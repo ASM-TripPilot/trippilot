@@ -1,7 +1,11 @@
 import type { ReactElement, ReactNode } from 'react';
 import { View } from 'react-native';
+import type { ListRenderItem } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import BottomSheet, {
+  BottomSheetFlatList,
+  BottomSheetScrollView,
+} from '@gorhom/bottom-sheet';
 
 import { MapView, type MapCenter, type MapPin } from '@/shared/map';
 
@@ -27,7 +31,26 @@ export type { ItineraryDaysItemSlotsItem } from '@/entities/itinerary-slot/model
 // 2스냅(peek ≈ 45% / expanded ≈ 88%). 초기값은 index=0(peek) 고정 — 실 전환은 6-b 실기 몫.
 const SNAP_POINTS = ['45%', '88%'];
 
-export interface MapSheetShellProps {
+/**
+ * 시트 body 리스트 슬롯(TRIP-798 묶음 C 가산) — 주면 셸이 body 를 `<BottomSheetScrollView>` 대신
+ * `<BottomSheetFlatList>` 로 그려, 무한 스크롤 리스트(h13 장소 후보, `onEndReached`)를
+ * VirtualizedList-in-ScrollView 충돌 없이 담는다(맹점①). `header`·`children` 은 리스트의
+ * `ListHeaderComponent` 로 맨 위에 얹힌다. 미전달이면 현행 스크롤 경로(6 소비처 무변경).
+ *
+ * ⚠️ 타입 선언만 — 실제 `<BottomSheetFlatList>` 렌더 배선은 [구현] 몫(`MapSheetShell.test.tsx`
+ *   SH8b 가 red 로 강제). 제네릭 `T` 는 `list.data` 로 추론된다(화면마다 다른 아이템 타입 수용).
+ */
+export interface MapSheetListSlot<T = unknown> {
+  data: readonly T[];
+  renderItem: ListRenderItem<T>;
+  keyExtractor: (item: T, index: number) => string;
+  onEndReached?: () => void;
+  onEndReachedThreshold?: number;
+  ListFooterComponent?: ReactElement | null;
+  testID?: string;
+}
+
+export interface MapSheetShellProps<T = unknown> {
   center: MapCenter;
   pins?: MapPin[];
   /** 일차 칩 목록 — `overlay` 를 주면 안 쓰인다(옵셔널, D3). */
@@ -54,9 +77,13 @@ export interface MapSheetShellProps {
    *  렌더한다(`overlay` 교체와 달리 추가). 미전달=미렌더(후방호환). 타입 선언만 — 렌더 배선은
    *  [구현] 몫(SH7b 가 red 로 강제). h16 확정 성공 배너가 이 슬롯을 쓴다. */
   mapCard?: ReactNode;
+  /** 시트 body 리스트 슬롯(TRIP-798 묶음 C 가산) — 주면 body 를 `<BottomSheetFlatList>` 로 그려
+   *  header·children 을 `ListHeaderComponent` 로 얹는다. 미전달=현행 `<BottomSheetScrollView>`
+   *  (6 소비처 무변경). 타입 선언만 — 렌더 배선은 [구현] 몫(SH8b 가 red 로 강제). h13 이 첫 소비처. */
+  list?: MapSheetListSlot<T>;
 }
 
-export function MapSheetShell({
+export function MapSheetShell<T = unknown>({
   center,
   pins,
   days,
@@ -70,7 +97,8 @@ export function MapSheetShell({
   initialIndex,
   mapFallback,
   mapCard,
-}: MapSheetShellProps): ReactElement {
+  list,
+}: MapSheetShellProps<T>): ReactElement {
   return (
     <View testID="map-sheet-shell-root" className="flex-1 bg-canvas">
       {/* 전면 지도 — 시트 뒤 형제(절대 배치, 풀블리드). connectPins 무언급=기본 선.
@@ -100,12 +128,33 @@ export function MapSheetShell({
       </SafeAreaView>
 
       {/* 하단 2스냅 시트 — header + children(카드·커넥터). 다중 슬롯이 하단 CTA 뒤로 가려 도달
-          불가한 것을 막으려 스크롤 컨테이너로 감싼다(경고-1 해소, 첫 소비자인 h07 에서 처리). */}
+          불가한 것을 막으려 스크롤 컨테이너로 감싼다(경고-1 해소, 첫 소비자인 h07 에서 처리).
+          list 를 주면 body 를 BottomSheetFlatList 로 그려 무한 스크롤 리스트(h13 장소 후보,
+          onEndReached)를 VirtualizedList-in-ScrollView 충돌 없이 담는다 — header·children 은 리스트의
+          ListHeaderComponent 한 자리에 얹힌다(TRIP-798 묶음 C). 미전달이면 현행 스크롤 경로(6 소비처 무변경). */}
       <BottomSheet index={initialIndex ?? 0} snapPoints={SNAP_POINTS}>
-        <BottomSheetScrollView>
-          {header}
-          {children}
-        </BottomSheetScrollView>
+        {list ? (
+          <BottomSheetFlatList
+            data={list.data}
+            renderItem={list.renderItem}
+            keyExtractor={list.keyExtractor}
+            ListHeaderComponent={
+              <>
+                {header}
+                {children}
+              </>
+            }
+            ListFooterComponent={list.ListFooterComponent}
+            onEndReached={list.onEndReached}
+            onEndReachedThreshold={list.onEndReachedThreshold}
+            testID={list.testID}
+          />
+        ) : (
+          <BottomSheetScrollView>
+            {header}
+            {children}
+          </BottomSheetScrollView>
+        )}
       </BottomSheet>
 
       {/* 하단 고정 CTA 바 — CTA 가 있을 때만(빈 배열/미전달이면 통째로 미렌더 · D9). */}

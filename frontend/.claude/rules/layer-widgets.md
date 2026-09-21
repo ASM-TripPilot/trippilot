@@ -29,6 +29,8 @@ paths:
 | `src/widgets/map-sheet-shell/ui/DayChipOverlay.tsx` | 좌상단 back + 일차 칩 오버레이(선택 칩 `accessibilityState.selected`) |
 | `src/widgets/map-sheet-shell/ui/MapSheetGlyphs.tsx` | 커넥터 이동수단(Car/Walk)+Back 글리프 **로컬 복제**(★5 — widgets→`@/features` import 금지라 `ItineraryGlyphs`를 못 가져다 씀). TRIP-790이 `FullAiGlyph`(✦)·`CheckGlyph`(✓)를 같은 이유로 추가 복제(features `ItineraryGlyphs`의 바이트 복제 — GenerationProgressCard 소비). raw-hex 스캔 제외(`*Glyphs.tsx` 관례) |
 
+**`list?: MapSheetListSlot<T>`(TRIP-798 묶음 C 가산)** — 시트 body를 `BottomSheetScrollView` 대신 `BottomSheetFlatList`로 그리는 옵셔널 슬롯(`{data, renderItem, keyExtractor, onEndReached, onEndReachedThreshold?, ListFooterComponent?, testID?}`). `header`·`children`은 이때 `ListHeaderComponent` 한 자리에만 들어간다(이중 렌더 구조적 불가). 미전달=현행 `BottomSheetScrollView`(6 소비처 h07·h08·h11·h14·h16 무변경 후방호환). 신설 이유: `BottomSheetScrollView` 안에 무한스크롤 `FlatList`(h13 P4, `onEndReached`)를 넣으면 VirtualizedList-in-ScrollView 충돌로 페이징이 죽는다 — 위젯에 리스트 슬롯을 뚫어 리스트 자체가 시트 몸통이 되게 해서 푼다. `__mocks__/@gorhom/bottom-sheet.tsx`에 `BottomSheetFlatList`(=RN `FlatList` 재수출) 선행 신설이 전제(먼저 없으면 import 크래시). 첫 실배선 소비처는 `PlaceAddPage.tsx`(h13). 상세는 [[지도+시트 셸 — 2스냅 바텀시트 위의 전면 지도]] 참고.
+
 지도 census 등재: `itineraryMapSurfaceStructure.test.ts`의 `LOCKED_CALLERS`에 `MapSheetShell.tsx` 등재 + S8 태그 카운트 12→13([[지도+시트 셸 — 2스냅 바텀시트 위의 전면 지도]] 참고).
 
 ## `src/widgets/itinerary-edit/` — 공용 일정 편집 셸 (TRIP-443 shared 신설 → TRIP-805로 shared→widgets 승격 이동)

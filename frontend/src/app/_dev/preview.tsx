@@ -80,7 +80,10 @@ import { GeneratingScreen } from '@/features/itinerary/ui/GeneratingScreen';
 import { MustVisitPickerScreen } from '@/features/itinerary/ui/MustVisitPickerScreen';
 import { MustVisitTimeScreen } from '@/features/itinerary/ui/MustVisitTimeScreen';
 import { OptionSwapScreen } from '@/features/itinerary/ui/OptionSwapScreen';
-import { PlaceAddScreen } from '@/features/itinerary/ui/PlaceAddScreen';
+import {
+  PlaceAddHeader,
+  PlaceAddRow,
+} from '@/features/itinerary/ui/PlaceAddScreen';
 import { SlotCandidatePanel } from '@/features/itinerary/ui/SlotCandidatePanel';
 import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
 import { GenerationProgressCard } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
@@ -4456,26 +4459,53 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // h13 장소 추가(TRIP-798, 구 h20) — 시트 콘텐츠 순수 뷰(props-only)라 배선 없이 상태만 넣어 그린다.
+  // h13 장소 추가(TRIP-798, 구 h20) — 묶음 C 시트화. 전면 지도 위 peek 시트(MapSheetShell)의 list 슬롯에
+  // 후보(PlaceAddRow)를 얹고, 검색바+칩(PlaceAddHeader)은 리스트 헤더(children)로, "장소 추가 · N일차"는
+  // header 로 조립한다(페이지 PlaceAddPage 와 같은 형태, 단 조회 훅 대신 픽스처 — 프리뷰는 api import 0).
   // 실화면 딥링크로는 빈 일정 생성 POST 를 백엔드가 만들어야 도달하므로(401 이면 못 봄) 여기가 눈 확인
-  // 자리다. 전면 지도+peek 시트(MapSheetShell) 조립·헤더는 묶음 C 이연이라 여기선 시트 콘텐츠만 보이고,
-  // 거리줄은 픽스처(distanceByPoiId)로만 렌더한다(실 GET 엔 거리 필드 없음 — 6-b 육안).
+  // 자리다. 거리줄은 픽스처로만 렌더한다(실 GET 엔 거리 필드 없음 — 6-b 육안). 2스냅 실개폐·핀 위치는 실기.
   {
     key: 'h13-place-add',
     band: 'h',
     label: 'h13 · 장소 추가',
     login: null,
     render: () => (
-      <PlaceAddScreen
-        places={PREVIEW_PLACES}
-        searchText=""
-        selectedCategory={null}
-        addedPoiIds={PREVIEW_PLACES.slice(0, 1).map((place) => place.poiId)}
-        distanceByPoiId={{ 'p-1': '③에서 1.1km', 'p-4': '숙소에서 800m' }}
-        onChangeSearchText={noop}
-        onSelectCategory={noop}
-        onPressAdd={noop}
-      />
+      <MapSheetShell
+        center={{ lat: 35.1532, lng: 129.1188 }}
+        pins={buildDraftPins(H11_COPICK_PREVIEW_SLOTS)}
+        onBack={noop}
+        header={
+          <Text className="px-lg pb-xs pt-sm font-noto-bold text-[18px] font-bold text-ink">
+            장소 추가 · 1일차
+          </Text>
+        }
+        list={{
+          data: PREVIEW_PLACES,
+          renderItem: ({ item }) => (
+            <PlaceAddRow
+              place={item}
+              added={item.poiId === PREVIEW_PLACES[0].poiId}
+              distanceLine={
+                item.poiId === 'p-1'
+                  ? '③에서 1.1km'
+                  : item.poiId === 'p-4'
+                    ? '숙소에서 800m'
+                    : undefined
+              }
+              onPressAdd={noop}
+            />
+          ),
+          keyExtractor: (place) => place.poiId,
+          testID: 'itinerary-place-list',
+        }}
+      >
+        <PlaceAddHeader
+          searchText=""
+          selectedCategory={null}
+          onChangeSearchText={noop}
+          onSelectCategory={noop}
+        />
+      </MapSheetShell>
     ),
   },
   // i05 현재 장소 상세(TRIP-398) — props-only 화면. jest 는 픽셀·레이아웃을 못 봐 이 자리가

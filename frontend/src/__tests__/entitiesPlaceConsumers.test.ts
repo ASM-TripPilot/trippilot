@@ -75,11 +75,10 @@ const ROWS: Row[] = [
     must: '@/entities/place',
     why: 'd06 부제 조각 소비',
   },
-  {
-    file: 'features/itinerary/ui/PlaceAddCard.tsx',
-    must: '@/entities/place',
-    why: 'h13 행 카드/부제 소비',
-  },
+  // TRIP-798 묶음 C 재조준 — PlaceAddCard 행 제거. h13 이 PlaceRowCard 채택으로 갈아타 이 카드는
+  // 런타임 소비처 0(고아)이 됐고 이 사이클에서 git rm 된다(itineraryManualStructure REMOVED_CARD 가
+  // 부재를 잠금). 여기 남기면 read() 가 ENOENT 로 죽는다 — h13 의 entities 소비 증거는 이 stale 행이
+  // 아니라 PlaceAddPage.integration C2(사진 leaf `itinerary-place-card-photo-*`)가 짐(vacuous 걷기).
   {
     file: 'features/itinerary/ui/SlotCandidateCard.tsx',
     must: '@/entities/place',

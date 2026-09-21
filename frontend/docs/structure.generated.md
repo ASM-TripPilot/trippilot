@@ -3,7 +3,7 @@
 # 구조 인벤토리 (자동 생성)
 
 ## __mocks__/@gorhom/
-- `__mocks__/@gorhom/bottom-sheet.tsx`  →  BottomSheet · BottomSheetModal · BottomSheetView · BottomSheetModalProvider · BottomSheetBackdrop · BottomSheetScrollView · useBottomSheetModal
+- `__mocks__/@gorhom/bottom-sheet.tsx`  →  BottomSheet · BottomSheetModal · BottomSheetView · BottomSheetModalProvider · BottomSheetBackdrop · BottomSheetScrollView · BottomSheetFlatList · useBottomSheetModal
 
 ## __mocks__/@mj-studio/
 - `__mocks__/@mj-studio/react-native-naver-map.tsx`  →  NaverMapView · NaverMapMarkerOverlay · NaverMapPathOverlay
@@ -430,8 +430,7 @@
 - `src/features/itinerary/ui/MyTripCard.tsx`  →  MyTripCardProps · MyTripCard
 - `src/features/itinerary/ui/MyTripsListScreen.tsx`  →  MyTripsListMode · MyTripsListScreenProps · MyTripsListScreen
 - `src/features/itinerary/ui/OptionSwapScreen.tsx`  →  OptionSwapScreenProps · OptionSwapScreen
-- `src/features/itinerary/ui/PlaceAddCard.tsx`  →  PlaceAddCardProps · PlaceAddCard
-- `src/features/itinerary/ui/PlaceAddScreen.tsx`  →  PlaceAddScreenProps · PlaceAddScreen
+- `src/features/itinerary/ui/PlaceAddScreen.tsx`  →  PlaceAddHeaderProps · PlaceAddHeader · PlaceAddRowProps · PlaceAddRow
 - `src/features/itinerary/ui/SlotCandidateCard.tsx`  →  candidateBadge · SlotCandidateCardProps · SlotCandidateCard
 - `src/features/itinerary/ui/SlotCandidatePanel.tsx`  →  SlotCandidatePanelProps · SlotCandidatePanel
 - `src/features/itinerary/ui/SlotDropZone.tsx`  →  SlotDropZoneProps · SlotDropZone
@@ -1297,10 +1296,10 @@
 - `src/widgets/map-sheet-shell/ui/DistanceConnector.tsx`  →  DistanceConnectorProps · DistanceConnector
 - `src/widgets/map-sheet-shell/ui/GenerationProgressCard.tsx`  →  GenerationProgressCell · GenerationProgressCardProps · GenerationProgressCard
 - `src/widgets/map-sheet-shell/ui/MapSheetGlyphs.tsx`  →  BackChevronGlyph · WalkGlyph · CarGlyph · FullAiGlyph · CheckGlyph
-- `src/widgets/map-sheet-shell/ui/MapSheetShell.tsx`  →  MapSheetShellProps · MapSheetShell
+- `src/widgets/map-sheet-shell/ui/MapSheetShell.tsx`  →  MapSheetListSlot · MapSheetShellProps · MapSheetShell
 - `src/widgets/map-sheet-shell/ui/SheetHeader.tsx`  →  SheetHeaderProps · SheetHeader
 
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetProps · TimeSheet
 
-합계 875개 파일
+합계 874개 파일

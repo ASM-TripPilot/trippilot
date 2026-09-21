@@ -38,6 +38,10 @@ import { PlaceAddPage } from './PlaceAddPage';
  *  - 🔴 **S1/S2** 앱바·완료·CTA·배너 제거 + 시트 헤더 "장소 추가 · N일차".
  *  - 🔴 **C1/C2** 아웃라인 "+추가"(필 폐기) + PlaceRowCard 채택(사진 접두) · 🟢 C3 거리줄 미렌더.
  *
+ * TRIP-798 묶음 C(시트화) 추가 — 전면 지도 위 peek 시트 재조립:
+ *  - 🔴 **SC** 페이지가 MapSheetShell(map-sheet-shell-root)+전면 지도(map-root)를 조립하고,
+ *    검색·칩·리스트·카드가 셸 안에 그대로 산다(재조립 무회귀 그물 — P2·P4·A2·C 를 안 깬다).
+ *
  * 왜 통합 버킷인가: 최종 직렬화된 URL·나간 PUT 바디·재요청 횟수·캐시 무효화는 msw/스파이만 본다.
  * 3동작 뼈대: 준비=핸들러/래퍼/params → 실행=렌더/입력/칩/add → 단언=나간 URL·PUT 바디·보이는 트리.
  */
@@ -508,7 +512,7 @@ describe('🔴 C1·C2·C3 · TRIP-798 — 카드 (아웃라인 +추가 · PlaceR
     );
     await renderPage();
 
-    // 현 PlaceAddCard 의 Image 엔 testID 가 없다 → red. PlaceRowCard 채택 시 이 접두 leaf 가 뜬다.
+    // PlaceRowCard 채택 증거 — 사진 있는 장소면 접두 `itinerary-place-card` 의 photo leaf 가 뜬다.
     expect(
       screen.getByTestId('itinerary-place-card-photo-pimg')
     ).toBeOnTheScreen();
@@ -518,5 +522,31 @@ describe('🔴 C1·C2·C3 · TRIP-798 — 카드 (아웃라인 +추가 · PlaceR
     await renderPage();
 
     expect(screen.queryByTestId('itinerary-place-distance-p1')).toBeNull();
+  });
+});
+
+describe('🔴 SC · TRIP-798 묶음 C — MapSheetShell peek 시트 조립 (시트화)', () => {
+  it('SC1 · 페이지가 MapSheetShell(map-sheet-shell-root) 로 시트를 조립하고 전면 지도(map-root) 를 깐다', async () => {
+    await renderPage();
+
+    // 현행 페이지는 View+SafeAreaView 로 헤더만 그리고 @/shared/map 을 안 물어 둘 다 부재 → red.
+    // 재조립 후엔 MapSheetShell(widgets)이 시트+전면 지도를 조립한다(features→widgets 는 pages 가 조립).
+    expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
+    expect(screen.getByTestId('map-root')).toBeOnTheScreen();
+  });
+
+  it('SC2 · 검색·칩·리스트·카드가 셸 안에 그대로 관측된다 (재조립 무회귀 그물)', async () => {
+    await renderPage();
+
+    // 셸 조립 확인과 함께 foundation testID 전부 생존 — 재조립이 P2·P4·A2·C 를 안 깬다.
+    expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
+    expect(screen.getByTestId('itinerary-place-search')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('itinerary-place-category-all')
+    ).toBeOnTheScreen();
+    expect(screen.getByTestId('itinerary-place-list')).toBeOnTheScreen();
+    expect(
+      screen.getAllByTestId(/^itinerary-place-card-/).length
+    ).toBeGreaterThan(0);
   });
 });

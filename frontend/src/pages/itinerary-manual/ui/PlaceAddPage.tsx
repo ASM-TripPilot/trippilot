@@ -1,17 +1,21 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
-import { Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ActivityIndicator, Text, View } from 'react-native';
 
 import {
   addSlot,
   insertSlotAt,
 } from '@/features/itinerary/model/itineraryEditStore';
 import { buildEditItineraryRequest } from '@/features/itinerary/model/buildEditItineraryRequest';
+import { buildDraftPins } from '@/features/itinerary/model/draftView';
 import { usePlacesInfinite } from '@/features/explore/model/usePlacesInfinite';
-import { PlaceAddScreen } from '@/features/itinerary/ui/PlaceAddScreen';
+import {
+  PlaceAddHeader,
+  PlaceAddRow,
+} from '@/features/itinerary/ui/PlaceAddScreen';
+import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
 import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
 import {
   getGetTripsTripIdItineraryQueryKey,
@@ -22,8 +26,11 @@ import type { Place, PoiCategory } from '@/shared/api/generated/schemas';
 
 /**
  * h13 장소 추가 배선(TRIP-798, 구 h20 TRIP-338·TRIP-502 계승) — `usePlacesInfinite` 로 후보를 받아
- * 시트 콘텐츠 뷰(`PlaceAddScreen`)에 잇고, 추가를 저장으로 잇는다. 앱바·완료·하단 CTA·안내/notReady
- * 배너는 h13 재편으로 걷고, 시트 헤더("장소 추가 · N일차")를 페이지가 조립한다.
+ * 전면 지도 위 peek 시트로 조립한다(묶음 C 시트화). 공용 `MapSheetShell`(widgets)의 `list` 슬롯에
+ * 후보를 `BottomSheetFlatList` 로 얹고(무한 스크롤 `onEndReached` 유지), 검색바+칩(`PlaceAddHeader`)은
+ * 리스트 헤더(`children`)로, "장소 추가 · N일차" 헤더 텍스트는 `header` 로, 후보 카드(`PlaceAddRow`)는
+ * `list.renderItem` 으로 조립한다 — features→widgets 상향 참조 금지라 셸 조립은 이 페이지가 진다.
+ * 앱바·완료·하단 CTA·안내/notReady 배너는 h13 재편으로 걷었다.
  *
  * 검색 규율(AC-5 · TRIP-502): 카테고리·검색어를 서버 파라미터로(`GET /places?category=&q=`) — 검색은
  * 서버가 하고 커서 무한 스크롤로 전량 수신을 없앤다(`region` 은 이 화면 라우트에 출처가 없어 안 보냄).
@@ -42,6 +49,7 @@ import type { Place, PoiCategory } from '@/shared/api/generated/schemas';
  */
 export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
   const { insertAfter } = useLocalSearchParams<{ insertAfter?: string }>();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [selectedCategory, setSelectedCategory] = useState<PoiCategory | null>(
     null
@@ -71,6 +79,15 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
   // 시트 헤더 "장소 추가 · N일차" — N = 담을 일자 index+1(현행 day[0]=1일차).
   const targetDayIndex = days.findIndex((day) => day.date === targetDate);
   const dayNumber = (targetDayIndex >= 0 ? targetDayIndex : 0) + 1;
+
+  // 전면 지도 — 담을 일자(days[0]) 슬롯 좌표로 핀을 세운다(MapSheetShell 이 MapView 를 소유하므로
+  // 지도 census 신규 등재 불필요). 좌표 없으면 기본 중심(선례 ItineraryPlanPage).
+  const targetSlots = days[0]?.slots ?? [];
+  const pins = buildDraftPins(targetSlots);
+  const center =
+    pins.length > 0
+      ? { lat: pins[0].lat, lng: pins[0].lng }
+      : { lat: 0, lng: 0 };
 
   function handleApplyTime(patch: {
     startAt: string;
@@ -121,28 +138,50 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
   }
 
   return (
-    <View className="flex-1 bg-canvas">
-      <SafeAreaView edges={['top']} className="bg-canvas px-lg pb-sm pt-sm">
-        <Text className="font-noto-bold text-[18px] font-bold text-ink">
-          {`장소 추가 · ${dayNumber}일차`}
-        </Text>
-      </SafeAreaView>
-
-      <PlaceAddScreen
-        places={items}
-        searchText={searchText}
-        selectedCategory={selectedCategory}
-        addedPoiIds={addedPoiIds}
-        onChangeSearchText={setSearchText}
-        onSelectCategory={setSelectedCategory}
-        onEndReached={handleEndReached}
-        isFetchingMore={isFetchingNextPage}
-        onPressAdd={(place) => {
-          // 담을 일자가 없으면 시트를 열지 않는다(조용한 소실 차단, W-2 — 배너는 제거됐다).
-          if (notReady) return;
-          setPendingPlace(place);
+    <View className="flex-1">
+      <MapSheetShell
+        center={center}
+        pins={pins}
+        onBack={() => router.back()}
+        header={
+          <Text className="px-lg pb-xs pt-sm font-noto-bold text-[18px] font-bold text-ink">
+            {`장소 추가 · ${dayNumber}일차`}
+          </Text>
+        }
+        list={{
+          data: items,
+          renderItem: ({ item }) => (
+            <PlaceAddRow
+              place={item}
+              added={addedPoiIds.includes(item.poiId)}
+              onPressAdd={() => {
+                // 담을 일자가 없으면 시트를 안 연다(조용한 소실 차단, W-2 — 배너는 제거됐다).
+                if (notReady) return;
+                setPendingPlace(item);
+              }}
+            />
+          ),
+          keyExtractor: (place) => place.poiId,
+          onEndReached: handleEndReached,
+          onEndReachedThreshold: 0.5,
+          ListFooterComponent: isFetchingNextPage ? (
+            <View
+              testID="itinerary-place-loading-more"
+              className="w-full items-center py-lg"
+            >
+              <ActivityIndicator />
+            </View>
+          ) : null,
+          testID: 'itinerary-place-list',
         }}
-      />
+      >
+        <PlaceAddHeader
+          searchText={searchText}
+          selectedCategory={selectedCategory}
+          onChangeSearchText={setSearchText}
+          onSelectCategory={setSelectedCategory}
+        />
+      </MapSheetShell>
 
       {pendingPlace ? (
         <TimeSheet
