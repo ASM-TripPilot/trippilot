@@ -115,9 +115,11 @@ ticket = "TRIP-614"
 title = "제휴 고지 '다시 보지 않기' 계정 단위 저장 — account_setting (O-U6-5 · BR-U6-33)"
 status = "done"
 migration = true
+# 정정(2026-09-21): 종전 `modules/affiliate-link` 표기는 낡은 서술이었다 — 그 모듈은 **존재하지
+# 않고**, 이 설정의 실제 구현처는 profile 이다(`제휴링크-연동-설계.md` 칸 0 이 지시한 정정).
 touches = [
   "backend/app/src/main/resources/db/migration",
-  "backend/modules/affiliate-link",
+  "backend/modules/profile",
   "backend/docs/design/openapi.yaml",
 ]
 note = """
@@ -682,18 +684,30 @@ note = """
 [[nodes]]
 id = "TRIP-825"
 ticket = "TRIP-825"
-title = "[Figma] Stay 확장 — StayItem imageUrl·distance·address, SavedStay imageUrl·region·priceLabel·isBase"
+title = "[Figma] Stay 확장 — StayItem imageUrl·address, SavedStay imageUrl·region·가격·isBase (distance 제외)"
 status = "todo"
 owner = "숙소"
 migration = false
 touches = ["backend/modules/accommodation-search", "backend/modules/saved-accommodation", "backend/docs/design/openapi.yaml"]
 note = """
-**`distance` 의 기준점 확정이 선행이다.** 티켓이 스스로 경고한다 — *"무엇으로부터의 거리인가가
-계약에 없으면 화면이 거짓말을 한다."* 검색 중심·사용자 위치·여행 거점 중 무엇인지 정하고
-응답에 기준점을 함께 실어야 한다.
+**정정(2026-09-21) — `distance` 는 이 티켓 스코프가 아니다.** 위 서술은 2026-09-17 제품 결정
+이전 것이었다. 기준점이 끝내 확정되지 않아 **FE 가 g02 거점 숙소 카드·선택 시트에서 거리 표시를
+제거했고**(박태현, 티켓 코멘트), BE 는 `distance`·`distanceFrom` 를 추가하지 않는다. 거리 재도입은
+기준점 확정 후 새 티켓이다. **즉 이 노드는 결정 대기가 아니다.**
 
-`isBase` 는 `linkedTripIds` 로 파생 가능한지가 쟁점이다(전역이 아니라 **특정 여행 문맥**의 판정).
-나머지는 벤더 응답에 있을 수 있으나 저장하지 않아 수집 경로를 건드려야 한다.
+남은 필드는 여섯 — StayItem `imageUrl`·`address`, SavedStay `imageUrl`·`region`·가격·`isBase`.
+티켓이 물은 확인사항 둘은 이렇게 답한다(2026-09-21):
+
+- **`isBase` 는 만들지 않는다.** `base_assignment` 에서 파생된 `linkedTripIds` 가 곧 거점 여부다 —
+  전역 목록(l04)이면 "비어있지 않음", 여행 문맥(선택 시트)이면 "그 tripId 포함"이고 FE 는 이미
+  tripId 를 안다. 서버 필드로 두면 여행 문맥 파라미터가 필요해지고 같은 사실의 출처가 둘이 된다.
+- **가격은 문자열(`priceLabel`)이 아니라 구조화 금액**으로 준다. `"120,000원~"` 을 서버가 만들면
+  통화·자릿수·로캘이 API 에 박혀 재사용이 안 된다. "부터 가격"이라는 업무 의미는 타입 설명이 진다.
+
+**진짜 막는 것은 데이터 출처다.** 여섯 중 셋(사진·가격)은 채울 소스가 없다 — LOCALDATA 인허가
+대장에 사진이 없고, `stay_price_snapshot` 은 `source='STUB'` 5건뿐이라 정본(`LOCALDATA`)과
+**교집합이 0**이다. 지금 계약만 열면 FE 는 여전히 플레이스홀더를 그린다.
+→ 출처 설계는 `숙소콘텐츠-수집-설계.md`, 가격·딥링크는 `제휴링크-연동-설계.md`.
 """
 
 [[nodes]]
@@ -877,9 +891,167 @@ TRIP-883 과 묶지 않았다.
 `PoiSurfaceServiceTest`(전 카테고리 코드 변환)와 동결 우선 스펙을 더해 둘 다 잡히게 했다.
 """
 
+# ── 숙소 콘텐츠·제휴 트랙(2026-09-21 신설) ────────────────────────────────────
+#
+# 숙소 정본 12,782곳에 **사진이 없다**(LOCALDATA 인허가 대장에 그 칸이 없다). 가격도 없다
+# (스냅숏 5건은 전부 `source='STUB'` 이라 정본과 교집합 0). TRIP-825 가 기대한 "실앱도 Figma 와
+# 같아진다"가 계약만 열어서는 달성되지 않는 이유다. 설계 정본 둘 —
+# `숙소콘텐츠-수집-설계.md`(사진·주소) · `제휴링크-연동-설계.md`(가격·딥링크).
+
+[[nodes]]
+id = "STAY-CONTENT-MEASURE"
+ticket = ""
+title = "TourAPI 숙박 커버리지 측정 — 전국 17개, 착수 여부를 숫자로 정한다"
+status = "todo"
+owner = "숙소"
+migration = false
+touches = ["ai/scripts", ".github/workflows"]
+note = """
+`숙소콘텐츠-수집-설계.md` 칸 0. **선행 0 — 지금 가능하다.**
+
+잴 값 넷: TourAPI 숙박(contentTypeId=32) 전국 총건수 · `firstimage` 보유율 · 우리 12,782곳과의
+매칭률(`addr_key` 주소 4요소 + 상호) · 매칭분 중 사진 보유율(= 실제로 채워지는 칸).
+
+**전국이다**(2026-09-21 결정). 제주 1개 지역 표본 안을 기각했다 — 관광 숙박 비중이 전국 평균보다
+높을 것이 거의 확실해 **낙관 쪽으로 치우친 표본**이고, 그 숫자로 착수를 정하면 나중에 뒤집힌다.
+
+**판정선을 착수 전에 박아 둔다**(결과를 보고 정하면 자기합리화가 된다): 매칭×사진 30% 이상이면
+칸 1 진행 · 10~30% 면 "사진 있는 숙소 우선 정렬"을 같은 PR 에 동반 · 10% 미만이면 트랙을 접고
+제휴 콘텐츠 API 를 기다린다.
+
+**도구는 만들어 뒀다**(2026-09-21) — `ai/scripts/measure_stay_coverage.py` +
+`.github/workflows/ai-stay-measure.yml`. 남은 것은 **한 번 돌리고 §7 에 숫자를 적는 것**이다.
+Actions → `ai-stay-measure` → Run workflow(전국이 기본). 주 1회 스케줄도 돈다.
+
+**예산 경합은 없다**(실측): POI 는 일일 3,000 중 **260 만 쓰고 이미 수렴했다**(85칸 전부 완주,
+신규 0건). 워크플로를 분리한 이유는 예산이 아니라 **상태 오염**이다 — 커서가 `[지역][타입]` 이라
+32 를 더하면 매일 긁어와 매일 버리는 일이 영구히 돈다.
+
+**매칭 키는 주소가 아니다.** 폐업 대조의 `addr_key()` 는 여기서 못 쓴다 — 우리 시드에 주소가
+없는 것이 애초에 이 트랙이 있는 이유다. `norm_name()` + 좌표 근접으로 붙이고, 거리 임계값은
+하나로 정하지 않고 100·300·500m 를 **함께 보고**한다(민감도를 봐야 칸 1 에서 정할 수 있다).
+"""
+
+[[nodes]]
+id = "STAY-CONTENT-TOURAPI"
+ticket = ""
+title = "TourAPI 숙박 수집 → 정본에 사진 채움 (전국)"
+status = "blocked"
+owner = "숙소"
+migration = true
+touches = [
+  "ai/scripts",
+  "backend/scripts/gen_stay_seed.py",
+  "backend/app/src/main/resources/db/migration",
+]
+note = """
+`숙소콘텐츠-수집-설계.md` 칸 1. 선행은 [[STAY-CONTENT-MEASURE]] 의 숫자다 — 그것 없이 착수하면
+커버리지 10% 짜리에 마이그레이션과 병합 코드를 쓰게 된다.
+
+**POI 제안 입구를 재사용하지 않는다.** `/internal/pois/proposals` 는 수집 게이트(INV-1)를 태우는
+자리이고 숙소는 그 대상이 아니다 — 같은 입구에 넣으면 게이트가 두 갈래로 갈린다(TRIP-681 에서
+같은 이유로 proposals 확장을 접었다).
+
+**API 도 새로 열지 않는다.** 호출자가 배치 하나뿐이라 수신 엔드포인트를 먼저 만들면 죽은 계약이
+된다(TRIP-681 결론과 같다). 생성물로 잇는다:
+`collect_stays.py` → `ai/data/stay_content.json` → `gen_stay_seed.py --content` → `R__seed_stay.sql`.
+
+`stay` 에 `address`·`image_url` 추가(둘 다 nullable — 없는 것과 모르는 것을 구분, amenities 선례).
+병합은 **주소가 같아도 상호가 다르면 붙이지 않는다** — 같은 건물의 다른 숙소에 남의 사진을 붙이는
+쪽이 훨씬 되돌리기 어렵다.
+"""
+
+[[nodes]]
+id = "STAY-ADDRESS-SEED"
+ticket = ""
+title = "숙소 주소 전수 채움 — 생성기가 읽고 버리던 값이다"
+status = "blocked"
+owner = "숙소"
+migration = true
+touches = [
+  "backend/scripts/gen_stay_seed.py",
+  "backend/app/src/main/resources/db/migration",
+]
+note = """
+`gen_stay_seed.py:114` 가 LOCALDATA 도로명주소를 **이미 읽고** region_code 뽑는 데만 쓴 뒤 버린다.
+컬럼만 추가하면 12,782곳 **전수**가 채워진다 — TourAPI(부분 커버리지)와 달리 여기는 전량이다.
+
+**선행은 사람 한 걸음이다.** 원본 CSV 가 리포에 없다(862MB 급, 브라우저로만 받는다 — `curl` 403,
+생성기 docstring). 그 파일만 오면 한 PR 이다.
+
+주소는 CSV 로 전수, 사진은 TourAPI 로 부분 — **두 축을 섞지 않는다**(커버리지가 다르므로 한
+마이그레이션에 묶으면 "주소도 부분인가"로 읽힌다).
+"""
+
+[[nodes]]
+id = "STAY-DETAIL-API"
+ticket = ""
+title = "GET /stays/{stayId} 숙소 상세 — FE 가 기다리는 계약 3종 중 하나"
+status = "todo"
+owner = "숙소"
+migration = false
+touches = [
+  "backend/modules/accommodation-search",
+  "backend/docs/design/openapi.yaml",
+]
+note = """
+`숙소콘텐츠-수집-설계.md` 칸 2. **선행 0 — 제휴와 무관하다.** 우리 `stay` 테이블 읽기다.
+
+TRIP-323(FE e03 숙소 상세)이 *"계약 3종 미존재"* 로 보류 중인데, 셋 중 **이것만 제휴 없이 풀린다**
+(나머지 둘 — 라이브 정확가·아웃바운드 — 은 [[AFFILIATE-LINK]] 몫).
+
+**설계 결정**: `stay` PK 가 `(external_source, external_id)` 복합키라 경로에 그대로 못 넣는다.
+`"LOCALDATA:3000000-201-1965-00264"` 합성 문자열로 간다. 대리 UUID 신설은 기각 — 시드를
+재생성할 때마다 값이 흔들리고, FE 가 이미 두 필드를 따로 들고 있어 조립만 하면 된다.
+
+⚠ 사진·가격이 빈 채로 상세를 열면 TRIP-323 이 경고한 *"정보가 없는 화면"* 이 된다. 그래서 이
+노드는 **계약을 여는 것까지**이고, 화면 착수 판단은 FE 가 [[STAY-CONTENT-TOURAPI]] 결과를 보고 한다.
+"""
+
+[[nodes]]
+id = "AFFILIATE-LINK"
+ticket = ""
+title = "제휴 링크(C5) — U1 1차 컴포넌트 중 유일한 미구현"
+status = "blocked"
+owner = "숙소"
+migration = true
+touches = [
+  "backend/modules/affiliate-link",
+  "backend/app/src/main/resources/db/migration",
+  "backend/docs/design/openapi.yaml",
+]
+note = """
+`제휴링크-연동-설계.md` 가 조사·칸 0~3 계획을 2026-09-11 에 박제해 두었고, **그 칸 0 이 지시한
+노드가 이것이다**(그때는 신설하지 않았다 — 2026-09-21 에 만든다).
+
+C5 는 U1 **1차 컴포넌트인데 유일하게 안 만들어졌다.** 설계는 완비다(`AffiliateLinkFacade` ·
+`OtaDeeplinkPort` · `OtaPartner`/`OutboundClick` 엔티티 · BR-U1-29~32). FE 도 제휴 고지 시트가
+구현돼 있다(TRIP-728·611 완료). **빠진 것은 코드가 아니라 계약**이다 — 어느 프로그램에 매체로
+승인받느냐이고, 어필리에이트 심사가 "운영 중인 매체"를 전제해 본계약이 사실상 출시 시점이다.
+
+지금 수수료가 발생하는 실 제휴 이동은 **0%** 다. FE 의 `stayOutbound.ts` 가 웹검색 폴백
+(`"{숙소명} 예약"`)으로 이동하는데, BR-U1-31 이 "장소 검색 우회"를 명시 허용해 규칙 위반은 아니다.
+
+**계약 무관으로 지금 되는 것**(설계 문서 칸 1): 아웃바운드를 서버로 승격 —
+`GET /stays/{stayId}/outbound` 가 클릭을 적고 302 로 보낸다. 계약 전부터 클릭 데이터가 쌓여
+협상 근거가 되고, OTA 교체가 앱 배포 없이 서버 변경만으로 된다. 이 노드를 쪼갤지는 착수 때 정한다.
+
+가격(`LivePricePort`)도 여기 딸려 온다 — TourAPI 는 가격을 주지 않는다. 다만 BR-U1-14·15 가
+**가격 없이도 성립하도록** 설계해 두어(가격 부재는 카드 제외 사유가 아니다 · 실시간 가격순 미제공)
+이 노드가 숙소 트랙 전체를 막지는 않는다.
+"""
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 간선 — 티켓 원문으로 확인한 것만
 # ─────────────────────────────────────────────────────────────────────────────
+
+[[edges]]
+from = "STAY-CONTENT-MEASURE"
+to = "STAY-CONTENT-TOURAPI"
+kind = "판정선행"
+verified = false
+reason = "설계 §3 판정선 — 커버리지 숫자가 없으면 10%짜리에 마이그레이션·병합 코드를 쓰게 된다. 숫자가 착수 여부 자체를 정한다."
+
 
 [[edges]]
 from = "IDP-REGISTER"
