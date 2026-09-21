@@ -74,6 +74,14 @@ const EXPECTED_H = [
   // h04 라 안정 정렬이 h03(방문 시각) 뒤·h07(부분 결과) 앞으로 이 칩을 올린다(옛 h24 자리에서 이동 —
   // TimeSheet 위젯에 mode='h04' 변형을 얹는 정합, 02a §3-5). 개명=count 불변(net 0).
   'dev-preview-state-h04-time-adjust-sheet', // h04
+  // TRIP-788: 내 여행 목록 h05/h06 Figma 재번호 — 옛 my-trips-* (h37 꼬리)가 h05/h06 로 개명돼 코드순
+  // 안정 정렬이 h04(time-adjust) 뒤·h07(부분 결과) 앞으로 이 4칩을 올린다(TRIP-801 h34→h16 이동 선례).
+  // 같은 코드 내 순서는 PREVIEW_STATES 배열 삽입 순서(안정 정렬) — 구현자는 background→done-bar→
+  // loading→empty 순으로 연속 삽입한다(배열 위치=정렬 위치). done-bar 만 신규, 나머지 3은 개명.
+  'dev-preview-state-h05-my-trips-background', // h05 (구 my-trips-list)
+  'dev-preview-state-h05-my-trips-done-bar', // h05 (신규 · 완료 도킹 배너)
+  'dev-preview-state-h06-my-trips-loading', // h06 (구 my-trips-loading)
+  'dev-preview-state-h06-my-trips-empty', // h06 (구 my-trips-empty)
   // TRIP-790: 옛 h10 `itinerary-draft-generating`(만드는 중 · DraftScreen 인라인 게이지)을
   // h07 부분 결과(셸 얼굴)로 개명. 라벨 코드가 h07 이라 안정 정렬이 mustvisit-time 뒤에 붙는다
   // (개명 엔트리는 PREVIEW_STATES 배열상 draft 구역이라 mustvisit-time 보다 늦다 · 02a ★10).
@@ -136,9 +144,8 @@ const EXPECTED_H = [
   // TRIP-801: itinerary-confirmed(h34)는 h16-plan-confirmed(h16)로 개명·상단 이동(위 h16 줄 참조)
   // 돼 이 자리에서 사라진다.
   'dev-preview-state-itinerary-draft-zero', // h35
-  'dev-preview-state-my-trips-list', // h37
-  'dev-preview-state-my-trips-empty', // h37
-  'dev-preview-state-my-trips-loading', // h37
+  // TRIP-788: my-trips-list/empty/loading 은 h05/h06 로 재번호돼 위 h04↔h07 사이로 이동(코드=정렬위치)
+  // — 이 h37 꼬리 자리엔 이제 아무 칩도 없다(itinerary-draft-zero 가 band h 그룹의 마지막).
 ];
 
 const EXPECTED_L = [

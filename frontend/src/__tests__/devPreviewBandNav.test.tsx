@@ -227,7 +227,14 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    이라 카운트는 **173 무변경**(net 0). test-designer 는 이 카운트를 안 만진다(올리면 174로 거짓 red).
     //    정확히 그 키인지는 아래 'TRIP-787' describe 가 못박고, devPreviewBandSort 는 band h 를 잠가
     //    EXPECTED_H 도 동반 갱신(h04 를 h03↔h07 사이로).
-    expect(PREVIEW_STATES).toHaveLength(173);
+    // ⚠️ TRIP-788: h05/h06 내 여행 목록 Figma 재번호 — my-trips-list→h05-my-trips-background(개명) +
+    //    신규 h05-my-trips-done-bar(완료 도킹 배너) + my-trips-loading→h06-my-trips-loading(개명) +
+    //    my-trips-empty→h06-my-trips-empty(개명). 개명 3 = net 0, 신규 done-bar 만 +1 → 173→174.
+    //    test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에서 3키 개명 + done-bar 1키
+    //    추가만 하고 이 가드는 안 만진다(재편 전엔 173개라 이 단언이 red). 정확히 그 키들인지는 아래
+    //    'TRIP-788' describe 가 못박는다. devPreviewBandSort 는 band h 를 잠가 EXPECTED_H 도 동반 갱신
+    //    (my-trips 키가 h37 꼬리 → h05/h06 위치=h04 직후로 이동, 코드=정렬위치).
+    expect(PREVIEW_STATES).toHaveLength(174);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -741,6 +748,29 @@ describe('🔴 TRIP-801 · h16 확정 일정 셸 프리뷰 키 개명 (band h ·
     //   개명=net 0 이라 위 카운트 가드(171)는 무변경(02a ★11).
     expect(keys).toContain('h14-plan-default');
     expect(keys).toContain('h11-copick-complete');
+  });
+});
+
+describe('🔴 TRIP-788 · h05/h06 내 여행 목록 프리뷰 키 재편 (band h)', () => {
+  it('h05/h06 개명 3 + 신규 done-bar 가 있고, 옛 my-trips-* 키는 없다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 긍정 — 개명 3(background·loading·empty) + 신규 1(done-bar). 추가/개명 전엔 부재라 red.
+    expect(keys).toContain('h05-my-trips-background');
+    expect(keys).toContain('h05-my-trips-done-bar');
+    expect(keys).toContain('h06-my-trips-loading');
+    expect(keys).toContain('h06-my-trips-empty');
+
+    // 부정 — 옛 h37 키(개명 원본)는 사라진다(재편 전엔 present 라 red). 카운트(174)만으론 "아무 키나
+    // 재편해도" 통과하므로, 이 짝이 '바뀐 게 정확히 그 키들'임을 못박는다(TRIP-798/787 미러).
+    expect(keys).not.toContain('my-trips-list');
+    expect(keys).not.toContain('my-trips-loading');
+    expect(keys).not.toContain('my-trips-empty');
+
+    // 형제 band h 앵커 — 인접 h키(h04 time-adjust · h35 zero)가 딸려 사라지지 않았다(공허 통과 방지).
+    expect(keys).toContain('h04-time-adjust-sheet');
+    expect(keys).toContain('itinerary-draft-zero');
   });
 });
 

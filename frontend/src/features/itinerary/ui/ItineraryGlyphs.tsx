@@ -345,6 +345,49 @@ export function ClockGlyph({ size = 20, testID }: GlyphProps) {
   );
 }
 
+// h06 빈 목록 얼굴 캘린더(30) — Figma `3994:2575`. 회색 원(surface-soft) 위에 얹는 muted-soft 달력.
+// 프레임(둥근 사각)+상단 구분선+걸이 2개 4-path. 브리프 §에셋 벡터 실측.
+export function CalendarGlyph({ size = 30, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 30 30"
+      fill="none"
+    >
+      <Path
+        d="M23.75 5H6.25C4.86929 5 3.75 6.11929 3.75 7.5V25C3.75 26.3807 4.86929 27.5 6.25 27.5H23.75C25.1307 27.5 26.25 26.3807 26.25 25V7.5C26.25 6.11929 25.1307 5 23.75 5Z"
+        stroke={MUTED_SOFT}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M3.75 11.25H26.25"
+        stroke={MUTED_SOFT}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M10 2.5V7.5"
+        stroke={MUTED_SOFT}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M20 2.5V7.5"
+        stroke={MUTED_SOFT}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 // h07 시작 시각 필드 chevron-down(20) — Figma `1904:1117`.
 export function ChevronDownGlyph({ size = 20, testID }: GlyphProps) {
   return (

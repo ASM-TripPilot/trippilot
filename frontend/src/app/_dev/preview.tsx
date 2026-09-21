@@ -85,6 +85,7 @@ import {
   PlaceAddRow,
 } from '@/features/itinerary/ui/PlaceAddScreen';
 import { SlotCandidatePanel } from '@/features/itinerary/ui/SlotCandidatePanel';
+import { GenerationDoneBar } from '@/widgets/generation-done-bar/ui/GenerationDoneBar';
 import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
 import { GenerationProgressCard } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
 import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
@@ -988,15 +989,26 @@ const TIMELINE_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
   },
 ];
 
-// 내 여행 목록(h37, TRIP-468) 카드 VM 3종 — 완성·작성중·미도착(배지 degrade). 순수 카드라
-// 픽스처를 얹어 세 얼굴을 한 화면에서 본다(컨테이너·react-query 없이).
+// 내 여행 목록(h05/h06, TRIP-788) 카드 VM 4종 — 완성(사진 픽스처)·생성중(resume 없음)·초안(resume)·
+// 미도착(배지 degrade). 순수 카드라 픽스처를 얹어 네 얼굴을 한 화면에서 본다(컨테이너·react-query 없이).
+// 완성 상태문은 Figma 정합(TRIP-788)으로 '추천안이 준비됐어요'(구 '확정 장소 N곳' 대체), imageUrl 은
+// DRAFT_PREVIEW_PHOTOS(로컬 에셋 resolve — jest 는 .uri undefined 라 회색, 실기만 사진).
 const MY_TRIPS_PREVIEW_VMS: MyTripCardVM[] = [
   {
     tripId: 'demo-done',
     title: '서귀포시 여행',
     metaLine: '6월 10일 ~ 13일 · 3박 4일 · 2명',
     badge: 'done',
-    extra: '확정 장소 12곳',
+    extra: '추천안이 준비됐어요',
+    imageUrl: DRAFT_PREVIEW_PHOTOS[0],
+  },
+  {
+    tripId: 'demo-generating',
+    title: '제주 여행',
+    metaLine: '9월 5일 ~ 7일 · 2박 3일 · 2명',
+    badge: 'draft',
+    extra: 'AI가 일정을 짜는 중',
+    resume: false,
   },
   {
     tripId: 'demo-draft',
@@ -4034,13 +4046,14 @@ export const PREVIEW_STATES: PreviewState[] = [
         noBase: true,
       }),
   },
-  // 내 여행 목록 · h37(TRIP-468) — 완성(success 배지+"확정 장소 N곳")·작성중(primary 배지+resume
-  // CTA)·미도착(배지·부가정보 부재 degrade) 세 카드 + 사진 플레이스홀더·"최신순" 라벨을 한 화면에서
-  // Figma h37 2971:1656 과 대조한다. 배지 pill·resume 오버레이·사진 자리는 jest 사각(6-b 전용).
+  // 내 여행 목록 · h05/h06(TRIP-788) — 배열 순서 background→done-bar→loading→empty(안정 정렬 =
+  // devPreviewBandSort EXPECTED_H 위치). background 는 완성(사진)·생성중·초안·미도착 4카드 + "최신순"
+  // 라벨, done-bar 는 그 목록 위에 완료 도킹 배너를 얹는다. 배지 pill·resume 오버레이·사진 자리·배너
+  // 절대배치·체크 색은 jest 사각(6-b 전용).
   {
-    key: 'my-trips-list',
+    key: 'h05-my-trips-background',
     band: 'h',
-    label: 'h37 · 내 여행 목록',
+    label: 'h05 · 내 여행 목록',
     login: null,
     render: () => (
       <MyTripsListScreen
@@ -4053,18 +4066,36 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   {
-    key: 'my-trips-empty',
+    key: 'h05-my-trips-done-bar',
     band: 'h',
-    label: 'h37 · 내 여행 empty',
+    label: 'h05 · 완료 도킹 배너',
     login: null,
-    render: () => <MyTripsListScreen mode="empty" onPressCreateTrip={noop} />,
+    render: () => (
+      <View style={{ flex: 1 }}>
+        <MyTripsListScreen
+          mode="list"
+          onPressCreateTrip={noop}
+          cards={MY_TRIPS_PREVIEW_VMS.map((vm) => (
+            <MyTripCard key={vm.tripId} vm={vm} onPress={noop} />
+          ))}
+        />
+        <GenerationDoneBar tripName="서귀포시 여행" onPressView={noop} />
+      </View>
+    ),
   },
   {
-    key: 'my-trips-loading',
+    key: 'h06-my-trips-loading',
     band: 'h',
-    label: 'h37 · 내 여행 스켈레톤',
+    label: 'h06 · 내 여행 스켈레톤',
     login: null,
     render: () => <MyTripsListScreen mode="loading" onPressCreateTrip={noop} />,
+  },
+  {
+    key: 'h06-my-trips-empty',
+    band: 'h',
+    label: 'h06 · 내 여행 empty',
+    login: null,
+    render: () => <MyTripsListScreen mode="empty" onPressCreateTrip={noop} />,
   },
   // l03 마이페이지 · l03(TRIP-604) — 프로필 카드·세그먼트·예정 카드·지난 여행(회고 chevron)·설정
   // 행을 한 화면에서 Figma l03 default(1602:2388)와 대조한다. 예정 2건 + 종료 2건(회고 진입 chevron).

@@ -418,12 +418,13 @@
 - `src/features/itinerary/model/slotSwapError.ts`  →  SLOT_SWAP_CONFLICT_CODES · SlotSwapErrorKind · SlotSwapError · resolveSlotSwapError
 - `src/features/itinerary/model/swapSlotPoi.ts`  →  swapSlotPoi
 - `src/features/itinerary/model/timeBandLabel.ts`  →  TimeBandLabel · timeBandLabel
+- `src/features/itinerary/model/tripCardFace.ts`  →  TripCardFace · deriveTripCardFace
 
 ## src/features/itinerary/ui/
 - `src/features/itinerary/ui/ConceptPickerScreen.tsx`  →  ConceptPickerScreenProps · ConceptPickerScreen
 - `src/features/itinerary/ui/DraftScreen.tsx`  →  DraftScreenProps · DraftScreen
 - `src/features/itinerary/ui/GeneratingScreen.tsx`  →  GeneratingScreenProps · GeneratingScreen
-- `src/features/itinerary/ui/ItineraryGlyphs.tsx`  →  BackChevronGlyph · LockGlyph · DragHandleGlyph · TrashGlyph · PlusGlyph · CheckGlyph · CheckCircleGlyph · PencilGlyph · SearchGlyph · CloseGlyph · ClockGlyph · ChevronDownGlyph · ChevronRightGlyph · LocationOffGlyph · CircleGlyphTone · InfoCircleGlyph · AlertCircleGlyph · WarningTriangleGlyph · ShareGlyph · WalkGlyph · CarGlyph · ExpandGlyph · RefreshGlyph · FullAiGlyph · CoPickGlyph · ManualGlyph
+- `src/features/itinerary/ui/ItineraryGlyphs.tsx`  →  BackChevronGlyph · LockGlyph · DragHandleGlyph · TrashGlyph · PlusGlyph · CheckGlyph · CheckCircleGlyph · PencilGlyph · SearchGlyph · CloseGlyph · ClockGlyph · CalendarGlyph · ChevronDownGlyph · ChevronRightGlyph · LocationOffGlyph · CircleGlyphTone · InfoCircleGlyph · AlertCircleGlyph · WarningTriangleGlyph · ShareGlyph · WalkGlyph · CarGlyph · ExpandGlyph · RefreshGlyph · FullAiGlyph · CoPickGlyph · ManualGlyph
 - `src/features/itinerary/ui/MethodPickerScreen.tsx`  →  ActiveGeneration · MethodPickerScreenProps · MethodPickerScreen
 - `src/features/itinerary/ui/MustVisitPickerScreen.tsx`  →  MustVisitPickerScreenProps · MustVisitPickerScreen
 - `src/features/itinerary/ui/MustVisitTimeScreen.tsx`  →  MustVisitTimeScreenProps · MustVisitTimeScreen
@@ -1279,6 +1280,10 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
+## src/widgets/generation-done-bar/ui/
+- `src/widgets/generation-done-bar/ui/GenerationDoneBar.tsx`  →  GenerationDoneBarProps · GenerationDoneBar
+- `src/widgets/generation-done-bar/ui/GenerationDoneBarGlyphs.tsx`  →  DoneCheckGlyph
+
 ## src/widgets/itinerary-edit/
 - `src/widgets/itinerary-edit/index.ts`  →  ManualEditShell · mergeValidationFlags · reorderKeepingFixed
 
@@ -1302,4 +1307,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 874개 파일
+합계 877개 파일

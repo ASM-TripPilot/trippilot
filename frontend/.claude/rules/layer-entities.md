@@ -49,10 +49,10 @@ paths:
 
 | 파일 | 용도·함정 |
 |---|---|
-| `model/index.ts` | `Trip`·`TripStatus`·`TripDestination`을 `@/shared/api/generated/schemas`에서 **얇게 재수출** + 카드 뷰모델 `MyTripCardVM`·`MyTripBadge`(h06 이관)·`PastTripCardVM`(j07 이관). place·stay와 동형 — generated 직참조는 이 파일만 허용. |
+| `model/index.ts` | `Trip`·`TripStatus`·`TripDestination`을 `@/shared/api/generated/schemas`에서 **얇게 재수출** + 카드 뷰모델 `MyTripCardVM`·`MyTripBadge`(h06 이관)·`PastTripCardVM`(j07 이관). place·stay와 동형 — generated 직참조는 이 파일만 허용. **TRIP-788 추가**: `MyTripCardVM`에 `resume?: boolean`(resume CTA 노출 — 배지와 독립 신호, AC-5 seam)·`imageUrl?: string \| null`(픽스처 전용 사진, 프로덕션 항상 null, INV-1) additive 옵셔널 2필드(l03·a01 공용 계약이라 TC1~TC7 등 기존 소비처 무회귀). |
 | `lib/formatTripPeriod.ts` | 기간 포맷터 **6벌**(`formatDateRange`·`formatSectionRange`·`formatTripRange`·`formatConfirmedDateRange`·`formatTripDateRange`·`formatDateRangeWithDow`) + `dayOfWeek`·`WEEKDAY_LABELS`를 각 원본에서 **바이트 그대로 이관**(en dash U+2013·미들닷 U+00B7·공백 유무·월 생략까지 출력 보존, 병합·통일 없음). 6벌이 살아있는 이유·실패값 계약은 [[바이트 지문과 심볼 보존의 자기모순]] 참고. |
 | `lib/formatNights.ts` | 박수 포맷터 **3벌**(`formatNightsLabel` 실패 `''`·`nightsLabel` 실패 `null`·`nightsCountLabel` count 기반, 신규 export — tripSummary 인라인 템플릿의 함수화). **실패값 통일 금지**(`''`≠`null`이 계약). |
-| `ui/TripCard.tsx` | h06 여행 카드. `testIDPrefix`(6종 sub-part 조립) 명시 prop — 카드가 `'my-trip'`을 하드코딩하지 않는다(l03 settings/TripCard도 같은 리터럴을 쓰는 D1 충돌 대비). `onPress={onResume ?? onPress}` 폴백으로 h06 옛 동작 보존. |
+| `ui/TripCard.tsx` | h06 여행 카드. `testIDPrefix`(6종 sub-part 조립) 명시 prop — 카드가 `'my-trip'`을 하드코딩하지 않는다(l03 settings/TripCard도 같은 리터럴을 쓰는 D1 충돌 대비). `onPress={onResume ?? onPress}` 폴백으로 h06 옛 동작 보존. **TRIP-788 추가**: resume 렌더 게이트가 `badge==='draft'`(폴백) 단독에서 `vm.resume ?? (badge==='draft')`로 바뀜 — 생성중(PARTIAL)도 배지가 `'draft'`(작성중)라 종전엔 resume가 새어 나왔는데, 컨테이너가 명시 `resume:false`를 실으면 억제된다(seam, `MyTripCardVM.resume` 미전달이면 기존 배지 파생 그대로라 무회귀). 사진: `imageUrl` truthy면 `<Image testID="{prefix}-photo-{id}" source={{uri:imageUrl}}>`, 없으면 기존 회색 `bg-surface-soft`(사진 testID는 imageUrl 있을 때만 붙는다 — 여분 testID 0 계약). |
 | `ui/PastTripRow.tsx` | j07 지난 여행 행. **완성 full `testID`**(`'record-calendar-past-trip-{id}'`) 명시 prop — PastTripList가 그 리터럴을 조립해 넘겨 리터럴이 소비처 파일에 잔존, 선재 `recordsCalendarStructure` G3 앵커 재조준 0. TripCard(6종 prefix)와 방식이 갈리는 이유는 sub-part 개수 차이(카드=6, 행=1). |
 | `ui/TripGlyphs.tsx` | `ChevronRightGlyph` — `features/itinerary/ui/ItineraryGlyphs`판을 바이트 그대로 로컬 복제(entities→features 역참조 금지라 재사용 불가, 리포 글리프 로컬 복제 관례의 N번째 사본). |
 

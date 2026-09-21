@@ -20,8 +20,8 @@ import ItineraryTab from '@/app/(tabs)/itinerary';
  *    영영 접근 불가였던 **핵심 결함**을 잠근다.
  *  - 🔴 **AC-2** 빈 배열이면 empty + [여행 만들기]→step1(리다이렉트 없음).
  *  - 🔴 **AC-3** trips.isPending 이면 스켈레톤 카드 2장(리다이렉트도 empty도 아님).
- *  - 🔴 **AC-5** 배지·부가정보를 **카드별 itinerary GET**에서 파생(완성→"확정 장소 N곳" 슬롯 합계 ·
- *    작성중→"추천안 준비 중" · 미도착→배지 미정 degrade).
+ *  - 🔴 **AC-5** 배지·상태문을 **카드별 itinerary GET**에서 파생(완성→"추천안이 준비됐어요"(TRIP-788
+ *    Figma 정합, 구 "확정 장소 N곳" 슬롯 합계 **대체**) · 작성중→"추천안 준비 중" · 미도착→배지 미정 degrade).
  *  - 🔴 **AC-6** 카드 탭은 **눌린 카드의 tripId** 목적지로 간다(`[0]` 고정 검출) · 오늘이 구간이면 live.
  *  - 🔴 **AC-7** 최신순(updatedAt desc) 정렬 + "최신순" 라벨.
  *
@@ -290,8 +290,8 @@ describe('🔴 AC-6b · 오늘이 여행 구간이면 live 로 (US-ONTRIP-01)', 
   });
 });
 
-describe('🔴 AC-5 · 배지·부가정보는 카드별 itinerary 에서 파생된다 (로딩 degrade 포함)', () => {
-  it('완성→"확정 장소 N곳"(슬롯 합계) · 작성중→"추천안 준비 중" · 미도착→배지 미정', () => {
+describe('🔴 AC-5 · 배지·상태문은 카드별 itinerary 에서 파생된다 (로딩 degrade 포함)', () => {
+  it('완성→"추천안이 준비됐어요"(TRIP-788) · 작성중→"추천안 준비 중" · 미도착→배지 미정', () => {
     mockUseGetTrips.mockReturnValue(
       tripsData([
         trip({ tripId: 'trip-done' }),
@@ -300,7 +300,7 @@ describe('🔴 AC-5 · 배지·부가정보는 카드별 itinerary 에서 파생
       ])
     );
     scriptItinerary({
-      // 완성 + 슬롯 2 + 1 = 3곳.
+      // 완성(CONFIRMED) — 슬롯 수는 이제 안 그린다(Figma 문구로 대체, 01b Q2).
       'trip-done': itinOk(itin('COMPLETE', 'CONFIRMED', [2, 1])),
       'trip-draft': itinHttpError(404),
       'trip-load': itinPending,
@@ -308,12 +308,12 @@ describe('🔴 AC-5 · 배지·부가정보는 카드별 itinerary 에서 파생
 
     render(<ItineraryTab />);
 
-    // 완성 — "완성" 배지 + "확정 장소 3곳"(★ 슬롯 합계 파생, 상수 하드코딩이면 red).
+    // 완성 — "완성" 배지 + "추천안이 준비됐어요"(★ TRIP-788: 구 "확정 장소 N곳" 슬롯 합계 대체, 상수).
     expect(screen.getByTestId('my-trip-badge-trip-done')).toHaveTextContent(
       '완성'
     );
     expect(screen.getByTestId('my-trip-extra-trip-done')).toHaveTextContent(
-      '확정 장소 3곳'
+      '추천안이 준비됐어요'
     );
 
     // 작성중 — "작성중" 배지 + "추천안 준비 중".
@@ -327,5 +327,36 @@ describe('🔴 AC-5 · 배지·부가정보는 카드별 itinerary 에서 파생
     // 미도착(degrade) — 배지 미정(부재) + 짝: 카드 자체는 뜬다.
     expect(screen.queryByTestId('my-trip-badge-trip-load')).toBeNull();
     expect(screen.getByTestId('my-trip-card-trip-load')).toBeOnTheScreen();
+  });
+});
+
+describe('🔴 AC-8 · empty 얼굴 — 캘린더 글리프(회색 원 72) + 부제 2줄 강제', () => {
+  it('illustration 슬롯이 회색 원(surface-soft 72)+캘린더를 그리고, 부제가 2줄이며, testID 는 보존된다', () => {
+    mockUseGetTrips.mockReturnValue(tripsData([]));
+
+    render(<ItineraryTab />);
+
+    // testID 보존(구 계약 계승) — StateNotice 자체는 무수정(stay·explore 회귀 방지).
+    expect(screen.getByTestId('itinerary-tab-empty')).toBeOnTheScreen();
+    expect(screen.getByTestId('itinerary-tab-create-trip')).toBeOnTheScreen();
+
+    // illustration 슬롯 — 회색 원 72(핑크 원 우회). NativeWind className 은 렌더 트리에 평문 prop 으로
+    // 남으므로 직독한다(HomeScreen.test.tsx:186 선례) — SVG 색은 못 봐도 배경/치수 토큰은 잠긴다.
+    const illustration = screen.getByTestId('itinerary-tab-empty-illustration');
+    expect(illustration.props.className).toContain('bg-surface-soft'); // 회색
+    expect(illustration.props.className).toContain('h-[72px]'); // 72
+    expect(illustration.props.className).not.toContain('bg-primary-pale'); // 핑크 아님
+
+    // 캘린더 글리프(신규, 핑크 InfoCircle 교체) 실재.
+    expect(
+      screen.getByTestId('itinerary-tab-empty-calendar')
+    ).toBeOnTheScreen();
+
+    // 부제 2줄 강제 — `toHaveTextContent`/`getByText` 는 개행을 공백으로 정규화해 못 본다(02a ★4·§5-2).
+    // 정규식으로 노드를 잡고 정규화 전 원문(`.props.children`)을 직단언해 `\n` 을 잠근다.
+    const subtitle = screen.getByText(/여행을 만들면 완성·작성중 상태를/);
+    expect(subtitle.props.children).toBe(
+      '여행을 만들면 완성·작성중 상태를\n여기서 한눈에 볼 수 있어요'
+    );
   });
 });
