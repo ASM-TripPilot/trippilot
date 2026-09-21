@@ -902,7 +902,7 @@ TRIP-883 과 묶지 않았다.
 id = "STAY-CONTENT-MEASURE"
 ticket = ""
 title = "TourAPI 숙박 커버리지 측정 — 전국 17개, 착수 여부를 숫자로 정한다"
-status = "todo"
+status = "blocked"
 owner = "숙소"
 migration = false
 touches = ["ai/scripts", ".github/workflows"]
@@ -919,9 +919,12 @@ note = """
 칸 1 진행 · 10~30% 면 "사진 있는 숙소 우선 정렬"을 같은 PR 에 동반 · 10% 미만이면 트랙을 접고
 제휴 콘텐츠 API 를 기다린다.
 
-**도구는 만들어 뒀다**(2026-09-21) — `ai/scripts/measure_stay_coverage.py` +
-`.github/workflows/ai-stay-measure.yml`. 남은 것은 **한 번 돌리고 §7 에 숫자를 적는 것**이다.
-Actions → `ai-stay-measure` → Run workflow(전국이 기본). 주 1회 스케줄도 돈다.
+**도구는 만들어 뒀다**(2026-09-21, PR #656) — `ai/scripts/measure_stay_coverage.py` +
+`.github/workflows/ai-stay-measure.yml`. 남은 것은 **한 번 돌리고 설계 §7 에 숫자를 적는 것**이다.
+
+⚠ **`main` 릴리스가 선행이다.** GitHub 은 기본 브랜치(`main`)의 워크플로만 Run workflow 에
+띄우고 cron 도 거기서만 발화한다 — 이 워크플로는 develop 에만 있어 `gh workflow list` 에
+안 나온다(실측). [[RELEASE-MAIN]] 뒤에 열린다.
 
 **예산 경합은 없다**(실측): POI 는 일일 3,000 중 **260 만 쓰고 이미 수렴했다**(85칸 전부 완주,
 신규 0건). 워크플로를 분리한 이유는 예산이 아니라 **상태 오염**이다 — 커서가 `[지역][타입]` 이라
@@ -1044,6 +1047,13 @@ C5 는 U1 **1차 컴포넌트인데 유일하게 안 만들어졌다.** 설계�
 # ─────────────────────────────────────────────────────────────────────────────
 # 간선 — 티켓 원문으로 확인한 것만
 # ─────────────────────────────────────────────────────────────────────────────
+
+[[edges]]
+from = "RELEASE-MAIN"
+to = "STAY-CONTENT-MEASURE"
+kind = "외부선행"
+verified = true
+reason = "실측 2026-09-21 — GitHub 은 기본 브랜치(main)의 워크플로만 Run workflow 에 띄우고 cron 도 거기서만 발화한다. develop 머지만으로는 gh workflow list 에 나오지 않는다."
 
 [[edges]]
 from = "STAY-CONTENT-MEASURE"
