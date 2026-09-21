@@ -9,12 +9,17 @@ import path from 'path';
  * `itineraryEditStructure.test.ts` 패턴 — 탐지기를 복제하지 않고 (a) 신규 파일 실재 (b) 기존 재귀
  * 스캔 자동 편입 (c) INV-3 타겟 가드만 얹는다.
  *
+ * **TRIP-797 묶음 C**: 편집기가 h12(지도+시트) 로 통일되며 `ManualPlanPage` 소비 화면이 pages 층 순수
+ * 뷰 `EditorView` 로 재조립됐다. 그 결과 옛 화면 `ManualPlanScreen.tsx` 는 소비처를 잃어 **제거된다**
+ * (삭제도 계약). 아래 `NEW_UI_FILES` 에서 뺐고 `REMOVED_SCREEN` 부재 앵커로 화면 제거를 확정한다 —
+ * implementer 가 실제 `git rm` 하기 전까지 RED(개정 테스트는 화면 제거와 짝, 02a-C ★C1). `PlaceAdd*`
+ * (h13, 별 티켓)·`ManualPlanPage`(pages, 재조립) 경로는 유지.
+ *
  * 무엇을 보장하나:
  *  - **G1** 전처리(stripComments)×탐지기가 서로를 지우지 않는다(조합 자가검사).
- *  - **G2** 신규 화면 3파일이 `features/itinerary/ui` **재귀 모집단**에 실제로 든다 — 이게 곧 기존
- *    `itineraryTimeStructure.test.ts` G2(소요시간 표기 0건 전수)의 사정거리 편입 증명.
- *  - **G3** 신규 파일(화면 2·카드 1·페이지 2·배럴 1·라우트 2)이 정본 경로에 실재.
- *  - **G4** 신규 ui 파일에 소요시간 표기 0건 **+ "이동시간" 0건**(디짓 갭 봉합, 아래 참조).
+ *  - **G2** 남는 화면·카드가 `features/itinerary/ui` **재귀 모집단**에 들고, 제거 화면은 빠진다.
+ *  - **G3** 남는 파일(카드 1·페이지 2·배럴 1·라우트 2)이 정본 경로에 실재, 제거 화면은 부재.
+ *  - **G4** 남는 ui 파일에 소요시간 표기 0건 **+ "이동시간" 0건**(디짓 갭 봉합, 아래 참조).
  *
  * ── 왜 타겟 가드 `TRAVEL_TIME` 을 새로 두나 (디짓 게이트 함정) ───────────────
  * 기존 스캔의 `DURATION_TEXT=/(\d+\s*분|\d+\s*시간|소요)/` 은 **숫자 앞자리를 요구**해 `'3시간'`은
@@ -35,12 +40,15 @@ const ROOT = path.resolve('src');
 
 const UI_DIR_REL = 'features/itinerary/ui';
 
-/** 이 칸이 새로 그리는 화면/카드(재귀 스캔 자동 편입 + INV-3 타겟 가드 대상). */
+/** 이 칸이 그리는(남는) 화면/카드(재귀 스캔 자동 편입 + INV-3 타겟 가드 대상). TRIP-797 로
+ *  ManualPlanScreen 은 여기서 빠졌다(EditorView 재조립으로 제거 — REMOVED_SCREEN 참조). */
 const NEW_UI_FILES = [
-  'features/itinerary/ui/ManualPlanScreen.tsx',
   'features/itinerary/ui/PlaceAddScreen.tsx',
   'features/itinerary/ui/PlaceAddCard.tsx',
 ];
+
+/** TRIP-797 묶음 C — h12 통일로 소비처를 잃어 제거되는 화면(삭제도 계약, git rm 전 RED). */
+const REMOVED_SCREEN = 'features/itinerary/ui/ManualPlanScreen.tsx';
 
 /** 이 칸이 새로 만드는 전 파일(경로 계약 스냅숏). */
 const NEW_PATHS = [
@@ -138,25 +146,34 @@ describe('G1 · 조합 자가검사 — 전처리와 탐지기가 서로를 지�
   });
 });
 
-describe('🔴 G2 · 편입 앵커 — 신규 화면 3파일이 features/itinerary/ui 재귀 스캔에 든다', () => {
-  it('세 화면 경로가 재귀 모집단에 실제로 있다 (기존 소요시간 전수의 사정거리 편입)', () => {
+describe('🔴 G2 · 편입 앵커 — 남는 화면·카드는 재귀 스캔에 들고, 제거 화면은 빠진다', () => {
+  it('PlaceAdd 2파일은 재귀 모집단에 있고 ManualPlanScreen 은 부재다 (화면 제거 확정)', () => {
     const population = listSourceFiles(path.join(ROOT, UI_DIR_REL)).map(relOf);
 
     // 긍정 앵커 — 모집단이 비어 있지 않다.
     expect(population.length).toBeGreaterThan(0);
 
-    // 세 화면이 그 안에 있다 — 이게 곧 기존 DURATION 전수 스캔이 이들을 자동으로 잡는다는 증명.
+    // 남는 파일이 그 안에 있다 — 기존 DURATION 전수 스캔이 이들을 자동으로 잡는다는 증명.
     NEW_UI_FILES.forEach((rel) => expect(population).toContain(rel));
+
+    // ★삭제도 계약 — 통일 편집기가 pages(EditorView) 로 옮겨가 이 화면은 사라진다(git rm 전 RED).
+    expect(population).not.toContain(REMOVED_SCREEN);
   });
 });
 
-describe('🔴 G3 · 경로 계약 — 신규 파일이 정본 경로에 실재한다', () => {
-  it('화면 2·카드 1·페이지 2·배럴 1·라우트 2 가 실재하고 배럴이 두 페이지를 재수출한다', () => {
+describe('🔴 G3 · 경로 계약 — 남는 파일은 실재, 제거 화면은 부재', () => {
+  it('카드 1·페이지 2·배럴 1·라우트 2 가 실재하고, ManualPlanScreen 은 부재다', () => {
     NEW_PATHS.forEach((rel) =>
       expect(existsPair(rel)).toEqual({ file: rel, exists: true })
     );
 
-    // 배럴이 빈 스텁이 아니라 실제로 두 페이지를 재수출한다.
+    // ★삭제도 계약 — 화면 제거 확정(implementer git rm 전 RED).
+    expect(existsPair(REMOVED_SCREEN)).toEqual({
+      file: REMOVED_SCREEN,
+      exists: false,
+    });
+
+    // 배럴이 빈 스텁이 아니라 실제로 두 페이지를 재수출한다(ManualPlanPage 는 재조립 후에도 남는다).
     const barrel = readOne('pages/itinerary-manual/index.ts');
     expect(barrel).toContain('ManualPlanPage');
     expect(barrel).toContain('PlaceAddPage');

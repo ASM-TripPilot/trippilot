@@ -166,7 +166,7 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `ManualEditShell` · `mergeValidationFlags` · `reorderKeepingFixed` · `ManualEditShellProps` · `ManualEditMode` | `widgets/itinerary-edit` | **TRIP-805로 `shared/itinerary-edit`에서 승격 이동(배럴 유지).** 공용 일정 편집 셸(`mode:'normal'\|'fallback'`) + 순수 로직(방어 머지·고정 재고정). `pages/planb-manual`이 소비. `ManualTimeSheet`은 `TimeSheet` 위젯에 흡수돼 배럴에서 빠졌다 |
 | `MapSheetShell` · `SheetHeader` · `DistanceConnector` · `CtaBar` · `DayChipOverlay` | `widgets/map-sheet-shell/ui` | **신규(TRIP-783, widgets 층)** — 지도+2스냅 시트 셸(리포 최초 조합). 결과 화면 6종(h07·h08·h11·h14·h16) 공용, 이번 사이클은 h08만 조립. 새 결과 화면을 또 그리지 말고 이 셸에 `header`·`children`·`cta`를 주입해 쓴다. 상세는 `.claude/rules/layer-widgets.md` |
 | `SlotStopCard` | `entities/itinerary-slot/ui` | **신규(TRIP-783)** — `PoiSlotCard`와 병존하는 결과 화면 공용 슬롯 카드(번호 배지·시각 칩·다른 후보 링크·72 사진). `PoiSlotCard`를 대체하지 않는다(표면이 다름) |
-| `ALT_LABEL` | `entities/itinerary-slot/config/altLabel` | **신규(TRIP-783)** — `'다른 후보 ›'` 단일 공용 상수(config 세그먼트). `DraftScreen`·`ItineraryEditScreen`의 옛 로컬 상수는 아직 교체 안 됨(소비 화면 재작성 후속 몫) |
+| `ALT_LABEL` | `entities/itinerary-slot/config/altLabel` | **신규(TRIP-783)** — `'다른 후보 ›'` 단일 공용 상수(config 세그먼트). `DraftScreen`의 옛 로컬 상수는 아직 교체 안 됨(소비 화면 재작성 후속 몫). `ItineraryEditScreen`의 동명 로컬 상수는 TRIP-797 묶음 C로 그 화면째 삭제돼 드리프트 해소(2026-09-21) |
 
 > ⚠️ **재사용 API 의 위젯 행(위 3건)은 "화면·컨테이너 제외" 규칙의 예외다** — `widgets/` 층은 여러 화면이 공유하는 조립 단위를 두는 자리라 재구현 방지 색인에 싣는 것이 오히려 목적에 맞는다(TRIP-805).
 
