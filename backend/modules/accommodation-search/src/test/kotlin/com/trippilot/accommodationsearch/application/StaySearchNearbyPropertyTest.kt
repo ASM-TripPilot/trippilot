@@ -28,6 +28,9 @@ import io.kotest.property.checkAll
  */
 private class PbtContent(val stays: List<Stay>) : AccommodationContentPort {
     override fun search(region: String?) = ContentResult(stays, false)
+
+    override fun findOne(key: StayKey) =
+        search(null).stays.firstOrNull { it.key() == key }
 }
 
 private object PbtPrices : StayPriceQueryPort {

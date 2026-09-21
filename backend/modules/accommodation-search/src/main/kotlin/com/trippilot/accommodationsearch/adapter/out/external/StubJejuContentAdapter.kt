@@ -3,6 +3,7 @@ package com.trippilot.accommodationsearch.adapter.out.external
 import com.trippilot.accommodationsearch.domain.AccommodationContentPort
 import com.trippilot.accommodationsearch.domain.ContentResult
 import com.trippilot.accommodationsearch.domain.Stay
+import com.trippilot.accommodationsearch.domain.StayKey
 import org.springframework.stereotype.Component
 
 /**
@@ -29,4 +30,6 @@ class StubJejuContentAdapter : AccommodationContentPort {
         val result = if (region == null) stays else stays.filter { it.region == region }
         return ContentResult(stays = result, degraded = false)  // 스텁은 실패 없음
     }
+
+    override fun findOne(key: StayKey): Stay? = stays.firstOrNull { it.key() == key }
 }
