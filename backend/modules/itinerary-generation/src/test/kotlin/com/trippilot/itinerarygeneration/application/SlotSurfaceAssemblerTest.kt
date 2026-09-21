@@ -45,7 +45,7 @@ class SlotSurfaceAssemblerTest : StringSpec({
         override fun findFrozenSurfaces(poiSnapshotIds: Collection<UUID>) = frozen.filterKeys { it in poiSnapshotIds }
     }
 
-    val liveA = PoiSurfaceView(poiA, "성산일출봉", 33.4, 126.9, "ATTRACTION", "09:00-18:00", "https://img/a.jpg", listOf("자연"))
+    val liveA = PoiSurfaceView(poiA, "성산일출봉", 33.4, 126.9, "ATTRACTION", "SIGHT", "09:00-18:00", "https://img/a.jpg", listOf("자연"))
 
     "정본 표면을 슬롯에 합성한다" {
         val s = SlotSurfaceAssembler(FakeSurfaces(live = mapOf(poiA to liveA))).assemble(itinerary(slot(poiA)))
@@ -54,9 +54,24 @@ class SlotSurfaceAssemblerTest : StringSpec({
         s.getValue(poiA).openingHoursKnown shouldBe true
     }
 
+    /**
+     * **카테고리도 한글과 코드를 함께, 같은 출처에서 집는다.** 한쪽만 동결본에서 가져오면
+     * 확정 슬롯이 `category="명소"` 와 `categoryCode="FOOD"` 처럼 서로 다른 것을 가리킨다 —
+     * 화면과 AI 경계가 다른 말을 하게 되고, 어느 쪽이 사실인지 판단할 근거가 없다.
+     */
+    "확정 슬롯의 카테고리는 한글·코드가 둘 다 동결본에서 온다" {
+        val recategorized = liveA.copy(category = "맛집", categoryCode = "FOOD")
+        val frozen = FrozenPoiView(snapA, poiA, "성산일출봉", 33.4, 126.9, "명소", "SIGHT")
+        val s = SlotSurfaceAssembler(FakeSurfaces(mapOf(poiA to recategorized), mapOf(snapA to frozen)))
+            .assemble(itinerary(slot(poiA, snapA)))
+
+        s.getValue(poiA).category shouldBe "명소"
+        s.getValue(poiA).categoryCode shouldBe "SIGHT"
+    }
+
     "확정 슬롯은 동결값이 이긴다 — 원본이 개명돼도 확정 당시 이름을 보여준다(INV-U1-03)" {
         val renamed = liveA.copy(nameKo = "이름이 바뀐 곳", lat = 0.0)
-        val frozen = FrozenPoiView(snapA, poiA, "성산일출봉", 33.4, 126.9, "ATTRACTION")
+        val frozen = FrozenPoiView(snapA, poiA, "성산일출봉", 33.4, 126.9, "ATTRACTION", "SIGHT")
         val s = SlotSurfaceAssembler(FakeSurfaces(mapOf(poiA to renamed), mapOf(snapA to frozen)))
             .assemble(itinerary(slot(poiA, snapA)))
 
@@ -67,7 +82,7 @@ class SlotSurfaceAssemblerTest : StringSpec({
     }
 
     "원본이 사라져도 확정 슬롯은 동결값으로 렌더된다" {
-        val frozen = FrozenPoiView(snapA, poiA, "성산일출봉", 33.4, 126.9, "ATTRACTION")
+        val frozen = FrozenPoiView(snapA, poiA, "성산일출봉", 33.4, 126.9, "ATTRACTION", "SIGHT")
         val s = SlotSurfaceAssembler(FakeSurfaces(live = emptyMap(), frozen = mapOf(snapA to frozen)))
             .assemble(itinerary(slot(poiA, snapA)))
 
@@ -160,4 +175,4 @@ class SlotSurfaceAssemblerTest : StringSpec({
 
 /** 표면 표본 — 이름 말고는 이 스펙의 관심사가 아니다. */
 private fun view(poiId: UUID, nameKo: String) =
-    PoiSurfaceView(poiId, nameKo, 33.4, 126.5, "명소", null, null, emptyList())
+    PoiSurfaceView(poiId, nameKo, 33.4, 126.5, "명소", "SIGHT", null, null, emptyList())

@@ -2,6 +2,7 @@ package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.itinerarygeneration.api.ItineraryFacade
 import com.trippilot.itinerarygeneration.api.ItineraryPlanFacade
+import com.trippilot.itinerarygeneration.api.PlannedPlaceView
 import com.trippilot.itinerarygeneration.api.PlannedSlotView
 import com.trippilot.itinerarygeneration.api.ItineraryRef
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
@@ -66,7 +67,7 @@ class ItineraryReadFacade(
      * 빈 목록으로 남기면 호출측이 "그 날은 일정이 없다"로 읽는데 그건 사실이 아니다(이름만 모른다).
      */
     @Transactional(readOnly = true)
-    override fun findPlannedPlaceNames(accountId: UUID, tripId: UUID): Map<LocalDate, List<String>> {
+    override fun findPlannedPlaces(accountId: UUID, tripId: UUID): Map<LocalDate, List<PlannedPlaceView>> {
         trips.findPeriod(accountId, tripId) ?: return emptyMap()
         val itinerary = itineraries.findByTrip(tripId).firstOrNull() ?: return emptyMap()
         val byPoi = surfaces.assemble(itinerary)
@@ -74,7 +75,9 @@ class ItineraryReadFacade(
             // 문구는 동선 순서로 읽힌다. 여기서 다시 정렬하지 않는 것은 `ItineraryDay.of` 가
             // 이미 orderIndex 로 정렬해 보관하기 때문이다 — 두 곳에서 정렬하면 한쪽을 고쳐도
             // 다른 쪽이 가려 준다(역검증에서 실제로 아무것도 안 죽었다).
-            day.date to day.slots.mapNotNull { byPoi[it.sourcePoiId]?.nameKo }
+            day.date to day.slots.mapNotNull { slot ->
+                byPoi[slot.sourcePoiId]?.let { PlannedPlaceView(it.nameKo, it.categoryCode) }
+            }
         }.filterValues { it.isNotEmpty() }
     }
 }

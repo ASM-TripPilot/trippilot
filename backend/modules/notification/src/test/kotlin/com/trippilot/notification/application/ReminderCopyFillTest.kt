@@ -3,6 +3,7 @@ package com.trippilot.notification.application
 import com.trippilot.notification.domain.NotificationKind
 import com.trippilot.notification.domain.ReminderCopy
 import com.trippilot.notification.domain.ReminderCopyPort
+import com.trippilot.itinerarygeneration.api.PlannedPlaceView
 import com.trippilot.notification.domain.ReminderCopyRequest
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldNotBeEmpty
@@ -28,6 +29,8 @@ import java.util.UUID
  */
 class ReminderCopyFillTest : StringSpec({
 
+    fun place(name: String, code: String) = PlannedPlaceView(name, code)
+
     val acc = UUID.randomUUID()
     val tripId = UUID.randomUUID()
     val clock: Clock = Clock.fixed(Instant.parse("2026-08-01T00:00:00Z"), ZoneOffset.UTC)
@@ -44,14 +47,14 @@ class ReminderCopyFillTest : StringSpec({
 
     /** 여행 3일(8/10~8/12) 전부에 갈 곳이 있는 일정. 재료가 있어야 문구를 묻는다. */
     val plannedNames = mapOf(
-        LocalDate.parse("2026-08-10") to listOf("성산일출봉", "섭지코지"),
-        LocalDate.parse("2026-08-11") to listOf("우도"),
-        LocalDate.parse("2026-08-12") to listOf("카페 이름"),
+        LocalDate.parse("2026-08-10") to listOf(place("성산일출봉", "SIGHT"), place("섭지코지", "NATURE")),
+        LocalDate.parse("2026-08-11") to listOf(place("우도", "NATURE")),
+        LocalDate.parse("2026-08-12") to listOf(place("카페 이름", "CAFE")),
     )
 
     fun serviceWith(
         port: ReminderCopyPort,
-        names: Map<LocalDate, List<String>> = plannedNames,
+        names: Map<LocalDate, List<PlannedPlaceView>> = plannedNames,
     ): Pair<NotificationScheduleService, FakeSchedules> {
         val schedules = FakeSchedules()
         val trips = FakeTripOwner().apply {
@@ -151,7 +154,7 @@ class ReminderCopyFillTest : StringSpec({
         svc.reload(tripId)
 
         val day1 = echo.seen.single { it.kind == NotificationKind.TRIP_DAY && it.date == LocalDate.parse("2026-08-10") }
-        day1.slots shouldBe listOf("성산일출봉", "섭지코지")
+        day1.slots.map { it.name } shouldBe listOf("성산일출봉", "섭지코지")
     }
 
     /**
@@ -169,7 +172,7 @@ class ReminderCopyFillTest : StringSpec({
 
         val pre = echo.seen.single { it.kind == NotificationKind.TRIP_PRE }
         pre.date shouldBe LocalDate.parse("2026-08-10")   // 발화는 8/9, 말하는 날은 8/10
-        pre.slots shouldBe listOf("성산일출봉", "섭지코지")
+        pre.slots.map { it.name } shouldBe listOf("성산일출봉", "섭지코지")
     }
 
     /**
@@ -184,6 +187,23 @@ class ReminderCopyFillTest : StringSpec({
 
         schedules.findPendingByTrip(tripId).shouldNotBeEmpty()
         echo.seen.forEach { it.slots shouldBe emptyList() }
+    }
+
+    /**
+     * **카테고리는 경계 코드로 나간다.** 상대 사전(`_CATEGORY_LABELS`)이 `FOOD`·`CAFE` 를 키로 쓰는데
+     * 한글 정본(`맛집`)을 보내면 **사전에 없어 조용히 이름만 렌더된다** — 422 도 로그도 없이
+     * 카테고리만 사라지는, 가장 안 보이는 실패다. 그래서 한글이 새지 않는 것까지 못 박는다.
+     */
+    "카테고리가 경계 코드로 실린다 — 한글이 새지 않는다" {
+        val echo = Echo()
+        val (svc, _) = serviceWith(echo)
+
+        svc.reload(tripId)
+
+        val day1 = echo.seen.single { it.kind == NotificationKind.TRIP_DAY && it.date == LocalDate.parse("2026-08-10") }
+        day1.slots.map { it.category } shouldBe listOf("SIGHT", "NATURE")
+        // 한글 정본이 섞이면 조용히 무효가 된다 — 값 자체를 막는다.
+        day1.slots.mapNotNull { it.category }.none { it.any { c -> c.code in 0xAC00..0xD7A3 } } shouldBe true
     }
 
 })

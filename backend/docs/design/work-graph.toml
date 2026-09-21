@@ -843,7 +843,7 @@ note = """
 id = "REMINDER-COPY-CATEGORY"
 ticket = ""
 title = "리마인드 재료에 카테고리 — 경계 어휘가 한글이라 상대가 못 읽는다"
-status = "todo"
+status = "done"
 owner = "알림"
 migration = false
 touches = [
@@ -861,6 +861,20 @@ TRIP-883 에서 갈라져 나온 잔여. 계약(`ReminderSlotSchema.category`)�
 정합 지점은 place-data 다: `PoiCategory.boundaryCode` 가 이미 있으니 `PoiSurfaceView` 에 경계 코드를
 **함께** 내보내면 된다(한글 필드는 화면이 쓰므로 교체가 아니라 추가). 파급은 그 뷰의 소비자 전부라
 TRIP-883 과 묶지 않았다.
+
+## 완료(2026-09-20)
+
+예상대로 place-data 에서 풀었다 — `PoiSurfaceView`·`FrozenPoiView` 에 `categoryCode` 를 **더했다**
+(한글 `category` 는 화면이 쓰므로 그대로 둔다). 동결본과 정본 중 **같은 출처에서 둘을 함께** 집는다 —
+한쪽만 동결본에서 가져오면 확정 슬롯이 `category="명소"` 와 `categoryCode="FOOD"` 를 동시에 말한다.
+
+`ItineraryPlanFacade.findPlannedPlaceNames` → `findPlannedPlaces`(`PlannedPlaceView`)로 바꿨다.
+이름만 주던 것이 카테고리까지 주므로 메서드 이름이 더는 사실이 아니었다.
+
+**역검증이 두 번 헛돌아 스펙 두 개를 새로 만들었다.** 처음엔 값이 *흐르는지*만 재고 있어서
+`boundaryCode` 를 한글 `name` 으로 되돌려도 아무것도 안 깨졌다 — 위쪽 테스트가 전부
+`PoiSurfaceView` 를 손으로 만들어 쓰는 바람에 **정작 변환이 일어나는 자리가 무검사**였다.
+`PoiSurfaceServiceTest`(전 카테고리 코드 변환)와 동결 우선 스펙을 더해 둘 다 잡히게 했다.
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
