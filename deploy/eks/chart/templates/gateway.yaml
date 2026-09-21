@@ -5,7 +5,9 @@ metadata:
   labels:
     {{- include "trippilot.labels" . | nindent 4 }}
 spec:
+  {{- if not (and .Values.gateway.autoscaling .Values.gateway.autoscaling.enabled) }}
   replicas: {{ .Values.gateway.replicas }}
+  {{- end }}
   revisionHistoryLimit: 3
   strategy:
     type: RollingUpdate

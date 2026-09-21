@@ -5,7 +5,9 @@ metadata:
   labels:
     {{- include "trippilot.labels" . | nindent 4 }}
 spec:
+  {{- if not (and .Values.ai.autoscaling .Values.ai.autoscaling.enabled) }}
   replicas: {{ .Values.ai.replicas }}
+  {{- end }}
   revisionHistoryLimit: 3
   progressDeadlineSeconds: 900
   strategy:

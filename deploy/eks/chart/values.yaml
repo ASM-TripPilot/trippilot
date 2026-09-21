@@ -33,6 +33,12 @@ backend:
     limits: { cpu: "2", memory: 2Gi }
 ai:
   replicas: 1
+  # When enabled the Deployment stops rendering replicas — the HPA owns the count.
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70
   resources:
     requests: { cpu: 500m, memory: 512Mi }
     limits: { cpu: "2", memory: 2Gi }
@@ -48,6 +54,11 @@ gateway:
   # Informational: create DNS to the LoadBalancer hostname after the first deployment.
   hostname: ""
   replicas: 1
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70
   loadBalancerSourceRanges: [0.0.0.0/0]
   resources:
     requests: { cpu: 100m, memory: 64Mi }
