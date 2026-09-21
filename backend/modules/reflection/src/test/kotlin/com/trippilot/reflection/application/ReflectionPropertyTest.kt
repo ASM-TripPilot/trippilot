@@ -77,7 +77,7 @@ class ReflectionPropertyTest : StringSpec({
         override fun findSurfaces(poiIds: Collection<UUID>) = poiIds.mapNotNull { id ->
             known[id]?.let {
                 val name = named[id] ?: "장소-${id.toString().take(4)}"
-                id to PoiSurfaceView(id, name, it.first, it.second, "카페", null, null, emptyList())
+                id to PoiSurfaceView(id, name, it.first, it.second, "카페", "CAFE", null, null, emptyList())
             }
         }.toMap()
         override fun findFrozenSurfaces(poiSnapshotIds: Collection<UUID>) = emptyMap<UUID, FrozenPoiView>()

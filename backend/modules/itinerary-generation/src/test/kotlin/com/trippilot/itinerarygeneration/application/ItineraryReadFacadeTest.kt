@@ -70,7 +70,7 @@ class ItineraryReadFacadeTest : StringSpec({
     /** 표면 대역 — poiId 를 그대로 이름으로 쓴다. 이름 규칙 자체는 [SlotSurfaceAssembler] 스펙이 잰다. */
     fun surfaces(names: Map<UUID, String>) = object : PoiSurfaceFacade {
         override fun findSurfaces(poiIds: Collection<UUID>) = poiIds.mapNotNull { id ->
-            names[id]?.let { id to PoiSurfaceView(id, it, 33.0, 126.0, "명소", null, null, emptyList()) }
+            names[id]?.let { id to PoiSurfaceView(id, it, 33.0, 126.0, "명소", "SIGHT", null, null, emptyList()) }
         }.toMap()
         override fun findFrozenSurfaces(poiSnapshotIds: Collection<UUID>) = emptyMap<UUID, FrozenPoiView>()
     }
@@ -118,10 +118,10 @@ class ItineraryReadFacadeTest : StringSpec({
      */
     "날짜별 장소 이름을 방문 순서로 준다" {
         val names = facade(names = mapOf(poiA to "성산일출봉", poiB to "우도"))
-            .findPlannedPlaceNames(acc, tripId)
+            .findPlannedPlaces(acc, tripId)
 
-        names[d1] shouldContainExactly listOf("성산일출봉")
-        names[d2] shouldContainExactly listOf("우도")
+        names[d1]!!.map { it.nameKo } shouldContainExactly listOf("성산일출봉")
+        names[d2]!!.map { it.nameKo } shouldContainExactly listOf("우도")
     }
 
     "orderIndex 가 순서를 정한다 — 저장 순서가 아니다" {
@@ -137,7 +137,7 @@ class ItineraryReadFacadeTest : StringSpec({
             trips, repo(multi), SlotSurfaceAssembler(surfaces(mapOf(poiA to "나중", poiC to "먼저"))),
         )
 
-        facade.findPlannedPlaceNames(acc, tripId)[d1] shouldContainExactly listOf("먼저", "나중")
+        facade.findPlannedPlaces(acc, tripId)[d1]!!.map { it.nameKo } shouldContainExactly listOf("먼저", "나중")
     }
 
     /**
@@ -145,10 +145,10 @@ class ItineraryReadFacadeTest : StringSpec({
      * 사실은 이름만 모르는 것이다 — 그 오독이 그대로 "오늘은 일정이 없으니…" 라는 거짓 문구가 된다.
      */
     "표면이 없으면 그 날은 키가 없다 — 빈 목록으로 남기지 않는다" {
-        facade(names = emptyMap()).findPlannedPlaceNames(acc, tripId) shouldBe emptyMap()
+        facade(names = emptyMap()).findPlannedPlaces(acc, tripId) shouldBe emptyMap()
     }
 
     "타 계정에는 재료를 주지 않는다" {
-        facade(names = mapOf(poiA to "성산일출봉")).findPlannedPlaceNames(UUID.randomUUID(), tripId) shouldBe emptyMap()
+        facade(names = mapOf(poiA to "성산일출봉")).findPlannedPlaces(UUID.randomUUID(), tripId) shouldBe emptyMap()
     }
 })

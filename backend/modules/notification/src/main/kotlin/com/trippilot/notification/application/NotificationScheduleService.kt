@@ -5,6 +5,7 @@ import com.trippilot.notification.domain.NotificationSchedule
 import com.trippilot.notification.domain.NotificationScheduleRepository
 import com.trippilot.notification.domain.ReminderCopyPort
 import com.trippilot.notification.domain.ReminderCopyRequest
+import com.trippilot.notification.domain.ReminderSlot
 import com.trippilot.itinerarygeneration.api.ItineraryPlanFacade
 import com.trippilot.trip.api.OwnedTripPeriod
 import com.trippilot.trip.api.TripOwnerFacade
@@ -82,7 +83,7 @@ class NotificationScheduleService(
         val received = runCatching {
             // 한 번만 묻는다 — 예약마다 부르면 여행 일수만큼 조회가 늘고, 그 사이 일정이 바뀌면
             // 같은 적재 안에서 날짜별로 다른 일정을 말하게 된다.
-            val namesByDate = plans.findPlannedPlaceNames(trip.accountId, tripId)
+            val placesByDate = plans.findPlannedPlaces(trip.accountId, tripId)
             copies.copiesFor(
                 tripTitle = null, // 여행 제목은 trip.api 가 아직 안 준다 — 상대는 선택 필드로 받는다
                 items = planned.map {
@@ -91,7 +92,7 @@ class NotificationScheduleService(
                         scheduleKey = it.scheduleId.toString(),
                         kind = it.kind,
                         date = subject,
-                        slots = namesByDate[subject].orEmpty(),
+                        slots = placesByDate[subject].orEmpty().map { p -> ReminderSlot(p.nameKo, p.categoryCode) },
                     )
                 },
             )

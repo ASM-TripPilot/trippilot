@@ -48,8 +48,18 @@ data class ReminderCopyRequest(
     val scheduleKey: String,
     val kind: NotificationKind,
     val date: LocalDate,
-    val slots: List<String> = emptyList(),
+    val slots: List<ReminderSlot> = emptyList(),
 )
+
+/**
+ * 문구 재료 한 칸.
+ *
+ * [category] 는 **경계 코드**(`FOOD`·`CAFE`)다. 상대 프롬프트가 `"장소 · 카테고리"` 로 렌더하는데
+ * 사전이 코드를 키로 쓴다 — 한글(`맛집`)을 보내면 **사전에 없어 조용히 이름만 렌더된다**.
+ * 터지지 않고 효과만 사라지는 종류라, 값이 흐르는지는 경계 테스트가 아니라 여기 주석이 지킨다.
+ * 모르면 null 이고, 그때 상대는 이름만 쓴다.
+ */
+data class ReminderSlot(val name: String, val category: String? = null)
 
 /** 받은 문구. 둘 다 있어야 쓴다 — 한쪽만 쓰면 제목과 본문이 따로 논다. */
 data class ReminderCopy(val title: String, val body: String)

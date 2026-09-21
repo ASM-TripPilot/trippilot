@@ -16,7 +16,7 @@ interface ItineraryPlanFacade {
     fun findPlanSlots(accountId: UUID, tripId: UUID): List<PlannedSlotView>
 
     /**
-     * 날짜별 **그 날 갈 곳의 이름**(방문 순서) — 리마인드 문구의 재료다(TRIP-883).
+     * 날짜별 **그 날 갈 곳**(방문 순서) — 리마인드 문구의 재료다(TRIP-883).
      *
      * ## 왜 이름을 여기서 주나
      *
@@ -33,8 +33,17 @@ interface ItineraryPlanFacade {
      * 표면을 못 찾은 슬롯은 **빠진다** — 이름 없이 알릴 수는 없고, `poiId` 를 문구에 넣을 수도 없다.
      * 그 날 전부가 빠지면 키 자체가 없다(빈 목록이 아니라). 호출측은 그것을 "재료 없음"으로 읽는다.
      */
-    fun findPlannedPlaceNames(accountId: UUID, tripId: UUID): Map<LocalDate, List<String>>
+    fun findPlannedPlaces(accountId: UUID, tripId: UUID): Map<LocalDate, List<PlannedPlaceView>>
 }
+
+/**
+ * 그 날 갈 곳 한 칸(api-safe).
+ *
+ * [categoryCode] 는 **경계 코드**(`FOOD`·`CAFE`)다 — 한글 정본이 아니다. 문구를 쓰는 쪽은 AI 이고
+ * 그쪽 사전이 코드를 키로 쓴다. 한글을 보내면 사전에 없어 **조용히 무시되고**, 터지지 않은 채
+ * 카테고리만 사라진다. 화면에 쓸 한글이 필요하면 [PlannedSlotView] 가 아니라 표면 조회를 쓴다.
+ */
+data class PlannedPlaceView(val nameKo: String, val categoryCode: String)
 
 /**
  * 계획 슬롯 한 칸(api-safe).
