@@ -17,10 +17,13 @@ import { ItineraryPlanPage } from './ItineraryPlanPage';
 /**
  * TRIP-482 — h25 완성 일정(PLANNED)에서 h24 일정 편집으로 **들어가는 문** 배선(브리프 01 · Seed 01b).
  *
- * 무엇을 보장하나: PLANNED 일정을 렌더한 h25 에 편집 진입 어포던스(`itinerary-view-edit`)가 뜨고,
- * 그걸 누르면 페이지가 `router.push` 로 edit 라우트에 **그 tripId 를 실어** 이동한다. 지금 이 라우트
- * push 호출자는 리포 전역에 0건 — 이 테스트가 첫 호출자를 만든다(01b AC-1). 그리고 실 데이터가
- * CONFIRMED(h34)면 어포던스가 배선 층에서도 안 뜬다(편집 문이 확정 일정으로 새지 않음, AC-2).
+ * **재작성(TRIP-799 · narrow)**: PLANNED 완성 일정이 이제 지도+시트 셸이고 Figma h14 는 **편집 연필이
+ * 없다**(01b D3 제거 목록) → IE1 은 "PLANNED → 편집 진입 push"에서 "PLANNED 셸엔 `itinerary-view-edit`
+ * **부재**"로 뒤집힌다(★7). IE2(CONFIRMED)는 TimelineScreen 유지라 무변경(편집 문이 확정 일정으로
+ * 새지 않음, AC-2).
+ *
+ * 무엇을 보장하나: PLANNED 셸 얼굴엔 편집 진입 어포던스(`itinerary-view-edit`)가 **없고**(Figma h14
+ * 미설계), CONFIRMED(h34)에도 어포던스가 없다(편집 문이 확정 일정으로 새지 않음).
  *
  * 왜 페이지 통합 버킷인가: 화면(TimelineScreen)은 라우팅을 모르므로(구조 가드) push 배선은 반드시
  * 페이지에서만 성립한다. `useRouter` 를 목으로 갈아 `push` 호출 인자를 관찰한다(escape 통합테스트와
@@ -181,34 +184,38 @@ function useItinerary(status: ItineraryStatus) {
   );
 }
 
-describe('🔴 IE1 · AC1(핵심) — PLANNED h25 → 편집 어포던스 press → edit 라우트 push', () => {
-  it('편집 진입을 누르면 /trips/[tripId]/itinerary/edit 로 그 tripId 를 실어 push 한다', async () => {
-    // 준비 — 두 조회 성공(PLANNED) → 시간표(listed) 얼굴.
+describe('🔴 IE1 · narrow(★7) — PLANNED 셸 얼굴엔 편집 연필이 없다 (Figma h14 미설계)', () => {
+  it('PLANNED 는 지도+시트 셸이고 itinerary-view-edit 가 부재하며 push 도 안 나간다', async () => {
+    // 준비 — 두 조회 성공(PLANNED) → 지도+시트 셸 얼굴.
     useItinerary('PLANNED');
     renderPage();
-    await screen.findByTestId('itinerary-view-timeline');
+    await screen.findByTestId('map-sheet-shell-root');
 
-    // 실행 — 편집 진입 어포던스(현행은 어포던스 자체가 없어 getByTestId 가 throw → red).
-    fireEvent.press(screen.getByTestId('itinerary-view-edit'));
+    // 단언 — 편집 연필은 셸에 없다(D3 제거 목록). 현행은 PLANNED→TimelineScreen 이라 이 얼굴 자체가
+    //   안 떠(map-sheet-shell-root findBy 에서 red), 셸 전환 후엔 어포던스 부재로 green.
+    expect(screen.queryByTestId('itinerary-view-edit')).toBeNull();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+});
 
-    // 단언 — 동적 라우트 push 관용구(객체 1인자, goCreate 의 method push 선례 복제).
+describe('🔴 IE2 · AC-7 의미 반전 — CONFIRMED h16 셸엔 "일정 수정" 버튼이 있고 h12 로 push 한다', () => {
+  it('CONFIRMED 셸의 sheet-cta-button-0(일정 수정) press → h12 편집 push 1회', async () => {
+    // 준비(TRIP-801 의미 반전) — 799 까지 IE2 는 "확정 일정엔 편집 문이 없다"를 잠갔으나, h16 정본이
+    // 정면으로 **일정 수정 버튼을 추가**한다(01b D5 · 02a ★1). CONFIRMED 는 이제 셸이라 착지 앵커는
+    // `map-sheet-shell-root`(옛 '확정 일정' 앱바 제목은 셸엔 없음 · ★2).
+    useItinerary('CONFIRMED');
+    renderPage();
+    await screen.findByTestId('map-sheet-shell-root');
+
+    // 단언 — 편집 문이 확정 일정으로 **의도적으로** 열린다. h12 는 이 배선이 최초 앱-내 진입점이다.
+    const edit = screen.getByTestId('sheet-cta-button-0');
+    expect(edit).toHaveTextContent('일정 수정');
+
+    fireEvent.press(edit);
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/trips/[tripId]/itinerary/edit',
       params: { tripId: TRIP_ID },
     });
-  });
-});
-
-describe('🔴 IE2 · AC2 — CONFIRMED h34 페이지엔 편집 어포던스가 없다(편집 문이 확정 일정으로 안 샌다)', () => {
-  it('실 데이터가 CONFIRMED 면 itinerary-view-edit 가 부재하고 확정 얼굴로 착지한다', async () => {
-    // 준비 — 일정 200·CONFIRMED → h34 확정 얼굴.
-    useItinerary('CONFIRMED');
-    renderPage();
-    // 확정 얼굴 착지 증명 — TRIP-505 로 배너가 제거돼 상시 앱바 제목 '확정 일정' 으로 착지 확인
-    //   (배너 앵커 파손 봉합 · 02a ★T1).
-    await screen.findByText('확정 일정');
-
-    // 단언 — 배선 층에서도 편집 진입이 부재(화면 축 C15b 와 이중 방어).
-    expect(screen.queryByTestId('itinerary-view-edit')).toBeNull();
+    expect(mockPush).toHaveBeenCalledTimes(1);
   });
 });

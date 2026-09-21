@@ -7,13 +7,11 @@ import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas'
 import { MapView } from '@/shared/map';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
-import { buildGenerationGauge } from '../model/draftView';
 import type {
   DraftDayTab,
   DraftPin,
   DraftView,
   FallbackNotice,
-  GenerationGaugeCell,
 } from '../model/draftView';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { timeBandLabel } from '../model/timeBandLabel';
@@ -21,9 +19,6 @@ import {
   AlertCircleGlyph,
   BackChevronGlyph,
   CheckCircleGlyph,
-  CheckGlyph,
-  ClockGlyph,
-  FullAiGlyph,
   InfoCircleGlyph,
   LockGlyph,
 } from './ItineraryGlyphs';
@@ -50,11 +45,6 @@ const COMPLETE_LABEL = '이대로 확정';
 /** 하단 좌측 secondary 버튼 · 우상단 링크 라벨 — 둘 다 수동 짜기 라우트로 간다(TRIP-483 AC-4). */
 const MANUAL_LABEL = '처음부터 직접';
 const PICK_MANUAL_LABEL = '직접 고르기';
-// h10 "만드는 중" 얼굴 문구(TRIP-337 · Figma 1872:1083). 제목엔 반드시 "만드는 중"이 든다(02a M5).
-// 게이지 캡션은 거리만 말한다(INV-3 — 소요시간·시각·퍼센트 없음). "곧 완성돼요"는 수치 없는 안내다.
-const GENERATING_TITLE = '일정 만드는 중';
-const GAUGE_TITLE = 'AI가 일정을 짜고 있어요';
-const GAUGE_CAPTION = '동선·이동 거리를 계산 중 · 곧 완성돼요';
 const REASON_TITLE = '취향·거리로 채운 추천안이에요';
 /** reason 블록 부제(정적 · 상태 비의존 — YAGNI). Figma "바꾸는 중"은 상호작용 중 캡처라 정지
  * 배너엔 부적합해 티켓 의도 문구로 둔다(01b 결정 5 · em-dash `—`). */
@@ -325,94 +315,6 @@ function LoadingFace(): ReactElement {
   );
 }
 
-/** h10 게이지 셀 — 일자 하나의 3상태 중 **정확히 하나**만 그린다(상태를 testID 로 구분).
- * done=완성(브랜드 채움+체크) / active=생성 중(연브랜드) / waiting=대기(회색). 채움비율은
- * 계약에 없어 넣지 않는다(01b D5) — 3색 톤과 라벨로만 상태를 말한다. */
-function GaugeCell({ cell }: { cell: GenerationGaugeCell }): ReactElement {
-  const track =
-    cell.state === 'done'
-      ? 'bg-primary'
-      : cell.state === 'active'
-        ? 'bg-primary-pale'
-        : 'bg-surface-strong';
-  const label =
-    cell.state === 'done'
-      ? `Day${cell.dayNumber} 완성`
-      : cell.state === 'active'
-        ? `Day${cell.dayNumber} 생성 중`
-        : `Day${cell.dayNumber} 대기`;
-  const labelTone =
-    cell.state === 'done'
-      ? 'font-noto-bold font-bold text-ink'
-      : cell.state === 'active'
-        ? 'font-noto-bold font-bold text-primary-text'
-        : 'font-noto text-muted';
-  return (
-    <View
-      testID={`itinerary-generating-day-${cell.dayNumber}-${cell.state}`}
-      className="flex-1 items-center gap-[7px]"
-    >
-      <View className={`h-[10px] w-full rounded-pill ${track}`} />
-      <View className="flex-row items-center gap-[3px]">
-        {cell.state === 'done' ? <CheckGlyph size={12} /> : null}
-        <Text className={`text-micro ${labelTone}`}>{label}</Text>
-      </View>
-    </View>
-  );
-}
-
-/** h10 상단 진행 게이지 카드(Figma 1872:1094). 퍼센트·채움비율은 렌더하지 않는다(01b D5 ·
- * AC-6 진행률 금지) — 일자별 3상태 라벨과 거리 안내만. 아이콘·체크는 기존 글리프 재사용. */
-function GenerationGauge({
-  cells,
-}: {
-  cells: GenerationGaugeCell[];
-}): ReactElement {
-  return (
-    <View
-      style={cardShadow}
-      className="w-full gap-md rounded-card border border-hairline bg-canvas p-lg"
-    >
-      <View className="w-full flex-row items-center gap-sm">
-        <FullAiGlyph size={18} tone="primary" />
-        <Text className="flex-1 font-noto-bold text-card-title font-bold text-ink">
-          {GAUGE_TITLE}
-        </Text>
-      </View>
-      <View className="w-full flex-row gap-sm">
-        {cells.map((cell) => (
-          <GaugeCell key={cell.date} cell={cell} />
-        ))}
-      </View>
-      <Text className="font-noto text-caption text-muted">{GAUGE_CAPTION}</Text>
-    </View>
-  );
-}
-
-/** 미도착 일자의 자리표시 행 — testID 는 일자 번호로 잡힌다(도착한 일자엔 없다). 상태 라벨 한
- * 줄 + 골격 바뿐이다(진행 수치·시각 없음 · INV-3). active="짜는 중", waiting="대기 중". */
-function GenerationSkeleton({
-  cell,
-}: {
-  cell: GenerationGaugeCell;
-}): ReactElement {
-  const label = cell.state === 'active' ? '코스를 짜는 중' : '대기 중';
-  return (
-    <View
-      testID={`itinerary-generating-skeleton-${cell.dayNumber}`}
-      className="w-full gap-sm rounded-card border border-hairline bg-surface-soft p-md"
-    >
-      <View className="flex-row items-center gap-sm">
-        <ClockGlyph size={16} />
-        <Text className="font-noto-bold text-label font-bold text-muted">
-          {`Day ${cell.dayNumber} · ${label}`}
-        </Text>
-      </View>
-      <View className="h-[12px] w-3/5 rounded-pill bg-surface-strong" />
-    </View>
-  );
-}
-
 export function DraftScreen({
   view,
   tabs,
@@ -430,10 +332,8 @@ export function DraftScreen({
   renderSlotPanel,
   onManualPlan,
 }: DraftScreenProps): ReactElement {
-  // h10 "만드는 중" 얼굴 — PARTIAL 목록 위에 얹힌다(01b D1). 게이지 3상태는 탭(도착 여부)에서
-  // 도출하므로 화면이 신호를 새 프롭 없이 받는다(view 로 전달 · DraftPage 참조).
-  const generating = view.kind === 'listed' && view.generating === true;
-  const gauge = generating ? buildGenerationGauge(tabs) : [];
+  // PARTIAL(2단계 생성 중) 얼굴은 이제 DraftPage 가 공용 지도+시트 셸로 그린다(TRIP-790 · D1) —
+  // 이 화면은 view.generating 을 읽지 않고 listed 얼굴만 그린다(완성 CTA 는 그대로 · C16 무회귀).
   const slots =
     view.kind === 'listed'
       ? (view.days.find((day) => day.date === selectedDate)?.slots ?? [])
@@ -453,7 +353,7 @@ export function DraftScreen({
             <BackChevronGlyph />
           </Pressable>
           <Text className="font-noto-bold text-[19px] font-bold text-ink">
-            {generating ? GENERATING_TITLE : SCREEN_TITLE}
+            {SCREEN_TITLE}
           </Text>
           <View className="flex-1" />
           {/* 우상단 「직접 고르기」 — 수동 짜기로 나가는 링크(gated · TRIP-483 AC-4). 재생성
@@ -536,31 +436,25 @@ export function DraftScreen({
             </View>
           ) : null}
 
-          {generating ? (
-            // 만드는 중이면 완성 톤의 안내줄("…채운 추천안이에요") 대신 진행 게이지를 얹는다
-            // (완성 얼굴 사라짐 · AC-8). 목록·탭·지도는 아래에서 그대로 공존한다(additive).
-            <GenerationGauge cells={gauge} />
-          ) : (
-            <View className="w-full flex-row items-start gap-[10px]">
-              <CheckCircleGlyph />
-              <View className="flex-1 gap-[3px]">
-                <Text className="font-noto-bold text-body font-bold text-ink">
-                  {REASON_TITLE}
+          <View className="w-full flex-row items-start gap-[10px]">
+            <CheckCircleGlyph />
+            <View className="flex-1 gap-[3px]">
+              <Text className="font-noto-bold text-body font-bold text-ink">
+                {REASON_TITLE}
+              </Text>
+              {/* 부제는 슬롯 교체를 권하는 행동 유도 문구라 바꿀 슬롯이 실재하는
+                  `listed` 얼굴에서만 뜬다 — loading·failed·empty(슬롯 0건)에선 감춘다
+                  (제목은 이 티켓 이전부터 무조건 렌더라 그대로 둔다 · 03b 참고-1). */}
+              {view.kind === 'listed' ? (
+                <Text
+                  testID="itinerary-draft-reason-subtitle"
+                  className="font-noto text-caption text-muted"
+                >
+                  {REASON_SUBTITLE}
                 </Text>
-                {/* 부제는 슬롯 교체를 권하는 행동 유도 문구라 바꿀 슬롯이 실재하는
-                    `listed` 얼굴에서만 뜬다 — loading·failed·empty(슬롯 0건)에선 감춘다
-                    (제목은 이 티켓 이전부터 무조건 렌더라 그대로 둔다 · 03b 참고-1). */}
-                {view.kind === 'listed' ? (
-                  <Text
-                    testID="itinerary-draft-reason-subtitle"
-                    className="font-noto text-caption text-muted"
-                  >
-                    {REASON_SUBTITLE}
-                  </Text>
-                ) : null}
-              </View>
+              ) : null}
             </View>
-          )}
+          </View>
 
           {pins.length === 0 ? null : (
             <View className="h-[230px] w-full overflow-hidden rounded-card border border-hairline">
@@ -642,16 +536,6 @@ export function DraftScreen({
               })}
             </>
           ) : null}
-
-          {/* 미도착 일자마다 자리표시 행 — 도착한 day1 카드 아래에 얹힌다(치환 아님 · AC-8).
-              도출된 게이지에서 done 이 아닌 셀만 그린다 → 도착한 일자엔 스켈레톤이 안 뜬다. */}
-          {generating
-            ? gauge
-                .filter((cell) => cell.state !== 'done')
-                .map((cell) => (
-                  <GenerationSkeleton key={cell.date} cell={cell} />
-                ))
-            : null}
 
           {/* 하단 2버튼(TRIP-483 · 스크롤 흐름의 마지막 자식이지 고정 바 아님 · `MustVisitPickerScreen`
               ctaPrimary 선례). 우 완성 CTA 는 `listed` 얼굴에만 뜨고(PARTIAL 생성 중 포함) CONFIRMED 면

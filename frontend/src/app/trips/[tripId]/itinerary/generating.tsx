@@ -13,7 +13,6 @@ export default function ItineraryGeneratingRoute() {
     mode?: GenerateItineraryRequestGenerationMode;
     successRoute?:
       | '/trips/[tripId]/itinerary/draft'
-      | '/trips/[tripId]/itinerary/copick'
       | '/trips/[tripId]/itinerary/copick/[slotKey]';
   }>();
 

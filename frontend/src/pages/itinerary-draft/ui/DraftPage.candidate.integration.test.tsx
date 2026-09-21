@@ -122,14 +122,19 @@ function itinerary(): Itinerary {
       ],
     },
   ];
+  // TRIP-792 재픽스처 — 깨끗한 COMPLETE 는 이제 h08 셸로 가(D1-R NARROW) 인라인 후보 패널이 없다
+  // (셸의 onPressAlt 는 no-op·D2-R). 이 파일이 검증하는 h12 인라인 패널 경로는 **DraftScreen 라우팅
+  // 얼굴**에서만 살아 있으므로, fallback(DETERMINISTIC+isFallback) 로 두어 DraftScreen 으로 라우팅한다
+  // (narrow 가 fallback 을 셸에서 뺀다). 폴백 배너 1블록이 곁에 붙지만 alt 트리거·패널·manual 어포던스
+  // 계약(D1~D6)엔 영향 없다(배너는 카드 리스트 밖 additive). 실 교체 시트는 TRIP-793 이연.
   return {
     itineraryId: 'itin-1',
     tripId: TRIP_ID,
     status: 'PLANNED',
-    solveMode: 'FULL_AI',
+    solveMode: 'DETERMINISTIC',
     generationMode: 'FULLY_AI',
     generationState: 'COMPLETE',
-    isFallback: false,
+    isFallback: true,
     days,
   };
 }

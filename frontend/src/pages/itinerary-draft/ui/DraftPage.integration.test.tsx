@@ -266,7 +266,7 @@ function renderPage() {
 }
 
 describe('🔴 I1 · AC-4 · AC-9 — 2단계 생성을 폴링으로 잇고, 다 받으면 멈춘다', () => {
-  it('PARTIAL 이면 2초 뒤 다시 조회해 3일차가 활성이 되고, COMPLETE 뒤에는 요청이 더 안 나간다', async () => {
+  it('PARTIAL 이면 2초 뒤 다시 조회해 COMPLETE 셸(h08)로 바뀌고, COMPLETE 뒤에는 요청이 더 안 나간다 (TRIP-792 플립)', async () => {
     // 준비 — 첫 조회는 day1 만 담긴 PARTIAL, 그 다음부터 3일 전부 담긴 COMPLETE.
     itineraryScript = (call) =>
       call === 0
@@ -275,18 +275,23 @@ describe('🔴 I1 · AC-4 · AC-9 — 2단계 생성을 폴링으로 잇고, 다
 
     renderPage();
 
-    // 단언 ① — 탭은 처음부터 **3개**다. 여행이 3일이기 때문이지 `days` 가 3개여서가 아니다.
-    //          `days.length` 로 셌다면 여기서 1개가 나온다(01b D7 의 급소).
-    await waitFor(() =>
-      expect(screen.queryAllByTestId(/^itinerary-draft-day-/)).toHaveLength(3)
-    );
-    expect(screen.getByTestId('itinerary-draft-day-3')).toBeDisabled();
+    // 단언 ① — PARTIAL 이면 셸 얼굴이 뜨고, 진행 카드 게이지는 **3셀**이다(여행 기간 3에서
+    //          도출). `days.length`(=1) 로 셌다면 cell-3 이 없다(01b D7 의 급소 — 옛 "탭 3개
+    //          disabled" 심판을 셸 게이지 3셀로 이관, TRIP-790). 셸이라 일차 칩은 없다(★2).
+    await screen.findByTestId('generation-progress-card');
+    expect(
+      screen.getByTestId('generation-gauge-cell-3-waiting')
+    ).toBeOnTheScreen();
+    expect(screen.queryAllByTestId(/^itinerary-draft-day-/)).toEqual([]);
 
-    // 단언 ② — 폴링이 실제로 돈다. 2초 뒤 두 번째 조회가 나가 3일차가 활성이 된다.
+    // 단언 ② — 폴링이 실제로 돈다. 2초 뒤 두 번째 조회가 나가 **깨끗한 COMPLETE → h08 셸**로 바뀐다
+    //          (TRIP-792 D1-R NARROW). 전환 증거: h07 진행 카드가 사라지고 h08 day-chip 오버레이가
+    //          뜬다(두 셸 다 map-sheet-shell-root 라 그건 전환 마커로 못 쓴다 — 오버레이로 가른다).
     await waitFor(
-      () => expect(screen.getByTestId('itinerary-draft-day-3')).toBeEnabled(),
+      () => expect(screen.queryByTestId('generation-progress-card')).toBeNull(),
       { timeout: DRAFT_POLL_INTERVAL_MS * 3 }
     );
+    expect(screen.getByTestId('sheet-daychip-0')).toBeOnTheScreen(); // h08 day-chip
     expect(itineraryGetCalls).toBe(2);
 
     // 단언 ③ — ★ COMPLETE 가 된 뒤로는 **한 건도 더 안 나간다**. 안 멈추면 화면을 열어 둔
@@ -332,7 +337,9 @@ describe('🔴 I3 · AC-11 — 다시 시도는 PLANNED 에서만 POST 를 낸�
 
     renderPage();
 
-    const retry = await screen.findByTestId('itinerary-draft-retry');
+    // TRIP-792 플립 — 깨끗한 COMPLETE·PLANNED → h08 셸. 재생성은 이제 셸의 '다시 짜기'(cta[0]).
+    const retry = await screen.findByTestId('sheet-cta-button-0');
+    expect(retry).toHaveTextContent('다시 짜기');
     // 배선이 mount 시 POST 를 내든 안 내든 상관없게 **누르기 직전 값과의 차이**를 잰다.
     const before = hitsFor('POST', '/itinerary');
 
@@ -341,12 +348,13 @@ describe('🔴 I3 · AC-11 — 다시 시도는 PLANNED 에서만 POST 를 낸�
     await waitFor(() => expect(hitsFor('POST', '/itinerary')).toBe(before + 1));
   });
 
-  it('🔴 CONFIRMED 면 버튼이 비활성이고 POST 가 0건이다 — 확정이 풀리면 되돌릴 수 없다', async () => {
+  it('🔴 CONFIRMED 면 다시 짜기를 눌러도 재생성 POST 가 0건이다 — 확정이 풀리면 되돌릴 수 없다 (TRIP-792 플립)', async () => {
     /**
      * ⚠️ openapi POST 원문: *"확정 일정에 호출하면 확정이 풀리고 PLANNED 새 일정으로 대체되며,
      * 동결됐던 poi_snapshot 참조는 사라진다."* 확정 해제 API 는 없다 — 되돌릴 방법이 없다.
-     * `toBeDisabled()` 만으로는 "회색인데 눌리는" 구현을 통과시키므로(02a ★8) **나간 요청 0건**을
-     * 짝으로 잰다.
+     * TRIP-792 플립: CONFIRMED·깨끗한 COMPLETE 도 narrow 조건상 h08 셸로 간다(status 는 조건에
+     * 없음). 셸의 CtaBar 는 disabled prop 이 없어(회색 잠금 없음) **진짜 방어는 handleRetry 의
+     * CONFIRMED early-return**이다 — '다시 짜기'(cta[0])를 눌러도 **나간 POST 0건**으로 그 방어를 잰다.
      */
     itineraryScript = () =>
       itinerary({
@@ -357,8 +365,8 @@ describe('🔴 I3 · AC-11 — 다시 시도는 PLANNED 에서만 POST 를 낸�
 
     renderPage();
 
-    const retry = await screen.findByTestId('itinerary-draft-retry');
-    await waitFor(() => expect(retry).toBeDisabled());
+    const retry = await screen.findByTestId('sheet-cta-button-0');
+    expect(retry).toHaveTextContent('다시 짜기');
 
     fireEvent.press(retry);
     await sleep(50);
@@ -380,7 +388,9 @@ const FACE_ROWS: {
   name: string;
   days: ItineraryDaysItem[];
   summary?: ItineraryCandidatesSummary;
-  face: 'empty' | 'zero' | 'listed';
+  // TRIP-792 플립 — 'listed' 는 두 갈래로 갈렸다: 강등/폴백이 곁에 붙은 목록은 DraftScreen('listed'),
+  // 깨끗한 COMPLETE 목록은 h08 셸('shell'). narrow 조건이 이 둘을 가른다.
+  face: 'empty' | 'zero' | 'listed' | 'shell';
 }[] = [
   {
     name: '1행 · 일자 없음 + 요약 키 없음 → 빈 화면',
@@ -416,10 +426,10 @@ const FACE_ROWS: {
     face: 'listed',
   },
   {
-    name: '5행 · 슬롯 있음 + 요약 null → 목록',
+    name: '5행 · 슬롯 있음 + 요약 null(깨끗한 COMPLETE) → h08 셸',
     days: daysUpTo(3),
     summary: null,
-    face: 'listed',
+    face: 'shell',
   },
 ];
 
@@ -444,8 +454,14 @@ describe('🔴 I4 · AC-5 — 01b D5 판정표대로 얼굴이 정확히 하나�
       expect([
         screen.queryAllByTestId('itinerary-draft-empty').length > 0,
         screen.queryAllByTestId('itinerary-draft-zero').length > 0,
-        cardTestIds().length > 0,
-      ]).toEqual([face === 'empty', face === 'zero', face === 'listed']);
+        cardTestIds().length > 0, // DraftScreen listed(강등/폴백 곁 배너)
+        screen.queryAllByTestId('map-sheet-shell-root').length > 0, // h08 셸(깨끗한 COMPLETE)
+      ]).toEqual([
+        face === 'empty',
+        face === 'zero',
+        face === 'listed',
+        face === 'shell',
+      ]);
     });
   });
 });
@@ -616,10 +632,13 @@ describe('🔴 I8 · AC-1·AC-2·AC-7 — solveMode·isFallback 신호가 배선
     ).toBeOnTheScreen();
   });
 
-  it('🔴 AC-7 · MINIMAL + isFallback=false(MANUAL) → 배너가 0건이다 (실패가 아니라 선택)', async () => {
+  it('🔴 AC-7 · MINIMAL + isFallback=false(MANUAL) → 폴백 배너 0건 (실패가 아니라 선택 · TRIP-792 플립)', async () => {
     /**
      * ⚠️ openapi 원문: MANUAL(직접 만들기)은 `solveMode=MINIMAL` 이지만 `isFallback=false` 다.
-     * 배선이 solveMode 만 보고 배너를 켜면 직접 만든 빈 일정에 "최소 일정 폴백" 오배너가 뜬다.
+     * 배선이 solveMode 만 보고 폴백을 켜면 오배너가 뜬다 — 그건 `resolveFallbackNotice` 가 막는다.
+     * TRIP-792 플립: isFallback=false 라 `resolveFallbackNotice(...)===undefined` → 깨끗한 COMPLETE →
+     * **h08 셸**로 간다(셸엔 배너 슬롯이 없다). isFallback=true 경로(위 AC-1·AC-2)는 DraftScreen 배너로
+     * 남아 게이트의 반대편을 지킨다.
      */
     itineraryScript = () =>
       itinerary({
@@ -631,9 +650,14 @@ describe('🔴 I8 · AC-1·AC-2·AC-7 — solveMode·isFallback 신호가 배선
 
     renderPage();
 
-    // 긍정 앵커 — 목록은 정상으로 떴다(빈 화면이 아래 부정 단언을 공짜로 통과하는 것 방지).
-    await waitFor(() => expect(cardTestIds().length).toBeGreaterThan(0));
-    // 부정 — solveMode 만 보고 배너를 켜면 여기서 걸린다(isFallback 게이트가 없으면 red 로 전환).
+    // 긍정 앵커 — 셸 슬롯 카드가 정상으로 떴다(빈 화면이 아래 부정 단언을 공짜로 통과하는 것 방지).
+    await waitFor(() =>
+      expect(screen.queryAllByTestId(/^slot-stopcard-/).length).toBeGreaterThan(
+        0
+      )
+    );
+    expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
+    // 부정 — DraftScreen 폴백 배너로 새지 않는다(isFallback=false=선택이라 폴백 아님).
     expect(screen.queryAllByTestId(FALLBACK_BANNER)).toEqual([]);
   });
 });
@@ -643,11 +667,14 @@ describe('🔴 I8 · AC-1·AC-2·AC-7 — solveMode·isFallback 신호가 배선
  * 책임이자 심판이다. 기본 시나리오(COMPLETE·PLANNED·3일 = listed 얼굴)에서 CTA 를 눌러 h25 로
  * 정확히 가는지 잰다.
  * ─────────────────────────────────────────────────────────────────────────── */
-describe('🔴 I9 · TRIP-454 AC-5 — 완성 CTA 를 누르면 h25 로 정확히 배선된다', () => {
-  it('listed 에서 완성 버튼을 누르면 /trips/[tripId]/itinerary 로 tripId 를 실어 한 번 이동한다', async () => {
+describe('🔴 I9 · TRIP-454 AC-5 / TRIP-792 AC-2 — 확정 CTA 를 누르면 h25 로 정확히 배선된다', () => {
+  it('h08 셸에서 확정하기(cta[1])를 누르면 /trips/[tripId]/itinerary 로 tripId 를 실어 한 번 이동한다', async () => {
     renderPage();
 
-    fireEvent.press(await screen.findByTestId('itinerary-draft-complete'));
+    // TRIP-792 플립 — 깨끗한 COMPLETE → h08 셸. 완성 CTA 는 셸의 '확정하기'(cta[1]).
+    const confirm = await screen.findByTestId('sheet-cta-button-1');
+    expect(confirm).toHaveTextContent('확정하기');
+    fireEvent.press(confirm);
 
     await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
 
@@ -669,13 +696,13 @@ describe('🔴 I9 · TRIP-454 AC-5 — 완성 CTA 를 누르면 h25 로 정확�
  * (a) 완성 CTA 확정 가드 + (c) onBack canGoBack 가드. 배선을 실 HTTP·목 라우터로 태운다.
  * ─────────────────────────────────────────────────────────────────────────── */
 
-describe('🔴 I10 · TRIP-466 AC-a1 — CONFIRMED 면 완성 CTA 가 잠기고 라우팅이 0 건이다', () => {
-  it('status=CONFIRMED 면 완성 버튼이 비활성이고 눌러도 router.push 가 0 건이다', async () => {
+describe('🔴 I10 · TRIP-466 AC-a1 / TRIP-792 — CONFIRMED 도 h08 셸로 가되 확정을 푸는 재생성은 막힌다', () => {
+  it('status=CONFIRMED 면 h08 셸이 뜨고, 다시 짜기를 눌러도 재생성 POST 가 0 건이다', async () => {
     /**
-     * ⚠️ 확정 일정에서 완성 CTA 가 눌리면 안 되는 이유는 완성이 곧 다음 화면 이동이라, 확정 이후
-     * 흐름에서 어긋난 액션이 살아 있는 것이다(브리프 (a)). 완성 CTA 는 `router.push` 로만 이동하므로
-     * `toBeDisabled()` 와 **push 0 건**을 짝으로 잰다(회색인데 눌리는 함정 회피 · 02a ★2).
-     * 초기 로딩엔 `data===undefined` 라 canRetry 가 잠깐 true 다 → settle 대기가 필수(★7, I3 동형).
+     * ⚠️ 확정 일정에서 재생성 POST 가 나가면 확정이 풀리고 동결된 poi_snapshot 참조가 사라진다
+     * (되돌릴 API 없음, 브리프 (a)). TRIP-792 플립: CONFIRMED·깨끗한 COMPLETE 도 narrow 조건상
+     * h08 셸로 간다(확정하기는 h14 조회로의 무해한 이동일 뿐). **진짜 위험은 재생성**이고 그 방어는
+     * handleRetry 의 CONFIRMED early-return 이다 — '다시 짜기'(cta[0]) press → **POST 0건**으로 잰다.
      */
     itineraryScript = () =>
       itinerary({
@@ -686,25 +713,25 @@ describe('🔴 I10 · TRIP-466 AC-a1 — CONFIRMED 면 완성 CTA 가 잠기고 
 
     renderPage();
 
-    const complete = await screen.findByTestId('itinerary-draft-complete');
-    await waitFor(() =>
-      expect(screen.getByTestId('itinerary-draft-complete')).toBeDisabled()
-    );
+    // 셸이 떴다(CONFIRMED 도 깨끗하면 셸) — 그 위에서 재생성 방어를 잰다.
+    await screen.findByTestId('map-sheet-shell-root');
+    const retry = screen.getByTestId('sheet-cta-button-0');
+    expect(retry).toHaveTextContent('다시 짜기');
 
-    fireEvent.press(complete);
+    fireEvent.press(retry);
     await sleep(50);
 
-    expect(mockPush).not.toHaveBeenCalled();
+    expect(hitsFor('POST', '/itinerary')).toBe(0);
   });
 });
 
-describe('🔴 I11 · TRIP-466 AC-a3 — 생성 중(PARTIAL) 은 잠기지 않는다 (선제 green · 과잉잠금 트립와이어)', () => {
-  it('generationState=PARTIAL(status PLANNED) 이면 완성 버튼이 활성이고 눌러 이동한다', async () => {
+describe('🔴 I11 · TRIP-790 D9 — 생성 중(PARTIAL)엔 확정/완성 CTA 가 없다 (계약 플립)', () => {
+  it('generationState=PARTIAL 이면 셸 얼굴이 뜨고 완성 CTA·CTA 바가 0건이다', async () => {
     /**
-     * ★ canRetry 재사용의 정확성을 지키는 심판(02a ★1 · 브리프 맹점 ④). PARTIAL 은 generationState
-     * 이고 status 는 여전히 PLANNED 라 canRetry=`PLANNED !== 'CONFIRMED'`=true → 완성 CTA 활성.
-     * 지금도 green(잠금 0)이고 구현 후에도 green 이어야 한다 — 구현자가 "CONFIRMED 만"을 "생성
-     * 중도 막음"으로 넓히면(예: canRetry 에 PARTIAL 배제를 곱함) 이 케이스가 red 로 전환된다.
+     * ★ 계약 플립(02a ★1·§6). 옛 계약은 "PARTIAL 도 완성 CTA 활성"이었으나, D1(PARTIAL→셸)·
+     * D9(생성 중 CTA 없음)로 뒤집힌다 — 생성 중엔 확정할 완성본이 없어 CTA 자체를 안 그린다
+     * (셸 `cta` 미전달). 현행은 PARTIAL 에 DraftScreen 완성 CTA 를 그려 이 부재 단언이 red,
+     * 셸 전환 후 green. "과잉잠금"이 아니라 "표면 자체 부재"로 바뀐 것이다.
      */
     itineraryScript = () =>
       itinerary({
@@ -715,15 +742,13 @@ describe('🔴 I11 · TRIP-466 AC-a3 — 생성 중(PARTIAL) 은 잠기지 않�
 
     renderPage();
 
-    const complete = await screen.findByTestId('itinerary-draft-complete');
-    await waitFor(() =>
-      expect(screen.getByTestId('itinerary-draft-complete')).toBeEnabled()
-    );
+    // 셸 얼굴이 떴다(진행 카드) — 그 위에서 CTA 부재를 잰다.
+    await screen.findByTestId('generation-progress-card');
 
-    fireEvent.press(complete);
-
-    // 활성이라 실제로 이동한다 — 목적지 정확일치는 AC-a2(기존 I9) 소관, 여기선 "잠기지 않았다"만.
-    await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId('itinerary-draft-complete')).toBeNull();
+    expect(screen.queryByTestId('sheet-cta-root')).toBeNull();
+    // 짝 — CTA 가 없어도 이동은 애초에 일어나지 않는다(생성 중 확정 경로 자체가 없음).
+    expect(mockPush).not.toHaveBeenCalled();
   });
 });
 
@@ -736,7 +761,7 @@ describe('🔴 I11 · TRIP-466 AC-a3 — 생성 중(PARTIAL) 은 잠기지 않�
 /** 두 얼굴과 각 얼굴의 뒤로 버튼·얼굴 마커. zero 는 `days:[]+요약객체`(I4 FACE_ROWS 2행이 zero 임을
  * 이미 증명), listed 는 기본 script. */
 const BACK_CASES: {
-  face: 'zero' | 'listed';
+  face: 'zero' | 'shell';
   backTestId: string;
   faceMarker: string;
   script: () => Itinerary;
@@ -754,9 +779,11 @@ const BACK_CASES: {
       }),
   },
   {
-    face: 'listed',
-    backTestId: 'itinerary-draft-back',
-    faceMarker: 'itinerary-draft-complete',
+    // TRIP-792 플립 — 깨끗한 COMPLETE 는 h08 셸. 뒤로가기는 DayChipOverlay 의 back
+    // (`sheet-daychip-back` → onBack=handleBack). faceMarker 도 셸 루트로.
+    face: 'shell',
+    backTestId: 'sheet-daychip-back',
+    faceMarker: 'map-sheet-shell-root',
     script: () => itinerary({ dayCount: 3, generationState: 'COMPLETE' }),
   },
 ];

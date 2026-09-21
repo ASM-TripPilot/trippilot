@@ -85,6 +85,7 @@ import { OptionSwapScreen } from '@/features/itinerary/ui/OptionSwapScreen';
 import { PlaceAddScreen } from '@/features/itinerary/ui/PlaceAddScreen';
 import { SlotCandidatePanel } from '@/features/itinerary/ui/SlotCandidatePanel';
 import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
+import { GenerationProgressCard } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
 import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
 import { SheetHeader } from '@/widgets/map-sheet-shell/ui/SheetHeader';
 import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
@@ -96,7 +97,6 @@ import {
   type MyTripCardVM,
 } from '@/features/itinerary/ui/MyTripCard';
 import { MyTripsListScreen } from '@/features/itinerary/ui/MyTripsListScreen';
-import { TimelineScreen } from '@/features/itinerary/ui/TimelineScreen';
 import { ZeroCandidateScreen } from '@/features/itinerary/ui/ZeroCandidateScreen';
 import {
   NotificationInboxScreen,
@@ -153,6 +153,8 @@ import { DestinationEditSheet } from '@/features/trip/ui/DestinationEditSheet';
 import { PeriodEditSheet } from '@/features/trip/ui/PeriodEditSheet';
 import { StaySelectSheet } from '@/features/trip/ui/StaySelectSheet';
 import { LiveLocationPage } from '@/pages/live-location';
+import { ConfirmedBanner } from '@/pages/itinerary-plan/ui/ConfirmedBanner';
+import { NoBaseNoticeCard } from '@/pages/itinerary-plan/ui/NoBaseNoticeCard';
 import { BudgetEditSheet } from '@/pages/trip-new-step1/ui/BudgetEditSheet';
 import { PrefOverrideSheet } from '@/pages/trip-new-step1/ui/PrefOverrideSheet';
 import {
@@ -536,19 +538,6 @@ const DRAFT_PREVIEW_DAYS: ItineraryDaysItem[] = [
   { date: DRAFT_PREVIEW_DATE, slots: DRAFT_PREVIEW_SLOTS },
 ];
 
-/** 좌표가 하나도 없는 날 — 핀이 0개라 **지도 블록이 통째로 빠지고 레이아웃이 위로 당겨진다.**
- * 03 §3.1-3 의 자기 신고 자리이고 Figma 와 갈리는 지점이라, 눈으로 판단할 상태로 세운다. */
-const DRAFT_PREVIEW_DAYS_NO_COORDS: ItineraryDaysItem[] = [
-  {
-    date: DRAFT_PREVIEW_DATE,
-    slots: DRAFT_PREVIEW_SLOTS.map((slot) => ({
-      ...slot,
-      lat: null,
-      lng: null,
-    })),
-  },
-];
-
 const DRAFT_PREVIEW_BASE: DraftScreenProps = {
   view: { kind: 'listed', days: DRAFT_PREVIEW_DAYS, staleFailed: false },
   // 여행은 3일인데 첫날만 도착한 상태(2단계 생성 중) — 2·3일차 탭이 비활성으로 보인다.
@@ -646,6 +635,180 @@ const H08_PREVIEW_TIME_LABELS = [
 const H08_PREVIEW_CONNECTORS = ['차량 · 2.1km', '0.8km', '0.6km'];
 
 const H08_PREVIEW_DATE = '2026-06-10';
+
+// h11 같이 결과(CoPick 완료, TRIP-796) — 비고정 4 + 고정 숙소 1(21:00). 고정 슬롯은 단일 시각·부제·
+// 고정 배지, 비고정은 시각 범위 칩만(다른 후보 링크 없음). meta 는 비고정 4 → `4/4 골랐어요`.
+const H11_COPICK_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
+  {
+    poiId: 'copick-gwangalli',
+    startAt: '10:00:00',
+    endAt: '11:00:00',
+    isFixed: false,
+    endsNextDay: false,
+    hasViolation: false,
+    nameKo: '광안리 해변',
+    category: '자연',
+    tags: ['바다', '산책'],
+    imageUrl: DRAFT_PREVIEW_PHOTOS[0],
+    distanceRange: null,
+    lat: 35.1532,
+    lng: 129.1188,
+  },
+  {
+    poiId: 'copick-hwangnyeong',
+    startAt: '11:30:00',
+    endAt: '12:10:00',
+    isFixed: false,
+    endsNextDay: false,
+    hasViolation: false,
+    nameKo: '황령산 전망대',
+    category: '자연',
+    tags: ['전망', '야경'],
+    imageUrl: DRAFT_PREVIEW_PHOTOS[1],
+    distanceRange: '차량 · 2.1km',
+    lat: 35.1372,
+    lng: 129.1005,
+  },
+  {
+    poiId: 'copick-museum',
+    startAt: '13:00:00',
+    endAt: '14:30:00',
+    isFixed: false,
+    endsNextDay: false,
+    hasViolation: false,
+    nameKo: '부산시립미술관',
+    category: '문화',
+    tags: ['전시', '실내'],
+    imageUrl: null,
+    distanceRange: '0.8km',
+    lat: 35.1697,
+    lng: 129.1339,
+  },
+  {
+    poiId: 'copick-waveon',
+    startAt: '15:30:00',
+    endAt: '16:30:00',
+    isFixed: false,
+    endsNextDay: false,
+    hasViolation: false,
+    nameKo: '웨이브온 카페',
+    category: '카페',
+    tags: ['카페', '오션뷰'],
+    imageUrl: DRAFT_PREVIEW_PHOTOS[2],
+    distanceRange: '0.6km',
+    lat: 35.1889,
+    lng: 129.2088,
+  },
+  {
+    poiId: 'copick-hotel',
+    startAt: '21:00:00',
+    endAt: '21:00:00',
+    isFixed: true,
+    endsNextDay: false,
+    hasViolation: false,
+    nameKo: '해운대 그랜드 호텔',
+    category: '숙소',
+    tags: [],
+    imageUrl: null,
+    distanceRange: '0.6km',
+    lat: 35.163,
+    lng: 129.16,
+  },
+];
+
+const H11_COPICK_PREVIEW_DATE = '2026-06-10';
+
+// h14 완성 일정(PLANNED, TRIP-799) 지도+시트 셸 프리뷰 — 페이지(ItineraryPlanPage)는 react-query·
+// 라우터가 필요해 프리뷰에서 직접 못 쓰므로, 페이지의 셸 조립을 축소해 4얼굴(default·거리계산중·지도
+// 폴백·거점없음)을 데이터 입력만 달리해 그린다(h11-copick-complete 선례). 슬롯은 h11 결과 픽스처를
+// 재사용한다(default 에 사진 없는 슬롯 1개 포함 — copick-museum·hotel imageUrl null).
+const H14_PLAN_PREVIEW_DATE = H11_COPICK_PREVIEW_DATE;
+const H14_PLAN_PENDING_SLOTS: ItineraryDaysItemSlotsItem[] =
+  H11_COPICK_PREVIEW_SLOTS.map((slot) => ({ ...slot, distanceRange: null }));
+const H14_PLAN_NO_BASE_SLOTS = H11_COPICK_PREVIEW_SLOTS.slice(0, 4);
+
+// 지도 폴백 바(TRIP-799 D5) — 지도 스트립 자리에 얹는 한 줄 안내 + [다시 시도] pill. 페이지는 실
+// 런타임 감지(MapView onLoadFailed)를 아직 배선하지 않아(맹점②, 03 follow-up) 이 프리뷰가 폴백 얼굴을
+// 보는 유일한 자리다 — 강제 주입한다.
+const H14_MAP_FALLBACK: ReactElement = (
+  <View className="flex-1 bg-surface-soft px-lg pt-[72px]">
+    <View className="flex-row items-center justify-between gap-sm rounded-card border border-hairline bg-canvas px-md py-sm">
+      <Text className="flex-1 font-noto text-caption text-muted">
+        ⊘ 지도를 불러올 수 없어요 · 일정은 아래 목록에서 볼 수 있어요
+      </Text>
+      <Pressable className="rounded-pill border border-hairline-strong bg-canvas px-md py-[6px]">
+        <Text className="font-noto-bold text-caption font-bold text-ink">
+          ↻ 다시 시도
+        </Text>
+      </Pressable>
+    </View>
+  </View>
+);
+
+function renderH14PlanSheet(options: {
+  slots: ItineraryDaysItemSlotsItem[];
+  meta: string;
+  mapFallback?: ReactElement;
+  noBase?: boolean;
+}): ReactElement {
+  const { slots, meta, mapFallback, noBase } = options;
+  return (
+    <MapSheetShell
+      center={{ lat: 35.1532, lng: 129.1188 }}
+      pins={buildDraftPins(slots)}
+      days={[
+        { label: '1일차' },
+        { label: '2일차' },
+        { label: '3일차' },
+        { label: '4일차' },
+      ]}
+      selectedDayIndex={0}
+      onSelectDay={noop}
+      onBack={noop}
+      mapFallback={mapFallback}
+      header={
+        <SheetHeader
+          title="부산 여행"
+          dayLabel="1일차"
+          dateLabel="6월 10일(수)"
+          meta={meta}
+        />
+      }
+      cta={[{ label: '일정 저장하기', variant: 'primary', onPress: noop }]}
+    >
+      <View className="gap-md px-lg pb-2xl pt-xs">
+        {slots.flatMap((slot, index) => {
+          const timeLabel = slot.isFixed
+            ? slot.startAt.slice(0, 5)
+            : `${slot.startAt.slice(0, 5)}–${slot.endAt.slice(0, 5)}`;
+          const items: ReactElement[] = [
+            <SlotStopCard
+              key={`card-${slot.poiId}`}
+              slot={slot}
+              date={H14_PLAN_PREVIEW_DATE}
+              index={index}
+              timeLabel={timeLabel}
+              fixed={slot.isFixed}
+              subtitle={slot.isFixed ? '저녁 · 숙소 · 변경 불가' : undefined}
+            />,
+          ];
+          if (index < slots.length - 1) {
+            const nextSlot = slots[index + 1];
+            items.push(
+              <DistanceConnector
+                key={`conn-${slot.poiId}`}
+                slotKey={buildSlotKey(H14_PLAN_PREVIEW_DATE, slot.poiId)}
+                distanceRange={nextSlot.distanceRange}
+              />
+            );
+          }
+          return items;
+        })}
+        {noBase ? <NoBaseNoticeCard onPress={noop} /> : null}
+      </View>
+    </MapSheetShell>
+  );
+}
 
 /**
  * g02 거점 숙소 2/4 default 의 대표값(TRIP-672, Figma `3657:2068` 재작성) — 박별(1박=1행) 거점
@@ -775,16 +938,10 @@ export const MUST_VISIT_THUMBNAILS = [
 ];
 
 /**
- * h25 완성 일정(TimelineScreen) 프리뷰 픽스처 — 피어 세션(frontend-82 "지라 TRIP-299 진행")이
- * 제공한 h25 칩을 옮긴 것이다(크로스티켓 조율: TRIP-299 프리뷰 칩 누락 보완, [기록]에 출처 명시).
- * h34 확정 프리뷰가 같은 데이터에 `status=CONFIRMED` 만 얹어 두 얼굴을 한 자리에서 대조한다.
- * 슬롯 4개가 오전/저녁/점심 시간대·고정·위반·자정 넘김을 한 벌로 덮는다.
+ * h24 일정 편집(ItineraryEditScreen) 프리뷰 픽스처 — 슬롯 4개가 오전/저녁/점심 시간대·고정·위반·자정
+ * 넘김을 한 벌로 덮는다. (옛 h34 확정 프리뷰(TimelineScreen)는 TRIP-801 로 지도+시트 셸(h16)로
+ * 이관돼 이 픽스처를 더는 쓰지 않는다 — `TIMELINE_PREVIEW_HEADER` 는 그때 제거됐다.)
  */
-const TIMELINE_PREVIEW_HEADER = {
-  title: '부산 여행',
-  nightsLabel: '3박 4일',
-  totalPlaces: 5,
-};
 const TIMELINE_PREVIEW_DAYS: PlanDayTab[] = [
   { dayIndex: 1, date: '2026-06-10', count: 4 },
   { dayIndex: 2, date: '2026-06-11', count: 1 },
@@ -828,118 +985,6 @@ const TIMELINE_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     tags: [],
   },
 ];
-
-/**
- * 완성 일정 · **풀 표면**(TRIP-354) 프리뷰 픽스처 — 세그먼트 토글이 없어졌고(결정 D) 지도가 상시
- * 인라인이라, 이 픽스처 하나가 인라인 글랜스 지도 + 풀카드(사진·이름·영업시간·태그) + 구간행(거리 +
- * [길찾기]) + 날짜헤더 "이동 X"(legDistance 합산) + 휴관칩을 한 화면에서 보여준다. "지도 크게 보기"
- * 를 누르면 h26 확대 오버레이(제스처 지도 + peekstrip + 핀 상세)가 열린다.
- * 위 h25 픽스처는 좌표·POI 표면이 비어(null 반쪽 엣지) 사진·이름 없는 카드로 대비된다.
- * 부산 실좌표 3지점 + **좌표 부재 슬롯 1개**(자갈치)를 섞어, 핀이 ①②④ 로 건너뛰고 카드엔 "지도
- * 미표시" 배지·영업시간 "미확인"·휴관칩(openingHoursKnown false)이 한 자리에서 같이 보인다.
- * 사진은 초안 프리뷰 썸네일 재사용(`DRAFT_PREVIEW_PHOTOS`).
- * ⚠️ 지도 폴백(h31)은 이 픽스처로 못 띄운다 — 폴백은 확대 오버레이의 MapView 실제 로드
- * 실패(onLoadFailed)로만 켜지고 강제할 prop 이 없다. 네이버 클라이언트 ID 가 있으면 지도가 뜨고, 없으면 폴백.
- */
-const TIMELINE_MAP_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
-  {
-    poiId: 'poi-a',
-    startAt: '09:30:00',
-    endAt: '11:00:00',
-    isFixed: false,
-    endsNextDay: false,
-    hasViolation: false,
-    tags: ['바다', '야경'],
-    lat: 35.1532,
-    lng: 129.1187,
-    nameKo: '광안리 해변',
-    category: '해변',
-    openingHours: '24시간 개방',
-    distanceRange: null,
-    imageUrl: DRAFT_PREVIEW_PHOTOS[0],
-  },
-  {
-    poiId: 'poi-b',
-    startAt: '12:00:00',
-    endAt: '13:30:00',
-    isFixed: false,
-    endsNextDay: false,
-    hasViolation: false,
-    tags: ['문화'],
-    lat: 35.0966,
-    lng: 129.0107,
-    nameKo: '감천문화마을',
-    category: '명소',
-    openingHours: '09:00–18:00 영업',
-    distanceRange: '약 3.1km · 차량 추정',
-    imageUrl: DRAFT_PREVIEW_PHOTOS[1],
-  },
-  {
-    poiId: 'poi-c',
-    startAt: '14:30:00',
-    endAt: '16:00:00',
-    isFixed: false,
-    endsNextDay: false,
-    hasViolation: false,
-    tags: [],
-    lat: null,
-    lng: null,
-    nameKo: '자갈치시장',
-    category: '시장',
-    openingHours: null,
-    openingHoursKnown: false,
-    distanceRange: null,
-    imageUrl: null,
-  },
-  {
-    poiId: 'poi-d',
-    startAt: '18:30:00',
-    endAt: '20:00:00',
-    isFixed: true,
-    endsNextDay: false,
-    hasViolation: false,
-    tags: [],
-    lat: 35.1587,
-    lng: 129.1604,
-    nameKo: '해운대 포차거리',
-    category: '활동',
-    openingHours: '17:00–02:00 영업',
-    distanceRange: '약 1.2km · 도보 추정',
-    imageUrl: DRAFT_PREVIEW_PHOTOS[2],
-  },
-];
-
-/**
- * TRIP-465 · 사진 없는 슬롯의 **카테고리 플레이스홀더** 프리뷰 픽스처 — 8종(명소·맛집·카페·야경·
- * 자연·쇼핑·문화 + 폴백)을 한 화면에 세워 틴트·아이콘 정합을 Figma 노드 2989:1731 과 눈으로 대조한다.
- * 전부 `imageUrl:null` 이라 사진 자리에 플레이스홀더가 뜬다(사진 있는 카드는 위 `itinerary-map`
- * 픽스처가 담당 — 상호 배타). 폴백은 매핑 밖 카테고리("액티비티")로 유도한다.
- */
-const TIMELINE_PLACEHOLDER_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
-  '명소',
-  '맛집',
-  '카페',
-  '야경',
-  '자연',
-  '쇼핑',
-  '문화',
-  '액티비티',
-].map((category, index) => ({
-  poiId: `poi-ph-${index}`,
-  startAt: `${String(9 + index).padStart(2, '0')}:00:00`,
-  endAt: `${String(10 + index).padStart(2, '0')}:00:00`,
-  isFixed: false,
-  endsNextDay: false,
-  hasViolation: false,
-  tags: [category],
-  lat: 35.16,
-  lng: 129.16,
-  nameKo: `${category} 장소`,
-  category,
-  openingHours: '09:00–18:00 영업',
-  distanceRange: index === 0 ? null : '약 1.2km · 도보 추정',
-  imageUrl: null,
-}));
 
 // 내 여행 목록(h37, TRIP-468) 카드 VM 3종 — 완성·작성중·미도착(배지 degrade). 순수 카드라
 // 픽스처를 얹어 세 얼굴을 한 화면에서 본다(컨테이너·react-query 없이).
@@ -3574,86 +3619,196 @@ export const PREVIEW_STATES: PreviewState[] = [
       </MapSheetShell>
     ),
   },
-  // h11 AI 추천안 초안 5상태(TRIP-297) — Figma `1870:1083` 대조용 격리 렌더.
-  // 화면이 props 만 받는 프레젠테이션이라 배선 없이 얼굴이 그대로 나온다
-  // (`docs/structure.md` 경고: "엣지 케이스 화면을 눈으로 보려면 목을 만들지 말고 여기에
-  // 상태를 추가한다"). 실화면 딥링크로는 이 얼굴들을 볼 수 없다 — 생성 POST 가 만드는
-  // `tripId` 와 서버의 2단계 생성 응답이 있어야 하는데 백엔드 없이는 안 생긴다.
+  // h08 지도+시트 셸 펼침(TRIP-792) — Figma `4224:2448` 대조용. 접힘 조립을 그대로 복제하고
+  // `initialIndex={1}` 만 더해 시트가 상단 스냅까지 열린 얼굴을 낸다(2스냅 실개폐는 통과형 목
+  // 사각이라 6-b 실기가 유일한 개폐 그물). 배열에서 collapsed 바로 뒤에 둬 안정 정렬이
+  // collapsed→expanded 순서를 내게 한다(devPreviewBandSort EXPECTED_H).
   {
-    key: 'itinerary-draft-default',
+    key: 'h08-draft-expanded',
     band: 'h',
-    label: 'h11 · 추천안 초안',
-    login: null,
-    render: () => <DraftScreen {...DRAFT_PREVIEW_BASE} />,
-  },
-  {
-    // h10 "만드는 중"(TRIP-337) — 같은 픽스처에 generating 만 얹는다. 게이지 3상태(day1 완성 /
-    // day2 생성 중 / day3 대기)와 스켈레톤은 tabs 에서 도출돼 손으로 적을 값이 없다.
-    key: 'itinerary-draft-generating',
-    band: 'h',
-    label: 'h10 · 만드는 중',
+    label: 'h08 · 지도+시트 셸 펼침',
     login: null,
     render: () => (
-      <DraftScreen
-        {...DRAFT_PREVIEW_BASE}
-        view={{
-          kind: 'listed',
-          days: DRAFT_PREVIEW_DAYS,
-          staleFailed: false,
-          generating: true,
-        }}
-      />
+      <MapSheetShell
+        center={{ lat: 35.1532, lng: 129.1188 }}
+        pins={buildDraftPins(H08_PREVIEW_SLOTS)}
+        initialIndex={1}
+        days={[
+          { label: '1일차' },
+          { label: '2일차' },
+          { label: '3일차' },
+          { label: '4일차' },
+        ]}
+        selectedDayIndex={0}
+        onSelectDay={noop}
+        onBack={noop}
+        header={
+          <SheetHeader
+            title="AI 추천안"
+            dayLabel="1일차"
+            dateLabel="6월 10일(수)"
+            meta="4곳 · 3.5km"
+          />
+        }
+        cta={[
+          { label: '다시 짜기', variant: 'outline', onPress: noop },
+          { label: '확정하기', variant: 'primary', onPress: noop },
+        ]}
+      >
+        <View className="gap-md px-lg pb-2xl pt-xs">
+          {H08_PREVIEW_SLOTS.flatMap((slot, index) => {
+            const items = [
+              <SlotStopCard
+                key={`card-${slot.poiId}`}
+                slot={slot}
+                date={H08_PREVIEW_DATE}
+                index={index}
+                timeLabel={H08_PREVIEW_TIME_LABELS[index]}
+                required={index === 2}
+                onPressName={noop}
+                onPressAlt={noop}
+              />,
+            ];
+            if (index < H08_PREVIEW_CONNECTORS.length) {
+              items.push(
+                <DistanceConnector
+                  key={`conn-${slot.poiId}`}
+                  slotKey={buildSlotKey(H08_PREVIEW_DATE, slot.poiId)}
+                  distanceRange={H08_PREVIEW_CONNECTORS[index]}
+                />
+              );
+            }
+            return items;
+          })}
+        </View>
+      </MapSheetShell>
     ),
   },
   {
-    key: 'itinerary-draft-stale-failed',
+    // h07 부분 결과(TRIP-790) — 옛 h10 DraftScreen 인라인 게이지를 공용 지도+시트 셸 얼굴로 개명·
+    // 재작성. 진행 카드가 day-chip 자리를 대체(overlay)하고, peek 시트에 도착한 1일차 슬롯을 얹는다.
+    // 게이지 3셀(day1 완성/day2 생성 중/day3 대기)은 3일 여행에서 도출되나 프리뷰는 표시값을 직접
+    // 세운다(실 도출은 DraftPage + buildGenerationGauge, A8-1b 가 심판). CTA 없음(생성 중 · D9).
+    key: 'h07-generating-partial',
     band: 'h',
-    label: 'h11 · 부분 실패',
+    label: 'h07 · 부분 결과',
     login: null,
     render: () => (
-      <DraftScreen
-        {...DRAFT_PREVIEW_BASE}
-        view={{ kind: 'listed', days: DRAFT_PREVIEW_DAYS, staleFailed: true }}
-      />
+      <MapSheetShell
+        center={{ lat: 35.1532, lng: 129.1188 }}
+        pins={buildDraftPins(H08_PREVIEW_SLOTS)}
+        overlay={
+          <GenerationProgressCard
+            cells={[
+              { status: 'done', label: '1일차 완성' },
+              { status: 'active', label: '2일차 생성 중' },
+              { status: 'waiting', label: '3일차 대기' },
+            ]}
+            onBack={noop}
+          />
+        }
+        header={
+          // 제목에 날짜를 합쳐 한 leaf 로(진행 카드 게이지 done 라벨 "1일차 완성" 과 겹치지 않게 —
+          // DraftPage 실배선과 같은 구조, A8-1b/A8-1e 근거). 프리뷰는 Figma 형식 "(수)" 로 세운다.
+          <SheetHeader
+            title="1일차 완성 · 6월 10일(수)"
+            dayLabel=""
+            dateLabel=""
+            meta="4곳 · 3.5km"
+          />
+        }
+      >
+        <View className="gap-md px-lg pb-2xl pt-xs">
+          {H08_PREVIEW_SLOTS.flatMap((slot, index) => {
+            const items = [
+              <SlotStopCard
+                key={`card-${slot.poiId}`}
+                slot={slot}
+                date={H08_PREVIEW_DATE}
+                index={index}
+                timeLabel={H08_PREVIEW_TIME_LABELS[index]}
+                onPressAlt={noop}
+              />,
+            ];
+            if (index < H08_PREVIEW_CONNECTORS.length) {
+              items.push(
+                <DistanceConnector
+                  key={`conn-${slot.poiId}`}
+                  slotKey={buildSlotKey(H08_PREVIEW_DATE, slot.poiId)}
+                  distanceRange={H08_PREVIEW_CONNECTORS[index]}
+                />
+              );
+            }
+            return items;
+          })}
+        </View>
+      </MapSheetShell>
     ),
   },
+  // h11 같이 결과(CoPick 완료, TRIP-796) — Figma `4257:2148` 대조용. 공용 지도+시트 셸에 CoPick 5슬롯
+  // (비고정 4 + 고정 숙소 1)을 얹는다. 고정 숙소는 단일 시각 `21:00`+부제+고정 배지, 비고정은 시각
+  // 범위 칩만(다른 후보 링크 없음 · h08 과 차이). meta 는 비고정 4 → `4/4 골랐어요`. 배열에서 fallback
+  // 3키 **직전**(h11 그룹 첫 자리)에 둬 안정 정렬이 copick→fallback 순서를 내게 한다(devPreviewBandSort
+  // EXPECTED_H · 02a ★13). 2스냅 실개폐·딤은 통과형 목 사각이라 6-b 실기가 유일한 개폐 그물.
   {
-    key: 'itinerary-draft-loading',
+    key: 'h11-copick-complete',
     band: 'h',
-    label: 'h11 · 로딩',
+    label: 'h11 · 같이 결과 CoPick 완료',
     login: null,
     render: () => (
-      <DraftScreen
-        {...DRAFT_PREVIEW_BASE}
-        view={{ kind: 'loading' }}
-        pins={[]}
-      />
-    ),
-  },
-  {
-    key: 'itinerary-draft-empty',
-    band: 'h',
-    label: 'h11 · 빈 화면',
-    login: null,
-    render: () => (
-      <DraftScreen {...DRAFT_PREVIEW_BASE} view={{ kind: 'empty' }} pins={[]} />
-    ),
-  },
-  {
-    key: 'itinerary-draft-nopins',
-    band: 'h',
-    label: 'h11 · 좌표 없는 날',
-    login: null,
-    render: () => (
-      <DraftScreen
-        {...DRAFT_PREVIEW_BASE}
-        view={{
-          kind: 'listed',
-          days: DRAFT_PREVIEW_DAYS_NO_COORDS,
-          staleFailed: false,
-        }}
-        pins={buildDraftPins(DRAFT_PREVIEW_DAYS_NO_COORDS[0].slots)}
-      />
+      <MapSheetShell
+        center={{ lat: 35.1532, lng: 129.1188 }}
+        pins={buildDraftPins(H11_COPICK_PREVIEW_SLOTS)}
+        days={[
+          { label: '1일차' },
+          { label: '2일차' },
+          { label: '3일차' },
+          { label: '4일차' },
+        ]}
+        selectedDayIndex={0}
+        onSelectDay={noop}
+        onBack={noop}
+        header={
+          <SheetHeader
+            title="부산 여행"
+            dayLabel="1일차"
+            dateLabel="6월 10일(수)"
+            meta="4/4 골랐어요"
+          />
+        }
+        cta={[{ label: '확정하기', variant: 'primary', onPress: noop }]}
+      >
+        <View className="gap-md px-lg pb-2xl pt-xs">
+          {H11_COPICK_PREVIEW_SLOTS.flatMap((slot, index) => {
+            const timeLabel = slot.isFixed
+              ? slot.startAt.slice(0, 5)
+              : `${slot.startAt.slice(0, 5)}–${slot.endAt.slice(0, 5)}`;
+            const items = [
+              <SlotStopCard
+                key={`card-${slot.poiId}`}
+                slot={slot}
+                date={H11_COPICK_PREVIEW_DATE}
+                index={index}
+                timeLabel={timeLabel}
+                required={index === 2}
+                fixed={slot.isFixed}
+                subtitle={slot.isFixed ? '저녁 · 숙소 · 변경 불가' : undefined}
+              />,
+            ];
+            if (index < H11_COPICK_PREVIEW_SLOTS.length - 1) {
+              const nextSlot = H11_COPICK_PREVIEW_SLOTS[index + 1];
+              items.push(
+                <DistanceConnector
+                  key={`conn-${slot.poiId}`}
+                  slotKey={buildSlotKey(H11_COPICK_PREVIEW_DATE, slot.poiId)}
+                  distanceRange={nextSlot.distanceRange}
+                />
+              );
+            }
+            return items;
+          })}
+        </View>
+      </MapSheetShell>
     ),
   },
   // TRIP-304 폴백·강등 배너 3종 — 심각도 삼분(MINIMAL > LOW > DETERMINISTIC). 실화면 딥링크로는
@@ -3766,94 +3921,56 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // h25 완성 일정(TRIP-299) — 피어가 제공한 프리뷰 칩. 실화면 딥링크로는 볼 수 없다(생성 POST 가
-  // 만드는 tripId + 완성 일정 응답이 백엔드 없이는 안 생긴다). 화면이 props 만 받는 프레젠테이션이라
-  // 배선 없이 얼굴이 그대로 나온다.
+  // h14 완성 일정(PLANNED, TRIP-799) — 옛 h25 TimelineScreen PLANNED 프리뷰 4키를 지도+시트 셸 4얼굴로
+  // 교체(D7). PLANNED 는 이제 셸이라 실화면 딥링크로도 이 얼굴을 보려면 백엔드 응답이 필요해, 여기가
+  // 4얼굴을 정적으로 대조하는 자리다. 4얼굴은 별 화면이 아니라 같은 셸의 데이터 분기다.
+  // 배열 삽입 순서(default→distance-pending→map-fallback→no-base)가 devPreviewBandSort EXPECTED_H 의
+  // h14 안정 정렬 순서를 정한다(같은 h14 코드라 배열 위치=정렬 위치, 02a ★14).
   {
-    key: 'itinerary-timeline',
+    key: 'h14-plan-default',
     band: 'h',
-    label: 'h25 · 완성 일정 시간표',
+    label: 'h14 · 완성 일정 default',
     login: null,
-    render: () => (
-      <TimelineScreen
-        header={TIMELINE_PREVIEW_HEADER}
-        days={TIMELINE_PREVIEW_DAYS}
-        slots={TIMELINE_PREVIEW_SLOTS}
-        activeDayIndex={0}
-        status="PLANNED"
-        onSelectDay={noop}
-        onBack={noop}
-        onConfirm={noop}
-        onEdit={noop}
-      />
-    ),
+    render: () =>
+      renderH14PlanSheet({
+        slots: H11_COPICK_PREVIEW_SLOTS,
+        meta: '4곳 · 4.1km',
+      }),
   },
   {
-    // 확정 예방 잠금(TRIP-337 · AC-4) — PARTIAL 이면 확정 CTA 가 회색 disabled + 사유 병기.
-    key: 'itinerary-timeline-confirm-locked',
+    key: 'h14-plan-distance-pending',
     band: 'h',
-    label: 'h25 · 확정 잠김 PARTIAL',
+    label: 'h14 · 완성 일정 거리계산중',
     login: null,
-    render: () => (
-      <TimelineScreen
-        header={TIMELINE_PREVIEW_HEADER}
-        days={TIMELINE_PREVIEW_DAYS}
-        slots={TIMELINE_PREVIEW_SLOTS}
-        activeDayIndex={0}
-        status="PLANNED"
-        confirmLocked
-        onSelectDay={noop}
-        onBack={noop}
-        onConfirm={noop}
-      />
-    ),
+    render: () =>
+      renderH14PlanSheet({
+        slots: H14_PLAN_PENDING_SLOTS,
+        meta: '4곳',
+      }),
   },
-  // 완성 일정 · 풀 표면(TRIP-354) — 인라인 글랜스 지도 + 풀카드(사진·이름·영업시간·태그) + 구간행 +
-  // 날짜헤더 "이동 X" + 휴관칩을 한 화면에서 본다. "지도 크게 보기"로 h26 확대 오버레이를 연다.
-  // 좌표 부재 슬롯(자갈치)이 섞여 핀 결번 ①②④ + "지도 미표시" 배지도 한 화면에서 확인된다.
   {
-    key: 'itinerary-map',
+    key: 'h14-plan-map-fallback',
     band: 'h',
-    label: 'h25 · 풀카드+인라인지도',
+    label: 'h14 · 완성 일정 지도폴백',
     login: null,
-    render: () => (
-      <TimelineScreen
-        header={TIMELINE_PREVIEW_HEADER}
-        days={TIMELINE_PREVIEW_DAYS}
-        slots={TIMELINE_MAP_PREVIEW_SLOTS}
-        activeDayIndex={0}
-        status="PLANNED"
-        onSelectDay={noop}
-        onBack={noop}
-        onConfirm={noop}
-      />
-    ),
+    render: () =>
+      renderH14PlanSheet({
+        slots: H11_COPICK_PREVIEW_SLOTS,
+        meta: '4곳 · 4.1km',
+        mapFallback: H14_MAP_FALLBACK,
+      }),
   },
-  // 사진 없는 슬롯의 카테고리 플레이스홀더(TRIP-465) — 8종 틴트·아이콘을 한 화면에서 Figma 2989:1731
-  // 과 대조한다(전부 imageUrl null). 픽셀·아이콘 fill 은 jest 사각이라 이 프리뷰가 유일한 육안 그물.
   {
-    key: 'itinerary-timeline-placeholder',
+    key: 'h14-plan-no-base',
     band: 'h',
-    label: 'h25 · 카테고리 플레이스홀더',
+    label: 'h14 · 완성 일정 거점없음',
     login: null,
-    render: () => (
-      <TimelineScreen
-        header={{ title: '부산 여행', nightsLabel: '3박 4일', totalPlaces: 8 }}
-        days={[
-          {
-            dayIndex: 1,
-            date: '2026-06-10',
-            count: TIMELINE_PLACEHOLDER_PREVIEW_SLOTS.length,
-          },
-        ]}
-        slots={TIMELINE_PLACEHOLDER_PREVIEW_SLOTS}
-        activeDayIndex={0}
-        status="PLANNED"
-        onSelectDay={noop}
-        onBack={noop}
-        onConfirm={noop}
-      />
-    ),
+    render: () =>
+      renderH14PlanSheet({
+        slots: H14_PLAN_NO_BASE_SLOTS,
+        meta: '4곳 · 3.5km',
+        noBase: true,
+      }),
   },
   // 내 여행 목록 · h37(TRIP-468) — 완성(success 배지+"확정 장소 N곳")·작성중(primary 배지+resume
   // CTA)·미도착(배지·부가정보 부재 degrade) 세 카드 + 사진 플레이스홀더·"최신순" 라벨을 한 화면에서
@@ -4062,24 +4179,75 @@ export const PREVIEW_STATES: PreviewState[] = [
       </View>
     ),
   },
-  // h34 확정 읽기전용(TRIP-505 정리) — 같은 데이터에 status=CONFIRMED 를 얹은 확정 얼굴. 배너·
-  // 하단 비활성 2버튼·부제 조립은 제거됐고, 그 자리에 `itinerary-confirmed-note` 안내 한 줄이
-  // 뜬다(appbar `확정 일정`·공유 아이콘은 유지). 안내·공유 어중간한 상태를 눈으로 대조하는 자리.
+  // h16 확정 일정(TRIP-801) — CONFIRMED 지도+시트 셸(옛 h34 TimelineScreen 읽기전용을 대체). 페이지
+  // (ItineraryPlanPage)는 react-query·라우터가 필요해 프리뷰에서 직접 못 쓰므로 셸 조립을 축소해
+  // 그린다(h14 선례). 확정 얼굴의 신규 3요소(지도 위 성공 배너·이름 옆 휴관 경고·[일정 수정]·[공유하기]
+  // 2버튼)를 한 화면에서 육안 대조한다. 슬롯은 h11 결과 픽스처를 재사용한다.
   {
-    key: 'itinerary-confirmed',
+    key: 'h16-plan-confirmed',
     band: 'h',
-    label: 'h34 · 확정 읽기전용',
+    label: 'h16 · 확정 일정',
     login: null,
     render: () => (
-      <TimelineScreen
-        header={TIMELINE_PREVIEW_HEADER}
-        days={TIMELINE_PREVIEW_DAYS}
-        slots={TIMELINE_PREVIEW_SLOTS}
-        activeDayIndex={0}
-        status="CONFIRMED"
+      <MapSheetShell
+        center={{ lat: 35.1532, lng: 129.1188 }}
+        pins={buildDraftPins(H11_COPICK_PREVIEW_SLOTS)}
+        days={[
+          { label: '1일차' },
+          { label: '2일차' },
+          { label: '3일차' },
+          { label: '4일차' },
+        ]}
+        selectedDayIndex={0}
         onSelectDay={noop}
         onBack={noop}
-      />
+        mapCard={<ConfirmedBanner />}
+        header={
+          <SheetHeader
+            title="부산 여행"
+            dayLabel="1일차"
+            dateLabel="6월 10일(수)"
+            meta="확정됨 · 4곳 · 4.1km"
+          />
+        }
+        cta={[
+          { label: '일정 수정', variant: 'outline', onPress: noop },
+          { label: '공유하기', variant: 'primary', onPress: noop },
+        ]}
+      >
+        <View className="gap-md px-lg pb-2xl pt-xs">
+          {H11_COPICK_PREVIEW_SLOTS.flatMap((slot, index) => {
+            const timeLabel = slot.isFixed
+              ? slot.startAt.slice(0, 5)
+              : `${slot.startAt.slice(0, 5)}–${slot.endAt.slice(0, 5)}`;
+            const items: ReactElement[] = [
+              <SlotStopCard
+                key={`card-${slot.poiId}`}
+                slot={slot}
+                date={H14_PLAN_PREVIEW_DATE}
+                index={index}
+                timeLabel={timeLabel}
+                fixed={slot.isFixed}
+                subtitle={slot.isFixed ? '저녁 · 숙소 · 변경 불가' : undefined}
+                // 휴관 경고 표면 육안 대조용 — 비고정 한 슬롯에 얹는다(실 페이지는 openingHoursKnown
+                // === false 서버 신호로 켠다).
+                warning={index === 1 ? '휴관일 확인' : undefined}
+              />,
+            ];
+            if (index < H11_COPICK_PREVIEW_SLOTS.length - 1) {
+              const nextSlot = H11_COPICK_PREVIEW_SLOTS[index + 1];
+              items.push(
+                <DistanceConnector
+                  key={`conn-${slot.poiId}`}
+                  slotKey={buildSlotKey(H14_PLAN_PREVIEW_DATE, slot.poiId)}
+                  distanceRange={nextSlot.distanceRange}
+                />
+              );
+            }
+            return items;
+          })}
+        </View>
+      </MapSheetShell>
     ),
   },
   // h12 슬롯 교체(TRIP-335→483) — 바텀시트를 슬롯 카드 아래 **인라인 확장 패널**로 이관했다. candidates

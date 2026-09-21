@@ -7,6 +7,8 @@ import Svg, { Circle, Path } from 'react-native-svg';
 
 const INK = '#222222';
 const MUTED = '#6A6A6A';
+const PRIMARY = '#FF385C';
+const PRIMARY_TEXT = '#C13515';
 
 type GlyphProps = {
   size?: number;
@@ -98,6 +100,46 @@ export function CarGlyph({ size = 16, testID }: GlyphProps) {
       />
       <Circle cx={5} cy={12.5} r={1} fill={MUTED} />
       <Circle cx={11} cy={12.5} r={1} fill={MUTED} />
+    </Svg>
+  );
+}
+
+// ✦ 스파클(18) — FullAiGlyph(ItineraryGlyphs) 바이트 복제, h07 진행 카드 제목의 AI 표식.
+// widget 은 primary 톤 하나만 쓰므로 tone 인자 없이 primary 채움으로 고정한다(YAGNI).
+export function FullAiGlyph({ size = 18, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M12 2L13.8 10.2L22 12L13.8 13.8L12 22L10.2 13.8L2 12L10.2 10.2L12 2Z"
+        fill={PRIMARY}
+      />
+    </Svg>
+  );
+}
+
+// ✓ 체크(12) — CheckGlyph(ItineraryGlyphs) 바이트 복제, 진행 게이지 done 셀 라벨 앞 표식.
+export function CheckGlyph({ size = 12, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 12 12"
+      fill="none"
+    >
+      <Path
+        d="M10 3L4.5 8.5L2 6"
+        stroke={PRIMARY_TEXT}
+        strokeWidth={1.3}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </Svg>
   );
 }

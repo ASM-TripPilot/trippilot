@@ -170,3 +170,24 @@ describe('🔴 SlotStopCard · CS7 — 이름 press 어포던스', () => {
     expect(onPressName).toHaveBeenCalledTimes(1);
   });
 });
+
+/* ──────────────── TRIP-801 · D4 가산(h16 휴관 경고) ────────────────
+ * h16 확정 얼굴은 이름 옆에 "⏰ 휴관일 확인" 인라인 경고를 얹는다. `warning?: string | null`(가산)를
+ * 주면 그 문구를 `slot-stopcard-warning-*` leaf 로 그린다 — 미주입=미렌더(6종 공용 카드 후방호환).
+ * 트리거(`openingHoursKnown === false`)·문구 상수는 소비처(페이지) 몫이고, 카드는 받은 문자열만 그린다.
+ * ⚠️ 빨강 텍스트·시계 글리프 톤은 6-b 육안(SVG 색은 jest 사각) — 여기선 leaf 텍스트·부재만 잠근다.
+ * ─────────────────────────────────────────────────────────────────────── */
+describe('🔴 SlotStopCard · CS8 — warning 가산(휴관 경고, 후방호환)', () => {
+  it('CS8a · warning 주입이면 경고 leaf 가 완전일치로 뜬다', () => {
+    const { slotKey } = renderCard({ warning: '휴관일 확인' });
+
+    expect(screen.getByTestId(id(slotKey)('warning'))).toHaveTextContent(
+      '휴관일 확인'
+    );
+  });
+
+  it('CS8b · warning 미주입이면 경고 leaf 가 부재한다 (기존 소비처 무변경 · 선제 green)', () => {
+    const { slotKey } = renderCard();
+    expect(screen.queryByTestId(id(slotKey)('warning'))).toBeNull();
+  });
+});

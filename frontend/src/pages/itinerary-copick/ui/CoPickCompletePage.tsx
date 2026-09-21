@@ -1,43 +1,62 @@
 import type { ReactElement } from 'react';
+import { useState } from 'react';
 import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
-import { legDistance } from '@/features/itinerary/model/legDistance';
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
-import { timeBandLabel } from '@/features/itinerary/model/timeBandLabel';
 import {
-  CoPickCompleteScreen,
-  type CoPickCompleteSlot,
-} from '@/features/itinerary/ui/CoPickCompleteScreen';
+  buildDraftDayTabs,
+  buildDraftPins,
+  formatDraftDayHeader,
+} from '@/features/itinerary/model/draftView';
+import { timeBandLabel } from '@/features/itinerary/model/timeBandLabel';
 import { WarningTriangleGlyph } from '@/features/itinerary/ui/ItineraryGlyphs';
-import { useGetTripsTripIdItinerary } from '@/shared/api/generated/trips/trips';
+import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
+import {
+  useGetTripsTripId,
+  useGetTripsTripIdItinerary,
+} from '@/shared/api/generated/trips/trips';
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
+import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
+import { SheetHeader } from '@/widgets/map-sheet-shell/ui/SheetHeader';
 
 /**
- * TRIP-335 슬라이스2 · h17 내가 고른 완성 배선 — itinerary GET 을 실 DTO 로 받아 완성 화면을 조립한다.
+ * TRIP-796 · h11 "같이 결과 · CoPick 완료" 배선 — itinerary GET + 트립 GET 을 받아 **공용 지도+시트
+ * 셸**(`MapSheetShell`)로 완성 얼굴을 조립한다(01b D1 · 계약 플립). 옛 `CoPickCompleteScreen`(features)
+ * 은 features→widgets 상향 참조 금지라 셸을 못 물어 삭제됐고, 이 조립을 페이지가 진다(h07/h08 `DraftPage`
+ * 선례).
  *
- * 무엇을 보장하나(BR-U3-07 · INV-3):
- *  - 비고정 슬롯은 **시간대 라벨만**(`timeBandLabel(startAt)`) — 검증 시각(startAt 09:30 등)을 화면으로
- *    흘리지 않는다. 고정 블록(숙소)만 시각("21:00 도착 · 변경 불가")을 실어 내린다.
- *  - 총 거리는 슬라이스1/354 의 `legDistance` **재사용**(서버 distanceRange 합산, 재발명 0) — "이동 X"
- *    라벨을 그대로 leaf 로 내린다.
- *
- * 시각을 붙일지 여부는 여기서 `isFixed` 로 갈라 내려준다 — 화면은 준 것만 그린다.
+ * 무엇을 보장하나:
+ *  - **전 슬롯 검증 시각**(BR-U3-07 개정 · INV-2): 비고정 슬롯은 시각 범위(`HH:mm–HH:mm`, en-dash),
+ *    고정 숙소는 단일 시각(`HH:mm`)+부제+고정 배지. 옛 "비고정 시각 0" 계약의 정반대다.
+ *  - **카운트는 비고정만**: 헤더 meta `{N}/{N} 골랐어요`(N=선택일 비고정 슬롯 수) — 고정(숙소)은
+ *    "고른" 대상이 아니라 세지 않는다.
+ *  - **읽기 전용**: "다른 후보 ›" 링크는 어느 슬롯에도 안 건다(onPressAlt 미주입, h08 과 차이).
+ *  - **INV-4 narrow**: 데이터 도착 얼굴만 셸. error/loading 은 셸이 아니라 기존 얼굴(testID 보존).
  */
 
 export interface CoPickCompletePageProps {
   tripId: string;
 }
 
+/** 고정 슬롯(숙소) 부제 — `{도착 시간대} · 숙소 · 변경 불가`(01b D3, 발명 display copy · 헬퍼로 동결). */
+function fixedSlotSubtitle(startAt: string): string {
+  return `${timeBandLabel(startAt)} · 숙소 · 변경 불가`;
+}
+
 export function CoPickCompletePage({
   tripId,
 }: CoPickCompletePageProps): ReactElement {
   const router = useRouter();
+  const [pickedDate, setPickedDate] = useState<string | null>(null);
+
+  const trip = useGetTripsTripId(tripId);
   const itinerary = useGetTripsTripIdItinerary(tripId);
 
-  // 조회 실패는 침묵하지 않는다(INV-4 원칙 — 빈 화면 영구 유지 금지).
-  if (itinerary.isError) {
+  // 조회 실패는 침묵하지 않는다(INV-4 · D5) — 셸이 아니라 기존 error 얼굴(testID 보존).
+  if (trip.isError || itinerary.isError) {
     return (
       <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
         <StateNotice
@@ -58,46 +77,102 @@ export function CoPickCompletePage({
     );
   }
 
-  // 데이터 도착 전에는 완성 화면(root testID)을 그리지 않는다 — 실 DTO 가 와야 시각 라벨·총거리를
-  // 조립할 수 있다. 읽기 전용 뷰라 PUT 데이터 손실 위험은 없다.
-  if (itinerary.data === undefined) {
+  // 데이터 도착 전에는 셸을 그리지 않는다 — 트립·일정 둘 다 있어야 헤더·시각·거리를 조립할 수 있다.
+  if (itinerary.data === undefined || trip.data === undefined) {
     return (
       <View testID="itinerary-copick-complete-loading" style={{ flex: 1 }} />
     );
   }
+
   const days = itinerary.data.days;
+  // 탭·일차·날짜의 출처는 **여행 기간**이다(day-chip 개수는 days.length 가 아님, D2). 데이터가 없는
+  // 날짜는 비활성으로 남고, 선택은 데이터가 있는 날로 되돌아간다(DraftPage 선례).
+  const tabs = buildDraftDayTabs({
+    startDate: trip.data.startDate,
+    endDate: trip.data.endDate,
+    days,
+  });
+  const selectedDate =
+    pickedDate !== null &&
+    tabs.some((tab) => tab.date === pickedDate && tab.hasData)
+      ? pickedDate
+      : (tabs.find((tab) => tab.hasData)?.date ?? tabs[0]?.date ?? '');
 
-  const slots: CoPickCompleteSlot[] = days.flatMap((day) =>
-    day.slots.map((slot) => ({
-      slotKey: buildSlotKey(day.date, slot.poiId),
-      bandLabel: timeBandLabel(slot.startAt),
-      name: slot.nameKo ?? '이름 준비 중',
-      isFixed: slot.isFixed,
-      fixedTimeLabel: slot.isFixed
-        ? `${slot.startAt.slice(0, 5)} 도착 · 변경 불가`
-        : undefined,
-      tagsLabel:
-        slot.tags && slot.tags.length > 0
-          ? slot.tags.map((tag) => `#${tag}`).join(' ')
-          : undefined,
-    }))
-  );
+  const dayChips = tabs.map((tab) => ({ label: `${tab.dayNumber}일차` }));
+  const selectedDayIndex = tabs.findIndex((tab) => tab.date === selectedDate);
+  const selectedDayNumber =
+    tabs.find((tab) => tab.date === selectedDate)?.dayNumber ?? 1;
 
-  const totalDistanceLabel = legDistance(
-    days.flatMap((day) => day.slots.map((slot) => slot.distanceRange))
-  );
+  const slots = days.find((day) => day.date === selectedDate)?.slots ?? [];
+  const pins = buildDraftPins(slots);
+  const center =
+    pins.length > 0
+      ? { lat: pins[0].lat, lng: pins[0].lng }
+      : { lat: 0, lng: 0 };
+
+  // meta 는 **비고정만** 센다 — 고정(숙소)은 "고른" 대상이 아니다(D2 · coPickProgress 재사용 금지).
+  const pickedCount = slots.filter((slot) => !slot.isFixed).length;
 
   return (
-    <CoPickCompleteScreen
-      slots={slots}
-      totalDistanceLabel={totalDistanceLabel}
-      onConfirm={() =>
-        router.push({
-          pathname: '/trips/[tripId]/itinerary',
-          params: { tripId },
-        })
-      }
+    <MapSheetShell
+      center={center}
+      pins={pins}
+      days={dayChips}
+      selectedDayIndex={selectedDayIndex < 0 ? 0 : selectedDayIndex}
+      onSelectDay={(index) => setPickedDate(tabs[index]?.date ?? null)}
       onBack={() => router.back()}
-    />
+      header={
+        <SheetHeader
+          title={trip.data.title}
+          dayLabel={`${selectedDayNumber}일차`}
+          dateLabel={formatDraftDayHeader(selectedDate)}
+          meta={`${pickedCount}/${pickedCount} 골랐어요`}
+        />
+      }
+      cta={[
+        {
+          label: '확정하기',
+          variant: 'primary',
+          onPress: () =>
+            router.push({
+              pathname: '/trips/[tripId]/itinerary',
+              params: { tripId },
+            }),
+        },
+      ]}
+    >
+      <View className="gap-md px-lg pb-2xl pt-xs">
+        {slots.flatMap((slot, index) => {
+          // 전 슬롯 검증 시각(BR-U3-07 · D3). 비고정=범위(en-dash U+2013), 고정 숙소=단일 시각.
+          const timeLabel = slot.isFixed
+            ? slot.startAt.slice(0, 5)
+            : `${slot.startAt.slice(0, 5)}–${slot.endAt.slice(0, 5)}`;
+          const items: ReactElement[] = [
+            <SlotStopCard
+              key={`card-${slot.poiId}`}
+              slot={slot}
+              date={selectedDate}
+              index={index}
+              timeLabel={timeLabel}
+              fixed={slot.isFixed}
+              subtitle={
+                slot.isFixed ? fixedSlotSubtitle(slot.startAt) : undefined
+              }
+            />,
+          ];
+          if (index < slots.length - 1) {
+            const nextSlot = slots[index + 1];
+            items.push(
+              <DistanceConnector
+                key={`conn-${slot.poiId}`}
+                slotKey={buildSlotKey(selectedDate, slot.poiId)}
+                distanceRange={nextSlot.distanceRange}
+              />
+            );
+          }
+          return items;
+        })}
+      </View>
+    </MapSheetShell>
   );
 }
