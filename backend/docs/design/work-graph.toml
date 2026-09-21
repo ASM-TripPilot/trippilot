@@ -905,7 +905,7 @@ title = "TourAPI 숙박 커버리지 측정 — 전국 17개, 착수 여부를 �
 status = "todo"
 owner = "숙소"
 migration = false
-touches = ["ai/scripts"]
+touches = ["ai/scripts", ".github/workflows"]
 note = """
 `숙소콘텐츠-수집-설계.md` 칸 0. **선행 0 — 지금 가능하다.**
 
@@ -919,8 +919,17 @@ note = """
 칸 1 진행 · 10~30% 면 "사진 있는 숙소 우선 정렬"을 같은 PR 에 동반 · 10% 미만이면 트랙을 접고
 제휴 콘텐츠 API 를 기다린다.
 
-재료는 전부 있다 — TourAPI 클라이언트(`sourcing/tourapi.py` 가 `firstimage`·`addr1` 을 **이미**
-뽑는다) · 키링 3개 · 전국 17개 순회 배치 · 폐업 대조에서 83.3% 를 낸 `addr_key()`.
+**도구는 만들어 뒀다**(2026-09-21) — `ai/scripts/measure_stay_coverage.py` +
+`.github/workflows/ai-stay-measure.yml`. 남은 것은 **한 번 돌리고 §7 에 숫자를 적는 것**이다.
+Actions → `ai-stay-measure` → Run workflow(전국이 기본). 주 1회 스케줄도 돈다.
+
+**예산 경합은 없다**(실측): POI 는 일일 3,000 중 **260 만 쓰고 이미 수렴했다**(85칸 전부 완주,
+신규 0건). 워크플로를 분리한 이유는 예산이 아니라 **상태 오염**이다 — 커서가 `[지역][타입]` 이라
+32 를 더하면 매일 긁어와 매일 버리는 일이 영구히 돈다.
+
+**매칭 키는 주소가 아니다.** 폐업 대조의 `addr_key()` 는 여기서 못 쓴다 — 우리 시드에 주소가
+없는 것이 애초에 이 트랙이 있는 이유다. `norm_name()` + 좌표 근접으로 붙이고, 거리 임계값은
+하나로 정하지 않고 100·300·500m 를 **함께 보고**한다(민감도를 봐야 칸 1 에서 정할 수 있다).
 """
 
 [[nodes]]
