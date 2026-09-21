@@ -56,15 +56,22 @@ const EXPECTED_H = [
   'dev-preview-state-itinerary-method-regenerate', // h04
   'dev-preview-state-itinerary-mustvisit-default', // h05
   'dev-preview-state-itinerary-mustvisit-time-default', // h07
+  // TRIP-790: 옛 h10 `itinerary-draft-generating`(만드는 중 · DraftScreen 인라인 게이지)을
+  // h07 부분 결과(셸 얼굴)로 개명. 라벨 코드가 h07 이라 안정 정렬이 mustvisit-time 뒤에 붙는다
+  // (개명 엔트리는 PREVIEW_STATES 배열상 draft 구역이라 mustvisit-time 보다 늦다 · 02a ★10).
+  'dev-preview-state-h07-generating-partial', // h07
   'dev-preview-state-h08-draft-collapsed', // h08 (TRIP-783 지도+시트 셸 접힘)
+  // TRIP-792: h08 펼침(시트 상단 스냅 · initialIndex={1}) 신규. 코드가 h08 이라 안정 정렬이
+  // collapsed 바로 뒤에 붙는다(PREVIEW_STATES 배열에서도 expanded 를 collapsed 직후에 삽입 —
+  // 그래야 안정 정렬이 이 순서를 낸다). 동시에 옛 h11 DraftScreen 초안 5키(default·stale-failed·
+  // loading·empty·nopins)는 삭제돼 이 배열에서도 빠진다(band h 소비처 이동, 폴백 3키는 유지).
+  'dev-preview-state-h08-draft-expanded', // h08 (TRIP-792 지도+시트 셸 펼침)
   'dev-preview-state-itinerary-generating', // h09
   'dev-preview-state-itinerary-generating-failed', // h09
-  'dev-preview-state-itinerary-draft-generating', // h10
-  'dev-preview-state-itinerary-draft-default', // h11
-  'dev-preview-state-itinerary-draft-stale-failed', // h11
-  'dev-preview-state-itinerary-draft-loading', // h11
-  'dev-preview-state-itinerary-draft-empty', // h11
-  'dev-preview-state-itinerary-draft-nopins', // h11
+  // TRIP-796: h11 같이 결과(CoPick 완료) 지도+시트 셸. 코드가 h11 이라 안정 정렬이 h11 그룹 안에
+  // 들어가고, PREVIEW_STATES 배열에서 이 프리뷰를 fallback 3키보다 **앞**(그 직전)에 삽입하므로
+  // 안정 정렬이 이 순서(copick → fallback 3)를 낸다(02a ★13 · h08 D5 선례 — 배열 위치=정렬 위치).
+  'dev-preview-state-h11-copick-complete', // h11 (TRIP-796 지도+시트 셸 · 같이 결과)
   'dev-preview-state-itinerary-draft-fallback-deterministic', // h11
   'dev-preview-state-itinerary-draft-fallback-minimal', // h11
   'dev-preview-state-itinerary-draft-fallback-demoted', // h11
@@ -73,6 +80,19 @@ const EXPECTED_H = [
   'dev-preview-state-slot-candidate-panel-degraded', // h12
   'dev-preview-state-slot-candidate-panel-empty', // h12
   'dev-preview-state-slot-candidate-panel-error', // h12
+  // TRIP-799: h14 완성 일정(TimelineScreen→지도+시트 셸) 4얼굴. 라벨 코드가 h14 라 안정 정렬이
+  // h12(slot-candidate-panel) 와 h18(option-swap) 사이로 들어간다(옛 h25 위치에서 h14 로 이동 —
+  // 라이브 Figma 재번호 h01~h17, 02a ★14). 같은 h14 코드 4키는 PREVIEW_STATES 배열 삽입 순서
+  // (default→distance-pending→map-fallback→no-base)로 안정정렬되므로 구현자는 그 순서로 삽입한다
+  // (h08 collapsed/expanded·h11 copick 선례 — 배열 위치=정렬 위치).
+  'dev-preview-state-h14-plan-default', // h14
+  'dev-preview-state-h14-plan-distance-pending', // h14
+  'dev-preview-state-h14-plan-map-fallback', // h14
+  'dev-preview-state-h14-plan-no-base', // h14
+  // TRIP-801: 옛 itinerary-confirmed(h34, CONFIRMED TimelineScreen)를 h16-plan-confirmed 로 개명
+  // (CONFIRMED→지도+시트 셸). 라벨 코드가 h34→h16 이라 정렬 위치가 파일 끝(h34)에서 h14/h18 사이로
+  // 이동한다(개명=count 불변, 위치만 이동 · 02a ★11).
+  'dev-preview-state-h16-plan-confirmed', // h16
   'dev-preview-state-option-swap', // h18
   'dev-preview-state-option-swap-selected', // h18
   'dev-preview-state-option-swap-empty', // h18
@@ -82,11 +102,9 @@ const EXPECTED_H = [
   'dev-preview-state-place-add-notready', // h20
   'dev-preview-state-itinerary-edit', // h24
   'dev-preview-state-itinerary-edit-time-sheet', // h24
-  'dev-preview-state-itinerary-timeline', // h25
-  'dev-preview-state-itinerary-timeline-confirm-locked', // h25
-  'dev-preview-state-itinerary-map', // h25
-  'dev-preview-state-itinerary-timeline-placeholder', // h25
-  'dev-preview-state-itinerary-confirmed', // h34
+  // TRIP-799: 옛 h25 TimelineScreen PLANNED 프리뷰 4키는 h14-plan-* 4키로 교체됐다(위 참조).
+  // TRIP-801: itinerary-confirmed(h34)는 h16-plan-confirmed(h16)로 개명·상단 이동(위 h16 줄 참조)
+  // 돼 이 자리에서 사라진다.
   'dev-preview-state-itinerary-draft-zero', // h35
   'dev-preview-state-my-trips-list', // h37
   'dev-preview-state-my-trips-empty', // h37

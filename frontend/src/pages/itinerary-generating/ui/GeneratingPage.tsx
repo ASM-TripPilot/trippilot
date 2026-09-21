@@ -35,10 +35,9 @@ export function GeneratingPage({
   mode?: GenerateItineraryRequestGenerationMode;
   /** 성공 후 목적지 pathname. 미지정=draft(h11). copick 씨앗(TRIP-504)은 첫 슬롯 라우트 템플릿을
    * 넘기고, 이 화면이 생성 응답의 days 로 실 slotKey 를 채워 replace 한다.
-   * ponytail: `copick`(허브 h16)는 안 (가) 흐름에서 라우팅이 끊겼다 — 파일 존치, 유니온 멤버는 후속 정리 대상. */
+   * (허브 라우트 `copick`(index)은 TRIP-796으로 삭제됨 — 죽은 유니온 멤버도 함께 제거.) */
   successRoute?:
     | '/trips/[tripId]/itinerary/draft'
-    | '/trips/[tripId]/itinerary/copick'
     | '/trips/[tripId]/itinerary/copick/[slotKey]';
 }): ReactElement {
   const router = useRouter();

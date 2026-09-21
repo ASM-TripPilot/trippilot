@@ -67,3 +67,31 @@ describe('🔴 CtaBar · CTA2 — 1버튼 변형(AC-6)', () => {
     expect(onSave).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('🔴 CtaBar · CTA3 — disabled 버튼(TRIP-799 · AC-9)', () => {
+  it('disabled:true 면 버튼이 비활성이고 press 해도 onPress 를 안 부른다', () => {
+    // ★5 `toBeDisabled()` 단독은 accessibilityState 만으로 통과하는 함정 — press→onPress 0 과 짝지어야
+    //    심판이 된다. h14 PARTIAL 잠금(isConfirmLocked)이 이 disabled 를 쓴다.
+    const onSave = jest.fn();
+    render(
+      <CtaBar
+        buttons={[
+          {
+            label: '일정 저장하기',
+            variant: 'primary',
+            onPress: onSave,
+            disabled: true,
+          },
+        ]}
+      />
+    );
+
+    const cta = screen.getByTestId('sheet-cta-button-0');
+    // 비활성 — **red 성격**: 현행 CtaBar 는 disabled 를 Pressable 에 안 실어 활성이라 이 단언이 red.
+    expect(cta).toBeDisabled();
+
+    // 눌러도 콜백이 안 나간다(disabled Pressable 은 onPress 미발화). 활성 짝은 CTA2 가 지킨다.
+    fireEvent.press(cta);
+    expect(onSave).not.toHaveBeenCalled();
+  });
+});

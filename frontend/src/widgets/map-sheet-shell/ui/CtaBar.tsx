@@ -12,6 +12,10 @@ export interface CtaButton {
   label: string;
   variant: 'primary' | 'outline';
   onPress: () => void;
+  /** 비활성(TRIP-799 D6·AC-9). 참이면 CtaBar 가 `<Pressable disabled>`(+회색)로 렌더해 press 가
+   *  onPress 를 안 부른다. 미전달=활성(기존 소비처 무변경). 타입 선언만 — 렌더 배선은 [구현] 몫
+   *  (CTA3 가 red 로 강제). h14 PARTIAL 잠금이 이 값을 쓴다(isConfirmLocked). */
+  disabled?: boolean;
 }
 
 export interface CtaBarProps {
@@ -28,14 +32,18 @@ export function CtaBar({ buttons }: CtaBarProps): ReactElement {
     >
       {buttons.map((button, index) => {
         const primary = button.variant === 'primary';
+        // 비활성이면 press 를 죽이고(Pressable disabled) primary 채움을 회색으로 바꾼다(TRIP-799 D6·AC-9).
+        // `disabled` prop 이 press 를 막아 onPress 가 안 나가고, 회색은 눈으로 잠김을 알린다.
+        const disabled = button.disabled === true;
         const shape = primary
-          ? 'flex-1 bg-primary'
+          ? `flex-1 ${disabled ? 'bg-hairline-strong' : 'bg-primary'}`
           : `${single ? 'flex-1' : 'w-[140px]'} border border-hairline-strong bg-canvas`;
         return (
           <Pressable
             key={button.label}
             testID={`sheet-cta-button-${index}`}
             onPress={button.onPress}
+            disabled={disabled}
             className={`h-[52px] items-center justify-center rounded-card ${shape}`}
           >
             <Text

@@ -1,19 +1,25 @@
 import type { ReactElement } from 'react';
 import { useRef, useState } from 'react';
+import { View } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 
 import {
   buildDraftDayTabs,
   buildDraftPins,
+  buildGenerationGauge,
   DRAFT_POLL_INTERVAL_MS,
   formatDraftDayHeader,
   resolveDraftView,
   resolveFallbackNotice,
   shouldKeepPollingDraft,
 } from '@/features/itinerary/model/draftView';
+import type { GenerationDayState } from '@/features/itinerary/model/draftView';
+import { legDistance } from '@/features/itinerary/model/legDistance';
 import { DraftScreen } from '@/features/itinerary/ui/DraftScreen';
 import { ZeroCandidateScreen } from '@/features/itinerary/ui/ZeroCandidateScreen';
+import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
 import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripId,
@@ -21,8 +27,20 @@ import {
   usePostTripsTripIdItinerary,
 } from '@/shared/api/generated/trips/trips';
 import { isNotFound } from '@/shared/api/isNotFound';
+import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
+import { GenerationProgressCard } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
+import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
+import { SheetHeader } from '@/widgets/map-sheet-shell/ui/SheetHeader';
 
 import { SlotCandidatePanelContainer } from './SlotCandidatePanelContainer';
+
+/** 진행 게이지 셀 라벨의 상태부 — `{n}일차 {완성|생성 중|대기}`(한글 · AC-6). 위젯은 features 를
+ *  못 물어 이 매핑을 못 하므로(D4) DraftPage 가 도출해 완성된 라벨을 주입한다. */
+const GENERATION_STATUS_LABEL: Record<GenerationDayState, string> = {
+  done: '완성',
+  active: '생성 중',
+  waiting: '대기',
+};
 
 /**
  * h11 배선(TRIP-297) — 두 조회를 잇고, 2단계 생성을 폴링으로 잇고, 재생성을 보낸다.
@@ -142,7 +160,7 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   // 다르게 진화한다.
   const summary = itinerary.data?.candidatesSummary;
 
-  const baseView = resolveDraftView({
+  const view = resolveDraftView({
     days,
     loading: trip.isPending || itinerary.isPending,
     // 재생성 실패도 여기로 온다 — 실패하면 목록은 그대로인데 화면이 아무 말도 안 하게 된다
@@ -156,16 +174,18 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
     candidatesSummary: summary,
   });
 
-  // h10 "만드는 중" 얼굴은 목록(listed) 위에 **얹히는 축**이다(01b D1) — PARTIAL 이면 generating 을
-  // 실어 화면이 게이지·스켈레톤·제목을 h10 으로 바꾼다(탭·카드는 그대로 공존). `DraftScreenProps`
-  // 를 안 늘리려 새 프롭 대신 view 에 실어 나른다(프롭 수 동결 심판 · itineraryMapSurfaceStructure S3).
-  const view =
-    baseView.kind === 'listed'
-      ? {
-          ...baseView,
-          generating: itinerary.data?.generationState === 'PARTIAL',
-        }
-      : baseView;
+  // 2단계 생성 중(PARTIAL)이면 h07 부분 결과 얼굴 — 완성 얼굴(DraftScreen) 대신 공용 지도+시트
+  // 셸을 그린다(01b D1 · TRIP-790). features→widgets 상향 참조 금지라 이 조립은 pages(여기)에서만
+  // 할 수 있다. 아래 shell 분기가 `view.kind==='listed' && isPartial` 에서 이 값을 쓴다.
+  const isPartial = itinerary.data?.generationState === 'PARTIAL';
+
+  // 폴백·강등 배너 신호를 한 번만 접는다 — h08 라우팅 조건(깨끗한 COMPLETE 판별)과 DraftScreen
+  // 프롭이 같은 값을 써야 갈라지지 않는다(같은 규칙이 두 층에서 다르게 진화하는 것 방지).
+  const fallbackNotice = resolveFallbackNotice({
+    solveMode: itinerary.data?.solveMode,
+    isFallback: itinerary.data?.isFallback,
+    candidatesSummary: summary,
+  });
 
   /**
    * 재생성 — **확정 일정에는 어떤 경로로도 보내지 않는다.**
@@ -245,6 +265,197 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
     );
   }
 
+  /**
+   * h07 부분 결과(PARTIAL) — 2단계 생성이 진행 중이면 완성 얼굴 대신 **공용 지도+시트 셸**을 그린다
+   * (01b D1). 진행 카드가 day-chip 자리를 대체하고(overlay), 하단 peek 시트에 이미 도착한 1일차
+   * 슬롯을 결과로 얹는다. CTA 는 안 준다 — 생성 중이라 확정할 완성본이 없다(D9).
+   */
+  if (view.kind === 'listed' && isPartial) {
+    const partialSlots =
+      days.find((day) => day.date === selectedDate)?.slots ?? [];
+    const partialPins = buildDraftPins(partialSlots);
+    // 게이지 셀은 여기서 tabs 에서 도출해 `{status,label}` 로 매핑 주입한다 — 위젯은 features
+    // (`buildGenerationGauge`)를 못 물어 상태를 못 도출한다(D4). 3셀의 출처는 `days.length` 가
+    // 아니라 **여행 기간**(tabs)이라, day1 만 도착해도 셀은 여행 일수만큼 선다(01b D7 급소).
+    const cells = buildGenerationGauge(tabs).map((cell) => ({
+      status: cell.state,
+      label: `${cell.dayNumber}일차 ${GENERATION_STATUS_LABEL[cell.state]}`,
+    }));
+    const selectedDayNumber =
+      tabs.find((tab) => tab.date === selectedDate)?.dayNumber ?? 1;
+    // 헤더 meta = "N곳 · X.Xkm". `legDistance` 는 "이동 3.5km" 를 주지만 헤더는 **km 부만** 쓴다
+    // (D8 · INV-3 — "이동" 접두·소요 어휘 금지). 거리 합이 없으면 "N곳"만.
+    const legLabel = legDistance(
+      partialSlots.map((slot) => slot.distanceRange)
+    );
+    const kmPart = legLabel === null ? null : legLabel.replace('이동 ', '');
+    const meta =
+      kmPart === null
+        ? `${partialSlots.length}곳`
+        : `${partialSlots.length}곳 · ${kmPart}`;
+    // 지도 center — 첫 핀(좌표 없으면 안전 폴백; 실서비스 PARTIAL day1 은 좌표 있는 POI 라 도달 X).
+    const center =
+      partialPins.length > 0
+        ? { lat: partialPins[0].lat, lng: partialPins[0].lng }
+        : { lat: 0, lng: 0 };
+
+    return (
+      <MapSheetShell
+        center={center}
+        pins={partialPins}
+        overlay={<GenerationProgressCard cells={cells} onBack={handleBack} />}
+        header={
+          // 제목에 날짜를 **합쳐** 한 leaf 로 넣는다(dayLabel/dateLabel 빈 값). 진행 카드 게이지의
+          // done 셀 라벨과 이 제목이 둘 다 "N일차 완성" 이면 `getByText` 가 둘을 잡아 실패하므로
+          // (A8-1b 는 게이지 라벨을 exact 로, A8-1e 는 헤더 제목을 regex 로 잡는다 — 헤더가 더 긴
+          // 문자열이어야 한다), 헤더 제목은 "N일차 완성 · 날짜" 로 게이지 라벨과 겹치지 않게 한다.
+          <SheetHeader
+            title={`${selectedDayNumber}일차 완성 · ${formatDraftDayHeader(
+              selectedDate
+            )}`}
+            dayLabel=""
+            dateLabel=""
+            meta={meta}
+          />
+        }
+      >
+        <View className="gap-md px-lg pb-2xl pt-xs">
+          {partialSlots.flatMap((slot, index) => {
+            const items: ReactElement[] = [
+              <SlotStopCard
+                key={`card-${slot.poiId}`}
+                slot={slot}
+                date={selectedDate}
+                index={index}
+                // 도착 일차 전 슬롯 시각 칩(isFixed 무관 · AC-2 · D6). 구분자는 en-dash U+2013.
+                timeLabel={`${slot.startAt.slice(0, 5)}–${slot.endAt.slice(
+                  0,
+                  5
+                )}`}
+                // "다른 후보 ›" 는 표시하되 PARTIAL 교체는 **미배선**(no-op · D7) — day1-only PUT 이
+                // 생성 중 day2·3 을 덮어쓰는 사고 방지(traps-itinerary TRIP-467/483 잔여). 정식
+                // 게이팅은 후속 티켓.
+                onPressAlt={() => {}}
+              />,
+            ];
+            if (index < partialSlots.length - 1) {
+              const nextSlot = partialSlots[index + 1];
+              items.push(
+                <DistanceConnector
+                  key={`conn-${slot.poiId}`}
+                  slotKey={buildSlotKey(selectedDate, slot.poiId)}
+                  distanceRange={nextSlot.distanceRange}
+                />
+              );
+            }
+            return items;
+          })}
+        </View>
+      </MapSheetShell>
+    );
+  }
+
+  /**
+   * h08 AI 추천안(깨끗한 COMPLETE) — 2단계 생성이 끝나고(!isPartial) 2차 실패도 폴백도 없는
+   * 목록이면 완성 얼굴을 **공용 지도+시트 셸**로 그린다(01b D1-R NARROW · TRIP-792). staleFailed·
+   * 폴백·강등이 곁에 붙은 목록은 이 조건에서 빠져 기존 `<DraftScreen>` 으로 가 배너를 유지한다
+   * (INV-4 — 셸엔 배너 슬롯이 없어 broad 로 보내면 배너가 삼켜진다). h07 셸과 달리 day-chip
+   * 오버레이(overlay 미전달=기본 렌더)와 하단 CTA 두 갈래(다시 짜기·확정하기)를 얹는다.
+   */
+  if (
+    view.kind === 'listed' &&
+    !isPartial &&
+    !view.staleFailed &&
+    fallbackNotice === null
+  ) {
+    const listedSlots =
+      days.find((day) => day.date === selectedDate)?.slots ?? [];
+    const listedPins = buildDraftPins(listedSlots);
+    // 일차 칩은 여행 기간(tabs)에서 나온다 — day1 만 도착한 순간에도 셀 수가 흔들리지 않는다(01b D7).
+    const dayChips = tabs.map((tab) => ({ label: `${tab.dayNumber}일차` }));
+    const selectedDayIndex = tabs.findIndex((tab) => tab.date === selectedDate);
+    const selectedDayNumber =
+      tabs.find((tab) => tab.date === selectedDate)?.dayNumber ?? 1;
+    // 헤더 meta = "N곳 · X.Xkm". `legDistance` 의 "이동 " 접두는 떼고 km 부만(D8 · INV-3).
+    const legLabel = legDistance(listedSlots.map((slot) => slot.distanceRange));
+    const kmPart = legLabel === null ? null : legLabel.replace('이동 ', '');
+    const meta =
+      kmPart === null
+        ? `${listedSlots.length}곳`
+        : `${listedSlots.length}곳 · ${kmPart}`;
+    const center =
+      listedPins.length > 0
+        ? { lat: listedPins[0].lat, lng: listedPins[0].lng }
+        : { lat: 0, lng: 0 };
+
+    return (
+      <MapSheetShell
+        center={center}
+        pins={listedPins}
+        days={dayChips}
+        selectedDayIndex={selectedDayIndex < 0 ? 0 : selectedDayIndex}
+        onSelectDay={(index) => setPickedDate(tabs[index]?.date ?? null)}
+        onBack={handleBack}
+        header={
+          <SheetHeader
+            title="AI 추천안"
+            dayLabel={`${selectedDayNumber}일차`}
+            dateLabel={formatDraftDayHeader(selectedDate)}
+            meta={meta}
+          />
+        }
+        cta={[
+          {
+            label: '다시 짜기',
+            variant: 'outline',
+            onPress: () => void handleRetry(),
+          },
+          {
+            label: '확정하기',
+            variant: 'primary',
+            onPress: () =>
+              router.push({
+                pathname: '/trips/[tripId]/itinerary',
+                params: { tripId },
+              }),
+          },
+        ]}
+      >
+        <View className="gap-md px-lg pb-2xl pt-xs">
+          {listedSlots.flatMap((slot, index) => {
+            const items: ReactElement[] = [
+              <SlotStopCard
+                key={`card-${slot.poiId}`}
+                slot={slot}
+                date={selectedDate}
+                index={index}
+                // 전 슬롯 시각 칩(isFixed 무관 · AC-3 · D8). 구분자는 en-dash U+2013.
+                timeLabel={`${slot.startAt.slice(0, 5)}–${slot.endAt.slice(
+                  0,
+                  5
+                )}`}
+                // "다른 후보 ›" 는 비고정 슬롯에만 표시(고정=미주입→링크 부재 · AC-7). 실 교체는
+                // TRIP-793 이연이라 지금은 no-op(D2-R) — 셸 얼굴엔 인라인 후보 패널을 마운트하지 않는다.
+                onPressAlt={slot.isFixed ? undefined : () => {}}
+              />,
+            ];
+            if (index < listedSlots.length - 1) {
+              const nextSlot = listedSlots[index + 1];
+              items.push(
+                <DistanceConnector
+                  key={`conn-${slot.poiId}`}
+                  slotKey={buildSlotKey(selectedDate, slot.poiId)}
+                  distanceRange={nextSlot.distanceRange}
+                />
+              );
+            }
+            return items;
+          })}
+        </View>
+      </MapSheetShell>
+    );
+  }
+
   return (
     <DraftScreen
       view={view}
@@ -255,11 +466,7 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
       )}
       dayHeader={formatDraftDayHeader(selectedDate)}
       canRetry={itinerary.data?.status !== 'CONFIRMED'}
-      fallbackNotice={resolveFallbackNotice({
-        solveMode: itinerary.data?.solveMode,
-        isFallback: itinerary.data?.isFallback,
-        candidatesSummary: summary,
-      })}
+      fallbackNotice={fallbackNotice}
       onSelectDay={setPickedDate}
       onRetry={() => void handleRetry()}
       onBack={handleBack}

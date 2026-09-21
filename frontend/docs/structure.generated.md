@@ -214,7 +214,6 @@
 ## src/app/trips/[tripId]/itinerary/copick/
 - `src/app/trips/[tripId]/itinerary/copick/[slotKey].tsx`  →  (export 없음)
 - `src/app/trips/[tripId]/itinerary/copick/complete.tsx`  →  (export 없음)
-- `src/app/trips/[tripId]/itinerary/copick/index.tsx`  →  (export 없음)
 
 ## src/app/trips/[tripId]/itinerary/
 - `src/app/trips/[tripId]/itinerary/draft.tsx`  →  (export 없음)
@@ -404,7 +403,6 @@
 
 ## src/features/itinerary/model/
 - `src/features/itinerary/model/buildEditItineraryRequest.ts`  →  buildEditItineraryRequest
-- `src/features/itinerary/model/coPickProgress.ts`  →  CoPickProgressSlot · CoPickProgress · coPickProgress
 - `src/features/itinerary/model/coPickSlots.ts`  →  firstCoPickSlotKey · nextCoPickSlotKey
 - `src/features/itinerary/model/draftView.ts`  →  DRAFT_POLL_INTERVAL_MS · DRAFT_POLL_MAX_COUNT · DraftDayTab · buildDraftDayTabs · GenerationDayState · GenerationGaugeCell · buildGenerationGauge · formatDraftDayHeader · DraftPin · buildDraftPins · shouldKeepPollingDraft · DraftView · isCandidatesDemoted · FallbackNotice · resolveFallbackNotice · resolveDraftView
 - `src/features/itinerary/model/itineraryEditStore.ts`  →  removeSlot · addSlot · reorderKeepingFixed · ItineraryEditState · useItineraryEditStore
@@ -418,28 +416,23 @@
 - `src/features/itinerary/model/timeBandLabel.ts`  →  TimeBandLabel · timeBandLabel
 
 ## src/features/itinerary/ui/
-- `src/features/itinerary/ui/CoPickCompleteScreen.tsx`  →  CoPickCompleteSlot · CoPickCompleteScreenProps · CoPickCompleteScreen
-- `src/features/itinerary/ui/CoPickHubScreen.tsx`  →  CoPickHubSlot · CoPickHubScreenProps · CoPickHubScreen
 - `src/features/itinerary/ui/ConceptPickerScreen.tsx`  →  ConceptPickerScreenProps · ConceptPickerScreen
 - `src/features/itinerary/ui/DraftScreen.tsx`  →  DraftScreenProps · DraftScreen
 - `src/features/itinerary/ui/GeneratingScreen.tsx`  →  GeneratingScreenProps · GeneratingScreen
 - `src/features/itinerary/ui/ItineraryEditScreen.tsx`  →  ItineraryEditScreenProps · ItineraryEditScreen
 - `src/features/itinerary/ui/ItineraryGlyphs.tsx`  →  BackChevronGlyph · LockGlyph · DragHandleGlyph · TrashGlyph · PlusGlyph · CheckGlyph · CheckCircleGlyph · PencilGlyph · SearchGlyph · CloseGlyph · ClockGlyph · ChevronDownGlyph · ChevronRightGlyph · LocationOffGlyph · CircleGlyphTone · InfoCircleGlyph · AlertCircleGlyph · WarningTriangleGlyph · ShareGlyph · WalkGlyph · CarGlyph · ExpandGlyph · RefreshGlyph · FullAiGlyph · CoPickGlyph · ManualGlyph
 - `src/features/itinerary/ui/ManualPlanScreen.tsx`  →  ManualPlanTimeBand · ManualPlanScreenProps · ManualPlanScreen
-- `src/features/itinerary/ui/MapFallback.tsx`  →  MapFallbackProps · MapFallback
 - `src/features/itinerary/ui/MethodPickerScreen.tsx`  →  ActiveGeneration · MethodPickerScreenProps · MethodPickerScreen
 - `src/features/itinerary/ui/MustVisitPickerScreen.tsx`  →  MustVisitPickerScreenProps · MustVisitPickerScreen
 - `src/features/itinerary/ui/MustVisitTimeScreen.tsx`  →  MustVisitTimeScreenProps · MustVisitTimeScreen
 - `src/features/itinerary/ui/MyTripCard.tsx`  →  MyTripCardProps · MyTripCard
 - `src/features/itinerary/ui/MyTripsListScreen.tsx`  →  MyTripsListMode · MyTripsListScreenProps · MyTripsListScreen
 - `src/features/itinerary/ui/OptionSwapScreen.tsx`  →  OptionSwapScreenProps · OptionSwapScreen
-- `src/features/itinerary/ui/PinDetailSheet.tsx`  →  PinDetailSheetProps · PinDetailSheet
 - `src/features/itinerary/ui/PlaceAddCard.tsx`  →  PlaceAddCardProps · PlaceAddCard
 - `src/features/itinerary/ui/PlaceAddScreen.tsx`  →  PlaceAddScreenProps · PlaceAddScreen
 - `src/features/itinerary/ui/SlotCandidateCard.tsx`  →  candidateBadge · SlotCandidateCardProps · SlotCandidateCard
 - `src/features/itinerary/ui/SlotCandidatePanel.tsx`  →  SlotCandidatePanelProps · SlotCandidatePanel
 - `src/features/itinerary/ui/SlotFillScreen.tsx`  →  SlotFillScreenProps · SlotFillScreen
-- `src/features/itinerary/ui/TimelineScreen.tsx`  →  ItineraryHeaderData · TimelineScreenProps · TimelineScreen
 - `src/features/itinerary/ui/ZeroCandidateScreen.tsx`  →  ZeroCandidateScreenProps · ZeroCandidateScreen
 
 ## src/features/notification/model/
@@ -680,11 +673,10 @@
 - `src/pages/destination-detail/ui/DestinationDetailPage.tsx`  →  DestinationDetailPage
 
 ## src/pages/itinerary-copick/
-- `src/pages/itinerary-copick/index.ts`  →  SlotFillPage · CoPickHubPage · CoPickCompletePage
+- `src/pages/itinerary-copick/index.ts`  →  SlotFillPage · CoPickCompletePage
 
 ## src/pages/itinerary-copick/ui/
 - `src/pages/itinerary-copick/ui/CoPickCompletePage.tsx`  →  CoPickCompletePageProps · CoPickCompletePage
-- `src/pages/itinerary-copick/ui/CoPickHubPage.tsx`  →  CoPickHubPageProps · CoPickHubPage
 - `src/pages/itinerary-copick/ui/SlotFillPage.tsx`  →  SlotFillPageProps · SlotFillPage
 
 ## src/pages/itinerary-draft/
@@ -743,7 +735,9 @@
 - `src/pages/itinerary-plan/index.ts`  →  ItineraryPlanPage
 
 ## src/pages/itinerary-plan/ui/
+- `src/pages/itinerary-plan/ui/ConfirmedBanner.tsx`  →  ConfirmedBanner
 - `src/pages/itinerary-plan/ui/ItineraryPlanPage.tsx`  →  ItineraryPlanPage
+- `src/pages/itinerary-plan/ui/NoBaseNoticeCard.tsx`  →  NoBaseNoticeCard
 
 ## src/pages/live-itinerary/
 - `src/pages/live-itinerary/index.ts`  →  LiveItineraryPage
@@ -1297,11 +1291,12 @@
 - `src/widgets/map-sheet-shell/ui/CtaBar.tsx`  →  CtaButton · CtaBarProps · CtaBar
 - `src/widgets/map-sheet-shell/ui/DayChipOverlay.tsx`  →  DayChip · DayChipOverlayProps · DayChipOverlay
 - `src/widgets/map-sheet-shell/ui/DistanceConnector.tsx`  →  DistanceConnectorProps · DistanceConnector
-- `src/widgets/map-sheet-shell/ui/MapSheetGlyphs.tsx`  →  BackChevronGlyph · WalkGlyph · CarGlyph
+- `src/widgets/map-sheet-shell/ui/GenerationProgressCard.tsx`  →  GenerationProgressCell · GenerationProgressCardProps · GenerationProgressCard
+- `src/widgets/map-sheet-shell/ui/MapSheetGlyphs.tsx`  →  BackChevronGlyph · WalkGlyph · CarGlyph · FullAiGlyph · CheckGlyph
 - `src/widgets/map-sheet-shell/ui/MapSheetShell.tsx`  →  MapSheetShellProps · MapSheetShell
 - `src/widgets/map-sheet-shell/ui/SheetHeader.tsx`  →  SheetHeaderProps · SheetHeader
 
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetProps · TimeSheet
 
-합계 878개 파일
+합계 873개 파일

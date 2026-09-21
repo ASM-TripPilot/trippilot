@@ -58,11 +58,9 @@ describe('G0 · 탐지기 자가검사', () => {
 type Row = { file: string; must: string[]; mustNot?: string[]; why: string };
 
 const ROWS: Row[] = [
-  {
-    file: 'features/itinerary/ui/TimelineScreen.tsx',
-    must: ['@/entities/itinerary-slot/ui'],
-    why: 'h25 카드가 PoiSlotCard·SlotPhotoPlaceholder 를 entities 에서 소비(import 재작성). 렌더 잠금은 TimelineScreen.{test,card,map,placeholder}.test 무수정 green',
-  },
+  // TRIP-801 GUT — TimelineScreen.tsx 행 제거. CONFIRMED→셸 이관으로 소비처 0이 돼 파일이 삭제되므로,
+  // 이 행을 두면 read() 가 ENOENT 로 throw 한다(02a ★10). PoiSlotCard 는 이번 티켓에서 잔존(범위
+  // 폭발 방지)이라 DELETED_PURE_SHIMS 에도 넣지 않는다 — 삭제는 후속(TRIP-810 shim 정리 계열).
   {
     file: 'features/planb/ui/ReplanDraftScreen.tsx',
     must: ['@/entities/itinerary-slot/ui'],
