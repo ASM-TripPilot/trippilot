@@ -1,7 +1,17 @@
 package com.trippilot.app
 
+import com.trippilot.accommodationsearch.adapter.out.external.StubJejuContentAdapter
+import com.trippilot.accommodationsearch.adapter.out.persistence.DbContentAdapter
+import com.trippilot.accommodationsearch.adapter.out.persistence.StayJpaRepository
+import com.trippilot.accommodationsearch.domain.AccommodationContentPort
+import com.trippilot.placedata.api.RegionLookupFacade
+import io.mockk.mockk
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeInstanceOf
+import org.springframework.boot.autoconfigure.AutoConfigurations
+import org.springframework.boot.autoconfigure.context.PropertyPlaceholderAutoConfiguration
+import org.springframework.boot.test.context.runner.ApplicationContextRunner
 import java.io.File
 
 /**
@@ -41,19 +51,31 @@ class StayContentModeParityTest : StringSpec({
         error("파일을 찾지 못했습니다: $rel (user.dir=${System.getProperty("user.dir")})")
     }
 
+    /**
+     * **주석을 먼저 걷어낸다.** 안 걷으면 `# STAY_CONTENT_MODE: stub 으로 되돌리려면…` 같은
+     * 설명 한 줄이 실제 설정보다 앞에 오는 순간 이 테스트가 **주석을 읽고 초록으로 통과한다**
+     * (실측으로 확인했다 — 주석을 끼우자 `db` 대신 `stub` 을 읽었다).
+     * 설정 파일을 텍스트로 읽는 검사는 전부 이 함정을 갖는다.
+     */
+    fun settingLines(rel: String): String =
+        repoFile(rel).readText()
+            .lineSequence()
+            .filterNot { it.trimStart().startsWith("#") }
+            .joinToString("\n")
+
     /** `${STAY_CONTENT_MODE:-db}` 의 인라인 기본값. */
     val compose = Regex("""STAY_CONTENT_MODE:-(\w+)}""")
-        .find(repoFile("docker-compose.yml").readText())
+        .find(settingLines("docker-compose.yml"))
         ?.groupValues?.get(1)
 
     /** ConfigMap 의 `STAY_CONTENT_MODE: "db"`. 없으면 null 이고, 그게 드리프트다. */
     val localK8s = Regex("""STAY_CONTENT_MODE:\s*"?(\w+)"?""")
-        .find(repoFile("deploy/k8s/backend/configmap.yaml").readText())
+        .find(settingLines("deploy/k8s/backend/configmap.yaml"))
         ?.groupValues?.get(1)
 
     /** Helm 템플릿의 `- name: STAY_CONTENT_MODE` 다음 줄 `value:`. */
     val eks = Regex("""name:\s*STAY_CONTENT_MODE\s*\n\s*value:\s*"?(\w+)"?""")
-        .find(repoFile("deploy/eks/chart/templates/backend.yaml").readText())
+        .find(settingLines("deploy/eks/chart/templates/backend.yaml"))
         ?.groupValues?.get(1)
 
     "세 배포 서술이 같은 숙소 콘텐츠 경로를 말한다" {
@@ -71,5 +93,43 @@ class StayContentModeParityTest : StringSpec({
      */
     "배포 경로는 정본 테이블을 읽는다 — 스텁 제주 5곳이 아니다" {
         compose shouldBe "db"
+    }
+
+    /**
+     * **`STAY_CONTENT_MODE` 라는 이름이 실제로 어댑터를 바꾸는가.**
+     *
+     * 위 스펙들은 세 파일이 같은 *문자열*을 말하는지만 본다. 그 이름이 틀렸다면 — 예를 들어
+     * `application.yml` 의 플레이스홀더가 `STAY_MODE` 였다면 — ConfigMap 의 `db` 는 **아무 일도
+     * 하지 않고** 조용히 스텁으로 남는다. 파일 세 곳이 사이좋게 일치한 채로.
+     *
+     * 이 리포는 그 실패를 이미 겪었다(같은 키를 여러 이름으로 읽던 건). 그래서 문자열 일치가
+     * 아니라 **빈 선택까지** 잰다. 선례는 `ScheduleAgentSwitchTest`.
+     *
+     * 컨텍스트 전체를 띄우지 않는 이유: 테스트 리소스 `application.yml` 이 본 파일을 가려
+     * 플레이스홀더가 안 보인다. 러너에 그 한 줄만 그대로 심는다.
+     */
+    "STAY_CONTENT_MODE 가 실제로 DB 어댑터를 고른다 — 이름이 틀리면 조용히 스텁이다" {
+        // application.yml 의 `mode: ${STAY_CONTENT_MODE:stub}` 와 같은 표기를 그대로 쓴다.
+        val placeholder = "trippilot.stay.content.mode=\${STAY_CONTENT_MODE:stub}"
+
+        ApplicationContextRunner()
+            .withConfiguration(AutoConfigurations.of(PropertyPlaceholderAutoConfiguration::class.java))
+            .withBean(StayJpaRepository::class.java, { mockk(relaxed = true) })
+            .withBean(RegionLookupFacade::class.java, { mockk(relaxed = true) })
+            .withBean(StubJejuContentAdapter::class.java)
+            .withBean(DbContentAdapter::class.java)
+            .withPropertyValues(placeholder)
+            .run { ctx -> ctx.getBean(AccommodationContentPort::class.java).shouldBeInstanceOf<StubJejuContentAdapter>() }
+
+        ApplicationContextRunner()
+            .withConfiguration(AutoConfigurations.of(PropertyPlaceholderAutoConfiguration::class.java))
+            .withBean(StayJpaRepository::class.java, { mockk(relaxed = true) })
+            .withBean(RegionLookupFacade::class.java, { mockk(relaxed = true) })
+            .withBean(StubJejuContentAdapter::class.java)
+            .withBean(DbContentAdapter::class.java)
+            // 배포가 주는 **그 이름 그대로** 넣는다 — 이게 이 스펙의 전부다.
+            .withSystemProperties("STAY_CONTENT_MODE=db")
+            .withPropertyValues(placeholder)
+            .run { ctx -> ctx.getBean(AccommodationContentPort::class.java).shouldBeInstanceOf<DbContentAdapter>() }
     }
 })
