@@ -74,16 +74,23 @@ paths:
   /auth/social/{provider}/token:
     post:
       tags: [auth]
-      summary: 소셜 로그인/가입 (네이티브 SDK access token)
+      summary: 소셜 로그인/가입 (네이티브 SDK 토큰)
       description: >
-        카카오·네이버 등 네이티브 SDK가 발급한 access token 을 전달(서버 code 교환 없음, redirect 불필요).
-        서버는 토큰으로 userinfo 만 호출. 이후 계정 upsert·토큰 발급은 code 흐름과 동일. (Apple 미지원.)
+        네이티브 SDK가 발급한 토큰을 전달(서버 code 교환 없음, redirect 불필요).
+        이후 계정 upsert·토큰 발급은 code 흐름과 동일.
+
+
+        **제공자별로 싣는 토큰이 다르다.** 카카오·네이버·구글은 access token 이고 서버가 그것으로
+        userinfo 를 호출한다. **애플은 `identityToken`(id_token)** 이다 — Apple 은 userinfo 엔드포인트가
+        없어 되물을 곳이 없고, 서버가 Apple JWKS 로 **서명·aud·iss·exp 를 직접 검증**한다.
+        필드명이 `accessToken` 인 것은 계약이 3사 기준으로 먼저 굳었기 때문이며, 와이어를 바꾸면
+        얻는 것이 이름뿐이라 유지한다(TRIP-858).
       security: []
       parameters:
         - name: provider
           in: path
           required: true
-          schema: { type: string, enum: [kakao, naver, google] }
+          schema: { type: string, enum: [kakao, naver, google, apple] }
       requestBody:
         required: true
         content:
@@ -2771,7 +2778,11 @@ components:
       type: object
       required: [accessToken]
       properties:
-        accessToken: { type: string, description: 네이티브 SDK가 발급한 제공자 access token }
+        accessToken:
+          type: string
+          description: >
+            네이티브 SDK가 발급한 제공자 토큰. 카카오·네이버·구글은 access token,
+            **애플은 `identityToken`(id_token)** 이다 — 경로 설명 참고(TRIP-858).
         ageConfirmation:
           allOf: [{ $ref: '#/components/schemas/AgeConfirmation' }]
           description: 신규 가입 시 필수, 기존 로그인 시 무시
