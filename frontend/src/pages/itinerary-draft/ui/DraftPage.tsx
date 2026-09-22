@@ -175,7 +175,6 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
       regenerate.isError ||
       itinerary.data?.generationState === 'FAILED' ||
       pollExhausted,
-    candidatesSummary: summary,
   });
 
   // 2단계 생성 중(PARTIAL)이면 h07 부분 결과 얼굴 — 완성 얼굴(DraftScreen) 대신 공용 지도+시트

@@ -169,8 +169,6 @@ export type DraftView =
   | { kind: 'loading' }
   | { kind: 'failed' }
   | { kind: 'empty' }
-  /** 만들기는 했는데 넣을 후보가 없었다(h35). 조건 목록은 서버 문자열 그대로 실려 나간다. */
-  | { kind: 'zero'; shortfallCategories: string[] }
   | {
       kind: 'listed';
       days: ItineraryDaysItem[];
@@ -240,21 +238,18 @@ export function resolveFallbackNotice(input: {
  * (openapi: `FAILED` = 2차 실패, 1차분은 유효) 실패가 목록을 덮지 않고 `staleFailed` 라는
  * 별도 축으로 같은 값 안에 실려 나간다. 목록도 살고 실패도 삼켜지지 않는다(INV-4).
  *
- * 세는 단위가 **일자가 아니라 슬롯**인 것이 후보 0건(h35)의 급소다 — 서버는 빈 일자를 담아
- * 보낼 수 있고, `days.length` 로만 보면 그 응답이 목록으로 새어 h35 가 영영 안 뜬다. 반대로
- * 일부 날짜만 비었으면 합계가 0이 아니므로 목록이 그대로 유지된다(01b D5·D6).
+ * 세는 단위가 **일자가 아니라 슬롯**이다 — 서버는 빈 일자를 담아 보낼 수 있고, `days.length`
+ * 로만 보면 안이 빈 응답이 목록으로 샌다. 반대로 일부 날짜만 비었으면 합계가 0이 아니므로
+ * 목록이 그대로 유지된다(01b D5·D6).
  *
- * 0건 판정에 `level`·`poolSize` 어휘를 쓰지 않는 것도 같은 이유다 — 어휘가 얼굴을 정하면
- * 서버가 말을 바꾸는 날 화면이 통째로 달라진다. 요약이 **객체로 도착했다**는 사실만 쓴다.
- *
- * 겹치는 조합의 순서(슬롯 > loading > failed > zero > empty)는 AC 가 정하지 않은 축이라
- * 이 사이클의 구현 판단이다 — 근거는 03 리포트. `failed > zero` 만 심판이 잠갔다.
+ * 겹치는 조합의 순서(슬롯 > loading > failed > empty)는 AC 가 정하지 않은 축이라 이 사이클의
+ * 구현 판단이다 — 근거는 03 리포트. (후보 0건 전용 `zero` 얼굴은 TRIP-791 로 화면이 삭제되고
+ * 이 정리로 kind 까지 제거됐다 — 안이 빈 응답은 이제 `empty` 로 접힌다.)
  */
 export function resolveDraftView(input: {
   days: ItineraryDaysItem[];
   loading: boolean;
   failed: boolean;
-  candidatesSummary?: ItineraryCandidatesSummary;
 }): DraftView {
   const slotCount = input.days.reduce((sum, day) => sum + day.slots.length, 0);
   if (slotCount > 0) {
@@ -262,16 +257,6 @@ export function resolveDraftView(input: {
   }
   if (input.loading) return { kind: 'loading' };
   if (input.failed) return { kind: 'failed' };
-
-  const summary = input.candidatesSummary;
-  if (summary !== undefined && summary !== null) {
-    // 키가 없는 것과 빈 배열을 여기서 하나로 만든다 — 화면이 "없음"과 "빈 배열"을 각각
-    // 다루면 같은 규칙이 두 층에 흩어진다(01b D8).
-    return {
-      kind: 'zero',
-      shortfallCategories: summary.shortfallCategories ?? [],
-    };
-  }
 
   return { kind: 'empty' };
 }
