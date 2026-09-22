@@ -49,8 +49,18 @@ spec:
               value: /app/config/llm-prices.json
             - name: EVENTS_STORE
               value: /app/data/collected_events.json
-            {{- range list "TRIPPILOT_LLM_PROVIDER" "OPENAI_API_KEY" "OPENAI_BASE_URL" "OPENAI_MODEL" "OPENAI_API" "ANTHROPIC_API_KEY" "ANTHROPIC_MODEL" "TRIPPILOT_LLM_FEATURE_MODELS" "TRIPPILOT_LLM_RETRY_MODELS" "TRIPPILOT_LOCAL_LLM_BASE_URL" "TRIPPILOT_LOCAL_LLM_API_KEY" "WEATHER_API" "KAKAO_REST_API_KEY" "EXISTENCE_MAX_CALLS" "TMAP_API_KEY" "TRIPPILOT_EMBEDDING_MODEL" "TRIPPILOT_EMBEDDING_TIMEOUT_SEC" }}
+            {{- $secretEnv := list "TRIPPILOT_LLM_PROVIDER" "OPENAI_API_KEY" "OPENAI_BASE_URL" "OPENAI_MODEL" "OPENAI_API" "ANTHROPIC_API_KEY" "ANTHROPIC_MODEL" "TRIPPILOT_LLM_FEATURE_MODELS" "TRIPPILOT_LLM_RETRY_MODELS" "TRIPPILOT_LOCAL_LLM_BASE_URL" "TRIPPILOT_LOCAL_LLM_API_KEY" "WEATHER_API" "KAKAO_REST_API_KEY" "EXISTENCE_MAX_CALLS" "TMAP_API_KEY" "TRIPPILOT_EMBEDDING_MODEL" "TRIPPILOT_EMBEDDING_TIMEOUT_SEC" }}
+            {{- /* In-cluster serving owns the address; leaving the secret copy in
+                   would put the same key in env twice and hide which one wins. */}}
+            {{- if .Values.reminderLlm.enabled }}
+            {{- $secretEnv = without $secretEnv "TRIPPILOT_LOCAL_LLM_BASE_URL" }}
+            {{- end }}
+            {{- range $secretEnv }}
             {{- include "trippilot.secretEnv" (dict "env" . "secret" "trippilot-ai" "optional" true) | nindent 12 }}
+            {{- end }}
+            {{- if .Values.reminderLlm.enabled }}
+            - name: TRIPPILOT_LOCAL_LLM_BASE_URL
+              value: http://reminder-llm:8000/v1
             {{- end }}
             {{- if .Values.embedding.enabled }}
             {{- include "trippilot.secretEnv" (dict "env" "TRIPPILOT_VECTOR_DB_URL" "secret" "trippilot-ai") | nindent 12 }}
