@@ -17,6 +17,7 @@ from trippilot.domain.dialogue import (
     ARGUMENT_TABLE,
     ArgumentKind,
     ArgumentSpec,
+    asked_argument_names,
     missing_arguments,
     specs_of,
     tool_specs,
@@ -157,6 +158,61 @@ def test_missing_is_deterministic_and_only_names_required_arguments(filled) -> N
 
 
 # ── 도구 스키마 파생 ─────────────────────────────────────────────────────
+
+
+def test_argument_is_not_asked_when_its_value_would_be_discarded() -> None:
+    """`lands_in is None` = 받을 칸이 없음 → 물으면 토큰만 쓰고 버린다."""
+    for intent in ROUTABLE_INTENTS:
+        for s in specs_of(intent):
+            if s.lands_in is None:
+                assert not s.asked(), f"{intent.value}.{s.name}"
+
+
+def test_handler_owned_argument_is_not_asked_even_though_it_lands() -> None:
+    """받을 칸이 **있는데도** 묻지 않는 자리 — `lands_in is None` 과 이유가 다르다.
+
+    `EDIT_SCHEDULE.op` 은 `EditCommand.op` 로 들어가지만 정하는 주인이 핸들러다.
+    지금 표에서 이 사유로 빠지는 것은 이 하나뿐이다.
+    """
+    op = next(s for s in specs_of(Intent.EDIT_SCHEDULE) if s.name == "op")
+    assert op.lands_in and not op.asked_by_router and not op.asked()
+    others = [
+        (i, s) for i in ROUTABLE_INTENTS for s in specs_of(i)
+        if not s.asked_by_router and s is not op
+    ]
+    assert others == []  # 늘어나면 근거를 여기 적고 이 단언을 고칠 것
+
+
+def test_headline_keeps_what_and_drops_why() -> None:
+    """설명문 첫 문장 = 모델 몫, 나머지 = 사람 몫. 한 벌로 둘 다 쓴다."""
+    op = next(s for s in specs_of(Intent.EDIT_SCHEDULE) if s.name == "op")
+    assert op.headline() == "편집 연산"  # "핸들러가 정한다 — …" 는 잘린다
+    day = next(s for s in specs_of(Intent.EDIT_SCHEDULE) if s.name == "day")
+    assert day.headline() == "편집 대상 하루"
+
+
+def test_every_headline_is_short_enough_to_be_an_instruction() -> None:
+    """근거가 첫 문장에 섞여 들어오면 프롬프트가 설계문서가 된다 — 길이로 잡는다."""
+    long = [
+        (i.value, s.name, s.headline())
+        for i in ROUTABLE_INTENTS for s in specs_of(i)
+        if s.asked() and len(s.headline()) > 45
+    ]
+    assert long == []
+
+
+def test_spec_rejects_required_argument_nobody_asks_for() -> None:
+    """아무도 묻지 않는 값을 필수로 두면 영원히 안 차서 되묻기 루프가 된다."""
+    with pytest.raises(ValueError, match="묻지 않는"):
+        ArgumentSpec(name="x", kinds=(ArgumentKind.DATE,), required=True,
+                     description="d", lands_in="somewhere", asked_by_router=False)
+
+
+def test_tool_specs_omit_arguments_nobody_asks_for() -> None:
+    """스키마의 정본은 `asked_specs_of` 하나 — 게이트의 허용 집합과 같은 함수를 본다."""
+    by_name = {t["name"]: set(t["parameters"]["properties"]) for t in tool_specs()}
+    for intent in ROUTABLE_INTENTS:
+        assert by_name[intent.value] == asked_argument_names(intent)
 
 
 def test_tool_specs_cover_the_closed_set_and_exclude_the_fallback_label() -> None:

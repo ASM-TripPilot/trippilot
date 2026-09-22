@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -51,6 +52,10 @@ class ArgumentKind(Enum):
 # 전자는 필수가 될 수 있고 후자는 될 수 없다.
 BACKEND_PENDING = "백엔드 봉투 (미합의 — business-rules 미결 #13)"
 
+# 설명문에서 **첫 문장**을 자르는 경계 — 한국어 종결("…다."), 일반 마침표, 그리고
+# 근거를 덧붙일 때 쓰는 em 대시. `ArgumentSpec.headline` 참조.
+_HEADLINE = re.compile(r"(?<=다)\.\s|\.\s|\s—\s")
+
 
 @dataclass(frozen=True, slots=True)
 class ArgumentSpec:
@@ -75,6 +80,28 @@ class ArgumentSpec:
     requires_group: str | None = None
     # 이 값이 실제로 들어가는 코드 필드. **None = 받을 칸이 없음(확인됨)** — 뽑아도 버려진다.
     lands_in: str | None = None
+    # 라우터가 **물어도 되는** 인자인가. 받을 칸은 있는데 **정하는 주인이 따로 있는** 경우
+    # `False` 다 — `lands_in is None`(칸이 없다)과 이유가 다르므로 따로 적는다.
+    # 지금 해당하는 것은 `EDIT_SCHEDULE.op` 하나다(그 행의 근거 참조).
+    asked_by_router: bool = True
+
+    def asked(self) -> bool:
+        """3차 프롬프트·도구 스키마에 실을 인자인가.
+
+        두 가지를 합친 것이다 — 값이 버려지거나(`lands_in is None`) 주인이 따로 있으면
+        **묻지 않는다.** 묻는 순간 토큰을 쓰고 모델에게 지어낼 자리를 주는데 결과는 버려진다.
+        """
+        return self.asked_by_router and self.lands_in is not None
+
+    def headline(self) -> str:
+        """설명문의 **첫 문장** — 모델에게 보여 줄 몫.
+
+        `description` 은 사람이 읽는 설계 근거까지 담는다("라우터가 정하면 더 적은 정보로
+        더 이른 자리에서 같은 판단을 하는 것이다"). 그걸 프롬프트에 실으면 잡음이고, 모델용
+        문구를 따로 두면 **두 벌이 되어 갈라진다.** 첫 문장만 잘라 쓰면 한 벌로 둘 다 된다
+        — 표를 쓸 때 "첫 문장은 무엇인가를, 나머지는 왜인가를 적는다"만 지키면 된다.
+        """
+        return _HEADLINE.split(self.description, maxsplit=1)[0]
 
     def __post_init__(self) -> None:
         if not self.name:
@@ -88,6 +115,9 @@ class ArgumentSpec:
         # 받을 칸이 없는 값을 필수로 두면 **되묻기가 발생하고 채워도 버려진다** (FD §2.0 ⑤)
         if self.required and self.lands_in is None:
             raise ValueError(f"{self.name}: lands_in 이 없는 인자는 필수가 될 수 없다")
+        # 아무도 묻지 않는 값을 필수로 두면 **영원히 안 차서 되묻기 루프**가 된다
+        if self.required and not self.asked_by_router:
+            raise ValueError(f"{self.name}: 라우터가 묻지 않는 인자는 필수가 될 수 없다")
         if self.requires_group is not None and not self.required:
             raise ValueError(f"{self.name}: requires_group 은 필수 인자끼리만 묶는다")
 
@@ -207,10 +237,13 @@ ARGUMENT_TABLE: dict[Intent, tuple[ArgumentSpec, ...]] = {
         _spec("target", (_SL, _PL), True,
               "편집 대상 항목. 해소되면 day 를 대신한다",
               requires_group="edit_scope", lands_in="EditCommand.affected_slots"),
+        # 받을 칸은 있는데 **주인이 핸들러**다. 그래서 `asked_by_router=False` — 표에는 남기되
+        # 3차 프롬프트·도구 스키마에서는 뺀다. 물으면 토큰을 쓰고 모델에게 지어낼 자리를 주는데,
+        # 정작 워커가 그 날 슬롯과 후보 풀을 손에 들고 다시 고른다.
         _spec("op", (_EN,), False,
               "편집 연산. **핸들러가 정한다** — 워커가 그 날 슬롯과 후보 풀을 손에 들고 고른다. "
               "라우터가 정하면 더 적은 정보로 더 이른 자리에서 같은 판단을 하는 것이다",
-              choices=_values(EditOp), lands_in="EditCommand.op"),
+              choices=_values(EditOp), lands_in="EditCommand.op", asked_by_router=False),
         _spec("replacement", (_PL,), False, "무엇으로 바꿀지",
               lands_in="EditCommand.params.targetPoiId"),
         _spec("position", (_SL,), False,
@@ -299,26 +332,46 @@ _JSON_TYPE = {
 }
 
 
+def asked_specs_of(intent: Intent) -> tuple[ArgumentSpec, ...]:
+    """그 의도에서 **라우터가 묻는** 인자만 (`ArgumentSpec.asked`).
+
+    프롬프트 스키마와 게이트의 허용 키가 이 하나를 본다 — 둘이 갈리면 모델이 낸 값을
+    게이트가 버리거나(묻고 버림) 안 물은 값이 통과한다.
+    """
+    return tuple(s for s in specs_of(intent) if s.asked())
+
+
+def asked_argument_names(intent: Intent) -> frozenset[str]:
+    """3차 산출물의 `slots` 가 가질 수 있는 키 — 게이트의 closed-set."""
+    return frozenset(s.name for s in asked_specs_of(intent))
+
+
 def _schema_for(spec: ArgumentSpec) -> dict:
-    base: dict = {"type": _JSON_TYPE.get(spec.kinds[0], "string"),
-                  "description": spec.description}
+    # 설명은 **첫 문장만** — 설계 근거는 모델에게 잡음이다 (`ArgumentSpec.headline`).
+    head = spec.headline()
+    base: dict = {"type": _JSON_TYPE.get(spec.kinds[0], "string"), "description": head}
     if spec.choices:
         base["enum"] = list(spec.choices)
     if spec.multiple:
-        base = {"type": "array", "items": base, "description": spec.description}
+        base = {"type": "array", "items": base, "description": head}
     return base
 
 
 def tool_specs() -> tuple[dict, ...]:
-    """인자표 → 도구 13종의 JSON Schema.
+    """인자표 → 도구 13종의 JSON Schema. **3차 프롬프트가 싣는 것도 이것이다.**
 
     **손으로 적은 스키마 파일을 두지 않는다** — 표가 정본이고 이건 순수 변환이다.
     `OUT_OF_SCOPE` 는 싣지 않는다: 3차는 "이 중 하나를 골라라" 이고, 고를 수 없는 라벨을
     목록에 넣으면 모델이 그걸 고른다(분류 불가는 `{"intent": null}` 로 받는다).
+
+    **묻지 않는 인자는 뺀다**(`ArgumentSpec.asked`) — 표 40칸 중 10칸이 그렇다.
+    값이 버려지거나 주인이 따로 있는 칸을 스키마에 실으면 토큰을 쓰고 모델에게 지어낼
+    자리를 주는데 결과는 쓰이지 않는다. 표에는 남겨 둔다 — 없는 것과 "있지만 안 묻는 것"은
+    다르고, 후자는 근거가 사라지면 다시 넣자는 말이 나온다.
     """
     out = []
     for intent in sorted(ROUTABLE_INTENTS, key=lambda i: i.value):
-        specs = specs_of(intent)
+        specs = asked_specs_of(intent)
         out.append({
             "name": intent.value,
             "description": f"{intent.value} 의도로 처리한다",
