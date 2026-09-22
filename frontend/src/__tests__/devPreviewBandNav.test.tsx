@@ -240,7 +240,10 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    implementer 는 preview.tsx 에서 개명 1 + 삭제 1만 하고 이 가드는 안 만진다(재편 전엔 174개라
     //    이 단언이 red). 정확히 그 키들인지는 아래 'TRIP-789' describe 가 못박고, devPreviewBandSort 는
     //    band h 를 잠가 EXPECTED_H 도 동반 갱신(loading 을 h07-generating-partial 뒤로, 옛 h09 2키 제거).
-    expect(PREVIEW_STATES).toHaveLength(173);
+    // ⚠️ TRIP-769: j02·오프라인 동기화 삭제로 프리뷰 키 3개(`records-compare`·`records-sync-badge`·
+    //    `records-conflict`, band `j`)를 제거해 173→170. 오케 직접(경량) — preview.tsx 에서 3키 + import
+    //    를 지우며 이 가드도 함께 내림. devPreviewBandSort 는 band h·l 만 잠가 band j 와 무관(오갱신 금지).
+    expect(PREVIEW_STATES).toHaveLength(170);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(

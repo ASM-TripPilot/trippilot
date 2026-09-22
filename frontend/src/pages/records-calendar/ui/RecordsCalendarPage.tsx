@@ -20,13 +20,14 @@ import { StateNotice } from '@/shared/ui/StateNotice';
  * `useRecordsCalendar()`(=`GET /trips` 얇은 래퍼)로 여행 목록을 받아, 이번 달(시계에서 문자열로 1회
  * 읽음)을 로컬 state 로 두고 `buildMonthGrid`·`markedDaysOfMonth`·`buildPastTripCards`(순수)로 화면 props
  * 를 조립한다. 월 이동은 `shiftMonth` 순수 계산으로 state 만 갈아 끼운다(재조회 0 — 캘린더는 전체 여행을
- * 클라에서 마킹). 여행 선택→`/trips/{id}/records/compare`(j02, Q1), 빈 상태→`/trips/new/step1`.
+ * 클라에서 마킹). 여행 선택→`/trips/{id}/records`(j01 — j02 비교는 TRIP-769 로 삭제, 최종 목적지
+ * 재지정은 TRIP-767), 빈 상태→`/trips/new/step1`.
  *
  * `useRouter()` 를 쓴다(imperative `router` 아님, ★D9) — tabsShell(expoRouterTabsMock)·route 목이
  * `useRouter` 를 제공해 이 페이지가 크래시 없이 렌더된다.
  *
  * ⚠️ 페이지 조립(월 라벨 서식·legend 파생·콜백 배선)은 jest 무심판이다 — 6-b 실기가 유일한 그물
- * (`RecordsComparePage`·`TripRecordsPage` 동형 사각).
+ * (`TripRecordsPage` 동형 사각).
  */
 export function RecordsCalendarPage(): ReactElement {
   const { trips, isPending, isError } = useRecordsCalendar();
@@ -89,7 +90,7 @@ export function RecordsCalendarPage(): ReactElement {
       isEmpty={trips.length === 0}
       onPressPrevMonth={() => setYearMonth((ym) => shiftMonth(ym, -1))}
       onPressNextMonth={() => setYearMonth((ym) => shiftMonth(ym, 1))}
-      onSelectTrip={(tripId) => router.push(`/trips/${tripId}/records/compare`)}
+      onSelectTrip={(tripId) => router.push(`/trips/${tripId}/records`)}
       onPressCreateTrip={() => router.push('/trips/new/step1')}
     />
   );

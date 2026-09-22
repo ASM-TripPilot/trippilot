@@ -35,13 +35,9 @@ import { LiveItineraryScreen } from '@/features/execution/ui/LiveItineraryScreen
 import { PlaceDetailScreen } from '@/features/execution/ui/PlaceDetailScreen';
 import { TriggerBanner } from '@/features/execution/ui/TriggerBanner';
 import { TriggerChip } from '@/features/execution/ui/TriggerChip';
-import type { CompareRow } from '@/features/record/model/compareRows';
-import { ConflictSheet } from '@/features/record/ui/ConflictSheet';
 import { MemoInline } from '@/features/record/ui/MemoInline';
 import { PhotoThumbStrip } from '@/features/record/ui/PhotoThumbStrip';
 import { RecordsCalendarScreen } from '@/features/record/ui/RecordsCalendarScreen';
-import { RecordsCompareScreen } from '@/features/record/ui/RecordsCompareScreen';
-import { SyncBadge } from '@/features/record/ui/SyncBadge';
 import { TripRecordsScreen } from '@/features/record/ui/TripRecordsScreen';
 import { VisitTimeSheet } from '@/features/record/ui/VisitTimeSheet';
 import { SHARE_FORMATS } from '@/features/reflection/model/shareCard';
@@ -2498,61 +2494,6 @@ export const PREVIEW_STATES: PreviewState[] = [
           onCancel={noop}
         />
       </View>
-    ),
-  },
-  // j01 오프라인 동기화 배지(TRIP-568) — 4상태를 3표기(대기/완료/충돌)로 접는 배지의 색·모양을
-  // 한 화면에서 육안 대조하는 자리(pill 색·글자 톤은 jest 사각 — repo-traps 글리프 함정 계열).
-  {
-    key: 'records-sync-badge',
-    band: 'j',
-    label: 'j01 · 동기화 배지',
-    login: null,
-    render: () => (
-      <View className="flex-1 gap-md bg-canvas px-lg pt-[80px]">
-        {(['LOCAL', 'PENDING', 'SYNCED', 'CONFLICT'] as const).map((status) => (
-          <View key={status} className="flex-row items-center gap-md">
-            <Text className="w-[80px] text-label text-muted-soft">
-              {status}
-            </Text>
-            <SyncBadge status={status} />
-          </View>
-        ))}
-      </View>
-    ),
-  },
-  // j01 동기화 충돌 해소(TRIP-568) — 전체화면 조건부 렌더 뷰(바텀시트 아님). 방문 2건을 카드 2장
-  // 으로 그려 2열 라디오·미선택 시작·적용 비활성/활성을 실기로 눌러 본다. card1=시각 축, card2=
-  // 상태 축(Figma 카드별 3필드). 선택 상태는 accessibilityState 로 잠기고 색은 무심판이라 이 키가
-  // 채움/테두리 강조를 눈으로 대조하는 유일한 자리(자율 세션 — 6-b 실기는 다음 세션 몫).
-  {
-    key: 'records-conflict',
-    band: 'j',
-    label: 'j01 · 동기화 충돌',
-    login: null,
-    render: () => (
-      <ConflictSheet
-        conflicts={[
-          {
-            visitCheckId: 'v1',
-            nameKo: '광안리 해변',
-            rows: [
-              { label: '방문 시각', local: '14:20 체크', server: '14:05 체크' },
-              { label: '메모', local: '노을 최고', server: '-' },
-              { label: '사진', local: '2장(대기)', server: '1장' },
-            ],
-          },
-          {
-            visitCheckId: 'v2',
-            nameKo: '부산시립미술관',
-            rows: [
-              { label: '방문 상태', local: '방문 완료', server: '방문 안 함' },
-              { label: '메모', local: '-', server: '-' },
-              { label: '사진', local: '0장', server: '0장' },
-            ],
-          },
-        ]}
-        onApply={noop}
-      />
     ),
   },
   // j01 사진·메모 첨부(TRIP-566) — PhotoThumbStrip 상태별 셀(available/other-device/unavailable)과 `+`
@@ -5263,62 +5204,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         isEmpty
         onNavigate={noop}
         onPressBack={noop}
-      />
-    ),
-  },
-  // j02 기록 비교 1키(TRIP-570) — 순수 뷰(`RecordsCompareScreen`)를 격리 렌더한다(`@/shared/api`·
-  // `@/shared/map` 값 import 0 이라 프리뷰 지뢰 목 통과). 세그 3탭·kind별 배지(실제/계획/변경)·
-  // 미방문·휴무 pill·코랄 점선 변경 카드·귀속 헤더·지도 degrade 자리표시를 한 화면에서 육안 대조하는
-  // 자리. 지도 3레이어·사진 핀은 좌표 계약 부재라 이번 사이클 제외(degrade) — 실제 렌더는 후속 몫.
-  // 세그 활성 탭 하이라이트는 고정('실제', noop) — 리스트는 탭 무관 전체라 필터 전환 대조는 불필요.
-  {
-    key: 'records-compare',
-    band: 'j',
-    label: 'j02 · 기록 비교',
-    login: null,
-    render: () => (
-      <RecordsCompareScreen
-        activeTab="actual"
-        onSelectTab={noop}
-        attribution={{ dayLabel: '6월 11일', stayName: '해운대 A호텔' }}
-        rows={
-          [
-            {
-              kind: 'actual',
-              key: 'a1',
-              date: '2026-06-11',
-              poiId: 'poi1',
-              placeLabel: '광안리 해변',
-              timeLabel: '14:20',
-            },
-            {
-              kind: 'actual',
-              key: 'a2',
-              date: '2026-06-11',
-              poiId: 'poi2',
-              placeLabel: '부산시립미술관',
-              timeLabel: '15:40',
-            },
-            {
-              kind: 'unvisited',
-              key: 'u1',
-              date: '2026-06-11',
-              poiId: 'poi9',
-              placeLabel: '○○ 전망대',
-            },
-            {
-              kind: 'change',
-              key: 'c1',
-              date: '2026-06-11',
-              beforeLabel: '△△ 카페',
-              afterLabel: '◇◇ 실내카페',
-              reason: '휴무',
-              timeLabel: '15:40',
-              sourceType: 'PLAN_B',
-            },
-          ] satisfies CompareRow[]
-        }
-        onBack={noop}
       />
     ),
   },

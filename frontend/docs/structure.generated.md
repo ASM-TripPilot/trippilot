@@ -95,7 +95,6 @@
 - `src/__tests__/recordAttributionStructure.test.ts`  →  (export 없음)
 - `src/__tests__/recordPhotoBinaryGuard.test.ts`  →  (export 없음)
 - `src/__tests__/recordsCalendarStructure.test.ts`  →  (export 없음)
-- `src/__tests__/recordsCompareStructure.test.ts`  →  (export 없음)
 - `src/__tests__/recordsDurationStructure.test.ts`  →  (export 없음)
 - `src/__tests__/recordsStructure.test.ts`  →  (export 없음)
 - `src/__tests__/reflectionFallbackStructure.test.ts`  →  (export 없음)
@@ -117,7 +116,6 @@
 - `src/__tests__/staySearchGenerated.test.ts`  →  (export 없음)
 - `src/__tests__/staySearchStructure.test.ts`  →  (export 없음)
 - `src/__tests__/staySelectSheetStructure.test.ts`  →  (export 없음)
-- `src/__tests__/syncQueueIdempotency.test.ts`  →  (export 없음)
 - `src/__tests__/tabbarOverlay.test.ts`  →  (export 없음)
 - `src/__tests__/tabbarVisual.test.ts`  →  (export 없음)
 - `src/__tests__/tabsExploreRoute.test.tsx`  →  (export 없음)
@@ -248,7 +246,6 @@
 - `src/app/trips/[tripId]/planb/triggers.tsx`  →  (export 없음)
 
 ## src/app/trips/[tripId]/records/
-- `src/app/trips/[tripId]/records/compare.tsx`  →  (export 없음)
 - `src/app/trips/[tripId]/records/index.tsx`  →  (export 없음)
 
 ## src/app/trips/[tripId]/records/reflection/
@@ -504,15 +501,12 @@
 
 ## src/features/record/model/
 - `src/features/record/model/adjustTimesDraft.ts`  →  AdjustTimesViolation · AdjustTimesDraftResult · adjustTimesDraft
-- `src/features/record/model/compareRows.ts`  →  CompareTab · CompareRowKind · ActualCompareRow · UnvisitedCompareRow · ChangeCompareRow · CompareRow · buildCompareRows
 - `src/features/record/model/conflict.ts`  →  ConflictChoice · ConflictSelection · ConflictRow · ConflictVisitVM · isVisitConflict
 - `src/features/record/model/photoAttach.ts`  →  photoAttach
 - `src/features/record/model/photoAvailability.ts`  →  PhotoAvailability · photoAvailability
 - `src/features/record/model/recordsCalendar.ts`  →  markedDaysOfMonth · buildPastTripCards · formatTripDateRange · nightsLabel
 - `src/features/record/model/stayAttribution.ts`  →  AttributedStay · DayAttribution · deriveStayAttribution
-- `src/features/record/model/syncQueue.ts`  →  SyncStatus · SyncQueueItem · ReplayExecutor · enqueue · replayQueue
 - `src/features/record/model/useAdjustVisitTimes.ts`  →  VISIT_CONFLICT_NOTICE · AdjustVisitTimesOutcome · useAdjustVisitTimes
-- `src/features/record/model/useCompareRecords.ts`  →  useCompareRecords
 - `src/features/record/model/useRecordsCalendar.ts`  →  useRecordsCalendar
 - `src/features/record/model/useTripRecords.ts`  →  useTripRecords · useRecordBases · useRecordSavedStays
 - `src/features/record/model/useVisitAttachments.ts`  →  useVisitAttachments
@@ -520,17 +514,12 @@
 - `src/features/record/model/visitStatus.ts`  →  VisitStatus · deriveVisitStatus
 
 ## src/features/record/ui/
-- `src/features/record/ui/CompareRow.tsx`  →  CompareRowProps · CompareRow
-- `src/features/record/ui/CompareSegment.tsx`  →  CompareSegmentProps · CompareSegment
-- `src/features/record/ui/ConflictSheet.tsx`  →  ConflictSheetProps · ConflictSheet
 - `src/features/record/ui/MemoInline.tsx`  →  MemoInlineProps · MemoInline
 - `src/features/record/ui/PastTripList.tsx`  →  PastTripListProps · PastTripList
 - `src/features/record/ui/PhotoThumbStrip.tsx`  →  PhotoThumbVM · PhotoThumbStripProps · PhotoThumbStrip
 - `src/features/record/ui/RecordGlyphs.tsx`  →  VisitCheckDoneGlyph · VisitCheckActiveGlyph · VisitCheckUpcomingGlyph · VisitCheckSkippedGlyph · PlusGlyph · BackArrowGlyph · ChevronRightGlyph · CalendarGlyph · HeartGlyph
 - `src/features/record/ui/RecordsCalendarScreen.tsx`  →  RecordsCalendarScreenProps · RecordsCalendarScreen
-- `src/features/record/ui/RecordsCompareScreen.tsx`  →  RecordsCompareScreenProps · RecordsCompareScreen
 - `src/features/record/ui/SpontaneousVisitButton.tsx`  →  SpontaneousVisitButtonProps · SpontaneousVisitButton
-- `src/features/record/ui/SyncBadge.tsx`  →  SYNC_BADGE_LABEL · SyncBadge
 - `src/features/record/ui/TripCalendarMonth.tsx`  →  TripCalendarMonthProps · TripCalendarMonth
 - `src/features/record/ui/TripRecordsScreen.tsx`  →  TripRecordsDayTab · DayAttributionHeader · TripRecordsScreenProps · TripRecordsScreen
 - `src/features/record/ui/VisitRecordCard.tsx`  →  VisitRecordCardVM · VisitRecordCardProps · VisitRecordCard
@@ -868,12 +857,6 @@
 
 ## src/pages/records-calendar/ui/
 - `src/pages/records-calendar/ui/RecordsCalendarPage.tsx`  →  RecordsCalendarPage
-
-## src/pages/records-compare/
-- `src/pages/records-compare/index.ts`  →  RecordsComparePage
-
-## src/pages/records-compare/ui/
-- `src/pages/records-compare/ui/RecordsComparePage.tsx`  →  RecordsComparePageProps · RecordsComparePage
 
 ## src/pages/region-picker/
 - `src/pages/region-picker/index.ts`  →  RegionPickerPage
@@ -1307,4 +1290,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 877개 파일
+합계 864개 파일

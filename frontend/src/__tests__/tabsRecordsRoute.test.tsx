@@ -10,7 +10,8 @@ import type { Trip } from '@/shared/api/generated/schemas';
  * 파일-로컬 목으로 통제해 QueryClientProvider 없이 렌더한다.
  *
  * 무엇을 보장하나:
- *  - AC-4: 지난 여행 카드를 누르면 그 여행의 기록 비교로 push('/trips/{id}/records/compare').
+ *  - AC-4: 지난 여행 카드를 누르면 그 여행의 방문 기록으로 push('/trips/{id}/records').
+ *    (j02 기록 비교 삭제 — TRIP-769. 최종 목적지 재지정은 TRIP-767.)
  *  - AC-5: 저장 여행 0건이면 빈 상태 + 새 여행 버튼이 push('/trips/new/step1') · placeholder 소멸.
  *  - AC-6: 이전/다음 월 화살표가 월 상태를 shiftMonth 기반으로 바꾼다(라벨 상대 변화·원복).
  *
@@ -57,8 +58,8 @@ beforeEach(() => {
   mockUseGetTrips.mockReset();
 });
 
-describe('지난 여행 선택 → 기록 비교 (AC-4)', () => {
-  it('카드를 누르면 그 여행의 records/compare로 push한다', () => {
+describe('지난 여행 선택 → 방문 기록 (AC-4)', () => {
+  it('카드를 누르면 그 여행의 records로 push한다', () => {
     // 준비: status ENDED 여행 하나(오늘과 무관하게 "지난 여행"이라 결정론).
     setTrips([
       trip({
@@ -73,7 +74,7 @@ describe('지난 여행 선택 → 기록 비교 (AC-4)', () => {
     render(<RecordsRoute />);
     fireEvent.press(screen.getByTestId('record-calendar-past-trip-t9'));
 
-    expect(mockPush).toHaveBeenCalledWith('/trips/t9/records/compare');
+    expect(mockPush).toHaveBeenCalledWith('/trips/t9/records');
   });
 });
 
