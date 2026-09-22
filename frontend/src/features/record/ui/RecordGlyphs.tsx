@@ -15,6 +15,7 @@ const INK = '#222222';
 const CIRCLE_UPCOMING = '#C2C7CE';
 const CIRCLE_SKIPPED = '#9AA1AB';
 const MUTED_SOFT = '#9AA1AB';
+const MUTED = '#6A6A6A';
 
 type GlyphProps = { size?: number };
 
@@ -179,6 +180,56 @@ export function ChevronRightGlyph({
         strokeWidth={1.7}
         strokeLinecap="round"
         strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/**
+ * ⓘ 안내 아이콘(원 + i) — TRIP-761 · GPS 미동의 배너 좌측. muted.
+ * 색·정확한 벡터는 jest 사각(글리프 함정, 6-b 육안, Figma 1562:1949).
+ */
+export function InfoCircleGlyph({ size = 20 }: GlyphProps): ReactElement {
+  const s = size / 20;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 20 20" fill="none">
+      <Circle cx={10} cy={10} r={8.25} stroke={MUTED} strokeWidth={1.5 * s} />
+      <Path
+        d="M10 9.2V13.6"
+        stroke={MUTED}
+        strokeWidth={1.6 * s}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M10 6.4V6.41"
+        stroke={MUTED}
+        strokeWidth={1.8 * s}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+/**
+ * ⊘ GPS 꺼짐 아이콘(크로스헤어 + 사선) — TRIP-761 · 지도 좌상단 배지. muted.
+ * 색·정확한 벡터는 jest 사각(글리프 함정, 6-b 육안, Figma 1562:1957).
+ */
+export function GpsOffGlyph({ size = 15 }: GlyphProps): ReactElement {
+  const s = size / 15;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 15 15" fill="none">
+      <Circle cx={7.5} cy={7.5} r={3.3} stroke={MUTED} strokeWidth={1.3 * s} />
+      <Path
+        d="M7.5 1.4V3.1M7.5 11.9V13.6M1.4 7.5H3.1M11.9 7.5H13.6"
+        stroke={MUTED}
+        strokeWidth={1.3 * s}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M2.3 2.3L12.7 12.7"
+        stroke={MUTED}
+        strokeWidth={1.4 * s}
+        strokeLinecap="round"
       />
     </Svg>
   );

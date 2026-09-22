@@ -58,6 +58,14 @@ export interface VisitRecordCardProps {
    * (01b 결정 1 — 재시도 단위=카드-레벨).
    */
   uploadRetry?: { onPress: () => void };
+  /**
+   * TRIP-761 · 수동 체크인 모드(옵셔널 — 미주입/false 면 부재, 565/613/760 호출자 무영향).
+   * `manualCheckin && UPCOMING` 일 때만 "방문 체크" pill 을 surface 한다 — press 는 arrive(도착 생성)를
+   * 올리는 `onPressManualCheck`(≠`onPressComplete`)로 흐른다. 완료 게이트(BR-U5-05)는 손대지 않는다.
+   */
+  manualCheckin?: boolean;
+  /** TRIP-761 · "방문 체크" press 콜백(arg = card.poiId). arrive({source:'MANUAL', poiId}) 진입점. */
+  onPressManualCheck?: (poiId: string) => void;
 }
 
 function StatusCircle({
@@ -116,6 +124,8 @@ export function VisitRecordCard({
   photoSlot,
   memoSlot,
   uploadRetry,
+  manualCheckin,
+  onPressManualCheck,
 }: VisitRecordCardProps): ReactElement {
   const status = deriveVisitStatus(card);
   const canSkip = status === 'UPCOMING' || status === 'IN_PROGRESS';
@@ -160,6 +170,28 @@ export function VisitRecordCard({
           ) : null}
         </View>
       </View>
+
+      {/* TRIP-761 · "방문 체크" pill — 수동 체크인 모드 & UPCOMING(도착 전)일 때만. press 는 arrive(도착
+          생성, `onPressManualCheck`)로만 흐르고 complete(`onPressComplete`)는 절대 안 쏜다 — 완료 게이트를
+          구조로 유지(AC-6). pill 은 Pressable 이고 완료 발화 Pressable(StatusCircle active)과 별개 노드다.
+          색·코랄 톤은 jest 사각(present/absent testID 로만 판정, Figma 1562:1963). */}
+      {manualCheckin && status === 'UPCOMING' ? (
+        <View className="flex-row items-center gap-[10px]">
+          <Pressable
+            testID={`record-visit-manual-check-${card.visitCheckId}`}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            onPress={() => onPressManualCheck?.(card.poiId)}
+            className="flex-row items-center rounded-[8px] bg-primary px-[15px] py-sm"
+          >
+            <Text className="font-noto-bold text-label text-white">
+              방문 체크
+            </Text>
+          </Pressable>
+          <Text className="text-caption text-muted">
+            좌표 없이 장소 직접 선택
+          </Text>
+        </View>
+      ) : null}
 
       {/* 사진 슬롯 — 주면 PhotoThumbStrip(페이지 배선), 안 주면 정적 스캐폴딩(후방호환). */}
       {photoSlot != null ? (

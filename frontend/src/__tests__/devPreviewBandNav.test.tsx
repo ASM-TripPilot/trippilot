@@ -252,7 +252,12 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에 records-error 키만 추가하고
     //    이 가드는 안 만진다(추가 전엔 168개라 이 단언이 red). 정확히 그 키인지는 아래 'TRIP-760' describe 가
     //    못박는다. devPreviewBandSort 는 band h·l 만 잠가 band j 와 무관(오갱신 금지).
-    expect(PREVIEW_STATES).toHaveLength(169);
+    // ⚠️ TRIP-761: j01 manual-checkin 얼굴 신설로 records-manual-checkin 프리뷰 키 1개(band j)
+    //    추가로 169→170. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에
+    //    records-manual-checkin 키만 추가하고 이 가드는 안 만진다(추가 전엔 169개라 이 단언이 red).
+    //    정확히 그 키인지는 아래 'TRIP-761' describe 가 못박는다. devPreviewBandSort 는 band h·l 만
+    //    잠가 band j 와 무관(오갱신 금지).
+    expect(PREVIEW_STATES).toHaveLength(170);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -297,6 +302,22 @@ describe('🔴 TRIP-760 · j01 error 프리뷰 키 신설 (band j)', () => {
     // 만으론 "아무 키나 1개 추가해도" 통과하므로, 이 단언이 '추가된 키가 records-error'임을 못박는다
     // (TRIP-759 통합 describe 미러).
     expect(keys).toContain('records-error');
+
+    // 긍정 — 형제 band j 앵커. default 얼굴이 딸려 사라지지 않았음(공허 통과 방지).
+    expect(keys).toContain('records-default');
+  });
+});
+
+describe('🔴 TRIP-761 · j01 manual-checkin 프리뷰 키 신설 (band j)', () => {
+  it('records-manual-checkin 이 있고, records-default 는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // red-first — records-manual-checkin 은 implementer 가 preview.tsx 에 추가하기 전엔 없다(band j,
+    // records-default 위에 GPS 배너 + ⊘ 배지 + manual 안내문 + UPCOMING 카드 "방문 체크" pill 을 얹은
+    // 픽스처, manualCheckin prop 직접 주입). 카운트(170)만으론 "아무 키나 1개 추가해도" 통과하므로,
+    // 이 단언이 '추가된 키가 records-manual-checkin'임을 못박는다(TRIP-760 records-error describe 미러).
+    expect(keys).toContain('records-manual-checkin');
 
     // 긍정 — 형제 band j 앵커. default 얼굴이 딸려 사라지지 않았음(공허 통과 방지).
     expect(keys).toContain('records-default');

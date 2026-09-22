@@ -6,7 +6,7 @@ import { MapView, type MapCenter, type MapPin } from '@/shared/map';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 
 import { SpontaneousVisitButton } from './SpontaneousVisitButton';
-import { BackArrowGlyph } from './RecordGlyphs';
+import { BackArrowGlyph, GpsOffGlyph, InfoCircleGlyph } from './RecordGlyphs';
 import { VisitRecordCard, type VisitRecordCardVM } from './VisitRecordCard';
 
 /**
@@ -57,6 +57,14 @@ export interface TripRecordsScreenProps {
    * per-card 컨테이너를 돌려준다. undefined 를 돌려주면 정적 스캐폴딩 VisitRecordCard 로 폴백한다.
    */
   renderCard?: (card: VisitRecordCardVM) => ReactNode;
+  /**
+   * TRIP-761 — 수동 체크인 모드(옵셔널 — 미주입/false 면 일반 모드, 기존 호출자·프리뷰 무영향).
+   * 페이지가 위치 권한 부재를 판정해 내린다. true 면 GPS 미동의 배너 + 지도 ⊘ 배지가 뜨고, UPCOMING
+   * 카드로 `manualCheckin`·`onPressManualCheck` 를 전달해 "방문 체크" pill 을 켠다(BR-U5-54).
+   */
+  manualCheckin?: boolean;
+  /** TRIP-761 — UPCOMING 카드 "방문 체크" press 를 페이지로 올린다(arg = card.poiId → arrive MANUAL). */
+  onPressManualCheck?: (poiId: string) => void;
   onPressComplete: (visitCheckId: string) => void;
   onPressSkip: (visitCheckId: string) => void;
   onPressSpontaneous: () => void;
@@ -74,6 +82,8 @@ export function TripRecordsScreen({
   attribution,
   noticeCopy,
   renderCard,
+  manualCheckin,
+  onPressManualCheck,
   onPressComplete,
   onPressSkip,
   onPressSpontaneous,
@@ -93,6 +103,29 @@ export function TripRecordsScreen({
         </Pressable>
         <Text className="font-noto-bold text-[18px] text-ink">방문 기록</Text>
       </View>
+
+      {/* TRIP-761 GPS 미동의 배너 — 수동 체크인 모드에서만(권한 부재). appbar 아래·일자 탭 위(Figma
+          1562:1947). 연회색 dashed 박스에 ⓘ + 제목·본문. 카피는 사용자 가시 문자열이라 자구가 계약
+          (BR-U5-54). 색·dashed 보더·폰트 미세치(13.5/12.5)는 jest 사각(6-b 육안). */}
+      {manualCheckin ? (
+        <View className="w-full bg-canvas px-lg pb-[8px] pt-[2px]">
+          <View
+            testID="record-gps-banner"
+            className="w-full flex-row items-start gap-[10px] rounded-button border-[1.3px] border-dashed border-hairline-strong bg-surface-soft px-[13px] py-md"
+          >
+            <InfoCircleGlyph size={20} />
+            <View className="flex-1 gap-[3px]">
+              <Text className="font-noto-bold text-label text-ink">
+                GPS 미동의 — 수동 체크인으로 기록해요
+              </Text>
+              <Text className="text-caption text-muted">
+                위치 권한이 없어 좌표·이동 경로는 자동 기록되지 않아요. 방문한
+                장소를 직접 선택해 기록하세요.
+              </Text>
+            </View>
+          </View>
+        </View>
+      ) : null}
 
       {/* 일자 탭 */}
       <View className="w-full flex-row gap-sm bg-canvas px-lg pb-[10px] pt-[4px]">
@@ -130,6 +163,20 @@ export function TripRecordsScreen({
           showZoomControls
           showScaleBar
         />
+        {/* TRIP-761 ⊘ "GPS 자동기록 꺼짐" 배지 — 수동 체크인 모드에서만. MapView 의 **형제** absolute
+            오버레이라 지도 위에 얹히되 글랜스(viewOnly)를 안 가린다. ★testID 노드 자신이
+            `pointerEvents="none"` 를 들어 지도 터치를 흡수하지 않는다(A3a 단언 — jest 가 볼 수 있는
+            유일한 예방 그물; 실제 덮음·터치통과·색은 6-b). */}
+        {manualCheckin ? (
+          <View
+            testID="record-map-gps-off"
+            pointerEvents="none"
+            className="absolute left-[12px] top-[12px] flex-row items-center gap-[6px] rounded-[8px] border-[1.2px] border-dashed border-muted-soft bg-canvas/90 px-[10px] py-[6px]"
+          >
+            <GpsOffGlyph size={15} />
+            <Text className="text-micro text-muted">GPS 자동기록 꺼짐</Text>
+          </View>
+        ) : null}
       </View>
 
       <ScrollView
@@ -172,6 +219,8 @@ export function TripRecordsScreen({
             {renderCard?.(card) ?? (
               <VisitRecordCard
                 card={card}
+                manualCheckin={manualCheckin}
+                onPressManualCheck={onPressManualCheck}
                 onPressComplete={onPressComplete}
                 onPressSkip={onPressSkip}
               />

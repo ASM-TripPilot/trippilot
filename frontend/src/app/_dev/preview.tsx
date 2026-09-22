@@ -2556,6 +2556,113 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // j01 방문 기록 manual-checkin 얼굴(TRIP-761) — 위치 권한 부재 모드. default 위에 (1) GPS 미동의 배너,
+  // (2) 지도 ⊘ "GPS 자동기록 꺼짐" 배지, (3) manual 안내문(법 문구 "(좌표 자동기록 비활성)"), (4) UPCOMING
+  // ○○ 카페 카드의 코랄 "방문 체크" pill 을 얹었다. `manualCheckin` prop 직접 주입(권한 조회 없이) — 실 권한
+  // 플로우는 시뮬레이터(6-b) 몫. 배너 dashed 보더·⊘ 벡터·코랄 톤·폰트 미세치는 jest 사각(6-b 육안).
+  {
+    key: 'records-manual-checkin',
+    band: 'j',
+    label: 'j01 · 방문 기록 수동 체크인',
+    login: null,
+    render: () => (
+      <TripRecordsScreen
+        manualCheckin
+        noticeCopy="수동 체크인 · 방문한 곳을 직접 선택해 기록하세요 (좌표 자동기록 비활성)"
+        dayTabs={[
+          { day: '2026-08-20', label: 'Day1' },
+          { day: '2026-08-21', label: 'Day2' },
+          { day: '2026-08-22', label: 'Day3' },
+        ]}
+        activeDay="2026-08-21"
+        onSelectDay={noop}
+        attribution={{ stayName: '해운대 그랜드 호텔', dayLabel: '2일차' }}
+        mapCenter={{ lat: 35.1532, lng: 129.1187 }}
+        mapPins={[
+          {
+            number: 1,
+            lat: 35.1532,
+            lng: 129.1187,
+            kind: 'visited',
+            imageUrl: require('@/assets/itinerary/draft-preview-1.jpg'),
+          },
+          {
+            number: 2,
+            lat: 35.1555,
+            lng: 129.1216,
+            kind: 'visited',
+            imageUrl: require('@/assets/itinerary/draft-preview-2.jpg'),
+          },
+          { number: 3, lat: 35.156, lng: 129.1174, kind: 'planned' },
+          { number: 4, lat: 35.1538, lng: 129.115, kind: 'planned' },
+          { number: 5, lat: 35.1518, lng: 129.1226, kind: 'stay' },
+        ]}
+        cards={[
+          {
+            visitCheckId: 'r1',
+            slotKey: '2026-08-21#p1',
+            poiId: 'p1',
+            nameKo: '광안리 해변',
+            arrivedAt: '2026-08-21T14:20:00',
+            completedAt: '2026-08-21T15:20:00',
+            skippedAt: null,
+            arrivedLabel: '14:20',
+          },
+          {
+            visitCheckId: 'r2',
+            slotKey: '2026-08-21#p2',
+            poiId: 'p2',
+            nameKo: '부산시립미술관',
+            arrivedAt: '2026-08-21T15:40:00',
+            completedAt: '2026-08-21T16:20:00',
+            skippedAt: null,
+            arrivedLabel: '15:40',
+          },
+          {
+            // UPCOMING(세 timestamp null) — 수동 체크인 모드에서 "방문 체크" pill 이 붙는 카드.
+            visitCheckId: 'r3',
+            slotKey: '2026-08-21#p3',
+            poiId: 'p3',
+            nameKo: '○○ 카페',
+            arrivedAt: null,
+            completedAt: null,
+            skippedAt: null,
+            arrivedLabel: null,
+          },
+        ]}
+        // 완료 카드(r1·r2)만 사진/메모 슬롯을 얹고, UPCOMING r3 은 undefined → 화면이 정적 스캐폴딩
+        // 폴백으로 그리되 manualCheckin·onPressManualCheck 를 함께 받아 pill 을 surface 한다.
+        renderCard={(card) =>
+          card.completedAt != null ? (
+            <VisitRecordCard
+              card={card}
+              onPressComplete={noop}
+              onPressSkip={noop}
+              photoSlot={
+                <PhotoThumbStrip
+                  photos={[
+                    {
+                      visitPhotoMetaId: `${card.visitCheckId}-a`,
+                      availability: 'available',
+                      uri: null,
+                    },
+                  ]}
+                  onPressAdd={noop}
+                />
+              }
+              memoSlot={<MemoInline onSubmit={noop} />}
+            />
+          ) : undefined
+        }
+        onPressManualCheck={noop}
+        onPressComplete={noop}
+        onPressSkip={noop}
+        onPressSpontaneous={noop}
+        onPressBack={noop}
+        onPressTab={noop}
+      />
+    ),
+  },
   // j01 방문 시각 수정 시트(TRIP-613) — 셀-press 시각 편집. 통과형 목이라 정적 프리뷰도 실제 열림/
   // 딤은 못 본다(6-b 실기 전용) — 셀 트리·도착/완료 컬럼·저장/취소 레이아웃 육안 대조 자리.
   {
