@@ -38,11 +38,13 @@ function baseProps(
     view: 'MAP',
     mapCenter: { lat: 35.1531, lng: 129.1187 },
     mapPins: [{ number: 1, lat: 35.1531, lng: 129.1187 }],
+    // TRIP-764: DayCardVM shape 이관(날짜 제거 + Day1·5곳 → dayLabel·visitCountLabel 분리).
+    // 이 파일의 단언은 카드 testID 존재만 보므로(내용 무단언) 이관해도 아래 it 블록은 불변·green.
     dayCards: [
       {
         key: '2026-06-11',
-        dateLabel: '6월 11일 목요일',
-        countLabel: 'Day1 · 5곳',
+        dayLabel: '1일차',
+        visitCountLabel: '5곳',
         subtitle: '광안리 해변→전포 카페거리',
       },
     ],

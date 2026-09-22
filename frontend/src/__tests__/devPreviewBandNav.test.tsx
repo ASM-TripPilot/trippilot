@@ -257,7 +257,13 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    records-manual-checkin 키만 추가하고 이 가드는 안 만진다(추가 전엔 169개라 이 단언이 red).
     //    정확히 그 키인지는 아래 'TRIP-761' describe 가 못박는다. devPreviewBandSort 는 band h·l 만
     //    잠가 band j 와 무관(오갱신 금지).
-    expect(PREVIEW_STATES).toHaveLength(170);
+    // ⚠️ TRIP-764: j04 요약 프리뷰 키 개명·삭제 — trip-summary-map→-default·-visit-list→-error(개명 net 0)
+    //    + trip-summary-share-off 삭제(공유 비활성 얼굴은 프리뷰 상실, 회귀 심판은 TripSummaryScreen.test
+    //    AC-5 가 유지) → 170→169. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에서
+    //    2키 개명 + 1키 삭제만 하고 이 가드는 안 만진다(재편 전엔 170개라 이 단언이 red). 정확히 그
+    //    키들인지는 아래 'TRIP-764' describe 가 못박는다. devPreviewBandSort 는 band h·l 만 잠가 band j
+    //    와 무관(오갱신 금지, 맹점③ 미러).
+    expect(PREVIEW_STATES).toHaveLength(169);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -320,6 +326,27 @@ describe('🔴 TRIP-761 · j01 manual-checkin 프리뷰 키 신설 (band j)', ()
     expect(keys).toContain('records-manual-checkin');
 
     // 긍정 — 형제 band j 앵커. default 얼굴이 딸려 사라지지 않았음(공허 통과 방지).
+    expect(keys).toContain('records-default');
+  });
+});
+
+describe('🔴 TRIP-764 · j04 요약 프리뷰 키 개명·삭제 (band j)', () => {
+  it('default·error 로 개명되고 share-off 는 삭제되며, 옛 이름은 없다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 긍정 — 개명된 두 키가 실재한다(개명 전엔 부재라 red).
+    expect(keys).toContain('trip-summary-default');
+    expect(keys).toContain('trip-summary-error');
+
+    // 부정 — 개명 원본 2키 + 삭제된 share-off 는 사라진다(재편 전엔 present 라 red). 카운트(169)
+    //    만으론 "아무 키나 재편/삭제해도" 통과하므로, 이 짝이 '바뀐 게 정확히 그 키들'임을 못박는다
+    //    (TRIP-759/730/784 미러).
+    expect(keys).not.toContain('trip-summary-map');
+    expect(keys).not.toContain('trip-summary-visit-list');
+    expect(keys).not.toContain('trip-summary-share-off');
+
+    // 형제 band j 앵커 — j01 기록 키가 딸려 사라지지 않았음(공허 통과 방지).
     expect(keys).toContain('records-default');
   });
 });

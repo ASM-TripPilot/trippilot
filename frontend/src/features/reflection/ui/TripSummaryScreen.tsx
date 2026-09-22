@@ -3,6 +3,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MapView, type MapCenter, type MapPin } from '@/shared/map';
+import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 
 import { BackArrowGlyph, LocationOffGlyph } from './ReflectionGlyphs';
 import { DayHighlightCard } from './DayHighlightCard';
@@ -33,8 +34,8 @@ export type SummaryViewMode = 'MAP' | 'VISIT_LIST';
 
 export interface DayCardVM {
   key: string;
-  dateLabel: string;
-  countLabel: string;
+  dayLabel: string;
+  visitCountLabel: string;
   subtitle: string;
 }
 
@@ -49,6 +50,8 @@ export interface TripSummaryScreenProps {
   shareEnabled: boolean;
   onShare: () => void;
   onBack: () => void;
+  /** TRIP-764 — 하단 탭바 라우팅(옵셔널, j03 동형). 미주입이면 탭 press 는 no-op. */
+  onPressTab?: (key: ShellTabKey) => void;
 }
 
 function StatCell({
@@ -84,6 +87,7 @@ export function TripSummaryScreen({
   shareEnabled,
   onShare,
   onBack,
+  onPressTab,
 }: TripSummaryScreenProps): ReactElement {
   // disabled 는 fireEvent.press 를 항상 막지는 않으므로(RNTL) 콜백 게이트를 한 번 더 둔다(571 저장버튼 동형).
   const handleShare = () => {
@@ -127,7 +131,8 @@ export function TripSummaryScreen({
 
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-md px-lg pb-[32px] pt-[8px]"
+        // pb-[120px] — 하단 탭바(96px 오버레이) 위로 콘텐츠가 가리지 않게 여백을 둔다(j03 default 동형).
+        contentContainerClassName="gap-md px-lg pb-[120px] pt-[8px]"
       >
         {/* stats 3셀 — 방문·거리(출처 라벨)·사진. 거리는 미측정이면 "—"(0km 아님). */}
         <View
@@ -150,7 +155,8 @@ export function TripSummaryScreen({
         {view === 'MAP' ? (
           <>
             {hasMap ? (
-              <View className="h-[220px] w-full overflow-hidden rounded-card">
+              // 풀폭 250h · radius 0(px-lg 패딩 밖으로 -mx-lg 하여 화면 폭 꽉 채운다, j03 mapArea 동형).
+              <View className="-mx-lg h-[250px] overflow-hidden">
                 <MapView center={mapCenter} pins={mapPins} viewOnly />
               </View>
             ) : (
@@ -167,41 +173,51 @@ export function TripSummaryScreen({
               </View>
             )}
 
+            {/* 지도 범례 캡션 — 코랄 선/숙 마커의 뜻(지도가 실제로 뜰 때만; map-pending 에선
+                없는 지도·경로선·마커를 설명하는 범례가 되므로, hasMap 으로 게이팅). 12 muted. */}
+            {hasMap && (
+              <Text className="font-noto text-caption text-muted">
+                코랄 선 = 이동 경로 · 숙 = 거점 숙소
+              </Text>
+            )}
+
             {dayCards.map((card) => (
               <DayHighlightCard
                 key={card.key}
-                dateLabel={card.dateLabel}
-                countLabel={card.countLabel}
+                dayLabel={card.dayLabel}
+                visitCountLabel={card.visitCountLabel}
                 subtitle={card.subtitle}
               />
             ))}
           </>
         ) : (
           <>
-            {/* 위치 전무 — 빈 지도 대신 순서 방문 목록(BR-U5-39). */}
+            {/* 위치 전무 — 빈 지도 대신 순서 방문 목록(BR-U5-39). 폴백 박스는 1줄(사유)만,
+                안내 두번째 문장은 박스 밖 좌측에 둔다(Figma 1572:2050 정합). */}
             <View className="w-full items-center gap-sm rounded-card border-[1.5px] border-dashed border-hairline-strong bg-surface-soft px-lg py-3xl">
               <LocationOffGlyph size={30} />
               <Text className="text-center font-noto text-label text-muted">
                 위치 기록이 없어 지도를 표시할 수 없어요
               </Text>
-              <Text className="text-center text-label text-muted-soft">
-                대신 방문 장소를 순서대로 보여드릴게요
-              </Text>
             </View>
+            <Text className="font-noto text-label text-muted">
+              대신 방문 장소를 순서대로 보여드릴게요
+            </Text>
 
             {orderedVisits.map((visit) => (
+              // 플레인 행(카드 테두리 없음) — 20 배지·N일차(약)·장소(15 bold), Figma 1572:2050 정합.
               <View
                 key={visit.order}
                 testID="reflection-summary-visit-item"
-                className="w-full flex-row items-center gap-md rounded-card border border-hairline bg-canvas px-lg py-[14px]"
+                className="w-full flex-row items-center gap-md py-[6px]"
               >
-                <View className="h-[26px] w-[26px] items-center justify-center rounded-full bg-primary">
-                  <Text className="font-noto-bold text-label font-bold text-on-primary">
+                <View className="h-[20px] w-[20px] items-center justify-center rounded-full bg-primary">
+                  <Text className="font-noto-bold text-micro font-bold text-on-primary">
                     {visit.order}
                   </Text>
                 </View>
                 <Text className="text-label text-muted">{visit.dayLabel}</Text>
-                <Text className="flex-1 font-noto text-body text-ink">
+                <Text className="flex-1 font-noto-bold text-card-title font-bold text-ink">
                   {visit.place}
                 </Text>
               </View>
@@ -209,6 +225,9 @@ export function TripSummaryScreen({
           </>
         )}
       </ScrollView>
+
+      {/* 하단 탭바(기록 활성) — 전 얼굴 공통 오버레이(absolute bottom-0, j03 동형). */}
+      <BottomTabBar activeKey="records" onPressTab={onPressTab ?? (() => {})} />
     </SafeAreaView>
   );
 }

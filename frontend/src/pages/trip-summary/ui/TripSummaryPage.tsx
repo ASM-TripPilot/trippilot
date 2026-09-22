@@ -15,8 +15,9 @@ import {
   TripSummaryScreen,
   type DayCardVM,
 } from '@/features/reflection/ui/TripSummaryScreen';
-import { formatKoreanDate } from '@/shared/date/formatKoreanDate';
+import { formatDayLabel } from '@/entities/trip/lib/formatDayLabel';
 import { StateNotice } from '@/shared/ui/StateNotice';
+import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
 
 /**
  * TRIP-572 · trip-summary 페이지 — j04 요약 조회·조립·배선의 단일 출처(FSD).
@@ -99,8 +100,8 @@ export function TripSummaryPage({
   const stats = summaryStats(data.stats);
   const dayCards: DayCardVM[] = data.highlights.map((highlight) => ({
     key: highlight.date,
-    dateLabel: formatKoreanDate(highlight.date),
-    countLabel: `Day${highlight.dayOrder} · ${highlight.visitCount}곳`,
+    dayLabel: formatDayLabel(highlight.dayOrder),
+    visitCountLabel: `${highlight.visitCount}곳`,
     subtitle: daySubtitle(highlight.places),
   }));
 
@@ -114,6 +115,9 @@ export function TripSummaryPage({
       shareEnabled={shareEnabled(envelope)}
       onShare={() => router.push(`/trips/${tripId}/records/share`)}
       onBack={handleBack}
+      onPressTab={(key: ShellTabKey) =>
+        router.replace(key === 'home' ? '/' : `/${key}`)
+      }
     />
   );
 }
