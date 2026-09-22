@@ -358,3 +358,71 @@ describe('🔴 TRIP-749 · i03 위험 상세 시트 프리뷰 (AC-9)', () => {
     ).toEqual([]);
   });
 });
+
+// ── TRIP-750 · i04 재계획 요청 시트 1키 ───────────────────────────────────────
+//
+// Figma 4067:2427 — i02 펼침(비 예보 알약 + 해운대 배지) 위에 스크림 + 요청 시트. 옛 감지 배너·범위 밖
+// 2키는 사라진다. 그 키 문자열은 삭제 testID 와 같아서 조립한다(planbRequestSheetStructure R3, 02a ★3).
+
+const OLD_REQUEST_KEYS = ['detected', 'out-of-scope'].map((suffix) =>
+  ['planb', 'request', suffix].join('-')
+);
+
+describe('🔴 TRIP-750 · i04 재계획 요청 시트 프리뷰 (AC-10)', () => {
+  it('planb-request 는 펼침 허브 + 알약 위에, 허브 밖 형제로 감지 칩이 켜진 요청 시트를 그린다', () => {
+    mockSearchParams.state = 'planb-request';
+
+    render(<DevPreview />);
+
+    // 배경 — i02 펼침 허브(시트 index 2) + 지도 알약.
+    const liveScreen = screen.getByTestId('execution-live-screen');
+    const hubIndices = liveScreen
+      .findAll(
+        (node) =>
+          typeof node.props?.index === 'number' &&
+          Array.isArray(node.props?.snapPoints)
+      )
+      .map((node) => node.props.index as number);
+    expect(hubIndices.length).toBeGreaterThan(0);
+    hubIndices.forEach((index) => expect(index).toBe(2));
+    expect(
+      screen.getByTestId('execution-live-trigger-label')
+    ).toHaveTextContent('비 예보 · 해운대 해변 17시');
+
+    // 시트·스크림 — 허브 밖(형제).
+    expect(screen.getByTestId('planb-request-sheet')).toBeOnTheScreen();
+    expect(screen.getByTestId('planb-request-scrim')).toBeOnTheScreen();
+    expect(within(liveScreen).queryByTestId('planb-request-sheet')).toBeNull();
+
+    // Figma 선택 상태 — 감지 칩 · 지금 이후 · 숙소 근처에서 끝내기만.
+    const chip = screen.getByTestId('planb-request-trigger-chip');
+    expect(chip).toHaveTextContent('비 예보 · 해운대 해변 17시');
+    expect(chip).toBeSelected();
+    expect(screen.queryByTestId('planb-request-reason-WEATHER')).toBeNull();
+    expect(
+      screen.getByTestId('planb-request-scope-PARTIAL_SLOTS')
+    ).toBeSelected();
+    expect(
+      screen.getByTestId('planb-request-directive-END_NEAR_STAY')
+    ).toBeSelected();
+    expect(
+      screen.getByTestId('planb-request-directive-INDOOR')
+    ).not.toBeSelected();
+  });
+
+  it('band i · 라벨 "i04 · 재계획 요청 시트" 이고, 옛 감지 배너·범위 밖 키는 없다', () => {
+    const states = PREVIEW_STATES as {
+      key: string;
+      band: string;
+      label: string;
+    }[];
+    const entry = states.find((state) => state.key === 'planb-request');
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('i');
+    expect(entry?.label).toBe('i04 · 재계획 요청 시트');
+
+    const keys = states.map((state) => state.key);
+    expect(keys.length).toBeGreaterThan(100);
+    OLD_REQUEST_KEYS.forEach((key) => expect(keys).not.toContain(key));
+  });
+});

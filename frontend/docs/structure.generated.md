@@ -88,6 +88,8 @@
 - `src/__tests__/planbManualRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/planbManualStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbReplanDraftStructure.test.ts`  →  (export 없음)
+- `src/__tests__/planbRequestRoute.test.tsx`  →  (export 없음)
+- `src/__tests__/planbRequestSheetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbSafeAreaStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbScopeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbTriggerKindStructure.test.ts`  →  (export 없음)
@@ -467,6 +469,7 @@
 - `src/features/onboarding/ui/TermsScreen.tsx`  →  TermsItemView · TermsScreenProps · TermsScreen
 
 ## src/features/planb/config/
+- `src/features/planb/config/replanChoices.ts`  →  ReplanChoice · REPLAN_REASONS · REPLAN_DIRECTIVES · TRIGGER_REASON_KEY
 - `src/features/planb/config/watchLabels.ts`  →  WatchKind · WATCH_CATEGORY_LABEL · WATCH_STATUS_LABEL
 
 ## src/features/planb/model/
@@ -474,7 +477,7 @@
 - `src/features/planb/model/replanFormStore.ts`  →  ReplanFormState · useReplanFormStore
 - `src/features/planb/model/replanOrigin.ts`  →  ReplanOrigin · buildManualOrigin · isEstimatedOrigin
 - `src/features/planb/model/replanRequest.ts`  →  ReplanFormValues · buildStartReplanRequest
-- `src/features/planb/model/replanScope.ts`  →  ReplanScopeOption · ReplanChoice · REPLAN_SCOPES · DEFAULT_REPLAN_SCOPE · REPLAN_REASONS · REPLAN_DIRECTIVES
+- `src/features/planb/model/replanScope.ts`  →  ReplanScopeOption · REPLAN_SCOPES · DEFAULT_REPLAN_SCOPE
 - `src/features/planb/model/replanState.ts`  →  ReplanState · resolveReplanState
 - `src/features/planb/model/riskAffectedRow.ts`  →  RiskAffectedRow · riskAffectedRow
 - `src/features/planb/model/slackTime.ts`  →  slackTime
@@ -490,11 +493,10 @@
 
 ## src/features/planb/ui/
 - `src/features/planb/ui/NoAlternativeScreen.tsx`  →  NoAlternativeScreenProps · NoAlternativeScreen
-- `src/features/planb/ui/OutOfScopeNotice.tsx`  →  OutOfScopeNotice
 - `src/features/planb/ui/PlanbGlyphs.tsx`  →  ChecklistDoneGlyph · ChecklistActiveGlyph · ChecklistWaitingGlyph · AppliedBackGlyph · AppliedCheckGlyph · AppliedAlertGlyph · RiskWarningGlyph · ChevronRightGlyph · LockGlyph
 - `src/features/planb/ui/ReplanAppliedScreen.tsx`  →  ReplanAppliedScreenProps · ReplanAppliedScreen
 - `src/features/planb/ui/ReplanDraftScreen.tsx`  →  ReplanDraftScreenProps · ReplanDraftScreen
-- `src/features/planb/ui/ReplanRequestSheet.tsx`  →  ReplanDetectionBanner · ReplanRequestSheetProps · ReplanRequestSheet
+- `src/features/planb/ui/ReplanRequestSheet.tsx`  →  ReplanDetectedChip · ReplanRequestSheetProps · ReplanRequestSheet
 - `src/features/planb/ui/ReplanSolvingScreen.tsx`  →  ReplanSolvingScreenProps · ReplanSolvingScreen
 - `src/features/planb/ui/RiskDetailSheet.tsx`  →  RiskDetailSheetProps · RiskDetailSheet
 - `src/features/planb/ui/SlotCandidateSheet.tsx`  →  SlotCandidateSheetProps · SlotCandidateSheet
@@ -1297,4 +1299,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 871개 파일
+합계 873개 파일

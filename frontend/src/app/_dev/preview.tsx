@@ -1614,6 +1614,34 @@ function renderLiveRiskSheetPreview(): ReactElement {
   );
 }
 
+// i04 재계획 요청 시트(TRIP-750) — 감지 칩 문구는 페이지와 같은 순수 함수로 조립한다(api 로드 0 — TRIP-610).
+function renderPlanbRequestPreview(): ReactElement {
+  const target = LIVE_HUB_PREVIEW_SLOTS.find(
+    ({ slot }) => slot.poiId === 'haeundae'
+  )?.slot;
+  return (
+    <>
+      {renderLiveTriggerPreview('WEATHER')}
+      <ReplanRequestSheet
+        scope="PARTIAL_SLOTS"
+        selectedReasons={['WEATHER']}
+        selectedDirectives={['END_NEAR_STAY']}
+        freeText=""
+        detected={{
+          label: triggerPillCopy('WEATHER', target),
+          reasonKey: 'WEATHER',
+        }}
+        onSelectScope={noop}
+        onToggleReason={noop}
+        onToggleDirective={noop}
+        onChangeFreeText={noop}
+        onSubmit={noop}
+        onClose={noop}
+      />
+    </>
+  );
+}
+
 // i15·i22 수동 편집(TRIP-443) — A(비고정)·H(숙소 체크인 isFixed)·C(비고정, lockedSlotKeys) 3슬롯.
 // aViolation 을 켜면 A 에 위반 배지가 뜬다(mode 무관 공통 축).
 const MANUAL_EDIT_PREVIEW_DATE = '2026-06-11';
@@ -4923,76 +4951,14 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // ── i10 재계획 요청 시트(TRIP-439) — 순수 시트를 props 로 직접 그린다. 바텀시트 실제 열림/딤은
-  //    정적 프리뷰에서도 못 보므로(통과형 목과 같은 원리) 여기서 보는 것은 칩·CTA·안내 레이아웃까지다 ──
+  // i04 재계획 요청 시트(TRIP-750, Figma 4067:2427) — i02 펼침 허브 + 비 예보 알약 위에, 페이지처럼
+  // 허브의 형제로 스크림 + 시트를 얹는다. 선택 상태는 Figma 목업 그대로(감지 칩·지금 이후·숙소 근처에서 끝내기).
   {
     key: 'planb-request',
     band: 'i',
-    label: 'i10 · 재계획 요청 수동',
+    label: 'i04 · 재계획 요청 시트',
     login: null,
-    render: () => (
-      <View className="flex-1">
-        <ReplanRequestSheet
-          scope="PARTIAL_SLOTS"
-          selectedReasons={['WEATHER']}
-          selectedDirectives={['RELAX']}
-          freeText=""
-          onSelectScope={noop}
-          onToggleReason={noop}
-          onToggleDirective={noop}
-          onChangeFreeText={noop}
-          onSubmit={noop}
-          onManual={noop}
-        />
-      </View>
-    ),
-  },
-  {
-    key: 'planb-request-detected',
-    band: 'i',
-    label: 'i10 · 재계획 요청 감지 배너',
-    login: null,
-    render: () => (
-      <View className="flex-1">
-        <ReplanRequestSheet
-          scope="FULL_DAY"
-          selectedReasons={[]}
-          selectedDirectives={[]}
-          freeText=""
-          onSelectScope={noop}
-          onToggleReason={noop}
-          onToggleDirective={noop}
-          onChangeFreeText={noop}
-          onSubmit={noop}
-          onManual={noop}
-          trigger={{ title: '비 예보 감지' }}
-          onSuppress={noop}
-        />
-      </View>
-    ),
-  },
-  {
-    key: 'planb-request-out-of-scope',
-    band: 'i',
-    label: 'i10 · 재계획 요청 범위 밖',
-    login: null,
-    render: () => (
-      <View className="flex-1">
-        <ReplanRequestSheet
-          scope="PARTIAL_SLOTS"
-          selectedReasons={[]}
-          selectedDirectives={[]}
-          freeText="파리로 바꿔줘"
-          onSelectScope={noop}
-          onToggleReason={noop}
-          onToggleDirective={noop}
-          onChangeFreeText={noop}
-          onSubmit={noop}
-          onManual={noop}
-          outOfScope
-        />
-      </View>
-    ),
+    render: renderPlanbRequestPreview,
   },
   // ── i12 재계획 로딩(TRIP-440) — 순수 화면. 진행바 흐름·체크리스트 아이콘 3상태는 정지
   //    스크린샷 한계라 여기서 보는 것은 레이아웃·라벨·안심 노트·CTA 2개까지다 ──
