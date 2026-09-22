@@ -12,6 +12,7 @@
 | EXIST-A8 | 설정 검증: top_n ≤ 0 · deadline ≤ 0 · factor ∉ (0, 1] · penalty ∉ [0, ∞) → `OrchestratorConfig` ValueError. 설정 정본은 한 곳 |
 | (물림) | 실 어댑터(`KakaoExistenceAdapter`) + 전송 fake 로 A2·A3 재확인 — 장애·형식 밖·예산 0·마감 부분 검증 |
 | (D37) | 전송 계층 지뢰 위에서 `run()` — 실 HTTP 0건 |
+| (배선) | 합성 루트(`build_orchestrator`·`build_dev_app`)에 꽂은 포트가 ②′ 까지 **실제로 닿는다** |
 
 **이력.** `test_poi_curation_existence_demote.py`(POOL-P7~P14, 풀 빌더 대상)의 후신이다.
 TRIP-683 은 `CandidatePoolBuilder` 가 풀 **순서**만 바꿨는데 이후 아무도 풀 순서를 읽지
@@ -82,6 +83,20 @@ from tests.generators.poi_curation import (
     malformed_payloads,
     sortable_pois,
 )
+from fastapi.testclient import TestClient
+
+from trippilot.api.app import create_app
+from trippilot.api.wiring import DEMO_ANCHOR, build_dev_app, build_orchestrator
+
+from tests.fakes.in_memory_poi import InMemoryPoi
+from tests.test_e2e_boundary import RoutingLlm
+from tests.test_e2e_boundary import _C1CFG as _E2E_C1CFG
+from tests.test_e2e_boundary import _DAY1 as _E2E_DAY1
+from tests.test_e2e_boundary import _POIS as _E2E_POIS
+from tests.test_e2e_boundary import _PersonaStore as _E2EPersonaStore
+from tests.test_e2e_boundary import _explanations_json as _e2e_explanations
+from tests.test_e2e_boundary import _request as _e2e_request
+from tests.test_e2e_boundary import _scores_json as _e2e_scores
 from tests.test_schedule_agent import _existence_case, _task
 from tests.test_schedule_coordinator import (
     _C1CFG,
@@ -917,3 +932,51 @@ def test_d37_run_never_makes_its_own_transport(monkeypatch) -> None:
     assert hits == []
     assert fake.call_count == 1                          # fake 만 불렸다
     assert len(http.calls) == len(_IDS6)                 # 전송 fake 만 불렸다
+
+
+# ── (배선) 합성 루트에서 ②′ 까지 포트가 닿는가 ─────────────────────
+#
+# TRIP-904 가 고친 버그가 바로 이 자리다: 포트는 배선돼 있었지만 강등이 **아무 데도
+# 닿지 않아** 효과가 0이었고, 스위트는 전부 초록이었다. 위 속성들은 에이전트에 포트가
+# **주어졌을 때**를 증명할 뿐이라, 합성 루트가 그 인자를 빠뜨리면 한 건도 울지 않는다
+# (`build_orchestrator(existence=...)` 를 지워도 전 스위트가 통과한다 — 실측).
+# 그래서 HTTP 경계에서 "포트가 불렸는가"를 장부로 본다. 경로 전체 관통은
+# test_e2e_boundary.py 소관이고, 여기서는 **이 포트의 배선 한 줄**만 못 박는다.
+
+
+def _wired_client(existence):
+    ids = tuple(str(p.poi_id) for p in _E2E_POIS)
+    orchestrator = build_orchestrator(
+        llm=RoutingLlm(_e2e_scores(*ids), _e2e_explanations(*ids)),
+        poi_db=InMemoryPoi(_E2E_POIS),
+        context_store=_E2EPersonaStore(),
+        c1_config=_E2E_C1CFG,
+        clock=FakeClock(),
+        trace=InMemoryTrace(),
+        existence=existence,
+    )
+    return TestClient(create_app(orchestrator), raise_server_exceptions=False)
+
+
+def test_wiring_existence_port_reaches_the_agent() -> None:
+    """`build_orchestrator(existence=...)` → ②′ 호출 1회. 전부 미검출이어도 200 (강등 ≠ 배제)."""
+    fake = FakeExistence(default=_NOT_FOUND)
+
+    response = _wired_client(fake).post("/ai/v1/itinerary/generate", json=_e2e_request())
+
+    assert response.status_code == 200, response.text
+    assert fake.call_count == 1, "합성 루트의 포트가 ②′ 에 닿지 않았다 (TRIP-904 회귀)"
+    assert response.json()["days"], "강등이 일정을 비웠다 — 배제로 변질"
+
+
+def test_wiring_dev_app_passes_existence_through() -> None:
+    """`build_dev_app(existence=...)` 도 같은 자리로 관통 — 스모크 조립이 포트를 흘리지 않는다."""
+    fake = FakeExistence(default=_FOUND)
+    with TestClient(build_dev_app(existence=fake), raise_server_exceptions=False) as client:
+        request = _e2e_request()
+        request["anchors"] = [{"date": _E2E_DAY1.isoformat(),
+                               "lat": DEMO_ANCHOR.lat, "lng": DEMO_ANCHOR.lng}]
+        response = client.post("/ai/v1/itinerary/generate", json=request)
+
+    assert response.status_code == 200, response.text
+    assert fake.call_count == 1
