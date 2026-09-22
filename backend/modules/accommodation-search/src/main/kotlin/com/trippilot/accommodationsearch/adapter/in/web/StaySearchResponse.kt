@@ -44,6 +44,13 @@ data class StayItemResponse(
     val amenities: List<String>,
     val stayType: String,
     val price: PriceResponse?,   // null = 가격 미확인(BR-U1-14)
+    /**
+     * 아래 셋은 **null 이 "없음"이 아니라 "모름"이다** — 공급자마다 주는 칸이 다르다.
+     * 화면은 null 이면 그 줄을 비운다. "전화 없는 숙소"·"객실 0개"로 그리면 안 된다.
+     */
+    val address: String?,
+    val phone: String?,   // 표시형 '02-1670-8876' — 그대로 tel: 에 실을 수 있다
+    val rooms: Int?,
 ) {
     companion object {
         fun from(r: StayResult) = StayItemResponse(
@@ -56,6 +63,9 @@ data class StayItemResponse(
             amenities = r.stay.amenities.sorted(),
             stayType = r.stay.stayType,
             price = r.lowestPrice?.let { PriceResponse(it.amount, it.currency) },
+            address = r.stay.address,
+            phone = r.stay.phone,
+            rooms = r.stay.rooms,
         )
     }
 }
@@ -82,6 +92,10 @@ data class StayDetailResponse(
     val amenities: List<String>,
     val stayType: String,
     val price: PriceResponse?,   // null = 가격 미확인(BR-U1-14) — 상세를 막는 사유가 아니다
+    /** 목록과 같은 뜻 — null 은 "모름"이다([StayItemResponse] 참고). */
+    val address: String?,
+    val phone: String?,
+    val rooms: Int?,
 ) {
     companion object {
         fun from(r: StayResult) = StayDetailResponse(
@@ -95,6 +109,9 @@ data class StayDetailResponse(
             amenities = r.stay.amenities.sorted(),
             stayType = r.stay.stayType,
             price = r.lowestPrice?.let { PriceResponse(it.amount, it.currency) },
+            address = r.stay.address,
+            phone = r.stay.phone,
+            rooms = r.stay.rooms,
         )
     }
 }
