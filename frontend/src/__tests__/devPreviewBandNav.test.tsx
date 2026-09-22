@@ -275,7 +275,12 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    (단수)·RecordsCalendarScreen.test 는 무수정(삭제 대상은 **플러럴** 프리뷰 키뿐, 소비처 preview.tsx 1곳).
     //    정확히 그 키인지는 아래 'TRIP-767' describe 가 못박는다. devPreviewBandSort 는 band h·l 만 잠가
     //    band j 와 무관(오갱신 금지).
-    expect(PREVIEW_STATES).toHaveLength(167);
+    // ⚠️ TRIP-770: j 밴드 프리뷰 최종 정리 — VisitTimeSheet 전용 2키(`records-visit-time-sheet`·
+    //    `-no-arrival`, band `j`) 삭제로 167→165(j 밴드 16→14). test-designer 선반영(카운트 가드만) —
+    //    implementer 는 preview.tsx 에서 그 2키 + VisitTimeSheet import 만 지우고 이 가드는 안 만진다
+    //    (삭제 전엔 167개라 이 단언이 red). VisitTimeSheet 컴포넌트는 recordsDurationStructure 가 참조하므로
+    //    유지(프리뷰 키만 삭제). 정확한 최종 14키·라벨은 아래 'TRIP-770' describe 가 못박는다.
+    expect(PREVIEW_STATES).toHaveLength(165);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -1021,5 +1026,45 @@ describe('AC-3 · 딥링크 초기 밴드 자동선택 (폴백 함수 재사용)
     expect(screen.getByTestId('dev-preview-band-group-c')).toHaveStyle(
       COLLAPSED_STYLE
     );
+  });
+});
+
+// TRIP-770 · j 밴드(기록·회고) 프리뷰 최종 정리 완료조건 — 22키 → 14키.
+// 무엇을 보장하나: band 'j' 가 정확히 14키이고, 각 키·라벨이 TRIP-770 최종 목록과 완전 일치한다
+// (759~767 이 만든 라벨 편차를 통일). 순서 무관 — (key,label) 쌍 집합으로 대조한다.
+describe('🔴 TRIP-770 · j 밴드 최종 14키·라벨 완전 일치', () => {
+  const EXPECTED_J: readonly (readonly [string, string])[] = [
+    ['records-default', 'j01 · 방문 기록 default'],
+    ['records-error', 'j01 · 방문 기록 error'],
+    ['records-manual-checkin', 'j01 · 방문 기록 manual-checkin'],
+    ['reflection-default', 'j03 · 오늘의 회고 default'],
+    ['reflection-data-insufficient', 'j03 · 오늘의 회고 data-insufficient'],
+    ['reflection-empty', 'j03 · 오늘의 회고 empty'],
+    ['reflection-error', 'j03 · 오늘의 회고 error'],
+    ['trip-summary-default', 'j04 · 여행 요약 default'],
+    ['trip-summary-error', 'j04 · 여행 요약 error'],
+    ['travel-style-default', 'j05 · 여행 스타일 분석 default'],
+    [
+      'travel-style-data-insufficient',
+      'j05 · 여행 스타일 분석 data-insufficient',
+    ],
+    ['share-card-default', 'j06 · 공유 카드 default'],
+    ['share-card-no-photo', 'j06 · 공유 카드 no-photo'],
+    ['records-calendar-default', 'j07 · 여행 캘린더 default'],
+  ];
+
+  it('band j 가 정확히 14키이고 키·라벨이 최종 목록과 완전 일치한다', () => {
+    // 준비: band 'j' 엔트리만 골라 (key\tlabel) 정렬 집합으로.
+    const jStates = PREVIEW_STATES.filter((state) => state.band === 'j');
+    const actual = jStates
+      .map((state) => `${state.key}\t${state.label}`)
+      .sort();
+    const expected = EXPECTED_J.map(
+      ([key, label]) => `${key}\t${label}`
+    ).sort();
+
+    // 단언: 14키 + (키,라벨) 집합 완전 일치(삭제된 22키의 잔재·라벨 편차 차단).
+    expect(jStates).toHaveLength(14);
+    expect(actual).toEqual(expected);
   });
 });

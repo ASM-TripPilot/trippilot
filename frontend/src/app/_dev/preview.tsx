@@ -40,7 +40,6 @@ import { PhotoThumbStrip } from '@/features/record/ui/PhotoThumbStrip';
 import { RecordsCalendarScreen } from '@/features/record/ui/RecordsCalendarScreen';
 import { TripRecordsScreen } from '@/features/record/ui/TripRecordsScreen';
 import { VisitRecordCard } from '@/features/record/ui/VisitRecordCard';
-import { VisitTimeSheet } from '@/features/record/ui/VisitTimeSheet';
 import { SHARE_FORMATS } from '@/features/reflection/model/shareCard';
 import { DailyReflectionScreen } from '@/features/reflection/ui/DailyReflectionScreen';
 import { ShareCardScreen } from '@/features/reflection/ui/ShareCardScreen';
@@ -2352,7 +2351,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'records-default',
     band: 'j',
-    label: 'j01 · 방문 기록 기본',
+    label: 'j01 · 방문 기록 default',
     login: null,
     render: () => (
       <TripRecordsScreen
@@ -2484,7 +2483,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'records-error',
     band: 'j',
-    label: 'j01 · 방문 기록 업로드 실패',
+    label: 'j01 · 방문 기록 error',
     login: null,
     render: () => (
       <TripRecordsScreen
@@ -2563,7 +2562,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'records-manual-checkin',
     band: 'j',
-    label: 'j01 · 방문 기록 수동 체크인',
+    label: 'j01 · 방문 기록 manual-checkin',
     login: null,
     render: () => (
       <TripRecordsScreen
@@ -2663,45 +2662,6 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // j01 방문 시각 수정 시트(TRIP-613) — 셀-press 시각 편집. 통과형 목이라 정적 프리뷰도 실제 열림/
-  // 딤은 못 본다(6-b 실기 전용) — 셀 트리·도착/완료 컬럼·저장/취소 레이아웃 육안 대조 자리.
-  {
-    key: 'records-visit-time-sheet',
-    band: 'j',
-    label: 'j01 · 방문 시각 시트',
-    login: null,
-    render: () => (
-      <View className="flex-1">
-        <VisitTimeSheet
-          visitCheckId="r1"
-          arrivedAt="2026-08-21T14:20:00"
-          completedAt="2026-08-21T15:20:00"
-          now="2026-08-21T20:00:00"
-          onSave={noop}
-          onCancel={noop}
-        />
-      </View>
-    ),
-  },
-  {
-    // 엣지 — 도착 없는 방문: 완료 컬럼이 비활성(opacity-40 + accessibilityState.disabled).
-    key: 'records-visit-time-sheet-no-arrival',
-    band: 'j',
-    label: 'j01 · 방문 시각 시트 도착없음',
-    login: null,
-    render: () => (
-      <View className="flex-1">
-        <VisitTimeSheet
-          visitCheckId="r3"
-          arrivedAt={null}
-          completedAt={null}
-          now="2026-08-21T20:00:00"
-          onSave={noop}
-          onCancel={noop}
-        />
-      </View>
-    ),
-  },
   // j03 오늘의 회고 4얼굴(TRIP-571) — 순수 뷰(`DailyReflectionScreen`)를 격리 렌더한다(`@/shared/api`
   // 값 import 0 이라 프리뷰 지뢰 목 통과). jest 는 testID·행동만 잠그고 4상태 레이아웃·코랄 토큰·
   // 플레이스홀더 카드·error 재시도 카드·편집 입력은 픽셀이라 6-b/육안 몫 — 자율/야간이라 6-b SKIP,
@@ -2710,7 +2670,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'reflection-default',
     band: 'j',
-    label: 'j03 · 회고 기본',
+    label: 'j03 · 오늘의 회고 default',
     login: null,
     render: () => (
       <DailyReflectionScreen
@@ -2751,7 +2711,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     // 부분 데이터 — 방문<2(거리 "—" + 지도 자리 사유) · 사진 0장("사진 없음" 자리). BR-U5-34 실증.
     key: 'reflection-data-insufficient',
     band: 'j',
-    label: 'j03 · 회고 데이터 부족',
+    label: 'j03 · 오늘의 회고 data-insufficient',
     login: null,
     render: () => (
       <DailyReflectionScreen
@@ -2785,7 +2745,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     // empty — 기록 없음: 빈 원 일러스트 + CTA "직접 회고 작성"(누르면 편집 입력이 열린다).
     key: 'reflection-empty',
     band: 'j',
-    label: 'j03 · 회고 빈 상태',
+    label: 'j03 · 오늘의 회고 empty',
     login: null,
     render: () => (
       <DailyReflectionScreen
@@ -2816,7 +2776,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     // error — 회고 조회 실패: stats 는 채움(BASIC 카드, INV-U5-07) + 에러 카드(다시 시도) + CTA.
     key: 'reflection-error',
     band: 'j',
-    label: 'j03 · 회고 실패',
+    label: 'j03 · 오늘의 회고 error',
     login: null,
     render: () => (
       <DailyReflectionScreen
@@ -2853,7 +2813,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     // 실화면은 좌표 계약 부재라 늘 map-pending 으로 접히므로 MAP 히어로는 이 키가 유일한 대조 자리.
     key: 'trip-summary-default',
     band: 'j',
-    label: 'j04 · 요약 default',
+    label: 'j04 · 여행 요약 default',
     login: null,
     render: () => (
       <TripSummaryScreen
@@ -2898,7 +2858,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     // error(VISIT_LIST) — 거리 셀 "—" + 지도 대신 순서 방문 목록(BR-U5-39) + 하단 탭바. 날짜카드 없음.
     key: 'trip-summary-error',
     band: 'j',
-    label: 'j04 · 요약 error',
+    label: 'j04 · 여행 요약 error',
     login: null,
     render: () => (
       <TripSummaryScreen
@@ -2928,7 +2888,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'share-card-default',
     band: 'j',
-    label: 'j06 · 공유 카드 사진',
+    label: 'j06 · 공유 카드 default',
     login: null,
     render: () => (
       <ShareCardScreen
@@ -2962,7 +2922,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'share-card-no-photo',
     band: 'j',
-    label: 'j06 · 공유 카드 사진없음',
+    label: 'j06 · 공유 카드 no-photo',
     login: null,
     render: () => (
       <ShareCardScreen
@@ -2996,7 +2956,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'travel-style-default',
     band: 'j',
-    label: 'j05 · 스타일 default',
+    label: 'j05 · 여행 스타일 분석 default',
     login: null,
     render: () => (
       <TravelStyleScreen
@@ -3026,7 +2986,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     // 임시 — official:false. 병합 헤딩 + 진행 바 + 아래 행 + "정식 아님" + `#`접두 미리보기 칩.
     key: 'travel-style-data-insufficient',
     band: 'j',
-    label: 'j05 · 스타일 data-insufficient',
+    label: 'j05 · 여행 스타일 분석 data-insufficient',
     login: null,
     render: () => (
       <TravelStyleScreen
@@ -5356,7 +5316,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'records-calendar-default',
     band: 'j',
-    label: 'j07 · 캘린더 마킹',
+    label: 'j07 · 여행 캘린더 default',
     login: null,
     render: () => (
       <RecordsCalendarScreen
