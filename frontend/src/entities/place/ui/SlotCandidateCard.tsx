@@ -53,6 +53,9 @@ export interface SlotCandidateCardProps {
   slack?: { label: string; value: string };
   /** itin 선택버튼·라디오 오른쪽 슬롯 — planb 미지정. */
   trailing?: ReactNode;
+  /** TRIP-795 h10 반경 밖 톤다운(기본 off). 참이면 이름 글자·배지를 회색(muted/non-primary)으로
+   * 낮춘다. 미전달=기존 렌더 불변(planb i14·h08 무회귀). 톤다운 판정은 계약에 없어 프롭 전용(D1·D8). */
+  dimmed?: boolean;
 }
 
 // 카드 그림자(itinerary h12·h18 값) — planb 는 그림자 없음이라 showImage 로 게이트한다.
@@ -79,6 +82,7 @@ export function SlotCandidateCard({
   selected = false,
   slack,
   trailing,
+  dimmed = false,
 }: SlotCandidateCardProps): ReactElement {
   const { poiId } = candidate;
   const leafId = (role: string): string => `${testIDPrefix}-${role}-${poiId}`;
@@ -103,8 +107,16 @@ export function SlotCandidateCard({
       }`}
     >
       {badge !== undefined ? (
-        <View className="h-[26px] w-[26px] items-center justify-center rounded-pill bg-primary">
-          <Text className="font-inter-bold text-caption font-bold text-on-primary">
+        <View
+          className={`h-[26px] w-[26px] items-center justify-center rounded-pill ${
+            dimmed ? 'bg-surface-strong' : 'bg-primary'
+          }`}
+        >
+          <Text
+            className={`font-inter-bold text-caption font-bold ${
+              dimmed ? 'text-muted' : 'text-on-primary'
+            }`}
+          >
             {badge}
           </Text>
         </View>
@@ -121,7 +133,9 @@ export function SlotCandidateCard({
         <Text
           testID={showNameTestId ? leafId('name') : undefined}
           numberOfLines={1}
-          className="font-noto-bold text-card-title font-bold text-ink"
+          className={`font-noto-bold text-card-title font-bold ${
+            dimmed ? 'text-muted' : 'text-ink'
+          }`}
         >
           {nameLabel}
         </Text>

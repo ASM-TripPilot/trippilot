@@ -114,6 +114,11 @@ const EXPECTED_H = [
   // 앞에 이 칩을 세운다(옛 h09 생성 키가 TRIP-789 로 사라진 자리에 새 h09 표면이 들어옴). 단일 키라
   // 배열 위치와 무관하게 코드 h09 가 정렬 위치를 결정한다.
   'dev-preview-state-h09-copick-concept', // h09 (TRIP-794 컨셉 고르기)
+  // TRIP-795: h10 후보 선택(같이 고르기 위저드 후보 화면) 2키. 코드가 h10 이라 안정 정렬이 h09
+  // (컨셉) 뒤·h11(완료) 앞에 이 둘을 세운다. 같은 h10 코드 2키는 PREVIEW_STATES 배열 삽입 순서
+  // (default→wide)로 안정정렬되므로 구현자는 그 순서로 삽입한다(배열 위치=정렬 위치, h02·h14 선례).
+  'dev-preview-state-h10-copick-candidates', // h10 (TRIP-795 default)
+  'dev-preview-state-h10-copick-candidates-wide', // h10 (TRIP-795 반경 넓힘)
   // TRIP-789: 옛 h09 두 키(itinerary-generating·itinerary-generating-failed)가 이 자리에서 사라진다 —
   // 전자는 h07-generating-loading 으로 개명·이동(위 h07 그룹), 후자는 프리뷰 키 삭제(핸들링 유지).
   // (TRIP-794 로 h09 코드 항목이 다시 생겼다 — h09-copick-concept, 위 h08 뒤 줄 참조. 옛 h09 생성

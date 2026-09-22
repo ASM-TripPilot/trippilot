@@ -234,6 +234,18 @@ export function SlotFillPage({
     requestCandidates(concept, next.key);
   }
 
+  // 반경 좁히기(TRIP-795, D10) — 마지막 단계에서 한 단계 뒤 반경으로 재조회. 첫 단계면 더 좁힐 곳이
+  // 없어 no-op(handleExpandRadius 의 대칭).
+  function handleShrinkRadius(): void {
+    const index = RADIUS_STEPS.findIndex(
+      (entry) => entry.key === selectedRadiusKey
+    );
+    const prev = RADIUS_STEPS[index - 1];
+    if (prev === undefined) return;
+    setSelectedRadiusKey(prev.key);
+    requestCandidates(concept, prev.key);
+  }
+
   function handleChangeConcept(): void {
     setInFill(false);
     setSelectedPoiId(null);
@@ -323,10 +335,18 @@ export function SlotFillPage({
       canExpandRadius={selectedRadiusKey !== MAX_RADIUS_KEY}
       isPending={isPending}
       errorMessage={errorMessage}
+      // h09 진행 줄·스텝퍼(GET 캐시 도출) 재사용 — 후보 얼굴에도 내린다(D9). 첫 슬롯이면
+      // conceptStepper()가 undefined 라 스텝퍼는 미렌더(h09 승계). concept 은 앱바 제목으로.
+      concept={concept}
+      progress={conceptProgress()}
+      stepperSlot={conceptStepper()}
+      // mapView 는 전달하지 않는다 — candidates 응답에 좌표가 없어 프로덕션은 지도 미표시(정직 degrade,
+      // D6). 지도 픽스처는 프리뷰 전용.
       onSelectRadius={handleSelectRadius}
       onSelectRadio={setSelectedPoiId}
       onConfirm={handleConfirm}
       onExpandRadius={handleExpandRadius}
+      onShrinkRadius={handleShrinkRadius}
       onChangeConcept={handleChangeConcept}
       onBack={handleChangeConcept}
     />

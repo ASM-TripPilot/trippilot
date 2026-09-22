@@ -439,3 +439,75 @@ describe('🔴 AC-4 — 현재위치 오버레이(파란 점·링·라벨)', () 
     expect(screen.queryByTestId('map-current-location')).toBeNull();
   });
 });
+
+// ── TRIP-795 · h10 반경 점선 원(additive) + letter 라벨 핀(additive) ─────────────
+//
+// 무엇을 보장하나: `radiusCircle` 을 주면 반경 원 오버레이(map-circle)를 그리고 그 반경 미터를
+// 그대로 전달한다. 미전달이면 원이 없다(무회귀). `MapPin.label` 을 주면 물방울 안 SVG 텍스트가
+// 번호 대신 그 letter(A/B/C/D — 카드 배지와 일치)를 그린다. 미전달이면 번호 그대로(무회귀).
+//
+// ★ 잠금은 prop 전달까지다(카카오 kakaoMapDocument 스냅샷 아님 — 죽은 API). 실 점선·축척·letter
+//   래스터는 6-b 실기(네이버 SDK 재빌드). 목이 NaverMapCircleOverlay props 를 host 로 노출해
+//   반경 전달을 관측하고, letter 는 SVG 라 content prop 으로 본다(번호 검증과 동형, TRIP-876).
+
+describe('🔴 TRIP-795 AC-3(a) — radiusCircle: 주면 map-circle 그리고 반경 전달, 미전달이면 원 없음', () => {
+  it('radiusCircle 전달 → map-circle present + radius prop 이 그 미터값(1100)이다', () => {
+    // Arrange + Act
+    render(
+      <MapView
+        center={CENTER}
+        pins={PINS}
+        radiusCircle={{ center: CENTER, radiusM: 1100 }}
+      />
+    );
+
+    // Assert — 목이 NaverMapCircleOverlay props 를 host 로 노출한다. 반경은 그대로 전달돼야 한다
+    // (정확한 색·점선은 6-b, 여기선 전달 여부·반경값만).
+    const circle = screen.queryByTestId('map-circle');
+    expect(circle).not.toBeNull();
+    expect((circle as { props: { radius?: number } }).props.radius).toBe(1100);
+  });
+
+  it('radiusCircle 미전달 → map-circle 없음(짝 — additive 무회귀)', () => {
+    // Arrange + Act — 기존 12 소비처는 radiusCircle 을 안 준다.
+    render(<MapView center={CENTER} pins={PINS} />);
+
+    // Assert
+    expect(screen.queryByTestId('map-circle')).toBeNull();
+  });
+});
+
+describe('🔴 TRIP-795 AC-3(b) — MapPin.label: letter 를 번호 대신 SVG 로 그린다', () => {
+  it('label="A" 핀 → 핀 안에 content="A" 노드가 있고 번호(content="1")는 없다', () => {
+    // Arrange + Act — letter 라벨 핀 하나(카드 배지 A 와 시각 일치).
+    render(
+      <MapView
+        center={CENTER}
+        pins={[{ number: 1, lat: 33.51, lng: 126.52, label: 'A' }]}
+      />
+    );
+
+    // Assert — letter 는 SVG 텍스트라 toHaveTextContent 로는 안 보인다(목이 RNSVGTSpan.props.content
+    // 에 넣는다). letter 가 번호를 대체하므로 content="1" 은 하나도 없어야 한다.
+    const pin = screen.getByTestId('map-marker-pin-1');
+    expect(
+      within(pin).UNSAFE_queryAllByProps({ content: 'A' }).length
+    ).toBeGreaterThan(0);
+    expect(within(pin).UNSAFE_queryAllByProps({ content: '1' })).toHaveLength(
+      0
+    );
+  });
+
+  it('label 미전달 → 번호(content="1") 그대로 그린다(짝 — additive 무회귀)', () => {
+    // Arrange + Act
+    render(
+      <MapView center={CENTER} pins={[{ number: 1, lat: 33.5, lng: 126.5 }]} />
+    );
+
+    // Assert
+    const pin = screen.getByTestId('map-marker-pin-1');
+    expect(
+      within(pin).UNSAFE_queryAllByProps({ content: '1' }).length
+    ).toBeGreaterThan(0);
+  });
+});

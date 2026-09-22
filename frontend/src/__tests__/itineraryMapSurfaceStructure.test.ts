@@ -81,6 +81,12 @@ const LOCKED_CALLERS = [
   // (GenerationFallbackScreen 신설) 전엔 `<MapView` 0건이라 S2 집합 불일치·S8 defaultTags 카운트로
   // red(정상, 442·563·571 3회 재발 방지 · 01b ★2).
   'features/itinerary/ui/GenerationFallbackScreen.tsx',
+  // TRIP-795 h10 후보 선택 지도 카드 — 반경 점선 원 + 현재위치 핀 + 후보 letter 핀을 얹은 잠긴
+  // 글랜스(viewOnly ON, connectPins={false} — "보여주기 전용, 검증된 동선 아님"). 좌표는 계약 밖이라
+  // 프로덕션은 지도 미표시(degrade), 프리뷰 픽스처만 렌더. GeneratingScreen 에 이은 **3번째** no-line
+  // caller 라 아래 NO_LINE_CALLERS 에도 등재. test-designer 착수 단계 선반영이라 구현(map 카드 추가)
+  // 전엔 SlotFillScreen 에 `<MapView` 0건이라 S2 집합 불일치·S8 lineOffTags 카운트로 red(정상, 01b D7).
+  'features/itinerary/ui/SlotFillScreen.tsx',
 ];
 
 /** 지도 고정을 **켜면 안 되는** 호출부. 앞의 넷은 지도를 움직여 좌표를 확정하는 것이 기능 자체라
@@ -108,6 +114,8 @@ const OPEN_CALLERS = [
 const NO_LINE_CALLERS = [
   'features/itinerary/ui/MustVisitPickerScreen.tsx',
   'features/itinerary/ui/GeneratingScreen.tsx',
+  // TRIP-795 h10 후보 지도 — "보여주기 전용" 글랜스라 확정 동선이 아니다(INV-2). 3번째 no-line caller.
+  'features/itinerary/ui/SlotFillScreen.tsx',
 ];
 
 const SCREEN_REL = 'features/itinerary/ui/DraftScreen.tsx';
@@ -297,7 +305,7 @@ describe('S8 · 무선 — 연결선을 끄는 자리가 h05·h07 loading 둘뿐
    * 무엇을 보장하지 **못**하나: 태그에 적힌 **글자**까지다. 그 값이 컴포넌트를 통과해 실제
    * 지도에 닿는지는 이 층에서 볼 수 없다 — `MapView`가 그 프롭을 흘려도 여기는 초록이다.
    * 그 축은 실물 렌더 심판(`shared/map/MapView.test.tsx` AC2 viewOnly·AC3 connectPins)이 잡는다. */
-  it('no-line 두 자리(h05·h07 loading)에만 connectPins={false} 가 있고 나머지 LOCKED(+OPEN 4)은 기본값을 받는다', () => {
+  it('no-line 세 자리(h05·h07 loading·h10 후보)에만 connectPins={false} 가 있고 나머지 LOCKED(+OPEN 4)은 기본값을 받는다', () => {
     const lineOffTags = NO_LINE_CALLERS.flatMap((rel) =>
       mapTagsOf(readOne(rel))
     );
@@ -308,19 +316,20 @@ describe('S8 · 무선 — 연결선을 끄는 자리가 h05·h07 loading 둘뿐
       // CONFIRMED 동선 선은 이제 MapSheetShell(LOCKED, connectPins 기본)이 그린다.
     ].flatMap((rel) => mapTagsOf(readOne(rel)));
 
-    // ① 도달 앵커 — 태그를 진짜로 떼어냈다(no-line 2개 + 나머지 14개 = 총 16개).
-    //    TRIP-789 로 no-line 이 1→2(h07 loading 지도 카드 추가, 이후 불변). TRIP-791 로
-    //    GenerationFallbackScreen(LOCKED·line caller)이 추가돼 defaultTags 13→14
-    //    (LOCKED 12−NO_LINE 2 = 10 + OPEN 4). no-line 은 여전히 2(폴백 인터스티셜은 line caller).
-    expect(lineOffTags).toHaveLength(2);
+    // ① 도달 앵커 — 태그를 진짜로 떼어냈다(no-line 3개 + 나머지 14개 = 총 17개).
+    //    TRIP-789 로 no-line 이 1→2(h07 loading 지도 카드). TRIP-795 로 3(h10 후보 지도 카드,
+    //    connectPins={false}). defaultTags 는 14 불변 — SlotFillScreen 은 LOCKED 이자 NO_LINE 이라
+    //    filter 에서 빠져 (LOCKED 13 − NO_LINE 3 = 10 + OPEN 4)로 상쇄된다(오갱신 금지 — 15로 올리면
+    //    거짓 red). TRIP-791 로 GenerationFallbackScreen(LOCKED·line caller) 추가분은 그대로.
+    expect(lineOffTags).toHaveLength(3);
     expect(defaultTags).toHaveLength(14);
 
-    // ② 끄는 두 자리 전부 끈다고 **명시**한다(h05·h07 loading).
+    // ② 끄는 세 자리 전부 끈다고 **명시**한다(h05·h07 loading·h10 후보).
     lineOffTags.forEach((tag) =>
       expect(tag).toMatch(/\bconnectPins=\{false\}/)
     );
 
-    // ③ 나머지(defaultTags 13개)는 아무 말도 하지 않는다 = 기본값(잇는다)을 받는다. h11 이 여기 있다 —
+    // ③ 나머지(defaultTags 14개)는 아무 말도 하지 않는다 = 기본값(잇는다)을 받는다. h11 이 여기 있다 —
     //    이 심판이 요구하는 것은 "끄지 않았다"이고, 기본값이 정말 잇는지는 X3이 잰다.
     expect(defaultTags.filter((tag) => /\bconnectPins\b/.test(tag))).toEqual(
       []
@@ -334,7 +343,7 @@ describe('S3 · AC-8 — 사진 도입이 화면·계약으로 새지 않았다 
    * `DraftScreen.tsx` 에 한 줄 느는 것은 이 조건이 금지하는 대상이 아니다(02a §3-5) — 그래서
    * 여기서 재는 것은 "화면 파일이 안 바뀌었다"가 아니라 **"사진 해결이 화면으로 새지 않았다"**다.
    */
-  it('MapPin 은 4필드(TRIP-745 state 편입), DraftScreenProps 는 14필드(TRIP-791 fallbackNotice 제거), 화면에 에셋 해석 지문이 0건이다', () => {
+  it('MapPin 은 5필드(TRIP-795 label 편입), DraftScreenProps 는 14필드(TRIP-791 fallbackNotice 제거), 화면에 에셋 해석 지문이 0건이다', () => {
     const mapCoreSource = readOne(MAP_CORE_REL);
     const screenSource = readOne(SCREEN_REL);
 
@@ -347,11 +356,15 @@ describe('S3 · AC-8 — 사진 도입이 화면·계약으로 새지 않았다 
     // 편입된다(옵셔널·2칸 들여쓰기 프로퍼티형이라 interfaceFields 가 4번째로 잡는다). 완료조건 #4가
     // "LOCKED_CALLERS 갱신"으로 오지정한 실제 대상이 이 스냅숏이다(01 §맹점④). 핀 모양(Circle→물방울)
     // 교체는 여기서 안 잡는다 — 필드 계약만 본다.
+    // TRIP-795 — h10 후보 letter 핀을 위해 `label?: string` 이 additive 로 5번째 편입된다(카드 배지
+    // A/B/C/D 와 시각 일치, 미전달 = 번호 그대로 무회귀). 정당한 계약 플립(이행 체크포인트 B) —
+    // 편입 전엔 4필드라 이 스냅숏이 red(뮤테이션 실측: label 제거 시 red).
     expect(interfaceFields(mapCoreSource, 'MapPin')).toEqual([
       'number',
       'lat',
       'lng',
       'state',
+      'label',
     ]);
     // 화면 계약 스냅숏 — 사진을 넣으려고 프롭을 늘리면 여기서 걸린다(이 칸 TRIP-339 의 취지).
     // 필드 추가는 **정당한 계약 변경일 때만** 이 목록을 함께 갱신해 통과시킨다(이행 체크포인트 B).

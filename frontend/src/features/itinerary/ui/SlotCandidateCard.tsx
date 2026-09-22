@@ -22,6 +22,10 @@ export interface SlotCandidateCardProps {
   selected?: boolean;
   /** 오른쪽 컨트롤 — h12 "선택" 버튼 또는 h18 라디오(시트·화면이 넣는다). */
   trailing: ReactNode;
+  /** TRIP-795 h10 표시 픽스처(계약엔 없어 프롭 전용) — 미전달이면 기존 렌더 불변. */
+  nameKo?: string | null;
+  tags?: string[];
+  dimmed?: boolean;
 }
 
 export function SlotCandidateCard({
@@ -29,6 +33,9 @@ export function SlotCandidateCard({
   badge,
   selected = false,
   trailing,
+  nameKo,
+  tags,
+  dimmed,
 }: SlotCandidateCardProps): ReactElement {
   return (
     <PlaceSlotCandidateCard
@@ -40,6 +47,9 @@ export function SlotCandidateCard({
       badge={badge}
       selected={selected}
       trailing={trailing}
+      nameKo={nameKo}
+      tags={tags}
+      dimmed={dimmed}
     />
   );
 }

@@ -6,7 +6,7 @@
 - `__mocks__/@gorhom/bottom-sheet.tsx`  →  BottomSheet · BottomSheetModal · BottomSheetView · BottomSheetModalProvider · BottomSheetBackdrop · BottomSheetScrollView · BottomSheetFlatList · useBottomSheetModal
 
 ## __mocks__/@mj-studio/
-- `__mocks__/@mj-studio/react-native-naver-map.tsx`  →  NaverMapView · NaverMapMarkerOverlay · NaverMapPathOverlay
+- `__mocks__/@mj-studio/react-native-naver-map.tsx`  →  NaverMapView · NaverMapMarkerOverlay · NaverMapPathOverlay · NaverMapCircleOverlay
 
 ## __mocks__/
 - `__mocks__/react-native-draggable-flatlist.tsx`  →  ScaleDecorator · OpacityDecorator · ShadowDecorator · NestableDraggableFlatList · NestableScrollContainer

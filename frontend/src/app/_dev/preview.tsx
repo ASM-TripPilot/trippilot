@@ -79,6 +79,7 @@ import {
   PlaceAddRow,
 } from '@/features/itinerary/ui/PlaceAddScreen';
 import { SlotCandidateSheet as ItinerarySlotCandidateSheet } from '@/features/itinerary/ui/SlotCandidateSheet';
+import { SlotFillScreen } from '@/features/itinerary/ui/SlotFillScreen';
 import { CoPickStepper } from '@/widgets/copick-stepper/ui/CoPickStepper';
 import { GenerationDoneBar } from '@/widgets/generation-done-bar/ui/GenerationDoneBar';
 import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
@@ -696,6 +697,72 @@ const H11_COPICK_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
 ];
 
 const H11_COPICK_PREVIEW_DATE = '2026-06-10';
+
+// h10 후보 선택(TRIP-795) 프리뷰 픽스처 — candidates 계약엔 이름·태그·좌표·톤다운이 없어(BE 후속)
+// 전부 Figma 값으로 채운 프롭 전용이다(부산시립미술관·F1963·부산현대미술관·감천문화마을). default 는
+// D 를 반경 밖 톤다운(dimmed), wide 는 D 활성(dimmed 없음)으로 갈린다.
+const H10_RADIUS_STEPS = [
+  { key: 'near', label: '700m' },
+  { key: 'mid', label: '1.1km' },
+  { key: 'max', label: '최대' },
+] as const;
+const H10_CENTER = { lat: 35.1587, lng: 129.1604 };
+const H10_DEFAULT_CANDIDATES: SlotCandidatesCandidatesItem[] = [
+  { poiId: 'A1', distanceRange: '420m', rationale: '가장 가까운 실내 전시' },
+  { poiId: 'B2', distanceRange: '770m', rationale: '전시+카페 한 번에' },
+  {
+    poiId: 'C3',
+    distanceRange: '약 1.0km',
+    rationale: '취향은 맞지만 조금 멀어요',
+  },
+  {
+    poiId: 'D4',
+    distanceRange: '약 9.9km',
+    rationale: '반경 밖 (넓히면 선택 가능)',
+  },
+];
+const H10_DEFAULT_VIEWS: Record<
+  string,
+  { nameKo?: string | null; tags?: string[]; dimmed?: boolean }
+> = {
+  A1: { nameKo: '부산시립미술관', tags: ['미술', '실내', '취향매칭'] },
+  B2: { nameKo: 'F1963 복합문화공간', tags: ['갤러리', '카페'] },
+  C3: { nameKo: '부산현대미술관', tags: ['미술', '자연'] },
+  D4: { nameKo: '감천문화마을', tags: ['전시', '포토'], dimmed: true },
+};
+const H10_WIDE_CANDIDATES: SlotCandidatesCandidatesItem[] = [
+  { poiId: 'A1', distanceRange: '420m', rationale: '가장 가까운 실내 전시' },
+  { poiId: 'B2', distanceRange: '770m', rationale: '전시+카페 한 번에' },
+  {
+    poiId: 'C3',
+    distanceRange: '약 9km',
+    rationale: '반경 경계 · 조금 멀어요',
+  },
+  { poiId: 'D4', distanceRange: '약 9.9km', rationale: '넓힌 반경에 들어옴' },
+];
+const H10_WIDE_VIEWS: Record<
+  string,
+  { nameKo?: string | null; tags?: string[]; dimmed?: boolean }
+> = {
+  A1: { nameKo: '부산시립미술관', tags: ['미술', '실내', '취향매칭'] },
+  B2: { nameKo: 'F1963 복합문화공간', tags: ['갤러리', '카페'] },
+  C3: { nameKo: '부산현대미술관', tags: ['미술', '자연'] },
+  D4: { nameKo: '감천문화마을', tags: ['전시', '포토'] },
+};
+const H10_STEPPER: ReactElement = (
+  <CoPickStepper
+    prev={{ title: '황령산 전망대', status: '고름', done: true }}
+    current={{ title: '오후 · 전시', status: '지금 고르는 중' }}
+    next={{ title: '오후 · 카페', status: '비어 있음' }}
+  />
+);
+const H10_PROGRESS = {
+  dayLabel: '1일차 / 4 · 6월 10일(수)',
+  slotCurrent: 3,
+  slotTotal: 4,
+  barFilled: 1,
+  barTotal: 4,
+};
 
 // h14 완성 일정(PLANNED, TRIP-799) 지도+시트 셸 프리뷰 — 페이지(ItineraryPlanPage)는 react-query·
 // 라우터가 필요해 프리뷰에서 직접 못 쓰므로, 페이지의 셸 조립을 축소해 4얼굴(default·거리계산중·지도
@@ -4387,6 +4454,91 @@ export const PREVIEW_STATES: PreviewState[] = [
         }
         onPickConcept={noop}
         onSkip={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  // h10 후보 선택(TRIP-795) — 같이 고르기 위저드의 후보 화면(Figma 3849 default·3850 반경 넓힘). 순수
+  // 뷰 SlotFillScreen 을 진행줄·스텝퍼·지도·후보 카드 픽스처 props 로 태운다(api import 0 이라 프리뷰
+  // 지뢰 목 무해). 반경 점선 원·축척·letter 핀 래스터·톤다운 배지 회색·색은 jest 사각이라 이 2키가
+  // 유일한 육안 그물(자율 세션 6-b SKIP). 지도는 네이버 네이티브라 사람 재빌드 전엔 미표시.
+  {
+    key: 'h10-copick-candidates',
+    band: 'h',
+    label: 'h10 · 후보 선택',
+    login: null,
+    render: () => (
+      <SlotFillScreen
+        concept="전시"
+        progress={H10_PROGRESS}
+        stepperSlot={H10_STEPPER}
+        mapView={{
+          center: H10_CENTER,
+          radiusCircle: { center: H10_CENTER, radiusM: 1100 },
+          pins: [
+            { number: 1, lat: 35.1601, lng: 129.163, label: 'A' },
+            { number: 2, lat: 35.1571, lng: 129.1568, label: 'B' },
+            { number: 3, lat: 35.1622, lng: 129.1604, label: 'C' },
+          ],
+          currentLocation: H10_CENTER,
+        }}
+        candidates={H10_DEFAULT_CANDIDATES}
+        candidateViews={H10_DEFAULT_VIEWS}
+        radiusSteps={H10_RADIUS_STEPS}
+        selectedRadiusKey="mid"
+        radiusUsedLabel="약 11.3km"
+        candidateCountLabel="후보 4곳"
+        selectedPoiId="A1"
+        canExpandRadius
+        isPending={false}
+        errorMessage={null}
+        onSelectRadius={noop}
+        onSelectRadio={noop}
+        onConfirm={noop}
+        onExpandRadius={noop}
+        onShrinkRadius={noop}
+        onChangeConcept={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'h10-copick-candidates-wide',
+    band: 'h',
+    label: 'h10 · 후보 선택 반경 넓힘',
+    login: null,
+    render: () => (
+      <SlotFillScreen
+        concept="전시"
+        progress={H10_PROGRESS}
+        stepperSlot={H10_STEPPER}
+        mapView={{
+          center: H10_CENTER,
+          radiusCircle: { center: H10_CENTER, radiusM: 11300 },
+          pins: [
+            { number: 1, lat: 35.1601, lng: 129.163, label: 'A' },
+            { number: 2, lat: 35.1571, lng: 129.1568, label: 'B' },
+            { number: 3, lat: 35.1622, lng: 129.1604, label: 'C' },
+            { number: 4, lat: 35.0975, lng: 129.0106, label: 'D' },
+          ],
+          currentLocation: H10_CENTER,
+        }}
+        candidates={H10_WIDE_CANDIDATES}
+        candidateViews={H10_WIDE_VIEWS}
+        radiusSteps={H10_RADIUS_STEPS}
+        selectedRadiusKey="max"
+        radiusUsedLabel="약 11.3km"
+        candidateCountLabel="후보 4곳"
+        selectedPoiId="D4"
+        canExpandRadius={false}
+        isPending={false}
+        errorMessage={null}
+        onSelectRadius={noop}
+        onSelectRadio={noop}
+        onConfirm={noop}
+        onExpandRadius={noop}
+        onShrinkRadius={noop}
+        onChangeConcept={noop}
         onBack={noop}
       />
     ),
