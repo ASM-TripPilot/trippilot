@@ -904,12 +904,23 @@ TRIP-883 과 묶지 않았다.
 [[nodes]]
 id = "STAY-CONTENT-MEASURE"
 ticket = ""
-title = "TourAPI 숙박 커버리지 측정 — 전국 17개, 착수 여부를 숫자로 정한다"
-status = "blocked"
+title = "TourAPI 숙박 커버리지 측정 — 전국 17개 · 답은 2.0%"
+status = "done"
 owner = "숙소"
 migration = false
 touches = ["ai/scripts", ".github/workflows"]
 note = """
+**완료(2026-09-22) — 답은 2.0% 다.** run 35760619466(전수 스캔, 26회 호출):
+TourAPI 숙박 전국 **1,479** → 우리 정본과 매칭 **442** → 그중 사진 있음 **260** = 12,782 중 **2.0%**.
+판정선(10% 미만이면 접는다)에 한참 못 미친다 → [[STAY-CONTENT-TOURAPI]] 를 접었다.
+
+거리 임계값은 결론과 무관했다(100m 416 · 300m 433 · 500m 442 — 6% 차이). 첫 실행은 러너 IP
+타임아웃으로 죽었고 재시도 체인(#673)이 2회차에서 받았다 — 그 장치가 없었으면 여기서 멈췄다.
+
+**도구는 남긴다** — 주 1회 스케줄이 TourAPI 숙박 증가를 계속 관측한다.
+
+(이하 착수 당시 기록.)
+
 `숙소콘텐츠-수집-설계.md` 칸 0. **선행 0 — 지금 가능하다.**
 
 잴 값 넷: TourAPI 숙박(contentTypeId=32) 전국 총건수 · `firstimage` 보유율 · 우리 12,782곳과의
@@ -944,8 +955,8 @@ note = """
 [[nodes]]
 id = "STAY-CONTENT-TOURAPI"
 ticket = ""
-title = "TourAPI 숙박 수집 → 정본에 사진 채움 (전국)"
-status = "blocked"
+title = "TourAPI 숙박 수집 → 정본에 사진 채움 — 측정 2.0% 로 접음"
+status = "dropped"
 owner = "숙소"
 migration = true
 touches = [
@@ -954,8 +965,16 @@ touches = [
   "backend/app/src/main/resources/db/migration",
 ]
 note = """
-`숙소콘텐츠-수집-설계.md` 칸 1. 선행은 [[STAY-CONTENT-MEASURE]] 의 숫자다 — 그것 없이 착수하면
-커버리지 10% 짜리에 마이그레이션과 병합 코드를 쓰게 된다.
+**접었다(2026-09-22).** [[STAY-CONTENT-MEASURE]] 가 **2.0%** 를 냈다 — 12,782곳 중 260곳만
+채워진다. 착수 전에 박아 둔 판정선이 "10% 미만이면 접는다"였고 그 아래다.
+
+세 단계가 각각 막는다: TourAPI 숙박이 1,479곳뿐이라 **상한이 11.6%**, 매칭에서 442, 사진에서 260.
+한 단계를 개선해도 나머지 둘이 남는다. 사진·가격은 [[AFFILIATE-LINK]] 로 수렴한다.
+
+**되살릴 조건**: 주 1회 측정이 TourAPI 숙박 증가를 관측한다. 채움률이 판정선을 넘으면 이 노드를
+다시 열고 아래 설계를 그대로 집는다.
+
+(이하 착수 계획 — 되살릴 때 쓴다.)
 
 **POI 제안 입구를 재사용하지 않는다.** `/internal/pois/proposals` 는 수집 게이트(INV-1)를 태우는
 자리이고 숙소는 그 대상이 아니다 — 같은 입구에 넣으면 게이트가 두 갈래로 갈린다(TRIP-681 에서
