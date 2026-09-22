@@ -55,7 +55,9 @@ def _env(name: str) -> str | None:
 
 # 우리 로거에 다는 핸들러 이름 — 멱등 판정용(같은 이름이 있으면 다시 안 단다).
 _LOG_HANDLER_NAME = "trippilot"
+# `WARN` 은 logging 의 정식 별칭이라 운영자가 흔히 친다 — 받아 주되 정식 이름으로 접는다.
 _LOG_LEVELS = ("CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG")
+_LOG_ALIASES = {"WARN": "WARNING", "FATAL": "CRITICAL"}
 
 
 def configure_logging() -> None:
@@ -77,10 +79,12 @@ def configure_logging() -> None:
       못 찾았을 때만** 쓰인다).
     - 멱등하다 — 재호출은 레벨만 갱신한다(기동 경로가 둘이고, 테스트가 여러 번 부른다).
     """
-    level = (_env("TRIPPILOT_LOG_LEVEL") or "INFO").upper()
+    raw = _env("TRIPPILOT_LOG_LEVEL") or "INFO"
+    level = _LOG_ALIASES.get(raw.upper(), raw.upper())
     if level not in _LOG_LEVELS:
+        # 원문 그대로 찍는다 — 대문자로 접어 찍으면 운영자가 자기가 넣은 값을 못 찾는다.
         raise RuntimeError(
-            f"TRIPPILOT_LOG_LEVEL 미지원 값: {level!r} — {'|'.join(_LOG_LEVELS)} 중 하나"
+            f"TRIPPILOT_LOG_LEVEL 미지원 값: {raw!r} — {'|'.join(_LOG_LEVELS)} 중 하나"
         )
     logger = logging.getLogger("trippilot")
     logger.setLevel(level)

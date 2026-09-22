@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import io
 import logging
+import sys
 
 import pytest
 
@@ -57,7 +58,8 @@ def test_info_actually_reaches_the_stream(monkeypatch) -> None:
 
     main.configure_logging()
     (handler,) = _ours(logger)
-    handler.stream = io.StringIO()          # 표준출력 대신 받아 본다
+    assert handler.stream is sys.stdout     # 갈아끼우기 **전에** 출력처를 고정한다
+    handler.stream = io.StringIO()          # 그다음 받아 본다
     logging.getLogger("trippilot.exists").info("절단 %d건", 3)
 
     line = handler.stream.getvalue()
@@ -78,7 +80,9 @@ def test_level_defaults_to_info(monkeypatch) -> None:
 
 @pytest.mark.parametrize("value,expected",
                          [("DEBUG", logging.DEBUG), ("warning", logging.WARNING),
-                          (" ERROR ", logging.ERROR)])
+                          (" ERROR ", logging.ERROR),
+                          # logging 정식 별칭 — 운영자가 흔히 친다
+                          ("WARN", logging.WARNING), ("fatal", logging.CRITICAL)])
 def test_level_comes_from_env(monkeypatch, value, expected) -> None:
     monkeypatch.setenv("TRIPPILOT_LOG_LEVEL", value)
     logger = _reset()
@@ -90,12 +94,18 @@ def test_level_comes_from_env(monkeypatch, value, expected) -> None:
 
 @pytest.mark.parametrize("bad", ["TRACE", "9", "verbose"])
 def test_unsupported_level_fails_startup(monkeypatch, bad) -> None:
-    """조용한 기본값 금지 — 오타가 "설정했는데 왜 안 나오지"로 남으면 안 된다."""
-    monkeypatch.setenv("TRIPPILOT_LOG_LEVEL", bad)
-    _reset()
+    """조용한 기본값 금지 — 오타가 "설정했는데 왜 안 나오지"로 남으면 안 된다.
 
-    with pytest.raises(RuntimeError, match="TRIPPILOT_LOG_LEVEL"):
+    메시지에 **원문 그대로** 실린다: 대문자로 접어 찍으면 운영자가 자기가 넣은 값을 못 찾는다.
+    """
+    monkeypatch.setenv("TRIPPILOT_LOG_LEVEL", bad)
+    logger = _reset()
+    before = logger.level
+
+    with pytest.raises(RuntimeError, match=f"TRIPPILOT_LOG_LEVEL.*{bad!r}"):
         main.configure_logging()
+
+    assert logger.level == before and not _ours(logger)   # 실패는 전역 상태를 안 바꾼다
 
 
 def test_empty_env_is_unset_not_error(monkeypatch) -> None:
