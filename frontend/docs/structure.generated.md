@@ -91,7 +91,6 @@
 - `src/__tests__/planbSafeAreaStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbScopeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbTriggerKindStructure.test.ts`  →  (export 없음)
-- `src/__tests__/planbTriggersRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/recordAttributionStructure.test.ts`  →  (export 없음)
 - `src/__tests__/recordPhotoBinaryGuard.test.ts`  →  (export 없음)
 - `src/__tests__/recordsCalendarStructure.test.ts`  →  (export 없음)
@@ -102,6 +101,7 @@
 - `src/__tests__/reflectionStructure.test.ts`  →  (export 없음)
 - `src/__tests__/reflectionSummaryStructure.test.ts`  →  (export 없음)
 - `src/__tests__/regionCatalogStructure.test.ts`  →  (export 없음)
+- `src/__tests__/riskSheetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/rootLayout.test.tsx`  →  (export 없음)
 - `src/__tests__/rootLayoutQueryProvider.test.tsx`  →  (export 없음)
 - `src/__tests__/rootLayoutSafeArea.test.tsx`  →  (export 없음)
@@ -245,7 +245,6 @@
 - `src/app/trips/[tripId]/planb/index.tsx`  →  (export 없음)
 - `src/app/trips/[tripId]/planb/manual.tsx`  →  (export 없음)
 - `src/app/trips/[tripId]/planb/solving.tsx`  →  (export 없음)
-- `src/app/trips/[tripId]/planb/triggers.tsx`  →  (export 없음)
 
 ## src/app/trips/[tripId]/records/
 - `src/app/trips/[tripId]/records/compare.tsx`  →  (export 없음)
@@ -467,6 +466,9 @@
 - `src/features/onboarding/ui/PrefStep2Screen.tsx`  →  PrefStep2ScreenProps · PrefStep2Screen
 - `src/features/onboarding/ui/TermsScreen.tsx`  →  TermsItemView · TermsScreenProps · TermsScreen
 
+## src/features/planb/config/
+- `src/features/planb/config/watchLabels.ts`  →  WatchKind · WATCH_CATEGORY_LABEL · WATCH_STATUS_LABEL
+
 ## src/features/planb/model/
 - `src/features/planb/model/foldScope.ts`  →  foldScope
 - `src/features/planb/model/replanFormStore.ts`  →  ReplanFormState · useReplanFormStore
@@ -474,6 +476,7 @@
 - `src/features/planb/model/replanRequest.ts`  →  ReplanFormValues · buildStartReplanRequest
 - `src/features/planb/model/replanScope.ts`  →  ReplanScopeOption · ReplanChoice · REPLAN_SCOPES · DEFAULT_REPLAN_SCOPE · REPLAN_REASONS · REPLAN_DIRECTIVES
 - `src/features/planb/model/replanState.ts`  →  ReplanState · resolveReplanState
+- `src/features/planb/model/riskAffectedRow.ts`  →  RiskAffectedRow · riskAffectedRow
 - `src/features/planb/model/slackTime.ts`  →  slackTime
 - `src/features/planb/model/triggerLabel.ts`  →  TriggerLabel · TRIGGER_LABELS · triggerLabel
 - `src/features/planb/model/triggerPillCopy.ts`  →  TriggerPillSlot · triggerPillCopy
@@ -484,18 +487,17 @@
 - `src/features/planb/model/useReplanSession.ts`  →  useReplanSession
 - `src/features/planb/model/useSlotCandidates.ts`  →  useSlotCandidates
 - `src/features/planb/model/useStartReplan.ts`  →  useStartReplan
-- `src/features/planb/model/useTriggerWatchlist.ts`  →  useTriggerWatchlist
 
 ## src/features/planb/ui/
 - `src/features/planb/ui/NoAlternativeScreen.tsx`  →  NoAlternativeScreenProps · NoAlternativeScreen
 - `src/features/planb/ui/OutOfScopeNotice.tsx`  →  OutOfScopeNotice
-- `src/features/planb/ui/PlanbGlyphs.tsx`  →  ChecklistDoneGlyph · ChecklistActiveGlyph · ChecklistWaitingGlyph · AppliedBackGlyph · AppliedCheckGlyph · AppliedAlertGlyph · WeatherCloudGlyph · ClockGlyph · ShopGlyph · ChevronRightGlyph · LockGlyph
+- `src/features/planb/ui/PlanbGlyphs.tsx`  →  ChecklistDoneGlyph · ChecklistActiveGlyph · ChecklistWaitingGlyph · AppliedBackGlyph · AppliedCheckGlyph · AppliedAlertGlyph · RiskWarningGlyph · ChevronRightGlyph · LockGlyph
 - `src/features/planb/ui/ReplanAppliedScreen.tsx`  →  ReplanAppliedScreenProps · ReplanAppliedScreen
 - `src/features/planb/ui/ReplanDraftScreen.tsx`  →  ReplanDraftScreenProps · ReplanDraftScreen
 - `src/features/planb/ui/ReplanRequestSheet.tsx`  →  ReplanDetectionBanner · ReplanRequestSheetProps · ReplanRequestSheet
 - `src/features/planb/ui/ReplanSolvingScreen.tsx`  →  ReplanSolvingScreenProps · ReplanSolvingScreen
+- `src/features/planb/ui/RiskDetailSheet.tsx`  →  RiskDetailSheetProps · RiskDetailSheet
 - `src/features/planb/ui/SlotCandidateSheet.tsx`  →  SlotCandidateSheetProps · SlotCandidateSheet
-- `src/features/planb/ui/TriggerWatchlistScreen.tsx`  →  TriggerWatchlistScreenProps · TriggerWatchlistScreen
 
 ## src/features/record/model/
 - `src/features/record/model/adjustTimesDraft.ts`  →  AdjustTimesViolation · AdjustTimesDraftResult · adjustTimesDraft
@@ -846,12 +848,6 @@
 
 ## src/pages/planb-request/ui/
 - `src/pages/planb-request/ui/PlanbRequestPage.tsx`  →  PlanbRequestPageProps · PlanbRequestPage
-
-## src/pages/planb-triggers/
-- `src/pages/planb-triggers/index.ts`  →  PlanbTriggersPage
-
-## src/pages/planb-triggers/ui/
-- `src/pages/planb-triggers/ui/PlanbTriggersPage.tsx`  →  PlanbTriggersPageProps · PlanbTriggersPage
 
 ## src/pages/records-calendar/
 - `src/pages/records-calendar/index.ts`  →  RecordsCalendarPage
@@ -1301,4 +1297,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 873개 파일
+합계 871개 파일

@@ -16,11 +16,8 @@ const INK = '#222222';
 // 변경됨·고정·"다른 후보 N" 텍스트색(brand red-dark, brief §토큰 스냅 raw 값). SVG stroke 은
 // className 을 못 받아 글리프 파일에서만 raw 로 고정한다(리포 *Glyphs raw-hex 면제 관례).
 const PRIMARY_TEXT = '#C13515';
-// i09 감시 행 아이콘 기본색(text-muted 토큰 raw 값, brief §토큰 스냅) — 화면이 활성 행엔 primary-text 로 덮는다.
-const MUTED = '#6A6A6A';
 
 type GlyphProps = { size?: number };
-type TintGlyphProps = GlyphProps & { color?: string };
 
 // 완료 = 핑크 채움 + 흰 체크.
 export function ChecklistDoneGlyph({ size = 20 }: GlyphProps) {
@@ -140,75 +137,30 @@ export function AppliedAlertGlyph({ size = 32 }: GlyphProps) {
 }
 
 /**
- * TRIP-562 · i09 감시 3항목 kind 아이콘(날씨·이동 지연·영업·휴무). execution 에 동명 글리프
- * (`WeatherCloudGlyph`·`ClockGlyph`)가 있으나 cross-feature import 금지라 벡터만 옮겨 planb 로컬로
- * 미러 신설한다(재구현 아님, 상점은 리포에 없어 새 근사 벡터). 색 기본 = MUTED(정상 행), 화면이 활성
- * 행엔 color 로 덮는다. 정확한 벡터 정합은 6-b 실기 캘리브레이션 대상이다.
+ * TRIP-749 · i03 위험 상세 시트 eyebrow — 빨강 채운 삼각 + 흰 `!`. `⚠` 글자는 iOS 에서 노란 컬러
+ * 이모지로 뜰 수 있어 SVG 로 그린다. execution `WarningFilledGlyph` 와 같은 벡터지만 cross-feature
+ * import 금지라 복제다(정확한 벡터 정합은 6-b 실기 캘리브레이션 대상).
  */
-
-// WEATHER — 비구름(execution WeatherCloudGlyph 미러).
-export function WeatherCloudGlyph({
-  size = 22,
-  color = MUTED,
-}: TintGlyphProps) {
+export function RiskWarningGlyph({
+  size = 12,
+  testID,
+}: GlyphProps & { testID?: string }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Svg testID={testID} width={size} height={size} viewBox="0 0 12 12">
       <Path
-        d="M7.5 16.5A3.5 3.5 0 0 1 7.1 9.54 5 5 0 0 1 16.9 8.6 3.2 3.2 0 0 1 17 16.5H7.5Z"
-        stroke={color}
-        strokeWidth={1.6}
+        d="M6 1.2L11.2 10.4H0.8L6 1.2Z"
+        fill={PRIMARY}
+        stroke={PRIMARY}
+        strokeWidth={1}
         strokeLinejoin="round"
       />
       <Path
-        d="M8.5 18.5L7.5 20.5M12.5 18.5L11.5 20.5M16.5 18.5L15.5 20.5"
-        stroke={color}
-        strokeWidth={1.6}
+        d="M6 4.6V7.1"
+        stroke={WHITE}
+        strokeWidth={1.3}
         strokeLinecap="round"
       />
-    </Svg>
-  );
-}
-
-// DELAY — 시계(execution ClockGlyph 미러).
-export function ClockGlyph({ size = 22, color = MUTED }: TintGlyphProps) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Circle cx={12} cy={12} r={9} stroke={color} strokeWidth={2} />
-      <Path
-        d="M12 7.5V12L15.5 14"
-        stroke={color}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-// CLOSURE — 상점(차양+간판, 새 근사 벡터).
-export function ShopGlyph({ size = 22, color = MUTED }: TintGlyphProps) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M4 10.5V19.5H20V10.5"
-        stroke={color}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M3.5 5.5H20.5L21.5 10.5H2.5L3.5 5.5Z"
-        stroke={color}
-        strokeWidth={1.8}
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M9.5 19.5V14.5H14.5V19.5"
-        stroke={color}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <Circle cx={6} cy={8.8} r={0.7} fill={WHITE} />
     </Svg>
   );
 }

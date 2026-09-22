@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react';
-import { render, screen } from '@testing-library/react-native';
+import { render, screen, within } from '@testing-library/react-native';
 
 /**
  * TRIP-746 · AC-7 — i01 허브 프리뷰 3키(`live-hub-closed`·`-half`·`-expanded`)가 Figma 4251:2448 ·
@@ -274,5 +274,87 @@ describe('🔴 TRIP-748 · i02 변수 감지 프리뷰 3키 (AC-10)', () => {
       expect(entry?.band).toBe('i');
       expect(entry?.label.startsWith('i02 · ')).toBe(true);
     });
+  });
+});
+
+// ── TRIP-749 · i03 위험 상세 시트 1키 ───────────────────────────────────────
+//
+// Figma 4052:2427 — i02 배경(허브 **중간** 스냅 + 지도 알약 + 해운대 배지) 위에 딤 + 위험 상세 시트.
+// 배경 시트 노드 이름은 `sheet-펼침` 이지만 위치가 중간(y=380)이라 index 1 을 정본으로 삼았다(브리프 드리프트).
+// 옛 i09 감시 목록 2키는 사라진다 — 키 접두어는 조립 문자열로 찾는다(리터럴이면 riskSheetStructure R3 이
+// 이 파일을 잡는다, 02a ★8).
+
+const OLD_WATCHLIST_PREFIX = ['planb', 'triggers'].join('-');
+
+describe('🔴 TRIP-749 · i03 위험 상세 시트 프리뷰 (AC-9)', () => {
+  it('live-risk-sheet 는 중간 스냅 허브 + 알약 + 해운대 배지 위에, 허브 밖 형제로 위험 상세 시트를 그린다', () => {
+    mockSearchParams.state = 'live-risk-sheet';
+
+    render(<DevPreview />);
+
+    // 배경 — 허브, 그리고 허브의 시트는 전부 중간 스냅(index 1).
+    const liveScreen = screen.getByTestId('execution-live-screen');
+    const hubIndices = liveScreen
+      .findAll(
+        (node) =>
+          typeof node.props?.index === 'number' &&
+          Array.isArray(node.props?.snapPoints)
+      )
+      .map((node) => node.props.index as number);
+    expect(hubIndices.length).toBeGreaterThan(0);
+    hubIndices.forEach((index) => expect(index).toBe(1));
+    expect(
+      screen.getByTestId('execution-live-trigger-label')
+    ).toHaveTextContent('비 예보 · 해운대 해변 17시');
+    expect(screen.getByTestId(HAEUNDAE_STATUS)).toHaveTextContent('비 예보');
+
+    // 시트 — 허브 밖(형제)에 있다(Figma: 딤이 FAB 까지 전면을 덮는다).
+    expect(screen.getByTestId('planb-risk-sheet')).toBeOnTheScreen();
+    expect(within(liveScreen).queryByTestId('planb-risk-sheet')).toBeNull();
+    expect(screen.getByTestId('planb-risk-eyebrow')).toHaveTextContent(
+      '위험 요소 · 날씨'
+    );
+    expect(screen.getByTestId('planb-risk-title')).toHaveTextContent(
+      '17시 이후 비 예보 70%'
+    );
+    expect(screen.getByTestId('planb-risk-affected-time')).toHaveTextContent(
+      '17:00'
+    );
+    expect(screen.getByTestId('planb-risk-affected-name')).toHaveTextContent(
+      '해운대 해변'
+    );
+    expect(screen.getByTestId('planb-risk-affected-meta')).toHaveTextContent(
+      '5번째 · 해변 · 24시간 개방'
+    );
+    expect(screen.getByTestId('planb-risk-watch-weather')).toHaveTextContent(
+      '날씨 · 활성'
+    );
+    expect(screen.getByTestId('planb-risk-watch-delay')).toHaveTextContent(
+      '이동 · 정상'
+    );
+    expect(screen.getByTestId('planb-risk-watch-closure')).toHaveTextContent(
+      '영업 · 정상'
+    );
+    expect(screen.getByTestId('planb-risk-cta')).toHaveTextContent('대안 보기');
+  });
+
+  it('band i · 라벨 "i03 · 위험 상세 시트" 이고, 옛 i09 감시 목록 키는 없다', () => {
+    const states = PREVIEW_STATES as {
+      key: string;
+      band: string;
+      label: string;
+    }[];
+    const entry = states.find((state) => state.key === 'live-risk-sheet');
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('i');
+    expect(entry?.label).toBe('i03 · 위험 상세 시트');
+
+    // 짝 앵커 — 목록이 비지 않았다.
+    expect(states.length).toBeGreaterThan(100);
+    expect(
+      states
+        .map((state) => state.key)
+        .filter((key) => key.startsWith(OLD_WATCHLIST_PREFIX))
+    ).toEqual([]);
   });
 });

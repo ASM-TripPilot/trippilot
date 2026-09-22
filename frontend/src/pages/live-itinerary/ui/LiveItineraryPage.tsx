@@ -11,9 +11,12 @@ import { deriveVisitProgress } from '@/features/execution/model/visitProgress';
 import { TriggerChip } from '@/features/execution/ui/TriggerChip';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { foldScope } from '@/features/planb/model/foldScope';
+import { riskAffectedRow } from '@/features/planb/model/riskAffectedRow';
 import { triggerLabel } from '@/features/planb/model/triggerLabel';
 import { triggerPillCopy } from '@/features/planb/model/triggerPillCopy';
+import { triggerWatchlist } from '@/features/planb/model/triggerWatchlist';
 import { useActiveTriggers } from '@/features/planb/model/useActiveTriggers';
+import { RiskDetailSheet } from '@/features/planb/ui/RiskDetailSheet';
 import type { Trigger } from '@/shared/api/generated/schemas';
 import {
   useGetTripsTripId,
@@ -57,6 +60,8 @@ export function LiveItineraryPage({
   const trip = useGetTripsTripId(tripId);
   // 사용자가 고른 날(없으면 오늘). 훅 규칙상 조기 반환보다 위에서 무조건 선언한다.
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  // i03 위험 상세 시트 열림 = 그 트리거 id(TRIP-749). 재조회로 트리거가 사라지면 시트도 사라진다.
+  const [riskTriggerId, setRiskTriggerId] = useState<string | null>(null);
 
   const state = resolveLiveState({
     isLoading: query.isPending,
@@ -187,7 +192,7 @@ export function LiveItineraryPage({
   const triggerChip = chipTrigger ? (
     <TriggerChip
       label={triggerPillCopy(chipTrigger.kind, pillSlot)}
-      onPressAlternative={() => openReplan(chipTrigger)}
+      onPressAlternative={() => setRiskTriggerId(chipTrigger.triggerId)}
     />
   ) : undefined;
 
@@ -199,30 +204,53 @@ export function LiveItineraryPage({
     return match ? triggerLabel(match.kind).label : null;
   };
 
+  // 시트는 허브의 형제로 조건부 마운트한다 — 딤이 FAB·알약까지 전면을 덮고, 닫힘 = 트리에서 사라짐.
+  const riskTrigger = displayTriggers.find(
+    (trigger) => trigger.triggerId === riskTriggerId
+  );
+  const riskSheet =
+    riskTrigger && riskTrigger.kind !== 'MANUAL' ? (
+      <RiskDetailSheet
+        kind={riskTrigger.kind}
+        title={riskTrigger.reason}
+        affected={riskAffectedRow(itinerary.days, riskTrigger.slotKey)}
+        watchRows={triggerWatchlist(displayTriggers).rows}
+        onPressAlternative={() => {
+          // i04 는 허브 위에 겹쳐 뜬다(D1) — 시트를 닫고 가야 뒤에 비치지 않는다.
+          setRiskTriggerId(null);
+          openReplan(riskTrigger);
+        }}
+        onClose={() => setRiskTriggerId(null)}
+      />
+    ) : null;
+
   return (
-    <LiveHubView
-      tripTitle={trip.data?.title ?? ''}
-      days={itinerary.days}
-      activeDayIndex={activeDayIndex}
-      slots={projected}
-      onSelectDay={setSelectedDay}
-      onBack={() => {
-        if (router.canGoBack()) router.back();
-        else router.replace(HOME_FALLBACK);
-      }}
-      // 수동 재계획 세션 진입(BR-U4-10) — 라우팅으로만(execution→planb 직접 import 없이).
-      onPressAiReplan={() => router.push(`/trips/${tripId}/planb`)}
-      onPressManualEdit={() => router.push(`/trips/${tripId}/planb/manual`)}
-      onPressComplete={
-        activeVisitCheckId !== null
-          ? () => {
-              void visitCheck.complete(activeVisitCheckId);
-            }
-          : undefined
-      }
-      triggerChip={triggerChip}
-      triggerPillKey={chipTrigger?.triggerId}
-      slotBadgeLabel={slotBadgeLabel}
-    />
+    <>
+      <LiveHubView
+        tripTitle={trip.data?.title ?? ''}
+        days={itinerary.days}
+        activeDayIndex={activeDayIndex}
+        slots={projected}
+        onSelectDay={setSelectedDay}
+        onBack={() => {
+          if (router.canGoBack()) router.back();
+          else router.replace(HOME_FALLBACK);
+        }}
+        // 수동 재계획 세션 진입(BR-U4-10) — 라우팅으로만(execution→planb 직접 import 없이).
+        onPressAiReplan={() => router.push(`/trips/${tripId}/planb`)}
+        onPressManualEdit={() => router.push(`/trips/${tripId}/planb/manual`)}
+        onPressComplete={
+          activeVisitCheckId !== null
+            ? () => {
+                void visitCheck.complete(activeVisitCheckId);
+              }
+            : undefined
+        }
+        triggerChip={triggerChip}
+        triggerPillKey={chipTrigger?.triggerId}
+        slotBadgeLabel={slotBadgeLabel}
+      />
+      {riskSheet}
+    </>
   );
 }

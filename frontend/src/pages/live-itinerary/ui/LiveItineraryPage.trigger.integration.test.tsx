@@ -30,7 +30,9 @@ import { LiveItineraryPage } from './LiveItineraryPage';
  *  - 카드 아래 배너 문장·×(끄기)·구름 아이콘은 없다. 서버 reason("비 예보 70%")도 허브에 안 보인다(AC-6).
  *  - 매칭 실패(slotKey null·다른 날)면 알약은 라벨만, 배지는 "예정" 그대로(AC-2 폴백).
  *  - 빈 목록·MANUAL 만이면 알약 없음(AC-6b 필터). 슬롯 시각은 계획값 그대로(BR-U4-35).
- *  - 알약 press → `/trips/{id}/planb` 로 router.push + scope 전달(NONE/null→PARTIAL_SLOTS, AC-4 — 목적지 보존).
+ *  - (TRIP-749 계약 플립) 알약 press 는 더 이상 바로 planb 로 가지 않고 i03 위험 상세 시트를 연다.
+ *    scope 전달(NONE/null→PARTIAL_SLOTS) 검사는 시트 [대안 보기] 경로로
+ *    `LiveItineraryPage.riskSheet.integration.test.tsx` R-I5a/b 에 옮겼다(옛 I-T4a/b).
  *  - 숨김 경로(일자 칩·FAB·시트 스크롤)를 눌러도 dismiss POST 는 0회다 — 로컬 숨김일 뿐(D3 · AC-7).
  *
  * 왜 통합 버킷인가(기존 LiveItineraryPage.integration.test.tsx 철학 계승): 표시 게이트·MANUAL
@@ -149,19 +151,6 @@ const baseHandlers = (list: TriggerList) => [
   triggersHandler(list),
 ];
 
-/** router.push 인자를 문자열로 정규화 — 문자열/객체 두 형태를 모두 받아 경로·쿼리만 잰다(★3). */
-function hrefString(arg: unknown): string {
-  if (typeof arg === 'string') return arg;
-  const obj = (arg ?? {}) as {
-    pathname?: string;
-    params?: Record<string, unknown>;
-  };
-  const qs = Object.entries(obj.params ?? {})
-    .map(([k, v]) => `${k}=${String(v)}`)
-    .join('&');
-  return qs ? `${obj.pathname ?? ''}?${qs}` : (obj.pathname ?? '');
-}
-
 let observedHits: string[] = [];
 const hitCount = (needle: string) =>
   observedHits.filter((hit) => hit === needle).length;
@@ -196,7 +185,6 @@ function wrapper({ children }: { children: ReactNode }) {
 
 const CHIP = 'execution-live-trigger-chip';
 const LABEL = 'execution-live-trigger-label';
-const ALT = 'execution-live-trigger-alternative';
 const STATUS = `execution-live-slot-status-${SLOT_KEY}`;
 const DISMISS_PATH = `POST /api/v1/trips/${TRIP_ID}/triggers/trg-1/dismiss`;
 
@@ -271,37 +259,6 @@ describe('LiveItineraryPage · i02 트리거 표면 (TRIP-748)', () => {
     expect(
       screen.getByTestId(`execution-live-slot-time-${SLOT_KEY}`)
     ).toHaveTextContent('10:00 도착 예정');
-  });
-
-  it('I-T4a 알약은 그 scope(FULL_DAY)로 planb 세션을 연다 (AC-4 pass-through)', async () => {
-    server.use(
-      ...baseHandlers({ triggers: [mkTrigger({ scope: 'FULL_DAY' })] })
-    );
-
-    render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
-    await waitFor(() => expect(screen.getByTestId(ALT)).toBeTruthy());
-
-    fireEvent.press(screen.getByTestId(ALT));
-
-    expect(mockPush).toHaveBeenCalledTimes(1);
-    const href = hrefString(mockPush.mock.calls[0][0]);
-    expect(href).toContain(`/trips/${TRIP_ID}/planb`);
-    expect(href).toContain('scope=FULL_DAY');
-    expect(href).toContain('triggerId=trg-1');
-  });
-
-  it('I-T4b scope=NONE 이면 기본값 PARTIAL_SLOTS 로 세션을 연다 (AC-4 기본값)', async () => {
-    server.use(...baseHandlers({ triggers: [mkTrigger({ scope: 'NONE' })] }));
-
-    render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
-    await waitFor(() => expect(screen.getByTestId(ALT)).toBeTruthy());
-
-    fireEvent.press(screen.getByTestId(ALT));
-
-    expect(mockPush).toHaveBeenCalledTimes(1);
-    const href = hrefString(mockPush.mock.calls[0][0]);
-    expect(href).toContain(`/trips/${TRIP_ID}/planb`);
-    expect(href).toContain('scope=PARTIAL_SLOTS');
   });
 
   it('I-T5 숨김 경로(일자 칩·FAB·시트 스크롤)는 알약만 숨기고 dismiss POST 는 0회다 (D3 · AC-7)', async () => {

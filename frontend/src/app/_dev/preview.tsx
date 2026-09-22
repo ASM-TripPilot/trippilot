@@ -115,6 +115,7 @@ import { SettingsScreen } from '@/features/settings/ui/SettingsScreen';
 import { TripCard, type TripCardVM } from '@/features/settings/ui/TripCard';
 import { triggerLabel } from '@/features/planb/model/triggerLabel';
 import { triggerPillCopy } from '@/features/planb/model/triggerPillCopy';
+import { riskAffectedRow } from '@/features/planb/model/riskAffectedRow';
 import { triggerWatchlist } from '@/features/planb/model/triggerWatchlist';
 import { ManualEditScreen } from '@/pages/planb-manual/ui/ManualEditScreen';
 import { ReplanRequestSheet } from '@/features/planb/ui/ReplanRequestSheet';
@@ -124,7 +125,7 @@ import { ReplanSolvingScreen } from '@/features/planb/ui/ReplanSolvingScreen';
 import { NoAlternativeScreen } from '@/features/planb/ui/NoAlternativeScreen';
 import type { ReplanSlotVM } from '@/entities/itinerary-slot/model';
 import { SlotCandidateSheet } from '@/features/planb/ui/SlotCandidateSheet';
-import { TriggerWatchlistScreen } from '@/features/planb/ui/TriggerWatchlistScreen';
+import { RiskDetailSheet } from '@/features/planb/ui/RiskDetailSheet';
 import { NicknameScreen } from '@/features/onboarding/ui/NicknameScreen';
 import {
   StayRegisterScreen,
@@ -1516,15 +1517,19 @@ const LIVE_HUB_PREVIEW_SLOTS: LiveHubSlot[] = [
   },
   {
     state: 'upcoming',
-    slot: liveHubSlot(
-      'haeundae',
-      '해운대 해변',
-      '17:00:00',
-      '18:30:00',
-      35.1587,
-      129.1604,
-      '24시간 개방'
-    ),
+    slot: {
+      ...liveHubSlot(
+        'haeundae',
+        '해운대 해변',
+        '17:00:00',
+        '18:30:00',
+        35.1587,
+        129.1604,
+        '24시간 개방'
+      ),
+      // i03 영향 행 메타(Figma `5번째 · 해변 · …`) — 서버 PoiCategory enum 밖 값이지만 프리뷰 데이터일 뿐.
+      category: '해변',
+    },
   },
 ];
 // Figma 의 현재위치 점(부산시립미술관 근처).
@@ -1559,11 +1564,11 @@ function renderLiveHubPreview(
 // i02 변수 감지(TRIP-748) — 펼침 5곳 위에 해운대(17:00) 매칭 트리거를 싣는다. 알약 카피·배지는
 // 페이지와 같은 순수 함수로 여기서 조립한다(api 로드 0 — TRIP-610).
 const LIVE_TRIGGER_SLOT_KEY = `${LIVE_HUB_PREVIEW_DATE}#haeundae`;
-function renderLiveTriggerPreview(kind: TriggerKind): ReactElement {
+function renderLiveTriggerPreview(kind: TriggerKind, snap = 2): ReactElement {
   const target = LIVE_HUB_PREVIEW_SLOTS.find(
     ({ slot }) => slot.poiId === 'haeundae'
   )?.slot;
-  return renderLiveHubPreview(2, {
+  return renderLiveHubPreview(snap, {
     triggerChip: (
       <TriggerChip
         label={triggerPillCopy(kind, target)}
@@ -1574,6 +1579,39 @@ function renderLiveTriggerPreview(kind: TriggerKind): ReactElement {
     slotBadgeLabel: (slotKey) =>
       slotKey === LIVE_TRIGGER_SLOT_KEY ? triggerLabel(kind).label : null,
   });
+}
+
+// i03 위험 상세 시트(TRIP-749, Figma 4052:2427) — 중간 스냅 i02 비 예보 위에, 페이지처럼 허브의 형제로
+// 시트를 얹는다. 영향 행·배지는 페이지와 같은 순수 함수로 조립한다(api 로드 0 — TRIP-610).
+const LIVE_RISK_PREVIEW_TRIGGER: Trigger = {
+  triggerId: 'preview-WEATHER',
+  kind: 'WEATHER',
+  affectedDate: LIVE_HUB_PREVIEW_DATE,
+  slotKey: LIVE_TRIGGER_SLOT_KEY,
+  reason: '17시 이후 비 예보 70%',
+  scope: 'PARTIAL_SLOTS',
+  detectedAt: '2026-06-11T09:00:00Z',
+};
+function renderLiveRiskSheetPreview(): ReactElement {
+  const days = [
+    {
+      date: LIVE_HUB_PREVIEW_DATE,
+      slots: LIVE_HUB_PREVIEW_SLOTS.map(({ slot }) => slot),
+    },
+  ];
+  return (
+    <>
+      {renderLiveTriggerPreview('WEATHER', 1)}
+      <RiskDetailSheet
+        kind="WEATHER"
+        title={LIVE_RISK_PREVIEW_TRIGGER.reason}
+        affected={riskAffectedRow(days, LIVE_RISK_PREVIEW_TRIGGER.slotKey)}
+        watchRows={triggerWatchlist([LIVE_RISK_PREVIEW_TRIGGER]).rows}
+        onPressAlternative={noop}
+        onClose={noop}
+      />
+    </>
+  );
 }
 
 // i15·i22 수동 편집(TRIP-443) — A(비고정)·H(숙소 체크인 isFixed)·C(비고정, lockedSlotKeys) 3슬롯.
@@ -1698,19 +1736,6 @@ function ManualEditPreview({ variant }: { variant?: 'error' }): ReactElement {
     </>
   );
 }
-
-// i09 감지된 변화(TRIP-562) 발화 얼굴 프리뷰 — 날씨 1건 발화. 정상 얼굴은 빈 배열을 사영한다.
-const TRIGGER_WATCHLIST_PREVIEW_FIRED: Trigger[] = [
-  {
-    triggerId: 'preview-weather',
-    kind: 'WEATHER',
-    affectedDate: '2026-08-20',
-    slotKey: null,
-    reason: '비 예보 70%',
-    scope: 'PARTIAL_SLOTS',
-    detectedAt: '2026-08-20T09:00:00Z',
-  },
-];
 
 // l05 취향 수정 프리뷰 픽스처 — 한국어 계약값 그대로(GET View 를 initialSelection 태운 뒤의 모양).
 const SETTINGS_PREF_PREVIEW_SELECTION: PreferenceSelection = {
@@ -4858,6 +4883,15 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => renderLiveTriggerPreview('CLOSURE'),
   },
+  // i03 위험 상세 시트(TRIP-749, Figma 4052:2427) — 중간 스냅 허브 + 알약 위 딤 + 시트. 옛 i09 감시
+  // 목록 2키는 이 시트로 흡수돼 사라졌다. 딤 전면 커버·끌어 닫기는 jest 사각이라 여기가 육안 자리다.
+  {
+    key: 'live-risk-sheet',
+    band: 'i',
+    label: 'i03 · 위험 상세 시트',
+    login: null,
+    render: renderLiveRiskSheetPreview,
+  },
   // e04 저장한 숙소(TRIP-461) — results·empty 두 얼굴. jest 는 픽셀·레이아웃을 못 봐(6-b) 이
   // 자리가 카드 그림자·거점 지정 하단 버튼·empty 콜라주·돋보기 CTA 를 눈으로 대조하는 곳이다.
   {
@@ -5134,48 +5168,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         onPressAddPlace={noop}
       />
     ),
-  },
-  // ── i09 감지된 변화(TRIP-562) — 발화(날씨 활성)·정상(발화 없음) 두 얼굴. 순수 프레젠테이션이라
-  //    사영 결과(triggerWatchlist)를 직접 주입한다(페이지·QueryClient 없이). 배너 primary 테두리·활성
-  //    배지 rose·감시 행 아이콘·구분선 픽셀·진입 FAB 는 jest 사각이라 이 두 키가 육안 대조 자리다
-  //    (i09 `1790:2869`). 자율 세션이라 6-b 미실행이면 다음 세션 확인 대상 ──
-  {
-    key: 'planb-triggers-active',
-    band: 'i',
-    label: 'i09 · 감지된 변화 발화',
-    login: null,
-    render: () => {
-      const { activeBanner, rows } = triggerWatchlist(
-        TRIGGER_WATCHLIST_PREVIEW_FIRED
-      );
-      return (
-        <TriggerWatchlistScreen
-          activeBanner={activeBanner}
-          rows={rows}
-          onPressAlternative={noop}
-          onPressManual={noop}
-          onBack={noop}
-        />
-      );
-    },
-  },
-  {
-    key: 'planb-triggers-normal',
-    band: 'i',
-    label: 'i09 · 감지된 변화 정상',
-    login: null,
-    render: () => {
-      const { activeBanner, rows } = triggerWatchlist([]);
-      return (
-        <TriggerWatchlistScreen
-          activeBanner={activeBanner}
-          rows={rows}
-          onPressAlternative={noop}
-          onPressManual={noop}
-          onBack={noop}
-        />
-      );
-    },
   },
   // l05 설정(TRIP-608) — 실화면 딥링크로는 미인증 리다이렉트/백엔드 부재로 온전히 못 본다. jest 가
   // 못 보는 것(6그룹 카드 레이아웃·리딩 아이콘 12종·"준비 중" 비활성·위험/동의 pill)을 여기서 눈으로.

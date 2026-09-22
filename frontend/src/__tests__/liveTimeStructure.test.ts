@@ -51,6 +51,8 @@ const HUB_FILES = [
   // TRIP-748 — 지도 알약 카피의 "{도착시}시"를 슬롯 startAt 에서 만든다. features/planb 에 있어
   // 실행 층 전수 스캔 밖이라 명시 편입한다(브리프 맹점① — 자르기만, 산술 0).
   'features/planb/model/triggerPillCopy.ts',
+  // TRIP-749 — i03 위험 상세 시트 영향 행의 "17:00" 을 슬롯 startAt 에서 자른다. 같은 이유로 편입.
+  'features/planb/model/riskAffectedRow.ts',
 ];
 
 /** 날짜 라이브러리 산술 함수 — 시각을 옮기는(재추정하는) 표준 이름들. */
