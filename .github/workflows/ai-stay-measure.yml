@@ -36,6 +36,12 @@ on:
 
 concurrency: ai-stay-measure   # 실 호출 워크플로는 동시 1건만 (일일 한도 보호)
 
+# 읽기와 artifact 업로드뿐이다 — 상태 브랜치 push 도, 이슈 생성도 없다.
+# 리포 기본이 read 라 지금은 같은 값이지만, **기본값이 바뀌면 조용히 넓어진다.**
+# 형제 배치(ai-intro2-probe·ai-existence-probe)도 같은 이유로 명시한다.
+permissions:
+  contents: read
+
 jobs:
   measure:
     runs-on: ubuntu-latest
