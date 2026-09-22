@@ -2765,9 +2765,16 @@ export const PREVIEW_STATES: PreviewState[] = [
           photoCount: 0,
         }}
         distanceDash
-        mapNotice="위치 기록 없음 · GPS 미동으로 지도를 만들 수 없어요"
+        mapNotice={{
+          title: '위치 기록 없음',
+          body: 'GPS 미동의로 지도를 만들 수 없어요',
+        }}
         hidePhotoGrid
         photos={[]}
+        dayTabs={[{ day: 1 }, { day: 2, today: true }, { day: 3 }]}
+        activeDay={2}
+        onSelectDay={noop}
+        onPressTab={noop}
         onEnterEdit={noop}
         onConfirm={noop}
         onSaveEdit={noop}
@@ -2795,6 +2802,10 @@ export const PREVIEW_STATES: PreviewState[] = [
         mapNotice={null}
         hidePhotoGrid
         photos={[]}
+        dayTabs={[{ day: 1 }, { day: 2, today: true }, { day: 3 }]}
+        activeDay={2}
+        onSelectDay={noop}
+        onPressTab={noop}
         onEnterEdit={noop}
         onConfirm={noop}
         onSaveEdit={noop}
@@ -2822,6 +2833,10 @@ export const PREVIEW_STATES: PreviewState[] = [
         mapNotice={null}
         hidePhotoGrid
         photos={[]}
+        dayTabs={[{ day: 1 }, { day: 2, today: true }, { day: 3 }]}
+        activeDay={2}
+        onSelectDay={noop}
+        onPressTab={noop}
         onEnterEdit={noop}
         onConfirm={noop}
         onSaveEdit={noop}

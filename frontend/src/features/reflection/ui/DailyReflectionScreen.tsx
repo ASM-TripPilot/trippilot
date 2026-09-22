@@ -29,22 +29,20 @@ import { ReflectionStatsRow } from './ReflectionStatsRow';
  * import — 프리뷰 격리 렌더 안전, FSD 경계). 화면은 완성된 `narrative`·`editableText` 를 받고,
  * `draftNarrative`/`editedNarrative`/`resolveDisplayNarrative` 어느 것도 참조하지 않는다.
  *
- * 4얼굴:
- *  - default            : 일차 탭 · 기분 3택 · stats · 풀폭 지도(또는 자리) · 서술 카드 · 사진 그리드 ·
- *                         메모 입력 · "저장" · 하단 탭바(기록). 헤더 "편집".
- *  - data-insufficient  : stats(거리 "—") + 지도 자리 사유 + 서술 + "사진 없음" 자리 · 헤더 "편집" · "확인".
+ * 4얼굴(TRIP-763: 일차 탭·하단 탭바(기록)·헤더 "편집"은 전 얼굴 공통 크롬):
+ *  - default            : 기분 3택 · stats · 풀폭 지도(또는 자리) · 서술 카드 · 사진 그리드 · 메모 입력 · "저장".
+ *  - data-insufficient  : stats(거리 "—") + 지도 자리 사유(제목/본문 2줄) + 서술 + "사진 없음" 자리 · "확인".
  *  - empty              : 빈 원 일러스트 + "오늘 기록된 활동이 없습니다" · 하단 CTA "직접 회고 작성".
  *  - error              : stats 채움(BASIC 카드, INV-U5-07) + 에러 카드(다시 시도) · CTA "직접 회고 작성".
  *
- * ★ TRIP-762 · default 얼굴만 재구성했다(다른 3얼굴·편집 모드는 무회귀). 신규 표면 prop
- *   (dayTabs·activeDay·onSelectDay·onPressTab)은 전부 **옵셔널** — 미주입 호출자(다른 얼굴·프리뷰·
+ * ★ 신규 표면 prop(dayTabs·activeDay·onSelectDay·onPressTab)은 전부 **옵셔널** — 미주입 호출자(프리뷰·
  *   무회귀 테스트)가 그대로 컴파일된다. mood·memo 는 prop 이 없다 — 화면 로컬 `useState`(UI 로컬,
  *   저장 배선 부재로 "저장 안 됨"이 구조적으로 강제됨. 통합 저장은 계약 확장 티켓 TRIP-823).
  *
- * ★ 편집 진입 컨트롤은 얼굴당 정확히 1개라 `reflection-daily-edit` 단일 testID 로 충돌 없이 쓴다 —
- *   default/data-insufficient 는 헤더 "편집"(default 는 서술 카드 "수정"으로도 진입), empty/error 는
- *   하단 CTA "직접 회고 작성"(모두 `handleEnterEdit`). 편집을 열면 상한 4000
- *   (`EditReflectionRequest.maxLength`, 서버 권위) — 빈/공백 텍스트는 저장 비활성 + 저장 콜백 0회.
+ * ★ 편집 진입은 헤더 "편집"(`reflection-daily-edit`, 전 얼굴 · default 는 서술 카드 "수정"으로도 진입)이
+ *   진다. empty/error 하단 CTA "직접 회고 작성"은 헤더와 같은 화면에 공존하므로 testID 를 분리한다
+ *   (`reflection-daily-compose`, 둘 다 `handleEnterEdit`) — 겹치면 `getByTestId` 가 throw. 편집을 열면 상한
+ *   4000(`EditReflectionRequest.maxLength`, 서버 권위) — 빈/공백 텍스트는 저장 비활성 + 저장 콜백 0회.
  *
  * 지도 좌표·핀은 옵셔널 — 회고 계약(`Reflection`)에 좌표가 없어 페이지가 채우면 쓰고, 없으면 지도 대신
  * 자리표시(가짜 기본 센터 지도 금지). 신규 지도 컴포넌트 금지 — `shared/map/MapView` 재사용, viewOnly.
@@ -86,9 +84,10 @@ export interface DailyReflectionScreenProps {
   editableText: string;
   stats: ReflectionStats;
   distanceDash: boolean;
-  mapNotice: string | null;
+  mapNotice: { title: string; body: string } | null;
   hidePhotoGrid: boolean;
-  photos: { uri: string }[];
+  // photos 는 읽기만 하므로 readonly — 호출자가 `[] as const` 로 넘겨도 받는다(가변 배열도 그대로 할당됨).
+  photos: readonly { uri: string }[];
   changeSummary?: string | null;
   mapCenter?: MapCenter;
   mapPins?: MapPin[];
@@ -162,9 +161,21 @@ export function DailyReflectionScreen({
         className="w-full items-center gap-sm rounded-card border-[1.5px] border-dashed border-hairline-strong bg-surface-soft px-lg py-3xl"
       >
         <LocationOffGlyph size={30} />
-        <Text className="text-center font-noto text-label text-muted">
-          {mapNotice ?? '위치 정보를 표시할 수 없어요'}
-        </Text>
+        {mapNotice ? (
+          // 제목·본문을 각각 leaf Text 로 — 객체를 한 슬롯에 넣으면 React child 에러라 2줄로 나눈다.
+          <>
+            <Text className="text-center font-noto-bold text-body font-bold text-ink">
+              {mapNotice.title}
+            </Text>
+            <Text className="text-center font-noto text-label text-muted">
+              {mapNotice.body}
+            </Text>
+          </>
+        ) : (
+          <Text className="text-center font-noto text-label text-muted">
+            위치 정보를 표시할 수 없어요
+          </Text>
+        )}
       </View>
     );
 
@@ -179,7 +190,7 @@ export function DailyReflectionScreen({
           오늘의 회고
         </Text>
         <View className="flex-1" />
-        {!editing && isDataFace ? (
+        {!editing ? (
           <Pressable
             testID="reflection-daily-edit"
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -192,10 +203,10 @@ export function DailyReflectionScreen({
         ) : null}
       </View>
 
-      {/* 일차 탭(default 얼굴, 헤더 아래 고정). 활성 탭만 코랄 pill — 색이 아니라
+      {/* 일차 탭(전 얼굴 공통, 헤더 아래 고정). 활성 탭만 코랄 pill — 색이 아니라
           accessibilityState.selected 로 잠근다(fill jest 사각). 라벨은 한글 N일차(formatDayLabel 재사용),
           오늘 탭엔 "오늘 ·" 접두. record 의 day-tab testID·타입은 쓰지 않는다(G2). */}
-      {face === 'default' && !editing && dayTabs && dayTabs.length > 0 ? (
+      {!editing && dayTabs && dayTabs.length > 0 ? (
         <View className="w-full flex-row gap-sm bg-canvas px-lg pb-[10px] pt-[4px]">
           {dayTabs.map((tab) => {
             const active = tab.day === activeDay;
@@ -279,7 +290,7 @@ export function DailyReflectionScreen({
             testID="reflection-daily-empty"
             className="w-full items-center gap-md py-[64px]"
           >
-            <EmptyCircleGlyph size={72} />
+            <EmptyCircleGlyph size={60} />
             <Text className="font-noto text-body text-muted">
               오늘 기록된 활동이 없습니다
             </Text>
@@ -289,7 +300,7 @@ export function DailyReflectionScreen({
             <ReflectionStatsRow stats={stats} distanceDash={distanceDash} />
             <View
               testID="reflection-daily-error"
-              className="w-full items-center gap-sm rounded-card border-[1.5px] border-dashed border-hairline-strong px-lg py-3xl"
+              className="w-full items-center gap-sm rounded-card border-[1.5px] border-dashed border-hairline-strong bg-surface-soft px-lg py-3xl"
             >
               <Text className="font-noto-bold text-body font-bold text-ink">
                 회고를 불러오지 못했어요
@@ -303,7 +314,7 @@ export function DailyReflectionScreen({
                 className="mt-sm flex-row items-center gap-[6px] rounded-button border border-hairline-strong bg-canvas px-lg py-sm"
               >
                 <RetryGlyph size={16} />
-                <Text className="font-noto-bold text-label font-bold text-primary">
+                <Text className="font-noto-bold text-label font-bold text-ink">
                   다시 시도
                 </Text>
               </Pressable>
@@ -375,7 +386,7 @@ export function DailyReflectionScreen({
             {hidePhotoGrid ? (
               <View
                 testID="reflection-daily-photo-empty"
-                className="w-full items-center gap-sm rounded-card border-[1.5px] border-dashed border-hairline-strong px-lg py-3xl"
+                className="w-full items-center gap-sm rounded-card border-[1.5px] border-dashed border-hairline-strong bg-surface-soft px-lg py-3xl"
               >
                 <PhotoOffGlyph size={26} />
                 <Text className="text-label text-muted">사진 없음</Text>
@@ -422,7 +433,7 @@ export function DailyReflectionScreen({
             {hidePhotoGrid ? (
               <View
                 testID="reflection-daily-photo-empty"
-                className="w-full items-center gap-sm rounded-card border-[1.5px] border-dashed border-hairline-strong px-lg py-3xl"
+                className="w-full items-center gap-sm rounded-card border-[1.5px] border-dashed border-hairline-strong bg-surface-soft px-lg py-3xl"
               >
                 <PhotoOffGlyph size={26} />
                 <Text className="text-label text-muted">사진 없음</Text>
@@ -438,37 +449,41 @@ export function DailyReflectionScreen({
         )}
       </ScrollView>
 
-      {/* 하단 — default: 탭바(기록 활성) 오버레이 · data-insufficient: "확인" · empty/error: "직접 회고
-          작성"(편집 진입). 편집 중엔 모두 숨김(편집 모드가 취소/저장을 그린다). */}
-      {editing ? null : face === 'default' ? (
-        <BottomTabBar
-          activeKey="records"
-          onPressTab={onPressTab ?? (() => {})}
-        />
-      ) : (
-        <View className="w-full bg-canvas px-lg pb-[24px] pt-[8px]">
-          {isDataFace ? (
-            <Pressable
-              testID="reflection-daily-confirm"
-              onPress={onConfirm}
-              className="h-[52px] w-full items-center justify-center rounded-button bg-primary"
-            >
-              <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                확인
-              </Text>
-            </Pressable>
-          ) : (
-            <Pressable
-              testID="reflection-daily-edit"
-              onPress={handleEnterEdit}
-              className="h-[52px] w-full items-center justify-center rounded-button bg-primary"
-            >
-              <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                직접 회고 작성
-              </Text>
-            </Pressable>
-          )}
-        </View>
+      {/* 하단 — 탭바(기록 활성)는 전 얼굴 공통 오버레이. 비-default 얼굴은 그 위에 CTA 를 함께 얹는다
+          (data-insufficient: "확인" · empty/error: "직접 회고 작성"=편집 진입). CTA 는 탭바 높이(96)만큼
+          아래 여백을 둬 탭바 위에 앉는다(세로 순서 자체는 6-b 육안). 편집 중엔 모두 숨김. */}
+      {editing ? null : (
+        <>
+          {face !== 'default' ? (
+            <View className="w-full bg-canvas px-lg pb-[104px] pt-[8px]">
+              {isDataFace ? (
+                <Pressable
+                  testID="reflection-daily-confirm"
+                  onPress={onConfirm}
+                  className="h-[52px] w-full items-center justify-center rounded-button bg-primary"
+                >
+                  <Text className="font-noto-bold text-card-title font-bold text-on-primary">
+                    확인
+                  </Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  testID="reflection-daily-compose"
+                  onPress={handleEnterEdit}
+                  className="h-[52px] w-full items-center justify-center rounded-button bg-primary"
+                >
+                  <Text className="font-noto-bold text-card-title font-bold text-on-primary">
+                    직접 회고 작성
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          ) : null}
+          <BottomTabBar
+            activeKey="records"
+            onPressTab={onPressTab ?? (() => {})}
+          />
+        </>
       )}
     </SafeAreaView>
   );
