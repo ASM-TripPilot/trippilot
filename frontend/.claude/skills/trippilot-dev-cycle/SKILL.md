@@ -46,7 +46,7 @@ description: "TripPilot frontend(React Native/Expo) 코드를 변경하는 모�
   - 예외: SKILL.md가 **자기 스킬의** `reference/x.md`를 가리킬 때는 스킬 루트 기준 상대경로가 맞다(Claude Code가 스킬 디렉토리 기준으로 해석한다).
 - **리포 루트**는 `git rev-parse --show-toplevel`로 확정한다 (예: `~/Desktop/dev/trippilot`).
 - 사이클 작업 공간: `<리포 루트>/_workspace/{cycle-id}/` — **항상 리포 루트 기준**. cwd 기준 상대경로 금지.
-- 서브 에이전트 프롬프트에는 작업 공간과 산출물 경로를 **절대 경로로** 전달한다 — 서브 에이전트의 cwd(frontend)에서 상대경로를 해석하면 생산자와 소비자가 서로 다른 디렉토리를 보게 된다. **⚠️ 산출 경로를 "같은 폴더"·"위 폴더" 같은 상대 표현으로 주지 마라 — 산출 파일마다 절대 경로를 박는다.** `<리포 루트>/frontend/_workspace/`가 실재해(옛 사이클 산출·git 미추적), 서브에이전트가 "같은 폴더"를 cwd(frontend) 기준으로 풀면 정본 `<리포 루트>/_workspace/`가 아니라 그쪽에 써서 01/02는 루트에, 03은 frontend 밑에 갈라진다(실측 7건·test-designer 5·code-critic 1·implementer 1, 상세는 하네스 변경이력).
+- 서브 에이전트 프롬프트에는 작업 공간과 산출물 경로를 **절대 경로로** 전달한다 — 서브 에이전트의 cwd(frontend)에서 상대경로를 해석하면 생산자와 소비자가 서로 다른 디렉토리를 보게 된다. **⚠️ 산출 경로를 "같은 폴더"·"위 폴더" 같은 상대 표현으로 주지 마라 — 산출 파일마다 절대 경로를 박는다.** `<리포 루트>/frontend/_workspace/`가 실재해(옛 사이클 산출·git 미추적), 서브에이전트가 "같은 폴더"를 cwd(frontend) 기준으로 풀면 정본 `<리포 루트>/_workspace/`가 아니라 그쪽에 써서 01/02는 루트에, 03은 frontend 밑에 갈라진다(실측 8건·test-designer 5·code-critic 1·implementer 2, 상세는 하네스 변경이력).
 
 ## 사이클 체크리스트
 
