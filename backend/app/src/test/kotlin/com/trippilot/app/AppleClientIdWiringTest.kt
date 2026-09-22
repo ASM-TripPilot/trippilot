@@ -71,6 +71,19 @@ class AppleClientIdWiringTest : StringSpec({
         line shouldBe "      APPLE_CLIENT_ID: \${APPLE_CLIENT_ID:-}"
     }
 
+    /**
+     * 통로는 아니지만 **여기가 비면 아무도 값이 필요한 줄 모른다** — `.env.example` 을 복사해 `.env` 를
+     * 만드는 것이 이 리포의 로컬 셋업이다. 실제로 1차 수정에서 이 파일만 빠뜨려, 종전의
+     * "apple 은 …구현 후 추가 예정" 주석이 구현 뒤에도 남아 있었다.
+     */
+    ".env.example 이 APPLE_CLIENT_ID 를 안내한다" {
+        val lines = repoFile(".env.example").readLines()
+
+        lines.any { it.trim() == "APPLE_CLIENT_ID=" } shouldBe true
+        // 구현 전 상태를 가리키는 낡은 안내가 남아 있으면 안 된다.
+        lines.none { it.contains("apple") && it.contains("추가 예정") } shouldBe true
+    }
+
     "Helm 차트가 APPLE_CLIENT_ID 를 시크릿 env 목록에 싣는다" {
         val chart = repoFile("deploy/eks/chart/templates/backend.yaml").readText()
 
