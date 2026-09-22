@@ -97,6 +97,9 @@ services:
       KAKAO_CLIENT_SECRET: ${KAKAO_CLIENT_SECRET:-}
       NAVER_CLIENT_ID: ${NAVER_CLIENT_ID:-}
       NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET:-}
+      # Apple 은 시크릿이 없다 — id_token 서명을 JWKS 로 검증할 뿐이라 iOS 번들 ID 하나뿐이다(TRIP-858).
+      # 이 값이 없으면 애플 로그인은 401 이 아니라 501(미지원)로 나간다.
+      APPLE_CLIENT_ID: ${APPLE_CLIENT_ID:-}
       # 지역 지오코딩 경계(국내강제). 기본 스텁은 시드 8개만 국내로 안다 —
       # 실 지역명으로 여행을 만들려면 kakao 로 켠다(키는 위 KAKAO_CLIENT_ID 를 그대로 쓴다).
       TRIPPILOT_PLACE_GEOCODE_MODE: ${PLACE_GEOCODE_MODE:-stub}

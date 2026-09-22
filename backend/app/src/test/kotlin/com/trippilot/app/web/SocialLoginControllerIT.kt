@@ -71,6 +71,29 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
         body["refreshToken"].asText().shouldNotBeBlank()
     }
 
+    /**
+     * TRIP-858 — apple 이 토큰 경로의 계약 enum 에 들어왔다(종전 `[kakao, naver, google]`).
+     *
+     * **이 테스트가 재는 범위는 좁다.** `FakeProviderConfig` 가 `SocialAuthPort` 를 통째로 갈아끼우므로
+     * `AppleOAuthClient` 는 생성도 호출도 되지 않고, `Provider.APPLE` 은 이번 변경 이전부터 있었다 —
+     * 즉 **변경 이전 커밋에서도 초록이다**(적대적 리뷰 지적). 남는 값은 "provider=apple 이 컨트롤러·
+     * 유스케이스·영속을 지나 APPLE 계정으로 떨어진다"는 회귀 심판뿐이다.
+     *
+     * 서명·aud·iss·exp 검증은 `AppleOAuthClientTest`, 설정 통로는 `AppleClientIdWiringTest` 가 각각 잰다.
+     */
+    @Test
+    fun `애플 identityToken 로그인은 200 + APPLE 계정을 만든다`() {
+        val (status, body) = post(
+            "/api/v1/auth/social/apple/token",
+            """{"accessToken":"apple-identity-token","ageConfirmation":{"method":"SELF_DECLARED"}}""",
+        )
+
+        status shouldBe 200
+        body["isNewUser"].asBoolean() shouldBe true
+        body["accessToken"].asText().shouldNotBeBlank()
+        body["account"]["socialProviders"].map { it.asText() } shouldBe listOf("APPLE")
+    }
+
     @Test
     fun `신규 가입인데 연령확인 누락이면 400 VALIDATION_ERROR`() {
         val (status, body) = post(
