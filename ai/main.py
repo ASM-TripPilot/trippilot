@@ -30,7 +30,9 @@ env 스위치 (TRIP-344):
 (docker-compose 헬스체크 의존).
 """
 
+import logging
 import os
+import sys
 from collections.abc import Mapping
 
 from fastapi import FastAPI
@@ -49,6 +51,54 @@ def _env(name: str) -> str | None:
     (TRIP-882 계열) — `.env` 에 `X= ` 처럼 꼬리 공백이 남는 건 흔하다.
     """
     return (os.environ.get(name) or "").strip() or None
+
+
+# 우리 로거에 다는 핸들러 이름 — 멱등 판정용(같은 이름이 있으면 다시 안 단다).
+_LOG_HANDLER_NAME = "trippilot"
+# `WARN` 은 logging 의 정식 별칭이라 운영자가 흔히 친다 — 받아 주되 정식 이름으로 접는다.
+_LOG_LEVELS = ("CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG")
+_LOG_ALIASES = {"WARN": "WARNING", "FATAL": "CRITICAL"}
+
+
+def configure_logging() -> None:
+    """`trippilot.*` 로그가 실제로 나오게 한다 (TRIP-914).
+
+    uvicorn 기본 설정은 `uvicorn*` 로거만 구성하고 루트엔 핸들러를 달지 않는다. 그래서
+    우리 로거는 **INFO 가 통째로 버려지고** WARNING 만 `logging.lastResort` 로 (레벨·
+    시각·로거 이름 없이) 새어 나갔다 — 프리필터 절단 관측(TRIP-908)의 분모, 요청 로그
+    (`api/middleware.py`)가 그렇게 안 보였다.
+
+    - 레벨은 `TRIPPILOT_LOG_LEVEL`(기본 INFO). 미지원 값은 **기동 실패**다 —
+      조용한 기본값은 "설정했다고 믿는데 안 나오는" 상태를 만든다(`TRIPPILOT_LLM_PROVIDER`
+      와 같은 규칙).
+    - 핸들러는 `trippilot` 로거에만 단다. 루트에 달면 의존 라이브러리 로그까지 우리
+      포맷으로 바꾼다.
+    - **전파는 끊지 않는다.** 끊으면 루트로 안 올라가 `caplog`(핸들러를 루트에 다는
+      pytest 기구)가 우리 로그를 못 잡고, import 순서에 따라 남의 테스트가 깨진다.
+      운영에선 루트에 핸들러가 없어 중복 출력도 없다(`lastResort` 는 **핸들러를 하나도
+      못 찾았을 때만** 쓰인다).
+    - 멱등하다 — 재호출은 레벨만 갱신한다(기동 경로가 둘이고, 테스트가 여러 번 부른다).
+    """
+    raw = _env("TRIPPILOT_LOG_LEVEL") or "INFO"
+    level = _LOG_ALIASES.get(raw.upper(), raw.upper())
+    if level not in _LOG_LEVELS:
+        # 원문 그대로 찍는다 — 대문자로 접어 찍으면 운영자가 자기가 넣은 값을 못 찾는다.
+        raise RuntimeError(
+            f"TRIPPILOT_LOG_LEVEL 미지원 값: {raw!r} — {'|'.join(_LOG_LEVELS)} 중 하나"
+        )
+    logger = logging.getLogger("trippilot")
+    logger.setLevel(level)
+    for existing in logger.handlers:
+        if getattr(existing, "name", None) == _LOG_HANDLER_NAME:
+            existing.setLevel(level)
+            return
+    handler = logging.StreamHandler(sys.stdout)
+    handler.name = _LOG_HANDLER_NAME
+    handler.setLevel(level)
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
+    )
+    logger.addHandler(handler)
 
 
 def _openai_llm_and_model() -> tuple[object, str]:
@@ -366,6 +416,7 @@ def _local_route(feature_models: Mapping[LlmFeature, str]) -> dict[str, object]:
 
 def build_app_from_env() -> FastAPI:
     """env → 앱 조립 스위치. 미설정 경로는 기존과 동일(회귀 없음)."""
+    configure_logging()  # 조립 로그부터 보이게 — 실패해도 기동 전에 드러난다 (TRIP-914)
     if os.environ.get("TRIPPILOT_WIRING") == "unwired":
         return create_app()
     weather = _kma_weather()
