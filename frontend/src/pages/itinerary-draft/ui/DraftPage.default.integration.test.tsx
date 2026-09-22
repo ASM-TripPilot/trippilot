@@ -31,8 +31,8 @@ import { DraftPage } from './DraftPage';
  *  - 🔴 셸 얼굴이 뜬다 — 전면 지도(`map-root`) + 좌상단 day-chip 오버레이(`sheet-daychip-*`) +
  *    시트 헤더(`sheet-header-*`) + 슬롯 카드(`slot-stopcard-*`) + 하단 CTA 바(`sheet-cta-root`).
  *    옛 DraftScreen 앱바(`itinerary-draft-back`·`-retry`·`-complete`·일차 탭)는 사라진다(AC-1).
- *  - 🟢 **narrow 가 INV-4 배너를 지킨다** — staleFailed·fallback 응답은 **셸이 아니라 DraftScreen**
- *    으로 가 배너를 유지한다(AC-1b · INV-4 회귀 가드 — broad 로 회귀하면 셸이 배너를 삼켜 red).
+ *  - 🟢 **narrow 가 INV-4 를 지킨다** — staleFailed 응답은 셸이 아니라 DraftScreen(staleFailed 배너)으로,
+ *    fallback 응답은 전용 인터스티셜로 간다(AC-1b · INV-4 · TRIP-791 — broad 로 회귀하면 셸이 삼켜 red).
  *  - 🔴 확정하기 → h14(index 라우트) push 완전일치 / 다시 짜기 → 재생성 POST 1건(AC-2).
  *  - 🔴 전 슬롯 시각 칩(isFixed 무관, en-dash) · 제거요소 부재 · 헤더 "N곳 · X.Xkm" · INV-3 0 ·
  *    다른 후보 ›는 비고정만(AC-3~7).
@@ -269,9 +269,11 @@ describe('🔴 A1 · AC-1 — 깨끗한 COMPLETE 면 h08 셸 얼굴이 뜬다 (D
   });
 });
 
-describe('A1b · AC-1b — narrow 가 INV-4 배너를 지킨다 (staleFailed·fallback → DraftScreen · 선제 green)', () => {
-  it('staleFailed(FAILED+슬롯) 응답은 셸이 아니라 DraftScreen(staleFailed 배너)로 간다', async () => {
+describe('A1b · AC-1b — narrow 가 INV-4 를 지킨다 (staleFailed → DraftScreen · fallback → 인터스티셜)', () => {
+  it('staleFailed(FAILED+슬롯) 응답은 셸이 아니라 DraftScreen(staleFailed 배너)로 간다 (선제 green)', async () => {
     // 준비 — FAILED+day1 슬롯 → resolveDraftView: listed + staleFailed. narrow 는 이걸 셸에서 뺀다.
+    // TRIP-791 무영향: FAILED 는 fallbackNotice=null(isFallback=false)이라 인터스티셜로 안 가고
+    // 목록 곁 staleFailed 배너를 유지한다(stale-failed 배너는 폴백 배너와 별개, 삭제 대상 아님).
     itineraryHandler = () =>
       HttpResponse.json(itinerary({ dayCount: 1, generationState: 'FAILED' }));
 
@@ -285,7 +287,9 @@ describe('A1b · AC-1b — narrow 가 INV-4 배너를 지킨다 (staleFailed·fa
     expect(screen.queryByTestId('map-sheet-shell-root')).toBeNull();
   });
 
-  it('fallback(DETERMINISTIC+isFallback) 응답은 셸이 아니라 DraftScreen(폴백 배너)로 간다', async () => {
+  it('🔴 fallback(DETERMINISTIC+isFallback) 응답은 셸도 DraftScreen 도 아닌 인터스티셜로 간다 (TRIP-791)', async () => {
+    // TRIP-791 플립 — 폴백 신호(non-null fallbackNotice)는 곁줄 배너가 아니라 전용 인터스티셜
+    // (GenerationFallbackScreen)로 라우팅된다(01b D1). 셸도 아니다(narrow 조건이 fallback 을 셸에서 뺌).
     itineraryHandler = () =>
       HttpResponse.json(
         itinerary({
@@ -299,9 +303,11 @@ describe('A1b · AC-1b — narrow 가 INV-4 배너를 지킨다 (staleFailed·fa
     renderPage();
 
     expect(
-      await screen.findByTestId('itinerary-draft-fallback-banner')
+      await screen.findByTestId('itinerary-fallback-root')
     ).toBeOnTheScreen();
+    // 기존 두 얼굴로 새지 않는다 — 셸도, 곁줄 폴백 배너(이제 소멸)도 아니다.
     expect(screen.queryByTestId('map-sheet-shell-root')).toBeNull();
+    expect(screen.queryByTestId('itinerary-draft-fallback-banner')).toBeNull();
   });
 });
 

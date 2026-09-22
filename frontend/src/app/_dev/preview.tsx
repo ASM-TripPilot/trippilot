@@ -62,29 +62,25 @@ import {
 import { HomeScreen } from '@/features/home/ui/HomeScreen';
 import { MAGAZINE_DEFAULT_PROPS } from '@/features/home/model/magazineFixtures';
 import { MagazineScreen } from '@/features/home/ui/MagazineScreen';
-import {
-  buildDraftPins,
-  formatDraftDayHeader,
-} from '@/features/itinerary/model/draftView';
+import { buildDraftPins } from '@/features/itinerary/model/draftView';
 import { type PlanDayTab } from '@/features/itinerary/model/planState';
 import type { MustVisitListItem } from '@/features/itinerary/model/mustVisitList';
 import {
   startTimeOptions,
   tripDayChips,
 } from '@/features/itinerary/model/mustVisitTimeForm';
-import {
-  DraftScreen,
-  type DraftScreenProps,
-} from '@/features/itinerary/ui/DraftScreen';
+import { ConceptPickerScreen } from '@/features/itinerary/ui/ConceptPickerScreen';
+import { GenerationFallbackScreen } from '@/features/itinerary/ui/GenerationFallbackScreen';
 import { GeneratingScreen } from '@/features/itinerary/ui/GeneratingScreen';
 import { MustVisitPickerScreen } from '@/features/itinerary/ui/MustVisitPickerScreen';
 import { MustVisitTimeScreen } from '@/features/itinerary/ui/MustVisitTimeScreen';
-import { OptionSwapScreen } from '@/features/itinerary/ui/OptionSwapScreen';
 import {
   PlaceAddHeader,
   PlaceAddRow,
 } from '@/features/itinerary/ui/PlaceAddScreen';
-import { SlotCandidatePanel } from '@/features/itinerary/ui/SlotCandidatePanel';
+import { SlotCandidateSheet as ItinerarySlotCandidateSheet } from '@/features/itinerary/ui/SlotCandidateSheet';
+import { SlotFillScreen } from '@/features/itinerary/ui/SlotFillScreen';
+import { CoPickStepper } from '@/widgets/copick-stepper/ui/CoPickStepper';
 import { GenerationDoneBar } from '@/widgets/generation-done-bar/ui/GenerationDoneBar';
 import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
 import { GenerationProgressCard } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
@@ -99,7 +95,6 @@ import {
   type MyTripCardVM,
 } from '@/features/itinerary/ui/MyTripCard';
 import { MyTripsListScreen } from '@/features/itinerary/ui/MyTripsListScreen';
-import { ZeroCandidateScreen } from '@/features/itinerary/ui/ZeroCandidateScreen';
 import {
   NotificationInboxScreen,
   type NotificationSection,
@@ -455,7 +450,6 @@ const MUST_VISIT_PREVIEW_PINS: MapPin[] = [
  * 관광지인 성산일출봉 둘레(0.9~2.0km)로 모았다 — **카페·숙소 이름과 실제 위치는 맞지 않는다**
  * (이 픽스처의 이름은 원래 가상이고, 여기서 재는 것은 축척과 배치다).
  */
-const DRAFT_PREVIEW_DATE = '2026-06-10';
 
 /**
  * 프리뷰 카드 썸네일 3장. 파일 출처·라이선스는 `src/assets/itinerary/CREDITS.md`.
@@ -537,28 +531,11 @@ const DRAFT_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
   },
 ];
 
-const DRAFT_PREVIEW_DAYS: ItineraryDaysItem[] = [
-  { date: DRAFT_PREVIEW_DATE, slots: DRAFT_PREVIEW_SLOTS },
-];
-
-const DRAFT_PREVIEW_BASE: DraftScreenProps = {
-  view: { kind: 'listed', days: DRAFT_PREVIEW_DAYS, staleFailed: false },
-  // 여행은 3일인데 첫날만 도착한 상태(2단계 생성 중) — 2·3일차 탭이 비활성으로 보인다.
-  tabs: [
-    { date: DRAFT_PREVIEW_DATE, dayNumber: 1, hasData: true },
-    { date: '2026-06-11', dayNumber: 2, hasData: false },
-    { date: '2026-06-12', dayNumber: 3, hasData: false },
-  ],
-  selectedDate: DRAFT_PREVIEW_DATE,
-  // 배선이 쓰는 판정 함수를 그대로 부른다 — 손으로 적으면 프리뷰와 실기가 갈린다.
-  pins: buildDraftPins(DRAFT_PREVIEW_SLOTS),
-  dayHeader: formatDraftDayHeader(DRAFT_PREVIEW_DATE),
-  canRetry: true,
-  onSelectDay: noop,
-  onRetry: noop,
-  onBack: noop,
-  onComplete: noop,
-};
+// TRIP-792 로 h11 DraftScreen 초안 프리뷰 5키가 셸(h08)로 옮겨가고, TRIP-791 로 폴백 배너 3키가
+// 전용 인터스티셜(GenerationFallbackScreen)로 승격되며 `DRAFT_PREVIEW_DAYS`·`DRAFT_PREVIEW_BASE`
+// 는 소비처를 잃어 삭제됐다. `DRAFT_PREVIEW_SLOTS`(위)는 그대로 산다 — 폴백 인터스티셜 프리뷰가
+// `buildDraftPins(DRAFT_PREVIEW_SLOTS)` 로 지도 핀을 얻고, 지도 census 픽스처 가드(S4·S5·S6)가
+// 이 상수의 사진·좌표를 계속 검사한다.
 
 /**
  * TRIP-783 · h08 지도+시트 셸 접힘 프리뷰(Figma `4221:2448`) — 광안리 해변·황령산 전망대·
@@ -720,6 +697,72 @@ const H11_COPICK_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
 ];
 
 const H11_COPICK_PREVIEW_DATE = '2026-06-10';
+
+// h10 후보 선택(TRIP-795) 프리뷰 픽스처 — candidates 계약엔 이름·태그·좌표·톤다운이 없어(BE 후속)
+// 전부 Figma 값으로 채운 프롭 전용이다(부산시립미술관·F1963·부산현대미술관·감천문화마을). default 는
+// D 를 반경 밖 톤다운(dimmed), wide 는 D 활성(dimmed 없음)으로 갈린다.
+const H10_RADIUS_STEPS = [
+  { key: 'near', label: '700m' },
+  { key: 'mid', label: '1.1km' },
+  { key: 'max', label: '최대' },
+] as const;
+const H10_CENTER = { lat: 35.1587, lng: 129.1604 };
+const H10_DEFAULT_CANDIDATES: SlotCandidatesCandidatesItem[] = [
+  { poiId: 'A1', distanceRange: '420m', rationale: '가장 가까운 실내 전시' },
+  { poiId: 'B2', distanceRange: '770m', rationale: '전시+카페 한 번에' },
+  {
+    poiId: 'C3',
+    distanceRange: '약 1.0km',
+    rationale: '취향은 맞지만 조금 멀어요',
+  },
+  {
+    poiId: 'D4',
+    distanceRange: '약 9.9km',
+    rationale: '반경 밖 (넓히면 선택 가능)',
+  },
+];
+const H10_DEFAULT_VIEWS: Record<
+  string,
+  { nameKo?: string | null; tags?: string[]; dimmed?: boolean }
+> = {
+  A1: { nameKo: '부산시립미술관', tags: ['미술', '실내', '취향매칭'] },
+  B2: { nameKo: 'F1963 복합문화공간', tags: ['갤러리', '카페'] },
+  C3: { nameKo: '부산현대미술관', tags: ['미술', '자연'] },
+  D4: { nameKo: '감천문화마을', tags: ['전시', '포토'], dimmed: true },
+};
+const H10_WIDE_CANDIDATES: SlotCandidatesCandidatesItem[] = [
+  { poiId: 'A1', distanceRange: '420m', rationale: '가장 가까운 실내 전시' },
+  { poiId: 'B2', distanceRange: '770m', rationale: '전시+카페 한 번에' },
+  {
+    poiId: 'C3',
+    distanceRange: '약 9km',
+    rationale: '반경 경계 · 조금 멀어요',
+  },
+  { poiId: 'D4', distanceRange: '약 9.9km', rationale: '넓힌 반경에 들어옴' },
+];
+const H10_WIDE_VIEWS: Record<
+  string,
+  { nameKo?: string | null; tags?: string[]; dimmed?: boolean }
+> = {
+  A1: { nameKo: '부산시립미술관', tags: ['미술', '실내', '취향매칭'] },
+  B2: { nameKo: 'F1963 복합문화공간', tags: ['갤러리', '카페'] },
+  C3: { nameKo: '부산현대미술관', tags: ['미술', '자연'] },
+  D4: { nameKo: '감천문화마을', tags: ['전시', '포토'] },
+};
+const H10_STEPPER: ReactElement = (
+  <CoPickStepper
+    prev={{ title: '황령산 전망대', status: '고름', done: true }}
+    current={{ title: '오후 · 전시', status: '지금 고르는 중' }}
+    next={{ title: '오후 · 카페', status: '비어 있음' }}
+  />
+);
+const H10_PROGRESS = {
+  dayLabel: '1일차 / 4 · 6월 10일(수)',
+  slotCurrent: 3,
+  slotTotal: 4,
+  barFilled: 1,
+  barTotal: 4,
+};
 
 // h14 완성 일정(PLANNED, TRIP-799) 지도+시트 셸 프리뷰 — 페이지(ItineraryPlanPage)는 react-query·
 // 라우터가 필요해 프리뷰에서 직접 못 쓰므로, 페이지의 셸 조립을 축소해 4얼굴(default·거리계산중·지도
@@ -3896,61 +3939,9 @@ export const PREVIEW_STATES: PreviewState[] = [
       </MapSheetShell>
     ),
   },
-  // TRIP-304 폴백·강등 배너 3종 — 심각도 삼분(MINIMAL > LOW > DETERMINISTIC). 실화면 딥링크로는
-  // 아직 못 본다(서버가 solveMode/isFallback/요약 신호를 안 준다). 목록은 그대로고 배너 한 줄만
-  // 곁에 붙으며, MINIMAL 만 배너 안에 [다시 시도]를 갖는다.
-  {
-    key: 'itinerary-draft-fallback-deterministic',
-    band: 'h',
-    label: 'h11 · 폴백 기본 모드',
-    login: null,
-    render: () => (
-      <DraftScreen
-        {...DRAFT_PREVIEW_BASE}
-        fallbackNotice={{ kind: 'deterministic' }}
-      />
-    ),
-  },
-  {
-    key: 'itinerary-draft-fallback-minimal',
-    band: 'h',
-    label: 'h11 · 폴백 최소 일정',
-    login: null,
-    render: () => (
-      <DraftScreen
-        {...DRAFT_PREVIEW_BASE}
-        fallbackNotice={{ kind: 'minimal' }}
-      />
-    ),
-  },
-  {
-    key: 'itinerary-draft-fallback-demoted',
-    band: 'h',
-    label: 'h11 · 후보 강등',
-    login: null,
-    render: () => (
-      <DraftScreen
-        {...DRAFT_PREVIEW_BASE}
-        fallbackNotice={{ kind: 'demoted' }}
-      />
-    ),
-  },
-  // h35 후보 0건(TRIP-298) — Figma `1906:1083` 대조용. 실화면 딥링크로는 이 얼굴을 볼 수
-  // 없다: 서버가 `candidatesSummary` 를 아직 안 준다(TRIP-306 미착수). 칩 문구는 Figma 목업
-  // 값 그대로이고, 실기에서는 **서버가 준 문자열이 그대로** 들어온다(01b D8).
-  {
-    key: 'itinerary-draft-zero',
-    band: 'h',
-    label: 'h35 · 후보 0건',
-    login: null,
-    render: () => (
-      <ZeroCandidateScreen
-        shortfallCategories={['1일 예산 5만원', '700m 이내', '비건·24시간']}
-        onBack={noop}
-        onReduceMustVisits={noop}
-      />
-    ),
-  },
+  // TRIP-791: 폴백 배너 3키(deterministic·minimal·demoted)와 h35 후보 0건 키(itinerary-draft-zero)는
+  // 전용 인터스티셜(GenerationFallbackScreen)로 승격·흡수돼 삭제됐다. 그 얼굴은 아래
+  // h07-generating-loading 직후 h07-generating-fallback 2키가 대신 낸다(band h 소비처 이동).
   // h01 시작 방법(TRIP-303 → TRIP-784) — props 만 받는 프레젠테이션이라 배선 없이 얼굴이 그대로
   // 나온다. 세 방식 콜백이 필수라(TRIP-784 soon 폴백 소멸) 프리뷰도 세 콜백을 다 넘긴다. 생성
   // 선행조건(거점 커버리지·겹침) 게이트는 h01 에 없다 — 그 판단은 여행 생성 2/2(g02)가 소유한다.
@@ -3982,6 +3973,45 @@ export const PREVIEW_STATES: PreviewState[] = [
         onRetry={noop}
         pins={MUST_VISIT_PREVIEW_PINS}
         center={{ lat: 35.1532, lng: 129.1188 }}
+      />
+    ),
+  },
+  // h07 폴백 인터스티셜(TRIP-791) — Figma `3831:2177` 대조용. 성공(폴백) 변형: 지도 카드(기본
+  // 동선)+메시지 카드+체크리스트 4행(3행만 대시·회색)+안내바+CTA 2개. props-only 순수 화면이라
+  // 픽스처+noop 콜백 한 벌로 충분. 초록 체크·회색 대시의 **색**은 jest 사각(글리프 raw-hex 제외)
+  // 이라 이 키가 유일한 육안 그물. 배열에서 h07-generating-loading 직후에 둬 안정 정렬이
+  // loading→fallback→fallback-failed 순서를 내게 한다(devPreviewBandSort EXPECTED_H). 지도 핀은
+  // 배선(DraftPage)과 같은 `buildDraftPins` 로 얻는다 — 손으로 적으면 프리뷰와 실기가 갈린다.
+  {
+    key: 'h07-generating-fallback',
+    band: 'h',
+    label: 'h07 · 폴백 인터스티셜',
+    login: null,
+    render: () => (
+      <GenerationFallbackScreen
+        mustVisitCount={3}
+        pins={buildDraftPins(DRAFT_PREVIEW_SLOTS)}
+        onViewPlan={noop}
+        onManualPlan={noop}
+        onRetry={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  // h07 폴백 하드실패(TRIP-791) — 생성 자체 실패 변형(히어로만: "일정을 만들지 못했어요" + 다시
+  // 시도/직접 짜기). 성공/실패는 상호배타라 같은 화면의 데이터 분기(failed=true)다.
+  {
+    key: 'h07-generating-fallback-failed',
+    band: 'h',
+    label: 'h07 · 폴백 하드실패',
+    login: null,
+    render: () => (
+      <GenerationFallbackScreen
+        failed
+        onViewPlan={noop}
+        onManualPlan={noop}
+        onRetry={noop}
+        onBack={noop}
       />
     ),
   },
@@ -4321,105 +4351,196 @@ export const PREVIEW_STATES: PreviewState[] = [
       </MapSheetShell>
     ),
   },
-  // h12 슬롯 교체(TRIP-335→483) — 바텀시트를 슬롯 카드 아래 **인라인 확장 패널**로 이관했다. candidates
-  // 는 아직 이름·사진 미확보(BE 후속)라 카드가 "이름 준비 중" 플레이스홀더 + 회색 사진 자리로 뜬다.
+  // h08 다른 후보 시트(TRIP-793) — 옛 h12 인라인 패널·h18 옵션 교체를 하나의 바텀시트로 합쳤다.
+  // candidates 응답엔 이름·태그가 아직 없어(BE 후속) 픽스처(Figma 4298:1998·4452:1478 값)로만 그린다.
   // 실화면 딥링크로는 볼 수 없다(생성 POST 가 만드는 tripId + slot-candidates 응답이 백엔드 없이는
-  // 안 생긴다). 인라인 패널이라 오버레이 없이 스크롤 흐름 안에서 그리고, 헤더에 시간대(오후)를 얹는다.
+  // 안 생긴다). 바텀시트 실 열림·scrim 딤·2스냅은 통과형 목 사각이라 6-b 실기가 유일한 개폐 그물.
   {
-    key: 'slot-candidate-panel',
+    key: 'h08-candidate-sheet',
     band: 'h',
-    label: 'h12 · 다른 후보 인라인 패널',
+    label: 'h08 · 다른 후보 시트',
     login: null,
     render: () => (
-      <ScrollView contentContainerClassName="gap-md p-lg">
-        <SlotCandidatePanel
-          candidates={SLOT_CANDIDATES_PREVIEW}
-          currentPoiId="poi-current"
-          currentName="부산시립미술관"
-          timeBand="오후"
-          isPending={false}
-          onSelectCandidate={noop}
-          onClose={noop}
-        />
-      </ScrollView>
+      <ItinerarySlotCandidateSheet
+        current={{
+          poiId: 'cur',
+          nameKo: '부산시립미술관',
+          tags: ['미술', '실내'],
+          distanceRange: '560m',
+        }}
+        candidates={[
+          {
+            poiId: 'p2',
+            nameKo: 'F1963 복합문화공간',
+            tags: ['카페', '갤러리'],
+            distanceRange: '1.1km',
+          },
+          {
+            poiId: 'p3',
+            nameKo: '부산근대역사관',
+            tags: ['지역', '무료'],
+            distanceRange: '1.8km',
+          },
+        ]}
+        startAt="13:00:00"
+        endAt="14:30:00"
+        category="전시"
+        selectedPoiId="p2"
+        onSelectRadio={noop}
+        onConfirm={noop}
+        isPending={false}
+        onPressPlaceSearch={noop}
+        onClose={noop}
+      />
     ),
   },
   {
-    key: 'slot-candidate-panel-pending',
+    key: 'h08-candidate-sheet-empty',
     band: 'h',
-    label: 'h12 · 다른 후보 교체 중',
+    label: 'h08 · 다른 후보 0건',
     login: null,
     render: () => (
-      <ScrollView contentContainerClassName="gap-md p-lg">
-        <SlotCandidatePanel
-          candidates={SLOT_CANDIDATES_PREVIEW}
-          currentPoiId="poi-current"
-          currentName="부산시립미술관"
-          timeBand="오후"
-          isPending
-          onSelectCandidate={noop}
-          onClose={noop}
-        />
-      </ScrollView>
+      <ItinerarySlotCandidateSheet
+        current={{
+          poiId: 'cur',
+          nameKo: '부산시립미술관',
+          tags: ['미술', '실내'],
+          distanceRange: '560m',
+        }}
+        candidates={[]}
+        startAt="13:00:00"
+        endAt="14:30:00"
+        category="전시"
+        selectedPoiId={null}
+        onSelectRadio={noop}
+        onConfirm={noop}
+        isPending={false}
+        onPressPlaceSearch={noop}
+        onClose={noop}
+      />
+    ),
+  },
+  // h09 컨셉 고르기(TRIP-794) — 같이 고르기(co-pick) 위저드의 컨셉 선택 화면(Figma 3845:2227). 진행 줄·
+  // CoPickStepper 위젯 노드·컨셉 카드 5장을 픽스처 props 로 태운다(순수 화면 · api import 0 이라 프리뷰
+  // 지뢰 목 무해). 배지·N곳은 BE 계약 부재라 미표시(D5). 첫 카드 primary 테두리·현재 단 빨강·색은 jest
+  // 사각이라 이 키가 유일한 육안 그물(자율 세션 6-b SKIP, 다음 세션 확인 대상).
+  {
+    key: 'h09-copick-concept',
+    band: 'h',
+    label: 'h09 · 컨셉 고르기',
+    login: null,
+    render: () => (
+      <ConceptPickerScreen
+        concepts={[
+          { key: 'meal', label: '식사' },
+          { key: 'cafe', label: '카페·디저트' },
+          { key: 'culture', label: '전시·문화' },
+          { key: 'outdoor', label: '야외·산책' },
+          { key: 'shopping', label: '쇼핑' },
+        ]}
+        progress={{
+          dayLabel: '1일차 / 4 · 6월 10일(수)',
+          slotCurrent: 3,
+          slotTotal: 4,
+          barFilled: 1,
+          barTotal: 4,
+        }}
+        stepperSlot={
+          <CoPickStepper
+            prev={{ title: '황령산 전망대', status: '고름', done: true }}
+            current={{ title: '오후 · 전시', status: '지금 고르는 중' }}
+            next={{ title: '오후 · 카페', status: '비어 있음' }}
+          />
+        }
+        onPickConcept={noop}
+        onSkip={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  // h10 후보 선택(TRIP-795) — 같이 고르기 위저드의 후보 화면(Figma 3849 default·3850 반경 넓힘). 순수
+  // 뷰 SlotFillScreen 을 진행줄·스텝퍼·지도·후보 카드 픽스처 props 로 태운다(api import 0 이라 프리뷰
+  // 지뢰 목 무해). 반경 점선 원·축척·letter 핀 래스터·톤다운 배지 회색·색은 jest 사각이라 이 2키가
+  // 유일한 육안 그물(자율 세션 6-b SKIP). 지도는 네이버 네이티브라 사람 재빌드 전엔 미표시.
+  {
+    key: 'h10-copick-candidates',
+    band: 'h',
+    label: 'h10 · 후보 선택',
+    login: null,
+    render: () => (
+      <SlotFillScreen
+        concept="전시"
+        progress={H10_PROGRESS}
+        stepperSlot={H10_STEPPER}
+        mapView={{
+          center: H10_CENTER,
+          radiusCircle: { center: H10_CENTER, radiusM: 1100 },
+          pins: [
+            { number: 1, lat: 35.1601, lng: 129.163, label: 'A' },
+            { number: 2, lat: 35.1571, lng: 129.1568, label: 'B' },
+            { number: 3, lat: 35.1622, lng: 129.1604, label: 'C' },
+          ],
+          currentLocation: H10_CENTER,
+        }}
+        candidates={H10_DEFAULT_CANDIDATES}
+        candidateViews={H10_DEFAULT_VIEWS}
+        radiusSteps={H10_RADIUS_STEPS}
+        selectedRadiusKey="mid"
+        radiusUsedLabel="약 11.3km"
+        candidateCountLabel="후보 4곳"
+        selectedPoiId="A1"
+        canExpandRadius
+        isPending={false}
+        errorMessage={null}
+        onSelectRadius={noop}
+        onSelectRadio={noop}
+        onConfirm={noop}
+        onExpandRadius={noop}
+        onShrinkRadius={noop}
+        onChangeConcept={noop}
+        onBack={noop}
+      />
     ),
   },
   {
-    key: 'slot-candidate-panel-degraded',
+    key: 'h10-copick-candidates-wide',
     band: 'h',
-    label: 'h12 · 다른 후보 강등 고지',
+    label: 'h10 · 후보 선택 반경 넓힘',
     login: null,
     render: () => (
-      <ScrollView contentContainerClassName="gap-md p-lg">
-        <SlotCandidatePanel
-          candidates={SLOT_CANDIDATES_PREVIEW}
-          currentPoiId="poi-current"
-          currentName="부산시립미술관"
-          timeBand="오후"
-          isPending={false}
-          degraded
-          onSelectCandidate={noop}
-          onClose={noop}
-        />
-      </ScrollView>
-    ),
-  },
-  {
-    key: 'slot-candidate-panel-empty',
-    band: 'h',
-    label: 'h12 · 다른 후보 0건',
-    login: null,
-    render: () => (
-      <ScrollView contentContainerClassName="gap-md p-lg">
-        <SlotCandidatePanel
-          candidates={[]}
-          currentPoiId="poi-current"
-          currentName="부산시립미술관"
-          timeBand="오후"
-          isPending={false}
-          onSelectCandidate={noop}
-          onClose={noop}
-        />
-      </ScrollView>
-    ),
-  },
-  {
-    key: 'slot-candidate-panel-error',
-    band: 'h',
-    label: 'h12 · 다른 후보 실패',
-    login: null,
-    render: () => (
-      <ScrollView contentContainerClassName="gap-md p-lg">
-        <SlotCandidatePanel
-          candidates={SLOT_CANDIDATES_PREVIEW}
-          currentPoiId="poi-current"
-          currentName="부산시립미술관"
-          timeBand="오후"
-          isPending={false}
-          errorMessage="확정된 일정이라 지금은 바꿀 수 없어요"
-          onSelectCandidate={noop}
-          onClose={noop}
-        />
-      </ScrollView>
+      <SlotFillScreen
+        concept="전시"
+        progress={H10_PROGRESS}
+        stepperSlot={H10_STEPPER}
+        mapView={{
+          center: H10_CENTER,
+          radiusCircle: { center: H10_CENTER, radiusM: 11300 },
+          pins: [
+            { number: 1, lat: 35.1601, lng: 129.163, label: 'A' },
+            { number: 2, lat: 35.1571, lng: 129.1568, label: 'B' },
+            { number: 3, lat: 35.1622, lng: 129.1604, label: 'C' },
+            { number: 4, lat: 35.0975, lng: 129.0106, label: 'D' },
+          ],
+          currentLocation: H10_CENTER,
+        }}
+        candidates={H10_WIDE_CANDIDATES}
+        candidateViews={H10_WIDE_VIEWS}
+        radiusSteps={H10_RADIUS_STEPS}
+        selectedRadiusKey="max"
+        radiusUsedLabel="약 11.3km"
+        candidateCountLabel="후보 4곳"
+        selectedPoiId="D4"
+        canExpandRadius={false}
+        isPending={false}
+        errorMessage={null}
+        onSelectRadius={noop}
+        onSelectRadio={noop}
+        onConfirm={noop}
+        onExpandRadius={noop}
+        onShrinkRadius={noop}
+        onChangeConcept={noop}
+        onBack={noop}
+      />
     ),
   },
   // h12 편집기 통일(TRIP-797) — 지도+2스냅 시트 위 슬롯 카드 편집. 순수 뷰 EditorView 를 preview 가
@@ -4486,61 +4607,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         onPressAddBetween={noop}
         onSave={noop}
         isDragging
-      />
-    ),
-  },
-  {
-    key: 'option-swap',
-    band: 'h',
-    label: 'h18 · 옵션 교체 화면',
-    login: null,
-    render: () => (
-      <OptionSwapScreen
-        candidates={SLOT_CANDIDATES_PREVIEW}
-        currentPoiId="poi-current"
-        currentName="부산시립미술관"
-        selectedPoiId={null}
-        onSelectRadio={noop}
-        onConfirm={noop}
-        isPending={false}
-        onBack={noop}
-      />
-    ),
-  },
-  {
-    key: 'option-swap-selected',
-    band: 'h',
-    label: 'h18 · 옵션 교체 선택 후 실패',
-    login: null,
-    render: () => (
-      <OptionSwapScreen
-        candidates={SLOT_CANDIDATES_PREVIEW}
-        currentPoiId="poi-current"
-        currentName="부산시립미술관"
-        selectedPoiId="poi-b"
-        onSelectRadio={noop}
-        onConfirm={noop}
-        isPending={false}
-        errorMessage="잠시 후 다시 시도해 주세요"
-        onBack={noop}
-      />
-    ),
-  },
-  {
-    key: 'option-swap-empty',
-    band: 'h',
-    label: 'h18 · 옵션 교체 0건',
-    login: null,
-    render: () => (
-      <OptionSwapScreen
-        candidates={[]}
-        currentPoiId="poi-current"
-        currentName="부산시립미술관"
-        selectedPoiId={null}
-        onSelectRadio={noop}
-        onConfirm={noop}
-        isPending={false}
-        onBack={noop}
       />
     ),
   },

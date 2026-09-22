@@ -63,3 +63,13 @@ BottomTab 위에 뜨는 "여행 일정이 완성됐어요" 흰 카드. Figma 원
 | `src/widgets/generation-done-bar/ui/GenerationDoneBar.tsx` | `GenerationDoneBarProps = {tripName: string, onPressView: () => void}` — 체크 글리프(`generation-done-bar-check`) + `{tripName} 일정이 완성됐어요`(`generation-done-bar-text`, 완전일치) + `보기` Pressable(`generation-done-bar-view`, press→`onPressView` 1회). border만(#ededed)·**그림자 없음**(Figma 실측 — 티켓 "그림자"는 어긋남, Figma 우선). presentation-only(useState 0, `widgetsStructure` F 규약 그대로 통과). **표시 조건(어떤 여행이 "갓 완성"인가 = last-seen 영속 로직)은 이번 범위 밖** — prop-driven+프리뷰 픽스처(`h05-my-trips-done-bar`)로만 격리, 실배선은 후속 티켓. |
 | `src/widgets/generation-done-bar/ui/GenerationDoneBarGlyphs.tsx` | `DoneCheckGlyph`(체크, success `#0E9384`, 원 없음) — widgets→features import 금지라 `ItineraryGlyphs`의 체크를 못 써 로컬 복제(`ManualEditGlyphs.tsx` 선례와 동형 raw-hex 격리 관례). |
 | 배럴 없음 | `preview.tsx`가 deep import로 직접 소비(가장 최근 widget 슬라이스 2개의 선례를 따름 — 소비처가 늘면 배럴 추가는 trivial, ponytail lite 대안·03 §트레이드오프). |
+
+## `src/widgets/copick-stepper/` — 공용 3단 스텝퍼 (TRIP-794 신규, h09·h10 공유 계약)
+
+h09(같이 고르기 컨셉 화면)·h10(TRIP-795, 미착수) 공유 3단 위저드 스텝퍼. **prop 계약이 h10을 구속한다**(개념 [[공용 위젯 prop 계약]]).
+
+| 파일 | 역할 |
+|---|---|
+| `src/widgets/copick-stepper/ui/CoPickStepper.tsx` | `CoPickStepperProps = {prev?, current, next?}`(각 `CoPickStep = {title, status, iconKey?, done?}`, current만 필수) — 이전·현재·다음 3열, 현재만 `text-primary`. presentation-only(useState 0, `widgetsStructure` F 규약 통과). **`iconKey`는 인터페이스에 있으나 미배선**(모든 슬롯이 상태 무관 `StepperSunGlyph` 고정 — 795가 실제로 쓸 때 채워질 죽은 필드, 03b 참고-1). **INV-3 유일 그물이 이 파일의 렌더 단언(T5)뿐**(위젯 층은 소스 스캔 모집단 밖 — 개념 [[가드의 사정거리]] 실측 17) |
+| `src/widgets/copick-stepper/ui/CoPickStepperGlyphs.tsx` | `StepperSunGlyph`·`StepperCheckBadge` 로컬 복제(widgets→features import 금지, `MapSheetGlyphs`·`ManualEditGlyphs`·`GenerationDoneBarGlyphs` 선례와 동형 — 개념 [[FSD 층 경계]] "글리프 재작도" 절). raw-hex 스캔 제외(`*Glyphs.tsx` 관례) |
+| 배럴 없음 | 소비처(`pages/itinerary-copick/ui/SlotFillPage.tsx`)가 deep import(기존 widget 슬라이스 선례 계승). `features/itinerary/ui/ConceptPickerScreen.tsx`(features→widgets 상향 참조 금지)는 이 위젯을 모른다 — `stepperSlot?: ReactNode` 슬롯으로 완성된 노드만 받는다. |

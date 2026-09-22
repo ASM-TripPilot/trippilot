@@ -6,6 +6,7 @@ import {
   NaverMapView,
   NaverMapMarkerOverlay,
   NaverMapPathOverlay,
+  NaverMapCircleOverlay,
 } from '@mj-studio/react-native-naver-map';
 
 /**
@@ -42,6 +43,9 @@ export interface MapPin {
   lat: number;
   lng: number;
   state?: MapPinState;
+  /** 물방울 안 글자를 번호 대신 letter(예 'A'/'B') 로 그린다(h10 후보 배지와 시각 일치).
+   * **옵셔널 additive** — 미전달이면 번호 그대로라 현행 소비처가 무회귀로 돈다. */
+  label?: string;
 }
 
 export interface MapViewProps {
@@ -68,6 +72,9 @@ export interface MapViewProps {
    * 미전달이면 그 마커를 렌더하지 않는다(항상-렌더 회귀 방지). 핀 index 를 오염시키지 않도록
    * `onPinTap` 을 달지 않는 별도 마커다. */
   currentLocation?: MapCenter;
+  /** 반경 원(TRIP-795, h10). 중심 좌표와 반경 미터를 주면 `NaverMapCircleOverlay` 로 원을 얹는다.
+   * **옵셔널 additive** — 미전달이면 원을 안 그린다(기존 12 소비처 무회귀). 실 점선·축척은 6-b 실기. */
+  radiusCircle?: { center: MapCenter; radiusM: number };
 }
 
 /** 네이버 초기 줌. ponytail: 카카오 기본 level 3 에 대응하는 대략값, 정확 캘리브레이션은 실기(6-b). */
@@ -100,10 +107,15 @@ const DONE_CHECK = 'M9.3 13.8L12.4 16.9L18.4 10.2';
 function PinTeardrop({
   state,
   number,
+  label,
 }: {
   state: MapPinState;
   number: number;
+  /** letter 라벨(h10). 주면 물방울 안 글자를 번호 대신 이 값으로 그린다(done 은 체크라 영향 없음). */
+  label?: string;
 }): ReactElement {
+  // 번호 자리에 그릴 글자 — label 을 주면 letter, 아니면 번호(무회귀).
+  const glyph = label ?? number;
   if (state === 'done') {
     // 체크는 초록 물방울 위에 겹치는 **별도 <Svg>** 로 그린다. testID 를 Svg 호스트(RNSVGSvgView)에
     // 얹어야 stroke 가 원문 '#FFFFFF' 문자열로 남는다 — shape 호스트(RNSVGPath)는 색을 정수로 가공해
@@ -160,7 +172,7 @@ function PinTeardrop({
           fontWeight="bold"
           textAnchor="middle"
         >
-          {number}
+          {glyph}
         </SvgText>
       </Svg>
     );
@@ -183,7 +195,7 @@ function PinTeardrop({
         fontWeight="bold"
         textAnchor="middle"
       >
-        {number}
+        {glyph}
       </SvgText>
     </Svg>
   );
@@ -213,6 +225,7 @@ export function MapView({
   maxLevel,
   onCameraIdle,
   currentLocation,
+  radiusCircle,
 }: MapViewProps): ReactElement {
   // 네이티브 SDK 는 런타임 키를 config plugin 에서 받으므로, 이 env 판정은 "설정 누락 표면"용이다
   // (키가 없으면 회색 빈 지도 대신 안내 화면을 띄운다). 참조는 이 한 곳뿐(A-2 계승).
@@ -280,6 +293,16 @@ export function MapView({
             : undefined
         }
       >
+        {radiusCircle ? (
+          // 반경 원(h10) — 중심·반경만 그린다(점선·색 튜닝은 6-b). outlineColor 는 핀 primary 재사용.
+          <NaverMapCircleOverlay
+            latitude={radiusCircle.center.lat}
+            longitude={radiusCircle.center.lng}
+            radius={radiusCircle.radiusM}
+            outlineColor={PIN_PRIMARY}
+            outlineWidth={1.5}
+          />
+        ) : null}
         {pins?.map((pin, index) => {
           // state 미전달이면 'current'(분홍+번호)로 폴백해 기존 거동을 보존한다(옵셔널 additive).
           const pinState = pin.state ?? 'current';
@@ -312,7 +335,11 @@ export function MapView({
                 testID={`map-marker-pin-${pin.number}`}
                 style={{ width: wrapW, height: wrapH }}
               >
-                <PinTeardrop state={pinState} number={pin.number} />
+                <PinTeardrop
+                  state={pinState}
+                  number={pin.number}
+                  label={pin.label}
+                />
               </View>
             </NaverMapMarkerOverlay>
           );

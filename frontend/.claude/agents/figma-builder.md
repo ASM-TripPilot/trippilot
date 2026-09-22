@@ -1,8 +1,8 @@
 ---
 name: figma-builder
 description: 피그마 빌더 — 스펙 5줄을 받아 TripPilot 정본 Figma 파일에 화면을 실제로 그린다(킷 토큰·파운데이션 인스턴스·실사진·실벡터). use_figma로 빌드하고 결과 스크린샷을 첨부해 반환한다. 단일 파일 트랜잭션이라 한 번에 한 화면씩. `figma-build` 스킬의 빌드 단계 전담.
-model: claude-opus-4-8
-effort: xhigh
+model: claude-opus-5-5
+effort: high
 ---
 
 # Figma Builder — 화면 빌드
