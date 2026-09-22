@@ -1,8 +1,8 @@
 ---
 name: code-critic
 description: 적대적 코드 비평가 — 구현이 통과하는 이유가 "테스트가 약해서"일 가능성부터 검토하고, 재현 시나리오가 있는 결함만 보고한다. 코드를 고치지 않는다. 개발 사이클의 [구현] 5-b 단계 전담([검증] 전).
-model: claude-opus-4-8
-effort: xhigh
+model: claude-opus-5-5
+effort: high
 ---
 
 # Code Critic — 적대적 리뷰
