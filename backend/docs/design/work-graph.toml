@@ -47,9 +47,12 @@
 # 체크가 하나도 안 달린다. 위 바퀴들처럼 PR 을 쌓으면 대부분이 여기 해당한다. 수동으로 태운다:
 # `gh workflow run backend-ci.yml --ref <branch>`. 이걸 모르면 "체크 없음"을 통과로 읽는다.
 #
-# 갱신: 2026-09-18 · EKS 배포 트랙 합류(파일 말미 §EKS 배포 트랙) — 멘토 PR #579·#597 머지로
-# EKS-INFRA 는 done(코드 기준 — 실 AWS 는 미검증), 실기동 EKS-DEV-LIVE 로 수렴하는 외부선행 셋
-# (RELEASE-MAIN=PR#598 · AWS-CONSOLE-BOOTSTRAP · DOMAIN-ACM)이 지금의 크리티컬 패스다.
+# 갱신: 2026-09-22 · **릴리스 선행이 풀렸다.** PR #598 은 닫혔고 #601 이 2026-09-18 에 승격을
+# 끝내, `aws-bootstrap.yml`·`aws-deploy.yml` 이 **이미 main 에 있다**(실측). 따라서 EKS-DEV-LIVE
+# 의 크리티컬 패스는 이제 **AWS-CONSOLE-BOOTSTRAP · DOMAIN-ACM 둘**이다 — 둘 다 사람·결제다.
+#
+# 이전 갱신: 2026-09-18 · EKS 배포 트랙 합류(파일 말미 §EKS 배포 트랙) — 멘토 PR #579·#597 머지로
+# EKS-INFRA 는 done(코드 기준 — 실 AWS 는 미검증).
 # 준하 몫(TRIP-892·893)과 후속(TRIP-894 관측성·895 Redis·896 smoke 신호분리·PR#599 CI캐시)은
 # 티켓·PR 로 발행돼 있다.
 #
@@ -2089,6 +2092,10 @@ EKS 배포 워크플로 등록 + 승격을 끝냈다.** 그 뒤로 develop 에 6
 **즉 이 노드는 "한 번 하면 끝"이 아니라 주기 승격이다.** 상시 todo 로 남는 것이 정상이고,
 무엇이 이것을 기다리는지를 노드마다 따로 적는 편이 낫다.
 
+**[[EKS-DEV-LIVE]] 도 더는 이것을 기다리지 않는다**(2026-09-22 실측). 간선의 근거였던
+*"main 에 없으면 bootstrap 조차 실행 불가"* 가 해소됐다 — `aws-bootstrap.yml`·`aws-deploy.yml`
+둘 다 #601 로 main 에 올라가 있다. 간선을 지웠다.
+
 **워크플로 하나를 main 에 올리는 데 이 노드를 기다리지 않는다.** 이 리포의 실제 관행은
 **워크플로 파일 하나만 담은 `ci(main):` PR** 이다 — `ai-poi-collect`(#340·#383) ·
 `ai-llm-smoke`(#337) · `ai-business-status-reminder`(#476) · `ai-existence-probe`(#505) ·
@@ -2141,13 +2148,6 @@ plan → apply+deploy_application=false → Secrets Manager 키 입력(backend=�
 → apply+deploy_application=true(embedding_enabled=false 시작) → NLB DNS 를 CNAME 연결 →
 `LIVE_AI=1 LiveAiRoundTripIT` 를 DEV 주소로. 이후 KB 사이클(TRIP-893)은 준하.
 """
-
-[[edges]]
-from = "RELEASE-MAIN"
-to = "EKS-DEV-LIVE"
-kind = "외부선행"
-verified = false
-reason = "가이드 원문 「저장소 기본 브랜치에 workflow 파일이 있어야 GitHub 의 Run workflow 버튼이 나타난다」— main 에 없으면 bootstrap 조차 실행 불가."
 
 [[edges]]
 from = "AWS-CONSOLE-BOOTSTRAP"
