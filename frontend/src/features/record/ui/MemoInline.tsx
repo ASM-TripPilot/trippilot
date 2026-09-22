@@ -37,7 +37,7 @@ export function MemoInline({ text, onSubmit }: MemoInlineProps): ReactElement {
       placeholderTextColor="#9AA1AB"
       maxLength={2000}
       multiline
-      className="min-h-[44px] rounded-input border border-hairline bg-surface-soft px-md py-sm font-noto text-label text-ink"
+      className="min-h-[44px] py-sm font-noto text-label text-ink"
     />
   );
 }

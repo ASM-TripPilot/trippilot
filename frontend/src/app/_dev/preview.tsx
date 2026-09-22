@@ -39,6 +39,7 @@ import { MemoInline } from '@/features/record/ui/MemoInline';
 import { PhotoThumbStrip } from '@/features/record/ui/PhotoThumbStrip';
 import { RecordsCalendarScreen } from '@/features/record/ui/RecordsCalendarScreen';
 import { TripRecordsScreen } from '@/features/record/ui/TripRecordsScreen';
+import { VisitRecordCard } from '@/features/record/ui/VisitRecordCard';
 import { VisitTimeSheet } from '@/features/record/ui/VisitTimeSheet';
 import { SHARE_FORMATS } from '@/features/reflection/model/shareCard';
 import { DailyReflectionScreen } from '@/features/reflection/ui/DailyReflectionScreen';
@@ -2403,7 +2404,7 @@ export const PREVIEW_STATES: PreviewState[] = [
             poiId: 'p2',
             nameKo: '부산시립미술관',
             arrivedAt: '2026-08-21T15:40:00',
-            completedAt: null,
+            completedAt: '2026-08-21T16:20:00',
             skippedAt: null,
             arrivedLabel: '15:40',
           },
@@ -2428,45 +2429,47 @@ export const PREVIEW_STATES: PreviewState[] = [
             arrivedLabel: '16:10',
           },
         ]}
-        onPressComplete={noop}
-        onPressSkip={noop}
-        onPressSpontaneous={noop}
-        onPressBack={noop}
-        onPressTab={noop}
-      />
-    ),
-  },
-  // j01 방문 기록 · 숙소 없는 날(당일치기·이동일, TRIP-569) — 귀속 헤더가 `-stay` 가 아니라
-  // `-date`(날짜만)로 갈리는 엣지. 헤더 testID 분기를 육안 대조하는 자리(jest 는 testID 존재만,
-  // 실제 배치는 6-b 실기).
-  {
-    key: 'records-attribution-dateonly',
-    band: 'j',
-    label: 'j01 · 날짜만 귀속',
-    login: null,
-    render: () => (
-      <TripRecordsScreen
-        dayTabs={[
-          { day: '2026-08-20', label: 'Day1' },
-          { day: '2026-08-21', label: 'Day2' },
-        ]}
-        activeDay="2026-08-21"
-        onSelectDay={noop}
-        attribution={{ stayName: null, dayLabel: '2일차' }}
-        mapCenter={{ lat: 37.5665, lng: 126.978 }}
-        mapPins={[]}
-        cards={[
-          {
-            visitCheckId: 'd1',
-            slotKey: '2026-08-21#p1',
-            poiId: 'p1',
-            nameKo: '경복궁',
-            arrivedAt: '2026-08-21T10:10:00',
-            completedAt: '2026-08-21T11:20:00',
-            skippedAt: null,
-            arrivedLabel: '10:10',
-          },
-        ]}
+        // TRIP-759 — 완료 방문 카드(r1·r2)에 사진/메모 슬롯을 얹어 default 얼굴에서 육안 대조한다
+        // (실 훅 대신 정적 픽스처: 네이티브 피커 미설치라 uri=null placeholder 셀 — 실 썸네일·간격은
+        // 6-b 몫). 미완료 카드(r3·r4)는 undefined → 화면이 정적 스캐폴딩으로 폴백한다. 광안리 2장·
+        // 미술관 1장. 카드 사진 셀은 placeholder 라 로컬 require 는 지도 마커족(mapPins)만 쓴다.
+        renderCard={(card) =>
+          card.completedAt != null ? (
+            <VisitRecordCard
+              card={card}
+              onPressComplete={noop}
+              onPressSkip={noop}
+              photoSlot={
+                <PhotoThumbStrip
+                  photos={
+                    card.visitCheckId === 'r1'
+                      ? [
+                          {
+                            visitPhotoMetaId: 'r1-a',
+                            availability: 'available',
+                            uri: null,
+                          },
+                          {
+                            visitPhotoMetaId: 'r1-b',
+                            availability: 'available',
+                            uri: null,
+                          },
+                        ]
+                      : [
+                          {
+                            visitPhotoMetaId: 'r2-a',
+                            availability: 'available',
+                            uri: null,
+                          },
+                        ]
+                  }
+                  onPressAdd={noop}
+                />
+              }
+              memoSlot={<MemoInline onSubmit={noop} />}
+            />
+          ) : undefined
+        }
         onPressComplete={noop}
         onPressSkip={noop}
         onPressSpontaneous={noop}
@@ -2511,38 +2514,6 @@ export const PREVIEW_STATES: PreviewState[] = [
           onSave={noop}
           onCancel={noop}
         />
-      </View>
-    ),
-  },
-  // j01 사진·메모 첨부(TRIP-566) — PhotoThumbStrip 상태별 셀(available/other-device/unavailable)과 `+`
-  // 추가 타일, MemoInline(낙관값·placeholder) 두 벌을 한 화면에서 육안 대조한다. 순수 뷰(`@/shared/api`
-  // 값 import 0)라 프리뷰 지뢰 목 통과. ★네이티브 피커 미설치라 available 셀은 uri:null placeholder(실
-  // 썸네일·간격·EXIF 는 이 세션 검증 불가, 후속 티켓·6-b 몫). 상태 셀·문구는 jest 가 잠그고, 픽셀은 여기.
-  {
-    key: 'records-photo-memo',
-    band: 'j',
-    label: 'j01 · 사진·메모',
-    login: null,
-    render: () => (
-      <View className="flex-1 gap-md bg-canvas px-lg pt-[80px]">
-        <PhotoThumbStrip
-          photos={[
-            { visitPhotoMetaId: 'ph-a', availability: 'available', uri: null },
-            {
-              visitPhotoMetaId: 'ph-b',
-              availability: 'other-device',
-              uri: null,
-            },
-            {
-              visitPhotoMetaId: 'ph-c',
-              availability: 'unavailable',
-              uri: null,
-            },
-          ]}
-          onPressAdd={noop}
-        />
-        <MemoInline text="바람이 좋았고 노을이 근사했다" onSubmit={noop} />
-        <MemoInline onSubmit={noop} />
       </View>
     ),
   },

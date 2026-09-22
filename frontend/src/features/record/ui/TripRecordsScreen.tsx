@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import { Fragment, type ReactElement, type ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -6,19 +6,22 @@ import { MapView, type MapCenter, type MapPin } from '@/shared/map';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 
 import { SpontaneousVisitButton } from './SpontaneousVisitButton';
-import { BackArrowGlyph, HeartGlyph } from './RecordGlyphs';
+import { BackArrowGlyph } from './RecordGlyphs';
 import { VisitRecordCard, type VisitRecordCardVM } from './VisitRecordCard';
 
 /**
  * TRIP-565 · j01 방문 기록 화면(순수 프레젠테이션 — VM·콜백 주입, 조회/판정 0).
  *
- * 세로 컬럼: appbar → 일자 탭 → 지도 히어로(250px) → 부제 → 방문 기록 카드 목록 → 즉석 방문
- * 추가. 하단 탭바(기록 활성)와 저장 FAB 는 오버레이. 조립·조회는 `pages/trip-records` 가 진다
- * (이 파일은 `@/shared/api` 를 import 하지 않는다 — 프리뷰 격리 렌더 안전, FSD 경계).
+ * 세로 컬럼: appbar → 일자 탭 → 지도 히어로(250px) → 부제 → 방문 기록 카드 목록 → 방문 추가.
+ * 하단 탭바(기록 활성)가 오버레이. 조립·조회는 `pages/trip-records` 가 진다(이 파일은
+ * `@/shared/api` 를 import 하지 않는다 — 프리뷰 격리 렌더 안전, FSD 경계).
  *
- * ★ 지도(MapView) 위에 인터랙티브 요소를 얹지 않는다(repo-traps 터치 흡수 함정).
- * 즉석 방문 버튼·카드는 지도 **아래 flow 형제**이고, 저장 FAB 는 지도 밖(하단) 절대배치라 겹치지
- * 않는다. 지도는 viewOnly 글랜스(제스처 없음).
+ * 완료 방문 카드의 사진/메모는 페이지가 `renderCard` 로 실데이터 슬롯을 조립해 내려준다
+ * (useVisitAttachments 는 훅이라 카드 map 안에서 못 부른다 → per-card 컨테이너). renderCard 가
+ * 카드를 안 그리면(undefined) 정적 스캐폴딩 VisitRecordCard 로 폴백한다(프리뷰·빈 카드 무영향).
+ *
+ * ★ 지도(MapView) 위에 인터랙티브 요소를 얹지 않는다(repo-traps 터치 흡수 함정). 방문 추가
+ * 버튼·카드는 지도 **아래 flow 형제**다. 지도는 viewOnly 글랜스(제스처 없음).
  */
 
 export interface TripRecordsDayTab {
@@ -44,6 +47,11 @@ export interface TripRecordsScreenProps {
   cards: VisitRecordCardVM[];
   /** TRIP-569 — 활성 일자의 숙소·날짜 귀속 헤더(없으면 미표시, 후방호환 optional). */
   attribution?: DayAttributionHeader;
+  /**
+   * TRIP-759 — 카드별 실데이터 렌더 훅(옵셔널). 페이지가 완료 방문 카드에 사진/메모 슬롯을 배선한
+   * per-card 컨테이너를 돌려준다. undefined 를 돌려주면 정적 스캐폴딩 VisitRecordCard 로 폴백한다.
+   */
+  renderCard?: (card: VisitRecordCardVM) => ReactNode;
   onPressComplete: (visitCheckId: string) => void;
   onPressSkip: (visitCheckId: string) => void;
   onPressSpontaneous: () => void;
@@ -59,6 +67,7 @@ export function TripRecordsScreen({
   mapPins,
   cards,
   attribution,
+  renderCard,
   onPressComplete,
   onPressSkip,
   onPressSpontaneous,
@@ -149,25 +158,23 @@ export function TripRecordsScreen({
           오늘의 동선 · 방문한 곳을 사진과 메모로 남겨요
         </Text>
 
+        {/* 카드 목록 — 페이지가 renderCard 를 주면 그것으로(완료 카드=실데이터 사진/메모 슬롯),
+            안 주거나 undefined 를 돌려주면 정적 스캐폴딩 VisitRecordCard 로 폴백한다. key 는 감싸는
+            Fragment 가 쥔다 — 방문이 바뀌면 리마운트돼 MemoInline 초안이 새로 심긴다(seed-once). */}
         {cards.map((card) => (
-          <VisitRecordCard
-            key={card.visitCheckId}
-            card={card}
-            onPressComplete={onPressComplete}
-            onPressSkip={onPressSkip}
-          />
+          <Fragment key={card.visitCheckId}>
+            {renderCard?.(card) ?? (
+              <VisitRecordCard
+                card={card}
+                onPressComplete={onPressComplete}
+                onPressSkip={onPressSkip}
+              />
+            )}
+          </Fragment>
         ))}
 
         <SpontaneousVisitButton onPress={onPressSpontaneous} />
       </ScrollView>
-
-      {/* 저장 FAB — 지도 밖(하단 우측) 절대배치, 탭바 위. */}
-      <View
-        testID="record-trip-saved-fab"
-        className="absolute bottom-[104px] right-lg size-[56px] items-center justify-center rounded-full border border-hairline bg-canvas"
-      >
-        <HeartGlyph size={26} />
-      </View>
 
       <BottomTabBar activeKey="records" onPressTab={onPressTab ?? (() => {})} />
     </SafeAreaView>

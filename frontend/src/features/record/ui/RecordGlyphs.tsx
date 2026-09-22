@@ -150,15 +150,3 @@ export function CalendarGlyph({ size = 32 }: GlyphProps): ReactElement {
     </Svg>
   );
 }
-
-/** ♥ 저장 FAB. */
-export function HeartGlyph({ size = 26 }: GlyphProps): ReactElement {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 26 26" fill="none">
-      <Path
-        d="M13 23.1292L11.4292 21.6992C5.85 16.64 2.16667 13.3033 2.16667 9.20833C2.16667 5.87167 4.78833 3.25 8.125 3.25C10.01 3.25 11.8192 4.1275 13 5.51417C14.1808 4.1275 15.99 3.25 17.875 3.25C21.2117 3.25 23.8333 5.87167 23.8333 9.20833C23.8333 13.3033 20.15 16.64 14.5708 21.71L13 23.1292Z"
-        fill={CORAL}
-      />
-    </Svg>
-  );
-}

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { router } from 'expo-router';
 
+import { formatDayLabel } from '@/entities/trip/lib/formatDayLabel';
 import { deriveStayAttribution } from '@/features/record/model/stayAttribution';
 import {
   useRecordBases,
@@ -10,6 +11,7 @@ import {
 import { useVisitCheck } from '@/features/record/model/useVisitCheck';
 import { TripRecordsScreen } from '@/features/record/ui/TripRecordsScreen';
 import type { VisitRecordCardVM } from '@/features/record/ui/VisitRecordCard';
+import { VisitRecordCardContainer } from '@/features/record/ui/VisitRecordCardContainer';
 import { useGetTripsTripIdItinerary } from '@/shared/api/generated/trips/trips';
 import type { MapCenter, MapPin } from '@/shared/map';
 import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
@@ -51,7 +53,7 @@ export function TripRecordsPage({
 
   const dayTabs = days.map((d, index) => ({
     day: d.date,
-    label: `Day${index + 1}`,
+    label: formatDayLabel(index + 1),
   }));
 
   // TRIP-569 귀속 파생 — 활성 일자를 덮는 base 를 찾아 숙소명을 해소한다(저장 안 함, 매 렌더
@@ -67,7 +69,7 @@ export function TripRecordsPage({
   const attribution =
     activeIndex >= 0
       ? {
-          dayLabel: `${activeIndex + 1}일차`,
+          dayLabel: formatDayLabel(activeIndex + 1),
           stayName: activeGroup?.baseStay?.name ?? null,
         }
       : undefined;
@@ -104,6 +106,13 @@ export function TripRecordsPage({
     })
   );
 
+  const handleComplete = (id: string): void => {
+    void visitCheck.complete(id);
+  };
+  const handleSkip = (id: string): void => {
+    void visitCheck.skip(id);
+  };
+
   return (
     <TripRecordsScreen
       dayTabs={dayTabs}
@@ -113,12 +122,20 @@ export function TripRecordsPage({
       mapPins={pins}
       cards={cards}
       attribution={attribution}
-      onPressComplete={(id) => {
-        void visitCheck.complete(id);
-      }}
-      onPressSkip={(id) => {
-        void visitCheck.skip(id);
-      }}
+      // 완료 방문 카드만 사진/메모 슬롯을 실데이터로 배선한다(useVisitAttachments 를 카드당 1회
+      // 부르는 per-card 컨테이너). 미완료 카드는 undefined → 화면이 정적 스캐폴딩으로 폴백한다.
+      renderCard={(card) =>
+        card.completedAt != null ? (
+          <VisitRecordCardContainer
+            tripId={tripId}
+            card={card}
+            onPressComplete={handleComplete}
+            onPressSkip={handleSkip}
+          />
+        ) : undefined
+      }
+      onPressComplete={handleComplete}
+      onPressSkip={handleSkip}
       onPressSpontaneous={() => {
         // 즉석 방문은 장소를 골라야 poiId 가 생긴다(useVisitCheck.arrive 의 입력) — 장소 선택
         // 진입은 후속 티켓(US-REC-01 후반). 훅 자체는 통합 테스트로 잠겨 있다.

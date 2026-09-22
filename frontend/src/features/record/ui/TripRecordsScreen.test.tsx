@@ -19,7 +19,7 @@ jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
  * 무엇을 보장하나:
  *  - 그날을 덮는 숙소가 있으면 숙소명 + 날짜 헤더(`record-trip-attribution-stay`)가 뜬다.
  *  - 숙소가 없는 날(당일치기·이동일)은 날짜만 헤더(`record-trip-attribution-date`)가 뜬다.
- *  - 헤더 추가가 기존 표면(일자 탭·즉석 추가·저장 FAB)을 깨지 않는다.
+ *  - 헤더·일자 탭·즉석 추가는 유지되고, 하트 FAB(`record-trip-saved-fab`)는 제거된다(TRIP-759 AC-5·AC-6).
  *
  * ★확장타입 재대입: 프로덕션 `TripRecordsScreenProps` 엔 아직 `attribution` prop 이 없다.
  *   구현 코드를 만들지 않으므로, 화면을 확장 prop 타입으로 재대입해 테스트만 컴파일한다.
@@ -97,8 +97,8 @@ describe('AC-7 · 숙소 없는 날 — 날짜만 헤더(당일치기·이동일
   });
 });
 
-describe('AC-7 · 헤더 추가가 기존 표면을 깨지 않는다(무회귀 앵커)', () => {
-  it('일자 탭·즉석 추가·저장 FAB 가 헤더와 함께 여전히 존재한다', () => {
+describe('🔴 TRIP-759 · 귀속 헤더·일자 탭·즉석 추가 유지 + 하트 FAB 제거', () => {
+  it('일자 탭·즉석 추가는 헤더와 함께 남고, record-trip-saved-fab 는 사라진다', () => {
     render(
       <Screen
         {...baseProps()}
@@ -106,8 +106,11 @@ describe('AC-7 · 헤더 추가가 기존 표면을 깨지 않는다(무회귀 �
       />
     );
 
+    // 유지(AC-6 무회귀) — 귀속 헤더가 딸린 채로도 탭·즉석 추가는 그대로.
     expect(screen.getByTestId('record-trip-day-tab-2026-06-11')).toBeTruthy();
     expect(screen.getByTestId('record-trip-spontaneous-add')).toBeTruthy();
-    expect(screen.getByTestId('record-trip-saved-fab')).toBeTruthy();
+    // 제거(AC-5) — 하트 FAB 는 Figma 정본에 없다 → present→absent 로 반전.
+    // (개념) `queryByTestId(...)` = 없으면 null → `.toBeNull()` 로 부재를 단언.
+    expect(screen.queryByTestId('record-trip-saved-fab')).toBeNull();
   });
 });

@@ -243,7 +243,12 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     // ⚠️ TRIP-769: j02·오프라인 동기화 삭제로 프리뷰 키 3개(`records-compare`·`records-sync-badge`·
     //    `records-conflict`, band `j`)를 제거해 173→170. 오케 직접(경량) — preview.tsx 에서 3키 + import
     //    를 지우며 이 가드도 함께 내림. devPreviewBandSort 는 band h·l 만 잠가 band j 와 무관(오갱신 금지).
-    expect(PREVIEW_STATES).toHaveLength(170);
+    // ⚠️ TRIP-759: j01 default 정합으로 프리뷰 키 2개(`records-attribution-dateonly`·`records-photo-memo`,
+    //    band `j`)를 records-default 1키로 통합(귀속·사진/메모를 default 얼굴이 흡수)해 170→168.
+    //    test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에서 그 두 키 + 관련 import 를
+    //    지울 뿐 이 가드는 안 만진다(삭제 전엔 170개라 이 단언이 red). 정확히 그 두 키인지는 아래
+    //    'TRIP-759' describe 가 못박는다. devPreviewBandSort 는 band h·l 만 잠가 band j 와 무관(오갱신 금지).
+    expect(PREVIEW_STATES).toHaveLength(168);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -260,6 +265,21 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     const allKeys = PREVIEW_STATES.map((state) => state.key);
     expect(new Set(groupedKeys)).toEqual(new Set(allKeys));
     expect(groupedKeys).toHaveLength(allKeys.length);
+  });
+});
+
+describe('🔴 TRIP-759 · j01 default 프리뷰 키 통합 (band j)', () => {
+  it('records-attribution-dateonly·records-photo-memo 가 없고, records-default 는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 부정 — 통합으로 사라지는 두 키(삭제 전엔 present 라 red). 카운트(168)만으론 "아무 두 키나
+    // 지워도" 통과하므로, 이 짝이 '지운 두 키가 정확히 그 j01 키'임을 못박는다(TRIP-769/743 음성 가드 미러).
+    expect(keys).not.toContain('records-attribution-dateonly');
+    expect(keys).not.toContain('records-photo-memo');
+
+    // 긍정 — 통합 목적지 키는 그대로(band j 가 통째로 빈 게 아님 = 공허 통과·과잉 삭제 차단).
+    expect(keys).toContain('records-default');
   });
 });
 
