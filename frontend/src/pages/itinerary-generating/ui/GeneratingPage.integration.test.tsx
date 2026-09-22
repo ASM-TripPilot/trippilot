@@ -192,9 +192,9 @@ describe('🔴 I4 · AC-4 — 앱바 뒤로 = 백그라운드 이탈 (취소 개
     expect(destinations.length).toBeGreaterThanOrEqual(1);
     expect(destinations.some((d) => d.includes('draft'))).toBe(false);
     expect(destinations.some((d) => d.includes('generating'))).toBe(false);
-    // 유일 이탈구가 됐으므로 목적지를 정확일치로 잠근다(5-b 참고-1) — 일정 탭이어야 한다.
-    // (`/(tabs)/itinerary` 는 trips[0] 리다이렉트가 있지만 백그라운드 복귀의 정본 목적지다.)
-    expect(destinations).toContain('/(tabs)/itinerary');
+    // 유일 이탈구가 됐으므로 목적지를 정확일치로 잠근다(5-b 참고-1) — 홈이어야 한다.
+    // (팀 확정 2026-09-11: 일정 탭은 trips[0] 리다이렉트로 옛 일정에 착지할 수 있어 홈으로 보낸다.)
+    expect(destinations).toContain('/(tabs)');
 
     // 서버 오퍼레이션 없음(openapi 767) — 취소를 안 쏜다.
     expect(mockCancelMutate).not.toHaveBeenCalled();

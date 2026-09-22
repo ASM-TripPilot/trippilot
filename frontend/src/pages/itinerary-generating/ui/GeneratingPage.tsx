@@ -85,11 +85,12 @@ export function GeneratingPage({
       failed={generate.isError}
       onRetry={start}
       onBackground={() => {
-        // 앱바 뒤로 = 백그라운드 이탈(화면만 여행 탭으로). 뮤테이션은 리셋하지 않는다 — 이미 나간
+        // 앱바 뒤로 = 백그라운드 이탈(화면만 홈으로). 뮤테이션은 리셋하지 않는다 — 이미 나간
         // POST 는 언마운트로 취소되지 않아(axios+react-query) 서버가 백그라운드에서 일정을 완성한다
-        // (Seed·openapi 767). h05 가 "만드는 중" 상태를 표시한다. 진짜 in-flight 중단([취소]=CANCELED,
-        // BR-U3-05)은 이 화면에서 제거됐다(TRIP-789, 팀 확정 — [기록]에서 canon 드리프트로 보고).
-        router.replace('/(tabs)/itinerary');
+        // (Seed·openapi 767). 홈으로 보내는 이유: 일정 탭은 trips[0] 로 리다이렉트해 생성 중인 여행이
+        // 아닌 옛 일정에 착지할 수 있다(traps-itinerary ③, 팀 확정 2026-09-11). [취소]=CANCELED(구
+        // BR-U3-05)는 팀 확정으로 제거 — canon BR-U3-04/05 도 "취소 없음"으로 갱신됨(TRIP-789).
+        router.replace('/(tabs)');
       }}
     />
   );
