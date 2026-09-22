@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { MapView, type MapCenter, type MapPin } from '@/shared/map';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
 import {
@@ -29,9 +30,13 @@ import {
  * 진행 바도 채움률(48%) 대신 **비결정형**(좌우로 미끄러지는 세그먼트)으로 "도는 중"만 표현한다.
  * 그래서 화면에 퍼센트·`N초`·소요시간(`N분`/`N시간`) 문자열이 하나도 없다(AC-1·AC-2 · INV-3).
  *
- * **Figma 보다 짧다**: 미니 지도(day1 실핀은 h10=TRIP-337 몫)는 이번 범위 밖이라 그리지 않는다.
- * **Figma 프레임에 없는 것**: [취소]/[백그라운드로] 두 버튼은 요구사항(BR-U3-05)이지 Figma 프레임에
- * 없다 — 프레임 미반영은 [기록]에서 드리프트로 보고한다.
+ * **지도 카드(TRIP-789)**: 꼭 갈 곳 핀만 그리고 연결선은 안 그린다(`connectPins={false}`, INV-2 —
+ * 생성 중엔 검증된 동선이 없어 실선을 그리면 거짓말이 된다). 좌표(`pins`+`center`)가 있을 때만
+ * 렌더하고, 없으면 지도 자체를 정직하게 생략한다(프로덕션은 생성 중 좌표가 없어 미렌더, 프리뷰만
+ * 픽스처 주입 — 실 좌표 배관은 후속 티켓).
+ * **하단 제거(TRIP-789)**: Figma 프레임에 없는 footer 안내·[생성 취소]·[백그라운드로 전환] 2버튼을
+ * 뺐다. 뒤로가기 = 백그라운드(앱바 뒤로 셰브론 = `onBackground`). [취소]=CANCELED 경로(BR-U3-05)가
+ * UI에서 사라지는 것은 [기록]에서 canon 드리프트로 보고한다(팀 확정 2026-09-11).
  */
 
 const SCREEN_TITLE = 'AI 일정 생성';
@@ -40,10 +45,6 @@ const PROGRESS_HEADING = 'AI가 일정을 짜고 있어요';
 const PROGRESS_NOTE = '취향·거리·동선까지 맞추는 중';
 /** 3단계 라벨은 Figma 정본(정확 문자열). 완료 여부는 표시하지 않는다(⚑C). */
 const STEPS = ['장소 수집', '동선 계산', '시간 배치'] as const;
-const FOOTER_NOTE =
-  '완성되면 마음에 안 드는 곳만 바꾸면 돼요 · 고정한 곳은 유지돼요';
-const CANCEL_LABEL = '생성 취소';
-const BACKGROUND_LABEL = '백그라운드로 전환';
 const FAILED_TITLE = '일정을 만들지 못했어요';
 const FAILED_NOTE = '네트워크를 확인하고 다시 시도해 주세요';
 const RETRY_LABEL = '다시 시도';
@@ -103,21 +104,24 @@ function IndeterminateBar(): ReactElement {
 }
 
 export interface GeneratingScreenProps {
-  /** [취소] press — 배선이 뒤로 이탈(생성 폐기). */
-  onCancel: () => void;
-  /** [백그라운드로] press — 배선이 앞으로 이탈(여행/홈), 뮤테이션은 살아 있음. */
+  /** 앱바 뒤로 셰브론 press — 배선이 앞으로 이탈(여행/홈), 뮤테이션은 살아 있음(뒤로가기=백그라운드). */
   onBackground: () => void;
   /** 실패 표면의 [다시 시도] press — 배선이 POST 를 재발화. */
   onRetry: () => void;
   /** POST 오류(배선의 isError) — 참이면 인라인 실패 표면 노출(INV-4, 침묵 금지). */
   failed?: boolean;
+  /** 꼭 갈 곳 핀 — `center`와 함께 있을 때만 지도 카드를 렌더(정직 폴백, INV-2 연결선 없음). */
+  pins?: MapPin[];
+  /** 지도 중심 — MapView 필수 prop. `pins`와 동반(둘 다 없으면 지도 생략). */
+  center?: MapCenter;
 }
 
 export function GeneratingScreen({
-  onCancel,
   onBackground,
   onRetry,
   failed = false,
+  pins,
+  center,
 }: GeneratingScreenProps): ReactElement {
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
@@ -126,12 +130,12 @@ export function GeneratingScreen({
           testID="itinerary-generating-appbar"
           className="w-full flex-row items-center gap-[6px] bg-canvas py-[14px] pl-md pr-lg"
         >
-          {/* 앱바 뒤로가기 = 취소(생성 폐기) — iOS 뒤로 제스처와 같은 의미. */}
+          {/* 앱바 뒤로가기 = 백그라운드 이탈(생성은 살아 있음) — 뒤로가면 h05가 상태를 표시한다. */}
           <Pressable
             testID="itinerary-generating-back"
             accessibilityRole="button"
             accessibilityLabel="뒤로"
-            onPress={onCancel}
+            onPress={onBackground}
             hitSlop={8}
           >
             <BackChevronGlyph />
@@ -175,6 +179,21 @@ export function GeneratingScreen({
                 </Text>
               </View>
 
+              {pins && center ? (
+                <View
+                  testID="itinerary-generating-map"
+                  style={cardShadow}
+                  className="h-[230px] w-full overflow-hidden rounded-card border border-hairline"
+                >
+                  <MapView
+                    center={center}
+                    pins={pins}
+                    viewOnly
+                    connectPins={false}
+                  />
+                </View>
+              ) : null}
+
               <View
                 style={cardShadow}
                 className="w-full gap-[15px] rounded-card border border-hairline bg-canvas p-lg"
@@ -197,38 +216,6 @@ export function GeneratingScreen({
               </View>
             </>
           )}
-
-          <View
-            testID="itinerary-generating-footer"
-            className="w-full flex-row items-center rounded-button bg-surface-soft px-lg py-[14px]"
-          >
-            <Text className="flex-1 font-noto text-[12.5px] text-muted">
-              {FOOTER_NOTE}
-            </Text>
-          </View>
-
-          <View className="w-full flex-row gap-md pt-xs">
-            <Pressable
-              testID="itinerary-generating-cancel"
-              accessibilityRole="button"
-              onPress={onCancel}
-              className="h-12 flex-1 items-center justify-center rounded-button border border-hairline-strong bg-canvas"
-            >
-              <Text className="font-noto-bold text-card-title font-bold text-muted">
-                {CANCEL_LABEL}
-              </Text>
-            </Pressable>
-            <Pressable
-              testID="itinerary-generating-background"
-              accessibilityRole="button"
-              onPress={onBackground}
-              className="h-12 flex-1 items-center justify-center rounded-button border border-hairline-strong bg-canvas"
-            >
-              <Text className="font-noto-bold text-card-title font-bold text-ink">
-                {BACKGROUND_LABEL}
-              </Text>
-            </Pressable>
-          </View>
         </ScrollView>
       </View>
     </SafeAreaView>

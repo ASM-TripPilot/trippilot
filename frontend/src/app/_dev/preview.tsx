@@ -3972,29 +3972,22 @@ export const PREVIEW_STATES: PreviewState[] = [
   // 표면은 비결정형(RN Animated)이고 3단계는 균일 진행 중(⚑C, 완료 날조 없음)이다. 실화면 딥링크로는
   // 잠깐만 스치는 얼굴이라(성공 즉시 draft 로 replace) 여기가 이 화면을 오래 보는 유일한 자리다.
   {
-    key: 'itinerary-generating',
+    key: 'h07-generating-loading',
     band: 'h',
-    label: 'h09 · 생성 중',
-    login: null,
-    render: () => (
-      <GeneratingScreen onCancel={noop} onBackground={noop} onRetry={noop} />
-    ),
-  },
-  // h09 생성 실패(AC-6·INV-4) — POST 오류 시 침묵하지 않고 실패 표면 + [다시 시도]를 낸다.
-  {
-    key: 'itinerary-generating-failed',
-    band: 'h',
-    label: 'h09 · 생성 실패',
+    label: 'h07 · 생성 중 loading',
     login: null,
     render: () => (
       <GeneratingScreen
-        onCancel={noop}
         onBackground={noop}
         onRetry={noop}
-        failed
+        pins={MUST_VISIT_PREVIEW_PINS}
+        center={{ lat: 35.1532, lng: 129.1188 }}
       />
     ),
   },
+  // h07 생성 실패 프리뷰 키(itinerary-generating-failed)는 TRIP-789로 삭제 — 실패 표면·핸들링
+  // 코드(GeneratingScreen failed/onRetry·GeneratingPage isError→failed)는 그대로 유지되고,
+  // 폴백 전용 화면(TRIP-791)이 이 얼굴을 흡수한다(부모 결정 G: 코드 유지·키만 삭제).
   // h14 완성 일정(PLANNED, TRIP-799) — 옛 h25 TimelineScreen PLANNED 프리뷰 4키를 지도+시트 셸 4얼굴로
   // 교체(D7). PLANNED 는 이제 셸이라 실화면 딥링크로도 이 얼굴을 보려면 백엔드 응답이 필요해, 여기가
   // 4얼굴을 정적으로 대조하는 자리다. 4얼굴은 별 화면이 아니라 같은 셸의 데이터 분기다.

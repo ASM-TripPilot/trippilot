@@ -86,14 +86,21 @@ const EXPECTED_H = [
   // h07 부분 결과(셸 얼굴)로 개명. 라벨 코드가 h07 이라 안정 정렬이 mustvisit-time 뒤에 붙는다
   // (개명 엔트리는 PREVIEW_STATES 배열상 draft 구역이라 mustvisit-time 보다 늦다 · 02a ★10).
   'dev-preview-state-h07-generating-partial', // h07
+  // TRIP-789: 옛 h09 itinerary-generating(생성 중 loading · GeneratingScreen)을 h07-generating-loading
+  // 으로 개명. 라벨 코드가 h07 이라 안정 정렬이 partial 바로 뒤에 붙는다 — PREVIEW_STATES 배열에서 이
+  // 항목(구 itinerary-generating)이 h07-generating-partial 보다 뒤 위치라 안정 정렬이 partial→loading
+  // 순서를 낸다(구현자는 개명만 하고 배열 위치는 안 옮긴다 · 배열 위치=정렬 위치). ★ h07 두 얼굴:
+  // loading(데이터 前) ≠ partial(day1 도착·셸) — 개명·정렬 시 안 섞음.
+  'dev-preview-state-h07-generating-loading', // h07 (TRIP-789 · 구 itinerary-generating · h09)
   'dev-preview-state-h08-draft-collapsed', // h08 (TRIP-783 지도+시트 셸 접힘)
   // TRIP-792: h08 펼침(시트 상단 스냅 · initialIndex={1}) 신규. 코드가 h08 이라 안정 정렬이
   // collapsed 바로 뒤에 붙는다(PREVIEW_STATES 배열에서도 expanded 를 collapsed 직후에 삽입 —
   // 그래야 안정 정렬이 이 순서를 낸다). 동시에 옛 h11 DraftScreen 초안 5키(default·stale-failed·
   // loading·empty·nopins)는 삭제돼 이 배열에서도 빠진다(band h 소비처 이동, 폴백 3키는 유지).
   'dev-preview-state-h08-draft-expanded', // h08 (TRIP-792 지도+시트 셸 펼침)
-  'dev-preview-state-itinerary-generating', // h09
-  'dev-preview-state-itinerary-generating-failed', // h09
+  // TRIP-789: 옛 h09 두 키(itinerary-generating·itinerary-generating-failed)가 이 자리에서 사라진다 —
+  // 전자는 h07-generating-loading 으로 개명·이동(위 h07 그룹), 후자는 프리뷰 키 삭제(핸들링 유지).
+  // band h 그룹에 더는 h09 코드 항목이 없다.
   // TRIP-796: h11 같이 결과(CoPick 완료) 지도+시트 셸. 코드가 h11 이라 안정 정렬이 h11 그룹 안에
   // 들어가고, PREVIEW_STATES 배열에서 이 프리뷰를 fallback 3키보다 **앞**(그 직전)에 삽입하므로
   // 안정 정렬이 이 순서(copick → fallback 3)를 낸다(02a ★13 · h08 D5 선례 — 배열 위치=정렬 위치).

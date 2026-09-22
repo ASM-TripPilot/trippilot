@@ -69,6 +69,12 @@ const LOCKED_CALLERS = [
   // test-designer 착수 단계 선반영이라 구현(placeholder→MapView) 전엔 `<MapView` 0건이라 S2 집합
   // 불일치·S8 카운트로 red(정상, 442·563·571 3회 재발 방지).
   'features/stay/ui/StayDetailScreen.tsx',
+  // TRIP-789 h07 생성 loading 지도 카드 — 진행 카드와 체크리스트 사이의 꼭 갈 곳 글랜스(viewOnly ON,
+  // connectPins={false} — 미검증 동선 선 금지 INV-2). pins·center 둘 다 있을 때만 렌더(정직 폴백),
+  // 프리뷰만 주입(Q1-B). MustVisitPickerScreen 에 이은 **2번째** no-line caller 라 아래 NO_LINE_CALLERS
+  // 에도 등재된다. test-designer 착수 단계 선반영이라 구현(map card 추가) 전엔 `<MapView` 0건이라
+  // S2 집합 불일치·S8 lineOffTags 카운트로 red(정상, 442·563·571 3회+ 재발 방지).
+  'features/itinerary/ui/GeneratingScreen.tsx',
 ];
 
 /** 지도 고정을 **켜면 안 되는** 호출부. 앞의 넷은 지도를 움직여 좌표를 확정하는 것이 기능 자체라
@@ -89,9 +95,14 @@ const OPEN_CALLERS = [
 // 함께 제거됐다. h25/h34 는 이제 없다(CONFIRMED 도 `MapSheetShell` 이 owner, LOCKED_CALLERS 에 이미
 // 등재됨). withTag 전수 동치(S2 ①)가 TimelineScreen.tsx 잔존 시 red 로 삭제를 강제한다(02a ★9).
 
-/** 게이트①-2 — 연결선을 **끄는** 유일한 자리(h05). 나머지 여섯 태그는 아무 말도 하지 않고
- * 기본값(`connectPins` = 잇는다)을 받는다 — h11(일정 초안)이 그 여섯 안에 있다. */
-const NO_LINE_CALLER = 'features/itinerary/ui/MustVisitPickerScreen.tsx';
+/** 연결선을 **끄는**(`connectPins={false}`) 자리. 게이트①-2 시점엔 h05 하나뿐이었으나 TRIP-789 로
+ * h07 생성 loading 지도 카드가 **2번째** no-line caller 가 됐다(미검증 동선 선 금지 INV-2 — h05 는
+ * "담은 순서"일 뿐, h07 loading 은 데이터 도착 전 꼭 갈 곳 글랜스라 둘 다 확정 동선이 아니다).
+ * 나머지 태그는 아무 말도 하지 않고 기본값(`connectPins` = 잇는다)을 받는다 — h11(일정 초안)이 그 안에 있다. */
+const NO_LINE_CALLERS = [
+  'features/itinerary/ui/MustVisitPickerScreen.tsx',
+  'features/itinerary/ui/GeneratingScreen.tsx',
+];
 
 const SCREEN_REL = 'features/itinerary/ui/DraftScreen.tsx';
 // TRIP-864 — 지도 계약(MapPin)은 삭제된 mapHtml.ts 에서 네이버 코어 MapView.tsx 로 이관됐다.
@@ -272,32 +283,35 @@ describe('🔴 S2 · AC-13 · AC-16 — 지도 고정은 h05·h11 에만 켠다 
   });
 });
 
-describe('S8 · h05 무선 — 연결선을 끄는 자리가 h05 하나뿐이다 (게이트①-2 추가분)', () => {
-  /** 왜 소스 층인가 — **어느 호출부가 무엇을 말했나**는 여기서만 보인다. h05 태그에서
-   * `connectPins={false}` 한 줄이 사라지면 "담은 순서"가 확정 동선처럼 선으로 그려지는데,
-   * 대본 실행 층(X3·X7)은 `buildMapHtml`을 직접 부르지 화면을 거치지 않아 그 삭제가 안 보인다
-   * (03b2 W2-1 뮤테이션 M3).
+describe('S8 · 무선 — 연결선을 끄는 자리가 h05·h07 loading 둘뿐이다 (게이트①-2 + TRIP-789)', () => {
+  /** 왜 소스 층인가 — **어느 호출부가 무엇을 말했나**는 여기서만 보인다. no-line 태그에서
+   * `connectPins={false}` 한 줄이 사라지면 "담은 순서"·"도착 전 글랜스"가 확정 동선처럼 선으로
+   * 그려지는데, 대본 실행 층(X3·X7)은 화면을 거치지 않아 그 삭제가 안 보인다(03b2 W2-1 뮤테이션 M3).
    *
    * 무엇을 보장하지 **못**하나: 태그에 적힌 **글자**까지다. 그 값이 컴포넌트를 통과해 실제
    * 지도에 닿는지는 이 층에서 볼 수 없다 — `MapView`가 그 프롭을 흘려도 여기는 초록이다.
    * 그 축은 실물 렌더 심판(`shared/map/MapView.test.tsx` AC2 viewOnly·AC3 connectPins)이 잡는다. */
-  it('h05 태그에만 connectPins={false} 가 있고 나머지 LOCKED 아홉(+OPEN 4)은 기본값을 받는다', () => {
-    const lineOffTags = mapTagsOf(readOne(NO_LINE_CALLER));
+  it('no-line 두 자리(h05·h07 loading)에만 connectPins={false} 가 있고 나머지 LOCKED(+OPEN 4)은 기본값을 받는다', () => {
+    const lineOffTags = NO_LINE_CALLERS.flatMap((rel) =>
+      mapTagsOf(readOne(rel))
+    );
     const defaultTags = [
-      ...LOCKED_CALLERS.filter((rel) => rel !== NO_LINE_CALLER),
+      ...LOCKED_CALLERS.filter((rel) => !NO_LINE_CALLERS.includes(rel)),
       ...OPEN_CALLERS,
       // TRIP-801 GUT — TimelineScreen(EXPLORE_CALLERS, 태그 둘) 삭제로 이 spread 가 빠졌다.
       // CONFIRMED 동선 선은 이제 MapSheetShell(LOCKED, connectPins 기본)이 그린다.
     ].flatMap((rel) => mapTagsOf(readOne(rel)));
 
-    // ① 도달 앵커 — 태그를 진짜로 떼어냈다(h05 1개 + 나머지 13개 = 총 14개).
-    //    TRIP-727 로 15 였다가, TRIP-801 GUT(TimelineScreen 태그 둘 삭제)로 15→13.
-    //    내역: LOCKED−h05 9 + OPEN 4.
-    expect(lineOffTags).toHaveLength(1);
+    // ① 도달 앵커 — 태그를 진짜로 떼어냈다(no-line 2개 + 나머지 13개 = 총 15개).
+    //    TRIP-789 로 no-line 이 1→2(h07 loading 지도 카드 추가). defaultTags 는 GeneratingScreen 이
+    //    LOCKED 이면서 NO_LINE 이라 여기서 필터돼 **13 그대로**(LOCKED 11−NO_LINE 2 = 9 + OPEN 4).
+    expect(lineOffTags).toHaveLength(2);
     expect(defaultTags).toHaveLength(13);
 
-    // ② 끄는 자리는 h05 하나뿐이고, 끈다고 **명시**한다.
-    expect(lineOffTags[0]).toMatch(/\bconnectPins=\{false\}/);
+    // ② 끄는 두 자리 전부 끈다고 **명시**한다(h05·h07 loading).
+    lineOffTags.forEach((tag) =>
+      expect(tag).toMatch(/\bconnectPins=\{false\}/)
+    );
 
     // ③ 나머지(defaultTags 13개)는 아무 말도 하지 않는다 = 기본값(잇는다)을 받는다. h11 이 여기 있다 —
     //    이 심판이 요구하는 것은 "끄지 않았다"이고, 기본값이 정말 잇는지는 X3이 잰다.
