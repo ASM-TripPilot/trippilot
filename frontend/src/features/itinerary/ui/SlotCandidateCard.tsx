@@ -14,14 +14,6 @@ import type { SlotCandidatesCandidatesItem } from '@/shared/api/generated/schema
 
 const DISTANCE_LABEL = '이동';
 
-/**
- * 후보 카드 배지 문자. 현 슬롯이 'A' 를 쓰므로 첫 후보가 'B' 부터 시작한다(Figma h12·h18). 위치
- * 문자라 poiId 원문과 겹치지 않는다 — poiId 가 알파벳이어도 카드 텍스트로 새지 않는다(AC6 비노출).
- */
-export function candidateBadge(index: number): string {
-  return String.fromCharCode('B'.charCodeAt(0) + index);
-}
-
 export interface SlotCandidateCardProps {
   candidate: SlotCandidatesCandidatesItem;
   /** 알파벳 배지 문자(A/B/C…) — poiId 원문이 아닌 위치 문자. */

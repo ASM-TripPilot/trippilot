@@ -62,9 +62,10 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [pickedDate, setPickedDate] = useState<string | null>(null);
-  // 어느 슬롯의 교체 패널이 펼쳐졌나(=그 슬롯 slotKey). null 이면 닫힘. 패널은 그 카드 **바로 아래**
-  // 스크롤 흐름에 인라인으로 뜨고(바텀시트 아님 · TRIP-483), 화면이 이 값과 일치하는 카드 자리에서만
-  // `renderSlotPanel(slotKey)` 을 불러 컨테이너를 마운트한다 — 닫힘 = 값이 null 이라 안 그려짐.
+  // 어느 슬롯의 교체 시트가 열렸나(=그 슬롯 slotKey). null 이면 닫힘. 컨테이너가 이제 바텀시트
+  // (`SlotCandidateSheet`, TRIP-793 이 인라인 패널에서 되돌림)를 그린다. 두 마운트 경로가 이 값을
+  // 공유한다 — DraftScreen 얼굴은 `renderSlotPanel(slotKey)` 로 카드 자리에서, h08 셸 얼굴은 형제로
+  // 조건부 마운트(셸엔 renderSlotPanel 메커니즘이 없다). 닫힘 = 값이 null 이라 안 그려짐.
   const [editingSlotKey, setEditingSlotKey] = useState<string | null>(null);
   // 폴백 인터스티셜을 "기본 일정 보기"로 넘겼나(01b D3) — 로컬 dismiss 다(route push 아님).
   // true 면 폴백 신호가 있어도 인터스티셜을 감추고 같은 데이터의 초안 얼굴을 그린다.
@@ -403,70 +404,87 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
         : { lat: 0, lng: 0 };
 
     return (
-      <MapSheetShell
-        center={center}
-        pins={listedPins}
-        days={dayChips}
-        selectedDayIndex={selectedDayIndex < 0 ? 0 : selectedDayIndex}
-        onSelectDay={(index) => setPickedDate(tabs[index]?.date ?? null)}
-        onBack={handleBack}
-        header={
-          <SheetHeader
-            title="AI 추천안"
-            dayLabel={`${selectedDayNumber}일차`}
-            dateLabel={formatDraftDayHeader(selectedDate)}
-            meta={meta}
+      <>
+        <MapSheetShell
+          center={center}
+          pins={listedPins}
+          days={dayChips}
+          selectedDayIndex={selectedDayIndex < 0 ? 0 : selectedDayIndex}
+          onSelectDay={(index) => setPickedDate(tabs[index]?.date ?? null)}
+          onBack={handleBack}
+          header={
+            <SheetHeader
+              title="AI 추천안"
+              dayLabel={`${selectedDayNumber}일차`}
+              dateLabel={formatDraftDayHeader(selectedDate)}
+              meta={meta}
+            />
+          }
+          cta={[
+            {
+              label: '다시 짜기',
+              variant: 'outline',
+              onPress: () => void handleRetry(),
+            },
+            {
+              label: '확정하기',
+              variant: 'primary',
+              onPress: () =>
+                router.push({
+                  pathname: '/trips/[tripId]/itinerary',
+                  params: { tripId },
+                }),
+            },
+          ]}
+        >
+          <View className="gap-md px-lg pb-2xl pt-xs">
+            {listedSlots.flatMap((slot, index) => {
+              const items: ReactElement[] = [
+                <SlotStopCard
+                  key={`card-${slot.poiId}`}
+                  slot={slot}
+                  date={selectedDate}
+                  index={index}
+                  // 전 슬롯 시각 칩(isFixed 무관 · AC-3 · D8). 구분자는 en-dash U+2013.
+                  timeLabel={`${slot.startAt.slice(0, 5)}–${slot.endAt.slice(
+                    0,
+                    5
+                  )}`}
+                  // "다른 후보 ›" 는 비고정 슬롯에만 표시(고정=미주입→링크 부재 · AC-7). TRIP-793 이
+                  // 이 트리거를 처음 실배선한다 — 셸엔 renderSlotPanel 메커니즘이 없어(그 자리에 시트를
+                  // 얹을 카드-인라인 슬롯이 없다) 형제로 조건부 마운트한다(planb StaySelectSheet 선례).
+                  onPressAlt={
+                    slot.isFixed
+                      ? undefined
+                      : () =>
+                          setEditingSlotKey(
+                            buildSlotKey(selectedDate, slot.poiId)
+                          )
+                  }
+                />,
+              ];
+              if (index < listedSlots.length - 1) {
+                const nextSlot = listedSlots[index + 1];
+                items.push(
+                  <DistanceConnector
+                    key={`conn-${slot.poiId}`}
+                    slotKey={buildSlotKey(selectedDate, slot.poiId)}
+                    distanceRange={nextSlot.distanceRange}
+                  />
+                );
+              }
+              return items;
+            })}
+          </View>
+        </MapSheetShell>
+        {editingSlotKey !== null ? (
+          <SlotCandidatePanelContainer
+            tripId={tripId}
+            slotKey={editingSlotKey}
+            onClose={() => setEditingSlotKey(null)}
           />
-        }
-        cta={[
-          {
-            label: '다시 짜기',
-            variant: 'outline',
-            onPress: () => void handleRetry(),
-          },
-          {
-            label: '확정하기',
-            variant: 'primary',
-            onPress: () =>
-              router.push({
-                pathname: '/trips/[tripId]/itinerary',
-                params: { tripId },
-              }),
-          },
-        ]}
-      >
-        <View className="gap-md px-lg pb-2xl pt-xs">
-          {listedSlots.flatMap((slot, index) => {
-            const items: ReactElement[] = [
-              <SlotStopCard
-                key={`card-${slot.poiId}`}
-                slot={slot}
-                date={selectedDate}
-                index={index}
-                // 전 슬롯 시각 칩(isFixed 무관 · AC-3 · D8). 구분자는 en-dash U+2013.
-                timeLabel={`${slot.startAt.slice(0, 5)}–${slot.endAt.slice(
-                  0,
-                  5
-                )}`}
-                // "다른 후보 ›" 는 비고정 슬롯에만 표시(고정=미주입→링크 부재 · AC-7). 실 교체는
-                // TRIP-793 이연이라 지금은 no-op(D2-R) — 셸 얼굴엔 인라인 후보 패널을 마운트하지 않는다.
-                onPressAlt={slot.isFixed ? undefined : () => {}}
-              />,
-            ];
-            if (index < listedSlots.length - 1) {
-              const nextSlot = listedSlots[index + 1];
-              items.push(
-                <DistanceConnector
-                  key={`conn-${slot.poiId}`}
-                  slotKey={buildSlotKey(selectedDate, slot.poiId)}
-                  distanceRange={nextSlot.distanceRange}
-                />
-              );
-            }
-            return items;
-          })}
-        </View>
-      </MapSheetShell>
+        ) : null}
+      </>
     );
   }
 

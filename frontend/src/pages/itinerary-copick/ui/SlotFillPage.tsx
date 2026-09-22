@@ -40,7 +40,7 @@ import {
  *
  * 이중발사 방지 `firedRef`(useRef — 같은 틱 둘째 탭이 옛 값을 읽어 못 막는 useState 잠금 회피) ·
  * 콜드캐시 가드(itinerary GET 미도착 중 확정하면 `swapSlotPoi([], …)` 로 빈 days PUT = 일정 소실)는
- * OptionSwapPage(h18) 동형 재사용이다.
+ * `SlotCandidatePanelContainer`(h08) 동형 재사용이다.
  */
 
 const CONCEPTS: readonly { key: string; label: string }[] = [

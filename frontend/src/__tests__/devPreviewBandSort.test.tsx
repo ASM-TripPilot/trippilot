@@ -103,6 +103,13 @@ const EXPECTED_H = [
   // 그래야 안정 정렬이 이 순서를 낸다). 동시에 옛 h11 DraftScreen 초안 5키(default·stale-failed·
   // loading·empty·nopins)는 삭제돼 이 배열에서도 빠진다(band h 소비처 이동, 폴백 3키는 유지).
   'dev-preview-state-h08-draft-expanded', // h08 (TRIP-792 지도+시트 셸 펼침)
+  // TRIP-793: h08 "다른 후보 시트"(정상·0건). 코드가 h08 이라 안정 정렬이 draft-expanded 바로 뒤에
+  // 붙는다 — PREVIEW_STATES 배열에서 이 2키를 옛 slot-candidate-panel 블록 자리(h11-copick 뒤)에 넣어도
+  // 코드가 h08 이라 정렬이 draft-* 뒤로 끌어올린다. 같은 h08 코드 4키는 배열 삽입 순서(collapsed→
+  // expanded→candidate-sheet→candidate-sheet-empty)로 안정정렬(배열 위치=정렬 위치 · h11 copick 선례).
+  // 동시에 옛 h12 인라인 패널 5키(slot-candidate-panel*)·h18 옵션 교체 3키(option-swap*)는 삭제된다.
+  'dev-preview-state-h08-candidate-sheet', // h08 (TRIP-793 다른 후보 시트)
+  'dev-preview-state-h08-candidate-sheet-empty', // h08 (TRIP-793 0건)
   // TRIP-789: 옛 h09 두 키(itinerary-generating·itinerary-generating-failed)가 이 자리에서 사라진다 —
   // 전자는 h07-generating-loading 으로 개명·이동(위 h07 그룹), 후자는 프리뷰 키 삭제(핸들링 유지).
   // band h 그룹에 더는 h09 코드 항목이 없다.
@@ -112,11 +119,8 @@ const EXPECTED_H = [
   // TRIP-791: h11 폴백 배너 프리뷰 3키(deterministic·minimal·demoted)는 인터스티셜 승격으로 삭제 —
   // 위 h07-generating-fallback 2키가 그 얼굴을 흡수한다(band h 소비처 이동, copick 은 유지).
   'dev-preview-state-h11-copick-complete', // h11 (TRIP-796 지도+시트 셸 · 같이 결과)
-  'dev-preview-state-slot-candidate-panel', // h12
-  'dev-preview-state-slot-candidate-panel-pending', // h12
-  'dev-preview-state-slot-candidate-panel-degraded', // h12
-  'dev-preview-state-slot-candidate-panel-empty', // h12
-  'dev-preview-state-slot-candidate-panel-error', // h12
+  // TRIP-793: 옛 h12 인라인 패널 5키(slot-candidate-panel·-pending·-degraded·-empty·-error)는
+  // h08-candidate-sheet 2키(위 h08 그룹)로 병합·이동 — 이 h12 자리에서 사라진다.
   // TRIP-797: h12 편집기 통일. 옛 manual-empty(h19)→h12-editor-empty·manual-filled(h19)+
   // itinerary-edit(h24)→h12-editor-filled(2→1 병합)·h12-editor-dragging(신규). 라벨 접두가 h12 라
   // 안정 정렬이 slot-candidate-panel(h12) 뒤·h14(plan) 앞에 세 칩을 인접시킨다 — 구현자는 preview.tsx
@@ -142,9 +146,8 @@ const EXPECTED_H = [
   // (CONFIRMED→지도+시트 셸). 라벨 코드가 h34→h16 이라 정렬 위치가 파일 끝(h34)에서 h14/h18 사이로
   // 이동한다(개명=count 불변, 위치만 이동 · 02a ★11).
   'dev-preview-state-h16-plan-confirmed', // h16
-  'dev-preview-state-option-swap', // h18
-  'dev-preview-state-option-swap-selected', // h18
-  'dev-preview-state-option-swap-empty', // h18
+  // TRIP-793: h18 옵션 교체 3키(option-swap·-selected·-empty)는 h08 시트로 통합·삭제 —
+  // 이 h18 자리엔 이제 아무 칩도 없다(h08-candidate-sheet 2키가 위 h08 그룹에서 흡수).
   // TRIP-797: h19 manual-empty·manual-filled 는 h12-editor-* 로 개명·병합돼 위 h12 그룹으로 이동.
   // TRIP-798: h20 place-add 는 h13-place-add 로 개명돼 위 h13 자리(h12↔h14)로 이동 +
   //   place-add-notready 는 배너 제거로 삭제 — 이 h20 자리엔 이제 아무 칩도 없다.

@@ -229,6 +229,28 @@ export function DashGlyph({ size = 18, testID }: GlyphProps) {
   );
 }
 
+// h08 "다른 후보 0건" 빈 상태 ◇(24) — Figma `4452:1478`. 점선 카드 가운데 얹는 마름모 아웃라인.
+// 색은 회색 muted-soft(빈 상태 톤). raw hex 는 이 파일 안에서만 고정(위 색 상수 관례).
+export function DiamondGlyph({ size = 24, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M12 4L20 12L12 20L4 12L12 4Z"
+        stroke={MUTED_SOFT}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 // h11 안내줄 체크 원(20) — Figma `1870:1092`. 위 `CheckGlyph` 의 체크를 `InfoCircleGlyph` 의
 // 원 안에 넣은 형태라 세 아이콘이 한 벌로 보인다(이 파일의 기존 합성 방식과 같다).
 export function CheckCircleGlyph({ size = 20, testID }: GlyphProps) {

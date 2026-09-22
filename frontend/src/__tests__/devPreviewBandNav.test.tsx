@@ -247,7 +247,14 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    이 가드는 안 만진다(재편 전엔 173개라 이 단언이 red). 정확히 그 키들인지는 아래 'TRIP-791' describe 가
     //    못박고, devPreviewBandSort 는 band h 를 잠가 EXPECTED_H 도 동반 갱신(폴백 3키·zero 키 제거,
     //    h07-generating-fallback 2키를 loading 뒤에 삽입).
-    expect(PREVIEW_STATES).toHaveLength(171);
+    // ⚠️ TRIP-793: h08 "다른 후보 시트" 통합 — 옛 h12/h18 프리뷰 8키(slot-candidate-panel·-pending·
+    //    -degraded·-empty·-error·option-swap·option-swap-selected·option-swap-empty)를 h08 시트 2키
+    //    (h08-candidate-sheet·h08-candidate-sheet-empty)로 병합해 **순 −6** → 171→165. test-designer
+    //    선반영(카운트 가드만) — implementer 는 preview.tsx 에서 옛 8키를 지우고 2키만 추가할 뿐 이 가드는
+    //    안 만진다(재편 전엔 171개라 이 단언이 red). 정확히 그 키들인지는 아래 'TRIP-793' describe 가
+    //    못박고, devPreviewBandSort 는 band h 를 잠가 EXPECTED_H 도 동반 갱신(h08-candidate-sheet 2키를
+    //    h08-draft-expanded 직후, 옛 slot-candidate-panel 5키·option-swap 3키 제거).
+    expect(PREVIEW_STATES).toHaveLength(165);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -264,6 +271,31 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     const allKeys = PREVIEW_STATES.map((state) => state.key);
     expect(new Set(groupedKeys)).toEqual(new Set(allKeys));
     expect(groupedKeys).toHaveLength(allKeys.length);
+  });
+});
+
+describe('🔴 TRIP-793 · h08 다른 후보 시트 프리뷰 8→2 병합 (band h)', () => {
+  it('h08-candidate-sheet 2키가 있고, 옛 h12/h18 8키는 없으며, 형제 band h 키는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 긍정 — 병합된 h08 시트 2키(정상·0건).
+    expect(keys).toContain('h08-candidate-sheet');
+    expect(keys).toContain('h08-candidate-sheet-empty');
+
+    // 부정 — 옛 h12 인라인 패널 5키 + h18 옵션 교체 3키는 사라진다(병합 전엔 present 라 red).
+    // 카운트(165)만으론 "아무 8키나 지워도" 통과하므로, 이 짝이 '병합된 게 정확히 그 키들'임을 못박는다.
+    expect(keys).not.toContain('slot-candidate-panel');
+    expect(keys).not.toContain('slot-candidate-panel-pending');
+    expect(keys).not.toContain('slot-candidate-panel-degraded');
+    expect(keys).not.toContain('slot-candidate-panel-empty');
+    expect(keys).not.toContain('slot-candidate-panel-error');
+    expect(keys).not.toContain('option-swap');
+    expect(keys).not.toContain('option-swap-selected');
+    expect(keys).not.toContain('option-swap-empty');
+
+    // 형제 band h 앵커 — 기존 h08 셸 키가 딸려 사라지지 않았음(공허 통과 방지).
+    expect(keys).toContain('h08-draft-collapsed');
   });
 });
 

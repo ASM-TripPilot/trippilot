@@ -73,12 +73,11 @@ import { GenerationFallbackScreen } from '@/features/itinerary/ui/GenerationFall
 import { GeneratingScreen } from '@/features/itinerary/ui/GeneratingScreen';
 import { MustVisitPickerScreen } from '@/features/itinerary/ui/MustVisitPickerScreen';
 import { MustVisitTimeScreen } from '@/features/itinerary/ui/MustVisitTimeScreen';
-import { OptionSwapScreen } from '@/features/itinerary/ui/OptionSwapScreen';
 import {
   PlaceAddHeader,
   PlaceAddRow,
 } from '@/features/itinerary/ui/PlaceAddScreen';
-import { SlotCandidatePanel } from '@/features/itinerary/ui/SlotCandidatePanel';
+import { SlotCandidateSheet as ItinerarySlotCandidateSheet } from '@/features/itinerary/ui/SlotCandidateSheet';
 import { GenerationDoneBar } from '@/widgets/generation-done-bar/ui/GenerationDoneBar';
 import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
 import { GenerationProgressCard } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
@@ -4283,105 +4282,73 @@ export const PREVIEW_STATES: PreviewState[] = [
       </MapSheetShell>
     ),
   },
-  // h12 슬롯 교체(TRIP-335→483) — 바텀시트를 슬롯 카드 아래 **인라인 확장 패널**로 이관했다. candidates
-  // 는 아직 이름·사진 미확보(BE 후속)라 카드가 "이름 준비 중" 플레이스홀더 + 회색 사진 자리로 뜬다.
+  // h08 다른 후보 시트(TRIP-793) — 옛 h12 인라인 패널·h18 옵션 교체를 하나의 바텀시트로 합쳤다.
+  // candidates 응답엔 이름·태그가 아직 없어(BE 후속) 픽스처(Figma 4298:1998·4452:1478 값)로만 그린다.
   // 실화면 딥링크로는 볼 수 없다(생성 POST 가 만드는 tripId + slot-candidates 응답이 백엔드 없이는
-  // 안 생긴다). 인라인 패널이라 오버레이 없이 스크롤 흐름 안에서 그리고, 헤더에 시간대(오후)를 얹는다.
+  // 안 생긴다). 바텀시트 실 열림·scrim 딤·2스냅은 통과형 목 사각이라 6-b 실기가 유일한 개폐 그물.
   {
-    key: 'slot-candidate-panel',
+    key: 'h08-candidate-sheet',
     band: 'h',
-    label: 'h12 · 다른 후보 인라인 패널',
+    label: 'h08 · 다른 후보 시트',
     login: null,
     render: () => (
-      <ScrollView contentContainerClassName="gap-md p-lg">
-        <SlotCandidatePanel
-          candidates={SLOT_CANDIDATES_PREVIEW}
-          currentPoiId="poi-current"
-          currentName="부산시립미술관"
-          timeBand="오후"
-          isPending={false}
-          onSelectCandidate={noop}
-          onClose={noop}
-        />
-      </ScrollView>
+      <ItinerarySlotCandidateSheet
+        current={{
+          poiId: 'cur',
+          nameKo: '부산시립미술관',
+          tags: ['미술', '실내'],
+          distanceRange: '560m',
+        }}
+        candidates={[
+          {
+            poiId: 'p2',
+            nameKo: 'F1963 복합문화공간',
+            tags: ['카페', '갤러리'],
+            distanceRange: '1.1km',
+          },
+          {
+            poiId: 'p3',
+            nameKo: '부산근대역사관',
+            tags: ['지역', '무료'],
+            distanceRange: '1.8km',
+          },
+        ]}
+        startAt="13:00:00"
+        endAt="14:30:00"
+        category="전시"
+        selectedPoiId="p2"
+        onSelectRadio={noop}
+        onConfirm={noop}
+        isPending={false}
+        onPressPlaceSearch={noop}
+        onClose={noop}
+      />
     ),
   },
   {
-    key: 'slot-candidate-panel-pending',
+    key: 'h08-candidate-sheet-empty',
     band: 'h',
-    label: 'h12 · 다른 후보 교체 중',
+    label: 'h08 · 다른 후보 0건',
     login: null,
     render: () => (
-      <ScrollView contentContainerClassName="gap-md p-lg">
-        <SlotCandidatePanel
-          candidates={SLOT_CANDIDATES_PREVIEW}
-          currentPoiId="poi-current"
-          currentName="부산시립미술관"
-          timeBand="오후"
-          isPending
-          onSelectCandidate={noop}
-          onClose={noop}
-        />
-      </ScrollView>
-    ),
-  },
-  {
-    key: 'slot-candidate-panel-degraded',
-    band: 'h',
-    label: 'h12 · 다른 후보 강등 고지',
-    login: null,
-    render: () => (
-      <ScrollView contentContainerClassName="gap-md p-lg">
-        <SlotCandidatePanel
-          candidates={SLOT_CANDIDATES_PREVIEW}
-          currentPoiId="poi-current"
-          currentName="부산시립미술관"
-          timeBand="오후"
-          isPending={false}
-          degraded
-          onSelectCandidate={noop}
-          onClose={noop}
-        />
-      </ScrollView>
-    ),
-  },
-  {
-    key: 'slot-candidate-panel-empty',
-    band: 'h',
-    label: 'h12 · 다른 후보 0건',
-    login: null,
-    render: () => (
-      <ScrollView contentContainerClassName="gap-md p-lg">
-        <SlotCandidatePanel
-          candidates={[]}
-          currentPoiId="poi-current"
-          currentName="부산시립미술관"
-          timeBand="오후"
-          isPending={false}
-          onSelectCandidate={noop}
-          onClose={noop}
-        />
-      </ScrollView>
-    ),
-  },
-  {
-    key: 'slot-candidate-panel-error',
-    band: 'h',
-    label: 'h12 · 다른 후보 실패',
-    login: null,
-    render: () => (
-      <ScrollView contentContainerClassName="gap-md p-lg">
-        <SlotCandidatePanel
-          candidates={SLOT_CANDIDATES_PREVIEW}
-          currentPoiId="poi-current"
-          currentName="부산시립미술관"
-          timeBand="오후"
-          isPending={false}
-          errorMessage="확정된 일정이라 지금은 바꿀 수 없어요"
-          onSelectCandidate={noop}
-          onClose={noop}
-        />
-      </ScrollView>
+      <ItinerarySlotCandidateSheet
+        current={{
+          poiId: 'cur',
+          nameKo: '부산시립미술관',
+          tags: ['미술', '실내'],
+          distanceRange: '560m',
+        }}
+        candidates={[]}
+        startAt="13:00:00"
+        endAt="14:30:00"
+        category="전시"
+        selectedPoiId={null}
+        onSelectRadio={noop}
+        onConfirm={noop}
+        isPending={false}
+        onPressPlaceSearch={noop}
+        onClose={noop}
+      />
     ),
   },
   // h12 편집기 통일(TRIP-797) — 지도+2스냅 시트 위 슬롯 카드 편집. 순수 뷰 EditorView 를 preview 가
@@ -4448,61 +4415,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         onPressAddBetween={noop}
         onSave={noop}
         isDragging
-      />
-    ),
-  },
-  {
-    key: 'option-swap',
-    band: 'h',
-    label: 'h18 · 옵션 교체 화면',
-    login: null,
-    render: () => (
-      <OptionSwapScreen
-        candidates={SLOT_CANDIDATES_PREVIEW}
-        currentPoiId="poi-current"
-        currentName="부산시립미술관"
-        selectedPoiId={null}
-        onSelectRadio={noop}
-        onConfirm={noop}
-        isPending={false}
-        onBack={noop}
-      />
-    ),
-  },
-  {
-    key: 'option-swap-selected',
-    band: 'h',
-    label: 'h18 · 옵션 교체 선택 후 실패',
-    login: null,
-    render: () => (
-      <OptionSwapScreen
-        candidates={SLOT_CANDIDATES_PREVIEW}
-        currentPoiId="poi-current"
-        currentName="부산시립미술관"
-        selectedPoiId="poi-b"
-        onSelectRadio={noop}
-        onConfirm={noop}
-        isPending={false}
-        errorMessage="잠시 후 다시 시도해 주세요"
-        onBack={noop}
-      />
-    ),
-  },
-  {
-    key: 'option-swap-empty',
-    band: 'h',
-    label: 'h18 · 옵션 교체 0건',
-    login: null,
-    render: () => (
-      <OptionSwapScreen
-        candidates={[]}
-        currentPoiId="poi-current"
-        currentName="부산시립미술관"
-        selectedPoiId={null}
-        onSelectRadio={noop}
-        onConfirm={noop}
-        isPending={false}
-        onBack={noop}
       />
     ),
   },
