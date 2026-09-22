@@ -375,271 +375,77 @@ describe('🔴 I3 · AC-11 — 다시 시도는 PLANNED 에서만 POST 를 낸�
   });
 });
 
-/* ───────────────────────── TRIP-298 · 강등 안내 + h35 후보 0건 ─────────────────────────
- * 왜 이 축들이 통합 버킷에 있나: 심판의 핵심이 **응답 한 벌이 어떤 얼굴로 이어지나**다.
- * 훅을 목킹하면 "페이지가 두 얼굴을 동시에 그리지 않는다"가 테스트의 *가정*이 되어 버린다
- * (이 파일 머리말의 판단을 승계). 순수 판정 축은 `draftView.test.ts` M11~M14 가 따로 잰다 —
- * 모델은 **규칙**을, 여기는 그 규칙이 실제 화면으로 **이어졌는지**를 잰다.
+/* ═════════════════════════ TRIP-791 · 폴백 인터스티셜 라우팅 (배너·zero 흡수) ═════════════════════════
+ * TRIP-304 폴백 배너 3종과 TRIP-298 h35 후보 0건이 전용 인터스티셜 화면(GenerationFallbackScreen)
+ * 하나로 합쳐졌다. DraftPage 는 `resolveFallbackNotice(...)` 가 non-null 이면 그 화면으로 라우팅한다
+ * (01b D1). 곁줄 배너·zero 화면·zero 분기는 사라진다.
+ *
+ * 왜 통합 버킷인가: solveMode·isFallback·candidatesSummary 세 신호가 배선을 타고 **인터스티셜로
+ * 이어지는지**는 model 도 screen 도 못 본다. 규칙(F-1~F-7)은 `draftView.fallback.test.ts` 가,
+ * 화면(카피·체크리스트·CTA)은 `GenerationFallbackScreen.test.tsx` 가 따로 잰다 — 여기는 응답 한 벌이
+ * 실제로 인터스티셜/기존 얼굴로 갈렸는지다. (하드실패 라우팅은 이 사이클 DraftPage 무심판 — 02a §3.)
  */
 
-const FALLBACK_BANNER = 'itinerary-draft-fallback-banner';
+const INTERSTITIAL = 'itinerary-fallback-root';
 
-const FACE_ROWS: {
+/** AC-10 — 폴백 신호 세 축이 오면 인터스티셜로 라우팅된다(deterministic·minimal·demoted). */
+const SIGNAL_ROWS: {
   name: string;
-  days: ItineraryDaysItem[];
+  solveMode: ItinerarySolveMode;
+  isFallback: boolean;
   summary?: ItineraryCandidatesSummary;
-  // TRIP-792 플립 — 'listed' 는 두 갈래로 갈렸다: 강등/폴백이 곁에 붙은 목록은 DraftScreen('listed'),
-  // 깨끗한 COMPLETE 목록은 h08 셸('shell'). narrow 조건이 이 둘을 가른다.
-  face: 'empty' | 'zero' | 'listed' | 'shell';
 }[] = [
   {
-    name: '1행 · 일자 없음 + 요약 키 없음 → 빈 화면',
-    days: [],
+    name: 'DETERMINISTIC + isFallback=true → 인터스티셜',
+    solveMode: 'DETERMINISTIC',
+    isFallback: true,
     summary: undefined,
-    face: 'empty',
   },
   {
-    name: "1'행 · 일자 없음 + 요약 null → 빈 화면",
-    days: [],
-    summary: null,
-    face: 'empty',
+    name: 'MINIMAL + isFallback=true → 인터스티셜',
+    solveMode: 'MINIMAL',
+    isFallback: true,
+    summary: undefined,
   },
   {
-    name: '2행 · 일자 없음 + 요약 객체 → 후보 0건(h35)',
-    days: [],
+    name: 'LOW 강등(FULL_AI·isFallback=false)도 인터스티셜',
+    solveMode: 'FULL_AI',
+    isFallback: false,
     summary: { level: 'LOW' },
-    face: 'zero',
-  },
-  {
-    name: '3행 · 일자는 왔는데 슬롯 합계 0 + 요약 객체 → 후보 0건(h35)',
-    days: [
-      { date: DAY1, slots: [] },
-      { date: DAY2, slots: [] },
-    ],
-    summary: { level: 'LOW' },
-    face: 'zero',
-  },
-  {
-    name: '4행 · 슬롯 있음 + 요약 객체 → 목록(강등 안내는 곁에)',
-    days: daysUpTo(3),
-    summary: { level: 'LOW' },
-    face: 'listed',
-  },
-  {
-    name: '5행 · 슬롯 있음 + 요약 null(깨끗한 COMPLETE) → h08 셸',
-    days: daysUpTo(3),
-    summary: null,
-    face: 'shell',
   },
 ];
 
-describe('🔴 I4 · AC-5 — 01b D5 판정표대로 얼굴이 정확히 하나만 뜬다', () => {
-  it.each(FACE_ROWS)('$name', async ({ days, summary, face }) => {
+describe('🔴 I4 · AC-10 — 폴백 신호가 오면 인터스티셜로 라우팅된다 (INV-4 파수꾼 이관)', () => {
+  it.each(SIGNAL_ROWS)('$name', async ({ solveMode, isFallback, summary }) => {
     itineraryScript = () =>
       itinerary({
-        dayCount: 0,
+        dayCount: 3,
         generationState: 'COMPLETE',
-        days,
+        solveMode,
+        isFallback,
         candidatesSummary: summary,
       });
 
     renderPage();
 
-    /**
-     * ★ 세 얼굴의 존재 여부를 **한 배열로 묶어 완전 일치**로 비교한다. 하나씩 따로 단언하면
-     * "빈 화면과 h35 가 동시에 떠 있는" 구현이 두 단언을 각각 통과한다 — AC-5 가 막으려는
-     * 사고가 정확히 그것이다(01b AC-5: "두 testID 가 동시에 뜨지 않는다").
-     */
-    await waitFor(() => {
-      expect([
-        screen.queryAllByTestId('itinerary-draft-empty').length > 0,
-        screen.queryAllByTestId('itinerary-draft-zero').length > 0,
-        cardTestIds().length > 0, // DraftScreen listed(강등/폴백 곁 배너)
-        screen.queryAllByTestId('map-sheet-shell-root').length > 0, // h08 셸(깨끗한 COMPLETE)
-      ]).toEqual([
-        face === 'empty',
-        face === 'zero',
-        face === 'listed',
-        face === 'shell',
-      ]);
-    });
-  });
-});
+    // ① 폴백 신호는 인터스티셜로 이어진다(배너·zero·셸 아님).
+    expect(await screen.findByTestId(INTERSTITIAL)).toBeOnTheScreen();
 
-describe('🔴 I5 · AC-4 — poolSize 가 없어도 0 으로 채우지 않는다', () => {
-  it.each([
-    { name: 'poolSize 키 자체가 없다', summary: { level: 'LOW' } },
-    {
-      name: 'poolSize 가 null 이다',
-      summary: { level: 'LOW', poolSize: null },
-    },
-    {
-      name: '진짜 0 이다 (NO_CANDIDATES · poolSize 0)',
-      summary: { level: 'NO_CANDIDATES', poolSize: 0 },
-    },
-  ])('$name — 안내는 뜨고 개수 표기는 0건이다', async ({ summary }) => {
-    itineraryScript = () =>
-      itinerary({
-        dayCount: 3,
-        generationState: 'COMPLETE',
-        candidatesSummary: summary,
-      });
-
-    renderPage();
-
-    // 긍정 짝 — 안내가 실제로 떴다. 없으면 아래 "숫자 0건"이 공허하다.
-    const banner = await screen.findByTestId(FALLBACK_BANNER);
-    // openapi 원문: *"poolSize 는 AI 가 주지 않으면 없다(0 으로 채우지 않는다 — 0 은 '후보
-    // 0건'이라는 판정이다)"*. `?? 0` 한 글자가 "모른다"를 "0건"으로 바꿔 놓는다.
-    expect(banner).not.toHaveTextContent(/\d/);
-
-    // ★ 세 번째 행이 요점 — **진짜 0** 이 와도 얼굴은 목록이다. 0건 판정은 문자열·숫자 어휘가
-    //   아니라 **슬롯 합계**로 한다(01b D5). 어휘가 얼굴을 정하면 서버가 말을 바꾸는 날
-    //   화면이 통째로 달라진다.
-    expect(screen.queryAllByTestId('itinerary-draft-zero')).toEqual([]);
-  });
-});
-
-describe('🔴 I6 · AC-8 — 완화 행이 실재하는 라우트로 간다 (01b D7)', () => {
-  it('완화 행을 누르면 필수 방문지 화면으로 한 번 이동한다', async () => {
-    itineraryScript = () =>
-      itinerary({
-        dayCount: 0,
-        generationState: 'COMPLETE',
-        days: [],
-        candidatesSummary: {
-          level: 'LOW',
-          shortfallCategories: ['1일 예산 5만원'],
-        },
-      });
-
-    renderPage();
-
-    fireEvent.press(await screen.findByTestId('itinerary-draft-zero-relax'));
-
-    await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
-
-    // ★ 목적지 표기 **형태**를 강요하지 않는다 — 리포에 `push('/문자열')` 과
-    //   `push({pathname, params})` 두 관례가 다 있어서, 한쪽으로 완전 일치를 걸면 정당한
-    //   구현이 red 가 된다. 직렬화해서 "어디로 갔나"만 잰다(02a ★8).
-    const destination = mockPush.mock.calls[0][0] as unknown;
-    const asText =
-      typeof destination === 'string'
-        ? destination
-        : JSON.stringify(destination);
-    expect(asText).toContain('/itinerary/must-visits');
-    expect(asText).toContain(TRIP_ID);
-    // 짝 — 슬롯 상세(`must-visits/[poiId]`)로 새지 않았다. 그 라우트는 poiId 가 필요하고
-    // 0건 화면에는 슬롯이 없다.
-    expect(asText).not.toContain('[poiId]');
-  });
-});
-
-describe('🔴 I7 · AC-9 — 일부 날짜만 0건이면 h11 을 유지한다 (01b D6)', () => {
-  it('1일차 2장 · 2일차 0장이면 탭·카드가 남고 안내만 곁에 붙는다', async () => {
-    // 준비 — 2일 여행. 이 리포에서 **네 번 반복된** 「얼굴 판정이 잔존 데이터를 가린다」 축이라
-    // 화면 전체를 h35 로 갈아 끼우는 구현을 여기서 죽인다.
-    tripScript = () => trip(DAY2);
-    itineraryScript = () =>
-      itinerary({
-        dayCount: 0,
-        generationState: 'COMPLETE',
-        days: [
-          {
-            date: DAY1,
-            slots: [
-              {
-                poiId: 'poi-1',
-                startAt: '09:30:00',
-                endAt: '11:00:00',
-                isFixed: false,
-                endsNextDay: false,
-                hasViolation: false,
-                tags: [],
-                nameKo: '광안리 해변',
-              },
-              {
-                poiId: 'poi-2',
-                startAt: '12:30:00',
-                endAt: '13:30:00',
-                isFixed: false,
-                endsNextDay: false,
-                hasViolation: false,
-                tags: [],
-                nameKo: 'F1963',
-              },
-            ],
-          },
-          { date: DAY2, slots: [] },
-        ],
-        candidatesSummary: { level: 'LOW' },
-      });
-
-    renderPage();
-
-    // ① 날짜 탭이 여행 기간(2일) 그대로다 — 빈 날이 탭을 지우지 않는다.
-    await waitFor(() =>
-      expect(screen.queryAllByTestId(/^itinerary-draft-day-/)).toHaveLength(2)
+    // ② ★ 기존 얼굴로 새지 않는다 — h08 셸·초안 카드가 동시에 뜨지 않는다(상호배타).
+    //    testID 접두 분리(`itinerary-fallback-*` ↔ `itinerary-draft-*`)라 cardTestIds 가 인터스티셜을
+    //    오계수하지 않는다(01b ★). 배너 testID 는 이제 화면 어디에도 없다.
+    expect(screen.queryAllByTestId('map-sheet-shell-root')).toEqual([]);
+    expect(screen.queryAllByTestId('itinerary-draft-fallback-banner')).toEqual(
+      []
     );
-    // ② 받은 두 장이 살아 있다.
-    expect(cardTestIds()).toHaveLength(2);
-    // ③ 안내는 곁에 붙어 있다(부족을 삼키지 않는다 — INV-4).
-    expect(screen.getByTestId(FALLBACK_BANNER)).toBeOnTheScreen();
-    // ④ 얼굴을 h35 로 갈아 끼우지 않았다.
-    expect(screen.queryAllByTestId('itinerary-draft-zero')).toEqual([]);
+    expect(cardTestIds()).toEqual([]);
   });
 });
 
-/* ───────────────────────── TRIP-304 · 폴백·강등 배너 (배선 이음매) ─────────────────────────
- * 왜 이 축들이 통합 버킷에 있나: `solveMode`·`isFallback` 두 신호가 **배선을 타고 배너로 이어지는지**는
- * model 도 screen 도 못 본다 — 함수가 옳고 화면이 옳아도 배선이 이 두 값을 `resolveFallbackNotice` 에
- * 안 넘기면 DETERMINISTIC 폴백에 배너가 안 뜬다(02a ★6). 규칙은 `draftView.fallback.test.ts` 가,
- * 그림은 `DraftScreen.fallback.test.tsx` 가 따로 잰다 — 여기는 응답 한 벌이 실제 화면으로 **이어졌나**다.
- */
-describe('🔴 I8 · AC-1·AC-2·AC-7 — solveMode·isFallback 신호가 배선을 타고 배너로 이어진다', () => {
-  it('AC-1 · DETERMINISTIC + isFallback=true → "기본 모드" 배너가 뜬다', async () => {
-    itineraryScript = () =>
-      itinerary({
-        dayCount: 3,
-        generationState: 'COMPLETE',
-        solveMode: 'DETERMINISTIC',
-        isFallback: true,
-      });
-
-    renderPage();
-
-    // 핵심어만 정규식으로 — 정확 문안은 01b 가 열어 뒀다(demoted 배너와 구별되는 지점).
-    expect(await screen.findByTestId(FALLBACK_BANNER)).toHaveTextContent(
-      /기본 모드/
-    );
-  });
-
-  it('AC-2 · MINIMAL + isFallback=true → 배너와 배너 내 [다시 시도] 버튼이 뜬다', async () => {
-    itineraryScript = () =>
-      itinerary({
-        dayCount: 3,
-        generationState: 'COMPLETE',
-        solveMode: 'MINIMAL',
-        isFallback: true,
-      });
-
-    renderPage();
-
-    expect(await screen.findByTestId(FALLBACK_BANNER)).toBeOnTheScreen();
-    // 배너 안 전용 retry(신규 testID) — 헤더의 `itinerary-draft-retry` 와 다른 버튼이다.
-    expect(
-      screen.getByTestId('itinerary-draft-fallback-retry')
-    ).toBeOnTheScreen();
-  });
-
-  it('🔴 AC-7 · MINIMAL + isFallback=false(MANUAL) → 폴백 배너 0건 (실패가 아니라 선택 · TRIP-792 플립)', async () => {
-    /**
-     * ⚠️ openapi 원문: MANUAL(직접 만들기)은 `solveMode=MINIMAL` 이지만 `isFallback=false` 다.
-     * 배선이 solveMode 만 보고 폴백을 켜면 오배너가 뜬다 — 그건 `resolveFallbackNotice` 가 막는다.
-     * TRIP-792 플립: isFallback=false 라 `resolveFallbackNotice(...)===undefined` → 깨끗한 COMPLETE →
-     * **h08 셸**로 간다(셸엔 배너 슬롯이 없다). isFallback=true 경로(위 AC-1·AC-2)는 DraftScreen 배너로
-     * 남아 게이트의 반대편을 지킨다.
-     */
+describe('I5 · AC-10 F-7 이관 — MANUAL(MINIMAL·isFallback=false)은 인터스티셜로 안 간다 (선제 green · 무회귀)', () => {
+  it('MANUAL 은 실패가 아니라 선택이라 인터스티셜 대신 깨끗한 COMPLETE 얼굴(h08 셸)로 간다', async () => {
+    // `resolveFallbackNotice(MINIMAL, false)===null`(F-7)이라 現 코드도 이미 셸 → 구현 전후 green.
+    // F-7 방어가 화면 승격 뒤에도 **안 흔들림**을 잠근다(직접 만들기 빈 일정에 거짓 폴백 안내 금지).
     itineraryScript = () =>
       itinerary({
         dayCount: 3,
@@ -657,8 +463,60 @@ describe('🔴 I8 · AC-1·AC-2·AC-7 — solveMode·isFallback 신호가 배선
       )
     );
     expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
-    // 부정 — DraftScreen 폴백 배너로 새지 않는다(isFallback=false=선택이라 폴백 아님).
-    expect(screen.queryAllByTestId(FALLBACK_BANNER)).toEqual([]);
+    // 부정 — 인터스티셜로 새지 않았다(F-7: isFallback=false=선택, 폴백 아님).
+    expect(screen.queryAllByTestId(INTERSTITIAL)).toEqual([]);
+  });
+});
+
+describe('🔴 I6 · 01b D3 — "기본 일정 보기"는 로컬 dismiss 로 기존 초안 목록을 연다', () => {
+  it('인터스티셜에서 "기본 일정 보기"를 누르면 인터스티셜이 사라지고 초안 목록이 배너 없이 뜬다', async () => {
+    itineraryScript = () =>
+      itinerary({
+        dayCount: 3,
+        generationState: 'COMPLETE',
+        solveMode: 'DETERMINISTIC',
+        isFallback: true,
+      });
+
+    renderPage();
+
+    // 인터스티셜에서 주 CTA press.
+    fireEvent.press(await screen.findByTestId('itinerary-fallback-view-plan'));
+
+    // ① 인터스티셜이 감춰지고 초안 목록이 뜬다(같은 데이터 · route push 아님, 01b D3).
+    await waitFor(() =>
+      expect(screen.queryAllByTestId(INTERSTITIAL)).toEqual([])
+    );
+    expect(cardTestIds().length).toBeGreaterThan(0);
+
+    // ② 초안 목록엔 폴백 배너가 없다 — DraftScreen 은 목록만 남는다(배너 승격, 화면 어디에도 0건).
+    expect(screen.queryAllByTestId('itinerary-draft-fallback-banner')).toEqual(
+      []
+    );
+
+    // ③ dismiss 는 라우팅이 아니다(route push 0 · 로컬 상태 토글).
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+});
+
+describe('I7 · AC-5 — 폴백 신호 없는 빈 응답은 빈 화면이다 (선제 green · 무회귀)', () => {
+  it('일자 없음 + 요약 없음 → 인터스티셜·셸 아닌 빈 화면', async () => {
+    // 現 코드도 이 조합은 빈 얼굴이라 구현 전후 green — 폴백/zero 승격이 빈 얼굴을 안 건드림을 잠근다.
+    itineraryScript = () =>
+      itinerary({
+        dayCount: 0,
+        generationState: 'COMPLETE',
+        days: [],
+        candidatesSummary: undefined,
+      });
+
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId('itinerary-draft-empty')).toBeOnTheScreen()
+    );
+    expect(screen.queryAllByTestId(INTERSTITIAL)).toEqual([]);
+    expect(screen.queryAllByTestId('map-sheet-shell-root')).toEqual([]);
   });
 });
 
@@ -753,31 +611,19 @@ describe('🔴 I11 · TRIP-790 D9 — 생성 중(PARTIAL)엔 확정/완성 CTA �
 });
 
 /* ───────────────────────── TRIP-466 · (c) onBack canGoBack 가드 ─────────────────────────
- * 두 뒤로가기(ZeroCandidateScreen `itinerary-draft-zero-back` · DraftScreen `itinerary-draft-back`)가
- * 딥링크로 콜드 오픈돼 히스토리가 없으면(canGoBack()===false) 침묵 no-op 이 아니라 홈으로 replace 한다
- * (INV-4). 히스토리가 있으면(true) 이전 화면으로 back. 얼굴은 실 HTTP 로 강제한다(훅 목킹 금지).
+ * h08 셸 뒤로가기(`sheet-daychip-back`)가 딥링크로 콜드 오픈돼 히스토리가 없으면(canGoBack()===false)
+ * 침묵 no-op 이 아니라 홈으로 replace 한다(INV-4). 히스토리가 있으면(true) 이전 화면으로 back. 얼굴은
+ * 실 HTTP 로 강제한다(훅 목킹 금지). ※ zero 뒤로가기는 TRIP-791 로 화면과 함께 소멸.
  * ─────────────────────────────────────────────────────────────────────────── */
 
-/** 두 얼굴과 각 얼굴의 뒤로 버튼·얼굴 마커. zero 는 `days:[]+요약객체`(I4 FACE_ROWS 2행이 zero 임을
- * 이미 증명), listed 는 기본 script. */
+/** 얼굴과 뒤로 버튼·얼굴 마커. TRIP-791 로 zero 화면·분기가 소멸해 이 축은 h08 셸 하나만 남는다
+ * (zero 뒤로가기 가드는 화면과 함께 사라졌다 — DraftScreen 뒤로가기는 별도 계약). */
 const BACK_CASES: {
-  face: 'zero' | 'shell';
+  face: 'shell';
   backTestId: string;
   faceMarker: string;
   script: () => Itinerary;
 }[] = [
-  {
-    face: 'zero',
-    backTestId: 'itinerary-draft-zero-back',
-    faceMarker: 'itinerary-draft-zero',
-    script: () =>
-      itinerary({
-        dayCount: 0,
-        generationState: 'COMPLETE',
-        days: [],
-        candidatesSummary: { level: 'LOW' },
-      }),
-  },
   {
     // TRIP-792 플립 — 깨끗한 COMPLETE 는 h08 셸. 뒤로가기는 DayChipOverlay 의 back
     // (`sheet-daychip-back` → onBack=handleBack). faceMarker 도 셸 루트로.

@@ -14,14 +14,6 @@ import type { SlotCandidatesCandidatesItem } from '@/shared/api/generated/schema
 
 const DISTANCE_LABEL = '이동';
 
-/**
- * 후보 카드 배지 문자. 현 슬롯이 'A' 를 쓰므로 첫 후보가 'B' 부터 시작한다(Figma h12·h18). 위치
- * 문자라 poiId 원문과 겹치지 않는다 — poiId 가 알파벳이어도 카드 텍스트로 새지 않는다(AC6 비노출).
- */
-export function candidateBadge(index: number): string {
-  return String.fromCharCode('B'.charCodeAt(0) + index);
-}
-
 export interface SlotCandidateCardProps {
   candidate: SlotCandidatesCandidatesItem;
   /** 알파벳 배지 문자(A/B/C…) — poiId 원문이 아닌 위치 문자. */
@@ -30,6 +22,10 @@ export interface SlotCandidateCardProps {
   selected?: boolean;
   /** 오른쪽 컨트롤 — h12 "선택" 버튼 또는 h18 라디오(시트·화면이 넣는다). */
   trailing: ReactNode;
+  /** TRIP-795 h10 표시 픽스처(계약엔 없어 프롭 전용) — 미전달이면 기존 렌더 불변. */
+  nameKo?: string | null;
+  tags?: string[];
+  dimmed?: boolean;
 }
 
 export function SlotCandidateCard({
@@ -37,6 +33,9 @@ export function SlotCandidateCard({
   badge,
   selected = false,
   trailing,
+  nameKo,
+  tags,
+  dimmed,
 }: SlotCandidateCardProps): ReactElement {
   return (
     <PlaceSlotCandidateCard
@@ -48,6 +47,9 @@ export function SlotCandidateCard({
       badge={badge}
       selected={selected}
       trailing={trailing}
+      nameKo={nameKo}
+      tags={tags}
+      dimmed={dimmed}
     />
   );
 }

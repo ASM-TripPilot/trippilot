@@ -78,6 +78,9 @@ class DbContentAdapter(
         // 그 사실은 응답이 따로 알린다(StaySearchResponse.amenitiesKnown).
         amenities = amenities.toSet(),
         stayType = stayType,
+        address = address,
+        phone = phone,
+        rooms = rooms,
     )
 
     /**

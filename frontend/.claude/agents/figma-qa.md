@@ -1,8 +1,8 @@
 ---
 name: figma-qa
 description: 피그마 QA — figma-builder가 그린 화면을 qa-checklist(값 A~G + 슬롭 H) 기준으로 적대적으로 판정한다. 스크린샷을 실제로 보고 assertion PASS/FAIL, 새 밴드 모드면 정본 무변경·이식 모드면 원본 자산 회귀를 단언한다. 고치지 않는다. `figma-build` 스킬의 QA 단계 전담.
-model: claude-opus-4-8
-effort: xhigh
+model: claude-opus-5-5
+effort: medium
 ---
 
 # Figma QA — 시각 판정

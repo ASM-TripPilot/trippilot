@@ -78,6 +78,66 @@ def resolve(address: str, sido: dict, sigungu: dict):
     return sido_code, parts[0]
 
 
+# 실재하는 국번만. **화이트리스트여야 한다** — "0 으로 시작하고 자릿수가 맞으면 통과"로 두면
+# 원본의 깨진 값이 `069-3564-9718` 같은 **멀쩡해 보이는 가짜**가 되어 형식 검사를 통과한다(실측 2건).
+AREA_CODES = {
+    "02",                                                   # 서울(유일한 2자리)
+    "031", "032", "033", "041", "042", "043", "044",
+    "051", "052", "053", "054", "055", "061", "062", "063", "064",
+    "070",                                                  # 인터넷전화
+    "010",                                                  # 이동전화
+}
+# **`011`·`016`~`019` 는 일부러 뺐다.** 2G 종료로 끊긴 번호라 통과시키면 안 걸리는 번호를
+# 내보내게 된다 — 060 을 버리는 것과 같은 이유다(현재 원본에는 0건이라 지금 바뀌는 값은 없다).
+#
+# 안심번호는 국번이 **4자리다**. 3자리로 끊으면 `0507-456-0364` 가 `050-7456-0364` 로 나간다 —
+# 숫자열은 같아서 전화는 걸리지만 화면에 틀린 번호가 보인다(실측 4건).
+RELAY_PREFIXES = {"0502", "0503", "0504", "0505", "0506", "0507", "0508"}
+
+
+def normalize_phone(raw: str):
+    """원본 전화번호 → 표시형 `02-1670-8876`. 못 믿을 값은 **None 이다**.
+
+    원본이 하이픈 없는 숫자열로 온다(`0216708876`). 그대로 화면에 내보내면 읽히지도 않고
+    `tel:` 링크로도 안 예쁘다.
+
+    **버리는 쪽이 기본이다.** 틀린 번호로 전화를 걸게 하느니 번호를 안 주는 편이 낫다
+    (NULL = "모름"). 두 갈래로 버린다:
+
+    - **선두 0 이 없는 값**(실측 66건) — 원본이 어딘가에서 수치로 취급돼 앞의 0 이 날아갔다.
+      `21717000` 처럼 8자리인데, 서울 `02` 인지 `021` 인지 복원하려면 추측해야 한다.
+    - **실재하지 않는 국번**(실측 2건) — `069…`·`060…`. 특히 060 은 정보이용료 번호라
+      눌리면 사용자에게 요금이 붙는다.
+
+    남는 7~8자리는 뒤 4자리를 기준으로 가른다 — `02|743|1450` · `02|1670|8876` · `070|8869|6165`.
+    """
+    digits = re.sub(r"\D", "", raw or "")
+    if digits[:4] in RELAY_PREFIXES:
+        area = digits[:4]
+    elif digits[:3] in AREA_CODES or digits[:2] == "02":
+        area = "02" if digits[:2] == "02" else digits[:3]
+    else:
+        return None
+    rest = digits[len(area):]
+    if len(rest) not in (7, 8):
+        return None
+    return f"{area}-{rest[:-4]}-{rest[-4:]}"
+
+
+def room_count(row: dict):
+    """양실+한실 → 객실 수. 둘 다 비면 **None 이다**(0 이 아니다).
+
+    0 을 그대로 넣으면 "객실 0개인 숙소"가 화면에 나간다 — 미기재와 구분이 안 된다(실측 59건).
+    DB 의 `ck_stay_rooms_positive` 가 이 규칙을 생성기 바깥에서 한 번 더 지킨다.
+    """
+    def n(key: str) -> int:
+        v = (row.get(key) or "").strip()
+        return int(v) if v.isdigit() else 0
+
+    total = n("양실수") + n("한실수")
+    return total or None
+
+
 def main(path: str) -> int:
     src = Path(path)
     if not src.is_file():
@@ -121,7 +181,10 @@ def main(path: str) -> int:
             if not name or not ext_id:
                 dropped["식별불가"] += 1
                 continue
-            rows.append((ext_id, name, lat, lng, region, code, STAY_TYPE.get(raw_type, "기타")))
+            rows.append((
+                ext_id, name, lat, lng, region, code, STAY_TYPE.get(raw_type, "기타"),
+                address, normalize_phone(row.get("전화번호")), room_count(row),
+            ))
 
     # 같은 관리번호가 두 번 오면 뒤엣것만 — PK 충돌로 시드 전체가 실패하는 것을 막는다.
     deduped = {r[0]: r for r in rows}
@@ -130,24 +193,46 @@ def main(path: str) -> int:
     def esc(v: str) -> str:
         return v.replace("'", "''")
 
+    def lit(v) -> str:
+        """NULL 과 빈 문자열을 가른다 — `''` 로 넣으면 '모름'이 '빈 값'이 되어 화면이 구분을 잃는다."""
+        if v is None:
+            return "NULL"
+        return str(v) if isinstance(v, int) else f"'{esc(v)}'"
+
+    vals = sorted(deduped.values())
+    n_all = len(vals)
+    have = {  # 채움률을 파일 머리에 박는다 — 원본이 바뀌면 재생성 diff 에서 바로 보인다.
+        "주소": sum(1 for v in vals if v[7]),
+        "전화": sum(1 for v in vals if v[8]),
+        "객실": sum(1 for v in vals if v[9]),
+    }
+
     out = [
         "-- R__ 반복 시드 — 숙소 정본. **생성물이다. 손으로 고치지 마라.**",
         "-- 원본: 행정안전부 LOCALDATA 「숙박업」 / 생성: backend/scripts/gen_stay_seed.py",
-        f"-- 수록 {len(deduped):,}곳 · 여관업·여인숙업 제외 · 좌표 EPSG:5174→WGS84 변환",
+        f"-- 수록 {n_all:,}곳 · 여관업·여인숙업 제외 · 좌표 EPSG:5174→WGS84 변환",
         "--",
         "-- amenities 는 비어 있다 — LOCALDATA 가 편의시설을 주지 않는다. '없음'이 아니라 '모름'이라",
         "-- 응답이 그 사실을 따로 알린다(필터가 조용히 0건을 내지 않도록).",
+        "--",
+        "-- address·phone·rooms 는 칸마다 채움률이 다르고 **NULL 이 '모름'을 뜻한다**:",
+        "--   " + " · ".join(f"{k} {v:,} ({v / n_all * 100:.1f}%)" for k, v in have.items()),
         "",
-        "INSERT INTO stay (external_source, external_id, name, lat, lng, region, region_code, stay_type) VALUES",
+        "INSERT INTO stay (external_source, external_id, name, lat, lng, region, region_code,"
+        " stay_type, address, phone, rooms) VALUES",
     ]
     out.append(",\n".join(
-        f"  ('LOCALDATA', '{esc(i)}', '{esc(n)}', {lat:.6f}, {lng:.6f}, '{esc(r)}', '{c}', '{t}')"
-        for i, n, lat, lng, r, c, t in sorted(deduped.values())
+        f"  ('LOCALDATA', '{esc(i)}', '{esc(n)}', {lat:.6f}, {lng:.6f}, '{esc(r)}', '{c}', '{t}',"
+        f" {lit(addr)}, {lit(tel)}, {lit(rooms)})"
+        for i, n, lat, lng, r, c, t, addr, tel, rooms in vals
     ))
+    # **새 칸을 여기 빠뜨리면 기존 DB 는 영원히 비어 있다.** 정본 12,782행이 이미 있으므로 재실행은
+    # 전부 이 충돌 경로를 탄다 — INSERT 절만 고치면 빌드는 초록인데 값이 안 들어온다.
     out.append("ON CONFLICT (external_source, external_id) DO UPDATE SET")
     out.append("  name = EXCLUDED.name, lat = EXCLUDED.lat, lng = EXCLUDED.lng,")
     out.append("  region = EXCLUDED.region, region_code = EXCLUDED.region_code,")
-    out.append("  stay_type = EXCLUDED.stay_type, updated_at = now();")
+    out.append("  stay_type = EXCLUDED.stay_type, address = EXCLUDED.address,")
+    out.append("  phone = EXCLUDED.phone, rooms = EXCLUDED.rooms, updated_at = now();")
     out.append("")
 
     dest = root / "app/src/main/resources/db/migration/R__seed_stay.sql"

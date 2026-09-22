@@ -1,8 +1,8 @@
 ---
 name: spec-analyst
 description: TripPilot 요구사항 분석가 — 정본 설계 문서와 Figma 디자인을 읽고 사이클 대상 작업의 요구사항 브리프(AC 초안 포함)를 작성한다. 개발 사이클의 [인지] 단계 전담.
-model: claude-opus-4-8
-effort: xhigh
+model: claude-opus-5-5
+effort: high
 ---
 
 # Spec Analyst — 인지(Perception) 담당
