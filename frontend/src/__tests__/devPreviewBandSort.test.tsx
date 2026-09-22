@@ -63,19 +63,44 @@ const EXPECTED_H = [
   'dev-preview-state-h02-mustvisit-default', // h02
   'dev-preview-state-h02-mustvisit-loading', // h02
   'dev-preview-state-h02-mustvisit-error', // h02
-  'dev-preview-state-itinerary-mustvisit-time-default', // h07
+  // TRIP-786: itinerary-mustvisit-time-default(h07) → h03-mustvisit-time-default(h03) 개명 +
+  // 신규 h03-mustvisit-time-off·-error 2키. 라벨 코드가 h03 이라 안정 정렬이 h02 뒤·h07 앞에 세
+  // 칩을 인접시킨다. 같은 h03 코드 3키는 PREVIEW_STATES 배열 삽입 순서(default→off→error)로
+  // 안정정렬되므로 구현자는 그 순서로 삽입한다(배열 위치=정렬 위치, h02 3키 선례 동형).
+  'dev-preview-state-h03-mustvisit-time-default', // h03
+  'dev-preview-state-h03-mustvisit-time-off', // h03
+  'dev-preview-state-h03-mustvisit-time-error', // h03
+  // TRIP-787: itinerary-edit-time-sheet(라벨 h24) → h04-time-adjust-sheet(라벨 h04) 개명. 라벨 코드가
+  // h04 라 안정 정렬이 h03(방문 시각) 뒤·h07(부분 결과) 앞으로 이 칩을 올린다(옛 h24 자리에서 이동 —
+  // TimeSheet 위젯에 mode='h04' 변형을 얹는 정합, 02a §3-5). 개명=count 불변(net 0).
+  'dev-preview-state-h04-time-adjust-sheet', // h04
+  // TRIP-788: 내 여행 목록 h05/h06 Figma 재번호 — 옛 my-trips-* (h37 꼬리)가 h05/h06 로 개명돼 코드순
+  // 안정 정렬이 h04(time-adjust) 뒤·h07(부분 결과) 앞으로 이 4칩을 올린다(TRIP-801 h34→h16 이동 선례).
+  // 같은 코드 내 순서는 PREVIEW_STATES 배열 삽입 순서(안정 정렬) — 구현자는 background→done-bar→
+  // loading→empty 순으로 연속 삽입한다(배열 위치=정렬 위치). done-bar 만 신규, 나머지 3은 개명.
+  'dev-preview-state-h05-my-trips-background', // h05 (구 my-trips-list)
+  'dev-preview-state-h05-my-trips-done-bar', // h05 (신규 · 완료 도킹 배너)
+  'dev-preview-state-h06-my-trips-loading', // h06 (구 my-trips-loading)
+  'dev-preview-state-h06-my-trips-empty', // h06 (구 my-trips-empty)
   // TRIP-790: 옛 h10 `itinerary-draft-generating`(만드는 중 · DraftScreen 인라인 게이지)을
   // h07 부분 결과(셸 얼굴)로 개명. 라벨 코드가 h07 이라 안정 정렬이 mustvisit-time 뒤에 붙는다
   // (개명 엔트리는 PREVIEW_STATES 배열상 draft 구역이라 mustvisit-time 보다 늦다 · 02a ★10).
   'dev-preview-state-h07-generating-partial', // h07
+  // TRIP-789: 옛 h09 itinerary-generating(생성 중 loading · GeneratingScreen)을 h07-generating-loading
+  // 으로 개명. 라벨 코드가 h07 이라 안정 정렬이 partial 바로 뒤에 붙는다 — PREVIEW_STATES 배열에서 이
+  // 항목(구 itinerary-generating)이 h07-generating-partial 보다 뒤 위치라 안정 정렬이 partial→loading
+  // 순서를 낸다(구현자는 개명만 하고 배열 위치는 안 옮긴다 · 배열 위치=정렬 위치). ★ h07 두 얼굴:
+  // loading(데이터 前) ≠ partial(day1 도착·셸) — 개명·정렬 시 안 섞음.
+  'dev-preview-state-h07-generating-loading', // h07 (TRIP-789 · 구 itinerary-generating · h09)
   'dev-preview-state-h08-draft-collapsed', // h08 (TRIP-783 지도+시트 셸 접힘)
   // TRIP-792: h08 펼침(시트 상단 스냅 · initialIndex={1}) 신규. 코드가 h08 이라 안정 정렬이
   // collapsed 바로 뒤에 붙는다(PREVIEW_STATES 배열에서도 expanded 를 collapsed 직후에 삽입 —
   // 그래야 안정 정렬이 이 순서를 낸다). 동시에 옛 h11 DraftScreen 초안 5키(default·stale-failed·
   // loading·empty·nopins)는 삭제돼 이 배열에서도 빠진다(band h 소비처 이동, 폴백 3키는 유지).
   'dev-preview-state-h08-draft-expanded', // h08 (TRIP-792 지도+시트 셸 펼침)
-  'dev-preview-state-itinerary-generating', // h09
-  'dev-preview-state-itinerary-generating-failed', // h09
+  // TRIP-789: 옛 h09 두 키(itinerary-generating·itinerary-generating-failed)가 이 자리에서 사라진다 —
+  // 전자는 h07-generating-loading 으로 개명·이동(위 h07 그룹), 후자는 프리뷰 키 삭제(핸들링 유지).
+  // band h 그룹에 더는 h09 코드 항목이 없다.
   // TRIP-796: h11 같이 결과(CoPick 완료) 지도+시트 셸. 코드가 h11 이라 안정 정렬이 h11 그룹 안에
   // 들어가고, PREVIEW_STATES 배열에서 이 프리뷰를 fallback 3키보다 **앞**(그 직전)에 삽입하므로
   // 안정 정렬이 이 순서(copick → fallback 3)를 낸다(02a ★13 · h08 D5 선례 — 배열 위치=정렬 위치).
@@ -119,16 +144,15 @@ const EXPECTED_H = [
   // TRIP-797: h19 manual-empty·manual-filled 는 h12-editor-* 로 개명·병합돼 위 h12 그룹으로 이동.
   // TRIP-798: h20 place-add 는 h13-place-add 로 개명돼 위 h13 자리(h12↔h14)로 이동 +
   //   place-add-notready 는 배너 제거로 삭제 — 이 h20 자리엔 이제 아무 칩도 없다.
-  // TRIP-797: h24 itinerary-edit 는 h12-editor-filled 로 병합돼 삭제. itinerary-edit-time-sheet 는
-  // TimeSheet 위젯 직접 렌더라 유지(카드 ⌄ 가 여는 시트, 제거 화면과 무관 · 02a ★9).
-  'dev-preview-state-itinerary-edit-time-sheet', // h24
+  // TRIP-797: h24 itinerary-edit 는 h12-editor-filled 로 병합돼 삭제.
+  // TRIP-787: itinerary-edit-time-sheet(h24) 는 h04-time-adjust-sheet(h04)로 개명·상단 이동(위 h04
+  //   줄 참조) 돼 이 자리에서 사라진다(개명=count 불변, 위치만 이동).
   // TRIP-799: 옛 h25 TimelineScreen PLANNED 프리뷰 4키는 h14-plan-* 4키로 교체됐다(위 참조).
   // TRIP-801: itinerary-confirmed(h34)는 h16-plan-confirmed(h16)로 개명·상단 이동(위 h16 줄 참조)
   // 돼 이 자리에서 사라진다.
   'dev-preview-state-itinerary-draft-zero', // h35
-  'dev-preview-state-my-trips-list', // h37
-  'dev-preview-state-my-trips-empty', // h37
-  'dev-preview-state-my-trips-loading', // h37
+  // TRIP-788: my-trips-list/empty/loading 은 h05/h06 로 재번호돼 위 h04↔h07 사이로 이동(코드=정렬위치)
+  // — 이 h37 꼬리 자리엔 이제 아무 칩도 없다(itinerary-draft-zero 가 band h 그룹의 마지막).
 ];
 
 const EXPECTED_L = [

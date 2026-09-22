@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import {
   DEFAULT_DWELL_KEY,
+  buildAnytimeMustVisitRequest,
   buildFixedMustVisitRequest,
   mustVisitTimeBlockReason,
   startTimeOptions,
@@ -145,8 +146,10 @@ export function MustVisitTimePage({
     if (!ready || submitLockedRef.current) return;
     // 화면의 `disabled` 는 접근성 상태만으로도 매처를 통과할 수 있으므로 배선도 스스로 문을
     // 잠근다. 여기서는 그 이상이다 — **되돌릴 수 없는 DELETE 를 검증 전에 보내지 않는 것**이
-    // 이 한 줄의 실질이다.
-    const request = buildFixedMustVisitRequest({ poiId: sourcePoiId, form });
+    // 이 한 줄의 실질이다. OFF 는 ANYTIME 최소본, FIXED 는 완성 시에만 본문이 만들어진다(null=중단).
+    const request = form.fixed
+      ? buildFixedMustVisitRequest({ poiId: sourcePoiId, form })
+      : buildAnytimeMustVisitRequest({ poiId: sourcePoiId });
     if (request === null) return;
 
     submitLockedRef.current = true;

@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Image, Pressable, Text, View } from 'react-native';
 
 import { ChevronRightGlyph } from './TripGlyphs';
 import type { MyTripCardVM } from '../model';
@@ -39,7 +39,11 @@ export function TripCard({
   onResume,
   testIDPrefix,
 }: TripCardProps): ReactElement {
-  const { tripId, title, metaLine, badge, extra } = vm;
+  const { tripId, title, metaLine, badge, extra, resume, imageUrl } = vm;
+
+  // TRIP-788 · resume 는 배지와 독립(AC-5 seam) — 명시 신호가 오면 그것, 없으면 기존 배지 파생 폴백.
+  // 생성중(resume=false)이 draft 배지를 써도 이 게이트가 resume 누출을 막는다.
+  const showResume = resume ?? badge === 'draft';
 
   return (
     <Pressable
@@ -48,8 +52,16 @@ export function TripCard({
       onPress={onPress}
       className="w-full overflow-hidden rounded-card border border-hairline bg-canvas"
     >
-      {/* 사진 자리 — 중립 플레이스홀더(Trip 에 사진 필드 없음). 배지·resume 를 이 위에 얹는다. */}
+      {/* 사진 자리 — imageUrl(픽스처 전용, AC-6 G7) 있으면 Image, 없으면 중립 회색(Trip 에 사진 필드
+          없음, INV-1). 배지·resume 는 이 위에 얹는다. */}
       <View className="h-[178px] w-full bg-surface-soft">
+        {imageUrl ? (
+          <Image
+            testID={`${testIDPrefix}-photo-${tripId}`}
+            source={{ uri: imageUrl }}
+            className="h-[178px] w-full"
+          />
+        ) : null}
         {badge !== null ? (
           <View
             testID={`${testIDPrefix}-badge-${tripId}`}
@@ -67,7 +79,7 @@ export function TripCard({
           </View>
         ) : null}
 
-        {badge === 'draft' ? (
+        {showResume ? (
           <Pressable
             testID={`${testIDPrefix}-resume-${tripId}`}
             accessibilityRole="button"

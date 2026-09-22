@@ -14,16 +14,14 @@ import { GeneratingPage } from './GeneratingPage';
  *  - 🔴 마운트 시 생성 POST 를 **1회** 쏜다(`{ generationMode:'FULLY_AI' }` 하나뿐, 여분 키 0).
  *  - 🔴 201(성공)이면 draft 로 **`router.replace` 1회**(뒤로가면 생성 화면으로 안 돌아온다).
  *  - 🔴 오류면 실패 표면을 띄우고(침묵 금지·INV-4) draft 로 안 가며, [다시 시도]가 POST 를 재발화한다.
- *  - 🔴 [취소]는 **뒤로 이탈**하고 draft 로 안 가며 **세션 cancel 을 안 쏜다**(sessionId 부재, Seed 결정 3).
- *  - 🔴 [백그라운드로]는 **앞으로 이탈**(여행/홈)하되 뒤로가기가 아니고 세션 cancel 도 안 쏜다.
+ *  - 🔴 앱바 뒤로 셰브론이 **백그라운드 이탈**(여행/홈 forward)이지 뒤로가기(router.back)·세션 cancel 이 아니다.
  *
- * ⚠️ **취소는 "중단"이 아니다.** orval `customInstance` 는 `signal` 을 안 받고(02a §5-5) react-query
- * mutationFn 도 AbortSignal 을 안 줘 in-flight POST 를 진짜로 끊을 길이 없다 — 구현은 `mutation.reset()`
- * +이탈이고 서버는 일정을 만들 수 있다(⚑D). 그래서 I4 는 **관측 가능한 폐기**(이탈+미전진+서버 cancel 0)만
- * 잰다.
- *
- * ⚠️ **[취소]=뒤로 · [백그라운드로]=여행/홈 forward** 는 ⚑A/Seed 기본값이다(게이트① 종속). cancel↔background
- * 구별의 급소는 `mockBack` 호출 여부.
+ * ⚠️ **TRIP-789 정합**: footer·[생성 취소]·[백그라운드로 전환] 2버튼이 제거되고 앱바 뒤로 셰브론이
+ * onBackground(백그라운드 이탈)를 흡수한다(Q2). 옛 [취소](reset+router.back)는 소멸했다 — 그래서
+ * 옛 I4([취소])·I5([백그라운드 버튼])는 앱바 뒤로 하나로 합쳐 다시 쓴다(제거된 testID 를 누르는 형제
+ * 테스트를 방치하면 엉뚱한 red — 02a ★2). in-flight POST 는 여전히 진짜로 못 끊는다(orval customInstance
+ * 가 signal 을 안 받음 ⚑D) — 이탈해도 서버는 일정을 만들 수 있다. I4 는 **관측 가능한 이탈**(forward+
+ * 미전진+서버 cancel 0)만 잰다.
  *
  * 3동작 뼈대: 준비 = `mockPhase`·목 세팅 → 실행 = 페이지 렌더/버튼 press → 단언 = 나간 mutate·불린 router.
  */
@@ -177,31 +175,15 @@ describe('🔴 I3 · AC-6 — 오류면 실패 표면 + 재시도가 POST 를 �
   });
 });
 
-describe('🔴 I4 · AC-3 — [취소]는 뒤로 이탈 · 결과 미반영 · 세션 cancel 미호출', () => {
-  it('[취소] press → 뒤로 가고 draft 로 안 가며 서버 취소를 안 쏜다', () => {
+describe('🔴 I4 · AC-4 — 앱바 뒤로 = 백그라운드 이탈 (취소 개념 소멸)', () => {
+  it('앱바 뒤로 press → 앞으로 이탈(여행/홈, draft·generating 아님)하고 뒤로가기·세션 cancel 이 아니다', () => {
     mockPhase = 'pending';
     renderPage();
 
-    fireEvent.press(screen.getByTestId('itinerary-generating-cancel'));
+    // TRIP-789: footer·[취소]·[백그라운드로] 2버튼 제거 후 유일한 이탈구는 앱바 뒤로 셰브론이다(Q2).
+    fireEvent.press(screen.getByTestId('itinerary-generating-back'));
 
-    // 뒤로 이탈(생성 폐기).
-    expect(mockBack).toHaveBeenCalledTimes(1);
-    // 결과 미반영 — 앞으로(draft)로 전진하지 않았다.
-    expect(mockReplace).not.toHaveBeenCalled();
-    expect(forwardDestinations().some((d) => d.includes('draft'))).toBe(false);
-    // sessionId 가 없어 서버 cancel 은 애초에 못/안 쏜다(Seed 결정 3).
-    expect(mockCancelMutate).not.toHaveBeenCalled();
-  });
-});
-
-describe('🔴 I5 · AC-4 — [백그라운드로]는 앞으로 이탈 · 뒤로 아님 · 세션 cancel 미호출', () => {
-  it('[백그라운드로] press → 여행/홈으로 이동(draft·generating 아님)하고 뒤로가기가 아니다', () => {
-    mockPhase = 'pending';
-    renderPage();
-
-    fireEvent.press(screen.getByTestId('itinerary-generating-background'));
-
-    // 뒤로가기가 아니다 — 이게 [취소]와 구별되는 급소다.
+    // 뒤로가기(router.back)가 아니다 — 옛 [취소](reset+back)가 사라졌음을 잠근다(급소).
     expect(mockBack).not.toHaveBeenCalled();
 
     // 앞으로 이탈이 실제로 일어났고(뮤테이션은 살린 채 화면만 이탈), 그 목적지가
@@ -210,6 +192,9 @@ describe('🔴 I5 · AC-4 — [백그라운드로]는 앞으로 이탈 · 뒤로
     expect(destinations.length).toBeGreaterThanOrEqual(1);
     expect(destinations.some((d) => d.includes('draft'))).toBe(false);
     expect(destinations.some((d) => d.includes('generating'))).toBe(false);
+    // 유일 이탈구가 됐으므로 목적지를 정확일치로 잠근다(5-b 참고-1) — 홈이어야 한다.
+    // (팀 확정 2026-09-11: 일정 탭은 trips[0] 리다이렉트로 옛 일정에 착지할 수 있어 홈으로 보낸다.)
+    expect(destinations).toContain('/(tabs)');
 
     // 서버 오퍼레이션 없음(openapi 767) — 취소를 안 쏜다.
     expect(mockCancelMutate).not.toHaveBeenCalled();

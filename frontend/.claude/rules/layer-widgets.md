@@ -4,7 +4,7 @@ paths:
 ---
 # `src/widgets/` — FSD widgets 층 (TRIP-804 규칙 신설 → TRIP-805 첫 입주)
 
-여러 화면이 쓰는 **화면 조각**(지도+시트 셸 같은 조립 단위)을 두는 층. **TRIP-805가 첫 입주** — `itinerary-edit`(shared→widgets 승격 이동)·`time-sheet`(쌍둥이 시각 시트 통일 신규) 두 슬라이스. 담은 곳 FAB 스택(a01·d01·d03 3벌)은 **이번에 넣지 않았다** — 소비처가 전부 features 층 화면이라 features→widgets 상향 참조가 되어 층 린트와 충돌(실측 `eslint-disable` 3곳으로만 통과). page/route 층에서 형제로 렌더하는 배치로 후속 티켓(정합 티켓 TRIP-695·703·708·725와 함께).
+여러 화면이 쓰는 **화면 조각**(지도+시트 셸 같은 조립 단위)을 두는 층. **TRIP-805가 첫 입주** — `itinerary-edit`(shared→widgets 승격 이동)·`time-sheet`(쌍둥이 시각 시트 통일 신규) 두 슬라이스. **TRIP-788이 세 번째 슬라이스 `generation-done-bar`를 신설**(prop-driven 완료 도킹 배너, 아래 절). 담은 곳 FAB 스택(a01·d01·d03 3벌)은 **이번에 넣지 않았다** — 소비처가 전부 features 층 화면이라 features→widgets 상향 참조가 되어 층 린트와 충돌(실측 `eslint-disable` 3곳으로만 통과). page/route 층에서 형제로 렌더하는 배치로 후속 티켓(정합 티켓 TRIP-695·703·708·725와 함께).
 
 ## import 방향
 - widgets → features · entities · shared 만 참조한다.
@@ -51,4 +51,15 @@ h24 `SlotTimeSheet`·i15/i22 `ManualTimeSheet`는 props 계약이 완전 동일�
 
 | 파일 | 역할 |
 |---|---|
-| `src/widgets/time-sheet/ui/TimeSheet.tsx` | 공용 시각 시트. props `{startAt, endAt, onApply({startAt,endAt,endsNextDay}), onCancel, testIDPrefix, labels:{start,end}, title?}`. 시·분 값별 셀-press 피커(휠 라이브러리 부재, `ScrollView`+map 으로 전 값 트리 실재). `endsNextDay=end<=start` 기계 유도(INV-2 판정 아님). 분 셀 bare 숫자(INV-3, "30" — "30분" 금지). **선택 셀 `useState` 유지**(`widgetsStructure` F의 useState-0 규약 예외, D8). 소비: `ItineraryEditPage`·`PlaceAddPage`(접두 `itinerary-edit-time`, 라벨 시작/종료, 제목 기본값 '시각 조정') · `PlanbManualPage`(접두 `planb-manual-time`, 라벨 도착/출발, 제목 '시각 입력'). ★ 실개폐·2스냅은 `@gorhom/bottom-sheet` 통과형 목이 못 봄(6-b 실기 전용) |
+| `src/widgets/time-sheet/ui/TimeSheet.tsx` | 공용 시각 시트. props `{startAt, endAt, onApply({startAt,endAt,endsNextDay}), onCancel, testIDPrefix, labels:{start,end}, title?, mode?:'h04', placeSummary?:TimeSheetPlaceSummary}`(뒤 둘은 TRIP-787 신규, 둘 다 옵셔널). `mode` 미전달(default) 시 시·분 값별 셀-press 피커(휠 라이브러리 부재, `ScrollView`+map 으로 전 값 트리 실재). `endsNextDay=end<=start` 기계 유도(INV-2 판정 아님, h04도 이 헬퍼를 그대로 재사용 — 재구현 금지 소스가드 `TimeSheet.h04.source.test.ts`). 분 셀 bare 숫자(INV-3, "30" — "30분" 금지). **선택 셀 `useState` 유지**(`widgetsStructure` F의 useState-0 규약 예외, D8). 소비(default): `ItineraryEditPage`·`PlaceAddPage`(접두 `itinerary-edit-time`, 라벨 시작/종료, 제목 기본값 '시각 조정') · `PlanbManualPage`(접두 `planb-manual-time`, 라벨 도착/출발, 제목 '시각 입력'). ★ 실개폐·2스냅은 `@gorhom/bottom-sheet` 통과형 목이 못 봄(6-b 실기 전용) |
+| ↳ **`mode='h04'` 변형**(TRIP-787, opt-in — 위 소비처는 `mode` 미전달이라 무변) | 장소 요약 행(`placeSummary`: `imageUrl`·`name`·`badgeLabel`·`region`)·시작/종료 2탭 세그(`@/shared/ui/SegmentedControl` 재사용)·3열 12시간 휠(`@/shared/ui/WheelPicker` 3벌 재사용, `decompose12`/`compose24`로 24h 상태와 표시만 변환)·단일 '적용' CTA(취소 없음)를 그린다. 프리뷰 키 `h04-time-adjust-sheet`(구 `itinerary-edit-time-sheet`)만 소비 — **프로덕션 배선 없음**(프리뷰 전용, region 데이터 출처는 슬롯 계약에 없어 프리뷰 픽스처로만 무해, 후속 티켓 후보). 휠 중앙 텍스트 15px 분홍(WheelPicker 기본) vs Figma 22px 검정은 재사용이 부르는 수용된 드리프트(6-b 육안 대상, 별 티켓 후보) |
+
+## `src/widgets/generation-done-bar/` — 완료 도킹 배너 (TRIP-788 신규)
+
+BottomTab 위에 뜨는 "여행 일정이 완성됐어요" 흰 카드. Figma 원본 이름 "알림 바 · 성공 (v2 이식)" — 재사용 가능한 공용 알림바(Toast·Snackbar류)처럼 보이나 리포에 그런 이름의 컴포넌트가 없어(`shared/ui`·`widgets` 전수 grep 0건) 신설.
+
+| 파일 | 역할 |
+|---|---|
+| `src/widgets/generation-done-bar/ui/GenerationDoneBar.tsx` | `GenerationDoneBarProps = {tripName: string, onPressView: () => void}` — 체크 글리프(`generation-done-bar-check`) + `{tripName} 일정이 완성됐어요`(`generation-done-bar-text`, 완전일치) + `보기` Pressable(`generation-done-bar-view`, press→`onPressView` 1회). border만(#ededed)·**그림자 없음**(Figma 실측 — 티켓 "그림자"는 어긋남, Figma 우선). presentation-only(useState 0, `widgetsStructure` F 규약 그대로 통과). **표시 조건(어떤 여행이 "갓 완성"인가 = last-seen 영속 로직)은 이번 범위 밖** — prop-driven+프리뷰 픽스처(`h05-my-trips-done-bar`)로만 격리, 실배선은 후속 티켓. |
+| `src/widgets/generation-done-bar/ui/GenerationDoneBarGlyphs.tsx` | `DoneCheckGlyph`(체크, success `#0E9384`, 원 없음) — widgets→features import 금지라 `ItineraryGlyphs`의 체크를 못 써 로컬 복제(`ManualEditGlyphs.tsx` 선례와 동형 raw-hex 격리 관례). |
+| 배럴 없음 | `preview.tsx`가 deep import로 직접 소비(가장 최근 widget 슬라이스 2개의 선례를 따름 — 소비처가 늘면 배럴 추가는 trivial, ponytail lite 대안·03 §트레이드오프). |

@@ -84,18 +84,13 @@ export function GeneratingPage({
     <GeneratingScreen
       failed={generate.isError}
       onRetry={start}
-      onCancel={() => {
-        // ponytail: 진짜 in-flight 중단은 불가 — orval customInstance 가 AbortSignal 을 안 받고
-        // (02a §5-5) react-query mutationFn 도 signal 을 안 준다. `reset()` 은 로컬 뮤테이션
-        // 상태만 지우고 서버는 일정을 만들 수 있다(⚑D). 관측 가능한 폐기 = 뒤로 이탈뿐.
-        // mutator 에 signal 배선이 생기면 여기서 abort 로 올린다.
-        generate.reset?.();
-        router.back();
-      }}
       onBackground={() => {
-        // 화면만 앞으로 이탈(여행 탭). 뮤테이션은 리셋하지 않는다 — 이미 나간 POST 는 언마운트로
-        // 취소되지 않아(axios+react-query) 서버가 백그라운드에서 일정을 완성한다(Seed·openapi 767).
-        router.replace('/(tabs)/itinerary');
+        // 앱바 뒤로 = 백그라운드 이탈(화면만 홈으로). 뮤테이션은 리셋하지 않는다 — 이미 나간
+        // POST 는 언마운트로 취소되지 않아(axios+react-query) 서버가 백그라운드에서 일정을 완성한다
+        // (Seed·openapi 767). 홈으로 보내는 이유: 일정 탭은 trips[0] 로 리다이렉트해 생성 중인 여행이
+        // 아닌 옛 일정에 착지할 수 있다(traps-itinerary ③, 팀 확정 2026-09-11). [취소]=CANCELED(구
+        // BR-U3-05)는 팀 확정으로 제거 — canon BR-U3-04/05 도 "취소 없음"으로 갱신됨(TRIP-789).
+        router.replace('/(tabs)');
       }}
     />
   );

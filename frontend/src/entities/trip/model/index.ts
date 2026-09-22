@@ -22,6 +22,10 @@ export interface MyTripCardVM {
   metaLine: string;
   badge: MyTripBadge;
   extra: string | null;
+  /** TRIP-788 · resume CTA 노출 신호(배지와 독립, AC-5 seam). 미전달=배지 파생 폴백(TripCard). */
+  resume?: boolean;
+  /** TRIP-788 · 카드 사진(픽스처 전용, AC-6 G7). 프로덕션 항상 null(INV-1 — Trip 에 사진 필드 없음). */
+  imageUrl?: string | null;
 }
 
 /**

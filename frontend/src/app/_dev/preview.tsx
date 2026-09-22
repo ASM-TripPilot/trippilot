@@ -85,6 +85,7 @@ import {
   PlaceAddRow,
 } from '@/features/itinerary/ui/PlaceAddScreen';
 import { SlotCandidatePanel } from '@/features/itinerary/ui/SlotCandidatePanel';
+import { GenerationDoneBar } from '@/widgets/generation-done-bar/ui/GenerationDoneBar';
 import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
 import { GenerationProgressCard } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
 import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
@@ -988,15 +989,26 @@ const TIMELINE_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
   },
 ];
 
-// 내 여행 목록(h37, TRIP-468) 카드 VM 3종 — 완성·작성중·미도착(배지 degrade). 순수 카드라
-// 픽스처를 얹어 세 얼굴을 한 화면에서 본다(컨테이너·react-query 없이).
+// 내 여행 목록(h05/h06, TRIP-788) 카드 VM 4종 — 완성(사진 픽스처)·생성중(resume 없음)·초안(resume)·
+// 미도착(배지 degrade). 순수 카드라 픽스처를 얹어 네 얼굴을 한 화면에서 본다(컨테이너·react-query 없이).
+// 완성 상태문은 Figma 정합(TRIP-788)으로 '추천안이 준비됐어요'(구 '확정 장소 N곳' 대체), imageUrl 은
+// DRAFT_PREVIEW_PHOTOS(로컬 에셋 resolve — jest 는 .uri undefined 라 회색, 실기만 사진).
 const MY_TRIPS_PREVIEW_VMS: MyTripCardVM[] = [
   {
     tripId: 'demo-done',
     title: '서귀포시 여행',
     metaLine: '6월 10일 ~ 13일 · 3박 4일 · 2명',
     badge: 'done',
-    extra: '확정 장소 12곳',
+    extra: '추천안이 준비됐어요',
+    imageUrl: DRAFT_PREVIEW_PHOTOS[0],
+  },
+  {
+    tripId: 'demo-generating',
+    title: '제주 여행',
+    metaLine: '9월 5일 ~ 7일 · 2박 3일 · 2명',
+    badge: 'draft',
+    extra: 'AI가 일정을 짜는 중',
+    resume: false,
   },
   {
     tripId: 'demo-draft',
@@ -3550,28 +3562,82 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => <MustVisitPickerScreen view={{ kind: 'failed' }} />,
   },
   {
-    key: 'itinerary-mustvisit-time-default',
+    key: 'h03-mustvisit-time-default',
     band: 'h',
-    label: 'h07 · 방문 시각 지정',
+    label: 'h03 · 방문 시각 지정 default',
     login: null,
     render: () => (
       <MustVisitTimeScreen
         sourcePoiId="poi-a"
         placeName="부산시립미술관"
         region="부산 부산진구"
-        imageUrl={null}
+        imageUrl={DRAFT_PREVIEW_PHOTOS[0]}
         dayChips={tripDayChips({
           startDate: '2026-06-10',
-          endDate: '2026-06-12',
+          endDate: '2026-06-13',
         })}
         startOptions={startTimeOptions()}
         form={{
           fixed: true,
-          fixedDate: '2026-06-11',
+          fixedDate: '2026-06-10',
           fixedStart: '13:00',
           dwellKey: 'NORMAL',
         }}
         blockReason={null}
+      />
+    ),
+  },
+  {
+    key: 'h03-mustvisit-time-off',
+    band: 'h',
+    label: 'h03 · 방문 시각 지정 off',
+    login: null,
+    render: () => (
+      <MustVisitTimeScreen
+        sourcePoiId="poi-a"
+        placeName="부산시립미술관"
+        region="부산 부산진구"
+        imageUrl={DRAFT_PREVIEW_PHOTOS[0]}
+        dayChips={tripDayChips({
+          startDate: '2026-06-10',
+          endDate: '2026-06-13',
+        })}
+        startOptions={startTimeOptions()}
+        form={{
+          fixed: false,
+          fixedDate: '2026-06-10',
+          fixedStart: '13:00',
+          dwellKey: 'NORMAL',
+        }}
+        blockReason={null}
+      />
+    ),
+  },
+  {
+    key: 'h03-mustvisit-time-error',
+    band: 'h',
+    label: 'h03 · 방문 시각 지정 error',
+    login: null,
+    render: () => (
+      <MustVisitTimeScreen
+        sourcePoiId="poi-a"
+        placeName="부산시립미술관"
+        region="부산 부산진구"
+        imageUrl={DRAFT_PREVIEW_PHOTOS[0]}
+        dayChips={tripDayChips({
+          startDate: '2026-06-10',
+          endDate: '2026-06-13',
+        })}
+        startOptions={startTimeOptions()}
+        form={{
+          fixed: true,
+          fixedDate: '2026-06-10',
+          fixedStart: '13:00',
+          dwellKey: 'NORMAL',
+        }}
+        blockReason={null}
+        errorText="저장하지 못했어요"
+        onRetry={noop}
       />
     ),
   },
@@ -3906,29 +3972,22 @@ export const PREVIEW_STATES: PreviewState[] = [
   // 표면은 비결정형(RN Animated)이고 3단계는 균일 진행 중(⚑C, 완료 날조 없음)이다. 실화면 딥링크로는
   // 잠깐만 스치는 얼굴이라(성공 즉시 draft 로 replace) 여기가 이 화면을 오래 보는 유일한 자리다.
   {
-    key: 'itinerary-generating',
+    key: 'h07-generating-loading',
     band: 'h',
-    label: 'h09 · 생성 중',
-    login: null,
-    render: () => (
-      <GeneratingScreen onCancel={noop} onBackground={noop} onRetry={noop} />
-    ),
-  },
-  // h09 생성 실패(AC-6·INV-4) — POST 오류 시 침묵하지 않고 실패 표면 + [다시 시도]를 낸다.
-  {
-    key: 'itinerary-generating-failed',
-    band: 'h',
-    label: 'h09 · 생성 실패',
+    label: 'h07 · 생성 중 loading',
     login: null,
     render: () => (
       <GeneratingScreen
-        onCancel={noop}
         onBackground={noop}
         onRetry={noop}
-        failed
+        pins={MUST_VISIT_PREVIEW_PINS}
+        center={{ lat: 35.1532, lng: 129.1188 }}
       />
     ),
   },
+  // h07 생성 실패 프리뷰 키(itinerary-generating-failed)는 TRIP-789로 삭제 — 실패 표면·핸들링
+  // 코드(GeneratingScreen failed/onRetry·GeneratingPage isError→failed)는 그대로 유지되고,
+  // 폴백 전용 화면(TRIP-791)이 이 얼굴을 흡수한다(부모 결정 G: 코드 유지·키만 삭제).
   // h14 완성 일정(PLANNED, TRIP-799) — 옛 h25 TimelineScreen PLANNED 프리뷰 4키를 지도+시트 셸 4얼굴로
   // 교체(D7). PLANNED 는 이제 셸이라 실화면 딥링크로도 이 얼굴을 보려면 백엔드 응답이 필요해, 여기가
   // 4얼굴을 정적으로 대조하는 자리다. 4얼굴은 별 화면이 아니라 같은 셸의 데이터 분기다.
@@ -3980,13 +4039,14 @@ export const PREVIEW_STATES: PreviewState[] = [
         noBase: true,
       }),
   },
-  // 내 여행 목록 · h37(TRIP-468) — 완성(success 배지+"확정 장소 N곳")·작성중(primary 배지+resume
-  // CTA)·미도착(배지·부가정보 부재 degrade) 세 카드 + 사진 플레이스홀더·"최신순" 라벨을 한 화면에서
-  // Figma h37 2971:1656 과 대조한다. 배지 pill·resume 오버레이·사진 자리는 jest 사각(6-b 전용).
+  // 내 여행 목록 · h05/h06(TRIP-788) — 배열 순서 background→done-bar→loading→empty(안정 정렬 =
+  // devPreviewBandSort EXPECTED_H 위치). background 는 완성(사진)·생성중·초안·미도착 4카드 + "최신순"
+  // 라벨, done-bar 는 그 목록 위에 완료 도킹 배너를 얹는다. 배지 pill·resume 오버레이·사진 자리·배너
+  // 절대배치·체크 색은 jest 사각(6-b 전용).
   {
-    key: 'my-trips-list',
+    key: 'h05-my-trips-background',
     band: 'h',
-    label: 'h37 · 내 여행 목록',
+    label: 'h05 · 내 여행 목록',
     login: null,
     render: () => (
       <MyTripsListScreen
@@ -3999,18 +4059,36 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   {
-    key: 'my-trips-empty',
+    key: 'h05-my-trips-done-bar',
     band: 'h',
-    label: 'h37 · 내 여행 empty',
+    label: 'h05 · 완료 도킹 배너',
     login: null,
-    render: () => <MyTripsListScreen mode="empty" onPressCreateTrip={noop} />,
+    render: () => (
+      <View style={{ flex: 1 }}>
+        <MyTripsListScreen
+          mode="list"
+          onPressCreateTrip={noop}
+          cards={MY_TRIPS_PREVIEW_VMS.map((vm) => (
+            <MyTripCard key={vm.tripId} vm={vm} onPress={noop} />
+          ))}
+        />
+        <GenerationDoneBar tripName="서귀포시 여행" onPressView={noop} />
+      </View>
+    ),
   },
   {
-    key: 'my-trips-loading',
+    key: 'h06-my-trips-loading',
     band: 'h',
-    label: 'h37 · 내 여행 스켈레톤',
+    label: 'h06 · 내 여행 스켈레톤',
     login: null,
     render: () => <MyTripsListScreen mode="loading" onPressCreateTrip={noop} />,
+  },
+  {
+    key: 'h06-my-trips-empty',
+    band: 'h',
+    label: 'h06 · 내 여행 empty',
+    login: null,
+    render: () => <MyTripsListScreen mode="empty" onPressCreateTrip={noop} />,
   },
   // l03 마이페이지 · l03(TRIP-604) — 프로필 카드·세그먼트·예정 카드·지난 여행(회고 chevron)·설정
   // 행을 한 화면에서 Figma l03 default(1602:2388)와 대조한다. 예정 2건 + 종료 2건(회고 진입 chevron).
@@ -4148,17 +4226,24 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   {
-    key: 'itinerary-edit-time-sheet',
+    key: 'h04-time-adjust-sheet',
     band: 'h',
-    label: 'h24 · 시각 조정 시트',
+    label: 'h04 · 시각 조정 시트',
     login: null,
     render: () => (
       <View className="flex-1">
         <TimeSheet
+          mode="h04"
           testIDPrefix="itinerary-edit-time"
           labels={{ start: '시작', end: '종료' }}
-          startAt="10:15:00"
-          endAt="11:45:00"
+          startAt="13:00:00"
+          endAt="14:30:00"
+          placeSummary={{
+            imageUrl: DRAFT_PREVIEW_PHOTOS[0],
+            name: '부산시립미술관',
+            badgeLabel: '필수',
+            region: '부산 부산진구',
+          }}
           onApply={noop}
           onCancel={noop}
         />
