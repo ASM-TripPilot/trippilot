@@ -14,6 +14,7 @@ const CORAL = '#FF385C';
 const INK = '#222222';
 const CIRCLE_UPCOMING = '#C2C7CE';
 const CIRCLE_SKIPPED = '#9AA1AB';
+const MUTED_SOFT = '#9AA1AB';
 
 type GlyphProps = { size?: number };
 
@@ -86,6 +87,65 @@ export function PlusGlyph({
         stroke={color}
         strokeWidth={1.95 * s}
         strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+/**
+ * ⚠ 업로드 실패 셀 아이콘(경고 삼각 + 느낌표) — muted-soft.
+ * TRIP-760 · 색·정확한 벡터는 jest 사각(6-b 육안, Figma 1561:1790).
+ */
+export function WarningTriangleGlyph({ size = 18 }: GlyphProps): ReactElement {
+  const s = size / 18;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 18 18" fill="none">
+      <Path
+        d="M9 2.25L16.5 15.25H1.5L9 2.25Z"
+        stroke={MUTED_SOFT}
+        strokeWidth={1.5 * s}
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M9 7V10.25"
+        stroke={MUTED_SOFT}
+        strokeWidth={1.5 * s}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M9 12.75V12.76"
+        stroke={MUTED_SOFT}
+        strokeWidth={1.6 * s}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+/**
+ * ↻ 업로드 다시 시도 아이콘(원형 화살표) — primary(coral).
+ * TRIP-760 · 색·정확한 벡터는 jest 사각(6-b 육안, Figma 1561:1790).
+ */
+export function RetryGlyph({
+  size = 16,
+  color = CORAL,
+}: GlyphProps & { color?: string }): ReactElement {
+  const s = size / 16;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      <Path
+        d="M13 8C13 10.7614 10.7614 13 8 13C5.23858 13 3 10.7614 3 8C3 5.23858 5.23858 3 8 3C9.79 3 11.36 3.94 12.24 5.35"
+        stroke={color}
+        strokeWidth={1.5 * s}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M12.5 2.5V5.5H9.5"
+        stroke={color}
+        strokeWidth={1.5 * s}
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </Svg>
   );

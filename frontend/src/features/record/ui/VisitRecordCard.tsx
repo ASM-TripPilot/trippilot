@@ -4,6 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 import { deriveVisitStatus } from '../model/visitStatus';
 import {
   PlusGlyph,
+  RetryGlyph,
   VisitCheckActiveGlyph,
   VisitCheckDoneGlyph,
   VisitCheckSkippedGlyph,
@@ -51,6 +52,12 @@ export interface VisitRecordCardProps {
    */
   photoSlot?: ReactNode;
   memoSlot?: ReactNode;
+  /**
+   * TRIP-760 · 사진 업로드 실패 시 카드 하단 재시도 버튼(옵셔널 — 미주입 시 부재, 565/613 호출자 무영향).
+   * 페이지 컨테이너가 실패 자산이 있을 때만 내려준다. onPress 는 카드의 실패 자산 전체를 재발화한다
+   * (01b 결정 1 — 재시도 단위=카드-레벨).
+   */
+  uploadRetry?: { onPress: () => void };
 }
 
 function StatusCircle({
@@ -108,6 +115,7 @@ export function VisitRecordCard({
   onPressEditTime,
   photoSlot,
   memoSlot,
+  uploadRetry,
 }: VisitRecordCardProps): ReactElement {
   const status = deriveVisitStatus(card);
   const canSkip = status === 'UPCOMING' || status === 'IN_PROGRESS';
@@ -169,6 +177,26 @@ export function VisitRecordCard({
       ) : (
         <Text className="text-label text-muted-soft">메모를 남겨보세요</Text>
       )}
+
+      {/* TRIP-760 · 업로드 실패 재시도 — uploadRetry 주입 시에만. 풀폭 [↻ 다시 시도] + INV-4 안내
+          (사진은 실패했어도 메모·방문 체크는 저장됐다). 미주입 시 이 블록 자체가 없다(무회귀 짝). */}
+      {uploadRetry != null ? (
+        <View className="w-full gap-[6px]">
+          <Pressable
+            testID={`record-trip-upload-retry-${card.visitCheckId}`}
+            onPress={uploadRetry.onPress}
+            className="w-full flex-row items-center justify-center gap-xs rounded-pill border border-primary py-[10px]"
+          >
+            <RetryGlyph size={16} />
+            <Text className="font-noto-bold text-label text-primary">
+              다시 시도
+            </Text>
+          </Pressable>
+          <Text className="text-center text-caption text-muted-soft">
+            메모와 방문 체크는 저장되었어요
+          </Text>
+        </View>
+      ) : null}
     </View>
   );
 }

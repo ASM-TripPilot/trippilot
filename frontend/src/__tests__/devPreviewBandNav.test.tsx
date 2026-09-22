@@ -248,7 +248,11 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에서 그 두 키 + 관련 import 를
     //    지울 뿐 이 가드는 안 만진다(삭제 전엔 170개라 이 단언이 red). 정확히 그 두 키인지는 아래
     //    'TRIP-759' describe 가 못박는다. devPreviewBandSort 는 band h·l 만 잠가 band j 와 무관(오갱신 금지).
-    expect(PREVIEW_STATES).toHaveLength(168);
+    // ⚠️ TRIP-760: j01 error 얼굴 신설로 records-error 프리뷰 키 1개(band j) 추가로 168→169.
+    //    test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에 records-error 키만 추가하고
+    //    이 가드는 안 만진다(추가 전엔 168개라 이 단언이 red). 정확히 그 키인지는 아래 'TRIP-760' describe 가
+    //    못박는다. devPreviewBandSort 는 band h·l 만 잠가 band j 와 무관(오갱신 금지).
+    expect(PREVIEW_STATES).toHaveLength(169);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -279,6 +283,22 @@ describe('🔴 TRIP-759 · j01 default 프리뷰 키 통합 (band j)', () => {
     expect(keys).not.toContain('records-photo-memo');
 
     // 긍정 — 통합 목적지 키는 그대로(band j 가 통째로 빈 게 아님 = 공허 통과·과잉 삭제 차단).
+    expect(keys).toContain('records-default');
+  });
+});
+
+describe('🔴 TRIP-760 · j01 error 프리뷰 키 신설 (band j)', () => {
+  it('records-error 가 있고, records-default 는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // red-first — records-error 는 implementer 가 preview.tsx 에 추가하기 전엔 없다(band j,
+    // records-default 위에 upload-failed 셀 + uploadRetry + error 안내문을 얹은 픽스처). 카운트(169)
+    // 만으론 "아무 키나 1개 추가해도" 통과하므로, 이 단언이 '추가된 키가 records-error'임을 못박는다
+    // (TRIP-759 통합 describe 미러).
+    expect(keys).toContain('records-error');
+
+    // 긍정 — 형제 band j 앵커. default 얼굴이 딸려 사라지지 않았음(공허 통과 방지).
     expect(keys).toContain('records-default');
   });
 });

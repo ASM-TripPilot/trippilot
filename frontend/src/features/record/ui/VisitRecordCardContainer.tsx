@@ -32,16 +32,25 @@ export function VisitRecordCardContainer({
   onPressComplete,
   onPressSkip,
 }: VisitRecordCardContainerProps): ReactElement {
-  const { photos, saveMemo } = useVisitAttachments({
+  const { photos, failedUploads, retryUpload, saveMemo } = useVisitAttachments({
     tripId,
     visitCheckId: card.visitCheckId,
   });
 
-  const photoVMs = photos.map((photo): PhotoThumbVM => ({
-    visitPhotoMetaId: photo.visitPhotoMetaId,
-    availability: 'other-device',
-    uri: null,
-  }));
+  // 서버 사진(GET) 셀 + 업로드 실패(POST 실패) 셀을 한 스트립에 얹는다. 실패 셀 id 는 아직 서버
+  // 미등록이라 localAssetId 를 쓴다(TRIP-760). 실패 자산이 없으면(현 degrade 피커라 상시) 이 꼬리는 빈다.
+  const photoVMs: PhotoThumbVM[] = [
+    ...photos.map((photo): PhotoThumbVM => ({
+      visitPhotoMetaId: photo.visitPhotoMetaId,
+      availability: 'other-device',
+      uri: null,
+    })),
+    ...failedUploads.map((f): PhotoThumbVM => ({
+      visitPhotoMetaId: f.localAssetId,
+      availability: 'upload-failed',
+      uri: null,
+    })),
+  ];
 
   return (
     <VisitRecordCard
@@ -50,6 +59,16 @@ export function VisitRecordCardContainer({
       onPressSkip={onPressSkip}
       photoSlot={<PhotoThumbStrip photos={photoVMs} />}
       memoSlot={<MemoInline onSubmit={(text) => void saveMemo(text)} />}
+      // 카드-레벨 재시도(01b 결정 1) — 실패 자산 전체를 재발화. 실패가 없으면 버튼 자체를 안 내린다.
+      uploadRetry={
+        failedUploads.length > 0
+          ? {
+              onPress: () => {
+                for (const f of failedUploads) void retryUpload(f.localAssetId);
+              },
+            }
+          : undefined
+      }
     />
   );
 }

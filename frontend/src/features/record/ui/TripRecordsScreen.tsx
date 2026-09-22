@@ -48,6 +48,11 @@ export interface TripRecordsScreenProps {
   /** TRIP-569 — 활성 일자의 숙소·날짜 귀속 헤더(없으면 미표시, 후방호환 optional). */
   attribution?: DayAttributionHeader;
   /**
+   * TRIP-760 — 부제 안내문(옵셔널). 상태별 의도(error 얼굴 등)를 페이지가 문자열로 내린다. 미주입 시
+   * 현행 default 문자열을 유지한다(기존 호출자·프리뷰 무영향).
+   */
+  noticeCopy?: string;
+  /**
    * TRIP-759 — 카드별 실데이터 렌더 훅(옵셔널). 페이지가 완료 방문 카드에 사진/메모 슬롯을 배선한
    * per-card 컨테이너를 돌려준다. undefined 를 돌려주면 정적 스캐폴딩 VisitRecordCard 로 폴백한다.
    */
@@ -67,6 +72,7 @@ export function TripRecordsScreen({
   mapPins,
   cards,
   attribution,
+  noticeCopy,
   renderCard,
   onPressComplete,
   onPressSkip,
@@ -155,7 +161,7 @@ export function TripRecordsScreen({
         ) : null}
 
         <Text className="w-full text-label text-muted">
-          오늘의 동선 · 방문한 곳을 사진과 메모로 남겨요
+          {noticeCopy ?? '오늘의 동선 · 방문한 곳을 사진과 메모로 남겨요'}
         </Text>
 
         {/* 카드 목록 — 페이지가 renderCard 를 주면 그것으로(완료 카드=실데이터 사진/메모 슬롯),

@@ -2478,6 +2478,84 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // j01 방문 기록 error 얼굴(TRIP-760) — 사진 업로드 실패 표면. default 와 안내문만 다르고(상태별 의도
+  // →noticeCopy 분기), 광안리 카드에 upload-failed 셀(⚠ "업로드 실패") + 풀폭 [↻ 다시 시도] 버튼 +
+  // "메모와 방문 체크는 저장되었어요"를 얹었다. ⚠ 생김새·surface-strong 톤·↻ 코랄은 jest 사각(6-b 육안).
+  {
+    key: 'records-error',
+    band: 'j',
+    label: 'j01 · 방문 기록 업로드 실패',
+    login: null,
+    render: () => (
+      <TripRecordsScreen
+        dayTabs={[
+          { day: '2026-08-20', label: 'Day1' },
+          { day: '2026-08-21', label: 'Day2' },
+          { day: '2026-08-22', label: 'Day3' },
+        ]}
+        activeDay="2026-08-21"
+        onSelectDay={noop}
+        attribution={{ stayName: '해운대 그랜드 호텔', dayLabel: '2일차' }}
+        noticeCopy="오늘 방문한 곳 — 핀은 방문 완료, 빈 핀은 예정"
+        mapCenter={{ lat: 35.1532, lng: 129.1187 }}
+        mapPins={[
+          {
+            number: 1,
+            lat: 35.1532,
+            lng: 129.1187,
+            kind: 'visited',
+            imageUrl: require('@/assets/itinerary/draft-preview-1.jpg'),
+          },
+          { number: 2, lat: 35.156, lng: 129.1174, kind: 'planned' },
+          { number: 3, lat: 35.1518, lng: 129.1226, kind: 'stay' },
+        ]}
+        cards={[
+          {
+            visitCheckId: 'r1',
+            slotKey: '2026-08-21#p1',
+            poiId: 'p1',
+            nameKo: '광안리 해변',
+            arrivedAt: '2026-08-21T14:20:00',
+            completedAt: '2026-08-21T15:20:00',
+            skippedAt: null,
+            arrivedLabel: '14:20',
+          },
+        ]}
+        // 광안리 카드: 성공 사진 1(placeholder) + 업로드 실패 셀 1 + 카드-레벨 재시도 버튼.
+        renderCard={(card) => (
+          <VisitRecordCard
+            card={card}
+            onPressComplete={noop}
+            onPressSkip={noop}
+            photoSlot={
+              <PhotoThumbStrip
+                photos={[
+                  {
+                    visitPhotoMetaId: 'r1-a',
+                    availability: 'available',
+                    uri: null,
+                  },
+                  {
+                    visitPhotoMetaId: 'r1-b',
+                    availability: 'upload-failed',
+                    uri: null,
+                  },
+                ]}
+                onPressAdd={noop}
+              />
+            }
+            memoSlot={<MemoInline onSubmit={noop} />}
+            uploadRetry={{ onPress: noop }}
+          />
+        )}
+        onPressComplete={noop}
+        onPressSkip={noop}
+        onPressSpontaneous={noop}
+        onPressBack={noop}
+        onPressTab={noop}
+      />
+    ),
+  },
   // j01 방문 시각 수정 시트(TRIP-613) — 셀-press 시각 편집. 통과형 목이라 정적 프리뷰도 실제 열림/
   // 딤은 못 본다(6-b 실기 전용) — 셀 트리·도착/완료 컬럼·저장/취소 레이아웃 육안 대조 자리.
   {
