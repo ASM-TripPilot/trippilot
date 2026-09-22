@@ -269,7 +269,13 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    프리뷰 키만 제거) → 169→168. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에서
     //    2키 개명 + 1키 삭제만 하고 이 가드는 안 만진다(재편 전엔 169개라 이 단언이 red). 정확히 그 키들인지는
     //    아래 'TRIP-765' describe 가 못박는다. devPreviewBandSort 는 band h·l 만 잠가 band j 와 무관(오갱신 금지).
-    expect(PREVIEW_STATES).toHaveLength(168);
+    // ⚠️ TRIP-767: j07 여행 캘린더 empty 프리뷰 키(`records-calendar-empty`, band `j`) 삭제로 168→167.
+    //    test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에서 그 1키만 지우고 이 가드는
+    //    안 만진다(삭제 전엔 168개라 이 단언이 red). ★유지: 화면 isEmpty 분기·testID `record-calendar-empty`
+    //    (단수)·RecordsCalendarScreen.test 는 무수정(삭제 대상은 **플러럴** 프리뷰 키뿐, 소비처 preview.tsx 1곳).
+    //    정확히 그 키인지는 아래 'TRIP-767' describe 가 못박는다. devPreviewBandSort 는 band h·l 만 잠가
+    //    band j 와 무관(오갱신 금지).
+    expect(PREVIEW_STATES).toHaveLength(167);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -301,6 +307,22 @@ describe('🔴 TRIP-759 · j01 default 프리뷰 키 통합 (band j)', () => {
 
     // 긍정 — 통합 목적지 키는 그대로(band j 가 통째로 빈 게 아님 = 공허 통과·과잉 삭제 차단).
     expect(keys).toContain('records-default');
+  });
+});
+
+describe('🔴 TRIP-767 · j07 여행 캘린더 empty 프리뷰 키 삭제 (band j)', () => {
+  it('records-calendar-empty(플러럴)가 없고, records-calendar-default 는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 부정 — 삭제 대상은 **프리뷰 키** `records-calendar-empty`(하이픈 s, 소비처 preview.tsx 1곳).
+    // 삭제 전엔 present 라 red. 카운트(167)만으론 "아무 키나 지워도" 통과하므로 이 짝이 '지운 키가 정확히
+    // 그 j07 캘린더 empty 키'임을 못박는다(TRIP-759/769 음성 가드 미러).
+    expect(keys).not.toContain('records-calendar-empty');
+
+    // 긍정 — 캘린더 default 얼굴은 그대로(band j 캘린더가 통째로 빈 게 아님 = 과잉 삭제·공허 통과 차단).
+    // (화면 isEmpty 얼굴·testID `record-calendar-empty` 단수는 RecordsCalendarScreen.test 가 무수정으로 계속 잠금.)
+    expect(keys).toContain('records-calendar-default');
   });
 });
 

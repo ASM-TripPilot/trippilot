@@ -152,13 +152,17 @@ export function RetryGlyph({
   );
 }
 
-/** ‹ 뒤로가기. */
-export function BackArrowGlyph({ size = 24 }: GlyphProps): ReactElement {
+/** ‹ 뒤로가기. `color` 미지정이면 INK(하위호환 — 앱바 뒤로가기 소비처가 안 깨진다); 월 캘린더 chevron 은
+ *  회색을 넘겨 얇은 회색으로 그린다. stroke 색은 className 을 못 받아 prop 으로 받는다(글리프 함정). */
+export function BackArrowGlyph({
+  size = 24,
+  color = INK,
+}: GlyphProps & { color?: string }): ReactElement {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
         d="M15 18L9 12L15 6"
-        stroke={INK}
+        stroke={color}
         strokeWidth={2.2}
         strokeLinecap="round"
         strokeLinejoin="round"

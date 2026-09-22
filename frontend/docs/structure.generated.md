@@ -308,7 +308,7 @@
 - `src/entities/trip/lib/formatDayLabel.ts`  →  formatDayLabel
 - `src/entities/trip/lib/formatNights.ts`  →  formatNightsLabel · nightsLabel · nightsCountLabel
 - `src/entities/trip/lib/formatShareCardPeriod.ts`  →  ShareCardPeriodOptions · formatShareCardPeriod
-- `src/entities/trip/lib/formatTripPeriod.ts`  →  WEEKDAY_LABELS · dayOfWeek · formatDateRange · formatSectionRange · formatTripRange · formatConfirmedDateRange · formatTripDateRange · formatDateRangeWithDow · formatBaseNightRange
+- `src/entities/trip/lib/formatTripPeriod.ts`  →  WEEKDAY_LABELS · dayOfWeek · formatDateRange · formatSectionRange · formatTripRange · formatConfirmedDateRange · formatTripDateRange · formatLegendDateRange · formatDateRangeWithDow · formatBaseNightRange
 
 ## src/entities/trip/model/
 - `src/entities/trip/model/index.ts`  →  MyTripBadge · MyTripCardVM · PastTripCardVM
