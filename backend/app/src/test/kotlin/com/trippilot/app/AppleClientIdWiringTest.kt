@@ -1,6 +1,7 @@
 package com.trippilot.app
 
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import org.springframework.boot.env.YamlPropertySourceLoader
@@ -64,11 +65,24 @@ class AppleClientIdWiringTest : StringSpec({
     // ── 배포 통로 3구간 ──────────────────────────────────────────────────────────
     // 셋 다 **명시 화이트리스트**다. 목록에 없는 변수는 조용히 사라진다 — 오타도 누락도 안 빨개진다.
 
-    "compose 가 APPLE_CLIENT_ID 를 컨테이너로 넘긴다" {
-        val line = repoFile("docker-compose.yml").readLines()
+    /**
+     * **`backend:` 서비스 블록 안**에 있는지까지 본다. compose 의 모든 서비스가 `environment:` 를 같은
+     * 들여쓰기로 쓰므로 파일 전체를 훑으면 **줄이 `ai:` 블록에 있어도 통과한다**(실측 — 그 상태에서
+     * 백엔드 컨테이너는 값을 못 받아 애플 로그인이 501 인데 테스트는 초록이었다).
+     */
+    "compose 가 backend 서비스에 APPLE_CLIENT_ID 를 넘긴다" {
+        val lines = repoFile("docker-compose.yml").readLines()
+        val backendStart = lines.indexOfFirst { it.trimEnd() == "  backend:" }
+        backendStart shouldBeGreaterThan -1
+        // 다음 최상위 서비스(들여쓰기 2칸 + `:`)가 나오기 전까지가 backend 블록이다.
+        val backendEnd = lines.drop(backendStart + 1)
+            .indexOfFirst { it.matches(Regex("^ {2}\\S.*:\\s*$")) }
+            .let { if (it < 0) lines.size else backendStart + 1 + it }
+
+        val line = lines.subList(backendStart, backendEnd)
             .firstOrNull { it.trim().startsWith("APPLE_CLIENT_ID:") }
 
-        line shouldBe "      APPLE_CLIENT_ID: \${APPLE_CLIENT_ID:-}"
+        line?.trim() shouldBe "APPLE_CLIENT_ID: \${APPLE_CLIENT_ID:-}"
     }
 
     /**
@@ -81,13 +95,21 @@ class AppleClientIdWiringTest : StringSpec({
 
         lines.any { it.trim() == "APPLE_CLIENT_ID=" } shouldBe true
         // 구현 전 상태를 가리키는 낡은 안내가 남아 있으면 안 된다.
-        lines.none { it.contains("apple") && it.contains("추가 예정") } shouldBe true
+        // **대소문자를 무시한다** — 소문자 `apple` 로만 물으면 이 단언이 죽는다(파일에 `Apple`·`APPLE_`
+        // 는 있어도 소문자는 한 줄도 없고, 사람이 새로 쓰는 안내문도 보통 `Apple` 이다).
+        lines.none { it.contains("apple", ignoreCase = true) && it.contains("추가 예정") } shouldBe true
     }
 
+    /**
+     * **`range list` 줄 자체**를 집는다. 파일 전체 부분문자열로 물으면 `range list` 에서 빼고 바로 위에
+     * `# 잠시 뺀다` 주석으로 이름을 남겨도 통과한다(실측 — Pod env 에서 완전히 사라졌는데 초록이었다).
+     * "잠시 빼면서 이유를 주석으로 남긴다"는 사람이 실제로 하는 동작이라 가공의 시나리오가 아니다.
+     */
     "Helm 차트가 APPLE_CLIENT_ID 를 시크릿 env 목록에 싣는다" {
-        val chart = repoFile("deploy/eks/chart/templates/backend.yaml").readText()
+        val rangeLine = repoFile("deploy/eks/chart/templates/backend.yaml").readLines()
+            .firstOrNull { it.contains("range list") && it.contains("\"GOOGLE_CLIENT_ID\"") }
 
-        chart shouldContain "\"APPLE_CLIENT_ID\""
+        rangeLine.orEmpty() shouldContain "\"APPLE_CLIENT_ID\""
     }
 
     "시크릿 동기화가 APPLE_CLIENT_ID 를 백엔드 키로 인정한다" {

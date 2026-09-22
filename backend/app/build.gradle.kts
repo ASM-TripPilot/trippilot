@@ -74,3 +74,17 @@ tasks.named<Jar>("jar") { enabled = false }
 tasks.named<Copy>("processResources") {
     from(rootProject.file("docs/design/openapi.yaml")) { into("static") }
 }
+
+// `AppleClientIdWiringTest` 는 **리포 밖 파일**(compose·Helm·배포 스크립트·.env.example)을 읽어
+// "env 가 앱까지 도달하는 통로"를 검사한다. 선언하지 않으면 Gradle 이 그 파일들을 입력으로 보지 않아
+// **통로만 끊긴 변경에서 `:app:test` 가 UP-TO-DATE 로 건너뛴다** — 즉 회귀가 일어난 바로 그 순간에
+// 가드가 안 돈다(실측: compose 에서 APPLE_CLIENT_ID 줄을 지워도 `BUILD SUCCESSFUL in 299ms`).
+// CI 경로 필터에도 같은 파일들이 들어가 있어야 한다(`.github/workflows/backend-ci.yml`) — 둘은 독립이다.
+tasks.named<Test>("test") {
+    inputs.files(
+        rootProject.file("../docker-compose.yml"),
+        rootProject.file("../.env.example"),
+        rootProject.file("../deploy/eks/chart/templates/backend.yaml"),
+        rootProject.file("../deploy/eks/runtime_secrets.py"),
+    ).withPropertyName("배선통로파일").withPathSensitivity(PathSensitivity.RELATIVE)
+}
