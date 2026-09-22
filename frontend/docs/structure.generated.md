@@ -98,6 +98,7 @@
 - `src/__tests__/recordsDurationStructure.test.ts`  →  (export 없음)
 - `src/__tests__/recordsMapMarkersStructure.test.ts`  →  (export 없음)
 - `src/__tests__/recordsStructure.test.ts`  →  (export 없음)
+- `src/__tests__/reflectionDailyStructure.test.ts`  →  (export 없음)
 - `src/__tests__/reflectionFallbackStructure.test.ts`  →  (export 없음)
 - `src/__tests__/reflectionStructure.test.ts`  →  (export 없음)
 - `src/__tests__/reflectionSummaryStructure.test.ts`  →  (export 없음)
@@ -543,12 +544,12 @@
 ## src/features/reflection/ui/
 - `src/features/reflection/ui/CategoryBarList.tsx`  →  CategoryBarListProps · CategoryBarList
 - `src/features/reflection/ui/ChangeSummaryRow.tsx`  →  ChangeSummaryRowProps · ChangeSummaryRow
-- `src/features/reflection/ui/DailyReflectionScreen.tsx`  →  ReflectionFace · DailyReflectionScreenProps · DailyReflectionScreen
+- `src/features/reflection/ui/DailyReflectionScreen.tsx`  →  ReflectionFace · ReflectionDayTab · DailyReflectionScreenProps · DailyReflectionScreen
 - `src/features/reflection/ui/DayHighlightCard.tsx`  →  DayHighlightCardProps · DayHighlightCard
 - `src/features/reflection/ui/EvidenceLink.tsx`  →  EvidenceLinkProps · EvidenceLink
 - `src/features/reflection/ui/FormatSegment.tsx`  →  FormatSegmentProps · FormatSegment
 - `src/features/reflection/ui/NarrativeBlock.tsx`  →  NarrativeBlockProps · NarrativeBlock
-- `src/features/reflection/ui/ReflectionGlyphs.tsx`  →  BackArrowGlyph · LocationOffGlyph · PhotoOffGlyph · EmptyCircleGlyph · RetryGlyph · ShareGlyph
+- `src/features/reflection/ui/ReflectionGlyphs.tsx`  →  BackArrowGlyph · LocationOffGlyph · PhotoOffGlyph · EmptyCircleGlyph · RetryGlyph · MoodSadGlyph · MoodSosoGlyph · MoodGoodGlyph
 - `src/features/reflection/ui/ReflectionPhotoGrid.tsx`  →  ReflectionPhotoGridProps · ReflectionPhotoGrid
 - `src/features/reflection/ui/ReflectionStatsRow.tsx`  →  ReflectionStatsRowProps · ReflectionStatsRow
 - `src/features/reflection/ui/ShareCardGlyphs.tsx`  →  DownloadGlyph · ShareGlyph · WatermarkLogoGlyph
@@ -1293,4 +1294,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 867개 파일
+합계 868개 파일

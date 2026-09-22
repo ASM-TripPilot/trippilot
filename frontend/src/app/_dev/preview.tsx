@@ -2737,6 +2737,10 @@ export const PREVIEW_STATES: PreviewState[] = [
           { number: 1, lat: 35.1532, lng: 129.1187 },
           { number: 2, lat: 35.1264, lng: 129.0403 },
         ]}
+        dayTabs={[{ day: 1 }, { day: 2, today: true }, { day: 3 }]}
+        activeDay={2}
+        onSelectDay={noop}
+        onPressTab={noop}
         onEnterEdit={noop}
         onConfirm={noop}
         onSaveEdit={noop}
