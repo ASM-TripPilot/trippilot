@@ -275,6 +275,37 @@ describe('🔴 AC-보강 — onCameraIdle: NaverMapView 의 idle 좌표를 {lat,
   });
 });
 
+describe('TRIP-748 — onTapMap: 지도 빈 곳 탭을 부모에 알린다(허브 알약 숨김 입구, 옵트인)', () => {
+  it('🔴 M1 onTapMap 전달 시 map-native 가 그 콜백을 받고, 네이버 모양으로 발화하면 1회 올라온다', () => {
+    // 초심자용 — onTapMap 은 "마커가 아닌 지도 빈 곳을 탭했다"를 네이버 지도가 알려주는 콜백이다.
+    // 허브는 좌표가 필요 없어 인자 없는 콜백으로 받는다(D3 로컬 숨김).
+    const onTapMap = jest.fn();
+    render(<MapView center={CENTER} pins={PINS} onTapMap={onTapMap} />);
+
+    const native = screen.getByTestId('map-native');
+    expect(native.props.onTapMap).toBeDefined();
+
+    (
+      native.props as {
+        onTapMap: (p: {
+          latitude: number;
+          longitude: number;
+          x: number;
+          y: number;
+        }) => void;
+      }
+    ).onTapMap({ latitude: 33.5, longitude: 126.5, x: 10, y: 20 });
+
+    expect(onTapMap).toHaveBeenCalledTimes(1);
+  });
+
+  it('M2 onTapMap 미전달 시 map-native 는 그 콜백을 받지 않는다(기존 소비처 무회귀 · 선제 green)', () => {
+    render(<MapView center={CENTER} pins={PINS} />);
+
+    expect(screen.getByTestId('map-native').props.onTapMap).toBeUndefined();
+  });
+});
+
 // ── TRIP-745 · 핀 3상태 + 현재위치 점 + 경로선 색 (01b AC-1~4) ──────────────────
 //
 // 무엇을 보장하나: MapPin.state 로 핀이 done/current/upcoming 세 얼굴로 갈리고(색·번호·체크),

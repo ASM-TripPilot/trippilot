@@ -75,6 +75,9 @@ export interface MapViewProps {
   /** 반경 원(TRIP-795, h10). 중심 좌표와 반경 미터를 주면 `NaverMapCircleOverlay` 로 원을 얹는다.
    * **옵셔널 additive** — 미전달이면 원을 안 그린다(기존 12 소비처 무회귀). 실 점선·축척은 6-b 실기. */
   radiusCircle?: { center: MapCenter; radiusM: number };
+  /** 지도 빈 곳 탭(마커 아님, TRIP-748 — i01 허브 트리거 알약 로컬 숨김). `onCameraIdle` 과 같은
+   * 옵트인 — 준 때만 NaverMapView 에 단다(미전달 시 콜백 부착 0). 좌표는 올리지 않는다. */
+  onTapMap?: () => void;
 }
 
 /** 네이버 초기 줌. ponytail: 카카오 기본 level 3 에 대응하는 대략값, 정확 캘리브레이션은 실기(6-b). */
@@ -226,6 +229,7 @@ export function MapView({
   onCameraIdle,
   currentLocation,
   radiusCircle,
+  onTapMap,
 }: MapViewProps): ReactElement {
   // 네이티브 SDK 는 런타임 키를 config plugin 에서 받으므로, 이 env 판정은 "설정 누락 표면"용이다
   // (키가 없으면 회색 빈 지도 대신 안내 화면을 띄운다). 참조는 이 한 곳뿐(A-2 계승).
@@ -292,6 +296,7 @@ export function MapView({
                 onCameraIdle({ lat: params.latitude, lng: params.longitude })
             : undefined
         }
+        onTapMap={onTapMap ? () => onTapMap() : undefined}
       >
         {radiusCircle ? (
           // 반경 원(h10) — 중심·반경만 그린다(점선·색 튜닝은 6-b). outlineColor 는 핀 primary 재사용.

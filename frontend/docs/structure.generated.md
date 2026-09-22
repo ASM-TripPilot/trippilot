@@ -351,9 +351,8 @@
 - `src/features/execution/model/visitProgress.ts`  →  VisitProgress · deriveVisitProgress
 
 ## src/features/execution/ui/
-- `src/features/execution/ui/ExecutionGlyphs.tsx`  →  RailDoneGlyph · RailActiveGlyph · RailUpcomingGlyph · BackArrowGlyph · ShareGlyph · WarningTriangleGlyph · WeatherCloudGlyph · ChevronRightGlyph · CloseGlyph
+- `src/features/execution/ui/ExecutionGlyphs.tsx`  →  RailDoneGlyph · RailActiveGlyph · RailUpcomingGlyph · BackArrowGlyph · ShareGlyph · WarningFilledGlyph · WeatherCloudGlyph
 - `src/features/execution/ui/PlaceDetailScreen.tsx`  →  PlaceDetailScreenProps · PlaceDetailScreen
-- `src/features/execution/ui/TriggerBanner.tsx`  →  TriggerBannerProps · TriggerBanner
 - `src/features/execution/ui/TriggerChip.tsx`  →  TriggerChipProps · TriggerChip
 
 ## src/features/explore/model/
@@ -477,6 +476,7 @@
 - `src/features/planb/model/replanState.ts`  →  ReplanState · resolveReplanState
 - `src/features/planb/model/slackTime.ts`  →  slackTime
 - `src/features/planb/model/triggerLabel.ts`  →  TriggerLabel · TRIGGER_LABELS · triggerLabel
+- `src/features/planb/model/triggerPillCopy.ts`  →  TriggerPillSlot · triggerPillCopy
 - `src/features/planb/model/triggerWatchlist.ts`  →  TriggerWatchlistRow · triggerWatchlist
 - `src/features/planb/model/useActiveTriggers.ts`  →  useActiveTriggers
 - `src/features/planb/model/useApplyReplan.ts`  →  useApplyReplan
@@ -484,7 +484,6 @@
 - `src/features/planb/model/useReplanSession.ts`  →  useReplanSession
 - `src/features/planb/model/useSlotCandidates.ts`  →  useSlotCandidates
 - `src/features/planb/model/useStartReplan.ts`  →  useStartReplan
-- `src/features/planb/model/useSuppressTrigger.ts`  →  useSuppressTrigger
 - `src/features/planb/model/useTriggerWatchlist.ts`  →  useTriggerWatchlist
 
 ## src/features/planb/ui/
@@ -1302,4 +1301,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 874개 파일
+합계 873개 파일

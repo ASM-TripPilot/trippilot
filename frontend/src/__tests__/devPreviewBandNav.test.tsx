@@ -6,7 +6,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
  * TRIP-641 파트 2 — dev 정적 프리뷰(`_dev/preview.tsx`)의 밴드 2단 네비.
  *
  * 무엇을 보장하나:
- *  (1) AC-6 — 172개 프리뷰 상태가 전부 Figma 밴드(10종) 하나로 분류되고, 그룹핑해도 하나도
+ *  (1) AC-6 — 174개 프리뷰 상태가 전부 Figma 밴드(10종) 하나로 분류되고, 그룹핑해도 하나도
  *      드롭되지 않는다(대규모 기계 편집의 누락 위험을 순수 데이터로 잠근다),
  *  (2) AC-1 — 상단에 first-cut 9개 밴드 버튼이 서고, 밴드를 누르면 그 밴드 칩 그룹만 "보이고"
  *      나머지 밴드 그룹은 "접힌다"(시각적 필터),
@@ -75,7 +75,7 @@ beforeEach(() => {
 });
 
 describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
-  it('172개 엔트리가 전부 10종 밴드 중 하나를 갖고, 그룹핑해도 하나도 드롭되지 않는다', () => {
+  it('174개 엔트리가 전부 10종 밴드 중 하나를 갖고, 그룹핑해도 하나도 드롭되지 않는다', () => {
     // 준비 — 렌더 없이 모듈의 PREVIEW_STATES 배열을 그대로 읽는다.
     // 단언 ① — 대규모 기계 편집에서 엔트리가 하나도 안 빠졌다(실측 166개, TRIP-649로 saved-places-empty +1).
     // ⚠️ TRIP-665: 신 default 재작성으로 제거된 화면 prop 을 쓰던 g01 프리뷰 키 3개
@@ -271,7 +271,10 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     // ⚠️ TRIP-747: i01 허브 `live-hub-edit-pills`·`live-hub-no-records` 2키(band `i`) 추가로
     //    170→172. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에 두 키만 더하고
     //    이 가드는 안 만진다(추가 전엔 170개라 red). 정확한 키는 `devPreviewLiveHub.test.tsx` 가 못박는다.
-    expect(PREVIEW_STATES).toHaveLength(172);
+    // ⚠️ TRIP-748: i02 `live-itinerary-trigger` 1키를 `live-trigger-weather`·`-delay`·`-closure` 3키(band
+    //    `i`)로 바꿔 **순 +2** → 172→174. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx
+    //    에서 키만 바꾸고 이 가드는 안 만진다(재편 전엔 172개라 red). 정확한 키는 `devPreviewLiveHub.test.tsx`.
+    expect(PREVIEW_STATES).toHaveLength(174);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(

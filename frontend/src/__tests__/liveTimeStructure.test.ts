@@ -48,6 +48,9 @@ const HUB_FILES = [
   'pages/live-itinerary/ui/LiveHubView.tsx',
   'entities/itinerary-slot/ui/SlotProgressCard.tsx',
   'entities/itinerary-slot/lib/openingHoursLabel.ts',
+  // TRIP-748 — 지도 알약 카피의 "{도착시}시"를 슬롯 startAt 에서 만든다. features/planb 에 있어
+  // 실행 층 전수 스캔 밖이라 명시 편입한다(브리프 맹점① — 자르기만, 산술 0).
+  'features/planb/model/triggerPillCopy.ts',
 ];
 
 /** 날짜 라이브러리 산술 함수 — 시각을 옮기는(재추정하는) 표준 이름들. */
@@ -128,7 +131,7 @@ describe('G1 · 탐지기 자가검사 — 이게 통과해야 아래 스캔이 
 });
 
 describe('G2 · BR-U4-34 — features/execution/** + i01 허브 소스에 슬롯 시각 산술이 0건이다', () => {
-  it('실행 층 전수 + 허브 3파일(주석 제외)에 시각 재추정 산술이 없다', () => {
+  it('실행 층 전수 + 허브 파일(주석 제외)에 시각 재추정 산술이 없다', () => {
     const sources = [
       ...listSourceFiles(path.join(ROOT, EXEC_DIR_REL)).map(relOf),
       // 없는 파일은 넣지 않는다 — 아래 앵커가 "빠졌다"를 red 로 드러낸다.

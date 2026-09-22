@@ -15,6 +15,8 @@ import path from 'path';
  *  - H4 프리뷰 사진 에셋이 `src/assets/execution/` 에 실재하고 CREDITS.md 가 각 파일을 적는다(G7).
  *  - H5 (TRIP-747 AC-7) 허브 뷰는 SVG 를 직접 그리지 않는다 — 수정 알약의 ✦·×·연필은 `*Glyphs.tsx` 에서
  *    가져온다(raw hex 는 `pagesLayerStructure` 가, SVG 소재는 이 절이 잠근다).
+ *  - H6 (TRIP-748 AC-6·AC-7) 카드 아래 배너(`TriggerBanner`)와 서버 억제 훅(`useSuppressTrigger`)의
+ *    소스·테스트가 없고, 이를 무는 import·jest.mock·require 가 0이다. 짝: 알약(`TriggerChip`)은 남는다.
  *
  * **전제 — 주석을 걷어낸 소스를 스캔한다**(`stripComments`, 콜론 예외로 `https://` 보존 — 리포 관례).
  * **census 순서 — `from` 절(·`jest.mock(` 줄)을 먼저 뽑고 그 줄 안에서 삭제 모듈 경로를 찾는다**
@@ -211,5 +213,67 @@ describe('H5 · TRIP-747 AC-7 — 허브 뷰는 react-native-svg 를 직접 impo
     // 짝 앵커 — 추출기가 이 파일에서 실제 import 를 뽑는다(셸).
     expect(specs).toContain('@/widgets/map-sheet-shell/ui/MapSheetShell');
     expect(specs.filter((spec) => spec === SVG_MODULE)).toEqual([]);
+  });
+});
+
+// ── TRIP-748 · 트리거 배너·억제 훅 삭제 ─────────────────────────────────────
+
+const DELETED_748 = [
+  'features/execution/ui/TriggerBanner.tsx',
+  'features/execution/ui/TriggerBanner.test.tsx',
+  'features/planb/model/useSuppressTrigger.ts',
+];
+const DELETED_748_MODULES = ['TriggerBanner', 'useSuppressTrigger'];
+const KEPT_748 = 'features/execution/ui/TriggerChip.tsx';
+
+/** 마지막 경로 조각이 정확히 삭제 모듈 이름인가(비슷한 이름은 아니다). */
+function isDeleted748(spec: string): boolean {
+  return DELETED_748_MODULES.includes(spec.split('/').pop() ?? '');
+}
+
+describe('H6-0 · 조합 자가검사 — 주석 제거 + import 추출 + 판정이 748 모듈명에서도 서로를 지우지 않는다', () => {
+  it('주석 속 import 는 걷히고, URL 줄은 추출되지 않으며, 실제 import·jest.mock 은 잡힌다', () => {
+    const sample = [
+      "// import { TriggerBanner } from './TriggerBanner';",
+      "const url = 'https://x.dev/useSuppressTrigger';",
+      "import { TriggerBanner } from '@/features/execution/ui/TriggerBanner';",
+      "jest.mock('@/features/planb/model/useSuppressTrigger');",
+      "import { TriggerChip } from '@/features/execution/ui/TriggerChip';",
+      "import { Like } from './TriggerBannerLike';",
+    ].join('\n');
+
+    const specs = importSpecs(sample);
+    expect(specs).not.toContain('./TriggerBanner');
+    expect(stripComments(sample)).toContain('https://x.dev/useSuppressTrigger');
+    expect(specs.filter(isDeleted748)).toEqual([
+      '@/features/execution/ui/TriggerBanner',
+      '@/features/planb/model/useSuppressTrigger',
+    ]);
+    expect(isDeleted748('@/features/execution/ui/TriggerChip')).toBe(false);
+    expect(isDeleted748('./TriggerBannerLike')).toBe(false);
+  });
+});
+
+describe('🔴 H6 · TRIP-748 AC-6·AC-7 — 배너·억제 훅이 사라졌고 아무도 무는 곳이 없다', () => {
+  it('삭제 3파일 부재 + TriggerChip 존재 + src 전수에서 삭제 모듈 import·jest.mock·require 0건', () => {
+    // 짝 앵커 — 알약은 제자리 재작성이라 남는다(Seed ⑤).
+    expect(fs.existsSync(path.join(ROOT, KEPT_748))).toBe(true);
+
+    const remaining = DELETED_748.filter((rel) =>
+      fs.existsSync(path.join(ROOT, rel))
+    );
+    expect(remaining).toEqual([]);
+
+    const files = listAllSources(ROOT);
+    expect(files.length).toBeGreaterThan(100);
+    // 이 파일 자신은 뺀다 — H6-0 표본 문자열의 import 문이 추출기에 걸린다(자기 참조 오탐).
+    const offenders = files
+      .filter((full) => relOf(full) !== '__tests__/liveHubStructure.test.ts')
+      .flatMap((full) =>
+        importSpecs(fs.readFileSync(full, 'utf8'))
+          .filter(isDeleted748)
+          .map((spec) => `${relOf(full)} → ${spec}`)
+      );
+    expect(offenders).toEqual([]);
   });
 });

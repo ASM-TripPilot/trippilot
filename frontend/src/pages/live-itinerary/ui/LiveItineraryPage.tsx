@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { router } from 'expo-router';
 import { View } from 'react-native';
@@ -9,16 +8,12 @@ import { useLiveItinerary } from '@/features/execution/model/useLiveItinerary';
 import { projectSlotProgress } from '@/features/execution/model/slotProgress';
 import { useVisitCheck } from '@/features/execution/model/useVisitCheck';
 import { deriveVisitProgress } from '@/features/execution/model/visitProgress';
-import {
-  WarningTriangleGlyph,
-  WeatherCloudGlyph,
-} from '@/features/execution/ui/ExecutionGlyphs';
-import { TriggerBanner } from '@/features/execution/ui/TriggerBanner';
 import { TriggerChip } from '@/features/execution/ui/TriggerChip';
+import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { foldScope } from '@/features/planb/model/foldScope';
 import { triggerLabel } from '@/features/planb/model/triggerLabel';
+import { triggerPillCopy } from '@/features/planb/model/triggerPillCopy';
 import { useActiveTriggers } from '@/features/planb/model/useActiveTriggers';
-import { useSuppressTrigger } from '@/features/planb/model/useSuppressTrigger';
 import type { Trigger } from '@/shared/api/generated/schemas';
 import {
   useGetTripsTripId,
@@ -54,12 +49,6 @@ const NEUTRAL_BADGE = (
 /** 뒤로 갈 히스토리가 없을 때(딥링크·푸시 직행)의 폴백 — ItineraryPlanPage 관례(INV-4 침묵 금지). */
 const HOME_FALLBACK = '/(tabs)';
 
-/** iconKey(triggerLabel) → 칩 leading 글리프. WEATHER 만 전용, 나머지는 경고삼각형 폴백(seed 미결). */
-function chipIcon(iconKey: string): ReactNode {
-  if (iconKey === 'weather') return <WeatherCloudGlyph size={24} />;
-  return <WarningTriangleGlyph size={24} />;
-}
-
 export function LiveItineraryPage({
   tripId,
   today = new Date().toISOString().slice(0, 10),
@@ -80,11 +69,10 @@ export function LiveItineraryPage({
 
   // 발화 중 트리거 조회는 active 얼굴에서만(게이팅) — 훅 규칙상 조기 반환 위에서 무조건 선언한다.
   // 표시 게이트는 MANUAL 필터 뒤의 목록으로 아래에서 판정한다(hasActiveTrigger 는 MANUAL 을 못
-  // 걸러 이 티켓의 3변형 필터엔 못 쓴다). 억제(dismiss) 뮤테이션도 여기서 선언한다.
+  // 걸러 이 티켓의 3변형 필터엔 못 쓴다). 알약 숨김은 허브 로컬 상태라 서버 억제 호출이 없다(D3).
   const triggers = useActiveTriggers(tripId, {
     enabled: state.kind === 'active',
   });
-  const suppress = useSuppressTrigger(tripId);
 
   // 방문 기록 조회·판정은 page 1회(FSD·구조가드). 훅 규칙상 조기 반환 위에서 무조건 선언한다 —
   // active 날짜(방문 기록 조회 키)를 미리 구하되, active 가 아니면 '' 로 두어 쿼리를 끈다.
@@ -160,6 +148,7 @@ export function LiveItineraryPage({
 
   const { itinerary } = state;
   const activeDayIndex = liveDayIndex;
+  const activeDate = itinerary.days[activeDayIndex]?.date ?? '';
   const activeSlots = itinerary.days[activeDayIndex]?.slots ?? [];
 
   // 방문 기록 → 진행 상태 도출 → projectSlotProgress 인자로 실제 주입(★도달성 — 빈 인자면
@@ -174,12 +163,12 @@ export function LiveItineraryPage({
       ? (progress.visitCheckIdByPoiId[progress.activePoiId] ?? null)
       : null;
 
-  // MANUAL 은 표시 표면에서 숨긴다(칩·배너는 WEATHER·DELAY·CLOSURE 3변형만). triggerLabel 은
+  // MANUAL 은 표시 표면에서 숨긴다(알약·배지는 WEATHER·DELAY·CLOSURE 3변형만). triggerLabel 은
   // 4종 매핑을 갖되(구조 완전성), 화면 표시 필터는 여기서 — 서로 다른 축이다(★8, BR-U4-01).
   const displayTriggers = (triggers.data?.triggers ?? []).filter(
     (trigger) => trigger.kind !== 'MANUAL'
   );
-  // 칩은 발화 중이면 상단 상주(전체-날짜 케이스 대행) — 첫 트리거를 대표로 싣는다.
+  // 알약은 발화 중이면 지도 위 상주(전체-날짜 케이스 대행) — 첫 트리거를 대표로 싣는다.
   const chipTrigger = displayTriggers[0];
 
   const openReplan = (trigger: Trigger) => {
@@ -189,32 +178,25 @@ export function LiveItineraryPage({
     );
   };
 
+  // 알약 카피의 대상 = 이 날 슬롯 중 트리거 slotKey 와 같은 것(없으면 라벨만, D2 폴백).
+  const pillSlot = chipTrigger
+    ? activeSlots.find(
+        (slot) => buildSlotKey(activeDate, slot.poiId) === chipTrigger.slotKey
+      )
+    : undefined;
   const triggerChip = chipTrigger ? (
     <TriggerChip
-      // 칩 제목은 kind 요지(정적 라벨) — 상세 사유(reason)는 슬롯 배너가 진다. 요지가 칩과
-      // 배너에 둘 다 서도, 상세 reason 은 배너 한 곳에만 흘러 표면 중복이 없다(정적×동적 경계).
-      title={triggerLabel(chipTrigger.kind).label}
-      subtitle="탭하여 대안 보기"
-      icon={chipIcon(triggerLabel(chipTrigger.kind).iconKey)}
+      label={triggerPillCopy(chipTrigger.kind, pillSlot)}
       onPressAlternative={() => openReplan(chipTrigger)}
-      onDismiss={() =>
-        suppress.mutate({ tripId, triggerId: chipTrigger.triggerId })
-      }
     />
   ) : undefined;
 
-  // 배너는 slotKey 매칭 슬롯에만 — 요지(label)에 서버 reason 을 이어 완성 문구로 조립한다
-  // (정적 라벨 × 동적 reason 경계). 매칭 없으면 null(칩=상시·배너=slotKey 매칭 구분, ★9).
-  const renderSlotBanner = (slotKey: string): ReactNode => {
+  // 영향 배지 = slotKey 가 맞는 트리거의 라벨(서버 reason 은 허브에 안 흘린다).
+  const slotBadgeLabel = (slotKey: string): string | null => {
     const match = displayTriggers.find(
       (trigger) => trigger.slotKey === slotKey
     );
-    if (!match) return null;
-    return (
-      <TriggerBanner
-        text={`${triggerLabel(match.kind).label} · ${match.reason}`}
-      />
-    );
+    return match ? triggerLabel(match.kind).label : null;
   };
 
   return (
@@ -239,7 +221,8 @@ export function LiveItineraryPage({
           : undefined
       }
       triggerChip={triggerChip}
-      renderSlotBanner={renderSlotBanner}
+      triggerPillKey={chipTrigger?.triggerId}
+      slotBadgeLabel={slotBadgeLabel}
     />
   );
 }

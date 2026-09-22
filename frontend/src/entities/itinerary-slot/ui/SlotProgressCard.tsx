@@ -25,7 +25,7 @@ import {
  *               통째로 안 그린다(G6 — 실앱은 조회 계약이 없어 늘 없다).
  *  - active   = 상태줄 "13:00 도착 · 지금 관람 중"(D4 고정) + [방문 완료]·[사진]·[메모].
  *               [사진]·[메모]는 `onPressSoon` 만 부른다 — "준비 중" 힌트의 열림 상태는 부모가 쥔다(BR-U4-38).
- *  - upcoming = "예정" 알약 + 상태줄 "15:00 도착 예정 · {영업시간}" + 누를 수 없는 아이콘 3개.
+ *  - upcoming = "예정" 알약(트리거 영향이면 `badgeLabel` 분홍 배지, TRIP-748) + 상태줄 "15:00 도착 예정 · {영업시간}" + 누를 수 없는 아이콘 3개.
  *
  * 시각은 서버 `startAt` 을 자를 뿐(BR-U4-34). 각 leaf 는 값 하나 — 시각과 "방문" 은 형제 leaf 다.
  */
@@ -63,6 +63,8 @@ export interface SlotProgressCardProps {
   onPressSoon?: () => void;
   /** "준비 중" 힌트 표시 여부 — 상태는 부모가 가진다. */
   soonHintVisible?: boolean;
+  /** upcoming 전용(TRIP-748) — 주면 "예정" 대신 이 글자를 분홍 배지로(트리거 영향 카드). */
+  badgeLabel?: string;
 }
 
 export function SlotProgressCard({
@@ -74,6 +76,7 @@ export function SlotProgressCard({
   onPressComplete,
   onPressSoon,
   soonHintVisible,
+  badgeLabel,
 }: SlotProgressCardProps): ReactElement {
   const slotKey = buildSlotKey(date, slot.poiId);
   const fieldId = (role: string): string =>
@@ -113,12 +116,18 @@ export function SlotProgressCard({
         </View>
       ) : null}
       {state === 'upcoming' ? (
-        <View className="rounded-button bg-surface-strong px-[10px] py-[5px]">
+        <View
+          className={`rounded-button px-[10px] py-[5px] ${
+            badgeLabel ? 'bg-primary-pale' : 'bg-surface-strong'
+          }`}
+        >
           <Text
             testID={fieldId('status')}
-            className="font-noto-bold text-micro font-bold text-muted"
+            className={`font-noto-bold text-micro font-bold ${
+              badgeLabel ? 'text-primary' : 'text-muted'
+            }`}
           >
-            예정
+            {badgeLabel ?? '예정'}
           </Text>
         </View>
       ) : null}

@@ -9,8 +9,8 @@ import { render, screen } from '@testing-library/react-native';
  *  - 세 키 모두 허브 루트·헤더 한 줄·카드 5장·사진 4장·후기 2개·진행/예정 문구가 같다(Figma 세 프레임은
  *    시트 내용 텍스트가 동일하고 스냅만 다르다 — 브리프 골격 표).
  *  - 시트가 받는 초기 index 가 키마다 0·1·2 다(실제 스냅 모양은 AC-V1 육안 · 6-b).
- *  - 옛 `live-itinerary` 키는 없어지고, `live-itinerary-trigger` 는 새 허브 위에서 계속 칩을 그린다
- *    (정리는 TRIP-756 몫).
+ *  - 옛 `live-itinerary` 키는 없어진다. TRIP-748: `live-itinerary-trigger` 도 없어지고 i02 3키
+ *    (`live-trigger-weather`·`-delay`·`-closure`)가 선다 — 펼침 5곳 위 지도 알약 + 해운대 배지.
  *  - 프리뷰는 네트워크 계층을 로드하지 않는다(허브 뷰 api-free — 02a ★12).
  *  - TRIP-747: `live-hub-edit-pills`(Figma 4055:2427 — 펼침 5곳 + 알약 2개가 처음부터 열림, FAB ×)와
  *    `live-hub-no-records`(Figma 4076:2452 — done 2장이 사진·후기 없이 이름 + "09:30 방문"만)가 band i
@@ -107,25 +107,21 @@ describe('🔴 TRIP-746 · i01 허브 프리뷰 3키 (AC-7)', () => {
   });
 });
 
-describe('🔴 TRIP-746 · 옛 키 정리 (AC-7)', () => {
-  it('live-itinerary 키는 없고, live-itinerary-trigger 는 새 허브 위에 트리거 칩을 그린다', () => {
+describe('🔴 TRIP-746·748 · 옛 키 정리 (AC-7 · 748 AC-10)', () => {
+  it('live-itinerary·live-itinerary-trigger 키는 없고, 허브 3키와 i02 3키가 있다', () => {
     const keys = PREVIEW_STATES.map((state) => state.key);
     expect(keys).not.toContain('live-itinerary');
+    expect(keys).not.toContain('live-itinerary-trigger');
     expect(keys).toEqual(
       expect.arrayContaining([
         'live-hub-closed',
         'live-hub-half',
         'live-hub-expanded',
-        'live-itinerary-trigger',
+        'live-trigger-weather',
+        'live-trigger-delay',
+        'live-trigger-closure',
       ])
     );
-
-    mockSearchParams.state = 'live-itinerary-trigger';
-    render(<DevPreview />);
-
-    expect(screen.getByTestId('execution-live-screen')).toBeOnTheScreen();
-    expect(screen.getByTestId('execution-live-sheet-header')).toBeOnTheScreen();
-    expect(screen.getByTestId('execution-live-trigger-chip')).toBeOnTheScreen();
   });
 });
 
@@ -224,6 +220,59 @@ describe('🔴 TRIP-747 · 새 키 등록 (AC-6)', () => {
       expect(entry).toBeDefined();
       expect(entry?.band).toBe('i');
       expect(entry?.label.startsWith('i01 · ')).toBe(true);
+    });
+  });
+});
+
+// ── TRIP-748 · i02 변수 감지 3키 ────────────────────────────────────────────
+//
+// Figma 4041:2427 · 4078:2477 · 4081:2502 — i01 펼침 5곳 그대로 + 지도 위 알약 한 줄 + 해운대 카드 배지.
+// 알약 카피는 D2 템플릿대로 슬롯명 전체("해운대 해변")를 쓴다 — Figma "해운대"와의 차이는 허용 차이(Seed).
+
+const HAEUNDAE_STATUS = 'execution-live-slot-status-2026-06-11#haeundae';
+const JEONPO_STATUS = 'execution-live-slot-status-2026-06-11#jeonpo';
+
+describe('🔴 TRIP-748 · i02 변수 감지 프리뷰 3키 (AC-10)', () => {
+  it.each([
+    ['live-trigger-weather', '비 예보 · 해운대 해변 17시', '비 예보'],
+    ['live-trigger-delay', '이동 지연 · 해운대 해변 방면', '이동 지연'],
+    ['live-trigger-closure', '휴무 · 해운대 해변 주변 시설', '휴무'],
+  ])(
+    '%s 는 펼침 5곳 위에 알약 "%s" 와 해운대 배지 "%s" 를 그린다',
+    (key, copy, badge) => {
+      mockSearchParams.state = key;
+
+      render(<DevPreview />);
+
+      expectExpandedHubBase();
+      expect(
+        screen.getByTestId('execution-live-trigger-chip')
+      ).toBeOnTheScreen();
+      expect(
+        screen.getByTestId('execution-live-trigger-label')
+      ).toHaveTextContent(copy);
+      expect(screen.getByTestId(HAEUNDAE_STATUS)).toHaveTextContent(badge);
+      expect(screen.getByTestId(JEONPO_STATUS)).toHaveTextContent('예정');
+      expect(screen.queryByTestId('execution-live-trigger-banner')).toBeNull();
+      expect(screen.queryByTestId('execution-live-trigger-dismiss')).toBeNull();
+    }
+  );
+
+  it('세 키가 band i 이고 라벨이 "i02 · " 로 시작한다', () => {
+    const states = PREVIEW_STATES as {
+      key: string;
+      band: string;
+      label: string;
+    }[];
+    [
+      'live-trigger-weather',
+      'live-trigger-delay',
+      'live-trigger-closure',
+    ].forEach((key) => {
+      const entry = states.find((state) => state.key === key);
+      expect(entry).toBeDefined();
+      expect(entry?.band).toBe('i');
+      expect(entry?.label.startsWith('i02 · ')).toBe(true);
     });
   });
 });

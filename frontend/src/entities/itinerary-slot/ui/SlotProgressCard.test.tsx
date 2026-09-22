@@ -286,3 +286,88 @@ describe('SlotProgressCard · INV-3 (C9)', () => {
     }
   });
 });
+
+// ── TRIP-748 · 영향 카드 배지 (AC-5 · Seed Q1) ──────────────────────────────
+//
+// 트리거가 가리키는 **예정** 카드는 "예정" 알약 대신 트리거 라벨(비 예보·이동 지연·휴무)을 분홍으로
+// 보인다(Figma 4135:2745). 알약 기하(rounded-button·px 10·py 5)는 그대로, 색 두 클래스만 바뀐다.
+// active·done 카드엔 배지를 새로 만들지 않는다(Q1).
+// ⚠️ 글자색은 `text-primary`(#FF385C)다 — `text-primary-text`(#C13515)가 아니다(02a ★12).
+
+function classTokens(node: { props?: { className?: unknown } }): string[] {
+  const cn = node.props?.className;
+  return typeof cn === 'string' ? cn.split(/\s+/).filter(Boolean) : [];
+}
+
+/** status 글자(Text)를 감싼 알약 박스 — `rounded-button` 을 가진 가장 가까운 조상(02a ★11). */
+function badgeBox(): { props?: { className?: unknown } } {
+  let up = screen.getByTestId(id('status')).parent;
+  while (up && !classTokens(up).includes('rounded-button')) up = up.parent;
+  if (!up) throw new Error('status 를 감싼 rounded-button 박스가 없다');
+  return up;
+}
+
+describe('SlotProgressCard · 배지 override (TRIP-748 C10)', () => {
+  const upcomingSlot = mkSlot({
+    startAt: '17:00:00',
+    endAt: '18:30:00',
+    nameKo: '해운대 해변',
+  });
+
+  it.each(['비 예보', '이동 지연', '휴무'])(
+    'C10a upcoming + badgeLabel "%s" → 그 글자를 분홍 알약(primary-pale 바탕 + primary 글자)으로',
+    (label) => {
+      render(
+        <SlotProgressCard
+          slot={upcomingSlot}
+          date={DATE}
+          state="upcoming"
+          badgeLabel={label}
+        />
+      );
+
+      const status = screen.getByTestId(id('status'));
+      expect(status).toHaveTextContent(label);
+      expect(classTokens(status)).toContain('text-primary');
+      expect(classTokens(status)).not.toContain('text-muted');
+
+      const box = classTokens(badgeBox());
+      expect(box).toContain('bg-primary-pale');
+      expect(box).not.toContain('bg-surface-strong');
+      // 기하는 "예정" 알약과 같다 — 색만 바뀐다.
+      expect(box).toEqual(
+        expect.arrayContaining(['rounded-button', 'px-[10px]', 'py-[5px]'])
+      );
+    }
+  );
+
+  it('C10b badgeLabel 이 없으면 지금처럼 "예정" + 회색 알약이다 (회귀 앵커)', () => {
+    render(
+      <SlotProgressCard slot={upcomingSlot} date={DATE} state="upcoming" />
+    );
+
+    const status = screen.getByTestId(id('status'));
+    expect(status).toHaveTextContent('예정');
+    expect(classTokens(status)).toContain('text-muted');
+    expect(classTokens(badgeBox())).toContain('bg-surface-strong');
+  });
+
+  it.each(['active', 'done'] as const)(
+    'C10c %s 카드는 badgeLabel 을 받아도 배지를 만들지 않는다 (Q1)',
+    (state) => {
+      render(
+        <SlotProgressCard
+          slot={upcomingSlot}
+          date={DATE}
+          state={state}
+          badgeLabel="비 예보"
+        />
+      );
+
+      // 짝 앵커 — 카드가 실제로 그려졌다.
+      expect(screen.getByTestId(id('name'))).toHaveTextContent('해운대 해변');
+      expect(screen.queryByTestId(id('status'))).toBeNull();
+      expect(screen.queryByText('비 예보')).toBeNull();
+    }
+  );
+});

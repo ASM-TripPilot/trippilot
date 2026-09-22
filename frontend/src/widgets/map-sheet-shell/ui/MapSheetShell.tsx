@@ -91,6 +91,14 @@ export interface MapSheetShellProps<T = unknown> {
   /** 현재위치 점(TRIP-746 가산) — `<MapView currentLocation>` 으로 흘린다(TRIP-745 계약). 미전달이면
    *  점 없음. */
   currentLocation?: MapCenter;
+  /** 시트 스냅 이동 시작(TRIP-748 가산) — `<BottomSheet onAnimate>` 로 그대로 흘린다. 마운트 가드
+   *  같은 판단은 소비처(i01 허브) 몫이다. 미전달=미부착. */
+  onSheetAnimate?: (fromIndex: number, toIndex: number) => void;
+  /** 시트 본문 스크롤 시작(TRIP-748 가산) — `<BottomSheetScrollView onScrollBeginDrag>` 로 흘린다.
+   *  `list` 경로에는 달지 않는다(소비처 없음). 미전달=미부착. */
+  onSheetScrollBeginDrag?: () => void;
+  /** 지도 빈 곳 탭(TRIP-748 가산) — `<MapView onTapMap>` 으로 흘린다. 미전달=미부착. */
+  onMapTap?: () => void;
 }
 
 export function MapSheetShell<T = unknown>({
@@ -111,6 +119,9 @@ export function MapSheetShell<T = unknown>({
   snapPoints,
   mapViewOnly,
   currentLocation,
+  onSheetAnimate,
+  onSheetScrollBeginDrag,
+  onMapTap,
 }: MapSheetShellProps<T>): ReactElement {
   return (
     <View testID="map-sheet-shell-root" className="flex-1 bg-canvas">
@@ -124,6 +135,7 @@ export function MapSheetShell<T = unknown>({
             pins={pins}
             viewOnly={mapViewOnly ?? true}
             currentLocation={currentLocation}
+            onTapMap={onMapTap}
           />
         )}
       </View>
@@ -155,6 +167,7 @@ export function MapSheetShell<T = unknown>({
       <BottomSheet
         index={initialIndex ?? 0}
         snapPoints={snapPoints ?? SNAP_POINTS}
+        onAnimate={onSheetAnimate}
       >
         {list ? (
           <BottomSheetFlatList
@@ -173,7 +186,7 @@ export function MapSheetShell<T = unknown>({
             testID={list.testID}
           />
         ) : (
-          <BottomSheetScrollView>
+          <BottomSheetScrollView onScrollBeginDrag={onSheetScrollBeginDrag}>
             {header}
             {children}
           </BottomSheetScrollView>

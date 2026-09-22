@@ -1,10 +1,11 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
   within,
 } from '@testing-library/react-native';
-import { Text } from 'react-native';
+import { Pressable, Text } from 'react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 
 import type { ItineraryDaysItemSlotsItem } from '@/entities/itinerary-slot/model';
@@ -28,7 +29,9 @@ import { LiveHubView, type LiveHubSlot } from './LiveHubView';
  *    (`AI에게 맡기기`·`직접 수정`), 알약을 누르면 메뉴가 닫히고 그 콜백만 1회 불린다(BR-U4-10 진입).
  *    딤이 없고 바깥 탭으로는 닫히지 않는다(Seed ③). 초기 열림은 `initialEditMenuOpen`(프리뷰 입구).
  *  - 셸 가산 사용: 3스냅 + 초기 스냅(0/1/2) 전달, 지도 조작 가능(잠그지 않음), 현재위치 점·상태 핀.
- *  - 748 전까지 트리거 칩·슬롯 배너 슬롯을 그대로 받는다(트리거 통합 green 유지).
+ *  - TRIP-748 트리거 표면: 알약은 시트가 아니라 지도 위(일자 칩 아래)에 서고, 영향 카드는 배지로
+ *    표시되며, 카드 아래 배너 슬롯은 없다. 알약은 시트 스크롤·끌기·지도 탭·다른 버튼으로 로컬 숨김(D3) —
+ *    열린 수정 알약 메뉴는 그대로 둔다(HP9 공존).
  *
  * ⚠️ 원리적 사각(02a ★1·★2): 스냅별로 무엇이 보이는지는 통과형 시트 목이 못 본다(5카드는 늘 렌더) —
  *   넘긴 index·snapPoints 까지만 잠근다. 실전환·FAB 가림·핸들 모양은 AC-V2(6-b).
@@ -329,24 +332,18 @@ describe('LiveHubView · HV5 지도 (Seed Q1 · 브리프 골격)', () => {
   });
 });
 
-describe('LiveHubView · HV6 트리거 슬롯 유지 (AC-6 — 748 재배치 전)', () => {
-  it('triggerChip 노드를 그리고, renderSlotBanner 를 slotKey 로 불러 그 노드를 그린다', () => {
-    const renderSlotBanner = jest.fn((slotKey: string) =>
-      slotKey === `${DATE}#museum` ? (
-        <Text testID="fake-banner">비 예보</Text>
-      ) : null
-    );
-    renderHub({
-      triggerChip: <Text testID="fake-trigger-chip">칩</Text>,
-      renderSlotBanner,
-    });
+describe('LiveHubView · HV6 카드 아래 배너 슬롯 삭제 (TRIP-748 AC-6)', () => {
+  it('renderSlotBanner 를 억지로 넘겨도 배너 노드를 그리지 않는다', () => {
+    const renderSlotBanner = jest.fn(() => (
+      <Text testID="fake-banner">비 예보 · 17시 이후 비</Text>
+    ));
+    // 삭제된 prop 이라 타입에 없다 — 런타임 무시를 보려고 object 스프레드로 넣는다(02a ★15).
+    renderHub({ ...({ renderSlotBanner } as object) });
 
-    expect(screen.getByTestId('fake-trigger-chip')).toBeOnTheScreen();
-    expect(screen.getByTestId('fake-banner')).toBeOnTheScreen();
-    const keys = renderSlotBanner.mock.calls.map(([slotKey]) => slotKey);
-    expect(new Set(keys)).toEqual(
-      new Set(SLOTS.map(({ slot }) => `${DATE}#${slot.poiId}`))
-    );
+    // 짝 앵커 — 허브가 실제로 그려졌다.
+    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(5);
+    expect(screen.queryByTestId('fake-banner')).toBeNull();
+    expect(renderSlotBanner).not.toHaveBeenCalled();
   });
 });
 
@@ -583,5 +580,302 @@ describe('LiveHubView · HP 초기 열림·바깥 탭 (TRIP-747 AC-5 · Seed ①
 
     // 바깥 탭 닫기 백드롭(투명 전면 Pressable)을 깔면 그 노드 이름이 여기 찍힌다(03b 경고-1).
     expect(closedBy).toEqual([]);
+  });
+});
+
+// ── TRIP-748 · 트리거 알약 자리 · 영향 카드 배지 · 로컬 숨김(D3) ──────────────
+//
+// 알약 노드는 페이지가 만들어 넘긴다(`triggerChip`) — 여기서는 누를 수 있는 가짜 알약으로 자리와
+// 숨김만 본다(알약 모양은 TriggerChip.test, 페이지 배선은 트리거 통합이 본다).
+// 숨김은 허브의 로컬 상태다: `triggerPillKey` 를 숨겼으면 안 그리고, 키가 바뀌면 다시 그린다.
+// ⚠️ 통과형 시트 목은 onAnimate·onScrollBeginDrag 를 스스로 쏘지 않는다 — 넘겨진 prop 을 직접 부른다
+//    (02a ★2·★3). 실제 드래그·마운트 애니메이션은 AC-V2(6-b).
+
+const TRIGGER_PILL = 'fake-trigger-pill';
+const HAEUNDAE_KEY = `${DATE}#haeundae`;
+const JEONPO_KEY = `${DATE}#jeonpo`;
+
+function fakePill(onPress: () => void) {
+  return (
+    <Pressable
+      testID={TRIGGER_PILL}
+      accessibilityRole="button"
+      onPress={onPress}
+    >
+      <Text>비 예보 · 해운대 해변 17시</Text>
+    </Pressable>
+  );
+}
+
+function renderWithPill(overrides: Overrides = {}) {
+  const onPressPill = jest.fn();
+  const handlers = renderHub({
+    triggerChip: fakePill(onPressPill),
+    triggerPillKey: 'trg-1',
+    ...overrides,
+  });
+  return { ...handlers, onPressPill };
+}
+
+/** snapPoints 를 가진 host(문자열 타입) 노드 — 시트 본체(목은 3겹, 02a ★3). */
+function sheetHost(): ReactTestInstance {
+  const host = screen.root
+    .findAll((node) => Array.isArray(node.props?.snapPoints))
+    .find((node) => typeof node.type === 'string');
+  if (!host) throw new Error('시트 host 노드가 없다');
+  return host;
+}
+
+function ancestorsOf(node: ReactTestInstance): ReactTestInstance[] {
+  const out: ReactTestInstance[] = [];
+  for (let up = node.parent; up; up = up.parent) out.push(up);
+  return out;
+}
+
+function fireSheetAnimate(from: number, to: number): void {
+  const onAnimate = sheetHost().props.onAnimate as unknown;
+  if (typeof onAnimate !== 'function') {
+    throw new Error('시트(BottomSheet)에 onAnimate 가 달려 있지 않다');
+  }
+  act(() => {
+    (onAnimate as (f: number, t: number, fp: number, tp: number) => void)(
+      from,
+      to,
+      0,
+      0
+    );
+  });
+}
+
+function fireSheetScrollBeginDrag(): void {
+  const nodes = screen.root.findAll(
+    (node) => typeof node.props?.onScrollBeginDrag === 'function'
+  );
+  if (nodes.length === 0) {
+    throw new Error(
+      '시트 본문 스크롤 뷰에 onScrollBeginDrag 가 달려 있지 않다'
+    );
+  }
+  act(() => {
+    (nodes[nodes.length - 1].props.onScrollBeginDrag as (e: unknown) => void)({
+      nativeEvent: {},
+    });
+  });
+}
+
+function fireMapTap(): void {
+  const onTapMap = screen.getByTestId('map-native').props.onTapMap as unknown;
+  if (typeof onTapMap !== 'function') {
+    throw new Error('지도(map-native)에 onTapMap 이 달려 있지 않다');
+  }
+  act(() => {
+    (onTapMap as (p: unknown) => void)({
+      latitude: 35.16,
+      longitude: 129.13,
+      x: 10,
+      y: 10,
+    });
+  });
+}
+
+/** 알약을 숨기는 경로(D3 · Seed ②) — 시트 스크롤·끌기, 지도 탭, 허브 안 다른 버튼. */
+const HIDE_PATHS: [string, () => void][] = [
+  ['시트 본문 스크롤 시작', fireSheetScrollBeginDrag],
+  ['시트 끌기 onAnimate(1→2)', () => fireSheetAnimate(1, 2)],
+  ['시트 끌기 onAnimate(0→1)', () => fireSheetAnimate(0, 1)],
+  ['지도 탭', fireMapTap],
+  [
+    '일자 칩',
+    () => fireEvent.press(screen.getByTestId('execution-live-daychip-2')),
+  ],
+  [
+    '[방문 완료]',
+    () => fireEvent.press(screen.getByTestId('execution-arrive-complete')),
+  ],
+  [
+    '[사진]',
+    () => fireEvent.press(screen.getByTestId('execution-arrive-photo')),
+  ],
+];
+
+describe('LiveHubView · HT 트리거 알약·배지·로컬 숨김 (TRIP-748)', () => {
+  // 지도 탭 경로는 map-native 가 떠야 한다 — 선언과 대입 분리(02a ★8, HV5 선례).
+  const KEY_NAME = 'EXPO_PUBLIC_NAVER_MAP_CLIENT_ID';
+  let original: string | undefined;
+  original = process.env[KEY_NAME];
+  beforeEach(() => {
+    process.env[KEY_NAME] = 'test-naver-client-id';
+  });
+  afterEach(() => {
+    if (original === undefined) delete process.env[KEY_NAME];
+    else process.env[KEY_NAME] = original;
+  });
+
+  it('HT1 알약은 시트 헤더가 아니라 지도 위 오버레이(뒤로가기·일자 칩과 같은 층)에 선다 (AC-1)', () => {
+    renderWithPill();
+
+    // 짝 앵커 — 허브와 알약이 실제로 그려졌다.
+    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(5);
+    const pill = screen.getByTestId(TRIGGER_PILL);
+
+    const sheet = sheetHost();
+    expect(within(sheet).queryByTestId(TRIGGER_PILL)).toBeNull();
+    // 알약과 뒤로가기의 가장 가까운 공통 조상이 시트를 품지 않는다 = 둘이 지도 위 같은 오버레이에 있다.
+    // 알약을 시트 header 에 두면 공통 조상이 셸 루트가 돼 시트를 품는다.
+    const backAncestors = new Set(
+      ancestorsOf(screen.getByTestId('execution-live-back'))
+    );
+    const common = ancestorsOf(pill).find((node) => backAncestors.has(node));
+    expect(common).toBeDefined();
+    expect(common?.findAll((node) => node === sheet)).toHaveLength(0);
+  });
+
+  it('HT1b 알약을 안 넘기면 알약이 없다 (회귀 앵커)', () => {
+    renderHub();
+
+    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(5);
+    expect(screen.queryByTestId(TRIGGER_PILL)).toBeNull();
+  });
+
+  it('HT2 slotBadgeLabel 이 라벨을 주는 예정 카드만 "예정" 대신 그 라벨을 보인다 (AC-5)', () => {
+    const slotBadgeLabel = jest.fn((slotKey: string) =>
+      slotKey === HAEUNDAE_KEY ? '비 예보' : null
+    );
+    renderWithPill({ slotBadgeLabel });
+
+    expect(
+      screen.getByTestId(`execution-live-slot-status-${HAEUNDAE_KEY}`)
+    ).toHaveTextContent('비 예보');
+    expect(
+      screen.getByTestId(`execution-live-slot-status-${JEONPO_KEY}`)
+    ).toHaveTextContent('예정');
+  });
+
+  it.each(HIDE_PATHS)(
+    'HT3 %s → 알약이 사라진다 (D3 로컬 숨김)',
+    (_name, fire) => {
+      renderWithPill();
+      expect(screen.getByTestId(TRIGGER_PILL)).toBeOnTheScreen();
+
+      fire();
+
+      expect(screen.queryByTestId(TRIGGER_PILL)).toBeNull();
+      // 짝 앵커 — 허브는 그대로다(화면이 통째로 사라진 것이 아니다).
+      expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(5);
+    }
+  );
+
+  it('HT3b 숨김은 버튼의 원래 동작을 먹지 않는다 — 칩·[방문 완료]·[사진]이 각자 일을 한다', () => {
+    const handlers = renderWithPill();
+
+    fireEvent.press(screen.getByTestId('execution-live-daychip-2'));
+    fireEvent.press(screen.getByTestId('execution-arrive-complete'));
+    fireEvent.press(screen.getByTestId('execution-arrive-photo'));
+
+    expect(screen.queryByTestId(TRIGGER_PILL)).toBeNull();
+    expect(handlers.onSelectDay).toHaveBeenCalledWith(2);
+    expect(handlers.onPressComplete).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('execution-arrive-soon-hint')).toBeOnTheScreen();
+  });
+
+  it.each([
+    ['마운트 애니메이션 onAnimate(-1→2)', -1, 2],
+    ['제자리 onAnimate(2→2)', 2, 2],
+  ])('HT4 %s 에는 알약이 남는다 (마운트 가드 · 02a ★2)', (_name, from, to) => {
+    renderWithPill();
+
+    fireSheetAnimate(from, to);
+
+    expect(screen.getByTestId(TRIGGER_PILL)).toBeOnTheScreen();
+  });
+
+  // 펼침(2)에선 시트가 알약을 덮는다 — 거기서 내려오는 끌기는 알약을 처음 드러내는 동작이라
+  // 숨기면 한 번도 안 보인 채 사라진다(5-b 경고-2 · 오케 결정 (나)).
+  it.each([
+    ['펼침→중간 onAnimate(2→1)', 2, 1],
+    ['펼침→접힘 onAnimate(2→0)', 2, 0],
+  ])(
+    'HT4c %s 에는 알약이 남는다 (펼침에서 내려오는 전이)',
+    (_name, from, to) => {
+      renderWithPill();
+
+      fireSheetAnimate(from, to);
+
+      expect(screen.getByTestId(TRIGGER_PILL)).toBeOnTheScreen();
+    }
+  );
+
+  it('HT4d 예외는 "펼침에서 출발"뿐이다 — 중간→접힘 onAnimate(1→0)은 여전히 숨긴다', () => {
+    renderWithPill();
+
+    fireSheetAnimate(1, 0);
+
+    expect(screen.queryByTestId(TRIGGER_PILL)).toBeNull();
+    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(5);
+  });
+
+  it('HT4b 알약 자기 자신을 누르면 숨기지 않고 목적지 콜백만 1회 부른다', () => {
+    const { onPressPill } = renderWithPill();
+
+    fireEvent.press(screen.getByTestId(TRIGGER_PILL));
+
+    expect(onPressPill).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId(TRIGGER_PILL)).toBeOnTheScreen();
+  });
+
+  it('HT5 FAB 를 누르면 수정 알약 2개가 열리고, 트리거 알약은 사라진다', () => {
+    renderWithPill();
+
+    fireEvent.press(screen.getByTestId(FAB));
+
+    expect(screen.getAllByTestId(PILL_ANY)).toHaveLength(2);
+    expectFabOpenFace();
+    expect(screen.queryByTestId(TRIGGER_PILL)).toBeNull();
+  });
+
+  it.each(HIDE_PATHS)(
+    'HT6 수정 메뉴가 열린 채 %s → 트리거 알약만 사라지고 메뉴는 열려 있다 (HP9 공존 · 02a ★1)',
+    (_name, fire) => {
+      // FAB 로 열면 그 press 자체가 숨김이라 경로를 따로 못 본다 — 초기 열림으로 연다.
+      renderWithPill({ initialEditMenuOpen: true });
+      expect(screen.getByTestId(TRIGGER_PILL)).toBeOnTheScreen();
+      expect(screen.getAllByTestId(PILL_ANY)).toHaveLength(2);
+
+      fire();
+
+      expect(screen.queryByTestId(TRIGGER_PILL)).toBeNull();
+      expect(screen.getAllByTestId(PILL_ANY)).toHaveLength(2);
+      expectFabOpenFace();
+    }
+  );
+
+  it('HT7 숨김은 트리거 키에 묶인다 — 같은 키로 다시 그려도 숨긴 채, 새 키가 오면 다시 보인다', () => {
+    const base = {
+      tripTitle: '부산 여행',
+      days: DAYS,
+      activeDayIndex: 1,
+      slots: SLOTS,
+      initialSnapIndex: 2,
+      onBack: jest.fn(),
+      onSelectDay: jest.fn(),
+      onPressAiReplan: jest.fn(),
+      onPressManualEdit: jest.fn(),
+      onPressComplete: jest.fn(),
+      triggerChip: fakePill(jest.fn()),
+    };
+    const { rerender } = render(
+      <LiveHubView {...base} triggerPillKey="trg-1" />
+    );
+
+    fireEvent.press(screen.getByTestId('execution-live-daychip-2'));
+    expect(screen.queryByTestId(TRIGGER_PILL)).toBeNull();
+
+    // 목록 재조회처럼 같은 트리거로 다시 그린다 — 숨김 유지.
+    rerender(<LiveHubView {...base} triggerPillKey="trg-1" />);
+    expect(screen.queryByTestId(TRIGGER_PILL)).toBeNull();
+
+    // 새 트리거가 오면 다시 보인다(useEffect 없이 키 비교로).
+    rerender(<LiveHubView {...base} triggerPillKey="trg-2" />);
+    expect(screen.getByTestId(TRIGGER_PILL)).toBeOnTheScreen();
   });
 });

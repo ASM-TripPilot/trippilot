@@ -4,6 +4,8 @@
 import fs from 'fs';
 import path from 'path';
 
+import { TRIGGER_LABELS } from '@/features/planb/model/triggerLabel';
+
 /**
  * TRIP-562 · AC-3 가드 사정거리 갭 방어 — 화면이 **아이콘을 triggerLabel(kind).iconKey 경유**로
  * 고르는지 소스로 잠근다(오케 교정: 실효 링크를 이름→아이콘 경로로 옮김).
@@ -73,8 +75,19 @@ describe('🔴 G3 · 하드코딩 금칙(부정 짝 · BR-U4-01)', () => {
 
     // 활성 트리거 제목(triggerLabel 값)은 화면이 하드코딩하지 않는다 — 서버 reason·사영이 준다.
     // '이동 지연' 은 카테고리명이자 DELAY 값이라 겹쳐 제외(카테고리 상수로 정당).
-    for (const label of ['비 예보', '휴무 확인', '변경 요청']) {
-      expect(stripped).not.toContain(label);
+    // TRIP-748: 리터럴 목록이 아니라 **현재 라벨표에서 도출**한다 — CLOSURE 가 '휴무 확인'→'휴무' 로
+    // 개명되자 옛 리터럴이 리포에서 사라져 금칙이 공허해졌다(02a ★9). '휴무' 는 카테고리명 '영업·휴무'
+    // 의 부분 문자열이라, 카테고리명을 먼저 가린 뒤 검사한다(카테고리명은 허용).
+    const masked = stripped.split('영업·휴무').join('');
+    const labels = (
+      Object.keys(TRIGGER_LABELS) as (keyof typeof TRIGGER_LABELS)[]
+    )
+      .filter((kind) => kind !== 'DELAY')
+      .map((kind) => TRIGGER_LABELS[kind].label);
+    // 짝 앵커 — 도출한 금칙이 비지 않았다(3종).
+    expect(labels).toHaveLength(3);
+    for (const label of labels) {
+      expect(masked).not.toContain(label);
     }
     // BR-U4-01 발명 kind — '교통'·'체류 초과' 0건.
     expect(stripped).not.toContain('교통');

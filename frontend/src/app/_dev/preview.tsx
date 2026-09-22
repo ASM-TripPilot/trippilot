@@ -29,9 +29,7 @@ import {
   PREVIEW_SAVED_POI_IDS,
 } from '@/features/explore/model/exploreFixtures';
 import type { PlaceDetailView } from '@/features/execution/model/placeDetailView';
-import { WeatherCloudGlyph } from '@/features/execution/ui/ExecutionGlyphs';
 import { PlaceDetailScreen } from '@/features/execution/ui/PlaceDetailScreen';
-import { TriggerBanner } from '@/features/execution/ui/TriggerBanner';
 import { TriggerChip } from '@/features/execution/ui/TriggerChip';
 import type { CompareRow } from '@/features/record/model/compareRows';
 import { ConflictSheet } from '@/features/record/ui/ConflictSheet';
@@ -115,6 +113,8 @@ import { StyleSummaryCard } from '@/features/settings/ui/StyleSummaryCard';
 import { RevokeConfirmDialog } from '@/features/settings/ui/RevokeConfirmDialog';
 import { SettingsScreen } from '@/features/settings/ui/SettingsScreen';
 import { TripCard, type TripCardVM } from '@/features/settings/ui/TripCard';
+import { triggerLabel } from '@/features/planb/model/triggerLabel';
+import { triggerPillCopy } from '@/features/planb/model/triggerPillCopy';
 import { triggerWatchlist } from '@/features/planb/model/triggerWatchlist';
 import { ManualEditScreen } from '@/pages/planb-manual/ui/ManualEditScreen';
 import { ReplanRequestSheet } from '@/features/planb/ui/ReplanRequestSheet';
@@ -173,6 +173,7 @@ import type {
   SlotCandidatesCandidatesItem,
   StayItem,
   Trigger,
+  TriggerKind,
 } from '@/shared/api/generated/schemas';
 import { PersonalizationInfoReason } from '@/shared/api/generated/schemas';
 import { buildMonthGrid } from '@/shared/date/monthGrid';
@@ -1553,6 +1554,26 @@ function renderLiveHubPreview(
       {...extra}
     />
   );
+}
+
+// i02 변수 감지(TRIP-748) — 펼침 5곳 위에 해운대(17:00) 매칭 트리거를 싣는다. 알약 카피·배지는
+// 페이지와 같은 순수 함수로 여기서 조립한다(api 로드 0 — TRIP-610).
+const LIVE_TRIGGER_SLOT_KEY = `${LIVE_HUB_PREVIEW_DATE}#haeundae`;
+function renderLiveTriggerPreview(kind: TriggerKind): ReactElement {
+  const target = LIVE_HUB_PREVIEW_SLOTS.find(
+    ({ slot }) => slot.poiId === 'haeundae'
+  )?.slot;
+  return renderLiveHubPreview(2, {
+    triggerChip: (
+      <TriggerChip
+        label={triggerPillCopy(kind, target)}
+        onPressAlternative={noop}
+      />
+    ),
+    triggerPillKey: `preview-${kind}`,
+    slotBadgeLabel: (slotKey) =>
+      slotKey === LIVE_TRIGGER_SLOT_KEY ? triggerLabel(kind).label : null,
+  });
 }
 
 // i15·i22 수동 편집(TRIP-443) — A(비고정)·H(숙소 체크인 isFixed)·C(비고정, lockedSlotKeys) 3슬롯.
@@ -4814,41 +4835,28 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () =>
       renderLiveHubPreview(2, { slots: LIVE_HUB_PREVIEW_SLOTS_NO_RECORDS }),
   },
-  // i08 트리거 칩(상단 상주) + i01 변수감지 배너(활성 슬롯 안)(TRIP-561) — 발화 중 얼굴. 748 재배치
-  // 전까지 새 허브(TRIP-746) 위에 그대로 얹는다(키 정리는 TRIP-756). 칩·배너는 순수 프레젠테이션이라
-  // 페이지가 조립할 문구·아이콘·콜백을 여기서 직접 얹는다.
+  // i02 변수 감지(TRIP-748, Figma 4041:2427 · 4078:2477 · 4081:2502) — 지도 위 알약 + 해운대 배지.
+  // 알약 카피는 D2 대로 슬롯명 전체("해운대 해변")라 Figma "해운대"와 다르다(허용 차이).
   {
-    key: 'live-itinerary-trigger',
+    key: 'live-trigger-weather',
     band: 'i',
-    label: 'i08 · 트리거 칩+배너',
+    label: 'i02 · 변수 감지 비 예보',
     login: null,
-    render: () => (
-      <LiveHubView
-        tripTitle="부산 여행"
-        days={LIVE_HUB_PREVIEW_DAYS}
-        activeDayIndex={1}
-        slots={LIVE_HUB_PREVIEW_SLOTS}
-        onBack={noop}
-        onSelectDay={noop}
-        onPressAiReplan={noop}
-        onPressManualEdit={noop}
-        onPressComplete={noop}
-        triggerChip={
-          <TriggerChip
-            title="비 예보"
-            subtitle="탭하여 대안 보기"
-            icon={<WeatherCloudGlyph size={24} />}
-            onPressAlternative={noop}
-            onDismiss={noop}
-          />
-        }
-        renderSlotBanner={(slotKey) =>
-          slotKey === `${LIVE_HUB_PREVIEW_DATE}#museum` ? (
-            <TriggerBanner text="비 예보 · 17시 이후 비 — 실내로 바꾸거나 시간을 당길 수 있어요" />
-          ) : null
-        }
-      />
-    ),
+    render: () => renderLiveTriggerPreview('WEATHER'),
+  },
+  {
+    key: 'live-trigger-delay',
+    band: 'i',
+    label: 'i02 · 변수 감지 이동 지연',
+    login: null,
+    render: () => renderLiveTriggerPreview('DELAY'),
+  },
+  {
+    key: 'live-trigger-closure',
+    band: 'i',
+    label: 'i02 · 변수 감지 휴무',
+    login: null,
+    render: () => renderLiveTriggerPreview('CLOSURE'),
   },
   // e04 저장한 숙소(TRIP-461) — results·empty 두 얼굴. jest 는 픽셀·레이아웃을 못 봐(6-b) 이
   // 자리가 카드 그림자·거점 지정 하단 버튼·empty 콜라주·돋보기 CTA 를 눈으로 대조하는 곳이다.
