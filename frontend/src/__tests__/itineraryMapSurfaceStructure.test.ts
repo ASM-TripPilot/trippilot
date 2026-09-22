@@ -95,8 +95,10 @@ const LOCKED_CALLERS = [
 const OPEN_CALLERS = [
   'features/stay/ui/StayRegisterScreen.tsx',
   'app/_dev/preview.tsx',
-  // TRIP-397 i02·i03 여행 중 지도 — 자유 탐색이라 제스처를 잠그지 않는다(viewOnly 미전달).
-  'features/execution/ui/LiveMapScreen.tsx',
+  // TRIP-746 — 옛 i02·i03 `features/execution/ui/LiveMapScreen.tsx`(TRIP-397 자유 탐색 지도)는 허브
+  // 재작성으로 삭제됐다. 그 "잠그지 않는다" 결정은 i01 허브가 이어받되, 허브는 `<MapView>` 를 직접
+  // 렌더하지 않고 셸(`MapSheetShell`, LOCKED 명부)을 `mapViewOnly={false}` 로 연다 — 그 옵트아웃
+  // 경계는 아래 S2b 가 따로 잠근다(태그가 아니라 셸 prop 이라 이 명부의 대상이 아니다).
   // TRIP-866(S4) — pages/live-location/ui/LiveLocationPage.tsx 는 이 명부에서 빠졌다: 이제 지도를
   // `<CenterPinPicker>`(중앙 고정 핀, shared/map)로 감싸 쓰므로 `<MapView\b` census 밖이다.
   // CenterPinPicker 는 viewOnly 를 받지 않는(항상 조작 가능) 래퍼라 이 옵트인 경계의 대상이 아니다.
@@ -117,6 +119,13 @@ const NO_LINE_CALLERS = [
   // TRIP-795 h10 후보 지도 — "보여주기 전용" 글랜스라 확정 동선이 아니다(INV-2). 3번째 no-line caller.
   'features/itinerary/ui/SlotFillScreen.tsx',
 ];
+
+/** TRIP-746 — 셸의 지도 잠금을 **푸는**(`mapViewOnly={false}`) 소비처. 셸 기본값은 잠금이고, 여행 중
+ * 자유 탐색인 i01 허브만 연다(TRIP-397 결정 계승 · Seed Q1). 새 파일이 이 prop 을 쓰면 S2b 가 먼저
+ * 걸려 "열어도 되는 화면인가"를 사람이 정하게 된다. */
+const SHELL_REL = 'widgets/map-sheet-shell/ui/MapSheetShell.tsx';
+const SHELL_UNLOCK_CONSUMERS = ['pages/live-itinerary/ui/LiveHubView.tsx'];
+const SHELL_UNLOCK = /\bmapViewOnly=\{false\}/;
 
 const SCREEN_REL = 'features/itinerary/ui/DraftScreen.tsx';
 // TRIP-864 — 지도 계약(MapPin)은 삭제된 mapHtml.ts 에서 네이버 코어 MapView.tsx 로 이관됐다.
@@ -283,17 +292,59 @@ describe('🔴 S2 · AC-13 · AC-16 — 지도 고정은 h05·h11 에만 켠다 
       expect(tags.filter((tag) => /\bviewOnly\b/.test(tag))).toEqual(tags);
     });
 
-    // ③ 열어 둘 자리 — 태그가 정확히 4개이고 그중 어느 것에도 viewOnly 가 없다. 이들이 잠기면
-    //    좌표 확정·여행 중 자유 탐색이 막힌다(회귀 금지). 내역: StayRegister 2(검색 미리보기+확정
-    //    시트) + preview 1 + LiveMapScreen 1. TRIP-866(S4) 로 live-location 이 `<CenterPinPicker>` 로
-    //    넘어가 `<MapView\b` census 밖이 되며 구 5 → 4. StayRegister 핀 지정 태그도 이제 CenterPinPicker
-    //    라 여전히 `<MapView\b` 밖이고, 남은 2개는 지도 검색 흐름(핀 지정과 무관)이다.
+    // ③ 열어 둘 자리 — 태그가 정확히 3개이고 그중 어느 것에도 viewOnly 가 없다. 이들이 잠기면
+    //    좌표 확정이 막힌다(회귀 금지). 내역: StayRegister 2(검색 미리보기+확정 시트) + preview 1.
+    //    TRIP-866(S4) 로 live-location 이 `<CenterPinPicker>` 로 넘어가 5 → 4, TRIP-746 으로
+    //    LiveMapScreen 이 삭제돼 4 → 3(여행 중 자유 탐색은 허브가 셸 prop 으로 이어받음 — S2b).
     const openTags = OPEN_CALLERS.flatMap((rel) => mapTagsOf(readOne(rel)));
-    expect(openTags).toHaveLength(4);
+    expect(openTags).toHaveLength(3);
     expect(openTags.filter((tag) => /\bviewOnly\b/.test(tag))).toEqual([]);
 
     // ④(구) TimelineScreen 태그 단위(글랜스 잠금 / h26 확대 열림) 분석은 TRIP-801 GUT 로 그 파일이
     //    삭제되며 제거됐다 — CONFIRMED 도 이제 MapSheetShell(LOCKED, 단일 viewOnly 태그)이 owner다.
+  });
+});
+
+describe('🔴 S2b · TRIP-746 — 셸 지도 잠금을 푸는 소비처는 i01 허브 하나뿐이다 (옵트아웃 경계)', () => {
+  it('자가검사 — 주석 속 mapViewOnly={false} 는 걷히고 코드의 것은 남는다', () => {
+    const sample = [
+      '// 허브만 mapViewOnly={false} 로 연다.',
+      '<MapSheetShell',
+      '  mapViewOnly={false}',
+      '  onBack={() => router.back()}',
+      '/>',
+    ].join('\n');
+    const stripped = stripComments(sample);
+
+    expect(stripped.split('mapViewOnly').length - 1).toBe(1);
+    expect(SHELL_UNLOCK.test(stripped)).toBe(true);
+    // 반대 방향 — 기본값을 명시한 true 는 푸는 것이 아니다.
+    expect(SHELL_UNLOCK.test('mapViewOnly={true}')).toBe(false);
+  });
+
+  it('mapViewOnly={false} 를 쓰는 파일 전수 = 허브 뷰 1개 · 그 파일은 셸을 렌더 · 셸은 그 prop 을 MapView viewOnly 로 흘린다', () => {
+    // 파일 단위로 센다 — `<MapSheetShell` 태그는 `=>`·JSX prop 을 품어 `[^>]*` 태그 정규식을 못 쓴다(02a ★9).
+    const unlocking = listSourceFiles(ROOT)
+      .map((full) => relOf(full))
+      .filter((rel) => rel !== SHELL_REL)
+      .filter((rel) => SHELL_UNLOCK.test(readOne(rel)))
+      .sort();
+
+    // ① 옵트아웃 전수 — 허브 뷰만 연다(구현 전엔 파일 부재라 [] → red).
+    expect(unlocking).toEqual(SHELL_UNLOCK_CONSUMERS);
+
+    // ② 그 파일은 실제로 셸을 렌더한다(prop 이 엉뚱한 곳에 붙은 공허 통과 차단).
+    SHELL_UNLOCK_CONSUMERS.forEach((rel) =>
+      expect(readOne(rel)).toContain('<MapSheetShell')
+    );
+
+    // ③ 셸은 prop 을 받고, 그 `<MapView>` 태그에 viewOnly 가 남아 있다(기본 잠금 — S2 ② 와 같은 태그).
+    //    `viewOnly` 를 태그에서 지우면 기본 잠금이 사라져 6 소비처가 조용히 풀린다.
+    const shell = readOne(SHELL_REL);
+    expect(shell).toContain('mapViewOnly');
+    const shellTags = mapTagsOf(shell);
+    expect(shellTags.length).toBeGreaterThan(0);
+    shellTags.forEach((tag) => expect(tag).toMatch(/\bviewOnly\b/));
   });
 });
 
@@ -305,7 +356,7 @@ describe('S8 · 무선 — 연결선을 끄는 자리가 h05·h07 loading 둘뿐
    * 무엇을 보장하지 **못**하나: 태그에 적힌 **글자**까지다. 그 값이 컴포넌트를 통과해 실제
    * 지도에 닿는지는 이 층에서 볼 수 없다 — `MapView`가 그 프롭을 흘려도 여기는 초록이다.
    * 그 축은 실물 렌더 심판(`shared/map/MapView.test.tsx` AC2 viewOnly·AC3 connectPins)이 잡는다. */
-  it('no-line 세 자리(h05·h07 loading·h10 후보)에만 connectPins={false} 가 있고 나머지 LOCKED(+OPEN 4)은 기본값을 받는다', () => {
+  it('no-line 세 자리(h05·h07 loading·h10 후보)에만 connectPins={false} 가 있고 나머지 LOCKED(+OPEN 3)은 기본값을 받는다', () => {
     const lineOffTags = NO_LINE_CALLERS.flatMap((rel) =>
       mapTagsOf(readOne(rel))
     );
@@ -316,20 +367,21 @@ describe('S8 · 무선 — 연결선을 끄는 자리가 h05·h07 loading 둘뿐
       // CONFIRMED 동선 선은 이제 MapSheetShell(LOCKED, connectPins 기본)이 그린다.
     ].flatMap((rel) => mapTagsOf(readOne(rel)));
 
-    // ① 도달 앵커 — 태그를 진짜로 떼어냈다(no-line 3개 + 나머지 14개 = 총 17개).
+    // ① 도달 앵커 — 태그를 진짜로 떼어냈다(no-line 3개 + 나머지 13개 = 총 16개). TRIP-746 으로
+    //    LiveMapScreen(OPEN, 태그 1) 삭제 → defaultTags 14 → 13.
     //    TRIP-789 로 no-line 이 1→2(h07 loading 지도 카드). TRIP-795 로 3(h10 후보 지도 카드,
     //    connectPins={false}). defaultTags 는 14 불변 — SlotFillScreen 은 LOCKED 이자 NO_LINE 이라
     //    filter 에서 빠져 (LOCKED 13 − NO_LINE 3 = 10 + OPEN 4)로 상쇄된다(오갱신 금지 — 15로 올리면
     //    거짓 red). TRIP-791 로 GenerationFallbackScreen(LOCKED·line caller) 추가분은 그대로.
     expect(lineOffTags).toHaveLength(3);
-    expect(defaultTags).toHaveLength(14);
+    expect(defaultTags).toHaveLength(13);
 
     // ② 끄는 세 자리 전부 끈다고 **명시**한다(h05·h07 loading·h10 후보).
     lineOffTags.forEach((tag) =>
       expect(tag).toMatch(/\bconnectPins=\{false\}/)
     );
 
-    // ③ 나머지(defaultTags 14개)는 아무 말도 하지 않는다 = 기본값(잇는다)을 받는다. h11 이 여기 있다 —
+    // ③ 나머지(defaultTags 13개)는 아무 말도 하지 않는다 = 기본값(잇는다)을 받는다. h11 이 여기 있다 —
     //    이 심판이 요구하는 것은 "끄지 않았다"이고, 기본값이 정말 잇는지는 X3이 잰다.
     expect(defaultTags.filter((tag) => /\bconnectPins\b/.test(tag))).toEqual(
       []

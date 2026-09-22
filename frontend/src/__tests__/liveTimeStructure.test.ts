@@ -35,8 +35,19 @@ const EXEC_DIR_REL = 'features/execution';
 const MODEL_FILES = [
   'features/execution/model/liveState.ts',
   'features/execution/model/slotProgress.ts',
-  'features/execution/model/liveViewStore.ts',
+  // TRIP-746 — liveViewStore.ts(세그먼트·토글)는 소비처 0 으로 삭제돼 앵커에서 뺐다.
   'features/execution/model/useLiveItinerary.ts',
+];
+/**
+ * TRIP-746 — i01 허브가 execution 밖으로 옮겨 갔다(pages 순수 뷰 · entities 카드 · entities lib).
+ * 진행 중 화면의 시각을 그리는 자리이므로 BR-U4-34 사정거리에 **명시 편입**한다 — 안 하면 그물이
+ * 조용히 줄어든다(브리프 맹점①). 페이지 컨테이너(`LiveItineraryPage.tsx`)는 오늘 날짜 테스트 seam
+ * (`new Date()`)을 정당하게 가져 제외한다 — 시각 재추정이 아니라 "오늘" 판정 입력이다.
+ */
+const HUB_FILES = [
+  'pages/live-itinerary/ui/LiveHubView.tsx',
+  'entities/itinerary-slot/ui/SlotProgressCard.tsx',
+  'entities/itinerary-slot/lib/openingHoursLabel.ts',
 ];
 
 /** 날짜 라이브러리 산술 함수 — 시각을 옮기는(재추정하는) 표준 이름들. */
@@ -116,17 +127,19 @@ describe('G1 · 탐지기 자가검사 — 이게 통과해야 아래 스캔이 
   });
 });
 
-describe('G2 · BR-U4-34 — features/execution/** 소스에 슬롯 시각 산술이 0건이다', () => {
-  it('실행 층 전수(주석 제외)에 시각 재추정 산술이 없다', () => {
-    const sources = listSourceFiles(path.join(ROOT, EXEC_DIR_REL)).map(
-      (full) => ({ file: relOf(full), source: readOne(relOf(full)) })
-    );
+describe('G2 · BR-U4-34 — features/execution/** + i01 허브 소스에 슬롯 시각 산술이 0건이다', () => {
+  it('실행 층 전수 + 허브 3파일(주석 제외)에 시각 재추정 산술이 없다', () => {
+    const sources = [
+      ...listSourceFiles(path.join(ROOT, EXEC_DIR_REL)).map(relOf),
+      // 없는 파일은 넣지 않는다 — 아래 앵커가 "빠졌다"를 red 로 드러낸다.
+      ...HUB_FILES.filter((rel) => fs.existsSync(path.join(ROOT, rel))),
+    ].map((file) => ({ file, source: readOne(file) }));
 
-    // 긍정 앵커 — 모집단이 비어 있지 않고, 이 칸의 model 파일이 그 안에 있다. 없으면 아래
-    // "0건"이 빈 디렉토리에서 공허하게 통과한다(구현 전에는 여기서 red).
+    // 긍정 앵커 — 모집단이 비어 있지 않고, 이 칸의 model 파일과 허브 3파일이 그 안에 있다. 없으면
+    // 아래 "0건"이 빈 디렉토리에서 공허하게 통과한다(구현 전에는 여기서 red — TRIP-746 허브 3파일).
     expect(sources.length).toBeGreaterThan(0);
     const scanned = sources.map((entry) => entry.file);
-    for (const rel of MODEL_FILES) {
+    for (const rel of [...MODEL_FILES, ...HUB_FILES]) {
       expect(scanned).toContain(rel);
     }
 

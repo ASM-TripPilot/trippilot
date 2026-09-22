@@ -15,6 +15,9 @@ const INFO = '#0B6E63';
 const SUCCESS = '#0E9384';
 const PRESENCE_BLUE = '#1B6EF3';
 const BODY = '#3F3F3F';
+const INK = '#222222';
+// 비활성 회청(Figma #C2CCD6) — 토큰 없음, TripGlyphs `DISABLED` 선례와 같은 값.
+const DISABLED = '#C2CCD6';
 
 type GlyphProps = {
   size?: number;
@@ -276,8 +279,8 @@ export function CategoryImageGlyph({ size = 30, testID }: GlyphProps) {
 export function ChevronRightGlyph({
   size = 16,
   tone = 'primaryText',
-}: GlyphProps & { tone?: 'primaryText' | 'muted' }) {
-  const stroke = tone === 'muted' ? MUTED : PRIMARY_TEXT;
+}: GlyphProps & { tone?: 'primaryText' | 'muted' | 'ink' }) {
+  const stroke = tone === 'muted' ? MUTED : tone === 'ink' ? INK : PRIMARY_TEXT;
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
@@ -339,6 +342,86 @@ export function LockGlyph({ size = 14 }: GlyphProps) {
         stroke={PRIMARY_TEXT}
         strokeWidth={1.8}
         strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+// TRIP-746 · i01 허브 진행 카드 아이콘 3종(Figma 4125:3957 벡터 그대로) — active [사진]·[메모]는
+// ink(16), upcoming 비활성 버튼은 회청(15). 같은 모양을 `tone` 으로 가른다(ChevronRightGlyph 패턴).
+type ProgressTone = 'ink' | 'disabled';
+const progressStroke = (tone: ProgressTone): string =>
+  tone === 'disabled' ? DISABLED : INK;
+
+export function PhotoGlyph({
+  size = 16,
+  tone = 'ink',
+}: GlyphProps & { tone?: ProgressTone }) {
+  const stroke = progressStroke(tone);
+  return (
+    <Svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      <Path
+        d="M12.67 2.67H3.33C2.6 2.67 2 3.26 2 4V12C2 12.74 2.6 13.33 3.33 13.33H12.67C13.4 13.33 14 12.74 14 12V4C14 3.26 13.4 2.67 12.67 2.67Z"
+        stroke={stroke}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M5.67 7.07C6.26 7.07 6.73 6.59 6.73 6C6.73 5.41 6.26 4.93 5.67 4.93C5.08 4.93 4.6 5.41 4.6 6C4.6 6.59 5.08 7.07 5.67 7.07Z"
+        stroke={stroke}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M14 10.67L10.67 7.33L3.33 14"
+        stroke={stroke}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+export function MemoGlyph({
+  size = 16,
+  tone = 'ink',
+}: GlyphProps & { tone?: ProgressTone }) {
+  const stroke = progressStroke(tone);
+  return (
+    <Svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      <Path
+        d="M8 13.33H14"
+        stroke={stroke}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M11 2.33C11.27 2.07 11.62 1.92 12 1.92C12.38 1.92 12.73 2.07 13 2.33C13.27 2.6 13.41 2.96 13.41 3.33C13.41 3.71 13.27 4.07 13 4.33L4.67 12.67L2 13.33L2.67 10.67L11 2.33Z"
+        stroke={stroke}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+export function CheckGlyph({
+  size = 15,
+  tone = 'disabled',
+}: GlyphProps & { tone?: ProgressTone }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 15 15" fill="none">
+      <Path
+        d="M12.5 3.75L5.63 10.63L2.5 7.5"
+        stroke={progressStroke(tone)}
+        strokeWidth={3}
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </Svg>
   );

@@ -7,7 +7,8 @@ import path from 'path';
 /**
  * TRIP-395 · INV-3 · PBT-U4-F2 — 여행 중 UI 소스 층 **소요시간 비표기 가드**.
  *
- * `features/{execution,planb}/ui/**` 소스 어디에도 소요시간 표기가 없다(INV-3 — 거리만, 시간 안 함).
+ * `features/{execution,planb}/ui/**` + i01 허브(`pages/live-itinerary/ui/**`·`entities/itinerary-slot/ui/**`,
+ * TRIP-746 편입) 소스 어디에도 소요시간 표기가 없다(INV-3 — 거리만, 시간 안 함).
  * 렌더 스캔이 못 보는 `accessibilityLabel="이동 30분"` 같은 prop 문자열도 여기서 잡는다
  * (`itineraryTimeStructure.test.ts`와 같은 계열·같은 규율).
  *
@@ -16,8 +17,18 @@ import path from 'path';
  */
 
 const ROOT = path.resolve('src');
-const UI_DIRS = ['features/execution/ui', 'features/planb/ui'];
-const SCREEN_REL = 'features/execution/ui/LiveItineraryScreen.tsx';
+// TRIP-746 — i01 허브가 pages 순수 뷰 + entities 카드로 옮겨 가 두 디렉토리를 편입했다(맹점① —
+// 안 하면 INV-3 그물이 조용히 줄어든다). 앵커도 옛 `LiveItineraryScreen.tsx`(삭제)에서 새 자리로.
+const UI_DIRS = [
+  'features/execution/ui',
+  'features/planb/ui',
+  'pages/live-itinerary/ui',
+  'entities/itinerary-slot/ui',
+];
+const ANCHOR_RELS = [
+  'pages/live-itinerary/ui/LiveHubView.tsx',
+  'entities/itinerary-slot/ui/SlotProgressCard.tsx',
+];
 
 /** 소요시간 **표기** 탐지기 — 화면에 나갈 문자열 형태. `HH:mm`(09:30)은 숫자 뒤가 `:`이라 안 걸린다. */
 const DURATION_TEXT = /(\d+\s*분|\d+\s*시간|소요)/;
@@ -66,10 +77,15 @@ describe('G1 · 탐지기 자가검사', () => {
 
     expect(DURATION_TEXT.test('이동 30분')).toBe(true);
     expect(DURATION_TEXT.test('소요 2시간')).toBe(true);
+
+    // TRIP-746 오탐 인지 — 영업시간 원문 "24시간 개방" 도 이 탐지기에 걸린다. 그래서 영업시간은
+    // **서버 데이터로만** 흘러야 하고, 스캔 대상 소스(ui)에 리터럴로 두면 안 된다(픽스처 문자열은
+    // 스캔 밖인 `app/_dev/preview.tsx` 에만 둔다, 02a ★8). 이 단언이 그 사실을 굳힌다.
+    expect(DURATION_TEXT.test("'24시간 개방'")).toBe(true);
   });
 });
 
-describe('G2 · INV-3 — features/{execution,planb}/ui 소스에 소요시간 표기가 0건이다', () => {
+describe('G2 · INV-3 — 여행 중 UI(execution·planb ui + 허브 pages·카드 entities) 소스에 소요시간 표기가 0건이다', () => {
   it('여행 중 UI 전수(주석 제외)에 분·시간·소요 표기가 없다', () => {
     const sources = UI_DIRS.flatMap((dir) =>
       listSourceFiles(path.join(ROOT, dir)).map((full) => ({
@@ -78,9 +94,12 @@ describe('G2 · INV-3 — features/{execution,planb}/ui 소스에 소요시간 �
       }))
     );
 
-    // 긍정 앵커 — 모집단이 비어 있지 않고 이 칸의 화면이 그 안에 있다(구현 전 red).
+    // 긍정 앵커 — 모집단이 비어 있지 않고 허브 뷰·카드가 그 안에 있다(구현 전 red — TRIP-746).
     expect(sources.length).toBeGreaterThan(0);
-    expect(sources.map((entry) => entry.file)).toContain(SCREEN_REL);
+    const scanned = sources.map((entry) => entry.file);
+    for (const rel of ANCHOR_RELS) {
+      expect(scanned).toContain(rel);
+    }
 
     const offenders = sources
       .filter(({ source }) => DURATION_TEXT.test(source))

@@ -25,6 +25,7 @@
 - `src/__tests__/devPreviewExplore.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewExploreLanding.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewHome.test.tsx`  →  (export 없음)
+- `src/__tests__/devPreviewLiveHub.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewMap.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewPref.test.tsx`  →  (export 없음)
 - `src/__tests__/editSheetBackdropStructure.test.ts`  →  (export 없음)
@@ -55,8 +56,8 @@
 - `src/__tests__/itineraryMethodStructure.test.ts`  →  (export 없음)
 - `src/__tests__/itineraryMustVisitStructure.test.ts`  →  (export 없음)
 - `src/__tests__/itineraryTimeStructure.test.ts`  →  (export 없음)
+- `src/__tests__/liveHubStructure.test.ts`  →  (export 없음)
 - `src/__tests__/liveLocationRoute.test.tsx`  →  (export 없음)
-- `src/__tests__/liveMapStructure.test.ts`  →  (export 없음)
 - `src/__tests__/liveTimeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/locationConsentPutBodyOwnership.test.ts`  →  (export 없음)
 - `src/__tests__/loginVisual.test.ts`  →  (export 없음)
@@ -267,6 +268,7 @@
 
 ## src/entities/itinerary-slot/lib/
 - `src/entities/itinerary-slot/lib/categoryPlaceholder.ts`  →  CategoryPlaceholder · resolveCategoryPlaceholder
+- `src/entities/itinerary-slot/lib/openingHoursLabel.ts`  →  formatOpeningHoursLabel
 - `src/entities/itinerary-slot/lib/slotKey.ts`  →  buildSlotKey · ParsedSlotKey · parseSlotKey · SlotKeySet · buildSlotKeys
 - `src/entities/itinerary-slot/lib/slotMapPin.ts`  →  SlotProgressState · StatePinInput · toMapPinState · buildStatePins
 
@@ -276,8 +278,9 @@
 ## src/entities/itinerary-slot/ui/
 - `src/entities/itinerary-slot/ui/PoiSlotCard.tsx`  →  PoiSlotCardVariant · PoiSlotCardProps · PoiSlotCard
 - `src/entities/itinerary-slot/ui/ReplanSlotRow.tsx`  →  ReplanSlotRowProps · ReplanSlotRow
-- `src/entities/itinerary-slot/ui/SlotGlyphs.tsx`  →  CategoryPinGlyph · CategoryForkKnifeGlyph · CategoryCupGlyph · CategoryNightGlyph · CategoryTreeGlyph · CategoryShoppingBagGlyph · CategoryBuildingGlyph · CategoryImageGlyph · ChevronRightGlyph · ClockGlyph · LockGlyph
+- `src/entities/itinerary-slot/ui/SlotGlyphs.tsx`  →  CategoryPinGlyph · CategoryForkKnifeGlyph · CategoryCupGlyph · CategoryNightGlyph · CategoryTreeGlyph · CategoryShoppingBagGlyph · CategoryBuildingGlyph · CategoryImageGlyph · ChevronRightGlyph · ClockGlyph · LockGlyph · PhotoGlyph · MemoGlyph · CheckGlyph
 - `src/entities/itinerary-slot/ui/SlotPhotoPlaceholder.tsx`  →  SlotPhotoPlaceholderProps · SlotPhotoPlaceholder
+- `src/entities/itinerary-slot/ui/SlotProgressCard.tsx`  →  SlotProgressCardProps · SlotProgressCard
 - `src/entities/itinerary-slot/ui/SlotStopCard.tsx`  →  UNSPECIFIED_CHIP_LABEL · SlotStopCardProps · SlotStopCard
 
 ## src/entities/place/lib/
@@ -337,25 +340,18 @@
 - `src/features/auth/ui/SplashScreen.tsx`  →  SplashScreen
 
 ## src/features/execution/model/
-- `src/features/execution/model/actualDistance.ts`  →  GeoPoint · accumulateDistanceKm · ActualRouteView · resolveActualRoute
 - `src/features/execution/model/dwellMinutes.ts`  →  dwellMinutes
 - `src/features/execution/model/liveState.ts`  →  LiveState · ResolveLiveStateInput · resolveLiveState
-- `src/features/execution/model/liveViewStore.ts`  →  LiveSegment · LivePlanToggle · LiveViewState · useLiveViewStore
-- `src/features/execution/model/mapPeek.ts`  →  MapPeekSlot · MapPeekView · buildMapPeek
 - `src/features/execution/model/nextNav.ts`  →  NavDest · buildAppNavUrl · buildWebNavUrl · resolveNextDest · openNextNav
 - `src/features/execution/model/placeDetailView.ts`  →  PlaceDetailView · resolveSlackLabel · buildPlaceDetailView
 - `src/features/execution/model/slotProgress.ts`  →  SlotState · ProjectedSlot · SlotProgressInput · projectSlotProgress
-- `src/features/execution/model/useActualRoute.ts`  →  useActualRoute
 - `src/features/execution/model/useLiveItinerary.ts`  →  useLiveItinerary
 - `src/features/execution/model/usePlaceDetail.ts`  →  usePlaceDetail
 - `src/features/execution/model/useVisitCheck.ts`  →  VisitCheckOutcome · useVisitCheck
 - `src/features/execution/model/visitProgress.ts`  →  VisitProgress · deriveVisitProgress
 
 ## src/features/execution/ui/
-- `src/features/execution/ui/ExecutionGlyphs.tsx`  →  RailDoneGlyph · RailActiveGlyph · RailUpcomingGlyph · ClockGlyph · VisitCheckGlyph · CameraGlyph · MemoGlyph · RouteArrowGlyph · BackArrowGlyph · ShareGlyph · WarningTriangleGlyph · WeatherCloudGlyph · ChevronRightGlyph · CloseGlyph · ShieldGlyph
-- `src/features/execution/ui/LiveItineraryScreen.tsx`  →  LiveItineraryScreenProps · LiveItineraryScreen
-- `src/features/execution/ui/LiveMapScreen.tsx`  →  LiveMapScreenProps · LiveMapScreen
-- `src/features/execution/ui/LiveSlotCard.tsx`  →  LiveSlotCardProps · LiveSlotCard
+- `src/features/execution/ui/ExecutionGlyphs.tsx`  →  RailDoneGlyph · RailActiveGlyph · RailUpcomingGlyph · BackArrowGlyph · ShareGlyph · WarningTriangleGlyph · WeatherCloudGlyph · ChevronRightGlyph · CloseGlyph
 - `src/features/execution/ui/PlaceDetailScreen.tsx`  →  PlaceDetailScreenProps · PlaceDetailScreen
 - `src/features/execution/ui/TriggerBanner.tsx`  →  TriggerBannerProps · TriggerBanner
 - `src/features/execution/ui/TriggerChip.tsx`  →  TriggerChipProps · TriggerChip
@@ -741,6 +737,7 @@
 - `src/pages/live-itinerary/index.ts`  →  LiveItineraryPage
 
 ## src/pages/live-itinerary/ui/
+- `src/pages/live-itinerary/ui/LiveHubView.tsx`  →  LiveHubSlot · LiveHubViewProps · LiveHubView
 - `src/pages/live-itinerary/ui/LiveItineraryPage.tsx`  →  LiveItineraryPageProps · LiveItineraryPage
 
 ## src/pages/live-location/
@@ -1305,4 +1302,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 877개 파일
+합계 874개 파일

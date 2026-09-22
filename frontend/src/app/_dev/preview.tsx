@@ -29,9 +29,7 @@ import {
   PREVIEW_SAVED_POI_IDS,
 } from '@/features/explore/model/exploreFixtures';
 import type { PlaceDetailView } from '@/features/execution/model/placeDetailView';
-import type { ProjectedSlot } from '@/features/execution/model/slotProgress';
 import { WeatherCloudGlyph } from '@/features/execution/ui/ExecutionGlyphs';
-import { LiveItineraryScreen } from '@/features/execution/ui/LiveItineraryScreen';
 import { PlaceDetailScreen } from '@/features/execution/ui/PlaceDetailScreen';
 import { TriggerBanner } from '@/features/execution/ui/TriggerBanner';
 import { TriggerChip } from '@/features/execution/ui/TriggerChip';
@@ -153,6 +151,10 @@ import { LiveLocationPage } from '@/pages/live-location';
 import { ConfirmedBanner } from '@/pages/itinerary-plan/ui/ConfirmedBanner';
 import { NoBaseNoticeCard } from '@/pages/itinerary-plan/ui/NoBaseNoticeCard';
 import { EditorView } from '@/pages/itinerary-edit/ui/EditorView';
+import {
+  LiveHubView,
+  type LiveHubSlot,
+} from '@/pages/live-itinerary/ui/LiveHubView';
 import { BudgetEditSheet } from '@/pages/trip-new-step1/ui/BudgetEditSheet';
 import { PrefOverrideSheet } from '@/pages/trip-new-step1/ui/PrefOverrideSheet';
 import {
@@ -1422,56 +1424,126 @@ const MAP_STATE_PREVIEW_PINS: MapPin[] = [
   { number: 5, lat: 37.5615, lng: 126.9847, state: 'upcoming' },
 ];
 
-// i01 방문 체크(TRIP-396) — 한 타임라인에 done·active·upcoming 세 카드 상태를 동시에 세워
-// [방문 완료](활성)·상태줄 "방문 중"·수동 [도착]·완료 컴팩트를 6-b 실기/육안으로 대조하는 자리.
-// jest 는 픽셀·플렉스 폭을 못 봐(★ layer-features-execution) 이 키가 유일한 눈으로 보는 곳.
-const LIVE_ITINERARY_PREVIEW_SLOTS: ProjectedSlot[] = [
+// i01 여행중 허브(TRIP-746) — Figma 4125:3957 의 5곳(2일차 6월 11일(목)) 그대로. done 2(사진·후기)·
+// active 1·upcoming 2. 영업시간 원문은 데이터로만 흘린다("24시간 개방" 은 INV-3 스캔 대상 소스에
+// 리터럴로 두면 오탐 — 이 파일은 스캔 밖). 사진은 Figma 목업 사진(`assets/execution/CREDITS.md`).
+const LIVE_HUB_PREVIEW_DATE = '2026-06-11';
+const LIVE_HUB_PREVIEW_DAYS = [
+  { date: '2026-06-10' },
+  { date: LIVE_HUB_PREVIEW_DATE },
+  { date: '2026-06-12' },
+];
+const liveHubSlot = (
+  poiId: string,
+  nameKo: string,
+  startAt: string,
+  endAt: string,
+  lat: number,
+  lng: number,
+  openingHours: string | null = null
+): ItineraryDaysItemSlotsItem => ({
+  poiId,
+  startAt,
+  endAt,
+  isFixed: false,
+  endsNextDay: false,
+  hasViolation: false,
+  nameKo,
+  distanceRange: null,
+  openingHours,
+  lat,
+  lng,
+  tags: [],
+});
+const LIVE_HUB_PREVIEW_SLOTS: LiveHubSlot[] = [
   {
     state: 'done',
-    slot: {
-      poiId: 'poi-done',
-      startAt: '09:30:00',
-      endAt: '10:50:00',
-      isFixed: false,
-      endsNextDay: false,
-      hasViolation: false,
-      nameKo: '감천문화마을',
-      distanceRange: null,
-      openingHours: '09:00 - 18:00',
-      tags: [],
-    },
+    slot: liveHubSlot(
+      'gamcheon',
+      '감천문화마을',
+      '09:30:00',
+      '10:50:00',
+      35.0975,
+      129.0106
+    ),
+    photos: [
+      require('@/assets/execution/live-gamcheon-1.jpg'),
+      require('@/assets/execution/live-gamcheon-2.jpg'),
+    ],
+    memo: '골목마다 알록달록한 벽화. 전망대에서 인증샷 남겼다.',
+  },
+  {
+    state: 'done',
+    slot: liveHubSlot(
+      'gwangalli',
+      '광안리 해변',
+      '11:00:00',
+      '12:20:00',
+      35.1532,
+      129.1186
+    ),
+    photos: [
+      require('@/assets/execution/live-gwangalli-1.jpg'),
+      require('@/assets/execution/live-gwangalli-2.jpg'),
+    ],
+    memo: '바람이 좋았다. 백사장 산책하고 커피 한 잔 마셨다.',
   },
   {
     state: 'active',
-    slot: {
-      poiId: 'poi-active',
-      startAt: '13:00:00',
-      endAt: '14:30:00',
-      isFixed: false,
-      endsNextDay: false,
-      hasViolation: false,
-      nameKo: '부산시립미술관',
-      distanceRange: null,
-      openingHours: '10:00 - 18:00',
-      tags: [],
-    },
+    slot: liveHubSlot(
+      'museum',
+      '부산시립미술관',
+      '13:00:00',
+      '14:30:00',
+      35.1667,
+      129.137,
+      '10:00 - 18:00'
+    ),
   },
   {
     state: 'upcoming',
-    slot: {
-      poiId: 'poi-upcoming',
-      startAt: '15:00:00',
-      endAt: '16:30:00',
-      isFixed: false,
-      endsNextDay: false,
-      hasViolation: false,
-      nameKo: '전포 카페거리',
-      distanceRange: '약 1.2km · 도보 추정',
-      openingHours: '11:00 - 22:00',
-      tags: [],
-    },
+    slot: liveHubSlot(
+      'jeonpo',
+      '전포 카페거리',
+      '15:00:00',
+      '16:30:00',
+      35.1555,
+      129.0636,
+      '11:00 - 22:00'
+    ),
+  },
+  {
+    state: 'upcoming',
+    slot: liveHubSlot(
+      'haeundae',
+      '해운대 해변',
+      '17:00:00',
+      '18:30:00',
+      35.1587,
+      129.1604,
+      '24시간 개방'
+    ),
   },
 ];
+// Figma 의 현재위치 점(부산시립미술관 근처).
+const LIVE_HUB_PREVIEW_LOCATION = { lat: 35.1655, lng: 129.1335 };
+
+function renderLiveHubPreview(snap: number): ReactElement {
+  return (
+    <LiveHubView
+      tripTitle="부산 여행"
+      days={LIVE_HUB_PREVIEW_DAYS}
+      activeDayIndex={1}
+      slots={LIVE_HUB_PREVIEW_SLOTS}
+      initialSnapIndex={snap}
+      currentLocation={LIVE_HUB_PREVIEW_LOCATION}
+      onBack={noop}
+      onSelectDay={noop}
+      onPressReplan={noop}
+      onPressComplete={noop}
+    />
+  );
+}
 
 // i15·i22 수동 편집(TRIP-443) — A(비고정)·H(숙소 체크인 isFixed)·C(비고정, lockedSlotKeys) 3슬롯.
 // aViolation 을 켜면 A 에 위반 배지가 뜬다(mode 무관 공통 축).
@@ -4692,69 +4764,47 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // i01 여행 중 일정(TRIP-396) — done·active·upcoming 세 카드 상태를 한 타임라인에서.
+  // i01 여행중 허브(TRIP-746) — 같은 5곳을 시트 초기 스냅만 달리해 Figma 3프레임과 대조한다
+  // (닫힘 4251:2448 · 중간 4251:2640 · 펼침 4125:3957). 실제 스냅 전환은 6-b 실기.
   {
-    key: 'live-itinerary',
+    key: 'live-hub-closed',
     band: 'i',
-    label: 'i01 · 여행 중 일정 방문 체크',
+    label: 'i01 · 여행중 허브 닫힘',
     login: null,
-    render: () => (
-      <LiveItineraryScreen
-        days={[
-          { date: '2026-08-20', slots: [] },
-          { date: '2026-08-21', slots: [] },
-        ]}
-        activeDayIndex={0}
-        slots={LIVE_ITINERARY_PREVIEW_SLOTS}
-        segment="itinerary"
-        onSelectDay={noop}
-        onSelectSegment={noop}
-        toggle="plan"
-        onToggle={noop}
-        actualRoute={{
-          enabled: false,
-          reason: '위치 권한을 켜면 기록돼요',
-          distanceKm: 0,
-        }}
-        tripTitle="부산 여행"
-        subtitle="8월 20일 목요일 · 오늘 일정"
-        onPressTab={noop}
-        onPressComplete={noop}
-        onManualArrive={noop}
-      />
-    ),
+    render: () => renderLiveHubPreview(0),
   },
-  // i08 트리거 칩(상단 상주) + i01 변수감지 배너(활성 슬롯 안)(TRIP-561) — 발화 중 얼굴. jest 는
-  // 칩 상단 위치·rose 톤·아이콘·배너 슬롯 내부 정렬을 못 봐(6-b), 이 키가 유일한 육안 대조 자리다.
-  // 칩·배너는 순수 프레젠테이션이라 페이지가 조립할 문구·아이콘·콜백을 여기서 직접 얹는다.
+  {
+    key: 'live-hub-half',
+    band: 'i',
+    label: 'i01 · 여행중 허브 중간',
+    login: null,
+    render: () => renderLiveHubPreview(1),
+  },
+  {
+    key: 'live-hub-expanded',
+    band: 'i',
+    label: 'i01 · 여행중 허브 펼침',
+    login: null,
+    render: () => renderLiveHubPreview(2),
+  },
+  // i08 트리거 칩(상단 상주) + i01 변수감지 배너(활성 슬롯 안)(TRIP-561) — 발화 중 얼굴. 748 재배치
+  // 전까지 새 허브(TRIP-746) 위에 그대로 얹는다(키 정리는 TRIP-756). 칩·배너는 순수 프레젠테이션이라
+  // 페이지가 조립할 문구·아이콘·콜백을 여기서 직접 얹는다.
   {
     key: 'live-itinerary-trigger',
     band: 'i',
     label: 'i08 · 트리거 칩+배너',
     login: null,
     render: () => (
-      <LiveItineraryScreen
-        days={[
-          { date: '2026-08-20', slots: [] },
-          { date: '2026-08-21', slots: [] },
-        ]}
-        activeDayIndex={0}
-        slots={LIVE_ITINERARY_PREVIEW_SLOTS}
-        segment="itinerary"
-        onSelectDay={noop}
-        onSelectSegment={noop}
-        toggle="plan"
-        onToggle={noop}
-        actualRoute={{
-          enabled: false,
-          reason: '위치 권한을 켜면 기록돼요',
-          distanceKm: 0,
-        }}
+      <LiveHubView
         tripTitle="부산 여행"
-        subtitle="8월 20일 목요일 · 오늘 일정"
-        onPressTab={noop}
+        days={LIVE_HUB_PREVIEW_DAYS}
+        activeDayIndex={1}
+        slots={LIVE_HUB_PREVIEW_SLOTS}
+        onBack={noop}
+        onSelectDay={noop}
+        onPressReplan={noop}
         onPressComplete={noop}
-        onManualArrive={noop}
         triggerChip={
           <TriggerChip
             title="비 예보"
@@ -4765,7 +4815,7 @@ export const PREVIEW_STATES: PreviewState[] = [
           />
         }
         renderSlotBanner={(slotKey) =>
-          slotKey === '2026-08-20#poi-active' ? (
+          slotKey === `${LIVE_HUB_PREVIEW_DATE}#museum` ? (
             <TriggerBanner text="비 예보 · 17시 이후 비 — 실내로 바꾸거나 시간을 당길 수 있어요" />
           ) : null
         }

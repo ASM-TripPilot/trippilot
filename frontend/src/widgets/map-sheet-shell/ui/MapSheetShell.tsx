@@ -81,6 +81,16 @@ export interface MapSheetShellProps<T = unknown> {
    *  header·children 을 `ListHeaderComponent` 로 얹는다. 미전달=현행 `<BottomSheetScrollView>`
    *  (6 소비처 무변경). 타입 선언만 — 렌더 배선은 [구현] 몫(SH8b 가 red 로 강제). h13 이 첫 소비처. */
   list?: MapSheetListSlot<T>;
+  /** 바텀시트 스냅 포인트(TRIP-746 가산) — i01 허브가 3스냅(닫힘·중간·펼침)을 준다. 미전달이면
+   *  현행 2스냅 `SNAP_POINTS`(6 소비처 무변경). */
+  snapPoints?: (string | number)[];
+  /** 지도 잠금 여부(TRIP-746 가산) — 기본 true(현행 `<MapView viewOnly>` 잠금). i01 허브만
+   *  `false` 로 열어 여행 중 자유 탐색을 유지한다(TRIP-397 결정 계승, `itineraryMapSurfaceStructure`
+   *  S2b 가 소비처를 잠근다). */
+  mapViewOnly?: boolean;
+  /** 현재위치 점(TRIP-746 가산) — `<MapView currentLocation>` 으로 흘린다(TRIP-745 계약). 미전달이면
+   *  점 없음. */
+  currentLocation?: MapCenter;
 }
 
 export function MapSheetShell<T = unknown>({
@@ -98,6 +108,9 @@ export function MapSheetShell<T = unknown>({
   mapFallback,
   mapCard,
   list,
+  snapPoints,
+  mapViewOnly,
+  currentLocation,
 }: MapSheetShellProps<T>): ReactElement {
   return (
     <View testID="map-sheet-shell-root" className="flex-1 bg-canvas">
@@ -105,7 +118,14 @@ export function MapSheetShell<T = unknown>({
           지도 실패 폴백(mapFallback)을 받으면 그 노드로 지도 자리를 대체한다(day-chip·시트·CTA 유지 →
           화면을 안 비운다, INV-4 · TRIP-799 D5). 미전달이면 현행대로 MapView(801·기존 소비처 무변경). */}
       <View className="absolute inset-0">
-        {mapFallback ?? <MapView center={center} pins={pins} viewOnly />}
+        {mapFallback ?? (
+          <MapView
+            center={center}
+            pins={pins}
+            viewOnly={mapViewOnly ?? true}
+            currentLocation={currentLocation}
+          />
+        )}
       </View>
 
       {/* 좌상단 오버레이 — `overlay` 를 주면 그것을, 아니면 기본 일차 칩 오버레이를 그린다(D3). */}
@@ -132,7 +152,10 @@ export function MapSheetShell<T = unknown>({
           list 를 주면 body 를 BottomSheetFlatList 로 그려 무한 스크롤 리스트(h13 장소 후보,
           onEndReached)를 VirtualizedList-in-ScrollView 충돌 없이 담는다 — header·children 은 리스트의
           ListHeaderComponent 한 자리에 얹힌다(TRIP-798 묶음 C). 미전달이면 현행 스크롤 경로(6 소비처 무변경). */}
-      <BottomSheet index={initialIndex ?? 0} snapPoints={SNAP_POINTS}>
+      <BottomSheet
+        index={initialIndex ?? 0}
+        snapPoints={snapPoints ?? SNAP_POINTS}
+      >
         {list ? (
           <BottomSheetFlatList
             data={list.data}

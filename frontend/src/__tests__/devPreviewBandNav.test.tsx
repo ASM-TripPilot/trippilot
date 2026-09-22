@@ -264,7 +264,11 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    반경 넓힘, SlotFillScreen 순수 뷰 + 픽스처 props)만 추가하고 이 가드는 안 만진다(추가 전엔
     //    166개라 이 단언이 red). 정확히 그 키들인지는 아래 'TRIP-795' describe 가 못박고,
     //    devPreviewBandSort 는 band h 를 잠가 EXPECTED_H 도 동반 갱신(h10 2키를 h09↔h11 사이).
-    expect(PREVIEW_STATES).toHaveLength(168);
+    // ⚠️ TRIP-746: i01 허브 재작성 — 옛 `live-itinerary` 1키를 지우고 `live-hub-closed`·`-half`·
+    //    `-expanded` 3키(band `i`)를 더해 **순 +2** → 168→170. test-designer 선반영(카운트 가드만) —
+    //    implementer 는 preview.tsx 에서 키만 바꾸고 이 가드는 안 만진다(재편 전엔 168개라 red).
+    //    정확히 그 키들인지는 `devPreviewLiveHub.test.tsx` 가 못박는다.
+    expect(PREVIEW_STATES).toHaveLength(170);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(

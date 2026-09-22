@@ -4,23 +4,15 @@ import { router } from 'expo-router';
 import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { resolveActualRoute } from '@/features/execution/model/actualDistance';
 import { resolveLiveState } from '@/features/execution/model/liveState';
 import { useLiveItinerary } from '@/features/execution/model/useLiveItinerary';
-import {
-  useLiveViewStore,
-  type LivePlanToggle,
-  type LiveSegment,
-} from '@/features/execution/model/liveViewStore';
 import { projectSlotProgress } from '@/features/execution/model/slotProgress';
-import { useActualRoute } from '@/features/execution/model/useActualRoute';
 import { useVisitCheck } from '@/features/execution/model/useVisitCheck';
 import { deriveVisitProgress } from '@/features/execution/model/visitProgress';
 import {
   WarningTriangleGlyph,
   WeatherCloudGlyph,
 } from '@/features/execution/ui/ExecutionGlyphs';
-import { LiveItineraryScreen } from '@/features/execution/ui/LiveItineraryScreen';
 import { TriggerBanner } from '@/features/execution/ui/TriggerBanner';
 import { TriggerChip } from '@/features/execution/ui/TriggerChip';
 import { foldScope } from '@/features/planb/model/foldScope';
@@ -33,16 +25,17 @@ import {
   useGetTripsTripIdVisitsDaysDay,
 } from '@/shared/api/generated/trips/trips';
 import { isNotFound } from '@/shared/api/isNotFound';
-import { formatKoreanDate } from '@/shared/date/formatKoreanDate';
 import { StateNotice } from '@/shared/ui/StateNotice';
+
+import { LiveHubView } from './LiveHubView';
 
 /**
  * TRIP-395 · live-itinerary 페이지 — 조회·판정·조립의 단일 출처.
  *
  * useLiveItinerary(tripId) + 오늘 날짜 → resolveLiveState 판정 1회 → 상태별 렌더. 시각·순서는
  * 솔버 검증값이라 재계산하지 않는다(INV-2). trip 은 헤더 제목(trip.title)만을 위해 따로 조회하고
- * 판정에는 넣지 않는다 — trip 로딩이 일정 얼굴을 막지 않는다. 부제 날짜는 여기(execution 밖)에서
- * formatKoreanDate 로 만들어 완성 문자열로 화면에 내린다(구조가드 경계).
+ * 판정에는 넣지 않는다 — trip 로딩이 일정 얼굴을 막지 않는다. active 얼굴은 i01 허브 순수 뷰
+ * (`LiveHubView`, TRIP-746)가 그린다. 사진·후기는 조회 계약이 없어 넘기지 않는다(G6 — 칸 생략).
  *
  * `today` 는 테스트 주입 seam 이다(기본 = 오늘 UTC). 순수 판정 함수 resolveLiveState 에 날짜를
  * 넘겨 주는 자리라 여기 `new Date()` 가 있고, features/execution 안에는 없다.
@@ -58,6 +51,9 @@ const NEUTRAL_BADGE = (
   <View className="h-[72px] w-[72px] rounded-pill bg-surface-strong" />
 );
 
+/** 뒤로 갈 히스토리가 없을 때(딥링크·푸시 직행)의 폴백 — ItineraryPlanPage 관례(INV-4 침묵 금지). */
+const HOME_FALLBACK = '/(tabs)';
+
 /** iconKey(triggerLabel) → 칩 leading 글리프. WEATHER 만 전용, 나머지는 경고삼각형 폴백(seed 미결). */
 function chipIcon(iconKey: string): ReactNode {
   if (iconKey === 'weather') return <WeatherCloudGlyph size={24} />;
@@ -70,12 +66,6 @@ export function LiveItineraryPage({
 }: LiveItineraryPageProps) {
   const query = useLiveItinerary(tripId);
   const trip = useGetTripsTripId(tripId);
-  const segment = useLiveViewStore((store) => store.segment);
-  const setSegment = useLiveViewStore((store) => store.setSegment);
-  const toggle = useLiveViewStore((store) => store.toggle);
-  const setToggle = useLiveViewStore((store) => store.setToggle);
-  // 실제 경로 점열·위치 동의 → 레이어 판정(동의 없으면 비활성·거리 0, PBT-U4-F3).
-  const actualRoute = resolveActualRoute(useActualRoute());
   // 사용자가 고른 날(없으면 오늘). 훅 규칙상 조기 반환보다 위에서 무조건 선언한다.
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
 
@@ -170,7 +160,6 @@ export function LiveItineraryPage({
 
   const { itinerary } = state;
   const activeDayIndex = liveDayIndex;
-  const activeDate = liveDate;
   const activeSlots = itinerary.days[activeDayIndex]?.slots ?? [];
 
   // 방문 기록 → 진행 상태 도출 → projectSlotProgress 인자로 실제 주입(★도달성 — 빈 인자면
@@ -184,10 +173,6 @@ export function LiveItineraryPage({
     progress.activePoiId !== null
       ? (progress.visitCheckIdByPoiId[progress.activePoiId] ?? null)
       : null;
-
-  const subtitle = activeDate
-    ? `${formatKoreanDate(activeDate)} · 오늘 일정`
-    : '오늘 일정';
 
   // MANUAL 은 표시 표면에서 숨긴다(칩·배너는 WEATHER·DELAY·CLOSURE 3변형만). triggerLabel 은
   // 4종 매핑을 갖되(구조 완전성), 화면 표시 필터는 여기서 — 서로 다른 축이다(★8, BR-U4-01).
@@ -233,19 +218,18 @@ export function LiveItineraryPage({
   };
 
   return (
-    <LiveItineraryScreen
+    <LiveHubView
+      tripTitle={trip.data?.title ?? ''}
       days={itinerary.days}
       activeDayIndex={activeDayIndex}
       slots={projected}
-      segment={segment}
       onSelectDay={setSelectedDay}
-      onSelectSegment={(next: LiveSegment) => setSegment(next)}
-      toggle={toggle}
-      onToggle={(next: LivePlanToggle) => setToggle(next)}
-      actualRoute={actualRoute}
-      tripTitle={trip.data?.title ?? ''}
-      subtitle={subtitle}
-      onPressTab={(key) => router.replace(key === 'home' ? '/' : `/${key}`)}
+      onBack={() => {
+        if (router.canGoBack()) router.back();
+        else router.replace(HOME_FALLBACK);
+      }}
+      // 수동 재계획 세션 진입(BR-U4-10) — 라우팅으로만(execution→planb 직접 import 없이).
+      onPressReplan={() => router.push(`/trips/${tripId}/planb`)}
       onPressComplete={
         activeVisitCheckId !== null
           ? () => {
@@ -253,17 +237,8 @@ export function LiveItineraryPage({
             }
           : undefined
       }
-      onManualArrive={(poiId) => {
-        void visitCheck.arrive({
-          slotKey: `${activeDate}#${poiId}`,
-          poiId,
-          source: 'MANUAL',
-        });
-      }}
       triggerChip={triggerChip}
       renderSlotBanner={renderSlotBanner}
-      // i09 감시 목록 진입 — 라우팅으로만(execution→planb 직접 import 없이, ★6).
-      onPressWatchlist={() => router.push(`/trips/${tripId}/planb/triggers`)}
     />
   );
 }
