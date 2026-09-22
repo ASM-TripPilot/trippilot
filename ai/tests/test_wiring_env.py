@@ -15,6 +15,8 @@ from __future__ import annotations
 import uuid
 
 import pytest
+
+from trippilot.agents.schedule.budget import OrchestratorConfig
 from fastapi import FastAPI
 
 import main
@@ -505,6 +507,23 @@ def test_existence_max_calls_explicit_value_is_honoured(
     monkeypatch.setenv("KAKAO_CLIENT_ID", "dummy-key")
     monkeypatch.setenv("EXISTENCE_MAX_CALLS", "7")
     assert main._place_existence()._max_calls == 7  # noqa: SLF001
+
+
+def test_existence_http_timeout_bounds_deadline_overrun(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """호출당 HTTP 타임아웃 ≤ ②′ 마감 — **진행 중인 1건이 곧 마감 초과 상한**이다.
+
+    어댑터는 마감을 호출 **사이**에서만 본다(`kakao_existence.verify`). 그래서 기본
+    10s 짜리 클라이언트를 꽂으면 생성 시한을 그만큼 넘길 수 있었다(TRIP-904 리뷰).
+    상수 1.0 을 베끼지 않고 **두 설정의 관계**로 적는다 — 마감을 줄이면 여기서 걸린다.
+    """
+    monkeypatch.setenv("KAKAO_CLIENT_ID", "dummy-key")
+    adapter = main._place_existence()
+    assert adapter is not None
+
+    timeout_ms = adapter._http._timeout * 1000  # noqa: SLF001 — 배선 값 확인
+    assert 0 < timeout_ms <= OrchestratorConfig().existence_deadline_ms
 
 
 def test_kakao_key_empty_string_means_unwired(monkeypatch: pytest.MonkeyPatch) -> None:
