@@ -88,7 +88,12 @@ jobs:
           print(f"- 훑은 고유 건수: {d['scanned_unique']:,} · 사진 보유: {d['with_image']:,}")
           print(f"- 우리 정본과 매칭: {d['matched']:,} · 그중 사진 있음: {d['matched_with_image']:,}")
           print(f"- **실제로 채워지는 칸: {fill}%** → {verdict}")
-          print(f"- HTTP 호출: {d['http_calls']} (일일 예산 3,000)\n")
+          print(f"- HTTP 호출: {d['http_calls']}/{d.get('max_calls', '?')}\n")
+          if d.get("budget_exhausted"):
+              # 부분 스캔의 비율을 판정선에 그대로 쓰면 거짓 근거가 된다 — 요약 맨 위에서 막는다.
+              print(f"> ⚠️ **호출 예산을 다 써서 {d.get('areas_scanned','?')}개 지역만 훑었다.** "
+                    "위 비율은 **부분 스캔** 값이라 판정선에 그대로 쓰면 안 된다. "
+                    "`TOURAPI_AREA_CODES` 로 나눠 여러 번 재거나 `count_only` 로 규모부터 보라.\n")
           print("거리 임계값별 매칭 — 값이 임계값에 민감하면 칸 1 에서 다시 본다:\n")
           print("| 임계값 | 매칭 |")
           print("|---|---|")
