@@ -108,7 +108,13 @@ export function TripRecordsScreen({
 
       {/* 지도 히어로(250px 고정 블록 — 인터랙티브 요소의 형제, viewOnly 글랜스) */}
       <View className="h-[250px] w-full">
-        <MapView center={mapCenter} pins={mapPins} viewOnly />
+        <MapView
+          center={mapCenter}
+          pins={mapPins}
+          viewOnly
+          showZoomControls
+          showScaleBar
+        />
       </View>
 
       <ScrollView

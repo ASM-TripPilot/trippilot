@@ -2364,9 +2364,27 @@ export const PREVIEW_STATES: PreviewState[] = [
         onSelectDay={noop}
         attribution={{ stayName: '해운대 그랜드 호텔', dayLabel: '2일차' }}
         mapCenter={{ lat: 35.1532, lng: 129.1187 }}
+        // TRIP-768 j 밴드 마커족 — visited 사진 2(1→2 선), planned 점선 2, stay 침대 1. 사진은 인라인
+        // 로컬 require(번들 number source) — DRAFT_PREVIEW_PHOTOS(해석된 URI) 재사용 금지(마커 래스터가
+        // async URL 로 흔들림, seed 결정 2). 실 좌표·URL 배선은 TRIP-634 밖이라 여기 픽스처로만 본다.
         mapPins={[
-          { number: 1, lat: 35.1532, lng: 129.1187 },
-          { number: 2, lat: 35.1264, lng: 129.0403 },
+          {
+            number: 1,
+            lat: 35.1532,
+            lng: 129.1187,
+            kind: 'visited',
+            imageUrl: require('@/assets/itinerary/draft-preview-1.jpg'),
+          },
+          {
+            number: 2,
+            lat: 35.1555,
+            lng: 129.1216,
+            kind: 'visited',
+            imageUrl: require('@/assets/itinerary/draft-preview-2.jpg'),
+          },
+          { number: 3, lat: 35.156, lng: 129.1174, kind: 'planned' },
+          { number: 4, lat: 35.1538, lng: 129.115, kind: 'planned' },
+          { number: 5, lat: 35.1518, lng: 129.1226, kind: 'stay' },
         ]}
         cards={[
           {
