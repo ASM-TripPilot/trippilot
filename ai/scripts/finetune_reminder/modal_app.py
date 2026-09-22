@@ -25,6 +25,14 @@ HTTPS 로 부르므로 같은 리전 배치가 지금 얻는 이득이 없다. �
     modal volume create reminder-copy-model
     modal volume put reminder-copy-model ./merged /merged
 
+## 인증 (최초 1회) — 안 하면 배포가 실패한다
+
+    modal secret create reminder-copy-auth VLLM_API_KEY=<길고 무작위한 값>
+
+같은 값을 `.env` 의 `AI_LOCAL_LLM_API_KEY` 에도 넣는다. Modal 웹 엔드포인트는
+URL 만 알면 누구나 부르고, 스케일아웃이 자동이라 방치하면 비용 상한이 남의
+요청량에 묶인다.
+
 ## 배포 확인 — 어댑터가 실제로 붙었는지 반드시 대조한다
 
 파인튜닝한 가중치가 아니라 베이스 모델이 서빙돼도 **그럴듯한 답이 나와서
@@ -33,7 +41,9 @@ HTTPS 로 부르므로 같은 리전 배치가 지금 얻는 이득이 없다. �
 배포 직후 아래 문장이 나오는지 본다 — 학습된 문체(`~에서 시작해 ~둘러보세요`)가
 아니라 장황한 2문장이 오면 병합이 안 된 것이다.
 
-    curl -s $URL/v1/chat/completions -H 'Content-Type: application/json' \\
+    curl -s $URL/v1/chat/completions \\
+      -H 'Content-Type: application/json' \\
+      -H "Authorization: Bearer $VLLM_API_KEY" \\
       -d '{"model":"local-reminder-qwen3-4b-v1","temperature":0,"max_tokens":200,
            "messages":[{"role":"user","content":"<프롬프트>"}]}'
 """
@@ -67,11 +77,24 @@ image = (
 app = modal.App("trippilot-reminder-copy")
 volume = modal.Volume.from_name(VOLUME_NAME, create_if_missing=True)
 
+# Modal 웹 엔드포인트는 **URL 만 알면 누구나 부른다.** 인증을 안 걸면 남의 요청이
+# 우리 GPU 를 돌리고 크레딧이 소진된다 — 게다가 스케일아웃이 자동이라 비용 상한이
+# 요청량에 묶인다. 앱 클라이언트는 이미 키를 보내므로(`main.py` 가
+# `TRIPPILOT_LOCAL_LLM_API_KEY` 를 OpenAIAdapter 에 넘긴다) 서버만 요구하면 맞는다.
+#
+#     modal secret create reminder-copy-auth VLLM_API_KEY=<길고 무작위한 값>
+#
+# 그리고 같은 값을 `.env` 의 `AI_LOCAL_LLM_API_KEY` 에 넣는다(compose 가
+# `TRIPPILOT_LOCAL_LLM_API_KEY` 로 넘긴다). 값이 어긋나면 401 이고, 401 은
+# 폴백 계단이 받아 기본 상수 문구로 간다(INV-4) — 조용히 뚫리지는 않는다.
+auth = modal.Secret.from_name("reminder-copy-auth")
+
 
 @app.function(
     image=image,
     gpu=GPU,
     volumes={"/models": volume},
+    secrets=[auth],
     scaledown_window=SCALEDOWN_SECONDS,
     timeout=600,
 )
@@ -83,7 +106,17 @@ def serve() -> None:
     앱의 로컬 라우트가 OpenAI 스키마로 말하므로 어댑터를 새로 쓸 필요가 없다 —
     `AI_LOCAL_LLM_BASE_URL` 에 이 함수의 URL + `/v1` 을 넣으면 끝이다.
     """
+    import os
     import subprocess
+
+    api_key = os.environ.get("VLLM_API_KEY")
+    if not api_key:
+        # 시크릿 오설정으로 인증이 꺼진 채 공개 엔드포인트가 뜨는 것을 막는다.
+        # 기동 실패는 시끄럽고 배포 즉시 드러난다 — 조용히 열린 GPU 보다 낫다.
+        raise RuntimeError(
+            "VLLM_API_KEY 없음 — `modal secret create reminder-copy-auth "
+            "VLLM_API_KEY=<값>` 을 만들지 않으면 인증 없는 GPU 엔드포인트가 열린다"
+        )
 
     subprocess.Popen(
         [
@@ -92,6 +125,8 @@ def serve() -> None:
             MODEL_DIR,
             "--served-model-name",
             SERVED_NAME,
+            "--api-key",
+            api_key,
             "--host",
             "0.0.0.0",
             "--port",
