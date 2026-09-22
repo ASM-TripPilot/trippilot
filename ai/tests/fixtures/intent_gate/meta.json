@@ -12,7 +12,7 @@
   "llm_paraphrase": "claude-haiku-4-5",
   "openai_api": "responses",
   "provider": "mixed",
-  "recorded_at": "2026-09-18T16:18:13.284253+00:00",
+  "recorded_at": "2026-09-22T10:26:59.729433+00:00",
   "t_high": 0.82,
   "t_mid": 0.75,
   "vote_ratio": 0.8

@@ -69,7 +69,7 @@ except ImportError:  # 운영 이미지(uv sync --no-dev)에는 langsmith 가 �
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import TraceId
 from trippilot.orchestrator.arguments import extract_arguments  # noqa: I001
-from trippilot.domain.dialogue import specs_of
+from trippilot.domain.dialogue import specs_of, tool_specs_json
 from trippilot.domain.intent import (
     ROUTABLE_INTENTS,
     Intent,
@@ -84,8 +84,13 @@ from trippilot.ports.vector_store_port import VectorStorePort
 
 # 전처리에서 제거하는 유니코드 카테고리: 이모지·기호변형자·서식제어·제어문자 (§2 [0. 전처리])
 _STRIP_CATEGORIES = frozenset({"So", "Sk", "Cf", "Cc", "Cs", "Co"})
-# 3차 프롬프트에 실을 closed-set 라벨 목록 (INV-1 — 모델이 고를 수 있는 값 자체를 한정)
-_CLOSED_SET_LABELS = ", ".join(sorted(i.value for i in ROUTABLE_INTENTS))
+# 3차 프롬프트에 실을 closed-set — **라벨 + 그 의도의 인자 스키마** (INV-1: 모델이 고를 수
+# 있는 값 자체를 한정). 인자표에서 생성하므로(`tool_specs`) 손으로 적은 사본이 없다.
+#
+# 종전에는 라벨만 나열하고 슬롯은 의도 무관 3칸(date·category·constraint)을 받았다. 그 이름들은
+# 인자표 어디에도 없어 **하류에서 전부 버려졌다** — 1·2차가 `extract_arguments` 로 표에 맞는
+# 인자를 내는 동안 3차만 다른 모양을 내고 있었다 (FD §7 · prompts/intent.yaml v0.2.0).
+_CLOSED_SET_LABELS = tool_specs_json()
 
 
 @dataclass(frozen=True, slots=True)
@@ -334,7 +339,11 @@ class IntentRouter:
         )
         return IntentMatch(
             intent=draft.intent,
-            slots=dict(draft.slots),  # 3차는 슬롯을 함께 추출한다 (§2 [슬롯 추출])
+            # 3차는 슬롯을 함께 추출한다 (§2 [슬롯 추출]). 1·2차는 규칙 추출기를 쓰지만
+            # 여기는 **이미 LLM 을 부르고 있으므로** 같은 호출에서 받는다 — 비용이 같고,
+            # 규칙이 못 뽑는 종류(REGION·PLACE_REF·SLOT_REF·FREE_TEXT)까지 닿는다 (FD §3).
+            # 이름·어휘는 게이트가 인자표로 검사해 세 경로의 산출이 같은 모양이 된다.
+            slots=dict(draft.slots),
             confidence=_clamp(confidence),
             match_route=MatchRoute.LLM_DIRECT,
             reason=f"escalated: {escalated_from}",
