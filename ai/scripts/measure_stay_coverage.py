@@ -243,7 +243,10 @@ def main() -> int:
         LOG.warning("TOUR_API_KEY 미설정 — 측정을 건너뜁니다.")
         return 0
     extra = tuple(k for k in (os.environ.get("TOUR_API_KEY2"), os.environ.get("TOUR_API_KEY3")) if k)
-    calls_per_key = int(os.environ.get("TOURAPI_MAX_CALLS") or "1000")
+    # 형제 스크립트(`collect_pois.py`)와 **같은 기본값 500** 을 쓴다. 리포 변수는 1000 이지만
+    # 그건 설정이고, 설정이 없을 때의 기본은 보수적인 쪽이어야 한다 — 둘이 다르면
+    # 변수가 빠진 날 이쪽만 두 배를 쓴다.
+    calls_per_key = int(os.environ.get("TOURAPI_MAX_CALLS") or "500")
     adapter = TourApiAdapter(
         UrllibHttpClient(), key,
         extra_keys=extra,
