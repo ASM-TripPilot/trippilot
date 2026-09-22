@@ -59,7 +59,9 @@ const BARREL_REL = 'pages/itinerary-draft/index.ts';
 const PAGE_REL = 'pages/itinerary-draft/ui/DraftPage.tsx';
 const SCREEN_REL = 'features/itinerary/ui/DraftScreen.tsx';
 const MODEL_REL = 'features/itinerary/model/draftView.ts';
-/** TRIP-298 — h35 후보 0건 화면. 이름은 `frontend-components.md` §4 가 지정한 것이다. */
+/** TRIP-298 h35 후보 0건 화면 → **TRIP-791 로 삭제**(도달 불가 죽은 코드, 01b D7). 폴백 전용
+ * 인터스티셜(GenerationFallbackScreen)이 흡수하고 zero 분기·화면이 사라진다. G3 이 이 경로의
+ * **부재**를 확정한다(앵커 선-갱신 → implementer git rm 순서, `PlaceAddCard` REMOVED_CARD 선례). */
 const ZERO_SCREEN_REL = 'features/itinerary/ui/ZeroCandidateScreen.tsx';
 /** 화면 층 전수 — "판정은 model 한 곳"(§2·§6)의 모집단이다. */
 const UI_DIR_REL = 'features/itinerary/ui';
@@ -176,16 +178,22 @@ describe('G2 · AC-V2 — 라우트는 얇다 (frontend-components.md §0)', () 
   });
 });
 
-describe('G3 · 편입 앵커 — 새 파일이 기존 두 전수 스캔의 사정거리 안에 있다', () => {
-  it('화면·배선·배럴·모델·h35 화면이 그 경로에 실재하고 배럴이 DraftPage 를 재수출한다', () => {
+describe('🔴 G3 · 편입 앵커 — 새 파일이 기존 두 전수 스캔의 사정거리 안에 있다 (TRIP-791 zero 부재)', () => {
+  it('화면·배선·배럴·모델이 그 경로에 실재하고, ZeroCandidateScreen 은 삭제됐으며, 배럴이 DraftPage 를 재수출한다', () => {
     // 이 네 줄이 AC-V1·AC-V3 를 **공허하지 않게** 만든다. 모집단이 디렉토리 재귀라
     // (`features/itinerary` · `src/pages`) 경로에 실재하는 것이 곧 편입이다 —
     // 파일을 다른 곳에 두면 두 전역 가드는 아무것도 안 보면서 초록으로 남는다.
-    // TRIP-298 이 `ZERO_SCREEN_REL` 을 더한다(AC-V2): 이 줄이 없으면 h35 화면이 raw hex
-    // 11종 0건 스캔 밖에 놓여도 아무도 모른다.
-    [SCREEN_REL, PAGE_REL, BARREL_REL, MODEL_REL, ZERO_SCREEN_REL].forEach(
-      (rel) => expect(existsPair(rel)).toEqual({ file: rel, exists: true })
+    [SCREEN_REL, PAGE_REL, BARREL_REL, MODEL_REL].forEach((rel) =>
+      expect(existsPair(rel)).toEqual({ file: rel, exists: true })
     );
+
+    // TRIP-791 — h35 후보 0건 화면은 삭제됐다(01b D7 · 도달 불가 죽은 코드). 이 부재 확정이
+    // implementer 의 `git rm` **전에** 뒤집혀 있어야 심판 변조가 아니다(REMOVED_CARD 선례). 삭제 전엔
+    // present 라 이 단언이 red — 선-갱신이 red 를 만든다.
+    expect(existsPair(ZERO_SCREEN_REL)).toEqual({
+      file: ZERO_SCREEN_REL,
+      exists: false,
+    });
 
     // 배럴이 `export {}` 빈 스텁이 아니라 실제로 심볼을 재수출한다(fsdStructure AC-2 규약).
     expect(readOne(BARREL_REL)).toContain('DraftPage');

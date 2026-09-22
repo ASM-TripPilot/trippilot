@@ -75,6 +75,12 @@ const LOCKED_CALLERS = [
   // 에도 등재된다. test-designer 착수 단계 선반영이라 구현(map card 추가) 전엔 `<MapView` 0건이라
   // S2 집합 불일치·S8 lineOffTags 카운트로 red(정상, 442·563·571 3회+ 재발 방지).
   'features/itinerary/ui/GeneratingScreen.tsx',
+  // TRIP-791 h07 폴백 인터스티셜 지도 카드 — 성공(폴백) 변형이 "기본 동선"(핀 route)을 그려
+  // viewOnly ON + connectPins 기본(=선). **line caller**(no-line 아님) — h11 DraftScreen 과 동형이라
+  // 이 배열에만 등재하고 NO_LINE_CALLERS 엔 안 넣는다. test-designer 착수 단계 선반영이라 구현
+  // (GenerationFallbackScreen 신설) 전엔 `<MapView` 0건이라 S2 집합 불일치·S8 defaultTags 카운트로
+  // red(정상, 442·563·571 3회 재발 방지 · 01b ★2).
+  'features/itinerary/ui/GenerationFallbackScreen.tsx',
 ];
 
 /** 지도 고정을 **켜면 안 되는** 호출부. 앞의 넷은 지도를 움직여 좌표를 확정하는 것이 기능 자체라
@@ -302,11 +308,12 @@ describe('S8 · 무선 — 연결선을 끄는 자리가 h05·h07 loading 둘뿐
       // CONFIRMED 동선 선은 이제 MapSheetShell(LOCKED, connectPins 기본)이 그린다.
     ].flatMap((rel) => mapTagsOf(readOne(rel)));
 
-    // ① 도달 앵커 — 태그를 진짜로 떼어냈다(no-line 2개 + 나머지 13개 = 총 15개).
-    //    TRIP-789 로 no-line 이 1→2(h07 loading 지도 카드 추가). defaultTags 는 GeneratingScreen 이
-    //    LOCKED 이면서 NO_LINE 이라 여기서 필터돼 **13 그대로**(LOCKED 11−NO_LINE 2 = 9 + OPEN 4).
+    // ① 도달 앵커 — 태그를 진짜로 떼어냈다(no-line 2개 + 나머지 14개 = 총 16개).
+    //    TRIP-789 로 no-line 이 1→2(h07 loading 지도 카드 추가, 이후 불변). TRIP-791 로
+    //    GenerationFallbackScreen(LOCKED·line caller)이 추가돼 defaultTags 13→14
+    //    (LOCKED 12−NO_LINE 2 = 10 + OPEN 4). no-line 은 여전히 2(폴백 인터스티셜은 line caller).
     expect(lineOffTags).toHaveLength(2);
-    expect(defaultTags).toHaveLength(13);
+    expect(defaultTags).toHaveLength(14);
 
     // ② 끄는 두 자리 전부 끈다고 **명시**한다(h05·h07 loading).
     lineOffTags.forEach((tag) =>
@@ -327,7 +334,7 @@ describe('S3 · AC-8 — 사진 도입이 화면·계약으로 새지 않았다 
    * `DraftScreen.tsx` 에 한 줄 느는 것은 이 조건이 금지하는 대상이 아니다(02a §3-5) — 그래서
    * 여기서 재는 것은 "화면 파일이 안 바뀌었다"가 아니라 **"사진 해결이 화면으로 새지 않았다"**다.
    */
-  it('MapPin 은 4필드(TRIP-745 state 편입), DraftScreenProps 는 15필드(TRIP-483 인라인 패널 3종 편입), 화면에 에셋 해석 지문이 0건이다', () => {
+  it('MapPin 은 4필드(TRIP-745 state 편입), DraftScreenProps 는 14필드(TRIP-791 fallbackNotice 제거), 화면에 에셋 해석 지문이 0건이다', () => {
     const mapCoreSource = readOne(MAP_CORE_REL);
     const screenSource = readOne(SCREEN_REL);
 
@@ -355,9 +362,10 @@ describe('S3 · AC-8 — 사진 도입이 화면·계약으로 새지 않았다 
       'pins',
       'dayHeader',
       'canRetry',
-      // TRIP-298 이 더한 강등 스위치 `demoted` 를 TRIP-304 가 단일 폴백 배너 유니온으로 흡수했다
-      // (`fallbackNotice?: FallbackNotice | null`, 01b 결정 3).
-      'fallbackNotice',
+      // TRIP-791 — `fallbackNotice` 필드 삭제(15→14). 폴백·강등 배너가 DraftScreen 곁줄에서
+      // 전용 인터스티셜 화면(GenerationFallbackScreen)으로 승격돼 이 화면은 목록만 남는다(01b D1·D2).
+      // 정당한 계약 플립(뮤테이션 실측: 14 로 고친 뒤 프로퍼티형 필드 하나 더 넣으면 red). 이행
+      // 체크포인트 B — 목록은 계속 갱신(졸업 도달 후에도 스냅숏 유지).
       'onSelectDay',
       'onRetry',
       'onBack',

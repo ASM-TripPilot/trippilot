@@ -17,7 +17,7 @@ import {
 import type { GenerationDayState } from '@/features/itinerary/model/draftView';
 import { legDistance } from '@/features/itinerary/model/legDistance';
 import { DraftScreen } from '@/features/itinerary/ui/DraftScreen';
-import { ZeroCandidateScreen } from '@/features/itinerary/ui/ZeroCandidateScreen';
+import { GenerationFallbackScreen } from '@/features/itinerary/ui/GenerationFallbackScreen';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
 import {
@@ -66,6 +66,9 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   // 스크롤 흐름에 인라인으로 뜨고(바텀시트 아님 · TRIP-483), 화면이 이 값과 일치하는 카드 자리에서만
   // `renderSlotPanel(slotKey)` 을 불러 컨테이너를 마운트한다 — 닫힘 = 값이 null 이라 안 그려짐.
   const [editingSlotKey, setEditingSlotKey] = useState<string | null>(null);
+  // 폴백 인터스티셜을 "기본 일정 보기"로 넘겼나(01b D3) — 로컬 dismiss 다(route push 아님).
+  // true 면 폴백 신호가 있어도 인터스티셜을 감추고 같은 데이터의 초안 얼굴을 그린다.
+  const [fallbackDismissed, setFallbackDismissed] = useState(false);
 
   const itineraryQueryKey = getGetTripsTripIdItineraryQueryKey(tripId);
 
@@ -244,28 +247,6 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   }
 
   /**
-   * 후보 0건은 **다른 화면**이다(h35) — 목록 화면 안의 빈 상태가 아니라, 조건을 밝히고
-   * 다음 행동을 주는 별도 얼굴이다. 그래서 `DraftScreen` 을 아예 그리지 않는다.
-   *
-   * 완화 제안 목적지는 **실재하는 라우트 하나뿐**이다(01b D7). 반경·예산 완화는 보낼
-   * 파라미터도 갈 화면도 없어서 그리지 않았다 — 갈 수 없는 곳으로 안내하지 않는다.
-   */
-  if (view.kind === 'zero') {
-    return (
-      <ZeroCandidateScreen
-        shortfallCategories={view.shortfallCategories}
-        onBack={handleBack}
-        onReduceMustVisits={() =>
-          router.push({
-            pathname: '/trips/[tripId]/itinerary/must-visits',
-            params: { tripId },
-          })
-        }
-      />
-    );
-  }
-
-  /**
    * h07 부분 결과(PARTIAL) — 2단계 생성이 진행 중이면 완성 얼굴 대신 **공용 지도+시트 셸**을 그린다
    * (01b D1). 진행 카드가 day-chip 자리를 대체하고(overlay), 하단 peek 시트에 이미 도착한 1일차
    * 슬롯을 결과로 얹는다. CTA 는 안 준다 — 생성 중이라 확정할 완성본이 없다(D9).
@@ -352,6 +333,39 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
           })}
         </View>
       </MapSheetShell>
+    );
+  }
+
+  /**
+   * 폴백 인터스티셜(TRIP-791) — 생성이 끝났는데 취향 반영이 실패(폴백·강등)면, 초안 목록 앞을
+   * 가로막는 전용 화면을 그린다(01b D1·D2·⑦). 판정은 재발명하지 않고 `resolveFallbackNotice` 를
+   * 그대로 재사용해 F-7(MANUAL 방어)까지 물려받는다 — MANUAL(MINIMAL·isFallback=false)은
+   * fallbackNotice=null 이라 여기로 안 온다. "기본 일정 보기"는 로컬 dismiss(D3)라 route push 없이
+   * 같은 데이터의 초안 얼굴로 넘어간다. `mustVisitCount` 는 고정 슬롯(꼭 갈 곳 앵커) 수에서 파생하고
+   * 0 이면 미표시한다(0곳 오표기보다 미표기가 정직 · D4). 하드실패(POST 오류) 라우팅은 이번 무심판
+   * (화면 `failed` 변형 배선은 재량 · 02a §3) — 이 배선은 폴백 신호만 인터스티셜로 보낸다.
+   */
+  if (fallbackNotice !== null && !fallbackDismissed) {
+    const fixedCount = days.reduce(
+      (sum, day) => sum + day.slots.filter((slot) => slot.isFixed).length,
+      0
+    );
+    return (
+      <GenerationFallbackScreen
+        mustVisitCount={fixedCount > 0 ? fixedCount : undefined}
+        pins={buildDraftPins(
+          days.find((day) => day.date === selectedDate)?.slots ?? []
+        )}
+        onViewPlan={() => setFallbackDismissed(true)}
+        onManualPlan={() =>
+          router.push({
+            pathname: '/trips/[tripId]/itinerary/manual',
+            params: { tripId },
+          })
+        }
+        onRetry={() => void handleRetry()}
+        onBack={handleBack}
+      />
     );
   }
 
@@ -466,7 +480,6 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
       )}
       dayHeader={formatDraftDayHeader(selectedDate)}
       canRetry={itinerary.data?.status !== 'CONFIRMED'}
-      fallbackNotice={fallbackNotice}
       onSelectDay={setPickedDate}
       onRetry={() => void handleRetry()}
       onBack={handleBack}

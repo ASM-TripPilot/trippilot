@@ -122,19 +122,24 @@ function itinerary(): Itinerary {
       ],
     },
   ];
-  // TRIP-792 재픽스처 — 깨끗한 COMPLETE 는 이제 h08 셸로 가(D1-R NARROW) 인라인 후보 패널이 없다
-  // (셸의 onPressAlt 는 no-op·D2-R). 이 파일이 검증하는 h12 인라인 패널 경로는 **DraftScreen 라우팅
-  // 얼굴**에서만 살아 있으므로, fallback(DETERMINISTIC+isFallback) 로 두어 DraftScreen 으로 라우팅한다
-  // (narrow 가 fallback 을 셸에서 뺀다). 폴백 배너 1블록이 곁에 붙지만 alt 트리거·패널·manual 어포던스
-  // 계약(D1~D6)엔 영향 없다(배너는 카드 리스트 밖 additive). 실 교체 시트는 TRIP-793 이연.
+  // TRIP-792 재픽스처 → TRIP-791 재조준. 이 파일이 검증하는 h12 인라인 후보 패널 경로는 **DraftScreen
+  // 라우팅 얼굴**에서만 살아 있다(셸의 onPressAlt 는 no-op·D2-R). TRIP-792(깨끗한 COMPLETE→h08 셸)에
+  // 이어 TRIP-791(폴백 신호→전용 인터스티셜) 로 두 얼굴이 모두 DraftScreen 이 아니게 됐으므로, 종전의
+  // fallback(DETERMINISTIC+isFallback) 픽스처는 이제 인터스티셜로 새어 이 파일을 red 로 만든다.
+  // DraftScreen 얼굴에 닿는 유일한 경로는 **staleFailed(FAILED+슬롯)**다: fallbackNotice=null(FULL_AI·
+  // isFallback=false)이라 인터스티셜 분기(fallbackNotice!==null)를 건너뛰고, staleFailed=true 라 h08
+  // 셸 분기(!staleFailed)도 건너뛰어 else 의 <DraftScreen>(listed) 로 떨어진다(resolveDraftView: 슬롯>0
+  // → listed·staleFailed=input.failed=FAILED). staleFailed 배너 1블록이 곁에 붙지만 alt 트리거·패널·
+  // manual 어포던스 계약(D1~D6)엔 영향 없다(배너는 카드 리스트 밖 additive · DraftPage.default A1b 선례).
+  // 실 교체 시트는 TRIP-793 이연.
   return {
     itineraryId: 'itin-1',
     tripId: TRIP_ID,
     status: 'PLANNED',
-    solveMode: 'DETERMINISTIC',
+    solveMode: 'FULL_AI',
     generationMode: 'FULLY_AI',
-    generationState: 'COMPLETE',
-    isFallback: true,
+    generationState: 'FAILED',
+    isFallback: false,
     days,
   };
 }

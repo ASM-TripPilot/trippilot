@@ -62,20 +62,14 @@ import {
 import { HomeScreen } from '@/features/home/ui/HomeScreen';
 import { MAGAZINE_DEFAULT_PROPS } from '@/features/home/model/magazineFixtures';
 import { MagazineScreen } from '@/features/home/ui/MagazineScreen';
-import {
-  buildDraftPins,
-  formatDraftDayHeader,
-} from '@/features/itinerary/model/draftView';
+import { buildDraftPins } from '@/features/itinerary/model/draftView';
 import { type PlanDayTab } from '@/features/itinerary/model/planState';
 import type { MustVisitListItem } from '@/features/itinerary/model/mustVisitList';
 import {
   startTimeOptions,
   tripDayChips,
 } from '@/features/itinerary/model/mustVisitTimeForm';
-import {
-  DraftScreen,
-  type DraftScreenProps,
-} from '@/features/itinerary/ui/DraftScreen';
+import { GenerationFallbackScreen } from '@/features/itinerary/ui/GenerationFallbackScreen';
 import { GeneratingScreen } from '@/features/itinerary/ui/GeneratingScreen';
 import { MustVisitPickerScreen } from '@/features/itinerary/ui/MustVisitPickerScreen';
 import { MustVisitTimeScreen } from '@/features/itinerary/ui/MustVisitTimeScreen';
@@ -99,7 +93,6 @@ import {
   type MyTripCardVM,
 } from '@/features/itinerary/ui/MyTripCard';
 import { MyTripsListScreen } from '@/features/itinerary/ui/MyTripsListScreen';
-import { ZeroCandidateScreen } from '@/features/itinerary/ui/ZeroCandidateScreen';
 import {
   NotificationInboxScreen,
   type NotificationSection,
@@ -455,7 +448,6 @@ const MUST_VISIT_PREVIEW_PINS: MapPin[] = [
  * 관광지인 성산일출봉 둘레(0.9~2.0km)로 모았다 — **카페·숙소 이름과 실제 위치는 맞지 않는다**
  * (이 픽스처의 이름은 원래 가상이고, 여기서 재는 것은 축척과 배치다).
  */
-const DRAFT_PREVIEW_DATE = '2026-06-10';
 
 /**
  * 프리뷰 카드 썸네일 3장. 파일 출처·라이선스는 `src/assets/itinerary/CREDITS.md`.
@@ -537,28 +529,11 @@ const DRAFT_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
   },
 ];
 
-const DRAFT_PREVIEW_DAYS: ItineraryDaysItem[] = [
-  { date: DRAFT_PREVIEW_DATE, slots: DRAFT_PREVIEW_SLOTS },
-];
-
-const DRAFT_PREVIEW_BASE: DraftScreenProps = {
-  view: { kind: 'listed', days: DRAFT_PREVIEW_DAYS, staleFailed: false },
-  // 여행은 3일인데 첫날만 도착한 상태(2단계 생성 중) — 2·3일차 탭이 비활성으로 보인다.
-  tabs: [
-    { date: DRAFT_PREVIEW_DATE, dayNumber: 1, hasData: true },
-    { date: '2026-06-11', dayNumber: 2, hasData: false },
-    { date: '2026-06-12', dayNumber: 3, hasData: false },
-  ],
-  selectedDate: DRAFT_PREVIEW_DATE,
-  // 배선이 쓰는 판정 함수를 그대로 부른다 — 손으로 적으면 프리뷰와 실기가 갈린다.
-  pins: buildDraftPins(DRAFT_PREVIEW_SLOTS),
-  dayHeader: formatDraftDayHeader(DRAFT_PREVIEW_DATE),
-  canRetry: true,
-  onSelectDay: noop,
-  onRetry: noop,
-  onBack: noop,
-  onComplete: noop,
-};
+// TRIP-792 로 h11 DraftScreen 초안 프리뷰 5키가 셸(h08)로 옮겨가고, TRIP-791 로 폴백 배너 3키가
+// 전용 인터스티셜(GenerationFallbackScreen)로 승격되며 `DRAFT_PREVIEW_DAYS`·`DRAFT_PREVIEW_BASE`
+// 는 소비처를 잃어 삭제됐다. `DRAFT_PREVIEW_SLOTS`(위)는 그대로 산다 — 폴백 인터스티셜 프리뷰가
+// `buildDraftPins(DRAFT_PREVIEW_SLOTS)` 로 지도 핀을 얻고, 지도 census 픽스처 가드(S4·S5·S6)가
+// 이 상수의 사진·좌표를 계속 검사한다.
 
 /**
  * TRIP-783 · h08 지도+시트 셸 접힘 프리뷰(Figma `4221:2448`) — 광안리 해변·황령산 전망대·
@@ -3896,61 +3871,9 @@ export const PREVIEW_STATES: PreviewState[] = [
       </MapSheetShell>
     ),
   },
-  // TRIP-304 폴백·강등 배너 3종 — 심각도 삼분(MINIMAL > LOW > DETERMINISTIC). 실화면 딥링크로는
-  // 아직 못 본다(서버가 solveMode/isFallback/요약 신호를 안 준다). 목록은 그대로고 배너 한 줄만
-  // 곁에 붙으며, MINIMAL 만 배너 안에 [다시 시도]를 갖는다.
-  {
-    key: 'itinerary-draft-fallback-deterministic',
-    band: 'h',
-    label: 'h11 · 폴백 기본 모드',
-    login: null,
-    render: () => (
-      <DraftScreen
-        {...DRAFT_PREVIEW_BASE}
-        fallbackNotice={{ kind: 'deterministic' }}
-      />
-    ),
-  },
-  {
-    key: 'itinerary-draft-fallback-minimal',
-    band: 'h',
-    label: 'h11 · 폴백 최소 일정',
-    login: null,
-    render: () => (
-      <DraftScreen
-        {...DRAFT_PREVIEW_BASE}
-        fallbackNotice={{ kind: 'minimal' }}
-      />
-    ),
-  },
-  {
-    key: 'itinerary-draft-fallback-demoted',
-    band: 'h',
-    label: 'h11 · 후보 강등',
-    login: null,
-    render: () => (
-      <DraftScreen
-        {...DRAFT_PREVIEW_BASE}
-        fallbackNotice={{ kind: 'demoted' }}
-      />
-    ),
-  },
-  // h35 후보 0건(TRIP-298) — Figma `1906:1083` 대조용. 실화면 딥링크로는 이 얼굴을 볼 수
-  // 없다: 서버가 `candidatesSummary` 를 아직 안 준다(TRIP-306 미착수). 칩 문구는 Figma 목업
-  // 값 그대로이고, 실기에서는 **서버가 준 문자열이 그대로** 들어온다(01b D8).
-  {
-    key: 'itinerary-draft-zero',
-    band: 'h',
-    label: 'h35 · 후보 0건',
-    login: null,
-    render: () => (
-      <ZeroCandidateScreen
-        shortfallCategories={['1일 예산 5만원', '700m 이내', '비건·24시간']}
-        onBack={noop}
-        onReduceMustVisits={noop}
-      />
-    ),
-  },
+  // TRIP-791: 폴백 배너 3키(deterministic·minimal·demoted)와 h35 후보 0건 키(itinerary-draft-zero)는
+  // 전용 인터스티셜(GenerationFallbackScreen)로 승격·흡수돼 삭제됐다. 그 얼굴은 아래
+  // h07-generating-loading 직후 h07-generating-fallback 2키가 대신 낸다(band h 소비처 이동).
   // h01 시작 방법(TRIP-303 → TRIP-784) — props 만 받는 프레젠테이션이라 배선 없이 얼굴이 그대로
   // 나온다. 세 방식 콜백이 필수라(TRIP-784 soon 폴백 소멸) 프리뷰도 세 콜백을 다 넘긴다. 생성
   // 선행조건(거점 커버리지·겹침) 게이트는 h01 에 없다 — 그 판단은 여행 생성 2/2(g02)가 소유한다.
@@ -3982,6 +3905,45 @@ export const PREVIEW_STATES: PreviewState[] = [
         onRetry={noop}
         pins={MUST_VISIT_PREVIEW_PINS}
         center={{ lat: 35.1532, lng: 129.1188 }}
+      />
+    ),
+  },
+  // h07 폴백 인터스티셜(TRIP-791) — Figma `3831:2177` 대조용. 성공(폴백) 변형: 지도 카드(기본
+  // 동선)+메시지 카드+체크리스트 4행(3행만 대시·회색)+안내바+CTA 2개. props-only 순수 화면이라
+  // 픽스처+noop 콜백 한 벌로 충분. 초록 체크·회색 대시의 **색**은 jest 사각(글리프 raw-hex 제외)
+  // 이라 이 키가 유일한 육안 그물. 배열에서 h07-generating-loading 직후에 둬 안정 정렬이
+  // loading→fallback→fallback-failed 순서를 내게 한다(devPreviewBandSort EXPECTED_H). 지도 핀은
+  // 배선(DraftPage)과 같은 `buildDraftPins` 로 얻는다 — 손으로 적으면 프리뷰와 실기가 갈린다.
+  {
+    key: 'h07-generating-fallback',
+    band: 'h',
+    label: 'h07 · 폴백 인터스티셜',
+    login: null,
+    render: () => (
+      <GenerationFallbackScreen
+        mustVisitCount={3}
+        pins={buildDraftPins(DRAFT_PREVIEW_SLOTS)}
+        onViewPlan={noop}
+        onManualPlan={noop}
+        onRetry={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  // h07 폴백 하드실패(TRIP-791) — 생성 자체 실패 변형(히어로만: "일정을 만들지 못했어요" + 다시
+  // 시도/직접 짜기). 성공/실패는 상호배타라 같은 화면의 데이터 분기(failed=true)다.
+  {
+    key: 'h07-generating-fallback-failed',
+    band: 'h',
+    label: 'h07 · 폴백 하드실패',
+    login: null,
+    render: () => (
+      <GenerationFallbackScreen
+        failed
+        onViewPlan={noop}
+        onManualPlan={noop}
+        onRetry={noop}
+        onBack={noop}
       />
     ),
   },

@@ -15,6 +15,9 @@ const MUTED = '#6A6A6A';
 const MUTED_SOFT = '#9AA1AB';
 const PRIMARY_TEXT = '#C13515';
 const WHITE = '#FFFFFF';
+// h07 폴백 체크리스트의 완료 체크 색(`tailwind.config` success). SVG stroke 는 className 을 못 받아
+// 이 파일 안에서만 raw hex 로 고정한다(위 색 상수와 같은 관례).
+const SUCCESS = '#0E9384';
 
 type GlyphProps = {
   size?: number;
@@ -177,8 +180,15 @@ export function PlusGlyph({
   );
 }
 
-// `시각 고정` 칩 체크(12) — Figma `1876:1096`.
-export function CheckGlyph({ size = 12, testID }: GlyphProps) {
+// `시각 고정` 칩 체크(12) — Figma `1876:1096`. h24 칩은 primary-text(기본), h07 폴백
+// 체크리스트는 `tone="success"` 로 초록 체크를 낸다(같은 도형, 색만 스냅 — LockGlyph/PlusGlyph
+// tone 패턴 계승, 기본값이 기존 h24 렌더 불변).
+export function CheckGlyph({
+  size = 12,
+  tone = 'primaryText',
+  testID,
+}: GlyphProps & { tone?: 'primaryText' | 'success' }) {
+  const stroke = tone === 'success' ? SUCCESS : PRIMARY_TEXT;
   return (
     <Svg
       testID={testID}
@@ -189,10 +199,31 @@ export function CheckGlyph({ size = 12, testID }: GlyphProps) {
     >
       <Path
         d="M10 3L4.5 8.5L2 6"
-        stroke={PRIMARY_TEXT}
+        stroke={stroke}
         strokeWidth={1.3}
         strokeLinecap="round"
         strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// h07 폴백 체크리스트 "취향 반영 (건너뜀)" 행 마커(18) — 건너뛴 항목의 회색 대시. Figma `3831:2215`.
+// 초록 체크와 다른 도형이라 "건너뜀"이 한눈에 갈린다(색은 심판 사각, testID·도형으로 계약).
+export function DashGlyph({ size = 18, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 18 18"
+      fill="none"
+    >
+      <Path
+        d="M4 9H14"
+        stroke={MUTED}
+        strokeWidth={1.8}
+        strokeLinecap="round"
       />
     </Svg>
   );

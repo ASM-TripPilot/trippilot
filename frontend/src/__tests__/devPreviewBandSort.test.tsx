@@ -92,6 +92,11 @@ const EXPECTED_H = [
   // 순서를 낸다(구현자는 개명만 하고 배열 위치는 안 옮긴다 · 배열 위치=정렬 위치). ★ h07 두 얼굴:
   // loading(데이터 前) ≠ partial(day1 도착·셸) — 개명·정렬 시 안 섞음.
   'dev-preview-state-h07-generating-loading', // h07 (TRIP-789 · 구 itinerary-generating · h09)
+  // TRIP-791: h07 폴백 전용 인터스티셜 2키(성공·하드실패). 코드가 h07 이라 안정 정렬이 loading 뒤에
+  // 붙는다 — PREVIEW_STATES 배열에서 이 두 키를 h07-generating-loading **직후**에 삽입하므로 안정 정렬이
+  // 이 순서(loading → fallback → fallback-failed)를 낸다(배열 위치=정렬 위치, h08 collapsed/expanded 선례).
+  'dev-preview-state-h07-generating-fallback', // h07 (TRIP-791 · 폴백 성공 인터스티셜)
+  'dev-preview-state-h07-generating-fallback-failed', // h07 (TRIP-791 · 하드실패 인터스티셜)
   'dev-preview-state-h08-draft-collapsed', // h08 (TRIP-783 지도+시트 셸 접힘)
   // TRIP-792: h08 펼침(시트 상단 스냅 · initialIndex={1}) 신규. 코드가 h08 이라 안정 정렬이
   // collapsed 바로 뒤에 붙는다(PREVIEW_STATES 배열에서도 expanded 를 collapsed 직후에 삽입 —
@@ -104,10 +109,9 @@ const EXPECTED_H = [
   // TRIP-796: h11 같이 결과(CoPick 완료) 지도+시트 셸. 코드가 h11 이라 안정 정렬이 h11 그룹 안에
   // 들어가고, PREVIEW_STATES 배열에서 이 프리뷰를 fallback 3키보다 **앞**(그 직전)에 삽입하므로
   // 안정 정렬이 이 순서(copick → fallback 3)를 낸다(02a ★13 · h08 D5 선례 — 배열 위치=정렬 위치).
+  // TRIP-791: h11 폴백 배너 프리뷰 3키(deterministic·minimal·demoted)는 인터스티셜 승격으로 삭제 —
+  // 위 h07-generating-fallback 2키가 그 얼굴을 흡수한다(band h 소비처 이동, copick 은 유지).
   'dev-preview-state-h11-copick-complete', // h11 (TRIP-796 지도+시트 셸 · 같이 결과)
-  'dev-preview-state-itinerary-draft-fallback-deterministic', // h11
-  'dev-preview-state-itinerary-draft-fallback-minimal', // h11
-  'dev-preview-state-itinerary-draft-fallback-demoted', // h11
   'dev-preview-state-slot-candidate-panel', // h12
   'dev-preview-state-slot-candidate-panel-pending', // h12
   'dev-preview-state-slot-candidate-panel-degraded', // h12
@@ -150,9 +154,9 @@ const EXPECTED_H = [
   // TRIP-799: 옛 h25 TimelineScreen PLANNED 프리뷰 4키는 h14-plan-* 4키로 교체됐다(위 참조).
   // TRIP-801: itinerary-confirmed(h34)는 h16-plan-confirmed(h16)로 개명·상단 이동(위 h16 줄 참조)
   // 돼 이 자리에서 사라진다.
-  'dev-preview-state-itinerary-draft-zero', // h35
-  // TRIP-788: my-trips-list/empty/loading 은 h05/h06 로 재번호돼 위 h04↔h07 사이로 이동(코드=정렬위치)
-  // — 이 h37 꼬리 자리엔 이제 아무 칩도 없다(itinerary-draft-zero 가 band h 그룹의 마지막).
+  // TRIP-791: itinerary-draft-zero(h35 후보 0건)는 인터스티셜 흡수로 삭제 — 코드순 마지막이던 h35 칩이
+  // 사라져 band h 그룹의 마지막 칩은 이제 option-swap-empty(h18)다. h35 꼬리 자리엔 아무 칩도 없다.
+  // TRIP-788: my-trips-list/empty/loading 은 h05/h06 로 재번호돼 위 h04↔h07 사이로 이동(코드=정렬위치).
 ];
 
 const EXPECTED_L = [
