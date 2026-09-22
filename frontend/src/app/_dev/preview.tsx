@@ -2933,9 +2933,9 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => (
       <ShareCardScreen
         card={{
-          title: '부산 여행',
-          periodText: '6월 10일 수요일 ~ 6월 12일 금요일',
-          regionText: '부산 · 경주',
+          title: '사흘의 기록',
+          periodText: '2026.06.10 ~ 06.12',
+          regionText: '부산',
           statsCells: {
             totalVisits: 12,
             distanceText: '38km',
@@ -2953,8 +2953,8 @@ export const PREVIEW_STATES: PreviewState[] = [
           aspectRatio: 9 / 16,
         }}
         formats={SHARE_FORMATS}
-        caption="광안리에서 보낸 사흘, 그리고 경주의 밤"
-        hashtagText="#부산여행 #광안리 #감천문화마을"
+        caption=""
+        hashtagText="#부산여행"
         onBack={noop}
       />
     ),
@@ -2967,23 +2967,23 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => (
       <ShareCardScreen
         card={{
-          title: '경주 여행',
-          periodText: '6월 1일 월요일 ~ 6월 3일 수요일',
-          regionText: '경주',
+          title: '부산 여행',
+          periodText: '2박 3일 · 2026.06.01 – 06.03',
+          regionText: '부산',
           statsCells: { totalVisits: 9, distanceText: '22km', totalPhotos: 0 },
           distanceSourceLabel: '근사',
           orderedVisits: [
-            { order: 1, dayLabel: 'Day1', place: '불국사' },
-            { order: 2, dayLabel: 'Day1', place: '석굴암' },
-            { order: 3, dayLabel: 'Day2', place: '첨성대' },
+            { order: 1, dayLabel: 'Day1', place: '광안리 해변' },
+            { order: 2, dayLabel: 'Day1', place: '감천문화마을' },
+            { order: 3, dayLabel: 'Day2', place: '해운대 해변' },
           ],
           mode: 'no-photo',
           watermark: 'TripPilot',
           aspectRatio: 9 / 16,
         }}
         formats={SHARE_FORMATS}
-        caption="사진은 없지만 동선만으로도 충분한 사흘"
-        hashtagText="#경주여행 #불국사"
+        caption=""
+        hashtagText="#부산여행"
         onBack={noop}
       />
     ),

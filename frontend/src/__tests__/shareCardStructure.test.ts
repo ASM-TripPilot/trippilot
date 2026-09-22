@@ -192,6 +192,17 @@ describe('🔴 G4 · 공유 카드 testID 3종 실재 + j03 헤더 공유 제거
   });
 });
 
+describe('🔴 AC-4 · 캡션 카드 = 해시태그만(페이지 문장 시드 제거)', () => {
+  it('ShareCardPage 에 캡션 문장 시드가 없고, 해시태그 조립은 유지된다', () => {
+    const page = readOne(PAGE_REL);
+    // 부정 — 문장 시드 제거(현 `${trip.data.title} 여행의 기록` → red).
+    expect(page).not.toContain('여행의 기록');
+    // 긍정 짝 — 해시태그 조립은 남는다(공허 통과 차단: 페이지가 캡션 카드 자체를 지운 게 아님).
+    expect(page).toContain('hashtagText');
+    expect(page).toMatch(/#/);
+  });
+});
+
 describe('🔴 AC-8 · INV-3 — shareCard 모델·카드 ui 에 소요시간 0(거리만)', () => {
   it('shareCard.ts + 카드 ui 4파일에 소요시간 문자열 0 + buildShareCard 앵커', () => {
     const sources = INV3_FILES.map((rel) => ({

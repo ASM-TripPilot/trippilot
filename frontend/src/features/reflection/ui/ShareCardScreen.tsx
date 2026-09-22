@@ -91,11 +91,9 @@ export function ShareCardScreen({
         />
 
         {card.mode === 'no-photo' ? (
-          <View
-            testID="reflection-share-no-photo-notice"
-            className="w-full rounded-card border border-hairline bg-surface-soft px-lg py-md"
-          >
-            <Text className="text-center font-noto text-caption text-muted">
+          // TRIP-766: 박스 크롬 제거 → 좌정렬 플레인 텍스트(테두리·배경·라운드·가운데정렬 없음).
+          <View testID="reflection-share-no-photo-notice" className="w-full">
+            <Text className="font-noto text-caption text-muted">
               {NO_PHOTO_NOTICE}
             </Text>
           </View>
