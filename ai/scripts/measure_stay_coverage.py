@@ -133,8 +133,30 @@ def _contains(a: str, b: str) -> bool:
     return len(a) >= 2 and len(b) >= 2 and (a in b or b in a)
 
 
-def measure(adapter: TourApiAdapter, areas: list[str], count_only: bool) -> dict:
-    idx = build_index(load_ours())
+def measure(
+    adapter: TourApiAdapter,
+    areas: list[str],
+    count_only: bool,
+    max_calls: int,
+    ours: list[tuple[str, float, float]] | None = None,
+) -> dict:
+    """전국을 훑되 **호출 예산 안에서** 멈춘다.
+
+    이 리포는 호출 예산을 1급 규칙으로 둔다(`sourcing/pipeline.py` 머리말 — 수집 파이프라인은
+    `_CallBudget` 로 강제한다). 이 스크립트는 파이프라인을 안 거치므로 **여기서 직접 막아야 한다.**
+
+    막지 않으면 두 가지가 같이 깨진다. 키가 전부 소진되면 어댑터의 `_next_alive` 가
+    *"전부 죽었으면 start 그대로(**부르는 쪽이 막는다**)"* 로 돌려주는데, 안 막으면 죽은 키로
+    계속 때린다. 그리고 그날 POI 수집 몫까지 태운다.
+
+    **잘랐으면 그 사실을 값으로 낸다**(`budget_exhausted`). 부분 스캔의 비율을 전체인 양 읽으면
+    판정선(30%/10%)이 거짓 근거 위에서 돈다 — 숙소 검색이 `truncated` 로 같은 함정을 막는다.
+    """
+    # 기본은 정본 시드를 읽는다. 주입을 여는 이유는 **예산 로직만 떼어 재기 위해서**다 —
+    # 1.6MB 시드에 매여 있으면 호출 상한 하나를 확인하는 데 파일 전체가 필요하고,
+    # 그 무게 때문에 경계 케이스(지역 경계에 딱 걸리는 예산)를 촘촘히 못 돈다.
+    ours = load_ours() if ours is None else ours
+    idx = build_index(ours)
     per_area: dict[str, dict] = {}
     calls = 0
     seen: set[str] = set()
@@ -142,7 +164,11 @@ def measure(adapter: TourApiAdapter, areas: list[str], count_only: bool) -> dict
     matched_at: dict[int, int] = {t: 0 for t in THRESHOLDS_M}
     total_items = 0
 
+    exhausted = False
     for area in areas:
+        if calls >= max_calls:
+            exhausted = True
+            break
         first = adapter.fetch_page(area, STAY_KIND, 1, 1 if count_only else ROWS)
         calls += 1
         area_total = first.total_count
@@ -153,6 +179,10 @@ def measure(adapter: TourApiAdapter, areas: list[str], count_only: bool) -> dict
 
         pages = -(-area_total // ROWS)
         for page_no in range(1, pages + 1):
+            # 페이지 단위로도 막는다 — 지역 하나가 예산 전체를 삼킬 수 있다.
+            if page_no > 1 and calls >= max_calls:
+                exhausted = True
+                break
             page = first if page_no == 1 else adapter.fetch_page(area, STAY_KIND, page_no, ROWS)
             if page_no > 1:
                 calls += 1
@@ -177,9 +207,11 @@ def measure(adapter: TourApiAdapter, areas: list[str], count_only: bool) -> dict
                     per_area[area]["matched"] += 1
                     if has_img:
                         matched_with_image += 1
-        LOG.info("지역 %s — 총 %d · 훑음 %d · 사진 %d · 매칭 %d",
+        LOG.info("지역 %s — 총 %d · 훑음 %d · 사진 %d · 매칭 %d (호출 %d/%d)",
                  area, area_total, per_area[area]["scanned"],
-                 per_area[area]["with_image"], per_area[area]["matched"])
+                 per_area[area]["with_image"], per_area[area]["matched"], calls, max_calls)
+        if exhausted:
+            break
 
     scanned = len(seen)
     return {
@@ -187,6 +219,10 @@ def measure(adapter: TourApiAdapter, areas: list[str], count_only: bool) -> dict
         "count_only": count_only,
         "areas": areas,
         "http_calls": calls,
+        "max_calls": max_calls,
+        # **잘렸는가.** true 면 아래 비율은 부분 스캔 위의 값이라 판정선에 그대로 쓰면 안 된다.
+        "budget_exhausted": exhausted,
+        "areas_scanned": len(per_area),
         "tourapi_total": total_items,
         "scanned_unique": scanned,
         "with_image": with_image,
@@ -194,7 +230,7 @@ def measure(adapter: TourApiAdapter, areas: list[str], count_only: bool) -> dict
         "matched": matched,
         "matched_with_image": matched_with_image,
         # 이 값이 판정선이다(설계 §3) — 우리 정본에서 **실제로 채워지는 칸**의 비율.
-        "fill_rate_pct": round(100 * matched_with_image / len(load_ours()), 1) if scanned else 0.0,
+        "fill_rate_pct": round(100 * matched_with_image / len(ours), 1) if scanned and ours else 0.0,
         "per_area": per_area,
     }
 
@@ -207,21 +243,33 @@ def main() -> int:
         LOG.warning("TOUR_API_KEY 미설정 — 측정을 건너뜁니다.")
         return 0
     extra = tuple(k for k in (os.environ.get("TOUR_API_KEY2"), os.environ.get("TOUR_API_KEY3")) if k)
+    calls_per_key = int(os.environ.get("TOURAPI_MAX_CALLS") or "1000")
     adapter = TourApiAdapter(
         UrllibHttpClient(), key,
         extra_keys=extra,
-        calls_per_key=int(os.environ.get("TOURAPI_MAX_CALLS") or "1000") if extra else None,
+        calls_per_key=calls_per_key if extra else None,
     )
+    # 총 예산 = 키 수 × 키당 상한 — `collect_pois.py` 와 같은 공식이다.
+    # **POI 수집과 하루를 나눠 쓴다.** 그쪽이 수렴해 260회만 쓰고 있어 여유가 크지만,
+    # 여유를 근거로 상한을 빼면 그 여유가 사라진 날 조용히 남의 몫을 먹는다.
+    max_calls = calls_per_key * (1 + len(extra))
     areas = resolve_area_codes(None, os.environ.get("TOURAPI_AREA_CODES"))
-    result = measure(adapter, areas, bool(os.environ.get("STAY_MEASURE_COUNT_ONLY")))
+    result = measure(adapter, areas, bool(os.environ.get("STAY_MEASURE_COUNT_ONLY")), max_calls)
 
     out = Path(os.environ.get("STAY_MEASURE_OUTPUT") or "stay_coverage.json")
     out.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     LOG.info(
-        "총 %d · 훑음 %d · 사진 %d · 매칭 %d · 채워지는 칸 %.1f%% · 호출 %d",
+        "총 %d · 훑음 %d · 사진 %d · 매칭 %d · 채워지는 칸 %.1f%% · 호출 %d/%d",
         result["tourapi_total"], result["scanned_unique"], result["with_image"],
-        result["matched"], result["fill_rate_pct"], result["http_calls"],
+        result["matched"], result["fill_rate_pct"], result["http_calls"], result["max_calls"],
     )
+    if result["budget_exhausted"]:
+        # 조용히 자르지 않는다 — 부분 스캔의 비율을 판정선에 그대로 쓰면 거짓 근거가 된다.
+        LOG.warning(
+            "호출 예산을 다 썼다 — %d/%d 지역만 훑었다. 아래 비율은 **부분 스캔** 값이다. "
+            "지역을 나눠(TOURAPI_AREA_CODES) 여러 날에 재거나 count_only 로 먼저 규모를 보라.",
+            result["areas_scanned"], len(areas),
+        )
     return 0
 
 
