@@ -2988,15 +2988,15 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // j05 여행 스타일 3키(TRIP-573) — 순수 뷰(`TravelStyleScreen`)를 격리 렌더한다(`@/shared/api` 값
-  // import 0 이라 프리뷰 지뢰 목 통과 — 컨테이너 `TravelStylePage` 는 별 파일이라 import 사슬 전이
-  // 로드 없음). 지도는 좌표 계약 공백이라 늘 placeholder degrade(가짜 지도 금지). 코랄 막대·StatTile
-  // 카드·진행 게이지·미리보기 칩·EvidenceLink press "준비 중" degrade 는 픽셀·상호작용이라 6-b/육안 몫
-  // — 자율/야간이라 6-b SKIP, 이 3키가 유일한 육안 대조 자리(정식·avgDwell null degrade·임시 3얼굴).
+  // j05 여행 스타일 2키(TRIP-573·TRIP-765) — 순수 뷰(`TravelStyleScreen`)를 격리 렌더한다(네트워크
+  // 계층 import 0 이라 프리뷰 지뢰 목 통과 — shared/ui/BottomTabBar 만 프레젠테이션으로 문다). 지도는
+  // 좌표 계약 공백이라 늘 placeholder degrade(가짜 지도 금지). StatTile 2톤·진행 병합·아래 행 계산값·칩
+  // `#`접두·바텀탭바는 이 2키(정합 default·임시 data-insufficient)로 육안 대조(자율/야간 6-b SKIP).
+  // avgDwellMinutes:null 체류 타일 소멸 degrade 는 프리뷰 키 대신 jest AC-2 null 테스트가 잠근다(TRIP-765).
   {
-    key: 'travel-style-official',
+    key: 'travel-style-default',
     band: 'j',
-    label: 'j05 · 스타일 정식',
+    label: 'j05 · 스타일 default',
     login: null,
     render: () => (
       <TravelStyleScreen
@@ -3023,46 +3023,17 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   {
-    // 엣지 — avgDwellMinutes:null → 평균 체류 타일이 사라진다(0 으로 안 채움, BR-U5-08a degrade).
-    key: 'travel-style-no-dwell',
+    // 임시 — official:false. 병합 헤딩 + 진행 바 + 아래 행 + "정식 아님" + `#`접두 미리보기 칩.
+    key: 'travel-style-data-insufficient',
     band: 'j',
-    label: 'j05 · 스타일 체류 미측정',
-    login: null,
-    render: () => (
-      <TravelStyleScreen
-        face="official"
-        progress={{ current: 11, required: 10 }}
-        analysis={{
-          descriptors: ['#느긋'],
-          traitGauges: { easygoing: 5, foodAffinity: 2, activeness: 2 },
-          categoryBreakdown: [
-            { category: '자연', ratio: 0.55, isOther: false },
-            { category: '카페', ratio: 0.3, isOther: false },
-            { category: '상위3밖', ratio: 0.15, isOther: true },
-          ],
-          avgPlacesPerDay: 3,
-          avgRadiusKm: 0.8,
-          avgDwellMinutes: null,
-          sampleTripCount: 2,
-          updatedAt: '2026-06-13T09:00:00Z',
-        }}
-        preview={null}
-        onBack={noop}
-      />
-    ),
-  },
-  {
-    // 임시 — official:false. 진행 게이지 + "정식 아님" + 온보딩 취향 미리보기 칩(Figma 목업엔 없으나 BR 우선).
-    key: 'travel-style-insufficient',
-    band: 'j',
-    label: 'j05 · 스타일 임시',
+    label: 'j05 · 스타일 data-insufficient',
     login: null,
     render: () => (
       <TravelStyleScreen
         face="insufficient"
         progress={{ current: 6, required: 10 }}
         analysis={null}
-        preview={{ descriptors: ['느긋한 여행', '바다 선호', '미식 탐험'] }}
+        preview={{ descriptors: ['바다', '미식', '느긋'] }}
         onBack={noop}
       />
     ),

@@ -6,6 +6,7 @@ import { router } from 'expo-router';
 import { resolveStyleFace } from '@/features/reflection/model/styleThreshold';
 import { useStyleAnalysis } from '@/features/reflection/model/useStyleAnalysis';
 import { TravelStyleScreen } from '@/features/reflection/ui/TravelStyleScreen';
+import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
 
 /**
  * TRIP-573 · travel-style 페이지 — j05 스타일 조회·얼굴 판정·배선의 단일 출처(FSD, 계정 단위).
@@ -57,6 +58,9 @@ export function TravelStylePage(): ReactElement {
       analysis={envelope.analysis ?? null}
       preview={envelope.preview ?? null}
       onBack={handleBack}
+      onPressTab={(key: ShellTabKey) =>
+        router.replace(key === 'home' ? '/' : `/${key}`)
+      }
     />
   );
 }

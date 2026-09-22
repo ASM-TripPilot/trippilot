@@ -263,7 +263,13 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    2키 개명 + 1키 삭제만 하고 이 가드는 안 만진다(재편 전엔 170개라 이 단언이 red). 정확히 그
     //    키들인지는 아래 'TRIP-764' describe 가 못박는다. devPreviewBandSort 는 band h·l 만 잠가 band j
     //    와 무관(오갱신 금지, 맹점③ 미러).
-    expect(PREVIEW_STATES).toHaveLength(169);
+    // ⚠️ TRIP-765: j05 스타일 프리뷰 키 개명·삭제 — travel-style-official→-default·
+    //    travel-style-insufficient→-data-insufficient(개명 net 0) + travel-style-no-dwell 삭제
+    //    (no-dwell degrade 는 avgDwellMinutes:null 변형이라 화면 코드·TravelStyleScreen.test 로 남고
+    //    프리뷰 키만 제거) → 169→168. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에서
+    //    2키 개명 + 1키 삭제만 하고 이 가드는 안 만진다(재편 전엔 169개라 이 단언이 red). 정확히 그 키들인지는
+    //    아래 'TRIP-765' describe 가 못박는다. devPreviewBandSort 는 band h·l 만 잠가 band j 와 무관(오갱신 금지).
+    expect(PREVIEW_STATES).toHaveLength(168);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -345,6 +351,27 @@ describe('🔴 TRIP-764 · j04 요약 프리뷰 키 개명·삭제 (band j)', ()
     expect(keys).not.toContain('trip-summary-map');
     expect(keys).not.toContain('trip-summary-visit-list');
     expect(keys).not.toContain('trip-summary-share-off');
+
+    // 형제 band j 앵커 — j01 기록 키가 딸려 사라지지 않았음(공허 통과 방지).
+    expect(keys).toContain('records-default');
+  });
+});
+
+describe('🔴 TRIP-765 · j05 스타일 프리뷰 키 개명·삭제 (band j)', () => {
+  it('default·data-insufficient 로 개명되고 no-dwell 은 삭제되며, 옛 이름은 없다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 긍정 — 개명된 두 키가 실재한다(개명 전엔 부재라 red).
+    expect(keys).toContain('travel-style-default');
+    expect(keys).toContain('travel-style-data-insufficient');
+
+    // 부정 — 개명 원본 2키 + 삭제된 no-dwell 은 사라진다(재편 전엔 present 라 red). 카운트(168)
+    //   만으론 "아무 키나 재편/삭제해도" 통과하므로, 이 짝이 '바뀐 게 정확히 그 키들'임을 못박는다
+    //   (TRIP-764 미러). no-dwell 은 프리뷰 키만 삭제 — degrade 동작은 코드/화면 테스트에 잔존.
+    expect(keys).not.toContain('travel-style-official');
+    expect(keys).not.toContain('travel-style-insufficient');
+    expect(keys).not.toContain('travel-style-no-dwell');
 
     // 형제 band j 앵커 — j01 기록 키가 딸려 사라지지 않았음(공허 통과 방지).
     expect(keys).toContain('records-default');

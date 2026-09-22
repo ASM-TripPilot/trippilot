@@ -129,6 +129,7 @@
 - `src/__tests__/tabsMyRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/tabsRecordsRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/tabsShell.test.tsx`  →  (export 없음)
+- `src/__tests__/travelStyleParityStructure.test.ts`  →  (export 없음)
 - `src/__tests__/travelStyleStructure.test.ts`  →  (export 없음)
 - `src/__tests__/tripBudgetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/tripDraftBoundary.test.ts`  →  (export 없음)
@@ -1294,4 +1295,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 868개 파일
+합계 869개 파일
