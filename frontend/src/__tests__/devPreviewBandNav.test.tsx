@@ -254,7 +254,12 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    안 만진다(재편 전엔 171개라 이 단언이 red). 정확히 그 키들인지는 아래 'TRIP-793' describe 가
     //    못박고, devPreviewBandSort 는 band h 를 잠가 EXPECTED_H 도 동반 갱신(h08-candidate-sheet 2키를
     //    h08-draft-expanded 직후, 옛 slot-candidate-panel 5키·option-swap 3키 제거).
-    expect(PREVIEW_STATES).toHaveLength(165);
+    // ⚠️ TRIP-794: h09 컨셉 고르기(같이 고르기 위저드) 프리뷰 키(`h09-copick-concept`, band `h`)
+    //    추가로 165→166. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에 그 키
+    //    하나만 추가(ConceptPickerScreen 을 진행줄·스텝퍼 픽스처 props 로 렌더)하고 이 가드는 안
+    //    만진다(추가 전엔 165개라 이 단언이 red). 정확히 그 키인지는 아래 'TRIP-794' describe 가
+    //    못박고, devPreviewBandSort 는 band h 를 잠가 EXPECTED_H 도 동반 갱신(h09 를 h08 뒤·h11 앞에).
+    expect(PREVIEW_STATES).toHaveLength(166);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -296,6 +301,22 @@ describe('🔴 TRIP-793 · h08 다른 후보 시트 프리뷰 8→2 병합 (band
 
     // 형제 band h 앵커 — 기존 h08 셸 키가 딸려 사라지지 않았음(공허 통과 방지).
     expect(keys).toContain('h08-draft-collapsed');
+  });
+});
+
+describe('🔴 TRIP-794 · h09 컨셉 고르기 프리뷰 키 (band h)', () => {
+  it('키 집합에 h09-copick-concept 가 있고 형제 band h 키는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // red-first — h09-copick-concept 는 implementer 가 preview.tsx 에 추가하기 전엔 없다(band h,
+    // ConceptPickerScreen 을 진행줄·스텝퍼 픽스처 props 로 렌더). 카운트(166)만으론 "아무 키나 1개
+    // 추가해도" 통과하므로, 이 단언이 '추가된 키가 h09-copick-concept'임을 못박는다(TRIP-796 미러).
+    expect(keys).toContain('h09-copick-concept');
+
+    // 형제 band h 앵커 — 기존 h08·h11 키가 딸려 사라지지 않았음을 못박는다(공허 통과 방지).
+    expect(keys).toContain('h08-candidate-sheet');
+    expect(keys).toContain('h11-copick-complete');
   });
 });
 

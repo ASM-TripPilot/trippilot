@@ -110,9 +110,14 @@ const EXPECTED_H = [
   // 동시에 옛 h12 인라인 패널 5키(slot-candidate-panel*)·h18 옵션 교체 3키(option-swap*)는 삭제된다.
   'dev-preview-state-h08-candidate-sheet', // h08 (TRIP-793 다른 후보 시트)
   'dev-preview-state-h08-candidate-sheet-empty', // h08 (TRIP-793 0건)
+  // TRIP-794: h09 컨셉 고르기(같이 고르기 위저드 컨셉 선택). 코드가 h09 라 안정 정렬이 h08 뒤·h11
+  // 앞에 이 칩을 세운다(옛 h09 생성 키가 TRIP-789 로 사라진 자리에 새 h09 표면이 들어옴). 단일 키라
+  // 배열 위치와 무관하게 코드 h09 가 정렬 위치를 결정한다.
+  'dev-preview-state-h09-copick-concept', // h09 (TRIP-794 컨셉 고르기)
   // TRIP-789: 옛 h09 두 키(itinerary-generating·itinerary-generating-failed)가 이 자리에서 사라진다 —
   // 전자는 h07-generating-loading 으로 개명·이동(위 h07 그룹), 후자는 프리뷰 키 삭제(핸들링 유지).
-  // band h 그룹에 더는 h09 코드 항목이 없다.
+  // (TRIP-794 로 h09 코드 항목이 다시 생겼다 — h09-copick-concept, 위 h08 뒤 줄 참조. 옛 h09 생성
+  //  키가 비운 자리에 새 h09 컨셉 표면이 들어온 것이라 생성 화면과는 무관.)
   // TRIP-796: h11 같이 결과(CoPick 완료) 지도+시트 셸. 코드가 h11 이라 안정 정렬이 h11 그룹 안에
   // 들어가고, PREVIEW_STATES 배열에서 이 프리뷰를 fallback 3키보다 **앞**(그 직전)에 삽입하므로
   // 안정 정렬이 이 순서(copick → fallback 3)를 낸다(02a ★13 · h08 D5 선례 — 배열 위치=정렬 위치).

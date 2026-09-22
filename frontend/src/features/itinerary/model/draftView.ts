@@ -111,6 +111,20 @@ export function formatDraftDayHeader(date: string): string {
   return `${at.getUTCMonth() + 1}월 ${at.getUTCDate()}일 · ${weekday}`;
 }
 
+/**
+ * `'2026-06-10'` → `'6월 10일(수)'`. h09 co-pick 진행 줄용 — 요일을 괄호로 감싼다(Figma 3845:2227).
+ * `formatDraftDayHeader`(중점 `· 수`)와 날짜 파싱(`utcDayTime`)·요일 배열을 공유하고 구분자만 다르다
+ * (형제 포매터 — 새 Date 파싱을 만들지 않는다).
+ */
+export function formatCoPickDayHeader(date: string): string {
+  const time = utcDayTime(date);
+  if (Number.isNaN(time)) return '';
+
+  const at = new Date(time);
+  const weekday = WEEKDAY_LABELS[at.getUTCDay()];
+  return `${at.getUTCMonth() + 1}월 ${at.getUTCDate()}일(${weekday})`;
+}
+
 export interface DraftPin {
   /** 카드 번호(배열 인덱스+1)를 그대로 쓴다 — 아래 주석 참조. */
   number: number;

@@ -69,6 +69,7 @@ import {
   startTimeOptions,
   tripDayChips,
 } from '@/features/itinerary/model/mustVisitTimeForm';
+import { ConceptPickerScreen } from '@/features/itinerary/ui/ConceptPickerScreen';
 import { GenerationFallbackScreen } from '@/features/itinerary/ui/GenerationFallbackScreen';
 import { GeneratingScreen } from '@/features/itinerary/ui/GeneratingScreen';
 import { MustVisitPickerScreen } from '@/features/itinerary/ui/MustVisitPickerScreen';
@@ -78,6 +79,7 @@ import {
   PlaceAddRow,
 } from '@/features/itinerary/ui/PlaceAddScreen';
 import { SlotCandidateSheet as ItinerarySlotCandidateSheet } from '@/features/itinerary/ui/SlotCandidateSheet';
+import { CoPickStepper } from '@/widgets/copick-stepper/ui/CoPickStepper';
 import { GenerationDoneBar } from '@/widgets/generation-done-bar/ui/GenerationDoneBar';
 import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
 import { GenerationProgressCard } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
@@ -4348,6 +4350,44 @@ export const PREVIEW_STATES: PreviewState[] = [
         isPending={false}
         onPressPlaceSearch={noop}
         onClose={noop}
+      />
+    ),
+  },
+  // h09 컨셉 고르기(TRIP-794) — 같이 고르기(co-pick) 위저드의 컨셉 선택 화면(Figma 3845:2227). 진행 줄·
+  // CoPickStepper 위젯 노드·컨셉 카드 5장을 픽스처 props 로 태운다(순수 화면 · api import 0 이라 프리뷰
+  // 지뢰 목 무해). 배지·N곳은 BE 계약 부재라 미표시(D5). 첫 카드 primary 테두리·현재 단 빨강·색은 jest
+  // 사각이라 이 키가 유일한 육안 그물(자율 세션 6-b SKIP, 다음 세션 확인 대상).
+  {
+    key: 'h09-copick-concept',
+    band: 'h',
+    label: 'h09 · 컨셉 고르기',
+    login: null,
+    render: () => (
+      <ConceptPickerScreen
+        concepts={[
+          { key: 'meal', label: '식사' },
+          { key: 'cafe', label: '카페·디저트' },
+          { key: 'culture', label: '전시·문화' },
+          { key: 'outdoor', label: '야외·산책' },
+          { key: 'shopping', label: '쇼핑' },
+        ]}
+        progress={{
+          dayLabel: '1일차 / 4 · 6월 10일(수)',
+          slotCurrent: 3,
+          slotTotal: 4,
+          barFilled: 1,
+          barTotal: 4,
+        }}
+        stepperSlot={
+          <CoPickStepper
+            prev={{ title: '황령산 전망대', status: '고름', done: true }}
+            current={{ title: '오후 · 전시', status: '지금 고르는 중' }}
+            next={{ title: '오후 · 카페', status: '비어 있음' }}
+          />
+        }
+        onPickConcept={noop}
+        onSkip={noop}
+        onBack={noop}
       />
     ),
   },

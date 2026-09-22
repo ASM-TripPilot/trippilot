@@ -401,6 +401,7 @@
 - `src/features/home/ui/MagazineScreen.tsx`  →  MagazineScreen
 
 ## src/features/itinerary/config/
+- `src/features/itinerary/config/conceptCards.ts`  →  CONCEPT_DESCRIPTIONS
 - `src/features/itinerary/config/generationFallback.ts`  →  GENERATION_FALLBACK_PROGRESS · GENERATION_FALLBACK_TITLE · GENERATION_FALLBACK_MAP_PILL · GENERATION_FALLBACK_MESSAGE_TITLE · GENERATION_FALLBACK_MESSAGE_BODY · GENERATION_FALLBACK_CHECK_ROUTE · GENERATION_FALLBACK_CHECK_SKIPPED · GENERATION_FALLBACK_CHECK_DONE · GENERATION_FALLBACK_INFO · GENERATION_FALLBACK_VIEW_PLAN · GENERATION_FALLBACK_MANUAL · GENERATION_FALLBACK_FAILED_TITLE · GENERATION_FALLBACK_FAILED_NOTE · GENERATION_FALLBACK_RETRY
 - `src/features/itinerary/config/methodPicker.ts`  →  METHOD_PROGRESS · METHOD_SUBTITLE · METHOD_SWITCH_NOTE
 - `src/features/itinerary/config/placeCategoryChips.ts`  →  PlaceCategoryChip · PLACE_CATEGORY_CHIPS
@@ -408,7 +409,7 @@
 ## src/features/itinerary/model/
 - `src/features/itinerary/model/buildEditItineraryRequest.ts`  →  buildEditItineraryRequest
 - `src/features/itinerary/model/coPickSlots.ts`  →  firstCoPickSlotKey · nextCoPickSlotKey
-- `src/features/itinerary/model/draftView.ts`  →  DRAFT_POLL_INTERVAL_MS · DRAFT_POLL_MAX_COUNT · DraftDayTab · buildDraftDayTabs · GenerationDayState · GenerationGaugeCell · buildGenerationGauge · formatDraftDayHeader · DraftPin · buildDraftPins · shouldKeepPollingDraft · DraftView · isCandidatesDemoted · FallbackNotice · resolveFallbackNotice · resolveDraftView
+- `src/features/itinerary/model/draftView.ts`  →  DRAFT_POLL_INTERVAL_MS · DRAFT_POLL_MAX_COUNT · DraftDayTab · buildDraftDayTabs · GenerationDayState · GenerationGaugeCell · buildGenerationGauge · formatDraftDayHeader · formatCoPickDayHeader · DraftPin · buildDraftPins · shouldKeepPollingDraft · DraftView · isCandidatesDemoted · FallbackNotice · resolveFallbackNotice · resolveDraftView
 - `src/features/itinerary/model/itineraryEditStore.ts`  →  EditorSlot · EditorDaysItem · removeSlot · addSlot · insertSlotAt · reorderKeepingFixed · ItineraryEditState · useItineraryEditStore
 - `src/features/itinerary/model/legDistance.ts`  →  legDistance
 - `src/features/itinerary/model/mustVisitList.ts`  →  MUST_VISIT_NAME_PLACEHOLDER · MustVisitListItem · MustVisitListView · joinMustVisits · buildMustVisitPins · resolveMustVisitListView
@@ -421,7 +422,7 @@
 - `src/features/itinerary/model/tripCardFace.ts`  →  TripCardFace · deriveTripCardFace
 
 ## src/features/itinerary/ui/
-- `src/features/itinerary/ui/ConceptPickerScreen.tsx`  →  ConceptPickerScreenProps · ConceptPickerScreen
+- `src/features/itinerary/ui/ConceptPickerScreen.tsx`  →  ConceptProgress · ConceptPickerScreenProps · ConceptPickerScreen
 - `src/features/itinerary/ui/DraftScreen.tsx`  →  DraftScreenProps · DraftScreen
 - `src/features/itinerary/ui/GeneratingScreen.tsx`  →  GeneratingScreenProps · GeneratingScreen
 - `src/features/itinerary/ui/GenerationFallbackScreen.tsx`  →  GenerationFallbackScreenProps · GenerationFallbackScreen
@@ -1273,6 +1274,10 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
+## src/widgets/copick-stepper/ui/
+- `src/widgets/copick-stepper/ui/CoPickStepper.tsx`  →  CoPickStep · CoPickStepperProps · CoPickStepper
+- `src/widgets/copick-stepper/ui/CoPickStepperGlyphs.tsx`  →  StepperSunGlyph · StepperCheckBadge
+
 ## src/widgets/generation-done-bar/ui/
 - `src/widgets/generation-done-bar/ui/GenerationDoneBar.tsx`  →  GenerationDoneBarProps · GenerationDoneBar
 - `src/widgets/generation-done-bar/ui/GenerationDoneBarGlyphs.tsx`  →  DoneCheckGlyph
@@ -1300,4 +1305,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 874개 파일
+합계 877개 파일
