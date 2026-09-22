@@ -5,6 +5,7 @@ import {
   within,
 } from '@testing-library/react-native';
 import { Text } from 'react-native';
+import type { ReactTestInstance } from 'react-test-renderer';
 
 import type { ItineraryDaysItemSlotsItem } from '@/entities/itinerary-slot/model';
 import {
@@ -22,7 +23,10 @@ import { LiveHubView, type LiveHubSlot } from './LiveHubView';
  *  - 골격: 전면 지도(셸) 위 좌상단 뒤로가기 + 일자 칩, 시트 헤더 한 줄
  *    "부산 여행 · 2일차 · 6월 11일(목) · 5곳", 카드 5장, 우하단 연필 FAB(`execution-live-replan-fab`).
  *  - 부재: 탭바·세그먼트·방패 FAB·옛 헤더·지도 세그먼트·수동 [도착]·다음 길찾기·레일 시각 열.
- *  - 배선: 뒤로·칩·FAB·[방문 완료] 가 콜백으로, [사진]/[메모] 가 "준비 중" 힌트로 이어진다.
+ *  - 배선: 뒤로·칩·[방문 완료] 가 콜백으로, [사진]/[메모] 가 "준비 중" 힌트로 이어진다.
+ *  - TRIP-747 수정 알약: 연필 FAB 는 이동하지 않고 제자리 토글이다 — 열면 × 얼굴 + 흰 알약 2개
+ *    (`AI에게 맡기기`·`직접 수정`), 알약을 누르면 메뉴가 닫히고 그 콜백만 1회 불린다(BR-U4-10 진입).
+ *    딤이 없고 바깥 탭으로는 닫히지 않는다(Seed ③). 초기 열림은 `initialEditMenuOpen`(프리뷰 입구).
  *  - 셸 가산 사용: 3스냅 + 초기 스냅(0/1/2) 전달, 지도 조작 가능(잠그지 않음), 현재위치 점·상태 핀.
  *  - 748 전까지 트리거 칩·슬롯 배너 슬롯을 그대로 받는다(트리거 통합 green 유지).
  *
@@ -110,7 +114,8 @@ function renderHub(overrides: Overrides = {}) {
   const handlers = {
     onBack: jest.fn(),
     onSelectDay: jest.fn(),
-    onPressReplan: jest.fn(),
+    onPressAiReplan: jest.fn(),
+    onPressManualEdit: jest.fn(),
     onPressComplete: jest.fn(),
   };
   render(
@@ -220,17 +225,16 @@ describe('LiveHubView · HV2 부재 (AC-2)', () => {
 });
 
 describe('LiveHubView · HV3 배선 (AC-1·AC-4 · Seed Q2)', () => {
-  it('뒤로·칩·FAB·[방문 완료] press 가 각 콜백을 부른다', () => {
+  // TRIP-747: FAB 는 더 이상 이동 콜백이 아니다(토글) — FAB 배선은 아래 HP 묶음이 잠근다.
+  it('뒤로·칩·[방문 완료] press 가 각 콜백을 부른다', () => {
     const handlers = renderHub();
 
     fireEvent.press(screen.getByTestId('execution-live-back'));
     fireEvent.press(screen.getByTestId('execution-live-daychip-2'));
-    fireEvent.press(screen.getByTestId('execution-live-replan-fab'));
     fireEvent.press(screen.getByTestId('execution-arrive-complete'));
 
     expect(handlers.onBack).toHaveBeenCalledTimes(1);
     expect(handlers.onSelectDay).toHaveBeenCalledWith(2);
-    expect(handlers.onPressReplan).toHaveBeenCalledTimes(1);
     expect(handlers.onPressComplete).toHaveBeenCalledTimes(1);
   });
 
@@ -370,5 +374,214 @@ describe('LiveHubView · HV7 레일 점 (5-b 경고-1 보강)', () => {
       'upcoming',
       'upcoming',
     ]);
+  });
+});
+
+// ── TRIP-747 · 수정 알약 열림 ────────────────────────────────────────────────
+
+const FAB = 'execution-live-replan-fab';
+const PILL_AI = 'execution-live-edit-pill-ai';
+const PILL_MANUAL = 'execution-live-edit-pill-manual';
+const PILL_ANY = /^execution-live-edit-pill-(ai|manual)$/;
+const PRIMARY = '#FF385C';
+
+/** 알약 서브트리에서 SVG 색 prop(fill|stroke)이 primary 인 노드 수 — 대소문자 무시(02a ★6). */
+function primaryCount(testID: string, prop: 'fill' | 'stroke'): number {
+  return screen
+    .getByTestId(testID)
+    .findAll(
+      (node) =>
+        typeof node.props?.[prop] === 'string' &&
+        (node.props[prop] as string).toUpperCase() === PRIMARY
+    ).length;
+}
+
+/** FAB 가 닫힘(연필) 얼굴인지 — 이름·글리프 두 신호를 함께 본다(02a ★3·★5). */
+function expectFabClosedFace(): void {
+  const fab = screen.getByTestId(FAB);
+  expect(fab).toHaveAccessibleName('일정 수정');
+  expect(within(fab).getByTestId(`${FAB}-pencil`)).toBeOnTheScreen();
+  expect(within(fab).queryByTestId(`${FAB}-close`)).toBeNull();
+}
+
+function expectFabOpenFace(): void {
+  const fab = screen.getByTestId(FAB);
+  expect(fab).toHaveAccessibleName('닫기');
+  expect(within(fab).getByTestId(`${FAB}-close`)).toBeOnTheScreen();
+  expect(within(fab).queryByTestId(`${FAB}-pencil`)).toBeNull();
+}
+
+const EDIT_CONTROL = /^execution-live-(replan-fab|edit-pill-(ai|manual))$/;
+
+const isEditControlNode = (node: ReactTestInstance): boolean =>
+  typeof node.props?.testID === 'string' &&
+  EDIT_CONTROL.test(node.props.testID as string);
+
+/**
+ * 트리(합성·호스트 전부)에서 onPress 를 가진 노드 중 FAB·알약이 아닌 것 — 자기·조상·자손 어디에도
+ * FAB·알약 testID 가 없어야 한다(EditPill 합성 같은 감싸개도 빠진다). 순서는 트리 순회 순이라 같은
+ * props 로 다시 그리면 i번째가 같은 노드다(HP9).
+ */
+function outsidePressables(): ReactTestInstance[] {
+  return screen.root.findAll((node) => {
+    if (typeof node.props?.onPress !== 'function') return false;
+    for (let up: ReactTestInstance | null = node; up; up = up.parent) {
+      if (isEditControlNode(up)) return false;
+    }
+    return node.findAll(isEditControlNode).length === 0;
+  });
+}
+
+function describeNode(node: ReactTestInstance): string {
+  const type =
+    typeof node.type === 'string'
+      ? node.type
+      : ((node.type as { displayName?: string; name?: string }).displayName ??
+        (node.type as { name?: string }).name ??
+        '?');
+  return `${type} testID=${String(node.props.testID)} className=${String(node.props.className)}`;
+}
+
+describe('LiveHubView · HP 수정 알약 토글 (TRIP-747 AC-1)', () => {
+  it('HP1 처음엔 닫혀 있다 — 연필 FAB 만 있고 알약은 0개', () => {
+    renderHub();
+
+    // 짝 앵커 — 허브가 실제로 그려졌다(빈 렌더 공허 통과 차단).
+    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(5);
+    expectFabClosedFace();
+    expect(screen.queryAllByTestId(PILL_ANY)).toHaveLength(0);
+  });
+
+  it('HP2 FAB 를 누르면 제자리에서 알약 2개(AI → 직접 수정 순)가 열리고 FAB 는 × 가 된다 — 어떤 콜백도 안 불린다', () => {
+    const handlers = renderHub();
+
+    fireEvent.press(screen.getByTestId(FAB));
+
+    expect(screen.getAllByTestId(PILL_ANY).map((n) => n.props.testID)).toEqual([
+      PILL_AI,
+      PILL_MANUAL,
+    ]);
+    expectFabOpenFace();
+    // FAB 는 이동하지 않는다 — 라우트 콜백은 물론 다른 콜백도 0회(02a ★2).
+    expect(handlers.onPressAiReplan).not.toHaveBeenCalled();
+    expect(handlers.onPressManualEdit).not.toHaveBeenCalled();
+    expect(handlers.onBack).not.toHaveBeenCalled();
+    expect(handlers.onSelectDay).not.toHaveBeenCalled();
+    expect(handlers.onPressComplete).not.toHaveBeenCalled();
+  });
+
+  it('HP3 열린 FAB(×)를 다시 누르면 알약이 사라지고 연필로 돌아온다', () => {
+    const handlers = renderHub();
+
+    fireEvent.press(screen.getByTestId(FAB));
+    fireEvent.press(screen.getByTestId(FAB));
+
+    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(5);
+    expect(screen.queryAllByTestId(PILL_ANY)).toHaveLength(0);
+    expectFabClosedFace();
+    expect(handlers.onPressAiReplan).not.toHaveBeenCalled();
+    expect(handlers.onPressManualEdit).not.toHaveBeenCalled();
+  });
+
+  it('HP4 알약 글자는 정확히 "AI에게 맡기기"·"직접 수정"이고, ✦·연필 글리프는 분홍(primary)이다', () => {
+    renderHub();
+
+    fireEvent.press(screen.getByTestId(FAB));
+
+    // 완전 일치 — ✦ 를 글자로 그리면 "✦ AI에게 맡기기" 가 돼 실패한다(02a ★4, Seed ④ SVG).
+    expect(screen.getByTestId(PILL_AI)).toHaveTextContent('AI에게 맡기기');
+    expect(screen.getByTestId(PILL_MANUAL)).toHaveTextContent('직접 수정');
+    // ✦ 는 채움(fill), 연필은 선(stroke) — 흰 연필 톤 재사용이면 0개로 실패한다(02a ★6).
+    expect(primaryCount(PILL_AI, 'fill')).toBeGreaterThan(0);
+    expect(primaryCount(PILL_MANUAL, 'stroke')).toBeGreaterThan(0);
+  });
+});
+
+describe('LiveHubView · HP 알약 콜백 (TRIP-747 AC-2 · Seed ②)', () => {
+  it('HP5 [AI에게 맡기기]를 누르면 AI 콜백만 1회 불리고 메뉴가 닫힌다', () => {
+    const handlers = renderHub();
+
+    fireEvent.press(screen.getByTestId(FAB));
+    fireEvent.press(screen.getByTestId(PILL_AI));
+
+    expect(handlers.onPressAiReplan).toHaveBeenCalledTimes(1);
+    expect(handlers.onPressManualEdit).not.toHaveBeenCalled();
+    // 메뉴 닫힘은 두 신호 — 알약 0개 + FAB 연필 복귀(02a ★3).
+    expect(screen.queryAllByTestId(PILL_ANY)).toHaveLength(0);
+    expectFabClosedFace();
+  });
+
+  it('HP6 [직접 수정]을 누르면 직접 수정 콜백만 1회 불리고 메뉴가 닫힌다', () => {
+    const handlers = renderHub();
+
+    fireEvent.press(screen.getByTestId(FAB));
+    fireEvent.press(screen.getByTestId(PILL_MANUAL));
+
+    expect(handlers.onPressManualEdit).toHaveBeenCalledTimes(1);
+    expect(handlers.onPressAiReplan).not.toHaveBeenCalled();
+    expect(screen.queryAllByTestId(PILL_ANY)).toHaveLength(0);
+    expectFabClosedFace();
+  });
+});
+
+describe('LiveHubView · HP 초기 열림·바깥 탭 (TRIP-747 AC-5 · Seed ①③)', () => {
+  it('HP7 initialEditMenuOpen 이면 처음부터 열린 얼굴이고, FAB 로 닫을 수 있다', () => {
+    const handlers = renderHub({ initialEditMenuOpen: true });
+
+    expect(screen.getAllByTestId(PILL_ANY)).toHaveLength(2);
+    expectFabOpenFace();
+    expect(handlers.onPressAiReplan).not.toHaveBeenCalled();
+    expect(handlers.onPressManualEdit).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId(FAB));
+
+    expect(screen.queryAllByTestId(PILL_ANY)).toHaveLength(0);
+    expectFabClosedFace();
+  });
+
+  it('HP8 열린 채로 다른 곳(일자 칩)을 눌러도 메뉴는 닫히지 않고, 딤(bg-scrim)이 없다', () => {
+    const handlers = renderHub();
+
+    fireEvent.press(screen.getByTestId(FAB));
+    fireEvent.press(screen.getByTestId('execution-live-daychip-2'));
+
+    // 칩 press 는 그대로 통한다 — 가로막는 백드롭이 없다(실제 터치 차단 여부는 6-b, 02a ★8).
+    expect(handlers.onSelectDay).toHaveBeenCalledWith(2);
+    // 바깥 탭으로 닫지 않는다(× 또는 알약으로만).
+    expect(screen.getAllByTestId(PILL_ANY)).toHaveLength(2);
+    expectFabOpenFace();
+    // Figma 4055:2427 에는 딤이 없다 — 짝 앵커는 바로 위 알약 2개.
+    const scrims = screen.root.findAll(
+      (node) =>
+        typeof node.props?.className === 'string' &&
+        /\bbg-scrim/.test(node.props.className as string)
+    );
+    expect(scrims).toHaveLength(0);
+  });
+
+  it('HP9 열린 채로 FAB·알약 말고 누를 수 있는 것을 무엇을 눌러도 메뉴는 닫히지 않는다', () => {
+    renderHub();
+    fireEvent.press(screen.getByTestId(FAB));
+    const total = outsidePressables().length;
+    // 짝 앵커 — 뒤로가기·일자 칩만으로도 4개 이상이다(빈 목록 공허 통과 차단).
+    expect(total).toBeGreaterThanOrEqual(4);
+
+    // 한 번에 하나씩, 매번 새로 그려 연 뒤 i번째만 누른다 — 앞 press 의 부작용이 섞이지 않게.
+    const closedBy: string[] = [];
+    for (let i = 0; i < total; i += 1) {
+      screen.unmount();
+      renderHub();
+      fireEvent.press(screen.getByTestId(FAB));
+      const target = outsidePressables()[i];
+      // 이름은 누르기 전에 뜬다 — 백드롭은 눌리면 스스로 사라져 뒤에서는 props 를 못 읽는다.
+      const label = describeNode(target);
+      fireEvent.press(target);
+      if (screen.queryAllByTestId(PILL_ANY).length !== 2) {
+        closedBy.push(label);
+      }
+    }
+
+    // 바깥 탭 닫기 백드롭(투명 전면 Pressable)을 깔면 그 노드 이름이 여기 찍힌다(03b 경고-1).
+    expect(closedBy).toEqual([]);
   });
 });

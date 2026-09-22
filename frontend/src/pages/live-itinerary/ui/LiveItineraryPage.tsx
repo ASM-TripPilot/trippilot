@@ -229,7 +229,8 @@ export function LiveItineraryPage({
         else router.replace(HOME_FALLBACK);
       }}
       // 수동 재계획 세션 진입(BR-U4-10) — 라우팅으로만(execution→planb 직접 import 없이).
-      onPressReplan={() => router.push(`/trips/${tripId}/planb`)}
+      onPressAiReplan={() => router.push(`/trips/${tripId}/planb`)}
+      onPressManualEdit={() => router.push(`/trips/${tripId}/planb/manual`)}
       onPressComplete={
         activeVisitCheckId !== null
           ? () => {

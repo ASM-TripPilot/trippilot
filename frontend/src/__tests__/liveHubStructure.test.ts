@@ -13,6 +13,8 @@ import path from 'path';
  *  - H2 방패 FAB 글리프(`ShieldGlyph`)가 사라졌다(감시 목록 FAB 삭제).
  *  - H3 삭제한 모듈을 import·jest.mock 하는 곳이 0이다(테스트 포함 — 옛 경로를 무는 목이 남지 않게).
  *  - H4 프리뷰 사진 에셋이 `src/assets/execution/` 에 실재하고 CREDITS.md 가 각 파일을 적는다(G7).
+ *  - H5 (TRIP-747 AC-7) 허브 뷰는 SVG 를 직접 그리지 않는다 — 수정 알약의 ✦·×·연필은 `*Glyphs.tsx` 에서
+ *    가져온다(raw hex 는 `pagesLayerStructure` 가, SVG 소재는 이 절이 잠근다).
  *
  * **전제 — 주석을 걷어낸 소스를 스캔한다**(`stripComments`, 콜론 예외로 `https://` 보존 — 리포 관례).
  * **census 순서 — `from` 절(·`jest.mock(` 줄)을 먼저 뽑고 그 줄 안에서 삭제 모듈 경로를 찾는다**
@@ -179,5 +181,35 @@ describe('🔴 H4 · G7 — 프리뷰 사진 에셋이 실재하고 출처가 �
     const credits = fs.readFileSync(creditsPath, 'utf8');
     const unlisted = jpgs.filter((name) => !credits.includes(name));
     expect(unlisted).toEqual([]);
+  });
+});
+
+const HUB_VIEW_REL = 'pages/live-itinerary/ui/LiveHubView.tsx';
+const SVG_MODULE = 'react-native-svg';
+
+describe('H5-0 · 조합 자가검사 — 주석 제거 + import 추출이 svg import 를 지우지도 지어내지도 않는다', () => {
+  it('주석 속 svg import 는 걷히고, URL 줄은 추출되지 않으며, 실제 svg import 는 잡힌다', () => {
+    const sample = [
+      "// import Svg from 'react-native-svg';",
+      "const u = 'https://x.dev/react-native-svg';",
+      "import Svg, { Path } from 'react-native-svg';",
+    ].join('\n');
+
+    expect(stripComments(sample)).toContain('https://x.dev/react-native-svg');
+    expect(importSpecs(sample).filter((spec) => spec === SVG_MODULE)).toEqual([
+      SVG_MODULE,
+    ]);
+    expect(importSpecs(sample.split('\n')[0] ?? '')).toEqual([]);
+  });
+});
+
+describe('H5 · TRIP-747 AC-7 — 허브 뷰는 react-native-svg 를 직접 import 하지 않는다(글리프는 *Glyphs.tsx)', () => {
+  it('LiveHubView.tsx 의 import 경로에 react-native-svg 가 0건이다', () => {
+    const specs = importSpecs(
+      fs.readFileSync(path.join(ROOT, HUB_VIEW_REL), 'utf8')
+    );
+    // 짝 앵커 — 추출기가 이 파일에서 실제 import 를 뽑는다(셸).
+    expect(specs).toContain('@/widgets/map-sheet-shell/ui/MapSheetShell');
+    expect(specs.filter((spec) => spec === SVG_MODULE)).toEqual([]);
   });
 });

@@ -154,6 +154,7 @@ import { EditorView } from '@/pages/itinerary-edit/ui/EditorView';
 import {
   LiveHubView,
   type LiveHubSlot,
+  type LiveHubViewProps,
 } from '@/pages/live-itinerary/ui/LiveHubView';
 import { BudgetEditSheet } from '@/pages/trip-new-step1/ui/BudgetEditSheet';
 import { PrefOverrideSheet } from '@/pages/trip-new-step1/ui/PrefOverrideSheet';
@@ -1528,7 +1529,14 @@ const LIVE_HUB_PREVIEW_SLOTS: LiveHubSlot[] = [
 // Figma 의 현재위치 점(부산시립미술관 근처).
 const LIVE_HUB_PREVIEW_LOCATION = { lat: 35.1655, lng: 129.1335 };
 
-function renderLiveHubPreview(snap: number): ReactElement {
+// i01 기록 없음(TRIP-747, Figma 4076:2452) — 같은 5곳에서 done 2장의 사진·후기만 뺀다.
+const LIVE_HUB_PREVIEW_SLOTS_NO_RECORDS: LiveHubSlot[] =
+  LIVE_HUB_PREVIEW_SLOTS.map(({ slot, state }) => ({ slot, state }));
+
+function renderLiveHubPreview(
+  snap: number,
+  extra: Partial<LiveHubViewProps> = {}
+): ReactElement {
   return (
     <LiveHubView
       tripTitle="부산 여행"
@@ -1539,8 +1547,10 @@ function renderLiveHubPreview(snap: number): ReactElement {
       currentLocation={LIVE_HUB_PREVIEW_LOCATION}
       onBack={noop}
       onSelectDay={noop}
-      onPressReplan={noop}
+      onPressAiReplan={noop}
+      onPressManualEdit={noop}
       onPressComplete={noop}
+      {...extra}
     />
   );
 }
@@ -4787,6 +4797,23 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => renderLiveHubPreview(2),
   },
+  // i01 수정 알약 열림(TRIP-747, Figma 4055:2427) — 펼침 위에 알약 2개를 처음부터 연다.
+  {
+    key: 'live-hub-edit-pills',
+    band: 'i',
+    label: 'i01 · 여행중 허브 수정 알약 열림',
+    login: null,
+    render: () => renderLiveHubPreview(2, { initialEditMenuOpen: true }),
+  },
+  // i01 기록 없음(TRIP-747, Figma 4076:2452) — done 카드가 이름 + "09:30 방문"만.
+  {
+    key: 'live-hub-no-records',
+    band: 'i',
+    label: 'i01 · 여행중 허브 기록 없음',
+    login: null,
+    render: () =>
+      renderLiveHubPreview(2, { slots: LIVE_HUB_PREVIEW_SLOTS_NO_RECORDS }),
+  },
   // i08 트리거 칩(상단 상주) + i01 변수감지 배너(활성 슬롯 안)(TRIP-561) — 발화 중 얼굴. 748 재배치
   // 전까지 새 허브(TRIP-746) 위에 그대로 얹는다(키 정리는 TRIP-756). 칩·배너는 순수 프레젠테이션이라
   // 페이지가 조립할 문구·아이콘·콜백을 여기서 직접 얹는다.
@@ -4803,7 +4830,8 @@ export const PREVIEW_STATES: PreviewState[] = [
         slots={LIVE_HUB_PREVIEW_SLOTS}
         onBack={noop}
         onSelectDay={noop}
-        onPressReplan={noop}
+        onPressAiReplan={noop}
+        onPressManualEdit={noop}
         onPressComplete={noop}
         triggerChip={
           <TriggerChip

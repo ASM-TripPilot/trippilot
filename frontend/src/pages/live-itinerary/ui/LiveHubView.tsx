@@ -4,9 +4,13 @@ import { Pressable, Text, View, type ImageSourcePropType } from 'react-native';
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
 import type { MapCenter } from '@/shared/map';
 import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
-import { BackChevronGlyph } from '@/widgets/map-sheet-shell/ui/MapSheetGlyphs';
+import {
+  BackChevronGlyph,
+  FullAiGlyph,
+} from '@/widgets/map-sheet-shell/ui/MapSheetGlyphs';
 import { formatCoPickDayHeader } from '@/features/itinerary/model/draftView';
 import { PencilGlyph } from '@/features/itinerary/ui/ItineraryGlyphs';
+import { CloseGlyph } from '@/features/home/ui/HomeGlyphs';
 import {
   RailActiveGlyph,
   RailDoneGlyph,
@@ -23,7 +27,8 @@ import { SlotProgressCard } from '@/entities/itinerary-slot/ui/SlotProgressCard'
  * TRIP-746 · i01 여행중 허브 **순수 뷰**(pages · api import 0 — preview 가 직접 import, TRIP-610).
  * 전면 지도(셸, 조작 가능) 위 좌상단 뒤로가기 + 일자 칩, 3스냅 시트(헤더 한 줄 + 레일 타임라인 +
  * 카드 3상태), 우하단 "일정 수정" 연필 FAB. 조회·판정·라우팅은 페이지(LiveItineraryPage) 몫이고,
- * 이 뷰가 가진 상태는 "준비 중" 힌트 열림 하나뿐이다(카드가 entities 라 상태를 못 가진다).
+ * 이 뷰가 가진 상태는 "준비 중" 힌트 열림(카드가 entities 라 상태를 못 가진다)과 수정 알약 메뉴
+ * 열림(TRIP-747 — FAB 는 제자리 토글, 이동은 알약이 한다) 둘이다.
  *
  * ⚠️ 원리적 사각(6-b): 3스냅 실전환·스냅별 보임·FAB 가림·지도 제스처 실해제는 jest 가 못 본다.
  */
@@ -48,6 +53,21 @@ const FAB_SHADOW = {
   shadowRadius: 16,
   elevation: 4,
 } as const;
+// 열린 FAB(×)·알약은 그림자가 다르다(Figma 4055:2632 · 4055:2639).
+const FAB_OPEN_SHADOW = {
+  shadowColor: '#000000',
+  shadowOffset: { width: 0, height: 6 },
+  shadowOpacity: 0.22,
+  shadowRadius: 8,
+  elevation: 6,
+} as const;
+const PILL_SHADOW = {
+  shadowColor: '#000000',
+  shadowOffset: { width: 0, height: 5 },
+  shadowOpacity: 0.16,
+  shadowRadius: 9,
+  elevation: 5,
+} as const;
 
 export interface LiveHubSlot {
   slot: ItineraryDaysItemSlotsItem;
@@ -67,8 +87,12 @@ export interface LiveHubViewProps {
   currentLocation?: MapCenter;
   onBack: () => void;
   onSelectDay: (index: number) => void;
-  /** 연필 FAB — 수동 재계획 진입(BR-U4-10). */
-  onPressReplan: () => void;
+  /** [AI에게 맡기기] 알약 — 수동 재계획 진입(BR-U4-10). */
+  onPressAiReplan: () => void;
+  /** [직접 수정] 알약 — 수동 편집 진입(US-PLANB-12). */
+  onPressManualEdit: () => void;
+  /** 수정 알약 메뉴 초기 열림(프리뷰 입구). 이후 열림은 뷰가 스스로 든다. */
+  initialEditMenuOpen?: boolean;
   /** active 카드 [방문 완료]. */
   onPressComplete?: () => void;
   /** TRIP-561 트리거 칩 — 748 재배치 전까지 시트 헤더 아래에 유지. */
@@ -83,6 +107,33 @@ const RAIL_TOP: Record<SlotProgressState, string> = {
   active: 'pt-[6px]',
   upcoming: 'pt-[8px]',
 };
+
+function EditPill({
+  testID,
+  icon,
+  label,
+  onPress,
+}: {
+  testID: string;
+  icon: ReactNode;
+  label: string;
+  onPress: () => void;
+}): ReactElement {
+  return (
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={PILL_SHADOW}
+      className="flex-row items-center gap-sm rounded-pill border border-hairline-strong bg-canvas py-md pl-lg pr-[18px]"
+    >
+      {icon}
+      <Text className="font-noto-bold text-body font-bold text-ink">
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
 
 function RailDot({ state }: { state: SlotProgressState }): ReactElement {
   if (state === 'done') return <RailDoneGlyph />;
@@ -99,12 +150,20 @@ export function LiveHubView({
   currentLocation,
   onBack,
   onSelectDay,
-  onPressReplan,
+  onPressAiReplan,
+  onPressManualEdit,
+  initialEditMenuOpen = false,
   onPressComplete,
   triggerChip,
   renderSlotBanner,
 }: LiveHubViewProps): ReactElement {
   const [soonHintVisible, setSoonHintVisible] = useState(false);
+  const [editMenuOpen, setEditMenuOpen] = useState(initialEditMenuOpen);
+  // 알약은 메뉴를 닫고 나서 이동한다 — 뒤로 돌아왔을 때 열린 채 남지 않게(Seed ②).
+  const pickEdit = (go: () => void) => () => {
+    setEditMenuOpen(false);
+    go();
+  };
   const activeDate = days[activeDayIndex]?.date ?? '';
 
   const header = [
@@ -220,17 +279,47 @@ export function LiveHubView({
         </View>
       </MapSheetShell>
 
-      {/* 일정 수정 FAB — 시트와 무관하게 우하단 고정(시트 위에 뜬다). */}
-      <Pressable
-        testID="execution-live-replan-fab"
-        accessibilityRole="button"
-        accessibilityLabel="일정 수정"
-        onPress={onPressReplan}
-        style={FAB_SHADOW}
-        className="absolute bottom-lg right-lg h-[52px] w-[52px] items-center justify-center rounded-pill bg-primary"
+      {/* 일정 수정 FAB + 수정 알약 — 시트와 무관하게 우하단 고정(시트 위에 뜬다). 딤이 없고 바깥
+          탭으로 닫지 않는다(× 또는 알약으로만, Seed ③) — 빈 칸은 box-none 이라 아래 시트로 터치가 간다. */}
+      <View
+        pointerEvents="box-none"
+        className="absolute bottom-lg right-lg items-end gap-md"
       >
-        <PencilGlyph size={24} tone="white" />
-      </Pressable>
+        {editMenuOpen ? (
+          <>
+            <EditPill
+              testID="execution-live-edit-pill-ai"
+              icon={<FullAiGlyph />}
+              label="AI에게 맡기기"
+              onPress={pickEdit(onPressAiReplan)}
+            />
+            <EditPill
+              testID="execution-live-edit-pill-manual"
+              icon={<PencilGlyph size={18} tone="primary" />}
+              label="직접 수정"
+              onPress={pickEdit(onPressManualEdit)}
+            />
+          </>
+        ) : null}
+        <Pressable
+          testID="execution-live-replan-fab"
+          accessibilityRole="button"
+          accessibilityLabel={editMenuOpen ? '닫기' : '일정 수정'}
+          onPress={() => setEditMenuOpen((open) => !open)}
+          style={editMenuOpen ? FAB_OPEN_SHADOW : FAB_SHADOW}
+          className="h-[52px] w-[52px] items-center justify-center rounded-pill bg-primary"
+        >
+          {editMenuOpen ? (
+            <CloseGlyph size={26} testID="execution-live-replan-fab-close" />
+          ) : (
+            <PencilGlyph
+              size={24}
+              tone="white"
+              testID="execution-live-replan-fab-pencil"
+            />
+          )}
+        </Pressable>
+      </View>
     </View>
   );
 }

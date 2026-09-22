@@ -12,6 +12,9 @@ import { render, screen } from '@testing-library/react-native';
  *  - 옛 `live-itinerary` 키는 없어지고, `live-itinerary-trigger` 는 새 허브 위에서 계속 칩을 그린다
  *    (정리는 TRIP-756 몫).
  *  - 프리뷰는 네트워크 계층을 로드하지 않는다(허브 뷰 api-free — 02a ★12).
+ *  - TRIP-747: `live-hub-edit-pills`(Figma 4055:2427 — 펼침 5곳 + 알약 2개가 처음부터 열림, FAB ×)와
+ *    `live-hub-no-records`(Figma 4076:2452 — done 2장이 사진·후기 없이 이름 + "09:30 방문"만)가 band i
+ *    키로 선다.
  *
  * 3동작: 준비(딥링크 state=키) → 실행(DevPreview 렌더) → 단언(허브 트리·문구·시트 index).
  */
@@ -123,5 +126,104 @@ describe('🔴 TRIP-746 · 옛 키 정리 (AC-7)', () => {
     expect(screen.getByTestId('execution-live-screen')).toBeOnTheScreen();
     expect(screen.getByTestId('execution-live-sheet-header')).toBeOnTheScreen();
     expect(screen.getByTestId('execution-live-trigger-chip')).toBeOnTheScreen();
+  });
+});
+
+// ── TRIP-747 · 수정 알약 열림 / 기록 없음 ─────────────────────────────────────
+
+const PILL_ANY = /^execution-live-edit-pill-(ai|manual)$/;
+
+/** 두 키 공통 — 헤더 한 줄·카드 5장·진행/예정 상태줄·시트 펼침(index 2). */
+function expectExpandedHubBase(): void {
+  expect(screen.getByTestId('execution-live-screen')).toBeOnTheScreen();
+  expect(screen.getByTestId('execution-live-sheet-header')).toHaveTextContent(
+    '부산 여행 · 2일차 · 6월 11일(목) · 5곳'
+  );
+  expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(5);
+  expect(screen.getByText('13:00 도착 · 지금 관람 중')).toBeOnTheScreen();
+  expect(
+    screen.getByText('15:00 도착 예정 · 11:00–22:00 영업')
+  ).toBeOnTheScreen();
+  expect(screen.getByText('17:00 도착 예정 · 24시간 개방')).toBeOnTheScreen();
+  const indices = sheetIndices();
+  expect(indices.length).toBeGreaterThan(0);
+  indices.forEach((index) => expect(index).toBe(2));
+}
+
+describe('🔴 TRIP-747 · i01 수정 알약 열림 프리뷰 (AC-5)', () => {
+  it('live-hub-edit-pills 는 펼침 5곳(사진 4·후기 2) 위에 알약 2개를 처음부터 연 채로 그리고 FAB 는 × 다', () => {
+    mockSearchParams.state = 'live-hub-edit-pills';
+
+    render(<DevPreview />);
+
+    expectExpandedHubBase();
+    // 배경은 펼침 프레임과 같다 — 사진·후기 포함.
+    expect(
+      screen.getAllByTestId(/^execution-live-slot-photo-\d+-/)
+    ).toHaveLength(4);
+    expect(screen.getAllByTestId(/^execution-live-slot-memo-/)).toHaveLength(2);
+    // 누르지 않아도 열려 있다(initialEditMenuOpen 입구).
+    expect(screen.getAllByTestId(PILL_ANY).map((n) => n.props.testID)).toEqual([
+      'execution-live-edit-pill-ai',
+      'execution-live-edit-pill-manual',
+    ]);
+    expect(
+      screen.getByTestId('execution-live-replan-fab')
+    ).toHaveAccessibleName('닫기');
+  });
+});
+
+describe('🔴 TRIP-747 · i01 기록 없음 프리뷰 (AC-4)', () => {
+  it('live-hub-no-records 는 done 2장을 사진·후기 없이 이름 + "09:30 방문"/"11:00 방문"만 그리고 알약은 닫혀 있다', () => {
+    mockSearchParams.state = 'live-hub-no-records';
+
+    render(<DevPreview />);
+
+    // 짝 앵커 — 카드 5장·헤더가 실제로 있다(아래 부재 단언의 공허 통과 차단).
+    expectExpandedHubBase();
+    // 사진 행·사진 셀·후기 박스 0.
+    expect(
+      screen.queryAllByTestId(/^execution-live-slot-photos-/)
+    ).toHaveLength(0);
+    expect(
+      screen.queryAllByTestId(/^execution-live-slot-photo-\d+-/)
+    ).toHaveLength(0);
+    expect(screen.queryAllByTestId(/^execution-live-slot-memo-/)).toHaveLength(
+      0
+    );
+    // done 2장 — 시각 leaf + "방문" leaf(형제, 02a ★13).
+    [
+      ['gamcheon', '09:30'],
+      ['gwangalli', '11:00'],
+    ].forEach(([poiId, hhmm]) => {
+      const key = `2026-06-11#${poiId}`;
+      expect(
+        screen.getByTestId(`execution-live-slot-visit-time-${key}`)
+      ).toHaveTextContent(hhmm);
+      expect(
+        screen.getByTestId(`execution-live-slot-visit-label-${key}`)
+      ).toHaveTextContent('방문');
+    });
+    // 수정 알약은 닫힘 — 연필 FAB.
+    expect(screen.queryAllByTestId(PILL_ANY)).toHaveLength(0);
+    expect(
+      screen.getByTestId('execution-live-replan-fab')
+    ).toHaveAccessibleName('일정 수정');
+  });
+});
+
+describe('🔴 TRIP-747 · 새 키 등록 (AC-6)', () => {
+  it('두 키가 band i 이고 라벨이 "i01 · " 로 시작한다', () => {
+    const states = PREVIEW_STATES as {
+      key: string;
+      band: string;
+      label: string;
+    }[];
+    ['live-hub-edit-pills', 'live-hub-no-records'].forEach((key) => {
+      const entry = states.find((state) => state.key === key);
+      expect(entry).toBeDefined();
+      expect(entry?.band).toBe('i');
+      expect(entry?.label.startsWith('i01 · ')).toBe(true);
+    });
   });
 });

@@ -23,7 +23,9 @@ import { LiveItineraryPage } from './LiveItineraryPage';
  *  - I2~I4 구간 밖·5xx·404 얼굴(TRIP-395 그대로 — 판정은 이 사이클이 안 건드린다).
  *  - I5·I6 뒤로가기는 `canGoBack` 사다리 — 히스토리가 있으면 back, 없으면(딥링크·푸시 직행)
  *    조용히 멈추지 않고 `/(tabs)` 로 replace(INV-4 · ItineraryPlanPage 관례).
- *  - I7 연필 FAB 는 수동 재계획 진입(`/trips/{id}/planb`, BR-U4-10 · Seed Q2).
+ *  - I7·I7b 수동 재계획 진입(BR-U4-10) — TRIP-747 부터 연필 FAB 는 제자리 토글이라 이동하지 않고,
+ *    열린 알약이 진입을 맡는다: [AI에게 맡기기] → `/trips/{id}/planb`, [직접 수정] → `/trips/{id}/planb/manual`
+ *    (US-PLANB-12 두 방식). 746 의 "FAB → planb" 단언을 지우지 않고 알약 기준으로 교체했다.
  *  - I8 실앱 done 카드는 사진·후기 칸이 없다 — `GET /visits/days` 계약에 photo/memo 가 없어서
  *    page 가 photos=[]·memo=null 로 넘긴다(맹점③ · G6). 시각은 계획값 "10:00" + "방문".
  *
@@ -242,14 +244,29 @@ describe('LiveItineraryPage', () => {
     expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
   });
 
-  it('I7 연필 FAB 는 수동 재계획 세션(/trips/{id}/planb)을 연다 (BR-U4-10 · Seed Q2)', async () => {
+  it('I7 FAB 는 이동하지 않고, 열린 [AI에게 맡기기] 알약이 수동 재계획 세션(/trips/{id}/planb)을 연다 (BR-U4-10 · TRIP-747)', async () => {
     server.use(itineraryOk(), tripHandler(), visitsHandler());
 
     await renderActive();
     fireEvent.press(screen.getByTestId('execution-live-replan-fab'));
+    // FAB 는 메뉴만 연다 — 여기서 push 가 나가면 "FAB 도 이동 + 알약도 이동" 이중 진입이다.
+    expect(mockPush).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('execution-live-edit-pill-ai'));
 
     expect(mockPush).toHaveBeenCalledTimes(1);
     expect(mockPush).toHaveBeenCalledWith(`/trips/${TRIP_ID}/planb`);
+  });
+
+  it('I7b 열린 [직접 수정] 알약은 i07 편집(/trips/{id}/planb/manual)으로 간다 (US-PLANB-12 · TRIP-747)', async () => {
+    server.use(itineraryOk(), tripHandler(), visitsHandler());
+
+    await renderActive();
+    fireEvent.press(screen.getByTestId('execution-live-replan-fab'));
+    fireEvent.press(screen.getByTestId('execution-live-edit-pill-manual'));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith(`/trips/${TRIP_ID}/planb/manual`);
   });
 
   it('I8 실앱 done 카드는 사진·후기 칸 없이 계획 시각 "10:00" + "방문" 만 그린다 (G6 · 맹점③)', async () => {
