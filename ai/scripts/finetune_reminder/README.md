@@ -193,6 +193,9 @@ pip install modal && modal setup          # 최초 1회, 계정 연결
 modal volume create reminder-copy-model
 modal volume put reminder-copy-model ./merged /merged
 
+# 엔드포인트 인증 — 안 만들면 기동이 실패한다(의도된 fail-fast)
+modal secret create reminder-copy-auth VLLM_API_KEY=<길고 무작위한 값>
+
 modal deploy scripts/finetune_reminder/modal_app.py
 ```
 
@@ -229,6 +232,7 @@ AI_LLM_FEATURE_MODELS=PARAPHRASE=claude-haiku-4-5,ALTERNATIVE_SELECTION=gpt-5.6-
 
 # 변경 후 — 같은 줄 끝에 이어 붙인다
 AI_LOCAL_LLM_BASE_URL=https://<modal-앱>.modal.run/v1
+AI_LOCAL_LLM_API_KEY=<modal secret 의 VLLM_API_KEY 와 같은 값>
 AI_LLM_FEATURE_MODELS=PARAPHRASE=claude-haiku-4-5,ALTERNATIVE_SELECTION=gpt-5.6-sol,EXPLANATION=claude-sonnet-5,REMINDER_COPY=local-reminder-qwen3-4b-v1
 ```
 
@@ -279,6 +283,7 @@ fail-fast 자체가 발동하지 않고, 로컬 라우트가 붙었는지 아닌
 ```bash
 export TRIPPILOT_LOCAL_LLM_BASE_URL=https://<modal-앱>.modal.run/v1
 export TRIPPILOT_LOCAL_LLM_MODEL=local-reminder-qwen3-4b-v1
+export TRIPPILOT_LOCAL_LLM_API_KEY=<위와 같은 값>
 cd ai
 uv run python scripts/smoke_reminder_copy.py
 ```
