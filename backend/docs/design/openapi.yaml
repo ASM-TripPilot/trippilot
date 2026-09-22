@@ -1821,6 +1821,23 @@ components:
           allOf: [{ $ref: '#/components/schemas/StayPrice' }]
           nullable: true
           description: 최저가 스냅숏. **null = 가격 미확인**(BR-U1-14) — 정본 전량이 현재 null 이다
+        address:
+          type: string
+          nullable: true
+          description: 도로명 우선, 없으면 지번. **null = 모름**(정본 채움률 100%)
+          example: 서울특별시 종로구 수표로 89-8 (관수동)
+        phone:
+          type: string
+          nullable: true
+          description: >
+            표시형 전화번호 — 그대로 `tel:` 에 실을 수 있다. **null = 모름이지 "전화 없는 숙소"가
+            아니다**(정본 채움률 54.8%). 화면은 null 이면 그 줄을 비운다.
+          example: 02-2267-7474
+        rooms:
+          type: integer
+          nullable: true
+          description: 객실 수(양실+한실). **null = 모름**(정본 채움률 99.5%). 0 은 내려가지 않는다
+          example: 81
 
     StayItem:
       type: object
@@ -1838,6 +1855,20 @@ components:
           allOf: [{ $ref: '#/components/schemas/StayPrice' }]
           nullable: true
           description: 최저가 스냅숏('부터 가격'). null=가격 미확인(BR-U1-14)
+        address:
+          type: string
+          nullable: true
+          description: 도로명 우선, 없으면 지번. **null = 모름**(정본 채움률 100%)
+        phone:
+          type: string
+          nullable: true
+          description: >
+            표시형 전화번호 — 그대로 `tel:` 에 실을 수 있다. **null = 모름이지 "전화 없는 숙소"가
+            아니다**(정본 채움률 54.8%).
+        rooms:
+          type: integer
+          nullable: true
+          description: 객실 수(양실+한실). **null = 모름**(정본 채움률 99.5%). 0 은 내려가지 않는다
 
     StayPrice:
       type: object
