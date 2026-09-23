@@ -7,7 +7,7 @@ import { SettingsScreen } from './SettingsScreen';
  * TRIP-608/618 AC-1 · AC-2 · AC-3 · AC-4 — l05 설정 화면 렌더(프레젠테이션).
  *
  * 무엇을 보장하나:
- *  - AC-1: 6그룹이 정본 순서로 렌더되고, 헤더(`설정`·back), 계정 닉네임 요약, 상호작용 3행
+ *  - AC-1: 7그룹(TRIP-937 앱 정보 포함)이 정본 순서로 렌더되고, 헤더(`설정`·back), 계정 닉네임 요약, 상호작용 3행
  *    어포던스가 실재한다.
  *  - AC-2·AC-3(TRIP-618, 렌더): 위치정보·알림 행이 **네비 행으로 승격**된다 — 비활성 "준비 중"이
  *    아니라 활성 행(`settings-nav-*` testID)으로 그려진다.
@@ -53,23 +53,34 @@ function renderScreen(
   );
 }
 
-/** 정본 순서(Figma 라이브). AC-1 이 순서까지 잠근다. */
+/**
+ * 정본 순서(Figma 라이브). AC-1 이 순서까지 잠근다.
+ * TRIP-937: 앱 정보(약관 3행)를 위험 영역 앞에 더했다(01 Q7 — Figma 에 없는 그룹, 드리프트 기록).
+ */
 const GROUP_LABELS = [
   '계정',
   '여행 취향',
   '위치정보',
   '알림',
   '제휴 안내',
+  '앱 정보',
   '위험 영역',
 ];
 
+/** TRIP-937 AC-3 — 앱 정보 그룹의 약관 행(termsType · 문서 제목, Figma c06 문구). */
+const TERMS_ROWS = [
+  ['TERMS_OF_SERVICE', '서비스 이용약관'],
+  ['PRIVACY_POLICY', '개인정보 처리방침'],
+  ['LOCATION_TERMS', '위치정보 이용약관'],
+] as const;
+
 describe('TRIP-608/618 · SettingsScreen (AC-1 · AC-2 · AC-3 · AC-4)', () => {
-  it('AC-1: 6그룹이 정본 순서로 렌더되고 헤더가 뜬다', () => {
+  it('AC-1: 7그룹(TRIP-937 앱 정보 포함)이 정본 순서로 렌더되고 헤더가 뜬다', () => {
     renderScreen();
 
-    // 단언: 그룹이 정확히 6개.
+    // 단언: 그룹이 정확히 7개.
     const groups = screen.getAllByTestId('settings-group');
-    expect(groups).toHaveLength(6);
+    expect(groups).toHaveLength(7);
 
     // 단언(순서까지): i번째 그룹 안에 i번째 라벨이 완전일치로 있다.
     GROUP_LABELS.forEach((label, i) => {
@@ -138,5 +149,30 @@ describe('TRIP-608/618 · SettingsScreen (AC-1 · AC-2 · AC-3 · AC-4)', () => 
     const notifRow = within(notif).getByTestId('settings-nav-notifications');
     expect(notifRow).not.toBeDisabled();
     expect(within(notif).queryByText(/준비 중/)).toBeNull();
+  });
+
+  it('TRIP-937 AC-3(렌더): 앱 정보 그룹의 약관 3행이 활성 네비 행으로 그려진다 — 준비 중 아님', () => {
+    // 준비·실행: 실 뷰모델 그대로 렌더.
+    renderScreen();
+
+    const groups = screen.getAllByTestId('settings-group');
+    const appInfo = groups.find(
+      (g) => within(g).queryByText('앱 정보') !== null
+    );
+    // 긍정 앵커: 앱 정보 그룹이 실재한다(없으면 아래 행 단언이 공허하다).
+    expect(appInfo).toBeDefined();
+
+    for (const [termsType, label] of TERMS_ROWS) {
+      // 단언: switch(key)가 약관 행을 네비 행으로 그려야만 이 testID 가 뜬다(02a ★1 선례 —
+      //   ready:true 만 두고 렌더 분기를 빠뜨리면 PreparingRow 'settings-row' 로 떨어져 red).
+      const row = within(appInfo!).getByTestId(
+        `settings-nav-terms-${termsType}`
+      );
+      expect(row).not.toBeDisabled();
+      // 단언(완전일치): 행 안의 라벨이 문서 제목이다(심사자가 찾는 이름 '개인정보 처리방침').
+      expect(within(row).getByText(label)).toBeOnTheScreen();
+    }
+    // 단언(부분포함): 약관 행은 준비 중이 아니다.
+    expect(within(appInfo!).queryByText(/준비 중/)).toBeNull();
   });
 });

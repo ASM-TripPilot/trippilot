@@ -5176,7 +5176,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   },
   // l05 설정(TRIP-608) — 실화면 딥링크로는 미인증 리다이렉트/백엔드 부재로 온전히 못 본다. jest 가
   // 못 보는 것(카드 레이아웃·리딩 아이콘·위험/동의 pill)을 여기서 눈으로. 운영 화면과 같게 ready 행만
-  // 거른 4그룹을 그린다(TRIP-939 — "준비 중" 행은 개통 전까지 숨김).
+  // 거른 5그룹을 그린다(TRIP-939 — "준비 중" 행은 개통 전까지 숨김 · TRIP-937 앱 정보 포함).
   {
     key: 'settings-default',
     band: 'l',

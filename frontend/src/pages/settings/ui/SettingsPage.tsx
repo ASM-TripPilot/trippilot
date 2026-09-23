@@ -165,6 +165,7 @@ export function SettingsPage(): ReactElement {
       onPressCancelDeletion={() => cancelDeletion.mutate()}
       onPressLocation={() => loadRouter()?.push('/settings/location')}
       onPressNotifications={() => loadRouter()?.push('/settings/notifications')}
+      onPressTerms={(termsType) => loadRouter()?.push(`/terms/${termsType}`)}
     />
   );
 }

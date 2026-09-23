@@ -256,3 +256,33 @@ describe('TermsPage — 저장 실패 (AC A8 · INV-4)', () => {
     expect(screen.getByTestId('onboarding-terms-retry')).toBeOnTheScreen();
   });
 });
+
+describe('TermsPage — 약관 "보기" → 열람 라우트 (TRIP-937 AC-1 · U0 FC §2 본문 열람 링크)', () => {
+  /**
+   * 무엇을 보장하나: 행의 "보기"를 누르면 그 약관의 열람 라우트 `/terms/{termsType}` 로 **push**(뒤로 돌아와
+   * 동의를 이어 가야 하므로 replace 아님)가 정확히 한 번 나가고, 그 행의 체크는 바뀌지 않는다(AC-1b 짝).
+   *
+   * ⚠️ jest 사각(02a ★12): "보기"는 체크 행 Pressable 안에 중첩돼 있고 `fireEvent.press` 는 가장 안쪽
+   *  onPress 하나만 부른다 — 체크 불변 짝은 핸들러가 명시적으로 토글을 부르는 구현만 잡는다. 실기에서
+   *  부모 토글이 함께 도는지는 6-b 확인 항목이다.
+   */
+  it.each([['TERMS_OF_SERVICE'], ['PRIVACY_POLICY'], ['LOCATION_TERMS']])(
+    '%s 행의 보기 → push("/terms/<termsType>") 1회, replace 0, 체크 불변',
+    async (termsType) => {
+      // 준비: 서버 약관 목록이 도착해 행이 그려진다.
+      await renderLoaded();
+
+      // 실행: 그 행의 "보기"를 누른다.
+      fireEvent.press(screen.getByTestId(`onboarding-terms-view-${termsType}`));
+
+      // 단언: 열람 라우트로 문자열 그대로 정확히 한 번, 온보딩 흐름 이동(replace)은 없다.
+      expect(routerMock.push).toHaveBeenCalledTimes(1);
+      expect(routerMock.push).toHaveBeenCalledWith(`/terms/${termsType}`);
+      expect(routerMock.replace).not.toHaveBeenCalled();
+      // 단언(짝): 보기는 동의가 아니다 — 행 체크가 켜지지 않는다.
+      expect(
+        screen.getByTestId(`onboarding-terms-${termsType}`)
+      ).not.toBeChecked();
+    }
+  );
+});

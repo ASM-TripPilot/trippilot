@@ -56,7 +56,8 @@ function bootstrapBody(scenario: MockScenario): BootstrapResponse {
     case 'reconsent':
       return {
         ...base,
-        reconsent: { required: true, termsTypes: ['TOS', 'PRIVACY'] },
+        // openapi `TermsType` enum 값이어야 재동의 화면이 `/terms` 목록과 교집합을 만든다(TRIP-937 AC-9).
+        reconsent: { required: true, termsTypes: ['PRIVACY_POLICY'] },
         session: { state: 'AUTHENTICATED', onboardingCompleted: true },
       };
     case 'onboarding':
@@ -269,6 +270,25 @@ export const handlers = [
 
   // ── TRIP-162 온보딩 ────────────────────────────────────────────────
   http.get(`${BASE}/terms`, () => HttpResponse.json(TERMS_VERSIONS)),
+
+  // TRIP-937 — 단건 약관(열람 화면). 목록과 같은 원천(TERMS_VERSIONS)에서 답한다. 없는 타입은 404.
+  http.get(`${BASE}/terms/:termsType`, ({ params }) => {
+    const term = TERMS_VERSIONS.find(
+      (item) => item.termsType === String(params.termsType)
+    );
+    return term
+      ? HttpResponse.json(term)
+      : HttpResponse.json(
+          { error: { code: 'NOT_FOUND', message: '약관을 찾을 수 없어요' } },
+          { status: 404 }
+        );
+  }),
+
+  // TRIP-937 — 개별 동의 GRANT/REVOKE(재동의). openapi 는 200 만 규정한다(구버전 400 은 발명하지 않는다).
+  http.patch(
+    `${BASE}/me/consents/:termsType`,
+    () => new HttpResponse(null, { status: 200 })
+  ),
 
   http.post(`${BASE}/me/consents`, () => {
     if (getOnboardingScenario().consent === 'server-error') {

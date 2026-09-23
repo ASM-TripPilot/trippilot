@@ -6,6 +6,7 @@ import {
   BellGlyph,
   ChevronRightGlyph,
   ContrastGlyph,
+  DocumentGlyph,
   DownloadGlyph,
   ExternalLinkGlyph,
   ForkKnifeGlyph,
@@ -36,6 +37,10 @@ const LEADING_GLYPHS: Record<
   notifications: BellGlyph,
   'affiliate-toggle': ExternalLinkGlyph,
   'delete-account': TrashGlyph,
+  // TRIP-937 앱 정보 약관 3행 — 발명 글리프(Figma 역반영 대상).
+  'terms-TERMS_OF_SERVICE': DocumentGlyph,
+  'terms-PRIVACY_POLICY': DocumentGlyph,
+  'terms-LOCATION_TERMS': DocumentGlyph,
 };
 
 function RowIcon({ rowKey }: { rowKey: string }): ReactElement | null {

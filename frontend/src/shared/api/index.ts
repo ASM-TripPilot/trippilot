@@ -297,6 +297,14 @@ export async function fetchTerms(): Promise<TermsVersion[]> {
   return response.data;
 }
 
+/** 단건 약관 현행판(TRIP-937 열람 화면). `/terms` 와 같이 무인증이다(openapi `security: []`). 없는 타입은 404. */
+export async function fetchTermsByType(
+  termsType: string
+): Promise<TermsVersion> {
+  const response = await baseClient.get<TermsVersion>(`/terms/${termsType}`);
+  return response.data;
+}
+
 /** 리프레시 자체의 실패(원인 불문 — 401·네트워크 끊김·5xx 전부) = 세션 만료. 홀더·저장소 둘 다 비운다(BR-U0-09). */
 function onSessionExpired(): void {
   clearAccessToken();

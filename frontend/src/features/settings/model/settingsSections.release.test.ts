@@ -9,10 +9,11 @@ import {
  *
  * 무엇을 보장하나:
  *  (1) `filterReadySettingsSections` 는 `ready:true` 행만 남기고, 행이 0개가 된 그룹은 통째로 뺀다
- *      → 계정·위치정보·알림·위험 영역 4그룹(정본 순서 유지).
+ *      → 계정·위치정보·알림·앱 정보·위험 영역 5그룹(정본 순서 유지). 앱 정보(약관 3행)는 TRIP-937 이
+ *      ready:true 로 더한 그룹이라 필터를 통과한다.
  *  (2) 판정은 **플래그(`ready`)로만** 한다 — 여행 취향의 한 행을 ready:true 로 바꾸면 그 그룹이
  *      그 행 하나로 되살아난다(라벨 하드코딩 차단, 기능 개통 = true 한 줄).
- *  (3) 입력을 바꾸지 않는다 — `buildSettingsSections` 결과는 여전히 6그룹·준비중 8행이다(되살림 자리).
+ *  (3) 입력을 바꾸지 않는다 — `buildSettingsSections` 결과는 여전히 7그룹·준비중 8행이다(되살림 자리).
  *
  * 3동작 뼈대: 준비=뷰모델 입력 → 실행=filterReadySettingsSections → 단언=남은 그룹/행.
  *
@@ -22,7 +23,7 @@ import {
 const INPUT = { nickname: '여행자123', email: 'a@b.com' };
 
 describe('TRIP-939 AC-1 · filterReadySettingsSections', () => {
-  it('R1 ready 행만 남기고 빈 그룹을 빼 4그룹(정본 순서)을 낸다', () => {
+  it('R1 ready 행만 남기고 빈 그룹을 빼 5그룹(정본 순서, TRIP-937 앱 정보 포함)을 낸다', () => {
     // 준비
     const groups = buildSettingsSections(INPUT);
 
@@ -34,6 +35,7 @@ describe('TRIP-939 AC-1 · filterReadySettingsSections', () => {
       '계정',
       '위치정보',
       '알림',
+      '앱 정보',
       '위험 영역',
     ]);
     // 남은 행은 전부 ready:true.
@@ -62,13 +64,14 @@ describe('TRIP-939 AC-1 · filterReadySettingsSections', () => {
       '여행 취향',
       '위치정보',
       '알림',
+      '앱 정보',
       '위험 영역',
     ]);
     const preferences = visible.find((g) => g.key === 'preferences');
     expect(preferences?.rows.map((r) => r.label)).toEqual(['여행 스타일']);
   });
 
-  it('R3 입력을 바꾸지 않는다 — 원본은 여전히 6그룹·준비중 8행(되살림 자리 유지)', () => {
+  it('R3 입력을 바꾸지 않는다 — 원본은 여전히 7그룹(TRIP-937 앱 정보 포함)·준비중 8행(되살림 자리 유지)', () => {
     // 준비
     const groups = buildSettingsSections(INPUT);
 
@@ -76,7 +79,7 @@ describe('TRIP-939 AC-1 · filterReadySettingsSections', () => {
     filterReadySettingsSections(groups);
 
     // 단언 — 필터 뒤에도 원본 배열은 그대로.
-    expect(groups).toHaveLength(6);
+    expect(groups).toHaveLength(7);
     expect(groups.flatMap((g) => g.rows).filter((r) => !r.ready)).toHaveLength(
       8
     );

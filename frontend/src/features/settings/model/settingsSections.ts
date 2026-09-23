@@ -1,8 +1,8 @@
 /**
- * l05 설정 6그룹 뷰모델 조립 (AC-1 · AC-11) — 순수 함수.
+ * l05 설정 7그룹 뷰모델 조립 (AC-1 · AC-11) — 순수 함수.
  *
  * 정본 순서(Figma 라이브 = 화면 유일 정본): 계정 → 여행 취향 → 위치정보 → 알림 → 제휴 안내 →
- * 위험 영역. 각 행은 `ready` 로 상호작용 여부를 표시한다 — 목적지 라우트가 선 행(위치·알림)은
+ * (앱 정보 — TRIP-937, Figma 에 없음) → 위험 영역. 각 행은 `ready` 로 상호작용 여부를 표시한다 — 목적지 라우트가 선 행(위치·알림)은
  * `ready:true`, 아직 없는 행(취향 7·제휴)은 `ready:false` 다(TRIP-618 진입 개통, AC-5·INV-4).
  *
  * 요약값은 닉네임만 라이브다(Q6 — email 이 null 이어도 닉네임만 표기, null/undefined 를 문자열로
@@ -76,6 +76,29 @@ export function buildSettingsSections(input: SettingsInput): SettingsGroupVM[] {
           key: 'affiliate-toggle',
           label: '외부 이동 시 제휴 안내 다시 보기',
           ready: false,
+        },
+      ],
+    },
+    {
+      // TRIP-937 — 약관·정책 열람(가이드라인 5.1.1(i)). Figma l05·U6 BLM §3.3 에 없는 그룹(정본 드리프트).
+      // rowKey `terms-{termsType}` 의 접미가 열람 라우트 `/terms/{termsType}` 의 세그먼트다.
+      key: 'app-info',
+      label: '앱 정보',
+      rows: [
+        {
+          key: 'terms-TERMS_OF_SERVICE',
+          label: '서비스 이용약관',
+          ready: true,
+        },
+        {
+          key: 'terms-PRIVACY_POLICY',
+          label: '개인정보 처리방침',
+          ready: true,
+        },
+        {
+          key: 'terms-LOCATION_TERMS',
+          label: '위치정보 이용약관',
+          ready: true,
         },
       ],
     },

@@ -731,3 +731,50 @@ export function TrashGlyph({ size = 22, testID }: GlyphProps) {
     </Svg>
   );
 }
+
+/**
+ * 앱 정보 약관 행(TRIP-937) — 접힌 모서리 문서 + 본문 줄. Figma 근거 없는 발명 글리프라(01 Q5)
+ * Figma 역반영 대상이다. 3행(이용약관·처리방침·위치정보)이 공유한다.
+ */
+export function DocumentGlyph({ size = 22, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M6 3H14L19 8V20A1 1 0 0 1 18 21H6A1 1 0 0 1 5 20V4A1 1 0 0 1 6 3Z"
+        stroke={INK}
+        strokeWidth={1.7}
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M14 3V8H19"
+        stroke={INK}
+        strokeWidth={1.7}
+        strokeLinejoin="round"
+      />
+      <Line
+        x1={9}
+        y1={13}
+        x2={15}
+        y2={13}
+        stroke={INK}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+      />
+      <Line
+        x1={9}
+        y1={17}
+        x2={15}
+        y2={17}
+        stroke={INK}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
