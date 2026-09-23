@@ -192,16 +192,19 @@ def main() -> int:
         return 1
 
     doc = json.loads(args.doc.read_text(encoding="utf-8"))
-    # 이어가기 — 이미 받은 것은 다시 부르지 않는다. 3일에 걸쳐 나눠 받는다.
+    # 이어가기 — 이미 받은 것은 다시 부르지 않는다. 여러 날에 걸쳐 나눠 받는다.
     prev: dict = json.loads(args.out.read_text(encoding="utf-8")) if args.out.exists() else {}
     fees: dict[str, dict] = dict(prev.get("fees") or {})
-    todo = [(cid, kind) for cid, kind in _targets(doc) if cid not in fees]
+    targets = _targets(doc)
+    todo = [(cid, kind) for cid, kind in targets if cid not in fees]
 
     print(f"[fee] 대상 {len(todo):,}건 (기수집 {len(fees):,}건 건너뜀) · "
           f"이번 상한 {args.max_calls:,}콜", file=sys.stderr)
 
     calls = failures = key_idx = done = 0   # done=처리한 POI · calls=HTTP 호출
     stat: Counter[str] = Counter()
+    fail_kind: Counter[str] = Counter()
+    fail_at: list[int] = []                 # 실패한 호출 번호 — 모양으로 원인이 갈린다
     for cid, kind in todo:
         if calls >= args.max_calls:
             print(f"[fee] 상한 도달 — {len(todo) - done:,}건 남김 (다음 실행이 이어간다)",
@@ -224,6 +227,9 @@ def main() -> int:
                 key_idx += 1
             except Exception as e:                  # noqa: BLE001 — 개별 실패는 넘긴다
                 failures += 1
+                fail_kind[type(e).__name__ if not isinstance(e, urllib.error.HTTPError)
+                          else f"HTTP {e.code}"] += 1
+                fail_at.append(calls)
                 print(f"[fee] {endpoint} {cid}: {e}", file=sys.stderr)
                 break
         if key_idx >= len(keys):
@@ -250,14 +256,32 @@ def main() -> int:
         print(f"    {k:10} {v:,}", file=sys.stderr)
     # 실패를 삼키고 초록으로 끝내지 않는다 — 실패한 호출은 "값이 없다"와 구분되지 않아
     # 커버리지를 조용히 끌어내린다(2026-09-19 실측: 429 로 절반이 죽은 실행이 초록이었다).
+    if failures:
+        # **실패의 모양이 원인을 가른다.** 한 덩어리로 몰려 있으면 특정 키가 죽은
+        # 것이고(회전이 그 키에 배정한 구간 전체가 실패한다), 흩어져 있으면 속도
+        # 제한이나 망 문제다. 실측: 403 898건이 정확히 한 키 슬롯(900)이었는데
+        # "동시 실행·일일 한도"만 안내해 엉뚱한 곳을 보게 했다.
+        span = fail_at[-1] - fail_at[0] + 1
+        shape = ("연속 — 특정 키가 죽었을 가능성" if span <= failures * 1.2
+                 else "산발 — 속도 제한·망 문제 가능성")
+        print(f"    실패 내역: "
+              + " · ".join(f"{k} {v:,}" for k, v in fail_kind.most_common())
+              + f"\n    실패 구간: {fail_at[0]:,}~{fail_at[-1]:,}번째 호출 "
+                f"({span:,}칸에 {failures:,}건) — {shape}", file=sys.stderr)
     if rate > args.max_failure_rate:
         print(f"[fee] 실패율 {rate * 100:.1f}% > {args.max_failure_rate * 100:.0f}% — "
-              f"산출물을 쓰지 않는다. 동시 실행·일일 한도를 확인하라.", file=sys.stderr)
+              f"산출물을 쓰지 않는다. **위 실패 내역·구간을 먼저 보라** — "
+              f"HTTP 403 이 연속이면 키 문제, 429 면 속도, 흩어진 타임아웃이면 망이다.",
+              file=sys.stderr)
         return 2
 
     args.out.write_text(json.dumps({
         "source": "tourapi:detailInfo2+detailIntro2",
         "fetched_at": time.strftime("%Y-%m-%d"),
+        # 수집 모수 — 읽는 쪽이 `len(fees) / attempted` 로 커버리지를 **파일만 보고**
+        # 계산한다. 이게 없으면 반쪽 파일인지 알 방법이 소비 측에 없고, 그렇다고
+        # 소비 측에 "몇 건 이상이어야 한다"는 임계를 두면 근거 없는 상수가 하나 는다.
+        "attempted": len(targets),
         "fees": fees,
     }, ensure_ascii=False, indent=1), encoding="utf-8")
     remaining = len(todo) - done
