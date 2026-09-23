@@ -59,7 +59,13 @@ _SOURCE: dict[str, tuple[str, tuple[str, ...]]] = {
 # `20인 이상` 의 인원을 배제하려면 이 조건이 필요하다.
 _AMOUNT = re.compile(r"(\d{1,3}(?:,\d{3})+|\d+)\s*원")
 # 성인 요금 라벨. 라벨과 금액 사이에 12자까지 허용한다.
-_ADULT = re.compile(r"(성인|어른|일반|대인)[^\d]{0,12}(\d{1,3}(?:,\d{3})+|\d+)\s*원")
+# `관람료`·`입장료`·`개인` 은 **명시적 입장료 표지**다 — 이게 있으면 같은 기록에
+# 체험비가 섞여 있어도 그 금액이 입장료다(실측: `관람료 5,000원` 이 같은 기록의
+# `나무곤충만들기 6,000원` 때문에 통째로 버려졌다). `개인` 은 `[개인]/[단체]` 대비에서
+# 개인가를 집는다 — 문서 순서상 개인이 먼저라 단체가를 집지 않는다.
+_ADULT = re.compile(
+    r"(성인|어른|일반|대인|관람료|입장료|관람권|개인)"
+    r"[^\d]{0,12}(\d{1,3}(?:,\d{3})+|\d+)\s*원")
 # 금액이 없는 괄호는 걷어낸다 — `성인 (20~65세) 12,000원` 처럼 **라벨과 금액 사이에
 # 나이·기간이 끼면** 위 정규식이 금액에 닿지 못한다(실측 5건).
 _PAREN_NO_WON = re.compile(r"\([^)원]*\)")
@@ -92,10 +98,15 @@ def parse_fee(raw: str) -> int | None:
                for a in _AMOUNT.findall(head)] or [int(a.replace(",", ""))
                                                    for a in _AMOUNT.findall(text)]
     if amounts:
-        if _OVERNIGHT.search(text) or _NOT_ADMISSION.search(head):
+        if _OVERNIGHT.search(text):
             return None
+        # **라벨을 먼저 본다.** 한 기록에 입장료와 체험비가 같이 오는 경우가 있어
+        # (`관람료 5,000원` + `나무곤충만들기 6,000원`), 비입장료 표지를 먼저 보면
+        # 멀쩡한 입장료까지 통째로 버린다. 명시적 표지가 있으면 그게 이긴다.
         if (hit := _ADULT.search(head)) is not None:
             return int(hit.group(2).replace(",", ""))
+        if _NOT_ADMISSION.search(head):
+            return None
         # 라벨이 없으면 개인가 최댓값 — `5,000원 (녹차 1잔 제공)` 처럼 나이 구분이
         # 아예 없는 단일 요금제가 있다. 라벨을 요구하면 이것들이 통째로 빠진다.
         return max(amounts)
