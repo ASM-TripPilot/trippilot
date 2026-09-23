@@ -45,6 +45,8 @@ export interface SettingsScreenProps {
   onPressTerms?: (termsType: string) => void;
   /** 로그아웃 확인(TRIP-938) — 확인 다이얼로그의 [로그아웃]에서만 나간다. preview 무파손 위해 optional. */
   onPressLogout?: () => void;
+  /** 데이터 출처 블록의 OSM 줄 링크(TRIP-886, 페이지가 저작권 페이지 열기를 주입). preview 무파손 위해 optional. */
+  onPressOsmCopyright?: () => void;
 }
 
 export function SettingsScreen({
@@ -65,6 +67,7 @@ export function SettingsScreen({
   onPressNotifications,
   onPressTerms,
   onPressLogout,
+  onPressOsmCopyright,
 }: SettingsScreenProps): ReactElement {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
@@ -179,6 +182,7 @@ export function SettingsScreen({
           <Text className="pt-md text-center font-noto text-caption text-muted-soft">
             TripPilot v1.0.0
           </Text>
+          <DataAttribution onPressOsmCopyright={onPressOsmCopyright} />
         </View>
       </ScrollView>
 
@@ -249,6 +253,39 @@ function DeletionPendingBanner({
           철회할 유예가 없어요. 이미 처리되었거나 만료된 상태예요.
         </Text>
       ) : null}
+    </View>
+  );
+}
+
+/**
+ * 데이터 출처 고지(TRIP-886) — 버전 문구 바로 아래. 법적 고지라 콜백 유무와 상관없이 항상 보이고,
+ * OSM 줄만 링크다(콜백이 주입됐을 때만 누를 자리를 그린다).
+ */
+function DataAttribution({
+  onPressOsmCopyright,
+}: {
+  onPressOsmCopyright?: () => void;
+}): ReactElement {
+  const textClass = 'text-center font-noto text-caption text-muted-soft';
+  return (
+    <View testID="settings-data-attribution" className="items-center gap-xs">
+      <Text className={textClass}>데이터 출처</Text>
+      <Text className={textClass}>
+        한국관광공사 TourAPI · Overture Maps Foundation
+      </Text>
+      {onPressOsmCopyright ? (
+        <Pressable
+          testID="settings-osm-copyright"
+          accessibilityRole="link"
+          onPress={onPressOsmCopyright}
+        >
+          <Text className={`${textClass} underline`}>
+            © OpenStreetMap contributors
+          </Text>
+        </Pressable>
+      ) : (
+        <Text className={textClass}>© OpenStreetMap contributors</Text>
+      )}
     </View>
   );
 }

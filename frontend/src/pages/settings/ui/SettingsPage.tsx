@@ -1,9 +1,11 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
+import * as Linking from 'expo-linking';
 import { type ReactElement, useState } from 'react';
 import { Share } from 'react-native';
 
 import { usePreferenceStore } from '@/features/onboarding/model/preferenceStore';
+import { OSM_COPYRIGHT_URL } from '@/features/settings/model/dataAttribution';
 import { resolveExportSummary } from '@/features/settings/model/exportSummary';
 import {
   buildSettingsSections,
@@ -180,6 +182,10 @@ export function SettingsPage(): ReactElement {
       onPressNotifications={() => loadRouter()?.push('/settings/notifications')}
       onPressTerms={(termsType) => loadRouter()?.push(`/terms/${termsType}`)}
       onPressLogout={() => void runLogout()}
+      onPressOsmCopyright={() => {
+        // 브라우저를 못 열어도 설정 화면은 그대로 둔다(TRIP-886 Q3 — 링크 실패는 무시).
+        Linking.openURL(OSM_COPYRIGHT_URL).catch(() => undefined);
+      }}
     />
   );
 }
