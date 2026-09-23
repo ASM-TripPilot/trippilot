@@ -11,6 +11,7 @@ import type {
 } from '@/shared/api/generated/schemas';
 import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
 import { getAccessToken } from '@/shared/api/tokenManager';
+import { seoulDate } from '@/shared/date/seoulDate';
 import { toggleMulti } from '@/shared/pref/preferenceSelection';
 
 import {
@@ -108,20 +109,9 @@ function isPrefillableBudget(
   return typeof value === 'number' && Number.isInteger(value) && value >= 0;
 }
 
-/** 오늘 날짜 'YYYY-MM-DD'(실시계). `baseDate` 미주입 시의 프로덕션 폴백 — 페이지(배선)라 시계를
- * 읽어도 되지만(화면·순수 함수만 시계 금지, `tripWizardStep1Boundary.test.ts` 스캔 밖), 이 폴백
- * 반환값은 심판이 없다(라우트가 `baseDate`를 안 나름, 02a §3 선재 갭 · `StayRegisterPage` 선례). */
-function todayIso(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
 export interface TripNewStep1PageProps {
   /** 달력 기준 '오늘' 주입점('YYYY-MM-DD') — 기간 편집 시트(S3)의 과거 셀 비활성·이전 달 하한
-   * 기준이다. 테스트가 이 값을 주입해 결정론이 된다. 미지정이면 실시계(`todayIso()`)로 폴백한다
+   * 기준이다. 테스트가 이 값을 주입해 결정론이 된다. 미지정이면 실시계(`seoulDate`·KST)로 폴백한다
    * (프로덕션 경로, `StayRegisterPage` 선례). */
   baseDate?: string;
 }
@@ -130,7 +120,7 @@ export function TripNewStep1Page({
   baseDate,
 }: TripNewStep1PageProps): ReactElement {
   const router = useRouter();
-  const resolvedToday = baseDate ?? todayIso();
+  const resolvedToday = baseDate ?? seoulDate(new Date());
 
   // 스토어 드래프트 — 요약 도출·게이트 판정의 재료(읽기 전용 구독). 액션은 편집 시트(S2~S6)가
   // 물므로 default 페이지는 상태만 읽는다.

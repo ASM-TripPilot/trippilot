@@ -113,6 +113,7 @@
 - `src/__tests__/rootLayoutSafeArea.test.tsx`  →  (export 없음)
 - `src/__tests__/savedPlacesStructure.test.ts`  →  (export 없음)
 - `src/__tests__/savedStaysStructure.test.ts`  →  (export 없음)
+- `src/__tests__/seoulTodayStructure.test.ts`  →  (export 없음)
 - `src/__tests__/settingsBoundary.test.ts`  →  (export 없음)
 - `src/__tests__/shareCardStructure.test.ts`  →  (export 없음)
 - `src/__tests__/sharedUiStructure.test.ts`  →  (export 없음)
@@ -1218,6 +1219,7 @@
 - `src/shared/date/formatKoreanDate.ts`  →  formatKoreanDate
 - `src/shared/date/formatRelativeTime.ts`  →  formatRelativeTime
 - `src/shared/date/monthGrid.ts`  →  MonthCell · daysInMonth · firstWeekdayOfMonth · shiftMonth · isDateInRange · buildMonthGrid
+- `src/shared/date/seoulDate.ts`  →  seoulDate
 
 ## src/shared/location/
 - `src/shared/location/LocationGlyphs.tsx`  →  LocationBackChevronGlyph · LocationRadarHero · LocationOffGlyph · LocationInfoGlyph · LocationClockGlyph · LocationSwapGlyph · LocationPinGlyph · LocationWarningGlyph
@@ -1310,4 +1312,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 878개 파일
+합계 880개 파일

@@ -7,6 +7,7 @@ import {
 } from '@/shared/api/generated/trips/trips';
 import { getAccessToken } from '@/shared/api/tokenManager';
 import { isNotFound } from '@/shared/api/isNotFound';
+import { seoulDate } from '@/shared/date/seoulDate';
 import { formatNightsLabel } from '@/entities/trip/lib/formatNights';
 import { formatTripRange } from '@/entities/trip/lib/formatTripPeriod';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
@@ -137,7 +138,7 @@ export default function HomeRoute() {
   // 데이터 도착 후에만 여행 유무를 판정한다. 비-ENDED 지배 여행이 있으면 planning, 없으면 undefined→discovery.
   const phase = resolveHomePhase({
     trips: trips.data ?? [],
-    today: new Date().toISOString().slice(0, 10),
+    today: seoulDate(new Date()),
     savedCount: savedPoiIds.length,
     formatTripMeta: (trip) =>
       `${formatTripRange(trip.startDate, trip.endDate)} · ${formatNightsLabel(
