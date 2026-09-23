@@ -280,16 +280,37 @@ export async function postSocialTokenLogin(
   }
 }
 
+/** 로그아웃마다 1 증가 — 로그아웃 전에 출발한 리프레시 응답이 지운 토큰을 되살리지 못하게 한다. */
+let logoutEpoch = 0;
+
 /** 저장소의 refresh 토큰으로 회전 요청 → 새 쌍을 저장소·홀더에 반영 → 새 access 반환. */
 export async function refreshTokens(): Promise<string> {
+  const epoch = logoutEpoch;
   const stored = await getTokens();
   const response = await baseClient.post<TokenPair>('/auth/token/refresh', {
     refreshToken: stored?.refreshToken,
   });
+  if (epoch !== logoutEpoch) throw new Error('logged out during refresh');
   const { accessToken, refreshToken } = response.data;
   await saveTokens({ accessToken, refreshToken });
   setAccessToken(accessToken);
   return accessToken;
+}
+
+/**
+ * 로그아웃(TRIP-938 · BR-U0-09) — 이 기기 refresh 체인만 서버에 폐기 요청하고 기기·메모리 토큰을 지운다.
+ * 서버 요청은 **기다리지 않고 실패도 삼킨다**: 결과와 무관하게 사용자는 로그아웃돼야 한다. refresh 는
+ * 지우기 **전에** 읽어야 바디에 실린다. 무인증 baseClient 인 이유 — authedClient 면 만료 access 의 401 이
+ * 폐기하려는 refresh 를 회전시킨다. 실서버는 `{ refreshToken }` 필수(openapi 의 "바디 없음"과 드리프트).
+ */
+export async function logout(): Promise<void> {
+  logoutEpoch += 1;
+  const stored = await getTokens();
+  baseClient
+    .post('/auth/logout', { refreshToken: stored?.refreshToken })
+    .catch(() => {});
+  await clearTokens();
+  clearAccessToken();
 }
 
 export async function fetchTerms(): Promise<TermsVersion[]> {

@@ -11,6 +11,7 @@ import {
   ExternalLinkGlyph,
   ForkKnifeGlyph,
   GaugeGlyph,
+  LogoutGlyph,
   PeopleGlyph,
   PersonGlyph,
   PinGlyph,
@@ -36,6 +37,7 @@ const LEADING_GLYPHS: Record<
   'location-consent': PinGlyph,
   notifications: BellGlyph,
   'affiliate-toggle': ExternalLinkGlyph,
+  logout: LogoutGlyph,
   'delete-account': TrashGlyph,
   // TRIP-937 앱 정보 약관 3행 — 발명 글리프(Figma 역반영 대상).
   'terms-TERMS_OF_SERVICE': DocumentGlyph,

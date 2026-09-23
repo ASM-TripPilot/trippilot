@@ -11,6 +11,7 @@ import { buildSettingsSections } from './settingsSections';
  *  (2) 계정 그룹 닉네임 행 요약값 = 닉네임(Q6 확정 — 닉네임만 표기).
  *  (3) email 이 null(소셜 MVP)이어도 요약이 안 깨진다 — 'null'/'undefined' 문자열이 새지 않는다.
  *  (4) 목적지 없는 행(취향7·위치·알림·제휴)은 ready:false, 상호작용 행은 ready:true.
+ *  (6) TRIP-938 AC-6: 계정 그룹 마지막 행 = 로그아웃(ready:true). 그룹 수(7)는 그대로다.
  *
  * 3동작 뼈대: 준비=닉네임/이메일 입력 → 실행=buildSettingsSections → 단언=그룹/행 VM.
  *
@@ -131,6 +132,30 @@ describe('TRIP-608 · buildSettingsSections (AC-1 · AC-11)', () => {
     }
     // 유지: 제휴 행은 목적지 라우트가 없어 ready:false(INV-4).
     expect(rowByKey('affiliate-toggle')?.ready).toBe(false);
+  });
+
+  it('TRIP-938 AC-6: 계정 그룹 마지막 행이 [로그아웃](ready:true)이다 — 운영 필터를 통과한다', () => {
+    // 준비
+    const groups = buildSettingsSections({
+      nickname: '여행자123',
+      email: null,
+    });
+
+    // 실행 — 계정 그룹의 행 key 순서와 로그아웃 행을 뽑는다.
+    const account = groups.find((g) => g.label === '계정');
+    expect(account).toBeDefined();
+    const logoutRow = account!.rows.find((r) => r.key === 'logout');
+
+    // 단언(완전일치 · 순서까지): 계정 그룹의 마지막 행이다(01 Q1 — 새 그룹을 만들지 않는다).
+    expect(account!.rows.map((r) => r.key)).toEqual([
+      'nickname',
+      'export',
+      'logout',
+    ]);
+    // 단언: 라벨과 ready:true — false 면 운영 화면 필터(filterReadySettingsSections)가 행을 숨긴다.
+    expect(logoutRow).toEqual(
+      expect.objectContaining({ label: '로그아웃', ready: true })
+    );
   });
 
   it('TRIP-937 AC-3: 앱 정보 그룹에 약관 3행이 c06 순서·문서 제목·rowKey terms-{termsType}·ready:true 로 있다', () => {

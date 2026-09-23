@@ -1,13 +1,16 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import { type ReactElement, useState } from 'react';
 import { Share } from 'react-native';
 
+import { usePreferenceStore } from '@/features/onboarding/model/preferenceStore';
 import { resolveExportSummary } from '@/features/settings/model/exportSummary';
 import {
   buildSettingsSections,
   filterReadySettingsSections,
 } from '@/features/settings/model/settingsSections';
 import { SettingsScreen } from '@/features/settings/ui/SettingsScreen';
+import { logout } from '@/shared/api';
 import {
   useDeleteMeDeletion,
   useGetMe,
@@ -51,6 +54,7 @@ function loadRouter(): typeof import('expo-router').router | null {
 export function SettingsPage(): ReactElement {
   const account = useGetMe();
   const profile = useGetMeProfile();
+  const queryClient = useQueryClient();
 
   // 닉네임: 서버 값 기본 + 편집 성공 시 override(200 뒤 요약 갱신 / 409·503 뒤 미변경).
   const [nicknameOverride, setNicknameOverride] = useState<string | null>(null);
@@ -143,6 +147,15 @@ export function SettingsPage(): ReactElement {
     await Share.share({ message: parts.join('\n\n') });
   };
 
+  // 로그아웃(TRIP-938): 토큰 삭제 → 이전 계정 캐시 비우기 → 게이트('/')에 인계. replace 라 뒤로가기로
+  // 설정에 못 돌아온다. 로그인 경로로 직접 가지 않는 이유 — (auth) 는 게이트가 재조회를 마쳐야 열린다.
+  const runLogout = async (): Promise<void> => {
+    await logout();
+    queryClient.clear();
+    usePreferenceStore.getState().reset();
+    loadRouter()?.replace('/');
+  };
+
   return (
     <SettingsScreen
       groups={filterReadySettingsSections(
@@ -166,6 +179,7 @@ export function SettingsPage(): ReactElement {
       onPressLocation={() => loadRouter()?.push('/settings/location')}
       onPressNotifications={() => loadRouter()?.push('/settings/notifications')}
       onPressTerms={(termsType) => loadRouter()?.push(`/terms/${termsType}`)}
+      onPressLogout={() => void runLogout()}
     />
   );
 }

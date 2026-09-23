@@ -778,3 +778,40 @@ export function DocumentGlyph({ size = 22, testID }: GlyphProps) {
     </Svg>
   );
 }
+
+/** 로그아웃 행(TRIP-938) — 열린 문 밖으로 나가는 화살표. Figma 근거 없는 발명 글리프(역반영 대상). */
+export function LogoutGlyph({ size = 22, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M10 4H6A1 1 0 0 0 5 5V19A1 1 0 0 0 6 20H10"
+        stroke={INK}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Line
+        x1={10}
+        y1={12}
+        x2={20}
+        y2={12}
+        stroke={INK}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M16 8L20 12L16 16"
+        stroke={INK}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}

@@ -41,6 +41,7 @@ export function buildSettingsSections(input: SettingsInput): SettingsGroupVM[] {
           ready: true,
         },
         { key: 'export', label: '데이터 내보내기', ready: true },
+        { key: 'logout', label: '로그아웃', ready: true },
       ],
     },
     {

@@ -268,6 +268,18 @@ export const handlers = [
     HttpResponse.json(tokenPair(false, 'refresh'))
   ),
 
+  // TRIP-938 — 로그아웃(이 기기 체인 revoke, BR-U0-09). openapi 는 바디 없는 bearer 로 적었지만 실서버는
+  // 무인증 + `{ refreshToken }` 필수(@NotBlank → 400)다(01 드리프트). 목은 실서버 판정을 따른다.
+  http.post(`${BASE}/auth/logout`, async ({ request }) => {
+    const body = (await request.json().catch(() => ({}))) as {
+      refreshToken?: unknown;
+    };
+    if (typeof body.refreshToken !== 'string' || body.refreshToken === '') {
+      return new HttpResponse(null, { status: 400 });
+    }
+    return new HttpResponse(null, { status: 204 });
+  }),
+
   // ── TRIP-162 온보딩 ────────────────────────────────────────────────
   http.get(`${BASE}/terms`, () => HttpResponse.json(TERMS_VERSIONS)),
 

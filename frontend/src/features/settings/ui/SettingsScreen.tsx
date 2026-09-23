@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { SettingsGroupVM, SettingsRowVM } from '../model/settingsSections';
 import { DeleteAccountDialog } from './DeleteAccountDialog';
 import { ExportRow } from './ExportRow';
+import { LogoutConfirmDialog } from './LogoutConfirmDialog';
 import { NicknameEditRow } from './NicknameEditRow';
 import { ChevronLeftGlyph, TrashGlyph } from './SettingsGlyphs';
 import { SettingsGroup } from './SettingsGroup';
@@ -12,7 +13,7 @@ import { NavRow, PreparingRow, RowBody } from './SettingsRow';
 
 /**
  * l05 설정 화면(프레젠테이션 · props만) — 받은 그룹을 정본 순서로 그린다. 상호작용 행은 닉네임·
- * 내보내기·계정 삭제 + 위치·알림 네비 행(TRIP-618 진입 개통) + 앱 정보 약관 네비 행(TRIP-937)이고, 남은 준비중 행(취향 7·제휴)은
+ * 내보내기·로그아웃(TRIP-938)·계정 삭제 + 위치·알림 네비 행(TRIP-618 진입 개통) + 앱 정보 약관 네비 행(TRIP-937)이고, 남은 준비중 행(취향 7·제휴)은
  * "준비 중" 비활성이다(AC-6, INV-4). 삭제는 2단 다이얼로그를 거쳐야 최종 콜백이 나간다(AC-12).
  *
  * 상태는 전부 위(페이지)에서 온다 — 화면은 삭제 다이얼로그의 열림만 로컬로 쥔다(딤·모달 실제 덮임은
@@ -42,6 +43,8 @@ export interface SettingsScreenProps {
   onPressNotifications?: () => void;
   /** 앱 정보 약관 행 진입(TRIP-937, 페이지가 /terms/{termsType} 으로 주입). */
   onPressTerms?: (termsType: string) => void;
+  /** 로그아웃 확인(TRIP-938) — 확인 다이얼로그의 [로그아웃]에서만 나간다. preview 무파손 위해 optional. */
+  onPressLogout?: () => void;
 }
 
 export function SettingsScreen({
@@ -61,8 +64,10 @@ export function SettingsScreen({
   onPressLocation,
   onPressNotifications,
   onPressTerms,
+  onPressLogout,
 }: SettingsScreenProps): ReactElement {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [logoutOpen, setLogoutOpen] = useState(false);
 
   const renderRow = (row: SettingsRowVM): ReactElement => {
     if (row.key.startsWith(TERMS_ROW_PREFIX)) {
@@ -107,6 +112,15 @@ export function SettingsScreen({
             truncatedLabel={truncatedLabel}
             errorLabel={exportError}
           />
+        );
+      case 'logout':
+        return (
+          <Pressable
+            testID="settings-row-logout"
+            onPress={() => setLogoutOpen(true)}
+          >
+            <RowBody rowKey="logout" label={row.label} />
+          </Pressable>
         );
       case 'delete-account':
         return deletionState === 'pending' ? (
@@ -174,6 +188,15 @@ export function SettingsScreen({
           onConfirmDeletion={() => {
             onPressDeleteAccount();
             setDialogOpen(false);
+          }}
+        />
+      ) : null}
+      {logoutOpen ? (
+        <LogoutConfirmDialog
+          onCancel={() => setLogoutOpen(false)}
+          onConfirm={() => {
+            setLogoutOpen(false);
+            onPressLogout?.();
           }}
         />
       ) : null}
