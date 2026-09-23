@@ -49,6 +49,12 @@ export function SplashGate() {
       <Stack.Protected guard={destination === 'HOME'}>
         <Stack.Screen name="(tabs)" />
       </Stack.Protected>
+      {/* i04 재계획 요청 시트 — 허브 위에 겹쳐 띄운다(TRIP-750 D1). trips 라우트는 어떤 가드에도
+          속하지 않으므로 선언도 가드 밖에 둔다. */}
+      <Stack.Screen
+        name="trips/[tripId]/planb/index"
+        options={{ presentation: 'transparentModal' }}
+      />
     </Stack>
   );
 }

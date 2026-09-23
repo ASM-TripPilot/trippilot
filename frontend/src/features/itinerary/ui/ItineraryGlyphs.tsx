@@ -15,6 +15,9 @@ const MUTED = '#6A6A6A';
 const MUTED_SOFT = '#9AA1AB';
 const PRIMARY_TEXT = '#C13515';
 const WHITE = '#FFFFFF';
+// h07 폴백 체크리스트의 완료 체크 색(`tailwind.config` success). SVG stroke 는 className 을 못 받아
+// 이 파일 안에서만 raw hex 로 고정한다(위 색 상수와 같은 관례).
+const SUCCESS = '#0E9384';
 
 type GlyphProps = {
   size?: number;
@@ -177,8 +180,15 @@ export function PlusGlyph({
   );
 }
 
-// `시각 고정` 칩 체크(12) — Figma `1876:1096`.
-export function CheckGlyph({ size = 12, testID }: GlyphProps) {
+// `시각 고정` 칩 체크(12) — Figma `1876:1096`. h24 칩은 primary-text(기본), h07 폴백
+// 체크리스트는 `tone="success"` 로 초록 체크를 낸다(같은 도형, 색만 스냅 — LockGlyph/PlusGlyph
+// tone 패턴 계승, 기본값이 기존 h24 렌더 불변).
+export function CheckGlyph({
+  size = 12,
+  tone = 'primaryText',
+  testID,
+}: GlyphProps & { tone?: 'primaryText' | 'success' }) {
+  const stroke = tone === 'success' ? SUCCESS : PRIMARY_TEXT;
   return (
     <Svg
       testID={testID}
@@ -189,8 +199,51 @@ export function CheckGlyph({ size = 12, testID }: GlyphProps) {
     >
       <Path
         d="M10 3L4.5 8.5L2 6"
-        stroke={PRIMARY_TEXT}
+        stroke={stroke}
         strokeWidth={1.3}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// h07 폴백 체크리스트 "취향 반영 (건너뜀)" 행 마커(18) — 건너뛴 항목의 회색 대시. Figma `3831:2215`.
+// 초록 체크와 다른 도형이라 "건너뜀"이 한눈에 갈린다(색은 심판 사각, testID·도형으로 계약).
+export function DashGlyph({ size = 18, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 18 18"
+      fill="none"
+    >
+      <Path
+        d="M4 9H14"
+        stroke={MUTED}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+// h08 "다른 후보 0건" 빈 상태 ◇(24) — Figma `4452:1478`. 점선 카드 가운데 얹는 마름모 아웃라인.
+// 색은 회색 muted-soft(빈 상태 톤). raw hex 는 이 파일 안에서만 고정(위 색 상수 관례).
+export function DiamondGlyph({ size = 24, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M12 4L20 12L12 20L4 12L12 4Z"
+        stroke={MUTED_SOFT}
+        strokeWidth={1.8}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -228,13 +281,15 @@ export function CheckCircleGlyph({ size = 20, testID }: GlyphProps) {
 }
 
 // 카드 우측 편집 연필(20) — Figma `1876:1099`. FIXED 항목에만 붙는 muted-soft 가 기본이고,
-// h19 hero 의 primary 원 안에서는 white 로 스냅한다(같은 도형, 색만 — PlusGlyph tone 패턴과 동형).
+// h19 hero 의 primary 원 안에서는 white 로, i01 [직접 수정] 흰 알약(TRIP-747)에서는 primary 로
+// 스냅한다(같은 도형, 색만 — PlusGlyph tone 패턴과 동형).
 export function PencilGlyph({
   size = 20,
   tone = 'mutedSoft',
   testID,
-}: GlyphProps & { tone?: 'mutedSoft' | 'white' }) {
-  const stroke = tone === 'white' ? WHITE : MUTED_SOFT;
+}: GlyphProps & { tone?: 'mutedSoft' | 'white' | 'primary' }) {
+  const stroke =
+    tone === 'white' ? WHITE : tone === 'primary' ? PRIMARY : MUTED_SOFT;
   return (
     <Svg
       testID={testID}

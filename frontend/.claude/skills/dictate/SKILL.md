@@ -15,7 +15,7 @@ dictate 실행해        # 목록 보고 고른 뒤 — 레인 실행(cap 2)
 
 ## 순서
 1. **전사** — `~/.claude/scripts/transcribe.sh ~/Dictate/{날짜}` = **가장 최근 미처리 녹음 1개**(회차 = 녹음 1개, 사용자 결정; `.processed`에 적힌 파일 제외, 1초 미만 제외, 전사 후 등록). 미처리 0건이면 "새 녹음 없음"으로 끝. 여러 개를 한 회차로 묶고 싶으면 한 번에 길게 녹음한다. 회차 id = `{날짜}-{HHMM}`, 산출 `<볼트>/구술/{회차}/00_transcript.md`(원문 + 녹음 파일명). 볼트 실경로는 `_workspace`의 부모(`…/Obsidian/TripPilot/`). 새 세션도 이 규칙만 따르면 된다 — 어느 녹음이 처리됐는지는 파일이 안다.
-2. **Workflow** — `Workflow({ scriptPath: '<리포 루트>/frontend/.claude/workflows/dictate.js', args: { date, run, transcript, cap, planOnly } })`. **기본 = planOnly**(전사 → triage → 할일 목록 브리핑, 지라·레인 없음) — 메뉴 막대 트리거·"dictate 돌려"는 이 모드. **실행은 사용자가 "dictate 실행해"라고 명시할 때만** `planOnly:false`(첫 3회 `cap: 2`, 사람 동석). 할일 목록을 보고 항목을 골라 실행하는 게 정상 경로다.
+2. **Workflow** — `Workflow({ scriptPath: '<리포 루트>/frontend/.claude/workflows/dictate.js', args: { date, run, transcript, cap, planOnly } })`. **기본 = planOnly**(전사 → triage → 할일 목록 브리핑, 지라·레인 없음) — "dictate 돌려"는 이 모드. **실행은 사용자가 "dictate 실행해"라고 명시할 때만** `planOnly:false`(첫 3회 `cap: 2`, 사람 동석). 할일 목록을 보고 항목을 골라 실행하는 게 정상 경로다.
    - Triage → `구술/{회차}/01_triage.md` (자유 층, 행동 없음). 직전 회차 폴더의 question·hold를 읽어 followUp 판정.
    - Jira → **code 레인 항목만** 본문 작성 후 **생성**(`jira.sh create-sub`). `jira-fe-subtask` §5 승인 게이트는 "dictate 실행해" 자체로 충족 — 사람이 planOnly 목록을 보고 고른 뒤에만 이 단계가 돈다. figma 레인은 티켓 없음(새 밴드는 탐색, 채택되면 코드 티켓).
    - Lanes → **figma 항목 전부 먼저, 그다음 code**, 항목마다 순차(병렬 없음). figma = figma-build(스펙 게이트 → figma-builder → figma-qa), 새 밴드까지만. code = 항목마다 `git worktree add -B feature/{키}-FE-{slug} .claude/worktrees/{slug} origin/develop`(**develop에서 분기** — 컨벤션; Workflow 자체 worktree 격리는 main 기준·호출마다 새 워크트리라 쓰지 않는다) 한 뒤 그 디렉토리에서 dev-cycle 단계를 `agent()` 사슬로(`--autonomous`: 3-a·퀴즈 생략, 5-b·6·8 생략 불가) → draft PR(제목에 키).

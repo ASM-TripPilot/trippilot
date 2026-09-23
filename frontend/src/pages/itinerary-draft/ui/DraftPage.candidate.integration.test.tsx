@@ -20,21 +20,17 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { DraftPage } from './DraftPage';
 
 /**
- * h11(DraftPage) 에 h12 슬롯 교체를 **인라인 패널**로 배선하는 심판(TRIP-467→483 이관). 컨테이너
- * 내부(POST→선택→PUT→닫힘·재조회)는 `SlotCandidatePanelContainer.integration.test.tsx` 가
- * 완결 — 여기선 **트리거·토글·인라인 배치·manual 어포던스** 페이지 층 배선만 잰다.
+ * h08(DraftPage)에 슬롯 교체 **시트**를 배선하는 심판(TRIP-467→483→793 이관). 컨테이너 내부
+ * (POST→라디오→확정 PUT→닫힘·재조회)는 `SlotCandidatePanelContainer.integration.test.tsx` 가 완결 —
+ * 여기선 **트리거·토글·조건부 마운트** 페이지 층 배선만 잰다.
  *
- * 무엇을 보장하나(전부 페이지 층 배선):
- *  - 🔴 배선 전엔 패널이 없다 — 조건부 마운트라 트리에 없고 POST 0(AC-1).
- *  - 🔴 비고정 트리거 press → **인라인 패널 마운트**(`itinerary-candidate-panel`) + 그 slotKey 로
- *    slot-candidates POST 1건(AC-1 · ★B). 바디는 slotKey 하나뿐(BR-U3-24).
- *  - 🔴 고정 슬롯은 트리거 부재라 열 방법이 없다(AC-2).
- *  - 🔴 X 로 닫힘 · **같은 트리거 재press 로 토글 접힘**(AC-1 · ★C).
- *  - 🔴 「처음부터 직접」·「직접 고르기」 → manual 라우트 push(AC-4).
- *
- * 왜 통합 버킷인가: "패널이 열렸다/닫혔다" 는 조건부 마운트라 마운트/언마운트로 관찰된다(인라인
- * 패널은 일반 View 라 열림/접힘이 jest 로 보인다 · 02a §1-D). "어느 slotKey 로 POST 가 나갔나" 는
- * 훅을 목킹하면 테스트의 가정이 되므로 **실 요청**으로 잰다.
+ * TRIP-793 변경: 인라인 패널(`itinerary-candidate-panel`)이 바텀시트(`itinerary-candidate-sheet` +
+ * scrim)로 바뀌었고, **h08 지도+시트 셸의 슬롯 "다른 후보 ›" 트리거(옛 no-op)를 처음 실배선**한다.
+ * 두 마운트 경로를 심판한다:
+ *  - 경로1(DraftScreen · staleFailed) — 화면 자체 트리거 `itinerary-draft-alt-{slotKey}` +
+ *    `renderSlotPanel`(무변경 인터페이스)이 컨테이너를 마운트한다.
+ *  - 경로2(h08 셸 · clean COMPLETE) — `SlotStopCard` 의 `slot-stopcard-alt-{slotKey}` 트리거가
+ *    `onPressAlt`(옛 `() => {}`)를 통해 시트를 연다(첫 실배선).
  *
  * 3동작 뼈대: 준비=가짜 서버 응답 → 실행=트리거/닫기/manual press → 단언=마운트·POST·push.
  */
@@ -49,7 +45,6 @@ jest.mock('@/shared/storage', () => ({
   hasStoredToken: jest.fn().mockResolvedValue(true),
 }));
 
-// manual 라우트 push 를 관찰하려면 모듈 스코프 목이 필요하다(호이스트 가드 회피 위해 `mock` 접두).
 const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({
@@ -67,7 +62,7 @@ const BASE = 'http://localhost:8080/api/v1';
 const TRIP_ID = '11111111-1111-1111-1111-111111111111';
 const DAY1 = '2026-06-10';
 
-/** 1일 여행 — 탭 흔들림·폴링을 피한다(generationState COMPLETE 라 폴링 없음). */
+/** 1일 여행 — 탭 흔들림·폴링을 피한다. */
 function trip(): Trip {
   return {
     tripId: TRIP_ID,
@@ -84,8 +79,8 @@ function trip(): Trip {
 }
 
 /** day1 = [고정 숙소(21:00) · 비고정 a · 비고정 b]. 고정은 트리거가 없어야 한다. */
-function itinerary(): Itinerary {
-  const days: ItineraryDaysItem[] = [
+function days(): ItineraryDaysItem[] {
+  return [
     {
       date: DAY1,
       slots: [
@@ -122,20 +117,36 @@ function itinerary(): Itinerary {
       ],
     },
   ];
-  // TRIP-792 재픽스처 — 깨끗한 COMPLETE 는 이제 h08 셸로 가(D1-R NARROW) 인라인 후보 패널이 없다
-  // (셸의 onPressAlt 는 no-op·D2-R). 이 파일이 검증하는 h12 인라인 패널 경로는 **DraftScreen 라우팅
-  // 얼굴**에서만 살아 있으므로, fallback(DETERMINISTIC+isFallback) 로 두어 DraftScreen 으로 라우팅한다
-  // (narrow 가 fallback 을 셸에서 뺀다). 폴백 배너 1블록이 곁에 붙지만 alt 트리거·패널·manual 어포던스
-  // 계약(D1~D6)엔 영향 없다(배너는 카드 리스트 밖 additive). 실 교체 시트는 TRIP-793 이연.
+}
+
+/** 경로1 — staleFailed(FAILED+슬롯). fallbackNotice=null(FULL_AI·isFallback false)이라 인터스티셜을
+ * 건너뛰고, staleFailed=true 라 h08 셸도 건너뛰어 `<DraftScreen>`(listed) 로 떨어진다. staleFailed
+ * 배너 1블록이 곁에 붙지만 alt 트리거·시트·manual 어포던스 계약엔 영향 없다(DraftScreen 라우팅 얼굴). */
+function staleFailedItinerary(): Itinerary {
   return {
     itineraryId: 'itin-1',
     tripId: TRIP_ID,
     status: 'PLANNED',
-    solveMode: 'DETERMINISTIC',
+    solveMode: 'FULL_AI',
+    generationMode: 'FULLY_AI',
+    generationState: 'FAILED',
+    isFallback: false,
+    days: days(),
+  };
+}
+
+/** 경로2 — 깨끗한 COMPLETE. isPartial=false·staleFailed=false·fallbackNotice=null 이라 h08 지도+시트
+ * 셸(MapSheetShell) 분기로 떨어진다(SlotStopCard 의 alt 트리거가 시트를 여는 유일 경로). */
+function cleanItinerary(): Itinerary {
+  return {
+    itineraryId: 'itin-1',
+    tripId: TRIP_ID,
+    status: 'PLANNED',
+    solveMode: 'FULL_AI',
     generationMode: 'FULLY_AI',
     generationState: 'COMPLETE',
-    isFallback: true,
-    days,
+    isFallback: false,
+    days: days(),
   };
 }
 
@@ -151,12 +162,17 @@ const CANDIDATES = {
 let postCalls = 0;
 let postBody: unknown = null;
 
-const PANEL = 'itinerary-candidate-panel';
+const SHEET = 'itinerary-candidate-sheet';
 
-function altId(poiId: string): string {
+/** DraftScreen 자체 트리거(renderSlotPanel 경로). */
+function draftAltId(poiId: string): string {
   return `itinerary-draft-alt-${buildSlotKey(DAY1, poiId)}`;
 }
-function cardId(poiId: string): string {
+/** h08 셸 SlotStopCard 트리거 — fieldId 규약 `slot-stopcard-${role}-${slotKey}`(role 이 앞). */
+function stopcardAltId(poiId: string): string {
+  return `slot-stopcard-alt-${buildSlotKey(DAY1, poiId)}`;
+}
+function draftCardId(poiId: string): string {
   return `itinerary-draft-slot-${buildSlotKey(DAY1, poiId)}`;
 }
 
@@ -170,8 +186,9 @@ beforeEach(() => {
 
   server.use(
     http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
+    // 기본은 경로1(staleFailed). 경로2 는 각 it 에서 server.use 로 덮는다.
     http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-      HttpResponse.json(itinerary())
+      HttpResponse.json(staleFailedItinerary())
     ),
     http.post(
       `${BASE}/trips/:tripId/itinerary/slot-candidates`,
@@ -206,22 +223,25 @@ function renderPage() {
   return render(<DraftPage tripId={TRIP_ID} />, { wrapper: Wrapper });
 }
 
-describe('🔴 D1 · AC-1 — 배선 전엔 패널이 없다 (조건부 마운트 · DraftPage 가 유일 마운트처)', () => {
-  it('아무 트리거도 누르기 전엔 패널이 트리에 없고 slot-candidates POST 도 0건이다', async () => {
+// ─── 경로1: DraftScreen(staleFailed) · renderSlotPanel 마운트 ─────────────────
+describe('🔴 D1 · AC-1 — 배선 전엔 시트가 없다 (조건부 마운트 · DraftScreen 경로)', () => {
+  it('아무 트리거도 누르기 전엔 시트가 트리에 없고 slot-candidates POST 도 0건이다', async () => {
     renderPage();
-    await screen.findByTestId(cardId('poi-a'));
+    await screen.findByTestId(draftCardId('poi-a'));
 
-    expect(screen.queryByTestId(PANEL)).toBeNull();
+    expect(screen.queryByTestId(SHEET)).toBeNull();
     expect(postCalls).toBe(0);
   });
 });
 
-describe('🔴 D2 · AC-1 — 비고정 트리거 press → 인라인 패널 마운트 + 그 slotKey 로 POST 1건', () => {
-  it('poi-b 트리거를 누르면 패널이 뜨고 slot-candidates POST 가 poi-b 의 slotKey 로 나간다', async () => {
+describe('🔴 D2 · AC-1 — 비고정 트리거 press → 시트 마운트(+scrim) + 그 slotKey 로 POST 1건', () => {
+  it('poi-b 트리거를 누르면 시트+scrim 이 뜨고 slot-candidates POST 가 poi-b 의 slotKey 로 나간다', async () => {
     renderPage();
-    fireEvent.press(await screen.findByTestId(altId('poi-b')));
+    fireEvent.press(await screen.findByTestId(draftAltId('poi-b')));
 
-    expect(await screen.findByTestId(PANEL)).toBeOnTheScreen();
+    expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
+    // scrim 존재는 심판(구조) — 실 딤 커버·터치 차단은 6-b 실기 몫(바텀시트 목 사각).
+    expect(screen.getByTestId('itinerary-candidate-scrim')).toBeOnTheScreen();
 
     await waitFor(() => expect(postCalls).toBe(1));
     expect((postBody as { slotKey: string }).slotKey).toBe(
@@ -232,46 +252,45 @@ describe('🔴 D2 · AC-1 — 비고정 트리거 press → 인라인 패널 마
 });
 
 describe('🔴 D3 · AC-2 — 고정 슬롯은 트리거 부재라 열 방법이 없다', () => {
-  it('고정 카드엔 트리거가 없고(비고정엔 있고) 패널도 안 뜬다', async () => {
+  it('고정 카드엔 트리거가 없고(비고정엔 있고) 시트도 안 뜬다', async () => {
     renderPage();
-    await screen.findByTestId(cardId('poi-a'));
+    await screen.findByTestId(draftCardId('poi-a'));
 
-    expect(screen.queryByTestId(altId('poi-fixed'))).toBeNull();
-    expect(screen.getByTestId(altId('poi-a'))).toBeOnTheScreen();
-    expect(screen.queryByTestId(PANEL)).toBeNull();
+    expect(screen.queryByTestId(draftAltId('poi-fixed'))).toBeNull();
+    expect(screen.getByTestId(draftAltId('poi-a'))).toBeOnTheScreen();
+    expect(screen.queryByTestId(SHEET)).toBeNull();
   });
 });
 
-describe('🔴 D4 · AC-1 — 닫기 X → 패널 언마운트 (editingSlotKey 클리어)', () => {
-  it('패널을 열고 닫기 버튼을 누르면 패널이 트리에서 사라진다', async () => {
+describe('🔴 D4 · AC-1 — scrim press → 시트 언마운트 (X 버튼 없음, scrim onClose)', () => {
+  it('시트를 열고 scrim 을 누르면 시트가 트리에서 사라진다', async () => {
     renderPage();
-    fireEvent.press(await screen.findByTestId(altId('poi-a')));
-    await screen.findByTestId(PANEL);
+    fireEvent.press(await screen.findByTestId(draftAltId('poi-a')));
+    await screen.findByTestId(SHEET);
 
-    fireEvent.press(screen.getByTestId('itinerary-candidate-panel-close'));
+    fireEvent.press(screen.getByTestId('itinerary-candidate-scrim'));
 
-    await waitFor(() => expect(screen.queryByTestId(PANEL)).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
   });
 });
 
 describe('🔴 D5 · AC-1 — 같은 트리거 재press 로 토글 접힘 (한 번에 한 슬롯 · ★C)', () => {
   it('poi-a 트리거를 눌러 열고, 다시 눌러 접는다', async () => {
     renderPage();
-    const trigger = await screen.findByTestId(altId('poi-a'));
+    const trigger = await screen.findByTestId(draftAltId('poi-a'));
 
     fireEvent.press(trigger);
-    await screen.findByTestId(PANEL);
+    await screen.findByTestId(SHEET);
 
-    // 같은 트리거 재press → 접힘. `setEditingSlotKey(k)`(재대입) 구현은 안 닫혀 여기서 red.
-    fireEvent.press(screen.getByTestId(altId('poi-a')));
-    await waitFor(() => expect(screen.queryByTestId(PANEL)).toBeNull());
+    fireEvent.press(screen.getByTestId(draftAltId('poi-a')));
+    await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
   });
 });
 
 describe('🔴 D6 · AC-4 — 「처음부터 직접」·「직접 고르기」 → manual 라우트 push', () => {
   it('두 어포던스 모두 /trips/[tripId]/itinerary/manual 로 push 한다', async () => {
     renderPage();
-    await screen.findByTestId(cardId('poi-a'));
+    await screen.findByTestId(draftCardId('poi-a'));
 
     const expected = {
       pathname: '/trips/[tripId]/itinerary/manual',
@@ -284,5 +303,45 @@ describe('🔴 D6 · AC-4 — 「처음부터 직접」·「직접 고르기」 
     fireEvent.press(screen.getByTestId('itinerary-draft-pick-manual'));
     expect(mockPush).toHaveBeenLastCalledWith(expected);
     expect(mockPush).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ─── 경로2: h08 지도+시트 셸(clean COMPLETE) · SlotStopCard 트리거 첫 실배선 ──────
+describe('🔴 D7~D9 · h08 셸 트리거 실배선 (no-op → 실배선 · clean COMPLETE)', () => {
+  function renderShell() {
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        HttpResponse.json(cleanItinerary())
+      )
+    );
+    return renderPage();
+  }
+
+  it('D7 · AC-1 — 셸 트리거 누르기 전엔 시트가 없고 POST 0건이다', async () => {
+    renderShell();
+    await screen.findByTestId(stopcardAltId('poi-a'));
+
+    expect(screen.queryByTestId(SHEET)).toBeNull();
+    expect(postCalls).toBe(0);
+  });
+
+  it('D8 · AC-1·D9(첫 실배선) — 비고정 슬롯 alt press → 시트 마운트 + 그 slotKey 로 POST 1건', async () => {
+    renderShell();
+    fireEvent.press(await screen.findByTestId(stopcardAltId('poi-a')));
+
+    // 셸의 onPressAlt 가 옛 no-op 이면 시트도 POST 도 없다 → 여기서 red.
+    expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
+    await waitFor(() => expect(postCalls).toBe(1));
+    expect((postBody as { slotKey: string }).slotKey).toBe(
+      buildSlotKey(DAY1, 'poi-a')
+    );
+  });
+
+  it('D9 · AC-2 — 고정 슬롯은 alt 트리거 부재(비고정엔 있음)', async () => {
+    renderShell();
+    await screen.findByTestId(stopcardAltId('poi-a'));
+
+    expect(screen.queryByTestId(stopcardAltId('poi-fixed'))).toBeNull();
+    expect(screen.getByTestId(stopcardAltId('poi-a'))).toBeOnTheScreen();
   });
 });

@@ -38,6 +38,12 @@ trippilot:
       client-secret: ${KAKAO_CLIENT_SECRET:}
       token-uri: https://kauth.kakao.com/oauth/token
       user-info-uri: https://kapi.kakao.com/v2/user/me
+    # Apple 은 userinfo 가 없다 — 신원이 id_token 안에 있어 JWKS 로 서명을 검증한다(TRIP-858).
+    # client-id 는 iOS 번들 ID 이자 id_token 의 aud 기대값이다. 미주입이면 501(미지원)로 나간다.
+    apple:
+      client-id: ${APPLE_CLIENT_ID:}
+      issuer: https://appleid.apple.com
+      jwks-uri: https://appleid.apple.com/auth/keys
     naver:
       client-id: ${NAVER_CLIENT_ID:}
       client-secret: ${NAVER_CLIENT_SECRET:}
