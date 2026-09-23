@@ -93,7 +93,9 @@ spec:
             - name: {{ . }}
               value: none
             {{- end }}
-            {{- range list "GOOGLE_CLIENT_ID" "GOOGLE_CLIENT_SECRET" "KAKAO_CLIENT_ID" "KAKAO_CLIENT_SECRET" "NAVER_CLIENT_ID" "NAVER_CLIENT_SECRET" "APPLE_CLIENT_ID" "WEATHER_API" "PLACE_GEOCODE_MODE" "WEATHER_MODE" "AI_REMINDER_COPY_MODE" }}
+            {{- /* GOOGLE_CLIENT_SECRET 은 일부러 없다 — 현재 구글 클라이언트가 공개(iOS) 유형이라
+                   시크릿을 보내면 invalid_client 로 거절된다(2026-09-23 실측). Web 유형으로 바꾸면 되살린다. */}}
+            {{- range list "GOOGLE_CLIENT_ID" "KAKAO_CLIENT_ID" "KAKAO_CLIENT_SECRET" "NAVER_CLIENT_ID" "NAVER_CLIENT_SECRET" "APPLE_CLIENT_ID" "WEATHER_API" "PLACE_GEOCODE_MODE" "WEATHER_MODE" "AI_REMINDER_COPY_MODE" }}
             {{- include "trippilot.secretEnv" (dict "env" . "secret" "trippilot-backend" "optional" true) | nindent 12 }}
             {{- end }}
             {{- include "trippilot.secretEnv" (dict "env" "TRIPPILOT_PUSH_MODE" "key" "PUSH_MODE" "secret" "trippilot-backend" "optional" true) | nindent 12 }}

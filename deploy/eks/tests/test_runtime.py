@@ -55,6 +55,20 @@ class SecretTests(unittest.TestCase):
             with self.subTest(changed=changed), self.assertRaises(ValueError):
                 runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, **changed})
 
+    def test_google_client_secret_must_stay_empty(self):
+        """공개(iOS) 클라이언트에 시크릿을 보내면 Google 이 invalid_client 로 거절한다(2026-09-23 실측).
+
+        부재·빈 값은 정상이어야 한다 — 그래야 이미 그 키가 들어 있는 시크릿의 배포 전체가
+        검증에서 죽지 않고, 값을 채운 경우에만 이유와 함께 막힌다.
+        """
+        base = {name: {} for name in runtime_secrets.GROUP_KEYS}
+        for ok in ({}, {"GOOGLE_CLIENT_SECRET": ""}, {"GOOGLE_CLIENT_SECRET": "   "}):
+            with self.subTest(ok=ok):
+                runtime_secrets.validate_groups({**base, "backend": ok})
+        with self.assertRaises(ValueError) as caught:
+            runtime_secrets.validate_groups({**base, "backend": {"GOOGLE_CLIENT_SECRET": "GOCSPX-무언가"}})
+        self.assertIn("invalid_client", str(caught.exception))
+
     def test_rejects_unknown_keys_and_nonstring_secret_values(self):
         for bad in ({"AI_LLM_PROVIDER": "openai"}, {"OPENAI_API_KEY": 123}, {"OPENAI_API_KEY": "a\x00b"}):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
