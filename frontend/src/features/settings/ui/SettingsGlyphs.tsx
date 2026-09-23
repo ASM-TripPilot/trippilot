@@ -40,41 +40,6 @@ export function ChevronRightGlyph({ size = 20, testID }: GlyphProps) {
   );
 }
 
-/** 헤더 우상단 아이콘(설정/모양 — Figma l03 의 태양형 글리프). onPress 미배선(Q6). */
-export function SettingsSunGlyph({ size = 24, testID }: GlyphProps) {
-  const rays = [0, 45, 90, 135, 180, 225, 270, 315];
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Circle cx={12} cy={12} r={4} stroke={INK} strokeWidth={1.7} />
-      {rays.map((deg) => {
-        const rad = (deg * Math.PI) / 180;
-        const x1 = 12 + Math.cos(rad) * 7;
-        const y1 = 12 + Math.sin(rad) * 7;
-        const x2 = 12 + Math.cos(rad) * 9;
-        const y2 = 12 + Math.sin(rad) * 9;
-        return (
-          <Line
-            key={deg}
-            x1={x1}
-            y1={y1}
-            x2={x2}
-            y2={y2}
-            stroke={INK}
-            strokeWidth={1.7}
-            strokeLinecap="round"
-          />
-        );
-      })}
-    </Svg>
-  );
-}
-
 /** 등록 숙소·예약 기록 행 — 책갈피/기록. */
 export function BookmarkGlyph({ size = 20, testID }: GlyphProps) {
   return (

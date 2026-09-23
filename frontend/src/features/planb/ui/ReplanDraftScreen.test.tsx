@@ -129,3 +129,28 @@ describe('🔴 ReplanDraftScreen — 빈 슬롯 degrade(AC-3)', () => {
     );
   });
 });
+
+describe('🔴 TRIP-939 AC-8 · 후보 교체 진입은 목적지가 있을 때만', () => {
+  it('D4 · onPressCandidates 미주입이면 "다른 후보" 링크가 0개다(슬롯은 그대로)', () => {
+    // 준비: 후보 4개인 슬롯(s1)이 있어도 진입 콜백을 안 넘긴다(PlanbDraftPage 의 운영 모양).
+    render(
+      <ReplanDraftScreen {...filledProps()} onPressCandidates={undefined} />
+    );
+
+    // 단언: 링크 부재 + 짝 앵커(슬롯 3행은 그려졌다).
+    // testID 문자열로 모아 비교한다 — 요소 배열을 toEqual 로 비교하면 실패 시 fiber 트리 diff 출력이
+    // 워커 메모리를 터뜨린다(실측 OOM, 02a ★22).
+    expect(
+      screen
+        .queryAllByTestId(/^planb-draft-candidates-/)
+        .map((node) => node.props.testID)
+    ).toEqual([]);
+    expect(screen.getAllByTestId(SLOT_ROOT)).toHaveLength(3);
+  });
+
+  it('D4 · onPressCandidates 주입이면 후보 있는 슬롯에 링크가 뜬다(짝)', () => {
+    render(<ReplanDraftScreen {...filledProps()} />);
+
+    expect(screen.getByTestId('planb-draft-candidates-s1')).toBeOnTheScreen();
+  });
+});

@@ -22,7 +22,8 @@ import { ReplanDraftScreen } from '@/features/planb/ui/ReplanDraftScreen';
  *  - 'solving'·'closed'·미도착 → null(폴링 대기·세션 종료·조회 미도착, 화면 없음).
  *
  * 배선 목적지: i13/i16 `onManualEdit` → planb/manual(variant 없음=정상 i15) · i13 `onApply` →
- * planb/diff(확정은 i18) · i16 `onSkip`·`onRestMode` → no-op 자리표시(계약·제품 정의 부재).
+ * planb/diff(확정은 i18). i13 `onPressCandidates`·i16 `onSkip`·`onRestMode` 는 계약·제품 정의 부재라
+ * **넘기지 않는다** — 화면이 그 버튼을 안 그린다(TRIP-939, 빈 함수 주입 = 눌러도 반응 없는 버튼).
  */
 
 export interface PlanbDraftPageProps {
@@ -73,7 +74,6 @@ export function PlanbDraftPage({
               params: { tripId, sessionId },
             })
           }
-          onPressCandidates={() => {}}
         />
       );
     }
@@ -81,8 +81,6 @@ export function PlanbDraftPage({
       return (
         <NoAlternativeScreen
           skipCount={(data.excludedPoiIds ?? []).length}
-          onSkip={() => {}}
-          onRestMode={() => {}}
           onManualEdit={goManual}
         />
       );

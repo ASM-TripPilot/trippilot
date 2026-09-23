@@ -27,6 +27,7 @@ interface HomeNav {
   onPressSpotsMore: () => void;
   onPressSearch: () => void;
   onPressMagazine: () => void;
+  onPressBell: () => void;
   savedPlacesCount: number;
   savedStaysCount: number;
   savedMenuOpen: boolean;
@@ -109,6 +110,8 @@ export default function HomeRoute() {
     onPressSearch: () => router.push('/explore/region?purpose=trip'),
     // TRIP-700 — discovery 캐러셀 page0(매거진 히어로) press → a02 매거진 목록(/magazine).
     onPressMagazine: () => router.push('/magazine'),
+    // TRIP-939 AC-9 — 인사 헤더 종 press → l01 알림함(/notifications, U6 "어디서든 종 아이콘으로 진입").
+    onPressBell: () => router.push('/notifications'),
     savedPlacesCount: savedPoiIds.length,
     savedStaysCount,
     savedMenuOpen,

@@ -95,7 +95,10 @@ import {
   NotificationSettingsScreen,
   type ToggleValueMap,
 } from '@/features/notification/ui/NotificationSettingsScreen';
-import { buildSettingsSections } from '@/features/settings/model/settingsSections';
+import {
+  buildSettingsSections,
+  filterReadySettingsSections,
+} from '@/features/settings/model/settingsSections';
 import { DeleteAccountDialog } from '@/features/settings/ui/DeleteAccountDialog';
 import { LocationConsentScreen } from '@/features/settings/ui/LocationConsentScreen';
 import type { StyleCardVM } from '@/features/settings/model/styleCardModel';
@@ -204,6 +207,18 @@ try {
   useDevPreviewSearchParams = require('expo-router').useLocalSearchParams;
 } catch {
   useDevPreviewSearchParams = () => ({});
+}
+
+// 운영 번들 리다이렉트 수단(TRIP-939 AC-10) — 위와 같은 이유로 정적 import 대신 지연 require + 폴백.
+// 폴백(null 렌더)은 expo-router 를 못 불러오는 jest 경로 전용이다(그 경로는 __DEV__=true 라 안 쓰인다).
+let DevPreviewRedirect: (props: { href: '/' }) => ReactElement | null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  DevPreviewRedirect = require('expo-router').Redirect;
+} catch {
+  DevPreviewRedirect = function NoRedirect() {
+    return null;
+  };
 }
 
 /**
@@ -2661,7 +2676,6 @@ export const PREVIEW_STATES: PreviewState[] = [
                           },
                         ]
                   }
-                  onPressAdd={noop}
                 />
               }
               memoSlot={<MemoInline onSubmit={noop} />}
@@ -2670,7 +2684,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         }
         onPressComplete={noop}
         onPressSkip={noop}
-        onPressSpontaneous={noop}
         onPressBack={noop}
         onPressTab={noop}
       />
@@ -2739,7 +2752,6 @@ export const PREVIEW_STATES: PreviewState[] = [
                     uri: null,
                   },
                 ]}
-                onPressAdd={noop}
               />
             }
             memoSlot={<MemoInline onSubmit={noop} />}
@@ -2748,7 +2760,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         )}
         onPressComplete={noop}
         onPressSkip={noop}
-        onPressSpontaneous={noop}
         onPressBack={noop}
         onPressTab={noop}
       />
@@ -2845,7 +2856,6 @@ export const PREVIEW_STATES: PreviewState[] = [
                       uri: null,
                     },
                   ]}
-                  onPressAdd={noop}
                 />
               }
               memoSlot={<MemoInline onSubmit={noop} />}
@@ -2855,7 +2865,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         onPressManualCheck={noop}
         onPressComplete={noop}
         onPressSkip={noop}
-        onPressSpontaneous={noop}
         onPressBack={noop}
         onPressTab={noop}
       />
@@ -3047,7 +3056,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         ]}
         orderedVisits={[]}
         shareEnabled
-        onShare={noop}
         onBack={noop}
         onPressTab={noop}
       />
@@ -3072,7 +3080,6 @@ export const PREVIEW_STATES: PreviewState[] = [
           { order: 4, dayLabel: '3일차', place: '전포 카페거리' },
         ]}
         shareEnabled
-        onShare={noop}
         onBack={noop}
         onPressTab={noop}
       />
@@ -3081,7 +3088,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   // j06 공유 카드 2키(TRIP-574) — 순수 뷰(`ShareCardScreen`)를 격리 렌더한다(`@/shared/api` 값 import 0
   // 이라 프리뷰 지뢰 목 통과 — 컨테이너 `ShareCardPage` 는 별 파일이라 import 사슬 전이 로드 없음).
   // 라이브 지도·view-shot 미설치라 카드는 지도 없이 동선 목록·워터마크·하단 그라디언트로 degrade 조립.
-  // 저장/공유 press 는 armed:false → "준비 중" 안내만(가짜 성공 금지). 포맷 전환(aspect)·워터마크·그라디언트
+  // 캡처 미장전(armed:false)이라 저장/공유 버튼 줄은 운영 화면처럼 안 그려진다(TRIP-939). 포맷 전환(aspect)·워터마크·그라디언트
   // 오버레이 정렬·no-photo 안내 레이아웃은 픽셀이라 6-b/육안 몫 — 자율/야간이라 6-b SKIP, 이 2키가 유일한
   // 육안 대조 자리(포맷 세그를 눌러 9:16→1:1→4:5 종횡비가 바뀌는 것도 여기서 확인).
   {
@@ -3149,7 +3156,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   },
   // j05 여행 스타일 2키(TRIP-573·TRIP-765) — 순수 뷰(`TravelStyleScreen`)를 격리 렌더한다(네트워크
   // 계층 import 0 이라 프리뷰 지뢰 목 통과 — shared/ui/BottomTabBar 만 프레젠테이션으로 문다). 지도는
-  // 좌표 계약 공백이라 늘 placeholder degrade(가짜 지도 금지). StatTile 2톤·진행 병합·아래 행 계산값·칩
+  // 좌표 계약 공백이라 그리지 않는다(TRIP-939 — 자리표시 제거, 근거 링크도 목적지 없어 미렌더). StatTile 2톤·진행 병합·아래 행 계산값·칩
   // `#`접두·바텀탭바는 이 2키(정합 default·임시 data-insufficient)로 육안 대조(자율/야간 6-b SKIP).
   // avgDwellMinutes:null 체류 타일 소멸 degrade 는 프리뷰 키 대신 jest AC-2 null 테스트가 잠근다(TRIP-765).
   {
@@ -3925,7 +3932,6 @@ export const PREVIEW_STATES: PreviewState[] = [
                 index={index}
                 timeLabel={H08_PREVIEW_TIME_LABELS[index]}
                 required={index === 2}
-                onPressName={noop}
                 onPressAlt={noop}
               />,
             ];
@@ -3990,7 +3996,6 @@ export const PREVIEW_STATES: PreviewState[] = [
                 index={index}
                 timeLabel={H08_PREVIEW_TIME_LABELS[index]}
                 required={index === 2}
-                onPressName={noop}
                 onPressAlt={noop}
               />,
             ];
@@ -4418,7 +4423,8 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // l02 알림 설정 default(1600:2388) — 6행×2열(COMMUNITY 숨김)·상단 정보 배너·하단 SYSTEM 줄. 토글
+  // l02 알림 설정 default(1600:2388) — 6행×인앱 1열(COMMUNITY 숨김, 푸시 열은 TRIP-939 개통 전 숨김)·
+  // 상단 정보 배너·하단 SYSTEM 줄. 토글
   // 빨강/회색·thumb 위치·정보 배너 틴트는 jest 사각이라 이 키가 육안 대조 자리다.
   {
     key: 'l02-notification-default',
@@ -4436,7 +4442,8 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   // l02 permission-denied(1601:2388) — 상단 대시 배너+[설정 이동]·열 헤더 "권한 필요" 칩·푸시 열
-  // 전부 회색 비활성·인앱은 정상·하단 푸시-누적 줄. 대시·칩·dimmed 는 6-b 실기 확인.
+  // 전부 회색 비활성·인앱은 정상·하단 푸시-누적 줄. ⚠️ TRIP-939: 푸시 열 개통 전(PUSH_COLUMN_READY=false)
+  // 에는 권한 거부 표면도 함께 숨어 default 와 같게 그려진다 — 개통하면 이 키가 다시 그 얼굴을 보인다.
   {
     key: 'l02-notification-denied',
     band: 'l',
@@ -5074,7 +5081,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         slots={REPLAN_DRAFT_PREVIEW_SLOTS}
         onManualEdit={noop}
         onApply={noop}
-        onPressCandidates={noop}
       />
     ),
   },
@@ -5090,25 +5096,17 @@ export const PREVIEW_STATES: PreviewState[] = [
         slots={[]}
         onManualEdit={noop}
         onApply={noop}
-        onPressCandidates={noop}
       />
     ),
   },
-  // ── i16 대안 없음(TRIP-563) — 지도·경고 삼각·문구·3버튼. 3버튼 모두 enabled, onSkip·onRestMode 는
-  //    no-op 자리표시(페이지가 실배선 결정). 실 지도·버튼 정렬은 6-b ──
+  // ── i16 대안 없음(TRIP-563) — 지도·경고 삼각·문구·[수동 수정]. [건너뛰기]·[휴식 모드]는 페이지가
+  //    목적지를 안 넘겨 운영 화면에 없다(TRIP-939) — 여기서도 넘기지 않는다. 실 지도·버튼 정렬은 6-b ──
   {
     key: 'planb-noalt',
     band: 'i',
     label: 'i16 · 대안 없음',
     login: null,
-    render: () => (
-      <NoAlternativeScreen
-        skipCount={1}
-        onSkip={noop}
-        onRestMode={noop}
-        onManualEdit={noop}
-      />
-    ),
+    render: () => <NoAlternativeScreen skipCount={1} onManualEdit={noop} />,
   },
   // ── i19 반영 완료(TRIP-441) — buildable 서브셋(헤더·체크·문구·CTA). 체크 원 크기·primary bg·
   //    정렬은 jest 사각이라 이 키가 육안 대조 자리다(지표·전후 배지·되돌리기는 draft 부재로 없음) ──
@@ -5177,7 +5175,8 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   // l05 설정(TRIP-608) — 실화면 딥링크로는 미인증 리다이렉트/백엔드 부재로 온전히 못 본다. jest 가
-  // 못 보는 것(6그룹 카드 레이아웃·리딩 아이콘 12종·"준비 중" 비활성·위험/동의 pill)을 여기서 눈으로.
+  // 못 보는 것(카드 레이아웃·리딩 아이콘·위험/동의 pill)을 여기서 눈으로. 운영 화면과 같게 ready 행만
+  // 거른 4그룹을 그린다(TRIP-939 — "준비 중" 행은 개통 전까지 숨김).
   {
     key: 'settings-default',
     band: 'l',
@@ -5185,10 +5184,12 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       <SettingsScreen
-        groups={buildSettingsSections({
-          nickname: '여행자123',
-          email: 'trippilot@email.com',
-        })}
+        groups={filterReadySettingsSections(
+          buildSettingsSections({
+            nickname: '여행자123',
+            email: 'trippilot@email.com',
+          })
+        )}
         deletionState="active"
         currentNickname="여행자123"
         onPressBack={noop}
@@ -5207,10 +5208,12 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       <SettingsScreen
-        groups={buildSettingsSections({
-          nickname: '여행자123',
-          email: null,
-        })}
+        groups={filterReadySettingsSections(
+          buildSettingsSections({
+            nickname: '여행자123',
+            email: null,
+          })
+        )}
         deletionState="active"
         currentNickname="여행자123"
         truncatedLabel="일부 항목이 잘렸어요: photos, memos"
@@ -5231,10 +5234,12 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       <SettingsScreen
-        groups={buildSettingsSections({
-          nickname: '여행자123',
-          email: null,
-        })}
+        groups={filterReadySettingsSections(
+          buildSettingsSections({
+            nickname: '여행자123',
+            email: null,
+          })
+        )}
         deletionState="active"
         currentNickname="여행자123"
         exportError="내보내기 정보를 불러오지 못했어요. 다시 시도해 주세요."
@@ -5254,10 +5259,12 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       <SettingsScreen
-        groups={buildSettingsSections({
-          nickname: '여행자123',
-          email: 'trippilot@email.com',
-        })}
+        groups={filterReadySettingsSections(
+          buildSettingsSections({
+            nickname: '여행자123',
+            email: 'trippilot@email.com',
+          })
+        )}
         deletionState="pending"
         purgeAt="2026-09-13T00:00:00Z"
         currentNickname="여행자123"
@@ -5511,7 +5518,18 @@ const byBandCode = (a: PreviewState, b: PreviewState): number => {
   return ca < cb ? -1 : ca > cb ? 1 : 0;
 };
 
+/**
+ * 라우트 진입점 — 운영 번들(`__DEV__ === false`)이면 프리뷰를 그리지 않고 홈(`/`)으로 한 번 보낸다
+ * (TRIP-939 AC-10, 심사 2.1 — 딥링크 `trippilot://_dev/preview` 로도 개발 화면이 안 열린다).
+ * `__DEV__` 는 모듈 맨 위가 아니라 **렌더 안에서** 읽는다 — 테스트가 전역을 뒤집어 운영 분기를 탈 수
+ * 있게. 본체를 별도 컴포넌트로 둔 것은 훅(useState 등)을 조건 분기 앞에서 부르지 않기 위해서다.
+ */
 export default function DevPreviewScreen() {
+  if (!__DEV__) return <DevPreviewRedirect href="/" />;
+  return <DevPreviewBody />;
+}
+
+function DevPreviewBody() {
   // useLocalSearchParams: expo-router 훅 — 현재 화면 URL 의 쿼리 문자열을 객체로 돌려준다.
   // 라우터 컨텍스트가 없어도(동결 devPreview.test) 빈 객체를 돌려주도록 expo-router 가
   // 보장한다 — 그래서 목 없이 렌더해도 크래시 없이 기존 초기 상태(splash)로 떨어진다.

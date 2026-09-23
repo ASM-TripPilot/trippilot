@@ -20,9 +20,19 @@ import { TripSummaryPage } from './TripSummaryPage';
  *  - AC-4(j04, 선제 green 회귀 앵커): ready:false → "요약 준비 중" 안내 렌더 + 요약 화면 자체 미렌더
  *    (공유 진입점 부재로 BR-U5-48 흡수).
  *
+ * TRIP-939 AC-2b(Q2): 공유 카드의 저장·공유가 미장전(`captureShareImage().armed === false`)이면 j06 은
+ *   보기만 하는 막다른 화면이 된다 → 페이지가 `onShare` 를 **넘기지 않아** 요약 화면의 [공유]가 사라진다.
+ *   armed 는 홀더 목으로 갈아끼운다(기본 false = 오늘의 운영 빌드, 개통 짝만 true).
+ *
  * (개념) `jest.fn(() => null)` 화면 목 → `mock.calls[0][0]` 이 전달 props · `toHaveBeenCalledWith(문자열)`
- *   = 인자 완전일치.
+ *   = 인자 완전일치 · `toBeUndefined()` = 그 prop 을 안 넘겼다(또는 undefined 로 넘겼다).
  */
+
+const mockShareArmed = { value: false };
+jest.mock('@/features/reflection/model/shareCard', () => ({
+  ...jest.requireActual('@/features/reflection/model/shareCard'),
+  captureShareImage: () => ({ armed: mockShareArmed.value }),
+}));
 
 jest.mock('expo-router', () => ({
   router: { push: jest.fn(), canGoBack: jest.fn(() => true), back: jest.fn() },
@@ -59,24 +69,46 @@ const SUMMARY: TripSummary = {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockShareArmed.value = false;
 });
 
-describe('🔴 AC-6a · 공유 → j06 라우트 push', () => {
-  it('ready:true 에서 onShare 를 부르면 /trips/{tripId}/records/share 로 push 한다', () => {
-    (useTripSummary as jest.Mock).mockReturnValue({
-      envelope: { ready: true, summary: SUMMARY },
-      summary: SUMMARY,
-      source: 'RULE',
-      isPending: false,
-      isError: false,
-      refetch: jest.fn(),
-    });
+function readySummary() {
+  (useTripSummary as jest.Mock).mockReturnValue({
+    envelope: { ready: true, summary: SUMMARY },
+    summary: SUMMARY,
+    source: 'RULE',
+    isPending: false,
+    isError: false,
+    refetch: jest.fn(),
+  });
+}
+
+describe('🔴 AC-6a · 공유 → j06 라우트 push (TRIP-939: 캡처 개통 시에만)', () => {
+  it('TRIP-939 AC-2b: 캡처 미장전(armed:false)이면 요약 화면에 onShare 를 넘기지 않는다', () => {
+    // 준비: 요약 준비 완료 + 캡처 미장전(기본).
+    readySummary();
+
+    // 실행
+    render(<TripSummaryPage tripId="trip-1" />);
+
+    // 단언: 화면은 그려졌고(앵커), 공유 진입 콜백은 없다 → 화면이 [공유]를 안 그린다.
+    const calls = (TripSummaryScreen as unknown as jest.Mock).mock.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls[0][0].onShare).toBeUndefined();
+  });
+
+  it('armed:true(개통) 에서 onShare 를 부르면 /trips/{tripId}/records/share 로 push 한다(짝)', () => {
+    // 준비: 캡처가 장전됐다고 가정.
+    mockShareArmed.value = true;
+    readySummary();
 
     render(<TripSummaryPage tripId="trip-1" />);
 
+    // 실행: 화면에 넘긴 공유 콜백을 부른다.
     const props = (TripSummaryScreen as unknown as jest.Mock).mock.calls[0][0];
     props.onShare();
 
+    // 단언: j06 공유 라우트로 정확히.
     expect(router.push).toHaveBeenCalledWith('/trips/trip-1/records/share');
   });
 });

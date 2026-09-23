@@ -195,19 +195,34 @@ export function SlotStopCard({
 
         <View className="flex-row items-center justify-between gap-[6px]">
           <View className="flex-1 flex-row items-center gap-[6px]">
-            <Pressable
-              testID={fieldId('name')}
-              onPress={onPressName}
-              className="flex-shrink flex-row items-center gap-[2px]"
-            >
-              <Text
-                numberOfLines={1}
-                className="font-noto-bold text-card-title font-bold text-ink"
+            {/* 이름 진입 목적지가 없으면 누를 수 없는 글자로, `›` 도 뺀다(TRIP-939 A-3·Q4). */}
+            {onPressName ? (
+              <Pressable
+                testID={fieldId('name')}
+                onPress={onPressName}
+                className="flex-shrink flex-row items-center gap-[2px]"
               >
-                {slot.nameKo ?? ''}
-              </Text>
-              <ChevronRightGlyph size={14} tone="muted" />
-            </Pressable>
+                <Text
+                  numberOfLines={1}
+                  className="font-noto-bold text-card-title font-bold text-ink"
+                >
+                  {slot.nameKo ?? ''}
+                </Text>
+                <ChevronRightGlyph size={14} tone="muted" />
+              </Pressable>
+            ) : (
+              <View
+                testID={fieldId('name')}
+                className="flex-shrink flex-row items-center gap-[2px]"
+              >
+                <Text
+                  numberOfLines={1}
+                  className="font-noto-bold text-card-title font-bold text-ink"
+                >
+                  {slot.nameKo ?? ''}
+                </Text>
+              </View>
+            )}
             {required ? (
               <View
                 testID={fieldId('required')}

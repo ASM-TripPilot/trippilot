@@ -16,6 +16,9 @@ import { NoAlternativeScreen } from './NoAlternativeScreen';
  *   숫자 조립이라 정규식 부분으로 잰다.
  *
  * 3동작 뼈대: 준비=props → 실행=렌더/press → 단언=요소 존재·enabled·불린 콜백.
+ *
+ * TRIP-939 AC-8(심사 2.1): [건너뛰기]·[휴식 모드]는 동작(계약·제품 정의)이 아직 없어 페이지가 빈 함수를
+ *  넘기던 무반응 버튼이다 → 콜백이 **주입될 때만** 그린다. N1·N2 는 주입 시(개통 짝) 계약으로 남는다.
  */
 
 // 지도는 이 화면의 심판 대상이 아니다 — WebView 를 통과 스텁으로 치환(center 무관).
@@ -88,5 +91,24 @@ describe('🔴 NoAlternativeScreen — i16 대안 없음(AC-1)', () => {
     expect(props.onManualEdit).toHaveBeenCalledTimes(1);
     expect(props.onSkip).toHaveBeenCalledTimes(0);
     expect(props.onRestMode).toHaveBeenCalledTimes(0);
+  });
+});
+
+describe('🔴 TRIP-939 AC-8 · 동작 없는 선택지는 그리지 않는다', () => {
+  it('N3 · onSkip·onRestMode 미주입 → [건너뛰기]·[휴식 모드] 없음, [수동 수정]만 1회 동작', () => {
+    // 준비: 페이지의 운영 모양 — 수동 수정만 실배선.
+    const onManualEdit = jest.fn();
+    render(<NoAlternativeScreen skipCount={3} onManualEdit={onManualEdit} />);
+
+    // 단언(부재): 무반응이던 두 버튼과 그 라벨이 없다.
+    expect(screen.queryByTestId('planb-noalt-skip')).toBeNull();
+    expect(screen.queryByTestId('planb-noalt-rest')).toBeNull();
+    expect(screen.queryByText(/건너뛰기/)).toBeNull();
+    expect(screen.queryByText(/휴식 모드/)).toBeNull();
+
+    // 실행·단언(짝): 경고 문구는 그대로, [수동 수정]은 동작한다.
+    expect(screen.getByText('조건에 맞는 대안이 없어요')).toBeOnTheScreen();
+    fireEvent.press(screen.getByTestId('planb-noalt-manual'));
+    expect(onManualEdit).toHaveBeenCalledTimes(1);
   });
 });

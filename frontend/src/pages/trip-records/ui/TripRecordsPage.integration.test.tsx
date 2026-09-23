@@ -18,14 +18,16 @@ import { TripRecordsPage } from './TripRecordsPage';
  *
  * 무엇을 보장하나(관측 가능한 결과만 — 화면의 새 prop 형태는 박제하지 않는다):
  *  - AC-1  일자 탭이 `Day${n}` 이 아니라 `${n}일차` 로 뜬다(formatDayLabel 배선).
- *  - AC-2  완료 방문 카드의 사진 자리에 PhotoThumbStrip 이 배선된다(`record-trip-photo-add` = 실배선 신호).
+ *  - AC-2  완료 방문 카드의 사진 자리에 PhotoThumbStrip 이 배선된다(`record-trip-photo-strip` = 실배선 신호 —
+ *          TRIP-939 B-7 로 사진 선택이 없는 `+` 타일은 숨겨져 옛 신호 `record-trip-photo-add` 대신 스트립 루트).
+ *  - TRIP-939 B-6·B-7(심사 2.1) — 장소 피커가 없는 [방문 추가]·사진 선택이 없는 `+` 타일을 그리지 않는다.
  *  - AC-3  완료 방문 카드의 메모 자리에 MemoInline 이 배선된다(`record-trip-memo-input`).
  *  - AC-3(seed-once) 카드 전환 시 타이핑한 메모 초안이 다음 방문으로 새지 않는다(key={visitCheckId}).
  *
  * ★왜 페이지 통합인가: 카드측 슬롯 계약은 VisitRecordCard.wiring.test 가 이미 잠갔다. 남은 완료조건은
  *   "페이지가 실제로 슬롯을 실데이터로 조립하는가" — 실 쿼리(MSW)로 렌더해야만 보인다.
  * ★정적↔실배선 판별: 카드 정적 스캐폴딩(사진 자리 View·메모 자리 Text)은 **testID 가 없다**. 실배선한
- *   PhotoThumbStrip·MemoInline 만 `record-trip-photo-add`·`record-trip-memo-input` 을 소유한다 →
+ *   PhotoThumbStrip·MemoInline 만 `record-trip-photo-strip`·`record-trip-memo-input` 을 소유한다 →
  *   이 testID present = "실 컴포넌트가 슬롯에 들어감"(글리프 fill 사각 회피 계열, 색 아닌 testID 로 판정).
  * ★seed-once(key): MemoInline 은 `useState(text ?? '')` 로 초안을 **마운트 1회** 심는다. 메모 읽기
  *   소스가 없어(VisitCheck 에 memo 필드 없음) "저장 메모 표시"로는 못 잠근다 — **타이핑 초안이 day 전환에
@@ -182,15 +184,27 @@ describe('🔴 AC-1 · 일자 탭 = "${n}일차"(Day${n} 폐기)', () => {
 });
 
 describe('🔴 AC-2·AC-3 · 완료 방문 카드에 사진/메모 슬롯이 실배선된다', () => {
-  it('record-trip-photo-add(PhotoThumbStrip)·record-trip-memo-input(MemoInline) 이 실데이터 렌더에서 뜬다', async () => {
+  it('record-trip-photo-strip(PhotoThumbStrip)·record-trip-memo-input(MemoInline) 이 실데이터 렌더에서 뜨고, 사진 선택 없는 + 타일은 없다', async () => {
     render(<TripRecordsPage tripId={TRIP_ID} />, { wrapper });
 
     // 준비/실행 — 활성일(첫날) 완료 방문(v-a) 카드가 쿼리 완료 후 그려진다.
     await screen.findByText('광안리 해변');
 
     // 단언 — 정적 스캐폴딩엔 없는 실배선 testID 가 present(= 실 컴포넌트가 슬롯에 들어감).
-    expect(await screen.findByTestId('record-trip-photo-add')).toBeTruthy();
+    expect(await screen.findByTestId('record-trip-photo-strip')).toBeTruthy();
     expect(screen.getByTestId('record-trip-memo-input')).toBeTruthy();
+    // TRIP-939 B-7 — 페이지가 사진 선택(onPressAdd)을 넘기지 않아 `+` 타일은 그리지 않는다.
+    expect(screen.queryByTestId('record-trip-photo-add')).toBeNull();
+  });
+
+  it('TRIP-939 B-6: 장소 피커가 없는 [방문 추가] 버튼을 그리지 않는다', async () => {
+    // 준비·실행: 실 페이지를 그린다(페이지는 즉석 방문 진입을 넘기지 않는다).
+    render(<TripRecordsPage tripId={TRIP_ID} />, { wrapper });
+    await screen.findByText('광안리 해변');
+
+    // 단언: 눌러도 아무 일 없던 버튼 부재 + 짝 앵커(방문 카드는 그려졌다).
+    expect(screen.queryByTestId('record-trip-spontaneous-add')).toBeNull();
+    expect(screen.queryByText('방문 추가')).toBeNull();
   });
 });
 

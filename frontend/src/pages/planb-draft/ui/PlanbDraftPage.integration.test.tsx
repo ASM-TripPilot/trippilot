@@ -8,7 +8,8 @@ import { PlanbDraftPage } from './PlanbDraftPage';
  * 무엇을 보장하나(자식 화면은 스텁 목이라 "어느 화면을 고르나 + 콜백이 어디로 가나"만 잰다):
  *  - 🔴 DRAFT→i13 셸(reasons·excludedPoiIds 계약필드 바인딩 + slots=[] 정직 degrade), NO_SOLUTION→i16,
  *    FAILED→router.push(planb/manual?variant=error) 1회, SOLVING·closed·미도착→렌더 없음(AC-6).
- *  - 🔴 i16/i13 onManualEdit 만 planb/manual 실배선(variant 없음=정상 i15), onSkip·onRestMode no-op(AC-7).
+ *  - 🔴 i16/i13 onManualEdit 만 planb/manual 실배선(variant 없음=정상 i15). onSkip·onRestMode·
+ *    onPressCandidates 는 넘기지 않는다(TRIP-939 AC-8 — 빈 함수 주입 = 누르면 반응 없는 버튼).
  *  - 🔴 i13 onApply→planb/diff 배선(brief §CTA).
  *
  * ★ 왜 자식 화면을 스텁 목하나: 실 ReplanDraftScreen·NoAlternativeScreen 은 지도를 그려 통합 버킷에서
@@ -101,6 +102,8 @@ describe('🔴 I1 · AC-6 — DRAFT → i13 셸(계약필드 바인딩 + slots=[
     expect(mockI13.props?.excludedPoiIds).toEqual(['x1']);
     // draft 계약 갭 — 페이지가 슬롯을 지어내지 않는다(정직 degrade).
     expect(mockI13.props?.slots).toEqual([]);
+    // TRIP-939 AC-8 — 후보 교체 진입은 목적지가 없어 빈 함수를 넘기지 않는다(무반응 링크 차단).
+    expect(mockI13.props?.onPressCandidates).toBeUndefined();
   });
 });
 
@@ -161,8 +164,8 @@ describe('🔴 I4 · AC-6 — SOLVING·closed·미도착 → 렌더 없음', () 
   });
 });
 
-describe('🔴 I5 · AC-7 — i16 배선: onManualEdit 실, onSkip·onRestMode no-op', () => {
-  it('onManualEdit→planb/manual(variant 없음), onSkip·onRestMode 는 push 0', () => {
+describe('🔴 I5 · AC-7 — i16 배선: onManualEdit 실, onSkip·onRestMode 는 넘기지 않는다 (TRIP-939 AC-8)', () => {
+  it('onManualEdit→planb/manual(variant 없음), onSkip·onRestMode 는 미주입(버튼 자체가 안 그려진다)', () => {
     mockSession.data = {
       status: 'NO_SOLUTION',
       sessionId: SESSION_ID,
@@ -176,10 +179,9 @@ describe('🔴 I5 · AC-7 — i16 배선: onManualEdit 실, onSkip·onRestMode n
       params: { tripId: TRIP_ID },
     });
 
-    mockPush.mockClear();
-    (mockI16.props?.onSkip as () => void)();
-    (mockI16.props?.onRestMode as () => void)();
-    expect(mockPush).not.toHaveBeenCalled();
+    // TRIP-939 AC-8 — 동작 없는 두 선택지는 빈 함수로 채우지 않는다(주입 = 버튼이 보인다는 뜻).
+    expect(mockI16.props?.onSkip).toBeUndefined();
+    expect(mockI16.props?.onRestMode).toBeUndefined();
   });
 });
 

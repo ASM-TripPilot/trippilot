@@ -37,7 +37,8 @@ export interface ReplanDraftScreenProps {
   excludedPoiIds: string[];
   onManualEdit: () => void;
   onApply: () => void;
-  onPressCandidates: (slotKey: string) => void;
+  /** 미주입이면 슬롯의 "다른 후보" 링크를 그리지 않는다(TRIP-939). */
+  onPressCandidates?: (slotKey: string) => void;
 }
 
 export function ReplanDraftScreen({

@@ -335,3 +335,30 @@ describe('🔴 695-AC-4 · savedCount·savedPoiIds.length 가 각 배지로 흐�
     );
   });
 });
+
+// ── TRIP-939 AC-9 · 홈 종 → 알림함 ─────────────────────────────────────────────
+describe('🔴 939-AC-9 · 홈 종 → /notifications (모든 얼굴 공용 인사 헤더)', () => {
+  it('discovery 얼굴: 종 press → push("/notifications") 정확히 1회', () => {
+    // 준비: 기본값(여행 없음 = discovery 얼굴).
+    render(<HomeRoute />);
+
+    // 실행
+    fireEvent.press(screen.getByTestId('home-dashboard-bell'));
+
+    // 단언: 알림함(l01) 라우트로, 한 번만(인자 완전일치).
+    expect(mockPush.mock.calls).toEqual([['/notifications']]);
+  });
+
+  it('planning 얼굴: 종 press → push("/notifications") 정확히 1회', () => {
+    // 준비: 비-ENDED 여행 1건 → planning 얼굴.
+    mockUseGetTrips.mockReturnValue(tripsResult([trip({ status: 'PLANNED' })]));
+    render(<HomeRoute />);
+    expect(screen.getByTestId('home-trip-hero')).toBeOnTheScreen();
+
+    // 실행
+    fireEvent.press(screen.getByTestId('home-dashboard-bell'));
+
+    // 단언
+    expect(mockPush.mock.calls).toEqual([['/notifications']]);
+  });
+});

@@ -24,7 +24,8 @@ export type { ReplanSlotVM, SlotBadgeKind } from '../model';
 
 export interface ReplanSlotRowProps {
   vm: ReplanSlotVM;
-  onPressCandidates: (slotKey: string) => void;
+  /** 미주입이면 "다른 후보" 링크를 그리지 않는다(TRIP-939 — 목적지 없는 링크 제거). */
+  onPressCandidates?: (slotKey: string) => void;
 }
 
 // 상단 상태 배지 라벨 — fixed 는 우측 pill 이 대신 표시하므로 여기서 제외한다.
@@ -45,7 +46,8 @@ export function ReplanSlotRow({
       ? TOP_BADGE_LABEL[badgeKind]
       : null;
   const isChanged = badgeKind === 'changed';
-  const showCandidates = !isFixed && (candidateCount ?? 0) > 0;
+  const showCandidates =
+    onPressCandidates !== undefined && !isFixed && (candidateCount ?? 0) > 0;
 
   return (
     <View
@@ -94,7 +96,7 @@ export function ReplanSlotRow({
         <Pressable
           testID={`planb-draft-candidates-${slotKey}`}
           accessibilityRole="button"
-          onPress={() => onPressCandidates(slotKey)}
+          onPress={() => onPressCandidates?.(slotKey)}
           hitSlop={8}
           className="flex-row items-center gap-[2px]"
         >

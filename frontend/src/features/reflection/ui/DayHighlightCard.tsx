@@ -32,12 +32,8 @@ export function DayHighlightCard({
   subtitle,
   onPress,
 }: DayHighlightCardProps): ReactElement {
-  return (
-    <Pressable
-      testID="reflection-summary-day-card"
-      onPress={onPress}
-      className="w-full flex-row items-center gap-md rounded-card border border-hairline bg-canvas p-[12px]"
-    >
+  const content = (
+    <>
       {/* 72×72 썸네일 자리 — 사진 URL 계약 부재라 자리표시(가짜 이미지 금지). */}
       <View className="h-[72px] w-[72px] rounded-card bg-surface-soft" />
 
@@ -57,7 +53,26 @@ export function DayHighlightCard({
           </Text>
         ) : null}
       </View>
+    </>
+  );
+  const cardClass =
+    'w-full flex-row items-center gap-md rounded-card border border-hairline bg-canvas p-[12px]';
 
+  // TRIP-939 A-2: 목적지(onPress)가 없으면 누를 수 없는 View 로 그리고 `›` 도 뺀다(어포던스 제거).
+  if (!onPress) {
+    return (
+      <View testID="reflection-summary-day-card" className={cardClass}>
+        {content}
+      </View>
+    );
+  }
+  return (
+    <Pressable
+      testID="reflection-summary-day-card"
+      onPress={onPress}
+      className={cardClass}
+    >
+      {content}
       <Text className="font-noto text-[20px] text-muted-soft">›</Text>
     </Pressable>
   );

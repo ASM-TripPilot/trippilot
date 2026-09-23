@@ -86,3 +86,15 @@ export function buildSettingsSections(input: SettingsInput): SettingsGroupVM[] {
     },
   ];
 }
+
+/**
+ * 운영 화면용 필터(TRIP-939) — `ready:true` 행만 남기고, 행이 0개가 된 그룹은 뺀다. 입력은 바꾸지
+ * 않는다. 판정은 `ready` 플래그로만 하므로, 기능을 열 때는 위 모델에서 `ready:true` 한 줄이면 된다.
+ */
+export function filterReadySettingsSections(
+  groups: SettingsGroupVM[]
+): SettingsGroupVM[] {
+  return groups
+    .map((g) => ({ ...g, rows: g.rows.filter((r) => r.ready) }))
+    .filter((g) => g.rows.length > 0);
+}

@@ -33,8 +33,10 @@ import { SettingsPage } from '..';
  *   push 인자·횟수만 관측한다(02a ★8).
  *
  * (개념) 문자열 인자 매처는 완전일치 — `toHaveBeenCalledWith('/settings/location')`는 라우트를
- *  글자 그대로 잠근다(02a §5-A). `fireEvent.press`는 onPress 핸들러가 있어야 발화하고, 준비중 행은
- *  핸들러가 없어 깨끗한 no-op 이다(02a §5-B).
+ *  글자 그대로 잠근다(02a §5-A).
+ *
+ * TRIP-939 AC-1: 준비중 행(ready:false)은 페이지가 `filterReadySettingsSections` 로 걸러 운영 화면에
+ *  아예 그리지 않는다(구 "눌러도 push 0" 앵커를 "그룹째 부재"로 뒤집음 — 누를 것이 없어야 심사 2.1 통과).
  */
 
 const mockPush = jest.fn();
@@ -76,17 +78,25 @@ describe('TRIP-618 · SettingsPage 진입 배선', () => {
     expect(mockPush).toHaveBeenCalledWith('/settings/notifications');
   });
 
-  it('AC-4(선제green): 제휴 준비중 행을 눌러도 push 0(무배선 유지, 회귀 앵커)', () => {
+  it('TRIP-939 AC-1: 준비중 행은 운영 화면에 없다 — 여행 취향·제휴 안내 그룹째 빠지고 4그룹만 남는다', () => {
+    // 준비·실행: 실 페이지를 그린다(페이지가 ready 필터를 거쳐 화면에 넘긴다).
     render(<SettingsPage />);
 
-    // 제휴 안내 그룹의 준비중 행(onPress 없음)을 누른다.
+    // 단언: 계정·위치정보·알림·위험 영역 4그룹뿐이고, 준비중 그룹과 "준비 중" 문구는 없다.
     const groups = screen.getAllByTestId('settings-group');
-    const affiliate = groups.find(
-      (g) => within(g).queryByText('제휴 안내') !== null
-    )!;
-    fireEvent.press(within(affiliate).getByTestId('settings-row'));
-
-    // 단언: 목적지 라우트가 없는 행은 아무 데도 가지 않는다(INV-4).
-    expect(mockPush).not.toHaveBeenCalled();
+    expect(groups).toHaveLength(4);
+    expect(
+      groups.map((g) =>
+        ['계정', '위치정보', '알림', '위험 영역'].find(
+          (label) => within(g).queryByText(label) !== null
+        )
+      )
+    ).toEqual(['계정', '위치정보', '알림', '위험 영역']);
+    expect(screen.queryByText('여행 취향')).toBeNull();
+    expect(screen.queryByText('제휴 안내')).toBeNull();
+    expect(screen.queryByText(/준비 중/)).toBeNull();
+    // 짝 앵커: 개통된 네비 행은 그대로 남아 누를 수 있다(화면이 통째로 빈 것이 아니다).
+    fireEvent.press(screen.getByTestId('settings-nav-notifications'));
+    expect(mockPush).toHaveBeenCalledWith('/settings/notifications');
   });
 });

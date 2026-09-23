@@ -107,15 +107,16 @@ describe('🔴 AC-2 · 지도 캡션 — MAP 존재 ↔ VISIT_LIST 부재', () =
     expect(screen.queryByText(MAP_CAPTION)).toBeNull();
   });
 
-  it('map-pending(좌표 없음) 얼굴엔 범례 캡션이 없다 — 없는 지도의 범례 차단(5-b 경고-1)', () => {
-    // 준비: MAP 얼굴이나 좌표 없음 → 지도 대신 "지도 준비 중"(hasMap=false, DayHighlight 계약상 실런타임 유일 얼굴).
+  it('좌표 없는 MAP 얼굴엔 지도 자리표시도 범례도 없다 — "지도 준비 중" 제거(TRIP-939 AC-4)', () => {
+    // 준비: MAP 얼굴이나 좌표 없음(hasMap=false, DayHighlight 계약상 실런타임 유일 얼굴).
     renderScreen({ view: 'MAP', mapPins: [] });
 
-    // 단언: 지도 준비 중 자리표시는 뜨고, 그 없는 지도의 범례는 안 뜬다.
-    expect(
-      screen.getByTestId('reflection-summary-map-pending')
-    ).toBeOnTheScreen();
+    // 단언: 가짜 자리표시("지도 준비 중")도, 없는 지도의 범례도 그리지 않는다(심사 2.1).
+    expect(screen.queryByTestId('reflection-summary-map-pending')).toBeNull();
+    expect(screen.queryByText(/지도 준비 중/)).toBeNull();
     expect(screen.queryByText(MAP_CAPTION)).toBeNull();
+    // 짝 앵커: 날짜 카드는 그대로 그려진다(화면이 통째로 빈 것이 아니다).
+    expect(screen.getByTestId('reflection-summary-day-card')).toBeOnTheScreen();
   });
 });
 

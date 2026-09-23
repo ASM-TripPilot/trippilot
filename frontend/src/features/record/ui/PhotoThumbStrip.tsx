@@ -13,7 +13,8 @@ import { PlusGlyph, WarningTriangleGlyph } from './RecordGlyphs';
  *  - 실제 `<Image>`(record-photo-thumb-image-{id})는 **available + uri 있을 때만** 렌더한다 —
  *    other-device·unavailable 셀은 Image 자체를 안 그려 "깨진 썸네일 0"(BR-U5-14/15·INV-4).
  *  - 타 기기·자산 실패는 정직한 문구로 표기("다른 기기에서 찍은 사진"·"사진을 불러올 수 없어요").
- *  - `+` 추가 타일(record-trip-photo-add)은 항상 있고 press → onPressAdd.
+ *  - `+` 추가 타일(record-trip-photo-add)은 onPressAdd 주입 시에만 있고 press → onPressAdd
+ *    (TRIP-939 — 사진 선택 미배선 동안 숨김). 스트립 루트는 `record-trip-photo-strip`.
  *
  * availability 는 상위 페이지가 `photoAvailability` 로 선판정해 VM 으로 준다 — 스트립은 재판정하지 않는다
  * (VisitRecordCard 순수 프레젠테이션 규율 계승).
@@ -101,17 +102,22 @@ export function PhotoThumbStrip({
   onPressAdd,
 }: PhotoThumbStripProps): ReactElement {
   return (
-    <View className="flex-row flex-wrap items-start gap-sm">
+    <View
+      testID="record-trip-photo-strip"
+      className="flex-row flex-wrap items-start gap-sm"
+    >
       {photos.map((vm) => (
         <PhotoCell key={vm.visitPhotoMetaId} vm={vm} />
       ))}
-      <Pressable
-        testID="record-trip-photo-add"
-        onPress={onPressAdd}
-        className={`${CELL} items-center justify-center border-[1.4px] border-dashed border-hairline-strong`}
-      >
-        <PlusGlyph size={22} />
-      </Pressable>
+      {onPressAdd ? (
+        <Pressable
+          testID="record-trip-photo-add"
+          onPress={onPressAdd}
+          className={`${CELL} items-center justify-center border-[1.4px] border-dashed border-hairline-strong`}
+        >
+          <PlusGlyph size={22} />
+        </Pressable>
+      ) : null}
     </View>
   );
 }

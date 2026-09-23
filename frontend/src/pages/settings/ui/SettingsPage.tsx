@@ -3,7 +3,10 @@ import { type ReactElement, useState } from 'react';
 import { Share } from 'react-native';
 
 import { resolveExportSummary } from '@/features/settings/model/exportSummary';
-import { buildSettingsSections } from '@/features/settings/model/settingsSections';
+import {
+  buildSettingsSections,
+  filterReadySettingsSections,
+} from '@/features/settings/model/settingsSections';
 import { SettingsScreen } from '@/features/settings/ui/SettingsScreen';
 import {
   useDeleteMeDeletion,
@@ -142,10 +145,12 @@ export function SettingsPage(): ReactElement {
 
   return (
     <SettingsScreen
-      groups={buildSettingsSections({
-        nickname: currentNickname,
-        email: account.data?.email ?? null,
-      })}
+      groups={filterReadySettingsSections(
+        buildSettingsSections({
+          nickname: currentNickname,
+          email: account.data?.email ?? null,
+        })
+      )}
       deletionState={deletionState}
       purgeAt={purgeAt}
       currentNickname={currentNickname}
