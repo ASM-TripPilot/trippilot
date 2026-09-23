@@ -33,17 +33,9 @@ paths:
 
 지도 census 등재: `itineraryMapSurfaceStructure.test.ts`의 `LOCKED_CALLERS`에 `MapSheetShell.tsx` 등재 + S8 태그 카운트 12→13([[지도+시트 셸 — 2스냅 바텀시트 위의 전면 지도]] 참고).
 
-## `src/widgets/itinerary-edit/` — 공용 일정 편집 셸 (TRIP-443 shared 신설 → TRIP-805로 shared→widgets 승격 이동)
+## `src/widgets/itinerary-edit/` — 삭제됨 (TRIP-753, 2026-09-23)
 
-`features/itinerary`(U3)에 편집 기계(스톱카드·드래그·잠금·위반 배지·저장 조립)가 통째로 있으나 **features 간 직접 import 금지**라 `features/planb`가 그대로 못 쓴다. 그래서 편집 셸·순수 로직만 승격해 신설했고(원래 `shared/itinerary-edit`), TRIP-803 "shared 에 도메인 컴포넌트 0" 원칙에 따라 **TRIP-805가 `widgets/itinerary-edit`로 옮겼다**(배럴 유지, 소비는 `pages/planb-manual`이 진다 — page→widgets 는 허용 방향). `ManualTimeSheet`은 TRIP-805로 공용 `widgets/time-sheet/ui/TimeSheet.tsx`에 흡수·삭제됐다.
-
-| 파일 | 역할 |
-|---|---|
-| `src/widgets/itinerary-edit/model/mergeValidationFlags.ts` | 순수 방어 머지 `mergeValidationFlags(localDays, serverDays)` — `(date,poiId)` Map 룩업으로 서버 재검증의 `hasViolation`/`violationReason`**만** 취하고 편집 본문은 로컬 유지(BR-U4-45). 현재 프로덕션 호출자 0(복구 트리거 배선은 후속, Q4 정본 공백) |
-| `src/widgets/itinerary-edit/model/reorderKeepingFixed.ts` | 순수 재정렬 `reorderKeepingFixed(original, reordered)` — 비고정만 `reordered` 순서로 채우고 고정 슬롯은 원래 절대 인덱스에 재고정. `PlanbManualPage.handleReorder`가 소비(TRIP-577). ⚠️ 재고정 판정이 `slot.isFixed`만 봐 `lockedSlotKeys`만 잠긴 슬롯은 밀릴 수 있다(맹점, 후속) |
-| `src/widgets/itinerary-edit/ui/ManualEditShell.tsx` | 공용 편집 셸 — `mode: 'normal'\|'fallback'` 단일 스위치가 4축(누락 배너·상단 안내줄+이력·지도 문구·시각 직접입력)을 함께 켜/끈다(i15·i22 4변형이 하나로 접힘). 잠금 = `slot.isFixed \|\| lockedSlotKeys.includes(slotKey)`. 드래그 재정렬 실배선(`NestableDraggableFlatList`, testID `planb-manual-list`, TRIP-577). `cardShadow.shadowColor='#000000'`은 raw hex(className 이 못 받는 관례적 예외 — TOKENIZED_HEX 밖이라 `widgetsStructure` F 미검출). props-only(useState 0) |
-| `src/widgets/itinerary-edit/ui/ManualEditGlyphs.tsx` | 셸 전용 인라인 SVG 글리프(raw hex 격리 `*Glyphs.tsx` 관례). 뒤로·되돌리기·경고삼각형·자물쇠·휴지통·플러스·드래그 손잡이(`MUTED_SOFT='#9AA1AB'`) |
-| `src/widgets/itinerary-edit/index.ts` | 배럴 — `ManualEditShell`·`ManualEditShellProps`·`ManualEditMode`·`mergeValidationFlags`·`reorderKeepingFixed` 재수출(TRIP-805로 `ManualTimeSheet` 재수출 제거 — 삭제). 실공개 API 배럴(README §62 정당) |
+TRIP-443 shared 신설 → TRIP-805 shared→widgets 승격 이동을 거친 이 슬라이스 전체(`ManualEditShell.tsx`·`ManualEditGlyphs.tsx`·`mergeValidationFlags.ts`·`reorderKeepingFixed.ts`·배럴)가 **TRIP-753으로 `git rm`됐다**. 유일 소비처였던 `pages/planb-manual`도 같은 사이클에서 함께 삭제됐고, i07 일정 편집은 이제 `pages/itinerary-edit`(h12)의 `ItineraryEditPage`를 `inTrip` 플래그로 재사용한다(`layer-pages.md` `itinerary-edit` 행). 대체 규칙: 재정렬은 `features/planb/model/reorderKeepingLocked.ts`(신규, 잠금 목록을 함께 보는 "이름 다른 사촌" 함수), 시각 시트는 공용 `widgets/time-sheet/ui/TimeSheet.tsx`. `mergeValidationFlags`(US-PLANB-11 방어 머지, 프로덕션 호출자 0이었음)는 git 이력에서만 복원 가능 — 복구 트리거 배선 시 이 사이클(`38b4042b`) 직전을 참조. 참조하면 깨진다.
 
 ## `src/widgets/time-sheet/` — 공용 시각 조정 시트 (TRIP-805 신규, 쌍둥이 통일)
 
@@ -51,7 +43,7 @@ h24 `SlotTimeSheet`·i15/i22 `ManualTimeSheet`는 props 계약이 완전 동일�
 
 | 파일 | 역할 |
 |---|---|
-| `src/widgets/time-sheet/ui/TimeSheet.tsx` | 공용 시각 시트. props `{startAt, endAt, onApply({startAt,endAt,endsNextDay}), onCancel, testIDPrefix, labels:{start,end}, title?, mode?:'h04', placeSummary?:TimeSheetPlaceSummary}`(뒤 둘은 TRIP-787 신규, 둘 다 옵셔널). `mode` 미전달(default) 시 시·분 값별 셀-press 피커(휠 라이브러리 부재, `ScrollView`+map 으로 전 값 트리 실재). `endsNextDay=end<=start` 기계 유도(INV-2 판정 아님, h04도 이 헬퍼를 그대로 재사용 — 재구현 금지 소스가드 `TimeSheet.h04.source.test.ts`). 분 셀 bare 숫자(INV-3, "30" — "30분" 금지). **선택 셀 `useState` 유지**(`widgetsStructure` F의 useState-0 규약 예외, D8). 소비(default): `ItineraryEditPage`·`PlaceAddPage`(접두 `itinerary-edit-time`, 라벨 시작/종료, 제목 기본값 '시각 조정') · `PlanbManualPage`(접두 `planb-manual-time`, 라벨 도착/출발, 제목 '시각 입력'). ★ 실개폐·2스냅은 `@gorhom/bottom-sheet` 통과형 목이 못 봄(6-b 실기 전용) |
+| `src/widgets/time-sheet/ui/TimeSheet.tsx` | 공용 시각 시트. props `{startAt, endAt, onApply({startAt,endAt,endsNextDay}), onCancel, testIDPrefix, labels:{start,end}, title?, mode?:'h04', placeSummary?:TimeSheetPlaceSummary}`(뒤 둘은 TRIP-787 신규, 둘 다 옵셔널). `mode` 미전달(default) 시 시·분 값별 셀-press 피커(휠 라이브러리 부재, `ScrollView`+map 으로 전 값 트리 실재). `endsNextDay=end<=start` 기계 유도(INV-2 판정 아님, h04도 이 헬퍼를 그대로 재사용 — 재구현 금지 소스가드 `TimeSheet.h04.source.test.ts`). 분 셀 bare 숫자(INV-3, "30" — "30분" 금지). **선택 셀 `useState` 유지**(`widgetsStructure` F의 useState-0 규약 예외, D8). 소비(default): `ItineraryEditPage`(h12·i07 공용, i07은 TRIP-753으로 옛 `PlanbManualPage`의 전용 시트 문구(도착/출발·'시각 입력')를 잃고 이 접두·라벨로 흡수됨)·`PlaceAddPage`(접두 `itinerary-edit-time`, 라벨 시작/종료, 제목 기본값 '시각 조정'). ★ 실개폐·2스냅은 `@gorhom/bottom-sheet` 통과형 목이 못 봄(6-b 실기 전용) |
 | ↳ **`mode='h04'` 변형**(TRIP-787, opt-in — 위 소비처는 `mode` 미전달이라 무변) | 장소 요약 행(`placeSummary`: `imageUrl`·`name`·`badgeLabel`·`region`)·시작/종료 2탭 세그(`@/shared/ui/SegmentedControl` 재사용)·3열 12시간 휠(`@/shared/ui/WheelPicker` 3벌 재사용, `decompose12`/`compose24`로 24h 상태와 표시만 변환)·단일 '적용' CTA(취소 없음)를 그린다. 프리뷰 키 `h04-time-adjust-sheet`(구 `itinerary-edit-time-sheet`)만 소비 — **프로덕션 배선 없음**(프리뷰 전용, region 데이터 출처는 슬롯 계약에 없어 프리뷰 픽스처로만 무해, 후속 티켓 후보). 휠 중앙 텍스트 15px 분홍(WheelPicker 기본) vs Figma 22px 검정은 재사용이 부르는 수용된 드리프트(6-b 육안 대상, 별 티켓 후보) |
 
 ## `src/widgets/generation-done-bar/` — 완료 도킹 배너 (TRIP-788 신규)

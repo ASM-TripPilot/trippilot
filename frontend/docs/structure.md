@@ -163,12 +163,13 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `groupByDay` | `features/notification/model/groupByDay` | **신규(TRIP-576)** — 알림 목록을 로컬 오늘/이전 2구간으로 가르는 순수 함수(입력 순서 보존, 유실·중복 0) |
 | `useNotificationInbox` | `features/notification/model/useNotificationInbox` | **신규(TRIP-576)** — `useGetMeNotifications`를 얇게 감싼 조회 훅. ⚠️ `isError`를 소비하지 않으면(현재 `NotificationInboxPage`가 그렇다) 조회 실패가 빈 배열로 접혀 "알림 없음"으로 오표시된다(후속 티켓 후보) |
 | `TimeSheet` · `TimeSheetProps` | `widgets/time-sheet/ui/TimeSheet` | **신규(TRIP-805, widgets 층)** — 공용 시각 조정 시트(h24 `SlotTimeSheet`·i15/i22 `ManualTimeSheet` 쌍둥이 통일). `testIDPrefix`·`labels:{start,end}`·`title?`만 소비처가 주입, props 계약(`startAt,endAt,onApply,onCancel`)은 무변경. 새 시각 시트를 또 만들지 말고 이 위젯에 접두·라벨을 넣어 쓴다 |
-| `ManualEditShell` · `mergeValidationFlags` · `reorderKeepingFixed` · `ManualEditShellProps` · `ManualEditMode` | `widgets/itinerary-edit` | **TRIP-805로 `shared/itinerary-edit`에서 승격 이동(배럴 유지).** 공용 일정 편집 셸(`mode:'normal'\|'fallback'`) + 순수 로직(방어 머지·고정 재고정). `pages/planb-manual`이 소비. `ManualTimeSheet`은 `TimeSheet` 위젯에 흡수돼 배럴에서 빠졌다 |
 | `MapSheetShell` · `SheetHeader` · `DistanceConnector` · `CtaBar` · `DayChipOverlay` | `widgets/map-sheet-shell/ui` | **신규(TRIP-783, widgets 층)** — 지도+2스냅 시트 셸(리포 최초 조합). 결과 화면 6종(h07·h08·h11·h14·h16) 공용, 이번 사이클은 h08만 조립. 새 결과 화면을 또 그리지 말고 이 셸에 `header`·`children`·`cta`를 주입해 쓴다. 상세는 `.claude/rules/layer-widgets.md` |
 | `SlotStopCard` | `entities/itinerary-slot/ui` | **신규(TRIP-783)** — `PoiSlotCard`와 병존하는 결과 화면 공용 슬롯 카드(번호 배지·시각 칩·다른 후보 링크·72 사진). `PoiSlotCard`를 대체하지 않는다(표면이 다름) |
 | `ALT_LABEL` | `entities/itinerary-slot/config/altLabel` | **신규(TRIP-783)** — `'다른 후보 ›'` 단일 공용 상수(config 세그먼트). `DraftScreen`의 옛 로컬 상수는 아직 교체 안 됨(소비 화면 재작성 후속 몫). `ItineraryEditScreen`의 동명 로컬 상수는 TRIP-797 묶음 C로 그 화면째 삭제돼 드리프트 해소(2026-09-21) |
 
 > ⚠️ **재사용 API 의 위젯 행(위 3건)은 "화면·컨테이너 제외" 규칙의 예외다** — `widgets/` 층은 여러 화면이 공유하는 조립 단위를 두는 자리라 재구현 방지 색인에 싣는 것이 오히려 목적에 맞는다(TRIP-805).
+
+> ⚠️ **`ManualEditShell`·`mergeValidationFlags`·`reorderKeepingFixed`(widgets/itinerary-edit) 행은 TRIP-753으로 삭제됐다** — i07 일정 편집이 `pages/itinerary-edit`의 `ItineraryEditPage`를 `inTrip` 플래그로 재사용해 이 셸·`pages/planb-manual` 소비처가 슬라이스째 사라졌다. 대체 재사용 API는 `reorderKeepingLocked`(`features/planb/model`, 잠금 목록을 함께 보는 사촌 함수)와 공용 `widgets/time-sheet`의 `TimeSheet`. 상세는 `.claude/rules/layer-widgets.md`·`.claude/rules/layer-pages.md`.
 
 > ⚠️ **제거된 심볼**(참조하면 깨진다): `setApiAdapter` · `defaultAdapter` · `SCENARIO_LIST` · `getActiveScenarioKey`
 
