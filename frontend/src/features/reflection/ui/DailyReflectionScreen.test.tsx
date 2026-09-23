@@ -10,14 +10,17 @@ import {
  * 조회·표시본 조립은 페이지 몫이라 여기선 완성 VM 을 props 로 넣고 렌더·편집 계약만 잠근다.
  *
  * 무엇을 보장하나(승인 계약):
- *  - 🔴 AC-5: error·empty 얼굴 CTA "직접 회고 작성" press → **편집 진입 콜백 1회**(생성 없이 편집 진입).
- *  - 🔴 AC-6: 회고 수정 입력 상한 = **4000**(2000 아님, 서버 권위) · **빈/공백 문자열 → 저장 비활성 +
- *    저장 콜백 0회**(초안 보존 — 덮어쓰기 불가).
+ *  - 🔴 AC-3·AC-4(TRIP-763): empty·error 에도 **헤더 편집**(reflection-daily-edit)이 뜨고, 하단 CTA 는
+ *    **분리된 새 testID `reflection-daily-compose`**("직접 회고 작성")다 — 둘이 같은 화면에 공존하되
+ *    `reflection-daily-edit` 는 정확히 1개(헤더). 헤더·CTA press 각각 편집 진입 콜백 1회.
+ *  - 🔴 AC-6(TRIP-571): 회고 수정 입력 상한 = **4000**(2000 아님, 서버 권위) · **빈/공백 문자열 → 저장
+ *    비활성 + 저장 콜백 0회**(초안 보존 — 덮어쓰기 불가).
  *  - 렌더 스모크(긍정 앵커): default 얼굴이 표시본·통계·사진 그리드를 실제로 그린다(빈 화면 아님).
  *
- * 왜 이렇게 테스트하나(02a ★6·★7·★8·★9):
- *  - CTA 상태 분기 — default/data-insufficient="확인", empty/error="직접 회고 작성". 편집 진입 컨트롤은
- *    얼굴당 1개라 `reflection-daily-edit` 단일 testID 로 충돌 없이 재사용.
+ * 왜 이렇게 테스트하나(02a ★A·★C):
+ *  - ★testID 충돌은 "한 세트"(TRIP-763) — 헤더 편집을 empty/error 에 켜는 순간 하단 CTA 의 옛
+ *    `reflection-daily-edit` 와 겹쳐 `getByTestId` 가 throw 한다. 하단 CTA testID 분리(`-compose`)를
+ *    안 하면 다른 테스트가 실행조차 못 한다. `getAllByTestId(...).toHaveLength(1)` 이 그 충돌을 심판.
  *  - 4000 = `EditReflectionRequest.maxLength`(서버 권위) — 티켓 "2000"은 visit_memo 오전이(맹점⑤).
  *  - 빈 문자열은 `toBeDisabled()` + 콜백 0회 짝으로 잠근다(`fireEvent.press`는 disabled 를 안 막으므로).
  *  - 화면은 `source` 로 UI 를 분기하지 않는다(VM 에 source 자리 없음 — 구조적 차단, 맹점②).
@@ -74,34 +77,64 @@ describe('렌더 스모크 · default 얼굴이 빈 화면이 아니다(긍정 �
   });
 });
 
-describe('🔴 AC-5 · 직접 회고 작성 진입(BR-U5-36)', () => {
-  it('empty 얼굴 CTA press 는 편집 진입 콜백을 정확히 1회 부른다', () => {
-    const { onEnterEdit } = renderScreen({
-      face: 'empty',
-      narrative: '오늘 기록된 활동이 없습니다.',
+describe('🔴 AC-3·AC-4 · 헤더 편집 전(全)얼굴 + testID 충돌 해소(TRIP-763)', () => {
+  // 헤더 편집이 켜지는 얼굴만 재현(empty·error). data 얼굴은 이미 헤더 편집이 있었다(무회귀는 아래 짝).
+  function faceProps(face: 'empty' | 'error') {
+    return {
+      face,
+      narrative:
+        face === 'empty'
+          ? '오늘 기록된 활동이 없습니다.'
+          : '회고를 불러오지 못했어요.',
       editableText: '',
       photos: [],
       hidePhotoGrid: true,
-    });
+    } as const;
+  }
 
-    fireEvent.press(screen.getByTestId('reflection-daily-edit'));
+  it.each(['empty', 'error'] as const)(
+    '%s: 헤더 편집(reflection-daily-edit)은 정확히 1개이고 하단 CTA 는 reflection-daily-compose 다',
+    (face) => {
+      renderScreen(faceProps(face));
 
-    expect(onEnterEdit).toHaveBeenCalledTimes(1);
-  });
+      // (개념) getAllByTestId(id).toHaveLength(1) = 그 이름표 요소가 화면에 정확히 하나.
+      // 하단 CTA 가 헤더와 같은 이름표를 쓰면 2개가 돼 getByTestId 가 throw — 그 충돌을 여기서 막는다.
+      expect(screen.getAllByTestId('reflection-daily-edit')).toHaveLength(1);
+      // 하단 "직접 회고 작성" CTA 는 분리된 새 이름표(현재 미존재 → red).
+      expect(screen.getByTestId('reflection-daily-compose')).toBeOnTheScreen();
+    }
+  );
 
-  it('error 얼굴 CTA press 도 편집 진입 콜백을 1회 부른다', () => {
-    const { onEnterEdit } = renderScreen({
-      face: 'error',
-      narrative: '회고를 불러오지 못했어요.',
-      editableText: '',
-      photos: [],
-      hidePhotoGrid: true,
-    });
+  it.each(['empty', 'error'] as const)(
+    '%s: 헤더 편집 press → onEnterEdit 를 1회 부른다(AC-3)',
+    (face) => {
+      const { onEnterEdit } = renderScreen(faceProps(face));
 
-    fireEvent.press(screen.getByTestId('reflection-daily-edit'));
+      fireEvent.press(screen.getByTestId('reflection-daily-edit'));
 
-    expect(onEnterEdit).toHaveBeenCalledTimes(1);
-  });
+      expect(onEnterEdit).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it.each(['empty', 'error'] as const)(
+    '%s: 하단 CTA(reflection-daily-compose) press → onEnterEdit 를 1회 부른다(AC-4)',
+    (face) => {
+      const { onEnterEdit } = renderScreen(faceProps(face));
+
+      fireEvent.press(screen.getByTestId('reflection-daily-compose'));
+
+      expect(onEnterEdit).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it.each(['default', 'data-insufficient'] as const)(
+    '%s: 헤더 편집은 여전히 정확히 1개다(무회귀 — 이 얼굴은 원래 헤더 편집이 있었다)',
+    (face) => {
+      renderScreen({ face });
+
+      expect(screen.getAllByTestId('reflection-daily-edit')).toHaveLength(1);
+    }
+  );
 });
 
 describe('🔴 AC-6 · 회고 수정 폼검증(§7 · 상한 4000)', () => {

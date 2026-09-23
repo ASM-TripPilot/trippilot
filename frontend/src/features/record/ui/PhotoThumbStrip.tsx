@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 
 import type { PhotoAvailability } from '../model/photoAvailability';
-import { PlusGlyph } from './RecordGlyphs';
+import { PlusGlyph, WarningTriangleGlyph } from './RecordGlyphs';
 
 /**
  * TRIP-566 · AC-3·AC-4·AC-5(다건 UI) — 방문 사진 썸네일 스트립(순수 프레젠테이션, VM 주입).
@@ -62,6 +62,23 @@ function PhotoCell({ vm }: { vm: PhotoThumbVM }): ReactElement {
       >
         <Text className="text-center text-caption leading-[13px] text-muted-soft">
           다른 기기에서 찍은 사진
+        </Text>
+      </View>
+    );
+  }
+
+  // upload-failed — 서버 POST 실패(별 축, 배선 주입). else(unavailable) 로 새지 않게 **명시 브랜치**로
+  // 잠근다(판별 유니온을 if-else 로 좁힌 대가 — 컴파일러가 새 값 누락을 못 잡음, 02a ★catch-all).
+  // 실 <Image> 없이 ⚠ + "업로드 실패" placeholder. 셀 배경은 surface-strong(성공 셀 surface-soft 와 구분).
+  if (availability === 'upload-failed') {
+    return (
+      <View
+        testID={`record-photo-upload-failed-${id}`}
+        className={`${CELL} items-center justify-center gap-[2px] bg-surface-strong px-[4px]`}
+      >
+        <WarningTriangleGlyph size={18} />
+        <Text className="text-center text-[10px] leading-[12px] text-muted-soft">
+          업로드 실패
         </Text>
       </View>
     );

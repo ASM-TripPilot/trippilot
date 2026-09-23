@@ -131,6 +131,49 @@ describe('🔴 AC-3 · 포맷 세그 전환 — 선택 상태 + 프리뷰 aspect
   });
 });
 
+describe('🔴 AC-3 · 카드 통계 라인이 얼굴별 포맷으로 렌더된다(통일 금지)', () => {
+  it('default(포맷 A) — "N곳 · Nkm · 사진 N장"', () => {
+    renderScreen({
+      card: baseCard({
+        mode: 'default',
+        statsCells: { totalVisits: 12, distanceText: '38km', totalPhotos: 24 },
+      }),
+    });
+    // 현 프리뷰는 상시 포맷 B(방문 …) → default 기대 A 와 불일치 → red.
+    expect(screen.getByText('12곳 · 38km · 사진 24장')).toBeOnTheScreen();
+  });
+
+  it('no-photo(포맷 B) — "방문 N · 이동 Nkm · 사진 N"', () => {
+    renderScreen({
+      card: baseCard({
+        mode: 'no-photo',
+        statsCells: { totalVisits: 12, distanceText: '38km', totalPhotos: 0 },
+      }),
+    });
+    expect(screen.getByText('방문 12 · 이동 38km · 사진 0')).toBeOnTheScreen();
+  });
+});
+
+describe('🔴 AC-5 · no-photo 안내 = 박스 없는 플레인 텍스트(좌정렬)', () => {
+  it('안내 컨테이너에 박스 크롬(테두리·배경·라운드)이 없고, 문구·좌정렬은 유지된다', () => {
+    renderScreen({ card: baseCard({ mode: 'no-photo' }) });
+
+    // 부정 — 박스 크롬 클래스 제거(현 컨테이너는 border·bg-surface-soft·rounded-card → red).
+    const notice = screen.getByTestId('reflection-share-no-photo-notice');
+    const noticeCls = String(notice.props.className);
+    expect(noticeCls).not.toMatch(/\bborder\b/);
+    expect(noticeCls).not.toContain('bg-surface-soft');
+    expect(noticeCls).not.toContain('rounded-card');
+
+    // 부정 — 내부 문구는 좌정렬(현 text-center 제거 → red).
+    const text = screen.getByText(/사진이 없어도 동선 지도만으로/);
+    expect(String(text.props.className)).not.toContain('text-center');
+
+    // 긍정 짝 — 문구·testID 는 그대로(현 AC-2 유지 · 공허 통과 차단).
+    expect(text).toBeOnTheScreen();
+  });
+});
+
 describe('🔴 degrade 정직성(INV-4) — 저장/공유는 가짜 성공을 내지 않는다', () => {
   it('저장 press → "준비 중" 안내가 뜨고 크래시하지 않는다', () => {
     renderScreen();

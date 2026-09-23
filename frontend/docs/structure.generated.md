@@ -96,9 +96,10 @@
 - `src/__tests__/recordAttributionStructure.test.ts`  →  (export 없음)
 - `src/__tests__/recordPhotoBinaryGuard.test.ts`  →  (export 없음)
 - `src/__tests__/recordsCalendarStructure.test.ts`  →  (export 없음)
-- `src/__tests__/recordsCompareStructure.test.ts`  →  (export 없음)
 - `src/__tests__/recordsDurationStructure.test.ts`  →  (export 없음)
+- `src/__tests__/recordsMapMarkersStructure.test.ts`  →  (export 없음)
 - `src/__tests__/recordsStructure.test.ts`  →  (export 없음)
+- `src/__tests__/reflectionDailyStructure.test.ts`  →  (export 없음)
 - `src/__tests__/reflectionFallbackStructure.test.ts`  →  (export 없음)
 - `src/__tests__/reflectionStructure.test.ts`  →  (export 없음)
 - `src/__tests__/reflectionSummaryStructure.test.ts`  →  (export 없음)
@@ -119,7 +120,6 @@
 - `src/__tests__/staySearchGenerated.test.ts`  →  (export 없음)
 - `src/__tests__/staySearchStructure.test.ts`  →  (export 없음)
 - `src/__tests__/staySelectSheetStructure.test.ts`  →  (export 없음)
-- `src/__tests__/syncQueueIdempotency.test.ts`  →  (export 없음)
 - `src/__tests__/tabbarOverlay.test.ts`  →  (export 없음)
 - `src/__tests__/tabbarVisual.test.ts`  →  (export 없음)
 - `src/__tests__/tabsExploreRoute.test.tsx`  →  (export 없음)
@@ -131,6 +131,7 @@
 - `src/__tests__/tabsMyRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/tabsRecordsRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/tabsShell.test.tsx`  →  (export 없음)
+- `src/__tests__/travelStyleParityStructure.test.ts`  →  (export 없음)
 - `src/__tests__/travelStyleStructure.test.ts`  →  (export 없음)
 - `src/__tests__/tripBudgetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/tripDraftBoundary.test.ts`  →  (export 없음)
@@ -249,7 +250,6 @@
 - `src/app/trips/[tripId]/planb/solving.tsx`  →  (export 없음)
 
 ## src/app/trips/[tripId]/records/
-- `src/app/trips/[tripId]/records/compare.tsx`  →  (export 없음)
 - `src/app/trips/[tripId]/records/index.tsx`  →  (export 없음)
 
 ## src/app/trips/[tripId]/records/reflection/
@@ -308,8 +308,10 @@
 - `src/entities/stay/ui/StaySearchCard.tsx`  →  StaySearchCardSave · StaySearchCardProps · StaySearchCard
 
 ## src/entities/trip/lib/
+- `src/entities/trip/lib/formatDayLabel.ts`  →  formatDayLabel
 - `src/entities/trip/lib/formatNights.ts`  →  formatNightsLabel · nightsLabel · nightsCountLabel
-- `src/entities/trip/lib/formatTripPeriod.ts`  →  WEEKDAY_LABELS · dayOfWeek · formatDateRange · formatSectionRange · formatTripRange · formatConfirmedDateRange · formatTripDateRange · formatDateRangeWithDow · formatBaseNightRange
+- `src/entities/trip/lib/formatShareCardPeriod.ts`  →  ShareCardPeriodOptions · formatShareCardPeriod
+- `src/entities/trip/lib/formatTripPeriod.ts`  →  WEEKDAY_LABELS · dayOfWeek · formatDateRange · formatSectionRange · formatTripRange · formatConfirmedDateRange · formatTripDateRange · formatLegendDateRange · formatDateRangeWithDow · formatBaseNightRange
 
 ## src/entities/trip/model/
 - `src/entities/trip/model/index.ts`  →  MyTripBadge · MyTripCardVM · PastTripCardVM
@@ -503,15 +505,12 @@
 
 ## src/features/record/model/
 - `src/features/record/model/adjustTimesDraft.ts`  →  AdjustTimesViolation · AdjustTimesDraftResult · adjustTimesDraft
-- `src/features/record/model/compareRows.ts`  →  CompareTab · CompareRowKind · ActualCompareRow · UnvisitedCompareRow · ChangeCompareRow · CompareRow · buildCompareRows
 - `src/features/record/model/conflict.ts`  →  ConflictChoice · ConflictSelection · ConflictRow · ConflictVisitVM · isVisitConflict
 - `src/features/record/model/photoAttach.ts`  →  photoAttach
 - `src/features/record/model/photoAvailability.ts`  →  PhotoAvailability · photoAvailability
 - `src/features/record/model/recordsCalendar.ts`  →  markedDaysOfMonth · buildPastTripCards · formatTripDateRange · nightsLabel
 - `src/features/record/model/stayAttribution.ts`  →  AttributedStay · DayAttribution · deriveStayAttribution
-- `src/features/record/model/syncQueue.ts`  →  SyncStatus · SyncQueueItem · ReplayExecutor · enqueue · replayQueue
 - `src/features/record/model/useAdjustVisitTimes.ts`  →  VISIT_CONFLICT_NOTICE · AdjustVisitTimesOutcome · useAdjustVisitTimes
-- `src/features/record/model/useCompareRecords.ts`  →  useCompareRecords
 - `src/features/record/model/useRecordsCalendar.ts`  →  useRecordsCalendar
 - `src/features/record/model/useTripRecords.ts`  →  useTripRecords · useRecordBases · useRecordSavedStays
 - `src/features/record/model/useVisitAttachments.ts`  →  useVisitAttachments
@@ -519,26 +518,22 @@
 - `src/features/record/model/visitStatus.ts`  →  VisitStatus · deriveVisitStatus
 
 ## src/features/record/ui/
-- `src/features/record/ui/CompareRow.tsx`  →  CompareRowProps · CompareRow
-- `src/features/record/ui/CompareSegment.tsx`  →  CompareSegmentProps · CompareSegment
-- `src/features/record/ui/ConflictSheet.tsx`  →  ConflictSheetProps · ConflictSheet
 - `src/features/record/ui/MemoInline.tsx`  →  MemoInlineProps · MemoInline
 - `src/features/record/ui/PastTripList.tsx`  →  PastTripListProps · PastTripList
 - `src/features/record/ui/PhotoThumbStrip.tsx`  →  PhotoThumbVM · PhotoThumbStripProps · PhotoThumbStrip
-- `src/features/record/ui/RecordGlyphs.tsx`  →  VisitCheckDoneGlyph · VisitCheckActiveGlyph · VisitCheckUpcomingGlyph · VisitCheckSkippedGlyph · PlusGlyph · BackArrowGlyph · ChevronRightGlyph · CalendarGlyph · HeartGlyph
+- `src/features/record/ui/RecordGlyphs.tsx`  →  VisitCheckDoneGlyph · VisitCheckActiveGlyph · VisitCheckUpcomingGlyph · VisitCheckSkippedGlyph · PlusGlyph · WarningTriangleGlyph · RetryGlyph · BackArrowGlyph · ChevronRightGlyph · InfoCircleGlyph · GpsOffGlyph · CalendarGlyph
 - `src/features/record/ui/RecordsCalendarScreen.tsx`  →  RecordsCalendarScreenProps · RecordsCalendarScreen
-- `src/features/record/ui/RecordsCompareScreen.tsx`  →  RecordsCompareScreenProps · RecordsCompareScreen
 - `src/features/record/ui/SpontaneousVisitButton.tsx`  →  SpontaneousVisitButtonProps · SpontaneousVisitButton
-- `src/features/record/ui/SyncBadge.tsx`  →  SYNC_BADGE_LABEL · SyncBadge
 - `src/features/record/ui/TripCalendarMonth.tsx`  →  TripCalendarMonthProps · TripCalendarMonth
 - `src/features/record/ui/TripRecordsScreen.tsx`  →  TripRecordsDayTab · DayAttributionHeader · TripRecordsScreenProps · TripRecordsScreen
 - `src/features/record/ui/VisitRecordCard.tsx`  →  VisitRecordCardVM · VisitRecordCardProps · VisitRecordCard
+- `src/features/record/ui/VisitRecordCardContainer.tsx`  →  VisitRecordCardContainerProps · VisitRecordCardContainer
 - `src/features/record/ui/VisitTimeSheet.tsx`  →  VisitTimeSheetProps · VisitTimeSheet
 
 ## src/features/reflection/model/
 - `src/features/reflection/model/missingParts.ts`  →  MissingParts · missingParts
 - `src/features/reflection/model/reflectionFallback.ts`  →  resolveDisplayNarrative
-- `src/features/reflection/model/shareCard.ts`  →  ShareFormat · SHARE_FORMATS · ShareCardMode · ShareCardVM · BuildShareCardInput · buildShareCard · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · validateCaption · validateHashtags · captureShareImage
+- `src/features/reflection/model/shareCard.ts`  →  ShareFormat · SHARE_FORMATS · ShareCardMode · ShareCardVM · BuildShareCardInput · buildShareCard · formatShareCardStats · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · validateCaption · validateHashtags · captureShareImage
 - `src/features/reflection/model/statsCard.ts`  →  statsCard
 - `src/features/reflection/model/styleThreshold.ts`  →  StyleFace · resolveStyleFace · categoryLabel
 - `src/features/reflection/model/summaryStats.ts`  →  SummaryStatCells · summaryStats
@@ -550,12 +545,12 @@
 ## src/features/reflection/ui/
 - `src/features/reflection/ui/CategoryBarList.tsx`  →  CategoryBarListProps · CategoryBarList
 - `src/features/reflection/ui/ChangeSummaryRow.tsx`  →  ChangeSummaryRowProps · ChangeSummaryRow
-- `src/features/reflection/ui/DailyReflectionScreen.tsx`  →  ReflectionFace · DailyReflectionScreenProps · DailyReflectionScreen
+- `src/features/reflection/ui/DailyReflectionScreen.tsx`  →  ReflectionFace · ReflectionDayTab · DailyReflectionScreenProps · DailyReflectionScreen
 - `src/features/reflection/ui/DayHighlightCard.tsx`  →  DayHighlightCardProps · DayHighlightCard
 - `src/features/reflection/ui/EvidenceLink.tsx`  →  EvidenceLinkProps · EvidenceLink
 - `src/features/reflection/ui/FormatSegment.tsx`  →  FormatSegmentProps · FormatSegment
 - `src/features/reflection/ui/NarrativeBlock.tsx`  →  NarrativeBlockProps · NarrativeBlock
-- `src/features/reflection/ui/ReflectionGlyphs.tsx`  →  BackArrowGlyph · LocationOffGlyph · PhotoOffGlyph · EmptyCircleGlyph · RetryGlyph · ShareGlyph
+- `src/features/reflection/ui/ReflectionGlyphs.tsx`  →  BackArrowGlyph · LocationOffGlyph · PhotoOffGlyph · EmptyCircleGlyph · RetryGlyph · MoodSadGlyph · MoodSosoGlyph · MoodGoodGlyph
 - `src/features/reflection/ui/ReflectionPhotoGrid.tsx`  →  ReflectionPhotoGridProps · ReflectionPhotoGrid
 - `src/features/reflection/ui/ReflectionStatsRow.tsx`  →  ReflectionStatsRowProps · ReflectionStatsRow
 - `src/features/reflection/ui/ShareCardGlyphs.tsx`  →  DownloadGlyph · ShareGlyph · WatermarkLogoGlyph
@@ -856,12 +851,6 @@
 
 ## src/pages/records-calendar/ui/
 - `src/pages/records-calendar/ui/RecordsCalendarPage.tsx`  →  RecordsCalendarPage
-
-## src/pages/records-compare/
-- `src/pages/records-compare/index.ts`  →  RecordsComparePage
-
-## src/pages/records-compare/ui/
-- `src/pages/records-compare/ui/RecordsComparePage.tsx`  →  RecordsComparePageProps · RecordsComparePage
 
 ## src/pages/region-picker/
 - `src/pages/region-picker/index.ts`  →  RegionPickerPage
@@ -1223,7 +1212,7 @@
 
 ## src/shared/map/
 - `src/shared/map/CenterPinPicker.tsx`  →  CenterPinPickerProps · CenterPinPicker
-- `src/shared/map/MapView.tsx`  →  MapCenter · MapPinState · MapPin · MapViewProps · MapView
+- `src/shared/map/MapView.tsx`  →  MapCenter · MapPinState · MapPinKind · MapPin · MapViewProps · MapView
 - `src/shared/map/index.ts`  →  MapView · CenterPinPicker
 
 ## src/shared/photo/
@@ -1299,4 +1288,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 873개 파일
+합계 866개 파일

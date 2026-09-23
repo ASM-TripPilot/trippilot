@@ -395,7 +395,7 @@ describe('S3 · AC-8 — 사진 도입이 화면·계약으로 새지 않았다 
    * `DraftScreen.tsx` 에 한 줄 느는 것은 이 조건이 금지하는 대상이 아니다(02a §3-5) — 그래서
    * 여기서 재는 것은 "화면 파일이 안 바뀌었다"가 아니라 **"사진 해결이 화면으로 새지 않았다"**다.
    */
-  it('MapPin 은 5필드(TRIP-795 label 편입), DraftScreenProps 는 14필드(TRIP-791 fallbackNotice 제거), 화면에 에셋 해석 지문이 0건이다', () => {
+  it('MapPin 은 7필드(TRIP-745 state + TRIP-768 imageUrl·kind + TRIP-795 label additive 편입), DraftScreenProps 는 14필드(TRIP-791 fallbackNotice 제거), 화면에 에셋 해석 지문이 0건이다', () => {
     const mapCoreSource = readOne(MAP_CORE_REL);
     const screenSource = readOne(SCREEN_REL);
 
@@ -405,17 +405,25 @@ describe('S3 · AC-8 — 사진 도입이 화면·계약으로 새지 않았다 
     expect(screenSource).toMatch(/export function DraftScreen\b/);
 
     // TRIP-745 — 핀 3상태(done/current/upcoming)를 위해 `state?: MapPinState` 가 additive 로
-    // 편입된다(옵셔널·2칸 들여쓰기 프로퍼티형이라 interfaceFields 가 4번째로 잡는다). 완료조건 #4가
-    // "LOCKED_CALLERS 갱신"으로 오지정한 실제 대상이 이 스냅숏이다(01 §맹점④). 핀 모양(Circle→물방울)
-    // 교체는 여기서 안 잡는다 — 필드 계약만 본다.
-    // TRIP-795 — h10 후보 letter 핀을 위해 `label?: string` 이 additive 로 5번째 편입된다(카드 배지
+    // 편입됐다(옵셔널·2칸 들여쓰기 프로퍼티형이라 interfaceFields 가 4번째로 잡는다). 핀 모양
+    // (Circle→물방울) 교체는 여기서 안 잡는다 — 필드 계약만 본다.
+    //
+    // TRIP-768 — j 밴드 기록 마커족을 위해 `imageUrl?`(사진 썸네일)·`kind?: MapPinKind`(visited/
+    // planned/stay) 가 additive 로 편입된다(둘 다 옵셔널·2칸 들여쓰기·단일 줄 프로퍼티형이라
+    // interfaceFields 가 5·6번째로 잡는다 — union 을 여러 줄로 쪼개면 내부 리터럴이 오캡처되니 한 줄
+    // 유지, DraftScreenProps `renderSlotPanel` 선례와 동형). 정당한 계약 확장이라 **목록만 갱신**한다
+    // (삭제 아님 — 이행 체크포인트 B). 순서는 declare 순서 그대로(toEqual 순서 민감).
+    //
+    // TRIP-795 — h10 후보 letter 핀을 위해 `label?: string` 이 additive 로 7번째 편입된다(카드 배지
     // A/B/C/D 와 시각 일치, 미전달 = 번호 그대로 무회귀). 정당한 계약 플립(이행 체크포인트 B) —
-    // 편입 전엔 4필드라 이 스냅숏이 red(뮤테이션 실측: label 제거 시 red).
+    // 편입 전엔 6필드라 이 스냅숏이 red(뮤테이션 실측: label 제거 시 red).
     expect(interfaceFields(mapCoreSource, 'MapPin')).toEqual([
       'number',
       'lat',
       'lng',
       'state',
+      'imageUrl',
+      'kind',
       'label',
     ]);
     // 화면 계약 스냅숏 — 사진을 넣으려고 프롭을 늘리면 여기서 걸린다(이 칸 TRIP-339 의 취지).
