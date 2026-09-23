@@ -39,6 +39,9 @@ class FeeTable:
 
     won: Mapping[str, int | None]
     fetched_at: str = ""
+    malformed: int = 0
+    """형식 위반으로 버린 행 수. **0 이 아니면 산출기 쪽 결함 신호다** —
+    조용히 적게 적재되는 것과 구별하려고 센다."""
 
     def of(self, source_ref: str | None) -> int | None:
         """성인 1인 입장료. **모르면 `None`** — 0원(무료)과 다르다."""
@@ -68,10 +71,8 @@ def load_fee_table(path: Path | None = None) -> FeeTable:
     try:
         raw = json.loads(target.read_text(encoding="utf-8"))
         fees = raw["fees"]
-        won = {
-            str(ref): (int(v["won"]) if v.get("won") is not None else None)
-            for ref, v in fees.items()
-        }
+        if not isinstance(fees, Mapping):
+            raise TypeError(f"fees 가 객체가 아님: {type(fees).__name__}")
     except FileNotFoundError:
         _logger.info("place_fees 미배치 (%s) — 예산 점수는 전부 중립", target.name)
         return EMPTY
@@ -79,6 +80,20 @@ def load_fee_table(path: Path | None = None) -> FeeTable:
         _logger.warning("place_fees 로드 실패 %s: %s — 전부 중립으로 진행",
                         type(e).__name__, e)
         return EMPTY
-    table = FeeTable(won=won, fetched_at=str(raw.get("fetched_at") or ""))
+    # **행 단위로 견딘다.** 한 행이 이상하다고 전량을 버리면 5천 건대에서
+    # 산출기의 사소한 버그 하나가 기능을 통째로 끈다 — 그것도 조용히(빈 표는
+    # 전부 '모름'이라 점수가 정상처럼 보인다). 버린 수는 세서 드러낸다.
+    won: dict[str, int | None] = {}
+    malformed = 0
+    for ref, entry in fees.items():
+        try:
+            value = entry["won"]
+            won[str(ref)] = None if value is None else int(value)
+        except (TypeError, ValueError, KeyError, IndexError):
+            malformed += 1
+    table = FeeTable(won=won, fetched_at=str(raw.get("fetched_at") or ""),
+                     malformed=malformed)
+    if malformed:
+        _logger.warning("place_fees 형식 위반 %s행 버림 — 산출기 확인 필요", malformed)
     _logger.info("place_fees %s건 적재 (%s)", len(won), table.counts())
     return table
