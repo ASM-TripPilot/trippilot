@@ -56,6 +56,7 @@
 - `src/__tests__/itineraryMethodStructure.test.ts`  →  (export 없음)
 - `src/__tests__/itineraryMustVisitStructure.test.ts`  →  (export 없음)
 - `src/__tests__/itineraryTimeStructure.test.ts`  →  (export 없음)
+- `src/__tests__/liveHubRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/liveHubStructure.test.ts`  →  (export 없음)
 - `src/__tests__/liveLocationRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/liveTimeStructure.test.ts`  →  (export 없음)
@@ -83,6 +84,7 @@
 - `src/__tests__/placeDetailStubRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/placeExploreStateStructure.test.ts`  →  (export 없음)
 - `src/__tests__/placeExploreStructure.test.ts`  →  (export 없음)
+- `src/__tests__/planbAppliedStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbApplyStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbDiffRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/planbEditUnifyStructure.test.ts`  →  (export 없음)
@@ -476,6 +478,7 @@
 - `src/features/planb/config/watchLabels.ts`  →  WatchKind · WATCH_CATEGORY_LABEL · WATCH_STATUS_LABEL
 
 ## src/features/planb/model/
+- `src/features/planb/model/appliedSummary.ts`  →  AppliedSummaryInput · appliedSummaryBadges
 - `src/features/planb/model/foldScope.ts`  →  foldScope
 - `src/features/planb/model/reorderKeepingLocked.ts`  →  reorderKeepingLocked
 - `src/features/planb/model/replanFormStore.ts`  →  ReplanFormState · useReplanFormStore
@@ -497,8 +500,8 @@
 - `src/features/planb/model/useStartReplan.ts`  →  useStartReplan
 
 ## src/features/planb/ui/
-- `src/features/planb/ui/PlanbGlyphs.tsx`  →  AppliedBackGlyph · AppliedCheckGlyph · AppliedAlertGlyph · RiskWarningGlyph · ChevronRightGlyph · LockGlyph
-- `src/features/planb/ui/ReplanAppliedScreen.tsx`  →  ReplanAppliedScreenProps · ReplanAppliedScreen
+- `src/features/planb/ui/PlanbGlyphs.tsx`  →  AppliedAlertGlyph · RiskWarningGlyph · ChevronRightGlyph · LockGlyph
+- `src/features/planb/ui/ReplanAppliedSheet.tsx`  →  AppliedDiffKind · AppliedDiffRow · ReplanAppliedSheetProps · ReplanAppliedSheet
 - `src/features/planb/ui/ReplanRequestSheet.tsx`  →  ReplanDetectedChip · ReplanRequestSheetProps · ReplanRequestSheet
 - `src/features/planb/ui/RiskDetailSheet.tsx`  →  RiskDetailSheetProps · RiskDetailSheet
 - `src/features/planb/ui/SlotCandidateSheet.tsx`  →  SlotCandidateSheetProps · SlotCandidateSheet
@@ -1272,4 +1275,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 860개 파일
+합계 863개 파일

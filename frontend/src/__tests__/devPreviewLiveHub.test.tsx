@@ -794,3 +794,130 @@ describe('🔴 TRIP-753 · i07 일정 편집 프리뷰 (AC-12 · AC-10)', () => 
     expect(keys).not.toContain('planb-manual-violation');
   });
 });
+
+// ── TRIP-754 · i08 변경 반영 시트 1키 ───────────────────────────────────────
+//
+// Figma 4401:1568 — 펼침 허브(5번째 해운대 자리가 F1963 + "변경됨") 위, 허브 밖 형제로 픽스처가 다 찬
+// 반영 시트. 옛 i19 전면화면(`ReplanAppliedScreen`)은 같은 키 이름을 물려주고 사라진다.
+
+/** 반복 testID 노드들이 기대 글자와 개수·순서까지 같다(각 노드 완전 일치). */
+function expectI08Texts(testID: string, expected: string[]): void {
+  const nodes = screen.getAllByTestId(testID);
+  expect(nodes).toHaveLength(expected.length);
+  nodes.forEach((node, index) =>
+    expect(node).toHaveTextContent(expected[index])
+  );
+}
+
+describe('🔴 TRIP-754 · i08 변경 반영 시트 프리뷰 (AC-11)', () => {
+  it('planb-applied 는 펼침 허브(5번째 F1963 · 변경됨) 위에, 허브 밖 형제로 Figma 픽스처 시트를 그린다', () => {
+    mockSearchParams.state = 'planb-applied';
+
+    render(<DevPreview />);
+
+    // 배경 — 펼침 허브(index 2) 5곳, 5번째 카드가 F1963 으로 바뀌고 "변경됨" 배지.
+    const liveScreen = screen.getByTestId('execution-live-screen');
+    const hubIndices = liveScreen
+      .findAll(
+        (node) =>
+          typeof node.props?.index === 'number' &&
+          Array.isArray(node.props?.snapPoints)
+      )
+      .map((node) => node.props.index as number);
+    expect(hubIndices.length).toBeGreaterThan(0);
+    hubIndices.forEach((index) => expect(index).toBe(2));
+    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(5);
+    const names = within(liveScreen).getAllByTestId(
+      /^execution-live-slot-name-2026-06-11#/
+    );
+    expect(names).toHaveLength(5);
+    expect(names[4]).toHaveTextContent('F1963 복합문화공간');
+    const changedKey = String(names[4].props.testID).replace(
+      'execution-live-slot-name-',
+      ''
+    );
+    expect(
+      screen.getByTestId(`execution-live-slot-status-${changedKey}`)
+    ).toHaveTextContent('변경됨');
+    expect(within(liveScreen).queryByText('해운대 해변')).toBeNull();
+
+    // 시트 — 허브 밖(형제), Figma 문구 전부.
+    const sheet = screen.getByTestId('planb-applied-sheet');
+    expect(sheet).toBeOnTheScreen();
+    expect(within(liveScreen).queryByTestId('planb-applied-sheet')).toBeNull();
+    expect(screen.getByTestId('planb-applied-scrim')).toBeOnTheScreen();
+    expect(screen.getByTestId('planb-applied-eyebrow')).toHaveTextContent(
+      '변경 반영됨'
+    );
+    expect(screen.getByTestId('planb-applied-title')).toHaveTextContent(
+      '새 일정이 반영됐어요'
+    );
+    expectI08Texts('planb-applied-subtitle-line', [
+      '비 예보를 반영했어요',
+      '방문한 곳은 그대로 두고 17시 이후만 바뀌었어요',
+    ]);
+    expectI08Texts('planb-applied-badge', [
+      '바뀐 곳 1',
+      '방문지 5→5',
+      '이동 −6.9km',
+    ]);
+
+    const rows = within(sheet).getAllByTestId('planb-applied-diff-row');
+    expect(rows).toHaveLength(2);
+    const expected = [
+      [
+        '추가',
+        'bg-success',
+        'F1963 복합문화공간',
+        '17:00–18:30 · 비 예보로 실내 대안',
+      ],
+      [
+        '삭제',
+        'bg-primary',
+        '해운대 해변',
+        '17:00–18:30 · 비 예보 · 17시 이후',
+      ],
+    ];
+    rows.forEach((row, index) => {
+      const [kind, dot, name, meta] = expected[index];
+      expect(
+        within(row).getByTestId('planb-applied-diff-kind')
+      ).toHaveTextContent(kind);
+      expect(
+        String(
+          within(row).getByTestId('planb-applied-diff-dot').props.className ??
+            ''
+        ).split(/\s+/)
+      ).toContain(dot);
+      expect(
+        within(row).getByTestId('planb-applied-diff-name')
+      ).toHaveTextContent(name);
+      expect(
+        within(row).getByTestId('planb-applied-diff-meta')
+      ).toHaveTextContent(meta);
+    });
+
+    expect(screen.getByTestId('planb-applied-revert')).toHaveTextContent(
+      '되돌리기'
+    );
+    expect(screen.getByTestId('planb-applied-confirm')).toHaveTextContent(
+      '확인'
+    );
+    expect(screen.queryByTestId('planb-applied-revert-notice')).toBeNull();
+  });
+
+  it('planb-applied 는 band i · 라벨 "i08 · 변경 반영 시트" 다', () => {
+    const states = PREVIEW_STATES as {
+      key: string;
+      band: string;
+      label: string;
+    }[];
+    const entry = states.find((state) => state.key === 'planb-applied');
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('i');
+    expect(entry?.label).toBe('i08 · 변경 반영 시트');
+
+    // 짝 앵커 — 목록이 비지 않았다.
+    expect(states.length).toBeGreaterThan(100);
+  });
+});

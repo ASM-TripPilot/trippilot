@@ -115,7 +115,8 @@ import { triggerPillCopy } from '@/features/planb/model/triggerPillCopy';
 import { riskAffectedRow } from '@/features/planb/model/riskAffectedRow';
 import { triggerWatchlist } from '@/features/planb/model/triggerWatchlist';
 import { ReplanRequestSheet } from '@/features/planb/ui/ReplanRequestSheet';
-import { ReplanAppliedScreen } from '@/features/planb/ui/ReplanAppliedScreen';
+import { appliedSummaryBadges } from '@/features/planb/model/appliedSummary';
+import { ReplanAppliedSheet } from '@/features/planb/ui/ReplanAppliedSheet';
 import type { ReplanSlotVM } from '@/entities/itinerary-slot/model';
 import { ReplanDraftView } from '@/pages/planb-draft/ui/ReplanDraftView';
 import { ReplanSolvingView } from '@/pages/planb-draft/ui/ReplanSolvingView';
@@ -1643,6 +1644,64 @@ function renderLiveRiskSheetPreview(): ReactElement {
         watchRows={triggerWatchlist([LIVE_RISK_PREVIEW_TRIGGER]).rows}
         onPressAlternative={noop}
         onClose={noop}
+      />
+    </>
+  );
+}
+
+// i08 변경 반영 시트(TRIP-754, Figma 4401:1568) — 펼침 허브의 5번째(해운대)가 F1963 + "변경됨"으로 바뀐
+// 뒤, 허브의 형제로 픽스처가 다 찬 시트를 얹는다. 라이브는 부제·배지·내역을 안 받는다(E4) — 여기만 Figma 모습.
+const LIVE_APPLIED_SLOT_KEY = `${LIVE_HUB_PREVIEW_DATE}#f1963`;
+const LIVE_APPLIED_PREVIEW_SLOTS: LiveHubSlot[] = LIVE_HUB_PREVIEW_SLOTS.map(
+  (entry) =>
+    entry.slot.poiId === 'haeundae'
+      ? {
+          state: 'upcoming',
+          slot: liveHubSlot(
+            'f1963',
+            'F1963 복합문화공간',
+            '17:00:00',
+            '18:30:00',
+            35.1747,
+            129.1152,
+            '09:00 - 21:00'
+          ),
+        }
+      : entry
+);
+function renderPlanbAppliedPreview(): ReactElement {
+  return (
+    <>
+      {renderLiveHubPreview(2, {
+        slots: LIVE_APPLIED_PREVIEW_SLOTS,
+        slotBadgeLabel: (slotKey) =>
+          slotKey === LIVE_APPLIED_SLOT_KEY ? '변경됨' : null,
+      })}
+      <ReplanAppliedSheet
+        subtitleLines={[
+          '비 예보를 반영했어요',
+          '방문한 곳은 그대로 두고 17시 이후만 바뀌었어요',
+        ]}
+        summaryBadges={appliedSummaryBadges({
+          changedCount: 1,
+          visitsBefore: 5,
+          visitsAfter: 5,
+          distanceDeltaM: -6900,
+        })}
+        diffRows={[
+          {
+            kind: 'added',
+            name: 'F1963 복합문화공간',
+            meta: '17:00–18:30 · 비 예보로 실내 대안',
+          },
+          {
+            kind: 'removed',
+            name: '해운대 해변',
+            meta: '17:00–18:30 · 비 예보 · 17시 이후',
+          },
+        ]}
+        onConfirm={noop}
+        onRevert={noop}
       />
     </>
   );
@@ -5100,14 +5159,13 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // ── i19 반영 완료(TRIP-441) — buildable 서브셋(헤더·체크·문구·CTA). 체크 원 크기·primary bg·
-  //    정렬은 jest 사각이라 이 키가 육안 대조 자리다(지표·전후 배지·되돌리기는 draft 부재로 없음) ──
+  // i08 변경 반영 시트(TRIP-754) — 펼침 허브 + 딤 + 시트. 딤 전면 커버·시트 높이는 jest 사각이라 육안 자리.
   {
     key: 'planb-applied',
     band: 'i',
-    label: 'i19 · 반영 완료',
+    label: 'i08 · 변경 반영 시트',
     login: null,
-    render: () => <ReplanAppliedScreen onBack={noop} onContinue={noop} />,
+    render: renderPlanbAppliedPreview,
   },
   // ── i20·i21 위치 수동 입력·권한 거부 폴백(TRIP-442) — 한 컴포넌트를 state prop 으로 두 얼굴.
   //    지도 롱프레스 실동작·"이 위치로 계속" 핸드오프·핀 오버레이·Figma 픽셀은 jest 사각이라 이

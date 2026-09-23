@@ -191,7 +191,8 @@ describe('🔴 G3 · AC-1 — 뷰 순수성 + 셸 조립', () => {
 describe('🔴 G4 · AC-1 — 옛 화면만 쓰던 체크리스트 글리프 3종이 지워졌다', () => {
   it('PlanbGlyphs(주석 제외)에 3종 이름이 0건이고, 다른 글리프는 남아 있다', () => {
     const glyphs = readOne(GLYPHS_REL);
-    expect(glyphs).toContain('AppliedCheckGlyph');
+    // TRIP-754 — AppliedCheckGlyph 는 i19 와 함께 지워진다. 남는 오류 글리프로 앵커를 옮겼다.
+    expect(glyphs).toContain('AppliedAlertGlyph');
     for (const name of CHECKLIST_GLYPHS) {
       expect(glyphs).not.toContain(name);
     }
