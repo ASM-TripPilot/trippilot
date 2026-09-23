@@ -2,8 +2,24 @@
 """숙소 정본 시드 생성 — LOCALDATA 숙박업 인허가 대장(csv) → R__seed_stay.sql
 
 원본: 행정안전부 지방행정인허가데이터(LOCALDATA) 「숙박업」
-      https://file.localdata.go.kr/file/lodgings/info  (브라우저로 접근 — curl 은 403)
+      https://file.localdata.go.kr/file/lodgings/info
       CP949 · 37컬럼 · 폐업 포함 전수
+
+**받는 것은 사람 몫이다 — 다만 "curl 로는 안 된다"는 이유 때문은 아니다.**
+종전 주석이 "curl 은 403" 이라고만 적어 두어 자동화가 불가능한 것처럼 읽혔는데,
+403 은 그냥 User-Agent 차단이다(2026-09-23 실측):
+
+    기본 curl                 → 403
+    브라우저 UA + Referer     → 200
+
+진짜 걸림돌은 그다음이다. 200 으로 오는 것은 **안내 페이지(HTML)** 이고 파일이 아니다.
+내려받기 링크가 정적 `href` 로 있지 않고 JS 가 만든다 — `/file/lodgings/{download,csv,zip,…}`
+을 찔러봐도 전부 Spring 기본 500(catch-all)이라 경로 추측으로는 닿지 않는다.
+
+자동화하려면 정식 경로인 **LOCALDATA 변동분 OpenAPI**(`auth_key`·`lastModTsBgn/End`·
+`pageIndex/pageSize`)를 쓴다. 인증키 발급이 선행이고, 생성기 입력이 CSV 에서 API 응답으로
+바뀌는 작업이다. 월 1회 갱신에 드는 수고(≈15분)를 생각하면 아직 값이 안 맞아 미뤘다 —
+주기를 올려야 할 이유가 생기면 그때 한다.
 
 사용법:
     python3 backend/scripts/gen_stay_seed.py <문화_숙박업.csv>
