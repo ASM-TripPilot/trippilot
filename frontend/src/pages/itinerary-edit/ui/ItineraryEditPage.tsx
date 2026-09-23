@@ -6,7 +6,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 
 import { buildEditItineraryRequest } from '@/features/itinerary/model/buildEditItineraryRequest';
-import { buildDraftPins } from '@/features/itinerary/model/draftView';
+import {
+  buildDraftPins,
+  formatCoPickDayHeader,
+} from '@/features/itinerary/model/draftView';
 import {
   useItineraryEditStore,
   type EditorDaysItem,
@@ -38,17 +41,16 @@ import {
 import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
 import { isNotFound } from '@/shared/api/isNotFound';
 import { StateNotice } from '@/shared/ui/StateNotice';
-
-import { EditorView } from './EditorView';
+import { EditorView } from '@/widgets/map-sheet-shell/ui/EditorView';
 
 /**
  * h24 일정 편집 배선(TRIP-302 슬라이스1~3) — **TRIP-797 묶음 C 로 소비 화면을 옛
- * `ItineraryEditScreen`(features) → 순수 뷰 `EditorView`(같은 pages 슬라이스) 로 재조립**한다. 배선
- * 계약(무엇이 서버로 나가고 무엇이 화면에 뜨나)은 그대로고, "누가 그리나"만 h12 통일 편집기로 바뀐다.
+ * `ItineraryEditScreen`(features) → 순수 뷰 `EditorView` 로 재조립**한다. 배선 계약(무엇이 서버로
+ * 나가고 무엇이 화면에 뜨나)은 그대로고, "누가 그리나"만 h12 통일 편집기로 바뀐다.
  *
- * features 화면은 widgets(`MapSheetShell`)를 상향 참조 못 하므로 셸 조립은 pages 층 순수 뷰가 진다
- * (h07/h08 DraftPage·h14/h16 ItineraryPlanPage 선례). 이 페이지는 그 뷰가 요구하는 값(center·pins·
- * days·slots·활성 일자·콜백)을 채워 넣고, EditorView 가 순수 뷰라 못 가진 세 조각 — 저장 오류 안내·
+ * TRIP-921 로 뷰가 widgets(`map-sheet-shell`)로 승격돼 직접 짜기(`ManualPlanPage`)와 같은 뷰를 쓴다.
+ * 이 페이지는 그 뷰가 요구하는 값(center·pins·days·slots·활성 일자·헤더 날짜 문구·콜백)을 채워 넣고,
+ * EditorView 가 순수 뷰라 못 가진 세 조각 — 저장 오류 안내·
  * 미지정 제외 안내·시각조정 시트 — 을 **형제로** 렌더한다(02a-C ★C5).
  *
  * 이 파일이 지는 책임 — EditorView 는 이 중 어느 것도 모른다:
@@ -266,6 +268,7 @@ export function ItineraryEditPage({
         slots={activeSlots as EditorSlot[]}
         activeDayIndex={activeDayIndex}
         activeDate={activeDate}
+        dateLabel={formatCoPickDayHeader(activeDate)}
         onSelectDay={setActiveDayIndex}
         onBack={() => router.back()}
         onPressTimeChip={setEditingSlotKey}

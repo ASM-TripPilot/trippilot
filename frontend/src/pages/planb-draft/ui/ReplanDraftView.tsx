@@ -18,7 +18,7 @@ import { SheetHeader } from '@/widgets/map-sheet-shell/ui/SheetHeader';
  *
  * 한 화면 세 얼굴(variant): draft(펼침) / noSolution(대안 없음) / failed(E3). 뒤 둘과 확정 실패(Q6)는
  * 헤더 아래 같은 안내 자리를 쓴다. 대안 없음이면 곳 수를 지우고 예정 행을 전부 흐린다(Seed Q3).
- * 시트는 항상 펼침(index 1)으로 연다 — 실제 88% 스냅은 6-b 몫.
+ * 시트는 항상 펼침(index 2 — 셸 기본 배열 [닫힘·peek·펼침])으로 연다 — 실제 88% 스냅은 6-b 몫.
  */
 
 // 확정 실패 안내 — PlanbDiffPage ERROR 와 같은 카피(BR-U4-32 "원 일정 유지"를 말로 알림, Q6).
@@ -115,7 +115,7 @@ export function ReplanDraftView({
       days={days}
       selectedDayIndex={selectedDayIndex}
       onBack={onBack}
-      initialIndex={1}
+      initialIndex={2}
       header={
         <>
           <SheetHeader

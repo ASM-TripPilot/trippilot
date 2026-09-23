@@ -143,3 +143,73 @@ export function CheckGlyph({ size = 12, testID }: GlyphProps) {
     </Svg>
   );
 }
+
+// 지도핀-꺼짐(16) — 지도 폴백 바 아이콘 원 안 표식(TRIP-919, Figma `4287:2126` 벡터 그대로). muted.
+export function MapPinOffGlyph({ size = 16, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+    >
+      <Path
+        d="M3.6 3.6C2.98178 4.50233 2.65595 5.57292 2.66667 6.66667C2.66667 10.6667 8 14.6667 8 14.6667C8.8638 13.9573 9.66661 13.1768 10.4 12.3333"
+        stroke={MUTED}
+        strokeWidth={1.33333}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M12.8 9C13.1523 8.27267 13.3346 7.47481 13.3333 6.66667C13.333 5.63215 13.0318 4.62006 12.4665 3.7537C11.9011 2.88733 11.096 2.20409 10.1492 1.78722C9.20236 1.37034 8.15475 1.23782 7.13396 1.40581C6.11318 1.5738 5.16328 2.03504 4.4 2.73333"
+        stroke={MUTED}
+        strokeWidth={1.33333}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M6.06667 6.06667C5.97178 6.36829 5.94977 6.6881 6.00242 6.99988C6.05507 7.31165 6.1809 7.6065 6.36957 7.86023C6.55824 8.11397 6.80438 8.31935 7.0878 8.45953C7.37122 8.59971 7.68383 8.6707 8 8.66667C8.42993 8.67213 8.85018 8.53889 9.19842 8.28671C9.54667 8.03453 9.80438 7.67684 9.93333 7.26667"
+        stroke={MUTED}
+        strokeWidth={1.33333}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M1.33333 1.33333L14.6667 14.6667"
+        stroke={MUTED}
+        strokeWidth={1.33333}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// 새로고침(16) — 지도 폴백 바 [다시 시도] 버튼 표식(TRIP-919, Figma `4287:2133` 벡터 그대로). ink.
+export function RetryGlyph({ size = 16, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+    >
+      <Path
+        d="M13.3333 7.33333C13.2818 6.07284 12.7851 4.87144 11.9314 3.94255C11.0778 3.01367 9.92255 2.41745 8.6709 2.25981C7.41924 2.10217 6.15222 2.39332 5.09494 3.08153C4.03765 3.76975 3.25855 4.81047 2.89605 6.01882C2.53355 7.22716 2.61111 8.52488 3.11497 9.68144C3.61882 10.838 4.51634 11.7785 5.64807 12.3359C6.77981 12.8933 8.07248 13.0314 9.29645 12.7258C10.5204 12.4202 11.5964 11.6906 12.3333 10.6667"
+        stroke={INK}
+        strokeWidth={1.33333}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M13.3333 2.66667V7.33333H8.66667"
+        stroke={INK}
+        strokeWidth={1.33333}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}

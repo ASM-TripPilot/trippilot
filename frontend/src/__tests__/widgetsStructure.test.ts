@@ -15,7 +15,9 @@
 //    @/widgets/time-sheet 소비(★4 누락 소비처 fail-closed). TRIP-753 으로 PlanbManualPage 는 빠졌다 —
 //    i07 은 ItineraryEditPage(시작/종료 라벨)를 그대로 쓴다.
 //  - AC-4/AC-5 상태·경계 규약: 위젯 소스에 expo-router·@/features·@/pages·raw hex 0,
-//    useState 0(단 TimeSheet.tsx 예외 — D8 선택 셀 상태, 02a ★7).
+//    useState 0(단 STATE_EXEMPT 명시 등재 파일 예외 — TimeSheet D8 선택 셀, MapSheetShell TRIP-919
+//    지도 실패/재시도 + TRIP-920 현재 스냅 칸 = 2개. 예외는 파일 + 허용 개수로 등재 — 호출 수가 개수와
+//    완전일치해야 한다).
 //
 // 리포 확립 규약: "없어야 한다"(부정)는 "있어야 한다"(긍정 짝)와 같은 it 안에 둔다 —
 // 빈 모집단에서 부정이 공허 통과하는 것을 긍정 짝이 먼저 막는다. 모든 스캔은 주석을 걷은 소스를 본다.
@@ -56,10 +58,34 @@ const TIME_SHEET_CONSUMERS: {
     rel: 'pages/itinerary-manual/ui/PlaceAddPage.tsx',
     labels: /labels=\{\{\s*start:\s*'시작',\s*end:\s*'종료'\s*\}\}/,
   },
+  // TRIP-921 — h12 직접 짜기도 같은 편집 뷰를 소비하며 ⌄ 시각 시트를 얻는다(01b Q3). 라벨은 편집과 같다.
+  {
+    rel: 'pages/itinerary-manual/ui/ManualPlanPage.tsx',
+    labels: /labels=\{\{\s*start:\s*'시작',\s*end:\s*'종료'\s*\}\}/,
+  },
 ];
 
-// D8 상태-소유 예외 — TimeSheet 는 선택 셀 useState 를 그대로 가진다(SlotTimeSheet 이관, 02a ★7).
-const STATE_EXEMPT = 'widgets/time-sheet/ui/TimeSheet.tsx';
+// 상태-소유 예외 — **파일 + 허용 개수**로 등재한다(스캔 범위는 줄이지 않는다). 개수는 useState **호출**
+// 수(import 줄 제외)와 완전일치해야 한다 — 늘리려면 이 숫자와 사유를 한 줄 고쳐야 한다(의도한 마찰,
+// 03b 경고-1). 새 예외는 사유와 함께 한 줄씩.
+const STATE_EXEMPT: { rel: string; count: number }[] = [
+  // D8 — TimeSheet 는 선택 셀 useState 를 그대로 가진다(SlotTimeSheet 이관, 02a ★7). 시·분 4 + 활성 칸
+  // + 종료 설정 여부 = 6.
+  { rel: 'widgets/time-sheet/ui/TimeSheet.tsx', count: 6 },
+  // TRIP-919 사용자 결정 — 셸이 지도 실패/재시도 상태를 쥔다(9 소비처가 배선 없이 폴백을 얻는다).
+  // TRIP-920 사용자 결정(3-a) — 셸이 `BottomSheet onChange` 로 받은 현재 스냅 칸을 쥔다(닫힘에서만 지도
+  // 풀림 · CTA 숨김). 2 = 실패 1 + 스냅 칸 1.
+  { rel: 'widgets/map-sheet-shell/ui/MapSheetShell.tsx', count: 2 },
+  // TRIP-921 01b Q2 — 편집 뷰가 "지금 끌고 있다"(onDragBegin~onDragEnd)를 쥔다. 두 페이지가 같은 상태·
+  // 콜백을 복제하지 않게 하려는 뷰 국소 일시 상태(TimeSheet 선택 셀과 같은 결). 1 = isDragging.
+  { rel: 'widgets/map-sheet-shell/ui/EditorView.tsx', count: 1 },
+];
+const STATE_EXEMPT_FILES = STATE_EXEMPT.map(({ rel }) => rel);
+
+/** useState **호출** 수 — `useState(`·`useState<T>(` 만 센다(import 줄의 이름은 안 센다). */
+function countUseStateCalls(source: string): number {
+  return (source.match(/\buseState\s*(<[^>]*>)?\s*\(/g) ?? []).length;
+}
 
 /**
  * 스캔 전처리 — 주석을 걷는다. 블록 주석을 먼저 지운다(순서를 바꾸면 한 줄 안의 코드가 소실된다).
@@ -260,9 +286,13 @@ describe('🔴 F · AC-4/AC-5 — 위젯은 상위층·raw hex 를 안 물고, �
 
     // 긍정 짝 — 모집단에 두 위젯이 실재한다(빈 widgets 층에서 공허 통과 방지). TRIP-753 으로 옛 셸이
     // 사라져 대표를 map-sheet-shell 로 옮겼다.
+    // TRIP-919: 새 폴백 바(MapFallbackBar)도 이 모집단에 들어와 같은 스캔을 받는다.
+    // TRIP-921: pages 에서 승격된 편집 뷰(EditorView)도 — 옛 5개 features import 를 전부 걷어야 한다.
     expect(sources.map((s) => s.file)).toEqual(
       expect.arrayContaining([
         'widgets/map-sheet-shell/ui/MapSheetShell.tsx',
+        'widgets/map-sheet-shell/ui/MapFallbackBar.tsx',
+        'widgets/map-sheet-shell/ui/EditorView.tsx',
         'widgets/time-sheet/ui/TimeSheet.tsx',
       ])
     );
@@ -281,18 +311,44 @@ describe('🔴 F · AC-4/AC-5 — 위젯은 상위층·raw hex 를 안 물고, �
     expect(offenders).toEqual([]);
   });
 
-  it('위젯 UI 에 useState 0 (부정, TimeSheet 예외) + 예외 대상 실재 (긍정 짝, ★7 D8)', () => {
+  it('위젯 UI 에 useState 0 (부정, STATE_EXEMPT 예외) + 예외 파일은 등재한 개수만큼만 상태를 쥔다 (긍정 짝)', () => {
     const sources = widgetUiSources();
 
-    // 긍정 짝 — 예외 대상(TimeSheet)이 실물이다(phantom 예외 방지) + props-only 위젯이 모집단에 있다.
-    expect(exists(STATE_EXEMPT)).toBe(true);
+    // 탐지기 자가검사 — import 줄은 안 세고, 제네릭 호출은 세고, 주석(전처리로 걷힘)은 안 센다.
+    expect(
+      countUseStateCalls(
+        stripComments(
+          [
+            "import { useState } from 'react';",
+            '// const [x] = useState(0);',
+            'const [a, setA] = useState(false);',
+            "const [b, setB] = useState<'start' | 'end'>('start');",
+          ].join('\n')
+        )
+      )
+    ).toBe(2);
+
+    // 긍정 짝 ① — 예외 파일마다 실물이고 useState 호출 수가 **등재한 개수와 정확히 같다**. 모자라면
+    //   유령 예외(02a ★8), 넘치면 허락 안 된 상태가 들어온 것이다(03b 경고-1 — 파일 단위 예외는 셸을
+    //   통째로 가드 밖으로 뺐다).
+    expect(
+      STATE_EXEMPT.map(({ rel }) => ({
+        rel,
+        exists: exists(rel),
+        count: countUseStateCalls(readOne(rel)),
+      }))
+    ).toEqual(
+      STATE_EXEMPT.map(({ rel, count }) => ({ rel, exists: true, count }))
+    );
+    // 긍정 짝 ② — props-only 위젯이 모집단에 있다. 재시도 상태는 셸이 쥐고 폴백 바는 그리기만 한다
+    //   (TRIP-919 — 셸이 예외가 돼 앵커를 MapFallbackBar 로 옮겼다, 02a ★9).
     expect(sources.map((s) => s.file)).toEqual(
-      expect.arrayContaining(['widgets/map-sheet-shell/ui/MapSheetShell.tsx'])
+      expect.arrayContaining(['widgets/map-sheet-shell/ui/MapFallbackBar.tsx'])
     );
 
-    // 부정 — TimeSheet(선택 셀 상태, D8) 외 위젯은 useState 를 쥐지 않는다(상태는 소비처 소유).
+    // 부정 — 예외 외 위젯은 useState 를 쥐지 않는다(상태는 소비처 소유).
     const offenders = sources
-      .filter(({ file }) => file !== STATE_EXEMPT)
+      .filter(({ file }) => !STATE_EXEMPT_FILES.includes(file))
       .filter(({ source }) => /\buseState\b/.test(source))
       .map(({ file }) => file);
     expect(offenders).toEqual([]);

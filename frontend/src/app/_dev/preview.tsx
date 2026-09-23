@@ -55,7 +55,10 @@ import {
 import { HomeScreen } from '@/features/home/ui/HomeScreen';
 import { MAGAZINE_DEFAULT_PROPS } from '@/features/home/model/magazineFixtures';
 import { MagazineScreen } from '@/features/home/ui/MagazineScreen';
-import { buildDraftPins } from '@/features/itinerary/model/draftView';
+import {
+  buildDraftPins,
+  formatCoPickDayHeader,
+} from '@/features/itinerary/model/draftView';
 import { type PlanDayTab } from '@/features/itinerary/model/planState';
 import type { MustVisitListItem } from '@/features/itinerary/model/mustVisitList';
 import {
@@ -73,10 +76,12 @@ import {
 } from '@/features/itinerary/ui/PlaceAddScreen';
 import { SlotCandidateSheet as ItinerarySlotCandidateSheet } from '@/features/itinerary/ui/SlotCandidateSheet';
 import { SlotFillScreen } from '@/features/itinerary/ui/SlotFillScreen';
+import type { StayRecommendView as StayRecommendViewModel } from '@/features/itinerary/model/stayRecommend';
 import { CoPickStepper } from '@/widgets/copick-stepper/ui/CoPickStepper';
 import { GenerationDoneBar } from '@/widgets/generation-done-bar/ui/GenerationDoneBar';
 import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
 import { GenerationProgressCard } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
+import { MapFallbackBar } from '@/widgets/map-sheet-shell/ui/MapFallbackBar';
 import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
 import { SheetHeader } from '@/widgets/map-sheet-shell/ui/SheetHeader';
 import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
@@ -123,6 +128,8 @@ import { appliedSummaryBadges } from '@/features/planb/model/appliedSummary';
 import { ReplanAppliedSheet } from '@/features/planb/ui/ReplanAppliedSheet';
 import type { ReplanSlotVM } from '@/entities/itinerary-slot/model';
 import { ReplanDraftView } from '@/pages/planb-draft/ui/ReplanDraftView';
+// 뷰 파일 경로로 직접 — 페이지 배럴은 useAssignBase(요청 모듈)를 끌어와 프리뷰 네트워크 지뢰가 터진다.
+import { StayRecommendView } from '@/pages/itinerary-stay-recommend/ui/StayRecommendView';
 import { ReplanSolvingView } from '@/pages/planb-draft/ui/ReplanSolvingView';
 import { SlotCandidateSheet } from '@/features/planb/ui/SlotCandidateSheet';
 import { RiskDetailSheet } from '@/features/planb/ui/RiskDetailSheet';
@@ -151,7 +158,7 @@ import { StaySelectSheet } from '@/features/trip/ui/StaySelectSheet';
 import { LiveLocationPage } from '@/pages/live-location';
 import { ConfirmedBanner } from '@/pages/itinerary-plan/ui/ConfirmedBanner';
 import { NoBaseNoticeCard } from '@/pages/itinerary-plan/ui/NoBaseNoticeCard';
-import { EditorView } from '@/pages/itinerary-edit/ui/EditorView';
+import { EditorView } from '@/widgets/map-sheet-shell/ui/EditorView';
 import {
   LiveHubView,
   type LiveHubSlot,
@@ -801,23 +808,62 @@ const H14_PLAN_PENDING_SLOTS: ItineraryDaysItemSlotsItem[] =
   H11_COPICK_PREVIEW_SLOTS.map((slot) => ({ ...slot, distanceRange: null }));
 const H14_PLAN_NO_BASE_SLOTS = H11_COPICK_PREVIEW_SLOTS.slice(0, 4);
 
-// 지도 폴백 바(TRIP-799 D5) — 지도 스트립 자리에 얹는 한 줄 안내 + [다시 시도] pill. 페이지는 실
-// 런타임 감지(MapView onLoadFailed)를 아직 배선하지 않아(맹점②, 03 follow-up) 이 프리뷰가 폴백 얼굴을
-// 보는 유일한 자리다 — 강제 주입한다.
-const H14_MAP_FALLBACK: ReactElement = (
-  <View className="flex-1 bg-surface-soft px-lg pt-[72px]">
-    <View className="flex-row items-center justify-between gap-sm rounded-card border border-hairline bg-canvas px-md py-sm">
-      <Text className="flex-1 font-noto text-caption text-muted">
-        ⊘ 지도를 불러올 수 없어요 · 일정은 아래 목록에서 볼 수 있어요
-      </Text>
-      <Pressable className="rounded-pill border border-hairline-strong bg-canvas px-md py-[6px]">
-        <Text className="font-noto-bold text-caption font-bold text-ink">
-          ↻ 다시 시도
-        </Text>
-      </Pressable>
-    </View>
-  </View>
-);
+// 지도 폴백 얼굴(TRIP-799 D5 → TRIP-919) — 셸 기본 폴백 바를 그대로 강제 주입한다. dev build 엔 지도
+// 키가 있어 셸이 스스로 실패하지 않으므로, 폴백 얼굴은 이렇게 넘겨야 보인다. 다시 시도는 noop.
+const H14_MAP_FALLBACK: ReactElement = <MapFallbackBar onRetry={noop} />;
+
+// h15 동선 기준 숙소 추천(TRIP-800) — Figma 4385:1623 픽스처. 실 추천 API(TRIP-823) 전이라 이 값은
+// 프리뷰에만 산다(라우트는 무데이터 안내 얼굴). 동선 핀 4 + 후보 3(첫 카드 선택 = 숙소 핀, 나머지 =
+// 아웃라인 후보 핀). 사진은 출처 기록이 있는 기존 로컬 에셋 재사용(외부 URL 금지 — S4).
+const H15_STAY_RECOMMEND_VIEW: StayRecommendViewModel = {
+  summary: '이틀 동선이 해운대·서면 중심이에요',
+  center: { lat: 35.159, lng: 129.128 },
+  radiusM: 1400,
+  routePins: [
+    { number: 1, lat: 35.1575, lng: 129.06 },
+    { number: 2, lat: 35.1665, lng: 129.137 },
+    { number: 3, lat: 35.1587, lng: 129.1604 },
+    { number: 4, lat: 35.153, lng: 129.152 },
+  ],
+  candidates: [
+    {
+      savedStayId: 'preview-h15-haeundae',
+      name: '해운대 그랜드 호텔',
+      imageSource: require('@/assets/home/collection-haeundae.jpg'),
+      avgDistanceM: 900,
+      maxDistanceM: 1400,
+      district: '해운대구',
+      priceTier: '중간가',
+      price: { amount: 120000, currency: 'KRW' },
+      lat: 35.1631,
+      lng: 129.1636,
+    },
+    {
+      savedStayId: 'preview-h15-seomyeon',
+      name: '서면 시티 호텔',
+      imageSource: require('@/assets/home/hero-night.jpg'),
+      avgDistanceM: 1200,
+      maxDistanceM: 2000,
+      district: '부산진구',
+      priceTier: '중간가',
+      price: { amount: 89000, currency: 'KRW' },
+      lat: 35.1578,
+      lng: 129.0592,
+    },
+    {
+      savedStayId: 'preview-h15-gwangalli',
+      name: '광안리 오션뷰',
+      imageSource: require('@/assets/execution/live-gwangalli-1.jpg'),
+      avgDistanceM: 1300,
+      maxDistanceM: 1800,
+      district: '수영구',
+      priceTier: '중간가',
+      price: { amount: 145000, currency: 'KRW' },
+      lat: 35.1532,
+      lng: 129.1188,
+    },
+  ],
+};
 
 function renderH14PlanSheet(options: {
   slots: ItineraryDaysItemSlotsItem[];
@@ -3950,8 +3996,8 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // h08 지도+시트 셸 접힘(TRIP-783) — Figma `4221:2448` 대조용. 셸(전면 지도+2스냅 시트+오버레이+
-  // CTA) 부품을 h08 default 4슬롯으로 조립한다. 2스냅 실개폐·딤은 통과형 목 사각이라 index=0(peek)
+  // h08 지도+시트 셸 접힘(TRIP-783) — Figma `4221:2448` 대조용. 셸(전면 지도+3스냅 시트+오버레이+
+  // CTA) 부품을 h08 default 4슬롯으로 조립한다. 3스냅 실개폐·딤은 통과형 목 사각이라 기본 진입 peek
   // 얼굴만 고정된다 — 6-b 실기가 유일한 개폐 그물. 지도 태그는 셸이 소유하므로 여기엔 없다.
   {
     key: 'h08-draft-collapsed',
@@ -4013,7 +4059,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   // h08 지도+시트 셸 펼침(TRIP-792) — Figma `4224:2448` 대조용. 접힘 조립을 그대로 복제하고
-  // `initialIndex={1}` 만 더해 시트가 상단 스냅까지 열린 얼굴을 낸다(2스냅 실개폐는 통과형 목
+  // `initialIndex={2}` 만 더해 시트가 상단 스냅까지 열린 얼굴을 낸다(스냅 실개폐는 통과형 목
   // 사각이라 6-b 실기가 유일한 개폐 그물). 배열에서 collapsed 바로 뒤에 둬 안정 정렬이
   // collapsed→expanded 순서를 내게 한다(devPreviewBandSort EXPECTED_H).
   {
@@ -4025,7 +4071,7 @@ export const PREVIEW_STATES: PreviewState[] = [
       <MapSheetShell
         center={{ lat: 35.1532, lng: 129.1188 }}
         pins={buildDraftPins(H08_PREVIEW_SLOTS)}
-        initialIndex={1}
+        initialIndex={2}
         days={[
           { label: '1일차' },
           { label: '2일차' },
@@ -4141,7 +4187,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   // (비고정 4 + 고정 숙소 1)을 얹는다. 고정 숙소는 단일 시각 `21:00`+부제+고정 배지, 비고정은 시각
   // 범위 칩만(다른 후보 링크 없음 · h08 과 차이). meta 는 비고정 4 → `4/4 골랐어요`. 배열에서 fallback
   // 3키 **직전**(h11 그룹 첫 자리)에 둬 안정 정렬이 copick→fallback 순서를 내게 한다(devPreviewBandSort
-  // EXPECTED_H · 02a ★13). 2스냅 실개폐·딤은 통과형 목 사각이라 6-b 실기가 유일한 개폐 그물.
+  // EXPECTED_H · 02a ★13). 3스냅 실개폐·딤은 통과형 목 사각이라 6-b 실기가 유일한 개폐 그물.
   {
     key: 'h11-copick-complete',
     band: 'h',
@@ -4332,6 +4378,24 @@ export const PREVIEW_STATES: PreviewState[] = [
         meta: '4곳 · 3.5km',
         noBase: true,
       }),
+  },
+  // h15 동선 기준 숙소 추천(TRIP-800) — 순수 뷰 + 픽스처(페이지·요청 모듈 미로드). 선택은 첫 카드 고정.
+  // 지도 마커 모양·반경 원 점선·peek 높이는 jest 사각(6-b 실기).
+  {
+    key: 'h15-stay-recommend',
+    band: 'h',
+    label: 'h15 · 동선 기준 숙소 추천',
+    login: null,
+    render: () => (
+      <StayRecommendView
+        view={H15_STAY_RECOMMEND_VIEW}
+        selectedId="preview-h15-haeundae"
+        onSelect={noop}
+        onConfirm={noop}
+        onBrowseOther={noop}
+        onBack={noop}
+      />
+    ),
   },
   // 내 여행 목록 · h05/h06(TRIP-788) — 배열 순서 background→done-bar→loading→empty(안정 정렬 =
   // devPreviewBandSort EXPECTED_H 위치). background 는 완성(사진)·생성중·초안·미도착 4카드 + "최신순"
@@ -4809,7 +4873,7 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // h12 편집기 통일(TRIP-797) — 지도+2스냅 시트 위 슬롯 카드 편집. 순수 뷰 EditorView 를 preview 가
+  // h12 편집기 통일(TRIP-797) — 지도+3스냅 시트 위 슬롯 카드 편집. 순수 뷰 EditorView 를 preview 가
   // 직접 태운다(컨테이너 api 사슬 없음, TRIP-610 회피). 빈/채움/드래그 세 정적 얼굴을 대조한다.
   // 실제 드래그·시트 개폐·딤은 통과형 목이 못 봄(6-b 실기 전용).
   {
@@ -4824,6 +4888,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         slots={[]}
         activeDayIndex={0}
         activeDate={TIMELINE_PREVIEW_DAYS[0].date}
+        dateLabel={formatCoPickDayHeader(TIMELINE_PREVIEW_DAYS[0].date)}
         onSelectDay={noop}
         onBack={noop}
         onPressTimeChip={noop}
@@ -4845,6 +4910,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         slots={TIMELINE_PREVIEW_SLOTS}
         activeDayIndex={0}
         activeDate={TIMELINE_PREVIEW_DAYS[0].date}
+        dateLabel={formatCoPickDayHeader(TIMELINE_PREVIEW_DAYS[0].date)}
         onSelectDay={noop}
         onBack={noop}
         onPressTimeChip={noop}
@@ -4866,6 +4932,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         slots={TIMELINE_PREVIEW_SLOTS}
         activeDayIndex={0}
         activeDate={TIMELINE_PREVIEW_DAYS[0].date}
+        dateLabel={formatCoPickDayHeader(TIMELINE_PREVIEW_DAYS[0].date)}
         onSelectDay={noop}
         onBack={noop}
         onPressTimeChip={noop}
@@ -4880,7 +4947,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   // 후보(PlaceAddRow)를 얹고, 검색바+칩(PlaceAddHeader)은 리스트 헤더(children)로, "장소 추가 · N일차"는
   // header 로 조립한다(페이지 PlaceAddPage 와 같은 형태, 단 조회 훅 대신 픽스처 — 프리뷰는 api import 0).
   // 실화면 딥링크로는 빈 일정 생성 POST 를 백엔드가 만들어야 도달하므로(401 이면 못 봄) 여기가 눈 확인
-  // 자리다. 거리줄은 픽스처로만 렌더한다(실 GET 엔 거리 필드 없음 — 6-b 육안). 2스냅 실개폐·핀 위치는 실기.
+  // 자리다. 거리줄은 픽스처로만 렌더한다(실 GET 엔 거리 필드 없음 — 6-b 육안). 3스냅 실개폐·핀 위치는 실기.
   {
     key: 'h13-place-add',
     band: 'h',
@@ -5146,7 +5213,7 @@ export const PREVIEW_STATES: PreviewState[] = [
       </SafeAreaView>
     ),
   },
-  // ── i06 재계획안(TRIP-751) — 한 뷰의 두 얼굴(펼침 · 대안 없음), 시트는 펼침(index 1). 같은 5곳
+  // ── i06 재계획안(TRIP-751) — 한 뷰의 두 얼굴(펼침 · 대안 없음), 시트는 펼침(index 2). 같은 5곳
   //    픽스처로 Figma 4314:1923 · 4335:1923 과 대조한다(88% 스냅·CTA 가림·흐림 정도는 육안 몫).
   //    실패(failed)·확정 실패 얼굴은 같은 안내 자리라 여기 따로 두지 않는다 ──
   {
@@ -5219,6 +5286,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         slots={I07_EDIT_SLOTS}
         activeDayIndex={1}
         activeDate={I07_EDIT_DATE}
+        dateLabel={formatCoPickDayHeader(I07_EDIT_DATE)}
         onSelectDay={noop}
         onBack={noop}
         onPressTimeChip={noop}

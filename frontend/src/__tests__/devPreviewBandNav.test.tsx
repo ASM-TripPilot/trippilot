@@ -328,7 +328,11 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     // ⚠️ TRIP-753: i07 옛 폴백·위반 2키(`planb-manual-fallback`·`-violation`)를 지워 **순 −2** → 162→160.
     //    `planb-manual-normal` 은 이름을 유지한다(Q10). test-designer 선반영(카운트 가드만) — implementer
     //    는 preview.tsx 에서 키만 지우고 이 가드는 안 만진다(삭제 전엔 162개라 red).
-    expect(PREVIEW_STATES).toHaveLength(160);
+    // ⚠️ TRIP-800: h15 동선 기준 숙소 추천 프리뷰 1키(`h15-stay-recommend`, band `h`) 추가로 160→161.
+    //    test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에 그 1키(StayRecommendScreen
+    //    순수 뷰 + 픽스처 props)만 추가하고 이 가드는 안 만진다(추가 전엔 160개라 red). 정확히 그 키인지는
+    //    아래 'TRIP-800' describe 가 못박고, devPreviewBandSort 는 EXPECTED_H 에 h14 4키 뒤·h16 앞으로 삽입.
+    expect(PREVIEW_STATES).toHaveLength(161);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -1007,6 +1011,26 @@ describe('🔴 TRIP-796 · h11 같이 결과(CoPick 완료) 셸 프리뷰 키 �
     //      삭제에 안 딸려가는 안정 band h 앵커로 h07-generating-loading 으로 교체.
     expect(keys).toContain('h08-draft-collapsed');
     expect(keys).toContain('h07-generating-loading');
+  });
+});
+
+describe('🔴 TRIP-800 · h15 동선 기준 숙소 추천 프리뷰 키 (band h)', () => {
+  it('키 h15-stay-recommend 가 band h · 라벨 "h15 · 동선 기준 숙소 추천"으로 있고 이웃 h14·h16 키는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES)만 읽는다.
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'h15-stay-recommend'
+    );
+
+    // red-first — implementer 가 preview.tsx 에 추가하기 전엔 없다. 카운트(161)만으론 "아무 1키나
+    // 추가해도" 통과하므로 이 단언이 '추가된 1키가 h15 키'임을 못박는다(TRIP-795 미러).
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('h');
+    expect(entry?.label).toBe('h15 · 동선 기준 숙소 추천');
+
+    // 이웃 앵커 — h14 완성 일정·h16 확정 일정이 딸려 사라지지 않았다(공허 통과 방지).
+    const keys = PREVIEW_STATES.map((state) => state.key);
+    expect(keys).toContain('h14-plan-no-base');
+    expect(keys).toContain('h16-plan-confirmed');
   });
 });
 

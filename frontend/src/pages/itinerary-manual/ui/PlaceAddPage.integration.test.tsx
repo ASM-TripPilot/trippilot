@@ -42,6 +42,9 @@ import { PlaceAddPage } from './PlaceAddPage';
  *  - 🔴 **SC** 페이지가 MapSheetShell(map-sheet-shell-root)+전면 지도(map-root)를 조립하고,
  *    검색·칩·리스트·카드가 셸 안에 그대로 산다(재조립 무회귀 그물 — P2·P4·A2·C 를 안 깬다).
  *
+ * TRIP-922 추가 — 시트 back 이 유일한 탈출구(루트 Stack headerShown:false):
+ *  - 🟢선제 **BK1** `sheet-daychip-back` press → router.back() 1회(셸 기본값이 빈 함수라 배선 누락은 조용하다).
+ *
  * 왜 통합 버킷인가: 최종 직렬화된 URL·나간 PUT 바디·재요청 횟수·캐시 무효화는 msw/스파이만 본다.
  * 3동작 뼈대: 준비=핸들러/래퍼/params → 실행=렌더/입력/칩/add → 단언=나간 URL·PUT 바디·보이는 트리.
  */
@@ -548,5 +551,16 @@ describe('🔴 SC · TRIP-798 묶음 C — MapSheetShell peek 시트 조립 (시
     expect(
       screen.getAllByTestId(/^itinerary-place-card-/).length
     ).toBeGreaterThan(0);
+  });
+});
+
+describe('🟢 BK1 · TRIP-922 — 시트 back 은 이전 화면으로 돌아간다 (유일한 탈출구)', () => {
+  it('BK1 · 시트 좌상단 back(sheet-daychip-back) press → router.back() 1회', async () => {
+    await renderPage();
+
+    fireEvent.press(screen.getByTestId('sheet-daychip-back'));
+
+    // 셸이 onBack 미전달을 빈 함수로 채워 배선 누락이 에러 없이 무반응이 된다 — 횟수로만 잡힌다.
+    expect(mockBack).toHaveBeenCalledTimes(1);
   });
 });

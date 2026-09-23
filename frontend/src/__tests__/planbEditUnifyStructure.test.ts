@@ -23,7 +23,8 @@ import path from 'path';
 const ROOT = path.resolve('src');
 
 const ROUTE_REL = 'app/trips/[tripId]/planb/manual.tsx';
-const EDITOR_REL = 'pages/itinerary-edit/ui/EditorView.tsx';
+// TRIP-921 — 편집 뷰가 widgets/map-sheet-shell 로 승격됐다(두 페이지가 같은 뷰 소비). 단언은 그대로.
+const EDITOR_REL = 'widgets/map-sheet-shell/ui/EditorView.tsx';
 const PAGE_REL = 'pages/itinerary-edit/ui/ItineraryEditPage.tsx';
 const CARD_REL = 'entities/itinerary-slot/ui/SlotStopCard.tsx';
 const RULE_REL = 'features/planb/model/reorderKeepingLocked.ts';
@@ -202,7 +203,8 @@ describe('🔴 U5 · AC-12 — 프리뷰는 옛 래퍼를 버리고 EditorView �
   it('ManualEditPreview·MANUAL_EDIT_PREVIEW·manualEditPreviewDays·배럴 import 0 (부정) + 딥 경로 import (긍정)', () => {
     const preview = readOne(PREVIEW_REL);
 
-    expect(preview).toContain("'@/pages/itinerary-edit/ui/EditorView'");
+    // TRIP-921 — 위젯 경로로 재조준(프리뷰가 뷰를 파일 경로로 무는 계약은 그대로).
+    expect(preview).toContain("'@/widgets/map-sheet-shell/ui/EditorView'");
 
     expect(preview).not.toContain('ManualEditPreview');
     expect(preview).not.toContain('MANUAL_EDIT_PREVIEW');

@@ -121,14 +121,17 @@ function textsOf(pattern: RegExp): string[] {
     .map((node) => String(node.props.children));
 }
 
-function sheetIndices(): number[] {
+/** 시트가 받은 초기 스냅 **칸 값**들 — snapPoints[index](TRIP-920: 숫자 index 는 셸 배열이 바뀌면 뜻이 밀린다). */
+function sheetSnapValues(): unknown[] {
   return screen.root
     .findAll(
       (node) =>
         typeof node.props?.index === 'number' &&
         Array.isArray(node.props?.snapPoints)
     )
-    .map((node) => node.props.index as number);
+    .map(
+      (node) => (node.props.snapPoints as unknown[])[node.props.index as number]
+    );
 }
 
 const DIMMED = /^opacity-(45|\[0\.45\])$/;
@@ -142,7 +145,7 @@ function dimmedSlotKeys(): string[] {
 }
 
 describe('🔴 V1 · AC-2 — 펼침 헤더·일차 칩·시트 스냅', () => {
-  it('셸 위에 헤더 4 leaf 가 주입값과 완전히 같고, 칩 2일차가 선택, 시트는 펼침(index 1)이다', () => {
+  it('셸 위에 헤더 4 leaf 가 주입값과 완전히 같고, 칩 2일차가 선택, 시트는 펼침(88%) 칸이다', () => {
     renderView();
 
     expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
@@ -158,9 +161,10 @@ describe('🔴 V1 · AC-2 — 펼침 헤더·일차 칩·시트 스냅', () => {
     );
     expect(screen.getByTestId('sheet-daychip-1')).toBeSelected();
 
-    const indices = sheetIndices();
-    expect(indices.length).toBeGreaterThan(0);
-    indices.forEach((index) => expect(index).toBe(1));
+    // TRIP-920 심판 수정 — 숫자 index 가 아니라 그 index 가 가리키는 칸 값(펼침 = 88%).
+    const values = sheetSnapValues();
+    expect(values.length).toBeGreaterThan(0);
+    values.forEach((value) => expect(value).toBe('88%'));
 
     expect(screen.queryByTestId('planb-draft-notice')).toBeNull();
   });

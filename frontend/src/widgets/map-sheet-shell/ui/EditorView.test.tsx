@@ -1,9 +1,12 @@
+import type { ReactElement } from 'react';
+import { StyleSheet } from 'react-native';
 import {
   fireEvent,
   render,
   screen,
   within,
 } from '@testing-library/react-native';
+import DraggableFlatList, * as DraggableModule from 'react-native-draggable-flatlist';
 
 import type {
   ItineraryDaysItem,
@@ -11,6 +14,12 @@ import type {
 } from '@/shared/api/generated/schemas';
 import { buildPlanDayTabs } from '@/features/itinerary/model/planState';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+import {
+  EDIT_LIST,
+  editListData,
+  fireEditDragBegin,
+  fireEditDragEnd,
+} from '@/test-support/editDragList';
 
 import { EditorView } from './EditorView';
 
@@ -26,6 +35,12 @@ import { EditorView } from './EditorView';
  * 테두리 색. 여기선 `map-sheet-shell-root`·children·testID 트리·콜백 발화·`isDragging` 표면 전환만.
  *
  * 3동작 뼈대: 준비=days/slots/콜백 주입 렌더 → 실행=렌더/press → 단언=골격·부재·콜백·CTA 상태.
+ *
+ * **TRIP-921 이동**: 뷰가 `pages/itinerary-edit` → `widgets/map-sheet-shell/ui` 로 승격돼(두 페이지가
+ * 같은 뷰를 소비) 이 파일도 따라왔다. 위젯은 features 를 못 물어 헤더 날짜를 **`dateLabel` 문자열로
+ * 받는다**(포맷 판정은 페이지 테스트 E0·M1 과 프리뷰 테스트 몫, 02a ★8). 아래 D1~D8 은 드래그 실배선
+ * — 리스트 끝 센티널 판정(재정렬 vs 드롭 삭제)·고정/완료 금지·드래그 중 얼굴 — 을 잠근다. 목은 손가락을
+ * 못 움직이므로 `@/test-support/editDragList` 가 라이브러리와 같은 배열 이동으로 onDragEnd 를 발화한다.
  */
 
 // 지도는 네이버 네이티브라 jest 에서 못 뜬다 — 관찰 목으로 map-root 를 노출(MapSheetShell.test 조합).
@@ -66,6 +81,8 @@ function renderView(
   onPressAddPlace: jest.Mock;
   onPressAddBetween: jest.Mock;
   onSave: jest.Mock;
+  onReorder: jest.Mock;
+  onDeleteViaDrag: jest.Mock;
 } {
   const cb = {
     onSelectDay: jest.fn(),
@@ -73,6 +90,8 @@ function renderView(
     onPressAddPlace: jest.fn(),
     onPressAddBetween: jest.fn(),
     onSave: jest.fn(),
+    onReorder: jest.fn(),
+    onDeleteViaDrag: jest.fn(),
   };
   render(
     <EditorView
@@ -81,6 +100,7 @@ function renderView(
       slots={[]}
       activeDayIndex={0}
       activeDate={DATE}
+      dateLabel="6월 10일(수)"
       onBack={jest.fn()}
       {...cb}
       {...overrides}
@@ -261,6 +281,8 @@ function renderI07(
     slots: I07_SLOTS,
     activeDayIndex: 1,
     activeDate: I07_DATE,
+    // TRIP-921 — 위젯은 포맷터(features)를 못 물어 페이지가 만든 문자열을 받는다(02a D-2).
+    dateLabel: '6월 11일(목)',
     completedSlotKeys: [k('p1'), k('p2')],
     ...overrides,
   });
@@ -278,19 +300,22 @@ function treeOrder(): string[] {
     .map((node) => node.props.testID as string);
 }
 
-/** 셸이 BottomSheet 목에 넘긴 초기 스냅 index 들. */
-function sheetIndices(): number[] {
+/** 셸이 BottomSheet 목에 넘긴 초기 스냅 **칸 값**들 — snapPoints[index]. TRIP-920 이 셸 기본 배열 앞에
+ *  닫힘(28)을 끼워 숫자 index 의 뜻이 밀렸다: 숫자만 보면 green 인 채로 "펼침→peek" 가 된다(02a ★1). */
+function sheetSnapValues(): unknown[] {
   return screen.root
     .findAll(
       (node) =>
         typeof node.props?.index === 'number' &&
         Array.isArray(node.props?.snapPoints)
     )
-    .map((node) => node.props.index as number);
+    .map(
+      (node) => (node.props.snapPoints as unknown[])[node.props.index as number]
+    );
 }
 
 describe('🔴 EditorView · V1 — 헤더 날짜 괄호형 + 시트 펼침 (TRIP-753 AC-2)', () => {
-  it('2일차 6/11 헤더를 "일정 편집 · 2일차 · 6월 11일(목) · 5곳" 조각으로 그리고 시트를 index 1 로 연다', () => {
+  it('2일차 6/11 헤더를 "일정 편집 · 2일차 · 6월 11일(목) · 5곳" 조각으로 그리고 시트를 펼침(88%) 칸으로 연다', () => {
     renderI07();
 
     expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
@@ -302,9 +327,10 @@ describe('🔴 EditorView · V1 — 헤더 날짜 괄호형 + 시트 펼침 (TRI
     );
     expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent('5곳');
 
-    const indices = sheetIndices();
-    expect(indices.length).toBeGreaterThan(0);
-    indices.forEach((index) => expect(index).toBe(1));
+    // TRIP-920 심판 수정 — 숫자 index 가 아니라 그 index 가 가리키는 칸 값(펼침 = 88%).
+    const values = sheetSnapValues();
+    expect(values.length).toBeGreaterThan(0);
+    values.forEach((value) => expect(value).toBe('88%'));
   });
 });
 
@@ -465,6 +491,306 @@ describe('🔴 EditorView · V7 — 플래그 없으면(h12) + 와 h12 안내 �
     expect(order.indexOf('itinerary-edit-add-place')).toBeGreaterThan(-1);
     expect(order.indexOf('itinerary-edit-guide')).toBeGreaterThan(
       order.indexOf('itinerary-edit-add-place')
+    );
+  });
+});
+
+// ── TRIP-921 · 드래그 실배선 — 리스트 끝 센티널(3-a) ─────────────────────────────────────────────
+//
+// data = 슬롯 n개 + 맨 끝 센티널(드롭존). 끈 카드가 새 data 에서 센티널 **뒤**면 삭제, 아니면 재정렬.
+// 경계는 "to = n" 하나다: [a,b,c,S] 에서 0→2 는 [b,c,a,S](센티널 바로 앞 = 맨 끝 재정렬), 0→3·2→3 은
+// [..,S,x](센티널 뒤 = 삭제). 목은 isActive 가 늘 false · 손가락 이동 없음(02a ★4·★5).
+
+const ACTIVE = 'itinerary-edit-dropzone-active';
+const CTA = 'sheet-cta-button-0';
+
+/**
+ * 5-b 경고-1 — 끌기 중 카드 사이 "+" 계약: **마운트·레이아웃은 그대로, 보이지 않고 누를 수 없다.**
+ * 라이브러리는 끌기 시작 순간 끄는 카드 위치를 스냅샷으로 적고 다시 안 잰다. 그 직후 "+" 줄(36px)이
+ * 빠지면 스냅샷이 아래로 어긋나 롱프레스만으로 드롭존(삭제) 판정이 난다 — 레이아웃 불변이 드롭 판정의
+ * 전제다(02a ★16). 관측(02a §5-H 실측):
+ *  ① 개수 — 숨긴 요소도 세도록 `includeHiddenElements:true`(RNTL 13 기본값은 접근성 숨김을 뺀다).
+ *  ② 안 보임 — `not.toBeVisible()`(style opacity 0 · display none · 접근성 숨김, 자신·조상 포함).
+ *     ⚠️ NativeWind className(`opacity-0`)은 jest 에서 style 로 안 바뀌어 여기 안 잡힌다 → style/접근성으로.
+ *  ③ 자리 유지 — 자신·조상(리스트까지)에 `display:'none'` style·`hidden` className 토큰 0(레이아웃 소멸 금지).
+ *  ④ 누름 불가 — press 해도 onPressAddBetween 0회(pointerEvents none·disabled 모두 RNTL 이 막는다).
+ */
+function expectInsertsHeldButInert(
+  cb: { onPressAddBetween: jest.Mock },
+  count: number
+): void {
+  const inserts = screen.getAllByTestId(/^itinerary-edit-insert-/, {
+    includeHiddenElements: true,
+  });
+  expect(inserts).toHaveLength(count);
+  const list = screen.getByTestId(EDIT_LIST);
+  inserts.forEach((node) => {
+    expect(node).not.toBeVisible();
+    for (
+      let cur: typeof node | null = node;
+      cur !== null && cur !== list;
+      cur = cur.parent
+    ) {
+      const flat = StyleSheet.flatten(cur.props.style) as
+        { display?: string } | undefined;
+      expect(flat?.display).not.toBe('none');
+      expect(String(cur.props.className ?? '').split(/\s+/)).not.toContain(
+        'hidden'
+      );
+    }
+    fireEvent.press(node);
+  });
+  expect(cb.onPressAddBetween).not.toHaveBeenCalled();
+}
+
+/** onReorder 첫 호출 인자의 poiId 순서. */
+function reorderedIds(mock: jest.Mock): string[] {
+  return (mock.mock.calls[0][0] as EditorSlot[]).map((s) => s.poiId);
+}
+
+describe('🔴 EditorView · D1 — 드래그 리스트 계약: 슬롯 n개 + 끝 센티널 1개 (TRIP-921 AC-1·AC-2 전제)', () => {
+  it('itinerary-edit-list 의 data 는 [a,b,c] 뒤에 슬롯 아닌 항목 하나, 키는 모두 다르다', () => {
+    renderView({ slots: [slot('a'), slot('b'), slot('c')] });
+
+    expect(screen.getByTestId(EDIT_LIST)).toBeOnTheScreen();
+
+    const data = editListData();
+    expect(data).toHaveLength(4);
+    expect(data.slice(0, 3).map((item) => (item as EditorSlot).poiId)).toEqual([
+      'a',
+      'b',
+      'c',
+    ]);
+    // 센티널 — 모양은 계약하지 않고 "슬롯이 아니다"만 본다(02a ★1).
+    const last = data[3] as { poiId?: unknown } | null;
+    expect(['a', 'b', 'c']).not.toContain(last?.poiId);
+
+    const keyExtractor = (
+      screen.UNSAFE_getByType(DraggableFlatList).props as {
+        keyExtractor: (item: unknown, index: number) => string;
+      }
+    ).keyExtractor;
+    expect(new Set(data.map((item, i) => keyExtractor(item, i))).size).toBe(4);
+  });
+});
+
+describe('🔴 EditorView · D2 — 센티널 앞에 놓으면 재정렬 (TRIP-921 AC-1)', () => {
+  it('b 를 맨 앞(1→0)에 놓으면 onReorder 가 센티널 뺀 [b,a,c] 로 1회, 삭제는 0회', () => {
+    const cb = renderView({ slots: [slot('a'), slot('b'), slot('c')] });
+
+    fireEditDragEnd(1, 0);
+
+    expect(cb.onReorder).toHaveBeenCalledTimes(1);
+    expect(reorderedIds(cb.onReorder)).toEqual(['b', 'a', 'c']);
+    expect(cb.onDeleteViaDrag).not.toHaveBeenCalled();
+  });
+
+  it('★경계 — 센티널 바로 앞(0→2, [b,c,a,S])은 맨 끝으로 재정렬이지 삭제가 아니다', () => {
+    const cb = renderView({ slots: [slot('a'), slot('b'), slot('c')] });
+
+    fireEditDragEnd(0, 2);
+
+    expect(cb.onReorder).toHaveBeenCalledTimes(1);
+    expect(reorderedIds(cb.onReorder)).toEqual(['b', 'c', 'a']);
+    expect(cb.onDeleteViaDrag).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 EditorView · D3 — 센티널 뒤에 놓으면 삭제 (TRIP-921 AC-2)', () => {
+  it('b 를 센티널 뒤(1→3, [a,c,S,b])에 놓으면 onDeleteViaDrag("b") 1회, 재정렬 0회', () => {
+    const cb = renderView({ slots: [slot('a'), slot('b'), slot('c')] });
+
+    fireEditDragEnd(1, 3);
+
+    expect(cb.onDeleteViaDrag).toHaveBeenCalledTimes(1);
+    expect(cb.onDeleteViaDrag).toHaveBeenCalledWith('b');
+    expect(cb.onReorder).not.toHaveBeenCalled();
+  });
+
+  it('★경계 — 마지막 카드 c 를 한 칸만 내려도(2→3, [a,b,S,c]) 센티널을 넘었으니 삭제다', () => {
+    const cb = renderView({ slots: [slot('a'), slot('b'), slot('c')] });
+
+    fireEditDragEnd(2, 3);
+
+    expect(cb.onDeleteViaDrag).toHaveBeenCalledTimes(1);
+    expect(cb.onDeleteViaDrag).toHaveBeenCalledWith('c');
+    expect(cb.onReorder).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 EditorView · D4 — 고정·완료 카드는 드롭존에 놓여도 안 지워진다 (TRIP-921 AC-3 ② 심층 방어)', () => {
+  it('고정 카드를 센티널 뒤로 강제 발화하면 두 콜백 0회 — 짝: 같은 화면의 예정 카드는 지워진다', () => {
+    const cb = renderView({
+      slots: [slot('a'), slot('fix', { isFixed: true }), slot('b')],
+    });
+
+    // 제스처로는 못 끄는 카드지만, 판정 단계에서 한 번 더 거른다(스토어 deleteSlot 은 고정을 안 본다).
+    fireEditDragEnd(1, 3);
+    expect(cb.onDeleteViaDrag).not.toHaveBeenCalled();
+    expect(cb.onReorder).not.toHaveBeenCalled();
+
+    // 짝(공허 통과 방지) — 콜백 배선 자체는 살아 있다.
+    fireEditDragEnd(2, 3);
+    expect(cb.onDeleteViaDrag).toHaveBeenCalledTimes(1);
+    expect(cb.onDeleteViaDrag).toHaveBeenCalledWith('b');
+  });
+
+  it('방문 완료 카드(p1)를 센티널 뒤로 강제 발화하면 두 콜백 0회 — 짝: 예정 p3 는 지워진다', () => {
+    const cb = renderI07();
+
+    fireEditDragEnd(0, 5);
+    expect(cb.onDeleteViaDrag).not.toHaveBeenCalled();
+    expect(cb.onReorder).not.toHaveBeenCalled();
+
+    fireEditDragEnd(2, 5);
+    expect(cb.onDeleteViaDrag).toHaveBeenCalledTimes(1);
+    expect(cb.onDeleteViaDrag).toHaveBeenCalledWith('p3');
+  });
+});
+
+describe('🔴 EditorView · D5 — 고정·완료 카드엔 롱프레스 끌기가 안 걸린다 (TRIP-921 AC-3 ①)', () => {
+  it('완료 p1·고정 p4 롱프레스는 끌기를 시작하지 않고, 예정 p3 롱프레스는 시작한다', () => {
+    renderI07({
+      slots: I07_SLOTS.map((s) =>
+        s.poiId === 'p4' ? { ...s, isFixed: true } : s
+      ),
+    });
+
+    // 목의 drag() 는 실물처럼 onDragBegin(index) 로 이어진다 → 끌기가 시작되면 드롭존 활성 표식이 뜬다.
+    fireEvent(screen.getByTestId(`slot-stopcard-${k('p1')}`), 'longPress');
+    fireEvent(screen.getByTestId(`slot-stopcard-${k('p4')}`), 'longPress');
+    expect(screen.queryByTestId(ACTIVE)).toBeNull();
+
+    // 짝 — 움직일 수 있는 카드는 롱프레스가 끌기로 이어진다(핸들 배선 존재).
+    fireEvent(screen.getByTestId(`slot-stopcard-${k('p3')}`), 'longPress');
+    expect(screen.getByTestId(ACTIVE)).toBeOnTheScreen();
+  });
+});
+
+describe('🔴 EditorView · D5b — 롱프레스는 라이브러리 drag() 를 실제로 부른다 (TRIP-921 AC-3 ① · 5-b 경고-2)', () => {
+  it('완료 p1·고정 p4 롱프레스는 drag 기록 0, 예정 p3 롱프레스는 그 칸(2)으로 drag 1회', () => {
+    // 목이 drag() 호출을 기록한다 — 뷰가 상태만 켜고 drag 를 안 부르면 실기에선 카드가 안 들리고
+    // onDragEnd 도 안 와 편집기가 드래그 얼굴로 굳는다(드롭존 표식만 보는 D5 는 이걸 못 가른다).
+    const { __dragLog } = DraggableModule as unknown as {
+      __dragLog: number[];
+    };
+    __dragLog.length = 0;
+    renderI07({
+      slots: I07_SLOTS.map((s) =>
+        s.poiId === 'p4' ? { ...s, isFixed: true } : s
+      ),
+    });
+
+    fireEvent(screen.getByTestId(`slot-stopcard-${k('p1')}`), 'longPress');
+    fireEvent(screen.getByTestId(`slot-stopcard-${k('p4')}`), 'longPress');
+    expect(__dragLog).toEqual([]);
+
+    fireEvent(screen.getByTestId(`slot-stopcard-${k('p3')}`), 'longPress');
+    expect(__dragLog).toEqual([2]);
+  });
+});
+
+describe('🔴 EditorView · D6 — 드래그 중 얼굴과 놓은 뒤 복귀 (TRIP-921 AC-4)', () => {
+  it('끌기 시작하면 드롭존 활성·CTA 없음·카드 사이 + 는 자리만 남고(2개) 숨김·누름 불가, 재정렬로 놓으면 원래 얼굴', () => {
+    const cb = renderView({ slots: [slot('a'), slot('b'), slot('c')] });
+
+    // 준비 확인 — 평소 얼굴.
+    expect(screen.queryByTestId(ACTIVE)).toBeNull();
+    expect(screen.getByTestId(CTA)).toBeOnTheScreen();
+    expect(screen.getAllByTestId(/^itinerary-edit-insert-/)).toHaveLength(2);
+
+    fireEditDragBegin(0);
+    expect(screen.getByTestId(ACTIVE)).toBeOnTheScreen();
+    expect(screen.queryByTestId(CTA)).toBeNull();
+    // 5-b 경고-1 계약 변경 — "+" 줄은 끌기 중에도 **자리(레이아웃)를 지키되** 안 보이고 안 눌린다.
+    expectInsertsHeldButInert(cb, 2);
+
+    fireEditDragEnd(0, 1);
+    expect(screen.queryByTestId(ACTIVE)).toBeNull();
+    expect(screen.getByTestId(CTA)).toBeOnTheScreen();
+    expect(screen.getAllByTestId(/^itinerary-edit-insert-/)).toHaveLength(2);
+    // 복귀 짝 — 놓은 뒤엔 다시 보이고 눌린다.
+    screen
+      .getAllByTestId(/^itinerary-edit-insert-/)
+      .forEach((node) => expect(node).toBeVisible());
+    fireEvent.press(screen.getByTestId('itinerary-edit-insert-0'));
+    expect(cb.onPressAddBetween).toHaveBeenCalledTimes(1);
+  });
+
+  it('드롭존에 놓아 삭제로 끝나도 원래 얼굴로 돌아온다', () => {
+    renderView({ slots: [slot('a'), slot('b'), slot('c')] });
+
+    fireEditDragBegin(1);
+    expect(screen.getByTestId(ACTIVE)).toBeOnTheScreen();
+
+    fireEditDragEnd(1, 3);
+    expect(screen.queryByTestId(ACTIVE)).toBeNull();
+    expect(screen.getByTestId(CTA)).toBeOnTheScreen();
+  });
+
+  it('★제자리 놓기(from=to)도 onDragEnd 가 오므로 원래 얼굴로 돌아온다', () => {
+    renderView({ slots: [slot('a'), slot('b'), slot('c')] });
+
+    fireEditDragBegin(0);
+    expect(screen.getByTestId(ACTIVE)).toBeOnTheScreen();
+
+    fireEditDragEnd(0, 0);
+    expect(screen.queryByTestId(ACTIVE)).toBeNull();
+    expect(screen.getByTestId(CTA)).toBeOnTheScreen();
+  });
+});
+
+describe('🔴 EditorView · D7 — isDragging prop 만으로 드래그 중 얼굴 (TRIP-921 AC-5)', () => {
+  it('제스처 없이 prop 을 주면 드롭존 활성·CTA 없음·카드 사이 + 는 자리만 남고(1개) 숨김·누름 불가', () => {
+    const cb = renderView({ slots: [slot('a'), slot('b')], isDragging: true });
+
+    expect(screen.getByTestId(ACTIVE)).toBeOnTheScreen();
+    expect(screen.queryByTestId(CTA)).toBeNull();
+    expectInsertsHeldButInert(cb, 1);
+  });
+});
+
+describe('🔴 EditorView · D8 — 끌리는 카드는 떠 있는 얼굴(빨강 테두리) (TRIP-921 AC-14 구조 절반)', () => {
+  it('renderItem 에 isActive:true 를 주면 그 카드 루트가 border-primary, false 면 border-hairline', () => {
+    renderView({ slots: [slot('a'), slot('b')] });
+    const keyA = buildSlotKey(DATE, 'a');
+    const renderItem = (
+      screen.UNSAFE_getByType(DraggableFlatList).props as {
+        renderItem: (p: {
+          item: unknown;
+          getIndex: () => number;
+          drag: () => void;
+          isActive: boolean;
+        }) => ReactElement;
+      }
+    ).renderItem;
+    const first = editListData()[0];
+
+    // 목은 isActive 를 늘 false 로 주므로(02a ★5) renderItem 을 직접 불러 그 결과만 따로 그린다.
+    render(
+      renderItem({
+        item: first,
+        getIndex: () => 0,
+        drag: () => {},
+        isActive: true,
+      })
+    );
+    expect(classTokens(`slot-stopcard-${keyA}`)).toContain('border-primary');
+    expect(classTokens(`slot-stopcard-${keyA}`)).not.toContain(
+      'border-hairline'
+    );
+
+    render(
+      renderItem({
+        item: first,
+        getIndex: () => 0,
+        drag: () => {},
+        isActive: false,
+      })
+    );
+    expect(classTokens(`slot-stopcard-${keyA}`)).toContain('border-hairline');
+    expect(classTokens(`slot-stopcard-${keyA}`)).not.toContain(
+      'border-primary'
     );
   });
 });

@@ -76,6 +76,9 @@ export interface SlotStopCardProps {
   /** TRIP-753 · 위반 배지 문구(카테고리 아래 연분홍 알약, `slot-stopcard-violation-*`). 미주입·null 이면
    *  미렌더 — 카드는 `slot.hasViolation` 을 스스로 읽지 않는다(결과 화면 5종 무변경). */
   violation?: string | null;
+  /** TRIP-921 · h12 편집기에서 **끌리는 중**인 카드(리스트 `isActive`). true 면 루트 테두리를 primary 로
+   *  그린다(Figma 떠 있는 카드). 미주입이면 현행 그대로. */
+  dragging?: boolean;
 }
 
 export function SlotStopCard({
@@ -94,6 +97,7 @@ export function SlotStopCard({
   locked,
   numberOutside,
   violation,
+  dragging,
 }: SlotStopCardProps): ReactElement {
   const slotKey = buildSlotKey(date, slot.poiId);
   const fieldId = (role: string): string => `slot-stopcard-${role}-${slotKey}`;
@@ -108,7 +112,7 @@ export function SlotStopCard({
     <View
       testID={`slot-stopcard-${slotKey}`}
       style={cardShadow}
-      className={`flex-row gap-[10px] rounded-card border border-hairline bg-canvas p-md ${numberOutside ? 'flex-1 items-center' : 'items-start'}`}
+      className={`flex-row gap-[10px] rounded-card border bg-canvas p-md ${dragging ? 'border-primary' : 'border-hairline'} ${numberOutside ? 'flex-1 items-center' : 'items-start'}`}
     >
       {/* 번호 배지 — 24px squircle(rounded-[8px]) primary. numberOutside 면 카드 밖(아래 return)에 그린다. */}
       {numberOutside ? null : (
