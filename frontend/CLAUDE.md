@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working in `fro
 
 **규칙 문서 편집:** `frontend/.claude/**`(에이전트·스킬·settings·이 파일)를 고칠 때는 `harness-rule-edit` 스킬을 사용하라 — 본문에 무엇을 남기고 무엇을 원장으로 보내는지, 압축 전 원장 확인 순서가 거기 있다.
 
-**모델 배치:** 자리별 모델의 정본은 **각 에이전트 frontmatter**다(`frontend/.claude/agents/*.md`). **예외는 없다** — 사이클 SKILL이 오버라이드하던 한 자리(구 4-b)는 2026-07-31 [테스트] 통합 복귀로 사라졌다. 배치를 두 군데 적으면 갈라진다. ⚠️ **메타 스킬 `harness:harness`의 "모든 에이전트는 `model: "opus"`" 지침보다 현재 frontmatter가 우선한다.** 하네스 정비 중 그 스킬이 로드돼도 일괄 opus로 되돌리지 마라 — 현 배치는 12사이클 실측(자리별 실패 가시성·되돌리기 비용·호출 빈도) 위에 있고, 근거·원칙·관찰 상태는 변경이력에 있다.
+**모델 배치:** 자리별 모델의 정본은 **각 에이전트 frontmatter**다(`frontend/.claude/agents/*.md`). **예외는 없다** — 사이클 SKILL이 오버라이드하던 한 자리(구 4-b)는 2026-07-31 [테스트] 통합 복귀로 사라졌다. 배치를 두 군데 적으면 갈라진다. ⚠️ **메타 스킬 `harness:harness`의 "모든 에이전트는 `model: "opus"`" 지침보다 현재 frontmatter가 우선한다.** 하네스 정비 중 그 스킬이 로드돼도 일괄 opus로 되돌리지 마라 — 배치 원칙(자리별 실패 가시성·되돌리기 비용·호출 빈도)은 이전 모델 세대의 12사이클 실측에서 나왔고, 현 Opus 5.5 배치 자체는 아래 effort 유지 판정으로 관찰 중이다. 근거·관찰 상태는 변경이력에 있다.
 
 **effort 배치:** 같은 원리로 자리별이다 — **에이전트는 frontmatter `effort:`, 오케스트레이터(메인 루프)는 `frontend/.claude/settings.json`의 `effortLevel`**. 전역 `~/.claude/settings.json`은 건드리지 않는다(다른 프로젝트가 딸려간다). 가르는 기준은 모델 배치와 같다 — **실패 가시성 × 되돌리기 비용**. 코드를 쓰거나 심판을 설계하는 자리(spec-analyst·test-designer·implementer·code-critic)는 얕아져도 조용히 통과하고 되돌리려면 새 사이클을 열어야 하므로 effort를 **명시해 상속을 끊는다**(`high`). 메인 루프는 학습 제시·주해·RESUME 기록이라 실패가 즉시 눈에 보이고, 캐시 읽기의 절반을 쓰는 자리다(`medium`). 판독·분류 자리(figma-qa·triage)도 `medium`이다.
 
