@@ -143,22 +143,6 @@ export function LiveItineraryPage({
     );
   }
 
-  if (state.kind === 'outsideToday') {
-    return (
-      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
-        <View className="flex-1 items-center justify-center bg-canvas px-lg">
-          <StateNotice
-            testID="execution-live-outside"
-            illustration={NEUTRAL_BADGE}
-            title="오늘은 여행 중이 아니에요"
-            description="여행 기간에 들어오면 오늘 일정을 보여드려요"
-            actions={[]}
-          />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
   const { itinerary } = state;
   const activeDayIndex = liveDayIndex;
   const activeDate = itinerary.days[activeDayIndex]?.date ?? '';

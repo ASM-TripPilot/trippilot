@@ -21,7 +21,7 @@ import { LiveItineraryPage } from './LiveItineraryPage';
  *
  * 무엇을 보장하나:
  *  - `appliedSessionId` 가 있고 일정이 active 일 때만 시트가 **허브 밖 형제로** 뜬다. 로딩 중에는 기다렸다가
- *    뜨고, 오류·404·여행 밖이면 뜨지 않는다. 라이브에는 부제·배지·내역이 없다(E4).
+ *    뜨고, 오류·404 면 뜨지 않는다. 라이브에는 부제·배지·내역이 없다(E4).
  *  - applied 로 들어오면 허브는 펼침(index 2)으로 시작한다(Q5). 대조군은 기본 1.
  *  - [확인]·스크림 → `router.setParams({ applied: undefined })` 1회, 화면 이동 0(쿼리 신호를 지운다).
  *  - [되돌리기] → 시트 안에 "이미 반영돼 되돌릴 수 없어요". 서버 쓰기(POST) 0, 시트는 그대로(E2 · Q3 멱등).
@@ -277,12 +277,6 @@ describe('🔴 A3·A4 · AC-6 — active 일정에서만 뜬다', () => {
         ),
       TODAY,
       'execution-live-notfound',
-    ],
-    [
-      '오늘이 여행 밖',
-      itineraryHandler,
-      '2026-09-01',
-      'execution-live-outside',
     ],
   ])(
     'A4 %s 이면 그 얼굴만 있고 시트는 없다',

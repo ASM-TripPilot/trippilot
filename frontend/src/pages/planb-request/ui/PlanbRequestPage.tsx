@@ -1,5 +1,6 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useRef, type ReactElement } from 'react';
+import { isAxiosError } from 'axios';
+import { useEffect, useRef, useState, type ReactElement } from 'react';
 
 import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { useLiveItinerary } from '@/features/execution/model/useLiveItinerary';
@@ -49,6 +50,9 @@ export function PlanbRequestPage({
 }: PlanbRequestPageProps): ReactElement {
   const router = useRouter();
   const startReplan = useStartReplan();
+  // 시작 실패 안내(INV-4). 여행 기간 밖이면 서버가 409 — 확정 일정은 날짜 무관 허브로 열리므로
+  // (2026-09-23) 여행 전·후에도 이 요청에 닿는다.
+  const [errorText, setErrorText] = useState<string | null>(null);
   const triggers = useActiveTriggers(tripId);
   const itinerary = useLiveItinerary(tripId);
 
@@ -99,6 +103,7 @@ export function PlanbRequestPage({
   }, [detectedReasonKey, toggleReason]);
 
   function handleSubmit(): void {
+    setErrorText(null);
     // 이벤트 시점의 최신값을 스토어에서 직접 읽는다(렌더 클로저 stale 회피).
     const form = useReplanFormStore.getState();
     const data = buildStartReplanRequest({
@@ -120,6 +125,12 @@ export function PlanbRequestPage({
             pathname: '/trips/[tripId]/planb/solving',
             params: { tripId, sessionId: session.sessionId },
           }),
+        onError: (error) =>
+          setErrorText(
+            isAxiosError(error) && error.response?.status === 409
+              ? '여행 기간에만 AI에게 맡길 수 있어요'
+              : '다시 짜기를 시작하지 못했어요. 잠시 후 다시 시도해 주세요'
+          ),
       }
     );
   }
@@ -146,6 +157,7 @@ export function PlanbRequestPage({
       onChangeFreeText={setFreeText}
       onSubmit={handleSubmit}
       onClose={handleClose}
+      errorText={errorText}
     />
   );
 }

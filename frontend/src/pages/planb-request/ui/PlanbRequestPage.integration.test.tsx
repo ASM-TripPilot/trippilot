@@ -25,15 +25,26 @@ import { PlanbRequestPage } from './PlanbRequestPage';
  * jest.mock 팩토리는 `mock` 접두 변수만 볼 수 있다(호이스팅).
  */
 
-let mockPhase: 'idle' | 'success' = 'idle';
+let mockPhase: 'idle' | 'success' | 'conflict' | 'serverError' | 'network' =
+  'idle';
 // 시작 응답 = 열린 세션(서버 계약 ReplanSession, 응답 status 는 SOLVING) — 성공 콜백이 이 세션을 받는다.
 const mockSession = { sessionId: 's9', tripId: 't1', status: 'SOLVING' };
+// 실패 = axios 에러 모양(isNotFound 선례). 네트워크 오류는 응답 자체가 없다.
+const mockHttpError = (status: number) => ({
+  isAxiosError: true,
+  response: { status },
+});
+const mockNetworkError = { isAxiosError: true, message: 'Network Error' };
+type MockMutateOptions = {
+  onSuccess?: (session: typeof mockSession) => void;
+  onError?: (error: unknown) => void;
+};
 const mockMutate = jest.fn(
-  (
-    _variables: unknown,
-    options?: { onSuccess?: (session: typeof mockSession) => void }
-  ) => {
+  (_variables: unknown, options?: MockMutateOptions) => {
     if (mockPhase === 'success') options?.onSuccess?.(mockSession);
+    if (mockPhase === 'conflict') options?.onError?.(mockHttpError(409));
+    if (mockPhase === 'serverError') options?.onError?.(mockHttpError(500));
+    if (mockPhase === 'network') options?.onError?.(mockNetworkError);
   }
 );
 
@@ -593,5 +604,67 @@ describe('🔴 I16 · 닫기는 한 번만 일어난다 (AC-8 · Q8 · 5-b 경�
     fireEvent.press(screen.getByTestId('planb-request-scrim'));
 
     expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('🔴 P-E · 시작 실패는 시트 안에 안내하고 이동하지 않는다 (03b 경고-1 · INV-4)', () => {
+  const ERROR = 'planb-request-error';
+  const CONFLICT_TEXT = '여행 기간에만 AI에게 맡길 수 있어요';
+  const GENERIC_TEXT =
+    '다시 짜기를 시작하지 못했어요. 잠시 후 다시 시도해 주세요';
+
+  function expectNoMove(): void {
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(mockBack).not.toHaveBeenCalled();
+  }
+
+  it('P-E1 409(여행 기간 밖)면 기간 안내를 띄우고 아무 데도 가지 않는다', () => {
+    mockPhase = 'conflict';
+    render(<PlanbRequestPage tripId={TRIP_ID} />);
+
+    fireEvent.press(screen.getByTestId('planb-request-submit'));
+
+    expect(mockMutate).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId(ERROR)).toHaveTextContent(CONFLICT_TEXT);
+    expectNoMove();
+  });
+
+  it.each([
+    ['5xx', 'serverError'],
+    ['네트워크 오류', 'network'],
+  ] as const)(
+    'P-E2 %s 면 일반 실패 안내를 띄우고 아무 데도 가지 않는다',
+    (_label, phase) => {
+      mockPhase = phase;
+      render(<PlanbRequestPage tripId={TRIP_ID} />);
+
+      fireEvent.press(screen.getByTestId('planb-request-submit'));
+
+      expect(screen.getByTestId(ERROR)).toHaveTextContent(GENERIC_TEXT);
+      expectNoMove();
+    }
+  );
+
+  it('P-E3 다시 누르면 안내를 먼저 지우고, 새 실패는 안내 하나로 교체된다', () => {
+    mockPhase = 'conflict';
+    render(<PlanbRequestPage tripId={TRIP_ID} />);
+    fireEvent.press(screen.getByTestId('planb-request-submit'));
+    expect(screen.getByTestId(ERROR)).toHaveTextContent(CONFLICT_TEXT);
+
+    // 응답이 아직 안 온 재시도 — 이때 안내가 남아 있으면 안 된다.
+    mockPhase = 'idle';
+    fireEvent.press(screen.getByTestId('planb-request-submit'));
+    expect(mockMutate).toHaveBeenCalledTimes(2);
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+
+    const retry = mockMutate.mock.calls[1][1];
+    expect(typeof retry?.onError).toBe('function');
+    act(() => retry?.onError?.(mockHttpError(500)));
+
+    expect(screen.getAllByTestId(ERROR)).toHaveLength(1);
+    expect(screen.getByTestId(ERROR)).toHaveTextContent(GENERIC_TEXT);
+    expectNoMove();
   });
 });
