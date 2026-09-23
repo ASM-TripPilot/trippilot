@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { processColor } from 'react-native';
 import { render, screen, within } from '@testing-library/react-native';
 
 import { MapView } from '@/shared/map';
@@ -497,6 +498,30 @@ describe('🔴 TRIP-795 AC-3(a) — radiusCircle: 주면 map-circle 그리고 �
     const circle = screen.queryByTestId('map-circle');
     expect(circle).not.toBeNull();
     expect((circle as { props: { radius?: number } }).props.radius).toBe(1100);
+  });
+
+  it('radiusCircle 전달 → 채움 color 가 알파 0·네이티브 값 0 아님(윤곽선만), 윤곽선·반경 무회귀', () => {
+    // Arrange + Act
+    render(
+      <MapView
+        center={CENTER}
+        pins={PINS}
+        radiusCircle={{ center: CENTER, radiusM: 1400 }}
+      />
+    );
+
+    // Assert — 목은 SDK 기본값을 재현하지 않아 미전달 color 가 undefined 로 보이지만, 실 SDK 에서
+    // 미전달은 color='black'(검정 채움)이다. 또 processColor 결과가 0 인 투명('transparent'·
+    // 'rgba(0,0,0,0)'·'#00000000')은 iOS 네이티브가 초기값 0 과 같다며 무시해 기본 흰색이 칠해진다.
+    // 그래서 "네이티브로 가는 정수가 0 이 아니고, 알파 바이트는 0" 을 요구한다.
+    const circle = screen.getByTestId('map-circle');
+    const argb = processColor(circle.props.color);
+    expect(typeof argb).toBe('number');
+    expect(argb).not.toBe(0);
+    expect(((argb as number) >>> 24) & 0xff).toBe(0);
+    expect(circle.props.outlineColor).toBe('#FF385C');
+    expect(circle.props.outlineWidth).toBe(1.5);
+    expect(circle.props.radius).toBe(1400);
   });
 
   it('radiusCircle 미전달 → map-circle 없음(짝 — additive 무회귀)', () => {

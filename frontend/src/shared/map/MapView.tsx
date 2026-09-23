@@ -524,6 +524,9 @@ export function MapView({
             latitude={radiusCircle.center.lat}
             longitude={radiusCircle.center.lng}
             radius={radiusCircle.radiusM}
+            // 채움 투명(알파 0·RGB 흰색) — 미전달이면 JS 기본 검정, 0 이 되는 투명 표기(transparent 등)는 iOS 가
+            // "변경 없음"으로 무시해 네이티브 기본 흰색이 칠해진다(h10·h15 실측). 0 이 아닌 값이어야 한다.
+            color="rgba(255,255,255,0)"
             outlineColor={PIN_PRIMARY}
             outlineWidth={1.5}
           />
