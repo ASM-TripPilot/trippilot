@@ -14,4 +14,6 @@ data class SocialTokenLoginCommand(
     val ageMethod: AgeMethod?,
     val birthDate: LocalDate?,
     val deviceId: String,
+    /** Apple 만 — revoke 용 refresh_token 을 받기 위한 code(TRIP-933). 없으면 교환하지 않는다. */
+    val authorizationCode: String? = null,
 )

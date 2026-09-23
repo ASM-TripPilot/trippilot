@@ -93,7 +93,7 @@ spec:
             - name: {{ . }}
               value: none
             {{- end }}
-            {{- range list "GOOGLE_CLIENT_ID" "GOOGLE_CLIENT_SECRET" "KAKAO_CLIENT_ID" "KAKAO_CLIENT_SECRET" "NAVER_CLIENT_ID" "NAVER_CLIENT_SECRET" "APPLE_CLIENT_ID" "WEATHER_API" "PLACE_GEOCODE_MODE" "WEATHER_MODE" "AI_REMINDER_COPY_MODE" }}
+            {{- range list "GOOGLE_CLIENT_ID" "GOOGLE_CLIENT_SECRET" "KAKAO_CLIENT_ID" "KAKAO_CLIENT_SECRET" "NAVER_CLIENT_ID" "NAVER_CLIENT_SECRET" "APPLE_CLIENT_ID" "APPLE_TEAM_ID" "APPLE_KEY_ID" "APPLE_PRIVATE_KEY" "SOCIAL_TOKEN_ENCRYPTION_KEY" "WEATHER_API" "PLACE_GEOCODE_MODE" "WEATHER_MODE" "AI_REMINDER_COPY_MODE" }}
             {{- include "trippilot.secretEnv" (dict "env" . "secret" "trippilot-backend" "optional" true) | nindent 12 }}
             {{- end }}
             {{- include "trippilot.secretEnv" (dict "env" "TRIPPILOT_PUSH_MODE" "key" "PUSH_MODE" "secret" "trippilot-backend" "optional" true) | nindent 12 }}
