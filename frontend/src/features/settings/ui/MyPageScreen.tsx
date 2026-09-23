@@ -10,9 +10,7 @@ import {
   ChevronRightGlyph,
   EyeOffGlyph,
   GearGlyph,
-  HeartGlyph,
   ListGlyph,
-  SettingsSunGlyph,
   ShareNodesGlyph,
 } from './SettingsGlyphs';
 import { TripStatusSegment } from './TripStatusSegment';
@@ -27,18 +25,52 @@ import { TripStatusSegment } from './TripStatusSegment';
  * 종료 여행이 0건이면 "아직 종료된 여행이 없습니다"만 뜨고 회고 진입 어포던스는 하나도 없다
  * (AC-5, empty Figma 의 상시 '지난 여행' 영역 근거).
  *
- * 하단 '설정' 행은 /settings 로 배선(TRIP-618, onPressSettings). 헤더 sun 아이콘·회고 하트는
- * 목적지 라우트가 아직 없어 onPress 미배선(Q6, 정직한 스텁).
+ * 하단 '설정' 행은 /settings 로 배선(TRIP-618, onPressSettings).
+ *
+ * TRIP-939(심사 2.1): 목적지가 없어 눌러도 반응 없던 것은 그리지 않는다 — 메뉴 5행은 `ready:false`
+ * 플래그로 걸러 숨기고(개통 시 true 한 줄), 헤더 sun 아이콘·"캘린더 ›"·회고 하트 floating 은 뺐다.
  */
 
-const SETTINGS_ROWS: { key: string; label: string; icon: ReactElement }[] = [
-  { key: 'bases', label: '등록 숙소·예약 기록', icon: <BookmarkGlyph /> },
-  { key: 'style', label: '여행 스타일 분석', icon: <BarChartGlyph /> },
-  { key: 'share', label: '내 일정 공개/공유 설정', icon: <ShareNodesGlyph /> },
-  { key: 'shared', label: '내가 공유한 일정', icon: <ListGlyph /> },
-  { key: 'blocked', label: '숨긴 사용자 관리', icon: <EyeOffGlyph /> },
-  { key: 'settings', label: '설정', icon: <GearGlyph /> },
+// `ready` = 목적지가 선 행인가. false 행은 화면에 그리지 않는다(TRIP-939 — 개통 시 true 한 줄로 되살림).
+const SETTINGS_ROWS: {
+  key: string;
+  label: string;
+  icon: ReactElement;
+  ready: boolean;
+}[] = [
+  {
+    key: 'bases',
+    label: '등록 숙소·예약 기록',
+    icon: <BookmarkGlyph />,
+    ready: false,
+  },
+  {
+    key: 'style',
+    label: '여행 스타일 분석',
+    icon: <BarChartGlyph />,
+    ready: false,
+  },
+  {
+    key: 'share',
+    label: '내 일정 공개/공유 설정',
+    icon: <ShareNodesGlyph />,
+    ready: false,
+  },
+  {
+    key: 'shared',
+    label: '내가 공유한 일정',
+    icon: <ListGlyph />,
+    ready: false,
+  },
+  {
+    key: 'blocked',
+    label: '숨긴 사용자 관리',
+    icon: <EyeOffGlyph />,
+    ready: false,
+  },
+  { key: 'settings', label: '설정', icon: <GearGlyph />, ready: true },
 ];
+const VISIBLE_SETTINGS_ROWS = SETTINGS_ROWS.filter((row) => row.ready);
 
 const EMPTY_TEXT: Record<TripBucket, string> = {
   upcoming: '예정된 여행이 없어요',
@@ -125,18 +157,11 @@ export function MyPageScreen({
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
       <View testID="my-page-root" className="flex-1 bg-canvas">
         <ScrollView contentContainerClassName="gap-lg px-lg pb-[110px] pt-md">
-          {/* 헤더 */}
+          {/* 헤더 — 제목만(목적지 없는 설정 아이콘은 TRIP-939 로 뺐다, 설정은 하단 행이 진다). */}
           <View className="flex-row items-center justify-between">
             <Text className="font-noto-bold text-[24px] font-bold text-ink">
               마이페이지
             </Text>
-            <Pressable
-              testID="my-header-settings"
-              accessibilityRole="button"
-              className="h-8 w-8 items-center justify-center"
-            >
-              <SettingsSunGlyph size={22} />
-            </Pressable>
           </View>
 
           <ProfileCard
@@ -180,9 +205,6 @@ export function MyPageScreen({
                 <Text className="font-noto-bold text-[16px] font-bold text-ink">
                   지난 여행
                 </Text>
-                <Text className="font-noto text-label text-primary">
-                  캘린더 ›
-                </Text>
               </View>
               {pastEmpty ? (
                 <Text className="py-md font-noto text-label text-muted">
@@ -196,23 +218,18 @@ export function MyPageScreen({
 
           {/* 설정 메뉴 */}
           <View className="rounded-card border border-hairline bg-canvas px-lg">
-            {SETTINGS_ROWS.map((row, i) => (
+            {VISIBLE_SETTINGS_ROWS.map((row, i) => (
               <SettingsRow
                 key={row.key}
                 label={row.label}
                 icon={row.icon}
-                last={i === SETTINGS_ROWS.length - 1}
+                last={i === VISIBLE_SETTINGS_ROWS.length - 1}
                 onPress={row.key === 'settings' ? onPressSettings : undefined}
                 testID={row.key === 'settings' ? 'my-settings-row' : undefined}
               />
             ))}
           </View>
         </ScrollView>
-
-        {/* 회고 하트(floating) — 목적지 미배선(Q6, 장식). */}
-        <View className="absolute bottom-[100px] right-lg h-[52px] w-[52px] items-center justify-center rounded-pill bg-canvas shadow-md">
-          <HeartGlyph size={24} />
-        </View>
       </View>
     </SafeAreaView>
   );

@@ -4,6 +4,19 @@ import { StyleSheet } from 'react-native';
 import { SHARE_FORMATS, type ShareCardVM } from '../model/shareCard';
 import { ShareCardScreen, type ShareCardScreenProps } from './ShareCardScreen';
 
+// TRIP-939 — 저장·공유 버튼은 `captureShareImage().armed` 로 그릴지 정한다(개통 플래그 재사용).
+// 홀더로 armed 를 갈아끼운다: 기본 false(= 오늘의 운영 빌드), 개통 짝 테스트만 true.
+// 팩토리는 호이스팅되므로 `mock` 접두 홀더를 화살표 안에서 **호출 시점에** 읽는다.
+const mockShareArmed = { value: false };
+jest.mock('../model/shareCard', () => ({
+  ...jest.requireActual('../model/shareCard'),
+  captureShareImage: () => ({ armed: mockShareArmed.value }),
+}));
+
+beforeEach(() => {
+  mockShareArmed.value = false;
+});
+
 /**
  * TRIP-574 · j06 공유 카드 화면(무상태 프레젠테이션 — VM·formats 주입, 포맷·degrade 로컬상태만).
  *
@@ -11,8 +24,9 @@ import { ShareCardScreen, type ShareCardScreenProps } from './ShareCardScreen';
  *  - 🔴 AC-1(정상 렌더): 제목·포맷 세그(3셀)·프리뷰 프레임·캡션·저장/공유 버튼이 그려진다.
  *  - 🔴 AC-2(BR-U5-47): mode 'no-photo' → 안내 문구 표시 · 'default' → 부재(짝).
  *  - 🔴 AC-3: 포맷 셀 press → 선택 상태 전환 + 프리뷰 aspect(9:16→1:1→4:5) 전환.
- *  - 🔴 degrade 정직성(INV-4): 저장/공유 press → "준비 중" 안내만(가짜 성공·크래시 0, 서버 호출은
- *    화면이 api 미접근이라 구조적으로 0).
+ *  - TRIP-939(심사 2.1): 캡처 미장전(armed:false)이면 저장/공유 버튼과 "준비 중" 안내를 **아예 그리지
+ *    않는다** — 가짜 성공도, 누르면 뜨는 안내도 없다(어포던스 제거). armed:true 면 버튼이 되살아난다.
+ *    [편집]은 onEditCaption 이 주입될 때만 그린다(미주입 Pressable = 눌러도 반응 없는 버튼).
  *
  * (개념) `StyleSheet.flatten(node.props.style).aspectRatio` = 인라인 style 에서 종횡비 읽기(§5 실검증) ·
  *   `queryByText(정규식)` = 부분 포함·부재(getBy 는 못 찾으면 throw) · `accessibilityState.selected`
@@ -82,9 +96,10 @@ describe('🔴 AC-1 · 정상 렌더 — 카드·세그·버튼·캡션', () => 
     expect(
       screen.getByTestId('reflection-share-preview-frame')
     ).toBeOnTheScreen();
-    expect(screen.getByTestId('reflection-share-save')).toBeOnTheScreen();
-    expect(screen.getByTestId('reflection-share-export')).toBeOnTheScreen();
     expect(screen.getByText(props.caption)).toBeOnTheScreen();
+    // TRIP-939 — 캡처 미장전(기본)이라 저장/공유 버튼은 그리지 않는다.
+    expect(screen.queryByTestId('reflection-share-save')).toBeNull();
+    expect(screen.queryByTestId('reflection-share-export')).toBeNull();
   });
 });
 
@@ -174,19 +189,53 @@ describe('🔴 AC-5 · no-photo 안내 = 박스 없는 플레인 텍스트(좌�
   });
 });
 
-describe('🔴 degrade 정직성(INV-4) — 저장/공유는 가짜 성공을 내지 않는다', () => {
-  it('저장 press → "준비 중" 안내가 뜨고 크래시하지 않는다', () => {
+describe('🔴 TRIP-939 AC-2 · 캡처 미장전이면 저장/공유 어포던스가 없다 (INV-4 → 어포던스 제거)', () => {
+  it('armed:false → 저장·공유 버튼도, "준비 중" 안내도 없다(누를 것도 안내도 없음)', () => {
+    // 준비·실행: 기본(armed:false = 오늘의 운영 빌드)으로 그린다.
     renderScreen();
+
+    // 단언: 버튼 2개·degrade 문구가 모두 부재.
+    expect(screen.queryByTestId('reflection-share-save')).toBeNull();
+    expect(screen.queryByTestId('reflection-share-export')).toBeNull();
     expect(screen.queryByTestId('reflection-share-degrade')).toBeNull();
-
-    fireEvent.press(screen.getByTestId('reflection-share-save'));
-
-    expect(screen.getByTestId('reflection-share-degrade')).toBeOnTheScreen();
+    expect(screen.queryByText(/준비 중/)).toBeNull();
+    // 짝 앵커: 카드 프리뷰는 그대로 그려졌다(화면이 통째로 빈 것이 아니다).
+    expect(
+      screen.getByTestId('reflection-share-preview-frame')
+    ).toBeOnTheScreen();
   });
 
-  it('공유 press → "준비 중" 안내가 뜬다(짝)', () => {
+  it('armed:true(개통) → 버튼 2개가 되살아나고, 눌러도 "준비 중" 안내는 없다(짝)', () => {
+    // 준비: 네이티브 캡처가 장전됐다고 가정한다.
+    mockShareArmed.value = true;
     renderScreen();
-    fireEvent.press(screen.getByTestId('reflection-share-export'));
-    expect(screen.getByTestId('reflection-share-degrade')).toBeOnTheScreen();
+
+    // 실행: 저장을 누른다.
+    fireEvent.press(screen.getByTestId('reflection-share-save'));
+
+    // 단언: 두 버튼이 있고, 가짜 안내는 뜨지 않는다.
+    expect(screen.getByTestId('reflection-share-export')).toBeOnTheScreen();
+    expect(screen.queryByTestId('reflection-share-degrade')).toBeNull();
+  });
+});
+
+describe('🔴 TRIP-939 A-1 · 캡션 [편집]은 onEditCaption 이 있을 때만', () => {
+  it('onEditCaption 미주입 → [편집] 없음(캡션은 그대로)', () => {
+    // 준비·실행: 편집 진입을 주입하지 않는다(ShareCardPage 의 현재 모양).
+    const props = renderScreen({ onEditCaption: undefined });
+
+    // 단언: [편집] 부재 + 캡션·해시태그는 남는다.
+    expect(screen.queryByTestId('reflection-share-caption-edit')).toBeNull();
+    expect(screen.getByText(props.caption)).toBeOnTheScreen();
+    expect(screen.getByText(props.hashtagText)).toBeOnTheScreen();
+  });
+
+  it('onEditCaption 주입 → [편집]이 있고 press 시 1회(짝)', () => {
+    const onEditCaption = jest.fn();
+    renderScreen({ onEditCaption });
+
+    fireEvent.press(screen.getByTestId('reflection-share-caption-edit'));
+
+    expect(onEditCaption).toHaveBeenCalledTimes(1);
   });
 });

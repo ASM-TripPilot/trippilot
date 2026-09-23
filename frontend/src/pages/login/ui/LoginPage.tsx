@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 
 import type { SocialProvider } from '@/shared/api';
 
+import { useAppleButton } from '@/features/auth/model/useAppleButton';
 import { useSocialLogin } from '@/features/auth/model/useSocialLogin';
 import { makeAuthorize } from '@/features/auth/lib/makeAuthorize';
 import { SocialLoginScreen } from '@/features/auth/ui/SocialLoginScreen';
@@ -12,11 +13,13 @@ import { SocialLoginScreen } from '@/features/auth/ui/SocialLoginScreen';
  * 흘리고, 버튼 탭에는 makeAuthorize(provider)(fake/real DI)를 signIn 에 주입한다. 성공하면 직접
  * 분기하지 않고 게이트('/')로 복귀시켜 부트스트랩이 다음 목적지를 재판정하게 한다(D3). 409 충돌은
  * conflictProvider 코드로 재로그인하고, 시트 취소는 화면을 idle 로 되돌린다.
+ * 애플 버튼은 useAppleButton 이 가용성(isAvailableAsync)을 판정한 뒤에만 화면에 넘긴다(TRIP-932).
  */
 export function LoginPage() {
   const { signIn, confirmAge, phase, errorCode, conflictProvider } =
     useSocialLogin();
   const [dismissed, setDismissed] = useState(false);
+  const AppleButton = useAppleButton();
 
   useEffect(() => {
     if (phase === 'success') {
@@ -50,6 +53,7 @@ export function LoginPage() {
       onConflictCancel={dismissSheet}
       onAgeConfirm={confirmAge}
       onAgeCancel={dismissSheet}
+      AppleButton={AppleButton}
     />
   );
 }

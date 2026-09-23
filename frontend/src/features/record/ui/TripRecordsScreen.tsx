@@ -67,7 +67,8 @@ export interface TripRecordsScreenProps {
   onPressManualCheck?: (poiId: string) => void;
   onPressComplete: (visitCheckId: string) => void;
   onPressSkip: (visitCheckId: string) => void;
-  onPressSpontaneous: () => void;
+  /** 즉석 방문 추가 — 미주입이면 [방문 추가]를 그리지 않는다(TRIP-939, 장소 피커 배선 전). */
+  onPressSpontaneous?: () => void;
   onPressBack?: () => void;
   onPressTab?: (key: ShellTabKey) => void;
 }
@@ -228,7 +229,9 @@ export function TripRecordsScreen({
           </Fragment>
         ))}
 
-        <SpontaneousVisitButton onPress={onPressSpontaneous} />
+        {onPressSpontaneous ? (
+          <SpontaneousVisitButton onPress={onPressSpontaneous} />
+        ) : null}
       </ScrollView>
 
       <BottomTabBar activeKey="records" onPressTab={onPressTab ?? (() => {})} />

@@ -2787,6 +2787,14 @@ components:
           allOf: [{ $ref: '#/components/schemas/AgeConfirmation' }]
           description: 신규 가입 시 필수, 기존 로그인 시 무시
         deviceId: { type: string, nullable: true, description: 미제공 시 서버가 임의 부여(기기별 세션) }
+        authorizationCode:
+          type: string
+          nullable: true
+          description: >
+            선택. **애플만 쓴다**(TRIP-933) — `expo-apple-authentication` 이 identityToken 과 함께 주는
+            `authorizationCode`. 로그인은 `accessToken`(identityToken)으로 끝나고, 이 값은 계정 파기 때
+            Apple 토큰을 revoke 하기 위한 refresh_token 교환에만 쓴다(App Store 5.1.1(v)).
+            교환이 실패해도 로그인은 성공한다(응답 무변화). 다른 제공자는 무시한다.
 
     RefreshedTokenPair:
       type: object

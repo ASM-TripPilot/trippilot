@@ -419,8 +419,6 @@ function CandidateList({
                 {candidate.address}
               </Text>
             </View>
-            {/* "📍 지도 ›" — 표시만(핸들러 flow 에 없음, R-17). 행 press 는 후보 선택으로 흡수된다. */}
-            <Text className="font-noto text-label text-primary">📍 지도 ›</Text>
           </Pressable>
         );
       })}

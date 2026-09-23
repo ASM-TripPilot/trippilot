@@ -55,7 +55,7 @@ export interface ReplanDraftViewProps {
   onManualEdit: () => void;
   onApply: () => void;
   onReopenRequest: () => void;
-  onPressCandidates: (slotKey: string) => void;
+  onPressCandidates?: (slotKey: string) => void;
 }
 
 export function ReplanDraftView({

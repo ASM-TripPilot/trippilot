@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import type { Trip } from '@/shared/api/generated/schemas';
 import { useGetTripsTripIdItinerary } from '@/shared/api/generated/trips/trips';
 import { isNotFound } from '@/shared/api/isNotFound';
+import { seoulDate } from '@/shared/date/seoulDate';
 import { formatNightsLabel } from '@/entities/trip/lib/formatNights';
 import { formatConfirmedDateRange } from '@/entities/trip/lib/formatTripPeriod';
 import {
@@ -75,7 +76,7 @@ export function TripCardContainer({
     resume,
   };
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = seoulDate(new Date());
   const todayInTrip = trip.startDate <= today && today <= trip.endDate;
 
   const onPress = (): void => {

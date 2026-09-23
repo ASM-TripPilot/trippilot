@@ -40,11 +40,12 @@ import { SlotProgressCard } from '@/entities/itinerary-slot/ui/SlotProgressCard'
  * TRIP-746 · i01 여행중 허브 **순수 뷰**(pages · api import 0 — preview 가 직접 import, TRIP-610).
  * 전면 지도(셸, 조작 가능) 위 좌상단 뒤로가기 + 일자 칩, 3스냅 시트(헤더 한 줄 + 레일 타임라인 +
  * 카드 3상태), 우하단 "일정 수정" 연필 FAB. 조회·판정·라우팅은 페이지(LiveItineraryPage) 몫이고,
- * 이 뷰가 가진 상태는 "준비 중" 힌트 열림(카드가 entities 라 상태를 못 가진다), 수정 알약 메뉴
- * 열림(TRIP-747 — FAB 는 제자리 토글, 이동은 알약이 한다), 트리거 알약 로컬 숨김(TRIP-748 D3) 셋이다.
+ * 이 뷰가 가진 상태는 수정 알약 메뉴 열림(TRIP-747 — FAB 는 제자리 토글, 이동은 알약이 한다),
+ * 트리거 알약 로컬 숨김(TRIP-748 D3) 둘이다. [사진]·[메모]는 카드에 `onPressSoon` 을 안 넘겨 그리지
+ * 않는다(TRIP-939 — 기능 개통 시 넘기면 되살아난다).
  *
  * 트리거 알약 숨김은 **명시 열거 경로**로만 부른다 — 시트 본문 스크롤 시작 · 시트 스냅 이동(마운트
- * `-1→n` 제외) · 지도 탭 · 일자 칩/FAB/[방문 완료]/[사진]·[메모]. 루트 터치 캡처·투명 백드롭은 쓰지
+ * `-1→n` 제외) · 지도 탭 · 일자 칩/FAB/[방문 완료]. 루트 터치 캡처·투명 백드롭은 쓰지
  * 않는다(알약 자기 press 까지 먹고, HP9 "바깥 탭으로 메뉴 안 닫힘"과 충돌). 서버 호출 없음.
  *
  * ⚠️ 원리적 사각(6-b): 3스냅 실전환·스냅별 보임·FAB 가림·지도 제스처 실해제는 jest 가 못 본다.
@@ -183,7 +184,6 @@ export function LiveHubView({
   triggerPillKey,
   slotBadgeLabel,
 }: LiveHubViewProps): ReactElement {
-  const [soonHintVisible, setSoonHintVisible] = useState(false);
   // Provider 없는 렌더(jest)에서는 null — useSafeAreaInsets 는 throw 하므로 컨텍스트를 직접 읽는다.
   const safeTop = useContext(SafeAreaInsetsContext)?.top ?? 0;
   const { height: windowHeight } = useWindowDimensions();
@@ -328,11 +328,6 @@ export function LiveHubView({
                           }
                         : undefined
                     }
-                    onPressSoon={() => {
-                      hidePill();
-                      setSoonHintVisible(true);
-                    }}
-                    soonHintVisible={soonHintVisible}
                     badgeLabel={slotBadgeLabel?.(slotKey) ?? undefined}
                   />
                 </View>

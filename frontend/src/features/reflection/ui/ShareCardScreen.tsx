@@ -23,6 +23,8 @@ import {
  *  - AC-3(US-REC-13): 포맷 셀 press → 선택 상태 전환 + 프리뷰 aspect(9:16→1:1→4:5) 전환.
  *  - degrade 정직성(INV-4): 저장/공유 press → captureShareImage() 가 armed:false → "준비 중" 안내만
  *    (가짜 성공·크래시 0, 서버 호출은 화면이 api 미접근이라 구조적으로 0). 실 캡처는 Blocker A 후속.
+ *  - TRIP-939(심사 2.1): 캡처 미장전(armed:false)이면 저장/공유 버튼 줄을 아예 그리지 않는다 — 장전되면
+ *    그 플래그 하나로 되살아난다. [편집]은 onEditCaption 주입 시에만 그린다.
  */
 
 const NO_PHOTO_NOTICE = '사진이 없어도 동선 지도만으로 멋진 카드를 만들었어요';
@@ -51,6 +53,7 @@ export function ShareCardScreen({
 
   const selectedFormat =
     formats.find((format) => format.id === selectedFormatId) ?? formats[0];
+  const exportArmed = captureShareImage().armed;
 
   // 저장·공유는 네이티브 캡처 미장전(armed:false)이라 가짜 성공을 내지 않고 "준비 중"만 알린다(INV-4).
   const handleExportAttempt = () => {
@@ -104,15 +107,17 @@ export function ShareCardScreen({
           <View className="flex-row items-center">
             <Text className="font-noto-bold text-caption text-muted">캡션</Text>
             <View className="flex-1" />
-            <Pressable
-              testID="reflection-share-caption-edit"
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              onPress={onEditCaption}
-            >
-              <Text className="font-noto-bold text-label text-primary">
-                편집
-              </Text>
-            </Pressable>
+            {onEditCaption ? (
+              <Pressable
+                testID="reflection-share-caption-edit"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                onPress={onEditCaption}
+              >
+                <Text className="font-noto-bold text-label text-primary">
+                  편집
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
           <Text className="font-noto text-body text-ink">{caption}</Text>
           <Text className="font-noto text-body text-link">{hashtagText}</Text>
@@ -130,29 +135,31 @@ export function ShareCardScreen({
         ) : null}
       </ScrollView>
 
-      {/* 하단 버튼 2개 — 이미지 저장(흰 배경) · 공유하기(코랄) */}
-      <View className="w-full flex-row gap-md bg-canvas px-lg pb-[24px] pt-[8px]">
-        <Pressable
-          testID="reflection-share-save"
-          onPress={handleExportAttempt}
-          className="h-[50px] flex-1 flex-row items-center justify-center gap-sm rounded-button border border-hairline-strong bg-canvas"
-        >
-          <DownloadGlyph size={18} />
-          <Text className="font-noto-bold text-card-title text-ink">
-            이미지 저장
-          </Text>
-        </Pressable>
-        <Pressable
-          testID="reflection-share-export"
-          onPress={handleExportAttempt}
-          className="h-[50px] flex-1 flex-row items-center justify-center gap-sm rounded-button bg-primary"
-        >
-          <ShareGlyph size={18} />
-          <Text className="font-noto-bold text-card-title text-on-primary">
-            공유하기
-          </Text>
-        </Pressable>
-      </View>
+      {/* 하단 버튼 2개 — 이미지 저장(흰 배경) · 공유하기(코랄). 캡처 장전 전에는 그리지 않는다. */}
+      {exportArmed ? (
+        <View className="w-full flex-row gap-md bg-canvas px-lg pb-[24px] pt-[8px]">
+          <Pressable
+            testID="reflection-share-save"
+            onPress={handleExportAttempt}
+            className="h-[50px] flex-1 flex-row items-center justify-center gap-sm rounded-button border border-hairline-strong bg-canvas"
+          >
+            <DownloadGlyph size={18} />
+            <Text className="font-noto-bold text-card-title text-ink">
+              이미지 저장
+            </Text>
+          </Pressable>
+          <Pressable
+            testID="reflection-share-export"
+            onPress={handleExportAttempt}
+            className="h-[50px] flex-1 flex-row items-center justify-center gap-sm rounded-button bg-primary"
+          >
+            <ShareGlyph size={18} />
+            <Text className="font-noto-bold text-card-title text-on-primary">
+              공유하기
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }

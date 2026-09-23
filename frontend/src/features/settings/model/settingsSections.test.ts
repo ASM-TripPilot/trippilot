@@ -4,24 +4,32 @@ import { buildSettingsSections } from './settingsSections';
  * TRIP-608 AC-1 · AC-11 — l05 설정 그룹 뷰모델 조립.
  *
  * 무엇을 보장하나:
- *  (1) 6그룹을 **정본 순서**로 낸다(Figma 라이브 = 화면 유일 정본: 계정 → 여행 취향 → 위치정보 →
- *      알림 → 제휴 안내 → 위험 영역). 티켓 서술의 "개인화" 그룹은 없다(§8 드리프트, Figma 승).
+ *  (1) 7그룹을 **정본 순서**로 낸다(Figma 라이브 = 화면 유일 정본: 계정 → 여행 취향 → 위치정보 →
+ *      알림 → 제휴 안내 → 위험 영역, 여기에 TRIP-937 이 앱 정보를 위험 영역 앞에 더했다 — Figma 에
+ *      없는 그룹이라 드리프트). 티켓 서술의 "개인화" 그룹은 없다(§8 드리프트, Figma 승).
+ *  (5) TRIP-937 AC-3: 앱 정보 그룹의 약관 3행(문서 제목·rowKey·ready:true).
  *  (2) 계정 그룹 닉네임 행 요약값 = 닉네임(Q6 확정 — 닉네임만 표기).
  *  (3) email 이 null(소셜 MVP)이어도 요약이 안 깨진다 — 'null'/'undefined' 문자열이 새지 않는다.
  *  (4) 목적지 없는 행(취향7·위치·알림·제휴)은 ready:false, 상호작용 행은 ready:true.
+ *  (6) TRIP-938 AC-6: 계정 그룹 마지막 행 = 로그아웃(ready:true). 그룹 수(7)는 그대로다.
  *
  * 3동작 뼈대: 준비=닉네임/이메일 입력 → 실행=buildSettingsSections → 단언=그룹/행 VM.
  *
  * (개념) 순수 함수 — 라이브값을 받아 그림 없는 자료(뷰모델)만 만든다. 화면은 이걸 그대로 그린다.
  */
 
-/** 정본 순서(Figma 라이브). 이 배열과 어긋나면 그룹이 빠졌거나 순서가 뒤집힌 것이다. */
+/**
+ * 정본 순서(Figma 라이브). 이 배열과 어긋나면 그룹이 빠졌거나 순서가 뒤집힌 것이다.
+ * TRIP-937: `앱 정보`(약관·정책 행)를 제휴 안내와 위험 영역 사이에 더했다 — Figma l05·U6 BLM §3.3 에는
+ * 없는 그룹이라 정본 드리프트다(01 Q7, 위험 영역은 맨 끝 관례 유지).
+ */
 const EXPECTED_GROUP_LABELS = [
   '계정',
   '여행 취향',
   '위치정보',
   '알림',
   '제휴 안내',
+  '앱 정보',
   '위험 영역',
 ] as const;
 
@@ -33,7 +41,7 @@ const EXPECTED_GROUP_LABELS = [
 const PREPARING_GROUP_LABELS = ['여행 취향', '제휴 안내'];
 
 describe('TRIP-608 · buildSettingsSections (AC-1 · AC-11)', () => {
-  it('6그룹을 정본 순서로 낸다', () => {
+  it('7그룹을 정본 순서로 낸다(TRIP-937 앱 정보 포함)', () => {
     const groups = buildSettingsSections({
       nickname: '여행자123',
       email: 'a@b.com',
@@ -124,5 +132,53 @@ describe('TRIP-608 · buildSettingsSections (AC-1 · AC-11)', () => {
     }
     // 유지: 제휴 행은 목적지 라우트가 없어 ready:false(INV-4).
     expect(rowByKey('affiliate-toggle')?.ready).toBe(false);
+  });
+
+  it('TRIP-938 AC-6: 계정 그룹 마지막 행이 [로그아웃](ready:true)이다 — 운영 필터를 통과한다', () => {
+    // 준비
+    const groups = buildSettingsSections({
+      nickname: '여행자123',
+      email: null,
+    });
+
+    // 실행 — 계정 그룹의 행 key 순서와 로그아웃 행을 뽑는다.
+    const account = groups.find((g) => g.label === '계정');
+    expect(account).toBeDefined();
+    const logoutRow = account!.rows.find((r) => r.key === 'logout');
+
+    // 단언(완전일치 · 순서까지): 계정 그룹의 마지막 행이다(01 Q1 — 새 그룹을 만들지 않는다).
+    expect(account!.rows.map((r) => r.key)).toEqual([
+      'nickname',
+      'export',
+      'logout',
+    ]);
+    // 단언: 라벨과 ready:true — false 면 운영 화면 필터(filterReadySettingsSections)가 행을 숨긴다.
+    expect(logoutRow).toEqual(
+      expect.objectContaining({ label: '로그아웃', ready: true })
+    );
+  });
+
+  it('TRIP-937 AC-3: 앱 정보 그룹에 약관 3행이 c06 순서·문서 제목·rowKey terms-{termsType}·ready:true 로 있다', () => {
+    // 준비
+    const groups = buildSettingsSections({
+      nickname: '여행자123',
+      email: null,
+    });
+
+    // 실행 — 앱 정보 그룹에서 약관 행(terms- 접두)만 뽑는다. 형제 행(TRIP-886 데이터 출처 등)이
+    // 나중에 붙어도 이 단언은 약관 3행만 본다.
+    const appInfo = groups.find((g) => g.label === '앱 정보');
+    expect(appInfo).toBeDefined();
+    const termsRows = appInfo!.rows
+      .filter((r) => r.key.startsWith('terms-'))
+      .map((r) => [r.key, r.label, r.ready]);
+
+    // 단언(완전일치 · 순서까지): rowKey 가 곧 testID(settings-nav-terms-*)의 원천이고, ready:true 가
+    // 아니면 운영 화면 필터(filterReadySettingsSections)가 행을 숨긴다(TRIP-939).
+    expect(termsRows).toEqual([
+      ['terms-TERMS_OF_SERVICE', '서비스 이용약관', true],
+      ['terms-PRIVACY_POLICY', '개인정보 처리방침', true],
+      ['terms-LOCATION_TERMS', '위치정보 이용약관', true],
+    ]);
   });
 });

@@ -1,4 +1,9 @@
-import { render, screen, within } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 
 import { buildSettingsSections } from '../model/settingsSections';
 import { SettingsScreen } from './SettingsScreen';
@@ -7,7 +12,7 @@ import { SettingsScreen } from './SettingsScreen';
  * TRIP-608/618 AC-1 · AC-2 · AC-3 · AC-4 — l05 설정 화면 렌더(프레젠테이션).
  *
  * 무엇을 보장하나:
- *  - AC-1: 6그룹이 정본 순서로 렌더되고, 헤더(`설정`·back), 계정 닉네임 요약, 상호작용 3행
+ *  - AC-1: 7그룹(TRIP-937 앱 정보 포함)이 정본 순서로 렌더되고, 헤더(`설정`·back), 계정 닉네임 요약, 상호작용 3행
  *    어포던스가 실재한다.
  *  - AC-2·AC-3(TRIP-618, 렌더): 위치정보·알림 행이 **네비 행으로 승격**된다 — 비활성 "준비 중"이
  *    아니라 활성 행(`settings-nav-*` testID)으로 그려진다.
@@ -53,23 +58,34 @@ function renderScreen(
   );
 }
 
-/** 정본 순서(Figma 라이브). AC-1 이 순서까지 잠근다. */
+/**
+ * 정본 순서(Figma 라이브). AC-1 이 순서까지 잠근다.
+ * TRIP-937: 앱 정보(약관 3행)를 위험 영역 앞에 더했다(01 Q7 — Figma 에 없는 그룹, 드리프트 기록).
+ */
 const GROUP_LABELS = [
   '계정',
   '여행 취향',
   '위치정보',
   '알림',
   '제휴 안내',
+  '앱 정보',
   '위험 영역',
 ];
 
+/** TRIP-937 AC-3 — 앱 정보 그룹의 약관 행(termsType · 문서 제목, Figma c06 문구). */
+const TERMS_ROWS = [
+  ['TERMS_OF_SERVICE', '서비스 이용약관'],
+  ['PRIVACY_POLICY', '개인정보 처리방침'],
+  ['LOCATION_TERMS', '위치정보 이용약관'],
+] as const;
+
 describe('TRIP-608/618 · SettingsScreen (AC-1 · AC-2 · AC-3 · AC-4)', () => {
-  it('AC-1: 6그룹이 정본 순서로 렌더되고 헤더가 뜬다', () => {
+  it('AC-1: 7그룹(TRIP-937 앱 정보 포함)이 정본 순서로 렌더되고 헤더가 뜬다', () => {
     renderScreen();
 
-    // 단언: 그룹이 정확히 6개.
+    // 단언: 그룹이 정확히 7개.
     const groups = screen.getAllByTestId('settings-group');
-    expect(groups).toHaveLength(6);
+    expect(groups).toHaveLength(7);
 
     // 단언(순서까지): i번째 그룹 안에 i번째 라벨이 완전일치로 있다.
     GROUP_LABELS.forEach((label, i) => {
@@ -138,5 +154,147 @@ describe('TRIP-608/618 · SettingsScreen (AC-1 · AC-2 · AC-3 · AC-4)', () => 
     const notifRow = within(notif).getByTestId('settings-nav-notifications');
     expect(notifRow).not.toBeDisabled();
     expect(within(notif).queryByText(/준비 중/)).toBeNull();
+  });
+
+  it('TRIP-937 AC-3(렌더): 앱 정보 그룹의 약관 3행이 활성 네비 행으로 그려진다 — 준비 중 아님', () => {
+    // 준비·실행: 실 뷰모델 그대로 렌더.
+    renderScreen();
+
+    const groups = screen.getAllByTestId('settings-group');
+    const appInfo = groups.find(
+      (g) => within(g).queryByText('앱 정보') !== null
+    );
+    // 긍정 앵커: 앱 정보 그룹이 실재한다(없으면 아래 행 단언이 공허하다).
+    expect(appInfo).toBeDefined();
+
+    for (const [termsType, label] of TERMS_ROWS) {
+      // 단언: switch(key)가 약관 행을 네비 행으로 그려야만 이 testID 가 뜬다(02a ★1 선례 —
+      //   ready:true 만 두고 렌더 분기를 빠뜨리면 PreparingRow 'settings-row' 로 떨어져 red).
+      const row = within(appInfo!).getByTestId(
+        `settings-nav-terms-${termsType}`
+      );
+      expect(row).not.toBeDisabled();
+      // 단언(완전일치): 행 안의 라벨이 문서 제목이다(심사자가 찾는 이름 '개인정보 처리방침').
+      expect(within(row).getByText(label)).toBeOnTheScreen();
+    }
+    // 단언(부분포함): 약관 행은 준비 중이 아니다.
+    expect(within(appInfo!).queryByText(/준비 중/)).toBeNull();
+  });
+});
+
+/**
+ * TRIP-938 — 로그아웃 행과 확인 다이얼로그(표면). 서버 호출·토큰 삭제·이동은 페이지 몫이라
+ * `SettingsPage.logout.integration.test.tsx` 가 잠근다. 여기선 "누르면 무엇이 열리고, 어느 버튼에서
+ * 콜백이 몇 번 나가나"만 본다.
+ *
+ * ★ 행은 계정 그룹 **안에서** 찾는다(02a ★8): 다이얼로그가 열리면 '로그아웃' 글자가 행과 버튼 두 곳에
+ *   생긴다. 완전일치 `getByText('로그아웃')` 을 화면 전체에 쓰면 두 개가 걸려 throw 한다.
+ * ★ 모르는 key 는 조용히 '준비 중' 행이 된다(02a ★9): 모델에 logout 을 넣고 renderRow 분기를
+ *   빠뜨려도 크래시가 없다. S1 이 testID·활성·'준비 중' 부재를 함께 요구해 잡는다.
+ * ⚠️ 딤이 화면을 실제로 덮는지·중앙 정렬은 jest 사각(6-b) — testID 트리와 콜백 횟수까지만 본다.
+ */
+describe('TRIP-938 · 로그아웃 행·확인 다이얼로그 (AC-6 · AC-3 · AC-1)', () => {
+  /** 계정 그룹 노드 — 행이 다른 그룹에 들어가면 여기서 못 찾는다. */
+  const accountGroup = () =>
+    screen
+      .getAllByTestId('settings-group')
+      .find((g) => within(g).queryByText('계정') !== null)!;
+
+  it('S1 계정 그룹 안에 [로그아웃] 행이 활성으로 있고 "준비 중"이 아니다', () => {
+    // 준비·실행
+    renderScreen({ onPressLogout: jest.fn() });
+
+    // 단언: 계정 그룹 안에서 행을 찾는다(다른 그룹이면 throw → red).
+    const row = within(accountGroup()).getByTestId('settings-row-logout');
+    expect(row).not.toBeDisabled();
+    // 단언(완전일치): 행 라벨.
+    expect(within(row).getByText('로그아웃')).toBeOnTheScreen();
+    // 단언(부분포함): 계정 그룹에 '준비 중' 표기가 없다(02a ★9).
+    expect(within(accountGroup()).queryByText(/준비 중/)).toBeNull();
+  });
+
+  it('S2 행을 누르면 확인 다이얼로그가 열린다 — 제목·[취소]·[로그아웃], 아직 콜백 0번', () => {
+    const onPressLogout = jest.fn();
+    renderScreen({ onPressLogout });
+
+    // 단언(부재 · 열기 전): 다이얼로그는 처음엔 없다.
+    expect(screen.queryByTestId('logout-confirm')).toBeNull();
+
+    // 실행
+    fireEvent.press(screen.getByTestId('settings-row-logout'));
+
+    // 단언: 다이얼로그 컨테이너 안에 제목과 두 버튼이 있다.
+    const dialog = screen.getByTestId('logout-confirm');
+    expect(within(dialog).getByText('로그아웃할까요?')).toBeOnTheScreen();
+    expect(
+      within(within(dialog).getByTestId('logout-cancel')).getByText('취소')
+    ).toBeOnTheScreen();
+    expect(
+      within(within(dialog).getByTestId('logout-confirm-button')).getByText(
+        '로그아웃'
+      )
+    ).toBeOnTheScreen();
+    // 단언(급소): 연 것만으로는 로그아웃하지 않는다.
+    expect(onPressLogout).not.toHaveBeenCalled();
+  });
+
+  it('S3 [취소] 를 누르면 다이얼로그가 닫히고 콜백은 0번이다', () => {
+    const onPressLogout = jest.fn();
+    renderScreen({ onPressLogout });
+
+    // 실행: 열기 → 취소.
+    fireEvent.press(screen.getByTestId('settings-row-logout'));
+    fireEvent.press(screen.getByTestId('logout-cancel'));
+
+    // 단언
+    expect(screen.queryByTestId('logout-confirm')).toBeNull();
+    expect(onPressLogout).not.toHaveBeenCalled();
+  });
+
+  it('S4 [로그아웃] 을 누르면 콜백이 정확히 1번 나가고 다이얼로그가 닫힌다(두 번 누를 자리 없음)', () => {
+    const onPressLogout = jest.fn();
+    renderScreen({ onPressLogout });
+
+    // 실행: 열기 → 확인.
+    fireEvent.press(screen.getByTestId('settings-row-logout'));
+    fireEvent.press(screen.getByTestId('logout-confirm-button'));
+
+    // 단언
+    expect(onPressLogout).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('logout-confirm')).toBeNull();
+  });
+
+  it('S5 계정 삭제 유예 중에도 [로그아웃] 행이 활성으로 있다(01 Q10)', () => {
+    // 준비: 삭제 유예 상태.
+    renderScreen({ deletionState: 'pending', onPressLogout: jest.fn() });
+
+    // 단언(앵커): 유예 배너가 실제로 그려진 상태다.
+    expect(screen.getByTestId('settings-deletion-pending')).toBeOnTheScreen();
+    // 단언: 그래도 다른 계정으로 바꿀 수단(로그아웃)은 있다.
+    expect(screen.getByTestId('settings-row-logout')).not.toBeDisabled();
+  });
+});
+
+/**
+ * TRIP-935 AC-3(R4) — 하단 버전 줄은 받은 `appVersion` 으로만 그린다. 값이 없으면 줄 자체를
+ * 그리지 않는다(가짜 버전보다 무표기, INV-4). 값의 출처(빌드 설정)는 페이지 몫 —
+ * `SettingsPage.version.test.tsx`.
+ */
+describe('🔴 TRIP-935 AC-3 · 버전 줄은 appVersion 으로만 그린다', () => {
+  it('appVersion="0.1.0" 이면 "TripPilot v0.1.0" 한 줄을 그린다', () => {
+    renderScreen({ appVersion: '0.1.0' });
+
+    expect(screen.getByText('TripPilot v0.1.0')).toBeOnTheScreen();
+  });
+
+  it.each([
+    ['미전달', {}],
+    ['null', { appVersion: null }],
+  ] as const)('appVersion %s 이면 버전 줄이 없다', (_label, overrides) => {
+    renderScreen(overrides);
+
+    // 앵커 — 화면 하단(출처 블록)은 그려졌다.
+    expect(screen.getByTestId('settings-data-attribution')).toBeOnTheScreen();
+    expect(screen.queryAllByText(/TripPilot v/)).toHaveLength(0);
   });
 });

@@ -23,6 +23,7 @@ import {
   BackChevronGlyph,
   InfoCircleGlyph,
 } from '@/features/itinerary/ui/ItineraryGlyphs';
+import { captureShareImage } from '@/features/reflection/model/shareCard';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import {
   getGetTripsTripIdItineraryQueryKey,
@@ -338,12 +339,15 @@ export function ItineraryPlanPage({
       }
       // 확정(h16)은 읽기전용이라 [일정 수정](h12)·[공유하기](j06) 2버튼(둘 다 활성 · AC-2). 미확정(h14)은
       // [일정 저장하기] 1버튼 — PARTIAL(생성 중)이면 확정을 예방 잠근다(계약 409 의 클라 사본 · 01b D6).
+      // [공유하기]는 공유 카드 캡처가 장전됐을 때만 싣는다(TRIP-939 Q2 — 미장전이면 j06 이 막다른 화면).
       cta={
         isConfirmed
-          ? [
-              { label: '일정 수정', variant: 'outline', onPress: goEdit },
-              { label: '공유하기', variant: 'primary', onPress: goShare },
-            ]
+          ? captureShareImage().armed
+            ? [
+                { label: '일정 수정', variant: 'outline', onPress: goEdit },
+                { label: '공유하기', variant: 'primary', onPress: goShare },
+              ]
+            : [{ label: '일정 수정', variant: 'outline', onPress: goEdit }]
           : [
               {
                 label: '일정 저장하기',

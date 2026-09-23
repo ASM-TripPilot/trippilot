@@ -38,7 +38,7 @@ const ONBOARDING_PAGE_SLICES = [
 ];
 
 /**
- * 화면 표면 스캔이 실제로 이 6개를 찾았는지 단언하는 모집단 목록(순서 고정) — 이동 전에는
+ * 화면 표면 스캔이 실제로 이 8개를 찾았는지 단언하는 모집단 목록(순서 고정) — 이동 전에는
  * `sources.length`만 봤지만, `ui/` 합류로 OnboardingGlyphs.tsx(raw-hex 12곳)가 같은 폴더에
  * 섞이면서 `*Screen.tsx` 필터만으로는 "몇 개를 찾았나"까지는 보장하지 못한다. 파일 목록을
  * 통째로 단언해야 필터가 조용히 축소되는 회귀를 잡는다(02a §3-C-4).
@@ -47,7 +47,10 @@ const SCREEN_SOURCE_FILES = [
   'features/onboarding/ui/NicknameScreen.tsx',
   'features/onboarding/ui/PrefStep1Screen.tsx',
   'features/onboarding/ui/PrefStep2Screen.tsx',
+  // TRIP-937 — 재동의·약관 열람 화면도 온보딩(동의 도메인) 슬라이스에 산다(01b Q6). 정렬 위치에 넣는다.
+  'features/onboarding/ui/ReconsentScreen.tsx',
   'features/onboarding/ui/TermsScreen.tsx',
+  'features/onboarding/ui/TermsViewerScreen.tsx',
   'shared/location/LocationGlyphs.tsx',
   'shared/location/LocationPreprompt.tsx',
 ];

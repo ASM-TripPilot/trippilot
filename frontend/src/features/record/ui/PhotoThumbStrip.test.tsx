@@ -12,7 +12,9 @@ import { PhotoThumbStrip, type PhotoThumbVM } from './PhotoThumbStrip';
  *    — 상호배타 present/absent 짝으로 구조를 잠근다(repo-traps 글리프 fill 사각 회피).
  *  - 실제 `<Image>`(record-photo-thumb-image)는 **available + uri 있을 때만** 렌더 → 나머지 상태에서
  *    그 testID 부재가 "깨진 Image 0"의 직접 증거(2중 그물).
- *  - `+` 추가 타일(record-trip-photo-add) 은 항상 있고, press → onPressAdd.
+ *  - `+` 추가 타일(record-trip-photo-add)은 onPressAdd 가 **주입될 때만** 있고 press → onPressAdd.
+ *    미주입이면 없다(TRIP-939 B-7 — 사진 선택 미개통, 눌러도 반응 없는 타일 제거). 스트립 루트는
+ *    `record-trip-photo-strip`(사진 0장·타일 없음이어도 "스트립이 슬롯에 들어갔다"는 신호).
  *
  * (개념) availability 는 상위 페이지가 `photoAvailability` 로 선판정해 VM 으로 준다 — 스트립은 순수
  *   프레젠테이션(카드/VisitRecordCard 규율 계승). `queryByTestId(...)`=없으면 null(부재 단언).
@@ -106,7 +108,17 @@ describe('🔴 AC-3·4 · 상태별 distinct 셀 + 깨진 Image 0', () => {
 });
 
 describe('🔴 add 타일 — record-trip-photo-add', () => {
-  it('추가 타일 present + press → onPressAdd 1회', () => {
+  it('TRIP-939 B-7: onPressAdd 미주입 → 추가 타일이 없고 스트립 루트는 있다', () => {
+    // 준비·실행: 방문 기록 카드 컨테이너의 현재 모양(사진 선택 미주입).
+    render(<PhotoThumbStrip photos={[cell({ visitPhotoMetaId: 'a' })]} />);
+
+    // 단언: + 타일 부재 + 짝 앵커(스트립 루트·사진 셀은 그대로).
+    expect(screen.queryByTestId('record-trip-photo-add')).toBeNull();
+    expect(screen.getByTestId('record-trip-photo-strip')).toBeTruthy();
+    expect(screen.getByTestId('record-photo-available-a')).toBeTruthy();
+  });
+
+  it('추가 타일 present + press → onPressAdd 1회(개통 짝)', () => {
     const onPressAdd = jest.fn();
     render(<PhotoThumbStrip photos={[]} onPressAdd={onPressAdd} />);
 

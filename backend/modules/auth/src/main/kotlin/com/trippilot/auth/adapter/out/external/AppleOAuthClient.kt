@@ -1,10 +1,11 @@
 package com.trippilot.auth.adapter.out.external
 
-import com.fasterxml.jackson.databind.JsonNode
 import com.trippilot.auth.domain.Provider
 import com.trippilot.auth.domain.SocialProfile
+import com.trippilot.auth.domain.port.ProviderTokenRevocationPort
 import com.trippilot.core.error.ProviderNotSupported
 import com.trippilot.core.error.UpstreamUnavailable
+import org.slf4j.LoggerFactory
 import org.springframework.http.MediaType
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator
 import org.springframework.security.oauth2.jwt.BadJwtException
@@ -20,7 +21,7 @@ import org.springframework.stereotype.Component
 import org.springframework.util.LinkedMultiValueMap
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestTemplate
-import java.util.Base64
+import java.time.Instant
 
 /**
  * Apple — 신원은 `id_token`(JWT) 안에 있다. **userinfo 엔드포인트가 없다.**
@@ -46,14 +47,14 @@ import java.util.Base64
  * iOS 네이티브(`expo-apple-authentication`)가 `identityToken` 을 바로 주므로 code 교환 단계가 없고,
  * 교환에만 필요한 p8 ES256 `client_secret` 서명이 통째로 빠진다. 정본의 `SDK_TOKEN` 설명("사용자 조회
  * API 로 검증")과도 한 군데 다르다 — Apple 은 조회 API 가 없어 **서명 검증으로 대신한다**.
- * code 교환은 계정삭제 시 토큰 revoke(TRIP-933)에서 필요해지며, 그때 아래 미사용 메서드가 살아난다.
+ * code 교환은 계정 파기 시 토큰 revoke 를 위해서만 한다(TRIP-933, [exchangeRevocationToken]).
  */
 @Component
 class AppleOAuthClient(
     private val props: SocialProviderProperties,
     restClientBuilder: RestClient.Builder,
     private val appleJwksRestTemplate: RestTemplate,
-) : OAuthProviderClient {
+) : OAuthProviderClient, ProviderTokenRevocationPort {
 
     override val provider = Provider.APPLE
     private val restClient = restClientBuilder.build()
@@ -73,7 +74,8 @@ class AppleOAuthClient(
     private val decoder: JwtDecoder by lazy { buildDecoder() }
 
     override fun fetchProfile(authorizationCode: String, codeVerifier: String, redirectUri: String): SocialProfile {
-        // code 교환은 p8 client_secret 서명을 요구한다 — TRIP-933 범위. 로그인은 아래 id_token 경로로 간다.
+        // 로그인은 아래 id_token 경로로만 간다. authorizationCode 는 revoke 용 토큰 확보에만 쓴다
+        // ([exchangeRevocationToken], TRIP-933) — 웹 redirect 로그인은 앱에 없어 열지 않는다.
         throw ProviderNotSupported(NOT_READY)
     }
 
@@ -138,49 +140,85 @@ class AppleOAuthClient(
         }
     }
 
+    // ── revoke 용 토큰(TRIP-933) ──────────────────────────────────────────────────
+
     /**
-     * 토큰 교환 + id_token 파싱(무검증). **아직 미사용** — TRIP-933(계정삭제 revoke)에서 `refresh_token`
-     * 을 받기 위해 살아난다. 그때 [decode] 를 물려 검증을 붙일 것. 무검증 파싱을 그대로 쓰면 안 된다.
+     * 로그인 때 앱이 함께 보낸 `authorizationCode` 를 교환해 **refresh_token** 을 받는다 — 계정 파기 때
+     * revoke 하기 위해서만이다. 로그인 자체는 위 id_token 경로에서 이미 끝났다.
+     *
+     * 교환 응답의 id_token 도 **JWKS 로 검증하고 `sub` 가 방금 로그인한 사람과 같은지 본다.** 안 보면
+     * 자기 identityToken 에 남의 code 를 붙여 보내 남의 refresh_token 을 우리 계정에 걸 수 있다
+     * (그 계정을 지우면 남의 애플 연결이 끊긴다). 종전 `exchangeAndDecodeUnverified` 의 무검증 파싱은 버렸다.
+     *
+     * 실패는 전부 null — 로그인을 막지 않는다([ProviderTokenRevocationPort] 참고). 원인은 예외 **종류**만
+     * 남긴다: 응답 본문·요청 폼에는 code·client_secret 이 있다(SECURITY-15).
      */
-    @Suppress("unused")
-    private fun exchangeAndDecodeUnverified(
-        authorizationCode: String,
-        codeVerifier: String,
-        redirectUri: String,
-    ): SocialProfile {
+    override fun exchangeRevocationToken(provider: Provider, authorizationCode: String, expectedSub: String): String? {
+        if (provider != Provider.APPLE) return null
+        if (!revocationConfigured()) {
+            log.warn("Apple revoke 설정(Team ID·Key ID·p8)이 없어 authorizationCode 교환을 건너뜁니다 — 이 계정은 파기 때 revoke 되지 않습니다.")
+            return null
+        }
+        return try {
+            val cfg = props.apple
+            val form = LinkedMultiValueMap<String, String>().apply {
+                add("grant_type", "authorization_code")
+                add("code", authorizationCode)
+                add("client_id", cfg.clientId)
+                add("client_secret", clientSecret.sign(Instant.now()))
+            }
+            val body = restClient.post()
+                .uri(cfg.tokenUri)
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .body(form)
+                .retrieve()
+                .body(String::class.java) ?: error("빈 토큰 응답")
+            val json = OAUTH_JSON.readTree(body)
+            val idToken = json.text("id_token") ?: error("id_token 없음")
+            if (decode(idToken).subject != expectedSub) {
+                log.warn("Apple code 교환 결과의 sub 가 로그인한 사용자와 다릅니다 — 토큰을 버립니다.")
+                return null
+            }
+            json.text("refresh_token")
+        } catch (e: Exception) {
+            log.warn("Apple authorizationCode 교환 실패({}) — 로그인은 진행합니다. 이 계정은 다음 로그인까지 revoke 대상이 없습니다.", e.javaClass.simpleName)
+            null
+        }
+    }
+
+    /**
+     * `POST /auth/revoke` — 2xx 가 아니면 예외다. 호출자(파기 스위프)가 잡아 다음 회차에 다시 시도한다.
+     * 예외 메시지에 요청 폼(client_secret·token)은 실리지 않는다 — RestClient 예외는 **응답** 상태·본문만 담는다.
+     */
+    override fun revoke(provider: Provider, token: String) {
+        require(provider == Provider.APPLE) { "revoke 는 Apple 만 지원합니다: $provider" }
+        check(revocationConfigured()) { "Apple revoke 설정(Team ID·Key ID·p8)이 없습니다." }
         val cfg = props.apple
         val form = LinkedMultiValueMap<String, String>().apply {
-            add("grant_type", "authorization_code")
-            add("code", authorizationCode)
-            add("redirect_uri", redirectUri)
             add("client_id", cfg.clientId)
-            add("client_secret", cfg.clientSecret)
-            add("code_verifier", codeVerifier)
+            add("client_secret", clientSecret.sign(Instant.now()))
+            add("token", token)
+            add("token_type_hint", "refresh_token")
         }
-        val token = restClient.post()
-            .uri(cfg.tokenUri)
+        restClient.post()
+            .uri(cfg.revokeUri)
             .contentType(MediaType.APPLICATION_FORM_URLENCODED)
             .body(form)
             .retrieve()
-            .body(String::class.java) ?: error("빈 토큰 응답")
-
-        val idToken = OAUTH_JSON.readTree(token).text("id_token") ?: error("id_token 없음")
-        val payload = decodePayload(idToken)
-        return SocialProfile(
-            provider = Provider.APPLE,
-            providerSub = payload.text("sub") ?: error("apple sub 없음"),
-            email = payload.text("email"),
-        )
+            .toBodilessEntity()
     }
 
-    private fun decodePayload(jwt: String): JsonNode {
-        val parts = jwt.split(".")
-        require(parts.size >= 2) { "잘못된 id_token 형식" }
-        val json = String(Base64.getUrlDecoder().decode(parts[1]))
-        return OAUTH_JSON.readTree(json)
+    private fun revocationConfigured(): Boolean = with(props.apple) {
+        listOf(clientId, jwksUri, issuer, tokenUri, revokeUri, teamId, keyId, privateKey).none { it.isBlank() }
+    }
+
+    private val clientSecret by lazy {
+        with(props.apple) { AppleClientSecret(teamId = teamId, clientId = clientId, keyId = keyId, privateKey = privateKey) }
     }
 
     private companion object {
+        private val log = LoggerFactory.getLogger(AppleOAuthClient::class.java)
+
         /** 화면에 그대로 나가는 문구 — 구현 상태(JWKS 등)를 싣지 않는다. */
         private const val NOT_READY = "애플 로그인은 아직 준비 중이에요."
     }

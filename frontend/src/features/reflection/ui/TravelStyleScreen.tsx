@@ -10,7 +10,7 @@ import type {
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 
 import type { StyleFace } from '../model/styleThreshold';
-import { BackArrowGlyph, LocationOffGlyph } from './ReflectionGlyphs';
+import { BackArrowGlyph } from './ReflectionGlyphs';
 import { CategoryBarList } from './CategoryBarList';
 import { EvidenceLink } from './EvidenceLink';
 import { StatTile } from './StatTile';
@@ -24,12 +24,12 @@ import { StatTile } from './StatTile';
  *
  * 무엇을 보장하나(승인 계약):
  *  - 정식(official, AC-2·AC-5): 카테고리 막대(`reflection-style-bar`)·StatTile 2(하루 평균 방문·평균
- *    체류)·EvidenceLink·지도 placeholder. 평균 체류는 `avgDwellMinutes != null` 일 때만(null→미표시
+ *    체류)·EvidenceLink(목적지 주입 시). 평균 체류는 `avgDwellMinutes != null` 일 때만(null→미표시
  *    degrade, 0 채움 금지 — BR-U5-08a). 값은 값 인터폴레이션(리터럴 `N분` 금지, INV-3).
  *  - 임시(insufficient, AC-3): 진행(`reflection-style-progress`) `현재 N곳 / 필요 M곳` + "정식 아님"
  *    명시 + preview.descriptors 칩(`reflection-style-preview-chip`). 정식 얼굴 요소는 안 그린다(상호배타).
  *
- * 지도 = **placeholder degrade**(MapView·@/shared/map 미사용 — `StyleAnalysisBody` 에 좌표/핀이
+ * 지도 = **그리지 않는다**(TRIP-939 — 자리표시는 미완성 표면이라 제거. `StyleAnalysisBody` 에 좌표/핀이
  * 없다, avgRadiusKm 스칼라만). 실 반경 원·방문 점 렌더는 좌표 계약+shared/map 확장 후속(Blocker D,
  * 개념 [[계약이 못 받치면 안 그린다]]). 서브타이틀 날짜는 `M.D`(Figma `6.13`) 인라인 서식.
  */
@@ -41,7 +41,7 @@ export interface TravelStyleScreenProps {
   analysis: StyleAnalysisBody | null;
   /** face==='insufficient' 일 때 참(온보딩 취향 미리보기 — 칩 원천). */
   preview: StylePreview | null;
-  /** 근거 진입 목적지(미주입이면 EvidenceLink 가 로컬 "준비 중" degrade). */
+  /** 근거 진입 목적지(미주입이면 링크를 그리지 않는다 — TRIP-939 AC-5). */
   onPressEvidence?: () => void;
   /** 앱바 뒤로가기(미주입이면 inert — iOS 엣지 스와이프가 대신). */
   onBack?: () => void;
@@ -103,23 +103,6 @@ export function TravelStyleScreen({
               {monthDay(analysis.updatedAt)}
             </Text>
 
-            {/* 지도 히어로 = placeholder degrade(좌표 계약 공백, 가짜 지도 금지). */}
-            <View
-              testID="reflection-style-map"
-              className="w-full items-center gap-sm rounded-card border-[1.5px] border-dashed border-hairline-strong bg-surface-soft px-lg py-3xl"
-            >
-              <LocationOffGlyph size={30} />
-              <Text className="font-noto text-label text-muted">
-                지도 표시 예정
-              </Text>
-              <Text className="text-label text-muted-soft">
-                평균 이동 반경 {analysis.avgRadiusKm}km
-              </Text>
-            </View>
-            <Text className="text-caption text-muted">
-              점 = 방문 장소 · 원 = 평균 이동 반경
-            </Text>
-
             <CategoryBarList categories={analysis.categoryBreakdown} />
 
             <View className="flex-row gap-md">
@@ -142,7 +125,10 @@ export function TravelStyleScreen({
               )}
             </View>
 
-            <EvidenceLink onPress={onPressEvidence} />
+            {/* 근거 목적지가 있을 때만 링크를 그린다(TRIP-939 AC-5 — 막다른 링크 제거). */}
+            {onPressEvidence ? (
+              <EvidenceLink onPress={onPressEvidence} />
+            ) : null}
           </>
         ) : (
           <>

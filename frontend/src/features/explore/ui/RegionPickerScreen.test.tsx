@@ -275,8 +275,8 @@ describe("AC-4 · '전체' 행 묶음 (selectable=false 시/도)", () => {
   });
 });
 
-describe('AC-5 · 준비중 유지 (poiCount=0 구/군, INV-1)', () => {
-  it('poiCount=0 구/군은 상세에서 "준비 중"을 달고, 눌러도 선택되지 않는다', () => {
+describe('AC-5 · 후보 없는 지역 표기 (poiCount=0 구/군, INV-1 · TRIP-935 AC-8)', () => {
+  it('🔴 poiCount=0 구/군은 "추천 장소 없음"을 달고("준비 중" 아님), 눌러도 선택되지 않는다', () => {
     const onSelectRegion = jest.fn();
     render(
       <RegionPickerScreen
@@ -286,9 +286,11 @@ describe('AC-5 · 준비중 유지 (poiCount=0 구/군, INV-1)', () => {
 
     fireEvent.press(screen.getByTestId('explore-region-sido-51')); // 강원 드릴인
 
-    // 홍천군(poi=0): "준비 중"(정규식 — 카드 집계 텍스트라 완전일치는 실패, ★2).
+    // 홍천군(poi=0): 데이터 상태 표기 "추천 장소 없음"(정규식 — 카드 집계 텍스트라 완전일치는
+    // 실패, ★2). TRIP-935: "준비 중"은 심사에서 미완성 기능(2.1)으로 읽혀 문구만 바꿨다.
     const coming = screen.getByTestId('explore-region-51720');
-    expect(coming).toHaveTextContent(/준비 중/);
+    expect(coming).toHaveTextContent(/추천 장소 없음/);
+    expect(coming).not.toHaveTextContent(/준비 중/);
 
     // 눌러도 선택 안 됨(★8 — 실제 press).
     fireEvent.press(coming);
