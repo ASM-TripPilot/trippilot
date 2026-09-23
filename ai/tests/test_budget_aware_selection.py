@@ -52,6 +52,35 @@ def test_깨진_파일도_예외를_안_올린다(tmp_path) -> None:
     assert load_fee_table(bad).won == {}
 
 
+def test_이상한_행_하나가_전량을_죽이지_않는다(tmp_path) -> None:
+    """5천 건대에서 산출기의 사소한 버그 하나가 기능을 통째로 끄면 안 된다.
+
+    그것도 **조용히** 꺼진다 — 빈 표는 전 POI 가 '모름'이라 점수가 정상처럼 보이고
+    예산만 안 먹는다. 예외도 안 난다. 그래서 행 단위로 견디고 버린 수를 센다.
+    """
+    path = tmp_path / "place_fees.json"
+    path.write_text(json.dumps({"fees": {
+        "ok-1": {"won": 0, "raw": "무료"},
+        "ok-2": {"won": 12000, "raw": "성인 12,000원"},
+        "bad-1": {"won": "12,000원", "raw": "산출기가 문자열을 냄"},
+        "bad-2": {"raw": "won 키가 없음"},
+        "ok-3": {"won": None, "raw": "상이함"},
+    }}, ensure_ascii=False), encoding="utf-8")
+    table = load_fee_table(path)
+
+    assert len(table.won) == 3          # 멀쩡한 것은 전부 산다
+    assert table.malformed == 2         # 버린 수가 드러난다 (침묵 금지)
+    assert table.of("ok-2") == 12000
+
+
+def test_정상_파일은_버린_행이_0이다(tmp_path) -> None:
+    """`malformed > 0` 이 산출기 결함 신호로 쓰이려면 정상일 때 0이어야 한다."""
+    path = tmp_path / "place_fees.json"
+    path.write_text(json.dumps({"fees": {"r1": {"won": 0, "raw": "무료"}}}),
+                    encoding="utf-8")
+    assert load_fee_table(path).malformed == 0
+
+
 def test_무료와_불명과_키부재를_가른다(tmp_path) -> None:
     """합치면 파서를 고칠 근거가 사라진다 — `일반 9,000원` 버그를 잡은 게 그 구분이었다."""
     path = tmp_path / "place_fees.json"
