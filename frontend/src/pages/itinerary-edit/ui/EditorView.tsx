@@ -6,7 +6,7 @@ import type { MapCenter, MapPin } from '@/shared/map';
 import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
 import { SheetHeader } from '@/widgets/map-sheet-shell/ui/SheetHeader';
 import type { CtaButton } from '@/widgets/map-sheet-shell/ui/CtaBar';
-import { formatDraftDayHeader } from '@/features/itinerary/model/draftView';
+import { formatCoPickDayHeader } from '@/features/itinerary/model/draftView';
 import type { EditorSlot } from '@/features/itinerary/model/itineraryEditStore';
 import type { PlanDayTab } from '@/features/itinerary/model/planState';
 import {
@@ -56,7 +56,16 @@ export interface EditorViewProps {
   isDragging?: boolean;
   /** 방문 완료 잠금(AC-11). */
   completedSlotKeys?: string[];
+  /** TRIP-753 · i07(여행 중 편집) 진입 — 카드 사이 "+" 를 숨기고 안내 문구를 i07 문구로 바꾼다.
+   *  그 밖(완료 잠금·위반 배지)은 모드가 아니라 데이터가 정한다. */
+  inTrip?: boolean;
 }
+
+const GUIDE_H12 = '길게 눌러 순서를 바꾸거나, 아래로 끌어 삭제해요';
+const GUIDE_IN_TRIP =
+  '방문한 곳은 그대로 두고, 길게 눌러 순서를 바꾸거나 아래로 끌어 삭제해요';
+// 위반 사유(AI detail)가 없을 때의 배지 문구 — 사유를 지어내지 않는다(Q4, 발명 카피·Figma 근거 없음).
+const VIOLATION_FALLBACK = '일정 충돌';
 
 export function EditorView({
   center,
@@ -73,6 +82,7 @@ export function EditorView({
   onSave,
   isDragging,
   completedSlotKeys,
+  inTrip,
 }: EditorViewProps): ReactElement {
   // 좌상단 오버레이 — back + 일차 칩(다일자만). MapSheetShell 의 기본 DayChipOverlay 대신 편집기 고유
   // testID(`itinerary-edit-day-{dayIndex}`)를 쓰려고 overlay 슬롯을 직접 채운다(AC-4).
@@ -112,7 +122,7 @@ export function EditorView({
     <SheetHeader
       title="일정 편집"
       dayLabel={`${activeDayIndex + 1}일차`}
-      dateLabel={formatDraftDayHeader(activeDate)}
+      dateLabel={formatCoPickDayHeader(activeDate)}
       meta={`${slots.length}곳`}
     />
   );
@@ -137,19 +147,9 @@ export function EditorView({
         overlay={overlay}
         header={header}
         cta={cta}
+        initialIndex={1}
       >
         <View className="gap-md px-lg pb-2xl pt-xs">
-          {/* 안내줄(AC-12). */}
-          <View
-            testID="itinerary-edit-guide"
-            className="flex-row items-center gap-xs"
-          >
-            <InfoCircleGlyph size={16} />
-            <Text className="font-noto text-caption text-muted">
-              길게 눌러 순서를 바꾸거나, 아래로 끌어 삭제해요
-            </Text>
-          </View>
-
           {/* 슬롯 카드 + 카드 사이 "+"(선행 index 인코딩, AC-7 배선). */}
           {slots.flatMap((slot, index) => {
             const slotKey = buildSlotKey(activeDate, slot.poiId);
@@ -171,12 +171,18 @@ export function EditorView({
                 unspecified={slot.startAt === null}
                 locked={locked}
                 fixed={fixed}
+                numberOutside
+                violation={
+                  slot.hasViolation
+                    ? (slot.violationReason ?? VIOLATION_FALLBACK)
+                    : null
+                }
                 onPressTimeChip={
                   canEditTime ? () => onPressTimeChip(slotKey) : undefined
                 }
               />,
             ];
-            if (index < slots.length - 1) {
+            if (!inTrip && index < slots.length - 1) {
               items.push(
                 <Pressable
                   key={`insert-${index}`}
@@ -197,11 +203,22 @@ export function EditorView({
             onPress={onPressAddPlace}
             className="flex-row items-center justify-center gap-xs rounded-card border border-dashed border-hairline-strong bg-canvas py-md"
           >
-            <PlusGlyph size={20} tone="primary" />
-            <Text className="font-noto-bold text-label font-bold text-primary-text">
+            <PlusGlyph size={24} />
+            <Text className="font-noto-bold text-body font-bold text-muted">
               장소 추가
             </Text>
           </Pressable>
+
+          {/* 안내줄(AC-12) — Figma 는 "장소 추가" 아래(h12·i07 공통), 문구만 모드별. */}
+          <View
+            testID="itinerary-edit-guide"
+            className="flex-row items-center gap-[6px]"
+          >
+            <InfoCircleGlyph size={16} />
+            <Text className="font-noto text-caption text-muted">
+              {inTrip ? GUIDE_IN_TRIP : GUIDE_H12}
+            </Text>
+          </View>
         </View>
       </MapSheetShell>
 

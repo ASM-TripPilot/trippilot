@@ -678,3 +678,119 @@ describe('🔴 TRIP-752 · i05 다시 짜는 중 프리뷰 (AC-13)', () => {
     expect(entry?.label).toBe('i05 · 다시 짜는 중');
   });
 });
+
+// ── TRIP-753 · i07 일정 편집 프리뷰 ─────────────────────────────────────────────────────────
+//
+// Figma 4313:2100 — `planb-manual-normal` 키가 h12 편집기(EditorView, inTrip)로 2일차 5곳을 펼침으로
+// 그린다. 옛 폴백·위반 2키는 사라진다. 프리뷰는 뷰를 파일 경로로 import 한다(위 `@/shared/api` 지뢰가
+// 배럴 로드를 막는다, 하위 경로 정적 검사는 planbEditUnifyStructure U5). 사진은 jest 에서 uri 가 없어
+// 플레이스홀더로 그려지므로 세지 않는다(02a ★17 — 육안 게이트 몫).
+
+function i07Tone(testID: string): string {
+  const tokens = String(screen.getByTestId(testID).props.className ?? '').split(
+    /\s+/
+  );
+  if (tokens.includes('bg-success')) return 'success';
+  if (tokens.includes('bg-primary')) return 'primary';
+  return 'none';
+}
+
+describe('🔴 TRIP-753 · i07 일정 편집 프리뷰 (AC-12 · AC-10)', () => {
+  it('planb-manual-normal 은 2일차 5곳을 완료 2·위반 1·i07 안내로 펼쳐 그리고, 옛 폴백 표면은 없다', () => {
+    mockSearchParams.state = 'planb-manual-normal';
+
+    render(<DevPreview />);
+
+    expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
+    expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
+      '일정 편집'
+    );
+    expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('2일차');
+    expect(screen.getByTestId('sheet-header-date')).toHaveTextContent(
+      '6월 11일(목)'
+    );
+    expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent('5곳');
+
+    // 일차 칩 3개, 2일차 선택.
+    expect(screen.getByTestId('itinerary-edit-day-1')).toBeOnTheScreen();
+    expect(screen.getByTestId('itinerary-edit-day-2')).toBeSelected();
+    expect(screen.getByTestId('itinerary-edit-day-3')).toBeOnTheScreen();
+
+    // 카드 5장 — 이름·시각·카테고리를 트리 순서대로.
+    const expectTexts = (pattern: RegExp, texts: string[]) => {
+      const nodes = screen.getAllByTestId(pattern);
+      expect(nodes).toHaveLength(texts.length);
+      nodes.forEach((node, index) =>
+        expect(node).toHaveTextContent(texts[index])
+      );
+    };
+    expectTexts(/^slot-stopcard-name-/, [
+      '감천문화마을',
+      '광안리 해변',
+      '부산시립미술관',
+      '전포 카페거리',
+      '해운대 해변',
+    ]);
+    expectTexts(/^slot-stopcard-time-/, [
+      '09:30–10:30',
+      '11:00–12:00',
+      '13:00–14:30',
+      '15:00–16:30',
+      '17:00–18:30',
+    ]);
+    expectTexts(/^slot-stopcard-tags-/, [
+      '마을 · 벽화',
+      '바다 · 산책',
+      '미술 · 실내',
+      '카페 · 실내',
+      '바다 · 해변',
+    ]);
+
+    // 완료 1·2 는 초록 번호 + 잠긴 알약, 예정 3~5 는 빨강 번호 + 누름 칩.
+    expect(
+      screen
+        .getAllByTestId(/^slot-stopcard-number-/)
+        .map((node) => i07Tone(node.props.testID as string))
+    ).toEqual(['success', 'success', 'primary', 'primary', 'primary']);
+    expect(screen.getAllByTestId(/^slot-stopcard-locked-/)).toHaveLength(2);
+    expect(screen.getAllByTestId(/^slot-stopcard-timechip-/)).toHaveLength(3);
+
+    // 행 3 위반 배지 하나.
+    expectTexts(/^slot-stopcard-violation-/, ['숙소 고정 충돌']);
+
+    // i07 얼굴 — 카드 사이 + 없음, 안내 문구, 펼친 시트, 저장 CTA.
+    expect(screen.queryAllByTestId(/^itinerary-edit-insert-/)).toHaveLength(0);
+    expect(screen.getByTestId('itinerary-edit-guide')).toHaveTextContent(
+      '방문한 곳은 그대로 두고, 길게 눌러 순서를 바꾸거나 아래로 끌어 삭제해요'
+    );
+    const indices = sheetIndices();
+    expect(indices.length).toBeGreaterThan(0);
+    indices.forEach((index) => expect(index).toBe(1));
+    expect(screen.getByTestId('sheet-cta-button-0')).toHaveTextContent(
+      '일정 저장하기'
+    );
+
+    // 옛 폴백·잠금 표면은 트리에 없다(AC-10).
+    expect(screen.queryAllByTestId(/^planb-manual-/)).toHaveLength(0);
+    ['이동시간 미상', '변경 불가', '--:--', '방문 완료'].forEach((text) =>
+      expect(screen.queryByText(text)).toBeNull()
+    );
+    expect(screen.queryByText(/^Day \d/)).toBeNull();
+  });
+
+  it('planb-manual-normal 은 band i · 라벨 "i07 · 일정 편집" 이고, 옛 폴백·위반 키는 없다', () => {
+    const states = PREVIEW_STATES as {
+      key: string;
+      band: string;
+      label: string;
+    }[];
+    const entry = states.find((state) => state.key === 'planb-manual-normal');
+    expect(entry?.band).toBe('i');
+    expect(entry?.label).toBe('i07 · 일정 편집');
+
+    const keys = states.map((state) => state.key);
+    expect(keys.length).toBeGreaterThan(100);
+    expect(keys).not.toContain('planb-manual-fallback');
+    expect(keys).not.toContain('planb-manual-violation');
+  });
+});

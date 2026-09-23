@@ -325,7 +325,10 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     // ⚠️ TRIP-751: i06 재계획안 빈 슬롯 키(`planb-replan-draft-empty`)를 지워 **순 −1** → 163→162.
     //    test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에서 키만 지우고 이 가드는 안
     //    만진다(삭제 전엔 163개라 red). 정확한 키는 `devPreviewLiveHub.test.tsx` 가 못박는다.
-    expect(PREVIEW_STATES).toHaveLength(162);
+    // ⚠️ TRIP-753: i07 옛 폴백·위반 2키(`planb-manual-fallback`·`-violation`)를 지워 **순 −2** → 162→160.
+    //    `planb-manual-normal` 은 이름을 유지한다(Q10). test-designer 선반영(카운트 가드만) — implementer
+    //    는 preview.tsx 에서 키만 지우고 이 가드는 안 만진다(삭제 전엔 162개라 red).
+    expect(PREVIEW_STATES).toHaveLength(160);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(

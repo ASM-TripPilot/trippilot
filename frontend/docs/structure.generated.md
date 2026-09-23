@@ -85,8 +85,8 @@
 - `src/__tests__/placeExploreStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbApplyStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbDiffRoute.test.tsx`  →  (export 없음)
+- `src/__tests__/planbEditUnifyStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbManualRoute.test.tsx`  →  (export 없음)
-- `src/__tests__/planbManualStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbReplanDraftStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbRequestRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/planbRequestSheetStructure.test.ts`  →  (export 없음)
@@ -477,6 +477,7 @@
 
 ## src/features/planb/model/
 - `src/features/planb/model/foldScope.ts`  →  foldScope
+- `src/features/planb/model/reorderKeepingLocked.ts`  →  reorderKeepingLocked
 - `src/features/planb/model/replanFormStore.ts`  →  ReplanFormState · useReplanFormStore
 - `src/features/planb/model/replanFromInstant.ts`  →  readFromInstant
 - `src/features/planb/model/replanOrigin.ts`  →  ReplanOrigin · buildManualOrigin · isEstimatedOrigin
@@ -833,13 +834,6 @@
 - `src/pages/planb-draft/ui/PlanbSolvingPage.tsx`  →  PlanbSolvingPageProps · PlanbSolvingPage
 - `src/pages/planb-draft/ui/ReplanDraftView.tsx`  →  ReplanDraftViewProps · ReplanDraftView
 - `src/pages/planb-draft/ui/ReplanSolvingView.tsx`  →  ReplanSolvingViewProps · ReplanSolvingView
-
-## src/pages/planb-manual/
-- `src/pages/planb-manual/index.ts`  →  PlanbManualPage
-
-## src/pages/planb-manual/ui/
-- `src/pages/planb-manual/ui/ManualEditScreen.tsx`  →  ManualEditVariant · ManualEditScreenProps · ManualEditScreen
-- `src/pages/planb-manual/ui/PlanbManualPage.tsx`  →  PlanbManualPageProps · PlanbManualPage
 
 ## src/pages/planb-request/
 - `src/pages/planb-request/index.ts`  →  PlanbRequestPage
@@ -1266,17 +1260,6 @@
 - `src/widgets/generation-done-bar/ui/GenerationDoneBar.tsx`  →  GenerationDoneBarProps · GenerationDoneBar
 - `src/widgets/generation-done-bar/ui/GenerationDoneBarGlyphs.tsx`  →  DoneCheckGlyph
 
-## src/widgets/itinerary-edit/
-- `src/widgets/itinerary-edit/index.ts`  →  ManualEditShell · mergeValidationFlags · reorderKeepingFixed
-
-## src/widgets/itinerary-edit/model/
-- `src/widgets/itinerary-edit/model/mergeValidationFlags.ts`  →  mergeValidationFlags
-- `src/widgets/itinerary-edit/model/reorderKeepingFixed.ts`  →  reorderKeepingFixed
-
-## src/widgets/itinerary-edit/ui/
-- `src/widgets/itinerary-edit/ui/ManualEditGlyphs.tsx`  →  BackChevronGlyph · UndoGlyph · WarningTriangleGlyph · LockGlyph · TrashGlyph · PlusGlyph · DragHandleGlyph
-- `src/widgets/itinerary-edit/ui/ManualEditShell.tsx`  →  ManualEditMode · ManualEditShellProps · ManualEditShell
-
 ## src/widgets/map-sheet-shell/ui/
 - `src/widgets/map-sheet-shell/ui/CtaBar.tsx`  →  CtaButton · CtaBarProps · CtaBar
 - `src/widgets/map-sheet-shell/ui/DayChipOverlay.tsx`  →  DayChip · DayChipOverlayProps · DayChipOverlay
@@ -1289,4 +1272,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 867개 파일
+합계 860개 파일
