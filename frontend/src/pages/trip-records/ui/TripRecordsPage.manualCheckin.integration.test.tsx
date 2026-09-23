@@ -195,7 +195,10 @@ describe('🔴 TRIP-761 · AC-1·AC-3·AC-4 · denied → manual 모드 표면�
 
     // 단언 — 세 manual 표면이 함께 뜬다(모드가 화면·카드로 하향).
     expect(screen.getByTestId('record-map-gps-off')).toBeTruthy();
-    expect(screen.getByTestId('record-visit-manual-check-v-up')).toBeTruthy();
+    // 배너(권한 effect)와 pill(방문 쿼리)은 도착 시점이 달라 pill 은 따로 기다린다 — CI 에서 레이스 실측.
+    expect(
+      await screen.findByTestId('record-visit-manual-check-v-up')
+    ).toBeTruthy();
   });
 });
 
