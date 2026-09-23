@@ -176,9 +176,15 @@ export function createAuthedApiClient(
   return client;
 }
 
-const API_BASE_URL = `${
-  process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:8080'
-}/api/v1`;
+// 점 표기로만 읽는다 — 출시 번들은 `process.env.EXPO_PUBLIC_*` 점 표기만 값으로 치환한다.
+// 운영 빌드에서 비어 있으면 localhost 로 조용히 붙지 않고 로드 시점에 실패한다(INV-4, TRIP-936).
+const envApiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
+if (!__DEV__ && !envApiBaseUrl) {
+  throw new Error(
+    'EXPO_PUBLIC_API_BASE_URL 이 비어 있습니다 — 운영 빌드는 API 주소 env 가 필요합니다.'
+  );
+}
+const API_BASE_URL = `${envApiBaseUrl ?? 'http://localhost:8080'}/api/v1`;
 
 /** 무인증 클라이언트 — SEC-04 화이트리스트(소셜 로그인·토큰 갱신·약관 조회)가 여기로 나간다. */
 const baseClient = createAxiosInstance({ baseURL: API_BASE_URL });

@@ -20,12 +20,40 @@ const config: ExpoConfig = {
   slug: 'trippilot',
   version: '0.1.0',
   orientation: 'portrait',
+  // TRIP-936 임시 아이콘(1024 불투명 RGB — App Store 는 알파 채널을 거부한다). 사람이 교체.
+  icon: './assets/icon.png',
   scheme: 'trippilot',
   userInterfaceStyle: 'automatic',
   newArchEnabled: true,
   ios: {
-    supportsTablet: true,
+    supportsTablet: false,
     bundleIdentifier: 'com.trippilot.travel',
+    config: {
+      usesNonExemptEncryption: false,
+    },
+    // TRIP-936 — required-reason API 선언(ITMS-91053). 수집 데이터 유형은 사람 판단이라 비워 둔다.
+    privacyManifests: {
+      NSPrivacyTracking: false,
+      NSPrivacyAccessedAPITypes: [
+        {
+          NSPrivacyAccessedAPIType: 'NSPrivacyAccessedAPICategoryUserDefaults',
+          NSPrivacyAccessedAPITypeReasons: ['CA92.1'],
+        },
+        {
+          NSPrivacyAccessedAPIType: 'NSPrivacyAccessedAPICategoryFileTimestamp',
+          NSPrivacyAccessedAPITypeReasons: ['C617.1', '0A2A.1', '3B52.1'],
+        },
+        {
+          NSPrivacyAccessedAPIType:
+            'NSPrivacyAccessedAPICategorySystemBootTime',
+          NSPrivacyAccessedAPITypeReasons: ['35F9.1'],
+        },
+        {
+          NSPrivacyAccessedAPIType: 'NSPrivacyAccessedAPICategoryDiskSpace',
+          NSPrivacyAccessedAPITypeReasons: ['E174.1', '85F4.1'],
+        },
+      ],
+    },
   },
   android: {
     package: 'com.trippilot.travel',
@@ -33,14 +61,20 @@ const config: ExpoConfig = {
   },
   plugins: [
     'expo-router',
-    'expo-secure-store',
+    // 옵션을 false(불리언)로 줘야 플러그인이 영문 기본 권한 문구를 Info.plist 에서 지운다 —
+    // 문자열 'false'·생략은 문구가 남는다. Face ID·"항상 허용" 위치는 쓰지 않는다(TRIP-936).
+    ['expo-secure-store', { faceIDPermission: false }],
     [
       'expo-location',
       {
         locationWhenInUsePermission:
           'TripPilot가 주변 여행지와 동선을 추천하기 위해 위치를 사용합니다.',
+        locationAlwaysPermission: false,
+        locationAlwaysAndWhenInUsePermission: false,
       },
     ],
+    // 튜플로 줘야 한다 — 문자열 단독이면 레거시 config.splash 경로로 빠진다.
+    ['expo-splash-screen', { backgroundColor: '#ffffff' }],
     'expo-notifications',
     [
       '@sentry/react-native/expo',
