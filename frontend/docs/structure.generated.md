@@ -31,6 +31,7 @@
 - `src/__tests__/devPreviewPref.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewReleaseGate.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewSheetSnap.test.tsx`  →  (export 없음)
+- `src/__tests__/devPreviewStayRecommend.test.tsx`  →  (export 없음)
 - `src/__tests__/editSheetBackdropStructure.test.ts`  →  (export 없음)
 - `src/__tests__/editSheetHandleStructure.test.ts`  →  (export 없음)
 - `src/__tests__/editorWidgetStructure.test.ts`  →  (export 없음)
@@ -127,6 +128,7 @@
 - `src/__tests__/socialSdkConfigPlugin.test.ts`  →  (export 없음)
 - `src/__tests__/socialSdkSecrets.test.ts`  →  (export 없음)
 - `src/__tests__/stayDetailStructure.test.ts`  →  (export 없음)
+- `src/__tests__/stayRecommendStructure.test.ts`  →  (export 없음)
 - `src/__tests__/stayRegisterStructure.test.ts`  →  (export 없음)
 - `src/__tests__/staySearchGenerated.test.ts`  →  (export 없음)
 - `src/__tests__/staySearchStructure.test.ts`  →  (export 없음)
@@ -253,6 +255,9 @@
 - `src/app/trips/[tripId]/itinerary/must-visits/[poiId].tsx`  →  (export 없음)
 - `src/app/trips/[tripId]/itinerary/must-visits/index.tsx`  →  (export 없음)
 
+## src/app/trips/[tripId]/itinerary/
+- `src/app/trips/[tripId]/itinerary/stay-recommend.tsx`  →  (export 없음)
+
 ## src/app/trips/[tripId]/live/
 - `src/app/trips/[tripId]/live/index.tsx`  →  (export 없음)
 - `src/app/trips/[tripId]/live/location.tsx`  →  (export 없음)
@@ -323,6 +328,7 @@
 
 ## src/entities/stay/ui/
 - `src/entities/stay/ui/SavedStayCard.tsx`  →  SavedStayCardProps · SavedStayCard
+- `src/entities/stay/ui/StayRecommendCard.tsx`  →  StayRecommendCardProps · StayRecommendCard
 - `src/entities/stay/ui/StaySearchCard.tsx`  →  StaySearchCardSave · StaySearchCardProps · StaySearchCard
 
 ## src/entities/trip/lib/
@@ -424,6 +430,9 @@
 - `src/features/itinerary/config/methodPicker.ts`  →  METHOD_PROGRESS · METHOD_SUBTITLE · METHOD_SWITCH_NOTE
 - `src/features/itinerary/config/placeCategoryChips.ts`  →  PlaceCategoryChip · PLACE_CATEGORY_CHIPS
 
+## src/features/itinerary/lib/
+- `src/features/itinerary/lib/objectParticle.ts`  →  withObjectParticle
+
 ## src/features/itinerary/model/
 - `src/features/itinerary/model/buildEditItineraryRequest.ts`  →  buildEditItineraryRequest
 - `src/features/itinerary/model/coPickSlots.ts`  →  firstCoPickSlotKey · nextCoPickSlotKey
@@ -435,6 +444,7 @@
 - `src/features/itinerary/model/planState.ts`  →  PlanState · PlanDayTab · resolvePlanState · isConfirmLocked · ItineraryDestination · resolveItineraryDestination · ItineraryDestinationHref · itineraryDestinationHref · buildPlanDayTabs
 - `src/features/itinerary/model/radiusUsedLabel.ts`  →  formatRadiusUsed
 - `src/features/itinerary/model/slotSwapError.ts`  →  SLOT_SWAP_CONFLICT_CODES · SlotSwapErrorKind · SlotSwapError · resolveSlotSwapError
+- `src/features/itinerary/model/stayRecommend.ts`  →  StayRecommendCandidate · StayRecommendView
 - `src/features/itinerary/model/swapSlotPoi.ts`  →  swapSlotPoi
 - `src/features/itinerary/model/timeBandLabel.ts`  →  TimeBandLabel · timeBandLabel
 - `src/features/itinerary/model/tripCardFace.ts`  →  TripCardFace · deriveTripCardFace
@@ -444,7 +454,7 @@
 - `src/features/itinerary/ui/DraftScreen.tsx`  →  DraftScreenProps · DraftScreen
 - `src/features/itinerary/ui/GeneratingScreen.tsx`  →  GeneratingScreenProps · GeneratingScreen
 - `src/features/itinerary/ui/GenerationFallbackScreen.tsx`  →  GenerationFallbackScreenProps · GenerationFallbackScreen
-- `src/features/itinerary/ui/ItineraryGlyphs.tsx`  →  BackChevronGlyph · LockGlyph · DragHandleGlyph · PlusGlyph · CheckGlyph · DashGlyph · DiamondGlyph · CheckCircleGlyph · PencilGlyph · SearchGlyph · CloseGlyph · ClockGlyph · CalendarGlyph · ChevronDownGlyph · ChevronRightGlyph · LocationOffGlyph · CircleGlyphTone · InfoCircleGlyph · AlertCircleGlyph · WarningTriangleGlyph · ShareGlyph · WalkGlyph · CarGlyph · ExpandGlyph · RefreshGlyph · FullAiGlyph · CoPickGlyph · ManualGlyph
+- `src/features/itinerary/ui/ItineraryGlyphs.tsx`  →  BackChevronGlyph · LockGlyph · DragHandleGlyph · PlusGlyph · CheckGlyph · DashGlyph · DiamondGlyph · CheckCircleGlyph · PencilGlyph · SearchGlyph · CloseGlyph · ClockGlyph · CalendarGlyph · ChevronDownGlyph · ChevronRightGlyph · LinkChevronGlyph · LocationOffGlyph · CircleGlyphTone · InfoCircleGlyph · AlertCircleGlyph · WarningTriangleGlyph · ShareGlyph · WalkGlyph · CarGlyph · ExpandGlyph · RefreshGlyph · FullAiGlyph · CoPickGlyph · ManualGlyph
 - `src/features/itinerary/ui/MethodPickerScreen.tsx`  →  ActiveGeneration · MethodPickerScreenProps · MethodPickerScreen
 - `src/features/itinerary/ui/MustVisitPickerScreen.tsx`  →  MustVisitPickerScreenProps · MustVisitPickerScreen
 - `src/features/itinerary/ui/MustVisitTimeScreen.tsx`  →  MustVisitTimeScreenProps · MustVisitTimeScreen
@@ -753,6 +763,13 @@
 - `src/pages/itinerary-plan/ui/ConfirmedBanner.tsx`  →  ConfirmedBanner
 - `src/pages/itinerary-plan/ui/ItineraryPlanPage.tsx`  →  ItineraryPlanPage
 - `src/pages/itinerary-plan/ui/NoBaseNoticeCard.tsx`  →  NoBaseNoticeCard
+
+## src/pages/itinerary-stay-recommend/
+- `src/pages/itinerary-stay-recommend/index.ts`  →  StayRecommendPage
+
+## src/pages/itinerary-stay-recommend/ui/
+- `src/pages/itinerary-stay-recommend/ui/StayRecommendPage.tsx`  →  StayRecommendPageProps · StayRecommendPage
+- `src/pages/itinerary-stay-recommend/ui/StayRecommendView.tsx`  →  StayRecommendViewProps · StayRecommendView
 
 ## src/pages/live-itinerary/
 - `src/pages/live-itinerary/index.ts`  →  LiveItineraryPage
@@ -1314,4 +1331,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 890개 파일
+합계 899개 파일

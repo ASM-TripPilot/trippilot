@@ -152,6 +152,9 @@ const EXPECTED_H = [
   'dev-preview-state-h14-plan-distance-pending', // h14
   'dev-preview-state-h14-plan-map-fallback', // h14
   'dev-preview-state-h14-plan-no-base', // h14
+  // TRIP-800: h15 동선 기준 숙소 추천(신규 1키). 라벨 코드 h15 라 h14 4키 뒤·h16 앞에 선다(배열 위치 무관 —
+  // 같은 코드가 하나뿐이라 안정 정렬 순서도 없다).
+  'dev-preview-state-h15-stay-recommend', // h15
   // TRIP-801: 옛 itinerary-confirmed(h34, CONFIRMED TimelineScreen)를 h16-plan-confirmed 로 개명
   // (CONFIRMED→지도+시트 셸). 라벨 코드가 h34→h16 이라 정렬 위치가 파일 끝(h34)에서 h14/h18 사이로
   // 이동한다(개명=count 불변, 위치만 이동 · 02a ★11).

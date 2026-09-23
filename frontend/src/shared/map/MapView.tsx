@@ -45,8 +45,10 @@ export type MapPinState = 'done' | 'current' | 'upcoming';
  * 기록 도메인 마커족(TRIP-768). `state`(진행 축)와 **직교**인 별개 축이다 — j 밴드 기록·회고 지도가
  * 쓴다. `visited`=사진 썸네일+번호 배지, `planned`=회색 점선 원+회색 번호, `stay`=빨강 마커+흰 침대
  * (번호 없음). `kind` 미전달이면 이 마커족을 안 그리고 현행 `state` 물방울로 폴백한다(무회귀).
+ * `candidate`(TRIP-800, h15)=흰 채움+빨강 테두리 빈 물방울(번호 없음) — 아직 고르지 않은 추천 숙소 위치.
+ * kind 축이라 경로선에서 자동으로 빠진다(아래 `lineCoords`).
  */
-export type MapPinKind = 'visited' | 'planned' | 'stay';
+export type MapPinKind = 'visited' | 'planned' | 'stay' | 'candidate';
 
 /**
  * 번호가 붙은 지도 핀(카카오 시절 계약 계승). `number` 는 지도가 정하지 않는다 — 호출부가
@@ -246,6 +248,7 @@ const RECORD_DIMS: Record<
   visited: { width: 48, height: 48, anchor: { x: 0.5, y: 0.5 } },
   planned: { width: 32, height: 32, anchor: { x: 0.5, y: 0.5 } },
   stay: { width: 34, height: 42, anchor: { x: 0.5, y: 1 } },
+  candidate: { width: 28, height: 36, anchor: { x: 0.5, y: 1 } },
 };
 
 /**
@@ -355,6 +358,24 @@ function RecordMarker({
         >
           {number}
         </SvgText>
+      </Svg>
+    );
+  }
+  if (kind === 'candidate') {
+    // 추천 후보(h15, Figma cand-pin 4385:1645) — 작은 물방울을 흰 채움 + 빨강 테두리로. 번호 없음.
+    return (
+      <Svg
+        testID={`map-marker-candidate-${number}`}
+        width={28}
+        height={36}
+        viewBox="0 0 28 36"
+      >
+        <Path
+          d={TEARDROP_SMALL}
+          fill={PIN_WHITE}
+          stroke={PIN_PRIMARY}
+          strokeWidth={2}
+        />
       </Svg>
     );
   }

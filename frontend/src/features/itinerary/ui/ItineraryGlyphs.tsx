@@ -439,6 +439,27 @@ export function ChevronRightGlyph({ size = 20, testID }: GlyphProps) {
   );
 }
 
+// h15 `다른 숙소 둘러보기 ›` 링크 쉐브론(16) — Figma `4385:1784`. 링크 글자색(primary-text)과 한 쌍.
+export function LinkChevronGlyph({ size = 16, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+    >
+      <Path
+        d="M6 4L10 8L6 12"
+        stroke={PRIMARY_TEXT}
+        strokeWidth={1.46667}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 // h35 히어로 배지 안의 「위치-off」(36) — Figma `1906:1083`. 지도 핀 위에 사선 하나를 그어
 // "여기서 찾을 곳이 없다"를 말한다. 색은 브랜드 primary 로, 배지 배경(primary-pale)과 한 쌍이다.
 export function LocationOffGlyph({ size = 36, testID }: GlyphProps) {

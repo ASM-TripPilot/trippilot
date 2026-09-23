@@ -8,7 +8,12 @@ import BottomSheet, {
   BottomSheetScrollView,
 } from '@gorhom/bottom-sheet';
 
-import { MapView, type MapCenter, type MapPin } from '@/shared/map';
+import {
+  MapView,
+  type MapCenter,
+  type MapPin,
+  type MapViewProps,
+} from '@/shared/map';
 
 import { CtaBar, type CtaButton } from './CtaBar';
 import { DayChipOverlay, type DayChip } from './DayChipOverlay';
@@ -107,6 +112,9 @@ export interface MapSheetShellProps<T = unknown> {
   onSheetScrollBeginDrag?: () => void;
   /** 지도 빈 곳 탭(TRIP-748 가산) — `<MapView onTapMap>` 으로 흘린다. 미전달=미부착. */
   onMapTap?: () => void;
+  /** 반경 원(TRIP-800 가산, h15) — `<MapView radiusCircle>` 로 흘린다. 미전달=원 없음(기존 소비처
+   *  무변경). */
+  radiusCircle?: MapViewProps['radiusCircle'];
 }
 
 export function MapSheetShell<T = unknown>({
@@ -130,6 +138,7 @@ export function MapSheetShell<T = unknown>({
   onSheetAnimate,
   onSheetScrollBeginDrag,
   onMapTap,
+  radiusCircle,
 }: MapSheetShellProps<T>): ReactElement {
   // 지도 로드 실패(TRIP-919). 폴백 중엔 MapView 가 트리에서 빠지므로, 재시도로 이 값을 풀면 MapView 가
   // 새 인스턴스로 다시 마운트돼 실패 알림(notifiedRef)도 처음부터 다시 돈다 — 별도 key 가 필요 없다.
@@ -163,6 +172,7 @@ export function MapSheetShell<T = unknown>({
               viewOnly={mapLocked}
               currentLocation={currentLocation}
               onTapMap={onMapTap}
+              radiusCircle={radiusCircle}
               onLoadFailed={handleMapLoadFailed}
             />
           ))}
