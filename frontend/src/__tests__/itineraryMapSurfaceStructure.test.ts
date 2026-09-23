@@ -56,8 +56,9 @@ const LOCKED_CALLERS = [
   // TRIP-572 j04 여행 요약 지도 — 방문 순서 글랜스(viewOnly ON). DailyReflectionScreen 동형(좌표
   // 있을 때만 렌더, 없으면 placeholder). test-designer 가 처음부터 등재(571·563·442 3번째 재발 방지).
   'features/reflection/ui/TripSummaryScreen.tsx',
-  // TRIP-783 h공통 지도+시트 셸 — 전면 지도가 시트 뒤 전면에 깔린 잠긴 글랜스(viewOnly ON,
-  // connectPins 기본=선). h07·h08·h11·h14·h16 결과 6종이 이 셸을 소비하는 부품이다. 셸이
+  // TRIP-783 h공통 지도+시트 셸 — 전면 지도가 시트 뒤 전면에 깔린다. 기본 잠금(viewOnly ON) · TRIP-920
+  // 부터 기본 스냅의 닫힘 칸에서만 풀린다(태그의 viewOnly 값이 상수가 아니다 — 이 census 는 글자 유무만
+  // 보고 값은 못 본다, 값은 MapSheetShell.test SH5·SH14 가 잠근다). connectPins 기본=선. h07·h08·h11·h14·h16 결과 6종이 이 셸을 소비하는 부품이다. 셸이
   // `<MapView>` 를 렌더하므로 census fail-closed 를 피하려 test-designer 가 착수 단계에서 선반영
   // (571·563·442 재발 방지 · TRIP-572 선례). 실개폐·2스냅은 통과형 목 사각(6-b 실기).
   'widgets/map-sheet-shell/ui/MapSheetShell.tsx',
@@ -340,7 +341,8 @@ describe('🔴 S2b · TRIP-746 — 셸 지도 잠금을 푸는 소비처는 i01 
     );
 
     // ③ 셸은 prop 을 받고, 그 `<MapView>` 태그에 viewOnly 가 남아 있다(기본 잠금 — S2 ② 와 같은 태그).
-    //    `viewOnly` 를 태그에서 지우면 기본 잠금이 사라져 6 소비처가 조용히 풀린다.
+    //    `viewOnly` 를 태그에서 지우면 기본 잠금이 사라져 소비처가 조용히 풀린다. TRIP-920 부터 값은
+    //    "기본 잠금 · 기본 스냅 닫힘에서만 열림"이지만 여기선 글자 유무만 본다(값 = SH5·SH14 렌더 테스트).
     const shell = readOne(SHELL_REL);
     expect(shell).toContain('mapViewOnly');
     const shellTags = mapTagsOf(shell);

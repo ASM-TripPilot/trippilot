@@ -98,7 +98,7 @@ const EXPECTED_H = [
   'dev-preview-state-h07-generating-fallback', // h07 (TRIP-791 · 폴백 성공 인터스티셜)
   'dev-preview-state-h07-generating-fallback-failed', // h07 (TRIP-791 · 하드실패 인터스티셜)
   'dev-preview-state-h08-draft-collapsed', // h08 (TRIP-783 지도+시트 셸 접힘)
-  // TRIP-792: h08 펼침(시트 상단 스냅 · initialIndex={1}) 신규. 코드가 h08 이라 안정 정렬이
+  // TRIP-792: h08 펼침(시트 상단 스냅 · TRIP-920 부터 initialIndex={2}) 신규. 코드가 h08 이라 안정 정렬이
   // collapsed 바로 뒤에 붙는다(PREVIEW_STATES 배열에서도 expanded 를 collapsed 직후에 삽입 —
   // 그래야 안정 정렬이 이 순서를 낸다). 동시에 옛 h11 DraftScreen 초안 5키(default·stale-failed·
   // loading·empty·nopins)는 삭제돼 이 배열에서도 빠진다(band h 소비처 이동, 폴백 3키는 유지).

@@ -18,7 +18,7 @@ import {
 
 /**
  * h19 배선(TRIP-338) — **TRIP-797 묶음 C 로 소비 화면을 옛 `ManualPlanScreen`(features) → h12 통일
- * 편집기 표면(지도+2스냅 시트 `MapSheetShell`) 으로 재조립**한다. MANUAL 생성 POST 가드는 배선 계약이라
+ * 편집기 표면(지도+3스냅 시트 `MapSheetShell`) 으로 재조립**한다. MANUAL 생성 POST 가드는 배선 계약이라
  * 무변경이고, 셸 루트만 `itinerary-manual-root` → `map-sheet-shell-root` 로 바뀐다.
  *
  * ⚠️ **왜 `EditorView`(h24 편집기 순수 뷰)를 재사용하지 않고 여기서 셸을 직접 조립하나:** `EditorView`

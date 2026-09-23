@@ -16,7 +16,8 @@
 //    i07 은 ItineraryEditPage(시작/종료 라벨)를 그대로 쓴다.
 //  - AC-4/AC-5 상태·경계 규약: 위젯 소스에 expo-router·@/features·@/pages·raw hex 0,
 //    useState 0(단 STATE_EXEMPT 명시 등재 파일 예외 — TimeSheet D8 선택 셀, MapSheetShell TRIP-919
-//    지도 실패/재시도 1개. 예외는 파일 + 허용 개수로 등재 — 호출 수가 개수와 완전일치해야 한다).
+//    지도 실패/재시도 + TRIP-920 현재 스냅 칸 = 2개. 예외는 파일 + 허용 개수로 등재 — 호출 수가 개수와
+//    완전일치해야 한다).
 //
 // 리포 확립 규약: "없어야 한다"(부정)는 "있어야 한다"(긍정 짝)와 같은 it 안에 둔다 —
 // 빈 모집단에서 부정이 공허 통과하는 것을 긍정 짝이 먼저 막는다. 모든 스캔은 주석을 걷은 소스를 본다.
@@ -66,8 +67,10 @@ const STATE_EXEMPT: { rel: string; count: number }[] = [
   // D8 — TimeSheet 는 선택 셀 useState 를 그대로 가진다(SlotTimeSheet 이관, 02a ★7). 시·분 4 + 활성 칸
   // + 종료 설정 여부 = 6.
   { rel: 'widgets/time-sheet/ui/TimeSheet.tsx', count: 6 },
-  // TRIP-919 사용자 결정 — 셸이 지도 실패/재시도 상태 1개만 쥔다(9 소비처가 배선 없이 폴백을 얻는다).
-  { rel: 'widgets/map-sheet-shell/ui/MapSheetShell.tsx', count: 1 },
+  // TRIP-919 사용자 결정 — 셸이 지도 실패/재시도 상태를 쥔다(9 소비처가 배선 없이 폴백을 얻는다).
+  // TRIP-920 사용자 결정(3-a) — 셸이 `BottomSheet onChange` 로 받은 현재 스냅 칸을 쥔다(닫힘에서만 지도
+  // 풀림 · CTA 숨김). 2 = 실패 1 + 스냅 칸 1.
+  { rel: 'widgets/map-sheet-shell/ui/MapSheetShell.tsx', count: 2 },
 ];
 const STATE_EXEMPT_FILES = STATE_EXEMPT.map(({ rel }) => rel);
 

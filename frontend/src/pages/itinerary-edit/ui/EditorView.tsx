@@ -24,7 +24,7 @@ import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
  * 선례). 이 뷰는 컨테이너 api 사슬이 없어 preview.tsx 가 그대로 import 한다(api import 0, TRIP-610 회피)
  * — 조회·저장 PUT·시트 개폐·미지정 안내는 페이지(ItineraryEditPage) 몫이고, 이 뷰는 골격·배선만 진다.
  *
- * ⚠️ 원리적 사각(6-b 실기 이연): 2스냅 실개폐·딤·롱프레스 드래그 실동작·드롭 삭제·색(빨강 테두리)은
+ * ⚠️ 원리적 사각(6-b 실기 이연): 3스냅 실개폐·딤·롱프레스 드래그 실동작·드롭 삭제·색(빨강 테두리)은
  * `@gorhom/bottom-sheet`·`react-native-draggable-flatlist` 통과형 목이 못 본다. 여기선 시각칩 press
  * 콜백·카드사이 + 배선·`isDragging` 드롭존 표면 전환만 계약한다(02a ★7).
  */
@@ -147,7 +147,7 @@ export function EditorView({
         overlay={overlay}
         header={header}
         cta={cta}
-        initialIndex={1}
+        initialIndex={2}
       >
         <View className="gap-md px-lg pb-2xl pt-xs">
           {/* 슬롯 카드 + 카드 사이 "+"(선행 index 인코딩, AC-7 배선). */}

@@ -58,6 +58,21 @@ function sheetIndices(): number[] {
     .map((node) => node.props.index as number);
 }
 
+/** 셸 기본 스냅을 쓰는 화면(i06·i07)의 초기 **칸 값** — snapPoints[index]. TRIP-920 이 셸 기본 배열 앞에
+ *  닫힘(28)을 끼워 숫자 index 의 뜻이 밀렸다(1 = 펼침 → peek). 허브·i05 는 snapPoints 를 직접 줘서 숫자 뜻이
+ *  안 바뀌므로 위 `sheetIndices` 를 그대로 쓴다(02a ★1·★2). */
+function sheetSnapValues(): unknown[] {
+  return screen.root
+    .findAll(
+      (node) =>
+        typeof node.props?.index === 'number' &&
+        Array.isArray(node.props?.snapPoints)
+    )
+    .map(
+      (node) => (node.props.snapPoints as unknown[])[node.props.index as number]
+    );
+}
+
 describe('🔴 TRIP-746 · i01 허브 프리뷰 3키 (AC-7)', () => {
   it.each([
     ['live-hub-closed', 0],
@@ -500,9 +515,10 @@ describe('🔴 TRIP-751 · i06 재계획안 펼침 프리뷰 (AC-12)', () => {
 
     expect(screen.getByTestId('sheet-daychip-1')).toBeSelected();
     expect(screen.getByTestId('sheet-daychip-2')).toBeOnTheScreen();
-    const indices = sheetIndices();
-    expect(indices.length).toBeGreaterThan(0);
-    indices.forEach((index) => expect(index).toBe(1));
+    // TRIP-920 심판 수정 — 펼침은 숫자 1 이 아니라 칸 값 88%.
+    const values = sheetSnapValues();
+    expect(values.length).toBeGreaterThan(0);
+    values.forEach((value) => expect(value).toBe('88%'));
 
     expect(screen.getByTestId('sheet-cta-button-0')).toHaveTextContent(
       '직접 수정'
@@ -567,9 +583,10 @@ describe('🔴 TRIP-751 · i06 재계획안 대안 없음 프리뷰 (AC-12)', ()
     expect(screen.getByTestId('sheet-cta-button-1')).toHaveTextContent(
       '조건 바꿔 다시 짜기'
     );
-    const indices = sheetIndices();
-    expect(indices.length).toBeGreaterThan(0);
-    indices.forEach((index) => expect(index).toBe(1));
+    // TRIP-920 심판 수정 — 펼침은 숫자 1 이 아니라 칸 값 88%.
+    const values = sheetSnapValues();
+    expect(values.length).toBeGreaterThan(0);
+    values.forEach((value) => expect(value).toBe('88%'));
   });
 });
 
@@ -763,9 +780,10 @@ describe('🔴 TRIP-753 · i07 일정 편집 프리뷰 (AC-12 · AC-10)', () => 
     expect(screen.getByTestId('itinerary-edit-guide')).toHaveTextContent(
       '방문한 곳은 그대로 두고, 길게 눌러 순서를 바꾸거나 아래로 끌어 삭제해요'
     );
-    const indices = sheetIndices();
-    expect(indices.length).toBeGreaterThan(0);
-    indices.forEach((index) => expect(index).toBe(1));
+    // TRIP-920 심판 수정 — 펼침은 숫자 1 이 아니라 칸 값 88%.
+    const values = sheetSnapValues();
+    expect(values.length).toBeGreaterThan(0);
+    values.forEach((value) => expect(value).toBe('88%'));
     expect(screen.getByTestId('sheet-cta-button-0')).toHaveTextContent(
       '일정 저장하기'
     );

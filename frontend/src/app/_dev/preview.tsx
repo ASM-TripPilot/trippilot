@@ -3937,8 +3937,8 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // h08 지도+시트 셸 접힘(TRIP-783) — Figma `4221:2448` 대조용. 셸(전면 지도+2스냅 시트+오버레이+
-  // CTA) 부품을 h08 default 4슬롯으로 조립한다. 2스냅 실개폐·딤은 통과형 목 사각이라 index=0(peek)
+  // h08 지도+시트 셸 접힘(TRIP-783) — Figma `4221:2448` 대조용. 셸(전면 지도+3스냅 시트+오버레이+
+  // CTA) 부품을 h08 default 4슬롯으로 조립한다. 3스냅 실개폐·딤은 통과형 목 사각이라 기본 진입 peek
   // 얼굴만 고정된다 — 6-b 실기가 유일한 개폐 그물. 지도 태그는 셸이 소유하므로 여기엔 없다.
   {
     key: 'h08-draft-collapsed',
@@ -4000,7 +4000,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   // h08 지도+시트 셸 펼침(TRIP-792) — Figma `4224:2448` 대조용. 접힘 조립을 그대로 복제하고
-  // `initialIndex={1}` 만 더해 시트가 상단 스냅까지 열린 얼굴을 낸다(2스냅 실개폐는 통과형 목
+  // `initialIndex={2}` 만 더해 시트가 상단 스냅까지 열린 얼굴을 낸다(스냅 실개폐는 통과형 목
   // 사각이라 6-b 실기가 유일한 개폐 그물). 배열에서 collapsed 바로 뒤에 둬 안정 정렬이
   // collapsed→expanded 순서를 내게 한다(devPreviewBandSort EXPECTED_H).
   {
@@ -4012,7 +4012,7 @@ export const PREVIEW_STATES: PreviewState[] = [
       <MapSheetShell
         center={{ lat: 35.1532, lng: 129.1188 }}
         pins={buildDraftPins(H08_PREVIEW_SLOTS)}
-        initialIndex={1}
+        initialIndex={2}
         days={[
           { label: '1일차' },
           { label: '2일차' },
@@ -4128,7 +4128,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   // (비고정 4 + 고정 숙소 1)을 얹는다. 고정 숙소는 단일 시각 `21:00`+부제+고정 배지, 비고정은 시각
   // 범위 칩만(다른 후보 링크 없음 · h08 과 차이). meta 는 비고정 4 → `4/4 골랐어요`. 배열에서 fallback
   // 3키 **직전**(h11 그룹 첫 자리)에 둬 안정 정렬이 copick→fallback 순서를 내게 한다(devPreviewBandSort
-  // EXPECTED_H · 02a ★13). 2스냅 실개폐·딤은 통과형 목 사각이라 6-b 실기가 유일한 개폐 그물.
+  // EXPECTED_H · 02a ★13). 3스냅 실개폐·딤은 통과형 목 사각이라 6-b 실기가 유일한 개폐 그물.
   {
     key: 'h11-copick-complete',
     band: 'h',
@@ -4796,7 +4796,7 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // h12 편집기 통일(TRIP-797) — 지도+2스냅 시트 위 슬롯 카드 편집. 순수 뷰 EditorView 를 preview 가
+  // h12 편집기 통일(TRIP-797) — 지도+3스냅 시트 위 슬롯 카드 편집. 순수 뷰 EditorView 를 preview 가
   // 직접 태운다(컨테이너 api 사슬 없음, TRIP-610 회피). 빈/채움/드래그 세 정적 얼굴을 대조한다.
   // 실제 드래그·시트 개폐·딤은 통과형 목이 못 봄(6-b 실기 전용).
   {
@@ -4867,7 +4867,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   // 후보(PlaceAddRow)를 얹고, 검색바+칩(PlaceAddHeader)은 리스트 헤더(children)로, "장소 추가 · N일차"는
   // header 로 조립한다(페이지 PlaceAddPage 와 같은 형태, 단 조회 훅 대신 픽스처 — 프리뷰는 api import 0).
   // 실화면 딥링크로는 빈 일정 생성 POST 를 백엔드가 만들어야 도달하므로(401 이면 못 봄) 여기가 눈 확인
-  // 자리다. 거리줄은 픽스처로만 렌더한다(실 GET 엔 거리 필드 없음 — 6-b 육안). 2스냅 실개폐·핀 위치는 실기.
+  // 자리다. 거리줄은 픽스처로만 렌더한다(실 GET 엔 거리 필드 없음 — 6-b 육안). 3스냅 실개폐·핀 위치는 실기.
   {
     key: 'h13-place-add',
     band: 'h',
@@ -5133,7 +5133,7 @@ export const PREVIEW_STATES: PreviewState[] = [
       </SafeAreaView>
     ),
   },
-  // ── i06 재계획안(TRIP-751) — 한 뷰의 두 얼굴(펼침 · 대안 없음), 시트는 펼침(index 1). 같은 5곳
+  // ── i06 재계획안(TRIP-751) — 한 뷰의 두 얼굴(펼침 · 대안 없음), 시트는 펼침(index 2). 같은 5곳
   //    픽스처로 Figma 4314:1923 · 4335:1923 과 대조한다(88% 스냅·CTA 가림·흐림 정도는 육안 몫).
   //    실패(failed)·확정 실패 얼굴은 같은 안내 자리라 여기 따로 두지 않는다 ──
   {

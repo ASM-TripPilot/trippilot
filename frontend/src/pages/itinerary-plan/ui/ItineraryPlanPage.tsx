@@ -274,7 +274,7 @@ export function ItineraryPlanPage({
     );
   }
 
-  // listed(완성/확정) — 전면 지도 + 2스냅 시트 셸. CONFIRMED(h16)·PLANNED(h14) 둘 다 이 셸을 조립한다
+  // listed(완성/확정) — 전면 지도 + 3스냅 시트 셸. CONFIRMED(h16)·PLANNED(h14) 둘 다 이 셸을 조립한다
   // (TRIP-801 계약 플립 — CONFIRMED 도 옛 `TimelineScreen` 대신 셸로 갈아끼웠다). `features→widgets`
   // 상향 참조 금지라 셸 조립은 페이지가 진다(h07/h08 `DraftPage`·h11 `CoPickCompletePage` 선례). 두
   // 얼굴의 차이(성공 배너·"확정됨" meta 접두·휴관 경고·CTA 2버튼)는 `isConfirmed` 하나로 갈린다. 탭·

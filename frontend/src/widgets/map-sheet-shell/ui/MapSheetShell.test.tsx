@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -10,8 +11,9 @@ import { Text } from 'react-native';
 import { MapSheetShell } from './MapSheetShell';
 
 /**
- * TRIP-783 · 셸 조립 계약(widgets). 전면 지도(`<MapView viewOnly>`) + 2스냅 바텀시트 +
- * 좌상단 일차 칩 오버레이 + 하단 고정 CTA 바를 조립한다.
+ * TRIP-783 · 셸 조립 계약(widgets). 전면 지도(`<MapView viewOnly>`) + 바텀시트 +
+ * 좌상단 일차 칩 오버레이 + 하단 고정 CTA 바를 조립한다. TRIP-920 부터 기본 스냅은 3칸
+ * (닫힘 28 · peek 45% · 펼침 88%)이고, 닫힘 칸에서만 지도가 풀린다(SH14).
  *
  * ⚠️ **원리적 사각(02a ★2·★3·★4)** — `@gorhom/bottom-sheet` 목은 통과형이라 시트 실개폐·2스냅·
  *   딤·`enableContentPanningGesture` 는 못 본다(E6·E7 → 6-b 실기). TRIP-919 부터 셸은 지도 실패
@@ -168,54 +170,73 @@ describe('🔴 MapSheetShell · SH4 — cta 미전달이면 CTA 바를 안 그�
   });
 });
 
-/* ──────────────── TRIP-792 · D5 가산 확장(h08 펼침 프리뷰) ────────────────
- * 셸은 `<BottomSheet index={0}>` 을 하드코딩해 왔다 — 접힘(peek) 얼굴만 초기값으로 낼 수 있었다.
- * h08 펼침 프리뷰(`h08-draft-expanded`)는 시트가 상단 스냅까지 올라간 얼굴이라 초기 스냅을
- * 1(expanded)로 열어야 한다. `initialIndex?: number`(기본 0) 옵셔널 가산으로 `<BottomSheet
- * index={initialIndex ?? 0}>` 을 만든다 — 기존 소비처(index 미전달=0)는 무변경(후방호환).
+/* ──────────────── TRIP-792 · D5 가산 확장(h08 펼침 프리뷰) → TRIP-920 개정 ────────────────
+ * `initialIndex?: number` 가 `<BottomSheet index>` 초기 스냅을 정한다. TRIP-920 이 기본 배열 앞에 닫힘(28)을
+ * 끼워 index 의 뜻이 한 칸씩 밀렸다(0=닫힘 · 1=peek · 2=펼침, 배열 번호 그대로 — 01b Q1).
  *
- * ⚠️ **원리적 사각(맹점③)** — `@gorhom/bottom-sheet` 목은 통과형이라 index 로 시트가 **실제로**
- *   그 스냅까지 열리는지는 못 본다. 여기선 셸이 그 값을 BottomSheet 에 **전달까지 했는지**만 잠근다
- *   (지도 viewOnly·2스냅 실개폐와 같은 계열 — 실전환은 6-b 실기 몫).
+ * ★ 심판 수정(02a ★1): 옛 SH5 는 **숫자 index**(0·1)를 단언했다. 그러면 배열이 바뀌어도 숫자는 그대로라
+ *   green 인 채로 "peek → 닫힘", "펼침 → peek" 로 뜻이 바뀐다. 그래서 **받은 snapPoints 배열에서 그 index 가
+ *   가리키는 값**('45%'·'88%'·28)을 단언한다.
  *
- * ★ 관측 방법(§5 실검증): 통과형 목(`__mocks__/@gorhom/bottom-sheet.tsx`)은 받은 prop 을 그대로
- *   `<View {...props}>` 에 얹는다. 그래서 `screen.root.findAll(...)`(렌더 트리 전체를 훑어 조건에 맞는
- *   노드를 배열로 주는 RNTL API)로 `index`(숫자)+`snapPoints`(배열)를 함께 가진 노드를 찾아 그
- *   `index` 값을 읽는다. 합성/호스트 두 겹이 같은 prop 을 갖고 나오므로 개수는 세지 않고 **찾은 노드
- *   전부가 기대 index 인지**로 잠근다(샌드박스 1회 실행으로 3노드 모두 index=0 확인, 02a §5).
+ * ⚠️ **원리적 사각** — 통과형 목이라 index 로 시트가 **실제로** 그 칸까지 열리는지는 못 본다. 셸이 값을
+ *   BottomSheet 에 **전달까지 했는지**만 잠근다(실전환은 6-b 실기 몫).
+ *
+ * ★ 관측 방법: 통과형 목(`__mocks__/@gorhom/bottom-sheet.tsx`)은 받은 prop 을 그대로 `<View {...props}>` 에
+ *   얹는다. `screen.root.findAll(...)`(렌더 트리 전체를 훑어 조건에 맞는 노드를 배열로 주는 RNTL API)로
+ *   `index`(숫자)+`snapPoints`(배열)를 함께 가진 노드를 찾는다. 합성/호스트 3겹이 같은 prop 을 갖고 나오므로
+ *   개수는 세지 않고 **찾은 노드 전부**가 기대 값인지로 잠근다(02a §5).
  * ─────────────────────────────────────────────────────────────────────── */
-function sheetIndices(): number[] {
+/** 시트가 받은 snapPoints 배열에서 index 가 가리키는 **칸 값**들(숫자 index 가 아니다 — 02a ★1). */
+function sheetSnapValues(): unknown[] {
   return screen.root
     .findAll(
       (node) =>
         typeof node.props?.index === 'number' &&
         Array.isArray(node.props?.snapPoints)
     )
-    .map((node) => node.props.index as number);
+    .map(
+      (node) => (node.props.snapPoints as unknown[])[node.props.index as number]
+    );
 }
 
-describe('MapSheetShell · SH5 — initialIndex 가 BottomSheet 초기 스냅을 정한다 (TRIP-792 D5)', () => {
-  it('SH5a · initialIndex 미전달이면 index=0(peek) 이다 (선제 green · 회귀 앵커)', () => {
-    // 준비/실행 — 기존 소비처 형태(initialIndex 안 줌)로 렌더.
+function expectSnapValue(expected: unknown): void {
+  const values = sheetSnapValues();
+  expect(values.length).toBeGreaterThan(0);
+  values.forEach((value) => expect(value).toBe(expected));
+}
+
+describe('MapSheetShell · SH5 — initialIndex 가 BottomSheet 초기 스냅 칸을 정한다 (TRIP-792 D5 · TRIP-920 개정)', () => {
+  // TRIP-920 — 지도 잠금까지 보므로 키를 넣는다(없으면 map-native 대신 폴백, 02a ★14).
+  beforeEach(withMapKey);
+  afterEach(restoreMapKey);
+
+  it('SH5a · initialIndex 미전달이면 peek(45%) 칸으로 열리고 지도는 잠겨 있다 (AC-2 · 선제 green · 심판 수정)', () => {
+    // 준비/실행 — 기존 소비처 형태(initialIndex 안 줌).
     renderShell();
 
-    // 단언 — BottomSheet 에 전달된 index 가 전부 0(현행 하드코딩 값). 구현 후에도 기본값이
-    //        0 으로 유지되는지 지키는 회귀 앵커라 지금도 통과한다(선제 green).
-    const indices = sheetIndices();
-    expect(indices.length).toBeGreaterThan(0);
-    indices.forEach((index) => expect(index).toBe(0));
+    // 단언 — 기본 진입은 여전히 peek. 셸이 배열만 바꾸고 기본 index 를 0 으로 두면 여기서 28 이 나와 red.
+    expectSnapValue('45%');
+    expectMapLocked(true);
+    expect(screen.getByTestId('sheet-cta-root')).toBeOnTheScreen();
   });
 
-  it('🔴 SH5b · initialIndex={1} 이면 index=1(expanded) 로 전달된다 (h08 펼침)', () => {
-    // 준비/실행 — 펼침 초기 스냅을 요구한다.
-    renderShell({ initialIndex: 1 });
+  it('🔴 SH5b · initialIndex={2} 면 펼침(88%) 칸으로 열리고 지도는 잠겨 있다 (AC-9 셸 쪽)', () => {
+    // 준비/실행 — 펼침 진입(h08 펼침·i06·i07 이 새 배열에서 주는 값).
+    renderShell({ initialIndex: 2 });
 
-    // 단언 — BottomSheet 가 index=1 을 받는다. **red 성격**: 현행 셸은 index={0} 하드코딩이라
-    //        initialIndex 를 무시하고 0 을 전달 → 이 단언이 red. 구현이 `index={initialIndex ?? 0}`
-    //        으로 바꾸면 green(기본값 0 은 SH5a 가 지킨다).
-    const indices = sheetIndices();
-    expect(indices.length).toBeGreaterThan(0);
-    indices.forEach((index) => expect(index).toBe(1));
+    // 단언 — 새 배열의 마지막 칸. 현행 2칸 배열엔 index 2 가 없어 undefined → red.
+    expectSnapValue('88%');
+    expectMapLocked(true);
+  });
+
+  it('🔴 SH5c · initialIndex={0} 이면 닫힘(28)으로 진입해 onChange 없이도 처음부터 지도가 풀리고 CTA 가 없다 (셸 상태 초기값 = 초기 index · 02a ★5)', () => {
+    // 준비/실행 — 닫힘으로 진입. 라이브러리가 마운트 때 onChange 를 부르는지는 jest 가 모르므로 부르지 않는다.
+    renderShell({ initialIndex: 0 });
+
+    // 단언 — 셸이 쥔 "현재 칸" 초기값이 initialIndex 와 같아야 한다(`useState(1)` 하드코딩이면 red).
+    expectSnapValue(28);
+    expectMapLocked(false);
+    expect(screen.queryByTestId('sheet-cta-root')).toBeNull();
   });
 });
 
@@ -406,12 +427,14 @@ function sheetSnapPoints(): unknown[][] {
 }
 
 describe('MapSheetShell · SH9 — snapPoints 가 시트 스냅을 정한다 (TRIP-746)', () => {
-  it('SH9a · snapPoints 미전달이면 현행 2스냅 [45%, 88%] 을 넘긴다 (선제 green · 회귀 앵커)', () => {
+  it('🔴 SH9a · snapPoints 미전달이면 3스냅 [닫힘 28, 45%, 88%] 을 넘긴다 (AC-1 · TRIP-920 개정)', () => {
     renderShell();
 
+    // 닫힘은 숫자 28(핸들만 보이는 높이 — i01 Figma 4251:2448 · LiveHubView CLOSED_SNAP 과 같은 출처, 01b Q3).
+    // 라이브러리 규칙상 낮은 높이부터 오름차순이라 닫힘이 0번이다.
     const all = sheetSnapPoints();
     expect(all.length).toBeGreaterThan(0);
-    all.forEach((points) => expect(points).toEqual(['45%', '88%']));
+    all.forEach((points) => expect(points).toEqual([28, '45%', '88%']));
   });
 
   it('🔴 SH9b · snapPoints 를 주면 그 배열(3스냅)을 그대로 넘긴다', () => {
@@ -687,4 +710,178 @@ describe('MapSheetShell · SH13 — 지도 실패를 셸이 폴백 바로 받는
     expect(screen.queryByTestId('map-sheet-fallback')).toBeNull();
     expect(screen.queryByTestId('map-root')).toBeNull();
   });
+});
+
+/* ──────────────── TRIP-920 · 시트를 끝까지 내리면(닫힘) 지도가 풀린다 ────────────────
+ * 셸이 `<BottomSheet onChange>` 로 "지금 멈춘 칸"을 받아 자기 상태(useState)에 들고, 그 칸이 **기본 배열의
+ * 닫힘(0번)** 일 때만 지도 잠금을 푼다(viewOnly off → 팬·줌). 열린 칸(peek·펼침)은 지금처럼 잠긴 글랜스이고,
+ * 닫힘에선 CTA 바를 그리지 않는다(28px 핸들을 CTA 가 덮어 되올릴 손잡이가 사라지는 것 방지 — 01b Q2).
+ *
+ * ★ 통과형 시트 목은 스스로 움직이지 않는다 → 테스트가 host 의 `onChange(index)` 를 **직접** 부르고, 상태
+ *   변경이 반영되도록 `act` 로 감싼다(02a ★6·★7). 관측점은 새 testID 없이 둘뿐이다(01b Q4):
+ *   지도 제스처 4 prop(`map-native`, SH10 선례)과 `sheet-cta-root` 유무.
+ * ★ "0번 = 닫힘" 은 **기본 배열에서만** 참이다. snapPoints 를 직접 준 소비처(i05 `['40%','88%']`)의 0번은 40%
+ *   시트다(02a ★3) — SH14d 가 잠근다. `mapViewOnly={false}`(i01)는 어떤 칸에서도 풀린 채다(★9, SH14e).
+ * ⚠️ 원리적 사각(02a ★13): 실제 스냅 이동·핸들이 CTA/홈 인디케이터에 가리는지·네이티브 지도가 실제로 팬·줌
+ *   되는지·라이브러리가 언제 onChange 를 부르는지는 jest 가 못 본다 → AC-V1~V3(6-b).
+ *
+ * 3동작 뼈대: 준비=키 주입 + 셸 렌더 → 실행=`changeSnap(index)` → 단언=제스처 4 prop·CTA·칩·폴백.
+ * ─────────────────────────────────────────────────────────────────────── */
+
+/** 시트가 그 칸에 **도착해 멈췄다**를 흉내 낸다 — host 의 onChange 를 act 안에서 직접 부른다. */
+function changeSnap(index: number): void {
+  const onChange = sheetHost().props.onChange as
+    ((index: number, position: number, type: number) => void) | undefined;
+  expect(onChange).toBeDefined();
+  act(() => onChange?.(index, 0, 0));
+}
+
+/** 지도 잠금 — 잠김이면 제스처 4 prop 이 전부 false, 풀림이면 전부 true. */
+function expectMapLocked(locked: boolean): void {
+  const map = screen.getByTestId('map-native');
+  GESTURE_TOGGLES.forEach((toggle) => expect(map.props[toggle]).toBe(!locked));
+}
+
+describe('🔴 MapSheetShell · SH14 — 닫힘 칸에서만 지도가 풀린다 (TRIP-920)', () => {
+  afterEach(restoreMapKey);
+
+  it('SH14a · 닫힘에 도착하면 제스처 4종이 켜지고 일차 칩·mapCard 는 그대로다 (AC-3)', () => {
+    // 준비 — 키 주입 + 지도 위 추가 카드.
+    withMapKey();
+    renderShell({
+      mapCard: <Text testID="fake-map-card">일정이 확정됐어요</Text>,
+    });
+
+    // 실행 — 시트를 끝까지 내려 닫힘(0번)에 멈춘다.
+    changeSnap(0);
+
+    // 단언 — 지도가 풀리고, 지도 위 오버레이는 남는다.
+    expectMapLocked(false);
+    expect(screen.getByTestId('sheet-daychip-root')).toBeOnTheScreen();
+    expect(screen.getByTestId('fake-map-card')).toBeOnTheScreen();
+  });
+
+  it('SH14b · 닫힘에선 CTA 바가 없고, peek·펼침으로 다시 올리면 지도가 잠기고 헤더·본문·CTA 가 돌아온다 (AC-4 · AC-7)', () => {
+    // 준비
+    withMapKey();
+    renderShell();
+
+    // 실행/단언 ① — 닫힘: CTA 바 미렌더(핸들 가림 방지).
+    changeSnap(0);
+    expectMapLocked(false);
+    expect(screen.queryByTestId('sheet-cta-root')).toBeNull();
+
+    // 실행/단언 ② — peek 로 올림: 원래 얼굴 + 다시 잠금("onChange 마다 뒤집기" 오구현이면 여기서 red, 02a ★8).
+    changeSnap(1);
+    expectMapLocked(true);
+    expect(screen.getByTestId('fake-header')).toBeOnTheScreen();
+    expect(screen.getByTestId('fake-body')).toBeOnTheScreen();
+    expect(screen.getByTestId('sheet-cta-root')).toBeOnTheScreen();
+
+    // 실행/단언 ③ — 펼침으로 한 번 더: 여전히 잠김 + 원래 얼굴.
+    changeSnap(2);
+    expectMapLocked(true);
+    expect(screen.getByTestId('fake-header')).toBeOnTheScreen();
+    expect(screen.getByTestId('fake-body')).toBeOnTheScreen();
+    expect(screen.getByTestId('sheet-cta-root')).toBeOnTheScreen();
+  });
+
+  it.each([1, 2])(
+    'SH14c · (금지) 열린 칸 %i 에 도착해도 지도는 잠긴 채이고 CTA 는 그대로다 (AC-5)',
+    (index) => {
+      // 준비
+      withMapKey();
+      renderShell();
+
+      // 실행 — 닫힘을 거치지 않고 열린 칸에 멈춘다.
+      changeSnap(index);
+
+      // 단언
+      expectMapLocked(true);
+      expect(screen.getByTestId('sheet-cta-root')).toBeOnTheScreen();
+    }
+  );
+
+  it('SH14d · (금지) snapPoints 를 직접 준 소비처(i05 모양)는 0번이 닫힘이 아니다 — 진입 칸 무변경 · 0번 도착에도 잠김 · CTA 유지 (AC-6 · 02a ★3·★4)', () => {
+    // 준비 — i05 `ReplanSolvingView` 모양(2칸 배열, initialIndex 미전달).
+    withMapKey();
+    renderShell({ snapPoints: ['40%', '88%'] });
+
+    // 단언 ① — 셸 기본 진입값(peek=1) 변경이 이 소비처로 새지 않는다: 여전히 0번(40%)으로 연다.
+    expectSnapValue('40%');
+    expectMapLocked(true);
+    expect(screen.getByTestId('sheet-cta-root')).toBeOnTheScreen();
+
+    // 실행 — 0번(= 40% 시트)에 도착.
+    changeSnap(0);
+
+    // 단언 ② — 닫힘 규칙 비적용: 잠김 유지 + CTA 유지.
+    expectMapLocked(true);
+    expect(screen.getByTestId('sheet-cta-root')).toBeOnTheScreen();
+  });
+
+  it.each<[string, (string | number)[] | undefined]>([
+    ['기본 스냅', undefined],
+    ['i01 스냅 [28, 55%, 86%]', [28, '55%', '86%']],
+  ])(
+    'SH14e · (금지) mapViewOnly={false}(i01 모양)는 %s 에서 어느 칸에 멈춰도 풀린 채다 (AC-6 · 02a ★9)',
+    (_label, snapPoints) => {
+      // 준비 — 여행 중 자유 탐색(허브) 모양.
+      withMapKey();
+      renderShell({ mapViewOnly: false, snapPoints });
+
+      // 실행/단언 — 진입부터 1 → 2 → 0 전 구간 풀림.
+      expectMapLocked(false);
+      [1, 2, 0].forEach((index) => {
+        changeSnap(index);
+        expectMapLocked(false);
+      });
+    }
+  );
+
+  it('SH14f · 지도 실패(키 없음) 중에 닫힘으로 내려도 폴백 바가 그대로이고 화면이 비지 않는다 (AC-8 · INV-4)', () => {
+    // 준비 — 키 없음 → 셸 기본 폴백(TRIP-919).
+    withoutMapKey();
+    renderShell();
+    expect(screen.getByTestId('map-sheet-fallback')).toBeOnTheScreen();
+
+    // 실행 — 닫힘.
+    changeSnap(0);
+
+    // 단언 — 지도 자리는 여전히 폴백(크래시·빈 화면 없음), 오버레이·시트 내용은 남는다.
+    expect(screen.getByTestId('map-sheet-fallback')).toBeOnTheScreen();
+    expect(screen.queryByTestId('map-root')).toBeNull();
+    expect(screen.getByTestId('sheet-daychip-root')).toBeOnTheScreen();
+    expect(screen.getByTestId('fake-header')).toBeOnTheScreen();
+    expect(screen.getByTestId('fake-body')).toBeOnTheScreen();
+  });
+});
+
+/* ──────────────── TRIP-920 · 5-b 후속 — 시트가 콘텐츠 높이 칸을 몰래 끼우지 않는다 ────────────────
+ * `@gorhom/bottom-sheet` 5.x 는 `enableDynamicSizing` 기본값이 **true** 라, 시트 내용 높이로 만든 칸 하나를
+ * 넘긴 snapPoints 에 끼워 넣고 정렬한 배열에서 `index`·`onChange` 번호를 센다(03b 경고-1). 그러면
+ * "0=닫힘 · 1=peek · 2=펼침" 번호표가 실기에서 어긋난다 — 내용이 짧은 h12-editor-empty 가 index 2 인데 45% 로 연다.
+ *
+ * ★ 통과형 목은 dynamic sizing 을 **재현하지 않는다**(넘긴 배열을 그대로 얹을 뿐). 그래서 이 파일과 소비처
+ *   테스트의 칸 값 단언 `snapPoints[index]`(02a ★1)는 **"라이브러리가 배열을 고치지 않는다"는 전제** 위에서만
+ *   실제 칸 값과 같다. 그 전제를 셸이 `enableDynamicSizing={false}` 로 직접 세우는지를 여기서 잠근다
+ *   (02a ★15). 목은 prop 을 host View 에 그대로 펼친다 — 넘기면 `false`, 안 넘기면 `undefined`(02a §5).
+ * `toBe(false)` 로 본다 — `undefined` 는 라이브러리 기본값 true 로 읽히므로 통과시키면 안 된다.
+ * ⚠️ 원리적 사각: 끈 뒤 실제 높이가 28/45%/88% 인지는 6-b 실기(h12-editor-empty ↔ -filled 첫 높이 비교).
+ * ─────────────────────────────────────────────────────────────────────── */
+describe('🔴 MapSheetShell · SH15 — 시트에 enableDynamicSizing={false} 를 넘긴다 (TRIP-920 · 03b 경고-1)', () => {
+  it.each<[string, (string | number)[] | undefined]>([
+    ['기본 스냅', undefined],
+    ['직접 준 snapPoints(i05 모양)', ['40%', '88%']],
+    ['직접 준 snapPoints(i01 모양)', [28, '55%', '86%']],
+  ])(
+    'SH15 · %s 에서도 BottomSheet 가 enableDynamicSizing=false 를 받는다',
+    (_label, snapPoints) => {
+      // 준비/실행 — 셸 렌더.
+      renderShell({ snapPoints });
+
+      // 단언 — 시트 본체(host)가 받은 값이 정확히 false(미전달 undefined = 라이브러리 기본 true 라 red).
+      expect(sheetHost().props.enableDynamicSizing).toBe(false);
+    }
+  );
 });

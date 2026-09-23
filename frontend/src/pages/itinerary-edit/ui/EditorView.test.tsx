@@ -278,19 +278,22 @@ function treeOrder(): string[] {
     .map((node) => node.props.testID as string);
 }
 
-/** 셸이 BottomSheet 목에 넘긴 초기 스냅 index 들. */
-function sheetIndices(): number[] {
+/** 셸이 BottomSheet 목에 넘긴 초기 스냅 **칸 값**들 — snapPoints[index]. TRIP-920 이 셸 기본 배열 앞에
+ *  닫힘(28)을 끼워 숫자 index 의 뜻이 밀렸다: 숫자만 보면 green 인 채로 "펼침→peek" 가 된다(02a ★1). */
+function sheetSnapValues(): unknown[] {
   return screen.root
     .findAll(
       (node) =>
         typeof node.props?.index === 'number' &&
         Array.isArray(node.props?.snapPoints)
     )
-    .map((node) => node.props.index as number);
+    .map(
+      (node) => (node.props.snapPoints as unknown[])[node.props.index as number]
+    );
 }
 
 describe('🔴 EditorView · V1 — 헤더 날짜 괄호형 + 시트 펼침 (TRIP-753 AC-2)', () => {
-  it('2일차 6/11 헤더를 "일정 편집 · 2일차 · 6월 11일(목) · 5곳" 조각으로 그리고 시트를 index 1 로 연다', () => {
+  it('2일차 6/11 헤더를 "일정 편집 · 2일차 · 6월 11일(목) · 5곳" 조각으로 그리고 시트를 펼침(88%) 칸으로 연다', () => {
     renderI07();
 
     expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
@@ -302,9 +305,10 @@ describe('🔴 EditorView · V1 — 헤더 날짜 괄호형 + 시트 펼침 (TRI
     );
     expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent('5곳');
 
-    const indices = sheetIndices();
-    expect(indices.length).toBeGreaterThan(0);
-    indices.forEach((index) => expect(index).toBe(1));
+    // TRIP-920 심판 수정 — 숫자 index 가 아니라 그 index 가 가리키는 칸 값(펼침 = 88%).
+    const values = sheetSnapValues();
+    expect(values.length).toBeGreaterThan(0);
+    values.forEach((value) => expect(value).toBe('88%'));
   });
 });
 
