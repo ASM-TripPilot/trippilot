@@ -40,6 +40,7 @@ import os
 import re
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from collections import Counter
@@ -117,14 +118,30 @@ def parse_fee(raw: str) -> int | None:
 
 
 # ── 수집 ────────────────────────────────────────────────────────
+class _KeyDead(Exception):
+    """이 키로는 앞으로도 안 된다 — 퇴출하고 다음 키로. 일시 장애와 구분한다."""
+
+
+# data.go.kr 공통 에러코드: 20 접근거부 · 22 한도초과 · 30 미등록 · 31 기한만료.
+# HTTP 403 도 같은 뜻이다(`TourApiAdapter` 와 같은 판정 — 그쪽이 정본이다).
+_KEY_DEAD_CODES = frozenset({"20", "22", "30", "31"})
+
+
 def _get(endpoint: str, params: dict[str, str], key: str) -> list[dict]:
     q = urllib.parse.urlencode({
         "serviceKey": key, "MobileOS": "ETC", "MobileApp": "TripPilot",
         "_type": "json", **params})
-    with urllib.request.urlopen(f"{_BASE}/{endpoint}?{q}", timeout=10.0) as r:
-        body = json.loads(r.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(f"{_BASE}/{endpoint}?{q}", timeout=10.0) as r:
+            body = json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        if e.code == 403:
+            raise _KeyDead(f"HTTP 403 — 키 소진/거부") from e
+        raise
     resp = body.get("response", {})
-    if (resp.get("header") or {}).get("resultCode") != _OK:
+    if (code := (resp.get("header") or {}).get("resultCode")) != _OK:
+        if str(code) in _KEY_DEAD_CODES:
+            raise _KeyDead(f"resultCode={code}")
         raise RuntimeError((resp.get("header") or {}).get("resultMsg"))
     items = (resp.get("body") or {}).get("items") or {}
     if not isinstance(items, dict):
@@ -183,21 +200,38 @@ def main() -> int:
     print(f"[fee] 대상 {len(todo):,}건 (기수집 {len(fees):,}건 건너뜀) · "
           f"이번 상한 {args.max_calls:,}콜", file=sys.stderr)
 
-    calls = failures = 0
+    calls = failures = key_idx = done = 0   # done=처리한 POI · calls=HTTP 호출
     stat: Counter[str] = Counter()
     for cid, kind in todo:
         if calls >= args.max_calls:
-            print(f"[fee] 상한 도달 — {len(todo) - calls:,}건 남김 (다음 실행이 이어간다)",
+            print(f"[fee] 상한 도달 — {len(todo) - done:,}건 남김 (다음 실행이 이어간다)",
                   file=sys.stderr)
             break
         endpoint, fields = _SOURCE[kind]
-        key = keys[(calls // 900) % len(keys)]
-        calls += 1
-        try:
-            items = _get(endpoint, {"contentId": cid, "contentTypeId": kind}, key)
-        except Exception as e:                      # noqa: BLE001 — 개별 실패는 넘긴다
-            failures += 1
-            print(f"[fee] {endpoint} {cid}: {e}", file=sys.stderr)
+        # **키는 죽을 때까지 쓰고 그때 넘어간다.** 호출 수로 미리 나누면 안 된다 —
+        # 프로세스가 매번 처음 키부터 시작하므로 하루에 여러 번 돌리면 **첫 키에만
+        # 몰려** 일일 한도를 넘는다(실측: 403 이 898건, 실패율 32.4% 로 실행 전체가
+        # 버려졌다). `TourApiAdapter` 가 같은 이유로 퇴출 방식을 쓴다 — 그쪽이 정본이다.
+        items = None
+        while key_idx < len(keys):
+            calls += 1
+            try:
+                items = _get(endpoint, {"contentId": cid, "contentTypeId": kind},
+                             keys[key_idx])
+                break
+            except _KeyDead as e:
+                print(f"[fee] 키 #{key_idx + 1} 퇴출 ({e}) — 다음 키로", file=sys.stderr)
+                key_idx += 1
+            except Exception as e:                  # noqa: BLE001 — 개별 실패는 넘긴다
+                failures += 1
+                print(f"[fee] {endpoint} {cid}: {e}", file=sys.stderr)
+                break
+        if key_idx >= len(keys):
+            print(f"[fee] 키 전부 소진 — {len(todo) - done:,}건 남김 "
+                  f"(다음 실행이 이어간다)", file=sys.stderr)
+            break
+        done += 1
+        if items is None:
             continue
         raw = _raw_fee(endpoint, fields, items)
         if raw is None:
@@ -210,7 +244,8 @@ def main() -> int:
             time.sleep(1)                           # 벤더 배려 — 한도는 계정 단위다
 
     rate = failures / calls if calls else 0.0
-    print(f"\n[fee] 호출 {calls:,} · 실패 {failures:,} ({rate * 100:.1f}%)", file=sys.stderr)
+    print(f"\n[fee] 처리 {done:,}건 · 호출 {calls:,} · 실패 {failures:,} "
+          f"({rate * 100:.1f}%) · 산 키 {len(keys) - key_idx}/{len(keys)}", file=sys.stderr)
     for k, v in stat.most_common():
         print(f"    {k:10} {v:,}", file=sys.stderr)
     # 실패를 삼키고 초록으로 끝내지 않는다 — 실패한 호출은 "값이 없다"와 구분되지 않아
@@ -225,7 +260,7 @@ def main() -> int:
         "fetched_at": time.strftime("%Y-%m-%d"),
         "fees": fees,
     }, ensure_ascii=False, indent=1), encoding="utf-8")
-    remaining = len(todo) - calls
+    remaining = len(todo) - done
     print(f"[fee] {args.out} 기록 — 누적 {len(fees):,}건 · 남은 대상 {max(0, remaining):,}건",
           file=sys.stderr)
     return 0
