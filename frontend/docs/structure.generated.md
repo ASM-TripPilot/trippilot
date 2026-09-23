@@ -338,6 +338,7 @@
 - `src/features/auth/config/oauthConfig.ts`  →  OAuthDiscovery · OAuthProviderConfig · getOAuthConfig
 
 ## src/features/auth/lib/
+- `src/features/auth/lib/appleAuthorize.tsx`  →  appleAuthorize · isAppleSignInAvailable · AppleSignInButton
 - `src/features/auth/lib/kakaoAuthorize.ts`  →  kakaoAuthorize
 - `src/features/auth/lib/makeAuthorize.ts`  →  makeAuthorize
 - `src/features/auth/lib/naverAuthorize.ts`  →  naverAuthorize
@@ -345,11 +346,12 @@
 
 ## src/features/auth/model/
 - `src/features/auth/model/resolveBootstrapDestination.ts`  →  BootstrapDestination · resolveBootstrapDestination
+- `src/features/auth/model/useAppleButton.ts`  →  useAppleButton
 - `src/features/auth/model/useBootstrapGate.ts`  →  BOOTSTRAP_TIMEOUT_MS · useBootstrapGate
 - `src/features/auth/model/useSocialLogin.ts`  →  SocialLoginPhase · AuthorizeResult · Authorize · useSocialLogin
 
 ## src/features/auth/ui/
-- `src/features/auth/ui/AuthGlyphs.tsx`  →  AppIconGlyph · GoogleIcon · AppleIcon · KakaoIcon · NaverIcon · WarningTriangleGlyph
+- `src/features/auth/ui/AuthGlyphs.tsx`  →  AppIconGlyph · GoogleIcon · KakaoIcon · NaverIcon · WarningTriangleGlyph
 - `src/features/auth/ui/SocialLoginScreen.tsx`  →  SocialLoginScreenProps · SocialLoginScreen
 - `src/features/auth/ui/SplashIllustration.tsx`  →  SplashIllustration
 - `src/features/auth/ui/SplashScreen.tsx`  →  SplashScreen
@@ -1277,6 +1279,7 @@
 - `src/shared/version/compareVersion.ts`  →  compareVersion
 
 ## src/test-support/
+- `src/test-support/expoAppleAuthenticationMock.tsx`  →  appleSignInAsyncSpy · appleIsAvailableAsyncSpy · appleButtonPropsSpy · expoAppleAuthenticationModule · resetExpoAppleAuthenticationMock
 - `src/test-support/expoAuthSessionMock.ts`  →  promptAsyncSpy · authRequestConstructorSpy · makeRedirectUriSpy · expoAuthSessionModule · expoWebBrowserModule · expoCryptoModule · setPromptResult · setCodeVerifier · resetExpoAuthSessionMock
 - `src/test-support/expoRouterRedirectMock.tsx`  →  Redirect · Stack
 - `src/test-support/expoRouterStackMock.tsx`  →  Stack
@@ -1318,4 +1321,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 884개 파일
+합계 887개 파일

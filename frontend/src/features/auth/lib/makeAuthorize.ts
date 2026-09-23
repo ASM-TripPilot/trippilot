@@ -11,6 +11,8 @@ import { getOAuthConfig } from '../config/oauthConfig';
  * 성공 결과에는 PKCE codeVerifier 만 담고 시크릿은 담지 않는다(SEC-AUTH).
  *
  * 토글이 꺼진 실 빌드에서는 provider 별로 실 경로가 갈린다(TRIP-210):
+ *  - apple — 항상 네이티브 SDK 어댑터(appleAuthorize, TRIP-932). env 게이트가 없다 — 버튼 노출을
+ *    컨테이너가 isAvailableAsync 로 이미 거른다(Android 는 버튼 자체가 없다).
  *  - kakao — EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY 가 있으면 네이티브 SDK 어댑터(kakaoAuthorize)로.
  *  - naver — EXPO_PUBLIC_NAVER_URL_SCHEME 이 있으면 네이티브 SDK 어댑터(naverAuthorize)로.
  *    (naver SDK 필수 파라미터인 consumerSecret 자체는 naverAuthorize.ts 안에서만 env 로 읽는다
@@ -19,12 +21,16 @@ import { getOAuthConfig } from '../config/oauthConfig';
  *  - 그 외(google, 또는 위 SDK 전용 env 가 비어 아직 미설정인 kakao·naver) — 기존
  *    getOAuthConfig(provider).clientId 가 있어야 브라우저 OAuth(realAuthorize)로 위임하고,
  *    없으면 빈 값으로 몰래 시도하지 않고 throw 한다(INV-4).
- * 두 SDK 모두 `await import` 로 지연 로드해서만 닿으므로 이 파일의 정적 그래프에 실리지
+ * 세 SDK 모두 `await import` 로 지연 로드해서만 닿으므로 이 파일의 정적 그래프에 실리지
  * 않는다(AC-11 · Hermes 부팅 격리 — expo-auth-session 을 감싼 realAuthorize 와 같은 경계).
  */
 export function makeAuthorize(provider: SocialProvider): Authorize {
   return async () => {
     if (!isFakeAuthEnabled()) {
+      if (provider === 'apple') {
+        const { appleAuthorize } = await import('./appleAuthorize');
+        return appleAuthorize();
+      }
       if (
         provider === 'kakao' &&
         process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY

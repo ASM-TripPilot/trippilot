@@ -86,6 +86,9 @@ const config: ExpoConfig = {
     ],
     ['@react-native-seoul/kakao-login', { kakaoAppKey: kakaoNativeAppKey }],
     ['@react-native-seoul/naver-login', { urlScheme: naverUrlScheme }],
+    // 애플 로그인 entitlement(com.apple.developer.applesignin)를 prebuild 가 넣는다(TRIP-932).
+    // ios.usesAppleSignIn 은 같은 일을 하므로 중복 선언하지 않는다.
+    'expo-apple-authentication',
     [
       'expo-build-properties',
       {

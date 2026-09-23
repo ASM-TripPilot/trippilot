@@ -49,6 +49,8 @@ export interface SocialLoginBody {
  * (D7 — 미제공 시 서버가 임의 부여). 필드에 없으면 실수로라도 실릴 수 없다. */
 export interface SocialTokenLoginBody {
   accessToken: string;
+  // 애플만 보낸다(TRIP-933 선택 필드).
+  authorizationCode?: string;
   ageConfirmation?: AgeConfirmation;
 }
 
