@@ -682,3 +682,82 @@ def test_demotion_does_not_become_exclusion_under_rain_soft_terms() -> None:
             return sum(len(d.slots) for d in sol.days)
 
         assert visits(demoted) == visits(problem), f"rain={rain}"
+
+
+# ── 입장료 파생 지식 조인 (2026-09-24) ────────────────────────────────
+
+
+class _SpyFees(dict):
+    """`FeeTable.won` 자리에 끼워 조회 키를 기록한다.
+
+    점수 내부값을 읽지 않고 **배선이 일어났는지**만 본다 — 점수 산식이 바뀌어도
+    이 테스트는 조인만 지킨다.
+    """
+
+    def __init__(self, mapping):
+        super().__init__(mapping)
+        self.asked: list[str] = []
+
+    def get(self, key, default=None):
+        self.asked.append(key)
+        return super().get(key, default)
+
+
+def test_규칙_점수가_source_ref_로_입장료를_조회한다() -> None:
+    """조인이 끊기면 예산이 점수에 아예 안 실린다 — 예외도 로그도 안 난다.
+
+    실측(2026-09-24): 이 테스트를 넣기 전에는 `fee_won=None` 으로 배선을 끊어도
+    이 파일의 26건이 **전부 통과**했다.
+    """
+    from trippilot.poi_curation.place_fees import FeeTable
+
+    # 공유 픽스처 `_POIS` 에는 `source_ref` 가 없다(실 경로에서는 `BackendPoiDb` 가
+    # `PoiReadResponse.sourceRef` 를 옮긴다). 조인을 보려면 여기서 채워야 한다 —
+    # 안 채우면 이 테스트가 **아무것도 안 보면서 통과**한다.
+    from dataclasses import replace as _replace
+
+    from trippilot.domain.llm import CandidatePool as _Pool
+
+    base = _pool()
+    pois = tuple(_replace(p, source_ref=f"ref-{p.poi_id}") for p in base.pois)
+    pool = _Pool(poi_ids=base.poi_ids, pois=pois, generated_at=base.generated_at,
+                 anchor=base.anchor, radius_km=base.radius_km)
+    refs = [p.source_ref for p in pool.pois]
+    spy = _SpyFees({r: 40_000 for r in refs})
+
+    trace = InMemoryTrace()
+    gateway = GatewayFacade(FakeLlm(_scores_json("p1", "p2", "p3")), _Renderer(),
+                            ClosedSetGate(), _C1CFG, trace)
+    agent = ScheduleAgent(
+        PreferenceScoringWorker(gateway),
+        _AssemblyProvider(trace, _Sink(), primary=True),
+        FakeClock(), trace,
+        fees=FeeTable(won=spy),
+    )
+
+    agent.run(_task(pool, persona=None))  # 페르소나 비가용 → 규칙 점수 경로
+
+    assert spy.asked, "요금 표를 한 번도 조회하지 않았다 — 조인이 끊겼다"
+    assert set(spy.asked) >= set(refs), (
+        f"풀의 source_ref 를 다 안 물었다: 물은 것 {sorted(set(spy.asked))}")
+
+
+def test_요금표_미주입이면_종전과_같은_점수다() -> None:
+    """켜지기 전 동작이 안 바뀌는 것이 배포 안전 조건이다."""
+    pool = _pool()
+    plain, _, _ = _agent()
+    outcome_a = plain.run(_task(pool, persona=None))
+
+    from trippilot.poi_curation.place_fees import EMPTY
+    trace = InMemoryTrace()
+    gateway = GatewayFacade(FakeLlm(_scores_json("p1", "p2", "p3")), _Renderer(),
+                            ClosedSetGate(), _C1CFG, trace)
+    explicit = ScheduleAgent(
+        PreferenceScoringWorker(gateway),
+        _AssemblyProvider(trace, _Sink(), primary=True),
+        FakeClock(), trace, fees=EMPTY,
+    )
+    outcome_b = explicit.run(_task(pool, persona=None))
+
+    assert [s.poi_id for d in outcome_a.solution.days for s in d.slots] == \
+           [s.poi_id for d in outcome_b.solution.days for s in d.slots]

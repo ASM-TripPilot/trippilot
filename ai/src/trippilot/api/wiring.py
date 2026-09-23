@@ -142,6 +142,7 @@ from trippilot.domain.trigger import TriggerKind, TriggerParams
 from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate
 from trippilot.llm_gateway.workers.preference_cache import CachingScoringWorker
 from trippilot.poi_curation.config import M7Config
+from trippilot.poi_curation.place_fees import load_fee_table
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder
 from trippilot.orchestrator import schedule_coordinator as core
 from trippilot.ports.llm_port import LlmPort, LlmRequest, LlmResponse
@@ -1586,6 +1587,10 @@ def build_orchestrator(
         # 미주입이면 강등 없이 기존과 동일(근거 없으면 판정 안 함).
         existence=existence,
         config=orchestrator_config,
+        # 입장료 파생 지식 (2026-09-24 결정 — AI 소유). 파일이 없으면 빈 표이고
+        # 그때 점수는 종전과 **완전히 같다**(전 POI '모름' → 중립). 즉 데이터가
+        # 배포되기 전에도 이 배선이 동작을 안 바꾼다.
+        fees=load_fee_table(),
     )
     # 수집기는 하나를 공유한다 — 코디네이터(generate)와 경계(replan·edit)가 같은
     # 요구표·같은 Provider 를 쓴다. 경로마다 따로 만들면 표가 갈라진다.
