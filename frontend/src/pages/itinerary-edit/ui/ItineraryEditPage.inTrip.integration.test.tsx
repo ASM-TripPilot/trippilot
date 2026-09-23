@@ -2,7 +2,6 @@ import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
-  act,
   fireEvent,
   render,
   screen,
@@ -21,8 +20,8 @@ import type {
   VisitCheckList,
 } from '@/shared/api/generated/schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { fireEditDragEnd } from '@/test-support/editDragList';
 
-import { EditorView } from './EditorView';
 import { ItineraryEditPage } from './ItineraryEditPage';
 
 /**
@@ -37,7 +36,8 @@ import { ItineraryEditPage } from './ItineraryEditPage';
  *  - P4 확정된 일정(여행 중)에 저장하면 409 → "확정된 일정은 수정할 수 없어요" 가 뜨고 화면은
  *    떠나지 않는다(AC-9 · INV-4). 라우터 네 방법(back·push·replace·navigate)을 모두 본다.
  *
- * ⚠️ 드래그 제스처는 jest 사각(traps-draglist) — 뷰가 받은 `onReorder` 를 꺼내 직접 부른다.
+ * ⚠️ 드래그 제스처는 jest 사각(traps-draglist) — TRIP-921 부터 편집 뷰가 드래그 리스트를 쥐므로,
+ * 목 리스트의 `onDragEnd` 를 라이브러리와 같은 배열 이동으로 발화한다(`@/test-support/editDragList`).
  *
  * 3동작 뼈대: 준비=가짜 서버(일정·방문·저장) → 실행=열고 누르거나 콜백 발화 → 단언=화면·나간 요청.
  */
@@ -269,22 +269,19 @@ describe('P2 · AC-5 — 예정 행 ⌄ → 시각 시트 → 적용값이 저�
 });
 
 describe('🔴 P3 · AC-8 — 끌기 결과가 와도 방문 완료 행은 제자리로 저장된다', () => {
-  it('끌기 [p3,p1,p5,p2,p4] → 저장 PUT 순서 [p1,p2,p3,p5,p4]', async () => {
+  it('p5 를 맨 앞으로 끌면(4→0) 리스트는 [p5,p1,p2,p3,p4] 지만 저장 PUT 순서는 [p1,p2,p5,p3,p4]', async () => {
     renderPage();
     await waitForLocked();
 
-    const byId = (id: string) => SLOTS.find((s) => s.poiId === id);
-    const dragged = ['p3', 'p1', 'p5', 'p2', 'p4'].map(byId);
-
-    // 드래그 제스처 대신 뷰가 받은 콜백을 직접 부른다(traps-draglist 관례).
-    act(() => {
-      screen.UNSAFE_getByType(EditorView).props.onReorder(dragged);
-    });
+    // TRIP-921 — 뷰 콜백을 꺼내 직접 부르던 옛 방식 대신 **리스트 onDragEnd 경유**(실제 배선 경로).
+    // 한 번의 끌기로 나올 수 있는 배열만 쓴다(옛 임의 순열은 실경로에서 안 나온다, 02 기존 테스트 변경).
+    fireEditDragEnd(4, 0);
 
     fireEvent.press(screen.getByTestId(SAVE));
     await waitFor(() => expect(putCalls).toBe(1));
 
-    expect(putOrder()).toEqual(['p1', 'p2', 'p3', 'p5', 'p4']);
+    // 완료 p1·p2 는 index 0·1 그대로, 나머지 칸이 끌기 순서(p5,p3,p4)로 채워진다.
+    expect(putOrder()).toEqual(['p1', 'p2', 'p5', 'p3', 'p4']);
   });
 });
 

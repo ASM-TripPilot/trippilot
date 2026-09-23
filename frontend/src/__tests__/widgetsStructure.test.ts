@@ -58,6 +58,11 @@ const TIME_SHEET_CONSUMERS: {
     rel: 'pages/itinerary-manual/ui/PlaceAddPage.tsx',
     labels: /labels=\{\{\s*start:\s*'시작',\s*end:\s*'종료'\s*\}\}/,
   },
+  // TRIP-921 — h12 직접 짜기도 같은 편집 뷰를 소비하며 ⌄ 시각 시트를 얻는다(01b Q3). 라벨은 편집과 같다.
+  {
+    rel: 'pages/itinerary-manual/ui/ManualPlanPage.tsx',
+    labels: /labels=\{\{\s*start:\s*'시작',\s*end:\s*'종료'\s*\}\}/,
+  },
 ];
 
 // 상태-소유 예외 — **파일 + 허용 개수**로 등재한다(스캔 범위는 줄이지 않는다). 개수는 useState **호출**
@@ -71,6 +76,9 @@ const STATE_EXEMPT: { rel: string; count: number }[] = [
   // TRIP-920 사용자 결정(3-a) — 셸이 `BottomSheet onChange` 로 받은 현재 스냅 칸을 쥔다(닫힘에서만 지도
   // 풀림 · CTA 숨김). 2 = 실패 1 + 스냅 칸 1.
   { rel: 'widgets/map-sheet-shell/ui/MapSheetShell.tsx', count: 2 },
+  // TRIP-921 01b Q2 — 편집 뷰가 "지금 끌고 있다"(onDragBegin~onDragEnd)를 쥔다. 두 페이지가 같은 상태·
+  // 콜백을 복제하지 않게 하려는 뷰 국소 일시 상태(TimeSheet 선택 셀과 같은 결). 1 = isDragging.
+  { rel: 'widgets/map-sheet-shell/ui/EditorView.tsx', count: 1 },
 ];
 const STATE_EXEMPT_FILES = STATE_EXEMPT.map(({ rel }) => rel);
 
@@ -279,10 +287,12 @@ describe('🔴 F · AC-4/AC-5 — 위젯은 상위층·raw hex 를 안 물고, �
     // 긍정 짝 — 모집단에 두 위젯이 실재한다(빈 widgets 층에서 공허 통과 방지). TRIP-753 으로 옛 셸이
     // 사라져 대표를 map-sheet-shell 로 옮겼다.
     // TRIP-919: 새 폴백 바(MapFallbackBar)도 이 모집단에 들어와 같은 스캔을 받는다.
+    // TRIP-921: pages 에서 승격된 편집 뷰(EditorView)도 — 옛 5개 features import 를 전부 걷어야 한다.
     expect(sources.map((s) => s.file)).toEqual(
       expect.arrayContaining([
         'widgets/map-sheet-shell/ui/MapSheetShell.tsx',
         'widgets/map-sheet-shell/ui/MapFallbackBar.tsx',
+        'widgets/map-sheet-shell/ui/EditorView.tsx',
         'widgets/time-sheet/ui/TimeSheet.tsx',
       ])
     );

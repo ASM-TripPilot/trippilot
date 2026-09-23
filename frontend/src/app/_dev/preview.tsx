@@ -55,7 +55,10 @@ import {
 import { HomeScreen } from '@/features/home/ui/HomeScreen';
 import { MAGAZINE_DEFAULT_PROPS } from '@/features/home/model/magazineFixtures';
 import { MagazineScreen } from '@/features/home/ui/MagazineScreen';
-import { buildDraftPins } from '@/features/itinerary/model/draftView';
+import {
+  buildDraftPins,
+  formatCoPickDayHeader,
+} from '@/features/itinerary/model/draftView';
 import { type PlanDayTab } from '@/features/itinerary/model/planState';
 import type { MustVisitListItem } from '@/features/itinerary/model/mustVisitList';
 import {
@@ -152,7 +155,7 @@ import { StaySelectSheet } from '@/features/trip/ui/StaySelectSheet';
 import { LiveLocationPage } from '@/pages/live-location';
 import { ConfirmedBanner } from '@/pages/itinerary-plan/ui/ConfirmedBanner';
 import { NoBaseNoticeCard } from '@/pages/itinerary-plan/ui/NoBaseNoticeCard';
-import { EditorView } from '@/pages/itinerary-edit/ui/EditorView';
+import { EditorView } from '@/widgets/map-sheet-shell/ui/EditorView';
 import {
   LiveHubView,
   type LiveHubSlot,
@@ -4811,6 +4814,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         slots={[]}
         activeDayIndex={0}
         activeDate={TIMELINE_PREVIEW_DAYS[0].date}
+        dateLabel={formatCoPickDayHeader(TIMELINE_PREVIEW_DAYS[0].date)}
         onSelectDay={noop}
         onBack={noop}
         onPressTimeChip={noop}
@@ -4832,6 +4836,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         slots={TIMELINE_PREVIEW_SLOTS}
         activeDayIndex={0}
         activeDate={TIMELINE_PREVIEW_DAYS[0].date}
+        dateLabel={formatCoPickDayHeader(TIMELINE_PREVIEW_DAYS[0].date)}
         onSelectDay={noop}
         onBack={noop}
         onPressTimeChip={noop}
@@ -4853,6 +4858,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         slots={TIMELINE_PREVIEW_SLOTS}
         activeDayIndex={0}
         activeDate={TIMELINE_PREVIEW_DAYS[0].date}
+        dateLabel={formatCoPickDayHeader(TIMELINE_PREVIEW_DAYS[0].date)}
         onSelectDay={noop}
         onBack={noop}
         onPressTimeChip={noop}
@@ -5206,6 +5212,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         slots={I07_EDIT_SLOTS}
         activeDayIndex={1}
         activeDate={I07_EDIT_DATE}
+        dateLabel={formatCoPickDayHeader(I07_EDIT_DATE)}
         onSelectDay={noop}
         onBack={noop}
         onPressTimeChip={noop}

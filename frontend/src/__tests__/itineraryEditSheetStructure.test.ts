@@ -39,10 +39,11 @@ import path from 'path';
 
 const ROOT = path.resolve('src');
 
-// TRIP-805 재앵커(시트=widget) → TRIP-797 재조준(뷰 순수성 대상을 옛 화면에서 EditorView 로).
+// TRIP-805 재앵커(시트=widget) → TRIP-797 재조준(뷰 순수성 대상을 옛 화면에서 EditorView 로) →
+// TRIP-921 재조준(EditorView 가 pages 에서 widgets/map-sheet-shell 로 승격 — 단언은 그대로, 경로만).
 const WIDGET_TIME_UI_DIR_REL = 'widgets/time-sheet/ui';
 const SHEET_REL = 'widgets/time-sheet/ui/TimeSheet.tsx';
-const EDITOR_REL = 'pages/itinerary-edit/ui/EditorView.tsx';
+const EDITOR_REL = 'widgets/map-sheet-shell/ui/EditorView.tsx';
 
 /** 소요시간 **표기** 탐지기 — 화면에 나갈 문자열 형태. `HH:mm`(09:30)은 숫자 뒤가 `:` 라 안 걸린다. */
 const DURATION_TEXT = /(\d+\s*분|\d+\s*시간|소요)/;
