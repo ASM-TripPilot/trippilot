@@ -53,6 +53,7 @@ from trippilot.agents.schedule.outcome import (
 )
 from trippilot.assembly_engine.facade import AssemblyConflictError
 from trippilot.assembly_engine.scorer import build_rule_score
+from trippilot.poi_curation.place_fees import EMPTY as FEES_EMPTY, FeeTable
 from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import (
     BudgetLevel,
@@ -199,6 +200,7 @@ class ScheduleAgent:
         alternative_explanation_worker: AlternativeExplanationWorker | None = None,
         existence: PlaceExistencePort | None = None,
         config: OrchestratorConfig | None = None,
+        fees: FeeTable | None = None,
     ) -> None:
         self._scoring = scoring_worker
         self._assembly_provider = assembly_provider
@@ -209,6 +211,9 @@ class ScheduleAgent:
         # 지도 실재 검증 (TRIP-904) — 미주입이면 ②′ 를 통째로 건너뛴다(기능 부재, 강등 아님)
         self._existence = existence
         self._cfg = config or OrchestratorConfig()  # 단계 임계·②′ 설정만 읽는다
+        # 입장료 파생 지식 (2026-09-24 결정 — AI 소유). 미주입이면 빈 표라 전 POI 가
+        # '모름'이고 점수가 종전과 같다 — 켜지기 전에 동작이 안 바뀌는 것이 조건이다.
+        self._fees = fees if fees is not None else FEES_EMPTY
 
     # ── 공개 API ────────────────────────────────────────────────────
 
@@ -428,7 +433,10 @@ class ScheduleAgent:
             ScoredPoi(
                 poi_id=poi.poi_id,
                 score=build_rule_score(
-                    poi, request.budget, request.anchor, request.seed
+                    poi, request.budget, request.anchor, request.seed,
+                    # 조인 키는 `source_ref` — KB-5 장소 설명과 같은 길이다.
+                    # 없으면 None 이고 그건 '모름'이라 중립이다.
+                    fee_won=self._fees.of(poi.source_ref),
                 ),
                 is_llm_score=False,
             )
