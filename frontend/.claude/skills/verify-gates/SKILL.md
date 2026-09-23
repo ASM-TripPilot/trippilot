@@ -58,7 +58,7 @@ description: "TripPilot frontend 검증 게이트 실행 순서와 명령. '검�
 
 ## 실기 스모크 (조건부 · 2026-07-21 신설)
 
-**왜 있나**: jest는 픽셀·레이아웃·Metro/Hermes·딥링크를 **원리적으로 못 본다.** 그리고 12사이클에서 발견된 **유일한 실제 동작 결함**이 정확히 그 층에서 나왔다 — `20260720-trip161-mock-seam`은 jest 121 green · 타입 0 · 린트 0을 **전부 통과한 뒤** 시뮬레이터에서 레드박스가 떴고(`Property 'MessageEvent' doesn't exist`), 목이 안 걸려 `localhost:8080` 커넥션이 20회 나갔다. 위 검사 4개는 그걸 볼 방법이 없다.
+**왜 있나**: jest는 픽셀·레이아웃·Metro/Hermes·딥링크를 **원리적으로 못 본다** — 위 검사 4개가 전부 green인 채로 런타임 전역 부재 레드박스와 목 미적용 실서버 호출이 시뮬레이터에서만 드러났다(실측 1건, 상세는 하네스 변경이력).
 
 ### 발동 조건 — diff로 기계 판정
 
@@ -130,8 +130,8 @@ xcrun simctl spawn booted log show --last 2m --style compact \
 **발동**: 자율 세션 + 화면 표면(픽셀·레이아웃)을 만진 사이클. 대상 키는 이번 사이클이 만진 프리뷰 키(`layer-app.md` `_dev/preview.tsx` 행에서 확정).
 
 **절차**:
-1. `scripts/dev-preview-capture.sh <키>…` — 키마다 fresh 재기동→진입→7s→캡처→상단 오버레이 크롭. 출력 `_workspace/preview-capture/<키>.png`. 사전 점검(시뮬·앱·Metro) 실패 시 exit 3 = 실행 불가(FAIL 아님, §0 정신).
-2. 대응 Figma 프레임 id 를 `get_screenshot(nodeId, fileKey=1MTF3dtptIrbg8gld5IdO2, maxDimension 1600)` 로 내려 `_workspace/figma-cache/<id>.png` 에 캐시(curl). 프레임 id 는 티켓 본문 "■ Figma 프레임".
+1. `scripts/dev-preview-capture.sh <키>…` — 키마다 fresh 재기동→진입→7s→캡처→상단 오버레이 크롭. 출력 `<리포 루트>/_workspace/preview-capture/<키>.png`. 사전 점검(시뮬·앱·Metro) 실패 시 exit 3 = 실행 불가(FAIL 아님, §0 정신).
+2. 대응 Figma 프레임 id 를 `get_screenshot(nodeId, fileKey=1MTF3dtptIrbg8gld5IdO2, maxDimension 1600)` 로 내려 `<리포 루트>/_workspace/figma-cache/<id>.png` 에 캐시(curl). 프레임 id 는 티켓 본문 "■ Figma 프레임".
 3. **비전 가능 서브에이전트**에 두 이미지 + 티켓 완료 조건을 주고 PASS/FAIL·차이 목록(요소·카피·색·간격)을 리포트로 쓰게 한다. 산출 `04b_smoke_{n}_{PASS|FAIL}.md`(실기 스모크와 같은 채번·자리).
 4. **FAIL → implementer 수정 루프 최대 2회.** 그래도 FAIL 이면 판단성 이상으로 새 티켓(전진 전용, 되돌리지 않음).
 

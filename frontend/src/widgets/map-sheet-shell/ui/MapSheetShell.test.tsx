@@ -340,3 +340,196 @@ describe('MapSheetShell · SH8 — list 슬롯이 body 를 BottomSheetFlatList �
     expect(onEndReached).toHaveBeenCalledTimes(1);
   });
 });
+
+/* ──────────────── TRIP-746 · i01 허브 가산 3종(snapPoints · mapViewOnly · currentLocation) ────────────────
+ * i01 여행중 허브는 같은 셸 위에 서되 셋이 다르다: 시트가 3스냅(닫힘·중간·펼침)이고, 지도는 여행 중
+ * 자유 탐색이라 **잠그지 않으며**(TRIP-397 결정 계승), 현재위치 점을 얹는다(TRIP-745 계약). 셋 다
+ * 옵셔널 가산이라 미전달 기본값이 현행(2스냅·잠금·점 없음)과 같아야 한다 — a 케이스가 그 회귀 앵커다.
+ *
+ * ⚠️ 원리적 사각(02a ★1·★2): 스냅 실전환은 통과형 목이 못 본다 → `BottomSheet` 에 **넘긴 값**까지만.
+ *   지도 목은 env 키가 있어야 `map-native`(prop 기록형)를 그린다 → 지도 케이스는 키를 넣고 원복한다.
+ *   실제로 제스처가 막히는지·점이 보이는지는 6-b 실기.
+ * ─────────────────────────────────────────────────────────────────────── */
+
+// no-dynamic-env-var 회피 — 선언과 대입을 분리한다(MapView.test 선례).
+const SHELL_CLIENT_ID_KEY = 'EXPO_PUBLIC_NAVER_MAP_CLIENT_ID';
+let SHELL_ORIGINAL_CLIENT_ID: string | undefined;
+SHELL_ORIGINAL_CLIENT_ID = process.env[SHELL_CLIENT_ID_KEY];
+
+function withMapKey(): void {
+  process.env[SHELL_CLIENT_ID_KEY] = 'test-naver-client-id';
+}
+function restoreMapKey(): void {
+  if (SHELL_ORIGINAL_CLIENT_ID === undefined) {
+    delete process.env[SHELL_CLIENT_ID_KEY];
+  } else {
+    process.env[SHELL_CLIENT_ID_KEY] = SHELL_ORIGINAL_CLIENT_ID;
+  }
+}
+
+const GESTURE_TOGGLES = [
+  'isScrollGesturesEnabled',
+  'isZoomGesturesEnabled',
+  'isRotateGesturesEnabled',
+  'isTiltGesturesEnabled',
+] as const;
+
+/** 통과형 시트 목에 실린 snapPoints 배열들(합성·호스트 두 겹이라 여러 개 — 전부 같아야 한다). */
+function sheetSnapPoints(): unknown[][] {
+  return screen.root
+    .findAll(
+      (node) =>
+        typeof node.props?.index === 'number' &&
+        Array.isArray(node.props?.snapPoints)
+    )
+    .map((node) => node.props.snapPoints as unknown[]);
+}
+
+describe('MapSheetShell · SH9 — snapPoints 가 시트 스냅을 정한다 (TRIP-746)', () => {
+  it('SH9a · snapPoints 미전달이면 현행 2스냅 [45%, 88%] 을 넘긴다 (선제 green · 회귀 앵커)', () => {
+    renderShell();
+
+    const all = sheetSnapPoints();
+    expect(all.length).toBeGreaterThan(0);
+    all.forEach((points) => expect(points).toEqual(['45%', '88%']));
+  });
+
+  it('🔴 SH9b · snapPoints 를 주면 그 배열(3스냅)을 그대로 넘긴다', () => {
+    renderShell({ snapPoints: [28, '55%', '86%'] });
+
+    const all = sheetSnapPoints();
+    expect(all.length).toBeGreaterThan(0);
+    all.forEach((points) => expect(points).toEqual([28, '55%', '86%']));
+  });
+});
+
+describe('MapSheetShell · SH10 — mapViewOnly 로 지도 잠금을 끈다 (TRIP-746 · Seed Q1)', () => {
+  beforeEach(withMapKey);
+  afterEach(restoreMapKey);
+
+  it('SH10a · mapViewOnly 미전달이면 제스처 4종이 전부 꺼진다(잠금 기본값 · 선제 green)', () => {
+    renderShell();
+
+    const map = screen.getByTestId('map-native');
+    GESTURE_TOGGLES.forEach((toggle) => expect(map.props[toggle]).toBe(false));
+  });
+
+  it('🔴 SH10b · mapViewOnly={false} 면 제스처 4종이 전부 켜진다(여행 중 자유 탐색)', () => {
+    renderShell({ mapViewOnly: false });
+
+    const map = screen.getByTestId('map-native');
+    GESTURE_TOGGLES.forEach((toggle) => expect(map.props[toggle]).toBe(true));
+  });
+});
+
+describe('MapSheetShell · SH11 — currentLocation 을 지도에 흘린다 (TRIP-746)', () => {
+  beforeEach(withMapKey);
+  afterEach(restoreMapKey);
+
+  it('SH11a · currentLocation 미전달이면 현재위치 점이 없다 (선제 green · 회귀 앵커)', () => {
+    renderShell();
+
+    // 짝 — 지도 자체는 떴다.
+    expect(screen.getByTestId('map-native')).toBeOnTheScreen();
+    expect(screen.queryByTestId('map-current-location')).toBeNull();
+  });
+
+  it('🔴 SH11b · currentLocation 을 주면 현재위치 점이 지도 위에 뜬다', () => {
+    renderShell({ currentLocation: { lat: 35.1, lng: 129.05 } });
+
+    expect(screen.getByTestId('map-current-location')).toBeOnTheScreen();
+  });
+});
+
+/* ──────────────── TRIP-748 · 알약 숨김 입구 3개(가산) ────────────────
+ * i02 허브는 지도 위 트리거 알약을 "시트를 끌거나 스크롤하거나 지도를 탭하면" 로컬로 숨긴다(D3).
+ * 셸은 그 세 사건을 **판단 없이 흘려보내기만** 한다 — 마운트 가드(from ≥ 0 && from ≠ to)는 허브 몫.
+ *   onSheetAnimate         → <BottomSheet onAnimate>
+ *   onSheetScrollBeginDrag → <BottomSheetScrollView onScrollBeginDrag>
+ *   onMapTap               → <MapView onTapMap>
+ * 통과형 시트 목은 이 이벤트를 스스로 쏘지 않는다 — 테스트가 넘겨진 prop 을 직접 부른다(02a ★2·★3).
+ * 시트 목은 3겹(forwardRef·함수·host)이라 host(문자열 타입)를 고른다.
+ * ─────────────────────────────────────────────────────────────────────── */
+
+/** snapPoints 를 가진 host(문자열 타입) 노드 — BottomSheet 본체. */
+function sheetHost() {
+  const host = screen.root
+    .findAll((node) => Array.isArray(node.props?.snapPoints))
+    .find((node) => typeof node.type === 'string');
+  if (!host) throw new Error('시트 host 노드가 없다');
+  return host;
+}
+
+function scrollBeginDragNodes() {
+  return screen.root.findAll(
+    (node) => typeof node.props?.onScrollBeginDrag === 'function'
+  );
+}
+
+describe('MapSheetShell · SH12 — 시트 끌기·본문 스크롤·지도 탭을 흘려보낸다 (TRIP-748)', () => {
+  beforeEach(withMapKey);
+  afterEach(restoreMapKey);
+
+  it('SH12a · 세 prop 미전달이면 어디에도 콜백을 달지 않는다 (선제 green · 6 소비처 무회귀)', () => {
+    renderShell();
+
+    // 짝 앵커 — 지도와 시트가 실제로 떴다.
+    expect(screen.getByTestId('map-native')).toBeOnTheScreen();
+    expect(sheetHost().props.onAnimate).toBeUndefined();
+    expect(scrollBeginDragNodes()).toHaveLength(0);
+    expect(screen.getByTestId('map-native').props.onTapMap).toBeUndefined();
+  });
+
+  it('🔴 SH12b · onSheetAnimate 는 BottomSheet onAnimate 로 흘러 (from, to) 를 그대로 올린다', () => {
+    const onSheetAnimate = jest.fn();
+    renderShell({ onSheetAnimate });
+
+    const onAnimate = sheetHost().props.onAnimate as
+      ((from: number, to: number, fp: number, tp: number) => void) | undefined;
+    expect(onAnimate).toBeDefined();
+    onAnimate?.(1, 2, 0, 0);
+
+    expect(onSheetAnimate).toHaveBeenCalledTimes(1);
+    expect(onSheetAnimate.mock.calls[0].slice(0, 2)).toEqual([1, 2]);
+  });
+
+  it('🔴 SH12c · onSheetScrollBeginDrag 는 시트 본체가 아니라 본문 스크롤 뷰에 달린다', () => {
+    const onSheetScrollBeginDrag = jest.fn();
+    renderShell({ onSheetScrollBeginDrag });
+
+    const nodes = scrollBeginDragNodes();
+    expect(nodes.length).toBeGreaterThan(0);
+    // 본문 스크롤 뷰 = snapPoints 가 없는 노드(시트 본체에 달면 이 단언이 깨진다).
+    nodes.forEach((node) =>
+      expect(Array.isArray(node.props.snapPoints)).toBe(false)
+    );
+    // 본문 children 을 품은 노드여야 한다.
+    expect(
+      nodes[nodes.length - 1].findAll(
+        (node) => node.props?.testID === 'fake-body'
+      ).length
+    ).toBeGreaterThan(0);
+
+    (nodes[nodes.length - 1].props.onScrollBeginDrag as (e: unknown) => void)({
+      nativeEvent: {},
+    });
+
+    expect(onSheetScrollBeginDrag).toHaveBeenCalledTimes(1);
+  });
+
+  it('🔴 SH12d · onMapTap 은 지도 onTapMap 으로 흐른다', () => {
+    const onMapTap = jest.fn();
+    renderShell({ onMapTap });
+
+    const native = screen.getByTestId('map-native');
+    expect(native.props.onTapMap).toBeDefined();
+    (native.props.onTapMap as (p: unknown) => void)({
+      latitude: 35.15,
+      longitude: 129.11,
+      x: 1,
+      y: 2,
+    });
+
+    expect(onMapTap).toHaveBeenCalledTimes(1);
+  });
+});

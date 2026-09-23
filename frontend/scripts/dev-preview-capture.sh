@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # dev-preview-capture.sh — _dev/preview 화면을 키마다 재캡처해 상단 dev 오버레이를 크롭한다.
-# TRIP-831 자동 육안 게이트의 "프리뷰 쪽" 절반(Figma 쪽은 get_screenshot → _workspace/figma-cache/).
+# TRIP-831 자동 육안 게이트의 "프리뷰 쪽" 절반(Figma 쪽은 get_screenshot → <리포 루트>/_workspace/figma-cache/).
 #
 # 사용: scripts/dev-preview-capture.sh <키> [<키> ...]
 #   예: scripts/dev-preview-capture.sh home-default login-idle
-# 출력: $CAPTURE_DIR/<키>.png (기본 _workspace/preview-capture/)
+# 출력: $CAPTURE_DIR/<키>.png (기본 <리포 루트>/_workspace/preview-capture/)
 #
 # 계약 한계(넘겨짚지 마라):
 # - 정적 캡처다. 실제 열림·드래그·터치 흡수는 못 본다(바텀시트/지도/드래그 목 사각과 동형).
@@ -15,7 +15,7 @@ set -euo pipefail
 APP_ID="com.trippilot.app"
 SCHEME="trippilot://_dev/preview"
 WAIT="${PREVIEW_WAIT:-7}"                       # 렌더·폰트·이미지 안착 대기(초)
-CAPTURE_DIR="${CAPTURE_DIR:-_workspace/preview-capture}"
+CAPTURE_DIR="${CAPTURE_DIR:-$(git rev-parse --show-toplevel)/_workspace/preview-capture}"  # 루트 기준 — cwd(frontend) 상대면 frontend/_workspace가 생겨 산출물 오배치 조건이 된다
 CROP_PX="${CROP_PX:-470}"                        # 잘라낼 상단 높이(px). dev 오버레이 2단(밴드+칩)+세이프에어리어 ≈ 156pt @3x ≈ 470px 실측.
                                                  #   ⚠️ 오버레이가 상단 ~156pt를 덮으므로 그 뒤 화면 콘텐츠(홈 인사 헤더 등)도 함께 잘린다 —
                                                  #   이 경로로는 헤더대 대조가 불가하다(오버레이를 지우면 헤더도 지워진다). 시뮬 스케일 바뀌면 이 값만 조정.

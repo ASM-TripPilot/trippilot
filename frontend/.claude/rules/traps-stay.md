@@ -32,7 +32,7 @@ paths:
 
 ## e05 프리뷰 키 복원 (TRIP-724, 19키 재산정)
 
-- **`stay-register-pin`·`stay-register-calendar`·`stay-filter-sheet` 3키의 "렌더된 얼굴"은 어떤 jest 심판도 안 본다** → `devPreviewBandNav.test.tsx`는 `PREVIEW_STATES` 키 존재·개수(카운트 174)·라벨만 잰다. `preview.tsx`의 `STAY_REGISTER_PIN_FLOW.activeTab`을 `'pin'`→`'mapsearch'`로 바꾸거나(핀 탭 대신 지도검색 얼굴이 뜬다) `stay-filter-sheet` 픽스처에 `amenities:[] stayTypes:[]`를 넘겨도(빈 시트) 전 스위트가 green을 유지한다(03b_code-critic_findings 참고-1). 픽스처 타입·의미는 code-critic이 화면 로직 대조로 확인했으나 6-b/TRIP-831 실기 육안 전까지는 "코드상 맞다"이지 "화면이 맞게 뜬다"가 아니다.
+- **`stay-register-pin`·`stay-register-calendar`·`stay-filter-sheet` 3키의 "렌더된 얼굴"은 어떤 jest 심판도 안 본다** → `devPreviewBandNav.test.tsx`는 `PREVIEW_STATES` 키 존재·개수(개수의 정본은 그 파일의 `toHaveLength`)·라벨만 잰다. `preview.tsx`의 `STAY_REGISTER_PIN_FLOW.activeTab`을 `'pin'`→`'mapsearch'`로 바꾸거나(핀 탭 대신 지도검색 얼굴이 뜬다) `stay-filter-sheet` 픽스처에 `amenities:[] stayTypes:[]`를 넘겨도(빈 시트) 전 스위트가 green을 유지한다(03b_code-critic_findings 참고-1). 픽스처 타입·의미는 code-critic이 화면 로직 대조로 확인했으나 6-b/TRIP-831 실기 육안 전까지는 "코드상 맞다"이지 "화면이 맞게 뜬다"가 아니다.
 
 ## stay 저장 (하트, TRIP-417)
 
