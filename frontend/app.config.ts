@@ -25,10 +25,10 @@ const config: ExpoConfig = {
   newArchEnabled: true,
   ios: {
     supportsTablet: true,
-    bundleIdentifier: 'com.trippilot.app',
+    bundleIdentifier: 'com.trippilot.travel',
   },
   android: {
-    package: 'com.trippilot.app',
+    package: 'com.trippilot.travel',
     edgeToEdgeEnabled: true,
   },
   plugins: [

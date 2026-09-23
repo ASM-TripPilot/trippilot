@@ -78,7 +78,7 @@ description: "TripPilot frontend 검증 게이트 실행 순서와 명령. '검�
 
 ```bash
 xcrun simctl list devices booted | grep -q Booted            # 시뮬레이터 부팅 상태
-xcrun simctl listapps booted | grep -q com.trippilot.app     # dev build 설치 상태
+xcrun simctl listapps booted | grep -q com.trippilot.travel     # dev build 설치 상태
 curl -s --max-time 3 http://localhost:8081/status \
   | grep -q packager-status:running                          # Metro 기동 상태
 ```
@@ -93,8 +93,8 @@ curl -s --max-time 3 http://localhost:8081/status \
 
 ```bash
 # 1. 깨끗한 재기동 (launch가 PID를 반환하면 프로세스는 떴다)
-xcrun simctl terminate booted com.trippilot.app 2>/dev/null
-xcrun simctl launch booted com.trippilot.app
+xcrun simctl terminate booted com.trippilot.travel 2>/dev/null
+xcrun simctl launch booted com.trippilot.travel
 
 # 2. 이번 사이클이 만진 화면으로 진입 (프리뷰 딥링크는 동작 확인됨)
 xcrun simctl openurl booted trippilot://_dev/preview
