@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useAppleButton } from '@/features/auth/model/useAppleButton';
 import {
   SocialLoginScreen,
   type SocialLoginScreenProps,
@@ -366,6 +367,19 @@ type LoginState = Pick<
   SocialLoginScreenProps,
   'phase' | 'errorCode' | 'conflictProvider'
 >;
+
+// 애플 버튼은 실 로그인과 같은 판정(useAppleButton)으로 얻는다 — iOS 실기에선 공식 버튼이 둘째
+// 자리에 뜨고, Android·jest 에선 3버튼이다(TRIP-932).
+function LoginPreview(props: LoginState) {
+  const AppleButton = useAppleButton();
+  return (
+    <SocialLoginScreen
+      {...props}
+      {...VIEW_ONLY_HANDLERS}
+      AppleButton={AppleButton}
+    />
+  );
+}
 
 // Figma 밴드 분류(first-cut 9) + 프레임·코드 둘 다 없는 발명 화면용 '기타'(TRIP-641).
 // 파트 2 네비가 이 값으로 166개 상태를 그룹핑한다 — figma-structure.md 밴드 표가 근거.
@@ -5565,7 +5579,7 @@ function DevPreviewBody() {
         {active.render ? (
           active.render()
         ) : active.login ? (
-          <SocialLoginScreen {...active.login} {...VIEW_ONLY_HANDLERS} />
+          <LoginPreview {...active.login} />
         ) : (
           <SplashScreen />
         )}

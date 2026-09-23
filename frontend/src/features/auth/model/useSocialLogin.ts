@@ -30,7 +30,8 @@ export type AuthorizeResult =
       codeVerifier: string;
       redirectUri: string;
     }
-  | { type: 'success-token'; accessToken: string }
+  // authorizationCode 는 애플만 싣는다(TRIP-932 — 서버가 탈퇴 시 revoke 용으로 쓴다, TRIP-933).
+  | { type: 'success-token'; accessToken: string; authorizationCode?: string }
   | { type: 'cancel' }
   | { type: 'dismiss' };
 
@@ -178,7 +179,14 @@ export function useSocialLogin(): SocialLoginState {
             : {
                 kind: 'token',
                 provider,
-                body: { accessToken: result.accessToken },
+                // 키 자체를 조건부로 만든다 — undefined 값 키도 axios 가 직렬화 대상에 넣으므로
+                // 카카오·네이버 바디는 { accessToken } 그대로여야 한다.
+                body: result.authorizationCode
+                  ? {
+                      accessToken: result.accessToken,
+                      authorizationCode: result.authorizationCode,
+                    }
+                  : { accessToken: result.accessToken },
               };
         pendingRef.current = pending;
         applyPhase('exchanging');
