@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
+import Constants from 'expo-constants';
 import * as Linking from 'expo-linking';
 import { type ReactElement, useState } from 'react';
 import { Share } from 'react-native';
@@ -72,6 +73,7 @@ export function SettingsPage(): ReactElement {
     (account.data?.status === 'DELETION_PENDING' ? 'pending' : 'active');
   const [purgeAt, setPurgeAt] = useState<string | null>(null);
   const [cancelDeletionError, setCancelDeletionError] = useState(false);
+  const [deleteRequestError, setDeleteRequestError] = useState(false);
 
   const [truncatedLabel, setTruncatedLabel] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -94,6 +96,11 @@ export function SettingsPage(): ReactElement {
       onSuccess: (data) => {
         setDeletionOverride('pending');
         setPurgeAt(data?.purgeAt ?? null);
+        setDeleteRequestError(false);
+      },
+      // 5xx·네트워크 오류 모두 — 상태는 active 그대로, 인라인 오류로 알린다(TRIP-935 R5, INV-4).
+      onError: () => {
+        setDeleteRequestError(true);
       },
     },
   });
@@ -172,6 +179,7 @@ export function SettingsPage(): ReactElement {
       nicknameError={nicknameError}
       truncatedLabel={truncatedLabel}
       cancelDeletionError={cancelDeletionError}
+      deleteRequestError={deleteRequestError}
       exportError={exportError}
       onPressBack={() => loadRouter()?.back()}
       onSubmitNickname={submitNickname}
@@ -182,6 +190,8 @@ export function SettingsPage(): ReactElement {
       onPressNotifications={() => loadRouter()?.push('/settings/notifications')}
       onPressTerms={(termsType) => loadRouter()?.push(`/terms/${termsType}`)}
       onPressLogout={() => void runLogout()}
+      // 스토어 버전과 같은 출처(app.config version). 없으면 화면이 버전 줄을 그리지 않는다(TRIP-935 R4).
+      appVersion={Constants.expoConfig?.version}
       onPressOsmCopyright={() => {
         // 브라우저를 못 열어도 설정 화면은 그대로 둔다(TRIP-886 Q3 — 링크 실패는 무시).
         Linking.openURL(OSM_COPYRIGHT_URL).catch(() => undefined);

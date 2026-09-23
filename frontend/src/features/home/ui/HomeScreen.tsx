@@ -31,7 +31,6 @@ import {
   BellGlyph,
   CloseGlyph,
   HeartFilledGlyph,
-  HeartOutlineGlyph,
   LocationPinGlyph,
   MapPinGlyph,
   PlusGlyph,
@@ -184,8 +183,8 @@ function MagazineHero({
   hero: HomeMagazineHero;
   testID?: string;
   showDots?: boolean;
-  // TRIP-700 — discovery 캐러셀 page0 만 a02 매거진 목록으로 가는 배선 CTA. asButton 은 role 을
-  // 구조로 굳히고(콜백 미주입 렌더에도 버튼 — 370-AC-4 버튼-집합), onPress 는 스레딩(AC-10)을 진다.
+  // TRIP-700 — discovery 캐러셀 page0 만 a02 매거진 목록으로 가는 배선 CTA. TRIP-935 R1 — 운영
+  // 라우트가 콜백을 안 넘겨 진입을 막으므로, page0 도 onPressMagazine 이 있을 때만 asButton 이다.
   // page1~4 슬라이드·planning/postTrip 슬라이드는 asButton 기본 false 라 비버튼 유지(집합 초과 방지).
   asButton?: boolean;
   onPress?: () => void;
@@ -295,7 +294,7 @@ function DiscoveryHeroCarousel({
               hero={hero}
               testID={i === 0 ? 'home-magazine-hero' : `home-hero-slide-${i}`}
               showDots={false}
-              asButton={i === 0}
+              asButton={i === 0 && onPressMagazine !== undefined}
               onPress={i === 0 ? onPressMagazine : undefined}
             />
           </View>
@@ -387,7 +386,6 @@ function CollectionCard({
             {card.badge}
           </Text>
         </View>
-        <HeartOutlineGlyph size={26} />
       </View>
       <View className="absolute inset-x-0 bottom-[16px] gap-[6px] px-[14px]">
         <Text className="font-noto-bold text-[18px] font-bold text-on-primary">
@@ -428,9 +426,6 @@ function SpotCard({
         locations={SCRIM_LOCATIONS}
         style={ABSOLUTE_FILL}
       />
-      <View className="absolute right-[10px] top-[10px]">
-        <HeartOutlineGlyph size={22} />
-      </View>
       <View className="absolute inset-x-0 bottom-[12px] gap-[3px] px-[12px]">
         <Text className="font-noto-bold text-body font-bold text-on-primary">
           {card.title}

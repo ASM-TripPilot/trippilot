@@ -175,18 +175,26 @@ describe('🟢 370-AC-1 · "지금 뜨는 장소" 더 보기 → /explore/places
   });
 });
 
-// ── TRIP-700 · AC-10 홈 매거진 히어로 → /magazine (라우트 목적지 잠금) ──────────
-// 형제 CTA(FAB·온램프·더보기·검색바)는 전부 목적지 문자열을 완전일치로 잠그는데 매거진만
-// 빠져 있었다(code-critic 경고-1). discovery 얼굴은 매거진 히어로 캐러셀 page0(home-magazine-hero)
-// 을 그리고, 그 press 가 onPressMagazine → router.push('/magazine') 로 흐른다. 목적지 오타
-// (예: /explore/places)는 이 완전일치 단언이 red 로 잡는다(tsc·형제 jest 로는 안 잡힘).
-describe('🟢 700-AC-10 · 홈 매거진 히어로 → /magazine', () => {
-  it('discovery 매거진 히어로(page0)를 누르면 매거진 목록으로 이동한다', () => {
+// ── TRIP-935 AC-1(R1) · 홈 매거진 히어로는 운영 홈에서 진입점이 아니다 ────────────
+// TRIP-700 은 page0 press → router.push('/magazine') 를 완전일치로 잠갔다. 매거진(a02)은 화면 전체가
+// 고정 샘플에 무반응 요소뿐이라(심사 2.1) 진입을 막는다 — 라우트가 onPressMagazine 을 넘기지 않아
+// page0 은 버튼이 아니고, 눌러도 어디로도 가지 않는다. 매거진 라우트 파일·화면은 그대로 둔다
+// (숨김은 조건부). "버튼 아님"과 "이동 없음"을 따로 잰다 — press 는 조상 onPress 로 올라갈 수 있어
+// 하나만으로는 증명이 안 된다(02a ★3).
+describe('🔴 935-AC-1 · 홈 매거진 히어로 → 이동 없음(진입 차단)', () => {
+  it('discovery 매거진 히어로(page0)는 버튼이 아니고, 눌러도 push 가 0회다', () => {
     render(<HomeRoute />);
 
-    fireEvent.press(screen.getByTestId('home-magazine-hero'));
+    // 앵커 — discovery 얼굴의 히어로 자체는 그려진다(사진 카드로 남는다).
+    const hero = screen.getByTestId('home-magazine-hero');
+    const buttonIds = screen
+      .queryAllByRole('button')
+      .map((node) => node.props.testID);
+    expect(buttonIds).not.toContain('home-magazine-hero');
 
-    expect(mockPush.mock.calls).toEqual([['/magazine']]);
+    fireEvent.press(hero);
+
+    expect(mockPush).not.toHaveBeenCalled();
   });
 });
 
@@ -360,5 +368,32 @@ describe('🔴 939-AC-9 · 홈 종 → /notifications (모든 얼굴 공용 인�
 
     // 단언
     expect(mockPush.mock.calls).toEqual([['/notifications']]);
+  });
+});
+
+// ── TRIP-935 AC-5(R6) · 계획 중 얼굴의 컬렉션 헤더에 여행 지역을 끼우지 않는다 ─────────
+// 컬렉션 카드는 부산 고정 픽스처라 "서울에서 담을 만한 곳" 아래 부산 카드가 뜨면 사실과 다른
+// 표기다(심사 2.3). 라이브 판정이 지역 헤더를 넣지 않아 기본 헤더가 뜬다. 날짜는 2099년으로 고정해
+// 실시계와 무관하게 늘 "계획 중" 가지(옛 코드가 지역 헤더를 넣던 곳)를 탄다(02a ★13).
+describe('🔴 935-AC-5 · 계획 중 홈의 컬렉션 헤더는 기본 문구다', () => {
+  it('"서울 여행"이 있어도 헤더는 "요즘 사람들이 담는 곳"이고 "서울에서 담을 만한 곳"은 없다', () => {
+    mockUseGetTrips.mockReturnValue(
+      tripsResult([
+        trip({
+          title: '서울 여행',
+          startDate: '2099-01-10',
+          endDate: '2099-01-12',
+          status: 'PLANNED',
+          destinations: [{ seq: 1, region: '서울', nights: 2 }],
+        }),
+      ])
+    );
+
+    render(<HomeRoute />);
+
+    // 앵커 — 계획 중(여행) 얼굴이 떴다.
+    expect(screen.getByTestId('home-trip-hero')).toBeOnTheScreen();
+    expect(screen.getByText('요즘 사람들이 담는 곳')).toBeOnTheScreen();
+    expect(screen.queryAllByText(/서울에서 담을 만한 곳/)).toHaveLength(0);
   });
 });

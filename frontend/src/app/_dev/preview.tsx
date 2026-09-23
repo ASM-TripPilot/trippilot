@@ -2874,7 +2874,8 @@ export const PREVIEW_STATES: PreviewState[] = [
   // 값 import 0 이라 프리뷰 지뢰 목 통과). jest 는 testID·행동만 잠그고 4상태 레이아웃·코랄 토큰·
   // 플레이스홀더 카드·error 재시도 카드·편집 입력은 픽셀이라 6-b/육안 몫 — 자율/야간이라 6-b SKIP,
   // 이 4키가 유일한 육안 대조 자리. `editableText` 를 주면 편집 진입(헤더 "편집"/CTA "직접 회고 작성")
-  // → 입력(상한 4000)·저장/취소를 실기로 눌러 본다.
+  // → 입력(상한 4000)·저장/취소를 실기로 눌러 본다. default 는 운영처럼 좌표 없이 그린다(TRIP-935 R7 —
+  // 페이지가 좌표를 넘기지 않아 지도 자리 없음·기분/메모 없음·하단 "확인").
   {
     key: 'reflection-default',
     band: 'j',
@@ -2900,11 +2901,6 @@ export const PREVIEW_STATES: PreviewState[] = [
           { uri: 'file://p3.jpg' },
         ]}
         changeSummary="이날 휴무로 1곳을 변경했어요"
-        mapCenter={{ lat: 35.1532, lng: 129.1187 }}
-        mapPins={[
-          { number: 1, lat: 35.1532, lng: 129.1187 },
-          { number: 2, lat: 35.1264, lng: 129.0403 },
-        ]}
         dayTabs={[{ day: 1 }, { day: 2, today: true }, { day: 3 }]}
         activeDay={2}
         onSelectDay={noop}
@@ -5199,6 +5195,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         onPressDeleteAccount={noop}
         onPressCancelDeletion={noop}
         onPressOsmCopyright={noop}
+        appVersion="0.1.0"
       />
     ),
   },

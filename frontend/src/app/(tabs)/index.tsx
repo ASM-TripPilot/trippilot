@@ -26,7 +26,6 @@ interface HomeNav {
   onPressSavedStays: () => void;
   onPressSpotsMore: () => void;
   onPressSearch: () => void;
-  onPressMagazine: () => void;
   onPressBell: () => void;
   savedPlacesCount: number;
   savedStaysCount: number;
@@ -108,8 +107,8 @@ export default function HomeRoute() {
     },
     onPressSpotsMore: () => router.push('/explore/places'),
     onPressSearch: () => router.push('/explore/region?purpose=trip'),
-    // TRIP-700 — discovery 캐러셀 page0(매거진 히어로) press → a02 매거진 목록(/magazine).
-    onPressMagazine: () => router.push('/magazine'),
+    // TRIP-935 R1 — 매거진(a02) 진입을 막는다: onPressMagazine 을 넘기지 않아 page0 은 버튼이 아니다.
+    // 매거진 화면은 고정 샘플에 무반응 요소뿐이라(심사 2.1) 실데이터가 생기면 여기서 다시 잇는다.
     // TRIP-939 AC-9 — 인사 헤더 종 press → l01 알림함(/notifications, U6 "어디서든 종 아이콘으로 진입").
     onPressBell: () => router.push('/notifications'),
     savedPlacesCount: savedPoiIds.length,

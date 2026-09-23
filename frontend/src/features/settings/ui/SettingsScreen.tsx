@@ -32,6 +32,8 @@ export interface SettingsScreenProps {
   /** 내보내기 조회 실패 안내 — 있으면 ExportRow 인라인 오류로 표면화(INV-4). preview 무파손 위해 optional. */
   exportError?: string | null;
   cancelDeletionError?: boolean;
+  /** 삭제 요청(POST) 실패 — 삭제 행 아래 인라인 오류로 표면화(TRIP-935 R5, INV-4). preview 무파손 위해 optional. */
+  deleteRequestError?: boolean;
   onPressBack: () => void;
   onSubmitNickname: (value: string) => void;
   onPressExport: () => void;
@@ -47,6 +49,8 @@ export interface SettingsScreenProps {
   onPressLogout?: () => void;
   /** 데이터 출처 블록의 OSM 줄 링크(TRIP-886, 페이지가 저작권 페이지 열기를 주입). preview 무파손 위해 optional. */
   onPressOsmCopyright?: () => void;
+  /** 하단 버전 줄에 쓸 앱 버전(TRIP-935). 없으면 줄을 그리지 않는다. preview 무파손 위해 optional. */
+  appVersion?: string | null;
 }
 
 export function SettingsScreen({
@@ -58,6 +62,7 @@ export function SettingsScreen({
   truncatedLabel,
   exportError,
   cancelDeletionError,
+  deleteRequestError,
   onPressBack,
   onSubmitNickname,
   onPressExport,
@@ -68,6 +73,7 @@ export function SettingsScreen({
   onPressTerms,
   onPressLogout,
   onPressOsmCopyright,
+  appVersion,
 }: SettingsScreenProps): ReactElement {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
@@ -150,6 +156,14 @@ export function SettingsScreen({
                 }
               />
             </Pressable>
+            {deleteRequestError ? (
+              <Text
+                testID="settings-delete-account-error"
+                className="px-lg pb-md font-noto text-caption text-primary-text"
+              >
+                삭제 요청을 보내지 못했어요. 잠시 후 다시 시도해 주세요.
+              </Text>
+            ) : null}
           </View>
         );
       default:
@@ -179,9 +193,11 @@ export function SettingsScreen({
               ))}
             </SettingsGroup>
           ))}
-          <Text className="pt-md text-center font-noto text-caption text-muted-soft">
-            TripPilot v1.0.0
-          </Text>
+          {appVersion ? (
+            <Text className="pt-md text-center font-noto text-caption text-muted-soft">
+              TripPilot v{appVersion}
+            </Text>
+          ) : null}
           <DataAttribution onPressOsmCopyright={onPressOsmCopyright} />
         </View>
       </ScrollView>

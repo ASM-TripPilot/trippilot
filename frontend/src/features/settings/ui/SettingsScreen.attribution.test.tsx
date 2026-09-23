@@ -78,8 +78,8 @@ describe('TRIP-886 · 설정 데이터 출처 고지 (AC-1 · AC-2 · AC-4 · AC
   });
 
   it('AC-1(위치): 출처 블록은 버전 문구 바로 다음에 온다 — 사이에 다른 문구가 끼지 않는다', () => {
-    // 준비: 링크 콜백 없이 그린다.
-    renderScreen();
+    // 준비: 링크 콜백 없이, 버전을 주고 그린다(TRIP-935 — 버전이 없으면 버전 줄 자체가 없다).
+    renderScreen({ appVersion: '0.1.0' });
 
     // 실행: 화면 글자를 읽는 순서대로 잇는다.
     const text = readingText(screen.toJSON());

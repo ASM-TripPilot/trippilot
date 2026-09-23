@@ -90,6 +90,7 @@ const WHEN_IN_USE_COPY =
   'TripPilot가 주변 여행지와 동선을 추천하기 위해 위치를 사용합니다.';
 
 let infoPlist: Record<string, unknown> = {};
+let introspectedExtra: Record<string, unknown> = {};
 
 beforeAll(() => {
   const stdout = execFileSync(
@@ -107,7 +108,9 @@ beforeAll(() => {
       },
     }
   );
-  infoPlist = JSON.parse(stdout)._internal.modResults.ios.infoPlist;
+  const introspected = JSON.parse(stdout);
+  infoPlist = introspected._internal.modResults.ios.infoPlist;
+  introspectedExtra = introspected.extra ?? {};
 }, 60_000);
 
 describe('AC-1 앱 아이콘', () => {
@@ -240,5 +243,24 @@ describe('AC-6 Sentry 자동 업로드 끔', () => {
       organization: 'trippilot',
       project: 'trippilot-frontend',
     });
+  });
+});
+
+describe('TRIP-935 AC-2 · expo-router 사이트맵 끔', () => {
+  it('expo-router 를 { sitemap: false } 튜플로 등록한다', () => {
+    const options = optionsOf('expo-router');
+
+    // 문자열 단독 등록이면 옵션이 없어 _sitemap 이 기본값(켜짐)으로 붙는다.
+    expect(options).toBeDefined();
+    expect(options?.sitemap).toBe(false);
+  });
+
+  it('Expo 가 해석한 설정의 extra.router.sitemap 이 false 다(런타임이 읽는 값)', () => {
+    // expo-router 는 실행 중 Constants.expoConfig.extra.router.sitemap !== false 이면 _sitemap 을 붙인다.
+    const router = introspectedExtra.router as
+      Record<string, unknown> | undefined;
+
+    expect(router).toBeDefined();
+    expect(router?.sitemap).toBe(false);
   });
 });

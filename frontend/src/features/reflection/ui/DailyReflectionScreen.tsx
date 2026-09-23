@@ -14,9 +14,6 @@ import {
   BackArrowGlyph,
   EmptyCircleGlyph,
   LocationOffGlyph,
-  MoodGoodGlyph,
-  MoodSadGlyph,
-  MoodSosoGlyph,
   PhotoOffGlyph,
   RetryGlyph,
 } from './ReflectionGlyphs';
@@ -30,22 +27,23 @@ import { ReflectionStatsRow } from './ReflectionStatsRow';
  * `draftNarrative`/`editedNarrative`/`resolveDisplayNarrative` 어느 것도 참조하지 않는다.
  *
  * 4얼굴(TRIP-763: 일차 탭·하단 탭바(기록)·헤더 "편집"은 전 얼굴 공통 크롬):
- *  - default            : 기분 3택 · stats · 풀폭 지도(또는 자리) · 서술 카드 · 사진 그리드 · 메모 입력 · "저장".
+ *  - default            : stats · 풀폭 지도(좌표 있을 때만) · 서술 카드 · 사진 그리드 · "확인".
  *  - data-insufficient  : stats(거리 "—") + 지도 자리 사유(제목/본문 2줄) + 서술 + "사진 없음" 자리 · "확인".
  *  - empty              : 빈 원 일러스트 + "오늘 기록된 활동이 없습니다" · 하단 CTA "직접 회고 작성".
  *  - error              : stats 채움(BASIC 카드, INV-U5-07) + 에러 카드(다시 시도) · CTA "직접 회고 작성".
  *
  * ★ 신규 표면 prop(dayTabs·activeDay·onSelectDay·onPressTab)은 전부 **옵셔널** — 미주입 호출자(프리뷰·
- *   무회귀 테스트)가 그대로 컴파일된다. mood·memo 는 prop 이 없다 — 화면 로컬 `useState`(UI 로컬,
- *   저장 배선 부재로 "저장 안 됨"이 구조적으로 강제됨. 통합 저장은 계약 확장 티켓 TRIP-823).
+ *   무회귀 테스트)가 그대로 컴파일된다. Figma 의 기분 3택·메모 입력은 그리지 않는다(TRIP-935 R7) —
+ *   저장 계약이 없어 다시 들어오면 사라지는 입력이었다(통합 저장은 계약 확장 티켓 TRIP-823).
  *
  * ★ 편집 진입은 헤더 "편집"(`reflection-daily-edit`, 전 얼굴 · default 는 서술 카드 "수정"으로도 진입)이
  *   진다. empty/error 하단 CTA "직접 회고 작성"은 헤더와 같은 화면에 공존하므로 testID 를 분리한다
  *   (`reflection-daily-compose`, 둘 다 `handleEnterEdit`) — 겹치면 `getByTestId` 가 throw. 편집을 열면 상한
  *   4000(`EditReflectionRequest.maxLength`, 서버 권위) — 빈/공백 텍스트는 저장 비활성 + 저장 콜백 0회.
  *
- * 지도 좌표·핀은 옵셔널 — 회고 계약(`Reflection`)에 좌표가 없어 페이지가 채우면 쓰고, 없으면 지도 대신
- * 자리표시(가짜 기본 센터 지도 금지). 신규 지도 컴포넌트 금지 — `shared/map/MapView` 재사용, viewOnly.
+ * 지도 좌표·핀은 옵셔널 — 회고 계약(`Reflection`)에 좌표가 없어 페이지가 채우면 쓰고, 없으면 default 는
+ * 지도 자리를 그리지 않고(TRIP-935 R7) data-insufficient 는 누락 사유를 표기한다(US-REC-06). 가짜 기본
+ * 센터 지도 금지. 신규 지도 컴포넌트 금지 — `shared/map/MapView` 재사용, viewOnly.
  */
 
 export type ReflectionFace =
@@ -56,25 +54,6 @@ export interface ReflectionDayTab {
   day: number;
   today?: boolean;
 }
-
-type MoodKey = 'sad' | 'soso' | 'good';
-const MOODS: { key: MoodKey; label: string }[] = [
-  { key: 'sad', label: '아쉬워요' },
-  { key: 'soso', label: '괜찮았어요' },
-  { key: 'good', label: '좋았어요' },
-];
-
-const MOOD_GLYPH: Record<
-  MoodKey,
-  (props: { size?: number; selected?: boolean }) => ReactElement
-> = {
-  sad: MoodSadGlyph,
-  soso: MoodSosoGlyph,
-  good: MoodGoodGlyph,
-};
-
-/** 메모 상한 60 — Figma-only(계약 근거 0). UX 사본이지 룰 권위 아님(비영속). */
-const MEMO_MAX = 60;
 
 export interface DailyReflectionScreenProps {
   face: ReflectionFace;
@@ -126,10 +105,6 @@ export function DailyReflectionScreen({
 }: DailyReflectionScreenProps): ReactElement {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(editableText);
-  // mood·memo 는 UI 로컬(저장 배선 없음 — 화면 이탈 시 소실 허용). 초기 mood=null(무선택)이 정직한
-  // 초기값이다(서버 값 없음 — "아직 안 고름").
-  const [selectedMood, setSelectedMood] = useState<MoodKey | null>(null);
-  const [memo, setMemo] = useState('');
   const canSave = text.trim().length > 0;
   const isDataFace = face === 'default' || face === 'data-insufficient';
 
@@ -147,37 +122,37 @@ export function DailyReflectionScreen({
     setEditing(false);
   };
 
-  const mapArea =
-    mapCenter && (mapPins?.length ?? 0) > 0 ? (
-      // 풀폭 250h · radius 0(px-lg 패딩 바깥으로 -mx-lg 하여 화면 폭 꽉 채운다).
-      <View className="-mx-lg h-[250px] overflow-hidden">
-        <MapView center={mapCenter} pins={mapPins} viewOnly />
-      </View>
-    ) : (
-      // 실 좌표가 없으면 지도를 그리지 않는다 — 하드코딩 기본 센터(서울)를 실데이터처럼 그리면
-      // 부산 하루에 서울 지도가 뜨는 거짓 정보가 된다. 회고 계약(Reflection)에 좌표가 없어 오늘은 늘 이 가지다.
-      <View
-        testID="reflection-daily-map-notice"
-        className="w-full items-center gap-sm rounded-card border-[1.5px] border-dashed border-hairline-strong bg-surface-soft px-lg py-3xl"
-      >
-        <LocationOffGlyph size={30} />
-        {mapNotice ? (
-          // 제목·본문을 각각 leaf Text 로 — 객체를 한 슬롯에 넣으면 React child 에러라 2줄로 나눈다.
-          <>
-            <Text className="text-center font-noto-bold text-body font-bold text-ink">
-              {mapNotice.title}
-            </Text>
-            <Text className="text-center font-noto text-label text-muted">
-              {mapNotice.body}
-            </Text>
-          </>
-        ) : (
-          <Text className="text-center font-noto text-label text-muted">
-            위치 정보를 표시할 수 없어요
+  const hasMap = mapCenter !== undefined && (mapPins?.length ?? 0) > 0;
+  const mapArea = hasMap ? (
+    // 풀폭 250h · radius 0(px-lg 패딩 바깥으로 -mx-lg 하여 화면 폭 꽉 채운다).
+    <View className="-mx-lg h-[250px] overflow-hidden">
+      <MapView center={mapCenter} pins={mapPins} viewOnly />
+    </View>
+  ) : (
+    // 실 좌표가 없으면 지도를 그리지 않는다 — 하드코딩 기본 센터(서울)를 실데이터처럼 그리면
+    // 부산 하루에 서울 지도가 뜨는 거짓 정보가 된다. 회고 계약(Reflection)에 좌표가 없어 오늘은 늘 이 가지다.
+    <View
+      testID="reflection-daily-map-notice"
+      className="w-full items-center gap-sm rounded-card border-[1.5px] border-dashed border-hairline-strong bg-surface-soft px-lg py-3xl"
+    >
+      <LocationOffGlyph size={30} />
+      {mapNotice ? (
+        // 제목·본문을 각각 leaf Text 로 — 객체를 한 슬롯에 넣으면 React child 에러라 2줄로 나눈다.
+        <>
+          <Text className="text-center font-noto-bold text-body font-bold text-ink">
+            {mapNotice.title}
           </Text>
-        )}
-      </View>
-    );
+          <Text className="text-center font-noto text-label text-muted">
+            {mapNotice.body}
+          </Text>
+        </>
+      ) : (
+        <Text className="text-center font-noto text-label text-muted">
+          위치 정보를 표시할 수 없어요
+        </Text>
+      )}
+    </View>
+  );
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }} className="bg-canvas">
@@ -322,46 +297,10 @@ export function DailyReflectionScreen({
           </>
         ) : face === 'default' ? (
           <>
-            {/* 기분 3택 — 원형 단일선택(로컬 state). 선택은 accessibilityState.selected 로 잠근다. */}
-            <Text className="font-noto-bold text-card-title font-bold text-ink">
-              오늘 어땠어요?
-            </Text>
-            <View className="w-full flex-row">
-              {MOODS.map(({ key, label }) => {
-                const selected = selectedMood === key;
-                const Glyph = MOOD_GLYPH[key];
-                return (
-                  <Pressable
-                    key={key}
-                    testID={`reflection-daily-mood-${key}`}
-                    accessibilityState={{ selected }}
-                    onPress={() => setSelectedMood(key)}
-                    className="flex-1 items-center gap-[8px]"
-                  >
-                    <View
-                      className={`h-[56px] w-[56px] items-center justify-center rounded-full ${
-                        selected ? 'bg-primary' : 'bg-surface-strong'
-                      }`}
-                    >
-                      <Glyph size={28} selected={selected} />
-                    </View>
-                    <Text
-                      className={
-                        selected
-                          ? 'font-noto-bold text-label font-bold text-ink'
-                          : 'font-noto text-label text-muted'
-                      }
-                    >
-                      {label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
             <ReflectionStatsRow stats={stats} distanceDash={distanceDash} />
 
-            {mapArea}
+            {/* 좌표 없으면 지도 자리 자체를 그리지 않는다(TRIP-935 R7 — 늘 빈 점선 박스였다). */}
+            {hasMap ? mapArea : null}
 
             {/* 서술 카드 — 헤드 "오늘의 기록" + "수정"(편집 진입, 죽은 링크 아님) + 본문(NarrativeBlock). */}
             <View className="w-full gap-sm rounded-card bg-surface-soft px-lg py-md">
@@ -395,30 +334,15 @@ export function DailyReflectionScreen({
               <ReflectionPhotoGrid photos={photos} />
             )}
 
-            {/* 메모 입력 행 — 시스템 변경요약(ChangeSummaryRow)을 사용자 메모로 대체. 로컬 state·비영속.
-                상한 60 · "N/60" 카운터. changeSummary 는 default 얼굴에서 무시된다(prop 은 무회귀로 유지). */}
-            <View className="w-full flex-row items-center gap-sm rounded-card border border-hairline-strong bg-canvas px-lg py-[10px]">
-              <TextInput
-                testID="reflection-daily-memo-input"
-                value={memo}
-                onChangeText={setMemo}
-                maxLength={MEMO_MAX}
-                placeholder="오늘 하루를 한 줄로 남겨보세요"
-                className="flex-1 font-noto text-body text-ink"
-              />
-              <Text className="font-noto text-label text-muted">
-                {`${memo.length}/${MEMO_MAX}`}
-              </Text>
-            </View>
-
-            {/* 저장 CTA — 코랄 풀폭. testID -save(구 -confirm), 라벨 "저장". 콜백명 onConfirm 유지. */}
+            {/* changeSummary 는 default 얼굴에서 그리지 않는다(prop 은 무회귀로 유지). */}
+            {/* 하단 CTA — 저장할 입력이 없으니 "확인"(TRIP-935 R7). data-insufficient 와 같은 이름표. */}
             <Pressable
-              testID="reflection-daily-save"
+              testID="reflection-daily-confirm"
               onPress={onConfirm}
               className="h-[52px] w-full items-center justify-center rounded-button bg-primary"
             >
               <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                저장
+                확인
               </Text>
             </Pressable>
           </>

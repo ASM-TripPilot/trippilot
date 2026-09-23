@@ -8,7 +8,7 @@ import {
 
 import { HOME_DEFAULT_PROPS, HOME_LOADING_PROPS } from '../model/homeFixtures';
 import type { HomePhase } from '../model/homeTypes';
-import { HeartOutlineGlyph } from './HomeGlyphs';
+import { HeartFilledGlyph, HeartOutlineGlyph } from './HomeGlyphs';
 import { HomeScreen } from './HomeScreen';
 
 /**
@@ -67,11 +67,11 @@ const WIRED_CTA_TEST_IDS = [
   // 대체(장소→d02·숙소→e04)해 중복이라 discovery 버튼셋에서 빠진다(370-AC-4 재동결).
   'home-spots-more',
   'home-search-bar',
-  // TRIP-700 — discovery 캐러셀 page0(home-magazine-hero)이 a02 매거진 목록으로 가는 배선 CTA 가
-  // 되며 role="button" 을 얻는다(구조로 굳힘 — 콜백 미주입 렌더에도 버튼, FAB·검색바 선례). page1~4
-  // 슬라이드(home-hero-slide-N)는 여전히 비버튼이라 이 집합 동치가 "page0 만 버튼"을 강제한다
-  // (슬라이드까지 버튼으로 만들면 집합 초과로 red). 계획/여행/완료 page0 은 트립 히어로라 무영향.
-  'home-magazine-hero',
+  // TRIP-935 AC-1(R1) — 매거진 히어로(home-magazine-hero)는 이 집합에서 빠졌다. TRIP-700 은 page0 을
+  // "구조로 버튼"(콜백 없어도 role=button)으로 굳혔지만, 심사 2.1 대응으로 매거진 진입을 막으면서
+  // **onPressMagazine 이 있을 때만 버튼**으로 바꿨다(이 집합 테스트는 콜백 없이 렌더한다). 벨·검색바·
+  // FAB 는 여전히 구조로 버튼이라 남는다 — 한 상수에 두 규칙이 공존한다(02a ★4). 콜백을 줬을 때
+  // page0 만 버튼이 되는지는 파일 아래 TRIP-935 AC-1 짝 describe 가 잰다.
   // TRIP-939 AC-9 — 종이 알림함(/notifications)으로 배선돼 버튼 집합에 든다. role 은 콜백 유무가 아니라
   // 구조로 굳힌다(이 집합 테스트는 콜백 없이 렌더 — 검색바·FAB 선례, 02a ★D4).
   'home-dashboard-bell',
@@ -570,13 +570,13 @@ describe('HomeScreen — 목적지 없는 컨트롤은 화면에 없다 (370-AC-
 });
 
 describe('HomeScreen — 버튼 역할 집합 == 배선된 CTA 집합 (370-AC-4 · 회귀)', () => {
-  it('discovery 접근성 트리에서 버튼으로 읽히는 것은 배선된 CTA 집합(매거진 히어로 포함)뿐이다', () => {
+  it('discovery 접근성 트리에서 버튼으로 읽히는 것은 배선된 CTA 집합뿐이다(콜백 없는 매거진 히어로는 제외)', () => {
     render(<HomeScreen {...HOME_DEFAULT_PROPS} />);
 
     // 실제 onPress 목적지가 있는 요소만 버튼이어야 한다 — 집합 동치라 (a)비배선이 안 벗겨짐
     // (b)배선 CTA 가 벗겨짐 (c)공유 SectionHeader 를 전부 벗겨 spots-more 도 사라짐 (d)새 버튼
-    // 유입, 넷 다 red 로 잡힌다. TRIP-700 — page0 매거진 히어로가 집합에 들고(구조 role), page1~4
-    // 슬라이드는 안 든다(슬라이드까지 버튼화하면 (d)로 red). 현행은 page0 이 비버튼이라 red-first.
+    // 유입, 넷 다 red 로 잡힌다. TRIP-935 — 콜백 없는 렌더라 매거진 히어로(page0)도 슬라이드도
+    // 버튼이 아니다(콜백이 없는데 버튼이면 (d)로 red).
     const buttonIds = screen
       .queryAllByRole('button')
       .map((node) => node.props.testID)
@@ -616,6 +616,25 @@ describe('🔴 HomeScreen — 매거진 히어로 진입 배선 (TRIP-700 AC-10 
     expect(onPressSearch).not.toHaveBeenCalled();
     expect(onPressCreateTrip).not.toHaveBeenCalled();
     expect(onPressSpotsMore).not.toHaveBeenCalled();
+  });
+});
+
+// TRIP-935 AC-1(R1) 짝 — 매거진 히어로는 콜백이 **주입됐을 때만** 버튼이다. 라우트는 이제 콜백을
+// 넘기지 않아 운영 홈에서는 버튼이 아니고(tabsHomeRoute), 화면의 배선 능력 자체는 남는다(숨김은
+// 조건부 — 화면·라우트 파일 삭제 아님). 콜백을 줘도 page1~4 슬라이드는 버튼이 아니다(02a ★5).
+describe('TRIP-935 AC-1 · 매거진 히어로는 onPressMagazine 이 있을 때만 버튼 (짝)', () => {
+  it('콜백을 주면 page0 은 버튼이고 page1~4 슬라이드는 여전히 버튼이 아니다', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} onPressMagazine={jest.fn()} />);
+
+    const buttonIds = screen
+      .queryAllByRole('button')
+      .map((node) => node.props.testID);
+
+    expect(buttonIds).toContain('home-magazine-hero');
+    [1, 2, 3, 4].forEach((i) => {
+      expect(screen.getByTestId(`home-hero-slide-${i}`)).toBeOnTheScreen();
+      expect(buttonIds).not.toContain(`home-hero-slide-${i}`);
+    });
   });
 });
 
@@ -1235,5 +1254,34 @@ describe('🔴 TRIP-939 AC-9 · B-5 · 모든 얼굴에서 종은 버튼, 빨간
     ).toHaveLength(0);
     // 컬렉션 "더 보기" 없음.
     expect(screen.queryAllByTestId('home-collections-more')).toHaveLength(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRIP-935 AC-5(R6) — 홈 카드 위 장식 하트 제거(심사 2.1). "요즘 사람들이 담는 곳"·"지금 뜨는 장소"·
+// 추천 카드의 하트는 눌러도 아무 일이 없는 "저장" 어포던스였다. 카드를 그리는 모든 얼굴에서 잰다.
+// 화면 전체의 HeartOutlineGlyph 는 0 이어야 하고(카드 외 사용처 없음), HeartFilledGlyph 는 하트 FAB
+// 토글이 정당하게 쓰므로 카드 서브트리 안으로 좁혀 센다 — 채운 하트로 바꿔 끼운 구현을 막는다(02a ★14).
+describe('🔴 TRIP-935 AC-5 · 홈 카드에 하트가 없다(모든 얼굴)', () => {
+  it.each([
+    ['discovery', undefined],
+    ['planning', PLANNING_PHASE],
+    ['postTrip', POST_TRIP_PHASE],
+  ] as const)('%s: 카드는 그려지고 하트 글리프는 0개다', (_face, phase) => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={phase} />);
+
+    const cards = [
+      ...screen.queryAllByTestId(/^home-collection-card-\d+$/),
+      ...screen.queryAllByTestId(/^home-spot-card-\d+$/),
+    ];
+    // 앵커 — 이 얼굴에 카드가 실제로 있다(공허 통과 차단).
+    expect(cards.length).toBeGreaterThan(0);
+
+    expect(screen.UNSAFE_queryAllByType(HeartOutlineGlyph)).toHaveLength(0);
+    for (const card of cards) {
+      expect(within(card).UNSAFE_queryAllByType(HeartFilledGlyph)).toHaveLength(
+        0
+      );
+    }
   });
 });

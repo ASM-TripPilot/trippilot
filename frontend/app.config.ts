@@ -60,7 +60,8 @@ const config: ExpoConfig = {
     edgeToEdgeEnabled: true,
   },
   plugins: [
-    'expo-router',
+    // TRIP-935 R3 — 개발용 라우트 목록(/_sitemap)을 운영 빌드에서 끈다. 네이티브 설정이라 재빌드 필요.
+    ['expo-router', { sitemap: false }],
     // 옵션을 false(불리언)로 줘야 플러그인이 영문 기본 권한 문구를 Info.plist 에서 지운다 —
     // 문자열 'false'·생략은 문구가 남는다. Face ID·"항상 허용" 위치는 쓰지 않는다(TRIP-936).
     ['expo-secure-store', { faceIDPermission: false }],

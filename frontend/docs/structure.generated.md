@@ -70,6 +70,7 @@
 - `src/__tests__/noDeadHandlers.test.ts`  →  (export 없음)
 - `src/__tests__/noMswInStaticGraph.test.ts`  →  (export 없음)
 - `src/__tests__/noStepCountStructure.test.ts`  →  (export 없음)
+- `src/__tests__/notFoundRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/notificationDurationStructure.test.ts`  →  (export 없음)
 - `src/__tests__/notificationKindGuard.test.tsx`  →  (export 없음)
 - `src/__tests__/notificationStructure.test.ts`  →  (export 없음)
@@ -171,6 +172,9 @@
 - `src/app/(tabs)/itinerary.tsx`  →  (export 없음)
 - `src/app/(tabs)/my.tsx`  →  (export 없음)
 - `src/app/(tabs)/records.tsx`  →  (export 없음)
+
+## src/app/
+- `src/app/+not-found.tsx`  →  (export 없음)
 
 ## src/app/_dev/
 - `src/app/_dev/preview.tsx`  →  MUST_VISIT_THUMBNAILS · PREVIEW_STATES
@@ -1312,4 +1316,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 880개 파일
+합계 882개 파일

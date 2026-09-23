@@ -627,8 +627,8 @@ describe('R-16 · CTA 텍스트가 상태별로 갈린다 (AC-S4 · 01b §3)', (
   // coordConfirmed 보다 우선함을 그 테스트가 강제한다(Seed 공식 순서 오기 정정, 02a ★5).
 });
 
-describe('R-17 · 다중 후보 행에 "📍 지도 ›" 링크가 있다 (AC-S2)', () => {
-  it('각 후보 행에 지도 링크가 존재한다 (라디오 checked 판정은 R-3 유지)', () => {
+describe('🔴 R-17 · 다중 후보 행에 "📍 지도 ›" 링크 모양이 없다 (TRIP-935 Q8)', () => {
+  it('각 후보 행에 "지도 ›" 글자가 없고 이름·주소는 그대로다 (라디오 checked 판정은 R-3 유지)', () => {
     renderScreen({
       ...IDLE_FLOW,
       searchStatus: 'success',
@@ -636,11 +636,14 @@ describe('R-17 · 다중 후보 행에 "📍 지도 ›" 링크가 있다 (AC-S2
       selectedCandidate: null,
     });
 
-    // 링크의 핸들러는 flow 콜백에 없어(표시 정합만) 존재만 잰다 — 부분포함이라 regex.
+    // 구 R-17 은 링크 존재를 잠갔지만 핸들러가 없어 누르면 행 선택으로 흡수되는 무반응 어포던스였다
+    // (심사 2.1) — TRIP-935 Q8 로 부재를 잰다. 앵커로 각 행의 숙소 이름을 함께 본다.
     const first = screen.getByTestId('stay-register-candidate-0');
     const second = screen.getByTestId('stay-register-candidate-1');
-    expect(within(first).getByText(/📍 지도 ›/)).toBeOnTheScreen();
-    expect(within(second).getByText(/📍 지도 ›/)).toBeOnTheScreen();
+    expect(within(first).getByText(CANDIDATE_A.name)).toBeOnTheScreen();
+    expect(within(second).getByText(CANDIDATE_B.name)).toBeOnTheScreen();
+    expect(within(first).queryAllByText(/지도 ›/)).toHaveLength(0);
+    expect(within(second).queryAllByText(/지도 ›/)).toHaveLength(0);
   });
 });
 

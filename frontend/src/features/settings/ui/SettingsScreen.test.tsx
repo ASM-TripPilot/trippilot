@@ -274,3 +274,27 @@ describe('TRIP-938 · 로그아웃 행·확인 다이얼로그 (AC-6 · AC-3 · 
     expect(screen.getByTestId('settings-row-logout')).not.toBeDisabled();
   });
 });
+
+/**
+ * TRIP-935 AC-3(R4) — 하단 버전 줄은 받은 `appVersion` 으로만 그린다. 값이 없으면 줄 자체를
+ * 그리지 않는다(가짜 버전보다 무표기, INV-4). 값의 출처(빌드 설정)는 페이지 몫 —
+ * `SettingsPage.version.test.tsx`.
+ */
+describe('🔴 TRIP-935 AC-3 · 버전 줄은 appVersion 으로만 그린다', () => {
+  it('appVersion="0.1.0" 이면 "TripPilot v0.1.0" 한 줄을 그린다', () => {
+    renderScreen({ appVersion: '0.1.0' });
+
+    expect(screen.getByText('TripPilot v0.1.0')).toBeOnTheScreen();
+  });
+
+  it.each([
+    ['미전달', {}],
+    ['null', { appVersion: null }],
+  ] as const)('appVersion %s 이면 버전 줄이 없다', (_label, overrides) => {
+    renderScreen(overrides);
+
+    // 앵커 — 화면 하단(출처 블록)은 그려졌다.
+    expect(screen.getByTestId('settings-data-attribution')).toBeOnTheScreen();
+    expect(screen.queryAllByText(/TripPilot v/)).toHaveLength(0);
+  });
+});
