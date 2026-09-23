@@ -12,6 +12,7 @@ import { formatLegendDateRange } from '@/entities/trip/lib/formatTripPeriod';
 import { useRecordsCalendar } from '@/features/record/model/useRecordsCalendar';
 import { RecordsCalendarScreen } from '@/features/record/ui/RecordsCalendarScreen';
 import { buildMonthGrid, shiftMonth } from '@/shared/date/monthGrid';
+import { seoulDate } from '@/shared/date/seoulDate';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
 /**
@@ -33,7 +34,7 @@ export function RecordsCalendarPage(): ReactElement {
   const { trips, isPending, isError } = useRecordsCalendar();
   const router = useRouter();
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = seoulDate(new Date());
   const [yearMonth, setYearMonth] = useState(today.slice(0, 7));
 
   // INV-4 · trips=[] 는 로딩·에러에서도 나온다 — isError·isPending 을 빈 상태보다 먼저 갈라
