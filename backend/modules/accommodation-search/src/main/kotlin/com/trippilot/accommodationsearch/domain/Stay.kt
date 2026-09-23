@@ -18,7 +18,7 @@ data class Stay(
     val amenities: Set<String>,   // 주차·조식·와이파이·오션뷰 …
     val stayType: String,         // 호텔·게스트하우스·펜션·리조트
     val address: String? = null,  // 도로명 우선, 없으면 지번
-    val phone: String? = null,    // 표시형 '02-1670-8876' — 그대로 tel: 에 실을 수 있다
+    val phone: String? = null,    // 표시형 '02-2267-7474' — 그대로 tel: 에 실을 수 있다
     val rooms: Int? = null,       // 양실+한실 합. 0 은 저장하지 않는다(미기재와 구분 불가)
 ) {
     fun key(): StayKey = StayKey(externalSource, externalId)

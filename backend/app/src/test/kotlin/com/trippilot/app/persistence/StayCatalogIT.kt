@@ -17,7 +17,7 @@ import org.springframework.test.context.TestPropertySource
  * 숙소 정본(V2.26 + `R__seed_stay.sql`) 실 DB 검증.
  *
  * 여기서만 드러나는 것:
- * - **시드가 실제로 들어갔는가** — 12,782행짜리 생성 SQL 이 문법·제약·FK 를 통과하는지는 실 DB 만 안다
+ * - **시드가 실제로 들어갔는가** — 1만 행을 넘는 생성 SQL 이 문법·제약·FK 를 통과하는지는 실 DB 만 안다
  * - **지역 조회가 코드로 도는가** — 사용자는 `제주`·`제주시`·`제주특별자치도` 를 섞어 보낸다
  * - **시도 롤업** — 코드 접두사라 시도를 고르면 그 안 시군구가 전부 잡혀야 한다
  *
@@ -100,7 +100,7 @@ class StayCatalogIT : AbstractPostgresIntegrationTest() {
     }
 
     /**
-     * **지역을 안 고르면 상한이 걸린다.** 정본이 12,782곳이라 전량을 실으면 탐색 탭이 열리는 것만으로
+     * **지역을 안 고르면 상한이 걸린다.** 정본이 1만 곳을 넘어 전량을 실으면 탐색 탭이 열리는 것만으로
      * 수 MB 가 나간다 — FE `explore.tsx` 가 인자 없이 부른다. 스텁(5곳) 시절에는 없던 문제다.
      *
      * 자른 사실을 값으로 알려야 한다. 뒤따르는 필터가 부분집합 위에서 돌기 때문에,
@@ -167,8 +167,8 @@ class StayCatalogIT : AbstractPostgresIntegrationTest() {
     }
 
     /**
-     * **전화번호는 그대로 `tel:` 에 실린다.** 원본은 하이픈 없는 숫자열(`0216708876`)이라
-     * 생성기가 지역번호 길이를 보고 끊는다 — 그 규칙이 무너지면 화면에 `0216708876` 이 나가고
+     * **전화번호는 그대로 `tel:` 에 실린다.** 원본은 하이픈 없는 숫자열(`0222677474`)이라
+     * 생성기가 지역번호 길이를 보고 끊는다 — 그 규칙이 무너지면 화면에 `0222677474` 가 나가고
      * 링크도 엉뚱한 번호로 걸린다. 형식이 깨진 값은 저장 자체를 하지 않는 편이 낫다.
      */
     @Test
@@ -198,6 +198,59 @@ class StayCatalogIT : AbstractPostgresIntegrationTest() {
             )
             """.trimIndent(),
         ) shouldBe 0
+    }
+
+    /**
+     * **국번(지역번호 다음 3~4자리)은 0·1 로 시작하지 않는다.**
+     *
+     * 국번 화이트리스트(위)를 통과하고도 새는 가짜가 있었다 — `02-0773-8803`(0 으로 시작하는
+     * 국번은 존재하지 않는다) 과 `02-1644-xxxx`(지역번호가 잘못 붙은 전국대표번호). 둘 다
+     * 형식 검사도 지역번호 검사도 통과한다. 실측 35건이었고 생성기가 이제 NULL 로 버린다.
+     *
+     * 이동전화(010)·인터넷전화(070)·안심번호(050X)는 이 규칙을 따르지 않으므로 제외한다 —
+     * `010-1234-5678`·`0507-136-6446` 은 정상이다.
+     */
+    @Test
+    fun `유선 국번이 0이나 1로 시작하지 않는다`() {
+        count(
+            """
+            phone IS NOT NULL
+              AND split_part(phone, '-', 1) NOT IN ('010', '070')
+              AND split_part(phone, '-', 1) NOT LIKE '050_'
+              AND left(split_part(phone, '-', 2), 1) IN ('0', '1')
+            """.trimIndent(),
+        ) shouldBe 0
+    }
+
+    /**
+     * **폐업한 곳이 정본에서 사라져야 한다 — upsert 만으로는 영원히 남는다.**
+     *
+     * 시드는 `INSERT … ON CONFLICT DO UPDATE` 라 **지우는 절이 없으면** 원본에서 빠진 행이
+     * 그대로 남는다. 2026-09-22 갱신에서 21곳이 빠졌는데, 그대로 두면 문 닫은 숙소가 계속
+     * 검색에 뜨고 이제는 **전화번호까지 달려 있어** 사용자가 없는 곳에 전화를 건다.
+     *
+     * **빈 DB 로는 원리적으로 못 본다.** Testcontainers 에는 지울 대상이 애초에 없다.
+     * 그래서 원본에 없는 LOCALDATA 행을 과거 시각으로 심고 시드를 다시 태운다.
+     */
+    @Test
+    fun `원본에서 빠진 숙소는 시드 재실행이 지운다`() {
+        try {
+            jdbc.update(
+                """
+                INSERT INTO stay (external_source, external_id, name, lat, lng, region, region_code, stay_type, updated_at)
+                VALUES ('LOCALDATA', 'gone-0001', '폐업한 숙소', 37.57, 126.98, '종로구', '11110', '호텔', now() - interval '1 day')
+                """.trimIndent(),
+            )
+            count("external_id = 'gone-0001'") shouldBe 1
+
+            val seed = ClassPathResource("db/migration/R__seed_stay.sql")
+                .inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
+            jdbc.execute(seed)
+
+            count("external_id = 'gone-0001'") shouldBe 0
+        } finally {
+            jdbc.update("DELETE FROM stay WHERE external_source = 'LOCALDATA' AND external_id = 'gone-0001'")
+        }
     }
 
     /**
@@ -239,7 +292,7 @@ class StayCatalogIT : AbstractPostgresIntegrationTest() {
      * **시드 재실행이 새 칸을 되채우는가 — 이 IT 의 나머지가 못 보는 경로다.**
      *
      * Testcontainers 는 빈 DB 라 시드가 `INSERT` 경로만 탄다. 그런데 실제 환경(DEV·로컬)에는
-     * 12,782행이 이미 있어 재실행은 **전부 `ON CONFLICT DO UPDATE` 로 간다.** 생성기의 INSERT 절만
+     * 정본 행이 이미 있어 재실행은 **전부 `ON CONFLICT DO UPDATE` 로 간다.** 생성기의 INSERT 절만
      * 고치고 그 절을 빠뜨리면 마이그레이션은 컬럼을 만들고 시드는 통과하는데 **값이 영원히 NULL 로
      * 남는다** — 빌드도 위 검사들도 전부 초록이다.
      *
