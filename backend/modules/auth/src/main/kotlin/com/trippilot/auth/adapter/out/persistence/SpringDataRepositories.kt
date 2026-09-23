@@ -26,6 +26,42 @@ interface SocialIdentityJpaRepository : JpaRepository<SocialIdentityJpaEntity, U
     fun findByProviderAndProviderSub(provider: String, providerSub: String): SocialIdentityJpaEntity?
 
     fun findByAccountId(accountId: UUID): List<SocialIdentityJpaEntity>
+
+    // ── 제공자 revoke 토큰(TRIP-933) — 엔티티에 매핑하지 않은 컬럼이라 네이티브로만 다룬다 ──
+
+    @Transactional
+    @Modifying
+    @Query(
+        "update social_identity set provider_refresh_token_enc = :enc where provider = :provider and provider_sub = :sub",
+        nativeQuery = true,
+    )
+    fun storeRevocationToken(@Param("provider") provider: String, @Param("sub") providerSub: String, @Param("enc") enc: String): Int
+
+    /** 파기 예정 시각이 지났고 철회되지 않은 계정의, 토큰이 남은 연결(ix_deletion_purge 를 탄다). */
+    @Query(
+        """
+        select si.social_identity_id as socialIdentityId, si.provider as provider, si.provider_refresh_token_enc as token
+        from social_identity si
+        join deletion_schedule d on d.account_id = si.account_id
+        where d.cancelled_at is null and d.purge_at <= :now and si.provider_refresh_token_enc is not null
+        order by d.purge_at
+        limit :limit
+        """,
+        nativeQuery = true,
+    )
+    fun findDueRevocationTokens(@Param("now") now: Instant, @Param("limit") limit: Int): List<RevocationTokenRow>
+
+    @Transactional
+    @Modifying
+    @Query("update social_identity set provider_refresh_token_enc = null where social_identity_id = :id", nativeQuery = true)
+    fun clearRevocationToken(@Param("id") socialIdentityId: UUID): Int
+}
+
+/** [SocialIdentityJpaRepository.findDueRevocationTokens] 행 — 암호문 그대로다. */
+interface RevocationTokenRow {
+    fun getSocialIdentityId(): UUID
+    fun getProvider(): String
+    fun getToken(): String
 }
 
 /** Spring Data JPA — refresh_session 테이블 CRUD + 해시 조회 + 체인 폐기. */

@@ -94,6 +94,29 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
         body["account"]["socialProviders"].map { it.asText() } shouldBe listOf("APPLE")
     }
 
+    /**
+     * TRIP-933 — 애플은 `authorizationCode` 를 선택으로 더 싣는다(revoke 용 refresh_token 교환).
+     * 이 환경은 Team ID·Key ID·p8 이 비어 있어 교환을 건너뛴다 — 재는 것은 **그래도 로그인이 된다**는 것,
+     * 즉 새 필드가 계약에 들어와도 역직렬화·검증에서 막히지 않고 revoke 설정 부재가 로그인을 막지 않는다는 것.
+     */
+    @Test
+    fun `애플 로그인에 authorizationCode 가 붙어도 200 — revoke 설정이 없어도 로그인은 막히지 않는다`() {
+        val (status, body) = post(
+            "/api/v1/auth/social/apple/token",
+            """{"accessToken":"apple-identity-token","authorizationCode":"apple-code","ageConfirmation":{"method":"SELF_DECLARED"}}""",
+        )
+
+        status shouldBe 200
+        body["account"]["socialProviders"].map { it.asText() } shouldBe listOf("APPLE")
+    }
+
+    /** 요청 스키마도 계약과 맞는다 — 코드에 필드를 넣고 openapi 에 안 넣으면 프론트 orval 이 모른다. */
+    @Test
+    fun `SocialTokenLoginRequest 계약이 authorizationCode 를 선언한다`() {
+        schemaProperties("SocialTokenLoginRequest") shouldBe
+            setOf("accessToken", "ageConfirmation", "deviceId", "authorizationCode")
+    }
+
     @Test
     fun `신규 가입인데 연령확인 누락이면 400 VALIDATION_ERROR`() {
         val (status, body) = post(
