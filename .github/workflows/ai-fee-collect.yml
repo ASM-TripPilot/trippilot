@@ -1,0 +1,92 @@
+# [main 등록용 사본] GitHub은 schedule(cron)·workflow_dispatch를 기본 브랜치의
+# 워크플로만 등록한다. main의 ai/ 는 구버전이므로 checkout을 develop으로 고정 —
+# 이 파일(트리거 등록)은 main, 실행 코드는 항상 develop. develop 쪽 원본 갱신 시 이 사본도 동기화할 것.
+# 장소 입장료 수집 — content_id → {won, raw} (TRIP-902 후속)
+#
+# 8,256건을 일일 한도(키 3개 × 1,000) 안에서 **여러 날에 걸쳐** 받는다. 누적본은
+# `fee-state` 전용 브랜치에 두고, 실행 시작에 복원 → 끝에 갱신 push 한다
+# (ai-poi-collect 의 collect-state 와 같은 패턴). 이미 받은 content_id 는 건너뛴다.
+#
+# 수동 실행 전용이다. 실 API 를 쓰므로 머지 게이트에 얹지 않는다(리포 규약: CI 는
+# 외부 호출 0). 수집 상태(커서·기제안 색인)는 읽지도 쓰지도 않는다 — 별개 축이다.
+name: ai-fee-collect
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_calls:
+        description: '이번 실행의 호출 상한 (일일 한도보다 낮게)'
+        required: false
+        default: '2800'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write   # fee-state 전용 브랜치 push 용 (잡 단위 최소 부여)
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: develop   # 수집 코드·공유본은 develop (main의 ai/는 구버전)
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # 누적본 복원 — 브랜치가 없으면 빈 상태로 시작한다(첫 실행).
+      - name: 누적본 복원
+        run: |
+          set -o pipefail
+          if git fetch origin fee-state --depth=1 2>/dev/null; then
+            git show FETCH_HEAD:place_fees.json > ai/data/place_fees.json
+            echo "복원: $(python3 -c 'import json,sys; print(len(json.load(open("ai/data/place_fees.json"))["fees"]))') 건"
+          else
+            echo "fee-state 브랜치 없음 — 처음부터 시작"
+          fi
+
+      - name: 입장료 수집
+        working-directory: ai
+        env:
+          TOUR_API_KEY: ${{ secrets.TOUR_API_KEY }}
+          TOUR_API_KEY2: ${{ secrets.TOUR_API_KEY2 }}
+          TOUR_API_KEY3: ${{ secrets.TOUR_API_KEY3 }}
+        run: |
+          # `| tee` 가 파이프 앞 종료 코드를 삼킨다 — 실패율 가드가 안 닿는다(실측).
+          set -o pipefail
+          uv run python scripts/collect_place_fees.py \
+            --doc data/collected_pois.json \
+            --out data/place_fees.json \
+            --max-calls "${{ inputs.max_calls }}" 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # 누적본 갱신 — orphan 커밋 하나로 브랜치를 덮는다(히스토리 불필요).
+      # push 실패가 수집 성공을 뒤집지 않는다: artifact 로 같은 파일이 남는다.
+      - name: 누적본 갱신
+        if: success()
+        run: |
+          set -o pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          (
+            cd "$(mktemp -d)"
+            git init -q . && git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            cp "$GITHUB_WORKSPACE/ai/data/place_fees.json" place_fees.json
+            git add place_fees.json
+            git commit -q -m "chore(fee): 입장료 누적본 갱신 ($(date -u +%Y-%m-%d))"
+            git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" \
+              HEAD:refs/heads/fee-state
+          ) || echo "::warning::누적본 push 실패 — artifact 로는 남았다 (다음 실행이 처음부터)"
+
+      - name: 결과 보존
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: place-fees
+          path: ai/data/place_fees.json
+          if-no-files-found: warn
+          retention-days: 30
