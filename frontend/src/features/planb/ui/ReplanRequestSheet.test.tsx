@@ -370,3 +370,34 @@ describe('🔴 S11 · 칩·CTA 토큰 (AC-11 · 후속 39)', () => {
     });
   });
 });
+
+describe('🔴 S-E · 실패 안내 (03b 경고-1 · INV-4)', () => {
+  const CONFLICT_TEXT = '여행 기간에만 AI에게 맡길 수 있어요';
+
+  it('S-E1 errorText 가 있으면 입력 뒤·CTA 바로 앞에 그 문구 하나를 그대로 띄운다', () => {
+    render(<ReplanRequestSheet {...baseProps()} errorText={CONFLICT_TEXT} />);
+
+    expect(screen.getAllByTestId('planb-request-error')).toHaveLength(1);
+    expect(screen.getByTestId('planb-request-error')).toHaveTextContent(
+      CONFLICT_TEXT
+    );
+    const order = screen
+      .getAllByTestId(/^planb-request-(freetext|error|submit)$/)
+      .map((node) => String(node.props.testID));
+    expect(order).toEqual([
+      'planb-request-freetext',
+      'planb-request-error',
+      'planb-request-submit',
+    ]);
+  });
+
+  it.each([
+    ['null', null],
+    ['안 줌', undefined],
+  ])('S-E2 errorText 가 %s 이면 안내 요소가 없다', (_label, errorText) => {
+    render(<ReplanRequestSheet {...baseProps()} errorText={errorText} />);
+
+    expect(screen.queryByTestId('planb-request-error')).toBeNull();
+    expect(screen.getByTestId('planb-request-submit')).toBeOnTheScreen();
+  });
+});

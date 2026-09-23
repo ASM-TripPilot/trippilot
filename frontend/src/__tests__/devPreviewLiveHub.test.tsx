@@ -426,3 +426,498 @@ describe('🔴 TRIP-750 · i04 재계획 요청 시트 프리뷰 (AC-10)', () =>
     OLD_REQUEST_KEYS.forEach((key) => expect(keys).not.toContain(key));
   });
 });
+
+// ── TRIP-751 · i06 재계획안 2키 ─────────────────────────────────────────────
+//
+// Figma 4314:1923(펼침) · 4335:1923(대안 없음) — 같은 5곳 픽스처를 지도+시트 셸 위에 펼침(index 1)으로.
+// 옛 빈 슬롯 키(`planb-replan-draft-empty`)는 사라진다. 프리뷰는 뷰를 파일 경로로 import 한다 —
+// 위 `@/shared/api` 지뢰가 배럴 로드를 막는다(하위 경로 정적 검사는 planbReplanDraftStructure G8).
+
+function i06Texts(pattern: RegExp): string[] {
+  return screen
+    .queryAllByTestId(pattern)
+    .map((node) => String(node.props.children));
+}
+
+function i06Classes(pattern: RegExp): string[][] {
+  return screen
+    .queryAllByTestId(pattern)
+    .map((node) => String(node.props.className ?? '').split(/\s+/));
+}
+
+const I06_DIMMED = /^opacity-(45|\[0\.45\])$/;
+
+describe('🔴 TRIP-751 · i06 재계획안 펼침 프리뷰 (AC-12)', () => {
+  it('planb-replan-draft 는 Figma 5곳을 헤더·번호 톤·거리 커넥터·사진·[직접 수정]/[적용하기]로 펼쳐 그린다', () => {
+    mockSearchParams.state = 'planb-replan-draft';
+
+    render(<DevPreview />);
+
+    expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
+    expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
+      'AI 재계획안'
+    );
+    expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('2일차');
+    expect(screen.getByTestId('sheet-header-date')).toHaveTextContent(
+      '6월 11일(목)'
+    );
+    expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(
+      '5곳 · 6.3km'
+    );
+
+    expect(i06Texts(/^planb-draft-slot-name-/)).toEqual([
+      '감천문화마을',
+      '광안리 해변',
+      '부산시립미술관',
+      '전포 카페거리',
+      'F1963 복합문화공간',
+    ]);
+    [
+      '09:30 방문',
+      '11:00 방문',
+      '13:00 도착 · 관람 중',
+      '15:00–16:30',
+      '17:00–18:30',
+      '마을 · 벽화',
+      '바다 · 산책',
+      '미술 · 실내',
+      '카페 · 실내',
+      '전시 · 실내',
+    ].forEach((text) => expect(screen.getByText(text)).toBeOnTheScreen());
+    expect(i06Texts(/^sheet-connector-distance-/)).toEqual([
+      '1.4km',
+      '3.2km',
+      '600m',
+      '1.1km',
+    ]);
+    expect(screen.getAllByTestId(/^planb-draft-slot-photo-/)).toHaveLength(5);
+    expect(
+      i06Classes(/^planb-draft-slot-number-/).map((tokens) =>
+        tokens.includes('bg-success') ? 'success' : 'primary'
+      )
+    ).toEqual(['success', 'success', 'success', 'primary', 'primary']);
+    expect(screen.getAllByTestId(/^planb-draft-candidates-/)).toHaveLength(2);
+
+    expect(screen.getByTestId('sheet-daychip-1')).toBeSelected();
+    expect(screen.getByTestId('sheet-daychip-2')).toBeOnTheScreen();
+    const indices = sheetIndices();
+    expect(indices.length).toBeGreaterThan(0);
+    indices.forEach((index) => expect(index).toBe(1));
+
+    expect(screen.getByTestId('sheet-cta-button-0')).toHaveTextContent(
+      '직접 수정'
+    );
+    expect(screen.getByTestId('sheet-cta-button-1')).toHaveTextContent(
+      '적용하기'
+    );
+    expect(screen.queryByTestId('planb-draft-notice')).toBeNull();
+  });
+});
+
+describe('🔴 TRIP-751 · i06 재계획안 대안 없음 프리뷰 (AC-12)', () => {
+  it('planb-noalt 는 곳 수 없이 안내 2줄 + 예정 두 행 흐림 + [조건 바꿔 다시 짜기]로 그린다', () => {
+    mockSearchParams.state = 'planb-noalt';
+
+    render(<DevPreview />);
+
+    expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
+      'AI 재계획안'
+    );
+    expect(screen.getByTestId('sheet-header-meta')).not.toHaveTextContent(/km/);
+    expect(screen.getByTestId('planb-draft-notice-title')).toHaveTextContent(
+      '대안을 찾지 못했어요'
+    );
+    expect(
+      screen.getByTestId('planb-draft-notice-description')
+    ).toHaveTextContent(
+      '17시 이후 실내 후보가 근처에 없어요 · 조건을 줄이거나 직접 고쳐 주세요'
+    );
+
+    expect(i06Texts(/^planb-draft-slot-name-/)).toEqual([
+      '감천문화마을',
+      '광안리 해변',
+      '부산시립미술관',
+      '전포 카페거리',
+      '해운대 해변',
+    ]);
+    expect(screen.getByText('바다 · 해변')).toBeOnTheScreen();
+    expect(i06Texts(/^sheet-connector-distance-/)).toEqual([
+      '1.4km',
+      '3.2km',
+      '600m',
+      '8km',
+    ]);
+
+    const dimmedRows = screen
+      .getAllByTestId(/^planb-draft-slot-/)
+      .filter((node) =>
+        String(node.props.className ?? '')
+          .split(/\s+/)
+          .some((token) => I06_DIMMED.test(token))
+      );
+    expect(
+      dimmedRows.map((row) =>
+        String(
+          within(row).getByTestId(/^planb-draft-slot-name-/).props.children
+        )
+      )
+    ).toEqual(['전포 카페거리', '해운대 해변']);
+    expect(screen.queryAllByTestId(/^planb-draft-candidates-/)).toHaveLength(0);
+
+    expect(screen.getByTestId('sheet-cta-button-1')).toHaveTextContent(
+      '조건 바꿔 다시 짜기'
+    );
+    const indices = sheetIndices();
+    expect(indices.length).toBeGreaterThan(0);
+    indices.forEach((index) => expect(index).toBe(1));
+  });
+});
+
+describe('🔴 TRIP-751 · i06 키 정리 (AC-12)', () => {
+  it('두 키가 band i · 라벨 "i06 · 재계획안 · 펼침/대안 없음" 이고, 빈 슬롯 키는 없다', () => {
+    const states = PREVIEW_STATES as {
+      key: string;
+      band: string;
+      label: string;
+    }[];
+    const draft = states.find((state) => state.key === 'planb-replan-draft');
+    const noalt = states.find((state) => state.key === 'planb-noalt');
+    expect(draft?.band).toBe('i');
+    expect(draft?.label).toBe('i06 · 재계획안 · 펼침');
+    expect(noalt?.band).toBe('i');
+    expect(noalt?.label).toBe('i06 · 재계획안 · 대안 없음');
+
+    const keys = states.map((state) => state.key);
+    expect(keys.length).toBeGreaterThan(100);
+    expect(keys).not.toContain('planb-replan-draft-empty');
+  });
+});
+
+// ── TRIP-752 · i05 다시 짜는 중 ─────────────────────────────────────────────
+//
+// Figma 4341:1957 — 전면 지도 + 좌상단 진행 카드 + peek 시트(40%). 행은 i06 픽스처 앞 2곳(방문 완료).
+// 옛 i12 전용 화면(부제·체크리스트·안심 노트·[백그라운드로])은 사라진다. 프리뷰는 뷰를 파일 경로로
+// import 한다(위 `@/shared/api` 지뢰가 배럴 로드를 막는다, 하위 경로 정적 검사는 planbSolvingStructure G6).
+
+describe('🔴 TRIP-752 · i05 다시 짜는 중 프리뷰 (AC-13)', () => {
+  it('planb-solving 은 진행 카드·헤더·방문 완료 2곳·거리 커넥터를 peek 시트로 그리고, CTA·옛 표면은 없다', () => {
+    mockSearchParams.state = 'planb-solving';
+
+    render(<DevPreview />);
+
+    expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
+    expect(screen.getByTestId('generation-progress-card')).toBeOnTheScreen();
+    expect(screen.getByText('AI가 일정을 다시 짜고 있어요')).toBeOnTheScreen();
+    expect(screen.getByTestId('generation-progress-cancel')).toHaveTextContent(
+      '취소'
+    );
+    expect(
+      screen.getByTestId('generation-gauge-cell-1-done')
+    ).toHaveTextContent('방문한 곳 그대로');
+    expect(
+      screen.getByTestId('generation-gauge-cell-2-active')
+    ).toHaveTextContent('17시 이후 다시 짜는 중');
+
+    expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
+      'AI 재계획안'
+    );
+    expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('2일차');
+    expect(screen.getByTestId('sheet-header-date')).toHaveTextContent(
+      '6월 11일(목)'
+    );
+    expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(
+      '방문한 3곳 그대로'
+    );
+
+    expect(i06Texts(/^planb-draft-slot-name-/)).toEqual([
+      '감천문화마을',
+      '광안리 해변',
+    ]);
+    ['09:30 방문', '11:00 방문', '마을 · 벽화', '바다 · 산책'].forEach((text) =>
+      expect(screen.getByText(text)).toBeOnTheScreen()
+    );
+    expect(screen.getAllByTestId(/^planb-draft-slot-photo-/)).toHaveLength(2);
+    expect(
+      i06Classes(/^planb-draft-slot-number-/).map((tokens) =>
+        tokens.includes('bg-success') ? 'success' : 'other'
+      )
+    ).toEqual(['success', 'success']);
+    expect(screen.queryAllByTestId(/^planb-draft-candidates-/)).toHaveLength(0);
+    expect(i06Texts(/^sheet-connector-distance-/)).toEqual(['1.4km']);
+
+    const sheets = screen.root.findAll(
+      (node) =>
+        typeof node.props?.index === 'number' &&
+        Array.isArray(node.props?.snapPoints)
+    );
+    expect(sheets.length).toBeGreaterThan(0);
+    sheets.forEach((node) => {
+      expect(node.props.index).toBe(0);
+      expect(node.props.snapPoints).toEqual(['40%', '88%']);
+    });
+
+    expect(screen.queryAllByTestId(/^sheet-cta/)).toHaveLength(0);
+    for (const id of [
+      'planb-solving-background',
+      'planb-solving-progress',
+      'planb-solving-cancel',
+    ]) {
+      expect(screen.queryByTestId(id)).toBeNull();
+    }
+    expect(screen.queryByText('백그라운드로')).toBeNull();
+  });
+
+  it('planb-solving 키는 band i · 라벨 "i05 · 다시 짜는 중" 이다', () => {
+    const states = PREVIEW_STATES as {
+      key: string;
+      band: string;
+      label: string;
+    }[];
+    const entry = states.find((state) => state.key === 'planb-solving');
+    expect(entry?.band).toBe('i');
+    expect(entry?.label).toBe('i05 · 다시 짜는 중');
+  });
+});
+
+// ── TRIP-753 · i07 일정 편집 프리뷰 ─────────────────────────────────────────────────────────
+//
+// Figma 4313:2100 — `planb-manual-normal` 키가 h12 편집기(EditorView, inTrip)로 2일차 5곳을 펼침으로
+// 그린다. 옛 폴백·위반 2키는 사라진다. 프리뷰는 뷰를 파일 경로로 import 한다(위 `@/shared/api` 지뢰가
+// 배럴 로드를 막는다, 하위 경로 정적 검사는 planbEditUnifyStructure U5). 사진은 jest 에서 uri 가 없어
+// 플레이스홀더로 그려지므로 세지 않는다(02a ★17 — 육안 게이트 몫).
+
+function i07Tone(testID: string): string {
+  const tokens = String(screen.getByTestId(testID).props.className ?? '').split(
+    /\s+/
+  );
+  if (tokens.includes('bg-success')) return 'success';
+  if (tokens.includes('bg-primary')) return 'primary';
+  return 'none';
+}
+
+describe('🔴 TRIP-753 · i07 일정 편집 프리뷰 (AC-12 · AC-10)', () => {
+  it('planb-manual-normal 은 2일차 5곳을 완료 2·위반 1·i07 안내로 펼쳐 그리고, 옛 폴백 표면은 없다', () => {
+    mockSearchParams.state = 'planb-manual-normal';
+
+    render(<DevPreview />);
+
+    expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
+    expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
+      '일정 편집'
+    );
+    expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('2일차');
+    expect(screen.getByTestId('sheet-header-date')).toHaveTextContent(
+      '6월 11일(목)'
+    );
+    expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent('5곳');
+
+    // 일차 칩 3개, 2일차 선택.
+    expect(screen.getByTestId('itinerary-edit-day-1')).toBeOnTheScreen();
+    expect(screen.getByTestId('itinerary-edit-day-2')).toBeSelected();
+    expect(screen.getByTestId('itinerary-edit-day-3')).toBeOnTheScreen();
+
+    // 카드 5장 — 이름·시각·카테고리를 트리 순서대로.
+    const expectTexts = (pattern: RegExp, texts: string[]) => {
+      const nodes = screen.getAllByTestId(pattern);
+      expect(nodes).toHaveLength(texts.length);
+      nodes.forEach((node, index) =>
+        expect(node).toHaveTextContent(texts[index])
+      );
+    };
+    expectTexts(/^slot-stopcard-name-/, [
+      '감천문화마을',
+      '광안리 해변',
+      '부산시립미술관',
+      '전포 카페거리',
+      '해운대 해변',
+    ]);
+    expectTexts(/^slot-stopcard-time-/, [
+      '09:30–10:30',
+      '11:00–12:00',
+      '13:00–14:30',
+      '15:00–16:30',
+      '17:00–18:30',
+    ]);
+    expectTexts(/^slot-stopcard-tags-/, [
+      '마을 · 벽화',
+      '바다 · 산책',
+      '미술 · 실내',
+      '카페 · 실내',
+      '바다 · 해변',
+    ]);
+
+    // 완료 1·2 는 초록 번호 + 잠긴 알약, 예정 3~5 는 빨강 번호 + 누름 칩.
+    expect(
+      screen
+        .getAllByTestId(/^slot-stopcard-number-/)
+        .map((node) => i07Tone(node.props.testID as string))
+    ).toEqual(['success', 'success', 'primary', 'primary', 'primary']);
+    expect(screen.getAllByTestId(/^slot-stopcard-locked-/)).toHaveLength(2);
+    expect(screen.getAllByTestId(/^slot-stopcard-timechip-/)).toHaveLength(3);
+
+    // 행 3 위반 배지 하나.
+    expectTexts(/^slot-stopcard-violation-/, ['숙소 고정 충돌']);
+
+    // i07 얼굴 — 카드 사이 + 없음, 안내 문구, 펼친 시트, 저장 CTA.
+    expect(screen.queryAllByTestId(/^itinerary-edit-insert-/)).toHaveLength(0);
+    expect(screen.getByTestId('itinerary-edit-guide')).toHaveTextContent(
+      '방문한 곳은 그대로 두고, 길게 눌러 순서를 바꾸거나 아래로 끌어 삭제해요'
+    );
+    const indices = sheetIndices();
+    expect(indices.length).toBeGreaterThan(0);
+    indices.forEach((index) => expect(index).toBe(1));
+    expect(screen.getByTestId('sheet-cta-button-0')).toHaveTextContent(
+      '일정 저장하기'
+    );
+
+    // 옛 폴백·잠금 표면은 트리에 없다(AC-10).
+    expect(screen.queryAllByTestId(/^planb-manual-/)).toHaveLength(0);
+    ['이동시간 미상', '변경 불가', '--:--', '방문 완료'].forEach((text) =>
+      expect(screen.queryByText(text)).toBeNull()
+    );
+    expect(screen.queryByText(/^Day \d/)).toBeNull();
+  });
+
+  it('planb-manual-normal 은 band i · 라벨 "i07 · 일정 편집" 이고, 옛 폴백·위반 키는 없다', () => {
+    const states = PREVIEW_STATES as {
+      key: string;
+      band: string;
+      label: string;
+    }[];
+    const entry = states.find((state) => state.key === 'planb-manual-normal');
+    expect(entry?.band).toBe('i');
+    expect(entry?.label).toBe('i07 · 일정 편집');
+
+    const keys = states.map((state) => state.key);
+    expect(keys.length).toBeGreaterThan(100);
+    expect(keys).not.toContain('planb-manual-fallback');
+    expect(keys).not.toContain('planb-manual-violation');
+  });
+});
+
+// ── TRIP-754 · i08 변경 반영 시트 1키 ───────────────────────────────────────
+//
+// Figma 4401:1568 — 펼침 허브(5번째 해운대 자리가 F1963 + "변경됨") 위, 허브 밖 형제로 픽스처가 다 찬
+// 반영 시트. 옛 i19 전면화면(`ReplanAppliedScreen`)은 같은 키 이름을 물려주고 사라진다.
+
+/** 반복 testID 노드들이 기대 글자와 개수·순서까지 같다(각 노드 완전 일치). */
+function expectI08Texts(testID: string, expected: string[]): void {
+  const nodes = screen.getAllByTestId(testID);
+  expect(nodes).toHaveLength(expected.length);
+  nodes.forEach((node, index) =>
+    expect(node).toHaveTextContent(expected[index])
+  );
+}
+
+describe('🔴 TRIP-754 · i08 변경 반영 시트 프리뷰 (AC-11)', () => {
+  it('planb-applied 는 펼침 허브(5번째 F1963 · 변경됨) 위에, 허브 밖 형제로 Figma 픽스처 시트를 그린다', () => {
+    mockSearchParams.state = 'planb-applied';
+
+    render(<DevPreview />);
+
+    // 배경 — 펼침 허브(index 2) 5곳, 5번째 카드가 F1963 으로 바뀌고 "변경됨" 배지.
+    const liveScreen = screen.getByTestId('execution-live-screen');
+    const hubIndices = liveScreen
+      .findAll(
+        (node) =>
+          typeof node.props?.index === 'number' &&
+          Array.isArray(node.props?.snapPoints)
+      )
+      .map((node) => node.props.index as number);
+    expect(hubIndices.length).toBeGreaterThan(0);
+    hubIndices.forEach((index) => expect(index).toBe(2));
+    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(5);
+    const names = within(liveScreen).getAllByTestId(
+      /^execution-live-slot-name-2026-06-11#/
+    );
+    expect(names).toHaveLength(5);
+    expect(names[4]).toHaveTextContent('F1963 복합문화공간');
+    const changedKey = String(names[4].props.testID).replace(
+      'execution-live-slot-name-',
+      ''
+    );
+    expect(
+      screen.getByTestId(`execution-live-slot-status-${changedKey}`)
+    ).toHaveTextContent('변경됨');
+    expect(within(liveScreen).queryByText('해운대 해변')).toBeNull();
+
+    // 시트 — 허브 밖(형제), Figma 문구 전부.
+    const sheet = screen.getByTestId('planb-applied-sheet');
+    expect(sheet).toBeOnTheScreen();
+    expect(within(liveScreen).queryByTestId('planb-applied-sheet')).toBeNull();
+    expect(screen.getByTestId('planb-applied-scrim')).toBeOnTheScreen();
+    expect(screen.getByTestId('planb-applied-eyebrow')).toHaveTextContent(
+      '변경 반영됨'
+    );
+    expect(screen.getByTestId('planb-applied-title')).toHaveTextContent(
+      '새 일정이 반영됐어요'
+    );
+    expectI08Texts('planb-applied-subtitle-line', [
+      '비 예보를 반영했어요',
+      '방문한 곳은 그대로 두고 17시 이후만 바뀌었어요',
+    ]);
+    expectI08Texts('planb-applied-badge', [
+      '바뀐 곳 1',
+      '방문지 5→5',
+      '이동 −6.9km',
+    ]);
+
+    const rows = within(sheet).getAllByTestId('planb-applied-diff-row');
+    expect(rows).toHaveLength(2);
+    const expected = [
+      [
+        '추가',
+        'bg-success',
+        'F1963 복합문화공간',
+        '17:00–18:30 · 비 예보로 실내 대안',
+      ],
+      [
+        '삭제',
+        'bg-primary',
+        '해운대 해변',
+        '17:00–18:30 · 비 예보 · 17시 이후',
+      ],
+    ];
+    rows.forEach((row, index) => {
+      const [kind, dot, name, meta] = expected[index];
+      expect(
+        within(row).getByTestId('planb-applied-diff-kind')
+      ).toHaveTextContent(kind);
+      expect(
+        String(
+          within(row).getByTestId('planb-applied-diff-dot').props.className ??
+            ''
+        ).split(/\s+/)
+      ).toContain(dot);
+      expect(
+        within(row).getByTestId('planb-applied-diff-name')
+      ).toHaveTextContent(name);
+      expect(
+        within(row).getByTestId('planb-applied-diff-meta')
+      ).toHaveTextContent(meta);
+    });
+
+    expect(screen.getByTestId('planb-applied-revert')).toHaveTextContent(
+      '되돌리기'
+    );
+    expect(screen.getByTestId('planb-applied-confirm')).toHaveTextContent(
+      '확인'
+    );
+    expect(screen.queryByTestId('planb-applied-revert-notice')).toBeNull();
+  });
+
+  it('planb-applied 는 band i · 라벨 "i08 · 변경 반영 시트" 다', () => {
+    const states = PREVIEW_STATES as {
+      key: string;
+      band: string;
+      label: string;
+    }[];
+    const entry = states.find((state) => state.key === 'planb-applied');
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('i');
+    expect(entry?.label).toBe('i08 · 변경 반영 시트');
+
+    // 짝 앵커 — 목록이 비지 않았다.
+    expect(states.length).toBeGreaterThan(100);
+  });
+});

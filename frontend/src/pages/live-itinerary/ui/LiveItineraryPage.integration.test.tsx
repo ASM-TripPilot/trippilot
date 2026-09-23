@@ -20,7 +20,8 @@ import { LiveItineraryPage } from './LiveItineraryPage';
  * 무엇을 보장하나:
  *  - I1 오늘 슬롯이 허브(`execution-live-screen`)에 뜨고, 시트 헤더 한 줄이
  *    trip.title + 일차 + `formatCoPickDayHeader(date)` + 슬롯 수로 조립된다.
- *  - I2~I4 구간 밖·5xx·404 얼굴(TRIP-395 그대로 — 판정은 이 사이클이 안 건드린다).
+ *  - I2·I2b 오늘이 여행 구간 밖(후·전)이어도 막지 않고 허브를 연다(2026-09-23 제품 규칙 변경 —
+ *    구 "오늘은 여행 중이 아니에요" 얼굴 폐지). I3·I4 5xx·404 얼굴.
  *  - I5·I6 뒤로가기는 `canGoBack` 사다리 — 히스토리가 있으면 back, 없으면(딥링크·푸시 직행)
  *    조용히 멈추지 않고 `/(tabs)` 로 replace(INV-4 · ItineraryPlanPage 관례).
  *  - I7·I7b 수동 재계획 진입(BR-U4-10) — TRIP-747 부터 연필 FAB 는 제자리 토글이라 이동하지 않고,
@@ -126,6 +127,23 @@ const itineraryOk = () =>
   http.get(`${BASE}/trips/:tripId/itinerary`, () =>
     HttpResponse.json(itinerary())
   );
+/** 2일짜리 일정(20일 p1 · 21일 p2) — 여행 전/후에 어느 날을 여는지 가르려면 날이 둘 이상이어야 한다. */
+const DAY2 = '2026-08-21';
+const twoDayItineraryOk = () =>
+  http.get(`${BASE}/trips/:tripId/itinerary`, () => {
+    const base = itinerary();
+    const [day1] = base.days;
+    return HttpResponse.json({
+      ...base,
+      days: [
+        day1,
+        {
+          date: DAY2,
+          slots: [{ ...day1.slots[0], poiId: 'p2', nameKo: '해운대' }],
+        },
+      ],
+    });
+  });
 const visitsHandler = (visits: VisitCheck[] = []) =>
   http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
     HttpResponse.json({ visits })
@@ -175,18 +193,42 @@ describe('LiveItineraryPage', () => {
     );
   });
 
-  it('I2 오늘이 여행 구간 밖이면 안내를 준다', async () => {
-    server.use(itineraryOk(), tripHandler());
+  it.each([
+    [
+      'I2 여행이 끝난 뒤',
+      '2026-12-25',
+      '마지막 날',
+      `${DAY2}#p2`,
+      `${TODAY}#p1`,
+    ],
+    [
+      'I2b 여행이 시작되기 전',
+      '2026-08-01',
+      '첫날',
+      `${TODAY}#p1`,
+      `${DAY2}#p2`,
+    ],
+  ])(
+    '%s(today=%s)에도 막지 않고 허브에 %s 슬롯을 띄운다',
+    async (_label, today, _day, shownSlot, hiddenSlot) => {
+      server.use(twoDayItineraryOk(), tripHandler(), visitsHandler());
 
-    render(<LiveItineraryPage tripId={TRIP_ID} today="2026-12-25" />, {
-      wrapper,
-    });
+      render(<LiveItineraryPage tripId={TRIP_ID} today={today} />, {
+        wrapper,
+      });
 
-    await waitFor(() =>
-      expect(screen.getByTestId('execution-live-outside')).toBeTruthy()
-    );
-    expect(screen.queryByTestId('execution-live-screen')).toBeNull();
-  });
+      await waitFor(() =>
+        expect(screen.getByTestId('execution-live-screen')).toBeTruthy()
+      );
+      expect(
+        screen.getByTestId(`execution-live-slot-${shownSlot}`)
+      ).toBeTruthy();
+      expect(
+        screen.queryByTestId(`execution-live-slot-${hiddenSlot}`)
+      ).toBeNull();
+      expect(screen.queryByTestId('execution-live-outside')).toBeNull();
+    }
+  );
 
   it('I3 조회가 5xx로 실패하면 실패 얼굴을 준다 (INV-4)', async () => {
     server.use(

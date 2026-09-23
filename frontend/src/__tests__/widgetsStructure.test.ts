@@ -5,13 +5,15 @@
 // 사라졌는가 · 위젯이 상태·상위층을 안 쥐는가"를 본다.
 //
 // 무엇을 보장하나:
-//  - AC-1 이동: shared/itinerary-edit 소멸 + widgets/itinerary-edit 실재 + 전 소스에 옛 경로 참조 0.
+//  - AC-1 이동: shared/itinerary-edit 소멸 + widgets 층 실재 + 전 소스에 옛 경로 참조 0.
 //  - AC-1 완료조건: shared 직계에 도메인명(itinerary·stay·place·trip) 0.
-//  - AC-1 경계: features/planb 에 @/widgets import 0 + ManualEditScreen 이 pages 로 이동.
+//  - AC-1 경계: features/planb 에 @/widgets import 0 + ManualEditScreen 은 어디에도 없다(TRIP-753 —
+//    pages 로 옮겨졌던 화면이 i07 을 h12 편집기로 합치며 슬라이스째 삭제됐다).
 //  - (AC-3 담은 곳 FAB 추출은 이번 범위에서 빠졌다 — 소비처가 features 층이라 features→widgets
 //    상향 참조가 되어 층 린트와 충돌. page 층 소비로 후속 티켓.)
-//  - AC-2 통일: features/itinerary/ui/SlotTimeSheet.tsx 소멸 + 소비처 3곳(PlaceAddPage 포함)이
-//    @/widgets/time-sheet 소비(★4 누락 소비처 fail-closed).
+//  - AC-2 통일: features/itinerary/ui/SlotTimeSheet.tsx 소멸 + 소비처(PlaceAddPage 포함)가
+//    @/widgets/time-sheet 소비(★4 누락 소비처 fail-closed). TRIP-753 으로 PlanbManualPage 는 빠졌다 —
+//    i07 은 ItineraryEditPage(시작/종료 라벨)를 그대로 쓴다.
 //  - AC-4/AC-5 상태·경계 규약: 위젯 소스에 expo-router·@/features·@/pages·raw hex 0,
 //    useState 0(단 TimeSheet.tsx 예외 — D8 선택 셀 상태, 02a ★7).
 //
@@ -38,6 +40,7 @@ const TOKENIZED_HEX = [
 ];
 
 // AC-2 TimeSheet 소비처 — seed 목록(ItineraryEditPage·PlanbManualPage)에 PlaceAddPage 누락(★4 sweep).
+// TRIP-753: PlanbManualPage(도착/출발·'시각 입력')는 슬라이스째 삭제 — 남은 소비처는 둘이다.
 // 5-c(03b 경고-1): 소비처가 넘기는 라벨·제목은 통합 테스트가 단언하지 않아, 위젯 기본값으로의
 // 조용한 회귀를 여기 소스 스캔으로 잠근다(뮤테이션 실측: 라벨 한 글자만 바꿔도 red).
 const TIME_SHEET_CONSUMERS: {
@@ -48,11 +51,6 @@ const TIME_SHEET_CONSUMERS: {
   {
     rel: 'pages/itinerary-edit/ui/ItineraryEditPage.tsx',
     labels: /labels=\{\{\s*start:\s*'시작',\s*end:\s*'종료'\s*\}\}/,
-  },
-  {
-    rel: 'pages/planb-manual/ui/PlanbManualPage.tsx',
-    labels: /labels=\{\{\s*start:\s*'도착',\s*end:\s*'출발'\s*\}\}/,
-    title: /title="시각 입력"/,
   },
   {
     rel: 'pages/itinerary-manual/ui/PlaceAddPage.tsx',
@@ -171,14 +169,15 @@ describe('G0 · 탐지기 자가검사 — 이게 통과해야 아래 스캔이 
   });
 });
 
-describe('🔴 A · AC-1 이동 — shared/itinerary-edit 소멸 + widgets/itinerary-edit 실재', () => {
-  it('shared 디렉토리 부재·전 소스 옛 경로 0 (부정) + widget 셸 실재·widget 경로 참조 (긍정 짝)', () => {
+describe('🔴 A · AC-1 이동 — shared/itinerary-edit 소멸 + widgets 층 실재', () => {
+  it('shared 디렉토리 부재·전 소스 옛 경로 0 (부정) + 실재 위젯·widget 경로 참조 (긍정 짝)', () => {
     const sources = allSources();
 
-    // 긍정 짝 — 이동 목적지가 실재하고 어떤 소스가 새 경로를 참조한다(공허 통과 방지).
-    expect(exists('widgets/itinerary-edit/ui/ManualEditShell.tsx')).toBe(true);
+    // 긍정 짝 — widgets 층이 실재하고 어떤 소스가 위젯 경로를 참조한다(공허 통과 방지). TRIP-753 으로
+    // 옛 목적지(widgets/itinerary-edit)가 슬라이스째 사라져 앵커를 남은 위젯(time-sheet)으로 옮겼다.
+    expect(exists('widgets/time-sheet/ui/TimeSheet.tsx')).toBe(true);
     expect(
-      sources.some(({ source }) => source.includes('widgets/itinerary-edit'))
+      sources.some(({ source }) => source.includes('@/widgets/time-sheet'))
     ).toBe(true);
 
     // 부정 — 옛 shared 디렉토리가 사라졌고, 어떤 소스도 옛 경로를 참조하지 않는다.
@@ -205,18 +204,19 @@ describe('🔴 B · AC-1 완료조건 — shared 직계에 도메인 컴포넌�
   });
 });
 
-describe('🔴 C · AC-1 경계 — features/planb 는 @/widgets 를 안 물고, ManualEditScreen 은 pages 로 갔다', () => {
-  it('features/planb @/widgets 0 · features 판 부재 (부정) + pages 판 실재 (긍정 짝)', () => {
+describe('🔴 C · AC-1 경계 — features/planb 는 @/widgets 를 안 물고, ManualEditScreen 은 어디에도 없다', () => {
+  it('features/planb @/widgets 0 · features 판·pages 판 부재 (부정) + planb 모집단 실재 (긍정 짝)', () => {
     const planbSources = readAll(
       listSourceFiles(path.join(ROOT, 'features/planb'))
     );
 
-    // 긍정 짝 — planb 모집단이 비어 있지 않고, 화면은 pages 로 옮겨졌다.
+    // 긍정 짝 — planb 모집단이 비어 있지 않다(공허 통과 방지).
     expect(planbSources.length).toBeGreaterThan(0);
-    expect(exists('pages/planb-manual/ui/ManualEditScreen.tsx')).toBe(true);
 
-    // 부정 — features/planb 는 상위층(widgets)을 역참조하지 않고, 화면은 더는 여기 없다.
+    // 부정 — features/planb 는 상위층(widgets)을 역참조하지 않고, 화면은 features 에도 pages 에도 없다
+    // (TRIP-753 — i07 이 h12 편집기(ItineraryEditPage + EditorView)를 재사용해 옛 화면이 사라졌다).
     expect(exists('features/planb/ui/ManualEditScreen.tsx')).toBe(false);
+    expect(exists('pages/planb-manual/ui/ManualEditScreen.tsx')).toBe(false);
     const offenders = planbSources
       .filter(({ source }) => source.includes('@/widgets'))
       .map(({ file }) => file);
@@ -224,15 +224,15 @@ describe('🔴 C · AC-1 경계 — features/planb 는 @/widgets 를 안 물고,
   });
 });
 
-describe('🔴 E · AC-2 — SlotTimeSheet 소멸 + 소비처 3곳이 @/widgets/time-sheet 소비', () => {
-  it('SlotTimeSheet.tsx 부재·전 소스 옛 경로 0 (부정) + 소비처 3곳 위젯 import (긍정 짝, ★4)', () => {
+describe('🔴 E · AC-2 — SlotTimeSheet 소멸 + 소비처가 @/widgets/time-sheet 소비', () => {
+  it('SlotTimeSheet.tsx 부재·전 소스 옛 경로 0 (부정) + 소비처 위젯 import (긍정 짝, ★4)', () => {
     const sources = allSources();
     const consumers = TIME_SHEET_CONSUMERS.map((c) => ({
       ...c,
       source: readOne(c.rel),
     }));
 
-    // 긍정 짝 — 세 소비처(PlaceAddPage 포함)가 위젯을 소비하고, 각자의 라벨·제목을 실제로 넘긴다
+    // 긍정 짝 — 소비처(PlaceAddPage 포함)가 위젯을 소비하고, 각자의 라벨·제목을 실제로 넘긴다
     // (seed 누락분 ★4 + 03b 경고-1 회귀 사각을 여기서 강제).
     consumers.forEach(({ rel, source, labels, title }) => {
       expect({
@@ -258,10 +258,11 @@ describe('🔴 F · AC-4/AC-5 — 위젯은 상위층·raw hex 를 안 물고, �
   it('위젯 UI 소스에 expo-router·@/features·@/pages·raw hex 0 (부정) + 3위젯 실재 (긍정 짝)', () => {
     const sources = widgetUiSources();
 
-    // 긍정 짝 — 모집단에 두 위젯이 실재한다(빈 widgets 층에서 공허 통과 방지).
+    // 긍정 짝 — 모집단에 두 위젯이 실재한다(빈 widgets 층에서 공허 통과 방지). TRIP-753 으로 옛 셸이
+    // 사라져 대표를 map-sheet-shell 로 옮겼다.
     expect(sources.map((s) => s.file)).toEqual(
       expect.arrayContaining([
-        'widgets/itinerary-edit/ui/ManualEditShell.tsx',
+        'widgets/map-sheet-shell/ui/MapSheetShell.tsx',
         'widgets/time-sheet/ui/TimeSheet.tsx',
       ])
     );
@@ -286,7 +287,7 @@ describe('🔴 F · AC-4/AC-5 — 위젯은 상위층·raw hex 를 안 물고, �
     // 긍정 짝 — 예외 대상(TimeSheet)이 실물이다(phantom 예외 방지) + props-only 위젯이 모집단에 있다.
     expect(exists(STATE_EXEMPT)).toBe(true);
     expect(sources.map((s) => s.file)).toEqual(
-      expect.arrayContaining(['widgets/itinerary-edit/ui/ManualEditShell.tsx'])
+      expect.arrayContaining(['widgets/map-sheet-shell/ui/MapSheetShell.tsx'])
     );
 
     // 부정 — TimeSheet(선택 셀 상태, D8) 외 위젯은 useState 를 쥐지 않는다(상태는 소비처 소유).

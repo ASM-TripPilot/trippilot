@@ -18,16 +18,33 @@ import { PlanbRequestPage } from './PlanbRequestPage';
  *  - 트리거가 없거나·못 찾았거나·MANUAL 이면 감지 칩 0, 정적 날씨가 보이고 triggerId 는 null.
  *  - 진입마다 폼을 초기화하고 시드는 set 이다(이전 방문 값·토글 반전 없음, Q4). 시드는 한 번뿐이다.
  *  - 스크림·끌어 닫기 → back, 뒤로 갈 곳이 없으면 허브로 replace. POST 0(AC-8).
+ *  - TRIP-752 AC-10: POST 가 성공하면 받은 세션 id 를 싣고 solving 으로 replace(push 아님). 성공 전엔 이동 0.
  *
  * seam 목(02a ★10): 페이지가 소비하는 래퍼 3개(`useStartReplan`·`useActiveTriggers`·`useLiveItinerary`)를
  * 목한다. 목 데이터는 같은 참조를 돌려준다(TanStack 구조 공유와 같다 — 새 객체면 가짜 루프).
  * jest.mock 팩토리는 `mock` 접두 변수만 볼 수 있다(호이스팅).
  */
 
-let mockPhase: 'idle' | 'success' = 'idle';
+let mockPhase: 'idle' | 'success' | 'conflict' | 'serverError' | 'network' =
+  'idle';
+// 시작 응답 = 열린 세션(서버 계약 ReplanSession, 응답 status 는 SOLVING) — 성공 콜백이 이 세션을 받는다.
+const mockSession = { sessionId: 's9', tripId: 't1', status: 'SOLVING' };
+// 실패 = axios 에러 모양(isNotFound 선례). 네트워크 오류는 응답 자체가 없다.
+const mockHttpError = (status: number) => ({
+  isAxiosError: true,
+  response: { status },
+});
+const mockNetworkError = { isAxiosError: true, message: 'Network Error' };
+type MockMutateOptions = {
+  onSuccess?: (session: typeof mockSession) => void;
+  onError?: (error: unknown) => void;
+};
 const mockMutate = jest.fn(
-  (_variables: unknown, options?: { onSuccess?: () => void }) => {
-    if (mockPhase === 'success') options?.onSuccess?.();
+  (_variables: unknown, options?: MockMutateOptions) => {
+    if (mockPhase === 'success') options?.onSuccess?.(mockSession);
+    if (mockPhase === 'conflict') options?.onError?.(mockHttpError(409));
+    if (mockPhase === 'serverError') options?.onError?.(mockHttpError(500));
+    if (mockPhase === 'network') options?.onError?.(mockNetworkError);
   }
 );
 
@@ -175,6 +192,12 @@ function forwardDestinations(): string[] {
     .map((call) => hrefString(call[0]));
 }
 
+// i05 로 **갈아 끼운다**(replace) — i04 는 허브 위 투명 모달이라 push 로 쌓으면 ‹ 가 요청 시트로 돌아간다.
+const SOLVING_HREF = {
+  pathname: '/trips/[tripId]/planb/solving',
+  params: { tripId: TRIP_ID, sessionId: 's9' },
+};
+
 const body = (over: Record<string, unknown> = {}) => ({
   scope: 'PARTIAL_SLOTS',
   originKind: null,
@@ -187,7 +210,7 @@ const body = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('I1·I2 · 수동 진입 제출 (AC-6 · BR-U4-10·12)', () => {
-  it('I1 정적 날씨 + 자유텍스트를 조립해 POST(triggerId null)하고 성공하면 solving 으로 간다', () => {
+  it('🔴 I1 정적 날씨 + 자유텍스트를 조립해 POST(triggerId null)하고, 성공하면 받은 세션 id 로 solving 에 replace 한다 (TRIP-752 AC-10)', () => {
     mockPhase = 'success';
     render(<PlanbRequestPage tripId={TRIP_ID} />);
 
@@ -201,9 +224,28 @@ describe('I1·I2 · 수동 진입 제출 (AC-6 · BR-U4-10·12)', () => {
     expect(postedBody()).toEqual(
       body({ reasons: ['WEATHER'], freeText: '광안리 야경' })
     );
-    const destinations = forwardDestinations();
-    expect(destinations.some((d) => d.includes('solving'))).toBe(true);
-    expect(destinations.some((d) => d.includes(TRIP_ID))).toBe(true);
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith(SOLVING_HREF);
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('🔴 I1b 제출 직후에는 아무 데도 가지 않고, 성공 콜백이 불린 뒤에만 solving 으로 간다 (TRIP-752 AC-10 · 751 차단-1)', () => {
+    render(<PlanbRequestPage tripId={TRIP_ID} />);
+
+    fireEvent.press(screen.getByTestId('planb-request-submit'));
+
+    expect(mockMutate).toHaveBeenCalledTimes(1);
+    expect(forwardDestinations()).toEqual([]);
+    expect(mockBack).not.toHaveBeenCalled();
+
+    const options = mockMutate.mock.calls[0][1];
+    expect(typeof options?.onSuccess).toBe('function');
+    act(() => options?.onSuccess?.(mockSession));
+
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith(SOLVING_HREF);
+    expect(mockPush).not.toHaveBeenCalled();
   });
 
   it('I2 아무것도 안 골라도 빈 배열·freeText null 로 POST 된다', () => {
@@ -562,5 +604,67 @@ describe('🔴 I16 · 닫기는 한 번만 일어난다 (AC-8 · Q8 · 5-b 경�
     fireEvent.press(screen.getByTestId('planb-request-scrim'));
 
     expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('🔴 P-E · 시작 실패는 시트 안에 안내하고 이동하지 않는다 (03b 경고-1 · INV-4)', () => {
+  const ERROR = 'planb-request-error';
+  const CONFLICT_TEXT = '여행 기간에만 AI에게 맡길 수 있어요';
+  const GENERIC_TEXT =
+    '다시 짜기를 시작하지 못했어요. 잠시 후 다시 시도해 주세요';
+
+  function expectNoMove(): void {
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(mockBack).not.toHaveBeenCalled();
+  }
+
+  it('P-E1 409(여행 기간 밖)면 기간 안내를 띄우고 아무 데도 가지 않는다', () => {
+    mockPhase = 'conflict';
+    render(<PlanbRequestPage tripId={TRIP_ID} />);
+
+    fireEvent.press(screen.getByTestId('planb-request-submit'));
+
+    expect(mockMutate).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId(ERROR)).toHaveTextContent(CONFLICT_TEXT);
+    expectNoMove();
+  });
+
+  it.each([
+    ['5xx', 'serverError'],
+    ['네트워크 오류', 'network'],
+  ] as const)(
+    'P-E2 %s 면 일반 실패 안내를 띄우고 아무 데도 가지 않는다',
+    (_label, phase) => {
+      mockPhase = phase;
+      render(<PlanbRequestPage tripId={TRIP_ID} />);
+
+      fireEvent.press(screen.getByTestId('planb-request-submit'));
+
+      expect(screen.getByTestId(ERROR)).toHaveTextContent(GENERIC_TEXT);
+      expectNoMove();
+    }
+  );
+
+  it('P-E3 다시 누르면 안내를 먼저 지우고, 새 실패는 안내 하나로 교체된다', () => {
+    mockPhase = 'conflict';
+    render(<PlanbRequestPage tripId={TRIP_ID} />);
+    fireEvent.press(screen.getByTestId('planb-request-submit'));
+    expect(screen.getByTestId(ERROR)).toHaveTextContent(CONFLICT_TEXT);
+
+    // 응답이 아직 안 온 재시도 — 이때 안내가 남아 있으면 안 된다.
+    mockPhase = 'idle';
+    fireEvent.press(screen.getByTestId('planb-request-submit'));
+    expect(mockMutate).toHaveBeenCalledTimes(2);
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+
+    const retry = mockMutate.mock.calls[1][1];
+    expect(typeof retry?.onError).toBe('function');
+    act(() => retry?.onError?.(mockHttpError(500)));
+
+    expect(screen.getAllByTestId(ERROR)).toHaveLength(1);
+    expect(screen.getByTestId(ERROR)).toHaveTextContent(GENERIC_TEXT);
+    expectNoMove();
   });
 });

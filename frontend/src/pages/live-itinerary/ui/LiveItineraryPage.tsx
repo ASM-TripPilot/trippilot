@@ -16,6 +16,7 @@ import { triggerLabel } from '@/features/planb/model/triggerLabel';
 import { triggerPillCopy } from '@/features/planb/model/triggerPillCopy';
 import { triggerWatchlist } from '@/features/planb/model/triggerWatchlist';
 import { useActiveTriggers } from '@/features/planb/model/useActiveTriggers';
+import { ReplanAppliedSheet } from '@/features/planb/ui/ReplanAppliedSheet';
 import { RiskDetailSheet } from '@/features/planb/ui/RiskDetailSheet';
 import type { Trigger } from '@/shared/api/generated/schemas';
 import {
@@ -43,6 +44,8 @@ export interface LiveItineraryPageProps {
   tripId: string;
   /** 'YYYY-MM-DD' — 테스트 주입용. 기본 = 오늘(UTC). */
   today?: string;
+  /** TRIP-754 — i06 적용 성공 신호(`?applied=sessionId`). 있으면 i08 반영 시트를 허브 위에 띄운다. */
+  appliedSessionId?: string;
 }
 
 const NEUTRAL_BADGE = (
@@ -55,6 +58,7 @@ const HOME_FALLBACK = '/(tabs)';
 export function LiveItineraryPage({
   tripId,
   today = new Date().toISOString().slice(0, 10),
+  appliedSessionId,
 }: LiveItineraryPageProps) {
   const query = useLiveItinerary(tripId);
   const trip = useGetTripsTripId(tripId);
@@ -62,6 +66,10 @@ export function LiveItineraryPage({
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   // i03 위험 상세 시트 열림 = 그 트리거 id(TRIP-749). 재조회로 트리거가 사라지면 시트도 사라진다.
   const [riskTriggerId, setRiskTriggerId] = useState<string | null>(null);
+  // i08 [되돌리기] 안내(E2 — 서버 호출 없이 안내만). 허브 초기 스냅은 마운트 때 한 번만 정한다 —
+  // 닫으며 applied 가 지워져도 펼친 허브를 도로 접지 않는다(Q5).
+  const [revertNotice, setRevertNotice] = useState(false);
+  const [initialSnapIndex] = useState(appliedSessionId ? 2 : undefined);
 
   const state = resolveLiveState({
     isLoading: query.isPending,
@@ -128,22 +136,6 @@ export function LiveItineraryPage({
             illustration={NEUTRAL_BADGE}
             title="일정을 불러오지 못했어요"
             description="네트워크를 확인하고 다시 시도해주세요"
-            actions={[]}
-          />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (state.kind === 'outsideToday') {
-    return (
-      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
-        <View className="flex-1 items-center justify-center bg-canvas px-lg">
-          <StateNotice
-            testID="execution-live-outside"
-            illustration={NEUTRAL_BADGE}
-            title="오늘은 여행 중이 아니에요"
-            description="여행 기간에 들어오면 오늘 일정을 보여드려요"
             actions={[]}
           />
         </View>
@@ -249,8 +241,18 @@ export function LiveItineraryPage({
         triggerChip={triggerChip}
         triggerPillKey={chipTrigger?.triggerId}
         slotBadgeLabel={slotBadgeLabel}
+        initialSnapIndex={initialSnapIndex}
       />
       {riskSheet}
+      {appliedSessionId ? (
+        // i08 — 반영 직후 한 번 뜨는 알림. 닫기 = applied 쿼리 제거(값을 undefined 로 줘야 지워진다 —
+        // setParams 는 병합이라 `{}` 는 무동작). 부제·배지·내역은 데이터 계약이 없어 안 넘긴다(E4).
+        <ReplanAppliedSheet
+          showRevertNotice={revertNotice}
+          onConfirm={() => router.setParams({ applied: undefined })}
+          onRevert={() => setRevertNotice(true)}
+        />
+      ) : null}
     </>
   );
 }

@@ -1,5 +1,6 @@
-import { useRouter, type Href } from 'expo-router';
-import { useEffect, useRef, type ReactElement } from 'react';
+import { useRouter } from 'expo-router';
+import { isAxiosError } from 'axios';
+import { useEffect, useRef, useState, type ReactElement } from 'react';
 
 import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { useLiveItinerary } from '@/features/execution/model/useLiveItinerary';
@@ -19,10 +20,9 @@ import type { ItineraryDaysItem } from '@/shared/api/generated/schemas';
  *   라우트·페이지 effect 순서에 기대지 않기 위해서다.
  * - 감지 트리거 = URL `triggerId` 와 같은 id 의 활성 트리거(MANUAL 제외). 있으면 대응 사유를 **한 번만**
  *   켠다(토글이 아니라 set — 이미 켜져 있으면 그대로). 사용자가 끈 뒤엔 다시 켜지 않는다.
- * - `[AI가 다시 짜기]` → body 조립(감지 트리거 id 포함) → POST → 성공 시 solving push.
+ * - `[AI가 다시 짜기]` → body 조립(감지 트리거 id 포함) → POST → 성공 시 응답 세션 id 를 싣고 solving 으로
+ *   **replace**(TRIP-752). 이 시트는 허브 위 투명 모달이라 push 로 쌓으면 solving 의 ‹ 가 요청 시트로 돌아간다.
  * - 스크림·끌어 닫기 → 뒤로. 뒤로 갈 곳이 없으면(딥링크·푸시 직행) 허브로 replace.
- *
- * solving 목적지는 typedRoutes 표에 없어 `as Href` 로 캐스트한다.
  */
 
 export interface PlanbRequestPageProps {
@@ -50,6 +50,9 @@ export function PlanbRequestPage({
 }: PlanbRequestPageProps): ReactElement {
   const router = useRouter();
   const startReplan = useStartReplan();
+  // 시작 실패 안내(INV-4). 여행 기간 밖이면 서버가 409 — 확정 일정은 날짜 무관 허브로 열리므로
+  // (2026-09-23) 여행 전·후에도 이 요청에 닿는다.
+  const [errorText, setErrorText] = useState<string | null>(null);
   const triggers = useActiveTriggers(tripId);
   const itinerary = useLiveItinerary(tripId);
 
@@ -100,6 +103,7 @@ export function PlanbRequestPage({
   }, [detectedReasonKey, toggleReason]);
 
   function handleSubmit(): void {
+    setErrorText(null);
     // 이벤트 시점의 최신값을 스토어에서 직접 읽는다(렌더 클로저 stale 회피).
     const form = useReplanFormStore.getState();
     const data = buildStartReplanRequest({
@@ -116,7 +120,17 @@ export function PlanbRequestPage({
     startReplan.mutate(
       { tripId, data },
       {
-        onSuccess: () => router.push(`/trips/${tripId}/planb/solving` as Href),
+        onSuccess: (session) =>
+          router.replace({
+            pathname: '/trips/[tripId]/planb/solving',
+            params: { tripId, sessionId: session.sessionId },
+          }),
+        onError: (error) =>
+          setErrorText(
+            isAxiosError(error) && error.response?.status === 409
+              ? '여행 기간에만 AI에게 맡길 수 있어요'
+              : '다시 짜기를 시작하지 못했어요. 잠시 후 다시 시도해 주세요'
+          ),
       }
     );
   }
@@ -143,6 +157,7 @@ export function PlanbRequestPage({
       onChangeFreeText={setFreeText}
       onSubmit={handleSubmit}
       onClose={handleClose}
+      errorText={errorText}
     />
   );
 }

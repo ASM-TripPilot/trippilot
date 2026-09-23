@@ -24,10 +24,16 @@ const UI_DIRS = [
   'features/planb/ui',
   'pages/live-itinerary/ui',
   'entities/itinerary-slot/ui',
+  // TRIP-751 — i06 재계획안이 features 화면에서 pages 순수 뷰로 옮겨 가 편입했다(안 하면 INV-3 그물이
+  // 조용히 줄어든다, 746 선례).
+  'pages/planb-draft/ui',
 ];
 const ANCHOR_RELS = [
   'pages/live-itinerary/ui/LiveHubView.tsx',
   'entities/itinerary-slot/ui/SlotProgressCard.tsx',
+  'pages/planb-draft/ui/ReplanDraftView.tsx',
+  // TRIP-754 — i08 시트가 features/planb/ui 에 자동 편입됐는지 긍정 확인(AC-13).
+  'features/planb/ui/ReplanAppliedSheet.tsx',
 ];
 
 /** 소요시간 **표기** 탐지기 — 화면에 나갈 문자열 형태. `HH:mm`(09:30)은 숫자 뒤가 `:`이라 안 걸린다. */

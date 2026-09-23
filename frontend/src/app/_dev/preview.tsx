@@ -80,6 +80,7 @@ import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
 import { SheetHeader } from '@/widgets/map-sheet-shell/ui/SheetHeader';
 import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+import { buildStatePins } from '@/entities/itinerary-slot/lib/slotMapPin';
 import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
 import { MethodPickerScreen } from '@/features/itinerary/ui/MethodPickerScreen';
 import {
@@ -113,13 +114,12 @@ import { triggerLabel } from '@/features/planb/model/triggerLabel';
 import { triggerPillCopy } from '@/features/planb/model/triggerPillCopy';
 import { riskAffectedRow } from '@/features/planb/model/riskAffectedRow';
 import { triggerWatchlist } from '@/features/planb/model/triggerWatchlist';
-import { ManualEditScreen } from '@/pages/planb-manual/ui/ManualEditScreen';
 import { ReplanRequestSheet } from '@/features/planb/ui/ReplanRequestSheet';
-import { ReplanAppliedScreen } from '@/features/planb/ui/ReplanAppliedScreen';
-import { ReplanDraftScreen } from '@/features/planb/ui/ReplanDraftScreen';
-import { ReplanSolvingScreen } from '@/features/planb/ui/ReplanSolvingScreen';
-import { NoAlternativeScreen } from '@/features/planb/ui/NoAlternativeScreen';
+import { appliedSummaryBadges } from '@/features/planb/model/appliedSummary';
+import { ReplanAppliedSheet } from '@/features/planb/ui/ReplanAppliedSheet';
 import type { ReplanSlotVM } from '@/entities/itinerary-slot/model';
+import { ReplanDraftView } from '@/pages/planb-draft/ui/ReplanDraftView';
+import { ReplanSolvingView } from '@/pages/planb-draft/ui/ReplanSolvingView';
 import { SlotCandidateSheet } from '@/features/planb/ui/SlotCandidateSheet';
 import { RiskDetailSheet } from '@/features/planb/ui/RiskDetailSheet';
 import { NicknameScreen } from '@/features/onboarding/ui/NicknameScreen';
@@ -165,7 +165,6 @@ import { TermsScreen } from '@/features/onboarding/ui/TermsScreen';
 import type { PreferenceSelection } from '@/features/settings/model/preferenceDraft';
 import { PreferencesEditView } from '@/features/settings/ui/PreferencesEditView';
 import type {
-  ItineraryDaysItem,
   ItineraryDaysItemSlotsItem,
   SlotCandidatesCandidatesItem,
   StayItem,
@@ -174,7 +173,6 @@ import type {
 } from '@/shared/api/generated/schemas';
 import { PersonalizationInfoReason } from '@/shared/api/generated/schemas';
 import { buildMonthGrid } from '@/shared/date/monthGrid';
-import { reorderKeepingFixed } from '@/widgets/itinerary-edit';
 import { LocationPreprompt } from '@/shared/location/LocationPreprompt';
 import { revokeImpact } from '@/shared/location/revokeImpact';
 import { MapView, type MapPin } from '@/shared/map';
@@ -1326,51 +1324,92 @@ const SLOT_CANDIDATES_PREVIEW: SlotCandidatesCandidatesItem[] = [
   },
 ];
 
-// i13 재계획안 슬롯(TRIP-563) — 배지 5종(방문함·진행중·변경됨·null·고정)·후보 어포던스·고정 pill 을
-// 한 화면에서 대조하는 주입 VM. 실 슬롯 데이터(사진·번호·시간대)는 draft 계약 공백이라 VM 에 없다 —
-// 배지·거리 메타·우측 어포던스만 그리는 골격을 눈으로 확인하는 자리(실 슬롯 바인딩은 BE 후속).
+// i06 재계획안(TRIP-751) — Figma `4314:1923` 펼침 5곳. 사진은 Figma 목업 사진(`assets/execution/CREDITS.md`,
+// 행 3·5 야경은 같은 사진). 거리는 "이 슬롯까지 오는 거리"라 행 1 은 null(커넥터는 다음 행 값을 그린다).
+// 행 1 커넥터는 Figma 가 차량 아이콘이지만 서버가 '차량'을 내지 않아 도보 기본으로 둔다(Seed Q9).
 const REPLAN_DRAFT_PREVIEW_SLOTS: ReplanSlotVM[] = [
   {
-    slotKey: 's1',
-    badgeKind: 'visited',
+    slotKey: 'i06-1',
     placeName: '감천문화마을',
-    metaText: '09:30–10:50 · 사진 2장',
-    candidateCount: 0,
+    tone: 'visited',
+    photo: require('@/assets/execution/live-gamcheon-1.jpg'),
+    category: 'SIGHT',
+    timeLabel: '09:30 방문',
+    categoryLabel: '마을 · 벽화',
+    distanceRange: null,
     isFixed: false,
   },
   {
-    slotKey: 's2',
-    badgeKind: 'inProgress',
+    slotKey: 'i06-2',
+    placeName: '광안리 해변',
+    tone: 'visited',
+    photo: require('@/assets/execution/live-gwangalli-1.jpg'),
+    category: 'NATURE',
+    timeLabel: '11:00 방문',
+    categoryLabel: '바다 · 산책',
+    distanceRange: '1.4km',
+    isFixed: false,
+  },
+  {
+    slotKey: 'i06-3',
     placeName: '부산시립미술관',
-    metaText: '13:00 도착 · 관람 중',
-    candidateCount: 0,
+    tone: 'visited',
+    photo: require('@/assets/execution/replan-night-1.jpg'),
+    category: 'CULTURE',
+    timeLabel: '13:00 도착 · 관람 중',
+    categoryLabel: '미술 · 실내',
+    distanceRange: '3.2km',
     isFixed: false,
   },
   {
-    slotKey: 's3',
-    badgeKind: 'changed',
-    placeName: 'F1963',
-    metaText: '#실내 · 도보 1.3km',
-    candidateCount: 4,
+    slotKey: 'i06-4',
+    placeName: '전포 카페거리',
+    tone: 'planned',
+    photo: require('@/assets/execution/live-gamcheon-2.jpg'),
+    category: 'CAFE',
+    timeLabel: '15:00–16:30',
+    categoryLabel: '카페 · 실내',
+    distanceRange: '600m',
     isFixed: false,
   },
   {
-    slotKey: 's4',
-    badgeKind: null,
-    placeName: '보수동 책방골목',
-    metaText: '도보 0.6km',
-    candidateCount: 2,
+    slotKey: 'i06-5',
+    placeName: 'F1963 복합문화공간',
+    tone: 'planned',
+    photo: require('@/assets/execution/replan-night-1.jpg'),
+    category: 'CULTURE',
+    timeLabel: '17:00–18:30',
+    categoryLabel: '전시 · 실내',
+    distanceRange: '1.1km',
     isFixed: false,
-  },
-  {
-    slotKey: 's5',
-    badgeKind: 'fixed',
-    placeName: '해운대 OO호텔',
-    metaText: '20:00 도착 · 변경 불가',
-    candidateCount: 0,
-    isFixed: true,
   },
 ];
+
+// i06 대안 없음(Figma `4335:1923`) — 행 5 가 해운대 해변으로 바뀌고 4→5 거리가 8km 다.
+const REPLAN_NOALT_PREVIEW_SLOTS: ReplanSlotVM[] = [
+  ...REPLAN_DRAFT_PREVIEW_SLOTS.slice(0, 4),
+  {
+    ...REPLAN_DRAFT_PREVIEW_SLOTS[4],
+    placeName: '해운대 해변',
+    category: 'NATURE',
+    categoryLabel: '바다 · 해변',
+    distanceRange: '8km',
+  },
+];
+
+const REPLAN_PREVIEW_BASE = {
+  center: { lat: 35.1587, lng: 129.1604 },
+  days: [{ label: '1일차' }, { label: '2일차' }, { label: '3일차' }],
+  selectedDayIndex: 1,
+  dayLabel: '2일차',
+  dateLabel: '6월 11일(목)',
+  meta: '5곳 · 6.3km',
+  onBack: noop,
+  onManualEdit: noop,
+  onApply: noop,
+  onReopenRequest: noop,
+  onPressCandidates: noop,
+};
 
 // e04 저장한 숙소(TRIP-461 → TRIP-729 Figma 정합) — 사진은 계약 공백이라 회색 자리, 거점 배지·
 // 지역줄·2톤 가격은 계약 공백이라 실앱에선 안 뜬다(degrade). 그 Figma 풀샷을 눈으로 보는 유일한
@@ -1610,6 +1649,64 @@ function renderLiveRiskSheetPreview(): ReactElement {
   );
 }
 
+// i08 변경 반영 시트(TRIP-754, Figma 4401:1568) — 펼침 허브의 5번째(해운대)가 F1963 + "변경됨"으로 바뀐
+// 뒤, 허브의 형제로 픽스처가 다 찬 시트를 얹는다. 라이브는 부제·배지·내역을 안 받는다(E4) — 여기만 Figma 모습.
+const LIVE_APPLIED_SLOT_KEY = `${LIVE_HUB_PREVIEW_DATE}#f1963`;
+const LIVE_APPLIED_PREVIEW_SLOTS: LiveHubSlot[] = LIVE_HUB_PREVIEW_SLOTS.map(
+  (entry) =>
+    entry.slot.poiId === 'haeundae'
+      ? {
+          state: 'upcoming',
+          slot: liveHubSlot(
+            'f1963',
+            'F1963 복합문화공간',
+            '17:00:00',
+            '18:30:00',
+            35.1747,
+            129.1152,
+            '09:00 - 21:00'
+          ),
+        }
+      : entry
+);
+function renderPlanbAppliedPreview(): ReactElement {
+  return (
+    <>
+      {renderLiveHubPreview(2, {
+        slots: LIVE_APPLIED_PREVIEW_SLOTS,
+        slotBadgeLabel: (slotKey) =>
+          slotKey === LIVE_APPLIED_SLOT_KEY ? '변경됨' : null,
+      })}
+      <ReplanAppliedSheet
+        subtitleLines={[
+          '비 예보를 반영했어요',
+          '방문한 곳은 그대로 두고 17시 이후만 바뀌었어요',
+        ]}
+        summaryBadges={appliedSummaryBadges({
+          changedCount: 1,
+          visitsBefore: 5,
+          visitsAfter: 5,
+          distanceDeltaM: -6900,
+        })}
+        diffRows={[
+          {
+            kind: 'added',
+            name: 'F1963 복합문화공간',
+            meta: '17:00–18:30 · 비 예보로 실내 대안',
+          },
+          {
+            kind: 'removed',
+            name: '해운대 해변',
+            meta: '17:00–18:30 · 비 예보 · 17시 이후',
+          },
+        ]}
+        onConfirm={noop}
+        onRevert={noop}
+      />
+    </>
+  );
+}
+
 // i04 재계획 요청 시트(TRIP-750) — 감지 칩 문구는 페이지와 같은 순수 함수로 조립한다(api 로드 0 — TRIP-610).
 function renderPlanbRequestPreview(): ReactElement {
   const target = LIVE_HUB_PREVIEW_SLOTS.find(
@@ -1638,128 +1735,83 @@ function renderPlanbRequestPreview(): ReactElement {
   );
 }
 
-// i15·i22 수동 편집(TRIP-443) — A(비고정)·H(숙소 체크인 isFixed)·C(비고정, lockedSlotKeys) 3슬롯.
-// aViolation 을 켜면 A 에 위반 배지가 뜬다(mode 무관 공통 축).
-const MANUAL_EDIT_PREVIEW_DATE = '2026-06-11';
-function manualEditPreviewDays(aViolation: boolean): ItineraryDaysItem[] {
-  return [
-    {
-      date: MANUAL_EDIT_PREVIEW_DATE,
-      slots: [
-        {
-          poiId: 'poi-a',
-          startAt: '13:00:00',
-          endAt: '14:30:00',
-          isFixed: false,
-          endsNextDay: false,
-          hasViolation: aViolation,
-          violationReason: aViolation ? '숙소 체크인과 충돌' : null,
-          nameKo: '부산시립미술관',
-          tags: ['전시', '실내'],
-        },
-        {
-          poiId: 'poi-cafe',
-          startAt: '15:00:00',
-          endAt: '16:00:00',
-          isFixed: false,
-          endsNextDay: false,
-          hasViolation: false,
-          nameKo: '전포 카페거리',
-          tags: ['카페'],
-        },
-        {
-          poiId: 'poi-hotel',
-          startAt: '17:30:00',
-          endAt: '17:30:00',
-          isFixed: true,
-          endsNextDay: false,
-          hasViolation: false,
-          nameKo: '해운대 OO호텔 체크인',
-          tags: [],
-        },
-      ],
-    },
-  ];
-}
-const MANUAL_EDIT_PREVIEW_LOCKED = [`${MANUAL_EDIT_PREVIEW_DATE}#poi-cafe`];
-
-// i15·i22 상호작용 프리뷰(TRIP-577) — PlanbManualPage 는 react-query·라우터·서버 시드가 필요해
-// QueryClient 없는 이 프리뷰에서 못 쓴다. 그래서 최소 상태(days·timeConfirmed)만 얹어 재정렬(AC-1)·
-// 시각 반영(AC-3)을 눈으로 확인한다(6-b 육안 그물 — 페이지의 handleReorder/handleApplyTime 축소판).
-function ManualEditPreview({ variant }: { variant?: 'error' }): ReactElement {
-  const [days, setDays] = useState<ItineraryDaysItem[]>(() =>
-    manualEditPreviewDays(false)
-  );
-  const [timeConfirmed, setTimeConfirmed] = useState<string[]>([]);
-  const [editingSlotKey, setEditingSlotKey] = useState<string | null>(null);
-  const activeDate = days[0]?.date ?? '';
-
-  const editingSlot =
-    editingSlotKey === null
-      ? undefined
-      : days
-          .flatMap((day) =>
-            day.slots.map((slot) => ({
-              key: `${day.date}#${slot.poiId}`,
-              slot,
-            }))
-          )
-          .find((entry) => entry.key === editingSlotKey)?.slot;
-
-  return (
-    <>
-      <ManualEditScreen
-        variant={variant}
-        days={days}
-        lockedSlotKeys={MANUAL_EDIT_PREVIEW_LOCKED}
-        timeConfirmedSlotKeys={timeConfirmed}
-        onBack={noop}
-        onSave={noop}
-        onReorder={(data) =>
-          setDays((prev) =>
-            prev.map((day) =>
-              day.date === activeDate
-                ? { ...day, slots: reorderKeepingFixed(day.slots, data) }
-                : day
-            )
-          )
-        }
-        onDeleteSlot={noop}
-        onEditSlotTime={(slotKey) => setEditingSlotKey(slotKey)}
-        onPressHistory={noop}
-        onPressAddPlace={noop}
-      />
-      {editingSlot === undefined ? null : (
-        <TimeSheet
-          testIDPrefix="planb-manual-time"
-          labels={{ start: '도착', end: '출발' }}
-          title="시각 입력"
-          startAt={editingSlot.startAt}
-          endAt={editingSlot.endAt}
-          onApply={(patch) => {
-            setDays((prev) =>
-              prev.map((day) => ({
-                ...day,
-                slots: day.slots.map((slot) =>
-                  `${day.date}#${slot.poiId}` === editingSlotKey
-                    ? { ...slot, ...patch }
-                    : slot
-                ),
-              }))
-            );
-            if (editingSlotKey !== null) {
-              setTimeConfirmed((prev) =>
-                prev.includes(editingSlotKey) ? prev : [...prev, editingSlotKey]
-              );
-            }
-            setEditingSlotKey(null);
-          }}
-          onCancel={() => setEditingSlotKey(null)}
-        />
-      )}
-    </>
-  );
-}
+// i07 일정 편집(TRIP-753) — Figma `4313:2100` 2일차 5곳. 행 1·2 방문 완료(잠금), 행 3 위반 배지.
+// 사진은 i06 과 같은 Figma 목업 사진 + 행 5 해운대(`assets/execution/CREDITS.md`). EditorView 는
+// `imageUrl` 문자열만 받으므로 `resolveAssetSource(...).uri` 로 풀어 넣는다(jest 는 undefined → 플레이스홀더).
+const I07_EDIT_DATE = '2026-06-11';
+const I07_EDIT_DAYS: PlanDayTab[] = [
+  { dayIndex: 1, date: '2026-06-10', count: 4 },
+  { dayIndex: 2, date: I07_EDIT_DATE, count: 5 },
+  { dayIndex: 3, date: '2026-06-12', count: 4 },
+];
+const i07Photo = (source: number): string | null =>
+  Image.resolveAssetSource?.(source)?.uri ?? null;
+const i07Slot = (
+  poiId: string,
+  startAt: string,
+  endAt: string,
+  nameKo: string,
+  tags: string[],
+  photo: number,
+  violationReason?: string
+): ItineraryDaysItemSlotsItem => ({
+  poiId,
+  startAt,
+  endAt,
+  isFixed: false,
+  endsNextDay: false,
+  hasViolation: violationReason !== undefined,
+  violationReason: violationReason ?? null,
+  nameKo,
+  tags,
+  imageUrl: i07Photo(photo),
+});
+const I07_EDIT_SLOTS: ItineraryDaysItemSlotsItem[] = [
+  i07Slot(
+    'i07-1',
+    '09:30:00',
+    '10:30:00',
+    '감천문화마을',
+    ['마을', '벽화'],
+    require('@/assets/execution/live-gamcheon-1.jpg')
+  ),
+  i07Slot(
+    'i07-2',
+    '11:00:00',
+    '12:00:00',
+    '광안리 해변',
+    ['바다', '산책'],
+    require('@/assets/execution/live-gwangalli-1.jpg')
+  ),
+  i07Slot(
+    'i07-3',
+    '13:00:00',
+    '14:30:00',
+    '부산시립미술관',
+    ['미술', '실내'],
+    require('@/assets/execution/replan-night-1.jpg'),
+    '숙소 고정 충돌'
+  ),
+  i07Slot(
+    'i07-4',
+    '15:00:00',
+    '16:30:00',
+    '전포 카페거리',
+    ['카페', '실내'],
+    require('@/assets/execution/live-gamcheon-2.jpg')
+  ),
+  i07Slot(
+    'i07-5',
+    '17:00:00',
+    '18:30:00',
+    '해운대 해변',
+    ['바다', '해변'],
+    require('@/assets/execution/i07-haeundae-1.jpg')
+  ),
+];
+const I07_EDIT_COMPLETED = ['i07-1', 'i07-2'].map((poiId) =>
+  buildSlotKey(I07_EDIT_DATE, poiId)
+);
 
 // l05 취향 수정 프리뷰 픽스처 — 한국어 계약값 그대로(GET View 를 initialSelection 태운 뒤의 모양).
 const SETTINGS_PREF_PREVIEW_SELECTION: PreferenceSelection = {
@@ -5001,14 +5053,33 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: renderPlanbRequestPreview,
   },
-  // ── i12 재계획 로딩(TRIP-440) — 순수 화면. 진행바 흐름·체크리스트 아이콘 3상태는 정지
-  //    스크린샷 한계라 여기서 보는 것은 레이아웃·라벨·안심 노트·CTA 2개까지다 ──
+  // ── i05 다시 짜는 중(TRIP-752) — Figma 4341:1957. 지도(허브 5곳 핀·현재위치) + 진행 카드 + 40% peek
+  //    시트(방문 완료 2곳). 진행 카드는 캡처 상단 크롭 영역이라 육안은 크롭 전 원본으로 본다 ──
   {
     key: 'planb-solving',
     band: 'i',
-    label: 'i12 · 재계획 로딩',
+    label: 'i05 · 다시 짜는 중',
     login: null,
-    render: () => <ReplanSolvingScreen onBackground={noop} onCancel={noop} />,
+    render: () => (
+      <ReplanSolvingView
+        center={LIVE_HUB_PREVIEW_LOCATION}
+        pins={buildStatePins(
+          LIVE_HUB_PREVIEW_SLOTS.map(({ slot, state }) => ({
+            lat: slot.lat,
+            lng: slot.lng,
+            progress: state,
+          }))
+        )}
+        currentLocation={LIVE_HUB_PREVIEW_LOCATION}
+        solvingLabel="17시 이후 다시 짜는 중"
+        dayLabel="2일차"
+        dateLabel="6월 11일(목)"
+        meta="방문한 3곳 그대로"
+        slots={REPLAN_DRAFT_PREVIEW_SLOTS.slice(0, 2)}
+        onBack={noop}
+        onCancel={noop}
+      />
+    ),
   },
   // ── i14 슬롯 후보 시트(TRIP-440) — 순수 인라인 패널 3얼굴(후보·강등 고지·빈 목록). slackLabel
   //    은 slackTime.ts(model) 산출 형태를 그대로 주입한다(ui 소스엔 숫자 리터럴 0) ──
@@ -5058,66 +5129,43 @@ export const PREVIEW_STATES: PreviewState[] = [
       </SafeAreaView>
     ),
   },
-  // ── i13 재계획안(TRIP-563) — 순수 화면 2얼굴. 채운 슬롯(배지 5종·후보·고정)과 빈 슬롯 degrade
-  //    (헤더 근거·이월 안내만). 지도 center 는 골격 플레이스홀더, 일차 스위치·사진·번호는 draft 계약
-  //    공백이라 없다 — 슬롯 배지·거리 메타·우측 어포던스·CTA 배치를 육안 대조하는 자리(실 지도·시트
-  //    열림은 6-b). draft 실슬롯 바인딩은 BE 후속 ──
+  // ── i06 재계획안(TRIP-751) — 한 뷰의 두 얼굴(펼침 · 대안 없음), 시트는 펼침(index 1). 같은 5곳
+  //    픽스처로 Figma 4314:1923 · 4335:1923 과 대조한다(88% 스냅·CTA 가림·흐림 정도는 육안 몫).
+  //    실패(failed)·확정 실패 얼굴은 같은 안내 자리라 여기 따로 두지 않는다 ──
   {
     key: 'planb-replan-draft',
     band: 'i',
-    label: 'i13 · 재계획안 채운 슬롯',
+    label: 'i06 · 재계획안 · 펼침',
     login: null,
     render: () => (
-      <ReplanDraftScreen
-        reasons={['비 예보를 반영해 오후 일정을 다시 짰어요']}
-        excludedPoiIds={['x1', 'x2']}
+      <ReplanDraftView
+        variant="draft"
         slots={REPLAN_DRAFT_PREVIEW_SLOTS}
-        onManualEdit={noop}
-        onApply={noop}
-        onPressCandidates={noop}
+        {...REPLAN_PREVIEW_BASE}
       />
     ),
   },
-  {
-    key: 'planb-replan-draft-empty',
-    band: 'i',
-    label: 'i13 · 재계획안 빈 슬롯',
-    login: null,
-    render: () => (
-      <ReplanDraftScreen
-        reasons={['비 예보를 반영해 오후 일정을 다시 짰어요']}
-        excludedPoiIds={['x1', 'x2']}
-        slots={[]}
-        onManualEdit={noop}
-        onApply={noop}
-        onPressCandidates={noop}
-      />
-    ),
-  },
-  // ── i16 대안 없음(TRIP-563) — 지도·경고 삼각·문구·3버튼. 3버튼 모두 enabled, onSkip·onRestMode 는
-  //    no-op 자리표시(페이지가 실배선 결정). 실 지도·버튼 정렬은 6-b ──
   {
     key: 'planb-noalt',
     band: 'i',
-    label: 'i16 · 대안 없음',
+    label: 'i06 · 재계획안 · 대안 없음',
     login: null,
     render: () => (
-      <NoAlternativeScreen
-        skipCount={1}
-        onSkip={noop}
-        onRestMode={noop}
-        onManualEdit={noop}
+      <ReplanDraftView
+        variant="noSolution"
+        slots={REPLAN_NOALT_PREVIEW_SLOTS}
+        noSolutionDescription="17시 이후 실내 후보가 근처에 없어요 · 조건을 줄이거나 직접 고쳐 주세요"
+        {...REPLAN_PREVIEW_BASE}
       />
     ),
   },
-  // ── i19 반영 완료(TRIP-441) — buildable 서브셋(헤더·체크·문구·CTA). 체크 원 크기·primary bg·
-  //    정렬은 jest 사각이라 이 키가 육안 대조 자리다(지표·전후 배지·되돌리기는 draft 부재로 없음) ──
+  // i08 변경 반영 시트(TRIP-754) — 펼침 허브 + 딤 + 시트. 딤 전면 커버·시트 높이는 jest 사각이라 육안 자리.
   {
     key: 'planb-applied',
     band: 'i',
-    label: 'i19 · 반영 완료',
+    label: 'i08 · 변경 반영 시트',
     login: null,
-    render: () => <ReplanAppliedScreen onBack={noop} onContinue={noop} />,
+    render: renderPlanbAppliedPreview,
   },
   // ── i20·i21 위치 수동 입력·권한 거부 폴백(TRIP-442) — 한 컴포넌트를 state prop 으로 두 얼굴.
   //    지도 롱프레스 실동작·"이 위치로 계속" 핸드오프·핀 오버레이·Figma 픽셀은 jest 사각이라 이
@@ -5139,40 +5187,29 @@ export const PREVIEW_STATES: PreviewState[] = [
       <LiveLocationPage tripId="preview-trip" state="permission-denied" />
     ),
   },
-  // ── i15·i22 수동 편집(TRIP-443·TRIP-577) — 한 래퍼(ManualEditPreview)를 variant 로 두 얼굴.
-  //    TRIP-577 로 상호작용 배선: 드래그 핸들 길게눌러 재정렬(AC-1)·[시각 입력] 시트→시각 반영(AC-3)이
-  //    이 프리뷰에서 실제로 동작한다(6-b 육안 그물 복원). 시트 실제 열림·드래그 제스처·점선 지도 픽셀은
-  //    여전히 jest 사각(바텀시트·draggable 통과형 목)이라 이 키들이 육안 대조 자리다(i15 `2284:2106`·
-  //    i22 `1790:3612`). 자체 조회 없는 프리젠테이션이라 QueryClient 없이 렌더된다 ──
+  // i07 일정 편집(TRIP-753) — h12 편집기(EditorView)를 여행 중 모드(inTrip)로. 키 이름은 옛
+  // `planb-manual-normal` 유지(개명은 TRIP-756). 드래그·시트 실개폐는 jest 사각이라 이 키가 육안 대조
+  // 자리다(Figma `4313:2100`).
   {
     key: 'planb-manual-normal',
     band: 'i',
-    label: 'i15 · 일정 편집 정상',
-    login: null,
-    render: () => <ManualEditPreview />,
-  },
-  {
-    key: 'planb-manual-fallback',
-    band: 'i',
-    label: 'i22 · 일정 직접 수정 폴백',
-    login: null,
-    render: () => <ManualEditPreview variant="error" />,
-  },
-  {
-    key: 'planb-manual-violation',
-    band: 'i',
-    label: 'i22 · 폴백 위반 배지',
+    label: 'i07 · 일정 편집',
     login: null,
     render: () => (
-      <ManualEditScreen
-        variant="error"
-        days={manualEditPreviewDays(true)}
-        lockedSlotKeys={MANUAL_EDIT_PREVIEW_LOCKED}
+      <EditorView
+        center={{ lat: 35.1532, lng: 129.1188 }}
+        days={I07_EDIT_DAYS}
+        slots={I07_EDIT_SLOTS}
+        activeDayIndex={1}
+        activeDate={I07_EDIT_DATE}
+        onSelectDay={noop}
         onBack={noop}
-        onSave={noop}
-        onDeleteSlot={noop}
-        onEditSlotTime={noop}
+        onPressTimeChip={noop}
         onPressAddPlace={noop}
+        onPressAddBetween={noop}
+        onSave={noop}
+        completedSlotKeys={I07_EDIT_COMPLETED}
+        inTrip
       />
     ),
   },

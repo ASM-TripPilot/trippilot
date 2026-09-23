@@ -59,6 +59,8 @@ export interface ReplanRequestSheetProps {
   onSubmit: () => void;
   /** 스크림 탭 · 아래로 끌어 닫기. */
   onClose: () => void;
+  /** 재계획 시작 실패 안내(INV-4 — 조용한 실패 금지). 없으면 안 그린다. */
+  errorText?: string | null;
 }
 
 /**
@@ -162,6 +164,7 @@ export function ReplanRequestSheet({
   onChangeFreeText,
   onSubmit,
   onClose,
+  errorText,
 }: ReplanRequestSheetProps): ReactElement {
   // 감지 칩이 있으면 그와 겹치는 정적 칩(날씨 · 감지 칩이 대신하는 사유)을 숨긴다(브리프 Q2).
   const staticReasons = detected
@@ -266,6 +269,15 @@ export function ReplanRequestSheet({
             className="h-[44px] rounded-input border border-hairline-strong bg-surface-soft px-[14px] font-noto text-label text-ink"
           />
         </View>
+
+        {errorText ? (
+          <Text
+            testID="planb-request-error"
+            className="font-noto text-label text-primary-text"
+          >
+            {errorText}
+          </Text>
+        ) : null}
 
         <Pressable
           testID="planb-request-submit"
