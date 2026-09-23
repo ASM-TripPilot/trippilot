@@ -82,6 +82,12 @@ services:
       # 리마인드 문구 AI 채움(TRIP-836). 기본 off = 상수 문구. http 로 켜면 예약 적재 시 AI 를 부른다.
       AI_REMINDER_COPY_MODE: ${AI_REMINDER_COPY_MODE:-off}
       TRIPPILOT_AI_SCHEDULE_BASE_URL: ${AI_URL:-http://ai:8000}
+      # 회고 AI 경계(O-U5-6). **통로가 없어서 로컬에서는 켤 방법이 아예 없었다** — 배포(Helm)만
+      # http 를 박고 있어, 운영에서만 항상 켜진 경로를 한 번도 로컬에서 검증할 수 없었다.
+      # base-url 도 같이 연다: 기본값이 localhost:8000 이라 mode 만 켜면 컨테이너가 자기 자신을
+      # 부른다(= 켠 것처럼 보이고 규칙 카드로 조용히 폴백). 일정 경계와 같은 꼴이다(DEC-U5-5).
+      TRIPPILOT_AI_REFLECTION_MODE: ${AI_REFLECTION_MODE:-rule}
+      TRIPPILOT_AI_REFLECTION_BASE_URL: ${AI_URL:-http://ai:8000}
       # 시간제약(day1 5s / 전체 20s)을 AI 에 실을지. **기본 off** — FE 연동 기간에는 시간 때문에
       # 규칙 폴백으로 강등되는 것을 걷어낸다(TRIP-474). 9월 재도입은 여기를 true 로(TRIP-475).
       TRIPPILOT_AI_SCHEDULE_DEADLINE_ENFORCED: ${AI_SCHEDULE_DEADLINE_ENFORCED:-false}
