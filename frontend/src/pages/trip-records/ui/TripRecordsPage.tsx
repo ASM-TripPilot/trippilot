@@ -168,11 +168,9 @@ export function TripRecordsPage({
       }
       onPressComplete={handleComplete}
       onPressSkip={handleSkip}
-      onPressSpontaneous={() => {
-        // 즉석 방문은 장소를 골라야 poiId 가 생긴다(useVisitCheck.arrive 의 입력) — 장소 선택
-        // 진입은 후속 티켓(US-REC-01 후반). 훅 자체는 통합 테스트로 잠겨 있다.
-        // ponytail: 장소 피커 라우트가 생기면 여기서 router.push 로 배선.
-      }}
+      // onPressSpontaneous 는 넘기지 않는다(TRIP-939 — [방문 추가] 숨김). 즉석 방문은 장소를 골라야
+      // poiId 가 생긴다(useVisitCheck.arrive 의 입력) — 장소 선택 진입은 후속 티켓(US-REC-01 후반).
+      // ponytail: 장소 피커 라우트가 생기면 onPressSpontaneous 로 router.push 를 넘기면 버튼이 되살아난다.
       onPressBack={() => {
         if (router.canGoBack()) router.back();
       }}

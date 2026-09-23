@@ -249,7 +249,7 @@ describe('🔴 I3 · AC9 — 일정이 아직 없으면(404) notFound 얼굴을 
  *  - 🔴 404 는 status 불변·재조회 없음(I7 · ★5). 409(+1)와 404(불변)를 GET 실건수로 가른다.
  */
 describe('🔴 I4 · AC-8 — "일정 저장하기" 성공(200)은 재조회 없이 확정 셸로 전환한다 (setQueryData · US-SCHED-12)', () => {
-  it('셸 CTA press → POST /confirm 1건, GET 재조회 없이 CONFIRMED 셸(공유하기 버튼)로 전환한다', async () => {
+  it('셸 CTA press → POST /confirm 1건, GET 재조회 없이 CONFIRMED 셸(성공 배너)로 전환한다', async () => {
     itineraryHandler = () => HttpResponse.json(plannedItinerary());
     confirmHandler = () => HttpResponse.json(confirmedItinerary());
 
@@ -264,9 +264,10 @@ describe('🔴 I4 · AC-8 — "일정 저장하기" 성공(200)은 재조회 없
     fireEvent.press(cta);
 
     // TRIP-801 플립 — 확정 성공 → setQueryData(CONFIRMED) → 재렌더 → CONFIRMED 도 이제 **셸**.
-    //   PLANNED 셸도 map-sheet-shell-root 라(★2) 착지 앵커는 CONFIRMED 전용 2번째 버튼
-    //   `sheet-cta-button-1`("공유하기")다. meta 엔 "확정됨" 접두가 붙는다.
-    await screen.findByTestId('sheet-cta-button-1');
+    //   PLANNED 셸도 map-sheet-shell-root 라(★2) 착지 앵커는 CONFIRMED 전용 표면인 성공 배너다
+    //   (TRIP-939: [공유하기]는 캡처 개통 전엔 숨어 옛 앵커 `sheet-cta-button-1` 을 못 쓴다).
+    //   meta 엔 "확정됨" 접두가 붙는다.
+    await screen.findByTestId('itinerary-confirmed-banner');
     expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(/확정됨/);
 
     // POST 1건, GET 은 **안 늘었다**(재조회 0). setQueryData 로 반영했다는 유일한 설명이다.
@@ -313,9 +314,9 @@ describe('🔴 I5b · INV-4 — 409 후 재조회가 CONFIRMED 면 읽기전용�
     itineraryHandler = () => HttpResponse.json(confirmedItinerary());
     fireEvent.press(cta);
 
-    // TRIP-801 플립 — 재조회로 CONFIRMED 셸로 정합한다. 착지 앵커는 CONFIRMED 전용 2번째 버튼
-    //   `sheet-cta-button-1`("공유하기")다(옛 '확정 일정' 앱바 제목은 셸엔 없음 · ★2).
-    await screen.findByTestId('sheet-cta-button-1');
+    // TRIP-801 플립 — 재조회로 CONFIRMED 셸로 정합한다. 착지 앵커는 CONFIRMED 전용 성공 배너다
+    //   (옛 '확정 일정' 앱바 제목은 셸엔 없음 · ★2 / TRIP-939: [공유하기]는 개통 전엔 숨는다).
+    await screen.findByTestId('itinerary-confirmed-banner');
     await waitFor(() => expect(itineraryGetCalls).toBe(2));
   });
 });

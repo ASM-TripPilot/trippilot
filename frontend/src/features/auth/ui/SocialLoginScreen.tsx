@@ -1,16 +1,10 @@
-import type { ComponentType, ReactNode } from 'react';
+import { Fragment, type ComponentType, type ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 
 import type { SocialProvider } from '@/shared/api';
-import {
-  AppIconGlyph,
-  AppleIcon,
-  GoogleIcon,
-  KakaoIcon,
-  NaverIcon,
-} from './AuthGlyphs';
+import { AppIconGlyph, GoogleIcon, KakaoIcon, NaverIcon } from './AuthGlyphs';
 import { APP_ICON_COLORS } from '../config/gradients';
 import type { SocialLoginPhase } from '../model/useSocialLogin';
 
@@ -23,22 +17,26 @@ export interface SocialLoginScreenProps {
   onConflictCancel: () => void;
   onAgeConfirm: () => void;
   onAgeCancel: () => void;
+  // 애플 공식 버튼(TRIP-932). 컨테이너가 isAvailableAsync 로 판정해 iOS 에서만 넘긴다 — 없으면
+  // (Android·판정 전·판정 실패) 애플 자리가 아예 없다. 화면이 SDK 를 직접 import 하지 않도록
+  // 컴포넌트째 주입받는다(nativeSdkLazyBoundary 경계).
+  AppleButton?: ComponentType<{ onPress: () => void }> | null;
 }
 
 type BrandIcon = ComponentType<{ size?: number; testID?: string }>;
 
-// 라벨 4종은 Figma c02-social-login 확정값(D5 한글) 그대로다. 예전엔 kakao 만 예외로
+// 라벨 3종은 Figma c02-social-login 확정값(D5 한글) 그대로다. 예전엔 kakao 만 예외로
 // 영문 브랜드명을 유지했다 — 동결 충돌 시트 테스트가 화면 전역에서 "카카오" 가 단 하나
 // (충돌 메시지)만 있다고 가정했기 때문이다. 그 단언은 이제 안내 메시지 testID
 // (auth-login-conflict-message) 스코프로 좁혀져 있어 더 이상 화면 전역 유일성을 요구하지
 // 않는다 — 버튼 라벨이 한글이어도 계약이 깨지지 않는다.
+// 애플은 이 표에 없다 — 커스텀 라벨·로고 대신 SDK 공식 버튼을 주입받아 구글 다음 자리에 그린다.
 const SOCIAL_BUTTONS: {
   provider: SocialProvider;
   label: string;
   Icon: BrandIcon;
 }[] = [
   { provider: 'google', label: '구글로 계속하기', Icon: GoogleIcon },
-  { provider: 'apple', label: '애플로 계속하기', Icon: AppleIcon },
   { provider: 'kakao', label: '카카오로 계속하기', Icon: KakaoIcon },
   { provider: 'naver', label: '네이버로 계속하기', Icon: NaverIcon },
 ];
@@ -158,6 +156,7 @@ export function SocialLoginScreen({
   onConflictCancel,
   onAgeConfirm,
   onAgeCancel,
+  AppleButton,
 }: SocialLoginScreenProps) {
   const showCancelNotice = phase === 'cancelled';
   const showConflictSheet =
@@ -220,17 +219,23 @@ export function SocialLoginScreen({
 
       <View className="gap-md">
         {SOCIAL_BUTTONS.map(({ provider, label, Icon }) => (
-          <Pressable
-            key={provider}
-            testID={`auth-login-${provider}`}
-            onPress={() => onSignIn(provider)}
-            className="h-[52px] w-full flex-row items-center justify-center gap-[10px] rounded-button border-[1.5px] border-hairline-strong bg-canvas"
-          >
-            <Icon size={20} testID={`auth-login-${provider}-icon`} />
-            <Text className="font-noto-bold text-card-title font-bold text-ink">
-              {label}
-            </Text>
-          </Pressable>
+          <Fragment key={provider}>
+            <Pressable
+              testID={`auth-login-${provider}`}
+              onPress={() => onSignIn(provider)}
+              className="h-[52px] w-full flex-row items-center justify-center gap-[10px] rounded-button border-[1.5px] border-hairline-strong bg-canvas"
+            >
+              <Icon size={20} testID={`auth-login-${provider}-icon`} />
+              <Text className="font-noto-bold text-card-title font-bold text-ink">
+                {label}
+              </Text>
+            </Pressable>
+            {provider === 'google' && AppleButton ? (
+              <View testID="auth-login-apple">
+                <AppleButton onPress={() => onSignIn('apple')} />
+              </View>
+            ) : null}
+          </Fragment>
         ))}
       </View>
 

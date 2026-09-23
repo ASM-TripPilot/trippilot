@@ -24,6 +24,7 @@ import {
   useGetTripsTripIdVisitsDaysDay,
 } from '@/shared/api/generated/trips/trips';
 import { isNotFound } from '@/shared/api/isNotFound';
+import { seoulDate } from '@/shared/date/seoulDate';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
 import { LiveHubView } from './LiveHubView';
@@ -36,13 +37,13 @@ import { LiveHubView } from './LiveHubView';
  * 판정에는 넣지 않는다 — trip 로딩이 일정 얼굴을 막지 않는다. active 얼굴은 i01 허브 순수 뷰
  * (`LiveHubView`, TRIP-746)가 그린다. 사진·후기는 조회 계약이 없어 넘기지 않는다(G6 — 칸 생략).
  *
- * `today` 는 테스트 주입 seam 이다(기본 = 오늘 UTC). 순수 판정 함수 resolveLiveState 에 날짜를
+ * `today` 는 테스트 주입 seam 이다(기본 = 오늘 KST). 순수 판정 함수 resolveLiveState 에 날짜를
  * 넘겨 주는 자리라 여기 `new Date()` 가 있고, features/execution 안에는 없다.
  */
 
 export interface LiveItineraryPageProps {
   tripId: string;
-  /** 'YYYY-MM-DD' — 테스트 주입용. 기본 = 오늘(UTC). */
+  /** 'YYYY-MM-DD' — 테스트 주입용. 기본 = 오늘(KST). */
   today?: string;
   /** TRIP-754 — i06 적용 성공 신호(`?applied=sessionId`). 있으면 i08 반영 시트를 허브 위에 띄운다. */
   appliedSessionId?: string;
@@ -57,7 +58,7 @@ const HOME_FALLBACK = '/(tabs)';
 
 export function LiveItineraryPage({
   tripId,
-  today = new Date().toISOString().slice(0, 10),
+  today = seoulDate(new Date()),
   appliedSessionId,
 }: LiveItineraryPageProps) {
   const query = useLiveItinerary(tripId);

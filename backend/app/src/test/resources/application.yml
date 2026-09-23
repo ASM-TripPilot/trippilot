@@ -45,3 +45,6 @@ trippilot:
   auth:
     legal-log-retention-sweep-ms: 3600000
     legal-log-retention-initial-delay-ms: 3600000
+    # 파기 시점 제공자 토큰 revoke 스위퍼도 같은 이유로 끈다(TRIP-933). 동작은 sweep() 직접 호출로 잰다.
+    provider-token-revoke-sweep-ms: 3600000
+    provider-token-revoke-initial-delay-ms: 3600000

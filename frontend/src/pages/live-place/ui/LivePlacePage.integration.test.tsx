@@ -196,7 +196,7 @@ describe('LivePlacePage', () => {
     expect(screen.queryByTestId('execution-place-detail')).toBeNull();
   });
 
-  it('I3 [일정에서 보기]는 router.back, [길찾기]는 무동작 (D7)', async () => {
+  it('I3 [일정에서 보기]는 router.back, 무동작 [길찾기]는 없다 (D7 · TRIP-939 AC-3)', async () => {
     server.use(
       http.get(`${BASE}/trips/:tripId/itinerary`, () =>
         HttpResponse.json(itinerary())
@@ -212,9 +212,8 @@ describe('LivePlacePage', () => {
     fireEvent.press(screen.getByTestId('execution-place-cta-itinerary'));
     expect(mockBack).toHaveBeenCalledTimes(1);
 
-    // 길찾기는 라우팅하지 않는다(US-ONTRIP-03 소관, 이번엔 자리만).
-    fireEvent.press(screen.getByTestId('execution-place-cta-directions'));
-    expect(mockBack).toHaveBeenCalledTimes(1);
+    // 길찾기는 목적지가 없어(US-ONTRIP-03 소관) 운영 화면에 그리지 않는다(심사 2.1).
+    expect(screen.queryByTestId('execution-place-cta-directions')).toBeNull();
   });
 
   it('I4 익일 고정 슬롯이 오늘의 slack 을 오염시키지 않는다 — 다음 고정 없음이면 "미확인" (경고-1)', async () => {

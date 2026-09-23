@@ -313,10 +313,9 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
                   0,
                   5
                 )}`}
-                // "다른 후보 ›" 는 표시하되 PARTIAL 교체는 **미배선**(no-op · D7) — day1-only PUT 이
+                // "다른 후보 ›" 는 PARTIAL 에선 넘기지 않는다(= 안 그려진다, TRIP-939) — day1-only PUT 이
                 // 생성 중 day2·3 을 덮어쓰는 사고 방지(traps-itinerary TRIP-467/483 잔여). 정식
                 // 게이팅은 후속 티켓.
-                onPressAlt={() => {}}
               />,
             ];
             if (index < partialSlots.length - 1) {

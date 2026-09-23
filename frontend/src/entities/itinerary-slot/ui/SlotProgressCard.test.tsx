@@ -177,6 +177,30 @@ describe('SlotProgressCard · active (AC-4)', () => {
     );
     expect(screen.getByTestId('execution-arrive-soon-hint')).toBeOnTheScreen();
   });
+
+  it('C6b TRIP-939 AC-6: onPressSoon 미주입이면 [사진]·[메모]·"준비 중" 힌트가 없고 [방문 완료]만 남는다', () => {
+    // 준비·실행: 허브(LiveHubView)의 운영 모양 — 사진·메모 진입을 넘기지 않는다.
+    const onPressComplete = jest.fn();
+    render(
+      <SlotProgressCard
+        slot={activeSlot}
+        date={DATE}
+        state="active"
+        onPressComplete={onPressComplete}
+        soonHintVisible
+      />
+    );
+
+    // 단언(부재): 눌러도 "준비 중"만 뜨던 두 버튼과 힌트가 없다(힌트 표시를 켜도).
+    expect(screen.queryByTestId('execution-arrive-photo')).toBeNull();
+    expect(screen.queryByTestId('execution-arrive-memo')).toBeNull();
+    expect(screen.queryByTestId('execution-arrive-soon-hint')).toBeNull();
+    expect(screen.queryByText(/준비 중/)).toBeNull();
+
+    // 실행·단언(짝): [방문 완료]는 그대로 동작한다.
+    fireEvent.press(screen.getByTestId('execution-arrive-complete'));
+    expect(onPressComplete).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('SlotProgressCard · upcoming (AC-5)', () => {

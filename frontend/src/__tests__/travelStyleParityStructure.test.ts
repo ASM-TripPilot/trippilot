@@ -83,21 +83,18 @@ describe('🔴 TRIP-765 · AC-3 EvidenceLink 플레인 행', () => {
   });
 });
 
-describe('🔴 TRIP-765 · AC-4 캡션 좌정렬', () => {
-  it('캡션 Text className 에 text-center·text-muted-soft 0 + text-muted 존재', () => {
+describe('🔴 TRIP-765 · AC-4 캡션 → TRIP-939 AC-5 지도 자리표시·범례 캡션 제거', () => {
+  it('화면 소스에 지도 자리표시 문구·범례 캡션 문구가 없다(가짜 지도 표면 제거, Q7)', () => {
+    // TRIP-939: 좌표 계약이 없어 지도는 늘 자리표시였다 → 자리표시와 그 범례를 통째로 뺀다
+    // (구 TRIP-765 AC-4 "캡션 좌정렬"은 캡션 자체가 사라져 "부재"로 뒤집는다).
+    // ⚠️ 원문 스캔(주석 미제거)이라 주석에 두 문구를 적어도 red 다(02a ★14).
     const src = readOne(SCREEN_REL);
 
-    // 캡션 여는 태그 attrs 를 캡처(속성 순서 무관) — "점 = 방문 장소" 를 품은 Text.
-    const className = classNameNear(src, /<Text([^>]*)>\s*점 = 방문 장소/);
-    // 긍정 앵커 — 캡션이 실재해 캡처에 성공했다(null 이면 red).
-    expect(className).not.toBeNull();
-
-    const tokens = classTokens(className ?? '');
-    // 부정 — 가운데 정렬·연한 색 제거(정확 토큰 비교라 text-muted-soft 가 text-muted 로 오탐 안 됨).
-    expect(tokens).not.toContain('text-center');
-    expect(tokens).not.toContain('text-muted-soft');
-    // 긍정 — muted(연하지 않은) 색.
-    expect(tokens).toContain('text-muted');
+    // 긍정 앵커 — 화면 파일을 제대로 읽었다(빈 파일 공허 통과 차단).
+    expect(src).toContain('CategoryBarList');
+    // 부정 — 자리표시 문구·범례 캡션 문구 부재.
+    expect(src).not.toContain('지도 표시 예정');
+    expect(src).not.toContain('점 = 방문 장소');
   });
 });
 

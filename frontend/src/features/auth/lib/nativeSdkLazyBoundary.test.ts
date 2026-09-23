@@ -5,7 +5,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * AC-11 (lazy 소스 스캔) — 네이티브 SDK 2종이 정적 import 그래프에 실리지 않게 강제.
+ * AC-11 (lazy 소스 스캔) — 네이티브 SDK(카카오·네이버, TRIP-932 에서 애플 추가)가 정적 import 그래프에 실리지 않게 강제.
  *
  * 무엇을 보장하나: `@react-native-seoul/kakao-login`·`naver-login` 은 **동적 경계 뒤에서만** 산다.
  * 근거는 화상 이력 — 모듈 최상단 정적 import 한 줄이 Hermes 부팅 크래시를 냈다. 기존
@@ -27,6 +27,9 @@ const TEST_ONLY_DIRS = ['__tests__', '__mocks__', 'test-support', 'mocks'];
 
 const KAKAO_SDK = '@react-native-seoul/kakao-login';
 const NAVER_SDK = '@react-native-seoul/naver-login';
+// TRIP-932 — 애플 SDK 도 같은 경계 뒤에 둔다. 공식 버튼(AppleAuthenticationButton)도 이 패키지
+// 에서 오므로, 화면이 버튼을 직접 import 하는 우회도 아래 테스트 3 이 잡는다.
+const APPLE_SDK = 'expo-apple-authentication';
 
 /** 정적 형태의 import(정적 from / side-effect import / require)만 잡는다. 동적 import 는 제외. */
 function hasStaticImportOf(source: string, moduleId: string): boolean {
@@ -86,7 +89,7 @@ function productionSources(): { file: string; source: string }[] {
 }
 
 describe('AC-11 · 네이티브 SDK lazy 경계 (소스 스캔)', () => {
-  it('SDK 2종은 auth/lib 안에 실재하되 makeAuthorize.ts·oauthConfig.ts 의 정적 그래프에는 실리지 않는다', () => {
+  it('네이티브 SDK 3종(카카오·네이버·애플)은 auth/lib 안에 실재하되 makeAuthorize.ts·oauthConfig.ts 의 정적 그래프에는 실리지 않는다', () => {
     // 탐지기 자가검사 — 탐지기가 고장 나 아무것도 못 잡는 채로 통과하는 것을 막는다.
     expect(
       hasStaticImportOf(`import { login } from '${KAKAO_SDK}';`, KAKAO_SDK)
@@ -106,6 +109,19 @@ describe('AC-11 · 네이티브 SDK lazy 경계 (소스 스캔)', () => {
       hasDynamicImport("const m = await import('./kakaoAuthorize');")
     ).toBe(true);
     expect(hasDynamicImport(`import x from '${KAKAO_SDK}';`)).toBe(false);
+    // 애플 탐지기 — 네임스페이스·타입 import 는 잡고(타입도 lib 밖에선 금지 — 보수적), 동적은 제외.
+    expect(
+      hasStaticImportOf(
+        `import * as AppleAuthentication from '${APPLE_SDK}';`,
+        APPLE_SDK
+      )
+    ).toBe(true);
+    expect(
+      hasStaticImportOf(`import type { X } from '${APPLE_SDK}';`, APPLE_SDK)
+    ).toBe(true);
+    expect(
+      hasStaticImportOf(`const m = await import('${APPLE_SDK}');`, APPLE_SDK)
+    ).toBe(false);
 
     const makeAuthorizeSource = stripComments(
       readFileSync(MAKE_AUTHORIZE, 'utf8')
@@ -121,6 +137,8 @@ describe('AC-11 · 네이티브 SDK lazy 경계 (소스 스캔)', () => {
     // 긍정 2·3 — 어댑터 실재: auth/lib 어딘가가 각 SDK 를 참조한다. 지금은 0건이라 red 다.
     expect(lib.some((s) => s.source.includes(KAKAO_SDK))).toBe(true);
     expect(lib.some((s) => s.source.includes(NAVER_SDK))).toBe(true);
+    // 긍정 4 — 애플 어댑터 실재(TRIP-932): auth/lib 어딘가가 애플 SDK 를 정적 import 한다.
+    expect(lib.some((s) => hasStaticImportOf(s.source, APPLE_SDK))).toBe(true);
 
     // 부정(격리 가드) — 진입점은 두 SDK 를 정적으로 끌어오지 않는다.
     expect(hasStaticImportOf(makeAuthorizeSource, KAKAO_SDK)).toBe(false);
@@ -129,6 +147,8 @@ describe('AC-11 · 네이티브 SDK lazy 경계 (소스 스캔)', () => {
     // 딸려 오는 우회를 막는다(기존 파일 케이스 25 와 같은 취지).
     expect(hasStaticImportOf(oauthConfigSource, KAKAO_SDK)).toBe(false);
     expect(hasStaticImportOf(oauthConfigSource, NAVER_SDK)).toBe(false);
+    expect(hasStaticImportOf(makeAuthorizeSource, APPLE_SDK)).toBe(false);
+    expect(hasStaticImportOf(oauthConfigSource, APPLE_SDK)).toBe(false);
   });
 
   it('SDK 를 정적 import 하는 어댑터 파일을 다른 프로덕션 파일이 정적으로 import 하지 않는다 (전이 오염 차단)', () => {
@@ -141,7 +161,8 @@ describe('AC-11 · 네이티브 SDK lazy 경계 (소스 스캔)', () => {
     const adapters = sources.filter(
       (s) =>
         hasStaticImportOf(s.source, KAKAO_SDK) ||
-        hasStaticImportOf(s.source, NAVER_SDK)
+        hasStaticImportOf(s.source, NAVER_SDK) ||
+        hasStaticImportOf(s.source, APPLE_SDK)
     );
     // 긍정 — 어댑터가 실제로 존재한다(0건이면 아래 부정 단언이 공허해진다). 지금은 red 다.
     expect(adapters.length).toBeGreaterThan(0);
@@ -185,5 +206,22 @@ describe('AC-11 · 네이티브 SDK lazy 경계 (소스 스캔)', () => {
     // 본체 — 어댑터를 정적으로 끌어오는 프로덕션 파일이 하나도 없다. 있으면 SDK 가
     // 전이적으로 부팅 그래프에 실려 Hermes 크래시 경로가 되살아난다.
     expect(offenders).toEqual([]);
+  });
+
+  it('애플 SDK 를 정적 import 하는 프로덕션 파일은 전부 features/auth/lib/ 안에 있다 (TRIP-932 · 화면·페이지 직접 import 차단)', () => {
+    const sources = productionSources();
+
+    const appleImporters = sources
+      .filter((s) => hasStaticImportOf(s.source, APPLE_SDK))
+      .map((s) => s.file);
+
+    // 앵커 — 애플 어댑터가 실제로 있다(0건이면 아래 부정 단언이 공허해진다).
+    expect(appleImporters.length).toBeGreaterThan(0);
+
+    // 본체 — lib 밖(예: ui/SocialLoginScreen.tsx 가 공식 버튼을 직접 import, pages/LoginPage 가
+    // isAvailableAsync 를 직접 import)에서 정적으로 끌어오는 파일이 하나도 없다.
+    expect(
+      appleImporters.filter((file) => !file.startsWith('features/auth/lib/'))
+    ).toEqual([]);
   });
 });

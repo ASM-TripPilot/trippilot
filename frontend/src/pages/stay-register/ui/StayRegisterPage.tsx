@@ -25,6 +25,7 @@ import {
   useGetStaysReverseGeocode,
 } from '@/shared/api/generated/stays/stays';
 import type { MapCenter } from '@/shared/map';
+import { seoulDate } from '@/shared/date/seoulDate';
 
 import {
   applyDatePick,
@@ -40,25 +41,15 @@ import {
 import { StayRegisterScreen } from '@/features/stay/ui/StayRegisterScreen';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 
-/** 로컬 달력 기준 오늘 — 과거 날짜 비활성(§3-4)의 기준값이라 UTC로 어긋나면 자정 근처에서
- * 하루가 밀린다. */
-function todayIso(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
 const EMPTY_RANGE: StayDateRange = { checkIn: null, checkOut: null };
 
 /** `baseDate`는 달력 기준 '오늘' 주입점(TRIP-390 · 선례 `TripNewStep1Page`) — 페이지 달력
- *  테스트를 결정론으로 만든다. 미지정이면 실시계(`todayIso()`)로 폴백한다(프로덕션 경로). */
+ *  테스트를 결정론으로 만든다. 미지정이면 실시계(`seoulDate`·KST)로 폴백한다(프로덕션 경로). */
 export function StayRegisterPage({
   baseDate,
 }: { baseDate?: string } = {}): ReactElement {
   const router = useRouter();
-  const today = baseDate ?? todayIso();
+  const today = baseDate ?? seoulDate(new Date());
 
   // 여행 기간(위저드 스토어)을 달력 상·하한으로 흘려보낸다(TRIP-390 · Seed Q1). features/stay는
   // features/trip를 직접 못 읽으므로(조합은 pages 몫) 페이지가 구독해 문자열 prop으로 내린다.

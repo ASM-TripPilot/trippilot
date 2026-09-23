@@ -33,7 +33,7 @@ export function DeleteAccountDialog({
               계정을 삭제할까요?
             </Text>
             <Text className="mt-sm font-noto text-body text-body">
-              아래 항목이 계정과 함께 모두 삭제되며 되돌릴 수 없습니다.
+              아래 항목이 계정과 함께 모두 삭제됩니다.
             </Text>
             <ScrollView className="mt-md max-h-[220px]">
               <View className="gap-xs">
@@ -68,8 +68,8 @@ export function DeleteAccountDialog({
               정말 삭제할까요?
             </Text>
             <Text className="mt-sm font-noto text-body text-body">
-              이 작업은 되돌릴 수 없어요. 확인하면 계정과 위의 모든 데이터가
-              삭제 절차에 들어갑니다.
+              확인하면 계정과 위의 모든 데이터가 삭제 절차에 들어가고, 30일 뒤
+              완전히 삭제돼요. 그 전에는 설정에서 삭제를 취소할 수 있어요.
             </Text>
             <View className="mt-2xl flex-row gap-[10px]">
               <DialogButton

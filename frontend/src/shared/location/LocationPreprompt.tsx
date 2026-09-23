@@ -126,8 +126,9 @@ export function LocationPreprompt({
                 onPress={onProceed}
                 className="h-[52px] items-center justify-center rounded-button bg-primary"
               >
+                {/* TRIP-935 R8 — BR-U0-30 문구("계속/나중에"). 권한 창 앞 안내에 "허용"을 쓰지 않는다(5.1.1(iv)). */}
                 <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                  위치 사용 허용
+                  계속
                 </Text>
               </Pressable>
               <Pressable

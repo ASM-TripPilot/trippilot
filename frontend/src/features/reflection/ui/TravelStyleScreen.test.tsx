@@ -20,6 +20,10 @@ import { TravelStyleScreen } from './TravelStyleScreen';
  *    정식 얼굴(막대·StatTile·Evidence)은 **안** 그린다(상호배타).
  *  - 🔴 **[[반쪽 방어]]**: official 인데 `categoryBreakdown` 이 null(계약위반)이어도 0막대·무크래시.
  *
+ *  - 🔴 **TRIP-939 AC-5(심사 2.1)**: 근거 링크는 목적지(`onPressEvidence`)가 있을 때만 그린다 — 미주입이면
+ *    링크 자체가 없다(눌러야 "준비 중"이 뜨던 막다른 링크 제거). 지도 자리표시("지도 표시 예정")·범례·
+ *    "평균 이동 반경" 캡션도 그리지 않는다(Q7 — 새 표면을 발명하지 않는다).
+ *
  * (개념) 매처: 부분포함은 `getByText(/정규식/)`, 부재는 `queryBy*`, 개수는 `getAllByTestId`(exact testID).
  *   `toHaveTextContent(문자열)`은 완전일치라 쓰지 않는다(문제로그 [[RNTL toHaveTextContent 완전 일치 함정]]).
  */
@@ -67,14 +71,18 @@ describe('🔴 TravelStyleScreen · official 얼굴 (AC-2 · AC-5)', () => {
     expect(screen.getByText(/기타/)).toBeOnTheScreen();
     expect(screen.getByText(/40%/)).toBeOnTheScreen();
 
-    // StatTile 2개(하루 평균 방문 · 평균 체류) + Evidence + 지도 placeholder degrade.
+    // StatTile 2개(하루 평균 방문 · 평균 체류).
     expect(
       screen.getByTestId('reflection-style-stat-places')
     ).toBeOnTheScreen();
     expect(screen.getByText(/4곳/)).toBeOnTheScreen();
     expect(screen.getByText('하루 평균 방문')).toBeOnTheScreen();
-    expect(screen.getByTestId('reflection-style-evidence')).toBeOnTheScreen();
-    expect(screen.getByTestId('reflection-style-map')).toBeOnTheScreen();
+    // TRIP-939 AC-5 — 근거 목적지 미주입이면 링크가 없고, 지도 자리표시·범례·반경 캡션도 없다.
+    expect(screen.queryByTestId('reflection-style-evidence')).toBeNull();
+    expect(screen.queryByTestId('reflection-style-map')).toBeNull();
+    expect(screen.queryByText('지도 표시 예정')).toBeNull();
+    expect(screen.queryByText(/점 = 방문 장소/)).toBeNull();
+    expect(screen.queryByText(/평균 이동 반경/)).toBeNull();
   });
 
   it('AC-5: 평균 체류 StatTile 이 72분을 표시한다(INV-3 유일 예외, BR-U5-08a)', () => {
@@ -110,7 +118,8 @@ describe('🔴 TravelStyleScreen · official 얼굴 (AC-2 · AC-5)', () => {
     ).toBeOnTheScreen();
   });
 
-  it('EvidenceLink press → "준비 중" degrade 만(가짜 이동 0, Q3·INV-4)', () => {
+  it('TRIP-939 AC-5: 근거 목적지 미주입이면 링크도 "준비 중" 안내도 없다(막다른 링크 제거)', () => {
+    // 준비·실행: 페이지의 현재 모양(onPressEvidence 미주입)으로 그린다.
     render(
       <TravelStyleScreen
         face="official"
@@ -120,8 +129,32 @@ describe('🔴 TravelStyleScreen · official 얼굴 (AC-2 · AC-5)', () => {
       />
     );
 
+    // 단언: 누를 링크가 없으니 안내도 없다 + 짝 앵커(막대는 그대로).
+    expect(screen.queryByTestId('reflection-style-evidence')).toBeNull();
+    expect(screen.queryByText(/근거가 된 방문 데이터/)).toBeNull();
+    expect(screen.queryByText(/준비 중/)).toBeNull();
+    expect(screen.getAllByTestId('reflection-style-bar')).toHaveLength(4);
+  });
+
+  it('근거 목적지를 주입하면 링크가 있고 press 시 그 콜백만 1회(짝 — 가짜 이동 0 유지)', () => {
+    // 준비
+    const onPressEvidence = jest.fn();
+    render(
+      <TravelStyleScreen
+        face="official"
+        progress={PROGRESS_OFFICIAL}
+        analysis={officialBody()}
+        preview={null}
+        onPressEvidence={onPressEvidence}
+      />
+    );
+
+    // 실행
     fireEvent.press(screen.getByTestId('reflection-style-evidence'));
-    expect(screen.getByText(/준비 중/)).toBeOnTheScreen();
+
+    // 단언: 콜백 1회, "준비 중" 안내는 없다.
+    expect(onPressEvidence).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/준비 중/)).toBeNull();
   });
 
   it('[[반쪽 방어]]: categoryBreakdown 이 null(계약위반)이어도 0막대·무크래시, 통계 타일은 생존', () => {

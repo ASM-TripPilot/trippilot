@@ -24,7 +24,8 @@ import { LiveHubView, type LiveHubSlot } from './LiveHubView';
  *  - 골격: 전면 지도(셸) 위 좌상단 뒤로가기 + 일자 칩, 시트 헤더 한 줄
  *    "부산 여행 · 2일차 · 6월 11일(목) · 5곳", 카드 5장, 우하단 연필 FAB(`execution-live-replan-fab`).
  *  - 부재: 탭바·세그먼트·방패 FAB·옛 헤더·지도 세그먼트·수동 [도착]·다음 길찾기·레일 시각 열.
- *  - 배선: 뒤로·칩·[방문 완료] 가 콜백으로, [사진]/[메모] 가 "준비 중" 힌트로 이어진다.
+ *  - 배선: 뒤로·칩·[방문 완료] 가 콜백으로 이어진다. [사진]/[메모]는 운영 화면에 없다(TRIP-939 AC-6 —
+ *    눌러도 "준비 중"만 뜨던 버튼 제거, 심사 2.1).
  *  - TRIP-747 수정 알약: 연필 FAB 는 이동하지 않고 제자리 토글이다 — 열면 × 얼굴 + 흰 알약 2개
  *    (`AI에게 맡기기`·`직접 수정`), 알약을 누르면 메뉴가 닫히고 그 콜백만 1회 불린다(BR-U4-10 진입).
  *    딤이 없고 바깥 탭으로는 닫히지 않는다(Seed ③). 초기 열림은 `initialEditMenuOpen`(프리뷰 입구).
@@ -241,15 +242,16 @@ describe('LiveHubView · HV3 배선 (AC-1·AC-4 · Seed Q2)', () => {
     expect(handlers.onPressComplete).toHaveBeenCalledTimes(1);
   });
 
-  it('[사진]을 누르면 오류 없이 "준비 중" 힌트가 드러난다 (BR-U4-38)', () => {
-    const handlers = renderHub();
+  it('TRIP-939 AC-6: 활성 카드에 [사진]·[메모]·"준비 중" 힌트가 없고 [방문 완료]는 있다', () => {
+    // 준비·실행: 허브를 그린다(허브는 카드에 사진·메모 진입을 넘기지 않는다).
+    renderHub();
 
+    // 단언(부재): 누르면 "준비 중"만 뜨던 두 버튼과 힌트가 운영 화면에 없다.
+    expect(screen.queryByTestId('execution-arrive-photo')).toBeNull();
+    expect(screen.queryByTestId('execution-arrive-memo')).toBeNull();
     expect(screen.queryByTestId('execution-arrive-soon-hint')).toBeNull();
-
-    fireEvent.press(screen.getByTestId('execution-arrive-photo'));
-
-    expect(screen.getByTestId('execution-arrive-soon-hint')).toBeOnTheScreen();
-    expect(handlers.onPressComplete).not.toHaveBeenCalled();
+    // 짝 앵커: [방문 완료]는 남는다.
+    expect(screen.getByTestId('execution-arrive-complete')).toBeOnTheScreen();
   });
 });
 
@@ -692,10 +694,7 @@ const HIDE_PATHS: [string, () => void][] = [
     '[방문 완료]',
     () => fireEvent.press(screen.getByTestId('execution-arrive-complete')),
   ],
-  [
-    '[사진]',
-    () => fireEvent.press(screen.getByTestId('execution-arrive-photo')),
-  ],
+  // TRIP-939 AC-6 — [사진]은 운영 화면에서 사라져 숨김 경로에서도 빠진다.
 ];
 
 describe('LiveHubView · HT 트리거 알약·배지·로컬 숨김 (TRIP-748)', () => {
@@ -765,17 +764,17 @@ describe('LiveHubView · HT 트리거 알약·배지·로컬 숨김 (TRIP-748)',
     }
   );
 
-  it('HT3b 숨김은 버튼의 원래 동작을 먹지 않는다 — 칩·[방문 완료]·[사진]이 각자 일을 한다', () => {
+  it('HT3b 숨김은 버튼의 원래 동작을 먹지 않는다 — 칩·[방문 완료]가 각자 일을 한다', () => {
     const handlers = renderWithPill();
 
     fireEvent.press(screen.getByTestId('execution-live-daychip-2'));
     fireEvent.press(screen.getByTestId('execution-arrive-complete'));
-    fireEvent.press(screen.getByTestId('execution-arrive-photo'));
 
     expect(screen.queryByTestId(TRIGGER_PILL)).toBeNull();
     expect(handlers.onSelectDay).toHaveBeenCalledWith(2);
     expect(handlers.onPressComplete).toHaveBeenCalledTimes(1);
-    expect(screen.getByTestId('execution-arrive-soon-hint')).toBeOnTheScreen();
+    // TRIP-939 AC-6 — [사진]은 운영 화면에 없다(구 "[사진] → 준비 중 힌트" 경로 제거).
+    expect(screen.queryByTestId('execution-arrive-photo')).toBeNull();
   });
 
   it.each([

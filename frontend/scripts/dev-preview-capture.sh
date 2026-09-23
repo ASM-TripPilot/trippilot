@@ -12,7 +12,7 @@
 #   layer-app.md·TRIP-297 04b §5). 그래서 키마다 terminate → openurl 를 반드시 다시 한다.
 set -euo pipefail
 
-APP_ID="com.trippilot.app"
+APP_ID="com.trippilot.travel"
 SCHEME="trippilot://_dev/preview"
 WAIT="${PREVIEW_WAIT:-7}"                       # 렌더·폰트·이미지 안착 대기(초)
 CAPTURE_DIR="${CAPTURE_DIR:-$(git rev-parse --show-toplevel)/_workspace/preview-capture}"  # 루트 기준 — cwd(frontend) 상대면 frontend/_workspace가 생겨 산출물 오배치 조건이 된다

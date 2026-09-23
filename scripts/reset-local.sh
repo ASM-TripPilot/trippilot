@@ -34,5 +34,5 @@ SQL
 
 [ -n "${SKIP_IOS:-}" ] && exit 0
 echo "== 앱 재설치 =="
-xcrun simctl uninstall booted com.trippilot.app 2>/dev/null || true
+xcrun simctl uninstall booted com.trippilot.travel 2>/dev/null || true
 cd frontend && LANG=en_US.UTF-8 pnpm ios

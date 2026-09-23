@@ -1,6 +1,7 @@
 jest.mock('@/shared/api/generated/account/account');
 jest.mock('@/shared/api/generated/profile/profile');
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   fireEvent,
   render,
@@ -47,6 +48,19 @@ import { SettingsPage } from '..';
  *  인자(완전일치), 상위 텍스트에 더 붙는 것(오류 카피·purgeAt 연도·export 문구)은 정규식(부분포함).
  *  node_modules 실측(02a §5-A).
  */
+
+/**
+ * TRIP-938 준비 단계 — 페이지가 로그아웃 때 캐시를 비우려고 `useQueryClient()` 를 부르므로
+ * QueryClientProvider 안에서 그린다(없으면 "No QueryClient set" 으로 렌더가 죽는다, 02a ★5).
+ * 조회 훅은 위에서 목하므로 이 클라이언트는 실제로 아무것도 가져오지 않는다.
+ */
+function renderPage() {
+  return render(
+    <QueryClientProvider client={new QueryClient()}>
+      <SettingsPage />
+    </QueryClientProvider>
+  );
+}
 
 const mockUseGetMe = useGetMe as jest.Mock;
 const mockUseGetMeProfile = useGetMeProfile as jest.Mock;
@@ -155,7 +169,7 @@ describe('TRIP-608 · 2단 삭제 게이트 (AC-12 · 법적)', () => {
       spy: postSpy,
       onSuccessData: { purgeAt: '2026-09-13T00:00:00Z', cascadeSummary: {} },
     });
-    render(<SettingsPage />);
+    renderPage();
 
     // 실행: 삭제 진입 → 1단 [계속].
     fireEvent.press(screen.getByTestId('settings-delete-account'));
@@ -172,7 +186,7 @@ describe('TRIP-608 · 2단 삭제 게이트 (AC-12 · 법적)', () => {
   });
 
   it('1단 다이얼로그가 deletionScope 전체 목록을 고지한다(Q1)', () => {
-    render(<SettingsPage />);
+    renderPage();
     fireEvent.press(screen.getByTestId('settings-delete-account'));
 
     // 단언(전량·완전일치): Figma 3항목 축약이 아니라 deletionScope.ts 실제 목록 전량을 그린다.
@@ -188,7 +202,7 @@ describe('TRIP-608 · 2단 삭제 게이트 (AC-12 · 법적)', () => {
   it('1단에서 취소하면 POST 를 안 낸다(AC-12 짝 · 1단)', () => {
     const postSpy = jest.fn();
     primeMutation(mockUsePostMeDeletion, { spy: postSpy });
-    render(<SettingsPage />);
+    renderPage();
 
     fireEvent.press(screen.getByTestId('settings-delete-account'));
     fireEvent.press(screen.getByTestId('settings-delete-cancel'));
@@ -201,7 +215,7 @@ describe('TRIP-608 · 2단 삭제 게이트 (AC-12 · 법적)', () => {
   it('2단(최종 확인)에서 취소하면 POST 를 안 낸다(AC-12 짝 · 2단)', () => {
     const postSpy = jest.fn();
     primeMutation(mockUsePostMeDeletion, { spy: postSpy });
-    render(<SettingsPage />);
+    renderPage();
 
     // 실행: 삭제 진입 → 1단 [계속]으로 2단 전이 → 2단 [취소].
     // 1단·2단 취소 버튼은 testID 가 같지만 조건부 렌더라 공존하지 않는다 — step2 전이 뒤엔
@@ -222,7 +236,7 @@ describe('TRIP-608 · 삭제 상태기 (AC-3 · AC-4 · AC-10)', () => {
       spy: jest.fn(),
       onSuccessData: { purgeAt: '2026-09-13T00:00:00Z', cascadeSummary: {} },
     });
-    render(<SettingsPage />);
+    renderPage();
 
     fireEvent.press(screen.getByTestId('settings-delete-account'));
     fireEvent.press(screen.getByTestId('settings-delete-confirm'));
@@ -242,7 +256,7 @@ describe('TRIP-608 · 삭제 상태기 (AC-3 · AC-4 · AC-10)', () => {
       spy: delSpy,
       onSuccessData: undefined,
     });
-    render(<SettingsPage />);
+    renderPage();
 
     // 실행: 삭제 철회.
     fireEvent.press(screen.getByTestId('settings-deletion-cancel'));
@@ -259,7 +273,7 @@ describe('TRIP-608 · 삭제 상태기 (AC-3 · AC-4 · AC-10)', () => {
       spy: jest.fn(),
       error: httpError(404),
     });
-    render(<SettingsPage />);
+    renderPage();
 
     fireEvent.press(screen.getByTestId('settings-deletion-cancel'));
 
@@ -271,11 +285,53 @@ describe('TRIP-608 · 삭제 상태기 (AC-3 · AC-4 · AC-10)', () => {
   });
 });
 
+/**
+ * TRIP-935 AC-4(R5) — 삭제 요청(POST) 실패를 조용히 삼키지 않는다(5.1.1(v) · INV-4). 철회(DELETE)
+ * 실패 안내(AC-10)와 대칭으로, 요청 실패도 인라인 오류를 띄우고 상태는 active(삭제 행 유지)로 둔다.
+ * 응답 없는 네트워크 오류도 같은 표면이어야 한다 — 상태 코드만 보고 분기하면 그 케이스가 red.
+ */
+describe('🔴 TRIP-935 AC-4 · 삭제 요청 실패 → 인라인 오류, active 유지', () => {
+  it.each([
+    ['500', httpError(500)],
+    ['응답 없는 네트워크 오류', new AxiosError('Network Error')],
+  ])(
+    'POST %s → 오류 안내가 보이고 삭제 행이 남으며 유예 배너는 없다',
+    (_label, error) => {
+      const postSpy = jest.fn();
+      primeMutation(mockUsePostMeDeletion, { spy: postSpy, error });
+      renderPage();
+
+      // 실행: 삭제 진입 → 1단 [계속] → 2단 [계정 삭제].
+      fireEvent.press(screen.getByTestId('settings-delete-account'));
+      fireEvent.press(screen.getByTestId('settings-delete-confirm'));
+      fireEvent.press(screen.getByTestId('settings-delete-confirm-final'));
+
+      // 앵커: 요청은 실제로 나갔다(게이트 이후의 실패다).
+      expect(postSpy).toHaveBeenCalledTimes(1);
+      // 단언(급소): 실패를 인라인으로 알린다 — 다시 시도할 수 있다는 안내(부분포함).
+      const inlineError = screen.getByTestId('settings-delete-account-error');
+      expect(inlineError).toHaveTextContent(/다시 시도/);
+      // 단언: 상태는 active — 삭제 행이 남고 유예 배너는 없다.
+      expect(screen.getByTestId('settings-delete-account')).toBeOnTheScreen();
+      expect(screen.queryByTestId('settings-deletion-pending')).toBeNull();
+      // 단언: 다이얼로그는 닫혔다(오류는 다이얼로그 밖 설정 화면에 남는다).
+      expect(screen.queryByTestId('settings-delete-confirm-final')).toBeNull();
+    }
+  );
+
+  it('짝: 요청 전에는 삭제 요청 오류 안내가 없다', () => {
+    renderPage();
+
+    expect(screen.getByTestId('settings-delete-account')).toBeOnTheScreen();
+    expect(screen.queryByTestId('settings-delete-account-error')).toBeNull();
+  });
+});
+
 describe('TRIP-608 · 닉네임 (AC-2 · AC-7 · AC-8 · AC-9)', () => {
   it('AC-7: 길이 밖(2자 미만)이면 PATCH 미발화 + 인라인 오류', () => {
     const patchSpy = jest.fn();
     primeMutation(mockUsePatchNickname, { spy: patchSpy });
-    render(<SettingsPage />);
+    renderPage();
 
     // 실행: 편집 확장 → 1자 입력 → 저장.
     fireEvent.press(screen.getByTestId('settings-nickname-edit'));
@@ -294,7 +350,7 @@ describe('TRIP-608 · 닉네임 (AC-2 · AC-7 · AC-8 · AC-9)', () => {
       spy: patchSpy,
       onSuccessData: { nickname: '새이름', nicknameUpdatedAt: 'x' },
     });
-    render(<SettingsPage />);
+    renderPage();
 
     fireEvent.press(screen.getByTestId('settings-nickname-edit'));
     fireEvent.changeText(
@@ -315,7 +371,7 @@ describe('TRIP-608 · 닉네임 (AC-2 · AC-7 · AC-8 · AC-9)', () => {
       spy: jest.fn(),
       error: httpError(409),
     });
-    render(<SettingsPage />);
+    renderPage();
 
     fireEvent.press(screen.getByTestId('settings-nickname-edit'));
     fireEvent.changeText(
@@ -335,7 +391,7 @@ describe('TRIP-608 · 닉네임 (AC-2 · AC-7 · AC-8 · AC-9)', () => {
       spy: jest.fn(),
       error: httpError(503),
     });
-    render(<SettingsPage />);
+    renderPage();
 
     fireEvent.press(screen.getByTestId('settings-nickname-edit'));
     fireEvent.changeText(
@@ -363,7 +419,7 @@ describe('TRIP-608 · 내보내기 (AC-5 · INV-4)', () => {
         }),
       }),
     });
-    render(<SettingsPage />);
+    renderPage();
 
     // 실행: 내보내기 행을 누른다(지연 조회 → 요약·Share).
     fireEvent.press(screen.getByTestId('settings-export-row'));
@@ -390,7 +446,7 @@ describe('TRIP-608 · 내보내기 (AC-5 · INV-4)', () => {
     mockUseGetMeExport.mockReturnValue({
       refetch: jest.fn().mockResolvedValue({ data: undefined }),
     });
-    render(<SettingsPage />);
+    renderPage();
 
     // 실행: 내보내기 행을 누른다(지연 조회 → 실패 분기).
     fireEvent.press(screen.getByTestId('settings-export-row'));
@@ -415,7 +471,7 @@ describe('TRIP-608 · 내보내기 (AC-5 · INV-4)', () => {
         data: makeExport({ truncatedSections: [], sections: ['trips'] }),
       }),
     });
-    render(<SettingsPage />);
+    renderPage();
 
     fireEvent.press(screen.getByTestId('settings-export-row'));
 

@@ -24,8 +24,8 @@ import type { OrderedVisit } from '../model/summaryView';
  *  - AC-5(BR-U5-48): shareEnabled:false → 공유 버튼 비활성 + press 콜백 0회(종료·요약 전 공유 불가).
  *
  * 지도는 `shared/map/MapView`(viewOnly 글랜스, `itineraryMapSurfaceStructure` 옵트인 등재) —
- * 실 좌표(mapCenter+mapPins)가 있을 때만 렌더하고 없으면 "지도 준비 중" 자리표시(가짜 기본 센터 지도
- * 금지, 571 경고-2 동형). `DayHighlight` 계약에 좌표가 없어 런타임은 늘 자리표시 가지다 — AC-1 은
+ * 실 좌표(mapCenter+mapPins)가 있을 때만 렌더하고 없으면 그 자리를 비운다(가짜 기본 센터 지도
+ * 금지, 571 경고-2 동형 · 자리표시 제거 TRIP-939). `DayHighlight` 계약에 좌표가 없어 런타임은 늘 빈 가지다 — AC-1 은
  * mapPins 를 주입해 MAP 경로만 검증하고, 실 좌표 배선은 계약 확장 후속 티켓. `mapCenter?`·`mapPins?`
  * 는 옵셔널(테스트가 안 넘겨도 컴파일 통과해야 하므로 required 불가).
  */
@@ -48,7 +48,8 @@ export interface TripSummaryScreenProps {
   dayCards: DayCardVM[];
   orderedVisits: OrderedVisit[];
   shareEnabled: boolean;
-  onShare: () => void;
+  /** TRIP-939 — 미주입이면 [공유]를 그리지 않는다(공유 카드 미장전 시 페이지가 넘기지 않음). */
+  onShare?: () => void;
   onBack: () => void;
   /** TRIP-764 — 하단 탭바 라우팅(옵셔널, j03 동형). 미주입이면 탭 press 는 no-op. */
   onPressTab?: (key: ShellTabKey) => void;
@@ -92,7 +93,7 @@ export function TripSummaryScreen({
   // disabled 는 fireEvent.press 를 항상 막지는 않으므로(RNTL) 콜백 게이트를 한 번 더 둔다(571 저장버튼 동형).
   const handleShare = () => {
     if (!shareEnabled) return;
-    onShare();
+    onShare?.();
   };
   const hasMap = mapCenter !== undefined && (mapPins?.length ?? 0) > 0;
 
@@ -112,21 +113,23 @@ export function TripSummaryScreen({
           여행 요약
         </Text>
         <View className="flex-1" />
-        <Pressable
-          testID="reflection-summary-share"
-          disabled={!shareEnabled}
-          accessibilityState={{ disabled: !shareEnabled }}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          onPress={handleShare}
-        >
-          <Text
-            className={`font-noto-bold text-body font-bold ${
-              shareEnabled ? 'text-primary' : 'text-muted-soft'
-            }`}
+        {onShare ? (
+          <Pressable
+            testID="reflection-summary-share"
+            disabled={!shareEnabled}
+            accessibilityState={{ disabled: !shareEnabled }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            onPress={handleShare}
           >
-            공유
-          </Text>
-        </Pressable>
+            <Text
+              className={`font-noto-bold text-body font-bold ${
+                shareEnabled ? 'text-primary' : 'text-muted-soft'
+              }`}
+            >
+              공유
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
 
       <ScrollView
@@ -156,22 +159,12 @@ export function TripSummaryScreen({
           <>
             {hasMap ? (
               // 풀폭 250h · radius 0(px-lg 패딩 밖으로 -mx-lg 하여 화면 폭 꽉 채운다, j03 mapArea 동형).
+              // 실 좌표가 없으면 지도 자리에 아무것도 그리지 않는다 — 하드코딩 기본 센터는 거짓 정보(571
+              // 경고-2), 자리표시는 미완성 표면(TRIP-939 AC-4). 좌표가 생기면 이 가지가 그대로 지도를 그린다.
               <View className="-mx-lg h-[250px] overflow-hidden">
                 <MapView center={mapCenter} pins={mapPins} viewOnly />
               </View>
-            ) : (
-              // 실 좌표가 없으면 지도를 그리지 않는다 — 하드코딩 기본 센터를 실데이터처럼 그리면
-              // 거짓 정보가 된다(571 경고-2 동형). DayHighlight 계약에 좌표가 없어 오늘은 늘 이 가지.
-              <View
-                testID="reflection-summary-map-pending"
-                className="w-full items-center gap-sm rounded-card border-[1.5px] border-dashed border-hairline-strong bg-surface-soft px-lg py-3xl"
-              >
-                <LocationOffGlyph size={30} />
-                <Text className="font-noto text-label text-muted">
-                  지도 준비 중
-                </Text>
-              </View>
-            )}
+            ) : null}
 
             {/* 지도 범례 캡션 — 코랄 선/숙 마커의 뜻(지도가 실제로 뜰 때만; map-pending 에선
                 없는 지도·경로선·마커를 설명하는 범례가 되므로, hasMap 으로 게이팅). 12 muted. */}

@@ -1,10 +1,19 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
+import Constants from 'expo-constants';
+import * as Linking from 'expo-linking';
 import { type ReactElement, useState } from 'react';
 import { Share } from 'react-native';
 
+import { usePreferenceStore } from '@/features/onboarding/model/preferenceStore';
+import { OSM_COPYRIGHT_URL } from '@/features/settings/model/dataAttribution';
 import { resolveExportSummary } from '@/features/settings/model/exportSummary';
-import { buildSettingsSections } from '@/features/settings/model/settingsSections';
+import {
+  buildSettingsSections,
+  filterReadySettingsSections,
+} from '@/features/settings/model/settingsSections';
 import { SettingsScreen } from '@/features/settings/ui/SettingsScreen';
+import { logout } from '@/shared/api';
 import {
   useDeleteMeDeletion,
   useGetMe,
@@ -48,6 +57,7 @@ function loadRouter(): typeof import('expo-router').router | null {
 export function SettingsPage(): ReactElement {
   const account = useGetMe();
   const profile = useGetMeProfile();
+  const queryClient = useQueryClient();
 
   // 닉네임: 서버 값 기본 + 편집 성공 시 override(200 뒤 요약 갱신 / 409·503 뒤 미변경).
   const [nicknameOverride, setNicknameOverride] = useState<string | null>(null);
@@ -63,6 +73,7 @@ export function SettingsPage(): ReactElement {
     (account.data?.status === 'DELETION_PENDING' ? 'pending' : 'active');
   const [purgeAt, setPurgeAt] = useState<string | null>(null);
   const [cancelDeletionError, setCancelDeletionError] = useState(false);
+  const [deleteRequestError, setDeleteRequestError] = useState(false);
 
   const [truncatedLabel, setTruncatedLabel] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -85,6 +96,11 @@ export function SettingsPage(): ReactElement {
       onSuccess: (data) => {
         setDeletionOverride('pending');
         setPurgeAt(data?.purgeAt ?? null);
+        setDeleteRequestError(false);
+      },
+      // 5xx·네트워크 오류 모두 — 상태는 active 그대로, 인라인 오류로 알린다(TRIP-935 R5, INV-4).
+      onError: () => {
+        setDeleteRequestError(true);
       },
     },
   });
@@ -140,18 +156,30 @@ export function SettingsPage(): ReactElement {
     await Share.share({ message: parts.join('\n\n') });
   };
 
+  // 로그아웃(TRIP-938): 토큰 삭제 → 이전 계정 캐시 비우기 → 게이트('/')에 인계. replace 라 뒤로가기로
+  // 설정에 못 돌아온다. 로그인 경로로 직접 가지 않는 이유 — (auth) 는 게이트가 재조회를 마쳐야 열린다.
+  const runLogout = async (): Promise<void> => {
+    await logout();
+    queryClient.clear();
+    usePreferenceStore.getState().reset();
+    loadRouter()?.replace('/');
+  };
+
   return (
     <SettingsScreen
-      groups={buildSettingsSections({
-        nickname: currentNickname,
-        email: account.data?.email ?? null,
-      })}
+      groups={filterReadySettingsSections(
+        buildSettingsSections({
+          nickname: currentNickname,
+          email: account.data?.email ?? null,
+        })
+      )}
       deletionState={deletionState}
       purgeAt={purgeAt}
       currentNickname={currentNickname}
       nicknameError={nicknameError}
       truncatedLabel={truncatedLabel}
       cancelDeletionError={cancelDeletionError}
+      deleteRequestError={deleteRequestError}
       exportError={exportError}
       onPressBack={() => loadRouter()?.back()}
       onSubmitNickname={submitNickname}
@@ -160,6 +188,14 @@ export function SettingsPage(): ReactElement {
       onPressCancelDeletion={() => cancelDeletion.mutate()}
       onPressLocation={() => loadRouter()?.push('/settings/location')}
       onPressNotifications={() => loadRouter()?.push('/settings/notifications')}
+      onPressTerms={(termsType) => loadRouter()?.push(`/terms/${termsType}`)}
+      onPressLogout={() => void runLogout()}
+      // 스토어 버전과 같은 출처(app.config version). 없으면 화면이 버전 줄을 그리지 않는다(TRIP-935 R4).
+      appVersion={Constants.expoConfig?.version}
+      onPressOsmCopyright={() => {
+        // 브라우저를 못 열어도 설정 화면은 그대로 둔다(TRIP-886 Q3 — 링크 실패는 무시).
+        Linking.openURL(OSM_COPYRIGHT_URL).catch(() => undefined);
+      }}
     />
   );
 }

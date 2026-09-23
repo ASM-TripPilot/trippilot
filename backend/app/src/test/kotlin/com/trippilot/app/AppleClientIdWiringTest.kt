@@ -120,4 +120,39 @@ class AppleClientIdWiringTest : StringSpec({
         // 부분문자열이 아니라 **토큰**으로 본다 — 다른 키의 일부에 걸려 통과하지 않도록.
         backendKeys.split(Regex("\\s+")).contains("APPLE_CLIENT_ID") shouldBe true
     }
+
+    // ── revoke 설정(TRIP-933) ──────────────────────────────────────────────────────
+    // 같은 네 구간이 같은 이유로 명시 화이트리스트다. 빠지면 배포해도 revoke 가 조용히 건너뛰어진다
+    // (경고 로그뿐) — 심사 요건(App Store 5.1.1(v))이 꺼진 채 초록이 된다.
+
+    "revoke 설정 4종이 application.yml·compose·.env.example·Helm·시크릿 동기화를 모두 지난다" {
+        val keys = mapOf(
+            "APPLE_TEAM_ID" to "trippilot.social.apple.team-id",
+            "APPLE_KEY_ID" to "trippilot.social.apple.key-id",
+            "APPLE_PRIVATE_KEY" to "trippilot.social.apple.private-key",
+            "SOCIAL_TOKEN_ENCRYPTION_KEY" to "trippilot.social.token-encryption-key",
+        )
+        val compose = repoFile("docker-compose.yml").readLines()
+        val backendStart = compose.indexOfFirst { it.trimEnd() == "  backend:" }
+        backendStart shouldBeGreaterThan -1
+        val backendEnd = compose.drop(backendStart + 1)
+            .indexOfFirst { it.matches(Regex("^ {2}\\S.*:\\s*$")) }
+            .let { if (it < 0) compose.size else backendStart + 1 + it }
+        val backendBlock = compose.subList(backendStart, backendEnd).map { it.trim() }
+        val envExample = repoFile(".env.example").readLines().map { it.trim() }
+        val helmRange = repoFile("deploy/eks/chart/templates/backend.yaml").readLines()
+            .first { it.contains("range list") && it.contains("\"GOOGLE_CLIENT_ID\"") }
+        val backendKeys = repoFile("deploy/eks/runtime_secrets.py").readText()
+            .substringAfter("BACKEND_KEYS = frozenset(\"\"\"").substringBefore("\"\"\"")
+            .split(Regex("\\s+"))
+
+        keys.forEach { (env, property) ->
+            resolve(property, mapOf(env to "v")) shouldBe "v"
+            resolve(property, emptyMap()) shouldBe ""
+            backendBlock.contains("$env: \${$env:-}") shouldBe true
+            envExample.contains("$env=") shouldBe true
+            helmRange shouldContain "\"$env\""
+            backendKeys.contains(env) shouldBe true
+        }
+    }
 })

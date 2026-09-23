@@ -83,14 +83,17 @@ afterAll(() => {
 });
 
 describe('LoginPage — 상태↔화면 배선 (AC-W-07)', () => {
-  it('컨테이너가 SocialLoginScreen 을 렌더하고 초기(idle) 상태로 브랜드·소셜 4버튼을 노출한다', () => {
+  // TRIP-932 — 애플 버튼은 isAvailableAsync 판정대로 붙는다(iOS 4버튼 / Android 3버튼). 이 스위트는
+  // 애플 SDK 목이 없어 판정이 falsy 로 떨어지므로(jest-expo 자동 목) 가용성과 무관한 3버튼만 본다.
+  // 애플 유무는 LoginPage.apple.test.tsx(node 버킷)가 맡는다 — integration 버킷은 lazy import 를
+  // 못 태운다(02a ★2).
+  it('컨테이너가 SocialLoginScreen 을 렌더하고 초기(idle) 상태로 브랜드·가용성과 무관한 소셜 3버튼(구글·카카오·네이버)을 노출한다', () => {
     setScenario('login-success-existing');
 
     render(<LoginPage />);
 
     expect(screen.getByTestId('auth-login-root')).toBeOnTheScreen();
     expect(screen.getByTestId('auth-login-google')).toBeOnTheScreen();
-    expect(screen.getByTestId('auth-login-apple')).toBeOnTheScreen();
     expect(screen.getByTestId('auth-login-kakao')).toBeOnTheScreen();
     expect(screen.getByTestId('auth-login-naver')).toBeOnTheScreen();
   });

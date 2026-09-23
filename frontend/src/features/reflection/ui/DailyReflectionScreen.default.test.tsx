@@ -34,17 +34,17 @@ jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
  *  - 🔴 AC-1: default 얼굴이 새 표면 요소를 **전부** 그린다(빈 화면·부분 재구성 아님).
  *  - 🔴 AC-2: 일차 탭 3개(testID 신설 `reflection-daily-day-tab-{day}`) — press→onSelectDay 1회,
  *    활성만 selected(코랄 pill 은 fill 아니라 `accessibilityState.selected` 로 잠금), 라벨 한글 N일차.
- *  - 🔴 AC-3: 기분 3택 단일선택 — 초기 무선택 → press 한 항목만 selected(fill 아닌 selected 로 잠금),
+ *  - 🔴 AC-3(TRIP-935 로 뒤집힘 → 숨김): 기분 3택 단일선택 — 초기 무선택 → press 한 항목만 selected(fill 아닌 selected 로 잠금),
  *    다른 항목 press 시 이전 선택 해제(단일). 저장 콜백 없음(mood prop·콜백 부재로 구조적 차단).
  *  - 🔴 AC-4(거동): distanceDash 면 이동값 "—"(거리만, INV-3 — 소요시간 문자열 0). 값 22·구분선 제거는
  *    소스 가드(`reflectionDailyStructure.test.ts`)가 맡는다.
- *  - 🔴 AC-5: 좌표 없으면 `reflection-daily-map-notice`(실화면 늘 이 가지, 가짜 기본센터 금지) ·
+ *  - 🔴 AC-5(TRIP-935 로 좌표 없음 가지 뒤집힘 → 박스 없음): 좌표 없으면 `reflection-daily-map-notice`(실화면 늘 이 가지, 가짜 기본센터 금지) ·
  *    좌표 있으면 MapView(`map-root`) viewOnly(둘은 상호배타).
  *  - 🔴 AC-7: 서술 **카드**(헤드 "오늘의 기록" + "수정" 링크 + 본문) · "수정" press → 편집 진입
  *    (동결 편집 모드 재사용, 죽은 링크 아님).
- *  - 🔴 AC-8: 메모 **입력** 행이 시스템 변경요약을 **대체**(changeSummary 를 줘도 변경요약 행 부재 +
+ *  - 🔴 AC-8(TRIP-935 로 뒤집힘 → 메모 숨김): 메모 **입력** 행이 시스템 변경요약을 **대체**(changeSummary 를 줘도 변경요약 행 부재 +
  *    메모 입력 present) · maxLength 60 · 카운터 "N/60".
- *  - 🔴 AC-9: 저장 CTA testID `-confirm`→`-save` 개명 + 라벨 "저장" + press→콜백 1회(콜백명 onConfirm 유지).
+ *  - 🔴 AC-9(TRIP-935 로 뒤집힘 → `-confirm`·"확인"): 저장 CTA testID `-confirm`→`-save` 개명 + 라벨 "저장" + press→콜백 1회(콜백명 onConfirm 유지).
  *  - 🔴 AC-10: 하단 탭바(shared/ui BottomTabBar 재사용) records 활성 + press→onPressTab 1회.
  *  - 🔴 AC-12: 헤더 "편집"(reflection-daily-edit) 유지(공유와 다름) — press→편집 진입.
  *
@@ -54,6 +54,12 @@ jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
  *   TextInput 실 prop 판독 · `queryByTestId` = 부재 확인(getBy 는 못 찾으면 throw).
  *
  * INV-3: 이 파일 픽스처에 "N분"·"N시간"·"소요" 문자열을 두지 않는다(G6 소스 스캔 오탐 방지).
+ *
+ * TRIP-935 AC-6(R7) — 심사 2.1 대응으로 default 얼굴의 비영속·빈 표면을 숨긴다. 아래 AC-1·3·5·8·9 는
+ * 지우지 않고 새 계약으로 뒤집었다: 기분 3택·메모 입력 숨김(저장되지 않는 입력), 좌표 없으면 지도
+ * 자리 자체를 안 그림(회고 계약에 좌표가 없어 늘 빈 박스였다), 하단 버튼은 "저장" 대신 "확인"
+ * (`reflection-daily-confirm` — data-insufficient 와 같은 이름표, 02a ★16). data-insufficient 의
+ * 누락 표기(mapNotice)는 US-REC-06 이 요구하므로 유지된다(faces.test AC-2).
  */
 
 type ReflectionDayTab = { day: number; today?: boolean };
@@ -103,24 +109,19 @@ function renderScreen(over: Partial<ExtendedProps> = {}) {
   return props;
 }
 
-describe('🔴 AC-1 · default 얼굴이 새 표면 요소를 전부 그린다(긍정 앵커)', () => {
-  it('일차 탭·기분·통계·서술·사진·메모·저장·탭바가 모두 실재한다', () => {
+describe('🔴 AC-1 · default 얼굴이 남는 표면 요소를 전부 그린다(긍정 앵커 · TRIP-935 갱신)', () => {
+  it('일차 탭·통계·서술·사진·확인·탭바가 모두 실재한다(기분·메모는 TRIP-935 로 숨김 — AC-3·8)', () => {
     renderScreen();
 
     // 일차 탭 3개
     expect(screen.getByTestId('reflection-daily-day-tab-1')).toBeOnTheScreen();
     expect(screen.getByTestId('reflection-daily-day-tab-2')).toBeOnTheScreen();
     expect(screen.getByTestId('reflection-daily-day-tab-3')).toBeOnTheScreen();
-    // 기분 3택
-    expect(screen.getByTestId('reflection-daily-mood-sad')).toBeOnTheScreen();
-    expect(screen.getByTestId('reflection-daily-mood-soso')).toBeOnTheScreen();
-    expect(screen.getByTestId('reflection-daily-mood-good')).toBeOnTheScreen();
-    // 통계·서술·사진(보존 testID) · 메모·저장(신설)
+    // 통계·서술·사진(보존 testID) · 확인(TRIP-935 — 구 저장)
     expect(screen.getByTestId('reflection-daily-stats')).toBeOnTheScreen();
     expect(screen.getByTestId('reflection-daily-narrative')).toBeOnTheScreen();
     expect(screen.getByTestId('reflection-daily-photo-grid')).toBeOnTheScreen();
-    expect(screen.getByTestId('reflection-daily-memo-input')).toBeOnTheScreen();
-    expect(screen.getByTestId('reflection-daily-save')).toBeOnTheScreen();
+    expect(screen.getByTestId('reflection-daily-confirm')).toBeOnTheScreen();
     // 탭바
     expect(screen.getByTestId('shell-tabbar-root')).toBeOnTheScreen();
   });
@@ -176,57 +177,16 @@ describe('🔴 AC-2 · 일차 탭(record 것 import 금지 — testID 신설)', 
   });
 });
 
-describe('🔴 AC-3 · 기분 3택 단일선택(로컬 state · 저장 콜백 없음)', () => {
-  it('초기엔 아무 것도 선택되지 않는다(비영속 — 서버 값 없음)', () => {
+describe('🔴 AC-3 · 기분 3택은 그리지 않는다(TRIP-935 — 저장되지 않는 입력 숨김)', () => {
+  it('기분 3택 버튼과 "오늘 어땠어요?" 제목이 없다', () => {
     renderScreen();
 
-    expect(
-      screen.getByTestId('reflection-daily-mood-sad').props.accessibilityState
-        ?.selected
-    ).toBe(false);
-    expect(
-      screen.getByTestId('reflection-daily-mood-soso').props.accessibilityState
-        ?.selected
-    ).toBe(false);
-    expect(
-      screen.getByTestId('reflection-daily-mood-good').props.accessibilityState
-        ?.selected
-    ).toBe(false);
-  });
-
-  it('하나를 누르면 그 항목만 selected 로 전환된다(fill 아닌 구조로 잠금)', () => {
-    renderScreen();
-
-    fireEvent.press(screen.getByTestId('reflection-daily-mood-good'));
-
-    expect(
-      screen.getByTestId('reflection-daily-mood-good').props.accessibilityState
-        ?.selected
-    ).toBe(true);
-    expect(
-      screen.getByTestId('reflection-daily-mood-sad').props.accessibilityState
-        ?.selected
-    ).toBe(false);
-    expect(
-      screen.getByTestId('reflection-daily-mood-soso').props.accessibilityState
-        ?.selected
-    ).toBe(false);
-  });
-
-  it('다른 항목을 누르면 이전 선택이 해제된다(단일선택)', () => {
-    renderScreen();
-
-    fireEvent.press(screen.getByTestId('reflection-daily-mood-good'));
-    fireEvent.press(screen.getByTestId('reflection-daily-mood-sad'));
-
-    expect(
-      screen.getByTestId('reflection-daily-mood-sad').props.accessibilityState
-        ?.selected
-    ).toBe(true);
-    expect(
-      screen.getByTestId('reflection-daily-mood-good').props.accessibilityState
-        ?.selected
-    ).toBe(false);
+    // 앵커 — default 얼굴 본문은 그려졌다.
+    expect(screen.getByTestId('reflection-daily-stats')).toBeOnTheScreen();
+    expect(screen.queryByTestId('reflection-daily-mood-sad')).toBeNull();
+    expect(screen.queryByTestId('reflection-daily-mood-soso')).toBeNull();
+    expect(screen.queryByTestId('reflection-daily-mood-good')).toBeNull();
+    expect(screen.queryAllByText('오늘 어땠어요?')).toHaveLength(0);
   });
 });
 
@@ -250,12 +210,17 @@ describe('🔴 AC-4(거동) · 통계는 거리만(INV-3)', () => {
   });
 });
 
-describe('🔴 AC-5 · 지도 가지(가짜 기본센터 금지)', () => {
-  it('좌표가 없으면 자리표시(map-notice)만 뜨고 지도는 없다', () => {
+describe('🔴 AC-5 · 지도 가지(가짜 기본센터 금지 · TRIP-935 빈 박스 숨김)', () => {
+  it('좌표가 없으면 지도도 자리표시(점선 박스)도 그리지 않는다', () => {
     renderScreen();
 
-    expect(screen.getByTestId('reflection-daily-map-notice')).toBeOnTheScreen();
+    // 앵커 — default 얼굴 본문은 그려졌다.
+    expect(screen.getByTestId('reflection-daily-stats')).toBeOnTheScreen();
+    expect(screen.queryByTestId('reflection-daily-map-notice')).toBeNull();
     expect(screen.queryByTestId('map-root')).toBeNull();
+    expect(screen.queryAllByText('위치 정보를 표시할 수 없어요')).toHaveLength(
+      0
+    );
   });
 
   it('좌표가 있으면 MapView(viewOnly)가 뜨고 자리표시는 없다', () => {
@@ -300,40 +265,33 @@ describe('🔴 AC-7 · 서술 카드(헤드 "오늘의 기록" + "수정" + 본�
   });
 });
 
-describe('🔴 AC-8 · 메모 입력 행이 시스템 변경요약을 대체한다', () => {
-  it('changeSummary 를 줘도 변경요약 행은 없고 메모 입력이 뜬다(교체)', () => {
+describe('🔴 AC-8 · 메모 입력은 그리지 않는다(TRIP-935) — 변경요약 행도 default 에선 여전히 없다', () => {
+  it('changeSummary 를 줘도 메모 입력·카운터·변경요약 행이 모두 없다', () => {
     renderScreen({ changeSummary: '이날 휴무로 1곳을 변경했어요' });
 
-    expect(screen.getByTestId('reflection-daily-memo-input')).toBeOnTheScreen();
+    // 앵커 — default 얼굴 본문은 그려졌다.
+    expect(screen.getByTestId('reflection-daily-narrative')).toBeOnTheScreen();
+    expect(screen.queryByTestId('reflection-daily-memo-input')).toBeNull();
+    expect(screen.queryAllByText(/\d+\/60/)).toHaveLength(0);
     expect(screen.queryByTestId('reflection-daily-change-summary')).toBeNull();
-  });
-
-  it('메모 상한은 60 이고 카운터가 입력 길이를 "N/60" 로 센다', () => {
-    renderScreen();
-
-    const memo = screen.getByTestId('reflection-daily-memo-input');
-    expect(memo.props.maxLength).toBe(60);
-    expect(screen.getByText('0/60')).toBeOnTheScreen();
-
-    fireEvent.changeText(memo, '좋은 하루였다');
-
-    expect(screen.getByText('7/60')).toBeOnTheScreen();
   });
 });
 
-describe('🔴 AC-9 · 저장 CTA(-confirm→-save 개명 · 라벨 "저장")', () => {
-  it('저장 버튼이 실재하고 옛 -confirm 은 사라진다', () => {
+describe('🔴 AC-9 · 하단 버튼은 "확인"(TRIP-935 — 저장할 것이 없으니 "저장" 아님)', () => {
+  it('확인 버튼(reflection-daily-confirm)이 있고 옛 -save 와 "저장" 글자는 없다', () => {
     renderScreen();
 
-    const save = screen.getByTestId('reflection-daily-save');
-    expect(within(save).getByText('저장')).toBeOnTheScreen();
-    expect(screen.queryByTestId('reflection-daily-confirm')).toBeNull();
+    const confirm = screen.getByTestId('reflection-daily-confirm');
+    expect(within(confirm).getByText('확인')).toBeOnTheScreen();
+    expect(screen.queryByTestId('reflection-daily-save')).toBeNull();
+    // 편집 전(비편집) 화면에는 "저장" 글자가 없다 — 편집 모드의 저장은 동결 테스트가 지킨다(02a ★17).
+    expect(screen.queryAllByText('저장')).toHaveLength(0);
   });
 
-  it('저장 press → 콜백을 정확히 1회 부른다', () => {
+  it('확인 press → 콜백(onConfirm)을 정확히 1회 부른다', () => {
     const { onConfirm } = renderScreen();
 
-    fireEvent.press(screen.getByTestId('reflection-daily-save'));
+    fireEvent.press(screen.getByTestId('reflection-daily-confirm'));
 
     expect(onConfirm).toHaveBeenCalledTimes(1);
   });

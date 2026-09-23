@@ -88,7 +88,6 @@ export function PlanbDraftPage({
         )
       }
       onReopenRequest={() => router.push(`/trips/${tripId}/planb`)}
-      onPressCandidates={() => {}}
     />
   );
 }

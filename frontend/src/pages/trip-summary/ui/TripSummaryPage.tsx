@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
 
+import { captureShareImage } from '@/features/reflection/model/shareCard';
 import { summaryStats } from '@/features/reflection/model/summaryStats';
 import {
   daySubtitle,
@@ -31,7 +32,7 @@ import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
  * 흡수한다(ready 만이 유일 신호, 01b 결정3).
  *
  * ⚠️ 계약 공백: `DayHighlight` 에 좌표가 없어 지도 좌표(`mapCenter`/`mapPins`)를 못 넘긴다 — 화면은
- * 늘 "지도 준비 중" 자리표시로 접힌다(가짜 기본 센터 지도 금지, 571 경고-2 동형). 실 좌표 배선은 계약
+ * 늘 지도 자리가 빈 채로 접힌다(가짜 기본 센터 지도 금지, 571 경고-2 동형). 실 좌표 배선은 계약
  * 확장 후속 티켓. 페이지 조립 로직(얼굴 판정·VM 조립·배선)은 `DailyReflectionPage`(j03)와 동형으로
  * jest 무심판이다 — 6-b 실기가 유일한 그물(자율/야간이라 이번엔 SKIP).
  */
@@ -113,7 +114,12 @@ export function TripSummaryPage({
       dayCards={dayCards}
       orderedVisits={toOrderedVisitList(data.highlights)}
       shareEnabled={shareEnabled(envelope)}
-      onShare={() => router.push(`/trips/${tripId}/records/share`)}
+      // TRIP-939 Q2: 공유 카드의 저장·공유가 미장전이면 진입점([공유])을 넘기지 않는다(막다른 화면 차단).
+      onShare={
+        captureShareImage().armed
+          ? () => router.push(`/trips/${tripId}/records/share`)
+          : undefined
+      }
       onBack={handleBack}
       onPressTab={(key: ShellTabKey) =>
         router.replace(key === 'home' ? '/' : `/${key}`)

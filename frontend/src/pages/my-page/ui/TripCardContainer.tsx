@@ -6,6 +6,7 @@ import {
   useGetTripsTripIdBases,
   useGetTripsTripIdItinerary,
 } from '@/shared/api/generated/trips/trips';
+import { seoulDate } from '@/shared/date/seoulDate';
 import { TripCard, type TripCardVM } from '@/features/settings/ui/TripCard';
 
 /**
@@ -53,7 +54,7 @@ export function TripCardContainer({
 
   // D-배지는 예정(미래 출발) 카드에만. 오늘은 라우트가 아니라 여기서 읽되(화면 파생), 종료·진행 중은
   // 배지가 없다. 종료 카드는 대신 회고 chevron 을 그린다(isEnded).
-  const today = new Date().toISOString().slice(0, 10);
+  const today = seoulDate(new Date());
   const isUpcoming = trip.status === 'PLANNED' || trip.status === 'CONFIRMED';
   const daysUntil = Math.round(
     (Date.parse(trip.startDate) - Date.parse(today)) / MS_PER_DAY
