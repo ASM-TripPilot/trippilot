@@ -44,9 +44,10 @@ const ROOT = path.resolve('src');
 const LOCKED_CALLERS = [
   'features/itinerary/ui/DraftScreen.tsx',
   'features/itinerary/ui/MustVisitPickerScreen.tsx',
-  // TRIP-563 i13·i16 재계획 글랜스 지도 — h05·h11 과 같은 인라인 잠금 미리보기(viewOnly ON).
-  'features/planb/ui/NoAlternativeScreen.tsx',
-  'features/planb/ui/ReplanDraftScreen.tsx',
+  // TRIP-751 — 옛 i13·i16 재계획 글랜스 지도(`features/planb/ui/{ReplanDraftScreen,NoAlternativeScreen}`)는
+  // i06 재작성으로 파일째 삭제됐다. 새 뷰(`pages/planb-draft/ui/ReplanDraftView.tsx`)는 `<MapView>` 를
+  // 직접 쓰지 않고 셸(`MapSheetShell`, 아래 LOCKED)이 지도를 소유한다. 옛 파일이 남아 있으면 S2 ① 전수
+  // 동치가 red 로 삭제를 강제한다.
   // TRIP-565 j01 방문 기록 히어로 지도 — 방문 동선 글랜스(viewOnly ON, 인터랙티브 요소는 형제).
   'features/record/ui/TripRecordsScreen.tsx',
   // TRIP-571 j03 오늘의 회고 지도 — 방문 동선 글랜스(viewOnly ON). 실 좌표 있을 때만 렌더(계약에
@@ -373,8 +374,9 @@ describe('S8 · 무선 — 연결선을 끄는 자리가 h05·h07 loading 둘뿐
     //    connectPins={false}). defaultTags 는 14 불변 — SlotFillScreen 은 LOCKED 이자 NO_LINE 이라
     //    filter 에서 빠져 (LOCKED 13 − NO_LINE 3 = 10 + OPEN 4)로 상쇄된다(오갱신 금지 — 15로 올리면
     //    거짓 red). TRIP-791 로 GenerationFallbackScreen(LOCKED·line caller) 추가분은 그대로.
+    //    TRIP-751 로 LOCKED 두 화면(i13·i16, 태그 각 1) 삭제 → defaultTags 13 → 11.
     expect(lineOffTags).toHaveLength(3);
-    expect(defaultTags).toHaveLength(13);
+    expect(defaultTags).toHaveLength(11);
 
     // ② 끄는 세 자리 전부 끈다고 **명시**한다(h05·h07 loading·h10 후보).
     lineOffTags.forEach((tag) =>

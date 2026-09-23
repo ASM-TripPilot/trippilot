@@ -426,3 +426,169 @@ describe('🔴 TRIP-750 · i04 재계획 요청 시트 프리뷰 (AC-10)', () =>
     OLD_REQUEST_KEYS.forEach((key) => expect(keys).not.toContain(key));
   });
 });
+
+// ── TRIP-751 · i06 재계획안 2키 ─────────────────────────────────────────────
+//
+// Figma 4314:1923(펼침) · 4335:1923(대안 없음) — 같은 5곳 픽스처를 지도+시트 셸 위에 펼침(index 1)으로.
+// 옛 빈 슬롯 키(`planb-replan-draft-empty`)는 사라진다. 프리뷰는 뷰를 파일 경로로 import 한다 —
+// 위 `@/shared/api` 지뢰가 배럴 로드를 막는다(하위 경로 정적 검사는 planbReplanDraftStructure G8).
+
+function i06Texts(pattern: RegExp): string[] {
+  return screen
+    .queryAllByTestId(pattern)
+    .map((node) => String(node.props.children));
+}
+
+function i06Classes(pattern: RegExp): string[][] {
+  return screen
+    .queryAllByTestId(pattern)
+    .map((node) => String(node.props.className ?? '').split(/\s+/));
+}
+
+const I06_DIMMED = /^opacity-(45|\[0\.45\])$/;
+
+describe('🔴 TRIP-751 · i06 재계획안 펼침 프리뷰 (AC-12)', () => {
+  it('planb-replan-draft 는 Figma 5곳을 헤더·번호 톤·거리 커넥터·사진·[직접 수정]/[적용하기]로 펼쳐 그린다', () => {
+    mockSearchParams.state = 'planb-replan-draft';
+
+    render(<DevPreview />);
+
+    expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
+    expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
+      'AI 재계획안'
+    );
+    expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('2일차');
+    expect(screen.getByTestId('sheet-header-date')).toHaveTextContent(
+      '6월 11일(목)'
+    );
+    expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(
+      '5곳 · 6.3km'
+    );
+
+    expect(i06Texts(/^planb-draft-slot-name-/)).toEqual([
+      '감천문화마을',
+      '광안리 해변',
+      '부산시립미술관',
+      '전포 카페거리',
+      'F1963 복합문화공간',
+    ]);
+    [
+      '09:30 방문',
+      '11:00 방문',
+      '13:00 도착 · 관람 중',
+      '15:00–16:30',
+      '17:00–18:30',
+      '마을 · 벽화',
+      '바다 · 산책',
+      '미술 · 실내',
+      '카페 · 실내',
+      '전시 · 실내',
+    ].forEach((text) => expect(screen.getByText(text)).toBeOnTheScreen());
+    expect(i06Texts(/^sheet-connector-distance-/)).toEqual([
+      '1.4km',
+      '3.2km',
+      '600m',
+      '1.1km',
+    ]);
+    expect(screen.getAllByTestId(/^planb-draft-slot-photo-/)).toHaveLength(5);
+    expect(
+      i06Classes(/^planb-draft-slot-number-/).map((tokens) =>
+        tokens.includes('bg-success') ? 'success' : 'primary'
+      )
+    ).toEqual(['success', 'success', 'success', 'primary', 'primary']);
+    expect(screen.getAllByTestId(/^planb-draft-candidates-/)).toHaveLength(2);
+
+    expect(screen.getByTestId('sheet-daychip-1')).toBeSelected();
+    expect(screen.getByTestId('sheet-daychip-2')).toBeOnTheScreen();
+    const indices = sheetIndices();
+    expect(indices.length).toBeGreaterThan(0);
+    indices.forEach((index) => expect(index).toBe(1));
+
+    expect(screen.getByTestId('sheet-cta-button-0')).toHaveTextContent(
+      '직접 수정'
+    );
+    expect(screen.getByTestId('sheet-cta-button-1')).toHaveTextContent(
+      '적용하기'
+    );
+    expect(screen.queryByTestId('planb-draft-notice')).toBeNull();
+  });
+});
+
+describe('🔴 TRIP-751 · i06 재계획안 대안 없음 프리뷰 (AC-12)', () => {
+  it('planb-noalt 는 곳 수 없이 안내 2줄 + 예정 두 행 흐림 + [조건 바꿔 다시 짜기]로 그린다', () => {
+    mockSearchParams.state = 'planb-noalt';
+
+    render(<DevPreview />);
+
+    expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
+      'AI 재계획안'
+    );
+    expect(screen.getByTestId('sheet-header-meta')).not.toHaveTextContent(/km/);
+    expect(screen.getByTestId('planb-draft-notice-title')).toHaveTextContent(
+      '대안을 찾지 못했어요'
+    );
+    expect(
+      screen.getByTestId('planb-draft-notice-description')
+    ).toHaveTextContent(
+      '17시 이후 실내 후보가 근처에 없어요 · 조건을 줄이거나 직접 고쳐 주세요'
+    );
+
+    expect(i06Texts(/^planb-draft-slot-name-/)).toEqual([
+      '감천문화마을',
+      '광안리 해변',
+      '부산시립미술관',
+      '전포 카페거리',
+      '해운대 해변',
+    ]);
+    expect(screen.getByText('바다 · 해변')).toBeOnTheScreen();
+    expect(i06Texts(/^sheet-connector-distance-/)).toEqual([
+      '1.4km',
+      '3.2km',
+      '600m',
+      '8km',
+    ]);
+
+    const dimmedRows = screen
+      .getAllByTestId(/^planb-draft-slot-/)
+      .filter((node) =>
+        String(node.props.className ?? '')
+          .split(/\s+/)
+          .some((token) => I06_DIMMED.test(token))
+      );
+    expect(
+      dimmedRows.map((row) =>
+        String(
+          within(row).getByTestId(/^planb-draft-slot-name-/).props.children
+        )
+      )
+    ).toEqual(['전포 카페거리', '해운대 해변']);
+    expect(screen.queryAllByTestId(/^planb-draft-candidates-/)).toHaveLength(0);
+
+    expect(screen.getByTestId('sheet-cta-button-1')).toHaveTextContent(
+      '조건 바꿔 다시 짜기'
+    );
+    const indices = sheetIndices();
+    expect(indices.length).toBeGreaterThan(0);
+    indices.forEach((index) => expect(index).toBe(1));
+  });
+});
+
+describe('🔴 TRIP-751 · i06 키 정리 (AC-12)', () => {
+  it('두 키가 band i · 라벨 "i06 · 재계획안 · 펼침/대안 없음" 이고, 빈 슬롯 키는 없다', () => {
+    const states = PREVIEW_STATES as {
+      key: string;
+      band: string;
+      label: string;
+    }[];
+    const draft = states.find((state) => state.key === 'planb-replan-draft');
+    const noalt = states.find((state) => state.key === 'planb-noalt');
+    expect(draft?.band).toBe('i');
+    expect(draft?.label).toBe('i06 · 재계획안 · 펼침');
+    expect(noalt?.band).toBe('i');
+    expect(noalt?.label).toBe('i06 · 재계획안 · 대안 없음');
+
+    const keys = states.map((state) => state.key);
+    expect(keys.length).toBeGreaterThan(100);
+    expect(keys).not.toContain('planb-replan-draft-empty');
+  });
+});

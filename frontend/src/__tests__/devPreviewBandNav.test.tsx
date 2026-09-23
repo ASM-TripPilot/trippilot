@@ -322,7 +322,10 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    가드는 안 만진다(재편 전엔 173개라 red). 정확한 키는 `devPreviewLiveHub.test.tsx` 가 못박는다.
     // ⚠️ 병합(TRIP-758 j 밴드 배치 ← develop): j 밴드 −8(173→165)과 h/i 밴드 −2(173→171)가 같은
     //    base 173 에서 갈라져 병합되므로 총계는 173 − 8 − 2 = 163. 양쪽 카운트 코멘트는 위에 보존.
-    expect(PREVIEW_STATES).toHaveLength(163);
+    // ⚠️ TRIP-751: i06 재계획안 빈 슬롯 키(`planb-replan-draft-empty`)를 지워 **순 −1** → 163→162.
+    //    test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에서 키만 지우고 이 가드는 안
+    //    만진다(삭제 전엔 163개라 red). 정확한 키는 `devPreviewLiveHub.test.tsx` 가 못박는다.
+    expect(PREVIEW_STATES).toHaveLength(162);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(

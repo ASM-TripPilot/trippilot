@@ -116,10 +116,9 @@ import { triggerWatchlist } from '@/features/planb/model/triggerWatchlist';
 import { ManualEditScreen } from '@/pages/planb-manual/ui/ManualEditScreen';
 import { ReplanRequestSheet } from '@/features/planb/ui/ReplanRequestSheet';
 import { ReplanAppliedScreen } from '@/features/planb/ui/ReplanAppliedScreen';
-import { ReplanDraftScreen } from '@/features/planb/ui/ReplanDraftScreen';
 import { ReplanSolvingScreen } from '@/features/planb/ui/ReplanSolvingScreen';
-import { NoAlternativeScreen } from '@/features/planb/ui/NoAlternativeScreen';
 import type { ReplanSlotVM } from '@/entities/itinerary-slot/model';
+import { ReplanDraftView } from '@/pages/planb-draft/ui/ReplanDraftView';
 import { SlotCandidateSheet } from '@/features/planb/ui/SlotCandidateSheet';
 import { RiskDetailSheet } from '@/features/planb/ui/RiskDetailSheet';
 import { NicknameScreen } from '@/features/onboarding/ui/NicknameScreen';
@@ -1326,51 +1325,92 @@ const SLOT_CANDIDATES_PREVIEW: SlotCandidatesCandidatesItem[] = [
   },
 ];
 
-// i13 재계획안 슬롯(TRIP-563) — 배지 5종(방문함·진행중·변경됨·null·고정)·후보 어포던스·고정 pill 을
-// 한 화면에서 대조하는 주입 VM. 실 슬롯 데이터(사진·번호·시간대)는 draft 계약 공백이라 VM 에 없다 —
-// 배지·거리 메타·우측 어포던스만 그리는 골격을 눈으로 확인하는 자리(실 슬롯 바인딩은 BE 후속).
+// i06 재계획안(TRIP-751) — Figma `4314:1923` 펼침 5곳. 사진은 Figma 목업 사진(`assets/execution/CREDITS.md`,
+// 행 3·5 야경은 같은 사진). 거리는 "이 슬롯까지 오는 거리"라 행 1 은 null(커넥터는 다음 행 값을 그린다).
+// 행 1 커넥터는 Figma 가 차량 아이콘이지만 서버가 '차량'을 내지 않아 도보 기본으로 둔다(Seed Q9).
 const REPLAN_DRAFT_PREVIEW_SLOTS: ReplanSlotVM[] = [
   {
-    slotKey: 's1',
-    badgeKind: 'visited',
+    slotKey: 'i06-1',
     placeName: '감천문화마을',
-    metaText: '09:30–10:50 · 사진 2장',
-    candidateCount: 0,
+    tone: 'visited',
+    photo: require('@/assets/execution/live-gamcheon-1.jpg'),
+    category: 'SIGHT',
+    timeLabel: '09:30 방문',
+    categoryLabel: '마을 · 벽화',
+    distanceRange: null,
     isFixed: false,
   },
   {
-    slotKey: 's2',
-    badgeKind: 'inProgress',
+    slotKey: 'i06-2',
+    placeName: '광안리 해변',
+    tone: 'visited',
+    photo: require('@/assets/execution/live-gwangalli-1.jpg'),
+    category: 'NATURE',
+    timeLabel: '11:00 방문',
+    categoryLabel: '바다 · 산책',
+    distanceRange: '1.4km',
+    isFixed: false,
+  },
+  {
+    slotKey: 'i06-3',
     placeName: '부산시립미술관',
-    metaText: '13:00 도착 · 관람 중',
-    candidateCount: 0,
+    tone: 'visited',
+    photo: require('@/assets/execution/replan-night-1.jpg'),
+    category: 'CULTURE',
+    timeLabel: '13:00 도착 · 관람 중',
+    categoryLabel: '미술 · 실내',
+    distanceRange: '3.2km',
     isFixed: false,
   },
   {
-    slotKey: 's3',
-    badgeKind: 'changed',
-    placeName: 'F1963',
-    metaText: '#실내 · 도보 1.3km',
-    candidateCount: 4,
+    slotKey: 'i06-4',
+    placeName: '전포 카페거리',
+    tone: 'planned',
+    photo: require('@/assets/execution/live-gamcheon-2.jpg'),
+    category: 'CAFE',
+    timeLabel: '15:00–16:30',
+    categoryLabel: '카페 · 실내',
+    distanceRange: '600m',
     isFixed: false,
   },
   {
-    slotKey: 's4',
-    badgeKind: null,
-    placeName: '보수동 책방골목',
-    metaText: '도보 0.6km',
-    candidateCount: 2,
+    slotKey: 'i06-5',
+    placeName: 'F1963 복합문화공간',
+    tone: 'planned',
+    photo: require('@/assets/execution/replan-night-1.jpg'),
+    category: 'CULTURE',
+    timeLabel: '17:00–18:30',
+    categoryLabel: '전시 · 실내',
+    distanceRange: '1.1km',
     isFixed: false,
-  },
-  {
-    slotKey: 's5',
-    badgeKind: 'fixed',
-    placeName: '해운대 OO호텔',
-    metaText: '20:00 도착 · 변경 불가',
-    candidateCount: 0,
-    isFixed: true,
   },
 ];
+
+// i06 대안 없음(Figma `4335:1923`) — 행 5 가 해운대 해변으로 바뀌고 4→5 거리가 8km 다.
+const REPLAN_NOALT_PREVIEW_SLOTS: ReplanSlotVM[] = [
+  ...REPLAN_DRAFT_PREVIEW_SLOTS.slice(0, 4),
+  {
+    ...REPLAN_DRAFT_PREVIEW_SLOTS[4],
+    placeName: '해운대 해변',
+    category: 'NATURE',
+    categoryLabel: '바다 · 해변',
+    distanceRange: '8km',
+  },
+];
+
+const REPLAN_PREVIEW_BASE = {
+  center: { lat: 35.1587, lng: 129.1604 },
+  days: [{ label: '1일차' }, { label: '2일차' }, { label: '3일차' }],
+  selectedDayIndex: 1,
+  dayLabel: '2일차',
+  dateLabel: '6월 11일(목)',
+  meta: '5곳 · 6.3km',
+  onBack: noop,
+  onManualEdit: noop,
+  onApply: noop,
+  onReopenRequest: noop,
+  onPressCandidates: noop,
+};
 
 // e04 저장한 숙소(TRIP-461 → TRIP-729 Figma 정합) — 사진은 계약 공백이라 회색 자리, 거점 배지·
 // 지역줄·2톤 가격은 계약 공백이라 실앱에선 안 뜬다(degrade). 그 Figma 풀샷을 눈으로 보는 유일한
@@ -5058,55 +5098,33 @@ export const PREVIEW_STATES: PreviewState[] = [
       </SafeAreaView>
     ),
   },
-  // ── i13 재계획안(TRIP-563) — 순수 화면 2얼굴. 채운 슬롯(배지 5종·후보·고정)과 빈 슬롯 degrade
-  //    (헤더 근거·이월 안내만). 지도 center 는 골격 플레이스홀더, 일차 스위치·사진·번호는 draft 계약
-  //    공백이라 없다 — 슬롯 배지·거리 메타·우측 어포던스·CTA 배치를 육안 대조하는 자리(실 지도·시트
-  //    열림은 6-b). draft 실슬롯 바인딩은 BE 후속 ──
+  // ── i06 재계획안(TRIP-751) — 한 뷰의 두 얼굴(펼침 · 대안 없음), 시트는 펼침(index 1). 같은 5곳
+  //    픽스처로 Figma 4314:1923 · 4335:1923 과 대조한다(88% 스냅·CTA 가림·흐림 정도는 육안 몫).
+  //    실패(failed)·확정 실패 얼굴은 같은 안내 자리라 여기 따로 두지 않는다 ──
   {
     key: 'planb-replan-draft',
     band: 'i',
-    label: 'i13 · 재계획안 채운 슬롯',
+    label: 'i06 · 재계획안 · 펼침',
     login: null,
     render: () => (
-      <ReplanDraftScreen
-        reasons={['비 예보를 반영해 오후 일정을 다시 짰어요']}
-        excludedPoiIds={['x1', 'x2']}
+      <ReplanDraftView
+        variant="draft"
         slots={REPLAN_DRAFT_PREVIEW_SLOTS}
-        onManualEdit={noop}
-        onApply={noop}
-        onPressCandidates={noop}
+        {...REPLAN_PREVIEW_BASE}
       />
     ),
   },
-  {
-    key: 'planb-replan-draft-empty',
-    band: 'i',
-    label: 'i13 · 재계획안 빈 슬롯',
-    login: null,
-    render: () => (
-      <ReplanDraftScreen
-        reasons={['비 예보를 반영해 오후 일정을 다시 짰어요']}
-        excludedPoiIds={['x1', 'x2']}
-        slots={[]}
-        onManualEdit={noop}
-        onApply={noop}
-        onPressCandidates={noop}
-      />
-    ),
-  },
-  // ── i16 대안 없음(TRIP-563) — 지도·경고 삼각·문구·3버튼. 3버튼 모두 enabled, onSkip·onRestMode 는
-  //    no-op 자리표시(페이지가 실배선 결정). 실 지도·버튼 정렬은 6-b ──
   {
     key: 'planb-noalt',
     band: 'i',
-    label: 'i16 · 대안 없음',
+    label: 'i06 · 재계획안 · 대안 없음',
     login: null,
     render: () => (
-      <NoAlternativeScreen
-        skipCount={1}
-        onSkip={noop}
-        onRestMode={noop}
-        onManualEdit={noop}
+      <ReplanDraftView
+        variant="noSolution"
+        slots={REPLAN_NOALT_PREVIEW_SLOTS}
+        noSolutionDescription="17시 이후 실내 후보가 근처에 없어요 · 조건을 줄이거나 직접 고쳐 주세요"
+        {...REPLAN_PREVIEW_BASE}
       />
     ),
   },
