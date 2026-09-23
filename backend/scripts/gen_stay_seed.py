@@ -96,9 +96,9 @@ RELAY_PREFIXES = {"0502", "0503", "0504", "0505", "0506", "0507", "0508"}
 
 
 def normalize_phone(raw: str):
-    """원본 전화번호 → 표시형 `02-1670-8876`. 못 믿을 값은 **None 이다**.
+    """원본 전화번호 → 표시형 `02-2267-7474`. 못 믿을 값은 **None 이다**.
 
-    원본이 하이픈 없는 숫자열로 온다(`0216708876`). 그대로 화면에 내보내면 읽히지도 않고
+    원본이 하이픈 없는 숫자열로 온다(`0222677474`). 그대로 화면에 내보내면 읽히지도 않고
     `tel:` 링크로도 안 예쁘다.
 
     **버리는 쪽이 기본이다.** 틀린 번호로 전화를 걸게 하느니 번호를 안 주는 편이 낫다
@@ -109,7 +109,7 @@ def normalize_phone(raw: str):
     - **실재하지 않는 국번**(실측 2건) — `069…`·`060…`. 특히 060 은 정보이용료 번호라
       눌리면 사용자에게 요금이 붙는다.
 
-    남는 7~8자리는 뒤 4자리를 기준으로 가른다 — `02|743|1450` · `02|1670|8876` · `070|8869|6165`.
+    남는 7~8자리는 뒤 4자리를 기준으로 가른다 — `02|743|1450` · `02|2267|7474` · `070|8869|6165`.
     """
     digits = re.sub(r"\D", "", raw or "")
     if digits[:4] in RELAY_PREFIXES:
@@ -121,7 +121,21 @@ def normalize_phone(raw: str):
     rest = digits[len(area):]
     if len(rest) not in (7, 8):
         return None
-    return f"{area}-{rest[:-4]}-{rest[-4:]}"
+    exchange = rest[:-4]
+
+    # **유선 국번은 0·1 로 시작하지 않는다.** 이 검사가 없으면 원본의 깨진 값이 형식만 맞는
+    # 가짜로 통과한다(실측 35건):
+    #   - `02-0773-8803` (18건) — 0 으로 시작하는 국번은 존재하지 않는다. 원본에 0 이 하나 더
+    #     붙었는지 지역번호가 잘못 붙었는지 알 수 없어 **복원하지 않고 버린다.**
+    #   - `02-1644-xxxx` (17건) — 15xx·16xx·18xx 전국대표번호에 지역번호가 잘못 붙은 것이다.
+    #     대표번호는 지역번호 없이 8자리로 건다. 앞을 떼면 `1644-xxxx` 로 살릴 수 있지만
+    #     **표시 모양이 하나 더 늘어** 화면·검사가 둘을 알아야 한다. 0.2% 를 위해 치를 값이
+    #     아니라고 보고 NULL 로 둔다(살리려면 별도 티켓).
+    # 이동전화(010)·인터넷전화(070)·안심번호(050X)는 이 규칙을 따르지 않으므로 제외한다.
+    if area not in RELAY_PREFIXES and area not in ("010", "070") and exchange[0] in "01":
+        return None
+
+    return f"{area}-{exchange}-{rest[-4:]}"
 
 
 def room_count(row: dict):
@@ -226,13 +240,26 @@ def main(path: str) -> int:
         f" {lit(addr)}, {lit(tel)}, {lit(rooms)})"
         for i, n, lat, lng, r, c, t, addr, tel, rooms in vals
     ))
-    # **새 칸을 여기 빠뜨리면 기존 DB 는 영원히 비어 있다.** 정본 12,782행이 이미 있으므로 재실행은
+    # **새 칸을 여기 빠뜨리면 기존 DB 는 영원히 비어 있다.** 정본 행이 이미 있는 환경에서는 재실행이
     # 전부 이 충돌 경로를 탄다 — INSERT 절만 고치면 빌드는 초록인데 값이 안 들어온다.
     out.append("ON CONFLICT (external_source, external_id) DO UPDATE SET")
     out.append("  name = EXCLUDED.name, lat = EXCLUDED.lat, lng = EXCLUDED.lng,")
     out.append("  region = EXCLUDED.region, region_code = EXCLUDED.region_code,")
     out.append("  stay_type = EXCLUDED.stay_type, address = EXCLUDED.address,")
     out.append("  phone = EXCLUDED.phone, rooms = EXCLUDED.rooms, updated_at = now();")
+    out.append("")
+    # **폐업한 곳을 지운다.** upsert 만으로는 사라진 행이 정본에 영원히 남는다 — 2026-09-22 원본
+    # 갱신에서 21곳이 빠졌는데, 그대로 두면 없어진 숙소가 계속 검색에 뜨고 이제는 **전화번호까지
+    # 달려 있어** 사용자가 문 닫은 곳에 전화를 건다.
+    #
+    # 판정은 `updated_at` 으로 한다. Flyway 는 스크립트 하나를 한 트랜잭션에서 돌리고 `now()` 는
+    # 트랜잭션 시작 시각으로 고정되므로, 위 upsert 가 건드린 행은 **정확히** `updated_at = now()` 다.
+    # 그보다 이전이면 이번 원본에 없던 행이다. 빈 DB 에서는 전부 같은 값이라 한 건도 안 지운다.
+    #
+    # `stay` 를 참조하는 FK 는 없다. 저장한 숙소(`saved_stay`)는 이름·좌표 사본을 따로 갖는다 —
+    # "외부 조회 불가해져도 사용 가능"이 정본의 설계다(U1 domain-entities §2).
+    out.append("-- 이번 원본에 없는 행 = 폐업. 위 upsert 가 건드리지 않은 것만 남는다.")
+    out.append("DELETE FROM stay WHERE external_source = 'LOCALDATA' AND updated_at < now();")
     out.append("")
 
     dest = root / "app/src/main/resources/db/migration/R__seed_stay.sql"

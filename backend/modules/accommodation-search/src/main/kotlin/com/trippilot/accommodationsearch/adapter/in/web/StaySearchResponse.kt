@@ -49,7 +49,7 @@ data class StayItemResponse(
      * 화면은 null 이면 그 줄을 비운다. "전화 없는 숙소"·"객실 0개"로 그리면 안 된다.
      */
     val address: String?,
-    val phone: String?,   // 표시형 '02-1670-8876' — 그대로 tel: 에 실을 수 있다
+    val phone: String?,   // 표시형 '02-2267-7474' — 그대로 tel: 에 실을 수 있다
     val rooms: Int?,
 ) {
     companion object {
