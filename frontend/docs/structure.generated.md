@@ -92,6 +92,7 @@
 - `src/__tests__/planbRequestSheetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbSafeAreaStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbScopeStructure.test.ts`  →  (export 없음)
+- `src/__tests__/planbSolvingStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbTriggerKindStructure.test.ts`  →  (export 없음)
 - `src/__tests__/recordAttributionStructure.test.ts`  →  (export 없음)
 - `src/__tests__/recordPhotoBinaryGuard.test.ts`  →  (export 없음)
@@ -477,6 +478,7 @@
 ## src/features/planb/model/
 - `src/features/planb/model/foldScope.ts`  →  foldScope
 - `src/features/planb/model/replanFormStore.ts`  →  ReplanFormState · useReplanFormStore
+- `src/features/planb/model/replanFromInstant.ts`  →  readFromInstant
 - `src/features/planb/model/replanOrigin.ts`  →  ReplanOrigin · buildManualOrigin · isEstimatedOrigin
 - `src/features/planb/model/replanRequest.ts`  →  ReplanFormValues · buildStartReplanRequest
 - `src/features/planb/model/replanScope.ts`  →  ReplanScopeOption · REPLAN_SCOPES · DEFAULT_REPLAN_SCOPE
@@ -494,10 +496,9 @@
 - `src/features/planb/model/useStartReplan.ts`  →  useStartReplan
 
 ## src/features/planb/ui/
-- `src/features/planb/ui/PlanbGlyphs.tsx`  →  ChecklistDoneGlyph · ChecklistActiveGlyph · ChecklistWaitingGlyph · AppliedBackGlyph · AppliedCheckGlyph · AppliedAlertGlyph · RiskWarningGlyph · ChevronRightGlyph · LockGlyph
+- `src/features/planb/ui/PlanbGlyphs.tsx`  →  AppliedBackGlyph · AppliedCheckGlyph · AppliedAlertGlyph · RiskWarningGlyph · ChevronRightGlyph · LockGlyph
 - `src/features/planb/ui/ReplanAppliedScreen.tsx`  →  ReplanAppliedScreenProps · ReplanAppliedScreen
 - `src/features/planb/ui/ReplanRequestSheet.tsx`  →  ReplanDetectedChip · ReplanRequestSheetProps · ReplanRequestSheet
-- `src/features/planb/ui/ReplanSolvingScreen.tsx`  →  ReplanSolvingScreenProps · ReplanSolvingScreen
 - `src/features/planb/ui/RiskDetailSheet.tsx`  →  RiskDetailSheetProps · RiskDetailSheet
 - `src/features/planb/ui/SlotCandidateSheet.tsx`  →  SlotCandidateSheetProps · SlotCandidateSheet
 
@@ -831,6 +832,7 @@
 - `src/pages/planb-draft/ui/PlanbDraftPage.tsx`  →  PlanbDraftPageProps · PlanbDraftPage
 - `src/pages/planb-draft/ui/PlanbSolvingPage.tsx`  →  PlanbSolvingPageProps · PlanbSolvingPage
 - `src/pages/planb-draft/ui/ReplanDraftView.tsx`  →  ReplanDraftViewProps · ReplanDraftView
+- `src/pages/planb-draft/ui/ReplanSolvingView.tsx`  →  ReplanSolvingViewProps · ReplanSolvingView
 
 ## src/pages/planb-manual/
 - `src/pages/planb-manual/index.ts`  →  PlanbManualPage
@@ -1287,4 +1289,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 865개 파일
+합계 867개 파일

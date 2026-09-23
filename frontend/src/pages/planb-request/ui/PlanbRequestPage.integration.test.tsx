@@ -18,6 +18,7 @@ import { PlanbRequestPage } from './PlanbRequestPage';
  *  - 트리거가 없거나·못 찾았거나·MANUAL 이면 감지 칩 0, 정적 날씨가 보이고 triggerId 는 null.
  *  - 진입마다 폼을 초기화하고 시드는 set 이다(이전 방문 값·토글 반전 없음, Q4). 시드는 한 번뿐이다.
  *  - 스크림·끌어 닫기 → back, 뒤로 갈 곳이 없으면 허브로 replace. POST 0(AC-8).
+ *  - TRIP-752 AC-10: POST 가 성공하면 받은 세션 id 를 싣고 solving 으로 replace(push 아님). 성공 전엔 이동 0.
  *
  * seam 목(02a ★10): 페이지가 소비하는 래퍼 3개(`useStartReplan`·`useActiveTriggers`·`useLiveItinerary`)를
  * 목한다. 목 데이터는 같은 참조를 돌려준다(TanStack 구조 공유와 같다 — 새 객체면 가짜 루프).
@@ -25,9 +26,14 @@ import { PlanbRequestPage } from './PlanbRequestPage';
  */
 
 let mockPhase: 'idle' | 'success' = 'idle';
+// 시작 응답 = 열린 세션(서버 계약 ReplanSession, 응답 status 는 SOLVING) — 성공 콜백이 이 세션을 받는다.
+const mockSession = { sessionId: 's9', tripId: 't1', status: 'SOLVING' };
 const mockMutate = jest.fn(
-  (_variables: unknown, options?: { onSuccess?: () => void }) => {
-    if (mockPhase === 'success') options?.onSuccess?.();
+  (
+    _variables: unknown,
+    options?: { onSuccess?: (session: typeof mockSession) => void }
+  ) => {
+    if (mockPhase === 'success') options?.onSuccess?.(mockSession);
   }
 );
 
@@ -175,6 +181,12 @@ function forwardDestinations(): string[] {
     .map((call) => hrefString(call[0]));
 }
 
+// i05 로 **갈아 끼운다**(replace) — i04 는 허브 위 투명 모달이라 push 로 쌓으면 ‹ 가 요청 시트로 돌아간다.
+const SOLVING_HREF = {
+  pathname: '/trips/[tripId]/planb/solving',
+  params: { tripId: TRIP_ID, sessionId: 's9' },
+};
+
 const body = (over: Record<string, unknown> = {}) => ({
   scope: 'PARTIAL_SLOTS',
   originKind: null,
@@ -187,7 +199,7 @@ const body = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('I1·I2 · 수동 진입 제출 (AC-6 · BR-U4-10·12)', () => {
-  it('I1 정적 날씨 + 자유텍스트를 조립해 POST(triggerId null)하고 성공하면 solving 으로 간다', () => {
+  it('🔴 I1 정적 날씨 + 자유텍스트를 조립해 POST(triggerId null)하고, 성공하면 받은 세션 id 로 solving 에 replace 한다 (TRIP-752 AC-10)', () => {
     mockPhase = 'success';
     render(<PlanbRequestPage tripId={TRIP_ID} />);
 
@@ -201,9 +213,28 @@ describe('I1·I2 · 수동 진입 제출 (AC-6 · BR-U4-10·12)', () => {
     expect(postedBody()).toEqual(
       body({ reasons: ['WEATHER'], freeText: '광안리 야경' })
     );
-    const destinations = forwardDestinations();
-    expect(destinations.some((d) => d.includes('solving'))).toBe(true);
-    expect(destinations.some((d) => d.includes(TRIP_ID))).toBe(true);
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith(SOLVING_HREF);
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('🔴 I1b 제출 직후에는 아무 데도 가지 않고, 성공 콜백이 불린 뒤에만 solving 으로 간다 (TRIP-752 AC-10 · 751 차단-1)', () => {
+    render(<PlanbRequestPage tripId={TRIP_ID} />);
+
+    fireEvent.press(screen.getByTestId('planb-request-submit'));
+
+    expect(mockMutate).toHaveBeenCalledTimes(1);
+    expect(forwardDestinations()).toEqual([]);
+    expect(mockBack).not.toHaveBeenCalled();
+
+    const options = mockMutate.mock.calls[0][1];
+    expect(typeof options?.onSuccess).toBe('function');
+    act(() => options?.onSuccess?.(mockSession));
+
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith(SOLVING_HREF);
+    expect(mockPush).not.toHaveBeenCalled();
   });
 
   it('I2 아무것도 안 골라도 빈 배열·freeText null 로 POST 된다', () => {

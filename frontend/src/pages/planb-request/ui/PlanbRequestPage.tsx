@@ -1,4 +1,4 @@
-import { useRouter, type Href } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useEffect, useRef, type ReactElement } from 'react';
 
 import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
@@ -19,10 +19,9 @@ import type { ItineraryDaysItem } from '@/shared/api/generated/schemas';
  *   라우트·페이지 effect 순서에 기대지 않기 위해서다.
  * - 감지 트리거 = URL `triggerId` 와 같은 id 의 활성 트리거(MANUAL 제외). 있으면 대응 사유를 **한 번만**
  *   켠다(토글이 아니라 set — 이미 켜져 있으면 그대로). 사용자가 끈 뒤엔 다시 켜지 않는다.
- * - `[AI가 다시 짜기]` → body 조립(감지 트리거 id 포함) → POST → 성공 시 solving push.
+ * - `[AI가 다시 짜기]` → body 조립(감지 트리거 id 포함) → POST → 성공 시 응답 세션 id 를 싣고 solving 으로
+ *   **replace**(TRIP-752). 이 시트는 허브 위 투명 모달이라 push 로 쌓으면 solving 의 ‹ 가 요청 시트로 돌아간다.
  * - 스크림·끌어 닫기 → 뒤로. 뒤로 갈 곳이 없으면(딥링크·푸시 직행) 허브로 replace.
- *
- * solving 목적지는 typedRoutes 표에 없어 `as Href` 로 캐스트한다.
  */
 
 export interface PlanbRequestPageProps {
@@ -116,7 +115,11 @@ export function PlanbRequestPage({
     startReplan.mutate(
       { tripId, data },
       {
-        onSuccess: () => router.push(`/trips/${tripId}/planb/solving` as Href),
+        onSuccess: (session) =>
+          router.replace({
+            pathname: '/trips/[tripId]/planb/solving',
+            params: { tripId, sessionId: session.sessionId },
+          }),
       }
     );
   }

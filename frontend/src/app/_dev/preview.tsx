@@ -80,6 +80,7 @@ import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
 import { SheetHeader } from '@/widgets/map-sheet-shell/ui/SheetHeader';
 import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+import { buildStatePins } from '@/entities/itinerary-slot/lib/slotMapPin';
 import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
 import { MethodPickerScreen } from '@/features/itinerary/ui/MethodPickerScreen';
 import {
@@ -116,9 +117,9 @@ import { triggerWatchlist } from '@/features/planb/model/triggerWatchlist';
 import { ManualEditScreen } from '@/pages/planb-manual/ui/ManualEditScreen';
 import { ReplanRequestSheet } from '@/features/planb/ui/ReplanRequestSheet';
 import { ReplanAppliedScreen } from '@/features/planb/ui/ReplanAppliedScreen';
-import { ReplanSolvingScreen } from '@/features/planb/ui/ReplanSolvingScreen';
 import type { ReplanSlotVM } from '@/entities/itinerary-slot/model';
 import { ReplanDraftView } from '@/pages/planb-draft/ui/ReplanDraftView';
+import { ReplanSolvingView } from '@/pages/planb-draft/ui/ReplanSolvingView';
 import { SlotCandidateSheet } from '@/features/planb/ui/SlotCandidateSheet';
 import { RiskDetailSheet } from '@/features/planb/ui/RiskDetailSheet';
 import { NicknameScreen } from '@/features/onboarding/ui/NicknameScreen';
@@ -5041,14 +5042,33 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: renderPlanbRequestPreview,
   },
-  // ── i12 재계획 로딩(TRIP-440) — 순수 화면. 진행바 흐름·체크리스트 아이콘 3상태는 정지
-  //    스크린샷 한계라 여기서 보는 것은 레이아웃·라벨·안심 노트·CTA 2개까지다 ──
+  // ── i05 다시 짜는 중(TRIP-752) — Figma 4341:1957. 지도(허브 5곳 핀·현재위치) + 진행 카드 + 40% peek
+  //    시트(방문 완료 2곳). 진행 카드는 캡처 상단 크롭 영역이라 육안은 크롭 전 원본으로 본다 ──
   {
     key: 'planb-solving',
     band: 'i',
-    label: 'i12 · 재계획 로딩',
+    label: 'i05 · 다시 짜는 중',
     login: null,
-    render: () => <ReplanSolvingScreen onBackground={noop} onCancel={noop} />,
+    render: () => (
+      <ReplanSolvingView
+        center={LIVE_HUB_PREVIEW_LOCATION}
+        pins={buildStatePins(
+          LIVE_HUB_PREVIEW_SLOTS.map(({ slot, state }) => ({
+            lat: slot.lat,
+            lng: slot.lng,
+            progress: state,
+          }))
+        )}
+        currentLocation={LIVE_HUB_PREVIEW_LOCATION}
+        solvingLabel="17시 이후 다시 짜는 중"
+        dayLabel="2일차"
+        dateLabel="6월 11일(목)"
+        meta="방문한 3곳 그대로"
+        slots={REPLAN_DRAFT_PREVIEW_SLOTS.slice(0, 2)}
+        onBack={noop}
+        onCancel={noop}
+      />
+    ),
   },
   // ── i14 슬롯 후보 시트(TRIP-440) — 순수 인라인 패널 3얼굴(후보·강등 고지·빈 목록). slackLabel
   //    은 slackTime.ts(model) 산출 형태를 그대로 주입한다(ui 소스엔 숫자 리터럴 0) ──

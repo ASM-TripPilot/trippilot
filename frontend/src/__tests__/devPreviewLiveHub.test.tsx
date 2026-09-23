@@ -592,3 +592,89 @@ describe('🔴 TRIP-751 · i06 키 정리 (AC-12)', () => {
     expect(keys).not.toContain('planb-replan-draft-empty');
   });
 });
+
+// ── TRIP-752 · i05 다시 짜는 중 ─────────────────────────────────────────────
+//
+// Figma 4341:1957 — 전면 지도 + 좌상단 진행 카드 + peek 시트(40%). 행은 i06 픽스처 앞 2곳(방문 완료).
+// 옛 i12 전용 화면(부제·체크리스트·안심 노트·[백그라운드로])은 사라진다. 프리뷰는 뷰를 파일 경로로
+// import 한다(위 `@/shared/api` 지뢰가 배럴 로드를 막는다, 하위 경로 정적 검사는 planbSolvingStructure G6).
+
+describe('🔴 TRIP-752 · i05 다시 짜는 중 프리뷰 (AC-13)', () => {
+  it('planb-solving 은 진행 카드·헤더·방문 완료 2곳·거리 커넥터를 peek 시트로 그리고, CTA·옛 표면은 없다', () => {
+    mockSearchParams.state = 'planb-solving';
+
+    render(<DevPreview />);
+
+    expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
+    expect(screen.getByTestId('generation-progress-card')).toBeOnTheScreen();
+    expect(screen.getByText('AI가 일정을 다시 짜고 있어요')).toBeOnTheScreen();
+    expect(screen.getByTestId('generation-progress-cancel')).toHaveTextContent(
+      '취소'
+    );
+    expect(
+      screen.getByTestId('generation-gauge-cell-1-done')
+    ).toHaveTextContent('방문한 곳 그대로');
+    expect(
+      screen.getByTestId('generation-gauge-cell-2-active')
+    ).toHaveTextContent('17시 이후 다시 짜는 중');
+
+    expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
+      'AI 재계획안'
+    );
+    expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('2일차');
+    expect(screen.getByTestId('sheet-header-date')).toHaveTextContent(
+      '6월 11일(목)'
+    );
+    expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(
+      '방문한 3곳 그대로'
+    );
+
+    expect(i06Texts(/^planb-draft-slot-name-/)).toEqual([
+      '감천문화마을',
+      '광안리 해변',
+    ]);
+    ['09:30 방문', '11:00 방문', '마을 · 벽화', '바다 · 산책'].forEach((text) =>
+      expect(screen.getByText(text)).toBeOnTheScreen()
+    );
+    expect(screen.getAllByTestId(/^planb-draft-slot-photo-/)).toHaveLength(2);
+    expect(
+      i06Classes(/^planb-draft-slot-number-/).map((tokens) =>
+        tokens.includes('bg-success') ? 'success' : 'other'
+      )
+    ).toEqual(['success', 'success']);
+    expect(screen.queryAllByTestId(/^planb-draft-candidates-/)).toHaveLength(0);
+    expect(i06Texts(/^sheet-connector-distance-/)).toEqual(['1.4km']);
+
+    const sheets = screen.root.findAll(
+      (node) =>
+        typeof node.props?.index === 'number' &&
+        Array.isArray(node.props?.snapPoints)
+    );
+    expect(sheets.length).toBeGreaterThan(0);
+    sheets.forEach((node) => {
+      expect(node.props.index).toBe(0);
+      expect(node.props.snapPoints).toEqual(['40%', '88%']);
+    });
+
+    expect(screen.queryAllByTestId(/^sheet-cta/)).toHaveLength(0);
+    for (const id of [
+      'planb-solving-background',
+      'planb-solving-progress',
+      'planb-solving-cancel',
+    ]) {
+      expect(screen.queryByTestId(id)).toBeNull();
+    }
+    expect(screen.queryByText('백그라운드로')).toBeNull();
+  });
+
+  it('planb-solving 키는 band i · 라벨 "i05 · 다시 짜는 중" 이다', () => {
+    const states = PREVIEW_STATES as {
+      key: string;
+      band: string;
+      label: string;
+    }[];
+    const entry = states.find((state) => state.key === 'planb-solving');
+    expect(entry?.band).toBe('i');
+    expect(entry?.label).toBe('i05 · 다시 짜는 중');
+  });
+});
