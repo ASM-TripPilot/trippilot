@@ -1,4 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import type { ReactNode } from 'react';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 import { Text } from 'react-native';
 
 import { MapSheetShell } from './MapSheetShell';
@@ -8,10 +14,10 @@ import { MapSheetShell } from './MapSheetShell';
  * 좌상단 일차 칩 오버레이 + 하단 고정 CTA 바를 조립한다.
  *
  * ⚠️ **원리적 사각(02a ★2·★3·★4)** — `@gorhom/bottom-sheet` 목은 통과형이라 시트 실개폐·2스냅·
- *   딤·`enableContentPanningGesture` 는 못 본다(E6·E7 → 6-b 실기). `MapView` 목은 env 유무로
- *   `map-native`/`map-failure` 갈리나 `map-root` 는 양쪽 다 렌더 → 여기선 `map-root` 만 단언한다
- *   (viewOnly 실전달은 `itineraryMapSurfaceStructure` S2 소스 스캔이 잠금). 이 파일은 **children
- *   렌더·prop 전달·testID 트리**만 잠근다.
+ *   딤·`enableContentPanningGesture` 는 못 본다(E6·E7 → 6-b 실기). TRIP-919 부터 셸은 지도 실패
+ *   (env 키 없음 → `MapView.onLoadFailed`)를 받으면 지도 자리를 폴백 바로 바꾼다 → 지도를 단언하는
+ *   케이스는 **키를 넣고** 돈다(`withMapKey`). viewOnly 실전달은 `itineraryMapSurfaceStructure` S2
+ *   소스 스캔이 잠근다. 이 파일은 **children 렌더·prop 전달·testID 트리**만 잠근다.
  *
  * 3동작 뼈대: 준비=header/children/cta/days/pins 주입 렌더 → 실행=렌더/칩·back press → 단언=조립·콜백.
  */
@@ -46,12 +52,36 @@ function renderShell(
   return { onBack, onSelectDay };
 }
 
+// 지도 env 키 주입/원복 — 실제 MapView 는 키가 있어야 `map-native` 를 그리고, 없으면 `onLoadFailed` 를
+// 알려 셸이 폴백 바로 바꾼다(TRIP-919). no-dynamic-env-var 회피 — 선언과 대입을 분리한다(MapView.test 선례).
+const SHELL_CLIENT_ID_KEY = 'EXPO_PUBLIC_NAVER_MAP_CLIENT_ID';
+let SHELL_ORIGINAL_CLIENT_ID: string | undefined;
+SHELL_ORIGINAL_CLIENT_ID = process.env[SHELL_CLIENT_ID_KEY];
+
+function withMapKey(): void {
+  process.env[SHELL_CLIENT_ID_KEY] = 'test-naver-client-id';
+}
+function withoutMapKey(): void {
+  delete process.env[SHELL_CLIENT_ID_KEY];
+}
+function restoreMapKey(): void {
+  if (SHELL_ORIGINAL_CLIENT_ID === undefined) {
+    delete process.env[SHELL_CLIENT_ID_KEY];
+  } else {
+    process.env[SHELL_CLIENT_ID_KEY] = SHELL_ORIGINAL_CLIENT_ID;
+  }
+}
+
 describe('🔴 MapSheetShell · SH1 — 조립·children·prop 전달', () => {
+  // TRIP-919 심판 보정 — 실패가 없는 조건(키 있음)을 명시해 "기본이면 지도가 조립된다"를 계속 지킨다.
+  beforeEach(withMapKey);
+  afterEach(restoreMapKey);
+
   it('지도·일차 칩·헤더 슬롯·본문 children·CTA 바가 한 트리에 조립된다', () => {
     renderShell();
 
     expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
-    // 지도 표면 — env 분기 무관하게 map-root 는 렌더된다(02a ★4).
+    // 지도 표면 — 키가 있으면 실패가 없어 MapView(map-root)가 조립된다.
     expect(screen.getByTestId('map-root')).toBeOnTheScreen();
     // 헤더 슬롯 + 본문 children 이 시트 안에 흐른다(통과형 목이 children 을 렌더).
     expect(screen.getByTestId('fake-header')).toBeOnTheScreen();
@@ -199,6 +229,10 @@ describe('MapSheetShell · SH5 — initialIndex 가 BottomSheet 초기 스냅을
  *   지도 자리를 대체하는지**(슬롯 계약)만 잠근다.
  * ─────────────────────────────────────────────────────────────────────── */
 describe('MapSheetShell · SH6 — mapFallback 이 지도 자리를 대체한다 (TRIP-799 D5·AC-6)', () => {
+  // TRIP-919 심판 보정 — 키 없으면 셸 자체 폴백이 map-root 를 치우므로, 미전달=MapView 를 보려면 키가 있어야 한다.
+  beforeEach(withMapKey);
+  afterEach(restoreMapKey);
+
   it('SH6a · mapFallback 미전달이면 map-root(MapView) 가 뜬다 (선제 green · 회귀 앵커)', () => {
     // 준비/실행 — 기존 소비처 형태(mapFallback 안 줌).
     renderShell();
@@ -351,21 +385,7 @@ describe('MapSheetShell · SH8 — list 슬롯이 body 를 BottomSheetFlatList �
  *   실제로 제스처가 막히는지·점이 보이는지는 6-b 실기.
  * ─────────────────────────────────────────────────────────────────────── */
 
-// no-dynamic-env-var 회피 — 선언과 대입을 분리한다(MapView.test 선례).
-const SHELL_CLIENT_ID_KEY = 'EXPO_PUBLIC_NAVER_MAP_CLIENT_ID';
-let SHELL_ORIGINAL_CLIENT_ID: string | undefined;
-SHELL_ORIGINAL_CLIENT_ID = process.env[SHELL_CLIENT_ID_KEY];
-
-function withMapKey(): void {
-  process.env[SHELL_CLIENT_ID_KEY] = 'test-naver-client-id';
-}
-function restoreMapKey(): void {
-  if (SHELL_ORIGINAL_CLIENT_ID === undefined) {
-    delete process.env[SHELL_CLIENT_ID_KEY];
-  } else {
-    process.env[SHELL_CLIENT_ID_KEY] = SHELL_ORIGINAL_CLIENT_ID;
-  }
-}
+// (env 키 헬퍼 `withMapKey`·`restoreMapKey` 는 TRIP-919 에서 파일 위쪽으로 옮겼다 — SH1·SH6 도 쓴다.)
 
 const GESTURE_TOGGLES = [
   'isScrollGesturesEnabled',
@@ -531,5 +551,140 @@ describe('MapSheetShell · SH12 — 시트 끌기·본문 스크롤·지도 탭�
     });
 
     expect(onMapTap).toHaveBeenCalledTimes(1);
+  });
+});
+
+/* ──────────────── TRIP-919 · 셸이 지도 실패를 스스로 폴백한다 ────────────────
+ * 지금까지 `mapFallback` 은 프리뷰가 강제로 넣을 때만 채워졌다. 이제 셸이 `<MapView onLoadFailed>` 로
+ * 실패를 받아 **자기 상태(useState)** 에 적고, 지도 자리에 기본 폴백 바(`MapFallbackBar`)를 얹는다.
+ * "다시 시도" 는 실패 상태를 풀어 MapView 를 **새로 마운트**한다 → 키가 생겼으면 지도가 뜨고, 여전히
+ * 없으면 다시 폴백(정직한 반복). 소비처가 `mapFallback` 을 주면 그쪽이 이긴다(01b 확정).
+ *
+ * 실패 트리거는 jest 에서 env 키 부재 하나뿐이다(실제 MapView 가 effect 에서 `onLoadFailed` 를 부른다).
+ * ⚠️ 원리적 사각(02a ★12): MapView 자체 `map-failure` 면이 폴백 전 한 커밋 깜빡이는 것·폴백 블록이
+ *   시트/칩에 가리는지·실기 복구(키는 빌드 때 고정)는 jest 가 못 본다 → AC-V1·AC-V2(6-b).
+ * ★ SH13b(재시도 → 지도)와 SH13c(재시도 → 다시 폴백)는 짝이다 — 재시도가 아무것도 안 하는 구현은
+ *   SH13c 만으론 못 잡는다(02a ★4). SH13e 는 "항상 폴백" 오구현을 막는 회귀 앵커다(02a ★5).
+ *
+ * 3동작 뼈대: 준비=env 키 유무 + 셸 렌더 → 실행=렌더(자동 실패)/다시 시도 press → 단언=폴백·지도·시트 유지.
+ * ─────────────────────────────────────────────────────────────────────── */
+const FALLBACK_MESSAGE =
+  '지도를 불러올 수 없어요 · 일정은 아래 목록에서 볼 수 있어요';
+
+describe('MapSheetShell · SH13 — 지도 실패를 셸이 폴백 바로 받는다 (TRIP-919)', () => {
+  afterEach(restoreMapKey);
+
+  it('🔴 SH13a · 키가 없으면 지도 자리에 폴백 바가 뜨고 칩·헤더·본문·CTA 는 그대로다 (AC-1·AC-6)', () => {
+    // 준비 — 키 없음(실제 MapView 가 onLoadFailed 를 알린다), mapFallback 미전달.
+    withoutMapKey();
+
+    // 실행
+    renderShell();
+
+    // 단언 — 셸 기본 폴백 바: 안내문 완전일치 + 다시 시도 버튼.
+    const fallback = screen.getByTestId('map-sheet-fallback');
+    expect(within(fallback).getByText(FALLBACK_MESSAGE)).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId('map-sheet-fallback-retry')).getByText(
+        '다시 시도'
+      )
+    ).toBeOnTheScreen();
+    // 지도(와 MapView 자체 실패면)는 지도 자리에서 빠진다.
+    expect(screen.queryByTestId('map-root')).toBeNull();
+    // 화면을 비우지 않는다(INV-4) — 일차 칩·헤더·본문·CTA 유지.
+    expect(screen.getByTestId('sheet-daychip-root')).toBeOnTheScreen();
+    expect(screen.getByTestId('fake-header')).toBeOnTheScreen();
+    expect(screen.getByTestId('fake-body')).toBeOnTheScreen();
+    expect(screen.getByTestId('sheet-cta-root')).toBeOnTheScreen();
+  });
+
+  it('🔴 SH13b · 키가 생긴 뒤 다시 시도하면 폴백이 사라지고 새로 마운트된 지도가 뜬다 (AC-2)', () => {
+    // 준비 — 키 없이 렌더해 폴백 상태를 만든다.
+    withoutMapKey();
+    renderShell();
+    expect(screen.getByTestId('map-sheet-fallback')).toBeOnTheScreen();
+
+    // 실행 — 키를 넣고 다시 시도.
+    withMapKey();
+    fireEvent.press(screen.getByTestId('map-sheet-fallback-retry'));
+
+    // 단언 — 폴백이 걷히고 실제 지도(map-native)가 뜬다.
+    expect(screen.queryByTestId('map-sheet-fallback')).toBeNull();
+    expect(screen.getByTestId('map-native')).toBeOnTheScreen();
+  });
+
+  it('🔴 SH13c · 키가 여전히 없으면 다시 시도할 때마다 폴백이 다시 뜬다 (AC-2 짝 — 크래시·빈 화면 없음)', () => {
+    // 준비 — 키 없음.
+    withoutMapKey();
+    renderShell();
+
+    // 실행/단언 — 두 번 눌러도 매번 폴백으로 돌아오고, 지도 자리가 비지 않으며 시트는 남는다.
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      fireEvent.press(screen.getByTestId('map-sheet-fallback-retry'));
+
+      expect(screen.getByTestId('map-sheet-fallback')).toBeOnTheScreen();
+      expect(screen.queryByTestId('map-root')).toBeNull();
+      expect(screen.getByTestId('fake-body')).toBeOnTheScreen();
+      expect(screen.getByTestId('sheet-cta-root')).toBeOnTheScreen();
+    }
+  });
+
+  it('SH13d · 소비처가 mapFallback 을 주면 그 노드가 이기고 셸 기본 폴백은 안 뜬다 (AC-3 · 선제 green)', () => {
+    // 준비 — 키 없음 + 소비처 폴백.
+    withoutMapKey();
+
+    // 실행
+    renderShell({
+      mapFallback: <Text testID="fake-map-fallback">소비처 폴백</Text>,
+    });
+
+    // 단언 — 소비처 노드만 뜬다(셸 기본 바·지도 없음).
+    expect(screen.getByTestId('fake-map-fallback')).toBeOnTheScreen();
+    expect(screen.queryByTestId('map-sheet-fallback')).toBeNull();
+    expect(screen.queryByTestId('map-root')).toBeNull();
+  });
+
+  it('SH13e · 키가 있고 실패가 없으면 지도만 뜨고 폴백은 없다 (AC-4 · 선제 green 회귀 앵커)', () => {
+    // 준비 — 키 있음.
+    withMapKey();
+
+    // 실행
+    renderShell();
+
+    // 단언 — "항상 폴백" 오구현이면 여기서 red.
+    expect(screen.getByTestId('map-native')).toBeOnTheScreen();
+    expect(screen.queryByTestId('map-sheet-fallback')).toBeNull();
+  });
+
+  it('SH13f · 셸 폴백이 이미 뜬 뒤 소비처가 mapFallback 을 넘기면 소비처 노드가 이긴다 (AC-3 짝 · 03b 경고-2)', () => {
+    // 왜 필요한가 — SH13d 는 처음부터 mapFallback 을 줘서 MapView 가 한 번도 안 만들어진다(셸 실패 상태가
+    // 영영 false). 두 폴백이 **동시에 후보인 순간**을 만들어야 우선순위를 본다.
+    const shell = (mapFallback?: ReactNode) => (
+      <MapSheetShell
+        center={CENTER}
+        pins={PINS}
+        days={DAYS}
+        selectedDayIndex={0}
+        onSelectDay={jest.fn()}
+        onBack={jest.fn()}
+        header={<Text testID="fake-header">헤더</Text>}
+        mapFallback={mapFallback}
+      >
+        <Text testID="fake-body">본문</Text>
+      </MapSheetShell>
+    );
+
+    // 준비 — 키 없이, mapFallback 없이 렌더 → 셸 실패 상태가 켜져 셸 기본 폴백이 뜬다.
+    withoutMapKey();
+    const { rerender } = render(shell());
+    expect(screen.getByTestId('map-sheet-fallback')).toBeOnTheScreen();
+
+    // 실행 — 같은 인스턴스에 소비처 폴백을 넘겨 다시 렌더(셸 실패 상태는 그대로 true).
+    rerender(shell(<Text testID="fake-map-fallback">소비처 폴백</Text>));
+
+    // 단언 — 소비처 노드만 뜨고 셸 기본 바는 물러난다.
+    expect(screen.getByTestId('fake-map-fallback')).toBeOnTheScreen();
+    expect(screen.queryByTestId('map-sheet-fallback')).toBeNull();
+    expect(screen.queryByTestId('map-root')).toBeNull();
   });
 });

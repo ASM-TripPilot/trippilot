@@ -12,6 +12,8 @@
 //  - AC-2 경계: 위젯이 @/pages·@/app·expo-router·형제 위젯을 안 물고 @/shared/map·@/entities 를 문다.
 //  - AC-5 카드 raw hex: entities SlotStopCard 가 토큰 클래스만 쓴다(entities 엔 raw-hex 스캔이 없어 gap).
 //  - AC-7: ALT_LABEL 이 config 세그먼트의 단일 상수 '다른 후보 ›'.
+//  - TRIP-919 G6: 지도 폴백 바가 Figma 글리프(SVG, MapSheetGlyphs)·반경 8(01b Q2)로 그려지고 유니코드
+//    대용 기호(⊘·↻)를 안 쓰며, 폴백 문구의 출처가 그 파일 하나뿐이다(프리뷰 로컬 마크업 소멸, AC-7).
 //
 // 리포 확립 규약: "없어야 한다"(부정)는 "있어야 한다"(긍정 짝)와 같은 it 안에 둔다.
 // 이 파일은 `pnpm test -- <경로>` 로 돈다(ESLint 미사용이라 NODE_OPTIONS 불필요).
@@ -213,5 +215,45 @@ describe('🔴 G5 · AC-7 — ALT_LABEL 이 config 세그먼트의 단일 공용
 
     expect(cfg).toContain('ALT_LABEL');
     expect(cfg).toContain('다른 후보 ›');
+  });
+});
+
+/* ──────────────── TRIP-919 · 지도 폴백 바 ────────────────
+ * 렌더로 못 보는 것만 본다: 아이콘이 SVG 글리프인가(유니코드 기호 대용 금지) · 버튼 반경이 01b Q2 의
+ * `rounded-[8px]` 인가(킷 규칙 12 와 다른 결정이라 조용히 "고쳐지는" 회귀를 막는다) · 문구가 한 파일에만
+ * 있는가. 색·간격 픽셀은 AC-V1 스크린샷 대조 몫이다.
+ * ★ 전처리 조합(02a §5 실측): stripComments 뒤에도 코드 속 `rounded-[8px]`·`./MapSheetGlyphs`·JSX 텍스트
+ *   속 문구·기호는 살아남고, 주석 속 기호·문구는 걷힌다.
+ * ─────────────────────────────────────────────────────────────────────── */
+const FALLBACK_BAR = 'widgets/map-sheet-shell/ui/MapFallbackBar.tsx';
+const FALLBACK_COPY = '지도를 불러올 수 없어요';
+
+describe('🔴 G6 · TRIP-919 — 지도 폴백 바는 SVG 글리프·반경 8 을 쓰고 문구의 유일한 출처다', () => {
+  it('G6a · MapFallbackBar 가 MapSheetGlyphs 글리프와 rounded-[8px] 을 쓰고 ⊘·↻ 기호는 0 이다', () => {
+    const bar = readOne(FALLBACK_BAR);
+
+    // 긍정 — 파일이 실재하고(빈 문자열 공허 통과 차단) 로컬 글리프 파일과 결정된 반경을 쓴다.
+    expect(exists(FALLBACK_BAR)).toBe(true);
+    expect(bar).toContain("from './MapSheetGlyphs'");
+    expect(bar).toContain('rounded-[8px]');
+
+    // 부정 — 옛 프리뷰의 유니코드 대용 아이콘을 옮겨 오지 않았다.
+    expect({
+      circleSlash: bar.includes('⊘'),
+      rotate: bar.includes('↻'),
+    }).toEqual({ circleSlash: false, rotate: false });
+  });
+
+  it('G6b · 폴백 문구를 가진 프로덕션 소스는 MapFallbackBar 하나뿐이다 (프리뷰 로컬 마크업 소멸)', () => {
+    const holders = listSourceFiles(ROOT)
+      .map((full) => ({
+        file: relOf(full),
+        source: stripComments(fs.readFileSync(full, 'utf8')),
+      }))
+      .filter(({ source }) => source.includes(FALLBACK_COPY))
+      .map(({ file }) => file);
+
+    // 긍정·부정 한 번에 — 정확히 위젯 한 파일(빈 배열이면 공허가 아니라 red).
+    expect(holders).toEqual([FALLBACK_BAR]);
   });
 });

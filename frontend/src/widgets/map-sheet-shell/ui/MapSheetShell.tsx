@@ -1,4 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
+import { useState } from 'react';
 import { View } from 'react-native';
 import type { ListRenderItem } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,16 +12,17 @@ import { MapView, type MapCenter, type MapPin } from '@/shared/map';
 
 import { CtaBar, type CtaButton } from './CtaBar';
 import { DayChipOverlay, type DayChip } from './DayChipOverlay';
+import { MapFallbackBar } from './MapFallbackBar';
 
 // 위젯 킷 소비처가 시트 body(카드·커넥터)를 조립할 때 쓰는 서버 슬롯 타입을 킷 표면으로 재수출한다
 // (widgets → entities 하향 참조 허용, `entities/itinerary-slot/model` 이 shared/api 를 얇게 재수출).
 export type { ItineraryDaysItemSlotsItem } from '@/entities/itinerary-slot/model';
 
 /**
- * TRIP-783 · h공통 지도+시트 셸(widgets · presentation-only, useState 0) — h07·h08·h11·h14·h16 결과
- * 6종이 공유하는 골격. 전면 지도(`<MapView viewOnly>`, 시트 뒤 형제) + 좌상단 일차 칩 오버레이 +
+ * TRIP-783 · h공통 지도+시트 셸(widgets) — h·i 밴드 지도 결과 화면들이 공유하는 골격. 전면 지도(`<MapView viewOnly>`, 시트 뒤 형제) + 좌상단 일차 칩 오버레이 +
  * 2스냅 바텀시트(`header`·`children`) + 하단 고정 CTA 바를 **조립만** 한다. 시각·합산·시트 개폐 같은
- * 판단은 전부 소비처로 밀어냈다(셸은 받은 ReactNode·문자열·콜백만 배치한다).
+ * 판단은 전부 소비처로 밀어냈다(셸은 받은 ReactNode·문자열·콜백만 배치한다). 예외 하나 — 지도 로드
+ * 실패 상태는 셸이 쥔다(TRIP-919, widgetsStructure F 예외 등재): 소비처 배선 없이 폴백을 얻게 하려고.
  *
  * ⚠️ 원리적 사각(6-b 실기 전용): 2스냅 실개폐·딤·`enableContentPanningGesture`(E6) 는 `@gorhom/
  * bottom-sheet` 통과형 목이, 지도 제스처·타일은 네이버 목이 못 본다. 지도는 시트 **뒤 형제**로 두어
@@ -69,9 +71,10 @@ export interface MapSheetShellProps<T = unknown> {
   /** 바텀시트 초기 스냅 인덱스(0=peek / 1=expanded). 미전달이면 0(접힘) — 기존 소비처 무변경.
    *  h08 펼침 프리뷰(`h08-draft-expanded`)가 1 을 준다(TRIP-792 D5). 실 스냅 전환은 6-b 실기 몫. */
   initialIndex?: number;
-  /** 지도 실패 폴백 슬롯(TRIP-799 D5·AC-6). 주면 지도 스트립 자리에 `<MapView>` 대신 이 노드를
-   *  렌더한다(day-chip·시트·CTA 는 유지 — 화면을 안 비운다, INV-4). 미전달이면 현행대로 MapView
-   *  (기존 소비처·801 무변경). 타입 선언만 — 렌더 배선은 [구현] 몫(SH6b 가 red 로 강제). */
+  /** 지도 자리 교체 슬롯(TRIP-799 D5·AC-6). 주면 지도 스트립 자리에 `<MapView>` 대신 이 노드를
+   *  렌더한다(day-chip·시트·CTA 는 유지 — 화면을 안 비운다, INV-4). 셸 자체 실패 감지보다 우선한다.
+   *  미전달이면 MapView 를 그리고, 그 MapView 가 로드 실패를 알리면 셸 기본 `MapFallbackBar` 로
+   *  바꾼다(TRIP-919). */
   mapFallback?: ReactNode;
   /** 지도 위 성공 배너 등 추가 카드(TRIP-801 D3·AC-1). 주면 day-chip 오버레이 **아래에** 추가로
    *  렌더한다(`overlay` 교체와 달리 추가). 미전달=미렌더(후방호환). 타입 선언만 — 렌더 배선은
@@ -123,21 +126,33 @@ export function MapSheetShell<T = unknown>({
   onSheetScrollBeginDrag,
   onMapTap,
 }: MapSheetShellProps<T>): ReactElement {
+  // 지도 로드 실패(TRIP-919). 폴백 중엔 MapView 가 트리에서 빠지므로, 재시도로 이 값을 풀면 MapView 가
+  // 새 인스턴스로 다시 마운트돼 실패 알림(notifiedRef)도 처음부터 다시 돈다 — 별도 key 가 필요 없다.
+  const [mapFailed, setMapFailed] = useState(false);
+  // 이름 붙인 핸들러 — `<MapView>` 태그 안에 `=>` 를 두면 itineraryMapSurfaceStructure 의 태그
+  // 정규식이 첫 `>` 에서 잘려 viewOnly 를 못 본다.
+  const handleMapLoadFailed = () => setMapFailed(true);
+  const handleMapRetry = () => setMapFailed(false);
+
   return (
     <View testID="map-sheet-shell-root" className="flex-1 bg-canvas">
       {/* 전면 지도 — 시트 뒤 형제(절대 배치, 풀블리드). connectPins 무언급=기본 선.
-          지도 실패 폴백(mapFallback)을 받으면 그 노드로 지도 자리를 대체한다(day-chip·시트·CTA 유지 →
-          화면을 안 비운다, INV-4 · TRIP-799 D5). 미전달이면 현행대로 MapView(801·기존 소비처 무변경). */}
+          지도 자리 우선순위: 소비처 mapFallback > 셸 기본 폴백 바(로드 실패 시) > MapView. 어느 쪽이든
+          day-chip·시트·CTA 는 유지된다(화면을 안 비운다, INV-4 · TRIP-799 D5 · TRIP-919). */}
       <View className="absolute inset-0">
-        {mapFallback ?? (
-          <MapView
-            center={center}
-            pins={pins}
-            viewOnly={mapViewOnly ?? true}
-            currentLocation={currentLocation}
-            onTapMap={onMapTap}
-          />
-        )}
+        {mapFallback ??
+          (mapFailed ? (
+            <MapFallbackBar onRetry={handleMapRetry} />
+          ) : (
+            <MapView
+              center={center}
+              pins={pins}
+              viewOnly={mapViewOnly ?? true}
+              currentLocation={currentLocation}
+              onTapMap={onMapTap}
+              onLoadFailed={handleMapLoadFailed}
+            />
+          ))}
       </View>
 
       {/* 좌상단 오버레이 — `overlay` 를 주면 그것을, 아니면 기본 일차 칩 오버레이를 그린다(D3). */}

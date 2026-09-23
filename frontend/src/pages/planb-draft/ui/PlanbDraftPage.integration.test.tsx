@@ -20,6 +20,11 @@ import { PlanbDraftPage } from './PlanbDraftPage';
  *   예외). 그래서 세션·seam 상태를 mock 접두 홀더에 담고 목이 렌더 때 지연 읽기 한다.
  */
 
+// TRIP-919 — 셸이 지도 실패(jest 엔 env 키가 없다)를 받으면 자기 폴백 바의 [다시 시도]를 띄워, 이 뷰의
+// [다시 시도]와 `getByText` 가 두 개로 겹친다. 이 파일의 관심사는 지도가 아니라 뷰 액션이라 얇은 관찰
+// 마커로 바꾼다(실패를 발화하지 않는다 — 페이지 통합 테스트 관례).
+jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
+
 const TRIP_ID = 't1';
 const SESSION_ID = 's9';
 

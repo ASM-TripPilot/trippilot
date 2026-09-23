@@ -77,6 +77,7 @@ import { CoPickStepper } from '@/widgets/copick-stepper/ui/CoPickStepper';
 import { GenerationDoneBar } from '@/widgets/generation-done-bar/ui/GenerationDoneBar';
 import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
 import { GenerationProgressCard } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
+import { MapFallbackBar } from '@/widgets/map-sheet-shell/ui/MapFallbackBar';
 import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
 import { SheetHeader } from '@/widgets/map-sheet-shell/ui/SheetHeader';
 import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
@@ -801,23 +802,9 @@ const H14_PLAN_PENDING_SLOTS: ItineraryDaysItemSlotsItem[] =
   H11_COPICK_PREVIEW_SLOTS.map((slot) => ({ ...slot, distanceRange: null }));
 const H14_PLAN_NO_BASE_SLOTS = H11_COPICK_PREVIEW_SLOTS.slice(0, 4);
 
-// 지도 폴백 바(TRIP-799 D5) — 지도 스트립 자리에 얹는 한 줄 안내 + [다시 시도] pill. 페이지는 실
-// 런타임 감지(MapView onLoadFailed)를 아직 배선하지 않아(맹점②, 03 follow-up) 이 프리뷰가 폴백 얼굴을
-// 보는 유일한 자리다 — 강제 주입한다.
-const H14_MAP_FALLBACK: ReactElement = (
-  <View className="flex-1 bg-surface-soft px-lg pt-[72px]">
-    <View className="flex-row items-center justify-between gap-sm rounded-card border border-hairline bg-canvas px-md py-sm">
-      <Text className="flex-1 font-noto text-caption text-muted">
-        ⊘ 지도를 불러올 수 없어요 · 일정은 아래 목록에서 볼 수 있어요
-      </Text>
-      <Pressable className="rounded-pill border border-hairline-strong bg-canvas px-md py-[6px]">
-        <Text className="font-noto-bold text-caption font-bold text-ink">
-          ↻ 다시 시도
-        </Text>
-      </Pressable>
-    </View>
-  </View>
-);
+// 지도 폴백 얼굴(TRIP-799 D5 → TRIP-919) — 셸 기본 폴백 바를 그대로 강제 주입한다. dev build 엔 지도
+// 키가 있어 셸이 스스로 실패하지 않으므로, 폴백 얼굴은 이렇게 넘겨야 보인다. 다시 시도는 noop.
+const H14_MAP_FALLBACK: ReactElement = <MapFallbackBar onRetry={noop} />;
 
 function renderH14PlanSheet(options: {
   slots: ItineraryDaysItemSlotsItem[];
