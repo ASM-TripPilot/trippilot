@@ -267,6 +267,52 @@ class AgentResult:
     error: TaskError | None
     metrics: TaskMetrics
 
+
+    # ── 생성 헬퍼 (DL-5) ────────────────────────────────────────────
+    #
+    # 불변식이 `__post_init__` 에 있어 **잘못 만들면 예외**인데, 그 조합을 네 에이전트가
+    # 각자 외우면 갈린다(SUCCESS 는 payload 필수이자 fallback_level 0, 오류 상태는
+    # error 필수이자 그 외 상태는 error 금지). 조합을 여기 한 곳에 둔다.
+    #
+    # `agents` 형제끼리는 서로 import 할 수 없으므로(L-2) 공용은 domain 이 제자리다.
+
+    @classmethod
+    def succeeded(cls, *, task_id: str, trace_id: str, payload: dict,
+                  metrics: "TaskMetrics",
+                  freshness: FreshnessMeta | None = None) -> "AgentResult":
+        """정상 — 폴백 계단 0."""
+        return cls(task_id=task_id, trace_id=trace_id, status=AgentStatus.SUCCESS,
+                   payload=payload, fallback_level=0, freshness=freshness,
+                   error=None, metrics=metrics)
+
+    @classmethod
+    def degraded(cls, *, task_id: str, trace_id: str, payload: dict,
+                 fallback_level: int, metrics: "TaskMetrics",
+                 freshness: FreshnessMeta | None = None) -> "AgentResult":
+        """결과는 나왔으나 계단을 내려온 경우 — 산출물이 있으므로 payload 필수다.
+
+        `fallback_level` 은 **몇 단 내려왔는가**지 실패 횟수가 아니다. 0 을 넘기면
+        SUCCESS 와 구분이 사라지므로 거절한다.
+        """
+        if fallback_level <= 0:
+            raise ValueError(f"FALLBACK 은 fallback_level > 0: {fallback_level}")
+        return cls(task_id=task_id, trace_id=trace_id, status=AgentStatus.FALLBACK,
+                   payload=payload, fallback_level=fallback_level,
+                   freshness=freshness, error=None, metrics=metrics)
+
+    @classmethod
+    def failed(cls, *, task_id: str, trace_id: str, error: TaskError,
+               metrics: "TaskMetrics", timeout: bool = False) -> "AgentResult":
+        """산출물 없음 — 예외로 던지지 않고 상태값으로 수렴한다(DL-5 · INV-4).
+
+        payload 는 None 이다. 빈 dict 를 넣으면 호출측이 "결과가 있는데 비었다"로
+        읽어 정상 경로를 태운다 — 그게 조용한 실패다.
+        """
+        return cls(task_id=task_id, trace_id=trace_id,
+                   status=AgentStatus.TIMEOUT if timeout else AgentStatus.FAILED,
+                   payload=None, fallback_level=0, freshness=None,
+                   error=error, metrics=metrics)
+
     def __post_init__(self) -> None:
         if not self.task_id:
             raise ValueError("task_id 비어있음 금지")
