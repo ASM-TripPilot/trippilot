@@ -60,7 +60,7 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
 
   // 검색은 서버가 한다(q) + 커서 무한 스크롤(TRIP-502) — 클라 이름 필터·전량 수신을 없앤다.
   const trimmedQuery = searchText.trim();
-  const { items, fetchNextPage, hasNextPage, isFetchingNextPage } =
+  const { items, fetchNextPage, hasNextPage, isFetchingNextPage, isSuccess } =
     usePlacesInfinite({
       ...(selectedCategory ? { category: selectedCategory } : {}),
       ...(trimmedQuery ? { q: trimmedQuery } : {}),
@@ -170,6 +170,17 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
               className="w-full items-center py-lg"
             >
               <ActivityIndicator />
+            </View>
+          ) : null,
+          // 조회 성공 + 0건일 때만 안내(INV-4 — 검색 0건 침묵 금지). 로딩 중엔 안 띄운다(깜빡임), 실패는 범위 밖.
+          ListEmptyComponent: isSuccess ? (
+            <View
+              testID="itinerary-place-empty"
+              className="w-full items-center py-lg"
+            >
+              <Text className="font-noto text-caption text-muted">
+                검색 결과가 없어요
+              </Text>
             </View>
           ) : null,
           testID: 'itinerary-place-list',

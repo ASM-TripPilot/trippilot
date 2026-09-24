@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import {
   act,
   fireEvent,
@@ -884,4 +884,68 @@ describe('🔴 MapSheetShell · SH15 — 시트에 enableDynamicSizing={false} �
       expect(sheetHost().props.enableDynamicSizing).toBe(false);
     }
   );
+});
+
+/* ──────────────── TRIP-924 · list 슬롯의 빈 목록 안내(ListEmptyComponent) ────────────────
+ * h13 장소 후보가 0건이면 시트가 헤더만 남고 비어 보인다. 셸은 **판단하지 않고** 소비처가 준 안내 노드를
+ * `<BottomSheetFlatList ListEmptyComponent>` 로 통과시키기만 한다(언제 줄지는 소비처 몫 — 02a ★1).
+ * 목의 `BottomSheetFlatList` 는 RN `FlatList` 라 data 0건일 때만 ListEmptyComponent 를 그린다(02a §5).
+ * 3동작: 준비=list(data·ListEmptyComponent) 주입 렌더 → 실행=렌더 → 단언=안내가 리스트 안에 뜨는가/안 뜨는가.
+ * ─────────────────────────────────────────────────────────────────────── */
+function renderListShell(
+  data: { id: string }[],
+  listEmpty?: ReactElement | null
+): void {
+  render(
+    <MapSheetShell
+      center={CENTER}
+      pins={PINS}
+      days={[]}
+      selectedDayIndex={0}
+      onSelectDay={jest.fn()}
+      onBack={jest.fn()}
+      header={<Text testID="fake-header">헤더</Text>}
+      list={{
+        data,
+        renderItem: ({ item }) => (
+          <Text testID={`list-item-${item.id}`}>{item.id}</Text>
+        ),
+        keyExtractor: (item) => item.id,
+        testID: 'shell-list',
+        ...(listEmpty !== undefined ? { ListEmptyComponent: listEmpty } : {}),
+      }}
+    >
+      <Text testID="fake-body">본문</Text>
+    </MapSheetShell>
+  );
+}
+
+describe('MapSheetShell · SH16 — list 슬롯이 빈 목록 안내를 통과시킨다 (TRIP-924)', () => {
+  it('SH16a · ListEmptyComponent 미전달 + 0건이면 셸이 아무 안내도 덧붙이지 않는다 (AC4 · 선제 green · 후방호환)', () => {
+    // 준비/실행 — 기존 소비처 형태(안내 없이 빈 data).
+    renderListShell([]);
+
+    // 단언 — 리스트 안 글자는 헤더+본문 **정확히** 그뿐(완전 일치 — 셸 기본 안내 문구가 끼면 red, 02a ★3).
+    expect(screen.getByTestId('shell-list')).toHaveTextContent('헤더본문');
+  });
+
+  it('🔴 SH16b · ListEmptyComponent 를 주고 0건이면 그 노드가 리스트 안에 뜬다 (AC1 셸 쪽)', () => {
+    // 준비/실행 — 빈 data + 안내 노드.
+    renderListShell([], <Text testID="fake-empty">비었음</Text>);
+
+    // 단언 — 안내가 list.testID 노드 **안**에 뜬다(리스트 밖 오버레이로 그리면 red, 02a ★2).
+    //   **red 성격**: 현행 셸은 ListEmptyComponent 를 FlatList 로 안 넘겨 아무것도 안 뜬다.
+    expect(
+      within(screen.getByTestId('shell-list')).getByTestId('fake-empty')
+    ).toBeOnTheScreen();
+  });
+
+  it('SH16c · ListEmptyComponent 를 줘도 1건 이상이면 안내가 없다 (AC3 셸 쪽 · 선제 green)', () => {
+    // 준비/실행 — 아이템 1건 + 안내 노드.
+    renderListShell([{ id: 'x1' }], <Text testID="fake-empty">비었음</Text>);
+
+    // 단언 — 아이템은 뜨고 안내는 없다(헤더·푸터 등 조건 없는 자리에 얹으면 red, 02a ★2).
+    expect(screen.getByTestId('list-item-x1')).toBeOnTheScreen();
+    expect(screen.queryByTestId('fake-empty')).toBeNull();
+  });
 });
