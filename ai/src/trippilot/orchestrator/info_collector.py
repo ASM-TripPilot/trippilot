@@ -78,6 +78,53 @@ INFO_REQUIREMENTS: Mapping[Intent, tuple[ProviderKind, ...]] = {
     # v2 §3 "REFLECT | (없음)" — 회고는 백엔드가 방문 이력을 봉투에 실어 보낸다.
     # 빈 튜플을 **명시**한다: 키가 없으면 "아직 안 정한 것"과 구분되지 않는다.
     Intent.GENERATE_REFLECTION: (),
+    # REGENERATE 는 "제외·고정을 얹은 생성"이다 — 같은 ScheduleAgent 이고 요청 타입도
+    # 같다(인자표: exclude → excluded_poi_ids · keep → fixed_blocks). 재료가 다를
+    # 이유가 없어 GENERATE_SCHEDULE 과 같은 행이다.
+    Intent.REGENERATE: (
+        ProviderKind.PLACE,
+        ProviderKind.WEATHER,
+        ProviderKind.PERSONA,
+        ProviderKind.EVENT,
+    ),
+    # SUGGEST_ALTERNATIVE 는 REPLAN 과 같은 행이다 — `wiring.alternatives()` 가
+    # **이미** `collect(Intent.REPLAN, ...)` 를 부르고 같은 PlanBAgent·같은 RAG 다.
+    # 행이 없으면 라우터가 이 라벨로 끄는 순간 예외가 난다.
+    Intent.SUGGEST_ALTERNATIVE: (
+        ProviderKind.WEATHER,
+        ProviderKind.TRANSIT,
+        ProviderKind.PERSONA,
+        ProviderKind.PLACE,
+    ),
+    # 회고 두 종류(DAILY·TRIP_SUMMARY)는 같은 ReflectAgent 이고, 방문·행사·페르소나를
+    # 백엔드가 조립해 봉투에 싣는다(AI stateless). 빈 튜플이 그 사실의 기록이다.
+    Intent.TRIP_SUMMARY: (),
+    # 아래 둘은 백엔드 DB 조회다 — 라우팅 표 註와 인자표의 BACKEND_PENDING 이 같은 말.
+    Intent.GET_NEXT_SLOT: (),
+    Intent.SHOW_SCHEDULE: (),
+    Intent.GET_WEATHER: (ProviderKind.WEATHER,),
+    # 거리만 쓴다(INV-3 — 소요시간 미표시).
+    #
+    # **호출측이 `purpose=INFO_DISPLAY` 를 반드시 넘긴다.** 안 넘기면 조립기가
+    # `delay_check` 로 떨어뜨리는데(`_build_transit_request` 기본값), 그건 지연
+    # 트리거 판정용이라 목적이 다르다 — 적어도 관측에 그렇게 찍히고,
+    # `expected_minutes` 가 "없으면 미판정"인 것도 delay_check 전제다. 쓰이지 않던
+    # enum 값(`INFO_DISPLAY`)이 하나 있었다는 게 이 경로를 아직 아무도 안 밟았다는
+    # 증거다.
+    #
+    # **`mode` 는 조립기가 필수로 읽는데 발화에 거의 없다** — 뱅크 seed+증강 +
+    # 평가셋 26발화에서 추출되는 건 2건(7.7%)뿐이다("걸어갈 만한 거리야?" 류).
+    # 그대로 두면 이 기능의 92%가 영구 UNAVAILABLE 이다. 기본값은 **호출측**이
+    # 채운다 — 조립기를 느슨하게 하면 `delay_check` 경로까지 같이 느슨해지는데
+    # 거기서는 수단 누락이 진짜 결함이라 UNAVAILABLE 이 맞다. 그리고 기본값은
+    # 결정이라 보이는 자리에 있어야 한다.
+    #
+    # 주의: "어차피 거리만 내보내니 수단 가정은 싸다"는 **실 어댑터에서는 약하다.**
+    # 폴백 추정기는 수단 무관이지만(`travel.py` — 직선×우회계수, 수단은 분(分)에만
+    # 영향하고 그건 INV-3 로 안 나간다) 실 Tmap 어댑터는 수단별로 **다른 경로**를
+    # 친다(`/tmap/routes` · `/routes/pedestrian` · `/transit/routes`). 수단을 잘못
+    # 가정하면 거리 자체가 달라진다.
+    Intent.GET_DISTANCE: (ProviderKind.TRANSIT,),
 }
 
 

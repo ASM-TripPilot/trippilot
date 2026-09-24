@@ -102,8 +102,8 @@ def test_intent_without_a_row_raises_instead_of_returning_empty() -> None:
     """
     collector = InfoCollector({})
     with pytest.raises(UnknownIntentError) as got:
-        collector.collect(Intent.SHOW_SCHEDULE, _PARAMS)
-    assert got.value.intent is Intent.SHOW_SCHEDULE
+        collector.collect(Intent.STYLE_ANALYSIS, _PARAMS)
+    assert got.value.intent is Intent.STYLE_ANALYSIS
 
 
 def test_every_requirement_key_is_a_real_intent_label() -> None:
@@ -111,23 +111,23 @@ def test_every_requirement_key_is_a_real_intent_label() -> None:
     assert all(isinstance(k, Intent) for k in INFO_REQUIREMENTS)
 
 
-# 아직 요구표를 안 정한 의도 — 여기 있는 동안 `collect()` 는 UnknownIntentError 다.
-# 행을 채우면 이 목록에서 지운다.
+# 아직 요구표 행이 없는 의도 — 여기 있는 동안 `collect()` 는 UnknownIntentError 다.
 #
-# **알려진 공백을 코드에 보이게 두는 것**이 목적이다. 표의 부재로만 있으면 아무도
-# 세지 않는다 — 지금 호출자가 없어 안전할 뿐, 라우터 배선이 오는 순간 이 아홉이
-# 전부 요청 경로에서 터진다. 그리고 새 의도를 라벨에 추가하고 행을 안 적으면
-# 그 사실이 **조용히 이 목록에 섞이지 않고** 여기서 깨진다.
+# **둘은 성질이 다르다.** "아직 안 정했다"와 "정할 수가 없다"를 뭉치면 다음 사람이
+# 전자인 줄 알고 아무 행이나 적는다.
+#
+# - `GET_POI_INFO`: PLACE Provider 가 **안 맞는다.** `PlaceProvider.fetch` 는
+#   `pool_request`(앵커·날짜·예산·교통 전부 필수, 날짜는 비면 예외)를 요구하는
+#   **후보풀 조립기**다. "이 장소 정보 알려줘"에는 날짜도 예산도 없고, 지어내면
+#   **영업일 필터가 물어본 그 장소를 떨어뜨릴 수 있다.** 단건 조회 능력은 포트에
+#   있지만(`PoiDbPort.find_by_ids`) Provider 가 안 내놓는다 — 그 경로를 여는 것이
+#   선행이다.
+# - `STYLE_ANALYSIS`: **처리자가 없다.** 라우팅 표는 `ReflectAgent` 를 가리키는데
+#   `ReflectionKind` 에 그 종류가 없다(DAILY·TRIP_SUMMARY 둘뿐). 인자표도 "AI 에
+#   처리 경로가 없다"고 적어 뒀다. 행을 적으면 처리 경로가 있다고 암시하게 된다.
 _REQUIREMENTS_UNDEFINED = frozenset({
-    Intent.REGENERATE,
-    Intent.SUGGEST_ALTERNATIVE,
-    Intent.TRIP_SUMMARY,
-    Intent.STYLE_ANALYSIS,
-    Intent.GET_NEXT_SLOT,
-    Intent.SHOW_SCHEDULE,
-    Intent.GET_WEATHER,
-    Intent.GET_DISTANCE,
-    Intent.GET_POI_INFO,
+    Intent.GET_POI_INFO,   # Provider 가 안 맞는다 (단건 조회 경로 선행)
+    Intent.STYLE_ANALYSIS,  # 처리자가 없다 (ReflectionKind 에 종류 없음)
 })
 
 
