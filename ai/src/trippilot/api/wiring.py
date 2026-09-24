@@ -59,46 +59,16 @@ from typing import Mapping, Sequence
 
 from fastapi import FastAPI
 
+from trippilot.agents.edit.agent import EditAgent, EditOutcome, EditTask
+from trippilot.agents.edit.commands import EditStatus
+from trippilot.agents.planb.rag import PlanBAgent, PlanBRagRequest, SavedPlace
+from trippilot.agents.reflect.agent import ReflectAgent, ReflectTask
+from trippilot.agents.schedule.agent import ScheduleAgent
 from trippilot.api import schemas
 from trippilot.api.app import create_app
 from trippilot.api.cost import CostLedger
-from trippilot.llm_gateway.config import C1Config
-from trippilot.llm_gateway.context import ContextResolver, ContextStore
-from trippilot.llm_gateway.gates.explanation import ExplanationGate
-from trippilot.llm_gateway.gates.reminder_copy import ReminderCopyGate
-from trippilot.llm_gateway.gates.scoring import ClosedSetGate
-from trippilot.llm_gateway.gateway import GatewayFacade
-from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.llm_gateway.workers.alternative_explanation import (
-    AlternativeExplanationWorker,
-)
-from trippilot.llm_gateway.workers.alternative_selection import AlternativeSelectionWorker
-from trippilot.llm_gateway.workers.explanation import ExplanationWorker
-from trippilot.llm_gateway.workers.reminder_copy import (
-    ReminderCopyInput,
-    ReminderCopyItem,
-    ReminderCopyWorker,
-)
-from trippilot.agents.reflect.agent import ReflectAgent, ReflectTask
-from trippilot.llm_gateway.gates.reflection_nudge import ReflectionNudgeGate
-from trippilot.llm_gateway.gates.reflection_template import ReflectionTemplateGate
-from trippilot.llm_gateway.workers.reflection_nudge import (
-    FALLBACK_NUDGE_MESSAGE, ReflectionNudgeInput, ReflectionNudgeWorker,
-)
-from trippilot.llm_gateway.workers.reflection_template import ReflectionTemplateWorker
-from trippilot.llm_gateway.gates.share_card_copy import ShareCardCopyGate
-from trippilot.llm_gateway.workers.share_card_copy import (
-    ShareCardCopyWorker, fallback_share_card_copy,
-)
-from trippilot.ports.poi_db_port import PoiLookup, PoiMiss, lookup_from
-from trippilot.domain.observability import FallbackEvent, LlmCallRecord
-from trippilot.domain.reflection import (
-    ReflectionKind, ReflectionRequest, SourceEventKind, TripEventRecord,
-    VisitRecord, VisitRef,
-)
-from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
 from trippilot.assembly_engine.config import AssemblyConfig
-from trippilot.assembly_engine.facade import HybridAssemblyFacade, AssemblyConflictError
+from trippilot.assembly_engine.facade import AssemblyConflictError, HybridAssemblyFacade
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
 from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
 from trippilot.assembly_engine.repair import RepairChange
@@ -115,7 +85,14 @@ from trippilot.domain.common import (
     TransportMode,
 )
 from trippilot.domain.context import PermissionDeniedError, Principal, ResourceRef
-from trippilot.domain.freshness import FreshnessMeta
+from trippilot.domain.edit import EditCommand, EditOp
+from trippilot.domain.freshness import (
+    FreshnessMeta,
+    InfoPacket,
+    ProviderKind,
+    ProviderStatus,
+)
+from trippilot.domain.intent import Intent
 from trippilot.domain.itinerary import (
     DaySolution,
     FixedBlock,
@@ -127,30 +104,67 @@ from trippilot.domain.itinerary import (
     VisitSlot,
 )
 from trippilot.domain.llm import CandidatePool, ModelTier, PoiExplanation
+from trippilot.domain.observability import FallbackEvent, LlmCallRecord
 from trippilot.domain.persona import CompanionType, PersonaSummary
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
-from trippilot.domain.travel import TravelEstimate
-from trippilot.agents.edit.agent import EditAgent, EditOutcome, EditTask
-from trippilot.agents.edit.commands import EditStatus
-from trippilot.agents.planb.rag import PlanBAgent, PlanBRagRequest, SavedPlace
-from trippilot.agents.schedule.agent import ScheduleAgent
-from trippilot.domain.edit import EditCommand, EditOp
-from trippilot.llm_gateway.gates.edit_translation import EditTranslationGate
-from trippilot.llm_gateway.workers.edit_translation import EditTranslationWorker
 from trippilot.domain.poi_curation import CandidatePoolRequest
+from trippilot.domain.reflection import (
+    ReflectionKind,
+    ReflectionRequest,
+    SourceEventKind,
+    TripEventRecord,
+    VisitRecord,
+    VisitRef,
+)
+from trippilot.domain.travel import TravelEstimate
 from trippilot.domain.trigger import TriggerKind, TriggerParams
+from trippilot.llm_gateway.config import C1Config
+from trippilot.llm_gateway.context import ContextResolver, ContextStore
 from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate
+from trippilot.llm_gateway.gates.edit_translation import EditTranslationGate
+from trippilot.llm_gateway.gates.explanation import ExplanationGate
+from trippilot.llm_gateway.gates.reflection_nudge import ReflectionNudgeGate
+from trippilot.llm_gateway.gates.reflection_template import ReflectionTemplateGate
+from trippilot.llm_gateway.gates.reminder_copy import ReminderCopyGate
+from trippilot.llm_gateway.gates.scoring import ClosedSetGate
+from trippilot.llm_gateway.gates.share_card_copy import ShareCardCopyGate
+from trippilot.llm_gateway.gateway import GatewayFacade
+from trippilot.llm_gateway.prompts import PromptRegistry
+from trippilot.llm_gateway.workers.alternative_explanation import (
+    AlternativeExplanationWorker,
+)
+from trippilot.llm_gateway.workers.alternative_selection import (
+    AlternativeSelectionWorker,
+)
+from trippilot.llm_gateway.workers.edit_translation import EditTranslationWorker
+from trippilot.llm_gateway.workers.explanation import ExplanationWorker
+from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
 from trippilot.llm_gateway.workers.preference_cache import CachingScoringWorker
+from trippilot.llm_gateway.workers.reflection_nudge import (
+    FALLBACK_NUDGE_MESSAGE,
+    ReflectionNudgeInput,
+    ReflectionNudgeWorker,
+)
+from trippilot.llm_gateway.workers.reflection_template import ReflectionTemplateWorker
+from trippilot.llm_gateway.workers.reminder_copy import (
+    ReminderCopyInput,
+    ReminderCopyItem,
+    ReminderCopyWorker,
+)
+from trippilot.llm_gateway.workers.share_card_copy import (
+    ShareCardCopyWorker,
+    fallback_share_card_copy,
+)
+from trippilot.orchestrator import schedule_coordinator as core
+from trippilot.orchestrator.info_collector import InfoCollector
 from trippilot.poi_curation.config import M7Config
 from trippilot.poi_curation.place_fees import load_fee_table
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder
-from trippilot.orchestrator import schedule_coordinator as core
-from trippilot.ports.llm_port import LlmPort, LlmRequest, LlmResponse
-from trippilot.ports.trace_port import TracePort
-from trippilot.domain.freshness import InfoPacket, ProviderKind, ProviderStatus
-from trippilot.orchestrator.info_collector import InfoCollector
-from trippilot.ports.weather_port import WeatherPort
 from trippilot.ports.event_port import EventPort
+from trippilot.ports.llm_port import LlmPort, LlmRequest, LlmResponse
+from trippilot.ports.poi_db_port import PoiLookup, PoiMiss, lookup_from
+from trippilot.ports.trace_port import TracePort
+from trippilot.ports.weather_port import WeatherPort
 from trippilot.providers.event import EventProvider
 from trippilot.providers.persona import PersonaProvider
 from trippilot.providers.place import PlaceProvider
@@ -998,7 +1012,7 @@ class WiredItineraryOrchestrator:
             params["principal"] = Principal(user_id=request.trip_id)
             params["persona_ref"] = ResourceRef(
                 kind="persona", ref_id=request.trip_id, owner_id=request.trip_id)
-        packets = self._info.collect("REPLAN", params)
+        packets = self._info.collect(Intent.REPLAN, params)
         pool = self._pool_from(packets, now)
         result = self._rag.run(
             PlanBRagRequest(
@@ -1245,7 +1259,7 @@ class WiredItineraryOrchestrator:
         # 직행 대신 PlaceProvider 를 거치면서 FreshnessMeta·ProviderStatus 가 붙는다.
         # 조회 실패가 예외로 튀지 않고 상태값으로 수렴한다(INV-4).
         packets = self._info.collect(
-            "EDIT",
+            Intent.EDIT_SCHEDULE,
             {
                 "pool_request": CandidatePoolRequest(
                     anchor=GeoPoint(request.anchor.lat, request.anchor.lng),
