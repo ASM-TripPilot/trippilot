@@ -2504,8 +2504,11 @@ export const PREVIEW_STATES: PreviewState[] = [
         />
         <OtaChoiceSheet
           item={STAY_DETAIL_PREVIEW_ITEM}
+          dontShowAgain={false}
+          onToggleDontShowAgain={noop}
           onCancel={noop}
           onConfirm={noop}
+          onRetry={noop}
         />
       </View>
     ),
@@ -5510,6 +5513,62 @@ export const PREVIEW_STATES: PreviewState[] = [
           impact={revokeImpact()}
           onCancel={noop}
           onConfirm={noop}
+        />
+      </View>
+    ),
+  },
+  // l07 제휴 고지 default(Figma 1615:2440) — 숙소 상세 위에 시트를 형제로 겹친다(e03 키와 같은 합성). 알려진 차이:
+  // OTA 행 1행 추가·버튼 라벨 '네이버로 이동'(Figma '부킹닷컴으로 이동' — 계약에 없는 코드라 안 지어냄). 딤·실개폐는 6-b.
+  {
+    key: 'l07-affiliate-default',
+    band: 'l',
+    label: 'l07 · 제휴 고지',
+    login: null,
+    render: () => (
+      <View style={StyleSheet.absoluteFill}>
+        <StayDetailScreen
+          item={STAY_DETAIL_PREVIEW_ITEM}
+          saved={true}
+          onToggleSave={noop}
+          onPressBook={noop}
+          onPressAddToTrip={noop}
+          onPressBack={noop}
+        />
+        <OtaChoiceSheet
+          item={STAY_DETAIL_PREVIEW_ITEM}
+          dontShowAgain={false}
+          onToggleDontShowAgain={noop}
+          onCancel={noop}
+          onConfirm={noop}
+          onRetry={noop}
+        />
+      </View>
+    ),
+  },
+  // l07 error(Figma 1616:2440) — 이동 실패 뒤 얼굴. 체크박스 없이 [취소]/[다시 시도].
+  {
+    key: 'l07-affiliate-error',
+    band: 'l',
+    label: 'l07 · 제휴 고지 실패',
+    login: null,
+    render: () => (
+      <View style={StyleSheet.absoluteFill}>
+        <StayDetailScreen
+          item={STAY_DETAIL_PREVIEW_ITEM}
+          saved={true}
+          onToggleSave={noop}
+          onPressBook={noop}
+          onPressAddToTrip={noop}
+          onPressBack={noop}
+        />
+        <OtaChoiceSheet
+          item={STAY_DETAIL_PREVIEW_ITEM}
+          variant="error"
+          dontShowAgain={false}
+          onToggleDontShowAgain={noop}
+          onCancel={noop}
+          onConfirm={noop}
+          onRetry={noop}
         />
       </View>
     ),

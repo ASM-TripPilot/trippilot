@@ -200,6 +200,8 @@ const EXPECTED_L = [
   'dev-preview-state-l06-location-consent-default', // l06
   'dev-preview-state-l06-location-consent-denied', // l06
   'dev-preview-state-l06-location-revoke-dialog', // l06
+  'dev-preview-state-l07-affiliate-default', // l07 (TRIP-781)
+  'dev-preview-state-l07-affiliate-error', // l07 (TRIP-781)
 ];
 
 // 접두 파싱은 구현과 같은 규약(라벨의 ' · ' 앞 토큰). 비교자는 재구현하지 않는다.

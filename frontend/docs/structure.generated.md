@@ -19,6 +19,7 @@
 - `src/__tests__/design-tokens.test.ts`  →  (export 없음)
 - `src/__tests__/destinationEditSheetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/devPreview.test.tsx`  →  (export 없음)
+- `src/__tests__/devPreviewAffiliateNotice.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewBandNav.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewBandSort.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewDeepLink.test.tsx`  →  (export 없음)
@@ -634,6 +635,7 @@
 - `src/features/settings/ui/TripStatusSegment.tsx`  →  TripStatusSegmentProps · TripStatusSegment
 
 ## src/features/stay/config/
+- `src/features/stay/config/affiliateNotice.ts`  →  AFFILIATE_NOTICE_DISMISSED_KEY · otaConfirmLabel
 - `src/features/stay/config/amenityIcons.ts`  →  resolveAmenityIcon
 
 ## src/features/stay/model/
@@ -1281,6 +1283,7 @@
 - `src/shared/push/register.ts`  →  toServerOsPermission · isDeviceNotRegistered · unregisterDeviceToken · registerPushToken
 
 ## src/shared/storage/
+- `src/shared/storage/flag.ts`  →  readFlag · writeFlag
 - `src/shared/storage/idSet.ts`  →  readIdSet · writeIdSet
 - `src/shared/storage/index.ts`  →  TokenBundle · saveTokens · getTokens · clearTokens · hasStoredToken
 
@@ -1339,4 +1342,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 907개 파일
+합계 910개 파일

@@ -336,7 +336,10 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     // ⚠️ TRIP-942: h01 '다른 여행 생성 중' 프리뷰 1키(`h01-method-active-generation`, band `h`) 추가로
     //    161→162. 정확히 그 키인지·차단 안내를 그리는지는 아래 'TRIP-942' describe 가 못박고,
     //    devPreviewBandSort 는 EXPECTED_H 에 h01-method 바로 뒤로 삽입.
-    expect(PREVIEW_STATES).toHaveLength(162);
+    // ⚠️ TRIP-781: l07 제휴 고지 2키(`l07-affiliate-default`·`-error`, band `l`) 추가로 162→164.
+    //    test-designer 선반영(카운트 가드만) — 두 키의 합성은 `devPreviewAffiliateNotice.test.tsx`,
+    //    정렬은 devPreviewBandSort EXPECTED_L 꼬리(l06 뒤)가 못박는다.
+    expect(PREVIEW_STATES).toHaveLength(164);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
