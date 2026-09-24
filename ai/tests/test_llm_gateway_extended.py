@@ -16,13 +16,17 @@ from hypothesis import given
 
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.context import ContextResolver
-from trippilot.llm_gateway.gates.explanation import ExplanationGate
+from trippilot.llm_gateway.gates.explanation import (
+    HASHTAG_COUNT,
+    HASHTAG_MAX_LEN,
+    ExplanationGate,
+)
 from trippilot.llm_gateway.gates.place_extraction import PlaceExtractionGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.llm_gateway.workers.explanation import ExplanationWorker
 from trippilot.llm_gateway.workers.place_extraction import PlaceExtractionWorker
-from trippilot.domain.common import BudgetLevel, TraceId
+from trippilot.domain.common import BudgetLevel, PoiId, TraceId
 from trippilot.domain.context import Principal, ResourceRef
 from trippilot.domain.llm import (
     CandidatePool,
@@ -68,8 +72,8 @@ def test_explanation_gate_drops_out_of_pool(pool: CandidatePool) -> None:
     pid = str(sorted(pool.poi_ids, key=str)[0])
     raw = json.dumps(
         {"explanations": [
-            {"poiId": pid, "text": "취향에 맞는 곳입니다. 분위기가 좋아요."},
-            {"poiId": "유령장소", "text": "환각 설명"},
+            {"poiId": pid, "tags": ["#취향저격", "#분위기좋은"]},
+            {"poiId": "유령장소", "tags": ["#환각"]},
         ]}
     )
     out = ExplanationGate().apply(raw, pool, feature=_FEAT_EXP, trace_id=_TID, now=_NOW)
@@ -83,8 +87,59 @@ def test_explanation_gate_schema_and_pool_guard() -> None:
     assert g.apply("깨짐", None, feature=_FEAT_EXP, trace_id=_TID, now=_NOW).error.startswith("gate_error:")
     pool = _tiny_pool()
     assert g.apply("깨짐", pool, feature=_FEAT_EXP, trace_id=_TID, now=_NOW).error.startswith("parse_error:")
-    bad = json.dumps({"explanations": [{"poiId": "p1", "text": "  "}]})
-    assert g.apply(bad, pool, feature=_FEAT_EXP, trace_id=_TID, now=_NOW).error is not None
+    # 형태 위반은 엄격하게 — tags 가 배열이 아니거나, v0.1.0 문장 스키마(text)로 답하면 parse_error
+    for bad_item in ({"poiId": "p1", "tags": "#문자열아님"}, {"poiId": "p1", "text": "문장으로 답함"}):
+        bad = json.dumps({"explanations": [bad_item]})
+        assert g.apply(bad, pool, feature=_FEAT_EXP, trace_id=_TID, now=_NOW).error.startswith("parse_error:")
+
+
+# ── ExplanationGate: 해시태그 경로 (v0.2.0) ─────────────────────
+
+
+def _apply_tags(tags: list[str], feature: LlmFeature = _FEAT_EXP):
+    raw = json.dumps({"explanations": [{"poiId": "p1", "tags": tags}]})
+    return ExplanationGate().apply(raw, _tiny_pool(), feature=feature, trace_id=_TID, now=_NOW)
+
+
+def test_explanation_gate_joins_hashtags_and_caps_at_fixed_count() -> None:
+    tags = [f"#태그{i}" for i in range(HASHTAG_COUNT + 3)]
+    out = _apply_tags(tags)
+    assert out.error is None and out.drop_event is None
+    assert out.value[0].text == " ".join(tags[:HASHTAG_COUNT])  # 앞에서 자르고 순서 보존
+
+
+def test_explanation_gate_filters_bad_tags_individually() -> None:
+    """형식·시간 표현·연락처 꼴은 **그 태그만** 빠지고, 중복은 첫 등장, 부족분은 그대로."""
+    out = _apply_tags(["#뷰맛집", "공백 있음", "#30분코스", "#book.kr", "#혼자여행", "#뷰맛집", "#" + "가" * (HASHTAG_MAX_LEN + 1)])
+    assert out.error is None
+    assert out.value[0].text == "#뷰맛집 #혼자여행"
+
+
+def test_explanation_gate_all_tags_invalid_keeps_slot_with_blank_text() -> None:
+    """슬롯은 살리고 문장만 비운다 — 문장 경로의 contact-like 처리와 같은 자리."""
+    out = _apply_tags(["문장입니다", "#오후3시"])
+    assert out.error is None
+    assert out.value[0].poi_id == PoiId("p1") and out.value[0].text == ""
+
+
+def test_explanation_gate_sentence_path_stays_for_alternatives() -> None:
+    """ALTERNATIVE_EXPLANATION(TRIP-887)은 같은 게이트를 쓰지만 문장 그대로 — feature 로 갈린다."""
+    alt = LlmFeature.ALTERNATIVE_EXPLANATION
+    raw = json.dumps({"explanations": [{"poiId": "p1", "text": "조용한 곳이라 잘 맞아요."}]})
+    out = ExplanationGate().apply(raw, _tiny_pool(), feature=alt, trace_id=_TID, now=_NOW)
+    assert out.error is None and out.value[0].text == "조용한 곳이라 잘 맞아요."
+    assert _apply_tags(["#태그"], feature=alt).error.startswith("parse_error:")
+
+
+def test_explanation_prompt_states_the_gate_limits() -> None:
+    """게이트가 검사하는 규칙은 프롬프트에 전부 있어야 한다(share_card 해시태그 규칙 누락 사고).
+
+    상수를 베끼지 않고 관계로 묶는다 — 게이트 상한을 바꾸면 이 테스트가 프롬프트를 고치라고 말한다.
+    """
+    text = (Path(__file__).resolve().parents[1] / "prompts" / "explanation.yaml").read_text(encoding="utf-8")
+    assert f"해시태그 {HASHTAG_COUNT}개" in text and f"정확히 {HASHTAG_COUNT}개" in text
+    assert f"{HASHTAG_MAX_LEN}자 이내" in text
+    assert '"tags"' in text and '"text"' not in text
 
 
 
@@ -143,11 +198,13 @@ def test_explanation_worker_end_to_end() -> None:
     from trippilot.domain.common import PoiId  # noqa: PLC0415
 
     pool = _tiny_pool()
-    canned = json.dumps({"explanations": [{"poiId": "p1", "text": "자연 취향에 맞아요. 여유로워요."}]})
+    tags = ["#자연", "#여유", "#힐링", "#산책", "#조용한"]
+    canned = json.dumps({"explanations": [{"poiId": "p1", "tags": tags}]})
     worker = ExplanationWorker(_facade(FakeLlm(canned=canned), ExplanationGate()))
     result = worker.explain(pool, (PoiId("p1"),), _PERSONA, _TID, _NOW)
     assert result.is_fallback is False
     assert isinstance(result.value[0], PoiExplanation)
+    assert result.value[0].text == " ".join(tags)  # 와이어는 문자열 하나 — 공백으로 이어 붙인다
 
 
 def test_extraction_worker_end_to_end() -> None:
@@ -163,14 +220,15 @@ def test_extraction_worker_end_to_end() -> None:
 
 def test_registry_loads_registered_features() -> None:
     reg = PromptRegistry(_PROMPTS)
-    for feature, variables in [
-        (LlmFeature.EXPLANATION, {"taste_tags": "x", "companion": "SOLO",
-                                  "activities": "카페", "cuisines": "한식",
-                                  "slots": "1. p"}),
-        (LlmFeature.PLACE_EXTRACTION, {"document": "d", "region": "제주", "category": "카페"}),
+    for feature, version, variables in [
+        # 0.3.0 — 추천 이유가 문장에서 해시태그 5개로 바뀐 판 (2026-09-24; 0.2.0 은 #703 의 활동·음식 선호 변수)
+        (LlmFeature.EXPLANATION, "0.3.0", {"taste_tags": "x", "companion": "SOLO",
+                                           "activities": "카페", "cuisines": "한식",
+                                           "slots": "1. p"}),
+        (LlmFeature.PLACE_EXTRACTION, "0.1.0", {"document": "d", "region": "제주", "category": "카페"}),
     ]:
         prompt, ref = reg.render(feature, variables)
-        assert feature.value == ref.feature
+        assert ref.version == version and feature.value == ref.feature
         assert "JSON" in prompt
 
 

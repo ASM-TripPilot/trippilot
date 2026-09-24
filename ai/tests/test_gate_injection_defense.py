@@ -126,42 +126,46 @@ def test_no_wiki_excerpt_sentence_is_flagged() -> None:
 # ── EXPLANATION — 이 text 는 DB 에 영속된다 ─────────────────────────────
 
 
-def _explain(text: str):
-    raw = '{"explanations": [{"poiId": "p1", "text": %s}]}' % repr(text).replace("'", '"')
+def _explain(*tags: str):
+    """v0.2.0 — 슬롯 추천 이유는 해시태그 배열로 온다(게이트가 공백으로 이어 붙인다)."""
+    raw = json.dumps({"explanations": [{"poiId": "p1", "tags": list(tags)}]})
     return ExplanationGate().apply(
         raw, _Pool("p1"), feature=LlmFeature.EXPLANATION, trace_id=_TID, now=_NOW
     )
 
 
-def test_explanation_keeps_ordinary_text() -> None:
-    out = _explain("경복궁은 조선의 정궁이라 한 번은 볼 만합니다")
+def test_explanation_keeps_ordinary_tags() -> None:
+    out = _explain("#조선정궁", "#역사산책", "#고궁나들이")
     assert out.error is None
-    assert out.value[0].text == "경복궁은 조선의 정궁이라 한 번은 볼 만합니다"
+    assert out.value[0].text == "#조선정궁 #역사산책 #고궁나들이"
 
 
-def test_explanation_blanks_contact_like_text_but_keeps_the_slot() -> None:
-    """슬롯은 살리고 문장만 버린다 — 후보를 통째로 잃으면 일정이 비어 버린다."""
-    out = _explain("예약은 book-now.example.kr 에서 미리 하세요")
+def test_explanation_drops_contact_like_tag_but_keeps_the_slot() -> None:
+    """슬롯은 살리고 태그만 버린다 — 후보를 통째로 잃으면 일정이 비어 버린다."""
+    tag = "#book.kr"
+    assert has_contact_like(tag)  # 공유 판정이 실제로 잡는지 먼저 확인
+    out = _explain(tag)
     assert out.error is None
     assert out.value[0].poi_id == PoiId("p1")  # 슬롯은 남는다
-    assert out.value[0].text == ""  # 문장만 비운다
+    assert out.value[0].text == ""  # 태그만 비운다
 
 
-def test_explanation_blanks_time_expressions_inv3() -> None:
+def test_explanation_drops_time_expression_tags_inv3() -> None:
     """이 text 는 백엔드 `visit_slot.placement_reason` 과 리비전 스냅샷에 **영속된다**.
 
     거르지 않으면 INV-3(소요시간 표시 금지) 위반이 화면과 DB 양쪽에 남는다.
     형제 게이트(alternative_selection)는 이미 같은 처리를 하고 있었다 — 이쪽만 빠져 있었다.
+    해시태그가 되면서 판정은 **태그 단위**다 — 위반 태그만 빠지고 나머지는 남는다.
     """
-    text = "관람에 약 40분이면 충분합니다"
-    assert _TIME_EXPR.search(text)  # 공유 정규식이 실제로 잡는지 먼저 확인
-    out = _explain(text)
-    assert out.value[0].text == ""
+    bad = "#약40분코스"
+    assert _TIME_EXPR.search(bad)  # 공유 정규식이 실제로 잡는지 먼저 확인
+    out = _explain("#고궁산책", bad)
+    assert out.value[0].text == "#고궁산책"
 
 
 def test_explanation_still_enforces_the_closed_set() -> None:
-    """문장 검사를 더해도 INV-1 은 그대로다 — 풀 밖 POI 는 여전히 드롭된다."""
-    raw = '{"explanations": [{"poiId": "not-in-pool", "text": "좋은 곳입니다"}]}'
+    """태그 검사를 더해도 INV-1 은 그대로다 — 풀 밖 POI 는 여전히 드롭된다."""
+    raw = json.dumps({"explanations": [{"poiId": "not-in-pool", "tags": ["#좋은곳"]}]})
     out = ExplanationGate().apply(
         raw, _Pool("p1"), feature=LlmFeature.EXPLANATION, trace_id=_TID, now=_NOW
     )
