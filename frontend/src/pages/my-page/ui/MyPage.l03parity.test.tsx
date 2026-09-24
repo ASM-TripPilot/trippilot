@@ -13,6 +13,7 @@ import { useGetMe } from '@/shared/api/generated/account/account';
 import { useGetMeProfile } from '@/shared/api/generated/profile/profile';
 import { useGetMeStyle } from '@/shared/api/generated/reflection/reflection';
 import {
+  useGetMeRecords,
   useGetTrips,
   useGetTripsTripIdBases,
   useGetTripsTripIdItinerary,
@@ -55,6 +56,8 @@ jest.mock('@/shared/api/generated/trips/trips', () => ({
   useGetTrips: jest.fn(),
   useGetTripsTripIdBases: jest.fn(),
   useGetTripsTripIdItinerary: jest.fn(),
+  // TRIP-776 — 페이지가 지난 여행 "사진 N" 을 위해 부르는 목록 조회(이 파일은 사진 수를 단언하지 않는다).
+  useGetMeRecords: jest.fn(),
 }));
 
 const mockUseMe = useGetMe as jest.MockedFunction<typeof useGetMe>;
@@ -68,6 +71,9 @@ const mockUseBases = useGetTripsTripIdBases as jest.MockedFunction<
 >;
 const mockUseItinerary = useGetTripsTripIdItinerary as jest.MockedFunction<
   typeof useGetTripsTripIdItinerary
+>;
+const mockUseRecords = useGetMeRecords as jest.MockedFunction<
+  typeof useGetMeRecords
 >;
 
 function asQuery<T>(data: T) {
@@ -143,6 +149,9 @@ beforeEach(() => {
     asQuery({ days: [{ date: '2026-06-10', slots: [] }] }) as ReturnType<
       typeof useGetTripsTripIdItinerary
     >
+  );
+  mockUseRecords.mockReturnValue(
+    asQuery(undefined) as ReturnType<typeof useGetMeRecords>
   );
 });
 
@@ -222,8 +231,9 @@ describe('AC-6 · 지난 여행은 예정 0건일 때만(§F-3 A안)', () => {
     render(<MyPage />);
 
     // 단언: 섹션도, 그 안의 종료 카드도 없다. 짝 앵커 = 예정 카드.
+    // TRIP-776: 지난 여행 카드는 썸네일형(루트 = my-trip-reflection-{id})이라 칩 카드 testID 대신 그것을 본다.
     expect(screen.queryByText('지난 여행')).toBeNull();
-    expect(screen.queryByTestId('my-trip-card-e1')).toBeNull();
+    expect(screen.queryByTestId('my-trip-reflection-e1')).toBeNull();
     expect(screen.getByTestId('my-trip-card-up-1')).toBeOnTheScreen();
   });
 
@@ -232,9 +242,10 @@ describe('AC-6 · 지난 여행은 예정 0건일 때만(§F-3 A안)', () => {
 
     render(<MyPage />);
 
+    // TRIP-776: 섹션 카드는 썸네일형 — 카드 전체가 회고 진입이고 썸네일 자리를 가진다.
     expect(screen.getByText('지난 여행')).toBeOnTheScreen();
-    expect(screen.getByTestId('my-trip-card-e1')).toBeOnTheScreen();
     expect(screen.getByTestId('my-trip-reflection-e1')).toBeOnTheScreen();
+    expect(screen.getByTestId('my-trip-reflection-e1-thumb')).toBeOnTheScreen();
     expect(screen.queryByText('아직 종료된 여행이 없습니다')).toBeNull();
   });
 

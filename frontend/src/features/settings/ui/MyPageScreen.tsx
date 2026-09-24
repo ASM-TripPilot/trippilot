@@ -13,6 +13,7 @@ import {
   ListGlyph,
   MenuBedGlyph,
   MUTED_SOFT,
+  PlusGlyph,
   ShareNodesGlyph,
 } from './SettingsGlyphs';
 import { TripStatusSegment } from './TripStatusSegment';
@@ -31,6 +32,10 @@ import { TripStatusSegment } from './TripStatusSegment';
  * "캘린더 ›"·회고 하트 floating 은 뺐다. TRIP-775(Figma 1602:2388, Seed Q1=A·Q2=a): 목적지가 선
  * 메뉴 2행(등록 숙소 → /my/stays · 스타일 분석 → /records/style)과 헤더 톱니(→ /settings)를 되살렸다.
  * 커뮤니티 3행은 U7 전이라 여전히 숨김. 헤더는 스크롤 밖 고정 + 하단 가로선(막대 View).
+ *
+ * TRIP-776(Figma 1603:2414, Seed Q1=A): "캘린더 ›"(→ /records)를 되살렸다 — `onPressCalendar` 가 들어올 때만
+ * 그린다(누를 곳 없는 링크 0). 캘린더는 회고 진입이 아니라 종료 0건이어도 섹션과 함께 남는다(BR-U6-23).
+ * 예정 빈 상태는 왼쪽 정렬 한 줄 + 플러스 글리프 CTA.
  */
 
 // `ready` = 목적지가 선 행인가. false 행은 화면에 그리지 않는다(TRIP-939 — 개통 시 true 한 줄로 되살림).
@@ -87,7 +92,7 @@ const SETTINGS_ROWS: {
 const VISIBLE_SETTINGS_ROWS = SETTINGS_ROWS.filter((row) => row.ready);
 
 const EMPTY_TEXT: Record<TripBucket, string> = {
-  upcoming: '예정된 여행이 없어요',
+  upcoming: '예정된 여행이 없어요 · 새 여행을 만들어 보세요',
   active: '진행 중인 여행이 없어요',
   ended: '종료된 여행이 없어요',
 };
@@ -119,6 +124,8 @@ export interface MyPageScreenProps {
   onPressStyleAnalysis?: () => void;
   /** 프로필 태그 — 페이지가 정식 분석 descriptors 만 내린다(Seed Q4=A). */
   tags?: string[];
+  /** 지난 여행 "캘린더 ›" 진입(페이지가 /records 로 주입). 미주입이면 링크를 그리지 않는다. */
+  onPressCalendar?: () => void;
 }
 
 /**
@@ -173,6 +180,7 @@ export function MyPageScreen({
   onPressStays,
   onPressStyleAnalysis,
   tags,
+  onPressCalendar,
 }: MyPageScreenProps): ReactElement {
   const menuHandlers: Partial<Record<MenuRowKey, () => void>> = {
     bases: onPressStays,
@@ -217,7 +225,7 @@ export function MyPageScreen({
 
           {/* 활성 버킷 목록 또는 빈 상태 */}
           {activeEmpty ? (
-            <View className="items-center gap-md py-lg">
+            <View className="gap-md">
               <Text className="font-noto text-label text-muted">
                 {EMPTY_TEXT[active]}
               </Text>
@@ -226,10 +234,11 @@ export function MyPageScreen({
                   testID="my-create-trip"
                   accessibilityRole="button"
                   onPress={onPressCreateTrip}
-                  className="h-12 w-full items-center justify-center rounded-button bg-primary"
+                  className="h-[50px] w-full flex-row items-center justify-center gap-sm rounded-button bg-primary"
                 >
+                  <PlusGlyph testID="my-create-trip-plus" />
                   <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                    + 새 여행 만들기
+                    새 여행 만들기
                   </Text>
                 </Pressable>
               ) : null}
@@ -245,13 +254,25 @@ export function MyPageScreen({
                 <Text className="font-noto-bold text-[16px] font-bold text-ink">
                   지난 여행
                 </Text>
+                {onPressCalendar ? (
+                  <Pressable
+                    testID="my-past-calendar"
+                    accessibilityRole="button"
+                    onPress={onPressCalendar}
+                    hitSlop={10}
+                  >
+                    <Text className="font-noto text-label text-primary">
+                      캘린더 ›
+                    </Text>
+                  </Pressable>
+                ) : null}
               </View>
               {pastEmpty ? (
                 <Text className="py-md font-noto text-label text-muted">
                   아직 종료된 여행이 없습니다
                 </Text>
               ) : (
-                <View className="gap-md">{pastCards}</View>
+                <View className="gap-[10px]">{pastCards}</View>
               )}
             </View>
           ) : null}

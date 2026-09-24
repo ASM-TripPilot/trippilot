@@ -85,6 +85,9 @@ import { MapFallbackBar } from '@/widgets/map-sheet-shell/ui/MapFallbackBar';
 import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
 import { SheetHeader } from '@/widgets/map-sheet-shell/ui/SheetHeader';
 import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
+import { PastTripRow } from '@/entities/trip/ui/PastTripRow';
+import { ChevronRightGlyph as TripChevronRightGlyph } from '@/entities/trip/ui/TripGlyphs';
+import type { PastTripCardVM } from '@/entities/trip/model';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { buildStatePins } from '@/entities/itinerary-slot/lib/slotMapPin';
 import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
@@ -1167,6 +1170,46 @@ const MY_PAGE_UPCOMING_VMS: TripCardVM[] = [
     dBadgeTone: 'ink',
     isEnded: false,
   },
+];
+
+// l03 마이페이지 empty(Figma 1603:2414, TRIP-776) — 지난 여행 썸네일 카드 3장(종료일 최근순). 사진은 Figma 목업
+// 사진 로컬 사본(`assets/my-page/CREDITS.md`, G7) — jest 는 .uri 가 undefined 라 회색 자리, 실기만 사진.
+const myPagePastVM = (
+  tripId: string,
+  title: string,
+  dateRangeLabel: string,
+  photoLabel: string,
+  source: number
+): PastTripCardVM => ({
+  tripId,
+  title,
+  dateRangeLabel,
+  nightsLabel: null,
+  photoLabel,
+  imageUrl: Image.resolveAssetSource?.(source)?.uri ?? null,
+});
+const MY_PAGE_PAST_VMS: PastTripCardVM[] = [
+  myPagePastVM(
+    'e-jeju',
+    '제주 여행',
+    '2026.5.1–5.3',
+    '사진 24',
+    require('@/assets/my-page/past-jeju.jpg')
+  ),
+  myPagePastVM(
+    'e-gangneung',
+    '강릉 여행',
+    '2026.4.18–4.20',
+    '사진 16',
+    require('@/assets/my-page/past-gangneung.jpg')
+  ),
+  myPagePastVM(
+    'e-busan',
+    '부산 여행',
+    '2025.10.3–10.5',
+    '사진 30',
+    require('@/assets/my-page/past-busan.jpg')
+  ),
 ];
 
 // l04 등록 숙소 3행 — 등록됨(연결 여행)·미등록·좌표 미확정(토글 disabled). 화면이 순수 프레젠테이션이라
@@ -4478,29 +4521,46 @@ export const PREVIEW_STATES: PreviewState[] = [
         'my'
       ),
   },
-  // l03 마이페이지 · 종료 0건 엣지(AC-5) — 예정 빈 상태(새 여행 CTA) + "아직 종료된 여행이 없습니다"
-  // (회고 진입 어포던스 0). Figma empty(1603:2414)의 CTA·지난 여행 영역을 대조하되, 사진 썸네일은
-  // 계약에 필드가 없어 그리지 않는다(드리프트 ① 해소).
+  // l03 마이페이지 empty(TRIP-776) — Figma 1603:2414 와 같은 데이터: 카운트 0/0/3 · 프로필 태그(스타일 카드
+  // 없음 — Figma 내부 모순 그대로) · 예정 빈 문구 + 플러스 CTA · 지난 여행 썸네일 카드 3장 + "캘린더 ›" ·
+  // 메뉴 3행 · 탭바(마이). 종료 0건 엣지("아직 종료된 여행이 없습니다")는 jest(MyPageScreen.l03empty)가 잰다.
   {
     key: 'my-page-empty',
     band: 'l',
-    label: 'l03 · 예정 0·종료 0',
+    label: 'l03 · 예정 0·종료 3',
     login: null,
-    render: () => (
-      <MyPageScreen
-        nickname="여행자123"
-        email="trippilot@email.com"
-        counts={{ upcoming: 0, active: 0, ended: 0 }}
-        active="upcoming"
-        onChangeSegment={noop}
-        cards={null}
-        activeEmpty
-        onPressCreateTrip={noop}
-        showPast
-        pastCards={null}
-        pastEmpty
-      />
-    ),
+    render: () =>
+      withShellTabBar(
+        <MyPageScreen
+          nickname="여행자123"
+          email="trippilot@email.com"
+          counts={{ upcoming: 0, active: 0, ended: 3 }}
+          tags={STYLE_CARD_OFFICIAL_VM.descriptors}
+          active="upcoming"
+          onChangeSegment={noop}
+          cards={null}
+          activeEmpty
+          onPressCreateTrip={noop}
+          showPast
+          pastCards={MY_PAGE_PAST_VMS.map((vm) => (
+            <PastTripRow
+              key={vm.tripId}
+              compact
+              testID={`my-trip-reflection-${vm.tripId}`}
+              vm={vm}
+              onPress={noop}
+              trailing={<TripChevronRightGlyph size={20} />}
+            />
+          ))}
+          pastEmpty={false}
+          onPressCalendar={noop}
+          onPressEdit={noop}
+          onPressSettings={noop}
+          onPressStays={noop}
+          onPressStyleAnalysis={noop}
+        />,
+        'my'
+      ),
   },
   // l03 스타일 요약 카드 · 미달 얼굴(TRIP-606) — 누적 방문 <10곳이면 게이지·칩 없이 안내 한 줄만
   // (INV-U5-09). 실화면 딥링크로는 백엔드 없이 이 얼굴을 못 보므로 카드를 단독으로 세워 대조한다.

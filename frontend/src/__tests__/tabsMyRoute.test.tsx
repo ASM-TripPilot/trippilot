@@ -9,6 +9,7 @@ import { useGetMe } from '@/shared/api/generated/account/account';
 import { useGetMeProfile } from '@/shared/api/generated/profile/profile';
 import { useGetMeStyle } from '@/shared/api/generated/reflection/reflection';
 import {
+  useGetMeRecords,
   useGetTrips,
   useGetTripsTripIdBases,
   useGetTripsTripIdItinerary,
@@ -51,6 +52,8 @@ jest.mock('@/shared/api/generated/trips/trips', () => ({
   useGetTrips: jest.fn(),
   useGetTripsTripIdBases: jest.fn(),
   useGetTripsTripIdItinerary: jest.fn(),
+  // TRIP-776 — 페이지가 지난 여행 "사진 N" 을 위해 부르는 목록 조회(이 스모크는 사진 수를 단언하지 않는다).
+  useGetMeRecords: jest.fn(),
 }));
 
 const mockUseMe = useGetMe as jest.MockedFunction<typeof useGetMe>;
@@ -64,6 +67,9 @@ const mockUseBases = useGetTripsTripIdBases as jest.MockedFunction<
 >;
 const mockUseItinerary = useGetTripsTripIdItinerary as jest.MockedFunction<
   typeof useGetTripsTripIdItinerary
+>;
+const mockUseRecords = useGetMeRecords as jest.MockedFunction<
+  typeof useGetMeRecords
 >;
 
 function meResult(over: Partial<AccountSummary> = {}) {
@@ -128,6 +134,12 @@ beforeEach(() => {
     isPending: false,
     isError: false,
   } as unknown as ReturnType<typeof useGetTripsTripIdItinerary>);
+  // 사진 수 목록 — 응답 전(사진 글자 없음).
+  mockUseRecords.mockReturnValue({
+    data: undefined,
+    isPending: true,
+    isError: false,
+  } as unknown as ReturnType<typeof useGetMeRecords>);
 });
 
 describe('🔴 AC-8 · 셸 교체 — StateNotice 제거, my-page 슬라이스 렌더', () => {

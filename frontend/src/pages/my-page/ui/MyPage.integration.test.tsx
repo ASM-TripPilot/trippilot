@@ -5,7 +5,10 @@ import type { StyleAnalysisEnvelope } from '@/shared/api/generated/schemas';
 import { useGetMe } from '@/shared/api/generated/account/account';
 import { useGetMeProfile } from '@/shared/api/generated/profile/profile';
 import { useGetMeStyle } from '@/shared/api/generated/reflection/reflection';
-import { useGetTrips } from '@/shared/api/generated/trips/trips';
+import {
+  useGetMeRecords,
+  useGetTrips,
+} from '@/shared/api/generated/trips/trips';
 
 import { HeartGlyph } from '@/features/settings/ui/SettingsGlyphs';
 
@@ -47,6 +50,8 @@ jest.mock('@/shared/api/generated/profile/profile', () => ({
 jest.mock('@/shared/api/generated/trips/trips', () => ({
   ...jest.requireActual('@/shared/api/generated/trips/trips'),
   useGetTrips: jest.fn(),
+  // TRIP-776 — 지난 여행 "사진 N" 목록 조회도 목으로 막는다(실 훅이면 MSW 없는 네트워크 요청이 샌다).
+  useGetMeRecords: jest.fn(),
 }));
 jest.mock('@/shared/api/generated/reflection/reflection', () => ({
   ...jest.requireActual('@/shared/api/generated/reflection/reflection'),
@@ -58,6 +63,9 @@ const mockUseProfile = useGetMeProfile as jest.MockedFunction<
   typeof useGetMeProfile
 >;
 const mockUseTrips = useGetTrips as jest.MockedFunction<typeof useGetTrips>;
+const mockUseRecords = useGetMeRecords as jest.MockedFunction<
+  typeof useGetMeRecords
+>;
 const mockUseStyle = useGetMeStyle as jest.MockedFunction<typeof useGetMeStyle>;
 
 /** 정식 분석 envelope — 배선이 실제로 이 값을 카드까지 흘려보내는지 본다. */
@@ -99,6 +107,9 @@ beforeEach(() => {
   mockUseProfile.mockReturnValue(asQuery({ nickname: '테스터' }));
   mockUseTrips.mockReturnValue(asQuery([])); // 여행 0건 → 카드 목록 비어 배치 확인에 집중
   mockUseStyle.mockReturnValue(asQuery(officialEnvelope()));
+  mockUseRecords.mockReturnValue(
+    asQuery(undefined) as unknown as ReturnType<typeof useGetMeRecords>
+  );
 });
 
 describe('🔴 AC-I1 · 조회→모델→배치', () => {
@@ -199,14 +210,21 @@ describe('🔴 TRIP-939 B-1·B-3·B-4 · 마이 탭에 눌러도 반응 없는 �
     expect(mockPush).toHaveBeenCalledWith('/settings');
   });
 
-  it('B-4: "캘린더 ›" 링크 글자와 회고 하트 floating 이 없다(지난 여행 섹션은 그대로)', () => {
-    // 준비·실행: 기본 탭(예정)이라 '지난 여행' 섹션이 상시 노출된다.
+  it('B-4(TRIP-776 Q1=A): 지난 여행의 "캘린더 ›"를 누르면 router.push("/records") 정확히 1회 — 회고 하트 floating 은 여전히 없다', () => {
+    // 준비·실행: 여행 0건 → 예정 0이라 '지난 여행' 섹션이 보인다(종료 0건이어도 캘린더 링크는 남는다).
     renderPage();
 
-    // 짝 앵커: 지난 여행 섹션이 실제로 그려졌다(캘린더 부재가 섹션 부재 때문이 아님).
+    // 짝 앵커: 지난 여행 섹션이 실제로 그려졌다.
     expect(screen.getByText('지난 여행')).toBeOnTheScreen();
-    // 단언(부재): 링크처럼 보이는 "캘린더 ›"·장식 하트 버튼.
-    expect(screen.queryByText(/캘린더/)).toBeNull();
+
+    // 단언(존재 + 배선): 목적지(/records, j07 캘린더)가 선 링크 — 반응 없는 링크가 아니다(TRIP-939 원칙 유지).
+    const calendar = screen.getByTestId('my-past-calendar');
+    expect(calendar).toHaveTextContent(/캘린더/);
+    fireEvent.press(calendar);
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith('/records');
+
+    // 단언(부재): 장식 하트 버튼은 여전히 없다.
     expect(screen.UNSAFE_queryAllByType(HeartGlyph)).toHaveLength(0);
   });
 });

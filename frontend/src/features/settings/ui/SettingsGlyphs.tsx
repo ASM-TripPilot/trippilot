@@ -16,6 +16,7 @@ const HAIRLINE_STRONG = '#DDDDDD';
 // l03 메뉴·헤더 아이콘(Figma 1602:2388 — #3F3F3F stroke 2, 메뉴 chevron #9AA1AB). 토큰 body·muted-soft 와 같은 값.
 const BODY = '#3F3F3F';
 export const MUTED_SOFT = '#9AA1AB';
+const ON_PRIMARY = '#FFFFFF';
 
 type GlyphProps = {
   size?: number;
@@ -823,6 +824,26 @@ export function LogoutGlyph({ size = 22, testID }: GlyphProps) {
         strokeWidth={1.7}
         strokeLinecap="round"
         strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/** 새 여행 CTA 플러스(Figma 1603:2414 — 20×20, 흰 두 선 stroke 2.6). */
+export function PlusGlyph({ size = 20, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 20 20"
+      fill="none"
+    >
+      <Path
+        d="M10 4V16M4 10H16"
+        stroke={ON_PRIMARY}
+        strokeWidth={2.6}
+        strokeLinecap="round"
       />
     </Svg>
   );

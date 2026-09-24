@@ -1,12 +1,18 @@
 import type { ReactElement } from 'react';
 import { useState } from 'react';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 
 import type { Trip } from '@/shared/api/generated/schemas';
 import { useGetMe } from '@/shared/api/generated/account/account';
 import { useGetMeProfile } from '@/shared/api/generated/profile/profile';
 import { useGetMeStyle } from '@/shared/api/generated/reflection/reflection';
-import { useGetTrips } from '@/shared/api/generated/trips/trips';
+import {
+  useGetMeRecords,
+  useGetTrips,
+} from '@/shared/api/generated/trips/trips';
+import { formatTripDateRange } from '@/entities/trip/lib/formatTripPeriod';
+import { ChevronRightGlyph } from '@/entities/trip/ui/TripGlyphs';
+import { PastTripRow } from '@/entities/trip/ui/PastTripRow';
 import { buildStyleCardModel } from '@/features/settings/model/styleCardModel';
 import {
   bucketTrips,
@@ -31,6 +37,11 @@ import { TripCardContainer } from './TripCardContainer';
  * 없어 주입하지 않는다(계약 공백).
  *
  * 정렬(Seed Q4, 순수 함수 밖): 예정·진행 중 startDate 오름차순(임박순) · 종료 endDate 내림차순(최근순).
+ *
+ * TRIP-776(Figma 1603:2414): "지난 여행" 카드는 썸네일형 `PastTripRow`(compact)다 — 카드마다 bases·itinerary 를
+ * 조회하는 `TripCardContainer` 를 태우지 않는다(두 값이 이 카드에 없다). "사진 N" 은 `GET /me/records` 한 번을
+ * **tripId 로** 조인한다(Seed Q2=A). 응답 전·실패·목록에 없음·0장이면 라벨을 안 만든다(가짜 숫자 금지, INV-4).
+ * '종료' 탭 목록은 기존 칩 카드 그대로(Seed Q3=A). "캘린더 ›"는 `/records`(j07 캘린더, US-REC-14).
  */
 
 /** 예정·진행 중 — 시작일 오름차순(임박한 것부터). */
@@ -65,11 +76,22 @@ export function MyPage(): ReactElement {
   const sortedEnded = [...buckets.ended].sort(byEndDesc);
 
   const showPast = active !== 'ended' && buckets.upcoming.length === 0;
+  // 목은 select 를 안 돌리므로 가공 전 응답(items)을 직접 읽는다.
+  // 사진 수를 쓰는 곳은 지난 여행 섹션뿐 — 섹션이 숨으면 조회하지 않는다.
+  const records = useGetMeRecords(undefined, { query: { enabled: showPast } });
   // 정식/미달 판정은 모델 한 곳(buildStyleCardModel)이 진다 — 태그도 그 결과를 따른다.
   const styleVM = style.data ? buildStyleCardModel(style.data) : undefined;
   const tags = styleVM?.kind === 'official' ? styleVM.descriptors : undefined;
 
   const onPressCreateTrip = (): void => router.push('/trips/new/step1');
+
+  const photoCountByTrip = new Map(
+    (records.data?.items ?? []).map((item) => [item.tripId, item.photoCount])
+  );
+  const photoLabelOf = (tripId: string): string | null => {
+    const count = photoCountByTrip.get(tripId);
+    return count !== undefined && count > 0 ? `사진 ${count}` : null;
+  };
 
   return (
     <MyPageScreen
@@ -97,8 +119,22 @@ export function MyPage(): ReactElement {
       onPressStyleAnalysis={() => router.push('/records/style')}
       tags={tags}
       showPast={showPast}
+      onPressCalendar={() => router.push('/records')}
       pastCards={sortedEnded.map((trip) => (
-        <TripCardContainer key={trip.tripId} trip={trip} />
+        <PastTripRow
+          key={trip.tripId}
+          compact
+          testID={`my-trip-reflection-${trip.tripId}`}
+          vm={{
+            tripId: trip.tripId,
+            title: trip.title,
+            dateRangeLabel: formatTripDateRange(trip.startDate, trip.endDate),
+            nightsLabel: null,
+            photoLabel: photoLabelOf(trip.tripId),
+          }}
+          onPress={() => router.push(`/trips/${trip.tripId}/records` as Href)}
+          trailing={<ChevronRightGlyph size={20} />}
+        />
       ))}
       pastEmpty={sortedEnded.length === 0}
     />

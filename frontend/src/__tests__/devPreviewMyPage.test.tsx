@@ -16,6 +16,8 @@ import { HeartGlyph } from '@/features/settings/ui/SettingsGlyphs';
  * 키 이름·개수 불변은 `devPreviewBandNav`·`devPreviewBandSort`(무수정)가 지킨다.
  * 픽셀(카드 모서리·그림자·폰트)은 jest 가 못 본다 — [검증] 스크린샷 대조 몫.
  *
+ * TRIP-776 · AC-8 — `my-page-empty` 프리뷰가 Figma l03 empty(1603:2414)의 데이터와 같다(아래 두 번째 describe).
+ *
  * 3동작: 준비(딥링크 state=키) → 실행(DevPreview 렌더) → 단언.
  */
 
@@ -37,6 +39,10 @@ jest.mock('@/shared/api', () => {
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const DevPreview = require('@/app/_dev/preview').default as ComponentType;
+const PREVIEW_STATES = require('@/app/_dev/preview').PREVIEW_STATES as {
+  key: string;
+  label: string;
+}[];
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 const CARD_ROOT = /^my-trip-card-/;
@@ -121,5 +127,98 @@ describe('TRIP-775 · my-page-default 프리뷰 (AC-10)', () => {
     expect(screen.UNSAFE_queryAllByType(HeartGlyph)).toHaveLength(0);
     // 짝 앵커: 화면은 그려졌다.
     expect(screen.getByTestId('my-page-root')).toBeOnTheScreen();
+  });
+});
+
+/** 지난 여행 카드 루트 — `my-trip-reflection-{id}` 이되 썸네일·사진 하위 testID 는 뺀다. */
+function pastCardRoots(): ReactTestInstance[] {
+  return screen
+    .queryAllByTestId(/^my-trip-reflection-/)
+    .filter((node) => !/-(thumb|photo)$/.test(String(node.props.testID)));
+}
+
+describe('TRIP-776 · my-page-empty 프리뷰 (AC-8)', () => {
+  beforeEach(() => {
+    mockSearchParams.state = 'my-page-empty';
+  });
+
+  it('프로필 카운트는 예정 0 · 진행 중 0 · 종료 3 순서다', () => {
+    render(<DevPreview />);
+
+    const numbers = screen
+      .getByTestId('my-profile-card')
+      .findAll(
+        (node) =>
+          (node.type as string) === 'Text' &&
+          /^\d+$/.test(String(node.props.children))
+      )
+      .map((node) => String(node.props.children));
+
+    expect(numbers).toEqual(['0', '0', '3']);
+  });
+
+  it('프로필 태그는 #바다 · #미식 · #느긋 이고, 스타일 카드는 없다(Figma empty)', () => {
+    render(<DevPreview />);
+
+    const tags = within(screen.getByTestId('my-profile-card'))
+      .getAllByTestId('my-profile-tag')
+      .map((node) => node.findAll((n) => (n.type as string) === 'Text'))
+      .map((texts) => texts.map((t) => String(t.props.children)).join(''));
+    expect(tags).toEqual(['#바다', '#미식', '#느긋']);
+    expect(screen.queryByTestId('my-style-card')).toBeNull();
+  });
+
+  it('예정 빈 문구 한 조각과 "새 여행 만들기" CTA 가 있고, 위 목록에 칩 카드는 없다', () => {
+    render(<DevPreview />);
+
+    expect(
+      screen.getByText('예정된 여행이 없어요 · 새 여행을 만들어 보세요')
+    ).toBeOnTheScreen();
+    const cta = screen.getByTestId('my-create-trip');
+    expect(within(cta).getByText('새 여행 만들기')).toBeOnTheScreen();
+    expect(screen.queryAllByTestId(CARD_ROOT)).toHaveLength(0);
+  });
+
+  it('지난 여행은 썸네일 카드 3장 — 제주 · 강릉 · 부산 순서, 날짜와 사진 수가 Figma 와 같다', () => {
+    render(<DevPreview />);
+
+    expect(screen.getByText('지난 여행')).toBeOnTheScreen();
+    expect(screen.getByTestId('my-past-calendar')).toBeOnTheScreen();
+
+    const cards = pastCardRoots();
+    expect(cards).toHaveLength(3);
+    const expected = [
+      ['제주 여행', '2026.5.1–5.3', '사진 24'],
+      ['강릉 여행', '2026.4.18–4.20', '사진 16'],
+      ['부산 여행', '2025.10.3–10.5', '사진 30'],
+    ] as const;
+    cards.forEach((card, i) => {
+      const [title, date, photos] = expected[i];
+      expect(within(card).getByText(title)).toBeOnTheScreen();
+      expect(within(card).getByText(date)).toBeOnTheScreen();
+      expect(within(card).getByText(photos)).toBeOnTheScreen();
+      // 썸네일형 카드다(자리 박스가 카드 안에 있다).
+      expect(
+        within(card).getByTestId(`${String(card.props.testID)}-thumb`)
+      ).toBeOnTheScreen();
+    });
+  });
+
+  it('하단 탭바가 합성돼 있고 마이 탭이 활성이다', () => {
+    render(<DevPreview />);
+
+    const tabBar = screen.getByTestId('shell-tabbar-root');
+    expect(
+      within(tabBar).getByTestId('shell-tabbar-icon-my-active')
+    ).toBeOnTheScreen();
+  });
+
+  it('라벨이 종료 3건을 반영한다(옛 "예정 0·종료 0" 이 아니다)', () => {
+    const state = PREVIEW_STATES.find((s) => s.key === 'my-page-empty');
+
+    expect(state).toBeDefined();
+    expect(state?.label).not.toBe('l03 · 예정 0·종료 0');
+    expect(state?.label).toMatch(/^l03 · /);
+    expect(state?.label).toMatch(/종료 3/);
   });
 });
