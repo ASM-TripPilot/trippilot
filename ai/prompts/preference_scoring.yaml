@@ -1,9 +1,12 @@
 # PreferenceScoring 프롬프트 v0.2.0 — 정본: ai-prompt-design.md §2.1
 # v0.2.0 (TRIP-374): reason 제거 — 실측 결과 reason은 게이트에서 파싱 후 폐기되던 필드로,
 #   출력 토큰 대부분을 차지했다. 표시용 설명은 EXPLANATION(§2.2)이 배치분만 생성한다.
+# v0.3.0: 활동·음식 선호 추가 — 7축이 못 담는 축이다(카페·야경은 styles 에 없고
+#   PoiCategory 에는 있다). 후보 줄이 `FOOD·음식점·한식` 으로 나가므로 같은
+#   한국어 어휘로 맞물리게 라벨 그대로 싣는다.
 # semver는 반드시 따옴표 (yaml 암묵 타입 변환 방지). few-shot 예시는 K-2에서 보강.
 feature: PREFERENCE_SCORING
-version: "0.2.0"
+version: "0.3.0"
 template: |
   당신은 여행 일정 추천 시스템의 점수 산정 모듈입니다.
   아래 사용자 취향과 후보 장소 목록을 보고, 각 장소에 0.0~1.0 사이의 선호 점수를 부여하세요.
@@ -17,6 +20,8 @@ template: |
   [사용자 취향]
   - 취향 태그: $taste_tags
   - 동반자: $companion
+  - 활동 선호: $activities
+  - 음식 선호: $cuisines
   - 예산: $budget
 
   [후보 장소 목록] (poiId | 카테고리 | 상호명)

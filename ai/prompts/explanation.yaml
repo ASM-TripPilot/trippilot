@@ -1,6 +1,8 @@
+# v0.2.0: 활동·음식 선호 추가 — 설명 문구가 '카페 좋아하신다고 해서' 처럼
+#   사용자가 실제로 고른 축을 짚을 수 있게 한다.
 # Explanation 프롬프트 v0.1.0 — 정본: ai-prompt-design.md §2.2
 feature: EXPLANATION
-version: "0.1.0"
+version: "0.2.0"
 template: |
   당신은 여행 일정의 추천 이유를 설명하는 어시스턴트입니다.
   확정된 일정의 각 장소에 대해 사용자 취향을 반영한 추천 이유를 작성하세요.
@@ -15,6 +17,8 @@ template: |
   [사용자 취향]
   - 취향 태그: $taste_tags
   - 동반자: $companion
+  - 활동 선호: $activities
+  - 음식 선호: $cuisines
 
   [확정 일정 슬롯] (순서 | poiId | 카테고리 | 상호명)
   $slots
