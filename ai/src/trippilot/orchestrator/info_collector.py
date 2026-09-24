@@ -78,6 +78,36 @@ INFO_REQUIREMENTS: Mapping[Intent, tuple[ProviderKind, ...]] = {
     # v2 §3 "REFLECT | (없음)" — 회고는 백엔드가 방문 이력을 봉투에 실어 보낸다.
     # 빈 튜플을 **명시**한다: 키가 없으면 "아직 안 정한 것"과 구분되지 않는다.
     Intent.GENERATE_REFLECTION: (),
+    # REGENERATE 는 "제외·고정을 얹은 생성"이다 — 같은 ScheduleAgent 이고 요청 타입도
+    # 같다(인자표: exclude → excluded_poi_ids · keep → fixed_blocks). 재료가 다를
+    # 이유가 없어 GENERATE_SCHEDULE 과 같은 행이다.
+    Intent.REGENERATE: (
+        ProviderKind.PLACE,
+        ProviderKind.WEATHER,
+        ProviderKind.PERSONA,
+        ProviderKind.EVENT,
+    ),
+    # SUGGEST_ALTERNATIVE 는 REPLAN 과 같은 행이다 — `wiring.alternatives()` 가
+    # **이미** `collect(Intent.REPLAN, ...)` 를 부르고 같은 PlanBAgent·같은 RAG 다.
+    # 행이 없으면 라우터가 이 라벨로 끄는 순간 예외가 난다.
+    Intent.SUGGEST_ALTERNATIVE: (
+        ProviderKind.WEATHER,
+        ProviderKind.TRANSIT,
+        ProviderKind.PERSONA,
+        ProviderKind.PLACE,
+    ),
+    # 회고 두 종류(DAILY·TRIP_SUMMARY)는 같은 ReflectAgent 이고, 방문·행사·페르소나를
+    # 백엔드가 조립해 봉투에 싣는다(AI stateless). 빈 튜플이 그 사실의 기록이다.
+    Intent.TRIP_SUMMARY: (),
+    # 아래 둘은 백엔드 DB 조회다 — 라우팅 표 註와 인자표의 BACKEND_PENDING 이 같은 말.
+    Intent.GET_NEXT_SLOT: (),
+    Intent.SHOW_SCHEDULE: (),
+    Intent.GET_WEATHER: (ProviderKind.WEATHER,),
+    # 거리만 쓴다(INV-3 — 소요시간 미표시). `_build_transit_request` 가 params 에서
+    # origin·destination·**mode** 를 필수로 읽으므로, 발화에 수단이 없으면 조립이
+    # 실패해 UNAVAILABLE 로 떨어진다. 그 자체는 정직한 강등이지만 "수단을 안 말한
+    # 거리 질문"이 항상 무응답이 되는 것은 별건으로 볼 자리다(아래 註).
+    Intent.GET_DISTANCE: (ProviderKind.TRANSIT,),
 }
 
 
