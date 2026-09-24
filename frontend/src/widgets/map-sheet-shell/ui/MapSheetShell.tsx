@@ -58,6 +58,9 @@ export interface MapSheetListSlot<T = unknown> {
   onEndReached?: () => void;
   onEndReachedThreshold?: number;
   ListFooterComponent?: ReactElement | null;
+  /** 빈 목록 안내(TRIP-924) — `data` 가 0건일 때 FlatList 가 그린다. 미전달이면 셸은 아무것도 안
+   *  그린다. 언제 줄지(로딩 중 제외 등)는 소비처 판단이다. */
+  ListEmptyComponent?: ReactElement | null;
   testID?: string;
 }
 
@@ -222,6 +225,7 @@ export function MapSheetShell<T = unknown>({
               </>
             }
             ListFooterComponent={list.ListFooterComponent}
+            ListEmptyComponent={list.ListEmptyComponent}
             onEndReached={list.onEndReached}
             onEndReachedThreshold={list.onEndReachedThreshold}
             testID={list.testID}

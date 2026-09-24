@@ -287,6 +287,85 @@ describe('🔴 M6 · AC-9 · INV-4 — 시간대 미지정 곳은 저장에서 �
   });
 });
 
+describe('🔴 M6-2 · TRIP-923 · INV-4 — 안내의 개수는 실제로 빠진 곳 수다', () => {
+  it('두 날에 걸친 미지정 u1·u2 를 저장하면 PUT 은 [[a],[]] 이고 안내가 "2곳" 문장과 완전 일치한다', async () => {
+    // 1곳(M6)이면 개수를 상수 1 로 박아도 통과한다 — 2곳이 구별되는 최소값.
+    // 두 날에 흩는다 — 한 날에만 두면 "보이는 날만 세기" 회귀(1곳)를 못 잡는다(편집 UN3 과 같은 장치).
+    const twoDays: Itinerary = {
+      ...manualDraft([]),
+      days: [
+        {
+          date: DAY,
+          slots: [
+            slot('u1', null, '09:00:00'),
+            slot('a', '10:00:00', '11:00:00'),
+          ],
+        },
+        { date: '2026-06-11', slots: [slot('u2', null, '12:00:00')] },
+      ],
+    };
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        HttpResponse.json(twoDays)
+      )
+    );
+    putHandler = () => HttpResponse.json(twoDays);
+    renderPage();
+    await ready();
+
+    const body = await save();
+
+    // ids() 는 days[0] 만 본다 — 두 날 모두 확인한다(빈 날도 날짜는 남는다).
+    expect(body.days.map((d) => d.slots.map((s) => s.poiId))).toEqual([
+      ['a'],
+      [],
+    ]);
+    expect(await screen.findByTestId(UNSPECIFIED)).toHaveTextContent(
+      '시간대를 정하지 않은 2곳은 저장에서 빠졌어요'
+    );
+  });
+});
+
+describe('🔴 M6-0 · TRIP-923 · INV-4 — 미지정 0 이면 저장해도 안내가 없다 (짝)', () => {
+  it('전부 지정된 a·b·c 를 저장하면 PUT 은 그대로 나가고 제외 안내는 뜨지 않는다', async () => {
+    renderPage();
+    await ready();
+
+    // 저장을 끝낸 뒤에 부재를 본다 — 저장 전 부재는 아무것도 증명하지 않는다.
+    expect(ids(await save())).toEqual(['a', 'b', 'c']);
+    expect(screen.queryByTestId(UNSPECIFIED)).toBeNull();
+  });
+});
+
+describe('🟢 V3 · TRIP-590 AC1 · 5-b 경고-1 — 저장 응답의 서버 위반이 저장 뒤 화면에 뜬다', () => {
+  it('위반 없는 초안을 저장하고 PUT 응답이 b 에 위반을 달면, 저장 뒤 b 에만 사유 배지가 뜬다', async () => {
+    const REASON = '숙소 고정 충돌';
+    // GET 은 위반 0(PLAIN), PUT 응답만 b 를 위반으로 재판정한다 — 배지의 출처가 PUT 응답뿐이게.
+    putHandler = () =>
+      HttpResponse.json(
+        manualDraft([
+          PLAIN[0],
+          { ...PLAIN[1], hasViolation: true, violationReason: REASON },
+          PLAIN[2],
+        ])
+      );
+    renderPage();
+    await ready();
+    expect(screen.queryAllByTestId(/^slot-stopcard-violation-/)).toHaveLength(
+      0
+    );
+
+    await save();
+
+    expect(
+      await screen.findByTestId(`slot-stopcard-violation-${k('b')}`)
+    ).toHaveTextContent(REASON);
+    expect(screen.queryAllByTestId(/^slot-stopcard-violation-/)).toHaveLength(
+      1
+    );
+  });
+});
+
 describe('🔴 M7 · AC-9 — 장소 추가·카드 사이 +·뒤로가 라우터로 이어진다', () => {
   it('장소 추가는 h13 말미, 카드 사이 + 는 선행 index, 뒤로는 back 을 부른다', async () => {
     renderPage();
