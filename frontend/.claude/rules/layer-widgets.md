@@ -56,7 +56,7 @@ BottomTab 위에 뜨는 "여행 일정이 완성됐어요" 흰 카드. Figma 원
 
 | 파일 | 역할 |
 |---|---|
-| `src/widgets/generation-done-bar/ui/GenerationDoneBar.tsx` | `GenerationDoneBarProps = {tripName: string, onPressView: () => void}` — 체크 글리프(`generation-done-bar-check`) + `{tripName} 일정이 완성됐어요`(`generation-done-bar-text`, 완전일치) + `보기` Pressable(`generation-done-bar-view`, press→`onPressView` 1회). border만(#ededed)·**그림자 없음**(Figma 실측 — 티켓 "그림자"는 어긋남, Figma 우선). presentation-only(useState 0, `widgetsStructure` F 규약 그대로 통과). **표시 조건(어떤 여행이 "갓 완성"인가 = last-seen 영속 로직)은 이번 범위 밖** — prop-driven+프리뷰 픽스처(`h05-my-trips-done-bar`)로만 격리, 실배선은 후속 티켓. |
+| `src/widgets/generation-done-bar/ui/GenerationDoneBar.tsx` | `GenerationDoneBarProps = {tripName: string, onPressView: () => void}` — 체크 글리프(`generation-done-bar-check`) + `{tripName} 일정이 완성됐어요`(`generation-done-bar-text`, 완전일치) + `보기` Pressable(`generation-done-bar-view`, press→`onPressView` 1회). border만(#ededed)·**그림자 없음**(Figma 실측 — 티켓 "그림자"는 어긋남, Figma 우선). presentation-only(useState 0, `widgetsStructure` F 규약 그대로 통과). **표시 조건은 TRIP-928로 실배선됨** — 소비처는 `pages/itinerary-list/ui/MyTripsListPage.tsx`(완성인데 미확인 여행 중 최신 1건, last-seen은 `shared/storage/idSet.ts` 영속). 이 위젯 자체는 무수정(prop-driven 그대로) — 판정·타이밍은 전부 페이지 쪽. docstring이 "소비처는 프리뷰뿐"이라고 낡은 채 남아 있음(AC-9 위젯 무수정 원칙상 미수정, 다음에 이 파일을 만질 때 정정). |
 | `src/widgets/generation-done-bar/ui/GenerationDoneBarGlyphs.tsx` | `DoneCheckGlyph`(체크, success `#0E9384`, 원 없음) — widgets→features import 금지라 `ItineraryGlyphs`의 체크를 못 써 로컬 복제(`ManualEditGlyphs.tsx` 선례와 동형 raw-hex 격리 관례). |
 | 배럴 없음 | `preview.tsx`가 deep import로 직접 소비(가장 최근 widget 슬라이스 2개의 선례를 따름 — 소비처가 늘면 배럴 추가는 trivial, ponytail lite 대안·03 §트레이드오프). |
 
