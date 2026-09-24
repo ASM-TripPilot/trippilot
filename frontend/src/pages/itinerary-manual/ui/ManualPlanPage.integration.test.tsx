@@ -1,6 +1,10 @@
-import { render, screen } from '@testing-library/react-native';
+import type { ReactElement, ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render as rtlRender, screen } from '@testing-library/react-native';
 
 import { ManualPlanPage } from './ManualPlanPage';
+import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+import { useItineraryEditStore } from '@/features/itinerary/model/itineraryEditStore';
 import type { Itinerary } from '@/shared/api/generated/schemas';
 
 /**
@@ -21,11 +25,21 @@ import type { Itinerary } from '@/shared/api/generated/schemas';
  *    `{ generationMode:'MANUAL' }` 하나만 담아 쏜다(POST 가드는 재조립 무관, 계약 그대로 얼린다).
  *  - 🔴 **I2 (TRIP-338 AC-2)** `(MANUAL, MINIMAL, isFallback=false)` 일정이 와도 폴백·실패 배너를 안
  *    띄운다(셸 루트 짝 동반, 재조립 후에도 보존).
+ *  - 🔴 **M1 (TRIP-926 AC1)** 빈 일자(핀 0개)면 지도 center = 서울 시청(null-island (0,0) 아님).
+ *  - 🟢 **M2 (TRIP-926 AC2)** 핀이 있으면 center = 첫 핀 좌표(무회귀 짝).
+ *  - 🟢 **V1·V2 (TRIP-590 AC1·AC2)** 서버가 `hasViolation:true` 로 준 슬롯에만 위반 배지가 사유 문구로
+ *    뜬다 — 페이지→스토어→EditorView→SlotStopCard 전 구간 잠금(선제 green, 뮤테이션으로 red 실측).
  *
  * ⚠️ RED 트리거는 `map-sheet-shell-root`(EditorView 조립) — 현재 페이지는 `ManualPlanScreen` 을 물어
  * 이 testID 가 없다. G-a2·G-a3(POST 가드) 는 재조립과 무관해 선제 green 이다.
  *
  * 3동작 뼈대: 준비=목(GET 상태·mutate·router) → 실행=페이지 렌더 → 단언=나간 POST·보이는 표면.
+ *
+ * **TRIP-921**: 페이지가 위젯 편집 뷰를 소비하며 편집 배선(스토어 시드·저장 PUT·시각 시트)을 얻는다.
+ * 이 파일의 단언은 **그대로**이고, 준비만 넓혔다 — 목에 저장 PUT 훅·쿼리키 함수를 더하고(없는 훅을
+ * 부르면 무관한 G-a1~a3 가 먼저 깨진다, 02a ★9), QueryClientProvider 로 감싸고, 편집 스토어를 매
+ * 케이스 비운다. **방문 조회 훅은 일부러 목에 없다** — MANUAL 초안엔 완료 개념이 없다(02a D-11).
+ * 새 편집 배선 자체는 `ManualPlanPage.edit.integration.test.tsx` 가 잰다.
  */
 
 // jest.mock 팩토리는 파일 맨 위로 호이스팅돼 바깥 변수를 못 본다 — 이름이 `mock` 으로 시작하는
@@ -37,6 +51,7 @@ let mockGet: {
 };
 
 const mockMutate = jest.fn();
+const mockPut = jest.fn();
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
 const mockBack = jest.fn();
@@ -48,6 +63,15 @@ jest.mock('@/shared/api/generated/trips/trips', () => ({
     isError: false,
   }),
   useGetTripsTripIdItinerary: () => mockGet,
+  // TRIP-921 — 편집 배선의 저장 PUT(이 파일은 저장을 누르지 않는다, 0회 유지는 단언 대상 아님).
+  usePutTripsTripIdItinerary: () => ({
+    mutate: mockPut,
+    isPending: false,
+    isError: false,
+  }),
+  getGetTripsTripIdItineraryQueryKey: (tripId: string) => [
+    `/trips/${tripId}/itinerary`,
+  ],
 }));
 
 jest.mock('expo-router', () => ({
@@ -63,6 +87,19 @@ jest.mock('expo-router', () => ({
 jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 const TRIP_ID = 't1';
+
+/** TRIP-921 — 편집 배선이 쿼리 클라이언트를 쓸 수 있게 감싼다(단언 무관 준비). */
+function render(ui: ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  function Wrapper({ children }: { children: ReactNode }) {
+    return (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+  }
+  return rtlRender(ui, { wrapper: Wrapper });
+}
 
 /** 정확한 `(MANUAL, MINIMAL, false)` 빈 일정 — 폴백 함정(§8①)의 급소 픽스처. */
 const MANUAL_EMPTY: Itinerary = {
@@ -109,9 +146,12 @@ beforeEach(() => {
   // 기본값 — 각 케이스가 자기 GET 상태를 명시로 덮어쓴다.
   mockGet = { data: undefined, isPending: true, isError: false };
   mockMutate.mockClear();
+  mockPut.mockClear();
   mockPush.mockClear();
   mockReplace.mockClear();
   mockBack.mockClear();
+  // 편집 스토어는 모듈 싱글턴 — 앞 케이스의 시드가 새지 않게 비운다(02a ★10).
+  useItineraryEditStore.getState().reset();
 });
 
 describe('🔴 G-a1 · AC-a1 — 기존 초안이 있으면 덮어쓰기 POST 0건, 슬롯 보존', () => {
@@ -178,5 +218,101 @@ describe('🔴 I2 · TRIP-338 AC-2 — (MANUAL, MINIMAL, false) 에 폴백·실�
       'itinerary-manual-fallback-banner',
       'itinerary-draft-fallback-banner',
     ].forEach((id) => expect(screen.queryByTestId(id)).toBeNull());
+  });
+});
+
+describe('TRIP-926 · M — 지도 중심 (핀 0개면 서울 시청, 있으면 첫 핀)', () => {
+  // mapViewMock 이 center 를 map-root 텍스트 "lat,lng" 로 노출한다(toHaveTextContent 는 완전 일치).
+  const SEOUL_CITY_HALL = '37.5665,126.978';
+
+  it('🔴 M1 · 빈 일자(핀 0개) 일정이면 지도 중심이 서울 시청이다 (AC1)', () => {
+    // 준비 — GET 이 정착해 빈 일자 1개짜리 MANUAL 일정을 돌려준다.
+    mockGet = { data: MANUAL_EMPTY, isPending: false, isError: false };
+
+    // 실행 — h19 진입.
+    render(<ManualPlanPage tripId={TRIP_ID} />);
+
+    // 단언 — 기니만(0,0)이 아니라 서울 시청을 비춘다.
+    expect(screen.getByTestId('map-root')).toHaveTextContent(SEOUL_CITY_HALL);
+  });
+
+  it('M2 · 활성 일자에 핀이 있으면 지도 중심은 첫 핀 좌표다 (AC2 · 무회귀 선제 green)', () => {
+    // 준비 — 기존 초안의 슬롯 2개에 좌표를 싣는다(첫 핀 ≠ 둘째 핀 ≠ 서울 시청).
+    const [first] = EXISTING_DRAFT.days[0].slots;
+    mockGet = {
+      data: {
+        ...EXISTING_DRAFT,
+        days: [
+          {
+            date: '2026-06-10',
+            slots: [
+              { ...first, lat: 37.5796, lng: 126.977 },
+              {
+                ...first,
+                poiId: 'p2',
+                nameKo: '창덕궁',
+                lat: 37.5794,
+                lng: 126.991,
+              },
+            ],
+          },
+        ],
+      },
+      isPending: false,
+      isError: false,
+    };
+
+    // 실행 — h19 진입.
+    render(<ManualPlanPage tripId={TRIP_ID} />);
+
+    // 단언 — 초안이 실제로 시드됐고(짝), 지도는 첫 핀(경복궁) 좌표를 비춘다.
+    expect(screen.getByText('경복궁')).toBeOnTheScreen();
+    expect(screen.getByTestId('map-root')).toHaveTextContent('37.5796,126.977');
+  });
+});
+
+describe('TRIP-590 · V — 서버 위반 슬롯에 배지 (h19 직접 짜기, 선제 green)', () => {
+  const DAY = '2026-06-10';
+  const REASON = '숙소 고정 충돌';
+
+  it('🟢 V1·V2 · 위반 슬롯엔 사유 문구 배지가, 위반 없는 슬롯엔 배지가 없다 (AC1·AC2)', () => {
+    // 준비 — GET 이 슬롯 2곳을 돌려준다: p1 은 서버가 위반 판정(사유 동봉), p2 는 위반 없음.
+    const [first] = EXISTING_DRAFT.days[0].slots;
+    mockGet = {
+      data: {
+        ...EXISTING_DRAFT,
+        days: [
+          {
+            date: DAY,
+            slots: [
+              { ...first, hasViolation: true, violationReason: REASON },
+              { ...first, poiId: 'p2', nameKo: '창덕궁' },
+            ],
+          },
+        ],
+      },
+      isPending: false,
+      isError: false,
+    };
+
+    // 실행 — h19 진입.
+    render(<ManualPlanPage tripId={TRIP_ID} />);
+
+    // 단언 ① (AC1) — 위반 슬롯의 배지가 서버 사유 문구 그대로 뜬다(toHaveTextContent 문자열 = 완전 일치).
+    expect(
+      screen.getByTestId(`slot-stopcard-violation-${buildSlotKey(DAY, 'p1')}`)
+    ).toHaveTextContent(REASON);
+
+    // 단언 ② (AC2) — 위반 없는 슬롯은 카드는 있고(짝) 배지는 없다.
+    const cleanKey = buildSlotKey(DAY, 'p2');
+    expect(screen.getByTestId(`slot-stopcard-${cleanKey}`)).toBeOnTheScreen();
+    expect(
+      screen.queryByTestId(`slot-stopcard-violation-${cleanKey}`)
+    ).toBeNull();
+
+    // 단언 ③ — 화면 전체의 위반 배지는 정확히 1개(엉뚱한 카드에 번지지 않는다).
+    expect(screen.queryAllByTestId(/^slot-stopcard-violation-/)).toHaveLength(
+      1
+    );
   });
 });

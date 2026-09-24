@@ -43,6 +43,7 @@ _ENV_VARS = ("TRIPPILOT_WIRING", "TRIPPILOT_LLM_PROVIDER", "OPENAI_API_KEY",
              "TRIPPILOT_VECTOR_DB_URL", "TRIPPILOT_EMBEDDING_PROVIDER",
              "TRIPPILOT_EMBEDDING_MODEL", "EVENTS_STORE",
              "TRIPPILOT_LOCAL_LLM_BASE_URL", "TRIPPILOT_LOCAL_LLM_API_KEY",
+             "TRIPPILOT_BEDROCK_MODEL_ARN", "TRIPPILOT_BEDROCK_REGION",
              "KAKAO_REST_API_KEY", "KAKAO_CLIENT_ID", "EXISTENCE_MAX_CALLS")
 
 
@@ -531,3 +532,34 @@ def test_kakao_key_empty_string_means_unwired(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setenv("KAKAO_REST_API_KEY", "")
     monkeypatch.setenv("KAKAO_CLIENT_ID", "")
     assert main._place_existence() is None
+
+
+def test_bedrock_arn_wins_over_base_url(monkeypatch) -> None:
+    """둘 다 있으면 Bedrock 이 이긴다 — 개발용 localhost 잔재로 실서비스가 나가면 안 된다."""
+    import main
+
+    pytest.importorskip("boto3")  # 의존성이 아니다 — Bedrock 켜는 환경만 설치
+    monkeypatch.setenv("TRIPPILOT_LLM_FEATURE_MODELS", "REMINDER_COPY=local-reminder-v1")
+    monkeypatch.setenv("TRIPPILOT_LOCAL_LLM_BASE_URL", "http://127.0.0.1:8080/v1")
+    monkeypatch.setenv(
+        "TRIPPILOT_BEDROCK_MODEL_ARN",
+        "arn:aws:bedrock:us-east-1:111122223333:imported-model/abc123",
+    )
+    route = main._local_route(main._feature_models_from_env())
+    adapter = route[main._LOCAL_PREFIX]
+    assert type(adapter).__name__ == "BedrockAdapter"
+
+
+def test_bedrock_route_without_base_url(monkeypatch) -> None:
+    """Bedrock 만 설정해도 기동한다 — base_url 은 개발 경로일 뿐 필수가 아니다."""
+    import main
+
+    pytest.importorskip("boto3")  # 의존성이 아니다 — Bedrock 켜는 환경만 설치
+    monkeypatch.setenv("TRIPPILOT_LLM_FEATURE_MODELS", "REMINDER_COPY=local-reminder-v1")
+    monkeypatch.delenv("TRIPPILOT_LOCAL_LLM_BASE_URL", raising=False)
+    monkeypatch.setenv(
+        "TRIPPILOT_BEDROCK_MODEL_ARN",
+        "arn:aws:bedrock:us-east-1:111122223333:imported-model/abc123",
+    )
+    route = main._local_route(main._feature_models_from_env())
+    assert type(route[main._LOCAL_PREFIX]).__name__ == "BedrockAdapter"

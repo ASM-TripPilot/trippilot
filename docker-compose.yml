@@ -97,6 +97,14 @@ services:
       KAKAO_CLIENT_SECRET: ${KAKAO_CLIENT_SECRET:-}
       NAVER_CLIENT_ID: ${NAVER_CLIENT_ID:-}
       NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET:-}
+      # Apple 은 시크릿이 없다 — id_token 서명을 JWKS 로 검증할 뿐이라 iOS 번들 ID 하나뿐이다(TRIP-858).
+      # 이 값이 없으면 애플 로그인은 401 이 아니라 501(미지원)로 나간다.
+      APPLE_CLIENT_ID: ${APPLE_CLIENT_ID:-}
+      # 계정 파기 때 Apple 토큰 revoke(TRIP-933). 비면 revoke 만 건너뛴다 — 로그인은 그대로 된다.
+      APPLE_TEAM_ID: ${APPLE_TEAM_ID:-}
+      APPLE_KEY_ID: ${APPLE_KEY_ID:-}
+      APPLE_PRIVATE_KEY: ${APPLE_PRIVATE_KEY:-}
+      SOCIAL_TOKEN_ENCRYPTION_KEY: ${SOCIAL_TOKEN_ENCRYPTION_KEY:-}
       # 지역 지오코딩 경계(국내강제). 기본 스텁은 시드 8개만 국내로 안다 —
       # 실 지역명으로 여행을 만들려면 kakao 로 켠다(키는 위 KAKAO_CLIENT_ID 를 그대로 쓴다).
       TRIPPILOT_PLACE_GEOCODE_MODE: ${PLACE_GEOCODE_MODE:-stub}
@@ -171,6 +179,10 @@ services:
       # 앱은 TRIPPILOT_* 만 읽는다. 이 통로가 빠지면 .env 에 값을 넣어도 조용히 무시된다.
       TRIPPILOT_LOCAL_LLM_BASE_URL: ${AI_LOCAL_LLM_BASE_URL:-}
       TRIPPILOT_LOCAL_LLM_API_KEY: ${AI_LOCAL_LLM_API_KEY:-}
+      # 학생 모델 실서비스 경로(Bedrock Custom Model Import). 위 BASE_URL 과
+      # 둘 다 있으면 ARN 이 이긴다 — main.py::_local_route.
+      TRIPPILOT_BEDROCK_MODEL_ARN: ${AI_BEDROCK_MODEL_ARN:-}
+      TRIPPILOT_BEDROCK_REGION: ${AI_BEDROCK_REGION:-}
       # LLM 요청당 비용 집계(#486)의 단가표 경로. **이 통로가 없어서** 컨테이너에서
       # 집계가 통째로 꺼져 있었다 — load_prices 가 None 을 돌려주면 llm_cost 로그 자체가
       # 안 나간다. 기능이 죽는 게 아니라 "얼마 썼는지 안 보이는" 형태라 증상이 없다

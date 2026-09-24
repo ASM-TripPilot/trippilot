@@ -13,6 +13,7 @@ import type { NotificationToggleKind } from '@/shared/api/generated/schemas';
  *
  * 푸시 열은 `pushColumnAvailable`(OS 권한) 로 게이트한다 — 거부면 checked=false·real disabled·회색.
  * 인앱 열은 권한과 무관하게 항상 조작 가능하다(DENIED 에서도 켜고 끌 수 있다).
+ * `showPushColumn` 이 false 면 푸시 열을 통째로 그리지 않는다(TRIP-939 — 푸시 수신 미배선 동안 숨김).
  */
 
 interface SwitchProps {
@@ -50,6 +51,8 @@ export interface ToggleRowProps {
   value: { pushEnabled: boolean; inAppEnabled: boolean };
   /** false(OS 권한 거부) 면 푸시 스위치가 real disabled + 회색(thumb 좌측). */
   pushColumnAvailable: boolean;
+  /** 푸시 열을 그릴지(화면의 개통 플래그). false 면 인앱 열만 남는다. */
+  showPushColumn: boolean;
   onToggle: (
     kind: NotificationToggleKind,
     channel: 'push' | 'inapp',
@@ -64,6 +67,7 @@ export function ToggleRow({
   label,
   value,
   pushColumnAvailable,
+  showPushColumn,
   onToggle,
   showDivider,
 }: ToggleRowProps): ReactElement {
@@ -77,14 +81,16 @@ export function ToggleRow({
         {label}
       </Text>
       <View className="flex-row gap-md">
-        <View className="w-[52px] items-center">
-          <Switch
-            testID={`notification-settings-toggle-push-${kind}`}
-            checked={pushColumnAvailable && value.pushEnabled}
-            disabled={!pushColumnAvailable}
-            onPress={() => onToggle(kind, 'push', !value.pushEnabled)}
-          />
-        </View>
+        {showPushColumn ? (
+          <View className="w-[52px] items-center">
+            <Switch
+              testID={`notification-settings-toggle-push-${kind}`}
+              checked={pushColumnAvailable && value.pushEnabled}
+              disabled={!pushColumnAvailable}
+              onPress={() => onToggle(kind, 'push', !value.pushEnabled)}
+            />
+          </View>
+        ) : null}
         <View className="w-[52px] items-center">
           <Switch
             testID={`notification-settings-toggle-inapp-${kind}`}

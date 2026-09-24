@@ -56,11 +56,20 @@ export interface GenerationProgressCell {
 export interface GenerationProgressCardProps {
   cells: GenerationProgressCell[];
   onBack: () => void;
+  /** 제목 문구 — 미전달이면 h07 기본 문구(TRIP-752, i05 는 `AI가 일정을 다시 짜고 있어요`). */
+  title?: string;
+  /** 주면 제목 행 오른쪽에 [취소] 텍스트 버튼을 그린다(TRIP-752 i05). 미전달=버튼 없음(h07). */
+  onCancel?: () => void;
+  /** [취소] 잠금 — 취소 요청 대기 중 연타 방지(TRIP-752). 미전달=활성. */
+  cancelDisabled?: boolean;
 }
 
 export function GenerationProgressCard({
   cells,
   onBack,
+  title = GAUGE_TITLE,
+  onCancel,
+  cancelDisabled,
 }: GenerationProgressCardProps): ReactElement {
   return (
     <View
@@ -82,12 +91,24 @@ export function GenerationProgressCard({
         style={cardShadow}
         className="flex-1 gap-md rounded-card border border-hairline bg-canvas px-lg py-md"
       >
-        {/* 제목 행 — ✦ 스파클 + 안내 문구. 퍼센트(67%)는 계약에 없어 안 그린다. */}
+        {/* 제목 행 — ✦ 스파클 + 안내 문구(+ i05 [취소]). 퍼센트(67%)는 계약에 없어 안 그린다. */}
         <View className="flex-row items-center gap-sm">
           <FullAiGlyph size={18} />
           <Text className="flex-1 font-noto-bold text-label font-bold text-ink">
-            {GAUGE_TITLE}
+            {title}
           </Text>
+          {onCancel !== undefined ? (
+            <Pressable
+              testID="generation-progress-cancel"
+              accessibilityRole="button"
+              onPress={onCancel}
+              disabled={cancelDisabled}
+            >
+              <Text className="font-inter-bold text-section font-bold text-muted">
+                취소
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
 
         {/* 게이지 — 셀마다 트랙(톤) + 라벨. 상태를 testID 로 구분해 심판이 셀별로 잠근다. */}

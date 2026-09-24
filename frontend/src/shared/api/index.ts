@@ -49,6 +49,8 @@ export interface SocialLoginBody {
  * (D7 — 미제공 시 서버가 임의 부여). 필드에 없으면 실수로라도 실릴 수 없다. */
 export interface SocialTokenLoginBody {
   accessToken: string;
+  // 애플만 보낸다(TRIP-933 선택 필드).
+  authorizationCode?: string;
   ageConfirmation?: AgeConfirmation;
 }
 
@@ -176,9 +178,15 @@ export function createAuthedApiClient(
   return client;
 }
 
-const API_BASE_URL = `${
-  process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:8080'
-}/api/v1`;
+// 점 표기로만 읽는다 — 출시 번들은 `process.env.EXPO_PUBLIC_*` 점 표기만 값으로 치환한다.
+// 운영 빌드에서 비어 있으면 localhost 로 조용히 붙지 않고 로드 시점에 실패한다(INV-4, TRIP-936).
+const envApiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
+if (!__DEV__ && !envApiBaseUrl) {
+  throw new Error(
+    'EXPO_PUBLIC_API_BASE_URL 이 비어 있습니다 — 운영 빌드는 API 주소 env 가 필요합니다.'
+  );
+}
+const API_BASE_URL = `${envApiBaseUrl ?? 'http://localhost:8080'}/api/v1`;
 
 /** 무인증 클라이언트 — SEC-04 화이트리스트(소셜 로그인·토큰 갱신·약관 조회)가 여기로 나간다. */
 const baseClient = createAxiosInstance({ baseURL: API_BASE_URL });
@@ -274,20 +282,49 @@ export async function postSocialTokenLogin(
   }
 }
 
+/** 로그아웃마다 1 증가 — 로그아웃 전에 출발한 리프레시 응답이 지운 토큰을 되살리지 못하게 한다. */
+let logoutEpoch = 0;
+
 /** 저장소의 refresh 토큰으로 회전 요청 → 새 쌍을 저장소·홀더에 반영 → 새 access 반환. */
 export async function refreshTokens(): Promise<string> {
+  const epoch = logoutEpoch;
   const stored = await getTokens();
   const response = await baseClient.post<TokenPair>('/auth/token/refresh', {
     refreshToken: stored?.refreshToken,
   });
+  if (epoch !== logoutEpoch) throw new Error('logged out during refresh');
   const { accessToken, refreshToken } = response.data;
   await saveTokens({ accessToken, refreshToken });
   setAccessToken(accessToken);
   return accessToken;
 }
 
+/**
+ * 로그아웃(TRIP-938 · BR-U0-09) — 이 기기 refresh 체인만 서버에 폐기 요청하고 기기·메모리 토큰을 지운다.
+ * 서버 요청은 **기다리지 않고 실패도 삼킨다**: 결과와 무관하게 사용자는 로그아웃돼야 한다. refresh 는
+ * 지우기 **전에** 읽어야 바디에 실린다. 무인증 baseClient 인 이유 — authedClient 면 만료 access 의 401 이
+ * 폐기하려는 refresh 를 회전시킨다. 실서버는 `{ refreshToken }` 필수(openapi 의 "바디 없음"과 드리프트).
+ */
+export async function logout(): Promise<void> {
+  logoutEpoch += 1;
+  const stored = await getTokens();
+  baseClient
+    .post('/auth/logout', { refreshToken: stored?.refreshToken })
+    .catch(() => {});
+  await clearTokens();
+  clearAccessToken();
+}
+
 export async function fetchTerms(): Promise<TermsVersion[]> {
   const response = await baseClient.get<TermsVersion[]>('/terms');
+  return response.data;
+}
+
+/** 단건 약관 현행판(TRIP-937 열람 화면). `/terms` 와 같이 무인증이다(openapi `security: []`). 없는 타입은 404. */
+export async function fetchTermsByType(
+  termsType: string
+): Promise<TermsVersion> {
+  const response = await baseClient.get<TermsVersion>(`/terms/${termsType}`);
   return response.data;
 }
 

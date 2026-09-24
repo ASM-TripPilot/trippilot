@@ -82,7 +82,15 @@ const ROWS: Row[] = [
   {
     file: 'features/itinerary/ui/SlotCandidateCard.tsx',
     must: '@/entities/place',
-    why: 'h08·h10 후보 카드를 entities 로 위임',
+    why: 'copick(h14/h15) SlotFillScreen 위임 카드 — 존치(TRIP-793 은 이 래퍼를 안 건드림)',
+  },
+  {
+    // TRIP-793 재조준 — h08 "다른 후보 시트"가 위임 래퍼(features SlotCandidateCard)를 우회하고
+    // entities 카드를 **직접** 소비한다(planb 시트 선례 · itinerary opt-in: 사진·이름·태그 켜고
+    // rationale·배지·"이동" 끄기). 시트가 아직 없으면 read() 가 throw → red(green 시 git mv 로 생성).
+    file: 'features/itinerary/ui/SlotCandidateSheet.tsx',
+    must: '@/entities/place',
+    why: 'h08 후보 시트가 entities 카드를 직접 소비(위임 래퍼 우회 · planb 시트 동형)',
   },
   {
     file: 'features/planb/ui/SlotCandidateSheet.tsx',

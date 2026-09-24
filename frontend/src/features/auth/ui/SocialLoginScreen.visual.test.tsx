@@ -1,4 +1,5 @@
 import type { ComponentProps } from 'react';
+import { Pressable } from 'react-native';
 import { render, screen, within } from '@testing-library/react-native';
 
 import { SocialLoginScreen } from './SocialLoginScreen';
@@ -124,9 +125,19 @@ const SHEETS: {
   },
 ];
 
+// TRIP-932 Q3 — 애플은 커스텀 아이콘·라벨이 아니라 SDK 공식 버튼이 로고·현지화 제목을 그린다.
+// 그래서 아래 아이콘(AC-VS-5)·라벨(AC-V1) 동결 계약은 커스텀으로 그리는 3종만 순회하고, 애플은
+// "커스텀 글리프·라벨이 없다"로 뒤집어 잠근다(AC-Q3 블록).
+const CUSTOM_PROVIDERS = ['google', 'kakao', 'naver'] as const;
+
+// 컨테이너가 넘겨 주는 공식 버튼의 대역(화면 단위 테스트용).
+function StubAppleButton({ onPress }: { onPress: () => void }) {
+  return <Pressable testID="stub-apple-button" onPress={onPress} />;
+}
+
 // ── 동결 계약: 아이콘 글리프 존재 (AC-VS-5~6) ────────────────────────────────
 describe('c02-social-login 비주얼 구조 가드 (AC-VS-5~6)', () => {
-  it.each(['google', 'apple', 'kakao', 'naver'])(
+  it.each(CUSTOM_PROVIDERS)(
     'AC-VS-5 %s 소셜 버튼 안에 브랜드 아이콘 SVG 가 렌더된다 — 텍스트 전용이 아니다',
     (provider) => {
       renderDefault();
@@ -147,16 +158,15 @@ describe('c02-social-login 비주얼 구조 가드 (AC-VS-5~6)', () => {
 });
 
 // Figma c02-social-login 확정 라벨 — AC-V1(전 버튼 웨이트)과 AC-V2(카카오 문구)가 함께 쓴다.
-const FIGMA_LABELS: Record<'google' | 'apple' | 'kakao' | 'naver', string> = {
+const FIGMA_LABELS: Record<(typeof CUSTOM_PROVIDERS)[number], string> = {
   google: '구글로 계속하기',
-  apple: '애플로 계속하기',
   kakao: '카카오로 계속하기',
   naver: '네이버로 계속하기',
 };
 
 // ── 동결 계약: 라벨/배너 스타일 (AC-V1~V3) ───────────────────────────────────
 describe('AC-V1 · 소셜 버튼 라벨이 Figma Bold 조합을 쓴다 (렌더)', () => {
-  it.each(['google', 'apple', 'kakao', 'naver'] as const)(
+  it.each(CUSTOM_PROVIDERS)(
     '%s 라벨이 font-noto-bold+font-bold 를 갖고, 옛 medium 조합은 없다',
     (provider) => {
       // ▸준비 — 무엇을 보장하나: 라벨이 Figma Bold 조합으로 렌더되고 옛 medium 조합으로
@@ -205,6 +215,22 @@ describe('AC-V2 · 카카오 라벨 문구 — 한글이 뜨고 영문은 화면
 
     // ▸단언 — 모집단 앵커: 렌더 통째 실패가 '전부 null'로 공허하게 통과하는 것을 막는다.
     expect(screen.getByTestId('auth-login-root')).toBeOnTheScreen();
+  });
+});
+
+describe('AC-Q3 · 애플 자리는 공식 버튼만 — 커스텀 사과 아이콘·"애플로 계속하기" 라벨이 없다 (TRIP-932)', () => {
+  it('애플 버튼을 받으면 래퍼 안에는 넘겨받은 버튼만 있고, 커스텀 아이콘·라벨은 화면 어디에도 없다', () => {
+    // ▸준비 + 실행 — iOS 모양.
+    renderDefault({ AppleButton: StubAppleButton });
+
+    // ▸단언 — 짝(존재): 래퍼 안에 넘겨받은 버튼이 있다. 이게 없으면 아래 부재 단언이 공허해진다.
+    const apple = screen.getByTestId('auth-login-apple');
+    expect(within(apple).getByTestId('stub-apple-button')).toBeOnTheScreen();
+
+    // ▸단언 — 부재: HIG 위반 소지가 있던 커스텀 글리프·음차 라벨이 사라졌다.
+    expect(within(apple).queryByTestId('auth-login-apple-icon')).toBeNull();
+    expect(screen.queryByTestId('auth-login-apple-icon')).toBeNull();
+    expect(screen.queryByText('애플로 계속하기')).toBeNull();
   });
 });
 

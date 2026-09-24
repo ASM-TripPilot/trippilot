@@ -22,7 +22,8 @@ import ItineraryTab from '@/app/(tabs)/itinerary';
  *  - 🔴 **AC-3** trips.isPending 이면 스켈레톤 카드 2장(리다이렉트도 empty도 아님).
  *  - 🔴 **AC-5** 배지·상태문을 **카드별 itinerary GET**에서 파생(완성→"추천안이 준비됐어요"(TRIP-788
  *    Figma 정합, 구 "확정 장소 N곳" 슬롯 합계 **대체**) · 작성중→"추천안 준비 중" · 미도착→배지 미정 degrade).
- *  - 🔴 **AC-6** 카드 탭은 **눌린 카드의 tripId** 목적지로 간다(`[0]` 고정 검출) · 오늘이 구간이면 live.
+ *  - 🔴 **AC-6** 카드 탭은 **눌린 카드의 tripId** 목적지로 간다(`[0]` 고정 검출) · 오늘이 구간이면 live ·
+ *    확정(CONFIRMED)이면 날짜와 무관하게 live(2026-09-23 제품 규칙 변경).
  *  - 🔴 **AC-7** 최신순(updatedAt desc) 정렬 + "최신순" 라벨.
  *
  * 왜 이렇게 테스트하나: 라우트는 `pages/itinerary-list`(페이지→컨테이너→화면→카드)를 그리고
@@ -37,10 +38,16 @@ import ItineraryTab from '@/app/(tabs)/itinerary';
  */
 
 const mockPush = jest.fn();
+const mockReplace = jest.fn();
+const mockNavigate = jest.fn();
 jest.mock('expo-router', () => ({
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   ...require('@/test-support/expoRouterRedirectMock'),
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => ({
+    push: mockPush,
+    replace: mockReplace,
+    navigate: mockNavigate,
+  }),
 }));
 
 jest.mock('@/shared/api/generated/trips/trips', () => ({
@@ -148,6 +155,8 @@ function scriptItinerary(map: Record<string, ItineraryHookResult>) {
 
 beforeEach(() => {
   mockPush.mockClear();
+  mockReplace.mockClear();
+  mockNavigate.mockClear();
   mockUseGetTrips.mockReset();
   mockUseItinerary.mockReset();
 });
@@ -229,7 +238,7 @@ describe('🔴 AC-7 · 최신순(updatedAt desc) 정렬 + "최신순" 라벨', (
 });
 
 describe('🔴 AC-6 · 카드 탭은 눌린 카드의 tripId 목적지로 간다 (`[0]` 고정 검출)', () => {
-  // A = 정렬상 첫 카드(최신·CONFIRMED→plan), B = 둘째 카드(옛것·404→method).
+  // A = 정렬상 첫 카드(최신·CONFIRMED→live), B = 둘째 카드(옛것·404→method).
   // 둘째 카드를 눌러 목적지가 trip-b 인지 본다 — [0]/sorted[0] 고정이면 A 로 새 red.
   function renderTwoTrips() {
     mockUseGetTrips.mockReturnValue(
@@ -257,17 +266,45 @@ describe('🔴 AC-6 · 카드 탭은 눌린 카드의 tripId 목적지로 간다
     );
   });
 
-  it('첫 카드(A, CONFIRMED)를 누르면 그 여행의 완성 일정(접미 없음)으로 간다', () => {
+  it('첫 카드(A, CONFIRMED · 여행 기간 지남)를 누르면 그 여행의 여행 중 화면으로 1회 간다', () => {
     renderTwoTrips();
 
     fireEvent.press(screen.getByTestId('my-trip-card-trip-a'));
 
-    expect(String(mockPush.mock.calls[0][0])).toBe('/trips/trip-a/itinerary');
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(String(mockPush.mock.calls[0][0])).toBe('/trips/trip-a/live');
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 AC-3 · 확정(CONFIRMED) 카드는 여행 전이어도 live 로', () => {
+  it('여행 기간 전(2099)인 확정 일정 카드를 누르면 /trips/{id}/live 로 1회 간다', () => {
+    mockUseGetTrips.mockReturnValue(
+      tripsData([
+        trip({
+          tripId: 'trip-future',
+          startDate: '2099-06-10',
+          endDate: '2099-06-13',
+        }),
+      ])
+    );
+    scriptItinerary({
+      'trip-future': itinOk(itin('COMPLETE', 'CONFIRMED')),
+    });
+
+    render(<ItineraryTab />);
+    fireEvent.press(screen.getByTestId('my-trip-card-trip-future'));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(String(mockPush.mock.calls[0][0])).toBe('/trips/trip-future/live');
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 });
 
 describe('🔴 AC-6b · 오늘이 여행 구간이면 live 로 (US-ONTRIP-01)', () => {
-  it('오늘이 [startDate,endDate] 안이고 일정이 있으면 카드 탭이 /trips/{id}/live 로 간다', () => {
+  it('오늘이 [startDate,endDate] 안이면 미확정 초안이어도 카드 탭이 /trips/{id}/live 로 1회 간다', () => {
     // 오늘을 항상 포함하도록 폭을 넓게(과거~미래) 둔다.
     mockUseGetTrips.mockReturnValue(
       tripsData([
@@ -278,15 +315,18 @@ describe('🔴 AC-6b · 오늘이 여행 구간이면 live 로 (US-ONTRIP-01)', 
         }),
       ])
     );
+    // 확정이 아닌 초안이어야 이 분기를 따로 잰다 — CONFIRMED 는 판정 함수가 이미 live 를 준다.
     scriptItinerary({
-      'trip-live': itinOk(itin('COMPLETE', 'CONFIRMED')),
+      'trip-live': itinOk(itin('COMPLETE', 'PLANNED')),
     });
 
     render(<ItineraryTab />);
     fireEvent.press(screen.getByTestId('my-trip-card-trip-live'));
 
-    // live 접미여야 한다(plan `/trips/{id}/itinerary` 가 아니다).
+    expect(mockPush).toHaveBeenCalledTimes(1);
     expect(String(mockPush.mock.calls[0][0])).toBe('/trips/trip-live/live');
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 });
 

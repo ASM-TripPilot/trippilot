@@ -384,23 +384,43 @@ _LOCAL_PREFIX = "local"
 
 
 def _local_route(feature_models: Mapping[LlmFeature, str]) -> dict[str, object]:
-    """`local*` 모델이 배정돼 있으면 로컬 서버 어댑터 라우트를 만든다.
+    """`local*` 모델이 배정돼 있으면 우리가 서빙하는 모델의 라우트를 만든다.
 
-    로컬 서버는 OpenAI 호환(vLLM·MLX)이라 어댑터 신규 구현이 없다 — 기존
-    OpenAIAdapter 에 base_url 만 갈아끼운다. `api="chat"` 고정: responses 표면은
-    OpenAI 전용이다.
+    전송로가 둘이고 **환경변수가 어느 쪽인지 고른다**:
 
-    **배정됐는데 주소가 없으면 기동 실패다**(설정 버그). 조용히 기본 벤더로 나가면
+    * `TRIPPILOT_BEDROCK_MODEL_ARN` — Bedrock Custom Model Import (실서비스).
+      서버리스라 무요청 0원이고 GPU 쿼터·상시 과금이 없다.
+    * `TRIPPILOT_LOCAL_LLM_BASE_URL` — OpenAI 호환 서버(vLLM·MLX). 로컬 개발과
+      Mac 검증이 이 경로를 쓴다. 어댑터 신규 구현 없이 base_url 만 갈아끼운다.
+
+    둘 다 있으면 **Bedrock 이 이긴다** — 실서비스 설정이 개발용 잔재를 덮는 쪽이
+    안전하다(반대면 누가 `.env` 에 남겨둔 localhost 로 실서비스가 나간다).
+
+    **배정됐는데 둘 다 없으면 기동 실패다**(설정 버그). 조용히 기본 벤더로 나가면
     파인튜닝 모델이 안 붙은 채 정상처럼 보인다 — 그 침묵이 이 분기의 존재 이유다.
     런타임 연결 실패는 다른 이야기고, 그쪽은 폴백 계단이 받는다(INV-4).
     """
     if not any(str(m).lower().startswith(_LOCAL_PREFIX) for m in feature_models.values()):
         return {}
+
+    model_arn = _env("TRIPPILOT_BEDROCK_MODEL_ARN")
+    if model_arn:
+        import boto3
+
+        from trippilot.llm_gateway.adapters.bedrock_adapter import BedrockAdapter
+
+        client = boto3.client(
+            "bedrock-runtime",
+            region_name=_env("TRIPPILOT_BEDROCK_REGION") or "us-east-1",
+        )
+        return {_LOCAL_PREFIX: BedrockAdapter(client, model_arn)}
+
     base_url = _env("TRIPPILOT_LOCAL_LLM_BASE_URL")
     if not base_url:
         raise RuntimeError(
             "local* 모델이 TRIPPILOT_LLM_FEATURE_MODELS 에 배정됐는데 "
-            "TRIPPILOT_LOCAL_LLM_BASE_URL 미설정 — 기본 벤더로 조용히 나가지 않는다"
+            "TRIPPILOT_BEDROCK_MODEL_ARN·TRIPPILOT_LOCAL_LLM_BASE_URL 둘 다 미설정 "
+            "— 기본 벤더로 조용히 나가지 않는다"
         )
     import openai
 

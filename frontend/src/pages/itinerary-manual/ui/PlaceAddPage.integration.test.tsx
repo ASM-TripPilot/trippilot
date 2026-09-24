@@ -2,10 +2,12 @@ import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
+  act,
   fireEvent,
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
@@ -41,6 +43,18 @@ import { PlaceAddPage } from './PlaceAddPage';
  * TRIP-798 묶음 C(시트화) 추가 — 전면 지도 위 peek 시트 재조립:
  *  - 🔴 **SC** 페이지가 MapSheetShell(map-sheet-shell-root)+전면 지도(map-root)를 조립하고,
  *    검색·칩·리스트·카드가 셸 안에 그대로 산다(재조립 무회귀 그물 — P2·P4·A2·C 를 안 깬다).
+ *
+ * TRIP-922 추가 — 시트 back 이 유일한 탈출구(루트 Stack headerShown:false):
+ *  - 🟢선제 **BK1** `sheet-daychip-back` press → router.back() 1회(셸 기본값이 빈 함수라 배선 누락은 조용하다).
+ *
+ * TRIP-924 추가 — 후보 0건 안내(검색어 무관 단일 문구, 조회 성공 뒤에만):
+ *  - 🔴 **E1** 조회 성공 + 0건 → 리스트 안에 `itinerary-place-empty` "검색 결과가 없어요".
+ *  - 🔴 **E2** 첫 조회 대기 중엔 안 뜨고, 응답(0건)이 와야 뜬다(깜빡임 방지).
+ *  - 🟢선제 **E3** 1건 이상이면 안 뜬다.
+ *
+ * TRIP-926 추가 — 지도 중심 폴백(핀 0개면 null-island (0,0) 이 아니라 서울 시청):
+ *  - 🔴 **M1** 일정 도착 후 담을 일자가 비었으면(핀 0개) center = 서울 시청.
+ *  - 🟢선제 **M2** 핀이 있으면 center = 첫 핀 좌표(무회귀 — 상수로 박아 버리는 구현을 막는 짝).
  *
  * 왜 통합 버킷인가: 최종 직렬화된 URL·나간 PUT 바디·재요청 횟수·캐시 무효화는 msw/스파이만 본다.
  * 3동작 뼈대: 준비=핸들러/래퍼/params → 실행=렌더/입력/칩/add → 단언=나간 URL·PUT 바디·보이는 트리.
@@ -548,5 +562,155 @@ describe('🔴 SC · TRIP-798 묶음 C — MapSheetShell peek 시트 조립 (시
     expect(
       screen.getAllByTestId(/^itinerary-place-card-/).length
     ).toBeGreaterThan(0);
+  });
+});
+
+describe('🟢 BK1 · TRIP-922 — 시트 back 은 이전 화면으로 돌아간다 (유일한 탈출구)', () => {
+  it('BK1 · 시트 좌상단 back(sheet-daychip-back) press → router.back() 1회', async () => {
+    await renderPage();
+
+    fireEvent.press(screen.getByTestId('sheet-daychip-back'));
+
+    // 셸이 onBack 미전달을 빈 함수로 채워 배선 누락이 에러 없이 무반응이 된다 — 횟수로만 잡힌다.
+    expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('TRIP-924 · E — 후보 0건 안내 (조회 성공 뒤에만, 검색어 무관 단일 문구)', () => {
+  const EMPTY_COPY = '검색 결과가 없어요';
+
+  it('🔴 E1a · 첫 조회가 성공했는데 0건이면 리스트 안에 "검색 결과가 없어요" 가 뜬다 (AC1)', async () => {
+    // 준비 — 서버가 빈 목록을 돌려준다.
+    server.use(
+      http.get(`${BASE}/places`, () =>
+        HttpResponse.json({ items: [], nextCursor: null })
+      )
+    );
+
+    // 실행 — 페이지 렌더.
+    render(<PlaceAddPage tripId="t1" />, { wrapper: createWrapper() });
+
+    // 단언 — 안내가 문구 그대로(완전 일치) 리스트 **안**에 뜨고, 검색창은 남아 다시 찾을 수 있다.
+    expect(
+      await screen.findByTestId('itinerary-place-empty')
+    ).toHaveTextContent(EMPTY_COPY);
+    expect(
+      within(screen.getByTestId('itinerary-place-list')).getByTestId(
+        'itinerary-place-empty'
+      )
+    ).toBeOnTheScreen();
+    expect(screen.getByTestId('itinerary-place-search')).toBeOnTheScreen();
+  });
+
+  it('🔴 E1b · 결과가 있다가 검색어로 0건이 되면 같은 문구가 뜬다 (AC1 · 검색어 무관 단일 문구)', async () => {
+    // 준비 — 기본 핸들러(4건)로 카드가 뜬 상태.
+    await renderPage();
+
+    // 실행 — 아무 이름에도 없는 검색어 → 서버가 0건을 돌려준다.
+    fireEvent.changeText(
+      screen.getByTestId('itinerary-place-search'),
+      '없는장소'
+    );
+
+    // 단언 — 카드는 사라지고 안내가 같은 문구로 뜬다.
+    expect(
+      await screen.findByTestId('itinerary-place-empty')
+    ).toHaveTextContent(EMPTY_COPY);
+    expect(screen.queryAllByTestId(/^itinerary-place-card-/)).toHaveLength(0);
+  });
+
+  it('🔴 E2 · 첫 조회 응답을 기다리는 동안엔 안 뜨고, 성공 응답(0건)이 와야 뜬다 (AC2 · 깜빡임 방지)', async () => {
+    // 준비 — 응답을 손으로 풀 때까지 붙잡는 /places(첫 조회 대기 상태를 만든다, 02a ★4).
+    let releasePlaces!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releasePlaces = resolve;
+    });
+    server.use(
+      http.get(`${BASE}/places`, async () => {
+        await gate;
+        return HttpResponse.json({ items: [], nextCursor: null });
+      })
+    );
+
+    // 실행 — 렌더 후 /places 요청이 실제로 나갔는지(=대기 중인지) 확인.
+    render(<PlaceAddPage tripId="t1" />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(hitsOf('GET', '/api/v1/places').length).toBeGreaterThanOrEqual(1)
+    );
+
+    // 단언 ① — 대기 중: 리스트는 있지만(0건) 안내는 없다.
+    expect(screen.getByTestId('itinerary-place-list')).toBeOnTheScreen();
+    expect(screen.queryByTestId('itinerary-place-empty')).toBeNull();
+
+    // 실행 — 응답을 푼다(성공 + 0건).
+    releasePlaces();
+
+    // 단언 ② — 그제서야 안내가 뜬다(①이 "원래 안 그리는 코드"로 통과하는 걸 막는 짝).
+    expect(
+      await screen.findByTestId('itinerary-place-empty')
+    ).toHaveTextContent(EMPTY_COPY);
+  });
+
+  it('E3 · 후보가 1건 이상이면 안내가 없다 (AC3 · 선제 green)', async () => {
+    // 준비/실행 — 기본 핸들러(4건)로 카드가 뜰 때까지 렌더.
+    await renderPage();
+
+    // 단언 — 카드가 있으니 안내는 없다.
+    expect(screen.queryByTestId('itinerary-place-empty')).toBeNull();
+  });
+});
+
+describe('TRIP-926 · M — 지도 중심 (핀 0개면 서울 시청, 있으면 첫 핀)', () => {
+  // mapViewMock 이 center 를 map-root 텍스트 "lat,lng" 로 노출한다(toHaveTextContent 는 완전 일치).
+  const SEOUL_CITY_HALL = '37.5665,126.978';
+
+  it('🔴 M1 · 일정이 도착했는데 담을 일자에 핀이 0개면(빈 일자) 지도 중심이 서울 시청이다 (AC1)', async () => {
+    // 준비 — 기본 핸들러: 일정 GET 이 빈 일자(slots: [])를 돌려준다. 캐시를 들여다볼 client.
+    const client = makeClient();
+
+    // 실행 — 렌더 후 일정 응답이 캐시에 앉을 때까지 기다리고, 그 변경 알림(setTimeout 0 예약)이
+    // 화면에 반영되도록 한 틱 흘린다 — 이 화면엔 "일정 도착"을 보여 주는 표면이 없다(02a ★M-a).
+    renderPageWith(client);
+    await waitFor(() =>
+      expect(
+        client.getQueryState(getGetTripsTripIdItineraryQueryKey('t1'))?.status
+      ).toBe('success')
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    // 단언 — 기니만(0,0)이 아니라 서울 시청을 비춘다.
+    expect(screen.getByTestId('map-root')).toHaveTextContent(SEOUL_CITY_HALL);
+  });
+
+  it('M2 · 담을 일자에 핀이 있으면 지도 중심은 첫 핀 좌표다 (AC2 · 무회귀 선제 green)', async () => {
+    // 준비 — 일정 GET 이 좌표 있는 슬롯 2개를 돌려준다(첫 핀 ≠ 둘째 핀 ≠ 서울 시청).
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        HttpResponse.json({
+          ...ITINERARY_ENVELOPE,
+          days: [
+            {
+              date: '2026-06-10',
+              slots: [
+                { ...makeSlot('s1'), lat: 35.0979, lng: 129.0256 },
+                { ...makeSlot('s2'), lat: 35.1587, lng: 129.1604 },
+              ],
+            },
+          ],
+        })
+      )
+    );
+
+    // 실행 — 페이지 렌더.
+    render(<PlaceAddPage tripId="t1" />, { wrapper: createWrapper() });
+
+    // 단언 — 일정이 도착하면 첫 핀(s1) 좌표로 맞춘다(둘째 핀·폴백이 아니다).
+    await waitFor(() =>
+      expect(screen.getByTestId('map-root')).toHaveTextContent(
+        '35.0979,129.0256'
+      )
+    );
   });
 });

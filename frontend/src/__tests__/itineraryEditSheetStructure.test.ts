@@ -10,8 +10,13 @@ import path from 'path';
  * TRIP-805 로 시트가 `features/itinerary/ui/SlotTimeSheet.tsx` 에서 공용 위젯
  * `widgets/time-sheet/ui/TimeSheet.tsx`(쌍둥이 SlotTimeSheet·ManualTimeSheet 통일)로 나갔다.
  * 시트가 features/itinerary 재귀 밖으로 가면서 옛 편입 대상(itineraryTimeStructure G2·
- * itineraryMustVisitStructure C34)의 사정거리를 벗어났고, INV-3 은 이제 `planbManualStructure.test.ts`
- * G3(widgets/time-sheet 재편입)이 잠근다 — "코드 이동 추적" 재조준(02a ★6, 개념 [[선재 가드 재조준]]).
+ * itineraryMustVisitStructure C34)의 사정거리를 벗어났고, INV-3 은 `planbManualStructure.test.ts`
+ * G3(widgets/time-sheet 재편입)이 잠갔다 — "코드 이동 추적" 재조준(02a ★6, 개념 [[선재 가드 재조준]]).
+ *
+ * **TRIP-753 재조준**: `planbManualStructure` 는 대상(pages/planb-manual·widgets/itinerary-edit)이
+ * 사라져 폐지됐다. 그 G3 가 `widgets/time-sheet/ui` **폴더 전체**를 훑던 축은 이 파일 E3 가 넘겨받는다
+ * — E3 를 TimeSheet.tsx 한 파일에서 폴더 전체로 넓혔다(폴더에 새 파일이 생겨도 INV-3 이 잡히게, 그물을
+ * 줄이지 않는 재조준 — 752 03b 경고-4 교훈).
  *
  * **TRIP-797 묶음 C 재조준**: 편집기가 h12(지도+시트) 로 통일되며 옛 화면 `ItineraryEditScreen.tsx` 가
  * 제거되고(itineraryEditStructure C-1 이 부재로 잠금), 그 화면 순수성(시트·스토어 미참조)이 **pages 층
@@ -20,8 +25,8 @@ import path from 'path';
  *
  * 무엇을 보장하나:
  *  - 공용 시트 `TimeSheet.tsx` 가 **정본 위젯 경로에 실재**하고,
- *  - 그 파일이 `widgets/time-sheet` 재귀 사정거리(=planbManualStructure G3)에 편입되며,
- *  - 새 시트 소스가 **소요시간 표기·raw hex 0건**(정당 파일은 clean),
+ *  - 그 파일이 `widgets/time-sheet` 재귀 사정거리(=아래 E3)에 편입되며,
+ *  - `widgets/time-sheet/ui` 폴더 전체 소스가 **소요시간 표기·raw hex 0건**(정당 파일은 clean),
  *  - **뷰 순수성(재조준)** — `EditorView.tsx` 는 시트·스토어를 모르고(gorhom·store 미참조),
  *    시트는 gorhom 을 쓰며, 뷰는 시각칩 진입 prop `onPressTimeChip` 과 `MapSheetShell` 조립만 짊어진다.
  *
@@ -34,10 +39,11 @@ import path from 'path';
 
 const ROOT = path.resolve('src');
 
-// TRIP-805 재앵커(시트=widget) → TRIP-797 재조준(뷰 순수성 대상을 옛 화면에서 EditorView 로).
+// TRIP-805 재앵커(시트=widget) → TRIP-797 재조준(뷰 순수성 대상을 옛 화면에서 EditorView 로) →
+// TRIP-921 재조준(EditorView 가 pages 에서 widgets/map-sheet-shell 로 승격 — 단언은 그대로, 경로만).
 const WIDGET_TIME_UI_DIR_REL = 'widgets/time-sheet/ui';
 const SHEET_REL = 'widgets/time-sheet/ui/TimeSheet.tsx';
-const EDITOR_REL = 'pages/itinerary-edit/ui/EditorView.tsx';
+const EDITOR_REL = 'widgets/map-sheet-shell/ui/EditorView.tsx';
 
 /** 소요시간 **표기** 탐지기 — 화면에 나갈 문자열 형태. `HH:mm`(09:30)은 숫자 뒤가 `:` 라 안 걸린다. */
 const DURATION_TEXT = /(\d+\s*분|\d+\s*시간|소요)/;
@@ -147,26 +153,29 @@ describe('🔴 E2 · 편입 앵커 — 공용 시트가 widgets/time-sheet 재�
     // 경로 실재(구현 전 RED).
     expect(existsPair(SHEET_REL)).toEqual({ file: SHEET_REL, exists: true });
 
-    // 새 시트가 planbManualStructure G3(widgets/time-sheet 재귀)의 스캔 모집단에 실제로 들어온다 →
-    // 그 gap-filler 가드가 이 파일의 소요시간 표기를 강제한다.
+    // 새 시트가 widgets/time-sheet 재귀 스캔 모집단(아래 E3)에 실제로 들어온다 → 그 gap-filler 가
+    // 이 파일의 소요시간 표기를 강제한다.
     expect(scan(WIDGET_TIME_UI_DIR_REL).map((s) => s.file)).toContain(
       SHEET_REL
     );
   });
 });
 
-describe('🔴 E3 · INV-3 — 새 시트 소스가 소요시간·raw hex 0건이다', () => {
-  it('TimeSheet.tsx 가 clean 하고(긍정 앵커: 모집단 실재), 소요시간·토큰화 색이 0건이다', () => {
-    // 긍정 앵커 — 새 시트가 실제 스캔 모집단에 있다(없으면 아래 부정 단언이 공허하게 통과).
-    expect(scan(WIDGET_TIME_UI_DIR_REL).map((s) => s.file)).toContain(
-      SHEET_REL
-    );
+describe('🔴 E3 · INV-3 — widgets/time-sheet/ui 폴더 전체가 소요시간·raw hex 0건이다', () => {
+  it('폴더 모집단에 TimeSheet.tsx 가 있고(긍정 앵커), 모든 소스의 소요시간·토큰화 색이 0건이다', () => {
+    const sources = scan(WIDGET_TIME_UI_DIR_REL);
 
-    const source = readOne(SHEET_REL);
-    expect(DURATION_TEXT.test(source)).toBe(false);
-    expect(
-      TOKENIZED_HEX.filter((hex) => source.toLowerCase().includes(hex))
-    ).toEqual([]);
+    // 긍정 앵커 — 시트가 실제 스캔 모집단에 있다(없으면 아래 부정 단언이 공허하게 통과).
+    expect(sources.map((s) => s.file)).toContain(SHEET_REL);
+
+    // 부정 — 폴더 전체(TRIP-753: planbManualStructure G3 의 폴더 스캔을 넘겨받음).
+    const offenders = sources.flatMap(({ file, source }) => [
+      ...(DURATION_TEXT.test(source) ? [`${file}: duration`] : []),
+      ...TOKENIZED_HEX.filter((hex) => source.toLowerCase().includes(hex)).map(
+        (hex) => `${file}: ${hex}`
+      ),
+    ]);
+    expect(offenders).toEqual([]);
   });
 });
 

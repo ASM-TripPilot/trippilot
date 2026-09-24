@@ -1,6 +1,7 @@
 jest.mock('@/shared/api/generated/account/account');
 jest.mock('@/shared/api/generated/profile/profile');
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   fireEvent,
   render,
@@ -33,8 +34,13 @@ import { SettingsPage } from '..';
  *   push 인자·횟수만 관측한다(02a ★8).
  *
  * (개념) 문자열 인자 매처는 완전일치 — `toHaveBeenCalledWith('/settings/location')`는 라우트를
- *  글자 그대로 잠근다(02a §5-A). `fireEvent.press`는 onPress 핸들러가 있어야 발화하고, 준비중 행은
- *  핸들러가 없어 깨끗한 no-op 이다(02a §5-B).
+ *  글자 그대로 잠근다(02a §5-A).
+ *
+ * TRIP-939 AC-1: 준비중 행(ready:false)은 페이지가 `filterReadySettingsSections` 로 걸러 운영 화면에
+ *  아예 그리지 않는다(구 "눌러도 push 0" 앵커를 "그룹째 부재"로 뒤집음 — 누를 것이 없어야 심사 2.1 통과).
+ *
+ * TRIP-937 AC-3: 앱 정보 그룹의 약관 3행을 누르면 열람 라우트 `/terms/{termsType}` 로 push 한다(심사
+ *  가이드라인 5.1.1(i) — 개인정보처리방침 앱 내 접근). 라우트 문자열은 페이지가 쥐므로 여기서 잠근다.
  */
 
 const mockPush = jest.fn();
@@ -42,6 +48,19 @@ const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
   router: { push: mockPush, back: jest.fn() },
 }));
+
+/**
+ * TRIP-938 준비 단계 — 페이지가 로그아웃 때 캐시를 비우려고 `useQueryClient()` 를 부르므로
+ * QueryClientProvider 안에서 그린다(없으면 "No QueryClient set" 으로 렌더가 죽는다, 02a ★5).
+ * 조회 훅은 위에서 목하므로 이 클라이언트는 실제로 아무것도 가져오지 않는다.
+ */
+function renderPage() {
+  return render(
+    <QueryClientProvider client={new QueryClient()}>
+      <SettingsPage />
+    </QueryClientProvider>
+  );
+}
 
 const mockUseGetMe = useGetMe as jest.Mock;
 const mockUseGetMeProfile = useGetMeProfile as jest.Mock;
@@ -57,7 +76,7 @@ beforeEach(() => {
 
 describe('TRIP-618 · SettingsPage 진입 배선', () => {
   it('AC-2: 위치 네비 행 press → router.push("/settings/location") 정확히 1회', () => {
-    render(<SettingsPage />);
+    renderPage();
 
     // 실행: 위치정보 네비 행을 누른다.
     fireEvent.press(screen.getByTestId('settings-nav-location-consent'));
@@ -68,7 +87,7 @@ describe('TRIP-618 · SettingsPage 진입 배선', () => {
   });
 
   it('AC-3: 알림 네비 행 press → router.push("/settings/notifications") 정확히 1회', () => {
-    render(<SettingsPage />);
+    renderPage();
 
     fireEvent.press(screen.getByTestId('settings-nav-notifications'));
 
@@ -76,17 +95,41 @@ describe('TRIP-618 · SettingsPage 진입 배선', () => {
     expect(mockPush).toHaveBeenCalledWith('/settings/notifications');
   });
 
-  it('AC-4(선제green): 제휴 준비중 행을 눌러도 push 0(무배선 유지, 회귀 앵커)', () => {
-    render(<SettingsPage />);
+  it('TRIP-939 AC-1: 준비중 행은 운영 화면에 없다 — 여행 취향·제휴 안내 그룹째 빠지고 5그룹만 남는다(TRIP-937 앱 정보 포함)', () => {
+    // 준비·실행: 실 페이지를 그린다(페이지가 ready 필터를 거쳐 화면에 넘긴다).
+    renderPage();
 
-    // 제휴 안내 그룹의 준비중 행(onPress 없음)을 누른다.
+    // 단언: 계정·위치정보·알림·앱 정보·위험 영역 5그룹뿐이고, 준비중 그룹과 "준비 중" 문구는 없다.
+    // TRIP-937: 약관 3행이 ready:true 라 앱 정보 그룹이 필터를 통과한다(01 Q7 — 의도적 갱신).
     const groups = screen.getAllByTestId('settings-group');
-    const affiliate = groups.find(
-      (g) => within(g).queryByText('제휴 안내') !== null
-    )!;
-    fireEvent.press(within(affiliate).getByTestId('settings-row'));
-
-    // 단언: 목적지 라우트가 없는 행은 아무 데도 가지 않는다(INV-4).
-    expect(mockPush).not.toHaveBeenCalled();
+    expect(groups).toHaveLength(5);
+    expect(
+      groups.map((g) =>
+        ['계정', '위치정보', '알림', '앱 정보', '위험 영역'].find(
+          (label) => within(g).queryByText(label) !== null
+        )
+      )
+    ).toEqual(['계정', '위치정보', '알림', '앱 정보', '위험 영역']);
+    expect(screen.queryByText('여행 취향')).toBeNull();
+    expect(screen.queryByText('제휴 안내')).toBeNull();
+    expect(screen.queryByText(/준비 중/)).toBeNull();
+    // 짝 앵커: 개통된 네비 행은 그대로 남아 누를 수 있다(화면이 통째로 빈 것이 아니다).
+    fireEvent.press(screen.getByTestId('settings-nav-notifications'));
+    expect(mockPush).toHaveBeenCalledWith('/settings/notifications');
   });
+
+  it.each([['TERMS_OF_SERVICE'], ['PRIVACY_POLICY'], ['LOCATION_TERMS']])(
+    'TRIP-937 AC-3: 약관 행(%s) press → router.push("/terms/<termsType>") 정확히 1회',
+    (termsType) => {
+      // 준비: 실 페이지(필터 통과한 운영 목록).
+      renderPage();
+
+      // 실행: 앱 정보 그룹의 약관 행을 누른다.
+      fireEvent.press(screen.getByTestId(`settings-nav-terms-${termsType}`));
+
+      // 단언: 열람 라우트(동적 세그먼트)로, 문자열 그대로 정확히 한 번.
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(mockPush).toHaveBeenCalledWith(`/terms/${termsType}`);
+    }
+  );
 });

@@ -7,12 +7,7 @@ import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas'
 import { MapView } from '@/shared/map';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
-import type {
-  DraftDayTab,
-  DraftPin,
-  DraftView,
-  FallbackNotice,
-} from '../model/draftView';
+import type { DraftDayTab, DraftPin, DraftView } from '../model/draftView';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { timeBandLabel } from '../model/timeBandLabel';
 import {
@@ -64,26 +59,9 @@ const FIXED_NOTE_SUFFIX = ' 도착 · 변경 불가';
  * 조회 실패 · 2차 생성 실패 · 재생성 실패 · 폴링 상한 도달). 한 원인을 문구에 박으면 나머지
  * 경우에 **틀린 이유**를 말하게 된다. */
 const STALE_FAILED_NOTE = '일부 정보를 불러오지 못했어요';
-/** 후보 강등 안내(BR-U3-11 · TRIP-298). 위 `STALE_FAILED_NOTE` 와 같은 성격 — 목록 곁에
- * 붙는 한 줄이지 얼굴이 아니다.
- *
- * **개수를 말하지 않는다.** 계약의 `poolSize` 는 AI 가 안 주면 없는 값이라 `?? 0` 으로 채우면
- * "모른다"가 "후보 0건"이라는 **다른 사건**으로 바뀐다(openapi 원문의 경고). 이번 표면에는
- * 개수 자리 자체를 두지 않는다. 시각·소요시간 어휘도 쓰지 않는다(INV-3 · BR-U3-10). */
-const DEMOTED_NOTE = '조건에 맞는 후보가 적어 일부 추천이 빠졌어요';
-/** DETERMINISTIC 폴백 안내(BR-U3-11). 스토리 원문 "일부 추천이 기본 모드로 생성됐어요". */
-const DETERMINISTIC_NOTE = '일부 추천이 기본 모드로 생성됐어요';
-/** MINIMAL 최소 일정 안내(US-SCHED-09). 배너 안 [다시 시도] 버튼과 함께 뜬다. */
-const MINIMAL_NOTE = '지금은 최소한의 일정만 만들었어요';
-/** 배너 안 전용 재시도 라벨. 숫자·시각·소요시간 어휘를 넣지 않는다(INV-3). */
-const FALLBACK_RETRY_LABEL = '다시 시도';
-
-/** 배너 종류 → 곁에 붙는 한 줄 문구. 셋 중 하나만 뜬다(심각도 최상위, 판정은 model 몫). */
-const FALLBACK_NOTE: Record<FallbackNotice['kind'], string> = {
-  minimal: MINIMAL_NOTE,
-  deterministic: DETERMINISTIC_NOTE,
-  demoted: DEMOTED_NOTE,
-};
+// 폴백·강등 배너(deterministic·minimal·demoted)는 TRIP-791 로 전용 인터스티셜
+// (GenerationFallbackScreen)으로 승격돼 이 화면에서 소멸했다 — 이 화면은 이제 목록만 남는다.
+// 판정(resolveFallbackNotice)·라우팅은 DraftPage 가, 그림은 인터스티셜 화면이 진다(01b D1·D2).
 
 const EMPTY_TITLE = '아직 만들어진 추천안이 없어요';
 const EMPTY_NOTE = `위 ${RETRY_LABEL}를 누르면 AI가 일정을 짜요`;
@@ -109,9 +87,6 @@ export interface DraftScreenProps {
   pins: DraftPin[];
   dayHeader: string;
   canRetry: boolean;
-  /** 폴백·강등 안내 배너의 종류(없으면 배너 0건). **판정은 model 몫**이고 화면은 결과만 받는다 —
-   * 원천 신호도 그 어휘도 모른다. 미지정이 당분간의 정상 경로다(서버가 아직 신호를 안 준다). */
-  fallbackNotice?: FallbackNotice | null;
   onSelectDay: (date: string) => void;
   onRetry: () => void;
   onBack: () => void;
@@ -322,7 +297,6 @@ export function DraftScreen({
   pins,
   dayHeader,
   canRetry,
-  fallbackNotice,
   onSelectDay,
   onRetry,
   onBack,
@@ -397,42 +371,6 @@ export function DraftScreen({
               <Text className="flex-1 font-noto text-label text-body">
                 {STALE_FAILED_NOTE}
               </Text>
-            </View>
-          ) : null}
-
-          {/* 얼굴과 무관하게 뜬다 — 폴백·강등은 "무엇을 보여줄까"가 아니라 "받은 것에 무엇이
-              빠졌나"라서, 목록이 그대로 있는 채로 곁에 붙는다(01b D5 4행 · D6). 셋 중 하나만
-              뜨고(심각도 최상위), MINIMAL 만 배너 안에 [다시 시도]를 갖는다(결정 4). */}
-          {fallbackNotice != null ? (
-            <View
-              testID="itinerary-draft-fallback-banner"
-              className="w-full flex-row items-center gap-sm rounded-button border border-hairline bg-surface-soft px-md py-md"
-            >
-              {fallbackNotice.kind === 'minimal' ? (
-                <AlertCircleGlyph />
-              ) : (
-                <InfoCircleGlyph />
-              )}
-              <Text className="flex-1 font-noto text-label text-body">
-                {FALLBACK_NOTE[fallbackNotice.kind]}
-              </Text>
-              {fallbackNotice.kind === 'minimal' ? (
-                <Pressable
-                  testID="itinerary-draft-fallback-retry"
-                  accessibilityRole="button"
-                  disabled={!canRetry}
-                  onPress={onRetry}
-                  hitSlop={8}
-                >
-                  <Text
-                    className={`font-noto-bold text-label ${
-                      canRetry ? 'text-primary-text' : 'text-muted-soft'
-                    }`}
-                  >
-                    {FALLBACK_RETRY_LABEL}
-                  </Text>
-                </Pressable>
-              ) : null}
             </View>
           ) : null}
 

@@ -269,15 +269,16 @@ describe('resolveHomePhase — title·badgeSub·greetSubtitle·collectionsTitle�
       expect(result.trip.meta).toBe('META:제주 여행'); // 주입 포맷터 통과
       // greetTitle 은 여행명 + D-day 를 **함께** 담는다(무변경 — 계획 중은 `${title} ${dday}`).
       expect(result.greetTitle).toBe('제주 여행 D-21');
-      // TRIP-696 인사 서브카피(고정) + 지역 컬렉션 헤더(title 후행 "여행" 제거 → 지역).
+      // TRIP-696 인사 서브카피(고정). TRIP-935 AC-5(R6) — 지역 컬렉션 헤더는 만들지 않는다: 카드가
+      // 부산 고정 픽스처라 "제주에서 담을 만한 곳" 아래 부산 카드가 뜨는 거짓 표기가 된다(심사 2.3).
       expect(result.greetSubtitle).toBe('일정을 이어서 짜볼까요');
-      expect(result.collectionsTitle).toBe('제주에서 담을 만한 곳');
+      expect(result.collectionsTitle).toBeUndefined();
     }
   });
 
-  it('collectionsTitle 지역은 후행 "여행"만 떼고 조립한다(앞머리 "여행"은 보존 — /\\s*여행$/ 앵커)', () => {
-    // 후행 "여행"이 없는 title(앞머리 '여행자')은 전체가 지역이 된다(task canon:
-    // region = title.replace(/\s*여행$/,'')). naïve `.replace('여행','')` 는 앞머리를 떼서 red.
+  it('TRIP-935: 어떤 여행 제목이어도 지역 컬렉션 헤더(collectionsTitle)를 만들지 않는다', () => {
+    // 구 TRIP-696 케이스는 "후행 '여행'만 떼고 지역 헤더를 조립한다"를 '여행자 모임' 경계로 잠갔다.
+    // TRIP-935 AC-5(R6)로 헤더 조립 자체를 멈추므로, 같은 경계 입력에서도 헤더가 없음을 잰다.
     const result = resolveHomePhase({
       trips: [
         trip({
@@ -290,9 +291,11 @@ describe('resolveHomePhase — title·badgeSub·greetSubtitle·collectionsTitle�
       savedCount: 0,
       formatTripMeta: metaOfTitle,
     });
-    expect(result?.kind === 'planning' && result.collectionsTitle).toBe(
-      '여행자 모임에서 담을 만한 곳'
-    );
+    // 앵커 — planning 얼굴은 조립됐다(undefined 반환으로 공허 통과하는 것 차단).
+    expect(result?.kind).toBe('planning');
+    expect(
+      result?.kind === 'planning' && result.collectionsTitle
+    ).toBeUndefined();
   });
 
   it('🔴 bridge 는 서버 담은 곳 **실카운트**를 반영한다 — 상수로 굳히면 red (03b 경고-1)', () => {

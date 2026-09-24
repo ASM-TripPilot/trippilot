@@ -624,8 +624,9 @@ describe('🔴 C16 · AC-4 — 생성 중(PARTIAL) listed 에서도 완성 CTA �
 });
 
 describe('C17 · AC-4 — 완성 CTA 는 비-listed 얼굴에는 없다 (선제 green · 짝 트립와이어)', () => {
-  // DraftScreen 의 비-listed 얼굴은 loading·failed·empty 3종이다(zero 는 DraftPage 가 가로채는
-  // 별도 `ZeroCandidateScreen` 이라 이 화면 계약 밖 · 02a ★6). CTA 가 아직 없어 지금은 전부
+  // DraftScreen 의 비-listed 얼굴은 loading·failed·empty 3종이다(후보 0건 전용 `zero` 얼굴은
+  // TRIP-791 로 화면이, 후속 정리로 `DraftView` kind 까지 제거돼 안이 빈 응답은 empty 로 접힌다).
+  // CTA 가 아직 없어 지금은 전부
   // green 이고, 구현 후에도 green 이면 "CTA 가 listed 에만 산다"는 트립와이어다 — 구현자가
   // CTA 를 얼굴 무관 위치(ScrollView 최상위)에 두면 여기서 red 로 전환된다(02a ★7).
   it.each([

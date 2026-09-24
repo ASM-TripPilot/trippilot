@@ -20,7 +20,8 @@ import { ItineraryPlanPage } from './ItineraryPlanPage';
  * 무엇을 보장하나:
  *  - 🔴 CONFIRMED 면 `ItineraryPlanPage` 가 옛 `TimelineScreen` 대신 공용 지도+시트 셸을 조립하고,
  *    지도 위 성공 배너(`itinerary-confirmed-banner`)를 얹는다. 옛 CONFIRMED 앵커는 사라진다(AC-1).
- *  - 🔴 하단 CTA 가 2버튼 — `일정 수정`→h12·`공유하기`→j06 으로 완전일치 push, 둘 다 활성(AC-2).
+ *  - 🔴 하단 CTA — `일정 수정`→h12 은 항상, `공유하기`→j06 은 공유 카드 캡처 개통(armed) 시에만(TRIP-939
+ *    Q2 — 미장전이면 1버튼). 완전일치 push, 활성(AC-2).
  *  - 🔴 헤더 meta 가 "확정됨 · " 접두를 단다(km null 이면 "확정됨 · N곳", AC-3).
  *  - 🔴 슬롯 `openingHoursKnown === false` 에만 휴관 경고 표면이 뜬다(true/null/undefined 부재, AC-4).
  *  - 🔴 읽기전용 — 다른 후보(alt) 링크가 없다(AC-5).
@@ -31,7 +32,8 @@ import { ItineraryPlanPage } from './ItineraryPlanPage';
  * 그 판정이 테스트의 *가정*이 된다 — 실 HTTP 로 강제해 판정 회귀를 가시화한다(기존 5파일 관례).
  *
  * ⚠️ 함정(02a §4):
- *  - ★2 CONFIRMED 셸도 `map-sheet-shell-root` 를 쓴다 → 전이 착지 앵커는 `sheet-cta-button-1`(공유하기).
+ *  - ★2 CONFIRMED 셸도 `map-sheet-shell-root` 를 쓴다 → 전이 착지 앵커는 `itinerary-confirmed-banner`
+ *    (TRIP-939: 공유하기가 개통 전엔 숨으므로 CONFIRMED 전용 배너로 옮김).
  *  - ★5 warning 트리거는 boolean `openingHoursKnown` 하나, 문구는 상수 `휴관일 확인`(요일 발명 금지).
  *  - ★12 "1일차"는 day-chip·헤더 둘 다 → getByText 금지, testID 로만 스코프.
  *  - ★13 meta 카운트는 선택일 **비고정만**(확정됨 접두). totalPlaces·coPickProgress 재사용 시 red.
@@ -65,6 +67,14 @@ jest.mock('expo-router', () => ({
     replace: mockReplace,
     canGoBack: mockCanGoBack,
   }),
+}));
+
+// TRIP-939 AC-2b(Q2) — [공유하기]는 공유 카드 캡처가 장전(`captureShareImage().armed`)됐을 때만
+// 보인다(미장전이면 j06 이 보기만 하는 막다른 화면). 홀더로 armed 를 갈아끼운다(기본 false).
+const mockShareArmed = { value: false };
+jest.mock('@/features/reflection/model/shareCard', () => ({
+  ...jest.requireActual('@/features/reflection/model/shareCard'),
+  captureShareImage: () => ({ armed: mockShareArmed.value }),
 }));
 
 const BASE = 'http://localhost:8080/api/v1';
@@ -205,6 +215,7 @@ function renderedText(): string {
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 
 beforeEach(() => {
+  mockShareArmed.value = false;
   mockPush.mockClear();
   mockBack.mockClear();
   mockReplace.mockClear();
@@ -259,7 +270,7 @@ describe('🔴 C1 · AC-1 — CONFIRMED 면 지도+시트 셸 + 성공 배너, �
   });
 });
 
-describe('🔴 C2 · AC-2 — 2버튼 CTA 가 h12/j06 으로 push 하고 둘 다 활성이다', () => {
+describe('🔴 C2 · AC-2 — CTA 가 h12(항상)·j06(캡처 개통 시)으로 push 하고 활성이다', () => {
   it('C2a · 일정 수정(button-0) press → h12 편집 push 1회, 활성', async () => {
     useItinerary(() => HttpResponse.json(confirmedDefault()));
     renderPage();
@@ -277,7 +288,22 @@ describe('🔴 C2 · AC-2 — 2버튼 CTA 가 h12/j06 으로 push 하고 둘 다
     expect(mockPush).toHaveBeenCalledTimes(1);
   });
 
-  it('C2b · 공유하기(button-1) press → j06 공유 push 1회, 활성', async () => {
+  it('C2b · TRIP-939: 캡처 미장전(armed:false)이면 [공유하기]가 없고 [일정 수정] 1버튼이다', async () => {
+    // 준비·실행: 확정 일정을 연다(캡처 미장전 = 오늘의 운영 빌드).
+    useItinerary(() => HttpResponse.json(confirmedDefault()));
+    renderPage();
+    await screen.findByTestId('map-sheet-shell-root');
+
+    // 단언: 두 번째 버튼·'공유하기' 글자가 없다 + 짝 앵커([일정 수정]은 남는다).
+    expect(screen.queryByTestId('sheet-cta-button-1')).toBeNull();
+    expect(screen.queryByText('공유하기')).toBeNull();
+    expect(screen.getByTestId('sheet-cta-button-0')).toHaveTextContent(
+      '일정 수정'
+    );
+  });
+
+  it('C2c · 캡처 개통(armed:true)이면 공유하기(button-1) press → j06 공유 push 1회, 활성(짝)', async () => {
+    mockShareArmed.value = true;
     useItinerary(() => HttpResponse.json(confirmedDefault()));
     renderPage();
     await screen.findByTestId('map-sheet-shell-root');

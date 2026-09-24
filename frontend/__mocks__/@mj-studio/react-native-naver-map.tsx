@@ -59,4 +59,16 @@ function NaverMapPathOverlay(props: Record<string, unknown>) {
   return <View testID="map-path" {...props} />;
 }
 
-export { NaverMapView, NaverMapMarkerOverlay, NaverMapPathOverlay };
+// TRIP-795 — 반경 점선 원 오버레이(additive). NaverMapPathOverlay 와 동형 통과형 목:
+// props(latitude·longitude·radius·color 등)를 host View 로 그대로 노출해 MapView.test 가
+// getByTestId('map-circle').props.radius 로 반경 전달을 관측한다. 점선 실렌더는 6-b.
+function NaverMapCircleOverlay(props: Record<string, unknown>) {
+  return <View testID="map-circle" {...props} />;
+}
+
+export {
+  NaverMapView,
+  NaverMapMarkerOverlay,
+  NaverMapPathOverlay,
+  NaverMapCircleOverlay,
+};

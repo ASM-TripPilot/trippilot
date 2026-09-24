@@ -71,6 +71,10 @@ def build_prompt_vars(pool: CandidatePool, persona: PersonaSummary) -> dict[str,
         # 미설정을 SOLO 로 적으면 선택 안 한 사람을 혼자 여행자로 단정한다 —
         # taste_tags 빈 경우와 같은 문구를 쓴다.
         "companion": persona.companion.value if persona.companion else "미설정",
+        # 미선택은 "미설정" — taste_tags 선례. 빈 문자열이면 LLM 이 앞 줄과
+        # 이어 붙여 읽는다.
+        "activities": ", ".join(persona.activities) or "미설정",
+        "cuisines": ", ".join(persona.cuisines) or "미설정",
         "budget": persona.budget.value,
         "candidates": candidates or "(후보 없음)",
     }

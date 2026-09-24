@@ -15,7 +15,9 @@ import path from 'path';
  *    (`/ai/v1`·view-shot·media-library·sharing·file-system·업로드 계열) + 온디바이스 앵커
  *    (`buildShareCard`·`captureShareImage` 실참조 — 공허 통과 차단).
  *  - **G3 3층**: 라우트→페이지→화면이 각자 몫만 진다.
- *  - **G4 testID 4종**: reflection-share-format-seg·-save·-export(공유 카드) + reflection-daily-share(j03 진입점).
+ *  - **G4 testID**: reflection-share-format-seg·-save·-export(공유 카드) 3종 실재 + j03 헤더 공유
+ *    `reflection-daily-share` **부재**(TRIP-762 로 j03 헤더 공유 제거 — 라이브 j03 에 공유 0, 공유는
+ *    j04/j06 소관. 진입점 유지 앵커는 `reflection-daily-edit`).
  *  - **AC-8 · INV-3**: shareCard.ts + 카드 ui 표면에 소요시간 문자열 0(거리만).
  *
  * ★ 위임(중복 신설 안 함, ponytail lite): **경계(타 feature import 0)**·**새 HTTP 0**·
@@ -177,12 +179,27 @@ describe('🔴 G3 · 3층 책임 — 라우트→페이지→화면', () => {
   });
 });
 
-describe('🔴 G4 · testID 4종이 공유 표면·진입점에 실재한다', () => {
-  it('공유 카드 3종 + j03 진입점(reflection-daily-share)', () => {
+describe('🔴 G4 · 공유 카드 testID 3종 실재 + j03 헤더 공유 제거', () => {
+  it('공유 카드 3종은 실재하고, j03 DailyReflectionScreen 의 헤더 공유는 사라진다', () => {
+    // 긍정 — 공유 카드 표면 3종은 그대로.
     expect(readOne(SEG_REL)).toContain('reflection-share-format-seg');
     expect(readOne(SCREEN_REL)).toContain('reflection-share-save');
     expect(readOne(SCREEN_REL)).toContain('reflection-share-export');
-    expect(readOne(DAILY_REL)).toContain('reflection-daily-share');
+    // 부정(TRIP-762) — j03 헤더 공유 아이콘 제거.
+    expect(readOne(DAILY_REL)).not.toContain('reflection-daily-share');
+    // 긍정 짝 — 공유는 지웠지만 편집 진입점(reflection-daily-edit)은 남는다(공허 통과 차단).
+    expect(readOne(DAILY_REL)).toContain('reflection-daily-edit');
+  });
+});
+
+describe('🔴 AC-4 · 캡션 카드 = 해시태그만(페이지 문장 시드 제거)', () => {
+  it('ShareCardPage 에 캡션 문장 시드가 없고, 해시태그 조립은 유지된다', () => {
+    const page = readOne(PAGE_REL);
+    // 부정 — 문장 시드 제거(현 `${trip.data.title} 여행의 기록` → red).
+    expect(page).not.toContain('여행의 기록');
+    // 긍정 짝 — 해시태그 조립은 남는다(공허 통과 차단: 페이지가 캡션 카드 자체를 지운 게 아님).
+    expect(page).toContain('hashtagText');
+    expect(page).toMatch(/#/);
   });
 });
 

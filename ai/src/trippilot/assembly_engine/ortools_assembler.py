@@ -14,6 +14,7 @@ INFEASIBLE(고정 블록 모순 등)·UNKNOWN이면 None → 체인 다음 단�
 from __future__ import annotations
 
 import logging
+import time
 from collections import Counter
 from dataclasses import replace
 from datetime import datetime, timedelta
@@ -111,6 +112,7 @@ class OrToolsAssembler:
         # 기배정 POI(TRIP-293)는 "이미 앞 일자에서 쓴 것"과 동일 취급 = used 초기값
         used: set[PoiId] = set(problem.excluded_poi_ids)
         days_out: list[DaySolution] = []
+        started = time.monotonic()
         for day in problem.days:
             slots = self._solve_day(problem, day, used, per_day_ms)
             if slots is None and problem.pace is not None:
@@ -135,6 +137,27 @@ class OrToolsAssembler:
                 slots = self._solve_day(replace(problem, pace=None), day,
                                         used, per_day_ms, log_cut=False)
             if slots is None:
+                # **안 쓴 예산을 실패한 일자에 몰아준다 (TRIP-907).**
+                #
+                # 퍼사드는 이 단계에 잔여 **전부**를 넘기는데(TRIP-376), `_solve_day`
+                # 는 일자당 상한(기본 3초)으로 스스로 자른다. 그래서 하루짜리 요청은
+                # 15초를 받아 3초만 쓰고 그리디로 내려간다 — 12초가 그냥 남는다.
+                #
+                # 실측(후보 50곳·1일): 3초·6초는 3/3 해없음, **12초는 0/3** 이다.
+                # 즉 못 푸는 게 아니라 시간이 모자란 것이고, 그 시간은 이미 있다.
+                # 상한 자체를 올리지 않는 이유는 위 `_solve_day` 주석에 있다 —
+                # 잘 풀리던 요청까지 전부 느려진다.
+                # 기준은 `per_day_ms` 가 아니라 **실제로 쓰인 상한**이다 — 하루짜리
+                # 요청은 per_day_ms 가 잔여 전부(15초)라 그걸로 비교하면 영원히
+                # 거짓이 된다. 실제 CP-SAT 에 들어간 값은 min(상한, per_day) 다.
+                used_cap_ms = min(self._cfg.or_tools_limit_ms, per_day_ms)
+                spare_ms = remaining_ms - int((time.monotonic() - started) * 1000)
+                if spare_ms >= used_cap_ms * 2:
+                    _log.info("해 없음 — 남은 예산 %dms 를 몰아 재시도 (day=%s)",
+                              spare_ms, day)
+                    slots = self._solve_day(replace(problem, pace=None), day, used,
+                                            spare_ms, log_cut=False, cap_ms=spare_ms)
+            if slots is None:
                 return None  # 해 확보 실패 → 체인 다음 단계
             used.update(s.poi_id for s in slots)
             days_out.append(DaySolution(
@@ -151,7 +174,8 @@ class OrToolsAssembler:
 
     # ── 일자 단위 CP-SAT ──────────────────────────────────────
     def _solve_day(self, problem, day, used: set[PoiId],
-                   budget_ms: int, *, log_cut: bool = True) -> list[VisitSlot] | None:
+                   budget_ms: int, *, log_cut: bool = True,
+                   cap_ms: int | None = None) -> list[VisitSlot] | None:
         tz = problem.day_window.start.tzinfo
         ws, we = _mod(problem.day_window.start), _mod(problem.day_window.end)
         fixed = [fb for fb in problem.fixed_blocks if fb.window.start.date() == day]
@@ -265,8 +289,12 @@ class OrToolsAssembler:
                                         max(nodes[i]["lo"], nodes[i]["hi"])))
 
         cp_solver = cp_model.CpSolver()
-        cp_solver.parameters.max_time_in_seconds = min(
-            self._cfg.or_tools_limit_ms, budget_ms) / 1000.0
+        # 일자당 상한. **기본값(3초)은 성공 경로의 지연을 묶는 장치다** — CP-SAT 은
+        # 준 시간을 거의 항상 끝까지 쓰므로(후보 20곳에서도 3,003ms 실측) 상한을
+        # 올리면 잘 풀리던 요청까지 전부 느려진다. 그래서 상한은 그대로 두고,
+        # **해를 못 냈을 때만** 호출측이 `cap_ms` 로 남은 예산을 몰아준다.
+        cap = self._cfg.or_tools_limit_ms if cap_ms is None else cap_ms
+        cp_solver.parameters.max_time_in_seconds = min(cap, budget_ms) / 1000.0
         cp_solver.parameters.random_seed = problem.seed % (2**31)
         cp_solver.parameters.num_search_workers = 1  # 결정론 (FD §4)
         status = cp_solver.Solve(m)

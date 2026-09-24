@@ -168,3 +168,77 @@ def test_every_backend_style_is_translated() -> None:
     missing = [x for x in backend if x not in TASTE_TOKENS]
     assert not missing, f"번역표에 없는 취향 어휘: {missing}"
     assert set(TASTE_TOKENS.values()) == set(TasteTag), "7축 중 도달 불가능한 값이 있다"
+
+
+# ── 7축이 못 담는 축 — 활동·음식 선호 ────────────────────────────────────────
+
+def test_cafe_and_nightview_preference_survives() -> None:
+    """7축에 대응 값이 없는 둘 — 이 필드가 생긴 이유다.
+
+    `PoiCategory` 에는 `CAFE`·`NIGHT_VIEW` 가 있는데 `TasteTag` 에는 없다.
+    이 두 줄이 깨지면 사용자가 카페를 골라도 표현할 방법이 다시 없어진다.
+    """
+    s, _ = store({"activities": ["카페", "야경"]})
+    assert s.get(REF).activities == ("카페", "야경")
+
+
+def test_cuisine_is_a_different_layer_from_the_food_axis() -> None:
+    """`미식`(7축 FOOD)은 '식당을 넣을까', 이쪽은 '어느 식당인가'다."""
+    s, _ = store({"styles": ["미식"], "food_tastes": ["한식", "일식"]})
+    got = s.get(REF)
+    assert got.taste_tags == (TasteTag.FOOD,)
+    assert got.cuisines == ("한식", "일식")
+
+
+def test_activity_and_cuisine_order_is_canonical() -> None:
+    """입력 순서에 안 흔들린다 — 프롬프트가 흔들리면 캐시 키가 매번 달라진다."""
+    from trippilot.domain.persona import activities_from, cuisines_from
+
+    assert activities_from(["야경", "카페"]) == activities_from(["카페", "야경"])
+    assert cuisines_from(["일식", "한식"]) == cuisines_from(["한식", "일식"])
+
+
+def test_every_backend_activity_and_cuisine_label_is_known() -> None:
+    """백엔드 정본 어휘를 다 덮는가 — 빠지면 조용히 버려진다."""
+    from trippilot.domain.persona import (
+        ACTIVITY_LABELS,
+        CUISINE_LABELS,
+        activities_from,
+        cuisines_from,
+    )
+
+    backend_activities = ("자연", "역사문화", "테마파크", "맛집투어",
+                          "카페", "전시", "야경", "쇼핑")
+    backend_cuisines = ("한식", "양식", "일식", "중식", "아시안")
+    assert set(backend_activities) == set(ACTIVITY_LABELS)
+    assert set(backend_cuisines) == set(CUISINE_LABELS)
+    assert len(activities_from(backend_activities)) == len(backend_activities)
+    assert len(cuisines_from(backend_cuisines)) == len(backend_cuisines)
+
+
+def test_unset_renders_as_misseol_in_the_prompt() -> None:
+    """빈 문자열이면 LLM 이 앞 줄과 이어 붙여 읽는다."""
+    import datetime as _dt
+
+    from trippilot.domain.llm import CandidatePool
+    from trippilot.llm_gateway.workers.preference import build_prompt_vars
+
+    persona = PersonaSummary(taste_tags=(), companion=None, budget=BudgetLevel.MID)
+    pool = CandidatePool(poi_ids=frozenset(), pois=(),
+                         generated_at=_dt.datetime(2026, 9, 24, tzinfo=_dt.timezone.utc))
+    vars_ = build_prompt_vars(pool, persona)
+    assert vars_["activities"] == "미설정" and vars_["cuisines"] == "미설정"
+
+
+def test_persona_round_trip_keeps_new_axes() -> None:
+    s, _ = store({"activities": ["카페"], "food_tastes": ["한식"]})
+    got = s.get(REF)
+    assert PersonaSummary.from_dict(got.to_dict()) == got
+
+
+def test_legacy_persona_payload_without_new_axes_loads() -> None:
+    s, _ = store({})
+    legacy = s.get(REF).to_dict()
+    del legacy["activities"], legacy["cuisines"]
+    restored = PersonaSummary.from_dict(legacy)
+    assert restored.activities == () and restored.cuisines == ()

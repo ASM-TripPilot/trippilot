@@ -6,7 +6,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 
 import { buildEditItineraryRequest } from '@/features/itinerary/model/buildEditItineraryRequest';
-import { buildDraftPins } from '@/features/itinerary/model/draftView';
+import {
+  buildDraftPins,
+  formatCoPickDayHeader,
+} from '@/features/itinerary/model/draftView';
 import {
   useItineraryEditStore,
   type EditorDaysItem,
@@ -17,6 +20,7 @@ import {
   resolvePlanState,
 } from '@/features/itinerary/model/planState';
 import { deriveVisitProgress } from '@/features/execution/model/visitProgress';
+import { reorderKeepingLocked } from '@/features/planb/model/reorderKeepingLocked';
 import {
   buildSlotKey,
   parseSlotKey,
@@ -37,17 +41,16 @@ import {
 import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
 import { isNotFound } from '@/shared/api/isNotFound';
 import { StateNotice } from '@/shared/ui/StateNotice';
-
-import { EditorView } from './EditorView';
+import { EditorView } from '@/widgets/map-sheet-shell/ui/EditorView';
 
 /**
  * h24 일정 편집 배선(TRIP-302 슬라이스1~3) — **TRIP-797 묶음 C 로 소비 화면을 옛
- * `ItineraryEditScreen`(features) → 순수 뷰 `EditorView`(같은 pages 슬라이스) 로 재조립**한다. 배선
- * 계약(무엇이 서버로 나가고 무엇이 화면에 뜨나)은 그대로고, "누가 그리나"만 h12 통일 편집기로 바뀐다.
+ * `ItineraryEditScreen`(features) → 순수 뷰 `EditorView` 로 재조립**한다. 배선 계약(무엇이 서버로
+ * 나가고 무엇이 화면에 뜨나)은 그대로고, "누가 그리나"만 h12 통일 편집기로 바뀐다.
  *
- * features 화면은 widgets(`MapSheetShell`)를 상향 참조 못 하므로 셸 조립은 pages 층 순수 뷰가 진다
- * (h07/h08 DraftPage·h14/h16 ItineraryPlanPage 선례). 이 페이지는 그 뷰가 요구하는 값(center·pins·
- * days·slots·활성 일자·콜백)을 채워 넣고, EditorView 가 순수 뷰라 못 가진 세 조각 — 저장 오류 안내·
+ * TRIP-921 로 뷰가 widgets(`map-sheet-shell`)로 승격돼 직접 짜기(`ManualPlanPage`)와 같은 뷰를 쓴다.
+ * 이 페이지는 그 뷰가 요구하는 값(center·pins·days·slots·활성 일자·헤더 날짜 문구·콜백)을 채워 넣고,
+ * EditorView 가 순수 뷰라 못 가진 세 조각 — 저장 오류 안내·
  * 미지정 제외 안내·시각조정 시트 — 을 **형제로** 렌더한다(02a-C ★C5).
  *
  * 이 파일이 지는 책임 — EditorView 는 이 중 어느 것도 모른다:
@@ -72,9 +75,8 @@ const SAVE_GENERATING_NOTE =
   '일정을 만드는 중이에요. 잠시 후 다시 시도해 주세요';
 const SAVE_ERROR_NOTE = '일정을 저장하지 못했어요. 잠시 후 다시 시도해 주세요';
 
-// 슬롯 좌표가 없을 때(계약 공백)의 안전 폴백 center — 지도는 목이라 값은 심판 대상이 아니다
-// (DraftPage·ItineraryPlanPage 의 `{ lat: 0, lng: 0 }` 폴백 선례와 동형).
-const FALLBACK_CENTER = { lat: 0, lng: 0 };
+// 핀이 없을 때 지도 중심 — 서울 시청(LiveHubView 선례). {0,0} 은 기니만 바다(null-island)라 무의미하다.
+const FALLBACK_CENTER = { lat: 37.5665, lng: 126.978 };
 
 function EditFace({
   testID,
@@ -104,8 +106,11 @@ function EditFace({
 
 export function ItineraryEditPage({
   tripId,
+  inTrip,
 }: {
   tripId: string;
+  /** TRIP-753 · i07 라우트(`planb/manual`)가 리터럴 true 로 넘긴다 — 뷰의 i07 얼굴(카드 사이 + 숨김·안내 문구). */
+  inTrip?: boolean;
 }): ReactElement {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -236,9 +241,12 @@ export function ItineraryEditPage({
     pins.length > 0 ? { lat: pins[0].lat, lng: pins[0].lng } : FALLBACK_CENTER;
 
   // 완료 poiId → slotKey(활성 일자). EditorView 가 이 배열로 per-slot 잠금을 판정한다(AC-11).
-  const completedSlotKeys = deriveVisitProgress(
+  const { completedPoiIds } = deriveVisitProgress(
     visits.data ?? { visits: [] }
-  ).completedPoiIds.map((poiId) => buildSlotKey(activeDate, poiId));
+  );
+  const completedSlotKeys = completedPoiIds.map((poiId) =>
+    buildSlotKey(activeDate, poiId)
+  );
 
   // 편집 중인 슬롯의 **현재 드래프트 값**을 찾아 시트에 시드한다 — 시트가 열렸고 그 슬롯이 드래프트에
   // 실재할 때만 마운트한다(둘 중 하나라도 없으면 안 그린다).
@@ -259,6 +267,7 @@ export function ItineraryEditPage({
         slots={activeSlots as EditorSlot[]}
         activeDayIndex={activeDayIndex}
         activeDate={activeDate}
+        dateLabel={formatCoPickDayHeader(activeDate)}
         onSelectDay={setActiveDayIndex}
         onBack={() => router.back()}
         onPressTimeChip={setEditingSlotKey}
@@ -275,13 +284,21 @@ export function ItineraryEditPage({
           })
         }
         onSave={handleSave}
-        // 재정렬은 startAt 을 읽지 않고 순서만 바꾼다(reorderKeepingFixed 는 isFixed 만 본다) — EditorSlot[]
-        // (미지정 null 허용)을 스토어의 슬롯 타입으로 좁혀 넘겨도 런타임 안전하다.
+        // 끌기 결과에서 완료·고정 행을 원래 자리로 되돌린 뒤 스토어에 넣는다(TRIP-753 AC-8). 규칙은 startAt 을
+        // 읽지 않고 순서만 바꾼다 — EditorSlot[](미지정 null 허용)을 서버 슬롯 타입으로 좁혀도 런타임 안전하다.
         onReorder={(data) =>
-          reorderSlots(activeDate, data as ItineraryDaysItemSlotsItem[])
+          reorderSlots(
+            activeDate,
+            reorderKeepingLocked(
+              activeSlots,
+              data as ItineraryDaysItemSlotsItem[],
+              completedPoiIds
+            )
+          )
         }
         onDeleteViaDrag={(poiId) => deleteSlot(activeDate, poiId)}
         completedSlotKeys={completedSlotKeys}
+        inTrip={inTrip}
       />
 
       {/* 순수 뷰가 못 가진 인라인 안내 — 저장 오류·미지정 제외(둘 다 INV-4). 지도·시트 위에 얹는 배너

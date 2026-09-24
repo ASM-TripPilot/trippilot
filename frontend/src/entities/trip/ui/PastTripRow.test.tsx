@@ -1,4 +1,4 @@
-import { Text } from 'react-native';
+import { Image, Text } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { PastTripRow } from './PastTripRow';
@@ -10,8 +10,9 @@ import type { PastTripCardVM } from '../model';
  *
  * 무엇을 보장하나:
  *  - 🔴 제목·날짜범위·박수를 **별개 leaf** 로 그린다(`getByText` 완전일치가 각각 잡음 — 한 줄로 합치면
- *    exact 매치 실패, 현 PastTripList 계약 계승). `Trip` 계약에 사진·통계 필드가 없어 72×72 썸네일·
- *    "사진 N·메모 M" 은 **안 그린다**(INV-1 정직 degrade).
+ *    exact 매치 실패, 현 PastTripList 계약 계승). `Trip` 계약에 사진·통계 필드가 없어 **실사진(`<Image>`)·
+ *    "사진 N·메모 M" 통계줄은 안 그린다**(INV-1 정직 degrade). 단 72×72 **placeholder 자리 박스**(bg-surface-soft,
+ *    이미지 없는 빈 박스)는 크롬으로 그린다(TRIP-767 · 실사진·통계 = TRIP-638 이후 · PR5).
  *  - 🔴 null 라벨은 미렌더(가짜 날짜·가짜 "0박" 금지). 제목만 있어도 카드는 뜬다.
  *  - 🔴 chevron 은 카드가 소유하지 않고 소비처가 **`trailing` 슬롯**으로 주입한다(807 SavedStayCard 동형 —
  *    j07 PastTripList 가 RecordGlyphs.ChevronRightGlyph 를 넣는다). shared 승격 없음(교차 0).
@@ -116,5 +117,25 @@ describe('🔴 PR4 · 사진·통계 발명 0 (INV-1 — Trip 계약에 없음)'
     expect(screen.queryAllByText(/사진|메모|₩|km/)).toHaveLength(0);
     // 짝 — 제목은 뜬다.
     expect(screen.getByText('부산 여행')).toBeOnTheScreen();
+  });
+});
+
+describe('🔴 PR5 · j07 정합 — 72×72 placeholder 자리 + 사진/메모·실사진 미렌더 (TRIP-767)', () => {
+  it('제목·기간이 다 있는 카드에도 72×72 placeholder 박스만 있고, 통계줄·실사진(Image)은 없다', () => {
+    // 준비 — 완전 VM(제목·날짜·박수 다 있음, 부산 2025 픽스처 대응).
+    render(<PastTripRow vm={vm()} onPress={noop} testID={ROOT} />);
+
+    // 짝(긍정) — placeholder 자리 박스가 실재한다(testID = `{root}-thumb`). 현 카드엔 없음 → red.
+    // (72×72·bg-surface-soft·이미지 없는 빈 박스 = 크롬 자리. 픽셀·정렬은 6-b.)
+    expect(screen.getByTestId(`${ROOT}-thumb`)).toBeOnTheScreen();
+
+    // 부정 — VM(`PastTripCardVM`)에 photoCount·memoCount·사진 URL 필드가 없어(INV-1) 통계줄을 안 그린다.
+    expect(screen.queryAllByText(/사진|메모/)).toHaveLength(0);
+    // 부정 — 실사진(`<Image>`)도 없다(placeholder 빈 박스뿐 — 실사진은 TRIP-638 이후).
+    expect(screen.UNSAFE_queryAllByType(Image)).toHaveLength(0);
+
+    // 짝(긍정) — 제목·기간 leaf 는 그대로(빈 렌더로 부재 단언이 공짜 통과하는 것 차단).
+    expect(screen.getByText('부산 여행')).toBeOnTheScreen();
+    expect(screen.getByText('2026.5.1–5.3')).toBeOnTheScreen();
   });
 });

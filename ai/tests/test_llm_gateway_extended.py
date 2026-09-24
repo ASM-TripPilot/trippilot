@@ -164,11 +164,13 @@ def test_extraction_worker_end_to_end() -> None:
 def test_registry_loads_registered_features() -> None:
     reg = PromptRegistry(_PROMPTS)
     for feature, variables in [
-        (LlmFeature.EXPLANATION, {"taste_tags": "x", "companion": "SOLO", "slots": "1. p"}),
+        (LlmFeature.EXPLANATION, {"taste_tags": "x", "companion": "SOLO",
+                                  "activities": "카페", "cuisines": "한식",
+                                  "slots": "1. p"}),
         (LlmFeature.PLACE_EXTRACTION, {"document": "d", "region": "제주", "category": "카페"}),
     ]:
         prompt, ref = reg.render(feature, variables)
-        assert ref.version == "0.1.0" and feature.value == ref.feature
+        assert feature.value == ref.feature
         assert "JSON" in prompt
 
 

@@ -16,6 +16,9 @@ import type { MonthCell } from '@/shared/date/monthGrid';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
+/** 월 네비 chevron 회색(muted-soft) — Figma 1570:1998 의 얇은 회색. 정확한 값·두께는 6-b(글리프 fill 사각). */
+const CHEVRON_GRAY = '#9AA1AB';
+
 export interface TripCalendarMonthProps {
   monthLabel: string;
   grid: (MonthCell | null)[];
@@ -45,7 +48,7 @@ export function TripCalendarMonth({
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           onPress={onPressPrev}
         >
-          <BackArrowGlyph size={22} />
+          <BackArrowGlyph size={16} color={CHEVRON_GRAY} />
         </Pressable>
         <Text
           testID="record-calendar-month-label"
@@ -60,7 +63,7 @@ export function TripCalendarMonth({
           onPress={onPressNext}
         >
           <View style={{ transform: [{ scaleX: -1 }] }}>
-            <BackArrowGlyph size={22} />
+            <BackArrowGlyph size={16} color={CHEVRON_GRAY} />
           </View>
         </Pressable>
       </View>

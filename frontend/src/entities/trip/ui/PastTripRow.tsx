@@ -6,8 +6,9 @@ import type { PastTripCardVM } from '../model';
 /**
  * TRIP-808 · j07 지난 여행 행 — 순수 프레젠테이션(features/record/ui/PastTripList 의 행에서 이관).
  *
- * 카드 = **제목 + 날짜범위(+박수)만**. 72×72 썸네일·"사진 N·메모 M" 통계는 `Trip` 계약에 필드가 없어
- * 안 그린다(INV-1 정직 degrade). 날짜범위·박수는 **별개 leaf** 로 그린다 — 테스트가 getByText 완전일치로
+ * 카드 = **72×72 placeholder 자리 박스 + 제목 + 날짜범위(+박수)**. 실사진(`<Image>`)·"사진 N·메모 M"
+ * 통계는 `Trip` 계약에 필드가 없어 안 그린다(INV-1 정직 degrade — 실데이터는 TRIP-638 이후, 지금은 빈 박스만).
+ * 날짜범위·박수는 **별개 leaf** 로 그린다 — 테스트가 getByText 완전일치로
  * 각각 잡기 때문(한 줄로 합치면 exact 실패). null 라벨은 미렌더(가짜 날짜·가짜 "0박" 금지).
  *
  * chevron 은 카드가 소유하지 않고 소비처가 `trailing` 슬롯으로 주입한다(807 SavedStayCard 동형) —
@@ -36,6 +37,12 @@ export function PastTripRow({
       onPress={onPress}
       className="w-full flex-row items-center gap-[12px] rounded-card border border-hairline bg-canvas p-[12px]"
     >
+      {/* 72×72 썸네일 자리 — 사진 실데이터는 `Trip` 계약에 없어(INV-1) 빈 placeholder 박스만 그린다
+          (실사진 `<Image>`·통계줄 없음, 실데이터는 TRIP-638 이후). 픽셀·정렬은 6-b. */}
+      <View
+        testID={`${testID}-thumb`}
+        className="h-[72px] w-[72px] rounded-[10px] bg-surface-soft"
+      />
       <View className="flex-1 gap-[3px]">
         <Text className="font-noto-bold text-card-title font-bold text-ink">
           {title}

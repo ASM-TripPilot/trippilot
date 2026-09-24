@@ -40,41 +40,6 @@ export function ChevronRightGlyph({ size = 20, testID }: GlyphProps) {
   );
 }
 
-/** 헤더 우상단 아이콘(설정/모양 — Figma l03 의 태양형 글리프). onPress 미배선(Q6). */
-export function SettingsSunGlyph({ size = 24, testID }: GlyphProps) {
-  const rays = [0, 45, 90, 135, 180, 225, 270, 315];
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Circle cx={12} cy={12} r={4} stroke={INK} strokeWidth={1.7} />
-      {rays.map((deg) => {
-        const rad = (deg * Math.PI) / 180;
-        const x1 = 12 + Math.cos(rad) * 7;
-        const y1 = 12 + Math.sin(rad) * 7;
-        const x2 = 12 + Math.cos(rad) * 9;
-        const y2 = 12 + Math.sin(rad) * 9;
-        return (
-          <Line
-            key={deg}
-            x1={x1}
-            y1={y1}
-            x2={x2}
-            y2={y2}
-            stroke={INK}
-            strokeWidth={1.7}
-            strokeLinecap="round"
-          />
-        );
-      })}
-    </Svg>
-  );
-}
-
 /** 등록 숙소·예약 기록 행 — 책갈피/기록. */
 export function BookmarkGlyph({ size = 20, testID }: GlyphProps) {
   return (
@@ -762,6 +727,90 @@ export function TrashGlyph({ size = 22, testID }: GlyphProps) {
         stroke={INK}
         strokeWidth={1.7}
         strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+/**
+ * 앱 정보 약관 행(TRIP-937) — 접힌 모서리 문서 + 본문 줄. Figma 근거 없는 발명 글리프라(01 Q5)
+ * Figma 역반영 대상이다. 3행(이용약관·처리방침·위치정보)이 공유한다.
+ */
+export function DocumentGlyph({ size = 22, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M6 3H14L19 8V20A1 1 0 0 1 18 21H6A1 1 0 0 1 5 20V4A1 1 0 0 1 6 3Z"
+        stroke={INK}
+        strokeWidth={1.7}
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M14 3V8H19"
+        stroke={INK}
+        strokeWidth={1.7}
+        strokeLinejoin="round"
+      />
+      <Line
+        x1={9}
+        y1={13}
+        x2={15}
+        y2={13}
+        stroke={INK}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+      />
+      <Line
+        x1={9}
+        y1={17}
+        x2={15}
+        y2={17}
+        stroke={INK}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+/** 로그아웃 행(TRIP-938) — 열린 문 밖으로 나가는 화살표. Figma 근거 없는 발명 글리프(역반영 대상). */
+export function LogoutGlyph({ size = 22, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M10 4H6A1 1 0 0 0 5 5V19A1 1 0 0 0 6 20H10"
+        stroke={INK}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Line
+        x1={10}
+        y1={12}
+        x2={20}
+        y2={12}
+        stroke={INK}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M16 8L20 12L16 16"
+        stroke={INK}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </Svg>
   );
