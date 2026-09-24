@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render as rtlRender, screen } from '@testing-library/react-native';
 
 import { ManualPlanPage } from './ManualPlanPage';
+import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { useItineraryEditStore } from '@/features/itinerary/model/itineraryEditStore';
 import type { Itinerary } from '@/shared/api/generated/schemas';
 
@@ -26,6 +27,8 @@ import type { Itinerary } from '@/shared/api/generated/schemas';
  *    띄운다(셸 루트 짝 동반, 재조립 후에도 보존).
  *  - 🔴 **M1 (TRIP-926 AC1)** 빈 일자(핀 0개)면 지도 center = 서울 시청(null-island (0,0) 아님).
  *  - 🟢 **M2 (TRIP-926 AC2)** 핀이 있으면 center = 첫 핀 좌표(무회귀 짝).
+ *  - 🟢 **V1·V2 (TRIP-590 AC1·AC2)** 서버가 `hasViolation:true` 로 준 슬롯에만 위반 배지가 사유 문구로
+ *    뜬다 — 페이지→스토어→EditorView→SlotStopCard 전 구간 잠금(선제 green, 뮤테이션으로 red 실측).
  *
  * ⚠️ RED 트리거는 `map-sheet-shell-root`(EditorView 조립) — 현재 페이지는 `ManualPlanScreen` 을 물어
  * 이 testID 가 없다. G-a2·G-a3(POST 가드) 는 재조립과 무관해 선제 green 이다.
@@ -265,5 +268,51 @@ describe('TRIP-926 · M — 지도 중심 (핀 0개면 서울 시청, 있으면 
     // 단언 — 초안이 실제로 시드됐고(짝), 지도는 첫 핀(경복궁) 좌표를 비춘다.
     expect(screen.getByText('경복궁')).toBeOnTheScreen();
     expect(screen.getByTestId('map-root')).toHaveTextContent('37.5796,126.977');
+  });
+});
+
+describe('TRIP-590 · V — 서버 위반 슬롯에 배지 (h19 직접 짜기, 선제 green)', () => {
+  const DAY = '2026-06-10';
+  const REASON = '숙소 고정 충돌';
+
+  it('🟢 V1·V2 · 위반 슬롯엔 사유 문구 배지가, 위반 없는 슬롯엔 배지가 없다 (AC1·AC2)', () => {
+    // 준비 — GET 이 슬롯 2곳을 돌려준다: p1 은 서버가 위반 판정(사유 동봉), p2 는 위반 없음.
+    const [first] = EXISTING_DRAFT.days[0].slots;
+    mockGet = {
+      data: {
+        ...EXISTING_DRAFT,
+        days: [
+          {
+            date: DAY,
+            slots: [
+              { ...first, hasViolation: true, violationReason: REASON },
+              { ...first, poiId: 'p2', nameKo: '창덕궁' },
+            ],
+          },
+        ],
+      },
+      isPending: false,
+      isError: false,
+    };
+
+    // 실행 — h19 진입.
+    render(<ManualPlanPage tripId={TRIP_ID} />);
+
+    // 단언 ① (AC1) — 위반 슬롯의 배지가 서버 사유 문구 그대로 뜬다(toHaveTextContent 문자열 = 완전 일치).
+    expect(
+      screen.getByTestId(`slot-stopcard-violation-${buildSlotKey(DAY, 'p1')}`)
+    ).toHaveTextContent(REASON);
+
+    // 단언 ② (AC2) — 위반 없는 슬롯은 카드는 있고(짝) 배지는 없다.
+    const cleanKey = buildSlotKey(DAY, 'p2');
+    expect(screen.getByTestId(`slot-stopcard-${cleanKey}`)).toBeOnTheScreen();
+    expect(
+      screen.queryByTestId(`slot-stopcard-violation-${cleanKey}`)
+    ).toBeNull();
+
+    // 단언 ③ — 화면 전체의 위반 배지는 정확히 1개(엉뚱한 카드에 번지지 않는다).
+    expect(screen.queryAllByTestId(/^slot-stopcard-violation-/)).toHaveLength(
+      1
+    );
   });
 });

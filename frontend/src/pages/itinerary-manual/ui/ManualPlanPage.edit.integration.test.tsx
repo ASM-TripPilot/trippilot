@@ -337,6 +337,35 @@ describe('🔴 M6-0 · TRIP-923 · INV-4 — 미지정 0 이면 저장해도 안
   });
 });
 
+describe('🟢 V3 · TRIP-590 AC1 · 5-b 경고-1 — 저장 응답의 서버 위반이 저장 뒤 화면에 뜬다', () => {
+  it('위반 없는 초안을 저장하고 PUT 응답이 b 에 위반을 달면, 저장 뒤 b 에만 사유 배지가 뜬다', async () => {
+    const REASON = '숙소 고정 충돌';
+    // GET 은 위반 0(PLAIN), PUT 응답만 b 를 위반으로 재판정한다 — 배지의 출처가 PUT 응답뿐이게.
+    putHandler = () =>
+      HttpResponse.json(
+        manualDraft([
+          PLAIN[0],
+          { ...PLAIN[1], hasViolation: true, violationReason: REASON },
+          PLAIN[2],
+        ])
+      );
+    renderPage();
+    await ready();
+    expect(screen.queryAllByTestId(/^slot-stopcard-violation-/)).toHaveLength(
+      0
+    );
+
+    await save();
+
+    expect(
+      await screen.findByTestId(`slot-stopcard-violation-${k('b')}`)
+    ).toHaveTextContent(REASON);
+    expect(screen.queryAllByTestId(/^slot-stopcard-violation-/)).toHaveLength(
+      1
+    );
+  });
+});
+
 describe('🔴 M7 · AC-9 — 장소 추가·카드 사이 +·뒤로가 라우터로 이어진다', () => {
   it('장소 추가는 h13 말미, 카드 사이 + 는 선행 index, 뒤로는 back 을 부른다', async () => {
     renderPage();
