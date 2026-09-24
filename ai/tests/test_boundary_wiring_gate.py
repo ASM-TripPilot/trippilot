@@ -24,15 +24,13 @@ import pathlib
 from trippilot.api.wiring import build_dev_app
 
 # 부르면 503 인 경계 — **사유와 함께 적는다.** 배선되면 지운다.
-_KNOWN_UNWIRED: dict[str, str] = {
-    "replan": (
-        "계약만 출하됨 (커밋 524bf03f, A-4 절반). 하루 전체 재계획은 선호 점수 단계가 "
-        "필요한데 그것은 ScheduleAgent 소유이고, 배선 층에서 복제하면 REPLAN 정보 "
-        "요구표 작업이 곧 지운다는 판단으로 미뤘다. 백엔드는 이 503 을 "
-        "`ORCHESTRATOR_NOT_WIRED` 로 알아보고 `legacyReplanViaGenerate` 로 내려가므로 "
-        "사용자에게 빈 화면이 아니라 **재계획 의도 5종이 버려진 일정**이 간다."
-    ),
-}
+_KNOWN_UNWIRED: dict[str, str] = {}
+"""**지금은 비어 있다** — `getattr` 경계 8종 전부가 실 배선에 있다.
+
+2026-09-24 에는 `replan` 하나가 들어 있었다(계약만 출하, 커밋 524bf03f). 같은 날
+배선해서 지웠다 — 목록이 비는 것이 정상이고, 비었다고 이 게이트가 무의미해지는 것은
+아니다(새 경계를 배선 없이 추가하면 그 순간 걸린다).
+"""
 
 
 def _handler_names() -> tuple[str, ...]:

@@ -103,6 +103,46 @@ def admission_fit(fee_won: int | None, category: PoiCategory, budget: BudgetLeve
     return _BUDGET_NEUTRAL if fee_won <= ceiling else _BUDGET_NEUTRAL - _OVER_BUDGET_PENALTY
 
 
+# ── 재계획 지시 — 사용자가 명시적으로 고른 방향 (KB-4) ─────────────────
+#
+# `DirectiveSpec.prefer_categories` / `avoid_categories` 를 **실제로 읽는 첫 자리**다.
+# 2026-09-24 실측: 사전 20종(PROMPT 11·RANKING 3·SOLVER 6)이 전부 적재돼 있는데
+# `enforced_by`·`prefer_categories`·`avoid_categories` 를 읽는 코드가 `src/` 전체에
+# **0건**이었다 — 사전이 인식은 하고 아무 효과가 없었다.
+#
+# **크기를 "한 단"(0.3)으로 잡는다.** 이 리포가 쓰는 말이고(`AssemblyConfig` 주석:
+# "취향 점수 갭이 한 단(≥0.3) 이상이면 점수 서열이 그대로 이긴다"), 그 값이어야
+# 지시가 카테고리 가중치를 실제로 넘는다 — ACTIVITY 0.9 를 CULTURE 0.8 아래로
+# 내리려면 0.1 로는 부족하고, "힘든 건 피해줘"를 눌렀는데 액티비티가 그대로 오면
+# 그 버튼은 거짓이다.
+#
+# **요금(`admission_fit`)과 달리 대칭이다.** 그쪽은 커버리지가 30%라 "기록이 있어서
+# 받는 가점"이 생겨 비대칭으로 막았는데, 지시는 사용자가 방금 누른 것이고 후보의
+# 카테고리는 **전원 알려져 있다** — 부분 관측이 아니라서 편향이 생길 자리가 없다.
+DIRECTIVE_STEP = 0.3
+
+
+def directive_fit(
+    category: PoiCategory,
+    prefer: frozenset[PoiCategory] = frozenset(),
+    avoid: frozenset[PoiCategory] = frozenset(),
+) -> float:
+    """지시 적합 — 선호 +, 회피 −, 해당 없으면 0.
+
+    **둘 다 걸리면 0 이다**(상쇄). 사용자가 서로 반대인 칩을 같이 눌렀다는 뜻이고,
+    그때 한쪽을 임의로 이기게 하면 화면에 설명할 수 없는 결과가 나온다 —
+    아무것도 안 하는 것이 정직하다. 그 상쇄는 호출측이 노트로 남긴다.
+    """
+    in_prefer, in_avoid = category in prefer, category in avoid
+    if in_prefer and in_avoid:
+        return 0.0
+    if in_prefer:
+        return DIRECTIVE_STEP
+    if in_avoid:
+        return -DIRECTIVE_STEP
+    return 0.0
+
+
 # 인기 포화점 — 저장 수가 이만큼이면 인기 항이 만점. 별점(0~5)이 차지하던 0~0.5 폭을
 # 그대로 쓰므로 다른 항(카테고리·예산·거리)과의 상대 비중은 변하지 않는다.
 _POPULARITY_FULL = 1000
@@ -119,6 +159,8 @@ def build_rule_score(
     anchor: GeoPoint | None,
     seed: int,
     fee_won: int | None = None,
+    prefer: frozenset[PoiCategory] = frozenset(),
+    avoid: frozenset[PoiCategory] = frozenset(),
 ) -> float:
     """LLM 점수 부재 시의 결정론 점수 (동일 입력 → 동일 출력, U5-P3).
 
@@ -133,4 +175,6 @@ def build_rule_score(
     # 시드 기반 미세 tie-break (crc32 — 파이썬 hash와 달리 실행 간 안정)
     jitter = (zlib.crc32(f"{seed}:{poi.poi_id}".encode()) % 1000) / 1e7
     return (CATEGORY_WEIGHT[poi.category] + popularity_norm
-            + admission_fit(fee_won, poi.category, budget) - dist_penalty + jitter)
+            + admission_fit(fee_won, poi.category, budget)
+            + directive_fit(poi.category, prefer, avoid)
+            - dist_penalty + jitter)

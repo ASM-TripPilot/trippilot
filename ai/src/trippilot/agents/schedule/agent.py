@@ -154,6 +154,11 @@ class GenerateItineraryRequest:
     # 여행 속도 (TRIP-906) — Provider 수집물이 아니라 **요청에 실려 오는 값**이라
     # 봉투(ScheduleTask)가 아니라 여기 있다. budget·transport 와 같은 길이다.
     pace: Pace | None = None
+    # 재계획 지시가 고른 방향 (KB-4 → `DirectiveSpec.prefer/avoid_categories`).
+    # `pace` 와 같은 길이다 — Provider 수집물이 아니라 **요청에 실려 오는 값**이라
+    # 봉투가 아니라 여기 있다. generate 경로는 기본값(빈 집합)이라 무영향이다.
+    prefer_categories: frozenset[PoiCategory] = frozenset()
+    avoid_categories: frozenset[PoiCategory] = frozenset()
 
     def __post_init__(self) -> None:
         if not self.days:
@@ -434,6 +439,8 @@ class ScheduleAgent:
                 poi_id=poi.poi_id,
                 score=build_rule_score(
                     poi, request.budget, request.anchor, request.seed,
+                    prefer=request.prefer_categories,
+                    avoid=request.avoid_categories,
                     # 조인 키는 `source_ref` — KB-5 장소 설명과 같은 길이다.
                     # 없으면 None 이고 그건 '모름'이라 중립이다.
                     fee_won=self._fees.of(poi.source_ref),
