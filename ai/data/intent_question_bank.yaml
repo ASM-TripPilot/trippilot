@@ -497,7 +497,7 @@ intents:
       - "잡아둔 여행 일정을 한눈에 볼 수 있을까요?"
 
   - intent: GET_WEATHER
-    handler: WeatherAgent
+    handler: null            # Orchestrator 직접 (WeatherProvider) — domain/intent.py 註
     mode: FastPath
     reviewed: true
     questions:
@@ -542,7 +542,7 @@ intents:
       - "내일 우산 챙겨야 할 정도로 비 올 가능성 있어?"
 
   - intent: GET_DISTANCE
-    handler: TransitAgent    # 거리만 응답 (INV-3 — 소요시간 미표시)
+    handler: null            # Orchestrator 직접 (TransitProvider) — 거리만 (INV-3)
     mode: FastPath
     reviewed: true
     questions:
@@ -577,7 +577,7 @@ intents:
       - "{장소}까지의 걷는 거리 좀 알려줘"
 
   - intent: GET_POI_INFO
-    handler: PlaceScoutAgent
+    handler: null            # Orchestrator 직접 (PlaceProvider) — domain/intent.py 註
     mode: FastPath
     reviewed: true
     questions:
