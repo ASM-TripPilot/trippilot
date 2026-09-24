@@ -150,6 +150,7 @@ class SecondPhaseGenerator(
                 d.slots.sumOf { s -> s.alternatives.count { SlotKey.of(d.date, it.poiId) in reasons.alternatives } }
             },
             tripId = tripId,
+            what = "차선책 문장(alternative_explanations)",
         )
 
         // 3) 이제 쓴다. 읽고-쓰는 사이에 재생성이 끼어들 수 있어 가드를 **다시** 본다.

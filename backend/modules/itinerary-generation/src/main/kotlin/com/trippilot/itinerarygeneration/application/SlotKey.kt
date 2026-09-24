@@ -24,12 +24,16 @@ object SlotKey {
     /**
      * 근거를 받았는데 **하나도 매칭되지 않으면** 키 규약이 어긋난 것이다 — 침묵하면 "AI 가 근거를 안 준 것"과
      * 구분되지 않는다(INV-4 취지). 값 자체는 버리지 않고 그대로 두고 신호만 남긴다.
+     *
+     * @param what 어느 축인지. **기본값을 믿고 그냥 부르지 마라** — 이 그물은 축이 둘이다(슬롯 근거 ·
+     *   차선책 문장). 라벨 없이 쓰면 차선책 키가 어긋났는데 로그가 *"추천 근거… explanations 키 규약"* 을
+     *   말해, 읽는 사람이 **엉뚱한 경로를 파게 된다.** 와이어 필드명을 함께 적어 바로 grep 되게 한다.
      */
-    fun warnIfUnmatched(received: Int, matched: Int, tripId: UUID) {
+    fun warnIfUnmatched(received: Int, matched: Int, tripId: UUID, what: String = "추천 근거(explanations)") {
         if (received > 0 && matched == 0) {
             log.warn(
-                "추천 근거 {}건을 받았지만 슬롯에 하나도 붙지 않았습니다 — explanations 키 규약 불일치 의심(BR-U2-04). tripId={}",
-                received, tripId,
+                "{} {}건을 받았지만 슬롯에 하나도 붙지 않았습니다 — 키 규약 불일치 의심(BR-U2-04). tripId={}",
+                what, received, tripId,
             )
         }
     }
