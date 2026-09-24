@@ -211,7 +211,13 @@ MLX LoRA 산출물(어댑터)은 그대로 vLLM 에 안 올라간다 — `fuse` 
 |---|---|
 | `vocab.json` | 스냅샷에서 복사 |
 | `merges.txt` | 스냅샷에서 복사 |
-| `chat_template` | `fuse` 가 `chat_template.jinja` 로 **빼 놓는다**. 원본은 `tokenizer_config.json` 안에 있다 — 그 키로 병합해 넣는다 |
+| `chat_template` | `fuse` 가 `chat_template.jinja` 로 **빼 놓는다**. **원본 `tokenizer_config.json` 을 그대로 덮어쓰고 `chat_template.jinja` 를 지운다** |
+
+> ⚠️ **둘 다 두면 안 된다.** AWS 문서가 명시한다 — 채팅 템플릿은 `chat_template.jinja`
+> **또는** `tokenizer_config.json` 의 `chat_template` 필드, **둘 중 하나만** 둔다
+> ("Choose one approach"). 실측(2026-09-24)으로 둘 다 넣은 2차 임포트도 같은
+> 토크나이저 오류로 실패했다. 통과한 구성은 **원본 HF 레이아웃 그대로**(가중치만
+> 융합본)였다 — `chat_template.jinja` 없음, `tokenizer_config.json` 에 필드 포함.
 
 올리기 전에 **HF 로더로 직접 읽어 본다**(실패를 30분 뒤가 아니라 그 자리에서 안다):
 
