@@ -8,6 +8,7 @@ import BottomSheet, {
 } from '@gorhom/bottom-sheet';
 import { LinearGradient } from 'expo-linear-gradient';
 
+import { deriveEndsNextDay } from '@/entities/itinerary-slot/lib/endsNextDay';
 import { SegmentedControl } from '@/shared/ui/SegmentedControl';
 import { WheelPicker } from '@/shared/ui/WheelPicker';
 
@@ -40,23 +41,27 @@ const MINUTES = Array.from({ length: 60 }, (_, i) =>
 /**
  * h04(시간대 조정) 변형의 장소 요약 행 데이터(TRIP-787).
  * `badgeLabel`은 화면이 파생하지 않고 문자열 그대로 받는다(seed Q3). `imageUrl` null 이면 썸네일 이미지 미렌더.
+ * `badgeLabel`·`region` 은 없으면 배지·둘째 줄을 그리지 않는다(TRIP-927 — 슬롯 계약에 region·필수 방문지
+ * 신호가 없어 편집 화면은 안 넘긴다. 없는 사실을 "필수 · 꼭 갈 곳"으로 지어내지 않는다).
  */
 export interface TimeSheetPlaceSummary {
   imageUrl: string | null;
   name: string;
-  badgeLabel: string;
-  region: string;
+  badgeLabel?: string;
+  region?: string;
 }
 
-export interface TimeSheetProps {
+/** 종료까지 정해진 적용 결과. `endsNextDay` 는 `deriveEndsNextDay` 유도값이다. */
+type TimeSheetApplyPatch = {
+  startAt: string;
+  endAt: string;
+  endsNextDay: boolean;
+};
+
+interface TimeSheetBaseProps {
   /** 현재값 "HH:mm:ss". */
   startAt: string;
   endAt: string;
-  onApply: (patch: {
-    startAt: string;
-    endAt: string;
-    endsNextDay: boolean;
-  }) => void;
   onCancel: () => void;
   /** testID 접두 — 소비처마다 다르다(`itinerary-edit-time`·`planb-manual-time`). */
   testIDPrefix: string;
@@ -64,14 +69,25 @@ export interface TimeSheetProps {
   labels: { start: string; end: string };
   /** 시트 제목 — 미지정 시 '시각 조정'(h24 원본), i15/i22 는 '시각 입력'을 넘긴다. */
   title?: string;
-  /**
-   * 렌더 변형(TRIP-787). 미전달 = default(기존 6화면 계약 무변). `'h04'` = 시간대 조정 변형.
-   * default 트리를 한 픽셀도 바꾸지 않는 opt-in 이다(회귀 0, AC-R1).
-   */
-  mode?: 'h04';
-  /** h04 변형의 장소 요약 행(프리뷰 픽스처, Q4 프리뷰 전용). default 모드는 무시한다. */
+  /** h04 변형의 장소 요약 행. default 모드는 무시한다. */
   placeSummary?: TimeSheetPlaceSummary;
 }
+
+/**
+ * `mode` 로 갈리는 props(TRIP-927). 미전달 = default(기존 소비처 계약 무변 — 항상 종료까지 싣는다).
+ * `'h04'` = 시간대 조정 변형(TRIP-787) — 종료를 손대지 않고 적용하면 `{ startAt, endAt: null }` 을 보내고
+ * `endsNextDay` 는 싣지 않는다. "종료는 그대로"의 해석(기존 endAt 유지·유도)은 소비처 몫이다.
+ */
+export type TimeSheetProps = TimeSheetBaseProps &
+  (
+    | { mode?: undefined; onApply: (patch: TimeSheetApplyPatch) => void }
+    | {
+        mode: 'h04';
+        onApply: (
+          patch: TimeSheetApplyPatch | { startAt: string; endAt: null }
+        ) => void;
+      }
+  );
 
 function renderTimeSheetBackdrop(
   props: BottomSheetBackdropProps
@@ -191,17 +207,17 @@ function timeLabel12(hourStr: string, minuteStr: string): string {
   return `${meridiem} ${hour12}:${minuteStr}`;
 }
 
-export function TimeSheet({
-  startAt,
-  endAt,
-  onApply,
-  onCancel,
-  testIDPrefix,
-  labels,
-  title = DEFAULT_TITLE,
-  mode,
-  placeSummary,
-}: TimeSheetProps): ReactElement {
+export function TimeSheet(props: TimeSheetProps): ReactElement {
+  // onApply 는 `mode` 에 따라 타입이 갈려 구조분해하지 않는다 — `props.mode` 로 좁혀서 부른다.
+  const {
+    startAt,
+    endAt,
+    onCancel,
+    testIDPrefix,
+    labels,
+    title = DEFAULT_TITLE,
+    placeSummary,
+  } = props;
   // 현재 시각을 시·분으로 시드한다(초는 표시·편집하지 않는다 — 적용 시 :00 으로 되돌린다).
   const [startHour, setStartHour] = useState(startAt.slice(0, 2));
   const [startMinute, setStartMinute] = useState(startAt.slice(3, 5));
@@ -211,21 +227,29 @@ export function TimeSheet({
   const [activeField, setActiveField] = useState<'start' | 'end'>('start');
   const [endConfigured, setEndConfigured] = useState(false);
 
+  const nextStart = `${startHour}:${startMinute}:00`;
+
   function handleApply(): void {
-    const nextStart = `${startHour}:${startMinute}:00`;
     const nextEnd = `${endHour}:${endMinute}:00`;
-    // end ≤ start(zero-pad 문자열 비교)면 자정을 넘긴 것으로 유도한다(같으면 익일).
-    onApply({
+    props.onApply({
       startAt: nextStart,
       endAt: nextEnd,
-      endsNextDay: nextEnd <= nextStart,
+      endsNextDay: deriveEndsNextDay(nextStart, nextEnd),
     });
   }
 
-  if (mode === 'h04') {
+  if (props.mode === 'h04') {
     // 휠은 활성 탭(시작/종료)의 시·분을 편집한다. 12시간제로 보여주되 저장은 24시간 HH 상태(위
-    // startHour/endHour 등)에 되쓴다 — 그래야 '적용'이 default 와 같은 handleApply(같은 endsNextDay
-    // 유도, `<=` 한 벌)를 그대로 쓴다(AC-E1, 유도 재구현 금지).
+    // startHour/endHour 등)에 되쓴다 — 종료를 손댔으면 '적용'이 default 와 같은 handleApply 를 탄다.
+    // 종료를 손대지 않았으면 종료를 "모름"으로 보고한다(endAt null, endsNextDay 없음 — TRIP-927).
+    const onApplyH04 = props.onApply;
+    const handleApplyH04 = (): void => {
+      if (endConfigured) {
+        handleApply();
+      } else {
+        onApplyH04({ startAt: nextStart, endAt: null });
+      }
+    };
     const activeHour = activeField === 'start' ? startHour : endHour;
     const activeMinute = activeField === 'start' ? startMinute : endMinute;
     const { meridiem, hour12 } = decompose12(activeHour);
@@ -253,7 +277,16 @@ export function TimeSheet({
       : H04_END_UNSET;
 
     return (
-      <BottomSheet backdropComponent={renderTimeSheetBackdrop}>
+      // 취소 버튼이 없는 얼굴이라 스와이프·딤 탭 닫힘도 onCancel 로 알린다 — 안 그러면 시트만 사라지고
+      // 소비처의 "열림" 상태가 남아 같은 칩을 다시 눌러도 안 열린다(TRIP-927 AC-7).
+      // `enableContentPanningGesture={false}` — 본문 pan 이 휠 드래그를 삼켜 시트 끌기로 새는 것을 막는다.
+      // 닫기는 핸들·딤으로 남는다(선례 MustVisitTimeScreen · repo-traps 바텀시트 절, jest 사각·6-b 실기).
+      <BottomSheet
+        backdropComponent={renderTimeSheetBackdrop}
+        enablePanDownToClose
+        enableContentPanningGesture={false}
+        onClose={onCancel}
+      >
         <BottomSheetView
           testID={`${testIDPrefix}-sheet`}
           className="w-full gap-lg px-xl pb-[28px] pt-[10px]"
@@ -290,18 +323,22 @@ export function TimeSheet({
                   >
                     {placeSummary.name}
                   </Text>
-                  <View className="rounded-button bg-primary-pale px-sm py-[3px]">
-                    <Text className="font-noto-bold text-micro font-bold text-primary">
-                      {placeSummary.badgeLabel}
-                    </Text>
-                  </View>
+                  {placeSummary.badgeLabel === undefined ? null : (
+                    <View className="rounded-button bg-primary-pale px-sm py-[3px]">
+                      <Text className="font-noto-bold text-micro font-bold text-primary">
+                        {placeSummary.badgeLabel}
+                      </Text>
+                    </View>
+                  )}
                 </View>
-                <Text
-                  numberOfLines={1}
-                  className="font-noto text-caption text-muted"
-                >
-                  {`${placeSummary.region} · ${H04_PLACE_SUFFIX}`}
-                </Text>
+                {placeSummary.region === undefined ? null : (
+                  <Text
+                    numberOfLines={1}
+                    className="font-noto text-caption text-muted"
+                  >
+                    {`${placeSummary.region} · ${H04_PLACE_SUFFIX}`}
+                  </Text>
+                )}
               </View>
             </View>
           )}
@@ -405,7 +442,7 @@ export function TimeSheet({
           <Pressable
             testID={`${testIDPrefix}-apply`}
             accessibilityRole="button"
-            onPress={handleApply}
+            onPress={handleApplyH04}
             className="w-full items-center justify-center rounded-button bg-primary py-lg"
           >
             <Text className="font-noto-bold text-[16px] font-bold text-on-primary">

@@ -292,6 +292,7 @@
 
 ## src/entities/itinerary-slot/lib/
 - `src/entities/itinerary-slot/lib/categoryPlaceholder.ts`  →  CategoryPlaceholder · resolveCategoryPlaceholder
+- `src/entities/itinerary-slot/lib/endsNextDay.ts`  →  deriveEndsNextDay
 - `src/entities/itinerary-slot/lib/openingHoursLabel.ts`  →  formatOpeningHoursLabel
 - `src/entities/itinerary-slot/lib/slotKey.ts`  →  buildSlotKey · ParsedSlotKey · parseSlotKey · SlotKeySet · buildSlotKeys
 - `src/entities/itinerary-slot/lib/slotMapPin.ts`  →  SlotProgressState · StatePinInput · toMapPinState · buildStatePins
@@ -1331,4 +1332,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 899개 파일
+합계 900개 파일
