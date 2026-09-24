@@ -30,6 +30,8 @@
     },
     "TerraformStateBucketPolicy": {
       "Type": "AWS::S3::BucketPolicy",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
       "Properties": {
         "Bucket": {"Ref": "TerraformStateBucket"},
         "PolicyDocument": {
@@ -153,6 +155,8 @@
                     "eks:ListClusters",
                     "eks:DescribeAddonVersions",
                     "eks:DescribeClusterVersions",
+                    "elasticloadbalancing:DescribeLoadBalancers",
+                    "elasticloadbalancing:DescribeTags",
                     "ecr:GetAuthorizationToken",
                     "logs:DescribeLogGroups"
                   ],

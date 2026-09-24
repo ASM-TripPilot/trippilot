@@ -343,7 +343,7 @@ body{word-break:keep-all;overflow-wrap:break-word}.anchor-alias{display:block;po
 <h2 id="release-recovery-title">실패 조사와 복구 범위</h2>
 <ul class="summary"><li>처음 실패한 step과 올바른 계정·클러스터·배포 revision을 확인합니다.</li><li>Helm --atomic은 Helm 명령 실패를 다룹니다. 이후 smoke 실패는 별도 판단합니다.</li><li>Terraform 변경·DB migration·데이터 복구에는 각각 복구 계획이 필요합니다.</li></ul>
 
-<aside class="notes"><b>강사 노트</b>로그를 공유할 때 비밀값을 포함하지 않습니다. EKS Pod 조회는 올바른 계정·리전·클러스터 컨텍스트인지 먼저 확인합니다. 상태 잠금이 남아 있다고 곧바로 강제 해제하지 말고 같은 환경에서 실행 중인 배포가 있는지 확인합니다.</aside>
+<aside class="notes"><b>강사 노트</b>환경 정리는 AWS 수동 삭제 런북을 따라 service 계획·삭제 뒤 bootstrap을 별도로 실행합니다. 기본값은 스냅샷·state 보존이며 Redis·ECR과 이미 삭제한 자원은 코드 revert로 복구되지 않습니다. 로그를 공유할 때 비밀값을 포함하지 않습니다. EKS Pod 조회는 올바른 계정·리전·클러스터 컨텍스트인지 먼저 확인합니다. 상태 잠금이 남아 있다고 곧바로 강제 해제하지 말고 같은 환경에서 실행 중인 배포가 있는지 확인합니다.</aside>
 <p class="source">구현 근거: <a href="../../deploy/eks/runtime.py">deploy/eks/runtime.py</a> · <a href="terraform-actions-aws-course.html#release-recovery">이 장의 상세 설명·실습</a></p>
 </section>
 <section class="slide" id="release-review" data-aliases="review" aria-labelledby="release-review-title">
