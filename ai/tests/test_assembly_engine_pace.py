@@ -212,3 +212,46 @@ def test_no_retry_when_pace_is_unset() -> None:
     asm._solve_day = always_none
     assert asm.solve(problem, remaining_ms=2000) is None
     assert calls == [None], f"불필요한 재시도: {calls}"
+
+
+# ── 안 쓴 예산을 실패한 일자에 몰아준다 (TRIP-907) ───────────────────────────
+
+def test_failed_day_retries_with_the_unspent_budget() -> None:
+    """퍼사드는 잔여 전부를 넘기는데 일자당 상한이 3초라 나머지가 남는다.
+
+    실측(후보 50곳·1일): 3초·6초는 3/3 해없음, 12초는 0/3. 못 푸는 게 아니라
+    시간이 모자란 것이고 그 시간은 이미 있다 — 안 쓰고 그리디로 내려가고 있었다.
+    """
+    problem, index = _problem()
+    asm = OrToolsAssembler(index, _EST, _CFG)
+    original = asm._solve_day
+    caps: list = []
+
+    def flaky(prob, day, used, budget_ms, **kw):
+        caps.append(kw.get("cap_ms"))
+        if len(caps) == 1:
+            return None  # 상한 안에서 못 푼 것을 흉내
+        return original(prob, day, used, budget_ms, **kw)
+
+    asm._solve_day = flaky
+    out = asm.solve(problem, remaining_ms=15_000)
+
+    assert out is not None, "남은 예산을 안 쓰고 포기했다 — 그리디 폴백으로 내려간다"
+    assert caps[0] is None, "첫 시도는 기본 상한이어야 한다(성공 경로 지연 불변)"
+    assert caps[1] and caps[1] > _CFG.or_tools_limit_ms, (
+        f"재시도가 상한을 안 늘렸다: {caps[1]}")
+
+
+def test_no_spare_retry_when_budget_is_already_spent() -> None:
+    """잔여가 상한과 같으면 몰아줄 것이 없다 — 같은 걸 또 풀어봐야 시간만 쓴다."""
+    problem, index = _problem()
+    asm = OrToolsAssembler(index, _EST, _CFG)
+    calls: list = []
+
+    def always_none(prob, day, used, budget_ms, **kw):
+        calls.append(budget_ms)
+        return None
+
+    asm._solve_day = always_none
+    assert asm.solve(problem, remaining_ms=_CFG.or_tools_limit_ms) is None
+    assert len(calls) == 1, f"불필요한 재시도: {calls}"

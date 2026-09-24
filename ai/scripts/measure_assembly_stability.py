@@ -110,18 +110,24 @@ def build_problem(n: int, *, pace: Pace | None = None):
     return problem, {p.poi_id: p for p in pois}
 
 
-def run_once(problem, index, cfg, *, engine: str = "or"):
+def run_once(problem, index, cfg, *, engine: str = "or", budget_ms: int = 15_000):
+    """budget_ms 는 **어셈블리 단계가 받는 잔여 전부**다 — 일자당 상한과 다르다.
+
+    퍼사드는 체인 단계에 잔여를 통째로 넘기고(TRIP-376), OR 단계가 일자당
+    `or_tools_limit_ms` 로 스스로 자른다. 둘을 같은 값으로 재면 "안 쓴 예산"이
+    없는 것처럼 보여 실패 구제 경로가 아예 안 돈다.
+    """
     est = TravelEstimator(cfg)
     asm = (OrToolsAssembler(index, est, cfg) if engine == "or"
            else RuleFallbackAssembler(index, est, cfg))
     t0 = time.perf_counter()
-    out = asm.solve(problem, remaining_ms=cfg.or_tools_limit_ms)
+    out = asm.solve(problem, remaining_ms=budget_ms)
     ms = int((time.perf_counter() - t0) * 1000)
     slots = None if out is None else sum(len(d.slots) for d in out.days)
     return slots, ms
 
 
-def sweep(pools, limits, paces, repeat: int) -> None:
+def sweep(pools, limits, paces, repeat: int, budget_ms: int) -> None:
     print(f"{'후보':>5} {'시한ms':>7} {'pace':>9} | "
           f"{'해없음':>8} {'OR슬롯':>10} {'폴백':>5} {'중앙ms':>7}")
     print("-" * 62)
@@ -130,11 +136,13 @@ def sweep(pools, limits, paces, repeat: int) -> None:
             cfg = AssemblyConfig(or_tools_limit_ms=limit_ms, or_tools_min_ms=50)
             for pace in paces:
                 problem, index = build_problem(n, pace=pace)
-                runs = [run_once(problem, index, cfg) for _ in range(repeat)]
+                runs = [run_once(problem, index, cfg, budget_ms=budget_ms)
+                        for _ in range(repeat)]
                 none_n = sum(1 for s, _ in runs if s is None)
                 got = sorted({s for s, _ in runs if s is not None})
                 times = sorted(ms for _, ms in runs)
-                fb, _ = run_once(problem, index, cfg, engine="fb")
+                fb, _ = run_once(problem, index, cfg, engine="fb",
+                                 budget_ms=budget_ms)
                 print(f"{n:>5} {limit_ms:>7} {str(pace.value if pace else '-'):>9} | "
                       f"{f'{none_n}/{repeat}':>8} {str(got or '-'):>10} "
                       f"{str(fb):>5} {times[len(times) // 2]:>7}")
@@ -148,6 +156,8 @@ def main() -> None:
                     help="or_tools_limit_ms (쉼표 구분). 시한만 올려 풀리는지 본다")
     ap.add_argument("--repeat", type=int, default=6,
                     help="조합당 반복. 같은 조합은 재현되므로 6이면 충분하다")
+    ap.add_argument("--budget-ms", type=int, default=15_000,
+                    help="어셈블리 단계가 받는 잔여 전부. 일자당 상한과 다르다")
     ap.add_argument("--pace", action="store_true",
                     help="pace 3값을 함께 비교 (기본은 무보정만)")
     args = ap.parse_args()
@@ -158,8 +168,9 @@ def main() -> None:
 
     print(f"기본 체류(분): "
           f"{ {c.value: v for c, v in STAY_DEFAULT_MIN.items()} }")
-    print(f"하루 창 09:00~21:00 · PUBLIC · 후보 1/3 은 짧은 영업창(10~17시)\n")
-    sweep(pools, limits, paces, args.repeat)
+    print(f"하루 창 09:00~21:00 · PUBLIC · 후보 1/3 은 짧은 영업창(10~17시)")
+    print(f"어셈블리 잔여 예산 {args.budget_ms}ms (일자당 상한과 별개)\n")
+    sweep(pools, limits, paces, args.repeat, args.budget_ms)
 
 
 if __name__ == "__main__":
