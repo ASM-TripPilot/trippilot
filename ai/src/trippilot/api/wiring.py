@@ -116,6 +116,7 @@ from trippilot.domain.common import (
 )
 from trippilot.domain.context import PermissionDeniedError, Principal, ResourceRef
 from trippilot.domain.freshness import FreshnessMeta
+from trippilot.domain.intent import Intent
 from trippilot.domain.itinerary import (
     DaySolution,
     FixedBlock,
@@ -998,7 +999,7 @@ class WiredItineraryOrchestrator:
             params["principal"] = Principal(user_id=request.trip_id)
             params["persona_ref"] = ResourceRef(
                 kind="persona", ref_id=request.trip_id, owner_id=request.trip_id)
-        packets = self._info.collect("REPLAN", params)
+        packets = self._info.collect(Intent.REPLAN, params)
         pool = self._pool_from(packets, now)
         result = self._rag.run(
             PlanBRagRequest(
@@ -1245,7 +1246,7 @@ class WiredItineraryOrchestrator:
         # 직행 대신 PlaceProvider 를 거치면서 FreshnessMeta·ProviderStatus 가 붙는다.
         # 조회 실패가 예외로 튀지 않고 상태값으로 수렴한다(INV-4).
         packets = self._info.collect(
-            "EDIT",
+            Intent.EDIT_SCHEDULE,
             {
                 "pool_request": CandidatePoolRequest(
                     anchor=GeoPoint(request.anchor.lat, request.anchor.lng),

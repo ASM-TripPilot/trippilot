@@ -17,7 +17,12 @@ from datetime import date, datetime, timezone
 
 from trippilot.domain.common import GeoPoint
 from trippilot.domain.freshness import InfoPacket, ProviderKind, ProviderStatus
-from trippilot.orchestrator.info_collector import InfoCollector
+from trippilot.domain.intent import ROUTABLE_INTENTS, Intent
+from trippilot.orchestrator.info_collector import (
+    INFO_REQUIREMENTS,
+    InfoCollector,
+    UnknownIntentError,
+)
 from trippilot.providers.weather import WeatherProvider
 
 _ANCHOR = GeoPoint(35.1587, 129.1604)
@@ -78,18 +83,66 @@ def test_collector_routes_by_requirements_table() -> None:
         {ProviderKind.WEATHER: WeatherProvider(_FakePort({_D1: 10}))}
     )
 
-    packets = collector.collect("GENERATE_SCHEDULE", _PARAMS)
+    packets = collector.collect(Intent.GENERATE_SCHEDULE, _PARAMS)
     assert set(packets) == {ProviderKind.WEATHER}
     assert packets[ProviderKind.WEATHER].status is ProviderStatus.OK
 
-    assert collector.collect("REFLECT", _PARAMS) == {}  # 요구표 밖 — 빈 묶음
+    # 회고는 **빈 튜플이 명시된** 행이다 — "Provider 가 필요 없다"는 기록이다.
+    assert collector.collect(Intent.GENERATE_REFLECTION, _PARAMS) == {}
+
+
+def test_intent_without_a_row_raises_instead_of_returning_empty() -> None:
+    """미정과 '필요 없음'을 가른다.
+
+    전에는 표에 없는 키가 **조용히 빈 묶음**이었다. 그러면 요구표를 안 적은 의도가
+    Provider 를 하나도 안 거치고 통과하고, 그 사실이 후보 0건으로만 드러나 원인까지
+    3단을 거슬러야 한다(INV-4 침묵 금지). 실제로 표의 키가 `"EDIT"`·`"REFLECT"` 라
+    라벨 정본(`EDIT_SCHEDULE`·`GENERATE_REFLECTION`)과 어긋나 있었고, 라우터가
+    라벨로 디스패치를 끄는 순간 그 두 의도가 통째로 샜을 자리다.
+    """
+    collector = InfoCollector({})
+    with pytest.raises(UnknownIntentError) as got:
+        collector.collect(Intent.SHOW_SCHEDULE, _PARAMS)
+    assert got.value.intent is Intent.SHOW_SCHEDULE
+
+
+def test_every_requirement_key_is_a_real_intent_label() -> None:
+    """수기 문자열이던 시절의 재발 방지 — 키가 라벨 정본과 같은 공간에 있는가."""
+    assert all(isinstance(k, Intent) for k in INFO_REQUIREMENTS)
+
+
+# 아직 요구표를 안 정한 의도 — 여기 있는 동안 `collect()` 는 UnknownIntentError 다.
+# 행을 채우면 이 목록에서 지운다.
+#
+# **알려진 공백을 코드에 보이게 두는 것**이 목적이다. 표의 부재로만 있으면 아무도
+# 세지 않는다 — 지금 호출자가 없어 안전할 뿐, 라우터 배선이 오는 순간 이 아홉이
+# 전부 요청 경로에서 터진다. 그리고 새 의도를 라벨에 추가하고 행을 안 적으면
+# 그 사실이 **조용히 이 목록에 섞이지 않고** 여기서 깨진다.
+_REQUIREMENTS_UNDEFINED = frozenset({
+    Intent.REGENERATE,
+    Intent.SUGGEST_ALTERNATIVE,
+    Intent.TRIP_SUMMARY,
+    Intent.STYLE_ANALYSIS,
+    Intent.GET_NEXT_SLOT,
+    Intent.SHOW_SCHEDULE,
+    Intent.GET_WEATHER,
+    Intent.GET_DISTANCE,
+    Intent.GET_POI_INFO,
+})
+
+
+def test_undefined_requirement_rows_stay_an_explicit_list() -> None:
+    actual = frozenset(i for i in ROUTABLE_INTENTS if i not in INFO_REQUIREMENTS)
+    assert actual == _REQUIREMENTS_UNDEFINED, (
+        "요구표 공백이 바뀌었다 — 행을 채웠으면 위 목록에서 지우고, "
+        "의도를 새로 추가했으면 행을 적거나 여기 명시할 것")
 
 
 # ── ④ 미등록 Provider — 기능 부재 ────────────────────────────────────
 
 
 def test_collector_skips_unregistered_provider() -> None:
-    packets = InfoCollector({}).collect("GENERATE_SCHEDULE", _PARAMS)
+    packets = InfoCollector({}).collect(Intent.GENERATE_SCHEDULE, _PARAMS)
     assert packets == {}  # 패킷 자체가 없다 — 실패 상태값도 아님
 
 
@@ -102,7 +155,7 @@ def test_collector_converts_leaked_exception_to_unavailable() -> None:
             raise RuntimeError("contract violation")
 
     packets = InfoCollector({ProviderKind.WEATHER: _BrokenProvider()}).collect(
-        "GENERATE_SCHEDULE", _PARAMS
+        Intent.GENERATE_SCHEDULE, _PARAMS
     )
 
     packet = packets[ProviderKind.WEATHER]
@@ -112,14 +165,14 @@ def test_collector_converts_leaked_exception_to_unavailable() -> None:
 
 # ── TRIP-407 — PlaceProvider·PersonaProvider ─────────────────────────
 
+import pytest
+
 from trippilot.domain.common import BudgetLevel, TransportMode
 from trippilot.domain.context import PermissionDeniedError, Principal, ResourceRef
 from trippilot.domain.persona import CompanionType, PersonaSummary
 from trippilot.domain.poi_curation import CandidatePoolRequest
 from trippilot.providers.persona import PersonaProvider
 from trippilot.providers.place import PlaceProvider
-
-import pytest
 
 _POOL_REQUEST = CandidatePoolRequest(
     anchor=_ANCHOR, dates=(_D1,), budget=BudgetLevel.MID,
@@ -218,7 +271,7 @@ def test_permission_denied_pierces_provider_and_collector() -> None:
 
     collector = InfoCollector({ProviderKind.PERSONA: provider})
     with pytest.raises(PermissionDeniedError):
-        collector.collect("GENERATE_SCHEDULE", _PERSONA_PARAMS)
+        collector.collect(Intent.GENERATE_SCHEDULE, _PERSONA_PARAMS)
 
 
 def test_collector_resolve_pool_delegates_to_place_provider() -> None:
