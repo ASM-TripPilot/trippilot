@@ -4,6 +4,7 @@ import com.trippilot.itinerarygeneration.domain.DaySchedule
 import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.withPlacementReason
+import com.trippilot.itinerarygeneration.domain.withAlternativeRationales
 import com.trippilot.itinerarygeneration.domain.GenerationState
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
@@ -128,15 +129,26 @@ class SecondPhaseGenerator(
                 d.slots.map { slot ->
                     // 이미 있는 근거를 빈 값으로 덮지 않는다 — 조회가 일부만 답해도 있던 문장은 남는다.
                     slot.withPlacementReason(
-                        BoundedText.clamp(reasons[SlotKey.of(d.date, slot.sourcePoiId)], BoundedText.PLACEMENT_REASON_MAX)
+                        BoundedText.clamp(reasons.slots[SlotKey.of(d.date, slot.sourcePoiId)], BoundedText.PLACEMENT_REASON_MAX)
                             ?: slot.placementReason,
-                    )
+                    ).withAlternativeRationales(reasons.alternatives) { SlotKey.of(d.date, it.poiId) }
                 },
             )
         }
         SlotKey.warnIfUnmatched(
-            received = reasons.size,
+            received = reasons.slots.size,
             matched = withReasons.sumOf { d -> d.slots.count { it.placementReason != null } },
+            tripId = tripId,
+        )
+        // 차선책 쪽도 같은 그물을 건다. 여기는 **덮어쓰기라 붙었는지 세는 것이 어렵다** — 템플릿
+        // 문구와 LLM 문구가 둘 다 비어 있지 않기 때문이다. 그래서 "받았는데 그 키를 가진 차선책이
+        // 하나도 없다"를 센다. 키 규약이 어긋나면(날짜 축이 다르거나 슬롯 POI 로 키를 만들었거나)
+        // 정확히 그 모양이 된다.
+        SlotKey.warnIfUnmatched(
+            received = reasons.alternatives.size,
+            matched = withReasons.sumOf { d ->
+                d.slots.sumOf { s -> s.alternatives.count { SlotKey.of(d.date, it.poiId) in reasons.alternatives } }
+            },
             tripId = tripId,
         )
 
@@ -193,7 +205,20 @@ class SecondPhaseGenerator(
 
     /** 근거 조회 입력 — 시각·순서만 담는다(INV-3: 소요시간 없음). */
     private fun List<ItineraryDay>.toOutput(current: Itinerary, at: java.time.Instant) = ScheduleAgentOutput(
-        days = map { d -> DaySchedule(d.date, d.slots.map { VisitSlotDisplay(it.sourcePoiId, it.startAt, it.endAt, it.endsNextDay, null, it.isFixed) }) },
+        // **`alternatives` 를 빠뜨리면 차선책 문장이 영영 안 온다.** 상대 `/explanations` 는 요청
+        // payload 의 이 값을 읽어 두 번째 호출을 한다 — 여기서 비우면 `toWire()` 가 아무리 제대로
+        // 실어도 실을 것이 없다(실제로 이 경로가 유일한 호출측이라, 여기가 비면 기능 전체가 꺼진다).
+        days = map { d ->
+            DaySchedule(
+                d.date,
+                d.slots.map {
+                    VisitSlotDisplay(
+                        it.sourcePoiId, it.startAt, it.endAt, it.endsNextDay, null, it.isFixed,
+                        alternatives = it.alternatives,
+                    )
+                },
+            )
+        },
         day1ReadyAt = null, explanations = emptyMap(),
         solveMode = current.solveMode, isFallback = current.isFallback,
         freshness = FreshnessMeta(at, degraded = false),

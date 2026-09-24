@@ -115,7 +115,7 @@ class LiveAiRoundTripIT : AbstractPostgresIntegrationTest() {
         val slotKeys = generated.days.flatMap { d -> d.slots.map { "${d.date}#${it.poiId}" } }
 
         val ms = measureTimeMillis {
-            val reasons = agent.explanations(UUID.randomUUID(), generated)
+            val reasons = agent.explanations(UUID.randomUUID(), generated).slots
             println("[LIVE-AI] explanations → ${reasons.size}건 · 슬롯 ${slotKeys.size}개 중 " +
                 "${slotKeys.count { it in reasons }}개 매칭")
             // 빈 맵도 계약상 정상(부가 정보) — 그래서 개수를 단정하지 않는다. 다만 **키가 맞물려야** 한다:
