@@ -5422,14 +5422,32 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   // 2단 삭제 다이얼로그 — 딤 전면 커버·2단 전이는 jest 원리적 사각(리포 Modal 선례 0). 여기서
-  // [계속]을 눌러 1단(scope 전체 고지)→2단(최종) 전이를 실기로 확인한다.
+  // [계속]을 눌러 1단(scope 전체 고지)→2단(최종) 전이를 실기로 확인한다. Figma 1608:2440 처럼
+  // settings-default 화면 위에 형제로 겹친다(화면은 열림을 로컬 state 로 쥐어 prop 으로 못 연다).
   {
     key: 'settings-delete-dialog',
     band: 'l',
     label: 'l05 · 삭제 다이얼로그',
     login: null,
     render: () => (
-      <View style={StyleSheet.absoluteFill} className="bg-canvas-alt">
+      <View style={StyleSheet.absoluteFill}>
+        <SettingsScreen
+          groups={filterReadySettingsSections(
+            buildSettingsSections({
+              nickname: '여행자123',
+              email: 'trippilot@email.com',
+            })
+          )}
+          deletionState="active"
+          currentNickname="여행자123"
+          onPressBack={noop}
+          onSubmitNickname={noop}
+          onPressExport={noop}
+          onPressDeleteAccount={noop}
+          onPressCancelDeletion={noop}
+          onPressOsmCopyright={noop}
+          appVersion="0.1.0"
+        />
         <DeleteAccountDialog onCancel={noop} onConfirmDeletion={noop} />
       </View>
     ),

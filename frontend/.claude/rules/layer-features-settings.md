@@ -16,7 +16,7 @@ paths:
 | `ui/SettingsScreen.tsx` | 설정 화면(TRIP-604) |
 | `ui/ProfileCard.tsx` / `ui/TripCard.tsx` / `ui/TripStatusSegment.tsx` | l03 프로필·여행 카드 구성 요소 |
 | `ui/SettingsGroup.tsx` / `ui/SettingsRow.tsx`(`RowBody`·`PreparingRow`·**`NavRow`**, TRIP-618 신규 export) / `ui/ExportRow.tsx` / `ui/NicknameEditRow.tsx` | 설정 화면 행 구성 요소 |
-| `ui/RevokeConfirmDialog.tsx` / `ui/DeleteAccountDialog.tsx` | 조건부 렌더 absolute 오버레이 다이얼로그 패턴 최초 선례(TRIP-608·609) — `BaseToggleDialog`(아래)가 이 형태를 그대로 따름 |
+| `ui/RevokeConfirmDialog.tsx` / `ui/DeleteAccountDialog.tsx` | 조건부 렌더 absolute 오버레이 다이얼로그 패턴 최초 선례(TRIP-608·609) — `BaseToggleDialog`(아래)가 이 형태를 그대로 따름. **TRIP-779(2026-09-24)**: 2단 게이트·문안·톤은 무변경, 라이브 Figma `1608:2440`/`4531:3018` 값만 재적용(불릿 `•` ink·간격6·목록 상한 `max-h-[248px]`·버튼 h52/라벨16·카드 그림자 `style`). 짝 테스트 `DeleteAccountDialog.l05parity.test.tsx`의 높이 상한 탐지기(`heightCapsAbove`)는 `[Npx]` 표기만 읽던 구멍을 **fail-closed**로 막았다(모르는 `max-h-*`/`h-*` 토큰 표기는 통과가 아니라 throw) — 이 파일의 `max-h-*`를 다시 만질 때 임의값 `[Npx]` 표기를 벗어나면 이 테스트가 즉시 걸린다는 뜻이다. |
 | `ui/LocationConsentScreen.tsx` | 위치 동의 철회 게이트 화면(TRIP-609) — 로컬 `useState` 다이얼로그 게이트 패턴의 최초 선례(`MyStaysScreen`의 출발점 전환 게이트가 이 형태를 그대로 따름) |
 | `model/settingsSections.ts` / `model/tripBuckets.ts` / `model/exportSummary.ts` / `model/deletionScope.ts` | 설정 화면 순수 파생 모델(섹션 구성·여행 버킷·내보내기 요약·삭제 고지 목록 정본) |
 
