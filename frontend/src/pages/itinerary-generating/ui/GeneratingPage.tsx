@@ -2,13 +2,19 @@ import { useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
 import { useCallback, useEffect, useRef } from 'react';
 
+import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import { firstCoPickSlotKey } from '@/features/itinerary/model/coPickSlots';
+import { buildMustVisitPins } from '@/features/itinerary/model/mustVisitList';
 import { GeneratingScreen } from '@/features/itinerary/ui/GeneratingScreen';
 import type {
   GenerateItineraryRequestGenerationMode,
   Itinerary,
 } from '@/shared/api/generated/schemas';
-import { usePostTripsTripIdItinerary } from '@/shared/api/generated/trips/trips';
+import {
+  useGetTripsTripIdMustVisits,
+  usePostTripsTripIdItinerary,
+} from '@/shared/api/generated/trips/trips';
+import { getAccessToken } from '@/shared/api/tokenManager';
 
 /**
  * h09 배선(TRIP-305) — 생성 POST 를 소유·발화하고 진행/성공/실패/이탈을 화면에 잇는다.
@@ -24,6 +30,11 @@ import { usePostTripsTripIdItinerary } from '@/shared/api/generated/trips/trips'
  *  3. **오류는 침묵하지 않는다(INV-4).** `isError` 를 화면에 내려 실패 표면을 띄우고, [다시 시도]가
  *     POST 를 재발화한다.
  *  4. **세션 GET 폴링·cancel 뮤테이션을 쓰지 않는다.** in-flight 라 sessionId 가 없다(Seed 결정 3).
+ *  5. **꼭 갈 곳 지도 좌표(TRIP-929).** 핀이 0개면 `pins`·`center` 둘 다 `undefined` 로 넘긴다 —
+ *     화면 게이트 `pins && center` 를 두 겹으로 닫는 이중 방어다(INV-4 빈 지도 금지). 어느 한 겹도
+ *     중복이 아니다: 서울 폴백 `center` 를 넣으면 `pins` 겹만 남고, `pins` 를 `[]` 그대로 넘기면
+ *     (`[]` 는 참) `center` 겹만 남는다. 조회 오류는 지도만 생략하고 `failed` 에 합치지 않는다 —
+ *     합치면 POST 가 진행 중인데 생성 실패가 뜬다.
  */
 export function GeneratingPage({
   tripId,
@@ -43,6 +54,14 @@ export function GeneratingPage({
   const router = useRouter();
   const generate = usePostTripsTripIdItinerary();
   const firedRef = useRef(false);
+
+  const mustVisits = useGetTripsTripIdMustVisits(tripId);
+  const savedPlaces = useSavedPlaces({ isAuthed: getAccessToken() !== null });
+  const pins = buildMustVisitPins({
+    items: mustVisits.data ?? [],
+    savedPlaces: savedPlaces.savedPlaces,
+  });
+  const firstPin = pins[0];
 
   const start = useCallback(() => {
     generate.mutate(
@@ -83,6 +102,8 @@ export function GeneratingPage({
   return (
     <GeneratingScreen
       failed={generate.isError}
+      pins={firstPin ? pins : undefined}
+      center={firstPin ? { lat: firstPin.lat, lng: firstPin.lng } : undefined}
       onRetry={start}
       onBackground={() => {
         // 앱바 뒤로 = 백그라운드 이탈(화면만 홈으로). 뮤테이션은 리셋하지 않는다 — 이미 나간

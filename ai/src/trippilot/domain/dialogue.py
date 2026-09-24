@@ -284,6 +284,20 @@ ARGUMENT_TABLE: dict[Intent, tuple[ArgumentSpec, ...]] = {
         _spec("origin", (_PL, _SL), False,
               "어디서부터인가. 현재 위치는 inline_context 가 싣고, 없으면 현재/직전 슬롯으로 메워진다",
               lands_in="TransitRequest.origin"),
+        # **배선 때 라우터가 기본값을 채워야 한다 — 그리고 채운 사실을 남겨야 한다.**
+        # 발화에서 이 값이 나오는 비율이 **26발화 중 2건(7.7%)** 이다(뱅크 seed+증강+평가셋
+        # 실측 2026-09-24). `_build_transit_request` 가 `params["mode"]` 를 필수로 읽으므로
+        # 안 채우면 "얼마나 멀어?" 계열의 92% 가 영구 `UNAVAILABLE` 이다.
+        # 기본값은 **조립기가 아니라 호출측**에 둔다: 조립기를 느슨하게 하면 같은 조립기를
+        # 쓰는 delay_check 경로까지 느슨해지는데 거기서는 수단 누락이 진짜 결함이다.
+        #
+        # 가정을 **조용히 하면 안 된다.** "거리만 내보내니(INV-3) 수단 가정은 싸다"는
+        # 폴백 추정기에서만 참이다(`travel.py`: 직선 × detour_factor — 거리는 수단 무관).
+        # 실 Tmap 어댑터는 수단별로 **다른 엔드포인트**를 치고 그 경로의 `totalDistance` 를
+        # 쓴다(CAR `/tmap/routes` · WALK `/tmap/routes/pedestrian` · PUBLIC `/transit/routes`)
+        # — 수단을 잘못 가정하면 **거리 자체가 달라진다**. 그래서 가정한 수단을 응답이나
+        # 관측에 남긴다. 안 남기면 사용자가 "왜 이렇게 멀지"를 물을 곳이 없다.
+        # 어휘 공백: "택시" 는 `TransportMode` 에 없어 `None` 이다(CAR 로 접을지는 별건).
         _spec("mode", (_EN,), False, "이동 수단",
               choices=_values(TransportMode), lands_in="TransitRequest.mode"),
     ),

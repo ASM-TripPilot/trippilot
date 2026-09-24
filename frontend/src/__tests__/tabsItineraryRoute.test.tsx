@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import type {
@@ -29,7 +31,8 @@ import ItineraryTab from '@/app/(tabs)/itinerary';
  * 왜 이렇게 테스트하나: 라우트는 `pages/itinerary-list`(페이지→컨테이너→화면→카드)를 그리고
  * 데이터는 두 훅 seam(`useGetTrips`·`useGetTripsTripIdItinerary`)으로 주입한다. **N+1 훅-per-카드**를
  * 훅 목으로 재현 — `useGetTripsTripIdItinerary` 를 tripId별 대본으로 갈아끼운다(react-query 미구동 →
- * QueryClientProvider 불필요, 02a ★5). 목록 뷰는 리다이렉트하지 않지만 `Redirect` 를 **일부러
+ * QueryClientProvider 불필요, 02a ★5 — TRIP-928 로 페이지가 `useQueries`
+ * 를 물면서 Provider 를 두르게 됐다: `renderTab()`). 목록 뷰는 리다이렉트하지 않지만 `Redirect` 를 **일부러
  * 목으로 남겨** `redirect-href` 마커가 뜨면 "리다이렉트로 회귀"를 잡는 트립와이어로 쓴다(★4).
  *
  * *(개념)* `getAllByTestId(/정규식/)` = **트리 순서(pre-order)** 배열(리포 선례 stayImport §5-5) —
@@ -50,10 +53,36 @@ jest.mock('expo-router', () => ({
   }),
 }));
 
+// TRIP-928 준비부 확장(단언 무변경) — 페이지가 완료 배너 판정을 위해 여행별 일정을 `useQueries` +
+// 옵션 함수로 함께 구독하고, 본 여행 id 를 SecureStore 에서 읽는다. 이 파일은 카드 계약 전용이라
+// 두 비동기를 영영 안 끝나게 막아 배너 판정을 늘 "보류"로 둔다(배너 동작은
+// `pages/itinerary-list/ui/MyTripsListPage.doneBar.test.tsx` 소관). 팩토리는 바깥 변수를 안 쓴다(호이스팅).
 jest.mock('@/shared/api/generated/trips/trips', () => ({
   useGetTrips: jest.fn(),
   useGetTripsTripIdItinerary: jest.fn(),
+  getGetTripsTripIdItineraryQueryOptions: (tripId: string) => ({
+    queryKey: [`/trips/${tripId}/itinerary`],
+    queryFn: () => new Promise(() => {}),
+  }),
 }));
+jest.mock('expo-secure-store', () => ({
+  getItemAsync: jest.fn(() => new Promise(() => {})),
+  setItemAsync: jest.fn(() => new Promise(() => {})),
+  deleteItemAsync: jest.fn(() => new Promise(() => {})),
+}));
+
+/** 매 렌더 새 QueryClient — 페이지의 `useQueries` 가 Provider 를 요구한다. */
+function renderTab() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+  });
+  function Wrapper({ children }: { children: ReactNode }) {
+    return (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+  }
+  return render(<ItineraryTab />, { wrapper: Wrapper });
+}
 
 const mockUseGetTrips = useGetTrips as jest.MockedFunction<typeof useGetTrips>;
 const mockUseItinerary = useGetTripsTripIdItinerary as jest.MockedFunction<
@@ -171,7 +200,7 @@ describe('🔴 AC-1 · 여행 2건+ → 모두 카드 렌더 (리다이렉트 �
       'trip-b': itinHttpError(404),
     });
 
-    render(<ItineraryTab />);
+    renderTab();
 
     // ★ 둘째 여행도 카드로 접근 가능하다.
     expect(screen.getByTestId('my-trip-card-trip-a')).toBeOnTheScreen();
@@ -185,7 +214,7 @@ describe('🟢🔴 AC-2 · 빈 배열 → empty + [여행 만들기]→step1 (�
   it('empty 상태를 그리고, 버튼이 여행 생성으로 이동하며, 리다이렉트하지 않는다', () => {
     mockUseGetTrips.mockReturnValue(tripsData([]));
 
-    render(<ItineraryTab />);
+    renderTab();
 
     expect(screen.getByTestId('itinerary-tab-empty')).toBeOnTheScreen();
     expect(screen.getByText('아직 만든 여행이 없어요')).toBeOnTheScreen();
@@ -202,7 +231,7 @@ describe('🔴 AC-3 · trips.isPending → 스켈레톤 카드 2장 (리다이�
   it('로딩 중이면 스켈레톤 2장을 그리고, 리다이렉트·empty 로 뭉개지 않는다', () => {
     mockUseGetTrips.mockReturnValue(tripsPending);
 
-    render(<ItineraryTab />);
+    renderTab();
 
     expect(screen.getAllByTestId(/^my-trip-skeleton-/)).toHaveLength(2);
     // 짝 — 로딩을 리다이렉트나 "여행 없음"으로 접지 않는다.
@@ -225,7 +254,7 @@ describe('🔴 AC-7 · 최신순(updatedAt desc) 정렬 + "최신순" 라벨', (
       'trip-b': itinOk(itin('COMPLETE', 'CONFIRMED')),
     });
 
-    render(<ItineraryTab />);
+    renderTab();
 
     // ★ 카드 루트만 트리 순서로 뽑는다(자식 leaf 는 접두가 달라 안 걸림). 정렬 제거 시 [B, A].
     const order = screen
@@ -251,7 +280,7 @@ describe('🔴 AC-6 · 카드 탭은 눌린 카드의 tripId 목적지로 간다
       'trip-a': itinOk(itin('COMPLETE', 'CONFIRMED')),
       'trip-b': itinHttpError(404),
     });
-    render(<ItineraryTab />);
+    renderTab();
   }
 
   it('둘째 카드(B, 404)를 누르면 그 여행의 method 화면으로 간다', () => {
@@ -293,7 +322,7 @@ describe('🔴 AC-3 · 확정(CONFIRMED) 카드는 여행 전이어도 live 로'
       'trip-future': itinOk(itin('COMPLETE', 'CONFIRMED')),
     });
 
-    render(<ItineraryTab />);
+    renderTab();
     fireEvent.press(screen.getByTestId('my-trip-card-trip-future'));
 
     expect(mockPush).toHaveBeenCalledTimes(1);
@@ -320,7 +349,7 @@ describe('🔴 AC-6b · 오늘이 여행 구간이면 live 로 (US-ONTRIP-01)', 
       'trip-live': itinOk(itin('COMPLETE', 'PLANNED')),
     });
 
-    render(<ItineraryTab />);
+    renderTab();
     fireEvent.press(screen.getByTestId('my-trip-card-trip-live'));
 
     expect(mockPush).toHaveBeenCalledTimes(1);
@@ -346,7 +375,7 @@ describe('🔴 AC-5 · 배지·상태문은 카드별 itinerary 에서 파생된
       'trip-load': itinPending,
     });
 
-    render(<ItineraryTab />);
+    renderTab();
 
     // 완성 — "완성" 배지 + "추천안이 준비됐어요"(★ TRIP-788: 구 "확정 장소 N곳" 슬롯 합계 대체, 상수).
     expect(screen.getByTestId('my-trip-badge-trip-done')).toHaveTextContent(
@@ -374,7 +403,7 @@ describe('🔴 AC-8 · empty 얼굴 — 캘린더 글리프(회색 원 72) + 부
   it('illustration 슬롯이 회색 원(surface-soft 72)+캘린더를 그리고, 부제가 2줄이며, testID 는 보존된다', () => {
     mockUseGetTrips.mockReturnValue(tripsData([]));
 
-    render(<ItineraryTab />);
+    renderTab();
 
     // testID 보존(구 계약 계승) — StateNotice 자체는 무수정(stay·explore 회귀 방지).
     expect(screen.getByTestId('itinerary-tab-empty')).toBeOnTheScreen();

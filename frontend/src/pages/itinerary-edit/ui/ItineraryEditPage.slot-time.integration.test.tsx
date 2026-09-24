@@ -22,22 +22,25 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { ItineraryEditPage } from './ItineraryEditPage';
 
 /**
- * TRIP-797 · h12 편집기 통일(묶음 C 재조립) — 편집 배선의 **시각조정 개폐·로컬성·저장 흐름**을 실 HTTP
- * 로 태우는 심판. 소비 화면만 옛 `ItineraryEditScreen` → 순수 뷰 `EditorView` 로 바뀌고, 시각칩은 이제
- * `SlotStopCard` 의 누름 칩(`slot-stopcard-timechip-*`)이며 시트는 그대로 `TimeSheet`(접두
- * `itinerary-edit-time`) 다.
+ * TRIP-797 · h12 편집기 통일(묶음 C 재조립) → TRIP-927 · 시트를 h04(시간대 조정) 변형으로 전환.
+ * 편집 배선의 **시각조정 개폐·로컬성·저장 흐름**을 실 HTTP 로 태우는 심판. 시각칩은 `SlotStopCard` 의
+ * 누름 칩(`slot-stopcard-timechip-*`)이고 시트는 `TimeSheet mode="h04"`(접두 `itinerary-edit-time`) 다.
  *
  * 무엇을 보장하나(전부 페이지 층 배선):
  *  - 🔴 비고정 시각칩 → **시트 조건부 마운트**(등장, IT1), 고정은 **누름 칩 자체가 없다**(IT2 · INV-U3-03).
- *  - 🔴 [적용] → 카드 시각 갱신·시트 닫힘·**PUT 0**(로컬 편집, INV-2)(IT3).
- *  - 🔴 [취소] → 카드 시각 무변경·시트 닫힘·PUT 0(IT4).
- *  - 🔴 조정값이 이후 **저장(PUT)에 그대로 실린다** — 저장 경로 재사용, 새 저장 코드 0(IT5).
+ *  - 🔴 시트는 h04 얼굴 — default 셀·취소 버튼이 없다(IT3, AC-8). 요약 행 = 슬롯 이름·사진뿐(IT3b, AC-9).
+ *  - 🔴 스와이프·딤으로 닫히면 카드 무변경·PUT 0, 같은 칩을 다시 누르면 다시 열린다(IT4, AC-7).
+ *  - 🔴 종료를 안 건드리고 적용 → 로컬 반영·PUT 0(IT5a), 저장 PUT 의 endAt 은 **드래프트 원값 그대로**
+ *    (초까지), endsNextDay 는 새 시작 기준으로 다시 유도(IT5b·IT5c, AC-10). 모든 endAt 은 string(AC-13).
+ *  - 🔴 종료를 설정하고 적용 → 저장 PUT 의 endAt 이 그 값(IT6, AC-11).
  *
- * ⚠️ 옛 IT3 의 "익일" 표기 단언은 뺐다 — `EditorView` 의 시각칩 라벨은 `HH:mm–HH:mm`(en-dash) 만
- * 조립하고 endsNextDay 접미를 그리지 않는다(위 뷰가 커밋된 계약, 02a-C §9). endsNextDay 는 저장 PUT
- * 본문(IT5)으로 잰다. 시트 실개폐·2스냅은 `@gorhom/bottom-sheet` 통과형 목이 원리적으로 못 본다.
+ * ⚠️ 옛 IT4 [취소]는 h04 에 취소 버튼이 없어(Figma 3974:2574) 닫힘 경로(onClose)로 대체했다(02a §6).
+ * ⚠️ 슬롯 a 의 endAt 은 일부러 `11:45:30` — 위젯은 초를 `:00` 으로 만들므로, "null 대신 시드 endAt 방출"
+ *    과 "페이지가 null 을 드래프트 원값으로 풀기"가 여기서 갈린다(02a ★3).
+ * ⚠️ 휠은 12시간제·활성 탭 한 벌 — 10:15(오전)→23시는 `ap-오후` 다음 `h-11` 두 번이다(02a ★4).
+ * 시트 실개폐·스와이프 실동작은 `@gorhom/bottom-sheet` 통과형 목이 원리적으로 못 본다(6-b 실기).
  *
- * 3동작 뼈대: 준비=가짜 서버 응답 → 실행=시각칩/셀/적용·취소·저장 press → 단언=시트 개폐·카드·PUT.
+ * 3동작 뼈대: 준비=가짜 서버 응답 → 실행=시각칩/탭/휠/적용·닫힘·저장 → 단언=시트 개폐·카드·PUT.
  */
 
 jest.mock('@/shared/storage', () => ({
@@ -68,6 +71,8 @@ const timeChip = (poiId: string) =>
 const cardId = (poiId: string) => `slot-stopcard-${buildSlotKey(DAY1, poiId)}`;
 const SHEET = 'itinerary-edit-time-sheet';
 const SAVE = 'sheet-cta-button-0';
+const t = (suffix: string): string => `itinerary-edit-time-${suffix}`;
+const B_IMAGE = 'https://example.com/blueline.jpg';
 
 function trip(): Trip {
   return {
@@ -84,7 +89,10 @@ function trip(): Trip {
   };
 }
 
-/** day1 = [고정 체크아웃(09:00) · 비고정 a(10:15–11:45)]. 고정은 편집 어포던스 자체가 없어야 한다. */
+/**
+ * day1 = [고정 체크아웃(09:00) · 비고정 a(10:15–11:45:30, 사진 없음) · 비고정 b(12:30–13:30, 사진 있음)].
+ * 고정은 편집 어포던스 자체가 없어야 한다.
+ */
 function itinerary(): Itinerary {
   const days: ItineraryDaysItem[] = [
     {
@@ -103,12 +111,23 @@ function itinerary(): Itinerary {
         {
           poiId: 'poi-a',
           startAt: '10:15:00',
-          endAt: '11:45:00',
+          endAt: '11:45:30',
           isFixed: false,
           endsNextDay: false,
           hasViolation: false,
           tags: ['바다'],
           nameKo: '광안리',
+        },
+        {
+          poiId: 'poi-b',
+          startAt: '12:30:00',
+          endAt: '13:30:00',
+          isFixed: false,
+          endsNextDay: false,
+          hasViolation: false,
+          tags: [],
+          nameKo: '해운대 블루라인파크',
+          imageUrl: B_IMAGE,
         },
       ],
     },
@@ -173,10 +192,27 @@ function renderPage() {
 }
 
 /** 비고정 시각칩을 눌러 시트를 연다 — 여러 케이스가 공유하는 준비 동작. */
-async function openSheetForA() {
-  await screen.findByTestId(cardId('poi-a'));
-  fireEvent.press(screen.getByTestId(timeChip('poi-a')));
+async function openSheetFor(poiId: string) {
+  await screen.findByTestId(cardId(poiId));
+  fireEvent.press(screen.getByTestId(timeChip(poiId)));
   await screen.findByTestId(SHEET);
+}
+
+/** h04 셀·탭·적용을 순서대로 누른다(접두 생략). */
+function press(...suffixes: string[]) {
+  suffixes.forEach((suffix) => fireEvent.press(screen.getByTestId(t(suffix))));
+}
+
+async function applyAndWaitClosed() {
+  press('apply');
+  await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
+}
+
+async function saveAndGetSlot(poiId: string) {
+  fireEvent.press(screen.getByTestId(SAVE));
+  await waitFor(() => expect(putCalls).toBe(1));
+  const body = putBody as EditItineraryRequest;
+  return body.days[0].slots.find((s) => s.poiId === poiId);
 }
 
 describe('🔴 IT1 · AC5 — 비고정 시각칩 → 시각조정 시트가 마운트된다', () => {
@@ -204,64 +240,136 @@ describe('🔴 IT2 · AC5 — 고정 슬롯엔 편집 어포던스 자체가 없
   });
 });
 
-describe('🔴 IT3 · AC5 — 적용: 카드 시각 갱신·시트 닫힘·PUT 0(로컬)', () => {
-  it('시작을 23 시로 바꿔 적용하면 카드가 23:15 로 바뀌고 저장은 안 나간다', async () => {
+describe('🔴 IT3 · AC-8 — 시트는 h04 얼굴이다 (default 셀·취소 없음)', () => {
+  it('제목 "시간대 조정"·시작/종료 탭·요약 행이 있고, default 시 셀과 [취소]는 없다', async () => {
     renderPage();
-    await openSheetForA();
+    await openSheetFor('poi-a');
 
-    fireEvent.press(screen.getByTestId('itinerary-edit-time-start-h-23'));
-    fireEvent.press(screen.getByTestId('itinerary-edit-time-apply'));
+    expect(screen.getByText('시간대 조정')).toBeOnTheScreen();
+    expect(screen.getByTestId(t('seg-start'))).toBeOnTheScreen();
+    expect(screen.getByTestId(t('place-summary'))).toBeOnTheScreen();
 
-    // 카드 시각칩이 갱신된다 — 부분 포함이라 regex(시각 leaf 는 완전일치라 부분 매칭은 regex 로).
-    await waitFor(() =>
-      expect(screen.getByTestId(timeChip('poi-a'))).toHaveTextContent(/23:15/)
+    expect(
+      screen.queryAllByTestId(/^itinerary-edit-time-start-h-/)
+    ).toHaveLength(0);
+    expect(screen.queryByTestId(t('cancel'))).toBeNull();
+  });
+});
+
+describe('🔴 IT3b · AC-9 — 요약 행은 슬롯 이름·사진뿐이다', () => {
+  it('사진 없는 a: 이름만(배지·지역 줄 없음), 썸네일 이미지 없음', async () => {
+    renderPage();
+    await openSheetFor('poi-a');
+
+    // 완전일치 — 이름 외 텍스트(배지·"꼭 갈 곳" 줄)가 없다(Q1).
+    expect(screen.getByTestId(t('place-summary'))).toHaveTextContent('광안리');
+    expect(screen.queryByTestId(t('place-thumb-image'))).toBeNull();
+  });
+
+  it('사진 있는 b: 이름 + 그 사진 URL 썸네일', async () => {
+    renderPage();
+    await openSheetFor('poi-b');
+
+    expect(screen.getByTestId(t('place-summary'))).toHaveTextContent(
+      '해운대 블루라인파크'
     );
+    expect(screen.getByTestId(t('place-thumb-image')).props.source).toEqual({
+      uri: B_IMAGE,
+    });
+  });
+});
 
-    // 시트가 닫힌다(unmount).
-    expect(screen.queryByTestId(SHEET)).toBeNull();
+describe('🔴 IT4 · AC-7 — 스와이프·딤으로 닫힘: 카드 무변경·PUT 0·다시 열린다', () => {
+  it('시작을 바꿔 봐도 닫히면 카드는 10:15 그대로고, 같은 칩을 다시 누르면 시트가 다시 뜬다', async () => {
+    renderPage();
+    await openSheetFor('poi-a');
 
+    press('wheel-h-11'); // 오전 11시 — 적용 전이라 드래프트엔 안 들어가야 한다.
+    fireEvent(screen.getByTestId(SHEET), 'close');
+
+    await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
+    expect(screen.getByTestId(timeChip('poi-a'))).toHaveTextContent(/10:15/);
+    expect(screen.getByTestId(timeChip('poi-a'))).not.toHaveTextContent(
+      /11:15/
+    );
+    expect(putCalls).toBe(0);
+
+    // 상태 고착 없음 — 닫힘이 편집 중 슬롯을 풀어야 같은 칩이 다시 시트를 연다(브리프 §9①).
+    fireEvent.press(screen.getByTestId(timeChip('poi-a')));
+    expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
+    expect(screen.getByTestId(t('readout'))).toHaveTextContent(/오전 10:15/);
+  });
+});
+
+describe('🔴 IT5 · AC-10 — 종료를 안 건드리면 기존 endAt 유지 + endsNextDay 재유도', () => {
+  it('IT5a · 시작만 23:15 로 적용하면 카드가 23:15–11:45 로 바뀌고 저장은 안 나간다(로컬)', async () => {
+    renderPage();
+    await openSheetFor('poi-a');
+
+    press('wheel-ap-오후', 'wheel-h-11');
+    await applyAndWaitClosed();
+
+    expect(screen.getByTestId(timeChip('poi-a'))).toHaveTextContent(
+      /23:15–11:45/
+    );
     // 로컬 편집 — 시각조정만으로 서버를 안 건드린다(INV-2).
     expect(putCalls).toBe(0);
   });
-});
 
-describe('🔴 IT4 · AC5 — 취소: 카드 시각 무변경·시트 닫힘·PUT 0', () => {
-  it('셀을 바꿔 봐도 취소하면 카드는 10:15 그대로고 저장도 안 나간다', async () => {
+  it('IT5b · 저장 PUT 의 a 는 startAt 23:15:00 · endAt 원값 11:45:30(초 보존) · endsNextDay true', async () => {
     renderPage();
-    await openSheetForA();
+    await openSheetFor('poi-a');
 
-    fireEvent.press(screen.getByTestId('itinerary-edit-time-start-h-23'));
-    fireEvent.press(screen.getByTestId('itinerary-edit-time-cancel'));
+    press('wheel-ap-오후', 'wheel-h-11');
+    await applyAndWaitClosed();
+    const slotA = await saveAndGetSlot('poi-a');
 
-    await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
+    expect(slotA?.startAt).toBe('23:15:00');
+    expect(slotA?.endAt).toBe('11:45:30');
+    // 원값은 false — 새 시작(23:15) 기준으로 다시 유도해야 true 다.
+    expect(slotA?.endsNextDay).toBe(true);
 
-    // 무변경 — 원래 10:15 이 남고 23:15 은 없다(취소는 드래프트를 안 바꾼다).
-    expect(screen.getByTestId(timeChip('poi-a'))).toHaveTextContent(/10:15/);
-    expect(screen.getByTestId(timeChip('poi-a'))).not.toHaveTextContent(
-      /23:15/
-    );
-    expect(putCalls).toBe(0);
+    // AC-13 — 서버 계약 endAt 은 항상 string(null 이 새지 않는다).
+    const body = putBody as EditItineraryRequest;
+    const endAts = body.days.flatMap((day) => day.slots.map((s) => s.endAt));
+    expect(endAts.filter((endAt) => typeof endAt !== 'string')).toEqual([]);
+  });
+
+  it('IT5c · 종료를 먼저 23:45 로 적용한 뒤 다시 열어 시작만 바꾸면 endAt 은 드래프트 23:45:00 이다(서버 원값 아님)', async () => {
+    renderPage();
+
+    // 1차 — 종료를 오후 11:45 로 설정해 적용한다.
+    await openSheetFor('poi-a');
+    press('seg-end', 'wheel-ap-오후');
+    await applyAndWaitClosed();
+
+    // 2차 — 다시 열어 시작만 오전 9시로 바꾼다(종료 미설정).
+    fireEvent.press(screen.getByTestId(timeChip('poi-a')));
+    await screen.findByTestId(SHEET);
+    press('wheel-h-9');
+    await applyAndWaitClosed();
+
+    const slotA = await saveAndGetSlot('poi-a');
+    expect(slotA?.startAt).toBe('09:15:00');
+    expect(slotA?.endAt).toBe('23:45:00');
+    expect(slotA?.endsNextDay).toBe(false);
   });
 });
 
-describe('🔴 IT5 · AC5 — 적용값이 저장 PUT 에 그대로 실린다', () => {
-  it('시각조정 후 저장하면 PUT 본문의 그 슬롯 startAt·endsNextDay 가 조정값이다', async () => {
+describe('🔴 IT6 · AC-11 — 종료를 설정하고 적용하면 저장 PUT 의 endAt 이 그 값이다', () => {
+  it('종료를 오후 1:45 로 설정해 저장하면 a 는 10:15:00–13:45:00 · endsNextDay false', async () => {
     renderPage();
-    await openSheetForA();
+    await openSheetFor('poi-a');
 
-    fireEvent.press(screen.getByTestId('itinerary-edit-time-start-h-23'));
-    fireEvent.press(screen.getByTestId('itinerary-edit-time-apply'));
-    await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
+    press('seg-end', 'wheel-ap-오후', 'wheel-h-1');
+    await applyAndWaitClosed();
+    expect(screen.getByTestId(timeChip('poi-a'))).toHaveTextContent(
+      /10:15–13:45/
+    );
 
-    // 저장이 기존 경로로 나간다(새 저장 코드 0 — 조립은 buildEditItineraryRequest).
-    fireEvent.press(screen.getByTestId(SAVE));
-    await waitFor(() => expect(putCalls).toBe(1));
-
-    const body = putBody as EditItineraryRequest;
-    const slotA = body.days[0].slots.find((s) => s.poiId === 'poi-a');
-    expect(slotA?.startAt).toBe('23:15:00');
-    expect(slotA?.endsNextDay).toBe(true);
-    // 짝 — 안 건드린 종료 시각은 원값 그대로 실린다.
-    expect(slotA?.endAt).toBe('11:45:00');
+    const slotA = await saveAndGetSlot('poi-a');
+    expect(slotA?.startAt).toBe('10:15:00');
+    expect(slotA?.endAt).toBe('13:45:00');
+    expect(slotA?.endsNextDay).toBe(false);
   });
 });

@@ -116,6 +116,23 @@ jest.mock('@/shared/api/generated/trips/trips', () => ({
     isPending: false,
     isError: false,
   }),
+  // TRIP-929: 페이지가 지도 좌표용으로 꼭 갈 곳을 조회한다 — 빈 조회로 둔다(지도는
+  // GeneratingPage.map.integration.test.tsx 소관, 이 파일은 POST·이동·실패·이탈만 본다).
+  useGetTripsTripIdMustVisits: () => ({
+    data: [],
+    isPending: false,
+    isError: false,
+  }),
+}));
+
+// TRIP-929: 좌표는 담은 장소에서 온다 — 빈 목록으로 둔다. 팩토리 목이라 실물(QueryClient 필요 ·
+// 생성 클라이언트·인증 계층)을 로드하지 않는다.
+jest.mock('@/features/explore/model/savedPlaces', () => ({
+  useSavedPlaces: () => ({
+    savedPlaces: [],
+    isPending: false,
+    isError: false,
+  }),
 }));
 
 jest.mock('expo-router', () => ({
