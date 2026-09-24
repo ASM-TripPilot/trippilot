@@ -21,6 +21,10 @@ import { ToggleRow } from './ToggleRow';
  *  - 열 헤더 푸시 자리: 권한 있음 = "푸시" 라벨 / 거부 = "권한 필요" 대시 칩.
  *  - 하단 배너: 권한 있음 = SYSTEM 줄 / 거부 = 푸시-누적 줄(프레임 실물대로 상태별 단일 문구).
  *
+ * TRIP-939(심사 2.1): 푸시 수신이 아직 배선되지 않아(TRIP-835) 푸시 열·"푸시"/"권한 필요" 헤더·권한 배너를
+ * `PUSH_COLUMN_READY` 플래그로 숨긴다 — 문구는 권한 있음 분기(푸시 미언급)로 고정된다. 개통은 true 한 줄.
+ * props(`pushColumnAvailable`·`onOpenSettings`)는 되살림 대비로 그대로 받는다.
+ *
  * testID: notification-settings-toggle-push-{kind} · -inapp-{kind} · notification-settings-permission-banner.
  * 실제 픽셀(토글 회색·thumb 위치·딤)은 jest 원리적 사각 → 6-b 실기(LocationConsentScreen 동형).
  */
@@ -58,6 +62,9 @@ const VISIBLE_ROWS: { kind: NotificationToggleKind; label: string }[] = [
 
 const EMPTY_VALUE = { pushEnabled: false, inAppEnabled: false } as const;
 
+/** 푸시 채널 개통 플래그(TRIP-939) — 푸시 수신 배선(TRIP-835) 전까지 false. true 면 푸시 열이 되살아난다. */
+const PUSH_COLUMN_READY = false;
+
 /** ⓘ + 문구 정보 배너(상·하단 공용) — surface-soft 라운드 블록. */
 function InfoBanner({ text }: { text: string }): ReactElement {
   return (
@@ -75,6 +82,8 @@ export function NotificationSettingsScreen({
   onOpenSettings,
   onPressBack,
 }: NotificationSettingsScreenProps): ReactElement {
+  // 푸시 열을 숨기는 동안엔 권한 거부 표면(배너·칩·푸시 누적 문구)도 함께 숨는다.
+  const showPermissionDenied = PUSH_COLUMN_READY && !pushColumnAvailable;
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-canvas-alt">
       <View className="flex-row items-center gap-sm border-b border-hairline px-lg pb-md pt-sm">
@@ -89,29 +98,31 @@ export function NotificationSettingsScreen({
       </View>
 
       <ScrollView contentContainerClassName="gap-lg px-lg pb-3xl pt-lg">
-        {pushColumnAvailable ? (
-          <InfoBanner text="변경한 알림 설정은 다음 알림부터 바로 반영됩니다" />
-        ) : (
+        {showPermissionDenied ? (
           <PermissionBanner onOpenSettings={onOpenSettings} />
+        ) : (
+          <InfoBanner text="변경한 알림 설정은 다음 알림부터 바로 반영됩니다" />
         )}
 
         {/* 열 헤더 — 두 토글 열 위에 정렬(ToggleRow 의 오른쪽 클러스터와 같은 w-[52px]·gap-md). */}
         <View className="flex-row items-center">
           <View className="flex-1" />
           <View className="flex-row gap-md">
-            <View className="w-[52px] items-center">
-              {pushColumnAvailable ? (
-                <Text className="font-noto-bold text-label text-muted">
-                  푸시
-                </Text>
-              ) : (
-                <View className="rounded-pill border border-dashed border-hairline-strong px-sm py-[2px]">
-                  <Text className="font-noto-medium text-caption text-muted">
-                    권한 필요
+            {PUSH_COLUMN_READY ? (
+              <View className="w-[52px] items-center">
+                {pushColumnAvailable ? (
+                  <Text className="font-noto-bold text-label text-muted">
+                    푸시
                   </Text>
-                </View>
-              )}
-            </View>
+                ) : (
+                  <View className="rounded-pill border border-dashed border-hairline-strong px-sm py-[2px]">
+                    <Text className="font-noto-medium text-caption text-muted">
+                      권한 필요
+                    </Text>
+                  </View>
+                )}
+              </View>
+            ) : null}
             <View className="w-[52px] items-center">
               <Text className="font-noto-bold text-label text-muted">인앱</Text>
             </View>
@@ -127,6 +138,7 @@ export function NotificationSettingsScreen({
               label={row.label}
               value={values[row.kind] ?? EMPTY_VALUE}
               pushColumnAvailable={pushColumnAvailable}
+              showPushColumn={PUSH_COLUMN_READY}
               onToggle={onToggle}
               showDivider={index > 0}
             />
@@ -135,9 +147,9 @@ export function NotificationSettingsScreen({
 
         <InfoBanner
           text={
-            pushColumnAvailable
-              ? '모든 알림을 꺼도 보안·계정 관련 알림은 알림함에 표시됩니다'
-              : '푸시를 꺼도 인앱 알림은 알림함에 계속 누적됩니다'
+            showPermissionDenied
+              ? '푸시를 꺼도 인앱 알림은 알림함에 계속 누적됩니다'
+              : '모든 알림을 꺼도 보안·계정 관련 알림은 알림함에 표시됩니다'
           }
         />
       </ScrollView>

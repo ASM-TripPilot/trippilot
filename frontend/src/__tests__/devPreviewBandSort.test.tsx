@@ -56,6 +56,8 @@ const EXPECTED_H = [
   // 그룹 선두로 올린다) + itinerary-method-regenerate 프리뷰 키 삭제(재생성 로직·M-R1~R4 는
   // 유지, 프리뷰 키만 정리).
   'dev-preview-state-h01-method', // h01
+  // TRIP-942: h01 '다른 여행 생성 중' 1키 — 같은 h01 코드라 배열 삽입 순서(h01-method 바로 뒤)로 안정정렬.
+  'dev-preview-state-h01-method-active-generation', // h01
   // TRIP-785: itinerary-mustvisit-default(h05) → h02-mustvisit-default(h02) 개명 + 신규
   // h02-mustvisit-loading·-error 2키. 라벨 코드가 h02 라 안정 정렬이 h01(method) 뒤·h07
   // (mustvisit-time) 앞에 세 칩을 인접시킨다. 같은 h02 코드 3키는 PREVIEW_STATES 배열 삽입
@@ -98,7 +100,7 @@ const EXPECTED_H = [
   'dev-preview-state-h07-generating-fallback', // h07 (TRIP-791 · 폴백 성공 인터스티셜)
   'dev-preview-state-h07-generating-fallback-failed', // h07 (TRIP-791 · 하드실패 인터스티셜)
   'dev-preview-state-h08-draft-collapsed', // h08 (TRIP-783 지도+시트 셸 접힘)
-  // TRIP-792: h08 펼침(시트 상단 스냅 · initialIndex={1}) 신규. 코드가 h08 이라 안정 정렬이
+  // TRIP-792: h08 펼침(시트 상단 스냅 · TRIP-920 부터 initialIndex={2}) 신규. 코드가 h08 이라 안정 정렬이
   // collapsed 바로 뒤에 붙는다(PREVIEW_STATES 배열에서도 expanded 를 collapsed 직후에 삽입 —
   // 그래야 안정 정렬이 이 순서를 낸다). 동시에 옛 h11 DraftScreen 초안 5키(default·stale-failed·
   // loading·empty·nopins)는 삭제돼 이 배열에서도 빠진다(band h 소비처 이동, 폴백 3키는 유지).
@@ -152,6 +154,9 @@ const EXPECTED_H = [
   'dev-preview-state-h14-plan-distance-pending', // h14
   'dev-preview-state-h14-plan-map-fallback', // h14
   'dev-preview-state-h14-plan-no-base', // h14
+  // TRIP-800: h15 동선 기준 숙소 추천(신규 1키). 라벨 코드 h15 라 h14 4키 뒤·h16 앞에 선다(배열 위치 무관 —
+  // 같은 코드가 하나뿐이라 안정 정렬 순서도 없다).
+  'dev-preview-state-h15-stay-recommend', // h15
   // TRIP-801: 옛 itinerary-confirmed(h34, CONFIRMED TimelineScreen)를 h16-plan-confirmed 로 개명
   // (CONFIRMED→지도+시트 셸). 라벨 코드가 h34→h16 이라 정렬 위치가 파일 끝(h34)에서 h14/h18 사이로
   // 이동한다(개명=count 불변, 위치만 이동 · 02a ★11).
@@ -195,6 +200,8 @@ const EXPECTED_L = [
   'dev-preview-state-l06-location-consent-default', // l06
   'dev-preview-state-l06-location-consent-denied', // l06
   'dev-preview-state-l06-location-revoke-dialog', // l06
+  'dev-preview-state-l07-affiliate-default', // l07 (TRIP-781)
+  'dev-preview-state-l07-affiliate-error', // l07 (TRIP-781)
 ];
 
 // 접두 파싱은 구현과 같은 규약(라벨의 ' · ' 앞 토큰). 비교자는 재구현하지 않는다.

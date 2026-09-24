@@ -211,4 +211,6 @@ export interface HomeScreenProps {
    * (`_dev/preview.tsx`·버튼-집합 테스트)도 깨지지 않는다. 라우팅은 `(tabs)/index.tsx` 가 진다.
    */
   onPressMagazine?: () => void;
+  /** 인사 헤더 종 press → 알림함(TRIP-939). 라우팅은 `(tabs)/index.tsx` 가 진다. */
+  onPressBell?: () => void;
 }

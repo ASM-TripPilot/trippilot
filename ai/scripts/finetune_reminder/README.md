@@ -175,32 +175,84 @@ MLX LoRA 산출물(어댑터)은 그대로 vLLM 에 안 올라간다 — `fuse` 
 소모품이다. Mac 학습 결과를 버려도 되는 이유는 이것 하나다. (이 명령도 §2 와 같은
 이유로 이 런북 작성 시점에 실행 검증하지 못했다.)
 
-## 4. 서빙 (Modal 서버리스)
+## 4. 서빙 (AWS Bedrock Custom Model Import)
 
-**AWS 가 아니라 Modal** — 개인 계정 서버리스로 띄운다. AWS 는 검토 후 기각했다: 새
-계정 GPU 쿼터가 0 이라 확보에 며칠이 걸리고, EC2 GPU 인스턴스를 켜 두면 그 자체로
-과금되며, AI 서비스는 이미 외부 LLM 을 HTTPS 로 부르고 있어 같은 리전 배치가 오늘
-당장 얻는 이득이 없다. 실운영 전환·팀 상시 운영 시점에는 재검토 대상이다(서빙 주소가
-env 변수 하나라 전환 비용은 실질적으로 0).
+**팀 결정 2026-09-24: AWS 로 간다.** 앞서 AWS 를 기각했던 근거 두 개(신규 계정 GPU
+쿼터 0 · EC2 GPU 상시 과금)는 **Bedrock Custom Model Import 에는 해당하지 않는다** —
+서버리스라 GPU 를 우리가 안 잡고 무요청 시 0원이다.
 
-Modal 앱은 `scripts/finetune_reminder/modal_app.py` 에 있다(2026-09-19 작성 —
-이전 판에서 "아직 작성되지 않았다"고 비워 둔 칸이다).
+현 EKS 클러스터로는 **못 올린다**(확인 2026-09-24): 차트 전체에 GPU 노드가 없고
+(`nvidia`/`gpu` 언급 0건), 임베딩은 CPU 서비스다. 4B 모델을 2 vCPU 로 돌리면 문구
+1건에 30초 이상 걸려 **항목당 상한 ~10초**(`C1Config.timeout_sec`, env 로 못 바꿈)를
+매번 넘긴다.
+
+**리전 제약**: Custom Model Import 는 `us-east-1`·`us-east-2`·`us-west-2`·`eu-central-1`
+에만 있다. **서울(ap-northeast-2)에 없다.** 이 경계는 발송 몇 시간~며칠 전에 도는
+배치라(§2) 교차 리전 지연은 무관하다.
+
+`merged/`(§3 산출물)가 이미 Bedrock 이 요구하는 형식이다 — safetensors + `config.json`
++ `tokenizer.json` + `tokenizer_config.json`. LoRA 어댑터는 **병합된 상태여야** 하는데
+§3 의 `fuse` 가 그 일을 한다.
+
+> Modal 경로(`scripts/finetune_reminder/modal_app.py`)는 지우지 않고 남겨 둔다 —
+> GPU 호스트에 직접 띄울 때와, Bedrock 리전을 못 쓰는 상황의 대안이다.
+
+### ⚠️ `fuse` 산출물은 그대로 올리면 임포트가 실패한다 — 토크나이저 3건
+
+`mlx_lm.fuse` 는 HF 표준 토크나이저 구성을 **완전히 재현하지 않는다.** 실측
+(2026-09-24)으로 임포트가 이 메시지로 떨어졌다:
+
+> Amazon Bedrock could not load the tokenizer. Make sure that you can load the
+> tokenizer with the Huggingface method.
+
+빠진 것과 처방(원본 HF 스냅샷에서 가져온다 — `~/.cache/huggingface/hub/models--Qwen--*/snapshots/*/`):
+
+| 빠진 것 | 처방 |
+|---|---|
+| `vocab.json` | 스냅샷에서 복사 |
+| `merges.txt` | 스냅샷에서 복사 |
+| `chat_template` | `fuse` 가 `chat_template.jinja` 로 **빼 놓는다**. **원본 `tokenizer_config.json` 을 그대로 덮어쓰고 `chat_template.jinja` 를 지운다** |
+
+> ⚠️ **둘 다 두면 안 된다.** AWS 문서가 명시한다 — 채팅 템플릿은 `chat_template.jinja`
+> **또는** `tokenizer_config.json` 의 `chat_template` 필드, **둘 중 하나만** 둔다
+> ("Choose one approach"). 실측(2026-09-24)으로 둘 다 넣은 2차 임포트도 같은
+> 토크나이저 오류로 실패했다. 통과한 구성은 **원본 HF 레이아웃 그대로**(가중치만
+> 융합본)였다 — `chat_template.jinja` 없음, `tokenizer_config.json` 에 필드 포함.
+
+올리기 전에 **HF 로더로 직접 읽어 본다**(실패를 30분 뒤가 아니라 그 자리에서 안다):
 
 ```bash
-pip install modal && modal setup          # 최초 1회, 계정 연결
-
-# §3 산출물을 볼륨에 올린다 (모델을 새로 학습할 때마다 다시)
-modal volume create reminder-copy-model
-modal volume put reminder-copy-model ./merged /merged
-
-# 엔드포인트 인증 — 안 만들면 기동이 실패한다(의도된 fail-fast)
-modal secret create reminder-copy-auth VLLM_API_KEY=<길고 무작위한 값>
-
-modal deploy scripts/finetune_reminder/modal_app.py
+uv run --with transformers python -c "
+from transformers import AutoTokenizer
+t = AutoTokenizer.from_pretrained('./merged')
+print(t.apply_chat_template([{'role':'user','content':'안녕'}], tokenize=False, add_generation_prompt=True))
+"
 ```
 
-배포가 끝나면 `https://<workspace>--trippilot-reminder-copy-serve.modal.run` 형태의
-URL 이 나온다 — 뒤에 `/v1` 을 붙인 것이 `AI_LOCAL_LLM_BASE_URL` 값이다.
+`<|im_start|>user ...` 가 나오면 통과다. 여기서 막히면 Bedrock 에서도 막힌다.
+
+```bash
+# 1) 모델을 S3 로 (Bedrock 이 지원하는 리전의 버킷이어야 한다)
+aws s3 sync ./merged s3://<버킷>/reminder-copy-v1/ --region us-east-1
+
+# 2) 임포트 작업 — 10~30분 걸린다
+aws bedrock create-model-import-job \
+  --job-name reminder-copy-v1 \
+  --imported-model-name reminder-copy-qwen3-4b-v1 \
+  --role-arn arn:aws:iam::<계정>:role/<BedrockImportRole> \
+  --model-data-source s3DataSource={s3Uri=s3://<버킷>/reminder-copy-v1/} \
+  --region us-east-1
+
+# 3) 끝났는지 확인 → 나온 ARN 이 다음 절의 값이다
+aws bedrock list-imported-models --region us-east-1
+```
+
+IAM 역할은 그 S3 경로 읽기 권한 + Bedrock 신뢰관계가 필요하다(AWS 문서의
+`custom-model-import-code-samples` 참고). 호출 측 자격에는 `bedrock:InvokeModel` 이
+그 모델 ARN 범위로 있어야 한다.
+
+임포트가 끝나면 `arn:aws:bedrock:us-east-1:<계정>:imported-model/<id>` 형태의 ARN 이
+나온다 — 이것이 `AI_BEDROCK_MODEL_ARN` 값이다.
 
 **GPU 가 있는 호스트에서 직접 띄우려면** 같은 모델을 vLLM 으로 그대로 올리면 된다
 (Modal 앱이 컨테이너 안에서 실행하는 것과 같은 명령이다):
@@ -215,8 +267,8 @@ vllm serve ./merged --served-model-name local-reminder-qwen3-4b-v1
 `--served-model-name` 과 정확히 일치해야 한다. 이름이 다르면 서버가 모델을 못
 찾았다며 요청을 거부한다.
 
-배포 후 (docker-compose 로 `ai` 컨테이너를 띄운다면) 저장소 루트 `.env` 에서
-`AI_LOCAL_LLM_BASE_URL` 을 채우고, **`AI_LLM_FEATURE_MODELS` 는 새 줄로 추가하지
+임포트 후 (docker-compose 로 `ai` 컨테이너를 띄운다면) 저장소 루트 `.env` 에서
+`AI_BEDROCK_MODEL_ARN` 을 채우고, **`AI_LLM_FEATURE_MODELS` 는 새 줄로 추가하지
 말고 기존 값 끝에 콤마로 이어 붙인다.** 그 키는 이미 PARAPHRASE·EXPLANATION·
 REFLECTION_TEMPLATE 등 살아 있는 배정을 한 줄에 콤마로 이어 붙인 **단일 값**이고
 (`.env.example` 참고, `ai-llm-smoke` 워크플로가 이 줄을 그대로 읽는 정본이다) —
@@ -227,12 +279,12 @@ PARAPHRASE·EXPLANATION 등 이미 돌던 기능이 전부 기본 모델로 폴�
 
 ```
 # 변경 전 (실제 .env 에 이미 배정이 있는 경우의 예)
-AI_LOCAL_LLM_BASE_URL=
+AI_BEDROCK_MODEL_ARN=
 AI_LLM_FEATURE_MODELS=PARAPHRASE=claude-haiku-4-5,ALTERNATIVE_SELECTION=gpt-5.6-sol,EXPLANATION=claude-sonnet-5
 
 # 변경 후 — 같은 줄 끝에 이어 붙인다
-AI_LOCAL_LLM_BASE_URL=https://<modal-앱>.modal.run/v1
-AI_LOCAL_LLM_API_KEY=<modal secret 의 VLLM_API_KEY 와 같은 값>
+AI_BEDROCK_MODEL_ARN=arn:aws:bedrock:us-east-1:<계정>:imported-model/<id>
+AI_BEDROCK_REGION=us-east-1
 AI_LLM_FEATURE_MODELS=PARAPHRASE=claude-haiku-4-5,ALTERNATIVE_SELECTION=gpt-5.6-sol,EXPLANATION=claude-sonnet-5,REMINDER_COPY=local-reminder-qwen3-4b-v1
 ```
 
@@ -240,11 +292,12 @@ AI_LLM_FEATURE_MODELS=PARAPHRASE=claude-haiku-4-5,ALTERNATIVE_SELECTION=gpt-5.6-
 하나도 없는 경우만) 새로 한 줄 추가해도 된다:
 `AI_LLM_FEATURE_MODELS=REMINDER_COPY=local-reminder-qwen3-4b-v1`.
 
-이 두 `AI_*` 변수는 `docker-compose.yml` 이 각각 `TRIPPILOT_LOCAL_LLM_BASE_URL` ·
-`TRIPPILOT_LLM_FEATURE_MODELS` 로 컨테이너에 넘긴다 — 앱 코드 자신은 `AI_*` 를 모르고
+이 `AI_*` 변수들은 `docker-compose.yml` 이 `TRIPPILOT_*` 로 컨테이너에 넘긴다
+(`AI_BEDROCK_MODEL_ARN` → `TRIPPILOT_BEDROCK_MODEL_ARN`,
+`AI_LLM_FEATURE_MODELS` → `TRIPPILOT_LLM_FEATURE_MODELS`) — 앱 코드 자신은 `AI_*` 를 모르고
 `TRIPPILOT_*` 만 읽는다. docker-compose 없이 `ai/` 를 직접 띄운다면 `TRIPPILOT_*` 쪽을
 바로 export 한다(이때도 같은 규칙 — 기존 `TRIPPILOT_LLM_FEATURE_MODELS` 값이 있으면
-새 값을 이어 붙인다). **배정은 됐는데 주소가 비어 있으면 기동이 실패한다** — 조용히
+새 값을 이어 붙인다). **배정은 됐는데 ARN·주소가 둘 다 비어 있으면 기동이 실패한다** — 조용히
 Anthropic/OpenAI 기본 벤더로 새는 것을 막으려는 의도된 fail-fast 다
 (`main.py::_local_route`).
 
@@ -281,9 +334,9 @@ fail-fast 자체가 발동하지 않고, 로컬 라우트가 붙었는지 아닌
 경로(`/ai/v1/notification/copies`)로 별도 확인한다.
 
 ```bash
-export TRIPPILOT_LOCAL_LLM_BASE_URL=https://<modal-앱>.modal.run/v1
+# 스모크는 OpenAI 호환 경로 전용이다 — Bedrock 은 앱 경계로 확인한다(아래).
+export TRIPPILOT_LOCAL_LLM_BASE_URL=<OpenAI 호환 서버 주소>/v1
 export TRIPPILOT_LOCAL_LLM_MODEL=local-reminder-qwen3-4b-v1
-export TRIPPILOT_LOCAL_LLM_API_KEY=<위와 같은 값>
 cd ai
 uv run python scripts/smoke_reminder_copy.py
 ```

@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { processColor } from 'react-native';
 import { render, screen, within } from '@testing-library/react-native';
 
 import { MapView } from '@/shared/map';
@@ -275,6 +276,37 @@ describe('🔴 AC-보강 — onCameraIdle: NaverMapView 의 idle 좌표를 {lat,
   });
 });
 
+describe('TRIP-748 — onTapMap: 지도 빈 곳 탭을 부모에 알린다(허브 알약 숨김 입구, 옵트인)', () => {
+  it('🔴 M1 onTapMap 전달 시 map-native 가 그 콜백을 받고, 네이버 모양으로 발화하면 1회 올라온다', () => {
+    // 초심자용 — onTapMap 은 "마커가 아닌 지도 빈 곳을 탭했다"를 네이버 지도가 알려주는 콜백이다.
+    // 허브는 좌표가 필요 없어 인자 없는 콜백으로 받는다(D3 로컬 숨김).
+    const onTapMap = jest.fn();
+    render(<MapView center={CENTER} pins={PINS} onTapMap={onTapMap} />);
+
+    const native = screen.getByTestId('map-native');
+    expect(native.props.onTapMap).toBeDefined();
+
+    (
+      native.props as {
+        onTapMap: (p: {
+          latitude: number;
+          longitude: number;
+          x: number;
+          y: number;
+        }) => void;
+      }
+    ).onTapMap({ latitude: 33.5, longitude: 126.5, x: 10, y: 20 });
+
+    expect(onTapMap).toHaveBeenCalledTimes(1);
+  });
+
+  it('M2 onTapMap 미전달 시 map-native 는 그 콜백을 받지 않는다(기존 소비처 무회귀 · 선제 green)', () => {
+    render(<MapView center={CENTER} pins={PINS} />);
+
+    expect(screen.getByTestId('map-native').props.onTapMap).toBeUndefined();
+  });
+});
+
 // ── TRIP-745 · 핀 3상태 + 현재위치 점 + 경로선 색 (01b AC-1~4) ──────────────────
 //
 // 무엇을 보장하나: MapPin.state 로 핀이 done/current/upcoming 세 얼굴로 갈리고(색·번호·체크),
@@ -466,6 +498,30 @@ describe('🔴 TRIP-795 AC-3(a) — radiusCircle: 주면 map-circle 그리고 �
     const circle = screen.queryByTestId('map-circle');
     expect(circle).not.toBeNull();
     expect((circle as { props: { radius?: number } }).props.radius).toBe(1100);
+  });
+
+  it('radiusCircle 전달 → 채움 color 가 알파 0·네이티브 값 0 아님(윤곽선만), 윤곽선·반경 무회귀', () => {
+    // Arrange + Act
+    render(
+      <MapView
+        center={CENTER}
+        pins={PINS}
+        radiusCircle={{ center: CENTER, radiusM: 1400 }}
+      />
+    );
+
+    // Assert — 목은 SDK 기본값을 재현하지 않아 미전달 color 가 undefined 로 보이지만, 실 SDK 에서
+    // 미전달은 color='black'(검정 채움)이다. 또 processColor 결과가 0 인 투명('transparent'·
+    // 'rgba(0,0,0,0)'·'#00000000')은 iOS 네이티브가 초기값 0 과 같다며 무시해 기본 흰색이 칠해진다.
+    // 그래서 "네이티브로 가는 정수가 0 이 아니고, 알파 바이트는 0" 을 요구한다.
+    const circle = screen.getByTestId('map-circle');
+    const argb = processColor(circle.props.color);
+    expect(typeof argb).toBe('number');
+    expect(argb).not.toBe(0);
+    expect(((argb as number) >>> 24) & 0xff).toBe(0);
+    expect(circle.props.outlineColor).toBe('#FF385C');
+    expect(circle.props.outlineWidth).toBe(1.5);
+    expect(circle.props.radius).toBe(1400);
   });
 
   it('radiusCircle 미전달 → map-circle 없음(짝 — additive 무회귀)', () => {

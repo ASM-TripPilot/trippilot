@@ -10,7 +10,7 @@ description: "TripPilot 화면을 Figma 정본 파일에 그리거나 고치는 
 | 파일 | 역할 | 읽는 자리 |
 |---|---|---|
 | 라이브 캔버스 `1MTF3dtptIrbg8gld5IdO2` 페이지 `1228:1045` | **무엇이 있나**의 유일 정본 | 오케(`get_metadata`→jq), 빌더, QA |
-| `frontend/tailwind.config.js` | **값**(색 25·반경 6·간격 7·폰트 8단)의 정본 | 킷이 미러 |
+| `frontend/tailwind.config.js` | **값**(색 25·반경 6·간격 7·폰트 8단)의 정본 — 단 **반경은 예외**: 킷 §3(2026-09-11 사용자 결정)이 정본이고 코드는 동기화 전 | 킷이 미러(반경 제외) |
 | `references/design-kit.md` | Figma 변수명·헬퍼·아이콘·사진 해시·레시피·§9 이 파일 고유 함정·**§10 설계 결정** | 빌더 전문 / QA §2·§4·§6·§7 / 오케 §10(스펙 게이트) |
 | `references/qa-checklist.md` | 판정 기준 A~G(값) + H(슬롭) | 오케·QA |
 | `../spec-perception/reference/figma-structure.md` | 밴드 맵·세대 판정 | 오케·spec-analyst |
@@ -30,13 +30,13 @@ description: "TripPilot 화면을 Figma 정본 파일에 그리거나 고치는 
 
 ## 절차
 
-1. **컨텍스트** — `whoami`로 SWT pro 연결 확인(starter 팀은 6회/월). 라이브 top-level 프레임 목록에서 대상 화면 node id·자매 화면(같은 밴드 신세대)·max y를 얻는다. 옛 id를 받았으면 `rules/figma-traps.md`의 이동·결번 규칙으로 해독(2026-07 이전 id는 6밴드에서 죽었다 — 라이브 이름·좌표로 다시 찾는다). `get_screenshot`으로 대상·자매를 `<스크래치패드>/{cycle-id}/before-{node}.png`에 저장(QA 입력).
+1. **컨텍스트** — `whoami`로 SWT pro 연결 확인(starter 팀은 6회/월). 라이브 top-level 프레임 목록에서 대상 화면 node id·자매 화면(같은 밴드 신세대)·max y를 얻는다. 옛 id·옛 화면 코드를 받았으면 `rules/figma-traps.md`의 해당 항목대로 라이브 이름·내용으로 다시 찾는다. `get_screenshot`으로 대상·자매를 `<스크래치패드>/{cycle-id}/before-{node}.png`에 저장(QA 입력).
 2. **스펙 게이트** — 먼저 `Skill(frontend-design)`을 로드한다(5번의 대조 절차와 카피 규칙). 아래 5줄이 다 있어야 빌더를 부른다. 하나라도 비면 사용자 질문(자율 실행이면 그 화면은 보류로 브리핑에).
    1. 이 화면이 사용자에게 시키는 **한 가지 일**.
    2. **실제 카피**(부산 데이터·실제 상태 문구). 플레이스홀더 금지.
    3. **자매 화면 node id** — 어휘를 물려받을 것.
    4. 라이브에서 확인한 **파운데이션 컴포넌트·Variables id**(킷 §0, 못 찾으면 그 사실) — 컴포넌트·변수를 먼저 찾고, 없을 때만 만든다.
-   5. **제네릭 대조 한 줄** — "아무 여행앱에나 붙는 화면"과 무엇이 다른지. (`frontend-design`의 "계획을 기본값과 대조" 절차)
+   5. **제네릭 대조 한 줄** — `qa-checklist.md` H에 이름 붙은 기본 조립 패턴(히어로+통계 타일·번호 배지 남용·`[i]` 배너로 정보 때움·같은 카드 3연속·모든 섹션 같은 리듬) 중 이 화면이 빠지기 쉬운 것 하나와, 그 대신 쓰는 TripPilot 고유 요소 하나. (`frontend-design`의 "계획을 기본값과 대조" 절차)
    코드 사이클에서 왔으면 `01_spec-analyst_brief.md`가 1~3의 출처다.
 3. **빌드** — `Agent(figma-builder)` **1회 1화면**, 완료 알림을 받은 뒤 다음 화면(단일 파일 트랜잭션, 병렬 금지). 입력: 스펙 5줄·node id·밴드 좌표·**절대 경로**(킷·작업공간). 출력: 생성 node id + 스크린샷 경로.
 4. **QA** — `Agent(figma-qa)`. high FAIL → 빌더 재호출 1회, 재실패는 누락 명시(조용한 생략 금지). H(슬롭 의심)는 차단 없이 브리핑으로.

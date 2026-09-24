@@ -3,6 +3,15 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import { DELETION_SCOPE } from '../model/deletionScope';
 
+/** 카드 그림자(Figma drop 0,8,24 · 12%) — 그림자는 className 으로 못 준다. */
+const DIALOG_SHADOW = {
+  shadowColor: '#000000',
+  shadowOffset: { width: 0, height: 8 },
+  shadowOpacity: 0.12,
+  shadowRadius: 24,
+  elevation: 8,
+} as const;
+
 /**
  * 계정 삭제 **2단 순차 다이얼로그**(Q2 · AC-12 법적 게이트). 리포에 Modal 선례가 0이라 신설 —
  * RN `Modal` 대신 **조건부 렌더 absolute 오버레이**로 짜서 열림 시 testID 가 트리에 실재하게 한다
@@ -26,28 +35,32 @@ export function DeleteAccountDialog({
 
   return (
     <View className="absolute inset-0 items-center justify-center bg-scrim/55 px-2xl">
-      <View className="w-[330px] rounded-[20px] bg-canvas p-2xl">
+      <View
+        style={DIALOG_SHADOW}
+        className="w-[330px] rounded-[20px] bg-canvas p-2xl"
+      >
         {step === 'confirm1' ? (
           <>
             <Text className="text-[19px] font-noto-bold text-ink">
               계정을 삭제할까요?
             </Text>
             <Text className="mt-sm font-noto text-body text-body">
-              아래 항목이 계정과 함께 모두 삭제되며 되돌릴 수 없습니다.
+              아래 항목이 계정과 함께 모두 삭제됩니다.
             </Text>
-            <ScrollView className="mt-md max-h-[220px]">
-              <View className="gap-xs">
+            {/* 상한 248 = 9행 228(20×9 + 간격 6×8) + 최장 항목 줄바꿈 한 줄 여유 — 잘림 없이, 큰 글자에선 스크롤. */}
+            <ScrollView className="mt-md max-h-[248px]">
+              <View className="gap-[6px]">
                 {DELETION_SCOPE.map((item) => (
                   <View key={item} className="flex-row gap-sm">
-                    <Text className="font-noto text-body text-muted">·</Text>
-                    <Text className="flex-1 font-noto text-body text-body">
+                    <Text className="font-noto text-body text-ink">•</Text>
+                    <Text className="flex-1 font-noto text-body text-ink">
                       {item}
                     </Text>
                   </View>
                 ))}
               </View>
             </ScrollView>
-            <View className="mt-2xl flex-row gap-[10px]">
+            <View className="mt-xl flex-row gap-[10px]">
               <DialogButton
                 testID="settings-delete-cancel"
                 label="취소"
@@ -68,10 +81,10 @@ export function DeleteAccountDialog({
               정말 삭제할까요?
             </Text>
             <Text className="mt-sm font-noto text-body text-body">
-              이 작업은 되돌릴 수 없어요. 확인하면 계정과 위의 모든 데이터가
-              삭제 절차에 들어갑니다.
+              확인하면 계정과 위의 모든 데이터가 삭제 절차에 들어가고, 30일 뒤
+              완전히 삭제돼요. 그 전에는 설정에서 삭제를 취소할 수 있어요.
             </Text>
-            <View className="mt-2xl flex-row gap-[10px]">
+            <View className="mt-xl flex-row gap-[10px]">
               <DialogButton
                 testID="settings-delete-cancel"
                 label="취소"
@@ -115,9 +128,9 @@ function DialogButton({
       testID={testID}
       accessibilityRole="button"
       onPress={onPress}
-      className={`h-12 flex-1 items-center justify-center rounded-button ${surface}`}
+      className={`h-[52px] flex-1 items-center justify-center rounded-button ${surface}`}
     >
-      <Text className={`font-noto-bold text-card-title ${text}`}>{label}</Text>
+      <Text className={`font-noto-bold text-[16px] ${text}`}>{label}</Text>
     </Pressable>
   );
 }

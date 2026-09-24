@@ -1,8 +1,8 @@
 /**
- * l05 설정 6그룹 뷰모델 조립 (AC-1 · AC-11) — 순수 함수.
+ * l05 설정 7그룹 뷰모델 조립 (AC-1 · AC-11) — 순수 함수.
  *
  * 정본 순서(Figma 라이브 = 화면 유일 정본): 계정 → 여행 취향 → 위치정보 → 알림 → 제휴 안내 →
- * 위험 영역. 각 행은 `ready` 로 상호작용 여부를 표시한다 — 목적지 라우트가 선 행(위치·알림)은
+ * (앱 정보 — TRIP-937, Figma 에 없음) → 위험 영역. 각 행은 `ready` 로 상호작용 여부를 표시한다 — 목적지 라우트가 선 행(위치·알림)은
  * `ready:true`, 아직 없는 행(취향 7·제휴)은 `ready:false` 다(TRIP-618 진입 개통, AC-5·INV-4).
  *
  * 요약값은 닉네임만 라이브다(Q6 — email 이 null 이어도 닉네임만 표기, null/undefined 를 문자열로
@@ -41,6 +41,7 @@ export function buildSettingsSections(input: SettingsInput): SettingsGroupVM[] {
           ready: true,
         },
         { key: 'export', label: '데이터 내보내기', ready: true },
+        { key: 'logout', label: '로그아웃', ready: true },
       ],
     },
     {
@@ -80,9 +81,44 @@ export function buildSettingsSections(input: SettingsInput): SettingsGroupVM[] {
       ],
     },
     {
+      // TRIP-937 — 약관·정책 열람(가이드라인 5.1.1(i)). Figma l05·U6 BLM §3.3 에 없는 그룹(정본 드리프트).
+      // rowKey `terms-{termsType}` 의 접미가 열람 라우트 `/terms/{termsType}` 의 세그먼트다.
+      key: 'app-info',
+      label: '앱 정보',
+      rows: [
+        {
+          key: 'terms-TERMS_OF_SERVICE',
+          label: '서비스 이용약관',
+          ready: true,
+        },
+        {
+          key: 'terms-PRIVACY_POLICY',
+          label: '개인정보 처리방침',
+          ready: true,
+        },
+        {
+          key: 'terms-LOCATION_TERMS',
+          label: '위치정보 이용약관',
+          ready: true,
+        },
+      ],
+    },
+    {
       key: 'danger',
       label: '위험 영역',
       rows: [{ key: 'delete-account', label: '계정 삭제', ready: true }],
     },
   ];
+}
+
+/**
+ * 운영 화면용 필터(TRIP-939) — `ready:true` 행만 남기고, 행이 0개가 된 그룹은 뺀다. 입력은 바꾸지
+ * 않는다. 판정은 `ready` 플래그로만 하므로, 기능을 열 때는 위 모델에서 `ready:true` 한 줄이면 된다.
+ */
+export function filterReadySettingsSections(
+  groups: SettingsGroupVM[]
+): SettingsGroupVM[] {
+  return groups
+    .map((g) => ({ ...g, rows: g.rows.filter((r) => r.ready) }))
+    .filter((g) => g.rows.length > 0);
 }

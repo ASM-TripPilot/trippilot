@@ -19,6 +19,9 @@ import com.trippilot.itinerarygeneration.domain.UnplacedMustVisit
 import com.trippilot.itinerarygeneration.domain.UnplacedReason
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
+import com.trippilot.itinerarygeneration.domain.SlotExplanations
+import io.kotest.assertions.withClue
+import com.trippilot.itinerarygeneration.domain.SlotAlternative
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
@@ -81,7 +84,7 @@ private class RejectAnytimeAgent(private val now: Instant, private val emitPoi: 
     }
     override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
     override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
-    override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): Map<String, String> = emptyMap()
+    override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): SlotExplanations = SlotExplanations()
 }
 
 /** 미배치 보고를 돌려주는 대역. */
@@ -95,7 +98,7 @@ private class ReportingAgent(private val now: Instant, private val unplaced: Lis
     )
     override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
     override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
-    override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): Map<String, String> = emptyMap()
+    override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): SlotExplanations = SlotExplanations()
 }
 
 /** 1차·2차가 서로 다른 보고를 돌려주는 대역 — 어느 쪽이 최종으로 남는지 본다. */
@@ -117,7 +120,7 @@ private class TwoPhaseReportingAgent(
     }
     override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
     override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
-    override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): Map<String, String> = emptyMap()
+    override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): SlotExplanations = SlotExplanations()
 }
 
 private class CapturingAgent(private val now: Instant, private val emit: (LocalDate) -> List<VisitSlotDisplay> = { emptyList() }) :
@@ -135,7 +138,7 @@ private class CapturingAgent(private val now: Instant, private val emit: (LocalD
     }
     override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
     override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
-    override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): Map<String, String> = emptyMap()
+    override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): SlotExplanations = SlotExplanations()
 }
 
 /** ScheduleAgent(AI) 실패 재현 — INV-4 폴백 경로 검증용. */
@@ -143,7 +146,7 @@ private class ThrowingAgent : StubScheduleAgent() {
     override fun generate(input: ScheduleAgentInput): ScheduleAgentOutput = throw RuntimeException("agent down")
     override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
     override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
-    override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): Map<String, String> = emptyMap()
+    override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): SlotExplanations = SlotExplanations()
 }
 
 private class CapturingPublisher : DomainEventPublisher {
@@ -633,7 +636,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
             )
             override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
             override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
-            override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): Map<String, String> = emptyMap()
+            override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): SlotExplanations = SlotExplanations()
         }
         val repo = FakeItineraries()
         val returned = service(agent, repo, start).generate(acc, tripId, GenerationMode.FULLY_AI)
@@ -713,7 +716,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
             )
 
             override fun explanations(tripId: UUID, solution: ScheduleAgentOutput) =
-                poiByDate.entries.associate { (d, p) -> "$d#$p" to "$d 근거" }
+                SlotExplanations(slots = poiByDate.entries.associate { (d, p) -> "$d#$p" to "$d 근거" })
             override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
             override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
         }
@@ -794,8 +797,9 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
                 solveMode = SolveMode.DETERMINISTIC, isFallback = false,
                 freshness = FreshnessMeta(now, degraded = false),
             )
-            override fun explanations(tripId: UUID, solution: ScheduleAgentOutput) =
-                solution.days.flatMap { d -> d.slots.map { "${d.date}#${it.poiId}" to "${d.date} 근거" } }.toMap()
+            override fun explanations(tripId: UUID, solution: ScheduleAgentOutput) = SlotExplanations(
+                slots = solution.days.flatMap { d -> d.slots.map { "${d.date}#${it.poiId}" to "${d.date} 근거" } }.toMap(),
+            )
             override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
             override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
         }
@@ -808,6 +812,70 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         finished.generationState shouldBe GenerationState.COMPLETE
         finished.days.map { it.slots.single().placementReason } shouldContainExactly
             listOf("$start 근거", "${start.plusDays(1)} 근거", "$end 근거")
+    }
+
+    /**
+     * **차선책 문장이 슬롯까지 닿는다**(TRIP-873 · AI TRIP-887) — 배선 세 칸을 한 번에 지킨다.
+     *
+     * 이 경로는 **세 곳 중 하나만 빠져도 조용히 꺼진다**:
+     * 1. `toOutput()` 이 저장된 차선책을 요청에 안 실으면 → 상대가 만들 재료가 없다
+     * 2. `toWire()` 가 그것을 경계 본문에 안 실으면 → 같은 결과
+     * 3. 적용이 빠지면 → 받아 놓고 버린다
+     *
+     * 셋 다 증상이 같다 — 화면의 "다른 선택지" 이유가 AI 템플릿 문구(`"같은 카페 후보"`)에 머문다.
+     * **그건 정상 폴백과 구분되지 않아** 아무도 눈치채지 못한다. 그래서 요청에 실렸는지(대역이 단언)와
+     * 응답이 적용됐는지(저장분 단정)를 **양쪽에서** 본다.
+     */
+    "차선책 문장이 요청에 실려 나가고 받은 문장이 슬롯에 붙는다" {
+        val end = start.plusDays(1)
+        val poiByDate = generateSequence(start) { it.plusDays(1) }.takeWhile { !it.isAfter(end) }
+            .associateWith { UUID.randomUUID() }
+        val altPoi = UUID.randomUUID()
+        var sentAlternatives = 0
+        val agent = object : StubScheduleAgent() {
+            override fun generate(input: ScheduleAgentInput) = ScheduleAgentOutput(
+                days = input.timeWindows.map { tw ->
+                    DaySchedule(
+                        tw.date,
+                        listOf(
+                            VisitSlotDisplay(
+                                poiByDate.getValue(tw.date), LocalTime.parse("10:00"), LocalTime.parse("11:00"),
+                                false, null, isFixed = false,
+                                alternatives = listOf(SlotAlternative(altPoi, "같은 카페 후보", null)),
+                            ),
+                        ),
+                    )
+                },
+                day1ReadyAt = null, explanations = emptyMap(),
+                solveMode = SolveMode.DETERMINISTIC, isFallback = false,
+                freshness = FreshnessMeta(now, degraded = false),
+            )
+
+            override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): SlotExplanations {
+                // 요청에 실려 왔는가 — 여기가 0 이면 위 1·2번이 끊긴 것이다.
+                sentAlternatives = solution.days.sumOf { d -> d.slots.sumOf { it.alternatives.size } }
+                return SlotExplanations(
+                    alternatives = solution.days
+                        .flatMap { d -> d.slots.flatMap { s -> s.alternatives.map { "${d.date}#${it.poiId}" to "비 오면 여기가 나아요" } } }
+                        .toMap(),
+                )
+            }
+
+            override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
+            override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
+        }
+        val repo = FakeItineraries()
+
+        service(agent, repo, end).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        withClue("요청 슬롯에 차선책이 하나도 안 실렸습니다 — toOutput() 이나 toWire() 가 끊긴 것입니다.") {
+            sentAlternatives shouldBe poiByDate.size
+        }
+        val saved = repo.byTrip.getValue(tripId)
+        withClue("문장을 받았는데 슬롯의 rationale 이 AI 템플릿 그대로입니다 — 적용이 끊긴 것입니다.") {
+            saved.days.flatMap { it.slots }.flatMap { it.alternatives }.map { it.rationale }
+                .toSet() shouldBe setOf("비 오면 여기가 나아요")
+        }
     }
 
     /** 근거 조회가 빈 맵을 줘도 일정은 닫힌다 — 근거는 부가 정보라 없다고 생성을 죽이지 않는다(INV-4). */
@@ -884,7 +952,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
             }
             override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
             override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
-            override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): Map<String, String> = emptyMap()
+            override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): SlotExplanations = SlotExplanations()
         }
         val repo = FakeItineraries()
         service(agent, repo, end, sessionRepo).generate(acc, tripId, GenerationMode.FULLY_AI)
@@ -907,10 +975,10 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         val (base, _) = emittingAgent(end)
         val theTrip = tripId // 아래 오버라이드의 파라미터 이름이 바깥 값을 가린다
         val agent = object : ScheduleAgentPort by base {
-            override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): Map<String, String> {
+            override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): SlotExplanations {
                 // 근거를 받아 오는 **그 사이에** 사용자가 [취소]를 눌렀다.
                 sessionRepo.findRunningByTrip(theTrip)?.let { sessionRepo.save(it.canceled(now)) }
-                return emptyMap()
+                return SlotExplanations()
             }
         }
         val repo = FakeItineraries()
@@ -974,7 +1042,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
                 }
                 override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
                 override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
-                override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): Map<String, String> = emptyMap()
+                override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): SlotExplanations = SlotExplanations()
             }
         }
         val repo = FakeItineraries()
@@ -1069,7 +1137,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
             }
             override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
             override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
-            override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): Map<String, String> = emptyMap()
+            override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): SlotExplanations = SlotExplanations()
         }
         val repo = FakeItineraries()
         service(agent, repo, end).generate(acc, tripId, GenerationMode.FULLY_AI)

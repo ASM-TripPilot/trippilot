@@ -61,10 +61,12 @@ const ROWS: Row[] = [
   // TRIP-801 GUT — TimelineScreen.tsx 행 제거. CONFIRMED→셸 이관으로 소비처 0이 돼 파일이 삭제되므로,
   // 이 행을 두면 read() 가 ENOENT 로 throw 한다(02a ★10). PoiSlotCard 는 이번 티켓에서 잔존(범위
   // 폭발 방지)이라 DELETED_PURE_SHIMS 에도 넣지 않는다 — 삭제는 후속(TRIP-810 shim 정리 계열).
+  // TRIP-751 재조준 — i13 진열대(`features/planb/ui/ReplanDraftScreen.tsx`)는 i06 재작성으로 삭제됐고,
+  // 행 소비처는 pages 순수 뷰로 옮겨 갔다. 렌더 잠금은 ReplanDraftView.test·ReplanSlotRow.test 가 진다.
   {
-    file: 'features/planb/ui/ReplanDraftScreen.tsx',
+    file: 'pages/planb-draft/ui/ReplanDraftView.tsx',
     must: ['@/entities/itinerary-slot/ui'],
-    why: 'i13 진열대가 ReplanSlotRow 를 entities 에서 소비(import 재작성). 렌더 잠금은 ReplanDraftScreen.test 무수정 green',
+    why: 'i06 재계획안 뷰가 ReplanSlotRow 를 entities 에서 소비',
   },
   // TRIP-810 재조준 — 순수 shim 5(categoryPlaceholder·slotKey·SlotPhotoPlaceholder·PoiSlotCard·
   // ReplanSlotRow)는 이번 사이클에 **파일째 삭제**된다. 소비처 전환 표(긍정+부정 소스 스캔)에서 빼고

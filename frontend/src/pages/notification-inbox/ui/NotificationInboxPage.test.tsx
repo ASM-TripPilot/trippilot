@@ -1,5 +1,12 @@
-jest.mock('@/shared/api/generated/notification/notification');
+// 부분 목 — 조회 훅만 가짜로 바꾸고 나머지(읽음 POST 함수·쿼리 키·생성 뮤테이션 훅)는 실물을 둔다.
+// 전체 자동 목이면 '모두 읽음' 배선이 생성 훅을 쓰는 순간 그 훅이 undefined 를 돌려줘 렌더가 죽는다(TRIP-773).
+jest.mock('@/shared/api/generated/notification/notification', () => ({
+  ...jest.requireActual('@/shared/api/generated/notification/notification'),
+  useGetMeNotifications: jest.fn(),
+}));
 
+import type { ReactElement } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { useGetMeNotifications } from '@/shared/api/generated/notification/notification';
@@ -19,17 +26,28 @@ import { NotificationInboxPage } from './NotificationInboxPage';
  *  - **AC-5**: REFLECTION 행 press → `router.push('/trips/{tripId}/records/reflection/{date}')` 1회.
  *  - **AC-3(조립)**: 메타가 `notificationKind.label · formatRelativeTime` 로 합쳐진다(occurredAt=10분30초
  *    전 → "Plan-B · 10분 전"). 두 순수 함수를 실제로 함께 태워 조립을 증명.
- *  - empty: items 0 → `notification-inbox-empty`(StateNotice).
+ *  - empty: items 0 → `notification-inbox-empty`.
  *
- * ★ 목 seam 은 **딥 경로**(`generated/notification/notification`) — 배럴 목이면 실 훅이 QueryClient 부재로
- *   죽는다(SettingsPage 선례). `router.push` 목은 "불렸다·이 인자로·N회"까지(통과형 목 사각 — 실 이동 6-b).
+ * ★ 목 seam 은 **딥 경로**(`generated/notification/notification`)의 조회 훅 하나만(부분 목) — 나머지는
+ *   실물이라 렌더를 QueryClientProvider 로 감싼다(페이지가 useQueryClient·생성 뮤테이션 훅을 써도 안 죽게).
+ *   실제로 나간 POST·재조회는 NotificationInboxPage.integration.test.tsx(msw)가 잠근다. `router.push` 목은 "불렸다·이 인자로·N회"까지(통과형 목 사각 — 실 이동 6-b).
  * ★ REFLECTION 대상 라우트(records/reflection/[date])는 U5 미착수라 router.push 인자만 본다(브리프 6.②).
  */
 
 const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
-  router: { push: (...args: unknown[]) => mockPush(...args) },
+  router: {
+    push: (...args: unknown[]) => mockPush(...args),
+    back: jest.fn(),
+  },
 }));
+
+function renderPage(ui: ReactElement = <NotificationInboxPage />): void {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+}
 
 const mockUseGetMeNotifications = useGetMeNotifications as jest.Mock;
 
@@ -75,7 +93,7 @@ beforeEach(() => {
 describe('AC-1(배선) · 조회 결과를 행으로 렌더', () => {
   it('items 2건 → notification-inbox-row 2개', () => {
     mockItems([PLAN_B, REFLECTION]);
-    render(<NotificationInboxPage />);
+    renderPage();
     expect(screen.queryAllByTestId('notification-inbox-row')).toHaveLength(2);
   });
 });
@@ -83,7 +101,7 @@ describe('AC-1(배선) · 조회 결과를 행으로 렌더', () => {
 describe('AC-4 · PLAN_B 액션 press → router.push(/trips/{tripId}/planb)', () => {
   it('대안 일정 보기 press 로 planb 로 1회 이동', () => {
     mockItems([PLAN_B]);
-    render(<NotificationInboxPage />);
+    renderPage();
 
     fireEvent.press(screen.getByTestId('notification-inbox-action'));
 
@@ -95,7 +113,7 @@ describe('AC-4 · PLAN_B 액션 press → router.push(/trips/{tripId}/planb)', (
 describe('AC-5 · REFLECTION 행 press → router.push(records/reflection/{date})', () => {
   it('회고 행 press 로 회고 딥링크로 1회 이동', () => {
     mockItems([REFLECTION]);
-    render(<NotificationInboxPage />);
+    renderPage();
 
     fireEvent.press(screen.getByTestId('notification-inbox-row'));
 
@@ -109,15 +127,15 @@ describe('AC-5 · REFLECTION 행 press → router.push(records/reflection/{date}
 describe('AC-3(조립) · 메타 = 라벨 · 상대시각', () => {
   it('PLAN_B occurredAt 10분30초 전 → "Plan-B · 10분 전"', () => {
     mockItems([PLAN_B]);
-    render(<NotificationInboxPage />);
+    renderPage();
     expect(screen.getByText('Plan-B · 10분 전')).toBeOnTheScreen();
   });
 });
 
 describe('empty · 알림 0건', () => {
-  it('items 0 → notification-inbox-empty(StateNotice)', () => {
+  it('items 0 → notification-inbox-empty', () => {
     mockItems([]);
-    render(<NotificationInboxPage />);
+    renderPage();
     expect(screen.getByTestId('notification-inbox-empty')).toBeOnTheScreen();
     expect(screen.queryAllByTestId('notification-inbox-row')).toHaveLength(0);
   });

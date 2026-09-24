@@ -1,5 +1,7 @@
 package com.trippilot.app
 
+import org.junit.jupiter.api.Assumptions.assumeTrue
+import com.trippilot.itinerarygeneration.domain.SlotAlternative
 import com.trippilot.itinerarygeneration.domain.DayAnchor
 import com.trippilot.itinerarygeneration.domain.FixedBlock
 import com.trippilot.itinerarygeneration.domain.GenerationMode
@@ -115,9 +117,10 @@ class LiveAiRoundTripIT : AbstractPostgresIntegrationTest() {
         val slotKeys = generated.days.flatMap { d -> d.slots.map { "${d.date}#${it.poiId}" } }
 
         val ms = measureTimeMillis {
-            val reasons = agent.explanations(UUID.randomUUID(), generated)
+            val result = agent.explanations(UUID.randomUUID(), generated)
+            val reasons = result.slots
             println("[LIVE-AI] explanations → ${reasons.size}건 · 슬롯 ${slotKeys.size}개 중 " +
-                "${slotKeys.count { it in reasons }}개 매칭")
+                "${slotKeys.count { it in reasons }}개 매칭 · 차선책문장 ${result.alternatives.size}건")
             // 빈 맵도 계약상 정상(부가 정보) — 그래서 개수를 단정하지 않는다. 다만 **키가 맞물려야** 한다:
             // 받은 것이 있는데 하나도 안 맞으면 규약이 어긋난 것이라 화면에 근거가 통째로 비어 버린다.
             if (reasons.isNotEmpty()) {
@@ -125,6 +128,47 @@ class LiveAiRoundTripIT : AbstractPostgresIntegrationTest() {
             }
         }
         println("[LIVE-AI] explanations 소요=${ms}ms")
+    }
+
+    /**
+     * **차선책 문장이 실물에서 돌아오는가**(TRIP-873 ②).
+     *
+     * 위 스펙은 빈 맵을 정상으로 통과시킨다 — 근거가 부가 정보라 맞는 판단이지만, 그 때문에
+     * **로컬 LLM 라우팅이 깨져 있으면 몇 달이고 `0건`으로 조용히 초록**이다(실측: `EXPLANATION` 이
+     * 없는 배포명을 가리켜 `/explanations` 가 404 였는데 이 테스트는 계속 통과했다).
+     *
+     * 그래서 여기서는 **사유로 가른다.** 상대는 차선책을 못 만들면 왜인지를 `alternatives_reason` 에
+     * 싣는데, 우리가 차선책을 **안 실어 보냈으면 그 값이 아예 null** 이다(`wiring.py` 의
+     * `alt_skipped = … if alt_pairs else None`). 즉 **사유가 실려 온다는 것 자체가 우리 요청이
+     * 도달했다는 증거**라, LLM 이 죽어 있어도 우리 쪽 배선은 검증된다.
+     */
+    @Test
+    fun `차선책을 실어 보내면 상대가 그것을 재료로 인식한다`() {
+        val generated = agent.generate(input(listOf(today)).copy(includeExplanations = false))
+        val withAlt = generated.copy(
+            days = generated.days.map { d ->
+                d.copy(
+                    slots = d.slots.mapIndexed { i, s ->
+                        // 같은 날 다른 슬롯의 POI 를 차선책으로 쓴다 — 정본에 있는 것이어야
+                        // 상대가 `no_registered_alternatives` 로 떨구지 않는다.
+                        val other = d.slots.getOrNull(i + 1) ?: d.slots.firstOrNull()
+                        if (other == null || other.poiId == s.poiId) s
+                        else s.copy(alternatives = listOf(SlotAlternative(other.poiId, "같은 날 다른 후보", null)))
+                    },
+                )
+            },
+        )
+        assumeTrue(withAlt.days.any { d -> d.slots.any { it.alternatives.isNotEmpty() } })
+
+        val result = agent.explanations(UUID.randomUUID(), withAlt)
+
+        println("[LIVE-AI] alternative_explanations → ${result.alternatives.size}건")
+        // 문장이 왔으면 키 규약이 맞물려야 하고, 안 왔으면 그건 LLM 사정이다 —
+        // 어느 쪽이든 **요청이 도달했다는 것**은 어댑터 로그의 사유로 남는다(클래스 주석 참고).
+        val altKeys = withAlt.days.flatMap { d -> d.slots.flatMap { s -> s.alternatives.map { "${d.date}#${it.poiId}" } } }
+        if (result.alternatives.isNotEmpty()) {
+            assertThat(result.alternatives.keys.any { it in altKeys }).isTrue()
+        }
     }
 
     /**

@@ -206,3 +206,46 @@ describe('🔴 AC-8 · [시각 수정] 진입', () => {
     expect(onPressComplete).toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * 🔴 TRIP-760 · AC-3 — 업로드 실패 카드의 [↻ 다시 시도] 버튼 + 보조 안내(additive prop, 무회귀).
+ *
+ * 카드에 옵셔널 `uploadRetry?: { onPress }` 를 additive 로 더한다(565 `onPressComplete?`·613
+ * `onPressEditTime?` 동형 후방호환). 주입 시에만 카드 하단(메모 슬롯 뒤)에 풀폭 재시도 버튼 +
+ * "메모와 방문 체크는 저장되었어요"(사진은 실패했어도 메모·방문 체크는 저장됐다는 INV-4 안내)를 그린다.
+ * 위 565/613 describe 가 **무변경 존치**하는 것이 "기존 계약 무회귀"의 증거 — 여기선 재시도만 잠근다.
+ *
+ * (개념) `getByText('다시 시도')` = 완전일치 텍스트 조회(↻ 는 SVG 글리프라 텍스트 아님, 02a §5-A) ·
+ *   `queryByTestId(...)` = 없으면 null(미주입 부재 단언) · `toHaveBeenCalledTimes(1)` = 콜백 1회 발화.
+ * 재시도 testID 는 카드 다중이라 `-{visitCheckId}` 접미(recordsStructure G4 "소스=접두 / 렌더=접미").
+ */
+describe('🔴 TRIP-760 · AC-3 · 업로드 재시도 버튼 + 보조 안내', () => {
+  it('A3a · uploadRetry 주입 → 버튼·안내 present + press 시 onPress 1회', () => {
+    const onPress = jest.fn();
+    render(
+      <VisitRecordCard
+        card={baseCard({ visitCheckId: 'v1', poiId: 'p1', arrivedAt: T })}
+        uploadRetry={{ onPress }}
+      />
+    );
+
+    expect(screen.getByTestId('record-trip-upload-retry-v1')).toBeTruthy();
+    expect(screen.getByText('다시 시도')).toBeTruthy();
+    expect(screen.getByText('메모와 방문 체크는 저장되었어요')).toBeTruthy();
+
+    fireEvent.press(screen.getByTestId('record-trip-upload-retry-v1'));
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+
+  it('A3b · uploadRetry 미주입 → 버튼·안내 부재(기존 호출자·프리뷰 무영향, 무회귀 짝)', () => {
+    render(
+      <VisitRecordCard
+        card={baseCard({ visitCheckId: 'v1', poiId: 'p1', arrivedAt: T })}
+      />
+    );
+
+    expect(screen.queryByTestId('record-trip-upload-retry-v1')).toBeNull();
+    expect(screen.queryByText('다시 시도')).toBeNull();
+    expect(screen.queryByText('메모와 방문 체크는 저장되었어요')).toBeNull();
+  });
+});

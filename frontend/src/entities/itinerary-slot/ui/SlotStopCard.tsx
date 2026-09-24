@@ -5,7 +5,7 @@ import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas'
 
 import { ALT_LABEL } from '../config/altLabel';
 import { buildSlotKey } from '../lib/slotKey';
-import { ChevronRightGlyph, ClockGlyph, LockGlyph } from './SlotGlyphs';
+import { ChevronRightGlyph, ClockGlyph } from './SlotGlyphs';
 import { SlotPhotoPlaceholder } from './SlotPhotoPlaceholder';
 
 /** TRIP-797 · 미지정(startAt 없는) 슬롯 칩 문구 — 정본 공백 발명 카피(Figma 근거 6-b 이연). */
@@ -66,9 +66,19 @@ export interface SlotStopCardProps {
   /** TRIP-797 · true 면 시각 칩 대신 "시간대 설정" 칩(`slot-stopcard-unspecified-*`)을 그린다(AC-6).
    *  시각 leaf(`slot-stopcard-time-*`)는 부재. `onPressTimeChip` 있으면 이 칩이 그 콜백을 발화. */
   unspecified?: boolean;
-  /** TRIP-797 · 방문 완료 잠금(AC-11 · INV-U3-03). true 면 잠금 표식(`slot-stopcard-locked-*`)을
-   *  그리고 **시각칩 편집 어포던스를 안 붙인다**(`onPressTimeChip` 이 있어도 누름 칩 부재). */
+  /** TRIP-797 · 방문 완료 잠금(AC-11 · INV-U3-03). true 면 **시각칩 편집 어포던스를 안 붙인다**
+   *  (`onPressTimeChip` 이 있어도 누름 칩 부재). TRIP-753: 보이는 자물쇠 배지 대신 시각 알약을 회색
+   *  톤으로 그리고, 잠금 표식 testID(`slot-stopcard-locked-*`)는 그 알약 View 에 붙는다. */
   locked?: boolean;
+  /** TRIP-753 · 번호 원을 카드 루트 **밖** 왼쪽에 그린다(편집기 opt-in, 결과 화면 5종 무변경). 톤은
+   *  `locked` 면 success, 아니면 primary. testID `slot-stopcard-number-*` 는 원 View 에 붙는다. */
+  numberOutside?: boolean;
+  /** TRIP-753 · 위반 배지 문구(카테고리 아래 연분홍 알약, `slot-stopcard-violation-*`). 미주입·null 이면
+   *  미렌더 — 카드는 `slot.hasViolation` 을 스스로 읽지 않는다(결과 화면 5종 무변경). */
+  violation?: string | null;
+  /** TRIP-921 · h12 편집기에서 **끌리는 중**인 카드(리스트 `isActive`). true 면 루트 테두리를 primary 로
+   *  그린다(Figma 떠 있는 카드). 미주입이면 현행 그대로. */
+  dragging?: boolean;
 }
 
 export function SlotStopCard({
@@ -85,6 +95,9 @@ export function SlotStopCard({
   onPressTimeChip,
   unspecified,
   locked,
+  numberOutside,
+  violation,
+  dragging,
 }: SlotStopCardProps): ReactElement {
   const slotKey = buildSlotKey(date, slot.poiId);
   const fieldId = (role: string): string => `slot-stopcard-${role}-${slotKey}`;
@@ -95,21 +108,23 @@ export function SlotStopCard({
   const chipClass =
     'flex-row items-center gap-xs self-start rounded-[8px] border border-hairline-strong bg-canvas px-sm py-[3px]';
 
-  return (
+  const card = (
     <View
       testID={`slot-stopcard-${slotKey}`}
       style={cardShadow}
-      className="flex-row items-start gap-[10px] rounded-card border border-hairline bg-canvas p-md"
+      className={`flex-row gap-[10px] rounded-card border bg-canvas p-md ${dragging ? 'border-primary' : 'border-hairline'} ${numberOutside ? 'flex-1 items-center' : 'items-start'}`}
     >
-      {/* 번호 배지 — 24px squircle(rounded-[8px]) primary. */}
-      <View className="h-[24px] w-[24px] items-center justify-center rounded-[8px] bg-primary">
-        <Text
-          testID={fieldId('number')}
-          className="font-inter-bold text-caption font-bold text-on-primary"
-        >
-          {String(index + 1)}
-        </Text>
-      </View>
+      {/* 번호 배지 — 24px squircle(rounded-[8px]) primary. numberOutside 면 카드 밖(아래 return)에 그린다. */}
+      {numberOutside ? null : (
+        <View className="h-[24px] w-[24px] items-center justify-center rounded-[8px] bg-primary">
+          <Text
+            testID={fieldId('number')}
+            className="font-inter-bold text-caption font-bold text-on-primary"
+          >
+            {String(index + 1)}
+          </Text>
+        </View>
+      )}
 
       {/* 사진 72×72 — 없으면 카테고리 플레이스홀더로 대체(엣지 E1). */}
       {hasImage ? (
@@ -169,6 +184,20 @@ export function SlotStopCard({
                 <ChevronRightGlyph size={14} tone="muted" />
               </View>
             </Pressable>
+          ) : locked ? (
+            // 방문 완료 잠금(AC-11) — 모양은 회색 알약뿐(Figma 4313:2100), 표식 testID 는 알약 자체.
+            <View
+              testID={fieldId('locked')}
+              className="flex-row items-center gap-xs self-start rounded-[8px] border border-muted-soft bg-canvas px-sm py-[3px]"
+            >
+              <ClockGlyph size={12} />
+              <Text
+                testID={fieldId('time')}
+                className="font-noto-bold text-caption font-bold text-muted"
+              >
+                {timeLabel}
+              </Text>
+            </View>
           ) : (
             <View className={chipClass}>
               <ClockGlyph size={12} />
@@ -182,32 +211,36 @@ export function SlotStopCard({
           )
         ) : null}
 
-        {/* 방문 완료 잠금 표식(AC-11) — 주면 자물쇠 배지. 편집 어포던스는 위에서 이미 떼였다. */}
-        {locked ? (
-          <View
-            testID={fieldId('locked')}
-            className="flex-row items-center gap-xs self-start rounded-[8px] bg-surface-strong px-sm py-[3px]"
-          >
-            <LockGlyph size={14} />
-            <Text className="font-noto text-micro text-muted">방문 완료</Text>
-          </View>
-        ) : null}
-
         <View className="flex-row items-center justify-between gap-[6px]">
           <View className="flex-1 flex-row items-center gap-[6px]">
-            <Pressable
-              testID={fieldId('name')}
-              onPress={onPressName}
-              className="flex-shrink flex-row items-center gap-[2px]"
-            >
-              <Text
-                numberOfLines={1}
-                className="font-noto-bold text-card-title font-bold text-ink"
+            {/* 이름 진입 목적지가 없으면 누를 수 없는 글자로, `›` 도 뺀다(TRIP-939 A-3·Q4). */}
+            {onPressName ? (
+              <Pressable
+                testID={fieldId('name')}
+                onPress={onPressName}
+                className="flex-shrink flex-row items-center gap-[2px]"
               >
-                {slot.nameKo ?? ''}
-              </Text>
-              <ChevronRightGlyph size={14} tone="muted" />
-            </Pressable>
+                <Text
+                  numberOfLines={1}
+                  className="font-noto-bold text-card-title font-bold text-ink"
+                >
+                  {slot.nameKo ?? ''}
+                </Text>
+                <ChevronRightGlyph size={14} tone="muted" />
+              </Pressable>
+            ) : (
+              <View
+                testID={fieldId('name')}
+                className="flex-shrink flex-row items-center gap-[2px]"
+              >
+                <Text
+                  numberOfLines={1}
+                  className="font-noto-bold text-card-title font-bold text-ink"
+                >
+                  {slot.nameKo ?? ''}
+                </Text>
+              </View>
+            )}
             {required ? (
               <View
                 testID={fieldId('required')}
@@ -254,6 +287,18 @@ export function SlotStopCard({
           </Text>
         ) : null}
 
+        {/* 위반 배지(TRIP-753) — 카테고리 아래 연분홍 알약. 문구는 소비처가 정한다(빈 배지 금지). */}
+        {violation ? (
+          <View
+            testID={fieldId('violation')}
+            className="self-start rounded-[12px] bg-primary-pale px-sm py-[3px]"
+          >
+            <Text className="font-noto-bold text-micro font-bold text-primary">
+              {violation}
+            </Text>
+          </View>
+        ) : null}
+
         {subtitle === null || subtitle === undefined ? null : (
           <Text
             testID={fieldId('subtitle')}
@@ -275,6 +320,23 @@ export function SlotStopCard({
           </Pressable>
         ) : null}
       </View>
+    </View>
+  );
+
+  if (!numberOutside) return card;
+
+  // 편집기(TRIP-753): `[번호 원] gap10 [카드]` — 번호는 카드 루트 밖, 톤은 완료(success)/예정(primary).
+  return (
+    <View className="flex-row items-center gap-[10px]">
+      <View
+        testID={fieldId('number')}
+        className={`h-[24px] w-[24px] items-center justify-center rounded-pill ${locked ? 'bg-success' : 'bg-primary'}`}
+      >
+        <Text className="font-inter-bold text-caption font-bold text-on-primary">
+          {String(index + 1)}
+        </Text>
+      </View>
+      {card}
     </View>
   );
 }

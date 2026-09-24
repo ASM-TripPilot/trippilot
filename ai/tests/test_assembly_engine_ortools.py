@@ -4,7 +4,7 @@
   ① OR-Tools 출력도 HC1~4 위반 0 (U5-P1 — 1차 단계 판)
   ② 결정론: 동일 입력 2회 → 동일 해 (소규모=OPTIMAL 도달, U5-P3)
   ③ 체인 통합: 가해 문제에서 facade가 OR_TOOLS 해를 선택 (규칙 폴백보다 우선)
-  ④ U5-P6: budget_fit 단조성 — 저비용 POI는 예산↓일수록 보상↑, 고비용은 반대
+  ④ U5-P6: admission_fit 단조성 — 저비용 POI는 예산↓일수록 보상↑, 고비용은 반대
   ⑤ TRIP-314: 웜스타트 하위 문제가 좁히는 필드 외 전 필드를 원본 그대로 승계
 """
 
@@ -22,7 +22,7 @@ from trippilot.assembly_engine.constraints import check_all
 from trippilot.assembly_engine.facade import HybridAssemblyFacade
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
 from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
-from trippilot.assembly_engine.scorer import budget_fit
+from trippilot.assembly_engine.scorer import _FEE_CEILING, admission_fit
 from trippilot.assembly_engine.travel import TravelEstimator
 from trippilot.domain.common import (
     BudgetLevel,
@@ -87,27 +87,76 @@ def test_chain_prefers_ortools_when_feasible(setup) -> None:
                                  SolveMode.MINIMAL)
 
 
-# ④ U5-P6 — 예산 소프트 가중 단조성
-@given(cost=st.integers(min_value=0, max_value=15_000))
-def test_budget_fit_cheap_poi_monotone_decreasing_with_budget(cost: int) -> None:
-    low, mid, high = (budget_fit(cost, BudgetLevel.LOW),
-                      budget_fit(cost, BudgetLevel.MID),
-                      budget_fit(cost, BudgetLevel.HIGH))
+# ④ U5-P6 — 예산 소프트 가중 단조성 (입장료 파생 지식 도입 후에도 보존)
+#
+# 종전 `budget_fit(avg_cost, …)` 를 `admission_fit(fee, category, budget)` 이 대체했다.
+# 세 성질은 그대로 지켜야 한다 — 함수가 바뀌었다고 규칙이 바뀌는 것이 아니다.
+_CEIL_CATS = tuple(_FEE_CEILING[BudgetLevel.LOW])  # 임계가 정의된 카테고리만
+
+
+@given(fee=st.integers(min_value=0, max_value=5_000),
+       category=st.sampled_from(_CEIL_CATS))
+def test_admission_fit_cheap_poi_monotone_decreasing_with_budget(fee, category) -> None:
+    low, mid, high = (admission_fit(fee, category, BudgetLevel.LOW),
+                      admission_fit(fee, category, BudgetLevel.MID),
+                      admission_fit(fee, category, BudgetLevel.HIGH))
     assert low >= mid >= high  # 저비용: 예산 낮을수록 보상 크거나 같음
 
 
-@given(cost=st.integers(min_value=40_001, max_value=200_000))
-def test_budget_fit_expensive_poi_monotone_increasing_with_budget(cost: int) -> None:
-    low, mid, high = (budget_fit(cost, BudgetLevel.LOW),
-                      budget_fit(cost, BudgetLevel.MID),
-                      budget_fit(cost, BudgetLevel.HIGH))
+@given(fee=st.integers(min_value=50_000, max_value=200_000),
+       category=st.sampled_from(_CEIL_CATS))
+def test_admission_fit_expensive_poi_monotone_increasing_with_budget(fee, category) -> None:
+    low, mid, high = (admission_fit(fee, category, BudgetLevel.LOW),
+                      admission_fit(fee, category, BudgetLevel.MID),
+                      admission_fit(fee, category, BudgetLevel.HIGH))
     assert low <= mid <= high  # 고비용: 예산 높을수록 보상 크거나 같음
 
 
-def test_budget_fit_unknown_cost_is_budget_neutral() -> None:
-    assert (budget_fit(None, BudgetLevel.LOW)
-            == budget_fit(None, BudgetLevel.MID)
-            == budget_fit(None, BudgetLevel.HIGH))
+@given(category=st.sampled_from(tuple(PoiCategory)))
+def test_admission_fit_unknown_fee_is_budget_neutral(category) -> None:
+    """모르는 것은 예산과 무관하다 — 커버리지가 점수를 흔들지 않는 근거."""
+    assert (admission_fit(None, category, BudgetLevel.LOW)
+            == admission_fit(None, category, BudgetLevel.MID)
+            == admission_fit(None, category, BudgetLevel.HIGH))
+
+
+# ④′ 비대칭 — 기록이 있으면 **손해만** 볼 수 있고 이득은 못 본다 (2026-09-24)
+#
+# 요금 커버리지가 30.6% 이고 카테고리에 정렬돼 있어서(FOOD·CAFE 는 구조적으로 0%),
+# 싼 것에 가점을 주면 "싸서 받는 점수"가 아니라 "기록이 있어서 받는 점수"가 된다.
+# 이 성질이 깨지면 수집을 늘릴수록 특정 카테고리가 유리해진다.
+
+
+@given(fee=st.integers(min_value=0, max_value=200_000),
+       category=st.sampled_from(tuple(PoiCategory)),
+       budget=st.sampled_from(tuple(BudgetLevel)))
+def test_admission_fit_never_rewards_above_unknown(fee, category, budget) -> None:
+    """요금을 아는 POI 가 모르는 POI 보다 **높은** 점수를 받는 일은 없다."""
+    known = admission_fit(fee, category, budget)
+    unknown = admission_fit(None, category, budget)
+    assert known <= unknown
+
+
+@given(category=st.sampled_from(_CEIL_CATS), budget=st.sampled_from(tuple(BudgetLevel)))
+def test_admission_fit_free_equals_unknown(category, budget) -> None:
+    """무료(0원)와 모름이 같아야 한다 — 판정분의 79.6% 가 0원이라 '싸다'는 정보가 없다.
+
+    다르면 그 차이는 요금을 **수집했느냐**만 반영한다.
+    """
+    assert admission_fit(0, category, budget) == admission_fit(None, category, budget)
+
+
+def test_fee_ceilings_are_non_decreasing_across_budget_levels() -> None:
+    """단조성(U5-P6)의 **구조적 근거** — 임계가 LOW ≤ MID ≤ ∞ 여야 성립한다.
+
+    임계표를 실측으로 갱신할 때 이 순서를 깨면 위 두 단조성이 무너진다.
+    그때 깨지는 이유를 성질 이름이 바로 말해 주도록 따로 둔다.
+    """
+    low, mid = _FEE_CEILING[BudgetLevel.LOW], _FEE_CEILING[BudgetLevel.MID]
+    assert set(low) == set(mid), "임계가 정의된 카테고리 집합이 등급마다 달라선 안 된다"
+    for category in low:
+        assert low[category] <= mid[category], f"{category.name}: LOW 임계가 MID 보다 높다"
+    assert not _FEE_CEILING[BudgetLevel.HIGH], "HIGH 는 임계 없음(비용 무관)"
 
 
 # ⑤ 회귀(TRIP-314) — 웜스타트 하위 문제의 필드 승계

@@ -83,15 +83,18 @@ export function ProfileCard({
           ) : null}
         </View>
 
-        <Pressable
-          testID="my-profile-edit"
-          accessibilityRole="button"
-          onPress={onPressEdit}
-          className="flex-row items-center gap-[3px] rounded-pill border border-hairline-strong px-md py-[6px]"
-        >
-          <PencilGlyph size={13} />
-          <Text className="font-noto text-label text-body">편집</Text>
-        </Pressable>
+        {/* 편집 목적지가 없으면 [편집]을 그리지 않는다(TRIP-939 B-3). */}
+        {onPressEdit ? (
+          <Pressable
+            testID="my-profile-edit"
+            accessibilityRole="button"
+            onPress={onPressEdit}
+            className="flex-row items-center gap-[3px] rounded-pill border border-hairline-strong px-md py-[6px]"
+          >
+            <PencilGlyph size={13} />
+            <Text className="font-noto text-label text-body">편집</Text>
+          </Pressable>
+        ) : null}
       </View>
 
       {/* 상태 카운트 3칸 */}

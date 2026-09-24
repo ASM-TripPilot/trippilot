@@ -82,6 +82,12 @@ services:
       # 리마인드 문구 AI 채움(TRIP-836). 기본 off = 상수 문구. http 로 켜면 예약 적재 시 AI 를 부른다.
       AI_REMINDER_COPY_MODE: ${AI_REMINDER_COPY_MODE:-off}
       TRIPPILOT_AI_SCHEDULE_BASE_URL: ${AI_URL:-http://ai:8000}
+      # 회고 AI 경계(O-U5-6). **통로가 없어서 로컬에서는 켤 방법이 아예 없었다** — 배포(Helm)만
+      # http 를 박고 있어, 운영에서만 항상 켜진 경로를 한 번도 로컬에서 검증할 수 없었다.
+      # base-url 도 같이 연다: 기본값이 localhost:8000 이라 mode 만 켜면 컨테이너가 자기 자신을
+      # 부른다(= 켠 것처럼 보이고 규칙 카드로 조용히 폴백). 일정 경계와 같은 꼴이다(DEC-U5-5).
+      TRIPPILOT_AI_REFLECTION_MODE: ${AI_REFLECTION_MODE:-rule}
+      TRIPPILOT_AI_REFLECTION_BASE_URL: ${AI_URL:-http://ai:8000}
       # 시간제약(day1 5s / 전체 20s)을 AI 에 실을지. **기본 off** — FE 연동 기간에는 시간 때문에
       # 규칙 폴백으로 강등되는 것을 걷어낸다(TRIP-474). 9월 재도입은 여기를 true 로(TRIP-475).
       TRIPPILOT_AI_SCHEDULE_DEADLINE_ENFORCED: ${AI_SCHEDULE_DEADLINE_ENFORCED:-false}
@@ -100,6 +106,11 @@ services:
       # Apple 은 시크릿이 없다 — id_token 서명을 JWKS 로 검증할 뿐이라 iOS 번들 ID 하나뿐이다(TRIP-858).
       # 이 값이 없으면 애플 로그인은 401 이 아니라 501(미지원)로 나간다.
       APPLE_CLIENT_ID: ${APPLE_CLIENT_ID:-}
+      # 계정 파기 때 Apple 토큰 revoke(TRIP-933). 비면 revoke 만 건너뛴다 — 로그인은 그대로 된다.
+      APPLE_TEAM_ID: ${APPLE_TEAM_ID:-}
+      APPLE_KEY_ID: ${APPLE_KEY_ID:-}
+      APPLE_PRIVATE_KEY: ${APPLE_PRIVATE_KEY:-}
+      SOCIAL_TOKEN_ENCRYPTION_KEY: ${SOCIAL_TOKEN_ENCRYPTION_KEY:-}
       # 지역 지오코딩 경계(국내강제). 기본 스텁은 시드 8개만 국내로 안다 —
       # 실 지역명으로 여행을 만들려면 kakao 로 켠다(키는 위 KAKAO_CLIENT_ID 를 그대로 쓴다).
       TRIPPILOT_PLACE_GEOCODE_MODE: ${PLACE_GEOCODE_MODE:-stub}
@@ -174,6 +185,10 @@ services:
       # 앱은 TRIPPILOT_* 만 읽는다. 이 통로가 빠지면 .env 에 값을 넣어도 조용히 무시된다.
       TRIPPILOT_LOCAL_LLM_BASE_URL: ${AI_LOCAL_LLM_BASE_URL:-}
       TRIPPILOT_LOCAL_LLM_API_KEY: ${AI_LOCAL_LLM_API_KEY:-}
+      # 학생 모델 실서비스 경로(Bedrock Custom Model Import). 위 BASE_URL 과
+      # 둘 다 있으면 ARN 이 이긴다 — main.py::_local_route.
+      TRIPPILOT_BEDROCK_MODEL_ARN: ${AI_BEDROCK_MODEL_ARN:-}
+      TRIPPILOT_BEDROCK_REGION: ${AI_BEDROCK_REGION:-}
       # LLM 요청당 비용 집계(#486)의 단가표 경로. **이 통로가 없어서** 컨테이너에서
       # 집계가 통째로 꺼져 있었다 — load_prices 가 None 을 돌려주면 llm_cost 로그 자체가
       # 안 나간다. 기능이 죽는 게 아니라 "얼마 썼는지 안 보이는" 형태라 증상이 없다

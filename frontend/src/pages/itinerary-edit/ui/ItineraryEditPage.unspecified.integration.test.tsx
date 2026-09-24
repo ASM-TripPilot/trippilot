@@ -55,6 +55,7 @@ jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 const BASE = 'http://localhost:8080/api/v1';
 const TRIP_ID = '11111111-1111-1111-1111-111111111111';
 const DAY1 = '2026-06-10';
+const DAY2 = '2026-06-11';
 
 const SAVE = 'sheet-cta-button-0';
 const NOTICE = 'itinerary-edit-unspecified-notice';
@@ -105,6 +106,33 @@ function itineraryWithUnspecified(): Itinerary {
   ];
   return {
     itineraryId: 'itin-1',
+    tripId: TRIP_ID,
+    status: 'PLANNED',
+    solveMode: 'FULL_AI',
+    generationMode: 'FULLY_AI',
+    generationState: 'COMPLETE',
+    isFallback: false,
+    days,
+  };
+}
+
+/**
+ * TRIP-923 · day1 = [a · u1(미지정)] + day2 = [u2(미지정)] — 미지정 2곳을 두 날에 흩는다.
+ * 1곳이면 개수를 상수 1 로 박아도 통과하고, 한 날에만 두면 "보이는 날만 세기" 회귀를 못 잡는다.
+ */
+function itineraryWithTwoUnspecified(): Itinerary {
+  const days: ItineraryDaysItem[] = [
+    {
+      date: DAY1,
+      slots: [
+        slot('poi-a', '09:00:00', '성산일출봉'),
+        slot('poi-u1', null, '미정 장소 1'),
+      ],
+    },
+    { date: DAY2, slots: [slot('poi-u2', null, '미정 장소 2')] },
+  ];
+  return {
+    itineraryId: 'itin-3',
     tripId: TRIP_ID,
     status: 'PLANNED',
     solveMode: 'FULL_AI',
@@ -205,6 +233,29 @@ describe('🔴 UN1 · AC-6·INV-4 — 미지정 슬롯은 저장에서 빠지고
     const notice = await screen.findByTestId(NOTICE);
     expect(notice).toHaveTextContent(/\S/);
     expect(notice).toHaveTextContent(/1/);
+  });
+});
+
+describe('🔴 UN3 · TRIP-923 · INV-4 — 안내의 개수는 실제로 빠진 곳 수다', () => {
+  it('두 날에 걸친 미지정 2곳을 저장하면 안내가 "2곳" 문장과 완전 일치한다', async () => {
+    getHandler = () => HttpResponse.json(itineraryWithTwoUnspecified());
+
+    renderPage();
+    await screen.findByTestId(`slot-stopcard-${buildSlotKey(DAY1, 'poi-a')}`);
+
+    fireEvent.press(screen.getByTestId(SAVE));
+    await waitFor(() => expect(putCalls).toBe(1));
+
+    // 두 날 모두에서 미지정이 빠진다 — 빈 날도 날짜는 남는다.
+    const body = putBody as EditItineraryRequest;
+    expect(body.days.map((d) => d.slots.map((s) => s.poiId))).toEqual([
+      ['poi-a'],
+      [],
+    ]);
+
+    expect(await screen.findByTestId(NOTICE)).toHaveTextContent(
+      '시간대를 정하지 않은 2곳은 저장에서 빠졌어요'
+    );
   });
 });
 

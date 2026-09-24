@@ -1,33 +1,33 @@
-import { render } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 
 import { PlanbDraftPage } from './PlanbDraftPage';
 
 /**
- * TRIP-563 · AC-6·AC-7 — i13/i16 재계획안 페이지 dispatch·배선 심판.
+ * TRIP-751 · AC-9·AC-10 · E1·E3·E4 · Seed Q6·Q7·Q8 — i06 재계획안 페이지 배선판.
  *
- * 무엇을 보장하나(자식 화면은 스텁 목이라 "어느 화면을 고르나 + 콜백이 어디로 가나"만 잰다):
- *  - 🔴 DRAFT→i13 셸(reasons·excludedPoiIds 계약필드 바인딩 + slots=[] 정직 degrade), NO_SOLUTION→i16,
- *    FAILED→router.push(planb/manual?variant=error) 1회, SOLVING·closed·미도착→렌더 없음(AC-6).
- *  - 🔴 i16/i13 onManualEdit 만 planb/manual 실배선(variant 없음=정상 i15), onSkip·onRestMode no-op(AC-7).
- *  - 🔴 i13 onApply→planb/diff 배선(brief §CTA).
+ * 무엇을 보장하나(세션 판정 1회 → 같은 뷰의 세 상태):
+ *  - DRAFT → 뷰를 제목만(일차·날짜·곳 수·칩·행 없음 — E4 정직 degrade)으로 그리고 [직접 수정]/[적용하기].
+ *  - [적용하기] → 확정 seam `useApplyReplan().mutate({tripId, sessionId}, { onSuccess })` 1회(E1 — diff
+ *    확인 페이지를 거치지 않는다). onSuccess → 허브로 `router.replace` + `applied=sessionId`(Q7).
+ *  - 확정 요청 중이면 [적용하기] 잠금, 실패면 같은 안내 자리에 "변경을 반영하지 못했어요"(Q6).
+ *  - NO_SOLUTION·FAILED → 같은 뷰의 안내 상태. FAILED 에서 옛 manual?variant=error push 는 없다(E3).
+ *    [조건 바꿔 다시 짜기]/[다시 시도] → i04(`/trips/{id}/planb`), [직접 수정] → planb/manual.
+ *  - SOLVING·closed·미도착 → 아무것도 안 그린다.
  *
- * ★ 왜 자식 화면을 스텁 목하나: 실 ReplanDraftScreen·NoAlternativeScreen 은 지도를 그려 통합 버킷에서
- *   무겁고, 자식 내부는 컴포넌트 테스트가 이미 잼. 페이지의 책임은 **dispatch + 콜백 배선**뿐이라 스텁으로
- *   격리한다(placeDetailStubRoute·liveLocationRoute 목 선례 계열).
- * ★ jest.mock 팩토리는 파일 맨 위로 호이스팅돼 바깥 변수를 못 본다(이름이 mock 으로 시작하는 것만 예외).
- *   그래서 세션 데이터·캡처 props 를 mock 접두 홀더에 담고, useReplanSession 목이 매 렌더 시점에 지연
- *   읽기 하도록 짠다 — 한 파일에서 5상태를 태우기 위함(선례 PlanbSolvingPage 는 상태별 별도 파일).
- * ★ 스텁이 RN 엘리먼트(<View/>·createElement(View))를 만들면 NativeWind babel 이 주입하는
- *   `_ReactNativeCSSInterop` 참조가 호이스팅된 팩토리 스코프 밖으로 걸려 변환이 죽는다(repo-traps
- *   드래그리스트/바텀시트 목 계열 — 실측으로 재현). 그래서 스텁은 **null 을 반환**하고, dispatch 는
- *   렌더된 testID 가 아니라 **캡처된 props 의 존재/부재**로 판정한다(더 정밀 — 그 화면 함수가 실제로
- *   props 를 받아 호출됐는지를 잰다).
+ * ★ 뷰를 스텁하지 않고 실제로 그린다(02a ★6) — 잠금·실패 안내를 렌더 결과로 본다. 시트·지도는
+ *   루트 `__mocks__` 통과형 목이 받는다.
+ * ★ jest.mock 팩토리는 파일 맨 위로 끌어올려져 바깥 변수를 못 본다(이름이 mock 으로 시작하는 것만
+ *   예외). 그래서 세션·seam 상태를 mock 접두 홀더에 담고 목이 렌더 때 지연 읽기 한다.
  */
+
+// TRIP-919 — 셸이 지도 실패(jest 엔 env 키가 없다)를 받으면 자기 폴백 바의 [다시 시도]를 띄워, 이 뷰의
+// [다시 시도]와 `getByText` 가 두 개로 겹친다. 이 파일의 관심사는 지도가 아니라 뷰 액션이라 얇은 관찰
+// 마커로 바꾼다(실패를 발화하지 않는다 — 페이지 통합 테스트 관례).
+jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 const TRIP_ID = 't1';
 const SESSION_ID = 's9';
 
-// 세션 조회 seam — data 를 render 시점에 지연 읽기(각 테스트가 갈아끼운다).
 const mockSession: { data: Record<string, unknown> | undefined } = {
   data: undefined,
 };
@@ -39,6 +39,16 @@ jest.mock('@/features/planb/model/useReplanSession', () => ({
   }),
 }));
 
+const mockMutate = jest.fn();
+const mockApply = { isPending: false, isError: false };
+jest.mock('@/features/planb/model/useApplyReplan', () => ({
+  useApplyReplan: () => ({
+    mutate: mockMutate,
+    isPending: mockApply.isPending,
+    isError: mockApply.isError,
+  }),
+}));
+
 const mockPush = jest.fn();
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
@@ -46,165 +56,231 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, back: mockBack, replace: mockReplace }),
 }));
 
-// 자식 화면 스텁 + props 캡처(RN 엘리먼트 미생성 → null 반환, ★ NativeWind interop 함정 회피).
-const mockI13: { props: Record<string, unknown> | undefined } = {
-  props: undefined,
-};
-jest.mock('@/features/planb/ui/ReplanDraftScreen', () => ({
-  ReplanDraftScreen: (props: Record<string, unknown>) => {
-    mockI13.props = props;
-    return null;
-  },
-}));
+function session(status: string): Record<string, unknown> {
+  return {
+    sessionId: SESSION_ID,
+    tripId: TRIP_ID,
+    itineraryId: 'it1',
+    scope: 'PARTIAL_SLOTS',
+    fromInstant: '2026-06-11T06:00:00Z',
+    originKind: 'GPS',
+    originLat: 35.1587,
+    originLng: 129.1604,
+    originEstimated: false,
+    status,
+    createdAt: '2026-06-11T05:59:00Z',
+  };
+}
 
-const mockI16: { props: Record<string, unknown> | undefined } = {
-  props: undefined,
+const MANUAL_HREF = {
+  pathname: '/trips/[tripId]/planb/manual',
+  params: { tripId: TRIP_ID },
 };
-jest.mock('@/features/planb/ui/NoAlternativeScreen', () => ({
-  NoAlternativeScreen: (props: Record<string, unknown>) => {
-    mockI16.props = props;
-    return null;
-  },
-}));
+const REQUEST_HREF = `/trips/${TRIP_ID}/planb`;
 
 beforeEach(() => {
   mockPush.mockClear();
   mockBack.mockClear();
   mockReplace.mockClear();
+  mockMutate.mockClear();
+  mockApply.isPending = false;
+  mockApply.isError = false;
   mockSession.data = undefined;
-  mockI13.props = undefined;
-  mockI16.props = undefined;
 });
 
 function renderPage() {
   render(<PlanbDraftPage tripId={TRIP_ID} sessionId={SESSION_ID} />);
 }
 
-describe('🔴 I1 · AC-6 — DRAFT → i13 셸(계약필드 바인딩 + slots=[] degrade)', () => {
-  it('i13 을 그리고 push 는 안 하며, reasons·excludedPoiIds 를 넘기고 slots 는 []', () => {
-    mockSession.data = {
-      status: 'DRAFT',
-      sessionId: SESSION_ID,
-      tripId: TRIP_ID,
-      reasons: ['비 예보 반영'],
-      excludedPoiIds: ['x1'],
-    };
+describe('🔴 P1 · AC-9(a) · Q8 — DRAFT 는 제목만 있는 i06 을 그린다', () => {
+  it('헤더는 제목만, 곳 수 빈칸, 행·칩·안내 없음, 버튼 [직접 수정]/[적용하기], 라우터·확정 호출 0', () => {
+    mockSession.data = session('DRAFT');
     renderPage();
 
-    // i13 이 호출됨(props 존재) · i16 미호출 · push 없음.
-    expect(mockI13.props).toBeDefined();
-    expect(mockI16.props).toBeUndefined();
-    expect(mockPush).not.toHaveBeenCalled();
+    expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
+      'AI 재계획안'
+    );
+    expect(screen.queryByTestId('sheet-header-day')).toBeNull();
+    expect(screen.queryByTestId('sheet-header-date')).toBeNull();
+    expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent('');
+    expect(screen.queryAllByTestId(/^planb-draft-slot-name-/)).toHaveLength(0);
+    expect(screen.queryByTestId('sheet-daychip-0')).toBeNull();
+    expect(screen.queryByTestId('planb-draft-notice')).toBeNull();
+    expect(screen.getByTestId('sheet-cta-button-0')).toHaveTextContent(
+      '직접 수정'
+    );
+    expect(screen.getByTestId('sheet-cta-button-1')).toHaveTextContent(
+      '적용하기'
+    );
 
-    // 계약 존재 필드는 그대로 바인딩.
-    expect(mockI13.props?.reasons).toEqual(['비 예보 반영']);
-    expect(mockI13.props?.excludedPoiIds).toEqual(['x1']);
-    // draft 계약 갭 — 페이지가 슬롯을 지어내지 않는다(정직 degrade).
-    expect(mockI13.props?.slots).toEqual([]);
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockMutate).not.toHaveBeenCalled();
   });
 });
 
-describe('🔴 I2 · AC-6 — NO_SOLUTION → i16', () => {
-  it('i16 을 그리고 push·i13 은 없다', () => {
-    mockSession.data = {
-      status: 'NO_SOLUTION',
-      sessionId: SESSION_ID,
-      tripId: TRIP_ID,
-    };
+describe('🔴 P2·P3 · AC-9(b)(c) · E1·Q7 — [적용하기]는 바로 확정하고 성공하면 허브로 바꿔 끼운다', () => {
+  it('누르면 seam mutate 가 {tripId, sessionId} + onSuccess 로 1회, diff 로 가는 push 는 없다', () => {
+    mockSession.data = session('DRAFT');
     renderPage();
 
-    expect(mockI16.props).toBeDefined();
-    expect(mockI13.props).toBeUndefined();
+    fireEvent.press(screen.getByText('적용하기'));
+
+    expect(mockMutate).toHaveBeenCalledTimes(1);
+    expect(mockMutate).toHaveBeenCalledWith(
+      { tripId: TRIP_ID, sessionId: SESSION_ID },
+      expect.objectContaining({ onSuccess: expect.any(Function) })
+    );
+    expect(mockPush).not.toHaveBeenCalled();
+    // 5-b 차단-1 — 성공 콜백 전에는 이동하지 않는다(P3 와 짝: "성공 뒤에만" replace).
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('onSuccess 가 불리면 router.replace 가 허브 + applied=sessionId 로 1회', () => {
+    mockSession.data = session('DRAFT');
+    renderPage();
+    fireEvent.press(screen.getByText('적용하기'));
+
+    const options = mockMutate.mock.calls[0]?.[1] as { onSuccess: () => void };
+    act(() => options.onSuccess());
+
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/live',
+      params: { tripId: TRIP_ID, applied: SESSION_ID },
+    });
     expect(mockPush).not.toHaveBeenCalled();
   });
 });
 
-describe('🔴 I3 · AC-6 — FAILED → planb/manual?variant=error push', () => {
-  it('router.push 가 manual 로 variant=error 를 담아 1회, 화면은 안 그린다', () => {
-    mockSession.data = {
-      status: 'FAILED',
-      sessionId: SESSION_ID,
-      tripId: TRIP_ID,
-    };
+describe('🔴 P4 · AC-9(d) — 확정 요청 중에는 [적용하기]가 잠긴다', () => {
+  it('seam isPending 이면 버튼이 disabled 이고 눌러도 mutate 가 안 불린다(이중 POST → 409 차단)', () => {
+    mockSession.data = session('DRAFT');
+    mockApply.isPending = true;
     renderPage();
 
+    const apply = screen.getByTestId('sheet-cta-button-1');
+    expect(apply).toHaveTextContent('적용하기');
+    expect(apply).toBeDisabled();
+    fireEvent.press(apply);
+    expect(mockMutate).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 P4b · 5-b 경고-1 — 확정 요청 중에는 [직접 수정]도 잠긴다(교차 잠금)', () => {
+  it('seam isPending 이면 [직접 수정]이 disabled 이고 눌러도 push 가 없다(밑에 남은 초안의 onSuccess 가 편집 화면을 갈아 끼우는 경로 차단)', () => {
+    mockSession.data = session('DRAFT');
+    mockApply.isPending = true;
+    renderPage();
+
+    const manual = screen.getByTestId('sheet-cta-button-0');
+    expect(manual).toHaveTextContent('직접 수정');
+    expect(manual).toBeDisabled();
+    fireEvent.press(manual);
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 P5 · AC-9(e) · Q6 — 확정 실패는 같은 안내 자리에', () => {
+  it('seam isError 면 실패 안내가 뜨고 replace 는 없으며, [적용하기]가 그대로 재시도다', () => {
+    mockSession.data = session('DRAFT');
+    mockApply.isError = true;
+    renderPage();
+
+    expect(screen.getByTestId('planb-draft-notice-title')).toHaveTextContent(
+      '변경을 반영하지 못했어요'
+    );
+    expect(
+      screen.getByTestId('planb-draft-notice-description')
+    ).toHaveTextContent(
+      '원래 일정은 그대로 있어요. 잠시 후 다시 시도해 주세요.'
+    );
+    expect(mockReplace).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByText('적용하기'));
+    expect(mockMutate).toHaveBeenCalledTimes(1);
+    // 5-b 차단-1 — 재시도를 눌러도 성공 전에는 이동하지 않는다.
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 P6 · AC-10 · Q4 — NO_SOLUTION 은 같은 뷰의 대안 없음 상태', () => {
+  it('안내 2줄(사유를 지어내지 않는 뒤 절만), 렌더만으로 push 0, 두 버튼이 i04·manual 로 간다', () => {
+    mockSession.data = session('NO_SOLUTION');
+    renderPage();
+
+    expect(screen.getByTestId('planb-draft-notice-title')).toHaveTextContent(
+      '대안을 찾지 못했어요'
+    );
+    expect(
+      screen.getByTestId('planb-draft-notice-description')
+    ).toHaveTextContent('조건을 줄이거나 직접 고쳐 주세요');
+    expect(mockPush).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByText('조건 바꿔 다시 짜기'));
     expect(mockPush).toHaveBeenCalledTimes(1);
-    expect(mockPush).toHaveBeenCalledWith({
-      pathname: '/trips/[tripId]/planb/manual',
-      params: { tripId: TRIP_ID, variant: 'error' },
-    });
-    expect(mockI13.props).toBeUndefined();
-    expect(mockI16.props).toBeUndefined();
+    expect(mockPush).toHaveBeenLastCalledWith(REQUEST_HREF);
+
+    fireEvent.press(screen.getByText('직접 수정'));
+    expect(mockPush).toHaveBeenCalledTimes(2);
+    expect(mockPush).toHaveBeenLastCalledWith(MANUAL_HREF);
+    expect(mockMutate).not.toHaveBeenCalled();
   });
 });
 
-describe('🔴 I4 · AC-6 — SOLVING·closed·미도착 → 렌더 없음', () => {
-  it.each([
-    ['SOLVING', 'SOLVING'],
-    ['APPLIED(closed)', 'APPLIED'],
-  ])('%s 이면 두 화면 미호출 + push 없음', (_label, status) => {
-    mockSession.data = { status, sessionId: SESSION_ID, tripId: TRIP_ID };
+describe('🔴 P7 · AC-10 · E3 — FAILED 도 같은 뷰에 착지한다(옛 variant=error push 반전)', () => {
+  it('안내 "다시 짜지 못했어요", 렌더만으로 push 0, [다시 시도]→i04 · [직접 수정]→manual(variant 없음)', () => {
+    mockSession.data = session('FAILED');
     renderPage();
 
-    expect(mockI13.props).toBeUndefined();
-    expect(mockI16.props).toBeUndefined();
+    expect(screen.getByTestId('planb-draft-notice-title')).toHaveTextContent(
+      '다시 짜지 못했어요'
+    );
+    expect(
+      screen.getByTestId('planb-draft-notice-description')
+    ).toHaveTextContent('잠시 후 다시 시도하거나 직접 고쳐 주세요');
     expect(mockPush).not.toHaveBeenCalled();
-  });
 
-  it('세션 미도착(data undefined)이면 두 화면 미호출 + push 없음', () => {
-    mockSession.data = undefined;
-    renderPage();
+    fireEvent.press(screen.getByText('다시 시도'));
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenLastCalledWith(REQUEST_HREF);
 
-    expect(mockI13.props).toBeUndefined();
-    expect(mockI16.props).toBeUndefined();
-    expect(mockPush).not.toHaveBeenCalled();
-  });
-});
-
-describe('🔴 I5 · AC-7 — i16 배선: onManualEdit 실, onSkip·onRestMode no-op', () => {
-  it('onManualEdit→planb/manual(variant 없음), onSkip·onRestMode 는 push 0', () => {
-    mockSession.data = {
-      status: 'NO_SOLUTION',
-      sessionId: SESSION_ID,
-      tripId: TRIP_ID,
-    };
-    renderPage();
-
-    (mockI16.props?.onManualEdit as () => void)();
-    expect(mockPush).toHaveBeenCalledWith({
-      pathname: '/trips/[tripId]/planb/manual',
-      params: { tripId: TRIP_ID },
-    });
-
-    mockPush.mockClear();
-    (mockI16.props?.onSkip as () => void)();
-    (mockI16.props?.onRestMode as () => void)();
-    expect(mockPush).not.toHaveBeenCalled();
+    fireEvent.press(screen.getByText('직접 수정'));
+    expect(mockPush).toHaveBeenCalledTimes(2);
+    expect(mockPush).toHaveBeenLastCalledWith(MANUAL_HREF);
   });
 });
 
-describe('🔴 I6 · AC-6/AC-7 — i13 배선: onManualEdit→manual, onApply→diff', () => {
-  it('onManualEdit→planb/manual(variant 없음), onApply→planb/diff', () => {
-    mockSession.data = {
-      status: 'DRAFT',
-      sessionId: SESSION_ID,
-      tripId: TRIP_ID,
-      reasons: [],
-      excludedPoiIds: [],
-    };
+describe('🔴 P8 · AC-10 — SOLVING·closed·미도착은 아무것도 그리지 않는다', () => {
+  it.each([['SOLVING'], ['APPLIED'], ['CANCELED']])(
+    '%s 이면 렌더 없음 + 라우터·확정 호출 0',
+    (status) => {
+      mockSession.data = session(status);
+      renderPage();
+
+      expect(screen.toJSON()).toBeNull();
+      expect(mockPush).not.toHaveBeenCalled();
+      expect(mockReplace).not.toHaveBeenCalled();
+      expect(mockMutate).not.toHaveBeenCalled();
+    }
+  );
+
+  it('세션 미도착(data undefined)이면 렌더 없음 + 라우터 호출 0', () => {
     renderPage();
 
-    (mockI13.props?.onManualEdit as () => void)();
-    expect(mockPush).toHaveBeenCalledWith({
-      pathname: '/trips/[tripId]/planb/manual',
-      params: { tripId: TRIP_ID },
-    });
+    expect(screen.toJSON()).toBeNull();
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+});
 
-    mockPush.mockClear();
-    (mockI13.props?.onApply as () => void)();
-    expect(mockPush).toHaveBeenCalledWith({
-      pathname: '/trips/[tripId]/planb/diff',
-      params: { tripId: TRIP_ID, sessionId: SESSION_ID },
-    });
+describe('🔴 P9 · Q8 — 뒤로가기', () => {
+  it('지도 위 뒤로가기는 router.back 을 1회 부른다', () => {
+    mockSession.data = session('DRAFT');
+    renderPage();
+
+    fireEvent.press(screen.getByTestId('sheet-daychip-back'));
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockPush).not.toHaveBeenCalled();
   });
 });

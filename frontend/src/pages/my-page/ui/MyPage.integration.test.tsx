@@ -7,6 +7,8 @@ import { useGetMeProfile } from '@/shared/api/generated/profile/profile';
 import { useGetMeStyle } from '@/shared/api/generated/reflection/reflection';
 import { useGetTrips } from '@/shared/api/generated/trips/trips';
 
+import { HeartGlyph } from '@/features/settings/ui/SettingsGlyphs';
+
 import { MyPage } from './MyPage';
 
 /**
@@ -112,9 +114,9 @@ describe('🔴 AC-I1 · 조회→모델→배치', () => {
   it('카드는 ProfileCard 와 TripStatusSegment 사이에 놓이고 기존 testID 는 그대로다', () => {
     renderPage();
 
-    // 기존 testID 무변경(additive prop 이 헐지 않았다).
+    // 기존 testID 무변경(additive prop 이 헐지 않았다). 헤더 설정 아이콘은 TRIP-939 B-2 로 숨김.
     expect(screen.getByTestId('my-page-root')).toBeOnTheScreen();
-    expect(screen.getByTestId('my-header-settings')).toBeOnTheScreen();
+    expect(screen.queryByTestId('my-header-settings')).toBeNull();
     expect(screen.getByTestId('my-profile-card')).toBeOnTheScreen();
     expect(screen.getByTestId('my-trip-segment')).toBeOnTheScreen();
 
@@ -146,11 +148,50 @@ describe('🔴 TRIP-618 AC-1 · 하단 설정 행 진입 배선', () => {
     expect(mockPush).toHaveBeenCalledWith('/settings');
   });
 
-  it('헤더 아이콘(my-header-settings)은 이번에 배선하지 않는다 — 존재만 유지', () => {
+  it('TRIP-939 B-2: 목적지 없는 헤더 아이콘(my-header-settings)은 그리지 않는다 — 설정은 하단 행이 진다', () => {
+    // 준비·실행
     renderPage();
 
-    // 무배선(Q1 ⓒ, 후속 티켓): 헤더 sun 아이콘은 존재하되 목적지가 없다.
-    // press→push 를 단언하지 않는다(무리 배선 금지). 존재 단언만 남겨 회귀를 막는다.
-    expect(screen.getByTestId('my-header-settings')).toBeOnTheScreen();
+    // 단언: 눌러도 반응 없던 헤더 아이콘 부재 + 짝 앵커(하단 '설정' 행은 있다).
+    expect(screen.queryByTestId('my-header-settings')).toBeNull();
+    expect(screen.getByTestId('my-settings-row')).toBeOnTheScreen();
+  });
+});
+
+describe('🔴 TRIP-939 B-1·B-3·B-4 · 마이 탭에 눌러도 반응 없는 것이 없다 (심사 2.1)', () => {
+  it('B-1: 목적지 없는 메뉴 5행은 없고 "설정" 행만 남는다', () => {
+    // 준비·실행: 실 마이페이지를 그린다(여행 0건).
+    renderPage();
+
+    // 단언(부재): › 가 붙어 버튼처럼 보이던 미배선 행 5개.
+    [
+      '등록 숙소·예약 기록',
+      '여행 스타일 분석',
+      '내 일정 공개/공유 설정',
+      '내가 공유한 일정',
+      '숨긴 사용자 관리',
+    ].forEach((label) => {
+      expect(screen.queryByText(label)).toBeNull();
+    });
+    // 짝 앵커: 배선된 '설정' 행은 있다.
+    expect(screen.getByTestId('my-settings-row')).toBeOnTheScreen();
+  });
+
+  it('B-3: 페이지가 편집 진입을 넘기지 않으므로 프로필 [편집]이 없다', () => {
+    renderPage();
+
+    expect(screen.queryByTestId('my-profile-edit')).toBeNull();
+    expect(screen.getByTestId('my-profile-card')).toBeOnTheScreen();
+  });
+
+  it('B-4: "캘린더 ›" 링크 글자와 회고 하트 floating 이 없다(지난 여행 섹션은 그대로)', () => {
+    // 준비·실행: 기본 탭(예정)이라 '지난 여행' 섹션이 상시 노출된다.
+    renderPage();
+
+    // 짝 앵커: 지난 여행 섹션이 실제로 그려졌다(캘린더 부재가 섹션 부재 때문이 아님).
+    expect(screen.getByText('지난 여행')).toBeOnTheScreen();
+    // 단언(부재): 링크처럼 보이는 "캘린더 ›"·장식 하트 버튼.
+    expect(screen.queryByText(/캘린더/)).toBeNull();
+    expect(screen.UNSAFE_queryAllByType(HeartGlyph)).toHaveLength(0);
   });
 });

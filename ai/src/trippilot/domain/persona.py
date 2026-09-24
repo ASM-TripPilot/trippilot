@@ -56,11 +56,28 @@ class PersonaSummary:
     taste_tags: tuple[TasteTag, ...]
     companion: CompanionType | None
     budget: BudgetLevel
+    # 활동·음식 선호 — 7축이 **못 담는** 축이다. `styles`(7종)가 7축과 1:1 이라
+    # 거기까지는 손실이 없는데, 백엔드 `activities` 의 `카페`·`야경` 은 대응하는
+    # styles 값이 없고 둘 다 `PoiCategory` 에는 있다(CAFE·NIGHT_VIEW). 즉 **취향
+    # 축이 후보 카테고리보다 좁고 빠진 것이 정확히 그 둘이다** — 사용자가 카페를
+    # 골라도 표현할 방법이 없었다.
+    #
+    # 7축을 8·9축으로 넓히지 않은 이유: 넓혀도 `CITY`·`REST` 가 `PoiCategory` 에
+    # 없어 불일치가 남는다. 반쯤 맞추면 둘 다 아닌 것이 된다. 취향 7축은 온보딩
+    # 택소노미 정본으로 두고, 더 잘게 쓸 축은 자기 자리를 갖는다.
+    #
+    # enum 이 아니라 **백엔드 한국어 라벨 그대로**인 것도 의도다 — 후보 줄이
+    # `FOOD·음식점·한식` 으로 나가므로(TRIP-870 태그 노출) 프롬프트에서 같은
+    # 어휘로 맞물린다. 영어 enum 으로 옮기면 LLM 이 양쪽을 이어 보기 어려워진다.
+    activities: tuple[str, ...] = ()
+    cuisines: tuple[str, ...] = ()
 
     def to_dict(self) -> dict:
         return {
             "taste_tags": [t.value for t in self.taste_tags],
             "companion": self.companion.value if self.companion else None,
+            "activities": list(self.activities),
+            "cuisines": list(self.cuisines),
             "budget": self.budget.value,
         }
 
@@ -70,6 +87,9 @@ class PersonaSummary:
             taste_tags=tuple(TasteTag(t) for t in d["taste_tags"]),
             companion=(CompanionType(d["companion"])
                        if d["companion"] is not None else None),
+            # `d.get` — 키가 없는 기존 직렬화본 하위호환
+            activities=tuple(d.get("activities") or ()),
+            cuisines=tuple(d.get("cuisines") or ()),
             budget=BudgetLevel(d["budget"]),
         )
 
@@ -84,22 +104,9 @@ class PersonaSummary:
 
 # 취향 7축 ← 백엔드 `styles` 7종. **1:1 대응이라 판단이 끼지 않는다.**
 #
-# `activities`(8종)·`food_tastes`(5종)는 **아직 안 싣는다 — 중복이라서가 아니라
-# 담을 자리가 없어서다.** (앞선 주석이 "중복"이라고 적었던 것을 정정한다.)
-#
-# ① `activities` 의 `카페`·`야경` 은 대응하는 `styles` 값이 없다. 그런데 둘 다
-#    `PoiCategory` 에는 있다(`CAFE`·`NIGHT_VIEW`) — **취향 축(7)이 후보
-#    카테고리(8)보다 좁고 빠진 것이 정확히 그 둘이다.** 사용자가 카페를 골라도
-#    우리는 그 취향을 표현할 방법이 없다. 나머지 6종(자연·역사문화·테마파크·
-#    맛집투어·전시·쇼핑)은 실제로 styles 와 겹친다.
-# ② `food_tastes`(한식·양식·일식·중식·아시안)는 7축의 `FOOD` 와 **다른 층**이다.
-#    `미식` 은 "식당을 넣을까", 이쪽은 "어느 식당인가" — 후보 쪽 세분류 태그와
-#    같은 축이다(TRIP-870 으로 `FOOD·음식점·한식` 이 이미 후보 줄에 나간다).
-#    7축에 접으면 또 FOOD 로 뭉개지므로 별도 필드가 맞다.
-#
-# **미결(팀 판단)**: `TasteTag` 를 8축으로 넓혀 `PoiCategory` 와 맞출 것인가,
-# `activities`·`cuisines` 를 별도 필드로 받을 것인가. 전자는 점수·프롬프트 분기를
-# 건드린다. 어느 쪽이든 "중복이라 영원히 안 싣는다"는 아니다.
+# `activities`(8종)·`food_tastes`(5종)는 7축에 접지 않고 **자기 자리로 간다**
+# (`PersonaSummary.activities`·`cuisines`) — 7축이 그 둘을 담지 못한다는 것이
+# 실측 근거다. 아래 두 표가 그 어휘의 정본이고, 모르는 값은 건너뛴다.
 TASTE_TOKENS: dict[str, TasteTag] = {
     "휴양": TasteTag.REST,
     "관광": TasteTag.CITY,
@@ -164,3 +171,31 @@ def companion_from(labels: Iterable[str]) -> CompanionType | None:
         if candidate in picked:
             return candidate
     return None
+
+
+# 백엔드 `PreferenceSet.ACTIVITIES` 8종. 이 중 `카페`·`야경` 은 대응하는 styles 가
+# 없어 7축으로는 표현되지 않는다 — 그 둘이 이 표가 있는 이유다.
+ACTIVITY_LABELS: tuple[str, ...] = (
+    "자연", "역사문화", "테마파크", "맛집투어", "카페", "전시", "야경", "쇼핑",
+)
+
+# 백엔드 `PreferenceSet.FOOD_TASTES` 5종. 7축의 `FOOD`("식당을 넣을까")와 다른
+# 층이다("어느 식당인가") — 접으면 다시 FOOD 하나로 뭉개진다.
+CUISINE_LABELS: tuple[str, ...] = ("한식", "양식", "일식", "중식", "아시안")
+
+
+def _known_in_order(values: Iterable[str], canon: tuple[str, ...]) -> tuple[str, ...]:
+    """정본 순서로 정규화. 입력 순서에 안 흔들린다 — 프롬프트 문자열이 흔들리면
+    같은 사용자가 요청마다 다른 캐시 키를 만든다(`preference_cache`)."""
+    picked = {v.strip() for v in values}
+    return tuple(x for x in canon if x in picked)
+
+
+def activities_from(labels: Iterable[str]) -> tuple[str, ...]:
+    """백엔드 `activities` → 활동 선호. 모르는 값은 건너뛴다."""
+    return _known_in_order(labels, ACTIVITY_LABELS)
+
+
+def cuisines_from(labels: Iterable[str]) -> tuple[str, ...]:
+    """백엔드 `food_tastes` → 음식 선호. 모르는 값은 건너뛴다."""
+    return _known_in_order(labels, CUISINE_LABELS)

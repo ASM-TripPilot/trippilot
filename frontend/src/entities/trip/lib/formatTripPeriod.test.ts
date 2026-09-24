@@ -6,6 +6,7 @@ import {
   formatTripRange,
   formatConfirmedDateRange,
   formatTripDateRange,
+  formatLegendDateRange,
   formatDateRangeWithDow,
   formatBaseNightRange,
   dayOfWeek,
@@ -126,6 +127,52 @@ describe('🔴 A. 여행 기간 범위 포맷터 6벌 — 출력이 서로 다�
         }
       ),
       { numRuns: 300 }
+    );
+  });
+});
+
+/**
+ * TRIP-767 · AC-2 — formatLegendDateRange (신규 sibling): j07 여행 캘린더 legend 의 **연도 생략** 범위.
+ *
+ * 무엇을 보장하나(계약):
+ *  - 🔴 `{sm}.{sd}–{em}.{ed}` — **연도 없음**·양쪽 월 항상·무공백 **en dash(U+2013)**. 같은 달도 둘째 월을
+ *    (연도만 접는 `formatTripDateRange` 와 달리) 접지 않고 그대로 `6.10–6.12`. 월 넘김 `5.30–6.2`.
+ *  - 🔴 한쪽이라도 null 이면 `null`(가짜 날짜 금지 — `formatTripDateRange` 와 같은 실패값).
+ *  - 🔴 `formatTripDateRange`(연도 유지 `2026.5.1–5.3`, 지난 카드용)는 **무변경** — 이건 legend 전용 별개
+ *    함수다(옵션 파라미터로 기존 함수를 흔들지 않는다 — frozen 계약 보호). 아래 마지막 줄이 그 대조 앵커.
+ *
+ * *(개념 — 왜 sibling 인가)* "포맷터"는 데이터(날짜 문자열)를 사람이 읽는 라벨로 바꾸는 순수 함수. legend 는
+ *  이번 달 안이라 연도가 군더더기(생략), 지난 카드는 다른 해라 연도가 필요(유지) — 규칙이 갈리니 함수도 갈린다.
+ *
+ * 3동작 뼈대: 준비(날짜 문자열) → 실행(formatLegendDateRange 호출) → 단언(반환 문자열 완전 일치·코드포인트).
+ */
+describe('🔴 D. legend 연도 생략 범위 — formatLegendDateRange (신규)', () => {
+  it('같은 달·월 넘김·연말 넘김을 연도 없이 "M.D–M.D"(en dash)로 낸다', () => {
+    // 같은 달(6.10–6.12 = 부산 여행 legend). 둘째 월(6)을 접지 않는다.
+    expect(formatLegendDateRange('2026-06-10', '2026-06-12')).toBe('6.10–6.12');
+    // 월 넘김(5.30–6.2). 양쪽 월 다 표기.
+    expect(formatLegendDateRange('2026-05-30', '2026-06-02')).toBe('5.30–6.2');
+    // 연말 넘김도 연도는 생략(legend 는 이번 달 축이라 연도 군더더기).
+    expect(formatLegendDateRange('2026-12-30', '2027-01-02')).toBe('12.30–1.2');
+  });
+
+  it('한쪽이라도 null 이면 null(가짜 날짜 금지)', () => {
+    expect(formatLegendDateRange('2026-05-01', null)).toBeNull();
+    expect(formatLegendDateRange(null, '2026-05-03')).toBeNull();
+    expect(formatLegendDateRange(null, null)).toBeNull();
+  });
+
+  it('구분자는 en dash(U+2013)이지 하이픈이 아니고, 연도(2026.)를 안 붙인다', () => {
+    const line = formatLegendDateRange('2026-06-10', '2026-06-12');
+    expect(line).toContain('–'); // U+2013
+    expect(line).not.toContain('-'); // 하이픈-마이너스 아님
+    expect(line).not.toContain('2026'); // legend 는 연도 생략(지난 카드와 갈리는 지점)
+  });
+
+  it('짝 — formatTripDateRange(지난 카드용)는 무변경, 연도 유지 "2026.5.1–5.3"', () => {
+    // legend(연도 생략)와 지난 카드(연도 유지)가 **다른 함수**임을 대조로 못박는다(frozen 계약 보호).
+    expect(formatTripDateRange('2026-05-01', '2026-05-03')).toBe(
+      '2026.5.1–5.3'
     );
   });
 });

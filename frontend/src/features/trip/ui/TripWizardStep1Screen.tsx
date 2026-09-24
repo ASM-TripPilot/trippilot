@@ -593,9 +593,6 @@ export function TripWizardStep1Screen({
               </Text>
               <View className="items-center">
                 <Text className="text-center font-noto text-label text-muted">
-                  해외 여행지는 준비 중이에요.
-                </Text>
-                <Text className="text-center font-noto text-label text-muted">
                   국내 도시로 만들어볼까요?
                 </Text>
               </View>

@@ -146,9 +146,10 @@ describe('AC-4(b) · features/pages/widgets 각 슬라이스 세그먼트는 {ui
 
     // widgets 는 이 사이클에 처음 채워진다(TRIP-805) — 2슬라이스 이상 + 대표 이름 앵커(빈 층이면 red).
     // (fab-stack 은 features→widgets 상향 참조 문제로 이번 범위에서 빠졌다 — page 층 소비로 후속.)
+    // TRIP-753: itinerary-edit 슬라이스가 i07·h12 편집기 통합으로 삭제돼 대표를 map-sheet-shell 로 옮겼다.
     expect(widgetSlices.length).toBeGreaterThanOrEqual(2);
     expect(widgetSlices).toEqual(
-      expect.arrayContaining(['itinerary-edit', 'time-sheet'])
+      expect.arrayContaining(['map-sheet-shell', 'time-sheet'])
     );
 
     // 부정 — 각 슬라이스의 직계 하위 디렉토리가 세그먼트 허용목록 밖이면 offender.

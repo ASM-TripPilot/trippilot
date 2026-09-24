@@ -100,53 +100,6 @@ export function DragHandleGlyph({ size = 18, testID }: GlyphProps) {
   );
 }
 
-// h24 편집 카드 삭제 휴지통(18) — Figma `1896:1083`. 비고정 슬롯 우상단. 회색 muted.
-export function TrashGlyph({ size = 18, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 18 18"
-      fill="none"
-    >
-      <Path
-        d="M3 5H15"
-        stroke={MUTED}
-        strokeWidth={1.4}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M7 5V3.5C7 3.22386 7.22386 3 7.5 3H10.5C10.7761 3 11 3.22386 11 3.5V5"
-        stroke={MUTED}
-        strokeWidth={1.4}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M4.5 5L4.95 14C4.97761 14.5523 5.43318 15 5.98613 15H12.0139C12.5668 15 13.0224 14.5523 13.05 14L13.5 5"
-        stroke={MUTED}
-        strokeWidth={1.4}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M7.5 8V12"
-        stroke={MUTED}
-        strokeWidth={1.4}
-        strokeLinecap="round"
-      />
-      <Path
-        d="M10.5 8V12"
-        stroke={MUTED}
-        strokeWidth={1.4}
-        strokeLinecap="round"
-      />
-    </Svg>
-  );
-}
-
 // h24 [장소 추가] 버튼 플러스(18) — Figma `1896:1083`. h24 버튼 글자와 같은 ink 가 기본이고,
 // h19 빈 밴드 원(primary-pale)엔 primary, primary 버튼(장소 검색 CTA·h20 추가)엔 white 로 스냅
 // 한다(같은 도형, 색만 — LockGlyph·FullAiGlyph 의 tone 패턴 계승, 기본값이 기존 h24 렌더 불변).
@@ -281,13 +234,15 @@ export function CheckCircleGlyph({ size = 20, testID }: GlyphProps) {
 }
 
 // 카드 우측 편집 연필(20) — Figma `1876:1099`. FIXED 항목에만 붙는 muted-soft 가 기본이고,
-// h19 hero 의 primary 원 안에서는 white 로 스냅한다(같은 도형, 색만 — PlusGlyph tone 패턴과 동형).
+// h19 hero 의 primary 원 안에서는 white 로, i01 [직접 수정] 흰 알약(TRIP-747)에서는 primary 로
+// 스냅한다(같은 도형, 색만 — PlusGlyph tone 패턴과 동형).
 export function PencilGlyph({
   size = 20,
   tone = 'mutedSoft',
   testID,
-}: GlyphProps & { tone?: 'mutedSoft' | 'white' }) {
-  const stroke = tone === 'white' ? WHITE : MUTED_SOFT;
+}: GlyphProps & { tone?: 'mutedSoft' | 'white' | 'primary' }) {
+  const stroke =
+    tone === 'white' ? WHITE : tone === 'primary' ? PRIMARY : MUTED_SOFT;
   return (
     <Svg
       testID={testID}
@@ -477,6 +432,27 @@ export function ChevronRightGlyph({ size = 20, testID }: GlyphProps) {
         d="M7.5 5L12.5 10L7.5 15"
         stroke={MUTED_SOFT}
         strokeWidth={1.83333}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// h15 `다른 숙소 둘러보기 ›` 링크 쉐브론(16) — Figma `4385:1784`. 링크 글자색(primary-text)과 한 쌍.
+export function LinkChevronGlyph({ size = 16, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+    >
+      <Path
+        d="M6 4L10 8L6 12"
+        stroke={PRIMARY_TEXT}
+        strokeWidth={1.46667}
         strokeLinecap="round"
         strokeLinejoin="round"
       />

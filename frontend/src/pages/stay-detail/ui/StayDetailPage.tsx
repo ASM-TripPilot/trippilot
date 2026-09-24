@@ -7,14 +7,20 @@
  * 저장 하트·"일정에 추가"는 `useSavedStays`(TRIP-417 토글 훅) 하나가 소유하고, 미인증은 요청 없이
  * 로그인으로 보낸다(BR-U1-03·55, 죽은 버튼 회피). "외부에서 예약하기"는 제휴 시트(BR-U1-30) →
  * [이동] 웹검색 폴백(`openStayOutbound`, BR-U1-31).
+ *
+ * TRIP-781(l07): 시트의 열림·error 얼굴·"다시 보지 않기" 체크는 전부 이 층이 쥔다(시트는 제어 컴포넌트).
+ * 저장값(SecureStore 플래그)이 켜져 있으면 시트 없이 바로 이동하고, 그 이동이 실패하면 error 얼굴 시트를
+ * 새로 연다(BR-U1-55). 저장값을 아직 못 읽었거나 읽기가 실패하면 고지 쪽으로 쓰러진다(시트를 띄운다).
  */
 import type { ReactElement } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { getAccessToken } from '@/shared/api/tokenManager';
 import type { StayItem } from '@/shared/api/generated/schemas';
+import { readFlag, writeFlag } from '@/shared/storage/flag';
 
+import { AFFILIATE_NOTICE_DISMISSED_KEY } from '@/features/stay/config/affiliateNotice';
 import { useSavedStays } from '@/features/stay/model/savedStays';
 import { openStayOutbound } from '@/features/stay/model/stayOutbound';
 import { stayKey } from '@/features/stay/model/stayKey';
@@ -67,6 +73,14 @@ export function StayDetailPage(): ReactElement {
   const [pending, setPending] = useState(false);
   const [addedNotice, setAddedNotice] = useState(false);
   const [otaOpen, setOtaOpen] = useState(false);
+  const [outboundError, setOutboundError] = useState(false);
+  const [dontShowAgain, setDontShowAgain] = useState(false);
+  // 읽기 전·읽기 실패 = false(고지 쪽으로 닫힌 실패, BR-U1-30).
+  const [noticeDismissed, setNoticeDismissed] = useState(false);
+
+  useEffect(() => {
+    readFlag(AFFILIATE_NOTICE_DISMISSED_KEY).then(setNoticeDismissed, () => {});
+  }, []);
 
   const saved = item !== null && isSaved(stayKey(item));
 
@@ -100,16 +114,42 @@ export function StayDetailPage(): ReactElement {
     }
   }
 
-  // [이동] — 웹검색 폴백으로 연다(01b Q2). 성공하면 시트를 닫고, 실패하면 열어 둔 채로 남겨
-  // 사용자가 재시도·취소할 수 있게 한다(침묵 금지, BR-U1-55 — 전용 실패 화면은 범위 밖).
-  async function handleConfirmOutbound(): Promise<void> {
+  // 웹검색 폴백으로 연다(01b Q2). 성공하면 시트를 닫고, 실패하면 시트를 error 얼굴로 연다 — 생략
+  // 경로(시트가 닫혀 있던 때)도 같다. 침묵 금지(BR-U1-55).
+  async function runOutbound(): Promise<void> {
     if (item === null) {
       return;
     }
     const result = await openStayOutbound(item, () => {});
-    if (result === 'web') {
-      setOtaOpen(false);
+    const failed = result === 'failed';
+    setOutboundError(failed);
+    setOtaOpen(failed);
+  }
+
+  function handlePressBook(): void {
+    if (noticeDismissed) {
+      void runOutbound();
+      return;
     }
+    // 시트를 열 때마다 체크는 해제·default 얼굴에서 시작한다(01b).
+    setDontShowAgain(false);
+    setOutboundError(false);
+    setOtaOpen(true);
+  }
+
+  // [이동] — 체크돼 있으면 누른 순간 저장한다(이동 결과와 무관, 01b Q4). 저장 실패는 다음에 시트가
+  // 다시 뜰 뿐이라(고지 쪽) 삼킨다.
+  function handleConfirmOutbound(): void {
+    if (dontShowAgain) {
+      writeFlag(AFFILIATE_NOTICE_DISMISSED_KEY, true).catch(() => {});
+      setNoticeDismissed(true);
+    }
+    void runOutbound();
+  }
+
+  function handleCancelOutbound(): void {
+    setOtaOpen(false);
+    setOutboundError(false);
   }
 
   return (
@@ -120,15 +160,19 @@ export function StayDetailPage(): ReactElement {
         pending={pending}
         addedNotice={addedNotice}
         onToggleSave={() => void handleToggleSave()}
-        onPressBook={() => setOtaOpen(true)}
+        onPressBook={handlePressBook}
         onPressAddToTrip={() => void handleAddToTrip()}
         onPressBack={() => router.back()}
       />
       {otaOpen && item !== null ? (
         <OtaChoiceSheet
           item={item}
-          onCancel={() => setOtaOpen(false)}
-          onConfirm={() => void handleConfirmOutbound()}
+          variant={outboundError ? 'error' : 'default'}
+          dontShowAgain={dontShowAgain}
+          onToggleDontShowAgain={() => setDontShowAgain((on) => !on)}
+          onCancel={handleCancelOutbound}
+          onConfirm={handleConfirmOutbound}
+          onRetry={() => void runOutbound()}
         />
       ) : null}
     </>
