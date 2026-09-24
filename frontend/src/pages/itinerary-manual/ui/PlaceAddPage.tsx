@@ -24,6 +24,9 @@ import {
 } from '@/shared/api/generated/trips/trips';
 import type { Place, PoiCategory } from '@/shared/api/generated/schemas';
 
+// 핀이 없을 때 지도 중심 — 서울 시청(LiveHubView 선례). {0,0} 은 기니만 바다(null-island)라 무의미하다.
+const FALLBACK_CENTER = { lat: 37.5665, lng: 126.978 };
+
 /**
  * h13 장소 추가 배선(TRIP-798, 구 h20 TRIP-338·TRIP-502 계승) — `usePlacesInfinite` 로 후보를 받아
  * 전면 지도 위 peek 시트로 조립한다(묶음 C 시트화). 공용 `MapSheetShell`(widgets)의 `list` 슬롯에
@@ -81,13 +84,11 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
   const dayNumber = (targetDayIndex >= 0 ? targetDayIndex : 0) + 1;
 
   // 전면 지도 — 담을 일자(days[0]) 슬롯 좌표로 핀을 세운다(MapSheetShell 이 MapView 를 소유하므로
-  // 지도 census 신규 등재 불필요). 좌표 없으면 기본 중심(선례 ItineraryPlanPage).
+  // 지도 census 신규 등재 불필요). 좌표 없으면 서울 기본 중심(FALLBACK_CENTER).
   const targetSlots = days[0]?.slots ?? [];
   const pins = buildDraftPins(targetSlots);
   const center =
-    pins.length > 0
-      ? { lat: pins[0].lat, lng: pins[0].lng }
-      : { lat: 0, lng: 0 };
+    pins.length > 0 ? { lat: pins[0].lat, lng: pins[0].lng } : FALLBACK_CENTER;
 
   function handleApplyTime(patch: {
     startAt: string;

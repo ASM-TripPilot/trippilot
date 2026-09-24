@@ -24,6 +24,8 @@ import type { Itinerary } from '@/shared/api/generated/schemas';
  *    `{ generationMode:'MANUAL' }` 하나만 담아 쏜다(POST 가드는 재조립 무관, 계약 그대로 얼린다).
  *  - 🔴 **I2 (TRIP-338 AC-2)** `(MANUAL, MINIMAL, isFallback=false)` 일정이 와도 폴백·실패 배너를 안
  *    띄운다(셸 루트 짝 동반, 재조립 후에도 보존).
+ *  - 🔴 **M1 (TRIP-926 AC1)** 빈 일자(핀 0개)면 지도 center = 서울 시청(null-island (0,0) 아님).
+ *  - 🟢 **M2 (TRIP-926 AC2)** 핀이 있으면 center = 첫 핀 좌표(무회귀 짝).
  *
  * ⚠️ RED 트리거는 `map-sheet-shell-root`(EditorView 조립) — 현재 페이지는 `ManualPlanScreen` 을 물어
  * 이 testID 가 없다. G-a2·G-a3(POST 가드) 는 재조립과 무관해 선제 green 이다.
@@ -213,5 +215,55 @@ describe('🔴 I2 · TRIP-338 AC-2 — (MANUAL, MINIMAL, false) 에 폴백·실�
       'itinerary-manual-fallback-banner',
       'itinerary-draft-fallback-banner',
     ].forEach((id) => expect(screen.queryByTestId(id)).toBeNull());
+  });
+});
+
+describe('TRIP-926 · M — 지도 중심 (핀 0개면 서울 시청, 있으면 첫 핀)', () => {
+  // mapViewMock 이 center 를 map-root 텍스트 "lat,lng" 로 노출한다(toHaveTextContent 는 완전 일치).
+  const SEOUL_CITY_HALL = '37.5665,126.978';
+
+  it('🔴 M1 · 빈 일자(핀 0개) 일정이면 지도 중심이 서울 시청이다 (AC1)', () => {
+    // 준비 — GET 이 정착해 빈 일자 1개짜리 MANUAL 일정을 돌려준다.
+    mockGet = { data: MANUAL_EMPTY, isPending: false, isError: false };
+
+    // 실행 — h19 진입.
+    render(<ManualPlanPage tripId={TRIP_ID} />);
+
+    // 단언 — 기니만(0,0)이 아니라 서울 시청을 비춘다.
+    expect(screen.getByTestId('map-root')).toHaveTextContent(SEOUL_CITY_HALL);
+  });
+
+  it('M2 · 활성 일자에 핀이 있으면 지도 중심은 첫 핀 좌표다 (AC2 · 무회귀 선제 green)', () => {
+    // 준비 — 기존 초안의 슬롯 2개에 좌표를 싣는다(첫 핀 ≠ 둘째 핀 ≠ 서울 시청).
+    const [first] = EXISTING_DRAFT.days[0].slots;
+    mockGet = {
+      data: {
+        ...EXISTING_DRAFT,
+        days: [
+          {
+            date: '2026-06-10',
+            slots: [
+              { ...first, lat: 37.5796, lng: 126.977 },
+              {
+                ...first,
+                poiId: 'p2',
+                nameKo: '창덕궁',
+                lat: 37.5794,
+                lng: 126.991,
+              },
+            ],
+          },
+        ],
+      },
+      isPending: false,
+      isError: false,
+    };
+
+    // 실행 — h19 진입.
+    render(<ManualPlanPage tripId={TRIP_ID} />);
+
+    // 단언 — 초안이 실제로 시드됐고(짝), 지도는 첫 핀(경복궁) 좌표를 비춘다.
+    expect(screen.getByText('경복궁')).toBeOnTheScreen();
+    expect(screen.getByTestId('map-root')).toHaveTextContent('37.5796,126.977');
   });
 });

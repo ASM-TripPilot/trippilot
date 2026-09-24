@@ -75,9 +75,8 @@ const SAVE_GENERATING_NOTE =
   '일정을 만드는 중이에요. 잠시 후 다시 시도해 주세요';
 const SAVE_ERROR_NOTE = '일정을 저장하지 못했어요. 잠시 후 다시 시도해 주세요';
 
-// 슬롯 좌표가 없을 때(계약 공백)의 안전 폴백 center — 지도는 목이라 값은 심판 대상이 아니다
-// (DraftPage·ItineraryPlanPage 의 `{ lat: 0, lng: 0 }` 폴백 선례와 동형).
-const FALLBACK_CENTER = { lat: 0, lng: 0 };
+// 핀이 없을 때 지도 중심 — 서울 시청(LiveHubView 선례). {0,0} 은 기니만 바다(null-island)라 무의미하다.
+const FALLBACK_CENTER = { lat: 37.5665, lng: 126.978 };
 
 function EditFace({
   testID,

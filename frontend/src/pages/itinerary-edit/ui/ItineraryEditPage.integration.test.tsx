@@ -35,6 +35,7 @@ import { ItineraryEditPage } from './ItineraryEditPage';
  *  - 🔴 409 는 **재조회한 일정 상태**(신호 B)로 "확정" vs "만드는 중" 을 서로 다른 문구로 가른다
  *    (R4·R5 · AC6). 500·네트워크도 **인라인 안내**(INV-4 침묵 금지) 다(R6·R7 · AC7).
  *  - 🔴 다일자 칩(`itinerary-edit-day-2`) press 로 활성 일자가 바뀐다(R8 · AC4).
+ *  - 🔴 활성 일자 슬롯에 좌표가 없으면(핀 0개) 지도 center = 서울 시청, 있으면 첫 핀 좌표(M1·M2 · TRIP-926).
  *
  * ⚠️ 재조립으로 **삭제·재정렬은 이 편집기에서 드래그(→드롭존 삭제)** 가 됐다 — 목이 원리적 사각이라
  * jest 밖(6-b `h12-editor-dragging` 프리뷰). 옛 II2(휴지통)·II3(onDragEnd 리스트) 케이스는 그래서
@@ -390,5 +391,50 @@ describe('🔴 R8 · AC4 — 다일자 칩으로 활성 일자 전환', () => {
     expect(screen.getByTestId(META)).toHaveTextContent('1곳');
     // 짝 — day1 슬롯은 더 이상 활성 목록에 없다.
     expect(screen.queryByTestId(cardId('poi-a'))).toBeNull();
+  });
+});
+
+describe('TRIP-926 · M — 지도 중심 (핀 0개면 서울 시청, 있으면 첫 핀)', () => {
+  // mapViewMock 이 center 를 map-root 텍스트 "lat,lng" 로 노출한다(toHaveTextContent 는 완전 일치).
+  const SEOUL_CITY_HALL = '37.5665,126.978';
+
+  it('🔴 M1 · 활성 일자 슬롯에 좌표가 없으면(핀 0개) 지도 중심이 서울 시청이다 (AC1)', async () => {
+    // 준비 — 기본 픽스처: day1 슬롯 2개 모두 lat/lng 없음(서버가 좌표를 못 준 슬롯).
+
+    // 실행 — 열고 일정이 시드될 때까지(카드가 뜰 때까지) 기다린다.
+    renderPage();
+    await screen.findByTestId(cardId('poi-a'));
+
+    // 단언 — 기니만(0,0)이 아니라 서울 시청을 비춘다.
+    expect(screen.getByTestId('map-root')).toHaveTextContent(SEOUL_CITY_HALL);
+  });
+
+  it('M2 · 활성 일자에 핀이 있으면 지도 중심은 첫 핀 좌표다 (AC2 · 무회귀 선제 green)', async () => {
+    // 준비 — day1 슬롯 2개에 좌표를 싣는다(첫 핀 ≠ 둘째 핀 ≠ 서울 시청).
+    const base = itinerary();
+    const [a, b] = base.days[0].slots;
+    getHandler = () =>
+      HttpResponse.json({
+        ...base,
+        days: [
+          {
+            ...base.days[0],
+            slots: [
+              { ...a, lat: 33.4581, lng: 126.9425 },
+              { ...b, lat: 33.4242, lng: 126.931 },
+            ],
+          },
+          base.days[1],
+        ],
+      });
+
+    // 실행 — 열고 카드가 뜰 때까지 기다린다.
+    renderPage();
+    await screen.findByTestId(cardId('poi-a'));
+
+    // 단언 — 첫 핀(poi-a 성산일출봉) 좌표를 비춘다.
+    expect(screen.getByTestId('map-root')).toHaveTextContent(
+      '33.4581,126.9425'
+    );
   });
 });
