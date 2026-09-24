@@ -5452,7 +5452,7 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // l06 permission-denied — 토글 회색 비활성·부제 "사용 불가"·[설정 이동] 배너·전체 dimmed.
+  // l06 permission-denied — 토글 비활성·부제 "사용 불가"·[설정 이동] 배너·용도 카드 색 dim(opacity 아님).
   {
     key: 'l06-location-consent-denied',
     band: 'l',
@@ -5470,15 +5470,24 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // l06 철회 재확인 다이얼로그 — 딤 전면 커버·모달 실제 열림은 jest 사각(608 동형). 중단3·계속2 구조화
-  // 리스트(Q1 확정, Figma 산문 축약과 다름)를 실기로 확인한다.
+  // l06 철회 재확인 다이얼로그 — Figma 1610:2440 처럼 default 화면(동의 ON) 위에 딤+다이얼로그를 형제로
+  // 겹친다(화면은 열림을 로컬 state 로 쥐어 prop 으로 못 연다). 딤 전면 커버·모달 실제 열림은 jest 사각.
   {
     key: 'l06-location-revoke-dialog',
     band: 'l',
     label: 'l06 · 철회 다이얼로그',
     login: null,
     render: () => (
-      <View style={StyleSheet.absoluteFill} className="bg-canvas-alt">
+      <View style={StyleSheet.absoluteFill}>
+        <LocationConsentScreen
+          consentOn
+          disabled={false}
+          impact={revokeImpact()}
+          onGrant={noop}
+          onRevokeConfirmed={noop}
+          onOpenSettings={noop}
+          onPressBack={noop}
+        />
         <RevokeConfirmDialog
           impact={revokeImpact()}
           onCancel={noop}

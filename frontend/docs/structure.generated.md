@@ -26,6 +26,7 @@
 - `src/__tests__/devPreviewExploreLanding.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewHome.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewLiveHub.test.tsx`  →  (export 없음)
+- `src/__tests__/devPreviewLocationConsent.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewMap.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewMapFallback.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewNotificationInbox.test.tsx`  →  (export 없음)
@@ -125,6 +126,7 @@
 - `src/__tests__/seoulTodayStructure.test.ts`  →  (export 없음)
 - `src/__tests__/settingsBoundary.test.ts`  →  (export 없음)
 - `src/__tests__/shareCardStructure.test.ts`  →  (export 없음)
+- `src/__tests__/sharedToggleStructure.test.ts`  →  (export 없음)
 - `src/__tests__/sharedUiStructure.test.ts`  →  (export 없음)
 - `src/__tests__/socialSdkConfigPlugin.test.ts`  →  (export 없음)
 - `src/__tests__/socialSdkSecrets.test.ts`  →  (export 없음)
@@ -1286,6 +1288,7 @@
 - `src/shared/ui/HeartGlyphs.tsx`  →  HeartOutlineGlyph · HeartFilledGlyph · HeartBadgeGlyph
 - `src/shared/ui/SegmentedControl.tsx`  →  SegmentedOption · SegmentedControlProps · SegmentedControl
 - `src/shared/ui/StateNotice.tsx`  →  StateNoticeAction · StateNoticeProps · StateNotice
+- `src/shared/ui/Toggle.tsx`  →  ToggleProps · Toggle
 - `src/shared/ui/WheelPicker.tsx`  →  WheelPickerProps · WheelPicker
 
 ## src/shared/ui/pref/
@@ -1335,4 +1338,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 903개 파일
+합계 906개 파일
