@@ -7,6 +7,7 @@ import type {
   PersonalizationItem,
 } from '@/shared/api/generated/schemas';
 import { LocationBackChevronGlyph } from '@/shared/location/LocationGlyphs';
+import { Toggle } from '@/shared/ui/Toggle';
 
 import { personalizationCopy } from '../model/personalizationCopy';
 
@@ -70,19 +71,11 @@ export function PersonalizationScreen({
               {subtitle}
             </Text>
           </View>
-          <Pressable
+          <Toggle
             testID="settings-personalization-toggle"
-            accessibilityRole="switch"
-            accessibilityState={{ checked: consentOn }}
+            checked={consentOn}
             onPress={onToggle}
-            className={`h-[30px] w-[52px] justify-center rounded-pill px-[3px] ${
-              consentOn
-                ? 'items-end bg-primary'
-                : 'items-start bg-hairline-strong'
-            }`}
-          >
-            <View className="h-6 w-6 rounded-pill bg-canvas" />
-          </Pressable>
+          />
         </View>
 
         {/* 안내 문구 — reason 에 따라 있을 때만. APPLIED 는 null 이라 그리지 않는다(목록이 대신 말함). */}

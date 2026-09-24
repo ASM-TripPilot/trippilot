@@ -2504,8 +2504,11 @@ export const PREVIEW_STATES: PreviewState[] = [
         />
         <OtaChoiceSheet
           item={STAY_DETAIL_PREVIEW_ITEM}
+          dontShowAgain={false}
+          onToggleDontShowAgain={noop}
           onCancel={noop}
           onConfirm={noop}
+          onRetry={noop}
         />
       </View>
     ),
@@ -5422,14 +5425,32 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   // 2단 삭제 다이얼로그 — 딤 전면 커버·2단 전이는 jest 원리적 사각(리포 Modal 선례 0). 여기서
-  // [계속]을 눌러 1단(scope 전체 고지)→2단(최종) 전이를 실기로 확인한다.
+  // [계속]을 눌러 1단(scope 전체 고지)→2단(최종) 전이를 실기로 확인한다. Figma 1608:2440 처럼
+  // settings-default 화면 위에 형제로 겹친다(화면은 열림을 로컬 state 로 쥐어 prop 으로 못 연다).
   {
     key: 'settings-delete-dialog',
     band: 'l',
     label: 'l05 · 삭제 다이얼로그',
     login: null,
     render: () => (
-      <View style={StyleSheet.absoluteFill} className="bg-canvas-alt">
+      <View style={StyleSheet.absoluteFill}>
+        <SettingsScreen
+          groups={filterReadySettingsSections(
+            buildSettingsSections({
+              nickname: '여행자123',
+              email: 'trippilot@email.com',
+            })
+          )}
+          deletionState="active"
+          currentNickname="여행자123"
+          onPressBack={noop}
+          onSubmitNickname={noop}
+          onPressExport={noop}
+          onPressDeleteAccount={noop}
+          onPressCancelDeletion={noop}
+          onPressOsmCopyright={noop}
+          appVersion="0.1.0"
+        />
         <DeleteAccountDialog onCancel={noop} onConfirmDeletion={noop} />
       </View>
     ),
@@ -5452,7 +5473,7 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // l06 permission-denied — 토글 회색 비활성·부제 "사용 불가"·[설정 이동] 배너·전체 dimmed.
+  // l06 permission-denied — 토글 비활성·부제 "사용 불가"·[설정 이동] 배너·용도 카드 색 dim(opacity 아님).
   {
     key: 'l06-location-consent-denied',
     band: 'l',
@@ -5470,19 +5491,84 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // l06 철회 재확인 다이얼로그 — 딤 전면 커버·모달 실제 열림은 jest 사각(608 동형). 중단3·계속2 구조화
-  // 리스트(Q1 확정, Figma 산문 축약과 다름)를 실기로 확인한다.
+  // l06 철회 재확인 다이얼로그 — Figma 1610:2440 처럼 default 화면(동의 ON) 위에 딤+다이얼로그를 형제로
+  // 겹친다(화면은 열림을 로컬 state 로 쥐어 prop 으로 못 연다). 딤 전면 커버·모달 실제 열림은 jest 사각.
   {
     key: 'l06-location-revoke-dialog',
     band: 'l',
     label: 'l06 · 철회 다이얼로그',
     login: null,
     render: () => (
-      <View style={StyleSheet.absoluteFill} className="bg-canvas-alt">
+      <View style={StyleSheet.absoluteFill}>
+        <LocationConsentScreen
+          consentOn
+          disabled={false}
+          impact={revokeImpact()}
+          onGrant={noop}
+          onRevokeConfirmed={noop}
+          onOpenSettings={noop}
+          onPressBack={noop}
+        />
         <RevokeConfirmDialog
           impact={revokeImpact()}
           onCancel={noop}
           onConfirm={noop}
+        />
+      </View>
+    ),
+  },
+  // l07 제휴 고지 default(Figma 1615:2440) — 숙소 상세 위에 시트를 형제로 겹친다(e03 키와 같은 합성). 알려진 차이:
+  // OTA 행 1행 추가·버튼 라벨 '네이버로 이동'(Figma '부킹닷컴으로 이동' — 계약에 없는 코드라 안 지어냄). 딤·실개폐는 6-b.
+  {
+    key: 'l07-affiliate-default',
+    band: 'l',
+    label: 'l07 · 제휴 고지',
+    login: null,
+    render: () => (
+      <View style={StyleSheet.absoluteFill}>
+        <StayDetailScreen
+          item={STAY_DETAIL_PREVIEW_ITEM}
+          saved={true}
+          onToggleSave={noop}
+          onPressBook={noop}
+          onPressAddToTrip={noop}
+          onPressBack={noop}
+        />
+        <OtaChoiceSheet
+          item={STAY_DETAIL_PREVIEW_ITEM}
+          dontShowAgain={false}
+          onToggleDontShowAgain={noop}
+          onCancel={noop}
+          onConfirm={noop}
+          onRetry={noop}
+        />
+      </View>
+    ),
+  },
+  // l07 error(Figma 1616:2440) — 이동 실패 뒤 얼굴. 체크박스 없이 [취소]/[다시 시도].
+  {
+    key: 'l07-affiliate-error',
+    band: 'l',
+    label: 'l07 · 제휴 고지 실패',
+    login: null,
+    render: () => (
+      <View style={StyleSheet.absoluteFill}>
+        <StayDetailScreen
+          item={STAY_DETAIL_PREVIEW_ITEM}
+          saved={true}
+          onToggleSave={noop}
+          onPressBook={noop}
+          onPressAddToTrip={noop}
+          onPressBack={noop}
+        />
+        <OtaChoiceSheet
+          item={STAY_DETAIL_PREVIEW_ITEM}
+          variant="error"
+          dontShowAgain={false}
+          onToggleDontShowAgain={noop}
+          onCancel={noop}
+          onConfirm={noop}
+          onRetry={noop}
         />
       </View>
     ),
@@ -5539,7 +5625,7 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // l01 알림함 — 기본(오늘 3·이전 2, 미읽음 dot·PLAN_B 인라인 링크). 딤·글리프 픽셀은 6-b 실기 몫.
+  // l01 알림함 — 기본(오늘 3·이전 2, 미읽음 dot·PLAN_B 인라인 링크·미읽음 2 → '모두 읽음'). 딤·글리프 픽셀은 6-b 실기 몫.
   {
     key: 'notification-inbox-default',
     band: 'l',
@@ -5551,10 +5637,11 @@ export const PREVIEW_STATES: PreviewState[] = [
         isEmpty={false}
         onNavigate={noop}
         onPressBack={noop}
+        onMarkAllRead={noop}
       />
     ),
   },
-  // l01 알림함 — 엣지: 빈 알림함(StateNotice 대시 종 아이콘).
+  // l01 알림함 — 엣지: 빈 알림함(로컬 대시 박스 112 + 종 46, '모두 읽음' 없음).
   {
     key: 'notification-inbox-empty',
     band: 'l',
@@ -5566,6 +5653,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         isEmpty
         onNavigate={noop}
         onPressBack={noop}
+        onMarkAllRead={noop}
       />
     ),
   },

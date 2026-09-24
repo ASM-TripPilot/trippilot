@@ -16,7 +16,7 @@ paths:
 | `ui/SettingsScreen.tsx` | 설정 화면(TRIP-604) |
 | `ui/ProfileCard.tsx` / `ui/TripCard.tsx` / `ui/TripStatusSegment.tsx` | l03 프로필·여행 카드 구성 요소 |
 | `ui/SettingsGroup.tsx` / `ui/SettingsRow.tsx`(`RowBody`·`PreparingRow`·**`NavRow`**, TRIP-618 신규 export) / `ui/ExportRow.tsx` / `ui/NicknameEditRow.tsx` | 설정 화면 행 구성 요소 |
-| `ui/RevokeConfirmDialog.tsx` / `ui/DeleteAccountDialog.tsx` | 조건부 렌더 absolute 오버레이 다이얼로그 패턴 최초 선례(TRIP-608·609) — `BaseToggleDialog`(아래)가 이 형태를 그대로 따름 |
+| `ui/RevokeConfirmDialog.tsx` / `ui/DeleteAccountDialog.tsx` | 조건부 렌더 absolute 오버레이 다이얼로그 패턴 최초 선례(TRIP-608·609) — `BaseToggleDialog`(아래)가 이 형태를 그대로 따름. **TRIP-779(2026-09-24)**: 2단 게이트·문안·톤은 무변경, 라이브 Figma `1608:2440`/`4531:3018` 값만 재적용(불릿 `•` ink·간격6·목록 상한 `max-h-[248px]`·버튼 h52/라벨16·카드 그림자 `style`). 짝 테스트 `DeleteAccountDialog.l05parity.test.tsx`의 높이 상한 탐지기(`heightCapsAbove`)는 `[Npx]` 표기만 읽던 구멍을 **fail-closed**로 막았다(모르는 `max-h-*`/`h-*` 토큰 표기는 통과가 아니라 throw) — 이 파일의 `max-h-*`를 다시 만질 때 임의값 `[Npx]` 표기를 벗어나면 이 테스트가 즉시 걸린다는 뜻이다. |
 | `ui/LocationConsentScreen.tsx` | 위치 동의 철회 게이트 화면(TRIP-609) — 로컬 `useState` 다이얼로그 게이트 패턴의 최초 선례(`MyStaysScreen`의 출발점 전환 게이트가 이 형태를 그대로 따름) |
 | `model/settingsSections.ts` / `model/tripBuckets.ts` / `model/exportSummary.ts` / `model/deletionScope.ts` | 설정 화면 순수 파생 모델(섹션 구성·여행 버킷·내보내기 요약·삭제 고지 목록 정본) |
 
@@ -74,7 +74,7 @@ l05 '등록 숙소·예약 기록'(bases) 행은 이 티켓 스코프 밖(스코
 |---|---|
 | `model/personalizationCopy.ts` | **신규.** 순수 함수 `personalizationCopy(reason): string \| null` — `PersonalizationInfoReason` enum 3값 전수 매핑(`APPLIED`→`null`, `CONSENT_MISSING`→'동의하면 지난 기록을 반영해요', `NOT_ENOUGH_RECORDS`→'기록이 더 쌓이면 반영돼요'). **급소**: `NOT_ENOUGH_RECORDS`는 이미 동의한 사용자라 "동의하면" 문구가 나오면 BR-U5-44 위반 — 반환 문자열에 그 부분문자열이 없음을 테스트가 순수 층에서도 잠근다. |
 | `model/usePersonalization.ts` | **신규.** `useGetMePersonalization()` 조회 + `consentOn = reason !== CONSENT_MISSING`(**`applied` 필드가 아니라 `reason`에서 도출** — 두 필드가 다른 축, 섞으면 NOT_ENOUGH_RECORDS 얼굴에서 토글이 잘못 그려진다) + 토글 press → `fetchTerms()`에서 PERSONALIZATION `termsVersion` 필터 → `patchConsent('PERSONALIZATION', version, consentOn?'REVOKE':'GRANT')` → `invalidateQueries`. GET 미도착 시 `reason ?? CONSENT_MISSING`으로 degrade(개념 [[degrade 스텁 — 못 켜는 기능은 정직하게 꺼둔다]] 참고 — 이번은 미배선이 아니라 미도착 변형). **적대적 리뷰 차단-1(2026-08-31 봉합)**: 이 도출을 검증하는 유일한 심판(T3 페이지 통합)이 원래 reason 3값 중 NOT_ENOUGH_RECORDS를 프라임하지 않아, `applied` 기반 오답 도출로 뮤테이션해도 전 스위트 green이었다 — 개념 [[가드의 사정거리]] TRIP-612 실측. 급소 케이스 추가 + 뮤테이션 실측으로 봉합(implementer 재호출 없이 테스트만 강화). |
-| `ui/PersonalizationScreen.tsx` | **신규.** 무상태 프레젠테이션(props: `consentOn`·`reason`·`sharedItems`·`onToggle`·`onPressBack?`). `LocationConsentScreen.tsx` 구조 준용하되 **재확인 다이얼로그 없음**(개인화 철회는 데이터 파기가 아니라 추천 입력 제외뿐이라 BR상 게이트 불요, l06과의 유일한 차이). 토글은 `LocationConsentScreen` 선례 동형 Pressable+`accessibilityState.checked`(RN `Switch` 아님). testID `settings-personalization-{root,back,toggle,item}`. |
+| `ui/PersonalizationScreen.tsx` | 무상태 프레젠테이션(props: `consentOn`·`reason`·`sharedItems`·`onToggle`·`onPressBack?`). `LocationConsentScreen.tsx` 구조 준용하되 **재확인 다이얼로그 없음**(개인화 철회는 데이터 파기가 아니라 추천 입력 제외뿐이라 BR상 게이트 불요, l06과의 유일한 차이). **TRIP-780로 공유 승격**: 인라인 Pressable(52×30) 13줄 → `shared/ui/Toggle`(46×28) 한 줄로 교체(구 서술 "선례 동형 Pressable"은 낡음). testID `settings-personalization-{root,back,toggle,item}`. |
 
 l05 설정 목록에 개인화 진입행 없음(Figma 캐논에 개인화 그룹 자체가 없음 + `settingsSections.test.ts` 완전일치 가드 충돌, TRIP-610 `preferences` 선례와 동형 판단) — 도달 경로는 딥링크 `/settings/personalization`과 `_dev/preview.tsx` 3키(reason 3얼굴)뿐. 진입행 배선은 후속 티켓([FE] l05 설정 개인화 진입행, Figma 디자인 선행).
 

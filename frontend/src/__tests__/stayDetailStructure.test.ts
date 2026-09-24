@@ -126,3 +126,21 @@ describe('G5 · 페이지 배선 존재', () => {
     expect(source).toContain('useSavedStays');
   });
 });
+
+describe('G6 · "다시 보지 않기" 저장은 페이지가 딥 경로로 문다 (TRIP-781 · 01b)', () => {
+  it('페이지가 flag 딥 경로·키 config 를 물고, 배럴은 flag 를 재수출하지 않으며, 시트는 저장을 모른다', () => {
+    const page = readOne(PAGE_REL);
+    const barrel = readOne('shared/storage/index.ts');
+    const sheet = readOne(SHEET_REL);
+
+    // 긍정 짝 — 배럴·시트 파일을 실제로 읽었다(빈 문자열 공허 통과 방지).
+    expect(barrel).toContain('saveTokens');
+    expect(sheet).toContain('stay-ota-sheet');
+
+    expect(page).toContain('@/shared/storage/flag');
+    expect(page).toContain('@/features/stay/config/affiliateNotice');
+    // 배럴에 얹으면 배럴을 통째 목으로 바꾸는 기존 테스트들이 readFlag 를 지운다.
+    expect(barrel).not.toContain('flag');
+    expect(sheet).not.toContain('@/shared/storage');
+  });
+});

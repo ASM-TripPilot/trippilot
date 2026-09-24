@@ -19,15 +19,19 @@
 - `src/__tests__/design-tokens.test.ts`  →  (export 없음)
 - `src/__tests__/destinationEditSheetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/devPreview.test.tsx`  →  (export 없음)
+- `src/__tests__/devPreviewAffiliateNotice.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewBandNav.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewBandSort.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewDeepLink.test.tsx`  →  (export 없음)
+- `src/__tests__/devPreviewDeleteDialog.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewExplore.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewExploreLanding.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewHome.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewLiveHub.test.tsx`  →  (export 없음)
+- `src/__tests__/devPreviewLocationConsent.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewMap.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewMapFallback.test.tsx`  →  (export 없음)
+- `src/__tests__/devPreviewNotificationInbox.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewPref.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewReleaseGate.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewSheetSnap.test.tsx`  →  (export 없음)
@@ -124,6 +128,7 @@
 - `src/__tests__/seoulTodayStructure.test.ts`  →  (export 없음)
 - `src/__tests__/settingsBoundary.test.ts`  →  (export 없음)
 - `src/__tests__/shareCardStructure.test.ts`  →  (export 없음)
+- `src/__tests__/sharedToggleStructure.test.ts`  →  (export 없음)
 - `src/__tests__/sharedUiStructure.test.ts`  →  (export 없음)
 - `src/__tests__/socialSdkConfigPlugin.test.ts`  →  (export 없음)
 - `src/__tests__/socialSdkSecrets.test.ts`  →  (export 없음)
@@ -630,6 +635,7 @@
 - `src/features/settings/ui/TripStatusSegment.tsx`  →  TripStatusSegmentProps · TripStatusSegment
 
 ## src/features/stay/config/
+- `src/features/stay/config/affiliateNotice.ts`  →  AFFILIATE_NOTICE_DISMISSED_KEY · otaConfirmLabel
 - `src/features/stay/config/amenityIcons.ts`  →  resolveAmenityIcon
 
 ## src/features/stay/model/
@@ -1277,6 +1283,7 @@
 - `src/shared/push/register.ts`  →  toServerOsPermission · isDeviceNotRegistered · unregisterDeviceToken · registerPushToken
 
 ## src/shared/storage/
+- `src/shared/storage/flag.ts`  →  readFlag · writeFlag
 - `src/shared/storage/idSet.ts`  →  readIdSet · writeIdSet
 - `src/shared/storage/index.ts`  →  TokenBundle · saveTokens · getTokens · clearTokens · hasStoredToken
 
@@ -1285,6 +1292,7 @@
 - `src/shared/ui/HeartGlyphs.tsx`  →  HeartOutlineGlyph · HeartFilledGlyph · HeartBadgeGlyph
 - `src/shared/ui/SegmentedControl.tsx`  →  SegmentedOption · SegmentedControlProps · SegmentedControl
 - `src/shared/ui/StateNotice.tsx`  →  StateNoticeAction · StateNoticeProps · StateNotice
+- `src/shared/ui/Toggle.tsx`  →  ToggleProps · Toggle
 - `src/shared/ui/WheelPicker.tsx`  →  WheelPickerProps · WheelPicker
 
 ## src/shared/ui/pref/
@@ -1334,4 +1342,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 902개 파일
+합계 910개 파일
