@@ -134,6 +134,16 @@ def validate_groups(groups):
     for key, allowed in modes.items():
         if key in backend and backend[key] not in allowed:
             raise ValueError(f"Unsupported {key} in backend secret")
+    # 현재 구글 클라이언트는 **공개(iOS) 유형**이라 client_secret 을 보내면 Google 이 invalid_client 로
+    # 거절한다(2026-09-23 실측 — 생략하면 invalid_grant 로 통과). 백엔드는 빈 값이면 전송을 생략하므로
+    # 부재·빈 값은 정상이고, **값이 차 있는 것만** 막는다. 목록에서 키를 빼지 않는 이유는 이미 그 값이
+    # 들어 있는 시크릿의 배포 전체를 검증에서 죽이지 않기 위해서다 — 여기서 이유와 함께 크게 실패시킨다.
+    # Web 유형 클라이언트로 바꾸면 이 가드를 지운다.
+    if backend.get("GOOGLE_CLIENT_SECRET", "").strip():
+        raise ValueError(
+            "GOOGLE_CLIENT_SECRET must stay empty: the Google client is a public (iOS) client, "
+            "so sending a secret makes Google reject the exchange with invalid_client"
+        )
     if backend.get("PLACE_GEOCODE_MODE") == "kakao":
         require(backend, ("KAKAO_CLIENT_ID",), "kakao geocoding")
     if backend.get("WEATHER_MODE") == "kma":
