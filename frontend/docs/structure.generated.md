@@ -31,6 +31,7 @@
 - `src/__tests__/devPreviewLocationConsent.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewMap.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewMapFallback.test.tsx`  →  (export 없음)
+- `src/__tests__/devPreviewMyPage.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewNotificationInbox.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewPref.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewReleaseGate.test.tsx`  →  (export 없음)
@@ -617,6 +618,7 @@
 - `src/features/settings/ui/BaseToggleDialog.tsx`  →  BaseToggleDialog
 - `src/features/settings/ui/DeleteAccountDialog.tsx`  →  DeleteAccountDialog
 - `src/features/settings/ui/ExportRow.tsx`  →  ExportRow
+- `src/features/settings/ui/InfoChip.tsx`  →  InfoChip
 - `src/features/settings/ui/LocationConsentScreen.tsx`  →  LocationConsentScreenProps · LocationConsentScreen
 - `src/features/settings/ui/LogoutConfirmDialog.tsx`  →  LogoutConfirmDialog
 - `src/features/settings/ui/MyPageScreen.tsx`  →  MyPageScreenProps · MyPageScreen
@@ -627,13 +629,14 @@
 - `src/features/settings/ui/PreferencesEditView.tsx`  →  EditableAxis · isMultiAxis · PreferencesEditViewProps · PreferencesEditView
 - `src/features/settings/ui/ProfileCard.tsx`  →  ProfileCardCounts · ProfileCardProps · ProfileCard
 - `src/features/settings/ui/RevokeConfirmDialog.tsx`  →  RevokeConfirmDialog
-- `src/features/settings/ui/SettingsGlyphs.tsx`  →  ChevronRightGlyph · BookmarkGlyph · BarChartGlyph · ShareNodesGlyph · ListGlyph · EyeOffGlyph · GearGlyph · PencilGlyph · HeartGlyph · ChevronLeftGlyph · PersonGlyph · DownloadGlyph · ContrastGlyph · WonGlyph · PeopleGlyph · StarGlyph · ArrowsSwapGlyph · ForkKnifeGlyph · GaugeGlyph · PinGlyph · BellGlyph · ExternalLinkGlyph · BedGlyph · TrashGlyph · DocumentGlyph · LogoutGlyph
+- `src/features/settings/ui/SettingsGlyphs.tsx`  →  MUTED_SOFT · ChevronRightGlyph · BookmarkGlyph · BarChartGlyph · ShareNodesGlyph · ListGlyph · EyeOffGlyph · GearGlyph · PencilGlyph · HeartGlyph · ChevronLeftGlyph · PersonGlyph · DownloadGlyph · ContrastGlyph · WonGlyph · PeopleGlyph · StarGlyph · ArrowsSwapGlyph · ForkKnifeGlyph · GaugeGlyph · PinGlyph · BellGlyph · ExternalLinkGlyph · BedGlyph · MenuBedGlyph · TrashGlyph · DocumentGlyph · LogoutGlyph
 - `src/features/settings/ui/SettingsGroup.tsx`  →  SettingsGroup
 - `src/features/settings/ui/SettingsRow.tsx`  →  RowBody · PreparingRow · NavRow
 - `src/features/settings/ui/SettingsScreen.tsx`  →  SettingsScreenProps · SettingsScreen
 - `src/features/settings/ui/StyleSummaryCard.tsx`  →  StyleSummaryCardProps · StyleSummaryCard
 - `src/features/settings/ui/TripCard.tsx`  →  TripCardVM · TripCardProps · TripCard
 - `src/features/settings/ui/TripStatusSegment.tsx`  →  TripStatusSegmentProps · TripStatusSegment
+- `src/features/settings/ui/cardShadow.ts`  →  CARD_SHADOW
 
 ## src/features/stay/config/
 - `src/features/stay/config/affiliateNotice.ts`  →  AFFILIATE_NOTICE_DISMISSED_KEY · otaConfirmLabel
@@ -1343,4 +1346,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 911개 파일
+합계 914개 파일

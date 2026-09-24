@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import type {
   AccountSummary,
@@ -23,6 +23,7 @@ import MyScreen from '@/app/(tabs)/my';
  *  - 🔴 AC-7 testID 계약 `my-profile-card`·`my-trip-segment`·`my-trip-card-{tripId}` 존재.
  *  - 🔴 AC-1 프로필 카드가 닉네임을 보이고 세그먼트·카드를 그린다.
  *  - 🔴 AC-5 종료 여행 0건이면 "아직 종료된 여행이 없습니다"만, **회고 진입 렌더 0**(비활성 버튼도 위반).
+ *    TRIP-775 부터 "지난 여행" 섹션은 예정 0건일 때만 보이므로 픽스처는 **예정 0**(진행 중만)이다.
  *
  * 왜 이렇게 테스트하나(02a ★1·★2): 프로필·계정·여행 목록·카드별 bases/itinerary가 전부 orval 훅
  * seam이라 훅 목으로 주입한다. `jest.mock` factory는 최상단 호이스트 — 외부 변수 참조 없이
@@ -158,25 +159,28 @@ describe('🔴 AC-7 · AC-1 구조 — 프로필 카드·세그먼트·여행 �
 });
 
 describe('🔴 AC-5 · 종료 0건 → 안내만, 회고 진입 렌더 0', () => {
-  it('종료 여행이 없으면 회고 진입이 어디에도 없고, 안내 문구만 뜬다', () => {
-    // 종료(ENDED) 0건 — 예정·진행 중만.
+  it('예정 0·종료 0(진행 중만)이면 회고 진입이 어디에도 없고, 안내 문구만 뜬다', () => {
+    // 준비: 진행 중 1건만 — 예정 0이라 "지난 여행" 섹션이 보이는 조건(TRIP-775 A안).
     mockUseTrips.mockReturnValue(
-      tripsResult([
-        trip({ tripId: 'up-1', status: 'PLANNED' }),
-        trip({ tripId: 'act-1', status: 'ACTIVE' }),
-      ])
+      tripsResult([trip({ tripId: 'act-1', status: 'ACTIVE' })])
     );
 
+    // 실행(초기 렌더 — 기본 탭 '예정')
     render(<MyScreen />);
 
     // 하드 락(부정) — 회고 진입 어포던스가 하나도 없다(비활성 버튼도 위반, ★7).
     expect(screen.queryAllByTestId(/^my-trip-reflection-/)).toHaveLength(0);
-
     // 긍정 짝1 — 화면이 통째로 안 그려져 우연 통과하는 것을 막는다(루트 생존).
     expect(screen.getByTestId('my-profile-card')).toBeOnTheScreen();
-    expect(screen.getByTestId('my-trip-card-up-1')).toBeOnTheScreen();
-
     // 긍정 짝2 — 종료-빈 상태를 초기 렌더에 안내한다(★12, AC-5 문구 계약).
+    expect(screen.getByText('아직 종료된 여행이 없습니다')).toBeOnTheScreen();
+
+    // 실행: '진행 중' 탭으로 옮겨 카드를 띄운다(진행 중 여행은 예정 탭 목록에 없다).
+    fireEvent.press(screen.getByTestId('my-trip-segment-active'));
+
+    // 단언: 카드가 떠도 회고 진입은 0, 안내 문구는 그대로다(활성 탭이 '종료'가 아니고 예정 0).
+    expect(screen.getByTestId('my-trip-card-act-1')).toBeOnTheScreen();
+    expect(screen.queryAllByTestId(/^my-trip-reflection-/)).toHaveLength(0);
     expect(screen.getByText('아직 종료된 여행이 없습니다')).toBeOnTheScreen();
   });
 });

@@ -114,9 +114,9 @@ describe('🔴 AC-I1 · 조회→모델→배치', () => {
   it('카드는 ProfileCard 와 TripStatusSegment 사이에 놓이고 기존 testID 는 그대로다', () => {
     renderPage();
 
-    // 기존 testID 무변경(additive prop 이 헐지 않았다). 헤더 설정 아이콘은 TRIP-939 B-2 로 숨김.
+    // 기존 testID 무변경(additive prop 이 헐지 않았다). 헤더 설정 아이콘은 TRIP-775 로 복원(→ /settings).
     expect(screen.getByTestId('my-page-root')).toBeOnTheScreen();
-    expect(screen.queryByTestId('my-header-settings')).toBeNull();
+    expect(screen.getByTestId('my-header-settings')).toBeOnTheScreen();
     expect(screen.getByTestId('my-profile-card')).toBeOnTheScreen();
     expect(screen.getByTestId('my-trip-segment')).toBeOnTheScreen();
 
@@ -148,40 +148,55 @@ describe('🔴 TRIP-618 AC-1 · 하단 설정 행 진입 배선', () => {
     expect(mockPush).toHaveBeenCalledWith('/settings');
   });
 
-  it('TRIP-939 B-2: 목적지 없는 헤더 아이콘(my-header-settings)은 그리지 않는다 — 설정은 하단 행이 진다', () => {
-    // 준비·실행
+  it('TRIP-775(구 TRIP-939 B-2): 헤더 설정 아이콘을 누르면 router.push("/settings") 정확히 1회', () => {
+    // 준비·실행: 헤더 톱니(Figma 1602:2388 우측 24)를 누른다. 목적지가 생겨 되살렸다(Seed Q2=a).
     renderPage();
+    fireEvent.press(screen.getByTestId('my-header-settings'));
 
-    // 단언: 눌러도 반응 없던 헤더 아이콘 부재 + 짝 앵커(하단 '설정' 행은 있다).
-    expect(screen.queryByTestId('my-header-settings')).toBeNull();
-    expect(screen.getByTestId('my-settings-row')).toBeOnTheScreen();
+    // 단언: 반응 없는 버튼이 아니다 — 설정으로, 한 번만.
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith('/settings');
   });
 });
 
 describe('🔴 TRIP-939 B-1·B-3·B-4 · 마이 탭에 눌러도 반응 없는 것이 없다 (심사 2.1)', () => {
-  it('B-1: 목적지 없는 메뉴 5행은 없고 "설정" 행만 남는다', () => {
+  it('B-1(TRIP-775 Q1=A): 목적지가 선 메뉴 3행은 누르면 각자 이동하고, 커뮤니티 3행은 없다', () => {
     // 준비·실행: 실 마이페이지를 그린다(여행 0건).
     renderPage();
 
-    // 단언(부재): › 가 붙어 버튼처럼 보이던 미배선 행 5개.
-    [
-      '등록 숙소·예약 기록',
-      '여행 스타일 분석',
-      '내 일정 공개/공유 설정',
-      '내가 공유한 일정',
-      '숨긴 사용자 관리',
-    ].forEach((label) => {
-      expect(screen.queryByText(label)).toBeNull();
+    // 단언(부재): U7 전이라 목적지가 없는 커뮤니티 3행.
+    ['내 일정 공개/공유 설정', '내가 공유한 일정', '숨긴 사용자 관리'].forEach(
+      (label) => {
+        expect(screen.queryByText(label)).toBeNull();
+      }
+    );
+
+    // 단언(존재 + 배선): 보이는 행은 전부 눌러서 이동한다 — 행마다 정확히 1회, 경로 완전일치.
+    (
+      [
+        ['my-stays-row', '등록 숙소·예약 기록', '/my/stays'],
+        ['my-style-analysis-row', '여행 스타일 분석', '/records/style'],
+        ['my-settings-row', '설정', '/settings'],
+      ] as const
+    ).forEach(([testID, label, href]) => {
+      mockPush.mockClear();
+      const row = screen.getByTestId(testID);
+      expect(row).toHaveTextContent(label);
+
+      fireEvent.press(row);
+
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(mockPush).toHaveBeenCalledWith(href);
     });
-    // 짝 앵커: 배선된 '설정' 행은 있다.
-    expect(screen.getByTestId('my-settings-row')).toBeOnTheScreen();
   });
 
-  it('B-3: 페이지가 편집 진입을 넘기지 않으므로 프로필 [편집]이 없다', () => {
+  it('B-3(TRIP-775 Q2=a): 프로필 [편집]이 있고 누르면 router.push("/settings") 정확히 1회', () => {
     renderPage();
 
-    expect(screen.queryByTestId('my-profile-edit')).toBeNull();
-    expect(screen.getByTestId('my-profile-card')).toBeOnTheScreen();
+    fireEvent.press(screen.getByTestId('my-profile-edit'));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith('/settings');
   });
 
   it('B-4: "캘린더 ›" 링크 글자와 회고 하트 floating 이 없다(지난 여행 섹션은 그대로)', () => {

@@ -1,4 +1,4 @@
-import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
+import Svg, { Circle, Line, Path } from 'react-native-svg';
 
 /**
  * TRIP-604 · l03 마이페이지 전용 인라인 벡터 글리프. features 간 직접 import 금지 관례라
@@ -13,14 +13,21 @@ import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
 const INK = '#222222';
 const MUTED = '#6A6A6A';
 const HAIRLINE_STRONG = '#DDDDDD';
+// l03 메뉴·헤더 아이콘(Figma 1602:2388 — #3F3F3F stroke 2, 메뉴 chevron #9AA1AB). 토큰 body·muted-soft 와 같은 값.
+const BODY = '#3F3F3F';
+export const MUTED_SOFT = '#9AA1AB';
 
 type GlyphProps = {
   size?: number;
   testID?: string;
 };
 
-/** 우향 chevron — 카드·행 진입 어포던스(회고 진입·설정 행 공용). */
-export function ChevronRightGlyph({ size = 20, testID }: GlyphProps) {
+/** 우향 chevron — 카드·행 진입 어포던스(회고 진입·설정 행 공용). `color` 미주입이면 기존 연회색. */
+export function ChevronRightGlyph({
+  size = 20,
+  testID,
+  color = HAIRLINE_STRONG,
+}: GlyphProps & { color?: string }) {
   return (
     <Svg
       testID={testID}
@@ -31,7 +38,7 @@ export function ChevronRightGlyph({ size = 20, testID }: GlyphProps) {
     >
       <Path
         d="M9 6L15 12L9 18"
-        stroke={HAIRLINE_STRONG}
+        stroke={color}
         strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -60,42 +67,22 @@ export function BookmarkGlyph({ size = 20, testID }: GlyphProps) {
   );
 }
 
-/** 여행 스타일 분석 행 — 막대 그래프. */
-export function BarChartGlyph({ size = 20, testID }: GlyphProps) {
+/** 여행 스타일 분석 행 — 막대 그래프(Figma 1602:2504 실측 path, 22 격자). */
+export function BarChartGlyph({ size = 22, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
       width={size}
       height={size}
-      viewBox="0 0 24 24"
+      viewBox="0 0 22 22"
       fill="none"
     >
-      <Line
-        x1={5}
-        y1={20}
-        x2={19}
-        y2={20}
-        stroke={INK}
-        strokeWidth={1.7}
+      <Path
+        d="M5.5 18.3333V11.9167M11 18.3333V4.58333M16.5 18.3333V8.25M2.75 18.3333H19.25"
+        stroke={BODY}
+        strokeWidth={2}
         strokeLinecap="round"
-      />
-      <Rect
-        x={6}
-        y={11}
-        width={3.4}
-        height={7}
-        rx={1}
-        stroke={INK}
-        strokeWidth={1.7}
-      />
-      <Rect
-        x={12}
-        y={7}
-        width={3.4}
-        height={11}
-        rx={1}
-        stroke={INK}
-        strokeWidth={1.7}
+        strokeLinejoin="round"
       />
     </Svg>
   );
@@ -210,22 +197,23 @@ export function EyeOffGlyph({ size = 20, testID }: GlyphProps) {
   );
 }
 
-/** 설정 행 — 톱니. */
-export function GearGlyph({ size = 20, testID }: GlyphProps) {
+/** 설정 행·l03 헤더 — 톱니(Figma 1602:2547 실측 path, 22 격자. 헤더는 size 24). */
+export function GearGlyph({ size = 22, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
       width={size}
       height={size}
-      viewBox="0 0 24 24"
+      viewBox="0 0 22 22"
       fill="none"
     >
-      <Circle cx={12} cy={12} r={3} stroke={INK} strokeWidth={1.7} />
+      <Circle cx={11} cy={11} r={2.75} stroke={BODY} strokeWidth={2} />
       <Path
-        d="M12 3.5V6M12 18V20.5M20.5 12H18M6 12H3.5M18 6L16.3 7.7M7.7 16.3L6 18M18 18L16.3 16.3M7.7 7.7L6 6"
-        stroke={INK}
-        strokeWidth={1.7}
+        d="M11 2.29167V5.04167M11 16.9583V19.7083M19.7083 11H16.9583M5.04167 11H2.29167M16.8667 5.13333L14.9417 7.05833M7.05833 14.9417L5.13333 16.8667M16.8667 16.8667L14.9417 14.9417M7.05833 7.05833L5.13333 5.13333"
+        stroke={BODY}
+        strokeWidth={2}
         strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </Svg>
   );
@@ -672,6 +660,30 @@ export function BedGlyph({ size = 22, testID }: GlyphProps) {
         d="M7 11V9H12V11"
         stroke={MUTED}
         strokeWidth={1.7}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/**
+ * l03 메뉴 첫 행(등록 숙소·예약 기록) — 침대(Figma 1602:2494 실측 path, 22 격자). l04 빈 상태
+ * `BedGlyph`(muted·베개)와 모양·색이 달라 따로 둔다 — 같은 메뉴의 다른 행(body 톤)과 맞춘다.
+ */
+export function MenuBedGlyph({ size = 22, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 22 22"
+      fill="none"
+    >
+      <Path
+        d="M1.83333 3.66667V18.3333M1.83333 7.33333H18.3333C18.8196 7.33333 19.2859 7.52649 19.6297 7.8703C19.9735 8.21412 20.1667 8.68044 20.1667 9.16667V18.3333M1.83333 15.5833H20.1667M5.5 7.33333V15.5833"
+        stroke={BODY}
+        strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
       />

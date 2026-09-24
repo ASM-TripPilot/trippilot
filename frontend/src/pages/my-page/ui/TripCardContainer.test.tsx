@@ -18,7 +18,8 @@ import { TripCardContainer } from './TripCardContainer';
  *
  * 무엇을 보장하나(승인 계약):
  *  - 🔴 AC-3 등록 숙소 0건→`숙소 미등록` 칩, N건→`숙소 N`.
- *  - 🔴 AC-1 카드가 목적지·기간·숙소 수·일정 수를 그린다.
+ *  - 🔴 AC-1 카드가 제목(`trip.title`)·기간·숙소 수·일정 수를 그린다(TRIP-775 — 제목은 region 이 아니라
+ *    trip.title. 서버 기본 제목이 "{첫 목적지} 여행"이라 목적지는 대개 제목에 들어 있다).
  *  - 🔴 AC-4 **종료** 여행 카드에만 회고 진입(`my-trip-reflection-{id}`) — press→`/trips/{id}/records`.
  *  - 🔴 AC-6 카드 어디에도 소요시간 문자열(분·시간·소요)이 없다(INV-3).
  *
@@ -177,8 +178,8 @@ describe('🔴 AC-1 · 미도착 bases 는 "숙소 미등록"으로 단정하지
   });
 });
 
-describe('🔴 AC-1 · 카드 대표정보(목적지·기간·숙소 수·일정 수)', () => {
-  it('목적지 region · 날짜범위 · 일정 N일 · 숙소 N을 모두 그린다', () => {
+describe('🔴 AC-1 · 카드 대표정보(제목·기간·숙소 수·일정 수)', () => {
+  it('제목 trip.title · 날짜범위 · 일정 N일 · 숙소 N을 그리고, 목적지 region 글자는 카드에 없다', () => {
     mockUseBases.mockReturnValue(basesResult(1));
     mockUseItinerary.mockReturnValue(itineraryResult(2));
 
@@ -193,8 +194,10 @@ describe('🔴 AC-1 · 카드 대표정보(목적지·기간·숙소 수·일정
       />
     );
 
-    // 목적지 — title('여름 휴가')엔 '부산'이 없어 이 매치는 목적지 leaf만 잡는다(★9).
-    expect(screen.getByText(/부산/)).toBeOnTheScreen();
+    // 제목 — trip.title leaf 완전일치(TRIP-775, Figma 1602:2388 "부산 여행").
+    expect(screen.getByText('여름 휴가')).toBeOnTheScreen();
+    // region('부산')은 제목에도 칩에도 없다 — 제목 옆에 region 을 남기거나 칩으로 옮기면 red.
+    expect(screen.queryAllByText(/부산/)).toHaveLength(0);
     // 기간 — 점·물결 형식은 잠그되 공백은 관대(★10, 근거 브리프 §재사용색인 "6.10~6.12").
     expect(screen.getByText(/6\.10\s*~\s*6\.12/)).toBeOnTheScreen();
     // 일정 수 — days.length(Q1). INV-3상 시간 아님.

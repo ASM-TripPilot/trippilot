@@ -86,6 +86,19 @@ j05(여행 스타일 분석, `features/reflection`)가 `records/style` 라우트
 |---|---|
 | `ui/StyleSummaryCard.tsx` | **변경(additive) — `my-style-detail` prop-gated 활성화.** `onPressDetail?: () => void` prop 추가, `disabled={onPressDetail == null}`·`onPress={onPressDetail}`. prop 미주입 시 여전히 `disabled`(기존 `StyleSummaryCard.test.tsx` AC-S6의 `toBeDisabled()` 무회귀 — 이게 backward-compat 증거). 실제 배선은 `pages/my-page/ui/MyPage.tsx`가 `onPressDetail={() => router.push('/records/style')}`를 주입(`layer-pages.md` `my-page` 행 참고). |
 
+## 이번 사이클(TRIP-775) 신규·변경 — l03 마이페이지 default Figma 정합
+
+| 파일 | 내용 |
+|---|---|
+| `ui/ProfileCard.tsx` | **변경.** `tags?: string[]` 슬롯 신설(정식 스타일 분석일 때만 주입 — 계약 공백 아님, 페이지가 판정). [편집] 아이콘(`PencilGlyph`) 제거 + r8 아웃라인, 카운트 3칸 사이 세로 hairline 막대 2개(`my-profile-count-divider`) 신설(기존 `border-t`만 있던 것에 추가). |
+| `ui/StyleSummaryCard.tsx` | **변경.** 게이지 dot을 `justify-between`(우측 정렬)에서 라벨 칸 고정폭(`w-[64px]`) + 좌측 정렬로. 메타줄("여행 N개 · 갱신 …", TRIP-606 self 서식) 제거 — `formatKoreanDate` import도 함께 삭제. `sampleTripCount`·`updatedAt` VM 필드는 `styleCardModel.test` AC-M1이 잠가 **필드 자체는 유지**. `headline?: string` 계약 공백 슬롯 신설(서버에 필드 없음, TRIP-623 후속). |
+| `ui/TripCard.tsx` | **변경.** 머리줄을 `flex-row`([배지][제목 flex-1][회고 chevron])로 — 기존엔 배지 줄과 제목 줄이 분리돼 있었다. 지역 `Chip`(pill·text-body) 삭제 → `InfoChip`으로 대체. |
+| `ui/TripStatusSegment.tsx` | **변경(값만).** 세그먼트 바탕 `bg-hairline`(#EDEDED)·안쪽 여백 4·탭 높이 34·글자 13.5(Figma D8 실측 드리프트, 구조 변경 없음). |
+| `ui/InfoChip.tsx` | **신규.** 회색 r8 칩 1종(`surface-strong`·11/6 패딩·12 muted) — 프로필 태그·스타일 칩·여행 카드 칩 3곳 공용. 누르지 않는 회색 칩 export가 `shared/ui`에 없어 신설(`PrefChip`은 누르는 선택 칩이라 용도가 다름). 소비처 3곳이 모두 settings 안이라 shared 미승격(README 승격 규칙 "feature 2곳 이상" 불충족). |
+| `ui/cardShadow.ts` | **신규.** `CARD_SHADOW`(RN `style` 객체, `0/2/10·6%·elevation2`) — 카드 껍데기 4종(프로필·스타일·여행·메뉴) 공용. `LocationConsentScreen.tsx`의 동명 지역 상수와 **값이 중복**되지만 features 경계 때문에 import 불가라 별도 export로 신설(drive-by 통합 금지, 5-c 후보로 보고만 함). |
+| `ui/SettingsGlyphs.tsx` | **변경.** `GearGlyph`·`BarChartGlyph`를 Figma 실측 path(22 격자·#3F3F3F·stroke2)로 재작도. `MenuBedGlyph` 신설(메뉴 첫 행, 기존 `BedGlyph`는 l04 empty용이라 모양이 다름). `ChevronRightGlyph`에 `color?` prop 추가(기본값 기존 연회색). `MUTED_SOFT` hex export 추가(비-글리프 파일이 raw hex 없이 chevron 색을 넘기기 위함). **`BookmarkGlyph`·`PencilGlyph`는 이 변경으로 프로덕션 소비처가 0이 됐다** — `MyPage.l03parity`·`ProfileCard.l03parity`의 부재 단언(짝 앵커)이 여전히 import하므로 남겨둠. |
+| `ui/MyPageScreen.tsx` | **변경.** `showPast?: boolean` prop 추가(판정은 페이지, 화면은 값만 소비). 하트 FAB 제거(Figma 근거 없음, "장식·미배선"). 메뉴 카드 재구성 — `px-lg` 내부 여백 제거하고 행마다 `p-lg` + 행 사이 카드 폭 전체 구분선 막대(옛 코드는 들여진 `border-b`). `overflow-hidden` 의도적 미부착(iOS 그림자 클리핑 회피). 헤더를 `ScrollView` 밖으로 이동(스크롤해도 고정) + 톱니 아이콘 조건부 렌더(`onPressSettings` 있을 때만). 메뉴 행 → 콜백은 `menuHandlers: Partial<Record<MenuRowKey, () => void>>`. |
+
 ## 관련
 
 - 경계 가드: `src/__tests__/settingsBoundary.test.ts`(소스 재귀 스캔, eslint 무강제 — repo-traps 참고). TRIP-610도 이 가드가 `features/onboarding` 재사용을 막아 shared 승격을 강제한 세 번째 실측.

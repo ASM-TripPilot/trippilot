@@ -19,7 +19,7 @@ import { TripCard, type TripCardVM } from '@/features/settings/ui/TripCard';
  * 여행 수가 적어(실사용 2~5) 수용(Seed Q2 — 백엔드 목록 요약 필드가 생기면 제거 가능).
  *
  * 등록 숙소 수 = `bases.length`(0→"숙소 미등록") · 일정 수 = `itinerary.days.length`("일정 N일",
- * Q1 — INV-3 상 시간 아님) · 목적지 = `destinations` region 조인 · 기간 = "M.D~M.D".
+ * Q1 — INV-3 상 시간 아님) · 제목 = `trip.title`(TRIP-775) · 기간 = "M.D~M.D".
  * 회고 진입은 **종료 카드에만**(status ENDED) → `/trips/{id}/records`(라우트 미존재라 `as Href`
  * 캐스트, Seed Q5 — 착지 실동작은 U5 화면 티켓 후속).
  */
@@ -35,6 +35,12 @@ function monthDay(iso: string): string {
 }
 
 const MS_PER_DAY = 86_400_000;
+
+/**
+ * 출발까지 이 일수 이하면 D-배지를 primary(임박)로, 넘으면 ink 로 칠한다(TRIP-775 Seed Q3=A).
+ * Figma 는 D-12 primary / D-30 ink 두 예뿐이고 기준값이 없어 정한 **발명값**(2주) — Figma 주해 요청 대상.
+ */
+const D_BADGE_URGENT_DAYS = 14;
 
 export function TripCardContainer({
   trip,
@@ -68,11 +74,12 @@ export function TripCardContainer({
 
   const vm: TripCardVM = {
     tripId: trip.tripId,
-    destinationLabel: trip.destinations.map((d) => d.region).join(' · '),
+    title: trip.title,
     dateRange: `${monthDay(trip.startDate)}~${monthDay(trip.endDate)}`,
     basesLabel,
     daysLabel: days ? `일정 ${days.length}일` : null,
     dBadge,
+    dBadgeTone: daysUntil <= D_BADGE_URGENT_DAYS ? 'primary' : 'ink',
     isEnded: trip.status === 'ENDED',
   };
 
