@@ -17,7 +17,7 @@ from datetime import date, datetime, timezone
 
 from trippilot.domain.common import GeoPoint
 from trippilot.domain.freshness import InfoPacket, ProviderKind, ProviderStatus
-from trippilot.domain.intent import Intent
+from trippilot.domain.intent import ROUTABLE_INTENTS, Intent
 from trippilot.orchestrator.info_collector import (
     INFO_REQUIREMENTS,
     InfoCollector,
@@ -109,6 +109,33 @@ def test_intent_without_a_row_raises_instead_of_returning_empty() -> None:
 def test_every_requirement_key_is_a_real_intent_label() -> None:
     """수기 문자열이던 시절의 재발 방지 — 키가 라벨 정본과 같은 공간에 있는가."""
     assert all(isinstance(k, Intent) for k in INFO_REQUIREMENTS)
+
+
+# 아직 요구표를 안 정한 의도 — 여기 있는 동안 `collect()` 는 UnknownIntentError 다.
+# 행을 채우면 이 목록에서 지운다.
+#
+# **알려진 공백을 코드에 보이게 두는 것**이 목적이다. 표의 부재로만 있으면 아무도
+# 세지 않는다 — 지금 호출자가 없어 안전할 뿐, 라우터 배선이 오는 순간 이 아홉이
+# 전부 요청 경로에서 터진다. 그리고 새 의도를 라벨에 추가하고 행을 안 적으면
+# 그 사실이 **조용히 이 목록에 섞이지 않고** 여기서 깨진다.
+_REQUIREMENTS_UNDEFINED = frozenset({
+    Intent.REGENERATE,
+    Intent.SUGGEST_ALTERNATIVE,
+    Intent.TRIP_SUMMARY,
+    Intent.STYLE_ANALYSIS,
+    Intent.GET_NEXT_SLOT,
+    Intent.SHOW_SCHEDULE,
+    Intent.GET_WEATHER,
+    Intent.GET_DISTANCE,
+    Intent.GET_POI_INFO,
+})
+
+
+def test_undefined_requirement_rows_stay_an_explicit_list() -> None:
+    actual = frozenset(i for i in ROUTABLE_INTENTS if i not in INFO_REQUIREMENTS)
+    assert actual == _REQUIREMENTS_UNDEFINED, (
+        "요구표 공백이 바뀌었다 — 행을 채웠으면 위 목록에서 지우고, "
+        "의도를 새로 추가했으면 행을 적거나 여기 명시할 것")
 
 
 # ── ④ 미등록 Provider — 기능 부재 ────────────────────────────────────
