@@ -14,9 +14,11 @@ import path from 'path';
  * 무엇을 보장하나:
  *  - **G1 편입 앵커**: 신규 소스 11파일이 정본 경로에 실재한다.
  *  - **G2 features 경계**: `features/notification/**` 가 다른 feature(`@/features/<타feature>`) 를 직접
- *    import 하지 않는다(조합은 pages 전담). 긍정 짝 — 화면이 실제로 `@/shared/**` 를 소비한다.
+ *    import 하지 않는다(조합은 pages 전담). 긍정 짝 — 모집단 안에 `@/shared/**` import 가 실제로 있다
+ *    (스캔이 import 줄을 보고 있다는 증거. TRIP-773 으로 화면이 empty 를 로컬 마크업으로 그려 화면
+ *    자체는 `@/shared/` 를 안 물 수 있어 앵커를 모집단 수준으로 올렸다).
  *  - **G3 d02 3층 책임**: 라우트→페이지→화면/훅 이 각자 몫만 진다(라우트는 조회를 모르고, 페이지가
- *    router·훅을 물고, 화면은 StateNotice 로 empty 를 그린다).
+ *    router·훅을 물고, 화면은 순수 뷰로 남는다 — TRIP-773 '모두 읽음' 배선은 페이지 몫).
  *
  * **전제**: 모든 스캔은 주석을 걷은 소스를 본다(`stripComments`, 콜론 예외로 URL·라우트 보존).
  * **가짜 통과 방지(리포 관례)**: 모든 "없어야 한다"는 같은 it 안 "있어야 한다"와 짝을 이룬다.
@@ -94,7 +96,7 @@ describe('G1 · 편입 앵커 — 신규 11파일이 정본 경로에 실재한�
 });
 
 describe('G2 · features 경계 — notification 은 다른 feature 를 직접 import 하지 않는다', () => {
-  it('features/notification/** 에 타 feature import 0건이고, 화면은 @/shared 를 문다', () => {
+  it('features/notification/** 에 타 feature import 0건이고, 모집단은 @/shared 를 문다', () => {
     const sources = scanDir(NOTIF_FEATURE_DIR_REL);
 
     // 긍정 앵커 — 모집단이 비어 있지 않고 이 칸의 화면이 그 안에 있다.
@@ -111,8 +113,10 @@ describe('G2 · features 경계 — notification 은 다른 feature 를 직접 i
       .map(({ file }) => file);
     expect(offenders).toEqual([]);
 
-    // 긍정 짝(🔴 red-first) — 화면이 실제로 공용 UI 를 소비한다(구현 후 green).
-    expect(readOne(SCREEN_REL)).toContain('@/shared/');
+    // 긍정 짝 — 모집단 어딘가에 @/shared import 가 실제로 있다(스캔이 import 줄을 본다는 증거).
+    expect(
+      sources.some(({ source }) => source.includes("from '@/shared/"))
+    ).toBe(true);
   });
 });
 
@@ -133,9 +137,17 @@ describe('🔴 G3 · d02 3층 책임 — 라우트→페이지→화면/훅', ()
     expect(page).toContain('router');
   });
 
-  it('화면이 StateNotice 로 empty 를 그린다(순수 프레젠테이션)', () => {
+  it('화면은 순수 뷰다 — 네트워크·쿼리·라우터를 모르고, empty 는 StateNotice 가 아닌 로컬 마크업(TRIP-773)', () => {
     const screen = readOne(SCREEN_REL);
+    // 긍정 — 화면 파일이 실재하고 empty 얼굴을 직접 그린다.
     expect(screen).toMatch(/export function NotificationInboxScreen\b/);
-    expect(screen).toContain('@/shared/ui/StateNotice');
+    expect(screen).toContain('notification-inbox-empty');
+    // 부정 — '모두 읽음' 배선(POST·무효화·이동)은 페이지 몫이라 화면이 물지 않는다(프리뷰 네트워크 격리).
+    expect(screen).not.toContain('@/shared/api');
+    expect(screen).not.toContain('@tanstack/react-query');
+    expect(screen).not.toContain('expo-router');
+    // 부정 — empty 삽화 수치(박스 112·제목 17·부제 13.5)는 StateNotice 고정값(16·13)과 달라 로컬 마크업
+    // (티켓·TRIP-777 선례). StateNotice 에 크기 prop 을 넣으면 소비처 ~25곳이 흔들린다.
+    expect(screen).not.toContain('@/shared/ui/StateNotice');
   });
 });

@@ -5539,7 +5539,7 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // l01 알림함 — 기본(오늘 3·이전 2, 미읽음 dot·PLAN_B 인라인 링크). 딤·글리프 픽셀은 6-b 실기 몫.
+  // l01 알림함 — 기본(오늘 3·이전 2, 미읽음 dot·PLAN_B 인라인 링크·미읽음 2 → '모두 읽음'). 딤·글리프 픽셀은 6-b 실기 몫.
   {
     key: 'notification-inbox-default',
     band: 'l',
@@ -5551,10 +5551,11 @@ export const PREVIEW_STATES: PreviewState[] = [
         isEmpty={false}
         onNavigate={noop}
         onPressBack={noop}
+        onMarkAllRead={noop}
       />
     ),
   },
-  // l01 알림함 — 엣지: 빈 알림함(StateNotice 대시 종 아이콘).
+  // l01 알림함 — 엣지: 빈 알림함(로컬 대시 박스 112 + 종 46, '모두 읽음' 없음).
   {
     key: 'notification-inbox-empty',
     band: 'l',
@@ -5566,6 +5567,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         isEmpty
         onNavigate={noop}
         onPressBack={noop}
+        onMarkAllRead={noop}
       />
     ),
   },
