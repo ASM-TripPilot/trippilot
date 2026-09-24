@@ -413,17 +413,22 @@ class HttpScheduleAgentAdapterTest : StringSpec({
     }
 
     /**
-     * **검증 요청에 무엇이 실리는지 못 박는다**(TRIP-873 후속 · TRIP-879 근거).
+     * **요청에 차선책이 실리는지 못 박는다**(TRIP-873 · TRIP-887 로 뒤집힘).
      *
-     * `toWire()` 는 `AiSlot` 을 여섯 인자로만 만들어 차선책을 **안 싣는다** — 기본값이 빈 목록이다.
-     * 그런데 경계 매퍼에 포함 정책 설정이 없어(기본 ALWAYS) **키 자체는 `[]` 로 나간다.**
+     * 종전에는 반대를 고정했다 — *"검증 요청의 슬롯에는 차선책이 빈 배열로 실린다"*. 그 근거는
+     * "상대가 소비하지 않는 값"이었는데, TRIP-887 로 `/explanations` 가 **요청 payload 의
+     * `slots[].alternatives[]` 를 읽어** 차선책 문장을 만들게 되면서 근거가 사라졌다.
      *
-     * 이 조합이 중요한 이유: 상대 런타임이 `alternatives` 를 `Extra inputs are not permitted` 로
-     * 거부하는데(TRIP-879), 우리가 보내는 것은 **늘 빈 배열**이다. 즉 이 거부로 잃는 데이터는 0 이고,
-     * 상대가 "받아서 무시" 하기만 해도 풀린다. 이 테스트가 그 사실의 근거다.
+     * **안 실으면 조용히 꺼진다** — 응답이 늘 `alternative_explanations: {}` 인데 그건 "차선책이
+     * 없다"와 **구분되지 않는 모양**이다. 그래서 값이 실제로 본문에 닿는지를 여기서 센다
+     * (상대 팀이 같은 부류를 두 번 놓쳐 합성 루트에 가드를 넣었다 — PR #668).
+     *
+     * 검증·수리 요청에도 같은 `toWire()` 가 쓰여 함께 실리지만, 상대는 그 경로에서 받아만 두고
+     * 쓰지 않는다(TRIP-879 로 422 해소). 그래서 여기서 `validate` 로 확인해도 뜻이 같다.
      */
-    "검증 요청의 슬롯에는 차선책이 빈 배열로 실린다 — 값을 되돌려 보내지 않는다" {
+    "요청 슬롯에 차선책이 실린다 — 안 실으면 상대가 문장을 만들 재료를 못 받는다" {
         // dummyOutput() 은 days 가 비어 있어 슬롯 경로가 아예 없다 — 슬롯 하나를 실은 산출물로 본다.
+        val altPoi = UUID.randomUUID()
         val solution = dummyOutput().copy(
             days = listOf(
                 DaySchedule(
@@ -431,22 +436,68 @@ class HttpScheduleAgentAdapterTest : StringSpec({
                     listOf(
                         VisitSlotDisplay(
                             poi, LocalTime.of(10, 0), LocalTime.of(11, 0), false, null, false,
-                            // 값이 있어도 되돌려 보내지 않는다는 것이 이 테스트의 요점이다.
-                            alternatives = listOf(SlotAlternative(UUID.randomUUID(), "안 실려야 한다", null)),
+                            alternatives = listOf(SlotAlternative(altPoi, "같은 카페 후보", "약 1.2km")),
                         ),
                     ),
                 ),
             ),
         )
         val (adapter, server) = fixture()
+        val alt = "$.itinerary.days[0].slots[0].alternatives[0]"
         server.expect(requestTo("http://ai.test/ai/v1/itinerary/validate"))
-            .andExpect(jsonPath("$.itinerary.days[0].slots[0].alternatives").isArray)
-            .andExpect(jsonPath("$.itinerary.days[0].slots[0].alternatives").isEmpty)
+            .andExpect(jsonPath("$alt.poi_id").value(altPoi.toString()))
+            .andExpect(jsonPath("$alt.rationale").value("같은 카페 후보"))
+            .andExpect(jsonPath("$alt.distance_range").value("약 1.2km"))
             .andRespond(withSuccess("""{"violations":[]}""", MediaType.APPLICATION_JSON))
 
         adapter.validate(solution)
 
         server.verify()
+    }
+
+    /**
+     * **차선책 문장을 받아서 버리지 않는다**(TRIP-873 ② · AI TRIP-887).
+     *
+     * 와이어 타입에는 `alternative_explanations` 가 먼저 들어와 있었는데(PR #592 가 계약만 맞췄다)
+     * `explanations()` 가 `res.explanations` 만 돌려줘 **받고도 버렸다.** 포트 반환이 맵 하나라
+     * 돌려줄 자리가 없었던 것이 원인이다 — 여기서 두 축이 다 나오는지 센다.
+     */
+    "explanations — 슬롯 근거와 차선책 문장을 둘 다 돌려준다" {
+        val altPoiId = UUID.randomUUID()
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/explanations"))
+            .andRespond(
+                withSuccess(
+                    """
+                    {"explanations":{"2026-08-01#$poi":"오전에 들르기 좋아요"},
+                     "alternative_explanations":{"2026-08-01#$altPoiId":"비 오면 여기가 나아요"},
+                     "alternatives_reason":null}
+                    """.trimIndent(),
+                    MediaType.APPLICATION_JSON,
+                ),
+            )
+
+        val result = adapter.explanations(UUID.randomUUID(), dummyOutput())
+
+        result.slots shouldBe mapOf("2026-08-01#$poi" to "오전에 들르기 좋아요")
+        result.alternatives shouldBe mapOf("2026-08-01#$altPoiId" to "비 오면 여기가 나아요")
+    }
+
+    /**
+     * **옛 응답도 깨지지 않는다** — 두 필드가 없던 시절의 AI 가 돌아와도 슬롯 근거는 살아야 한다.
+     * 기본값이 빈 맵이라 성립하는데, 그 기본값이 사라지면 역직렬화가 통째로 실패해 근거가 다 없어진다.
+     */
+    "explanations — 차선책 필드가 없는 옛 응답도 슬롯 근거는 그대로 받는다" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/explanations"))
+            .andRespond(
+                withSuccess("""{"explanations":{"2026-08-01#$poi":"좋아요"}}""", MediaType.APPLICATION_JSON),
+            )
+
+        val result = adapter.explanations(UUID.randomUUID(), dummyOutput())
+
+        result.slots shouldBe mapOf("2026-08-01#$poi" to "좋아요")
+        result.alternatives shouldBe emptyMap()
     }
 
     "validate — 위반은 200 정상 응답이고 위치 인덱스가 그대로 실린다" {

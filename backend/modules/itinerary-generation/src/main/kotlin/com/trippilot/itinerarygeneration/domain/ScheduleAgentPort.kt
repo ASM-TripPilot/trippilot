@@ -24,12 +24,10 @@ interface ScheduleAgentPort {
      * 설명은 LLM 이 만들고 ~10초를 쓴다. 생성에 붙여 두면 사용자가 첫 화면을 그만큼 늦게 본다.
      * 일정(솔버)과 근거(LLM)는 서로를 기다릴 이유가 없어 나눴다.
      *
-     * **실패는 빈 맵이다.** 근거는 부가 정보라 없다고 일정을 죽이지 않는다 — 다만 조용히 지나가지
+     * **실패는 빈 결과다.** 근거는 부가 정보라 없다고 일정을 죽이지 않는다 — 다만 조용히 지나가지
      * 않게 어댑터가 로그로 드러낸다(INV-4).
-     *
-     * @return `"{date}#{poiId}"` → 문장. 키 규약은 생성 응답의 `explanations` 와 같다(BR-U2-04).
      */
-    fun explanations(tripId: UUID, solution: ScheduleAgentOutput): Map<String, String>
+    fun explanations(tripId: UUID, solution: ScheduleAgentOutput): SlotExplanations
 
     /**
      * 슬롯 후보 제안(DEC-U3-5) — **완전 AI·같이 고르기 공통 경계**다. 경로별로 다른 API 를 두지 않는다(BR-U3-23).
@@ -302,6 +300,25 @@ data class VisitSlotDisplay(
  * 받는다(형식이 틀린 한 건 때문에 응답 전체를 잃지 않으려고).
  */
 data class SlotAlternative(val poiId: UUID, val rationale: String, val distanceRange: String?)
+
+/**
+ * 근거 조회 결과 — **두 축을 한 번에 받는다**(AI 가 한 번의 왕복으로 둘 다 준다).
+ *
+ * 나눠 두는 이유는 **키 축이 다르기 때문**이다. [slots] 는 배치된 슬롯의 POI 를 가리키고
+ * [alternatives] 는 그 슬롯을 **대신할 후보**를 가리킨다 — 한 맵에 섞으면 같은 날 같은 키가
+ * 둘 중 무엇을 뜻하는지 알 수 없다.
+ *
+ * **둘 다 빈 것이 정상 경로다**(INV-4). 상대 실패·미배선·마감 초과가 전부 빈 결과이고,
+ * 그때 화면은 슬롯 근거 없이, 차선책은 AI 템플릿 문구(`"같은 카페 후보"`)로 그려진다.
+ *
+ * @param slots `"{date}#{poiId}"` → 배치 근거. 키 규약은 생성 응답의 `explanations` 와 같다(BR-U2-04).
+ * @param alternatives `"{date}#{altPoiId}"` → **대신 골라도 좋은 이유**(AI TRIP-887).
+ *   키가 없으면 그 차선책은 AI 가 준 템플릿 `rationale` 을 그대로 쓴다 — 그게 폴백이다.
+ */
+data class SlotExplanations(
+    val slots: Map<String, String> = emptyMap(),
+    val alternatives: Map<String, String> = emptyMap(),
+)
 
 /** 사용 데이터 신선도 집계(IO-6). */
 data class FreshnessMeta(val generatedAt: Instant, val degraded: Boolean)

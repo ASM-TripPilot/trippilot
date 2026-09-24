@@ -5,6 +5,7 @@ import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.RepairResult
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
+import com.trippilot.itinerarygeneration.domain.SlotExplanations
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
 import com.trippilot.itinerarygeneration.domain.SlotCandidate
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesInput
@@ -171,8 +172,15 @@ class FakeScheduleAgent(
      *
      * 빈 맵으로 두면 "설명 단계가 통째로 빠져도" 테스트가 통과해, 분리한 배선을 아무도 안 지킨다.
      */
-    override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): Map<String, String> =
-        solution.days.flatMap { d -> d.slots.map { SlotKey.of(d.date, it.poiId) to "일정 흐름에 맞는 곳이에요" } }
-            .toMap()
+    override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): SlotExplanations = SlotExplanations(
+        slots = solution.days
+            .flatMap { d -> d.slots.map { SlotKey.of(d.date, it.poiId) to "일정 흐름에 맞는 곳이에요" } }
+            .toMap(),
+        // 차선책 쪽도 같은 이유로 채운다 — 빈 맵으로 두면 그 배선이 통째로 빠져도 fake 경로 테스트가
+        // 통과한다. 슬롯 근거와 **다른 축의 키**(차선책 POI)라 여기서 그 규약도 같이 지켜진다.
+        alternatives = solution.days
+            .flatMap { d -> d.slots.flatMap { s -> s.alternatives.map { SlotKey.of(d.date, it.poiId) to "여기도 괜찮아요" } } }
+            .toMap(),
+    )
 
 }

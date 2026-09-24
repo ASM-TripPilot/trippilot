@@ -72,13 +72,15 @@ internal data class AiSlot(
     /**
      * 슬롯별 차선책(AI TRIP-871, 슬롯당 ≤2건). **기본 빈 목록** — 이 필드가 없는 옛 AI 응답도 같은 뜻이 되게 한다.
      *
-     * **받기만 한다 — 되돌려 보내지 않는다.** [ScheduleAgentOutput.toWire] 가 이 인자를 안 넘겨 검증·수리
-     * 요청에는 늘 `[]` 가 실린다(키 자체는 나간다 — 경계 매퍼에 포함 정책 설정이 없어 기본 ALWAYS).
-     * 상대가 소비하지 않는 값을 굳이 왕복시킬 이유가 없다.
+     * **받고, 되돌려 보낸다**(TRIP-887 로 뒤집힘). `/explanations` 가 요청 payload 의 이 값을 읽어
+     * 차선책 문장을 만들기 때문에, 안 실으면 응답이 늘 `alternative_explanations: {}` 다 —
+     * **"차선책이 없다"와 구분이 안 되는 모양**이라 조용히 기능이 꺼진다.
      *
-     * *(종전 주석은 "그대로 되돌려 보낸다"였는데 코드가 그렇지 않았다 — 2026-09-16 검수에서 정정.)*
-     * 이 사실이 TRIP-879 의 근거이기도 하다: 상대 런타임이 이 키를 거부하는데 **우리가 보내는 것은 늘
-     * 빈 배열**이라, 그 거부로 잃는 데이터가 0 이다. 상대가 받아서 무시하기만 해도 풀린다.
+     * *(2026-09-16 검수에서 "되돌려 보내지 않는다"로 못 박았던 주석이다. 그 판단의 근거는 "상대가
+     * 소비하지 않는 값"이었고, TRIP-887 로 상대가 소비하게 되면서 근거가 사라졌다.)*
+     *
+     * 검증·수리 요청에도 같은 [ScheduleAgentOutput.toWire] 가 쓰여 함께 실리는데, 상대는 그 경로에서
+     * 받아만 두고 쓰지 않는다(TRIP-879 로 422 는 해소됐다).
      */
     val alternatives: List<AiSlotAlternative> = emptyList(),
 )
@@ -280,7 +282,20 @@ internal fun AiViolation.toDomain(): Violation =
 /** 도메인 산출물 → 상대 본문. 왕복 형태가 같아(생성 응답 = 검증 요청) 그대로 되돌려 보낸다. */
 internal fun ScheduleAgentOutput.toWire(): AiSchedulePayload = AiSchedulePayload(
     days = days.map { d ->
-        AiDay(d.date, d.slots.map { AiSlot(it.poiId, it.startAt, it.endAt, it.endsNextDay, it.distanceRange, it.isFixed) })
+        AiDay(
+            d.date,
+            d.slots.map {
+                AiSlot(
+                    it.poiId, it.startAt, it.endAt, it.endsNextDay, it.distanceRange, it.isFixed,
+                    // **이 인자가 빠지면 차선책 문장이 영영 안 만들어진다.** 상대 `/explanations` 는
+                    // 요청 payload 의 이 값을 읽어 두 번째 호출을 한다 — 빈 배열을 보내면 응답이
+                    // 늘 빈 맵이고, 그건 "차선책이 없다"와 같은 모양이라 아무도 눈치채지 못한다.
+                    alternatives = it.alternatives.map { a ->
+                        AiSlotAlternative(a.poiId.toString(), a.rationale, a.distanceRange)
+                    },
+                )
+            },
+        )
     },
     day1ReadyAt = day1ReadyAt,
     explanations = explanations,
