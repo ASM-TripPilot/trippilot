@@ -87,13 +87,16 @@ def test_planb_keeps_its_own_fallback_level() -> None:
 def test_edit_confirm_required_is_need_more_info() -> None:
     """FAILED 로 내면 폴백을 태우고, SUCCESS 로 내면 적용된 줄 안다."""
     from trippilot.agents.edit.agent import EditOutcome
-    from trippilot.agents.edit.commands import EditCommand, EditStatus
-    from trippilot.domain.edit import ApplyMode
+    from trippilot.agents.edit.commands import EditStatus
+    from trippilot.domain.common import PoiId
+    from trippilot.domain.edit import ApplyMode, EditCommand, EditOp
     from trippilot.agents.edit.envelope import to_agent_result
 
+    command = EditCommand(op=EditOp.MOVE_SLOT, params={"poi_id": "p1"},
+                          affected_slots=(PoiId("p1"),))
     outcome = EditOutcome(
         status=EditStatus.CONFIRM_REQUIRED,
-        command=EditCommand.__new__(EditCommand),  # 내용 무관 — 상태 사영만 본다
+        command=command,
         apply_mode=ApplyMode.CONFIRM_REQUIRED,
         reason="겹침",
     )
@@ -102,6 +105,30 @@ def test_edit_confirm_required_is_need_more_info() -> None:
     assert r.error is None
     # 도메인이 강제하는 칸 — 되물을 것이 무엇인지 호출측이 고를 수 있어야 한다.
     assert r.payload["missing"] == ["confirm"] and r.payload["reason"]
+
+
+def test_edit_confirm_payload_carries_what_is_being_confirmed() -> None:
+    """`EditOutcome` 이 CONFIRM_REQUIRED 에 command 를 필수로 거는 이유가 이것이다.
+
+    빠뜨리면 봉투가 "확인 필요"라고만 말하고 **무엇을** 확인하는지는 말하지
+    않는다 — 호출측이 확인 화면을 못 그린다. 와이어 계약
+    (`EditItineraryResponse`)은 이미 command 를 싣고 있어, 빠지면 봉투가 경계보다
+    정보를 덜 나르는 상태가 된다.
+    """
+    from trippilot.agents.edit.agent import EditOutcome
+    from trippilot.agents.edit.commands import EditStatus
+    from trippilot.agents.edit.envelope import to_agent_result
+    from trippilot.domain.common import PoiId
+    from trippilot.domain.edit import ApplyMode, EditCommand, EditOp
+
+    command = EditCommand(op=EditOp.MOVE_SLOT, params={"poi_id": "p9"},
+                          affected_slots=(PoiId("p9"),))
+    r = to_agent_result(
+        EditOutcome(status=EditStatus.CONFIRM_REQUIRED, command=command,
+                    apply_mode=ApplyMode.CONFIRM_REQUIRED, reason="겹침"),
+        task_id=_TASK, trace_id=_TRACE, metrics=_METRICS)
+
+    assert r.payload["command"] == command.to_dict()
 
 
 # ── Reflect — 실패 상태가 없다 ──────────────────────────────────────────────

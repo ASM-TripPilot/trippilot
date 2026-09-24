@@ -43,6 +43,13 @@ def to_agent_result(
             payload={
                 "missing": ["confirm"],
                 "reason": outcome.reason or "적용 전 확인 필요",
+                # **무엇을 확인하는지**가 이 봉투의 본체다. `EditOutcome` 이
+                # CONFIRM_REQUIRED 에 command 를 필수로 거는 이유가 바로 그것이고
+                # (불변식 주석: "사용자가 무엇을 확인하는지 알아야 한다"),
+                # 와이어 계약(`EditItineraryResponse`)도 command 를 싣는다.
+                # 빠뜨리면 봉투가 경계보다 정보를 덜 나르고 호출측이 확인 화면을
+                # 못 그린다. 불변식이 None 아님을 보장하므로 아래 분기는 방어용이다.
+                "command": outcome.command.to_dict() if outcome.command else None,
                 "apply_mode": outcome.apply_mode.value if outcome.apply_mode else None,
             },
             fallback_level=0, freshness=freshness, error=None, metrics=metrics,
