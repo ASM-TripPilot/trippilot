@@ -154,7 +154,9 @@ def test_confident_route_without_any_llm() -> None:
     assert math.isclose(match.confidence, 1.0, abs_tol=1e-9)
     assert match.reason is None
     assert match.routing.mode is RoutingMode.FAST_PATH  # Fast Path 판정이 바로 선다
-    assert match.routing.handler == "WeatherAgent"
+    # FAST_PATH 는 오케스트레이터 직접 처리라 handler 가 없다 — 이름이 있으면
+    # 그 이름의 에이전트 클래스가 실재해야 한다(domain/intent.py 불변식).
+    assert match.routing.handler is None
 
 
 def test_confident_fills_arguments_from_the_intent_table() -> None:
@@ -522,7 +524,7 @@ def test_augmented_questions_load_with_their_own_origin() -> None:
     raw = {
         "version": "t", "origin": "seed",
         "intents": [{
-            "intent": "GET_WEATHER", "handler": "WeatherAgent", "mode": "FastPath",
+            "intent": "GET_WEATHER", "handler": None, "mode": "FastPath",
             "reviewed": True,
             "questions": ["내일 날씨 어때?"],
             "augmented": ["낼 날씨 어떰?", "내일 비 오나요?"],
@@ -539,7 +541,7 @@ def test_augmented_question_duplicating_a_seed_is_rejected() -> None:
     raw = {
         "version": "t", "origin": "seed",
         "intents": [{
-            "intent": "GET_WEATHER", "handler": "WeatherAgent", "mode": "FastPath",
+            "intent": "GET_WEATHER", "handler": None, "mode": "FastPath",
             "reviewed": True, "questions": ["내일 날씨 어때?"], "augmented": ["내일 날씨 어때?"],
         }],
     }
@@ -604,12 +606,28 @@ def test_routing_table_and_enum_stay_in_sync() -> None:
     assert Intent.OUT_OF_SCOPE not in ROUTABLE_INTENTS
 
 
+def test_a_handler_name_exists_if_and_only_if_the_route_delegates() -> None:
+    """**`handler is not None` ⇔ `mode is DELEGATE`** — 이 표의 불변식.
+
+    종전에는 이 검사에 면제 구멍이 있었다: FAST_PATH 의 `"WeatherAgent"`·
+    `"TransitAgent"`·`"PlaceScoutAgent"` 를 "v2 에서 Provider 라 검사 밖"으로 적어
+    두고 표에는 그대로 남겨 뒀다. **면제가 테스트 docstring 에만 있어서 표를 읽는
+    사람에게는 안 보였고**, 다른 세션이 이 표를 근거로 "에이전트 7종"으로 계획을
+    세웠다가 되돌렸다(2026-09-24). 문서가 아니라 계획을 오염시킨 것이라 이름을 지우고
+    면제도 없앴다 — 이제 이름이 있으면 **반드시** 실재하는 클래스다.
+
+    어느 Provider 를 쓰는지는 이 표의 일이 아니다: `INFO_REQUIREMENTS` 가 그 자리다.
+    """
+    named = {i for i, e in ROUTING_TABLE.items() if e.handler is not None}
+    delegating = {i for i, e in ROUTING_TABLE.items() if e.mode is RoutingMode.DELEGATE}
+    assert named == delegating, "handler 이름과 DELEGATE 가 어긋난다"
+
+
 def test_delegate_handlers_name_real_agent_classes() -> None:
     """DELEGATE 행의 handler 문자열은 `agents/` 에 실재하는 클래스여야 한다.
 
     ScheduleAgent(#480)·PlanBAgent(개명 전 PlanBRagPipeline)는 표가 먼저 이름을 적고
     코드가 뒤따랐다 — 라우터가 배선되기 전까지는 아무도 안 읽어서 어긋나도 증상이 없다.
-    FAST_PATH 의 Weather/Transit/PlaceScout 는 v2 에서 Provider 라 이 검사 밖이다.
     """
     import importlib
 
