@@ -25,7 +25,13 @@ from collections.abc import Mapping
 
 from trippilot.domain.common import BUDGET_TOKENS, BudgetLevel
 from trippilot.domain.context import ResourceRef
-from trippilot.domain.persona import PersonaSummary, companion_from, taste_tags_from
+from trippilot.domain.persona import (
+    PersonaSummary,
+    activities_from,
+    companion_from,
+    cuisines_from,
+    taste_tags_from,
+)
 from trippilot.ports.http_json_port import HttpJson
 
 _PATH = "/internal/users/{account_id}/persona"
@@ -74,6 +80,8 @@ def _to_summary(body: Mapping) -> PersonaSummary:
     return PersonaSummary(
         taste_tags=taste_tags_from(body.get("styles") or ()),
         companion=companion_from(body.get("companion_types") or ()),
+        activities=activities_from(body.get("activities") or ()),
+        cuisines=cuisines_from(body.get("food_tastes") or ()),
         budget=(BUDGET_TOKENS.get(str(tier).strip().upper(), BudgetLevel.MID)
                 if tier else BudgetLevel.MID),
     )
