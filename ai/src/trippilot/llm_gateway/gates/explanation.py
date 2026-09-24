@@ -34,6 +34,11 @@ class ExplanationGate:
     - `EXPLANATION` (슬롯 추천 이유, 프롬프트 v0.3.0) — `{"explanations": [{"poiId", "tags": [...]}]}`.
       태그를 개별 검사(형식·시간 표현·연락처 꼴)해 걸러내고 앞에서 `HASHTAG_COUNT`개까지
       공백으로 이어 붙여 `PoiExplanation.text` 에 담는다. 와이어는 그대로 문자열 하나다.
+      **태그가 하나도 안 남은 슬롯은 싣지 않고 `dropped_count` 에 센다** — 빈 문자열로 실으면
+      백엔드(`SecondPhaseGenerator`)가 이미 있는 근거를 빈 값으로 덮고, 게이트웨이는 성공으로
+      집계해 "모델이 `#` 을 빼먹는" 드리프트가 어디에도 남지 않는다(INV-4). 전 슬롯이 그러면
+      survivors 가 비어 `gate_dropped_all` 로 폴백 사유가 실린다. `dropped_ids` 는 풀 밖 poiId
+      만 담는다(문구 드롭은 ID 가 아니다 — share_card_copy·nudge 선례).
     - 그 외(`ALTERNATIVE_EXPLANATION`, TRIP-887) — `{"poiId", "text"}` 문장. 종전 처리 그대로.
 
     중복 poiId 는 첫 등장 채택.
@@ -74,12 +79,17 @@ class ExplanationGate:
         seen: set[str] = set()
         survivors: list[PoiExplanation] = []
         dropped: list[PoiId] = []
+        blank = 0  # 해시태그 경로 — 태그가 하나도 안 남은 슬롯 수
         for pid_str, text in parsed:
             if pid_str in seen:
                 continue
             seen.add(pid_str)
             pid = PoiId(pid_str)
-            if pool.contains(pid):
+            in_pool = pool.contains(pid)
+            if hashtags and not text and in_pool:
+                blank += 1
+                continue
+            if in_pool:
                 # 형제 게이트(alternative_selection)와 같은 처리 — 문장만 버리고 슬롯은 살린다.
                 # ⑴ 시간·소요시간 표현: 이 text 는 백엔드 `visit_slot.placement_reason` 과
                 #    리비전 스냅샷에 **영속된다**. 걸러 내지 않으면 INV-3 위반이 화면과 DB
@@ -97,9 +107,9 @@ class ExplanationGate:
             GateDropEvent(
                 trace_id=trace_id, occurred_at=now, component="c1.gate",
                 feature=feature.value, dropped_ids=tuple(dropped),
-                total_count=len(seen), dropped_count=len(dropped),
+                total_count=len(seen), dropped_count=len(dropped) + blank,
             )
-            if dropped else None
+            if dropped or blank else None
         )
         return GateOutcome(
             value=tuple(survivors),
@@ -118,7 +128,7 @@ def _sentence_text(item: dict, i: int) -> str:
 
 def _hashtag_text(item: dict, i: int) -> str:
     """해시태그 경로 — 형태 위반은 엄격하게(배열·문자열 아님 = parse_error), 내용 위반은 태그
-    단위로 걸러낸다. 걸러낸 뒤 0개면 빈 문자열 — "슬롯은 살리고 문장만 비운다"와 같은 자리다.
+    단위로 걸러낸다. 걸러낸 뒤 0개면 빈 문자열을 돌려주고, 호출측(apply)이 그 슬롯을 싣지 않고 센다.
     """
     tags = item.get("tags")
     if not isinstance(tags, list) or not all(isinstance(t, str) for t in tags):

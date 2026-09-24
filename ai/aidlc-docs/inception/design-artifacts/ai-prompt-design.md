@@ -142,8 +142,9 @@ if not validated:
 
 **게이트 (태그 단위 격리)**: 형식(`^#[^\s#]{1,10}$`)·시간 표현(`_TIME_EXPR`)·연락처 꼴
 (`has_contact_like`) 위반은 **그 태그만** 빠진다. 순서 보존 중복 제거 후 앞에서 5개까지. 걸러낸
-뒤 0개면 그 슬롯의 값은 빈 문자열(슬롯은 살린다 — 문장 시절의 contact-like 처리와 같은 자리).
-poiId ∉ 풀은 종전대로 드롭 + `GateDropEvent`. 게이트가 검사하는 규칙은 **전부 프롬프트에도**
+뒤 0개면 **그 슬롯은 싣지 않고 `GateDropEvent.dropped_count` 에 센다**(빈 문자열로 실으면 백엔드가
+기존 근거를 빈 값으로 덮고 성공으로 집계돼 드리프트가 보이지 않는다 — INV-4). 전 슬롯이 그러면
+`gate_dropped_all` 폴백 사유. poiId ∉ 풀은 종전대로 드롭 + `dropped_ids`. 게이트가 검사하는 규칙은 **전부 프롬프트에도**
 있어야 한다(share_card_copy 의 해시태그 규칙 누락 사고) — 상수 정합은 테스트가 고정한다.
 
 **폴백**: 생성 실패 시 해당 슬롯 reason 필드 null — 일정 자체는 정상 제공.
@@ -387,7 +388,7 @@ poiId ∉ 풀은 종전대로 드롭 + `GateDropEvent`. 게이트가 검사하�
 
 ### 2.8 AlternativeExplanation — 워커 (상위 티어) `[정본]` — 슬롯별 차선책의 근거 문장(TRIP-887)
 
-**목적**: 생성 응답의 슬롯별 차선책(TRIP-871, 슬롯당 ≤2건)에 대해 "확정된 장소 대신 골라도 좋은 이유" **1~2문장**을 취향 기준으로 생성. Explanation(§2.2)과 **별개 feature** — 그 프롬프트는 "확정된 일정의 각 장소"를 전제해 차선책을 섞으면 모델에게 확정되지 않은 장소를 확정된 것처럼 말하게 된다. 구현: `ai/prompts/alternative_explanation.yaml` v0.1.0 · 출구 게이트는 `ExplanationGate` 재사용(출력 JSON 모양 동일) · `llm_gateway/workers/alternative_explanation.py`.
+**목적**: 생성 응답의 슬롯별 차선책(TRIP-871, 슬롯당 ≤2건)에 대해 "확정된 장소 대신 골라도 좋은 이유" **1~2문장**을 취향 기준으로 생성. Explanation(§2.2)과 **별개 feature** — 그 프롬프트는 "확정된 일정의 각 장소"를 전제해 차선책을 섞으면 모델에게 확정되지 않은 장소를 확정된 것처럼 말하게 된다. 구현: `ai/prompts/alternative_explanation.yaml` v0.1.0 · 출구 게이트는 `ExplanationGate` 재사용 — 단 **출력 모양은 다르다**: §2.2 는 v0.3.0 부터 `tags`, 여기는 `text` 문장이고 게이트가 `feature` 로 갈라 본다 · `llm_gateway/workers/alternative_explanation.py`.
 
 **입력 컨텍스트** (좌표 미포함 — G181):
 ```
@@ -396,7 +397,7 @@ poiId ∉ 풀은 종전대로 드롭 + `GateDropEvent`. 게이트가 검사하�
   같은 선택지가 여러 슬롯에 있으면 첫 쌍만(문장은 선택지 POI 당 1개 — 취향 기준 근거라 슬롯과 무관)
 ```
 
-**OutputSchema**: `{"explanations": [{"poiId": "string", "text": "string(1~2문장)"}]}` — §2.2 와 동일.
+**OutputSchema**: `{"explanations": [{"poiId": "string", "text": "string(1~2문장)"}]}` — §2.2 의 v0.1.0 모양(§2.2 는 v0.3.0 부터 `tags` 배열; 이쪽은 문장 유지).
 
 **규칙(프롬프트)**: 선택지 poiId 안에서만 · 근거 그라운딩 · 확정 장소를 깎아내리지 않음 · 시각·이동시간·거리 수치 미언급(INV-3).
 

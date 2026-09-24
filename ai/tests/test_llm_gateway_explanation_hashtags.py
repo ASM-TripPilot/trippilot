@@ -1,4 +1,4 @@
-"""EXPL-H1~H13 — EXPLANATION 게이트 해시태그 경로 (v0.2.0) 속성 (gates/explanation.py).
+"""EXPL-H1~H13 — EXPLANATION 게이트 해시태그 경로 속성 (gates/explanation.py).
 
 | 속성 | 내용 |
 |---|---|
@@ -6,23 +6,27 @@
 | **EXPL-H2** | 시간 표현·연락처 꼴은 **그 태그만** 빠진다 — 슬롯 통째 blank 금지 |
 | EXPL-H3 | (a) 유효 6개+ → **앞 5개, 순서 보존** |
 | **EXPL-H4** | (b) 유효+무효 혼합 → 유효만, **필터 뒤 절단** (앞 5칸에 무효가 있어도 유효 ≥5 면 정확히 5) |
-| EXPL-H5 | (c) 다중 슬롯 — 전부 무효인 슬롯은 `text=""` 로 **살고** 다른 슬롯·error·drop_event 에 영향 없음 |
-| EXPL-H6 | (d) 슬롯 하나 + 전부 무효(또는 `tags: []`) → `value=(PoiExplanation(p1,""),)`, `error=None`, `drop_event=None` — 라벨 없음(문장판 contact-like 비움과 동일 판정) |
-| EXPL-H7 | (e) 왕복·멱등: `text.split(" ") == 기대 태그열`, 결과를 다시 넣어도 같은 text, 빈 목록이면 `""` |
+| **EXPL-H5** | (c) 다중 슬롯 — 태그가 0개 남은 슬롯은 **싣지 않고 센다**: 산 슬롯만 value, `dropped_count += 빈 슬롯 수`, `dropped_ids` 는 풀 밖 전용, 산 슬롯이 하나라도 있으면 `error None` |
+| **EXPL-H6** | (d) 슬롯 하나 + 전부 무효(또는 `tags: []`) → `value=()`, `error="gate_dropped_all"`, `drop_event(dropped_ids=(), dropped_count=1, total_count=1)` — 빈 문자열로 실으면 백엔드가 기존 근거를 덮고 드리프트가 안 보인다(INV-4) |
+| EXPL-H7 | (e) 왕복·멱등: `text.split(" ") == 기대 태그열`, 결과를 다시 넣어도 같은 text |
 | EXPL-H8 | 결정론: 같은 raw 두 번·항목 키 순서 바꿔도 같은 `GateOutcome` |
-| EXPL-H9 | INV-1·드롭 계수 불변: 유령 poiId 드롭 + `GateDropEvent`(total=서로 다른 id 수), 중복 poiId 첫 등장, **태그 전부 무효인 풀 안 슬롯은 드롭으로 안 센다** |
+| **EXPL-H9** | INV-1·드롭 계수: 유령 poiId → `dropped_ids`, 빈 슬롯 → 계수만, `total=서로 다른 id 수`, 중복 poiId 첫 등장, **풀 밖 판정이 먼저**(유령은 blank 로 안 센다), 라벨 2종(`gate_dropped_all`/`llm_empty_result`) 보존 |
 | EXPL-H10 | 스키마 엄격: `tags` 비배열·원소 비문자열·`tags` 누락(v0.1.0 `text` 회귀)·`explanations` 비배열 → 전체 `parse_error` |
 | EXPL-H11 | 길이 경계: 본문 1~10 통과, 11 탈락, `#` 은 안 센다(코드포인트 기준) |
 | EXPL-H12 | 처리 순서 `strip → 첫 등장 중복 제거 → 필터 → 5개`: 공백 패딩은 살고 패딩만 다른 중복은 하나로, 중복 제거는 **절단보다 먼저** |
-| EXPL-H13 | `feature=ALTERNATIVE_EXPLANATION` 은 종전 **문장** 경로 그대로 — 보통 문장 유지·연락처/시간 문장은 `""`·풀 밖 드롭·`tags` 스키마는 parse_error |
+| EXPL-H13 | `feature=ALTERNATIVE_EXPLANATION` 은 종전 **문장** 경로 그대로 — 보통 문장 유지·연락처/시간 문장은 `""` 로 **슬롯 유지**·풀 밖 드롭·`tags` 스키마는 parse_error |
 
 프롬프트 ↔ 게이트 상수 정합(개수 5·길이 10)은 `test_llm_gateway_extended.py::
 test_explanation_prompt_states_the_gate_limits` 가 고정한다 — 여기서 다시 쓰지 않는다.
+빈 슬롯 처리의 **예제**는 extended 의 `…all_tags_invalid_omits_slot_and_counts_it` 과 injection_defense 의
+`…omits_slot_whose_tags_all_fail…` 이 든다 — 여기서는 그 규칙을 무효 클래스·슬롯 구성 전 분포로 일반화한다.
 
 **오라클은 규칙에서 따로 적었다.** `_TAG_MAX=10`·`_TAG_KEEP=5` 는 설계값 **리터럴**이다(구현 상수
 `HASHTAG_*` 를 import 하지 않는다 — reflection_template 테스트의 `_SCENE_MIN` 선례). 구현이
 값을 바꾸면 여기가 울어야 한다. 형식 정규식도 테스트가 따로 적고, 시간·연락처 검출기 2종은 규칙이
 **이름으로** 지정한 공유 함수라 import 한다(그 둘의 성질은 test_gate_injection_defense 몫).
+슬롯 단위 결과(`_expected_outcome`)도 규칙 문장 그대로다: 중복 poiId 첫 등장 → 풀 밖이면 `dropped_ids`
+→ 태그가 0개면 blank 계수 → 남으면 survivor. 드롭 이벤트는 `dropped or blank` 일 때만.
 
 **알려진 한계 — 버그로 고정하지 않는다** (팀 결정 2026-09-24): 길이는 코드포인트(`#🇰🇷` 는 2),
 ZWSP(U+200B) 는 `\\s` 밖이라 형식을 통과한다. 생성기는 한글 음절만 써서 그 자리를 밟지 않는다.
@@ -41,8 +45,8 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from trippilot.domain.common import PoiId, TraceId
-from trippilot.domain.llm import CandidatePool, LlmFeature, PoiExplanation
-from trippilot.llm_gateway.gates.base import has_contact_like
+from trippilot.domain.llm import CandidatePool, LlmFeature
+from trippilot.llm_gateway.gates.base import GateOutcome, has_contact_like
 from trippilot.llm_gateway.gates.explanation import ExplanationGate
 from trippilot.llm_gateway.gates.reflection_template import _TIME_EXPR
 
@@ -78,6 +82,43 @@ def _expected_text(tags: list[str]) -> str:
     return " ".join(_expected_tags(tags))
 
 
+def _expected_outcome(slots: list[tuple[str, list[str]]], pool_ids: set[str]):
+    """슬롯 목록 → (survivors[(pid, text)], dropped_ids[pid], blank, total).
+
+    중복 poiId 는 첫 등장만 → 풀 밖이면 `dropped_ids`(풀 밖 판정이 먼저) → 태그 0개면 blank
+    → 남으면 survivor. 규칙 문장을 그대로 옮긴 것이고 구현의 루프를 베낀 것이 아니다.
+    """
+    first: dict[str, list[str]] = {}
+    for pid, tags in slots:
+        first.setdefault(pid, tags)
+    survivors, dropped, blank = [], [], 0
+    for pid, tags in first.items():
+        if pid not in pool_ids:
+            dropped.append(pid)
+            continue
+        text = _expected_text(tags)
+        if text:
+            survivors.append((pid, text))
+        else:
+            blank += 1
+    return survivors, dropped, blank, len(first)
+
+
+def _assert_outcome(out: GateOutcome, slots, pool_ids) -> None:
+    """value·drop_event·error 세 축을 한 번에 — 규칙의 라벨 2종까지."""
+    survivors, dropped, blank, total = _expected_outcome(slots, pool_ids)
+    assert [(str(e.poi_id), e.text) for e in out.value] == survivors
+    if dropped or blank:
+        assert out.drop_event is not None
+        assert [str(p) for p in out.drop_event.dropped_ids] == dropped   # 풀 밖 전용·첫 등장 순
+        assert out.drop_event.dropped_count == len(dropped) + blank
+        assert out.drop_event.total_count == total
+        assert out.error == (None if survivors else "gate_dropped_all")
+    else:
+        assert out.drop_event is None
+        assert out.error == (None if survivors else "llm_empty_result")
+
+
 # ── 하네스 (test_gate_injection_defense 의 `_Pool` 재사용) ───────────────
 
 
@@ -92,13 +133,20 @@ def _explain_tags(*slots: tuple[str, list[str]], pool: tuple[str, ...] = ("p1",)
     return _apply(raw, *pool, feature=feature)
 
 
-def _one(tags: list[str]):
-    """슬롯 하나(p1) 의 text."""
+def _one(tags: list[str]) -> str:
+    """슬롯 하나(p1) 의 text — 태그가 남으면 그 문자열, 0개면 `""` 를 돌려주되 **슬롯이 빠지고
+    세어졌는지**(H6 규칙) 까지 확인한다. 호출측은 `""` 를 "무효" 로 읽으면 된다."""
     out = _explain_tags(("p1", tags))
-    assert out.error is None and out.drop_event is None
-    (item,) = out.value
-    assert item.poi_id == PoiId("p1")
-    return item.text
+    if _expected_tags(tags):
+        assert out.error is None and out.drop_event is None
+        (item,) = out.value
+        assert item.poi_id == PoiId("p1")
+        return item.text
+    assert out.value == () and out.error == "gate_dropped_all"
+    assert out.drop_event is not None
+    assert out.drop_event.dropped_ids == () and out.drop_event.dropped_count == 1
+    assert out.drop_event.total_count == 1
+    return ""
 
 
 # ── 생성기 — 한글 음절만 (숫자·라틴·`.`·`@` 없음 → 시간·연락처 규칙에 절대 안 걸린다) ──
@@ -131,6 +179,10 @@ _CONTACT_TAGS = st.sampled_from(
     ["#a.kr", "#서울.kr", "#t.me", "#go.shop", "#www.a", "#x@y.io", "#http://a"])
 _INVALID = st.one_of(_BAD_FORMAT, _TIME_TAGS, _CONTACT_TAGS)
 _MIXED = st.lists(st.one_of(_VALID, _PADDED_VALID, _INVALID), max_size=12)
+# 태그가 0개 남는 슬롯 재료 — 빈 배열 포함
+_BLANK_TAGS = st.one_of(st.just([]), st.lists(_INVALID, min_size=1, max_size=6))
+# 태그가 최소 1개 남는 슬롯 재료
+_LIVE_TAGS = st.lists(st.one_of(_VALID, _INVALID), min_size=1, max_size=8).filter(_expected_tags)
 
 _PBT = settings(max_examples=150, deadline=None)
 
@@ -143,6 +195,14 @@ def _front_loaded(draw) -> list[str]:
     rest = draw(st.permutations(valid + bad[1:]))
     at = draw(st.integers(0, min(4, len(rest))))
     return rest[:at] + [bad[0]] + rest[at:]
+
+
+@st.composite
+def _slot_mixes(draw) -> list[tuple[str, list[str]]]:
+    """풀 안 슬롯 1~5개 — 살 것과 빈 것을 섞고 순서도 섞는다. poiId 는 서로 다르다."""
+    n = draw(st.integers(1, 5))
+    kinds = draw(st.lists(st.booleans(), min_size=n, max_size=n))     # True = 산다
+    return [(f"p{i}", draw(_LIVE_TAGS if live else _BLANK_TAGS)) for i, live in enumerate(kinds)]
 
 
 # ── EXPL-H1: 태그 단위 형식 판정 ───────────────────────────────────────
@@ -223,47 +283,77 @@ def test_h4_filter_happens_before_truncation(tags) -> None:
 @_PBT
 @given(tags=_MIXED)
 def test_h4_mixed_list_equals_oracle(tags) -> None:
-    """무작위 혼합(패딩·중복 포함) 전 분포에서 등식."""
+    """무작위 혼합(패딩·중복 포함) 전 분포에서 등식 — 0개 남는 경우는 `_one` 이 H6 규칙까지 본다."""
     assert _one(tags) == _expected_text(tags)
 
 
-# ── EXPL-H5: (c) 다중 슬롯 — 빈 슬롯은 살고 이웃에 영향 없음 ─────────────
+# ── EXPL-H5: (c) 다중 슬롯 — 빈 슬롯은 싣지 않고 센다, 이웃은 그대로 ────────
 
 
 @_PBT
-@given(bad=st.lists(_INVALID, min_size=1, max_size=6),
-       good=st.lists(st.one_of(_VALID, _INVALID), min_size=1, max_size=8)
-              .filter(lambda ts: _expected_tags(ts)),
-       bad_first=st.booleans())
-def test_h5_all_invalid_slot_survives_blank_next_to_a_good_one(bad, good, bad_first) -> None:
+@given(slots=_slot_mixes())
+def test_h5_blank_slots_are_omitted_and_counted_live_slots_untouched(slots) -> None:
+    """산 슬롯만 value(입력 순서), 빈 슬롯 수만큼 `dropped_count`, `dropped_ids` 는 비어 있다.
+
+    `""` 로 실으면 백엔드가 기존 placementReason 을 빈 값으로 덮고 성공으로 집계돼 '#' 누락
+    드리프트가 어디에도 남지 않는다(INV-4) — 그래서 "싣지 않고 센다".
+    """
+    pool = tuple(pid for pid, _ in slots)
+
+    out = _explain_tags(*slots, pool=pool)
+
+    _assert_outcome(out, slots, set(pool))
+    survivors, _, blank, _ = _expected_outcome(slots, set(pool))
+    if blank and survivors:
+        assert out.error is None                      # 하나라도 살면 실패가 아니다
+        assert out.drop_event.dropped_ids == ()       # 풀 밖 전용
+    if not blank:
+        assert out.drop_event is None                 # 전부 유효 태그가 있을 때만 None
+
+
+@_PBT
+@given(bad=_BLANK_TAGS, good=_LIVE_TAGS, bad_first=st.booleans())
+def test_h5_one_blank_slot_next_to_one_live_slot(bad, good, bad_first) -> None:
     slots = [("pa", bad), ("pb", good)] if bad_first else [("pb", good), ("pa", bad)]
 
     out = _explain_tags(*slots, pool=("pa", "pb"))
 
-    assert out.error is None and out.drop_event is None
-    assert [str(e.poi_id) for e in out.value] == [pid for pid, _ in slots]
-    by_id = {str(e.poi_id): e.text for e in out.value}
-    assert by_id["pa"] == ""
-    assert by_id["pb"] == _expected_text(good)
+    assert out.error is None
+    assert [(str(e.poi_id), e.text) for e in out.value] == [("pb", _expected_text(good))]
+    assert out.drop_event is not None
+    assert (out.drop_event.dropped_ids, out.drop_event.dropped_count, out.drop_event.total_count) == ((), 1, 2)
 
 
-# ── EXPL-H6: (d) 슬롯 하나 + 전부 무효 → 라벨 없음 ───────────────────────
+# ── EXPL-H6: (d) 슬롯 하나 + 전부 무효 → 빠지고 세어지고 gate_dropped_all ──────
 
 
 @_PBT
-@given(tags=st.one_of(st.just([]), st.lists(_INVALID, min_size=1, max_size=8)))
-def test_h6_single_slot_all_invalid_is_kept_blank_without_error(tags) -> None:
-    """`value=(PoiExplanation(p1,""),)`·`error=None`·`drop_event=None`.
+@given(tags=_BLANK_TAGS)
+def test_h6_single_slot_all_invalid_is_omitted_counted_and_labelled(tags) -> None:
+    """`value=()`·`error="gate_dropped_all"`·`drop_event(dropped_ids=(), dropped_count=1, total_count=1)`.
 
-    `empty_result_error` 는 value 의 truthiness 만 보고, 빈 text 슬롯도 원소 1개라 참이다 —
-    문장판이 연락처 꼴을 비우던 자리와 **같은 판정**이다(`llm_empty_result` 도
-    `gate_dropped_all` 도 아니다). `tags: []` 도 같은 칸(팀 결정 2026-09-24).
+    라벨은 `gate_dropped_all` 이다 — drop_event 가 있으므로 `llm_empty_result` 가 아니다
+    (TRIP-260 #5 의 2종 구분: 게이트가 버렸다는 신호). `tags: []` 도 같은 칸.
     """
     out = _explain_tags(("p1", tags))
 
-    assert out.value == (PoiExplanation(PoiId("p1"), ""),)
-    assert out.error is None
-    assert out.drop_event is None
+    assert out.value == ()
+    assert out.error == "gate_dropped_all"
+    assert out.drop_event is not None
+    assert out.drop_event.dropped_ids == ()
+    assert (out.drop_event.dropped_count, out.drop_event.total_count) == (1, 1)
+
+
+@_PBT
+@given(slots=st.lists(st.tuples(st.sampled_from(["p1", "p2", "p3"]), _BLANK_TAGS), min_size=1, max_size=5))
+def test_h6_all_slots_blank_is_gate_dropped_all_with_distinct_count(slots) -> None:
+    """전 슬롯이 빈 경우(중복 poiId 포함) — 계수는 **서로 다른** poiId 수, 라벨은 gate_dropped_all."""
+    out = _explain_tags(*slots, pool=("p1", "p2", "p3"))
+    distinct = len(dict.fromkeys(pid for pid, _ in slots))
+
+    assert out.value == () and out.error == "gate_dropped_all"
+    assert out.drop_event.dropped_ids == ()
+    assert (out.drop_event.dropped_count, out.drop_event.total_count) == (distinct, distinct)
 
 
 # ── EXPL-H7: (e) 왕복·멱등 ──────────────────────────────────────────
@@ -304,42 +394,44 @@ def test_h8_same_raw_twice_and_key_order_do_not_matter(slots) -> None:
 
 @_PBT
 @given(pool=candidate_pools().filter(lambda p: bool(p.poi_ids)),
-       picks=st.lists(st.integers(0, 3), min_size=1, max_size=5),
+       picks=st.lists(st.integers(0, 3), min_size=0, max_size=5),
        ghosts=st.lists(st.sampled_from(["유령1", "유령2"]), max_size=3),
-       tag_lists=st.lists(_MIXED, min_size=8, max_size=8))
-def test_h9_closed_set_and_drop_accounting_unchanged(pool: CandidatePool, picks, ghosts, tag_lists) -> None:
+       tag_lists=st.lists(_MIXED, min_size=8, max_size=8),
+       shuffle=st.randoms(use_true_random=False))
+def test_h9_closed_set_and_drop_accounting(pool: CandidatePool, picks, ghosts, tag_lists, shuffle) -> None:
+    """유령·중복·빈 슬롯이 섞인 전 분포에서 value·drop_event·error 가 오라클과 같다.
+
+    유령은 `dropped_ids` 로만 가고 blank 로 세지 않는다(풀 밖 판정이 먼저) — 유령의 태그가 전부
+    무효여도 `dropped_count` 에 한 번만 든다.
+    """
     ids = sorted(pool.poi_ids, key=str)
     in_pool = [str(ids[i % len(ids)]) for i in picks]            # 중복 허용
     ghost_ids = [g for g in ghosts if PoiId(g) not in pool.poi_ids]
     order = in_pool + ghost_ids
+    shuffle.shuffle(order)
     slots = list(zip(order, tag_lists))
     raw = json.dumps({"explanations": [{"poiId": p, "tags": t} for p, t in slots]})
 
     out = ExplanationGate().apply(raw, pool, feature=_EXP, trace_id=_TID, now=_NOW)
 
-    first_seen: dict[str, list[str]] = {}
-    for p, t in slots:
-        first_seen.setdefault(p, t)
-    expected_ids = [p for p in dict.fromkeys(order) if PoiId(p) in pool.poi_ids]
-    assert [str(e.poi_id) for e in out.value] == expected_ids            # 첫 등장·입력 순서
-    assert [e.text for e in out.value] == [_expected_text(first_seen[p]) for p in expected_ids]
-    distinct_ghosts = list(dict.fromkeys(ghost_ids))
-    if distinct_ghosts:
-        assert out.drop_event is not None
-        assert out.drop_event.dropped_count == len(distinct_ghosts)
-        assert out.drop_event.total_count == len(dict.fromkeys(order))
-        assert set(map(str, out.drop_event.dropped_ids)) == set(distinct_ghosts)
-        assert out.error is None                                          # 풀 안 슬롯이 하나는 있다
-    else:
-        assert out.drop_event is None and out.error is None
+    _assert_outcome(out, slots, {str(p) for p in pool.poi_ids})
 
 
-def test_h9_blank_slot_is_not_counted_as_dropped() -> None:
-    """태그가 전부 무효인 풀 안 슬롯은 **살아 있다** — 드롭 계수·이벤트에 들어가면 안 된다."""
-    out = _explain_tags(("p1", ["#30분"]), ("유령", ["#좋음"]))
-    assert [str(e.poi_id) for e in out.value] == ["p1"] and out.value[0].text == ""
-    assert out.drop_event is not None and out.drop_event.dropped_count == 1
-    assert out.drop_event.total_count == 2
+def test_h9_ghost_with_blank_tags_is_dropped_not_blank() -> None:
+    """풀 밖 판정이 먼저 — 유령 슬롯의 태그가 전부 무효여도 `dropped_ids` 에 들고 blank 로는 안 센다."""
+    out = _explain_tags(("유령", ["#30분"]), ("p1", ["#고궁산책"]))
+    assert [(str(e.poi_id), e.text) for e in out.value] == [("p1", "#고궁산책")]
+    assert [str(p) for p in out.drop_event.dropped_ids] == ["유령"]
+    assert (out.drop_event.dropped_count, out.drop_event.total_count) == (1, 2)   # 2 면 이중 계수
+    assert out.error is None
+
+
+def test_h9_blank_and_ghost_add_up() -> None:
+    """빈 슬롯 1 + 유령 1 → dropped_count 2, dropped_ids 는 유령만, 산 슬롯 하나라 error None."""
+    out = _explain_tags(("p1", ["#30분"]), ("유령", ["#좋음"]), ("p2", ["#야경"]), pool=("p1", "p2"))
+    assert [(str(e.poi_id), e.text) for e in out.value] == [("p2", "#야경")]
+    assert [str(p) for p in out.drop_event.dropped_ids] == ["유령"]
+    assert (out.drop_event.dropped_count, out.drop_event.total_count) == (2, 3)
     assert out.error is None
 
 
@@ -347,6 +439,7 @@ def test_h9_empty_result_labels_are_preserved() -> None:
     """전부 유령 → gate_dropped_all, 빈 배열 → llm_empty_result (TRIP-260 #5 라벨 2종)."""
     assert _explain_tags(("유령", ["#좋음"])).error == "gate_dropped_all"
     assert _apply('{"explanations": []}', "p1").error == "llm_empty_result"
+    assert _apply('{"explanations": []}', "p1").drop_event is None
 
 
 # ── EXPL-H10: 스키마 엄격 ──────────────────────────────────────────
@@ -456,8 +549,10 @@ def test_h13_alternative_keeps_ordinary_sentence() -> None:
 
 @pytest.mark.parametrize("text", ["예약은 book-now.example.kr 에서 미리 하세요", "관람에 약 40분이면 충분합니다"])
 def test_h13_alternative_blanks_contact_or_time_sentence_but_keeps_slot(text) -> None:
+    """문장 경로는 종전 그대로 — `""` 로 **슬롯을 유지**한다(해시태그 경로의 '싣지 않고 센다'와 다른 자리)."""
     out = _alt(text)
-    assert out.error is None and out.value[0].poi_id == PoiId("p1") and out.value[0].text == ""
+    assert out.error is None and out.drop_event is None
+    assert out.value[0].poi_id == PoiId("p1") and out.value[0].text == ""
 
 
 def test_h13_alternative_still_enforces_closed_set() -> None:

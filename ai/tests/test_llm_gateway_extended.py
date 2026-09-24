@@ -110,16 +110,25 @@ def test_explanation_gate_joins_hashtags_and_caps_at_fixed_count() -> None:
 
 def test_explanation_gate_filters_bad_tags_individually() -> None:
     """형식·시간 표현·연락처 꼴은 **그 태그만** 빠지고, 중복은 첫 등장, 부족분은 그대로."""
-    out = _apply_tags(["#뷰맛집", "공백 있음", "#30분코스", "#book.kr", "#혼자여행", "#뷰맛집", "#" + "가" * (HASHTAG_MAX_LEN + 1)])
+    out = _apply_tags([
+        "#뷰맛집", "공백 있음", "#뷰 맛집", "#서울#맛집", "#30분코스", "#book.kr",
+        " #혼자여행 ", "#뷰맛집", "#" + "가" * (HASHTAG_MAX_LEN + 1),
+    ])  # 태그 안 공백·내부 '#'·앞뒤 공백(strip 후 살림)·중복·길이 초과를 한 줄에
     assert out.error is None
     assert out.value[0].text == "#뷰맛집 #혼자여행"
 
 
-def test_explanation_gate_all_tags_invalid_keeps_slot_with_blank_text() -> None:
-    """슬롯은 살리고 문장만 비운다 — 문장 경로의 contact-like 처리와 같은 자리."""
-    out = _apply_tags(["문장입니다", "#오후3시"])
-    assert out.error is None
-    assert out.value[0].poi_id == PoiId("p1") and out.value[0].text == ""
+def test_explanation_gate_all_tags_invalid_omits_slot_and_counts_it() -> None:
+    """태그가 하나도 안 남은 슬롯은 **빈 문자열로 싣지 않는다** — 백엔드가 기존 근거를 빈 값으로
+    덮고, 성공으로 집계돼 '#' 누락 드리프트가 어디에도 남지 않는다(INV-4). 세어서 이벤트에 남기고,
+    유일한 슬롯이면 폴백 사유(`gate_dropped_all`)가 실린다. `dropped_ids` 는 풀 밖 poiId 전용.
+    """
+    for tags in (["문장입니다", "#오후3시"], []):
+        out = _apply_tags(tags)
+        assert out.value == () and out.error == "gate_dropped_all"
+        assert out.drop_event is not None
+        assert out.drop_event.dropped_ids == () and out.drop_event.dropped_count == 1
+        assert out.drop_event.total_count == 1
 
 
 def test_explanation_gate_sentence_path_stays_for_alternatives() -> None:

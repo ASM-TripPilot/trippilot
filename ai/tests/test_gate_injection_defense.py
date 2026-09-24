@@ -141,13 +141,32 @@ def test_explanation_keeps_ordinary_tags() -> None:
 
 
 def test_explanation_drops_contact_like_tag_but_keeps_the_slot() -> None:
-    """슬롯은 살리고 태그만 버린다 — 후보를 통째로 잃으면 일정이 비어 버린다."""
+    """슬롯은 살리고 그 태그만 버린다 — 후보를 통째로 잃으면 일정이 비어 버린다."""
     tag = "#book.kr"
     assert has_contact_like(tag)  # 공유 판정이 실제로 잡는지 먼저 확인
-    out = _explain(tag)
+    out = _explain("#고궁산책", tag)
     assert out.error is None
     assert out.value[0].poi_id == PoiId("p1")  # 슬롯은 남는다
-    assert out.value[0].text == ""  # 태그만 비운다
+    assert out.value[0].text == "#고궁산책"  # 연락처 꼴 태그만 빠진다
+
+
+def test_explanation_omits_slot_whose_tags_all_fail_instead_of_shipping_blank() -> None:
+    """태그가 하나도 안 남은 슬롯은 **빈 문자열로 싣지 않는다** — "" 는 백엔드에서 non-null 이라
+    이미 있던 placement_reason 을 덮어쓰고, 성공으로 집계돼 드리프트가 보이지 않는다(INV-4).
+    다른 슬롯은 그대로 살고, 빠진 수는 드롭 이벤트에 남는다(dropped_ids 는 풀 밖 전용).
+    """
+    raw = json.dumps({"explanations": [
+        {"poiId": "p1", "tags": ["#고궁산책"]},
+        {"poiId": "p2", "tags": ["book.kr", "오후 3시"]},  # 전부 형식 위반
+    ]})
+    out = ExplanationGate().apply(
+        raw, _Pool("p1", "p2"), feature=LlmFeature.EXPLANATION, trace_id=_TID, now=_NOW
+    )
+    assert out.error is None
+    assert [(str(e.poi_id), e.text) for e in out.value] == [("p1", "#고궁산책")]
+    assert out.drop_event is not None
+    assert out.drop_event.dropped_ids == () and out.drop_event.dropped_count == 1
+    assert out.drop_event.total_count == 2
 
 
 def test_explanation_drops_time_expression_tags_inv3() -> None:
