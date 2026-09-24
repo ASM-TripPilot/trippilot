@@ -197,6 +197,34 @@ MLX LoRA 산출물(어댑터)은 그대로 vLLM 에 안 올라간다 — `fuse` 
 > Modal 경로(`scripts/finetune_reminder/modal_app.py`)는 지우지 않고 남겨 둔다 —
 > GPU 호스트에 직접 띄울 때와, Bedrock 리전을 못 쓰는 상황의 대안이다.
 
+### ⚠️ `fuse` 산출물은 그대로 올리면 임포트가 실패한다 — 토크나이저 3건
+
+`mlx_lm.fuse` 는 HF 표준 토크나이저 구성을 **완전히 재현하지 않는다.** 실측
+(2026-09-24)으로 임포트가 이 메시지로 떨어졌다:
+
+> Amazon Bedrock could not load the tokenizer. Make sure that you can load the
+> tokenizer with the Huggingface method.
+
+빠진 것과 처방(원본 HF 스냅샷에서 가져온다 — `~/.cache/huggingface/hub/models--Qwen--*/snapshots/*/`):
+
+| 빠진 것 | 처방 |
+|---|---|
+| `vocab.json` | 스냅샷에서 복사 |
+| `merges.txt` | 스냅샷에서 복사 |
+| `chat_template` | `fuse` 가 `chat_template.jinja` 로 **빼 놓는다**. 원본은 `tokenizer_config.json` 안에 있다 — 그 키로 병합해 넣는다 |
+
+올리기 전에 **HF 로더로 직접 읽어 본다**(실패를 30분 뒤가 아니라 그 자리에서 안다):
+
+```bash
+uv run --with transformers python -c "
+from transformers import AutoTokenizer
+t = AutoTokenizer.from_pretrained('./merged')
+print(t.apply_chat_template([{'role':'user','content':'안녕'}], tokenize=False, add_generation_prompt=True))
+"
+```
+
+`<|im_start|>user ...` 가 나오면 통과다. 여기서 막히면 Bedrock 에서도 막힌다.
+
 ```bash
 # 1) 모델을 S3 로 (Bedrock 이 지원하는 리전의 버킷이어야 한다)
 aws s3 sync ./merged s3://<버킷>/reminder-copy-v1/ --region us-east-1
