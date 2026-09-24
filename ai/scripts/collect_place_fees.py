@@ -29,7 +29,16 @@
 비용이 아니다. 38·39 는 요금 필드가 아예 없다(두 엔드포인트 전 필드 확인).
 
     uv run python scripts/collect_place_fees.py --doc data/collected_pois.json \
-        --out data/place_fees.json --max-calls 2800
+        --out data/place_fees.json --max-calls 1200
+
+## ⚠️ 하루 총합은 이 스크립트가 못 지킨다
+
+`--max-calls` 는 **이번 실행**만 센다. 같은 날 프로브·앞선 수집이 얼마나 썼는지는
+모른다. 실측(2026-09-23): 프로브 990 + 수집 2,800 + 재시도 1,800 = **5,590콜** 을
+하루에 태워 계정이 429 로 막혔고, 두 실행이 통째로 버려졌다.
+
+키 3개 기준 하루 3,000 이 상한이므로 **하루 한 번, 2,000 이하**로 돌린다. 같은 날
+프로브를 돌렸으면 그만큼 뺀다. 이어가기가 있으니 여러 날에 나누는 비용은 0 이다.
 """
 
 from __future__ import annotations
@@ -74,9 +83,12 @@ _PAREN_NO_WON = re.compile(r"\([^)원]*\)")
 _GROUP_HEAD = re.compile(r"\[\s*단체")
 # 입장료가 아닌 요금. ⚠️ `반\s*\d` 에는 반드시 `(?<!일)` — 없으면 **`일반 9,000원`** 의
 # "반"을 강좌명(`서예반 90,000원`)으로 읽어 진짜 입장료를 버린다(실측 21건).
+# `대당`·`1대` 는 **단위가 다르다** — 인당 입장료가 아니라 차량당이라 4인이면
+# 1/4 이다(실측: `차량 1대당 23,000원`). 파싱 실패가 아니라 단위 불일치이므로
+# 대관료·수강료와 같은 계열로 둔다.
 _NOT_ADMISSION = re.compile(
     r"대관|강좌|수강|과목|체험비|체험 ?활동|만들기|\d+박|숙박|회원|회비|"
-    r"(?<!일)반\s*\d|강습")
+    r"(?<!일)반\s*\d|강습|대당|\d+대\s*(?:당|기준)")
 # 1박 단위 요금 — 방문 1회 비용이 아니다.
 _OVERNIGHT = re.compile(r"캠핑|야영|글램핑|오토캠|카라반|휴양림|펜션|민박")
 _FREE_ONLY = frozenset({"무료", "무료입장", "없음", "전액무료"})
@@ -180,8 +192,9 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--doc", type=Path, required=True)
     ap.add_argument("--out", type=Path, required=True)
-    ap.add_argument("--max-calls", type=int, default=2800,
-                    help="이번 실행의 호출 상한. 일일 한도(키 수 × 1,000)보다 낮게 둔다")
+    ap.add_argument("--max-calls", type=int, default=1200,
+                    help="**이번 실행의** 호출 상한. 이 값은 같은 날 앞선 실행을 모른다 — "
+                         "하루 총합이 한도(키 수 × 1,000)를 넘지 않게 부르는 쪽이 지켜야 한다")
     ap.add_argument("--max-failure-rate", type=float, default=0.05)
     args = ap.parse_args()
 
@@ -262,8 +275,18 @@ def main() -> int:
         # 제한이나 망 문제다. 실측: 403 898건이 정확히 한 키 슬롯(900)이었는데
         # "동시 실행·일일 한도"만 안내해 엉뚱한 곳을 보게 했다.
         span = fail_at[-1] - fail_at[0] + 1
-        shape = ("연속 — 특정 키가 죽었을 가능성" if span <= failures * 1.2
-                 else "산발 — 속도 제한·망 문제 가능성")
+        # **HTTP 코드가 모양보다 앞선다.** 속도 제한도 연속으로 보이므로 모양만으로
+        # 판정하면 429 를 "키가 죽었다"로 읽는다 — 실측에서 실제로 그렇게 찍혔다.
+        # 코드가 말해 주면 그걸 쓰고, 안 말해 줄 때만 모양으로 좁힌다.
+        top = fail_kind.most_common(1)[0][0] if fail_kind else ""
+        if top == "HTTP 429":
+            shape = "속도 제한 — 간격을 늘리거나 상한을 낮춰라"
+        elif top == "HTTP 403":
+            shape = ("연속 — 특정 키가 죽었거나 그 계정 한도 소진"
+                     if span <= failures * 1.2 else "산발 403 — 계정 단위 스로틀 가능성")
+        else:
+            shape = ("연속 — 한 구간에 몰렸다" if span <= failures * 1.2
+                     else "산발 — 망 문제 가능성")
         print(f"    실패 내역: "
               + " · ".join(f"{k} {v:,}" for k, v in fail_kind.most_common())
               + f"\n    실패 구간: {fail_at[0]:,}~{fail_at[-1]:,}번째 호출 "
