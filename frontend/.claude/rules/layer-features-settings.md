@@ -100,6 +100,18 @@ j05(여행 스타일 분석, `features/reflection`)가 `records/style` 라우트
 | `ui/MyPageScreen.tsx` | **변경.** `showPast?: boolean` prop 추가(판정은 페이지, 화면은 값만 소비). 하트 FAB 제거(Figma 근거 없음, "장식·미배선"). 메뉴 카드 재구성 — `px-lg` 내부 여백 제거하고 행마다 `p-lg` + 행 사이 카드 폭 전체 구분선 막대(옛 코드는 들여진 `border-b`). `overflow-hidden` 의도적 미부착(iOS 그림자 클리핑 회피). 헤더를 `ScrollView` 밖으로 이동(스크롤해도 고정) + 톱니 아이콘 조건부 렌더(`onPressSettings` 있을 때만). 메뉴 행 → 콜백은 `menuHandlers: Partial<Record<MenuRowKey, () => void>>`. **TRIP-776 추가**: 빈 문구 왼쪽 정렬로 변경(`items-center` 제거) — 블록이 세 탭(예정·진행중·종료) 공용이라 진행중·종료 빈 문구도 함께 왼쪽으로 감(03b 참고-3, Figma에 그 두 탭 프레임이 없어 판단성 미해결). CTA 라벨 `'새 여행 만들기'` + 신규 `PlusGlyph`(`my-create-trip-plus`). `onPressCalendar?` prop 추가 — 있을 때만 "캘린더 ›" 링크 렌더(TRIP-939 원칙 승계: 누를 곳 없는 링크 안 만듦). |
 | `ui/MyPageScreen.l03empty.test.tsx` | **신규(TRIP-776)** — 빈 문구·CTA·캘린더 링크 3방향 분기(콜백+섹션/섹션 없음/콜백 없음) 단위. |
 
+## 이번 사이클(TRIP-777) 변경 — l04 등록 숙소 default·empty·dialog Figma 정합
+
+| 파일 | 내용 |
+|---|---|
+| `ui/MyStaysScreen.tsx` | **변경(값·구조 일부).** "출발점" 배지·"출발점 지정"·칩 3종을 `rounded-[8px]`로, 카드를 `rounded-[12px]`로 재작도. "출발점 변경 ›"에서 "›" 문자를 지우고 `ChevronRightGlyph`(muted, `SettingsGlyphs.MUTED` 신규 export)로 대체. empty를 `shared/ui/StateNotice` 우회 — 로컬 마크업으로 제목 생략·CTA 폭 조정(testID `my-stays-empty`·`my-stays-explore` 보존). **경고: 배지·칩·"출발점 지정" 상자를 `h-[..]`(고정 높이, `:60`·`:97`·`:108`)로 바꿔 큰 글씨 배율(iOS 약 1.5~1.8배)에서 글자가 상자를 넘칠 수 있다**(03b 경고-2, `min-h-[..]`로 바꾸면 완화 — 5-c 판단은 이번엔 보류, 다음에 이 파일을 만질 때 처리). **미등록 행("출발점 지정")을 누르는 경로를 지키는 테스트가 없다**(03b 경고-1, TRIP-605부터 있던 구멍 — 이번 사이클은 손대지 않음, 다음에 이 Pressable을 만질 때 `my-stays-base-toggle-s2`류 케이스를 추가할 것). |
+| `ui/BaseToggleDialog.tsx` | **변경(값만).** 카드 `w-[330px]`·제목 `text-[19px]`·본문 `text-body`(muted 아님)·버튼 h44·딤 `bg-scrim/55`로 Figma 1606 재작도. `DIALOG_SHADOW`는 `DeleteAccountDialog`와 값이 같다는 주석이 있었는데 실제로는 `RevokeConfirmDialog`(0.2/14)와 다르다 — 다이얼로그 틀을 `shared/ui`로 승격할 때 이 차이를 먼저 확인할 것(03b 지적-3). |
+| `ui/SettingsGlyphs.tsx` | **변경.** `BedGlyph`를 Figma path·`muted-soft`로 재작도(소비처는 `MyStaysScreen` 1곳뿐이라 회귀 없음). `MUTED` hex export 신규(chevron 색 전달용 — `myStaysStructure` G3 raw hex 가드는 화면 소스의 hex 문자열만 스캔하므로 이름으로 넘기면 안 걸린다, 참고-1). |
+| `src/__tests__/devPreviewMyStays.test.tsx` | **신규.** `my-stays-default`(2행 프리뷰)·`my-stays-dialog`(형제 합성 — `MyStaysScreen` 뒤에 `BaseToggleDialog`를 형제로 얹어 트리 순서로 열림을 확인, `@/shared/api` 네트워크 지뢰 미로드) 두 프리뷰 키 가드. `devPreviewBandNav`/`devPreviewBandSort` 카운트·정렬 가드도 이 사이클에서 +1(164→165, `my-stays-empty` 뒤 삽입). |
+| `ui/MyStaysScreen.l04parity.test.tsx` | **신규.** AC-1~7 — 배지·칩 토큰(`rounded-[8px]`/`[12px]`)·"출발점 변경" 완전일치+chevron 글리프·주소 줄 유무 짝·empty 로컬 마크업·dialog 치수(공통 host 조상으로 탐색, 명시 testID 없음)·`border-hairline` 구분선 막대. |
+
+**새 티켓 후보(범위 밖, 착수 안 함)**: l04 실주소(계약에 `SavedStay.address` 없음, 역지오코딩 우회 수단만 있음 — BR-U6-20 미충족 상태로 미룸) · `SavedStay` codegen 재생성(`linkedTripIds` 누락, N+1 제거 가능) · 좌표 미확정 행 비활성 표시+BR-U1-22 안내(Figma 프레임 선행 필요) · 다이얼로그 틀(딤·카드·그림자·버튼) `shared/ui` 승격.
+
 ## 관련
 
 - 경계 가드: `src/__tests__/settingsBoundary.test.ts`(소스 재귀 스캔, eslint 무강제 — repo-traps 참고). TRIP-610도 이 가드가 `features/onboarding` 재사용을 막아 shared 승격을 강제한 세 번째 실측.

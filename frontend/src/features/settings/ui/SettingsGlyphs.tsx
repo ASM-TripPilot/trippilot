@@ -11,7 +11,7 @@ import Svg, { Circle, Line, Path } from 'react-native-svg';
  */
 
 const INK = '#222222';
-const MUTED = '#6A6A6A';
+export const MUTED = '#6A6A6A';
 const HAIRLINE_STRONG = '#DDDDDD';
 // l03 메뉴·헤더 아이콘(Figma 1602:2388 — #3F3F3F stroke 2, 메뉴 chevron #9AA1AB). 토큰 body·muted-soft 와 같은 값.
 const BODY = '#3F3F3F';
@@ -620,10 +620,18 @@ export function ExternalLinkGlyph({ size = 22, testID }: GlyphProps) {
 }
 
 /**
- * l04 등록 숙소 0건 안내(빈 상태) 일러스트 — 침대. `features/trip/ui/TripGlyphs` 에 `BedGlyph` 가
- * 있으나 features 경계로 import 불가라 여기 새로 그린다(리포 확립 관례). muted 톤(빈 상태 배지용).
+ * l04 등록 숙소 0건 안내(빈 상태) 일러스트 — 침대(Figma 1605:2440 실측 path, 44 격자를 24 viewBox 로
+ * 환산). `features/trip/ui/TripGlyphs` 에 `BedGlyph` 가 있으나 features 경계로 import 불가라 여기
+ * 새로 그린다(리포 확립 관례). muted-soft 톤.
  */
-export function BedGlyph({ size = 22, testID }: GlyphProps) {
+const BED_PATHS = [
+  'M2 4V20',
+  'M2 8H20a2 2 0 0 1 2 2V20',
+  'M2 17H22',
+  'M6 8V17',
+] as const;
+
+export function BedGlyph({ size = 44, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -632,45 +640,23 @@ export function BedGlyph({ size = 22, testID }: GlyphProps) {
       viewBox="0 0 24 24"
       fill="none"
     >
-      <Line
-        x1={3}
-        y1={7}
-        x2={3}
-        y2={18}
-        stroke={MUTED}
-        strokeWidth={1.7}
-        strokeLinecap="round"
-      />
-      <Path
-        d="M3 11H19A2 2 0 0 1 21 13V18"
-        stroke={MUTED}
-        strokeWidth={1.7}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Line
-        x1={3}
-        y1={15}
-        x2={21}
-        y2={15}
-        stroke={MUTED}
-        strokeWidth={1.7}
-        strokeLinecap="round"
-      />
-      <Path
-        d="M7 11V9H12V11"
-        stroke={MUTED}
-        strokeWidth={1.7}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      {BED_PATHS.map((d) => (
+        <Path
+          key={d}
+          d={d}
+          stroke={MUTED_SOFT}
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ))}
     </Svg>
   );
 }
 
 /**
  * l03 메뉴 첫 행(등록 숙소·예약 기록) — 침대(Figma 1602:2494 실측 path, 22 격자). l04 빈 상태
- * `BedGlyph`(muted·베개)와 모양·색이 달라 따로 둔다 — 같은 메뉴의 다른 행(body 톤)과 맞춘다.
+ * `BedGlyph`(muted-soft·24 격자)와 색·격자가 달라 따로 둔다 — 같은 메뉴의 다른 행(body 톤)과 맞춘다.
  */
 export function MenuBedGlyph({ size = 22, testID }: GlyphProps) {
   return (

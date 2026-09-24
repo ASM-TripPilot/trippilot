@@ -339,7 +339,10 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     // ⚠️ TRIP-781: l07 제휴 고지 2키(`l07-affiliate-default`·`-error`, band `l`) 추가로 162→164.
     //    test-designer 선반영(카운트 가드만) — 두 키의 합성은 `devPreviewAffiliateNotice.test.tsx`,
     //    정렬은 devPreviewBandSort EXPECTED_L 꼬리(l06 뒤)가 못박는다.
-    expect(PREVIEW_STATES).toHaveLength(164);
+    // ⚠️ TRIP-777: l04 출발점 다이얼로그 합성 1키(`my-stays-dialog`, band `l`) 추가로 164→165.
+    //    test-designer 선반영(카운트 가드만) — 합성은 `devPreviewMyStays.test.tsx`, 정렬은
+    //    devPreviewBandSort EXPECTED_L(my-stays-empty 바로 뒤)가 못박는다(추가 전엔 164개라 red).
+    expect(PREVIEW_STATES).toHaveLength(165);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(

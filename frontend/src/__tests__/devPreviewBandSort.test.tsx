@@ -187,6 +187,7 @@ const EXPECTED_L = [
   'dev-preview-state-my-style-card-insufficient', // l03
   'dev-preview-state-my-stays-default', // l04
   'dev-preview-state-my-stays-empty', // l04
+  'dev-preview-state-my-stays-dialog', // l04 (TRIP-777)
   'dev-preview-state-settings-preferences', // l05
   'dev-preview-state-settings-preferences-error', // l05
   'dev-preview-state-settings-default', // l05

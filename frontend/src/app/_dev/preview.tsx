@@ -109,6 +109,7 @@ import {
   buildSettingsSections,
   filterReadySettingsSections,
 } from '@/features/settings/model/settingsSections';
+import { BaseToggleDialog } from '@/features/settings/ui/BaseToggleDialog';
 import { DeleteAccountDialog } from '@/features/settings/ui/DeleteAccountDialog';
 import { LocationConsentScreen } from '@/features/settings/ui/LocationConsentScreen';
 import type { StyleCardVM } from '@/features/settings/model/styleCardModel';
@@ -1212,13 +1213,14 @@ const MY_PAGE_PAST_VMS: PastTripCardVM[] = [
   ),
 ];
 
-// l04 등록 숙소 3행 — 등록됨(연결 여행)·미등록·좌표 미확정(토글 disabled). 화면이 순수 프레젠테이션이라
-// 완성 VM 한 벌이면 세 표면을 다 본다(location 은 계약 공백이라 빈 값 — 화면이 줄을 안 그린다).
+// l04 등록 숙소 2행 — Figma 1604:2440 카드 그대로(등록됨 1 · 미등록 1). default·dialog 두 키가 이 한 벌을
+// 공유한다. 주소는 계약 공백(G6)이라 실앱은 빈 값으로 줄을 생략하고, 프리뷰만 Figma 값을 채운다.
+// 좌표 미확정(토글 disabled) 행은 Figma 프레임이 없어 여기서만 뺐다(G5 — 코드 분기·테스트는 유지).
 const MY_STAYS_PREVIEW_ROWS: MyStayRowVM[] = [
   {
     savedStayId: 'stay-assigned',
-    name: '해운대 오션뷰',
-    location: '',
+    name: '부산 그랜드 호텔',
+    location: '부산 해운대구 우동',
     dateRangeLabel: '6.10 ~ 6.13',
     sourceLabel: 'OTA 예약',
     memoLabel: null,
@@ -1230,27 +1232,14 @@ const MY_STAYS_PREVIEW_ROWS: MyStayRowVM[] = [
   },
   {
     savedStayId: 'stay-unassigned',
-    name: '남포동 게스트하우스',
-    location: '',
-    dateRangeLabel: null,
+    name: '○○ 게스트하우스',
+    location: '부산 중구 남포동',
+    dateRangeLabel: '6.14 ~ 6.15',
     sourceLabel: '앱 저장',
     memoLabel: '예약번호 미입력',
     linkedTripLabel: '연결된 여행 없음',
     baseState: 'unassigned',
     canAssignBase: true,
-    tripId: null,
-    baseAssignmentId: null,
-  },
-  {
-    savedStayId: 'stay-nocoord',
-    name: '좌표 미확정 숙소',
-    location: '',
-    dateRangeLabel: null,
-    sourceLabel: '앱 저장',
-    memoLabel: null,
-    linkedTripLabel: '연결된 여행 없음',
-    baseState: 'unassigned',
-    canAssignBase: false,
     tripId: null,
     baseAssignmentId: null,
   },
@@ -4577,13 +4566,13 @@ export const PREVIEW_STATES: PreviewState[] = [
       </SafeAreaView>
     ),
   },
-  // l04 등록 숙소·예약 기록(TRIP-605) — 등록됨(채움 pill + "출발점 변경 ›")·미등록(점선 "출발점 지정")·
-  // 좌표 미확정(토글 disabled) 세 행을 한 화면에서 Figma l04 default(1604:2440)와 대조한다. "출발점
-  // 변경/지정" 을 누르면 BaseToggleDialog(딤+중앙 카드)가 뜨는 것도 여기서 실제로 조작해 본다.
+  // l04 등록 숙소·예약 기록(TRIP-605·777) — 등록됨(채움 배지 + "출발점 변경" chevron)·미등록(점선
+  // "출발점 지정") 두 행을 Figma l04 default(1604:2440)와 대조한다. "출발점 변경/지정" 을 누르면
+  // BaseToggleDialog(딤+중앙 카드)가 뜨는 것도 여기서 실제로 조작해 본다.
   {
     key: 'my-stays-default',
     band: 'l',
-    label: 'l04 · 등록 숙소 3행',
+    label: 'l04 · 등록 숙소 2행',
     login: null,
     render: () => (
       <MyStaysScreen
@@ -4609,6 +4598,27 @@ export const PREVIEW_STATES: PreviewState[] = [
         onPressExplore={noop}
         onPressBack={noop}
       />
+    ),
+  },
+  // l04 출발점 다이얼로그(1606:2440, TRIP-777) — default 화면 위에 BaseToggleDialog 를 형제로 겹친다
+  // (화면은 열림을 로컬 state 로 쥐어 prop 으로 못 연다 — settings-delete-dialog 와 같은 합성).
+  // 딤 전면 커버·중앙 정렬은 jest 원리적 사각이라 이 키가 육안 대조 자리다.
+  {
+    key: 'my-stays-dialog',
+    band: 'l',
+    label: 'l04 · 출발점 다이얼로그',
+    login: null,
+    render: () => (
+      <View style={StyleSheet.absoluteFill}>
+        <MyStaysScreen
+          rows={MY_STAYS_PREVIEW_ROWS}
+          isEmpty={false}
+          onConfirmBaseToggle={noop}
+          onPressExplore={noop}
+          onPressBack={noop}
+        />
+        <BaseToggleDialog onCancel={noop} onConfirm={noop} />
+      </View>
     ),
   },
   // l02 알림 설정 default(1600:2388) — 6행×인앱 1열(COMMUNITY 숨김, 푸시 열은 TRIP-939 개통 전 숨김)·
