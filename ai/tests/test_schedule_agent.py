@@ -761,3 +761,33 @@ def test_요금표_미주입이면_종전과_같은_점수다() -> None:
 
     assert [s.poi_id for d in outcome_a.solution.days for s in d.slots] == \
            [s.poi_id for d in outcome_b.solution.days for s in d.slots]
+
+
+def test_요청의_지시_카테고리가_규칙_점수에_실린다() -> None:
+    """`GenerateItineraryRequest.avoid_categories` → `build_rule_score` 고리.
+
+    실측(2026-09-24): 이 고리를 `frozenset()` 으로 끊었더니 경계 테스트 15건이
+    **전부 통과**했다 — 경계 테스트는 "요청에 실렸나"까지만 보고, 점수까지는
+    안 보기 때문이다. 두 고리를 따로 지켜야 한다.
+    """
+    from dataclasses import replace as _replace
+
+    from trippilot.domain.poi import PoiCategory
+
+    pool = _pool()
+    agent, _, _ = _agent()
+    base_request = _request()
+    avoided = {p.category for p in pool.pois}  # 풀에 실제로 있는 카테고리를 피한다
+    assert avoided, "풀이 비면 이 테스트가 아무것도 안 본다"
+
+    plain = {s.poi_id: s.score for s in agent._rule_scores(base_request, pool)}
+    steered = {
+        s.poi_id: s.score
+        for s in agent._rule_scores(
+            _replace(base_request, avoid_categories=frozenset(avoided)), pool
+        )
+    }
+
+    assert plain.keys() == steered.keys()
+    assert any(steered[k] < plain[k] for k in plain), (
+        "회피 지시가 점수를 전혀 안 바꿨다 — 요청→점수 고리가 끊겼다")

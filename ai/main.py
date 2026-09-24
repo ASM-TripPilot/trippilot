@@ -31,6 +31,7 @@ env 스위치 (TRIP-344):
 """
 
 import logging
+import pathlib
 import os
 import sys
 from collections.abc import Mapping
@@ -434,6 +435,32 @@ def _local_route(feature_models: Mapping[LlmFeature, str]) -> dict[str, object]:
     return {_LOCAL_PREFIX: OpenAIAdapter(client, api="chat")}
 
 
+_DIRECTIVES_PATH = pathlib.Path(__file__).resolve().parent / "data" / "replan_directives.yaml"
+
+
+def _replan_directives() -> tuple:
+    """KB-4 재계획 지시 사전 (칩·자유입력 해석). 없거나 깨져도 기동을 막지 않는다.
+
+    **여기서 읽는 이유**: yaml 파서 의존은 `llm_gateway/prompts.py` 전용이라는
+    아키텍처 규칙이 있어(`test_yaml_only_imported_in_llm_gateway_prompts`) `src/`
+    안에서 못 읽는다. `load_directive_file(path, parse)` 가 파서를 인자로 받게
+    설계된 것이 그 때문이고, `main.py` 는 `src/` 밖이라 여기가 그 자리다.
+
+    사전이 없으면 `/replan` 이 칩·자유입력을 해석하지 못하고 그 사실을 응답 노트
+    (`directive_dictionary_absent`)로 낸다 — 조용히 무시하는 것과 다르다.
+    """
+    try:
+        import yaml
+
+        from trippilot.agents.planb.directives import load_directive_file
+
+        return load_directive_file(_DIRECTIVES_PATH, yaml.safe_load)
+    except Exception as e:  # 파일 부재·형식 위반 — 지시 없이도 재계획은 된다
+        logging.getLogger("trippilot.main").warning(
+            "replan_directives 로드 실패 %s: %s — 지시 해석 없이 기동", type(e).__name__, e)
+        return ()
+
+
 def build_app_from_env() -> FastAPI:
     """env → 앱 조립 스위치. 미설정 경로는 기존과 동일(회귀 없음)."""
     configure_logging()  # 조립 로그부터 보이게 — 실패해도 기동 전에 드러난다 (TRIP-914)
@@ -474,7 +501,8 @@ def build_app_from_env() -> FastAPI:
                          vector_store=vector_store, embedding=embedding,
                          travel_port=travel, existence=existence,
                          feature_models=feature_models,
-                         retry_models=_retry_models_from_env())
+                         retry_models=_retry_models_from_env(),
+                         directives=_replan_directives())
 
 
 # ASGI 진입점 — `uvicorn main:app` 으로도 기동 가능.
