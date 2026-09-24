@@ -42,33 +42,35 @@ export function ToggleRow({
   showDivider,
 }: ToggleRowProps): ReactElement {
   return (
-    <View
-      className={`flex-row items-center py-lg ${
-        showDivider ? 'border-t border-hairline' : ''
-      }`}
-    >
-      <Text className="flex-1 pr-md font-noto-bold text-card-title text-ink">
-        {label}
-      </Text>
-      <View className="flex-row gap-md">
-        {showPushColumn ? (
-          <View className="w-[52px] items-center">
+    <>
+      {/* 구분선을 border 로 그리지 않는다 — `border-hairline` 은 색만이 아니라 NativeWind 프리셋의
+          borderWidth `hairline` 과 이름이 겹쳐 네 변 모두에 선을 깔고, 마지막 행 아래 변이 카드의
+          둥근 모서리 밖으로 각지게 비친다(TRIP-774 04b). */}
+      {showDivider ? <View className="h-px bg-hairline" /> : null}
+      <View className="flex-row items-center px-lg py-[15px]">
+        <Text className="flex-1 pr-md text-[14.5px] font-noto-bold text-ink">
+          {label}
+        </Text>
+        <View className="flex-row gap-lg">
+          {showPushColumn ? (
+            <View className="w-[46px] items-center">
+              <Toggle
+                testID={`notification-settings-toggle-push-${kind}`}
+                checked={pushColumnAvailable && value.pushEnabled}
+                disabled={!pushColumnAvailable}
+                onPress={() => onToggle(kind, 'push', !value.pushEnabled)}
+              />
+            </View>
+          ) : null}
+          <View className="w-[46px] items-center">
             <Toggle
-              testID={`notification-settings-toggle-push-${kind}`}
-              checked={pushColumnAvailable && value.pushEnabled}
-              disabled={!pushColumnAvailable}
-              onPress={() => onToggle(kind, 'push', !value.pushEnabled)}
+              testID={`notification-settings-toggle-inapp-${kind}`}
+              checked={value.inAppEnabled}
+              onPress={() => onToggle(kind, 'inapp', !value.inAppEnabled)}
             />
           </View>
-        ) : null}
-        <View className="w-[52px] items-center">
-          <Toggle
-            testID={`notification-settings-toggle-inapp-${kind}`}
-            checked={value.inAppEnabled}
-            onPress={() => onToggle(kind, 'inapp', !value.inAppEnabled)}
-          />
         </View>
       </View>
-    </View>
+    </>
   );
 }

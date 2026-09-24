@@ -82,6 +82,7 @@
 - `src/__tests__/notFoundRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/notificationDurationStructure.test.ts`  →  (export 없음)
 - `src/__tests__/notificationKindGuard.test.tsx`  →  (export 없음)
+- `src/__tests__/notificationSettingsParityStructure.test.ts`  →  (export 없음)
 - `src/__tests__/notificationStructure.test.ts`  →  (export 없음)
 - `src/__tests__/onboardingEntryGuard.test.tsx`  →  (export 없음)
 - `src/__tests__/onboardingPrefRoutes.test.tsx`  →  (export 없음)
@@ -1342,4 +1343,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 910개 파일
+합계 911개 파일

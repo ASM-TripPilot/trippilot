@@ -65,10 +65,19 @@ const EMPTY_VALUE = { pushEnabled: false, inAppEnabled: false } as const;
 /** 푸시 채널 개통 플래그(TRIP-939) — 푸시 수신 배선(TRIP-835) 전까지 false. true 면 푸시 열이 되살아난다. */
 const PUSH_COLUMN_READY = false;
 
+// 카드 그림자(Figma 0,2,10 · 6%) — 그림자는 className 으로 못 준다. l01 cardShadow 와 같은 값('#000000' raw-hex 예외).
+const cardShadow = {
+  shadowColor: '#000000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.06,
+  shadowRadius: 10,
+  elevation: 2,
+} as const;
+
 /** ⓘ + 문구 정보 배너(상·하단 공용) — surface-soft 라운드 블록. */
 function InfoBanner({ text }: { text: string }): ReactElement {
   return (
-    <View className="flex-row items-center gap-sm rounded-[20px] bg-surface-soft px-lg py-md">
+    <View className="flex-row items-start gap-[10px] rounded-[12px] bg-surface-soft px-[14px] py-md">
       <NotifInfoGlyph size={18} />
       <Text className="flex-1 font-noto text-label text-muted">{text}</Text>
     </View>
@@ -85,7 +94,7 @@ export function NotificationSettingsScreen({
   // 푸시 열을 숨기는 동안엔 권한 거부 표면(배너·칩·푸시 누적 문구)도 함께 숨는다.
   const showPermissionDenied = PUSH_COLUMN_READY && !pushColumnAvailable;
   return (
-    <SafeAreaView edges={['top']} className="flex-1 bg-canvas-alt">
+    <SafeAreaView edges={['top']} className="flex-1 bg-canvas">
       <View className="flex-row items-center gap-sm border-b border-hairline px-lg pb-md pt-sm">
         <Pressable
           testID="notification-settings-back"
@@ -94,43 +103,52 @@ export function NotificationSettingsScreen({
         >
           <NotifBackChevronGlyph />
         </Pressable>
-        <Text className="text-[18px] font-noto-bold text-ink">알림 설정</Text>
+        <Text className="text-[20px] font-noto-bold text-ink">알림 설정</Text>
       </View>
 
-      <ScrollView contentContainerClassName="gap-lg px-lg pb-3xl pt-lg">
+      <ScrollView contentContainerClassName="gap-lg px-lg pb-[26px] pt-[18px]">
         {showPermissionDenied ? (
           <PermissionBanner onOpenSettings={onOpenSettings} />
         ) : (
           <InfoBanner text="변경한 알림 설정은 다음 알림부터 바로 반영됩니다" />
         )}
 
-        {/* 열 헤더 — 두 토글 열 위에 정렬(ToggleRow 의 오른쪽 클러스터와 같은 w-[52px]·gap-md). */}
-        <View className="flex-row items-center">
+        {/* 열 헤더 — ToggleRow 와 같은 px-lg·칸 폭·gap 이라 글자가 토글 위에 선다. 푸시 칸은 min-w 라
+            "권한 필요" 칩(≈65)이 칸을 왼쪽으로 넓히며 한 줄로 선다(오른쪽 끝은 토글 칸과 맞음). */}
+        <View className="flex-row items-center px-lg">
           <View className="flex-1" />
-          <View className="flex-row gap-md">
+          <View className="flex-row gap-lg">
             {PUSH_COLUMN_READY ? (
-              <View className="w-[52px] items-center">
+              <View className="min-w-[46px] items-center">
                 {pushColumnAvailable ? (
-                  <Text className="font-noto-bold text-label text-muted">
+                  <Text className="font-noto-bold text-caption text-muted">
                     푸시
                   </Text>
                 ) : (
-                  <View className="rounded-pill border border-dashed border-hairline-strong px-sm py-[2px]">
-                    <Text className="font-noto-medium text-caption text-muted">
+                  <View className="rounded-[8px] border border-dashed border-[#C4C9CF] px-[10px] py-xs">
+                    <Text
+                      numberOfLines={1}
+                      className="text-[11.5px] font-noto-bold text-muted-soft"
+                    >
                       권한 필요
                     </Text>
                   </View>
                 )}
               </View>
             ) : null}
-            <View className="w-[52px] items-center">
-              <Text className="font-noto-bold text-label text-muted">인앱</Text>
+            <View className="w-[46px] items-center">
+              <Text className="font-noto-bold text-caption text-muted">
+                인앱
+              </Text>
             </View>
           </View>
         </View>
 
-        {/* 종류 행 카드 — 한 카드에 6행. */}
-        <View className="rounded-[20px] bg-canvas px-lg">
+        {/* 종류 행 카드 — 한 카드에 6행. 가로 여백은 행이 가져 구분선이 카드 폭 전체에 걸친다. */}
+        <View
+          style={cardShadow}
+          className="rounded-[12px] border border-hairline bg-canvas"
+        >
           {VISIBLE_ROWS.map((row, index) => (
             <ToggleRow
               key={row.kind}
