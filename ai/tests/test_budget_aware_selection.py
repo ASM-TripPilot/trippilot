@@ -73,6 +73,29 @@ def test_이상한_행_하나가_전량을_죽이지_않는다(tmp_path) -> None
     assert table.of("ok-2") == 12000
 
 
+def test_모수가_있으면_커버리지가_파일에서_나온다(tmp_path) -> None:
+    """반쪽 파일인지 읽는 쪽이 판단할 근거 — **임계를 안 만들고** 드러낸다.
+
+    소비 측에 "예상보다 적으면 경고"를 두면 그 수가 또 하나의 근거 없는 상수가 된다
+    (얇은 표본으로 경계를 정하지 말자던 것과 같은 함정). 모수를 같이 실으면 계산된다.
+    """
+    path = tmp_path / "place_fees.json"
+    path.write_text(json.dumps({"attempted": 10, "fees": {
+        f"r{i}": {"won": 0, "raw": "무료"} for i in range(4)}}), encoding="utf-8")
+    table = load_fee_table(path)
+
+    assert table.attempted == 10
+    assert table.coverage() == 0.4
+
+
+def test_모수가_없는_옛_파일은_커버리지를_모른다고_한다(tmp_path) -> None:
+    """`0.0` 으로 답하면 "전부 실패"로 읽힌다 — 모르는 것과 0은 다르다."""
+    path = tmp_path / "place_fees.json"
+    path.write_text(json.dumps({"fees": {"r1": {"won": 0, "raw": "무료"}}}),
+                    encoding="utf-8")
+    assert load_fee_table(path).coverage() is None
+
+
 def test_정상_파일은_버린_행이_0이다(tmp_path) -> None:
     """`malformed > 0` 이 산출기 결함 신호로 쓰이려면 정상일 때 0이어야 한다."""
     path = tmp_path / "place_fees.json"
@@ -163,3 +186,29 @@ def test_에이전트가_source_ref_로_요금을_맞춘다() -> None:
     assert table.of(pricey_poi.source_ref) == 40_000
     assert table.of(None) is None            # ref 없는 POI 는 조용히 모름
     assert EMPTY.of("r-expensive") is None   # 빈 표는 아무것도 모른다
+
+
+# ── 실물 표본 회귀 (운영·데이터 세션 산출기가 실제로 낸 파일) ──────────
+
+
+def test_실물_표본을_그대로_읽는다() -> None:
+    """손으로 만든 픽스처는 `<br>`·개행·탭·비ASCII 를 안 본다 — 실 산출물이 본다.
+
+    표본 521건 실측(2026-09-24): `<br>` 93건 · 개행 69건 · 탭 1건 · 비ASCII 521건.
+    포맷 계약이 3일치 수집 **뒤에** 틀리면 그 3일이 날아가므로 먼저 고정한다.
+
+    파일이 없으면(수집 완료 후 삭제 예정) 건너뛴다 — 없어진 것이 실패는 아니다.
+    """
+    import pathlib
+
+    import pytest
+
+    sample = pathlib.Path(__file__).resolve().parent.parent / "data" / "place_fees.sample.json"
+    if not sample.exists():
+        pytest.skip("실물 표본 미배치 — 전량 수집 후 삭제됨")
+
+    table = load_fee_table(sample)
+
+    assert table.malformed == 0, "실 산출물을 한 행도 못 읽으면 포맷 계약이 갈린 것이다"
+    assert table.counts() == {"free": 393, "paid": 102, "unparsed": 26}
+    assert table.attempted == 710

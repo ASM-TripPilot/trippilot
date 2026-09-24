@@ -42,6 +42,16 @@ class FeeTable:
     malformed: int = 0
     """형식 위반으로 버린 행 수. **0 이 아니면 산출기 쪽 결함 신호다** —
     조용히 적게 적재되는 것과 구별하려고 센다."""
+    attempted: int = 0
+    """산출기가 조회를 시도한 POI 수. 0 이면 그 필드가 없는 옛 파일이다.
+
+    **커버리지를 파일 자체에서 계산하려고 둔다.** 이게 없으면 "반쪽 파일이 왔는지"를
+    읽는 쪽이 판단할 근거가 없고, 그렇다고 "예상보다 적으면 경고" 같은 임계를 두면
+    근거 없는 상수가 하나 는다. 모수를 같이 실어 보내면 임계 없이 드러난다."""
+
+    def coverage(self) -> float | None:
+        """값을 확보한 비율. 모수를 모르면 `None` — 0.0 과 다르다."""
+        return len(self.won) / self.attempted if self.attempted else None
 
     def of(self, source_ref: str | None) -> int | None:
         """성인 1인 입장료. **모르면 `None`** — 0원(무료)과 다르다."""
@@ -91,9 +101,16 @@ def load_fee_table(path: Path | None = None) -> FeeTable:
             won[str(ref)] = None if value is None else int(value)
         except (TypeError, ValueError, KeyError, IndexError):
             malformed += 1
+    try:
+        attempted = int(raw.get("attempted") or 0)
+    except (TypeError, ValueError):
+        attempted = 0
     table = FeeTable(won=won, fetched_at=str(raw.get("fetched_at") or ""),
-                     malformed=malformed)
+                     malformed=malformed, attempted=attempted)
     if malformed:
         _logger.warning("place_fees 형식 위반 %s행 버림 — 산출기 확인 필요", malformed)
-    _logger.info("place_fees %s건 적재 (%s)", len(won), table.counts())
+    cov = table.coverage()
+    _logger.info("place_fees %s건 적재 (%s) · 커버리지 %s",
+                 len(won), table.counts(),
+                 f"{cov:.1%} (모수 {table.attempted:,})" if cov is not None else "모수 미상")
     return table
