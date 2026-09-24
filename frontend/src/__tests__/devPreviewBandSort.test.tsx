@@ -56,6 +56,8 @@ const EXPECTED_H = [
   // 그룹 선두로 올린다) + itinerary-method-regenerate 프리뷰 키 삭제(재생성 로직·M-R1~R4 는
   // 유지, 프리뷰 키만 정리).
   'dev-preview-state-h01-method', // h01
+  // TRIP-942: h01 '다른 여행 생성 중' 1키 — 같은 h01 코드라 배열 삽입 순서(h01-method 바로 뒤)로 안정정렬.
+  'dev-preview-state-h01-method-active-generation', // h01
   // TRIP-785: itinerary-mustvisit-default(h05) → h02-mustvisit-default(h02) 개명 + 신규
   // h02-mustvisit-loading·-error 2키. 라벨 코드가 h02 라 안정 정렬이 h01(method) 뒤·h07
   // (mustvisit-time) 앞에 세 칩을 인접시킨다. 같은 h02 코드 3키는 PREVIEW_STATES 배열 삽입

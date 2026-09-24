@@ -32,6 +32,8 @@ import { ItineraryEditPage } from './ItineraryEditPage';
  *  - 🔴 P1 페이지가 `inTrip` 을 뷰까지 내린다 — 카드 사이 + 가 없고 안내가 i07 문구다(AC-7).
  *    방문 기록으로 완료 행이 잠긴다(AC-4, 잠금 배선 자체는 h12 CL1 과 같다).
  *  - P2 예정 행 ⌄ → 시각 시트 → 적용 → 저장 PUT 에 바뀐 시각이 실린다(AC-5).
+ *    TRIP-927 부터 시트는 h04(시간대 조정) 얼굴이다 — i07 도 h12 와 같은 얼굴·같은 종료 선택 사항
+ *    (종료를 안 건드리면 기존 endAt 유지, P2b)을 쓴다(AC-12, Figma `[공통]`).
  *  - 🔴 P3 끌기 결과가 와도 완료 행은 제자리다 — 규칙(`reorderKeepingLocked`)을 거쳐 저장된다(AC-8).
  *  - P4 확정된 일정(여행 중)에 저장하면 409 → "확정된 일정은 수정할 수 없어요" 가 뜨고 화면은
  *    떠나지 않는다(AC-9 · INV-4). 라우터 네 방법(back·push·replace·navigate)을 모두 본다.
@@ -237,7 +239,7 @@ describe('🔴 P1 · AC-7·4 — 페이지가 inTrip 을 뷰로 내리고, 완�
   });
 });
 
-describe('P2 · AC-5 — 예정 행 ⌄ → 시각 시트 → 적용값이 저장 PUT 에 실린다', () => {
+describe('🔴 P2 · AC-5·AC-12 — 예정 행 ⌄ → h04 시트 → 적용값이 저장 PUT 에 실린다', () => {
   it('p3 를 14:00–15:30 으로 바꿔 저장하면 PUT 의 p3 시각이 바뀌고 완료 p1 은 그대로다', async () => {
     renderPage();
     await waitForLocked();
@@ -247,8 +249,19 @@ describe('P2 · AC-5 — 예정 행 ⌄ → 시각 시트 → 적용값이 저�
     fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('p3')}`));
     expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
 
-    fireEvent.press(screen.getByTestId('itinerary-edit-time-start-h-14'));
-    fireEvent.press(screen.getByTestId('itinerary-edit-time-end-h-15'));
+    // i07 도 h04 얼굴 — 제목·요약 행(슬롯 이름뿐), default 시 셀 없음.
+    expect(screen.getByText('시간대 조정')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('itinerary-edit-time-place-summary')
+    ).toHaveTextContent('부산시립미술관');
+    expect(
+      screen.queryAllByTestId(/^itinerary-edit-time-start-h-/)
+    ).toHaveLength(0);
+
+    // 시작 탭: 오후 1시 → 2시. 종료 탭: 오후 2시 → 3시(분은 시드 유지).
+    fireEvent.press(screen.getByTestId('itinerary-edit-time-wheel-h-2'));
+    fireEvent.press(screen.getByTestId('itinerary-edit-time-seg-end'));
+    fireEvent.press(screen.getByTestId('itinerary-edit-time-wheel-h-3'));
     fireEvent.press(screen.getByTestId('itinerary-edit-time-apply'));
     await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
 
@@ -265,6 +278,30 @@ describe('P2 · AC-5 — 예정 행 ⌄ → 시각 시트 → 적용값이 저�
     expect(p3?.startAt).toBe('14:00:00');
     expect(p3?.endAt).toBe('15:30:00');
     expect(p1?.startAt).toBe('09:30:00');
+  });
+
+  it('P2b · 시작만 15:00 으로 바꿔 적용·저장하면 p3 endAt 은 원값 14:30:00 · endsNextDay true', async () => {
+    renderPage();
+    await waitForLocked();
+
+    fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('p3')}`));
+    await screen.findByTestId(SHEET);
+    fireEvent.press(screen.getByTestId('itinerary-edit-time-wheel-h-3'));
+    fireEvent.press(screen.getByTestId('itinerary-edit-time-apply'));
+    await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
+
+    expect(
+      screen.getByTestId(`slot-stopcard-time-${k('p3')}`)
+    ).toHaveTextContent('15:00–14:30');
+
+    fireEvent.press(screen.getByTestId(SAVE));
+    await waitFor(() => expect(putCalls).toBe(1));
+
+    const body = putBody as EditItineraryRequest;
+    const p3 = body.days[0].slots.find((s) => s.poiId === 'p3');
+    expect(p3?.startAt).toBe('15:00:00');
+    expect(p3?.endAt).toBe('14:30:00');
+    expect(p3?.endsNextDay).toBe(true);
   });
 });
 

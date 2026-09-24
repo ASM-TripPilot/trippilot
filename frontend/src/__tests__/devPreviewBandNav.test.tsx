@@ -1,4 +1,4 @@
-import type { ComponentType } from 'react';
+import type { ComponentType, ReactElement } from 'react';
 import type { ViewStyle } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
@@ -52,6 +52,7 @@ const PREVIEW_STATES = previewModule.PREVIEW_STATES as {
   key: string;
   label: string;
   band: string;
+  render: () => ReactElement;
 }[];
 
 // TRIP-742 AC-6 순수 데이터 단언용 — g01 '꼭 갈 곳' 스트립 픽스처. `PREVIEW_STATES` 선례와
@@ -332,7 +333,10 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에 그 1키(StayRecommendScreen
     //    순수 뷰 + 픽스처 props)만 추가하고 이 가드는 안 만진다(추가 전엔 160개라 red). 정확히 그 키인지는
     //    아래 'TRIP-800' describe 가 못박고, devPreviewBandSort 는 EXPECTED_H 에 h14 4키 뒤·h16 앞으로 삽입.
-    expect(PREVIEW_STATES).toHaveLength(161);
+    // ⚠️ TRIP-942: h01 '다른 여행 생성 중' 프리뷰 1키(`h01-method-active-generation`, band `h`) 추가로
+    //    161→162. 정확히 그 키인지·차단 안내를 그리는지는 아래 'TRIP-942' describe 가 못박고,
+    //    devPreviewBandSort 는 EXPECTED_H 에 h01-method 바로 뒤로 삽입.
+    expect(PREVIEW_STATES).toHaveLength(162);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -565,6 +569,27 @@ describe('🔴 TRIP-784 · h01 시작 방법 프리뷰 키 재편 (band h)', () 
     // 부정 — 옛 키는 사라진다(개명 원본 + 삭제된 재생성 프리뷰).
     expect(keys).not.toContain('itinerary-method');
     expect(keys).not.toContain('itinerary-method-regenerate');
+  });
+});
+
+describe('🔴 TRIP-942 · h01 다른 여행 생성 중 프리뷰 키 (band h)', () => {
+  it('h01-method-active-generation 키가 있고, 렌더하면 차단 안내가 뜬다', () => {
+    // 준비 — 새 키 엔트리를 찾는다(red-first: preview.tsx 에 추가 전엔 없다).
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'h01-method-active-generation'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('h');
+    expect(entry?.label).toBe('h01 · 다른 여행 생성 중');
+
+    // 실행 — 그 엔트리의 render() 를 그린다.
+    render(<>{entry?.render()}</>);
+
+    // 단언 — 공허 통과 방지: 일반 h01 이 아니라 activeGeneration 을 넘긴 얼굴이어야 차단 안내가 있다.
+    expect(screen.getByTestId('itinerary-method-blocked-reason')).toBeTruthy();
+
+    // 이웃 앵커 — 기본 h01-method 가 딸려 사라지지 않았다.
+    expect(PREVIEW_STATES.map((state) => state.key)).toContain('h01-method');
   });
 });
 

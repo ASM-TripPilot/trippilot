@@ -4269,6 +4269,24 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // h01 다른 여행 생성 중(TRIP-942 · TRIP-817) — 같은 화면에 activeGeneration 을 넘긴 차단 안내 얼굴.
+  // 실배선(ItineraryMethodPage)은 서버 판정면이 없어 항상 null 이라 이 얼굴은 여기서만 보인다.
+  {
+    key: 'h01-method-active-generation',
+    band: 'h',
+    label: 'h01 · 다른 여행 생성 중',
+    login: null,
+    render: () => (
+      <MethodPickerScreen
+        onBack={noop}
+        onPressFullAi={noop}
+        onPressManual={noop}
+        onPressCoPick={noop}
+        activeGeneration={{ tripId: 'preview-other-trip' }}
+        onPressActiveGeneration={noop}
+      />
+    ),
+  },
   // h09 생성 중(TRIP-305) — props 만 받는 프레젠테이션이라 배선 없이 얼굴이 그대로 나온다. 진행
   // 표면은 비결정형(RN Animated)이고 3단계는 균일 진행 중(⚑C, 완료 날조 없음)이다. 실화면 딥링크로는
   // 잠깐만 스치는 얼굴이라(성공 즉시 draft 로 replace) 여기가 이 화면을 오래 보는 유일한 자리다.
