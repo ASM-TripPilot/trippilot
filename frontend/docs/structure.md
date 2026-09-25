@@ -81,6 +81,7 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `formatNightsLabel` · `nightsLabel` · `nightsCountLabel` | `entities/trip/lib/formatNights`(TRIP-808 이관, 원래 `features/itinerary/model/planState`·`features/record/model/recordsCalendar`·`features/trip/model/tripSummary` 인라인) | 박수 3벌. **실패값이 서로 다르다**(`formatNightsLabel`→`''` vs `nightsLabel`→`null`) — 통일 금지, 실패 처리 계약 그대로 보존 |
 | `TripCard` | `entities/trip/ui`(TRIP-808) | h06 여행 카드. `testIDPrefix` 명시 prop(6종 sub-part 조립) — l03 settings/TripCard와 testID 리터럴 충돌 대비(D1) |
 | `PastTripRow` | `entities/trip/ui`(TRIP-808) | j07 지난 여행 행. 완성 full `testID` 명시 prop(1종) — TripCard와 달리 prefix가 아니라 완성 문자열(선재 `recordsCalendarStructure` G3 앵커 보존 목적) |
+| `resolveStyleFace` · `StyleFace` | `entities/style-analysis/lib/styleFace`(TRIP-637 이관, 원래 `features/reflection/model/styleThreshold`) | 스타일 분석 정식/임시 판정 단일 지점(`official===true && analysis!=null`만 official, BR-U5-40·PBT-U5-F4). j05(reflection)·l03(settings) 두 화면이 공유 — 옛 자리엔 `categoryLabel`만 남고 판정 토큰 0 |
 | `stayKey` | `features/stay/model` | `stayKey(item: Pick<StayItem,'externalSource'\|'externalId'>): string` — `${externalSource}:${externalId}` 합성(TRIP-181). React key·testID 공용 출처 |
 | `resolveStaySearchState` · `StaySearchState` | `features/stay/model/staySearchState` | 판별 유니온(5종) + 판정 순수 함수(TRIP-182, PBT 대상). 화면은 이 결과를 받기만 하고 재판정하지 않는다(구조 가드) |
 | `filterReasonLabel` | `features/stay/model/filterReasonLabel` | `filterZeroReasons` 코드 → 한글 표시명(TRIP-182). 축 사전 2줄 + 모르는 축 폴백 |
