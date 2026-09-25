@@ -105,6 +105,8 @@ function ended(tripId: string, over: Partial<Trip> = {}): Trip {
     status: 'ENDED',
     createdAt: '2026-04-01T00:00:00.000Z',
     updatedAt: '2026-05-04T00:00:00.000Z',
+    baseCount: 0,
+    itineraryDayCount: 0,
     ...over,
   };
 }

@@ -47,6 +47,8 @@ const TRIP: Trip = {
   status: 'ENDED',
   createdAt: '2026-06-01T00:00:00Z',
   updatedAt: '2026-06-13T00:00:00Z',
+  baseCount: 0,
+  itineraryDayCount: 0,
 };
 
 function makeSummary(over: Partial<TripSummary> = {}): TripSummary {

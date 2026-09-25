@@ -10,20 +10,27 @@
  */
 import type { StayPrice } from './stayPrice';
 
-export interface StayItem {
+/**
+ * 숙소 상세. StayItem 에 `stayId`(합성 식별자) 하나를 더한 모양이다 — 상세가 목록보다 풍부해지는 것은 사진·편의시설이 채워진 뒤이고(숙소콘텐츠-수집-설계.md), 지금 없는 값의 자리만 만들어 두면 화면이 "준비 중"을 그릴 근거를 잃는다.
+ */
+export interface StayDetail {
+  /** "{출처}:{식별자}" — 경로에 그대로 쓴다 */
+  stayId: string;
   externalSource: string;
   externalId: string;
   name: string;
   lat: number;
   lng: number;
+  /** 표시용 지역명 */
   region: string;
+  /** **빈 배열이 "없음"이 아닐 수 있다.** 정본(LOCALDATA)은 편의시설을 주지 않아 전량이 비어 있다 — 목록 응답의 `amenitiesKnown` 이 그 사실을 알린다. */
   amenities: string[];
   stayType: string;
-  /** 최저가 스냅숏('부터 가격'). null=가격 미확인(BR-U1-14) */
+  /** 최저가 스냅숏. **null = 가격 미확인**(BR-U1-14) — 정본 전량이 현재 null 이다 */
   price?: StayPrice | null;
   /** 도로명 우선, 없으면 지번. **null = 모름**(정본 채움률 100%) */
   address?: string | null;
-  /** 표시형 전화번호 — 그대로 `tel:` 에 실을 수 있다. **null = 모름이지 "전화 없는 숙소"가 아니다**(정본 채움률 54.8%). */
+  /** 표시형 전화번호 — 그대로 `tel:` 에 실을 수 있다. **null = 모름이지 "전화 없는 숙소"가 아니다**(정본 채움률 54.8%). 화면은 null 이면 그 줄을 비운다. */
   phone?: string | null;
   /** 객실 수(양실+한실). **null = 모름**(정본 채움률 99.5%). 0 은 내려가지 않는다 */
   rooms?: number | null;

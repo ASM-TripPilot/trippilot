@@ -159,6 +159,7 @@ export * from './slotCandidatesRequest';
 export * from './startReplanRequest';
 export * from './startReplanRequestOriginKind';
 export * from './startReplanRequestScope';
+export * from './stayDetail';
 export * from './stayItem';
 export * from './stayPrice';
 export * from './stayRecommendation';

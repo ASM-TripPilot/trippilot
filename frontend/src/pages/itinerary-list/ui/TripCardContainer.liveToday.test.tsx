@@ -44,6 +44,8 @@ const TRIP: Trip = {
   status: 'CONFIRMED',
   createdAt: '2026-08-01T10:00:00.000Z',
   updatedAt: '2026-08-01T10:00:00.000Z',
+  baseCount: 0,
+  itineraryDayCount: 0,
 };
 
 /** 확정 일정 — 여행 구간 밖이면 목적지가 `plan`(`/trips/t1/itinerary`)으로 정해진다. */

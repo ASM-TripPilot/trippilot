@@ -93,6 +93,8 @@ const TRIP_FIXTURE: Trip = {
   status: 'PLANNED',
   createdAt: '2026-08-02T00:00:00Z',
   updatedAt: '2026-08-02T00:00:00Z',
+  baseCount: 0,
+  itineraryDayCount: 0,
 };
 
 /** 예산 러프값이 실제로 있는 취향. `companionTypes`에 `커플`이 들어 있는 것이 정상이다 —
