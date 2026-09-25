@@ -163,6 +163,10 @@ def main(argv: list[str]) -> int:
         detail = " · ".join(f"{k} {v}" for k, v in sorted(dropped.items()))
         print(f"[merge] 관광 무관 제거 — {sum(dropped.values())}건 ({detail})", file=sys.stderr)
         out["stats"]["unique_proposals"] = len(out["proposals"])
+        # **축소 가드가 이걸 사고로 오인하지 않게 stats 에 남긴다.** 배치는
+        # "합본 < 공유본이면 실패"로 조용한 유실을 막는데, 의도한 제거도 수를
+        # 줄이므로 그 값을 빼고 비교해야 한다. 안 남기면 내일 배치가 빨개진다.
+        out["stats"]["non_travel_dropped"] = sum(dropped.values())
     text = json.dumps(out, ensure_ascii=False, indent=2)
     if args.output:
         Path(args.output).write_text(text, encoding="utf-8")
