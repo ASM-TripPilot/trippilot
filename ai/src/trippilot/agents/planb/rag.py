@@ -37,6 +37,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from types import MappingProxyType
 
+from trippilot.agents.planb.place_knowledge import fetch_place_knowledge
 from trippilot.agents.planb.kb_retrieval import (
     DEFAULT_TOP_K,
     retrieve_persona,
@@ -256,6 +257,10 @@ class RagContext:
     persona: tuple[KbHit, ...] = ()
     situation: tuple[KbHit, ...] = ()
     notes: tuple[str, ...] = ()
+    # KB-5 장소 지식 — {source_ref: 문서}. 앞 셋과 달리 **풀 전원**을 가져온다
+    # (일부에게만 설명이 붙으면 임베딩 유사도가 랭커가 되어 규칙 랭킹을 덮는다 —
+    #  `place_knowledge` 모듈 docstring).
+    place_knowledge: Mapping[str, str] = field(default_factory=dict)
 
     def counts(self) -> dict:
         return {
@@ -346,7 +351,9 @@ class PlanBAgent:
             )
 
         # [3] Generate
-        ranked_refs, reasons, used_llm, why = self._select(request, context, available)
+        ranked_refs, reasons, used_llm, why, rule_ranked = self._select(
+            request, context, available
+        )
         if why:
             notes.append(why)
 
@@ -355,9 +362,21 @@ class PlanBAgent:
         if dropped:
             notes.append(f"out_of_pool_dropped: {len(dropped)}")
         if not kept:  # 전량 드롭 → 규칙 랭킹으로 되돌린다 (LLM만 믿지 않는다)
-            kept = available
+            # **풀 순서가 아니라 규칙 랭킹이다.** 종전에는 `available`(풀 순서)을 그대로
+            # 썼는데 주석은 "규칙 랭킹"이라 적혀 있었다 — 코드가 주석을 안 지켰다.
+            # 우천 강등(⓪)·저장 장소(①)·앵커 거리(②)가 이 경로에서만 통째로 빠져서,
+            # 비 오는 날 전량 드롭되면 야외가 앞에 올 수 있었다.
+            kept = tuple(PoiId(r) for r in rule_ranked)
             used_llm = False
             notes.append("all_selected_dropped → rule_ranking")
+
+        # 게이트가 INV-3 위반 이유를 비워 보낸다 — 몇 건인지는 여기서만 셀 수 있다.
+        # 세지 않으면 결정론 문구로 조용히 바뀐 것이 LLM 이 원래 그렇게 쓴 것과
+        # 구별이 안 된다(INV-4 — 폴백은 해도 침묵은 안 한다).
+        shown = kept[: self._cfg.max_alternatives]  # 화면에 뜨는 것만 센다
+        blanked = sum(1 for r in shown if str(r) in reasons and not reasons[str(r)])
+        if blanked:
+            notes.append(f"reason_time_expr_blanked: {blanked}건")
 
         alternatives = tuple(
             Alternative(
@@ -366,7 +385,7 @@ class PlanBAgent:
                 # LLM이 낸 근거(사용자 표시 1문장)가 있으면 그대로, 없으면 출처 표기
                 rationale=reasons.get(str(poi_id)) or self._rationale(request, used_llm),
             )
-            for i, poi_id in enumerate(kept[: self._cfg.max_alternatives])
+            for i, poi_id in enumerate(shown)
         )
         fallback_level = 0 if used_llm else 1
         return PlanBRagResult(
@@ -379,31 +398,61 @@ class PlanBAgent:
             empty_reason=None,
         )
 
-    # [1] Retrieve — KB 3종. 한 KB가 실패해도 나머지로 진행한다 (부분 성공 허용)
+    # [1] Retrieve — KB 4종. 한 KB가 실패해도 나머지로 진행한다 (부분 성공 허용)
     def retrieve(self, request: PlanBRagRequest) -> RagContext:
         notes: list[str] = []
+        # 질의 셋을 **한 번에** 임베딩한다. 단건 168ms 실측이고 종전에는 KB 마다 한 번씩
+        # 총 네 번 불렀다(KB-5 는 상황 질의를 그대로 다시 임베딩했다) — 0.67초가 Plan-B
+        # 예산에서 그냥 나갔다. 배치가 터지면 `None` 셋으로 두어 종전 경로로 되돌아간다
+        # (KB 검색을 통째로 잃는 것보다 낫다 — INV-4).
+        sched_q, situ_q, persona_q = (
+            _schedule_query(request), _situation_query(request), _persona_query(request)
+        )
+        try:
+            sched_v, situ_v, persona_v = self._embedding.embed_batch(
+                (sched_q, situ_q, persona_q)
+            )
+        except Exception as e:
+            sched_v = situ_v = persona_v = None
+            notes.append(f"embed_batch_degraded: {type(e).__name__}: {e}")
+
         schedule, note = self._safe_retrieve(
-            retrieve_schedule, _schedule_query(request), KbKind.SCHEDULE
+            retrieve_schedule, sched_q, KbKind.SCHEDULE, sched_v
         )
         if note:
             notes.append(note)
         situation, note = self._safe_retrieve(
-            retrieve_situation, _situation_query(request), KbKind.SITUATION
+            retrieve_situation, situ_q, KbKind.SITUATION, situ_v
         )
         if note:
             notes.append(note)
         persona, note = self._safe_retrieve(
-            retrieve_persona, _persona_query(request), KbKind.PERSONA
+            retrieve_persona, persona_q, KbKind.PERSONA, persona_v
+        )
+        if note:
+            notes.append(note)
+        # KB-5 — 앞 셋과 다르다: 상황에 맞는 몇 건이 아니라 **풀 전원의 문서**다.
+        # 실패해도 예외를 안 올린다(문서 없이 도는 것이 정상 동작이지 실패가 아니다).
+        knowledge, note = fetch_place_knowledge(
+            request.pool.pois, situ_q, self._embedding, self._store, vector=situ_v
         )
         if note:
             notes.append(note)
         return RagContext(
-            schedule=schedule, persona=persona, situation=situation, notes=tuple(notes)
+            schedule=schedule,
+            persona=persona,
+            situation=situation,
+            notes=tuple(notes),
+            place_knowledge=knowledge,
         )
 
-    def _safe_retrieve(self, fn, query: str, kb: KbKind) -> tuple[tuple[KbHit, ...], str]:
+    def _safe_retrieve(
+        self, fn, query: str, kb: KbKind, vector: Sequence[float] | None = None
+    ) -> tuple[tuple[KbHit, ...], str]:
         try:
-            hits = fn(query, self._embedding, self._store, top_k=self._cfg.top_k)
+            hits = fn(
+                query, self._embedding, self._store, top_k=self._cfg.top_k, vector=vector
+            )
         except Exception as e:
             return (), f"retrieve_{kb.value.lower()}_error: {type(e).__name__}: {e}"
         return self._cut(hits, kb)
@@ -442,8 +491,13 @@ class PlanBAgent:
         request: PlanBRagRequest,
         context: RagContext,
         available: tuple[PoiId, ...],
-    ) -> tuple[tuple[str, ...], Mapping[str, str], bool, str]:
-        """반환: (참조 순열, {참조: LLM 근거}, LLM 사용 여부, 폴백 사유)."""
+    ) -> tuple[tuple[str, ...], Mapping[str, str], bool, str, tuple[str, ...]]:
+        """반환: (참조 순열, {참조: LLM 근거}, LLM 사용 여부, 폴백 사유, 규칙 랭킹).
+
+        마지막 항목을 따로 돌려주는 이유: closed-set 재검증에서 **전량 드롭**되면
+        호출측이 되돌아갈 곳이 필요한데, 그때 풀 순서로 떨어지면 우천 강등·저장 장소
+        우선이 통째로 빠진다. 규칙 랭킹은 이미 계산돼 있으니 버리지 않고 넘긴다.
+        """
         saved_refs = _saved_refs(request.saved_places, context.persona)
         rule_ranked, rule_note = _rule_ranking(
             saved_refs, request.pool, available, request.reason
@@ -453,7 +507,7 @@ class PlanBAgent:
             return f"{cause} · {rule_note}" if rule_note else cause
 
         if self._worker is None:
-            return rule_ranked, {}, False, _why("alternative_worker_absent")
+            return rule_ranked, {}, False, _why("alternative_worker_absent"), rule_ranked
         try:
             result = self._worker.select(
                 request.pool,
@@ -468,6 +522,7 @@ class PlanBAgent:
                         context.persona, request.saved_places, request.persona),
                     max_alternatives=self._cfg.max_alternatives,
                     excluded_poi_ids=request.excluded_poi_ids,
+                    place_knowledge=context.place_knowledge,
                 ),
                 request.trace_id,
                 request.now,
@@ -475,16 +530,16 @@ class PlanBAgent:
                 retry_timeout_sec=self._llm_timeout(request, self._cfg.llm_retry_share),
             )
         except Exception as e:  # 설정 버그(프롬프트 미등록 등)도 Plan-B를 죽이지 않는다
-            return rule_ranked, {}, False, _why(f"alternative_error: {type(e).__name__}: {e}")
+            return rule_ranked, {}, False, _why(f"alternative_error: {type(e).__name__}: {e}"), rule_ranked
         if result.is_fallback:
-            return rule_ranked, {}, False, _why(f"alternative_fallback: {result.error}")
+            return rule_ranked, {}, False, _why(f"alternative_fallback: {result.error}"), rule_ranked
         picked = _as_refs(result.value)
         if picked is None:
-            return rule_ranked, {}, False, _why("alternative_bad_shape")
+            return rule_ranked, {}, False, _why("alternative_bad_shape"), rule_ranked
         selected, reasons = picked
         if not selected:
-            return rule_ranked, {}, False, _why("alternative_empty")
-        return selected, reasons, True, ""
+            return rule_ranked, {}, False, _why("alternative_empty"), rule_ranked
+        return selected, reasons, True, "", rule_ranked
 
     def _llm_timeout(
         self, request: PlanBRagRequest, share: float | None = None

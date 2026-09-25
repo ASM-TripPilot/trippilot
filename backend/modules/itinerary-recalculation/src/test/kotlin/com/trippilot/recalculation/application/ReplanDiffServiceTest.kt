@@ -85,6 +85,9 @@ class ReplanDiffServiceTest : StringSpec({
 
     fun plansOf(vararg slots: PlannedSlotView) = object : ItineraryPlanFacade {
         override fun findPlanSlots(accountId: UUID, tripId: UUID) = slots.toList()
+        // 이 스펙들은 계획 시각만 본다 — 문구 재료(TRIP-883)는 쓰지 않는다.
+        override fun findPlannedPlaces(accountId: UUID, tripId: UUID) =
+            emptyMap<java.time.LocalDate, List<com.trippilot.itinerarygeneration.api.PlannedPlaceView>>()
     }
 
     "초안이 나오기 전에는 비교가 없다 — 404 가 아니라 ready=false(INV-U4-05)" {
@@ -224,6 +227,30 @@ class ReplanDiffServiceTest : StringSpec({
 
         view.before.single { it.slotKey == slotKey(added) }.endsNextDay shouldBe true
         view.result!!.impact.returnTimeDelta shouldBe Duration.ofMinutes(-330)
+    }
+
+    /**
+     * 초안의 이동 거리가 **응답까지 간다**(TRIP-854 B-5). 초안 jsonb 에만 담고 아무도 안 읽으면
+     * 그 칸은 죽은 컬럼이고, `i08` 의 이동 지표는 여전히 나오지 않는다.
+     *
+     * 델타(`totalDistanceDeltaM`)는 **여전히 null 이다** — 원 일정 쪽에 미터 값이 없다. 그 사실을
+     * 여기 못 박아 둔다: 절대값이 생겼다고 델타가 생긴 것처럼 읽히면 화면이 뺄셈을 시도한다.
+     */
+    "초안의 이동 거리가 비교 결과에 실린다 — 델타는 여전히 모른다" {
+        val proposal = ReplanProposal(
+            UUID.randomUUID(), day, listOf(draftSlot(kept, "10:00", "11:00")), totalDistanceKm = 6.9,
+        )
+        val svc = ReplanDiffService(
+            sessionsOf(ReplanStatus.DRAFT, proposal.toMap()),
+            plansOf(planned(kept, "10:00", "11:00", 0)),
+        )
+
+        val view = svc.diff(acc, tripId, UUID.randomUUID())
+
+        view.totalDistanceKm shouldBe 6.9
+        ReplanDiffResponse.from(view).impact!!.totalDistanceKm shouldBe 6.9
+        // 원 일정에 미터가 없어 뺄셈이 성립하지 않는다 — 0 으로 채우면 거짓 요약이 된다.
+        ReplanDiffResponse.from(view).impact!!.totalDistanceDeltaM shouldBe null
     }
 
     "INV-3 응답 어디에도 소요시간 필드가 없다" {

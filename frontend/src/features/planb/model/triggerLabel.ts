@@ -24,7 +24,7 @@ export interface TriggerLabel {
 
 export const TRIGGER_LABELS: Record<TriggerKind, TriggerLabel> = {
   WEATHER: { label: '비 예보', iconKey: 'weather' },
-  CLOSURE: { label: '휴무 확인', iconKey: 'closure' },
+  CLOSURE: { label: '휴무', iconKey: 'closure' },
   DELAY: { label: '이동 지연', iconKey: 'delay' },
   MANUAL: { label: '변경 요청', iconKey: 'manual' },
 };

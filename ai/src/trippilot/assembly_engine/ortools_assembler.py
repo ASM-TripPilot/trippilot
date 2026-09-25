@@ -13,6 +13,9 @@ INFEASIBLE(고정 블록 모순 등)·UNKNOWN이면 None → 체인 다음 단�
 
 from __future__ import annotations
 
+import logging
+import time
+from collections import Counter
 from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Mapping
@@ -22,7 +25,7 @@ from ortools.sat.python import cp_model
 from trippilot.assembly_engine.config import (
     RAIN_INDOOR,
     RAIN_OUTDOOR,
-    STAY_DEFAULT_MIN,
+    stay_for,
     AssemblyConfig,
 )
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler, placed_fixed_blocks
@@ -34,10 +37,57 @@ from trippilot.domain.itinerary import (
     SolveMode,
     VisitSlot,
 )
+from trippilot.domain.llm import ScoredPoi
 from trippilot.domain.poi import Poi, PoiCategory
+
+_log = logging.getLogger(__name__)
 
 _PREFILTER_TOP_K = 60
 _MIN_DAY_MS = 100
+
+
+def prefilter_cut(
+    before: list[ScoredPoi], kept: list[ScoredPoi], pois: Mapping[PoiId, Poi]
+) -> tuple[Counter, tuple[PoiCategory, ...]]:
+    """프리필터가 버린 후보의 카테고리 분포와 **잘려서 0이 된 카테고리** (TRIP-908).
+
+    두 번째 값이 이 관측의 본체다. "식당 0개 풀"(수집 공백 — 설계상 허용, TRIP-379)과
+    "식당이 있었는데 상위 N 에서 전부 잘림"(랭킹·상한 문제)은 둘 다 밥 슬롯이 빈 같은
+    결과로 수렴하는데, 조치가 정반대다. 전자는 FOOD 가 `before` 에 없어 여기 안 나오고,
+    후자만 나온다. `meal_bonus` 는 프리필터 **뒤** 목적함수라 FOOD 후보가 안 남으면 줄
+    대상이 없다 — 그래서 총 건수가 아니라 카테고리별 잔존 0 을 본다.
+
+    **프리필터 잔존 기준이다 — 실제 노드 기준이 아니다.** 남은 FOOD 가 전부 휴무·창
+    밖이라 노드에서 빠져도 여기엔 안 나오고, 후보 밖 FOOD 고정 블록(식당 예약)이 있어도
+    "잔존 0: FOOD" 로 나온다. 이 관측이 가르려는 것은 "프리필터가 잘랐는가" 하나다.
+    """
+    kept_ids = {c.poi_id for c in kept}
+    cut = Counter(pois[c.poi_id].category for c in before if c.poi_id not in kept_ids)
+    kept_cats = {pois[c.poi_id].category for c in kept}
+    zeroed = tuple(sorted((cat for cat in cut if cat not in kept_cats),
+                          key=lambda cat: cat.value))
+    return cut, zeroed
+
+
+def _log_prefilter_cut(day, before, kept, pois) -> None:
+    """관측만 한다 — 프리필터 동작은 바꾸지 않는다(카테고리 인지 프리필터는 별건).
+
+    ponytail: 로그로만 남긴다. 응답·`AssemblyRunRecord` 로 내려면 단계 → 퍼사드 통로가
+    필요하다(단계는 trace 포트를 모른다) — 로그로 빈도를 본 뒤 필요하면 올린다.
+    주의: 앱에 루트 로깅 설정이 없어 uvicorn 기본으로는 `trippilot.*` 의 **INFO 가 안
+    나온다**(WARNING 만 나온다 — 잔존 0 신호는 보이고, 분모인 절단 INFO 는 안 보인다).
+    요청 로그(`api/middleware.py`)도 같은 처지라 로깅 설정은 별건이다.
+    """
+    cut, zeroed = prefilter_cut(before, kept, pois)
+    by_cat = ", ".join(f"{cat.value}={n}" for cat, n in
+                       sorted(cut.items(), key=lambda kv: kv[0].value))
+    if zeroed:
+        _log.warning(
+            "프리필터가 카테고리를 통째로 잘랐다 — 잔존 0: %s (day=%s, 후보 %d → %d, 잘림 %s)",
+            ",".join(cat.value for cat in zeroed), day, len(before), len(kept), by_cat)
+    else:
+        _log.info("프리필터 절단 (day=%s, 후보 %d → %d, 잘림 %s)",
+                  day, len(before), len(kept), by_cat)
 
 
 def _mod(dt: datetime) -> int:
@@ -62,8 +112,51 @@ class OrToolsAssembler:
         # 기배정 POI(TRIP-293)는 "이미 앞 일자에서 쓴 것"과 동일 취급 = used 초기값
         used: set[PoiId] = set(problem.excluded_poi_ids)
         days_out: list[DaySolution] = []
+        started = time.monotonic()
         for day in problem.days:
             slots = self._solve_day(problem, day, used, per_day_ms)
+            if slots is None and problem.pace is not None:
+                # **pace 는 소프트 선호다.** 지키려다 해를 못 내면 안 지키는 편이 낫다 —
+                # 여기서 포기하면 체인 다음 단계인 규칙 폴백(그리디)으로 내려가고,
+                # 그러면 "알차게를 골랐더니 일정이 더 성의 없어졌다"가 된다.
+                #
+                # 체류 배율은 CP-SAT 인스턴스의 난이도를 바꾼다. 실측(후보 60곳·3초 한도):
+                # 무보정은 6/6 성공인데 ×0.9 는 6/6 실패였고, 후보 45곳에서는 반대로
+                # ×0.95 가 6/6 실패·×0.9 는 6/6 성공이었다. 즉 "체류가 짧을수록 어렵다"가
+                # 아니라 **조합마다 어려운 인스턴스가 따로 있다**(같은 조합은 재현된다).
+                # (이 불안정 자체는 pace 와 무관하게 존재한다 — 무보정 기준선도 후보
+                #  50곳에서 8/8 해없음이다. 별건으로 재서 정한다: OR 단계가 큰
+                #  후보풀에서 해를 못 낸다.)
+                # 그래서 안전한 배율을 고르는 것으로는 못 막고, 못 냈을 때 무보정으로
+                # 한 번 더 보는 쪽이 맞다 — 이 재시도는 정의상 기준선과 같으므로
+                # **pace 를 켜서 기준선보다 나빠지는 경우가 없다.**
+                _log.info("pace=%s 로 해 없음 — 무보정 재시도 (day=%s)",
+                          problem.pace.value, day)
+                # 재시도는 같은 후보를 같은 프리필터로 자른다(pace 는 후보를 안 바꾼다) —
+                # 절단 관측을 두 번 남기면 빈도가 두 배로 세진다 (TRIP-908).
+                slots = self._solve_day(replace(problem, pace=None), day,
+                                        used, per_day_ms, log_cut=False)
+            if slots is None:
+                # **안 쓴 예산을 실패한 일자에 몰아준다 (TRIP-907).**
+                #
+                # 퍼사드는 이 단계에 잔여 **전부**를 넘기는데(TRIP-376), `_solve_day`
+                # 는 일자당 상한(기본 3초)으로 스스로 자른다. 그래서 하루짜리 요청은
+                # 15초를 받아 3초만 쓰고 그리디로 내려간다 — 12초가 그냥 남는다.
+                #
+                # 실측(후보 50곳·1일): 3초·6초는 3/3 해없음, **12초는 0/3** 이다.
+                # 즉 못 푸는 게 아니라 시간이 모자란 것이고, 그 시간은 이미 있다.
+                # 상한 자체를 올리지 않는 이유는 위 `_solve_day` 주석에 있다 —
+                # 잘 풀리던 요청까지 전부 느려진다.
+                # 기준은 `per_day_ms` 가 아니라 **실제로 쓰인 상한**이다 — 하루짜리
+                # 요청은 per_day_ms 가 잔여 전부(15초)라 그걸로 비교하면 영원히
+                # 거짓이 된다. 실제 CP-SAT 에 들어간 값은 min(상한, per_day) 다.
+                used_cap_ms = min(self._cfg.or_tools_limit_ms, per_day_ms)
+                spare_ms = remaining_ms - int((time.monotonic() - started) * 1000)
+                if spare_ms >= used_cap_ms * 2:
+                    _log.info("해 없음 — 남은 예산 %dms 를 몰아 재시도 (day=%s)",
+                              spare_ms, day)
+                    slots = self._solve_day(replace(problem, pace=None), day, used,
+                                            spare_ms, log_cut=False, cap_ms=spare_ms)
             if slots is None:
                 return None  # 해 확보 실패 → 체인 다음 단계
             used.update(s.poi_id for s in slots)
@@ -81,7 +174,8 @@ class OrToolsAssembler:
 
     # ── 일자 단위 CP-SAT ──────────────────────────────────────
     def _solve_day(self, problem, day, used: set[PoiId],
-                   budget_ms: int) -> list[VisitSlot] | None:
+                   budget_ms: int, *, log_cut: bool = True,
+                   cap_ms: int | None = None) -> list[VisitSlot] | None:
         tz = problem.day_window.start.tzinfo
         ws, we = _mod(problem.day_window.start), _mod(problem.day_window.end)
         fixed = [fb for fb in problem.fixed_blocks if fb.window.start.date() == day]
@@ -98,13 +192,16 @@ class OrToolsAssembler:
             cands.sort(key=lambda c: (-c.score, str(c.poi_id)))
             keep = [c for c in cands if c.poi_id in fixed_ids]
             keep += [c for c in cands if c.poi_id not in fixed_ids]
-            cands = keep[:_PREFILTER_TOP_K]
+            kept = keep[:_PREFILTER_TOP_K]
+            if log_cut:
+                _log_prefilter_cut(day, cands, kept, self._pois)
+            cands = kept
 
         # 노드 구성: 각 노드의 (poi, stay, lo, hi, score, pinned_start)
         nodes = []
         for c in cands:
             poi = self._pois[c.poi_id]
-            stay = STAY_DEFAULT_MIN[poi.category]
+            stay = stay_for(poi.category, problem.pace)
             win = self._day_open_window(poi, day)
             if win is None:
                 continue  # 휴무 — 모델에서 제외
@@ -122,7 +219,14 @@ class OrToolsAssembler:
             stay = int((fb.window.end - fb.window.start).total_seconds() // 60)
             existing = next((n for n in nodes if n["poi"].poi_id == fb.poi_id), None)
             if existing:
-                existing.update({"pin": pin, "stay": stay})
+                # lo·hi 도 함께 고정한다 — 아래 else 가지가 새 노드를 만들 때 쓰는 값과
+                # 같아야 한다. 안 맞추면 후보로 계산된 창(`hi = 닫힘 − 기본체류`)이 남고,
+                # 그 밖에 pin 이 놓이면 `start[i] == pin` 과 정의역이 모순돼 CP-SAT 이
+                # INFEASIBLE 을 낸다 → `_solve_day` None → **그 일자가 아니라 전체 solve**
+                # 가 None → 규칙 폴백 강등. 실측: 하루 창 09~21시, SIGHT(기본 75분)이
+                # 후보이자 고정일 때 20:00 예약에서 재현(19:00 은 통과 — 경계가 19:45).
+                # 고정 블록의 창이 정본이다(HC3) — 후보 기본체류는 여기서 의미가 없다.
+                existing.update({"pin": pin, "stay": stay, "lo": pin, "hi": pin})
             else:
                 nodes.append({"poi": poi, "stay": stay, "lo": pin, "hi": pin,
                               "score": 0.0, "is_llm": False, "pin": pin})
@@ -185,8 +289,12 @@ class OrToolsAssembler:
                                         max(nodes[i]["lo"], nodes[i]["hi"])))
 
         cp_solver = cp_model.CpSolver()
-        cp_solver.parameters.max_time_in_seconds = min(
-            self._cfg.or_tools_limit_ms, budget_ms) / 1000.0
+        # 일자당 상한. **기본값(3초)은 성공 경로의 지연을 묶는 장치다** — CP-SAT 은
+        # 준 시간을 거의 항상 끝까지 쓰므로(후보 20곳에서도 3,003ms 실측) 상한을
+        # 올리면 잘 풀리던 요청까지 전부 느려진다. 그래서 상한은 그대로 두고,
+        # **해를 못 냈을 때만** 호출측이 `cap_ms` 로 남은 예산을 몰아준다.
+        cap = self._cfg.or_tools_limit_ms if cap_ms is None else cap_ms
+        cp_solver.parameters.max_time_in_seconds = min(cap, budget_ms) / 1000.0
         cp_solver.parameters.random_seed = problem.seed % (2**31)
         cp_solver.parameters.num_search_workers = 1  # 결정론 (FD §4)
         status = cp_solver.Solve(m)

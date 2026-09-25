@@ -1,0 +1,27 @@
+<p><code>${{ ... }}</code>는 GitHub Actions 표현식이고 Bash의 <code>$NAME</code>은 runner에서 읽는 환경변수다. 둘은 평가하는 주체가 다르다. Workflow에서 <code>env: DEPLOY_MODE: ${{ inputs.mode }}</code>로 입력을 넘기면 Python은 <code>os.environ['DEPLOY_MODE']</code>로, Bash는 <code>"$DEPLOY_MODE"</code>로 읽는다. 외부 입력을 shell 코드에 직접 이어 붙이지 않고 값으로 전달하면 코드와 데이터를 구분하기 쉽다.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>표현식 / 값</th><th>생산자</th><th>이 저장소의 사용 예</th></tr></thead>
+<tbody>
+<tr><td><code>github.sha</code>, <code>github.ref</code></td><td>현재 실행의 Git 정보</td><td>배포 commit 식별, 브랜치 검증</td></tr>
+<tr><td><code>inputs.environment</code></td><td>수동 실행 입력</td><td><code>dev</code> 또는 <code>prd</code> 선택</td></tr>
+<tr><td><code>vars.AWS_ROLE_ARN</code></td><td>저장소·Environment 설정 변수</td><td>선택한 환경의 Role ARN</td></tr>
+<tr><td><code>secrets.GITHUB_TOKEN</code></td><td>GitHub가 제공하는 job 토큰</td><td>기존 CI의 GHCR 로그인</td></tr>
+<tr><td><code>env.IMAGE_TAG</code></td><td>workflow 또는 job 환경변수</td><td>새 ECR 이미지의 태그</td></tr>
+<tr><td><code>steps.config.outputs.state_bucket</code></td><td>같은 job의 <code>id: config</code> step</td><td>Terraform S3 backend 선택</td></tr>
+<tr><td><code>needs.validate.outputs.revision</code></td><td>선행 job이 공개한 output</td><td>연습 예제의 검증 commit 전달</td></tr>
+</tbody>
+</table></div>
+<p class="source-note">Context는 사용할 수 있는 YAML 위치가 정해져 있다. 예를 들어 아직 실행하지 않은 step의 output으로 workflow 전체의 시작 조건을 정할 수는 없다. <a href="https://docs.github.com/en/actions/reference/workflows-and-actions/contexts">Contexts reference</a></p>
+<p>Runner는 특별한 파일 경로를 환경변수로 제공한다. <code>GITHUB_OUTPUT</code>에 <code>name=value</code>를 덧붙이면 step의 결과가 된다. <code>GITHUB_ENV</code>에 쓰면 같은 job의 <em>다음</em> step들이 읽을 환경변수가 된다. 작성한 step 안에서 즉시 변수를 쓰려면 shell 변수도 별도로 지정해야 한다. <code>GITHUB_STEP_SUMMARY</code>는 사람이 읽는 실행 요약에 Markdown을 추가한다. 세 파일의 목적이 다르므로 요약에 쓴 값을 프로그램이 output처럼 참조할 수는 없다. <a href="https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-commands">Environment files와 workflow commands</a></p>
+<div class="code-block"><div class="code-label">실제 코드 발췌 · 문자열로 전달되는 step output</div><pre><code class="language-yaml">- name: Validate environment and branch before AWS access
+  id: config
+  run: python3 infra/scripts/workflow_config.py
+
+# 이후 Terraform init step에서 사용
+env:
+  TF_STATE_BUCKET: ${{ steps.config.outputs.state_bucket }}
+
+# 이후 앱 배포 관련 step에서 사용
+if: steps.config.outputs.deploy_application == 'true'</code></pre></div>
+<p><a href="../../infra/scripts/workflow_config.py">workflow_config.py</a>는 <code>GITHUB_OUTPUT</code> 파일에 <code>state_bucket=...</code>와 <code>deploy_application=false</code> 같은 결과를 쓴다. <code>inputs.deploy_application</code>은 boolean 입력이지만 step output은 문자열이므로 후속 조건은 <code>== 'true'</code>로 비교한다. 문자열 <code>'false'</code> 자체를 boolean인 것처럼 평가하면 의도와 어긋날 수 있다.</p>
+<p>기초 예제에서 step output을 다른 job으로 옮기는 연결은 <code>steps.check.outputs.revision → jobs.validate.outputs.revision → needs.validate.outputs.revision</code>이다. <code>GITHUB_ENV</code>의 <code>CHECK_LABEL</code>은 이 연결을 거치지 않았으므로 <code>report</code> job에 전달되지 않는다. <a href="https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/pass-job-outputs">Job 사이 output 전달</a></p>

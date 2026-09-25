@@ -1,29 +1,64 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
-
+import type { ReactTestInstance } from 'react-test-renderer';
 import {
-  REPLAN_DIRECTIVES,
-  REPLAN_REASONS,
-} from '@/features/planb/model/replanScope';
+  act,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 
 import { ReplanRequestSheet } from './ReplanRequestSheet';
 
 /**
- * TRIP-439 · AC-1·AC-2·BR-U4-12·D5 — i10 재계획 요청 시트(순수 props+콜백).
+ * TRIP-750 · AC-1~5·8·11 — i04 재계획 요청 시트(Figma 4067:2427, 순수 props+콜백).
  *
  * 무엇을 보장하나:
- *  - 🔴 범위 2칩·사유 6칩·방향 7칩·자유텍스트·2 CTA 가 규약 testID 로 실재하고, 라벨이 카탈로그와 일치.
- *  - 🔴 칩 press → 대응 콜백(onSelectScope/onToggleReason/onToggleDirective) 이 그 key 로 불린다.
- *  - 🔴 `[AI가 다시 짜기]`↔`[직접 고르기]` 두 CTA 는 **서로 다른 콜백**을 부른다(페이지 분기의 seam).
- *  - 🔴 감지 배너+[끄기]는 `trigger` prop **있을 때만** 뜬다(D5 — 수동 진입 주 동선엔 없음).
+ *  - 섹션 순서 = 왜 바꾸나요 → 바꿀 범위 → 어떻게 바꿀까요 → 직접 말하기 → CTA 1개. 부제·각주·`(선택)` 없음.
+ *  - `detected` 가 있으면 사유 맨 앞에 감지 칩(SVG 경고 + 문구)이 서고, 정적 {WEATHER, reasonKey} 칩은 숨는다.
+ *  - 방향 11종(key·라벨·순서), 입력 1줄, 스크림·끌어 닫기 → onClose.
+ *  - 삭제된 배너·범위 밖 안내·[직접 고르기]의 testID 가 트리에 없다.
  *
- * ★1 바텀시트 목이 children 을 통과 렌더하므로 시트 안 요소를 조회할 수 있다(시트 거동 자체는 무심판).
- * ★2 자유텍스트는 RN TextInput 계약(BottomSheetTextInput 은 목이 미제공).
- * ★3 칩=단일 leaf 라 라벨은 문자열 완전일치로 잠근다(배너는 다중 텍스트라 정규식 부분포함).
- *
- * 3동작: 준비 = 기본 props → 실행 = 렌더/press/changeText → 단언 = 요소 존재·불린 콜백.
+ * 삭제 testID 는 조립한다 — 리터럴이면 `planbRequestSheetStructure` R3 가 이 파일을 잡는다(02a ★3).
+ * 통과형 바텀시트 목이라 실제 딤 커버·끌어 닫기는 jest 사각(02a ★1, AC-V2 실기).
  */
 
-/** 기본 props — 값은 비어 있고 콜백은 스파이. 케이스마다 override. */
+const DELETED_IDS = ['detected', 'out-of-scope', 'manual', 'suppress'].map(
+  (suffix) => ['planb', 'request', suffix].join('-')
+);
+
+const REASONS: [string, string][] = [
+  ['TEMP_CLOSED', '임시 휴무'],
+  ['SLOW_MOVE', '이동 지연'],
+  ['LOW_ENERGY', '체력 저하'],
+  ['FULLY_BOOKED', '예약 마감'],
+  ['WEATHER', '날씨'],
+  ['JUST_CHANGE', '그냥 바꾸고 싶어요'],
+];
+
+const DIRECTIVES: [string, string][] = [
+  ['RELAX', '여유 있게'],
+  ['FILL_MORE', '더 채워서'],
+  ['INDOOR', '실내로'],
+  ['EARLIER', '시간만 당기기'],
+  ['NEARBY', '가까운 곳으로'],
+  ['ADD_FOOD', '맛집 추가'],
+  ['END_NEAR_STAY', '숙소 근처에서 끝내기'],
+  ['LESS_MOVE', '이동 짧게'],
+  ['KEEP_BUDGET', '예산 유지'],
+  ['KEEP_DINNER', '저녁은 그대로'],
+  ['AVOID_OUTDOOR', '야외 피하기'],
+];
+
+const TRIGGER_CHIP = 'planb-request-trigger-chip';
+const WEATHER_DETECTED = {
+  label: '비 예보 · 해운대 해변 17시',
+  reasonKey: 'WEATHER',
+};
+const CLOSURE_DETECTED = {
+  label: '휴무 · 해운대 해변 주변 시설',
+  reasonKey: 'TEMP_CLOSED',
+};
+
 function baseProps() {
   return {
     scope: 'PARTIAL_SLOTS' as const,
@@ -35,126 +70,334 @@ function baseProps() {
     onToggleDirective: jest.fn(),
     onChangeFreeText: jest.fn(),
     onSubmit: jest.fn(),
-    onManual: jest.fn(),
+    onClose: jest.fn(),
   };
 }
 
-describe('🔴 R1 · 범위 2칩 · 라벨 · 단일선택 표시', () => {
+function classTokens(node: ReactTestInstance): string[] {
+  return String(node.props.className ?? '')
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+/** 정적 사유 칩 testID 를 트리 순서대로 key 만 뽑는다. */
+function staticReasonKeys(): string[] {
+  return screen
+    .queryAllByTestId(/^planb-request-reason-/)
+    .map((node) =>
+      String(node.props.testID).replace('planb-request-reason-', '')
+    );
+}
+
+/** testID → 섹션 그룹. 그룹 밖(시트·스크림 등)은 null. */
+function groupOf(testID: string): string | null {
+  if (testID === TRIGGER_CHIP) return 'reason';
+  if (testID.startsWith('planb-request-reason-')) return 'reason';
+  if (testID.startsWith('planb-request-scope-')) return 'scope';
+  if (testID.startsWith('planb-request-directive-')) return 'directive';
+  if (testID === 'planb-request-freetext') return 'freetext';
+  if (testID === 'planb-request-submit') return 'submit';
+  return null;
+}
+
+describe('🔴 S1 · 제목·섹션 라벨·순서 (AC-1)', () => {
+  it('제목은 20px, 라벨 4개와 CTA 가 Figma 순서·문구 그대로이고 부제·각주·(선택)은 없다', () => {
+    render(<ReplanRequestSheet {...baseProps()} />);
+
+    const title = screen.getByText('✦ AI에게 맡길게요');
+    expect(classTokens(title)).toContain('text-[20px]');
+    expect(classTokens(title)).not.toContain('text-section');
+
+    const labels = screen
+      .getAllByText(
+        /^(왜 바꾸나요 · 여러 개 가능|바꿀 범위|어떻게 바꿀까요 · 지킬 것도 함께|직접 말하기|AI가 다시 짜기)$/
+      )
+      .map((node) => node.props.children);
+    expect(labels).toEqual([
+      '왜 바꾸나요 · 여러 개 가능',
+      '바꿀 범위',
+      '어떻게 바꿀까요 · 지킬 것도 함께',
+      '직접 말하기',
+      'AI가 다시 짜기',
+    ]);
+
+    expect(screen.queryByText(/어디를 · 어떻게 바꿀지/)).toBeNull();
+    expect(screen.queryByText(/방문한 곳과 진행 중인 일정/)).toBeNull();
+    expect(screen.queryByText(/\(선택\)/)).toBeNull();
+  });
+});
+
+describe('🔴 S2 · 칩 그룹 트리 순서 (AC-1)', () => {
+  it('감지 칩 → 사유 → 범위 → 방향 → 입력 → CTA 순으로 놓인다', () => {
+    render(<ReplanRequestSheet {...baseProps()} detected={WEATHER_DETECTED} />);
+
+    const ids = screen
+      .getAllByTestId(/^planb-request-/)
+      .map((node) => String(node.props.testID));
+    // 감지 칩이 사유 그룹의 맨 앞이다.
+    expect(ids.find((id) => groupOf(id) === 'reason')).toBe(TRIGGER_CHIP);
+
+    const groups = ids
+      .map(groupOf)
+      .filter((group): group is string => group !== null)
+      .filter((group, index, all) => index === 0 || all[index - 1] !== group);
+    expect(groups).toEqual([
+      'reason',
+      'scope',
+      'directive',
+      'freetext',
+      'submit',
+    ]);
+  });
+});
+
+describe('S3 · 감지 트리거 없음 — 정적 사유 6칩 (AC-2a)', () => {
+  it('6종이 key·라벨·순서 그대로 뜨고 감지 칩은 없으며, 누르면 그 key 로 토글된다', () => {
+    const props = baseProps();
+    render(<ReplanRequestSheet {...props} />);
+
+    expect(screen.queryByTestId(TRIGGER_CHIP)).toBeNull();
+    expect(staticReasonKeys()).toEqual(REASONS.map(([key]) => key));
+    REASONS.forEach(([key, label]) =>
+      expect(
+        screen.getByTestId(`planb-request-reason-${key}`)
+      ).toHaveTextContent(label)
+    );
+
+    fireEvent.press(screen.getByTestId('planb-request-reason-TEMP_CLOSED'));
+    expect(props.onToggleReason).toHaveBeenCalledTimes(1);
+    expect(props.onToggleReason).toHaveBeenCalledWith('TEMP_CLOSED');
+  });
+});
+
+describe('🔴 S4 · 감지 트리거 WEATHER — 선두 감지 칩 (AC-2b·c)', () => {
+  it('감지 칩이 문구·SVG 경고·선택 상태로 서고, 정적 날씨 칩은 숨으며, 누르면 WEATHER 로 토글된다', () => {
+    const props = { ...baseProps(), selectedReasons: ['WEATHER'] };
+    render(<ReplanRequestSheet {...props} detected={WEATHER_DETECTED} />);
+
+    const chip = screen.getByTestId(TRIGGER_CHIP);
+    expect(chip).toHaveTextContent('비 예보 · 해운대 해변 17시');
+    expect(chip).toBeSelected();
+    expect(
+      chip.findAll((node) => node.props.fill === '#FF385C').length
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText(/⚠/)).toBeNull();
+
+    expect(staticReasonKeys()).toEqual([
+      'TEMP_CLOSED',
+      'SLOW_MOVE',
+      'LOW_ENERGY',
+      'FULLY_BOOKED',
+      'JUST_CHANGE',
+    ]);
+
+    fireEvent.press(chip);
+    expect(props.onToggleReason).toHaveBeenCalledTimes(1);
+    expect(props.onToggleReason).toHaveBeenCalledWith('WEATHER');
+  });
+
+  it('선택값에 reasonKey 가 없으면 감지 칩은 꺼진 상태로 그려진다', () => {
+    render(<ReplanRequestSheet {...baseProps()} detected={WEATHER_DETECTED} />);
+
+    expect(screen.getByTestId(TRIGGER_CHIP)).not.toBeSelected();
+  });
+});
+
+describe('🔴 S5 · 감지 트리거 CLOSURE — 매핑 key 칩도 숨긴다 (AC-2c · Q2)', () => {
+  it('정적 날씨·임시 휴무가 숨고 나머지 4칩이 남으며, 감지 칩은 TEMP_CLOSED 로 토글된다', () => {
+    const props = { ...baseProps(), selectedReasons: ['TEMP_CLOSED'] };
+    render(<ReplanRequestSheet {...props} detected={CLOSURE_DETECTED} />);
+
+    const chip = screen.getByTestId(TRIGGER_CHIP);
+    expect(chip).toHaveTextContent('휴무 · 해운대 해변 주변 시설');
+    expect(chip).toBeSelected();
+    expect(staticReasonKeys()).toEqual([
+      'SLOW_MOVE',
+      'LOW_ENERGY',
+      'FULLY_BOOKED',
+      'JUST_CHANGE',
+    ]);
+
+    fireEvent.press(chip);
+    expect(props.onToggleReason).toHaveBeenCalledWith('TEMP_CLOSED');
+  });
+});
+
+describe('🔴 S6 · 방향 11칩 (AC-3 · D5 · Q1)', () => {
+  it('11종이 key·라벨·순서 그대로이고 야경 코스는 없으며, 야외 피하기를 누르면 AVOID_OUTDOOR 로 토글된다', () => {
+    const props = baseProps();
+    render(<ReplanRequestSheet {...props} />);
+
+    const keys = screen
+      .getAllByTestId(/^planb-request-directive-/)
+      .map((node) =>
+        String(node.props.testID).replace('planb-request-directive-', '')
+      );
+    expect(keys).toEqual(DIRECTIVES.map(([key]) => key));
+    DIRECTIVES.forEach(([key, label]) =>
+      expect(
+        screen.getByTestId(`planb-request-directive-${key}`)
+      ).toHaveTextContent(label)
+    );
+    expect(screen.queryByText('야경 코스')).toBeNull();
+
+    fireEvent.press(
+      screen.getByTestId('planb-request-directive-AVOID_OUTDOOR')
+    );
+    expect(props.onToggleDirective).toHaveBeenCalledTimes(1);
+    expect(props.onToggleDirective).toHaveBeenCalledWith('AVOID_OUTDOOR');
+  });
+});
+
+describe('S7 · 범위 2칩 · 단일선택 (BR-U4-11)', () => {
   it('두 칩이 라벨과 함께 뜨고 기본 범위가 선택 표시되며 press 가 값을 올린다', () => {
     const props = baseProps();
     render(<ReplanRequestSheet {...props} />);
 
-    // 라벨 완전일치(칩=단일 leaf, ★3).
     expect(
       screen.getByTestId('planb-request-scope-PARTIAL_SLOTS')
     ).toHaveTextContent('지금 이후');
     expect(
       screen.getByTestId('planb-request-scope-FULL_DAY')
     ).toHaveTextContent('오늘 전체');
-
-    // 기본값(지금 이후)이 selected.
     expect(
-      screen.getByTestId('planb-request-scope-PARTIAL_SLOTS').props
-        .accessibilityState?.selected
-    ).toBe(true);
+      screen.getByTestId('planb-request-scope-PARTIAL_SLOTS')
+    ).toBeSelected();
 
-    // 오늘 전체 press → onSelectScope('FULL_DAY').
     fireEvent.press(screen.getByTestId('planb-request-scope-FULL_DAY'));
     expect(props.onSelectScope).toHaveBeenCalledTimes(1);
     expect(props.onSelectScope).toHaveBeenCalledWith('FULL_DAY');
   });
 });
 
-describe('🔴 R2 · 사유 6칩 전량 · 토글 콜백 (BR-U4-12)', () => {
-  it('카탈로그의 사유 6종이 모두 뜨고, 하나를 누르면 그 key 로 토글된다', () => {
+describe('🔴 S8 · 직접 말하기 입력 1줄 (AC-4 · BR-U4-13)', () => {
+  it('multiline·64px 최소 높이가 없고 placeholder·maxLength 500 은 그대로이며 입력이 올라간다', () => {
     const props = baseProps();
     render(<ReplanRequestSheet {...props} />);
 
-    // 카탈로그(모델)와 render 를 동기로 잠근다 — 6종 전부 존재 + 라벨 일치.
-    REPLAN_REASONS.forEach((reason) => {
-      const chip = screen.getByTestId(`planb-request-reason-${reason.key}`);
-      expect(chip).toHaveTextContent(reason.label);
-    });
-
-    fireEvent.press(screen.getByTestId('planb-request-reason-WEATHER'));
-    expect(props.onToggleReason).toHaveBeenCalledTimes(1);
-    expect(props.onToggleReason).toHaveBeenCalledWith('WEATHER');
-  });
-});
-
-describe('🔴 R3 · 방향 7칩 전량 · 토글 콜백', () => {
-  it('카탈로그의 방향 7종이 모두 뜨고, 하나를 누르면 그 key 로 토글된다', () => {
-    const props = baseProps();
-    render(<ReplanRequestSheet {...props} />);
-
-    REPLAN_DIRECTIVES.forEach((directive) => {
-      const chip = screen.getByTestId(
-        `planb-request-directive-${directive.key}`
-      );
-      expect(chip).toHaveTextContent(directive.label);
-    });
-
-    fireEvent.press(screen.getByTestId('planb-request-directive-RELAX'));
-    expect(props.onToggleDirective).toHaveBeenCalledTimes(1);
-    expect(props.onToggleDirective).toHaveBeenCalledWith('RELAX');
-  });
-});
-
-describe('🔴 R4 · 자유텍스트 (★2 RN TextInput)', () => {
-  it('입력하면 onChangeFreeText 로 그 값이 올라간다', () => {
-    const props = baseProps();
-    render(<ReplanRequestSheet {...props} />);
-
-    fireEvent.changeText(
-      screen.getByTestId('planb-request-freetext'),
-      '저녁은 야경'
+    const input = screen.getByTestId('planb-request-freetext');
+    expect(input.props.multiline).not.toBe(true);
+    expect(classTokens(input)).not.toContain('min-h-[64px]');
+    expect(input.props.placeholder).toBe(
+      '예: 저녁은 광안리 야경 보이는 곳으로'
     );
-    expect(props.onChangeFreeText).toHaveBeenCalledTimes(1);
+    expect(input.props.maxLength).toBe(500);
+
+    fireEvent.changeText(input, '저녁은 야경');
     expect(props.onChangeFreeText).toHaveBeenCalledWith('저녁은 야경');
   });
 });
 
-describe('🔴 R5 · 2 CTA 분기 seam (AC-1 · AC-2)', () => {
-  it('[AI가 다시 짜기]는 onSubmit 만, [직접 고르기]는 onManual 만 부른다', () => {
+describe('🔴 S9 · CTA 1개 · 삭제 표면 부재 (AC-5)', () => {
+  it('[AI가 다시 짜기]만 있고 onSubmit 만 부르며, 옛 배너·범위 밖·[직접 고르기]의 흔적이 없다', () => {
     const props = baseProps();
-    render(<ReplanRequestSheet {...props} />);
+    render(<ReplanRequestSheet {...props} detected={WEATHER_DETECTED} />);
 
-    fireEvent.press(screen.getByTestId('planb-request-submit'));
-    expect(props.onSubmit).toHaveBeenCalledTimes(1);
-    expect(props.onManual).not.toHaveBeenCalled();
+    const cta = screen.getByTestId('planb-request-submit');
+    expect(cta).toHaveTextContent('AI가 다시 짜기');
+    expect(classTokens(cta)).toContain('rounded-button');
+    expect(classTokens(cta)).not.toContain('rounded-[14px]');
 
-    fireEvent.press(screen.getByTestId('planb-request-manual'));
-    expect(props.onManual).toHaveBeenCalledTimes(1);
-    // submit 은 여전히 1회(직접 고르기가 제출을 안 부름).
+    fireEvent.press(cta);
     expect(props.onSubmit).toHaveBeenCalledTimes(1);
+    expect(props.onClose).not.toHaveBeenCalled();
+
+    expect(screen.queryByText('직접 고르기')).toBeNull();
+    expect(screen.queryByText('끄기')).toBeNull();
+    DELETED_IDS.forEach((id) => expect(screen.queryByTestId(id)).toBeNull());
   });
 });
 
-describe('🔴 R6 · 감지 배너 조건부 (D5)', () => {
-  it('trigger 가 없으면 [끄기]가 없고, 있으면 배너+[끄기]가 뜬다', () => {
+describe('🔴 S10 · 닫기 — 스크림 탭 · 끌어 닫기 (AC-8)', () => {
+  it('스크림(bg-scrim/40)과 BottomSheet onClose 가 모두 onClose 로 이어지고 제출은 안 한다', () => {
     const props = baseProps();
-    const { rerender } = render(<ReplanRequestSheet {...props} />);
+    render(<ReplanRequestSheet {...props} />);
 
-    // 수동 진입 주 동선 — 배너/끄기 없음.
-    expect(screen.queryByTestId('planb-request-suppress')).toBeNull();
+    const scrim = screen.getByTestId('planb-request-scrim');
+    expect(classTokens(scrim)).toContain('bg-scrim/40');
+    fireEvent.press(scrim);
+    expect(props.onClose).toHaveBeenCalledTimes(1);
 
-    // 트리거가 주어지면(자동 진입 변형) 배너+끄기 렌더.
-    const onSuppress = jest.fn();
-    rerender(
+    const pannable = screen.UNSAFE_root.findAll(
+      (node) => node.props.enablePanDownToClose === true
+    );
+    expect(pannable.length).toBeGreaterThan(0);
+    act(() => {
+      pannable[0].props.onClose();
+    });
+    expect(props.onClose).toHaveBeenCalledTimes(2);
+    expect(props.onSubmit).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 S11 · 칩·CTA 토큰 (AC-11 · 후속 39)', () => {
+  it('선택 칩은 primary-pale 배경·primary 글자·r12 이고, 어떤 칩에도 pill 반경·primary-text 가 없다', () => {
+    render(
       <ReplanRequestSheet
-        {...props}
-        trigger={{ title: '비 예보 감지' }}
-        onSuppress={onSuppress}
+        {...baseProps()}
+        selectedReasons={['WEATHER']}
+        selectedDirectives={['END_NEAR_STAY']}
+        detected={WEATHER_DETECTED}
       />
     );
 
-    expect(screen.getByTestId('planb-request-suppress')).toBeOnTheScreen();
-    // 배너는 제목+부제를 담을 수 있어 정규식 부분포함으로 잠근다(★3).
-    expect(screen.getByTestId('planb-request-detected')).toHaveTextContent(
-      /비 예보 감지/
-    );
+    const selected: [string, string][] = [
+      [TRIGGER_CHIP, '비 예보 · 해운대 해변 17시'],
+      ['planb-request-scope-PARTIAL_SLOTS', '지금 이후'],
+      ['planb-request-directive-END_NEAR_STAY', '숙소 근처에서 끝내기'],
+    ];
+    selected.forEach(([id, label]) => {
+      const chip = screen.getByTestId(id);
+      expect(classTokens(chip)).toEqual(
+        expect.arrayContaining(['bg-primary-pale', 'rounded-button'])
+      );
+      expect(classTokens(within(chip).getByText(label))).toContain(
+        'text-primary'
+      );
+    });
 
-    fireEvent.press(screen.getByTestId('planb-request-suppress'));
-    expect(onSuppress).toHaveBeenCalledTimes(1);
+    const chips = screen
+      .getAllByTestId(/^planb-request-(trigger-chip|reason-|scope-|directive-)/)
+      .filter((node) => typeof node.props.testID === 'string');
+    expect(chips.length).toBeGreaterThan(15);
+    chips.forEach((chip) => {
+      expect(classTokens(chip)).toContain('rounded-button');
+      expect(classTokens(chip)).not.toContain('rounded-pill');
+      const primaryText = chip.findAll((node) =>
+        classTokens(node).includes('text-primary-text')
+      );
+      expect(primaryText).toEqual([]);
+    });
+  });
+});
+
+describe('🔴 S-E · 실패 안내 (03b 경고-1 · INV-4)', () => {
+  const CONFLICT_TEXT = '여행 기간에만 AI에게 맡길 수 있어요';
+
+  it('S-E1 errorText 가 있으면 입력 뒤·CTA 바로 앞에 그 문구 하나를 그대로 띄운다', () => {
+    render(<ReplanRequestSheet {...baseProps()} errorText={CONFLICT_TEXT} />);
+
+    expect(screen.getAllByTestId('planb-request-error')).toHaveLength(1);
+    expect(screen.getByTestId('planb-request-error')).toHaveTextContent(
+      CONFLICT_TEXT
+    );
+    const order = screen
+      .getAllByTestId(/^planb-request-(freetext|error|submit)$/)
+      .map((node) => String(node.props.testID));
+    expect(order).toEqual([
+      'planb-request-freetext',
+      'planb-request-error',
+      'planb-request-submit',
+    ]);
+  });
+
+  it.each([
+    ['null', null],
+    ['안 줌', undefined],
+  ])('S-E2 errorText 가 %s 이면 안내 요소가 없다', (_label, errorText) => {
+    render(<ReplanRequestSheet {...baseProps()} errorText={errorText} />);
+
+    expect(screen.queryByTestId('planb-request-error')).toBeNull();
+    expect(screen.getByTestId('planb-request-submit')).toBeOnTheScreen();
   });
 });

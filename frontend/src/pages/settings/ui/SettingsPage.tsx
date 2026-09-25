@@ -1,20 +1,43 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
+import Constants from 'expo-constants';
+import * as Linking from 'expo-linking';
 import { type ReactElement, useState } from 'react';
 import { Share } from 'react-native';
 
+import { usePreferenceStore } from '@/features/onboarding/model/preferenceStore';
+import { OSM_COPYRIGHT_URL } from '@/features/settings/model/dataAttribution';
 import { resolveExportSummary } from '@/features/settings/model/exportSummary';
-import { buildSettingsSections } from '@/features/settings/model/settingsSections';
+import {
+  buildSettingsSections,
+  filterReadySettingsSections,
+} from '@/features/settings/model/settingsSections';
 import { SettingsScreen } from '@/features/settings/ui/SettingsScreen';
+import { logout } from '@/shared/api';
 import {
   useDeleteMeDeletion,
   useGetMe,
   useGetMeExport,
   usePostMeDeletion,
 } from '@/shared/api/generated/account/account';
+import { useGetMeLocationConsent } from '@/shared/api/generated/location/location';
+import { useGetMePreferences } from '@/shared/api/generated/preferences/preferences';
 import {
+  getGetMeSettingsQueryKey,
   useGetMeProfile,
+  useGetMeSettings,
   usePatchMeProfileNickname,
+  usePatchMeSettings,
 } from '@/shared/api/generated/profile/profile';
+import { useGetMePersonalization } from '@/shared/api/generated/reflection/reflection';
+import {
+  type AccountSettings,
+  PersonalizationInfoReason,
+} from '@/shared/api/generated/schemas';
+import {
+  registerPushIfGranted,
+  unregisterStoredPushToken,
+} from '@/shared/push';
 import { validateNicknameFormat } from '@/shared/validation/nicknameFormat';
 
 /**
@@ -48,6 +71,7 @@ function loadRouter(): typeof import('expo-router').router | null {
 export function SettingsPage(): ReactElement {
   const account = useGetMe();
   const profile = useGetMeProfile();
+  const queryClient = useQueryClient();
 
   // 닉네임: 서버 값 기본 + 편집 성공 시 override(200 뒤 요약 갱신 / 409·503 뒤 미변경).
   const [nicknameOverride, setNicknameOverride] = useState<string | null>(null);
@@ -63,9 +87,48 @@ export function SettingsPage(): ReactElement {
     (account.data?.status === 'DELETION_PENDING' ? 'pending' : 'active');
   const [purgeAt, setPurgeAt] = useState<string | null>(null);
   const [cancelDeletionError, setCancelDeletionError] = useState(false);
+  const [deleteRequestError, setDeleteRequestError] = useState(false);
 
   const [truncatedLabel, setTruncatedLabel] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+
+  // TRIP-778 행 값 — 조회 전·실패면 undefined 로 흘려 값·칩을 그리지 않는다(D4).
+  // 위치 동의는 GET 만 쓴다: `useLocationConsent` 는 마운트 시 OS 권한 미러 PATCH 를 쏜다.
+  const preferences = useGetMePreferences();
+  const locationConsent = useGetMeLocationConsent();
+  const personalization = useGetMePersonalization();
+  const personalizationReason = personalization.data?.reason;
+
+  // 제휴 안내: 진실은 `/me/settings` 쿼리 캐시 하나다(숙소 상세도 같은 키를 읽는다 — AC-11).
+  // 라벨이 "다시 보기"라 ON = dismissed:false — 서버 값 ↔ UI 반전은 여기 한 곳에서만 한다.
+  const settingsKey = getGetMeSettingsQueryKey();
+  const accountSettings = useGetMeSettings();
+  const dismissed = accountSettings.data?.affiliateNoticeDismissed;
+  const [affiliateNoticeError, setAffiliateNoticeError] = useState(false);
+  const patchSettings = usePatchMeSettings<
+    unknown,
+    { previous?: AccountSettings }
+  >({
+    mutation: {
+      // 낙관 반영 — 응답 전에 캐시를 먼저 바꾸고, 실패하면 이전 값으로 되돌린다(D7).
+      onMutate: ({ data }) => {
+        const previous = queryClient.getQueryData<AccountSettings>(settingsKey);
+        queryClient.setQueryData<AccountSettings>(settingsKey, {
+          affiliateNoticeDismissed: data.affiliateNoticeDismissed === true,
+        });
+        setAffiliateNoticeError(false);
+        return { previous };
+      },
+      onSuccess: (data) => {
+        queryClient.setQueryData(settingsKey, data);
+      },
+      onError: (_error, _variables, context) => {
+        if (context?.previous)
+          queryClient.setQueryData(settingsKey, context.previous);
+        setAffiliateNoticeError(true);
+      },
+    },
+  });
 
   const patchNickname = usePatchMeProfileNickname({
     mutation: {
@@ -85,6 +148,13 @@ export function SettingsPage(): ReactElement {
       onSuccess: (data) => {
         setDeletionOverride('pending');
         setPurgeAt(data?.purgeAt ?? null);
+        setDeleteRequestError(false);
+        // 삭제를 요청한 계정으로 푸시가 가지 않게 이 기기 토큰을 해제한다(TRIP-835 AC-6).
+        void unregisterStoredPushToken();
+      },
+      // 5xx·네트워크 오류 모두 — 상태는 active 그대로, 인라인 오류로 알린다(TRIP-935 R5, INV-4).
+      onError: () => {
+        setDeleteRequestError(true);
       },
     },
   });
@@ -95,6 +165,8 @@ export function SettingsPage(): ReactElement {
         setDeletionOverride('active');
         setPurgeAt(null);
         setCancelDeletionError(false);
+        // 철회하면 다시 받게 조용히 재등록한다 — 묻지 않는다(TRIP-835 Q4).
+        void registerPushIfGranted();
       },
       // 404 는 "유예 없음"이지 성공이 아니다. 그 밖의 실패도 조용히 넘기지 않고 안내한다(INV-4).
       onError: () => {
@@ -140,18 +212,40 @@ export function SettingsPage(): ReactElement {
     await Share.share({ message: parts.join('\n\n') });
   };
 
+  // 로그아웃(TRIP-938): 토큰 삭제 → 이전 계정 캐시 비우기 → 게이트('/')에 인계. replace 라 뒤로가기로
+  // 설정에 못 돌아온다. 로그인 경로로 직접 가지 않는 이유 — (auth) 는 게이트가 재조회를 마쳐야 열린다.
+  // 푸시 토큰 해제를 먼저 기다린다(TRIP-835 AC-5) — 인증이 살아 있을 때 DELETE 가 닿아야 한다.
+  // 해제는 실패를 삼키고 3초에서 끊으므로 로그아웃을 막지 않는다.
+  const runLogout = async (): Promise<void> => {
+    await unregisterStoredPushToken();
+    await logout();
+    queryClient.clear();
+    usePreferenceStore.getState().reset();
+    loadRouter()?.replace('/');
+  };
+
   return (
     <SettingsScreen
-      groups={buildSettingsSections({
-        nickname: currentNickname,
-        email: account.data?.email ?? null,
-      })}
+      groups={filterReadySettingsSections(
+        buildSettingsSections({
+          nickname: currentNickname,
+          email: account.data?.email ?? null,
+          preferences: preferences.data,
+          locationConsent: locationConsent.data?.legalConsent,
+          personalizationOn:
+            personalizationReason === undefined
+              ? undefined
+              : personalizationReason !==
+                PersonalizationInfoReason.CONSENT_MISSING,
+        })
+      )}
       deletionState={deletionState}
       purgeAt={purgeAt}
       currentNickname={currentNickname}
       nicknameError={nicknameError}
       truncatedLabel={truncatedLabel}
       cancelDeletionError={cancelDeletionError}
+      deleteRequestError={deleteRequestError}
       exportError={exportError}
       onPressBack={() => loadRouter()?.back()}
       onSubmitNickname={submitNickname}
@@ -160,6 +254,27 @@ export function SettingsPage(): ReactElement {
       onPressCancelDeletion={() => cancelDeletion.mutate()}
       onPressLocation={() => loadRouter()?.push('/settings/location')}
       onPressNotifications={() => loadRouter()?.push('/settings/notifications')}
+      onPressTerms={(termsType) => loadRouter()?.push(`/terms/${termsType}`)}
+      onPressLogout={() => void runLogout()}
+      onPressPreferences={() => loadRouter()?.push('/settings/preferences')}
+      onPressPersonalization={() =>
+        loadRouter()?.push('/settings/personalization')
+      }
+      affiliateNoticeOn={dismissed === undefined ? null : !dismissed}
+      affiliateNoticeError={affiliateNoticeError}
+      onToggleAffiliateNotice={() => {
+        if (dismissed === undefined) return;
+        // 보낸 필드만 바뀐다(생략 = 변경 없음) — 본문은 이 한 필드뿐이다.
+        patchSettings.mutate({
+          data: { affiliateNoticeDismissed: !dismissed },
+        });
+      }}
+      // 스토어 버전과 같은 출처(app.config version). 없으면 화면이 버전 줄을 그리지 않는다(TRIP-935 R4).
+      appVersion={Constants.expoConfig?.version}
+      onPressOsmCopyright={() => {
+        // 브라우저를 못 열어도 설정 화면은 그대로 둔다(TRIP-886 Q3 — 링크 실패는 무시).
+        Linking.openURL(OSM_COPYRIGHT_URL).catch(() => undefined);
+      }}
     />
   );
 }

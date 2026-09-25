@@ -70,6 +70,17 @@ const PRICE_TEXT_BY_EXTERNAL_ID: Record<string, string> = {
   s2: '20,000원~',
 };
 
+/**
+ * TRIP-725 · 2톤 가격의 bold 노드 텍스트 — formatPrice 반환("30,000원~")에서 접미 "~"를 뗀 값.
+ * 카드가 이 값(bold)과 "~"(muted) 두 형제 Text 로 쪼갠다(AC-2). 단일 결합 노드 "30,000원~"은
+ * 더 이상 없어야 한다(PRICE_TEXT_BY_EXTERNAL_ID 는 그 부재 반증용으로만 남긴다).
+ */
+const BOLD_PRICE_BY_EXTERNAL_ID: Record<string, string> = {
+  s3: '30,000원',
+  s1: '10,000원',
+  s2: '20,000원',
+};
+
 /** ITEMS의 1번(서면, 10000)만 price: null로 바꾼 3건 — AC-3 전용(02a §1-4, 가운데를 비운다). */
 const ITEMS_WITH_NULL: StayItem[] = ITEMS.map((item, index) =>
   index === 1 ? { ...item, price: null } : item
@@ -128,8 +139,8 @@ describe('StaySearchScreen — 헤더 조립 (AC-1 · BR-U1-10)', () => {
   });
 });
 
-describe('StaySearchScreen — 카드 구성 (AC-2)', () => {
-  it('카드마다 숙소명·지역·금액·저장 하트·사진 자리가 있다', () => {
+describe('StaySearchScreen — 카드 구성 · 가격 2톤 (AC-2)', () => {
+  it('카드마다 숙소명·지역·2톤 금액(bold+"~")·저장 하트·사진 자리가 있다', () => {
     render(<StaySearchScreen region="부산" items={ITEMS} />);
 
     ITEMS.forEach((item) => {
@@ -140,9 +151,16 @@ describe('StaySearchScreen — 카드 구성 (AC-2)', () => {
       // 다중 매칭으로 throw한다(F-4 실측). 이번 픽스처는 지역이 전부 달라도 습관으로 둔다.
       expect(within(card).getByText(item.name)).toBeOnTheScreen();
       expect(within(card).getByText(item.region)).toBeOnTheScreen();
+
+      // 2톤 — bold "{천단위}원" + muted "~" 두 형제 노드(AC-2). 단일 결합 노드는 없다.
       expect(
-        within(card).getByText(PRICE_TEXT_BY_EXTERNAL_ID[item.externalId])
+        within(card).getByText(BOLD_PRICE_BY_EXTERNAL_ID[item.externalId])
       ).toBeOnTheScreen();
+      expect(within(card).getByText('~')).toBeOnTheScreen();
+      expect(
+        within(card).queryByText(PRICE_TEXT_BY_EXTERNAL_ID[item.externalId])
+      ).toBeNull();
+
       expect(
         within(card).getByTestId(`stay-card-save-${key}`)
       ).toBeOnTheScreen();
@@ -167,13 +185,16 @@ describe('StaySearchScreen — 가격 미확인 (AC-3 · BR-U1-14)', () => {
     const nullItem = ITEMS_WITH_NULL[1];
     const nullCard = screen.getByTestId(`stay-card-${stayKey(nullItem)}`);
     expect(within(nullCard).getByText('가격 미확인')).toBeOnTheScreen();
+    // 결측 카드엔 2톤 접미 "~"가 없다(2톤 분기로 새지 않는다).
+    expect(within(nullCard).queryByText('~')).toBeNull();
 
-    // 나머지 두 카드는 금액 문자열이 그대로 남아 있다 — null 처리가 다른 카드로 새지 않는다.
+    // 나머지 두 카드는 2톤 금액(bold+"~")이 그대로 남는다 — null 처리가 옆 카드로 안 샌다.
     [ITEMS_WITH_NULL[0], ITEMS_WITH_NULL[2]].forEach((item) => {
       const card = screen.getByTestId(`stay-card-${stayKey(item)}`);
       expect(
-        within(card).getByText(PRICE_TEXT_BY_EXTERNAL_ID[item.externalId])
+        within(card).getByText(BOLD_PRICE_BY_EXTERNAL_ID[item.externalId])
       ).toBeOnTheScreen();
+      expect(within(card).getByText('~')).toBeOnTheScreen();
     });
   });
 });
@@ -232,8 +253,8 @@ describe('StaySearchScreen — 스텁의 정직성 (AC-7)', () => {
   });
 });
 
-describe('StaySearchScreen — 목록 프레임 · 탭바 · FAB (AC-9)', () => {
-  it('FlatList 헤더 안에 헤더 문구·칩이 있고, 탐색 탭바와 FAB가 그려진다', () => {
+describe('StaySearchScreen — 목록 프레임 · 탭바 · 2단 FAB (AC-7 · AC-9)', () => {
+  it('FlatList 헤더 안에 헤더 문구·칩이 있고, 탐색 탭바와 원형 FAB 2개가 그려진다', () => {
     render(<StaySearchScreen region="부산" items={ITEMS} />);
 
     const list = screen.getByTestId('stay-search-list');
@@ -249,11 +270,12 @@ describe('StaySearchScreen — 목록 프레임 · 탭바 · FAB (AC-9)', () => 
       screen.getByTestId('shell-tabbar-icon-explore-active')
     ).toBeOnTheScreen();
 
-    // FAB의 '＋'는 전각 플러스(U+FF0B)라 완전일치로 잡으면 반각 구현·아이콘 글리프 구현
-    // 모두에서 깨진다(F-14 실측) — 정규식 부분 포함으로 잡는다.
-    expect(screen.getByTestId('stay-search-fab')).toHaveTextContent(
-      /여행 만들기/
-    );
+    // 알약 "여행 만들기" FAB 소멸 → 원형 FAB 2개(담은 숙소·숙소 등록). 개명 아닌 교체라
+    // 옛 단일 testID·라벨은 완전히 사라진다(★F-4: 두 원의 크기·간격·색은 픽셀이라 6-b 몫).
+    expect(screen.getByTestId('stay-search-fab-saved')).toBeOnTheScreen();
+    expect(screen.getByTestId('stay-search-fab-register')).toBeOnTheScreen();
+    expect(screen.queryByTestId('stay-search-fab')).toBeNull();
+    expect(screen.queryByText(/여행 만들기/)).toBeNull();
   });
 });
 
@@ -296,22 +318,45 @@ describe('StaySearchScreen — 카드 골격 토큰 (V2)', () => {
   });
 });
 
-describe('StaySearchScreen — 필터 칩 3개 (V3)', () => {
+describe('StaySearchScreen — 필터 칩 3개 · 라운드 사각 (V3 · AC-6)', () => {
   it.each([
     { axis: 'price', label: '가격대' },
     { axis: 'region', label: '지역' },
     { axis: 'more', label: '필터' },
   ])(
-    '$axis 칩이 라벨 "$label"과 rounded-pill·border-hairline-strong 토큰을 갖는다',
+    '$axis 칩이 라벨 "$label"과 rounded-[8px]·border-hairline-strong 토큰을 갖는다(pill 아님)',
     ({ axis, label }) => {
       render(<StaySearchScreen region="부산" items={ITEMS} />);
 
       const chip = screen.getByTestId(`stay-search-filter-${axis}`);
 
       expect(within(chip).getByText(label)).toBeOnTheScreen();
+      // 라운드 사각(r8)으로 교체 — 현행 rounded-pill 이 사라진다(border 는 유지).
+      // "필터" 슬라이더 벡터 재작도는 SVG 라 jest 사각(★F-4, 6-b).
       expect(classTokens(chip)).toEqual(
-        expect.arrayContaining(['rounded-pill', 'border-hairline-strong'])
+        expect.arrayContaining(['rounded-[8px]', 'border-hairline-strong'])
       );
+      expect(classTokens(chip)).not.toContain('rounded-pill');
     }
   );
+});
+
+describe('StaySearchScreen — 검색창 placeholder (AC-1)', () => {
+  it('onChangeNameQuery 를 줄 때 placeholder 가 "지역·숙소 이름 검색"이다(현행 문구 소멸)', () => {
+    render(
+      <StaySearchScreen
+        region="부산"
+        items={ITEMS}
+        nameQuery=""
+        onChangeNameQuery={() => {}}
+      />
+    );
+
+    // (개념) getByPlaceholderText 는 기본 완전일치 — TextInput 의 placeholder prop 을 잰다(§5 실검증).
+    expect(
+      screen.getByPlaceholderText('지역·숙소 이름 검색')
+    ).toBeOnTheScreen();
+    // 현행 placeholder 는 사라진다(교체 반증). 돋보기 아이콘(핀 아님)은 SVG 라 jest 사각(★F-4).
+    expect(screen.queryByPlaceholderText('숙소 이름 · 지역 검색')).toBeNull();
+  });
 });

@@ -1,11 +1,15 @@
 package com.trippilot.app
 
+import org.junit.jupiter.api.Assumptions.assumeTrue
+import com.trippilot.itinerarygeneration.domain.SlotAlternative
 import com.trippilot.itinerarygeneration.domain.DayAnchor
 import com.trippilot.itinerarygeneration.domain.FixedBlock
 import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.PreferenceProfile
+import com.trippilot.itinerarygeneration.domain.ReplanCurrentSlot
 import com.trippilot.itinerarygeneration.domain.ReplanInput
 import com.trippilot.itinerarygeneration.domain.ReplanScope
+import com.trippilot.itinerarygeneration.domain.SavedPlaceRef
 import com.trippilot.itinerarygeneration.domain.RequestMeta
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
@@ -113,9 +117,10 @@ class LiveAiRoundTripIT : AbstractPostgresIntegrationTest() {
         val slotKeys = generated.days.flatMap { d -> d.slots.map { "${d.date}#${it.poiId}" } }
 
         val ms = measureTimeMillis {
-            val reasons = agent.explanations(UUID.randomUUID(), generated)
+            val result = agent.explanations(UUID.randomUUID(), generated)
+            val reasons = result.slots
             println("[LIVE-AI] explanations → ${reasons.size}건 · 슬롯 ${slotKeys.size}개 중 " +
-                "${slotKeys.count { it in reasons }}개 매칭")
+                "${slotKeys.count { it in reasons }}개 매칭 · 차선책문장 ${result.alternatives.size}건")
             // 빈 맵도 계약상 정상(부가 정보) — 그래서 개수를 단정하지 않는다. 다만 **키가 맞물려야** 한다:
             // 받은 것이 있는데 하나도 안 맞으면 규약이 어긋난 것이라 화면에 근거가 통째로 비어 버린다.
             if (reasons.isNotEmpty()) {
@@ -123,6 +128,47 @@ class LiveAiRoundTripIT : AbstractPostgresIntegrationTest() {
             }
         }
         println("[LIVE-AI] explanations 소요=${ms}ms")
+    }
+
+    /**
+     * **차선책 문장이 실물에서 돌아오는가**(TRIP-873 ②).
+     *
+     * 위 스펙은 빈 맵을 정상으로 통과시킨다 — 근거가 부가 정보라 맞는 판단이지만, 그 때문에
+     * **로컬 LLM 라우팅이 깨져 있으면 몇 달이고 `0건`으로 조용히 초록**이다(실측: `EXPLANATION` 이
+     * 없는 배포명을 가리켜 `/explanations` 가 404 였는데 이 테스트는 계속 통과했다).
+     *
+     * 그래서 여기서는 **사유로 가른다.** 상대는 차선책을 못 만들면 왜인지를 `alternatives_reason` 에
+     * 싣는데, 우리가 차선책을 **안 실어 보냈으면 그 값이 아예 null** 이다(`wiring.py` 의
+     * `alt_skipped = … if alt_pairs else None`). 즉 **사유가 실려 온다는 것 자체가 우리 요청이
+     * 도달했다는 증거**라, LLM 이 죽어 있어도 우리 쪽 배선은 검증된다.
+     */
+    @Test
+    fun `차선책을 실어 보내면 상대가 그것을 재료로 인식한다`() {
+        val generated = agent.generate(input(listOf(today)).copy(includeExplanations = false))
+        val withAlt = generated.copy(
+            days = generated.days.map { d ->
+                d.copy(
+                    slots = d.slots.mapIndexed { i, s ->
+                        // 같은 날 다른 슬롯의 POI 를 차선책으로 쓴다 — 정본에 있는 것이어야
+                        // 상대가 `no_registered_alternatives` 로 떨구지 않는다.
+                        val other = d.slots.getOrNull(i + 1) ?: d.slots.firstOrNull()
+                        if (other == null || other.poiId == s.poiId) s
+                        else s.copy(alternatives = listOf(SlotAlternative(other.poiId, "같은 날 다른 후보", null)))
+                    },
+                )
+            },
+        )
+        assumeTrue(withAlt.days.any { d -> d.slots.any { it.alternatives.isNotEmpty() } })
+
+        val result = agent.explanations(UUID.randomUUID(), withAlt)
+
+        println("[LIVE-AI] alternative_explanations → ${result.alternatives.size}건")
+        // 문장이 왔으면 키 규약이 맞물려야 하고, 안 왔으면 그건 LLM 사정이다 —
+        // 어느 쪽이든 **요청이 도달했다는 것**은 어댑터 로그의 사유로 남는다(클래스 주석 참고).
+        val altKeys = withAlt.days.flatMap { d -> d.slots.flatMap { s -> s.alternatives.map { "${d.date}#${it.poiId}" } } }
+        if (result.alternatives.isNotEmpty()) {
+            assertThat(result.alternatives.keys.any { it in altKeys }).isTrue()
+        }
     }
 
     /**
@@ -155,26 +201,34 @@ class LiveAiRoundTripIT : AbstractPostgresIntegrationTest() {
      * 상대에 새 경로를 요구하지 않는 설계라, 실제로 수용되는지가 이 테스트의 전부다.
      */
     @Test
-    fun `재계획이 상대에 수용된다 — 잠금이 고정 블록으로 승격돼 나간다`() {
+    fun `재계획 전용 경계가 열 종을 다 싣고 수용된다`() {
         val output = agent.replan(
             ReplanInput(
                 tripId = UUID.randomUUID(), itineraryId = UUID.randomUUID(),
                 scope = ReplanScope.PARTIAL_SLOTS, destinations = listOf("제주"), fromInstant = Instant.now(), targetDate = today,
                 originLat = 33.45, originLng = 126.56, lockedBlocks = listOf(FixedBlock(poi, today, LocalTime.parse("09:00"), 60)),
-                reasons = listOf("비가 와요"), directives = listOf("실내로"), freeText = null,
+                // 사유·지시는 **상대 사전**의 값으로 보낸다 — 자연어를 보내면 전부 unknown 으로 돌아온다.
+                reasons = listOf("WEATHER"), directives = listOf("INDOOR"),
+                freeText = "비가 와서 실내 위주로 바꿔 주세요",
                 excludedPoiIds = emptyList(),
                 companionType = "친구", budgetLevel = "MID",
                 preferenceProfile = PreferenceProfile(
                     listOf("미식"), listOf("야경"), listOf("한식"), listOf("렌터카"), "알차게", listOf("친구"), false, "표준",
                 ),
-                currentSlots = emptyList(), savedPlaces = emptyList(),
-                requestMeta = RequestMeta(UUID.randomUUID().toString(), Instant.now(), 10_000L),
+                // 종전 경로(generate 재사용)에서는 **자리가 없어 버려지던 두 값**이다. 실물이 받는지가 핵심.
+                currentSlots = listOf(
+                    ReplanCurrentSlot(poi, LocalTime.parse("09:00"), LocalTime.parse("10:00"), true, false, "예약이 있어요"),
+                ),
+                savedPlaces = listOf(SavedPlaceRef(UUID.randomUUID(), "담아 둔 카페")),
+                requestMeta = RequestMeta(UUID.randomUUID().toString(), Instant.now(), 25_000L),
             ),
         )
 
         assertThat(output.solveMode).isNotNull()
+        // 거리는 **재계획에만 있는 값**이다. null 이면 상대가 안 준 것 — 단정하지 않고 기록만 남긴다.
         println("[LIVE-AI] replan → solveMode=${output.solveMode} days=${output.days.size} " +
-            "slots=${output.days.sumOf { it.slots.size }} isFallback=${output.isFallback}")
+            "slots=${output.days.sumOf { it.slots.size }} isFallback=${output.isFallback} " +
+            "totalDistanceKm=${output.totalDistanceKm}")
     }
 
     private fun candidatesInput() = SlotCandidatesInput(

@@ -49,7 +49,10 @@ import path from 'path';
 const ROOT = path.resolve('src');
 
 const UI_DIR_REL = 'features/itinerary/ui';
-const SCREEN_REL = 'features/itinerary/ui/TimelineScreen.tsx';
+// TimelineScreen.tsx 는 TRIP-801 로 삭제됨(h16 CONFIRMED 가 셸로 이관돼 0 소비처 → gut). G2 INV-3
+// 전수 스캔은 디렉토리 재귀라 그대로 유효하고, 앵커(스캔이 실 화면에 닿는지 증명)만 생존 화면으로
+// 재조준한다 — census 형제 2건(itineraryMapSurface S2·entitiesItinerarySlotConsumers) 갱신과 동형.
+const SCREEN_REL = 'features/itinerary/ui/DraftScreen.tsx';
 const PAGE_REL = 'pages/itinerary-plan/ui/ItineraryPlanPage.tsx';
 const BARREL_REL = 'pages/itinerary-plan/index.ts';
 const MODEL_REL = 'features/itinerary/model/planState.ts';

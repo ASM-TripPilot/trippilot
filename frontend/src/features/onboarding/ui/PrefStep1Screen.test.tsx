@@ -105,7 +105,7 @@ describe('PrefStep1Screen — 페이스 (AC1 · US-ONB-15 · 3-4)', () => {
 });
 
 describe('PrefStep1Screen — 탈출구 구성 (AC1 · US-ONB-11 · 3-5)', () => {
-  it('back chevron은 없고 상·하단 건너뛰기만 탈출구로 존재한다', () => {
+  it('back chevron은 없고 상단 건너뛰기만 탈출구로 존재한다 (TRIP-718 · 하단 링크 제거)', () => {
     // 준비 — 기본 픽스처.
     render(<PrefStep1Screen {...makeProps()} />);
 
@@ -115,14 +115,13 @@ describe('PrefStep1Screen — 탈출구 구성 (AC1 · US-ONB-11 · 3-5)', () =>
     // 단언(부정) — back chevron은 만들지 않는다(예약 id만 있고 실물 없음).
     expect(screen.queryByTestId('onboarding-pref1-back')).toBeNull();
 
-    // 단언 — 상·하단 skip 두 곳이 모두 존재.
+    // 단언 — 상단 skip 만 존재. TRIP-718: Figma 1643:1183 에 CTA 아래 하단 링크가 없어 제거했다
+    // (US-ONB-11 탈출구는 상단 하나로 충족 — queryBy* 로 부재 단언).
     expect(screen.getByTestId('onboarding-pref1-skip-top')).toBeOnTheScreen();
-    expect(
-      screen.getByTestId('onboarding-pref1-skip-bottom')
-    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('onboarding-pref1-skip-bottom')).toBeNull();
 
-    // 단언 — 같은 문구('나중에 설정하고 시작')가 상·하단 2곳에 나온다(Figma 채택 문구 — §7-15).
-    expect(screen.getAllByText('나중에 설정하고 시작')).toHaveLength(2);
+    // 단언 — '나중에 설정하고 시작' 은 이제 상단 1곳에만 나온다.
+    expect(screen.getAllByText('나중에 설정하고 시작')).toHaveLength(1);
   });
 });
 
@@ -145,24 +144,41 @@ describe('PrefStep1Screen — 0개 선택에도 진행 (AC1 · 인터뷰4 · 3-6
 });
 
 describe('PrefStep1Screen — 핵심 문구·skip 콜백 (AC1 · 3-7)', () => {
-  it('타이틀·서브·info·스텝번호가 보이고 상·하단 skip이 같은 콜백을 부른다', () => {
+  it('타이틀·서브·info·스텝번호가 보이고 상단 skip이 콜백을 부른다', () => {
     // 준비 — onSkipAll 관찰.
     const onSkipAll = jest.fn();
     render(<PrefStep1Screen {...makeProps({ onSkipAll })} />);
 
-    // 단언 — 핵심 문구·스텝번호.
+    // 단언 — 핵심 문구·스텝번호. TRIP-718: Figma 는 공백 포함 "1 / 2".
     expect(screen.getByText('어떤 여행을 좋아하세요?')).toBeOnTheScreen();
     expect(screen.getByText('여러 개 골라도 좋아요')).toBeOnTheScreen();
-    expect(screen.getByText('1/2')).toBeOnTheScreen();
+    expect(screen.getByText('1 / 2')).toBeOnTheScreen();
     // info 배너는 testID 존재만 단언한다(§7-15 — 본문 카피 결합 회피).
     expect(screen.getByTestId('onboarding-pref1-info')).toBeOnTheScreen();
 
-    // 실행 — 상단 skip 탭.
+    // 실행 — 상단 skip 탭(TRIP-718 로 하단 링크 제거, 탈출구는 상단 하나).
     fireEvent.press(screen.getByTestId('onboarding-pref1-skip-top'));
-    // 실행 — 하단 skip 탭.
-    fireEvent.press(screen.getByTestId('onboarding-pref1-skip-bottom'));
 
-    // 단언 — 상·하단이 같은 동작(onSkipAll)을 2회 호출한다(AC-11-1·2).
-    expect(onSkipAll).toHaveBeenCalledTimes(2);
+    // 단언 — onSkipAll 1회 호출(AC-11-1).
+    expect(onSkipAll).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('PrefStep1Screen — 진행점 색 (TRIP-718 · Figma 1643:1183)', () => {
+  // className 은 NativeWind 가 소비 전이라 jest 렌더 트리에 평문 prop 으로 남는다 — 공백으로
+  // 쪼갠 '토큰 배열'로 비교한다(부분 문자열 오탐 차단: 'bg-hairline' 은 'bg-hairline-strong'
+  // 의 부분열이지만 토큰 배열에는 원소로 없다). TripWizardStep1Screen 진행 세그 심판과 동형.
+  const tokens = (testID: string): string[] =>
+    String(screen.getByTestId(testID).props.className)
+      .split(/\s+/)
+      .filter(Boolean);
+
+  it('채움 점은 bg-primary, 빈 점은 bg-hairline 이다 (bg-ink·bg-hairline-strong 회귀 금지)', () => {
+    render(<PrefStep1Screen {...makeProps()} />);
+
+    // 채움 점 — Figma 는 primary(코랄). 종전 bg-ink 로 회귀하면 토큰 배열에 'bg-primary' 부재 → red.
+    expect(tokens('onboarding-pref1-progress-active')).toContain('bg-primary');
+    // 빈 점 — Figma 실측 hairline(옅음). bg-hairline-strong 로 회귀하면 'bg-hairline' 원소 부재 → red.
+    expect(tokens('onboarding-pref1-progress-empty')).toContain('bg-hairline');
   });
 });

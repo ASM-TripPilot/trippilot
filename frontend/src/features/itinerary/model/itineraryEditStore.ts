@@ -22,6 +22,17 @@ import type {
 type Slot = ItineraryDaysItemSlotsItem;
 
 /**
+ * 편집 중 로컬 "미지정(시간대 설정)" 슬롯 — 서버 계약(`ItineraryDaysItemSlotsItem.startAt`)은
+ * non-nullable 이라(openapi 2065/2559) 미지정을 서버 타입으로 표현할 수 없다. 그래서 편집 층에서만
+ * `startAt: string | null` 로 넓힌 **로컬/에디터 타입**을 쓴다 — 서버 생성 타입은 오염하지 않는다.
+ * 저장 조립(`buildEditItineraryRequest`)이 `startAt === null` 슬롯을 걸러 서버로 안 보낸다(INV-4).
+ */
+export type EditorSlot = Omit<ItineraryDaysItemSlotsItem, 'startAt'> & {
+  startAt: string | null;
+};
+export type EditorDaysItem = { date: string; slots: EditorSlot[] };
+
+/**
  * 첫 일치 슬롯 하나만 뺀 **새 배열**. `filter`는 같은 poiId가 둘이면 전부 지운다(wizard
  * `removeDestination`과 같은 함정) — `findIndex`로 그 한 자리만 잘라낸다. 원본은 `slice`라 안
  * 바뀐다(비파괴 — 시드한 GET 배열을 건드리지 않기 위함, 엣지5).
@@ -38,6 +49,17 @@ export function removeSlot(slots: Slot[], poiId: string): Slot[] {
  */
 export function addSlot(slots: Slot[], slot: Slot): Slot[] {
   return [...slots, slot];
+}
+
+/**
+ * TRIP-797 · 슬롯을 **지정 index 자리**에 꽂은 새 배열(말미 append 인 `addSlot` 과 다르다 —
+ * "카드 사이 +" 가 선행 슬롯 index 로 넣는 자리, AC-7 · INV-U3-02). 경계는 `splice` 준용:
+ * `index >= length` 는 말미, `index <= 0` 은 맨 앞으로 클램프한다. 스프레드라 원본은 안 건드린다
+ * (비파괴 — `addSlot`·`removeSlot` 과 같은 패턴).
+ */
+export function insertSlotAt(slots: Slot[], slot: Slot, index: number): Slot[] {
+  const at = Math.max(0, Math.min(index, slots.length));
+  return [...slots.slice(0, at), slot, ...slots.slice(at)];
 }
 
 /**

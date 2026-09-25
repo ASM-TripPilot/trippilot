@@ -6,6 +6,7 @@ import type {
 import {
   buildDraftDayTabs,
   buildDraftPins,
+  buildGenerationGauge,
   DRAFT_POLL_INTERVAL_MS,
   DRAFT_POLL_MAX_COUNT,
   formatDraftDayHeader,
@@ -13,6 +14,7 @@ import {
   resolveDraftView,
   shouldKeepPollingDraft,
 } from './draftView';
+import type { DraftDayTab } from './draftView';
 
 /**
  * h11 초안 화면의 **순수 판정 5종 + 폴링 상수 2개**. 화면은 이 중 어느 것도 다시 계산하지
@@ -28,12 +30,13 @@ import {
  *  - 이미 도착한 일자가 **실패에 지워지지 않는다**(AC-9 · INV-4 · `mustVisitList` 의 `staleFailed`
  *    와 같은 형태 — 이 리포에서 네 번째 자리다).
  *
- * ── TRIP-298 이 더한 판정 축 (M11~M14) ──────────────────────────────────────
+ * ── 판정 축 (M11~M16) ────────────────────────────────────────────────────────
  *  - 후보 강등 안내를 **켤지 말지**(`isCandidatesDemoted`)는 "조용한 값 화이트리스트"다
- *    (01b D2) — 모르는 값은 자동으로 시끄러운 쪽에 떨어진다(INV-4).
- *  - 후보 0건 얼굴(h35)은 **슬롯 합계 0 AND 요약 객체 도착**으로만 갈린다(01b D5) —
- *    `level` 문자열 어휘에 기대지 않는다. 어휘는 서버가 언제든 바꿀 수 있다.
- *  - 일부 날짜만 0건이면 얼굴을 갈아 끼우지 않는다(01b D6 · 「얼굴 판정이 잔존 데이터를
+ *    (01b D2) — 모르는 값은 자동으로 시끄러운 쪽에 떨어진다(INV-4). 얼굴 판정과는 별개 축이다.
+ *  - 얼굴은 **슬롯 합계**로만 목록/빈 화면을 가른다 — `level` 문자열 어휘에 기대지 않는다.
+ *    (후보 0건 전용 `zero` 얼굴은 TRIP-791 로 화면이, 후속 정리로 kind 까지 제거됐다 — 안이
+ *    빈 응답은 이제 `empty` 로 접힌다.)
+ *  - 일부 날짜만 비면 얼굴을 갈아 끼우지 않는다(01b D6 · 「얼굴 판정이 잔존 데이터를
  *    가린다」 — 이 리포에서 네 번 반복된 사고).
  *
  * *(개념)* **순수 함수** — 같은 입력에 늘 같은 출력을 내고 바깥 세상(시계·네트워크·화면)을
@@ -344,62 +347,38 @@ describe('M12 · AC-3 — 요약이 안 왔으면 판정 자체를 안 한다 (0
   });
 });
 
-describe('🔴 M13 · AC-5 — 01b D5 판정표 5행이 그대로 얼굴로 갈린다', () => {
-  it('슬롯 합계와 요약 도착 여부 둘로만 갈리고 문자열 어휘는 얼굴을 정하지 않는다', () => {
+describe('🔴 M13 · AC-5 — 슬롯 합계로 목록과 빈 화면을 가른다 (요약은 얼굴에 무관)', () => {
+  it('슬롯 합계만 얼굴을 정한다 — 후보 요약은 얼굴 판정에 들어가지 않는다', () => {
     const base = { loading: false, failed: false };
 
-    // 1행 · 1'행 — 아직 만들지 않은 일정. 요약이 없으니 기존 "빈 화면"이다.
-    expect(
-      resolveDraftView({ ...base, days: [], candidatesSummary: undefined })
-    ).toEqual({ kind: 'empty' });
-    expect(
-      resolveDraftView({ ...base, days: [], candidatesSummary: null })
-    ).toEqual({ kind: 'empty' });
+    // 아직 만들지 않았거나 안이 빈 일정 — 슬롯 합계 0 은 전부 "빈 화면"이다.
+    // (후보 0건 전용 `zero` 얼굴은 TRIP-791 로 화면이 삭제되고 이 정리로 kind 까지 제거됐다.)
+    expect(resolveDraftView({ ...base, days: [] })).toEqual({ kind: 'empty' });
 
-    // 2행 — 만들기는 했는데 넣을 후보가 없었다. 조건 목록은 **받은 그대로** 실려 나간다(D8).
-    expect(
-      resolveDraftView({
-        ...base,
-        days: [],
-        candidatesSummary: { level: 'LOW', shortfallCategories: ['budget'] },
-      })
-    ).toEqual({ kind: 'zero', shortfallCategories: ['budget'] });
+    // ★ 급소 — 일자는 왔는데 **슬롯이 0**이다. `days.length > 0` 만 보는 구현은 여기서
+    //   listed 로 샌다. 세는 축이 "일자 개수"가 아니라 **슬롯 합계**임을 잠근다.
+    expect(resolveDraftView({ ...base, days: [day(DAY1), day(DAY2)] })).toEqual(
+      { kind: 'empty' }
+    );
 
-    // 3행 ★ 급소 — 일자는 왔는데 **슬롯이 0**이다. `days.length > 0` 만 보는 구현은 여기서
-    //   listed 로 새어 h35 가 영영 안 뜬다. `shortfallCategories` 키가 없으면 `[]` 로
-    //   정규화한다 — 화면이 "없음"과 "빈 배열"을 따로 다루지 않아도 되게(D8).
-    expect(
-      resolveDraftView({
-        ...base,
-        days: [day(DAY1), day(DAY2)],
-        candidatesSummary: { level: 'LOW' },
-      })
-    ).toEqual({ kind: 'zero', shortfallCategories: [] });
-
-    // 4행 — 슬롯이 있으면 얼굴은 목록이다. 강등은 얼굴을 갈아 끼우지 않는다.
+    // 슬롯이 있으면 얼굴은 목록이다.
     const days = [day(DAY1, SLOTS3)];
-    expect(
-      resolveDraftView({
-        ...base,
-        days,
-        candidatesSummary: { level: 'LOW' },
-      })
-    ).toEqual({ kind: 'listed', days, staleFailed: false });
+    expect(resolveDraftView({ ...base, days })).toEqual({
+      kind: 'listed',
+      days,
+      staleFailed: false,
+    });
 
-    // 5행 — 요약이 없어도 목록은 목록이다.
-    expect(
-      resolveDraftView({ ...base, days, candidatesSummary: null })
-    ).toEqual({ kind: 'listed', days, staleFailed: false });
-
-    // ★ 짝 — 같은 4행 입력에서 **안내는 켜져 있다.** 얼굴(listed)과 안내(on)가 서로 다른
-    //   축임이 한 자리에서 보인다. 하나로 합치면 D5 4행("목록 + 강등 안내")이 표현되지 않는다.
+    // ★ 짝 — 강등 안내(`isCandidatesDemoted`)는 얼굴과 **다른 축**이다. `resolveDraftView` 는
+    //   더는 요약을 보지 않고(파라미터에서 제거됨), 안내 판정은 화면 층(`resolveFallbackNotice`)
+    //   몫으로 별개 함수가 계속 진다.
     expect(isCandidatesDemoted({ level: 'LOW' })).toBe(true);
   });
 });
 
-describe('🔴 M14 · AC-9 — 일부 날짜만 0건이면 h11 을 유지한다 (01b D6)', () => {
+describe('🔴 M14 · AC-9 — 일부 날짜만 비면 h11 을 유지한다 (01b D6)', () => {
   it('1일차 2장 · 2일차 0장이면 얼굴은 목록이고 빈 일자도 버리지 않는다', () => {
-    // 준비 — 2일차가 비었다고 화면 전체를 h35 로 갈아 끼우면 1일차에 받은 두 장이 사용자
+    // 준비 — 2일차가 비었다고 화면 전체를 빈 화면으로 갈아 끼우면 1일차에 받은 두 장이 사용자
     // 눈앞에서 사라진다(개념 「얼굴 판정이 잔존 데이터를 가린다」 — 이 리포에서 네 번 반복).
     // 빈 일자를 결과에서 걸러내도 안 된다: 날짜 탭의 활성 여부가 `days` 에서 나온다.
     const days = [
@@ -407,43 +386,33 @@ describe('🔴 M14 · AC-9 — 일부 날짜만 0건이면 h11 을 유지한다 
       day(DAY2),
     ];
 
-    expect(
-      resolveDraftView({
-        days,
-        loading: false,
-        failed: false,
-        candidatesSummary: { level: 'LOW' },
-      })
-    ).toEqual({ kind: 'listed', days, staleFailed: false });
+    expect(resolveDraftView({ days, loading: false, failed: false })).toEqual({
+      kind: 'listed',
+      days,
+      staleFailed: false,
+    });
 
-    // ★ 짝(대조) — 같은 모양에서 1일차 슬롯까지 비면 그때는 zero 다. 두 줄이 붙어 있어야
+    // ★ 짝(대조) — 같은 모양에서 1일차 슬롯까지 비면 그때는 빈 화면이다. 두 줄이 붙어 있어야
     //   판정축이 "일자 개수"가 아니라 **슬롯 합계**임이 드러난다.
     expect(
       resolveDraftView({
         days: [day(DAY1), day(DAY2)],
         loading: false,
         failed: false,
-        candidatesSummary: { level: 'LOW' },
       })
-    ).toEqual({ kind: 'zero', shortfallCategories: [] });
+    ).toEqual({ kind: 'empty' });
   });
 });
 
-describe('🔴 M15·M16 · 얼굴 우선순위 — 슬롯 > loading > failed > zero > empty', () => {
+describe('🔴 M15·M16 · 얼굴 우선순위 — 슬롯 > loading > failed > empty', () => {
   /**
-   * 겹치는 조합의 순서에는 AC 가 없어 심판도 없었다 — 순서를 통째로 뒤집어도 1631 건이 전부
-   * 통과했다. 결정을 코드에만 적으면 다음 사람이 아무 때나 되돌린다.
+   * 겹치는 조합의 순서에는 AC 가 없어 심판도 없었다 — 순서를 통째로 뒤집어도 전부 통과했다.
+   * 결정을 코드에만 적으면 다음 사람이 아무 때나 되돌린다.
    *
-   * 무엇을 막나 — 폴링이 상한(30회 ≒ 60초)에 걸리거나 2차 생성이 죽었는데 요약이 함께
-   * 도착하면, `zero` 가 이기는 순서에서는 h35 가 떠서 「예산·활동 범위가 좁아 추천할 장소를
-   * 못 찾았어요」라고 **원인을 특정해 틀리게** 말한다. 실제 원인은 시간 안에 못 끝낸 것이고,
-   * h35 에는 `다시 만들기` 가 없어 재시도 경로까지 사라진다. 같은 리포의 `STALE_FAILED_NOTE`
-   * (`ui/DraftScreen.tsx`)가 이미 이름 붙인 함정이다 — "한 원인을 문구에 박으면 나머지
-   * 경우에 틀린 이유를 말하게 된다".
+   * 무엇을 막나 — 폴링이 상한(30회 ≒ 60초)에 걸리거나 2차 생성이 죽었는데 안이 빈 응답이
+   * 오면, `empty` 가 `failed` 를 이기는 순서에서는 "아직 만들어진 추천안이 없어요" 라고 떠서
+   * **재시도 경로 없이** 조용히 끝난다(INV-4). 실패가 이겨야 `다시 만들기` 가 남는다.
    */
-
-  /** 요약이 **객체로** 도착한 상태. 얼굴은 `level` 어휘를 안 보지만 조건 목록은 짝에서 잰다. */
-  const SUMMARY_ARRIVED = { level: 'LOW', shortfallCategories: ['budget'] };
 
   /**
    * 슬롯 합계 0 — **일자는 왔는데 안이 비었다.** 서버가 실제로 보내는 모양이라 `days: []` 보다
@@ -451,46 +420,53 @@ describe('🔴 M15·M16 · 얼굴 우선순위 — 슬롯 > loading > failed > z
    */
   const NO_SLOTS = [day(DAY1), day(DAY2)];
 
-  it('M15 실패가 후보 0건을 이긴다 — 실패에 "조건이 좁아서"라는 틀린 이유를 붙이지 않는다', () => {
-    // 준비 — 슬롯 0 · 요약 도착 · 생성 실패(폴링 상한 도달 포함)가 **동시에** 참인 한 칸.
-    // 실행·단언 — 얼굴은 `failed`. 원인을 특정하지 않는 쪽이 이긴다.
+  it('M15 실패가 빈 화면을 이긴다 — 실패에 재시도 경로를 남긴다', () => {
+    // 준비 — 슬롯 0 · 생성 실패(폴링 상한 도달 포함)가 동시에 참인 한 칸.
+    // 실행·단언 — 얼굴은 `failed`. 재시도 경로가 있는 쪽이 이긴다.
     expect(
-      resolveDraftView({
-        days: NO_SLOTS,
-        loading: false,
-        failed: true,
-        candidatesSummary: SUMMARY_ARRIVED,
-      })
+      resolveDraftView({ days: NO_SLOTS, loading: false, failed: true })
     ).toEqual({ kind: 'failed' });
 
-    // ★ 짝 — **`failed` 만 false 로 바꾼** 같은 입력에서는 `zero` 가 나온다. 이 줄이 없으면
-    //   `return { kind: 'failed' }` 한 줄짜리 구현이 위를 그대로 통과한다. 조건 목록까지 재서
-    //   "껍데기만 zero"(내용물을 흘린 구현)도 함께 배제한다.
+    // ★ 짝 — **`failed` 만 false 로 바꾼** 같은 입력에서는 `empty` 가 나온다. 이 줄이 없으면
+    //   `empty` 를 맨 앞에 둔 구현이 위 실패 케이스를 삼켜도 안 걸린다.
     expect(
-      resolveDraftView({
-        days: NO_SLOTS,
-        loading: false,
-        failed: false,
-        candidatesSummary: SUMMARY_ARRIVED,
-      })
-    ).toEqual({ kind: 'zero', shortfallCategories: ['budget'] });
+      resolveDraftView({ days: NO_SLOTS, loading: false, failed: false })
+    ).toEqual({ kind: 'empty' });
   });
 
-  it('M16 로딩은 실패와 후보 0건을 함께 이긴다 — 재조회 중에는 아직 결론이 아니다', () => {
-    // 준비 — 넷이 겹치는 최악의 칸: 슬롯 0 · 요약 도착 · 로딩 중 · 실패 표시까지 켜짐.
+  it('M16 로딩은 실패와 빈 화면을 함께 이긴다 — 재조회 중에는 아직 결론이 아니다', () => {
+    // 준비 — 셋이 겹치는 최악의 칸: 슬롯 0 · 로딩 중 · 실패 표시까지 켜짐.
     // 실행·단언 — 얼굴은 `loading`. 몇 초 뒤 슬롯이 도착할 수 있는데 결론을 앞세우면 화면이
-    //   h35 → h11 로 튄다. M10 이 "로딩과 실패가 겹치면 로딩"을 이미 잠갔지만 그 케이스에는
-    //   **요약이 없다** — 요약이 낀 조합은 여기가 유일한 심판이다.
+    //   빈 화면 → 목록으로 튄다.
     expect(
-      resolveDraftView({
-        days: NO_SLOTS,
-        loading: true,
-        failed: true,
-        candidatesSummary: SUMMARY_ARRIVED,
-      })
+      resolveDraftView({ days: NO_SLOTS, loading: true, failed: true })
     ).toEqual({ kind: 'loading' });
   });
 
-  // 「슬롯이 있으면 전부를 이긴다」는 여기 없다 — M9(슬롯 vs 실패·로딩)와 M13 4행(슬롯 vs
-  // 요약)이 이미 잡는다. 뮤테이션으로 확인했다: 슬롯 분기를 맨 뒤로 내리면 그 둘이 red 다.
+  // 「슬롯이 있으면 전부를 이긴다」는 여기 없다 — M9(슬롯 vs 실패·로딩)와 M13(슬롯 vs 빈 화면)이
+  // 이미 잡는다. 뮤테이션으로 확인했다: 슬롯 분기를 맨 뒤로 내리면 그 둘이 red 다.
+});
+
+describe('M17 · AC-1 (TRIP-790) — 게이지는 다중일차에서도 tabs.hasData 로 도출한다', () => {
+  it('day1·day2 둘 다 도착한 4일 PARTIAL 이면 [done, done, active, waiting] 이다', () => {
+    // 준비 — 4일 여행, day1·day2 만 도착(hasData=[true,true,false,false]).
+    //   `DraftDayTab` 은 {date, dayNumber, hasData} — 리터럴로 세운다(날짜 산술은 M1~M4 소관).
+    const tabs: DraftDayTab[] = [
+      { date: '2026-06-10', dayNumber: 1, hasData: true },
+      { date: '2026-06-11', dayNumber: 2, hasData: true },
+      { date: '2026-06-12', dayNumber: 3, hasData: false },
+      { date: '2026-06-13', dayNumber: 4, hasData: false },
+    ];
+
+    // 실행 — 게이지 상태를 도출한다.
+    const states = buildGenerationGauge(tabs).map((cell) => cell.state);
+
+    // 단언 — 도착한 두 일자는 done, 아직 안 온 것 중 첫째만 active, 나머지는 waiting.
+    //   ★ 인덱스 하드코딩 뮤테이션(`i===0?'done':i===1?'active':'waiting'`)은 여기서
+    //   ['done','active','waiting','waiting'] 를 내 index 1·2 에서 red — 이미 도착한 day2 를
+    //   "생성 중"으로 거짓 표시하는 무심판(traps h10)을 이 케이스가 닫는다. **개념 [파생값]**:
+    //   상태는 주입이 아니라 hasData 에서 도출돼 "전부 done" 가짜 진척이 원천 불가.
+    //   함수는 이미 옳아 이 케이스는 회귀 심판(선제 green) — 뮤테이션 실측은 [구현] 5단계 몫.
+    expect(states).toEqual(['done', 'done', 'active', 'waiting']);
+  });
 });

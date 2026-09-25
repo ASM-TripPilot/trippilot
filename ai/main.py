@@ -30,7 +30,10 @@ env 스위치 (TRIP-344):
 (docker-compose 헬스체크 의존).
 """
 
+import logging
+import pathlib
 import os
+import sys
 from collections.abc import Mapping
 
 from fastapi import FastAPI
@@ -49,6 +52,54 @@ def _env(name: str) -> str | None:
     (TRIP-882 계열) — `.env` 에 `X= ` 처럼 꼬리 공백이 남는 건 흔하다.
     """
     return (os.environ.get(name) or "").strip() or None
+
+
+# 우리 로거에 다는 핸들러 이름 — 멱등 판정용(같은 이름이 있으면 다시 안 단다).
+_LOG_HANDLER_NAME = "trippilot"
+# `WARN` 은 logging 의 정식 별칭이라 운영자가 흔히 친다 — 받아 주되 정식 이름으로 접는다.
+_LOG_LEVELS = ("CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG")
+_LOG_ALIASES = {"WARN": "WARNING", "FATAL": "CRITICAL"}
+
+
+def configure_logging() -> None:
+    """`trippilot.*` 로그가 실제로 나오게 한다 (TRIP-914).
+
+    uvicorn 기본 설정은 `uvicorn*` 로거만 구성하고 루트엔 핸들러를 달지 않는다. 그래서
+    우리 로거는 **INFO 가 통째로 버려지고** WARNING 만 `logging.lastResort` 로 (레벨·
+    시각·로거 이름 없이) 새어 나갔다 — 프리필터 절단 관측(TRIP-908)의 분모, 요청 로그
+    (`api/middleware.py`)가 그렇게 안 보였다.
+
+    - 레벨은 `TRIPPILOT_LOG_LEVEL`(기본 INFO). 미지원 값은 **기동 실패**다 —
+      조용한 기본값은 "설정했다고 믿는데 안 나오는" 상태를 만든다(`TRIPPILOT_LLM_PROVIDER`
+      와 같은 규칙).
+    - 핸들러는 `trippilot` 로거에만 단다. 루트에 달면 의존 라이브러리 로그까지 우리
+      포맷으로 바꾼다.
+    - **전파는 끊지 않는다.** 끊으면 루트로 안 올라가 `caplog`(핸들러를 루트에 다는
+      pytest 기구)가 우리 로그를 못 잡고, import 순서에 따라 남의 테스트가 깨진다.
+      운영에선 루트에 핸들러가 없어 중복 출력도 없다(`lastResort` 는 **핸들러를 하나도
+      못 찾았을 때만** 쓰인다).
+    - 멱등하다 — 재호출은 레벨만 갱신한다(기동 경로가 둘이고, 테스트가 여러 번 부른다).
+    """
+    raw = _env("TRIPPILOT_LOG_LEVEL") or "INFO"
+    level = _LOG_ALIASES.get(raw.upper(), raw.upper())
+    if level not in _LOG_LEVELS:
+        # 원문 그대로 찍는다 — 대문자로 접어 찍으면 운영자가 자기가 넣은 값을 못 찾는다.
+        raise RuntimeError(
+            f"TRIPPILOT_LOG_LEVEL 미지원 값: {raw!r} — {'|'.join(_LOG_LEVELS)} 중 하나"
+        )
+    logger = logging.getLogger("trippilot")
+    logger.setLevel(level)
+    for existing in logger.handlers:
+        if getattr(existing, "name", None) == _LOG_HANDLER_NAME:
+            existing.setLevel(level)
+            return
+    handler = logging.StreamHandler(sys.stdout)
+    handler.name = _LOG_HANDLER_NAME
+    handler.setLevel(level)
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
+    )
+    logger.addHandler(handler)
 
 
 def _openai_llm_and_model() -> tuple[object, str]:
@@ -146,7 +197,10 @@ def _place_existence():
     )
 
     return KakaoExistenceAdapter(
-        UrllibHttpClient(), key,
+        # 호출당 1s — 어댑터는 마감을 호출 **사이**에서만 보므로 진행 중인 호출 1건이 곧
+        # 마감 초과 상한이다. 기본 10s 면 생성 시한을 10s 넘길 수 있었다(TRIP-904 리뷰).
+        # 키워드 검색 1건은 보통 수백 ms 라 1s 로 정상 응답을 자르지 않는다.
+        UrllibHttpClient(timeout_sec=1.0), key,
         # 상한은 검증 대상 상위 N(기본 50) 보다 넉넉히 — 실질 제한은 마감이다
         # `_env` 를 거친다 — `os.environ.get(k, "60")` 은 변수가 **없을 때만** 기본을
         # 쓰고 `EXISTENCE_MAX_CALLS=` 로 오면 "" 를 돌려줘 `int("")` 로 죽는다.
@@ -331,23 +385,43 @@ _LOCAL_PREFIX = "local"
 
 
 def _local_route(feature_models: Mapping[LlmFeature, str]) -> dict[str, object]:
-    """`local*` 모델이 배정돼 있으면 로컬 서버 어댑터 라우트를 만든다.
+    """`local*` 모델이 배정돼 있으면 우리가 서빙하는 모델의 라우트를 만든다.
 
-    로컬 서버는 OpenAI 호환(vLLM·MLX)이라 어댑터 신규 구현이 없다 — 기존
-    OpenAIAdapter 에 base_url 만 갈아끼운다. `api="chat"` 고정: responses 표면은
-    OpenAI 전용이다.
+    전송로가 둘이고 **환경변수가 어느 쪽인지 고른다**:
 
-    **배정됐는데 주소가 없으면 기동 실패다**(설정 버그). 조용히 기본 벤더로 나가면
+    * `TRIPPILOT_BEDROCK_MODEL_ARN` — Bedrock Custom Model Import (실서비스).
+      서버리스라 무요청 0원이고 GPU 쿼터·상시 과금이 없다.
+    * `TRIPPILOT_LOCAL_LLM_BASE_URL` — OpenAI 호환 서버(vLLM·MLX). 로컬 개발과
+      Mac 검증이 이 경로를 쓴다. 어댑터 신규 구현 없이 base_url 만 갈아끼운다.
+
+    둘 다 있으면 **Bedrock 이 이긴다** — 실서비스 설정이 개발용 잔재를 덮는 쪽이
+    안전하다(반대면 누가 `.env` 에 남겨둔 localhost 로 실서비스가 나간다).
+
+    **배정됐는데 둘 다 없으면 기동 실패다**(설정 버그). 조용히 기본 벤더로 나가면
     파인튜닝 모델이 안 붙은 채 정상처럼 보인다 — 그 침묵이 이 분기의 존재 이유다.
     런타임 연결 실패는 다른 이야기고, 그쪽은 폴백 계단이 받는다(INV-4).
     """
     if not any(str(m).lower().startswith(_LOCAL_PREFIX) for m in feature_models.values()):
         return {}
+
+    model_arn = _env("TRIPPILOT_BEDROCK_MODEL_ARN")
+    if model_arn:
+        import boto3
+
+        from trippilot.llm_gateway.adapters.bedrock_adapter import BedrockAdapter
+
+        client = boto3.client(
+            "bedrock-runtime",
+            region_name=_env("TRIPPILOT_BEDROCK_REGION") or "us-east-1",
+        )
+        return {_LOCAL_PREFIX: BedrockAdapter(client, model_arn)}
+
     base_url = _env("TRIPPILOT_LOCAL_LLM_BASE_URL")
     if not base_url:
         raise RuntimeError(
             "local* 모델이 TRIPPILOT_LLM_FEATURE_MODELS 에 배정됐는데 "
-            "TRIPPILOT_LOCAL_LLM_BASE_URL 미설정 — 기본 벤더로 조용히 나가지 않는다"
+            "TRIPPILOT_BEDROCK_MODEL_ARN·TRIPPILOT_LOCAL_LLM_BASE_URL 둘 다 미설정 "
+            "— 기본 벤더로 조용히 나가지 않는다"
         )
     import openai
 
@@ -361,8 +435,35 @@ def _local_route(feature_models: Mapping[LlmFeature, str]) -> dict[str, object]:
     return {_LOCAL_PREFIX: OpenAIAdapter(client, api="chat")}
 
 
+_DIRECTIVES_PATH = pathlib.Path(__file__).resolve().parent / "data" / "replan_directives.yaml"
+
+
+def _replan_directives() -> tuple:
+    """KB-4 재계획 지시 사전 (칩·자유입력 해석). 없거나 깨져도 기동을 막지 않는다.
+
+    **여기서 읽는 이유**: yaml 파서 의존은 `llm_gateway/prompts.py` 전용이라는
+    아키텍처 규칙이 있어(`test_yaml_only_imported_in_llm_gateway_prompts`) `src/`
+    안에서 못 읽는다. `load_directive_file(path, parse)` 가 파서를 인자로 받게
+    설계된 것이 그 때문이고, `main.py` 는 `src/` 밖이라 여기가 그 자리다.
+
+    사전이 없으면 `/replan` 이 칩·자유입력을 해석하지 못하고 그 사실을 응답 노트
+    (`directive_dictionary_absent`)로 낸다 — 조용히 무시하는 것과 다르다.
+    """
+    try:
+        import yaml
+
+        from trippilot.agents.planb.directives import load_directive_file
+
+        return load_directive_file(_DIRECTIVES_PATH, yaml.safe_load)
+    except Exception as e:  # 파일 부재·형식 위반 — 지시 없이도 재계획은 된다
+        logging.getLogger("trippilot.main").warning(
+            "replan_directives 로드 실패 %s: %s — 지시 해석 없이 기동", type(e).__name__, e)
+        return ()
+
+
 def build_app_from_env() -> FastAPI:
     """env → 앱 조립 스위치. 미설정 경로는 기존과 동일(회귀 없음)."""
+    configure_logging()  # 조립 로그부터 보이게 — 실패해도 기동 전에 드러난다 (TRIP-914)
     if os.environ.get("TRIPPILOT_WIRING") == "unwired":
         return create_app()
     weather = _kma_weather()
@@ -400,7 +501,8 @@ def build_app_from_env() -> FastAPI:
                          vector_store=vector_store, embedding=embedding,
                          travel_port=travel, existence=existence,
                          feature_models=feature_models,
-                         retry_models=_retry_models_from_env())
+                         retry_models=_retry_models_from_env(),
+                         directives=_replan_directives())
 
 
 # ASGI 진입점 — `uvicorn main:app` 으로도 기동 가능.

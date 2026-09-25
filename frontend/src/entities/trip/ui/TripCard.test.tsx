@@ -184,3 +184,73 @@ describe('🔴 TC7 · 여분 testID 0 (host 필터 — 프로즌 카드 카운�
     );
   });
 });
+
+// ── TRIP-788 추가분(additive, 프로즌 TC1~TC7 무회귀) ────────────────────────────
+// 두 옵셔널 VM 필드(resume?·imageUrl?)는 default vm() 이 미전달이라 TC1~TC7 을 한 픽셀도 안 건드린다.
+
+describe('🔴 TC8 · resume seam — 배지와 독립(additive `resume` 필드)', () => {
+  // 생성중·초안이 같은 draft 배지를 쓰므로 배지로 resume 를 가르면 생성중에 샌다(맹점①).
+  // 렌더는 `resume ?? (badge==='draft')` 하나여야 아래 세 케이스가 동시에 참이다.
+  it('badge=draft + resume=false → resume 부재(명시 억제 — 생성중 누출 차단)', () => {
+    render(
+      <TripCard
+        vm={vm({ badge: 'draft', extra: 'AI가 일정을 짜는 중', resume: false })}
+        onPress={noop}
+        testIDPrefix="my-trip"
+      />
+    );
+
+    expect(screen.getByTestId('my-trip-badge-t1')).toHaveTextContent('작성중');
+    expect(screen.queryByTestId('my-trip-resume-t1')).toBeNull();
+  });
+
+  it('badge=draft + resume 미전달 → resume 존재(배지 파생 폴백 — TC3/TC5 무회귀 짝)', () => {
+    render(
+      <TripCard
+        vm={vm({ badge: 'draft', extra: '추천안 준비 중' })}
+        onPress={noop}
+        testIDPrefix="my-trip"
+      />
+    );
+
+    expect(screen.getByTestId('my-trip-resume-t1')).toHaveTextContent(
+      '일정 이어서 짜기'
+    );
+  });
+
+  it('badge=draft + resume=true → resume 존재(명시 노출)', () => {
+    render(
+      <TripCard
+        vm={vm({ badge: 'draft', extra: '추천안 준비 중', resume: true })}
+        onPress={noop}
+        testIDPrefix="my-trip"
+      />
+    );
+
+    expect(screen.getByTestId('my-trip-resume-t1')).toBeOnTheScreen();
+  });
+});
+
+describe('🔴 TC9 · 카드 사진(G7) — imageUrl 있으면 Image, 없으면 회색', () => {
+  it('imageUrl(옵셔널·픽스처 전용) 있으면 사진 Image 를 그린다', () => {
+    render(
+      <TripCard
+        vm={vm({ imageUrl: 'file://x.png' })}
+        onPress={noop}
+        testIDPrefix="my-trip"
+      />
+    );
+
+    const photo = screen.getByTestId('my-trip-photo-t1');
+    expect(photo).toBeOnTheScreen();
+    // source uri 가 그 픽스처 값이어야 한다(엉뚱한 소스면 red).
+    expect(photo.props.source).toEqual({ uri: 'file://x.png' });
+  });
+
+  it('imageUrl 미전달(프로덕션 항상 null) → 사진 Image 부재, 회색 플레이스홀더', () => {
+    render(<TripCard vm={vm()} onPress={noop} testIDPrefix="my-trip" />);
+
+    // 사진 testID 는 imageUrl 있을 때만 붙는다(TC7 여분 testID 0 과 정합).
+    expect(screen.queryByTestId('my-trip-photo-t1')).toBeNull();
+  });
+});

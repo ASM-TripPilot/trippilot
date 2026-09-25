@@ -8,6 +8,16 @@ ns       := "trippilot"
 backend  := "trippilot-backend"
 postgres := "trippilot-postgres"
 
+# 서비스에 접속할 때 쓰는 호스트. 기본은 localhost — 개발 PC 에서 직접 쓰면 그대로 둔다.
+#
+# 헤드리스 서버(홈 서버 등)에 띄우고 **다른 PC 브라우저·터미널**에서 볼 때는 서버 IP 를 준다.
+# 클러스터 쪽은 손댈 게 없다 — kind 의 extraPortMappings 는 이미 0.0.0.0 에 바인딩하므로
+# 여기 URL 만 IP 를 가리키면 된다.
+#
+#   just host=192.168.1.100 health
+#   export TRIPPILOT_HOST=192.168.1.100     (셸에 고정)
+host := env_var_or_default('TRIPPILOT_HOST', 'localhost')
+
 # kind 클러스터 생성 + SigNoz 설치 (멱등)
 cluster-up:
     ./deploy/bin/cluster-up.sh
@@ -40,10 +50,10 @@ undeploy:
 
 # 네 서비스가 실제로 응답하는지 확인
 health:
-    @printf 'frontend  '; curl -fsS -o /dev/null -w '%{http_code}\n' http://localhost:8080/ || echo FAIL
-    @printf 'backend   '; curl -fsS http://localhost:8081/actuator/health || echo FAIL
-    @printf '\nai        '; curl -fsS http://localhost:8082/health || echo FAIL
-    @printf '\nsignoz    '; curl -fsS -o /dev/null -w '%{http_code}\n' http://localhost:8083/ || echo FAIL
+    @printf 'frontend  '; curl -fsS -o /dev/null -w '%{http_code}\n' http://{{ host }}:8080/ || echo FAIL
+    @printf 'backend   '; curl -fsS http://{{ host }}:8081/actuator/health || echo FAIL
+    @printf '\nai        '; curl -fsS http://{{ host }}:8082/health || echo FAIL
+    @printf '\nsignoz    '; curl -fsS -o /dev/null -w '%{http_code}\n' http://{{ host }}:8083/ || echo FAIL
 
 # ── 데이터베이스 ──────────────────────────────────────────────────────────
 

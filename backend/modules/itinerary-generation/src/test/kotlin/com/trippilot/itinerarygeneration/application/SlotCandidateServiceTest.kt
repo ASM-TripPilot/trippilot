@@ -73,7 +73,7 @@ class SlotCandidateServiceTest : StringSpec({
 
     val surfaces = object : PoiSurfaceFacade {
         override fun findSurfaces(poiIds: Collection<UUID>) = poiIds.associateWith {
-            PoiSurfaceView(it, "장소", 33.45, 126.56, "명소", null, null, emptyList())
+            PoiSurfaceView(it, "장소", 33.45, 126.56, "명소", "SIGHT", null, null, emptyList())
         }
         override fun findFrozenSurfaces(poiSnapshotIds: Collection<UUID>) = emptyMap<UUID, FrozenPoiView>()
     }

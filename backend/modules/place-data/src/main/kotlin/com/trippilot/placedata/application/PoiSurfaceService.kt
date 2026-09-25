@@ -25,6 +25,7 @@ class PoiSurfaceService(
                 lat = p.lat,
                 lng = p.lng,
                 category = p.category.name,
+                categoryCode = p.category.boundaryCode,
                 openingHours = p.openingHours,
                 imageUrl = p.imageUrl,
                 tags = p.tags,
@@ -35,7 +36,10 @@ class PoiSurfaceService(
     override fun findFrozenSurfaces(poiSnapshotIds: Collection<UUID>): Map<UUID, FrozenPoiView> {
         if (poiSnapshotIds.isEmpty()) return emptyMap()
         return snapshots.findByIds(poiSnapshotIds.distinct()).associate { s ->
-            s.poiSnapshotId to FrozenPoiView(s.poiSnapshotId, s.sourcePoiId, s.nameKo, s.lat, s.lng, s.category.name)
+            s.poiSnapshotId to FrozenPoiView(
+                s.poiSnapshotId, s.sourcePoiId, s.nameKo, s.lat, s.lng,
+                s.category.name, s.category.boundaryCode,
+            )
         }
     }
 }

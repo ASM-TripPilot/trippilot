@@ -15,7 +15,7 @@ from typing import Mapping, Sequence
 from trippilot.assembly_engine.config import (
     RAIN_INDOOR,
     RAIN_OUTDOOR,
-    STAY_DEFAULT_MIN,
+    stay_for,
     AssemblyConfig,
 )
 from trippilot.domain.common import PoiId
@@ -179,7 +179,7 @@ class RuleFallbackAssembler:
                     poi = self._pois.get(cand.poi_id)
                     if poi is None:
                         continue
-                    stay = STAY_DEFAULT_MIN[poi.category]
+                    stay = stay_for(poi.category, problem.pace)
                     if last is None:
                         depart = _at(day, problem.day_window.start)
                         travel_min = 0

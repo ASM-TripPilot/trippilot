@@ -10,6 +10,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
+import { MapView } from '@/shared/map';
 import { PlaceSubtitle } from '@/entities/place/ui/PlaceSubtitle';
 import type { Place } from '@/shared/api/generated/schemas';
 
@@ -203,10 +204,19 @@ export function PlaceDetailScreen({
             >
               {place.nameKo}
             </Text>
-            <PlaceSubtitle
-              parts={subtitleParts}
-              className="font-noto text-caption text-on-primary"
-            />
+            {/* 부제 앞 핀(Figma gsub 2091:2044) — 흰 핀 + [category · region] join 유지.
+                on-primary tone(사진 위 흰색), 색 자체는 SVG stroke 라 jest 사각(6-b 육안). */}
+            <View className="flex-row items-center gap-[6px]">
+              <MapPinGlyph
+                testID="explore-place-subtitle-pin"
+                size={14}
+                tone="on-primary"
+              />
+              <PlaceSubtitle
+                parts={subtitleParts}
+                className="font-noto text-caption text-on-primary"
+              />
+            </View>
           </View>
         </View>
 
@@ -258,16 +268,18 @@ export function PlaceDetailScreen({
             </InfoRow>
           </View>
 
-          {/* 미니맵 — 실 MapView 는 네이티브 재빌드 함정이라 정적 placeholder(i05 선례).
-              ponytail: static box, lat/lng 단일핀 MapView(viewOnly) 는 후속 티켓. */}
+          {/* 미니맵(Figma d06map 1907:1124) — 단일 핀 viewOnly 지도(place.lat/lng). connectPins
+              미전달(핀 1개라 경로선 없음). 네이버 네이티브라 타일·제스처 잠금은 6-b 실기(코드만
+              머지 시 재빌드 전 회색). env 키 부재 시 코어가 map-failure 로 접는다(INV-4). */}
           <View
             testID="explore-place-map"
-            className="h-[150px] w-full items-center justify-center gap-xs overflow-hidden rounded-[14px] border border-hairline bg-surface-soft"
+            className="h-[150px] w-full overflow-hidden rounded-[14px] border border-hairline bg-surface-soft"
           >
-            <MapPinGlyph size={28} />
-            <Text className="font-noto text-caption text-muted">
-              지도 준비 중
-            </Text>
+            <MapView
+              center={{ lat: place.lat, lng: place.lng }}
+              pins={[{ number: 1, lat: place.lat, lng: place.lng }]}
+              viewOnly
+            />
           </View>
         </View>
       </ScrollView>

@@ -1,0 +1,14 @@
+<div class="lab">
+<p><strong>목적:</strong> AWS 계정 없이 기존 테스트와 코드 읽기로 입력 검증·출력 전달을 확인한다. <strong>준비물:</strong> 이 브랜치의 로컬 사본, Python 3.13, 텍스트 편집기. 명령은 저장소 루트에서 실행하며 PowerShell·Bash 모두 사용할 수 있다.</p>
+<ol>
+<li><strong>0–2분:</strong> 2.3의 YAML을 연습 폴더의 <code>course-checks.example.yml</code>에 저장한다. <code>needs</code>, <code>id</code>, <code>outputs</code>에 표시하고 <code>report</code>가 실행되는 조건을 한 문장으로 적는다.</li>
+<li><strong>2–4분:</strong> 아래 두 테스트 명령을 실행한다. 첫 테스트는 bootstrap 템플릿의 정책을, 둘째는 실제 CLI의 입력 검증과 output 파일 쓰기를 확인한다. 두 명령은 AWS API를 호출하지 않는다.</li>
+<li><strong>4–5분:</strong> <code>workflow_config.py</code>에서 <code>deploy =</code> 줄과 <code>GITHUB_OUTPUT</code> 줄을 찾고 <code>mode=plan</code>일 때 output이 false가 되는 이유를 설명한다.</li>
+<li><strong>5–6분:</strong> <code>aws-deploy.yml</code>에서 <code>id-token: write</code>, <code>environment:</code>, <code>always()</code>를 찾아 각각 인증·승인·정리 중 어디에 속하는지 표시한다.</li>
+</ol>
+<div class="code-block"><div class="code-label">로컬 실행 · Python 표준 라이브러리 기반 검사</div><pre><code class="language-bash">python -m unittest discover -s infra/bootstrap/tests -v
+python -m unittest discover -s infra/tests -p "test_workflow_cli.py" -v</code></pre></div>
+<p><strong>기대 결과:</strong> 두 실행이 각각 <code>OK</code>로 종료한다. 테스트는 성공·실패 입력을 임시 디렉터리에서 확인한다. 특히 plan 입력에서는 <code>deploy_application=false</code> output을 확인하고 잘못된 입력에서는 비정상 종료와 output 미생성을 확인한다. AWS 리소스나 기존 workflow 파일은 바뀌지 않는다.</p>
+<p><strong>실행이 안 될 때:</strong> <code>Start directory is not importable</code> 또는 경로 오류면 현재 위치가 저장소 루트인지 확인한다. <code>python</code>을 찾지 못하면 설치된 환경에 맞춰 <code>py -3.13</code> 또는 <code>python3</code>를 사용한다. 연습 YAML 구문 검사 도구 <code>actionlint</code>가 설치되어 있다면 <code>actionlint course-checks.example.yml</code>도 실행할 수 있다.</p>
+</div>
+<details class="answer"><summary>확장 5분: DEV를 main에서 실행하면 어디서 멈추는가?</summary><p>기본 <code>DEPLOY_BRANCH</code>가 비어 있으면 DEV의 기대 브랜치는 <code>develop</code>이다. Environment의 branch 규칙이 올바르게 설정되어 있다면 먼저 그 보호 단계에서 차단된다. 해당 규칙이 빠졌더라도 <code>workflow_config.py</code>는 <code>GITHUB_REF != refs/heads/develop</code>을 감지하여 configure-aws-credentials step 전에 실패한다. 그러나 workflow 자체를 바꿀 수 있는 주체까지 방어하는 장치로 이 Python 검사만 의존해서는 안 된다.</p></details>

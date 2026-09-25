@@ -1,0 +1,55 @@
+<div class="lab">
+<p><strong>목표:</strong> 내 컴퓨터에서 됐다는 설명을 이미지 버전·테스트 결과·실행 대상이 기록된 배포 후보로 바꾼다. 아래 명령은 저장소 루트의 Bash에서 실행한다. Windows에서는 저장소의 Bash 기반 도구를 사용할 수 있는 WSL 환경을 사용하고 Docker 연결을 확인한다.</p>
+<ol>
+<li>Docker, kind, kubectl, Helm, foundryctl, Bazel/Bazelisk, just, JDK 25와 패키지별 의존성을 준비한다. <code>just doctor</code>는 주요 도구를 점검하지만 모든 버전과 설치 의존성까지 증명하지는 않는다.</li>
+<li>단위·통합 테스트를 실행한 다음 로컬 클러스터를 올린다. 문서상의 <code>just up</code>은 전체 테스트 명령이 아니며 현재 브랜치에는 아래 이미지 이름·AI 이미지 구성의 불일치가 있으므로 강사는 보정한 클러스터를 사전에 준비한다.</li>
+<li>최초 SigNoz 실행이면 <code>http://localhost:8083</code>에서 관리자 계정을 만든다. 그 전에는 수집기의 OTLP 수신기가 준비되지 않아 앱에서 연결 실패가 보일 수 있다.</li>
+<li>서비스 상태와 실제 업무 요청을 확인하고 실패 로그를 보관한다. 테스트에 사용한 commit을 기록한다.</li>
+</ol>
+<div class="code-block"><p class="code-label">로컬 검증 · Bash · 저장소 루트</p><pre><code>just doctor
+just test
+# 클러스터 준비에는 아래의 알려진 차이와 보정 예시를 먼저 읽는다.
+just status
+just health
+just smoke
+just verify-telemetry
+git rev-parse HEAD</code></pre></div>
+<p><strong>검증 목표:</strong> 준비·보정된 클러스터에서 frontend 8080, backend 8081, AI 8082, SigNoz 8083 접근 결과를 기록한다. 아래 코드 불일치 때문에 현재 clean checkout의 <code>just up</code>이 이 결과를 곧바로 보장하지는 않는다. <code>just health</code>는 실패를 <code>FAIL</code>로 출력하고 다음 검사로 진행할 수 있으므로 셸 종료 코드만 보고 성공으로 판정하지 않는다. 출력의 HTTP 상태와 JSON을 읽는다. 텔레메트리 검증에서 원문 토큰 노출을 뜻하는 <code>unmasked_jwt</code>는 0이어야 한다.</p>
+</div>
+<p>로컬 컨테이너 이미지는 <code>deploy/BUILD.bazel</code>이 만들고 <code>deploy/bin/images.sh</code>가 Docker와 kind 노드에 차례로 넣는다. kind 노드는 호스트 Docker와 이미지 저장소가 다르다. Docker에 이미지만 있다고 Pod가 이를 사용할 수 있는 것은 아니다. 로컬 YAML의 <code>imagePullPolicy: Never</code>는 레지스트리에서 받지 말라는 의미이며 노드에 이미지가 없으면 시작에 실패한다. <a href="https://kubernetes.io/docs/concepts/containers/images/">Kubernetes 이미지와 pull policy</a>.</p>
+<div class="callout warning">
+<strong>코드에서 확인한 로컬 개발 경로의 불일치</strong>
+<p><code>deploy/bin/deploy.sh</code>의 사전 검사는 기본값 <code>trippilot-backend:dev</code> 이미지를 찾지만 Bazel은 <code>trippilot/backend:local</code>을 만든다. 또한 Bazel AI 이미지는 과거의 <code>main.py</code> 단독·stdlib 구성을 유지하지만 현재 <code>ai/main.py</code>는 FastAPI와 <code>trippilot</code> 패키지를 import한다. 이미지 이름 검사를 통과해도 이 AI 이미지는 필요한 의존성·소스가 없어 정상 기동할 수 없는 구성이다. 오래된 로컬 안내의 “AI는 stdlib 스텁” 설명을 현재 앱 전체의 상태로 읽지 않는다.</p>
+<p>아래는 두 차이를 우회하는 <strong>교육용 보정 예시이며 이 교재 작성 중 실제 실행 검증한 결과는 아니다.</strong> 강사는 실행·health·업무 시나리오까지 사전 확인하거나 실패 로그 분석 실습으로 대체한다. 본 교재는 저장소의 배포 코드를 수정하지 않는다.</p>
+</div>
+<div class="code-block"><p class="code-label">교육용 로컬 준비 보정 예시 · Bash · AWS 접근 없음</p><pre><code>just cluster-up
+just backend-build
+just images
+
+# 현재 소스·의존성을 담는 Dockerfile로 AI 이미지를 교체한다.
+docker build -t trippilot/ai:local ./ai
+kind load docker-image trippilot/ai:local --name trippilot
+
+kubectl config use-context kind-trippilot
+# deploy.sh의 이미지 존재 검사에 실제 Bazel backend 이름을 전달한다.
+IMAGE_NAME=trippilot/backend IMAGE_TAG=local just deploy
+just status
+just health</code></pre></div>
+<div class="code-block"><p class="code-label">보정한 AI를 유지하며 backend만 갱신하는 예시</p><pre><code># 새 JAR → backend 이미지만 생성·적재 → backend만 rollout
+just backend-build
+bazel run //deploy:backend_load
+kind load docker-image trippilot/backend:local --name trippilot
+kubectl --context kind-trippilot -n trippilot \
+  rollout restart deployment/trippilot-backend
+kubectl --context kind-trippilot -n trippilot \
+  rollout status deployment/trippilot-backend --timeout=300s
+just health
+kubectl --context kind-trippilot -n trippilot \
+  logs deployment/trippilot-backend --tail=100</code></pre></div>
+<p><code>just backend-build</code>는 새 JAR를 만들어 Bazel 입력 위치에 복사한다. 이를 생략하고 <code>just update</code>만 실행하면 이전 JAR를 담은 이미지를 다시 만들 수 있다. 또한 <code>just update</code>와 <code>just images</code>는 AI도 예전 Bazel 구성으로 다시 적재하므로 위의 Dockerfile 보정을 덮어쓴다. 보정 후에는 위 backend 단독 갱신 예시를 사용하거나 전체 갱신 뒤 AI Dockerfile 빌드·kind load와 <code>deployment/ai</code>의 rollout restart/status를 다시 수행한다. 로컬 배포 스크립트는 현재 컨텍스트가 <code>kind-trippilot</code>인지 검사하므로 EKS에 로컬 YAML을 잘못 적용하는 것을 막는다.</p>
+<div class="callout">
+<strong>로컬 테스트와 AWS 이미지 테스트 사이의 간격</strong>
+<p>Bazel 로컬 이미지는 베이스 이미지 digest를 고정하지만 AWS 배포는 <code>backend/Dockerfile</code>, <code>ai/Dockerfile</code>을 Buildx로 다시 빌드한다. Python/JDK 베이스, 의존성 설치 방식, 포함 파일과 CPU 아키텍처를 비교해야 한다. 위에서 확인한 AI 패키징 불일치는 바로 이 차이가 실제 장애로 이어지는 예다. 이를 보정한 뒤에도 health 응답만으로 외부 연동과 전체 업무 경로를 검증했다고 볼 수 없다. Apple Silicon에서 성공한 arm64 실행도 AWS amd64 실행을 대신 검증하지 않는다.</p>
+</div>
+<p>이 간격을 줄이려면 CI에서 실제 AWS용 Dockerfile로 만든 후보 이미지를 테스트하고 필요하면 그 이미지를 별도의 로컬 검증 클러스터에 받아 실행한다. 로컬의 PostgreSQL <code>16-alpine</code>과 RDS의 <code>16</code>은 같은 major 계열이지만 minor 버전·확장·TLS·권한 정책이 같다는 뜻이 아니다. 클러스터 내부 연결에 성공한 뒤에도 DEV에서 RDS 연결, Flyway migration과 실제 API 시나리오를 확인해야 한다.</p>
+<p class="source-note">명령 근거: <a href="../../justfile">justfile</a>, <a href="../../just/k8s.just">로컬 Kubernetes 레시피</a>, <a href="../../deploy/bin/images.sh">이미지 적재</a>, <a href="../../backend/Dockerfile">AWS backend Dockerfile</a>, <a href="../../ai/Dockerfile">AWS AI Dockerfile</a>.</p>

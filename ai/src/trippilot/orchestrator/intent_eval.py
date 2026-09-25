@@ -25,7 +25,9 @@ from trippilot.domain.intent import Intent, IntentMatch, MatchRoute
 BOUNDARY_INTENTS = frozenset({Intent.EDIT_SCHEDULE, Intent.REPLAN, Intent.GENERATE_SCHEDULE})
 # 라우터가 "분류를 거절했다"는 표지 — intent_router 의 폴백 사유 문자열(IntentGate not_classifiable /
 # 3차 결과가 라우팅 불가 라벨). 이 표지가 없는 FALLBACK 은 인프라 실패로 본다.
-_REFUSAL_MARKERS = ("not_classifiable", "intent_not_routable")
+_REFUSAL_MARKERS = ("not_classifiable", "intent_not_routable", "out_of_scope_anchor")
+# 셋 다 "판단해서 거절했다" 는 뜻이다. 표지 없는 FALLBACK 은 인프라·출력 실패라
+# 따로 센다(unrefused_fallbacks) — 장애를 정답으로 세면 OUT_OF_SCOPE 정확도가 부풀려진다.
 
 
 def _is_refusal(match: IntentMatch) -> bool:

@@ -36,10 +36,21 @@ class GenerationSessionBackfillIT {
 
     private fun conn(user: String, pw: String): Connection = DriverManager.getConnection(pg.jdbcUrl, user, pw)
 
+    /**
+     * **`R__` 반복 시드는 뺀다.** Flyway 는 target 이 무엇이든 반복 마이그레이션을 그 집합 **끝에
+     * 무조건** 붙인다. 그래서 2.26 까지만 올려도 `R__seed_stay.sql` 이 돌고, 그 시드가 2.26 시점에
+     * 없는 컬럼을 쓰면 여기서 죽는다 — 실제로 V2.51(stay 주소·전화·객실)에서 그렇게 됐다.
+     *
+     * 그대로 두면 이 테스트가 **"V2.26 이후로 stay 에 컬럼을 추가하지 말라"** 는 뜻이 된다.
+     * 시드는 이 테스트가 보려는 것(V2.27 소급)과 아무 상관이 없으므로 아예 해석 대상에서 뺀다 —
+     * 어느 파일도 쓰지 않는 접두사를 줘서 반복 마이그레이션이 하나도 잡히지 않게 한다.
+     * 덤으로 12,782행 시드를 매번 적재하던 것도 사라진다.
+     */
     private fun migrateTo(version: String) = Flyway.configure()
         .dataSource(pg.jdbcUrl, "app_migrate", "app_migrate")
         .schemas("app").defaultSchema("app").createSchemas(false)
         .locations("classpath:db/migration")
+        .repeatableSqlMigrationPrefix("__NONE__")
         .target(version)
         .load()
         .migrate()

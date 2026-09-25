@@ -242,13 +242,16 @@ describe('P-6 · 좌표 미확정: 핀을 아직 안 맞췄으면 등록이 잠�
   });
 });
 
-describe('P-7 · 잠긴 탭은 잠겼다고 글자로 말한다 (회귀 앵커 · INV-4)', () => {
-  it('링크 붙여넣기 탭은 비활성이고 "준비 중"이 보이며, 핀 탭은 눌러 고를 수 있다', () => {
+describe('P-7 · 잠긴 탭은 잠긴 채이되 "준비 중"은 사라진다 (TRIP-730 · INV-4)', () => {
+  it('링크 붙여넣기 탭은 비활성 유지이나 "준비 중" 캡션은 없고, 핀 탭은 눌러 고를 수 있다', () => {
     const handlers = renderScreen(IDLE_FLOW);
 
     const linkTab = screen.getByTestId('stay-register-tab-linkpaste');
+    // disabled 는 그대로 유지(계약 미존재 · Seed §1) — 개봉 안 함.
     expect(linkTab).toBeDisabled();
-    expect(linkTab).toHaveTextContent(/준비 중/);
+    // TRIP-730 — 정지 화면을 Figma 와 맞춰 "준비 중" 캡션을 제거한다(무음 disabled 셀 자체가
+    // INV-4 신호). regex 부분포함이라 캡션이 남아 있으면 red 다.
+    expect(linkTab).not.toHaveTextContent(/준비 중/);
 
     fireEvent.press(screen.getByTestId('stay-register-tab-pin'));
     expect(handlers.onSelectTab).toHaveBeenCalledTimes(1);

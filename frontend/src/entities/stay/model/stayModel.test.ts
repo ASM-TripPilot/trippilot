@@ -83,4 +83,20 @@ describe('🔴 AC-1 · entities/stay/model 재수출 + 카드 뷰모델', () => 
     expect(bare).toEqual({ savedStayId: 'ss-1', name: '해운대 오션뷰' });
     expect(withDate).toHaveProperty('dateLabel', '6.10~6.13');
   });
+
+  it('🔴 M1-4 · TRIP-729 — SavedStayCardVM 에 옵셔널 isBase?·region?·priceLabel? 가 있다(additive)', () => {
+    // e04 거점 배지·지역줄·2톤 가격은 계약 공백이라 옵셔널 — 실앱은 미설정(degrade), 프리뷰만 채운다.
+    // 세 필드가 VM 타입에 없으면 이 satisfies 가 tsc red(런타임엔 키 존재만 확인).
+    const full = {
+      savedStayId: 'ss-1',
+      name: '해운대 오션뷰',
+      isBase: true,
+      region: '해운대',
+      priceLabel: '145,000원~',
+    } satisfies SavedStayCardVM;
+
+    expect(full).toHaveProperty('isBase', true);
+    expect(full).toHaveProperty('region', '해운대');
+    expect(full).toHaveProperty('priceLabel', '145,000원~');
+  });
 });

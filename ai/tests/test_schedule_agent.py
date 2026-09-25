@@ -515,3 +515,279 @@ def test_alternative_sentences_only_for_slot_pois_counts_as_empty() -> None:
     assert any(d.reason == "alternative_explanation_empty" for d in outcome.degradations)
     assert all(a.rationale.endswith("명소 후보")
                for alts in outcome.slot_alternatives.values() for a in alts)
+
+
+# ── ②′ 지도 실재 검증 → 점수 강등이 **일정에 닿는다** (TRIP-904) ─────────────
+#
+# 종전(TRIP-898)엔 풀 빌더가 풀 순서만 바꿔 일정이 그대로였다 — 이 절의 첫 테스트가
+# 그 버그의 회귀 가드다. 속성 전수(강등이지 배제 아님·UNVERIFIED 무강등·계약 깨는
+# 포트)는 test_schedule_existence_demote.py 가 덮는다.
+
+from tests.fakes.fake_existence import FakeExistence
+from trippilot.ports.place_existence_port import ExistenceStatus
+
+
+def _existence_case():
+    """풀 p1..p6(전부 SIGHT·같은 LLM 점수 0.9 는 p1~p3, 나머지는 규칙 보충)·창 09–12 → 2건 배치."""
+    pois = tuple(_poi(i, 0.003 * i) for i in range(1, 7))
+    req = replace(_request(), day_window=TimeWindow(
+        start=datetime(2026, 8, 5, 9, 0, tzinfo=_KST), end=datetime(2026, 8, 5, 12, 0, tzinfo=_KST)))
+    pool = CandidatePoolBuilder(InMemoryPoi(pois), M7Config()).build(
+        CandidatePoolRequest(anchor=req.anchor, dates=req.days, budget=req.budget, transport=req.transport), _NOW,
+    )
+    return pool, req
+
+
+def _agent_with_existence(existence):
+    trace = InMemoryTrace()
+    gateway = GatewayFacade(FakeLlm(_scores_json("p1", "p2", "p3", "p4", "p5", "p6")), _Renderer(),
+                            ClosedSetGate(), _C1CFG, trace)
+    return ScheduleAgent(
+        PreferenceScoringWorker(gateway), _AssemblyProvider(trace, _Sink(), primary=True),
+        FakeClock(), trace, existence=existence,
+    ), trace
+
+
+def _placed(outcome):
+    return [str(s.poi_id) for d in outcome.solution.days for s in d.slots]
+
+
+def test_map_miss_demotion_changes_the_itinerary() -> None:
+    """배치될 두 곳을 '지도에 없음'으로 주면 다른 후보로 바뀐다 — 강등이 어셈블리에 닿는다."""
+    pool, req = _existence_case()
+    base = _agent_with_existence(None)[0].run(_task(pool, request=req))
+    first = _placed(base)
+    assert len(first) == 2  # 전제
+
+    fake = FakeExistence({pid: ExistenceStatus.NOT_FOUND for pid in first})
+    agent, _ = _agent_with_existence(fake)
+    outcome = agent.run(_task(pool, request=req))
+
+    assert fake.call_count == 1
+    assert not set(_placed(outcome)) & set(first), "지도에서 못 찾은 곳이 그대로 배치됐다"
+    assert outcome.status is GenerationStatus.SUCCESS  # 강등은 정상 동작이다 — 폴백 아님
+
+
+def test_map_miss_is_demotion_not_exclusion() -> None:
+    """전 후보가 '지도에 없음'이면 그래도 일정은 채워진다 — 다른 선택지가 없을 때는 쓴다."""
+    pool, req = _existence_case()
+    base = _placed(_agent_with_existence(None)[0].run(_task(pool, request=req)))
+    agent, _ = _agent_with_existence(FakeExistence(default=ExistenceStatus.NOT_FOUND))
+
+    outcome = agent.run(_task(pool, request=req))
+
+    assert _placed(outcome) == base  # 다 같이 깎이면 상대 순서는 그대로다
+
+
+def test_map_verify_failures_never_fail_or_silently_skip() -> None:
+    """포트 예외·전량 확인 실패 → 일정은 그대로 + 강등 기록 (INV-4)."""
+    pool, req = _existence_case()
+    base = _placed(_agent_with_existence(None)[0].run(_task(pool, request=req)))
+
+    class _Boom:
+        def verify(self, queries, *, deadline_ms):
+            raise RuntimeError("vendor down")
+
+    for port, prefix in ((_Boom(), "existence_error: RuntimeError"),
+                         (FakeExistence(default=ExistenceStatus.UNVERIFIED), "existence_unverified")):
+        agent, trace = _agent_with_existence(port)
+        outcome = agent.run(_task(pool, request=req))
+        assert _placed(outcome) == base
+        assert outcome.status is GenerationStatus.DEGRADED
+        assert any(d.stage == "existence" and d.reason.startswith(prefix) for d in outcome.degradations)
+        assert any(e.stage == "existence" for e in trace.of_type(FallbackEvent))
+
+
+def test_map_verify_respects_assembly_floor() -> None:
+    """어셈블리 바닥을 침범할 시간이 없으면 부르지 않는다 — 건너뛴 사실은 남긴다 (DL-2)."""
+    pool, req = _existence_case()
+    fake = FakeExistence(default=ExistenceStatus.NOT_FOUND)
+    agent, trace = _agent_with_existence(fake)
+
+    outcome = agent.run(_task(pool, request=req, total_ms=1_000))  # 바닥 1000ms = 전부
+
+    assert fake.call_count == 0
+    assert any(d.stage == "existence" and d.reason.startswith("deadline:available=")
+               for d in outcome.degradations)
+    # 결과에만 싣고 이벤트를 빠뜨리면 폴백률 지표에서 이 건너뜀이 안 보인다 (INV-4)
+    assert [e.component for e in trace.of_type(FallbackEvent) if e.stage == "existence"] == [
+        "agents.schedule"]
+
+
+
+def test_map_verify_contract_breaking_port_never_fails_generation() -> None:
+    """None·엉뚱한 원소·빈 응답을 돌려주는 포트 → 일정은 그대로 + 강등 기록 (FAILED 아님)."""
+    pool, req = _existence_case()
+    base = _placed(_agent_with_existence(None)[0].run(_task(pool, request=req)))
+
+    class _Returns:
+        def __init__(self, value):
+            self.value = value
+
+        def verify(self, queries, *, deadline_ms):
+            return self.value
+
+    cases = ((None, "existence_error: TypeError"),
+             ([{"poi_id": "p1", "status": "NOT_FOUND"}], "existence_empty_response"),
+             ((), "existence_empty_response"))
+    for value, prefix in cases:
+        agent, trace = _agent_with_existence(_Returns(value))
+        outcome = agent.run(_task(pool, request=req))
+        assert outcome.solution is not None and _placed(outcome) == base, value
+        assert any(d.stage == "existence" and d.reason.startswith(prefix)
+                   for d in outcome.degradations), (value, outcome.degradations)
+        assert len([e for e in trace.of_type(FallbackEvent) if e.stage == "existence"]) == 1
+
+
+def test_demotion_never_raises_a_nonpositive_score() -> None:
+    """음수 점수(원거리 규칙 점수)는 배율을 곱하면 **올라간다** — 0 이하는 그대로 둔다."""
+    from trippilot.agents.schedule.agent import demote_missing_on_map
+    from trippilot.domain.llm import ScoredPoi
+    from trippilot.ports.place_existence_port import ExistenceVerdict
+
+    cands = (ScoredPoi(PoiId("neg"), -0.1, False), ScoredPoi(PoiId("zero"), 0.0, False),
+             ScoredPoi(PoiId("pos"), 0.5, True))
+    verdicts = tuple(ExistenceVerdict(c.poi_id, ExistenceStatus.NOT_FOUND) for c in cands)
+
+    out = demote_missing_on_map(cands, verdicts, 0.2, 0.3)
+
+    assert [c.score for c in out] == [-0.1, 0.0, max(0.5 - 0.3, 0.5 * 0.2)]
+
+
+
+def test_demotion_does_not_become_exclusion_under_rain_soft_terms() -> None:
+    """리뷰 실측 회귀(TRIP-904): 비 오는 날·실외만·전량 미검출이어도 OR-Tools 배치 수는 강등 전과 같다.
+
+    곱셈만 쓰던 첫 안(×0.2)은 0.16 − 0.2(우천 실외 감점) < 0 이라 방문 이득이 음수가 되어
+    **대체 후보가 없는데도** 3곳 → 1곳으로 줄었다(사실상 배제 — 9/12 팀 결정 위반).
+    """
+    from trippilot.agents.schedule.agent import demote_missing_on_map
+    from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
+    from trippilot.ports.place_existence_port import ExistenceVerdict
+    from tests.test_assembly_engine_rain_adjust import (
+        _CFG as _RAIN_CFG, _EST as _RAIN_EST, _POOL_OUTDOOR_ONLY, _RAINY, _problem as _rain_problem,
+    )
+
+    cfg = OrchestratorConfig()
+    for rain in (None, _RAINY):
+        problem, index = _rain_problem(_POOL_OUTDOOR_ONLY, rain=rain)
+        verdicts = tuple(ExistenceVerdict(c.poi_id, ExistenceStatus.NOT_FOUND)
+                         for c in problem.candidates)
+        demoted = replace(problem, candidates=demote_missing_on_map(
+            problem.candidates, verdicts,
+            cfg.existence_demote_factor, cfg.existence_demote_penalty))
+
+        def visits(p):
+            sol = OrToolsAssembler(index, _RAIN_EST, _RAIN_CFG).solve(p, 3000)
+            return sum(len(d.slots) for d in sol.days)
+
+        assert visits(demoted) == visits(problem), f"rain={rain}"
+
+
+# ── 입장료 파생 지식 조인 (2026-09-24) ────────────────────────────────
+
+
+class _SpyFees(dict):
+    """`FeeTable.won` 자리에 끼워 조회 키를 기록한다.
+
+    점수 내부값을 읽지 않고 **배선이 일어났는지**만 본다 — 점수 산식이 바뀌어도
+    이 테스트는 조인만 지킨다.
+    """
+
+    def __init__(self, mapping):
+        super().__init__(mapping)
+        self.asked: list[str] = []
+
+    def get(self, key, default=None):
+        self.asked.append(key)
+        return super().get(key, default)
+
+
+def test_규칙_점수가_source_ref_로_입장료를_조회한다() -> None:
+    """조인이 끊기면 예산이 점수에 아예 안 실린다 — 예외도 로그도 안 난다.
+
+    실측(2026-09-24): 이 테스트를 넣기 전에는 `fee_won=None` 으로 배선을 끊어도
+    이 파일의 26건이 **전부 통과**했다.
+    """
+    from trippilot.poi_curation.place_fees import FeeTable
+
+    # 공유 픽스처 `_POIS` 에는 `source_ref` 가 없다(실 경로에서는 `BackendPoiDb` 가
+    # `PoiReadResponse.sourceRef` 를 옮긴다). 조인을 보려면 여기서 채워야 한다 —
+    # 안 채우면 이 테스트가 **아무것도 안 보면서 통과**한다.
+    from dataclasses import replace as _replace
+
+    from trippilot.domain.llm import CandidatePool as _Pool
+
+    base = _pool()
+    pois = tuple(_replace(p, source_ref=f"ref-{p.poi_id}") for p in base.pois)
+    pool = _Pool(poi_ids=base.poi_ids, pois=pois, generated_at=base.generated_at,
+                 anchor=base.anchor, radius_km=base.radius_km)
+    refs = [p.source_ref for p in pool.pois]
+    spy = _SpyFees({r: 40_000 for r in refs})
+
+    trace = InMemoryTrace()
+    gateway = GatewayFacade(FakeLlm(_scores_json("p1", "p2", "p3")), _Renderer(),
+                            ClosedSetGate(), _C1CFG, trace)
+    agent = ScheduleAgent(
+        PreferenceScoringWorker(gateway),
+        _AssemblyProvider(trace, _Sink(), primary=True),
+        FakeClock(), trace,
+        fees=FeeTable(won=spy),
+    )
+
+    agent.run(_task(pool, persona=None))  # 페르소나 비가용 → 규칙 점수 경로
+
+    assert spy.asked, "요금 표를 한 번도 조회하지 않았다 — 조인이 끊겼다"
+    assert set(spy.asked) >= set(refs), (
+        f"풀의 source_ref 를 다 안 물었다: 물은 것 {sorted(set(spy.asked))}")
+
+
+def test_요금표_미주입이면_종전과_같은_점수다() -> None:
+    """켜지기 전 동작이 안 바뀌는 것이 배포 안전 조건이다."""
+    pool = _pool()
+    plain, _, _ = _agent()
+    outcome_a = plain.run(_task(pool, persona=None))
+
+    from trippilot.poi_curation.place_fees import EMPTY
+    trace = InMemoryTrace()
+    gateway = GatewayFacade(FakeLlm(_scores_json("p1", "p2", "p3")), _Renderer(),
+                            ClosedSetGate(), _C1CFG, trace)
+    explicit = ScheduleAgent(
+        PreferenceScoringWorker(gateway),
+        _AssemblyProvider(trace, _Sink(), primary=True),
+        FakeClock(), trace, fees=EMPTY,
+    )
+    outcome_b = explicit.run(_task(pool, persona=None))
+
+    assert [s.poi_id for d in outcome_a.solution.days for s in d.slots] == \
+           [s.poi_id for d in outcome_b.solution.days for s in d.slots]
+
+
+def test_요청의_지시_카테고리가_규칙_점수에_실린다() -> None:
+    """`GenerateItineraryRequest.avoid_categories` → `build_rule_score` 고리.
+
+    실측(2026-09-24): 이 고리를 `frozenset()` 으로 끊었더니 경계 테스트 15건이
+    **전부 통과**했다 — 경계 테스트는 "요청에 실렸나"까지만 보고, 점수까지는
+    안 보기 때문이다. 두 고리를 따로 지켜야 한다.
+    """
+    from dataclasses import replace as _replace
+
+    from trippilot.domain.poi import PoiCategory
+
+    pool = _pool()
+    agent, _, _ = _agent()
+    base_request = _request()
+    avoided = {p.category for p in pool.pois}  # 풀에 실제로 있는 카테고리를 피한다
+    assert avoided, "풀이 비면 이 테스트가 아무것도 안 본다"
+
+    plain = {s.poi_id: s.score for s in agent._rule_scores(base_request, pool)}
+    steered = {
+        s.poi_id: s.score
+        for s in agent._rule_scores(
+            _replace(base_request, avoid_categories=frozenset(avoided)), pool
+        )
+    }
+
+    assert plain.keys() == steered.keys()
+    assert any(steered[k] < plain[k] for k in plain), (
+        "회피 지시가 점수를 전혀 안 바꿨다 — 요청→점수 고리가 끊겼다")

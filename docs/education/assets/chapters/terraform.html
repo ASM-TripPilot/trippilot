@@ -1,0 +1,20 @@
+<p class="lead">같은 저장소에서 DEV에는 NAT Gateway 한 개를, PRD에는 세 개를 만든다. 이 차이를 Terraform이 어떻게 읽고 실제 AWS 리소스로 바꾸는지, TripPilot 브랜치의 코드를 따라가며 배운다.</p>
+<div class="callout"><strong>수업이 끝나면</strong> HCL 블록을 읽고 환경별 변수를 설명하고 provider와 state의 역할을 구분할 수 있다. AWS를 변경하지 않는 검증을 직접 실행하고 Cloudflare DNS 연결에 필요한 추가 설계까지 제시한다.</div>
+<p><span class="badge">현재 구현: AWS</span> <span class="badge">추가 학습 예제: Cloudflare v5</span> <span class="badge">학생 실습: AWS 리소스 변경 없음</span></p>
+<div class="table-wrap timing">
+<table><caption>강사 진행표 · 기본 50분</caption><thead><tr><th>구간</th><th>주제</th><th>진행 방식</th></tr></thead><tbody>
+<tr><td>00–03분</td><td>1. 원하는 상태와 실제 상태</td><td>콘솔 작업과 코드 변경 비교</td></tr>
+<tr><td>03–06분</td><td>2. 저장소 지도</td><td>파일 역할 찾기</td></tr>
+<tr><td>06–12분</td><td>3. HCL 문법과 자료형</td><td>코드 한 줄씩 읽기</td></tr>
+<tr><td>12–17분</td><td>4. 입력·가공·조회·출력</td><td>변수에서 리소스까지 값 추적</td></tr>
+<tr><td>17–21분</td><td>5. 반복과 의존성</td><td>리소스 주소 및 그래프 설명</td></tr>
+<tr><td>21–25분</td><td>6. AWS Provider</td><td>버전·인증·계정 검증</td></tr>
+<tr><td>25–30분</td><td>7. State와 두 종류의 lock</td><td>동시 수정 사례 토론</td></tr>
+<tr><td>30–33분</td><td>8. 최초 부트스트랩</td><td>인증과 상태 저장소의 선행 조건</td></tr>
+<tr><td>33–37분</td><td>9. DEV와 PRD 비교</td><td>가용성·비용·데이터 보호 비교</td></tr>
+<tr><td>37–43분</td><td>10. Cloudflare Provider</td><td>DNS·ACM·NLB 연결 예제</td></tr>
+<tr><td>43–48분</td><td>11. 변경 없는 실습</td><td>fmt → init → validate → test</td></tr>
+<tr><td>48–50분</td><td>12. 이해 확인</td><td>짧은 설명과 정답 검토</td></tr>
+</tbody></table>
+</div>
+<p class="source-note"><strong>30분 편성:</strong> 1·2절 3분, 3·4절 7분, 5·6절 4분, 7·8절 5분, 9절 3분, 10절 4분, 11절 강사 시연 3분, 12절 1분. <strong>60분 편성:</strong> 기본 과정에 11절의 실패 입력 테스트(negative test) 실습 5분과 10절 DNS 설계 토론 5분을 추가한다. 도구 설치와 provider 다운로드는 수업 전에 마친다.</p>

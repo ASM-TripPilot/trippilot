@@ -22,7 +22,7 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { MustVisitListPage } from './MustVisitListPage';
 
 /**
- * h05 배선을 **실 HTTP 로** 태우는 심판(AC-1 · AC-2 · AC-3 · AC-8 · AC-10 · AC-M1 · D3).
+ * h02(구 h05) 배선을 **실 HTTP 로** 태우는 심판(AC-1 · AC-2 · AC-3 · AC-8 · AC-M1 · D3).
  *
  * 무엇을 보장하나:
  *  - 두 조회(`GET /trips/{id}/must-visits` · `GET /saved-places`)가 실제로 나가고, 그 둘이
@@ -30,10 +30,13 @@ import { MustVisitListPage } from './MustVisitListPage';
  *  - 조인 실패 항목이 **실 HTTP 위에서도** 목록에 남는다(사용자 동결 · INV-4).
  *  - 해제는 `must_visit` 만 지운다 — 담기(`saved-places`)는 건드리지 않는다(INV-U1-04 ·
  *    BR-U1-04 양방향 독립). 사용자가 탐색 화면의 ♥ 까지 잃으면 되돌릴 방법이 없다.
- *  - 🔴 **이미 도착한 목록이 재조회 실패에 지워지지 않는다**(문제로그 2026-08-04 · 이 계열 화면
- *    에서 두 번 재발했고, 이 칸이 세 번째다).
+ *  - 🔴 **이미 도착한 목록이 재조회 실패에 지워지지 않는다**(문제로그 2026-08-04). 단 TRIP-785 로
+ *    h02 는 stale 알림(AlertRow)을 **더는 안 그린다**(Q3 · model 은 유지, h03 이 흡수) — I4 가
+ *    "목록은 살고 AlertRow 는 없다" 로 뒤집혔다.
  *  - 게스트가 **끝나지 않는 스켈레톤**을 보지 않는다(`useSavedPlaces` 는 `enabled: isAuthed` 라
  *    미로그인이면 `isPending` 이 영원히 true 다).
+ *  - 🔴 TRIP-785 재정합: 강등 확인 시트·배선이 사라졌고(부재 단언 하나로 접음), 건너뛰기는
+ *    listed 에서 사라져 **failed 얼굴 전용**이 됐다(I13·I16 재작성).
  *
  * 왜 통합 버킷인가: 심판의 핵심이 **어떤 요청이 몇 건 나갔나** 다. 훅을 목킹하면 "해제가
  * saved-places 를 안 건드린다" 가 테스트의 *가정*이 되어 그 가정이 틀려도 아무도 모른다
@@ -232,6 +235,13 @@ function cardTestIds(): string[] {
     });
 }
 
+/** 노드의 부재를 **숫자로** 잰다. `expect(queryAll…).toEqual([])` 는 단언이 실패할 때 jest 가
+ * ReactTestInstance 를 직렬화하며 순환 참조로 스택을 터뜨린다(RNTL 13.3.3 실측) — 부재 단언은
+ * red 가 될 수 있으므로(뮤테이션 실측) `.length` 를 먼저 뽑아 숫자만 비교한다. */
+function countTestId(testID: string): number {
+  return screen.queryAllByTestId(testID).length;
+}
+
 describe('I1 · AC-1 · AC-2 — 두 조회가 실제로 나가고 이름까지 이어진다', () => {
   it('카드 3장이 뜨고 조인된 장소명이 그려진다', async () => {
     renderPage();
@@ -287,16 +297,21 @@ describe('🔴 I3 · AC-8 — 해제는 담기를 건드리지 않는다 (INV-U1
   });
 });
 
-describe('🔴 I4 · AC-M1 — 도착한 목록이 재조회 실패에 지워지지 않는다', () => {
+describe('🔴 I4 · AC-M1 · AC-5 · Q3 — 도착한 목록은 재조회 실패에 안 지워지고, h02 는 stale 알림을 안 그린다', () => {
   /**
-   * ⚠️ 문제로그 `2026-08-04 화면 얼굴 전환이 잔존 목록을 지운다`. TRIP-222·223 에서 서로 반대
-   * 방향으로 두 번 재발했다. 순수 함수(`mustVisitList.test.ts` C5)·화면(`MustVisitPickerScreen`
-   * C23)·배선(여기) **세 층에 독립으로** 박는다 — 어느 한 층만 고쳐도 나머지가 red 로 남는다.
+   * ⚠️ 문제로그 `2026-08-04 화면 얼굴 전환이 잔존 목록을 지운다`(TRIP-222·223 두 번 재발).
+   *
+   * TRIP-785 로 **계약이 반쪽 갈렸다**(Q3): 재조회 실패는 여전히 `staleFailed` 로 model 에
+   * 실려 나가고(순수 함수 `mustVisitList.test.ts` C5 가 잠금) — 페이지가 그대로 view 에 싣는다
+   * — 그런데 h02 화면은 그 안내(`-stale-failed` AlertRow)를 **더는 안 그린다**(h03/TRIP-786 이
+   * 흡수). 그래서 이 배선 층 심판은 옛 "AlertRow 가 붙는다" 를 **"안 붙는다" 로 뒤집는다**:
+   * 목록은 살아 있고(AC-M1 데이터 안전 유지) 전면 실패·로딩 얼굴로 갈아 끼우지도 않되,
+   * stale 알림은 화면에 없다(AC-5 · "삭제도 계약").
    *
    * 재조회를 **테스트가 직접 일으킨다**(캐시 무효화). 해제 뮤테이션 뒤에 일으키면 "배선이
    * 무효화를 하는가" 라는 다른 축이 섞여 들어와, 낙관 갱신으로 짠 정당한 구현이 red 를 낸다.
    */
-  it('카드가 그대로 남고 실패 알림이 곁에 붙으며 전면 실패 얼굴로 갈아 끼우지 않는다', async () => {
+  it('카드가 그대로 남되 stale 알림은 안 뜨고, 전면 실패·로딩 얼굴로 갈아 끼우지 않는다', async () => {
     const { client } = renderPage();
     await screen.findByTestId('itinerary-mustvisit-poi-a');
     await waitFor(() => expect(cardTestIds()).toHaveLength(3));
@@ -310,31 +325,29 @@ describe('🔴 I4 · AC-M1 — 도착한 목록이 재조회 실패에 지워지
     });
 
     // 단언 ① — 재조회가 실제로 나갔고 실패했다(긍정 앵커). 없으면 아무 일도 안 일어난 화면이
-    //          아래 단언을 공짜로 통과한다.
+    //          아래 부재 단언을 공짜로 통과한다. 이 실패가 model 에 `staleFailed=true` 를 싣는다.
     await waitFor(() =>
       expect(
         hitsFor('GET', `/trips/${TRIP_ID}/must-visits`)
       ).toBeGreaterThanOrEqual(2)
     );
 
-    // 단언 ② — 목록이 지워지지 않았다.
+    // 단언 ② — 목록이 지워지지 않았다(AC-M1 데이터 안전은 그대로 산다 · listed 얼굴 유지).
     await waitFor(() =>
       expect(
-        screen.getByTestId('itinerary-mustvisit-screen-stale-failed')
-      ).toBeOnTheScreen()
+        screen.getByTestId('itinerary-mustvisit-name-poi-a')
+      ).toHaveTextContent('부산시립미술관')
     );
     expect(cardTestIds()).toHaveLength(3);
-    expect(
-      screen.getByTestId('itinerary-mustvisit-name-poi-a')
-    ).toHaveTextContent('부산시립미술관');
 
-    // 단언 ③ — 실패가 삼켜지지도, 목록을 덮지도 않았다.
-    expect(
-      screen.queryAllByTestId('itinerary-mustvisit-screen-failed')
-    ).toEqual([]);
-    expect(
-      screen.queryAllByTestId('itinerary-mustvisit-screen-loading')
-    ).toEqual([]);
+    // 단언 ③ 🔴 — h02 는 stale 알림을 안 그린다(Q3 · AC-5). model 은 여전히 staleFailed 를
+    //   싣지만 화면이 AlertRow 를 지웠다 — 이 부재가 이 티켓이 뒤집은 계약이다("삭제도 계약").
+    expect(countTestId('itinerary-mustvisit-screen-stale-failed')).toBe(0);
+    expect(countTestId('itinerary-mustvisit-screen-stale-retry')).toBe(0);
+
+    // 단언 ④ — 전면 실패·로딩 얼굴로 갈아 끼우지도 않았다(목록이 살아 있으므로 listed 유지).
+    expect(countTestId('itinerary-mustvisit-screen-failed')).toBe(0);
+    expect(countTestId('itinerary-mustvisit-screen-loading')).toBe(0);
   });
 });
 
@@ -385,20 +398,19 @@ describe('I6 · D3 — 카드를 누르면 시각 지정 화면으로 간다', (
 });
 
 /* ────────────────────────────────────────────────────────────────────────────
- * TRIP-326 추가분 — 좌표 조인(AC-1·AC-2·AC-19) · 칩 동선(AC-8) · 강등 2단(AC-9·AC-10) ·
- * 비활성 CTA(AC-14).
+ * TRIP-326 추가분 → TRIP-785 재정합 — 좌표 조인(AC-1·AC-2·AC-19) · 칩 동선(AC-8) ·
+ * 전진 CTA·건너뛰기(TRIP-454·TRIP-785).
  *
- * 왜 여기서 재나: 강등 심판의 핵심이 **어떤 요청이 어떤 순서로 몇 건 나갔나** 다. 계약에
- * `PATCH` 가 없어 강등은 DELETE→POST 2단이고 **원자성이 없다** — 훅을 목킹하면 그 위험이
- * 테스트의 *가정*이 되어 가정이 틀려도 아무도 모른다.
+ * ⚠️ **강등(FIXED→ANYTIME) 2단은 이 화면에서 사라졌다**(TRIP-785 Q2). 계약에 `PATCH` 가 없어
+ * DELETE→POST 2단이던 강등 확인 시트·`onDemote`/`onRetryDemote`/`demoteErrorText` 배선을 h02 가
+ * 전부 뗐다(h03/TRIP-786 이 흡수). 옛 I9~I12·I14·I15 가 그 2단의 순서·실패 3종(lost·kept·409)·
+ * 인플라이트 잠금을 심판했으나, 심판 대상이 통째로 없어져 **부재 단언 하나로 접었다**(아래
+ * '강등 배선 제거'). 되살아나면 그 하나가 red — "삭제도 계약".
  *
- * 새 케이스는 각자 `server.use(...)` 로 POST 핸들러를 건다(`beforeEach` 기본 핸들러 셋은
+ * 살아남은 케이스는 각자 `server.use(...)` 로 핸들러를 건다(`beforeEach` 기본 핸들러 셋은
  * 그대로 둔다). `onUnhandledRequest:'error'` 라 안 걸면 AC 실패가 아니라 준비 단계에서 죽는다.
  * ──────────────────────────────────────────────────────────────────────────── */
 
-const DEMOTE_LOST = '바꾸지 못해 목록에서 빠졌어요. 다시 시도해 주세요';
-const DEMOTE_KEPT = '바꾸지 못했어요. 다시 시도해 주세요';
-const DEMOTE_DUPLICATE = '이미 아무 때나로 담겨 있어요';
 const BLOCKED_REASON = '다음 단계는 아직 준비 중이에요';
 
 /** 좌표가 서로 다른 담은 장소. 기본 핸들러의 `savedPlace()` 는 좌표가 전부 같은 값이라
@@ -421,36 +433,6 @@ async function openList(
   renderPage({ mode });
   await screen.findByTestId('itinerary-mustvisit-poi-a');
   await waitFor(() => expect(cardTestIds()).toHaveLength(3));
-}
-
-/** FIXED 카드의 `아무 때나` 를 눌러 확인 시트를 띄우고 승인한다(강등 2단의 방아쇠). */
-function confirmDemote(sourcePoiId = 'poi-a'): void {
-  fireEvent.press(
-    screen.getByTestId(`itinerary-mustvisit-timemode-anytime-${sourcePoiId}`)
-  );
-  fireEvent.press(
-    screen.getByTestId('itinerary-mustvisit-screen-demote-confirm')
-  );
-}
-
-/** `poi-a`·`poi-b` 를 **둘 다** FIXED 로 세운다. 기본 픽스처는 `poi-a` 하나만 FIXED 라
- * "강등 두 건이 서로에게 무슨 짓을 하나" 를 아예 만들 수 없다(I14 · I15 의 공통 준비). */
-function makeBothFixed(): void {
-  mustVisitStore = [
-    mustVisit({
-      sourcePoiId: 'poi-a',
-      type: 'FIXED',
-      fixedDate: '2026-06-11',
-      fixedStart: '13:00',
-    }),
-    mustVisit({
-      sourcePoiId: 'poi-b',
-      type: 'FIXED',
-      fixedDate: '2026-06-12',
-      fixedStart: '10:00',
-    }),
-    mustVisit({ sourcePoiId: 'poi-z' }),
-  ];
 }
 
 describe('I7 · AC-1 · AC-2 · AC-19 — 좌표가 담은 장소에서 지도까지 흐른다', () => {
@@ -503,126 +485,34 @@ describe('I8 · AC-8 — 시간 정해두기는 h07 로만 가고 요청을 만�
   });
 });
 
-describe('🔴 I9 · AC-9 — 확인해야 나가고, DELETE 가 POST 보다 먼저다', () => {
-  it('확인 전에는 요청이 0건이고, 확인 후 순서가 DELETE → POST 이며 본문에 시각이 없다', async () => {
-    let postBody: unknown = null;
-    server.use(
-      http.post(`${BASE}/trips/:tripId/must-visits`, async ({ request }) => {
-        postBody = await request.json();
-        const created = mustVisit({ sourcePoiId: 'poi-a', type: 'ANYTIME' });
-        mustVisitStore = [...mustVisitStore, created];
-        return HttpResponse.json(created, { status: 201 });
-      })
-    );
-
+describe('🔴 강등 배선 제거 (TRIP-785 · Q2 · 삭제도 계약)', () => {
+  /**
+   * 옛 I9~I12·I14·I15 는 FIXED→ANYTIME 강등의 DELETE→POST 2단(순서·본문·실패 3종·인플라이트
+   * 잠금)을 심판했다. TRIP-785 가 그 시트·배선(`onDemote`/`onRetryDemote`/`demoteErrorText`)을
+   * 통째로 뗐다(Q2 · h03/TRIP-786 흡수) — 심판 대상이 없어져 **하나의 부재 단언으로 접는다**.
+   * 되살아나면(시트가 다시 뜨거나 강등 요청이 다시 나가면) 이 하나가 red 다.
+   *
+   * 왜 통합 버킷에 남기나: "강등 요청이 **한 건도 안 나간다**" 는 실 HTTP 위에서만 정직하게
+   * 재진다 — 훅을 목킹하면 "안 나간다" 가 테스트의 가정이 되어 되살아나도 모른다.
+   */
+  it('FIXED 의 `아무 때나` 를 눌러도 확인 시트가 없고 POST·DELETE 가 0건이며 칩은 FIXED 그대로다', async () => {
     await openList();
 
-    // ① 칩만 눌렀을 때 — 확인 시트가 뜨고 **아무 요청도 안 나간다**(01b D1). 이 세 줄이 없으면
-    //    확인 시트는 그냥 한 번 더 누르게 하는 장애물일 뿐이다.
+    // ① FIXED 카드의 `아무 때나` 칩은 이제 표시 전용이다(Q1) — 눌러도 아무 일이 없다.
     fireEvent.press(
       screen.getByTestId('itinerary-mustvisit-timemode-anytime-poi-a')
     );
-    expect(
-      screen.getByTestId('itinerary-mustvisit-screen-demote')
-    ).toBeOnTheScreen();
+
+    // ② 🔴 강등 확인 시트가 뜨지 않는다(어떤 testID 도 없다).
+    expect(countTestId('itinerary-mustvisit-screen-demote')).toBe(0);
+    expect(countTestId('itinerary-mustvisit-screen-demote-confirm')).toBe(0);
+    expect(countTestId('itinerary-mustvisit-screen-demote-cancel')).toBe(0);
+
+    // ③ 🔴 강등 요청(DELETE→POST 2단)이 한 건도 안 나간다 — 배선이 사라졌다.
+    expect(hitsFor('POST', '/must-visits')).toBe(0);
     expect(hitsFor('DELETE', '/must-visits')).toBe(0);
-    expect(hitsFor('POST', '/must-visits')).toBe(0);
 
-    // ② 승인
-    fireEvent.press(
-      screen.getByTestId('itinerary-mustvisit-screen-demote-confirm')
-    );
-    await waitFor(() => expect(hitsFor('POST', '/must-visits')).toBe(1));
-
-    // ③ 🔴 순서 — POST 를 먼저 보내면 실서버에서 중복 금지(INV-U1-18)로 409 가 나 전부 막힌다.
-    const deleteAt = observedHits.findIndex((hit) => hit.startsWith('DELETE'));
-    const postAt = observedHits.findIndex((hit) => hit.startsWith('POST'));
-    expect(deleteAt).toBeGreaterThanOrEqual(0);
-    expect(postAt).toBeGreaterThan(deleteAt);
-    expect(hitsFor('DELETE', '/must-visits/mv-poi-a')).toBe(1);
-
-    // ④ 🔴 본문에 날짜·시각을 **다시 실어 보내지 않는다** — 강등은 그것을 버리는 방향이고,
-    //    남겨 보내면 서버가 ANYTIME 인데 시각이 있는 모순된 등록 건을 갖게 된다.
-    expect(postBody).toEqual({ poiId: 'poi-a', type: 'ANYTIME' });
-
-    // ⑤ 결과가 화면에 반영된다 — 자물쇠 칩이 사라지고 필수 칩이 선다.
-    await waitFor(() =>
-      expect(
-        screen.getByTestId('itinerary-mustvisit-chip-must-poi-a')
-      ).toBeOnTheScreen()
-    );
-    expect(
-      screen.queryAllByTestId('itinerary-mustvisit-chip-fixed-poi-a')
-    ).toEqual([]);
-  });
-
-  it('I9-b 응답 전 두 번째 승인이 두 번째 DELETE 를 만들지 않는다', async () => {
-    server.use(
-      http.post(`${BASE}/trips/:tripId/must-visits`, () =>
-        HttpResponse.json(
-          mustVisit({ sourcePoiId: 'poi-a', type: 'ANYTIME' }),
-          { status: 201 }
-        )
-      )
-    );
-
-    await openList();
-
-    // 상태 갱신은 다음 렌더에야 보이므로 **같은 틱의 두 번째 누름을 못 막는다** — 배선이 ref 로
-    // 잠가야 한다. 두 번 나가면 없는 id 로 404 가 나거나 방금 만든 등록을 지운다.
-    confirmDemote();
-    confirmDemote();
-
-    await waitFor(() => expect(hitsFor('POST', '/must-visits')).toBe(1));
-    expect(hitsFor('DELETE', '/must-visits/mv-poi-a')).toBe(1);
-  });
-});
-
-describe('🔴 I10 · AC-10 lost — DELETE 성공 + POST 실패는 항목이 사라진 상태다', () => {
-  it('사실을 말하고 재시도를 주며, 재시도는 POST 만 다시 낸다', async () => {
-    server.use(
-      http.post(`${BASE}/trips/:tripId/must-visits`, () =>
-        HttpResponse.json({}, { status: 500 })
-      )
-    );
-
-    await openList();
-    confirmDemote();
-
-    // ① 침묵하지 않는다(INV-4 · BR-U1-55) — 사용자의 항목이 **실제로 사라진** 자리다.
-    expect(await screen.findByText(DEMOTE_LOST)).toBeOnTheScreen();
-
-    // ② 🔴 재시도는 **POST 만** 다시 낸다. DELETE 를 또 내면 없는 id 로 404 가 나거나 방금
-    //    성공한 등록을 지운다 — 실패 상태가 "다시 낼 요청" 을 통째로 들고 있어야 한다.
-    const deletesBefore = hitsFor('DELETE', '/must-visits/mv-poi-a');
-    fireEvent.press(
-      screen.getByTestId('itinerary-mustvisit-screen-demote-retry')
-    );
-    await waitFor(() => expect(hitsFor('POST', '/must-visits')).toBe(2));
-    expect(hitsFor('DELETE', '/must-visits/mv-poi-a')).toBe(deletesBefore);
-  });
-});
-
-describe('🔴 I11 · AC-10 kept — DELETE 자체가 실패하면 POST 를 보내지 않는다', () => {
-  it('POST 가 0건이고 항목이 FIXED 그대로 살아 있으며 사실을 말한다', async () => {
-    server.use(
-      http.delete(`${BASE}/trips/:tripId/must-visits/:mustVisitId`, () =>
-        HttpResponse.json({}, { status: 500 })
-      ),
-      http.post(`${BASE}/trips/:tripId/must-visits`, () =>
-        HttpResponse.json({}, { status: 201 })
-      )
-    );
-
-    await openList();
-    confirmDemote();
-
-    expect(await screen.findByText(DEMOTE_KEPT)).toBeOnTheScreen();
-
-    // 🔴 보내면 409 로 막히고 요청만 는다 — 서버 상태가 안 바뀌었으므로 처음부터 다시 하면 된다.
-    expect(hitsFor('POST', '/must-visits')).toBe(0);
-
-    // 짝 — 항목은 **그대로 살아 있다**. 실패했는데 목록에서 사라지면 그게 더 나쁜 거짓말이다.
+    // ④ 짝 — 항목은 FIXED 그대로다(강등이 조용히 일어나 필수 칩으로 바뀌지 않았다).
     expect(
       screen.getByTestId('itinerary-mustvisit-chip-fixed-poi-a')
     ).toBeOnTheScreen();
@@ -630,87 +520,61 @@ describe('🔴 I11 · AC-10 kept — DELETE 자체가 실패하면 POST 를 보�
   });
 });
 
-describe('🔴 I12 · AC-10 duplicate — POST 409 는 실패가 아니되 침묵도 아니다', () => {
-  it('안내가 뜨고 실패 문구 둘은 0건이며 목록을 다시 불러온다', async () => {
-    server.use(
-      http.post(`${BASE}/trips/:tripId/must-visits`, () =>
-        HttpResponse.json({ code: 'ALREADY_REGISTERED' }, { status: 409 })
-      )
-    );
-
-    await openList();
-    const listsBefore = hitsFor('GET', `/trips/${TRIP_ID}/must-visits`);
-    confirmDemote();
-
-    // 409 = 목표 상태와 결과 상태가 같다. 실패로 세지 않되 아무 말 안 하지도 않는다.
-    expect(await screen.findByText(DEMOTE_DUPLICATE)).toBeOnTheScreen();
-    expect(screen.queryAllByText(DEMOTE_LOST)).toEqual([]);
-    expect(screen.queryAllByText(DEMOTE_KEPT)).toEqual([]);
-
-    // 서버 진실을 다시 그린다 — 무엇이 남아 있는지는 서버가 안다.
-    await waitFor(() =>
-      expect(hitsFor('GET', `/trips/${TRIP_ID}/must-visits`)).toBeGreaterThan(
-        listsBefore
-      )
-    );
-  });
-});
-
-describe('🔴 I13 · TRIP-454 AC-2 — CTA·건너뛰기가 활성이고 각각 h09 로 가며 사유가 없다', () => {
+describe('🔴 I13 · TRIP-454·TRIP-785 — listed 는 CTA 활성·건너뛰기 부재, failed 에서만 건너뛰기가 h09 로', () => {
   /**
-   * TRIP-326(AC-14)에서 이 두 표면은 **상시 차단·무동작**이었다 — h09(생성 중)가 리포에 없어
-   * "목적지 없는 버튼을 말없이 죽이지 않으려"(INV-4) 사유 문구를 항상 띄웠다. h09 는 이제
-   * 존재하므로 이 사이클이 그 문을 연다: 배선만 바뀌고 화면 계약은 무수정이다(브리프 part 1 ·
-   * 맹점 ①). 재작성 정당 = 새 사이클(파일 머리말 · 02a §2).
+   * TRIP-454 가 h09(생성 중)를 열어 두 표면의 상시 차단을 풀었고, TRIP-785 가 **건너뛰기를
+   * listed 에서 뗐다**(에러에서 빠져나갈 문이라 `failed` 전용으로 이사 — 화면 계약). 그래서
+   * listed 에는 CTA 만 남고(활성→h09), 건너뛰기는 failed 얼굴에서만 뜬다.
    */
-  it('두 표면이 활성이고 각각 눌러 generating 으로 가며 사유 문구가 없고 요청이 0건이다', async () => {
+  it('listed — CTA 가 활성이고 눌러 h09 로 가며, 건너뛰기·사유 문구가 둘 다 없고 요청이 0건이다', async () => {
     await openList();
 
     const proceed = screen.getByTestId('itinerary-mustvisit-screen-proceed');
-    const skip = screen.getByTestId('itinerary-mustvisit-screen-skip');
 
     // ① 활성 — 회색 잠금이 풀렸다. `toBeDisabled` 단독은 "회색인데 눌리는" 구현도 통과시키므로
-    //    아래 press→이동을 짝으로 붙인다(02a ★5).
+    //    아래 press→이동을 짝으로 붙인다.
     expect(proceed).not.toBeDisabled();
-    expect(skip).not.toBeDisabled();
-    // ② 사유 문구 부재 — 목적지가 생겼으므로 "준비 중" 안내가 사라진다(브리프 INV-4 절).
-    //    기존 I13 이 `getByText(BLOCKED_REASON)` 으로 존재를 증명했었다 — 그 null-safe 짝이다.
+    // ② 🔴 건너뛰기는 listed 에 없다(TRIP-785 — failed 전용으로 이사). 사유 문구도 없다.
+    expect(countTestId('itinerary-mustvisit-screen-skip')).toBe(0);
     expect(screen.queryByText(BLOCKED_REASON)).toBeNull();
 
     // ③ 다음 CTA → h09(생성 중). 목적지 형태를 강요하지 않고 직렬화해 "어디로 갔나"만 잰다.
     fireEvent.press(proceed);
     await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
-    const proceedDest = mockPush.mock.calls[0][0];
-    const proceedFlat =
-      typeof proceedDest === 'string'
-        ? proceedDest
-        : JSON.stringify(proceedDest);
-    expect(proceedFlat).toContain('generating');
-    expect(proceedFlat).toContain(TRIP_ID);
-    // ★ 완전AI 갈래(mode 미전달)는 copick 신호를 얻지 않는다 — CO_PLAN·copick 이 새면 red
-    //   (TRIP-504 AC-5 회귀: 완전AI 는 기존 FULLY_AI generating 그대로).
-    expect(proceedFlat).not.toContain('CO_PLAN');
-    expect(proceedFlat).not.toContain('copick');
+    const dest = mockPush.mock.calls[0][0];
+    const flat = typeof dest === 'string' ? dest : JSON.stringify(dest);
+    expect(flat).toContain('generating');
+    expect(flat).toContain(TRIP_ID);
+    // ★ 완전AI 갈래(mode 미전달)는 copick 신호를 얻지 않는다(TRIP-504 AC-5 회귀).
+    expect(flat).not.toContain('CO_PLAN');
+    expect(flat).not.toContain('copick');
 
-    // ④ 건너뛰기도 같은 목적지(h09). 앞 호출과 섞이지 않게 비우고 다시 잰다.
-    mockPush.mockClear();
-    fireEvent.press(skip);
-    await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
-    const skipDest = mockPush.mock.calls[0][0];
-    const skipFlat =
-      typeof skipDest === 'string' ? skipDest : JSON.stringify(skipDest);
-    expect(skipFlat).toContain('generating');
-    expect(skipFlat).toContain(TRIP_ID);
-    expect(skipFlat).not.toContain('CO_PLAN');
-    expect(skipFlat).not.toContain('copick');
-
-    // ⑤ 전진은 요청을 만들지 않는다 — 생성 POST 는 h09 가 마운트 시 소유한다(무회귀).
+    // ④ 전진은 요청을 만들지 않는다 — 생성 POST 는 h09 가 마운트 시 소유한다(무회귀).
     expect(hitsFor('POST', '/must-visits')).toBe(0);
     expect(hitsFor('DELETE', '/must-visits')).toBe(0);
   });
+
+  it('I13-b failed — 건너뛰기가 앱바에 뜨고 눌러 h09 로 나간다 (에러 탈출문)', async () => {
+    // 준비 — 첫 조회부터 실패시켜 error 얼굴을 띄운다. 건너뛰기는 이 얼굴에서만 렌더된다.
+    listStatus = 500;
+    renderPage();
+    await screen.findByTestId('itinerary-mustvisit-screen-failed');
+
+    // ① 🔴 건너뛰기가 error 얼굴에서 뜬다(위 listed 부재의 짝 — 이사가 실제로 일어났다).
+    const skip = screen.getByTestId('itinerary-mustvisit-screen-skip');
+    expect(skip).toBeOnTheScreen();
+
+    // ② 눌러 h09 로 나간다 — 에러에서 빠져나갈 유일한 문이 살아 있다(INV-4).
+    fireEvent.press(skip);
+    await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+    const dest = mockPush.mock.calls[0][0];
+    const flat = typeof dest === 'string' ? dest : JSON.stringify(dest);
+    expect(flat).toContain('generating');
+    expect(flat).toContain(TRIP_ID);
+  });
 });
 
-describe('🔴 I16 · TRIP-504 AC-5 — copick 갈래(mode=CO_PLAN)는 CO_PLAN generating + 첫 슬롯 successRoute 로 잇는다', () => {
+describe('🔴 I16 · TRIP-504 AC-5 · TRIP-785 — copick 갈래는 CO_PLAN generating + 첫 슬롯 successRoute, 건너뛰기 부재', () => {
   /**
    * 완전AI 갈래(I13)는 mode 없이 generating 으로만 간다. copick 갈래는 h04 에서 실려 온 `mode`
    * 신호를 받아 CTA 목적지를 **CO_PLAN generating + successRoute=첫 슬롯 경로**로 바꾼다(01b Q3).
@@ -718,204 +582,31 @@ describe('🔴 I16 · TRIP-504 AC-5 — copick 갈래(mode=CO_PLAN)는 CO_PLAN g
    * ★ 목적지 값이 급소다(462 gate②-2). h05 시점엔 slotKey 를 아직 모르므로 successRoute 는
    *   슬롯 라우트 **템플릿**(`copick/[slotKey]`)이고, 그 `[slotKey]` 세그먼트가 허브(`copick`)와
    *   가른다 — mode 만 맞고 successRoute 가 허브/draft 로 새면 사용자가 엉뚱한 화면에 착지한다.
+   *   건너뛰기는 copick 갈래에서도 listed 에 없다(TRIP-785 — failed 전용).
    */
-  it('proceed·skip 둘 다 generating 으로 가되 mode=CO_PLAN 과 첫 슬롯 successRoute 를 싣고, 요청은 0건이다', async () => {
+  it('proceed 가 CO_PLAN generating + 첫 슬롯 successRoute 로 가고, 건너뛰기는 listed 에 없으며 요청은 0건이다', async () => {
     await openList('CO_PLAN');
 
     const proceed = screen.getByTestId('itinerary-mustvisit-screen-proceed');
-    const skip = screen.getByTestId('itinerary-mustvisit-screen-skip');
 
     // ① 다음 CTA → CO_PLAN generating. 목적지를 직렬화해 값째 잰다.
     fireEvent.press(proceed);
     await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
-    const proceedDest = mockPush.mock.calls[0][0];
-    const proceedFlat =
-      typeof proceedDest === 'string'
-        ? proceedDest
-        : JSON.stringify(proceedDest);
-    expect(proceedFlat).toContain('generating');
+    const dest = mockPush.mock.calls[0][0];
+    const flat = typeof dest === 'string' ? dest : JSON.stringify(dest);
+    expect(flat).toContain('generating');
     // ★ mode 신호 — 완전AI(mode 없음)와 가르는 지점.
-    expect(proceedFlat).toContain('CO_PLAN');
+    expect(flat).toContain('CO_PLAN');
     // ★ successRoute = 첫 슬롯 경로 계열(허브 `copick` 가 아니라 슬롯 라우트 `copick/[slotKey]`).
     //   `[slotKey]` 세그먼트가 허브와 가른다 — 허브/draft 로 새면 red.
-    expect(proceedFlat).toContain('copick/[slotKey]');
-    expect(proceedFlat).toContain(TRIP_ID);
+    expect(flat).toContain('copick/[slotKey]');
+    expect(flat).toContain(TRIP_ID);
 
-    // ② 건너뛰기도 같은 목적지(CO_PLAN generating). 앞 호출과 섞이지 않게 비우고 다시 잰다.
-    mockPush.mockClear();
-    fireEvent.press(skip);
-    await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
-    const skipDest = mockPush.mock.calls[0][0];
-    const skipFlat =
-      typeof skipDest === 'string' ? skipDest : JSON.stringify(skipDest);
-    expect(skipFlat).toContain('generating');
-    expect(skipFlat).toContain('CO_PLAN');
-    expect(skipFlat).toContain('copick/[slotKey]');
-    expect(skipFlat).toContain(TRIP_ID);
+    // ② 🔴 건너뛰기는 listed 에 없다(TRIP-785 — failed 전용). copick 갈래도 예외 아니다.
+    expect(countTestId('itinerary-mustvisit-screen-skip')).toBe(0);
 
     // ③ 전진은 요청을 만들지 않는다(생성 POST 는 h09 소유, 무회귀).
     expect(hitsFor('POST', '/must-visits')).toBe(0);
     expect(hitsFor('DELETE', '/must-visits')).toBe(0);
-  });
-});
-
-/* ── 게이트①-2 추가분 (03b 경고② · 경고③) ────────────────────────────────────────
- *
- * 앞의 I9~I12 는 강등을 **한 번만** 한다. 그래서 "강등 두 건이 시간축에서 서로에게 무슨 짓을
- * 하는가" 를 재는 심판이 하나도 없었다 — 적대적 리뷰가 그 자리에서 결함 두 개를 재현했다.
- * 아래 둘은 **지금 red 다**(구현이 아직 안 고쳐졌다). 5-c 에서 초록이 된다.
- * ──────────────────────────────────────────────────────────────────────────── */
-
-describe('🔴 I14 · AC-10 — `lost` 안내와 되돌릴 수단이 다음 강등 성공에 살아남는다', () => {
-  /**
-   * `lost` = DELETE 성공 + POST 실패 = **항목이 서버에서 실제로 사라진** 상태다. 그 실패 상태가
-   * "다시 낼 요청" 의 **유일한 사본**을 들고 있다(배선 주석이 스스로 그렇게 적었다).
-   *
-   * 🔴 그런데 다른 항목의 강등이 성공하면 그 사본·재시도 버튼·안내 문구가 **한꺼번에** 버려진다.
-   * `poi-a` 는 서버에서 이미 지워졌으므로 목록에도 없다 — 사용자가 h07 에서 직접 입력한
-   * 날짜·시각과 함께 흔적 없이 증발하고, 되돌리려면 탐색 화면에서 다시 담고 h07 을 다시 거쳐야
-   * 한다(03b §2 재현).
-   *
-   * 3동작 뼈대: 준비=둘 다 FIXED + POST 를 `poi-a` 만 실패시킴 → 실행=a 강등(실패) 후 b 강등(성공)
-   * → 단언=a 의 안내·재시도·요청 사본이 아직 살아 있나.
-   */
-  it('다른 항목이 성공해도 안내·재시도가 남고, 재시도가 잃은 항목의 요청을 다시 낸다', async () => {
-    // 준비 — 한 번의 실행 안에 실패와 성공을 함께 넣는 유일한 방법은 **본문으로 가르는 것**이다.
-    const postBodies: { poiId: string }[] = [];
-    makeBothFixed();
-    server.use(
-      http.post(`${BASE}/trips/:tripId/must-visits`, async ({ request }) => {
-        const body = (await request.json()) as { poiId: string };
-        postBodies.push(body);
-        if (body.poiId === 'poi-a')
-          return HttpResponse.json({}, { status: 500 });
-        const created = mustVisit({
-          sourcePoiId: body.poiId,
-          type: 'ANYTIME',
-        });
-        mustVisitStore = [...mustVisitStore, created];
-        return HttpResponse.json(created, { status: 201 });
-      })
-    );
-
-    await openList();
-
-    // 실행 ① — `poi-a` 강등이 `lost` 로 떨어진다.
-    confirmDemote('poi-a');
-    expect(await screen.findByText(DEMOTE_LOST)).toBeOnTheScreen();
-
-    // 실행 ② — 사용자가 재시도 대신 **다른 항목**을 강등한다(정상 성공).
-    confirmDemote('poi-b');
-    await waitFor(() => expect(postBodies).toHaveLength(2));
-
-    // ① 긍정 앵커 — `poi-b` 의 강등이 **실제로 성공했다**. 이 줄이 없으면 "둘째 강등이 아무것도
-    //    안 한 덕에 첫 실패가 남아 있는" 구현이 통과한다.
-    expect(postBodies[1]).toEqual({ poiId: 'poi-b', type: 'ANYTIME' });
-
-    // ② 🔴 잃은 항목의 안내가 **아직 화면에 있다**. 사라지면 사용자는 무엇을 잃었는지도 모른다.
-    expect(screen.getByText(DEMOTE_LOST)).toBeOnTheScreen();
-
-    // ③ 🔴 되돌릴 수단도 아직 있다.
-    const retry = screen.getByTestId('itinerary-mustvisit-screen-demote-retry');
-
-    // ④ 🔴 급소 — 눌렀을 때 **잃은 항목(`poi-a`)의 요청**이 다시 나간다. 문구만 남기고 요청
-    //    사본은 버린 구현이 여기서 죽는다.
-    fireEvent.press(retry);
-    await waitFor(() => expect(postBodies).toHaveLength(3));
-    expect(postBodies[2]).toEqual({ poiId: 'poi-a', type: 'ANYTIME' });
-  });
-});
-
-describe('🔴 I15 · AC-9 · BR-U1-55 — 요청이 나가는 중에 누른 다른 강등이 삼켜지지 않는다', () => {
-  /**
-   * 이중 제출 잠금(`submitLockedRef`)은 **항목별이 아니라 화면 전체 하나**다. 잠긴 동안 들어온
-   * 강등은 값 없이 버려지는데, 확인 시트는 이미 닫혀 버려 **사용자에게 남는 신호가 0** 이다.
-   * 🔴 "정해둔 날짜와 시각이 지워져요" 라는 경고까지 읽고 `바꾸기` 를 눌렀는데 아무 일도 아무
-   * 말도 없다 — BR-U1-55(침묵 실패 금지) 위반이다(03b §3 재현).
-   *
-   * **계약: 잠금 중에는 확인 시트를 닫지 않는다.** 새 사용자 문구를 만들지 않는 방향이다 —
-   * 이번 사이클의 문구 12개는 게이트①에서 동결됐고, 동결 밖 문구를 구현자가 발명하게 하는 것은
-   * 다른 규칙을 깨는 일이다. 잠금을 **항목별로 쪼개는** 갈래는 기각했다: 실패 상태 슬롯이 하나뿐
-   * 이라 동시 실패 두 건을 못 담아 같은 종류의 결함을 하나 더 만든다(02a2 §3-3).
-   *
-   * *(개념)* **인플라이트(in-flight)** — 요청을 보냈고 응답이 아직 안 온 구간. 아래 준비는
-   * 가짜 서버가 **우리가 풀어 줄 때까지 응답하지 않게** 붙잡아 그 구간을 인위적으로 넓힌다.
-   *
-   * 3동작 뼈대: 준비=a 의 DELETE 를 보류 → 실행=인플라이트 중 b 를 강등 → 단언=조작이 남아 있나.
-   */
-  it('시트가 닫히지 않고, 잠금이 풀린 뒤 다시 누르면 그 항목의 요청이 실제로 나간다', async () => {
-    // 준비 — `mv-poi-a` 의 DELETE 만 붙잡아 둔다. `resolve` 를 밖으로 꺼내 두면 원하는 시점에
-    // 응답을 풀 수 있다(못 풀고 끝나도 `afterEach` 가 푼다).
-    makeBothFixed();
-    server.use(
-      http.delete(
-        `${BASE}/trips/:tripId/must-visits/:mustVisitId`,
-        async ({ params }) => {
-          const id = String(params.mustVisitId);
-          if (id === 'mv-poi-a') {
-            await new Promise<void>((resolve) => {
-              releaseHeldResponse = resolve;
-            });
-          }
-          mustVisitStore = mustVisitStore.filter(
-            (entry) => entry.mustVisitId !== id
-          );
-          return new HttpResponse(null, { status: 204 });
-        }
-      ),
-      http.post(`${BASE}/trips/:tripId/must-visits`, async ({ request }) => {
-        const body = (await request.json()) as { poiId: string };
-        const created = mustVisit({
-          sourcePoiId: body.poiId,
-          type: 'ANYTIME',
-        });
-        mustVisitStore = [...mustVisitStore, created];
-        return HttpResponse.json(created, { status: 201 });
-      })
-    );
-
-    await openList();
-
-    // 실행 ① — `poi-a` 강등. DELETE 가 나갔고 **아직 안 끝났다**.
-    confirmDemote('poi-a');
-    await waitFor(() =>
-      expect(hitsFor('DELETE', '/must-visits/mv-poi-a')).toBe(1)
-    );
-
-    // 실행 ② — 응답 전에 **다른 항목**을 강등한다. 여기까지는 사용자에게 아무 이상이 없다.
-    fireEvent.press(
-      screen.getByTestId('itinerary-mustvisit-timemode-anytime-poi-b')
-    );
-    // ① 긍정 앵커 — 확인 시트가 정상적으로 뜬다(경고 문구까지 읽고 누르는 동선이다).
-    expect(
-      screen.getByTestId('itinerary-mustvisit-screen-demote')
-    ).toBeOnTheScreen();
-    fireEvent.press(
-      screen.getByTestId('itinerary-mustvisit-screen-demote-confirm')
-    );
-
-    // ② 🔴 시트가 **그대로 열려 있다** — 조작이 삼켜지지 않았다는 신호. 현행은 여기서 닫힌다.
-    expect(
-      screen.getByTestId('itinerary-mustvisit-screen-demote')
-    ).toBeOnTheScreen();
-
-    // ③ 잠금 중에 두 번째 요청을 만들지는 **않는다** — 이중 제출 방지는 그대로 유지한다.
-    expect(hitsFor('DELETE', '/must-visits/mv-poi-b')).toBe(0);
-
-    // 실행 ③ — 보류를 푼다. 응답이 도착하면 리액트 상태가 바뀌므로 `act` 로 감싼다(안 감싸면
-    // "not wrapped in act(...)" 경고가 뜬다).
-    await act(async () => {
-      releaseHeldResponse?.();
-    });
-    await waitFor(() => expect(hitsFor('POST', '/must-visits')).toBe(1));
-
-    // ④ 🔴 이제 다시 누르면 `poi-b` 의 요청이 **실제로 나간다**. 시트를 껍데기로만 남겨 두는
-    //    "고친 척" 이 여기서 죽는다.
-    fireEvent.press(
-      screen.getByTestId('itinerary-mustvisit-screen-demote-confirm')
-    );
-    await waitFor(() =>
-      expect(hitsFor('DELETE', '/must-visits/mv-poi-b')).toBe(1)
-    );
   });
 });

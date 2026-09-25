@@ -66,8 +66,10 @@ const routerMock = require('expo-router').router as {
 /** c08 이 주입해야 하는 Figma 온보딩 목적 문구(브리프 §화면·IO · 1296:1208). 프리뷰의
  * placeholder "내 주변 숙소 탐색" 이 아니라 **화면 정본 문구**여야 한다. toHaveTextContent 는
  * 문자열이면 완전 일치이므로(RNTL matches exact:true 기본), 이 상수 전체가 곧 계약이다. */
+// TRIP-717: Figma 1296:1208 2줄 고정 개행 반영(같은 어구, 중간에 \n). toHaveTextContent 는
+// 공백을 정규화하므로 \n 유무와 무관하게 매치하지만, 앱 문자열과 자구를 일치시켜 계약을 명시한다.
 const ONBOARDING_PURPOSE =
-  '내 주변을 알면 더 잘 맞는 곳을 추천하고 길 안내도 막힘없이 이어져요';
+  '내 주변을 알면 더 잘 맞는 곳을 추천하고\n길 안내도 막힘없이 이어져요';
 const PREF1_ROUTE = '/(onboarding)/pref1';
 
 /** requestForegroundPermissionsAsync 응답(LocationPermissionResponse 부분집합). status·granted 를
@@ -141,7 +143,7 @@ describe('LocationPage — default 렌더 + 목적 주입 (AC-3)', () => {
 });
 
 describe('LocationPage — 허용 → OS 권한 요청 (AC-4)', () => {
-  it('"위치 사용 허용" 을 누르면 OS 권한 요청이 1회 발화되고 granted 면 pref1 로 replace 한다', async () => {
+  it('주 버튼 "계속" 을 누르면 OS 권한 요청이 1회 발화되고 granted 면 pref1 로 replace 한다', async () => {
     mockRequestForeground.mockResolvedValue(GRANTED);
     render(<LocationPage />);
 
@@ -200,31 +202,8 @@ describe('LocationPage — 설정 열기 (AC-7)', () => {
   });
 });
 
-describe('LocationPage — 안내 줄 닫기 1회성 (AC-③-3 소비처 배선, TRIP-592)', () => {
-  it('denied 에서 닫기(×)를 누르면 안내 줄만 사라지고(1회성) denied 프레임은 유지된다', async () => {
-    // ▸준비 — 허용→OS denied→denied 프레임까지 몰아간다.
-    await reachDenied();
-
-    // ▸준비 확인 — 닫기 전엔 안내 앵커가 떠 있다.
-    expect(
-      screen.getByTestId('onboarding-location-denied-notice')
-    ).toBeOnTheScreen();
-
-    // ▸실행 — × 를 누르면 부모(LocationPage)가 소유한 로컬 상태가 안내 줄을 숨긴다(영속 없음 = 화면 표시 1회).
-    fireEvent.press(screen.getByTestId('onboarding-location-notice-dismiss'));
-
-    // ▸단언 — 안내 줄은 사라지되(1회성) denied 프레임 자체는 남아 진행 수단이 유지된다.
-    // '프레임 통째로 숨김'으로 가짜 통과하는 것을 continue 존재 단언이 막는다.
-    await waitFor(() =>
-      expect(
-        screen.queryByTestId('onboarding-location-denied-notice')
-      ).toBeNull()
-    );
-    expect(
-      screen.getByTestId('onboarding-location-continue')
-    ).toBeOnTheScreen();
-  });
-});
+// TRIP-717: 안내 줄 닫기(×)·1회성 숨김(onDismissNotice/noticeDismissed)은 Figma 정본에 없어
+// 폐기했다 — denied 안내는 카드로 항상 떠 있다(닫기 없음). 관련 dismiss 테스트는 삭제한다.
 
 describe('LocationPage — 서버 진행 플래그 미생성 (AC-8)', () => {
   it('허용→granted→pref1 전 플로우 동안 서버로 아무 요청도 보내지 않는다', async () => {

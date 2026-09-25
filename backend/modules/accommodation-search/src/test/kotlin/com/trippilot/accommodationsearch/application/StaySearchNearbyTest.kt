@@ -15,6 +15,9 @@ import io.kotest.matchers.shouldBe
 private class NearbyFakeContent(val stays: List<Stay>) : AccommodationContentPort {
     override fun search(region: String?) =
         ContentResult(if (region == null) stays else stays.filter { it.region == region }, false)
+
+    override fun findOne(key: StayKey) =
+        search(null).stays.firstOrNull { it.key() == key }
 }
 
 private class NearbyFakePrices(val map: Map<StayKey, Money>) : StayPriceQueryPort {

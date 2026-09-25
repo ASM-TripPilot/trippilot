@@ -1,4 +1,4 @@
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Circle, Path } from 'react-native-svg';
 
 // 숙소 검색 결과(e02) 전용 인라인 벡터 글리프(AuthGlyphs/OnboardingGlyphs/HomeGlyphs 패턴
 // 계승 · Figma 1837:2283). features 간 직접 import 금지(importBoundary 의도 — features/stay는
@@ -13,6 +13,7 @@ const MUTED = '#6A6A6A';
 const PRIMARY = '#FF385C';
 const MUTED_SOFT = '#9AA1AB';
 const ON_PRIMARY = '#FFFFFF';
+const INFO = '#0B6E63';
 
 type GlyphProps = {
   size?: number;
@@ -61,8 +62,8 @@ export function ChevronDownGlyph({ size = 14, testID }: GlyphProps) {
   );
 }
 
-// 필터 칩 '필터'(⇅) — 위/아래 화살표 쌍(정렬·필터 상투 아이콘).
-// 필터 칩(14px, tone 미지정 = body)과 filter-zero 원형 배지(32px, tone='primary')가 같은
+// 필터 칩 '필터'(⇥) — 가로 슬라이더 2줄(각 줄에 조절 노브 하나, Figma 1837:2291 재작도).
+// 필터 칩(15px, tone 미지정 = body)과 filter-zero 원형 배지(32px, tone='primary')가 같은
 // 도형을 다른 색으로 쓴다 — WarningTriangleGlyph와 같은 형태로 색만 prop으로 뺀다.
 // 기본값을 body로 두는 이유: 칩이 먼저 이 글리프를 쓰고 있었고, 그 색이 바뀌면 안 된다.
 export function FilterSlidersGlyph({
@@ -80,19 +81,19 @@ export function FilterSlidersGlyph({
       fill="none"
     >
       <Path
-        d="M4 9.5V2M4 2L1.8 4.2M4 2L6.2 4.2"
+        d="M2 4.5H12"
         stroke={stroke}
         strokeWidth={1.3}
         strokeLinecap="round"
-        strokeLinejoin="round"
       />
+      <Circle cx={5} cy={4.5} r={1.7} fill={stroke} />
       <Path
-        d="M10 4.5V12M10 12L7.8 9.8M10 12L12.2 9.8"
+        d="M2 9.5H12"
         stroke={stroke}
         strokeWidth={1.3}
         strokeLinecap="round"
-        strokeLinejoin="round"
       />
+      <Circle cx={9} cy={9.5} r={1.7} fill={stroke} />
     </Svg>
   );
 }
@@ -176,9 +177,16 @@ export function MapPinGlyph({
   );
 }
 
-// e04 empty CTA `숙소 둘러보기` 돋보기(19) — 분홍 버튼 위라 흰색(ON_PRIMARY). Figma 1702:1183
-// 벡터. TripGlyphs 에 동명 그림이 있으나 features 간 직접 import 금지(리포 관례)라 새로 그린다.
-export function SearchGlyph({ size = 19, testID }: GlyphProps) {
+// 돋보기 — e04 empty CTA `숙소 둘러보기`(19, 분홍 버튼 위 흰색 ON_PRIMARY, Figma 1702:1183) 와
+// e02 검색바(20, 회색 MUTED_SOFT, Figma 2488:1500) 겸용. 색만 tone prop 으로 뺀다(SearchGlyph 를
+// 두 벌로 나누지 않는다 — FilterSlidersGlyph tone 선례). 기본값 onPrimary: e04 가 먼저 이 색을 썼다.
+// TripGlyphs 에 동명 그림이 있으나 features 간 직접 import 금지(리포 관례)라 새로 그린다.
+export function SearchGlyph({
+  size = 19,
+  tone = 'onPrimary',
+  testID,
+}: GlyphProps & { tone?: 'onPrimary' | 'mutedSoft' }) {
+  const stroke = tone === 'mutedSoft' ? MUTED_SOFT : ON_PRIMARY;
   return (
     <Svg
       testID={testID}
@@ -189,14 +197,14 @@ export function SearchGlyph({ size = 19, testID }: GlyphProps) {
     >
       <Path
         d="M9.16667 15C12.3883 15 15 12.3883 15 9.16667C15 5.94501 12.3883 3.33333 9.16667 3.33333C5.94501 3.33333 3.33333 5.94501 3.33333 9.16667C3.33333 12.3883 5.94501 15 9.16667 15Z"
-        stroke={ON_PRIMARY}
+        stroke={stroke}
         strokeWidth={1.8}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <Path
         d="M17.5 17.5L13.75 13.75"
-        stroke={ON_PRIMARY}
+        stroke={stroke}
         strokeWidth={1.8}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -205,8 +213,17 @@ export function SearchGlyph({ size = 19, testID }: GlyphProps) {
   );
 }
 
-// 수동 등록 유도 카드 배지 플러스(TRIP-182 §3-2) — 22px, 분홍. Figma 1341:1391 벡터 그대로.
-export function PlusGlyph({ size = 22, testID }: GlyphProps) {
+// 플러스 — 수동 등록 유도 카드 배지(22, 분홍 PRIMARY, 연분홍 원 위, Figma 1341:1391) ·
+// e02 분홍 원 FAB(24, 흰색 ON_PRIMARY, Figma 4463:2113) · e03 CTA2 "일정에 추가"(19, 흰 버튼 위라
+// 먹색 INK, Figma 1700:1278) 겸용. 색만 tone prop 으로 뺀다(SearchGlyph tone 선례). 기본값
+// primary: 등록 카드가 먼저 이 색을 썼다(무prop 호출 무회귀).
+export function PlusGlyph({
+  size = 22,
+  tone = 'primary',
+  testID,
+}: GlyphProps & { tone?: 'primary' | 'onPrimary' | 'ink' }) {
+  const stroke =
+    tone === 'onPrimary' ? ON_PRIMARY : tone === 'ink' ? INK : PRIMARY;
   return (
     <Svg
       testID={testID}
@@ -217,14 +234,14 @@ export function PlusGlyph({ size = 22, testID }: GlyphProps) {
     >
       <Path
         d="M11 4.58333V17.4167"
-        stroke={PRIMARY}
+        stroke={stroke}
         strokeWidth={2.38333}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <Path
         d="M4.58333 11H17.4167"
-        stroke={PRIMARY}
+        stroke={stroke}
         strokeWidth={2.38333}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -319,8 +336,16 @@ export function ShareGlyph({ size = 20, testID }: GlyphProps) {
   );
 }
 
-// e03 인라인 제휴 고지(TRIP-457) — 정보 원(ⓘ). Figma 1700:1266 벡터 근사. muted.
-export function InfoGlyph({ size = 15, testID }: GlyphProps) {
+// e03 인라인 제휴 고지(TRIP-457) — 정보 원(ⓘ). Figma 1700:1266 벡터 근사.
+// tone: muted(기본, e03 제휴 고지)와 info(민트, e05 coordnotice — Figma multi 1358 실측) 겸용.
+// 색만 prop 으로 뺀다(FilterSlidersGlyph·WarningTriangleGlyph tone 선례). 기본값 muted: e03 이
+// 먼저 이 색을 썼다(무prop 호출 무회귀).
+export function InfoGlyph({
+  size = 15,
+  tone = 'muted',
+  testID,
+}: GlyphProps & { tone?: 'muted' | 'info' }) {
+  const color = tone === 'info' ? INFO : MUTED;
   return (
     <Svg
       testID={testID}
@@ -331,15 +356,150 @@ export function InfoGlyph({ size = 15, testID }: GlyphProps) {
     >
       <Path
         d="M8 14.5C11.5899 14.5 14.5 11.5899 14.5 8C14.5 4.41015 11.5899 1.5 8 1.5C4.41015 1.5 1.5 4.41015 1.5 8C1.5 11.5899 4.41015 14.5 8 14.5Z"
-        stroke={MUTED}
+        stroke={color}
         strokeWidth={1.4}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <Path
         d="M8 7.3V11M8 5H8.008"
-        stroke={MUTED}
+        stroke={color}
         strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// e05 확정 카드 침대 아이콘(TRIP-730) — 연분홍 사각 위 분홍 침대(Figma default 1703 실측 근사).
+// 헤드보드·매트리스·발치·베개로 구성. 색은 6-b 실기 몫(글리프 stroke jest 무심판).
+export function BedGlyph({ size = 20, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M3 17V7"
+        stroke={PRIMARY}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M3 17H21"
+        stroke={PRIMARY}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M3 12H21V17"
+        stroke={PRIMARY}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M21 12V11C21 10.4477 20.5523 10 20 10H10V12"
+        stroke={PRIMARY}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M6 10V9.2C6 8.6477 6.4477 8.2 7 8.2H8.5C9.0523 8.2 9.5 8.6477 9.5 9.2V10"
+        stroke={PRIMARY}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// e05 확정 CTA 체크(TRIP-730) — 분홍 버튼 위라 흰색(ON_PRIMARY). "이 숙소 등록" 앞 ✓.
+export function CheckGlyph({ size = 20, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M20 6L9 17L4 12"
+        stroke={ON_PRIMARY}
+        strokeWidth={2.2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// e05 날짜 필드 달력 아이콘(TRIP-730) — 라벨 옆 muted 달력(옛 CalendarPlusGlyph 는 TRIP-727 로
+// 삭제됨, 이 화면 전용으로 새로 그린다). 상단 고리 2개 + 헤더 구분선.
+export function CalendarGlyph({ size = 16, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 20 20"
+      fill="none"
+    >
+      <Path
+        d="M4 4H16C16.5523 4 17 4.4477 17 5V16C17 16.5523 16.5523 17 16 17H4C3.4477 17 3 16.5523 3 16V5C3 4.4477 3.4477 4 4 4Z"
+        stroke={MUTED}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M3 8H17"
+        stroke={MUTED}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M7 2.5V5.5M13 2.5V5.5"
+        stroke={MUTED}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// e05 지도 검색 실패 배너 재시도(TRIP-730) — 원형 화살표(↻). text-primary 옆이라 분홍.
+export function RefreshGlyph({ size = 16, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+    >
+      <Path
+        d="M13.5 8C13.5 11.0376 11.0376 13.5 8 13.5C4.9624 13.5 2.5 11.0376 2.5 8C2.5 4.9624 4.9624 2.5 8 2.5C10.0503 2.5 11.8412 3.6519 12.75 5.3333"
+        stroke={PRIMARY}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M13 2.5V5.5H10"
+        stroke={PRIMARY}
+        strokeWidth={1.5}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -382,34 +542,6 @@ export function ExternalLinkGlyph({ size = 19, testID }: GlyphProps) {
   );
 }
 
-// e03 2차 CTA(일정에 추가) — 달력+, 흰 버튼 위라 먹색. Figma 1700:1278.
-export function CalendarPlusGlyph({ size = 19, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 20 20"
-      fill="none"
-    >
-      <Path
-        d="M4.5 4H15.5C16.0523 4 16.5 4.44772 16.5 5V15.5C16.5 16.0523 16.0523 16.5 15.5 16.5H4.5C3.94772 16.5 3.5 16.0523 3.5 15.5V5C3.5 4.44772 3.94772 4 4.5 4Z"
-        stroke={INK}
-        strokeWidth={1.6}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M6.5 2.5V5.5M13.5 2.5V5.5M3.5 8H16.5M10 10V14M8 12H12"
-        stroke={INK}
-        strokeWidth={1.6}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
 // e03 편의시설 칩 아이콘(TRIP-457) — 서버 코드가 임의라 코드별 아이콘을 지어내지 않고(INV-1)
 // 하나의 일반 체크 배지로 그린다. 색은 6-b 실기 몫(★F-10, 글리프 fill은 jest 무심판).
 export function AmenityGlyph({ size = 24, testID }: GlyphProps) {
@@ -432,27 +564,139 @@ export function AmenityGlyph({ size = 24, testID }: GlyphProps) {
   );
 }
 
-// 제휴 시트 OTA 행 선두 아이콘(TRIP-457) — 침대(숙소) 일반 도형. Figma 1348:1545 근사.
-export function BedGlyph({ size = 22, testID }: GlyphProps) {
+// e03 편의시설 아이콘 4종(TRIP-727) — 서버 코드가 아는 값(주차·조식·와이파이·오션뷰)일 때만
+// 코드별 그림을 그린다(모르는 값은 `resolveAmenityIcon`이 AmenityGlyph 폴백으로 접는다, INV-1).
+// 매핑표는 `features/stay/config/amenityIcons.ts`. 색은 6-b 실기 몫(글리프 fill/stroke jest 무심판).
+
+// 주차 — 자동차 실루엣.
+export function ParkingGlyph({ size = 24, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
       width={size}
       height={size}
-      viewBox="0 0 22 22"
+      viewBox="0 0 24 24"
       fill="none"
     >
       <Path
-        d="M3 6V16M3 12H19V16M19 12V9C19 8.44772 18.5523 8 18 8H10V12"
+        d="M5 14L6.6 8.6C6.8 7.9 7.4 7.5 8.1 7.5H15.9C16.6 7.5 17.2 7.9 17.4 8.6L19 14"
+        stroke={BODY}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M4 14H20V16.5C20 16.8 19.8 17 19.5 17H4.5C4.2 17 4 16.8 4 16.5V14Z"
+        stroke={BODY}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Circle cx={7.5} cy={17} r={1.3} fill={BODY} />
+      <Circle cx={16.5} cy={17} r={1.3} fill={BODY} />
+    </Svg>
+  );
+}
+
+// 조식 — 커피 컵(김 세 줄).
+export function BreakfastGlyph({ size = 24, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M5.5 8.5H16.5V13C16.5 15.2 14.7 17 12.5 17H9.5C7.3 17 5.5 15.2 5.5 13V8.5Z"
+        stroke={BODY}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M16.5 9.5H18.5C19.6 9.5 20.5 10.4 20.5 11.5C20.5 12.6 19.6 13.5 18.5 13.5H16.5"
+        stroke={BODY}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M9 4V6M12 4V6M15 4V6"
         stroke={BODY}
         strokeWidth={1.6}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    </Svg>
+  );
+}
+
+// 와이파이 — 세 겹 아치 + 점.
+export function WifiGlyph({ size = 24, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
       <Path
-        d="M6.5 10.5C7.32843 10.5 8 9.82843 8 9C8 8.17157 7.32843 7.5 6.5 7.5C5.67157 7.5 5 8.17157 5 9C5 9.82843 5.67157 10.5 6.5 10.5Z"
+        d="M4 9.5C8.5 5 15.5 5 20 9.5"
         stroke={BODY}
-        strokeWidth={1.6}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M7 12.5C10 9.7 14 9.7 17 12.5"
+        stroke={BODY}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M10 15.5C11.2 14.4 12.8 14.4 14 15.5"
+        stroke={BODY}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Circle cx={12} cy={18} r={1} fill={BODY} />
+    </Svg>
+  );
+}
+
+// 오션뷰 — 물결 세 줄.
+export function OceanViewGlyph({ size = 24, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M3 7C4.5 5 6 5 7.5 7C9 9 10.5 9 12 7C13.5 5 15 5 16.5 7C18 9 19.5 9 21 7"
+        stroke={BODY}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M3 12C4.5 10 6 10 7.5 12C9 14 10.5 14 12 12C13.5 10 15 10 16.5 12C18 14 19.5 14 21 12"
+        stroke={BODY}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M3 17C4.5 15 6 15 7.5 17C9 19 10.5 19 12 17C13.5 15 15 15 16.5 17C18 19 19.5 19 21 17"
+        stroke={BODY}
+        strokeWidth={1.8}
         strokeLinecap="round"
         strokeLinejoin="round"
       />

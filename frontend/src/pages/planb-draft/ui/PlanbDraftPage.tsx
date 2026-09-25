@@ -1,29 +1,32 @@
 import { useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
-import { useEffect } from 'react';
 
 import { resolveReplanState } from '@/features/planb/model/replanState';
+import { useApplyReplan } from '@/features/planb/model/useApplyReplan';
 import { useReplanSession } from '@/features/planb/model/useReplanSession';
-import { NoAlternativeScreen } from '@/features/planb/ui/NoAlternativeScreen';
-import { ReplanDraftScreen } from '@/features/planb/ui/ReplanDraftScreen';
+
+import { ReplanDraftView } from './ReplanDraftView';
 
 /**
- * TRIP-563 · AC-6·AC-7 — i13/i16 재계획안 페이지 배선판. 세션 GET 을 폴링해 판정 1회로 접고
- * kind 별로 화면을 그리거나 라우팅한다(선례 `PlanbSolvingPage` 동형 — dispatch 정본).
+ * TRIP-751 · AC-9·AC-10 — i06 재계획안 페이지 배선판. 세션 GET 을 폴링해 판정 1회로 접고
+ * 같은 순수 뷰(`ReplanDraftView`)의 세 얼굴 중 하나로 그린다.
  *
  * `useReplanSession`(폴링) → `resolveReplanState(status)`:
- *  - 'draft'      → `ReplanDraftScreen`(i13). 계약 존재 필드(reasons·excludedPoiIds)만 바인딩하고
- *                    **slots 는 []** — 제안 days/slots(ReplanSession.draft) 계약 공백의 정직한 degrade
- *                    (페이지가 슬롯을 지어내지 않는다). apply 훅은 import 하지 않는다(INV-U4-05 무쓰기).
- *  - 'noSolution' → `NoAlternativeScreen`(i16). skipCount 는 이월 개수로 채운다(계약 공백이라 심판은
- *                    값을 강제 안 함 — brief 열린 판단).
- *  - 'failed'     → `router.push(planb/manual?variant=error)` 1회(침묵 없이 수동 편집으로, INV-4 ·
- *                    선례 106-A). 진입 신호는 variant(정상 i15 와 error 를 가른다).
- *  - 'solving'·'closed'·미도착 → null(폴링 대기·세션 종료·조회 미도착, 화면 없음).
+ *  - 'draft'      → variant 'draft'. [적용하기]는 **바로 확정**한다(E1 — 확정 지점이 i06 페이지로
+ *                    옮겨졌다. 쓰기는 여전히 seam `useApplyReplan` 하나만 통과한다, BR-U4-28).
+ *                    성공하면 허브로 `replace`(뒤로가기로 초안에 돌아와 409 를 맞는 길을 없앤다) +
+ *                    `applied=sessionId`(i08 시트 신호, 소비는 754).
+ *  - 'noSolution' → variant 'noSolution'. 서버가 사유를 주지 않으므로 부제는 뒤 절만(Seed Q4).
+ *  - 'failed'     → variant 'failed'(E3 — 다른 화면으로 튕기지 않고 같은 자리에 안내, INV-4).
+ *  - 'solving'·'closed'·미도착 → null.
  *
- * 배선 목적지: i13/i16 `onManualEdit` → planb/manual(variant 없음=정상 i15) · i13 `onApply` →
- * planb/diff(확정은 i18) · i16 `onSkip`·`onRestMode` → no-op 자리표시(계약·제품 정의 부재).
+ * 라이브 얼굴은 제목 + 안내 + CTA 뿐이다(E4·Q8) — 세션 계약에 슬롯·거리·일차·날짜가 없어 지어내지 않는다.
  */
+
+// 라이브 대안 없음 부제 — Figma 앞 절("17시 이후 …")은 데이터별 사유라 서버가 주기 전엔 쓰지 않는다.
+const NO_SOLUTION_DESCRIPTION = '조건을 줄이거나 직접 고쳐 주세요';
+// 출발 좌표가 없는 세션(originLat/Lng nullable)의 지도 중심 — 옛 i13 화면의 부산 중심 플레이스홀더 계승.
+const FALLBACK_CENTER = { lat: 35.1587, lng: 129.1604 };
 
 export interface PlanbDraftPageProps {
   tripId: string;
@@ -36,58 +39,55 @@ export function PlanbDraftPage({
 }: PlanbDraftPageProps): ReactElement | null {
   const router = useRouter();
   const session = useReplanSession(tripId, sessionId);
+  const apply = useApplyReplan();
 
   const data = session.data;
-  const state =
-    data === undefined ? undefined : resolveReplanState(data.status);
-
-  // FAILED → i22(수동 편집·error)로 전환한다(INV-4 침묵 금지). failed 일 때만 발화하고 폴링 재렌더로
-  // kind 가 그대로면 재발화하지 않는다(1회 push, 선례 106-A).
-  const failed = state?.kind === 'failed';
-  useEffect(() => {
-    if (failed) {
-      router.push({
-        pathname: '/trips/[tripId]/planb/manual',
-        params: { tripId, variant: 'error' },
-      });
-    }
-  }, [failed, tripId, router]);
-
-  const goManual = () =>
-    router.push({
-      pathname: '/trips/[tripId]/planb/manual',
-      params: { tripId },
-    });
-
-  if (data !== undefined && state !== undefined) {
-    if (state.kind === 'draft') {
-      return (
-        <ReplanDraftScreen
-          reasons={data.reasons ?? []}
-          excludedPoiIds={data.excludedPoiIds ?? []}
-          slots={[]}
-          onManualEdit={goManual}
-          onApply={() =>
-            router.push({
-              pathname: '/trips/[tripId]/planb/diff',
-              params: { tripId, sessionId },
-            })
-          }
-          onPressCandidates={() => {}}
-        />
-      );
-    }
-    if (state.kind === 'noSolution') {
-      return (
-        <NoAlternativeScreen
-          skipCount={(data.excludedPoiIds ?? []).length}
-          onSkip={() => {}}
-          onRestMode={() => {}}
-          onManualEdit={goManual}
-        />
-      );
-    }
+  if (data === undefined) return null;
+  const state = resolveReplanState(data.status);
+  if (
+    state.kind !== 'draft' &&
+    state.kind !== 'noSolution' &&
+    state.kind !== 'failed'
+  ) {
+    return null;
   }
 
-  return null;
+  return (
+    <ReplanDraftView
+      variant={state.kind}
+      center={{
+        lat: data.originLat ?? FALLBACK_CENTER.lat,
+        lng: data.originLng ?? FALLBACK_CENTER.lng,
+      }}
+      days={[]}
+      selectedDayIndex={0}
+      dayLabel=""
+      dateLabel=""
+      meta=""
+      slots={[]}
+      noSolutionDescription={NO_SOLUTION_DESCRIPTION}
+      applyPending={apply.isPending}
+      applyFailed={apply.isError}
+      onBack={() => router.back()}
+      onManualEdit={() =>
+        router.push({
+          pathname: '/trips/[tripId]/planb/manual',
+          params: { tripId },
+        })
+      }
+      onApply={() =>
+        apply.mutate(
+          { tripId, sessionId },
+          {
+            onSuccess: () =>
+              router.replace({
+                pathname: '/trips/[tripId]/live',
+                params: { tripId, applied: sessionId },
+              }),
+          }
+        )
+      }
+      onReopenRequest={() => router.push(`/trips/${tripId}/planb`)}
+    />
+  );
 }

@@ -1,0 +1,13 @@
+<p>현재 절차에서는 검토한 변경을 <code>main</code>에 반영하고 그 commit의 필수 테스트를 확인한 뒤, main branch에서 <code>environment=prd</code>로 plan과 apply를 실행한다. 현재 backend·AI CI의 자동 push/PR 대상은 develop 중심이므로 main에 병합했다고 두 CI가 자동 실행됐다고 가정하지 않는다. 각 CI의 <code>workflow_dispatch</code>에서 main을 선택해 테스트를 실행하고 대상 SHA를 확인하거나, 운영 branch를 포함하는 별도 CI gate를 추가해야 한다. 최초 PRD는 bootstrap·ACM·Secrets Manager·DNS 준비를 PRD 환경에서도 수행한다. DEV의 state 버킷·NLB·DB를 PRD 변수에 재사용하지 않는다.</p>
+<ol>
+<li>DEV에서 검증한 기능과 변경을 main에 반영하고 <strong>실제로 배포할 main SHA</strong>를 기록한다. merge commit이나 squash를 사용하면 DEV에서 본 SHA와 달라질 수 있으므로 코드 차이와 CI 대상도 확인한다.</li>
+<li>PRD plan의 계정·리전·state·삭제/교체 계획을 검토한다. DB migration에 기존 앱과의 호환성 문제가 있는지 검토한다.</li>
+<li>PRD Environment의 리뷰어가 배포를 승인한다. 현재 승인 시점은 앞에서 설명한 deploy job 시작 전이다.</li>
+<li>PRD apply와 앱 배포를 실행하고 Summary의 SHA·이미지 tag·URL을 기록한다. DEV와 동일한 기능 시나리오를 PRD에 적합한 테스트 데이터로 확인한다.</li>
+<li>오류율·응답 시간·DB 상태를 관찰한다. 이 브랜치에 운영 관측성 수집 시스템 전체가 포함되어 있지는 않으므로 조직의 로그·모니터링 절차를 연결한다.</li>
+</ol>
+<div class="callout warning">
+<strong>현재 구현은 동일 이미지의 DEV → PRD 승격이 아니다</strong>
+<p>각 <code>apply + deploy_application=true</code> 실행은 backend와 AI 이미지를 새로 빌드한다. tag는 <code>sha-&lt;commit SHA&gt;-&lt;run ID&gt;-&lt;attempt&gt;</code>다. 같은 소스 SHA를 다시 빌드해도 Dockerfile의 가변 베이스 tag, 외부 다운로드, 의존성 해석, 빌드 메타데이터가 달라질 수 있다. ECR tag의 immutable 설정은 그 tag를 덮어쓰지 못하게 하지만 다른 두 tag의 이미지 내용이 같다는 뜻은 아니다. 현재 workflow에는 검증된 기존 digest를 입력해 빌드를 생략하는 기능이 없다.</p>
+</div>
+<p>이 차이를 표현할 때 DEV에서 검증한 코드 변경을 PRD에서 다시 빌드했다는 말과 DEV에서 검증한 이미지 digest를 PRD에 그대로 배포했다는 말을 구분한다. tag는 사람이 추적할 이름이고 digest는 이미지 내용의 식별자다. Kubernetes에서 digest를 직접 지정하면 <code>repository@sha256:...</code> 형태를 사용한다. <a href="https://kubernetes.io/docs/concepts/containers/images/">Kubernetes의 digest 고정</a>, <a href="https://docs.aws.amazon.com/AmazonECR/latest/userguide/image-tag-mutability.html">ECR tag immutable 설정</a>.</p>

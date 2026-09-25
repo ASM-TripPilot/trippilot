@@ -67,10 +67,11 @@ export function isConfirmLocked(
  * 카드 CTA·일정 탭)이 **같은 이 함수를 호출**해 규칙이 한 곳에만 산다(AC-5).
  *
  * 우선순위: 404(없음)→method · PARTIAL(생성 중)→generating · FAILED(2차 실패, 1차분 유효)→draft ·
- * CONFIRMED(확정=읽기전용)→plan · 그 외(COMPLETE+PLANNED, 미확정 초안)→draft. generationState 는
+ * CONFIRMED(확정)→live · 그 외(COMPLETE+PLANNED, 미확정 초안)→draft. generationState 는
  * status 와 독립 축이라(계약) 진행 상태를 확정 상태보다 먼저 본다(BR-U3-04/07/28 성격에서 파생).
+ * 확정 일정은 날짜와 상관없이 여행 중 화면(허브)으로 보낸다 — 2026-09-23 사용자 결정(제품 규칙).
  */
-export type ItineraryDestination = 'method' | 'generating' | 'draft' | 'plan';
+export type ItineraryDestination = 'method' | 'generating' | 'draft' | 'live';
 
 export function resolveItineraryDestination(input: {
   notFound: boolean;
@@ -80,13 +81,13 @@ export function resolveItineraryDestination(input: {
   if (input.notFound) return 'method';
   if (input.generationState === 'PARTIAL') return 'generating';
   if (input.generationState === 'FAILED') return 'draft';
-  if (input.status === 'CONFIRMED') return 'plan';
+  if (input.status === 'CONFIRMED') return 'live';
   return 'draft';
 }
 
 /**
- * 목적지 토큰 + tripId → **문자열** 라우트 href. 두 진입점이 같은 조립기를 써 "plan 만 접미
- * 없음" 특례가 한 곳에만 산다 — Redirect·push 관찰이 String(href) 기반이라 객체 href 는 금지다.
+ * 목적지 토큰 + tripId → **문자열** 라우트 href. 두 진입점이 같은 조립기를 써 "live 만 itinerary
+ * 밖" 특례가 한 곳에만 산다 — Redirect·push 관찰이 String(href) 기반이라 객체 href 는 금지다.
  *
  * 반환 타입은 각 라우트를 그대로 담은 템플릿 리터럴 유니온이다 — 순수 문자열(`string`)로 두면
  * `typedRoutes` 가 `router.push`/`Redirect href` 에서 거부한다(라우트 파일에서 인라인 템플릿만
@@ -94,7 +95,7 @@ export function resolveItineraryDestination(input: {
  * import 하지 않아 이 model 층은 라우팅 무지로 남는다.
  */
 export type ItineraryDestinationHref =
-  | `/trips/${string}/itinerary`
+  | `/trips/${string}/live`
   | `/trips/${string}/itinerary/method`
   | `/trips/${string}/itinerary/generating`
   | `/trips/${string}/itinerary/draft`;
@@ -110,8 +111,8 @@ export function itineraryDestinationHref(
       return `/trips/${tripId}/itinerary/generating`;
     case 'draft':
       return `/trips/${tripId}/itinerary/draft`;
-    case 'plan':
-      return `/trips/${tripId}/itinerary`;
+    case 'live':
+      return `/trips/${tripId}/live`;
   }
 }
 

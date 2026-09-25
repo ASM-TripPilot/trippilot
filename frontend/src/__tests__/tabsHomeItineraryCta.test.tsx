@@ -35,8 +35,14 @@ import HomeRoute from '@/app/(tabs)/index';
  */
 
 const mockPush = jest.fn();
+const mockReplace = jest.fn();
+const mockNavigate = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => ({
+    push: mockPush,
+    replace: mockReplace,
+    navigate: mockNavigate,
+  }),
 }));
 
 jest.mock('@/shared/api/generated/trips/trips', () => ({
@@ -78,6 +84,8 @@ function planningTrip(): Trip {
     status: 'PLANNED',
     createdAt: '2026-08-01T10:00:00.000Z',
     updatedAt: '2026-08-01T10:00:00.000Z',
+    baseCount: 0,
+    itineraryDayCount: 0,
   };
 }
 
@@ -122,6 +130,8 @@ const itineraryNotFound = {
 
 beforeEach(() => {
   mockPush.mockClear();
+  mockReplace.mockClear();
+  mockNavigate.mockClear();
   mockUseGetTrips.mockReset();
   mockUseItinerary.mockReset();
   mockUseSavedPlaces.mockReset();
@@ -157,6 +167,26 @@ describe('🔴 AC-5(홈측) · planning + itinerary PARTIAL → push generating(
     expect(mockPush).toHaveBeenCalledWith(
       `/trips/${TRIP_ID}/itinerary/generating`
     );
+  });
+});
+
+describe('🔴 AC-2 · planning(여행 전) + itinerary CONFIRMED → push live', () => {
+  it('확정 일정이 있는 여행 카드 CTA 를 누르면 여행 전이어도 여행 중 화면으로 1회 push 한다', () => {
+    mockUseGetTrips.mockReturnValue(
+      tripsResult([{ ...planningTrip(), status: 'CONFIRMED' }])
+    );
+    mockUseItinerary.mockReturnValue(
+      itineraryOk(ItineraryGenerationState.COMPLETE, ItineraryStatus.CONFIRMED)
+    );
+
+    render(<HomeRoute />);
+
+    fireEvent.press(screen.getByTestId('home-trip-hero-cta'));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith(`/trips/${TRIP_ID}/live`);
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 });
 

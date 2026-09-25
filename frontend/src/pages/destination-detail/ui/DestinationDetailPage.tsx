@@ -26,6 +26,7 @@ import type { StayItem } from '@/shared/api/generated/schemas';
 import { useGetPlaces } from '@/shared/api/generated/places/places';
 import { getAccessToken } from '@/shared/api/tokenManager';
 import { formatPrice } from '@/entities/stay/lib/formatPrice';
+import { useSavedStays } from '@/features/stay/model/savedStays';
 import { stayKey } from '@/features/stay/model/stayKey';
 import { useStaySearch } from '@/features/stay/model/useStaySearch';
 import { useRegions } from '@/features/explore/model/regions';
@@ -46,6 +47,13 @@ export function DestinationDetailPage(): ReactElement {
 
   const isAuthed = getAccessToken() !== null;
   const { savedPoiIds } = useSavedPlaces({ isAuthed });
+  // 숙소 담기 하트(TRIP-709, `(tabs)/explore.tsx` SavableStayLane 선례) — 서버 상태 소유자는
+  // useSavedStays(react-query 캐시)다. 로컬 useState 토글이 아니라 save/remove 실호출이라
+  // "저장됐다는 거짓말"이 안 통한다(repo-trap 글리프 함정). 게스트는 훅이 enabled:false 로
+  // 요청을 안 보내고, 하트 press 는 로그인으로 보낸다(BR-U1-03).
+  const { isSaved, save, remove, savedKeys } = useSavedStays({ isAuthed });
+  const [pendingKeys, setPendingKeys] = useState<string[]>([]);
+  const [saveError, setSaveError] = useState(false);
   // 담은 곳 saved-menu 열림 상태(`(tabs)/explore.tsx` TRIP-494 선례) — 화면은 useState 0건.
   const [savedMenuOpen, setSavedMenuOpen] = useState(false);
 
@@ -84,8 +92,27 @@ export function DestinationDetailPage(): ReactElement {
     if (item) {
       router.push({
         pathname: '/stays/[stayId]',
-        params: { stayId: card.key, item: JSON.stringify(item) },
+        params: { stayId: card.key },
       });
+    }
+  }
+
+  // 하트 press — 게스트는 요청 없이 로그인으로(BR-U1-03), 로그인 사용자는 담김이면 remove·
+  // 아니면 save 를 실호출한다(낙관/롤백은 훅이 짐, `SavableStayLane` attemptToggle 선례 동형).
+  // 실패는 침묵하지 않고 배너로 알린다(INV-4). 배너는 다음 하트 press 첫 줄로 소멸.
+  async function attemptToggle(card: StayCardVM): Promise<void> {
+    if (!isAuthed) {
+      router.push('/(auth)/login');
+      return;
+    }
+    setSaveError(false);
+    const item = stayItems.find((it: StayItem) => stayKey(it) === card.key);
+    if (!item) return;
+    setPendingKeys((keys) => [...keys, card.key]);
+    const outcome = isSaved(card.key) ? await remove(item) : await save(item);
+    setPendingKeys((keys) => keys.filter((k) => k !== card.key));
+    if (outcome.kind === 'failed') {
+      setSaveError(true);
     }
   }
 
@@ -102,6 +129,11 @@ export function DestinationDetailPage(): ReactElement {
         onSeeAll: () =>
           router.push(`/stays?region=${encodeURIComponent(displayName)}`),
         onPressCard: pressStayCard,
+        savedKeys,
+        pendingKeys,
+        onToggleSave: (card) => void attemptToggle(card),
+        saveError,
+        onDismissSaveError: () => setSaveError(false),
       }}
       placeLane={{
         error: places.isError,
@@ -117,6 +149,8 @@ export function DestinationDetailPage(): ReactElement {
       onPressTab={(key) =>
         router.replace(key === 'home' ? '/(tabs)' : `/${key}`)
       }
+      // ＋ 여행 만들기 FAB → g01 위저드(d01 라우트 선례).
+      onPressCreateTrip={() => router.push('/trips/new/step1')}
       savedMenu={{
         open: savedMenuOpen,
         savedCount: savedPoiIds.length,

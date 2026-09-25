@@ -19,7 +19,7 @@ jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
  * 무엇을 보장하나:
  *  - 그날을 덮는 숙소가 있으면 숙소명 + 날짜 헤더(`record-trip-attribution-stay`)가 뜬다.
  *  - 숙소가 없는 날(당일치기·이동일)은 날짜만 헤더(`record-trip-attribution-date`)가 뜬다.
- *  - 헤더 추가가 기존 표면(일자 탭·즉석 추가·저장 FAB)을 깨지 않는다.
+ *  - 헤더·일자 탭·즉석 추가는 유지되고, 하트 FAB(`record-trip-saved-fab`)는 제거된다(TRIP-759 AC-5·AC-6).
  *
  * ★확장타입 재대입: 프로덕션 `TripRecordsScreenProps` 엔 아직 `attribution` prop 이 없다.
  *   구현 코드를 만들지 않으므로, 화면을 확장 prop 타입으로 재대입해 테스트만 컴파일한다.
@@ -97,8 +97,8 @@ describe('AC-7 · 숙소 없는 날 — 날짜만 헤더(당일치기·이동일
   });
 });
 
-describe('AC-7 · 헤더 추가가 기존 표면을 깨지 않는다(무회귀 앵커)', () => {
-  it('일자 탭·즉석 추가·저장 FAB 가 헤더와 함께 여전히 존재한다', () => {
+describe('🔴 TRIP-759 · 귀속 헤더·일자 탭·즉석 추가 유지 + 하트 FAB 제거', () => {
+  it('일자 탭·즉석 추가는 헤더와 함께 남고, record-trip-saved-fab 는 사라진다', () => {
     render(
       <Screen
         {...baseProps()}
@@ -106,8 +106,45 @@ describe('AC-7 · 헤더 추가가 기존 표면을 깨지 않는다(무회귀 �
       />
     );
 
+    // 유지(AC-6 무회귀) — 귀속 헤더가 딸린 채로도 탭·즉석 추가는 그대로.
     expect(screen.getByTestId('record-trip-day-tab-2026-06-11')).toBeTruthy();
     expect(screen.getByTestId('record-trip-spontaneous-add')).toBeTruthy();
-    expect(screen.getByTestId('record-trip-saved-fab')).toBeTruthy();
+    // 제거(AC-5) — 하트 FAB 는 Figma 정본에 없다 → present→absent 로 반전.
+    // (개념) `queryByTestId(...)` = 없으면 null → `.toBeNull()` 로 부재를 단언.
+    expect(screen.queryByTestId('record-trip-saved-fab')).toBeNull();
+  });
+});
+
+/**
+ * 🔴 TRIP-760 · AC-6 — 안내문 카피 prop 분기(additive, 무회귀).
+ *
+ * error 얼굴은 default 와 안내문 문자열만 다르다(스타일 동일 — 티켓 ■ 결정 확정 "상태별 의도→prop 분기",
+ * 라이브 Figma 실측). 옵셔널 `noticeCopy?: string` 을 더해, 주면 그 문자열로 대체하고 안 주면 현행 default
+ * 문자열을 유지한다(미주입 시 default = 기존 호출자·프리뷰 무영향, A8b 미러).
+ *
+ * ★ 매처(02a §5-A): `getByText(문자열)` 은 완전일치(matches.js `exact=true` → `===`). 안내문은 단일
+ *   `Text` 리프라 그 노드 텍스트와 문자열이 정확히 같다. error 카피의 `—` 는 EM DASH(U+2014), default 의
+ *   `·` 는 U+00B7 — 둘 다 공백이 아니라 정규화(trim+공백붕괴)에도 보존된다.
+ */
+type ScreenWithCopy = TripRecordsScreenProps & { noticeCopy?: string };
+const ScreenC = TripRecordsScreen as unknown as (
+  props: ScreenWithCopy
+) => ReactElement;
+
+const DEFAULT_COPY = '오늘의 동선 · 방문한 곳을 사진과 메모로 남겨요';
+const ERROR_COPY = '오늘 방문한 곳 — 핀은 방문 완료, 빈 핀은 예정';
+
+describe('🔴 TRIP-760 · AC-6 · 안내문 카피 prop 분기', () => {
+  it('A6a · noticeCopy 주입 → error 카피로 대체(default 문자열 부재)', () => {
+    render(<ScreenC {...baseProps()} noticeCopy={ERROR_COPY} />);
+
+    expect(screen.getByText(ERROR_COPY)).toBeTruthy();
+    expect(screen.queryByText(DEFAULT_COPY)).toBeNull();
+  });
+
+  it('A6b · noticeCopy 미주입 → 현행 default 문자열 유지(무회귀 짝)', () => {
+    render(<Screen {...baseProps()} />);
+
+    expect(screen.getByText(DEFAULT_COPY)).toBeTruthy();
   });
 });

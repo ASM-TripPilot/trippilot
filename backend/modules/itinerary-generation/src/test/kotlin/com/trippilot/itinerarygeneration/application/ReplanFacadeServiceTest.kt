@@ -103,7 +103,7 @@ class ReplanFacadeServiceTest : StringSpec({
         now, GenerationState.COMPLETE,
     )
 
-    class Agent(val days: List<DaySchedule>) : StubScheduleAgent() {
+    class Agent(val days: List<DaySchedule>, val totalDistanceKm: Double? = null) : StubScheduleAgent() {
         val inputs = mutableListOf<ReplanInput>()
         override fun replan(input: ReplanInput): ScheduleAgentOutput {
             inputs += input
@@ -111,6 +111,7 @@ class ReplanFacadeServiceTest : StringSpec({
                 days = days, day1ReadyAt = null, explanations = emptyMap(),
                 solveMode = SolveMode.DETERMINISTIC, isFallback = false,
                 freshness = FreshnessMeta(Instant.parse("2026-08-11T06:00:00Z"), degraded = false),
+                totalDistanceKm = totalDistanceKm,
             )
         }
     }
@@ -320,6 +321,52 @@ class ReplanFacadeServiceTest : StringSpec({
         ReplanProposal.fromMap(original.toMap()) shouldBe original
     }
 
+    /**
+     * 거리도 왕복해야 한다(B-5). jsonb 왕복은 **수 타입을 보존하지 않는다** — 잭슨이 정수로 읽히는
+     * 값을 `Integer` 로 돌려주므로 `as? Double` 만 두면 `12` 가 조용히 null 이 된다.
+     * 그 증상은 "짧은 이동일 때만 거리가 사라진다"라 재현 조건을 못 잡는다.
+     */
+    "초안 왕복이 거리도 지킨다 — jsonb 를 실제로 통과시킨다" {
+        val base = ReplanProposal(UUID.randomUUID(), today, emptyList())
+
+        // **메모리 맵을 그대로 되읽으면 이 스펙은 아무것도 재지 않는다** — 넣은 Double 을 그대로
+        // 꺼내니 당연히 통과한다. 실제 저장은 jsonb 라 한 번은 JSON 을 통과시켜야 한다.
+        fun throughJsonb(p: ReplanProposal) = ReplanProposal.fromMap(jsonb(p.toMap()))
+
+        throughJsonb(base.copy(totalDistanceKm = 6.9)).totalDistanceKm shouldBe 6.9
+        throughJsonb(base.copy(totalDistanceKm = 12.0)).totalDistanceKm shouldBe 12.0
+        // 모르면 **모르는 채로** 돌아온다 — 0 으로 접으면 "이동이 없는 하루"라는 거짓이 화면에 나간다.
+        throughJsonb(base).totalDistanceKm shouldBe null
+        base.toMap().containsKey("totalDistanceKm") shouldBe false
+    }
+
+    /**
+     * 정수로 적힌 초안도 읽는다. 우리 쓰기 경로는 항상 `Double` 이라 여기로 오지 않지만,
+     * **초안 jsonb 는 손으로 고쳐질 수 있는 자리**다(운영 중 한 건 교정). `as? Double` 만 두면
+     * `12` 가 조용히 null 이 되어 "짧은 이동일 때만 거리가 사라진다"는 재현 불가한 증상이 된다.
+     */
+    "정수로 적힌 거리도 읽는다 — 조용히 모른다가 되지 않는다" {
+        val raw = mapOf<String, Any>(
+            "itineraryId" to UUID.randomUUID().toString(),
+            "date" to today.toString(),
+            "slots" to emptyList<Map<String, Any>>(),
+            "totalDistanceKm" to 12,
+        )
+
+        ReplanProposal.fromMap(raw).totalDistanceKm shouldBe 12.0
+    }
+
+    /**
+     * 거리는 **상대가 푼 값**이고(INV-2) 우리는 나르기만 한다. 초안까지 도달하지 않으면
+     * i08 의 "이동 −6.9km" 재료가 없는데, 증상이 예외가 아니라 화면의 한 줄이 조용히 빠지는 것이다.
+     */
+    "AI 가 준 거리가 초안까지 간다" {
+        val agent = Agent(proposal(replacement), totalDistanceKm = 6.9)
+        val svc = fixture(agent).svc
+
+        svc.propose(command())!!.totalDistanceKm shouldBe 6.9
+    }
+
     "재계획 요청이 실제 취향·동반·예산·원 일정·담은 장소를 싣는다 — 중립으로 덮지 않는다(B-1)" {
         val agent = Agent(proposal(replacement))
         val svc = fixture(agent).svc
@@ -427,3 +474,13 @@ class ReplanFacadeServiceTest : StringSpec({
 
 /** 코드 없는 목적지 — 기존 테스트는 전부 이름 경로다(코드 경로는 `RegionCodeAnchorTest`). */
 private fun refs(vararg names: String) = names.map { TripDestinationRef(it, null) }
+
+/**
+ * 초안 맵을 **실제 JSON 을 거쳐** 되읽는다. Hibernate 가 `@JdbcTypeCode(SqlTypes.JSON)` 컬럼에
+ * 하는 일과 같다 — 이걸 통과시키지 않으면 수 타입 축약을 원리적으로 못 본다.
+ */
+@Suppress("UNCHECKED_CAST")
+private fun jsonb(map: Map<String, Any>): Map<String, Any> {
+    val mapper = tools.jackson.databind.json.JsonMapper.builder().build()
+    return mapper.readValue(mapper.writeValueAsString(map), Map::class.java) as Map<String, Any>
+}

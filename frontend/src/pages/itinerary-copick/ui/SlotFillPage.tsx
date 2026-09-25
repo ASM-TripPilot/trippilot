@@ -5,21 +5,32 @@ import { useRouter } from 'expo-router';
 
 import { buildEditItineraryRequest } from '@/features/itinerary/model/buildEditItineraryRequest';
 import { nextCoPickSlotKey } from '@/features/itinerary/model/coPickSlots';
+import { formatCoPickDayHeader } from '@/features/itinerary/model/draftView';
 import { isConfirmLocked } from '@/features/itinerary/model/planState';
 import { formatRadiusUsed } from '@/features/itinerary/model/radiusUsedLabel';
 import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { resolveSlotSwapError } from '@/features/itinerary/model/slotSwapError';
 import { swapSlotPoi } from '@/features/itinerary/model/swapSlotPoi';
 import { timeBandLabel } from '@/features/itinerary/model/timeBandLabel';
-import { ConceptPickerScreen } from '@/features/itinerary/ui/ConceptPickerScreen';
+import {
+  ConceptPickerScreen,
+  type ConceptProgress,
+} from '@/features/itinerary/ui/ConceptPickerScreen';
 import { SlotFillScreen } from '@/features/itinerary/ui/SlotFillScreen';
-import type { SlotCandidatesRequest } from '@/shared/api/generated/schemas';
+import type {
+  ItineraryDaysItemSlotsItem,
+  SlotCandidatesRequest,
+} from '@/shared/api/generated/schemas';
 import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripIdItinerary,
   usePostTripsTripIdItinerarySlotCandidates,
   usePutTripsTripIdItinerary,
 } from '@/shared/api/generated/trips/trips';
+import {
+  CoPickStepper,
+  type CoPickStep,
+} from '@/widgets/copick-stepper/ui/CoPickStepper';
 
 /**
  * TRIP-335 슬라이스2 · h13→h14/h15 슬롯 채우기 배선 — 슬라이스1 코어(POST 후보 → `swapSlotPoi`
@@ -40,7 +51,7 @@ import {
  *
  * 이중발사 방지 `firedRef`(useRef — 같은 틱 둘째 탭이 옛 값을 읽어 못 막는 useState 잠금 회피) ·
  * 콜드캐시 가드(itinerary GET 미도착 중 확정하면 `swapSlotPoi([], …)` 로 빈 days PUT = 일정 소실)는
- * OptionSwapPage(h18) 동형 재사용이다.
+ * `SlotCandidatePanelContainer`(h08) 동형 재사용이다.
  */
 
 const CONCEPTS: readonly { key: string; label: string }[] = [
@@ -107,6 +118,82 @@ export function SlotFillPage({
       : `${band} 슬롯`;
   }
 
+  // h09 진행 줄·스텝퍼 데이터를 itinerary GET 캐시(이미 조회돼 있음)에서 조립한다 — 화면은 순수라 값만
+  // 받는다(AC-9). co-pick 은 **비고정 슬롯**을 하나씩 채우므로 그 목록에서 현재 슬롯의 위치가 곧 진행이다.
+  function coPickContext(): {
+    dayNumber: number;
+    totalDays: number;
+    date: string;
+    nonFixed: ItineraryDaysItemSlotsItem[];
+    index: number;
+  } | null {
+    if (parsed.kind !== 'ok' || itinerary.data === undefined) return null;
+    const days = itinerary.data.days;
+    const dayIndex = days.findIndex((day) => day.date === parsed.date);
+    if (dayIndex === -1) return null;
+    const nonFixed = days[dayIndex].slots.filter((slot) => !slot.isFixed);
+    const index = nonFixed.findIndex((slot) => slot.poiId === parsed.poiId);
+    if (index === -1) return null;
+    return {
+      dayNumber: dayIndex + 1,
+      totalDays: days.length,
+      date: days[dayIndex].date,
+      nonFixed,
+      index,
+    };
+  }
+
+  // 현재/다음 단 제목 — category 있으면 '{시간대} · {컨셉}', 없으면 시간대 라벨만(정직 degrade, D1).
+  // "오후"는 시간대 라벨이라 INV-3(소요시간 비표시) 안전 — 시각·분/시간은 안 낸다.
+  function bandTitle(slot: ItineraryDaysItemSlotsItem): string {
+    const band = timeBandLabel(slot.startAt);
+    return slot.category !== null &&
+      slot.category !== undefined &&
+      slot.category !== ''
+      ? `${band} · ${slot.category}`
+      : band;
+  }
+
+  function conceptProgress(): ConceptProgress | undefined {
+    const ctx = coPickContext();
+    if (ctx === null) return undefined;
+    // 우 슬롯 N/M(slotCurrent/Total)은 슬롯 진행, 진행바(barFilled/Total)는 일차 진행 — 서로 다른 축이라
+    // Figma 처럼 어긋날 수 있다(브리프 §B, 화면은 안 고침).
+    return {
+      dayLabel: `${ctx.dayNumber}일차 / ${ctx.totalDays} · ${formatCoPickDayHeader(
+        ctx.date
+      )}`,
+      slotCurrent: ctx.index + 1,
+      slotTotal: ctx.nonFixed.length,
+      barFilled: ctx.dayNumber,
+      barTotal: ctx.totalDays,
+    };
+  }
+
+  // 이전(고름) → 현재(지금 고르는 중) → 다음(비어 있음) 상태를 슬롯 위치로 결정론 도출한다(seed D1).
+  // 첫 비고정 슬롯(index 0)엔 아직 고른 '이전'이 없어 스텝퍼를 안 그린다 — role 3슬롯 중 current 만
+  // 남는 비대칭을 피하고, 동결 문맥 줄 가드(첫 슬롯엔 "…다음" 꼬리 없음)와도 어긋나지 않게 한다.
+  function conceptStepper(): ReactElement | undefined {
+    const ctx = coPickContext();
+    if (ctx === null || ctx.index === 0) return undefined;
+    const prevSlot = ctx.nonFixed[ctx.index - 1];
+    const currentSlot = ctx.nonFixed[ctx.index];
+    const prev: CoPickStep = {
+      title: prevSlot.nameKo ?? '',
+      status: '고름',
+      done: true,
+    };
+    const current: CoPickStep = {
+      title: bandTitle(currentSlot),
+      status: '지금 고르는 중',
+    };
+    const next: CoPickStep | undefined =
+      ctx.index + 1 < ctx.nonFixed.length
+        ? { title: bandTitle(ctx.nonFixed[ctx.index + 1]), status: '비어 있음' }
+        : undefined;
+    return <CoPickStepper prev={prev} current={current} next={next} />;
+  }
+
   // slotKey + radiusM(항상) + concept(스킵이면 생략) 로 후보를 조회한다. radiusM 3단째는 null 을
   // 그대로 실어 서버가 AI 기본 반경으로 확대하게 한다(§계약).
   function requestCandidates(
@@ -145,6 +232,18 @@ export function SlotFillPage({
     if (next === undefined) return; // 마지막 단계 — 더 넓힐 곳이 없다(E3)
     setSelectedRadiusKey(next.key);
     requestCandidates(concept, next.key);
+  }
+
+  // 반경 좁히기(TRIP-795, D10) — 마지막 단계에서 한 단계 뒤 반경으로 재조회. 첫 단계면 더 좁힐 곳이
+  // 없어 no-op(handleExpandRadius 의 대칭).
+  function handleShrinkRadius(): void {
+    const index = RADIUS_STEPS.findIndex(
+      (entry) => entry.key === selectedRadiusKey
+    );
+    const prev = RADIUS_STEPS[index - 1];
+    if (prev === undefined) return;
+    setSelectedRadiusKey(prev.key);
+    requestCandidates(concept, prev.key);
   }
 
   function handleChangeConcept(): void {
@@ -212,6 +311,8 @@ export function SlotFillPage({
     return (
       <ConceptPickerScreen
         concepts={CONCEPTS}
+        progress={conceptProgress()}
+        stepperSlot={conceptStepper()}
         slotContextLabel={slotContextLabel()}
         onPickConcept={handlePickConcept}
         onSkip={handleSkip}
@@ -234,10 +335,18 @@ export function SlotFillPage({
       canExpandRadius={selectedRadiusKey !== MAX_RADIUS_KEY}
       isPending={isPending}
       errorMessage={errorMessage}
+      // h09 진행 줄·스텝퍼(GET 캐시 도출) 재사용 — 후보 얼굴에도 내린다(D9). 첫 슬롯이면
+      // conceptStepper()가 undefined 라 스텝퍼는 미렌더(h09 승계). concept 은 앱바 제목으로.
+      concept={concept}
+      progress={conceptProgress()}
+      stepperSlot={conceptStepper()}
+      // mapView 는 전달하지 않는다 — candidates 응답에 좌표가 없어 프로덕션은 지도 미표시(정직 degrade,
+      // D6). 지도 픽스처는 프리뷰 전용.
       onSelectRadius={handleSelectRadius}
       onSelectRadio={setSelectedPoiId}
       onConfirm={handleConfirm}
       onExpandRadius={handleExpandRadius}
+      onShrinkRadius={handleShrinkRadius}
       onChangeConcept={handleChangeConcept}
       onBack={handleChangeConcept}
     />

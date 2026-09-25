@@ -1,0 +1,17 @@
+<div class="table-wrap"><table><caption>현재 브랜치의 실제 환경 차이</caption><thead><tr><th>항목</th><th>DEV</th><th>PRD</th><th>의미</th></tr></thead><tbody>
+<tr><td>리소스 이름</td><td><code>trippilot-dev</code></td><td><code>trippilot-prd</code></td><td>환경별 이름·ARN·state 구분</td></tr>
+<tr><td>VPC CIDR</td><td><code>10.40.0.0/16</code></td><td><code>10.50.0.0/16</code></td><td>환경 네트워크 범위 분리</td></tr>
+<tr><td>AZ / NAT</td><td>2 AZ / NAT 1개</td><td>3 AZ / AZ별 NAT 1개</td><td>DEV 비용 절약, PRD 외부 통신 경로의 AZ 의존 분산</td></tr>
+<tr><td>RDS 크기</td><td><code>db.t4g.small</code></td><td><code>db.t4g.medium</code></td><td>운영 부하에 더 큰 기본 용량</td></tr>
+<tr><td>RDS 스토리지</td><td>초기 20 / 최대 100 GiB</td><td>초기 100 / 최대 1000 GiB</td><td>자동 확장 상한도 다름</td></tr>
+<tr><td>RDS 가용성·보호</td><td>단일 AZ, 삭제 보호 꺼짐, 최종 snapshot 생략</td><td>Multi-AZ, 삭제 보호, 최종 snapshot 유지</td><td>PRD 데이터 복구와 삭제 실수 방어</td></tr>
+<tr><td>RDS 백업</td><td>1일</td><td>14일</td><td>복구 가능한 보관 기간</td></tr>
+<tr><td>Redis</td><td><code>cache.t4g.micro</code>, 1노드</td><td><code>cache.t4g.small</code>, 총 3노드</td><td>PRD primary 1 + replica 2, Multi-AZ·자동 failover</td></tr>
+<tr><td>Redis snapshot</td><td>1일</td><td>7일</td><td>환경별 보관 기간</td></tr>
+<tr><td>EKS 로그 / 삭제 보호</td><td>14일 / 꺼짐</td><td>90일 / 켜짐</td><td>운영 감사와 복구 판단에 필요한 정보</td></tr>
+<tr><td>Secret 복구 기간</td><td>7일</td><td>30일</td><td>Secret 삭제 후 복구 가능한 기간</td></tr>
+</tbody></table></div>
+<p>공통으로 RDS는 public endpoint를 허용하지 않고 스토리지를 암호화하며 PostgreSQL TLS를 요구한다. Redis도 저장 데이터와 전송 구간을 암호화한다. 데이터 서브넷의 route table에는 Internet Gateway나 NAT로 향하는 기본 경로가 없다. EKS 노드는 private compute subnet에서 동작하며 public subnet에는 외부 요청을 받는 NLB와 NAT 같은 구성요소가 놓인다. NAT는 private 영역에서 시작한 외부 통신을 지원하는 구성이지 애플리케이션의 외부 진입점이 아니다.</p>
+<p>EKS는 Auto Mode를 사용하고 cluster의 compute·storage·load balancing 설정을 함께 켠다. private node와 private Kubernetes API는 다른 설정이다. 현재 Kubernetes API는 private endpoint와 public endpoint를 모두 활성화하고 기본 public CIDR은 <code>0.0.0.0/0</code>이다. GitHub 호스팅 러너가 관리 API에 접근해야 하기 때문이다. IAM 인증과 EKS Access Entry가 접근을 통제하며 고정 egress IP의 러너를 도입한다면 CIDR을 함께 좁힐 수 있다.</p>
+<p>현재 코드에 ECR은 backend·ai·embedding 세 저장소가 항상 생성된다. 임베딩 애플리케이션을 배포할지는 workflow의 별도 옵션이다. 인프라가 준비되었다고 해당 기능의 모든 애플리케이션 코드가 활성화되는 것은 아니다. 예를 들어 Redis 인프라는 정의되어 있지만 저장소 가이드 기준 backend의 Redis adapter는 아직 구현되지 않았다.</p>
+<p>환경을 다른 이름·VPC·state·역할로 분리하는 것과 서로 다른 AWS 계정으로 격리하는 것은 수준이 다르다. 현재 구성은 둘 다 선택할 수 있지만 같은 계정에서는 계정·리전 수준 조회 API와 서비스 역할 등 일부 범위가 공유된다. 운영을 강하게 격리하려면 환경별 AWS 계정과 그에 맞는 bootstrap을 사용한다. 위 수치는 이 브랜치의 설계 값이며 보편적인 모든 서비스의 정답은 아니다.</p>

@@ -126,22 +126,70 @@ export function RetryGlyph({
   );
 }
 
-/** ⤴ 공유(j03 헤더, TRIP-574) — 종료·요약된 여행에서만 활성(코랄), 아니면 muted. */
-export function ShareGlyph({
-  size = 22,
-  muted = false,
-}: {
-  size?: number;
-  muted?: boolean;
-}): ReactElement {
-  const color = muted ? MUTED : CORAL;
+/**
+ * TRIP-762 · 기분 3택 글리프(아쉬워요 / 괜찮았어요 / 좋았어요) — 날씨 은유(흐림 → 반쯤 갬 → 맑음).
+ * 선택 시 코랄 원 배경 위 흰색, 미선택 시 회색 원 위 회색 — 색(raw hex)은 이 `*Glyphs.tsx` 안에만
+ * 둔다(raw-hex 스캔 제외 관례). fill 은 심판 대상이 아니고(글리프 함정), 선택은 화면 Pressable 의
+ * `accessibilityState.selected` 로 잠근다.
+ */
+
+const WHITE = '#FFFFFF';
+type MoodGlyphProps = { size?: number; selected?: boolean };
+
+/** 아쉬워요 — 흐린 구름. */
+export function MoodSadGlyph({
+  size = 26,
+  selected = false,
+}: MoodGlyphProps): ReactElement {
+  const color = selected ? WHITE : MUTED;
   return (
-    <Svg width={size} height={size} viewBox="0 0 22 22" fill="none">
-      <Circle cx={6} cy={11} r={2.4} stroke={color} strokeWidth={1.9} />
-      <Circle cx={16} cy={5.5} r={2.4} stroke={color} strokeWidth={1.9} />
-      <Circle cx={16} cy={16.5} r={2.4} stroke={color} strokeWidth={1.9} />
+    <Svg width={size} height={size} viewBox="0 0 28 28" fill="none">
       <Path
-        d="M8.1 9.9L13.9 6.6M8.1 12.1L13.9 15.4"
+        d="M8.5 20.5H18.5C21 20.5 23 18.5 23 16C23 13.6 21.1 11.6 18.7 11.5C18 8.6 15.4 6.5 12.3 6.5C8.7 6.5 5.8 9.4 5.8 13C5.8 13.3 5.8 13.6 5.9 13.9C4.2 14.6 3 16.2 3 18.1C3 19.5 4.1 20.5 5.5 20.5H8.5Z"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/** 괜찮았어요 — 해가 구름 뒤로 반쯤. */
+export function MoodSosoGlyph({
+  size = 26,
+  selected = false,
+}: MoodGlyphProps): ReactElement {
+  const color = selected ? WHITE : MUTED;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 28 28" fill="none">
+      <Circle cx={10.5} cy={10} r={4} stroke={color} strokeWidth={1.6} />
+      <Path
+        d="M10.5 2.5V4M4 10H2.5M5.4 4.9L4.4 3.9M15.6 4.9L16.6 3.9"
+        stroke={color}
+        strokeWidth={1.6}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M11 22.5H19.5C21.4 22.5 23 20.9 23 19C23 17.2 21.6 15.7 19.8 15.5C19.3 13.3 17.4 11.7 15 11.7C12.6 11.7 10.6 13.4 10.2 15.6C8.6 15.9 7.5 17.3 7.5 19C7.5 20.9 9 22.5 11 22.5Z"
+        stroke={color}
+        strokeWidth={1.7}
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/** 좋았어요 — 맑은 해. */
+export function MoodGoodGlyph({
+  size = 26,
+  selected = false,
+}: MoodGlyphProps): ReactElement {
+  const color = selected ? WHITE : MUTED;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 28 28" fill="none">
+      <Circle cx={14} cy={14} r={5} stroke={color} strokeWidth={1.9} />
+      <Path
+        d="M14 3.5V6M14 22V24.5M3.5 14H6M22 14H24.5M6.6 6.6L8.4 8.4M19.6 19.6L21.4 21.4M21.4 6.6L19.6 8.4M8.4 19.6L6.6 21.4"
         stroke={color}
         strokeWidth={1.9}
         strokeLinecap="round"

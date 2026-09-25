@@ -122,6 +122,20 @@ export function formatTripDateRange(
   return `${head}${EN_DASH}${em}.${ed}`;
 }
 
+/** '6.10–6.12'(연도 생략·점·무공백 en dash). j07 legend 전용 — legend 는 이번 달 축이라 연도가 군더더기다.
+ *  연도만 접는 formatTripDateRange 와 달리 **양쪽 월을 항상 표기**하고(같은 달도 둘째 월 안 접음) 연도만 뺀다.
+ *  한쪽이라도 null 이면 못 만들어 null(가짜 날짜 금지). formatTripDateRange(연도 포함)는 무변경 — 규칙이
+ *  갈리니 별개 sibling 함수다(옵션 파라미터로 기존 함수를 흔들지 않는다). */
+export function formatLegendDateRange(
+  start: string | null,
+  end: string | null
+): string | null {
+  if (start === null || end === null) return null;
+  const [, sm, sd] = start.split('-').map(Number);
+  const [, em, ed] = end.split('-').map(Number);
+  return `${sm}.${sd}${EN_DASH}${em}.${ed}`;
+}
+
 /** '6월 10일(수) – 13일(토)'(요일 삽입·공백 en dash·같은 달 생략). 요일은 dayOfWeek(에포크 산술)로
  *  구해 시계를 안 읽는다. summaryPeriod 가 여기에 ' · N박 M일'을 이어 붙인다. */
 export function formatDateRangeWithDow(

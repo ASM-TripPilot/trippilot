@@ -3,9 +3,9 @@
 # 이 파일(트리거 등록)은 main, 실행 코드는 항상 develop. develop 쪽 원본 갱신 시 이 사본도 동기화할 것.
 # detailIntro2 응답 관측 — 필드명·채움률 (TRIP-683)
 #
-# `fetch_hours()` 는 이 엔드포인트를 항목당 1콜 부르면서 응답에서 **필드 2개만
-# 읽고 나머지를 버린다**. 그 안에 무엇이 더 있는지 리포에 기록이 없고, fake 도
-# 우리가 읽는 2필드만 흉내내므로 **실물이 바뀌어도 테스트는 초록**이다.
+# `fetch_detail()` 는 이 엔드포인트를 항목당 1콜 부르면서 응답에서 **채택 목록의
+# 필드만 읽고 나머지를 버린다**. 그 밖에 무엇이 오는지 리포에 기록이 없고, fake 도
+# 우리가 읽는 필드만 흉내내므로 **실물이 바뀌어도 테스트는 초록**이다.
 #
 # 수집 배치에 얹지 않은 이유: 파이프라인은 "기제안·변경 없음이면 상세 호출도 안
 # 나간다"를 불변식으로 지키고 테스트 3건이 물고 있다(쿼터 절약의 본체). 지금
@@ -34,6 +34,16 @@ on:
         required: false
         default: '12,14,28,38,39'
         type: string
+      from_doc:
+        description: '제안 문서에서 content_id 를 뽑는다 (목록 호출 0 · area 무시). 빈 값이면 목록으로 훑는다'
+        required: false
+        default: ''
+        type: string
+      dump:
+        description: '원문을 전부 남길 필드 쉼표 목록 (예: usefee,parkingfee). 채택 목록 안의 것만'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -58,11 +68,15 @@ jobs:
           TOUR_API_KEY2: ${{ secrets.TOUR_API_KEY2 }}
           TOUR_API_KEY3: ${{ secrets.TOUR_API_KEY3 }}
         run: |
-          uv run python scripts/probe_intro2.py \
-            --area "${{ inputs.area }}" \
-            --per-kind "${{ inputs.per_kind }}" \
-            --kinds "${{ inputs.kinds }}" \
-            --out intro2.json | tee -a "$GITHUB_STEP_SUMMARY"
+          # `| tee` 가 파이프 앞 종료 코드를 삼킨다 — 프로브가 실패해도 스텝이 초록이 된다(실측).
+          set -o pipefail
+          args=(--area "${{ inputs.area }}"
+                --per-kind "${{ inputs.per_kind }}"
+                --kinds "${{ inputs.kinds }}"
+                --out intro2.json)
+          [ -n "${{ inputs.from_doc }}" ] && args+=(--from-doc "${{ inputs.from_doc }}")
+          [ -n "${{ inputs.dump }}" ] && args+=(--dump "${{ inputs.dump }}")
+          uv run python scripts/probe_intro2.py "${args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: 결과 보존
         if: always()

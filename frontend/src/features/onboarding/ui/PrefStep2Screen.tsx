@@ -3,7 +3,8 @@
  * props 만 받고 스토어·네트워크를 모른다. 예산(단일)+동행·활동·음식·이동(복수) 5블록.
  * 동행·이동·음식·활동 값 도메인은 요구사항 정본(US-ONB-07~10 + §PreferenceSet + openapi)이
  * 쥐며, 라이브 Figma(1774:2258)는 옛 세트를 그린 낡은 사본이라 근거가 아니다(TRIP-254 §드리프트).
- * back chevron은 Q4 결정으로 2/2 화면에만 둔다(1/2는 back 없음).
+ * TRIP-719: Q4 번복 — Figma 1774:2258 에 back chevron 이 없어 제거(1/2·2/2 둘 다 back 없음).
+ * 진행점은 2/2 라 둘 다 primary, 하단 스킵 링크도 Figma 부재라 제거(탈출구는 상단 하나, US-ONB-11).
  */
 import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
@@ -13,7 +14,6 @@ import { PrefChip } from '@/shared/ui/pref/PrefChip';
 import { PrefTile } from '@/shared/ui/pref/PrefTile';
 
 import {
-  BackChevronGlyph,
   BikeGlyph,
   CarGlyph,
   CheckGlyph,
@@ -42,7 +42,6 @@ export interface PrefStep2ScreenProps {
   onToggleActivity: (id: string) => void;
   onToggleFood: (id: string) => void;
   onToggleTransport: (id: string) => void;
-  onBack: () => void;
   onDone: () => void;
   onSkipAll: () => void;
 }
@@ -226,7 +225,6 @@ export function PrefStep2Screen({
   onToggleActivity,
   onToggleFood,
   onToggleTransport,
-  onBack,
   onDone,
   onSkipAll,
 }: PrefStep2ScreenProps): ReactElement {
@@ -235,19 +233,17 @@ export function PrefStep2Screen({
       <View testID="onboarding-pref2-root" className="flex-1 bg-canvas">
         <View className="flex-row items-center justify-between px-lg pb-sm pt-2xl">
           <View className="flex-row items-center gap-sm">
-            <Pressable
-              testID="onboarding-pref2-back"
-              accessibilityRole="button"
-              onPress={onBack}
-              hitSlop={8}
-            >
-              <BackChevronGlyph size={22} />
-            </Pressable>
             <View className="flex-row items-center gap-xs">
-              <View className="h-[6px] w-[6px] rounded-pill bg-hairline-strong" />
-              <View className="h-[6px] w-[6px] rounded-pill bg-ink" />
+              <View
+                testID="onboarding-pref2-progress-1"
+                className="h-[6px] w-[6px] rounded-pill bg-primary"
+              />
+              <View
+                testID="onboarding-pref2-progress-2"
+                className="h-[6px] w-[6px] rounded-pill bg-primary"
+              />
             </View>
-            <Text className="font-noto text-caption text-muted">2/2</Text>
+            <Text className="font-noto text-caption text-muted">2 / 2</Text>
           </View>
           <Pressable
             testID="onboarding-pref2-skip-top"
@@ -417,16 +413,6 @@ export function PrefStep2Screen({
           >
             <Text className="font-noto-bold text-section font-bold text-on-primary">
               완료
-            </Text>
-          </Pressable>
-          <Pressable
-            testID="onboarding-pref2-skip-bottom"
-            accessibilityRole="button"
-            onPress={onSkipAll}
-            className="items-center pb-[2px] pt-[14px]"
-          >
-            <Text className="font-noto text-center text-label text-muted underline">
-              나중에 설정하고 시작
             </Text>
           </Pressable>
         </View>

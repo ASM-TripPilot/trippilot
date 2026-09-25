@@ -6,8 +6,13 @@ import { Text, View } from 'react-native';
  *
  * ★ INV-3 강제 형태: 숫자·단위를 **값 인터폴레이션**으로만 그린다(`value`·`unit` prop). 소스에 리터럴
  * `72분` 같은 숫자+분 문자열을 두지 않아 기존 INV-3 가드(reflectionStructure G6·reflectionSummaryStructure
- * AC-4·travelStyleStructure)가 무수정 통과한다. 값과 단위는 **한 Text** 로 이어 붙여(`{value}{unit}`)
- * 렌더 텍스트가 `72분` 한 덩어리가 되게 한다(개별 Text 로 쪼개면 `getByText(/72분/)` 가 못 잡는다).
+ * AC-4·travelStyleStructure)가 무수정 통과한다.
+ *
+ * ★ TRIP-765 2톤: 숫자(22 bold ink)와 단위(15 regular muted)를 **중첩** `<Text>`(바깥 Text 안에 단위
+ * Text 를 넣는다 — `<Text>{value}<Text>{unit}</Text></Text>`)로 그린다. 바깥이 자식 문자열을 이어 붙여
+ * 렌더 텍스트는 `72분` 한 덩어리라 `getByText(/72분/)` 가 잡고, 단위는 별도 leaf 노드라 크기·색을 따로
+ * 준다. 형제(`<View><Text>72</Text><Text>분</Text></View>`)로 쪼개면 이어 붙지 않아 `getByText(/72분/)`
+ * 가 못 잡는다(카드 크롬은 흰 배경+hairline 테두리+r14 — bg-surface-soft 무테에서 교체).
  */
 
 export interface StatTileProps {
@@ -26,11 +31,13 @@ export function StatTile({
   return (
     <View
       testID={testID}
-      className="flex-1 gap-[6px] rounded-card bg-surface-soft px-lg py-[18px]"
+      className="flex-1 gap-[6px] rounded-[14px] border border-hairline bg-canvas px-lg py-[18px]"
     >
-      <Text className="font-noto-bold text-[24px] font-bold text-ink">
+      <Text className="font-noto-bold text-[22px] font-bold text-ink">
         {value}
-        {unit}
+        <Text className="font-noto text-[15px] font-normal text-muted">
+          {unit}
+        </Text>
       </Text>
       <Text className="font-noto text-label text-muted">{label}</Text>
     </View>

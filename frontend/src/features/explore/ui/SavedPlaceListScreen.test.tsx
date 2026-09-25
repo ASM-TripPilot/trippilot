@@ -298,9 +298,11 @@ describe('T-8 · 빈 상태 (E-1·E-2·E-3 · 01b Seed Q4·Q5)', () => {
     expect(
       within(empty).getByText('마음에 드는 곳을 담아 보세요')
     ).toBeOnTheScreen();
+    // TRIP-705: 서브카피가 명시 줄바꿈(\n) 2줄이다(Figma 1695:1183). 한 Text 안 \n 이라
+    // getByText 는 \n 포함 정확 문자열로 잡는다.
     expect(
       within(empty).getByText(
-        '부산 인기 장소를 둘러보고 ♥로 담으면 여기에 모여 바로 여행이 돼요'
+        '부산 인기 장소를 둘러보고 ♥로 담으면\n여기에 모여 바로 여행이 돼요'
       )
     ).toBeOnTheScreen();
 
@@ -309,8 +311,13 @@ describe('T-8 · 빈 상태 (E-1·E-2·E-3 · 01b Seed Q4·Q5)', () => {
       within(empty).getByTestId('explore-saved-empty-art')
     ).toBeOnTheScreen();
 
+    // CTA 는 돋보기 아이콘 + "장소 둘러보기"(Figma). 아이콘은 SVG 라 라벨로만 못 재고,
+    // 버튼 서브트리에 SVG(Path) 가 실제로 있는지로 아이콘 배선을 잠근다.
     const browse = screen.getByTestId('explore-saved-browse');
     expect(within(browse).getByText('장소 둘러보기')).toBeOnTheScreen();
+    expect(
+      within(browse).getByTestId('explore-saved-browse-icon')
+    ).toBeOnTheScreen();
     fireEvent.press(browse);
     expect(onPressBrowse).toHaveBeenCalledTimes(1);
 
@@ -355,11 +362,12 @@ describe('T-9 · 낙관 삽입 항목의 testID 에는 콜론이 섞인다 (01b 
   });
 });
 
-describe('T-10 · loading 얼굴 (01b Seed Q6)', () => {
-  it('스켈레톤 4장이 뜨고 다른 얼굴은 나오지 않는다', () => {
+describe('T-10 · loading 얼굴 (01b Seed Q6 · TRIP-705 Figma 3614:2032)', () => {
+  it('스켈레톤 6행 + 앱바 서브텍스트 + 회색 disabled CTA, 다른 얼굴은 없다', () => {
     renderScreen({ savedPlaces: [], state: { kind: 'loading' } });
 
     expect(screen.getByTestId('explore-saved-loading')).toBeOnTheScreen();
+    // TRIP-705: 4행 → 6행(Figma).
     expect(
       screen
         .queryAllByTestId(/^explore-saved-skeleton-/)
@@ -369,8 +377,25 @@ describe('T-10 · loading 얼굴 (01b Seed Q6)', () => {
       'explore-saved-skeleton-1',
       'explore-saved-skeleton-2',
       'explore-saved-skeleton-3',
+      'explore-saved-skeleton-4',
+      'explore-saved-skeleton-5',
     ]);
-    expect(screen.getByText('담은 장소를 불러오는 중')).toBeOnTheScreen();
+    // 서브텍스트는 본문이 아니라 앱바로 이동했고 문구도 바뀌었다("담은 곳 불러오는 중").
+    expect(
+      within(screen.getByTestId('explore-saved-subtitle')).getByText(
+        '담은 곳 불러오는 중'
+      )
+    ).toBeOnTheScreen();
+    expect(screen.queryByText('담은 장소를 불러오는 중')).toBeNull();
+
+    // CTA 는 자리를 지키되 비활성(누를 수 없다, Figma). accessibilityState.disabled 를 잠그고
+    // (toBeDisabled) press 가 콜백을 안 올리는 것까지 확인한다 — RNTL 은 비활성 요소의 press 를
+    // 삼킨다. (raw `disabled` prop 은 Pressable 이 host 노드에서 accessibilityState 로 흡수해
+    // jest 로 직접 못 본다 — 실제 네이티브 제스처 차단은 viewOnly 계열 6-b 사각, code-critic 경고-2.)
+    const cta = screen.getByTestId('explore-saved-createtrip');
+    expect(cta).toBeDisabled();
+    fireEvent.press(cta);
+    expect(onPressCreateTrip).not.toHaveBeenCalled();
 
     // 부정 짝 — 두 얼굴을 동시에 보이면 사용자가 무엇이 참인지 모른다.
     expect(screen.queryByTestId('explore-saved-empty')).toBeNull();

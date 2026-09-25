@@ -3,6 +3,7 @@ package com.trippilot.accommodationsearch.adapter.out.persistence
 import com.trippilot.accommodationsearch.domain.AccommodationContentPort
 import com.trippilot.accommodationsearch.domain.ContentResult
 import com.trippilot.accommodationsearch.domain.Stay
+import com.trippilot.accommodationsearch.domain.StayKey
 import com.trippilot.placedata.api.RegionLookupFacade
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.data.domain.PageRequest
@@ -77,5 +78,15 @@ class DbContentAdapter(
         // 그 사실은 응답이 따로 알린다(StaySearchResponse.amenitiesKnown).
         amenities = amenities.toSet(),
         stayType = stayType,
+        address = address,
+        phone = phone,
+        rooms = rooms,
     )
+
+    /**
+     * 한 건 조회. 복합 PK(`source`,`externalId`) 라 [StayId] 로 바로 집는다 —
+     * 지역 조회를 거쳐 거르면 상세 한 번에 정본 전량을 읽게 된다.
+     */
+    override fun findOne(key: StayKey): Stay? =
+        jpa.findById(StayId(key.externalSource, key.externalId)).orElse(null)?.toDomain()
 }

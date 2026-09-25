@@ -39,7 +39,9 @@ const place = (
   dataStatus,
 });
 
-/** 2열 그리드가 3행 차도록 6장. 카테고리·태그·저장수를 흩어 카드 변형을 한눈에 본다. */
+/** 2열 그리드가 3행 차도록 6장(TRIP-708: Figma 1692:1183 default 순서 — 감천·광안리·해운대
+ * 해변·전포·해동용궁사·자갈치). p-9(해운대 해변)·p-10(해동용궁사)은 705 `PREVIEW_SAVED_PLACES`가
+ * 이미 쓴 poiId·이름·지역과 맞춘다(같은 곳이면 같은 poiId 재사용). imageUrl 은 전부 null. */
 export const PREVIEW_PLACES: Place[] = [
   place('p-1', '감천문화마을', PoiCategory.명소, '사하구', ['감성 골목'], 1284),
   place(
@@ -50,56 +52,88 @@ export const PREVIEW_PLACES: Place[] = [
     ['바다', '야경'],
     2077
   ),
+  place('p-9', '해운대 해변', PoiCategory.자연, '해운대구', ['바다'], 3120),
   place('p-3', '전포 카페거리', PoiCategory.카페, '부산진구', ['카페'], 934),
+  place('p-10', '해동용궁사', PoiCategory.명소, '기장군', ['명소'], 1640),
   place('p-4', '자갈치시장', PoiCategory.맛집, '중구', ['미식'], 1502),
-  place('p-5', '황령산 전망대', PoiCategory.야경, '남구', ['야경'], 611),
-  place('p-6', '해운대 블루라인', PoiCategory.명소, '해운대구', ['바다'], 1810),
 ];
 
-/** 담긴 상태 2장 — 하트 채움 + "담음" 배지 + 하단 CTA 숫자를 동시에 보이게 한다. */
-export const PREVIEW_SAVED_POI_IDS: string[] = ['p-2', 'p-4'];
+/** 담긴 상태 3장(감천·해운대·자갈치) — 하트 채움 + "담음" 배지를 프리뷰에서 확인하게 한다. */
+export const PREVIEW_SAVED_POI_IDS: string[] = ['p-1', 'p-9', 'p-4'];
 
 /**
  * d02 목록. `savedAt` 오름차순이 담은 순서이고 순번 배지 1..N 이 그 뜻이다.
  * 폐업·미검증을 한 건씩 섞어 `dataStatus` 배지 두 종을 프리뷰에서 확인할 수 있게 한다
  * (담기 목록은 ACTIVE 가 아닌 것도 포함한다 — 계약 스키마 설명).
  */
+// TRIP-705: Figma 1693:1183 default 6행(감천문화마을·광안리·전포·해운대·해동용궁사·자갈치).
+// 전부 ACTIVE·imageUrl null — Figma default 엔 dataStatus 배지가 없다(배지 표본은 실화면에
+// 맡긴다, 티켓). savedAt 오름차순 = 담은 순서(순번 배지 1..6).
 export const PREVIEW_SAVED_PLACES: SavedPlace[] = [
   {
     savedPlaceId: 'sp-1',
     savedAt: '2026-08-01T09:00:00Z',
-    place: PREVIEW_PLACES[1],
+    place: place(
+      'p-1',
+      '감천문화마을',
+      PoiCategory.명소,
+      '사하구',
+      ['감성 골목'],
+      1284
+    ),
   },
   {
     savedPlaceId: 'sp-2',
     savedAt: '2026-08-02T10:30:00Z',
-    place: PREVIEW_PLACES[3],
+    place: place(
+      'p-2',
+      '광안리 해변',
+      PoiCategory.자연,
+      '수영구',
+      ['야경'],
+      2077
+    ),
   },
   {
     savedPlaceId: 'sp-3',
     savedAt: '2026-08-03T14:15:00Z',
     place: place(
-      'p-7',
-      '초량 이바구길',
-      PoiCategory.명소,
-      '동구',
-      ['감성 골목'],
-      402,
-      PlaceDataStatus.UNVERIFIED
+      'p-3',
+      '전포 카페거리',
+      PoiCategory.카페,
+      '부산진구',
+      ['카페'],
+      934
     ),
   },
   {
     savedPlaceId: 'sp-4',
     savedAt: '2026-08-04T18:40:00Z',
     place: place(
-      'p-8',
-      '옛 백제병원 카페',
-      PoiCategory.카페,
-      '동구',
-      ['카페'],
-      158,
-      PlaceDataStatus.CLOSED
+      'p-9',
+      '해운대 해변',
+      PoiCategory.자연,
+      '해운대구',
+      ['바다'],
+      3120
     ),
+  },
+  {
+    savedPlaceId: 'sp-5',
+    savedAt: '2026-08-05T11:20:00Z',
+    place: place(
+      'p-10',
+      '해동용궁사',
+      PoiCategory.명소,
+      '기장군',
+      ['명소'],
+      1640
+    ),
+  },
+  {
+    savedPlaceId: 'sp-6',
+    savedAt: '2026-08-06T16:05:00Z',
+    place: place('p-4', '자갈치시장', PoiCategory.맛집, '중구', ['미식'], 1502),
   },
 ];
 
@@ -107,7 +141,7 @@ export const PREVIEW_SAVED_PLACES: SavedPlace[] = [
  * d1b·e00 지역 선택(TRIP-445 · TRIP-597) 프리뷰 표본 — 서버 `GET /regions` 응답과 같은 shape.
  *
  * 왜 있나: results 얼굴을 실화면 딥링크로는 볼 수 없다(백엔드 401이면 항상 에러 얼굴). 프리뷰가
- * props에 이 값을 직접 넣어 세 갈래 카드를 한눈에 그린다 — 선택 가능(poiCount>0)·**준비 중**
+ * props에 이 값을 직접 넣어 세 갈래 카드를 한눈에 그린다 — 선택 가능(poiCount>0)·**추천 장소 없음**
  * (poiCount=0)·**묶음 행**(selectable=false 도/행정구)을 일부러 섞었다. `regionCode`는 서버가
  * 주는 법정동코드 앞자리(숫자문자열)라 구 슬러그('busan')와 성격이 다르다(D2, 해시 tint 표본).
  *
@@ -116,7 +150,7 @@ export const PREVIEW_SAVED_PLACES: SavedPlace[] = [
  *  · 인천(28) SIDO 선택 가능 + 미추홀구·연수구 → happy path('인천 전체' 선택 가능 + 구/군 카드).
  *  · 서울·부산·제주(SIDO, 하위 없음) → '전체'만(엣지② sigungu 빈 그룹).
  *  · 강원(51*)은 홍천군만·SIDO 행 부재 → 방어(엣지③ sido=null, '전체' 선택 행 없음).
- *  · 충북(43, selectable=false) → '전체'가 묶음 행 + 청주시 상당구 "준비 중"(선택 불가 두 갈래).
+ *  · 충북(43, selectable=false) → '전체'가 묶음 행 + 청주시 상당구 "추천 장소 없음"(선택 불가 두 갈래).
  */
 export const PREVIEW_REGIONS: Region[] = [
   {
@@ -185,7 +219,7 @@ export const PREVIEW_REGIONS: Region[] = [
     selectable: false,
     poiCount: 12,
   },
-  // 후보풀이 빈 지역 — "준비 중"으로 그려지고 선택 불가(poiCount=0, INV-1).
+  // 후보풀이 빈 지역 — "추천 장소 없음"으로 그려지고 선택 불가(poiCount=0, INV-1).
   {
     regionCode: '43111',
     name: '청주시 상당구',

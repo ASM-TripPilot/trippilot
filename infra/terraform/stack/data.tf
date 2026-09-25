@@ -1,6 +1,6 @@
 resource "aws_security_group" "postgres" {
   name        = "${local.name}-postgres"
-  description = "PostgreSQL access only from this environment's EKS nodes"
+  description = "PostgreSQL access only from this environment EKS nodes"
   vpc_id      = aws_vpc.this.id
 }
 
@@ -65,7 +65,7 @@ resource "aws_db_instance" "postgres" {
 
 resource "aws_security_group" "redis" {
   name        = "${local.name}-redis"
-  description = "TLS Redis access only from this environment's EKS nodes"
+  description = "TLS Redis access only from this environment EKS nodes"
   vpc_id      = aws_vpc.this.id
 }
 

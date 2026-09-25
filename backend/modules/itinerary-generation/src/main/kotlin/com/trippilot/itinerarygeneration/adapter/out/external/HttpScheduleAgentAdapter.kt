@@ -10,7 +10,10 @@ import com.trippilot.itinerarygeneration.domain.ReplanInput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
 import com.trippilot.itinerarygeneration.domain.TimeWindow
 import com.trippilot.itinerarygeneration.domain.TripContext
+import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
+import com.trippilot.itinerarygeneration.domain.SlotExplanations
+import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesInput
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesOutput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
@@ -105,7 +108,7 @@ class HttpScheduleAgentAdapter(
      * **실패를 삼킨다.** 근거가 없다고 일정을 죽이면 사용자가 잃는 것이 더 크다. 대신 조용히
      * 지나가지 않게 로그로 남긴다(INV-4) — 근거가 통째로 비는 화면은 눈에 띄지만 원인은 안 보인다.
      */
-    override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): Map<String, String> =
+    override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): SlotExplanations =
         runCatching {
             post(
                 EXPLANATIONS_PATH,
@@ -119,8 +122,14 @@ class HttpScheduleAgentAdapter(
             if (res.isFallback) {
                 log.info("추천 근거가 폴백입니다 — reason={} tripId={}", res.reason, tripId)
             }
-            res.explanations
-        } ?: emptyMap()
+            // **차선책 문장이 비는 것은 흔한 정상이다**(차선책 자체가 없는 일정이 대부분). 다만 사유가
+            // 실려 오면 남긴다 — `slot_explanations_unavailable`·`no_registered_alternatives`·`deadline:…`
+            // 로 "왜 안 왔나"가 갈리는데, 안 적으면 빈 맵만 보고 우리 배선을 의심하게 된다.
+            if (res.alternativesReason != null) {
+                log.info("차선책 문장이 비었습니다 — reason={} tripId={}", res.alternativesReason, tripId)
+            }
+            SlotExplanations(slots = res.explanations, alternatives = res.alternativeExplanations)
+        } ?: SlotExplanations()
 
     /**
      * 최소 조정 수리 — 시각·순서만 바꾸고 POI 는 불변이다(BR-U3-14).
@@ -147,46 +156,94 @@ class HttpScheduleAgentAdapter(
     }
 
     /**
-     * 재계획(정본 §3.1) — **상대에 새 경로를 요구하지 않는다.** 잠금 슬롯을 고정 블록으로 승격해
-     * 이미 열려 있는 `generate` 를 그대로 쓴다(HC3 가 그 시각을 지킨다).
+     * 재계획 — **전용 경로**(`POST /ai/v1/itinerary/replan` · 연동 설계 §2).
      *
-     * ⚠ `reasons`·`directives`·`freeText`, 그리고 B-1 로 조립되기 시작한 다섯
-     * (`companionType`·`budgetLevel`·`preferenceProfile`·`currentSlots`·`savedPlaces`)은 **아직
-     * 보내지 않는다** — 상대 요청 계약(`ai/docs/openapi.json` `GenerateItineraryRequest`)에 실을 자리가
-     * 없다. 없는 필드를 지어내면 422 로 전 호출이 폴백된다(그 드리프트는 `AiBoundaryOpenApiTest` 가
-     * 막는다). 전용 경로(`/ai/v1/itinerary/replan`, 연동 설계 `ai-backend-replan-연동-설계.md`)가
-     * 상대 계약에 출하되면 이 메서드가 그 경로로 옮겨 가며 전부 싣는다 — 그때까지 취향은 이 경로에서
-     * NEUTRAL 로 나간다(§1 문제 ②의 마지막 잔재).
+     * 종전에는 잠금을 고정 블록으로 승격해 `generate` 를 재사용했다. 그 계약에는 자리가 없어
+     * **사유·지시·자유입력·원 일정 슬롯·담은 장소가 전부 버려졌다** — 상대는 그것들을 RAG 컨텍스트와
+     * 후보 가중치로 쓰므로, 버리는 동안 재계획 품질에 구조적 천장이 있었다(설계 §1).
+     *
+     * 이제 열 종을 다 싣는다. 창은 여전히 **하루 전체**이고 '지금 이후만' 은 잠금으로 표현한다
+     * (정본 §3.1) — 창을 좁히면 오전에 잠긴 고정 블록이 창 밖이 되어 상대가 모순으로 거부한다(실측 409).
+     *
+     * **앵커는 필수다.** 상대가 후보 풀을 좌표에 매단다 — 없으면 422 다(실측). 기준점은 현재 위치이고
+     * 없으면 호출측이 숙소 앵커로 채워 준다(BR-U4-19 사다리). 그래서 여기서 좌표가 비면 **부르기 전에**
+     * 실패로 올린다 — 빈 앵커로 부르면 상대의 422 가 "AI 가 이상하다"로 보인다.
      */
     override fun replan(input: ReplanInput): ScheduleAgentOutput {
-        val generateInput = ScheduleAgentInput(
-            tripId = input.tripId,
-            generationMode = GenerationMode.FULLY_AI,
-            // **동반·예산을 실어 보낸다.** 둘 다 `ReplanInput` 이 이미 들고 있는데(호출측이
-            // trip 에서 읽어 채운다) 여기서 null 로 덮고 있었다 — 재계획만 조건 없는 사람이 됐다.
+        val lat = input.originLat
+        val lng = input.originLng
+        if (lat == null || lng == null) {
+            throw ScheduleAgentCallFailed(
+                null, retryable = false,
+                message = "재계획 기준점(좌표)이 없습니다 — 상대는 앵커 없이 후보 풀을 만들 수 없습니다.",
+            )
+        }
+
+        val request = AiReplanRequest(
+            tripId = input.tripId.toString(),
             tripContext = TripContext(
                 input.destinations, input.targetDate, input.targetDate,
                 input.companionType, input.budgetLevel,
             ),
-            // 상대는 후보 풀을 좌표에 매단다 — 앵커가 없으면 422 다(실측). 재계획의 기준점은 **현재 위치**이고,
-            // 없으면 호출측이 숙소 앵커로 채워 준다(BR-U4-19 사다리).
-            anchors = listOfNotNull(
-                input.originLat?.let { lat -> input.originLng?.let { lng -> DayAnchor(input.targetDate, lat, lng) } },
-            ),
-            // 창은 **하루 전체**다. '지금 이후만' 은 창을 좁혀서가 아니라 **잠금**으로 표현한다(정본 §3.1) —
-            // 창을 지금부터로 좁히면 오전에 잠긴 고정 블록이 창 밖이 되어 상대가 모순으로 거부한다(실측 409).
-            timeWindows = listOf(TimeWindow(input.targetDate, DAY_START, DAY_END)),
-            fixedBlocks = input.lockedBlocks,
-            // **취향을 중립으로 덮지 않는다(B-1).** 처음 일정은 취향으로 만들고 다시 짤 땐 "취향 없는
-            // 사람"으로 만들던 상태를 끝낸다. 값은 `ReplanInput` 에 이미 실려 있었고 여기서 버렸다.
+            targetDate = input.targetDate,
+            timeWindow = AiTimeWindow(input.targetDate, DAY_START, DAY_END),
+            anchor = AiCoord(lat, lng),
+            scope = input.scope.name,
+            fromInstant = input.fromInstant,
             preferenceProfile = input.preferenceProfile,
-            recommendationStrength = null,
             requestMeta = input.requestMeta,
+            lockedBlocks = input.lockedBlocks,
+            reasons = input.reasons,
+            directives = input.directives,
+            freeText = input.freeText,
+            currentSlots = input.currentSlots.map {
+                AiReplanSlot(
+                    poiId = it.poiId.toString(), startAt = it.startAt, endAt = it.endAt,
+                    isFixed = it.isFixed, endsNextDay = it.endsNextDay, placementReason = it.placementReason,
+                )
+            },
+            savedPlaces = input.savedPlaces.map { AiSavedPlace(it.poiId.toString(), it.name) },
             excludedPoiIds = input.excludedPoiIds,
         )
-        val wire = post(GENERATE_PATH, generateInput, AiScheduleResponse::class.java)
+
+        val res = try {
+            post(REPLAN_PATH, request, AiReplanResponse::class.java)
+        } catch (e: ScheduleAgentCallFailed) {
+            // **상대가 아직 이 경로를 구현하지 않았다**(503 `ORCHESTRATOR_NOT_WIRED`). 계약과 스키마는
+            // 이미 출하됐고 오케스트레이터 배선만 진행 중이다 — 그동안 재계획을 전부 실패로 올리면
+            // 사용자는 "다시 짜기"를 누를 때마다 수동 편집으로 튕긴다. 종전 경로로 한 번 더 시도한다.
+            //
+            // **이 갈래는 상대가 배선을 마치면 지운다**(그날 실 왕복이 200 을 낸다). 남겨 두면 두 경로가
+            // 공존하며 "왜 취향이 가끔만 먹지"를 다시 만든다 — 종전 경로는 열 종 중 다섯을 버린다.
+            if (e.errorCode != NOT_WIRED) throw e
+            log.warn("상대가 재계획 전용 경로를 아직 배선하지 않았습니다(503) — 종전 generate 경로로 내려갑니다. 열 종 중 다섯(사유·지시·자유입력·원 일정·담은 장소)은 이 경로에서 버려집니다.")
+            return legacyReplanViaGenerate(input)
+        }
+
+        // 상대가 못 알아들은 지시는 **드러낸다.** 삼키면 "지시를 넣었는데 왜 안 먹었나"를 못 짚는다.
+        if (res.unknownDirectives.isNotEmpty()) {
+            log.warn("상대가 모르는 지시 {}건 — 사전에 없는 키다: {}", res.unknownDirectives.size, res.unknownDirectives)
+        }
+        if (res.notes.isNotEmpty()) log.info("replan notes: {}", res.notes)
+        if (res.retrieved.isNotEmpty()) log.info("replan KB 적중: {}", res.retrieved)
+
+        // 빈 산출은 **실패가 아니다** — 상대가 "근처에 후보가 없다"를 정상적으로 답한 것이다(i06).
+        // 여기서 던지면 화면이 '대안 없음 3옵션' 대신 오류를 그린다. 빈 일정으로 올리면
+        // 위쪽 `propose` 가 "슬롯 0건 = 해 없음"으로 접는다 — 판정 지점을 늘리지 않는다.
+        val itinerary = res.itinerary ?: run {
+            log.info("재계획 대안 없음 — code={} params={}", res.emptyReason?.code, res.emptyReason?.params)
+            return ScheduleAgentOutput(
+                days = emptyList(), day1ReadyAt = null, explanations = emptyMap(),
+                solveMode = SolveMode.DETERMINISTIC, isFallback = res.isFallback,
+                freshness = FreshnessMeta(clock.instant(), degraded = res.isFallback),
+                totalDistanceKm = res.totalDistanceKm,
+            )
+        }
+
         return try {
-            wire.toDomain(clock.instant()).groundAlternatives()
+            itinerary.toDomain(clock.instant())
+                .copy(totalDistanceKm = res.totalDistanceKm)
+                .groundAlternatives()
         } catch (e: IllegalArgumentException) {
             throw ScheduleAgentCallFailed(null, retryable = false, message = "AI 재계획 응답 스키마 불일치: ${e.message}", cause = e)
         }
@@ -249,6 +306,39 @@ class HttpScheduleAgentAdapter(
         )
     }
 
+    /**
+     * 종전 재계획 — 잠금을 고정 블록으로 승격해 `generate` 를 재사용한다.
+     *
+     * **한시적이다.** 상대가 `replan` 배선을 마치면 이 함수와 위의 503 갈래를 함께 지운다.
+     * 여기서는 사유·지시·자유입력·원 일정·담은 장소를 **실을 자리가 없어 버린다** —
+     * 그래서 취향이 중립은 아니지만(동반·예산·취향은 싣는다) 재계획 의도는 전달되지 않는다.
+     */
+    private fun legacyReplanViaGenerate(input: ReplanInput): ScheduleAgentOutput {
+        val generateInput = ScheduleAgentInput(
+            tripId = input.tripId,
+            generationMode = GenerationMode.FULLY_AI,
+            tripContext = TripContext(
+                input.destinations, input.targetDate, input.targetDate,
+                input.companionType, input.budgetLevel,
+            ),
+            anchors = listOfNotNull(
+                input.originLat?.let { lat -> input.originLng?.let { lng -> DayAnchor(input.targetDate, lat, lng) } },
+            ),
+            timeWindows = listOf(TimeWindow(input.targetDate, DAY_START, DAY_END)),
+            fixedBlocks = input.lockedBlocks,
+            preferenceProfile = input.preferenceProfile,
+            recommendationStrength = null,
+            requestMeta = input.requestMeta,
+            excludedPoiIds = input.excludedPoiIds,
+        )
+        val wire = post(GENERATE_PATH, generateInput, AiScheduleResponse::class.java)
+        return try {
+            wire.toDomain(clock.instant()).groundAlternatives()
+        } catch (e: IllegalArgumentException) {
+            throw ScheduleAgentCallFailed(null, retryable = false, message = "AI 재계획 응답 스키마 불일치: ${e.message}", cause = e)
+        }
+    }
+
     /** 에러 응답 → 도메인 실패. 바디 `{error_code, message, retryable}`(계약) 파싱 실패해도 상태코드로 판정. */
     private fun callFailed(status: Int, body: ByteArray): ScheduleAgentCallFailed {
         val parsed = runCatching { ERROR_MAPPER.readValue(body, AiErrorBody::class.java) }.getOrNull()
@@ -267,13 +357,18 @@ class HttpScheduleAgentAdapter(
         internal const val REPAIR_PATH = "/ai/v1/itinerary/repair"
         internal const val EXPLANATIONS_PATH = "/ai/v1/itinerary/explanations"
         internal const val ALTERNATIVES_PATH = "/ai/v1/itinerary/alternatives"
+        internal const val REPLAN_PATH = "/ai/v1/itinerary/replan"
+
+        /** 상대가 경로는 열었지만 배선 전일 때의 코드(`ai/src/trippilot/api/errors.py`). 한시 폴백의 유일한 방아쇠다. */
+        private const val NOT_WIRED = "ORCHESTRATOR_NOT_WIRED"
 
         /**
          * **이 목록이 계약 게이트의 입력이다.** 손으로 관리하는 목록을 테스트가 따로 또 들고 있으면
          * 둘이 갈라진다 — 실제로 그래서 explanations 가 게이트 밖에 있었다(2026-09-01). 경로를
          * 하나 늘리면 여기에 넣게 되고, 그러면 게이트가 저절로 따라온다.
          */
-        internal val CALLED_PATHS = listOf(GENERATE_PATH, VALIDATE_PATH, REPAIR_PATH, EXPLANATIONS_PATH, ALTERNATIVES_PATH)
+        internal val CALLED_PATHS =
+            listOf(GENERATE_PATH, VALIDATE_PATH, REPAIR_PATH, EXPLANATIONS_PATH, ALTERNATIVES_PATH, REPLAN_PATH)
 
         // 편집 재검증·보정은 사용자가 화면에서 기다리는 동작이라 생성(20s)보다 짧게 잡는다.
         private const val VALIDATE_DEADLINE_MS = 3_000L

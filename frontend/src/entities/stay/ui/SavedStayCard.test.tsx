@@ -263,3 +263,125 @@ describe('SavedStayCard — g02 row optional 슬롯 (TRIP-741)', () => {
     expect(screen.queryByTestId('saved-stay-card-ss-1-photo')).toBeNull();
   });
 });
+
+/**
+ * TRIP-729 · AC-1·2·3·5 — e04 vertical 카드 Figma 정합(거점 배지·지역줄·2톤 가격·radius).
+ *
+ * 무엇을 보장하나(**degrade = 계약이 채우는 값만 정직하게 그린다**):
+ *  - 🔴 AC-2 `isBase===true` 면 사진 좌상단 `거점` 배지(`{root}-base-badge` testID + "거점" 텍스트),
+ *    false/미지정이면 미렌더. **배지 존재는 testID 로만 잰다** — 핀 SVG fill·모양·분홍 배지색은
+ *    `*Glyphs.tsx` fill 무심판이라 어느 심판도 못 본다(★1, 6-b/TRIP-831). 이 배지는 **vertical 전용** —
+ *    row(g02)는 isBase 를 무시한다(imageUrl scope 잠금 선례 동형).
+ *  - 🔴 AC-3 `region` 지정 시 이름 아래 muted 지역줄(거리 미표시), `priceLabel` 지정 시 **2톤 가격줄**
+ *    (금액 bold ink + "~" muted = **View 형제 두 Text**). 미지정이면 각각 미렌더(degrade).
+ *  - 🔴 AC-1 vertical 카드 radius `rounded-[12px]`(Figma 12, 현행 `rounded-card`=16 에서).
+ *  - 🔴 AC-5 이름만 준 vertical 은 거점·지역·가격 문자열 0(발명 0 · INV-1).
+ *
+ * *(개념 — 2톤 split · [[getByText 집계 경계]])* `getByText` 는 **완전일치·host Text 노드 단위**다.
+ *  중첩 Text 는 합쳐 재지만 **View 형제는 각 노드로 갈린다**. 그래서 2톤을 `<View><Text>145,000원</Text>
+ *  <Text>~</Text></View>` 로 그리면 `getByText('145,000원')`·`getByText('~')` 가 **각각** 매치된다 —
+ *  단일 `'145,000원~'` 나 중첩이면 `getByText('145,000원')` 이 탈락(부분 아님·완전일치). 이 두 단언이
+ *  곧 "2톤으로 갈렸다"를 강제한다(색 tone 은 className 토큰으로 덧잠금 — jest 렌더 트리에 평문으로 남음).
+ */
+describe('SavedStayCard — e04 vertical Figma 정합 (TRIP-729)', () => {
+  const rootId = 'saved-stay-card-ss-1';
+
+  it('🔴 AC-1 · vertical 카드 radius rounded-[12px] (rounded-card 아님)', () => {
+    render(<SavedStayCard testID={rootId} name="숙소 A" layout="vertical" />);
+
+    const tokens = cls(screen.getByTestId(rootId));
+    expect(tokens).toContain('rounded-[12px]');
+    expect(tokens).not.toContain('rounded-card');
+  });
+
+  it('🔴 AC-2 · isBase=true → 거점 배지(testID + "거점") 렌더', () => {
+    render(
+      <SavedStayCard testID={rootId} name="숙소 A" layout="vertical" isBase />
+    );
+
+    expect(screen.getByTestId(`${rootId}-base-badge`)).toBeOnTheScreen();
+    expect(screen.getByText('거점')).toBeOnTheScreen();
+  });
+
+  it('🔴 AC-2 · isBase 미지정 → 배지 미렌더 (degrade)', () => {
+    render(<SavedStayCard testID={rootId} name="숙소 A" layout="vertical" />);
+
+    expect(screen.queryByTestId(`${rootId}-base-badge`)).toBeNull();
+    expect(screen.queryByText('거점')).toBeNull();
+  });
+
+  it('🔴 AC-2 · isBase 는 vertical 전용 — row(g02)는 배지를 안 낸다 (scope 잠금)', () => {
+    render(
+      <SavedStayCard
+        testID="trip-base-staysheet-cand-ss-1"
+        name="숙소 A"
+        layout="row"
+        isBase
+      />
+    );
+
+    expect(
+      screen.queryByTestId('trip-base-staysheet-cand-ss-1-base-badge')
+    ).toBeNull();
+  });
+
+  it('🔴 AC-3 · region 지정 → muted 지역줄 렌더 + 거리 미표시', () => {
+    // 이름은 지역어를 안 담는다("숙소 A") — region 단언이 이름과 겹쳐 오탐 나지 않게.
+    render(
+      <SavedStayCard
+        testID={rootId}
+        name="숙소 A"
+        layout="vertical"
+        region="해운대"
+      />
+    );
+
+    expect(screen.getByText('해운대')).toBeOnTheScreen();
+    expect(cls(screen.getByText('해운대'))).toContain('text-muted');
+    // 거리(제품 결정으로 미표시)는 region 을 줘도 안 뜬다.
+    expect(screen.getByTestId(rootId)).not.toHaveTextContent(/\d+\s*m\b|km/);
+  });
+
+  it('🔴 AC-3 · region 미지정 → 지역줄 미렌더 (degrade)', () => {
+    render(<SavedStayCard testID={rootId} name="숙소 A" layout="vertical" />);
+
+    expect(screen.queryByText('해운대')).toBeNull();
+  });
+
+  it('🔴 AC-3 · priceLabel 지정 → 2톤 가격줄(금액 bold ink + "~" muted, View 형제)', () => {
+    render(
+      <SavedStayCard
+        testID={rootId}
+        name="숙소 A"
+        layout="vertical"
+        priceLabel="145,000원~"
+      />
+    );
+
+    // 두 노드가 각각 존재해야 통과 = 2톤으로 갈렸다(단일/중첩 Text 면 '145,000원' 탈락).
+    expect(screen.getByText('145,000원')).toBeOnTheScreen();
+    expect(screen.getByText('~')).toBeOnTheScreen();
+    // tone — 금액은 ink, "~" 는 muted(색은 className 토큰으로 관측).
+    expect(cls(screen.getByText('145,000원'))).toContain('text-ink');
+    expect(cls(screen.getByText('~'))).toContain('text-muted');
+  });
+
+  it('🔴 AC-3 · priceLabel 미지정 → 가격줄 미렌더 (degrade)', () => {
+    render(<SavedStayCard testID={rootId} name="숙소 A" layout="vertical" />);
+
+    expect(screen.queryByText('~')).toBeNull();
+    expect(screen.getByTestId(rootId)).not.toHaveTextContent(/원~|₩/);
+  });
+
+  it('🔴 AC-5 · 발명 0 — 이름만 준 vertical 은 거점·지역·가격 문자열 0 (INV-1)', () => {
+    render(
+      <SavedStayCard testID={rootId} name="해운대 오션뷰" layout="vertical" />
+    );
+
+    const card = screen.getByTestId(rootId);
+    expect(screen.queryByTestId(`${rootId}-base-badge`)).toBeNull();
+    expect(card).not.toHaveTextContent(/원~|₩|km|\d+\s*m\b/);
+    // 가짜통과 방지 짝 — 카드·이름은 떠 있다.
+    expect(screen.getByText('해운대 오션뷰')).toBeOnTheScreen();
+  });
+});

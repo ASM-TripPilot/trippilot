@@ -121,6 +121,28 @@ describe('🔴 AC-2 · 출발점 전환 다이얼로그 게이트(BR-U6-21)', ()
     expect(screen.queryByTestId('my-stays-base-dialog')).toBeNull();
   });
 
+  it('미등록 행의 "출발점 지정" press 도 같은 게이트를 거쳐 확정에서만 그 행(미등록)으로 1회 부른다', () => {
+    // 등록 행과 함께 그려, 눌린 행이 아닌 다른 행이 넘어가는 혼동도 잡는다.
+    const { onConfirmBaseToggle } = renderScreen({
+      rows: [assignedRow(), unassignedRow()],
+    });
+    expect(screen.queryByTestId('my-stays-base-dialog')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('my-stays-base-toggle-s2'));
+
+    expect(screen.getByTestId('my-stays-base-dialog')).toBeOnTheScreen();
+    expect(onConfirmBaseToggle).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('my-stays-base-confirm'));
+
+    expect(onConfirmBaseToggle).toHaveBeenCalledTimes(1);
+    expect(onConfirmBaseToggle.mock.calls[0][0]).toMatchObject({
+      savedStayId: 's2',
+      baseState: 'unassigned',
+    });
+    expect(screen.queryByTestId('my-stays-base-dialog')).toBeNull();
+  });
+
   it('취소하면 콜백 0회로 다이얼로그만 닫힌다(짝)', () => {
     const { onConfirmBaseToggle } = renderScreen({ rows: [assignedRow()] });
 

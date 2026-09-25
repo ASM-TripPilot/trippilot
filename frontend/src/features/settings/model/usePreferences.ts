@@ -7,8 +7,11 @@
  *
  * 격리 테스트하지 않는다(02a §1) — GET 초기값·PUT 저장·400 행위는 화면 통합테스트가 관통 검증한다.
  */
+import { useQueryClient } from '@tanstack/react-query';
+
 import type { PreferenceInput } from '@/shared/api/generated/schemas';
 import {
+  getGetMePreferencesQueryKey,
   useGetMePreferences,
   usePutMePreferences,
 } from '@/shared/api/generated/preferences/preferences';
@@ -22,7 +25,16 @@ export interface UsePreferencesResult {
 
 export function usePreferences(): UsePreferencesResult {
   const query = useGetMePreferences();
-  const mutation = usePutMePreferences();
+  const queryClient = useQueryClient();
+  // 저장 성공 뒤 조회를 낡음 표시 — 스택에 남은 설정(l05)의 취향 요약이 옛 값을 보이지 않게 한다(TRIP-778 D11).
+  const mutation = usePutMePreferences({
+    mutation: {
+      onSuccess: () =>
+        queryClient.invalidateQueries({
+          queryKey: getGetMePreferencesQueryKey(),
+        }),
+    },
+  });
 
   return {
     view: query.data,

@@ -5,7 +5,12 @@ import type { StyleAnalysisEnvelope } from '@/shared/api/generated/schemas';
 import { useGetMe } from '@/shared/api/generated/account/account';
 import { useGetMeProfile } from '@/shared/api/generated/profile/profile';
 import { useGetMeStyle } from '@/shared/api/generated/reflection/reflection';
-import { useGetTrips } from '@/shared/api/generated/trips/trips';
+import {
+  useGetMeRecords,
+  useGetTrips,
+} from '@/shared/api/generated/trips/trips';
+
+import { HeartGlyph } from '@/features/settings/ui/SettingsGlyphs';
 
 import { MyPage } from './MyPage';
 
@@ -45,6 +50,8 @@ jest.mock('@/shared/api/generated/profile/profile', () => ({
 jest.mock('@/shared/api/generated/trips/trips', () => ({
   ...jest.requireActual('@/shared/api/generated/trips/trips'),
   useGetTrips: jest.fn(),
+  // TRIP-776 — 지난 여행 "사진 N" 목록 조회도 목으로 막는다(실 훅이면 MSW 없는 네트워크 요청이 샌다).
+  useGetMeRecords: jest.fn(),
 }));
 jest.mock('@/shared/api/generated/reflection/reflection', () => ({
   ...jest.requireActual('@/shared/api/generated/reflection/reflection'),
@@ -56,6 +63,9 @@ const mockUseProfile = useGetMeProfile as jest.MockedFunction<
   typeof useGetMeProfile
 >;
 const mockUseTrips = useGetTrips as jest.MockedFunction<typeof useGetTrips>;
+const mockUseRecords = useGetMeRecords as jest.MockedFunction<
+  typeof useGetMeRecords
+>;
 const mockUseStyle = useGetMeStyle as jest.MockedFunction<typeof useGetMeStyle>;
 
 /** 정식 분석 envelope — 배선이 실제로 이 값을 카드까지 흘려보내는지 본다. */
@@ -97,6 +107,9 @@ beforeEach(() => {
   mockUseProfile.mockReturnValue(asQuery({ nickname: '테스터' }));
   mockUseTrips.mockReturnValue(asQuery([])); // 여행 0건 → 카드 목록 비어 배치 확인에 집중
   mockUseStyle.mockReturnValue(asQuery(officialEnvelope()));
+  mockUseRecords.mockReturnValue(
+    asQuery(undefined) as unknown as ReturnType<typeof useGetMeRecords>
+  );
 });
 
 describe('🔴 AC-I1 · 조회→모델→배치', () => {
@@ -112,7 +125,7 @@ describe('🔴 AC-I1 · 조회→모델→배치', () => {
   it('카드는 ProfileCard 와 TripStatusSegment 사이에 놓이고 기존 testID 는 그대로다', () => {
     renderPage();
 
-    // 기존 testID 무변경(additive prop 이 헐지 않았다).
+    // 기존 testID 무변경(additive prop 이 헐지 않았다). 헤더 설정 아이콘은 TRIP-775 로 복원(→ /settings).
     expect(screen.getByTestId('my-page-root')).toBeOnTheScreen();
     expect(screen.getByTestId('my-header-settings')).toBeOnTheScreen();
     expect(screen.getByTestId('my-profile-card')).toBeOnTheScreen();
@@ -146,11 +159,72 @@ describe('🔴 TRIP-618 AC-1 · 하단 설정 행 진입 배선', () => {
     expect(mockPush).toHaveBeenCalledWith('/settings');
   });
 
-  it('헤더 아이콘(my-header-settings)은 이번에 배선하지 않는다 — 존재만 유지', () => {
+  it('TRIP-775(구 TRIP-939 B-2): 헤더 설정 아이콘을 누르면 router.push("/settings") 정확히 1회', () => {
+    // 준비·실행: 헤더 톱니(Figma 1602:2388 우측 24)를 누른다. 목적지가 생겨 되살렸다(Seed Q2=a).
+    renderPage();
+    fireEvent.press(screen.getByTestId('my-header-settings'));
+
+    // 단언: 반응 없는 버튼이 아니다 — 설정으로, 한 번만.
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith('/settings');
+  });
+});
+
+describe('🔴 TRIP-939 B-1·B-3·B-4 · 마이 탭에 눌러도 반응 없는 것이 없다 (심사 2.1)', () => {
+  it('B-1(TRIP-775 Q1=A): 목적지가 선 메뉴 3행은 누르면 각자 이동하고, 커뮤니티 3행은 없다', () => {
+    // 준비·실행: 실 마이페이지를 그린다(여행 0건).
     renderPage();
 
-    // 무배선(Q1 ⓒ, 후속 티켓): 헤더 sun 아이콘은 존재하되 목적지가 없다.
-    // press→push 를 단언하지 않는다(무리 배선 금지). 존재 단언만 남겨 회귀를 막는다.
-    expect(screen.getByTestId('my-header-settings')).toBeOnTheScreen();
+    // 단언(부재): U7 전이라 목적지가 없는 커뮤니티 3행.
+    ['내 일정 공개/공유 설정', '내가 공유한 일정', '숨긴 사용자 관리'].forEach(
+      (label) => {
+        expect(screen.queryByText(label)).toBeNull();
+      }
+    );
+
+    // 단언(존재 + 배선): 보이는 행은 전부 눌러서 이동한다 — 행마다 정확히 1회, 경로 완전일치.
+    (
+      [
+        ['my-stays-row', '등록 숙소·예약 기록', '/my/stays'],
+        ['my-style-analysis-row', '여행 스타일 분석', '/records/style'],
+        ['my-settings-row', '설정', '/settings'],
+      ] as const
+    ).forEach(([testID, label, href]) => {
+      mockPush.mockClear();
+      const row = screen.getByTestId(testID);
+      expect(row).toHaveTextContent(label);
+
+      fireEvent.press(row);
+
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(mockPush).toHaveBeenCalledWith(href);
+    });
+  });
+
+  it('B-3(TRIP-775 Q2=a): 프로필 [편집]이 있고 누르면 router.push("/settings") 정확히 1회', () => {
+    renderPage();
+
+    fireEvent.press(screen.getByTestId('my-profile-edit'));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith('/settings');
+  });
+
+  it('B-4(TRIP-776 Q1=A): 지난 여행의 "캘린더 ›"를 누르면 router.push("/records") 정확히 1회 — 회고 하트 floating 은 여전히 없다', () => {
+    // 준비·실행: 여행 0건 → 예정 0이라 '지난 여행' 섹션이 보인다(종료 0건이어도 캘린더 링크는 남는다).
+    renderPage();
+
+    // 짝 앵커: 지난 여행 섹션이 실제로 그려졌다.
+    expect(screen.getByText('지난 여행')).toBeOnTheScreen();
+
+    // 단언(존재 + 배선): 목적지(/records, j07 캘린더)가 선 링크 — 반응 없는 링크가 아니다(TRIP-939 원칙 유지).
+    const calendar = screen.getByTestId('my-past-calendar');
+    expect(calendar).toHaveTextContent(/캘린더/);
+    fireEvent.press(calendar);
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith('/records');
+
+    // 단언(부재): 장식 하트 버튼은 여전히 없다.
+    expect(screen.UNSAFE_queryAllByType(HeartGlyph)).toHaveLength(0);
   });
 });

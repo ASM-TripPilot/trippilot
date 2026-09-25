@@ -15,12 +15,13 @@ import { StaySearchPage } from './StaySearchPage';
 /**
  * TRIP-457 AC-5(배선) — e02 카드 탭이 실제로 상세 라우트 push 로 이어진다는 증거.
  * 화면은 `onPressCard?(item)` 콜백만 올린다(cardPress.test) — 그 콜백이 진짜 `/stays/[stayId]`
- * push(객체형·item JSON param)로 이어지는지는 이 배선 층에서만 확인된다.
+ * push(객체형)로 이어지는지는 이 배선 층에서만 확인된다.
  *
  * *(개념·★F-3)* push 는 리포 idiom 인 **객체형**: `router.push({ pathname:'/stays/[stayId]',
- * params:{ stayId, item } })`(CoPick·MustVisit 선례). `stayId` 는 raw `stayKey`(콜론 포함) —
+ * params:{ stayId } })`(CoPick·MustVisit 선례). `stayId` 는 raw `stayKey`(콜론 포함) —
  * expo-router 가 세그먼트를 자동 인코딩하고 수신측이 자동 디코딩하므로 수동 encodeURIComponent 를
- * 걸지 않는다(이중 인코딩 회피). load-bearing 은 `item`(JSON) — 상세는 그것만 파싱한다(GET 계약 부재).
+ * 걸지 않는다(이중 인코딩 회피). TRIP-940 부터 load-bearing 은 `stayId` 하나다 — 상세가 그 값으로
+ * `GET /stays/{stayId}` 를 부른다(구 `item` JSON param 폐기, 01b D0).
  */
 
 jest.mock('@/shared/storage', () => ({
@@ -103,7 +104,9 @@ function detailPushes() {
 }
 
 describe('N1 · 카드 press → 상세 push (AC-5)', () => {
-  it('카드를 누르면 stayKey·item(JSON) 을 실어 /stays/[stayId] 로 push 한다', async () => {
+  // TRIP-940 AC-10 재작성 — 상세가 `GET /stays/{stayId}` 로 스스로 조회하므로 item(JSON) 을 싣지
+  // 않는다(01b D0). toHaveBeenCalledWith 는 toEqual 과 같은 재귀 비교라 params 에 item 이 남으면 red.
+  it('카드를 누르면 stayKey 만 실어 /stays/[stayId] 로 push 한다(item 없음)', async () => {
     render(<StaySearchPage />, { wrapper: createWrapper() });
     await waitFor(() =>
       expect(screen.getByText(ITEM_A.name)).toBeOnTheScreen()
@@ -113,7 +116,7 @@ describe('N1 · 카드 press → 상세 push (AC-5)', () => {
 
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/stays/[stayId]',
-      params: { stayId: KEY_A, item: JSON.stringify(ITEM_A) },
+      params: { stayId: KEY_A },
     });
   });
 });

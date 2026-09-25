@@ -11,6 +11,9 @@ dependencies {
 
     implementation(project(":common:core"))
     implementation(project(":modules:trip"))   // R1: 여행 소유자·기간 조회만 — trip.api(TripOwnerFacade)
+    // R1: 그 날 갈 곳의 **이름**만 — itinerary-generation.api(ItineraryPlanFacade). 이름 규칙(확정분
+    // 동결 우선, INV-U1-03)은 저쪽이 소유하므로 poiId 를 받아 place-data 를 따로 묻지 않는다.
+    implementation(project(":modules:itinerary-generation"))
     implementation(libs.spring.boot.starter.data.jpa)
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.validation)

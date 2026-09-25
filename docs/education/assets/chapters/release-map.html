@@ -1,0 +1,30 @@
+<div class="callout">
+<strong>Kubernetes 용어 네 가지</strong>
+<p><strong>Pod</strong>는 하나 이상의 컨테이너를 함께 실행하는 기본 단위다. <strong>Deployment</strong>는 원하는 Pod 복제본 수를 유지하고 새 버전으로 교체하는 rollout을 관리한다. <strong>Service</strong>는 Pod가 교체되어 주소가 바뀌어도 사용할 수 있는 안정적인 접근 주소를 제공한다. <strong>Namespace</strong>는 한 클러스터 안에서 리소스 이름의 범위를 나눈다. 이 저장소는 로컬과 각 AWS 클러스터에서 <code>trippilot</code> namespace를 사용하며 같은 namespace 이름이라고 해서 같은 클러스터를 가리키는 것은 아니다.</p>
+</div>
+<p>로컬 개발에서는 코드 수정 결과를 빠르게 확인하는 것이 중요하다. 운영에서는 누가 어떤 코드를 어떤 권한으로 배포했는지 추적하고 데이터와 비밀값을 유지하면서 실행 중인 앱을 교체해야 한다. 두 환경은 Kubernetes라는 공통 API를 사용하지만 이미지 전달, 데이터베이스, 외부 접근과 인증 방식이 다르다.</p>
+<div aria-label="현재 브랜치의 실제 배포 경로" class="flow">
+<div class="flow-step"><strong>① 개발·테스트</strong><br/>Gradle / pnpm / Bazel<br/>로컬 kind에서 동작 확인</div>
+<div class="flow-step"><strong>② 코드 검토</strong><br/>PR와 앱 CI<br/>배포할 commit 기록</div>
+<div class="flow-step"><strong>③ 수동 AWS 실행</strong><br/>GitHub Environment<br/>OIDC → Terraform</div>
+<div class="flow-step"><strong>④ 앱 배포</strong><br/>Dockerfile 새 빌드 → ECR<br/>Secret → DB → Helm</div>
+<div class="flow-step"><strong>⑤ 배포 검증</strong><br/>내부 smoke<br/>외부 DNS·TLS·업무 시나리오</div>
+</div>
+<p>여기서 Terraform은 네트워크와 AWS 서비스를 준비하고 Helm은 준비된 EKS 위의 Deployment·Service·ConfigMap 등을 구성한다. EKS Auto Mode는 Helm이 만든 <code>LoadBalancer</code> Service를 관찰하여 NLB를 생성한다. <strong>인프라만 apply한 시점에는 아직 앱 Service와 NLB가 없을 수 있다.</strong> Terraform, Kubernetes, EKS Auto Mode가 각각 관리하는 대상을 구분해야 변경 위치를 찾을 수 있다. <a href="https://docs.aws.amazon.com/eks/latest/userguide/auto-configure-nlb.html">EKS Auto Mode의 NLB 생성 동작</a>.</p>
+<div class="table-wrap"><table>
+<caption>이 저장소에서 실제로 달라지는 로컬·DEV·PRD 구성</caption>
+<thead><tr><th>항목</th><th>로컬 kind</th><th>AWS DEV</th><th>AWS PRD</th></tr></thead>
+<tbody>
+<tr><td>배포 정의</td><td><code>deploy/k8s/</code>, 셸 스크립트</td><td colspan="2"><code>infra/terraform/stack/</code> + <code>deploy/eks/chart/</code></td></tr>
+<tr><td>이미지</td><td>Bazel → Docker → kind load<br/><code>trippilot/backend:local</code> 등</td><td colspan="2">Dockerfile·Buildx → 환경별 ECR, <code>linux/amd64</code></td></tr>
+<tr><td>앱</td><td>backend·AI·정적 frontend 스텁</td><td>backend·AI·gateway 각 1개</td><td>backend·AI·gateway 각 2개, PDB</td></tr>
+<tr><td>DB</td><td>PostgreSQL 16 StatefulSet·PVC</td><td>RDS PostgreSQL 16, 단일 AZ, 백업 1일</td><td>RDS Multi-AZ, 삭제 보호, 백업 14일</td></tr>
+<tr><td>Redis</td><td>클러스터 내부 Redis</td><td>ElastiCache Redis 7.1, 1노드</td><td>3노드, Multi-AZ, 자동 장애 조치</td></tr>
+<tr><td>네트워크</td><td>호스트 8080–8083 포트</td><td>2 AZ, NAT Gateway 1개</td><td>3 AZ, AZ별 NAT Gateway</td></tr>
+<tr><td>외부 API 진입</td><td>NodePort ↔ kind hostPort</td><td colspan="2">도메인 → NLB TLS 443 → nginx gateway → backend</td></tr>
+<tr><td>관측성</td><td>SigNoz 수집·조회</td><td colspan="2">이 AWS 배포는 SigNoz collector를 생성하지 않음. backend OTel 전송 비활성</td></tr>
+</tbody>
+</table></div>
+<p>PRD의 Redis 3노드는 primary와 replica를 합한 수다. Redis 인프라와 TLS 설정은 준비하지만 현재 backend에는 실제 Redis adapter 구현이 없어 캐시 사용까지 완성된 것은 아니다. 선택형 embedding은 기본 비활성이고 켜면 별도 이미지와 약 5GiB 메모리 요청이 추가된다. 임베딩 서비스와 pgvector 테이블 생성만으로 지식 데이터가 자동 적재되지는 않는다.</p>
+<p>모바일 Expo 앱은 별도 앱 배포 절차를 따른다. AWS workflow는 frontend 이미지를 빌드하거나 배포하지 않는다. 로컬 nginx frontend는 통합 확인용 정적 스텁이다. AWS에서 모바일 앱을 연결하려면 앱이 사용하는 API base URL을 DEV·PRD의 HTTPS 도메인에 맞게 설정해야 한다.</p>
+<p class="source-note">저장소 근거: <a href="../../deploy/README.md">로컬 배포 안내</a>, <a href="../../infra/terraform/stack/data.tf">RDS·ElastiCache 정의</a>, <a href="../../deploy/eks/chart/values-dev.yaml">DEV values</a>, <a href="../../deploy/eks/chart/values-prd.yaml">PRD values</a>, <a href="../../deploy/eks/chart/templates/backend.yaml">backend 운영 설정</a>.</p>

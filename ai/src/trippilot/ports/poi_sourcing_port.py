@@ -11,7 +11,8 @@ PlacesPort(§2.3 — 카테고리 검색·지오코딩)와 달리 이 포트는 
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from typing import Protocol
 
 
@@ -43,11 +44,17 @@ class SourcedPage:
 
 
 @dataclass(frozen=True, slots=True)
-class SourcedHours:
-    """영업시간 원문 (파싱 전). 파싱 가능한 것만 OpenHour가 된다 — 지어내기 금지."""
+class SourcedDetail:
+    """상세 1건의 원문 (파싱 전). 영업시간은 파싱 가능한 것만 OpenHour가 된다 — 지어내기 금지.
+
+    `detail_raw` 는 같은 응답에 실려 온 **표시용 문자열**(대표메뉴·주차·입장료 등)을
+    벤더 필드명 그대로 담는다 — 판정에 쓰지 않고 provenance 로만 나간다. 비어 있는
+    필드는 키 자체가 없다. 소요시간(`spendtime` 류)은 어떤 구현체도 싣지 않는다 (INV-3).
+    """
 
     hours_raw: str | None      # 영업시간 원문 (TourAPI usetime류)
     rest_raw: str | None       # 휴무일 원문 (TourAPI restdate류)
+    detail_raw: Mapping[str, str] = field(default_factory=dict)
 
 
 class PoiSourcingPort(Protocol):
@@ -55,4 +62,4 @@ class PoiSourcingPort(Protocol):
         self, area_code: str, kind: str, page_no: int, rows: int
     ) -> SourcedPage: ...
 
-    def fetch_hours(self, source_ref: str, kind: str) -> SourcedHours: ...
+    def fetch_detail(self, source_ref: str, kind: str) -> SourcedDetail: ...

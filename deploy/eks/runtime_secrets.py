@@ -1,15 +1,19 @@
 """Allowlisted Secrets Manager JSON -> service-scoped Kubernetes Secrets."""
 import base64
 import json
+import os
 import secrets
+import shutil
 import subprocess
+import tempfile
 from urllib.parse import quote
 
 from runtime_io import CommandError
 
 BACKEND_KEYS = frozenset("""
 JWT_SIGNING_KEY GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET KAKAO_CLIENT_ID
-KAKAO_CLIENT_SECRET NAVER_CLIENT_ID NAVER_CLIENT_SECRET WEATHER_API
+KAKAO_CLIENT_SECRET NAVER_CLIENT_ID NAVER_CLIENT_SECRET APPLE_CLIENT_ID WEATHER_API
+APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY SOCIAL_TOKEN_ENCRYPTION_KEY
 PUSH_EXPO_ACCESS_TOKEN PLACE_GEOCODE_MODE WEATHER_MODE PUSH_MODE AI_REMINDER_COPY_MODE
 """.split())
 AI_KEYS = frozenset("""
@@ -47,10 +51,22 @@ def get_secret(shell, region, arn, *, strings_only=True):
 
 
 def put_secret(shell, region, arn, values):
-    # Values travel on stdin, never command arguments, logs, files, or Terraform state.
-    shell(["aws", "secretsmanager", "put-secret-value", "--region", region,
-           "--cli-input-json", "file:///dev/stdin", "--output", "json"],
-          json.dumps({"SecretId": arn, "SecretString": json.dumps(values)}))
+    # Values never travel on command arguments, logs, or Terraform state.
+    # stdin(file:///dev/stdin) is NOT an option: the aws CLI v2 paramfile loader
+    # cannot read pipes and fails with "Invalid JSON received" (measured 2026-09-19,
+    # runs 35388660238/35389564380/35390200513 — mock-shell tests cannot catch this).
+    # A 0600 file inside a private 0700 temp dir on the throwaway runner disk,
+    # removed immediately after the call, preserves the same secrecy property.
+    directory = tempfile.mkdtemp()
+    try:
+        path = os.path.join(directory, "payload.json")
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "w") as stream:
+            json.dump({"SecretId": arn, "SecretString": json.dumps(values)}, stream)
+        shell(["aws", "secretsmanager", "put-secret-value", "--region", region,
+               "--cli-input-json", f"file://{path}", "--output", "json"])
+    finally:
+        shutil.rmtree(directory, ignore_errors=True)
 
 
 def rsa_key():
@@ -118,6 +134,16 @@ def validate_groups(groups):
     for key, allowed in modes.items():
         if key in backend and backend[key] not in allowed:
             raise ValueError(f"Unsupported {key} in backend secret")
+    # 현재 구글 클라이언트는 **공개(iOS) 유형**이라 client_secret 을 보내면 Google 이 invalid_client 로
+    # 거절한다(2026-09-23 실측 — 생략하면 invalid_grant 로 통과). 백엔드는 빈 값이면 전송을 생략하므로
+    # 부재·빈 값은 정상이고, **값이 차 있는 것만** 막는다. 목록에서 키를 빼지 않는 이유는 이미 그 값이
+    # 들어 있는 시크릿의 배포 전체를 검증에서 죽이지 않기 위해서다 — 여기서 이유와 함께 크게 실패시킨다.
+    # Web 유형 클라이언트로 바꾸면 이 가드를 지운다.
+    if backend.get("GOOGLE_CLIENT_SECRET", "").strip():
+        raise ValueError(
+            "GOOGLE_CLIENT_SECRET must stay empty: the Google client is a public (iOS) client, "
+            "so sending a secret makes Google reject the exchange with invalid_client"
+        )
     if backend.get("PLACE_GEOCODE_MODE") == "kakao":
         require(backend, ("KAKAO_CLIENT_ID",), "kakao geocoding")
     if backend.get("WEATHER_MODE") == "kma":

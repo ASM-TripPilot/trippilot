@@ -2,10 +2,14 @@ import { type ReactElement, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { StateNotice } from '@/shared/ui/StateNotice';
-
 import { BaseToggleDialog } from './BaseToggleDialog';
-import { BedGlyph, ChevronLeftGlyph } from './SettingsGlyphs';
+import { CARD_SHADOW } from './cardShadow';
+import {
+  BedGlyph,
+  ChevronLeftGlyph,
+  ChevronRightGlyph,
+  MUTED,
+} from './SettingsGlyphs';
 
 /**
  * TRIP-605 · l04 등록 숙소·예약 기록 화면 — 순수 프레젠테이션(VM 주입). 조회·조합·N+1·포맷은
@@ -42,24 +46,23 @@ export interface MyStaysScreenProps {
   onPressBack?: () => void;
 }
 
-/** 채움/점선 칩 — 날짜·출처·메모 상태를 한 형태로. `filled` 는 채움(surface-strong), 아니면 outline. */
+/** 채움/아웃라인 칩 — 날짜·출처·메모 상태를 한 형태로. `filled` 는 채움(surface-strong·body 글자),
+ *  아니면 아웃라인(hairline-strong·muted 글자 — Figma 1604 는 출처·메모 둘 다 muted). */
 function Chip({
   label,
   filled,
-  muted,
 }: {
   label: string;
   filled?: boolean;
-  muted?: boolean;
 }): ReactElement {
   return (
     <View
-      className={`rounded-pill px-md py-xs ${
+      className={`min-h-[27px] justify-center rounded-[8px] px-md ${
         filled ? 'bg-surface-strong' : 'border border-hairline-strong'
       }`}
     >
       <Text
-        className={`font-noto text-caption ${muted ? 'text-muted' : 'text-body'}`}
+        className={`font-noto text-caption ${filled ? 'text-body' : 'text-muted'}`}
       >
         {label}
       </Text>
@@ -68,7 +71,7 @@ function Chip({
 }
 
 /** 등록 숙소 한 행(카드). 출발점 전환 버튼(`my-stays-base-toggle-{id}`)은 행당 정확히 1개다 —
- *  등록됨이면 하단 "출발점 변경 ›" 링크, 미등록이면 상단 "출발점 지정" 점선 pill. */
+ *  등록됨이면 하단 "출발점 변경" + chevron 링크, 미등록이면 상단 "출발점 지정" 점선 배지. */
 function MyStayRow({
   row,
   onPressToggle,
@@ -82,15 +85,16 @@ function MyStayRow({
   return (
     <View
       testID={`my-stays-row-${row.savedStayId}`}
-      className="rounded-card border border-hairline bg-canvas p-lg shadow-md"
+      style={CARD_SHADOW}
+      className="rounded-[12px] border border-hairline bg-canvas p-lg"
     >
       {/* 상단: 숙소명 ↔ 출발점 배지(등록됨)/지정 버튼(미등록) */}
-      <View className="flex-row items-start justify-between gap-md">
+      <View className="flex-row items-center justify-between gap-md">
         <Text className="flex-1 text-[16px] font-noto-bold text-ink">
           {row.name}
         </Text>
         {assigned ? (
-          <View className="rounded-pill bg-primary px-md py-xs">
+          <View className="min-h-[24px] justify-center rounded-[8px] bg-primary px-[11px]">
             <Text className="font-noto-bold text-caption text-on-primary">
               출발점
             </Text>
@@ -101,7 +105,7 @@ function MyStayRow({
             accessibilityRole="button"
             disabled={!row.canAssignBase}
             onPress={() => onPressToggle(row)}
-            className="rounded-pill border border-dashed border-muted-soft px-md py-xs"
+            className="min-h-[24px] justify-center rounded-[8px] border border-dashed border-muted-soft px-[11px]"
           >
             <Text className="font-noto text-caption text-muted">
               출발점 지정
@@ -118,15 +122,16 @@ function MyStayRow({
       ) : null}
 
       {/* 칩 줄 — 날짜(채움)·출처(outline)·메모 상태(outline muted) */}
-      <View className="mt-md flex-row flex-wrap gap-sm">
+      <View className="mt-[10px] flex-row flex-wrap gap-sm">
         {row.dateRangeLabel !== null ? (
           <Chip label={row.dateRangeLabel} filled />
         ) : null}
         <Chip label={row.sourceLabel} />
-        {row.memoLabel !== null ? <Chip label={row.memoLabel} muted /> : null}
+        {row.memoLabel !== null ? <Chip label={row.memoLabel} /> : null}
       </View>
 
-      <View className="mt-md border-t border-hairline" />
+      {/* 구분선은 막대로 — `border-t border-hairline` 은 네 변 두께를 함께 건드려 모서리가 각진다. */}
+      <View className="mt-md h-px bg-hairline" />
 
       {/* 하단: 연결 여행 ↔ 출발점 변경(등록됨만) */}
       <View className="mt-md flex-row items-center justify-between gap-md">
@@ -139,10 +144,10 @@ function MyStayRow({
             accessibilityRole="button"
             disabled={!row.canAssignBase}
             onPress={() => onPressToggle(row)}
+            className="flex-row items-center gap-[2px]"
           >
-            <Text className="font-noto-bold text-label text-primary">
-              출발점 변경 ›
-            </Text>
+            <Text className="font-noto text-label text-body">출발점 변경</Text>
+            <ChevronRightGlyph size={15} color={MUTED} />
           </Pressable>
         ) : null}
       </View>
@@ -163,7 +168,7 @@ export function MyStaysScreen({
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
       <View testID="my-stays-root" className="flex-1 bg-canvas">
         {/* 앱바 — 뒤로 + 타이틀 + 하단 hairline */}
-        <View className="flex-row items-center gap-sm border-b border-hairline px-lg pb-md pt-sm">
+        <View className="flex-row items-center gap-md border-b border-hairline px-lg pb-[14px] pt-sm">
           <Pressable accessibilityRole="button" onPress={onPressBack}>
             <ChevronLeftGlyph />
           </Pressable>
@@ -173,24 +178,32 @@ export function MyStaysScreen({
         </View>
 
         {isEmpty ? (
-          <View className="flex-1 justify-center px-lg">
-            <StateNotice
-              testID="my-stays-empty"
-              icon={<BedGlyph size={30} />}
-              title="아직 등록된 숙소가 없어요"
-              description={'숙소를 탐색하고 등록하면\n일정을 만들 수 있습니다'}
-              actions={[
-                {
-                  testID: 'my-stays-explore',
-                  label: '숙소 탐색',
-                  variant: 'filled',
-                  onPress: onPressExplore,
-                },
-              ]}
-            />
+          // Figma 1605 는 제목 없이 원·설명·내용 폭 CTA 라 공용 StateNotice(제목 필수·고정 폭 버튼) 대신 로컬로.
+          <View className="flex-1 justify-center px-2xl">
+            <View testID="my-stays-empty" className="items-center gap-lg">
+              <View
+                testID="my-stays-empty-icon"
+                className="h-[96px] w-[96px] items-center justify-center rounded-full bg-surface-strong"
+              >
+                <BedGlyph size={44} />
+              </View>
+              <Text className="text-center font-noto text-body leading-[21px] text-muted">
+                {'숙소를 탐색하고 등록하면\n일정을 만들 수 있습니다'}
+              </Text>
+              <Pressable
+                testID="my-stays-explore"
+                accessibilityRole="button"
+                onPress={onPressExplore}
+                className="h-[44px] items-center justify-center rounded-button bg-primary px-[22px]"
+              >
+                <Text className="font-noto-bold text-card-title text-on-primary">
+                  숙소 탐색
+                </Text>
+              </Pressable>
+            </View>
           </View>
         ) : (
-          <ScrollView contentContainerClassName="gap-md px-lg py-lg pb-3xl">
+          <ScrollView contentContainerClassName="gap-lg px-lg pb-2xl pt-lg">
             {rows.map((row) => (
               <MyStayRow
                 key={row.savedStayId}

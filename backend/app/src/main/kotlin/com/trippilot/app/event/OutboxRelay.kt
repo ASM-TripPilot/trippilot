@@ -10,8 +10,8 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import java.sql.ResultSet
+import java.time.Clock
 import java.time.Duration
-import java.util.concurrent.TimeUnit
 import java.util.UUID
 
 /**
@@ -39,6 +39,16 @@ class OutboxRelay(
     private val jdbc: JdbcTemplate,
     registry: MeterRegistry,
     subscribers: List<OutboxSubscriber>,
+    /**
+     * 지연 계측의 **끝점**. 시작점(`occurred_at`)도 앱이 찍으므로 **같은 종류의 시계**다 —
+     * 종전에는 끝점만 DB `now()` 라 앱·DB 시계 차가 그대로 값에 섞였다(아래 [recordLatency] 참고).
+     *
+     * ⚠ 다중 인스턴스에서는 **적재한 인스턴스와 배달하는 인스턴스가 다를 수 있다.** 그때는 두 앱
+     * 시계 사이의 NTP 편차가 남는데, 그건 DB 와의 편차보다 작고 무엇보다 **음수가 나오면 보인다**
+     * (아래 경고). 완전히 없애려면 DB 가 찍는 적재 시각 컬럼이 따로 필요하고, 그건 `occurred_at`
+     * 의 의미(도메인 사건 발생 시각)를 바꾸지 않으려면 컬럼 추가가 된다 — 지금 값이 안 된다.
+     */
+    private val clock: Clock,
 ) {
     /**
      * 릴레이 지연(OBS-U6-01) — **분위수를 내보내도록 등록한다.**
@@ -110,14 +120,17 @@ class OutboxRelay(
                 return@forEach
             }
             runCatching { targets.forEach { it.handle(envelope) }; markPublished(envelope.eventId) }
-                .onSuccess { seconds ->
+                .onSuccess { published ->
                     // OBS-U6-01 — 적재(occurred_at)에서 배달까지. **구독자 없어 닫은 건은 빼고**
                     // 실제로 배달된 것만 잰다. 그쪽을 섞으면 즉시 닫히는 값이 p95 를 끌어내려
                     // "빠르다"는 착시가 생긴다.
-                    seconds?.let {
-                        // Timer 는 정수 단위만 받는다 — 초 소수부를 살리려면 밀리초로 올려 준다.
-                        relayLatency.record((it * 1000).toLong(), TimeUnit.MILLISECONDS)
-                    }
+                    //
+                    // **경과는 앱 시계로 잰다.** 종전에는 DB 가 `now() - occurred_at` 으로 계산했는데,
+                    // `occurred_at` 은 앱이 찍은 값이라 **시작과 끝이 다른 시계**였다. 두 시계가
+                    // 수십 ms 만 어긋나도(컨테이너·다른 호스트에서는 흔하다) 값이 음수가 되고,
+                    // Micrometer 는 음수 기록을 **조용히 버린다** — 지표는 0 인데 배달은 되고 있어
+                    // "계측이 아예 안 붙었다"처럼 보인다(실측: 로컬 −8~−29ms, CI 는 통과).
+                    if (published) recordLatency(envelope)
                 }
                 .onFailure { e ->
                     val attempts = bumpAttempts(envelope.eventId)
@@ -140,14 +153,35 @@ class OutboxRelay(
      * 지표에 섞인다.** 어긋난 방향에 따라 음수가 나오는데 Micrometer 는 음수를 **조용히 버려서**,
      * 지표가 비는 것을 아무도 눈치채지 못한다. 같은 UPDATE 안에서 같은 시계로 재면 그 문제가 없다.
      */
-    private fun markPublished(eventId: UUID): Double? = jdbc.queryForObject(
-        """
-        UPDATE outbox_event SET published_at = now()
-         WHERE event_id = ?
-        RETURNING EXTRACT(EPOCH FROM (now() - occurred_at))
-        """.trimIndent(),
-        Double::class.java, eventId,
-    )
+    /**
+     * 지연 1건 기록 — **음수면 버리되 소리를 낸다**(INV-4).
+     *
+     * Micrometer 는 음수 기록을 예외도 로그도 없이 **그냥 무시한다.** 그래서 종전 결함이
+     * "지표가 0 인데 배달은 되고 있다"로만 보였고, 계측이 아예 안 붙은 것과 구분되지 않았다.
+     * 여기까지 오는 음수는 이제 **시계가 뒤로 간 경우뿐**이므로(두 끝이 같은 시계다) 드물고,
+     * 드물기에 더더욱 조용하면 안 된다.
+     */
+    private fun recordLatency(envelope: EventEnvelope) {
+        val elapsed = Duration.between(envelope.occurredAt, clock.instant())
+        if (elapsed.isNegative) {
+            log.warn(
+                "적재 시각이 미래라 지연 표본을 버립니다 — 시계가 뒤로 갔습니다. eventId={} occurredAt={}",
+                envelope.eventId, envelope.occurredAt,
+            )
+            return
+        }
+        relayLatency.record(elapsed)
+    }
+
+    /**
+     * 발행 표시. 실제로 이 호출이 닫았으면 true — 경과 계산은 호출측이 앱 시계로 한다.
+     *
+     * **행이 없으면 false 다**(종전에는 `queryForObject` 가 예외를 던져 *배달 실패*로 접혔다).
+     * 새 쪽이 맞다 — 여기 오기 전에 구독자는 이미 다 돌았으므로, 없는 행에 시도 횟수를 올려 봐야
+     * 다음 폴링이 집을 대상도 없다. 실제로 그 경로는 이 리포에 없다(아웃박스는 지우지 않는다).
+     */
+    private fun markPublished(eventId: UUID): Boolean =
+        jdbc.update("UPDATE outbox_event SET published_at = now() WHERE event_id = ?", eventId) > 0
 
     /**
      * 시도 횟수를 올리고 **다음 시도 시각을 뒤로 민다**(REL-U6-01 지수 백오프). 증가된 값을 돌려준다 —

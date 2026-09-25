@@ -153,8 +153,9 @@ export function StaySearchPage(): ReactElement {
         // 그린다. 그 복제 탭바를 실 라우팅에 잇는다: 탭 key → 해당 탭 URL 로 replace(이 스택
         // 화면을 떠나 탭으로 간다). home 만 파일 규약상 index 라 '/' 다((tabs)/_layout 매핑과 동형).
         onPressTab={(key) => router.replace(key === 'home' ? '/' : `/${key}`)}
-        // FAB "여행 만들기"(TRIP-414) — 탐색 랜딩 bridge CTA·PlaceExplore CtaBar 와 같은 목적지.
-        onPressCreateTrip={() => router.push('/trips/new/step1')}
+        // 흰 원 하트 FAB(TRIP-725) — 담은 숙소 목록(e04)으로. 화면은 라우터를 모른다(구조 가드).
+        // + FAB 는 아래 onPressRegister 를 재사용한다(같은 목적지 /stays/register).
+        onPressSaved={() => router.push('/stays/saved')}
         // 지역·필터 칩(TRIP-415) — 배지는 적용된 필터 개수(초안 아님).
         onPressFilter={handlePressFilter}
         activeFilterCount={countActiveFilters(amenityList, stayTypeList)}
@@ -179,12 +180,12 @@ export function StaySearchPage(): ReactElement {
         savedKeys={savedKeys}
         pendingKeys={pendingKeys}
         onToggleSave={(item) => void attemptToggle(item)}
-        // 카드 탭(TRIP-457 AC-5) → 상세 라우트로 push(객체형·raw stayKey·item JSON — expo-router
-        // 자동 인코딩이라 수동 encode 안 함 ★F-3). 화면은 라우터를 모른다(구조 가드).
+        // 카드 탭(TRIP-457 AC-5) → 상세 라우트로 push(객체형·raw stayKey 만 — 상세가 스스로 조회,
+        // TRIP-940. expo-router 자동 인코딩이라 수동 encode 안 함 ★F-3). 화면은 라우터를 모른다(구조 가드).
         onPressCard={(item) =>
           router.push({
             pathname: '/stays/[stayId]',
-            params: { stayId: stayKey(item), item: JSON.stringify(item) },
+            params: { stayId: stayKey(item) },
           })
         }
         nameQuery={nameQuery}

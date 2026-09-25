@@ -16,14 +16,22 @@
  * 해제·재조회·새 담기 시도)이 지운다(01b Seed Q5).
  *
  * `isAuthed`는 `getAccessToken() !== null`(01b Seed Q1) — 동기라서 "판정 대기" 제3 상태가
- * 안 생긴다. 담긴 목록·CTA 숫자는 `useSavedPlaces`가 한 곳에서 낸다(01b Seed Q2 ⓐ).
+ * 안 생긴다. 담긴 목록은 `useSavedPlaces`가 한 곳에서 낸다(01b Seed Q2 ⓐ).
  */
 import type { ReactElement } from 'react';
 import { useState } from 'react';
+import { Pressable, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import BottomSheet, {
+  BottomSheetBackdrop,
+  BottomSheetView,
+  type BottomSheetBackdropProps,
+} from '@gorhom/bottom-sheet';
 
-import type { Place, PoiCategory } from '@/shared/api/generated/schemas';
+import type { Place } from '@/shared/api/generated/schemas';
+import { PoiCategory } from '@/shared/api/generated/schemas';
 import { getAccessToken } from '@/shared/api/tokenManager';
+import { BottomTabBar } from '@/shared/ui/BottomTabBar';
 
 import { resolvePlaceListState } from '@/features/explore/model/placeListState';
 import {
@@ -36,6 +44,93 @@ import { usePlacesInfinite } from '@/features/explore/model/usePlacesInfinite';
 import { useMultiRegionPlaces } from '@/features/explore/model/useMultiRegionPlaces';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
+
+/** 카테고리 시트(TRIP-708 AC-6) — **페이지가 소유**한다(@gorhom/bottom-sheet). 열림 상태는
+ * 페이지 `useState`이고, 닫히면 트리에서 통째로 사라진다(조건부 마운트) — gorhom 목이 통과형
+ * (어떤 prop이든 children 렌더)이라 "열림"은 마운트/언마운트로만 관측된다(실개폐·딤·snap은
+ * 6-b 실기). 화면(`PlaceExploreScreen`)에 두면 화면 순수성(useState 0)이 깨지므로 여기 둔다.
+ * 헤더의 CategoryChips와 testID가 겹치지 않도록 `-sheet-` 접두를 쓴다(항상 닫혀 있어 실제
+ * 충돌은 없지만 방어적으로 분리). */
+function renderCategorySheetBackdrop(
+  props: BottomSheetBackdropProps
+): ReactElement {
+  return (
+    <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} />
+  );
+}
+
+const CATEGORY_SHEET_CHIPS: {
+  key: string;
+  label: string;
+  value: PoiCategory | null;
+}[] = [
+  { key: 'all', label: '전체', value: null },
+  ...Object.values(PoiCategory).map((category) => ({
+    key: category,
+    label: category,
+    value: category,
+  })),
+];
+
+function CategorySheet({
+  selected,
+  onSelect,
+  onClose,
+}: {
+  selected: PoiCategory | null;
+  onSelect: (category: PoiCategory | null) => void;
+  onClose: () => void;
+}): ReactElement {
+  return (
+    <BottomSheet
+      index={0}
+      enablePanDownToClose
+      onClose={onClose}
+      backdropComponent={renderCategorySheetBackdrop}
+    >
+      <BottomSheetView
+        testID="explore-places-category-sheet"
+        className="w-full gap-lg px-lg pb-2xl pt-sm"
+      >
+        <Text className="font-noto-bold text-section font-bold text-ink">
+          카테고리
+        </Text>
+        <View className="w-full flex-row flex-wrap gap-sm">
+          {CATEGORY_SHEET_CHIPS.map((chip) => {
+            const isSelected = chip.value === selected;
+            return (
+              <Pressable
+                key={chip.key}
+                testID={`explore-places-sheet-category-${chip.key}`}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSelected }}
+                onPress={() => {
+                  onSelect(chip.value);
+                  onClose();
+                }}
+                className={
+                  isSelected
+                    ? 'rounded-pill bg-primary px-md py-sm'
+                    : 'rounded-pill border border-hairline-strong bg-canvas px-md py-sm'
+                }
+              >
+                <Text
+                  className={
+                    isSelected
+                      ? 'font-noto-bold text-label font-bold text-on-primary'
+                      : 'font-noto-bold text-label font-bold text-ink'
+                  }
+                >
+                  {chip.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </BottomSheetView>
+    </BottomSheet>
+  );
+}
 
 export function PlaceExplorePage(): ReactElement {
   const { region } = useLocalSearchParams<{ region?: string | string[] }>();
@@ -52,6 +147,8 @@ export function PlaceExplorePage(): ReactElement {
   const [pendingPoiIds, setPendingPoiIds] = useState<string[]>([]);
   const [saveError, setSaveError] = useState<PlaceSaveNotice | null>(null);
   const [lastAttempted, setLastAttempted] = useState<Place | null>(null);
+  // 카테고리 시트 열림 — 필터 버튼 press가 연다(AC-6, 조건부 마운트).
+  const [categorySheetOpen, setCategorySheetOpen] = useState(false);
 
   const isAuthed = getAccessToken() !== null;
 
@@ -160,27 +257,47 @@ export function PlaceExplorePage(): ReactElement {
   }
 
   return (
-    <PlaceExploreScreen
-      places={items}
-      savedPoiIds={savedPoiIds}
-      selectedCategory={selectedCategory}
-      searchText={searchText}
-      onSelectCategory={handleSelectCategory}
-      onChangeSearchText={handleChangeSearchText}
-      onToggleSave={handleToggleSave}
-      onPressCard={(place) => router.push(`/explore/places/${place.poiId}`)}
-      onPressCreateTrip={() => router.push('/trips/new/step1')}
-      onBack={() => router.back()}
-      state={listState}
-      pendingPoiIds={pendingPoiIds}
-      saveError={saveError}
-      onRetry={handleRetry}
-      onPressChangeRegion={() => router.push('/explore/region?purpose=trip')}
-      onClearFilter={handleClearFilter}
-      onPressSaveErrorAction={handlePressSaveErrorAction}
-      onEndReached={handleEndReached}
-      isFetchingMore={isFetchingNextPage}
-      degraded={isMultiRegion && !isError ? multi.degraded : false}
-    />
+    <View style={{ flex: 1 }}>
+      <PlaceExploreScreen
+        places={items}
+        savedPoiIds={savedPoiIds}
+        selectedCategory={selectedCategory}
+        searchText={searchText}
+        onSelectCategory={handleSelectCategory}
+        onChangeSearchText={handleChangeSearchText}
+        onToggleSave={handleToggleSave}
+        onPressCard={(place) => router.push(`/explore/places/${place.poiId}`)}
+        onPressCreateTrip={() => router.push('/trips/new/step1')}
+        onPressSavedPlaces={() => router.push('/explore/saved-places')}
+        onPressFilter={() => setCategorySheetOpen(true)}
+        onBack={() => router.back()}
+        state={listState}
+        pendingPoiIds={pendingPoiIds}
+        saveError={saveError}
+        onRetry={handleRetry}
+        onPressChangeRegion={() => router.push('/explore/region?purpose=trip')}
+        onClearFilter={handleClearFilter}
+        onPressSaveErrorAction={handlePressSaveErrorAction}
+        onEndReached={handleEndReached}
+        isFetchingMore={isFetchingNextPage}
+        degraded={isMultiRegion && !isError ? multi.degraded : false}
+      />
+
+      {/* (tabs) 밖 라우트라 진짜 탭바가 없다 — DestinationDetail 선례처럼 복제해 그리고,
+          onPressTab은 push가 아니라 replace로 항법한다(뒤로가기 스택을 안 쌓는다). */}
+      <BottomTabBar
+        activeKey="explore"
+        onPressTab={(key) => router.replace(key === 'home' ? '/' : `/${key}`)}
+      />
+
+      {/* 카테고리 시트 — 필터 버튼이 열고, 닫힘=트리 부재(조건부 마운트). */}
+      {categorySheetOpen ? (
+        <CategorySheet
+          selected={selectedCategory}
+          onSelect={handleSelectCategory}
+          onClose={() => setCategorySheetOpen(false)}
+        />
+      ) : null}
+    </View>
   );
 }
