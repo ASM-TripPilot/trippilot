@@ -179,10 +179,6 @@ jobs:
           EVENTS_STORE: collected_events.json
           # TRIP-524 — 있으면 품질 floors 게이트(FAIL)·3σ 회귀(WARNING), 없으면 무게이트
           SMOKE_BASELINE_JSON: rehearsal_baseline.json
-          # TRIP-869 후속 — 리허설 결과에 LLM 비용을 실어 rehearsal_log.jsonl 시계열에
-          # 누적한다. 없으면 cost=null(모름). 현행 배정은 멘토 게이트웨이라 전건
-          # unpriced 가 정상이고, Claude 배정이 섞이는 순간부터 금액이 잡힌다.
-          TRIPPILOT_LLM_PRICE_FILE: config/llm-prices.json
         run: uv run python scripts/smoke_itinerary.py
       # 후속 3스텝은 !cancelled() — 품질 게이트 FAIL(exit 1)로 잡이 붉어도 그날
       # 기록·artifact는 남긴다 (TRIP-524): 회귀가 처음 발생한 날의 증빙이 가장 귀하다.
