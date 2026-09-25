@@ -16,21 +16,23 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { NotificationInboxPage } from './NotificationInboxPage';
 
 /**
- * TRIP-773 · l01 '모두 읽음' 배선 — 실제 페이지 + msw + 실 QueryClient 로 "실제로 나간 요청"을 잰다.
+ * l01 '모두 읽음' 배선 — 실제 페이지 + msw + 실 QueryClient 로 "실제로 나간 요청"을 잰다.
+ * TRIP-773 신설(건별 POST), TRIP-946 에서 `POST /me/notifications/read-all` 1회로 계약 교체.
  *
- * 무엇을 보장하나(01b D1~D3):
- *  - **AC-2 건별 호출**: 미읽음 2 + 읽음 1 에서 누르면 `POST /me/notifications/{id}/read` 가 정확히 2회,
- *    대상은 미읽음 두 건이고 읽음 행 id 로는 0회. `/read-all` 은 미처리 요청이라 쏘면 red(D1 — 전환은 새 티켓).
- *  - **AC-3 무효화**: POST 가 **모두 끝난 뒤** 목록 GET 이 한 번 더 나가고, 재조회 결과(모두 읽음)로 버튼이 사라진다.
- *  - **AC-4 부분 실패**: 1건이 500 이어도 나머지를 기다린 뒤 재조회하고, 안내 "일부 알림을 읽음 처리하지 못했어요"를
- *    보인다. 전부 실패도 같은 문구, 전부 성공이면 안내 부재. 다음 press 때 안내가 걷힌다.
- *  - **AC-5 진행 중 비활성**: 응답 전엔 버튼이 disabled 이고, 다시 눌러도 POST 가 늘지 않는다.
+ * 무엇을 보장하나:
+ *  - AC-12 1회 요청: 미읽음 2 + 읽음 1 에서 누르면 read-all 이 정확히 1회, 건별 `/{id}/read` 는 0회.
+ *  - AC-13 응답 뒤 재조회: read-all 204 를 받은 **뒤** 목록 GET 이 한 번 더 나가고, 그 결과(전부 읽음)로
+ *    버튼·미읽음 dot 이 사라진다. 응답 전(문이 닫힌 동안)엔 재조회가 없다.
+ *  - AC-14 실패: read-all 이 500·네트워크 오류여도 재조회하고, 안내 "일부 알림을 읽음 처리하지 못했어요"를
+ *    보인다(문구는 Q3 로 유지). 다음 press 때 안내가 걷힌다.
+ *  - AC-15 진행 중 비활성: 응답 전엔 버튼이 disabled 이고, 다시 눌러도 read-all 은 1회에 머문다.
  *
  * 장치:
- *  - **상태 기억 핸들러** — POST 받은 id 를 `readIds` 에 넣고, GET 은 그 id 의 readAt 을 채워 돌려준다.
- *    고정 응답이면 재조회 뒤에도 미읽음이 그대로라 "버튼이 사라진다"를 관측할 수 없다.
- *  - **문(gate)** — 테스트가 열 때까지 응답하지 않는 POST. "응답 전"을 시간이 아니라 신호로 만든다
- *    (useToggles.integration.test.tsx 선례).
+ *  - 상태 기억 GET — read-all 이 204 로 끝나면 이후 GET 은 전 행의 readAt 을 채워 돌려준다. 고정 응답이면
+ *    재조회 뒤에도 미읽음이 그대로라 "버튼이 사라진다"를 관측할 수 없다.
+ *  - 문(gate) — 테스트가 열 때까지 응답하지 않는 read-all. "응답 전"을 시간이 아니라 신호로 만든다.
+ *    `refetchGate` 는 같은 문을 재조회 GET 에 건다 — 비활성이 재조회 **완료**까지 이어지는지 본다.
+ *  - 건별 POST 핸들러는 일부러 204 로 살려 두고 호출만 센다 — 옛 방식으로 돌아가면 "건별 0회" 단언이 red 가 된다.
  */
 
 // 생성 클라이언트의 인증 계층(authedClient)이 @/shared/storage 를 정적으로 문다.
@@ -52,7 +54,8 @@ const BASE = 'http://localhost:8080/api/v1';
 const LIST_PATH = '/api/v1/me/notifications';
 const MARK_ALL = 'notification-inbox-mark-all';
 const MARK_ALL_ERROR = 'notification-inbox-mark-all-error';
-const PARTIAL_FAILURE = '일부 알림을 읽음 처리하지 못했어요';
+const UNREAD_DOT = 'notification-inbox-unread-dot';
+const FAILURE = '일부 알림을 읽음 처리하지 못했어요';
 
 // 계약상 notificationId 는 uuid.
 const U1 = '00000000-0000-4000-8000-000000000001';
@@ -104,14 +107,21 @@ function createGate() {
   return { opened, release };
 }
 
-/** POST 한 건을 어떻게 답할지 — 204(성공) / 500(실패), 필요하면 문 뒤에서. */
-type Reply = { status: 204 | 500; gate?: ReturnType<typeof createGate> };
+/** read-all 한 번을 어떻게 답할지 — 204(성공) / 500 / 네트워크 오류, 필요하면 문 뒤에서. */
+type Reply = {
+  status: 204 | 500 | 'network';
+  gate?: ReturnType<typeof createGate>;
+};
 
-let readIds: Set<string>;
-let postStarts: string[];
-/** request:start(GET) 와 POST 완료를 한 줄에 섞어 순서를 본다. */
+let allRead: boolean;
+let readAllPosts: number;
+let perIdPosts: string[];
+/** request:start(GET) 와 read-all 완료를 한 줄에 섞어 순서를 본다. */
 let timeline: string[];
-let replies: Record<string, Reply>;
+/** read-all 호출 순서대로 꺼내 쓰는 응답 큐. 비면 204. */
+let readAllReplies: Reply[];
+/** 있으면 read-all 성공 뒤의 목록 GET(재조회)을 이 문 뒤에 붙잡는다. 첫 GET 은 안 막는다. */
+let refetchGate: ReturnType<typeof createGate> | undefined;
 
 const listGets = () => timeline.filter((e) => e === `GET ${LIST_PATH}`).length;
 
@@ -125,37 +135,40 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
-  readIds = new Set();
-  postStarts = [];
+  allRead = false;
+  readAllPosts = 0;
+  perIdPosts = [];
   timeline = [];
-  replies = {};
+  readAllReplies = [];
+  refetchGate = undefined;
   setAccessToken('a');
   server.use(
-    // 상태 기억 GET — POST 로 읽힌 id 는 readAt 이 채워져 나간다.
-    http.get(`${BASE}/me/notifications`, () =>
-      HttpResponse.json({
+    // 상태 기억 GET — read-all 이 성공한 뒤로는 전 행이 읽음으로 나간다.
+    http.get(`${BASE}/me/notifications`, async () => {
+      if (allRead && refetchGate) await refetchGate.opened;
+      return HttpResponse.json({
         items: BASE_ITEMS.map((item) =>
-          readIds.has(item.notificationId)
-            ? { ...item, readAt: item.readAt ?? minutesAgo(0) }
-            : item
+          allRead ? { ...item, readAt: item.readAt ?? minutesAgo(0) } : item
         ),
-      })
-    ),
-    http.post(
-      `${BASE}/me/notifications/:notificationId/read`,
-      async ({ params }) => {
-        const id = String(params.notificationId);
-        postStarts.push(id);
-        const reply = replies[id] ?? { status: 204 };
-        if (reply.gate) await reply.gate.opened;
-        timeline.push(`POST-done ${id}`);
-        if (reply.status === 500) {
-          return new HttpResponse(null, { status: 500 });
-        }
-        readIds.add(id);
-        return new HttpResponse(null, { status: 204 });
+      });
+    }),
+    http.post(`${BASE}/me/notifications/read-all`, async () => {
+      readAllPosts += 1;
+      const reply = readAllReplies.shift() ?? { status: 204 };
+      if (reply.gate) await reply.gate.opened;
+      timeline.push('POST-done read-all');
+      if (reply.status === 'network') return HttpResponse.error();
+      if (reply.status === 500) {
+        return new HttpResponse(null, { status: 500 });
       }
-    )
+      allRead = true;
+      return new HttpResponse(null, { status: 204 });
+    }),
+    // 옛 방식(건별) 감시용 — 정상 응답하되 호출을 센다.
+    http.post(`${BASE}/me/notifications/:notificationId/read`, ({ params }) => {
+      perIdPosts.push(String(params.notificationId));
+      return new HttpResponse(null, { status: 204 });
+    })
   );
 });
 
@@ -196,77 +209,91 @@ async function settle() {
   });
 }
 
-describe('AC-2·3 · 전부 성공 — 미읽음만 건별 POST, 모두 끝난 뒤 재조회, 버튼 사라짐', () => {
-  it('POST 는 미읽음 2건에만 정확히 2회, 두 POST 가 끝난 뒤 GET 이 다시 나가고 버튼·dot 이 사라진다', async () => {
+describe('AC-12·13 · 성공 — read-all 1회, 응답 뒤 재조회, 버튼·dot 사라짐', () => {
+  it('read-all 정확히 1회 · 건별 0회, 204 뒤 GET 이 한 번 더 나가고 미읽음 표시가 전부 사라진다', async () => {
     await renderReady();
+    expect(screen.queryAllByTestId(UNREAD_DOT)).toHaveLength(2);
 
     fireEvent.press(screen.getByTestId(MARK_ALL));
 
-    // 재조회가 나가고, 그 결과(모두 읽음)가 화면에 닿을 때까지.
     await waitFor(() => expect(listGets()).toBe(2));
     await waitFor(() => expect(screen.queryByTestId(MARK_ALL)).toBeNull());
 
-    // 건별 호출 — 정확히 2회, 대상은 미읽음 두 건, 읽음 행은 0회.
-    expect(postStarts).toHaveLength(2);
-    expect([...postStarts].sort()).toEqual([U1, U2].sort());
-    expect(postStarts).not.toContain(R1);
+    // 한 번에 — read-all 1회, 건별 호출 0회.
+    expect(readAllPosts).toBe(1);
+    expect(perIdPosts).toHaveLength(0);
 
-    // 무효화 — GET 이 한 번 더(1 → 2), 그리고 그 GET 은 두 POST 가 모두 끝난 뒤다.
-    const refetchAt = timeline.lastIndexOf(`GET ${LIST_PATH}`);
-    expect(timeline.indexOf(`POST-done ${U1}`)).toBeLessThan(refetchAt);
-    expect(timeline.indexOf(`POST-done ${U2}`)).toBeLessThan(refetchAt);
+    // 재조회 GET 은 read-all 응답 뒤다.
+    expect(timeline.indexOf('POST-done read-all')).toBeGreaterThan(-1);
+    expect(timeline.indexOf('POST-done read-all')).toBeLessThan(
+      timeline.lastIndexOf(`GET ${LIST_PATH}`)
+    );
 
-    // 행은 그대로 3개(긍정 짝) + 미읽음 dot 0 + 전부 성공이면 안내 부재.
+    // 행은 그대로 3개(긍정 짝) + 미읽음 dot 0 + 안내 없음.
     expect(screen.queryAllByTestId('notification-inbox-row')).toHaveLength(3);
-    expect(
-      screen.queryAllByTestId('notification-inbox-unread-dot')
-    ).toHaveLength(0);
+    expect(screen.queryAllByTestId(UNREAD_DOT)).toHaveLength(0);
     expect(screen.queryByTestId(MARK_ALL_ERROR)).toBeNull();
   });
-});
 
-describe('AC-3·4 · 부분 실패 — 나머지를 기다린 뒤 재조회하고 안내를 보인다', () => {
-  it('U1 500 · U2 지연: U2 가 끝나기 전엔 재조회 없음 → 끝나면 재조회 + 안내, 실패한 1건은 미읽음으로 남는다', async () => {
-    const slow = createGate();
-    replies[U1] = { status: 500 };
-    replies[U2] = { status: 204, gate: slow };
+  it('read-all 응답 전(문 닫힘)엔 재조회하지 않고, 응답이 오면 재조회한다', async () => {
+    const gate = createGate();
+    readAllReplies = [{ status: 204, gate }];
     await renderReady();
 
     fireEvent.press(screen.getByTestId(MARK_ALL));
-    await waitFor(() => expect(postStarts).toHaveLength(2));
+    await waitFor(() => expect(readAllPosts).toBe(1));
     await settle();
 
-    // U1 은 이미 실패했지만 U2 가 아직이다 — 모두 끝나기 전에 무효화하면 안 된다.
     expect(listGets()).toBe(1);
 
     await act(async () => {
-      slow.release();
+      gate.release();
     });
 
     await waitFor(() => expect(listGets()).toBe(2));
+    await waitFor(() => expect(screen.queryByTestId(MARK_ALL)).toBeNull());
+  });
+});
+
+describe('AC-14 · 실패 — 재조회하고 안내를 보인다', () => {
+  it('read-all 500 → 재조회 + 안내, 미읽음은 그대로 남는다', async () => {
+    readAllReplies = [{ status: 500 }];
+    await renderReady();
+
+    fireEvent.press(screen.getByTestId(MARK_ALL));
+
     expect(await screen.findByTestId(MARK_ALL_ERROR)).toHaveTextContent(
-      PARTIAL_FAILURE
+      FAILURE
     );
-    // 재조회 결과: U2 만 읽힘 → 미읽음 1(U1) 이라 버튼·dot 1 이 남는다.
-    await waitFor(() =>
-      expect(
-        screen.queryAllByTestId('notification-inbox-unread-dot')
-      ).toHaveLength(1)
+    await waitFor(() => expect(listGets()).toBe(2));
+    expect(screen.queryAllByTestId(UNREAD_DOT)).toHaveLength(2);
+    expect(screen.getByTestId(MARK_ALL)).toBeOnTheScreen();
+    expect(readAllPosts).toBe(1);
+    expect(perIdPosts).toHaveLength(0);
+  });
+
+  it('read-all 네트워크 오류 → 재조회 + 안내', async () => {
+    readAllReplies = [{ status: 'network' }];
+    await renderReady();
+
+    fireEvent.press(screen.getByTestId(MARK_ALL));
+
+    expect(await screen.findByTestId(MARK_ALL_ERROR)).toHaveTextContent(
+      FAILURE
     );
+    await waitFor(() => expect(listGets()).toBe(2));
     expect(screen.getByTestId(MARK_ALL)).toBeOnTheScreen();
   });
 
   it('안내는 다음 "모두 읽음" press 때 걷히고, 이번엔 성공해 버튼이 사라진다', async () => {
-    replies[U1] = { status: 500 };
+    const retry = createGate();
+    readAllReplies = [{ status: 500 }, { status: 204, gate: retry }];
     await renderReady();
 
     fireEvent.press(screen.getByTestId(MARK_ALL));
     await screen.findByTestId(MARK_ALL_ERROR);
     await waitFor(() => expect(screen.getByTestId(MARK_ALL)).toBeEnabled());
 
-    // 두 번째 시도 — U1 이 이번엔 성공하되 문 뒤에서 기다린다.
-    const retry = createGate();
-    replies[U1] = { status: 204, gate: retry };
     fireEvent.press(screen.getByTestId(MARK_ALL));
 
     // 응답 전인데도 안내가 걷혔다(press 때 걷힘).
@@ -279,28 +306,14 @@ describe('AC-3·4 · 부분 실패 — 나머지를 기다린 뒤 재조회하�
     });
     await waitFor(() => expect(screen.queryByTestId(MARK_ALL)).toBeNull());
     expect(screen.queryByTestId(MARK_ALL_ERROR)).toBeNull();
-  });
-
-  it('전부 실패해도 재조회하고 같은 문구를 보인다', async () => {
-    replies[U1] = { status: 500 };
-    replies[U2] = { status: 500 };
-    await renderReady();
-
-    fireEvent.press(screen.getByTestId(MARK_ALL));
-
-    expect(await screen.findByTestId(MARK_ALL_ERROR)).toHaveTextContent(
-      PARTIAL_FAILURE
-    );
-    await waitFor(() => expect(listGets()).toBe(2));
-    expect(postStarts).toHaveLength(2);
+    expect(readAllPosts).toBe(2);
   });
 });
 
-describe('AC-5 · 진행 중 비활성 — 응답 전 다시 눌러도 POST 가 늘지 않는다', () => {
-  it('응답 전엔 버튼이 disabled 이고, 한 번 더 눌러도 POST 는 미읽음 수(2)에 머문다', async () => {
+describe('AC-15 · 진행 중 비활성 — 응답 전 다시 눌러도 read-all 이 늘지 않는다', () => {
+  it('응답 전엔 버튼이 disabled 이고, 한 번 더 눌러도 read-all 은 1회에 머문다', async () => {
     const gate = createGate();
-    replies[U1] = { status: 204, gate };
-    replies[U2] = { status: 204, gate };
+    readAllReplies = [{ status: 204, gate }];
     await renderReady();
 
     fireEvent.press(screen.getByTestId(MARK_ALL));
@@ -308,12 +321,34 @@ describe('AC-5 · 진행 중 비활성 — 응답 전 다시 눌러도 POST 가 
     fireEvent.press(screen.getByTestId(MARK_ALL));
     await settle();
 
-    expect(postStarts).toHaveLength(2);
+    expect(readAllPosts).toBe(1);
 
     await act(async () => {
       gate.release();
     });
     await waitFor(() => expect(screen.queryByTestId(MARK_ALL)).toBeNull());
-    expect(postStarts).toHaveLength(2);
+    expect(readAllPosts).toBe(1);
+  });
+
+  it('read-all 은 끝났어도 재조회 응답 전엔 버튼이 disabled 이고, 다시 눌러도 read-all 은 1회에 머문다', async () => {
+    refetchGate = createGate();
+    await renderReady();
+
+    fireEvent.press(screen.getByTestId(MARK_ALL));
+    // read-all 204 가 돌아왔고 재조회 GET 이 나갔다 — 그 응답만 문 뒤에 붙잡혀 있다.
+    await waitFor(() => expect(listGets()).toBe(2));
+    await settle();
+
+    expect(timeline).toContain('POST-done read-all');
+    expect(screen.getByTestId(MARK_ALL)).toBeDisabled();
+    fireEvent.press(screen.getByTestId(MARK_ALL));
+    await settle();
+    expect(readAllPosts).toBe(1);
+
+    await act(async () => {
+      refetchGate?.release();
+    });
+    await waitFor(() => expect(screen.queryByTestId(MARK_ALL)).toBeNull());
+    expect(readAllPosts).toBe(1);
   });
 });

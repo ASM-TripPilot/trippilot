@@ -4,6 +4,8 @@
  * TripPilot U1 API (소셜 로그인 전용 MVP)
  * U1 기반·계정·온보딩 (M1 Auth · M2 Profile · C3 Moderation). 소셜 로그인 전용 — 이메일/비밀번호 로그인은 후속 이연. 정본 대조: docs/design/U1-API-설계.md, U1-DB스키마-설계.md, U1-내부아키텍처-설계.md
  *
+ * **횡단 규약 — 입력 형식 오류는 어느 엔드포인트에서든 400이다.** 경로변수·쿼리의 타입 변환 실패(UUID·숫자·enum)와 필수 쿼리 누락은 표준 에러 봉투 (`ErrorResponse`, code=`VALIDATION_ERROR`, `fields[].field`=문제 파라미터 이름)로 나간다. 경로별 `'400'` 선언은 **업무 검증**이 있는 곳에만 적는다 — 형식 오류까지 경로마다 중복 선언하면 무엇이 그 엔드포인트 고유의 검증인지 안 보인다. (2026-09-01 이전에는 이 갈래가 500 `INTERNAL` 로 나갔다 — UUID-PATH-400)
+ *
  * OpenAPI spec version: 0.1.0-draft
  */
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -586,6 +588,90 @@ export const usePostMeNotificationsNotificationIdRead = <
 > => {
   return useMutation(
     getPostMeNotificationsNotificationIdReadMutationOptions(options),
+    queryClient
+  );
+};
+/**
+ * 알림함 '모두 읽음'. 계정의 **미읽음 전부**를 한 번에 읽음 처리한다(TRIP-829) — 건별 순회는 왕복이 알림 수만큼 늘고, 그 사이 새 알림이 끼어들어 "눌렀는데 하나 남았다"가 된다.
+ * **멱등하다** — 대상이 0건이어도 204 다(이미 다 읽었거나 알림이 없다). 건별 읽음과 같이 **처음 읽은 시각은 덮지 않는다**.
+ * **종류로 거르지 않는다.** 대상 집합이 `unreadOnly` 목록과 같아야 뱃지가 0 이 된다 — SYSTEM 을 빼면 눌러도 숫자가 남아 버튼이 고장난 것처럼 보인다(수신설정에서 SYSTEM 을 못 끄는 것과는 별개 축이다).
+ * 처리 건수는 돌려주지 않는다 — 화면이 그 수로 하는 일이 없다(뱃지는 어차피 0 이 된다).
+ * 인앱 읽음 상태만 건드린다. 푸시와는 별개다(INV-U6-02).
+ * @summary 알림 모두 읽음
+ */
+export const postMeNotificationsReadAll = (signal?: AbortSignal) => {
+  return customInstance<void>({
+    url: `/me/notifications/read-all`,
+    method: 'POST',
+    signal,
+  });
+};
+
+export const getPostMeNotificationsReadAllMutationOptions = <
+  TError = unknown,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postMeNotificationsReadAll>>,
+    TError,
+    void,
+    TContext
+  >;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postMeNotificationsReadAll>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ['postMeNotificationsReadAll'];
+  const { mutation: mutationOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postMeNotificationsReadAll>>,
+    void
+  > = () => {
+    return postMeNotificationsReadAll();
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostMeNotificationsReadAllMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postMeNotificationsReadAll>>
+>;
+
+export type PostMeNotificationsReadAllMutationError = unknown;
+
+/**
+ * @summary 알림 모두 읽음
+ */
+export const usePostMeNotificationsReadAll = <
+  TError = unknown,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postMeNotificationsReadAll>>,
+      TError,
+      void,
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postMeNotificationsReadAll>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(
+    getPostMeNotificationsReadAllMutationOptions(options),
     queryClient
   );
 };

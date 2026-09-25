@@ -1033,7 +1033,7 @@
 - `src/shared/api/generated/location/location.ts`  →  getMeLocationConsent · getGetMeLocationConsentQueryKey · getGetMeLocationConsentQueryOptions · GetMeLocationConsentQueryResult · GetMeLocationConsentQueryError · useGetMeLocationConsent · putMeLocationConsent · getPutMeLocationConsentMutationOptions · PutMeLocationConsentMutationResult · PutMeLocationConsentMutationBody · PutMeLocationConsentMutationError · usePutMeLocationConsent · patchMeLocationConsentOsPermission · getPatchMeLocationConsentOsPermissionMutationOptions · PatchMeLocationConsentOsPermissionMutationResult · PatchMeLocationConsentOsPermissionMutationBody · PatchMeLocationConsentOsPermissionMutationError · usePatchMeLocationConsentOsPermission
 
 ## src/shared/api/generated/notification/
-- `src/shared/api/generated/notification/notification.ts`  →  getMeNotificationSettings · getGetMeNotificationSettingsQueryKey · getGetMeNotificationSettingsQueryOptions · GetMeNotificationSettingsQueryResult · GetMeNotificationSettingsQueryError · useGetMeNotificationSettings · patchMeNotificationSettingsKind · getPatchMeNotificationSettingsKindMutationOptions · PatchMeNotificationSettingsKindMutationResult · PatchMeNotificationSettingsKindMutationBody · PatchMeNotificationSettingsKindMutationError · usePatchMeNotificationSettingsKind · getMeNotifications · getGetMeNotificationsQueryKey · getGetMeNotificationsQueryOptions · GetMeNotificationsQueryResult · GetMeNotificationsQueryError · useGetMeNotifications · postMeNotificationsNotificationIdRead · getPostMeNotificationsNotificationIdReadMutationOptions · PostMeNotificationsNotificationIdReadMutationResult · PostMeNotificationsNotificationIdReadMutationError · usePostMeNotificationsNotificationIdRead
+- `src/shared/api/generated/notification/notification.ts`  →  getMeNotificationSettings · getGetMeNotificationSettingsQueryKey · getGetMeNotificationSettingsQueryOptions · GetMeNotificationSettingsQueryResult · GetMeNotificationSettingsQueryError · useGetMeNotificationSettings · patchMeNotificationSettingsKind · getPatchMeNotificationSettingsKindMutationOptions · PatchMeNotificationSettingsKindMutationResult · PatchMeNotificationSettingsKindMutationBody · PatchMeNotificationSettingsKindMutationError · usePatchMeNotificationSettingsKind · getMeNotifications · getGetMeNotificationsQueryKey · getGetMeNotificationsQueryOptions · GetMeNotificationsQueryResult · GetMeNotificationsQueryError · useGetMeNotifications · postMeNotificationsNotificationIdRead · getPostMeNotificationsNotificationIdReadMutationOptions · PostMeNotificationsNotificationIdReadMutationResult · PostMeNotificationsNotificationIdReadMutationError · usePostMeNotificationsNotificationIdRead · postMeNotificationsReadAll · getPostMeNotificationsReadAllMutationOptions · PostMeNotificationsReadAllMutationResult · PostMeNotificationsReadAllMutationError · usePostMeNotificationsReadAll
 
 ## src/shared/api/generated/notifications/
 - `src/shared/api/generated/notifications/notifications.ts`  →  postMePushTokens · getPostMePushTokensMutationOptions · PostMePushTokensMutationResult · PostMePushTokensMutationBody · PostMePushTokensMutationError · usePostMePushTokens · deleteMePushTokensToken · getDeleteMePushTokensTokenMutationOptions · DeleteMePushTokensTokenMutationResult · DeleteMePushTokensTokenMutationError · useDeleteMePushTokensToken
@@ -1133,13 +1133,16 @@
 - `src/shared/api/generated/schemas/nicknameTakenResponse.ts`  →  NicknameTakenResponse
 - `src/shared/api/generated/schemas/notFoundResponse.ts`  →  NotFoundResponse
 - `src/shared/api/generated/schemas/notification.ts`  →  Notification
-- `src/shared/api/generated/schemas/notificationActionPayload.ts`  →  NotificationActionPayload
 - `src/shared/api/generated/schemas/notificationActionType.ts`  →  NotificationActionType
 - `src/shared/api/generated/schemas/notificationKind.ts`  →  NotificationKind
 - `src/shared/api/generated/schemas/notificationList.ts`  →  NotificationList
+- `src/shared/api/generated/schemas/notificationPlanBAction.ts`  →  NotificationPlanBAction
+- `src/shared/api/generated/schemas/notificationReflectionAction.ts`  →  NotificationReflectionAction
+- `src/shared/api/generated/schemas/notificationStayAction.ts`  →  NotificationStayAction
 - `src/shared/api/generated/schemas/notificationToggle.ts`  →  NotificationToggle
 - `src/shared/api/generated/schemas/notificationToggleKind.ts`  →  NotificationToggleKind
 - `src/shared/api/generated/schemas/notificationToggleList.ts`  →  NotificationToggleList
+- `src/shared/api/generated/schemas/notificationTripAction.ts`  →  NotificationTripAction
 - `src/shared/api/generated/schemas/patchMeLocationConsentOsPermissionBody.ts`  →  PatchMeLocationConsentOsPermissionBody
 - `src/shared/api/generated/schemas/patchMeLocationConsentOsPermissionBodyOsPermission.ts`  →  PatchMeLocationConsentOsPermissionBodyOsPermission
 - `src/shared/api/generated/schemas/patchMeProfileNicknameBody.ts`  →  PatchMeProfileNicknameBody
@@ -1362,4 +1365,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 928개 파일
+합계 931개 파일

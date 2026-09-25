@@ -10,17 +10,8 @@
  */
 
 /**
- * 알림에서 들어갈 화면. 진입이 없으면 `actionPayload` 와 함께 **둘 다 null** 이다 — 액션 없는 알림을 "액션 있는 척" 그리지 않는다(INV-4). 회고에 쓸 데이터가 없어 만들지 못한 알림이 그 경우다(BR-U6-12).
- *
- * `PLANB_REPLAN` 은 일정 화면이 아니라 **재계획 진입**이다(BR-U6-08 '대안 일정 보기').
+ * `STAY_DETAIL`. 등록된 숙소 상세로 들어간다.
  */
-export type NotificationActionType =
-  (typeof NotificationActionType)[keyof typeof NotificationActionType] | null;
-
-export const NotificationActionType = {
-  TRIP_ITINERARY: 'TRIP_ITINERARY',
-  PLANB_REPLAN: 'PLANB_REPLAN',
-  REFLECTION_DAILY: 'REFLECTION_DAILY',
-  TRIP_SUMMARY: 'TRIP_SUMMARY',
-  STAY_DETAIL: 'STAY_DETAIL',
-} as const;
+export interface NotificationStayAction {
+  savedStayId: string;
+}
