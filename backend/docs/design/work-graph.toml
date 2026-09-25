@@ -673,6 +673,9 @@ owner = "장소"
 migration = true
 touches = ["backend/modules/place-data", "backend/app/src/main/resources/db/migration", "backend/docs/design/openapi.yaml"]
 note = """
+**확인(2026-09-26) — `GET /places/{id}` 는 `openapi.yaml` 에 아직 없다.** 노드가 말한 "단건 신설
+여부가 선행 결정"이 그대로 열려 있다(주석에 *"후보마다 `GET /places/{id}`"* 라는 **언급만** 있다).
+
 **이 움브렐라에서 가장 비싸다.** 네 필드가 `poi` 테이블에 **없다** — 컬럼 추가 + 수집 경로 변경 +
 기존 12,782곳 채우기다. 컬럼만 만들면 전부 null 이라 화면은 계속 플레이스홀더를 그린다
 (움브렐라 규약 3번: "스키마 + 데이터가 한 세트").
@@ -729,6 +732,20 @@ owner = "일정"
 migration = false
 touches = ["backend/modules/itinerary-generation", "backend/docs/design/openapi.yaml"]
 note = """
+**대조 완료(2026-09-26) — 다섯 중 넷은 이미 막혀 있었고, 남은 하나도 AI 계약이 막는다.**
+
+유일한 후보였던 **슬롯 `startAt` nullable** 을 팠더니 선행이 나왔다:
+
+- **FE 는 이미 준비돼 있다.** `SlotStopCard` 가 *"미지정(startAt null)이면 '시간대 설정' 칩"* 을
+  그리고, `itineraryEditStore` 주석이 *"저장 조립이 `startAt === null` 슬롯을 걸러 서버로 안 보낸다"*
+  고 적는다. **즉 사용자가 시간 미정으로 둔 슬롯이 저장되지 않는 실제 결함이 있다.**
+- **그런데 AI 계약이 `start_at` 을 필수로 요구한다** — `ai/docs/openapi.json` 의
+  `VisitSlotDisplaySchema`·`ReplanSlotSchema` 둘 다 `required`, nullable 아님. 우리가 저장해도
+  검증·재계획 왕복에서 422 다.
+
+**AI 쪽 스키마 완화가 선행이다.** 그전에 백엔드만 고치면 저장은 되는데 그 일정은 편집·재계획을
+못 하는 반쪽이 된다.
+
 **다섯 항목의 상태가 제각각이다**(움브렐라가 경고한 그 티켓).
 
 | 항목 | 상태 |
@@ -755,6 +772,10 @@ owner = "회고"
 migration = true
 touches = ["backend/modules/reflection", "backend/app/src/main/resources/db/migration", "backend/docs/design/openapi.yaml"]
 note = """
+**대조 완료(2026-09-26) — FE 가 `mood` 를 저장하지 않는다.** `DailyReflectionPage` 주석이
+*"mood/memo 비영속"* 이라고 명시한다. 값 집합(닫힌 enum 인지)을 정하기 전에 **애초에 영속할
+것인가**가 먼저다 — 지금 만들면 아무도 안 쓰는 컬럼이 된다.
+
 **`mood` 값 집합을 화면과 대조해야 한다**(닫힌 enum 인지 자유형인지). `EditReflectionRequest` 가
 지금 "카드 통째 교체"만 받아서 부분 갱신을 허용할지도 결정거리다.
 
@@ -771,6 +792,14 @@ owner = "여행"
 migration = false
 touches = ["backend/modules/trip", "backend/docs/design/openapi.yaml"]
 note = """
+**대조 완료(2026-09-26) — 둘 다 화면이 안 쓴다. 지금 만들면 아무도 안 읽는 필드다.**
+
+노드가 물은 *"내 여행 카드가 사진 수를 쓰는가"* 의 답은 **안 쓴다** 였다. FE 전수 확인:
+`photoCount` 는 셋 다 다른 출처다 — `useVisitAttachments`(방문 첨부 자체 계산)·`ReflectionStatsRow`
+(회고 통계)·`_dev/preview`(밴드 j **회고 화면** 픽스처). **`coverImageUrl` 은 FE 에 0건**이다.
+
+`status = todo` 로 두되, **착수 조건은 "FE 가 그 필드를 읽는 코드를 먼저 낸다"** 이다.
+
 **`endedAt` 은 닫혔다**(PR #583). 값이 이미 DB 에 있었고 응답에만 안 실렸다. 그 과정에서 규칙을
 못 박았다 — **분기는 `status`, 표시는 `endedAt`**. 둘은 만들어지는 방식이 달라
 (`status` 는 날짜에서 즉시 파생, `endedAt` 은 스윕이 10분 주기로 기록) **최대 10분의 시차**가 있다.
