@@ -112,6 +112,22 @@ j05(여행 스타일 분석, `features/reflection`)가 `records/style` 라우트
 
 **새 티켓 후보(범위 밖, 착수 안 함)**: l04 실주소(계약에 `SavedStay.address` 없음, 역지오코딩 우회 수단만 있음 — BR-U6-20 미충족 상태로 미룸) · `SavedStay` codegen 재생성(`linkedTripIds` 누락, N+1 제거 가능) · 좌표 미확정 행 비활성 표시+BR-U1-22 안내(Figma 프레임 선행 필요) · 다이얼로그 틀(딤·카드·그림자·버튼) `shared/ui` 승격.
 
+## 이번 사이클(TRIP-778) 변경 — l05 설정 default Figma 정합 + 제휴 "다시 보지 않기" 서버 전환
+
+| 파일 | 내용 |
+|---|---|
+| `model/preferenceSummary.ts` | **신규.** `summarize`(빈 값 거르고 `·`로 이어붙임, 없으면 unset) · `summarizePreferences`(기존 `initialSelection` 재사용, 동행 끝에 반려동물 붙임). 취향 7행을 `설정 안 함`/실제 값 요약으로 갈라 `SettingsScreen`에 넘긴다. 대체할 기존 함수 없음(재사용 탐색 결과 — `usePreferences`류 소비처 3곳 중 요약 함수는 없었다). |
+| `model/settingsSections.ts` | **변경.** 입력 3필드 추가(취향 요약·위치 동의·개인화). `SettingsRowChip` 타입, `PREFERENCE_ROWS`·`UNSET_CHIP` 상수, `preferenceRows`(값 모르면 값·칩 둘 다 없음), `consentChip`(undefined면 칩 없음), 개인화 행 신설. 취향 7행·개인화·제휴 전 행 `ready:true`로 개통(TRIP-624 분리로 미뤄 뒀던 `ready:false`가 풀림 — 새 티켓 후보 "운영 빌드 새 노출 행", 백엔드 `/me/settings` 배포 확인 필요). |
+| `ui/SettingsRow.tsx` | **변경.** `NavRow`에 `value`·`chip`·`chevron` 색(`MUTED_SOFT`)+testID 슬롯 추가, 내부 `RowChip`(tone 2종, r8) 신설. |
+| `ui/SettingsScreen.tsx` | **변경.** `PREFERENCE_ROW_KEYS` 도입, `renderRow`에 취향·개인화·제휴 분기(제휴는 `Toggle checked===true`·`disabled==null`+실패 안내 Text) 추가. 위험 칩 r8, 바탕 `bg-canvas`. |
+| `ui/SettingsGlyphs.tsx` / `ui/ExportRow.tsx` / `ui/NicknameEditRow.tsx` | **변경.** `SparkleGlyph` 신규(개인화 행 아이콘 — `HomeGlyphs`·`TripGlyphs`에 동명이 있으나 features 경계로 복제). `ExportRow`·`NicknameEditRow`는 chevron 색을 `MUTED_SOFT`로 한 줄씩(캡처 대조에서 발견, l05 화면 자신의 행이라 다른 화면으로 안 번짐). |
+| `ui/SettingsScreen.l05parity.test.tsx` | **신규.** 취향 7행 값/칩 짝·위치 동의 칩·개인화 `사용 중`·chevron 색·칩 r8·바탕 완전일치. |
+| `shared/storage/flag.ts`·`flag.test.ts` | **삭제(`git rm`).** "다시 보지 않기" 저장처가 기기 SecureStore에서 서버 `/me/settings`로 전환(아래 pages 절·`shared/api` 참고). |
+
+**저장처 전환 요지(pages 배선은 `layer-pages.md`의 `stay-detail`·`settings` 행 참고)**: `SettingsPage`(제휴 토글)와 `StayDetailPage`(고지 시트)가 같은 쿼리 키(`getGetMeSettingsQueryKey()`)를 읽고 써 "한 진실"을 이룬다. **실측 결함(03b 경고-1, 수정 완료)**: `enabled:false`로 꺼진 쿼리도 TanStack Query는 캐시에 남은 `data`를 그대로 돌려준다 — 게스트 판정에 `isAuthed &&`를 명시로 걸지 않으면 이전 계정의 `dismissed:true`가 게스트에게 새어 법정 제휴 고지를 우회한다. `enabled:false` ≠ "캐시 무시"라는 이 패턴은 다른 화면에서도 재발할 수 있는 일반 함정이다(문제로그 참고).
+
+**새 티켓 후보(범위 밖, 착수 안 함)**: 설정 토글 연타 시 PATCH 응답 순서 역전으로 캐시가 서버와 갈라질 가능성(참고-3, 확인 필요) · 세션 만료 후 다른 계정 로그인 시 이전 계정 캐시가 첫 GET 전까지 노출(재리뷰 참고-R1) · `useLocationConsent` 리터럴 키가 생성 키와 손으로만 맞물림(참고-2) · 전체 `pnpm codegen` 동기화(약 208파일, notification 스키마 드리프트 포함) · Figma 취향 값 문구(`바다·휴양` 등)가 서버 enum 밖(D5) · 운영 빌드에서 새로 열리는 행(취향·개인화·제휴) 백엔드 배포 확인.
+
 ## 관련
 
 - 경계 가드: `src/__tests__/settingsBoundary.test.ts`(소스 재귀 스캔, eslint 무강제 — repo-traps 참고). TRIP-610도 이 가드가 `features/onboarding` 재사용을 막아 shared 승격을 강제한 세 번째 실측.

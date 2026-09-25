@@ -13,8 +13,8 @@ import {
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { StayItem } from '@/shared/api/generated/schemas';
+import { getGetMeSettingsQueryKey } from '@/shared/api/generated/profile/profile';
 import { formatPrice } from '@/entities/stay/lib/formatPrice';
-import { readFlag, writeFlag } from '@/shared/storage/flag';
 import { StayDetailPage } from './StayDetailPage';
 
 /**
@@ -29,7 +29,15 @@ import { StayDetailPage } from './StayDetailPage';
  *  - I6 (AC-10) 로그인 사용자 `stay-detail-addtotrip` → POST /saved-stays + 거점 편입 안내.
  *  - I7 (AC-10) 게스트 addtotrip → 요청 0 + /(auth)/login push(죽은 버튼 아님, BR-U1-03·55).
  *  - I8 (AC-11) 게스트 하트 → 요청 0 + /(auth)/login push.
- *  - I9~I21 (TRIP-781 AC-7~11) 이동 실패 → error 얼굴·재시도, "다시 보지 않기" 저장·생략·읽기 실패.
+ *  - I9~I12 (TRIP-781 AC-7·8) 이동 실패 → error 얼굴·재시도.
+ *  - I13~I24 (TRIP-781 AC-9~11 → TRIP-778 AC-10 재작성) "다시 보지 않기"의 저장처가 기기(SecureStore)에서
+ *    **서버 `/me/settings.affiliateNoticeDismissed`** 로 바뀌었다(BR-U6-33 계정 단위, 01b 사용자 결정).
+ *    읽기 = 로그인일 때 GET, 저장 = 체크 후 [이동]에서 PATCH `{affiliateNoticeDismissed:true}` 한 필드.
+ *    응답 전·실패면 고지 쪽으로 쓰러진다(시트를 띄운다). 결론(생략·재진입 유지·재누름)은 781 그대로다.
+ *  - G1 (TRIP-778 D9) 게스트는 서버 설정을 조회하지 않고, 시트에 "다시 보지 않기"가 없다(저장할 곳 없는 약속 금지).
+ *  - G2 (TRIP-778 D9 · 5-b 경고-1) 캐시에 이전 계정의 `dismissed:true`가 남은 게스트도 시트를 본다.
+ *  - F1 (TRIP-778 · 781 "실패 = 고지 쪽" · 5-b 경고-2) 저장·재조회가 모두 실패하면 다시 누를 때 시트가 뜬다.
+ *  - F2 (TRIP-778 · 5-b 재리뷰 경고-R1) 첫 GET 부터 실패해 이전 값이 없어도 같다.
  *
  * 인프라: `StaySearchPage.save.integration.test.tsx` 의 msw·tokenManager·expo-router 목을 복제
  * (리포 관례 — 공용화 안 함). expo-linking 은 nextNav.test 패턴으로 목.
@@ -67,16 +75,6 @@ jest.mock('expo-linking', () => ({
 
 const mockOpenURL = Linking.openURL as jest.Mock;
 
-// "다시 보지 않기" 저장소 — 딥 경로 모듈이라 위 배럴 목과 따로 막는다. 메모리 Map 이라 쓰면 실제로
-// 다음 읽기가 바뀐다(재마운트 왕복 I21).
-const mockFlags = new Map<string, boolean>();
-jest.mock('@/shared/storage/flag', () => ({
-  readFlag: jest.fn(),
-  writeFlag: jest.fn(),
-}));
-const mockReadFlag = readFlag as jest.Mock;
-const mockWriteFlag = writeFlag as jest.Mock;
-
 const BASE = 'http://localhost:8080/api/v1';
 
 const OLD_BR_U1_30 =
@@ -85,7 +83,6 @@ const OLD_BR_U1_30 =
 const BODY =
   '외부 OTA 사이트로 이동하며, 실제 예약·결제는 해당 사이트에서 진행됩니다.';
 const ERROR_TITLE = '링크를 열 수 없습니다';
-const DISMISSED_KEY = 'stay.affiliateNotice.dismissed';
 
 const ITEM_A: StayItem = {
   externalSource: 'NAVER',
@@ -111,10 +108,47 @@ function hitCount(needle: string): number {
   return observedHits.filter((hit) => hit === needle).length;
 }
 
+// TRIP-778 — 서버 쪽 "다시 보지 않기" 상태. PATCH 가 바꾸고 GET 이 읽는다(상태형 핸들러 — 재진입 왕복 I21).
+const SETTINGS_GET = 'GET /api/v1/me/settings';
+let serverDismissed = false;
+/** 나간 PATCH /me/settings 의 와이어 본문(직렬화 후 파싱) — 순서대로. */
+let patchBodies: unknown[] = [];
+/** 끝난 요청(`METHOD /path`) — 응답이 도착했는지 기다리는 데 쓴다(02a ★9). */
+let endedHits: string[] = [];
+
+/** GET /me/settings 를 서버 상태로 답하고, PATCH 는 본문을 적어 두고 준 필드만 바꾼다. */
+function installSettingsServer(): void {
+  server.use(
+    http.get(`${BASE}/me/settings`, () =>
+      HttpResponse.json({ affiliateNoticeDismissed: serverDismissed })
+    ),
+    http.patch(`${BASE}/me/settings`, async ({ request }) => {
+      const body = (await request.json()) as {
+        affiliateNoticeDismissed?: boolean | null;
+      };
+      patchBodies.push(body);
+      if (typeof body.affiliateNoticeDismissed === 'boolean') {
+        serverDismissed = body.affiliateNoticeDismissed;
+      }
+      return HttpResponse.json({ affiliateNoticeDismissed: serverDismissed });
+    })
+  );
+}
+
+/** 로그인 사용자 + 서버 저장값. */
+function signInWithDismissed(dismissed: boolean): void {
+  setAccessToken('valid-access');
+  serverDismissed = dismissed;
+  installSettingsServer();
+}
+
 beforeAll(() => {
   server.listen({ onUnhandledRequest: 'error' });
   server.events.on('request:start', ({ request }) => {
     observedHits.push(`${request.method} ${new URL(request.url).pathname}`);
+  });
+  server.events.on('request:end', ({ request }) => {
+    endedHits.push(`${request.method} ${new URL(request.url).pathname}`);
   });
 });
 
@@ -125,15 +159,9 @@ beforeEach(() => {
   mockBack.mockClear();
   mockOpenURL.mockClear();
   mockOpenURL.mockResolvedValue(true);
-  mockFlags.clear();
-  mockReadFlag
-    .mockReset()
-    .mockImplementation(async (key: string) => mockFlags.get(key) ?? false);
-  mockWriteFlag
-    .mockReset()
-    .mockImplementation(async (key: string, value: boolean) => {
-      mockFlags.set(key, value);
-    });
+  serverDismissed = false;
+  patchBodies = [];
+  endedHits = [];
   clearAccessToken();
   // GET /saved-stays 는 항상 등록(게스트에서 잘못 나가도 throw 아니라 hitCount 로 잡히게).
   server.use(http.get(`${BASE}/saved-stays`, () => HttpResponse.json([])));
@@ -298,8 +326,13 @@ function holdNextOpenURL() {
   return hold;
 }
 
-/** 마운트 때 시작된 저장값 읽기를 끝까지 흘린다(effect → then → setState). */
-async function settleRead(): Promise<void> {
+/** 마운트 때 나간 GET /me/settings 응답이 도착하고 화면에 반영될 때까지 흘린다(02a ★9). */
+async function settleSettings(): Promise<void> {
+  await waitFor(() =>
+    expect(
+      endedHits.filter((hit) => hit === SETTINGS_GET).length
+    ).toBeGreaterThanOrEqual(1)
+  );
   await act(async () => {});
 }
 
@@ -366,25 +399,160 @@ describe('I9~I12 · 이동 실패 → error 얼굴 → 재시도/취소 (TRIP-78
   });
 });
 
-describe('I13~I16 · "다시 보지 않기" 저장 (TRIP-781 AC-9 · 01b)', () => {
-  it('I13 · 체크하고 [이동]을 누르면 그 키로 true 를 한 번 저장한다', async () => {
+// ── TRIP-778 · "다시 보지 않기" 저장처 = 서버 /me/settings (AC-10 · D9) ─────────
+
+describe('G1 · 게스트 (TRIP-778 D9)', () => {
+  it('게스트는 서버 설정을 조회하지 않고, 시트는 뜨되 "다시 보지 않기"가 없다', async () => {
+    // 준비: 게스트(토큰 없음). 핸들러는 걸어 두되 불리면 안 된다.
+    installSettingsServer();
     render(<StayDetailPage />, { wrapper: createWrapper() });
+    await act(async () => {});
+
+    // 실행
+    fireEvent.press(screen.getByTestId('stay-detail-book'));
+
+    // 단언(긍정 앵커): 고지 시트는 뜬다.
+    expect(screen.getByText(BODY)).toBeOnTheScreen();
+    // 단언: 저장할 곳이 없으니 체크박스를 보이지 않는다.
+    expect(screen.queryByTestId('stay-ota-dont-show')).toBeNull();
+    // 단언: 로그인이 필요한 조회를 보내지 않았다(onUnhandledRequest 는 실패를 로그만 하므로 직접 센다).
+    expect(hitCount(SETTINGS_GET)).toBe(0);
+  });
+});
+
+describe('G2 · 캐시가 남은 게스트 (TRIP-778 D9 · 5-b 경고-1)', () => {
+  it('이전 계정의 dismissed:true 가 캐시에 남아 있어도, 게스트는 고지 시트를 본다', async () => {
+    // 준비: 세션 만료(토큰만 지워짐 — beforeEach 의 clearAccessToken) + 캐시는 그대로인 상태.
+    // gcTime: Infinity — 관찰자가 붙기 전에 캐시가 수거되지 않게(앱 기본 5분과 같은 효과).
+    installSettingsServer();
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+    client.setQueryData(getGetMeSettingsQueryKey(), {
+      affiliateNoticeDismissed: true,
+    });
+    render(<StayDetailPage />, {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    });
+    await act(async () => {});
+
+    // 실행
+    fireEvent.press(screen.getByTestId('stay-detail-book'));
+
+    // 단언: 바로 이동하지 않고 고지 시트가 뜬다.
+    expect(screen.getByText(BODY)).toBeOnTheScreen();
+    expect(mockOpenURL).not.toHaveBeenCalled();
+    // 단언: 게스트라 체크박스는 없고(D9), 조회도 보내지 않았다(G1 과 같은 계약).
+    expect(screen.queryByTestId('stay-ota-dont-show')).toBeNull();
+    expect(hitCount(SETTINGS_GET)).toBe(0);
+  });
+});
+
+describe('F1 · 저장 실패는 고지 쪽으로 닫힌다 (TRIP-778 · 5-b 경고-2)', () => {
+  it('오프라인 — PATCH 와 재조회 GET 이 모두 실패하면, 다시 눌렀을 때 시트가 또 뜬다', async () => {
+    // 준비: 로그인 · 첫 GET 만 dismissed:false 로 성공하고, 그 뒤 GET·PATCH 는 네트워크 오류.
+    setAccessToken('valid-access');
+    let gets = 0;
+    server.use(
+      http.get(`${BASE}/me/settings`, () => {
+        gets += 1;
+        return gets === 1
+          ? HttpResponse.json({ affiliateNoticeDismissed: false })
+          : HttpResponse.error();
+      }),
+      http.patch(`${BASE}/me/settings`, async ({ request }) => {
+        patchBodies.push(await request.json());
+        return HttpResponse.error();
+      })
+    );
+    render(<StayDetailPage />, { wrapper: createWrapper() });
+    await settleSettings();
+
+    // 실행 ①: 체크하고 [이동] — 저장 요청이 나가서 실패한다.
+    fireEvent.press(screen.getByTestId('stay-detail-book'));
+    fireEvent.press(screen.getByTestId('stay-ota-dont-show'));
+    fireEvent.press(screen.getByTestId('stay-ota-confirm'));
+    await waitFor(() => expect(mockOpenURL).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(
+        endedHits.filter((hit) => hit === 'PATCH /api/v1/me/settings')
+      ).toHaveLength(1)
+    );
+    // 실패 뒤에 나간 요청(재조회 등)이 있으면 그것까지 끝나기를 기다린다.
+    await act(async () => {});
+    await waitFor(() => expect(endedHits).toHaveLength(observedHits.length));
+    await act(async () => {});
+    expect(patchBodies).toEqual([{ affiliateNoticeDismissed: true }]);
+
+    // 실행 ②: 같은 화면에서 다시 [예약하기].
+    fireEvent.press(screen.getByTestId('stay-detail-book'));
+
+    // 단언: 실패한 저장이 "다시 보지 않기"로 남지 않았다 — 시트가 뜨고, 이동은 1번 그대로다.
+    expect(screen.getByText(BODY)).toBeOnTheScreen();
+    expect(mockOpenURL).toHaveBeenCalledTimes(1);
+  });
+
+  it('F2 · 처음부터 오프라인 — 첫 GET 도 실패해 이전 값이 없어도, 다시 눌렀을 때 시트가 또 뜬다', async () => {
+    // 준비: 로그인 · GET·PATCH 모두 처음부터 네트워크 오류 — 캐시에 되돌릴 이전 값이 없다.
+    setAccessToken('valid-access');
+    server.use(
+      http.get(`${BASE}/me/settings`, () => HttpResponse.error()),
+      http.patch(`${BASE}/me/settings`, async ({ request }) => {
+        patchBodies.push(await request.json());
+        return HttpResponse.error();
+      })
+    );
+    render(<StayDetailPage />, { wrapper: createWrapper() });
+    await settleSettings();
+
+    // 실행 ①: 모르는 상태라 시트가 뜬다 → 체크하고 [이동] — 저장 요청이 나가서 실패한다.
+    fireEvent.press(screen.getByTestId('stay-detail-book'));
+    fireEvent.press(screen.getByTestId('stay-ota-dont-show'));
+    fireEvent.press(screen.getByTestId('stay-ota-confirm'));
+    await waitFor(() => expect(mockOpenURL).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(
+        endedHits.filter((hit) => hit === 'PATCH /api/v1/me/settings')
+      ).toHaveLength(1)
+    );
+    await act(async () => {});
+    await waitFor(() => expect(endedHits).toHaveLength(observedHits.length));
+    await act(async () => {});
+    expect(patchBodies).toEqual([{ affiliateNoticeDismissed: true }]);
+
+    // 실행 ②: 같은 화면에서 다시 [예약하기].
+    fireEvent.press(screen.getByTestId('stay-detail-book'));
+
+    // 단언: 낙관값 true 가 남지 않았다 — 시트가 뜨고, 이동은 1번 그대로다.
+    expect(screen.getByText(BODY)).toBeOnTheScreen();
+    expect(mockOpenURL).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('I13~I16 · "다시 보지 않기" 저장 = PATCH /me/settings (TRIP-778 AC-10 · 781 AC-9 재작성)', () => {
+  it('I13 · 체크하고 [이동]을 누르면 {affiliateNoticeDismissed:true} 한 필드를 한 번 보낸다', async () => {
+    signInWithDismissed(false);
+    render(<StayDetailPage />, { wrapper: createWrapper() });
+    await settleSettings();
     fireEvent.press(screen.getByTestId('stay-detail-book'));
 
     fireEvent.press(screen.getByTestId('stay-ota-dont-show'));
     expect(screen.getByTestId('stay-ota-dont-show')).toBeChecked();
     fireEvent.press(screen.getByTestId('stay-ota-confirm'));
 
-    await waitFor(() =>
-      expect(mockWriteFlag).toHaveBeenCalledWith(DISMISSED_KEY, true)
-    );
-    expect(mockWriteFlag).toHaveBeenCalledTimes(1);
-    expect(mockOpenURL).toHaveBeenCalledTimes(1);
+    // 단언(완전일치 · 배열): 한 번 · 이 필드만 · 값 방향 true(다시 보지 않음).
+    await waitFor(() => expect(patchBodies).toHaveLength(1));
+    expect(patchBodies).toEqual([{ affiliateNoticeDismissed: true }]);
+    await waitFor(() => expect(mockOpenURL).toHaveBeenCalledTimes(1));
   });
 
-  it('I14 · 이동이 실패해도(error 얼굴) 저장은 이미 끝났다 — 이동 결과와 무관', async () => {
+  it('I14 · 이동이 실패해도(error 얼굴) 저장 요청은 이미 나갔다 — 이동 결과와 무관', async () => {
+    signInWithDismissed(false);
     mockOpenURL.mockRejectedValueOnce(new Error('cannot open'));
     render(<StayDetailPage />, { wrapper: createWrapper() });
+    await settleSettings();
     fireEvent.press(screen.getByTestId('stay-detail-book'));
 
     fireEvent.press(screen.getByTestId('stay-ota-dont-show'));
@@ -393,12 +561,14 @@ describe('I13~I16 · "다시 보지 않기" 저장 (TRIP-781 AC-9 · 01b)', () =
     await waitFor(() =>
       expect(screen.getByText(ERROR_TITLE)).toBeOnTheScreen()
     );
-    expect(mockWriteFlag).toHaveBeenCalledTimes(1);
-    expect(mockWriteFlag).toHaveBeenCalledWith(DISMISSED_KEY, true);
+    await waitFor(() => expect(patchBodies).toHaveLength(1));
+    expect(patchBodies).toEqual([{ affiliateNoticeDismissed: true }]);
   });
 
   it('I15 · 체크하고 [취소]하거나, 체크 없이 [이동]하면 저장하지 않는다', async () => {
+    signInWithDismissed(false);
     render(<StayDetailPage />, { wrapper: createWrapper() });
+    await settleSettings();
 
     // 체크 → 취소.
     fireEvent.press(screen.getByTestId('stay-detail-book'));
@@ -410,11 +580,13 @@ describe('I13~I16 · "다시 보지 않기" 저장 (TRIP-781 AC-9 · 01b)', () =
     await waitFor(() => expect(mockOpenURL).toHaveBeenCalledTimes(1));
     await act(async () => {});
 
-    expect(mockWriteFlag).not.toHaveBeenCalled();
+    expect(patchBodies).toEqual([]);
   });
 
-  it('I16 · 시트를 다시 열면 체크는 해제 상태로 시작한다', () => {
+  it('I16 · 시트를 다시 열면 체크는 해제 상태로 시작한다', async () => {
+    signInWithDismissed(false);
     render(<StayDetailPage />, { wrapper: createWrapper() });
+    await settleSettings();
     fireEvent.press(screen.getByTestId('stay-detail-book'));
     fireEvent.press(screen.getByTestId('stay-ota-dont-show'));
     fireEvent.press(screen.getByTestId('stay-ota-cancel'));
@@ -425,11 +597,11 @@ describe('I13~I16 · "다시 보지 않기" 저장 (TRIP-781 AC-9 · 01b)', () =
   });
 });
 
-describe('I17~I21 · 저장값이 켜져 있으면 시트 생략, 못 읽으면 고지 쪽 (TRIP-781 AC-10 · AC-11)', () => {
-  it('I17 · 저장값 true → [예약하기]가 시트 없이 바로 웹검색을 연다', async () => {
-    mockFlags.set(DISMISSED_KEY, true);
+describe('I17~I21 · 서버 값이 켜져 있으면 시트 생략, 모르면 고지 쪽 (TRIP-778 AC-10 · 781 AC-10·11 재작성)', () => {
+  it('I17 · 서버 값 true → [예약하기]가 시트 없이 바로 웹검색을 연다', async () => {
+    signInWithDismissed(true);
     render(<StayDetailPage />, { wrapper: createWrapper() });
-    await settleRead();
+    await settleSettings();
 
     fireEvent.press(screen.getByTestId('stay-detail-book'));
 
@@ -440,14 +612,15 @@ describe('I17~I21 · 저장값이 켜져 있으면 시트 생략, 못 읽으면 
     );
     expect(mockOpenURL).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId('stay-ota-sheet')).toBeNull();
-    expect(mockReadFlag).toHaveBeenCalledWith(DISMISSED_KEY);
+    // 앵커: 값은 서버에서 읽었다.
+    expect(hitCount(SETTINGS_GET)).toBeGreaterThanOrEqual(1);
   });
 
   it('I18 · 생략 경로에서 이동이 실패하면 error 얼굴 시트가 뜬다(침묵 금지)', async () => {
-    mockFlags.set(DISMISSED_KEY, true);
+    signInWithDismissed(true);
     mockOpenURL.mockRejectedValueOnce(new Error('cannot open'));
     render(<StayDetailPage />, { wrapper: createWrapper() });
-    await settleRead();
+    await settleSettings();
 
     fireEvent.press(screen.getByTestId('stay-detail-book'));
 
@@ -458,9 +631,14 @@ describe('I17~I21 · 저장값이 켜져 있으면 시트 생략, 못 읽으면 
     expect(screen.queryByTestId('stay-ota-dont-show')).toBeNull();
   });
 
-  it('I19 · 저장값을 아직 못 읽었으면 시트를 띄운다(고지 쪽으로 닫힌 실패)', () => {
-    mockReadFlag.mockImplementation(() => new Promise<boolean>(() => {}));
+  it('I19 · 서버 값을 아직 못 받았으면 시트를 띄운다(고지 쪽으로 닫힌 실패)', async () => {
+    // 준비: 로그인 + 응답하지 않는 GET.
+    setAccessToken('valid-access');
+    server.use(
+      http.get(`${BASE}/me/settings`, () => new Promise<never>(() => {}))
+    );
     render(<StayDetailPage />, { wrapper: createWrapper() });
+    await waitFor(() => expect(hitCount(SETTINGS_GET)).toBe(1));
 
     fireEvent.press(screen.getByTestId('stay-detail-book'));
 
@@ -468,10 +646,15 @@ describe('I17~I21 · 저장값이 켜져 있으면 시트 생략, 못 읽으면 
     expect(mockOpenURL).not.toHaveBeenCalled();
   });
 
-  it('I20 · 저장값 읽기가 실패해도 시트를 띄운다', async () => {
-    mockReadFlag.mockRejectedValue(new Error('secure store unavailable'));
+  it('I20 · 서버 조회가 실패해도(500) 시트를 띄운다', async () => {
+    setAccessToken('valid-access');
+    server.use(
+      http.get(`${BASE}/me/settings`, () =>
+        HttpResponse.json({}, { status: 500 })
+      )
+    );
     render(<StayDetailPage />, { wrapper: createWrapper() });
-    await settleRead();
+    await settleSettings();
 
     fireEvent.press(screen.getByTestId('stay-detail-book'));
 
@@ -479,16 +662,21 @@ describe('I17~I21 · 저장값이 켜져 있으면 시트 생략, 못 읽으면 
     expect(mockOpenURL).not.toHaveBeenCalled();
   });
 
-  it('I21 · 체크하고 이동한 뒤 다시 들어오면 시트 없이 바로 이동한다(저장 → 읽기 왕복)', async () => {
+  it('I21 · 체크하고 이동한 뒤 다시 들어오면 시트 없이 바로 이동한다(PATCH → GET 서버 왕복)', async () => {
+    signInWithDismissed(false);
     const first = render(<StayDetailPage />, { wrapper: createWrapper() });
+    await settleSettings();
     fireEvent.press(screen.getByTestId('stay-detail-book'));
     fireEvent.press(screen.getByTestId('stay-ota-dont-show'));
     fireEvent.press(screen.getByTestId('stay-ota-confirm'));
     await waitFor(() => expect(mockOpenURL).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(patchBodies).toHaveLength(1));
     first.unmount();
 
+    // 재진입 = 새 캐시(createWrapper 가 QueryClient 를 새로 만든다) — 값은 서버에서만 온다.
+    endedHits = [];
     render(<StayDetailPage />, { wrapper: createWrapper() });
-    await settleRead();
+    await settleSettings();
     fireEvent.press(screen.getByTestId('stay-detail-book'));
 
     await waitFor(() => expect(mockOpenURL).toHaveBeenCalledTimes(2));
@@ -496,10 +684,11 @@ describe('I17~I21 · 저장값이 켜져 있으면 시트 생략, 못 읽으면 
   });
 });
 
-describe('I22~I24 · 같은 화면 재누름·체크 해제 (TRIP-781 AC-9 · AC-10, 5-b 보강)', () => {
+describe('I22~I24 · 같은 화면 재누름·체크 해제 (781 AC-9·10 → TRIP-778 서버 기준)', () => {
   it('I22 · 체크 없이 [이동]한 뒤 같은 화면에서 다시 누르면 고지 시트가 또 뜬다', async () => {
+    signInWithDismissed(false);
     render(<StayDetailPage />, { wrapper: createWrapper() });
-    await settleRead();
+    await settleSettings();
     fireEvent.press(screen.getByTestId('stay-detail-book'));
     fireEvent.press(screen.getByTestId('stay-ota-confirm'));
     await waitFor(() => expect(mockOpenURL).toHaveBeenCalledTimes(1));
@@ -512,12 +701,14 @@ describe('I22~I24 · 같은 화면 재누름·체크 해제 (TRIP-781 AC-9 · AC
   });
 
   it('I23 · 체크하고 [이동]한 뒤 같은 화면에서 다시 누르면 시트 없이 바로 이동한다', async () => {
+    signInWithDismissed(false);
     render(<StayDetailPage />, { wrapper: createWrapper() });
-    await settleRead();
+    await settleSettings();
     fireEvent.press(screen.getByTestId('stay-detail-book'));
     fireEvent.press(screen.getByTestId('stay-ota-dont-show'));
     fireEvent.press(screen.getByTestId('stay-ota-confirm'));
     await waitFor(() => expect(mockOpenURL).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(patchBodies).toHaveLength(1));
     await act(async () => {});
 
     fireEvent.press(screen.getByTestId('stay-detail-book'));
@@ -527,19 +718,21 @@ describe('I22~I24 · 같은 화면 재누름·체크 해제 (TRIP-781 AC-9 · AC
   });
 
   it('I24 · 체크했다 다시 풀고 [이동]하면 저장하지 않고, 다시 들어오면 시트가 뜬다', async () => {
+    signInWithDismissed(false);
     const first = render(<StayDetailPage />, { wrapper: createWrapper() });
-    await settleRead();
+    await settleSettings();
     fireEvent.press(screen.getByTestId('stay-detail-book'));
     fireEvent.press(screen.getByTestId('stay-ota-dont-show'));
     fireEvent.press(screen.getByTestId('stay-ota-dont-show'));
     fireEvent.press(screen.getByTestId('stay-ota-confirm'));
     await waitFor(() => expect(mockOpenURL).toHaveBeenCalledTimes(1));
     await act(async () => {});
-    expect(mockWriteFlag).not.toHaveBeenCalled();
+    expect(patchBodies).toEqual([]);
     first.unmount();
 
+    endedHits = [];
     render(<StayDetailPage />, { wrapper: createWrapper() });
-    await settleRead();
+    await settleSettings();
     fireEvent.press(screen.getByTestId('stay-detail-book'));
 
     expect(screen.getByText(BODY)).toBeOnTheScreen();

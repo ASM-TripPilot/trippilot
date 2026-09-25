@@ -591,6 +591,26 @@ export function BellGlyph({ size = 22, testID }: GlyphProps) {
   );
 }
 
+/** 개인화 행 — 4갈래 반짝임 외곽선(TRIP-778, Figma `4526:2415`). */
+export function SparkleGlyph({ size = 22, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M12 3L13.8 10.2L21 12L13.8 13.8L12 21L10.2 13.8L3 12L10.2 10.2L12 3Z"
+        stroke={INK}
+        strokeWidth={1.7}
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 /** 제휴 안내 행 — 외부 링크(박스 밖으로 나가는 화살표). */
 export function ExternalLinkGlyph({ size = 22, testID }: GlyphProps) {
   return (

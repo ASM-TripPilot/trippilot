@@ -9,18 +9,25 @@
  * [이동] 웹검색 폴백(`openStayOutbound`, BR-U1-31).
  *
  * TRIP-781(l07): 시트의 열림·error 얼굴·"다시 보지 않기" 체크는 전부 이 층이 쥔다(시트는 제어 컴포넌트).
- * 저장값(SecureStore 플래그)이 켜져 있으면 시트 없이 바로 이동하고, 그 이동이 실패하면 error 얼굴 시트를
- * 새로 연다(BR-U1-55). 저장값을 아직 못 읽었거나 읽기가 실패하면 고지 쪽으로 쓰러진다(시트를 띄운다).
+ * 저장값이 켜져 있으면 시트 없이 바로 이동하고, 그 이동이 실패하면 error 얼굴 시트를 새로 연다(BR-U1-55).
+ * 저장값을 아직 못 받았거나 조회가 실패하면 고지 쪽으로 쓰러진다(시트를 띄운다).
+ *
+ * TRIP-778: 저장처는 서버 `/me/settings.affiliateNoticeDismissed`(계정 단위, BR-U6-33)다. l05 토글과 같은
+ * 쿼리 키를 읽으므로 한쪽의 변경을 다른 쪽이 그대로 본다. 게스트는 조회도 캐시 판독도 하지 않고 체크박스도 숨긴다(D9).
  */
 import type { ReactElement } from 'react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { getAccessToken } from '@/shared/api/tokenManager';
-import type { StayItem } from '@/shared/api/generated/schemas';
-import { readFlag, writeFlag } from '@/shared/storage/flag';
+import {
+  getGetMeSettingsQueryKey,
+  useGetMeSettings,
+  usePatchMeSettings,
+} from '@/shared/api/generated/profile/profile';
+import type { AccountSettings, StayItem } from '@/shared/api/generated/schemas';
 
-import { AFFILIATE_NOTICE_DISMISSED_KEY } from '@/features/stay/config/affiliateNotice';
 import { useSavedStays } from '@/features/stay/model/savedStays';
 import { openStayOutbound } from '@/features/stay/model/stayOutbound';
 import { stayKey } from '@/features/stay/model/stayKey';
@@ -75,12 +82,38 @@ export function StayDetailPage(): ReactElement {
   const [otaOpen, setOtaOpen] = useState(false);
   const [outboundError, setOutboundError] = useState(false);
   const [dontShowAgain, setDontShowAgain] = useState(false);
-  // 읽기 전·읽기 실패 = false(고지 쪽으로 닫힌 실패, BR-U1-30).
-  const [noticeDismissed, setNoticeDismissed] = useState(false);
-
-  useEffect(() => {
-    readFlag(AFFILIATE_NOTICE_DISMISSED_KEY).then(setNoticeDismissed, () => {});
-  }, []);
+  // 응답 전·조회 실패·게스트 = false(고지 쪽으로 닫힌 실패, BR-U1-30). 꺼진 쿼리도 캐시 값은
+  // 돌려주므로(이전 계정의 true가 남을 수 있다) 게스트는 캐시를 아예 읽지 않는다(D9).
+  const queryClient = useQueryClient();
+  const settingsKey = getGetMeSettingsQueryKey();
+  const accountSettings = useGetMeSettings({ query: { enabled: isAuthed } });
+  const noticeDismissed =
+    isAuthed && (accountSettings.data?.affiliateNoticeDismissed ?? false);
+  const patchSettings = usePatchMeSettings<
+    void,
+    { previous?: AccountSettings }
+  >({
+    mutation: {
+      // 누른 순간 캐시에 반영한다 — 같은 화면에서 다시 눌러도 시트가 안 뜬다(781 I23).
+      onMutate: () => {
+        const previous = queryClient.getQueryData<AccountSettings>(settingsKey);
+        queryClient.setQueryData<AccountSettings>(settingsKey, {
+          affiliateNoticeDismissed: true,
+        });
+        return { previous };
+      },
+      onSuccess: (data) => queryClient.setQueryData(settingsKey, data),
+      // 저장 실패 = 낙관값을 먼저 걷어낸다(재조회까지 실패해도 true가 남지 않게) → 서버 값 재조회.
+      // 이전 값이 없으면 false — 다음에 시트가 다시 뜬다(고지 쪽).
+      onError: (_error, _variables, context) => {
+        queryClient.setQueryData<AccountSettings>(
+          settingsKey,
+          context?.previous ?? { affiliateNoticeDismissed: false }
+        );
+        void queryClient.invalidateQueries({ queryKey: settingsKey });
+      },
+    },
+  });
 
   const saved = item !== null && isSaved(stayKey(item));
 
@@ -137,12 +170,10 @@ export function StayDetailPage(): ReactElement {
     setOtaOpen(true);
   }
 
-  // [이동] — 체크돼 있으면 누른 순간 저장한다(이동 결과와 무관, 01b Q4). 저장 실패는 다음에 시트가
-  // 다시 뜰 뿐이라(고지 쪽) 삼킨다.
+  // [이동] — 체크돼 있으면 누른 순간 저장한다(이동 결과와 무관, 01b Q4). 보낸 필드만 바뀐다.
   function handleConfirmOutbound(): void {
     if (dontShowAgain) {
-      writeFlag(AFFILIATE_NOTICE_DISMISSED_KEY, true).catch(() => {});
-      setNoticeDismissed(true);
+      patchSettings.mutate({ data: { affiliateNoticeDismissed: true } });
     }
     void runOutbound();
   }
@@ -170,6 +201,7 @@ export function StayDetailPage(): ReactElement {
           variant={outboundError ? 'error' : 'default'}
           dontShowAgain={dontShowAgain}
           onToggleDontShowAgain={() => setDontShowAgain((on) => !on)}
+          showDontShowAgain={isAuthed}
           onCancel={handleCancelOutbound}
           onConfirm={handleConfirmOutbound}
           onRetry={() => void runOutbound()}

@@ -48,6 +48,8 @@ export interface OtaChoiceSheetProps {
   variant?: 'default' | 'error';
   dontShowAgain: boolean;
   onToggleDontShowAgain: () => void;
+  /** 생략 = true. false 면 "다시 보지 않기"를 그리지 않는다 — 게스트는 저장할 곳이 없다(TRIP-778 D9). */
+  showDontShowAgain?: boolean;
   onCancel: () => void;
   onConfirm: () => void;
   onRetry: () => void;
@@ -69,6 +71,7 @@ export function OtaChoiceSheet({
   variant = 'default',
   dontShowAgain,
   onToggleDontShowAgain,
+  showDontShowAgain = true,
   onCancel,
   onConfirm,
   onRetry,
@@ -146,27 +149,29 @@ export function OtaChoiceSheet({
             </View>
 
             {/* 체크 표시는 prop 으로만 — 누름은 콜백만 올린다(TermsScreen 체크박스 모양 선례). */}
-            <Pressable
-              testID="stay-ota-dont-show"
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: dontShowAgain }}
-              onPress={onToggleDontShowAgain}
-              className="flex-row items-center gap-[10px]"
-            >
-              <View
-                testID="stay-ota-dont-show-box"
-                className={`h-[22px] w-[22px] items-center justify-center rounded-[6px] ${
-                  dontShowAgain
-                    ? 'bg-primary'
-                    : 'border-[1.6px] border-hairline-strong bg-canvas'
-                }`}
+            {showDontShowAgain ? (
+              <Pressable
+                testID="stay-ota-dont-show"
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: dontShowAgain }}
+                onPress={onToggleDontShowAgain}
+                className="flex-row items-center gap-[10px]"
               >
-                {dontShowAgain ? <CheckGlyph size={14} /> : null}
-              </View>
-              <Text className="font-noto text-label text-body">
-                이 안내를 다시 보지 않기
-              </Text>
-            </Pressable>
+                <View
+                  testID="stay-ota-dont-show-box"
+                  className={`h-[22px] w-[22px] items-center justify-center rounded-[6px] ${
+                    dontShowAgain
+                      ? 'bg-primary'
+                      : 'border-[1.6px] border-hairline-strong bg-canvas'
+                  }`}
+                >
+                  {dontShowAgain ? <CheckGlyph size={14} /> : null}
+                </View>
+                <Text className="font-noto text-label text-body">
+                  이 안내를 다시 보지 않기
+                </Text>
+              </Pressable>
+            ) : null}
           </>
         )}
 

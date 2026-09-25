@@ -10,7 +10,9 @@ import { buildSettingsSections } from './settingsSections';
  *  (5) TRIP-937 AC-3: 앱 정보 그룹의 약관 3행(문서 제목·rowKey·ready:true).
  *  (2) 계정 그룹 닉네임 행 요약값 = 닉네임(Q6 확정 — 닉네임만 표기).
  *  (3) email 이 null(소셜 MVP)이어도 요약이 안 깨진다 — 'null'/'undefined' 문자열이 새지 않는다.
- *  (4) 목적지 없는 행(취향7·위치·알림·제휴)은 ready:false, 상호작용 행은 ready:true.
+ *  (4) TRIP-778 AC-2: 모든 행이 ready:true 다(취향 7·제휴·개인화 개통) — 그룹·행 key·label·ready 를
+ *      완전일치 표로 잠근다. 구 "취향·제휴 ready:false" 단언은 계약 변경(01b 사용자 결정)으로 재작성.
+ *  (7) TRIP-778 AC-4·5·6(모델 몫): 취향 값/미설정 칩, 위치 동의 칩, 개인화 '사용 중' 값.
  *  (6) TRIP-938 AC-6: 계정 그룹 마지막 행 = 로그아웃(ready:true). 그룹 수(7)는 그대로다.
  *
  * 3동작 뼈대: 준비=닉네임/이메일 입력 → 실행=buildSettingsSections → 단언=그룹/행 VM.
@@ -32,13 +34,6 @@ const EXPECTED_GROUP_LABELS = [
   '앱 정보',
   '위험 영역',
 ] as const;
-
-/**
- * 준비중(진입 미개통) 그룹 — 이 그룹의 모든 행은 ready:false 여야 한다(INV-4).
- * TRIP-618: '위치정보'·'알림' 제거 — 목적지 라우트(/settings/location·/settings/notifications)가
- * 서 있어 진입을 활성화(ready:true)했다. 남는 준비중은 취향(TRIP-624 분리)·제휴(라우트 없음)뿐.
- */
-const PREPARING_GROUP_LABELS = ['여행 취향', '제휴 안내'];
 
 describe('TRIP-608 · buildSettingsSections (AC-1 · AC-11)', () => {
   it('7그룹을 정본 순서로 낸다(TRIP-937 앱 정보 포함)', () => {
@@ -78,60 +73,6 @@ describe('TRIP-608 · buildSettingsSections (AC-1 · AC-11)', () => {
     // 단언(없어야 한다): null/undefined 가 문자열로 새어 화면에 찍히지 않는다.
     expect(String(value)).not.toContain('null');
     expect(String(value)).not.toContain('undefined');
-  });
-
-  it('AC-6: 준비중 그룹의 모든 행은 ready:false, 상호작용 행은 ready:true(짝)', () => {
-    const groups = buildSettingsSections({
-      nickname: '여행자123',
-      email: null,
-    });
-
-    // 준비중 그룹(취향·위치·알림·제휴)의 모든 행은 비활성이어야 한다(목적지 부재, INV-4).
-    for (const label of PREPARING_GROUP_LABELS) {
-      const group = groups.find((g) => g.label === label);
-      expect(group).toBeDefined();
-      expect(group!.rows.length).toBeGreaterThan(0);
-      for (const row of group!.rows) {
-        expect(row.ready).toBe(false);
-      }
-    }
-
-    // 긍정 짝: 상호작용 행(내보내기·계정 삭제)은 ready:true — "전부 false" 공허 통과를 막는다.
-    const account = groups.find((g) => g.label === '계정')!;
-    const danger = groups.find((g) => g.label === '위험 영역')!;
-    expect(account.rows.every((r) => r.ready)).toBe(true);
-    expect(danger.rows.every((r) => r.ready)).toBe(true);
-  });
-
-  it('TRIP-618 AC-5: 위치·알림 행은 ready:true(진입 개통), 취향·제휴는 ready:false 유지', () => {
-    const groups = buildSettingsSections({
-      nickname: '여행자123',
-      email: null,
-    });
-    // 모든 그룹의 행을 평탄화해 key 로 찾는 헬퍼(그룹 소속 무관하게 flag 만 본다).
-    const rowByKey = (key: string) =>
-      groups.flatMap((g) => g.rows).find((r) => r.key === key);
-
-    // 플립(급소): 라우트가 서 있는 두 행은 ready:true 여야 한다.
-    // 되돌려 false 로 바꾸면 이 두 단언이 red — 조용한 "가드는 green인데 준비중" 회귀를
-    // 데이터 층에서 잠근다(렌더 층은 SettingsScreen.test.tsx 가 별도로 잠근다).
-    expect(rowByKey('location-consent')?.ready).toBe(true);
-    expect(rowByKey('notifications')?.ready).toBe(true);
-
-    // 유지: 취향 7행은 ready:false — 근거는 "라우트 없음"이 아니라 TRIP-624 분리다.
-    for (const key of [
-      'style',
-      'budget',
-      'companions',
-      'activities',
-      'transport',
-      'food',
-      'pace',
-    ]) {
-      expect(rowByKey(key)?.ready).toBe(false);
-    }
-    // 유지: 제휴 행은 목적지 라우트가 없어 ready:false(INV-4).
-    expect(rowByKey('affiliate-toggle')?.ready).toBe(false);
   });
 
   it('TRIP-938 AC-6: 계정 그룹 마지막 행이 [로그아웃](ready:true)이다 — 운영 필터를 통과한다', () => {
@@ -180,5 +121,210 @@ describe('TRIP-608 · buildSettingsSections (AC-1 · AC-11)', () => {
       ['terms-PRIVACY_POLICY', '개인정보 처리방침', true],
       ['terms-LOCATION_TERMS', '위치정보 이용약관', true],
     ]);
+  });
+});
+
+/**
+ * TRIP-778 — l05 설정 default 정합(라이브 Figma 1607:2440).
+ *
+ * AC-2: 7그룹의 그룹·행 key·label·ready 를 **정본 순서 완전일치 표**로 잠근다. 위치정보 그룹에 라이브
+ *  `4526:2415` 의 개인화 행이 붙고(D3), 취향 7·제휴·개인화가 ready:true 다(구 TRIP-618 AC-5·AC-6 의
+ *  "취향·제휴 ready:false 유지"는 01b 사용자 결정으로 뒤집혀 이 표로 대체).
+ * AC-4·5·6(모델 몫): 서버 값이 행 VM 의 `value`·`chip` 으로 들어간다. 응답 전·실패("모름")는 값도 칩도
+ *  없다 — 모를 때 `미설정`/`미동의` 라고 말하면 거짓 표면이다(D4, 02a ★4).
+ *
+ * (개념) `x ?? null` — x 가 undefined 거나 null 이면 null. "없음"을 undefined 로 둘지 null 로 둘지는
+ *  구현 재량이라 둘 다 받는다(02a ★5).
+ */
+
+const DOT = '·';
+
+/** 그룹·행 정본 표(AC-2) — [그룹 key, 그룹 label, [행 key, 행 label, ready][]]. */
+const CANON = [
+  [
+    'account',
+    '계정',
+    [
+      ['nickname', '닉네임·이메일', true],
+      ['export', '데이터 내보내기', true],
+      ['logout', '로그아웃', true],
+    ],
+  ],
+  [
+    'preferences',
+    '여행 취향',
+    [
+      ['style', '여행 스타일', true],
+      ['budget', '예산', true],
+      ['companions', '동행 유형', true],
+      ['activities', '선호 활동', true],
+      ['transport', '이동 방식', true],
+      ['food', '음식 취향', true],
+      ['pace', '일정 밀도·이동 선호', true],
+    ],
+  ],
+  [
+    'location',
+    '위치정보',
+    [
+      ['location-consent', '위치정보 수집 동의', true],
+      ['personalization', '개인화', true],
+    ],
+  ],
+  ['notifications', '알림', [['notifications', '알림 설정', true]]],
+  [
+    'affiliate',
+    '제휴 안내',
+    [['affiliate-toggle', '외부 이동 시 제휴 안내 다시 보기', true]],
+  ],
+  [
+    'app-info',
+    '앱 정보',
+    [
+      ['terms-TERMS_OF_SERVICE', '서비스 이용약관', true],
+      ['terms-PRIVACY_POLICY', '개인정보 처리방침', true],
+      ['terms-LOCATION_TERMS', '위치정보 이용약관', true],
+    ],
+  ],
+  ['danger', '위험 영역', [['delete-account', '계정 삭제', true]]],
+];
+
+const PREFERENCE_KEYS = [
+  'style',
+  'budget',
+  'companions',
+  'activities',
+  'transport',
+  'food',
+  'pace',
+] as const;
+
+/** D5 프리뷰 픽스처 — 예산만 미설정(축 없음). */
+const PREFERENCES = {
+  styles: { value: ['휴양', '자연'], isNeutralDefault: false },
+  companion: {
+    companionTypes: ['친구'],
+    petFlag: false,
+    isNeutralDefault: false,
+  },
+  activities: { value: ['맛집투어', '전시'], isNeutralDefault: false },
+  transportModes: { value: ['대중교통'], isNeutralDefault: false },
+  foodTastes: { value: ['일식'], isNeutralDefault: false },
+  pace: { value: '느긋하게', isNeutralDefault: false },
+};
+
+function rowOf(groups: ReturnType<typeof buildSettingsSections>, key: string) {
+  const row = groups.flatMap((g) => g.rows).find((r) => r.key === key);
+  // 긍정 앵커: 행이 실재한다(없으면 아래 "없음" 단언이 공허해진다).
+  expect(row).toBeDefined();
+  return row!;
+}
+
+describe('TRIP-778 AC-2 · 그룹·행 정본 표 완전일치', () => {
+  it('7그룹의 key·label 과 행 key·label·ready 가 정본 순서 그대로다(개인화 행 포함, 전부 ready:true)', () => {
+    // 준비·실행
+    const groups = buildSettingsSections({
+      nickname: '여행자123',
+      email: null,
+    });
+
+    // 단언(완전일치 · 순서까지): 행이 빠지거나·더해지거나·순서가 바뀌거나·ready 가 false 면 red.
+    expect(
+      groups.map((g) => [
+        g.key,
+        g.label,
+        g.rows.map((r) => [r.key, r.label, r.ready]),
+      ])
+    ).toEqual(CANON);
+  });
+
+  it('짝: 준비중(ready:false) 행이 하나도 없다', () => {
+    const groups = buildSettingsSections({
+      nickname: '여행자123',
+      email: null,
+    });
+
+    // 긍정 앵커: 행이 실제로 있다(빈 목록 공허 통과 차단).
+    expect(groups.flatMap((g) => g.rows).length).toBeGreaterThan(0);
+    expect(groups.flatMap((g) => g.rows).filter((r) => !r.ready)).toEqual([]);
+  });
+});
+
+describe('TRIP-778 AC-4 · 취향 7행 값·미설정 칩 (모델)', () => {
+  it('설정된 축은 value 에 요약 문자열, 미설정 축은 회색 "미설정" 칩', () => {
+    // 준비·실행
+    const groups = buildSettingsSections({
+      nickname: '여행자123',
+      email: null,
+      preferences: PREFERENCES,
+    });
+
+    // 단언 — 값 행: value 완전일치 + 칩 없음.
+    const expected: Record<string, string> = {
+      style: `휴양${DOT}자연`,
+      companions: '친구',
+      activities: `맛집투어${DOT}전시`,
+      transport: '대중교통',
+      food: '일식',
+      pace: '느긋하게',
+    };
+    for (const [key, text] of Object.entries(expected)) {
+      const row = rowOf(groups, key);
+      expect(row.value).toBe(text);
+      expect(row.chip ?? null).toBeNull();
+    }
+    // 단언 — 미설정 행(예산): 칩 + 값 없음.
+    const budget = rowOf(groups, 'budget');
+    expect(budget.chip).toEqual({ label: '미설정', tone: 'neutral' });
+    expect(budget.value ?? null).toBeNull();
+  });
+
+  it('취향을 아직 모르면(응답 전·실패) 7행 모두 값도 칩도 없다 — 미설정이라고 말하지 않는다', () => {
+    // 준비·실행 — preferences 입력 없음.
+    const groups = buildSettingsSections({
+      nickname: '여행자123',
+      email: null,
+    });
+
+    for (const key of PREFERENCE_KEYS) {
+      const row = rowOf(groups, key);
+      expect(row.value ?? null).toBeNull();
+      expect(row.chip ?? null).toBeNull();
+    }
+  });
+});
+
+describe('TRIP-778 AC-5 · 위치정보 수집 동의 칩 (모델, D4)', () => {
+  it.each([
+    ['동의(true)', true, { label: '동의', tone: 'primary' }],
+    ['미동의(false)', false, { label: '미동의', tone: 'neutral' }],
+    ['모름(없음)', undefined, null],
+  ] as const)('%s → 칩', (_title, locationConsent, expected) => {
+    const groups = buildSettingsSections({
+      nickname: '여행자123',
+      email: null,
+      locationConsent,
+    });
+
+    expect(rowOf(groups, 'location-consent').chip ?? null).toEqual(expected);
+  });
+});
+
+describe('TRIP-778 AC-6 · 개인화 행 값 (모델, D3)', () => {
+  it.each([
+    ['동의(true)', true, '사용 중'],
+    ['미동의(false)', false, null],
+    ['모름(없음)', undefined, null],
+  ] as const)('%s → 값', (_title, personalizationOn, expected) => {
+    const groups = buildSettingsSections({
+      nickname: '여행자123',
+      email: null,
+      personalizationOn,
+    });
+
+    const row = rowOf(groups, 'personalization');
+    expect(row.value ?? null).toBe(expected);
+    // 개인화 행은 칩을 쓰지 않는다("사용 안 함" 같은 문구 발명 금지).
+    expect(row.chip ?? null).toBeNull();
   });
 });

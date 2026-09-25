@@ -127,20 +127,42 @@ describe('G5 · 페이지 배선 존재', () => {
   });
 });
 
-describe('G6 · "다시 보지 않기" 저장은 페이지가 딥 경로로 문다 (TRIP-781 · 01b)', () => {
-  it('페이지가 flag 딥 경로·키 config 를 물고, 배럴은 flag 를 재수출하지 않으며, 시트는 저장을 모른다', () => {
+/**
+ * G6 재작성(TRIP-778 AC-10 · D2) — 781 의 "페이지가 SecureStore 플래그(`@/shared/storage/flag`)를 딥 경로로
+ * 문다"는 계약이, 저장처를 서버 `/me/settings` 로 옮기며(BR-U6-33 계정 단위 · 01b 사용자 결정) 뒤집혔다.
+ * 이제 페이지는 기기 저장소를 읽지도 쓰지도 않고, 로컬 저장 모듈·키 상수는 고아로 지워진다.
+ */
+describe('G6 · "다시 보지 않기"는 서버 설정을 문다 — 기기 저장소 0 (TRIP-778 AC-10 · D2)', () => {
+  it('페이지는 /me/settings 생성 훅을 물고, flag 모듈·키 상수를 모른다', () => {
     const page = readOne(PAGE_REL);
-    const barrel = readOne('shared/storage/index.ts');
+
+    // 긍정 짝 — 서버 설정 조회·변경 훅을 실제로 문다(D1 codegen 이름, 02a §2-5).
+    expect(page).toContain('useGetMeSettings');
+    expect(page).toContain('usePatchMeSettings');
+    // 부정 — 기기 저장소 경로·함수·키가 페이지에서 사라졌다.
+    expect(page).not.toContain('@/shared/storage/flag');
+    expect(page).not.toContain('readFlag');
+    expect(page).not.toContain('writeFlag');
+    expect(page).not.toContain('AFFILIATE_NOTICE_DISMISSED_KEY');
+  });
+
+  it('고아 정리 — shared/storage/flag.ts 가 없고, 키 상수도 config 에서 빠졌다(라벨 사전은 남는다)', () => {
+    const config = readOne('features/stay/config/affiliateNotice.ts');
+
+    // 긍정 짝 — config 파일은 실제로 읽혔다(시트가 쓰는 라벨 사전이 남아 있다).
+    expect(config).toContain('otaConfirmLabel');
+    expect(config).not.toContain('AFFILIATE_NOTICE_DISMISSED_KEY');
+    expect(fs.existsSync(path.join(ROOT, 'shared/storage/flag.ts'))).toBe(
+      false
+    );
+  });
+
+  it('시트는 여전히 저장을 모른다 — 저장소도 서버 설정 훅도 import 하지 않는다', () => {
     const sheet = readOne(SHEET_REL);
 
-    // 긍정 짝 — 배럴·시트 파일을 실제로 읽었다(빈 문자열 공허 통과 방지).
-    expect(barrel).toContain('saveTokens');
+    // 긍정 짝 — 시트 파일을 실제로 읽었다.
     expect(sheet).toContain('stay-ota-sheet');
-
-    expect(page).toContain('@/shared/storage/flag');
-    expect(page).toContain('@/features/stay/config/affiliateNotice');
-    // 배럴에 얹으면 배럴을 통째 목으로 바꾸는 기존 테스트들이 readFlag 를 지운다.
-    expect(barrel).not.toContain('flag');
     expect(sheet).not.toContain('@/shared/storage');
+    expect(sheet).not.toContain('MeSettings');
   });
 });

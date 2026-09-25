@@ -1812,6 +1812,32 @@ function renderPlanbRequestPreview(): ReactElement {
   );
 }
 
+// l05 설정(TRIP-778) — settings-* 5키가 함께 쓰는 배경. 취향은 서버 enum 원문(D5 — Figma 의 바다·해산물·
+// 느긋·맛집은 enum 밖이라 Figma 쪽 수정 대상), 예산만 미설정 칩. 위치 동의·개인화 사용 중·제휴 토글 ON.
+const L05_SETTINGS_BASE = {
+  groups: filterReadySettingsSections(
+    buildSettingsSections({
+      nickname: '여행자123',
+      email: 'trippilot@email.com',
+      preferences: {
+        styles: { value: ['휴양', '자연'], isNeutralDefault: false },
+        companion: {
+          companionTypes: ['친구'],
+          petFlag: false,
+          isNeutralDefault: false,
+        },
+        activities: { value: ['맛집투어', '전시'], isNeutralDefault: false },
+        transportModes: { value: ['대중교통'], isNeutralDefault: false },
+        foodTastes: { value: ['일식'], isNeutralDefault: false },
+        pace: { value: '느긋하게', isNeutralDefault: false },
+      },
+      locationConsent: true,
+      personalizationOn: true,
+    })
+  ),
+  affiliateNoticeOn: true,
+};
+
 // i07 일정 편집(TRIP-753) — Figma `4313:2100` 2일차 5곳. 행 1·2 방문 완료(잠금), 행 3 위반 배지.
 // 사진은 i06 과 같은 Figma 목업 사진 + 행 5 해운대(`assets/execution/CREDITS.md`). EditorView 는
 // `imageUrl` 문자열만 받으므로 `resolveAssetSource(...).uri` 로 풀어 넣는다(jest 는 undefined → 플레이스홀더).
@@ -5371,8 +5397,8 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   // l05 설정(TRIP-608) — 실화면 딥링크로는 미인증 리다이렉트/백엔드 부재로 온전히 못 본다. jest 가
-  // 못 보는 것(카드 레이아웃·리딩 아이콘·위험/동의 pill)을 여기서 눈으로. 운영 화면과 같게 ready 행만
-  // 거른 5그룹을 그린다(TRIP-939 — "준비 중" 행은 개통 전까지 숨김 · TRIP-937 앱 정보 포함).
+  // 못 보는 것(카드 레이아웃·리딩 아이콘·값·칩·토글)을 여기서 눈으로. 운영 화면과 같게 ready 행만
+  // 거른다(TRIP-939) — TRIP-778 로 전부 개통돼 7그룹. 배경은 `L05_SETTINGS_BASE` 한 벌을 5키가 공유.
   // 하단 데이터 출처 블록(TRIP-886)은 운영처럼 OSM 줄이 링크인 모양 — 나머지 settings-* 는 콜백 없는 평문.
   {
     key: 'settings-default',
@@ -5381,12 +5407,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       <SettingsScreen
-        groups={filterReadySettingsSections(
-          buildSettingsSections({
-            nickname: '여행자123',
-            email: 'trippilot@email.com',
-          })
-        )}
+        {...L05_SETTINGS_BASE}
         deletionState="active"
         currentNickname="여행자123"
         onPressBack={noop}
@@ -5407,12 +5428,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       <SettingsScreen
-        groups={filterReadySettingsSections(
-          buildSettingsSections({
-            nickname: '여행자123',
-            email: null,
-          })
-        )}
+        {...L05_SETTINGS_BASE}
         deletionState="active"
         currentNickname="여행자123"
         truncatedLabel="일부 항목이 잘렸어요: photos, memos"
@@ -5433,12 +5449,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       <SettingsScreen
-        groups={filterReadySettingsSections(
-          buildSettingsSections({
-            nickname: '여행자123',
-            email: null,
-          })
-        )}
+        {...L05_SETTINGS_BASE}
         deletionState="active"
         currentNickname="여행자123"
         exportError="내보내기 정보를 불러오지 못했어요. 다시 시도해 주세요."
@@ -5458,12 +5469,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       <SettingsScreen
-        groups={filterReadySettingsSections(
-          buildSettingsSections({
-            nickname: '여행자123',
-            email: 'trippilot@email.com',
-          })
-        )}
+        {...L05_SETTINGS_BASE}
         deletionState="pending"
         purgeAt="2026-09-13T00:00:00Z"
         currentNickname="여행자123"
@@ -5486,12 +5492,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => (
       <View style={StyleSheet.absoluteFill}>
         <SettingsScreen
-          groups={filterReadySettingsSections(
-            buildSettingsSections({
-              nickname: '여행자123',
-              email: 'trippilot@email.com',
-            })
-          )}
+          {...L05_SETTINGS_BASE}
           deletionState="active"
           currentNickname="여행자123"
           onPressBack={noop}
