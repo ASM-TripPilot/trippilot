@@ -114,6 +114,8 @@ from trippilot.domain.common import (
     ScheduleId,
     TraceId,
     TransportMode,
+    Rejection,
+    RejectionKind,
 )
 from trippilot.domain.context import PermissionDeniedError, Principal, ResourceRef
 from trippilot.domain.freshness import FreshnessMeta
@@ -348,6 +350,20 @@ def _fixed_block(block: schemas.FixedBlockSchema, tz: timezone) -> FixedBlock:
     )
 
 
+def _domain_rejections(
+    rows: Sequence[schemas.RejectionSchema],
+) -> tuple[Rejection, ...]:
+    """경계 거절 이력 → 도메인 (TRIP-964). 순서 보존, 값 변환만 한다.
+
+    `kind` 는 스키마가 Literal 로 닫아 두었으므로 여기서 다시 검사하지 않는다 —
+    미지 값은 422 로 먼저 걸린다(경계에서 거르고 도메인은 신뢰하는 관례).
+    """
+    return tuple(
+        Rejection(poi_id=PoiId(r.poi_id), kind=RejectionKind(r.kind), count=r.count)
+        for r in rows
+    )
+
+
 def _domain_generate_request(
     request: schemas.GenerateItineraryRequest, tz: timezone
 ) -> core.GenerateItineraryRequest:
@@ -377,6 +393,7 @@ def _domain_generate_request(
         seed=_seed_from(request.trip_id),
         fixed_blocks=tuple(_fixed_block(b, tz) for b in request.fixed_blocks),
         excluded_poi_ids=frozenset(PoiId(x) for x in request.excluded_poi_ids),
+        rejections=_domain_rejections(request.rejections),
         include_explanations=request.include_explanations,
     )
 
@@ -1343,6 +1360,7 @@ class WiredItineraryOrchestrator:
             seed=abs(hash(meta.request_id)) % 10_000,
             fixed_blocks=_replan_fixed_blocks(request, self._tz),
             excluded_poi_ids=frozenset(PoiId(p) for p in request.excluded_poi_ids),
+            rejections=_domain_rejections(request.rejections),
             include_explanations=False,  # 재계획 화면(i06)은 설명을 안 쓴다
             prefer_categories=prefer,
             avoid_categories=avoid,
