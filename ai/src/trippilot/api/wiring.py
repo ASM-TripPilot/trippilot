@@ -2016,6 +2016,8 @@ def build_orchestrator(
     weather: WeatherPort | None = None,
     travel_port: object | None = None,  # 실경로 어댑터 (TRIP-432) — None이면 하버사인
     existence: object | None = None,    # 지도 실재 검증 (TRIP-683) — None이면 강등 없음
+    hours: object | None = None,        # 영업시간 보강 (Google) — None이면 보강 없음
+    place_ids: dict | None = None,      # content_id→place_id. 비면 물을 대상 0
     events: "EventPort | None" = None,  # 행사 저장소 (TRIP-421) — None이면 무보정
     vector_store: object | None = None,
     embedding: object | None = None,
@@ -2116,6 +2118,11 @@ def build_orchestrator(
         # 지도 실재 검증(TRIP-898) — 점수 뒤·어셈블리 앞에서 점수를 깎는다(TRIP-904).
         # 미주입이면 강등 없이 기존과 동일(근거 없으면 판정 안 함).
         existence=existence,
+        # 영업시간 런타임 보강 — **둘 다 있어야 돈다.** 포트만 있고 place_id 표가
+        # 비면 물을 대상이 0 이라 조용히 꺼진 것과 같다. 돈이 나가는 경로라
+        # "켜기"가 두 조건인 것이 안전장치다.
+        hours=hours,
+        place_ids=place_ids,
         config=orchestrator_config,
         # 입장료 파생 지식 (2026-09-24 결정 — AI 소유). 파일이 없으면 빈 표이고
         # 그때 점수는 종전과 **완전히 같다**(전 POI '모름' → 중립). 즉 데이터가
@@ -2306,6 +2313,8 @@ def build_dev_app(
     poi_db: object | None = None,
     travel_port: object | None = None,
     existence: object | None = None,   # PlaceExistencePort (TRIP-683)
+    hours: object | None = None,       # PlaceHoursPort (Google Places)
+    place_ids: dict | None = None,     # content_id→place_id
     feature_models: dict | None = None,  # 기능별 모델 오버라이드 (TRIP-513)
     retry_models: dict | None = None,  # 타임아웃 재시도 모델 (TRIP-522 2단 폴백)
     events: EventPort | None = None,
@@ -2346,6 +2355,8 @@ def build_dev_app(
         }
     orchestrator = build_orchestrator(
         existence=existence,
+        hours=hours,
+        place_ids=place_ids,
         llm=llm if llm is not None else UnwiredLlm(),
         poi_db=poi_db if poi_db is not None else StaticPoiDb(demo_poi_seed()),
         context_store=context_store if context_store is not None else StaticPersonaStore(
