@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { PlaceGridCard } from '@/entities/place/ui/PlaceGridCard';
 import type { Place } from '@/shared/api/generated/schemas';
 import { PoiCategory } from '@/shared/api/generated/schemas';
+import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
 import type { PlaceListState } from '../model/placeListState';
@@ -22,14 +23,27 @@ import {
   FilterSlidersGlyph,
   InfoGlyph,
   MapPinGlyph,
+  PlusGlyph,
   SearchGlyph,
   WarningTriangleGlyph,
 } from './ExploreGlyphs';
 import { PartialFailureBanner } from './PartialFailureBanner';
 
+// 우하단 FAB 그림자 — `DestinationDetailScreen`·`ExploreLandingScreen`의 FAB_SHADOW와 동형
+// (RN에 CSS box-shadow가 없어 style prop으로 옮긴다). `#000000`은 raw-hex 가드
+// 사정거리 밖(TOKENIZED_HEX 9색에 없음, 홈 fabShadow 선례).
+const FAB_SHADOW = {
+  shadowColor: '#000000',
+  shadowOffset: { width: 0, height: 6 },
+  shadowOpacity: 0.22,
+  shadowRadius: 12,
+  elevation: 6,
+} as const;
+
 /**
  * d04 장소 탐색 default(Figma `1692:1183`) — **프레젠테이션 화면**. props 8개(TRIP-221 확정)
- * + 옵셔널 7개(TRIP-222)만 받는다. 조회·라우팅·로컬 상태는 `pages/place-explore/ui/
+ * + 옵셔널 9개(TRIP-222 7개 + TRIP-708 `onPressSavedPlaces`·`onPressFilter`)만 받는다.
+ * 조회·라우팅·로컬 상태는 `pages/place-explore/ui/
  * PlaceExplorePage.tsx` 몫이고, 상태 판정(`resolvePlaceListState`)도 페이지가 끝내 `state`
  * 하나로 내려준다 — 이 화면은 그 판별 유니온을 보고 그리기만 한다(판정의 단일 출처).
  * 새 prop은 전부 옵셔널이고 `state` 기본값이 `results`라 TRIP-221 동결 렌더(prop 8개)가
@@ -38,7 +52,7 @@ import { PartialFailureBanner } from './PartialFailureBanner';
 export interface PlaceExploreScreenProps {
   /** 그릴 순서 그대로의 목록. 정렬·검색 필터는 이미 끝나 있다(페이지 몫). */
   places: Place[];
-  /** 담긴 poiId 목록 — 하트 상태·"담음" 배지·CTA 숫자의 단일 출처. */
+  /** 담긴 poiId 목록 — 하트 상태·"담음" 배지의 단일 출처. */
   savedPoiIds: string[];
   /** null = "전체" 칩 활성. */
   selectedCategory: PoiCategory | null;
@@ -50,6 +64,12 @@ export interface PlaceExploreScreenProps {
   /** 카드 본문 탭 → d06 상세. 미지정이면 카드는 눌러도 무동작(additive, 게이트① 재개봉 없음). */
   onPressCard?: (place: Place) => void;
   onPressCreateTrip: () => void;
+  /** ♥ FAB(우하단 위) → 담은 장소 d02. 미지정이면 무동작(옵셔널) — FAB 자체는 상시 렌더한다
+   * (Figma 상시 노출, 콜백은 선택). 라우팅은 페이지가 `/explore/saved-places`로 배선. */
+  onPressSavedPlaces?: () => void;
+  /** 검색바 우측 필터 버튼 → 카테고리 시트(페이지 소유 @gorhom/bottom-sheet). 미지정이면
+   * 무동작(옵셔널) — 버튼 자체는 상시 렌더한다. */
+  onPressFilter?: () => void;
   /** 미지정이어도 화면은 그대로 동작한다(`StayRegisterScreen.tsx:62`와 같은 선택). */
   onBack?: () => void;
   /** 화면 얼굴. 미지정 = `{ kind: 'results' }` — 동결 렌더 헬퍼가 8개만 넘기므로 이 기본값이
@@ -123,12 +143,14 @@ function AppBar({ onBack }: { onBack?: () => void }): ReactElement {
 function SearchBar({
   value,
   onChangeText,
+  onPressFilter,
 }: {
   value: string;
   onChangeText: (text: string) => void;
+  onPressFilter?: () => void;
 }): ReactElement {
   return (
-    <View className="h-[52px] w-full flex-row items-center gap-sm rounded-pill border border-hairline-strong bg-canvas pl-lg pr-sm">
+    <View className="h-[58px] w-full flex-row items-center gap-sm rounded-pill border border-hairline-strong bg-canvas pl-lg pr-sm">
       <SearchGlyph size={20} />
       <TextInput
         testID="explore-places-search"
@@ -137,6 +159,16 @@ function SearchBar({
         placeholder="장소 · 명소 · 맛집 검색"
         className="flex-1 font-noto text-card-title text-ink placeholder:text-muted-soft"
       />
+      {/* 우측 필터 버튼 — press 는 콜백만 올린다. 카테고리 시트의 실제 열림·딤은 페이지 소유(6-b). */}
+      <Pressable
+        testID="explore-places-filter"
+        accessibilityRole="button"
+        accessibilityLabel="필터"
+        onPress={onPressFilter}
+        className="h-9 w-9 items-center justify-center rounded-pill"
+      >
+        <FilterSlidersGlyph size={20} tone="ink" />
+      </Pressable>
     </View>
   );
 }
@@ -185,51 +217,63 @@ function CategoryChips({
   );
 }
 
-/** 정렬 칩 — 선택지가 아니라 **현재 정렬을 알리는 라벨**이다(01b Seed Q8: `savedCount`가
- * 계약의 유일한 정렬 재료라 "지금 뜨는 순"을 더해도 완전히 같은 순서가 된다). 그래서
- * `Pressable`이 아니라 `View`다 — 누를 수 있는 것 목록(AC-G1)에 걸리면 안 된다. */
+/** 정렬 칩 3개 — 선택지가 아니라 **현재 정렬을 알리는 라벨**이다(01b Seed Q8: `savedCount`가
+ * 계약의 유일한 정렬 재료라 "지금 뜨는 순"을 더해도 완전히 같은 순서가 되고, "가까운 순"은
+ * 좌표 파라미터가 없다). 활성 "요즘 담긴 순"(연핑크 `bg-primary-pale`) + 표시 전용
+ * "지금 뜨는 순"·"가까운 순"(회색). 셋 다 `Pressable`이 아니라 `View`다 — 누를 수 있는 것
+ * 목록(AC-1 개수 계약)에 걸리면 안 된다. */
+function SortChip({
+  testID,
+  label,
+  active,
+}: {
+  testID: string;
+  label: string;
+  active: boolean;
+}): ReactElement {
+  return (
+    <View
+      testID={testID}
+      className={
+        active
+          ? 'rounded-pill bg-primary-pale px-[13px] py-[7px]'
+          : 'rounded-pill bg-surface-soft px-[13px] py-[7px]'
+      }
+    >
+      <Text
+        className={
+          active
+            ? 'font-noto-bold text-[12.5px] font-bold text-primary'
+            : 'font-noto text-[12.5px] text-muted'
+        }
+      >
+        {label}
+      </Text>
+    </View>
+  );
+}
+
 function SortRow(): ReactElement {
   return (
     <View className="flex-row items-center gap-sm">
       <Text className="font-noto-bold text-caption font-bold text-muted-soft">
         정렬
       </Text>
-      <View
+      <SortChip
         testID="explore-places-sort-saved"
-        className="rounded-pill bg-primary-pale px-[13px] py-[7px]"
-      >
-        <Text className="font-noto-bold text-[12.5px] font-bold text-primary">
-          요즘 담긴 순
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-function CtaBar({
-  count,
-  onPress,
-}: {
-  count: number;
-  onPress: () => void;
-}): ReactElement {
-  return (
-    <View className="w-full border-t border-hairline bg-canvas px-lg pb-lg pt-md">
-      <Pressable
-        testID="explore-places-createtrip"
-        accessibilityRole="button"
-        onPress={onPress}
-        className="h-[54px] w-full flex-row items-center justify-center gap-sm rounded-[14px] bg-primary"
-      >
-        <View className="h-6 w-6 items-center justify-center rounded-pill bg-on-primary">
-          <Text className="font-inter-bold text-label font-bold text-primary">
-            {count}
-          </Text>
-        </View>
-        <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-          담은 장소로 여행 만들기
-        </Text>
-      </Pressable>
+        label="요즘 담긴 순"
+        active
+      />
+      <SortChip
+        testID="explore-places-sort-trending"
+        label="지금 뜨는 순"
+        active={false}
+      />
+      <SortChip
+        testID="explore-places-sort-nearby"
+        label="가까운 순"
+        active={false}
+      />
     </View>
   );
 }
@@ -390,7 +434,7 @@ function ErrorNotice({ onRetry }: { onRetry?: () => void }): ReactElement {
 }
 
 /** 담기 실패 배너(01b Seed Q5 ⓐ) — `trip-wizard-submit-banner` 선례와 같은 모양(아이콘 +
- * 문구 + 조건부 액션 버튼). CTA 바 위에 그려지고, 다음 조작 시 사라진다(타이머 금지 —
+ * 문구 + 조건부 액션 버튼). 목록 위에 그려지고, 다음 조작 시 사라진다(타이머 금지 —
  * 사라지는 조건은 페이지가 `saveError`를 다시 `null`로 돌리는 것으로 정한다). */
 function SaveErrorBanner({
   notice,
@@ -442,6 +486,8 @@ export function PlaceExploreScreen({
   onToggleSave,
   onPressCard,
   onPressCreateTrip,
+  onPressSavedPlaces,
+  onPressFilter,
   onBack,
   state = { kind: 'results' },
   pendingPoiIds = [],
@@ -471,13 +517,19 @@ export function PlaceExploreScreen({
           columnWrapperStyle={{ justifyContent: 'space-between' }}
           contentContainerStyle={{
             paddingHorizontal: 16,
-            paddingBottom: 20,
+            // FAB(absolute bottom-100+h-56=156)·페이지 복제 탭바(~96) 오버레이가 마지막 행을
+            // 가리지 않도록 스크롤 끝 여백 확보(DestinationDetail·ExploreLanding과 같은 값).
+            paddingBottom: 156,
             flexGrow: 1,
           }}
           ItemSeparatorComponent={() => <View style={{ height: 18 }} />}
           ListHeaderComponent={
             <View className="gap-lg pb-lg">
-              <SearchBar value={searchText} onChangeText={onChangeSearchText} />
+              <SearchBar
+                value={searchText}
+                onChangeText={onChangeSearchText}
+                onPressFilter={onPressFilter}
+              />
               <CategoryChips
                 selected={selectedCategory}
                 onSelect={onSelectCategory}
@@ -528,9 +580,31 @@ export function PlaceExploreScreen({
           />
         ) : null}
 
-        {savedPoiIds.length > 0 ? (
-          <CtaBar count={savedPoiIds.length} onPress={onPressCreateTrip} />
-        ) : null}
+        {/* 우하단 세로 2단 FAB(TRIP-708, d01 703 FAB 구조 재사용): 위=♥ 담은 장소(흰 원)·
+            아래=＋ 여행 만들기(핑크 원). CtaBar(담은 수>0 조건부)를 대체한다 — 담은 수·상태
+            얼굴과 무관하게 상시 노출한다(Figma). 콜백은 옵셔널(♥)이라 미전달이면 무동작. */}
+        <View className="absolute bottom-[100px] right-lg items-end gap-md">
+          <Pressable
+            testID="explore-places-saved-fab"
+            accessibilityRole="button"
+            accessibilityLabel="담은 장소"
+            onPress={() => onPressSavedPlaces?.()}
+            style={FAB_SHADOW}
+            className="h-[56px] w-[56px] items-center justify-center rounded-full bg-canvas"
+          >
+            <HeartFilledGlyph size={26} />
+          </Pressable>
+          <Pressable
+            testID="explore-places-create-fab"
+            accessibilityRole="button"
+            accessibilityLabel="여행 만들기"
+            onPress={onPressCreateTrip}
+            style={FAB_SHADOW}
+            className="h-[56px] w-[56px] items-center justify-center rounded-full bg-primary"
+          >
+            <PlusGlyph size={24} />
+          </Pressable>
+        </View>
       </View>
     </SafeAreaView>
   );

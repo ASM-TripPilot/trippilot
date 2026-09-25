@@ -20,6 +20,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
+# 제3자 문자열(웹 수집 상호명·위키 발췌·네이버 스니펫)은 줄에 넣기 전에 한 줄로 누른다 —
+# 줄바꿈이 남으면 우리 프롬프트 골격을 위조한다 (inline() docstring 에 실측).
+from trippilot.llm_gateway.prompts import inline
 from trippilot.domain.common import TraceId
 from trippilot.domain.llm import LlmFeature
 from trippilot.llm_gateway.gates.reminder_copy import ReminderCopyContext, ReminderCopyDraft
@@ -63,9 +66,30 @@ class ReminderCopyResult:
     body: str
 
 
+# 경계 카테고리 코드 → 프롬프트에 쓸 한국어 라벨.
+# 백엔드는 모든 경계에서 **영문 코드**를 내보낸다(`PoiCategory` docstring: 백엔드
+# read 포트가 한글 정본 `Poi.kt` 를 코드로 변환해 내보낸다). 그 코드를 그대로
+# 프롬프트에 박으면 한국어 문구를 쓰는 모델이 "우리밀 · FOOD" 를 읽게 되므로,
+# 여기서 백엔드가 쓰는 한글 정본 어휘로 되돌린다. **와이어는 코드, 프롬프트는 한글** —
+# 다른 경계와 어휘를 맞추면서 모델에는 자연어를 준다.
+_CATEGORY_LABELS = {
+    "FOOD": "맛집",
+    "CAFE": "카페",
+    "SIGHT": "명소",
+    "NIGHT_VIEW": "야경",
+    "NATURE": "자연",
+    "CULTURE": "문화",
+    "ACTIVITY": "액티비티",
+    "SHOPPING": "쇼핑",
+    "STAY": "숙소",
+}
+
+
 def _slot_line(name: str, category: str) -> str:
-    """빈 카테고리는 구분자 없이 이름만 — 대롱거리는 " · " 방지."""
-    return f"{name} · {category}" if category else name
+    """빈 카테고리·모르는 코드는 구분자 없이 이름만 — 대롱거리는 " · " 와
+    프롬프트에 새는 원시 코드를 동시에 막는다."""
+    label = _CATEGORY_LABELS.get(category.strip().upper(), "")
+    return f"{inline(name)} · {label}" if label else inline(name)
 
 
 def build_reminder_copy_vars(item: ReminderCopyItem, trip_title: str) -> dict[str, str]:

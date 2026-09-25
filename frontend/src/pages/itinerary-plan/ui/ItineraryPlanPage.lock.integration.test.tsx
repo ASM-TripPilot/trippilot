@@ -20,14 +20,19 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { ItineraryPlanPage } from './ItineraryPlanPage';
 
 /**
- * TRIP-337 · AC-4 확정 예방 잠금을 **실 HTTP 로** 태우는 심판.
+ * TRIP-337 → TRIP-799 · AC-9 확정 예방 잠금을 **실 HTTP 로** 태우는 심판.
+ *
+ * **재작성(TRIP-799 · narrow)**: PLANNED 완성 일정이 이제 지도+시트 셸이라 확정 CTA 는
+ * `sheet-cta-button-0`("일정 저장하기")이고, PARTIAL 잠금은 **CtaButton.disabled**(가산 prop)로
+ * 표현된다(★5). 그리고 옛 잠금 **배너**(`itinerary-confirm-locked-notice`)는 새 흐름에서 **제거**된다
+ * (D6 — h14 는 PARTIAL 도달 안 함) → A4-1 은 "배너가 뜬다"에서 "배너가 부재한다"로 뒤집힌다.
  *
  * 무엇을 보장하나:
- *  - 🔴 `generationState==='PARTIAL'` 이면 확정 CTA 가 **비활성**이고 "만드는 중" 사유가 뜨며,
- *    **눌러도 확정 요청이 한 건도 안 나간다**(계약: PARTIAL 동안 확정은 409 — 눌러 409 받는
- *    죽은 활성 버튼을 미리 막는다). 지금은 `ItineraryPlanPage` 가 generationState 를 화면에
- *    넘기지도 않아 CTA 가 무조건 활성이다 — 이 간극이 AC-4 다.
+ *  - 🔴 `generationState==='PARTIAL'` 이면 셸 CTA 가 **비활성**이고 **눌러도 확정 요청이 한 건도 안
+ *    나간다**(계약: PARTIAL 동안 확정은 409). 잠금 배너는 **안 뜬다**(옛 lock 테스트 뒤집기).
  *  - `COMPLETE` 면 CTA 가 다시 활성이고 눌리면 요청이 실제로 나간다(잠금은 PARTIAL 에서만).
+ *  - ★ `toBeDisabled()` 단독은 accessibilityState 만으로 통과하므로, **disabled + press→confirm 0**
+ *    짝으로만 심판이 된다(★5 — CtaButton.disabled 없이 accessibilityState 만 켠 가짜 비활성은 red).
  *
  * 왜 통합 버킷인가: 핵심 단언이 **"눌러도 확정 요청이 안 나갔다"**(POST 0건)다 — 순수함수·화면
  * 단독으로는 못 잰다. 훅을 목킹하면 그 계수가 테스트의 *가정*이 되어 틀려도 아무도 모른다.
@@ -73,6 +78,8 @@ function trip(): Trip {
     status: 'PLANNED',
     createdAt: '2026-08-01T10:00:00.000Z',
     updatedAt: '2026-08-01T10:00:00.000Z',
+    baseCount: 0,
+    itineraryDayCount: 0,
   };
 }
 
@@ -172,8 +179,8 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-describe('🔴 A4-1 · AC-4 — PARTIAL 이면 확정이 잠긴다 (D2·D3 · 계약 409 · ★2·★4)', () => {
-  it('확정 CTA 가 비활성이고 "만드는 중" 사유가 뜨며, 눌러도 확정 요청이 0건이다', async () => {
+describe('🔴 A4-1 · AC-9 — PARTIAL 이면 셸 CTA 가 잠긴다 (계약 409 · ★5, 잠금 배너 부재)', () => {
+  it('셸 CTA 가 비활성이고 잠금 배너가 없으며, 눌러도 확정 요청이 0건이다', async () => {
     // 준비 — 생성 진행 중(PARTIAL)인데 확정 상태축은 아직 PLANNED. 계약상 확정은 409.
     itineraryHandler = () =>
       HttpResponse.json(
@@ -183,15 +190,14 @@ describe('🔴 A4-1 · AC-4 — PARTIAL 이면 확정이 잠긴다 (D2·D3 · �
 
     renderPage();
 
-    // ① 비활성 — `toBeDisabled()` 는 accessibilityState 만 켜도 통과하므로(02a M1) 단독으로는
-    //    "회색인데 눌리는" 구현을 통과시킨다. 아래 ③(요청 0건)과 짝을 이뤄야 심판이 된다(★2).
-    const cta = await screen.findByTestId('itinerary-confirm-cta');
+    // ① 비활성 — `toBeDisabled()` 는 accessibilityState 만 켜도 통과하므로 단독으로는 "회색인데
+    //    눌리는" 구현을 통과시킨다. 아래 ③(요청 0건)과 짝을 이뤄야 심판이 된다(★5).
+    const cta = await screen.findByTestId('sheet-cta-button-0');
     await waitFor(() => expect(cta).toBeDisabled());
 
-    // ② 침묵 잠금 아님(INV-4) — 사유가 뜬다. 문안은 정본에 없어 정규식(계열)으로만 잠근다
-    //    (문자열로 걸면 완전 일치라 정당한 문안이 red — 02a M4).
-    const notice = await screen.findByTestId('itinerary-confirm-locked-notice');
-    expect(notice).toHaveTextContent(/만드는 중/);
+    // ② 잠금 배너 부재(D6 뒤집기) — 옛 흐름의 `itinerary-confirm-locked-notice` 는 새 셸에 없다
+    //    (h14 는 PARTIAL 에 도달 안 함, 사유 배너 대신 disabled CTA 로만 방어).
+    expect(screen.queryByTestId('itinerary-confirm-locked-notice')).toBeNull();
 
     // ③ ★ 핵심 — 눌러도 확정 요청이 **한 건도 안 나간다**. 죽은 활성 버튼(눌러 409만 받음)이
     //    아니다. accessibilityState 만 켠 가짜 비활성은 press 가 살아 있어 여기서 red 가 된다.
@@ -201,8 +207,8 @@ describe('🔴 A4-1 · AC-4 — PARTIAL 이면 확정이 잠긴다 (D2·D3 · �
   });
 });
 
-describe('🔴 A4-2 · AC-4 — COMPLETE 면 확정이 다시 활성이다 (필수 짝 · ★1·★4)', () => {
-  it('확정 CTA 가 활성이고 사유가 없으며, 누르면 확정 요청이 1건 나간다', async () => {
+describe('🔴 A4-2 · AC-9 — COMPLETE 면 셸 CTA 가 다시 활성이다 (필수 짝 · ★5)', () => {
+  it('셸 CTA 가 활성이고 잠금 배너가 없으며, 누르면 확정 요청이 1건 나간다', async () => {
     // 준비 — status 는 A4-1 과 **똑같이 PLANNED**, generationState 만 COMPLETE 로 바뀐다.
     // 이 대조가 "잠금은 generationState 축에서만 갈린다"를 못박는다(★4).
     itineraryHandler = () =>
@@ -217,10 +223,10 @@ describe('🔴 A4-2 · AC-4 — COMPLETE 면 확정이 다시 활성이다 (필�
     renderPage();
 
     // ① 활성 — A4-1 을 만족시키려 CTA 를 무조건 비활성화하는 과잉 구현을 여기서 죽인다.
-    const cta = await screen.findByTestId('itinerary-confirm-cta');
+    const cta = await screen.findByTestId('sheet-cta-button-0');
     await waitFor(() => expect(cta).toBeEnabled());
 
-    // ② 잠금 사유는 없다(COMPLETE 는 잠글 이유가 없다).
+    // ② 잠금 배너는 없다(COMPLETE 는 잠글 이유가 없다 · 새 셸엔 배너 자체가 없다).
     expect(screen.queryAllByTestId('itinerary-confirm-locked-notice')).toEqual(
       []
     );

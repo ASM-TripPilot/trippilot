@@ -24,12 +24,10 @@ interface ScheduleAgentPort {
      * 설명은 LLM 이 만들고 ~10초를 쓴다. 생성에 붙여 두면 사용자가 첫 화면을 그만큼 늦게 본다.
      * 일정(솔버)과 근거(LLM)는 서로를 기다릴 이유가 없어 나눴다.
      *
-     * **실패는 빈 맵이다.** 근거는 부가 정보라 없다고 일정을 죽이지 않는다 — 다만 조용히 지나가지
+     * **실패는 빈 결과다.** 근거는 부가 정보라 없다고 일정을 죽이지 않는다 — 다만 조용히 지나가지
      * 않게 어댑터가 로그로 드러낸다(INV-4).
-     *
-     * @return `"{date}#{poiId}"` → 문장. 키 규약은 생성 응답의 `explanations` 와 같다(BR-U2-04).
      */
-    fun explanations(tripId: UUID, solution: ScheduleAgentOutput): Map<String, String>
+    fun explanations(tripId: UUID, solution: ScheduleAgentOutput): SlotExplanations
 
     /**
      * 슬롯 후보 제안(DEC-U3-5) — **완전 AI·같이 고르기 공통 경계**다. 경로별로 다른 API 를 두지 않는다(BR-U3-23).
@@ -86,9 +84,9 @@ data class ReplanInput(
     val freeText: String?,
     val excludedPoiIds: List<UUID>,
     /**
-     * 아래 다섯은 전용 재계획 경계(`/ai/v1/itinerary/replan`, 연동 설계 §2)의 입력이다.
-     * 상대 계약이 출하되기 전까지 http 어댑터는 generate 재사용이라 **아직 와이어에 싣지 않는다** —
-     * 조립을 먼저 완성해 두는 것은 NEUTRAL_PREFERENCES 로 취향을 덮던 상태를 끝내기 위한 준비다(B-1).
+     * 아래 다섯은 전용 재계획 경계(`/ai/v1/itinerary/replan`, 연동 설계 §2)의 입력이고
+     * **지금은 전부 와이어에 실린다**(TRIP-854). 상대 계약이 열리기 전에는 generate 재사용이라
+     * 조립만 해 두고 버렸었다 — 그 기간 동안 재계획은 NEUTRAL_PREFERENCES 로 취향을 덮고 있었다.
      * 기본값을 두지 않는다 — 조립 지점이 값을 말하지 않고 조용히 빠지는 것을 컴파일이 막는다.
      */
     val companionType: String?,
@@ -224,6 +222,16 @@ data class ScheduleAgentOutput(
      * 필드가 없는 옛 AI 응답과도 같은 뜻이 되게 한다.
      */
     val unplacedMustVisits: List<UnplacedMustVisit> = emptyList(),
+    /**
+     * 그날 이동 총거리(km) — **재계획 응답에만 있다.** 생성 경로는 주지 않으므로 거기서는 null 이다.
+     *
+     * 화면 i08 이 "이동 −6.9km" 를 보여주려면 재계획 전후를 빼야 하는데, 그 뺄셈의 재료가 이 값이다.
+     * **백엔드가 다시 계산하지 않는다** — 거리는 상대의 조립 엔진이 소유한다(INV-2). 우리가 직선거리로
+     * 덧칠하면 화면의 −6.9km 와 상대가 푼 경로가 어긋난다.
+     *
+     * 단위는 km 이고 **소요시간은 여기에도 없다**(INV-3).
+     */
+    val totalDistanceKm: Double? = null,
 )
 
 /**
@@ -292,6 +300,25 @@ data class VisitSlotDisplay(
  * 받는다(형식이 틀린 한 건 때문에 응답 전체를 잃지 않으려고).
  */
 data class SlotAlternative(val poiId: UUID, val rationale: String, val distanceRange: String?)
+
+/**
+ * 근거 조회 결과 — **두 축을 한 번에 받는다**(AI 가 한 번의 왕복으로 둘 다 준다).
+ *
+ * 나눠 두는 이유는 **키 축이 다르기 때문**이다. [slots] 는 배치된 슬롯의 POI 를 가리키고
+ * [alternatives] 는 그 슬롯을 **대신할 후보**를 가리킨다 — 한 맵에 섞으면 같은 날 같은 키가
+ * 둘 중 무엇을 뜻하는지 알 수 없다.
+ *
+ * **둘 다 빈 것이 정상 경로다**(INV-4). 상대 실패·미배선·마감 초과가 전부 빈 결과이고,
+ * 그때 화면은 슬롯 근거 없이, 차선책은 AI 템플릿 문구(`"같은 카페 후보"`)로 그려진다.
+ *
+ * @param slots `"{date}#{poiId}"` → 배치 근거. 키 규약은 생성 응답의 `explanations` 와 같다(BR-U2-04).
+ * @param alternatives `"{date}#{altPoiId}"` → **대신 골라도 좋은 이유**(AI TRIP-887).
+ *   키가 없으면 그 차선책은 AI 가 준 템플릿 `rationale` 을 그대로 쓴다 — 그게 폴백이다.
+ */
+data class SlotExplanations(
+    val slots: Map<String, String> = emptyMap(),
+    val alternatives: Map<String, String> = emptyMap(),
+)
 
 /** 사용 데이터 신선도 집계(IO-6). */
 data class FreshnessMeta(val generatedAt: Instant, val degraded: Boolean)

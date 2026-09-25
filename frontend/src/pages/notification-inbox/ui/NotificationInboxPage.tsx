@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 import { router } from 'expo-router';
 import type { Href } from 'expo-router';
 
@@ -27,6 +27,9 @@ import type { Notification } from '@/shared/api/generated/schemas';
 
 /** PLAN_B 인라인 링크 문구(Figma l01). 라우팅 가능할 때만 붙인다(데이터없음이면 null). */
 const PLAN_B_ACTION_LABEL = '대안 일정 보기 ›';
+
+/** '모두 읽음' 한 건 이상 실패 안내(INV-4). 전부 실패도 같은 문구(TRIP-773 D2). */
+const MARK_ALL_FAILURE = '일부 알림을 읽음 처리하지 못했어요';
 
 function toRowVM(item: Notification, now: Date): NotificationRowVM {
   const { icon, label } = notificationKind(item.kind);
@@ -72,8 +75,18 @@ function buildSections(
 }
 
 export function NotificationInboxPage(): ReactElement {
-  const { items } = useNotificationInbox();
+  const { items, markAllRead } = useNotificationInbox();
+  const [markAllPending, setMarkAllPending] = useState(false);
+  const [markAllError, setMarkAllError] = useState<string | null>(null);
   const now = new Date();
+
+  async function handleMarkAllRead(): Promise<void> {
+    setMarkAllError(null);
+    setMarkAllPending(true);
+    const ok = await markAllRead();
+    setMarkAllPending(false);
+    if (!ok) setMarkAllError(MARK_ALL_FAILURE);
+  }
 
   return (
     <NotificationInboxScreen
@@ -81,6 +94,9 @@ export function NotificationInboxPage(): ReactElement {
       isEmpty={items.length === 0}
       onNavigate={(route) => router.push(route as Href)}
       onPressBack={() => router.back()}
+      onMarkAllRead={() => void handleMarkAllRead()}
+      markAllPending={markAllPending}
+      markAllError={markAllError}
     />
   );
 }

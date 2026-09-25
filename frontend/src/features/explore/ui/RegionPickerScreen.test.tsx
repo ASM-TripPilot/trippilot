@@ -1,4 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 
 import type { Region } from '@/shared/api/generated/schemas';
 import { RegionLevel } from '@/shared/api/generated/schemas';
@@ -166,6 +171,24 @@ describe('AC-1b · 인기 여행지 가로 스트립 (TRIP-650)', () => {
     fireEvent.press(card);
     expect(screen.getByText('미추홀구')).toBeOnTheScreen();
   });
+
+  it('TRIP-707 — 첫 카드에 인기 배지가 붙고, 태그라인(로컬 카탈로그)이 뜬다', () => {
+    render(<RegionPickerScreen {...props({ query: '' })} />);
+
+    // 인기 배지는 정확히 첫 카드(인천/28)에만. 총 1개 + 그 1개가 첫 카드 서브트리 안이라야
+    // "index===0"가 실제로 잠긴다(code-critic 경고-1: 총 개수만 보면 배지가 둘째 카드로 옮겨가도
+    // green — 첫 카드 소속까지 봐야 한다).
+    const firstCard = screen.getByTestId('explore-region-popular-28');
+    const badge = within(firstCard).getByTestId('explore-region-popular-badge');
+    expect(within(badge).getByText('인기')).toBeOnTheScreen();
+    expect(screen.getAllByTestId('explore-region-popular-badge')).toHaveLength(
+      1
+    );
+
+    // 인천(28)·강원(51) 태그라인이 로컬 카탈로그(POPULAR_TAGLINE)에서 온다(이 CATALOG 의 두 시/도).
+    expect(screen.getByText('항구 · 근대')).toBeOnTheScreen();
+    expect(screen.getByText('산 · 휴식')).toBeOnTheScreen();
+  });
 });
 
 describe('AC-2 · 드릴다운 진입/복귀 + 상세 뒤로 ≠ 앱바 뒤로', () => {
@@ -252,8 +275,8 @@ describe("AC-4 · '전체' 행 묶음 (selectable=false 시/도)", () => {
   });
 });
 
-describe('AC-5 · 준비중 유지 (poiCount=0 구/군, INV-1)', () => {
-  it('poiCount=0 구/군은 상세에서 "준비 중"을 달고, 눌러도 선택되지 않는다', () => {
+describe('AC-5 · 후보 없는 지역 표기 (poiCount=0 구/군, INV-1 · TRIP-935 AC-8)', () => {
+  it('🔴 poiCount=0 구/군은 "추천 장소 없음"을 달고("준비 중" 아님), 눌러도 선택되지 않는다', () => {
     const onSelectRegion = jest.fn();
     render(
       <RegionPickerScreen
@@ -263,9 +286,11 @@ describe('AC-5 · 준비중 유지 (poiCount=0 구/군, INV-1)', () => {
 
     fireEvent.press(screen.getByTestId('explore-region-sido-51')); // 강원 드릴인
 
-    // 홍천군(poi=0): "준비 중"(정규식 — 카드 집계 텍스트라 완전일치는 실패, ★2).
+    // 홍천군(poi=0): 데이터 상태 표기 "추천 장소 없음"(정규식 — 카드 집계 텍스트라 완전일치는
+    // 실패, ★2). TRIP-935: "준비 중"은 심사에서 미완성 기능(2.1)으로 읽혀 문구만 바꿨다.
     const coming = screen.getByTestId('explore-region-51720');
-    expect(coming).toHaveTextContent(/준비 중/);
+    expect(coming).toHaveTextContent(/추천 장소 없음/);
+    expect(coming).not.toHaveTextContent(/준비 중/);
 
     // 눌러도 선택 안 됨(★8 — 실제 press).
     fireEvent.press(coming);

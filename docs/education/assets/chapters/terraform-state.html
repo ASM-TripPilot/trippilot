@@ -1,0 +1,20 @@
+<p>코드에는 <code>aws_vpc.this</code>라는 이름이 있고 AWS에는 <code>vpc-...</code>라는 ID가 있다. <strong>State</strong>는 둘의 대응과 Terraform이 관리에 필요한 정보를 보관한다. state가 사라져도 AWS의 VPC가 자동 삭제되지는 않는다. 반대로 Terraform이 기존 리소스와의 연결을 잃으면 새 리소스를 만들려는 계획이 나올 수 있다. 그래서 state를 앱의 빌드 캐시처럼 지워도 되는 파일로 취급해서는 안 된다.</p>
+<div class="code-block"><p class="code-label">현재 코드 발췌 · versions.tf의 backend</p><pre><code class="language-hcl">terraform {
+  backend "s3" {
+    encrypt      = true
+    use_lockfile = true
+  }
+}</code></pre></div>
+<p>bucket과 key는 <strong>부분 구성</strong>을 사용하기 때문에 비어 있다. workflow의 <code>terraform init -backend-config=...</code>가 환경 전용 bucket, <code>terraform.tfstate</code> key, region을 전달한다. backend 블록은 일반 입력 변수나 <code>local.name</code>을 참조하는 곳이 아니다. backend를 먼저 초기화해야 이후 state를 읽고 계획할 수 있으므로 provider·리소스 평가와 별개의 단계다.</p>
+<div class="table-wrap"><table><thead><tr><th>대상</th><th>무엇을 보관하거나 제어하는가?</th><th>이 브랜치의 처리</th></tr></thead><tbody>
+<tr><td><code>terraform.tfstate</code></td><td>구성 주소와 실제 리소스의 대응 및 상태 정보</td><td>환경 전용 S3 bucket에 저장. Git에 커밋하지 않음</td></tr>
+<tr><td><code>terraform.tfstate.tflock</code></td><td>동일 state를 동시에 수정하지 못하게 하는 실행 잠금</td><td><code>use_lockfile = true</code>로 native S3 locking 사용</td></tr>
+<tr><td><code>.terraform.lock.hcl</code></td><td>선택한 provider 버전과 패키지 검증용 해시</td><td>저장소에 커밋하고 readonly로 검증</td></tr>
+<tr><td><code>.terraform/</code></td><td>설치한 provider와 로컬 초기화 정보</td><td>실행 디렉터리의 생성물. 일반적으로 커밋하지 않음</td></tr>
+<tr><td><code>trippilot.tfplan</code></td><td>이 실행에서 적용할 저장된 변경 계획</td><td>러너 임시 디렉터리에만 저장</td></tr>
+</tbody></table></div>
+<p>S3 state locking은 <code>.tflock</code> 객체를 사용한다. state 파일 읽기·쓰기에 더해 잠금 객체의 읽기·쓰기·삭제 권한이 필요하다. 현재 bootstrap 정책은 state 객체의 삭제를 허용하지 않고 잠금 파일 삭제만 허용한다. 이 잠금은 여러 실행이 state에 동시에 쓰는 것을 막고 GitHub의 concurrency는 같은 환경 workflow 전체를 직렬화한다. 두 장치는 적용 범위가 다르다. <a href="https://developer.hashicorp.com/terraform/language/backend/s3">S3 backend와 native lock 권한</a></p>
+<p><code>.terraform.lock.hcl</code>의 lock은 실행 잠금과 관련이 없다. 팀원이 같은 provider 패키지를 사용하게 하는 의존성 기록이다. 한 사람이 Terraform을 실행 중이라고 이 파일이 잠기는 것도 아니고 이 파일을 삭제한다고 S3 실행 잠금이 해제되지도 않는다. <a href="https://developer.hashicorp.com/terraform/language/files/dependency-lock">Dependency lock file 문서</a></p>
+<p>DEV와 PRD는 같은 <code>terraform.tfstate</code>라는 key를 쓰지만 bucket이 다르다. <code>trippilot-tfstate-&lt;account&gt;-&lt;region&gt;-dev</code>와 <code>...-prd</code>로 분리하며 Terraform workspace는 따로 만들지 않는다. 두 환경의 <code>.tfvars</code>만 나누고 state를 공유하면 한 환경의 선언이 다른 환경을 수정하거나 제거하는 계획을 만들 수 있다. <strong>설정 값 분리와 state 분리는 함께 해야 한다.</strong></p>
+<div class="callout warning"><strong>비밀값과 state:</strong> <code>sensitive = true</code>는 주로 화면 노출을 줄이는 표시이며 일반적인 민감 값의 state 저장까지 막지는 않는다. 이 브랜치는 앱 비밀값 자체를 Terraform에 전달하지 않고 Secret 저장소만 만든다. RDS 관리자 암호는 AWS가 관리한다. 그래도 state와 저장된 plan에는 민감 정보가 포함될 가능성을 전제로 접근을 제한하고 일반 Actions artifact로 배포하지 않는다. <a href="https://developer.hashicorp.com/terraform/language/manage-sensitive-data">Terraform의 민감 정보 관리</a></div>
+<p>이 구조를 지키기 위해 bootstrap은 S3 public access 차단, 암호화, TLS 강제, versioning을 설정한다. versioning은 이전 state를 찾는 데 도움이 되지만 아무 버전이나 복원해도 실제 리소스와 맞아지는 것은 아니다. 복구 시에는 실제 AWS와 state의 대응을 함께 확인해야 한다.</p>

@@ -14,7 +14,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
   LocationBackChevronGlyph,
-  LocationCloseGlyph,
   LocationInfoGlyph,
   LocationOffGlyph,
   LocationRadarHero,
@@ -31,11 +30,6 @@ export interface LocationPrepromptProps {
   onProceed: () => void;
   onDefer: () => void;
   onOpenSettings?: () => void;
-  /** denied 안내 줄 닫기(×) 콜백. 컴포넌트는 무상태(D2)라 콜백만 올려보내고, 1회성 숨김
-   * 상태는 부모가 소유한다. 미전달이면 × 를 그리지 않는다(무회귀). */
-  onDismissNotice?: () => void;
-  /** 부모가 소유한 1회성 상태 — true 면 denied 안내 줄을 그리지 않는다(기본 false = 표시). */
-  noticeDismissed?: boolean;
 }
 
 export function LocationPreprompt({
@@ -44,8 +38,6 @@ export function LocationPreprompt({
   onProceed,
   onDefer,
   onOpenSettings,
-  onDismissNotice,
-  noticeDismissed = false,
 }: LocationPrepromptProps): ReactElement {
   const denied = state === 'permission-denied';
 
@@ -69,32 +61,18 @@ export function LocationPreprompt({
                 '등록한 숙소를 기준으로 탐색·동선을 안내해 드릴게요.\n온보딩은 그대로 계속할 수 있어요.'
               }
             </Text>
-            {noticeDismissed ? null : (
-              // TRIP-592: 청록 pale 카드 → 상하 hairline 인라인 줄 + 뉴트럴 텍스트 + 닫기(×).
-              // 코랄 1볼티지 원칙(kit §1) 강화 — 위치 안내는 강조가 아니라 뉴트럴 신호다.
-              <View className="w-full flex-row items-center gap-sm border-t border-b border-hairline pl-lg pr-md py-md">
-                <LocationInfoGlyph color={LOCATION_ICON_COLORS.mutedSoft} />
-                {/* D3 — 거부돼도 진행을 막지 않는다. toHaveTextContent 는 기본이 **완전 일치**라
-                    (RNTL matches() exact:true 기본값) testID 요소는 '설정에서' 조각만 감싸야 한다
-                    — 동결 테스트와 같은 앵커 패턴(원본 LocationPreprompt.tsx 의 방식을 그대로 유지). */}
-                <Text className="flex-1 font-noto text-label text-muted">
-                  현재 위치 기능은 언제든{' '}
-                  <Text testID="onboarding-location-denied-notice">
-                    설정에서
-                  </Text>{' '}
-                  켤 수 있어요
-                </Text>
-                {onDismissNotice ? (
-                  <Pressable
-                    testID="onboarding-location-notice-dismiss"
-                    onPress={onDismissNotice}
-                    hitSlop={8}
-                  >
-                    <LocationCloseGlyph />
-                  </Pressable>
-                ) : null}
-              </View>
-            )}
+            {/* TRIP-717: TRIP-592 인라인 줄(상하 hairline·뉴트럴·닫기 ×) → Figma 1297:1208
+                정본 복귀 = hairline 테두리 라운드 카드 + 청록(info) 아이콘 + 15 ink 텍스트, 닫기 없음.
+                × 와 1회성 숨김 상태(onDismissNotice/noticeDismissed)는 폐기했다. testID 요소는
+                '설정에서' 조각만 감싼다 — 동결 테스트 앵커 패턴 유지. */}
+            <View className="w-full flex-row items-start gap-sm rounded-input border border-hairline p-lg">
+              <LocationInfoGlyph color={LOCATION_ICON_COLORS.info} />
+              <Text className="flex-1 font-noto text-card-title text-ink">
+                현재 위치 기능은 언제든{' '}
+                <Text testID="onboarding-location-denied-notice">설정에서</Text>{' '}
+                켤 수 있어요
+              </Text>
+            </View>
           </View>
         ) : (
           <View className="flex-1 gap-lg px-2xl pt-xl">
@@ -104,7 +82,7 @@ export function LocationPreprompt({
             </Text>
             <Text
               testID="onboarding-location-purpose"
-              className="font-noto text-body text-ink"
+              className="font-noto text-body text-muted"
             >
               {purposeContext}
             </Text>
@@ -116,7 +94,10 @@ export function LocationPreprompt({
           </View>
         )}
 
-        <View className="gap-sm px-2xl pb-2xl pt-lg">
+        <View
+          testID="onboarding-location-footer"
+          className="gap-sm border-t border-hairline px-2xl pb-2xl pt-lg"
+        >
           {denied ? (
             <>
               <Pressable
@@ -145,8 +126,9 @@ export function LocationPreprompt({
                 onPress={onProceed}
                 className="h-[52px] items-center justify-center rounded-button bg-primary"
               >
+                {/* TRIP-935 R8 — BR-U0-30 문구("계속/나중에"). 권한 창 앞 안내에 "허용"을 쓰지 않는다(5.1.1(iv)). */}
                 <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                  위치 사용 허용
+                  계속
                 </Text>
               </Pressable>
               <Pressable

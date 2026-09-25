@@ -97,3 +97,53 @@ describe('🔴 M3 · freeText 매핑 짝 앵커', () => {
     ).toBe('실내로');
   });
 });
+
+describe('🔴 M4 · TRIP-750 AC-6 · Q3 — 트리거 진입이면 triggerId 를 싣는다 (BR-U4-31)', () => {
+  it('폼에 triggerId 가 있으면 body 에 그대로 실리고 키는 7개 그대로다', () => {
+    const form = {
+      scope: 'PARTIAL_SLOTS' as const,
+      reasons: ['WEATHER'],
+      directives: ['END_NEAR_STAY'],
+      freeText: '',
+    };
+
+    const result = buildStartReplanRequest({ ...form, triggerId: 'trg-1' });
+
+    expect(result.triggerId).toBe('trg-1');
+    expect(Object.keys(result).sort()).toEqual(EXPECTED_KEYS);
+  });
+});
+
+describe('M5·M6 · TRIP-750 — 새 카탈로그 key 통과 · 명시 null', () => {
+  it('M5 새 방향 key 5종과 사유 key 를 바꾸지 않고 그대로 싣는다', () => {
+    const directives = [
+      'EARLIER',
+      'END_NEAR_STAY',
+      'KEEP_BUDGET',
+      'KEEP_DINNER',
+      'AVOID_OUTDOOR',
+    ];
+
+    const result = buildStartReplanRequest({
+      scope: 'FULL_DAY',
+      reasons: ['TEMP_CLOSED', 'SLOW_MOVE'],
+      directives,
+      freeText: '',
+    });
+
+    expect(result.directives).toEqual(directives);
+    expect(result.reasons).toEqual(['TEMP_CLOSED', 'SLOW_MOVE']);
+  });
+
+  it('M6 triggerId 를 null 로 명시하면 null 이다', () => {
+    const result = buildStartReplanRequest({
+      scope: 'PARTIAL_SLOTS',
+      reasons: [],
+      directives: [],
+      freeText: '',
+      triggerId: null,
+    });
+
+    expect(result.triggerId).toBeNull();
+  });
+});

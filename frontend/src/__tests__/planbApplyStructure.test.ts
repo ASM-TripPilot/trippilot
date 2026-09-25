@@ -8,8 +8,10 @@ import path from 'path';
  * TRIP-441 · AC-5 · BR-U4-28 · INV-U4-05 — 재계획 **확정(apply) 배선** 구조가드.
  *
  * 무엇을 보장하나(소스를 글자로 읽어 잰다 — 앱을 안 돌린다):
- *  - 🔴 `useApplyReplan` 호출처는 **정확히 1곳**, `pages/planb-diff` 슬라이스뿐이다(BR-U4-28 —
- *    확정은 일정 쓰기의 유일 지점, INV-U4-05). 다른 슬라이스가 부르면 red.
+ *  - 🔴 `useApplyReplan` 호출처는 **정확히 2곳**, `pages/planb-diff` 와 `pages/planb-draft` 의
+ *    `PlanbDraftPage` 뿐이다(BR-U4-28 — 확정은 일정 쓰기의 유일 지점, INV-U4-05). TRIP-751 E1 로
+ *    i06 [적용하기]가 바로 확정하게 되어 확정 지점이 i06 페이지로도 열렸다(봉인 파기가 아니라 확정
+ *    지점의 이동 — seam 경유는 그대로). 다른 슬라이스가 부르면 red.
  *  - 🔴 `useApplyReplan` 심볼이 실재하고(긍정 앵커), 그 소스에 `invalidateQueries` 배선이 있다
  *    (맹점① 그물 — 무효화 correctness 는 jest 원리적 사각이라 이 소스 스캔이 유일 심판).
  *  - 🔴 codegen apply 훅은 **seam(`useApplyReplan.ts`) 1곳에만 봉인**된다 — 페이지가 래퍼를
@@ -27,6 +29,8 @@ const ROOT = path.resolve('src');
 /** 확정 배선의 세 좌표(리포 상대경로, `/` 정규화). */
 const WRAPPER_REL = 'features/planb/model/useApplyReplan.ts';
 const PAGE_REL = 'pages/planb-diff/ui/PlanbDiffPage.tsx';
+/** TRIP-751 E1 — i06 [적용하기]의 확정 지점. */
+const DRAFT_PAGE_REL = 'pages/planb-draft/ui/PlanbDraftPage.tsx';
 
 /** 호출처를 셀 모집단 — 재귀 스캔할 두 층. */
 const SCAN_DIRS = ['features/planb', 'pages'];
@@ -108,14 +112,14 @@ describe('G1 · 전처리×탐지기 자가검사 (★ 조합)', () => {
   });
 });
 
-describe('🔴 G2 · useApplyReplan 호출처는 pages/planb-diff 1곳뿐 (BR-U4-28)', () => {
-  it('정의 파일을 뺀 모집단에서 useApplyReplan 을 부르는 파일이 그 슬라이스 하나다', () => {
+describe('🔴 G2 · useApplyReplan 호출처는 planb-diff·planb-draft 페이지 2곳뿐 (BR-U4-28 · TRIP-751 E1)', () => {
+  it('정의 파일을 뺀 모집단에서 useApplyReplan 을 부르는 파일이 그 두 페이지다', () => {
     const callers = scanSources()
       .filter(({ file }) => file !== WRAPPER_REL) // ★ 정의줄 오탐 제외
       .filter(({ source }) => APPLY_CALL.test(source))
       .map(({ file }) => file);
 
-    expect(callers).toEqual([PAGE_REL]);
+    expect(callers).toEqual([PAGE_REL, DRAFT_PAGE_REL]);
   });
 });
 

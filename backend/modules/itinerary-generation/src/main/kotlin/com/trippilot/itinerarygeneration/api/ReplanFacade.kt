@@ -66,15 +66,29 @@ data class ReplanProposal(
     val itineraryId: UUID,
     val date: LocalDate,
     val slots: List<ReplanSlot>,
+    /**
+     * 그날 이동 총거리(km) — **상대가 푼 값**이다(우리가 다시 재지 않는다, INV-2).
+     *
+     * 슬롯에는 담을 자리가 없다. `visit_slot.distance_range` 는 `"약 1.2km · 도보 추정"` 같은
+     * **표시 문자열**이라 더할 수 없고, 미터 컬럼을 새로 만들면 슬롯마다 값이 필요해 기존 행 백필
+     * 문제가 생긴다. 그래서 초안 jsonb 에 **하루 총합 한 칸**으로 싣는다(연동 설계 §5).
+     *
+     * **모르면 null 이다.** 옛 초안에는 이 칸이 없고, 그때의 사실은 "모른다"이지 0 이 아니다 —
+     * 0 으로 접으면 "이동이 전혀 없는 하루"라는 거짓이 화면에 나간다.
+     */
+    val totalDistanceKm: Double? = null,
 ) {
     /** 대안이 하나도 없으면 "해 없음"이다 — 빈 초안을 보여 주면 사용자가 빈 하루를 확정하게 된다. */
     val isEmpty: Boolean get() = slots.isEmpty()
 
-    fun toMap(): Map<String, Any> = mapOf(
-        "itineraryId" to itineraryId.toString(),
-        "date" to date.toString(),
-        "slots" to slots.map { it.toMap() },
-    )
+    fun toMap(): Map<String, Any> = buildMap {
+        put("itineraryId", itineraryId.toString())
+        put("date", date.toString())
+        put("slots", slots.map { it.toMap() })
+        // null 은 **넣지 않는다** — jsonb 에 `null` 을 적으면 "몰라서 비었다"와 구분이 안 되고,
+        // 왕복 항등 검사도 `{k:null}` vs 키 없음에서 갈린다.
+        totalDistanceKm?.let { put("totalDistanceKm", it) }
+    }
 
     companion object {
         @Suppress("UNCHECKED_CAST")
@@ -82,6 +96,9 @@ data class ReplanProposal(
             itineraryId = UUID.fromString(raw.getValue("itineraryId") as String),
             date = LocalDate.parse(raw.getValue("date") as String),
             slots = (raw["slots"] as? List<Map<String, Any>>).orEmpty().map { ReplanSlot.fromMap(it) },
+            // jsonb 왕복은 수 타입을 보존하지 않는다 — 잭슨이 정수로 읽히는 값을 Integer 로 돌려주므로
+            // Double 캐스팅만 두면 `12` 가 조용히 null 이 된다(= "이동 모름"). Number 로 받아 내린다.
+            totalDistanceKm = (raw["totalDistanceKm"] as? Number)?.toDouble(),
         )
     }
 }

@@ -3,6 +3,7 @@ package com.trippilot.notification.application
 import com.trippilot.notification.domain.NotificationKind
 import com.trippilot.notification.domain.ReminderCopy
 import com.trippilot.notification.domain.ReminderCopyPort
+import com.trippilot.itinerarygeneration.api.PlannedPlaceView
 import com.trippilot.notification.domain.ReminderCopyRequest
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldNotBeEmpty
@@ -28,6 +29,8 @@ import java.util.UUID
  */
 class ReminderCopyFillTest : StringSpec({
 
+    fun place(name: String, code: String) = PlannedPlaceView(name, code)
+
     val acc = UUID.randomUUID()
     val tripId = UUID.randomUUID()
     val clock: Clock = Clock.fixed(Instant.parse("2026-08-01T00:00:00Z"), ZoneOffset.UTC)
@@ -42,12 +45,22 @@ class ReminderCopyFillTest : StringSpec({
         }
     }
 
-    fun serviceWith(port: ReminderCopyPort): Pair<NotificationScheduleService, FakeSchedules> {
+    /** 여행 3일(8/10~8/12) 전부에 갈 곳이 있는 일정. 재료가 있어야 문구를 묻는다. */
+    val plannedNames = mapOf(
+        LocalDate.parse("2026-08-10") to listOf(place("성산일출봉", "SIGHT"), place("섭지코지", "NATURE")),
+        LocalDate.parse("2026-08-11") to listOf(place("우도", "NATURE")),
+        LocalDate.parse("2026-08-12") to listOf(place("카페 이름", "CAFE")),
+    )
+
+    fun serviceWith(
+        port: ReminderCopyPort,
+        names: Map<LocalDate, List<PlannedPlaceView>> = plannedNames,
+    ): Pair<NotificationScheduleService, FakeSchedules> {
         val schedules = FakeSchedules()
         val trips = FakeTripOwner().apply {
             put(tripId, acc, LocalDate.parse("2026-08-10"), LocalDate.parse("2026-08-12"))
         }
-        return NotificationScheduleService(trips, schedules, port, clock) to schedules
+        return NotificationScheduleService(trips, schedules, port, FakePlans(names), clock) to schedules
     }
 
     "받은 문구가 예약에 붙고, 발화가 그것을 쓴다" {
@@ -129,6 +142,70 @@ class ReminderCopyFillTest : StringSpec({
 
         schedule.toNotification(clock.instant()).title shouldBe "오늘의 일정"
     }
+    /**
+     * **재료가 실린다**(TRIP-883). 이게 없으면 상대는 빈 일정을 받고 *"오늘은 정해진 일정이 없으니…"*
+     * 를 지어낸다 — 일정이 있는 날에 나가면 거짓말이라, 어댑터가 빈 재료를 아예 거른다.
+     * 즉 재료를 안 채우면 **문구가 한 건도 안 나온다**(예외도 로그도 없이).
+     */
+    "그 날 갈 곳이 요청에 실린다 — 방문 순서 그대로" {
+        val echo = Echo()
+        val (svc, _) = serviceWith(echo)
+
+        svc.reload(tripId)
+
+        val day1 = echo.seen.single { it.kind == NotificationKind.TRIP_DAY && it.date == LocalDate.parse("2026-08-10") }
+        day1.slots.map { it.name } shouldBe listOf("성산일출봉", "섭지코지")
+    }
+
+    /**
+     * **`TRIP_PRE` 는 하루 전에 울리면서 "내일은 …" 을 말한다.** 그래서 재료는 **여행 첫날**의 것이고
+     * 날짜도 첫날이다. 발화일(D-1)을 그대로 쓰면 아직 시작도 안 한 날을 묻게 돼 재료가 비고,
+     * 그 예약만 조용히 문구 없이 나간다 — 증상이 "가끔 문구가 안 붙는다"라 원인을 못 짚는다.
+     *
+     * 상대 프롬프트가 `[날짜]` 와 `[오늘 일정]` 을 나란히 놓으므로 둘은 같은 날이어야 한다.
+     */
+    "여행 전날 알림은 첫날을 말한다 — 발화일이 아니라" {
+        val echo = Echo()
+        val (svc, _) = serviceWith(echo)
+
+        svc.reload(tripId)
+
+        val pre = echo.seen.single { it.kind == NotificationKind.TRIP_PRE }
+        pre.date shouldBe LocalDate.parse("2026-08-10")   // 발화는 8/9, 말하는 날은 8/10
+        pre.slots.map { it.name } shouldBe listOf("성산일출봉", "섭지코지")
+    }
+
+    /**
+     * 재료가 없어도 **예약은 그대로 적재된다.** 문구는 부가 정보이고, 그것 때문에 리마인드가
+     * 사라지면 밋밋한 문구보다 훨씬 나쁘다(INV-4). 빈 재료를 거르는 것은 어댑터 몫이다.
+     */
+    "일정 이름을 못 얻어도 예약 수는 그대로다" {
+        val echo = Echo()
+        val (svc, schedules) = serviceWith(echo, names = emptyMap())
+
+        svc.reload(tripId)
+
+        schedules.findPendingByTrip(tripId).shouldNotBeEmpty()
+        echo.seen.forEach { it.slots shouldBe emptyList() }
+    }
+
+    /**
+     * **카테고리는 경계 코드로 나간다.** 상대 사전(`_CATEGORY_LABELS`)이 `FOOD`·`CAFE` 를 키로 쓰는데
+     * 한글 정본(`맛집`)을 보내면 **사전에 없어 조용히 이름만 렌더된다** — 422 도 로그도 없이
+     * 카테고리만 사라지는, 가장 안 보이는 실패다. 그래서 한글이 새지 않는 것까지 못 박는다.
+     */
+    "카테고리가 경계 코드로 실린다 — 한글이 새지 않는다" {
+        val echo = Echo()
+        val (svc, _) = serviceWith(echo)
+
+        svc.reload(tripId)
+
+        val day1 = echo.seen.single { it.kind == NotificationKind.TRIP_DAY && it.date == LocalDate.parse("2026-08-10") }
+        day1.slots.map { it.category } shouldBe listOf("SIGHT", "NATURE")
+        // 한글 정본이 섞이면 조용히 무효가 된다 — 값 자체를 막는다.
+        day1.slots.mapNotNull { it.category }.none { it.any { c -> c.code in 0xAC00..0xD7A3 } } shouldBe true
+    }
+
 })
 
 /**

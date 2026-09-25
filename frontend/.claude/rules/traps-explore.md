@@ -19,7 +19,7 @@ paths:
 
 ## 하트 글리프 정본 (TRIP-806 → TRIP-807로 shared 이동)
 
-- **하트 저장 글리프(Outline·Filled) 정본은 이제 `shared/ui/HeartGlyphs.tsx`다** — TRIP-806이 `entities/place/ui/PlaceGlyphs.tsx`로 승격했던 것을 TRIP-807이 `git mv`로 다시 `shared/ui`로 내렸다(place·stay 검색 카드가 공유, entities 교차 0). `features/explore/ui/ExploreGlyphs.tsx`의 동명 함수는 806 5-c에서 이미 삭제됐다. `repo-traps.md`의 `LocationOffGlyph` 두 벌 함정과 동형 위험이 두 차례(806 explore↔entities, 807 stay 신규 소비) 발생했다 — 새 하트 소비처를 만들 때 옛 경로(`entities/place/ui/PlaceGlyphs`·`ExploreGlyphs`)에서 다시 끌어오면 조용히 두 벌로 되돌아간다. raw-hex·fill 스캔은 `*Glyphs.tsx` 제외 관례라 분기해도 기계가 못 잡는다.
+- **하트 저장 글리프(Outline·Filled) 정본은 이제 `shared/ui/HeartGlyphs.tsx`다** — TRIP-806이 `entities/place/ui/PlaceGlyphs.tsx`로 승격했던 것을 TRIP-807이 `git mv`로 다시 `shared/ui`로 내렸다(place·stay 검색 카드가 공유, entities 교차 0). `features/explore/ui/ExploreGlyphs.tsx`의 동명 함수는 806 5-c에서 이미 삭제됐다. `traps-glyphs.md`의 `LocationOffGlyph` 세 벌 함정과 동형 위험이 두 차례(806 explore↔entities, 807 stay 신규 소비) 발생했다 — 새 하트 소비처를 만들 때 옛 경로(`entities/place/ui/PlaceGlyphs`·`ExploreGlyphs`)에서 다시 끌어오면 조용히 두 벌로 되돌아간다. raw-hex·fill 스캔은 `*Glyphs.tsx` 제외 관례라 분기해도 기계가 못 잡는다.
 
 ## 장소 상세 (explore, d06, TRIP-456)
 

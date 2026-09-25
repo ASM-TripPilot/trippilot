@@ -140,22 +140,24 @@ beforeEach(() => {
   mockUseGetPlaces.mockReturnValue(placesResult());
 });
 
-describe('🔴 AC-E1 · AC-E8 — 5구획 렌더 + nearby 부재', () => {
-  it('헤딩·검색·lane_stay·lane_itin·담은 곳 FAB 5구획을 그리고, nearby·축 세그먼트는 안 그린다', () => {
+describe('🔴 AC-E1 · AC-E8 — 구획 렌더 + nearby·여행자 레인 부재 (TRIP-703)', () => {
+  it('헤딩·검색·lane_stay·담은 곳 FAB 을 그리고, nearby·축 세그먼트·여행자 일정 레인은 안 그린다', () => {
     render(<ExploreRoute />);
 
-    // 긍정 — 5구획이 전부 있다(축 세그먼트는 TRIP-447 로 제거).
+    // 긍정 — 남는 구획이 전부 있다(축 세그먼트는 TRIP-447, 여행자 레인은 TRIP-703 으로 제거).
     [
       'explore-landing',
       'explore-landing-heading',
       'explore-landing-search',
       'explore-lane-stay',
-      'explore-lane-itin',
       'explore-saved-menu-toggle',
     ].forEach((id) => expect(screen.getByTestId(id)).toBeOnTheScreen());
 
     // 부정 — 축 세그먼트는 렌더되지 않는다(AC-1, 렌더 층 확인 — 소스 0건은 별도 스캔).
     expect(screen.queryByTestId('explore-axis-all')).toBeNull();
+
+    // 부정 — 여행자 일정 레인은 제거됐다(TRIP-703 AC-6, 라이브 Figma 1672:1183 정합).
+    expect(screen.queryByTestId('explore-lane-itin')).toBeNull();
 
     // 부정 — 좌표 파라미터가 없어 '내 주변' 블록은 없다(AC-E8).
     expect(screen.queryByTestId('explore-nearby')).toBeNull();
@@ -223,16 +225,41 @@ describe('🔴 AC-E3 — lane_stay 데이터·가격 규칙·모두 보기', () 
   });
 });
 
-describe('🔴 AC-E4 — lane_itin 자리만', () => {
-  it('준비중 안내만 있고 실 카드·상세 라우팅이 없다', () => {
+describe('🔴 AC-6(TRIP-703) — 여행자 일정 레인 제거', () => {
+  it('여행자 일정 레인 testID·"여행자 일정" 제목·"준비 중" 자리가 모두 없다', () => {
     render(<ExploreRoute />);
 
-    const laneItin = screen.getByTestId('explore-lane-itin');
-    expect(laneItin).toBeOnTheScreen();
-    // 준비중 자리 문구(BR-U1-05).
-    expect(within(laneItin).getByText(/준비\s*중/)).toBeOnTheScreen();
-    // 실 카드 없음 — 숙소 카드 testID 규약이 일정 자리 안에 새어들지 않는다.
-    expect(within(laneItin).queryByTestId(/explore-stay-card/)).toBeNull();
+    // 라이브 Figma(1672:1183)에 여행자 일정 레인이 없어 실앱에서도 제거한다(G11 > G6).
+    // `여행자 일정` 은 완전일치 쿼리라 부제(`숙소·장소·여행자 일정을…`) 부분문자열엔 안 걸리고
+    // 오직 레인 헤더(`<Text>여행자 일정</Text>`)만 노린다 — 현재 소스는 레인이 있어 red.
+    expect(screen.queryByTestId('explore-lane-itin')).toBeNull();
+    expect(screen.queryByText('여행자 일정')).toBeNull();
+    expect(screen.queryByText(/준비\s*중/)).toBeNull();
+  });
+});
+
+describe('🔴 AC-2(TRIP-703) — 헤딩 부제 갱신(여행자 일정 문구 제거)', () => {
+  it('부제가 "숙소·장소를 둘러보고 담아요" 이고, 옛 여행자 일정 문구는 없다', () => {
+    render(<ExploreRoute />);
+
+    // 부제는 라우트 base.heading.subtitle 이 소유한다(화면은 받은 문자열만 그림).
+    expect(screen.getByText('숙소·장소를 둘러보고 담아요')).toBeOnTheScreen();
+    expect(
+      screen.queryByText('숙소·장소·여행자 일정을 둘러보고 담아요')
+    ).toBeNull();
+  });
+});
+
+describe('🔴 AC-5(TRIP-703) — ＋ 여행 만들기 FAB → /trips/new/step1', () => {
+  it('＋ FAB 을 누르면 여행 만들기 위저드로 이동한다', () => {
+    // ＋ FAB 은 화면(순수 뷰)에 있고, 목적지 배선은 라우트가 진다(화면은 라우터 미import).
+    // 라우트가 onPressCreateTrip 을 /trips/new/step1 push 에 잇는지만 여기서 잠근다.
+    render(<ExploreRoute />);
+
+    fireEvent.press(screen.getByTestId('explore-create-trip-fab'));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(String(mockPush.mock.calls[0][0])).toBe('/trips/new/step1');
   });
 });
 
@@ -285,11 +312,10 @@ describe('🔴 AC-E6 — 부분 실패 · 독립 쿼리', () => {
     mockUseSavedPlaces.mockReturnValue(savedResult(['p1']));
     render(<ExploreRoute />);
 
-    // 나머지 구획 생존(침묵 실패 없음, INV-4).
+    // 나머지 구획 생존(침묵 실패 없음, INV-4). 여행자 일정 레인은 TRIP-703 으로 제거돼 목록에서 뺀다.
     [
       'explore-landing-heading',
       'explore-landing-search',
-      'explore-lane-itin',
       'explore-saved-menu-toggle',
     ].forEach((id) => expect(screen.getByTestId(id)).toBeOnTheScreen());
 
@@ -361,5 +387,44 @@ describe('🟢 470 — 가볼 곳 레인: 장소 카드 렌더 + press → d06',
     render(<ExploreRoute />);
 
     expect(mockUseGetPlaces).toHaveBeenCalledWith({ limit: 8 });
+  });
+});
+
+describe('🔴 AC-704 · 로딩 배선 — stay/places isPending → 로딩 스켈레톤 (TRIP-704)', () => {
+  // 코드-비평 경고-1a 봉합: 로딩 얼굴을 프로덕션에서 뜨게 하는 유일한 배선
+  // (`isLoading: stay.isPending || places.isPending`)을 실제로 태우는 심판이 없었다.
+  // 목이 isPending:false 로 고정돼 이 분기를 한 번도 안 탔다 — 아래가 그 분기를 연다.
+  it('숙소 조회가 대기(isPending) 중이면 로딩 스켈레톤을 그린다', () => {
+    mockUseStaySearch.mockReturnValue({
+      data: undefined,
+      isError: false,
+      isPending: true,
+    } as unknown as ReturnType<typeof useStaySearch>);
+
+    render(<ExploreRoute />);
+
+    // 스켈레톤이 뜨고, 실카드·에러·폴백은 없다.
+    expect(
+      screen.getByTestId('explore-landing-skeleton-stay-0')
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('explore-landing-skeleton-place-0')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('explore-lane-stay-retry')).toBeNull();
+  });
+
+  it('장소 조회가 대기(isPending) 중이어도 로딩 스켈레톤을 그린다 (|| 배선)', () => {
+    mockUseGetPlaces.mockReturnValue({
+      data: undefined,
+      isError: false,
+      isPending: true,
+      refetch: jest.fn(),
+    } as unknown as ReturnType<typeof useGetPlaces>);
+
+    render(<ExploreRoute />);
+
+    expect(
+      screen.getByTestId('explore-landing-skeleton-place-0')
+    ).toBeOnTheScreen();
   });
 });

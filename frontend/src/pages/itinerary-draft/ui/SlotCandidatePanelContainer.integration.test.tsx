@@ -22,21 +22,23 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { SlotCandidatePanelContainer } from './SlotCandidatePanelContainer';
 
 /**
- * h12 완전 AI 슬롯 교체 배선을 **실 HTTP 로** 태우는 심판(TRIP-335→483 이관).
- *
- * 프레젠테이션이 바텀시트→인라인 패널로 바뀌었지만 **배선 로직은 재사용**이다 — 이 파일은
- * 그 로직이 개명(`SlotCandidateSheetContainer`→`SlotCandidatePanelContainer`) 후에도 그대로
- * 무는지를 실 요청으로 재확인한다(★D). testID 는 `-sheet`→`-panel` 개명분만 반영한다.
+ * h08 슬롯 교체 배선을 **실 HTTP 로** 태우는 심판(TRIP-793 — 컨테이너는 이제 `SlotCandidateSheet`
+ * (바텀시트·라디오 2단계)를 그린다). 프레젠테이션이 인라인 패널→바텀시트로, 확정이 즉시확정 1단계→
+ * 라디오 2단계로 바뀌었어도 **배선 로직은 재사용**이다(조회·치환·PUT·firedRef·콜드캐시).
  *
  * 무엇을 보장하나:
- *  - 마운트(=패널 열림)에 slot-candidates POST 1건, slotKey 만(BR-U3-24).
- *  - 화면 후보 집합 = 응답 집합(INV-1) · "선택"→치환 전체 days PUT 1건·성공 시 onClose+재조회.
- *  - ★h09: 동기 연속 탭 2회여도 PUT 1건(firedRef).
- *  - PUT 409/500/네트워크 실패는 인라인 오류로 뜨고 패널을 안 닫는다(AC3·INV-4).
- *  - 🔴 **헤더에 시간대가 관통된다**(`{시간대} — 다른 후보로 바꾸기`, K10 · 신규).
- *  - 🔴 **응답 degraded===true 면 강등 고지가 뜬다**(K11 · AC6 · 신규).
+ *  - 마운트(=시트 열림)에 slot-candidates POST 1건, slotKey 만(BR-U3-24).
+ *  - 화면 후보 집합 = 응답 집합(INV-1).
+ *  - 🔴 **라디오 2단계**: 행 press 는 선택만(PUT 0) · "교체하기" press 에서 전체 days PUT 1건·성공 시
+ *    onClose + 재조회(AC-4).
+ *  - ★h09: 동기 연속 확정 2회여도 PUT 1건(firedRef, handleConfirm).
+ *  - PUT 409/500/네트워크 실패는 인라인 오류로 뜨고 시트를 안 닫는다(AC-6·INV-4).
+ *  - 🔴 GET 미도착 중 확정 → PUT 0(빈 days 전체교체 방지, 경고3).
+ *  - 🔴 **PARTIAL(2차 생성 중)이면 확정 PUT 0**(★ 가드가 handleConfirm 으로 이전 · AC-11 · 뮤테이션 실측).
+ *  - 🔴 **헤더에 시각범위·컨셉 관통**(`{HH:mm}–{HH:mm} · {category} 슬롯의 …`, K10 · D5 · 옛 timeBand 대체).
+ *  - 🔴 **degraded 전용 표면 제거**(응답이 degraded 여도 시트에 무표시 · AC-6, K12).
  *
- * 3동작 뼈대: 준비=가짜 서버 응답 → 실행=열고 선택 → 단언=나간 요청·보이는 것.
+ * 3동작 뼈대: 준비=가짜 서버 응답 → 실행=열고 라디오+확정 → 단언=나간 요청·보이는 것.
  */
 
 jest.mock('@/shared/storage', () => ({
@@ -55,7 +57,7 @@ const DAY1 = '2026-06-10';
 const DAY2 = '2026-06-11';
 const CURRENT_SLOT_KEY = buildSlotKey(DAY1, 'a');
 
-/** day1=[a(09:30 → 오전), b] · day2=[c](endsNextDay:true). 교체 대상은 day1 의 a. */
+/** day1=[a(09:30–11:00 · category 문화) · b] · day2=[c](endsNextDay). 교체 대상은 day1 의 a. */
 function itinerary(): Itinerary {
   const days: ItineraryDaysItem[] = [
     {
@@ -66,6 +68,7 @@ function itinerary(): Itinerary {
           nameKo: '경복궁',
           startAt: '09:30:00',
           endAt: '11:00:00',
+          category: '문화',
           isFixed: false,
           endsNextDay: false,
           hasViolation: false,
@@ -188,11 +191,20 @@ function renderContainer() {
   );
 }
 
+/** 후보 카드 루트 셀렉터(재설계 반영 — 하위·특수 testID 부정 룩어헤드 제외). */
 const CANDIDATE_ROOT =
-  /^itinerary-candidate-(?!panel|current|empty|error|degraded|name-|image-|distance-|rationale-|select-|radio-)/;
+  /^itinerary-candidate-(?!sheet|scrim|current|empty|error|place-search|confirm|name-|image-|distance-|tags-|radio-|check-)/;
 
-describe('🔴 SlotCandidatePanelContainer (h12) 배선', () => {
-  it('K1 · AC1·BR-U3-24 — 마운트에 slot-candidates POST 1건, slotKey 만 실린다(제외목록 없음)', async () => {
+/** 라디오 선택 후 "교체하기"를 눌러 확정하는 2단계 헬퍼. */
+async function selectAndConfirm(poiId: string) {
+  fireEvent.press(
+    await screen.findByTestId(`itinerary-candidate-radio-${poiId}`)
+  );
+  fireEvent.press(screen.getByTestId('itinerary-candidate-confirm'));
+}
+
+describe('🔴 SlotCandidatePanelContainer (h08) 배선', () => {
+  it('K1 · AC1·BR-U3-24 — 마운트에 slot-candidates POST 1건, slotKey 만 실린다', async () => {
     renderContainer();
 
     await waitFor(() => expect(postCalls).toBe(1));
@@ -211,12 +223,17 @@ describe('🔴 SlotCandidatePanelContainer (h12) 배선', () => {
     expect(poiIds.sort()).toEqual(['X', 'Y'].sort());
   });
 
-  it('K3 · AC1·AC3 — "선택" 탭 → 치환된 전체 days 를 PUT 1건, 성공 시 onClose + 조회 재조회', async () => {
+  it('K3 · AC4 — 라디오 2단계: 행 선택은 PUT 0, "교체하기"에서 치환 PUT 1건 + onClose + 재조회', async () => {
     renderContainer();
-    await screen.findByTestId('itinerary-candidate-select-X');
+    await screen.findByTestId('itinerary-candidate-radio-X');
     await waitFor(() => expect(getCalls).toBe(1));
 
-    fireEvent.press(screen.getByTestId('itinerary-candidate-select-X'));
+    // 1단계 — 라디오 선택은 controlled 상태만 바꾼다(PUT 안 나감).
+    fireEvent.press(screen.getByTestId('itinerary-candidate-radio-X'));
+    expect(putCalls).toBe(0);
+
+    // 2단계 — "교체하기"에서 확정.
+    fireEvent.press(screen.getByTestId('itinerary-candidate-confirm'));
 
     await waitFor(() => expect(putCalls).toBe(1));
     const body = putBody as EditItineraryRequest;
@@ -232,20 +249,21 @@ describe('🔴 SlotCandidatePanelContainer (h12) 배선', () => {
     await waitFor(() => expect(getCalls).toBe(2));
   });
 
-  it('K4 · AC3(★h09) — 동기 연속 탭 2회여도 PUT 은 1건이다', async () => {
+  it('K4 · AC4(★h09) — 확정 CTA 동기 연속 2회여도 PUT 은 1건이다(firedRef)', async () => {
     renderContainer();
-    const button = await screen.findByTestId('itinerary-candidate-select-X');
+    fireEvent.press(await screen.findByTestId('itinerary-candidate-radio-X'));
+    const confirm = screen.getByTestId('itinerary-candidate-confirm');
 
     act(() => {
-      fireEvent.press(button);
-      fireEvent.press(button);
+      fireEvent.press(confirm);
+      fireEvent.press(confirm);
     });
 
     await waitFor(() => expect(mockClose).toHaveBeenCalledTimes(1));
     expect(putCalls).toBe(1);
   });
 
-  it('K5 · AC3 — PUT 409(확정)는 인라인 오류로 뜨고 패널을 안 닫는다', async () => {
+  it('K5 · AC6 — PUT 409(확정)는 인라인 오류로 뜨고 시트를 안 닫는다', async () => {
     putHandler = () =>
       HttpResponse.json(
         {
@@ -254,29 +272,29 @@ describe('🔴 SlotCandidatePanelContainer (h12) 배선', () => {
         { status: 409 }
       );
     renderContainer();
-    fireEvent.press(await screen.findByTestId('itinerary-candidate-select-X'));
+    await selectAndConfirm('X');
 
     await waitFor(() => expect(putCalls).toBe(1));
     const err = await screen.findByTestId('itinerary-candidate-error');
     expect(err).toHaveTextContent(/\S/);
     expect(mockClose).toHaveBeenCalledTimes(0);
-    expect(screen.getByTestId('itinerary-candidate-panel')).toBeOnTheScreen();
+    expect(screen.getByTestId('itinerary-candidate-sheet')).toBeOnTheScreen();
   });
 
-  it('K6 · AC3·INV-4 — PUT 500 도 침묵하지 않는다', async () => {
+  it('K6 · AC6·INV-4 — PUT 500 도 침묵하지 않는다', async () => {
     putHandler = () => new HttpResponse(null, { status: 500 });
     renderContainer();
-    fireEvent.press(await screen.findByTestId('itinerary-candidate-select-X'));
+    await selectAndConfirm('X');
 
     const err = await screen.findByTestId('itinerary-candidate-error');
     expect(err).toHaveTextContent(/\S/);
     expect(mockClose).toHaveBeenCalledTimes(0);
   });
 
-  it('K7 · AC3·INV-4 — PUT 네트워크 실패도 침묵하지 않는다', async () => {
+  it('K7 · AC6·INV-4 — PUT 네트워크 실패도 침묵하지 않는다', async () => {
     putHandler = () => HttpResponse.error();
     renderContainer();
-    fireEvent.press(await screen.findByTestId('itinerary-candidate-select-X'));
+    await selectAndConfirm('X');
 
     const err = await screen.findByTestId('itinerary-candidate-error');
     expect(err).toHaveTextContent(/\S/);
@@ -290,7 +308,7 @@ describe('🔴 SlotCandidatePanelContainer (h12) 배선', () => {
     expect(current).not.toHaveTextContent('이름 준비 중');
   });
 
-  it('K9 · 경고3 — GET 미도착 중 선택 → PUT 0(빈 days 전체교체 방지)', async () => {
+  it('K9 · 경고3 — GET 미도착 중 확정 → PUT 0(빈 days 전체교체 방지)', async () => {
     server.use(
       http.get(`${BASE}/trips/:tripId/itinerary`, async () => {
         await delay('infinite');
@@ -298,18 +316,27 @@ describe('🔴 SlotCandidatePanelContainer (h12) 배선', () => {
       })
     );
     renderContainer();
-    await screen.findByTestId('itinerary-candidate-select-X');
-
-    fireEvent.press(screen.getByTestId('itinerary-candidate-select-X'));
+    await selectAndConfirm('X');
 
     await waitFor(() => expect(postCalls).toBe(1));
     expect(putCalls).toBe(0);
     expect(mockClose).toHaveBeenCalledTimes(0);
   });
 
-  it('K12 · TRIP-601 가드 b — generationState=PARTIAL 이면 후보 선택 PUT 0(생성 중 전체교체 차단)', async () => {
-    // 준비 — GET 이 PARTIAL(day1 도착)로 정착한다. day1 data 는 있으므로 콜드캐시(K9)와 달리 throw 가
-    // 안 나고, 가드가 없으면 "선택"이 그대로 day1-only 전체교체 PUT 을 쏜다(★b-2 · copick 형제와 동형).
+  it('K10 · AC2·D5 — 헤더에 현 슬롯 시각범위·컨셉이 관통된다(09:30–11:00 · 문화)', async () => {
+    renderContainer();
+
+    const subtitle = await screen.findByTestId(
+      'itinerary-candidate-sheet-subtitle'
+    );
+    // 현 슬롯 startAt 09:30·endAt 11:00·category 문화 → 부제에 시각범위+컨셉이 실린다(옛 timeBand 대체).
+    await waitFor(() => expect(subtitle).toHaveTextContent(/09:30–11:00/));
+    expect(subtitle).toHaveTextContent(/문화/);
+  });
+
+  it('K11 · AC-11(★ PARTIAL 게이트 handleConfirm) — PARTIAL 중 라디오+확정 → PUT 0', async () => {
+    // 준비 — GET 이 PARTIAL(day1 도착)로 정착. data 는 있어 콜드캐시(K9)와 달리 throw 안 나고,
+    // 가드가 없으면 "교체하기"가 그대로 day1-only 전체교체 PUT 을 쏜다(traps-itinerary TRIP-467/483 잔여).
     server.use(
       http.get(`${BASE}/trips/:tripId/itinerary`, () => {
         getCalls += 1;
@@ -320,46 +347,28 @@ describe('🔴 SlotCandidatePanelContainer (h12) 배선', () => {
       })
     );
     renderContainer();
-    await screen.findByTestId('itinerary-candidate-select-X');
+    await screen.findByTestId('itinerary-candidate-radio-X');
     await waitFor(() => expect(getCalls).toBe(1));
 
-    // 실행 — 후보 "선택" 탭. 조회(POST)는 정상, 막는 건 확정(PUT)뿐이다.
-    fireEvent.press(screen.getByTestId('itinerary-candidate-select-X'));
+    // 실행 — 라디오 선택은 되지만 확정(PUT)은 막혀야 한다.
+    await selectAndConfirm('X');
 
-    // ★b-1 통과형 목 함정 회피 — PUT 이 나갔다면 이 대기 동안 putCalls 가 오른다. 나갈 시간을 실제로
-    // 줘야 "안 나갔다"가 거짓 green 이 아니다(K9 콜드캐시는 mutate 미호출이라 이 대기가 불필요했다).
+    // ★ 통과형 목 함정 회피 — PUT 이 나갔다면 이 대기 동안 putCalls 가 오른다(나갈 시간을 실제로 준다).
     await new Promise((resolve) => {
       setTimeout(resolve, 50);
     });
 
-    // ★ PARTIAL 이면 전체교체 PUT 이 나가면 안 된다(서버 409 의 클라 사본, 심층 방어).
+    // ★ PARTIAL 이면 전체교체 PUT 이 나가면 안 된다(handleConfirm 의 isConfirmLocked 가드).
+    // 뮤테이션 실측: 이 가드를 지우면 이 테스트만 red(PUT 1) — 원복은 cp/Edit, git checkout 금지.
     expect(putCalls).toBe(0);
-    // 막혔으니 성공 콜백의 onClose 도 없다.
     expect(mockClose).toHaveBeenCalledTimes(0);
   });
 
-  it('K10 · AC2 — 헤더에 현 슬롯 시간대가 관통된다(09:30 → 오전)', async () => {
-    renderContainer();
-
-    const title = await screen.findByTestId('itinerary-candidate-panel-title');
-    // 현 슬롯 startAt 09:30:00 → timeBandLabel = 오전. 헤더는 `{시간대} — 다른 후보로 바꾸기`.
-    await waitFor(() =>
-      expect(title).toHaveTextContent(/오전 — 다른 후보로 바꾸기/)
-    );
-  });
-
-  it('K11 · AC6·★E — 응답 degraded===true 면 강등 고지가 뜨고, false 면 미표시', async () => {
+  it('K12 · AC6 — degraded 전용 표면 제거: 응답이 degraded 여도 시트에 무표시', async () => {
     candidatesResponse = { ...CANDIDATES, degraded: true };
     renderContainer();
 
-    const notice = await screen.findByTestId('itinerary-candidate-degraded');
-    expect(notice).toHaveTextContent(/AI 추천 준비 중/);
-  });
-
-  it('K11b · AC6 — degraded===false 면 강등 고지가 미표시(후보는 뜬다)', async () => {
-    candidatesResponse = { ...CANDIDATES, degraded: false };
-    renderContainer();
-
+    // 후보는 뜨지만 강등 전용 표면은 더 이상 없다(옛 itinerary-candidate-degraded 소멸).
     await screen.findByTestId('itinerary-candidate-X');
     expect(screen.queryByTestId('itinerary-candidate-degraded')).toBeNull();
   });

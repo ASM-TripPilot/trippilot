@@ -6,11 +6,10 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
  * 파라미터로 초기 화면 상태를 정한다 (Seed 완료 정의 5 · 대조 매트릭스 9프레임, TRIP-162).
  *
  * 계약:
- *  (1) 매트릭스 9개 state 키 각각이 딥링크만으로 해당 화면을 **초기 렌더**한다
- *      (소스 수정·토글 탭 없이 — 스크린샷 대조 루프의 자동 조준 전제),
+ *  (1) 매트릭스 8개 state 키 각각이 딥링크만으로 해당 화면을 **초기 렌더**한다
+ *      (소스 수정·토글 탭 없이 — 스크린샷 대조 루프의 자동 조준 전제. TRIP-722: splash-loading 삭제로 9→8),
  *  (2) 잘못된/미존재/비문자열 값은 에러 화면 없이 **결정론적으로 splash 폴백** (INV-4 정신),
- *  (3) 딥링크는 초기 상태만 정한다 — 진입 후 토글 전환은 그대로 동작한다,
- *  (4) `splash-loading` 은 프리뷰의 정식 상태다(토글로도 진입 가능).
+ *  (3) 딥링크는 초기 상태만 정한다 — 진입 후 토글 전환은 그대로 동작한다.
  *
  * 파라미터 수신은 expo-router 의 `useLocalSearchParams` 로 한다 — 현재 화면 URL 의
  * 쿼리 문자열(?state=X)을 객체로 돌려주는 훅이다. 실제 라우터 없이 검증하기 위해
@@ -40,15 +39,10 @@ beforeEach(() => {
   delete mockSearchParams.state;
 });
 
-// 대조 매트릭스 9프레임 ↔ 기존 PREVIEW_STATES 키(+ 신규 splash-loading) ↔ 그 상태에만
-// 나타나는 실물 화면 마커. 마커는 동결 devPreview.test 와 같은 원칙으로 고른다.
+// 대조 매트릭스 8프레임 ↔ PREVIEW_STATES 키 ↔ 그 상태에만 나타나는 실물 화면 마커.
+// 마커는 동결 devPreview.test 와 같은 원칙으로 고른다. TRIP-722: splash-loading 키 삭제로 c01 loading 제외.
 const MATRIX_CASES = [
   { frame: 'c01 default', state: 'splash', marker: 'shell-splash-root' },
-  {
-    frame: 'c01 loading',
-    state: 'splash-loading',
-    marker: 'shell-splash-progress-dot-active',
-  },
   { frame: 'c02 default', state: 'login-idle', marker: 'auth-login-root' },
   {
     frame: 'c02 conflict',
@@ -95,13 +89,14 @@ describe('dev 프리뷰 딥링크 조준 — ?state=X 로 초기 상태를 정�
     }
   );
 
-  it('state=splash 는 loading 강조 없는 기본 스플래시다 — 두 프레임이 구별된다', () => {
+  it('state=splash 는 기본 스플래시다 — TRIP-722로 loading 강조 갈래 자체가 사라졌다', () => {
     mockSearchParams.state = 'splash';
 
     render(<DevPreview />);
 
     expect(screen.getByTestId('shell-splash-root')).toBeOnTheScreen();
-    expect(screen.queryByTestId('shell-splash-progress-dot-active')).toBeNull();
+    // TRIP-722로 active 진행점 testID 자체가 소스에서 사라져 부재 단언은 공허해졌다 — 삭제.
+    // 딥링크 splash 렌더는 위 splash-root 존재 단언이 계속 검증한다.
   });
 });
 
@@ -135,15 +130,5 @@ describe('dev 프리뷰 딥링크 — 초기 상태만 정하고 토글은 그�
 
     // 파라미터를 매 렌더 상태로 박아버리면(토글 잠김) 이 단언이 실패한다.
     expect(screen.getByTestId('onboarding-nickname-helper')).toBeOnTheScreen();
-  });
-
-  it('splash-loading 은 정식 프리뷰 상태다 — 토글로도 진입된다', () => {
-    render(<DevPreview />);
-
-    fireEvent.press(screen.getByTestId('dev-preview-state-splash-loading'));
-
-    expect(
-      screen.getByTestId('shell-splash-progress-dot-active')
-    ).toBeOnTheScreen();
   });
 });

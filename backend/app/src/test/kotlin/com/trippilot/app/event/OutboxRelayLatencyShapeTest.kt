@@ -40,7 +40,7 @@ class OutboxRelayLatencyShapeTest : StringSpec({
         try {
             // 타이머는 생성자에서 등록된다 — 릴레이를 돌릴 필요가 없다.
             // JdbcTemplate 은 생성자가 건드리지 않으므로 빈 것으로 충분하다.
-            OutboxRelay(JdbcTemplate(), registry, emptyList())
+            OutboxRelay(JdbcTemplate(), registry, emptyList(), java.time.Clock.systemUTC())
 
             val timer = registry.find("trippilot.outbox.relay.latency").timer()!!
             timer.record(Duration.ofSeconds(5))
@@ -68,7 +68,7 @@ class OutboxRelayLatencyShapeTest : StringSpec({
         }
         val registry = OtlpMeterRegistry(offline, Clock.SYSTEM)
         try {
-            OutboxRelay(JdbcTemplate(), registry, emptyList())
+            OutboxRelay(JdbcTemplate(), registry, emptyList(), java.time.Clock.systemUTC())
             val timer = registry.find("trippilot.outbox.relay.latency").timer()!!
             timer.record(Duration.ofMillis(300))
 

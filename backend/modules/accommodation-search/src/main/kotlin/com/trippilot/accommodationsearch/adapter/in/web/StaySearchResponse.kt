@@ -44,6 +44,13 @@ data class StayItemResponse(
     val amenities: List<String>,
     val stayType: String,
     val price: PriceResponse?,   // null = 가격 미확인(BR-U1-14)
+    /**
+     * 아래 셋은 **null 이 "없음"이 아니라 "모름"이다** — 공급자마다 주는 칸이 다르다.
+     * 화면은 null 이면 그 줄을 비운다. "전화 없는 숙소"·"객실 0개"로 그리면 안 된다.
+     */
+    val address: String?,
+    val phone: String?,   // 표시형 '02-2267-7474' — 그대로 tel: 에 실을 수 있다
+    val rooms: Int?,
 ) {
     companion object {
         fun from(r: StayResult) = StayItemResponse(
@@ -56,8 +63,55 @@ data class StayItemResponse(
             amenities = r.stay.amenities.sorted(),
             stayType = r.stay.stayType,
             price = r.lowestPrice?.let { PriceResponse(it.amount, it.currency) },
+            address = r.stay.address,
+            phone = r.stay.phone,
+            rooms = r.stay.rooms,
         )
     }
 }
 
 data class PriceResponse(val amount: Long, val currency: String)
+
+/**
+ * 숙소 상세(US-STAY-03). 목록 항목([StayItemResponse])에 **`stayId` 하나만** 더한다 —
+ * 상세가 목록보다 풍부해지는 것은 사진·편의시설이 채워진 뒤이고(숙소콘텐츠-수집-설계.md),
+ * 지금 없는 값을 자리만 만들어 두면 화면이 "준비 중"을 그릴 근거를 잃는다.
+ *
+ * **리뷰·평점이 없는 것은 의도다**(US-STAY-03 — 외부 OTA 위임). 정확 1박가도 없다
+ * (INV-U1-05 — 캐싱 금지라 표시 시점에 따로 부른다). 소요시간도 없다(INV-3).
+ */
+data class StayDetailResponse(
+    /** 경로에 그대로 쓰는 합성 식별자 `"{출처}:{식별자}"` — 클라이언트가 조립하지 않게 실어 준다. */
+    val stayId: String,
+    val externalSource: String,
+    val externalId: String,
+    val name: String,
+    val lat: Double,
+    val lng: Double,
+    val region: String,
+    val amenities: List<String>,
+    val stayType: String,
+    val price: PriceResponse?,   // null = 가격 미확인(BR-U1-14) — 상세를 막는 사유가 아니다
+    /** 목록과 같은 뜻 — null 은 "모름"이다([StayItemResponse] 참고). */
+    val address: String?,
+    val phone: String?,
+    val rooms: Int?,
+) {
+    companion object {
+        fun from(r: StayResult) = StayDetailResponse(
+            stayId = "${r.stay.externalSource}:${r.stay.externalId}",
+            externalSource = r.stay.externalSource,
+            externalId = r.stay.externalId,
+            name = r.stay.name,
+            lat = r.stay.lat,
+            lng = r.stay.lng,
+            region = r.stay.region,
+            amenities = r.stay.amenities.sorted(),
+            stayType = r.stay.stayType,
+            price = r.lowestPrice?.let { PriceResponse(it.amount, it.currency) },
+            address = r.stay.address,
+            phone = r.stay.phone,
+            rooms = r.stay.rooms,
+        )
+    }
+}

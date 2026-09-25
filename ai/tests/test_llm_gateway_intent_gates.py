@@ -20,11 +20,12 @@ import pytest
 import yaml
 
 from trippilot.llm_gateway.config import C1Config
-from trippilot.llm_gateway.gates.intent import IntentGate
+from trippilot.llm_gateway.gates.intent import IntentGate, _within
 from trippilot.llm_gateway.gates.paraphrase import ParaphraseGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.domain.common import TraceId
+from trippilot.domain.dialogue import specs_of, tool_specs, tool_specs_json
 from trippilot.domain.intent import ROUTABLE_INTENTS, Intent, IntentDraft, MatchRoute
 from trippilot.domain.llm import LlmFeature, ModelTier
 from trippilot.domain.observability import FallbackEvent, GateDropEvent, LlmCallRecord
@@ -39,7 +40,9 @@ _BANK_YAML = Path(__file__).resolve().parent.parent / "data" / "intent_question_
 _NOW = datetime(2026, 8, 6, 12, 0, tzinfo=timezone.utc)
 _TID = TraceId("t-313")
 _CFG = C1Config(model_ids={ModelTier.LIGHT: "m-l", ModelTier.HEAVY: "m-h"})
-_LABELS = ", ".join(sorted(i.value for i in ROUTABLE_INTENTS))
+# 3차 프롬프트에 실리는 것 — 라우터가 실제로 넘기는 값과 **같은 함수**에서 나온다.
+# 손으로 라벨을 나열하면 프롬프트가 무엇을 받는지 테스트만 다르게 믿는다.
+_INTENTS = tool_specs_json()
 
 
 def _intent(raw: str) -> object:
@@ -57,14 +60,53 @@ def _paraphrase(raw: str) -> object:
 
 def test_intent_prompt_loads_with_semver_and_injected_closed_set() -> None:
     prompt, ref = PromptRegistry(_PROMPTS).render(
-        LlmFeature.INTENT, {"utterance": "내일 뭐 하지", "intents": _LABELS}
+        LlmFeature.INTENT, {"utterance": "내일 뭐 하지", "intents": _INTENTS}
     )
-    assert ref.prompt_id == "prompts/intent.yaml" and ref.version == "0.1.0"
+    assert ref.prompt_id == "prompts/intent.yaml" and ref.version == "0.2.0"
     assert ref.feature == "INTENT"
     for intent in ROUTABLE_INTENTS:  # 13종 전부 프롬프트에 실린다 (서버 주입 closed-set)
         assert intent.value in prompt
     assert "목록 밖 라벨 생성 금지" in prompt  # INV-1 동형
     assert '{"intent": null}' in prompt  # 분류 불가 = 지어내기 금지 (INV-4 폴백 신호)
+
+
+def test_intent_prompt_carries_per_intent_arguments_not_three_generic_slots() -> None:
+    """v0.2.0 의 핵심 — 의도별 인자가 실리고, 의도 무관 3칸은 사라졌다 (FD §7).
+
+    옛 스키마(`date`·`category`·`constraint`)는 인자표 어디에도 없는 이름이라
+    **하류에서 전부 버려졌다**. 그 이름이 프롬프트에 남아 있으면 모델은 계속 그걸 채운다.
+    """
+    prompt, _ = PromptRegistry(_PROMPTS).render(
+        LlmFeature.INTENT, {"utterance": "내일 뭐 하지", "intents": _INTENTS}
+    )
+    # 의도별 인자가 실린다 — 표에서 나온 이름들
+    assert "target_date" in prompt and "budget_level" in prompt and "replacement" in prompt
+    # enum 어휘도 함께 — "발화 표현을 그대로 옮기지 말라"는 규칙의 대조군이다
+    assert "MULTIGEN" in prompt and "REORDER_DAY" not in prompt  # op 은 묻지 않는다
+    # 옛 3칸의 흔적이 없다
+    assert '"category"' not in prompt and '"constraint"' not in prompt
+
+
+def test_schema_omits_arguments_nobody_asks_for() -> None:
+    """`lands_in is None`(버려짐)·`asked_by_router=False`(주인이 따로) 는 싣지 않는다.
+
+    물으면 토큰을 쓰고 모델에게 지어낼 자리를 주는데 결과는 쓰이지 않는다.
+
+    **의도별로** 본다 — 같은 이름이 한 의도에서는 버려지고 다른 의도에서는 쓰인다
+    (`region` 은 GENERATE_SCHEDULE 에선 소비자가 0건이고 TRIP_SUMMARY 에선 실제로 쓰인다).
+    프롬프트 문자열 전체에 대고 "이 이름이 없다"를 재면 그 구분이 지워진다.
+    """
+    by_name = {t["name"]: t["parameters"]["properties"] for t in tool_specs()}
+    omitted = 0
+    for intent in ROUTABLE_INTENTS:
+        props = by_name[intent.value]
+        for spec in specs_of(intent):
+            if spec.asked():
+                assert spec.name in props, f"{intent.value}.{spec.name} 가 빠졌다"
+            else:
+                omitted += 1
+                assert spec.name not in props, f"{intent.value}.{spec.name} 를 묻고 있다"
+    assert omitted == 10  # 표 40칸 중 10칸 — 줄면 근거를 확인하고 이 수를 고칠 것
 
 
 def test_paraphrase_prompt_loads_with_semver_and_meaning_preservation_rule() -> None:
@@ -80,17 +122,22 @@ def test_paraphrase_prompt_loads_with_semver_and_meaning_preservation_rule() -> 
 
 def test_prompt_render_is_deterministic() -> None:
     reg = PromptRegistry(_PROMPTS)
-    variables = {"utterance": "일정 좀 바꿔줘", "intents": _LABELS}
+    variables = {"utterance": "일정 좀 바꿔줘", "intents": _INTENTS}
     assert reg.render(LlmFeature.INTENT, variables)[0] == reg.render(
         LlmFeature.INTENT, variables
     )[0]
 
 
 def test_prompt_labels_match_question_bank_labels() -> None:
-    """프롬프트에 실리는 라벨 집합 = 질문뱅크 라벨 집합 (드리프트 차단)."""
+    """프롬프트에 실리는 라벨 집합 = 뱅크의 **위임 대상** 라벨 집합 (드리프트 차단).
+
+    거부 앵커(OUT_OF_SCOPE)는 뱅크에 있지만 프롬프트에는 싣지 않는다 — 3차는 "이 중 하나를 골라라"
+    이고, 고를 수 없는 라벨을 목록에 넣으면 모델이 그걸 고른다. 분류 불가는 `{"intent": null}` 로
+    받는다(intent.yaml 의 기존 규약).
+    """
     bank = yaml.safe_load(_BANK_YAML.read_text(encoding="utf-8"))
     bank_labels = {entry["intent"] for entry in bank["intents"]}
-    assert bank_labels == {i.value for i in ROUTABLE_INTENTS}
+    assert bank_labels - {"OUT_OF_SCOPE"} == {i.value for i in ROUTABLE_INTENTS}
 
 
 # ── INTENT 게이트 ───────────────────────────────────────────────────────
@@ -152,6 +199,137 @@ def test_intent_gate_passes_out_of_scope_to_router() -> None:
     outcome = _intent('{"intent": "OUT_OF_SCOPE"}')
     assert outcome.error is None
     assert outcome.value.intent is Intent.OUT_OF_SCOPE
+
+
+# ── ⑤ 인자 이름 closed-set ──────────────────────────────────────────────
+
+
+def test_intent_gate_drops_argument_names_outside_the_table() -> None:
+    """표 밖 키는 **그 키만** 버린다 — 의도는 살린다.
+
+    라벨 하나가 라우팅을 결정하고 인자는 덧붙는 값이다. 곁가지 키 하나로 맞는 의도를
+    폴백으로 보내면 사용자가 "기본 응답 + 수동 편집 안내"를 받는다.
+    """
+    outcome = _intent(json.dumps({
+        "intent": "GET_WEATHER",
+        "slots": {"date": "내일", "category": "카페", "constraint": "실내"},
+    }))
+    assert outcome.error is None
+    assert outcome.value.intent is Intent.GET_WEATHER  # 의도는 살았다
+    assert outcome.value.slots == {"date": "내일"}  # 표에 있는 것만
+
+
+def test_intent_gate_reports_dropped_argument_names() -> None:
+    """조용히 버리지 않는다 — 표 밖 키가 늘면 프롬프트와 표가 갈라졌다는 신호다."""
+    outcome = _intent(json.dumps({
+        "intent": "GET_WEATHER",
+        "slots": {"date": "내일", "category": "카페", "constraint": "실내"},
+    }))
+    assert isinstance(outcome.drop_event, GateDropEvent)
+    assert (outcome.drop_event.total_count, outcome.drop_event.dropped_count) == (3, 2)
+    assert outcome.drop_event.dropped_ids == ()  # 풀 ID 가 아니다 — 환각률 지표 순수성
+
+
+def test_intent_gate_emits_no_drop_event_when_every_name_is_known() -> None:
+    outcome = _intent(json.dumps({"intent": "GET_WEATHER", "slots": {"date": "내일"}}))
+    assert outcome.drop_event is None
+
+
+def test_argument_names_are_scoped_to_the_intent() -> None:
+    """같은 이름이 다른 의도에서는 표 밖이다 — 전역 허용 집합이 아니다.
+
+    `budget_level` 은 GENERATE_SCHEDULE 의 인자이고 GET_WEATHER 의 인자가 아니다.
+    한 벌로 합쳐 두면 "아무 의도에나 아무 인자"가 통과한다.
+    """
+    ok = _intent(json.dumps({
+        "intent": "GENERATE_SCHEDULE", "slots": {"budget_level": "LOW"}}))
+    assert ok.value.slots == {"budget_level": "LOW"}
+
+    out = _intent(json.dumps({
+        "intent": "GET_WEATHER", "slots": {"budget_level": "LOW"}}))
+    assert out.value.intent is Intent.GET_WEATHER and out.value.slots == {}
+
+
+def test_intent_gate_drops_handler_owned_argument() -> None:
+    """`op` 은 표에 있지만 **묻지 않는 인자**다 — 주인이 핸들러라 받아도 쓰지 않는다."""
+    outcome = _intent(json.dumps({
+        "intent": "EDIT_SCHEDULE", "slots": {"day": "2일차", "op": "REMOVE_SLOT"}}))
+    assert outcome.value.slots == {"day": "2일차"}
+
+
+def test_plural_argument_arrives_as_a_list() -> None:
+    """표가 `multiple=True` 라 적은 인자는 **목록**으로 받는다.
+
+    스키마가 배열로 광고하는데 게이트가 스칼라만 받으면 **모델이 시킨 대로 했는데
+    전량 드롭**이 난다 — 실측으로 그랬다(2026-09-22 평가셋 REPLAN 3건이
+    `parse_error: slots['reason']가 평면 스칼라가 아님`). 광고와 검사는 한 표를 본다.
+    """
+    outcome = _intent(json.dumps({
+        "intent": "REPLAN", "slots": {"reason": ["WEATHER", "CLOSED"]}}))
+    assert outcome.error is None
+    assert outcome.value.slots == {"reason": ("WEATHER", "CLOSED")}
+
+
+def test_plural_argument_rejects_a_bare_scalar() -> None:
+    """복수 사유가 조용히 한 건으로 잘리는 것을 막는다 (`ReplanRequest.reasons`)."""
+    outcome = _intent(json.dumps({"intent": "REPLAN", "slots": {"reason": "WEATHER"}}))
+    assert outcome.error is not None and "스칼라 목록이 아님" in outcome.error
+
+
+def test_singular_argument_still_rejects_a_list() -> None:
+    """`multiple` 이 아닌 칸에 목록이 오면 여전히 드롭 — 표에 없는 모양이다."""
+    outcome = _intent(json.dumps({"intent": "GET_WEATHER", "slots": {"date": ["내일"]}}))
+    assert outcome.error is not None and "평면 스칼라가 아님" in outcome.error
+
+
+def test_plural_argument_rejects_nested_lists() -> None:
+    outcome = _intent(json.dumps({"intent": "REPLAN", "slots": {"reason": [["W"]]}}))
+    assert outcome.error is not None and "스칼라 목록이 아님" in outcome.error
+
+
+# ── ⑥ 어휘 closed-set ───────────────────────────────────────────────────
+
+
+def test_enum_value_outside_the_vocabulary_is_dropped() -> None:
+    """프롬프트가 enum 을 광고하므로 검사도 같은 표를 본다.
+
+    틀린 어휘는 없는 것보다 나쁘다 — 하류가 엉뚱한 분기를 타거나 변환에서 죽는다.
+    의도는 살리고 그 칸만 버린다.
+    """
+    outcome = _intent(json.dumps({
+        "intent": "GENERATE_SCHEDULE",
+        "slots": {"budget_level": "가성비", "start_date": "내일"},
+    }))
+    assert outcome.value.intent is Intent.GENERATE_SCHEDULE
+    assert outcome.value.slots == {"start_date": "내일"}  # 어휘 밖 칸만 빠졌다
+
+
+def test_enum_value_inside_the_vocabulary_survives() -> None:
+    outcome = _intent(json.dumps({
+        "intent": "GENERATE_SCHEDULE", "slots": {"budget_level": "LOW"}}))
+    assert outcome.value.slots == {"budget_level": "LOW"}
+
+
+def test_plural_vocabulary_requires_every_member_inside() -> None:
+    """목록이면 **전부** 어휘 안이어야 한다 — 하나가 오염되면 그 칸을 믿을 수 없다.
+
+    지금 표에는 "복수 + 어휘"인 인자가 없다(`REPLAN.reason` 은 복수지만 `choices` 가 비어
+    있다 — 표 규약상 "아직 타입이 아님"). 그래서 게이트를 통해 재지 않고 판정 함수를
+    직접 본다. 둘 중 하나가 생기는 날 이 테스트가 그 자리를 이미 지키고 있다.
+    """
+    assert _within(("WEATHER", "CLOSED"), ("WEATHER", "CLOSED"))
+    assert not _within(("WEATHER", "그냥"), ("WEATHER", "CLOSED"))
+
+
+def test_argument_without_a_vocabulary_is_not_value_checked() -> None:
+    """`choices` 가 비면 어휘 검사를 하지 않는다 — "아직 타입이 아니다"는 뜻이다.
+
+    `REPLAN.reason` 이 그 자리다: 종류는 ENUM 인데 코드에 enum 이 없고 주석 어휘뿐이라
+    표가 빈 `choices` 로 그 사실을 적어 뒀다. 없는 어휘로 값을 거르면 전부 버린다.
+    """
+    outcome = _intent(json.dumps({
+        "intent": "REPLAN", "slots": {"reason": ["날씨"], "free_text": "실내 위주로"}}))
+    assert outcome.value.slots == {"reason": ("날씨",), "free_text": "실내 위주로"}
 
 
 # ── PARAPHRASE 게이트 ───────────────────────────────────────────────────
@@ -219,14 +397,17 @@ def _gateway(canned: str, gate, trace: InMemoryTrace) -> GatewayFacade:
 def test_intent_gateway_call_succeeds_end_to_end() -> None:
     trace = InMemoryTrace()
     result = _gateway(
-        json.dumps({"intent": "REPLAN", "slots": {"date": "오늘"}, "confidence": 0.9}),
+        json.dumps(
+            {"intent": "REPLAN", "slots": {"target_date": "오늘"}, "confidence": 0.9}
+        ),
         IntentGate(),
         trace,
     ).call(
-        LlmFeature.INTENT, {"utterance": "오늘 비 오는데", "intents": _LABELS}, None, _TID, _NOW
+        LlmFeature.INTENT, {"utterance": "오늘 비 오는데", "intents": _INTENTS}, None, _TID, _NOW
     )
     assert result.is_fallback is False and result.error is None
-    assert result.value == IntentDraft(Intent.REPLAN, {"date": "오늘"}, 0.9)
+    # 인자 이름이 **의도별**이다 — REPLAN 의 날짜 칸은 `target_date` 이고 `date` 가 아니다
+    assert result.value == IntentDraft(Intent.REPLAN, {"target_date": "오늘"}, 0.9)
     assert result.call_record.prompt_ref.prompt_id == "prompts/intent.yaml"
     assert result.call_record.model_id == "m-l"  # LIGHT 티어 (config 주입 — 하드코딩 없음)
     assert trace.of_type(FallbackEvent) == []
@@ -249,7 +430,7 @@ def test_gateway_fallback_is_signalled_not_silent() -> None:
     """게이트 거부 → 폴백 TypedResult + FallbackEvent (INV-4 침묵 실패 금지)."""
     trace = InMemoryTrace()
     result = _gateway('{"intent": "MAKE_COFFEE"}', IntentGate(), trace).call(
-        LlmFeature.INTENT, {"utterance": "커피", "intents": _LABELS}, None, _TID, _NOW
+        LlmFeature.INTENT, {"utterance": "커피", "intents": _INTENTS}, None, _TID, _NOW
     )
     assert result.is_fallback is True and "closed_set_violation" in result.error
     assert len(trace.of_type(FallbackEvent)) == 1
@@ -288,7 +469,7 @@ def _router(*, intent_trace: InMemoryTrace, paraphrase_trace: InMemoryTrace) -> 
         _ScriptedEmbedding(),
         store,
         intent_gateway=_gateway(
-            json.dumps({"intent": "GENERATE_SCHEDULE", "slots": {"date": "내일"},
+            json.dumps({"intent": "GENERATE_SCHEDULE", "slots": {"start_date": "내일"},
                         "confidence": 0.77}),
             IntentGate(),
             intent_trace,
@@ -326,13 +507,13 @@ def test_third_stage_classification_runs_on_real_prompt_and_gate() -> None:
     )
     assert match.match_route is MatchRoute.LLM_DIRECT  # 폴백으로 흡수되지 않았다
     assert match.intent is Intent.GENERATE_SCHEDULE
-    assert match.slots == {"date": "내일"} and math.isclose(match.confidence, 0.77)
+    assert match.slots == {"start_date": "내일"} and math.isclose(match.confidence, 0.77)
     assert "below_t_mid" in match.reason  # 승격 사유는 남는다
 
     records = intent_trace.of_type(LlmCallRecord)
     assert len(records) == 1 and records[0].success is True
     assert records[0].prompt_ref.prompt_id == "prompts/intent.yaml"
-    assert records[0].prompt_ref.version == "0.1.0"
+    assert records[0].prompt_ref.version == "0.2.0"
     assert intent_trace.of_type(FallbackEvent) == []
 
 

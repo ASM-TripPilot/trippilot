@@ -1,10 +1,20 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import type { ReactTestInstance } from 'react-test-renderer';
 
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
 
 import { ALT_LABEL } from '../config/altLabel';
 import { buildSlotKey } from '../lib/slotKey';
+import { ChevronRightGlyph } from './SlotGlyphs';
 import { SlotStopCard } from './SlotStopCard';
+
+/** 호스트가 누를 수 있는가 — Pressable 은 onPress 없이도 응답자 핸들러를 단다(02a ★6 · §5-B). */
+function isTouchable(node: ReactTestInstance): boolean {
+  return (
+    typeof node.props.onStartShouldSetResponder === 'function' ||
+    typeof node.props.onClick === 'function'
+  );
+}
 
 /**
  * TRIP-783 · AC-3·AC-7·E1·E2·E4·E5 — 결과 화면 공용 슬롯 카드(신설·병존, `PoiSlotCard` 대체 아님).
@@ -168,5 +178,45 @@ describe('🔴 SlotStopCard · CS7 — 이름 press 어포던스', () => {
     fireEvent.press(screen.getByTestId(id(slotKey)('name')));
 
     expect(onPressName).toHaveBeenCalledTimes(1);
+  });
+
+  it('TRIP-939 AC-7: onPressName 미주입이면 이름은 누를 수 없는 글자이고 옆 › 도 없다 (A-3 · Q4)', () => {
+    // 준비·실행: 라이브 호출부 6곳의 현재 모양(이름 진입 미주입). 기본 렌더는 편집기 칩이 아니라
+    // 카드 안 ChevronRightGlyph 는 이름 옆 › 하나뿐이다(02a ★11).
+    const { slotKey } = renderCard();
+    const name = screen.getByTestId(id(slotKey)('name'));
+
+    // 단언: 이름은 그대로 보이되(앵커) 버튼이 아니고, 누를 수 있어 보이는 › 가 없다.
+    expect(name).toHaveTextContent('광안리 해변');
+    expect(isTouchable(name)).toBe(false);
+    expect(screen.UNSAFE_queryAllByType(ChevronRightGlyph)).toHaveLength(0);
+  });
+
+  it('onPressName 주입이면 이름이 버튼이고 › 가 1개다(짝 — 목적지가 생기면 되살림)', () => {
+    const { slotKey } = renderCard({ onPressName: jest.fn() });
+
+    expect(isTouchable(screen.getByTestId(id(slotKey)('name')))).toBe(true);
+    expect(screen.UNSAFE_queryAllByType(ChevronRightGlyph)).toHaveLength(1);
+  });
+});
+
+/* ──────────────── TRIP-801 · D4 가산(h16 휴관 경고) ────────────────
+ * h16 확정 얼굴은 이름 옆에 "⏰ 휴관일 확인" 인라인 경고를 얹는다. `warning?: string | null`(가산)를
+ * 주면 그 문구를 `slot-stopcard-warning-*` leaf 로 그린다 — 미주입=미렌더(6종 공용 카드 후방호환).
+ * 트리거(`openingHoursKnown === false`)·문구 상수는 소비처(페이지) 몫이고, 카드는 받은 문자열만 그린다.
+ * ⚠️ 빨강 텍스트·시계 글리프 톤은 6-b 육안(SVG 색은 jest 사각) — 여기선 leaf 텍스트·부재만 잠근다.
+ * ─────────────────────────────────────────────────────────────────────── */
+describe('🔴 SlotStopCard · CS8 — warning 가산(휴관 경고, 후방호환)', () => {
+  it('CS8a · warning 주입이면 경고 leaf 가 완전일치로 뜬다', () => {
+    const { slotKey } = renderCard({ warning: '휴관일 확인' });
+
+    expect(screen.getByTestId(id(slotKey)('warning'))).toHaveTextContent(
+      '휴관일 확인'
+    );
+  });
+
+  it('CS8b · warning 미주입이면 경고 leaf 가 부재한다 (기존 소비처 무변경 · 선제 green)', () => {
+    const { slotKey } = renderCard();
+    expect(screen.queryByTestId(id(slotKey)('warning'))).toBeNull();
   });
 });

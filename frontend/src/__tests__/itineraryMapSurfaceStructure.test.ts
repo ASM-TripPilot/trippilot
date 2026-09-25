@@ -44,9 +44,10 @@ const ROOT = path.resolve('src');
 const LOCKED_CALLERS = [
   'features/itinerary/ui/DraftScreen.tsx',
   'features/itinerary/ui/MustVisitPickerScreen.tsx',
-  // TRIP-563 i13·i16 재계획 글랜스 지도 — h05·h11 과 같은 인라인 잠금 미리보기(viewOnly ON).
-  'features/planb/ui/NoAlternativeScreen.tsx',
-  'features/planb/ui/ReplanDraftScreen.tsx',
+  // TRIP-751 — 옛 i13·i16 재계획 글랜스 지도(`features/planb/ui/{ReplanDraftScreen,NoAlternativeScreen}`)는
+  // i06 재작성으로 파일째 삭제됐다. 새 뷰(`pages/planb-draft/ui/ReplanDraftView.tsx`)는 `<MapView>` 를
+  // 직접 쓰지 않고 셸(`MapSheetShell`, 아래 LOCKED)이 지도를 소유한다. 옛 파일이 남아 있으면 S2 ① 전수
+  // 동치가 red 로 삭제를 강제한다.
   // TRIP-565 j01 방문 기록 히어로 지도 — 방문 동선 글랜스(viewOnly ON, 인터랙티브 요소는 형제).
   'features/record/ui/TripRecordsScreen.tsx',
   // TRIP-571 j03 오늘의 회고 지도 — 방문 동선 글랜스(viewOnly ON). 실 좌표 있을 때만 렌더(계약에
@@ -55,11 +56,44 @@ const LOCKED_CALLERS = [
   // TRIP-572 j04 여행 요약 지도 — 방문 순서 글랜스(viewOnly ON). DailyReflectionScreen 동형(좌표
   // 있을 때만 렌더, 없으면 placeholder). test-designer 가 처음부터 등재(571·563·442 3번째 재발 방지).
   'features/reflection/ui/TripSummaryScreen.tsx',
-  // TRIP-783 h공통 지도+시트 셸 — 전면 지도가 시트 뒤 전면에 깔린 잠긴 글랜스(viewOnly ON,
-  // connectPins 기본=선). h07·h08·h11·h14·h16 결과 6종이 이 셸을 소비하는 부품이다. 셸이
+  // TRIP-783 h공통 지도+시트 셸 — 전면 지도가 시트 뒤 전면에 깔린다. 기본 잠금(viewOnly ON) · TRIP-920
+  // 부터 기본 스냅의 닫힘 칸에서만 풀린다(태그의 viewOnly 값이 상수가 아니다 — 이 census 는 글자 유무만
+  // 보고 값은 못 본다, 값은 MapSheetShell.test SH5·SH14 가 잠근다). connectPins 기본=선. h07·h08·h11·h14·h16 결과 6종이 이 셸을 소비하는 부품이다. 셸이
   // `<MapView>` 를 렌더하므로 census fail-closed 를 피하려 test-designer 가 착수 단계에서 선반영
   // (571·563·442 재발 방지 · TRIP-572 선례). 실개폐·2스냅은 통과형 목 사각(6-b 실기).
   'widgets/map-sheet-shell/ui/MapSheetShell.tsx',
+  // TRIP-710 d06 장소 상세 미니맵 — 정적 placeholder → 실 MapView(viewOnly ON, 단일 핀).
+  // connectPins 미전달(단일 핀→경로선 없음, 아래 S8 ③ 강제). test-designer 착수 단계 선반영이라
+  // 구현(placeholder→MapView) 전엔 `<MapView` 0건이라 S2 집합 불일치·S8 카운트로 red(정상).
+  'features/explore/ui/PlaceDetailScreen.tsx',
+  // TRIP-727 e03 숙소 상세 미니맵 — 정적 자리(MapPinGlyph) → 실 MapView(viewOnly ON, 단일 핀).
+  // connectPins 미전달(단일 핀→경로선 없음, 아래 S8 ③ 강제). d06 PlaceDetailScreen(TRIP-710) 동형 —
+  // test-designer 착수 단계 선반영이라 구현(placeholder→MapView) 전엔 `<MapView` 0건이라 S2 집합
+  // 불일치·S8 카운트로 red(정상, 442·563·571 3회 재발 방지).
+  'features/stay/ui/StayDetailScreen.tsx',
+  // TRIP-789 h07 생성 loading 지도 카드 — 진행 카드와 체크리스트 사이의 꼭 갈 곳 글랜스(viewOnly ON,
+  // connectPins={false} — 미검증 동선 선 금지 INV-2). pins·center 둘 다 있을 때만 렌더(정직 폴백),
+  // 프리뷰만 주입(Q1-B). MustVisitPickerScreen 에 이은 **2번째** no-line caller 라 아래 NO_LINE_CALLERS
+  // 에도 등재된다. test-designer 착수 단계 선반영이라 구현(map card 추가) 전엔 `<MapView` 0건이라
+  // S2 집합 불일치·S8 lineOffTags 카운트로 red(정상, 442·563·571 3회+ 재발 방지).
+  'features/itinerary/ui/GeneratingScreen.tsx',
+  // TRIP-791 h07 폴백 인터스티셜 지도 카드 — 성공(폴백) 변형이 "기본 동선"(핀 route)을 그려
+  // viewOnly ON + connectPins 기본(=선). **line caller**(no-line 아님) — h11 DraftScreen 과 동형이라
+  // 이 배열에만 등재하고 NO_LINE_CALLERS 엔 안 넣는다. test-designer 착수 단계 선반영이라 구현
+  // (GenerationFallbackScreen 신설) 전엔 `<MapView` 0건이라 S2 집합 불일치·S8 defaultTags 카운트로
+  // red(정상, 442·563·571 3회 재발 방지 · 01b ★2).
+  'features/itinerary/ui/GenerationFallbackScreen.tsx',
+  // TRIP-795 h10 후보 선택 지도 카드 — 반경 점선 원 + 현재위치 핀 + 후보 letter 핀을 얹은 잠긴
+  // 글랜스(viewOnly ON, connectPins={false} — "보여주기 전용, 검증된 동선 아님"). 좌표는 계약 밖이라
+  // 프로덕션은 지도 미표시(degrade), 프리뷰 픽스처만 렌더. GeneratingScreen 에 이은 **3번째** no-line
+  // caller 라 아래 NO_LINE_CALLERS 에도 등재. test-designer 착수 단계 선반영이라 구현(map 카드 추가)
+  // 전엔 SlotFillScreen 에 `<MapView` 0건이라 S2 집합 불일치·S8 lineOffTags 카운트로 red(정상, 01b D7).
+  'features/itinerary/ui/SlotFillScreen.tsx',
+  // TRIP-755 i10 현재 장소 상세 미니맵 — 운영 화면에서 지도가 빠져 있던 자리 → 실 MapView(viewOnly ON,
+  // 현재 장소 1핀, showScaleBar). connectPins 미전달(단일 핀→경로선 없음, 아래 S8 ③ 강제) — line caller
+  // 라 NO_LINE_CALLERS 엔 안 넣는다. d06(TRIP-710) 동형. test-designer 착수 단계 선반영이라 구현 전엔
+  // `<MapView` 0건이라 S2 집합 불일치·S8 defaultTags 카운트로 red(정상, 442·563·571 재발 방지).
+  'features/execution/ui/PlaceDetailScreen.tsx',
 ];
 
 /** 지도 고정을 **켜면 안 되는** 호출부. 앞의 넷은 지도를 움직여 좌표를 확정하는 것이 기능 자체라
@@ -68,28 +102,37 @@ const LOCKED_CALLERS = [
 const OPEN_CALLERS = [
   'features/stay/ui/StayRegisterScreen.tsx',
   'app/_dev/preview.tsx',
-  // TRIP-397 i02·i03 여행 중 지도 — 자유 탐색이라 제스처를 잠그지 않는다(viewOnly 미전달).
-  'features/execution/ui/LiveMapScreen.tsx',
+  // TRIP-746 — 옛 i02·i03 `features/execution/ui/LiveMapScreen.tsx`(TRIP-397 자유 탐색 지도)는 허브
+  // 재작성으로 삭제됐다. 그 "잠그지 않는다" 결정은 i01 허브가 이어받되, 허브는 `<MapView>` 를 직접
+  // 렌더하지 않고 셸(`MapSheetShell`, LOCKED 명부)을 `mapViewOnly={false}` 로 연다 — 그 옵트아웃
+  // 경계는 아래 S2b 가 따로 잠근다(태그가 아니라 셸 prop 이라 이 명부의 대상이 아니다).
   // TRIP-866(S4) — pages/live-location/ui/LiveLocationPage.tsx 는 이 명부에서 빠졌다: 이제 지도를
   // `<CenterPinPicker>`(중앙 고정 핀, shared/map)로 감싸 쓰므로 `<MapView\b` census 밖이다.
   // CenterPinPicker 는 viewOnly 를 받지 않는(항상 조작 가능) 래퍼라 이 옵트인 경계의 대상이 아니다.
 ];
 
-/** 완성·확정 일정 화면(h25/h34 · TimelineScreen). **지도 호출부가 둘이다**(TRIP-354 · Q5 정정):
- *  ① **인라인 글랜스 지도**(기본 · 작은 것) — viewOnly **켠다**(잠긴 미리보기). "지도 크게 보기"가
- *     있는 이유가 인라인은 잠긴 글랜스라서다. connectPins 기본값(동선 선).
- *  ② **h26 확대 오버레이 지도**(제스처 탐색 · TRIP-301) — viewOnly **끈다**(D6: 제스처 + setMaxLevel).
- *     connectPins 기본값.
- * 한 파일에 **잠긴 태그와 안 잠긴 태그가 공존하는 첫 자리**라, 아래 S2가 파일이 아니라 **태그 단위로**
- * 둘을 각각 명시한다(AC-8: "새 지도 호출부가 생기면 사람이 잠금 여부를 명시"의 이행 자리). */
-const EXPLORE_CALLERS = ['features/itinerary/ui/TimelineScreen.tsx'];
-/** TimelineScreen 태그 분포 — 사람이 의도적으로 등재한다(그냥 통과시키기 금지). */
-const ITINERARY_GLANCE_LOCKED_TAGS = 1; // 인라인 글랜스: viewOnly ON
-const ITINERARY_EXPLORE_OPEN_TAGS = 1; // h26 확대: viewOnly OFF
+// TRIP-801 GUT — 완성·확정 일정 화면 `TimelineScreen` 이 소비처 0(CONFIRMED→셸 이관)으로 삭제되며
+// `EXPLORE_CALLERS`(TimelineScreen 의 인라인 글랜스 + h26 확대 두 태그)·`ITINERARY_*_TAGS` 상수가
+// 함께 제거됐다. h25/h34 는 이제 없다(CONFIRMED 도 `MapSheetShell` 이 owner, LOCKED_CALLERS 에 이미
+// 등재됨). withTag 전수 동치(S2 ①)가 TimelineScreen.tsx 잔존 시 red 로 삭제를 강제한다(02a ★9).
 
-/** 게이트①-2 — 연결선을 **끄는** 유일한 자리(h05). 나머지 여섯 태그는 아무 말도 하지 않고
- * 기본값(`connectPins` = 잇는다)을 받는다 — h11(일정 초안)이 그 여섯 안에 있다. */
-const NO_LINE_CALLER = 'features/itinerary/ui/MustVisitPickerScreen.tsx';
+/** 연결선을 **끄는**(`connectPins={false}`) 자리. 게이트①-2 시점엔 h05 하나뿐이었으나 TRIP-789 로
+ * h07 생성 loading 지도 카드가 **2번째** no-line caller 가 됐다(미검증 동선 선 금지 INV-2 — h05 는
+ * "담은 순서"일 뿐, h07 loading 은 데이터 도착 전 꼭 갈 곳 글랜스라 둘 다 확정 동선이 아니다).
+ * 나머지 태그는 아무 말도 하지 않고 기본값(`connectPins` = 잇는다)을 받는다 — h11(일정 초안)이 그 안에 있다. */
+const NO_LINE_CALLERS = [
+  'features/itinerary/ui/MustVisitPickerScreen.tsx',
+  'features/itinerary/ui/GeneratingScreen.tsx',
+  // TRIP-795 h10 후보 지도 — "보여주기 전용" 글랜스라 확정 동선이 아니다(INV-2). 3번째 no-line caller.
+  'features/itinerary/ui/SlotFillScreen.tsx',
+];
+
+/** TRIP-746 — 셸의 지도 잠금을 **푸는**(`mapViewOnly={false}`) 소비처. 셸 기본값은 잠금이고, 여행 중
+ * 자유 탐색인 i01 허브만 연다(TRIP-397 결정 계승 · Seed Q1). 새 파일이 이 prop 을 쓰면 S2b 가 먼저
+ * 걸려 "열어도 되는 화면인가"를 사람이 정하게 된다. */
+const SHELL_REL = 'widgets/map-sheet-shell/ui/MapSheetShell.tsx';
+const SHELL_UNLOCK_CONSUMERS = ['pages/live-itinerary/ui/LiveHubView.tsx'];
+const SHELL_UNLOCK = /\bmapViewOnly=\{false\}/;
 
 const SCREEN_REL = 'features/itinerary/ui/DraftScreen.tsx';
 // TRIP-864 — 지도 계약(MapPin)은 삭제된 mapHtml.ts 에서 네이버 코어 MapView.tsx 로 이관됐다.
@@ -244,12 +287,10 @@ describe('🔴 S2 · AC-13 · AC-16 — 지도 고정은 h05·h11 에만 켠다 
       .sort();
 
     // ① 도달 앵커 — 호출부가 통째로 이 심판 안에 있다. 새 호출부가 생기면 여기서 먼저 걸려
-    //    "잠글 곳인가 아닌가"를 사람이 정하게 된다(모집단이 조용히 새는 것을 막는다). TimelineScreen
-    //    은 지도 태그가 둘(글랜스+h26)이지만 **파일은 하나**라 이 파일 단위 열거에는 한 번만 온다 —
-    //    잠금 여부는 아래 ④가 태그 단위로 가른다(Q5 · AC-8).
-    expect(withTag).toEqual(
-      [...LOCKED_CALLERS, ...OPEN_CALLERS, ...EXPLORE_CALLERS].sort()
-    );
+    //    "잠글 곳인가 아닌가"를 사람이 정하게 된다(모집단이 조용히 새는 것을 막는다). TRIP-801 GUT 로
+    //    TimelineScreen 이 삭제돼 EXPLORE_CALLERS(태그 둘) 가 빠졌다 — TimelineScreen.tsx 가 아직
+    //    디스크에 있으면 withTag 에 잡혀 이 동치가 red(삭제 강제, 02a ★9).
+    expect(withTag).toEqual([...LOCKED_CALLERS, ...OPEN_CALLERS].sort());
 
     // ② 잠글 두 화면 — 태그마다 viewOnly 가 있다.
     LOCKED_CALLERS.forEach((rel) => {
@@ -258,66 +299,100 @@ describe('🔴 S2 · AC-13 · AC-16 — 지도 고정은 h05·h11 에만 켠다 
       expect(tags.filter((tag) => /\bviewOnly\b/.test(tag))).toEqual(tags);
     });
 
-    // ③ 열어 둘 자리 — 태그가 정확히 4개이고 그중 어느 것에도 viewOnly 가 없다. 이들이 잠기면
-    //    좌표 확정·여행 중 자유 탐색이 막힌다(회귀 금지). 내역: StayRegister 2(검색 미리보기+확정
-    //    시트) + preview 1 + LiveMapScreen 1. TRIP-866(S4) 로 live-location 이 `<CenterPinPicker>` 로
-    //    넘어가 `<MapView\b` census 밖이 되며 구 5 → 4. StayRegister 핀 지정 태그도 이제 CenterPinPicker
-    //    라 여전히 `<MapView\b` 밖이고, 남은 2개는 지도 검색 흐름(핀 지정과 무관)이다.
+    // ③ 열어 둘 자리 — 태그가 정확히 3개이고 그중 어느 것에도 viewOnly 가 없다. 이들이 잠기면
+    //    좌표 확정이 막힌다(회귀 금지). 내역: StayRegister 2(검색 미리보기+확정 시트) + preview 1.
+    //    TRIP-866(S4) 로 live-location 이 `<CenterPinPicker>` 로 넘어가 5 → 4, TRIP-746 으로
+    //    LiveMapScreen 이 삭제돼 4 → 3(여행 중 자유 탐색은 허브가 셸 prop 으로 이어받음 — S2b).
     const openTags = OPEN_CALLERS.flatMap((rel) => mapTagsOf(readOne(rel)));
-    expect(openTags).toHaveLength(4);
+    expect(openTags).toHaveLength(3);
     expect(openTags.filter((tag) => /\bviewOnly\b/.test(tag))).toEqual([]);
 
-    // ④ 완성·확정 일정 화면 — 지도 호출부가 **둘**이다(Q5). 파일이 아니라 **태그 단위로** 잠금
-    //    여부를 사람이 명시한다: 인라인 글랜스는 viewOnly 를 **켜고**(잠긴 미리보기), h26 확대는
-    //    **끈다**(제스처 탐색 · D6). 구현이 둘을 뒤바꾸거나(글랜스 열림 / h26 잠금) 태그 수가
-    //    달라지면 여기서 red — "지도 크게 보기가 잠긴 글랜스를 여는" 설계가 회귀하는 것을 막는다.
-    const itineraryTags = mapTagsOf(readOne(EXPLORE_CALLERS[0]));
-    expect(itineraryTags).toHaveLength(
-      ITINERARY_GLANCE_LOCKED_TAGS + ITINERARY_EXPLORE_OPEN_TAGS
-    );
-    const lockedGlance = itineraryTags.filter((tag) =>
-      /\bviewOnly\b/.test(tag)
-    );
-    const openExplore = itineraryTags.filter(
-      (tag) => !/\bviewOnly\b/.test(tag)
-    );
-    expect(lockedGlance).toHaveLength(ITINERARY_GLANCE_LOCKED_TAGS); // 잠긴 인라인 글랜스
-    expect(openExplore).toHaveLength(ITINERARY_EXPLORE_OPEN_TAGS); // 제스처 h26 확대
+    // ④(구) TimelineScreen 태그 단위(글랜스 잠금 / h26 확대 열림) 분석은 TRIP-801 GUT 로 그 파일이
+    //    삭제되며 제거됐다 — CONFIRMED 도 이제 MapSheetShell(LOCKED, 단일 viewOnly 태그)이 owner다.
   });
 });
 
-describe('S8 · h05 무선 — 연결선을 끄는 자리가 h05 하나뿐이다 (게이트①-2 추가분)', () => {
-  /** 왜 소스 층인가 — **어느 호출부가 무엇을 말했나**는 여기서만 보인다. h05 태그에서
-   * `connectPins={false}` 한 줄이 사라지면 "담은 순서"가 확정 동선처럼 선으로 그려지는데,
-   * 대본 실행 층(X3·X7)은 `buildMapHtml`을 직접 부르지 화면을 거치지 않아 그 삭제가 안 보인다
-   * (03b2 W2-1 뮤테이션 M3).
+describe('🔴 S2b · TRIP-746 — 셸 지도 잠금을 푸는 소비처는 i01 허브 하나뿐이다 (옵트아웃 경계)', () => {
+  it('자가검사 — 주석 속 mapViewOnly={false} 는 걷히고 코드의 것은 남는다', () => {
+    const sample = [
+      '// 허브만 mapViewOnly={false} 로 연다.',
+      '<MapSheetShell',
+      '  mapViewOnly={false}',
+      '  onBack={() => router.back()}',
+      '/>',
+    ].join('\n');
+    const stripped = stripComments(sample);
+
+    expect(stripped.split('mapViewOnly').length - 1).toBe(1);
+    expect(SHELL_UNLOCK.test(stripped)).toBe(true);
+    // 반대 방향 — 기본값을 명시한 true 는 푸는 것이 아니다.
+    expect(SHELL_UNLOCK.test('mapViewOnly={true}')).toBe(false);
+  });
+
+  it('mapViewOnly={false} 를 쓰는 파일 전수 = 허브 뷰 1개 · 그 파일은 셸을 렌더 · 셸은 그 prop 을 MapView viewOnly 로 흘린다', () => {
+    // 파일 단위로 센다 — `<MapSheetShell` 태그는 `=>`·JSX prop 을 품어 `[^>]*` 태그 정규식을 못 쓴다(02a ★9).
+    const unlocking = listSourceFiles(ROOT)
+      .map((full) => relOf(full))
+      .filter((rel) => rel !== SHELL_REL)
+      .filter((rel) => SHELL_UNLOCK.test(readOne(rel)))
+      .sort();
+
+    // ① 옵트아웃 전수 — 허브 뷰만 연다(구현 전엔 파일 부재라 [] → red).
+    expect(unlocking).toEqual(SHELL_UNLOCK_CONSUMERS);
+
+    // ② 그 파일은 실제로 셸을 렌더한다(prop 이 엉뚱한 곳에 붙은 공허 통과 차단).
+    SHELL_UNLOCK_CONSUMERS.forEach((rel) =>
+      expect(readOne(rel)).toContain('<MapSheetShell')
+    );
+
+    // ③ 셸은 prop 을 받고, 그 `<MapView>` 태그에 viewOnly 가 남아 있다(기본 잠금 — S2 ② 와 같은 태그).
+    //    `viewOnly` 를 태그에서 지우면 기본 잠금이 사라져 소비처가 조용히 풀린다. TRIP-920 부터 값은
+    //    "기본 잠금 · 기본 스냅 닫힘에서만 열림"이지만 여기선 글자 유무만 본다(값 = SH5·SH14 렌더 테스트).
+    const shell = readOne(SHELL_REL);
+    expect(shell).toContain('mapViewOnly');
+    const shellTags = mapTagsOf(shell);
+    expect(shellTags.length).toBeGreaterThan(0);
+    shellTags.forEach((tag) => expect(tag).toMatch(/\bviewOnly\b/));
+  });
+});
+
+describe('S8 · 무선 — 연결선을 끄는 자리가 h05·h07 loading 둘뿐이다 (게이트①-2 + TRIP-789)', () => {
+  /** 왜 소스 층인가 — **어느 호출부가 무엇을 말했나**는 여기서만 보인다. no-line 태그에서
+   * `connectPins={false}` 한 줄이 사라지면 "담은 순서"·"도착 전 글랜스"가 확정 동선처럼 선으로
+   * 그려지는데, 대본 실행 층(X3·X7)은 화면을 거치지 않아 그 삭제가 안 보인다(03b2 W2-1 뮤테이션 M3).
    *
    * 무엇을 보장하지 **못**하나: 태그에 적힌 **글자**까지다. 그 값이 컴포넌트를 통과해 실제
    * 지도에 닿는지는 이 층에서 볼 수 없다 — `MapView`가 그 프롭을 흘려도 여기는 초록이다.
    * 그 축은 실물 렌더 심판(`shared/map/MapView.test.tsx` AC2 viewOnly·AC3 connectPins)이 잡는다. */
-  it('h05 태그에만 connectPins={false} 가 있고 나머지 여덟은 기본값을 받는다', () => {
-    const lineOffTags = mapTagsOf(readOne(NO_LINE_CALLER));
+  it('no-line 세 자리(h05·h07 loading·h10 후보)에만 connectPins={false} 가 있고 나머지 LOCKED(+OPEN 3)은 기본값을 받는다', () => {
+    const lineOffTags = NO_LINE_CALLERS.flatMap((rel) =>
+      mapTagsOf(readOne(rel))
+    );
     const defaultTags = [
-      ...LOCKED_CALLERS.filter((rel) => rel !== NO_LINE_CALLER),
+      ...LOCKED_CALLERS.filter((rel) => !NO_LINE_CALLERS.includes(rel)),
       ...OPEN_CALLERS,
-      // TRIP-301/354 완성·확정 일정 지도도 동선 선을 그린다 — 핀 번호가 솔버 확정 순서라 선이
-      // 사실이다(h11 과 같은 부류). TimelineScreen 은 태그가 둘(인라인 글랜스 + h26 확대)인데
-      // **둘 다** connectPins 를 무언급 = 기본값(잇는다)으로 둔다.
-      ...EXPLORE_CALLERS,
+      // TRIP-801 GUT — TimelineScreen(EXPLORE_CALLERS, 태그 둘) 삭제로 이 spread 가 빠졌다.
+      // CONFIRMED 동선 선은 이제 MapSheetShell(LOCKED, connectPins 기본)이 그린다.
     ].flatMap((rel) => mapTagsOf(readOne(rel)));
 
-    // ① 도달 앵커 — 태그를 진짜로 떼어냈다(h05 1개 + 나머지 12개 = 총 13개).
-    //    TRIP-866(S4) 로 live-location 이 `<CenterPinPicker>` 로 넘어가며 13→12 가 됐다가,
-    //    TRIP-783 h공통 셸(`MapSheetShell`, LOCKED−h05 · connectPins 기본)이 등재되며 12→13.
-    //    내역: LOCKED−h05 7 + OPEN 4 + EXPLORE 2.
-    expect(lineOffTags).toHaveLength(1);
-    expect(defaultTags).toHaveLength(13);
+    // ① 도달 앵커 — 태그를 진짜로 떼어냈다(no-line 3개 + 나머지 13개 = 총 16개). TRIP-746 으로
+    //    LiveMapScreen(OPEN, 태그 1) 삭제 → defaultTags 14 → 13.
+    //    TRIP-789 로 no-line 이 1→2(h07 loading 지도 카드). TRIP-795 로 3(h10 후보 지도 카드,
+    //    connectPins={false}). defaultTags 는 14 불변 — SlotFillScreen 은 LOCKED 이자 NO_LINE 이라
+    //    filter 에서 빠져 (LOCKED 13 − NO_LINE 3 = 10 + OPEN 4)로 상쇄된다(오갱신 금지 — 15로 올리면
+    //    거짓 red). TRIP-791 로 GenerationFallbackScreen(LOCKED·line caller) 추가분은 그대로.
+    //    TRIP-751 로 LOCKED 두 화면(i13·i16, 태그 각 1) 삭제 → defaultTags 13 → 11.
+    //    TRIP-755 로 i10 PlaceDetailScreen(LOCKED·line caller, 태그 1) 추가 → defaultTags 11 → 12.
+    expect(lineOffTags).toHaveLength(3);
+    expect(defaultTags).toHaveLength(12);
 
-    // ② 끄는 자리는 h05 하나뿐이고, 끈다고 **명시**한다.
-    expect(lineOffTags[0]).toMatch(/\bconnectPins=\{false\}/);
+    // ② 끄는 세 자리 전부 끈다고 **명시**한다(h05·h07 loading·h10 후보).
+    lineOffTags.forEach((tag) =>
+      expect(tag).toMatch(/\bconnectPins=\{false\}/)
+    );
 
-    // ③ 나머지 여덟은 아무 말도 하지 않는다 = 기본값(잇는다)을 받는다. h11·인라인 글랜스·h26이
-    //    여기 있다 — 이 심판이 요구하는 것은 "끄지 않았다"이고, 기본값이 정말 잇는지는 X3이 잰다.
+    // ③ 나머지(defaultTags 13개)는 아무 말도 하지 않는다 = 기본값(잇는다)을 받는다. h11 이 여기 있다 —
+    //    이 심판이 요구하는 것은 "끄지 않았다"이고, 기본값이 정말 잇는지는 X3이 잰다.
     expect(defaultTags.filter((tag) => /\bconnectPins\b/.test(tag))).toEqual(
       []
     );
@@ -330,7 +405,7 @@ describe('S3 · AC-8 — 사진 도입이 화면·계약으로 새지 않았다 
    * `DraftScreen.tsx` 에 한 줄 느는 것은 이 조건이 금지하는 대상이 아니다(02a §3-5) — 그래서
    * 여기서 재는 것은 "화면 파일이 안 바뀌었다"가 아니라 **"사진 해결이 화면으로 새지 않았다"**다.
    */
-  it('MapPin 은 4필드(TRIP-745 state 편입), DraftScreenProps 는 15필드(TRIP-483 인라인 패널 3종 편입), 화면에 에셋 해석 지문이 0건이다', () => {
+  it('MapPin 은 7필드(TRIP-745 state + TRIP-768 imageUrl·kind + TRIP-795 label additive 편입), DraftScreenProps 는 14필드(TRIP-791 fallbackNotice 제거), 화면에 에셋 해석 지문이 0건이다', () => {
     const mapCoreSource = readOne(MAP_CORE_REL);
     const screenSource = readOne(SCREEN_REL);
 
@@ -340,14 +415,26 @@ describe('S3 · AC-8 — 사진 도입이 화면·계약으로 새지 않았다 
     expect(screenSource).toMatch(/export function DraftScreen\b/);
 
     // TRIP-745 — 핀 3상태(done/current/upcoming)를 위해 `state?: MapPinState` 가 additive 로
-    // 편입된다(옵셔널·2칸 들여쓰기 프로퍼티형이라 interfaceFields 가 4번째로 잡는다). 완료조건 #4가
-    // "LOCKED_CALLERS 갱신"으로 오지정한 실제 대상이 이 스냅숏이다(01 §맹점④). 핀 모양(Circle→물방울)
-    // 교체는 여기서 안 잡는다 — 필드 계약만 본다.
+    // 편입됐다(옵셔널·2칸 들여쓰기 프로퍼티형이라 interfaceFields 가 4번째로 잡는다). 핀 모양
+    // (Circle→물방울) 교체는 여기서 안 잡는다 — 필드 계약만 본다.
+    //
+    // TRIP-768 — j 밴드 기록 마커족을 위해 `imageUrl?`(사진 썸네일)·`kind?: MapPinKind`(visited/
+    // planned/stay) 가 additive 로 편입된다(둘 다 옵셔널·2칸 들여쓰기·단일 줄 프로퍼티형이라
+    // interfaceFields 가 5·6번째로 잡는다 — union 을 여러 줄로 쪼개면 내부 리터럴이 오캡처되니 한 줄
+    // 유지, DraftScreenProps `renderSlotPanel` 선례와 동형). 정당한 계약 확장이라 **목록만 갱신**한다
+    // (삭제 아님 — 이행 체크포인트 B). 순서는 declare 순서 그대로(toEqual 순서 민감).
+    //
+    // TRIP-795 — h10 후보 letter 핀을 위해 `label?: string` 이 additive 로 7번째 편입된다(카드 배지
+    // A/B/C/D 와 시각 일치, 미전달 = 번호 그대로 무회귀). 정당한 계약 플립(이행 체크포인트 B) —
+    // 편입 전엔 6필드라 이 스냅숏이 red(뮤테이션 실측: label 제거 시 red).
     expect(interfaceFields(mapCoreSource, 'MapPin')).toEqual([
       'number',
       'lat',
       'lng',
       'state',
+      'imageUrl',
+      'kind',
+      'label',
     ]);
     // 화면 계약 스냅숏 — 사진을 넣으려고 프롭을 늘리면 여기서 걸린다(이 칸 TRIP-339 의 취지).
     // 필드 추가는 **정당한 계약 변경일 때만** 이 목록을 함께 갱신해 통과시킨다(이행 체크포인트 B).
@@ -358,9 +445,10 @@ describe('S3 · AC-8 — 사진 도입이 화면·계약으로 새지 않았다 
       'pins',
       'dayHeader',
       'canRetry',
-      // TRIP-298 이 더한 강등 스위치 `demoted` 를 TRIP-304 가 단일 폴백 배너 유니온으로 흡수했다
-      // (`fallbackNotice?: FallbackNotice | null`, 01b 결정 3).
-      'fallbackNotice',
+      // TRIP-791 — `fallbackNotice` 필드 삭제(15→14). 폴백·강등 배너가 DraftScreen 곁줄에서
+      // 전용 인터스티셜 화면(GenerationFallbackScreen)으로 승격돼 이 화면은 목록만 남는다(01b D1·D2).
+      // 정당한 계약 플립(뮤테이션 실측: 14 로 고친 뒤 프로퍼티형 필드 하나 더 넣으면 red). 이행
+      // 체크포인트 B — 목록은 계속 갱신(졸업 도달 후에도 스냅숏 유지).
       'onSelectDay',
       'onRetry',
       'onBack',

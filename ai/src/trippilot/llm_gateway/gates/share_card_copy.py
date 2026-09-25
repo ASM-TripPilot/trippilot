@@ -18,6 +18,13 @@ SOFT(랭킹 감점)로 두는데, 그건 계약이 "N회 생성 → 최선 채�
   ④ CAPTION_LEN    캡션 150자 초과 (FE 상한 — 잘린 문장을 미리 막는다)
   ⑤ HASHTAG_COUNT  해시태그 11개 이상 (FE 상한)
   ⑥ HASHTAG_OUT    지역·방문지·브랜드 파생 아닌 태그 (`_tag_allowed` 재사용)
+  ⑦ CONTACTISH     링크·도메인·이메일·전화번호 꼴 (`has_contact_like` 재사용)
+
+⑦만 표시 규칙이 아니라 **프롬프트 인젝션 산출물 방어**다. 캡션은 ①~⑥ 어느 것에도
+걸리지 않고 자유 한국어를 담을 수 있는데, 이 카드는 **앱 밖으로 공유된다** — 받는
+사람은 발신자도 TripPilot 도 의심하지 않는다. 캡션 프롬프트에 실리는 장소명이 웹
+수집분이라(누구나 편집) 링크를 심을 자리가 실재한다. 해시태그 쪽은 ⑥이 이미
+지역·방문지 파생으로 닫아 두었지만, 판정은 캡션과 같은 자리에 둔다.
 
 **③은 모델의 자기 신고를 교차한다** — `places` 배열에 캡션에서 쓴 상호명을 담게 하고
 (프롬프트 규칙), 게이트가 (a) 방문 기록 실재 (b) 캡션 내 실제 등장을 양방향으로 본다.
@@ -39,6 +46,7 @@ from datetime import datetime
 
 from trippilot.llm_gateway.gates.base import (
     GateOutcome,
+    has_contact_like,
     _load_json_object,
     empty_result_error,
 )
@@ -252,4 +260,6 @@ def _text_violations(text: str, label: str) -> list[str]:
     for token in _PLACEHOLDER.findall(text):
         if token not in PLACEHOLDER_VOCAB:
             found.append(f"PLACEHOLDER_OUT: {label}에 어휘 밖 자리표시자 {{{token}}}")
+    if has_contact_like(text):
+        found.append(f"CONTACTISH: {label}에 링크·연락처 꼴")  # ⑦
     return found

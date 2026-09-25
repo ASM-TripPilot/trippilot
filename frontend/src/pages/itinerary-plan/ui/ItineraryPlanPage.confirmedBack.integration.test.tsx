@@ -17,6 +17,10 @@ import { ItineraryPlanPage } from './ItineraryPlanPage';
 /**
  * TRIP-505 — h34 확정 일정에서 **뒤로가기 재배선**(브리프 01 · Seed 01b AC-1·AC-2).
  *
+ * **재작성(TRIP-799 · narrow)**: 미확정(PLANNED) 얼굴이 이제 지도+시트 셸이라 그 얼굴의 뒤로가기는
+ * 셸의 `sheet-daychip-back`(옛 `itinerary-view-back` 아님)이다(★6) — CB2 의 앵커·press 대상만 셸로
+ * 바뀐다. **CONFIRMED 얼굴은 TimelineScreen 유지**라 CB1 은 무변경(back testID·replace 목적지 그대로).
+ *
  * 무엇을 보장하나: 확정(CONFIRMED) 얼굴에서 뒤로가기를 누르면, 생성/확정 흐름 스택으로
  * 되돌아가는 대신 **내 여행 목록**(`/(tabs)/itinerary`)으로 `router.replace` 한다(AC-1). 그리고
  * 그 확정 분기가 **미확정(PLANNED) 경로를 바꾸지 않는다** — PLANNED 뒤로가기는 기존
@@ -82,6 +86,8 @@ function trip(): Trip {
     status: 'PLANNED',
     createdAt: '2026-08-01T10:00:00.000Z',
     updatedAt: '2026-08-01T10:00:00.000Z',
+    baseCount: 0,
+    itineraryDayCount: 0,
   };
 }
 
@@ -183,33 +189,34 @@ function useItinerary(status: ItineraryStatus) {
 }
 
 describe('🔴 CB1 · AC-1 — 확정(CONFIRMED) 뒤로가기는 내 여행 목록으로 replace 한다', () => {
-  it('CONFIRMED 얼굴에서 뒤로가기 press → replace("/(tabs)/itinerary") 1회, back() 미호출', async () => {
-    // 준비 — 일정 200·CONFIRMED → 확정 얼굴. 착지 앵커는 상시 앱바 제목 '확정 일정'(배너는
-    // 이 티켓이 제거하므로 앵커로 못 쓴다 · 02a ★T1). canGoBack 은 true(히스토리 있음).
+  it('CONFIRMED 셸에서 sheet-daychip-back press → replace("/(tabs)/itinerary") 1회, back() 미호출', async () => {
+    // 준비(TRIP-801 플립) — CONFIRMED 가 이제 지도+시트 셸이라(01b D1) 착지 앵커는
+    // `map-sheet-shell-root`(옛 TimelineScreen 앱바 제목 '확정 일정'은 셸엔 없음 · 02a ★2)이고,
+    // 뒤로가기 대상은 셸의 `sheet-daychip-back`(옛 `itinerary-view-back` 아님 · ★1). canGoBack=true.
     useItinerary('CONFIRMED');
     renderPage();
-    await screen.findByText('확정 일정');
+    await screen.findByTestId('map-sheet-shell-root');
 
-    // 실행 — 뒤로가기.
-    fireEvent.press(screen.getByTestId('itinerary-view-back'));
+    // 실행 — 셸 back.
+    fireEvent.press(screen.getByTestId('sheet-daychip-back'));
 
-    // 단언 — 확정 분기는 canGoBack 경로를 타지 않고 곧장 내 여행 목록으로 replace 한다.
-    //   `/(tabs)/itinerary`(목록)는 딥링크 폴백 `/(tabs)`(홈)과 다른 리터럴이다(★T5).
+    // 단언 — 확정 분기는 canGoBack 경로를 타지 않고 곧장 내 여행 목록으로 replace 한다(무변경 계약).
+    //   `/(tabs)/itinerary`(목록)는 딥링크 폴백 `/(tabs)`(홈)과 다른 리터럴이다.
     expect(mockReplace).toHaveBeenCalledWith('/(tabs)/itinerary');
     expect(mockReplace).toHaveBeenCalledTimes(1);
     expect(mockBack).not.toHaveBeenCalled();
   });
 });
 
-describe('🔴 CB2 · AC-2 — 미확정(PLANNED) 뒤로가기는 기존 동작 유지(회귀 방지)', () => {
-  it('PLANNED 얼굴에서 뒤로가기 press → back() 1회, replace 미호출(확정 분기가 안 샌다)', async () => {
-    // 준비 — 일정 200·PLANNED → 편집(listed) 얼굴. 히스토리 있음(canGoBack=true).
+describe('🔴 CB2 · AC-2 — 미확정(PLANNED) 셸 뒤로가기는 기존 동작 유지(회귀 방지)', () => {
+  it('PLANNED 셸에서 sheet-daychip-back press → back() 1회, replace 미호출(확정 분기가 안 샌다)', async () => {
+    // 준비 — 일정 200·PLANNED → 지도+시트 셸 얼굴. 히스토리 있음(canGoBack=true).
     useItinerary('PLANNED');
     renderPage();
-    await screen.findByTestId('itinerary-view-timeline');
+    await screen.findByTestId('map-sheet-shell-root');
 
-    // 실행 — 뒤로가기.
-    fireEvent.press(screen.getByTestId('itinerary-view-back'));
+    // 실행 — ★6 셸 back(sheet-daychip-back) → handleBack.
+    fireEvent.press(screen.getByTestId('sheet-daychip-back'));
 
     // 단언 — canGoBack()=true 라 back(). 확정 분기가 PLANNED 로 새지 않아 replace 는 안 불린다.
     expect(mockBack).toHaveBeenCalledTimes(1);

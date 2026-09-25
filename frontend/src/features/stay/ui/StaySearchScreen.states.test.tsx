@@ -60,6 +60,13 @@ const PRICE_TEXT_BY_EXTERNAL_ID: Record<string, string> = {
   s2: '20,000원~',
 };
 
+// TRIP-725 — 2톤 가격의 bold 노드(접미 "~" 제거). 카드가 bold+"~" 두 형제 Text 로 쪼갠다(AC-2).
+const BOLD_PRICE_BY_EXTERNAL_ID: Record<string, string> = {
+  s3: '30,000원',
+  s1: '10,000원',
+  s2: '20,000원',
+};
+
 /** ITEMS의 1번(서면, 10000)만 price: null로 바꾼 3건 — AC-6 전용. */
 const ITEMS_WITH_NULL: StayItem[] = ITEMS.map((item, index) =>
   index === 1 ? { ...item, price: null } : item
@@ -101,8 +108,8 @@ function hasTokenInSubtree(
 const CURLY_TITLE = (name: string) => `‘${name}’ 필터가 0건을 만들었어요`;
 const CURLY_CLEAR = (name: string) => `‘${name}’ 필터 해제`;
 
-describe('StaySearchScreen — loading (AC-1)', () => {
-  it('안내 라벨·스켈레톤 2장이 뜨고, 서브헤더에 개수가 없으며, 카드는 0장이다', () => {
+describe('StaySearchScreen — loading (AC-1 · TRIP-726 AC-L1′·L3)', () => {
+  it('안내 라벨·스켈레톤 4장(카드 틀)이 뜨고, 서브헤더에 개수가 없으며, 카드는 0장이다', () => {
     const state: StaySearchState = { kind: 'loading' };
     render(<StaySearchScreen region="부산" items={[]} state={state} />);
 
@@ -111,7 +118,9 @@ describe('StaySearchScreen — loading (AC-1)', () => {
         '숙소를 모으는 중'
       )
     ).toBeOnTheScreen();
-    expect(screen.queryAllByTestId(/^stay-search-skeleton-/)).toHaveLength(2);
+    // AC-L3(동결 갱신) — 스켈레톤 2→4(01b 오버라이드: 세로형 유지 + 4장). 구 계약(2)이 살아 있으면
+    // 4장 구현이 red 없이 통과하는 것을 막는 갱신이다(브리프 맹점⑤).
+    expect(screen.queryAllByTestId(/^stay-search-skeleton-/)).toHaveLength(4);
     // toHaveTextContent(문자열)은 완전 일치다(§5 ★3) — 이 한 줄이 "곳이 없다"까지 겸한다.
     expect(screen.getByTestId('stay-search-header')).toHaveTextContent(
       '부산 · 날짜 미정'
@@ -127,6 +136,18 @@ describe('StaySearchScreen — loading (AC-1)', () => {
         'bg-surface-strong'
       )
     ).toBe(true);
+    // AC-L1′(01b 오버라이드) — 각 스켈레톤을 카드 틀(border-hairline + rounded-card)로 감싼다.
+    // soft shadow 는 style prop(#000000, raw-hex 스캔 밖)이라 룩은 6-b/831 몫 — 여기선 단언하지 않는다.
+    expect(classTokens(screen.getByTestId('stay-search-skeleton-0'))).toEqual(
+      expect.arrayContaining(['border-hairline', 'rounded-card'])
+    );
+    // AC-L1′ 세로형 잠금(5-b code-critic 참고-1) — 이 사이클의 핵심 결정은 "세로 유지"인데 방향을
+    // 무는 심판이 없었다(카드 바깥 View 에 flex-row 만 넣으면 5스위트 전부 green). RN View 기본이
+    // column 이라 세로의 표식은 flex-row 의 **부재**다. 위 arrayContaining 이 실토큰(border-hairline)
+    // 존재로 "옳은 엘리먼트를 읽는다"를 보장하므로 이 부정 단언은 공허하지 않다(뮤테이션으로 실측).
+    expect(
+      classTokens(screen.getByTestId('stay-search-skeleton-0'))
+    ).not.toContain('flex-row');
   });
 });
 
@@ -192,6 +213,13 @@ describe('StaySearchScreen — empty 수동 등록 유도 (AC-3)', () => {
         'stay-search-register'
       )
     ).toBeNull();
+
+    // AC-E1(TRIP-726) — 등록 유도 카드를 흰 카드 틀(border-hairline + rounded-card)로 감싼다.
+    // 틀 클래스는 testID 엘리먼트(stay-search-register)에 얹힌다(StateNotice·EmptyBlock 선례 동형 —
+    // 별도 래퍼 View 에 얹지 않는다, §5 실검증). 내용·testID·콜백은 위 단언들이 무회귀를 잠근다.
+    expect(classTokens(reg)).toEqual(
+      expect.arrayContaining(['border-hairline', 'rounded-card'])
+    );
   });
 });
 
@@ -295,13 +323,15 @@ describe('StaySearchScreen — partial에서도 가격 규칙 유지 (AC-6 · BR
     const nullItem = ITEMS_WITH_NULL[1];
     const nullCard = screen.getByTestId(`stay-card-${stayKey(nullItem)}`);
     expect(within(nullCard).getByText('가격 미확인')).toBeOnTheScreen();
+    expect(within(nullCard).queryByText('~')).toBeNull();
 
-    // 나머지 두 카드는 금액 문자열이 그대로 남아 있다 — null 처리가 옆 카드로 새지 않는다.
+    // 나머지 두 카드는 2톤 금액(bold+"~")이 그대로 남는다 — null 처리가 옆 카드로 안 샌다.
     [ITEMS_WITH_NULL[0], ITEMS_WITH_NULL[2]].forEach((item) => {
       const card = screen.getByTestId(`stay-card-${stayKey(item)}`);
       expect(
-        within(card).getByText(PRICE_TEXT_BY_EXTERNAL_ID[item.externalId])
+        within(card).getByText(BOLD_PRICE_BY_EXTERNAL_ID[item.externalId])
       ).toBeOnTheScreen();
+      expect(within(card).getByText('~')).toBeOnTheScreen();
     });
 
     expect(screen.getByTestId('stay-search-partialfailure')).toBeOnTheScreen();
@@ -396,7 +426,10 @@ describe('StaySearchScreen — default 회귀 (AC-9, 선제 green이 정상)', (
     expect(screen.getByTestId('stay-search-header')).toHaveTextContent(
       '부산 · 날짜 미정 · 3곳'
     );
-    expect(screen.getByTestId('stay-search-fab')).toBeOnTheScreen();
+    // TRIP-725 — default 얼굴에도 2단 원형 FAB 2개가 그대로 뜨고, 옛 알약 FAB 은 없다.
+    expect(screen.getByTestId('stay-search-fab-saved')).toBeOnTheScreen();
+    expect(screen.getByTestId('stay-search-fab-register')).toBeOnTheScreen();
+    expect(screen.queryByTestId('stay-search-fab')).toBeNull();
 
     // 새 상태 UI가 default로 새지 않는다(부정 4개) — 동결 파일은 이 testID들이 그때
     // 없었으므로 이 단언을 가질 수 없었다. 이 it이 "기본값이 정말 default 얼굴인가"를

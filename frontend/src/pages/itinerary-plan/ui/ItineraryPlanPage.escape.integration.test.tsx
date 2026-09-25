@@ -30,6 +30,12 @@ import { ItineraryPlanPage } from './ItineraryPlanPage';
  *
  * 얼굴은 훅이 아니라 **실 HTTP로** 강제한다(02a ★2) — 훅을 목하면 얼굴 판정이 테스트의 가정이 되어
  * 그 판정 회귀를 아무도 못 본다. loading은 `delay('infinite')`로 두 GET을 영영 pending시킨다.
+ *
+ * **재작성(TRIP-799 · narrow)**: listed(PLANNED) 얼굴이 이제 지도+시트 셸이라 그 얼굴의 뒤로가기는
+ * DayChipOverlay 의 `sheet-daychip-back`(옛 `itinerary-view-back` 아님)이고, 본체 앵커는
+ * `map-sheet-shell-root` 다(★6). **loading·notFound·failed 얼굴은 여전히 PlanFace/PlanAppBar**라
+ * 그쪽 뒤로가기는 `itinerary-view-back` 그대로 — 셸 back 과 PlanFace back 의 testID 가 갈린 것이
+ * narrow 경계다. AC-5a·5b·6 은 셸 testID 로, AC-7 은 settle 후 앵커만 셸로 바뀐다(AC-1~4 무변경).
  */
 
 // listed 얼굴이 KakaoMapView를 마운트하므로 얇은 가짜로 렌더 노이즈를 없앤다(관심사는 지도가
@@ -80,6 +86,8 @@ function trip(): Trip {
     status: 'PLANNED',
     createdAt: '2026-08-01T10:00:00.000Z',
     updatedAt: '2026-08-01T10:00:00.000Z',
+    baseCount: 0,
+    itineraryDayCount: 0,
   };
 }
 
@@ -269,47 +277,48 @@ describe('🔴 AC-4 · 딥링크(히스토리 없음) — 침묵 no-op 금지, �
   });
 });
 
-describe('AC-5a · listed 뒤로가기 무회귀 (선제 green)', () => {
-  it('완성 일정이 있는 얼굴의 기존 뒤로가기가 계속 이전 화면으로 간다', async () => {
-    // 준비 — 두 조회 성공 → 시간표(listed) 얼굴.
+describe('🔴 AC-5a · listed(PLANNED) 셸 뒤로가기 — 히스토리 있으면 이전 화면으로', () => {
+  it('셸의 sheet-daychip-back 을 누르면 router.back()으로 이어진다', async () => {
+    // 준비 — 두 조회 성공(PLANNED) → 지도+시트 셸 얼굴.
     useItineraryListed();
     renderPage();
-    await screen.findByTestId('itinerary-view-timeline');
+    await screen.findByTestId('map-sheet-shell-root');
 
-    // 실행 + 단언 — 히스토리 있으면 back(무회귀).
-    fireEvent.press(screen.getByTestId('itinerary-view-back'));
+    // 실행 + 단언 — ★6 셸 back(sheet-daychip-back) → handleBack → 히스토리 있으면 back(무회귀).
+    fireEvent.press(screen.getByTestId('sheet-daychip-back'));
     expect(mockBack).toHaveBeenCalledTimes(1);
     expect(mockReplace).not.toHaveBeenCalled();
   });
 });
 
-describe('🔴 AC-5b · listed 딥링크 사각 봉합 — 공통 handleBack이라 이 얼굴도 홈 폴백', () => {
-  it('listed 얼굴에서도 canGoBack()===false면 홈(/(tabs))으로 replace한다', async () => {
-    // 준비 — listed + 히스토리 없음(기존은 맨 router.back()이라 조용히 무동작이던 자리).
+describe('🔴 AC-5b · listed 딥링크 사각 봉합 — 공통 handleBack이라 셸 얼굴도 홈 폴백', () => {
+  it('셸에서도 canGoBack()===false면 홈(/(tabs))으로 replace한다', async () => {
+    // 준비 — listed(PLANNED) 셸 + 히스토리 없음.
     useItineraryListed();
     mockCanGoBack.mockReturnValue(false);
     renderPage();
-    await screen.findByTestId('itinerary-view-timeline');
+    await screen.findByTestId('map-sheet-shell-root');
 
     // 실행 + 단언.
-    fireEvent.press(screen.getByTestId('itinerary-view-back'));
+    fireEvent.press(screen.getByTestId('sheet-daychip-back'));
     expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
     expect(mockBack).not.toHaveBeenCalled();
   });
 });
 
-describe('AC-6 · listed 본체 무회귀 (선제 green)', () => {
-  it('인라인 지도·지도 크게 보기·시간표 카드·확정 CTA가 현행 그대로 있다', async () => {
-    // 준비 — listed 얼굴.
+describe('🔴 AC-6 · listed(PLANNED) 본체 = 지도+시트 셸 (옛 timeline 앵커 소멸)', () => {
+  it('셸 본체·CTA가 뜨고 옛 TimelineScreen listed 앵커는 사라진다', async () => {
+    // 준비 — listed(PLANNED) 얼굴.
     useItineraryListed();
     renderPage();
-    await screen.findByTestId('itinerary-view-timeline');
+    await screen.findByTestId('map-sheet-shell-root');
 
-    // 단언 — onBack 배선 교체가 본체 표면을 안 부순다(세그먼트 토글은 이미 없음 — TRIP-354 폐기).
-    expect(screen.getByTestId('itinerary-view-map')).toBeOnTheScreen();
-    expect(screen.getByTestId('itinerary-map-expand')).toBeOnTheScreen();
-    expect(screen.getByTestId('itinerary-view-timeline')).toBeOnTheScreen();
-    expect(screen.getByTestId('itinerary-confirm-cta')).toBeOnTheScreen();
+    // 단언 — PLANNED 본체는 셸이다(narrow). 옛 인라인 지도·지도 크게 보기·시간표·확정 CTA testID 소멸.
+    expect(screen.getByTestId('sheet-cta-root')).toBeOnTheScreen();
+    expect(screen.queryByTestId('itinerary-view-timeline')).toBeNull();
+    expect(screen.queryByTestId('itinerary-view-map')).toBeNull();
+    expect(screen.queryByTestId('itinerary-map-expand')).toBeNull();
+    expect(screen.queryByTestId('itinerary-confirm-cta')).toBeNull();
   });
 });
 
@@ -321,12 +330,13 @@ describe('🔴 AC-7 · loading 얼굴 뒤로가기 — 조회가 걸려도 갇�
     useItineraryListed();
     renderPage();
 
-    // 얼굴 증명 — settle 전이라 다른 3얼굴은 없다(부재는 queryAll, getAll은 0건에서 throw). loading임.
-    expect(screen.queryAllByTestId('itinerary-view-timeline')).toEqual([]);
+    // 얼굴 증명 — settle 전이라 다른 얼굴은 없다(부재는 queryAll, getAll은 0건에서 throw). loading임.
+    // narrow: settle 후 PLANNED 는 셸이므로 loading 중엔 셸(map-sheet-shell-root)도 아직 없다.
+    expect(screen.queryAllByTestId('map-sheet-shell-root')).toEqual([]);
     expect(screen.queryAllByTestId('itinerary-view-notfound')).toEqual([]);
     expect(screen.queryAllByTestId('itinerary-view-failed')).toEqual([]);
 
-    // 실행 — loading 얼굴의 뒤로가기를 지금(settle 전) 누른다. 현행 loading은 빈 View라 여기서 throw.
+    // 실행 — loading 얼굴의 뒤로가기(PlanAppBar, itinerary-view-back — 무변경)를 지금(settle 전) 누른다.
     fireEvent.press(screen.getByTestId('itinerary-view-back'));
 
     // 단언 — 히스토리 있으니 back().
@@ -334,6 +344,7 @@ describe('🔴 AC-7 · loading 얼굴 뒤로가기 — 조회가 걸려도 갇�
     expect(mockReplace).not.toHaveBeenCalled();
 
     // 정리 — 쿼리를 settle시켜 teardown의 dangling promise/act 경고를 없앤다(단언 아님).
-    await screen.findByTestId('itinerary-view-timeline');
+    //   settle 후 PLANNED 는 셸이라 앵커를 셸 루트로 바꾼다(narrow).
+    await screen.findByTestId('map-sheet-shell-root');
   });
 });

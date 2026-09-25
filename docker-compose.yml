@@ -82,6 +82,12 @@ services:
       # 리마인드 문구 AI 채움(TRIP-836). 기본 off = 상수 문구. http 로 켜면 예약 적재 시 AI 를 부른다.
       AI_REMINDER_COPY_MODE: ${AI_REMINDER_COPY_MODE:-off}
       TRIPPILOT_AI_SCHEDULE_BASE_URL: ${AI_URL:-http://ai:8000}
+      # 회고 AI 경계(O-U5-6). **통로가 없어서 로컬에서는 켤 방법이 아예 없었다** — 배포(Helm)만
+      # http 를 박고 있어, 운영에서만 항상 켜진 경로를 한 번도 로컬에서 검증할 수 없었다.
+      # base-url 도 같이 연다: 기본값이 localhost:8000 이라 mode 만 켜면 컨테이너가 자기 자신을
+      # 부른다(= 켠 것처럼 보이고 규칙 카드로 조용히 폴백). 일정 경계와 같은 꼴이다(DEC-U5-5).
+      TRIPPILOT_AI_REFLECTION_MODE: ${AI_REFLECTION_MODE:-rule}
+      TRIPPILOT_AI_REFLECTION_BASE_URL: ${AI_URL:-http://ai:8000}
       # 시간제약(day1 5s / 전체 20s)을 AI 에 실을지. **기본 off** — FE 연동 기간에는 시간 때문에
       # 규칙 폴백으로 강등되는 것을 걷어낸다(TRIP-474). 9월 재도입은 여기를 true 로(TRIP-475).
       TRIPPILOT_AI_SCHEDULE_DEADLINE_ENFORCED: ${AI_SCHEDULE_DEADLINE_ENFORCED:-false}
@@ -97,12 +103,24 @@ services:
       KAKAO_CLIENT_SECRET: ${KAKAO_CLIENT_SECRET:-}
       NAVER_CLIENT_ID: ${NAVER_CLIENT_ID:-}
       NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET:-}
+      # Apple 은 시크릿이 없다 — id_token 서명을 JWKS 로 검증할 뿐이라 iOS 번들 ID 하나뿐이다(TRIP-858).
+      # 이 값이 없으면 애플 로그인은 401 이 아니라 501(미지원)로 나간다.
+      APPLE_CLIENT_ID: ${APPLE_CLIENT_ID:-}
+      # 계정 파기 때 Apple 토큰 revoke(TRIP-933). 비면 revoke 만 건너뛴다 — 로그인은 그대로 된다.
+      APPLE_TEAM_ID: ${APPLE_TEAM_ID:-}
+      APPLE_KEY_ID: ${APPLE_KEY_ID:-}
+      APPLE_PRIVATE_KEY: ${APPLE_PRIVATE_KEY:-}
+      SOCIAL_TOKEN_ENCRYPTION_KEY: ${SOCIAL_TOKEN_ENCRYPTION_KEY:-}
       # 지역 지오코딩 경계(국내강제). 기본 스텁은 시드 8개만 국내로 안다 —
       # 실 지역명으로 여행을 만들려면 kakao 로 켠다(키는 위 KAKAO_CLIENT_ID 를 그대로 쓴다).
       TRIPPILOT_PLACE_GEOCODE_MODE: ${PLACE_GEOCODE_MODE:-stub}
       # 숙소 콘텐츠 경로. 기본 스텁은 **제주 5곳뿐**이라 다른 지역 검색이 전부 0건이 된다 —
       # 전국 정본(stay 12,782곳)으로 돌리려면 db 로 켠다.
-      TRIPPILOT_STAY_CONTENT_MODE: ${STAY_CONTENT_MODE:-stub}
+      # 기본을 db 로 둔다 — compose 는 Flyway 가 기동 때 도는 환경이라 정본(12,782곳)이
+      # 항상 채워져 있다. 스텁(제주 5곳)이 남아 있을 이유는 **시드 없는 환경**뿐인데
+      # 여기는 그 경우가 아니다. `.env` 를 안 만든 사람이 제주 5곳만 보고 원인을 찾아
+      # 헤매는 쪽이 더 비싸다.
+      TRIPPILOT_STAY_CONTENT_MODE: ${STAY_CONTENT_MODE:-db}
       # 푸시 발송기(TRIP-834). **기본 off** — 켜지 않으면 LoggingPushAdapter 가 물려 아무 데도
       # 안 보내면서 성공을 보고한다(실패로 보고하면 진짜 실패가 묻히므로 그 판단 자체는 옳다).
       # 그 상태가 기본이라는 것을 **여기서 보이게** 두는 것이 이 줄의 목적이다 — 통로가 없으면
@@ -167,6 +185,10 @@ services:
       # 앱은 TRIPPILOT_* 만 읽는다. 이 통로가 빠지면 .env 에 값을 넣어도 조용히 무시된다.
       TRIPPILOT_LOCAL_LLM_BASE_URL: ${AI_LOCAL_LLM_BASE_URL:-}
       TRIPPILOT_LOCAL_LLM_API_KEY: ${AI_LOCAL_LLM_API_KEY:-}
+      # 학생 모델 실서비스 경로(Bedrock Custom Model Import). 위 BASE_URL 과
+      # 둘 다 있으면 ARN 이 이긴다 — main.py::_local_route.
+      TRIPPILOT_BEDROCK_MODEL_ARN: ${AI_BEDROCK_MODEL_ARN:-}
+      TRIPPILOT_BEDROCK_REGION: ${AI_BEDROCK_REGION:-}
       # LLM 요청당 비용 집계(#486)의 단가표 경로. **이 통로가 없어서** 컨테이너에서
       # 집계가 통째로 꺼져 있었다 — load_prices 가 None 을 돌려주면 llm_cost 로그 자체가
       # 안 나간다. 기능이 죽는 게 아니라 "얼마 썼는지 안 보이는" 형태라 증상이 없다
@@ -194,6 +216,8 @@ services:
       # verify() 1회당 호출 상한. 검증 대상 상위 50건보다 넉넉히(기본 60) —
       # 실질 제한은 마감 1.5s 다.
       EXISTENCE_MAX_CALLS: ${EXISTENCE_MAX_CALLS:-60}
+      # 로그 레벨 (TRIP-914) — 미설정이면 INFO. 미지원 값은 기동 실패다(조용한 기본값 금지).
+      TRIPPILOT_LOG_LEVEL: ${TRIPPILOT_LOG_LEVEL:-}
       # PlanB RAG 벡터 스토어(TRIP-426) — 미설정 = 미배선(경계 개통은 TRIP-428).
       # 컨테이너 안에서는 ai-vectordb 호스트로 해석된다.
       TRIPPILOT_VECTOR_DB_URL: ${AI_VECTOR_DB_URL:-}
@@ -269,6 +293,11 @@ services:
     profiles: ["full"]
     image: pgvector/pgvector:pg16
     container_name: trippilot-ai-vectordb
+    # 실측(2026-09-12): kb_vectors 121행 = 904kB, 컨테이너 상주 57MiB. 1g 는 데이터
+    # 대비 과할 만큼의 여유다. 한도가 없으면 postgres 가 shared_buffers + work_mem×
+    # 연결수로 늘어나 호스트를 압박하고, 커널 OOM killer 는 같은 호스트에서 가장 큰
+    # ai-embedding(5g)을 먼저 죽인다 — 벡터 DB 가 부풀어 임베딩이 죽는 형태가 된다.
+    mem_limit: 1g
     environment:
       POSTGRES_DB: ai_kb
       POSTGRES_USER: ${AI_VECTOR_DB_USER:-ai_kb}

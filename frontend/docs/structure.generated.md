@@ -3,37 +3,55 @@
 # 구조 인벤토리 (자동 생성)
 
 ## __mocks__/@gorhom/
-- `__mocks__/@gorhom/bottom-sheet.tsx`  →  BottomSheet · BottomSheetModal · BottomSheetView · BottomSheetModalProvider · BottomSheetBackdrop · BottomSheetScrollView · useBottomSheetModal
+- `__mocks__/@gorhom/bottom-sheet.tsx`  →  BottomSheet · BottomSheetModal · BottomSheetView · BottomSheetModalProvider · BottomSheetBackdrop · BottomSheetScrollView · BottomSheetFlatList · useBottomSheetModal
 
 ## __mocks__/@mj-studio/
-- `__mocks__/@mj-studio/react-native-naver-map.tsx`  →  NaverMapView · NaverMapMarkerOverlay · NaverMapPathOverlay
+- `__mocks__/@mj-studio/react-native-naver-map.tsx`  →  NaverMapView · NaverMapMarkerOverlay · NaverMapPathOverlay · NaverMapCircleOverlay
 
 ## __mocks__/
-- `__mocks__/react-native-draggable-flatlist.tsx`  →  ScaleDecorator · OpacityDecorator · ShadowDecorator · NestableDraggableFlatList · NestableScrollContainer
+- `__mocks__/expo-notifications.ts`  →  getPermissionsAsync · requestPermissionsAsync · getExpoPushTokenAsync · setNotificationChannelAsync · AndroidImportance
+- `__mocks__/react-native-draggable-flatlist.tsx`  →  __dragLog · ScaleDecorator · OpacityDecorator · ShadowDecorator · NestableDraggableFlatList · NestableScrollContainer
 
 ## src/__tests__/
+- `src/__tests__/affiliateNoticeOneTruth.integration.test.tsx`  →  (export 없음)
+- `src/__tests__/authSheetHandleStructure.test.ts`  →  (export 없음)
 - `src/__tests__/budgetEditSheetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/companionEditSheetStructure.test.ts`  →  (export 없음)
+- `src/__tests__/deleteAccountDialogGate.test.ts`  →  (export 없음)
 - `src/__tests__/deletionScopeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/design-tokens.test.ts`  →  (export 없음)
 - `src/__tests__/destinationEditSheetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/devPreview.test.tsx`  →  (export 없음)
+- `src/__tests__/devPreviewAffiliateNotice.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewBandNav.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewBandSort.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewDeepLink.test.tsx`  →  (export 없음)
-- `src/__tests__/devPreviewDraft.test.tsx`  →  (export 없음)
+- `src/__tests__/devPreviewDeleteDialog.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewExplore.test.tsx`  →  (export 없음)
+- `src/__tests__/devPreviewExploreLanding.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewHome.test.tsx`  →  (export 없음)
+- `src/__tests__/devPreviewLiveHub.test.tsx`  →  (export 없음)
+- `src/__tests__/devPreviewLocationConsent.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewMap.test.tsx`  →  (export 없음)
+- `src/__tests__/devPreviewMapFallback.test.tsx`  →  (export 없음)
+- `src/__tests__/devPreviewMyPage.test.tsx`  →  (export 없음)
+- `src/__tests__/devPreviewMyStays.test.tsx`  →  (export 없음)
+- `src/__tests__/devPreviewNotificationInbox.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewPref.test.tsx`  →  (export 없음)
+- `src/__tests__/devPreviewReleaseGate.test.tsx`  →  (export 없음)
+- `src/__tests__/devPreviewSettingsDefault.test.tsx`  →  (export 없음)
+- `src/__tests__/devPreviewSheetSnap.test.tsx`  →  (export 없음)
+- `src/__tests__/devPreviewStayRecommend.test.tsx`  →  (export 없음)
 - `src/__tests__/editSheetBackdropStructure.test.ts`  →  (export 없음)
 - `src/__tests__/editSheetHandleStructure.test.ts`  →  (export 없음)
+- `src/__tests__/editorWidgetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/entitiesItinerarySlotConsumers.test.ts`  →  (export 없음)
 - `src/__tests__/entitiesItinerarySlotStructure.test.ts`  →  (export 없음)
 - `src/__tests__/entitiesPlaceConsumers.test.ts`  →  (export 없음)
 - `src/__tests__/entitiesPlaceStructure.test.ts`  →  (export 없음)
 - `src/__tests__/entitiesStayConsumers.test.ts`  →  (export 없음)
 - `src/__tests__/entitiesStayStructure.test.ts`  →  (export 없음)
+- `src/__tests__/entitiesStyleAnalysisStructure.test.ts`  →  (export 없음)
 - `src/__tests__/entitiesTripConsumers.test.ts`  →  (export 없음)
 - `src/__tests__/entitiesTripStructure.test.ts`  →  (export 없음)
 - `src/__tests__/executionDurationStructure.test.ts`  →  (export 없음)
@@ -54,20 +72,25 @@
 - `src/__tests__/itineraryMethodStructure.test.ts`  →  (export 없음)
 - `src/__tests__/itineraryMustVisitStructure.test.ts`  →  (export 없음)
 - `src/__tests__/itineraryTimeStructure.test.ts`  →  (export 없음)
+- `src/__tests__/liveHubRoute.test.tsx`  →  (export 없음)
+- `src/__tests__/liveHubStructure.test.ts`  →  (export 없음)
 - `src/__tests__/liveLocationRoute.test.tsx`  →  (export 없음)
-- `src/__tests__/liveMapStructure.test.ts`  →  (export 없음)
 - `src/__tests__/liveTimeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/locationConsentPutBodyOwnership.test.ts`  →  (export 없음)
 - `src/__tests__/loginVisual.test.ts`  →  (export 없음)
 - `src/__tests__/magazineRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/mapBridgeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/mapSheetShellStructure.test.ts`  →  (export 없음)
+- `src/__tests__/monthGridSharedPromotion.test.ts`  →  (export 없음)
 - `src/__tests__/myStaysStructure.test.ts`  →  (export 없음)
 - `src/__tests__/nicknameSharedPromotion.test.ts`  →  (export 없음)
+- `src/__tests__/noDeadHandlers.test.ts`  →  (export 없음)
 - `src/__tests__/noMswInStaticGraph.test.ts`  →  (export 없음)
 - `src/__tests__/noStepCountStructure.test.ts`  →  (export 없음)
+- `src/__tests__/notFoundRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/notificationDurationStructure.test.ts`  →  (export 없음)
 - `src/__tests__/notificationKindGuard.test.tsx`  →  (export 없음)
+- `src/__tests__/notificationSettingsParityStructure.test.ts`  →  (export 없음)
 - `src/__tests__/notificationStructure.test.ts`  →  (export 없음)
 - `src/__tests__/onboardingEntryGuard.test.tsx`  →  (export 없음)
 - `src/__tests__/onboardingPrefRoutes.test.tsx`  →  (export 없음)
@@ -81,41 +104,49 @@
 - `src/__tests__/placeDetailStubRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/placeExploreStateStructure.test.ts`  →  (export 없음)
 - `src/__tests__/placeExploreStructure.test.ts`  →  (export 없음)
+- `src/__tests__/planbAppliedStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbApplyStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbDiffRoute.test.tsx`  →  (export 없음)
+- `src/__tests__/planbEditUnifyStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbManualRoute.test.tsx`  →  (export 없음)
-- `src/__tests__/planbManualStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbReplanDraftStructure.test.ts`  →  (export 없음)
+- `src/__tests__/planbRequestRoute.test.tsx`  →  (export 없음)
+- `src/__tests__/planbRequestSheetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbSafeAreaStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbScopeStructure.test.ts`  →  (export 없음)
+- `src/__tests__/planbSolvingStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbTriggerKindStructure.test.ts`  →  (export 없음)
-- `src/__tests__/planbTriggersRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/recordAttributionStructure.test.ts`  →  (export 없음)
 - `src/__tests__/recordPhotoBinaryGuard.test.ts`  →  (export 없음)
 - `src/__tests__/recordsCalendarStructure.test.ts`  →  (export 없음)
-- `src/__tests__/recordsCompareStructure.test.ts`  →  (export 없음)
 - `src/__tests__/recordsDurationStructure.test.ts`  →  (export 없음)
+- `src/__tests__/recordsMapMarkersStructure.test.ts`  →  (export 없음)
 - `src/__tests__/recordsStructure.test.ts`  →  (export 없음)
+- `src/__tests__/reflectionDailyStructure.test.ts`  →  (export 없음)
 - `src/__tests__/reflectionFallbackStructure.test.ts`  →  (export 없음)
 - `src/__tests__/reflectionStructure.test.ts`  →  (export 없음)
 - `src/__tests__/reflectionSummaryStructure.test.ts`  →  (export 없음)
 - `src/__tests__/regionCatalogStructure.test.ts`  →  (export 없음)
+- `src/__tests__/releaseBuildConfig.test.ts`  →  (export 없음)
+- `src/__tests__/riskSheetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/rootLayout.test.tsx`  →  (export 없음)
 - `src/__tests__/rootLayoutQueryProvider.test.tsx`  →  (export 없음)
 - `src/__tests__/rootLayoutSafeArea.test.tsx`  →  (export 없음)
 - `src/__tests__/savedPlacesStructure.test.ts`  →  (export 없음)
 - `src/__tests__/savedStaysStructure.test.ts`  →  (export 없음)
+- `src/__tests__/seoulTodayStructure.test.ts`  →  (export 없음)
 - `src/__tests__/settingsBoundary.test.ts`  →  (export 없음)
 - `src/__tests__/shareCardStructure.test.ts`  →  (export 없음)
+- `src/__tests__/sharedToggleStructure.test.ts`  →  (export 없음)
 - `src/__tests__/sharedUiStructure.test.ts`  →  (export 없음)
 - `src/__tests__/socialSdkConfigPlugin.test.ts`  →  (export 없음)
 - `src/__tests__/socialSdkSecrets.test.ts`  →  (export 없음)
 - `src/__tests__/stayDetailStructure.test.ts`  →  (export 없음)
+- `src/__tests__/stayRecommendStructure.test.ts`  →  (export 없음)
 - `src/__tests__/stayRegisterStructure.test.ts`  →  (export 없음)
 - `src/__tests__/staySearchGenerated.test.ts`  →  (export 없음)
 - `src/__tests__/staySearchStructure.test.ts`  →  (export 없음)
 - `src/__tests__/staySelectSheetStructure.test.ts`  →  (export 없음)
-- `src/__tests__/syncQueueIdempotency.test.ts`  →  (export 없음)
 - `src/__tests__/tabbarOverlay.test.ts`  →  (export 없음)
 - `src/__tests__/tabbarVisual.test.ts`  →  (export 없음)
 - `src/__tests__/tabsExploreRoute.test.tsx`  →  (export 없음)
@@ -127,6 +158,8 @@
 - `src/__tests__/tabsMyRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/tabsRecordsRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/tabsShell.test.tsx`  →  (export 없음)
+- `src/__tests__/termsRoutes.test.tsx`  →  (export 없음)
+- `src/__tests__/travelStyleParityStructure.test.ts`  →  (export 없음)
 - `src/__tests__/travelStyleStructure.test.ts`  →  (export 없음)
 - `src/__tests__/tripBudgetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/tripDraftBoundary.test.ts`  →  (export 없음)
@@ -162,6 +195,9 @@
 - `src/app/(tabs)/itinerary.tsx`  →  (export 없음)
 - `src/app/(tabs)/my.tsx`  →  (export 없음)
 - `src/app/(tabs)/records.tsx`  →  (export 없음)
+
+## src/app/
+- `src/app/+not-found.tsx`  →  (export 없음)
 
 ## src/app/_dev/
 - `src/app/_dev/preview.tsx`  →  MUST_VISIT_THUMBNAILS · PREVIEW_STATES
@@ -209,10 +245,12 @@
 - `src/app/stays/register.tsx`  →  (export 없음)
 - `src/app/stays/saved.tsx`  →  (export 없음)
 
+## src/app/terms/
+- `src/app/terms/[termsType].tsx`  →  (export 없음)
+
 ## src/app/trips/[tripId]/itinerary/copick/
 - `src/app/trips/[tripId]/itinerary/copick/[slotKey].tsx`  →  (export 없음)
 - `src/app/trips/[tripId]/itinerary/copick/complete.tsx`  →  (export 없음)
-- `src/app/trips/[tripId]/itinerary/copick/index.tsx`  →  (export 없음)
 
 ## src/app/trips/[tripId]/itinerary/
 - `src/app/trips/[tripId]/itinerary/draft.tsx`  →  (export 없음)
@@ -231,6 +269,9 @@
 - `src/app/trips/[tripId]/itinerary/must-visits/[poiId].tsx`  →  (export 없음)
 - `src/app/trips/[tripId]/itinerary/must-visits/index.tsx`  →  (export 없음)
 
+## src/app/trips/[tripId]/itinerary/
+- `src/app/trips/[tripId]/itinerary/stay-recommend.tsx`  →  (export 없음)
+
 ## src/app/trips/[tripId]/live/
 - `src/app/trips/[tripId]/live/index.tsx`  →  (export 없음)
 - `src/app/trips/[tripId]/live/location.tsx`  →  (export 없음)
@@ -244,10 +285,8 @@
 - `src/app/trips/[tripId]/planb/index.tsx`  →  (export 없음)
 - `src/app/trips/[tripId]/planb/manual.tsx`  →  (export 없음)
 - `src/app/trips/[tripId]/planb/solving.tsx`  →  (export 없음)
-- `src/app/trips/[tripId]/planb/triggers.tsx`  →  (export 없음)
 
 ## src/app/trips/[tripId]/records/
-- `src/app/trips/[tripId]/records/compare.tsx`  →  (export 없음)
 - `src/app/trips/[tripId]/records/index.tsx`  →  (export 없음)
 
 ## src/app/trips/[tripId]/records/reflection/
@@ -267,18 +306,21 @@
 
 ## src/entities/itinerary-slot/lib/
 - `src/entities/itinerary-slot/lib/categoryPlaceholder.ts`  →  CategoryPlaceholder · resolveCategoryPlaceholder
+- `src/entities/itinerary-slot/lib/endsNextDay.ts`  →  deriveEndsNextDay
+- `src/entities/itinerary-slot/lib/openingHoursLabel.ts`  →  formatOpeningHoursLabel
 - `src/entities/itinerary-slot/lib/slotKey.ts`  →  buildSlotKey · ParsedSlotKey · parseSlotKey · SlotKeySet · buildSlotKeys
 - `src/entities/itinerary-slot/lib/slotMapPin.ts`  →  SlotProgressState · StatePinInput · toMapPinState · buildStatePins
 
 ## src/entities/itinerary-slot/model/
-- `src/entities/itinerary-slot/model/index.ts`  →  SlotBadgeKind · ReplanSlotVM · PoiCategory
+- `src/entities/itinerary-slot/model/index.ts`  →  ReplanSlotTone · ReplanSlotVM · PoiCategory
 
 ## src/entities/itinerary-slot/ui/
 - `src/entities/itinerary-slot/ui/PoiSlotCard.tsx`  →  PoiSlotCardVariant · PoiSlotCardProps · PoiSlotCard
 - `src/entities/itinerary-slot/ui/ReplanSlotRow.tsx`  →  ReplanSlotRowProps · ReplanSlotRow
-- `src/entities/itinerary-slot/ui/SlotGlyphs.tsx`  →  CategoryPinGlyph · CategoryForkKnifeGlyph · CategoryCupGlyph · CategoryNightGlyph · CategoryTreeGlyph · CategoryShoppingBagGlyph · CategoryBuildingGlyph · CategoryImageGlyph · ChevronRightGlyph · ClockGlyph · LockGlyph
+- `src/entities/itinerary-slot/ui/SlotGlyphs.tsx`  →  CategoryPinGlyph · CategoryForkKnifeGlyph · CategoryCupGlyph · CategoryNightGlyph · CategoryTreeGlyph · CategoryShoppingBagGlyph · CategoryBuildingGlyph · CategoryImageGlyph · ChevronRightGlyph · ClockGlyph · LockGlyph · PhotoGlyph · MemoGlyph · CheckGlyph
 - `src/entities/itinerary-slot/ui/SlotPhotoPlaceholder.tsx`  →  SlotPhotoPlaceholderProps · SlotPhotoPlaceholder
-- `src/entities/itinerary-slot/ui/SlotStopCard.tsx`  →  SlotStopCardProps · SlotStopCard
+- `src/entities/itinerary-slot/ui/SlotProgressCard.tsx`  →  SlotProgressCardProps · SlotProgressCard
+- `src/entities/itinerary-slot/ui/SlotStopCard.tsx`  →  UNSPECIFIED_CHIP_LABEL · SlotStopCardProps · SlotStopCard
 
 ## src/entities/place/lib/
 - `src/entities/place/lib/formatDistance.ts`  →  formatDistance
@@ -301,11 +343,17 @@
 
 ## src/entities/stay/ui/
 - `src/entities/stay/ui/SavedStayCard.tsx`  →  SavedStayCardProps · SavedStayCard
+- `src/entities/stay/ui/StayRecommendCard.tsx`  →  StayRecommendCardProps · StayRecommendCard
 - `src/entities/stay/ui/StaySearchCard.tsx`  →  StaySearchCardSave · StaySearchCardProps · StaySearchCard
 
+## src/entities/style-analysis/lib/
+- `src/entities/style-analysis/lib/styleFace.ts`  →  StyleFace · resolveStyleFace
+
 ## src/entities/trip/lib/
+- `src/entities/trip/lib/formatDayLabel.ts`  →  formatDayLabel
 - `src/entities/trip/lib/formatNights.ts`  →  formatNightsLabel · nightsLabel · nightsCountLabel
-- `src/entities/trip/lib/formatTripPeriod.ts`  →  WEEKDAY_LABELS · dayOfWeek · formatDateRange · formatSectionRange · formatTripRange · formatConfirmedDateRange · formatTripDateRange · formatDateRangeWithDow · formatBaseNightRange
+- `src/entities/trip/lib/formatShareCardPeriod.ts`  →  ShareCardPeriodOptions · formatShareCardPeriod
+- `src/entities/trip/lib/formatTripPeriod.ts`  →  WEEKDAY_LABELS · dayOfWeek · formatDateRange · formatSectionRange · formatTripRange · formatConfirmedDateRange · formatTripDateRange · formatLegendDateRange · formatDateRangeWithDow · formatBaseNightRange
 
 ## src/entities/trip/model/
 - `src/entities/trip/model/index.ts`  →  MyTripBadge · MyTripCardVM · PastTripCardVM
@@ -320,6 +368,7 @@
 - `src/features/auth/config/oauthConfig.ts`  →  OAuthDiscovery · OAuthProviderConfig · getOAuthConfig
 
 ## src/features/auth/lib/
+- `src/features/auth/lib/appleAuthorize.tsx`  →  appleAuthorize · isAppleSignInAvailable · AppleSignInButton
 - `src/features/auth/lib/kakaoAuthorize.ts`  →  kakaoAuthorize
 - `src/features/auth/lib/makeAuthorize.ts`  →  makeAuthorize
 - `src/features/auth/lib/naverAuthorize.ts`  →  naverAuthorize
@@ -327,37 +376,30 @@
 
 ## src/features/auth/model/
 - `src/features/auth/model/resolveBootstrapDestination.ts`  →  BootstrapDestination · resolveBootstrapDestination
+- `src/features/auth/model/useAppleButton.ts`  →  useAppleButton
 - `src/features/auth/model/useBootstrapGate.ts`  →  BOOTSTRAP_TIMEOUT_MS · useBootstrapGate
 - `src/features/auth/model/useSocialLogin.ts`  →  SocialLoginPhase · AuthorizeResult · Authorize · useSocialLogin
 
 ## src/features/auth/ui/
-- `src/features/auth/ui/AuthGlyphs.tsx`  →  AppIconGlyph · GoogleIcon · AppleIcon · KakaoIcon · NaverIcon · WarningTriangleGlyph
+- `src/features/auth/ui/AuthGlyphs.tsx`  →  AppIconGlyph · GoogleIcon · KakaoIcon · NaverIcon · WarningTriangleGlyph
 - `src/features/auth/ui/SocialLoginScreen.tsx`  →  SocialLoginScreenProps · SocialLoginScreen
 - `src/features/auth/ui/SplashIllustration.tsx`  →  SplashIllustration
-- `src/features/auth/ui/SplashScreen.tsx`  →  SplashScreenProps · SplashScreen
+- `src/features/auth/ui/SplashScreen.tsx`  →  SplashScreen
 
 ## src/features/execution/model/
-- `src/features/execution/model/actualDistance.ts`  →  GeoPoint · accumulateDistanceKm · ActualRouteView · resolveActualRoute
 - `src/features/execution/model/dwellMinutes.ts`  →  dwellMinutes
 - `src/features/execution/model/liveState.ts`  →  LiveState · ResolveLiveStateInput · resolveLiveState
-- `src/features/execution/model/liveViewStore.ts`  →  LiveSegment · LivePlanToggle · LiveViewState · useLiveViewStore
-- `src/features/execution/model/mapPeek.ts`  →  MapPeekSlot · MapPeekView · buildMapPeek
 - `src/features/execution/model/nextNav.ts`  →  NavDest · buildAppNavUrl · buildWebNavUrl · resolveNextDest · openNextNav
-- `src/features/execution/model/placeDetailView.ts`  →  PlaceDetailView · resolveSlackLabel · buildPlaceDetailView
+- `src/features/execution/model/placeDetailView.ts`  →  PlaceDetailView · buildPlaceDetailView · buildPlaceShareMessage
 - `src/features/execution/model/slotProgress.ts`  →  SlotState · ProjectedSlot · SlotProgressInput · projectSlotProgress
-- `src/features/execution/model/useActualRoute.ts`  →  useActualRoute
 - `src/features/execution/model/useLiveItinerary.ts`  →  useLiveItinerary
 - `src/features/execution/model/usePlaceDetail.ts`  →  usePlaceDetail
 - `src/features/execution/model/useVisitCheck.ts`  →  VisitCheckOutcome · useVisitCheck
 - `src/features/execution/model/visitProgress.ts`  →  VisitProgress · deriveVisitProgress
 
 ## src/features/execution/ui/
-- `src/features/execution/ui/ExecutionGlyphs.tsx`  →  RailDoneGlyph · RailActiveGlyph · RailUpcomingGlyph · ClockGlyph · VisitCheckGlyph · CameraGlyph · MemoGlyph · RouteArrowGlyph · BackArrowGlyph · ShareGlyph · WarningTriangleGlyph · WeatherCloudGlyph · ChevronRightGlyph · CloseGlyph · ShieldGlyph
-- `src/features/execution/ui/LiveItineraryScreen.tsx`  →  LiveItineraryScreenProps · LiveItineraryScreen
-- `src/features/execution/ui/LiveMapScreen.tsx`  →  LiveMapScreenProps · LiveMapScreen
-- `src/features/execution/ui/LiveSlotCard.tsx`  →  LiveSlotCardProps · LiveSlotCard
+- `src/features/execution/ui/ExecutionGlyphs.tsx`  →  RailDoneGlyph · RailActiveGlyph · RailUpcomingGlyph · BackArrowGlyph · ShareGlyph · WarningFilledGlyph · WeatherCloudGlyph · HeroPinGlyph · HeroPhotoGlyph
 - `src/features/execution/ui/PlaceDetailScreen.tsx`  →  PlaceDetailScreenProps · PlaceDetailScreen
-- `src/features/execution/ui/TriggerBanner.tsx`  →  TriggerBannerProps · TriggerBanner
 - `src/features/execution/ui/TriggerChip.tsx`  →  TriggerChipProps · TriggerChip
 
 ## src/features/explore/model/
@@ -376,8 +418,9 @@
 
 ## src/features/explore/ui/
 - `src/features/explore/ui/DestinationDetailScreen.tsx`  →  DestinationDetailScreenProps · DestinationDetailScreen
-- `src/features/explore/ui/ExploreGlyphs.tsx`  →  SuitcaseGlyph · CloseGlyph · BackChevronGlyph · ShareGlyph · SearchGlyph · MapPinGlyph · FilterSlidersGlyph · WarningTriangleGlyph · InfoGlyph
+- `src/features/explore/ui/ExploreGlyphs.tsx`  →  SuitcaseGlyph · CloseGlyph · PlusGlyph · BackChevronGlyph · ShareGlyph · SearchGlyph · MapPinGlyph · FilterSlidersGlyph · WarningTriangleGlyph · CheckCircleFilledGlyph · CheckCircleOutlineGlyph · CircleExclaimGlyph · InfoGlyph
 - `src/features/explore/ui/ExploreLandingScreen.tsx`  →  ExploreLandingScreenProps · ExploreLandingScreen
+- `src/features/explore/ui/MustVisitPickScreen.tsx`  →  MustVisitPickScreenProps · MustVisitPickScreen
 - `src/features/explore/ui/PartialFailureBanner.tsx`  →  PartialFailureBanner
 - `src/features/explore/ui/PlaceDetailScreen.tsx`  →  PlaceDetailScreenProps · PlaceDetailScreen
 - `src/features/explore/ui/PlaceExploreScreen.tsx`  →  PlaceExploreScreenProps · PlaceExploreScreen
@@ -399,45 +442,47 @@
 - `src/features/home/ui/HomeScreen.tsx`  →  HomeScreen
 - `src/features/home/ui/MagazineScreen.tsx`  →  MagazineScreen
 
+## src/features/itinerary/config/
+- `src/features/itinerary/config/conceptCards.ts`  →  CONCEPT_DESCRIPTIONS
+- `src/features/itinerary/config/generationFallback.ts`  →  GENERATION_FALLBACK_PROGRESS · GENERATION_FALLBACK_TITLE · GENERATION_FALLBACK_MAP_PILL · GENERATION_FALLBACK_MESSAGE_TITLE · GENERATION_FALLBACK_MESSAGE_BODY · GENERATION_FALLBACK_CHECK_ROUTE · GENERATION_FALLBACK_CHECK_SKIPPED · GENERATION_FALLBACK_CHECK_DONE · GENERATION_FALLBACK_INFO · GENERATION_FALLBACK_VIEW_PLAN · GENERATION_FALLBACK_MANUAL · GENERATION_FALLBACK_FAILED_TITLE · GENERATION_FALLBACK_FAILED_NOTE · GENERATION_FALLBACK_RETRY
+- `src/features/itinerary/config/methodPicker.ts`  →  METHOD_PROGRESS · METHOD_SUBTITLE · METHOD_SWITCH_NOTE
+- `src/features/itinerary/config/placeCategoryChips.ts`  →  PlaceCategoryChip · PLACE_CATEGORY_CHIPS
+
+## src/features/itinerary/lib/
+- `src/features/itinerary/lib/objectParticle.ts`  →  withObjectParticle
+
 ## src/features/itinerary/model/
 - `src/features/itinerary/model/buildEditItineraryRequest.ts`  →  buildEditItineraryRequest
-- `src/features/itinerary/model/coPickProgress.ts`  →  CoPickProgressSlot · CoPickProgress · coPickProgress
 - `src/features/itinerary/model/coPickSlots.ts`  →  firstCoPickSlotKey · nextCoPickSlotKey
-- `src/features/itinerary/model/draftView.ts`  →  DRAFT_POLL_INTERVAL_MS · DRAFT_POLL_MAX_COUNT · DraftDayTab · buildDraftDayTabs · GenerationDayState · GenerationGaugeCell · buildGenerationGauge · formatDraftDayHeader · DraftPin · buildDraftPins · shouldKeepPollingDraft · DraftView · isCandidatesDemoted · FallbackNotice · resolveFallbackNotice · resolveDraftView
-- `src/features/itinerary/model/itineraryEditStore.ts`  →  removeSlot · addSlot · reorderKeepingFixed · ItineraryEditState · useItineraryEditStore
+- `src/features/itinerary/model/doneBar.ts`  →  DoneBarEntry · DoneBarPick · pickDoneBar
+- `src/features/itinerary/model/draftView.ts`  →  DRAFT_POLL_INTERVAL_MS · DRAFT_POLL_MAX_COUNT · DraftDayTab · buildDraftDayTabs · GenerationDayState · GenerationGaugeCell · buildGenerationGauge · formatDraftDayHeader · formatCoPickDayHeader · DraftPin · buildDraftPins · shouldKeepPollingDraft · DraftView · isCandidatesDemoted · FallbackNotice · resolveFallbackNotice · resolveDraftView
+- `src/features/itinerary/model/itineraryEditStore.ts`  →  EditorSlot · EditorDaysItem · removeSlot · addSlot · insertSlotAt · reorderKeepingFixed · ItineraryEditState · useItineraryEditStore
 - `src/features/itinerary/model/legDistance.ts`  →  legDistance
 - `src/features/itinerary/model/mustVisitList.ts`  →  MUST_VISIT_NAME_PLACEHOLDER · MustVisitListItem · MustVisitListView · joinMustVisits · buildMustVisitPins · resolveMustVisitListView
-- `src/features/itinerary/model/mustVisitTimeForm.ts`  →  DwellKey · MustVisitTimeForm · DWELL_OPTIONS · DEFAULT_DWELL_KEY · tripDayChips · startTimeOptions · startTimeLabel · mustVisitTimeBlockReason · canSubmitMustVisitTime · buildFixedMustVisitRequest
+- `src/features/itinerary/model/mustVisitTimeForm.ts`  →  DwellKey · MustVisitTimeForm · DWELL_OPTIONS · DEFAULT_DWELL_KEY · tripDayChips · startTimeOptions · startTimeLabel · mustVisitTimeBlockReason · canSubmitMustVisitTime · buildFixedMustVisitRequest · buildAnytimeMustVisitRequest
 - `src/features/itinerary/model/planState.ts`  →  PlanState · PlanDayTab · resolvePlanState · isConfirmLocked · ItineraryDestination · resolveItineraryDestination · ItineraryDestinationHref · itineraryDestinationHref · buildPlanDayTabs
 - `src/features/itinerary/model/radiusUsedLabel.ts`  →  formatRadiusUsed
 - `src/features/itinerary/model/slotSwapError.ts`  →  SLOT_SWAP_CONFLICT_CODES · SlotSwapErrorKind · SlotSwapError · resolveSlotSwapError
+- `src/features/itinerary/model/stayRecommend.ts`  →  StayRecommendCandidate · StayRecommendView
 - `src/features/itinerary/model/swapSlotPoi.ts`  →  swapSlotPoi
 - `src/features/itinerary/model/timeBandLabel.ts`  →  TimeBandLabel · timeBandLabel
+- `src/features/itinerary/model/tripCardFace.ts`  →  TripCardFace · deriveTripCardFace
 
 ## src/features/itinerary/ui/
-- `src/features/itinerary/ui/CoPickCompleteScreen.tsx`  →  CoPickCompleteSlot · CoPickCompleteScreenProps · CoPickCompleteScreen
-- `src/features/itinerary/ui/CoPickHubScreen.tsx`  →  CoPickHubSlot · CoPickHubScreenProps · CoPickHubScreen
-- `src/features/itinerary/ui/ConceptPickerScreen.tsx`  →  ConceptPickerScreenProps · ConceptPickerScreen
+- `src/features/itinerary/ui/ConceptPickerScreen.tsx`  →  ConceptProgress · ConceptPickerScreenProps · ConceptPickerScreen
 - `src/features/itinerary/ui/DraftScreen.tsx`  →  DraftScreenProps · DraftScreen
 - `src/features/itinerary/ui/GeneratingScreen.tsx`  →  GeneratingScreenProps · GeneratingScreen
-- `src/features/itinerary/ui/ItineraryEditScreen.tsx`  →  ItineraryEditScreenProps · ItineraryEditScreen
-- `src/features/itinerary/ui/ItineraryGlyphs.tsx`  →  BackChevronGlyph · LockGlyph · DragHandleGlyph · TrashGlyph · PlusGlyph · CheckGlyph · CheckCircleGlyph · PencilGlyph · SearchGlyph · CloseGlyph · ClockGlyph · ChevronDownGlyph · ChevronRightGlyph · LocationOffGlyph · CircleGlyphTone · InfoCircleGlyph · AlertCircleGlyph · WarningTriangleGlyph · ShareGlyph · WalkGlyph · CarGlyph · ExpandGlyph · RefreshGlyph · FullAiGlyph · CoPickGlyph · ManualGlyph
-- `src/features/itinerary/ui/ManualPlanScreen.tsx`  →  ManualPlanTimeBand · ManualPlanScreenProps · ManualPlanScreen
-- `src/features/itinerary/ui/MapFallback.tsx`  →  MapFallbackProps · MapFallback
+- `src/features/itinerary/ui/GenerationFallbackScreen.tsx`  →  GenerationFallbackScreenProps · GenerationFallbackScreen
+- `src/features/itinerary/ui/ItineraryGlyphs.tsx`  →  BackChevronGlyph · LockGlyph · DragHandleGlyph · PlusGlyph · CheckGlyph · DashGlyph · DiamondGlyph · CheckCircleGlyph · PencilGlyph · SearchGlyph · CloseGlyph · ClockGlyph · CalendarGlyph · ChevronDownGlyph · ChevronRightGlyph · LinkChevronGlyph · LocationOffGlyph · CircleGlyphTone · InfoCircleGlyph · AlertCircleGlyph · WarningTriangleGlyph · ShareGlyph · WalkGlyph · CarGlyph · ExpandGlyph · RefreshGlyph · FullAiGlyph · CoPickGlyph · ManualGlyph
 - `src/features/itinerary/ui/MethodPickerScreen.tsx`  →  ActiveGeneration · MethodPickerScreenProps · MethodPickerScreen
 - `src/features/itinerary/ui/MustVisitPickerScreen.tsx`  →  MustVisitPickerScreenProps · MustVisitPickerScreen
 - `src/features/itinerary/ui/MustVisitTimeScreen.tsx`  →  MustVisitTimeScreenProps · MustVisitTimeScreen
 - `src/features/itinerary/ui/MyTripCard.tsx`  →  MyTripCardProps · MyTripCard
 - `src/features/itinerary/ui/MyTripsListScreen.tsx`  →  MyTripsListMode · MyTripsListScreenProps · MyTripsListScreen
-- `src/features/itinerary/ui/OptionSwapScreen.tsx`  →  OptionSwapScreenProps · OptionSwapScreen
-- `src/features/itinerary/ui/PinDetailSheet.tsx`  →  PinDetailSheetProps · PinDetailSheet
-- `src/features/itinerary/ui/PlaceAddCard.tsx`  →  PlaceAddCardProps · PlaceAddCard
-- `src/features/itinerary/ui/PlaceAddScreen.tsx`  →  PlaceAddScreenProps · PlaceAddScreen
-- `src/features/itinerary/ui/SlotCandidateCard.tsx`  →  candidateBadge · SlotCandidateCardProps · SlotCandidateCard
-- `src/features/itinerary/ui/SlotCandidatePanel.tsx`  →  SlotCandidatePanelProps · SlotCandidatePanel
+- `src/features/itinerary/ui/PlaceAddScreen.tsx`  →  PlaceAddHeaderProps · PlaceAddHeader · PlaceAddRowProps · PlaceAddRow
+- `src/features/itinerary/ui/SlotCandidateCard.tsx`  →  SlotCandidateCardProps · SlotCandidateCard
+- `src/features/itinerary/ui/SlotCandidateSheet.tsx`  →  SlotCandidateSheetRow · SlotCandidateSheetProps · SlotCandidateSheet
 - `src/features/itinerary/ui/SlotFillScreen.tsx`  →  SlotFillScreenProps · SlotFillScreen
-- `src/features/itinerary/ui/TimelineScreen.tsx`  →  ItineraryHeaderData · TimelineScreenProps · TimelineScreen
-- `src/features/itinerary/ui/ZeroCandidateScreen.tsx`  →  ZeroCandidateScreenProps · ZeroCandidateScreen
 
 ## src/features/notification/model/
 - `src/features/notification/model/channelAvailability.ts`  →  PushPermission · PushColumnState · resolvePushColumn
@@ -461,6 +506,7 @@
 - `src/features/onboarding/model/preferenceSelection.ts`  →  toggleMulti · toggleSingle
 - `src/features/onboarding/model/preferenceStore.ts`  →  PreferenceDraft · usePreferenceStore
 - `src/features/onboarding/model/resolveOnboardingStep.ts`  →  OnboardingStep · OnboardingProgress · resolveOnboardingStep
+- `src/features/onboarding/model/termsDocumentTitle.ts`  →  termsDocumentTitle
 - `src/features/onboarding/model/useNickname.ts`  →  UseNickname · useNickname
 - `src/features/onboarding/model/useOnboardingProgress.ts`  →  useOnboardingProgress
 - `src/features/onboarding/model/useTermsConsent.ts`  →  UseTermsConsent · useTermsConsent
@@ -471,17 +517,28 @@
 - `src/features/onboarding/ui/OnboardingGlyphs.tsx`  →  BackChevronGlyph · CheckGlyph · ViewChevronGlyph · RegenerateGlyph · PositiveCheckGlyph · GlyphComponent · SunGlyph · ForkKnifeGlyph · MountainGlyph · ArtGlyph · ActivityGlyph · CameraGlyph · ShoppingBagGlyph · MoonGlyph · BalanceGlyph · LightningGlyph · SoloPersonGlyph · FriendsGlyph · HeartGlyph · FamilyGlyph · ParentsGlyph · PetGlyph · WalkGlyph · TransitGlyph · CarGlyph · TaxiGlyph · BikeGlyph · SkipChevronGlyph · InfoCircleGlyph
 - `src/features/onboarding/ui/PrefStep1Screen.tsx`  →  PrefStep1ScreenProps · PrefStep1Screen
 - `src/features/onboarding/ui/PrefStep2Screen.tsx`  →  PrefStep2ScreenProps · PrefStep2Screen
+- `src/features/onboarding/ui/ReconsentScreen.tsx`  →  ReconsentItemView · ReconsentScreenProps · ReconsentScreen
 - `src/features/onboarding/ui/TermsScreen.tsx`  →  TermsItemView · TermsScreenProps · TermsScreen
+- `src/features/onboarding/ui/TermsViewerScreen.tsx`  →  TermsViewerScreenProps · TermsViewerScreen
+
+## src/features/planb/config/
+- `src/features/planb/config/replanChoices.ts`  →  ReplanChoice · REPLAN_REASONS · REPLAN_DIRECTIVES · TRIGGER_REASON_KEY
+- `src/features/planb/config/watchLabels.ts`  →  WatchKind · WATCH_CATEGORY_LABEL · WATCH_STATUS_LABEL
 
 ## src/features/planb/model/
+- `src/features/planb/model/appliedSummary.ts`  →  AppliedSummaryInput · appliedSummaryBadges
 - `src/features/planb/model/foldScope.ts`  →  foldScope
+- `src/features/planb/model/reorderKeepingLocked.ts`  →  reorderKeepingLocked
 - `src/features/planb/model/replanFormStore.ts`  →  ReplanFormState · useReplanFormStore
+- `src/features/planb/model/replanFromInstant.ts`  →  readFromInstant
 - `src/features/planb/model/replanOrigin.ts`  →  ReplanOrigin · buildManualOrigin · isEstimatedOrigin
 - `src/features/planb/model/replanRequest.ts`  →  ReplanFormValues · buildStartReplanRequest
-- `src/features/planb/model/replanScope.ts`  →  ReplanScopeOption · ReplanChoice · REPLAN_SCOPES · DEFAULT_REPLAN_SCOPE · REPLAN_REASONS · REPLAN_DIRECTIVES
+- `src/features/planb/model/replanScope.ts`  →  ReplanScopeOption · REPLAN_SCOPES · DEFAULT_REPLAN_SCOPE
 - `src/features/planb/model/replanState.ts`  →  ReplanState · resolveReplanState
+- `src/features/planb/model/riskAffectedRow.ts`  →  RiskAffectedRow · riskAffectedRow
 - `src/features/planb/model/slackTime.ts`  →  slackTime
 - `src/features/planb/model/triggerLabel.ts`  →  TriggerLabel · TRIGGER_LABELS · triggerLabel
+- `src/features/planb/model/triggerPillCopy.ts`  →  TriggerPillSlot · triggerPillCopy
 - `src/features/planb/model/triggerWatchlist.ts`  →  TriggerWatchlistRow · triggerWatchlist
 - `src/features/planb/model/useActiveTriggers.ts`  →  useActiveTriggers
 - `src/features/planb/model/useApplyReplan.ts`  →  useApplyReplan
@@ -489,31 +546,22 @@
 - `src/features/planb/model/useReplanSession.ts`  →  useReplanSession
 - `src/features/planb/model/useSlotCandidates.ts`  →  useSlotCandidates
 - `src/features/planb/model/useStartReplan.ts`  →  useStartReplan
-- `src/features/planb/model/useSuppressTrigger.ts`  →  useSuppressTrigger
-- `src/features/planb/model/useTriggerWatchlist.ts`  →  useTriggerWatchlist
 
 ## src/features/planb/ui/
-- `src/features/planb/ui/NoAlternativeScreen.tsx`  →  NoAlternativeScreenProps · NoAlternativeScreen
-- `src/features/planb/ui/OutOfScopeNotice.tsx`  →  OutOfScopeNotice
-- `src/features/planb/ui/PlanbGlyphs.tsx`  →  ChecklistDoneGlyph · ChecklistActiveGlyph · ChecklistWaitingGlyph · AppliedBackGlyph · AppliedCheckGlyph · AppliedAlertGlyph · WeatherCloudGlyph · ClockGlyph · ShopGlyph · ChevronRightGlyph · LockGlyph
-- `src/features/planb/ui/ReplanAppliedScreen.tsx`  →  ReplanAppliedScreenProps · ReplanAppliedScreen
-- `src/features/planb/ui/ReplanDraftScreen.tsx`  →  ReplanDraftScreenProps · ReplanDraftScreen
-- `src/features/planb/ui/ReplanRequestSheet.tsx`  →  ReplanDetectionBanner · ReplanRequestSheetProps · ReplanRequestSheet
-- `src/features/planb/ui/ReplanSolvingScreen.tsx`  →  ReplanSolvingScreenProps · ReplanSolvingScreen
+- `src/features/planb/ui/PlanbGlyphs.tsx`  →  AppliedAlertGlyph · RiskWarningGlyph · ChevronRightGlyph · LockGlyph
+- `src/features/planb/ui/ReplanAppliedSheet.tsx`  →  AppliedDiffKind · AppliedDiffRow · ReplanAppliedSheetProps · ReplanAppliedSheet
+- `src/features/planb/ui/ReplanRequestSheet.tsx`  →  ReplanDetectedChip · ReplanRequestSheetProps · ReplanRequestSheet
+- `src/features/planb/ui/RiskDetailSheet.tsx`  →  RiskDetailSheetProps · RiskDetailSheet
 - `src/features/planb/ui/SlotCandidateSheet.tsx`  →  SlotCandidateSheetProps · SlotCandidateSheet
-- `src/features/planb/ui/TriggerWatchlistScreen.tsx`  →  TriggerWatchlistScreenProps · TriggerWatchlistScreen
 
 ## src/features/record/model/
 - `src/features/record/model/adjustTimesDraft.ts`  →  AdjustTimesViolation · AdjustTimesDraftResult · adjustTimesDraft
-- `src/features/record/model/compareRows.ts`  →  CompareTab · CompareRowKind · ActualCompareRow · UnvisitedCompareRow · ChangeCompareRow · CompareRow · buildCompareRows
 - `src/features/record/model/conflict.ts`  →  ConflictChoice · ConflictSelection · ConflictRow · ConflictVisitVM · isVisitConflict
 - `src/features/record/model/photoAttach.ts`  →  photoAttach
 - `src/features/record/model/photoAvailability.ts`  →  PhotoAvailability · photoAvailability
 - `src/features/record/model/recordsCalendar.ts`  →  markedDaysOfMonth · buildPastTripCards · formatTripDateRange · nightsLabel
 - `src/features/record/model/stayAttribution.ts`  →  AttributedStay · DayAttribution · deriveStayAttribution
-- `src/features/record/model/syncQueue.ts`  →  SyncStatus · SyncQueueItem · ReplayExecutor · enqueue · replayQueue
 - `src/features/record/model/useAdjustVisitTimes.ts`  →  VISIT_CONFLICT_NOTICE · AdjustVisitTimesOutcome · useAdjustVisitTimes
-- `src/features/record/model/useCompareRecords.ts`  →  useCompareRecords
 - `src/features/record/model/useRecordsCalendar.ts`  →  useRecordsCalendar
 - `src/features/record/model/useTripRecords.ts`  →  useTripRecords · useRecordBases · useRecordSavedStays
 - `src/features/record/model/useVisitAttachments.ts`  →  useVisitAttachments
@@ -521,28 +569,24 @@
 - `src/features/record/model/visitStatus.ts`  →  VisitStatus · deriveVisitStatus
 
 ## src/features/record/ui/
-- `src/features/record/ui/CompareRow.tsx`  →  CompareRowProps · CompareRow
-- `src/features/record/ui/CompareSegment.tsx`  →  CompareSegmentProps · CompareSegment
-- `src/features/record/ui/ConflictSheet.tsx`  →  ConflictSheetProps · ConflictSheet
 - `src/features/record/ui/MemoInline.tsx`  →  MemoInlineProps · MemoInline
 - `src/features/record/ui/PastTripList.tsx`  →  PastTripListProps · PastTripList
 - `src/features/record/ui/PhotoThumbStrip.tsx`  →  PhotoThumbVM · PhotoThumbStripProps · PhotoThumbStrip
-- `src/features/record/ui/RecordGlyphs.tsx`  →  VisitCheckDoneGlyph · VisitCheckActiveGlyph · VisitCheckUpcomingGlyph · VisitCheckSkippedGlyph · PlusGlyph · BackArrowGlyph · ChevronRightGlyph · CalendarGlyph · HeartGlyph
+- `src/features/record/ui/RecordGlyphs.tsx`  →  VisitCheckDoneGlyph · VisitCheckActiveGlyph · VisitCheckUpcomingGlyph · VisitCheckSkippedGlyph · PlusGlyph · WarningTriangleGlyph · RetryGlyph · BackArrowGlyph · ChevronRightGlyph · InfoCircleGlyph · GpsOffGlyph · CalendarGlyph
 - `src/features/record/ui/RecordsCalendarScreen.tsx`  →  RecordsCalendarScreenProps · RecordsCalendarScreen
-- `src/features/record/ui/RecordsCompareScreen.tsx`  →  RecordsCompareScreenProps · RecordsCompareScreen
 - `src/features/record/ui/SpontaneousVisitButton.tsx`  →  SpontaneousVisitButtonProps · SpontaneousVisitButton
-- `src/features/record/ui/SyncBadge.tsx`  →  SYNC_BADGE_LABEL · SyncBadge
 - `src/features/record/ui/TripCalendarMonth.tsx`  →  TripCalendarMonthProps · TripCalendarMonth
 - `src/features/record/ui/TripRecordsScreen.tsx`  →  TripRecordsDayTab · DayAttributionHeader · TripRecordsScreenProps · TripRecordsScreen
 - `src/features/record/ui/VisitRecordCard.tsx`  →  VisitRecordCardVM · VisitRecordCardProps · VisitRecordCard
+- `src/features/record/ui/VisitRecordCardContainer.tsx`  →  VisitRecordCardContainerProps · VisitRecordCardContainer
 - `src/features/record/ui/VisitTimeSheet.tsx`  →  VisitTimeSheetProps · VisitTimeSheet
 
 ## src/features/reflection/model/
 - `src/features/reflection/model/missingParts.ts`  →  MissingParts · missingParts
 - `src/features/reflection/model/reflectionFallback.ts`  →  resolveDisplayNarrative
-- `src/features/reflection/model/shareCard.ts`  →  ShareFormat · SHARE_FORMATS · ShareCardMode · ShareCardVM · BuildShareCardInput · buildShareCard · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · validateCaption · validateHashtags · captureShareImage
+- `src/features/reflection/model/shareCard.ts`  →  ShareFormat · SHARE_FORMATS · ShareCardMode · ShareCardVM · BuildShareCardInput · buildShareCard · formatShareCardStats · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · validateCaption · validateHashtags · captureShareImage
 - `src/features/reflection/model/statsCard.ts`  →  statsCard
-- `src/features/reflection/model/styleThreshold.ts`  →  StyleFace · resolveStyleFace · categoryLabel
+- `src/features/reflection/model/styleThreshold.ts`  →  categoryLabel
 - `src/features/reflection/model/summaryStats.ts`  →  SummaryStatCells · summaryStats
 - `src/features/reflection/model/summaryView.ts`  →  OrderedVisit · shareEnabled · resolveSummaryView · toOrderedVisitList · distanceSourceLabel · daySubtitle
 - `src/features/reflection/model/useDailyReflection.ts`  →  UseDailyReflectionResult · useDailyReflection
@@ -552,12 +596,11 @@
 ## src/features/reflection/ui/
 - `src/features/reflection/ui/CategoryBarList.tsx`  →  CategoryBarListProps · CategoryBarList
 - `src/features/reflection/ui/ChangeSummaryRow.tsx`  →  ChangeSummaryRowProps · ChangeSummaryRow
-- `src/features/reflection/ui/DailyReflectionScreen.tsx`  →  ReflectionFace · DailyReflectionScreenProps · DailyReflectionScreen
+- `src/features/reflection/ui/DailyReflectionScreen.tsx`  →  ReflectionFace · ReflectionDayTab · DailyReflectionScreenProps · DailyReflectionScreen
 - `src/features/reflection/ui/DayHighlightCard.tsx`  →  DayHighlightCardProps · DayHighlightCard
-- `src/features/reflection/ui/EvidenceLink.tsx`  →  EvidenceLinkProps · EvidenceLink
 - `src/features/reflection/ui/FormatSegment.tsx`  →  FormatSegmentProps · FormatSegment
 - `src/features/reflection/ui/NarrativeBlock.tsx`  →  NarrativeBlockProps · NarrativeBlock
-- `src/features/reflection/ui/ReflectionGlyphs.tsx`  →  BackArrowGlyph · LocationOffGlyph · PhotoOffGlyph · EmptyCircleGlyph · RetryGlyph · ShareGlyph
+- `src/features/reflection/ui/ReflectionGlyphs.tsx`  →  BackArrowGlyph · LocationOffGlyph · PhotoOffGlyph · EmptyCircleGlyph · RetryGlyph · MoodSadGlyph · MoodSosoGlyph · MoodGoodGlyph
 - `src/features/reflection/ui/ReflectionPhotoGrid.tsx`  →  ReflectionPhotoGridProps · ReflectionPhotoGrid
 - `src/features/reflection/ui/ReflectionStatsRow.tsx`  →  ReflectionStatsRowProps · ReflectionStatsRow
 - `src/features/reflection/ui/ShareCardGlyphs.tsx`  →  DownloadGlyph · ShareGlyph · WatermarkLogoGlyph
@@ -568,11 +611,13 @@
 - `src/features/reflection/ui/TripSummaryScreen.tsx`  →  SummaryViewMode · DayCardVM · TripSummaryScreenProps · TripSummaryScreen
 
 ## src/features/settings/model/
+- `src/features/settings/model/dataAttribution.ts`  →  OSM_COPYRIGHT_URL
 - `src/features/settings/model/deletionScope.ts`  →  DELETION_SCOPE
 - `src/features/settings/model/exportSummary.ts`  →  ExportSummary · resolveExportSummary
 - `src/features/settings/model/personalizationCopy.ts`  →  personalizationCopy
 - `src/features/settings/model/preferenceDraft.ts`  →  PreferenceSelection · initialSelection · buildPreferenceInput
-- `src/features/settings/model/settingsSections.ts`  →  SettingsInput · SettingsRowVM · SettingsGroupVM · buildSettingsSections
+- `src/features/settings/model/preferenceSummary.ts`  →  PreferenceRowKey · PreferenceSummary · summarizePreferences
+- `src/features/settings/model/settingsSections.ts`  →  SettingsInput · SettingsRowChip · SettingsRowVM · SettingsGroupVM · buildSettingsSections · filterReadySettingsSections
 - `src/features/settings/model/stayTripLink.ts`  →  StayTripLink · buildStayTripLink
 - `src/features/settings/model/styleCardModel.ts`  →  StyleGauge · StyleCardVM · buildStyleCardModel
 - `src/features/settings/model/tripBuckets.ts`  →  TripBucket · tripStatusBucket · bucketTrips
@@ -583,7 +628,9 @@
 - `src/features/settings/ui/BaseToggleDialog.tsx`  →  BaseToggleDialog
 - `src/features/settings/ui/DeleteAccountDialog.tsx`  →  DeleteAccountDialog
 - `src/features/settings/ui/ExportRow.tsx`  →  ExportRow
+- `src/features/settings/ui/InfoChip.tsx`  →  InfoChip
 - `src/features/settings/ui/LocationConsentScreen.tsx`  →  LocationConsentScreenProps · LocationConsentScreen
+- `src/features/settings/ui/LogoutConfirmDialog.tsx`  →  LogoutConfirmDialog
 - `src/features/settings/ui/MyPageScreen.tsx`  →  MyPageScreenProps · MyPageScreen
 - `src/features/settings/ui/MyStaysScreen.tsx`  →  MyStayBaseState · MyStayRowVM · MyStaysScreenProps · MyStaysScreen
 - `src/features/settings/ui/NicknameEditRow.tsx`  →  NicknameEditRow
@@ -592,13 +639,18 @@
 - `src/features/settings/ui/PreferencesEditView.tsx`  →  EditableAxis · isMultiAxis · PreferencesEditViewProps · PreferencesEditView
 - `src/features/settings/ui/ProfileCard.tsx`  →  ProfileCardCounts · ProfileCardProps · ProfileCard
 - `src/features/settings/ui/RevokeConfirmDialog.tsx`  →  RevokeConfirmDialog
-- `src/features/settings/ui/SettingsGlyphs.tsx`  →  ChevronRightGlyph · SettingsSunGlyph · BookmarkGlyph · BarChartGlyph · ShareNodesGlyph · ListGlyph · EyeOffGlyph · GearGlyph · PencilGlyph · HeartGlyph · ChevronLeftGlyph · PersonGlyph · DownloadGlyph · ContrastGlyph · WonGlyph · PeopleGlyph · StarGlyph · ArrowsSwapGlyph · ForkKnifeGlyph · GaugeGlyph · PinGlyph · BellGlyph · ExternalLinkGlyph · BedGlyph · TrashGlyph
+- `src/features/settings/ui/SettingsGlyphs.tsx`  →  MUTED · MUTED_SOFT · ChevronRightGlyph · BookmarkGlyph · BarChartGlyph · ShareNodesGlyph · ListGlyph · EyeOffGlyph · GearGlyph · PencilGlyph · HeartGlyph · ChevronLeftGlyph · PersonGlyph · DownloadGlyph · ContrastGlyph · WonGlyph · PeopleGlyph · StarGlyph · ArrowsSwapGlyph · ForkKnifeGlyph · GaugeGlyph · PinGlyph · BellGlyph · SparkleGlyph · ExternalLinkGlyph · BedGlyph · MenuBedGlyph · TrashGlyph · DocumentGlyph · LogoutGlyph · PlusGlyph
 - `src/features/settings/ui/SettingsGroup.tsx`  →  SettingsGroup
 - `src/features/settings/ui/SettingsRow.tsx`  →  RowBody · PreparingRow · NavRow
 - `src/features/settings/ui/SettingsScreen.tsx`  →  SettingsScreenProps · SettingsScreen
 - `src/features/settings/ui/StyleSummaryCard.tsx`  →  StyleSummaryCardProps · StyleSummaryCard
 - `src/features/settings/ui/TripCard.tsx`  →  TripCardVM · TripCardProps · TripCard
 - `src/features/settings/ui/TripStatusSegment.tsx`  →  TripStatusSegmentProps · TripStatusSegment
+- `src/features/settings/ui/cardShadow.ts`  →  CARD_SHADOW
+
+## src/features/stay/config/
+- `src/features/stay/config/affiliateNotice.ts`  →  otaConfirmLabel
+- `src/features/stay/config/amenityIcons.ts`  →  resolveAmenityIcon
 
 ## src/features/stay/model/
 - `src/features/stay/model/buildSaveStayRequest.ts`  →  buildSaveStayRequest
@@ -607,7 +659,7 @@
 - `src/features/stay/model/relaxCulpritFilter.ts`  →  relaxCulpritFilter
 - `src/features/stay/model/savedStayIndex.ts`  →  findSavedStayId · optimisticSavedStayId
 - `src/features/stay/model/savedStays.ts`  →  SavedStaysFailureReason · SavedStaysOutcome · useSavedStays
-- `src/features/stay/model/stayDates.ts`  →  StayDateRange · daysInMonth · shiftMonth · firstWeekdayOfMonth · nightsBetween · isDateInRange · isStayRangeValid · applyDatePick · commitDateRange
+- `src/features/stay/model/stayDates.ts`  →  StayDateRange · nightsBetween · isStayRangeValid · applyDatePick · commitDateRange · formatStayDateRange
 - `src/features/stay/model/stayFilterOptions.ts`  →  StayFilterOption · StayFilterOptions · buildStayFilterOptions · toggleFilterValue · countActiveFilters
 - `src/features/stay/model/stayKey.ts`  →  stayKey
 - `src/features/stay/model/stayOutbound.ts`  →  buildStaySearchUrl · openStayOutbound
@@ -620,9 +672,9 @@
 - `src/features/stay/ui/PartialFailureBanner.tsx`  →  PartialFailureBanner
 - `src/features/stay/ui/SavedStayListScreen.tsx`  →  SavedStayFace · SavedStayListScreenProps · SavedStayListScreen
 - `src/features/stay/ui/SkeletonList.tsx`  →  SkeletonList
-- `src/features/stay/ui/StayDetailScreen.tsx`  →  StayDetailScreenProps · StayDetailScreen
+- `src/features/stay/ui/StayDetailScreen.tsx`  →  StayDetailState · StayDetailScreenProps · StayDetailScreen
 - `src/features/stay/ui/StayFilterSheet.tsx`  →  StayFilterSheetProps · StayFilterSheet
-- `src/features/stay/ui/StayGlyphs.tsx`  →  BackChevronGlyph · ChevronDownGlyph · FilterSlidersGlyph · WarningTriangleGlyph · MapPinGlyph · SearchGlyph · PlusGlyph · ChevronRightGlyph · HeartOutlineGlyph · ShareGlyph · InfoGlyph · ExternalLinkGlyph · CalendarPlusGlyph · AmenityGlyph · BedGlyph · HeartFilledGlyph
+- `src/features/stay/ui/StayGlyphs.tsx`  →  BackChevronGlyph · ChevronDownGlyph · FilterSlidersGlyph · WarningTriangleGlyph · MapPinGlyph · SearchGlyph · PlusGlyph · ChevronRightGlyph · HeartOutlineGlyph · ShareGlyph · InfoGlyph · BedGlyph · CheckGlyph · CalendarGlyph · RefreshGlyph · ExternalLinkGlyph · AmenityGlyph · ParkingGlyph · BreakfastGlyph · WifiGlyph · OceanViewGlyph · HeartFilledGlyph
 - `src/features/stay/ui/StayPriceSheet.tsx`  →  StayPriceSheetProps · StayPriceSheet
 - `src/features/stay/ui/StayRegisterScreen.tsx`  →  StayRegisterScreenProps · StayRegisterScreen
 - `src/features/stay/ui/StaySearchScreen.tsx`  →  StaySearchScreenProps · StaySearchScreen
@@ -637,7 +689,7 @@
 - `src/features/trip/model/createTripRequest.ts`  →  CreateTripInput · buildCreateTripRequest
 - `src/features/trip/model/mustVisitSeed.ts`  →  MustVisitSeedItem · MUST_VISIT_THUMBNAIL_LIMIT · seedMustVisits · mergeMustVisitSeeds · MustVisitSectionView · resolveMustVisitSection · mustVisitFailureNotice
 - `src/features/trip/model/stayDateImport.ts`  →  StayImportView · StayImportInput · formatStayDateRange · resolveStayImport
-- `src/features/trip/model/tripDatePicker.ts`  →  daysInMonth · firstWeekdayOfMonth · shiftMonth · isDateInRange · dateCell · TripDateRange · applyRangePick
+- `src/features/trip/model/tripDatePicker.ts`  →  dateCell · TripDateRange · applyRangePick
 - `src/features/trip/model/tripDraft.ts`  →  TripViolationCode · TripDraft · tripLength · nightsSum · validateTripDraft · toCompanionType
 - `src/features/trip/model/tripSummary.ts`  →  wizardProgress · formatWizardStep · SummaryLine · PreferenceSummary · summaryDestinations · summaryPeriod · summaryCompanion · summaryPreferences · summaryBudget
 - `src/features/trip/model/tripWizardStep1.ts`  →  PeriodPresetCode · CompanionCode · PERIOD_PRESETS · COMPANION_OPTIONS · fromEpochDay · presetRange · deriveEndDate
@@ -674,11 +726,10 @@
 - `src/pages/destination-detail/ui/DestinationDetailPage.tsx`  →  DestinationDetailPage
 
 ## src/pages/itinerary-copick/
-- `src/pages/itinerary-copick/index.ts`  →  SlotFillPage · CoPickHubPage · CoPickCompletePage
+- `src/pages/itinerary-copick/index.ts`  →  SlotFillPage · CoPickCompletePage
 
 ## src/pages/itinerary-copick/ui/
 - `src/pages/itinerary-copick/ui/CoPickCompletePage.tsx`  →  CoPickCompletePageProps · CoPickCompletePage
-- `src/pages/itinerary-copick/ui/CoPickHubPage.tsx`  →  CoPickHubPageProps · CoPickHubPage
 - `src/pages/itinerary-copick/ui/SlotFillPage.tsx`  →  SlotFillPageProps · SlotFillPage
 
 ## src/pages/itinerary-draft/
@@ -727,22 +778,26 @@
 - `src/pages/itinerary-mustvisit/ui/MustVisitListPage.tsx`  →  MustVisitListPage
 - `src/pages/itinerary-mustvisit/ui/MustVisitTimePage.tsx`  →  MustVisitTimePage
 
-## src/pages/itinerary-option-swap/
-- `src/pages/itinerary-option-swap/index.ts`  →  OptionSwapPage
-
-## src/pages/itinerary-option-swap/ui/
-- `src/pages/itinerary-option-swap/ui/OptionSwapPage.tsx`  →  OptionSwapPageProps · OptionSwapPage
-
 ## src/pages/itinerary-plan/
 - `src/pages/itinerary-plan/index.ts`  →  ItineraryPlanPage
 
 ## src/pages/itinerary-plan/ui/
+- `src/pages/itinerary-plan/ui/ConfirmedBanner.tsx`  →  ConfirmedBanner
 - `src/pages/itinerary-plan/ui/ItineraryPlanPage.tsx`  →  ItineraryPlanPage
+- `src/pages/itinerary-plan/ui/NoBaseNoticeCard.tsx`  →  NoBaseNoticeCard
+
+## src/pages/itinerary-stay-recommend/
+- `src/pages/itinerary-stay-recommend/index.ts`  →  StayRecommendPage
+
+## src/pages/itinerary-stay-recommend/ui/
+- `src/pages/itinerary-stay-recommend/ui/StayRecommendPage.tsx`  →  StayRecommendPageProps · StayRecommendPage
+- `src/pages/itinerary-stay-recommend/ui/StayRecommendView.tsx`  →  StayRecommendViewProps · StayRecommendView
 
 ## src/pages/live-itinerary/
 - `src/pages/live-itinerary/index.ts`  →  LiveItineraryPage
 
 ## src/pages/live-itinerary/ui/
+- `src/pages/live-itinerary/ui/LiveHubView.tsx`  →  LiveHubSlot · LiveHubViewProps · LiveHubView
 - `src/pages/live-itinerary/ui/LiveItineraryPage.tsx`  →  LiveItineraryPageProps · LiveItineraryPage
 
 ## src/pages/live-location/
@@ -839,13 +894,8 @@
 ## src/pages/planb-draft/ui/
 - `src/pages/planb-draft/ui/PlanbDraftPage.tsx`  →  PlanbDraftPageProps · PlanbDraftPage
 - `src/pages/planb-draft/ui/PlanbSolvingPage.tsx`  →  PlanbSolvingPageProps · PlanbSolvingPage
-
-## src/pages/planb-manual/
-- `src/pages/planb-manual/index.ts`  →  PlanbManualPage
-
-## src/pages/planb-manual/ui/
-- `src/pages/planb-manual/ui/ManualEditScreen.tsx`  →  ManualEditVariant · ManualEditScreenProps · ManualEditScreen
-- `src/pages/planb-manual/ui/PlanbManualPage.tsx`  →  PlanbManualPageProps · PlanbManualPage
+- `src/pages/planb-draft/ui/ReplanDraftView.tsx`  →  ReplanDraftViewProps · ReplanDraftView
+- `src/pages/planb-draft/ui/ReplanSolvingView.tsx`  →  ReplanSolvingViewProps · ReplanSolvingView
 
 ## src/pages/planb-request/
 - `src/pages/planb-request/index.ts`  →  PlanbRequestPage
@@ -853,23 +903,17 @@
 ## src/pages/planb-request/ui/
 - `src/pages/planb-request/ui/PlanbRequestPage.tsx`  →  PlanbRequestPageProps · PlanbRequestPage
 
-## src/pages/planb-triggers/
-- `src/pages/planb-triggers/index.ts`  →  PlanbTriggersPage
+## src/pages/reconsent/
+- `src/pages/reconsent/index.ts`  →  ReconsentPage
 
-## src/pages/planb-triggers/ui/
-- `src/pages/planb-triggers/ui/PlanbTriggersPage.tsx`  →  PlanbTriggersPageProps · PlanbTriggersPage
+## src/pages/reconsent/ui/
+- `src/pages/reconsent/ui/ReconsentPage.tsx`  →  ReconsentPage
 
 ## src/pages/records-calendar/
 - `src/pages/records-calendar/index.ts`  →  RecordsCalendarPage
 
 ## src/pages/records-calendar/ui/
 - `src/pages/records-calendar/ui/RecordsCalendarPage.tsx`  →  RecordsCalendarPage
-
-## src/pages/records-compare/
-- `src/pages/records-compare/index.ts`  →  RecordsComparePage
-
-## src/pages/records-compare/ui/
-- `src/pages/records-compare/ui/RecordsComparePage.tsx`  →  RecordsComparePageProps · RecordsComparePage
 
 ## src/pages/region-picker/
 - `src/pages/region-picker/index.ts`  →  RegionPickerPage
@@ -943,6 +987,12 @@
 ## src/pages/stay-search/ui/
 - `src/pages/stay-search/ui/StaySearchPage.tsx`  →  StaySearchPage
 
+## src/pages/terms-viewer/
+- `src/pages/terms-viewer/index.ts`  →  TermsViewerPage
+
+## src/pages/terms-viewer/ui/
+- `src/pages/terms-viewer/ui/TermsViewerPage.tsx`  →  TermsViewerPage
+
 ## src/pages/travel-style/
 - `src/pages/travel-style/index.ts`  →  TravelStylePage
 
@@ -994,7 +1044,7 @@
 - `src/shared/api/generated/preferences/preferences.ts`  →  getMePreferences · getGetMePreferencesQueryKey · getGetMePreferencesQueryOptions · GetMePreferencesQueryResult · GetMePreferencesQueryError · useGetMePreferences · putMePreferences · getPutMePreferencesMutationOptions · PutMePreferencesMutationResult · PutMePreferencesMutationBody · PutMePreferencesMutationError · usePutMePreferences
 
 ## src/shared/api/generated/profile/
-- `src/shared/api/generated/profile/profile.ts`  →  getMeProfile · getGetMeProfileQueryKey · getGetMeProfileQueryOptions · GetMeProfileQueryResult · GetMeProfileQueryError · useGetMeProfile · patchMeProfileNickname · getPatchMeProfileNicknameMutationOptions · PatchMeProfileNicknameMutationResult · PatchMeProfileNicknameMutationBody · PatchMeProfileNicknameMutationError · usePatchMeProfileNickname · postNicknameSuggestions · getPostNicknameSuggestionsMutationOptions · PostNicknameSuggestionsMutationResult · PostNicknameSuggestionsMutationError · usePostNicknameSuggestions · postNicknameCheck · getPostNicknameCheckMutationOptions · PostNicknameCheckMutationResult · PostNicknameCheckMutationBody · PostNicknameCheckMutationError · usePostNicknameCheck
+- `src/shared/api/generated/profile/profile.ts`  →  getMeProfile · getGetMeProfileQueryKey · getGetMeProfileQueryOptions · GetMeProfileQueryResult · GetMeProfileQueryError · useGetMeProfile · patchMeProfileNickname · getPatchMeProfileNicknameMutationOptions · PatchMeProfileNicknameMutationResult · PatchMeProfileNicknameMutationBody · PatchMeProfileNicknameMutationError · usePatchMeProfileNickname · postNicknameSuggestions · getPostNicknameSuggestionsMutationOptions · PostNicknameSuggestionsMutationResult · PostNicknameSuggestionsMutationError · usePostNicknameSuggestions · postNicknameCheck · getPostNicknameCheckMutationOptions · PostNicknameCheckMutationResult · PostNicknameCheckMutationBody · PostNicknameCheckMutationError · usePostNicknameCheck · getMeSettings · getGetMeSettingsQueryKey · getGetMeSettingsQueryOptions · GetMeSettingsQueryResult · GetMeSettingsQueryError · useGetMeSettings · patchMeSettings · getPatchMeSettingsMutationOptions · PatchMeSettingsMutationResult · PatchMeSettingsMutationBody · PatchMeSettingsMutationError · usePatchMeSettings
 
 ## src/shared/api/generated/reflection/
 - `src/shared/api/generated/reflection/reflection.ts`  →  getMePersonalization · getGetMePersonalizationQueryKey · getGetMePersonalizationQueryOptions · GetMePersonalizationQueryResult · GetMePersonalizationQueryError · useGetMePersonalization · getMeStyle · getGetMeStyleQueryKey · getGetMeStyleQueryOptions · GetMeStyleQueryResult · GetMeStyleQueryError · useGetMeStyle · getTripsTripIdSummary · getGetTripsTripIdSummaryQueryKey · getGetTripsTripIdSummaryQueryOptions · GetTripsTripIdSummaryQueryResult · GetTripsTripIdSummaryQueryError · useGetTripsTripIdSummary · getTripsTripIdReflections · getGetTripsTripIdReflectionsQueryKey · getGetTripsTripIdReflectionsQueryOptions · GetTripsTripIdReflectionsQueryResult · GetTripsTripIdReflectionsQueryError · useGetTripsTripIdReflections · postTripsTripIdReflectionsDayDate · getPostTripsTripIdReflectionsDayDateMutationOptions · PostTripsTripIdReflectionsDayDateMutationResult · PostTripsTripIdReflectionsDayDateMutationError · usePostTripsTripIdReflectionsDayDate · putTripsTripIdReflectionsDayDate · getPutTripsTripIdReflectionsDayDateMutationOptions · PutTripsTripIdReflectionsDayDateMutationResult · PutTripsTripIdReflectionsDayDateMutationBody · PutTripsTripIdReflectionsDayDateMutationError · usePutTripsTripIdReflectionsDayDate
@@ -1004,6 +1054,7 @@
 
 ## src/shared/api/generated/schemas/
 - `src/shared/api/generated/schemas/accountExport.ts`  →  AccountExport
+- `src/shared/api/generated/schemas/accountSettings.ts`  →  AccountSettings
 - `src/shared/api/generated/schemas/accountSummary.ts`  →  AccountSummary
 - `src/shared/api/generated/schemas/accountSummarySocialProvidersItem.ts`  →  AccountSummarySocialProvidersItem
 - `src/shared/api/generated/schemas/accountSummaryStatus.ts`  →  AccountSummaryStatus
@@ -1155,6 +1206,7 @@
 - `src/shared/api/generated/schemas/startReplanRequest.ts`  →  StartReplanRequest
 - `src/shared/api/generated/schemas/startReplanRequestOriginKind.ts`  →  StartReplanRequestOriginKind
 - `src/shared/api/generated/schemas/startReplanRequestScope.ts`  →  StartReplanRequestScope
+- `src/shared/api/generated/schemas/stayDetail.ts`  →  StayDetail
 - `src/shared/api/generated/schemas/stayItem.ts`  →  StayItem
 - `src/shared/api/generated/schemas/stayPrice.ts`  →  StayPrice
 - `src/shared/api/generated/schemas/stayRecommendation.ts`  →  StayRecommendation
@@ -1185,6 +1237,7 @@
 - `src/shared/api/generated/schemas/tripSummarySource.ts`  →  TripSummarySource
 - `src/shared/api/generated/schemas/tripSummaryStats.ts`  →  TripSummaryStats
 - `src/shared/api/generated/schemas/tripSummaryStatsDistanceSource.ts`  →  TripSummaryStatsDistanceSource
+- `src/shared/api/generated/schemas/updateAccountSettingsRequest.ts`  →  UpdateAccountSettingsRequest
 - `src/shared/api/generated/schemas/updateToggleRequest.ts`  →  UpdateToggleRequest
 - `src/shared/api/generated/schemas/validationErrorResponse.ts`  →  ValidationErrorResponse
 - `src/shared/api/generated/schemas/visitCheck.ts`  →  VisitCheck
@@ -1195,13 +1248,13 @@
 - `src/shared/api/generated/schemas/visitPhotoList.ts`  →  VisitPhotoList
 
 ## src/shared/api/generated/stays/
-- `src/shared/api/generated/stays/stays.ts`  →  getStaysSearch · getGetStaysSearchQueryKey · getGetStaysSearchQueryOptions · GetStaysSearchQueryResult · GetStaysSearchQueryError · useGetStaysSearch · getStaysGeocode · getGetStaysGeocodeQueryKey · getGetStaysGeocodeQueryOptions · GetStaysGeocodeQueryResult · GetStaysGeocodeQueryError · useGetStaysGeocode · getStaysReverseGeocode · getGetStaysReverseGeocodeQueryKey · getGetStaysReverseGeocodeQueryOptions · GetStaysReverseGeocodeQueryResult · GetStaysReverseGeocodeQueryError · useGetStaysReverseGeocode
+- `src/shared/api/generated/stays/stays.ts`  →  getStaysSearch · getGetStaysSearchQueryKey · getGetStaysSearchQueryOptions · GetStaysSearchQueryResult · GetStaysSearchQueryError · useGetStaysSearch · getStaysStayId · getGetStaysStayIdQueryKey · getGetStaysStayIdQueryOptions · GetStaysStayIdQueryResult · GetStaysStayIdQueryError · useGetStaysStayId · getStaysGeocode · getGetStaysGeocodeQueryKey · getGetStaysGeocodeQueryOptions · GetStaysGeocodeQueryResult · GetStaysGeocodeQueryError · useGetStaysGeocode · getStaysReverseGeocode · getGetStaysReverseGeocodeQueryKey · getGetStaysReverseGeocodeQueryOptions · GetStaysReverseGeocodeQueryResult · GetStaysReverseGeocodeQueryError · useGetStaysReverseGeocode
 
 ## src/shared/api/generated/trips/
 - `src/shared/api/generated/trips/trips.ts`  →  postTrips · getPostTripsMutationOptions · PostTripsMutationResult · PostTripsMutationBody · PostTripsMutationError · usePostTrips · getTrips · getGetTripsQueryKey · getGetTripsQueryOptions · GetTripsQueryResult · GetTripsQueryError · useGetTrips · getTripsTripId · getGetTripsTripIdQueryKey · getGetTripsTripIdQueryOptions · GetTripsTripIdQueryResult · GetTripsTripIdQueryError · useGetTripsTripId · patchTripsTripId · getPatchTripsTripIdMutationOptions · PatchTripsTripIdMutationResult · PatchTripsTripIdMutationBody · PatchTripsTripIdMutationError · usePatchTripsTripId · deleteTripsTripId · getDeleteTripsTripIdMutationOptions · DeleteTripsTripIdMutationResult · DeleteTripsTripIdMutationError · useDeleteTripsTripId · postTripsTripIdBases · getPostTripsTripIdBasesMutationOptions · PostTripsTripIdBasesMutationResult · PostTripsTripIdBasesMutationBody · PostTripsTripIdBasesMutationError · usePostTripsTripIdBases · getTripsTripIdBases · getGetTripsTripIdBasesQueryKey · getGetTripsTripIdBasesQueryOptions · GetTripsTripIdBasesQueryResult · GetTripsTripIdBasesQueryError · useGetTripsTripIdBases · deleteTripsTripIdBasesBaseAssignmentId · getDeleteTripsTripIdBasesBaseAssignmentIdMutationOptions · DeleteTripsTripIdBasesBaseAssignmentIdMutationResult · DeleteTripsTripIdBasesBaseAssignmentIdMutationError · useDeleteTripsTripIdBasesBaseAssignmentId · getTripsTripIdCoverage · getGetTripsTripIdCoverageQueryKey · getGetTripsTripIdCoverageQueryOptions · GetTripsTripIdCoverageQueryResult · GetTripsTripIdCoverageQueryError · useGetTripsTripIdCoverage · putTripsTripIdCoverageDaysDayDate · getPutTripsTripIdCoverageDaysDayDateMutationOptions · PutTripsTripIdCoverageDaysDayDateMutationResult · PutTripsTripIdCoverageDaysDayDateMutationBody · PutTripsTripIdCoverageDaysDayDateMutationError · usePutTripsTripIdCoverageDaysDayDate · postTripsTripIdMustVisits · getPostTripsTripIdMustVisitsMutationOptions · PostTripsTripIdMustVisitsMutationResult · PostTripsTripIdMustVisitsMutationBody · PostTripsTripIdMustVisitsMutationError · usePostTripsTripIdMustVisits · getTripsTripIdMustVisits · getGetTripsTripIdMustVisitsQueryKey · getGetTripsTripIdMustVisitsQueryOptions · GetTripsTripIdMustVisitsQueryResult · GetTripsTripIdMustVisitsQueryError · useGetTripsTripIdMustVisits · getTripsTripIdItinerary · getGetTripsTripIdItineraryQueryKey · getGetTripsTripIdItineraryQueryOptions · GetTripsTripIdItineraryQueryResult · GetTripsTripIdItineraryQueryError · useGetTripsTripIdItinerary · postTripsTripIdItinerary · getPostTripsTripIdItineraryMutationOptions · PostTripsTripIdItineraryMutationResult · PostTripsTripIdItineraryMutationBody · PostTripsTripIdItineraryMutationError · usePostTripsTripIdItinerary · putTripsTripIdItinerary · getPutTripsTripIdItineraryMutationOptions · PutTripsTripIdItineraryMutationResult · PutTripsTripIdItineraryMutationBody · PutTripsTripIdItineraryMutationError · usePutTripsTripIdItinerary · getTripsTripIdGenerationSessionsSessionId · getGetTripsTripIdGenerationSessionsSessionIdQueryKey · getGetTripsTripIdGenerationSessionsSessionIdQueryOptions · GetTripsTripIdGenerationSessionsSessionIdQueryResult · GetTripsTripIdGenerationSessionsSessionIdQueryError · useGetTripsTripIdGenerationSessionsSessionId · postTripsTripIdGenerationSessionsSessionIdCancel · getPostTripsTripIdGenerationSessionsSessionIdCancelMutationOptions · PostTripsTripIdGenerationSessionsSessionIdCancelMutationResult · PostTripsTripIdGenerationSessionsSessionIdCancelMutationError · usePostTripsTripIdGenerationSessionsSessionIdCancel · postTripsTripIdItinerarySlotCandidates · getPostTripsTripIdItinerarySlotCandidatesMutationOptions · PostTripsTripIdItinerarySlotCandidatesMutationResult · PostTripsTripIdItinerarySlotCandidatesMutationBody · PostTripsTripIdItinerarySlotCandidatesMutationError · usePostTripsTripIdItinerarySlotCandidates · postTripsTripIdVisits · getPostTripsTripIdVisitsMutationOptions · PostTripsTripIdVisitsMutationResult · PostTripsTripIdVisitsMutationBody · PostTripsTripIdVisitsMutationError · usePostTripsTripIdVisits · getTripsTripIdVisitsDaysDay · getGetTripsTripIdVisitsDaysDayQueryKey · getGetTripsTripIdVisitsDaysDayQueryOptions · GetTripsTripIdVisitsDaysDayQueryResult · GetTripsTripIdVisitsDaysDayQueryError · useGetTripsTripIdVisitsDaysDay · patchTripsTripIdVisitsVisitCheckId · getPatchTripsTripIdVisitsVisitCheckIdMutationOptions · PatchTripsTripIdVisitsVisitCheckIdMutationResult · PatchTripsTripIdVisitsVisitCheckIdMutationBody · PatchTripsTripIdVisitsVisitCheckIdMutationError · usePatchTripsTripIdVisitsVisitCheckId · postTripsTripIdVisitsVisitCheckIdComplete · getPostTripsTripIdVisitsVisitCheckIdCompleteMutationOptions · PostTripsTripIdVisitsVisitCheckIdCompleteMutationResult · PostTripsTripIdVisitsVisitCheckIdCompleteMutationError · usePostTripsTripIdVisitsVisitCheckIdComplete · postTripsTripIdVisitsVisitCheckIdSkip · getPostTripsTripIdVisitsVisitCheckIdSkipMutationOptions · PostTripsTripIdVisitsVisitCheckIdSkipMutationResult · PostTripsTripIdVisitsVisitCheckIdSkipMutationError · usePostTripsTripIdVisitsVisitCheckIdSkip · postTripsTripIdVisitsVisitCheckIdPhotos · getPostTripsTripIdVisitsVisitCheckIdPhotosMutationOptions · PostTripsTripIdVisitsVisitCheckIdPhotosMutationResult · PostTripsTripIdVisitsVisitCheckIdPhotosMutationBody · PostTripsTripIdVisitsVisitCheckIdPhotosMutationError · usePostTripsTripIdVisitsVisitCheckIdPhotos · getTripsTripIdVisitsVisitCheckIdPhotos · getGetTripsTripIdVisitsVisitCheckIdPhotosQueryKey · getGetTripsTripIdVisitsVisitCheckIdPhotosQueryOptions · GetTripsTripIdVisitsVisitCheckIdPhotosQueryResult · GetTripsTripIdVisitsVisitCheckIdPhotosQueryError · useGetTripsTripIdVisitsVisitCheckIdPhotos · putTripsTripIdVisitsVisitCheckIdPhotosOrder · getPutTripsTripIdVisitsVisitCheckIdPhotosOrderMutationOptions · PutTripsTripIdVisitsVisitCheckIdPhotosOrderMutationResult · PutTripsTripIdVisitsVisitCheckIdPhotosOrderMutationBody · PutTripsTripIdVisitsVisitCheckIdPhotosOrderMutationError · usePutTripsTripIdVisitsVisitCheckIdPhotosOrder · deleteTripsTripIdVisitsVisitCheckIdPhotosVisitPhotoMetaId · getDeleteTripsTripIdVisitsVisitCheckIdPhotosVisitPhotoMetaIdMutationOptions · DeleteTripsTripIdVisitsVisitCheckIdPhotosVisitPhotoMetaIdMutationResult · DeleteTripsTripIdVisitsVisitCheckIdPhotosVisitPhotoMetaIdMutationError · useDeleteTripsTripIdVisitsVisitCheckIdPhotosVisitPhotoMetaId · getMeRecords · getGetMeRecordsQueryKey · getGetMeRecordsQueryOptions · GetMeRecordsQueryResult · GetMeRecordsQueryError · useGetMeRecords · getTripsTripIdRecords · getGetTripsTripIdRecordsQueryKey · getGetTripsTripIdRecordsQueryOptions · GetTripsTripIdRecordsQueryResult · GetTripsTripIdRecordsQueryError · useGetTripsTripIdRecords · putTripsTripIdVisitsVisitCheckIdMemo · getPutTripsTripIdVisitsVisitCheckIdMemoMutationOptions · PutTripsTripIdVisitsVisitCheckIdMemoMutationResult · PutTripsTripIdVisitsVisitCheckIdMemoMutationBody · PutTripsTripIdVisitsVisitCheckIdMemoMutationError · usePutTripsTripIdVisitsVisitCheckIdMemo · getTripsTripIdTriggers · getGetTripsTripIdTriggersQueryKey · getGetTripsTripIdTriggersQueryOptions · GetTripsTripIdTriggersQueryResult · GetTripsTripIdTriggersQueryError · useGetTripsTripIdTriggers · weatherCheck · getWeatherCheckMutationOptions · WeatherCheckMutationResult · WeatherCheckMutationError · useWeatherCheck · postTripsTripIdTriggersTriggerIdDismiss · getPostTripsTripIdTriggersTriggerIdDismissMutationOptions · PostTripsTripIdTriggersTriggerIdDismissMutationResult · PostTripsTripIdTriggersTriggerIdDismissMutationError · usePostTripsTripIdTriggersTriggerIdDismiss · postTripsTripIdStayRecommendations · getPostTripsTripIdStayRecommendationsMutationOptions · PostTripsTripIdStayRecommendationsMutationResult · PostTripsTripIdStayRecommendationsMutationBody · PostTripsTripIdStayRecommendationsMutationError · usePostTripsTripIdStayRecommendations · postTripsTripIdReplanSessions · getPostTripsTripIdReplanSessionsMutationOptions · PostTripsTripIdReplanSessionsMutationResult · PostTripsTripIdReplanSessionsMutationBody · PostTripsTripIdReplanSessionsMutationError · usePostTripsTripIdReplanSessions · getTripsTripIdReplanSessionsSessionId · getGetTripsTripIdReplanSessionsSessionIdQueryKey · getGetTripsTripIdReplanSessionsSessionIdQueryOptions · GetTripsTripIdReplanSessionsSessionIdQueryResult · GetTripsTripIdReplanSessionsSessionIdQueryError · useGetTripsTripIdReplanSessionsSessionId · postTripsTripIdReplanSessionsSessionIdApply · getPostTripsTripIdReplanSessionsSessionIdApplyMutationOptions · PostTripsTripIdReplanSessionsSessionIdApplyMutationResult · PostTripsTripIdReplanSessionsSessionIdApplyMutationError · usePostTripsTripIdReplanSessionsSessionIdApply · postTripsTripIdReplanSessionsSessionIdCancel · getPostTripsTripIdReplanSessionsSessionIdCancelMutationOptions · PostTripsTripIdReplanSessionsSessionIdCancelMutationResult · PostTripsTripIdReplanSessionsSessionIdCancelMutationError · usePostTripsTripIdReplanSessionsSessionIdCancel · getTripsTripIdItineraryRevisions · getGetTripsTripIdItineraryRevisionsQueryKey · getGetTripsTripIdItineraryRevisionsQueryOptions · GetTripsTripIdItineraryRevisionsQueryResult · GetTripsTripIdItineraryRevisionsQueryError · useGetTripsTripIdItineraryRevisions · postTripsTripIdItineraryRevisionsRevisionIdRestore · getPostTripsTripIdItineraryRevisionsRevisionIdRestoreMutationOptions · PostTripsTripIdItineraryRevisionsRevisionIdRestoreMutationResult · PostTripsTripIdItineraryRevisionsRevisionIdRestoreMutationError · usePostTripsTripIdItineraryRevisionsRevisionIdRestore · postTripsTripIdItineraryConfirm · getPostTripsTripIdItineraryConfirmMutationOptions · PostTripsTripIdItineraryConfirmMutationResult · PostTripsTripIdItineraryConfirmMutationError · usePostTripsTripIdItineraryConfirm · getTripsTripIdChangeLog · getGetTripsTripIdChangeLogQueryKey · getGetTripsTripIdChangeLogQueryOptions · GetTripsTripIdChangeLogQueryResult · GetTripsTripIdChangeLogQueryError · useGetTripsTripIdChangeLog · deleteTripsTripIdMustVisitsMustVisitId · getDeleteTripsTripIdMustVisitsMustVisitIdMutationOptions · DeleteTripsTripIdMustVisitsMustVisitIdMutationResult · DeleteTripsTripIdMustVisitsMustVisitIdMutationError · useDeleteTripsTripIdMustVisitsMustVisitId
 
 ## src/shared/api/
-- `src/shared/api/index.ts`  →  SocialProvider · BootstrapResponse · AgeConfirmation · SocialLoginBody · SocialTokenLoginBody · AccountSummary · TokenPair · NormalizedApiError · AuthedApiClientOptions · TermsVersion · ConsentAction · ConsentInput · NicknameCheckReason · NicknameCheckResult · createAuthedApiClient · fetchBootstrap · postSocialLogin · postSocialTokenLogin · refreshTokens · fetchTerms · authedClient · submitConsents · patchConsent · fetchNicknameSuggestions · checkNickname · updateNickname · completeOnboarding
+- `src/shared/api/index.ts`  →  SocialProvider · BootstrapResponse · AgeConfirmation · SocialLoginBody · SocialTokenLoginBody · AccountSummary · TokenPair · NormalizedApiError · AuthedApiClientOptions · TermsVersion · ConsentAction · ConsentInput · NicknameCheckReason · NicknameCheckResult · createAuthedApiClient · fetchBootstrap · postSocialLogin · postSocialTokenLogin · refreshTokens · logout · fetchTerms · fetchTermsByType · authedClient · submitConsents · patchConsent · fetchNicknameSuggestions · checkNickname · updateNickname · completeOnboarding
 - `src/shared/api/isAlreadyRegistered.ts`  →  isAlreadyRegistered
 - `src/shared/api/isNotFound.ts`  →  isNotFound
 - `src/shared/api/mutator.ts`  →  customInstance
@@ -1215,9 +1268,10 @@
 - `src/shared/date/formatKoreanDate.ts`  →  formatKoreanDate
 - `src/shared/date/formatRelativeTime.ts`  →  formatRelativeTime
 - `src/shared/date/monthGrid.ts`  →  MonthCell · daysInMonth · firstWeekdayOfMonth · shiftMonth · isDateInRange · buildMonthGrid
+- `src/shared/date/seoulDate.ts`  →  seoulDate
 
 ## src/shared/location/
-- `src/shared/location/LocationGlyphs.tsx`  →  LocationBackChevronGlyph · LocationRadarHero · LocationOffGlyph · LocationInfoGlyph · LocationClockGlyph · LocationSwapGlyph · LocationPinGlyph · LocationWarningGlyph · LocationCloseGlyph
+- `src/shared/location/LocationGlyphs.tsx`  →  LocationBackChevronGlyph · LocationRadarHero · LocationOffGlyph · LocationInfoGlyph · LocationClockGlyph · LocationSwapGlyph · LocationPinGlyph · LocationWarningGlyph
 - `src/shared/location/LocationPreprompt.tsx`  →  LocationPrepromptState · LocationPrepromptProps · LocationPreprompt
 - `src/shared/location/consentPutBody.ts`  →  consentPutBody
 - `src/shared/location/geofence.ts`  →  GeofenceRegion · buildGeofenceRegions · geofenceArriveRequest · registerGeofences · clearGeofences
@@ -1231,7 +1285,7 @@
 
 ## src/shared/map/
 - `src/shared/map/CenterPinPicker.tsx`  →  CenterPinPickerProps · CenterPinPicker
-- `src/shared/map/MapView.tsx`  →  MapCenter · MapPinState · MapPin · MapViewProps · MapView
+- `src/shared/map/MapView.tsx`  →  MapCenter · MapPinState · MapPinKind · MapPin · MapViewProps · MapView
 - `src/shared/map/index.ts`  →  MapView · CenterPinPicker
 
 ## src/shared/photo/
@@ -1241,17 +1295,21 @@
 - `src/shared/pref/preferenceSelection.ts`  →  toggleMulti · toggleSingle
 
 ## src/shared/push/
-- `src/shared/push/index.ts`  →  getPushPermission · type PushPermissionStatus · registerPushToken · unregisterDeviceToken · toServerOsPermission · isDeviceNotRegistered
+- `src/shared/push/index.ts`  →  getPushPermission · type PushPermissionStatus · requestPushPermission · registerPushToken · unregisterDeviceToken · toServerOsPermission · isDeviceNotRegistered · promptAndRegisterPush · registerPushIfGranted · unregisterStoredPushToken
 - `src/shared/push/permissions.ts`  →  PushPermissionStatus · getPushPermission
-- `src/shared/push/register.ts`  →  toServerOsPermission · isDeviceNotRegistered · unregisterDeviceToken · registerPushToken
+- `src/shared/push/register.ts`  →  toServerOsPermission · isDeviceNotRegistered · unregisterDeviceToken · registerPushToken · promptAndRegisterPush · registerPushIfGranted · unregisterStoredPushToken
+- `src/shared/push/request.ts`  →  ensureAndroidChannels · requestPushPermission
 
 ## src/shared/storage/
+- `src/shared/storage/idSet.ts`  →  readIdSet · writeIdSet
 - `src/shared/storage/index.ts`  →  TokenBundle · saveTokens · getTokens · clearTokens · hasStoredToken
 
 ## src/shared/ui/
 - `src/shared/ui/BottomTabBar.tsx`  →  ShellTabKey · BottomTabBarProps · BottomTabBar
 - `src/shared/ui/HeartGlyphs.tsx`  →  HeartOutlineGlyph · HeartFilledGlyph · HeartBadgeGlyph
+- `src/shared/ui/SegmentedControl.tsx`  →  SegmentedOption · SegmentedControlProps · SegmentedControl
 - `src/shared/ui/StateNotice.tsx`  →  StateNoticeAction · StateNoticeProps · StateNotice
+- `src/shared/ui/Toggle.tsx`  →  ToggleProps · Toggle
 - `src/shared/ui/WheelPicker.tsx`  →  WheelPickerProps · WheelPicker
 
 ## src/shared/ui/pref/
@@ -1265,6 +1323,8 @@
 - `src/shared/version/compareVersion.ts`  →  compareVersion
 
 ## src/test-support/
+- `src/test-support/editDragList.ts`  →  EDIT_LIST · editListData · moveItem · fireEditDragEnd · fireEditDropOnZone · fireEditDragBegin
+- `src/test-support/expoAppleAuthenticationMock.tsx`  →  appleSignInAsyncSpy · appleIsAvailableAsyncSpy · appleButtonPropsSpy · expoAppleAuthenticationModule · resetExpoAppleAuthenticationMock
 - `src/test-support/expoAuthSessionMock.ts`  →  promptAsyncSpy · authRequestConstructorSpy · makeRedirectUriSpy · expoAuthSessionModule · expoWebBrowserModule · expoCryptoModule · setPromptResult · setCodeVerifier · resetExpoAuthSessionMock
 - `src/test-support/expoRouterRedirectMock.tsx`  →  Redirect · Stack
 - `src/test-support/expoRouterStackMock.tsx`  →  Stack
@@ -1272,29 +1332,32 @@
 - `src/test-support/mapViewMock.tsx`  →  MapCenter · MapPin · MapView · CenterPinPicker
 - `src/test-support/nativeSocialSdkMock.ts`  →  kakaoLoginSpy · naverLoginSpy · naverInitializeSpy · kakaoLogoutSpy · kakaoLoginModule · naverLoginModule · resetNativeSocialSdkMock
 - `src/test-support/onboardingScenarios.ts`  →  ConsentBehavior · NicknameBehavior · OnboardingScenario · ONBOARDING_SCENARIOS · OnboardingScenarioKey · setOnboardingScenario · getOnboardingScenario · resetOnboardingScenario
+- `src/test-support/pushOsFake.ts`  →  OsPermission · primeOsPermission · primeExpoToken
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-## src/widgets/itinerary-edit/
-- `src/widgets/itinerary-edit/index.ts`  →  ManualEditShell · mergeValidationFlags · reorderKeepingFixed
+## src/widgets/copick-stepper/ui/
+- `src/widgets/copick-stepper/ui/CoPickStepper.tsx`  →  CoPickStep · CoPickStepperProps · CoPickStepper
+- `src/widgets/copick-stepper/ui/CoPickStepperGlyphs.tsx`  →  StepperSunGlyph · StepperCheckBadge
 
-## src/widgets/itinerary-edit/model/
-- `src/widgets/itinerary-edit/model/mergeValidationFlags.ts`  →  mergeValidationFlags
-- `src/widgets/itinerary-edit/model/reorderKeepingFixed.ts`  →  reorderKeepingFixed
-
-## src/widgets/itinerary-edit/ui/
-- `src/widgets/itinerary-edit/ui/ManualEditGlyphs.tsx`  →  BackChevronGlyph · UndoGlyph · WarningTriangleGlyph · LockGlyph · TrashGlyph · PlusGlyph · DragHandleGlyph
-- `src/widgets/itinerary-edit/ui/ManualEditShell.tsx`  →  ManualEditMode · ManualEditShellProps · ManualEditShell
+## src/widgets/generation-done-bar/ui/
+- `src/widgets/generation-done-bar/ui/GenerationDoneBar.tsx`  →  GenerationDoneBarProps · GenerationDoneBar
+- `src/widgets/generation-done-bar/ui/GenerationDoneBarGlyphs.tsx`  →  DoneCheckGlyph
 
 ## src/widgets/map-sheet-shell/ui/
 - `src/widgets/map-sheet-shell/ui/CtaBar.tsx`  →  CtaButton · CtaBarProps · CtaBar
 - `src/widgets/map-sheet-shell/ui/DayChipOverlay.tsx`  →  DayChip · DayChipOverlayProps · DayChipOverlay
 - `src/widgets/map-sheet-shell/ui/DistanceConnector.tsx`  →  DistanceConnectorProps · DistanceConnector
-- `src/widgets/map-sheet-shell/ui/MapSheetGlyphs.tsx`  →  BackChevronGlyph · WalkGlyph · CarGlyph
-- `src/widgets/map-sheet-shell/ui/MapSheetShell.tsx`  →  MapSheetShellProps · MapSheetShell
+- `src/widgets/map-sheet-shell/ui/EditorGlyphs.tsx`  →  TrashGlyph · PlusGlyph · InfoCircleGlyph
+- `src/widgets/map-sheet-shell/ui/EditorView.tsx`  →  EditorViewSlot · EditorViewProps · EditorView
+- `src/widgets/map-sheet-shell/ui/GenerationProgressCard.tsx`  →  GenerationProgressCell · GenerationProgressCardProps · GenerationProgressCard
+- `src/widgets/map-sheet-shell/ui/MapFallbackBar.tsx`  →  MapFallbackBar
+- `src/widgets/map-sheet-shell/ui/MapSheetGlyphs.tsx`  →  BackChevronGlyph · WalkGlyph · CarGlyph · FullAiGlyph · CheckGlyph · MapPinOffGlyph · RetryGlyph
+- `src/widgets/map-sheet-shell/ui/MapSheetShell.tsx`  →  MapSheetListSlot · MapSheetShellProps · MapSheetShell
 - `src/widgets/map-sheet-shell/ui/SheetHeader.tsx`  →  SheetHeaderProps · SheetHeader
+- `src/widgets/map-sheet-shell/ui/SlotDropZone.tsx`  →  SlotDropZoneProps · SlotDropZone
 
 ## src/widgets/time-sheet/ui/
-- `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetProps · TimeSheet
+- `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 873개 파일
+합계 926개 파일

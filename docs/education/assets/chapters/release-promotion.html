@@ -1,0 +1,108 @@
+<p><span class="badge">교육용 확장 · 이 브랜치에 미구현</span> 사용자가 개발·테스트한 이미지 자체를 DEV와 PRD에 배포하려면 이미지 생성과 이미지 선택을 분리한다. 후보 이미지를 한 번 빌드하고 digest를 기록한 다음, 그 digest로 DEV를 테스트하고 승인된 결과를 PRD에 전달한다. 환경별 DB 주소·Secret·replica 수는 바꿔도 앱 이미지 digest는 바꾸지 않는다.</p>
+<div aria-label="추가 구현할 동일 이미지 승격 경로" class="flow">
+<div class="flow-step"><strong>BUILD ONCE</strong><br/>검토된 소스 → ECR<br/>backend·AI digest 기록</div>
+<div class="flow-step"><strong>DEV VERIFY</strong><br/>해당 digest 배포<br/>통합·업무 테스트 기록</div>
+<div class="flow-step"><strong>RELEASE RECORD</strong><br/>source SHA·build run<br/>digest·DEV 결과 묶음</div>
+<div class="flow-step"><strong>APPROVE &amp; PROMOTE</strong><br/>재빌드 없이 복사·동일성 확인<br/>PRD digest 배포</div>
+</div>
+<p>release 기록에는 최소한 repository, source SHA, build run ID와 attempt, backend/AI/선택형 embedding digest, Helm chart 버전 또는 commit, DEV 검증 실행 번호를 넣는다. 최신 성공 실행처럼 움직이는 대상을 찾지 말고 한 실행을 명시적으로 선택한다. PRD 승인자는 해당 소스가 운영 branch에 반영된 검토 대상인지, DEV 결과가 바로 그 digest와 chart를 검증했는지 확인한다. 기록 자체에는 비밀값이나 Terraform plan/state를 넣지 않는다.</p>
+<div class="code-block"><p class="code-label">변경 예시 ① 빌드 step에 id를 부여하여 digest를 수집 · 기존 workflow 수정안</p><pre><code>- name: Build and publish backend
+  id: backend_image
+  if: steps.config.outputs.deploy_application == 'true'
+  uses: docker/build-push-action@v6
+  with:
+    context: ./backend
+    platforms: linux/amd64
+    push: true
+    tags: ${{ steps.infra.outputs.backend_repository }}:${{ env.IMAGE_TAG }}
+
+- name: Build and publish AI
+  id: ai_image
+  if: steps.config.outputs.deploy_application == 'true'
+  uses: docker/build-push-action@v6
+  with:
+    context: ./ai
+    platforms: linux/amd64
+    push: true
+    tags: ${{ steps.infra.outputs.ai_repository }}:${{ env.IMAGE_TAG }}
+
+# DEV 배포와 DEV 검증을 통과한 뒤 게시할 메타데이터의 재료.
+- name: Record candidate image identities
+  if: steps.config.outputs.deploy_application == 'true'
+  env:
+    BACKEND_DIGEST: ${{ steps.backend_image.outputs.digest }}
+    AI_DIGEST: ${{ steps.ai_image.outputs.digest }}
+  run: |
+    set -euo pipefail
+    [[ "$BACKEND_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
+    [[ "$AI_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
+    jq -n \
+      --arg source_sha "$GITHUB_SHA" \
+      --arg build_run "$GITHUB_RUN_ID" \
+      --arg attempt "$GITHUB_RUN_ATTEMPT" \
+      --arg backend "$BACKEND_DIGEST" \
+      --arg ai "$AI_DIGEST" \
+      '{source_sha:$source_sha,build_run:$build_run,attempt:$attempt,
+        images:{backend:$backend,ai:$ai}}' &gt; release-candidate.json</code></pre></div>
+<p>이것은 완성된 release workflow가 아니라 digest를 얻는 부분의 수정안이다. repository·chart·검증 결과를 추가하고 실제 DEV에도 이 digest를 배포한 뒤 성공한 기록만 승격 대상으로 게시해야 한다. Buildx action은 <code>digest</code> output을 제공한다. 이미지 manifest 또는 image index의 digest와 실제 노드가 고른 platform manifest digest는 층위가 다를 수 있으므로 비교 대상을 명확히 기록한다. <a href="https://github.com/docker/build-push-action#outputs">Buildx action outputs</a>.</p>
+<p><strong>현재 chart에 <code>--set images.backend.digest=...</code>만 추가하면 동작하지 않는다.</strong> <a href="../../deploy/eks/chart/templates/_helpers.tpl">현재 helper</a>는 항상 <code>repository:tag</code>를 만들고 <a href="../../deploy/eks/chart/values.schema.json">values schema</a>는 알 수 없는 digest 필드를 거부한다. <a href="../../deploy/eks/runtime.py">runtime.py</a>도 <code>--image-tag</code>만 받는다. 세 곳을 함께 바꿔야 한다.</p>
+<div class="code-block"><p class="code-label">변경 예시 ② tag와 digest를 지원하는 Helm helper · digest 우선 정책</p><pre><code>{{- define "trippilot.image" -}}
+{{- $image := index .root.Values.images .component -}}
+{{- $repo := required "image repository is required" $image.repository -}}
+{{- if $image.digest -}}
+  {{- if not (regexMatch "^sha256:[a-f0-9]{64}$" $image.digest) -}}
+    {{- fail "image digest must be sha256 followed by 64 lowercase hex characters" -}}
+  {{- end -}}
+  {{- printf "%s@%s" $repo $image.digest | quote -}}
+{{- else -}}
+  {{- printf "%s:%s" $repo (required "image tag is required" $image.tag) | quote -}}
+{{- end -}}
+{{- end -}}</code></pre></div>
+<p>함께 바꿀 schema에는 각 이미지의 선택적 <code>digest</code> 문자열과 <code>^sha256:[a-f0-9]{64}$</code> 패턴을 추가한다. 활성 이미지의 <code>repository</code>는 필수로 두고 nonempty tag 또는 유효 digest 중 하나는 반드시 존재하게 <code>anyOf</code>로 검증한다. embedding의 이미지 식별자 필수 검증은 <code>embedding.enabled=true</code>일 때만 적용한다. 비활성 embedding은 현재 기본 values나 Helm lint에서 빈 값을 허용해야 한다. gateway가 기존 tag 형식으로도 동작하도록 호환성을 유지하고 활성 앱 이미지에는 승격 시 digest를 필수로 하는 별도 검증을 둔다. 값이 둘 다 있으면 위 helper는 digest를 우선한다.</p>
+<p>runtime에는 검증된 release 파일을 받아 backend·AI·embedding별 digest를 렌더링하는 옵션을 추가한다. 단일 공통 tag만 받는 현재 인터페이스로는 구성요소별 digest를 표현할 수 없다. 입력 repository는 Terraform output의 대상 환경 ECR과 일치시키고 임의 공개 registry URL을 허용하지 않는다. 이때 PRD values의 replica·Secret·DB 주소는 계속 PRD 값을 사용한다.</p>
+<div class="code-block"><p class="code-label">변경 예시 ③ 수정된 chart에 검증한 digest를 주입 · 승격 workflow 내부 예시</p><pre><code># 사전 조건:
+# - PRD branch/Environment 보호와 OIDC 인증 완료
+# - release 기록의 출처·성공한 DEV 검증·source SHA를 검증
+# - BACKEND_DIGEST, AI_DIGEST는 복제 후 동일성을 확인한 digest
+# - 대상 PRD 인프라 output으로 runtime values와 Secret/DB 준비 완료
+# - 이 경로에는 docker build 단계가 없음
+
+helm upgrade --install trippilot deploy/eks/chart --namespace trippilot \
+  -f deploy/eks/chart/values-prd.yaml \
+  -f "$RUNNER_TEMP/trippilot-values.json" \
+  --set-string "images.backend.digest=$BACKEND_DIGEST" \
+  --set-string "images.ai.digest=$AI_DIGEST" \
+  --set-string "rolloutNonce=$DEPLOY_RUN_ID" \
+  --atomic --wait --timeout 20m --history-max 10</code></pre></div>
+<p>승격 workflow에는 수동 <code>release_run_id</code> 또는 검토된 release ID 입력, <code>environment: prd</code>, 기존 <code>aws-prd</code> concurrency와 OIDC 보호를 유지한다. 입력을 셸 문자열에 바로 삽입하지 말고 환경변수로 전달해 숫자 형식 등을 검증한다. 지정된 실행의 repository·workflow 경로·event·branch·성공 상태·attempt·source SHA를 조회한 뒤 그 실행의 release 기록을 내려받는다. 다른 실행의 artifact를 받으려면 명시적 run ID와 해당 저장소의 Actions 읽기 권한이 필요하다. 출처 검증 없이 사용자가 입력한 digest만 받아 PRD에 적용하는 설계는 피한다.</p>
+<div class="table-wrap"><table>
+<caption>같은 이미지를 환경별 ECR로 가져오는 방법</caption>
+<thead><tr><th>구성</th><th>가능한 설계</th><th>반드시 확인할 점</th></tr></thead>
+<tbody>
+<tr><td>같은 계정, 환경별 repository</td><td>검증된 DEV digest를 PRD repository로 복사하거나, 별도 승인된 공통 release repository를 두고 양쪽에서 pull</td><td>현재 환경별 IAM 정책을 그대로 두면 교차 접근 권한이 부족할 수 있음. 읽기·복사·pull 권한을 별도 설계</td></tr>
+<tr><td>다른 계정</td><td>대상 registry 정책을 갖춘 ECR replication 또는 제한된 복사 Role로 manifest·layer 복사</td><td>원본/대상 계정 신뢰·ECR 권한과 대상 repository의 immutable 정책 확인</td></tr>
+<tr><td>서로 다른 repository 이름</td><td>이름을 지정할 수 있는 복사 도구로 전송</td><td>ECR 기본 replication은 repository 이름을 바꾸지 못함</td></tr>
+</tbody>
+</table></div>
+<p>현재 환경별 repository는 DEV와 PRD 이름이 다르므로 ECR 자동 replication 설정만으로 곧바로 두 경로가 연결되는 것은 아니다. 또한 기본 replication은 설정 이전에 이미 존재하던 모든 이미지를 자동으로 소급 복제하지 않는다. 목적지 도착을 확인한 뒤 digest를 비교해야 한다. <a href="https://docs.aws.amazon.com/AmazonECR/latest/userguide/replication.html">ECR replication 제약</a>.</p>
+<div class="code-block"><p class="code-label">교육용 복사 예시 · 별도 구현·권한·인증이 필요한 단계</p><pre><code># SOURCE_REPOSITORY와 TARGET_REPOSITORY는 검증한 ECR URL.
+# 양쪽 ECR 인증은 별도로 구성하고 토큰을 로그에 출력하지 않는다.
+# skopeo 설치와 최소 권한 Role 준비가 필요하다.
+skopeo copy --all --preserve-digests \
+  "docker://$SOURCE_REPOSITORY@$BACKEND_DIGEST" \
+  "docker://$TARGET_REPOSITORY:$RELEASE_TAG"
+
+# 현재 AWS CLI 인증이 목적지 계정인지 먼저 검증한 상태여야 한다.
+copied_digest=$(aws ecr describe-images \
+  --region "$TARGET_REGION" \
+  --repository-name "$TARGET_REPOSITORY_NAME" \
+  --image-ids "imageTag=$RELEASE_TAG" \
+  --query 'imageDetails[0].imageDigest' --output text)
+
+test "$copied_digest" = "$BACKEND_DIGEST"</code></pre></div>
+<p><code>--all</code>은 image index가 가리키는 이미지까지 복사하고 <code>--preserve-digests</code>는 digest 보존이 불가능할 때 실패하도록 요청한다. 임의로 다시 build하거나 manifest 형식을 바꿔놓고 같은 이미지라고 기록하지 않는다. backend·AI·활성 embedding 모두 확인한다. <a href="https://github.com/podman-container-tools/skopeo/blob/main/docs/skopeo-copy.1.md">Skopeo copy 공식 옵션</a>.</p>
+<p>동일 앱 digest는 실행 환경 전체의 동일성까지 보장하지 않는다. PRD에는 다른 DB 데이터·Secret·외부 API·네트워크 정책이 있고 gateway·DB 초기화 Job 같은 보조 이미지도 있다. 엄격한 재현성을 원하면 Dockerfile의 베이스 digest, 잠금 파일, 빌드 도구, chart·보조 이미지와 migration 버전까지 release 기록에 연결한다. DB 변경은 이전 앱과 새 앱이 잠시 공존하는 rolling update를 고려해 호환되는 컬럼 추가 → 앱 전환 → 나중에 오래된 컬럼 제거처럼 단계적으로 설계한다.</p>
+<div class="exercise">
+<p><strong>확장 과제 — 성공/실패 조건부터 정의하기</strong></p>
+<p>수정 chart가 <code>repository@sha256:...</code>를 출력하는 성공 사례, 길이가 틀린 digest를 거부하는 사례, PRD가 DEV repository를 잘못 참조하는 사례, optional embedding digest가 빠진 사례, 실패한 DEV 실행을 PRD 승격에 사용하는 사례를 테스트로 적는다. 승인·출처·이미지 보존을 통과했을 때만 재빌드 없이 Helm 단계에 도달하도록 설계한다.</p>
+</div>

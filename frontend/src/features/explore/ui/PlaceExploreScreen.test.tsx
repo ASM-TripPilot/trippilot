@@ -17,10 +17,12 @@ import {
  * AC-1 · AC-2 · AC-3 · AC-4 · AC-5 · AC-6 · AC-G1 · AC-G2 · AC-V1(01b Seed) —
  * d04 장소 탐색 default 의 **프레젠테이션 화면**.
  *
- * 무엇을 보장하나: `PlaceExploreScreen` 은 props 8개만 받아(네트워크·라우팅·로컬 상태 없음)
- * 검색바 · 카테고리 칩 8개 · 정렬 라벨 1개 · 2열 카드 그리드 · 하단 CTA 를 그린다. 받은 순서를
+ * 무엇을 보장하나: `PlaceExploreScreen` 은 네트워크·라우팅·로컬 상태 없이 검색바(우측 필터
+ * 버튼) · 카테고리 칩 8개 · 정렬 칩 3개(1 활성 + 2 표시전용) · 2열 카드 그리드 · 우하단 FAB
+ * 2단(♥ 담은장소 · ＋ 여행만들기)을 그린다(TRIP-708 로 CtaBar → FAB 로 교체). 받은 순서를
  * 그대로 그리고(정렬·검색은 페이지가 끝내서 넘긴다), 담김 여부는 `savedPoiIds` 하나에서만
- * 파생하며, **계약에 판정 재료가 없는 컨트롤은 그리지 않는다**(01b Seed §2).
+ * 파생하며, **계약에 판정 재료가 없는 컨트롤은 그리지 않는다**(01b Seed §2). BottomTabBar·
+ * 카테고리 시트는 화면이 아니라 페이지가 그린다(화면 순수성 — `PlaceExplorePage.*.integration`).
  * 소스 층(INV-3 조건부 렌더 · 토큰 · 층 경계)은 `src/__tests__/placeExploreStructure.test.ts`
  * 가 맡는다 — 이 파일은 렌더 결과만 본다.
  *
@@ -264,30 +266,42 @@ describe('PlaceExploreScreen — 카테고리 칩 (AC-3)', () => {
   });
 });
 
-describe('PlaceExploreScreen — 그리지 않는 컨트롤 (AC-G1 · 01b Seed §2·Q5·Q8)', () => {
-  it('정렬 칩은 "요즘 담긴 순" 하나뿐이고, 나머지 두 축은 어디에도 없다', () => {
+describe('PlaceExploreScreen — 정렬 칩 3개 (AC-3 · 01b Seed §2·Q8)', () => {
+  it('정렬 칩 3개를 그리되 전부 표시 전용(비-Pressable)이고, 활성은 "요즘 담긴 순" 하나다', () => {
     renderScreen();
 
-    const sortChips = screen.getAllByTestId(/^explore-places-sort-/);
-    expect(sortChips).toHaveLength(1);
-    expect(String(sortChips[0].props.testID)).toBe('explore-places-sort-saved');
-    expect(within(sortChips[0]).getByText('요즘 담긴 순')).toBeOnTheScreen();
+    // 3칩이 라벨과 함께 뜬다. "지금 뜨는 순"은 계약 재료가 savedCount 하나뿐이라 "요즘 담긴
+    // 순"과 완전히 같은 순서가 되고(Seed Q8), "가까운 순"은 좌표 파라미터가 없다 — 둘 다
+    // 눌러도 아무 일이 없는 **표시 라벨**이라 View(비-Pressable)로 둔다.
+    const saved = screen.getByTestId('explore-places-sort-saved');
+    const trending = screen.getByTestId('explore-places-sort-trending');
+    const nearby = screen.getByTestId('explore-places-sort-nearby');
+    expect(within(saved).getByText('요즘 담긴 순')).toBeOnTheScreen();
+    expect(within(trending).getByText('지금 뜨는 순')).toBeOnTheScreen();
+    expect(within(nearby).getByText('가까운 순')).toBeOnTheScreen();
 
-    // "지금 뜨는 순"은 계약 재료가 `savedCount` 하나뿐이라 "요즘 담긴 순"과 **완전히 같은
-    // 순서**가 되고(Seed Q8), "가까운 순"은 좌표 파라미터가 없다(AC-G1). 둘 다 누르면
-    // 아무 일도 안 나는 칩이 된다.
-    expect(screen.queryAllByText(/지금 뜨는/)).toHaveLength(0);
-    expect(screen.queryAllByText(/가까운/)).toHaveLength(0);
+    // 활성/비활성은 색으로 갈린다(활성 = 연핑크 `bg-primary-pale`). NativeWind className 은
+    // style 로는 안 바뀌어도 렌더 트리에 `props.className` 문자열로 남으므로 문자열 포함으로
+    // 잰다(TimelineScreen.placeholder 선례). 셋 다 핑크(또는 셋 다 회색)인 회귀를 잡는다.
+    expect(String(saved.props.className)).toContain('primary-pale');
+    expect(String(trending.props.className)).not.toContain('primary-pale');
+    expect(String(nearby.props.className)).not.toContain('primary-pale');
   });
+});
 
-  it('누를 수 있는 것은 뒤로 · 칩 8개 · 하트 5개 · CTA 뿐이다', () => {
+describe('PlaceExploreScreen — 누를 수 있는 것 17개 (AC-1 · AC-2 · AC-3 · 01b Seed §2)', () => {
+  it('뒤로 · 칩 8개 · 하트 5개 · FAB 2개 · 필터 = 17개다 (CTA 제거·FAB/필터 추가·정렬칩 비-Pressable)', () => {
+    // 이 렌더는 onPressSavedPlaces·onPressFilter 를 **안 넘긴다** — 그래도 두 FAB·필터가 떠야
+    // 한다(Figma 는 상시 노출, 콜백은 옵셔널·무동작 허용). "콜백 없으면 안 그리는" 구현이면
+    // 여기서 개수가 어긋나 red.
     renderScreen();
 
-    // 이 한 단언이 Seed §2 원칙 전체의 심판이다 — 검색바 우측 필터 아이콘(Q5 미렌더),
-    // 정렬 칩의 Pressable 화(Q8: 선택지가 아니라 라벨), 카드 전체 누름 배선(d06 은 범위 밖)이
-    // 전부 여기 걸린다.
+    // 이 한 단언이 Seed §2 원칙 전체의 심판이다 — CtaBar 제거(-1)·우하단 FAB 2단(+2)·검색바
+    // 필터 버튼(+1)·정렬 칩 3개(비-Pressable=0)로 현 15 → **17**(현 15 에서 델타로 직접 세어
+    // 확정). 완전일치 목록이라 FAB 하나라도 빠지면(뮤테이션) 어긋나 red 다.
+    // BottomTabBar 는 화면이 아니라 페이지가 그리므로(3-a) 여기 개수에 안 든다.
     // 정직한 한계: `getAllByRole('button')` 은 accessibilityRole 이 **명시된** 요소만 잡는다
-    // (실측 — 맨 Pressable 은 안 잡힌다). 리포 관례상 모든 Pressable 이 role 을 단다.
+    // — 카드 루트는 role 미부여 bare Pressable 이라 카드 자체는 안 세어진다(TRIP-456).
     expect(
       screen
         .getAllByRole('button')
@@ -298,7 +312,9 @@ describe('PlaceExploreScreen — 그리지 않는 컨트롤 (AC-G1 · 01b Seed �
         'explore-places-back',
         ...CATEGORY_CHIPS.map(({ code }) => `explore-places-category-${code}`),
         ...PLACES.map(({ poiId }) => `explore-places-save-${poiId}`),
-        'explore-places-createtrip',
+        'explore-places-saved-fab',
+        'explore-places-create-fab',
+        'explore-places-filter',
       ].sort()
     );
   });
@@ -321,31 +337,60 @@ describe('PlaceExploreScreen — 담기 토글 (AC-4 · AC-5)', () => {
   });
 });
 
-describe('PlaceExploreScreen — 하단 CTA (AC-6 · BR-U1-09 · 01b Seed Q3)', () => {
-  it('담은 곳 수를 배지로, 문구를 따로 표기하고 누르면 콜백을 올린다', () => {
-    const handlers = renderScreen();
+describe('PlaceExploreScreen — 우하단 FAB 2단 (AC-1 · 01b Seed 3-a)', () => {
+  it('♥ FAB 를 누르면 onPressSavedPlaces, ＋ FAB 를 누르면 onPressCreateTrip 을 올린다', () => {
+    const onPressSavedPlaces = jest.fn();
+    const onPressCreateTrip = jest.fn();
+    renderScreen({ onPressSavedPlaces, onPressCreateTrip });
 
-    const cta = screen.getByTestId('explore-places-createtrip');
-    // 라이브 d04 는 `[숫자 배지] 담은 장소로 여행 만들기` 로, 숫자가 **별도 노드**다
-    // (티켓 AC 의 "{N} 담은 장소로 여행 만들기" 단일 문자열은 라이브와 다르다).
-    // 그래서 숫자와 문구를 각각 잰다 — `toHaveTextContent(문자열)` 은 완전 일치라
-    // 문구만으로는 통과할 수 없다(정규식으로 부분 확인).
-    expect(within(cta).getByText('2')).toBeOnTheScreen();
-    expect(cta).toHaveTextContent(/담은 장소로 여행 만들기/);
+    // ♥(위) = 담은 장소 d02 로, ＋(아래) = 여행 만들기(기존 콜백 재사용).
+    fireEvent.press(screen.getByTestId('explore-places-saved-fab'));
+    expect(onPressSavedPlaces).toHaveBeenCalledTimes(1);
 
-    fireEvent.press(cta);
-    expect(handlers.onPressCreateTrip).toHaveBeenCalledTimes(1);
+    fireEvent.press(screen.getByTestId('explore-places-create-fab'));
+    expect(onPressCreateTrip).toHaveBeenCalledTimes(1);
   });
 
-  it('담은 곳이 0이면 CTA 바 자체를 그리지 않는다', () => {
+  it('담은 곳이 0이어도 두 FAB 는 그대로 있고, 옛 CtaBar 는 사라졌다', () => {
     renderScreen({ savedPoiIds: [] });
 
-    // BR-U1-09 의 조건절 그대로다(Seed Q3 ⓐ). 비활성 회색 CTA 를 두면 눌러도 아무 일 없는
-    // 컨트롤이 되어 Seed §2 원칙 위반이다.
+    // CtaBar 는 savedPoiIds>0 조건이었으나 FAB 는 담은 수와 무관하게 상시 노출(Figma).
+    expect(screen.getByTestId('explore-places-saved-fab')).toBeOnTheScreen();
+    expect(screen.getByTestId('explore-places-create-fab')).toBeOnTheScreen();
+    // 회귀 잠금 — CTA 가 다시 살아나면 이 부재 단언이 red.
     expect(screen.queryByTestId('explore-places-createtrip')).toBeNull();
 
     // 긍정 짝 — 렌더가 통째로 실패해서 "없음"이 초록이 된 게 아니다.
     expect(cardTestIds()).toHaveLength(5);
+  });
+});
+
+describe('PlaceExploreScreen — 검색 필터 버튼 (AC-2 · 01b Seed 3-a)', () => {
+  it('검색바 우측 필터 버튼을 누르면 onPressFilter 를 올린다 (시트 열림은 페이지·6-b)', () => {
+    const onPressFilter = jest.fn();
+    renderScreen({ onPressFilter });
+
+    // 필터 버튼은 콜백만 올린다 — 카테고리 시트의 실제 열림·딤은 페이지 소유이고 6-b 다.
+    fireEvent.press(screen.getByTestId('explore-places-filter'));
+    expect(onPressFilter).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('PlaceExploreScreen — 카드 타이포 14/12 (AC-5)', () => {
+  it('카드 이름은 text-[14px], 부제는 text-[12px] 다 (13.5/11.5 에서 상향)', () => {
+    renderScreen();
+
+    // NativeWind className 은 style 로는 안 바뀌어도 렌더 트리에 props.className 문자열로
+    // 남는다(실측 확인 · TimelineScreen.placeholder 선례). 카드 타이포는 순수 시각 변경이지만
+    // 이 문자열 매처로 red 를 낼 수 있다 — 픽셀 렌더는 [검증] 스크린샷 몫이다. 카드는 이제
+    // entities/place/ui/PlaceGridCard 소유라 그 파일의 className 이 여기로 관측된다.
+    const card = screen.getByTestId('explore-places-card-p1');
+    expect(
+      String(within(card).getByText('감천문화마을').props.className)
+    ).toContain('text-[14px]');
+    expect(
+      String(within(card).getByText('명소 · 사하구').props.className)
+    ).toContain('text-[12px]');
   });
 });
 

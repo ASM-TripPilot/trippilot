@@ -40,8 +40,9 @@ beforeEach(() => {
 });
 
 describe('dev 프리뷰 탐색 2키 — results 얼굴 진입점', () => {
-  it('state=places-results 로 열면 d04 루트와 카드가 그려진다', () => {
-    mockSearchParams.state = 'places-results';
+  it('state=places-default 로 열면 d04 루트와 카드가 그려진다', () => {
+    // TRIP-708: `places-results` → `places-default` 개명(preview.tsx 키 개명은 implementer).
+    mockSearchParams.state = 'places-default';
 
     render(<DevPreview />);
 
@@ -52,8 +53,9 @@ describe('dev 프리뷰 탐색 2키 — results 얼굴 진입점', () => {
     ).toBeGreaterThan(0);
   });
 
-  it('state=saved-places-results 로 열면 d02 루트와 순번 항목이 그려진다', () => {
-    mockSearchParams.state = 'saved-places-results';
+  it('state=saved-places-default 로 열면 d02 루트와 순번 항목이 그려진다', () => {
+    // TRIP-705: `saved-places-results` → `saved-places-default` 개명.
+    mockSearchParams.state = 'saved-places-default';
 
     render(<DevPreview />);
 

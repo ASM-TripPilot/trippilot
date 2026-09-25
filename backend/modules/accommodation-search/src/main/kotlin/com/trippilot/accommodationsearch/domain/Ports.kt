@@ -7,6 +7,14 @@ package com.trippilot.accommodationsearch.domain
 interface AccommodationContentPort {
     /** 지역 기준 숙소 콘텐츠. region=null 이면 전체. 일부 벤더 실패 시 degraded=true + 가용분만. */
     fun search(region: String?): ContentResult
+
+    /**
+     * 한 건 조회(US-STAY-03 상세). **없으면 null** — 빈 [Stay] 를 지어내지 않는다.
+     *
+     * [search] 로 전체를 받아 걸러내지 않는 이유는 규모다. 정본이 12,782곳이라 상세 한 번에
+     * 전량을 읽게 되고, 지역 미선택 조회가 상한에 걸리는 것과 같은 문제가 된다.
+     */
+    fun findOne(key: StayKey): Stay?
 }
 
 /**

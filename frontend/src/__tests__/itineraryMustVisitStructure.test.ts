@@ -353,3 +353,29 @@ describe('C40 · TRIP-599 — h07 시작 시각이 shared 휠 primitive 를 소�
     expect(screenSrc).toMatch(/<WheelPicker\b/);
   });
 });
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * TRIP-785 추가분 — AC-14 상단 배지 아이콘 부재(AlertCircleGlyph 0).
+ *
+ * 왜 소스로 재나: 에러 얼굴이 StateNotice(상단 원형 `AlertCircleGlyph` 배지) → 로컬 블록(아이콘
+ * 없는 빨강 아웃라인)으로 갈린다. 글리프는 SVG `stroke`/`fill` 이라 className·testID 를 못 받아
+ * **렌더 테스트가 원리적으로 못 본다**(리포 글리프 함정, repo-traps). 강등 시트·staleFailed
+ * AlertRow 도 삭제돼 `AlertCircleGlyph` 의 이 화면 소비처가 0 이 된다 — 그 부재를 소스로 잠근다.
+ * 렌더층은 `bg-primary-pale` 배지 부재로 "StateNotice 재사용" 만 잡는다(화면 테스트 AC-14).
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+describe('C41 · AC-14 — h02 화면이 AlertCircleGlyph 를 더는 쓰지 않는다', () => {
+  it('MustVisitPickerScreen 에 AlertCircleGlyph 0건이고, InfoCircleGlyph(empty)는 남는다', () => {
+    const source = readOne(SCREEN_REL);
+
+    // 긍정(짝) — 읽은 것이 정말 그 화면이다(경로 오타면 readOne 이 빈 문자열 → 아래가 공짜 통과).
+    expect(source).toMatch(/export function MustVisitPickerScreen\b/);
+    // 긍정(짝) — empty 얼굴은 무변경(Q4)이라 InfoCircleGlyph 는 여전히 실재한다.
+    //   이 앵커가 없으면 "글리프를 통째로 안 쓰는 화면" 이 아래 부정 단언을 공허하게 통과한다.
+    expect(source).toContain('InfoCircleGlyph');
+
+    // 🔴 부정 — 강등 시트·staleFailed AlertRow·failed StateNotice 배지가 전부 사라지면
+    //   AlertCircleGlyph 소비처가 0 이 된다. 현재는 import + 2 usage 라 red.
+    expect(source).not.toContain('AlertCircleGlyph');
+  });
+});

@@ -14,7 +14,10 @@ import path from 'path';
  *  - 배럴이 `StayDetailPage` 를 재수출한다.
  *  - `StayDetailScreen.tsx` 는 하단 탭바(`BottomTabBar`)를 렌더하지 않는다(AC-14 몰입, 소스 절반 —
  *    렌더 절반은 `StayDetailScreen.test.tsx` S6 가 잠근다).
- *  - 페이지가 params 파싱·저장 훅을 실제로 문다(공허 통과 방지 짝).
+ *  - 페이지가 params·저장 훅을 실제로 문다(공허 통과 방지 짝). TRIP-940 부터는 `item` param 을
+ *    읽지도 파싱하지도 않는다(G5 재작성 — 데이터 출처는 `GET /stays/{stayId}` 하나).
+ *  - 진입 4곳의 상세 push 는 `stayId` 하나만 싣고, e04 의 `toStayItem` 합성은 고아로 지워졌다(G7·G8).
+ *  - 전화 열기(`tel:`)는 배선 층 몫이라 화면은 Linking 을 모른다(G9).
  *
  * INV-3(duration)·URL·zustand·raw hex·useState 등은 동결 가드가 자동 편입해 잠근다:
  *  - `pagesLayerStructure.test.ts`(src/pages 재귀) → StayDetailPage
@@ -117,12 +120,134 @@ describe('G4 · 몰입 화면 = 탭바 없음 (AC-14 소스 절반)', () => {
   });
 });
 
-describe('G5 · 페이지 배선 존재', () => {
-  it('StayDetailPage 가 params 파싱과 저장 훅을 실제로 문다', () => {
+/**
+ * G5 재작성(TRIP-940 AC-10 · 01b D0) — 구 계약은 "페이지가 `item` param 을 `JSON.parse` 한다"를
+ * **요구**했다(손에 든 카드 데이터가 유일한 출처). 데이터 출처가 서버 조회 `GET /stays/{stayId}`
+ * 하나로 바뀌어 이 요구를 뒤집는다 — 이제 파싱이 **없어야** 한다.
+ */
+describe('G5 · 페이지 배선 — item param 폐기 (TRIP-940 AC-10 · D0)', () => {
+  it('StayDetailPage 가 params·저장 훅은 물되, item param 선언과 JSON.parse 가 0건이다', () => {
     const source = readOne(PAGE_REL);
 
+    // 긍정 짝 — 파일을 실제로 읽었다(빈/미완 파일 공허 통과 방지).
     expect(source).toContain('useLocalSearchParams');
-    expect(source).toContain('JSON.parse');
     expect(source).toContain('useSavedStays');
+    // 부정 — 목록 값을 placeholder 로도 쓰지 않는다(사용자 확정 D0).
+    expect(source).not.toContain('JSON.parse');
+    // 부정 — `useLocalSearchParams<{ …; item?: string }>` 형태의 item param 선언이 사라졌다.
+    expect(source).not.toMatch(/\bitem\??\s*:\s*string\b/);
+  });
+});
+
+/**
+ * G6 재작성(TRIP-778 AC-10 · D2) — 781 의 "페이지가 SecureStore 플래그(`@/shared/storage/flag`)를 딥 경로로
+ * 문다"는 계약이, 저장처를 서버 `/me/settings` 로 옮기며(BR-U6-33 계정 단위 · 01b 사용자 결정) 뒤집혔다.
+ * 이제 페이지는 기기 저장소를 읽지도 쓰지도 않고, 로컬 저장 모듈·키 상수는 고아로 지워진다.
+ */
+describe('G6 · "다시 보지 않기"는 서버 설정을 문다 — 기기 저장소 0 (TRIP-778 AC-10 · D2)', () => {
+  it('페이지는 /me/settings 생성 훅을 물고, flag 모듈·키 상수를 모른다', () => {
+    const page = readOne(PAGE_REL);
+
+    // 긍정 짝 — 서버 설정 조회·변경 훅을 실제로 문다(D1 codegen 이름, 02a §2-5).
+    expect(page).toContain('useGetMeSettings');
+    expect(page).toContain('usePatchMeSettings');
+    // 부정 — 기기 저장소 경로·함수·키가 페이지에서 사라졌다.
+    expect(page).not.toContain('@/shared/storage/flag');
+    expect(page).not.toContain('readFlag');
+    expect(page).not.toContain('writeFlag');
+    expect(page).not.toContain('AFFILIATE_NOTICE_DISMISSED_KEY');
+  });
+
+  it('고아 정리 — shared/storage/flag.ts 가 없고, 키 상수도 config 에서 빠졌다(라벨 사전은 남는다)', () => {
+    const config = readOne('features/stay/config/affiliateNotice.ts');
+
+    // 긍정 짝 — config 파일은 실제로 읽혔다(시트가 쓰는 라벨 사전이 남아 있다).
+    expect(config).toContain('otaConfirmLabel');
+    expect(config).not.toContain('AFFILIATE_NOTICE_DISMISSED_KEY');
+    expect(fs.existsSync(path.join(ROOT, 'shared/storage/flag.ts'))).toBe(
+      false
+    );
+  });
+
+  it('시트는 여전히 저장을 모른다 — 저장소도 서버 설정 훅도 import 하지 않는다', () => {
+    const sheet = readOne(SHEET_REL);
+
+    // 긍정 짝 — 시트 파일을 실제로 읽었다.
+    expect(sheet).toContain('stay-ota-sheet');
+    expect(sheet).not.toContain('@/shared/storage');
+    expect(sheet).not.toContain('MeSettings');
+  });
+});
+
+// ── TRIP-940 · item param 폐기 — 진입 4곳 · 고아 정리 · 전화 열기 자리 ──────────────
+
+/** 상세 라우트로 가는 객체형 push 의 `params: { … }` 본문을 모두 뽑는다. */
+const DETAIL_PUSH =
+  /pathname:\s*['"]\/stays\/\[stayId\]['"]\s*,\s*params:\s*\{([^}]*)\}/g;
+
+function detailPushParams(source: string): string[] {
+  return [...source.matchAll(DETAIL_PUSH)].map((match) => match[1].trim());
+}
+
+const ENTRY_RELS = [
+  'app/(tabs)/explore.tsx',
+  'pages/stay-saved/ui/SavedStayPage.tsx',
+  'pages/destination-detail/ui/DestinationDetailPage.tsx',
+  'pages/stay-search/ui/StaySearchPage.tsx',
+];
+
+describe('G7 · 진입 4곳은 stayId 만 싣는다 (TRIP-940 AC-10)', () => {
+  it('자가검사 — 탐지기가 주석 제거 뒤에도 item 을 실은 push 와 stayId 만 실은 push 를 가른다', () => {
+    const sample = stripComments(
+      [
+        '// router.push({ pathname: "/stays/[stayId]", params: { note } });',
+        "router.push({ pathname: '/stays/[stayId]', params: { stayId: card.key, item: JSON.stringify(item) } });",
+        "router.push({\n  pathname: '/stays/[stayId]',\n  params: { stayId },\n});",
+      ].join('\n')
+    );
+
+    // 주석 속 push 는 걷히고(1번), 코드 속 두 push 는 둘 다 살아남아 잡힌다.
+    expect(detailPushParams(sample)).toEqual([
+      'stayId: card.key, item: JSON.stringify(item)',
+      'stayId',
+    ]);
+  });
+
+  it.each(ENTRY_RELS)(
+    '%s 의 상세 push 는 전부 params 에 stayId 하나뿐이다',
+    (rel) => {
+      const blocks = detailPushParams(readOne(rel));
+
+      // 긍정 짝 — 이 파일에 상세 push 가 실제로 있다(형태가 바뀌어 탐지기가 헛도는 것 차단).
+      expect(blocks.length).toBeGreaterThanOrEqual(1);
+      // 단언 — 키가 stayId 하나(단축 `stayId` 또는 `stayId: 식`). item·JSON 동봉 금지.
+      blocks.forEach((block) => {
+        expect({ rel, block }).toEqual({
+          rel,
+          block: expect.stringMatching(/^stayId(\s*:\s*[^,]+)?,?$/),
+        });
+      });
+    }
+  );
+});
+
+describe('G8 · 고아 정리 — SavedStayPage 의 toStayItem 합성 (TRIP-940 AC-10)', () => {
+  it('SavedStayPage.tsx 에 toStayItem 이 없다(상세가 더는 item 을 받지 않는다)', () => {
+    const source = readOne('pages/stay-saved/ui/SavedStayPage.tsx');
+
+    // 긍정 짝 — 파일을 실제로 읽었다.
+    expect(source).toContain('/stays/[stayId]');
+    expect(source).not.toContain('toStayItem');
+  });
+});
+
+describe('G9 · 전화 열기는 배선 층 몫 (TRIP-940 AC-3 · FSD 경계)', () => {
+  it('StayDetailScreen.tsx 는 Linking·tel: 을 모르고 콜백만 올린다', () => {
+    const source = readOne(SCREEN_REL);
+
+    // 긍정 짝 — 화면 파일을 실제로 읽었고, 전화 줄이 있다.
+    expect(source).toContain('stay-detail-phone');
+    expect(source).not.toContain('Linking');
+    expect(source).not.toContain('tel:');
   });
 });

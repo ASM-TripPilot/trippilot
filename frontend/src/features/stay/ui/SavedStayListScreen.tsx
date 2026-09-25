@@ -128,23 +128,17 @@ function ResultsFace({
         {savedStays.map((vm) => (
           // 저장 목록이라 항상 담김(selected 고정). 담김 하트는 표시용이라 카드가 소유하지 않고
           // trailing 으로 주입한다(카드는 하트 불가지) — 담김은 색이 아니라 accessibilityState +
-          // 별도 글리프 testID 로 잰다(★4·★5). 사진·지역·가격은 계약 무라 카드가 그리지 않는다.
+          // 별도 글리프 testID 로 잰다(★4·★5). 거점·지역·가격은 계약 공백이라 VM 값 그대로 흘리고
+          // (실앱은 미설정 → 카드가 이름만), 날짜라벨은 e04 에서 뗀다(F-10 — subtitle 미전달).
           <SavedStayCard
             key={vm.savedStayId}
             testID={`saved-stay-card-${vm.savedStayId}`}
             name={vm.name}
             layout="vertical"
             selected
-            subtitle={
-              vm.dateLabel ? (
-                <Text
-                  testID={`saved-stay-date-${vm.savedStayId}`}
-                  className="font-noto text-label text-muted"
-                >
-                  {vm.dateLabel}
-                </Text>
-              ) : undefined
-            }
+            isBase={vm.isBase}
+            region={vm.region}
+            priceLabel={vm.priceLabel}
             trailing={
               <HeartFilledGlyph
                 size={27}
@@ -156,7 +150,7 @@ function ResultsFace({
         ))}
       </ScrollView>
 
-      <View className="w-full border-t border-hairline bg-canvas px-lg pb-lg pt-md">
+      <View className="w-full bg-canvas px-lg pb-lg pt-md">
         <Pressable
           testID="saved-stay-register"
           accessibilityRole="button"
@@ -173,18 +167,44 @@ function ResultsFace({
   );
 }
 
-/** empty 삽화(01b Q5 단순화 SVG) — Figma 의 사진 3장 겹침 콜라주를 라운드 사각 3개 + 하트 원으로
- * 재현한다. 실사진은 자산 라이선스 미정이라 벡터로 대체(INV-1 정신). */
-function EmptyCluster(): ReactElement {
+// 중앙 하트 원 그림자(Figma 1702:1195, 0 6 18 /.1) — className 으로 못 줘 style prop. shadowColor
+// '#000000' 은 raw-hex 가드 사정거리 밖(cardShadow 선례).
+const emptyHeartShadow = {
+  shadowColor: '#000000',
+  shadowOffset: { width: 0, height: 6 },
+  shadowOpacity: 0.1,
+  shadowRadius: 18,
+  elevation: 6,
+};
+
+/** empty 콜라주(TRIP-729, Figma 1702:1191) — 사진 3장 겹침(중앙 상승·크게·앞, 양옆 낮게·뒤로) +
+ * 흰 3px 테두리 + 중앙 하트 원. 실사진은 계약 공백이라 회색 자리(구조만, INV-1) — 겹침 기하는 절대
+ * 좌표(rotate 없음, d02 는 rotate 였다). 중앙(photo-1)을 JSX 마지막에 그려 z 위(양옆 위로 겹침).
+ * 겹침·z·높이 위계·그림자는 jest 사각(★4) — 6-b/TRIP-831 육안. */
+function EmptyCollage(): ReactElement {
   return (
-    <View className="h-[162px] w-[220px] flex-row items-center justify-center gap-xs">
-      <View className="h-[118px] w-[70px] rounded-card bg-surface-strong" />
-      <View className="h-[162px] w-[92px] items-center justify-center rounded-card border-[3px] border-canvas bg-surface-soft">
-        <View className="h-[52px] w-[52px] items-center justify-center rounded-pill bg-canvas">
+    <View className="h-[170px] w-[320px]">
+      <View
+        testID="saved-stay-empty-photo-0"
+        className="absolute left-[6px] top-[26px] h-[138px] w-[120px] rounded-[12px] border-[3px] border-canvas bg-surface-strong"
+      />
+      <View
+        testID="saved-stay-empty-photo-2"
+        className="absolute left-[194px] top-[26px] h-[138px] w-[120px] rounded-[12px] border-[3px] border-canvas bg-surface-strong"
+      />
+      {/* 중앙 — 크게·상승·앞(마지막 렌더로 양옆 위에 겹친다). 중앙 하트 원 포함. */}
+      <View
+        testID="saved-stay-empty-photo-1"
+        className="absolute left-[96px] top-[4px] h-[158px] w-[128px] items-center justify-center rounded-[12px] border-[3px] border-canvas bg-surface-soft"
+      >
+        <View
+          testID="saved-stay-empty-heart"
+          style={emptyHeartShadow}
+          className="h-[52px] w-[52px] items-center justify-center rounded-pill bg-canvas"
+        >
           <HeartFilledGlyph size={26} />
         </View>
       </View>
-      <View className="h-[118px] w-[70px] rounded-card bg-surface-strong" />
     </View>
   );
 }
@@ -197,9 +217,9 @@ function EmptyFace({
   return (
     <View
       testID="saved-stay-empty"
-      className="w-full flex-1 items-center justify-center px-[28px]"
+      className="w-full flex-1 items-center px-[28px] pt-[96px]"
     >
-      <EmptyCluster />
+      <EmptyCollage />
       <Text className="mt-2xl text-center font-noto-bold text-[20px] font-bold text-ink">
         마음에 드는 숙소를 저장해 보세요
       </Text>
@@ -212,7 +232,7 @@ function EmptyFace({
         accessibilityRole="button"
         onPress={onPressBrowse}
         style={cardShadow}
-        className="mt-2xl h-[52px] flex-row items-center justify-center gap-sm rounded-[14px] bg-primary px-[28px]"
+        className="mt-2xl h-[52px] flex-row items-center justify-center gap-sm rounded-[12px] bg-primary px-[28px]"
       >
         <SearchGlyph size={19} />
         <Text className="font-noto-bold text-card-title font-bold text-on-primary">

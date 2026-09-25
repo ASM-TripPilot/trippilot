@@ -1,0 +1,37 @@
+<p>배포 실패는 한 종류가 아니다. 권한 오류, 인프라 생성 오류, 이미지 pull 오류, 앱 시작 오류와 외부 DNS 오류를 서로 구분해야 한다. 먼저 GitHub 실행에서 <strong>처음 실패한 step</strong>을 찾고 그 step이 변경하기 전과 후의 상태를 확인한다. 실패했으니 모든 것이 처음 상태로 돌아갔다고 가정하지 않는다.</p>
+<div class="table-wrap"><table>
+<caption>증상에서 확인 위치로 이동하기</caption>
+<thead><tr><th>증상</th><th>우선 확인</th><th>해석과 다음 행동</th></tr></thead>
+<tbody>
+<tr><td>OIDC 인증 거절</td><td>Role ARN·account·aud/sub·Environment branch</td><td>키를 새로 추가하기 전에 trust와 실행 환경이 일치하는지 확인</td></tr>
+<tr><td>S3 init·lock 오류</td><td>bootstrap 성공 여부, bucket·state key·동시 실행</td><td>진행 중인 실행을 확인. lock 파일을 임의 삭제하지 않음</td></tr>
+<tr><td>Terraform apply 실패</td><td>실패 resource, quota·SCP·권한·이벤트</td><td>일부 리소스는 이미 생성됐을 수 있음. 원인 수정 후 새 plan으로 상태 확인</td></tr>
+<tr><td>ImagePullBackOff</td><td>Pod events, ECR URL·tag/digest·권한·네트워크</td><td>로컬 <code>:local</code> 이미지가 ECR에 있다고 가정하지 않음</td></tr>
+<tr><td>Pending</td><td>Pod requests, node/스토리지/AZ 이벤트</td><td>Auto Mode 노드 준비·quota·embedding 메모리 요구 확인</td></tr>
+<tr><td>CrashLoopBackOff</td><td>이전 컨테이너 로그, Secret key, DB·Flyway</td><td>비밀값을 출력하지 않고 누락·형식·연결 상태 확인</td></tr>
+<tr><td>내부 smoke 성공, 외부 HTTPS 실패</td><td>API CNAME·ACM hostname·NLB listener/target health</td><td>내부 테스트는 외부 DNS·TLS를 검증하지 않음</td></tr>
+<tr><td>롤아웃 완료, 업무 요청 오류</td><td>인증·외부 API·migration·데이터·타임아웃</td><td>health 성공과 업무 성공을 분리해 조사</td></tr>
+</tbody>
+</table></div>
+<div class="code-block"><p class="code-label">읽기 중심의 진단 명령 · 대상 EKS 컨텍스트 명시</p><pre><code>kubectl --context "$EKS_CONTEXT" -n trippilot get deployments,pods
+kubectl --context "$EKS_CONTEXT" -n trippilot get events \
+  --sort-by=.metadata.creationTimestamp
+kubectl --context "$EKS_CONTEXT" -n trippilot describe deployment backend
+kubectl --context "$EKS_CONTEXT" -n trippilot logs deployment/backend --tail=100
+helm --kube-context "$EKS_CONTEXT" -n trippilot history trippilot
+
+# 재시작한 Pod의 이전 컨테이너 로그가 필요할 때:
+# POD_NAME에 위 get pods로 확인한 backend Pod 이름을 넣는다.
+kubectl --context "$EKS_CONTEXT" -n trippilot \
+  logs "$POD_NAME" --previous --tail=100</code></pre></div>
+<p>로그는 공유 전에 민감한 값을 확인하고 <code>kubectl get secret -o yaml</code>로 Secret 전체를 제출하지 않는다. 현재 DB 초기화와 smoke 도구는 Job을 끝에서 정리하므로 완료 뒤 Job이 남아 있지 않을 수 있다. 실제 장애 관측을 강화하려면 민감정보를 제외한 Job 상태·종료 원인·이벤트를 정리 전에 수집하는 작업도 별도로 설계해야 한다.</p>
+<div class="callout warning">
+<strong>Helm atomic이 되돌리는 범위</strong>
+<p>기존 release의 Helm upgrade 실패에는 이전 revision으로 되돌리는 동작이 적용되지만 최초 설치에는 돌아갈 이전 revision이 없다. 더구나 현재 내부 smoke는 Helm 성공 다음의 별도 step이다. smoke step에서만 실패했다면 앞서 성공한 Helm 변경이 자동으로 rollback되지는 않는다. Terraform 변경, Secrets Manager/Kubernetes Secret 동기화, 이미 실행된 DB migration도 Helm rollback 범위 밖이다.</p>
+</div>
+<p>현재 저장소의 일반 앱 복구 절차는 배포 branch에 revert commit을 만들고 CI 검증 후 수동 배포를 다시 실행하는 것이다. 이 역시 이미지를 새로 빌드하는 복구이며 예전 digest를 그대로 재사용하는 기능은 아니다. 운영자가 즉시 이전 Helm revision으로 복구해야 한다면 조직의 장애 대응 권한과 runbook 아래에서 아래 작업을 수행하고 Git의 배포 정의도 후속 수정해 다음 배포가 다시 잘못된 상태를 만들지 않게 한다.</p>
+<div class="code-block"><p class="code-label">교육용 장애 대응 예시 · 실제 실행은 지정 운영자만</p><pre><code># history에서 정상 상태였던 revision을 확인한 뒤 지정한다.
+helm --kube-context "$EKS_CONTEXT" -n trippilot history trippilot
+helm --kube-context "$EKS_CONTEXT" -n trippilot rollback \
+  trippilot "$GOOD_REVISION" --wait --timeout 20m</code></pre></div>
+<p>Helm revision은 chart·values를 되돌리지만 외부에서 이미 바뀐 DB 스키마·암호·서비스 데이터는 되돌리지 못한다. 이전 앱이 현재 DB와 호환되는지 확인하고 외부·내부 검증을 반복한다. DB 복구는 백업·시점 복원과 데이터 손실 허용 범위를 판단하는 별도 운영 절차다. PRD RDS에는 삭제 보호가 있으며 이 브랜치에는 전체 destroy workflow가 제공되지 않는다. 로컬 <code>just down</code>은 kind 데이터까지 삭제하지만 AWS 정리 명령은 아니다. <a href="https://helm.sh/docs/v3/helm/helm_rollback/">Helm rollback 동작</a>.</p>

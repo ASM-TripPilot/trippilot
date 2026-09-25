@@ -8,6 +8,7 @@
  */
 
 export * from './accountExport';
+export * from './accountSettings';
 export * from './accountSummary';
 export * from './accountSummarySocialProvidersItem';
 export * from './accountSummaryStatus';
@@ -158,6 +159,7 @@ export * from './slotCandidatesRequest';
 export * from './startReplanRequest';
 export * from './startReplanRequestOriginKind';
 export * from './startReplanRequestScope';
+export * from './stayDetail';
 export * from './stayItem';
 export * from './stayPrice';
 export * from './stayRecommendation';
@@ -188,6 +190,7 @@ export * from './tripSummaryEnvelope';
 export * from './tripSummarySource';
 export * from './tripSummaryStats';
 export * from './tripSummaryStatsDistanceSource';
+export * from './updateAccountSettingsRequest';
 export * from './updateToggleRequest';
 export * from './validationErrorResponse';
 export * from './visitCheck';

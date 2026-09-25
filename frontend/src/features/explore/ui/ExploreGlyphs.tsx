@@ -9,6 +9,8 @@ const MUTED = '#6A6A6A';
 const MUTED_SOFT = '#9AA1AB';
 const PRIMARY = '#FF385C';
 const ON_PRIMARY = '#FFFFFF';
+// d02 select 미선택 체크 링 색(Figma MISS `#d0d0d0` — 토큰 없음, `*Glyphs.tsx` raw-hex 스캔 제외).
+const DISABLED_RING = '#D0D0D0';
 
 type GlyphProps = {
   size?: number;
@@ -54,6 +56,27 @@ export function CloseGlyph({ size = 24, testID }: GlyphProps) {
     >
       <Path
         d="M6 6l12 12M18 6L6 18"
+        stroke={ON_PRIMARY}
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+/** 여행 만들기 FAB — 흰 십자(＋). 핑크 원(bg-primary) 위에 얹힌다(CloseGlyph 와 같은 관례로
+ * 흰색 stroke 고정). 단순 십자선이라 Figma path 근사 없이 충분(글리프 벡터는 jest 사각·6-b 육안). */
+export function PlusGlyph({ size = 24, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M12 5v14M5 12h14"
         stroke={ON_PRIMARY}
         strokeWidth={2}
         strokeLinecap="round"
@@ -135,13 +158,15 @@ export function SearchGlyph({ size = 20, testID }: GlyphProps) {
 /** d04 empty 상태 배지 — 위치 핀(32px, 분홍). e02 `MapPinGlyph`(1341:1378)와 같은 도형을
  * feature 간 직접 import 금지 관례대로 이 파일에 다시 그린다. `tone`은 TRIP-223(d02) 행의
  * 지역구 핀(회색, 13px)을 위한 확장 — `FilterSlidersGlyph`·`WarningTriangleGlyph`의 색 prop
- * 선례를 따른다(브리프 §6-2, 범용 색상표는 만들지 않는다). 기본값은 기존 d04 용법과 동일. */
+ * 선례를 따른다(브리프 §6-2, 범용 색상표는 만들지 않는다). 기본값은 기존 d04 용법과 동일.
+ * `on-primary`(흰색)는 TRIP-710(d06) 부제 핀 — hero 사진 위에 얹혀 흰색이어야 읽힌다. */
 export function MapPinGlyph({
   size = 32,
   tone = 'primary',
   testID,
-}: GlyphProps & { tone?: 'primary' | 'muted' }) {
-  const stroke = tone === 'muted' ? MUTED : PRIMARY;
+}: GlyphProps & { tone?: 'primary' | 'muted' | 'on-primary' }) {
+  const stroke =
+    tone === 'muted' ? MUTED : tone === 'on-primary' ? ON_PRIMARY : PRIMARY;
   return (
     <Svg
       testID={testID}
@@ -239,6 +264,74 @@ export function WarningTriangleGlyph({
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    </Svg>
+  );
+}
+
+/** d02 select 선택 체크 — 핑크 채움 원 + 흰 체크 틱. 미선택(`CheckCircleOutlineGlyph`)과
+ * **서로 다른 컴포넌트**로 갈린다(하나의 글리프에 fill 색만 토글하면 SVG fill 이 렌더 트리에
+ * 안 남아 심판을 못 한다 — repo-traps §글리프 함정 회피). Figma 2437:1500 체크 틱. */
+export function CheckCircleFilledGlyph({ size = 24, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Circle cx={12} cy={12} r={11} fill={PRIMARY} />
+      <Path
+        d="M7.5 12.3l3 3 6-6.6"
+        stroke={ON_PRIMARY}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/** d02 select 미선택 체크 — 흰 배경 + 회색 빈 원. 채움(`CheckCircleFilledGlyph`)과 다른 컴포넌트다
+ * (위 함정 참고). 링 색 `#d0d0d0` 은 토큰 밖 raw 지만 `*Glyphs.tsx` 는 raw-hex 스캔 제외라 허용된다. */
+export function CheckCircleOutlineGlyph({ size = 24, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Circle
+        cx={12}
+        cy={12}
+        r={10.2}
+        stroke={DISABLED_RING}
+        strokeWidth={1.6}
+      />
+    </Svg>
+  );
+}
+
+/** d02 select-error 배지 — 원형 느낌표(primary). 연회색 원(92px) 안에 얹힌다(Figma 2437:1639). */
+export function CircleExclaimGlyph({ size = 40, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Circle cx={12} cy={12} r={9} stroke={PRIMARY} strokeWidth={1.8} />
+      <Path
+        d="M12 7.5v5"
+        stroke={PRIMARY}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+      />
+      <Circle cx={12} cy={16} r={1.05} fill={PRIMARY} />
     </Svg>
   );
 }

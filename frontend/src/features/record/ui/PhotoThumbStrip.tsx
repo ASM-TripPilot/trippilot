@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 
 import type { PhotoAvailability } from '../model/photoAvailability';
-import { PlusGlyph } from './RecordGlyphs';
+import { PlusGlyph, WarningTriangleGlyph } from './RecordGlyphs';
 
 /**
  * TRIP-566 · AC-3·AC-4·AC-5(다건 UI) — 방문 사진 썸네일 스트립(순수 프레젠테이션, VM 주입).
@@ -13,7 +13,8 @@ import { PlusGlyph } from './RecordGlyphs';
  *  - 실제 `<Image>`(record-photo-thumb-image-{id})는 **available + uri 있을 때만** 렌더한다 —
  *    other-device·unavailable 셀은 Image 자체를 안 그려 "깨진 썸네일 0"(BR-U5-14/15·INV-4).
  *  - 타 기기·자산 실패는 정직한 문구로 표기("다른 기기에서 찍은 사진"·"사진을 불러올 수 없어요").
- *  - `+` 추가 타일(record-trip-photo-add)은 항상 있고 press → onPressAdd.
+ *  - `+` 추가 타일(record-trip-photo-add)은 onPressAdd 주입 시에만 있고 press → onPressAdd
+ *    (TRIP-939 — 사진 선택 미배선 동안 숨김). 스트립 루트는 `record-trip-photo-strip`.
  *
  * availability 는 상위 페이지가 `photoAvailability` 로 선판정해 VM 으로 준다 — 스트립은 재판정하지 않는다
  * (VisitRecordCard 순수 프레젠테이션 규율 계승).
@@ -67,6 +68,23 @@ function PhotoCell({ vm }: { vm: PhotoThumbVM }): ReactElement {
     );
   }
 
+  // upload-failed — 서버 POST 실패(별 축, 배선 주입). else(unavailable) 로 새지 않게 **명시 브랜치**로
+  // 잠근다(판별 유니온을 if-else 로 좁힌 대가 — 컴파일러가 새 값 누락을 못 잡음, 02a ★catch-all).
+  // 실 <Image> 없이 ⚠ + "업로드 실패" placeholder. 셀 배경은 surface-strong(성공 셀 surface-soft 와 구분).
+  if (availability === 'upload-failed') {
+    return (
+      <View
+        testID={`record-photo-upload-failed-${id}`}
+        className={`${CELL} items-center justify-center gap-[2px] bg-surface-strong px-[4px]`}
+      >
+        <WarningTriangleGlyph size={18} />
+        <Text className="text-center text-[10px] leading-[12px] text-muted-soft">
+          업로드 실패
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <View
       testID={`record-photo-unavailable-${id}`}
@@ -84,17 +102,22 @@ export function PhotoThumbStrip({
   onPressAdd,
 }: PhotoThumbStripProps): ReactElement {
   return (
-    <View className="flex-row flex-wrap items-start gap-sm">
+    <View
+      testID="record-trip-photo-strip"
+      className="flex-row flex-wrap items-start gap-sm"
+    >
       {photos.map((vm) => (
         <PhotoCell key={vm.visitPhotoMetaId} vm={vm} />
       ))}
-      <Pressable
-        testID="record-trip-photo-add"
-        onPress={onPressAdd}
-        className={`${CELL} items-center justify-center border-[1.4px] border-dashed border-hairline-strong`}
-      >
-        <PlusGlyph size={22} />
-      </Pressable>
+      {onPressAdd ? (
+        <Pressable
+          testID="record-trip-photo-add"
+          onPress={onPressAdd}
+          className={`${CELL} items-center justify-center border-[1.4px] border-dashed border-hairline-strong`}
+        >
+          <PlusGlyph size={22} />
+        </Pressable>
+      ) : null}
     </View>
   );
 }

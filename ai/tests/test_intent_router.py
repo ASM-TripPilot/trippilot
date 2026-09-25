@@ -128,7 +128,7 @@ _QUERY_ANGLES = {
 
 
 def _scripted_router(
-    *, slot_pattern: dict | None = None, extra_angles: dict[str, float] | None = None,
+    *, extra_angles: dict[str, float] | None = None,
     bank: dict[str, tuple[float, Intent]] | None = None, **kwargs
 ) -> IntentRouter:
     embedding = _ScriptedEmbedding({**_QUERY_ANGLES, **(extra_angles or {})})
@@ -138,7 +138,7 @@ def _scripted_router(
             BANK_COLLECTION,
             item_id,
             (math.cos(theta), math.sin(theta)),
-            {"intent": intent.value, "question": item_id, "slot_pattern": slot_pattern or {}},
+            {"intent": intent.value, "question": item_id},
         )
     return IntentRouter(embedding, store, **kwargs)
 
@@ -154,17 +154,24 @@ def test_confident_route_without_any_llm() -> None:
     assert math.isclose(match.confidence, 1.0, abs_tol=1e-9)
     assert match.reason is None
     assert match.routing.mode is RoutingMode.FAST_PATH  # Fast Path 판정이 바로 선다
-    assert match.routing.handler == "WeatherAgent"
+    # FAST_PATH 는 오케스트레이터 직접 처리라 handler 가 없다 — 이름이 있으면
+    # 그 이름의 에이전트 클래스가 실재해야 한다(domain/intent.py 불변식).
+    assert match.routing.handler is None
 
 
-def test_confident_extracts_slots_from_entry_pattern() -> None:
+def test_confident_fills_arguments_from_the_intent_table() -> None:
+    """인자는 **뱅크 엔트리가 아니라 의도의 인자표**에서 온다 (FD §3).
+
+    엔트리별 `slot_pattern` 을 폐기한 자리다 — 뱅크가 485문장이고 증강으로 계속 느는데
+    문장마다 패턴을 달 수 없고, 같은 `date` 를 의도마다 다르게 뽑는 드리프트가 난다.
+    """
     router = _scripted_router(
-        slot_pattern={"date": "regex:오늘|내일|모레", "bad": "glob:*"},
+        bank={"W1": (0.00, Intent.GET_WEATHER)},
         extra_angles={"내일 확실한 질문": 0.0},
     )
     match = router.route("내일 확실한 질문", _TID, _NOW)
     assert match.match_route is MatchRoute.CONFIDENT
-    assert match.slots == {"date": "내일"}  # 지원하지 않는 패턴 형식(bad)은 조용히 제외
+    assert match.slots == {"date": "내일"}  # GET_WEATHER.date 가 표에 있다
 
 
 def test_confident_when_competing_intent_is_far_even_if_it_is_top2() -> None:
@@ -184,10 +191,45 @@ def test_confident_when_competing_intent_is_far_even_if_it_is_top2() -> None:
     assert match.intent is Intent.GET_WEATHER
 
 
-def test_broken_regex_pattern_does_not_break_routing() -> None:
-    router = _scripted_router(slot_pattern={"x": "regex:[unclosed"})
+def test_unextractable_arguments_do_not_break_routing() -> None:
+    """추출 실패는 `None` 이고 예외가 아니다 — 의도는 이미 정해졌고 인자만 빈다."""
+    router = _scripted_router()
     match = router.route("확실한 질문", _TID, _NOW)
     assert match.match_route is MatchRoute.CONFIDENT and match.slots == {}
+
+
+def test_overlong_utterance_is_refused_not_truncated() -> None:
+    """길이 상한 초과는 **거절**이지 자르기가 아니다 (프롬프트 인젝션 방어).
+
+    상한이 없으면 임의 길이가 그대로 2·3차 프롬프트에 실린다 — 비용·지연이 입력에 비례하고
+    긴 입력은 지시문을 숨길 자리를 준다. 잘라 내면 뜻이 바뀐 발화를 사용자 것인 양 처리하게
+    되므로(INV-4: 조용한 변형 금지) 사유를 싣고 폴백한다.
+    """
+    router = _scripted_router()  # 게이트웨이 미주입 — LLM 을 부르면 그 자리에서 터진다
+    match = router.route("확" * 501, _TID, _NOW)
+    assert match.match_route is MatchRoute.FALLBACK
+    assert match.intent is Intent.OUT_OF_SCOPE
+    assert "utterance_too_long" in match.reason
+
+
+def test_length_is_measured_after_normalisation() -> None:
+    """공백·제어문자를 섞어 상한을 우회하는 입력은 정규화 **뒤** 길이로 판정된다."""
+    router = _scripted_router(extra_angles={"확실한 질문": 0.0})
+    padded = "확실한" + " " * 2000 + "질문"
+    match = router.route(padded, _TID, _NOW)
+    assert match.match_route is MatchRoute.CONFIDENT  # 정규화하면 6자다
+
+
+def test_utterance_at_the_cap_still_routes() -> None:
+    """상한 자체는 통과해야 한다 — off-by-one 으로 정상 발화를 막으면 안 된다."""
+    router = _scripted_router(extra_angles={"확" * 500: 0.0})
+    match = router.route("확" * 500, _TID, _NOW)
+    assert match.match_route is not MatchRoute.FALLBACK or "too_long" not in (match.reason or "")
+
+
+def test_config_rejects_a_nonpositive_cap() -> None:
+    with pytest.raises(ValueError, match="max_utterance_chars"):
+        IntentRouterConfig(max_utterance_chars=0)
 
 
 # ── 2차: 의도 혼재 → 유사질문 투표 ──────────────────────────────────────
@@ -287,11 +329,52 @@ def test_polluted_bank_labels_are_ignored_inv1() -> None:
     """closed-set 밖 라벨이 실린 엔트리는 매칭 대상이 아니다 (INV-1 — 뱅크 오염 방어)."""
     store = InMemoryVectorStore()
     store.upsert(BANK_COLLECTION, "X1", (1.0, 0.0), {"intent": "HACK_THE_PLANET"})
-    store.upsert(BANK_COLLECTION, "X2", (1.0, 0.0), {"intent": "OUT_OF_SCOPE"})
     router = IntentRouter(_ScriptedEmbedding(_QUERY_ANGLES), store)
     match = router.route("확실한 질문", _TID, _NOW)
     assert match.match_route is MatchRoute.FALLBACK
     assert "bank_miss" in match.reason
+
+
+def test_out_of_scope_anchor_winning_the_vote_refuses_instead_of_crashing() -> None:
+    """2차 투표가 거부 앵커를 승자로 뽑아도 거절로 수렴한다 (거부 앵커 후속 결함).
+
+    앵커를 뱅크에 넣은 순간 **2차도 앵커를 뽑을 수 있게 됐다.** 그런데 `_vote` 는 승자를
+    `MatchRoute.VOTED` 로 감싸고, `IntentMatch` 는 "FALLBACK 경로 ⇔ OUT_OF_SCOPE 라벨" 을
+    강제한다 — 그래서 ValueError 가 났다.
+
+    증상이 고약했다: 라우터가 그 예외를 잡아 폴백으로 바꾸므로 **결과는 우연히 거절이라 맞다.**
+    사유만 `router_error: ValueError ...` 였고, 채점에서는 거절 표지가 없어 '비거절 폴백' 1건으로
+    조용히 잡혔다. 평가셋 87건 중 1건이라 잡음으로 읽히기 딱 좋았다.
+    """
+    # 앵커 하나만 둔 뱅크 — 원문도 재질의도 전부 앵커에 붙어 2차 승자가 OUT_OF_SCOPE 가 된다
+    router = _scripted_router(
+        bank={"OOS1": (0.00, Intent.OUT_OF_SCOPE), "E1": (1.50, Intent.EDIT_SCHEDULE)},
+        # 0.66 → top1 0.790: t_mid(0.75) 위·t_high(0.82) 아래라 **2차로 간다**.
+        # 재질의 변형 셋이 전부 앵커에 딱 붙어(1.000) 득표율 1.0 → 승자가 OUT_OF_SCOPE 가 된다.
+        extra_angles={"범위 밖 질문": 0.66, "변형1": 0.00, "변형2": 0.00, "변형3": 0.00},
+        paraphrase_gateway=_paraphrase_gw("변형1", "변형2", "변형3"),
+    )
+    match = router.route("범위 밖 질문", _TID, _NOW)
+    assert match.match_route is MatchRoute.FALLBACK
+    assert match.intent is Intent.OUT_OF_SCOPE
+    assert "out_of_scope_anchor" in match.reason  # 거절 표지 — 인프라 실패로 세지 않는다
+    assert "router_error" not in match.reason  # 예외로 수렴하면 안 된다
+
+
+def test_out_of_scope_anchor_refuses_at_stage_one_without_calling_llm() -> None:
+    """거부 앵커가 1차에서 이기면 **LLM 0회로 거절**한다 (TRIP-868).
+
+    앵커가 없으면 딴소리도 13종 중 가장 덜 먼 곳에 붙는다 — 그래서 앵커는 매칭 대상이어야 하고,
+    이겼을 때의 행동만 다르다(위임 대신 거절). 문턱은 CONFIDENT 와 같은 값을 쓴다.
+    """
+    store = InMemoryVectorStore()
+    store.upsert(BANK_COLLECTION, "OOS#00", (1.0, 0.0), {"intent": "OUT_OF_SCOPE"})
+    # LLM 게이트웨이를 주지 않는다 — 호출하면 그 자리에서 터진다(= 0회임을 구조로 증명)
+    router = IntentRouter(_ScriptedEmbedding(_QUERY_ANGLES), store)
+    match = router.route("확실한 질문", _TID, _NOW)
+    assert match.match_route is MatchRoute.FALLBACK
+    assert match.intent is Intent.OUT_OF_SCOPE
+    assert "out_of_scope_anchor" in match.reason  # 거절 표지 — 인프라 실패와 구분된다
 
 
 # ── 폴백: 결정론 + 침묵 금지 (INV-4) ────────────────────────────────────
@@ -382,12 +465,15 @@ def _load_seed():
 
 def test_seed_bank_covers_closed_set_and_matches_routing_table() -> None:
     entries = _load_seed()
-    assert {e.intent for e in entries} == ROUTABLE_INTENTS  # 13종 전부, 그 밖은 없음
-    assert len(entries) == 450  # v0.6 (yaml 헤더 명시 — seed 125 + §3.2 ② 증강 325)
-    assert all(e.bank_version == "0.6" for e in entries)
+    # 위임 대상 13종 전부 + 거부 앵커 1종 (TRIP-868) — 그 밖의 라벨은 없다
+    assert {e.intent for e in entries} == ROUTABLE_INTENTS | {Intent.OUT_OF_SCOPE}
+    assert len(entries) == 485  # v0.7 (seed 125 + §3.2 ② 증강 325 + 거부 앵커 35)
+    assert sum(1 for e in entries if e.intent is Intent.OUT_OF_SCOPE) == 35
+    assert all(e.bank_version == "0.7" for e in entries)
     assert all(e.reviewed for e in entries)  # 사람 검수(seed) · 기계 관문(증강) 통과분만 실린다
     by_origin = Counter(e.origin for e in entries)
-    assert by_origin == {"seed": 125, "augmented": 325}  # 출처가 구분돼 되돌릴 수 있다
+    # 앵커도 seed 다 — 사람이 직접 썼고 증강 대상이 아니다(범위 밖은 열린 집합이라 불려도 의미가 없다)
+    assert by_origin == {"seed": 160, "augmented": 325}  # 출처가 구분돼 되돌릴 수 있다
 
 
 def test_each_intent_block_declares_augmented_at_most_once() -> None:
@@ -438,7 +524,7 @@ def test_augmented_questions_load_with_their_own_origin() -> None:
     raw = {
         "version": "t", "origin": "seed",
         "intents": [{
-            "intent": "GET_WEATHER", "handler": "WeatherAgent", "mode": "FastPath",
+            "intent": "GET_WEATHER", "handler": None, "mode": "FastPath",
             "reviewed": True,
             "questions": ["내일 날씨 어때?"],
             "augmented": ["낼 날씨 어떰?", "내일 비 오나요?"],
@@ -455,7 +541,7 @@ def test_augmented_question_duplicating_a_seed_is_rejected() -> None:
     raw = {
         "version": "t", "origin": "seed",
         "intents": [{
-            "intent": "GET_WEATHER", "handler": "WeatherAgent", "mode": "FastPath",
+            "intent": "GET_WEATHER", "handler": None, "mode": "FastPath",
             "reviewed": True, "questions": ["내일 날씨 어때?"], "augmented": ["내일 날씨 어때?"],
         }],
     }
@@ -489,7 +575,9 @@ def test_seed_question_roundtrips_through_router_with_fake_embedding() -> None:
     "mutate, needle",
     [
         (lambda d: d["intents"][0].__setitem__("intent", "MAKE_COFFEE"), "closed-set"),
-        (lambda d: d["intents"][0].__setitem__("intent", "OUT_OF_SCOPE"), "위임 대상이 아닌"),
+        # OUT_OF_SCOPE 는 이제 거부 앵커로 실릴 수 있다(TRIP-868) — 다만 handler·mode 가 함께 맞아야
+        # 한다. 라벨만 바꾸면 라우팅 표와 어긋나 드리프트 검사에 걸린다.
+        (lambda d: d["intents"][0].__setitem__("intent", "OUT_OF_SCOPE"), "handler가 라우팅 테이블과"),
         (lambda d: d["intents"][0].__setitem__("handler", "PlanBAgent"), "handler가 라우팅 테이블과"),
         (lambda d: d["intents"][0].__setitem__("mode", "FastPath"), "mode가 라우팅 테이블과"),
         (lambda d: d["intents"][0].__setitem__("mode", "Turbo"), "알 수 없는 mode"),
@@ -512,20 +600,27 @@ def test_loader_rejects_structural_violations(mutate, needle) -> None:
     assert needle in str(exc.value)
 
 
-def test_loader_reads_slot_pattern_into_payload() -> None:
-    data = yaml.safe_load(_SEED_YAML.read_text(encoding="utf-8"))
-    data["intents"][0]["slot_pattern"] = {"date": "regex:오늘|내일"}
-    entries = load_bank(data)
-    assert entries[0].payload()["slot_pattern"] == {"date": "regex:오늘|내일"}
-    with pytest.raises(BankLoadError):
-        data["intents"][0]["slot_pattern"] = {"date": 3}
-        load_bank(data)
-
-
 def test_routing_table_and_enum_stay_in_sync() -> None:
     assert set(ROUTING_TABLE) == set(Intent)
     assert len(ROUTABLE_INTENTS) == 13  # closed-set 13종 (CONFIRM/CANCEL/UNDO 제외)
     assert Intent.OUT_OF_SCOPE not in ROUTABLE_INTENTS
+
+
+def test_a_handler_name_exists_if_and_only_if_the_route_delegates() -> None:
+    """**`handler is not None` ⇔ `mode is DELEGATE`** — 이 표의 불변식.
+
+    종전에는 이 검사에 면제 구멍이 있었다: FAST_PATH 의 `"WeatherAgent"`·
+    `"TransitAgent"`·`"PlaceScoutAgent"` 를 "v2 에서 Provider 라 검사 밖"으로 적어
+    두고 표에는 그대로 남겨 뒀다. **면제가 테스트 docstring 에만 있어서 표를 읽는
+    사람에게는 안 보였고**, 다른 세션이 이 표를 근거로 "에이전트 7종"으로 계획을
+    세웠다가 되돌렸다(2026-09-24). 문서가 아니라 계획을 오염시킨 것이라 이름을 지우고
+    면제도 없앴다 — 이제 이름이 있으면 **반드시** 실재하는 클래스다.
+
+    어느 Provider 를 쓰는지는 이 표의 일이 아니다: `INFO_REQUIREMENTS` 가 그 자리다.
+    """
+    named = {i for i, e in ROUTING_TABLE.items() if e.handler is not None}
+    delegating = {i for i, e in ROUTING_TABLE.items() if e.mode is RoutingMode.DELEGATE}
+    assert named == delegating, "handler 이름과 DELEGATE 가 어긋난다"
 
 
 def test_delegate_handlers_name_real_agent_classes() -> None:
@@ -533,7 +628,6 @@ def test_delegate_handlers_name_real_agent_classes() -> None:
 
     ScheduleAgent(#480)·PlanBAgent(개명 전 PlanBRagPipeline)는 표가 먼저 이름을 적고
     코드가 뒤따랐다 — 라우터가 배선되기 전까지는 아무도 안 읽어서 어긋나도 증상이 없다.
-    FAST_PATH 의 Weather/Transit/PlaceScout 는 v2 에서 Provider 라 이 검사 밖이다.
     """
     import importlib
 
@@ -587,7 +681,11 @@ def test_route_never_raises_and_label_is_closed_set(utterance: str, wired: bool)
     assert match.routing is ROUTING_TABLE[match.intent]
 
 
-@settings(max_examples=40)
+# deadline 을 끈다 — 이 테스트는 **예제마다 라우터를 두 번 새로 만든다**(같은 입력이 서로 다른
+# 인스턴스에서도 같은 답을 내는지가 속성이라 하나를 재사용할 수 없다). 그 구성 비용이 기본 200ms
+# 를 넘나들어, 머신이 바쁠 때 속성이 아니라 **부하**를 재게 된다(실측 2회: 319ms·단독 실행 시 통과).
+# 여기서 잡고 싶은 것은 결정론이지 속도가 아니다.
+@settings(max_examples=40, deadline=None)
 @given(utterance=_utterances, wired=st.booleans())
 def test_route_is_deterministic(utterance: str, wired: bool) -> None:
     first = _pbt_router(wired).route(utterance, _TID, _NOW)

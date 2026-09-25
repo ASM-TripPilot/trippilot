@@ -1,3 +1,4 @@
+import { formatDayLabel } from '@/entities/trip/lib/formatDayLabel';
 import type {
   DayHighlight,
   TripSummaryEnvelope,
@@ -42,7 +43,7 @@ export function toOrderedVisitList(highlights: DayHighlight[]): OrderedVisit[] {
     for (const place of day.places ?? []) {
       out.push({
         order: out.length + 1,
-        dayLabel: `Day${day.dayOrder}`,
+        dayLabel: formatDayLabel(day.dayOrder),
         place,
       });
     }

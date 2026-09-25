@@ -1,9 +1,24 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
+import type { ReactTestInstance } from 'react-test-renderer';
+
+import { DayHighlightCard } from './DayHighlightCard';
 import {
   TripSummaryScreen,
   type TripSummaryScreenProps,
 } from './TripSummaryScreen';
+
+/**
+ * 호스트 노드가 "누를 수 있는 것"인가 — Pressable 은 onPress 가 없어도 호스트에 응답자 핸들러
+ * (`onStartShouldSetResponder`·`onClick`)를 단다. 일반 View·Text 호스트엔 없다(02a ★6 · §5-B 실측).
+ * 그래서 "눌러도 아무 일 없음"(press no-op)으로는 View 와 onPress 없는 Pressable 을 구분할 수 없다.
+ */
+function isTouchable(node: ReactTestInstance): boolean {
+  return (
+    typeof node.props.onStartShouldSetResponder === 'function' ||
+    typeof node.props.onClick === 'function'
+  );
+}
 
 // 실물 KakaoMapView 는 JS 키가 없는 jest 에서 map-failure 로 떨어져 center/pins 가 안 흐른다 —
 // 배럴 경유 관찰 목으로 갈아끼운다(LiveMapScreen·TripRecordsScreen 선례, ★10). 목은
@@ -38,11 +53,13 @@ function baseProps(
     view: 'MAP',
     mapCenter: { lat: 35.1531, lng: 129.1187 },
     mapPins: [{ number: 1, lat: 35.1531, lng: 129.1187 }],
+    // TRIP-764: DayCardVM shape 이관(날짜 제거 + Day1·5곳 → dayLabel·visitCountLabel 분리).
+    // 이 파일의 단언은 카드 testID 존재만 보므로(내용 무단언) 이관해도 아래 it 블록은 불변·green.
     dayCards: [
       {
         key: '2026-06-11',
-        dateLabel: '6월 11일 목요일',
-        countLabel: 'Day1 · 5곳',
+        dayLabel: '1일차',
+        visitCountLabel: '5곳',
         subtitle: '광안리 해변→전포 카페거리',
       },
     ],
@@ -125,5 +142,44 @@ describe('🔴 AC-5 · 공유 진입점 비활성 (BR-U5-48)', () => {
 
     fireEvent.press(share);
     expect(onShare).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('🔴 TRIP-939 AC-2b · 공유 카드가 미장전이면 진입점도 없다 (Q2 — 막다른 화면 차단)', () => {
+  it('onShare 미주입(페이지가 armed:false 로 안 넘김) → 공유 버튼이 없다', () => {
+    // 준비·실행: 공유 진입 콜백 없이 그린다.
+    renderScreen({ onShare: undefined });
+
+    // 단언: 공유 버튼 부재 + 짝 앵커(요약 통계는 그대로).
+    expect(screen.queryByTestId('reflection-summary-share')).toBeNull();
+    expect(screen.getByTestId('reflection-summary-stats')).toBeOnTheScreen();
+  });
+});
+
+describe('🔴 TRIP-939 AC-4 · 날짜 카드는 목적지가 없으면 버튼이 아니다 (A-2)', () => {
+  it('화면이 카드에 onPress 를 안 넘기면 카드 루트가 누를 수 없는 요소다', () => {
+    // 준비·실행: 기본 렌더(TripSummaryScreen 은 DayHighlightCard 에 onPress 를 넘기지 않는다).
+    renderScreen();
+
+    // 단언: 카드는 그려지되(앵커) 호스트가 터치 불가(Pressable 이 아닌 View).
+    const card = screen.getByTestId('reflection-summary-day-card');
+    expect(isTouchable(card)).toBe(false);
+  });
+
+  it('onPress 를 주면 카드가 버튼이 되고 press 시 1회(짝 — 목적지가 생기면 되살림)', () => {
+    const onPress = jest.fn();
+    render(
+      <DayHighlightCard
+        dayLabel="1일차"
+        visitCountLabel="5곳"
+        subtitle="광안리 해변→전포 카페거리"
+        onPress={onPress}
+      />
+    );
+
+    const card = screen.getByTestId('reflection-summary-day-card');
+    expect(isTouchable(card)).toBe(true);
+    fireEvent.press(card);
+    expect(onPress).toHaveBeenCalledTimes(1);
   });
 });

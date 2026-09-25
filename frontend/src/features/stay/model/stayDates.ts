@@ -1,7 +1,8 @@
 /**
- * 숙소 등록 날짜 계산 순수 함수(01b Seed §3-4 · AC-4 · AC-5). 달력 그리드에 필요한 네 계산
- * (1일 요일 · 월 일수 · 범위 판정 · 박수)과, 날짜를 고르는 전이(`applyDatePick`)가 역전·같은
- * 날 범위를 구조적으로 만들지 않는 성질을 담는다. 네트워크·시계·화면을 건드리지 않는다.
+ * 숙소 등록 날짜 계산 순수 함수(01b Seed §3-4 · AC-4 · AC-5). 박수 계산과, 날짜를 고르는
+ * 전이(`applyDatePick`)가 역전·같은 날 범위를 구조적으로 만들지 않는 성질을 담는다. 달력 그리드
+ * 산술(월 일수 · 1일 요일 · 월 이동 · 범위 판정)은 `shared/date/monthGrid`에 있다(TRIP-639).
+ * 네트워크·시계·화면을 건드리지 않는다.
  *
  * 박수 계산은 항상 에포크 일수(UTC 기준 정수)로 변환해 뺀다 — 로컬 타임존에 따라 하루가
  * 밀리는 것을 막는다(`Date.UTC`는 실행 기계의 타임존과 무관하다).
@@ -19,29 +20,6 @@ function toEpochDay(date: string): number {
   return Math.round(Date.UTC(year, month - 1, day) / MS_PER_DAY);
 }
 
-/** 월 일수. `month`는 1~12(1월=1). */
-export function daysInMonth(year: number, month: number): number {
-  return new Date(year, month, 0).getDate();
-}
-
-/**
- * 'YYYY-MM'을 `delta`개월 옮긴다. 연 경계를 넘는다(`2026-12` +1 → `2027-01`).
- *
- * 달력이 한 달만 그려 월 경계를 넘는 범위를 못 고르던 결함(5-b W-1) 때문에 생겼다 —
- * 월말에는 체크인 이후 칸이 화면에 하나도 없어 어떤 범위도 완성할 수 없었다.
- * 개월 총합으로 환산해 계산하므로 12월↔1월에서 따로 분기하지 않는다.
- */
-export function shiftMonth(yearMonth: string, delta: number): string {
-  const [year, month] = yearMonth.split('-').map(Number);
-  const total = year * 12 + (month - 1) + delta;
-  return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, '0')}`;
-}
-
-/** 그 달 1일의 요일. 0=일 ~ 6=토. */
-export function firstWeekdayOfMonth(year: number, month: number): number {
-  return new Date(year, month - 1, 1).getDay();
-}
-
 /** 박수. 체크아웃이 체크인보다 뒤일 때만 양수, 그 외(같은 날 · 역전 · 한쪽만 있음 · 둘 다
  * 없음)는 전부 null이다. */
 export function nightsBetween(
@@ -51,17 +29,6 @@ export function nightsBetween(
   if (checkIn === null || checkOut === null) return null;
   const nights = toEpochDay(checkOut) - toEpochDay(checkIn);
   return nights > 0 ? nights : null;
-}
-
-/** `date`가 [checkIn, checkOut] 범위 안(양 끝 포함)인지. 범위가 미완성(한쪽 null)이면 항상
- * false다 — ISO 날짜 문자열은 사전식 비교가 실제 시간 순서와 일치한다. */
-export function isDateInRange(
-  date: string,
-  checkIn: string | null,
-  checkOut: string | null
-): boolean {
-  if (checkIn === null || checkOut === null) return false;
-  return date >= checkIn && date <= checkOut;
 }
 
 /** 저장 가능 판정. 둘 다 없거나 하나만 있으면 true(BR-U1-26), 둘 다 있으면 박수가 나올 때만
@@ -99,4 +66,24 @@ export function commitDateRange(range: StayDateRange): StayDateRange {
     return { checkIn: null, checkOut: null };
   }
   return range;
+}
+
+/** 0=일 ~ 6=토. 요일은 날짜에서 계산한다(Figma 목업 텍스트가 아니라, 02a §5-B). */
+const WEEKDAY_KO = ['일', '월', '화', '수', '목', '금', '토'];
+
+/** 'YYYY-MM-DD' → `"M.D (요일)"`. 월·일은 앞자리 0 없음, 요일은 UTC 기준으로 계산해(toEpochDay와
+ * 같은 경로) 로컬 타임존에 따라 하루가 밀리는 것을 막는다. */
+function formatDayWithWeekday(date: string): string {
+  const [year, month, day] = date.split('-').map(Number);
+  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  return `${month}.${day} (${WEEKDAY_KO[weekday]})`;
+}
+
+/**
+ * 요일 포함 날짜 범위 표기. 예: `formatStayDateRange('2026-06-10','2026-06-12')` → `"6.10 (수) – 6.12 (금)"`.
+ * 월·일은 앞자리 0을 붙이지 않고, 요일은 **날짜에서 계산**하며(Figma 목업 텍스트가 아니라), 두
+ * 날짜는 en-dash(–, U+2013) 양옆 공백으로 잇는다. 소요시간을 넣지 않는다(INV-3 — 날짜만).
+ */
+export function formatStayDateRange(checkIn: string, checkOut: string): string {
+  return `${formatDayWithWeekday(checkIn)} – ${formatDayWithWeekday(checkOut)}`;
 }

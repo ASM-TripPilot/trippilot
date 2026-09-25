@@ -80,12 +80,12 @@ export function PlaceGridCard({
           )}
         </Pressable>
       </View>
-      <Text className="font-noto-bold text-[13.5px] font-bold text-ink">
+      <Text className="font-noto-bold text-[14px] font-bold text-ink">
         {place.nameKo}
       </Text>
       <PlaceSubtitle
         parts={subtitleParts}
-        className="font-noto text-[11.5px] text-muted"
+        className="font-noto text-[12px] text-muted"
       />
     </Pressable>
   );

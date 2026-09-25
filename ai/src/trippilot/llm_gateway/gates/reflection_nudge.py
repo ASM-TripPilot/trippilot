@@ -7,6 +7,7 @@
   ① 빈 문자열·공백뿐 — 빈 알림은 보낼 수 없다
   ② 길이 상한 `_MAX_LENGTH` 초과 — 푸시 문구는 잘리면 의미가 깨진다
   ③ 금지 토큰(`_FORBIDDEN_TOKENS` — 분·시간·시각·duration류) 포함 (INV-3)
+  ④ 링크·연락처 꼴(`has_contact_like`) 포함 — 프롬프트 인젝션 산출물 방어
 **빈 결과 = 실패** (TRIP-260 #5): 보낼 문구가 없으면 알림을 못 만든다. 게이트가
 사유를 직접 실어 폴백 신호를 내고, 알림 자체는 호출측이 결정론 기본 문구
 (workers.reflection_nudge.FALLBACK_NUDGE_MESSAGE)로 보장한다 (INV-4, 침묵 실패
@@ -22,6 +23,7 @@ from datetime import datetime
 
 from trippilot.llm_gateway.gates.base import (
     GateOutcome,
+    has_contact_like,
     _load_json_object,
     empty_result_error,
 )
@@ -60,6 +62,10 @@ class ReflectionNudgeGate:
             not message  # ①
             or len(message) > _MAX_LENGTH  # ②
             or any(t in message.lower() for t in _FORBIDDEN_TOKENS)  # ③ (INV-3)
+            # ④ 이 문구는 **잠금화면에 앱 이름과 함께** 뜬다 — 앱이 보증하는 것처럼
+            # 보이는 자리다. 프롬프트에 실리는 장소명은 웹 수집분이라(누구나 편집)
+            # 링크를 심을 수 있고, 60자 상한도 `evil.io` 한 조각은 막지 못한다.
+            or has_contact_like(message)
         )
         if dropped:
             drop_event = GateDropEvent(

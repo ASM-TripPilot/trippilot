@@ -205,6 +205,7 @@ data class ReplanDiffResponse(
                     // 분으로 낸다 — 화면이 "30분 늦어져요"로 그린다. null 은 비교할 슬롯이 없다는 뜻이다.
                     returnTimeDeltaMinutes = it.returnTimeDelta?.toMinutes(),
                     totalDistanceDeltaM = it.totalDistanceDeltaM,
+                    totalDistanceKm = v.totalDistanceKm,
                 )
             },
         )
@@ -236,13 +237,17 @@ data class ReplanDiffEntryResponse(
 )
 
 /**
- * 영향 지표 3종(BR-U4-29).
+ * 영향 지표(BR-U4-29).
  *
  * @property totalDistanceDeltaM **어느 한쪽이라도 거리를 모르면 null** 이다. 0 으로 채우면
- *   "거리가 줄었다"는 거짓 요약이 된다.
+ *   "거리가 줄었다"는 거짓 요약이 된다. 원 일정에 미터 값이 없어 **지금은 항상 null** 이다.
+ * @property totalDistanceKm 재계획안의 이동 총거리(km) — **변화량이 아니라 절대값**이다.
+ *   상대(AI)가 푼 값을 그대로 나른다(INV-2 — 우리가 다시 재지 않는다). 소요시간은 없다(INV-3).
+ *   위 델타가 나올 수 없는 동안 화면이 쓸 수 있는 유일한 이동 지표다.
  */
 data class ReplanImpactResponse(
     val visitCountDelta: Int,
     val returnTimeDeltaMinutes: Long?,
     val totalDistanceDeltaM: Int?,
+    val totalDistanceKm: Double?,
 )

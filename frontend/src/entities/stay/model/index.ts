@@ -24,9 +24,19 @@ export interface StayCardVM {
  * 저장 숙소 degrade 카드 뷰모델 — 이름과 (있으면)날짜라벨만(SavedStayListScreen 로컬 정의에서 이관).
  * `SavedStay` 계약에 사진·지역·거리·가격이 없어 그 필드는 두지 않는다(발명 0 · INV-1). dateLabel 은
  * 체크인/아웃이지 소요시간이 아니다(INV-3).
+ *
+ * TRIP-729 — e04 Figma 정합의 거점 배지·지역줄·2톤 가격은 계약 공백이라 **옵셔널 additive**다.
+ * 실앱(SavedStay 조회)은 이 셋을 채울 데이터가 없어 미설정으로 두고(degrade), Figma 풀샷은 프리뷰
+ * 픽스처에서만 재현한다.
  */
 export interface SavedStayCardVM {
   savedStayId: string;
   name: string;
   dateLabel?: string;
+  /** 거점 여부 — true 면 카드 사진에 "거점" 배지. 실앱은 조회 경로가 없어 미설정(degrade). */
+  isBase?: boolean;
+  /** 동네(표시용 문자열) — 있을 때만 지역줄. 실앱은 계약 공백이라 미설정. */
+  region?: string;
+  /** 가격(표시용 "145,000원~") — 있을 때만 2톤 가격줄. 실앱은 계약 공백이라 미설정. */
+  priceLabel?: string;
 }

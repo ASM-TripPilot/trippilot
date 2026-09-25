@@ -120,7 +120,7 @@ class ReplanFacadeService(
         }
         // 빈 초안은 "해 없음"이다 — 빈 하루를 초안이라고 보여 주면 사용자가 그걸 확정한다.
         if (slots.isEmpty()) return null
-        return ReplanProposal(current.itineraryId, command.targetDate, slots)
+        return ReplanProposal(current.itineraryId, command.targetDate, slots, output.totalDistanceKm)
     }
 
     /**

@@ -83,6 +83,8 @@ const TRIP: Trip = {
   status: 'PLANNED',
   createdAt: '2026-08-02T00:00:00Z',
   updatedAt: '2026-08-02T00:00:00Z',
+  baseCount: 0,
+  itineraryDayCount: 0,
 };
 
 function makePlace(poiId: string, nameKo: string): Place {
@@ -429,26 +431,62 @@ describe('I11 · AC-7 · D5(개정) · INV-U1-18 — 409 는 실패로 세지 �
   });
 });
 
-describe('I12 · D8 — 토글을 끄면 저장이 나가지 않는다', () => {
-  it('CTA 가 잠기고 눌러도 쓰기 요청이 0건이다', async () => {
+describe('I12 · AC-a4 · BR-U1-48 — 채운 폼을 OFF 로 끄면 FIXED 값이 버려지고 ANYTIME 최소본만 나간다', () => {
+  it('CTA 가 열리고 DELETE→POST 로 {poiId, type:ANYTIME} 최소본만 나간다', async () => {
     renderPage();
     await ready();
     ensureFixed(true);
     pickDateAndStart();
 
-    // 값을 다 채운 **뒤에** 끈다 — "값이 없어서 안 나간 것" 과 구별되는 자리다.
+    // 값을 다 채운 **뒤에** 끈다 — 채워진 FIXED 값(날짜·시각)이 OFF 에서 버려지고 ANYTIME
+    // 최소본만 나가는가. I13 은 값을 안 채워 이 축을 못 본다(고유 커버리지).
     ensureFixed(false);
 
-    expect(
-      screen.getByTestId('itinerary-mustvisit-time-submit')
-    ).toBeDisabled();
+    expect(screen.getByTestId('itinerary-mustvisit-time-submit')).toBeEnabled();
     submit();
 
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    });
+    await waitFor(() =>
+      expect(mustVisitWrites()).toEqual([DELETE_HIT, POST_HIT])
+    );
 
-    expect(mustVisitWrites()).toEqual([]);
-    expect(mockBack).not.toHaveBeenCalled();
+    // ★ 고유 커버리지 — 채운 fixedDate·fixedStart·dwellMin 이 한 키도 안 샌다.
+    expect(postBodies).toHaveLength(1);
+    expect(postBodies[0]).toEqual({ poiId: POI_ID, type: 'ANYTIME' });
+    expect(Object.keys(postBodies[0]).sort()).toEqual(['poiId', 'type']);
+
+    // 성공하면 목록으로 되돌아간다(I13 미러).
+    await waitFor(() => expect(mockBack).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe('🔴 I13 · AC-a4 · BR-U1-48 — 토글 OFF 저장은 ANYTIME 본문을 DELETE 뒤에 POST 한다', () => {
+  /**
+   * TRIP-786 — OFF=ANYTIME 제출 허용. 등록 항목(REGISTERED=poi-a ANYTIME)이 있으므로 승격 경로와
+   * 같은 **DELETE → POST 2단**을 재사용한다(INV-U1-18·19). 본문은 **최소본** `{poiId, type:ANYTIME}`
+   * 으로 FIXED 필드(fixedDate·fixedStart·dwellMin)가 실리지 않는다.
+   */
+  it('쓰기가 DELETE→POST 두 건이고 POST 본문이 {poiId, type:ANYTIME} 최소본이다', async () => {
+    renderPage();
+    await ready();
+    // 값은 안 채운다 — ANYTIME 은 날짜·시각을 안 싣는다. 초기 fixed:true 를 끄기만 한다.
+    ensureFixed(false);
+
+    submit();
+
+    // ★ 배열 완전 일치 — 개수·순서·경로. 현재 배선은 buildFixed 가 OFF 에서 null 이라 0 건 → red.
+    await waitFor(() =>
+      expect(mustVisitWrites()).toEqual([DELETE_HIT, POST_HIT])
+    );
+
+    // 본문 — FIXED 필드 없는 최소본. `toEqual` + `Object.keys` 로 여분 키까지 잠근다.
+    expect(postBodies).toHaveLength(1);
+    expect(postBodies[0]).toEqual({ poiId: POI_ID, type: 'ANYTIME' });
+    expect(Object.keys(postBodies[0]).sort()).toEqual(['poiId', 'type']);
+
+    // 성공하면 목록으로 되돌아간다(I7 미러).
+    await waitFor(() => expect(mockBack).toHaveBeenCalledTimes(1));
+    expect(screen.queryAllByTestId('itinerary-mustvisit-time-error')).toEqual(
+      []
+    );
   });
 });

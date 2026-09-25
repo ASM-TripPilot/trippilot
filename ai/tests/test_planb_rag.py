@@ -14,6 +14,10 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
+from types import SimpleNamespace
+
+from trippilot.domain.llm import AlternativePick
 import math
 from datetime import date, datetime, timezone
 
@@ -1103,3 +1107,104 @@ def test_cut_params_are_validated(cfg: dict) -> None:
     """코사인 범위는 [-1, 1] — 음수가 실제로 난다. [0,1] 로 검증하면 유효한 설정을 막는다."""
     with pytest.raises(ValueError):
         PlanBRagConfig(**cfg)
+
+
+def test_all_dropped_falls_back_to_rule_ranking_not_pool_order() -> None:
+    """LLM 선택이 전량 드롭되면 **규칙 랭킹**으로 돌아간다 — 풀 순서가 아니다.
+
+    종전에는 `available`(풀 순서)을 그대로 썼는데 주석은 "규칙 랭킹"이라 적혀 있었다.
+    그 경로에서만 우천 강등(⓪)·저장 장소(①)·앵커 거리(②)가 통째로 빠져서 **비 오는
+    날 전량 드롭되면 야외가 앞에 올 수 있었다.** 동료 세션(TRIP-904 리뷰)이 찾았다.
+
+    구도: 풀 순서는 [야외, 실내]인데 reason=weather 라 규칙 랭킹은 실내를 앞세운다.
+    """
+    def _cat(pid: str, category: PoiCategory) -> Poi:
+        base = _poi(pid)
+        return replace(base, category=category)
+
+    pois = (_cat("p-out", PoiCategory.NATURE), _cat("p-in", PoiCategory.CULTURE))
+    pool = CandidatePool(
+        poi_ids=frozenset(p.poi_id for p in pois), pois=pois, generated_at=_NOW
+    )
+    # 게이트를 우회하는 스텁 — 실 게이트가 풀 교차를 먼저 해서 이 분기에 못 닿는다.
+    # (그게 이 경로가 "드문" 이유이고, 그래도 두 번째 방어선은 옳게 돌아야 한다.)
+    class _OutOfPoolWorker:
+        def select(self, pool, inp, trace_id, now, **kw):
+            return SimpleNamespace(
+                is_fallback=False, error=None,
+                value=[AlternativePick(poi_id=PoiId("밖-1"), reason="풀 밖")],
+            )
+
+    result = PlanBAgent(
+        FakeEmbedding(dim=_SMALL), InMemoryVectorStore(),
+        alternative_worker=_OutOfPoolWorker(),
+    ).run(_request(pool, reason="weather"))
+
+    assert any("all_selected_dropped" in n for n in result.notes), result.notes
+    picked = [str(p) for a in result.alternatives for p in a.poi_ids]
+    assert picked[0] == "p-in", f"우천인데 야외가 앞에 왔다: {picked}"
+
+
+# ── 질의 임베딩은 한 번에 (KB 넷 × 168ms) ────────────────────────────────
+
+
+class _CountingEmbedding:
+    """embed / embed_batch 호출을 따로 센다."""
+
+    def __init__(self, inner) -> None:
+        self._inner = inner
+        self.embed_calls = self.batch_calls = 0
+        self.dim, self.model_id = inner.dim, inner.model_id
+
+    def embed(self, text: str):
+        self.embed_calls += 1
+        return self._inner.embed(text)
+
+    def embed_batch(self, texts):
+        self.batch_calls += 1
+        return self._inner.embed_batch(texts)
+
+
+def _pool_with_refs(*ids: str) -> CandidatePool:
+    """`source_ref` 가 있는 풀 — 없으면 KB-5 가 조회 전에 조기 반환해서
+    "임베딩 안 했다"가 **허수로** 참이 된다 (이 파일 `_poi` 는 ref 를 안 채운다)."""
+    pois = tuple(replace(_poi(i), source_ref=f"ref-{i}") for i in ids)
+    return CandidatePool(
+        poi_ids=frozenset(p.poi_id for p in pois), pois=pois, generated_at=_NOW
+    )
+
+
+def test_KB_질의는_한_번에_임베딩한다() -> None:
+    """종전에는 KB 마다 한 번씩 총 네 번 불렀다(KB-5 가 상황 질의를 또 임베딩했다).
+
+    단건 실측 168ms 라 0.67초가 Plan-B 예산에서 그냥 나갔다. 검색 결과는 같아야 하고
+    임베딩 호출만 줄어야 한다 — 그래서 배치 1회·단건 0회를 둘 다 고정한다.
+    """
+    store = InMemoryVectorStore()
+    spy = _CountingEmbedding(FakeEmbedding(dim=_SMALL))
+
+    PlanBAgent(spy, store).run(_request(_pool_with_refs("p1", "p2", "p3")))
+
+    assert spy.batch_calls == 1  # 세 질의를 한 번에
+    assert spy.embed_calls == 0  # KB-5 도 그 벡터를 재사용한다 (풀에 ref 가 있는데도)
+
+
+def test_배치가_터져도_KB_검색을_잃지_않는다() -> None:
+    """배치 실패로 KB 넷을 통째로 잃는 것보다 단건으로 되돌아가는 편이 낫다 (INV-4).
+
+    되돌아간 사실은 노트에 남긴다 — 조용히 느려지면 원인을 못 찾는다.
+    """
+
+    class _BrokenBatch(_CountingEmbedding):
+        def embed_batch(self, texts):
+            self.batch_calls += 1
+            raise RuntimeError("배치 경로 고장")
+
+    store = InMemoryVectorStore()
+    spy = _BrokenBatch(FakeEmbedding(dim=_SMALL))
+
+    result = PlanBAgent(spy, store).run(_request(_pool_with_refs("p1", "p2", "p3")))
+
+    assert spy.embed_calls == 4  # KB 셋 + KB-5 — 종전 경로 그대로
+    assert any("embed_batch_degraded" in n for n in result.notes)
+    assert [a.label for a in result.alternatives] == ["A", "B", "C"]  # 결과는 온전하다

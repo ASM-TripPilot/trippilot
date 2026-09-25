@@ -1,0 +1,38 @@
+<p>수업을 마쳤다면 다음 여섯 가지를 자신의 문장으로 작성한다. 실제 배포를 하지 않았다면 예제 로그 또는 예상값임을 표시한다. 성공 화면만 첨부하기보다 무엇이 바뀌었고 무엇을 확인했는지 남긴다.</p>
+<ol>
+<li><strong>변경:</strong> 변경한 코드의 commit SHA와 대상 GitHub Environment.</li>
+<li><strong>권한:</strong> 사용한 AWS 계정·역할과 OIDC 신뢰의 제한 조건. 토큰이나 비밀값은 기록하지 않는다.</li>
+<li><strong>인프라:</strong> plan의 생성·변경·삭제 항목과 DEV/PRD state가 섞이지 않는 근거.</li>
+<li><strong>아티팩트:</strong> backend·AI 이미지의 repository, tag, 확인 가능한 digest. 재빌드인지 동일 아티팩트 승격인지 명시한다.</li>
+<li><strong>검증:</strong> 테스트 결과, Helm rollout, 내부 smoke, 실제 도메인의 DNS/TLS·API 확인 결과.</li>
+<li><strong>복구:</strong> 되돌릴 앱 버전과 인프라·DB 변경을 별도로 처리해야 하는 이유.</li>
+</ol>
+<details><summary>핵심 용어 사전 — 비슷해 보이는 단어 구분하기</summary>
+<dl class="glossary">
+<dt>IaC</dt><dd>Infrastructure as Code. 원하는 인프라 구성을 코드로 정의하고 검토·반복 적용하는 방식.</dd>
+<dt>Provider</dt><dd>Terraform이 외부 서비스 API와 통신하도록 연결하는 플러그인.</dd>
+<dt>State</dt><dd>Terraform 리소스 주소와 실제 원격 객체를 대응시키는 상태 데이터.</dd>
+<dt>Backend</dt><dd>Terraform state를 보관하는 방식. 이 브랜치는 환경별 S3 버킷을 사용한다.</dd>
+<dt>Plan</dt><dd>현재 상태와 설정을 비교한 변경 계획. 실제 서비스 생성·수정은 apply 단계에서 수행한다.</dd>
+<dt>Workflow</dt><dd>이벤트에 따라 실행할 Job들을 정의한 GitHub Actions YAML 파일.</dd>
+<dt>Runner</dt><dd>Job의 Step을 실행하는 컴퓨팅 환경.</dd>
+<dt>OIDC</dt><dd>외부 실행 주체의 신원을 검증하는 표준. GitHub의 신원 토큰을 AWS의 임시 자격증명으로 교환하는 데 사용한다.</dd>
+<dt>Tag / digest</dt><dd>Tag는 이미지에 붙인 이름이고 digest는 콘텐츠를 식별하는 해시다. immutable tag는 덮어쓰기를 막지만 다른 빌드의 동일성을 증명하지는 않는다.</dd>
+<dt>ECR / EKS</dt><dd>ECR은 컨테이너 이미지 레지스트리, EKS는 관리형 Kubernetes 서비스다.</dd>
+<dt>Helm</dt><dd>템플릿과 values로 Kubernetes 매니페스트를 구성하고 release를 관리하는 도구.</dd>
+<dt>Promotion</dt><dd>검증한 릴리스 아티팩트를 다음 환경으로 전달하는 과정. 같은 소스의 재빌드와는 구분한다.</dd>
+</dl>
+</details>
+<div class="table-wrap"><table>
+<caption>다시 찾아볼 저장소의 근거 파일</caption>
+<thead><tr><th scope="col">확인할 내용</th><th scope="col">파일</th></tr></thead>
+<tbody>
+<tr><td>로컬 kind 구동과 도구의 역할</td><td><a href="../../deploy/README.md">deploy/README.md</a></td></tr>
+<tr><td>AWS 계정의 최초 준비</td><td><a href="../guides/aws-bootstrap.md">aws-bootstrap.md</a></td></tr>
+<tr><td>현재 DEV/PRD 배포 절차</td><td><a href="../guides/aws-eks-deployment.md">aws-eks-deployment.md</a></td></tr>
+<tr><td>실제 Workflow와 Step</td><td><a href="../../.github/workflows/aws-deploy.yml">aws-deploy.yml</a> · <a href="../../.github/workflows/aws-bootstrap.yml">aws-bootstrap.yml</a></td></tr>
+<tr><td>환경 입력 검증</td><td><a href="../../infra/scripts/workflow_config.py">workflow_config.py</a></td></tr>
+<tr><td>Helm 이미지 주소 조합</td><td><a href="../../deploy/eks/chart/templates/_helpers.tpl">_helpers.tpl</a> · <a href="../../deploy/eks/chart/values.schema.json">values.schema.json</a></td></tr>
+<tr><td>비밀값·DB 초기화·smoke</td><td><a href="../../deploy/eks/runtime.py">runtime.py</a></td></tr>
+</tbody>
+</table></div>

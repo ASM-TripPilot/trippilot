@@ -4,6 +4,8 @@
  * TripPilot U1 API (소셜 로그인 전용 MVP)
  * U1 기반·계정·온보딩 (M1 Auth · M2 Profile · C3 Moderation). 소셜 로그인 전용 — 이메일/비밀번호 로그인은 후속 이연. 정본 대조: docs/design/U1-API-설계.md, U1-DB스키마-설계.md, U1-내부아키텍처-설계.md
  *
+ * **횡단 규약 — 입력 형식 오류는 어느 엔드포인트에서든 400이다.** 경로변수·쿼리의 타입 변환 실패(UUID·숫자·enum)와 필수 쿼리 누락은 표준 에러 봉투 (`ErrorResponse`, code=`VALIDATION_ERROR`, `fields[].field`=문제 파라미터 이름)로 나간다. 경로별 `'400'` 선언은 **업무 검증**이 있는 곳에만 적는다 — 형식 오류까지 경로마다 중복 선언하면 무엇이 그 엔드포인트 고유의 검증인지 안 보인다. (2026-09-01 이전에는 이 갈래가 500 `INTERNAL` 로 나갔다 — UUID-PATH-400)
+ *
  * OpenAPI spec version: 0.1.0-draft
  */
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -23,6 +25,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AccountSettings,
   ModerationUnavailableResponse,
   NicknameTakenResponse,
   PatchMeProfileNicknameBody,
@@ -30,6 +33,7 @@ import type {
   PostNicknameCheckBody,
   PostNicknameSuggestions200,
   Profile,
+  UpdateAccountSettingsRequest,
 } from '../schemas';
 
 import { customInstance } from '../../mutator';
@@ -421,4 +425,213 @@ export const usePostNicknameCheck = <
   TContext
 > => {
   return useMutation(getPostNicknameCheckMutationOptions(options), queryClient);
+};
+/**
+ * 저장한 적 없으면 **기본값**으로 온다 — 404 가 아니다. 첫 진입에서 화면이 설정을 그려야 한다.
+ *
+ * 취향(`/me/preferences`)과 **자리를 나눈다** — 취향은 여행 생성 시 `preferenceSnapshot` 으로 동결되므로, 앱 설정을 섞으면 "제휴 안내 다시 안 보기"가 여행 이력에 박힌다(O-U6-5).
+ * @summary 계정 단위 앱 설정 조회 (l05)
+ */
+export const getMeSettings = (signal?: AbortSignal) => {
+  return customInstance<AccountSettings>({
+    url: `/me/settings`,
+    method: 'GET',
+    signal,
+  });
+};
+
+export const getGetMeSettingsQueryKey = () => {
+  return [`/me/settings`] as const;
+};
+
+export const getGetMeSettingsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMeSettings>>,
+  TError = void,
+>(options?: {
+  query?: Partial<
+    UseQueryOptions<Awaited<ReturnType<typeof getMeSettings>>, TError, TData>
+  >;
+}) => {
+  const { query: queryOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMeSettingsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMeSettings>>> = ({
+    signal,
+  }) => getMeSettings(signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMeSettings>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetMeSettingsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMeSettings>>
+>;
+export type GetMeSettingsQueryError = void;
+
+export function useGetMeSettings<
+  TData = Awaited<ReturnType<typeof getMeSettings>>,
+  TError = void,
+>(
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getMeSettings>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getMeSettings>>,
+          TError,
+          Awaited<ReturnType<typeof getMeSettings>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetMeSettings<
+  TData = Awaited<ReturnType<typeof getMeSettings>>,
+  TError = void,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getMeSettings>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getMeSettings>>,
+          TError,
+          Awaited<ReturnType<typeof getMeSettings>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetMeSettings<
+  TData = Awaited<ReturnType<typeof getMeSettings>>,
+  TError = void,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getMeSettings>>, TError, TData>
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary 계정 단위 앱 설정 조회 (l05)
+ */
+
+export function useGetMeSettings<
+  TData = Awaited<ReturnType<typeof getMeSettings>>,
+  TError = void,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getMeSettings>>, TError, TData>
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getGetMeSettingsQueryOptions(options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * **준 것만** 바꾼다. 생략한 필드는 그대로다 — null 을 "끄기"로 읽으면 화면이 한 토글을 만질 때 다른 토글이 조용히 꺼진다.
+ * @summary 계정 단위 앱 설정 변경 (l05)
+ */
+export const patchMeSettings = (
+  updateAccountSettingsRequest: UpdateAccountSettingsRequest,
+  signal?: AbortSignal
+) => {
+  return customInstance<AccountSettings>({
+    url: `/me/settings`,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    data: updateAccountSettingsRequest,
+    signal,
+  });
+};
+
+export const getPatchMeSettingsMutationOptions = <
+  TError = void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof patchMeSettings>>,
+    TError,
+    { data: UpdateAccountSettingsRequest },
+    TContext
+  >;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof patchMeSettings>>,
+  TError,
+  { data: UpdateAccountSettingsRequest },
+  TContext
+> => {
+  const mutationKey = ['patchMeSettings'];
+  const { mutation: mutationOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof patchMeSettings>>,
+    { data: UpdateAccountSettingsRequest }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return patchMeSettings(data);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PatchMeSettingsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof patchMeSettings>>
+>;
+export type PatchMeSettingsMutationBody = UpdateAccountSettingsRequest;
+export type PatchMeSettingsMutationError = void;
+
+/**
+ * @summary 계정 단위 앱 설정 변경 (l05)
+ */
+export const usePatchMeSettings = <TError = void, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof patchMeSettings>>,
+      TError,
+      { data: UpdateAccountSettingsRequest },
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof patchMeSettings>>,
+  TError,
+  { data: UpdateAccountSettingsRequest },
+  TContext
+> => {
+  return useMutation(getPatchMeSettingsMutationOptions(options), queryClient);
 };

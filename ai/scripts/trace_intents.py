@@ -71,6 +71,11 @@ from local_embedding import build_local_embedding  # noqa: E402
 from smoke_llm import _build_adapter  # noqa: E402 — 제공자 선택·mixed·재시도 0 정책을 스모크와 공유
 from tests.fakes.in_memory_trace import InMemoryTrace  # noqa: E402
 from tests.fakes.in_memory_vector_store import InMemoryVectorStore  # noqa: E402
+from tests.fakes.replay_fixtures import (  # noqa: E402
+    RecordingEmbedding,
+    RecordingLlm,
+    write_fixtures,
+)
 from trippilot.domain.common import TraceId  # noqa: E402
 from trippilot.domain.intent import Intent  # noqa: E402
 from trippilot.domain.llm import LlmFeature, ModelTier  # noqa: E402
@@ -115,7 +120,7 @@ def _expand_bank(entries, embedding, store, n_sets: int) -> int:
 
     가설: 실명 발화가 자리표시자 원문과는 0.5~0.7 대, 채운 변형과는 0.9 대로 붙는다(TRIP-678 leak 검사에서
     구조가 같은 문장끼리 관측). **실측으로 기각됨** — 모듈 docstring 참조. 구조까지 같아야 0.9 가 나오고,
-    평가셋 미달은 구조가 다른 문장들이었다. payload(intent·slot_pattern)는 원문 것 그대로. 반환: 추가 건수.
+    평가셋 미달은 구조가 다른 문장들이었다. payload(intent)는 원문 것 그대로. 반환: 추가 건수.
     """
     added = 0
     for e in entries:
@@ -202,6 +207,9 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--t-high", type=float, default=default.t_high)
     p.add_argument("--t-mid", type=float, default=default.t_mid)
     p.add_argument("--vote-ratio", type=float, default=default.vote_ratio)
+    p.add_argument("--record", type=Path, metavar="디렉토리",
+                   help="이 실행의 임베딩·LLM 응답을 픽스처로 기록한다 (§6 CI 게이트용). "
+                        "--eval 과 함께 쓴다 — 기록된 정확도가 곧 게이트 기준선이 된다")
     return p.parse_args()
 
 
@@ -224,6 +232,8 @@ def main() -> int:
     cfg = IntentRouterConfig(t_high=args.t_high, t_mid=args.t_mid, vote_ratio=args.vote_ratio,
                              intent_margin=args.intent_margin)
     embedding = build_local_embedding()
+    if args.record:
+        embedding = RecordingEmbedding(embedding)
     store = InMemoryVectorStore()
     entries = load_bank_file(_BANK, yaml.safe_load)
     bank_size = index_bank(entries, embedding, store,
@@ -233,6 +243,8 @@ def main() -> int:
         return 1 if _leak_check(labeled, entries, embedding, store) else 0
     provider = os.environ.get("LLM_PROVIDER", "openai")
     llm, model_id, feature_models, assignment_source = _build_llm(provider)
+    if args.record:
+        llm = RecordingLlm(llm)
     c1 = C1Config(
         model_ids={ModelTier.LIGHT: model_id, ModelTier.HEAVY: model_id},
         feature_models=feature_models,
@@ -283,8 +295,28 @@ def main() -> int:
             if label is not None:
                 samples.append(Sample(label, text, m, elapsed_ms))
 
-    if samples:
-        print("\n" + format_report(score(samples)))
+    report = score(samples) if samples else None
+    if report is not None:
+        print("\n" + format_report(report))
+
+    if args.record:
+        if report is None:
+            raise SystemExit("--record 는 --eval 과 함께 써야 한다 — 기준선이 없으면 게이트가 성립하지 않는다")
+        # 기준선은 **이 기록으로 재생했을 때 나오는 값**이다. 재생은 결정론이라 실행마다 흔들리지 않는다
+        # — CI 가 재는 것은 "LLM 이 오늘 어떤 기분인가"가 아니라 "내 변경이 점수를 움직였나"다.
+        meta = dict(run_meta)
+        meta.update({
+            "recorded_at": datetime.now(UTC).isoformat(),
+            "t_high": cfg.t_high, "t_mid": cfg.t_mid,
+            "vote_ratio": cfg.vote_ratio, "intent_margin": cfg.intent_margin,
+            "bank_entries": bank_size,
+            "eval_cases": len(samples),
+            "baseline_correct": report.correct,
+        })
+        n_emb, n_llm = write_fixtures(args.record, embedding, llm, meta)
+        print(f"[기록] 임베딩 {n_emb}건 · LLM {n_llm}건 → {args.record} "
+              f"(기준선 {report.correct}/{len(samples)})", file=sys.stderr)
+
     calls = trace.of_type(LlmCallRecord)
     if calls:  # 타임아웃·폴백이 많으면 점수 분포가 아니라 LLM 상태를 먼저 의심해야 한다
         failed = sum(1 for c in calls if not c.success)

@@ -57,8 +57,8 @@ export function ShareCardPage({ tripId }: ShareCardPageProps): ReactElement {
     format: SHARE_FORMATS[0],
   });
 
-  // 캡션·해시태그는 온디바이스 편집만(서버 저장 없음, §7) — 여행 제목·지역으로 시드한다.
-  const caption = trip.data ? `${trip.data.title} 여행의 기록` : '';
+  // TRIP-766: 캡션 카드는 해시태그만 — 문장 시드 제거. 해시태그는 지역으로 조립(온디바이스만, §7).
+  const caption = '';
   const hashtagText = (trip.data?.destinations ?? [])
     .map((dest) => `#${dest.region}여행`)
     .join(' ');

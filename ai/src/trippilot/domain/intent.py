@@ -67,6 +67,19 @@ class RoutingEntry:
 
 # delegation-design §5 라우팅 테이블 그대로. handler 문자열은 질문뱅크 yaml의
 # `handler` 필드와 대조되는 정본이다 (question_bank 로더가 드리프트를 잡는다).
+#
+# **불변식: `handler is not None` ⇔ `mode is DELEGATE`** (아래 테스트가 고정).
+# 즉 handler 칸에 이름이 있으면 그 이름의 에이전트 클래스가 실재한다 — FAST_PATH 는
+# 오케스트레이터가 직접 처리하므로 전부 `None` 이다.
+#
+# 2026-09-24 정정: GET_WEATHER·GET_DISTANCE·GET_POI_INFO 가 각각 `"WeatherAgent"`·
+# `"TransitAgent"`·`"PlaceScoutAgent"` 를 적고 있었는데 **그 세 클래스는 코드에 없다**
+# (grep 결과가 이 표 3줄뿐이었다). v2 Provider 이관(TRIP-530) 때 능력이
+# `providers/{weather,transit,place}.py` 로 갔고 이 칸만 v1 이름으로 남은 것이다.
+# 실제로 다른 세션이 이 표를 읽고 "에이전트 7종"으로 계획을 세웠다가 되돌렸다 —
+# 문서가 아니라 **계획을 오염시킨** 드리프트라 이름을 지운다.
+# 어느 Provider 를 쓰는지는 이 표의 일이 아니다: `INFO_REQUIREMENTS`(의도 → Provider
+# 목록)가 그 자리이고, 위 세 의도는 아직 그 표에 행이 없다(무행 9종 중 셋).
 ROUTING_TABLE: dict[Intent, RoutingEntry] = {
     Intent.GENERATE_SCHEDULE: RoutingEntry("ScheduleAgent", RoutingMode.DELEGATE),
     Intent.REGENERATE: RoutingEntry("ScheduleAgent", RoutingMode.DELEGATE),
@@ -78,9 +91,9 @@ ROUTING_TABLE: dict[Intent, RoutingEntry] = {
     Intent.EDIT_SCHEDULE: RoutingEntry("EditAgent", RoutingMode.DELEGATE),
     Intent.GET_NEXT_SLOT: RoutingEntry(None, RoutingMode.FAST_PATH),  # DB 조회
     Intent.SHOW_SCHEDULE: RoutingEntry(None, RoutingMode.FAST_PATH),  # DB 조회
-    Intent.GET_WEATHER: RoutingEntry("WeatherAgent", RoutingMode.FAST_PATH),
-    Intent.GET_DISTANCE: RoutingEntry("TransitAgent", RoutingMode.FAST_PATH),  # 거리만 (INV-3)
-    Intent.GET_POI_INFO: RoutingEntry("PlaceScoutAgent", RoutingMode.FAST_PATH),
+    Intent.GET_WEATHER: RoutingEntry(None, RoutingMode.FAST_PATH),  # WeatherProvider
+    Intent.GET_DISTANCE: RoutingEntry(None, RoutingMode.FAST_PATH),  # TransitProvider, 거리만 (INV-3)
+    Intent.GET_POI_INFO: RoutingEntry(None, RoutingMode.FAST_PATH),  # PlaceProvider
     Intent.OUT_OF_SCOPE: RoutingEntry(None, RoutingMode.FALLBACK),
 }
 

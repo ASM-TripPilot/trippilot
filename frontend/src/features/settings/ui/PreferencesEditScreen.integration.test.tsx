@@ -192,3 +192,58 @@ describe('PreferencesEditScreen — 취향 전체 수정 배선', () => {
     expect(note).toHaveTextContent(/우선/);
   });
 });
+
+/**
+ * TRIP-778 D11 — 저장이 성공하면 취향 조회를 다시 한다.
+ *
+ * 왜: 설정 화면(l05)은 스택에 남은 채 이 편집 화면을 push 하므로 돌아와도 다시 마운트되지 않는다. 저장 뒤
+ * `/me/preferences` 를 무효화하지 않으면 설정의 취향 요약이 옛 값을 계속 보인다(01 맹점 ④ — 새로 연 값
+ * 표면이 거짓말). 이 화면의 조회는 살아 있으므로(active), 무효화되면 GET 이 실제로 한 번 더 나간다 —
+ * 그 "한 번 더"를 와이어에서 센다(무효화 키를 틀리면 재요청이 없어 red).
+ */
+describe('PreferencesEditScreen — 저장 뒤 취향 조회 무효화 (TRIP-778 D11)', () => {
+  it('I6(D11) PUT 200 뒤 GET /me/preferences 가 다시 나간다(1 → 2)', async () => {
+    // 준비 — GET 호출 수를 센다.
+    let gets = 0;
+    server.use(
+      http.get(`${BASE}/me/preferences`, () => {
+        gets += 1;
+        return HttpResponse.json({
+          styles: { value: ['휴양'], isNeutralDefault: false },
+        });
+      })
+    );
+    capturePut(200);
+
+    // 실행 — 첫 조회 후 한 축 바꾸고 저장.
+    renderScreen();
+    fireEvent.press(await screen.findByTestId('settings-pref-style-미식'));
+    expect(gets).toBe(1);
+    fireEvent.press(screen.getByTestId('settings-pref-save'));
+    await waitFor(() => expect(putBody).not.toBeNull());
+
+    // 단언 — 저장 성공 뒤 조회가 한 번 더 나간다.
+    await waitFor(() => expect(gets).toBe(2));
+  });
+
+  it('짝: PUT 이 400 이면 다시 조회하지 않는다(실패를 성공처럼 갱신하지 않음)', async () => {
+    let gets = 0;
+    server.use(
+      http.get(`${BASE}/me/preferences`, () => {
+        gets += 1;
+        return HttpResponse.json({
+          styles: { value: ['휴양'], isNeutralDefault: false },
+        });
+      })
+    );
+    capturePut(400);
+
+    renderScreen();
+    fireEvent.press(await screen.findByTestId('settings-pref-style-미식'));
+    fireEvent.press(screen.getByTestId('settings-pref-save'));
+    // 앵커 — 실패가 화면에 처리된 뒤에 센다.
+    expect(await screen.findByTestId('settings-pref-error')).toBeOnTheScreen();
+
+    expect(gets).toBe(1);
+  });
+});

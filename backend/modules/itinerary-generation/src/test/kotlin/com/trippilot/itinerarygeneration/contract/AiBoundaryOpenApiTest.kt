@@ -8,7 +8,12 @@ import com.trippilot.itinerarygeneration.adapter.out.external.AiDay
 import com.trippilot.itinerarygeneration.adapter.out.external.AiExplanationsRequest
 import com.trippilot.itinerarygeneration.adapter.out.external.AiExplanationsResponse
 import com.trippilot.itinerarygeneration.adapter.out.external.AiFreshness
+import com.trippilot.itinerarygeneration.adapter.out.external.AiReplanEmptyReason
+import com.trippilot.itinerarygeneration.adapter.out.external.AiReplanRequest
+import com.trippilot.itinerarygeneration.adapter.out.external.AiReplanResponse
+import com.trippilot.itinerarygeneration.adapter.out.external.AiReplanSlot
 import com.trippilot.itinerarygeneration.adapter.out.external.AiRequestMeta
+import com.trippilot.itinerarygeneration.adapter.out.external.AiTimeWindow
 import com.trippilot.itinerarygeneration.adapter.out.external.AiSavedPlace
 import com.trippilot.itinerarygeneration.adapter.out.external.AiScheduleResponse
 import com.trippilot.itinerarygeneration.adapter.out.external.AiSlot
@@ -23,6 +28,7 @@ import com.trippilot.itinerarygeneration.domain.DayAnchor
 import com.trippilot.itinerarygeneration.domain.FixedBlock
 import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.PreferenceProfile
+import com.trippilot.itinerarygeneration.domain.ReplanScope
 import com.trippilot.itinerarygeneration.domain.RequestMeta
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
 import com.trippilot.itinerarygeneration.domain.TimeWindow
@@ -205,6 +211,58 @@ class AiBoundaryOpenApiTest : StringSpec({
         wireKeys(sampleExplanationsResponse) shouldContainExactly props("ExplanationsResponse")
     }
 
+    // ───────────────────────── 재계획 전용 경계(TRIP-854) ─────────────────────────
+
+    /**
+     * **우리가 안 보내는 것을 눈에 보이게 둔다.** 계약에는 `transport_mode`·`trigger` 가 있지만
+     * 지금 보내지 않는다 — 이동수단은 재계획 세션이 모르고(생성 경로도 안 보낸다), 트리거는
+     * planb-detection(C9) 소유라 세션에 구조화된 채로 남아 있지 않다. 사유는 `reasons` 가 나른다.
+     *
+     * 제외 목록을 **더해서** 정확히 일치를 요구하는 것이 핵심이다 — 상대가 필드를 하나 더 만들면
+     * 여기가 깨진다. 느슨하게 두면 새 필드가 생긴 것을 영원히 모른다.
+     */
+    "replan 요청 키가 계약과 일치한다 — 안 보내는 둘은 명시적으로 뺀다" {
+        val notSent = listOf("transport_mode", "trigger")
+        (wireKeys(sampleReplanRequest) + notSent).sorted() shouldContainExactly props("ReplanRequest")
+    }
+
+    "replan 요청이 계약 필수 필드를 하나도 빠뜨리지 않는다" {
+        val sent = wireKeys(sampleReplanRequest)
+        required("ReplanRequest").forEach { sent shouldContain it }
+    }
+
+    /**
+     * 이름이 맞아도 모양이 어긋나면 422 다. 실제로 이 절을 쓰다가 `empty_reason` 을 문자열로
+     * 적어 둔 것이 잡혔다 — 계약에서는 `{code, params}` 객체라 문자열이면 역직렬화가 통째로 터진다.
+     */
+    "replan 요청·응답의 값 모양이 계약과 일치한다" {
+        mismatches(sampleReplanRequest, "ReplanRequest") shouldContainExactly emptyList()
+        mismatches(sampleReplanResponse, "ReplanResponse") shouldContainExactly emptyList()
+    }
+
+    "replan 중첩 타입 키가 계약과 일치한다 — 안쪽이 어긋나도 겉은 멀쩡해 보인다" {
+        wireKeys(sampleReplanRequest.timeWindow) shouldContainExactly props("TimeWindowSchema")
+        wireKeys(sampleReplanRequest.anchor) shouldContainExactly props("CoordSchema")
+        wireKeys(sampleReplanRequest.currentSlots.single()) shouldContainExactly props("ReplanSlotSchema")
+        wireKeys(sampleReplanRequest.savedPlaces.single()) shouldContainExactly props("SavedPlaceSchema")
+        wireKeys(sampleReplanRequest.lockedBlocks.single()) shouldContainExactly props("FixedBlockSchema")
+    }
+
+    "replan 응답 키가 계약과 정확히 일치한다 — 개명되면 거리·사유가 조용히 사라진다" {
+        wireKeys(sampleReplanResponse) shouldContainExactly props("ReplanResponse")
+        wireKeys(requireNotNull(sampleReplanResponse.emptyReason)) shouldContainExactly props("ReplanEmptyReasonSchema")
+    }
+
+    /**
+     * `scope` 는 우리 [com.trippilot.itinerarygeneration.domain.ReplanScope] 이름을 그대로 보낸다.
+     * 어휘가 갈리면 매 호출 422 인데, 이름을 문자열로 넘기는 구조라 컴파일러가 지켜 주지 않는다.
+     */
+    "replan scope 어휘가 우리 enum 과 정확히 같다" {
+        val contractScopes = requireNotNull(schemas["ReplanRequest"]?.get("properties")?.get("scope")?.get("enum"))
+            .map { it.asString() }.sorted()
+        ReplanScope.entries.map { it.name }.sorted() shouldContainExactly contractScopes
+    }
+
     /**
      * `candidates_summary` 만 타입을 고정하지 않고 [JsonNode] 로 받아 **손으로 읽는다**(형태 미확정 시절의 결정).
      * 손으로 읽는 키는 컴파일러가 지켜 주지 않으므로 여기서 계약과 맞춘다 — 이름이 어긋나면 배너 근거가
@@ -311,3 +369,42 @@ private val sampleExplanationsResponse =
     )
 
 private val sampleViolation = AiViolation("HC1", slotRef = "2026-08-01#poi", detail = "영업시간 밖", dayIndex = 0, slotIndex = 1)
+
+private val sampleReplanRequest = AiReplanRequest(
+    tripId = UUID.randomUUID().toString(),
+    tripContext = TripContext(listOf("제주"), LocalDate.parse("2026-08-01"), LocalDate.parse("2026-08-01"), "친구", "표준"),
+    targetDate = LocalDate.parse("2026-08-01"),
+    timeWindow = AiTimeWindow(LocalDate.parse("2026-08-01"), LocalTime.parse("09:00"), LocalTime.parse("21:00")),
+    anchor = AiCoord(33.45, 126.56),
+    scope = "PARTIAL_SLOTS",
+    fromInstant = Instant.parse("2026-08-01T05:00:00Z"),
+    preferenceProfile = PreferenceProfile(
+        listOf("미식"), listOf("야경"), listOf("한식"), listOf("렌터카"), "알차게", listOf("친구"), true, "고급",
+    ),
+    requestMeta = RequestMeta(UUID.randomUUID().toString(), Instant.parse("2026-08-01T05:00:00Z"), 25_000L),
+    lockedBlocks = listOf(FixedBlock(UUID.randomUUID(), LocalDate.parse("2026-08-01"), LocalTime.parse("12:00"), 90)),
+    reasons = listOf("WEATHER"),
+    directives = listOf("INDOOR"),
+    freeText = "비 와서 실내로",
+    currentSlots = listOf(
+        AiReplanSlot(
+            UUID.randomUUID().toString(), LocalTime.parse("10:00"), LocalTime.parse("11:00"),
+            isFixed = true, endsNextDay = false, placementReason = "동선상 가까워요",
+        ),
+    ),
+    savedPlaces = listOf(AiSavedPlace(UUID.randomUUID().toString(), "담아 둔 카페")),
+    excludedPoiIds = listOf(UUID.randomUUID()),
+)
+
+/** 응답 표본도 전부 채운다 — 비운 칸은 직렬화에서 빠져 "그 필드를 안 읽는다"가 통과해 버린다. */
+private val sampleReplanResponse = AiReplanResponse(
+    itinerary = samplePayload,
+    totalDistanceKm = 6.9,
+    isFallback = true,
+    fallbackLevel = 1,
+    emptyReason = AiReplanEmptyReason("NO_CANDIDATE", mapOf("from" to "17:00", "filter" to "INDOOR")),
+    notes = listOf("후보가 적어 반경을 넓혔습니다"),
+    resolvedDirectives = listOf("INDOOR"),
+    unknownDirectives = listOf("뭐시기"),
+    retrieved = mapOf("kb1" to 3),
+)

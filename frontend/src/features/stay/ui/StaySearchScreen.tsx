@@ -19,6 +19,7 @@ import { formatPrice } from '@/entities/stay/lib/formatPrice';
 import { StaySearchCard } from '@/entities/stay/ui/StaySearchCard';
 import type { StayItem } from '@/shared/api/generated/schemas';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
+import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
 import { StateNotice, type StateNoticeAction } from '@/shared/ui/StateNotice';
 
 import { filterReasonLabel } from '../model/filterReasonLabel';
@@ -33,6 +34,7 @@ import {
   FilterSlidersGlyph,
   MapPinGlyph,
   PlusGlyph,
+  SearchGlyph,
   WarningTriangleGlyph,
 } from './StayGlyphs';
 
@@ -52,14 +54,14 @@ export interface StaySearchScreenProps {
   /** 하단 탭바 탭 콜백(TRIP-413). 누른 탭의 key 가 그대로 온다 — 라우팅은 페이지 몫이다.
    * 미지정이면 정직한 스텁이라 기존 2-prop 호출이 안 깨진다. */
   onPressTab?: (key: ShellTabKey) => void;
-  /** FAB "여행 만들기" 콜백(TRIP-414). 목적지(/trips/new/step1)는 페이지가 정한다.
-   * 미지정이면 정직한 스텁. */
-  onPressCreateTrip?: () => void;
+  /** 흰 원 하트 FAB "담은 숙소" 콜백(TRIP-725). 목적지(/stays/saved)는 페이지가 정한다.
+   * 미지정이면 정직한 스텁(눌러도 무동작). */
+  onPressSaved?: () => void;
   /** 지역·필터 칩 콜백(TRIP-415). 누른 칩의 axis 가 온다 — 지역 재선택·필터 시트는 페이지 몫.
    * 미지정이면 정직한 스텁(가격대 칩은 페이지가 axis 를 무시해 스텁으로 남는다). */
   onPressFilter?: (axis: 'price' | 'region' | 'more') => void;
   /** 적용된 필터 개수(TRIP-415) — '필터' 칩에 배지로 드러낸다(0이면 배지 없음). empty 카드의
-   * "필터 완화" 조건부 렌더에도 쓰인다(TRIP-416 AC-3, `=== 0`일 때만 숨김). */
+   * "필터 완화" 활성/비활성에도 쓰인다(TRIP-726 F-9, `=== 0`이면 disabled·미지정=활성). */
   activeFilterCount?: number;
   /** empty 카드 "지역 바꾸기" 콜백(TRIP-416 AC-1). 목적지(/explore/region)는 페이지가 정한다.
    * 미지정이면 정직한 스텁. */
@@ -103,6 +105,34 @@ function filterByNameQuery(items: StayItem[], query: string): StayItem[] {
 // 화면보다 짧을 때만 효과가 있고, 카드 자체는 top-align을 유지한다(중앙정렬은 `ListEmptyBlock`
 // 래퍼 몫이라 여기선 `flexGrow`만 준다).
 const listContentStyle = { flexGrow: 1 } as const;
+
+// 검색바·FAB 소프트 그림자 — className 으로 못 줘 style prop 으로 옮긴다. shadowColor '#000000'
+// 은 토큰화 대상 밖이라 raw-hex 가드(V1) 사정거리 밖(카드 cardShadow·HomeScreen 선례).
+const searchShadow = {
+  shadowColor: '#000000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.06,
+  shadowRadius: 8,
+  elevation: 2,
+} as const;
+
+const fabShadow = {
+  shadowColor: '#000000',
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.16,
+  shadowRadius: 12,
+  elevation: 6,
+} as const;
+
+// empty 등록 유도 카드 틀 소프트 그림자(Figma 0 2 10 rgba(0,0,0,0.06), TRIP-726 AC-E1) —
+// searchShadow(radius 8)보다 Figma 실측 radius 만 2 크다(결과카드 cardShadow 0/4/16/.08 보다 약함).
+const softCardShadow = {
+  shadowColor: '#000000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.06,
+  shadowRadius: 10,
+  elevation: 2,
+} as const;
 
 const FILTER_CHIPS: { axis: 'price' | 'region' | 'more'; label: string }[] = [
   { axis: 'price', label: '가격대' },
@@ -149,7 +179,7 @@ function FilterChip({
       testID={`stay-search-filter-${axis}`}
       accessibilityRole="button"
       onPress={onPress}
-      className="flex-row items-center gap-xs rounded-pill border border-hairline-strong bg-canvas px-md py-sm"
+      className="flex-row items-center gap-xs rounded-[8px] border border-hairline-strong bg-canvas px-md py-sm"
     >
       <Text className="font-noto text-body text-body">{label}</Text>
       {showBadge ? (
@@ -160,7 +190,7 @@ function FilterChip({
         </View>
       ) : null}
       {axis === 'more' ? (
-        <FilterSlidersGlyph size={14} />
+        <FilterSlidersGlyph size={15} />
       ) : (
         <ChevronDownGlyph size={14} />
       )}
@@ -205,7 +235,9 @@ function ListHeader({
   );
 }
 
-/** 점선 박스 밖, 구분선 아래 수동 등록 유도 카드(AC-3 · US-STAY-10 예외 → US-STAY-08 연결). */
+/** 점선 박스 밖, 구분선 아래 수동 등록 유도 카드(AC-3 · US-STAY-10 예외 → US-STAY-08 연결).
+ * TRIP-726 AC-E1 — 흰 카드 틀(border-hairline + soft shadow + rounded-card)로 감싼다. 틀
+ * 클래스는 testID 엘리먼트(이 Pressable) 자체에 얹는다(별도 래퍼 금지, states.test AC-3). */
 function RegisterPromptCard({
   onPress,
 }: {
@@ -216,7 +248,8 @@ function RegisterPromptCard({
       testID="stay-search-register"
       accessibilityRole="button"
       onPress={onPress}
-      className="w-full flex-row items-center gap-[14px] px-lg pb-lg"
+      style={softCardShadow}
+      className="w-full flex-row items-center gap-[14px] rounded-card border border-hairline bg-canvas p-md"
     >
       <View className="h-10 w-10 items-center justify-center rounded-pill bg-primary-pale">
         <PlusGlyph size={22} />
@@ -235,9 +268,10 @@ function RegisterPromptCard({
 }
 
 /** empty(AC-2·AC-3) — 점선 안내 박스 + 구분선 + 수동 등록 카드(박스 밖 별도 형제).
- * "필터 완화"(AC-3)는 적용된 필터가 있을 때만 낸다 — 필터가 0이면 완화할 대상이 없어 무동작
- * 버튼(이 티켓이 고치는 결함)을 재생산하기 때문. `activeFilterCount === 0`일 때만 숨기고,
- * 미지정(undefined)은 "0"이 아니므로 유지한다(기존 2-prop 무회귀 — `?? 0` 폴백 금지). */
+ * "필터 완화"는 항상 렌더하되 적용 필터가 0이면 비활성으로 보여준다(TRIP-726 F-9 역전) —
+ * 필터가 0이면 완화할 대상이 없지만, 숨겨서 죽은 버튼을 없애는 대신 정직한 비활성으로 남긴다.
+ * `activeFilterCount === 0`일 때만 disabled 이고, 미지정(undefined)은 "0"이 아니라 활성이다
+ * (기존 2-prop 무회귀 — `?? 0` 폴백 금지). */
 function EmptyBlock({
   activeFilterCount,
   onPressChangeRegion,
@@ -256,15 +290,14 @@ function EmptyBlock({
       variant: 'outline',
       onPress: onPressChangeRegion,
     },
-  ];
-  if (activeFilterCount !== 0) {
-    actions.push({
+    {
       testID: 'stay-search-empty-filter',
       label: '필터 완화',
       variant: 'outline',
       onPress: onRelaxFilters,
-    });
-  }
+      disabled: activeFilterCount === 0,
+    },
+  ];
 
   return (
     <View className="w-full gap-lg">
@@ -284,7 +317,11 @@ function EmptyBlock({
       <View className="px-lg">
         <View className="h-[1px] w-full bg-hairline" />
       </View>
-      <RegisterPromptCard onPress={onPressRegister} />
+      {/* 등록 카드 틀도 점선 박스·구분선처럼 화면 좌우 16px 안쪽으로 띄운다(카드 틀은
+       * RegisterPromptCard 의 testID 엘리먼트에 있고, 좌우 오프셋만 이 래퍼가 준다). */}
+      <View className="px-lg">
+        <RegisterPromptCard onPress={onPressRegister} />
+      </View>
     </View>
   );
 }
@@ -438,7 +475,7 @@ export function StaySearchScreen({
   onPressRegister,
   onPressBack,
   onPressTab,
-  onPressCreateTrip,
+  onPressSaved,
   onPressFilter,
   activeFilterCount,
   onPressChangeRegion,
@@ -478,13 +515,16 @@ export function StaySearchScreen({
             <>
               {onChangeNameQuery ? (
                 <View className="px-lg pt-sm">
-                  <View className="flex-row items-center gap-sm rounded-pill border border-hairline-strong bg-canvas px-md py-3">
-                    <MapPinGlyph size={16} />
+                  <View
+                    style={searchShadow}
+                    className="h-12 flex-row items-center gap-sm rounded-pill border border-hairline bg-canvas px-md"
+                  >
+                    <SearchGlyph size={20} tone="mutedSoft" />
                     <TextInput
                       testID="stay-search-name-input"
                       value={nameQuery ?? ''}
                       onChangeText={onChangeNameQuery}
-                      placeholder="숙소 이름 · 지역 검색"
+                      placeholder="지역·숙소 이름 검색"
                       className="flex-1 font-noto text-body text-ink"
                     />
                   </View>
@@ -541,10 +581,10 @@ export function StaySearchScreen({
             );
           }}
           ItemSeparatorComponent={() => <View className="h-lg" />}
-          // FAB(absolute bottom-104 + h-52 = 상단 156)·탭바(96) 오버레이가 마지막 카드를
-          // 가리지 않도록 스크롤 끝 여백을 156까지 확보한다(TRIP-414, Figma fabSpacer 대응).
+          // 2단 원형 FAB(흰 하트 absolute bottom-152 + size56 = 상단 208)·탭바(96) 오버레이가
+          // 마지막 카드를 가리지 않도록 스크롤 끝 여백을 208까지 확보한다(TRIP-725, fabSpacer 대응).
           ListFooterComponent={
-            <View testID="stay-search-list-footer" className="h-[156px]" />
+            <View testID="stay-search-list-footer" className="h-[208px]" />
           }
         />
 
@@ -553,18 +593,28 @@ export function StaySearchScreen({
           onPressTab={(key) => onPressTab?.(key)}
         />
 
+        {/* 2단 원형 FAB(TRIP-725) — 위 흰 원 하트(담은 숙소 → /stays/saved) + 아래 분홍 원 ＋
+         * (숙소 등록 → /stays/register). 목적지는 페이지가 정한다(화면은 라우터를 모른다).
+         * 글리프가 SVG(텍스트 0)라 accessibilityLabel 이 스크린리더 이름의 유일한 출처다. */}
         <Pressable
-          testID="stay-search-fab"
+          testID="stay-search-fab-saved"
           accessibilityRole="button"
-          // 자식 Text 의 전각 '＋'가 스크린리더 이름에 새지 않게 명시한다(TRIP-414 접근성 AC,
-          // TRIP-391 홈 FAB 이 겪은 유일한 실패 경로와 동형).
-          accessibilityLabel="여행 만들기"
-          onPress={onPressCreateTrip}
-          className="absolute bottom-[104px] right-lg h-[52px] items-center justify-center rounded-pill bg-primary px-xl"
+          accessibilityLabel="담은 숙소"
+          onPress={onPressSaved}
+          style={fabShadow}
+          className="absolute bottom-[152px] right-lg h-14 w-14 items-center justify-center rounded-pill border border-hairline bg-canvas"
         >
-          <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-            ＋ 여행 만들기
-          </Text>
+          <HeartFilledGlyph size={26} />
+        </Pressable>
+        <Pressable
+          testID="stay-search-fab-register"
+          accessibilityRole="button"
+          accessibilityLabel="숙소 등록"
+          onPress={onPressRegister}
+          style={fabShadow}
+          className="absolute bottom-[84px] right-lg h-14 w-14 items-center justify-center rounded-pill bg-primary"
+        >
+          <PlusGlyph size={24} tone="onPrimary" />
         </Pressable>
       </View>
     </SafeAreaView>

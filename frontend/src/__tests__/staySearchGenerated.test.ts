@@ -290,11 +290,12 @@ const GENERATED_FILE_COUNT_FLOOR = 75;
  *      포매터를 안 돌리면 순수 포맷 차이로 어긋난다(02a ★1).
  */
 const ENDPOINT_FILE_SHA256: Record<string, string> = {
+  // TRIP-640 에서 갱신: GET /stays/{stayId}(StayDetail) 오퍼레이션 추가(정당한 계약 변경 — BE #659).
   // TRIP-503 에서 갱신 — 다만 이 파일이 바뀐 이유는 **이 티켓이 아니다.** 역지오코딩
   // (GET /stays/reverse-geocode)이 openapi 에 머지됐는데 재생성이 안 돼 밀려 있었다.
   // 이 가드가 예고한 사고가 그대로 일어난 것이라, 여기서 함께 갚는다.
   'stays/stays.ts':
-    'c1f252bc4602f56e891152073f33f23d4fc844af94d1c82747eae5d5c45ea779',
+    'ac1a5bfd2a6fe0fb49579eaf9e0f830bd83cc7b4040000aadebdc9e1d19f2f5f',
   'saved-stays/saved-stays.ts':
     '79fe27571bb827aaa31a24849ed111b87ef260341bf6769bf43bea5d15a44a46',
   // TRIP-294에서 places·preferences로 넓혔다(01b Seed 확정 6). 근거는 문제로그

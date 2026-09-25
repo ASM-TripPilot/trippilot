@@ -1,0 +1,20 @@
+<p class="lead">잘 동작하는 소스를 배포하는 것과, 검증을 마친 바로 그 이미지를 배포하는 것은 서로 다른 보장이다. 이 강의에서는 현재 브랜치의 실제 배포 절차를 따라가고 같은 이미지를 DEV에서 PRD로 승격하려면 무엇을 더 구현해야 하는지 설계한다.</p>
+<p><span class="badge">기본 50분</span> <span class="badge">압축 30분</span> <span class="badge">확장 60분</span></p>
+<div class="timing">
+<div class="table-wrap"><table>
+<caption>3강 진행표 — 클라우드 생성 대기 시간은 수업 시간에 포함하지 않음</caption>
+<thead><tr><th>구간</th><th>학습 활동</th><th>시간</th></tr></thead>
+<tbody>
+<tr><td>0–8분</td><td>로컬과 AWS 구성 비교, 이미지·소스·환경 구분</td><td>8분</td></tr>
+<tr><td>8–18분</td><td>로컬 검증과 OIDC/state 초기 준비 읽기</td><td>10분</td></tr>
+<tr><td>18–30분</td><td>DEV 인프라·앱 배포 로그와 DNS/TLS 검증 실습</td><td>12분</td></tr>
+<tr><td>30–42분</td><td>PRD 배포, 동일 digest 승격 설계</td><td>12분</td></tr>
+<tr><td>42–50분</td><td>실패 조사, 복구 경계, 퀴즈와 제출</td><td>8분</td></tr>
+</tbody>
+</table></div>
+<p>30분 과정에서는 선준비된 로컬 클러스터와 성공·실패 로그를 이용하고 digest 확장은 도식과 변경 목록까지만 다룬다. 60분 과정에서는 추가 10분 동안 Helm 이미지 helper 수정안을 렌더링하고 잘못된 digest 입력을 거부하는 테스트를 설계한다.</p>
+</div>
+<div class="callout warning">
+<strong>실습의 실행 범위</strong>
+<p>이 교재의 작성 과정에서는 AWS 배포를 실행하지 않았다. 수강생은 로컬 검증과 로그 분석을 수행하고 실제 AWS 변경은 강사가 지정한 계정·환경에서만 실행한다. 최초 EKS·NLB·RDS·노드 생성, 인증서 DNS 검증과 이미지 빌드는 한 시간을 넘길 수 있으므로 강사는 계정·도메인·DEV 클러스터를 수업 전에 준비한다. EKS·NAT·RDS·ElastiCache는 실습이 끝나도 비용이 계속 발생한다. 정확한 금액을 고정해 가정하지 말고 강사가 실습 계정의 예산과 종료 절차를 관리한다.</p>
+</div>

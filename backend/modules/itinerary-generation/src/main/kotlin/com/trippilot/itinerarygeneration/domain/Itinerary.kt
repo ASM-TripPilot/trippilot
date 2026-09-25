@@ -98,6 +98,31 @@ fun VisitSlot.withPlacementReason(reason: String?): VisitSlot = VisitSlot.of(
     distanceRange, reason, violationReason, alternatives,
 )
 
+/**
+ * 차선책의 "대신 골라도 좋은 이유"만 갈아끼운 사본(TRIP-873 · AI TRIP-887).
+ *
+ * [withPlacementReason] 과 같은 자리·같은 이유다 — 문장이 일정보다 늦게 도착하므로 시각·순서를
+ * 다시 만들지 않고 그 자리에 문장만 채운다.
+ *
+ * **키가 없으면 그대로 둔다.** 생성 시점에 AI 가 준 템플릿 문구(`"같은 카페 후보"`)가 폴백이라,
+ * 빈 값으로 덮으면 화면의 "다른 선택지" 칸이 이유 없이 비어 버린다 — 조회가 일부만 답하는 것은
+ * 정상 경로다(`slot_explanations_unavailable` 등).
+ *
+ * @param byAltPoiKey `"{date}#{altPoiId}"` → 문장. 키를 만드는 쪽이 날짜를 알아야 해서 맵으로 받는다.
+ * @param key 이 슬롯의 날짜를 아는 호출측이 차선책 POI 로 키를 만든다.
+ */
+fun VisitSlot.withAlternativeRationales(
+    byAltPoiKey: Map<String, String>,
+    key: (SlotAlternative) -> String,
+): VisitSlot {
+    if (byAltPoiKey.isEmpty() || alternatives.isEmpty()) return this
+    return VisitSlot.of(
+        sourcePoiId, poiSnapshotId, orderIndex, startAt, endAt, isFixed, hasViolation, endsNextDay,
+        distanceRange, placementReason, violationReason,
+        alternatives.map { alt -> byAltPoiKey[key(alt)]?.let { alt.copy(rationale = it) } ?: alt },
+    )
+}
+
 /** 하루 일정 — 날짜 + 방문 슬롯(순서 오름차순 정렬 보장). */
 class ItineraryDay private constructor(
     val date: LocalDate,

@@ -286,25 +286,3 @@ export function LocationWarningGlyph({
     </Svg>
   );
 }
-
-// 거부 안내 줄의 닫기(×) 아이콘. features 3곳의 CloseGlyph 는 경계상 import 불가라(shared→features
-// 금지) 여기 신설한다 — kit §6 close SVG(6,6→18,18 / 18,6→6,18)를 뉴트럴 mutedSoft 로 그린다.
-export function LocationCloseGlyph({ size = 18, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M6 6L18 18M18 6L6 18"
-        stroke={LOCATION_ICON_COLORS.mutedSoft}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
