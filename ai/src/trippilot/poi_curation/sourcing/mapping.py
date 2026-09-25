@@ -212,6 +212,69 @@ _UNREPRESENTABLE_REST = re.compile(r"첫째|둘째|셋째|넷째|다섯째|격�
 _NO_REST_TOKENS = frozenset({"연중무휴", "없음", "무휴", "연중 무휴"})
 
 
+# 영업시간이 **아닌** 시각이 붙는 줄 — 빼고 읽지 않으면 휴게시간이 개점시간이 된다.
+# 실물: `09:00~17:00 / 휴게시간 12:00~13:00 / 입장 마감 16:30`
+# ⚠️ 실데이터에서 라벨 빈도를 세어 넣었다 — `준비시간` 이 **1,100건으로 1위**다.
+# 감으로 목록을 만들었을 때 이게 빠져서 `10:00~18:00 (준비시간 12:00~13:00)` 이
+# **12:00~13:00 으로 읽혔다.** 목록은 반드시 실물 빈도로 채운다.
+_NOT_OPEN_SEGMENT = re.compile(
+    r"준비\s*시간|휴게|브레이크|점심\s*시간|마감|주문|라스트\s*오더|정비|청소|"
+    r"\d+\s*항차|\d+\s*회차|대관|예약|상담|입실|퇴실")
+# 시설·구역이 여럿이면 **어느 것이 이 장소의 시간인지 모른다** — 통째로 포기한다.
+# 실물: `[사우나] 06:00~21:00 [아쿠아나] 실내 10:00~18:00 야외 12:00~17:00`
+_SECTION_HEAD = re.compile(r"\[[^\]]{1,20}\]")
+_RANGE_RE = re.compile(r"(\d{1,2}):(\d{2})\s*[~\-–—]\s*(\d{1,2}):(\d{2})")
+# 이보다 좁으면 회차·교육 세션을 영업시간으로 읽은 것이다 (실측으로 정한 값).
+_MIN_WINDOW_MIN = 120
+
+
+def _multi_range_window(text: str) -> tuple[int, int] | None:
+    """시각이 3회 이상인 원문에서 영업 창을 고른다. 확신 없으면 None.
+
+    종전에는 통째로 포기했다("어느 창이 맞는지 확정 불가"). 실측(2026-09-26,
+    공유본 18,605건): 결측 13,367건 중 **4,764건이 원문에 시각을 갖고 있었다.**
+
+    **첫 범위를 쓴다.** 원문이 대개 "대표 시간 → 부가 안내" 순서라 첫 범위가 그
+    장소의 시간이다. 두 규칙을 실데이터로 비교해 골랐다 — 읽어내는 양은 같은데
+    오독이 한 자리 적다:
+
+        규칙        읽힘    2시간 이하(의심)
+        교집합       839        120
+        첫 범위      851          4      ← 채택
+
+    교집합은 `09:00~19:00 … 야시장 18:00~22:00` 처럼 **무관한 시설**과 겹쳐 18~19시로
+    좁아졌다. 첫 범위는 그 함정을 안 밟는다.
+
+    보정 둘:
+      · **같은 개점의 다른 폐점**(하절기/동절기)이 있으면 **이른 폐점**을 쓴다 —
+        넓게 잡으면 닫힌 시간에 일정을 넣는다. 좁으면 후보에서 빠질 뿐이다.
+      · 창이 **2시간 이하면 포기** — 회차·교육 세션을 영업시간으로 읽은 흔적이다.
+
+    포기하는 경우: 구역 머리(`[사우나]`)가 둘 이상 — 어느 구역이 장소 전체인지 모른다.
+    """
+    if len(_SECTION_HEAD.findall(text)) > 1:
+        return None
+    # 괄호도 경계다 — `(준비시간 12:00~13:00)` 이 앞 범위와 한 덩어리로 남으면
+    # 라벨 검사가 줄 전체를 버려 정상 범위까지 함께 사라진다.
+    spans: list[tuple[int, int]] = []
+    for seg in re.split(r"[\n<>()（）\[\]]|·", text):
+        if _NOT_OPEN_SEGMENT.search(seg):
+            continue
+        for h1, m1, h2, m2 in _RANGE_RE.findall(seg):
+            start, end = int(h1) * 60 + int(m1), int(h2) * 60 + int(m2)
+            if end <= start:
+                end += 24 * 60          # 자정 초과 (OpenHour 계약과 동일)
+            spans.append((start, end))
+    # **하나만 남아도 쓴다.** 비영업 줄을 걷어내면 정상 범위가 하나만 남는 것이
+    # 흔하다(`09:00~17:00` + 휴게 + 입장마감 → 하나). 둘 이상을 요구하면 가장
+    # 잘 읽히는 모양을 통째로 버린다 — 실제로 그렇게 짰다가 테스트가 잡았다.
+    if not spans:
+        return None
+    start = spans[0][0]
+    end = min(e for s, e in spans if s == start)   # 계절 변형 중 이른 폐점
+    return (start, end) if end - start > _MIN_WINDOW_MIN else None
+
+
 def parse_open_hours(hours_raw: str | None, rest_raw: str | None) -> tuple[OpenHour, ...]:
     """영업시간 원문 → 주간 OpenHour. 확신할 수 없으면 () (지어내기 금지).
 
@@ -228,12 +291,18 @@ def parse_open_hours(hours_raw: str | None, rest_raw: str | None) -> tuple[OpenH
         open_min, close_min = _ALL_DAY
     else:
         times = _TIME_RE.findall(hours_raw)
-        if len(times) != 2:
+        if len(times) == 2:
+            open_min = int(times[0][0]) * 60 + int(times[0][1])
+            close_min = int(times[1][0]) * 60 + int(times[1][1])
+            if close_min <= open_min:
+                close_min += 24 * 60  # 자정 초과 영업 (시작일 귀속)
+        elif len(times) > 2:
+            window = _multi_range_window(hours_raw)
+            if window is None:
+                return ()
+            open_min, close_min = window
+        else:
             return ()
-        open_min = int(times[0][0]) * 60 + int(times[0][1])
-        close_min = int(times[1][0]) * 60 + int(times[1][1])
-        if close_min <= open_min:
-            close_min += 24 * 60  # 자정 초과 영업 (시작일 귀속)
 
     closed_days = _parse_rest_days(rest_raw)
     if closed_days is None:
