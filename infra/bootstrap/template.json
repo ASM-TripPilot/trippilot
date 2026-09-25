@@ -547,11 +547,11 @@
         ]
       }
     },
-    "DeploymentPodIdentityPolicy": {
+    "DeploymentExtraPolicy": {
       "Type": "AWS::IAM::ManagedPolicy",
       "Properties": {
-        "ManagedPolicyName": {"Fn::Sub": "trippilot-${Environment}-github-deploy-pod-identity"},
-        "Description": "Lets the deployment role bind the AI pod role to the ai service account. Separate from the inline policy only because that one sits at the 10240-character limit.",
+        "ManagedPolicyName": {"Fn::Sub": "trippilot-${Environment}-github-deploy-extra"},
+        "Description": "Deployment-role statements that do not fit the inline policy (it sits at the 10240-character limit): Pod Identity binding for the AI pods, and read-only serving metrics/cost for the weekly serving judge.",
         "Roles": [{"Ref": "DeploymentRole"}],
         "PolicyDocument": {
           "Version": "2012-10-17",
@@ -579,6 +579,12 @@
               "Effect": "Allow",
               "Action": ["iam:GetRole", "iam:ListRoleTags", "iam:ListAttachedRolePolicies", "iam:ListRolePolicies", "iam:GetRolePolicy"],
               "Resource": {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/trippilot-${Environment}-ai-pod"}
+            },
+            {
+              "Sid": "ReadServingMetricsAndCost",
+              "Effect": "Allow",
+              "Action": ["cloudwatch:ListMetrics", "cloudwatch:GetMetricStatistics", "ce:GetCostAndUsage"],
+              "Resource": "*"
             },
             {
               "Sid": "PassAiPodRoleToPods",
