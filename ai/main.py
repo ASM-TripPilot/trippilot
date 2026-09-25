@@ -30,6 +30,7 @@ env 스위치 (TRIP-344):
 (docker-compose 헬스체크 의존).
 """
 
+import json
 import logging
 import pathlib
 import os
@@ -209,6 +210,66 @@ def _place_existence():
         max_calls=int(_env("EXISTENCE_MAX_CALLS") or "60"),
         monotonic_ms=lambda: int(time.monotonic() * 1000),
     )
+
+
+def _place_hours():
+    """`GOOGLE_MAPS_API_KEY` 설정 시 영업시간 보강 어댑터 조립. 미설정 = 미배선.
+
+    **돈이 나간다.** `regularOpeningHours` 는 Place Details Enterprise 티어다
+    ($20/1,000 · 월 1,000 무료). 팀 결정은 "무료 한도 안에서만"이라 상한이 기본값에
+    박혀 있다 — 켜는 것만으로 과금되지 않게.
+
+    ⚠️ **프로세스가 재시작하면 월 카운터는 0 이 된다.** 이 상한은 실수 방지용이고
+    과금 방어의 정본은 **GCP 콘솔 할당량**이다. 배포 전에 콘솔에서 Places API 일/월
+    상한을 걸어야 한다.
+
+    `place_ids` 표가 비면 물을 대상이 0 이라 어댑터가 있어도 조용히 안 돈다 —
+    둘 다 있어야 켜진다(`ScheduleAgent._enrich_hours`).
+    """
+    key = _env("GOOGLE_MAPS_API_KEY")
+    if key is None:
+        return None
+    import time
+
+    from trippilot.background.naver_search import UrllibHttpClient
+    from trippilot.poi_curation.adapters.google_places_hours import (
+        GooglePlacesHoursAdapter,
+    )
+
+    class _Http:
+        """헤더 규약이 달라 카카오 클라이언트를 그대로 못 쓴다(그쪽은 Authorization)."""
+
+        def __init__(self) -> None:
+            self._inner = UrllibHttpClient(timeout_sec=1.0)
+
+        def get_json(self, url, headers):
+            return self._inner.get_json(url, headers, {})
+
+    return GooglePlacesHoursAdapter(
+        _Http(), key,
+        # 생성 1회당 상한 — 보강 대상 상위 N(기본 20)보다 조금 넉넉히
+        max_calls=int(_env("HOURS_MAX_CALLS") or "25"),
+        # 월 누적 — 무료 한도(1,000)보다 낮게 둔다. `_env` 를 거치는 이유는 TRIP-882:
+        # compose 가 통로를 열어 둔 변수는 빈 문자열로 오고 `int("")` 가 기동을 막는다.
+        monthly_budget=int(_env("HOURS_MONTHLY_BUDGET") or "900"),
+        monotonic_ms=lambda: int(time.monotonic() * 1000),
+    )
+
+
+def _place_ids() -> dict[str, str]:
+    """`data/place_ids.json` → `{content_id: place_id}`. 없으면 빈 표(= 기능 꺼짐).
+
+    `place_id` 는 Google 약관의 **유일한 저장 예외**라 리포에 둘 수 있다.
+    """
+    path = pathlib.Path(_env("PLACE_IDS_PATH") or "data/place_ids.json")
+    if not path.exists():
+        return {}
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}   # 깨진 표 때문에 기동이 막히면 안 된다 — 없는 것과 같게 본다
+    ids = doc.get("place_ids")
+    return ids if isinstance(ids, dict) else {}
 
 
 def _backend_poi_db():
@@ -471,12 +532,14 @@ def build_app_from_env() -> FastAPI:
     travel = _tmap_travel()
     events = _event_store()
     existence = _place_existence()
+    hours, place_ids = _place_hours(), _place_ids()
     vector_store, embedding = _vector_rag()
     provider = _env("TRIPPILOT_LLM_PROVIDER")
     if provider is None:
         return build_dev_app(weather=weather, poi_db=poi_db, events=events,
                              vector_store=vector_store, embedding=embedding,
-                             travel_port=travel, existence=existence)
+                             travel_port=travel, existence=existence,
+                             hours=hours, place_ids=place_ids)
     if provider == "openai":
         llm, model_id = _openai_llm_and_model()
     elif provider == "anthropic":
@@ -500,6 +563,7 @@ def build_app_from_env() -> FastAPI:
                          poi_db=poi_db, events=events,
                          vector_store=vector_store, embedding=embedding,
                          travel_port=travel, existence=existence,
+                         hours=hours, place_ids=place_ids,
                          feature_models=feature_models,
                          retry_models=_retry_models_from_env(),
                          directives=_replan_directives())

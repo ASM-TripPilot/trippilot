@@ -187,6 +187,7 @@ from trippilot.domain.itinerary import (
 )
 from trippilot.domain.llm import CandidatePool, ScoredPoi
 from trippilot.domain.poi import OpenHour, PoiCategory
+from trippilot.ports.place_hours_port import HoursVerdict
 from trippilot.domain.common import ScheduleId
 
 from tests.generators.poi import candidate_pools
@@ -791,3 +792,120 @@ def test_요청의_지시_카테고리가_규칙_점수에_실린다() -> None:
     assert plain.keys() == steered.keys()
     assert any(steered[k] < plain[k] for k in plain), (
         "회피 지시가 점수를 전혀 안 바꿨다 — 요청→점수 고리가 끊겼다")
+
+
+# ── ②⁗ 영업시간 런타임 보강 (2026-09-26) ──────────────────────────
+# **이 단계의 유일한 실패 방식은 "값을 채웠는데 일정이 안 바뀌는 것"이다.**
+# `ScoredPoi` 에 `Poi` 본체가 없어 후보를 바꿔 봐야 HC1 에 안 닿고, 교체가
+# `for_pool(pool.pois)` 보다 아래면 조립이 옛 POI 를 본다. 이 리포가 같은 모양으로
+# 네 번 당했다(TRIP-898·904·#668·#681). 그래서 아래 첫 테스트가 핵심이다.
+
+
+class FakeHours:
+    """place_id → 영업시간. 물어본 것만 기록해 **범위**도 같이 문다(돈이 나가는 자리)."""
+
+    def __init__(self, by_place_id: dict, *, raises: bool = False):
+        self._by = by_place_id
+        self._raises = raises
+        self.asked: list[str] = []
+
+    def fetch(self, queries, *, deadline_ms):
+        if self._raises:
+            raise RuntimeError("vendor down")
+        out = []
+        for q in queries:
+            self.asked.append(q.place_id)
+            hours = self._by.get(q.place_id)
+            out.append(HoursVerdict(q.poi_id, hours=hours) if hours
+                       else HoursVerdict(q.poi_id, reason="no_hours_in_response"))
+        return tuple(out)
+
+
+def _closed_all_week() -> tuple:
+    """월요일만 여는 영업시간 — 여행일(2026-08-05, 수)에는 휴무다."""
+    return (OpenHour(day_of_week=0, open_min=540, close_min=1080),)
+
+
+def _agent_with_hours(hours, place_ids):
+    trace = InMemoryTrace()
+    gateway = GatewayFacade(FakeLlm(_scores_json("p1", "p2", "p3", "p4", "p5", "p6")),
+                            _Renderer(), ClosedSetGate(), _C1CFG, trace)
+    return ScheduleAgent(
+        PreferenceScoringWorker(gateway), _AssemblyProvider(trace, _Sink(), primary=True),
+        FakeClock(), trace, hours=hours, place_ids=place_ids,
+    ), trace
+
+
+def test_보강한_영업시간이_실제로_일정을_바꾼다() -> None:
+    """**배선이 HC1 에 닿는지** — 이 단계가 존재할 이유 전부다.
+
+    배치되던 두 곳에 "여행일 휴무"를 채우면 그 둘이 빠져야 한다. 안 빠지면
+    값을 채웠지만 조립이 못 본 것이다(풀 교체가 `for_pool` 아래거나, 후보만 바꿨거나).
+    """
+    pool, req = _existence_case()
+    base = _placed(_agent_with_hours(None, {})[0].run(_task(pool, request=req)))
+    assert len(base) == 2  # 전제
+
+    closed = _closed_all_week()
+    fake = FakeHours({f"place-{p}": closed for p in base})
+    agent, _ = _agent_with_hours(fake, {p: f"place-{p}" for p in base})
+    outcome = agent.run(_task(pool, request=req))
+
+    assert not set(_placed(outcome)) & set(base), \
+        "휴무로 밝혀진 곳이 그대로 배치됐다 — 보강이 HC1 에 안 닿는다"
+    assert outcome.status is GenerationStatus.SUCCESS   # 보강은 정상 동작이다
+
+
+def test_이미_영업시간이_있는_후보는_묻지_않는다() -> None:
+    """사용자 결정(2026-09-26) — 덮으면 파서 값과 벤더 값이 섞여 출처를 못 가린다.
+
+    돈이 나가는 자리라 **묻는 범위가 곧 비용**이기도 하다.
+    """
+    pois = tuple(_poi(i, 0.003 * i) for i in range(1, 7))
+    # p1 에만 영업시간을 심는다 — 나머지는 비어 있다
+    pois = tuple(replace(p, open_hours=(OpenHour(day_of_week=2, open_min=0, close_min=1440),))
+                 if str(p.poi_id) == "p1" else p for p in pois)
+    req = replace(_request(), day_window=TimeWindow(
+        start=datetime(2026, 8, 5, 9, 0, tzinfo=_KST),
+        end=datetime(2026, 8, 5, 12, 0, tzinfo=_KST)))
+    pool = CandidatePoolBuilder(InMemoryPoi(pois), M7Config()).build(
+        CandidatePoolRequest(anchor=req.anchor, dates=req.days, budget=req.budget,
+                             transport=req.transport), _NOW)
+
+    fake = FakeHours({})
+    agent, _ = _agent_with_hours(fake, {f"p{i}": f"place-p{i}" for i in range(1, 7)})
+    agent.run(_task(pool, request=req))
+
+    assert "place-p1" not in fake.asked, "값이 있는 후보에까지 돈을 썼다"
+    assert fake.asked, "물어본 것이 하나도 없다 — 대상 선정이 틀렸다"
+
+
+def test_place_id_가_없으면_묻지_않는다() -> None:
+    """`place_id` 는 미리 해결해 둔 것만 쓴다 — 여기서 검색하면 비용이 두 배다."""
+    pool, req = _existence_case()
+    fake = FakeHours({})
+    agent, _ = _agent_with_hours(fake, {"p1": "place-p1"})   # 하나만 해결돼 있다
+    agent.run(_task(pool, request=req))
+
+    assert fake.asked == ["place-p1"]
+
+
+def test_보강_실패는_일정을_깨지_않는다() -> None:
+    """영업시간을 못 채운 것이 **생성 실패가 되면 안 된다** (INV-4·DL-5)."""
+    pool, req = _existence_case()
+    base = _placed(_agent_with_hours(None, {})[0].run(_task(pool, request=req)))
+
+    for hours in (FakeHours({}, raises=True), FakeHours({})):
+        agent, trace = _agent_with_hours(
+            hours, {f"p{i}": f"place-p{i}" for i in range(1, 7)})
+        outcome = agent.run(_task(pool, request=req))
+        assert _placed(outcome) == base          # 종전 그대로
+        assert any(d.stage == "hours" for d in outcome.degradations), "조용히 넘어갔다"
+
+
+def test_미주입이면_종전과_완전히_같다() -> None:
+    """켜지기 전에 동작이 안 바뀌는 것이 배선의 조건이다."""
+    pool, req = _existence_case()
+    with_port = _placed(_agent_with_hours(FakeHours({}), {})[0].run(_task(pool, request=req)))
+    without = _placed(_agent_with_hours(None, {})[0].run(_task(pool, request=req)))
+    assert with_port == without
