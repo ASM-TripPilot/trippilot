@@ -192,6 +192,36 @@
             "requests",
             "limits"
           ]
+        },
+        "autoscaling": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "enabled",
+            "minReplicas",
+            "maxReplicas",
+            "targetCPUUtilizationPercentage"
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "minReplicas": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20
+            },
+            "maxReplicas": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20
+            },
+            "targetCPUUtilizationPercentage": {
+              "type": "integer",
+              "minimum": 10,
+              "maximum": 100
+            }
+          }
         }
       }
     },
@@ -240,6 +270,36 @@
             "limits"
           ]
         },
+        "autoscaling": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "enabled",
+            "minReplicas",
+            "maxReplicas",
+            "targetCPUUtilizationPercentage"
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "minReplicas": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20
+            },
+            "maxReplicas": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20
+            },
+            "targetCPUUtilizationPercentage": {
+              "type": "integer",
+              "minimum": 10,
+              "maximum": 100
+            }
+          }
+        },
         "certificateArn": {
           "type": "string",
           "pattern": "^arn:aws[a-z-]*:acm:[a-z0-9-]+:[0-9]{12}:certificate/[a-f0-9-]{36}$"
@@ -256,6 +316,72 @@
             "type": "string",
             "pattern": "^[0-9.]+/[0-9]{1,2}$"
           }
+        }
+      }
+    },
+    "reminderLlm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "servedModelName",
+        "image",
+        "modelClaimName",
+        "maxReplicas",
+        "cooldownSeconds",
+        "prometheusAddress",
+        "resources"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "servedModelName": {
+          "type": "string",
+          "pattern": "^local[a-zA-Z0-9._-]*$"
+        },
+        "image": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "repository",
+            "tag"
+          ],
+          "properties": {
+            "repository": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9./:_-]+$"
+            },
+            "tag": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_.-]+$"
+            }
+          }
+        },
+        "modelClaimName": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "maxReplicas": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4
+        },
+        "cooldownSeconds": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 3600
+        },
+        "prometheusAddress": {
+          "type": "string",
+          "pattern": "^https?://"
+        },
+        "resources": {
+          "type": "object",
+          "required": [
+            "requests",
+            "limits"
+          ]
         }
       }
     },

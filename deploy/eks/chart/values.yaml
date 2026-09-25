@@ -33,6 +33,12 @@ backend:
     limits: { cpu: "2", memory: 2Gi }
 ai:
   replicas: 1
+  # When enabled the Deployment stops rendering replicas — the HPA owns the count.
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70
   resources:
     requests: { cpu: 500m, memory: 512Mi }
     limits: { cpu: "2", memory: 2Gi }
@@ -48,9 +54,31 @@ gateway:
   # Informational: create DNS to the LoadBalancer hostname after the first deployment.
   hostname: ""
   replicas: 1
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70
   loadBalancerSourceRanges: [0.0.0.0/0]
   resources:
     requests: { cpu: 100m, memory: 64Mi }
     limits: { cpu: 500m, memory: 128Mi }
+reminderLlm:
+  # Fine-tuned REMINDER_COPY model on an in-cluster GPU. Off until the Modal
+  # baseline exists and a GPU NodePool is approved — see templates/reminder-llm.yaml.
+  enabled: false
+  # This exact string is also the Triton model repository directory and the
+  # TRIPPILOT_LLM_FEATURE_MODELS assignment. It must start with "local".
+  servedModelName: local-reminder-qwen3-4b-v1
+  image:
+    repository: nvcr.io/nvidia/tritonserver
+    tag: 24.08-vllm-python-py3
+  modelClaimName: reminder-llm-models
+  maxReplicas: 1
+  cooldownSeconds: 300
+  prometheusAddress: http://prometheus-server.monitoring:80
+  resources:
+    requests: { cpu: "2", memory: 12Gi }
+    limits: { memory: 16Gi }
 podDisruptionBudget:
   enabled: false

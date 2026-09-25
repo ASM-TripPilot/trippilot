@@ -114,6 +114,83 @@ class ChartTests(unittest.TestCase):
                 self.assertEqual(len(sources), 1)
                 self.assertEqual(sources[0]["podSelector"]["matchLabels"]["app.kubernetes.io/component"], "ai")
 
+    def test_autoscaling_replaces_static_replicas_and_skips_embedding(self):
+        documents = render(embedding=True, overrides=[
+            "--set", "ai.autoscaling.enabled=true",
+            "--set", "ai.autoscaling.minReplicas=1",
+            "--set", "ai.autoscaling.maxReplicas=4",
+        ])
+        scalers = {item["metadata"]["name"]: item
+                   for item in documents if item["kind"] == "HorizontalPodAutoscaler"}
+        self.assertEqual(set(scalers), {"ai"})
+        target = scalers["ai"]["spec"]["scaleTargetRef"]
+        self.assertEqual((target["kind"], target["name"]), ("Deployment", "ai"))
+        self.assertEqual(scalers["ai"]["spec"]["maxReplicas"], 4)
+        deployments = {item["metadata"]["name"]: item
+                       for item in documents if item["kind"] == "Deployment"}
+        # HPA 가 소유하면 Deployment 는 replicas 를 싣지 않는다 — 둘 다 실으면
+        # 다음 helm upgrade 가 HPA 가 정한 수를 되돌린다.
+        self.assertNotIn("replicas", deployments["ai"]["spec"])
+        self.assertEqual(deployments["embedding"]["spec"]["replicas"], 1)
+
+    def test_autoscaling_is_off_by_default(self):
+        documents = render()
+        self.assertEqual(
+            [item for item in documents if item["kind"] == "HorizontalPodAutoscaler"], [])
+        deployments = {item["metadata"]["name"]: item
+                       for item in documents if item["kind"] == "Deployment"}
+        self.assertEqual(deployments["ai"]["spec"]["replicas"], 1)
+
+    def test_reminder_serving_is_opt_in_and_off_by_default(self):
+        documents = render()
+        names = {(item["kind"], item["metadata"]["name"]) for item in documents}
+        self.assertNotIn(("Deployment", "reminder-llm"), names)
+        self.assertNotIn(("ScaledObject", "reminder-llm"), names)
+
+    def test_reminder_serving_keeps_the_served_model_name_contract(self):
+        documents = render(overrides=["--set", "reminderLlm.enabled=true"])
+        deployment = next(item for item in documents
+                          if item["kind"] == "Deployment"
+                          and item["metadata"]["name"] == "reminder-llm")
+        container = deployment["spec"]["template"]["spec"]["containers"][0]
+        # 이 문자열이 계약이다. Triton 모델 디렉토리명 · 요청의 model= · 앱의
+        # TRIPPILOT_LLM_FEATURE_MODELS 배정이 전부 같아야 하고, `local` 로 시작하지
+        # 않으면 앱이 로컬 라우트를 아예 안 켜고 외부 벤더로 조용히 나간다.
+        served = container["env"]
+        served_name = {item["name"]: item["value"] for item in served}["SERVED_MODEL_NAME"]
+        self.assertEqual(served_name, "local-reminder-qwen3-4b-v1")
+        self.assertTrue(served_name.startswith("local"))
+        self.assertIn(served_name, " ".join(container["args"]))
+
+    def test_reminder_serving_asks_for_a_gpu_and_scales_to_zero(self):
+        documents = render(overrides=["--set", "reminderLlm.enabled=true"])
+        deployment = next(item for item in documents
+                          if item["kind"] == "Deployment"
+                          and item["metadata"]["name"] == "reminder-llm")
+        spec = deployment["spec"]["template"]["spec"]
+        resources = spec["containers"][0]["resources"]
+        self.assertEqual(resources["limits"]["nvidia.com/gpu"], 1)
+        # 기본 general-purpose NodePool 에는 GPU 가 없다 — 전용 풀로만 떨어져야 한다.
+        self.assertEqual(spec["nodeSelector"]["trippilot.io/nodepool"], "gpu")
+        self.assertEqual(spec["tolerations"][0]["key"], "nvidia.com/gpu")
+        scaler = next(item for item in documents if item["kind"] == "ScaledObject")
+        # 0 으로 내려가지 않으면 GPU 노드가 상주해 Modal 기각 근거(무요청 0원)를 못 이긴다.
+        self.assertEqual(scaler["spec"]["minReplicaCount"], 0)
+        self.assertEqual(scaler["spec"]["scaleTargetRef"]["name"], "reminder-llm")
+
+    def test_ai_points_at_the_in_cluster_reminder_service_when_enabled(self):
+        documents = render(overrides=["--set", "reminderLlm.enabled=true"])
+        ai = next(item for item in documents
+                  if item["kind"] == "Deployment" and item["metadata"]["name"] == "ai")
+        env = {item["name"]: item for item in ai["spec"]["template"]["spec"]["containers"][0]["env"]}
+        self.assertEqual(env["TRIPPILOT_LOCAL_LLM_BASE_URL"]["value"],
+                         "http://reminder-llm:8000/v1")
+
+    def test_embedding_autoscaling_key_is_rejected(self):
+        # 임베딩은 파드당 4.2 GiB·모델 로드 수십 초라 늘려도 늦다. 스키마가 막는다.
+        with self.assertRaises(subprocess.CalledProcessError):
+            render(embedding=True, overrides=["--set", "embedding.autoscaling.enabled=true"])
+
 
 if __name__ == "__main__":
     unittest.main()

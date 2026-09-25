@@ -269,7 +269,8 @@ def test_vector_env_set_wires_pgvector_and_openai_embedding(
     captured = _spy_dev_app(monkeypatch)
     main.build_app_from_env()  # 커넥션은 지연 팩토리 — 조립 시 실 접속 없음
     assert isinstance(captured["vector_store"], PgVectorStore)
-    assert isinstance(captured["embedding"], OpenAiEmbeddingAdapter)
+    # 캐시 래퍼를 거치지만 provider 가 고른 어댑터는 그대로 안쪽에 있다.
+    assert isinstance(captured["embedding"].inner, OpenAiEmbeddingAdapter)
 
 
 @pytest.mark.parametrize("key", [None, ""])
@@ -386,6 +387,23 @@ def test_vector_rag_local_without_package_fails_fast(monkeypatch) -> None:
     monkeypatch.setitem(_sys.modules, "sentence_transformers", None)  # import 시 ImportError
     with pytest.raises(RuntimeError, match="sentence-transformers 미설치"):
         main._vector_rag()
+
+
+def test_vector_rag_wraps_the_embedding_in_a_cache(monkeypatch) -> None:
+    """요청 경로의 임베딩은 캐시를 거친다 — 닫힌 질의 28가지가 매번 재계산되던 것.
+
+    `model_id` 는 collection 이름에 들어가므로(TRIP-519) 래퍼가 가리면 적재와 질의가
+    다른 collection 을 본다. 통과 여부를 여기서 고정한다.
+    """
+    from trippilot.llm_gateway.adapters.caching_embedding import CachingEmbedding
+
+    monkeypatch.setenv("TRIPPILOT_VECTOR_DB_URL", "postgresql://x:x@localhost:5433/x")
+    monkeypatch.setenv("TRIPPILOT_EMBEDDING_PROVIDER", "http")
+    monkeypatch.setenv("TRIPPILOT_EMBEDDING_BASE_URL", "http://ai-embedding:8100")
+    _, embedding = main._vector_rag()
+    assert isinstance(embedding, CachingEmbedding)
+    assert embedding.model_id == "nlpai-lab/KURE-v1"
+    assert embedding.dim == 1024
 
 
 def test_vector_rag_unknown_provider_lists_local(monkeypatch) -> None:

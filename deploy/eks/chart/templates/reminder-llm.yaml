@@ -1,0 +1,138 @@
+{{/*
+REMINDER_COPY fine-tuned model served in-cluster by Triton (vLLM backend).
+
+WHY THIS IS OPT-IN AND DEFAULTS TO OFF
+  The reminder copy model is served on Modal serverless GPU today
+  (ai/scripts/finetune_reminder/modal_app.py). That file records why AWS was
+  rejected: a new account has a GPU quota of zero, and a parked EC2 GPU keeps
+  billing when someone forgets to stop it (measured 40-50만원/month in Seoul).
+  Serverless bills nothing while idle. Moving here only wins if the GPU is
+  actually released while idle — hence KEDA scaling to zero replicas and a
+  dedicated Karpenter NodePool that drains with it.
+
+  As of 2026-09-21 there is no baseline to beat: Modal is not deployed either.
+  These manifests exist so the comparison can be run, not because the move is
+  decided.
+
+WHAT BREAKS SILENTLY
+  `reminderLlm.servedModelName` is a three-way contract: the Triton model
+  repository directory, the `model=` field the app sends, and the
+  TRIPPILOT_LLM_FEATURE_MODELS assignment must be the same string, and it must
+  start with `local` or ai/main.py::_local_route never builds the local route —
+  calls then leave for the external vendor with no error at all. The chart tests
+  pin both halves.
+
+PREREQUISITES OWNED BY BACKEND (TRIP-885)
+  - a Karpenter NodePool labelled trippilot.io/nodepool=gpu with GPU instance
+    types; EKS Auto Mode's built-in general-purpose pool has none
+  - an approved GPU service quota in the account
+  - the NVIDIA device plugin, and KEDA installed in the cluster
+*/}}
+{{- if .Values.reminderLlm.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reminder-llm
+  labels:
+    {{- include "trippilot.labels" . | nindent 4 }}
+spec:
+  {{- /* KEDA owns the count: it scales this Deployment between 0 and maxReplicas. */}}
+  revisionHistoryLimit: 3
+  progressDeadlineSeconds: 1800
+  selector:
+    matchLabels:
+      {{- include "trippilot.selector" (dict "root" . "component" "reminder-llm") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "trippilot.selector" (dict "root" . "component" "reminder-llm") | nindent 8 }}
+      annotations:
+        trippilot.io/rollout-nonce: {{ .Values.rolloutNonce | quote }}
+    spec:
+      nodeSelector:
+        trippilot.io/nodepool: gpu
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: triton
+          image: {{ .Values.reminderLlm.image.repository }}:{{ .Values.reminderLlm.image.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - tritonserver
+            - --model-repository=/models
+            - --model-control-mode=explicit
+            - --load-model={{ .Values.reminderLlm.servedModelName }}
+            {{- /* Triton's vLLM backend speaks the Triton generate API; the app
+                   speaks OpenAI. The OpenAI-compatible frontend is what keeps
+                   "no new adapter" true (ai-99 규약). */}}
+            - --http-port=8000
+          env:
+            - name: SERVED_MODEL_NAME
+              value: {{ .Values.reminderLlm.servedModelName | quote }}
+          ports:
+            - { name: http, containerPort: 8000 }
+          startupProbe:
+            httpGet: { path: /v2/health/ready, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 5
+            {{- /* Cold start is a node launch plus a multi-GB image pull plus
+                   weight load. The copy-fill job runs hours to days before the
+                   push fires, so this is affordable (설계문서 §2). */}}
+            failureThreshold: 180
+          readinessProbe:
+            httpGet: { path: /v2/health/ready, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            requests:
+              {{- toYaml .Values.reminderLlm.resources.requests | nindent 14 }}
+            limits:
+              {{- /* Non-negotiable and kept in the template, not values: without a
+                     GPU limit the pod schedules onto a CPU node and Triton fails
+                     to load the model at runtime instead of failing to schedule. */}}
+              nvidia.com/gpu: 1
+              {{- toYaml .Values.reminderLlm.resources.limits | nindent 14 }}
+          volumeMounts:
+            - { name: models, mountPath: /models }
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: {{ .Values.reminderLlm.modelClaimName }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: reminder-llm
+  labels:
+    {{- include "trippilot.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "trippilot.selector" (dict "root" . "component" "reminder-llm") | nindent 4 }}
+  ports:
+    - { name: http, port: 8000, targetPort: http }
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: reminder-llm
+  labels:
+    {{- include "trippilot.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    name: reminder-llm
+  {{- /* Zero is the whole point: the node drains with the pod and the GPU stops
+         billing. Anything above zero loses to Modal on cost outright. */}}
+  minReplicaCount: 0
+  maxReplicaCount: {{ .Values.reminderLlm.maxReplicas }}
+  pollingInterval: 30
+  cooldownPeriod: {{ .Values.reminderLlm.cooldownSeconds }}
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: {{ .Values.reminderLlm.prometheusAddress | quote }}
+        query: sum(rate(trippilot_reminder_copy_requests_total[2m]))
+        threshold: "0.01"
+{{- end }}

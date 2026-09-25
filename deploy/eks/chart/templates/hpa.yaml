@@ -1,0 +1,34 @@
+{{/*
+Only ai and gateway are autoscaled. The embedding component has no autoscaling
+key and the schema rejects one: its pod requests 5Gi and model load takes tens of
+seconds (startupProbe allows up to 15 minutes), so scaling on observed CPU
+arrives after the load is gone. Adding uvicorn workers is closed too — the model
+costs ~4.2 GiB per process. Rationale: ai/docs/임베딩-사이징-근거.md
+*/}}
+{{- range list "ai" "gateway" }}
+{{- $component := . }}
+{{- $config := (index $.Values $component).autoscaling }}
+{{- if and $config $config.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $component }}
+  labels:
+    {{- include "trippilot.labels" $ | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ $component }}
+  minReplicas: {{ $config.minReplicas }}
+  maxReplicas: {{ $config.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $config.targetCPUUtilizationPercentage }}
+{{- end }}
+{{- end }}
