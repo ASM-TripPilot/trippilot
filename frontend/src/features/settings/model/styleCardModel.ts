@@ -1,3 +1,4 @@
+import { resolveStyleFace } from '@/entities/style-analysis/lib/styleFace';
 import type { StyleAnalysisEnvelope } from '@/shared/api/generated/schemas';
 
 /**
@@ -32,8 +33,8 @@ export function buildStyleCardModel(
   envelope: StyleAnalysisEnvelope
 ): StyleCardVM {
   const { analysis } = envelope;
-  // official 이 아니거나 분석 본문이 없으면 미달 얼굴 — preview 는 싣지 않는다.
-  if (!envelope.official || analysis == null) {
+  // 정식/임시 판정은 j05 와 같은 한 곳(entities)이 한다 — preview 는 싣지 않는다.
+  if (resolveStyleFace(envelope) === 'insufficient' || analysis == null) {
     return { kind: 'insufficient', current: envelope.progress.current };
   }
 

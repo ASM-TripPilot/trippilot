@@ -13,7 +13,8 @@ import path from 'path';
  *
  * 무엇을 보장하나:
  *  - 🔴 AC-2 StatTile 크롬: `bg-surface-soft` 제거 + `border-hairline`(흰배경+hairline) 추가.
- *  - 🔴 AC-3 EvidenceLink 플레인: 카드 크롬(`rounded-card`·`bg-canvas`) 제거 + 코랄 chevron(`text-primary`).
+ *  - 🔴 AC-3 EvidenceLink 플레인 → **TRIP-637 행 자체 제거**: 근거 링크 파일이 없고 화면이 그것을 안 문다
+ *    (목적지 라우트·근거 방문 데이터 계약이 없어 누를 곳 없는 링크였다 — 크롬을 다듬던 행을 통째로 걷음).
  *  - 🔴 AC-4 캡션 좌정렬: 캡션 Text className 에 `text-center`·`text-muted-soft` 제거 + `text-muted`.
  *  - 🔴 AC-7 칩 색: 미리보기 칩 View className `bg-surface-strong`→`bg-primary-pale`.
  *
@@ -27,6 +28,7 @@ const ROOT = path.resolve('src');
 
 const SCREEN_REL = 'features/reflection/ui/TravelStyleScreen.tsx';
 const STATTILE_REL = 'features/reflection/ui/StatTile.tsx';
+/** TRIP-637 로 삭제된 근거 링크 — 부재 단언 대상. */
 const EVIDENCE_REL = 'features/reflection/ui/EvidenceLink.tsx';
 
 /** 콜론(:) 뒤 // 는 주석으로 안 본다 — URL·경로 `//` 보존. */
@@ -69,17 +71,17 @@ describe('🔴 TRIP-765 · AC-2 StatTile 크롬 교체(흰배경+hairline)', () 
   });
 });
 
-describe('🔴 TRIP-765 · AC-3 EvidenceLink 플레인 행', () => {
-  it('EvidenceLink 에 카드 크롬(rounded-card·bg-canvas) 0 + 코랄 chevron(text-primary)', () => {
-    const src = readOne(EVIDENCE_REL);
+describe('🔴 TRIP-765 · AC-3 EvidenceLink 플레인 행 → TRIP-637 행 자체 제거', () => {
+  it('EvidenceLink.tsx 가 없고 화면 소스가 그것을 import·렌더하지 않는다', () => {
+    const src = readOne(SCREEN_REL);
 
-    // 긍정 앵커 — 링크 요소 실재(빈 파일 공허 통과 차단).
-    expect(src).toContain('reflection-style-evidence');
-    // 부정 — 카드 크롬 제거(플레인 행).
-    expect(src).not.toContain('rounded-card');
-    expect(src).not.toContain('bg-canvas');
-    // 긍정 — 코랄 chevron.
-    expect(src).toContain('text-primary');
+    // 긍정 앵커 — 화면 파일을 제대로 읽었다(빈 파일 공허 통과 차단).
+    expect(src).toContain('CategoryBarList');
+    // 부정 — 근거 링크 파일 부재(readOne 은 없는 파일에 '' 이라 존재를 직접 본다).
+    expect(fs.existsSync(path.join(ROOT, EVIDENCE_REL))).toBe(false);
+    // 부정 — 화면 코드(주석 제거)에 컴포넌트명·testID 0.
+    expect(src).not.toContain('EvidenceLink');
+    expect(src).not.toContain('reflection-style-evidence');
   });
 });
 

@@ -50,6 +50,7 @@
 - `src/__tests__/entitiesPlaceStructure.test.ts`  →  (export 없음)
 - `src/__tests__/entitiesStayConsumers.test.ts`  →  (export 없음)
 - `src/__tests__/entitiesStayStructure.test.ts`  →  (export 없음)
+- `src/__tests__/entitiesStyleAnalysisStructure.test.ts`  →  (export 없음)
 - `src/__tests__/entitiesTripConsumers.test.ts`  →  (export 없음)
 - `src/__tests__/entitiesTripStructure.test.ts`  →  (export 없음)
 - `src/__tests__/executionDurationStructure.test.ts`  →  (export 없음)
@@ -344,6 +345,9 @@
 - `src/entities/stay/ui/StayRecommendCard.tsx`  →  StayRecommendCardProps · StayRecommendCard
 - `src/entities/stay/ui/StaySearchCard.tsx`  →  StaySearchCardSave · StaySearchCardProps · StaySearchCard
 
+## src/entities/style-analysis/lib/
+- `src/entities/style-analysis/lib/styleFace.ts`  →  StyleFace · resolveStyleFace
+
 ## src/entities/trip/lib/
 - `src/entities/trip/lib/formatDayLabel.ts`  →  formatDayLabel
 - `src/entities/trip/lib/formatNights.ts`  →  formatNightsLabel · nightsLabel · nightsCountLabel
@@ -581,7 +585,7 @@
 - `src/features/reflection/model/reflectionFallback.ts`  →  resolveDisplayNarrative
 - `src/features/reflection/model/shareCard.ts`  →  ShareFormat · SHARE_FORMATS · ShareCardMode · ShareCardVM · BuildShareCardInput · buildShareCard · formatShareCardStats · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · validateCaption · validateHashtags · captureShareImage
 - `src/features/reflection/model/statsCard.ts`  →  statsCard
-- `src/features/reflection/model/styleThreshold.ts`  →  StyleFace · resolveStyleFace · categoryLabel
+- `src/features/reflection/model/styleThreshold.ts`  →  categoryLabel
 - `src/features/reflection/model/summaryStats.ts`  →  SummaryStatCells · summaryStats
 - `src/features/reflection/model/summaryView.ts`  →  OrderedVisit · shareEnabled · resolveSummaryView · toOrderedVisitList · distanceSourceLabel · daySubtitle
 - `src/features/reflection/model/useDailyReflection.ts`  →  UseDailyReflectionResult · useDailyReflection
@@ -593,7 +597,6 @@
 - `src/features/reflection/ui/ChangeSummaryRow.tsx`  →  ChangeSummaryRowProps · ChangeSummaryRow
 - `src/features/reflection/ui/DailyReflectionScreen.tsx`  →  ReflectionFace · ReflectionDayTab · DailyReflectionScreenProps · DailyReflectionScreen
 - `src/features/reflection/ui/DayHighlightCard.tsx`  →  DayHighlightCardProps · DayHighlightCard
-- `src/features/reflection/ui/EvidenceLink.tsx`  →  EvidenceLinkProps · EvidenceLink
 - `src/features/reflection/ui/FormatSegment.tsx`  →  FormatSegmentProps · FormatSegment
 - `src/features/reflection/ui/NarrativeBlock.tsx`  →  NarrativeBlockProps · NarrativeBlock
 - `src/features/reflection/ui/ReflectionGlyphs.tsx`  →  BackArrowGlyph · LocationOffGlyph · PhotoOffGlyph · EmptyCircleGlyph · RetryGlyph · MoodSadGlyph · MoodSosoGlyph · MoodGoodGlyph
@@ -1354,4 +1357,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 922개 파일
+합계 923개 파일
