@@ -10,7 +10,7 @@
  * 위험, 03 notes 참조). AC-1 이 정확성을 요구해 순수 함수로 잠근다.
  *
  * ★ liveTimeStructure 가드(features/execution/**): `new Date`·`Date.parse`·`.getTime` 류 금지.
- * "HH:mm:ss" 를 split 으로 쪼개 **다른 이름의 분 변수**로 옮겨 뺀다(placeDetailView.toMinutes 선례).
+ * "HH:mm:ss" 를 split 으로 쪼개 **다른 이름의 분 변수**로 옮겨 뺀다(옛 placeDetailView.toMinutes 선례 — TRIP-755 후속으로 삭제됨).
  */
 
 // "…THH:mm:ss" → 분(minute). 'T' 뒤 시각부만 취해 ':' 로 쪼갠 뒤 시·분만 쓴다(초 절사).

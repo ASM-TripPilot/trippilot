@@ -991,7 +991,7 @@ describe('🔴 TRIP-755 · i10 현재 장소 상세 프리뷰 (AC-11)', () => {
       ).toBeOnTheScreen()
     );
 
-    // 단언 ④ — 정보 카드 원문(Figma 4159:2718·2722·2726) + 유지되는 "다음 일정까지"(Seed Q1).
+    // 단언 ④ — 정보 카드 원문(Figma 4159:2718·2722·2726) 3행뿐 — "다음 일정까지" 없음(2026-09-25 결정).
     expect(screen.getByTestId('execution-place-openhours')).toHaveTextContent(
       '10:00~18:00 (월 휴관)'
     );
@@ -1001,7 +1001,7 @@ describe('🔴 TRIP-755 · i10 현재 장소 상세 프리뷰 (AC-11)', () => {
     expect(screen.getByTestId('execution-place-fee')).toHaveTextContent(
       '성인 12,000원'
     );
-    expect(screen.getByTestId('execution-place-slack')).toBeTruthy();
+    expect(screen.queryByTestId('execution-place-slack')).toBeNull();
 
     // 단언 ⑤ — 옛 표면은 없다.
     expect(screen.queryByTestId('execution-place-cta-itinerary')).toBeNull();

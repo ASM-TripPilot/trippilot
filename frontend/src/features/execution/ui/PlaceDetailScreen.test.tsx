@@ -17,7 +17,7 @@ import { PlaceDetailScreen } from './PlaceDetailScreen';
  *
  * 무엇을 보장하나:
  *  - 표면 = 갤러리 히어로(장소명·핀 부제·"1 / N") + 원형 버튼(뒤로·공유·하트) · 추천 카피 · 태그 ·
- *    정보 카드(영업시간·주소·입장료·다음 일정까지) · 지도 · "이곳의 사진". 옛 제목·"지금 여기"·하단 CTA 는 없다.
+ *    정보 카드(영업시간·주소·입장료) · 지도 · "이곳의 사진". 옛 제목·"지금 여기"·하단 CTA 는 없다.
  *  - 계약 공백 필드(카피·주소·입장료·사진 수)는 값이 있을 때만 그리거나 "미확인"으로 적는다(INV-1·BR-U4-40).
  *  - 하트는 저장하지 않는다 — 누르면 "준비 중" 한 줄만 뜨고 하트 모양은 그대로다(저장 거짓말 금지).
  *  - 소요시간 단위 문자열은 화면 어디에도 없다(INV-3).
@@ -46,7 +46,6 @@ const view = (over: Partial<PlaceDetailView> = {}): PlaceDetailView => ({
   hoursCaption: null,
   address: '부산 수영구 광안해변로 219',
   admissionFee: '무료',
-  slackLabel: '여유 있음 · 다음 부산시립미술관',
   lat: 35.15,
   lng: 129.11,
   ...over,
@@ -79,7 +78,7 @@ function hostShape(node: ReactTestInstance): unknown {
 }
 
 describe('PlaceDetailScreen (i10)', () => {
-  it('S1 정상 — 장소명·영업시간·주소·입장료·다음 일정까지를 각 leaf 로 그린다 (AC-2·AC-7)', () => {
+  it('S1 정상 — 장소명·영업시간·주소·입장료를 각 leaf 로 그리고, "다음 일정까지"는 없다 (AC-2·AC-7)', () => {
     // 준비·실행
     render(<PlaceDetailScreen view={view()} />);
 
@@ -94,10 +93,9 @@ describe('PlaceDetailScreen (i10)', () => {
       '부산 수영구 광안해변로 219'
     );
     expect(screen.getByTestId('execution-place-fee')).toHaveTextContent('무료');
-    // "다음 일정까지"는 US-ONTRIP-02 요구라 유지(Seed Q1 — Figma 와 의도적 차이).
-    expect(screen.getByTestId('execution-place-slack')).toHaveTextContent(
-      '여유 있음 · 다음 부산시립미술관'
-    );
+    // "다음 일정까지"(여유) 행은 Figma 3행에 맞춰 제거(사용자 결정 2026-09-25).
+    expect(screen.queryByTestId('execution-place-slack')).toBeNull();
+    expect(screen.queryByText('다음 일정까지')).toBeNull();
 
     // 값이 있으므로 결측 자리 testID 는 안 뜬다.
     expect(
@@ -351,16 +349,16 @@ describe('PlaceDetailScreen (i10)', () => {
     ).toBeNull();
   });
 
-  it('S11 정보 카드 — 행 순서는 영업시간 · 주소 · 입장료 · 다음 일정까지 (AC-7 · Seed Q1)', () => {
+  it('S11 정보 카드 — 행은 영업시간 · 주소 · 입장료 3개뿐이다 (AC-7 · Figma 3행)', () => {
     // 준비·실행
     render(<PlaceDetailScreen view={view()} />);
 
     // 단언 — RNTL 쿼리는 트리를 문서 순서로 훑어 반환 배열 순서 = 화면 순서(02a ★8).
-    // 옛 라벨 "위치"도 패턴에 넣어, 남아 있으면 배열이 달라져 red.
+    // 옛 라벨 "위치"·"다음 일정까지"도 패턴에 넣어, 남아 있으면 배열이 달라져 red.
     const labels = within(screen.getByTestId('execution-place-info'))
       .getAllByText(/^(영업시간|주소|입장료|다음 일정까지|위치)$/)
       .map((node) => node.props.children);
-    expect(labels).toEqual(['영업시간', '주소', '입장료', '다음 일정까지']);
+    expect(labels).toEqual(['영업시간', '주소', '입장료']);
   });
 
   describe('S12 지도 — 현재 장소 1핀 · 잠금 · 스케일바 (AC-9 · Q5)', () => {

@@ -25,10 +25,9 @@ import { LivePlacePage } from './LivePlacePage';
  *    있으면 back·없으면(콜드 딥링크) 여행 중 허브로 replace(I3 — TRIP-939 I3 반전). 운영 조립은 주소·
  *    입장료를 "미확인"으로, 카피·사진 섹션은 안 그린다(I6). 공유는 OS 공유 시트에 장소명(I7). 하트는
  *    저장 요청 없이 "준비 중" 한 줄만(I8).
- *  - 익일 고정 슬롯이 오늘의 slack 을 오염시키지 않는다(I4, 5-b 경고-1 봉합, red-first).
  *  - 조회 로딩 창에서 notFound 가 깜빡이지 않고 loading 얼굴이 선다(I5, 5-b 경고-3 봉합).
  *
- * 왜 통합 버킷인가: buildPlaceDetailView 의 poiId 탐색·slack 조립이 실 조회 데이터에서 갈리므로,
+ * 왜 통합 버킷인가: buildPlaceDetailView 의 poiId 탐색이 실 조회 데이터에서 갈리므로,
  * 훅을 목킹하면 그 조합이 테스트의 가정이 되어 버린다.
  */
 
@@ -100,57 +99,6 @@ const itinerary = (): Itinerary =>
     ],
   }) as unknown as Itinerary;
 
-// I4 전용 — 여행이 **2일**이고 익일(day2)에만 고정 슬롯이 있다. day1 의 p1 을 딥링크로 열면,
-// "여행 전체 슬롯 평탄화"는 익일 p2 를 다음 고정으로 잘못 골라 slack 부호가 뒤집힌다(경고-1).
-// 당일 슬롯만 보면 day1 에 다음 고정이 없어 slack 은 '미확인'(V-4 균일)이어야 한다.
-const crossdayItinerary = (): Itinerary =>
-  ({
-    itineraryId: 'it1',
-    tripId: TRIP_ID,
-    status: 'PLANNED',
-    solveMode: 'FULL_AI',
-    generationMode: 'FULLY_AI',
-    isFallback: false,
-    generationState: 'COMPLETE',
-    days: [
-      {
-        date: '2026-08-20',
-        slots: [
-          {
-            poiId: 'p1',
-            startAt: '14:20:00',
-            endAt: '15:00:00',
-            isFixed: false,
-            endsNextDay: false,
-            hasViolation: false,
-            nameKo: '광안리 해수욕장',
-            openingHours: '09:00~22:00',
-            openingHoursKnown: true,
-            tags: ['해변'],
-            lat: 35.1,
-            lng: 129.1,
-            imageUrl: null,
-          },
-        ],
-      },
-      {
-        date: '2026-08-21',
-        slots: [
-          {
-            poiId: 'p2',
-            startAt: '09:00:00',
-            endAt: '10:00:00',
-            isFixed: true,
-            endsNextDay: false,
-            hasViolation: false,
-            nameKo: '부산시립미술관',
-            tags: [],
-          },
-        ],
-      },
-    ],
-  }) as unknown as Itinerary;
-
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -198,7 +146,7 @@ async function renderP1(): Promise<void> {
 }
 
 describe('LivePlacePage', () => {
-  it('I1 poiId 가 슬롯에 있으면 상세 화면(영업시간·slack)을 그린다 (AC-1)', async () => {
+  it('I1 poiId 가 슬롯에 있으면 상세 화면(영업시간)을 그리고 "다음 일정까지"는 없다 (AC-1)', async () => {
     server.use(
       http.get(`${BASE}/trips/:tripId/itinerary`, () =>
         HttpResponse.json(itinerary())
@@ -213,9 +161,8 @@ describe('LivePlacePage', () => {
     expect(screen.getByTestId('execution-place-openhours')).toHaveTextContent(
       '09:00~22:00 (상시 개방)'
     );
-    expect(screen.getByTestId('execution-place-slack')).toHaveTextContent(
-      '여유 있음 · 다음 부산시립미술관'
-    );
+    // "다음 일정까지" 행 제거(사용자 결정 2026-09-25).
+    expect(screen.queryByTestId('execution-place-slack')).toBeNull();
   });
 
   it('I2 poiId 가 어느 슬롯에도 없으면 "장소를 찾을 수 없어요" 얼굴 (AC-7·D8)', async () => {
@@ -259,28 +206,6 @@ describe('LivePlacePage', () => {
     expect(mockReplace).toHaveBeenCalledTimes(1);
     expect(mockReplace).toHaveBeenCalledWith('/trips/trip-1/live');
     expect(mockBack).not.toHaveBeenCalled();
-  });
-
-  it('I4 익일 고정 슬롯이 오늘의 slack 을 오염시키지 않는다 — 다음 고정 없음이면 "미확인" (경고-1)', async () => {
-    // Arrange — 여행이 2일. day1 의 p1(딥링크 대상)은 오늘 슬롯, 다음 고정은 **익일** day2 의 p2 뿐.
-    server.use(
-      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
-        HttpResponse.json(crossdayItinerary())
-      )
-    );
-
-    // Act — 오늘(day1)의 p1 상세를 연다.
-    render(<LivePlacePage tripId={TRIP_ID} poiId="p1" />, { wrapper });
-    await waitFor(() =>
-      expect(screen.getByTestId('execution-place-detail')).toBeTruthy()
-    );
-
-    // Assert — 당일 슬롯만 보면 다음 고정이 없으므로 slack 은 '미확인'(V-slack-4 균일).
-    // *(현재 코드는 전체 일자 평탄화로 익일 p2 를 다음 고정으로 잘못 골라 부호가 뒤집힌
-    //   '여유 없음 · 다음 부산시립미술관'을 내므로 red — 당일 슬롯만 넘기는 5-c 수정 후 green.)*
-    expect(screen.getByTestId('execution-place-slack')).toHaveTextContent(
-      '미확인'
-    );
   });
 
   it('I5 조회 로딩 창에서는 loading 얼굴만 서고 notFound·detail 은 아직 없다 (경고-3)', async () => {

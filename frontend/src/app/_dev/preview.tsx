@@ -1544,7 +1544,6 @@ const LIVE_PLACE_PREVIEW_VIEW: PlaceDetailView = {
   hoursCaption: null,
   address: '부산 부산진구 ○○로 12',
   admissionFee: '성인 12,000원',
-  slackLabel: '여유 있음 · 다음 광안리 해수욕장',
   lat: 35.1667,
   lng: 129.1364,
 };

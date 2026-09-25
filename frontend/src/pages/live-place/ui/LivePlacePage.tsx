@@ -47,8 +47,7 @@ export function LivePlacePage({ tripId, poiId }: LivePlacePageProps) {
     );
   }
 
-  // poiId 가 속한 **그 일자**의 슬롯만 넘긴다 — 전체 평탄화는 next-fixed 탐색이 익일 슬롯을 골라
-  // slack 부호가 뒤집힌다(5-b 경고-1). 어느 일자에도 없으면 [] → buildPlaceDetailView = null(notFound).
+  // poiId 가 속한 일자의 슬롯을 넘긴다(여유 계산이 사라져 일자 한정은 결과에 영향 없음 — 단순 탐색 범위). 없으면 [] → null(notFound).
   const days = query.data?.days ?? [];
   const slots =
     days.find((day) => day.slots.some((slot) => slot.poiId === poiId))?.slots ??

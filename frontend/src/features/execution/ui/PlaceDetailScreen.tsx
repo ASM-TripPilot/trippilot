@@ -28,8 +28,8 @@ import {
  * TRIP-755 · PlaceDetailScreen(i10, Figma 4159:2673) — 여행 중 현재 장소 상세, 무상태 화면.
  *
  * 표면(위→아래): 풀블리드 갤러리 히어로(원형 버튼·장소명·핀 부제·"1 / N") · 추천 카피 · 태그 칩 ·
- * 정보 카드(영업시간·주소·입장료·다음 일정까지) · 미니맵 · "이곳의 사진".
- * 재판정하지 않고 뷰 값만 그린다 — 결측·slack 조립은 model(`placeDetailView.ts`)이 소유.
+ * 정보 카드(영업시간·주소·입장료) · 미니맵 · "이곳의 사진".
+ * 재판정하지 않고 뷰 값만 그린다 — 결측 조립은 model(`placeDetailView.ts`)이 소유.
  *
  * 규율:
  *  - 계약 공백 필드(카피·사진 수·갤러리 2장째부터)는 값이 있을 때만 그린다(INV-1). 주소·입장료
@@ -37,7 +37,7 @@ import {
  *  - 뒤로·공유·모두 보기는 콜백이 있을 때만 그린다(TRIP-939 — 반응 없는 버튼 금지).
  *  - 하트는 저장하지 않는다 — 누르면 "준비 중" 한 줄만 뜨고 글리프·selected 는 그대로다(BR-U4-38,
  *    저장 거짓말 금지). 그래서 콜백 prop 이 없고 항상 그린다.
- *  - "다음 일정까지"는 US-ONTRIP-02 요구라 4행째로 유지한다(Figma 에 없음 — 의도적 차이).
+ *  - "다음 일정까지"(여유) 행은 두지 않는다 — Figma 3행 그대로(사용자 결정 2026-09-25 — US-ONTRIP-02 여유 표시 요구와의 차이를 알고 수용).
  *  - 소요시간 단위 문자열은 화면 어디에도 없다(INV-3).
  */
 
@@ -65,7 +65,7 @@ function InfoRow({
 }): ReactElement {
   return (
     <View className="flex-row items-start gap-[10px] py-[13px]">
-      {/* Figma 라벨 폭 60 — "다음 일정까지"만 넘쳐 min 폭으로 둔다(그 행만 값 시작이 밀린다). */}
+      {/* Figma 라벨 폭 60. */}
       <View className="min-w-[60px]">
         <Text className="font-noto text-label text-muted">{label}</Text>
       </View>
@@ -318,15 +318,6 @@ export function PlaceDetailScreen({
             <Divider />
             <InfoRow label="입장료">
               <ValueOrUnknown value={view.admissionFee} field="fee" />
-            </InfoRow>
-            <Divider />
-            <InfoRow label="다음 일정까지">
-              <Text
-                testID="execution-place-slack"
-                className="font-noto text-[13.5px] text-ink"
-              >
-                {view.slackLabel}
-              </Text>
             </InfoRow>
           </View>
 
