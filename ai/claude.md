@@ -92,6 +92,29 @@ every external API (zero real calls). GHCR images publish on develop.
 **Wire canon is `docs/openapi.json`** — never hand-edit it; regenerate with
 `scripts/export_openapi.py`.
 
+## Development Workflow (spec-kit + subagents)
+
+[spec-kit](https://github.com/github/spec-kit) is installed in this package (`.specify/`,
+`.claude/skills/speckit-*`). Feature work goes `/speckit-specify` → (`/speckit-clarify`) →
+`/speckit-plan` → `/speckit-tasks` → `/speckit-implement`, producing `specs/NNN-<name>/`.
+The constitution `.specify/memory/constitution.md` is a **summary** of the repo canon
+(4 invariants · canon order · TDD+PBT · ponytail minimalism · architecture boundaries) —
+when they disagree, the canon wins and the constitution gets fixed. Mapping to the team's
+8-step workflow and the size rule (bug fixes / chores skip the spec) is in the constitution.
+spec-kit does **not** create branches here — branch per `docs/conventions/`, in a worktree.
+
+**Subagents** (`.claude/agents/`) carry the tooling with them:
+- Code writers (`worker-builder`, `pbt-writer`) preload `ponytail:ponytail` + `superpowers:test-driven-development`
+  via frontmatter `skills:`, call `speckit-implement` when a spec dir is given, and end with
+  `superpowers:verification-before-completion`.
+- `fd-designer` writes the FD, then `speckit-plan` (plan.md points at the FD, never restates it).
+- `invariant-reviewer` / `canon-auditor` call `speckit-analyze` when a spec dir exists;
+  the reviewer runs `ponytail:ponytail-review` only when asked for an over-engineering pass.
+- When dispatching, pass the spec dir path in the prompt (subagents inherit no context).
+
+`ponytail` and `superpowers` are user-scope Claude Code plugins; on a machine without them the
+`skills:` preload is simply absent and the constitution's summary of those rules still applies.
+
 ## AI-DLC Rules
 
 Detailed rules in `.kiro/aws-aidlc-rule-details/`.
