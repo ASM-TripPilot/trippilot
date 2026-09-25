@@ -8,6 +8,7 @@ import {
 } from '@/features/execution/model/placeDetailView';
 import { usePlaceDetail } from '@/features/execution/model/usePlaceDetail';
 import { PlaceDetailScreen } from '@/features/execution/ui/PlaceDetailScreen';
+import { isNotFound } from '@/shared/api/isNotFound';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
 /**
@@ -22,6 +23,9 @@ import { StateNotice } from '@/shared/ui/StateNotice';
  *
  * ★ 로딩 가드 선행(★8): isPending 이면 -loading 중립 뷰를 **먼저** 반환한다. 안 그러면 data 미도착
  * 중 slots=[] → buildPlaceDetailView(...) = null → notFound 가 로딩을 "장소 없음"으로 오표시한다.
+ *
+ * TRIP-952: 판정 순서 로딩 → 404(장소 없음) → 그 밖의 조회 실패(오류 얼굴 + 다시 시도) → 데이터
+ * (형제 `resolveLiveState` 순서). 5xx·끊김은 "없다"가 아니라 "모른다"라 장소 없음으로 접지 않는다(INV-4).
  */
 
 export interface LivePlacePageProps {
@@ -47,12 +51,37 @@ export function LivePlacePage({ tripId, poiId }: LivePlacePageProps) {
     );
   }
 
+  const notFound = isNotFound(query.error);
+
+  if (query.isError && !notFound) {
+    return (
+      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+        <View className="flex-1 items-center justify-center bg-canvas px-lg">
+          <StateNotice
+            testID="execution-place-error"
+            illustration={NEUTRAL_BADGE}
+            title="일정을 불러오지 못했어요"
+            description="네트워크를 확인하고 다시 시도해주세요"
+            actions={[
+              {
+                testID: 'execution-place-retry',
+                label: '다시 시도',
+                variant: 'filled',
+                onPress: () => void query.refetch(),
+              },
+            ]}
+          />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   // poiId 가 속한 일자의 슬롯을 넘긴다(여유 계산이 사라져 일자 한정은 결과에 영향 없음 — 단순 탐색 범위). 없으면 [] → null(notFound).
   const days = query.data?.days ?? [];
   const slots =
     days.find((day) => day.slots.some((slot) => slot.poiId === poiId))?.slots ??
     [];
-  const view = buildPlaceDetailView(slots, poiId);
+  const view = notFound ? null : buildPlaceDetailView(slots, poiId);
 
   if (view === null) {
     return (
@@ -62,7 +91,7 @@ export function LivePlacePage({ tripId, poiId }: LivePlacePageProps) {
             testID="execution-place-notfound"
             illustration={NEUTRAL_BADGE}
             title="장소를 찾을 수 없어요"
-            description="이 장소는 오늘 일정에 없어요"
+            description="이 장소는 일정에 없어요"
             actions={[]}
           />
         </View>
