@@ -27,38 +27,62 @@ model.onnx 와 **같은 디렉토리**에 있는 external data 를 따라간다.
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
-import torch
-from sentence_transformers import SentenceTransformer
+# **torch·sentence-transformers 는 함수 안에서 읽는다.** 둘 다 프로젝트 의존성이 아니라
+# (의도 — `ai/docs/임베딩-사이징-근거.md`) 모듈 수준에서 import 하면 이 파일을 읽는 것만으로
+# 죽는다. 그러면 경로 선택 같은 가벼운 규칙조차 테스트할 수 없다.
 
-MODEL_NAME = "nlpai-lab/KURE-v1"
+MODEL_NAME = os.environ.get("EMBEDDING_MODEL") or "nlpai-lab/KURE-v1"
+# 이미지에 구워진 fp16 사본. 빌드 안에서는 `HF_HUB_OFFLINE=1` 이라 **이 경로가 유일한
+# 읽을 자리**다 — 모델명으로 가면 허브로 나가려다 빌드가 죽는다.
+MODEL_PATH = os.environ.get("EMBEDDING_MODEL_PATH") or ""
 EXPECTED_DIM = 1024  # BR-AF-09
 
 
-class Encoder(torch.nn.Module):
-    """last_hidden_state 하나만 내보내는 얇은 래퍼.
+def model_source() -> str:
+    """구운 가중치가 있으면 그것, 없으면 모델명 — `app.py::_load` 와 같은 규칙."""
+    return MODEL_PATH or MODEL_NAME
 
-    XLMRobertaModel 은 dataclass(`BaseModelOutputWithPooling...`)를 돌려주고
-    거기엔 쓰지 않는 `pooler_output` 이 딸려 있다. **그걸 그대로 내보내면 안 된다** —
-    pooler 는 tanh(dense(CLS)) 라 CLS 와 다른 벡터인데 차원이 같아, 호출측이
-    출력 이름을 헷갈리면 조용히 다른 공간이 나온다.
+
+def _encoder_class(torch):
+    """`last_hidden_state` 하나만 내보내는 얇은 래퍼.
+
+    XLMRobertaModel 은 dataclass(`BaseModelOutputWithPooling...`)를 돌려주고 거기엔
+    쓰지 않는 `pooler_output` 이 딸려 있다. **그걸 그대로 내보내면 안 된다** — pooler 는
+    tanh(dense(CLS)) 라 CLS 와 다른 벡터인데 차원이 같아, 호출측이 출력 이름을 헷갈리면
+    조용히 다른 공간이 나온다.
+
+    클래스를 함수 안에서 만드는 이유는 상속 대상(`torch.nn.Module`)이 모듈 수준에
+    없기 때문이다 — 위 import 주석 참조.
     """
 
-    def __init__(self, backbone: torch.nn.Module) -> None:
-        super().__init__()
-        self.backbone = backbone
+    class Encoder(torch.nn.Module):
+        def __init__(self, backbone) -> None:
+            super().__init__()
+            self.backbone = backbone
 
-    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
-        return self.backbone(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
+        def forward(self, input_ids, attention_mask):
+            return self.backbone(
+                input_ids=input_ids, attention_mask=attention_mask
+            ).last_hidden_state
+
+    return Encoder
 
 
 def main(out_dir: str) -> int:
+    import torch
+    from sentence_transformers import SentenceTransformer
+
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
 
-    st = SentenceTransformer(MODEL_NAME, device="cpu")
+    st = SentenceTransformer(model_source(), device="cpu")
+    # 구운 가중치는 fp16 이다. 그대로 내보내면 CPU 에 fp16 고속 경로가 없어 19배 느린
+    # 그래프가 나온다(TRIP-518). `app.py::_load` 와 같은 자리에서 fp32 로 되올린다.
+    st[0].auto_model.float()
     dim = st.get_sentence_embedding_dimension()
     if dim != EXPECTED_DIM:
         print(f"[export] 차원 {dim} != {EXPECTED_DIM} (BR-AF-09)", file=sys.stderr)
@@ -89,7 +113,7 @@ def main(out_dir: str) -> int:
     path = out / "model.onnx"
     with torch.no_grad():
         torch.onnx.export(
-            Encoder(backbone),
+            _encoder_class(torch)(backbone),
             (sample["input_ids"], sample["attention_mask"]),
             str(path),
             input_names=["input_ids", "attention_mask"],

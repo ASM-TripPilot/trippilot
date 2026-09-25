@@ -57,13 +57,20 @@ MAX_TEXTS = int(os.environ.get("EMBEDDING_MAX_TEXTS") or "256")
 # ONNX 로 내보내 Triton(ORT 백엔드)에서 인코더만 돌리고, **토크나이즈·풀링·정규화는
 # 여기서** 한다. 어느 쪽이든 `/embed` 응답의 `model`·`dim` 은 같은 값이어야 한다 —
 # 호출측(HttpEmbeddingAdapter)이 그걸 읽고 거부하는 것이 모델 불일치의 유일한 방벽이다.
-BACKEND = os.environ.get("EMBEDDING_BACKEND") or "sentence-transformers"
-if BACKEND not in ("sentence-transformers", "triton"):
+_BACKENDS = ("sentence-transformers", "onnx", "triton")
+BACKEND = os.environ.get("EMBEDDING_BACKEND") or _BACKENDS[0]
+if BACKEND not in _BACKENDS:
     # 오타를 조용히 기본값으로 흘리지 않는다. `EMBEDDING_BACKEND=tirton` 이 기존
-    # 경로로 떨어지면 "Triton 을 띄웠는데 아무것도 안 달라졌다"로 한참 헤맨다.
+    # 경로로 떨어지면 "바꿨는데 아무것도 안 달라졌다"로 한참 헤맨다.
     raise RuntimeError(
-        f"EMBEDDING_BACKEND={BACKEND!r} — 'sentence-transformers' 또는 'triton'"
+        f"EMBEDDING_BACKEND={BACKEND!r} — {' · '.join(_BACKENDS)} 중 하나여야 한다"
     )
+# ONNX 그래프 자리. `onnx` 는 이걸 프로세스 안에서 직접 읽고, `triton` 은 같은 그래프를
+# 옆 컨테이너가 읽는다 — 둘은 **엔진이 같고 도는 자리만 다르다**(TRIP-965).
+ONNX_DIR = os.environ.get("EMBEDDING_ONNX_DIR") or "/models/onnx"
+# 스레드 수를 안 고정하면 백엔드 비교가 코어 수 비교가 된다. Triton 쪽
+# `config.pbtxt` 의 intra_op_thread_count 와 같은 값을 기본으로 둔다(BR-MLO-18).
+ONNX_THREADS = int(os.environ.get("EMBEDDING_ONNX_THREADS") or "4")
 TRITON_URL = (os.environ.get("TRITON_URL") or "http://localhost:8000").rstrip("/")
 TRITON_MODEL = os.environ.get("TRITON_MODEL") or "kure_encoder"
 # config.pbtxt 의 max_batch_size 와 맞춘다 — 넘겨 보내면 Triton 이 요청을 거절한다.
@@ -218,8 +225,52 @@ def _embed_triton(texts: list[str], infer=None) -> list[list[float]]:
     return out
 
 
+_session = None
+
+
+def _load_session():
+    """ONNX Runtime 세션 — 프로세스 안에서 그래프를 직접 읽는다.
+
+    외부 텐서(`.onnx_data`)는 `model.onnx` 와 **같은 디렉토리**에 있어야 ORT 가 따라간다
+    (fp32 2.27GB 라 protobuf 단일 파일 상한 2GB 를 넘어 쪼개 저장한다).
+    """
+    global _session
+    with _lock:
+        if _session is not None:
+            return _session
+        import onnxruntime as ort
+
+        options = ort.SessionOptions()
+        options.intra_op_num_threads = ONNX_THREADS
+        options.inter_op_num_threads = 1
+        path = os.path.join(ONNX_DIR, "model.onnx")
+        logger.info("ONNX 세션 로드 시작: %s (intra_op=%d)", path, ONNX_THREADS)
+        _session = ort.InferenceSession(path, options, providers=["CPUExecutionProvider"])
+        logger.info("ONNX 세션 로드 완료")
+        return _session
+
+
+def _embed_onnx(texts: list[str]) -> list[list[float]]:
+    """프로세스 안 ONNX 경로 — 추론만 바꿔 끼우고 나머지는 `_embed_triton` 그대로 탄다.
+
+    토크나이즈·길이정렬·CLS 풀링·정규화를 여기서 다시 구현하지 않는다. 두 벌이 되면
+    조용히 갈라지는데 차원이 1024 그대로라 아무 검사도 못 잡는다 — mean 으로 잘못 넣으면
+    코사인이 0.71 까지 떨어진다(BR-MLO-07).
+    """
+    session = _load_session()
+    names = [i.name for i in session.get_inputs()]
+
+    def infer(input_ids, attention_mask):
+        feed = {"input_ids": input_ids, "attention_mask": attention_mask}
+        return session.run(None, {name: feed[name] for name in names})[0]
+
+    return _embed_triton(texts, infer=infer)
+
+
 def _encode(texts: list[str]) -> list[list[float]]:
-    """백엔드 분기 지점 — 여기 말고는 두 경로가 만나지 않는다."""
+    """백엔드 분기 지점 — 여기 말고는 경로들이 만나지 않는다."""
+    if BACKEND == "onnx":
+        return _embed_onnx(texts)
     if BACKEND == "triton":
         return _embed_triton(texts)
     vectors = _load().encode(texts, normalize_embeddings=True, show_progress_bar=False)
@@ -258,10 +309,10 @@ def _warm() -> None:
 
     def _run() -> None:
         try:
-            # triton 경로는 여기서 2GB 짜리 torch 모델을 읽으면 안 된다 — 그걸 안
-            # 읽는 것이 이 백엔드의 이유다. 토크나이저만 데우고 첫 추론을 한 번 돌려
-            # ORT 의 지연 초기화까지 끝내 둔다.
-            if BACKEND == "triton":
+            # ONNX 그래프를 쓰는 두 경로는 여기서 2GB 짜리 torch 모델을 읽으면 안 된다
+            # — 그걸 안 읽는 것이 그 백엔드들의 이유다. 토크나이저만 데우고 첫 추론을
+            # 한 번 돌려 ORT 의 지연 초기화까지 끝내 둔다.
+            if BACKEND in ("onnx", "triton"):
                 _encode(["워밍업"])
             else:
                 _load()
@@ -279,7 +330,14 @@ def health() -> dict:
     없이도 돌아야 하고(UnwiredEmbedding 계약), 여기에 결합을 걸면 임베딩 컨테이너의
     재시작 루프가 일정 생성·회고까지 기동 실패로 끌고 간다.
     """
-    loaded = _tokenizer is not None if BACKEND == "triton" else _model is not None
+    # 백엔드마다 "다 읽었다"의 실체가 다르다. 엉뚱한 것을 보면 `loaded` 가 영원히
+    # false 로 남아 워밍 진행을 보는 유일한 창이 막힌다.
+    if BACKEND == "onnx":
+        loaded = _session is not None
+    elif BACKEND == "triton":
+        loaded = _tokenizer is not None
+    else:
+        loaded = _model is not None
     return {
         "status": "ok",
         "model": MODEL_NAME,
