@@ -82,6 +82,7 @@ from trippilot.llm_gateway.workers.alternative_explanation import (
 )
 from trippilot.llm_gateway.workers.explanation import ExplanationWorker
 from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
+from trippilot.ports.place_hours_port import HoursQuery, HoursVerdict, PlaceHoursPort
 from trippilot.ports.place_existence_port import (
     ExistenceQuery,
     ExistenceStatus,
@@ -224,6 +225,8 @@ class ScheduleAgent:
         existence: PlaceExistencePort | None = None,
         config: OrchestratorConfig | None = None,
         fees: FeeTable | None = None,
+        hours: PlaceHoursPort | None = None,
+        place_ids: Mapping[str, str] | None = None,
     ) -> None:
         self._scoring = scoring_worker
         self._assembly_provider = assembly_provider
@@ -237,6 +240,11 @@ class ScheduleAgent:
         # 입장료 파생 지식 (2026-09-24 결정 — AI 소유). 미주입이면 빈 표라 전 POI 가
         # '모름'이고 점수가 종전과 같다 — 켜지기 전에 동작이 안 바뀌는 것이 조건이다.
         self._fees = fees if fees is not None else FEES_EMPTY
+        # 영업시간 런타임 보강 — **둘 다 있어야 돈다.** 포트만 있고 place_id 표가
+        # 비면 물을 대상이 0 이라 조용히 꺼진 것과 같다(빈 표가 기본인 이유).
+        # 미주입이면 ②⁗ 를 통째로 건너뛴다 (기능 부재, 강등 아님).
+        self._hours = hours
+        self._place_ids = place_ids or {}
 
     # ── 공개 API ────────────────────────────────────────────────────
 
@@ -311,6 +319,12 @@ class ScheduleAgent:
         candidates = self._verify_on_map(
             request, pool, candidates, budget, t0, steps, trace_id, now
         )
+
+        # ②⁗ 영업시간 런타임 보강 — **후보가 아니라 풀을 간다.** `ScoredPoi` 에는
+        #    `Poi` 본체가 없어(poi_id·score·is_llm_score) 영업시간을 담을 자리가 없고,
+        #    HC1 이 읽는 것은 바로 아래 `for_pool(pool.pois)` 이다. 이 교체가 그보다
+        #    아래면 조립은 옛 POI 를 본다 — 이 리포가 같은 모양으로 네 번 당했다.
+        pool = self._enrich_hours(pool, candidates, budget, t0, steps, trace_id, now)
 
         # ③ ItineraryProblem 조립 — 후보는 풀에서 나온 것만 (INV-1).
         #    날씨(TRIP-383)·행사 보너스(TRIP-421)는 오케스트레이터가 패킷을 소화해
@@ -672,6 +686,81 @@ class ScheduleAgent:
         return demote_missing_on_map(
             candidates, answered,
             self._cfg.existence_demote_factor, self._cfg.existence_demote_penalty)
+
+    def _enrich_hours(
+        self,
+        pool: CandidatePool,
+        candidates: tuple[ScoredPoi, ...],
+        budget: DeadlineBudget,
+        t0: int,
+        steps: list[Degradation],
+        trace_id: TraceId,
+        now: datetime,
+    ) -> CandidatePool:
+        """영업시간이 **없는** 상위 후보만 벤더에서 빌려 풀에 채운다. 저장하지 않는다.
+
+        수집본 보유는 47.3% 고, 나머지는 TourAPI 가 원문 자체를 안 준 것이라 파싱으로는
+        못 메운다. HC1 은 빈 값을 "정보 없음"으로 보고 **통과시키므로**(constraints.py
+        §영업시간 판정) 지금 그 절반은 닫힌 시간에도 배치될 수 있다.
+
+        **보강은 자유도를 줄이기만 한다.** 채운 결과 "그 요일 휴무"로 밝혀지면 배치가
+        불가능해진다 — 일정 수가 줄 수 있고 그것이 옳은 방향이다. 늘리는 기능이 아니다.
+
+        **이미 값이 있는 후보는 건드리지 않는다**(사용자 결정 2026-09-26): 덮으면 우리
+        파서 값과 벤더 값이 섞여 출처를 못 가린다. 돈이 나가는 것도 이유다 — Place
+        Details Enterprise 는 한 건이 곧 비용이라 물을 대상을 좁히는 것이 설계의 일부다.
+
+        받은 값은 `Poi.open_hours` 를 채워 **이 요청 안에서만** 산다. 벤더 약관이
+        `place_id` 외 저장을 금지하므로 어디에도 적재하지 않는다(포트 docstring 참조).
+        실패·시간부족은 강등 없이 통과하고 `Degradation` 으로만 남긴다 (INV-4).
+        """
+        if self._hours is None or not candidates:
+            return pool  # 미주입 = 기능 부재 (강등 아님)
+        index = {p.poi_id: p for p in pool.pois}
+        place_ids = self._place_ids or {}
+        # 영업시간이 **없고** place_id 가 해결된 것만. 점수 순이라 배치될 후보부터 채운다.
+        targets = tuple(
+            c.poi_id for c in sorted(candidates, key=lambda c: (-c.score, str(c.poi_id)))
+            if (poi := index.get(c.poi_id)) is not None
+            and not poi.open_hours
+            and str(c.poi_id) in place_ids
+        )[: self._cfg.hours_enrich_top_n]
+        if not targets:
+            return pool
+        available = (budget.total_ms - (self._clock.monotonic_ms() - t0)
+                     - budget.c2_reserved_ms)
+        deadline = min(self._cfg.hours_enrich_deadline_ms, available)
+        if deadline <= 0:
+            self._degrade(steps, trace_id, now, "hours", "enrich", "(none)",
+                          f"deadline:available={available}ms")
+            return pool
+        try:
+            # 반환값 순회까지 try 안이다 — 곁가지 하나가 생성 전체를 FAILED 로 만들면
+            # 안 된다 (DL-5 방어, _verify_on_map 과 같은 규약).
+            answered = [
+                v for v in self._hours.fetch(
+                    tuple(HoursQuery(poi_id=pid, place_id=place_ids[str(pid)])
+                          for pid in targets),
+                    deadline_ms=deadline,
+                )
+                if isinstance(v, HoursVerdict) and v.hours
+            ]
+        except Exception as e:  # noqa: BLE001
+            self._degrade(steps, trace_id, now, "hours", "enrich", "(none)",
+                          f"hours_error: {type(e).__name__}: {e}")
+            return pool
+        if not answered:
+            # 물었는데 한 건도 못 받았다 — 예산 소진·벤더 장애. 조용히는 아니게.
+            self._degrade(steps, trace_id, now, "hours", "enrich", "(none)",
+                          f"hours_empty:asked={len(targets)}")
+            return pool
+        filled = {v.poi_id: v.hours for v in answered}
+        self._observe(trace_id, now, "hours", "enrich", "enrich",
+                      f"hours_filled:{len(filled)}/{len(targets)}")
+        return replace(pool, pois=tuple(
+            replace(p, open_hours=filled[p.poi_id]) if p.poi_id in filled else p
+            for p in pool.pois
+        ))
 
     # ── ⑥′ 차선책 LLM 문장 (TRIP-887) ──────────────────────────────
 
