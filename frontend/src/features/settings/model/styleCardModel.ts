@@ -1,4 +1,5 @@
 import { resolveStyleFace } from '@/entities/style-analysis/lib/styleFace';
+import { resolveStyleProgress } from '@/entities/style-analysis/lib/styleProgress';
 import type { StyleAnalysisEnvelope } from '@/shared/api/generated/schemas';
 
 /**
@@ -35,7 +36,10 @@ export function buildStyleCardModel(
   const { analysis } = envelope;
   // 정식/임시 판정은 j05 와 같은 한 곳(entities)이 한다 — preview 는 싣지 않는다.
   if (resolveStyleFace(envelope) === 'insufficient' || analysis == null) {
-    return { kind: 'insufficient', current: envelope.progress.current };
+    return {
+      kind: 'insufficient',
+      current: resolveStyleProgress(envelope).current,
+    };
   }
 
   const { traitGauges } = analysis;

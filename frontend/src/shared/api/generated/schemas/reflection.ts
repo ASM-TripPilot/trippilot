@@ -4,20 +4,23 @@
  * TripPilot U1 API (소셜 로그인 전용 MVP)
  * U1 기반·계정·온보딩 (M1 Auth · M2 Profile · C3 Moderation). 소셜 로그인 전용 — 이메일/비밀번호 로그인은 후속 이연. 정본 대조: docs/design/U1-API-설계.md, U1-DB스키마-설계.md, U1-내부아키텍처-설계.md
  *
+ * **횡단 규약 — 입력 형식 오류는 어느 엔드포인트에서든 400이다.** 경로변수·쿼리의 타입 변환 실패(UUID·숫자·enum)와 필수 쿼리 누락은 표준 에러 봉투 (`ErrorResponse`, code=`VALIDATION_ERROR`, `fields[].field`=문제 파라미터 이름)로 나간다. 경로별 `'400'` 선언은 **업무 검증**이 있는 곳에만 적는다 — 형식 오류까지 경로마다 중복 선언하면 무엇이 그 엔드포인트 고유의 검증인지 안 보인다. (2026-09-01 이전에는 이 갈래가 500 `INTERNAL` 로 나갔다 — UUID-PATH-400)
+ *
  * OpenAPI spec version: 0.1.0-draft
  */
+import type { ReflectionCard } from './reflectionCard';
 import type { ReflectionSource } from './reflectionSource';
 import type { ReflectionStats } from './reflectionStats';
 
 export interface Reflection {
   dayDate: string;
-  /** 화면이 그대로 그리는 문장(`editedNarrative ?? draftNarrative`). **표시본 선택은 업무 규칙이라 서버가 정한다**(BR-U5-35) — 클라이언트가 매번 다시 고르면 조회 화면과 목록 화면이 서로 다르게 고르는 날이 온다. */
-  narrative: string;
-  /** 생성된 원문. **비어 있을 수 없다**(INV-U5-07) */
-  draftNarrative: string;
-  /** 사용자가 고친 문장. null 이면 아직 손대지 않았다 — 화면은 둘을 2열로 그린다(INV-U5-06). */
-  editedNarrative?: string | null;
-  /** 문장이 어느 단에서 나왔나(BR-U5-33). **항상 실린다** — 화면이 구분해 그리지 않더라도 규칙 문장이 몇 %인지 모르면 AI 경로를 붙일 근거가 없다. 현재 `AI` 는 미개통(O-U5-6). */
+  /** 화면이 그대로 그리는 카드(`editedCard ?? draftCard`). **표시본 선택은 업무 규칙이라 서버가 정한다**(BR-U5-35) — 클라이언트가 매번 다시 고르면 조회 화면과 목록 화면이 서로 다르게 고르는 날이 온다. */
+  card: ReflectionCard;
+  /** 생성된 원본 카드. **비어 있을 수 없다**(INV-U5-07) */
+  draftCard: ReflectionCard;
+  /** 사용자가 고친 카드. null 이면 아직 손대지 않았다 — 화면은 둘을 2열로 그린다(INV-U5-06). */
+  editedCard?: ReflectionCard | null;
+  /** 카드가 어느 단에서 나왔나(BR-U5-33). **항상 실린다** — 화면이 구분해 그리지 않더라도 규칙 카드가 몇 %인지 모르면 AI 경로의 값을 잴 근거가 없다. `AI` 는 칸 2·3 에서 개통한다. */
   source: ReflectionSource;
   stats: ReflectionStats;
   generatedAt: string;

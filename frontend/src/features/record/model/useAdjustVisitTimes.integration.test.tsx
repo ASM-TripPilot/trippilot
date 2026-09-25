@@ -1,6 +1,11 @@
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  defaultScheduler,
+  notifyManager,
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
@@ -10,6 +15,7 @@ import type {
   VisitCheck,
 } from '@/shared/api/generated/schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { flushNotifications } from '@/test-support/flushNotifications';
 
 import { deriveVisitStatus } from './visitStatus';
 import {
@@ -36,6 +42,13 @@ import {
  *
  * 왜 통합 버킷인가: 심판 대상이 "실제로 나간 body"와 "응답 전/롤백 후 캐시 상태"다 — msw + 실
  * QueryClient 로만 관측(record `useVisitCheck.integration.test.tsx` 와 같은 자리·장치).
+ *
+ * 화면 읽기 규율(TRIP-884·953): react-query 는 캐시 변경 알림을 스케줄러로 미뤄 보낸다. 이 파일은
+ * 그 알림을 일부러 5ms 늦춰(beforeAll) "알림을 안 기다리고 result.current 를 읽는" 단언을 드러낸다.
+ * ⚠️ 항상 red 는 아니다 — 기대값이 호출 전 값과 같은 단언(롤백 후 false 등)은 flush 를 빼먹어도
+ * 옛 화면을 읽고 통과한다. 그러니 화면을 읽기 전엔 예외 없이 `flushNotifications()` 를 거친다.
+ * 요청 도착(hitCount·captured*)은 알림과 무관한 비동기라 `waitFor` 로 기다리고, "0건·아직 1건" 같은
+ * 부정 단언은 즉시 단언으로 둔다(waitFor 로 감싸면 첫 시도에 통과해 공허해진다).
  */
 
 // authedClient(mutator 인증 계층)가 @/shared/storage 를 정적으로 문다.
@@ -85,6 +98,7 @@ const hitCount = (needle: string) =>
   observedHits.filter((hit) => hit === needle).length;
 
 beforeAll(() => {
+  notifyManager.setScheduler((cb) => setTimeout(cb, 5));
   server.listen({ onUnhandledRequest: 'error' });
   server.events.on('request:start', ({ request }) => {
     observedHits.push(`${request.method} ${new URL(request.url).pathname}`);
@@ -102,7 +116,10 @@ afterEach(() => {
   clearAccessToken();
 });
 
-afterAll(() => server.close());
+afterAll(() => {
+  notifyManager.setScheduler(defaultScheduler);
+  server.close();
+});
 
 function createWrapper() {
   const client = new QueryClient({
@@ -235,6 +252,7 @@ describe('🔴 AC-5 · BR-U5-07 — 200 → 낙관을 서버 VisitCheck 로 교�
         completedAt: COMP,
       });
     });
+    await flushNotifications();
 
     // 단언 ① — 서버가 답하기 전 낙관 COMPLETED, 단 버전은 아직 옛값(서버 미확인).
     expect(cacheStatus(result.current.visits, 'v1')).toBe('COMPLETED');
@@ -246,6 +264,7 @@ describe('🔴 AC-5 · BR-U5-07 — 200 → 낙관을 서버 VisitCheck 로 교�
     await act(async () => {
       outcome = await pending;
     });
+    await flushNotifications();
 
     // 단언 ②③ — 낙관을 서버 레코드로 교체(권위 updatedAt) + 파생 상태 COMPLETED 유지.
     expect(outcome).toEqual({ kind: 'adjusted' });
@@ -323,6 +342,7 @@ describe('🔴 AC-6 · BR-U5-22 · INV-4 — 409 VISIT_CONFLICT → 롤백 + 재
         arrivedAt: '2026-08-31T13:00:00',
       });
     });
+    await flushNotifications();
     // 단언 mid — 낙관이 실제로 일어났다(이게 없으면 no-op 훅이 공허 통과).
     expect(cacheRecord(result.current.visits, 'v1')?.arrivedAt).toBe(
       '2026-08-31T13:00:00'
@@ -334,6 +354,7 @@ describe('🔴 AC-6 · BR-U5-22 · INV-4 — 409 VISIT_CONFLICT → 롤백 + 재
     await act(async () => {
       outcome = await pending;
     });
+    await flushNotifications();
 
     // 단언 ① — 안내가 호출자에게 도달(조용히 삼키면 INV-4 위반).
     expect(outcome).toEqual({

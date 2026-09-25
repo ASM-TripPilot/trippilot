@@ -33,11 +33,7 @@ const MARK_ALL_FAILURE = '일부 알림을 읽음 처리하지 못했어요';
 
 function toRowVM(item: Notification, now: Date): NotificationRowVM {
   const { icon, label } = notificationKind(item.kind);
-  const route = notificationAction(
-    item.kind,
-    item.actionType,
-    item.actionPayload
-  );
+  const route = notificationAction(item.actionType, item.actionPayload);
   return {
     id: item.notificationId,
     icon,
@@ -47,7 +43,9 @@ function toRowVM(item: Notification, now: Date): NotificationRowVM {
     unread: item.readAt == null,
     route,
     inlineActionLabel:
-      item.kind === 'PLAN_B' && route != null ? PLAN_B_ACTION_LABEL : null,
+      item.actionType === 'PLANB_REPLAN' && route != null
+        ? PLAN_B_ACTION_LABEL
+        : null,
   };
 }
 

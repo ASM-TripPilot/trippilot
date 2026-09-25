@@ -1,6 +1,11 @@
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  defaultScheduler,
+  notifyManager,
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
@@ -11,6 +16,7 @@ import type {
   UpdateToggleRequest,
 } from '@/shared/api/generated/schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { flushNotifications } from '@/test-support/flushNotifications';
 
 import { useToggles, type ToggleOutcome } from './useToggles';
 
@@ -30,6 +36,13 @@ import { useToggles, type ToggleOutcome } from './useToggles';
  * 로만 관측된다(`useVisitCheck.integration.test.tsx` 와 같은 자리·장치). 낙관 갱신은 GET 정본 쿼리키
  * (`getGetMeNotificationSettingsQueryKey()`)에 얹혀야 화면이 읽으므로, 관측도 그 키를 읽는 별도
  * 조회 프로브로 한다.
+ *
+ * 화면 읽기 규율(TRIP-884·953): react-query 는 캐시 변경 알림을 스케줄러로 미뤄 보낸다. 이 파일은
+ * 그 알림을 일부러 5ms 늦춰(beforeAll) "알림을 안 기다리고 result.current 를 읽는" 단언을 드러낸다.
+ * ⚠️ 항상 red 는 아니다 — 기대값이 호출 전 값과 같은 단언(롤백 후 false 등)은 flush 를 빼먹어도
+ * 옛 화면을 읽고 통과한다. 그러니 화면을 읽기 전엔 예외 없이 `flushNotifications()` 를 거친다.
+ * 요청 도착(hitCount·captured*)은 알림과 무관한 비동기라 `waitFor` 로 기다리고, "0건·아직 1건" 같은
+ * 부정 단언은 즉시 단언으로 둔다(waitFor 로 감싸면 첫 시도에 통과해 공허해진다).
  */
 
 // authedClient(생성 클라이언트의 mutator 인증 계층)가 @/shared/storage 를 정적으로 문다.
@@ -79,6 +92,7 @@ const hitCount = (needle: string) =>
   observedHits.filter((hit) => hit === needle).length;
 
 beforeAll(() => {
+  notifyManager.setScheduler((cb) => setTimeout(cb, 5));
   server.listen({ onUnhandledRequest: 'error' });
   server.events.on('request:start', ({ request }) => {
     observedHits.push(`${request.method} ${new URL(request.url).pathname}`);
@@ -97,7 +111,10 @@ afterEach(() => {
   clearAccessToken();
 });
 
-afterAll(() => server.close());
+afterAll(() => {
+  notifyManager.setScheduler(defaultScheduler);
+  server.close();
+});
 
 function createWrapper() {
   const client = new QueryClient({
@@ -171,14 +188,16 @@ describe('정상-2 · 푸시 토글 — 바뀐 필드만 PATCH + 응답 전 낙�
     await act(async () => {
       pending = result.current.toggles.toggle('STAY', 'push', false);
     });
+    await flushNotifications();
 
     // 단언 ① — 서버가 아직 답하지 않았는데 이미 꺼짐(낙관).
     expect(pushOf(result.current.settings, 'STAY')).toBe(false);
     // 단언 ② — 인앱은 건드리지 않았다(그 kind 낙관은 채널 단위).
     expect(inAppOf(result.current.settings, 'STAY')).toBe(true);
-    // 단언 ③ — PATCH 는 그 kind 로 나갔고, 바디는 바뀐 필드 하나뿐이다.
+    // 단언 ③ — PATCH 는 그 kind 로 나갔고, 바디는 바뀐 필드 하나뿐이다. 도착은 capturedBodies 로
+    // 기다린다 — 핸들러가 kind 를 먼저, 바디는 JSON 파싱 뒤에 채운다.
+    await waitFor(() => expect(capturedBodies).toHaveLength(1));
     expect(capturedKinds).toEqual(['STAY']);
-    expect(capturedBodies).toHaveLength(1);
     expect(capturedBodies[0]).toEqual({ pushEnabled: false });
     // 두 필드 동봉 금지의 급소 — inAppEnabled 키가 바디에 아예 없다(null 도 아님).
     expect(capturedBodies[0]).not.toHaveProperty('inAppEnabled');
@@ -240,6 +259,7 @@ describe('정상-3 · PATCH 실패 → kind×채널 롤백 + 실패 통지 + 무
     await act(async () => {
       outcome = await result.current.toggles.toggle('STAY', 'push', false);
     });
+    await flushNotifications();
 
     // 단언 ① — 실패가 호출자에게 도달한다(조용히 삼키면 INV-4 위반).
     expect(outcome.kind).toBe('failed');

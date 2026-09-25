@@ -9,6 +9,10 @@
 //  - AC-4 요약카드 배선: `styleCardModel.ts` 가 그 판정을 entities 에서 들여와 부른다.
 //  - AC-5·AC-6 옛 자리 사본·재수출 shim 0: `features/reflection/model/styleThreshold.ts` 에 두 심볼 토큰 0.
 //  - AC-6 경계: 두 심볼의 모든 import 출처가 entities 슬라이스이고, 슬라이스는 `@/shared` 만 본다.
+//  - TRIP-956 AC-3 대칭(G7·G8): progress 폴백 `resolveStyleProgress` 는 `styleProgress.ts` 한 곳에 정의되고,
+//    envelope 의 progress 칸을 직접 읽는 곳도 그 밖엔 없다. j05 페이지·요약카드 모델이 둘 다 그 함수를
+//    들여와 부르고, 두 파일엔 `.progress` 토큰 자체가 없다(객체 단위 `progress ?? 기본값` 우회 차단).
+//    j05 페이지는 그 결과를 `progress={resolveStyleProgress(envelope)}` 그대로 넘긴다(가공·인자 치환 차단).
 //
 // 전제: 모든 스캔은 주석을 걷은 코드만 본다(이력 주석은 허용). 모든 "없어야 한다"는 같은 it 의
 // "있어야 한다"와 짝이다(빈 파일·틀린 경로의 공허 통과 차단 — 리포 관례).
@@ -22,6 +26,8 @@ const OLD_THRESHOLD_REL = 'features/reflection/model/styleThreshold.ts';
 const CARD_MODEL_REL = 'features/settings/model/styleCardModel.ts';
 const PAGE_REL = 'pages/travel-style/ui/TravelStylePage.tsx';
 const SCREEN_REL = 'features/reflection/ui/TravelStyleScreen.tsx';
+/** TRIP-956 — progress 필드 단위 폴백의 자리. */
+const STYLE_PROGRESS_REL = 'entities/style-analysis/lib/styleProgress.ts';
 
 /** 판정 심볼 2종 — 함수와 얼굴 타입. */
 const SYMBOLS = ['resolveStyleFace', 'StyleFace'];
@@ -33,6 +39,29 @@ const DEF_TYPE = /\b(?:type|interface)\s+StyleFace\b\s*[=<{]/;
 
 /** 서버 정식 플래그 읽기(`envelope.official`·`envelope?.official`). */
 const OFFICIAL_READ = /\.official\b/;
+
+/** TRIP-956 폴백 함수 정의 탐지기 — 선언만(import·호출 불매치, 02a §5-A). */
+const DEF_PROGRESS_FN =
+  /\bfunction\s+resolveStyleProgress\s*\(|\b(?:const|let)\s+resolveStyleProgress\s*=/;
+
+/** 호출 탐지기 — import 문장엔 괄호가 없어 안 걸린다. */
+const CALL_PROGRESS_FN = /\bresolveStyleProgress\s*\(/;
+
+/**
+ * envelope 의 progress 칸 읽기(`x.progress.current`·`x?.progress?.required` …). 앞에 점이 있어야 하므로
+ * 이미 폴백이 끝난 화면 prop(`progress.current`)·다른 도메인(`entry.progress`)은 안 걸린다(02a ★8).
+ */
+const PROGRESS_FIELD_READ = /\.progress\??\.(?:current|required)\b/;
+
+/** progress 토큰 자체 — 두 소비처에만 거는 더 센 금지(02a ★10). */
+const PROGRESS_TOKEN = /\.progress\b/;
+
+/**
+ * j05 페이지 prop 고정 — 공유 함수 결과를 가공·인자 치환 없이 그대로 넘긴다(TRIP-956 02c, 03b 경고-1).
+ * 공백·줄바꿈은 `\s*` 로 흡수하고, 앞 글자 제약으로 `clampProgress=`·`x.progress=` 는 안 걸린다.
+ */
+const PAGE_PROGRESS_PROP =
+  /(?<![\w$.])progress\s*=\s*\{\s*resolveStyleProgress\s*\(\s*envelope\s*\)\s*\}/;
 
 /**
  * import·재수출 문장 파서 — `from` 절을 먼저 잡고 그 안의 이름 목록을 본다(심볼명 선검색은 사용처와
@@ -269,5 +298,127 @@ describe('🔴 G6 · AC-6 entities/style-analysis 는 @/shared 만 본다', () =
     ).toBe(true);
     // 부정
     expect(offenders).toEqual([]);
+  });
+});
+
+describe('G0b · TRIP-956 탐지기 자가검사 — 주석 제거 × progress 읽기·정의·호출 탐지기 조합', () => {
+  it('주석 속 progress 읽기는 걷히고, 코드 속 envelope 칸 읽기만 잡히며 prop·다른 도메인은 안 잡힌다', () => {
+    // 준비: 주석 속 가짜 읽기 + 여러 줄 import + URL + 세 가지 칸 읽기 + 오탐 후보 셋.
+    const sample = [
+      '/* envelope.progress.current */',
+      '// const x = envelope.progress?.current ?? 0;',
+      'import {',
+      '  resolveStyleProgress,',
+      "} from '@/entities/style-analysis/lib/styleProgress';",
+      "const u = 'https://x.y/progress.current';",
+      'const a = envelope?.progress?.current ?? 0;',
+      'const b = envelope.progress?.required ?? 10;',
+      'const c = envelope.progress.current;',
+      'state: toMapPinState(entry.progress),',
+      '{progress.current}곳',
+      'progress={resolveStyleProgress(envelope)}',
+    ].join('\n');
+
+    // 실행
+    const stripped = stripComments(sample);
+    const lines = stripped.split('\n');
+
+    // 단언 ① 칸 읽기 = 코드 속 세 줄뿐(주석·URL·prop·다른 도메인 제외).
+    expect(lines.filter((l) => PROGRESS_FIELD_READ.test(l))).toEqual([
+      'const a = envelope?.progress?.current ?? 0;',
+      'const b = envelope.progress?.required ?? 10;',
+      'const c = envelope.progress.current;',
+    ]);
+    // ② URL 은 살아남는다(콜론 예외).
+    expect(stripped).toContain("const u = 'https://x.y/progress.current';");
+    // ③ 토큰 금지는 다른 도메인(entry.progress)도 잡는다 — 그래서 두 소비처에만 건다.
+    expect(PROGRESS_TOKEN.test('state: toMapPinState(entry.progress),')).toBe(
+      true
+    );
+    expect(
+      PROGRESS_TOKEN.test('progress={resolveStyleProgress(envelope)}')
+    ).toBe(false);
+    // ④ import 파서는 여러 줄 import 를 한 문장으로 잡는다.
+    expect(importsOf(stripped)).toEqual([
+      {
+        names: ['resolveStyleProgress'],
+        from: '@/entities/style-analysis/lib/styleProgress',
+      },
+    ]);
+    // ⑤ 정의 탐지기는 선언만, 호출 탐지기는 import 에 안 걸린다.
+    expect(
+      DEF_PROGRESS_FN.test('export function resolveStyleProgress(e) {')
+    ).toBe(true);
+    expect(
+      DEF_PROGRESS_FN.test('export const resolveStyleProgress = (e) =>')
+    ).toBe(true);
+    expect(
+      DEF_PROGRESS_FN.test('const p = resolveStyleProgress(envelope);')
+    ).toBe(false);
+    expect(CALL_PROGRESS_FN.test('resolveStyleProgress(envelope)')).toBe(true);
+    expect(
+      CALL_PROGRESS_FN.test("import { resolveStyleProgress } from 'x';")
+    ).toBe(false);
+  });
+});
+
+describe('🔴 G7 · TRIP-956 progress 폴백의 자리 — 정의는 styleProgress.ts 한 곳', () => {
+  it('파일이 있고, resolveStyleProgress 를 정의하는 프로덕션 파일은 그 하나뿐이다', () => {
+    // 준비: src 프로덕션 전수.
+    const sources = readScoped(ROOT);
+    expect(sources.length).toBeGreaterThan(100); // 모집단 앵커
+
+    // 실행
+    const defs = sources
+      .filter(({ source }) => DEF_PROGRESS_FN.test(source))
+      .map(({ file }) => file);
+
+    // 단언
+    expect(fs.existsSync(path.join(ROOT, STYLE_PROGRESS_REL))).toBe(true);
+    expect(defs).toEqual([STYLE_PROGRESS_REL]);
+  });
+});
+
+describe('🔴 G8 · TRIP-956 AC-3 소비처 census — j05 페이지와 요약카드가 같은 폴백을 부른다', () => {
+  it('progress 칸 읽기는 styleProgress.ts 밖에 0 이고, 두 소비처는 entities 에서 들여와 부르며 .progress 를 직접 안 만진다', () => {
+    // 준비: import 문장을 먼저 파싱하고, 그 이름 목록에 폴백 함수가 있는 문장만 고른다.
+    const sources = readScoped(ROOT);
+    const statements = sources.flatMap(({ file, source }) =>
+      importsOf(source)
+        .filter(({ names }) => names.includes('resolveStyleProgress'))
+        .map(({ from }) => ({ file, from }))
+    );
+
+    // 실행 ① 슬라이스 밖에서 envelope 의 progress 칸을 직접 읽는 파일.
+    const strayReaders = sources
+      .filter(({ file }) => file !== STYLE_PROGRESS_REL)
+      .filter(({ source }) => PROGRESS_FIELD_READ.test(source))
+      .map(({ file }) => file);
+    // 실행 ② 출처가 entities 슬라이스가 아닌 import 문장.
+    const offenders = statements
+      .filter(
+        ({ file, from }) =>
+          !(
+            from.startsWith('@/entities/style-analysis') ||
+            (file.startsWith(`${SLICE_REL}/`) && from.startsWith('.'))
+          )
+      )
+      .map(({ file, from }) => `${file} ← ${from}`);
+
+    // 단언 ① 칸 읽기·옛 경로 import 0.
+    expect(strayReaders).toEqual([]);
+    expect(offenders).toEqual([]);
+    // ② 긍정 짝 — 두 화면의 소비처가 모두 폴백을 들여온다.
+    expect(statements.map(({ file }) => file)).toEqual(
+      expect.arrayContaining([PAGE_REL, CARD_MODEL_REL])
+    );
+    // ③ 들여오기만 하지 않고 실제로 부른다 + ④ progress 를 직접 만지는 코드가 없다.
+    for (const rel of [PAGE_REL, CARD_MODEL_REL]) {
+      const source = readOne(rel);
+      expect(source).toMatch(CALL_PROGRESS_FN);
+      expect(source).not.toMatch(PROGRESS_TOKEN);
+    }
+    // ⑤ j05 페이지는 그 결과를 그대로 prop 에 넘긴다 — 감싸기·인자 바꿔치기는 카드와 값이 갈린다.
+    expect(readOne(PAGE_REL)).toMatch(PAGE_PROGRESS_PROP);
   });
 });

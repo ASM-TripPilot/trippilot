@@ -26,11 +26,13 @@ if [ "$#" -eq 0 ]; then
 fi
 
 # 사전 점검 — 없으면 실행 불가(FAIL 아님). verify-gates 실기 스모크 §0 와 같은 정신.
-xcrun simctl list devices booted | grep -q Booted \
+# grep -q 금지: 첫 일치에서 파이프를 닫아 앞 명령이 SIGPIPE(141)로 죽고, pipefail 이 그걸
+# 실패로 봐 "미설치" 오판을 낸다(TRIP-957). >/dev/null 은 끝까지 읽어 앞 명령이 정상 종료한다.
+xcrun simctl list devices booted | grep Booted >/dev/null \
   || { echo "실행 불가: 부팅된 시뮬레이터 없음" >&2; exit 3; }
-xcrun simctl listapps booted | grep -q "$APP_ID" \
+xcrun simctl listapps booted | grep "$APP_ID" >/dev/null \
   || { echo "실행 불가: $APP_ID 미설치" >&2; exit 3; }
-curl -s --max-time 3 http://localhost:8081/status | grep -q packager-status:running \
+curl -s --max-time 3 http://localhost:8081/status | grep packager-status:running >/dev/null \
   || { echo "실행 불가: Metro 미기동(pnpm start 후 재시도)" >&2; exit 3; }
 
 mkdir -p "$CAPTURE_DIR"

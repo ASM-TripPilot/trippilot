@@ -27,6 +27,9 @@ const UI_DIRS = [
   // TRIP-751 — i06 재계획안이 features 화면에서 pages 순수 뷰로 옮겨 가 편입했다(안 하면 INV-3 그물이
   // 조용히 줄어든다, 746 선례).
   'pages/planb-draft/ui',
+  // TRIP-952 — i10 현재 장소 상세에 오류 얼굴 문구가 들어와 편입했다(티켓 AC "기존 스캔 무회귀"가
+  // 이 디렉토리를 안 봐서 공허했다, 01b Q3).
+  'pages/live-place/ui',
 ];
 const ANCHOR_RELS = [
   'pages/live-itinerary/ui/LiveHubView.tsx',
@@ -34,6 +37,7 @@ const ANCHOR_RELS = [
   'pages/planb-draft/ui/ReplanDraftView.tsx',
   // TRIP-754 — i08 시트가 features/planb/ui 에 자동 편입됐는지 긍정 확인(AC-13).
   'features/planb/ui/ReplanAppliedSheet.tsx',
+  'pages/live-place/ui/LivePlacePage.tsx',
 ];
 
 /** 소요시간 **표기** 탐지기 — 화면에 나갈 문자열 형태. `HH:mm`(09:30)은 숫자 뒤가 `:`이라 안 걸린다. */

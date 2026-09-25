@@ -10,17 +10,15 @@
  */
 
 /**
- * 알림에서 들어갈 화면. 진입이 없으면 `actionPayload` 와 함께 **둘 다 null** 이다 — 액션 없는 알림을 "액션 있는 척" 그리지 않는다(INV-4). 회고에 쓸 데이터가 없어 만들지 못한 알림이 그 경우다(BR-U6-12).
- *
- * `PLANB_REPLAN` 은 일정 화면이 아니라 **재계획 진입**이다(BR-U6-08 '대안 일정 보기').
+ * 회고 카드 한 장. 서버는 `cover` 밖을 **해석하지 않는다**(DEC-U5-14) — 재검증하면 AI 가 템플릿을 하나 늘릴 때마다 서버 마이그레이션이 된다. 화면은 `templateId` 로 그리는 법을 고른다.
  */
-export type NotificationActionType =
-  (typeof NotificationActionType)[keyof typeof NotificationActionType] | null;
-
-export const NotificationActionType = {
-  TRIP_ITINERARY: 'TRIP_ITINERARY',
-  PLANB_REPLAN: 'PLANB_REPLAN',
-  REFLECTION_DAILY: 'REFLECTION_DAILY',
-  TRIP_SUMMARY: 'TRIP_SUMMARY',
-  STAY_DETAIL: 'STAY_DETAIL',
-} as const;
+export interface ReflectionCard {
+  /** 카드를 만든 주체·판(예: backend.rule.daily.v1) */
+  templateId: string;
+  format: string;
+  /** `cover.title`. **목록이 쓰는 짧은 문구**라 따로 낸다 — 클라가 매번 payload 를 파싱하지 않게 */
+  title: string;
+  subtitle: string;
+  /** 카드 원문(JSON 문자열). 서버가 재조립하지 않고 그대로 낸다 */
+  payload: string;
+}

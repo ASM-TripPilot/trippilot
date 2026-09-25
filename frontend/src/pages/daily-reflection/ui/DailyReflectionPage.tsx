@@ -21,7 +21,7 @@ import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
  * 무상태 — draft/edited 필드명을 보지 않고 완성된 `narrative`·`editableText` 만 받는다.
  *
  * 얼굴 판정: error > (회고 없음)empty > (부분데이터)data-insufficient > default. 편집 시드는
- * `editedNarrative ?? draftNarrative`(내가 고친 최신 문장을 입력에 올림, 없으면 초안, empty 는 '').
+ * 서버가 고른 표시 카드의 `card.subtitle`(클라가 edited/draft 를 다시 고르지 않는다, empty 는 '').
  *
  * TRIP-762 · 일차 탭은 여행 기간(`Trip.startDate`~`endDate`, 실 계약 필드)에서 조립한다 — 회고 계약엔
  * 일차 소스가 없어 여행 조회로 얻는다(j01 TripRecordsPage 선례 동형, 단 거긴 itinerary.days, 여긴
@@ -88,7 +88,7 @@ export function DailyReflectionPage({
   const stats = statsCard(res?.stats);
   const missing = missingParts(stats);
   const narrative = resolveDisplayNarrative(res);
-  const editableText = res?.editedNarrative ?? res?.draftNarrative ?? '';
+  const editableText = res?.card?.subtitle ?? '';
 
   const face: ReflectionFace = daily.isError
     ? 'error'

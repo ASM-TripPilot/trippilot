@@ -348,6 +348,7 @@
 
 ## src/entities/style-analysis/lib/
 - `src/entities/style-analysis/lib/styleFace.ts`  →  StyleFace · resolveStyleFace
+- `src/entities/style-analysis/lib/styleProgress.ts`  →  resolveStyleProgress
 
 ## src/entities/trip/lib/
 - `src/entities/trip/lib/formatDayLabel.ts`  →  formatDayLabel
@@ -582,6 +583,7 @@
 - `src/features/record/ui/VisitTimeSheet.tsx`  →  VisitTimeSheetProps · VisitTimeSheet
 
 ## src/features/reflection/model/
+- `src/features/reflection/model/editCard.ts`  →  buildEditCard
 - `src/features/reflection/model/missingParts.ts`  →  MissingParts · missingParts
 - `src/features/reflection/model/reflectionFallback.ts`  →  resolveDisplayNarrative
 - `src/features/reflection/model/shareCard.ts`  →  ShareFormat · SHARE_FORMATS · ShareCardMode · ShareCardVM · BuildShareCardInput · buildShareCard · formatShareCardStats · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · validateCaption · validateHashtags · captureShareImage
@@ -1032,7 +1034,7 @@
 - `src/shared/api/generated/location/location.ts`  →  getMeLocationConsent · getGetMeLocationConsentQueryKey · getGetMeLocationConsentQueryOptions · GetMeLocationConsentQueryResult · GetMeLocationConsentQueryError · useGetMeLocationConsent · putMeLocationConsent · getPutMeLocationConsentMutationOptions · PutMeLocationConsentMutationResult · PutMeLocationConsentMutationBody · PutMeLocationConsentMutationError · usePutMeLocationConsent · patchMeLocationConsentOsPermission · getPatchMeLocationConsentOsPermissionMutationOptions · PatchMeLocationConsentOsPermissionMutationResult · PatchMeLocationConsentOsPermissionMutationBody · PatchMeLocationConsentOsPermissionMutationError · usePatchMeLocationConsentOsPermission
 
 ## src/shared/api/generated/notification/
-- `src/shared/api/generated/notification/notification.ts`  →  getMeNotificationSettings · getGetMeNotificationSettingsQueryKey · getGetMeNotificationSettingsQueryOptions · GetMeNotificationSettingsQueryResult · GetMeNotificationSettingsQueryError · useGetMeNotificationSettings · patchMeNotificationSettingsKind · getPatchMeNotificationSettingsKindMutationOptions · PatchMeNotificationSettingsKindMutationResult · PatchMeNotificationSettingsKindMutationBody · PatchMeNotificationSettingsKindMutationError · usePatchMeNotificationSettingsKind · getMeNotifications · getGetMeNotificationsQueryKey · getGetMeNotificationsQueryOptions · GetMeNotificationsQueryResult · GetMeNotificationsQueryError · useGetMeNotifications · postMeNotificationsNotificationIdRead · getPostMeNotificationsNotificationIdReadMutationOptions · PostMeNotificationsNotificationIdReadMutationResult · PostMeNotificationsNotificationIdReadMutationError · usePostMeNotificationsNotificationIdRead
+- `src/shared/api/generated/notification/notification.ts`  →  getMeNotificationSettings · getGetMeNotificationSettingsQueryKey · getGetMeNotificationSettingsQueryOptions · GetMeNotificationSettingsQueryResult · GetMeNotificationSettingsQueryError · useGetMeNotificationSettings · patchMeNotificationSettingsKind · getPatchMeNotificationSettingsKindMutationOptions · PatchMeNotificationSettingsKindMutationResult · PatchMeNotificationSettingsKindMutationBody · PatchMeNotificationSettingsKindMutationError · usePatchMeNotificationSettingsKind · getMeNotifications · getGetMeNotificationsQueryKey · getGetMeNotificationsQueryOptions · GetMeNotificationsQueryResult · GetMeNotificationsQueryError · useGetMeNotifications · postMeNotificationsNotificationIdRead · getPostMeNotificationsNotificationIdReadMutationOptions · PostMeNotificationsNotificationIdReadMutationResult · PostMeNotificationsNotificationIdReadMutationError · usePostMeNotificationsNotificationIdRead · postMeNotificationsReadAll · getPostMeNotificationsReadAllMutationOptions · PostMeNotificationsReadAllMutationResult · PostMeNotificationsReadAllMutationError · usePostMeNotificationsReadAll
 
 ## src/shared/api/generated/notifications/
 - `src/shared/api/generated/notifications/notifications.ts`  →  postMePushTokens · getPostMePushTokensMutationOptions · PostMePushTokensMutationResult · PostMePushTokensMutationBody · PostMePushTokensMutationError · usePostMePushTokens · deleteMePushTokensToken · getDeleteMePushTokensTokenMutationOptions · DeleteMePushTokensTokenMutationResult · DeleteMePushTokensTokenMutationError · useDeleteMePushTokensToken
@@ -1132,13 +1134,16 @@
 - `src/shared/api/generated/schemas/nicknameTakenResponse.ts`  →  NicknameTakenResponse
 - `src/shared/api/generated/schemas/notFoundResponse.ts`  →  NotFoundResponse
 - `src/shared/api/generated/schemas/notification.ts`  →  Notification
-- `src/shared/api/generated/schemas/notificationActionPayload.ts`  →  NotificationActionPayload
 - `src/shared/api/generated/schemas/notificationActionType.ts`  →  NotificationActionType
 - `src/shared/api/generated/schemas/notificationKind.ts`  →  NotificationKind
 - `src/shared/api/generated/schemas/notificationList.ts`  →  NotificationList
+- `src/shared/api/generated/schemas/notificationPlanBAction.ts`  →  NotificationPlanBAction
+- `src/shared/api/generated/schemas/notificationReflectionAction.ts`  →  NotificationReflectionAction
+- `src/shared/api/generated/schemas/notificationStayAction.ts`  →  NotificationStayAction
 - `src/shared/api/generated/schemas/notificationToggle.ts`  →  NotificationToggle
 - `src/shared/api/generated/schemas/notificationToggleKind.ts`  →  NotificationToggleKind
 - `src/shared/api/generated/schemas/notificationToggleList.ts`  →  NotificationToggleList
+- `src/shared/api/generated/schemas/notificationTripAction.ts`  →  NotificationTripAction
 - `src/shared/api/generated/schemas/patchMeLocationConsentOsPermissionBody.ts`  →  PatchMeLocationConsentOsPermissionBody
 - `src/shared/api/generated/schemas/patchMeLocationConsentOsPermissionBodyOsPermission.ts`  →  PatchMeLocationConsentOsPermissionBodyOsPermission
 - `src/shared/api/generated/schemas/patchMeProfileNicknameBody.ts`  →  PatchMeProfileNicknameBody
@@ -1175,6 +1180,7 @@
 - `src/shared/api/generated/schemas/putMeLocationConsentBody.ts`  →  PutMeLocationConsentBody
 - `src/shared/api/generated/schemas/putMemoRequest.ts`  →  PutMemoRequest
 - `src/shared/api/generated/schemas/reflection.ts`  →  Reflection
+- `src/shared/api/generated/schemas/reflectionCard.ts`  →  ReflectionCard
 - `src/shared/api/generated/schemas/reflectionList.ts`  →  ReflectionList
 - `src/shared/api/generated/schemas/reflectionSource.ts`  →  ReflectionSource
 - `src/shared/api/generated/schemas/reflectionStats.ts`  →  ReflectionStats
@@ -1329,6 +1335,7 @@
 - `src/test-support/expoRouterRedirectMock.tsx`  →  Redirect · Stack
 - `src/test-support/expoRouterStackMock.tsx`  →  Stack
 - `src/test-support/expoRouterTabsMock.tsx`  →  capturedTabsProps · Tabs · useRouter
+- `src/test-support/flushNotifications.ts`  →  flushNotifications
 - `src/test-support/mapViewMock.tsx`  →  MapCenter · MapPin · MapView · CenterPinPicker
 - `src/test-support/nativeSocialSdkMock.ts`  →  kakaoLoginSpy · naverLoginSpy · naverInitializeSpy · kakaoLogoutSpy · kakaoLoginModule · naverLoginModule · resetNativeSocialSdkMock
 - `src/test-support/onboardingScenarios.ts`  →  ConsentBehavior · NicknameBehavior · OnboardingScenario · ONBOARDING_SCENARIOS · OnboardingScenarioKey · setOnboardingScenario · getOnboardingScenario · resetOnboardingScenario
@@ -1360,4 +1367,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 926개 파일
+합계 933개 파일
