@@ -60,18 +60,33 @@ class BootstrapSecurityTests(unittest.TestCase):
             self.assertEqual(len(resources), 2)
             self.assertTrue(all(item["Fn::Sub"].endswith(("-${Environment}-cluster", "-${Environment}-node")) for item in resources))
         self.assertNotIn("AdministratorAccess", json.dumps(self.template))
-        self.assertFalse(any("iam:PutRolePolicy" in item["Action"] for item in self.statements))
+        # The managed policy attached to the deployment role is under the same guard as the inline one.
+        attached = self.resources["DeploymentPodIdentityPolicy"]["Properties"]
+        self.assertEqual(attached["Roles"], [{"Ref": "DeploymentRole"}])
+        statements = self.statements + attached["PolicyDocument"]["Statement"]
+        self.assertFalse(any("iam:PutRolePolicy" in item["Action"] for item in statements))
         forbidden = {"iam:CreateRole", "iam:UpdateAssumeRolePolicy", "iam:AttachRolePolicy", "iam:DeleteRole"}
-        self.assertFalse(any(forbidden.intersection(item["Action"]) for item in self.statements))
+        self.assertFalse(any(forbidden.intersection(item["Action"]) for item in statements))
+        passes = next(item for item in attached["PolicyDocument"]["Statement"] if item["Sid"] == "PassAiPodRoleToPods")
+        self.assertTrue(passes["Resource"]["Fn::Sub"].endswith("-${Environment}-ai-pod"))
+        self.assertEqual(passes["Condition"]["StringEquals"]["iam:PassedToService"], "pods.eks.amazonaws.com")
 
     def test_cluster_and_node_roles_have_fixed_aws_service_trust(self):
-        expected = {"ClusterRole": "eks.amazonaws.com", "NodeRole": "ec2.amazonaws.com"}
+        expected = {"ClusterRole": "eks.amazonaws.com", "NodeRole": "ec2.amazonaws.com", "AiPodRole": "pods.eks.amazonaws.com"}
         for role, service in expected.items():
             trust = self.resources[role]["Properties"]["AssumeRolePolicyDocument"]["Statement"]
             self.assertEqual(len(trust), 1)
             self.assertEqual(trust[0]["Principal"], {"Service": service})
         cluster = self.resources["ClusterRole"]["Properties"]
         self.assertIn("sts:TagSession", cluster["AssumeRolePolicyDocument"]["Statement"][0]["Action"])
+
+    def test_ai_pod_role_can_only_invoke_imported_bedrock_models(self):
+        policies = self.resources["AiPodRole"]["Properties"]["Policies"]
+        statements = [item for policy in policies for item in policy["PolicyDocument"]["Statement"]]
+        self.assertEqual(len(statements), 1)
+        self.assertEqual(statements[0]["Action"], ["bedrock:InvokeModel"])
+        self.assertTrue(statements[0]["Resource"]["Fn::Sub"].endswith(":imported-model/*"))
+        self.assertNotIn("ManagedPolicyArns", self.resources["AiPodRole"]["Properties"])
 
     def test_new_security_group_rules_have_tag_authorization(self):
         create = self.statement("CreateTaggedSecurityRules")
