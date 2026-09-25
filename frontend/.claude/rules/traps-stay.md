@@ -20,6 +20,10 @@ paths:
 
 - **`buildSaveStayRequest`의 출력값을 잠그는 심판이 단위·통합 두 층에 나뉘어 있고, 서로를 갱신시키는 기계가 없다** → `buildSaveStayRequest.test.ts`(단위, 함수 반환값)와 `src/pages/stay-search/ui/StaySearchPage.save.integration.test.tsx`(배선층, `EXPECTED_POST_A` 리터럴로 같은 값을 한 번 더 못 박음)가 같은 `coordConfirmed` 값을 각자 리터럴로 굳힌다. 단위 테스트만 갱신하고 통합 테스트를 빠뜨려도 lint·tsc는 안 잡고 `pnpm test:node`도 green이다 — `pnpm test:integration`(또는 `pnpm test` 전체)을 돌려야만 드러난다(TRIP-600 04#1·#2 FAIL 실측, 처방은 04#3). 이 함수의 반환 필드를 다시 바꿀 때는 두 파일을 함께 grep한다.
 
+## e03 숙소 상세 GET (TRIP-940)
+
+- **`GET /stays/{stayId}`는 인증 필요인데 401을 별도로 안 가르고 통합 테스트 목 서버는 무조건 200이다** → `pages/stay-detail/ui/StayDetailPage.tsx`의 `resolveDetailState`는 404(notFound)·400(invalid)만 가르고 401은 나머지(`error`, 재시도 버튼)로 접힌다. 401은 다시 물어도 절대 안 풀리므로(로그인해야 풀림) 세션 만료 사용자는 재시도 버튼을 눌러도 같은 얼굴이 무한 반복된다. `StayDetailPage.integration.test.tsx`의 `beforeEach` 기본 핸들러가 Authorization 헤더를 안 보고 누구에게나 200을 주기 때문에, 게스트 동선을 전제하는 I7·I8·G1·G2·`affiliateNoticeOneTruth` 게스트 케이스가 전부 green이어도 **실서버의 게스트/세션만료 경로는 아무것도 보장 안 된다**(03b 경고-1). 정책 미결(공개 API로 열지 FE가 401 얼굴을 새로 만들지) — 문제로그 참고.
+
 ## 하트 글리프 사본 분기 (TRIP-807, 6-b 시각 전용)
 
 - **e02 카드 하트와 e03·e04 하트가 서로 다른 모양이다** → TRIP-807이 e02(`StaySearchScreen`)만 `@/shared/ui/HeartGlyphs`(18-viewBox, 옛 `PlaceGlyphs` 모양)로 이관했고, e03(`StayDetailScreen`)·e04(`SavedStayListScreen` trailing)는 여전히 `features/stay/ui/StayGlyphs`(22-viewBox)를 쓴다. jest는 SVG path·viewBox를 원리적으로 못 봐(글리프 fill/모양 사각) 배선·testID·selected·press는 전수 green이어도 실기에서 두 하트 모양이 섞여 보인다(04b_smoke_1_PASS 확인). 통일은 후속 티켓(entities 카드 도입 전엔 e02·e03·e04 셋이 전부 `StayGlyphs`로 일관돼 있었다).
