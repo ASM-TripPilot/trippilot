@@ -12,14 +12,23 @@
 # 스케줄로 돌리지 않는다 — 모델 2.1GB 를 받는 측정이고, 답이 필요할 때만 부른다.
 name: ai-embedding-backend-bench
 
+# 트리거가 둘인 이유: `workflow_dispatch` 는 **기본 브랜치(main)에 있는 것만** 이름으로
+# 부를 수 있다. main 이 develop 보다 138커밋 뒤라 이 파일이 거기 닿기까지 시간이 걸리고,
+# 그 전에도 amd64 숫자가 필요하다. PR 에 `bench-embedding` 라벨을 붙이면 **그 PR 브랜치
+# 코드로** 돈다. 라벨을 떼었다 다시 붙이면 재실행이다.
 on:
   workflow_dispatch:
+  pull_request:
+    types: [labeled]
 
 permissions:
   contents: read
 
 jobs:
   bench:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.label.name == 'bench-embedding'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     defaults:
