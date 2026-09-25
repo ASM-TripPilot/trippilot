@@ -12,16 +12,19 @@ import { buildStyleCardModel } from './styleCardModel';
  * TRIP-637 · AC-4 — l03 요약카드(`buildStyleCardModel`)가 j05 와 **같은 정식/임시 판정**을 쓴다.
  *
  * 무엇을 보장하나:
- *  - 🔴 **동치 property**: 계약 안의 임의 envelope 에 대해 `buildStyleCardModel(e).kind === resolveStyleFace(e)`.
+ *  - 🔴 **동치 property**: 임의 envelope(TRIP-956 부터 progress 결측 포함)에 대해 `buildStyleCardModel(e).kind === resolveStyleFace(e)`.
  *    요약카드가 판정을 우회해 자기 분기를 다시 만들면(예: `current >= required` 로 자체 승격) 한 번이라도
  *    갈리는 순간 red — 두 화면이 조용히 갈라지는 것(TRIP-573 맹점②)을 행동으로 막는다.
- *  - 🔴 **위험 조합 고정 예제**: 무작위가 덜 뽑아도 반드시 한 번은 보도록 두 조합을 손으로 고정한다.
+ *  - 🔴 **위험 조합 고정 예제**: 무작위가 덜 뽑아도 반드시 한 번은 보도록 세 조합을 손으로 고정한다(셋째는 TRIP-956 progress 결측).
  *
  * (개념) 동치 property = "두 함수가 같은 답을 낸다"를 무작위 입력 수백 개로 확인하는 테스트.
  *
- * 커버하지 않는 것: 계약 밖 입력(`progress` 결측·envelope null). `buildStyleCardModel` 은 그 입력에서
- * 크래시하고, 방어 추가는 이번 범위 밖이다(01b Q4) — 그래서 생성기가 `official`·`progress` 를 늘 채운다.
- * VM 값 무변형(AC-M1~M3)은 `styleCardModel.test.ts` 몫.
+ * TRIP-956 부터 계약 밖 `progress`(생략·undefined·null·`{}`·한쪽만)도 생성기에 넣는다 — 요약카드가
+ * 그 입력에서 던지지 않고 판정을 따르는지까지 같은 property 가 본다. 동치 단언 자체는 그대로다.
+ *
+ * 커버하지 않는 것: envelope 자체 null(MyPage 가 먼저 거름 — 범위 밖), `official` 결측(판정 권위 필드라
+ * 생성기가 늘 채운다). current 값 대칭은 `styleCardModel.progress.test.ts`, VM 값 무변형(AC-M1~M3)은
+ * `styleCardModel.test.ts` 몫.
  */
 
 /** 정식 본문 arb — 판정은 존재만 보지만 요약카드는 값을 읽으므로 타입에 맞는 전체 모양을 만든다. */
@@ -47,23 +50,43 @@ const analysisBodyArb: fc.Arbitrary<StyleAnalysisBody> = fc.record({
 });
 
 /**
- * 계약 안의 임의 envelope — `official`·`progress` 는 필수라 늘 채우고, 옵셔널 `analysis`·`preview` 는
- * `requiredKeys` 로 키 생략(undefined)·null·값 세 형태를 모두 돌린다(02a §5-B 실측: 500회 중 생략 88·null 65·값 347).
+ * progress 모양 — 정상 4 : 부분·빈 객체 2 : null 1 : undefined 1 가중치(TRIP-956 02a ★6). 가중치가 없으면
+ * 정상 모양이 줄어 TRIP-637 위험 조합이 덜 뽑힌다(500회 실측: 정상 268·위험 조합 46).
  */
-const envelopeArb: fc.Arbitrary<StyleAnalysisEnvelope> = fc.record(
+const looseProgressArb = fc.oneof(
   {
-    official: fc.boolean(),
-    progress: fc.record({
+    arbitrary: fc.record({
       current: fc.integer({ min: 0, max: 20 }),
       required: fc.constant(10),
     }),
+    weight: 4,
+  },
+  {
+    arbitrary: fc.record(
+      { current: fc.integer({ min: 0, max: 20 }), required: fc.constant(10) },
+      { requiredKeys: [] }
+    ),
+    weight: 2,
+  },
+  { arbitrary: fc.constant(null), weight: 1 },
+  { arbitrary: fc.constant(undefined), weight: 1 }
+);
+
+/**
+ * 임의 envelope — `official` 만 늘 채우고, `progress`·`analysis`·`preview` 는 `requiredKeys` 로 키 생략까지
+ * 돌린다. progress 는 계약 밖 모양도 섞이므로 타입을 한 번 속인다(02a ★7).
+ */
+const envelopeArb = fc.record(
+  {
+    official: fc.boolean(),
+    progress: looseProgressArb,
     analysis: fc.option(analysisBodyArb, { nil: null }),
     preview: fc.option(fc.record({ descriptors: fc.array(fc.string()) }), {
       nil: null,
     }),
   },
-  { requiredKeys: ['official', 'progress'] }
-);
+  { requiredKeys: ['official'] }
+) as unknown as fc.Arbitrary<StyleAnalysisEnvelope>;
 
 const ANALYSIS: StyleAnalysisBody = {
   descriptors: ['#바다'],
@@ -77,7 +100,7 @@ const ANALYSIS: StyleAnalysisBody = {
 };
 
 describe('🔴 AC-4 · 요약카드와 j05 가 같은 판정을 쓴다(동치 property)', () => {
-  it('계약 안의 임의 envelope 에서 buildStyleCardModel(e).kind 는 resolveStyleFace(e) 와 같다', () => {
+  it('progress 결측까지 넓힌 임의 envelope 에서 buildStyleCardModel(e).kind 는 resolveStyleFace(e) 와 같다', () => {
     fc.assert(
       fc.property(envelopeArb, (envelope) => {
         // 실행: 같은 입력을 두 함수에 준다.
@@ -109,6 +132,14 @@ describe('🔴 AC-4 · 요약카드와 j05 가 같은 판정을 쓴다(동치 pr
         analysis: null,
         preview: { descriptors: ['느긋'] },
       },
+    ],
+    [
+      'official=false · progress 결측(TRIP-956 크래시 자리)',
+      {
+        official: false,
+        analysis: null,
+        preview: { descriptors: ['느긋'] },
+      } as unknown as StyleAnalysisEnvelope,
     ],
   ] as [string, StyleAnalysisEnvelope][])(
     '위험 조합 %s 은 두 쪽 모두 insufficient',

@@ -348,6 +348,7 @@
 
 ## src/entities/style-analysis/lib/
 - `src/entities/style-analysis/lib/styleFace.ts`  →  StyleFace · resolveStyleFace
+- `src/entities/style-analysis/lib/styleProgress.ts`  →  resolveStyleProgress
 
 ## src/entities/trip/lib/
 - `src/entities/trip/lib/formatDayLabel.ts`  →  formatDayLabel
@@ -1366,4 +1367,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 932개 파일
+합계 933개 파일
