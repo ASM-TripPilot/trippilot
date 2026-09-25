@@ -89,6 +89,11 @@ const LOCKED_CALLERS = [
   // caller 라 아래 NO_LINE_CALLERS 에도 등재. test-designer 착수 단계 선반영이라 구현(map 카드 추가)
   // 전엔 SlotFillScreen 에 `<MapView` 0건이라 S2 집합 불일치·S8 lineOffTags 카운트로 red(정상, 01b D7).
   'features/itinerary/ui/SlotFillScreen.tsx',
+  // TRIP-755 i10 현재 장소 상세 미니맵 — 운영 화면에서 지도가 빠져 있던 자리 → 실 MapView(viewOnly ON,
+  // 현재 장소 1핀, showScaleBar). connectPins 미전달(단일 핀→경로선 없음, 아래 S8 ③ 강제) — line caller
+  // 라 NO_LINE_CALLERS 엔 안 넣는다. d06(TRIP-710) 동형. test-designer 착수 단계 선반영이라 구현 전엔
+  // `<MapView` 0건이라 S2 집합 불일치·S8 defaultTags 카운트로 red(정상, 442·563·571 재발 방지).
+  'features/execution/ui/PlaceDetailScreen.tsx',
 ];
 
 /** 지도 고정을 **켜면 안 되는** 호출부. 앞의 넷은 지도를 움직여 좌표를 확정하는 것이 기능 자체라
@@ -377,8 +382,9 @@ describe('S8 · 무선 — 연결선을 끄는 자리가 h05·h07 loading 둘뿐
     //    filter 에서 빠져 (LOCKED 13 − NO_LINE 3 = 10 + OPEN 4)로 상쇄된다(오갱신 금지 — 15로 올리면
     //    거짓 red). TRIP-791 로 GenerationFallbackScreen(LOCKED·line caller) 추가분은 그대로.
     //    TRIP-751 로 LOCKED 두 화면(i13·i16, 태그 각 1) 삭제 → defaultTags 13 → 11.
+    //    TRIP-755 로 i10 PlaceDetailScreen(LOCKED·line caller, 태그 1) 추가 → defaultTags 11 → 12.
     expect(lineOffTags).toHaveLength(3);
-    expect(defaultTags).toHaveLength(11);
+    expect(defaultTags).toHaveLength(12);
 
     // ② 끄는 세 자리 전부 끈다고 **명시**한다(h05·h07 loading·h10 후보).
     lineOffTags.forEach((tag) =>

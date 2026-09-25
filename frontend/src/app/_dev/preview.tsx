@@ -1523,20 +1523,30 @@ const SAVED_STAY_PREVIEW_CARDS: SavedStayCardVM[] = [
   },
 ];
 
-// i05 현재 장소 상세(TRIP-398) — Figma 대조용 완성 뷰. 결측 얼굴은 이 위에 상태만 얹는다.
+// i10 현재 장소 상세(TRIP-755) — Figma 4159:2673 카피 그대로(부산시립미술관). 계약 공백 필드(카피·
+// 주소·입장료·사진 수·갤러리)는 운영에선 null 이고 여기 픽스처만 채운다(INV-1·G6). 사진은
+// DRAFT_PREVIEW_PHOTOS 재사용 — jest 는 .uri 가 undefined 라 [] 가 되어 갤러리·"이곳의 사진"이 안
+// 그려진다(실기만 사진, 6-b). 좌표는 부산시립미술관 근사.
 const LIVE_PLACE_PREVIEW_VIEW: PlaceDetailView = {
-  name: '광안리 해수욕장',
-  category: '해변',
-  tags: ['해변', '포토스팟', '야경', '이동선근처'],
+  name: '부산시립미술관',
+  category: '미술관 · 전시',
+  tags: ['미술', '실내', '취향매칭', '비와도좋음'],
   imageUrl: null,
-  openingHours: '09:00~22:00 (상시 개방)',
+  galleryUrls: DRAFT_PREVIEW_PHOTOS.filter(
+    (uri): uri is string => uri !== null
+  ),
+  photoTotal: 42,
+  pitchTitle: '비 오는 날에도 반나절이 아깝지 않은 곳',
+  pitchBody:
+    '상설전은 무료로 열려 있고, 3층 전시실은 사람이 적어 오래 머물게 돼요. 창가 자리에서 쉬는 시간까지 넉넉히 잡아 두세요.',
+  openingHours: '10:00~18:00 (월 휴관)',
   openingHoursMissing: false,
   hoursCaption: null,
-  location: '미확인',
-  slackLabel: '여유 있음 · 다음 부산시립미술관',
-  arrival: '14:20 도착',
-  lat: 35.15,
-  lng: 129.11,
+  address: '부산 부산진구 ○○로 12',
+  admissionFee: '성인 12,000원',
+  slackLabel: '여유 있음 · 다음 광안리 해수욕장',
+  lat: 35.1667,
+  lng: 129.1364,
 };
 
 // map-default(TRIP-745) — 핀 3상태를 한 지도에서 대조하는 픽스처. done 둘·current 하나·upcoming
@@ -5074,36 +5084,20 @@ export const PREVIEW_STATES: PreviewState[] = [
       </MapSheetShell>
     ),
   },
-  // i05 현재 장소 상세(TRIP-398) — props-only 화면. jest 는 픽셀·레이아웃을 못 봐 이 자리가
-  // 유일하게 눈으로 보는 곳. 결측 얼굴은 model 결측 스위치를 켠 뷰를 그대로 얹는다.
+  // i10 현재 장소 상세(TRIP-755) — props-only 화면. 옛 default·unknown 2키를 1키로 합쳤다(결측
+  // 얼굴은 Figma 에 없고 결측 처리는 model·화면 테스트가 잠근다). 뒤로·공유·모두 보기는 Figma 에
+  // 있으니 빈 핸들러로 켠다. 하트 '준비 중' 안내는 누르면 뜬다(6-b).
   {
-    key: 'live-place-default',
+    key: 'live-place',
     band: 'i',
-    label: 'i05 · 현재 장소 상세',
+    label: 'i10 · 현재 장소 상세',
     login: null,
     render: () => (
       <PlaceDetailScreen
         view={LIVE_PLACE_PREVIEW_VIEW}
-        onPressItinerary={noop}
-      />
-    ),
-  },
-  {
-    key: 'live-place-unknown',
-    band: 'i',
-    label: 'i05 · 현재 장소 상세 결측',
-    login: null,
-    render: () => (
-      <PlaceDetailScreen
-        view={{
-          ...LIVE_PLACE_PREVIEW_VIEW,
-          name: '미확인',
-          openingHours: '미확인',
-          openingHoursMissing: true,
-          hoursCaption: '확인 필요',
-          slackLabel: '미확인',
-        }}
-        onPressItinerary={noop}
+        onPressBack={noop}
+        onPressShare={noop}
+        onPressSeeAll={noop}
       />
     ),
   },

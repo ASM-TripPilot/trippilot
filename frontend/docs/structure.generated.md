@@ -389,7 +389,7 @@
 - `src/features/execution/model/dwellMinutes.ts`  →  dwellMinutes
 - `src/features/execution/model/liveState.ts`  →  LiveState · ResolveLiveStateInput · resolveLiveState
 - `src/features/execution/model/nextNav.ts`  →  NavDest · buildAppNavUrl · buildWebNavUrl · resolveNextDest · openNextNav
-- `src/features/execution/model/placeDetailView.ts`  →  PlaceDetailView · resolveSlackLabel · buildPlaceDetailView
+- `src/features/execution/model/placeDetailView.ts`  →  PlaceDetailView · resolveSlackLabel · buildPlaceDetailView · buildPlaceShareMessage
 - `src/features/execution/model/slotProgress.ts`  →  SlotState · ProjectedSlot · SlotProgressInput · projectSlotProgress
 - `src/features/execution/model/useLiveItinerary.ts`  →  useLiveItinerary
 - `src/features/execution/model/usePlaceDetail.ts`  →  usePlaceDetail
@@ -397,7 +397,7 @@
 - `src/features/execution/model/visitProgress.ts`  →  VisitProgress · deriveVisitProgress
 
 ## src/features/execution/ui/
-- `src/features/execution/ui/ExecutionGlyphs.tsx`  →  RailDoneGlyph · RailActiveGlyph · RailUpcomingGlyph · BackArrowGlyph · ShareGlyph · WarningFilledGlyph · WeatherCloudGlyph
+- `src/features/execution/ui/ExecutionGlyphs.tsx`  →  RailDoneGlyph · RailActiveGlyph · RailUpcomingGlyph · BackArrowGlyph · ShareGlyph · WarningFilledGlyph · WeatherCloudGlyph · HeroPinGlyph · HeroPhotoGlyph
 - `src/features/execution/ui/PlaceDetailScreen.tsx`  →  PlaceDetailScreenProps · PlaceDetailScreen
 - `src/features/execution/ui/TriggerChip.tsx`  →  TriggerChipProps · TriggerChip
 

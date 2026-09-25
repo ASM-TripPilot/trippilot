@@ -22,16 +22,22 @@ export interface PlaceDetailView {
   category: string | null;
   tags: string[];
   imageUrl: string | null;
+  /** 히어로 갤러리(TRIP-755). 운영은 대표 사진 1장뿐(`imageUrl`), 그 이상은 계약 공백(G6·TRIP-823). */
+  galleryUrls: string[];
+  /** 전체 사진 수("1 / N" 칩·"+N"). 계약 공백 — 운영은 null(INV-1, 지어내지 않는다). */
+  photoTotal: number | null;
+  /** 추천 카피 제목·본문. 계약 공백 — 운영은 null(G6). */
+  pitchTitle: string | null;
+  pitchBody: string | null;
   openingHours: string;
   /** openingHours == null → 값 자리를 `-unknown-openhours` testID 로 바꾸는 스위치(AC-2). */
   openingHoursMissing: boolean;
   /** openingHoursKnown===false 일 때만 "확인 필요"(D4). 그 외(true·null)는 null. */
   hoursCaption: string | null;
-  /** 계약 공백이라 항상 "미확인"(D3). */
-  location: string;
+  /** 주소·입장료 — 슬롯 계약에 없어 운영은 null. 화면이 "미확인"으로 적는다(BR-U4-40). */
+  address: string | null;
+  admissionFee: string | null;
   slackLabel: string;
-  /** 계획값(BR-U4-34) — startAt "14:20:00" → "14:20 도착"(재추정 아닌 슬라이스). */
-  arrival: string;
   lat: number | null;
   lng: number | null;
 }
@@ -81,13 +87,25 @@ export function buildPlaceDetailView(
     category: slot.category ?? null,
     tags: slot.tags,
     imageUrl: slot.imageUrl ?? null,
+    galleryUrls: slot.imageUrl ? [slot.imageUrl] : [],
+    photoTotal: null,
+    pitchTitle: null,
+    pitchBody: null,
     openingHours: slot.openingHours ?? MISSING,
     openingHoursMissing,
     hoursCaption: slot.openingHoursKnown === false ? '확인 필요' : null,
-    location: MISSING,
+    address: null,
+    admissionFee: null,
     slackLabel,
-    arrival: `${slot.startAt.slice(0, 5)} 도착`,
     lat: slot.lat ?? null,
     lng: slot.lng ?? null,
   };
+}
+
+/** OS 공유 시트 문구(TRIP-755 AC-5) — 장소명, 주소가 있으면 다음 줄에 덧붙인다. 순수 함수로 뺀
+ * 이유: 운영 주소는 늘 null 이라 페이지 경로로는 주소 분기에 닿을 수 없다(V-9 가 여기서 잰다). */
+export function buildPlaceShareMessage(
+  view: Pick<PlaceDetailView, 'name' | 'address'>
+): string {
+  return view.address === null ? view.name : `${view.name}\n${view.address}`;
 }
