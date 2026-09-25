@@ -261,12 +261,29 @@ note = """
 id = "APPLE-JWKS"
 ticket = "TRIP-858"
 title = "Apple 로그인 id_token 서명검증(JWKS)·aud/iss/exp — 현재 fail-closed 로 비활성"
-status = "todo"
+status = "done"
 migration = false
 touches = [
   "backend/modules/auth/src/main/kotlin/com/trippilot/auth/adapter/out/external",
 ]
 note = """
+**완료(확인 2026-09-26). 노드가 낡아 있었다** — Jira TRIP-858 도 2026-09-23 에 "완료"다.
+"현재 fail-closed 로 비활성"은 **키가 없어서 501 이라는 뜻**이지 코드가 없다는 게 아니었다.
+
+코드로 확인한 것(`AppleOAuthClient.buildDecoder`):
+  서명    `NimbusJwtDecoder.withJwkSetUri` (Nimbus 가 kid 캐싱)
+  exp     `JwtTimestampValidator`
+  iss     `JwtIssuerValidator`
+  aud     `JwtClaimValidator` — **배열로 오는 경우까지** 처리(`clientId in aud`)
+  미설정   `ProviderNotSupported(501)` — 401 로 안 뭉갠다(TRIP-249)
+  p8      `AppleClientSecret` 가 ES256 으로 동적 서명(TRIP-933)
+  테스트   `AppleOAuthClientTest`·`AppleTokenRevocationTest`·`AppleClientIdWiringTest`
+
+**nonce 는 여전히 미검증이고 그건 의도다** — 코드 주석에 판단이 적혀 있다(재생 상한은 Apple `exp`
+10분, 서버 nonce 저장소는 값이 안 나와 보류, 재생 관측·심사 요구 시 올린다).
+
+**남은 것은 `IDP-REGISTER`(사람) 하나다** — 팀 키·서비스 ID 를 시크릿에 넣으면 501 이 풀린다.
+
 코드 주석에만 있다가(AppleOAuthClient·AbstractOAuth2Client 의 TODO(SECURITY)) 2026-09-14
 TRIP-858 로 티켓화했다. MVP 는 소셜 로그인만인데 그 중 하나가 꺼져 있다. nonce·state 검증도
 함께 비어 있다. SEC-06 이 여는 조건의 정본이다 — 서명·iss·aud·exp(·nonce) + p8 키 ES256
@@ -1728,6 +1745,20 @@ touches = [
   "backend/app/src/main/resources/db/migration/R__seed_reference_data.sql",
 ]
 note = """
+**법무에 넘길 사실 관계(코드 확인 2026-09-26).** 문구는 법무 몫이지만 *"무엇을 명시해야 하는가"* 는
+코드가 답한다 — 법무가 리포를 읽을 수는 없으므로 여기 적어 둔다.
+
+- **저장하는 것**: 사진의 **EXIF 좌표만**(`visit_photo_meta.exif_lat`·`exif_lng`). 사진 파일 자체는
+  서버에 없다 — 사용자 기기에 있다(`VisitRecordPersistence` 주석).
+- **게이팅**: `gpsRecordingOptIn` 이 거짓이면 **좌표를 아예 받지 않는다**(`VisitRecord.kt:66` —
+  `exifLat.takeIf { gpsRecordingOptIn }`, INV-U5-04). 동의 없으면 저장 자체가 안 일어난다.
+- **철회 시**: EXIF 좌표만 NULL 로 지운다. 행·메모·방문 체크는 남는다(INV-L4).
+- **현재 문구**: `R__seed_reference_data.sql:13` 의 `'[플레이스홀더] GPS 이동경로 기록 동의'` —
+  **사진 EXIF 라는 말이 없다.** 사용자는 "이동경로"만 읽고 사진 좌표를 떠올리지 못한다.
+
+**⚠️ 문구 자체는 이 세션이 쓰지 않는다.** 프로덕션 동의 화면에 나가는 법적 텍스트를 지어내는 것은
+위험하고, 노드가 이미 *"자체 초안으로는 부족하고 법무 검토가 선행"* 이라고 적었다.
+
 **축소·대기(2026-09-15).** 실배포 전환으로 무게가 달라졌다 — 자체 초안으로는 부족하고 **법무 검토가
 선행**이다. 우리 몫은 `GPS_RECORDING` 본문(사진 EXIF 명시) 하나로 좁히고, 나머지 5종은 주체가 정해질
 때까지 대기. 배포 시 **위치기반서비스사업 신고**(방통위)도 함께 걸린다 — 코드로 못 푸는 선행이다.
