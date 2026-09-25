@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { ComponentType, ReactElement } from 'react';
 import type { ViewStyle } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
@@ -342,6 +344,10 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     // ⚠️ TRIP-777: l04 출발점 다이얼로그 합성 1키(`my-stays-dialog`, band `l`) 추가로 164→165.
     //    test-designer 선반영(카운트 가드만) — 합성은 `devPreviewMyStays.test.tsx`, 정렬은
     //    devPreviewBandSort EXPECTED_L(my-stays-empty 바로 뒤)가 못박는다(추가 전엔 164개라 red).
+    // ⚠️ TRIP-772: l 밴드 라이브 Figma 25프레임 1:1 — `settings-preferences-error` 삭제(−1, 프레임 없음 G5)
+    //    + `settings-delete-dialog-final`(2단 4531:3018) 추가(+1)로 **순 0** → 165 유지. 777 이 넣은
+    //    my-stays-dialog 는 이미 위 줄에 셌다(두 번 올리지 않는다). 정확한 25키·라벨은 아래 'TRIP-772'
+    //    describe, 정렬은 devPreviewBandSort EXPECTED_L 이 못박는다.
     expect(PREVIEW_STATES).toHaveLength(165);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
@@ -1252,5 +1258,65 @@ describe('🔴 TRIP-770 · j 밴드 최종 14키·라벨 완전 일치', () => {
     // 단언: 14키 + (키,라벨) 집합 완전 일치(삭제된 22키의 잔재·라벨 편차 차단).
     expect(jStates).toHaveLength(14);
     expect(actual).toEqual(expected);
+  });
+});
+
+// TRIP-772 · l 밴드(알림·마이·설정) 프리뷰 키 정리 — 라이브 Figma l 행 25프레임과 1:1.
+// 무엇을 보장하나: band 'l' 이 정확히 25키이고, 각 키·라벨이 Figma 프레임 이름(`lNN · 화면명 상태`,
+// `[갈래]` 제외)과 완전 일치한다 — 프레임 없는 칩도, 칩 없는 프레임도 없다. 순서 무관((key,label) 집합).
+describe('🔴 TRIP-772 · l 밴드 25키·라벨 완전 일치 (AC-1·AC-3)', () => {
+  const EXPECTED_L_PAIRS: readonly (readonly [string, string])[] = [
+    ['notification-inbox-default', 'l01 · 알림 default'], // 1598:2389
+    ['notification-inbox-empty', 'l01 · 알림 empty'], // 1599:2388
+    ['l02-notification-default', 'l02 · 알림 설정 default'], // 1600:2388
+    ['l02-notification-denied', 'l02 · 알림 설정 permission-denied'], // 1601:2388
+    ['my-page-default', 'l03 · 마이페이지 default'], // 1602:2388
+    ['my-page-empty', 'l03 · 마이페이지 empty'], // 1603:2414
+    ['my-style-card-insufficient', 'l03 · 마이페이지 style-insufficient'], // 4533:2424
+    ['my-stays-default', 'l04 · 등록 숙소·예약 기록 default'], // 1604:2440
+    ['my-stays-empty', 'l04 · 등록 숙소·예약 기록 empty'], // 1605:2440
+    ['my-stays-dialog', 'l04 · 등록 숙소·예약 기록 dialog'], // 1606:2440
+    ['settings-default', 'l05 · 설정 default'], // 1607:2440
+    ['settings-delete-dialog', 'l05 · 설정 dialog 1단'], // 1608:2440
+    ['settings-delete-dialog-final', 'l05 · 설정 dialog 2단'], // 4531:3018
+    ['settings-export-truncated', 'l05 · 설정 export-truncated'], // 4533:3260
+    ['settings-export-error', 'l05 · 설정 export-error'], // 4533:3476
+    ['settings-pending', 'l05 · 설정 deletion-pending'], // 4533:3671
+    ['settings-preferences', 'l05 · 여행 취향 편집 default'], // 4533:2619
+    ['l05-personalization-applied', 'l05 · 개인화 applied'], // 4529:2417
+    ['l05-personalization-consent-missing', 'l05 · 개인화 consent-missing'], // 4531:2420
+    ['l05-personalization-not-enough', 'l05 · 개인화 not-enough'], // 4531:2997
+    ['l06-location-consent-default', 'l06 · 위치정보 동의 default'], // 1609:2440
+    ['l06-location-revoke-dialog', 'l06 · 위치정보 동의 dialog'], // 1610:2440
+    ['l06-location-consent-denied', 'l06 · 위치정보 동의 permission-denied'], // 1612:2440
+    ['l07-affiliate-default', 'l07 · 제휴 고지 default'], // 1615:2440
+    ['l07-affiliate-error', 'l07 · 제휴 고지 error'], // 1616:2440
+  ];
+
+  it('band l 이 정확히 25키이고 키·라벨이 Figma 프레임 목록과 완전 일치한다', () => {
+    // 준비: band 'l' 엔트리만 골라 (key\tlabel) 정렬 집합으로.
+    const lStates = PREVIEW_STATES.filter((state) => state.band === 'l');
+    const actual = lStates
+      .map((state) => `${state.key}\t${state.label}`)
+      .sort();
+    const expected = EXPECTED_L_PAIRS.map(
+      ([key, label]) => `${key}\t${label}`
+    ).sort();
+
+    // 단언: 25키 + (키,라벨) 집합 완전 일치(프레임 없는 settings-preferences-error 잔재·2단 누락 차단).
+    expect(lStates).toHaveLength(25);
+    expect(actual).toEqual(expected);
+  });
+
+  it('삭제한 키의 전용 픽스처(미설정 취향)가 preview.tsx 에 고아로 남지 않는다', () => {
+    // 준비: 프리뷰 원문.
+    const source = readFileSync(
+      resolve(__dirname, '../app/_dev/preview.tsx'),
+      'utf8'
+    );
+
+    // 단언: 앵커(형제 픽스처는 settings-preferences 가 계속 쓴다) + 고아 이름 부재.
+    expect(source.includes('SETTINGS_PREF_PREVIEW_SELECTION')).toBe(true);
+    expect(source.includes('SETTINGS_PREF_PREVIEW_EMPTY')).toBe(false);
   });
 });

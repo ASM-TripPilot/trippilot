@@ -1927,16 +1927,6 @@ const SETTINGS_PREF_PREVIEW_SELECTION: PreferenceSelection = {
   petFlag: true,
   budgetTier: '중간',
 };
-const SETTINGS_PREF_PREVIEW_EMPTY: PreferenceSelection = {
-  styles: null,
-  activities: null,
-  transportModes: null,
-  foodTastes: null,
-  pace: null,
-  companionTypes: null,
-  petFlag: false,
-  budgetTier: null,
-};
 
 // l01 알림함(TRIP-576) — Figma 1598:2389 의 5행(오늘 3·이전 2). 화면은 VM 만 받는 순수 뷰라
 // 픽스처 한 벌로 default 를, 빈 sections + isEmpty 로 empty 를 낸다(엣지 상태 포함).
@@ -2140,29 +2130,12 @@ export const PREVIEW_STATES: PreviewState[] = [
     // 순수 뷰(PreferencesEditView)에 선택 픽스처를 얹어 태운다(pref1/pref2 정적 패턴과 동형).
     key: 'settings-preferences',
     band: 'l',
-    label: 'l05 · 취향 수정 기본',
+    label: 'l05 · 여행 취향 편집 default',
     login: null,
     render: () => (
       <PreferencesEditView
         selection={SETTINGS_PREF_PREVIEW_SELECTION}
         saveError={false}
-        onToggle={noop}
-        onTogglePet={noop}
-        onSave={noop}
-        onBack={noop}
-      />
-    ),
-  },
-  {
-    // 엣지: 미설정(전 축 null) + 400 저장 실패 인라인 오류(INV-4) 동시 얼굴.
-    key: 'settings-preferences-error',
-    band: 'l',
-    label: 'l05 · 취향 수정 미설정+400',
-    login: null,
-    render: () => (
-      <PreferencesEditView
-        selection={SETTINGS_PREF_PREVIEW_EMPTY}
-        saveError
         onToggle={noop}
         onTogglePet={noop}
         onSave={noop}
@@ -4503,7 +4476,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'my-page-default',
     band: 'l',
-    label: 'l03 · default',
+    label: 'l03 · 마이페이지 default',
     login: null,
     render: () =>
       withShellTabBar(
@@ -4542,7 +4515,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'my-page-empty',
     band: 'l',
-    label: 'l03 · 예정 0·종료 3',
+    label: 'l03 · 마이페이지 empty',
     login: null,
     render: () =>
       withShellTabBar(
@@ -4582,7 +4555,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'my-style-card-insufficient',
     band: 'l',
-    label: 'l03 · 스타일 카드 미달',
+    label: 'l03 · 마이페이지 style-insufficient',
     login: null,
     render: () => (
       <SafeAreaView edges={['top']} style={{ flex: 1 }}>
@@ -4598,7 +4571,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'my-stays-default',
     band: 'l',
-    label: 'l04 · 등록 숙소 2행',
+    label: 'l04 · 등록 숙소·예약 기록 default',
     login: null,
     render: () => (
       <MyStaysScreen
@@ -4614,7 +4587,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'my-stays-empty',
     band: 'l',
-    label: 'l04 · 등록 숙소 0건',
+    label: 'l04 · 등록 숙소·예약 기록 empty',
     login: null,
     render: () => (
       <MyStaysScreen
@@ -4632,7 +4605,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'my-stays-dialog',
     band: 'l',
-    label: 'l04 · 출발점 다이얼로그',
+    label: 'l04 · 등록 숙소·예약 기록 dialog',
     login: null,
     render: () => (
       <View style={StyleSheet.absoluteFill}>
@@ -4653,7 +4626,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'l02-notification-default',
     band: 'l',
-    label: 'l02 · 알림 설정 기본',
+    label: 'l02 · 알림 설정 default',
     login: null,
     render: () => (
       <NotificationSettingsScreen
@@ -4671,7 +4644,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'l02-notification-denied',
     band: 'l',
-    label: 'l02 · 알림 설정 권한 거부',
+    label: 'l02 · 알림 설정 permission-denied',
     login: null,
     render: () => (
       <NotificationSettingsScreen
@@ -5403,7 +5376,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'settings-default',
     band: 'l',
-    label: 'l05 · 설정 기본',
+    label: 'l05 · 설정 default',
     login: null,
     render: () => (
       <SettingsScreen
@@ -5424,7 +5397,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'settings-export-truncated',
     band: 'l',
-    label: 'l05 · 내보내기 잘림',
+    label: 'l05 · 설정 export-truncated',
     login: null,
     render: () => (
       <SettingsScreen
@@ -5445,7 +5418,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'settings-export-error',
     band: 'l',
-    label: 'l05 · 내보내기 실패',
+    label: 'l05 · 설정 export-error',
     login: null,
     render: () => (
       <SettingsScreen
@@ -5465,7 +5438,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'settings-pending',
     band: 'l',
-    label: 'l05 · 삭제 유예',
+    label: 'l05 · 설정 deletion-pending',
     login: null,
     render: () => (
       <SettingsScreen
@@ -5487,7 +5460,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'settings-delete-dialog',
     band: 'l',
-    label: 'l05 · 삭제 다이얼로그',
+    label: 'l05 · 설정 dialog 1단',
     login: null,
     render: () => (
       <View style={StyleSheet.absoluteFill}>
@@ -5507,11 +5480,40 @@ export const PREVIEW_STATES: PreviewState[] = [
       </View>
     ),
   },
+  // 2단(Figma 4531:3018) — 1단 키와 같은 배경에 게이트 컴포넌트 실물을 2단부터 연다. 문구는 코드
+  // (30일 유예, TRIP-935 Q7)가 정본이라 Figma "되돌릴 수 없어요"와 다른 것이 의도다.
+  {
+    key: 'settings-delete-dialog-final',
+    band: 'l',
+    label: 'l05 · 설정 dialog 2단',
+    login: null,
+    render: () => (
+      <View style={StyleSheet.absoluteFill}>
+        <SettingsScreen
+          {...L05_SETTINGS_BASE}
+          deletionState="active"
+          currentNickname="여행자123"
+          onPressBack={noop}
+          onSubmitNickname={noop}
+          onPressExport={noop}
+          onPressDeleteAccount={noop}
+          onPressCancelDeletion={noop}
+          onPressOsmCopyright={noop}
+          appVersion="0.1.0"
+        />
+        <DeleteAccountDialog
+          onCancel={noop}
+          onConfirmDeletion={noop}
+          initialStep="confirm2"
+        />
+      </View>
+    ),
+  },
   // l06 위치정보 동의 — 동의 ON default. 용도 3항목·계속 배너 육안 대조(글리프 SVG·틴트는 jest 사각).
   {
     key: 'l06-location-consent-default',
     band: 'l',
-    label: 'l06 · 위치 동의 ON',
+    label: 'l06 · 위치정보 동의 default',
     login: null,
     render: () => (
       <LocationConsentScreen
@@ -5529,7 +5531,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'l06-location-consent-denied',
     band: 'l',
-    label: 'l06 · 위치 동의 거부',
+    label: 'l06 · 위치정보 동의 permission-denied',
     login: null,
     render: () => (
       <LocationConsentScreen
@@ -5548,7 +5550,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'l06-location-revoke-dialog',
     band: 'l',
-    label: 'l06 · 철회 다이얼로그',
+    label: 'l06 · 위치정보 동의 dialog',
     login: null,
     render: () => (
       <View style={StyleSheet.absoluteFill}>
@@ -5574,7 +5576,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'l07-affiliate-default',
     band: 'l',
-    label: 'l07 · 제휴 고지',
+    label: 'l07 · 제휴 고지 default',
     login: null,
     render: () => (
       <View style={StyleSheet.absoluteFill}>
@@ -5601,7 +5603,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'l07-affiliate-error',
     band: 'l',
-    label: 'l07 · 제휴 고지 실패',
+    label: 'l07 · 제휴 고지 error',
     login: null,
     render: () => (
       <View style={StyleSheet.absoluteFill}>
@@ -5630,7 +5632,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'l05-personalization-applied',
     band: 'l',
-    label: 'l05 · 개인화 반영중',
+    label: 'l05 · 개인화 applied',
     login: null,
     render: () => (
       <PersonalizationScreen
@@ -5649,7 +5651,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'l05-personalization-consent-missing',
     band: 'l',
-    label: 'l05 · 개인화 미동의',
+    label: 'l05 · 개인화 consent-missing',
     login: null,
     render: () => (
       <PersonalizationScreen
@@ -5665,7 +5667,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'l05-personalization-not-enough',
     band: 'l',
-    label: 'l05 · 개인화 기록부족',
+    label: 'l05 · 개인화 not-enough',
     login: null,
     render: () => (
       <PersonalizationScreen
@@ -5681,7 +5683,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'notification-inbox-default',
     band: 'l',
-    label: 'l01 · 알림함 기본',
+    label: 'l01 · 알림 default',
     login: null,
     render: () => (
       <NotificationInboxScreen
@@ -5697,7 +5699,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'notification-inbox-empty',
     band: 'l',
-    label: 'l01 · 알림함 빈 상태',
+    label: 'l01 · 알림 empty',
     login: null,
     render: () => (
       <NotificationInboxScreen

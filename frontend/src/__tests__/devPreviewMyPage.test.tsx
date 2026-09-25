@@ -213,12 +213,13 @@ describe('TRIP-776 · my-page-empty 프리뷰 (AC-8)', () => {
     ).toBeOnTheScreen();
   });
 
-  it('라벨이 종료 3건을 반영한다(옛 "예정 0·종료 0" 이 아니다)', () => {
+  it('라벨이 l03 코드로 시작하고 옛 "예정 0·종료 0" 이 아니다', () => {
     const state = PREVIEW_STATES.find((s) => s.key === 'my-page-empty');
 
     expect(state).toBeDefined();
     expect(state?.label).not.toBe('l03 · 예정 0·종료 0');
     expect(state?.label).toMatch(/^l03 · /);
-    expect(state?.label).toMatch(/종료 3/);
+    // TRIP-772: l 라벨을 Figma 프레임 이름(`l03 · 마이페이지 empty`)으로 통일해 픽스처 수("종료 3")
+    // 단언은 뺐다 — 정확한 라벨은 devPreviewBandNav 'TRIP-772' describe 가 못박는다.
   });
 });
