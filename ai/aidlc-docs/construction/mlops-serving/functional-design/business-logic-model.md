@@ -26,7 +26,7 @@ ai/
     measure_triton_embedding.py   M-1 A/B 하네스 (동등성 + 지연)
     measure_embedding_precision.py  측정 규약의 정본 (TRIP-518)
     smoke_reminder_copy.py        M-2 실호출 스모크 + assert_served_model
-  main.py::_local_route           M-2 전송로 선택 (ARN 우선)
+  main.py::_local_route           M-2 전송로 선택 (TRIPPILOT_REMINDER_TRANSPORT > ARN)
 deploy/eks/chart/templates/
   hpa.yaml                        ai·gateway HPA (기본 꺼짐)
   reminder-llm.yaml               M-2 인클러스터 Triton + KEDA 0↔1 (기본 꺼짐)
@@ -49,7 +49,8 @@ deploy/eks/chart/templates/
           └ HttpEmbeddingAdapter    ② POST /embed  (응답의 model·dim 대조, 다르면 거부)
               └ embedding 서비스    ③ EMBEDDING_BACKEND 분기
                    ├ sentence-transformers (기본, 프로세스 안)
-                   └ triton → ONNX Runtime (별도 컨테이너, 꺼짐)
+                   ├ onnx   → ONNX Runtime, **프로세스 안** (TRIP-965, 꺼짐)
+                   └ triton → ONNX Runtime, 별도 컨테이너 (측정용, 꺼짐)
 ```
 
 **①이 있는 이유**: 요청 1건이 임베딩을 **직렬 3회** 부르는데(SCHEDULE·SITUATION·PERSONA)
@@ -85,22 +86,33 @@ deploy/eks/chart/templates/
 
 ## 4. 전환 절차 — Bedrock(다리) → EKS GPU(목표)
 
-사용자 결정(2026-09-26): **EKS GPU 가 목표, Bedrock 은 쿼터가 올 때까지의 다리.**
+사용자 결정(2026-09-26, 이 세션): **EKS GPU 가 목표, Bedrock 은 쿼터가 올 때까지의 다리.**
 
-전환은 파드를 띄우는 일이 아니다. **ARN 을 내리는 일**이다 — 우선순위 규칙상 ARN 이 살아
-있으면 파드를 켜도 트래픽이 안 간다.
+> ⚠️ **같은 날 반대 방향의 기록이 하나 더 있다 — 확인 전까지 이 절을 근거로 삼지 마라.**
+> 서빙 트랙 세션이 PR [#750](https://github.com/ASM-TripPilot/trippilot/pull/750)(ADR AI-D08,
+> 열림)에 **"실서비스 = Bedrock, EKS GPU 는 측정 실험이고 더 싸면 전환"** 으로 적었다.
+> 두 기록은 **목표와 실험의 이름표가 반대**다. 사용자 확인을 요청해 둔 상태이고, 그 답에
+> 따라 이 절의 한 줄만 바뀐다.
+>
+> **아래 절차와 코드는 어느 쪽이든 그대로다** — 전송로를 값으로 고르는 구조라, 어느 쪽을
+> "목표"로 부르든 조작은 같고 되돌리기도 같다. 이름표가 정해지기 전에도 실험은 돌릴 수 있다.
+
+전환은 파드를 띄우는 일이 아니다. **전송로를 고르는 일**이다 — 우선순위 규칙상 ARN 이 살아
+있으면 파드를 켜도 트래픽이 안 간다. `reminderLlm.transport`(→ `TRIPPILOT_REMINDER_TRANSPORT`)
+가 그 선택이고, **ARN 을 지우지 않는다** — 되돌리기가 값 하나여야 실험이 성립한다.
 
 ```
 ① GPU 서비스 쿼터 신청            ← 리드타임 수일, 가장 먼저 (TRIP-961)
 ② GPU NodePool · device plugin · KEDA 설치   ← 백엔드 (infra/terraform)
-③ 모델 가중치 PVC 적재 + reminderLlm.enabled=true
-④ 파드가 Ready 인지 확인 — 이 시점에도 트래픽은 여전히 Bedrock 이다
+③ 모델 가중치 PVC 적재
+④ reminderLlm.enabled=true · transport=bedrock  ← 파드는 뜨고 트래픽은 그대로(섀도)
 ⑤ smoke_reminder_copy.py 로 인클러스터 경로 단독 검증 (base_url 직접 지정)
-⑥ 비용 비교 — EKS 가 "1건 1.4초 · CMU 1 · 5분 창 과금"보다 싼지
-⑦ 싸면 ARN 제거 → 트래픽 이동. 아니면 ③~⑤를 되돌리고 Bedrock 유지
+⑥ transport=local  ← 트래픽 이동. **ARN 은 그대로 둔다**
+⑦ 비용 비교 — EKS 가 "1건 1.4초 · CMU 1 · 5분 창 과금"보다 싼지
+⑧ 싸면 유지. 아니면 transport=bedrock 으로 **값 하나** 되돌림
 ```
 
-**되돌리기는 ARN 을 다시 넣는 것**이고 재배포 한 번이다. 그래서 ⑦을 되돌릴 수 없는 결정으로
+**되돌리기는 값 하나다.** 그래서 ⑥을 되돌릴 수 없는 결정으로
 다루지 않는다.
 
 ---

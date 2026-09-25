@@ -340,6 +340,14 @@
           "type": "string",
           "pattern": "^local[a-zA-Z0-9._-]*$"
         },
+        "transport": {
+          "type": "string",
+          "enum": [
+            "",
+            "bedrock",
+            "local"
+          ]
+        },
         "image": {
           "type": "object",
           "additionalProperties": false,

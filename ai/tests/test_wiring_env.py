@@ -389,6 +389,66 @@ def test_vector_rag_local_without_package_fails_fast(monkeypatch) -> None:
         main._vector_rag()
 
 
+def test_transport_switch_can_pick_local_while_the_arn_stays(monkeypatch) -> None:
+    """ARN 을 지우지 않고 전송로를 고른다 — 없으면 EKS 실험이 PR 로 성립하지 않는다.
+
+    우선순위 규칙(ARN 이 이긴다)만 있으면 다른 경로를 재려면 Secrets Manager 에서 ARN 을
+    **지워야** 한다. 그건 되돌리기가 배포인 조작이라 실험이 아니라 전환이 된다.
+    """
+    monkeypatch.setenv("TRIPPILOT_LLM_FEATURE_MODELS", "REMINDER_COPY=local-x")
+    monkeypatch.setenv("TRIPPILOT_BEDROCK_MODEL_ARN", "arn:aws:bedrock:us-east-1:1:imported-model/x")
+    monkeypatch.setenv("TRIPPILOT_LOCAL_LLM_BASE_URL", "http://reminder-llm:8000/v1")
+    monkeypatch.setenv("TRIPPILOT_REMINDER_TRANSPORT", "local")
+
+    from trippilot.llm_gateway.adapters.openai_adapter import OpenAIAdapter
+
+    route = main._local_route(main._feature_models_from_env())
+    assert isinstance(route["local"], OpenAIAdapter)
+
+
+def test_transport_switch_unset_keeps_todays_behaviour(monkeypatch) -> None:
+    # 기본값이 동작을 바꾸면 이 스위치 자체가 사고다 — 미설정은 종전 그대로(ARN 이 이긴다).
+    monkeypatch.setenv("TRIPPILOT_LLM_FEATURE_MODELS", "REMINDER_COPY=local-x")
+    monkeypatch.setenv("TRIPPILOT_BEDROCK_MODEL_ARN", "arn:aws:bedrock:us-east-1:1:imported-model/x")
+    monkeypatch.setenv("TRIPPILOT_LOCAL_LLM_BASE_URL", "http://reminder-llm:8000/v1")
+    monkeypatch.delenv("TRIPPILOT_REMINDER_TRANSPORT", raising=False)
+
+    import sys as _sys
+    import types as _types
+
+    from trippilot.llm_gateway.adapters.bedrock_adapter import BedrockAdapter
+
+    # boto3 는 프로젝트 의존성이 아니다(의도 — Titan 어댑터 선례). 클라이언트는 주입이라
+    # 스텁으로 충분하고, 여기서 보는 것은 **어느 어댑터가 조립되는가** 하나다.
+    stub = _types.ModuleType("boto3")
+    stub.client = lambda *args, **kwargs: object()
+    monkeypatch.setitem(_sys.modules, "boto3", stub)
+
+    route = main._local_route(main._feature_models_from_env())
+    assert isinstance(route["local"], BedrockAdapter)
+
+
+def test_transport_switch_typo_fails_startup(monkeypatch) -> None:
+    # `bedrcok` 이 조용히 로컬로 떨어지면 실서비스가 개발 서버로 나간다.
+    monkeypatch.setenv("TRIPPILOT_LLM_FEATURE_MODELS", "REMINDER_COPY=local-x")
+    monkeypatch.setenv("TRIPPILOT_BEDROCK_MODEL_ARN", "arn:aws:bedrock:us-east-1:1:imported-model/x")
+    monkeypatch.setenv("TRIPPILOT_REMINDER_TRANSPORT", "bedrcok")
+
+    with pytest.raises(RuntimeError, match="TRIPPILOT_REMINDER_TRANSPORT"):
+        main._local_route(main._feature_models_from_env())
+
+
+def test_transport_local_without_base_url_fails_startup(monkeypatch) -> None:
+    # 고르고 주소를 안 준 것은 설정 버그다 — Bedrock 으로 조용히 되돌아가지 않는다.
+    monkeypatch.setenv("TRIPPILOT_LLM_FEATURE_MODELS", "REMINDER_COPY=local-x")
+    monkeypatch.setenv("TRIPPILOT_BEDROCK_MODEL_ARN", "arn:aws:bedrock:us-east-1:1:imported-model/x")
+    monkeypatch.delenv("TRIPPILOT_LOCAL_LLM_BASE_URL", raising=False)
+    monkeypatch.setenv("TRIPPILOT_REMINDER_TRANSPORT", "local")
+
+    with pytest.raises(RuntimeError, match="TRIPPILOT_LOCAL_LLM_BASE_URL"):
+        main._local_route(main._feature_models_from_env())
+
+
 def test_vector_rag_wraps_the_embedding_in_a_cache(monkeypatch) -> None:
     """요청 경로의 임베딩은 캐시를 거친다 — 닫힌 질의 28가지가 매번 재계산되던 것.
 

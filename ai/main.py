@@ -415,7 +415,24 @@ def _local_route(feature_models: Mapping[LlmFeature, str]) -> dict[str, object]:
     if not any(str(m).lower().startswith(_LOCAL_PREFIX) for m in feature_models.values()):
         return {}
 
+    # `TRIPPILOT_REMINDER_TRANSPORT` 은 **ARN 을 지우지 않고** 전송로를 고르는 자리다.
+    # 우선순위 규칙만 있으면 다른 경로를 재려고 Secrets Manager 에서 ARN 을 지워야 하고,
+    # 그건 되돌리기가 배포인 조작이라 실험이 아니라 전환이 된다. 미설정이면 종전 그대로다.
+    transport = _env("TRIPPILOT_REMINDER_TRANSPORT")
+    if transport is not None and transport not in ("bedrock", "local"):
+        raise RuntimeError(
+            f"TRIPPILOT_REMINDER_TRANSPORT={transport!r} — 'bedrock' 또는 'local'. "
+            "오타가 조용히 한쪽으로 떨어지면 실서비스가 개발 서버로 나간다"
+        )
+
     model_arn = _env("TRIPPILOT_BEDROCK_MODEL_ARN")
+    if transport == "local":
+        model_arn = None  # 명시적으로 고른 것 — ARN 이 남아 있어도 안 쓴다
+    elif transport == "bedrock" and not model_arn:
+        raise RuntimeError(
+            "TRIPPILOT_REMINDER_TRANSPORT=bedrock 인데 TRIPPILOT_BEDROCK_MODEL_ARN 미설정 "
+            "— 고르고 주소를 안 준 것은 설정 버그다"
+        )
     if model_arn:
         import boto3
 

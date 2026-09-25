@@ -70,6 +70,12 @@ reminderLlm:
   # This exact string is also the Triton model repository directory and the
   # TRIPPILOT_LLM_FEATURE_MODELS assignment. It must start with "local".
   servedModelName: local-reminder-qwen3-4b-v1
+  # Which transport the app uses for the fine-tuned model: "" (unset, today's
+  # behaviour — the Bedrock ARN wins when present), "bedrock", or "local".
+  # Setting "local" lets the in-cluster path be exercised WITHOUT deleting the
+  # ARN from Secrets Manager, which is what makes it an experiment rather than
+  # a migration: rolling back is a value change, not a secret restore.
+  transport: ""
   image:
     repository: nvcr.io/nvidia/tritonserver
     tag: 24.08-vllm-python-py3

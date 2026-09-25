@@ -185,6 +185,30 @@ class ChartTests(unittest.TestCase):
         env = {item["name"]: item for item in ai["spec"]["template"]["spec"]["containers"][0]["env"]}
         self.assertEqual(env["TRIPPILOT_LOCAL_LLM_BASE_URL"]["value"],
                          "http://reminder-llm:8000/v1")
+        # 주소만 박으면 Bedrock ARN 이 살아 있는 한 트래픽이 안 온다. 전송로를 값으로
+        # 고를 수 있어야 ARN 을 지우지 않고 실험이 된다.
+        self.assertEqual(env["TRIPPILOT_REMINDER_TRANSPORT"]["value"], "local")
+
+    def test_reminder_transport_is_absent_while_the_pod_is_off(self):
+        # 파드를 안 띄우는데 전송로를 정하면 종전 동작을 건드린다 — 아무것도 렌더하지 않는다.
+        ai = next(item for item in render()
+                  if item["kind"] == "Deployment" and item["metadata"]["name"] == "ai")
+        names = {item["name"] for item in ai["spec"]["template"]["spec"]["containers"][0]["env"]}
+        self.assertNotIn("TRIPPILOT_REMINDER_TRANSPORT", names)
+
+    def test_reminder_transport_can_run_the_pod_warm_without_traffic(self):
+        # 파드는 띄우되 트래픽은 Bedrock 에 두는 구성(섀도) — 전환 전에 기동만 확인할 때.
+        documents = render(overrides=["--set", "reminderLlm.enabled=true",
+                                      "--set", "reminderLlm.transport=bedrock"])
+        ai = next(item for item in documents
+                  if item["kind"] == "Deployment" and item["metadata"]["name"] == "ai")
+        env = {item["name"]: item for item in ai["spec"]["template"]["spec"]["containers"][0]["env"]}
+        self.assertEqual(env["TRIPPILOT_REMINDER_TRANSPORT"]["value"], "bedrock")
+
+    def test_reminder_transport_rejects_an_unknown_value(self):
+        with self.assertRaises(subprocess.CalledProcessError):
+            render(overrides=["--set", "reminderLlm.enabled=true",
+                              "--set", "reminderLlm.transport=bedrcok"])
 
     def test_embedding_autoscaling_key_is_rejected(self):
         # 임베딩은 파드당 4.2 GiB·모델 로드 수십 초라 늘려도 늦다. 스키마가 막는다.

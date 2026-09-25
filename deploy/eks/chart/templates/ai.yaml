@@ -61,6 +61,17 @@ spec:
             {{- if .Values.reminderLlm.enabled }}
             - name: TRIPPILOT_LOCAL_LLM_BASE_URL
               value: http://reminder-llm:8000/v1
+            {{- /* Address alone is not enough: while a Bedrock ARN is present it wins,
+                   so the in-cluster pod would sit idle with no error at all. This value
+                   picks the transport without deleting the ARN — rollback is a value
+                   change, not a secret restore.
+
+                   Enabling the pod defaults to sending it traffic, because a pod nobody
+                   calls is the trap above. Set transport=bedrock to run it warm without
+                   traffic (shadow); the app then requires the ARN and fails startup if
+                   it is missing, which is the explicit error we want. */}}
+            - name: TRIPPILOT_REMINDER_TRANSPORT
+              value: {{ .Values.reminderLlm.transport | default "local" | quote }}
             {{- end }}
             {{- if .Values.embedding.enabled }}
             {{- include "trippilot.secretEnv" (dict "env" "TRIPPILOT_VECTOR_DB_URL" "secret" "trippilot-ai") | nindent 12 }}
