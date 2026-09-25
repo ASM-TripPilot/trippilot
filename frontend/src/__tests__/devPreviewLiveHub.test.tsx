@@ -969,10 +969,10 @@ describe('🔴 TRIP-755 · i10 현재 장소 상세 프리뷰 (AC-11)', () => {
     expect(screen.getByTestId('execution-place-photo-count')).toHaveTextContent(
       '1 / 42'
     );
-    // 원형 버튼 — Figma 에 있으니 프리뷰는 빈 핸들러로 뒤로·공유를 켠다(하트는 항상).
+    // 원형 버튼 — 프리뷰는 빈 핸들러로 뒤로·공유를 켠다. 하트는 없다(2026-09-25 결정, Figma 와 차이).
     expect(screen.getByTestId('execution-place-back')).toBeTruthy();
     expect(screen.getByTestId('execution-place-share')).toBeTruthy();
-    expect(screen.getByTestId('execution-place-save')).toBeTruthy();
+    expect(screen.queryByTestId('execution-place-save')).toBeNull();
 
     // 단언 ② — 추천 카피: 제목은 Figma 레이어명 = 내용이라 완전일치, 본문은 원문 미확인이라 비어 있지
     //   않음만(02a D-i).

@@ -4,10 +4,9 @@ import {
   screen,
   within,
 } from '@testing-library/react-native';
-import type { ReactTestInstance } from 'react-test-renderer';
 
 import type { PlaceDetailView } from '@/features/execution/model/placeDetailView';
-import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
+import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
 
 import { BackArrowGlyph, ShareGlyph } from './ExecutionGlyphs';
 import { PlaceDetailScreen } from './PlaceDetailScreen';
@@ -16,10 +15,10 @@ import { PlaceDetailScreen } from './PlaceDetailScreen';
  * TRIP-755 · PlaceDetailScreen(i10) — 여행 중 현재 장소 상세, Figma 4159:2673 재작성.
  *
  * 무엇을 보장하나:
- *  - 표면 = 갤러리 히어로(장소명·핀 부제·"1 / N") + 원형 버튼(뒤로·공유·하트) · 추천 카피 · 태그 ·
+ *  - 표면 = 갤러리 히어로(장소명·핀 부제·"1 / N") + 원형 버튼(뒤로·공유) · 추천 카피 · 태그 ·
  *    정보 카드(영업시간·주소·입장료) · 지도 · "이곳의 사진". 옛 제목·"지금 여기"·하단 CTA 는 없다.
  *  - 계약 공백 필드(카피·주소·입장료·사진 수)는 값이 있을 때만 그리거나 "미확인"으로 적는다(INV-1·BR-U4-40).
- *  - 하트는 저장하지 않는다 — 누르면 "준비 중" 한 줄만 뜨고 하트 모양은 그대로다(저장 거짓말 금지).
+ *  - 하트(저장) 버튼·"준비 중" 안내는 없다(사용자 결정 2026-09-25 — 저장 계약 부재, 반응 없는 버튼 금지).
  *  - 소요시간 단위 문자열은 화면 어디에도 없다(INV-3).
  *
  * TRIP-939(심사 2.1) 계승: 핸들러 없는 버튼 그림은 여전히 그리지 않는다(S6 ①). 이번엔 버튼에 핸들러가
@@ -58,24 +57,6 @@ const PHOTOS = [
   'file:///g4.jpg',
   'file:///g5.jpg',
 ];
-
-/**
- * 하트 서브트리의 "모양" — 호스트 노드의 타입과 props(함수·children 제외)를 통째로 직렬화한다.
- * SVG `fill`/`stroke` 도 여기 실린다(색은 정수 payload 로 바뀌므로 hex 로 찾지 말고 전후 비교만 한다).
- * 글리프 안에서 fill 만 바꾸는 "저장된 척"도 이 문자열을 바꾼다(02a ★1 — cardFingerprint 가 못 보는 축).
- */
-function hostShape(node: ReactTestInstance): unknown {
-  const kids = node.children.map((child) =>
-    typeof child === 'string' ? child : hostShape(child)
-  );
-  if (typeof node.type !== 'string') return kids;
-  const props = Object.fromEntries(
-    Object.entries(node.props).filter(
-      ([key, value]) => key !== 'children' && typeof value !== 'function'
-    )
-  );
-  return { type: node.type, props, children: kids };
-}
 
 describe('PlaceDetailScreen (i10)', () => {
   it('S1 정상 — 장소명·영업시간·주소·입장료를 각 leaf 로 그리고, "다음 일정까지"는 없다 (AC-2·AC-7)', () => {
@@ -210,8 +191,8 @@ describe('PlaceDetailScreen (i10)', () => {
     expect(screen.queryByTestId('execution-place-share')).toBeNull();
     expect(screen.UNSAFE_queryAllByType(BackArrowGlyph)).toHaveLength(0);
     expect(screen.UNSAFE_queryAllByType(ShareGlyph)).toHaveLength(0);
-    // 짝 앵커 — 하트는 콜백과 무관하게 항상 있다(누르면 안내가 뜨는 반응이 있다, 02a D-a).
-    expect(screen.getByTestId('execution-place-save')).toBeTruthy();
+    // 하트는 콜백 유무와 무관하게 없다(2026-09-25 결정).
+    expect(screen.queryByTestId('execution-place-save')).toBeNull();
 
     // ② 콜백 둘 — 준비
     const onPressBack = jest.fn();
@@ -235,45 +216,24 @@ describe('PlaceDetailScreen (i10)', () => {
     expect(onPressBack).toHaveBeenCalledTimes(1);
   });
 
-  it('S7 하트 — 누르면 "저장 기능은 준비 중이에요" 한 줄만 뜨고, 하트 모양·선택 상태는 그대로다 (AC-4 · 저장 거짓말 금지)', () => {
-    // 준비
-    render(<PlaceDetailScreen view={view()} />);
-    const before = JSON.stringify(
-      hostShape(screen.getByTestId('execution-place-save'))
+  it('S7 하트 — 저장 버튼·"준비 중" 안내·하트 글리프가 어디에도 없다 (2026-09-25 결정 · TRIP-939)', () => {
+    // 준비·실행 — 뒤로·공유 콜백까지 다 준 가장 풍부한 얼굴에서도.
+    render(
+      <PlaceDetailScreen
+        view={view()}
+        onPressBack={jest.fn()}
+        onPressShare={jest.fn()}
+      />
     );
-    // 공허 방지 — 하트 글리프가 실제로 그려졌다(SVG Path 가 모양에 실렸다).
-    expect(before).toContain('RNSVGPath');
+
+    // 단언 — 버튼·안내 testID 부재 + 빈/찬 하트 글리프 0(다른 testID 로 되살아나도 잡는다).
+    expect(screen.queryByTestId('execution-place-save')).toBeNull();
     expect(screen.queryByTestId('execution-place-save-notice')).toBeNull();
-
-    // 실행 — 두 번 누른다(토글형 거짓말이면 두 번째에 되돌아가 우연히 같아질 수 있어 매번 잰다).
-    fireEvent.press(screen.getByTestId('execution-place-save'));
-    const afterFirst = JSON.stringify(
-      hostShape(screen.getByTestId('execution-place-save'))
-    );
-    fireEvent.press(screen.getByTestId('execution-place-save'));
-    const afterSecond = JSON.stringify(
-      hostShape(screen.getByTestId('execution-place-save'))
-    );
-
-    // 단언 ① — 안내 한 줄(완전일치)이 정확히 하나.
-    expect(screen.getAllByTestId('execution-place-save-notice')).toHaveLength(
-      1
-    );
-    expect(screen.getByTestId('execution-place-save-notice')).toHaveTextContent(
-      '저장 기능은 준비 중이에요'
-    );
-
-    // 단언 ② — 하트 서브트리 모양(글리프 fill·stroke·className 포함)이 누르기 전과 같다.
-    expect(afterFirst).toBe(before);
-    expect(afterSecond).toBe(before);
-
-    // 단언 ③ — 빈 하트 글리프 그대로, 찬 하트는 트리 어디에도 없다, 선택됨이 아니다.
-    const heart = screen.getByTestId('execution-place-save');
-    expect(
-      within(heart).getByTestId('execution-place-save-outline')
-    ).toBeTruthy();
+    expect(screen.queryByText('저장 기능은 준비 중이에요')).toBeNull();
+    expect(screen.UNSAFE_queryAllByType(HeartOutlineGlyph)).toHaveLength(0);
     expect(screen.UNSAFE_queryAllByType(HeartFilledGlyph)).toHaveLength(0);
-    expect(heart).not.toBeSelected();
+    // 앵커 — 원형 버튼 줄 자체는 살아 있다(공허 통과 방지).
+    expect(screen.getByTestId('execution-place-share')).toBeTruthy();
   });
 
   it('S8 히어로 — 갤러리는 가로 한 장씩 넘기는 스크롤이고, 사진 수가 있으면 "1 / N" 칩을 단다 (AC-8 · Q9)', () => {

@@ -23,8 +23,8 @@ import { LivePlacePage } from './LivePlacePage';
  *  - poiId 가 어느 슬롯에도 없으면 "장소를 찾을 수 없어요" 얼굴(I2, AC-7·D8) — 상세 화면 아님.
  *  - TRIP-755(i10 재작성): 하단 [일정에서 보기]/[길찾기]·"지금 여기"는 없고, 원형 뒤로는 히스토리가
  *    있으면 back·없으면(콜드 딥링크) 여행 중 허브로 replace(I3 — TRIP-939 I3 반전). 운영 조립은 주소·
- *    입장료를 "미확인"으로, 카피·사진 섹션은 안 그린다(I6). 공유는 OS 공유 시트에 장소명(I7). 하트는
- *    저장 요청 없이 "준비 중" 한 줄만(I8).
+ *    입장료를 "미확인"으로, 카피·사진 섹션은 안 그린다(I6). 공유는 OS 공유 시트에 장소명(I7).
+ *    하트(저장) 버튼은 없다(I8, 2026-09-25 결정).
  *  - 조회 로딩 창에서 notFound 가 깜빡이지 않고 loading 얼굴이 선다(I5, 5-b 경고-3 봉합).
  *
  * 왜 통합 버킷인가: buildPlaceDetailView 의 poiId 탐색이 실 조회 데이터에서 갈리므로,
@@ -106,17 +106,10 @@ function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
-// 요청 로그(I8 — 하트가 저장 요청을 보내지 않는지). 리스너는 한 번만 걸고 매 테스트 비운다(savedStays 선례).
-let requestLog: string[] = [];
-
 beforeAll(() => {
   server.listen({ onUnhandledRequest: 'error' });
-  server.events.on('request:start', ({ request }) => {
-    requestLog.push(`${request.method} ${new URL(request.url).pathname}`);
-  });
 });
 beforeEach(() => {
-  requestLog = [];
   setAccessToken('a');
   mockCanGoBack.mockReset();
   mockCanGoBack.mockReturnValue(true);
@@ -270,23 +263,13 @@ describe('LivePlacePage', () => {
     shareSpy.mockRestore();
   });
 
-  it('I8 하트 — 저장 요청을 보내지 않고 "준비 중" 한 줄만 띄운다 (TRIP-755 AC-4)', async () => {
-    // 준비
+  it('I8 하트 없음 — 저장 버튼과 "준비 중" 안내가 페이지에 없다 (2026-09-25 결정)', async () => {
+    // 준비·실행
     await renderP1();
 
-    // 실행
-    fireEvent.press(screen.getByTestId('execution-place-save'));
-
-    // 단언 ① — 안내(완전일치) + 선택됨이 아니다.
-    expect(screen.getByTestId('execution-place-save-notice')).toHaveTextContent(
-      '저장 기능은 준비 중이에요'
-    );
-    expect(screen.getByTestId('execution-place-save')).not.toBeSelected();
-
-    // 단언 ② — 조회(GET) 외 요청 0건. 도달 앵커: 로그가 실제로 기록되고 있었다(02a ★12).
-    await waitFor(() =>
-      expect(requestLog).toContain(`GET /api/v1/trips/${TRIP_ID}/itinerary`)
-    );
-    expect(requestLog.filter((hit) => !hit.startsWith('GET '))).toEqual([]);
+    // 단언 — 저장 수단이 아예 없다(앵커: 공유 버튼은 페이지 배선으로 떠 있다).
+    expect(screen.queryByTestId('execution-place-save')).toBeNull();
+    expect(screen.queryByTestId('execution-place-save-notice')).toBeNull();
+    expect(screen.getByTestId('execution-place-share')).toBeTruthy();
   });
 });

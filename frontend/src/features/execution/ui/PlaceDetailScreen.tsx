@@ -1,5 +1,4 @@
 import type { ReactElement, ReactNode } from 'react';
-import { useState } from 'react';
 import {
   Image,
   Pressable,
@@ -14,7 +13,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import { PlaceSubtitle } from '@/entities/place/ui/PlaceSubtitle';
 import { MapView } from '@/shared/map';
-import { HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
 
 import type { PlaceDetailView } from '../model/placeDetailView';
 import {
@@ -35,8 +33,8 @@ import {
  *  - 계약 공백 필드(카피·사진 수·갤러리 2장째부터)는 값이 있을 때만 그린다(INV-1). 주소·입장료
  *    결측은 행을 지우지 않고 다른 testID 로 "미확인"(BR-U4-40, `-unknown-{field}`).
  *  - 뒤로·공유·모두 보기는 콜백이 있을 때만 그린다(TRIP-939 — 반응 없는 버튼 금지).
- *  - 하트는 저장하지 않는다 — 누르면 "준비 중" 한 줄만 뜨고 글리프·selected 는 그대로다(BR-U4-38,
- *    저장 거짓말 금지). 그래서 콜백 prop 이 없고 항상 그린다.
+ *  - 하트(저장) 버튼은 두지 않는다 — 장소 저장 계약이 없고 '준비 중' 안내도 빼기로 했다(사용자 결정 2026-09-25,
+ *    Figma 와 차이). 반응 없는 버튼은 그리지 않는다(TRIP-939).
  *  - "다음 일정까지"(여유) 행은 두지 않는다 — Figma 3행 그대로(사용자 결정 2026-09-25 — US-ONTRIP-02 여유 표시 요구와의 차이를 알고 수용).
  *  - 소요시간 단위 문자열은 화면 어디에도 없다(INV-3).
  */
@@ -53,7 +51,6 @@ export interface PlaceDetailScreenProps {
 const SCRIM_COLORS = ['rgba(0,0,0,0)', 'rgba(0,0,0,0.5)'] as const;
 const SCRIM_LOCATIONS = [0.3, 1] as const;
 const THUMB_COUNT = 3;
-const SAVE_NOTICE = '저장 기능은 준비 중이에요';
 
 /** 정보 카드 한 행 — 라벨 + 값 슬롯(값은 결측 스위치·캡션 때문에 호출부가 조립해 넘긴다). */
 function InfoRow({
@@ -104,19 +101,16 @@ function ValueOrUnknown({
 function CircleButton({
   testID,
   onPress,
-  selected,
   children,
 }: {
   testID: string;
   onPress: () => void;
-  selected?: boolean;
   children: ReactNode;
 }): ReactElement {
   return (
     <Pressable
       testID={testID}
       accessibilityRole="button"
-      accessibilityState={selected === undefined ? undefined : { selected }}
       onPress={onPress}
       className="h-[38px] w-[38px] items-center justify-center rounded-pill bg-on-primary"
     >
@@ -132,8 +126,6 @@ export function PlaceDetailScreen({
   onPressSeeAll,
 }: PlaceDetailScreenProps): ReactElement {
   const { width } = useWindowDimensions();
-  // 하트 '준비 중' 안내 — 로컬 상태 한 줄(ShareCardScreen degradeVisible 선례). 하트 자체는 안 바뀐다.
-  const [saveNoticeVisible, setSaveNoticeVisible] = useState(false);
 
   const hasPitch = view.pitchTitle !== null || view.pitchBody !== null;
   const coords =
@@ -203,16 +195,6 @@ export function PlaceDetailScreen({
                 <ShareGlyph size={19} />
               </CircleButton>
             ) : null}
-            <CircleButton
-              testID="execution-place-save"
-              onPress={() => setSaveNoticeVisible(true)}
-              selected={false}
-            >
-              <HeartOutlineGlyph
-                testID="execution-place-save-outline"
-                size={20}
-              />
-            </CircleButton>
           </View>
 
           <View
@@ -384,18 +366,6 @@ export function PlaceDetailScreen({
           ) : null}
         </View>
       </ScrollView>
-
-      {/* 하트 '준비 중' 안내 — 화면 하단 고정, 타이머 없음(d06 SaveErrorBanner 자리). */}
-      {saveNoticeVisible ? (
-        <View className="mx-lg mb-sm rounded-button bg-surface-soft p-md">
-          <Text
-            testID="execution-place-save-notice"
-            className="font-noto text-label text-body"
-          >
-            {SAVE_NOTICE}
-          </Text>
-        </View>
-      ) : null}
     </SafeAreaView>
   );
 }
