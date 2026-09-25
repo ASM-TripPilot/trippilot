@@ -10,13 +10,15 @@
  */
 
 /**
- * 카드가 어느 단에서 나왔나(BR-U5-33). **항상 실린다** — 화면이 구분해 그리지 않더라도 규칙 카드가 몇 %인지 모르면 AI 경로의 값을 잴 근거가 없다. `AI` 는 칸 2·3 에서 개통한다.
+ * 회고 카드 한 장. 서버는 `cover` 밖을 **해석하지 않는다**(DEC-U5-14) — 재검증하면 AI 가 템플릿을 하나 늘릴 때마다 서버 마이그레이션이 된다. 화면은 `templateId` 로 그리는 법을 고른다.
  */
-export type ReflectionSource =
-  (typeof ReflectionSource)[keyof typeof ReflectionSource];
-
-export const ReflectionSource = {
-  AI: 'AI',
-  RULE: 'RULE',
-  BASIC: 'BASIC',
-} as const;
+export interface ReflectionCard {
+  /** 카드를 만든 주체·판(예: backend.rule.daily.v1) */
+  templateId: string;
+  format: string;
+  /** `cover.title`. **목록이 쓰는 짧은 문구**라 따로 낸다 — 클라가 매번 payload 를 파싱하지 않게 */
+  title: string;
+  subtitle: string;
+  /** 카드 원문(JSON 문자열). 서버가 재조립하지 않고 그대로 낸다 */
+  payload: string;
+}

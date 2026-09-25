@@ -582,6 +582,7 @@
 - `src/features/record/ui/VisitTimeSheet.tsx`  →  VisitTimeSheetProps · VisitTimeSheet
 
 ## src/features/reflection/model/
+- `src/features/reflection/model/editCard.ts`  →  buildEditCard
 - `src/features/reflection/model/missingParts.ts`  →  MissingParts · missingParts
 - `src/features/reflection/model/reflectionFallback.ts`  →  resolveDisplayNarrative
 - `src/features/reflection/model/shareCard.ts`  →  ShareFormat · SHARE_FORMATS · ShareCardMode · ShareCardVM · BuildShareCardInput · buildShareCard · formatShareCardStats · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · validateCaption · validateHashtags · captureShareImage
@@ -1175,6 +1176,7 @@
 - `src/shared/api/generated/schemas/putMeLocationConsentBody.ts`  →  PutMeLocationConsentBody
 - `src/shared/api/generated/schemas/putMemoRequest.ts`  →  PutMemoRequest
 - `src/shared/api/generated/schemas/reflection.ts`  →  Reflection
+- `src/shared/api/generated/schemas/reflectionCard.ts`  →  ReflectionCard
 - `src/shared/api/generated/schemas/reflectionList.ts`  →  ReflectionList
 - `src/shared/api/generated/schemas/reflectionSource.ts`  →  ReflectionSource
 - `src/shared/api/generated/schemas/reflectionStats.ts`  →  ReflectionStats
@@ -1360,4 +1362,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 926개 파일
+합계 928개 파일

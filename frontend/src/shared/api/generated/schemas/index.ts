@@ -128,6 +128,7 @@ export * from './pushTokenResponsePlatform';
 export * from './putMeLocationConsentBody';
 export * from './putMemoRequest';
 export * from './reflection';
+export * from './reflectionCard';
 export * from './reflectionList';
 export * from './reflectionSource';
 export * from './reflectionStats';
