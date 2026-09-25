@@ -18,12 +18,16 @@ import { SavedStayPage } from './SavedStayPage';
  * TRIP-461 · e04 저장한 숙소 배선(페이지 층) 승인 테스트 — AC-2·4·5·6·7.
  *
  * 무엇을 보장하나: 페이지가 `GET /saved-stays`를 읽어 카드 N개를 그리고(AC-2), 카드 press 시
- * `SavedStay`를 **e03가 받는 최소 `StayItem`으로 합성**해 넘긴다(AC-5, 01b Q1). 이 합성이
- * 헤드라인이다 — `SavedStay`를 그대로 넘기면 e03의 `isStayItemShape`가 false를 내 notFound를
- * 그린다(브리프 맹점 2). 그래서 이 테스트는 push 된 `item`을 **e03와 똑같은 게이트로** 다시
- * 검문한다(★1). 게스트(미로그인)는 조회를 아예 안 내보내고 게스트 얼굴을 그린다(AC-4·★5).
+ * 상세 라우트로 **`stayId` 하나만** 실어 push 한다(AC-5). 게스트(미로그인)는 조회를 아예 안
+ * 내보내고 게스트 얼굴을 그린다(AC-4·★5).
  *
- * 왜 통합 버킷인가 — 심판 대상이 "서버 데이터로 조립한 push payload"다. 합성·라우팅은 실
+ * TRIP-940 재작성(AC-10 · 01b D0·Q3): 예전엔 `SavedStay`를 e03가 받는 `StayItem`으로 **합성**해
+ * `item`(JSON)으로 넘기고, 그 합성물이 e03 검문 게이트를 통과하는지를 여기서 복제 검문했다. 상세가
+ * `GET /stays/{stayId}`로 스스로 조회하게 되면서 합성·게이트가 모두 사라졌다 — 이제는 "item 을
+ * 싣지 않는다"가 계약이다. 외부키 없는 핀·수동 숙소는 여전히 `savedStayId`로 폴백 push 하고
+ * (Q3 — 상세에서 400 식별자 오류 얼굴을 받는다, 새 티켓 후보: 등록 숙소 상세 정의).
+ *
+ * 왜 통합 버킷인가 — 심판 대상이 "서버 데이터로 조립한 push payload"다. 라우팅 인자는 실
  * react-query 캐시에서 나온 실데이터라야 의미가 있다(d02 `SavedPlacesPage.rowtap` 선례).
  *
  * *(초심자용 개념)*
@@ -52,17 +56,6 @@ jest.mock('expo-router', () => ({
 }));
 
 const BASE = 'http://localhost:8080/api/v1';
-
-/** e03가 손에 든 `item`을 실제로 검문하는 게이트 — `StayDetailPage.tsx:32-39`의 복제.
- * (그 함수는 비-export라 import가 안 돼, 게이트 로직을 문자 그대로 재현한다. 02a §2-2 실측.) */
-function passesE03Gate(value: unknown): boolean {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    !Array.isArray(value) &&
-    Array.isArray((value as { amenities?: unknown }).amenities)
-  );
-}
 
 // 하트 저장분(외부키 있음) — stayId는 stayKey(=SOURCE:ID)가 돼야 한다.
 const HEARTED: SavedStay = {
@@ -144,8 +137,8 @@ describe('AC-2 · 서버 N건 → 카드 N개 + 개수 부제', () => {
   });
 });
 
-describe('AC-5 · 카드 press → e03 합성 StayItem push (★1 게이트 정합)', () => {
-  it('하트 숙소 카드 press → stayId=stayKey + item이 e03 게이트를 통과하고 숙소명을 담는다', async () => {
+describe('AC-5 · 카드 press → 상세 push 는 stayId 만 (TRIP-940 AC-10 재작성)', () => {
+  it('하트 숙소 카드 press → stayId=stayKey 하나만 싣고 item 은 없다', async () => {
     server.use(
       http.get(`${BASE}/saved-stays`, () =>
         HttpResponse.json([HEARTED, PINNED])
@@ -154,29 +147,16 @@ describe('AC-5 · 카드 press → e03 합성 StayItem push (★1 게이트 정�
     render(<SavedStayPage />, { wrapper: createWrapper() });
     await screen.findByTestId('saved-stay-card-ss-1');
 
-    // 음성 대조 — 원본 SavedStay는 amenities가 없어 게이트를 탈락한다(=notFound). 그래서
-    // 합성이 필수다(02a §5-2에서 node로도 확인). 이 줄이 곧 AC-5의 존재 이유다.
-    expect(passesE03Gate(HEARTED)).toBe(false);
-
     // 실행 — 하트 숙소 카드를 누른다.
     fireEvent.press(screen.getByTestId('saved-stay-card-ss-1'));
 
-    // 단언 — push shape가 e03 진입 계약과 같고(StaySearchPage 선례), stayId는 stayKey다.
-    expect(mockPush).toHaveBeenCalledTimes(1);
-    const arg = mockPush.mock.calls[0][0] as {
-      pathname: string;
-      params: { stayId: string; item: string };
-    };
-    expect(arg.pathname).toBe('/stays/[stayId]');
-    expect(arg.params.stayId).toBe('NAVER:n-99');
-
-    // ★1 — 넘긴 item을 e03와 똑같은 게이트로 검문한다. 통과해야 notFound가 안 뜬다.
-    const parsed: unknown = JSON.parse(arg.params.item);
-    expect(passesE03Gate(parsed)).toBe(true);
-    expect((parsed as { name: string }).name).toBe('해운대 오션뷰 호텔');
+    // 단언 — push 는 한 번, 객체형 전체를 완전일치로 본다(params 에 item 이 남으면 red).
+    expect(mockPush.mock.calls).toEqual([
+      [{ pathname: '/stays/[stayId]', params: { stayId: 'NAVER:n-99' } }],
+    ]);
   });
 
-  it('핀·수동 숙소(외부키 null) 카드 press → stayId=savedStayId 폴백 + 게이트 통과 (★2)', async () => {
+  it('핀·수동 숙소(외부키 null) 카드 press → stayId=savedStayId 폴백 하나만 싣는다 (★2 · Q3)', async () => {
     server.use(
       http.get(`${BASE}/saved-stays`, () =>
         HttpResponse.json([HEARTED, PINNED])
@@ -188,15 +168,10 @@ describe('AC-5 · 카드 press → e03 합성 StayItem push (★1 게이트 정�
     // 실행 — 외부키가 null인 핀 숙소 카드를 누른다.
     fireEvent.press(screen.getByTestId('saved-stay-card-ss-2'));
 
-    // 단언 — stayKey가 "null:null"로 충돌하지 않고 savedStayId로 폴백한다.
-    const arg = mockPush.mock.calls[0][0] as {
-      pathname: string;
-      params: { stayId: string; item: string };
-    };
-    expect(arg.params.stayId).toBe('ss-2');
-    const parsed: unknown = JSON.parse(arg.params.item);
-    expect(passesE03Gate(parsed)).toBe(true);
-    expect((parsed as { name: string }).name).toBe('제주 돌담 게스트하우스');
+    // 단언 — stayKey가 "null:null"로 충돌하지 않고 savedStayId로 폴백하며, item 은 없다.
+    expect(mockPush.mock.calls).toEqual([
+      [{ pathname: '/stays/[stayId]', params: { stayId: 'ss-2' } }],
+    ]);
   });
 });
 

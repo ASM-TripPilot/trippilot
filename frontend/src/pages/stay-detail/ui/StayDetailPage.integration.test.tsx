@@ -8,11 +8,12 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
-import type { StayItem } from '@/shared/api/generated/schemas';
+import type { StayDetail } from '@/shared/api/generated/schemas';
 import { getGetMeSettingsQueryKey } from '@/shared/api/generated/profile/profile';
 import { formatPrice } from '@/entities/stay/lib/formatPrice';
 import { StayDetailPage } from './StayDetailPage';
@@ -23,7 +24,11 @@ import { StayDetailPage } from './StayDetailPage';
  * 저장 요청·웹검색 이동·로그인 유도는 이 배선 층에서만 확인된다.
  *
  * 무엇을 보장하나:
- *  - I1/I2/I3 (AC-2) 데이터는 손에 든 `item`(JSON param)에서 온다. 파싱 실패·부재 → notFound(INV-4).
+ *  - D1~D11 (TRIP-940) 데이터는 **서버 조회 `GET /stays/{stayId}` 하나**에서 온다(01b D0 — 구 I1~I3b 의
+ *    "손에 든 `item` JSON param" 계약을 뒤집어 재작성). 응답 전 로딩·404 notFound·400 invalid·
+ *    네트워크 error 는 서로 다른 얼굴이고(INV-4), 404·400 은 자동 재시도 없이 바로 뜬다(AC-13).
+ *    `item` param 이 와도 읽지 않는다. 전화 줄은 `tel:` 을 연다(AC-3).
+ *  - 그 밖의 I·G·F 는 모두 **조회가 끝난 뒤**(`await ready()`) 누른다 — 로딩 얼굴엔 버튼이 없다(AC-4).
  *  - I4 (AC-8 · TRIP-781 AC-1) `stay-detail-book` → 제휴 고지 시트(l07 본문 정확 문구) 마운트.
  *  - I5 (AC-9) 시트 [이동] → 웹검색 URL 로 Linking.openURL(01b Q2 웹검색 폴백).
  *  - I6 (AC-10) 로그인 사용자 `stay-detail-addtotrip` → POST /saved-stays + 거점 편입 안내.
@@ -84,7 +89,9 @@ const BODY =
   '외부 OTA 사이트로 이동하며, 실제 예약·결제는 해당 사이트에서 진행됩니다.';
 const ERROR_TITLE = '링크를 열 수 없습니다';
 
-const ITEM_A: StayItem = {
+// openapi `StayDetail` 계약 모양(필수 9 + 선택 4). 진입 카드가 들고 있던 값이 아니라 **서버 응답**이다.
+const DETAIL: StayDetail = {
+  stayId: 'NAVER:s1',
   externalSource: 'NAVER',
   externalId: 's1',
   name: '해운대 오션 호텔',
@@ -94,18 +101,29 @@ const ITEM_A: StayItem = {
   amenities: ['ocean', 'wifi'],
   stayType: 'HOTEL',
   price: { amount: 145000, currency: 'KRW' },
+  address: '부산 해운대구 우동 1411-1',
+  phone: '051-749-7000',
+  rooms: 120,
 };
-const KEY_A = `${ITEM_A.externalSource}:${ITEM_A.externalId}`;
+const KEY_A = `${DETAIL.externalSource}:${DETAIL.externalId}`;
+/** 상세 조회 요청 한 건의 관측 문자열(`request:start` 의 method + pathname, 02a §5 실측). */
+const DETAIL_GET = `GET /api/v1/stays/${KEY_A}`;
 
-/** 유효 진입 params — 카드가 넘긴 형태(01b Q1). */
-function validParams() {
-  return { stayId: KEY_A, item: JSON.stringify(ITEM_A) };
+/** 유효 진입 params — 진입 4곳이 넘기는 형태(TRIP-940: stayId 하나). */
+function validParams(): { stayId?: string; item?: string } {
+  return { stayId: KEY_A };
 }
 
 let observedHits: string[] = [];
 
 function hitCount(needle: string): number {
   return observedHits.filter((hit) => hit === needle).length;
+}
+
+/** `/stays/…` 상세 조회 GET 전부 — 빈 stayId 로 `/stays/` 가 나가도 여기서 센다(AC-8). */
+function detailGets(): number {
+  return observedHits.filter((hit) => hit.startsWith('GET /api/v1/stays/'))
+    .length;
 }
 
 // TRIP-778 — 서버 쪽 "다시 보지 않기" 상태. PATCH 가 바꾸고 GET 이 읽는다(상태형 핸들러 — 재진입 왕복 I21).
@@ -164,7 +182,12 @@ beforeEach(() => {
   endedHits = [];
   clearAccessToken();
   // GET /saved-stays 는 항상 등록(게스트에서 잘못 나가도 throw 아니라 hitCount 로 잡히게).
-  server.use(http.get(`${BASE}/saved-stays`, () => HttpResponse.json([])));
+  // GET /stays/:stayId 도 기본 200(DETAIL) — onUnhandledRequest:'error' 라 핸들러가 없으면 AC 가
+  // 아니라 준비 단계에서 무너진다(브리프 맹점 ①-a). 개별 테스트가 server.use 로 덮어쓴다.
+  server.use(
+    http.get(`${BASE}/saved-stays`, () => HttpResponse.json([])),
+    http.get(`${BASE}/stays/:stayId`, () => HttpResponse.json(DETAIL))
+  );
 });
 
 afterEach(() => server.resetHandlers());
@@ -184,52 +207,317 @@ function createWrapper() {
   };
 }
 
-describe('I1·I2·I3 · 데이터는 손에 든 item 에서 (AC-2)', () => {
-  it('I1 · 유효 item param → 이름·가격을 그린다', () => {
-    render(<StayDetailPage />, { wrapper: createWrapper() });
+/** 조회가 끝나 ready 얼굴(`stay-detail-root`)이 뜰 때까지 기다린다 — 버튼은 그 뒤에만 있다(AC-4). */
+function ready() {
+  return screen.findByTestId('stay-detail-root');
+}
 
-    expect(screen.getByText(ITEM_A.name)).toBeOnTheScreen();
-    // 가격은 2톤 분할 렌더(bold '145,000원' + muted '~' 두 형제, TRIP-727) — 결합 노드 아님.
-    // 페이지가 가격을 그린다는 보장은 유지하되 결합 문자열 가정만 분할로 바꾼다.
+/** 시작한 요청이 모두 끝나고 결과가 화면에 반영될 때까지 흘린다(02a ★5). */
+async function settleAll(): Promise<void> {
+  await waitFor(() => expect(endedHits).toHaveLength(observedHits.length));
+  await act(async () => {});
+}
+
+/** 상세 조회를 멈춰 두고, 테스트가 `release()`를 부를 때 `body`로 답한다(로딩 얼굴 관찰용). */
+function holdDetail(body: StayDetail = DETAIL): () => void {
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  server.use(
+    http.get(`${BASE}/stays/:stayId`, async () => {
+      await gate;
+      return HttpResponse.json(body);
+    })
+  );
+  return () => release();
+}
+
+/** 상세 조회가 오류 봉투(`ErrorResponse`)로 답한다 — 404 = 없음, 400 = 형식 오류(openapi). */
+function answerDetailWith(status: 400 | 404 | 500): void {
+  const code =
+    status === 404
+      ? 'NOT_FOUND'
+      : status === 400
+        ? 'VALIDATION_ERROR'
+        : 'INTERNAL';
+  server.use(
+    http.get(`${BASE}/stays/:stayId`, () =>
+      HttpResponse.json({ error: { code, message: 'x' } }, { status })
+    )
+  );
+}
+
+describe('D1·D2 · 데이터는 서버 조회 GET /stays/{stayId} 하나에서 (TRIP-940 AC-1 · AC-10 · D0)', () => {
+  it('D1 · stayId param 으로 GET /stays/{stayId} 를 정확히 1회 부르고, 응답 값으로 그린다', async () => {
+    // 준비: beforeEach — params { stayId: 'NAVER:s1' } · 서버는 DETAIL 로 답한다.
+    // 실행
+    render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
+    await settleAll();
+
+    // 단언: 요청 — 합성 식별자 그대로 경로에 실려 딱 한 번(다른 /stays/… 조회 없음).
+    expect(hitCount(DETAIL_GET)).toBe(1);
+    expect(detailGets()).toBe(1);
+    // 단언: 화면 — 응답 필드가 각 자리에 그려진다.
+    expect(screen.getByText(DETAIL.name)).toBeOnTheScreen();
+    const priceRow = screen.getByTestId('stay-detail-price-row');
     expect(
-      screen.getByText(formatPrice(ITEM_A.price).slice(0, -1))
+      within(priceRow).getByText(formatPrice(DETAIL.price).slice(0, -1))
     ).toBeOnTheScreen();
-    expect(screen.getByText('~')).toBeOnTheScreen();
+    expect(within(priceRow).getByText(DETAIL.region)).toBeOnTheScreen();
+    expect(screen.getByTestId('stay-detail-amenity-ocean')).toBeOnTheScreen();
+    expect(screen.getByTestId('stay-detail-address')).toHaveTextContent(
+      /부산 해운대구 우동 1411-1/
+    );
+    expect(screen.getByTestId('stay-detail-phone')).toHaveTextContent(
+      /051-749-7000/
+    );
+    expect(screen.getByTestId('stay-detail-rooms')).toHaveTextContent(/120실/);
   });
 
-  it('I2 · item 이 망가진 JSON 이면 notFound (INV-4)', () => {
-    mockSearchParams = { stayId: KEY_A, item: '{망가진' };
+  it('D2 · item param 이 함께 와도 읽지 않는다 — 로딩 중에도, 응답 뒤에도 카드 이름이 안 보인다', async () => {
+    // 준비: 옛 진입처럼 item(JSON)을 실어 보내되 이름을 서버 값과 다르게 둔다(출처 판별용).
+    const CARD_NAME = '목록 카드에 있던 이름';
+    mockSearchParams = {
+      stayId: KEY_A,
+      item: JSON.stringify({ ...DETAIL, name: CARD_NAME }),
+    };
+    const release = holdDetail();
+
+    // 실행 ①: 응답 전.
     render(<StayDetailPage />, { wrapper: createWrapper() });
 
-    expect(screen.getByTestId('stay-detail-notfound')).toBeOnTheScreen();
-    expect(screen.queryByText(ITEM_A.name)).toBeNull();
-  });
+    // 단언 ①: 로딩 얼굴이고, 목록 값을 placeholder 로 그리지 않는다(사용자 확정 D0).
+    expect(await screen.findByTestId('stay-detail-loading')).toBeOnTheScreen();
+    expect(screen.queryByText(CARD_NAME)).toBeNull();
 
-  it('I3 · item param 부재 → notFound', () => {
-    mockSearchParams = { stayId: KEY_A };
+    // 실행 ②: 응답 도착.
+    release();
+    await ready();
+
+    // 단언 ②: 서버 이름만 보인다.
+    expect(screen.getByText(DETAIL.name)).toBeOnTheScreen();
+    expect(screen.queryByText(CARD_NAME)).toBeNull();
+  });
+});
+
+describe('D3 · 로딩 얼굴 (TRIP-940 AC-4 · AC-11)', () => {
+  it('응답 전에는 로딩 얼굴과 뒤로 버튼만 있고, 하트·예약·일정 추가가 없다', async () => {
+    // 준비: 응답을 멈춰 둔다.
+    const release = holdDetail();
+
+    // 실행
     render(<StayDetailPage />, { wrapper: createWrapper() });
 
-    expect(screen.getByTestId('stay-detail-notfound')).toBeOnTheScreen();
+    // 단언: 로딩 얼굴 + 그 안의 뒤로 버튼.
+    const face = await screen.findByTestId('stay-detail-loading');
+    expect(within(face).getByTestId('stay-detail-back')).toBeOnTheScreen();
+    // 단언: 조회가 끝나기 전엔 저장·예약·일정 추가가 일어날 수 없다(버튼 부재).
+    expect(screen.queryByTestId('stay-detail-save')).toBeNull();
+    expect(screen.queryByTestId('stay-detail-book')).toBeNull();
+    expect(screen.queryByTestId('stay-detail-addtotrip')).toBeNull();
+
+    // 정리: 멈춘 요청을 풀어 준다.
+    release();
+    await ready();
+  });
+});
+
+describe('D4·D5 · 404 와 400 은 다른 얼굴이다 (TRIP-940 AC-5 · AC-6 · INV-4)', () => {
+  it('D4 · 404 → notFound 얼굴, 재시도 버튼 없음', async () => {
+    answerDetailWith(404);
+
+    render(<StayDetailPage />, { wrapper: createWrapper() });
+
+    expect(await screen.findByTestId('stay-detail-notfound')).toBeOnTheScreen();
+    // 앵커: 얼굴의 근거가 실제 조회 404 다(조회 없이 notFound 를 그리던 구 동작 차단).
+    expect(hitCount(DETAIL_GET)).toBe(1);
+    expect(screen.queryByTestId('stay-detail-invalid')).toBeNull();
+    expect(screen.queryByTestId('stay-detail-error')).toBeNull();
+    expect(screen.queryByTestId('stay-detail-retry')).toBeNull();
   });
 
-  // I3b (5-b 경고-1) · `JSON.parse` 는 문법상 유효하지만 StayItem 이 아닌 값(`123`·`{}`·`[]`·`"x"`)도
-  // 성공시킨다 — 그대로 통과하면 화면이 `item.amenities.length` 에서 크래시한다(미인증 딥링크로 도달).
-  // 형태 검문이 이 클래스도 notFound 로 접는지, 즉 렌더가 **던지지 않고** notFound 를 그리는지 잰다.
-  it.each(['123', '{}', '[]', '"x"'])(
-    'I3b · 형태가 StayItem 이 아닌 유효 JSON(%s) → 크래시 없이 notFound (INV-4)',
-    (bad) => {
-      mockSearchParams = { stayId: KEY_A, item: bad };
+  it('D5 · 400 → invalid 얼굴(notFound 가 아니다), 재시도 버튼 없음', async () => {
+    answerDetailWith(400);
+
+    render(<StayDetailPage />, { wrapper: createWrapper() });
+
+    expect(await screen.findByTestId('stay-detail-invalid')).toBeOnTheScreen();
+    expect(screen.queryByTestId('stay-detail-notfound')).toBeNull();
+    expect(screen.queryByTestId('stay-detail-error')).toBeNull();
+    expect(screen.queryByTestId('stay-detail-retry')).toBeNull();
+  });
+});
+
+describe('D6 · 네트워크 오류 → 다시 시도 → 정상 (TRIP-940 AC-7 · INV-4)', () => {
+  it.each<[string, () => Response]>([
+    [
+      '5xx',
+      () =>
+        HttpResponse.json(
+          { error: { code: 'INTERNAL', message: 'x' } },
+          { status: 500 }
+        ),
+    ],
+    ['응답 없음(네트워크 끊김)', () => HttpResponse.error()],
+  ])(
+    '%s 이면 error 얼굴과 "다시 시도"가 뜨고, 누르면 재조회해 정상 얼굴로 바뀐다',
+    async (_label, fail) => {
+      // 준비: 첫 조회만 실패, 두 번째는 200.
+      let calls = 0;
+      server.use(
+        http.get(`${BASE}/stays/:stayId`, () => {
+          calls += 1;
+          return calls === 1 ? fail() : HttpResponse.json(DETAIL);
+        })
+      );
       render(<StayDetailPage />, { wrapper: createWrapper() });
+      const face = await screen.findByTestId('stay-detail-error');
+      // 404·400 얼굴로 오접지 않는다(isNotFound 는 네트워크 오류를 false 로 판정).
+      expect(screen.queryByTestId('stay-detail-notfound')).toBeNull();
+      expect(screen.queryByTestId('stay-detail-invalid')).toBeNull();
 
-      expect(screen.getByTestId('stay-detail-notfound')).toBeOnTheScreen();
-      expect(screen.queryByText(ITEM_A.name)).toBeNull();
+      // 실행
+      fireEvent.press(within(face).getByTestId('stay-detail-retry'));
+
+      // 단언: 재조회(2회째)가 나가고, 정상 얼굴로 바뀐다.
+      await ready();
+      expect(screen.getByText(DETAIL.name)).toBeOnTheScreen();
+      expect(screen.queryByTestId('stay-detail-error')).toBeNull();
+      expect(hitCount(DETAIL_GET)).toBe(2);
     }
   );
 });
 
-describe('I4·I5 · 예약하기 → 제휴 시트 → 이동 (AC-8 · AC-9)', () => {
-  it('I4 · book press → 시트 마운트 + l07 본문 정확 문구, 옛 문장 없음', () => {
+describe('D7 · stayId 가 없거나 비면 요청 0 · invalid 얼굴 (TRIP-940 AC-8)', () => {
+  it.each<[string, { stayId?: string }]>([
+    ['param 없음', {}],
+    ['빈 문자열', { stayId: '' }],
+  ])(
+    '%s → /stays/… 조회를 보내지 않고 invalid 얼굴을 그린다',
+    async (_label, params) => {
+      // 준비: 생성 훅의 enabled 는 null/undefined 만 거른다 — '' 는 `/stays/` 로 새어 나간다(맹점 ①-c).
+      mockSearchParams = params;
+
+      // 실행
+      render(<StayDetailPage />, { wrapper: createWrapper() });
+
+      // 단언: 끝나지 않는 로딩이 아니라 invalid 얼굴(INV-4).
+      expect(
+        await screen.findByTestId('stay-detail-invalid')
+      ).toBeOnTheScreen();
+      await act(async () => {});
+      await act(async () => {});
+      // 단언: 상세 조회는 한 건도 나가지 않았다(onUnhandledRequest 는 로그만 하므로 직접 센다).
+      expect(detailGets()).toBe(0);
+    }
+  );
+});
+
+describe('D8 · 비정상 얼굴의 뒤로 = router.back (TRIP-940 AC-9)', () => {
+  it('404 얼굴의 뒤로 버튼을 누르면 router.back() 이 한 번 불린다', async () => {
+    answerDetailWith(404);
     render(<StayDetailPage />, { wrapper: createWrapper() });
+    const face = await screen.findByTestId('stay-detail-notfound');
+
+    fireEvent.press(within(face).getByTestId('stay-detail-back'));
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('D9 · 404·400 은 자동 재시도 없이 바로 (TRIP-940 AC-13 · 맹점 ①-b)', () => {
+  // 운영 QueryClient(`src/app/_layout.tsx`)는 기본 재시도 3회다. 테스트 공용 wrapper 는 retry:false 라
+  // 이 차이를 못 본다 → 여기서만 **재시도가 켜진** 클라이언트로 돌린다(지연 0 — 켜져 있으면 즉시 4회).
+  function retryingWrapper() {
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: 3, retryDelay: 0, gcTime: 0 },
+        mutations: { gcTime: 0 },
+      },
+    });
+    return function Wrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      );
+    };
+  }
+
+  it.each([
+    [404, 'stay-detail-notfound'],
+    [400, 'stay-detail-invalid'],
+  ] as const)(
+    '%s → 재시도가 켜진 클라이언트에서도 조회는 1회뿐이고 %s 얼굴이 뜬다',
+    async (status, face) => {
+      answerDetailWith(status);
+
+      render(<StayDetailPage />, { wrapper: retryingWrapper() });
+
+      expect(await screen.findByTestId(face)).toBeOnTheScreen();
+      await settleAll();
+      expect(hitCount(DETAIL_GET)).toBe(1);
+    }
+  );
+});
+
+describe('D10 · 전화 줄 → tel: (TRIP-940 AC-3 · Q5)', () => {
+  it('전화 줄을 누르면 tel:{phone} 을 그대로 연다', async () => {
+    render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
+
+    fireEvent.press(screen.getByTestId('stay-detail-phone'));
+
+    await waitFor(() =>
+      expect(mockOpenURL).toHaveBeenCalledWith('tel:051-749-7000')
+    );
+    expect(mockOpenURL).toHaveBeenCalledTimes(1);
+  });
+
+  it('tel: 열기가 실패해도(전화 앱 없음) 화면은 그대로 남는다', async () => {
+    mockOpenURL.mockRejectedValueOnce(new Error('no phone app'));
+    render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
+
+    fireEvent.press(screen.getByTestId('stay-detail-phone'));
+    await waitFor(() => expect(mockOpenURL).toHaveBeenCalledTimes(1));
+    await act(async () => {});
+
+    expect(screen.getByTestId('stay-detail-root')).toBeOnTheScreen();
+  });
+});
+
+describe('D11 · 정본 실데이터 모양 (TRIP-940 AC-2 · BR-U1-14 · BR-U1-18)', () => {
+  it('price null · amenities [] · phone null 이어도 ready 얼굴 — 가격 미확인 · 편의시설 미확인 · 전화 줄 없음', async () => {
+    // 준비: LOCALDATA 정본은 가격 null 100%·편의시설 빈 배열 100%·전화 채움률 54.8%(브리프 ③).
+    server.use(
+      http.get(`${BASE}/stays/:stayId`, () =>
+        HttpResponse.json({
+          ...DETAIL,
+          price: null,
+          amenities: [],
+          phone: null,
+        })
+      )
+    );
+
+    render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
+
+    expect(screen.getByText('가격 미확인')).toBeOnTheScreen();
+    expect(screen.getByTestId('stay-detail-amenities-empty')).toHaveTextContent(
+      /미확인/
+    );
+    expect(screen.queryByTestId('stay-detail-phone')).toBeNull();
+    // 앵커: 이웃 줄은 그대로(얼굴째 사라진 공짜 green 차단).
+    expect(screen.getByTestId('stay-detail-rooms')).toHaveTextContent(/120실/);
+  });
+});
+
+describe('I4·I5 · 예약하기 → 제휴 시트 → 이동 (AC-8 · AC-9)', () => {
+  it('I4 · book press → 시트 마운트 + l07 본문 정확 문구, 옛 문장 없음', async () => {
+    render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
 
     fireEvent.press(screen.getByTestId('stay-detail-book'));
 
@@ -240,13 +528,14 @@ describe('I4·I5 · 예약하기 → 제휴 시트 → 이동 (AC-8 · AC-9)', (
 
   it('I5 · 시트 [이동] → 웹검색 URL 로 openURL (01b Q2)', async () => {
     render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
 
     fireEvent.press(screen.getByTestId('stay-detail-book'));
     fireEvent.press(screen.getByTestId('stay-ota-confirm'));
 
     await waitFor(() =>
       expect(mockOpenURL).toHaveBeenCalledWith(
-        expect.stringContaining(encodeURIComponent(`${ITEM_A.name} 예약`))
+        expect.stringContaining(encodeURIComponent(`${DETAIL.name} 예약`))
       )
     );
   });
@@ -260,13 +549,13 @@ describe('I6·I7 · 일정에 추가 (AC-10)', () => {
         HttpResponse.json(
           {
             savedStayId: 'new-1',
-            name: ITEM_A.name,
+            name: DETAIL.name,
             coordConfirmed: false,
             registerRoute: 'MAP_SEARCH',
-            externalSource: ITEM_A.externalSource,
-            externalId: ITEM_A.externalId,
-            lat: ITEM_A.lat,
-            lng: ITEM_A.lng,
+            externalSource: DETAIL.externalSource,
+            externalId: DETAIL.externalId,
+            lat: DETAIL.lat,
+            lng: DETAIL.lng,
             createdAt: '2026-08-01T00:00:00Z',
             updatedAt: '2026-08-01T00:00:00Z',
           },
@@ -275,6 +564,7 @@ describe('I6·I7 · 일정에 추가 (AC-10)', () => {
       )
     );
     render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
 
     fireEvent.press(screen.getByTestId('stay-detail-addtotrip'));
 
@@ -287,6 +577,7 @@ describe('I6·I7 · 일정에 추가 (AC-10)', () => {
   it('I7 · 게스트 → 요청 0 + /(auth)/login push (죽은 버튼 아님)', async () => {
     clearAccessToken();
     render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
 
     fireEvent.press(screen.getByTestId('stay-detail-addtotrip'));
 
@@ -299,6 +590,7 @@ describe('I8 · 저장 하트 게스트 (AC-11)', () => {
   it('게스트 하트 press → 요청 0 + /(auth)/login push', async () => {
     clearAccessToken();
     render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
 
     fireEvent.press(screen.getByTestId('stay-detail-save'));
 
@@ -346,6 +638,7 @@ async function openErrorFace(): Promise<void> {
 describe('I9~I12 · 이동 실패 → error 얼굴 → 재시도/취소 (TRIP-781 AC-7 · AC-8 · BR-U1-55)', () => {
   it('I9 · openURL 이 실패하면 시트가 닫히지 않고 error 얼굴로 바뀐다', async () => {
     render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
 
     await openErrorFace();
 
@@ -356,6 +649,7 @@ describe('I9~I12 · 이동 실패 → error 얼굴 → 재시도/취소 (TRIP-78
 
   it('I10 · [다시 시도]가 openURL 을 다시 부르고, 성공하면 시트가 닫힌다', async () => {
     render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
     await openErrorFace();
     const second = holdNextOpenURL();
 
@@ -370,6 +664,7 @@ describe('I9~I12 · 이동 실패 → error 얼굴 → 재시도/취소 (TRIP-78
 
   it('I11 · 재시도도 실패하면 error 얼굴에 그대로 남는다', async () => {
     render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
     await openErrorFace();
     const second = holdNextOpenURL();
 
@@ -387,6 +682,7 @@ describe('I9~I12 · 이동 실패 → error 얼굴 → 재시도/취소 (TRIP-78
 
   it('I12 · error 얼굴의 [취소]는 시트를 닫고, 다음 [예약하기]는 default 얼굴에서 시작한다', async () => {
     render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
     await openErrorFace();
 
     fireEvent.press(screen.getByTestId('stay-ota-cancel'));
@@ -406,6 +702,7 @@ describe('G1 · 게스트 (TRIP-778 D9)', () => {
     // 준비: 게스트(토큰 없음). 핸들러는 걸어 두되 불리면 안 된다.
     installSettingsServer();
     render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
     await act(async () => {});
 
     // 실행
@@ -436,6 +733,7 @@ describe('G2 · 캐시가 남은 게스트 (TRIP-778 D9 · 5-b 경고-1)', () =>
         <QueryClientProvider client={client}>{children}</QueryClientProvider>
       ),
     });
+    await ready();
     await act(async () => {});
 
     // 실행
@@ -468,6 +766,7 @@ describe('F1 · 저장 실패는 고지 쪽으로 닫힌다 (TRIP-778 · 5-b 경
       })
     );
     render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
     await settleSettings();
 
     // 실행 ①: 체크하고 [이동] — 저장 요청이 나가서 실패한다.
@@ -505,6 +804,7 @@ describe('F1 · 저장 실패는 고지 쪽으로 닫힌다 (TRIP-778 · 5-b 경
       })
     );
     render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
     await settleSettings();
 
     // 실행 ①: 모르는 상태라 시트가 뜬다 → 체크하고 [이동] — 저장 요청이 나가서 실패한다.
@@ -535,6 +835,7 @@ describe('I13~I16 · "다시 보지 않기" 저장 = PATCH /me/settings (TRIP-77
   it('I13 · 체크하고 [이동]을 누르면 {affiliateNoticeDismissed:true} 한 필드를 한 번 보낸다', async () => {
     signInWithDismissed(false);
     render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
     await settleSettings();
     fireEvent.press(screen.getByTestId('stay-detail-book'));
 
@@ -552,6 +853,7 @@ describe('I13~I16 · "다시 보지 않기" 저장 = PATCH /me/settings (TRIP-77
     signInWithDismissed(false);
     mockOpenURL.mockRejectedValueOnce(new Error('cannot open'));
     render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
     await settleSettings();
     fireEvent.press(screen.getByTestId('stay-detail-book'));
 
@@ -568,6 +870,7 @@ describe('I13~I16 · "다시 보지 않기" 저장 = PATCH /me/settings (TRIP-77
   it('I15 · 체크하고 [취소]하거나, 체크 없이 [이동]하면 저장하지 않는다', async () => {
     signInWithDismissed(false);
     render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
     await settleSettings();
 
     // 체크 → 취소.
@@ -586,6 +889,7 @@ describe('I13~I16 · "다시 보지 않기" 저장 = PATCH /me/settings (TRIP-77
   it('I16 · 시트를 다시 열면 체크는 해제 상태로 시작한다', async () => {
     signInWithDismissed(false);
     render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
     await settleSettings();
     fireEvent.press(screen.getByTestId('stay-detail-book'));
     fireEvent.press(screen.getByTestId('stay-ota-dont-show'));
@@ -601,13 +905,14 @@ describe('I17~I21 · 서버 값이 켜져 있으면 시트 생략, 모르면 고
   it('I17 · 서버 값 true → [예약하기]가 시트 없이 바로 웹검색을 연다', async () => {
     signInWithDismissed(true);
     render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
     await settleSettings();
 
     fireEvent.press(screen.getByTestId('stay-detail-book'));
 
     await waitFor(() =>
       expect(mockOpenURL).toHaveBeenCalledWith(
-        expect.stringContaining(encodeURIComponent(`${ITEM_A.name} 예약`))
+        expect.stringContaining(encodeURIComponent(`${DETAIL.name} 예약`))
       )
     );
     expect(mockOpenURL).toHaveBeenCalledTimes(1);
@@ -620,6 +925,7 @@ describe('I17~I21 · 서버 값이 켜져 있으면 시트 생략, 모르면 고
     signInWithDismissed(true);
     mockOpenURL.mockRejectedValueOnce(new Error('cannot open'));
     render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
     await settleSettings();
 
     fireEvent.press(screen.getByTestId('stay-detail-book'));
@@ -638,6 +944,7 @@ describe('I17~I21 · 서버 값이 켜져 있으면 시트 생략, 모르면 고
       http.get(`${BASE}/me/settings`, () => new Promise<never>(() => {}))
     );
     render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
     await waitFor(() => expect(hitCount(SETTINGS_GET)).toBe(1));
 
     fireEvent.press(screen.getByTestId('stay-detail-book'));
@@ -654,6 +961,7 @@ describe('I17~I21 · 서버 값이 켜져 있으면 시트 생략, 모르면 고
       )
     );
     render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
     await settleSettings();
 
     fireEvent.press(screen.getByTestId('stay-detail-book'));
@@ -665,6 +973,7 @@ describe('I17~I21 · 서버 값이 켜져 있으면 시트 생략, 모르면 고
   it('I21 · 체크하고 이동한 뒤 다시 들어오면 시트 없이 바로 이동한다(PATCH → GET 서버 왕복)', async () => {
     signInWithDismissed(false);
     const first = render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
     await settleSettings();
     fireEvent.press(screen.getByTestId('stay-detail-book'));
     fireEvent.press(screen.getByTestId('stay-ota-dont-show'));
@@ -676,6 +985,7 @@ describe('I17~I21 · 서버 값이 켜져 있으면 시트 생략, 모르면 고
     // 재진입 = 새 캐시(createWrapper 가 QueryClient 를 새로 만든다) — 값은 서버에서만 온다.
     endedHits = [];
     render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
     await settleSettings();
     fireEvent.press(screen.getByTestId('stay-detail-book'));
 
@@ -688,6 +998,7 @@ describe('I22~I24 · 같은 화면 재누름·체크 해제 (781 AC-9·10 → TR
   it('I22 · 체크 없이 [이동]한 뒤 같은 화면에서 다시 누르면 고지 시트가 또 뜬다', async () => {
     signInWithDismissed(false);
     render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
     await settleSettings();
     fireEvent.press(screen.getByTestId('stay-detail-book'));
     fireEvent.press(screen.getByTestId('stay-ota-confirm'));
@@ -703,6 +1014,7 @@ describe('I22~I24 · 같은 화면 재누름·체크 해제 (781 AC-9·10 → TR
   it('I23 · 체크하고 [이동]한 뒤 같은 화면에서 다시 누르면 시트 없이 바로 이동한다', async () => {
     signInWithDismissed(false);
     render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
     await settleSettings();
     fireEvent.press(screen.getByTestId('stay-detail-book'));
     fireEvent.press(screen.getByTestId('stay-ota-dont-show'));
@@ -720,6 +1032,7 @@ describe('I22~I24 · 같은 화면 재누름·체크 해제 (781 AC-9·10 → TR
   it('I24 · 체크했다 다시 풀고 [이동]하면 저장하지 않고, 다시 들어오면 시트가 뜬다', async () => {
     signInWithDismissed(false);
     const first = render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
     await settleSettings();
     fireEvent.press(screen.getByTestId('stay-detail-book'));
     fireEvent.press(screen.getByTestId('stay-ota-dont-show'));
@@ -732,6 +1045,7 @@ describe('I22~I24 · 같은 화면 재누름·체크 해제 (781 AC-9·10 → TR
 
     endedHits = [];
     render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
     await settleSettings();
     fireEvent.press(screen.getByTestId('stay-detail-book'));
 
