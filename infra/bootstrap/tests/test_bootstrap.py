@@ -61,7 +61,7 @@ class BootstrapSecurityTests(unittest.TestCase):
             self.assertTrue(all(item["Fn::Sub"].endswith(("-${Environment}-cluster", "-${Environment}-node")) for item in resources))
         self.assertNotIn("AdministratorAccess", json.dumps(self.template))
         # The managed policy attached to the deployment role is under the same guard as the inline one.
-        attached = self.resources["DeploymentPodIdentityPolicy"]["Properties"]
+        attached = self.resources["DeploymentExtraPolicy"]["Properties"]
         self.assertEqual(attached["Roles"], [{"Ref": "DeploymentRole"}])
         statements = self.statements + attached["PolicyDocument"]["Statement"]
         self.assertFalse(any("iam:PutRolePolicy" in item["Action"] for item in statements))
@@ -70,6 +70,9 @@ class BootstrapSecurityTests(unittest.TestCase):
         passes = next(item for item in attached["PolicyDocument"]["Statement"] if item["Sid"] == "PassAiPodRoleToPods")
         self.assertTrue(passes["Resource"]["Fn::Sub"].endswith("-${Environment}-ai-pod"))
         self.assertEqual(passes["Condition"]["StringEquals"]["iam:PassedToService"], "pods.eks.amazonaws.com")
+        # The serving judge reads metrics and cost; it must never gain a write verb.
+        reads = next(item for item in attached["PolicyDocument"]["Statement"] if item["Sid"] == "ReadServingMetricsAndCost")
+        self.assertTrue(all(action.split(":")[1].startswith(("Get", "List")) for action in reads["Action"]))
 
     def test_cluster_and_node_roles_have_fixed_aws_service_trust(self):
         expected = {"ClusterRole": "eks.amazonaws.com", "NodeRole": "ec2.amazonaws.com", "AiPodRole": "pods.eks.amazonaws.com"}
