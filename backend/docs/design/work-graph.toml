@@ -693,6 +693,11 @@ owner = "숙소"
 migration = false
 touches = ["backend/modules/accommodation-search", "backend/modules/saved-accommodation", "backend/docs/design/openapi.yaml"]
 note = """
+**진행(2026-09-25) — 여섯 중 `address` 는 들어갔다**(PR #677, `StayItem`·`StayDetail`).
+남은 다섯 중 **`imageUrl` 은 공급원이 없다** — `STAY-CONTENT-TOURAPI` 가 측정 2.0% 로 접혔고
+(LOCALDATA·카카오·OSM 모두 사진 없음, Google Places 는 저장 금지), 수렴점은 **OTA 제휴 콘텐츠 API**
+하나다. 즉 이 필드는 우리 코드가 아니라 **계약이 선행**한다.
+
 **정정(2026-09-21) — `distance` 는 이 티켓 스코프가 아니다.** 위 서술은 2026-09-17 제품 결정
 이전 것이었다. 기준점이 끝내 확정되지 않아 **FE 가 g02 거점 숙소 카드·선택 시트에서 거리 표시를
 제거했고**(박태현, 티켓 코멘트), BE 는 `distance`·`distanceFrom` 를 추가하지 않는다. 거리 재도입은
@@ -993,7 +998,7 @@ note = """
 id = "STAY-ADDRESS-SEED"
 ticket = ""
 title = "숙소 주소 전수 채움 — 생성기가 읽고 버리던 값이다"
-status = "blocked"
+status = "done"
 owner = "숙소"
 migration = true
 touches = [
@@ -1001,6 +1006,10 @@ touches = [
   "backend/app/src/main/resources/db/migration",
 ]
 note = """
+**완료(2026-09-25, PR #677·#683).** CSV 를 받아 `address`·`phone`·`rooms` 를 열었다(V2.51).
+실측 채움률: 주소 12,936 (100%) · 전화 7,003 (54.1%) · 객실 12,878 (99.6%).
+덤으로 **폐업 제거**도 같이 붙였다 — upsert 만으로는 원본에서 빠진 행이 정본에 영원히 남는다.
+
 `gen_stay_seed.py:114` 가 LOCALDATA 도로명주소를 **이미 읽고** region_code 뽑는 데만 쓴 뒤 버린다.
 컬럼만 추가하면 12,782곳 **전수**가 채워진다 — TourAPI(부분 커버리지)와 달리 여기는 전량이다.
 
