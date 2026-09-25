@@ -81,6 +81,45 @@ QUERIES = (
 TOP_K = 4  # kb_retrieval.DEFAULT_TOP_K
 COSINE_FLOOR = 0.9999  # 채택 전제
 
+# `ORT_DIRECT=1` 이면 Triton 서버 없이 onnxruntime 을 직접 부른다.
+#
+# **왜 이게 Triton 의 대리 측정으로 성립하나**: 2026-09-22 측정에서 Triton 서버측
+# 분해가 queue 1.8ms · compute_input 0.05ms · compute_output 0.58ms 였고
+# `compute_infer` 만 3,673ms 였다 — 즉 서버 오버헤드는 소수점이고 차이는 전부
+# ORT 연산이다. 그래서 백엔드 우열은 ORT 직접 호출로 갈린다.
+#
+# **왜 필요한가**: 판정에 필요한 것은 **amd64** 숫자인데(배포 대상), 개발 맥은
+# arm64 다. Triton 이미지는 20.7GB 라 GitHub 러너 디스크에 안 들어간다. 이 모드는
+# 러너에서 2.1GB 모델만으로 같은 비교를 끝낸다. 같은 4스레드 · 같은 그래프다.
+ORT_DIRECT = os.environ.get("ORT_DIRECT") == "1"
+ONNX_DIR = Path(os.environ.get("ONNX_DIR") or "/tmp/kure_onnx")
+
+
+def _ort_direct_encode():
+    """ORT 세션을 `app._embed_triton` 의 추론 자리에 끼운다.
+
+    토크나이즈·길이정렬·CLS 풀링·정규화는 **서빙 코드 그대로** 탄다 — 여기서 다시
+    구현하면 두 벌이 되고, 차원이 1024 그대로라 갈라져도 아무 검사가 못 잡는다
+    (mean 으로 잘못 넣으면 코사인 0.71).
+    """
+    import onnxruntime as ort
+
+    import app
+
+    options = ort.SessionOptions()
+    options.intra_op_num_threads = 4  # config.pbtxt 의 intra_op_thread_count 와 동일
+    options.inter_op_num_threads = 1
+    session = ort.InferenceSession(
+        str(ONNX_DIR / "model.onnx"), options, providers=["CPUExecutionProvider"]
+    )
+    names = [i.name for i in session.get_inputs()]
+
+    def infer(input_ids, attention_mask):
+        feed = {"input_ids": input_ids, "attention_mask": attention_mask}
+        return session.run(None, {n: feed[n] for n in names})[0]
+
+    return lambda batch: app._embed_triton(list(batch), infer=infer)
+
 
 def _measure(encode, texts: list[str], name: str) -> dict:
     """워밍업 2회 후 3회 중앙값 — 기존 하네스와 같은 규약."""
@@ -125,10 +164,13 @@ def main() -> int:
         "sentence-transformers (현행)",
     )
 
-    os.environ["EMBEDDING_BACKEND"] = "triton"
-    import app  # noqa: E402 — env 를 먼저 세운 뒤 읽어야 BACKEND 가 잡힌다
+    if ORT_DIRECT:
+        variant = _measure(_ort_direct_encode(), texts, "ONNX Runtime (직접)")
+    else:
+        os.environ["EMBEDDING_BACKEND"] = "triton"
+        import app  # noqa: E402 — env 를 먼저 세운 뒤 읽어야 BACKEND 가 잡힌다
 
-    variant = _measure(app._embed_triton, texts, "Triton (ONNX Runtime)")
+        variant = _measure(app._embed_triton, texts, "Triton (ONNX Runtime)")
 
     cosine = np.sum(base["docs"] * variant["docs"], axis=1) / (
         np.linalg.norm(base["docs"], axis=1) * np.linalg.norm(variant["docs"], axis=1)

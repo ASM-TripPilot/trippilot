@@ -170,8 +170,13 @@ def _triton_infer(input_ids, attention_mask):
     return np.frombuffer(payload[header_len:], dtype=np.float32).reshape(shape)
 
 
-def _embed_triton(texts: list[str]) -> list[list[float]]:
+def _embed_triton(texts: list[str], infer=None) -> list[list[float]]:
     """토크나이즈 → Triton(인코더) → **CLS 풀링** → L2 정규화.
+
+    `infer` 는 `(input_ids, attention_mask) -> last_hidden_state` 를 바꿔 끼우는
+    자리다. 기본은 Triton HTTP 이고, 측정 하네스가 onnxruntime 을 직접 부를 때
+    쓴다 — 풀링·정렬·정규화를 두 벌로 구현하면 조용히 갈라지는데 차원이 1024
+    그대로라 아무 검사도 못 잡는다(아래 참조).
 
     ## 풀링이 이 함수의 전부다
 
@@ -202,7 +207,7 @@ def _embed_triton(texts: list[str]) -> list[list[float]]:
             max_length=MAX_SEQ_LENGTH,
             return_tensors="np",
         )
-        hidden = _triton_infer(encoded["input_ids"], encoded["attention_mask"])
+        hidden = (infer or _triton_infer)(encoded["input_ids"], encoded["attention_mask"])
         if hidden.shape[-1] != EXPECTED_DIM:
             # 조용히 내보내면 적재 벡터와 공간이 어긋난 채로 서비스한다(BR-AF-09).
             raise RuntimeError(f"Triton 출력 차원 {hidden.shape[-1]} != {EXPECTED_DIM}")
