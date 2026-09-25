@@ -120,3 +120,46 @@ def test_pbt_절대_음수나_예외를_내지_않는다(raw: str) -> None:
     """임의 문자열에도 죽지 않는다 — 수집은 8천 건을 돌고 한 건 때문에 멈추면 안 된다."""
     got = parse_fee(raw)
     assert got is None or got >= 0
+
+
+# ── 반복정보 infoname 정규화·우선순위 (2026-09-26) ──────────────────
+# 실물 빈도: `입 장 료` 350 · `입장료` 51 · `시설이용료` 31 · `관 람 료` 2.
+# 공백이 섞인 변형이 **더 흔하다** — 나열로 잡으면 새 변형마다 새는다.
+
+import collect_place_fees as C  # noqa: E402
+
+
+def _info(name: str, text: str) -> dict:
+    return {"infoname": name, "infotext": text}
+
+
+def test_공백_섞인_infoname_을_잡는다() -> None:
+    """실물 1위가 `입 장 료`(350건)다 — 공백을 지우고 비교해야 한다."""
+    got = C._raw_fee("detailInfo2", ("입장료",), [_info("입 장 료", "- 성인 5,000원")])
+    assert got == "- 성인 5,000원"
+
+
+def test_입장료가_있으면_대체_필드를_쓰지_않는다() -> None:
+    """우선순위 순서가 곧 정확도다 — 시설이용료는 입장료가 없을 때의 대체다."""
+    items = [_info("시설이용료", "- 대인 9,000원"), _info("입 장 료", "- 성인 3,000원")]
+    assert C._raw_fee("detailInfo2", ("입장료", "관람료", "시설이용료"), items) \
+        == "- 성인 3,000원"
+
+
+def test_입장료가_없으면_대체_필드로_내려간다() -> None:
+    items = [_info("화장실", "있음"), _info("관 람 료", "- 어른 2,000원")]
+    assert C._raw_fee("detailInfo2", ("입장료", "관람료", "시설이용료"), items) \
+        == "- 어른 2,000원"
+
+
+def test_주차요금은_입장료가_아니다() -> None:
+    """**목록에 없어야 한다** — 주차비를 입장료로 읽으면 예산 판정이 틀린다."""
+    items = [_info("주차요금", "- 소형 2,000원"), _info("화장실", "있음")]
+    assert C._raw_fee("detailInfo2", ("입장료", "관람료", "시설이용료"), items) is None
+
+
+def test_값이_비면_다음_후보로_넘어간다() -> None:
+    """필드는 있는데 내용이 빈 경우가 있다 — 그걸 답으로 쓰면 안 된다."""
+    items = [_info("입 장 료", "   "), _info("시설이용료", "- 일반 4,000원")]
+    assert C._raw_fee("detailInfo2", ("입장료", "관람료", "시설이용료"), items) \
+        == "- 일반 4,000원"
