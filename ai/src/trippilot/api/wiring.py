@@ -867,6 +867,10 @@ def _replan_rag_request(
         trace_id=trace_id,
         now=now,
         excluded_poi_ids=frozenset(PoiId(p) for p in request.excluded_poi_ids),
+        # 원 일정 순서 — KB-1 이 하려던 그 일을 검색이 아니라 봉투로 한다(TRIP-972).
+        # 제외된 것은 빼지 않는다: "지금 이렇게 짜여 있다"가 컨텍스트이고, 후보 자격은
+        # `closed_set_filter` 소유다(INV-1). 풀에 없는 id 는 렌더에서 건너뛴다.
+        current_slot_ids=tuple(PoiId(s.poi_id) for s in request.current_slots),
         # `ReplanSlotSchema.placement_reason` 이 이 필드를 위해 있다 — 계약 독스트링이
         # "visit_slot.placement_reason" 이라고 적어 둔 그 값이고, PlanB 가 "원래 취지를
         # 잇는 대안"을 고르는 컨텍스트다. 종전 배선에서는 아무도 읽지 않았다.

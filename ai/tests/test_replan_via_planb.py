@@ -349,7 +349,9 @@ def test_replan_response_carries_kb_hit_counts() -> None:
     PlanB 검색 단계를 실제로 통과했는가다(실패도 키를 남긴다, 침묵 금지)."""
     body = _replan_response().json()
 
-    assert set(body["retrieved"]) == {"SCHEDULE", "PERSONA", "SITUATION"}, body["retrieved"]
+    # SCHEDULE 키는 없다 — 검색하지 않으므로 0 을 싣는 것도 거짓이다(TRIP-972).
+    # 일정 컨텍스트는 요청 봉투(`current_slots`·`placement_reason`)가 들고 온다.
+    assert set(body["retrieved"]) == {"PERSONA", "SITUATION"}, body["retrieved"]
 
 
 def test_replan_runs_planb_and_says_so() -> None:
@@ -534,3 +536,19 @@ def test_rule_fallback_ranking_is_capped() -> None:
 
     assert result.is_fallback is True                      # 워커 없음 → 규칙 랭킹
     assert len(result.ranked_poi_ids) == MAX_RANKED        # 풀은 더 큰데 상한에서 끊긴다
+
+
+def test_current_slots_reach_planb_as_the_itinerary_context() -> None:
+    """KB-1 이 하려던 일을 봉투가 한다 (TRIP-972) — 원 일정 순서가 PlanB 로 넘어간다.
+
+    제외 목록에 걸린 것도 **뺀다지 않는다**: "지금 이렇게 짜여 있다"가 컨텍스트이고
+    후보 자격은 `closed_set_filter` 소유다(INV-1).
+    """
+    out, _ = _rag_request(
+        current_slots=[
+            {"poi_id": "p1", "start_at": "10:00", "end_at": "11:00"},
+            {"poi_id": "p2", "start_at": "12:00", "end_at": "13:00"},
+        ],
+        excluded_poi_ids=["p2"],
+    )
+    assert [str(p) for p in out.current_slot_ids] == ["p1", "p2"]

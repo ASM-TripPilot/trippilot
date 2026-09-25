@@ -41,7 +41,6 @@ from trippilot.agents.planb.place_knowledge import fetch_place_knowledge
 from trippilot.agents.planb.kb_retrieval import (
     DEFAULT_TOP_K,
     retrieve_persona,
-    retrieve_schedule,
     retrieve_situation,
 )
 from trippilot.llm_gateway.workers.alternative_selection import (
@@ -176,6 +175,18 @@ class PlanBRagRequest:
     trace_id: TraceId
     now: datetime
     excluded_poi_ids: frozenset[PoiId] = frozenset()  # 이미 방문·거절한 POI
+    # 원 일정 순서 (TRIP-972 — /replan 의 `current_slots`). **KB-1 이 하려던 그 일**을
+    # 검색이 아니라 봉투로 한다: 정본 §2 KB-1 표의 "현재 일정 (슬롯 + POI)" 항목이다.
+    # 비어 있으면(=/alternatives 경로) 일정 컨텍스트가 원래 추천 이유만으로 구성된다.
+    # **시각은 담지 않는다.** 대안 선택에 필요한 것은 "지금 어떤 곳들로 짜여 있나"다.
+    #
+    # 이유가 "게이트가 잡아 준다"가 **아니다** — 반대다. 근거 문장을 비우는 게이트
+    # (`reflection_template._TIME_EXPR`)는 `\d+분`·`\d+시간`·`오전/오후 \d+시`만 잡고
+    # **`09:00` 같은 콜론 형식은 통과시킨다**(2026-09-26 실측). 그래서 원 일정 시각을
+    # 프롬프트에 흘리면 LLM 이 근거에 그대로 옮겨 적어도 **아무도 못 막고**, 그 값은
+    # 이 대안에 대해 어셈블리가 검증한 시각이 아니라 **다른 슬롯의 시각**이다(INV-2 위반).
+    # 재료 쪽에서 막는 것이 유일한 방어다.
+    current_slot_ids: tuple[PoiId, ...] = ()
     # 대체 대상 슬롯의 원래 추천 이유 (TRIP-516 — 백엔드 visit_slot.placement_reason).
     # **참조 텍스트**다: 후보 자격과 무관(INV-1은 closed_set_filter 소유), LLM이
     # "원래 취지를 잇는 대안"을 고르게 하는 컨텍스트로만 쓰인다. 키는 평문 poi_id 문자열.
@@ -265,7 +276,6 @@ class PlanBRagResult:
 class RagContext:
     """Retrieve 단계 산출물 — Augment에 들어갈 검색 컨텍스트."""
 
-    schedule: tuple[KbHit, ...] = ()
     persona: tuple[KbHit, ...] = ()
     situation: tuple[KbHit, ...] = ()
     notes: tuple[str, ...] = ()
@@ -275,8 +285,9 @@ class RagContext:
     place_knowledge: Mapping[str, str] = field(default_factory=dict)
 
     def counts(self) -> dict:
+        # SCHEDULE 키가 없다 — 검색하지 않으므로 0 을 싣는 것도 거짓이다(TRIP-972).
+        # 0 은 "찾았는데 없었다"로 읽히고, 사실은 "찾지 않는다"다.
         return {
-            KbKind.SCHEDULE.value: len(self.schedule),
             KbKind.PERSONA.value: len(self.persona),
             KbKind.SITUATION.value: len(self.situation),
         }
@@ -422,22 +433,22 @@ class PlanBAgent:
         # 총 네 번 불렀다(KB-5 는 상황 질의를 그대로 다시 임베딩했다) — 0.67초가 Plan-B
         # 예산에서 그냥 나갔다. 배치가 터지면 `None` 셋으로 두어 종전 경로로 되돌아간다
         # (KB 검색을 통째로 잃는 것보다 낫다 — INV-4).
-        sched_q, situ_q, persona_q = (
-            _schedule_query(request), _situation_query(request), _persona_query(request)
-        )
+        # **KB-1(SCHEDULE) 은 여기서 검색하지 않는다** (TRIP-972). 정본 §9 개정 ③ 이
+        # "KB-1 은 구조화 DB 조회, 1단계만 VectorStorePort 동형"이라고 적어 뒀고,
+        # 그 1단계가 끝났다(/replan 배선 완료 — #744). 검색은 **구조적으로 항상 0건**
+        # 이었다: 적재 문서 0건 · 쓰는 코드 0건 · 질의가 `"{uuid} {날짜} {enum} 영향 슬롯"`
+        # 이라 한국어 문서와 임베딩 공간에서 붙지 못한다(KB-3 에서 reason 을 한국어로
+        # 치환한 이유와 같은 함정의 더 나쁜 판).
+        #
+        # 일정 컨텍스트는 **요청 봉투가 들고 온다** — `current_slots`(원 일정)·
+        # `affected_reasons`(슬롯별 원래 추천 이유). 검색할 대상이 아니라 받는 값이다.
+        situ_q, persona_q = _situation_query(request), _persona_query(request)
         try:
-            sched_v, situ_v, persona_v = self._embedding.embed_batch(
-                (sched_q, situ_q, persona_q)
-            )
+            situ_v, persona_v = self._embedding.embed_batch((situ_q, persona_q))
         except Exception as e:
-            sched_v = situ_v = persona_v = None
+            situ_v = persona_v = None
             notes.append(f"embed_batch_degraded: {type(e).__name__}: {e}")
 
-        schedule, note = self._safe_retrieve(
-            retrieve_schedule, sched_q, KbKind.SCHEDULE, sched_v
-        )
-        if note:
-            notes.append(note)
         situation, note = self._safe_retrieve(
             retrieve_situation, situ_q, KbKind.SITUATION, situ_v
         )
@@ -456,7 +467,6 @@ class PlanBAgent:
         if note:
             notes.append(note)
         return RagContext(
-            schedule=schedule,
             persona=persona,
             situation=situation,
             notes=tuple(notes),
@@ -532,7 +542,7 @@ class PlanBAgent:
                     trigger_kind=request.trigger.kind.value,
                     reason=request.reason,
                     schedule_context=_with_reasons(
-                        _join(context.schedule), request.affected_reasons),
+                        _current_itinerary(request), request.affected_reasons),
                     situation_context=_with_observed_rain(
                         _join(context.situation), request),
                     persona_context=_join_persona(
@@ -580,13 +590,6 @@ class PlanBAgent:
 
 
 # ── 질의 조립 (Augment 재료) ────────────────────────────────────────────
-
-
-def _schedule_query(request: PlanBRagRequest) -> str:
-    return (
-        f"{request.trigger.schedule_id} {request.trigger.affected_date.isoformat()} "
-        f"{request.trigger.kind.value} 영향 슬롯"
-    )
 
 
 # reason 은 영문 enum 값이라 한국어 KB 문서와 임베딩 공간에서 잘 붙지 않는다. 특히
@@ -712,6 +715,25 @@ def _join_profile(profile: "PersonaSummary | None") -> str:
 
 def _join(hits: Sequence[KbHit]) -> str:
     return "\n".join(f"- {h.text}" for h in hits)
+
+
+def _current_itinerary(request: "PlanBRagRequest") -> str:
+    """원 일정을 "1. 성산일출봉 2. 흑돼지거리" 로 — 이름은 **풀에서** 가져온다.
+
+    봉투는 poi_id 만 들고 오고 이름은 풀이 갖고 있다. 풀에 없는 id 는 **건너뛴다**:
+    그 슬롯은 후보 자격도 없고(INV-1), 이름 없는 id 를 프롬프트에 흘리면 모델이
+    그것을 장소로 읽는다.
+
+    시각·소요시간 없음(INV-3) — 필드 주석에 이유가 있다.
+    """
+    if not request.current_slot_ids:
+        return ""
+    name = {p.poi_id: p.name for p in request.pool.pois}
+    places = [name[pid] for pid in request.current_slot_ids if pid in name]
+    if not places:
+        return ""
+    line = " ".join(f"{i}. {n}" for i, n in enumerate(places, 1))
+    return f"[현재 일정]\n{line}"
 
 
 def _with_reasons(schedule_context: str, reasons: Mapping[str, str]) -> str:

@@ -300,10 +300,11 @@ def test_build_pool_같은_입력이면_같은_풀(pair):
 def test_kb_documents_구성과_kb_라벨():
     docs = kb_documents(_pool())
     # KB-2(PERSONA)는 여기 없다 — 저장 장소는 봉투로 온다 (TRIP-512).
+    # KB-1(SCHEDULE)도 없다 — 파이프라인이 검색하지 않고 일정은 봉투로 온다 (TRIP-972).
     assert [(d.kb, d.doc_id) for d in docs] == [
-        (KbKind.SCHEDULE, f"{DOC_PREFIX}-sched-1"),
         (KbKind.SITUATION, f"{DOC_PREFIX}-situ-1"),
     ]
+    assert not any(d.kb is KbKind.SCHEDULE for d in docs)
     assert not any(d.kb is KbKind.PERSONA for d in docs)
     assert all(d.doc_id.startswith(DOC_PREFIX) for d in docs)  # 실 collection 격리 접두
     assert all(d.text.strip() for d in docs)
@@ -311,8 +312,8 @@ def test_kb_documents_구성과_kb_라벨():
 
 def test_kb_documents_저장장소_문서만_poi_ref를_가진다():
     docs = kb_documents(_pool())
-    assert [d.poi_ref for d in docs[:2]] == [None, None]  # KB-1·KB-3은 POI 참조 없음
-    assert all(d.metadata == {"kind": "saved"} for d in docs[2:])
+    assert docs[0].poi_ref is None  # KB-3은 POI 참조 없음
+    assert all(d.metadata == {"kind": "saved"} for d in docs[1:])
 
 
 def test_봉투_저장장소는_전부_풀_안이다():
@@ -439,7 +440,7 @@ def test_KB_적재가_정상이면_3종_모두_히트하고_에러노트가_없�
     pool = _pool()
     result = pipeline(_indexed_store(pool), HashEmbedding(), None, None).run(_request(pool))
     # KB-2 는 더 이상 적재하지 않는다 — 저장 장소는 봉투로 온다 (TRIP-512)
-    assert result.retrieved == {"SCHEDULE": 1, "PERSONA": 0, "SITUATION": 1}
+    assert result.retrieved == {"PERSONA": 0, "SITUATION": 1}
     assert not [n for n in result.notes if n.startswith("retrieve_")]
     # note 는 폴백 사유 + 규칙 랭킹 조정 기록의 합성("… · rule_ranking: …", TRIP-532) — 부분 일치
     assert any("alternative_worker_absent" in n for n in result.notes)
@@ -452,7 +453,7 @@ def test_KB_적재가_정상이면_3종_모두_히트하고_에러노트가_없�
 def test_KB_검색이_전멸해도_저장장소는_살아남는다():
     """**TRIP-512 의 요점** — 저장 장소가 벡터가 아니라 봉투로 오므로 검색과 독립이다.
 
-    스토어가 통째로 죽어 KB 히트가 0건이어도(=`retrieve_*_error` 3종) 저장 장소는
+    스토어가 통째로 죽어 KB 히트가 0건이어도(=`retrieve_*_error` 2종) 저장 장소는
     규칙 랭킹 상위를 그대로 차지한다. 예전에는 KB-2 벡터에 의존해서 검색이 죽으면
     이 신호도 같이 죽었고, 프로덕션에는 그 collection 에 쓰는 경로조차 없었다.
 
@@ -461,10 +462,9 @@ def test_KB_검색이_전멸해도_저장장소는_살아남는다():
     """
     pool = _pool()
     result = pipeline(_DeadStore(), HashEmbedding(), None, None).run(_request(pool))
-    assert result.retrieved == {"SCHEDULE": 0, "PERSONA": 0, "SITUATION": 0}
+    assert result.retrieved == {"PERSONA": 0, "SITUATION": 0}
     assert sorted(n.split(":")[0] for n in result.notes if n.startswith("retrieve_")) == [
         "retrieve_persona_error",
-        "retrieve_schedule_error",
         "retrieve_situation_error",
     ]
     # 검색이 전멸했는데도 저장 장소가 상위 2를 차지한다 — 봉투 경로가 살아 있다는 증거
