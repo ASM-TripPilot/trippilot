@@ -55,6 +55,27 @@ class OrchestratorConfig:
     # 강등 하한 배율 — 저점수(< penalty/(1−factor))가 음수로 떨어지지 않게 원점수의 이만큼은
     # 남긴다. **0 초과**여야 강등이다(0 이면 OR-Tools 방문 이득 0 = 사실상 배제, 9/12 결정 위반).
     existence_demote_factor: float = 0.2
+    # ── PlanB 상황 랭킹 가산 (/replan 경로에서만) ──────────────────
+    # PlanBAgent(RAG)가 상황 지식으로 고른 순서를 점수에 **더한다**. 1위가 이 값
+    # 전부, 이후 순위는 `1 − 순위/개수` 로 선형 감소.
+    #
+    # 0.3 = 다른 소프트 항과 같은 "한 단"(`existence_demote_penalty` 주석의 그 축 —
+    # 비 오는 날 실외 −0.2·식사창 밖 FOOD −0.2·지시 ±0.3). 같은 축을 쓰면 겹쳤을 때
+    # 결과가 예측 가능하다: PlanB 1위이면서 지도 미검출이면 +0.3 −0.3 = 상쇄다.
+    #
+    # **곱셈이 아니라 덧셈인 이유**: 점수 원점이 둘이다 — LLM 점수는 게이트가
+    # 0.0~1.0 으로 클램프하고(`gates/scoring.py`) 규칙 점수는 원거리에서 음수까지
+    # 간다. 배율은 두 원점에서 다른 뜻이 되고, 음수에 곱하면 **더 내려간다**
+    # (`demoted_score` 가 0 이하를 건드리지 않는 이유와 같은 함정의 반대편).
+    # 덧셈은 양쪽에서 같은 뜻이고 음수 점수도 끌어올린다 — 멀지만 상황에 딱 맞는
+    # 곳을 PlanB 가 되살릴 수 있다는 뜻이고, 그게 이 항의 목적이다.
+    #
+    # **이 항은 가산항으로 유지한다** (팀 결정 2026-09-26). 곧 같은 자리에 거절 이력
+    # 강등이 음수로 더해지고, 결정은 "상쇄시키되 PlanB 가 조금 더 이기게"다 — 거절
+    # 강등을 이 값보다 한 칸 작게(예 0.25) 두면 겹쳤을 때 순증이 남는다. 곱셈이나
+    # 배제로 바꾸면 그 합성이 불가능해진다. 근거: 거절이 항상 이기면 사용자가
+    # "다시 짜줘"를 두세 번 누를 때 풀이 말라 막다른 길이 된다.
+    planb_rank_lift: float = 0.3
 
     def __post_init__(self) -> None:
         if not 0.0 < self.c2_min_share < 1.0:
@@ -75,6 +96,8 @@ class OrchestratorConfig:
             raise ValueError("existence_demote_factor ∈ (0, 1] — 0 은 배제다")
         if not 0.0 <= self.existence_demote_penalty < float("inf"):
             raise ValueError("existence_demote_penalty ∈ [0, ∞)")
+        if not 0.0 <= self.planb_rank_lift < float("inf"):
+            raise ValueError("planb_rank_lift ∈ [0, ∞) — 음수면 가산이 아니라 강등이다")
 
 
 @dataclass(frozen=True, slots=True)

@@ -61,6 +61,11 @@ from trippilot.assembly_engine.travel import haversine_km
 
 _ALTERNATIVE_LABELS = ("A", "B", "C", "D", "E")
 
+# `PlanBRagResult.ranked_poi_ids` 길이 상한. 하루 슬롯이 5~8개이고 어셈블리
+# 프리필터가 상위 60을 보므로(`ortools_assembler._PREFILTER_TOP_K`) 20이면
+# 배치될 후보를 넉넉히 덮는다. 상한이 필요한 이유는 필드 주석에 있다.
+MAX_RANKED = 20
+
 # 규칙 폴백의 reason → 후순위 카테고리 (TRIP-532). 배정을 바꾸려면 여기만 고친다.
 # 분기 키는 TriggerKind 가 아니라 **reason** — MANUAL 트리거도 사유("비 와서")를 따라간다.
 # delay·fatigue 는 거리 오름차순이 곧 규칙이라 항목이 없고, closed·canceled·fully_booked·none 은
@@ -228,6 +233,13 @@ class PlanBRagResult:
     retrieved: dict  # {KB 라벨: 검색 건수}
     dropped_out_of_pool: tuple[str, ...]  # closed-set 밖이라 버려진 참조 (INV-1 가시화)
     empty_reason: str | None = None  # 대안 0개 사유 (e16 문구 근거)
+    # closed-set 검증을 통과한 **잘리기 전** 랭킹 (상한 `MAX_RANKED`).
+    # `alternatives` 는 `max_alternatives` 로 잘린 화면용이고, 이쪽은 재계획이
+    # 점수 가산에 쓰는 순서다 — /replan 이 이 순서를 `ScheduleTask.planb_rank` 로
+    # 넘기면 어셈블리가 그 가산이 실린 점수로 배치한다 (INV-2 는 그대로: 시각·순서는
+    # 어셈블리 것이고 우리는 점수만 민다).
+    # `to_dict` 에 싣지 않는다 — /alternatives 와이어에는 없는 필드다.
+    ranked_poi_ids: tuple[PoiId, ...] = ()
 
     def __post_init__(self) -> None:
         if self.fallback_level < 0:
@@ -396,6 +408,11 @@ class PlanBAgent:
             retrieved=context.counts(),
             dropped_out_of_pool=dropped,
             empty_reason=None,
+            # 상한을 두는 이유: 규칙 랭킹 경로의 `kept` 는 **풀 전체**라 길이가 풀
+            # 크기와 같다. 이 튜플이 `ScheduleTask` 봉투를 타고 다니므로 상한이
+            # 없으면 봉투가 풀만큼 커진다. 호출측이 LLM 경로에서만 쓰지만
+            # (`is_fallback` 확인), 상한은 그 규율과 무관하게 여기서 건다.
+            ranked_poi_ids=kept[:MAX_RANKED],
         )
 
     # [1] Retrieve — KB 4종. 한 KB가 실패해도 나머지로 진행한다 (부분 성공 허용)

@@ -191,6 +191,18 @@ class ScheduleTask:
     trace_id: TraceId
     now: datetime
     prior_degradations: tuple[Degradation, ...] = ()
+    # PlanBAgent(RAG)가 상황 지식으로 고른 순서 — **/replan 경로만** 채운다.
+    # 빈 튜플 = 무보정이라 generate 경로는 동작이 바뀌지 않는다.
+    #
+    # 봉투에 있는 이유: Provider 수집물처럼 **오케스트레이터가 앞 단계에서 얻어온
+    # 재료**다(`daily_rain`·`event_bonus` 와 같은 자리). 요청에 실려 오는 값이 아니다.
+    #
+    # 왜 점수 단계를 대체하지 않고 **가산**인가 — 둘은 다른 판단이다. PlanB 는
+    # "이 상황에 뭐가 맞나"(KB-3 상황·KB-5 장소 지식)를, 게이트웨이 점수는 "이 사람이
+    # 뭘 좋아하나"(페르소나)를 본다. 둘 중 하나를 버릴 이유가 없고, 예산이 모자라면
+    # 기존 진입 임계(`c1_min_ms`)가 저절로 점수 단계를 규칙으로 내린다 — 여기서
+    # 따로 분기하지 않는다.
+    planb_rank: tuple[PoiId, ...] = ()
 
 
 class ScheduleAgent:
@@ -250,6 +262,22 @@ class ScheduleAgent:
             request, pool, persona, budget, budget.total_ms - elapsed, steps,
             trace_id, now,
         )
+
+        # ②″ PlanB 상황 랭킹 가산 (/replan) — 점수 원점이 LLM 이든 규칙이든 같게 더한다.
+        #    **②′ 보다 먼저**여야 한다: ②′ 는 상위 N 건만 지도에서 확인하므로, 가산을
+        #    먼저 해야 실제로 배치될 후보가 검증 대상에 들어간다. 그리고 가산을 나중에
+        #    하면 지도 미검출 강등을 되돌려 버린다(사용자 눈에 없는 곳이 되살아난다).
+        if task.planb_rank:
+            candidates = lift_planb_ranked(
+                candidates, task.planb_rank, self._cfg.planb_rank_lift
+            )
+            # 몇 건이 실제로 올라갔는지 남긴다 — 랭킹이 풀 밖 참조뿐이면 0 건이고,
+            # 그러면 RAG 를 태운 것이 일정에 아무 효과가 없었다는 뜻이다(침묵 금지).
+            self._observe(
+                trace_id, now, "planb", "planb_rank", "planb_rank",
+                f"planb_rank_lifted:{sum(1 for c in candidates if c.poi_id in set(task.planb_rank))}"
+                f"/{len(task.planb_rank)}",
+            )
 
         # ②′ 지도 실재 검증 (TRIP-904) — **점수가 나온 뒤**라야 배치될 후보를 검증할 수
         #    있고, 결과가 **점수**에 실려야 어셈블리에 닿는다. 풀 단계에서 순서만 바꾸던
@@ -817,6 +845,46 @@ def demoted_score(score: float, *, factor: float, penalty: float) -> float:
     if score <= 0:
         return score
     return max(score - penalty, score * factor)
+
+
+def planb_lifted_score(score: float, rank: int, ranked: int, *, lift: float) -> float:
+    """PlanB 랭킹 가산 = 점수 + lift × (1 − 순위/개수). 1위가 lift 전부.
+
+    `rank` 는 0-base. `ranked` 는 랭킹 전체 길이 — 마지막 순위도 `lift/ranked` 만큼은
+    받는다(랭킹에 든 것과 안 든 것은 다른 사실이라 0 으로 만들지 않는다).
+
+    **덧셈이다** — `demoted_score` 의 곱셈 하한이 없다. 이유는 `planb_rank_lift`
+    주석에 있다(점수 원점이 LLM 0~1 과 규칙 음수허용 둘이라 배율은 뜻이 갈린다).
+    음수 점수도 그대로 끌어올린다 — 멀지만 상황에 맞는 곳을 되살리는 것이 목적이다.
+
+    순위에 대해 단조 감소하고 점수에 대해 단조 증가한다 — 같은 순위끼리의 순서도,
+    랭킹 안에서의 순서도 뒤집히지 않는다.
+    """
+    if ranked <= 0 or not 0 <= rank < ranked:
+        return score
+    return score + lift * (1.0 - rank / ranked)
+
+
+def lift_planb_ranked(
+    candidates: tuple[ScoredPoi, ...],
+    ranked: Sequence[PoiId],
+    lift: float,
+) -> tuple[ScoredPoi, ...]:
+    """PlanB 랭킹에 든 후보만 가산 — 순서·개수·후보 집합은 그대로 (INV-1).
+
+    랭킹을 **순위표로만** 읽는다: 중복·풀 밖 참조가 섞여 와도 후보가 늘거나 사라지거나
+    두 번 가산되지 않는다. 첫 등장 위치가 그 POI 의 순위다(중복은 뒤쪽을 무시).
+    `demote_missing_on_map` 이 판정을 집합으로만 읽는 것과 같은 규율.
+    """
+    order: dict[PoiId, int] = {}
+    for i, poi_id in enumerate(ranked):
+        order.setdefault(poi_id, i)
+    total = len(order)
+    return tuple(
+        replace(c, score=planb_lifted_score(c.score, order[c.poi_id], total, lift=lift))
+        if c.poi_id in order else c
+        for c in candidates
+    )
 
 
 def demote_missing_on_map(

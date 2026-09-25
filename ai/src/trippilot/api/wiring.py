@@ -777,6 +777,96 @@ def _categories_of(names: "tuple[str, ...]") -> set[PoiCategory]:
     return out
 
 
+# 재계획 사유(AI 어휘) → 트리거 종류. 백엔드가 `trigger` 를 안 보내는 동안 이 표가
+# 대신 유도한다 — `/alternatives` 가 `kind="MANUAL"` 을 **지어내는** 것과 다르다:
+# 여기 입력(`reasons`)은 FE 칩에서 온 실값이다. 표에 없는 사유는 MANUAL 이고,
+# 그건 "사용자가 직접 바꿔 달라고 했다"라서 지어낸 값이 아니라 맞는 값이다.
+_REASON_TO_TRIGGER: Mapping[str, TriggerKind] = {
+    "weather": TriggerKind.WEATHER,
+    "closed": TriggerKind.CLOSURE,
+    "fully_booked": TriggerKind.CLOSURE,  # 둘 다 "그 장소에 못 들어간다"
+    "delay": TriggerKind.DELAY,
+    "canceled": TriggerKind.DELAY,
+    # fatigue·none → MANUAL (사용자 사정)
+}
+
+# 요청 예산 중 PlanB(RAG + LLM 선택)에 줄 몫. 나머지가 페르소나 점수 + 어셈블리 몫이다.
+#
+# 0.5 인 이유: 25초 예산에서 12.5초다. PlanB 안에서 다시 `llm_budget_share=0.5` ·
+# `llm_retry_share=0.35` 로 갈리므로 1차 6.2초 · 재시도 4.4초 — 실측 중앙값
+# (gpt-5.6-sol 5.0초)에 1차가 들어가고 꼬리는 재시도가 받는다. 남는 12.5초에서
+# 어셈블리 바닥 5초를 떼면 점수 상한이 7.5초로, 실호출 바닥 ~3초에 여유가 있다.
+# PlanB 가 예산을 다 태우면 `c1_min_ms` 진입 임계가 점수를 규칙으로 내린다 —
+# 일정은 나오고 강등만 기록된다 (INV-4).
+_REPLAN_PLANB_BUDGET_SHARE = 0.5
+
+
+def _replan_rag_request(
+    request: schemas.ReplanRequest,
+    pool: CandidatePool,
+    persona: PersonaSummary | None,
+    daily_rain: Mapping[date, int],
+    trace_id: TraceId,
+    now: datetime,
+    *,
+    notes: list[str],
+    deadline_ms: int,
+) -> PlanBRagRequest:
+    """`ReplanRequest` → `PlanBRagRequest`. **재료가 전부 실값이다** — 이 경로가
+    `/alternatives` 와 갈리는 지점이다.
+
+    `/alternatives` 는 트리거를 지어내고(`ScheduleAgentWire.kt` 의 `kind="MANUAL"`)
+    예산·이동수단·저장 장소가 비어 온다. 여기는 사유·기존 일정·슬롯별 추천 이유·
+    저장 장소·취향 확정값이 다 온다 — PlanBAgent 가 원래 받도록 설계된 재료다.
+    """
+    reasons = [r for r in request.reasons if r]
+    if len(reasons) > 1:
+        # PlanB 는 사유를 하나만 받는다. 버리는 것을 **밝힌다** — 조용히 첫 번째만
+        # 쓰면 FE 가 칩 두 개를 눌렀는데 하나만 먹은 것을 알 방법이 없다.
+        notes.append(f"planb_reason_truncated: {reasons[0]} 사용 / {len(reasons)}건 수신")
+    reason = reasons[0] if reasons else "none"
+
+    if request.trigger is not None:
+        trigger = TriggerParams(
+            kind=TriggerKind(request.trigger.kind),
+            schedule_id=ScheduleId(request.trigger.schedule_id),
+            affected_date=request.trigger.affected_date,
+            payload=request.trigger.payload,
+        )
+    else:
+        trigger = TriggerParams(
+            kind=_REASON_TO_TRIGGER.get(reason, TriggerKind.MANUAL),
+            schedule_id=ScheduleId(request.trip_id),
+            affected_date=request.target_date,
+            payload={},
+        )
+
+    return PlanBRagRequest(
+        trigger=trigger,
+        reason=reason,
+        # 원 일정이 이미 합류한 풀이다 (`_with_current_slots`) — 원 슬롯도 후보로
+        # 경쟁해야 "원래 자리보다 나은 것만 바꾼다"가 성립한다.
+        pool=pool,
+        trace_id=trace_id,
+        now=now,
+        excluded_poi_ids=frozenset(PoiId(p) for p in request.excluded_poi_ids),
+        # `ReplanSlotSchema.placement_reason` 이 이 필드를 위해 있다 — 계약 독스트링이
+        # "visit_slot.placement_reason" 이라고 적어 둔 그 값이고, PlanB 가 "원래 취지를
+        # 잇는 대안"을 고르는 컨텍스트다. 종전 배선에서는 아무도 읽지 않았다.
+        affected_reasons={
+            s.poi_id: s.placement_reason
+            for s in request.current_slots
+            if s.placement_reason
+        },
+        saved_places=tuple(
+            SavedPlace(poi_id=sp.poi_id, name=sp.name) for sp in request.saved_places
+        ),
+        deadline_ms=int(deadline_ms * _REPLAN_PLANB_BUDGET_SHARE),
+        rain_prob_by_date=daily_rain,
+        persona=persona,
+    )
+
+
 def _replan_fixed_blocks(
     request: schemas.ReplanRequest, tz: timezone
 ) -> tuple[FixedBlock, ...]:
@@ -1165,16 +1255,37 @@ class WiredItineraryOrchestrator:
         였고, 그 요구표가 채워진 뒤(`INFO_REQUIREMENTS[Intent.REPLAN]`)라 이제
         `ScheduleAgent` 를 그대로 재사용하면 복제가 없다.
 
-        `generate` 재사용(백엔드가 GENERATE_PATH 로 보내기)이 기각된 세 이유 중
-        둘을 이 경로가 되찾는다 — ⑵ 인라인 `preference_profile` 이 NEUTRAL 로
-        덮이지 않고 ⑶ 사유·지시·자유입력·원 일정이 실릴 자리가 있다. ⑴ RAG 미탑승은
-        남는다(ScheduleAgent 는 KB 검색을 안 한다) — 상황 지식은 `/alternatives`
-        쪽 경로가 쓴다.
+        `generate` 재사용(백엔드가 GENERATE_PATH 로 보내기)이 기각된 세 이유
+        **셋 다** 이 경로가 되찾는다 — ⑵ 인라인 `preference_profile` 이 NEUTRAL 로
+        덮이지 않고 ⑶ 사유·지시·자유입력·원 일정이 실릴 자리가 있고, ⑴ **RAG 도
+        탄다**.
+
+        ⑴ 은 종전에 남겨 둔 구멍이었다(2026-09-24 PR #714: "RAG 미탑승은 남는다").
+        그게 틀린 절충이었다는 증거가 계약 자체에 있었다 — `ReplanRequest` 독스트링이
+        "`generate` 와 다른 것: **RAG(KB-3)를 탄다**"라고 적고 `ReplanResponse` 에
+        `retrieved`(KB 히트 수) 필드가 있는데, ScheduleAgent 만 붙여 놨으니 그 필드가
+        **항상 빈 dict** 였다. 정본(`planb-rag-design.md`)의 배정도 반대였다:
+        PlanBAgent = "여행 중 변수 발생 시 기존 일정 + 페르소나 기반 대안", ScheduleAgent
+        = "백지·여행 전". 여행 중 변수 대응 경로가 바로 여기다.
+
+        **두 판단을 합성한다** (하나를 버리지 않는다):
+        - PlanBAgent(RAG) — "이 상황에 뭐가 맞나". KB-3 상황·KB-5 장소 지식 검색 →
+          LLM 이 고른 **순서**. 시각·순서는 내지 않는다 (INV-2 — 애초에 필드가 없다).
+        - ScheduleAgent — "이 사람이 뭘 좋아하나"(페르소나 점수) + 어셈블리 배치.
+          PlanB 순서는 `planb_rank` 로 실어 **점수 가산**으로만 들어간다.
+
+        예산이 모자라면 기존 진입 임계(`c1_min_ms`)가 점수 단계를 규칙으로 내린다 —
+        여기서 따로 분기하지 않는다. PlanB 가 LLM 을 못 썼으면(`is_fallback`) 랭킹을
+        **넘기지 않는다**: 그때 `ranked_poi_ids` 는 규칙 랭킹이고, 그건 `build_rule_score`
+        가 이미 보는 신호(우천·거리·저장 장소)를 두 번 세는 것이라 얻는 것이 없다.
         """
         meta = request.request_meta
         now = _tz_aware(meta.requested_at, self._tz)
         trace_id = TraceId(meta.request_id)
         notes: list[str] = []
+        # PlanB·점수·어셈블리가 **한 시계 원점을 공유한다** — PlanB 가 쓴 시간이
+        # ScheduleAgent 의 잔여에서 저절로 빠져야 두 LLM 호출이 예산을 겹쳐 쓰지 않는다.
+        t0 = self._clock.monotonic_ms()
 
         resolved, unknown, prefer, avoid = self._replan_directives(request, notes)
 
@@ -1201,6 +1312,20 @@ class WiredItineraryOrchestrator:
         if not pool.pois:
             return self._replan_empty("NO_CANDIDATE", notes, resolved, unknown)
 
+        persona = self._persona_from(packets) or _persona_of(request)
+        daily_rain = self._rain_from(packets, dates, now)
+
+        # ── PlanBAgent (RAG) — 상황 지식으로 순서를 낸다 ─────────────
+        planb = self._rag.run(_replan_rag_request(
+            request, pool, persona, daily_rain, trace_id, now,
+            notes=notes, deadline_ms=_deadline_budget(meta),
+        ))
+        notes += [f"planb: {n}" for n in planb.notes]
+        # 랭킹은 **LLM 경로일 때만** 넘긴다 (독스트링 마지막 단락).
+        planb_rank = () if planb.is_fallback else planb.ranked_poi_ids
+        if planb.is_fallback:
+            notes.append(f"planb_rank_skipped: fallback_level={planb.fallback_level}")
+
         window = request.time_window
         domain_request = core.GenerateItineraryRequest(
             schedule_id=ScheduleId(request.trip_id),
@@ -1225,16 +1350,22 @@ class WiredItineraryOrchestrator:
         outcome = self._schedule_agent.run(core.ScheduleTask(
             request=domain_request,
             pool=pool,
-            persona=self._persona_from(packets) or _persona_of(request),
-            daily_rain=self._rain_from(packets, dates, now),
+            persona=persona,
+            daily_rain=daily_rain,
             event_bonus=None,
             candidates_summary=core.candidates_report(pool),
             budget=core.allocate(_deadline_budget(meta), core.OrchestratorConfig()),
-            started_ms=self._clock.monotonic_ms(),
+            # PlanB 가 쓴 시간이 잔여에서 빠지도록 **PlanB 이전** 원점을 넘긴다.
+            # 여기서 시계를 다시 읽으면 PlanB 가 공짜가 되고, 두 LLM 호출 합이
+            # 예산을 넘겨 백스톱(504)에 걸린다.
+            started_ms=t0,
             trace_id=trace_id,
             now=now,
+            planb_rank=planb_rank,
         ))
-        return self._replan_projection(request, outcome, notes, resolved, unknown)
+        return self._replan_projection(
+            request, outcome, notes, resolved, unknown, retrieved=planb.retrieved
+        )
 
     def _replan_directives(
         self, request: schemas.ReplanRequest, notes: list[str]
@@ -1325,13 +1456,19 @@ class WiredItineraryOrchestrator:
         )
 
     def _replan_empty(
-        self, code: str, notes: list[str], resolved: list[str], unknown: list[str]
+        self, code: str, notes: list[str], resolved: list[str], unknown: list[str],
+        retrieved: Mapping[str, int] | None = None,
     ) -> schemas.ReplanResponse:
-        """못 만든 것을 **빈 일정으로 위장하지 않는다** (IO-7 — itinerary=null + 사유)."""
+        """못 만든 것을 **빈 일정으로 위장하지 않는다** (IO-7 — itinerary=null + 사유).
+
+        `retrieved` 는 실패해도 싣는다 — 검색은 됐는데 배치가 안 된 것과 검색부터
+        안 된 것은 다른 사실이고, 그 구분이 있어야 어디를 고칠지 안다.
+        """
         return schemas.ReplanResponse(
             itinerary=None, total_distance_km=None, is_fallback=True, fallback_level=2,
             notes=notes, resolved_directives=resolved, unknown_directives=unknown,
             empty_reason=schemas.ReplanEmptyReasonSchema(code=code),
+            retrieved=dict(retrieved or {}),
         )
 
     def _replan_projection(
@@ -1341,6 +1478,8 @@ class WiredItineraryOrchestrator:
         notes: list[str],
         resolved: list[str],
         unknown: list[str],
+        *,
+        retrieved: Mapping[str, int] | None = None,
     ) -> schemas.ReplanResponse:
         """`GenerationOutcome` → `ReplanResponse`. **예외로 올리지 않는다** (IO-7).
 
@@ -1353,10 +1492,12 @@ class WiredItineraryOrchestrator:
         notes += [d.reason for d in outcome.degradations]
         if outcome.status is core.GenerationStatus.FAILED:
             notes.append(outcome.error or "unknown_failure")
-            return self._replan_empty("NO_FEASIBLE_SLOT", notes, resolved, unknown)
+            return self._replan_empty(
+                "NO_FEASIBLE_SLOT", notes, resolved, unknown, retrieved)
         solution = outcome.solution
         if solution is None or not any(day.slots for day in solution.days):
-            return self._replan_empty("NO_FEASIBLE_SLOT", notes, resolved, unknown)
+            return self._replan_empty(
+                "NO_FEASIBLE_SLOT", notes, resolved, unknown, retrieved)
 
         coords = self._coords_for(solution, outcome.slot_alternatives)
         anchors = {request.target_date: GeoPoint(request.anchor.lat, request.anchor.lng)}
@@ -1378,6 +1519,8 @@ class WiredItineraryOrchestrator:
             notes=notes,
             resolved_directives=resolved,
             unknown_directives=unknown,
+            # 계약이 "KB 히트 수"라고 적어 둔 그 필드 — 배선 전에는 항상 빈 dict 였다.
+            retrieved=dict(retrieved or {}),
         )
 
     def _total_distance_km(
