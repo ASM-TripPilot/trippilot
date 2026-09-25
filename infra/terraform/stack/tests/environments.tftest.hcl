@@ -76,7 +76,7 @@ run "dev_is_private_and_cost_conscious" {
   }
 
   assert {
-    condition     = data.aws_iam_role.cluster.name == "trippilot-dev-cluster" && data.aws_iam_role.node.name == "trippilot-dev-node" && aws_eks_cluster.this.role_arn == data.aws_iam_role.cluster.arn && aws_eks_cluster.this.compute_config[0].node_role_arn == data.aws_iam_role.node.arn
+    condition     = data.aws_iam_role.cluster.name == "trippilot-dev-cluster" && data.aws_iam_role.node.name == "trippilot-dev-node" && aws_eks_cluster.this.role_arn == data.aws_iam_role.cluster.arn && aws_eks_cluster.this.compute_config[0].node_role_arn == data.aws_iam_role.node.arn && aws_eks_pod_identity_association.ai.role_arn == data.aws_iam_role.ai_pod.arn && aws_eks_pod_identity_association.ai.service_account == "ai"
     error_message = "EKS must read the separate fixed bootstrap-owned DEV cluster/node roles."
   }
 

@@ -8,6 +8,12 @@ data "aws_iam_role" "node" {
   name = "${local.name}-node"
 }
 
+# AI pods reach Bedrock through EKS Pod Identity. Auto Mode pins the IMDS hop
+# limit to 1, so the node role above is unreachable from pods by design.
+data "aws_iam_role" "ai_pod" {
+  name = "${local.name}-ai-pod"
+}
+
 resource "aws_cloudwatch_log_group" "eks" {
   name              = "/aws/eks/${local.name}/cluster"
   retention_in_days = local.production ? 90 : 14
@@ -78,4 +84,11 @@ resource "aws_eks_access_policy_association" "deployment" {
   access_scope {
     type = "cluster"
   }
+}
+
+resource "aws_eks_pod_identity_association" "ai" {
+  cluster_name    = aws_eks_cluster.this.name
+  namespace       = "trippilot"
+  service_account = "ai"
+  role_arn        = data.aws_iam_role.ai_pod.arn
 }
