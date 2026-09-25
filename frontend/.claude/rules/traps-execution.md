@@ -9,6 +9,8 @@ paths:
 이 파일은 repo-traps.md에서 경로별로 쪼갠 함정이다 — 해당 경로 만질 때만 로드된다.
 (전역 불변식 INV-3 "소요시간 비표시, 거리만"은 코어 `repo-traps.md`에 남아 무조건 로드된다.)
 
+- **react-query 캐시 알림을 읽는 통합테스트는 `act` 직후 곧바로 `result.current`를 읽지 마라 — flush 헬퍼로 순서를 기다린다.** `notifyManager`가 알림을 `setTimeout(cb, 0)`으로 예약해서 보내므로, `act` 직후 즉시 읽으면 재렌더 전(구값)을 관측할 확률적 flake가 난다(원인 확증 TRIP-884, `useVisitCheck.integration.test.tsx` 11/20 재현 — 개념 [[테스트 워커 강제종료 flake (원인 미상)]]). 의심되면 `beforeAll`에 `notifyManager.setScheduler((cb) => setTimeout(cb, 5))`로 재현해 확인한다.
+
 ## 여행 중 실행 (execution, i01~i05)
 ⚠️ 이 절의 `i01`·`i05` 등은 **코드 라우트·프리뷰 키가 쓰는 옛 Figma 코드**다. 라이브 Figma i 밴드는 2026-09-11에 i01~i10으로 재번호됐다(옛 i05 현재 장소 상세 = 새 i10) — 대조는 `spec-perception/reference/figma-structure.md`의 매핑 포인터로.
 
