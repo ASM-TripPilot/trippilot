@@ -59,10 +59,23 @@ _BASE = "https://apis.data.go.kr/B551011/KorService2"
 _OK = "0000"
 
 # 타입 → (엔드포인트, 읽을 필드). 12 는 반복정보라 infoname 으로 찾는다.
+#
+# ⚠️ **반복정보의 infoname 에는 공백이 섞인다** — 실물에 `입 장 료`(350건)와
+# `입장료`(51건)가 **둘 다** 있고 `관 람 료` 도 있다. 변형을 나열하면 끝없이
+# 새는 것이 생기므로 **공백을 지우고 비교**한다(`_norm_name`).
+#
+# 순서가 곧 우선순위다 — 앞의 것이 있으면 그걸 쓴다. `시설이용료`·`관람료` 는
+# 입장료가 없을 때의 대체다(실측 33건). `주차요금` 은 **넣지 않는다** — 입장료가
+# 아니라 주차비다.
 _SOURCE: dict[str, tuple[str, tuple[str, ...]]] = {
-    "12": ("detailInfo2", ("입 장 료", "입장료")),
+    "12": ("detailInfo2", ("입장료", "관람료", "시설이용료")),
     "14": ("detailIntro2", ("usefee",)),
 }
+
+
+def _norm_name(name: str) -> str:
+    """반복정보 infoname 정규화 — 공백만 지운다(`입 장 료` → `입장료`)."""
+    return re.sub(r"\s+", "", name)
 
 # ── 파싱 ────────────────────────────────────────────────────────
 # `원` 이 붙은 수만 금액으로 읽는다 — `어른 (25~64세) 1,000원` 의 나이,
@@ -165,10 +178,12 @@ def _get(endpoint: str, params: dict[str, str], key: str) -> list[dict]:
 def _raw_fee(endpoint: str, fields: tuple[str, ...], items: list[dict]) -> str | None:
     """응답에서 요금 원문 1건. 없으면 None (= 키를 만들지 않는다)."""
     if endpoint == "detailInfo2":
-        for it in items:                       # 반복정보: infoname 이 곧 필드명
-            if str(it.get("infoname") or "").strip() in fields:
-                if (v := str(it.get("infotext") or "").strip()):
-                    return v
+        # 우선순위 순으로 훑는다 — 입장료가 있으면 그걸 쓰고, 없을 때만 대체한다.
+        by_name = {_norm_name(str(it.get("infoname") or "")):
+                   str(it.get("infotext") or "").strip() for it in items}
+        for f in fields:
+            if (v := by_name.get(_norm_name(f))):
+                return v
         return None
     first = items[0] if items and isinstance(items[0], dict) else {}
     for f in fields:
