@@ -180,12 +180,12 @@ export function StaySearchPage(): ReactElement {
         savedKeys={savedKeys}
         pendingKeys={pendingKeys}
         onToggleSave={(item) => void attemptToggle(item)}
-        // 카드 탭(TRIP-457 AC-5) → 상세 라우트로 push(객체형·raw stayKey·item JSON — expo-router
-        // 자동 인코딩이라 수동 encode 안 함 ★F-3). 화면은 라우터를 모른다(구조 가드).
+        // 카드 탭(TRIP-457 AC-5) → 상세 라우트로 push(객체형·raw stayKey 만 — 상세가 스스로 조회,
+        // TRIP-940. expo-router 자동 인코딩이라 수동 encode 안 함 ★F-3). 화면은 라우터를 모른다(구조 가드).
         onPressCard={(item) =>
           router.push({
             pathname: '/stays/[stayId]',
-            params: { stayId: stayKey(item), item: JSON.stringify(item) },
+            params: { stayId: stayKey(item) },
           })
         }
         nameQuery={nameQuery}

@@ -23,7 +23,7 @@ import {
  *
  * 서버 카탈로그(`Region`)를 그린다 — 카드는 세 갈래다:
  *  · `selectable && poiCount>0` → 누르면 선택되는 카드.
- *  · `selectable && poiCount===0` → "준비 중"(후보풀 빔, INV-1) — 보이되 선택 불가.
+ *  · `selectable && poiCount===0` → "추천 장소 없음"(후보풀 빔, INV-1) — 보이되 선택 불가.
  *  · `selectable === false` → 도(道)·행정구 묶음 행 — 보이되 선택 불가.
  * 조회 실패(`isError`)는 빈 목록으로 뭉개지 않고 실패 얼굴로 그린다(INV-4).
  *
@@ -132,7 +132,8 @@ function SelectableCard({
   );
 }
 
-/** poiCount===0 지역 카드 — 후보풀이 비어 "준비 중"(INV-1). 비-Pressable이라 눌러도 선택 안 됨. */
+/** poiCount===0 지역 카드 — 후보풀이 비어 "추천 장소 없음"(INV-1). 비-Pressable이라 눌러도 선택 안 됨.
+ * "준비 중"은 미완성 기능으로 읽혀(심사 2.1) 데이터 상태 표현으로 바꿨다(TRIP-935 R9). */
 function ComingSoonCard({ region }: { region: Region }): ReactElement {
   const [from, to] = regionTint(region.regionCode);
   return (
@@ -148,7 +149,9 @@ function ComingSoonCard({ region }: { region: Region }): ReactElement {
         <Text className="font-noto-bold text-card-title font-bold text-ink">
           {region.name}
         </Text>
-        <Text className="mt-xs font-noto text-label text-muted">준비 중</Text>
+        <Text className="mt-xs font-noto text-label text-muted">
+          추천 장소 없음
+        </Text>
       </View>
     </View>
   );

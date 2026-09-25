@@ -5,7 +5,10 @@ import type { StyleAnalysisEnvelope } from '@/shared/api/generated/schemas';
 import { useGetMe } from '@/shared/api/generated/account/account';
 import { useGetMeProfile } from '@/shared/api/generated/profile/profile';
 import { useGetMeStyle } from '@/shared/api/generated/reflection/reflection';
-import { useGetTrips } from '@/shared/api/generated/trips/trips';
+import {
+  useGetMeRecords,
+  useGetTrips,
+} from '@/shared/api/generated/trips/trips';
 
 import { MyPage } from './MyPage';
 
@@ -43,6 +46,8 @@ jest.mock('@/shared/api/generated/profile/profile', () => ({
 jest.mock('@/shared/api/generated/trips/trips', () => ({
   ...jest.requireActual('@/shared/api/generated/trips/trips'),
   useGetTrips: jest.fn(),
+  // TRIP-776 — 지난 여행 "사진 N" 목록 조회도 목으로 막는다(실 훅이면 MSW 없는 네트워크 요청이 샌다).
+  useGetMeRecords: jest.fn(),
 }));
 jest.mock('@/shared/api/generated/reflection/reflection', () => ({
   ...jest.requireActual('@/shared/api/generated/reflection/reflection'),
@@ -54,6 +59,9 @@ const mockUseProfile = useGetMeProfile as jest.MockedFunction<
   typeof useGetMeProfile
 >;
 const mockUseTrips = useGetTrips as jest.MockedFunction<typeof useGetTrips>;
+const mockUseRecords = useGetMeRecords as jest.MockedFunction<
+  typeof useGetMeRecords
+>;
 const mockUseStyle = useGetMeStyle as jest.MockedFunction<typeof useGetMeStyle>;
 
 /** 정식 envelope — 카드가 official 얼굴로 그려져 my-style-detail 이 렌더된다. */
@@ -95,6 +103,9 @@ beforeEach(() => {
   mockUseProfile.mockReturnValue(asQuery({ nickname: '테스터' }));
   mockUseTrips.mockReturnValue(asQuery([]));
   mockUseStyle.mockReturnValue(asQuery(officialEnvelope()));
+  mockUseRecords.mockReturnValue(
+    asQuery(undefined) as unknown as ReturnType<typeof useGetMeRecords>
+  );
 });
 
 describe('🔴 TRIP-573 AC-7 · 요약카드 상세진입 활성화', () => {

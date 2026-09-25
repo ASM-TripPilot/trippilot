@@ -1,11 +1,21 @@
 import type { ReactElement } from 'react';
 import { useEffect, useMemo, useRef } from 'react';
+import type { ImageSourcePropType } from 'react-native';
 import { StyleSheet, Text, View } from 'react-native';
-import Svg, { Circle, Path, Rect, Text as SvgText } from 'react-native-svg';
+import Svg, {
+  Circle,
+  ClipPath,
+  Defs,
+  Image as SvgImage,
+  Path,
+  Rect,
+  Text as SvgText,
+} from 'react-native-svg';
 import {
   NaverMapView,
   NaverMapMarkerOverlay,
   NaverMapPathOverlay,
+  NaverMapCircleOverlay,
 } from '@mj-studio/react-native-naver-map';
 
 /**
@@ -32,16 +42,35 @@ export interface MapCenter {
 export type MapPinState = 'done' | 'current' | 'upcoming';
 
 /**
+ * 기록 도메인 마커족(TRIP-768). `state`(진행 축)와 **직교**인 별개 축이다 — j 밴드 기록·회고 지도가
+ * 쓴다. `visited`=사진 썸네일+번호 배지, `planned`=회색 점선 원+회색 번호, `stay`=빨강 마커+흰 침대
+ * (번호 없음). `kind` 미전달이면 이 마커족을 안 그리고 현행 `state` 물방울로 폴백한다(무회귀).
+ * `candidate`(TRIP-800, h15)=흰 채움+빨강 테두리 빈 물방울(번호 없음) — 아직 고르지 않은 추천 숙소 위치.
+ * kind 축이라 경로선에서 자동으로 빠진다(아래 `lineCoords`).
+ */
+export type MapPinKind = 'visited' | 'planned' | 'stay' | 'candidate';
+
+/**
  * 번호가 붙은 지도 핀(카카오 시절 계약 계승). `number` 는 지도가 정하지 않는다 — 호출부가
  * 만든 값을 그대로 그린다(좌표 없는 슬롯을 건너뛴 뒤에도 카드 번호를 유지해야 해 핀 번호가
  * ①③④처럼 뛴다). `state` 는 **옵셔널 additive** — 미전달이면 기존 분홍 핀(번호 있음) 거동 유지라
  * 현행 소비처가 무회귀로 그대로 돈다.
+ *
+ * `imageUrl`·`kind` 도 옵셔널 additive(TRIP-768) — 기록 마커족 축이다. 둘 다 미전달이면 위 `state`
+ * 물방울 거동이 그대로라 h·i 밴드 현행 호출부는 건드리지 않는다. `imageUrl` 은 `visited` 에서만
+ * 의미가 있고 번들 `require`(number source)를 받는다 — SVG `<Image href>` 로 넘겨 iOS 마커 래스터에
+ * 안전하게 찍는다(원격 URL 배선은 TRIP-634 밖).
  */
 export interface MapPin {
   number: number;
   lat: number;
   lng: number;
   state?: MapPinState;
+  imageUrl?: ImageSourcePropType;
+  kind?: MapPinKind;
+  /** 물방울 안 글자를 번호 대신 letter(예 'A'/'B') 로 그린다(h10 후보 배지와 시각 일치).
+   * **옵셔널 additive** — 미전달이면 번호 그대로라 현행 소비처가 무회귀로 돈다. */
+  label?: string;
 }
 
 export interface MapViewProps {
@@ -68,6 +97,19 @@ export interface MapViewProps {
    * 미전달이면 그 마커를 렌더하지 않는다(항상-렌더 회귀 방지). 핀 index 를 오염시키지 않도록
    * `onPinTap` 을 달지 않는 별도 마커다. */
   currentLocation?: MapCenter;
+  /** +/− 줌 컨트롤(우상단)을 켠다(TRIP-768, 기록·회고 지도). **옵트인** — 미전달이면 명시적으로
+   * 끈다(네이버 SDK native default 가 `true` 라 안 넘기면 저절로 뜬다). `viewOnly`(제스처)와 **독립**:
+   * 제스처를 잠근 지도에도 줌 버튼은 켤 수 있고, 기존 viewOnly 지도(h05·h07)에 저절로 생기지 않는다. */
+  showZoomControls?: boolean;
+  /** 축척 바("1km", 우하단)를 켠다(TRIP-768). `showZoomControls` 와 같은 옵트인·독립 규칙. 거리
+   * 표기라 INV-3(소요시간 금지)과 무관하다. */
+  showScaleBar?: boolean;
+  /** 반경 원(TRIP-795, h10). 중심 좌표와 반경 미터를 주면 `NaverMapCircleOverlay` 로 원을 얹는다.
+   * **옵셔널 additive** — 미전달이면 원을 안 그린다(기존 12 소비처 무회귀). 실 점선·축척은 6-b 실기. */
+  radiusCircle?: { center: MapCenter; radiusM: number };
+  /** 지도 빈 곳 탭(마커 아님, TRIP-748 — i01 허브 트리거 알약 로컬 숨김). `onCameraIdle` 과 같은
+   * 옵트인 — 준 때만 NaverMapView 에 단다(미전달 시 콜백 부착 0). 좌표는 올리지 않는다. */
+  onTapMap?: () => void;
 }
 
 /** 네이버 초기 줌. ponytail: 카카오 기본 level 3 에 대응하는 대략값, 정확 캘리브레이션은 실기(6-b). */
@@ -100,10 +142,15 @@ const DONE_CHECK = 'M9.3 13.8L12.4 16.9L18.4 10.2';
 function PinTeardrop({
   state,
   number,
+  label,
 }: {
   state: MapPinState;
   number: number;
+  /** letter 라벨(h10). 주면 물방울 안 글자를 번호 대신 이 값으로 그린다(done 은 체크라 영향 없음). */
+  label?: string;
 }): ReactElement {
+  // 번호 자리에 그릴 글자 — label 을 주면 letter, 아니면 번호(무회귀).
+  const glyph = label ?? number;
   if (state === 'done') {
     // 체크는 초록 물방울 위에 겹치는 **별도 <Svg>** 로 그린다. testID 를 Svg 호스트(RNSVGSvgView)에
     // 얹어야 stroke 가 원문 '#FFFFFF' 문자열로 남는다 — shape 호스트(RNSVGPath)는 색을 정수로 가공해
@@ -160,7 +207,7 @@ function PinTeardrop({
           fontWeight="bold"
           textAnchor="middle"
         >
-          {number}
+          {glyph}
         </SvgText>
       </Svg>
     );
@@ -183,9 +230,186 @@ function PinTeardrop({
         fontWeight="bold"
         textAnchor="middle"
       >
-        {number}
+        {glyph}
       </SvgText>
     </Svg>
+  );
+}
+
+/** stay 마커 몸통 — 아래로 뾰족한 라운드 사각(Figma 1557:1738 침대 마커). 좌표는 아래 꼭짓점(17,39). */
+const STAY_PIN =
+  'M11 2 H23 A9 9 0 0 1 32 11 V21 A9 9 0 0 1 23 30 H21 L17 39 L13 30 H11 A9 9 0 0 1 2 21 V11 A9 9 0 0 1 11 2 Z';
+
+/** 기록 마커족 치수·앵커(kind 별). 앵커는 좌표가 마커의 어디를 가리키나 — 6-b 조정 knob. */
+const RECORD_DIMS: Record<
+  MapPinKind,
+  { width: number; height: number; anchor: { x: number; y: number } }
+> = {
+  visited: { width: 48, height: 48, anchor: { x: 0.5, y: 0.5 } },
+  planned: { width: 32, height: 32, anchor: { x: 0.5, y: 0.5 } },
+  stay: { width: 34, height: 42, anchor: { x: 0.5, y: 1 } },
+  candidate: { width: 28, height: 36, anchor: { x: 0.5, y: 1 } },
+};
+
+/**
+ * 기록 마커족 한 개(TRIP-768). PinTeardrop(state 물방울) 옆 형제 분기다 — `kind` 가 있을 때만 그린다.
+ *  · visited: 라운드 사각 사진 썸네일(`<Image href>`, `map-marker-photo-{n}` testID)에 좌상단 빨강 번호 배지.
+ *  · planned: 회색 점선 빈 원 + 가운데 회색 번호(채움·사진 없음).
+ *  · stay: 빨강 마커 + 흰 침대(`map-marker-stay-{n}` testID). 번호 없음.
+ * 번호·글자는 전부 SVG 여야 iOS 마커 래스터(UIImage 스냅샷)에 찍힌다(RN <Text> 미포착, TRIP-876).
+ * 사진·침대는 색이 아니라 testID 로 식별한다(SVG shape 색은 마커 스왑에 취약 — 색 토글 거짓통과 함정).
+ */
+function RecordMarker({
+  kind,
+  number,
+  imageUrl,
+}: {
+  kind: MapPinKind;
+  number: number;
+  imageUrl?: ImageSourcePropType;
+}): ReactElement {
+  if (kind === 'visited') {
+    // 사진은 라운드 사각으로 클립한다(clip id 는 핀별 고유). 번호 배지는 사진 좌상단에 겹치는 별도 Svg.
+    const clipId = `photo-clip-${number}`;
+    return (
+      <>
+        <Svg
+          testID={`map-marker-photo-${number}`}
+          width={40}
+          height={40}
+          viewBox="0 0 40 40"
+          style={{ position: 'absolute', top: 8, left: 8 }}
+        >
+          <Defs>
+            <ClipPath id={clipId}>
+              <Rect x={0} y={0} width={40} height={40} rx={10} />
+            </ClipPath>
+          </Defs>
+          {imageUrl ? (
+            <SvgImage
+              href={imageUrl}
+              x={0}
+              y={0}
+              width={40}
+              height={40}
+              preserveAspectRatio="xMidYMid slice"
+              clipPath={`url(#${clipId})`}
+            />
+          ) : null}
+          <Rect
+            x={1}
+            y={1}
+            width={38}
+            height={38}
+            rx={9}
+            fill="none"
+            stroke={PIN_WHITE}
+            strokeWidth={2}
+          />
+        </Svg>
+        <Svg
+          width={22}
+          height={22}
+          viewBox="0 0 22 22"
+          style={{ position: 'absolute', top: 0, left: 0 }}
+        >
+          <Circle
+            cx={11}
+            cy={11}
+            r={10}
+            fill={PIN_PRIMARY}
+            stroke={PIN_WHITE}
+            strokeWidth={1.5}
+          />
+          <SvgText
+            x={11}
+            y={15}
+            fill={PIN_WHITE}
+            fontSize={12}
+            fontWeight="bold"
+            textAnchor="middle"
+          >
+            {number}
+          </SvgText>
+        </Svg>
+      </>
+    );
+  }
+  if (kind === 'planned') {
+    // 회색 점선 빈 원 + 가운데 회색 번호. 채움 없음(fill="none") · 빨강/초록 노드 0(스왑 차단).
+    return (
+      <Svg width={32} height={32} viewBox="0 0 32 32">
+        <Circle
+          cx={16}
+          cy={16}
+          r={13}
+          fill="none"
+          stroke={PIN_MUTED_SOFT}
+          strokeWidth={2}
+          strokeDasharray="3 3"
+        />
+        <SvgText
+          x={16}
+          y={20.5}
+          fill={PIN_MUTED_SOFT}
+          fontSize={13}
+          fontWeight="bold"
+          textAnchor="middle"
+        >
+          {number}
+        </SvgText>
+      </Svg>
+    );
+  }
+  if (kind === 'candidate') {
+    // 추천 후보(h15, Figma cand-pin 4385:1645) — 작은 물방울을 흰 채움 + 빨강 테두리로. 번호 없음.
+    return (
+      <Svg
+        testID={`map-marker-candidate-${number}`}
+        width={28}
+        height={36}
+        viewBox="0 0 28 36"
+      >
+        <Path
+          d={TEARDROP_SMALL}
+          fill={PIN_WHITE}
+          stroke={PIN_PRIMARY}
+          strokeWidth={2}
+        />
+      </Svg>
+    );
+  }
+  // stay — 빨강 마커 몸통 + 흰 침대(별도 Svg testID). 번호는 안 그린다.
+  return (
+    <>
+      <Svg
+        width={34}
+        height={42}
+        viewBox="0 0 34 42"
+        style={{ position: 'absolute', top: 0, left: 0 }}
+      >
+        <Path
+          d={STAY_PIN}
+          fill={PIN_PRIMARY}
+          stroke={PIN_WHITE}
+          strokeWidth={2}
+        />
+      </Svg>
+      <Svg
+        testID={`map-marker-stay-${number}`}
+        width={20}
+        height={20}
+        viewBox="0 0 20 20"
+        style={{ position: 'absolute', top: 6, left: 7 }}
+      >
+        {/* 침대 실루엣(헤드보드·베개·매트리스·다리) — 전부 흰 Rect. */}
+        <Rect x={1} y={6} width={2} height={10} rx={1} fill={PIN_WHITE} />
+        <Rect x={2} y={11} width={16} height={4.5} rx={2} fill={PIN_WHITE} />
+        <Rect x={4.5} y={8} width={4.5} height={3} rx={1.5} fill={PIN_WHITE} />
+        <Rect x={2} y={15.5} width={1.8} height={2.5} fill={PIN_WHITE} />
+        <Rect x={16.2} y={15.5} width={1.8} height={2.5} fill={PIN_WHITE} />
+      </Svg>
+    </>
   );
 }
 
@@ -213,6 +437,10 @@ export function MapView({
   maxLevel,
   onCameraIdle,
   currentLocation,
+  showZoomControls,
+  showScaleBar,
+  radiusCircle,
+  onTapMap,
 }: MapViewProps): ReactElement {
   // 네이티브 SDK 는 런타임 키를 config plugin 에서 받으므로, 이 env 판정은 "설정 누락 표면"용이다
   // (키가 없으면 회색 빈 지도 대신 안내 화면을 띄운다). 참조는 이 한 곳뿐(A-2 계승).
@@ -258,8 +486,13 @@ export function MapView({
     );
   }
 
-  const showPath =
-    connectPins !== false && pins !== undefined && pins.length >= 2;
+  // 연결선은 **방문(visited) 구간만** + **현행 무-kind 호출부 전부** 잇는다(TRIP-768). `kind===undefined`
+  // 를 반드시 포함해야 h·i 밴드 물방울 지도(전부 kind 미전달)의 선이 안 지워진다(무회귀). j 밴드는
+  // 모든 핀이 kind 를 가지므로 결과는 visited-only 다(planned·stay 는 선 밖).
+  const lineCoords = (pins ?? [])
+    .filter((pin) => pin.kind === undefined || pin.kind === 'visited')
+    .map((pin) => ({ latitude: pin.lat, longitude: pin.lng }));
+  const showPath = connectPins !== false && lineCoords.length >= 2;
 
   return (
     <View testID="map-root" className="flex-1">
@@ -270,6 +503,10 @@ export function MapView({
         isZoomGesturesEnabled={!viewOnly}
         isRotateGesturesEnabled={!viewOnly}
         isTiltGesturesEnabled={!viewOnly}
+        // 줌/축척은 명시적으로 내려보낸다(옵트인). SDK native default 가 true 라 안 넘기면(undefined)
+        // 저절로 뜨므로, 미전달을 `=== true` 로 눌러 명시적 false 로 "기본 미표시"를 지킨다.
+        isShowZoomControls={showZoomControls === true}
+        isShowScaleBar={showScaleBar === true}
         {...(maxLevel !== undefined
           ? { minZoom: kakaoMaxLevelToNaverMinZoom(maxLevel) }
           : {})}
@@ -279,8 +516,58 @@ export function MapView({
                 onCameraIdle({ lat: params.latitude, lng: params.longitude })
             : undefined
         }
+        onTapMap={onTapMap ? () => onTapMap() : undefined}
       >
+        {radiusCircle ? (
+          // 반경 원(h10) — 중심·반경만 그린다(점선·색 튜닝은 6-b). outlineColor 는 핀 primary 재사용.
+          <NaverMapCircleOverlay
+            latitude={radiusCircle.center.lat}
+            longitude={radiusCircle.center.lng}
+            radius={radiusCircle.radiusM}
+            // 채움 투명(알파 0·RGB 흰색) — 미전달이면 JS 기본 검정, 0 이 되는 투명 표기(transparent 등)는 iOS 가
+            // "변경 없음"으로 무시해 네이티브 기본 흰색이 칠해진다(h10·h15 실측). 0 이 아닌 값이어야 한다.
+            color="rgba(255,255,255,0)"
+            outlineColor={PIN_PRIMARY}
+            outlineWidth={1.5}
+          />
+        ) : null}
         {pins?.map((pin, index) => {
+          // 기록 마커족(kind 축)이 있으면 그것으로, 없으면 현행 state 물방울로 그린다(TRIP-768,
+          // 무회귀). 래퍼(map-marker-pin-{n}·collapsable={false})는 두 갈래가 공유한다 — TRIP-876
+          // 래스터 필수 조건이고 심판이 이 testID 를 물고 있다.
+          if (pin.kind !== undefined) {
+            const dims = RECORD_DIMS[pin.kind];
+            return (
+              <NaverMapMarkerOverlay
+                key={pin.number}
+                latitude={pin.lat}
+                longitude={pin.lng}
+                anchor={dims.anchor}
+                width={dims.width}
+                height={dims.height}
+                onTap={() => onPinTap?.(index)}
+              >
+                <View
+                  key={`pin-${pin.number}-${pin.kind}`}
+                  collapsable={false}
+                  testID={`map-marker-pin-${pin.number}`}
+                  style={{
+                    width: dims.width,
+                    height: dims.height,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <RecordMarker
+                    kind={pin.kind}
+                    number={pin.number}
+                    imageUrl={pin.imageUrl}
+                  />
+                </View>
+              </NaverMapMarkerOverlay>
+            );
+          }
+
           // state 미전달이면 'current'(분홍+번호)로 폴백해 기존 거동을 보존한다(옵셔널 additive).
           const pinState = pin.state ?? 'current';
           // current·기본은 큰 물방울(35×45.5), upcoming·done 은 작은 물방울(28×36). 래퍼·마커 치수를
@@ -312,7 +599,11 @@ export function MapView({
                 testID={`map-marker-pin-${pin.number}`}
                 style={{ width: wrapW, height: wrapH }}
               >
-                <PinTeardrop state={pinState} number={pin.number} />
+                <PinTeardrop
+                  state={pinState}
+                  number={pin.number}
+                  label={pin.label}
+                />
               </View>
             </NaverMapMarkerOverlay>
           );
@@ -377,11 +668,9 @@ export function MapView({
         ) : null}
         {showPath ? (
           // 경로선 빨강(primary) + 흰 케이싱(Figma 4125:3958 route/route-casing). width 는 6-b 조정.
+          // coords 는 visited(+무-kind) 구간만 — planned·stay 는 선에서 빠진다(위 lineCoords).
           <NaverMapPathOverlay
-            coords={pins.map((pin) => ({
-              latitude: pin.lat,
-              longitude: pin.lng,
-            }))}
+            coords={lineCoords}
             color={PIN_PRIMARY}
             width={2.75}
             outlineColor={PIN_WHITE}

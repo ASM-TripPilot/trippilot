@@ -1,11 +1,14 @@
 import type { Trigger } from '@/shared/api/generated/schemas';
 
+import { WATCH_CATEGORY_LABEL } from '../config/watchLabels';
+
 /**
- * TRIP-562 · triggerWatchlist — 발화 트리거 목록 → i09 감시 3항목 사영(projection).
+ * TRIP-562 · triggerWatchlist — 발화 트리거 목록 → 감시 3항목 사영(projection).
+ * TRIP-749 — 옛 i09 감시 목록 화면은 삭제됐고, 이 사영이 i03 위험 상세 시트의 배지 3개가 된다.
  *
- * 개념 **사영(projection)**: 같은 `GET /triggers` 데이터를 "다른 모양으로 접는다". i08 칩은 발화
- * 목록을 그대로 쓰고(활성 트리거 제목), i09 감시 표면은 kind 3종별로 접는다 — 감시 행은 **활성 여부와
- * 무관히 상시 존재하는 카테고리**라 이름이 Figma 카테고리명(날씨·이동 지연·영업·휴무)이다.
+ * 개념 **사영(projection)**: 같은 `GET /triggers` 데이터를 "다른 모양으로 접는다". 지도 알약은 발화
+ * 목록의 첫 트리거를 쓰고, 감시 배지는 kind 3종별로 접는다 — 감시 행은 **활성 여부와 무관히 상시
+ * 존재하는 카테고리**라 이름이 Figma 카테고리명(날씨·이동·영업, `config/watchLabels`)이다.
  *
  *  - MANUAL 은 제외한다(사용자가 만드는 편집 요청이라 감시 표면에 안 뜬다, BR-U4-01) — 배너도 못
  *    몰고 어느 행도 active 로 못 만든다.
@@ -25,13 +28,6 @@ export interface TriggerWatchlistRow {
   /** 활성 kind 의 발화 사유(normal 이면 null). */
   reason: string | null;
 }
-
-/** 감시 표면 카테고리명(명명 상수 — 사영이 `row.label` 에 실어 나른다). */
-const WATCH_CATEGORY_LABEL: Record<TriggerWatchlistRow['kind'], string> = {
-  WEATHER: '날씨',
-  DELAY: '이동 지연',
-  CLOSURE: '영업·휴무',
-};
 
 /** 감시 3항목 고정 순서(입력 순서 무관). */
 const WATCH_ORDER: TriggerWatchlistRow['kind'][] = [

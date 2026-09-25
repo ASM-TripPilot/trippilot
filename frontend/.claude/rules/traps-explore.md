@@ -7,6 +7,8 @@ paths:
 ---
 이 파일은 repo-traps.md에서 경로별로 쪼갠 함정이다 — 해당 경로 만질 때만 로드된다.
 
+- **`savedPlaces.integration.test.tsx`는 react-query 알림 경합 처방이 적용돼 있다(TRIP-953)** — `beforeAll`에 `notifyManager.setScheduler` 5ms 잠금 + `@/test-support/flushNotifications`로 `result.current`를 읽기 전 순서를 기다린다. 롤백 단언 앞 flush 3자리(`:405`·`:432`·`:451`)는 지워도 green으로 남는 무방비 지점이다(상세·이유는 `traps-record.md` 동일 항목). 새 낙관 업데이트 테스트를 이 파일에 더할 때 flush 없이 `act` 직후 읽으면 같은 flake가 재발한다.
+
 ## 지역 카탈로그 (explore/region, TRIP-445)
 
 - **`TripNewStep1Page`·`RegionPickerScreen`을 렌더하는 node-버킷 테스트는 `useRegions`를 목해야 크래시 안 남** → 두 화면 모두 `useRegions()`(react-query)를 물어 `QueryClientProvider` 없는 node 버킷에서 렌더하면 `No QueryClient set` throw. 승인 테스트는 목을 걸었지만 sibling 테스트(`.budget`·`.mustVisit`·`.stayImport`·`tripWizardEntryReset`)는 처음엔 안 걸려 있었다(qa n=1 FAIL 실측) — 이 화면들을 렌더하는 새 테스트 파일을 추가할 때마다 같은 목이 필요하다는 사실을 기계가 강제하지 않는다.
@@ -19,7 +21,7 @@ paths:
 
 ## 하트 글리프 정본 (TRIP-806 → TRIP-807로 shared 이동)
 
-- **하트 저장 글리프(Outline·Filled) 정본은 이제 `shared/ui/HeartGlyphs.tsx`다** — TRIP-806이 `entities/place/ui/PlaceGlyphs.tsx`로 승격했던 것을 TRIP-807이 `git mv`로 다시 `shared/ui`로 내렸다(place·stay 검색 카드가 공유, entities 교차 0). `features/explore/ui/ExploreGlyphs.tsx`의 동명 함수는 806 5-c에서 이미 삭제됐다. `repo-traps.md`의 `LocationOffGlyph` 두 벌 함정과 동형 위험이 두 차례(806 explore↔entities, 807 stay 신규 소비) 발생했다 — 새 하트 소비처를 만들 때 옛 경로(`entities/place/ui/PlaceGlyphs`·`ExploreGlyphs`)에서 다시 끌어오면 조용히 두 벌로 되돌아간다. raw-hex·fill 스캔은 `*Glyphs.tsx` 제외 관례라 분기해도 기계가 못 잡는다.
+- **하트 저장 글리프(Outline·Filled) 정본은 이제 `shared/ui/HeartGlyphs.tsx`다** — TRIP-806이 `entities/place/ui/PlaceGlyphs.tsx`로 승격했던 것을 TRIP-807이 `git mv`로 다시 `shared/ui`로 내렸다(place·stay 검색 카드가 공유, entities 교차 0). `features/explore/ui/ExploreGlyphs.tsx`의 동명 함수는 806 5-c에서 이미 삭제됐다. `traps-glyphs.md`의 `LocationOffGlyph` 세 벌 함정과 동형 위험이 두 차례(806 explore↔entities, 807 stay 신규 소비) 발생했다 — 새 하트 소비처를 만들 때 옛 경로(`entities/place/ui/PlaceGlyphs`·`ExploreGlyphs`)에서 다시 끌어오면 조용히 두 벌로 되돌아간다. raw-hex·fill 스캔은 `*Glyphs.tsx` 제외 관례라 분기해도 기계가 못 잡는다.
 
 ## 장소 상세 (explore, d06, TRIP-456)
 

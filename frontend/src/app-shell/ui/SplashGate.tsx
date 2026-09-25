@@ -3,6 +3,7 @@ import { Stack } from 'expo-router';
 
 import { useBootstrapGate } from '@/features/auth/model/useBootstrapGate';
 import { SplashScreen } from '@/features/auth/ui/SplashScreen';
+import { registerPushIfGranted } from '@/shared/push';
 
 /** 스플래시 최소 노출 하한(ms). 정본 근거 없는 발명값 — 머지 후 실기 체감으로 조정. */
 export const SPLASH_MIN_VISIBLE_MS = 900;
@@ -28,6 +29,12 @@ export function SplashGate() {
     return () => clearTimeout(timer);
   }, []);
 
+  // 인증된 진입(로그인·재로그인 포함)마다 조용히 토큰을 다시 올린다 — 조회만, 절대 묻지 않는다(TRIP-835).
+  // 서버 등록은 멱등이라 반복해도 무해하다.
+  useEffect(() => {
+    if (destination === 'HOME') void registerPushIfGranted();
+  }, [destination]);
+
   if (phase === 'loading' || destination === null || !floorElapsed) {
     return <SplashScreen />;
   }
@@ -49,6 +56,12 @@ export function SplashGate() {
       <Stack.Protected guard={destination === 'HOME'}>
         <Stack.Screen name="(tabs)" />
       </Stack.Protected>
+      {/* i04 재계획 요청 시트 — 허브 위에 겹쳐 띄운다(TRIP-750 D1). trips 라우트는 어떤 가드에도
+          속하지 않으므로 선언도 가드 밖에 둔다. */}
+      <Stack.Screen
+        name="trips/[tripId]/planb/index"
+        options={{ presentation: 'transparentModal' }}
+      />
     </Stack>
   );
 }

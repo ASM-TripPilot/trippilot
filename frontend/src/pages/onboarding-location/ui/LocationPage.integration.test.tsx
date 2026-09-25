@@ -143,7 +143,7 @@ describe('LocationPage — default 렌더 + 목적 주입 (AC-3)', () => {
 });
 
 describe('LocationPage — 허용 → OS 권한 요청 (AC-4)', () => {
-  it('"위치 사용 허용" 을 누르면 OS 권한 요청이 1회 발화되고 granted 면 pref1 로 replace 한다', async () => {
+  it('주 버튼 "계속" 을 누르면 OS 권한 요청이 1회 발화되고 granted 면 pref1 로 replace 한다', async () => {
     mockRequestForeground.mockResolvedValue(GRANTED);
     render(<LocationPage />);
 

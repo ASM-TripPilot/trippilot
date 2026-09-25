@@ -29,7 +29,7 @@ export function TripStatusSegment({
   return (
     <View
       testID="my-trip-segment"
-      className="w-full flex-row rounded-input bg-surface-strong p-[3px]"
+      className="w-full flex-row rounded-input bg-hairline p-xs"
     >
       {TABS.map(({ bucket, label }) => {
         const selected = bucket === active;
@@ -40,12 +40,12 @@ export function TripStatusSegment({
             accessibilityRole="tab"
             accessibilityState={{ selected }}
             onPress={() => onChange(bucket)}
-            className={`flex-1 items-center justify-center rounded-[9px] py-[9px] ${
+            className={`h-[34px] flex-1 items-center justify-center rounded-[9px] ${
               selected ? 'bg-canvas shadow-sm' : ''
             }`}
           >
             <Text
-              className={`text-label ${
+              className={`text-[13.5px] ${
                 selected
                   ? 'font-noto-bold font-bold text-ink'
                   : 'font-noto text-muted'

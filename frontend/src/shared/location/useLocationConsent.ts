@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import * as Location from 'expo-location';
+import { useQueryClient } from '@tanstack/react-query';
 
 import {
   useGetMeLocationConsent,
@@ -36,7 +37,16 @@ function toOsPermission(status: string): OsPermission {
  */
 export function useLocationConsent(): LocationConsentModel {
   const consent = useGetMeLocationConsent();
-  const put = usePutMeLocationConsent();
+  const queryClient = useQueryClient();
+  // 저장 성공 뒤 조회를 낡음 표시 — 스택에 남은 설정(l05)의 동의 칩이 옛 값을 보이지 않게 한다(TRIP-778 D11).
+  // 키는 `getGetMeLocationConsentQueryKey()` 와 같은 값의 리터럴이다 — 생성 모듈을 자동 목하는 테스트에서
+  // 그 함수는 undefined 를 돌려줘 전체 무효화로 번진다.
+  const put = usePutMeLocationConsent({
+    mutation: {
+      onSuccess: () =>
+        queryClient.invalidateQueries({ queryKey: ['/me/location-consent'] }),
+    },
+  });
   const patch = usePatchMeLocationConsentOsPermission();
 
   // 단말 실권한 — 마운트 시 1회 읽어 저장한다(초기 null). 서버 미러가 stale DENIED 여도 단말이

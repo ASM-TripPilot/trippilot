@@ -1,5 +1,4 @@
 import type { ReactElement } from 'react';
-import { useState } from 'react';
 import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -12,7 +11,6 @@ import {
   type MustVisitListView,
 } from '../model/mustVisitList';
 import {
-  AlertCircleGlyph,
   BackChevronGlyph,
   CloseGlyph,
   InfoCircleGlyph,
@@ -31,9 +29,10 @@ import {
  * (카카오 SDK 가 자체 렌더한다 · 01b D8)는 그리지 않는다. 눌러도 아무 일 없는 표면은 침묵
  * 실패의 다른 이름이다.
  *
- * **CTA 와 건너뛰기는 예외로 그린다**(01b D6) — 갈 다음 단계(h09)가 아직 없지만 **사유를
- * 함께** 내므로 침묵이 아니다. 사유가 있으면 둘 다 실제로 잠기고 색도 함께 바뀐다: 접근성
- * 상태만 잠그면 "빨간 활성 버튼처럼 보이는데 안 눌리는" 상태가 남는다(문제로그 2026-08-08).
+ * **얼굴마다 크롬이 다르다** — 헤드라인 제목은 `listed` 에서 숨고(그때만 서브카피만 남는다),
+ * 건너뛰기는 `failed` 에서만 뜬다(에러에서 빠져나갈 유일한 문). CTA 는 `listed` 가 아니면
+ * 잠긴다(로딩·에러·빈 목록은 아직 갈 다음 단계가 없다) — 색도 함께 바뀌어 "빨간데 안 눌리는"
+ * 상태를 남기지 않는다(문제로그 2026-08-08).
  */
 
 const SCREEN_TITLE = '필수 방문지';
@@ -55,21 +54,12 @@ const TIMEMODE_FIXED = '시간 정해두기';
 
 const PROCEED_LABEL = '이 구성으로 일정 짜기';
 
-/** 강등 확인 시트 — 정본 공백이라 01b D1 이 정한 발명값이다. 이 시트가 붙는 유일한 이유가
- * **무엇을 잃는지 말하는 것**이다: 계약에 수정(PATCH)이 없어 강등은 DELETE→POST 2단이고
- * 되돌리려면 h07 에서 날짜·시각을 다시 입력해야 한다. */
-const DEMOTE_TITLE = '아무 때나로 바꿀까요?';
-const DEMOTE_NOTE = '정해둔 날짜와 시각이 지워져요';
-const DEMOTE_CONFIRM = '바꾸기';
-const DEMOTE_CANCEL = '취소';
-
 const EMPTY_TITLE = '아직 담은 필수 방문지가 없어요';
 const EMPTY_NOTE = '꼭 가고 싶은 곳을 담으면 AI가 알아서 배치해요';
-const FAILED_TITLE = '목록을 불러오지 못했어요';
-const FAILED_NOTE = '네트워크를 확인하고 다시 시도해주세요';
+/** 조회 실패 부제는 0곳 얼굴과 반드시 구분한다(정본 `frontend-components` L132). */
+const FAILED_TITLE = '담은 곳을 불러오지 못했어요';
+const FAILED_NOTE = '네트워크를 확인하고 다시 시도해 주세요';
 const RETRY_LABEL = '다시 시도';
-/** 목록은 살아 있고 최신화만 실패한 자리 — 조회 실패와 해제 실패가 함께 여기로 온다. */
-const STALE_FAILED_NOTE = '목록을 최신 상태로 맞추지 못했어요';
 
 // 카드 그림자(Figma `0px 4px 16px rgba(0,0,0,0.08)`). RN 은 box-shadow 가 없어 스타일
 // 프로퍼티로 옮긴다 — 그림자는 토큰 대상이 아니다(`HomeScreen.heroCardShadow` 와 같은 값).
@@ -87,11 +77,9 @@ export interface MustVisitPickerScreenProps {
    * 화면은 그것을 그대로 그린다. 비었으면 지도 카드를 아예 안 그린다(01b D9).
    * 아예 안 넘기면 "핀을 아직 모른다" 는 뜻이라 좌표 안내도 붙이지 않는다. */
   pins?: MapPin[];
-  /** 다음 단계가 막힌 사유. `null`·미지정이면 CTA·건너뛰기가 활성이다(정본 선례 —
-   * `frontend-components` §4 h04 "차단 시 CTA 비활성 + 사유(판정값은 prop)"). */
+  /** 다음 단계가 막힌 사유. `null`·미지정이면 사유 문구를 안 띄운다. 비활성 판정 자체는
+   * `view.kind !== 'listed'` 가 소유한다(이 값은 그 위에 얹는 보조 사유일 뿐이다). */
   proceedBlockedReason?: string | null;
-  /** 강등 실패 안내. 목록 **곁에** 덧붙는다 — 얼굴을 갈아 끼우지 않는다(AC-M1). */
-  demoteErrorText?: string;
   onBack?(): void;
   /** 카드 본문 누름 → h07(01b D3). Figma 가 그린 우측 아이콘은 그대로 두고 동선만 연다. */
   onPressItem?(sourcePoiId: string): void;
@@ -99,19 +87,6 @@ export interface MustVisitPickerScreenProps {
   onRetry?(): void;
   onProceed?(): void;
   onSkip?(): void;
-  /**
-   * 확인 시트에서 사용자가 **승인했을 때만** 불린다 — 칩을 누른 시점에는 안 불린다(01b D1).
-   *
-   * `false` 를 돌려주면 **요청을 받지 못했다**는 뜻이고 시트는 열린 채로 남는다(앞 강등이
-   * 아직 날아가는 중이라 잠겨 있을 때). 아무것도 안 돌려주는 호출부는 예전처럼 닫는다.
-   */
-  onDemote?(input: {
-    mustVisitId: string;
-    sourcePoiId: string;
-  }): boolean | void;
-  /** 강등 재시도. 복구 가능한 실패(`lost`)일 때만 배선이 넘긴다(h07 `onRetry` 선례) —
-   * 다시 낼 요청이 없는 실패에 헛된 버튼을 세우지 않는다. */
-  onRetryDemote?(): void;
 }
 
 function Chip({
@@ -142,7 +117,8 @@ function Chip({
  * `아무 때나 / 시간 정해두기` 두 칸짜리 셀렉터의 한 칸(Figma `timeMode`).
  *
  * 선택 상태를 **색과 접근성 상태 둘 다로** 낸다 — 색만 쓰면 스크린리더도 jest 도 어느 쪽이
- * 켜졌는지 알 수 없다(`SegmentItem` 선례).
+ * 켜졌는지 알 수 없다(`SegmentItem` 선례). `onPress` 를 안 주면 표시 전용이다 — h02 에서 이
+ * 셀렉터는 강등을 일으키지 않는다(Q1, 시간 변경은 연필→h07 경유).
  */
 function TimeModeChip({
   testID,
@@ -153,25 +129,43 @@ function TimeModeChip({
   testID: string;
   label: string;
   selected: boolean;
-  onPress(): void;
+  onPress?(): void;
 }): ReactElement {
+  const className = `rounded-pill px-[10px] py-[3px] ${
+    selected ? 'bg-primary-pale' : 'bg-surface-strong'
+  }`;
+  const labelNode = (
+    <Text
+      className={`font-noto-bold text-micro font-bold ${
+        selected ? 'text-primary-text' : 'text-muted'
+      }`}
+    >
+      {label}
+    </Text>
+  );
+  // onPress 가 없으면 표시 전용이다 — `Pressable`+`button` 역할로 두면 VoiceOver 가 "버튼" 으로
+  // 알리고 double-tap 이 무반응이라 침묵 실패가 된다(머리말 원칙). 어포던스 자체를 없애고 선택
+  // 상태만 `accessibilityState` 로 남긴다. 상호작용 칩(시간 정해두기)은 onPress 가 있어 버튼이다.
+  if (onPress === undefined) {
+    return (
+      <View
+        testID={testID}
+        accessibilityState={{ selected }}
+        className={className}
+      >
+        {labelNode}
+      </View>
+    );
+  }
   return (
     <Pressable
       testID={testID}
       accessibilityRole="button"
       accessibilityState={{ selected }}
       onPress={onPress}
-      className={`rounded-pill px-[10px] py-[3px] ${
-        selected ? 'bg-primary-pale' : 'bg-surface-strong'
-      }`}
+      className={className}
     >
-      <Text
-        className={`font-noto-bold text-micro font-bold ${
-          selected ? 'text-primary-text' : 'text-muted'
-        }`}
-      >
-        {label}
-      </Text>
+      {labelNode}
     </Pressable>
   );
 }
@@ -187,7 +181,6 @@ function MustVisitCard({
   noCoords,
   onPressItem,
   onRemove,
-  onRequestDemote,
 }: {
   index: number;
   item: MustVisitListItem;
@@ -196,7 +189,6 @@ function MustVisitCard({
   noCoords: boolean;
   onPressItem?(sourcePoiId: string): void;
   onRemove?(input: { mustVisitId: string; sourcePoiId: string }): void;
-  onRequestDemote(input: { mustVisitId: string; sourcePoiId: string }): void;
 }): ReactElement {
   const fixed = item.type === 'FIXED';
   return (
@@ -261,15 +253,8 @@ function MustVisitCard({
             testID={`itinerary-mustvisit-timemode-anytime-${item.sourcePoiId}`}
             label={TIMEMODE_ANYTIME}
             selected={!fixed}
-            // 이미 ANYTIME 이면 할 일이 없다 — 같은 상태로 보내는 DELETE→POST 는 요청만 늘린다.
-            onPress={() => {
-              if (fixed) {
-                onRequestDemote({
-                  mustVisitId: item.mustVisitId,
-                  sourcePoiId: item.sourcePoiId,
-                });
-              }
-            }}
+            // 표시 전용 — 강등(FIXED→ANYTIME)은 h02 에서 일으키지 않는다(Q1). 되돌릴 수 없는
+            // DELETE→POST 2단이라 h03/h07 을 거친다.
           />
           <TimeModeChip
             testID={`itinerary-mustvisit-timemode-fixed-${item.sourcePoiId}`}
@@ -311,8 +296,12 @@ function MustVisitCard({
   );
 }
 
-/** 도착 전 자리표시. **글자를 넣지 않는다** — "담은 곳이 없어요" 를 미리 그리면 담아 둔
- * 사용자에게 한 순간 거짓말을 하게 된다(`MustVisitSection` 선례). */
+/**
+ * 도착 전 자리표시. **글자를 넣지 않는다** — "담은 곳이 없어요" 를 미리 그리면 담아 둔
+ * 사용자에게 한 순간 거짓말을 하게 된다(`MustVisitSection` 선례). 지도 자리와 카드 3장을
+ * 회색 블록으로 흉내 낸다(실지도 재마운트 아님 · 색은 토큰) — 카드마다 원+사각+바 2줄로
+ * 도착할 카드의 골격을 미리 비운다(빈칸이 아니라 명시적 자리표시 · UX-U1-02).
+ */
 function LoadingFace(): ReactElement {
   return (
     <View
@@ -320,49 +309,68 @@ function LoadingFace(): ReactElement {
       className="w-full gap-lg"
       accessibilityLabel="목록을 불러오는 중"
     >
+      <View
+        testID="itinerary-mustvisit-screen-map-skeleton"
+        className="h-[170px] w-full rounded-card bg-surface-soft"
+      />
       {[0, 1, 2].map((slot) => (
         <View
           key={slot}
-          className="h-[102px] w-full rounded-card bg-surface-soft"
-        />
+          testID="itinerary-mustvisit-screen-card-skeleton"
+          className="w-full flex-row items-center gap-md rounded-card border border-hairline bg-canvas py-md pl-md pr-[14px]"
+        >
+          <View
+            testID="itinerary-mustvisit-screen-skeleton-thumb"
+            className="h-[26px] w-[26px] rounded-pill bg-surface-soft"
+          />
+          <View
+            testID="itinerary-mustvisit-screen-skeleton-box"
+            className="h-[78px] w-[78px] rounded-thumb bg-surface-soft"
+          />
+          <View className="flex-1 gap-xs">
+            <View
+              testID="itinerary-mustvisit-screen-skeleton-bar"
+              className="h-[14px] w-1/3 rounded-pill bg-surface-soft"
+            />
+            <View
+              testID="itinerary-mustvisit-screen-skeleton-bar"
+              className="h-[14px] w-2/3 rounded-pill bg-surface-soft"
+            />
+          </View>
+        </View>
       ))}
     </View>
   );
 }
 
-/** 목록 곁에 **덧붙는** 알림. 얼굴을 갈아 끼우지 않는 것이 이 행의 전부다(AC-M1) — 조회
- * 최신화 실패와 강등 실패가 같은 모양을 쓴다. */
-function AlertRow({
-  testID,
-  text,
-  retryTestID,
-  onRetry,
-}: {
-  testID?: string;
-  text: string;
-  /** 주지 않으면 재시도 버튼이 서지 않는다 — 다시 낼 요청이 없는 실패가 그 자리다. */
-  retryTestID?: string;
-  onRetry?(): void;
-}): ReactElement {
+/**
+ * 조회 실패 얼굴 — 로컬 블록(StateNotice 아님). Figma 는 상단 원형 배지 없이 빨강 아웃라인
+ * `다시 시도` pill 만 그린다. StateNotice 는 아이콘 배지가 필수 + outline 이 회색이라 그 얼굴을
+ * 못 낸다(01b) — 그래서 여기서만 쓰는 로컬 블록으로 그린다. 빨강은 토큰(`border-primary` ·
+ * `text-primary`), 상단 `bg-primary-pale` 배지·글리프 없음(AC-14 · C41).
+ */
+function FailedFace({ onRetry }: { onRetry?(): void }): ReactElement {
   return (
     <View
-      testID={testID}
-      className="w-full flex-row items-center gap-sm rounded-button border border-hairline bg-surface-soft px-[14px] py-md"
+      testID="itinerary-mustvisit-screen-failed"
+      className="w-full items-center gap-md rounded-card px-lg py-3xl"
     >
-      <AlertCircleGlyph />
-      <Text className="flex-1 font-noto text-label text-body">{text}</Text>
-      {retryTestID === undefined ? null : (
-        <Pressable
-          testID={retryTestID}
-          accessibilityRole="button"
-          onPress={onRetry}
-          hitSlop={6}
-        >
-          <Text className="font-noto-bold text-label font-bold text-primary">
-            {RETRY_LABEL}
-          </Text>
-        </Pressable>
-      )}
+      <Text className="text-center font-noto-bold text-[16px] font-bold text-ink">
+        {FAILED_TITLE}
+      </Text>
+      <Text className="text-center font-noto text-label text-muted">
+        {FAILED_NOTE}
+      </Text>
+      <Pressable
+        testID="itinerary-mustvisit-screen-retry"
+        accessibilityRole="button"
+        onPress={onRetry}
+        className="rounded-pill border border-primary px-lg py-md"
+      >
+        <Text className="font-noto-bold text-label font-bold text-primary">
+          {RETRY_LABEL}
+        </Text>
+      </Pressable>
     </View>
   );
 }
@@ -371,28 +379,19 @@ export function MustVisitPickerScreen({
   view,
   pins,
   proceedBlockedReason,
-  demoteErrorText,
   onBack,
   onPressItem,
   onRemove,
   onRetry,
   onProceed,
   onSkip,
-  onDemote,
-  onRetryDemote,
 }: MustVisitPickerScreenProps): ReactElement {
-  // 화면이 스스로 쥐는 상태는 하나뿐이다 — "확인 시트가 누구를 대상으로 열려 있는가".
-  // 순수 표시 상태라 배선이 알 이유가 없다(`MustVisitTimeScreen.startSheetOpen` 과 같은 배치).
-  const [demoteTarget, setDemoteTarget] = useState<{
-    mustVisitId: string;
-    sourcePoiId: string;
-  } | null>(null);
-
   const pinNumbers = new Set((pins ?? []).map((pin) => pin.number));
   // 얼굴이 핀보다 세다 — 빈 목록·조회 실패 프레임에는 핀을 받아도 지도가 없다(Figma
   // `empty`·`error`). 항목은 있는데 좌표를 가진 것이 하나도 없을 때도 안 그린다(01b D9).
   const mapPins = view.kind === 'listed' ? (pins ?? []) : [];
-  const blocked = proceedBlockedReason != null;
+  // 다음 단계는 목록이 도착한 뒤에만 열린다 — 로딩·에러·빈 목록은 갈 곳이 없어 잠근다.
+  const blocked = view.kind !== 'listed' || proceedBlockedReason != null;
 
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
@@ -411,21 +410,18 @@ export function MustVisitPickerScreen({
             {SCREEN_TITLE}
           </Text>
           <View className="flex-1" />
-          <Pressable
-            testID="itinerary-mustvisit-screen-skip"
-            accessibilityRole="button"
-            disabled={blocked}
-            onPress={onSkip}
-            hitSlop={8}
-          >
-            <Text
-              className={`font-noto text-body ${
-                blocked ? 'text-muted-soft' : 'text-muted'
-              }`}
+          {view.kind === 'failed' ? (
+            <Pressable
+              testID="itinerary-mustvisit-screen-skip"
+              accessibilityRole="button"
+              onPress={onSkip}
+              hitSlop={8}
             >
-              {SKIP_LABEL}
-            </Text>
-          </Pressable>
+              <Text className="font-noto text-body text-muted">
+                {SKIP_LABEL}
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
 
         <ScrollView
@@ -433,9 +429,11 @@ export function MustVisitPickerScreen({
           keyboardShouldPersistTaps="handled"
         >
           <View className="w-full gap-xs">
-            <Text className="font-noto-bold text-card-title font-bold text-ink">
-              {INTRO_TITLE}
-            </Text>
+            {view.kind === 'listed' ? null : (
+              <Text className="font-noto-bold text-card-title font-bold text-ink">
+                {INTRO_TITLE}
+              </Text>
+            )}
             <Text className="font-noto text-caption text-muted">
               {INTRO_NOTE}
             </Text>
@@ -458,18 +456,6 @@ export function MustVisitPickerScreen({
             </View>
           )}
 
-          {demoteErrorText === undefined ? null : (
-            <AlertRow
-              text={demoteErrorText}
-              retryTestID={
-                onRetryDemote === undefined
-                  ? undefined
-                  : 'itinerary-mustvisit-screen-demote-retry'
-              }
-              onRetry={onRetryDemote}
-            />
-          )}
-
           {view.kind === 'loading' ? <LoadingFace /> : null}
 
           {view.kind === 'empty' ? (
@@ -483,34 +469,10 @@ export function MustVisitPickerScreen({
             />
           ) : null}
 
-          {view.kind === 'failed' ? (
-            <StateNotice
-              testID="itinerary-mustvisit-screen-failed"
-              icon={<AlertCircleGlyph size={32} tone="primaryText" />}
-              title={FAILED_TITLE}
-              description={FAILED_NOTE}
-              actions={[
-                {
-                  testID: 'itinerary-mustvisit-screen-retry',
-                  label: RETRY_LABEL,
-                  variant: 'outline',
-                  onPress: onRetry,
-                },
-              ]}
-            />
-          ) : null}
+          {view.kind === 'failed' ? <FailedFace onRetry={onRetry} /> : null}
 
-          {view.kind === 'listed' ? (
-            <>
-              {view.staleFailed ? (
-                <AlertRow
-                  testID="itinerary-mustvisit-screen-stale-failed"
-                  text={STALE_FAILED_NOTE}
-                  retryTestID="itinerary-mustvisit-screen-stale-retry"
-                  onRetry={onRetry}
-                />
-              ) : null}
-              {view.items.map((item, index) => (
+          {view.kind === 'listed'
+            ? view.items.map((item, index) => (
                 <MustVisitCard
                   key={item.mustVisitId}
                   index={index}
@@ -518,11 +480,9 @@ export function MustVisitPickerScreen({
                   noCoords={pins !== undefined && !pinNumbers.has(index + 1)}
                   onPressItem={onPressItem}
                   onRemove={onRemove}
-                  onRequestDemote={setDemoteTarget}
                 />
-              ))}
-            </>
-          ) : null}
+              ))
+            : null}
 
           {/* Figma `ctaPrimary` 는 `body` 의 마지막 자식이다 — 하단 고정 바가 아니라 스크롤
               흐름 안에 있다. 리포 표준 `CtaBar` 를 쓰면 자리가 달라진다. */}
@@ -551,56 +511,6 @@ export function MustVisitPickerScreen({
             </Pressable>
           </View>
         </ScrollView>
-
-        {demoteTarget === null ? null : (
-          <View className="absolute inset-0 justify-end">
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={DEMOTE_CANCEL}
-              className="absolute inset-0 bg-scrim/40"
-              onPress={() => setDemoteTarget(null)}
-            />
-            <View
-              testID="itinerary-mustvisit-screen-demote"
-              className="w-full gap-xs rounded-t-sheet-top bg-canvas px-lg pb-2xl pt-xl"
-            >
-              <Text className="font-noto-bold text-section font-bold text-ink">
-                {DEMOTE_TITLE}
-              </Text>
-              <Text className="font-noto text-label text-muted">
-                {DEMOTE_NOTE}
-              </Text>
-              <View className="w-full flex-row items-center gap-sm pt-md">
-                <Pressable
-                  testID="itinerary-mustvisit-screen-demote-cancel"
-                  accessibilityRole="button"
-                  onPress={() => setDemoteTarget(null)}
-                  className="flex-1 items-center justify-center rounded-button border border-hairline-strong py-md"
-                >
-                  <Text className="font-noto-bold text-card-title font-bold text-muted">
-                    {DEMOTE_CANCEL}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  testID="itinerary-mustvisit-screen-demote-confirm"
-                  accessibilityRole="button"
-                  onPress={() => {
-                    // 배선이 **요청을 못 받았다**(`false`)고 하면 시트를 그대로 둔다. 닫으면
-                    // 확인까지 거친 조작이 아무 신호 없이 사라진다 — 사용자는 "바꿨는데 안
-                    // 바뀌었다" 를 이유 없이 겪는다(BR-U1-55 침묵 실패 금지).
-                    if (onDemote?.(demoteTarget) === false) return;
-                    setDemoteTarget(null);
-                  }}
-                  className="flex-1 items-center justify-center rounded-button bg-primary py-md"
-                >
-                  <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                    {DEMOTE_CONFIRM}
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
-          </View>
-        )}
       </View>
     </SafeAreaView>
   );

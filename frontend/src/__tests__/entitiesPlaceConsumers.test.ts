@@ -75,15 +75,22 @@ const ROWS: Row[] = [
     must: '@/entities/place',
     why: 'd06 부제 조각 소비',
   },
-  {
-    file: 'features/itinerary/ui/PlaceAddCard.tsx',
-    must: '@/entities/place',
-    why: 'h13 행 카드/부제 소비',
-  },
+  // TRIP-798 묶음 C 재조준 — PlaceAddCard 행 제거. h13 이 PlaceRowCard 채택으로 갈아타 이 카드는
+  // 런타임 소비처 0(고아)이 됐고 이 사이클에서 git rm 된다(itineraryManualStructure REMOVED_CARD 가
+  // 부재를 잠금). 여기 남기면 read() 가 ENOENT 로 죽는다 — h13 의 entities 소비 증거는 이 stale 행이
+  // 아니라 PlaceAddPage.integration C2(사진 leaf `itinerary-place-card-photo-*`)가 짐(vacuous 걷기).
   {
     file: 'features/itinerary/ui/SlotCandidateCard.tsx',
     must: '@/entities/place',
-    why: 'h08·h10 후보 카드를 entities 로 위임',
+    why: 'copick(h14/h15) SlotFillScreen 위임 카드 — 존치(TRIP-793 은 이 래퍼를 안 건드림)',
+  },
+  {
+    // TRIP-793 재조준 — h08 "다른 후보 시트"가 위임 래퍼(features SlotCandidateCard)를 우회하고
+    // entities 카드를 **직접** 소비한다(planb 시트 선례 · itinerary opt-in: 사진·이름·태그 켜고
+    // rationale·배지·"이동" 끄기). 시트가 아직 없으면 read() 가 throw → red(green 시 git mv 로 생성).
+    file: 'features/itinerary/ui/SlotCandidateSheet.tsx',
+    must: '@/entities/place',
+    why: 'h08 후보 시트가 entities 카드를 직접 소비(위임 래퍼 우회 · planb 시트 동형)',
   },
   {
     file: 'features/planb/ui/SlotCandidateSheet.tsx',

@@ -6,12 +6,14 @@ import type { Trigger } from '@/shared/api/generated/schemas';
 import { triggerWatchlist } from './triggerWatchlist';
 
 /**
- * TRIP-562 · AC-1 — 발화 트리거 목록 → i09 감시 3항목 사영(projection).
+ * TRIP-562 · AC-1 — 발화 트리거 목록 → 감시 3항목 사영(projection).
+ * TRIP-749 · AC-5 — 옛 i09 감시 목록 화면은 삭제되고, 이 사영이 i03 위험 상세 시트의 **배지 3개**
+ * 데이터가 된다. 카테고리명을 Figma i03 배지대로 `날씨 · 이동 · 영업` 으로 바꿨다(계약 플립 — 옛
+ * `이동 지연`·`영업·휴무`). 순서·활성 판정·MANUAL 제외·배너 규칙은 그대로다.
  *
- * 개념 **사영(projection)**: 같은 `GET /triggers` 데이터를 "다른 모양으로 접는다". i08 칩은
- * 발화 목록을 그대로 쓰고, i09 감시 표면은 kind 3종별로 접는다. 감시 행은 **활성 여부와 무관히
- * 상시 존재하는 카테고리**라 이름이 Figma 카테고리명(날씨·이동 지연·영업·휴무)이다 — i08 칩의 활성
- * 트리거 제목('비 예보')과는 다른 표면(★1, 오케 교정 2026-08-29).
+ * 개념 **사영(projection)**: 같은 `GET /triggers` 데이터를 "다른 모양으로 접는다". 지도 알약은
+ * 발화 목록의 첫 트리거를 쓰고, 감시 배지는 kind 3종별로 접는다. 감시 행은 **활성 여부와 무관히
+ * 상시 존재하는 카테고리**라 이름이 카테고리명이다 — 알약의 활성 트리거 라벨('비 예보')과는 다른 표면.
  *
  * 무엇을 보장하나:
  *  - 🔴 MANUAL 은 제외한다 — 배너도 못 몰고 어느 행도 active 로 못 만든다(BR-U4-01, ★8).
@@ -39,11 +41,11 @@ const mk = (over: Partial<Trigger> = {}): Trigger =>
 /** 기준선 = 발화 0. 카테고리명·고정 순서 3행 전부 normal·reason null. */
 const NORMAL_ROWS = [
   { kind: 'WEATHER', label: '날씨', status: 'normal', reason: null },
-  { kind: 'DELAY', label: '이동 지연', status: 'normal', reason: null },
-  { kind: 'CLOSURE', label: '영업·휴무', status: 'normal', reason: null },
+  { kind: 'DELAY', label: '이동', status: 'normal', reason: null },
+  { kind: 'CLOSURE', label: '영업', status: 'normal', reason: null },
 ];
 
-describe('🔴 triggerWatchlist (i09 사영)', () => {
+describe('🔴 triggerWatchlist (감시 배지 사영)', () => {
   it('P1 빈 목록 → 배너 없음 + 3행 고정순서(카테고리명) 전부 정상', () => {
     expect(triggerWatchlist([])).toEqual({
       activeBanner: null,
@@ -81,7 +83,7 @@ describe('🔴 triggerWatchlist (i09 사영)', () => {
     expect(result.activeBanner).toBe(delay);
     expect(result.rows[1]).toEqual({
       kind: 'DELAY',
-      label: '이동 지연',
+      label: '이동',
       status: 'active',
       reason: '도로 정체',
     });
@@ -103,5 +105,13 @@ describe('🔴 triggerWatchlist (i09 사영)', () => {
     expect(result.rows[1].status).toBe('normal'); // DELAY
     expect(result.rows[2].status).toBe('active'); // CLOSURE
     expect(result.activeBanner).toBe(closure); // 입력 첫 non-MANUAL
+  });
+
+  it('P6 카테고리명은 Figma i03 배지 그대로 날씨·이동·영업 순이다 (TRIP-749 AC-5 · 티켓 완료 조건)', () => {
+    expect(triggerWatchlist([]).rows.map((row) => row.label)).toEqual([
+      '날씨',
+      '이동',
+      '영업',
+    ]);
   });
 });

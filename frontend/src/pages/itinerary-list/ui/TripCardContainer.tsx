@@ -4,12 +4,14 @@ import { useRouter } from 'expo-router';
 import type { Trip } from '@/shared/api/generated/schemas';
 import { useGetTripsTripIdItinerary } from '@/shared/api/generated/trips/trips';
 import { isNotFound } from '@/shared/api/isNotFound';
+import { seoulDate } from '@/shared/date/seoulDate';
 import { formatNightsLabel } from '@/entities/trip/lib/formatNights';
 import { formatConfirmedDateRange } from '@/entities/trip/lib/formatTripPeriod';
 import {
   itineraryDestinationHref,
   resolveItineraryDestination,
 } from '@/features/itinerary/model/planState';
+import { deriveTripCardFace } from '@/features/itinerary/model/tripCardFace';
 import {
   MyTripCard,
   type MyTripBadge,
@@ -24,7 +26,9 @@ import {
  * 컴포넌트를 카드 수만큼 렌더해 각자 자기 훅을 부른다(목록 1회 + 카드 N회). 여행 수가 적고(실사용
  * 2~5) 병렬·react-query 캐시라 수용(01b Q2 — 백엔드 목록 요약 필드가 생기면 제거 가능).
  *
- * 배지 파생: pending(미도착)→null · itinerary CONFIRMED→done · 그 외→draft.
+ * 얼굴 파생(TRIP-788): pending(미도착)→배지 미정 degrade · 그 외는 `deriveTripCardFace`(순수)가
+ * 상태문·배지·resume 를 함께 낸다(생성중/완성/초안 3종, Mapping A). 구 '확정 장소 N곳' 슬롯 합계는
+ * Figma 문구 '추천안이 준비됐어요'로 대체돼 사라졌다(01b Q2).
  * 목적지: 오늘이 여행 구간이면 live(US-ONTRIP-01), 아니면 `resolveItineraryDestination`(티켓 지정
  * 재사용) → `itineraryDestinationHref`. 두 규칙을 홈 카드 CTA·일정 탭이 공유한다.
  */
@@ -45,18 +49,23 @@ export function TripCardContainer({
   const router = useRouter();
   const itinerary = useGetTripsTripIdItinerary(trip.tripId);
 
-  const badge: MyTripBadge = itinerary.isPending
-    ? null
-    : itinerary.data?.status === 'CONFIRMED'
-      ? 'done'
-      : 'draft';
-
-  const extra: string | null =
-    badge === 'done'
-      ? `확정 장소 ${(itinerary.data?.days ?? []).flatMap((day) => day.slots).length}곳`
-      : badge === 'draft'
-        ? '추천안 준비 중'
-        : null;
+  // 미도착이면 배지·상태문·resume 전부 없는 degrade, 그 외는 얼굴을 순수 함수가 낸다(seam 포함).
+  let badge: MyTripBadge;
+  let extra: string | null;
+  let resume: boolean;
+  if (itinerary.isPending) {
+    badge = null;
+    extra = null;
+    resume = false;
+  } else {
+    const face = deriveTripCardFace(
+      itinerary.data?.status,
+      itinerary.data?.generationState
+    );
+    badge = face.badge;
+    extra = face.statusLine;
+    resume = face.resume;
+  }
 
   const vm: MyTripCardVM = {
     tripId: trip.tripId,
@@ -64,9 +73,10 @@ export function TripCardContainer({
     metaLine: `${formatCardDateRange(trip.startDate, trip.endDate)} · ${formatNightsLabel(trip.startDate, trip.endDate)} · ${trip.party}명`,
     badge,
     extra,
+    resume,
   };
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = seoulDate(new Date());
   const todayInTrip = trip.startDate <= today && today <= trip.endDate;
 
   const onPress = (): void => {

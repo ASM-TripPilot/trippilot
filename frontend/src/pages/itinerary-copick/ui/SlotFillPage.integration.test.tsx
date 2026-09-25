@@ -505,3 +505,65 @@ describe('U3 · h13 문맥 줄 도출 (slotContextLabel)', () => {
     expect(await screen.findByText('점심 슬롯 · 경복궁 다음')).toBeTruthy();
   });
 });
+
+/**
+ * TRIP-795 · h10 후보 선택 배선 — 진행줄·스텝퍼(h09 헬퍼 재사용)를 후보 얼굴(SlotFillScreen)에도
+ * 내리고, 반경 좁히기(신규 onShrinkRadius)를 잇고, 좌표 없는 프로덕션에선 지도를 안 그린다(degrade).
+ *
+ * fixture: day1 비고정 [a 경복궁, b]. slot a = index 0(스텝퍼 없음), slot b = index 1(스텝퍼 있음).
+ */
+describe('🔴 TRIP-795 · h10 진행줄·스텝퍼·반경 좁히기·좌표 degrade 배선', () => {
+  it('I-PROG · 후보 얼굴에 진행줄(신규 namespace)이 뜨고 슬롯 카운트가 1 / 2', async () => {
+    renderPage(SLOT_KEY); // slot a — index 0, nonFixed [a,b]
+    await pickConcept('culture');
+
+    expect(
+      await screen.findByTestId('itinerary-copick-slotfill-progress')
+    ).toBeTruthy();
+    expect(
+      screen.getByTestId('itinerary-copick-slotfill-progress-count')
+    ).toHaveTextContent('1 / 2');
+  });
+
+  it('I-STEP · 둘째 슬롯(index 1)엔 스텝퍼가 뜨고, 첫 슬롯(index 0)엔 안 뜬다', async () => {
+    // 둘째 슬롯 — 이전(경복궁 고름)이 있어 스텝퍼를 그린다(conceptStepper 재사용).
+    renderPage(buildSlotKey(DAY1, 'b'));
+    await pickConcept('culture');
+    expect(await screen.findByTestId('copick-stepper')).toBeTruthy();
+
+    // 첫 슬롯 — 이전이 없어 conceptStepper()가 undefined → 스텝퍼 미렌더(h09 승계).
+    screen.unmount();
+    renderPage(SLOT_KEY);
+    await pickConcept('culture');
+    await screen.findByTestId('itinerary-candidate-radio-X'); // 후보 얼굴 도착
+    expect(screen.queryByTestId('copick-stepper')).toBeNull();
+  });
+
+  it('I-SHRINK · 마지막 단계에서 반경 좁히기 → 한 단계 뒤(mid·1100m)로 재조회', async () => {
+    renderPage();
+    await pickConcept('culture');
+    await waitFor(() => expect(postCalls).toBe(1));
+
+    // 반경 max 로 올린다(radiusM=null) → 마지막 단계라 결과 얼굴에 "반경 좁히기" 상시 노출.
+    fireEvent.press(screen.getByTestId('itinerary-copick-radius-seg-max'));
+    await waitFor(() => expect(postCalls).toBe(2));
+    expect(postBody?.radiusM).toBeNull();
+
+    const radiusBtn = screen.getByTestId('itinerary-copick-slotfill-radius');
+    expect(radiusBtn).toHaveTextContent('반경 좁히기');
+
+    // 좁히기 → 한 단계 뒤(mid) 반경으로 재조회.
+    fireEvent.press(radiusBtn);
+    await waitFor(() => expect(postCalls).toBe(3));
+    expect(postBody?.radiusM).toBe(1100);
+  });
+
+  it('I-DEGRADE · 좌표 없는 후보(계약 밖)에선 지도 카드를 안 그린다(선제 green)', async () => {
+    renderPage();
+    await pickConcept('culture');
+    await screen.findByTestId('itinerary-candidate-radio-X');
+
+    // candidates 에 lat/lng 없음 → 프로덕션은 지도 미표시(픽스처 지도는 프리뷰 전용, D6·INV-1).
+    expect(screen.queryByTestId('map-root')).toBeNull();
+  });
+});

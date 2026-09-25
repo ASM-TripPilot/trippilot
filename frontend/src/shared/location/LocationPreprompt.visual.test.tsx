@@ -60,6 +60,8 @@ function parentOfTestId(testID: string): JsonNode | null {
  *
  * 문구 일반 규칙(Seed 확정 1)의 두 갈래를 이 파일이 고정한다:
  *  - testID 만 단언돼 온 지점(allow·later 버튼) → **Figma 문구 채택** ("위치 사용 허용"/"나중에 하기")
+ *    → TRIP-935 AC-7(R8): 주 버튼만 "계속"으로 뒤집었다. 권한 창 앞 안내 화면 버튼이 "허용"이면
+ *    심사 5.1.1(iv) 반려 사례이고, 정본 BR-U0-30 도 "목적 설명 + 계속/나중에"다. testID 는 유지.
  *  - 동결 테스트가 문구를 단언하는 지점(거부 안내 '설정에서') → **기존 문구 유지**
  *
  * 전체화면 레이아웃 자체(카드 → 풀스크린)와 denied 버튼 라벨은 [검증] 스크린샷 대조 몫.
@@ -78,16 +80,27 @@ function renderDefault() {
   );
 }
 
-describe('LocationPreprompt — Figma 문구 채택 지점 (default)', () => {
-  it('허용 버튼은 "위치 사용 허용", 보류 버튼은 "나중에 하기" 라벨을 쓴다', () => {
+describe('LocationPreprompt — 버튼 문구 (default · TRIP-935 AC-7)', () => {
+  it('주 버튼은 "계속", 보류 버튼은 "나중에 하기" 라벨을 쓴다(BR-U0-30)', () => {
     renderDefault();
 
+    // 완전일치 — 버튼 안 글자 전체가 정확히 "계속"(부분 포함 아님).
     expect(screen.getByTestId('onboarding-location-allow')).toHaveTextContent(
-      '위치 사용 허용'
+      '계속'
     );
     expect(screen.getByTestId('onboarding-location-later')).toHaveTextContent(
       '나중에 하기'
     );
+  });
+});
+
+describe('🔴 TRIP-935 AC-7 · 권한 안내 화면에 "허용" 단어가 없다 (default)', () => {
+  it('default 상태 어디에도 "허용"이 들어간 글자가 없다(5.1.1(iv))', () => {
+    renderDefault();
+
+    // 앵커 — 주 버튼은 그려졌다.
+    expect(screen.getByTestId('onboarding-location-allow')).toBeOnTheScreen();
+    expect(screen.queryAllByText(/허용/)).toHaveLength(0);
   });
 });
 

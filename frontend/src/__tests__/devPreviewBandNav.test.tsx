@@ -1,4 +1,6 @@
-import type { ComponentType } from 'react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import type { ComponentType, ReactElement } from 'react';
 import type { ViewStyle } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
@@ -6,7 +8,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
  * TRIP-641 파트 2 — dev 정적 프리뷰(`_dev/preview.tsx`)의 밴드 2단 네비.
  *
  * 무엇을 보장하나:
- *  (1) AC-6 — 170개 프리뷰 상태가 전부 Figma 밴드(10종) 하나로 분류되고, 그룹핑해도 하나도
+ *  (1) AC-6 — 171개 프리뷰 상태가 전부 Figma 밴드(10종) 하나로 분류되고, 그룹핑해도 하나도
  *      드롭되지 않는다(대규모 기계 편집의 누락 위험을 순수 데이터로 잠근다),
  *  (2) AC-1 — 상단에 first-cut 9개 밴드 버튼이 서고, 밴드를 누르면 그 밴드 칩 그룹만 "보이고"
  *      나머지 밴드 그룹은 "접힌다"(시각적 필터),
@@ -52,6 +54,7 @@ const PREVIEW_STATES = previewModule.PREVIEW_STATES as {
   key: string;
   label: string;
   band: string;
+  render: () => ReactElement;
 }[];
 
 // TRIP-742 AC-6 순수 데이터 단언용 — g01 '꼭 갈 곳' 스트립 픽스처. `PREVIEW_STATES` 선례와
@@ -75,7 +78,7 @@ beforeEach(() => {
 });
 
 describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
-  it('170개 엔트리가 전부 10종 밴드 중 하나를 갖고, 그룹핑해도 하나도 드롭되지 않는다', () => {
+  it('171개 엔트리가 전부 10종 밴드 중 하나를 갖고, 그룹핑해도 하나도 드롭되지 않는다', () => {
     // 준비 — 렌더 없이 모듈의 PREVIEW_STATES 배열을 그대로 읽는다.
     // 단언 ① — 대규모 기계 편집에서 엔트리가 하나도 안 빠졌다(실측 166개, TRIP-649로 saved-places-empty +1).
     // ⚠️ TRIP-665: 신 default 재작성으로 제거된 화면 prop 을 쓰던 g01 프리뷰 키 3개
@@ -202,7 +205,153 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    test-designer 선반영(카운트 무변경 확인 + 아래 'TRIP-799' describe 로 키 교체를 못박음).
     //    implementer 는 preview.tsx 에서 옛 4키를 지우고 새 4키를 추가할 뿐 이 카운트는 안 만진다.
     //    devPreviewBandSort 는 band h 를 잠가 EXPECTED_H 도 동반 갱신(h14-plan-* 를 h14 위치에).
-    expect(PREVIEW_STATES).toHaveLength(171);
+    // ⚠️ TRIP-784: h01 시작 방법 프리뷰 키 정리 — itinerary-method 개명(→h01-method, 카운트 불변) +
+    //    itinerary-method-regenerate 삭제(재생성 로직·화면·배선·M-R1~R4 는 유지, 프리뷰 키만 제거)
+    //    → 171→170. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에서 그 두 키만
+    //    재편하고 이 가드는 안 만진다(재편 전엔 171개라 이 단언이 red). 정확히 그 키들인지는 아래
+    //    'TRIP-784' describe 가 못박는다. devPreviewBandSort 는 band h 를 잠가 EXPECTED_H 도 동반 갱신.
+    // ⚠️ TRIP-785: h02 꼭 갈 곳 프리뷰 재편 — itinerary-mustvisit-default → h02-mustvisit-default
+    //    개명(카운트 불변) + 신규 h02-mustvisit-loading·-error 2키 → 170→172. test-designer 선반영
+    //    (카운트 가드) — implementer 는 preview.tsx 에서 개명 1 + 신규 2키만 재편하고 이 가드는 안
+    //    만진다(재편 전엔 170개라 이 단언이 red). 정확히 그 키들인지는 아래 'TRIP-785' describe 가
+    //    못박는다. devPreviewBandSort 는 band h 를 잠가 EXPECTED_H 도 동반 갱신(h02 3키를 h01·h07 사이).
+    // ⚠️ TRIP-798: h13 장소 추가 프리뷰 재편 — place-add → h13-place-add 개명(카운트 불변) +
+    //    place-add-notready 삭제(안내/notReady 배너 제거) → 172→171. test-designer 선반영(카운트
+    //    가드) — implementer 는 preview.tsx 에서 개명 1 + 삭제 1만 하고 이 가드는 안 만진다(재편 전엔
+    //    172개라 이 단언이 red). 정확히 그 키들인지는 아래 'TRIP-798' describe 가 못박는다.
+    //    devPreviewBandSort 는 band h 를 잠가 EXPECTED_H 도 동반 갱신(h13-place-add 를 h12↔h14 사이).
+    // ⚠️ TRIP-786: h03 방문 시각 프리뷰 재편 — itinerary-mustvisit-time-default(h07) →
+    //    h03-mustvisit-time-default(h03) 개명(카운트 불변) + 신규 h03-mustvisit-time-off·-error 2키
+    //    → 171→173. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에서 개명 1 +
+    //    신규 2키만 재편하고 이 가드는 안 만진다(재편 전엔 171개라 이 단언이 red). 정확히 그 키들인지는
+    //    아래 'TRIP-786' describe 가 못박는다. devPreviewBandSort 는 band h 를 잠가 EXPECTED_H 도 동반
+    //    갱신(h03 3키를 h02 직후·h07 앞에 삽입, 옛 h07 키 제거).
+    // ⚠️ TRIP-787: itinerary-edit-time-sheet → h04-time-adjust-sheet **개명**(TimeSheet mode='h04' 정합)
+    //    이라 카운트는 **173 무변경**(net 0). test-designer 는 이 카운트를 안 만진다(올리면 174로 거짓 red).
+    //    정확히 그 키인지는 아래 'TRIP-787' describe 가 못박고, devPreviewBandSort 는 band h 를 잠가
+    //    EXPECTED_H 도 동반 갱신(h04 를 h03↔h07 사이로).
+    // ⚠️ TRIP-788: h05/h06 내 여행 목록 Figma 재번호 — my-trips-list→h05-my-trips-background(개명) +
+    //    신규 h05-my-trips-done-bar(완료 도킹 배너) + my-trips-loading→h06-my-trips-loading(개명) +
+    //    my-trips-empty→h06-my-trips-empty(개명). 개명 3 = net 0, 신규 done-bar 만 +1 → 173→174.
+    //    test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에서 3키 개명 + done-bar 1키
+    //    추가만 하고 이 가드는 안 만진다(재편 전엔 173개라 이 단언이 red). 정확히 그 키들인지는 아래
+    //    'TRIP-788' describe 가 못박는다. devPreviewBandSort 는 band h 를 잠가 EXPECTED_H 도 동반 갱신
+    //    (my-trips 키가 h37 꼬리 → h05/h06 위치=h04 직후로 이동, 코드=정렬위치).
+    // ⚠️ TRIP-789: h07 생성 loading 정합 — itinerary-generating(h09) → h07-generating-loading(h07)
+    //    개명(net 0) + itinerary-generating-failed(h09) 키 삭제(핸들링 코드·GeneratingScreen failed
+    //    표면은 유지, 프리뷰 진입점만 제거 — 부모 해석 G) → 174→173. test-designer 선반영(카운트 가드) —
+    //    implementer 는 preview.tsx 에서 개명 1 + 삭제 1만 하고 이 가드는 안 만진다(재편 전엔 174개라
+    //    이 단언이 red). 정확히 그 키들인지는 아래 'TRIP-789' describe 가 못박고, devPreviewBandSort 는
+    //    band h 를 잠가 EXPECTED_H 도 동반 갱신(loading 을 h07-generating-partial 뒤로, 옛 h09 2키 제거).
+    // ⚠️ TRIP-769: j02·오프라인 동기화 삭제로 프리뷰 키 3개(`records-compare`·`records-sync-badge`·
+    //    `records-conflict`, band `j`)를 제거해 173→170. 오케 직접(경량) — preview.tsx 에서 3키 + import
+    //    를 지우며 이 가드도 함께 내림. devPreviewBandSort 는 band h·l 만 잠가 band j 와 무관(오갱신 금지).
+    // ⚠️ TRIP-759: j01 default 정합으로 프리뷰 키 2개(`records-attribution-dateonly`·`records-photo-memo`,
+    //    band `j`)를 records-default 1키로 통합(귀속·사진/메모를 default 얼굴이 흡수)해 170→168.
+    //    test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에서 그 두 키 + 관련 import 를
+    //    지울 뿐 이 가드는 안 만진다(삭제 전엔 170개라 이 단언이 red). 정확히 그 두 키인지는 아래
+    //    'TRIP-759' describe 가 못박는다. devPreviewBandSort 는 band h·l 만 잠가 band j 와 무관(오갱신 금지).
+    // ⚠️ TRIP-760: j01 error 얼굴 신설로 records-error 프리뷰 키 1개(band j) 추가로 168→169.
+    //    test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에 records-error 키만 추가하고
+    //    이 가드는 안 만진다(추가 전엔 168개라 이 단언이 red). 정확히 그 키인지는 아래 'TRIP-760' describe 가
+    //    못박는다. devPreviewBandSort 는 band h·l 만 잠가 band j 와 무관(오갱신 금지).
+    // ⚠️ TRIP-761: j01 manual-checkin 얼굴 신설로 records-manual-checkin 프리뷰 키 1개(band j)
+    //    추가로 169→170. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에
+    //    records-manual-checkin 키만 추가하고 이 가드는 안 만진다(추가 전엔 169개라 이 단언이 red).
+    //    정확히 그 키인지는 아래 'TRIP-761' describe 가 못박는다. devPreviewBandSort 는 band h·l 만
+    //    잠가 band j 와 무관(오갱신 금지).
+    // ⚠️ TRIP-764: j04 요약 프리뷰 키 개명·삭제 — trip-summary-map→-default·-visit-list→-error(개명 net 0)
+    //    + trip-summary-share-off 삭제(공유 비활성 얼굴은 프리뷰 상실, 회귀 심판은 TripSummaryScreen.test
+    //    AC-5 가 유지) → 170→169. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에서
+    //    2키 개명 + 1키 삭제만 하고 이 가드는 안 만진다(재편 전엔 170개라 이 단언이 red). 정확히 그
+    //    키들인지는 아래 'TRIP-764' describe 가 못박는다. devPreviewBandSort 는 band h·l 만 잠가 band j
+    //    와 무관(오갱신 금지, 맹점③ 미러).
+    // ⚠️ TRIP-765: j05 스타일 프리뷰 키 개명·삭제 — travel-style-official→-default·
+    //    travel-style-insufficient→-data-insufficient(개명 net 0) + travel-style-no-dwell 삭제
+    //    (no-dwell degrade 는 avgDwellMinutes:null 변형이라 화면 코드·TravelStyleScreen.test 로 남고
+    //    프리뷰 키만 제거) → 169→168. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에서
+    //    2키 개명 + 1키 삭제만 하고 이 가드는 안 만진다(재편 전엔 169개라 이 단언이 red). 정확히 그 키들인지는
+    //    아래 'TRIP-765' describe 가 못박는다. devPreviewBandSort 는 band h·l 만 잠가 band j 와 무관(오갱신 금지).
+    // ⚠️ TRIP-767: j07 여행 캘린더 empty 프리뷰 키(`records-calendar-empty`, band `j`) 삭제로 168→167.
+    //    test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에서 그 1키만 지우고 이 가드는
+    //    안 만진다(삭제 전엔 168개라 이 단언이 red). ★유지: 화면 isEmpty 분기·testID `record-calendar-empty`
+    //    (단수)·RecordsCalendarScreen.test 는 무수정(삭제 대상은 **플러럴** 프리뷰 키뿐, 소비처 preview.tsx 1곳).
+    //    정확히 그 키인지는 아래 'TRIP-767' describe 가 못박는다. devPreviewBandSort 는 band h·l 만 잠가
+    //    band j 와 무관(오갱신 금지).
+    // ⚠️ TRIP-770: j 밴드 프리뷰 최종 정리 — VisitTimeSheet 전용 2키(`records-visit-time-sheet`·
+    //    `-no-arrival`, band `j`) 삭제로 167→165(j 밴드 16→14). test-designer 선반영(카운트 가드만) —
+    //    implementer 는 preview.tsx 에서 그 2키 + VisitTimeSheet import 만 지우고 이 가드는 안 만진다
+    //    (삭제 전엔 167개라 이 단언이 red). VisitTimeSheet 컴포넌트는 recordsDurationStructure 가 참조하므로
+    //    유지(프리뷰 키만 삭제). 정확한 최종 14키·라벨은 아래 'TRIP-770' describe 가 못박는다.
+    // ⚠️ TRIP-791: h07 폴백 전용 인터스티셜 화면 신설 — 삭제 4키(itinerary-draft-fallback-{deterministic,
+    //    minimal,demoted}·itinerary-draft-zero) + 신설 2키(h07-generating-fallback·h07-generating-fallback-failed)
+    //    로 **순 −2** → 173→171. (itinerary-generating-failed 는 이미 TRIP-789 로 삭제돼 현존 안 함.)
+    //    test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에서 4키를 지우고 2키만 추가할 뿐
+    //    이 가드는 안 만진다(재편 전엔 173개라 이 단언이 red). 정확히 그 키들인지는 아래 'TRIP-791' describe 가
+    //    못박고, devPreviewBandSort 는 band h 를 잠가 EXPECTED_H 도 동반 갱신(폴백 3키·zero 키 제거,
+    //    h07-generating-fallback 2키를 loading 뒤에 삽입).
+    // ⚠️ TRIP-793: h08 "다른 후보 시트" 통합 — 옛 h12/h18 프리뷰 8키(slot-candidate-panel·-pending·
+    //    -degraded·-empty·-error·option-swap·option-swap-selected·option-swap-empty)를 h08 시트 2키
+    //    (h08-candidate-sheet·h08-candidate-sheet-empty)로 병합해 **순 −6** → 171→165. test-designer
+    //    선반영(카운트 가드만) — implementer 는 preview.tsx 에서 옛 8키를 지우고 2키만 추가할 뿐 이 가드는
+    //    안 만진다(재편 전엔 171개라 이 단언이 red). 정확히 그 키들인지는 아래 'TRIP-793' describe 가
+    //    못박고, devPreviewBandSort 는 band h 를 잠가 EXPECTED_H 도 동반 갱신(h08-candidate-sheet 2키를
+    //    h08-draft-expanded 직후, 옛 slot-candidate-panel 5키·option-swap 3키 제거).
+    // ⚠️ TRIP-794: h09 컨셉 고르기(같이 고르기 위저드) 프리뷰 키(`h09-copick-concept`, band `h`)
+    //    추가로 165→166. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에 그 키
+    //    하나만 추가(ConceptPickerScreen 을 진행줄·스텝퍼 픽스처 props 로 렌더)하고 이 가드는 안
+    //    만진다(추가 전엔 165개라 이 단언이 red). 정확히 그 키인지는 아래 'TRIP-794' describe 가
+    //    못박고, devPreviewBandSort 는 band h 를 잠가 EXPECTED_H 도 동반 갱신(h09 를 h08 뒤·h11 앞에).
+    // ⚠️ TRIP-795: h10 후보 선택 프리뷰 2키(`h10-copick-candidates`·`-wide`, band `h`) 추가로
+    //    166→168. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에 그 2키(default·
+    //    반경 넓힘, SlotFillScreen 순수 뷰 + 픽스처 props)만 추가하고 이 가드는 안 만진다(추가 전엔
+    //    166개라 이 단언이 red). 정확히 그 키들인지는 아래 'TRIP-795' describe 가 못박고,
+    //    devPreviewBandSort 는 band h 를 잠가 EXPECTED_H 도 동반 갱신(h10 2키를 h09↔h11 사이).
+    // ⚠️ TRIP-746: i01 허브 재작성 — 옛 `live-itinerary` 1키를 지우고 `live-hub-closed`·`-half`·
+    //    `-expanded` 3키(band `i`)를 더해 **순 +2** → 168→170. test-designer 선반영(카운트 가드만) —
+    //    implementer 는 preview.tsx 에서 키만 바꾸고 이 가드는 안 만진다(재편 전엔 168개라 red).
+    //    정확히 그 키들인지는 `devPreviewLiveHub.test.tsx` 가 못박는다.
+    // ⚠️ TRIP-747: i01 허브 `live-hub-edit-pills`·`live-hub-no-records` 2키(band `i`) 추가로
+    //    170→172. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에 두 키만 더하고
+    //    이 가드는 안 만진다(추가 전엔 170개라 red). 정확한 키는 `devPreviewLiveHub.test.tsx` 가 못박는다.
+    // ⚠️ TRIP-748: i02 `live-itinerary-trigger` 1키를 `live-trigger-weather`·`-delay`·`-closure` 3키(band
+    //    `i`)로 바꿔 **순 +2** → 172→174. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx
+    //    에서 키만 바꾸고 이 가드는 안 만진다(재편 전엔 172개라 red). 정확한 키는 `devPreviewLiveHub.test.tsx`.
+    // ⚠️ TRIP-749: i09 감시 목록 2키를 지우고 i03 `live-risk-sheet` 1키(band `i`)를 더해 **순 −1** →
+    //    174→173. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에서 키만 바꾸고 이
+    //    가드는 안 만진다(재편 전엔 174개라 red). 정확한 키는 `devPreviewLiveHub.test.tsx` 가 못박는다.
+    // ⚠️ TRIP-750: i04 재계획 요청 3키를 `planb-request` 1키로 합쳐(감지 배너·범위 밖 키 삭제) **순 −2**
+    //    → 173→171. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에서 키만 지우고 이
+    //    가드는 안 만진다(재편 전엔 173개라 red). 정확한 키는 `devPreviewLiveHub.test.tsx` 가 못박는다.
+    // ⚠️ 병합(TRIP-758 j 밴드 배치 ← develop): j 밴드 −8(173→165)과 h/i 밴드 −2(173→171)가 같은
+    //    base 173 에서 갈라져 병합되므로 총계는 173 − 8 − 2 = 163. 양쪽 카운트 코멘트는 위에 보존.
+    // ⚠️ TRIP-751: i06 재계획안 빈 슬롯 키(`planb-replan-draft-empty`)를 지워 **순 −1** → 163→162.
+    //    test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에서 키만 지우고 이 가드는 안
+    //    만진다(삭제 전엔 163개라 red). 정확한 키는 `devPreviewLiveHub.test.tsx` 가 못박는다.
+    // ⚠️ TRIP-753: i07 옛 폴백·위반 2키(`planb-manual-fallback`·`-violation`)를 지워 **순 −2** → 162→160.
+    //    `planb-manual-normal` 은 이름을 유지한다(Q10). test-designer 선반영(카운트 가드만) — implementer
+    //    는 preview.tsx 에서 키만 지우고 이 가드는 안 만진다(삭제 전엔 162개라 red).
+    // ⚠️ TRIP-800: h15 동선 기준 숙소 추천 프리뷰 1키(`h15-stay-recommend`, band `h`) 추가로 160→161.
+    //    test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에 그 1키(StayRecommendScreen
+    //    순수 뷰 + 픽스처 props)만 추가하고 이 가드는 안 만진다(추가 전엔 160개라 red). 정확히 그 키인지는
+    //    아래 'TRIP-800' describe 가 못박고, devPreviewBandSort 는 EXPECTED_H 에 h14 4키 뒤·h16 앞으로 삽입.
+    // ⚠️ TRIP-942: h01 '다른 여행 생성 중' 프리뷰 1키(`h01-method-active-generation`, band `h`) 추가로
+    //    161→162. 정확히 그 키인지·차단 안내를 그리는지는 아래 'TRIP-942' describe 가 못박고,
+    //    devPreviewBandSort 는 EXPECTED_H 에 h01-method 바로 뒤로 삽입.
+    // ⚠️ TRIP-781: l07 제휴 고지 2키(`l07-affiliate-default`·`-error`, band `l`) 추가로 162→164.
+    //    test-designer 선반영(카운트 가드만) — 두 키의 합성은 `devPreviewAffiliateNotice.test.tsx`,
+    //    정렬은 devPreviewBandSort EXPECTED_L 꼬리(l06 뒤)가 못박는다.
+    // ⚠️ TRIP-777: l04 출발점 다이얼로그 합성 1키(`my-stays-dialog`, band `l`) 추가로 164→165.
+    //    test-designer 선반영(카운트 가드만) — 합성은 `devPreviewMyStays.test.tsx`, 정렬은
+    //    devPreviewBandSort EXPECTED_L(my-stays-empty 바로 뒤)가 못박는다(추가 전엔 164개라 red).
+    // ⚠️ TRIP-772: l 밴드 라이브 Figma 25프레임 1:1 — `settings-preferences-error` 삭제(−1, 프레임 없음 G5)
+    //    + `settings-delete-dialog-final`(2단 4531:3018) 추가(+1)로 **순 0** → 165 유지. 777 이 넣은
+    //    my-stays-dialog 는 이미 위 줄에 셌다(두 번 올리지 않는다). 정확한 25키·라벨은 아래 'TRIP-772'
+    //    describe, 정렬은 devPreviewBandSort EXPECTED_L 이 못박는다.
+    // ⚠️ TRIP-755: i10 현재 장소 상세 2키(`live-place-default`·`-unknown`)를 `live-place` 1키(band `i`)로
+    //    합쳐 **순 −1** → 165→164. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에서
+    //    키만 바꾸고 이 가드는 안 만진다(재편 전엔 165개라 red). 정확한 키는 `devPreviewLiveHub.test.tsx`.
+    expect(PREVIEW_STATES).toHaveLength(164);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -219,6 +368,280 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     const allKeys = PREVIEW_STATES.map((state) => state.key);
     expect(new Set(groupedKeys)).toEqual(new Set(allKeys));
     expect(groupedKeys).toHaveLength(allKeys.length);
+  });
+});
+
+describe('🔴 TRIP-759 · j01 default 프리뷰 키 통합 (band j)', () => {
+  it('records-attribution-dateonly·records-photo-memo 가 없고, records-default 는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 부정 — 통합으로 사라지는 두 키(삭제 전엔 present 라 red). 카운트(168)만으론 "아무 두 키나
+    // 지워도" 통과하므로, 이 짝이 '지운 두 키가 정확히 그 j01 키'임을 못박는다(TRIP-769/743 음성 가드 미러).
+    expect(keys).not.toContain('records-attribution-dateonly');
+    expect(keys).not.toContain('records-photo-memo');
+
+    // 긍정 — 통합 목적지 키는 그대로(band j 가 통째로 빈 게 아님 = 공허 통과·과잉 삭제 차단).
+    expect(keys).toContain('records-default');
+  });
+});
+
+describe('🔴 TRIP-767 · j07 여행 캘린더 empty 프리뷰 키 삭제 (band j)', () => {
+  it('records-calendar-empty(플러럴)가 없고, records-calendar-default 는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 부정 — 삭제 대상은 **프리뷰 키** `records-calendar-empty`(하이픈 s, 소비처 preview.tsx 1곳).
+    // 삭제 전엔 present 라 red. 카운트(167)만으론 "아무 키나 지워도" 통과하므로 이 짝이 '지운 키가 정확히
+    // 그 j07 캘린더 empty 키'임을 못박는다(TRIP-759/769 음성 가드 미러).
+    expect(keys).not.toContain('records-calendar-empty');
+
+    // 긍정 — 캘린더 default 얼굴은 그대로(band j 캘린더가 통째로 빈 게 아님 = 과잉 삭제·공허 통과 차단).
+    // (화면 isEmpty 얼굴·testID `record-calendar-empty` 단수는 RecordsCalendarScreen.test 가 무수정으로 계속 잠금.)
+    expect(keys).toContain('records-calendar-default');
+  });
+});
+
+describe('🔴 TRIP-760 · j01 error 프리뷰 키 신설 (band j)', () => {
+  it('records-error 가 있고, records-default 는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // red-first — records-error 는 implementer 가 preview.tsx 에 추가하기 전엔 없다(band j,
+    // records-default 위에 upload-failed 셀 + uploadRetry + error 안내문을 얹은 픽스처). 카운트(169)
+    // 만으론 "아무 키나 1개 추가해도" 통과하므로, 이 단언이 '추가된 키가 records-error'임을 못박는다
+    // (TRIP-759 통합 describe 미러).
+    expect(keys).toContain('records-error');
+
+    // 긍정 — 형제 band j 앵커. default 얼굴이 딸려 사라지지 않았음(공허 통과 방지).
+    expect(keys).toContain('records-default');
+  });
+});
+
+describe('🔴 TRIP-761 · j01 manual-checkin 프리뷰 키 신설 (band j)', () => {
+  it('records-manual-checkin 이 있고, records-default 는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // red-first — records-manual-checkin 은 implementer 가 preview.tsx 에 추가하기 전엔 없다(band j,
+    // records-default 위에 GPS 배너 + ⊘ 배지 + manual 안내문 + UPCOMING 카드 "방문 체크" pill 을 얹은
+    // 픽스처, manualCheckin prop 직접 주입). 카운트(170)만으론 "아무 키나 1개 추가해도" 통과하므로,
+    // 이 단언이 '추가된 키가 records-manual-checkin'임을 못박는다(TRIP-760 records-error describe 미러).
+    expect(keys).toContain('records-manual-checkin');
+
+    // 긍정 — 형제 band j 앵커. default 얼굴이 딸려 사라지지 않았음(공허 통과 방지).
+    expect(keys).toContain('records-default');
+  });
+});
+
+describe('🔴 TRIP-764 · j04 요약 프리뷰 키 개명·삭제 (band j)', () => {
+  it('default·error 로 개명되고 share-off 는 삭제되며, 옛 이름은 없다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 긍정 — 개명된 두 키가 실재한다(개명 전엔 부재라 red).
+    expect(keys).toContain('trip-summary-default');
+    expect(keys).toContain('trip-summary-error');
+
+    // 부정 — 개명 원본 2키 + 삭제된 share-off 는 사라진다(재편 전엔 present 라 red). 카운트(169)
+    //    만으론 "아무 키나 재편/삭제해도" 통과하므로, 이 짝이 '바뀐 게 정확히 그 키들'임을 못박는다
+    //    (TRIP-759/730/784 미러).
+    expect(keys).not.toContain('trip-summary-map');
+    expect(keys).not.toContain('trip-summary-visit-list');
+    expect(keys).not.toContain('trip-summary-share-off');
+
+    // 형제 band j 앵커 — j01 기록 키가 딸려 사라지지 않았음(공허 통과 방지).
+    expect(keys).toContain('records-default');
+  });
+});
+
+describe('🔴 TRIP-765 · j05 스타일 프리뷰 키 개명·삭제 (band j)', () => {
+  it('default·data-insufficient 로 개명되고 no-dwell 은 삭제되며, 옛 이름은 없다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 긍정 — 개명된 두 키가 실재한다(개명 전엔 부재라 red).
+    expect(keys).toContain('travel-style-default');
+    expect(keys).toContain('travel-style-data-insufficient');
+
+    // 부정 — 개명 원본 2키 + 삭제된 no-dwell 은 사라진다(재편 전엔 present 라 red). 카운트(168)
+    //   만으론 "아무 키나 재편/삭제해도" 통과하므로, 이 짝이 '바뀐 게 정확히 그 키들'임을 못박는다
+    //   (TRIP-764 미러). no-dwell 은 프리뷰 키만 삭제 — degrade 동작은 코드/화면 테스트에 잔존.
+    expect(keys).not.toContain('travel-style-official');
+    expect(keys).not.toContain('travel-style-insufficient');
+    expect(keys).not.toContain('travel-style-no-dwell');
+
+    // 형제 band j 앵커 — j01 기록 키가 딸려 사라지지 않았음(공허 통과 방지).
+    expect(keys).toContain('records-default');
+  });
+});
+
+describe('🔴 TRIP-793 · h08 다른 후보 시트 프리뷰 8→2 병합 (band h)', () => {
+  it('h08-candidate-sheet 2키가 있고, 옛 h12/h18 8키는 없으며, 형제 band h 키는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 긍정 — 병합된 h08 시트 2키(정상·0건).
+    expect(keys).toContain('h08-candidate-sheet');
+    expect(keys).toContain('h08-candidate-sheet-empty');
+
+    // 부정 — 옛 h12 인라인 패널 5키 + h18 옵션 교체 3키는 사라진다(병합 전엔 present 라 red).
+    // 카운트(165)만으론 "아무 8키나 지워도" 통과하므로, 이 짝이 '병합된 게 정확히 그 키들'임을 못박는다.
+    expect(keys).not.toContain('slot-candidate-panel');
+    expect(keys).not.toContain('slot-candidate-panel-pending');
+    expect(keys).not.toContain('slot-candidate-panel-degraded');
+    expect(keys).not.toContain('slot-candidate-panel-empty');
+    expect(keys).not.toContain('slot-candidate-panel-error');
+    expect(keys).not.toContain('option-swap');
+    expect(keys).not.toContain('option-swap-selected');
+    expect(keys).not.toContain('option-swap-empty');
+
+    // 형제 band h 앵커 — 기존 h08 셸 키가 딸려 사라지지 않았음(공허 통과 방지).
+    expect(keys).toContain('h08-draft-collapsed');
+  });
+});
+
+describe('🔴 TRIP-794 · h09 컨셉 고르기 프리뷰 키 (band h)', () => {
+  it('키 집합에 h09-copick-concept 가 있고 형제 band h 키는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // red-first — h09-copick-concept 는 implementer 가 preview.tsx 에 추가하기 전엔 없다(band h,
+    // ConceptPickerScreen 을 진행줄·스텝퍼 픽스처 props 로 렌더). 카운트(166)만으론 "아무 키나 1개
+    // 추가해도" 통과하므로, 이 단언이 '추가된 키가 h09-copick-concept'임을 못박는다(TRIP-796 미러).
+    expect(keys).toContain('h09-copick-concept');
+
+    // 형제 band h 앵커 — 기존 h08·h11 키가 딸려 사라지지 않았음을 못박는다(공허 통과 방지).
+    expect(keys).toContain('h08-candidate-sheet');
+    expect(keys).toContain('h11-copick-complete');
+  });
+});
+
+describe('🔴 TRIP-795 · h10 후보 선택 프리뷰 2키 (band h)', () => {
+  it('키 집합에 h10-copick-candidates·-wide 가 있고 형제 band h(h09·h11) 키는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // red-first — 두 키는 implementer 가 preview.tsx 에 추가하기 전엔 없다(band h, SlotFillScreen 을
+    // default·반경 넓힘 픽스처 props 로 렌더). 카운트(168)만으론 "아무 2키나 추가해도" 통과하므로,
+    // 이 단언이 '추가된 2키가 h10 키'임을 못박는다(TRIP-794 미러).
+    expect(keys).toContain('h10-copick-candidates');
+    expect(keys).toContain('h10-copick-candidates-wide');
+
+    // 형제 band h 앵커 — 이웃 co-pick 키(h09 컨셉·h11 완료)가 딸려 사라지지 않았음(공허 통과 방지).
+    expect(keys).toContain('h09-copick-concept');
+    expect(keys).toContain('h11-copick-complete');
+  });
+});
+
+describe('🔴 TRIP-785 · h02 꼭 갈 곳 프리뷰 키 재편 (band h)', () => {
+  it('h02-mustvisit-default 로 개명되고, loading·error 2키가 생기며, 옛 키는 없다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 부정 — 개명 원본은 사라진다(재편 전엔 present 라 red). 카운트만으론 "아무 키나 재편해도"
+    // 통과하므로, 이 짝이 '바뀐 게 정확히 그 키'임을 못박는다(TRIP-784 미러).
+    expect(keys).not.toContain('itinerary-mustvisit-default');
+
+    // 긍정 — 개명 + 신규 2키(loading·error).
+    expect(keys).toContain('h02-mustvisit-default');
+    expect(keys).toContain('h02-mustvisit-loading');
+    expect(keys).toContain('h02-mustvisit-error');
+
+    // 형제 band h 앵커 — 방문 시각 키가 딸려 사라지지 않았음(공허 통과 방지). TRIP-786 이
+    //    itinerary-mustvisit-time-default → h03-mustvisit-time-default 로 개명하므로 새 이름으로 잡는다.
+    expect(keys).toContain('h03-mustvisit-time-default');
+  });
+});
+
+describe('🔴 TRIP-786 · h03 방문 시각 프리뷰 키 재편 (band h)', () => {
+  it('h03-mustvisit-time-default 로 개명되고 off·error 2키가 생기며, 옛 h07 키는 없다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 부정 — 옛 h07 키는 h03 으로 개명돼 사라진다(재편 전엔 present 라 red). 카운트만으론
+    //    "아무 키나 재편해도" 통과하므로, 이 짝이 '바뀐 게 정확히 그 키'임을 못박는다(TRIP-785 미러).
+    expect(keys).not.toContain('itinerary-mustvisit-time-default');
+
+    // 긍정 — 개명 + 신규 2키(off·error).
+    expect(keys).toContain('h03-mustvisit-time-default');
+    expect(keys).toContain('h03-mustvisit-time-off');
+    expect(keys).toContain('h03-mustvisit-time-error');
+
+    // 형제 band h 앵커 — h02 꼭 갈 곳 키가 딸려 사라지지 않았음(공허 통과 방지).
+    expect(keys).toContain('h02-mustvisit-default');
+  });
+});
+
+describe('🔴 TRIP-784 · h01 시작 방법 프리뷰 키 재편 (band h)', () => {
+  it('h01-method 가 있고, 옛 itinerary-method·itinerary-method-regenerate 는 없다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 짝 — 개명된 h01-method 가 실재한다.
+    expect(keys).toContain('h01-method');
+
+    // 부정 — 옛 키는 사라진다(개명 원본 + 삭제된 재생성 프리뷰).
+    expect(keys).not.toContain('itinerary-method');
+    expect(keys).not.toContain('itinerary-method-regenerate');
+  });
+});
+
+describe('🔴 TRIP-942 · h01 다른 여행 생성 중 프리뷰 키 (band h)', () => {
+  it('h01-method-active-generation 키가 있고, 렌더하면 차단 안내가 뜬다', () => {
+    // 준비 — 새 키 엔트리를 찾는다(red-first: preview.tsx 에 추가 전엔 없다).
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'h01-method-active-generation'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('h');
+    expect(entry?.label).toBe('h01 · 다른 여행 생성 중');
+
+    // 실행 — 그 엔트리의 render() 를 그린다.
+    render(<>{entry?.render()}</>);
+
+    // 단언 — 공허 통과 방지: 일반 h01 이 아니라 activeGeneration 을 넘긴 얼굴이어야 차단 안내가 있다.
+    expect(screen.getByTestId('itinerary-method-blocked-reason')).toBeTruthy();
+
+    // 이웃 앵커 — 기본 h01-method 가 딸려 사라지지 않았다.
+    expect(PREVIEW_STATES.map((state) => state.key)).toContain('h01-method');
+  });
+});
+
+describe('🔴 TRIP-787 · h04 시각 조정 시트 프리뷰 키 개명 (band h · net 0)', () => {
+  it('h04-time-adjust-sheet 로 개명되고, 옛 itinerary-edit-time-sheet 키는 없다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 긍정 — 개명된 h04-time-adjust-sheet 가 실재한다(개명 전엔 부재라 red).
+    expect(keys).toContain('h04-time-adjust-sheet');
+
+    // 부정 — 개명 원본(프리뷰 키)은 사라진다(개명 전엔 present 라 red). 카운트(173, net 0)만으론
+    //   "아무 키나 개명해도" 통과하므로, 이 짝이 '바뀐 게 정확히 그 키'임을 못박는다(TRIP-798 미러).
+    //   ⚠️ 이 문자열은 preview.tsx 의 프리뷰 **키**다 — default 시트의 렌더 testID(같은 문자열, 다른
+    //   물건)는 이 개명과 무관(mode 미전달 소비처는 그대로, 02a ★1).
+    expect(keys).not.toContain('itinerary-edit-time-sheet');
+
+    // 형제 band h 앵커 — 방문 시각(h03) 키가 딸려 사라지지 않았음(공허 통과 방지).
+    expect(keys).toContain('h03-mustvisit-time-default');
+  });
+});
+
+describe('🔴 TRIP-798 · h13 장소 추가 프리뷰 키 재편 (band h)', () => {
+  it('h13-place-add 로 개명되고, place-add·place-add-notready 는 없다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 긍정 — 개명된 h13-place-add 가 실재한다.
+    expect(keys).toContain('h13-place-add');
+
+    // 부정 — 개명 원본(place-add) + 삭제된 notReady 프리뷰가 사라진다(재편 전엔 present 라 red).
+    // 카운트만으론 "아무 키나 재편해도" 통과하므로, 이 짝이 '바뀐 게 정확히 그 키'임을 못박는다.
+    expect(keys).not.toContain('place-add');
+    expect(keys).not.toContain('place-add-notready');
+
+    // 형제 band h 앵커 — h12 편집기 키가 딸려 사라지지 않았음(공허 통과 방지).
+    expect(keys).toContain('h12-editor-filled');
   });
 });
 
@@ -563,10 +986,54 @@ describe('🔴 TRIP-792 · h08 셸 전환 프리뷰 키 재편 (band h)', () => 
     expect(keys).toContain('h08-draft-expanded');
     expect(keys).toContain('h08-draft-collapsed');
 
-    // 형제 band h 앵커 — 남기기로 한 h11 폴백 프리뷰·인접 밴드 키는 딸려 사라지지 않았다
-    //   (과잉 삭제·공허 통과 차단 — 삭제 집합은 초안 5키뿐, 폴백 3키는 유지).
-    expect(keys).toContain('itinerary-draft-fallback-minimal');
-    expect(keys).toContain('itinerary-generating');
+    // 형제 band h 앵커 — 인접 밴드 키가 딸려 사라지지 않았다(과잉 삭제·공허 통과 차단).
+    //   ⚠️ TRIP-791: 옛 앵커 itinerary-draft-fallback-minimal(h11 폴백 배너 프리뷰)이 인터스티셜 승격으로
+    //      삭제됐다 — 삭제에 안 딸려가는 안정 band h 앵커로 h07-generating-partial(TRIP-790)로 교체.
+    expect(keys).toContain('h07-generating-partial');
+  });
+});
+
+describe('🔴 TRIP-789 · h07 생성 loading 프리뷰 키 재편 (band h)', () => {
+  it('h07-generating-loading 로 개명되고, 옛 itinerary-generating·-failed 키는 없다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 긍정 — 개명된 loading 키(band h, 라벨 h07)가 실재한다(개명 전엔 부재라 red).
+    expect(keys).toContain('h07-generating-loading');
+
+    // 부정 — 개명 원본(itinerary-generating) + 삭제된 failed 키가 사라진다(재편 전엔 present 라 red).
+    //   카운트(173)만으론 "아무 키나 재편해도" 통과하므로, 이 짝이 '바뀐 게 정확히 그 키들'임을
+    //   못박는다(TRIP-798/787 미러). failed 는 핸들링 코드·GeneratingScreen 실패 표면은 유지되고
+    //   프리뷰 진입점만 삭제(부모 해석 G).
+    expect(keys).not.toContain('itinerary-generating');
+    expect(keys).not.toContain('itinerary-generating-failed');
+
+    // 형제 band h 앵커 — 인접 h07 부분 결과 키(TRIP-790)가 딸려 사라지지 않았다(공허 통과 방지).
+    //   ★ h07 두 얼굴: loading(GeneratingScreen, 데이터 前) ≠ partial(MapSheetShell, day1 도착) — 안 섞음.
+    expect(keys).toContain('h07-generating-partial');
+  });
+});
+
+describe('🔴 TRIP-791 · h07 폴백 인터스티셜 프리뷰 키 재편 (band h)', () => {
+  it('폴백 3키·zero 키가 없고, h07-generating-fallback 2키가 있으며, 형제 h 키는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 부정 — 곁줄 배너 3키 + h35 후보 0건 키가 인터스티셜 승격으로 사라진다(삭제 전엔 present 라 red).
+    //   카운트(171, net −2)만으론 "아무 4키나 지우고 2키나 더해도" 통과하므로, 이 짝이 '지운 게 정확히
+    //   그 4키'임을 못박는다(TRIP-711/722/742 음성 가드 패턴 미러).
+    expect(keys).not.toContain('itinerary-draft-fallback-deterministic');
+    expect(keys).not.toContain('itinerary-draft-fallback-minimal');
+    expect(keys).not.toContain('itinerary-draft-fallback-demoted');
+    expect(keys).not.toContain('itinerary-draft-zero');
+
+    // 긍정 — 신설 인터스티셜 2키(성공·하드실패)가 실재한다(추가 전엔 부재라 red).
+    expect(keys).toContain('h07-generating-fallback');
+    expect(keys).toContain('h07-generating-fallback-failed');
+
+    // 형제 band h 앵커 — 인접 h07 loading·partial 키가 딸려 사라지지 않았다(과잉 편집·공허 통과 차단).
+    expect(keys).toContain('h07-generating-loading');
+    expect(keys).toContain('h07-generating-partial');
   });
 });
 
@@ -579,9 +1046,31 @@ describe('🔴 TRIP-796 · h11 같이 결과(CoPick 완료) 셸 프리뷰 키 �
     //   "아무 키나 추가해도" 통과하므로, 이 짝이 '더한 게 정확히 그 키'임을 못박는다.
     expect(keys).toContain('h11-copick-complete');
 
-    // 형제 band h 앵커 — 인접 h08·폴백 키가 딸려 사라지지 않았다(과잉 편집·공허 통과 차단).
+    // 형제 band h 앵커 — 인접 h08·h07 키가 딸려 사라지지 않았다(과잉 편집·공허 통과 차단).
+    //   ⚠️ TRIP-791: 옛 앵커 itinerary-draft-fallback-deterministic 이 인터스티셜 승격으로 삭제됐다 —
+    //      삭제에 안 딸려가는 안정 band h 앵커로 h07-generating-loading 으로 교체.
     expect(keys).toContain('h08-draft-collapsed');
-    expect(keys).toContain('itinerary-draft-fallback-deterministic');
+    expect(keys).toContain('h07-generating-loading');
+  });
+});
+
+describe('🔴 TRIP-800 · h15 동선 기준 숙소 추천 프리뷰 키 (band h)', () => {
+  it('키 h15-stay-recommend 가 band h · 라벨 "h15 · 동선 기준 숙소 추천"으로 있고 이웃 h14·h16 키는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES)만 읽는다.
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'h15-stay-recommend'
+    );
+
+    // red-first — implementer 가 preview.tsx 에 추가하기 전엔 없다. 카운트(161)만으론 "아무 1키나
+    // 추가해도" 통과하므로 이 단언이 '추가된 1키가 h15 키'임을 못박는다(TRIP-795 미러).
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('h');
+    expect(entry?.label).toBe('h15 · 동선 기준 숙소 추천');
+
+    // 이웃 앵커 — h14 완성 일정·h16 확정 일정이 딸려 사라지지 않았다(공허 통과 방지).
+    const keys = PREVIEW_STATES.map((state) => state.key);
+    expect(keys).toContain('h14-plan-no-base');
+    expect(keys).toContain('h16-plan-confirmed');
   });
 });
 
@@ -625,6 +1114,31 @@ describe('🔴 TRIP-801 · h16 확정 일정 셸 프리뷰 키 개명 (band h ·
     // 형제 band h 앵커 — 인접 h14/h11 키가 딸려 사라지지 않았다(과잉 편집·공허 통과 차단).
     //   개명=net 0 이라 위 카운트 가드(171)는 무변경(02a ★11).
     expect(keys).toContain('h14-plan-default');
+    expect(keys).toContain('h11-copick-complete');
+  });
+});
+
+describe('🔴 TRIP-788 · h05/h06 내 여행 목록 프리뷰 키 재편 (band h)', () => {
+  it('h05/h06 개명 3 + 신규 done-bar 가 있고, 옛 my-trips-* 키는 없다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 긍정 — 개명 3(background·loading·empty) + 신규 1(done-bar). 추가/개명 전엔 부재라 red.
+    expect(keys).toContain('h05-my-trips-background');
+    expect(keys).toContain('h05-my-trips-done-bar');
+    expect(keys).toContain('h06-my-trips-loading');
+    expect(keys).toContain('h06-my-trips-empty');
+
+    // 부정 — 옛 h37 키(개명 원본)는 사라진다(재편 전엔 present 라 red). 카운트(174)만으론 "아무 키나
+    // 재편해도" 통과하므로, 이 짝이 '바뀐 게 정확히 그 키들'임을 못박는다(TRIP-798/787 미러).
+    expect(keys).not.toContain('my-trips-list');
+    expect(keys).not.toContain('my-trips-loading');
+    expect(keys).not.toContain('my-trips-empty');
+
+    // 형제 band h 앵커 — 인접 h키가 딸려 사라지지 않았다(공허 통과 방지).
+    //   ⚠️ TRIP-791: 옛 앵커 itinerary-draft-zero(h35 후보 0건)가 인터스티셜 흡수로 삭제됐다 —
+    //      삭제에 안 딸려가는 안정 band h 앵커로 h11-copick-complete 로 교체.
+    expect(keys).toContain('h04-time-adjust-sheet');
     expect(keys).toContain('h11-copick-complete');
   });
 });
@@ -707,5 +1221,105 @@ describe('AC-3 · 딥링크 초기 밴드 자동선택 (폴백 함수 재사용)
     expect(screen.getByTestId('dev-preview-band-group-c')).toHaveStyle(
       COLLAPSED_STYLE
     );
+  });
+});
+
+// TRIP-770 · j 밴드(기록·회고) 프리뷰 최종 정리 완료조건 — 22키 → 14키.
+// 무엇을 보장하나: band 'j' 가 정확히 14키이고, 각 키·라벨이 TRIP-770 최종 목록과 완전 일치한다
+// (759~767 이 만든 라벨 편차를 통일). 순서 무관 — (key,label) 쌍 집합으로 대조한다.
+describe('🔴 TRIP-770 · j 밴드 최종 14키·라벨 완전 일치', () => {
+  const EXPECTED_J: readonly (readonly [string, string])[] = [
+    ['records-default', 'j01 · 방문 기록 default'],
+    ['records-error', 'j01 · 방문 기록 error'],
+    ['records-manual-checkin', 'j01 · 방문 기록 manual-checkin'],
+    ['reflection-default', 'j03 · 오늘의 회고 default'],
+    ['reflection-data-insufficient', 'j03 · 오늘의 회고 data-insufficient'],
+    ['reflection-empty', 'j03 · 오늘의 회고 empty'],
+    ['reflection-error', 'j03 · 오늘의 회고 error'],
+    ['trip-summary-default', 'j04 · 여행 요약 default'],
+    ['trip-summary-error', 'j04 · 여행 요약 error'],
+    ['travel-style-default', 'j05 · 여행 스타일 분석 default'],
+    [
+      'travel-style-data-insufficient',
+      'j05 · 여행 스타일 분석 data-insufficient',
+    ],
+    ['share-card-default', 'j06 · 공유 카드 default'],
+    ['share-card-no-photo', 'j06 · 공유 카드 no-photo'],
+    ['records-calendar-default', 'j07 · 여행 캘린더 default'],
+  ];
+
+  it('band j 가 정확히 14키이고 키·라벨이 최종 목록과 완전 일치한다', () => {
+    // 준비: band 'j' 엔트리만 골라 (key\tlabel) 정렬 집합으로.
+    const jStates = PREVIEW_STATES.filter((state) => state.band === 'j');
+    const actual = jStates
+      .map((state) => `${state.key}\t${state.label}`)
+      .sort();
+    const expected = EXPECTED_J.map(
+      ([key, label]) => `${key}\t${label}`
+    ).sort();
+
+    // 단언: 14키 + (키,라벨) 집합 완전 일치(삭제된 22키의 잔재·라벨 편차 차단).
+    expect(jStates).toHaveLength(14);
+    expect(actual).toEqual(expected);
+  });
+});
+
+// TRIP-772 · l 밴드(알림·마이·설정) 프리뷰 키 정리 — 라이브 Figma l 행 25프레임과 1:1.
+// 무엇을 보장하나: band 'l' 이 정확히 25키이고, 각 키·라벨이 Figma 프레임 이름(`lNN · 화면명 상태`,
+// `[갈래]` 제외)과 완전 일치한다 — 프레임 없는 칩도, 칩 없는 프레임도 없다. 순서 무관((key,label) 집합).
+describe('🔴 TRIP-772 · l 밴드 25키·라벨 완전 일치 (AC-1·AC-3)', () => {
+  const EXPECTED_L_PAIRS: readonly (readonly [string, string])[] = [
+    ['notification-inbox-default', 'l01 · 알림 default'], // 1598:2389
+    ['notification-inbox-empty', 'l01 · 알림 empty'], // 1599:2388
+    ['l02-notification-default', 'l02 · 알림 설정 default'], // 1600:2388
+    ['l02-notification-denied', 'l02 · 알림 설정 permission-denied'], // 1601:2388
+    ['my-page-default', 'l03 · 마이페이지 default'], // 1602:2388
+    ['my-page-empty', 'l03 · 마이페이지 empty'], // 1603:2414
+    ['my-style-card-insufficient', 'l03 · 마이페이지 style-insufficient'], // 4533:2424
+    ['my-stays-default', 'l04 · 등록 숙소·예약 기록 default'], // 1604:2440
+    ['my-stays-empty', 'l04 · 등록 숙소·예약 기록 empty'], // 1605:2440
+    ['my-stays-dialog', 'l04 · 등록 숙소·예약 기록 dialog'], // 1606:2440
+    ['settings-default', 'l05 · 설정 default'], // 1607:2440
+    ['settings-delete-dialog', 'l05 · 설정 dialog 1단'], // 1608:2440
+    ['settings-delete-dialog-final', 'l05 · 설정 dialog 2단'], // 4531:3018
+    ['settings-export-truncated', 'l05 · 설정 export-truncated'], // 4533:3260
+    ['settings-export-error', 'l05 · 설정 export-error'], // 4533:3476
+    ['settings-pending', 'l05 · 설정 deletion-pending'], // 4533:3671
+    ['settings-preferences', 'l05 · 여행 취향 편집 default'], // 4533:2619
+    ['l05-personalization-applied', 'l05 · 개인화 applied'], // 4529:2417
+    ['l05-personalization-consent-missing', 'l05 · 개인화 consent-missing'], // 4531:2420
+    ['l05-personalization-not-enough', 'l05 · 개인화 not-enough'], // 4531:2997
+    ['l06-location-consent-default', 'l06 · 위치정보 동의 default'], // 1609:2440
+    ['l06-location-revoke-dialog', 'l06 · 위치정보 동의 dialog'], // 1610:2440
+    ['l06-location-consent-denied', 'l06 · 위치정보 동의 permission-denied'], // 1612:2440
+    ['l07-affiliate-default', 'l07 · 제휴 고지 default'], // 1615:2440
+    ['l07-affiliate-error', 'l07 · 제휴 고지 error'], // 1616:2440
+  ];
+
+  it('band l 이 정확히 25키이고 키·라벨이 Figma 프레임 목록과 완전 일치한다', () => {
+    // 준비: band 'l' 엔트리만 골라 (key\tlabel) 정렬 집합으로.
+    const lStates = PREVIEW_STATES.filter((state) => state.band === 'l');
+    const actual = lStates
+      .map((state) => `${state.key}\t${state.label}`)
+      .sort();
+    const expected = EXPECTED_L_PAIRS.map(
+      ([key, label]) => `${key}\t${label}`
+    ).sort();
+
+    // 단언: 25키 + (키,라벨) 집합 완전 일치(프레임 없는 settings-preferences-error 잔재·2단 누락 차단).
+    expect(lStates).toHaveLength(25);
+    expect(actual).toEqual(expected);
+  });
+
+  it('삭제한 키의 전용 픽스처(미설정 취향)가 preview.tsx 에 고아로 남지 않는다', () => {
+    // 준비: 프리뷰 원문.
+    const source = readFileSync(
+      resolve(__dirname, '../app/_dev/preview.tsx'),
+      'utf8'
+    );
+
+    // 단언: 앵커(형제 픽스처는 settings-preferences 가 계속 쓴다) + 고아 이름 부재.
+    expect(source.includes('SETTINGS_PREF_PREVIEW_SELECTION')).toBe(true);
+    expect(source.includes('SETTINGS_PREF_PREVIEW_EMPTY')).toBe(false);
   });
 });

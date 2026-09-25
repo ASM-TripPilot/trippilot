@@ -5,6 +5,8 @@ import {
 } from '@/shared/api/generated/reflection/reflection';
 import type { Reflection } from '@/shared/api/generated/schemas';
 
+import { buildEditCard } from './editCard';
+
 /**
  * TRIP-571 · useDailyReflection — 당일 회고 조회·생성·수정을 잇는 얇은 래퍼(재사용 3훅만, 새 HTTP 0).
  *
@@ -26,7 +28,7 @@ export interface UseDailyReflectionResult {
   refetch: () => void;
   /** 회고 생성·재생성(BR-U5-32). */
   create: () => void;
-  /** 회고 문장 수정 — 초안은 남는다(BR-U5-35, `EditReflectionRequest.text`). */
+  /** 회고 카드 수정 — 초안은 남는다(BR-U5-35, `EditReflectionRequest.card` · subtitle 만 교체). */
   saveEdit: (text: string) => void;
 }
 
@@ -53,7 +55,11 @@ export function useDailyReflection(
       post.mutate({ tripId, dayDate: date });
     },
     saveEdit: (text: string) => {
-      put.mutate({ tripId, dayDate: date, data: { text } });
+      put.mutate({
+        tripId,
+        dayDate: date,
+        data: { card: buildEditCard(reflection?.card, text) },
+      });
     },
   };
 }

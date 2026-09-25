@@ -74,16 +74,23 @@ paths:
   /auth/social/{provider}/token:
     post:
       tags: [auth]
-      summary: 소셜 로그인/가입 (네이티브 SDK access token)
+      summary: 소셜 로그인/가입 (네이티브 SDK 토큰)
       description: >
-        카카오·네이버 등 네이티브 SDK가 발급한 access token 을 전달(서버 code 교환 없음, redirect 불필요).
-        서버는 토큰으로 userinfo 만 호출. 이후 계정 upsert·토큰 발급은 code 흐름과 동일. (Apple 미지원.)
+        네이티브 SDK가 발급한 토큰을 전달(서버 code 교환 없음, redirect 불필요).
+        이후 계정 upsert·토큰 발급은 code 흐름과 동일.
+
+
+        **제공자별로 싣는 토큰이 다르다.** 카카오·네이버·구글은 access token 이고 서버가 그것으로
+        userinfo 를 호출한다. **애플은 `identityToken`(id_token)** 이다 — Apple 은 userinfo 엔드포인트가
+        없어 되물을 곳이 없고, 서버가 Apple JWKS 로 **서명·aud·iss·exp 를 직접 검증**한다.
+        필드명이 `accessToken` 인 것은 계약이 3사 기준으로 먼저 굳었기 때문이며, 와이어를 바꾸면
+        얻는 것이 이름뿐이라 유지한다(TRIP-858).
       security: []
       parameters:
         - name: provider
           in: path
           required: true
-          schema: { type: string, enum: [kakao, naver, google] }
+          schema: { type: string, enum: [kakao, naver, google, apple] }
       requestBody:
         required: true
         content:
@@ -517,6 +524,47 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/StaySearchResponse' }
         '400': { $ref: '#/components/responses/ValidationError' }
+
+  /stays/{stayId}:
+    get:
+      tags: [stays]
+      summary: 숙소 상세(US-STAY-03)
+      description: >
+        정적 콘텐츠 + 최저가 스냅숏. **리뷰·평점은 담지 않는다** — 외부 OTA 딥링크로 위임한다
+        (US-STAY-03 · BR-U1-18). **정확 1박가도 여기 없다**(INV-U1-05 — 캐싱 금지라 표시 시점에
+        따로 부른다). 소요시간 미표시(INV-3).
+
+
+        누락 항목은 빈칸이 아니라 화면이 "미확인"으로 그린다(US-STAY-03 예외). 특히 가격은
+        정본(LOCALDATA) 전량에 스냅숏이 없어 **null 이 기본값**이다 — 상세를 막는 사유가 아니다
+        (BR-U1-14).
+
+
+        `stayId` 는 `"{출처}:{식별자}"` 합성 문자열이다. `stay` 의 PK 가 복합키라 경로에 그대로
+        싣지 못해서이고, 목록 응답이 `externalSource`·`externalId` 를 따로 실으므로 클라이언트가
+        조립할 수 있다(상세 응답은 조립된 값을 `stayId` 로 되돌려 준다).
+      parameters:
+        - name: stayId
+          in: path
+          required: true
+          schema: { type: string }
+          example: 'LOCALDATA:3000000-201-1965-00264'
+          description: '"{출처}:{식별자}" — 첫 콜론으로만 가른다'
+      responses:
+        '200':
+          description: 숙소 상세
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StayDetail' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          description: >
+            그런 숙소가 없다. **형식 오류(400)와 구분한다** — 둘을 같은 응답으로 접으면
+            클라이언트가 식별자를 잘못 조립하고 있어도 드러나지 않는다.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
 
   /stays/geocode:
     get:
@@ -1754,6 +1802,50 @@ components:
         degraded: { type: boolean, description: 일부 공급자 실패 시 true(부분 결과·재시도 안내) }
         filterZeroReasons: { type: array, items: { type: string }, description: '필터로 0건일 때 완화 후보(예: stayType, amenity:오션뷰)' }
 
+    StayDetail:
+      type: object
+      required: [stayId, externalSource, externalId, name, lat, lng, region, amenities, stayType]
+      description: >
+        숙소 상세. StayItem 에 `stayId`(합성 식별자) 하나를 더한 모양이다 — 상세가 목록보다
+        풍부해지는 것은 사진·편의시설이 채워진 뒤이고(숙소콘텐츠-수집-설계.md), 지금 없는 값의
+        자리만 만들어 두면 화면이 "준비 중"을 그릴 근거를 잃는다.
+      properties:
+        stayId: { type: string, description: '"{출처}:{식별자}" — 경로에 그대로 쓴다', example: 'STUB:jeju-001' }
+        externalSource: { type: string }
+        externalId: { type: string }
+        name: { type: string }
+        lat: { type: number, format: double }
+        lng: { type: number, format: double }
+        region: { type: string, description: 표시용 지역명 }
+        amenities:
+          type: array
+          items: { type: string }
+          description: >
+            **빈 배열이 "없음"이 아닐 수 있다.** 정본(LOCALDATA)은 편의시설을 주지 않아 전량이
+            비어 있다 — 목록 응답의 `amenitiesKnown` 이 그 사실을 알린다.
+        stayType: { type: string }
+        price:
+          allOf: [{ $ref: '#/components/schemas/StayPrice' }]
+          nullable: true
+          description: 최저가 스냅숏. **null = 가격 미확인**(BR-U1-14) — 정본 전량이 현재 null 이다
+        address:
+          type: string
+          nullable: true
+          description: 도로명 우선, 없으면 지번. **null = 모름**(정본 채움률 100%)
+          example: 서울특별시 종로구 수표로 89-8 (관수동)
+        phone:
+          type: string
+          nullable: true
+          description: >
+            표시형 전화번호 — 그대로 `tel:` 에 실을 수 있다. **null = 모름이지 "전화 없는 숙소"가
+            아니다**(정본 채움률 54.8%). 화면은 null 이면 그 줄을 비운다.
+          example: 02-2267-7474
+        rooms:
+          type: integer
+          nullable: true
+          description: 객실 수(양실+한실). **null = 모름**(정본 채움률 99.5%). 0 은 내려가지 않는다
+          example: 81
+
     StayItem:
       type: object
       required: [externalSource, externalId, name, lat, lng, region, amenities, stayType]
@@ -1770,6 +1862,20 @@ components:
           allOf: [{ $ref: '#/components/schemas/StayPrice' }]
           nullable: true
           description: 최저가 스냅숏('부터 가격'). null=가격 미확인(BR-U1-14)
+        address:
+          type: string
+          nullable: true
+          description: 도로명 우선, 없으면 지번. **null = 모름**(정본 채움률 100%)
+        phone:
+          type: string
+          nullable: true
+          description: >
+            표시형 전화번호 — 그대로 `tel:` 에 실을 수 있다. **null = 모름이지 "전화 없는 숙소"가
+            아니다**(정본 채움률 54.8%).
+        rooms:
+          type: integer
+          nullable: true
+          description: 객실 수(양실+한실). **null = 모름**(정본 채움률 99.5%). 0 은 내려가지 않는다
 
     StayPrice:
       type: object
@@ -2672,11 +2778,23 @@ components:
       type: object
       required: [accessToken]
       properties:
-        accessToken: { type: string, description: 네이티브 SDK가 발급한 제공자 access token }
+        accessToken:
+          type: string
+          description: >
+            네이티브 SDK가 발급한 제공자 토큰. 카카오·네이버·구글은 access token,
+            **애플은 `identityToken`(id_token)** 이다 — 경로 설명 참고(TRIP-858).
         ageConfirmation:
           allOf: [{ $ref: '#/components/schemas/AgeConfirmation' }]
           description: 신규 가입 시 필수, 기존 로그인 시 무시
         deviceId: { type: string, nullable: true, description: 미제공 시 서버가 임의 부여(기기별 세션) }
+        authorizationCode:
+          type: string
+          nullable: true
+          description: >
+            선택. **애플만 쓴다**(TRIP-933) — `expo-apple-authentication` 이 identityToken 과 함께 주는
+            `authorizationCode`. 로그인은 `accessToken`(identityToken)으로 끝나고, 이 값은 계정 파기 때
+            Apple 토큰을 revoke 하기 위한 refresh_token 교환에만 쓴다(App Store 5.1.1(v)).
+            교환이 실패해도 로그인은 성공한다(응답 무변화). 다른 제공자는 무시한다.
 
     RefreshedTokenPair:
       type: object

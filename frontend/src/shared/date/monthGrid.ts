@@ -1,14 +1,15 @@
 /**
- * TRIP-575 · 월 캘린더 순수 계산(도메인 무지). j07 기록 캘린더가 커스텀 월 그리드를 그리는 데
- * 쓰는 네 계산(월 일수 · 1일 요일 · 월 이동 · 범위 판정)과 주 단위(7의 배수) 셀 배열 조립을 담는다.
+ * TRIP-575 · 월 캘린더 순수 계산(도메인 무지). 커스텀 월 그리드를 그리는 네 계산(월 일수 · 1일
+ * 요일 · 월 이동 · 범위 판정)과 주 단위(7의 배수) 셀 배열 조립을 담는다. j07 기록 캘린더(record),
+ * 숙소 날짜 시트(stay), 여행 기간 시트(trip)가 쓴다.
  *
- * 이 수학은 `features/stay/model/stayDates.ts`·`features/trip/model/tripDatePicker.ts`에 **두 벌**
- * 있으나, `features/record`가 그 둘을 직접 import 하면 경계(recordsStructure G2) 위반이다.
- * `actualDistance→shared/geo`·`formatKoreanDate→shared/date` 승격 선례대로 여기 신설해 record 가
- * 쓴다(record 내 재구현 금지 · stay/trip 두 벌의 shared 통합은 후속 Follow-up G).
+ * TRIP-575 때 이 수학이 `features/stay/model/stayDates.ts`·`features/trip/model/tripDatePicker.ts`에
+ * 두 벌 있었고, record 가 그 둘을 직접 import 하면 경계(recordsStructure G2) 위반이라 여기 신설했다.
+ * TRIP-639 에서 두 사본을 지우고 한 벌로 합쳤다 — 도메인 규칙(박수·선택 전이·표기)은 각 feature 에
+ * 남는다. 옛 자리 재수출(shim)은 두지 않는다(`monthGridSharedPromotion.test.ts`).
  *
  * TZ-safe: 로컬 타임존에 요일·경계가 밀리지 않게 에포크 일수(UTC 정수)로만 계산한다
- * (`formatKoreanDate`·`tripDatePicker` 관례) — `new Date(...)` 생성자를 안 쓴다.
+ * (`formatKoreanDate` 관례) — `new Date(...)` 생성자를 안 쓴다(`tripWizardStep1Boundary.test.ts` AC-5).
  */
 
 const MS_PER_DAY = 86_400_000;
@@ -57,7 +58,7 @@ export function daysInMonth(year: number, month: number): number {
  */
 export function firstWeekdayOfMonth(year: number, month: number): number {
   const first = toEpochDay(`${year}-${pad2(month)}-01`);
-  return ((first % 7) + 4) % 7;
+  return ((first % 7) + 7 + 4) % 7; // % 는 음수를 음수로 남긴다 — +7 로 1970 이전도 0~6
 }
 
 /** 'YYYY-MM'을 `delta`개월 옮긴다. 연 경계를 넘는다(개월 총합 환산이라 12월↔1월 분기가 없다). */

@@ -10,8 +10,9 @@ import ExploreRoute from '@/app/(tabs)/explore';
 /**
  * TRIP-457 AC-6(배선) · AC-7 — d01 탐색 랜딩 숙소 카드 탭이 실제로 상세 라우트 push 로 이어진다.
  * 화면은 `stayLane.onPressCard?(card)` 콜백만 올린다(순수 뷰, `@/features/stay` import 금지) —
- * 그 콜백을 받아 카드 key 로 원본 `StayItem` 을 역조회해 `/stays/[stayId]` push(객체형·item JSON)
+ * 그 콜백을 받아 카드 key 로 원본 `StayItem` 을 역조회해 `/stays/[stayId]` push(객체형)
  * 하는 것은 **라우트**(`(tabs)/explore.tsx`) 몫이다. `onToggleSave` 역조회 선례와 동형.
+ * TRIP-940 부터 push 는 `stayId` 만 싣는다 — 상세가 `GET /stays/{stayId}` 로 스스로 조회한다.
  *
  * 목 seam(tabsExploreRoute.test 계승): `useStaySearch`·`useSavedPlaces` 딥 경로 + `useRouter`.
  * 게스트(토큰 없음)라 조건부 자식 `SavableStayLane`(useSavedStays)은 마운트되지 않는다 —
@@ -101,14 +102,16 @@ function detailPushes() {
 }
 
 describe('X1 · d01 카드 press → 상세 push (AC-6)', () => {
-  it('카드를 누르면 원본 item 을 역조회해 /stays/[stayId] 로 push 한다', () => {
+  // TRIP-940 AC-10 재작성 — 상세가 `GET /stays/{stayId}` 로 스스로 조회하므로 item(JSON) 을 싣지
+  // 않는다(01b D0). params 에 item 이 남으면 재귀 비교라 red.
+  it('카드를 누르면 stayKey 만 실어 /stays/[stayId] 로 push 한다(item 없음)', () => {
     render(<ExploreRoute />);
 
     fireEvent.press(screen.getByTestId(`explore-stay-card-${KEY_A}`));
 
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/stays/[stayId]',
-      params: { stayId: KEY_A, item: JSON.stringify(CARD_A) },
+      params: { stayId: KEY_A },
     });
   });
 });

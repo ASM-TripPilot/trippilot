@@ -1,18 +1,13 @@
 import { useLocalSearchParams } from 'expo-router';
 
-import { PlanbManualPage } from '@/pages/planb-manual';
+import { ItineraryEditPage } from '@/pages/itinerary-edit';
 
 /**
- * TRIP-443 · i15·i22 수동 편집 — 얇은 라우트, 배선은 `pages/planb-manual`이 진다
- * (`live/location.tsx`·`planb/solving.tsx` 선례). params(tripId·variant)만 읽어 prop 으로 내린다 —
- * `variant` 를 흘려야 폴백 진입(error=i22)과 정상 [직접 고르기] 진입(미지정=i15)이 갈린다
- * (진입 신호 겹침을 라우트 파라미터로 가름).
+ * i07 일정 편집(TRIP-753) — 얇은 라우트. 여행 중 [직접 수정] 진입은 h12 편집 페이지를 그대로 쓰고,
+ * 이 주소로 왔다는 사실(라우트가 곧 진입 신호)만 `inTrip` 으로 넘긴다.
  */
 export default function PlanbManualRoute() {
-  const { tripId, variant } = useLocalSearchParams<{
-    tripId: string;
-    variant?: 'error' | 'normal';
-  }>();
+  const { tripId } = useLocalSearchParams<{ tripId: string }>();
 
-  return <PlanbManualPage tripId={tripId} variant={variant} />;
+  return <ItineraryEditPage tripId={tripId} inTrip />;
 }

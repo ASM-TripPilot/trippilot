@@ -1,8 +1,8 @@
 ---
 name: implementer
 description: 구현자 — 승인된 실패 테스트를 통과시키는 최소 구현을 작성한다. 테스트 수정 금지. 개발 사이클의 [구현]·[리팩토링] 단계 전담(산출물은 학습 검토(7단계)의 재료).
-model: claude-opus-4-8
-effort: xhigh
+model: claude-opus-5-5
+effort: high
 ---
 
 # Implementer — 구현

@@ -1,42 +1,58 @@
 import type { ReactElement, ReactNode } from 'react';
-import { Image, Pressable, ScrollView, Text, View } from 'react-native';
+import {
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { PlaceSubtitle } from '@/entities/place/ui/PlaceSubtitle';
+import { MapView } from '@/shared/map';
 
 import type { PlaceDetailView } from '../model/placeDetailView';
-import { BackArrowGlyph, ShareGlyph } from './ExecutionGlyphs';
+import {
+  BackArrowGlyph,
+  HeroPhotoGlyph,
+  HeroPinGlyph,
+  ShareGlyph,
+} from './ExecutionGlyphs';
 
 /**
- * TRIP-398 · PlaceDetailScreen(i05) — 여행 중 현재 장소 상세, 무상태 화면.
+ * TRIP-755 · PlaceDetailScreen(i10, Figma 4159:2673) — 여행 중 현재 장소 상세, 무상태 화면.
  *
- * 표면(위→아래): 헤더(뒤로가기·제목·공유) · hero 이미지 · 부제 한 줄 · 태그 칩 · 정보 카드
- * (영업시간·위치·다음 일정까지) · "지금 여기" 블록 · 미니맵 placeholder · 하단 CTA 2개.
- * 재판정하지 않고 뷰 값만 그린다 — 결측 처리·slack 조립은 model(`placeDetailView.ts`)이 소유.
+ * 표면(위→아래): 풀블리드 갤러리 히어로(원형 버튼·장소명·핀 부제·"1 / N") · 추천 카피 · 태그 칩 ·
+ * 정보 카드(영업시간·주소·입장료) · 미니맵 · "이곳의 사진".
+ * 재판정하지 않고 뷰 값만 그린다 — 결측 조립은 model(`placeDetailView.ts`)이 소유.
  *
  * 규율:
- *  - 각 leaf 는 값 하나(`toHaveTextContent` 문자열=완전일치, LiveSlotCard 관례).
- *  - 결측 영업시간은 값 자리를 **다른 testID**(`-unknown-openhours`)로 바꿔 기계로 구분(AC-2).
- *  - 위치는 계약 공백이라 항상 "미확인"(`-unknown-location`, D3).
- *  - 소요시간 단위 문자열은 화면 어디에도 없다(INV-3) — 여유는 정성 라벨(model 조립)만 렌더.
- *  - [길찾기]는 자리만(onPress 없음, US-ONTRIP-03 소관) · [일정에서 보기]만 콜백(D7).
+ *  - 계약 공백 필드(카피·사진 수·갤러리 2장째부터)는 값이 있을 때만 그린다(INV-1). 주소·입장료
+ *    결측은 행을 지우지 않고 다른 testID 로 "미확인"(BR-U4-40, `-unknown-{field}`).
+ *  - 뒤로·공유·모두 보기는 콜백이 있을 때만 그린다(TRIP-939 — 반응 없는 버튼 금지).
+ *  - 하트(저장) 버튼은 두지 않는다 — 장소 저장 계약이 없고 '준비 중' 안내도 빼기로 했다(사용자 결정 2026-09-25,
+ *    Figma 와 차이). 반응 없는 버튼은 그리지 않는다(TRIP-939).
+ *  - "다음 일정까지"(여유) 행은 두지 않는다 — Figma 3행 그대로(사용자 결정 2026-09-25 — US-ONTRIP-02 여유 표시 요구와의 차이를 알고 수용).
+ *  - 소요시간 단위 문자열은 화면 어디에도 없다(INV-3).
  */
 
-// 정보 카드 행 라벨 셀 — 고정 폭 86px, bold muted(Figma i05 카드).
-function RowLabel({ text }: { text: string }): ReactElement {
-  return (
-    <View className="w-[86px]">
-      <Text className="font-noto-bold text-label text-muted">{text}</Text>
-    </View>
-  );
+export interface PlaceDetailScreenProps {
+  view: PlaceDetailView;
+  onPressBack?: () => void;
+  onPressShare?: () => void;
+  /** "이곳의 사진 · 모두 보기 ›" — 사진 뷰어가 없어 미주입이면 그리지 않는다. */
+  onPressSeeAll?: () => void;
 }
 
-// 카드 행 구분선(hairline).
-function Divider(): ReactElement {
-  return <View className="h-px w-full bg-hairline" />;
-}
+// 하단 스크림 — 흰 제목·부제를 사진 위에서 읽히게 한다. 반투명이라 raw(d06 SCRIM_COLORS 와 같은 값).
+const SCRIM_COLORS = ['rgba(0,0,0,0)', 'rgba(0,0,0,0.5)'] as const;
+const SCRIM_LOCATIONS = [0.3, 1] as const;
+const THUMB_COUNT = 3;
 
-// 정보 카드 한 행 — 라벨 + 값 슬롯(값은 결측 스위치·캡션 때문에 호출부가 조립해 넘긴다).
+/** 정보 카드 한 행 — 라벨 + 값 슬롯(값은 결측 스위치·캡션 때문에 호출부가 조립해 넘긴다). */
 function InfoRow({
   label,
   children,
@@ -45,65 +61,200 @@ function InfoRow({
   children: ReactNode;
 }): ReactElement {
   return (
-    <View className="flex-row items-start gap-[14px] py-[14px]">
-      <RowLabel text={label} />
+    <View className="flex-row items-start gap-[10px] py-[13px]">
+      {/* Figma 라벨 폭 60. */}
+      <View className="min-w-[60px]">
+        <Text className="font-noto text-label text-muted">{label}</Text>
+      </View>
       <View className="flex-1 gap-[2px]">{children}</View>
     </View>
   );
 }
 
-export interface PlaceDetailScreenProps {
-  view: PlaceDetailView;
-  onPressItinerary?: () => void;
+// 행 구분선 — `border-hairline` 은 네 변 두께를 함께 건드려(repo-traps) 막대 View 로 그린다.
+function Divider(): ReactElement {
+  return <View className="h-px w-full bg-hairline" />;
+}
+
+/** 값 또는 결측 — 값이 null 이면 "미확인"을 `-unknown-{field}` testID 로 적는다. */
+function ValueOrUnknown({
+  value,
+  field,
+}: {
+  value: string | null;
+  field: string;
+}): ReactElement {
+  return (
+    <Text
+      testID={
+        value === null
+          ? `execution-place-unknown-${field}`
+          : `execution-place-${field}`
+      }
+      className="font-noto text-[13.5px] text-ink"
+    >
+      {value ?? '미확인'}
+    </Text>
+  );
+}
+
+function CircleButton({
+  testID,
+  onPress,
+  children,
+}: {
+  testID: string;
+  onPress: () => void;
+  children: ReactNode;
+}): ReactElement {
+  return (
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      onPress={onPress}
+      className="h-[38px] w-[38px] items-center justify-center rounded-pill bg-on-primary"
+    >
+      {children}
+    </Pressable>
+  );
 }
 
 export function PlaceDetailScreen({
   view,
-  onPressItinerary,
+  onPressBack,
+  onPressShare,
+  onPressSeeAll,
 }: PlaceDetailScreenProps): ReactElement {
+  const { width } = useWindowDimensions();
+
+  const hasPitch = view.pitchTitle !== null || view.pitchBody !== null;
+  const coords =
+    view.lat !== null && view.lng !== null
+      ? { lat: view.lat, lng: view.lng }
+      : null;
+  const thumbs = view.galleryUrls.slice(0, THUMB_COUNT);
+  const moreCount =
+    view.photoTotal === null ? 0 : view.photoTotal - THUMB_COUNT;
+
   return (
     <SafeAreaView
       testID="execution-place-detail"
-      edges={['top', 'bottom']}
+      edges={['bottom']}
       style={{ flex: 1 }}
       className="bg-canvas"
     >
-      <ScrollView className="flex-1" contentContainerClassName="pb-md">
-        {/* 헤더 — 뒤로가기·공유는 계약에 핸들러가 없어 시각 요소만(6-b 확인). 컨텍스트 라벨
-            "부산 여행 · 2일차"는 trip 조회 계약이 없어 생략(데이터 없이 지어내지 않음). */}
-        <View className="gap-[3px] px-lg pb-md pt-[14px]">
-          <View className="h-[24px] flex-row items-center">
-            <BackArrowGlyph size={24} />
-            <View className="flex-1" />
-            <ShareGlyph size={24} />
-          </View>
-          <Text className="font-noto-bold text-[20px] text-ink">현재 장소</Text>
-        </View>
-
-        {/* hero — imageUrl NULL 이면 기본 이미지를 지어내지 않고 빈 placeholder(D6·TRIP-219). */}
+      <ScrollView className="flex-1" contentContainerClassName="pb-xl">
+        {/* 갤러리 히어로(풀블리드 430) — 사진이 없으면 지어내지 않고 회색 자리(D6·INV-1). */}
         <View
           testID="execution-place-hero"
-          className="h-[240px] w-full bg-surface-strong"
+          className="h-[430px] w-full overflow-hidden bg-surface-strong"
         >
-          {view.imageUrl ? (
-            <Image
-              source={{ uri: view.imageUrl }}
-              className="h-full w-full"
-              resizeMode="cover"
-            />
+          {view.galleryUrls.length > 0 ? (
+            <ScrollView
+              testID="execution-place-gallery"
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+            >
+              {view.galleryUrls.map((uri, index) => (
+                <Image
+                  key={`${index}-${uri}`}
+                  testID={`execution-place-gallery-${index}`}
+                  source={{ uri }}
+                  resizeMode="cover"
+                  className="h-full"
+                  style={{ width }}
+                />
+              ))}
+            </ScrollView>
+          ) : null}
+          <LinearGradient
+            colors={SCRIM_COLORS}
+            locations={SCRIM_LOCATIONS}
+            style={StyleSheet.absoluteFillObject}
+            pointerEvents="none"
+          />
+
+          {/* 원형 버튼 — top-[52px]는 상태바 근사(d06 선례, 기기별 안전영역 정합은 6-b). box-none 이라
+              버튼 사이 빈 곳의 스와이프는 갤러리로 간다. */}
+          <View
+            pointerEvents="box-none"
+            className="absolute left-lg right-lg top-[52px] flex-row items-center gap-sm"
+          >
+            {onPressBack ? (
+              <CircleButton testID="execution-place-back" onPress={onPressBack}>
+                <BackArrowGlyph size={20} />
+              </CircleButton>
+            ) : null}
+            <View pointerEvents="none" className="flex-1" />
+            {onPressShare ? (
+              <CircleButton
+                testID="execution-place-share"
+                onPress={onPressShare}
+              >
+                <ShareGlyph size={19} />
+              </CircleButton>
+            ) : null}
+          </View>
+
+          <View
+            pointerEvents="none"
+            className="absolute bottom-[42px] left-lg right-[120px] gap-xs"
+          >
+            <Text
+              testID="execution-place-title"
+              className="font-noto-bold text-[27px] text-on-primary"
+            >
+              {view.name}
+            </Text>
+            {view.category !== null ? (
+              <View className="flex-row items-center gap-[6px]">
+                <HeroPinGlyph testID="execution-place-subtitle-pin" />
+                <PlaceSubtitle
+                  parts={[view.category]}
+                  className="font-noto text-caption text-on-primary"
+                />
+              </View>
+            ) : null}
+          </View>
+
+          {view.photoTotal !== null ? (
+            <View
+              testID="execution-place-photo-count"
+              pointerEvents="none"
+              className="absolute bottom-lg right-lg flex-row items-center gap-[5px] rounded-[8px] bg-scrim/55 px-[11px] py-[5px]"
+            >
+              <HeroPhotoGlyph />
+              <Text className="font-inter-bold text-micro text-on-primary">
+                {`1 / ${view.photoTotal}`}
+              </Text>
+            </View>
           ) : null}
         </View>
 
-        <View className="gap-lg px-lg pb-lg pt-[18px]">
-          {/* 부제 — 태그 상위 몇 개를 " · " 로 이은 줄(없으면 category). 앵커 testID 없음. */}
-          {view.tags.length > 0 || view.category !== null ? (
-            <PlaceSubtitle
-              parts={view.tags.length > 0 ? view.tags : [view.category ?? '']}
-              className="font-noto text-label text-muted"
-            />
+        <View className="gap-[14px] px-lg pt-lg">
+          {hasPitch ? (
+            <View testID="execution-place-pitch" className="gap-[6px] py-lg">
+              {view.pitchTitle !== null ? (
+                <Text
+                  testID="execution-place-pitch-title"
+                  className="font-noto-bold text-[16px] text-ink"
+                >
+                  {view.pitchTitle}
+                </Text>
+              ) : null}
+              {view.pitchBody !== null ? (
+                <Text
+                  testID="execution-place-pitch-body"
+                  className="font-noto text-[13px] leading-[21px] text-body"
+                >
+                  {view.pitchBody}
+                </Text>
+              ) : null}
+            </View>
           ) : null}
 
-          {/* 태그 칩 — 각 tag 앞에 #. tags 비어도 컨테이너는 남는다(구조 앵커 S1). */}
+          {/* 태그 칩 — tags 비어도 컨테이너는 남는다(구조 앵커). */}
           <View
             testID="execution-place-tags"
             className="flex-row flex-wrap gap-sm"
@@ -111,31 +262,28 @@ export function PlaceDetailScreen({
             {view.tags.map((tag) => (
               <View
                 key={tag}
-                className="rounded-pill bg-surface-strong px-md py-[6px]"
+                className="rounded-[8px] bg-surface-soft px-[11px] py-[6px]"
               >
-                <Text className="font-noto text-label text-body">{`#${tag}`}</Text>
+                <Text className="font-noto text-[12.5px] leading-[14px] text-body">{`#${tag}`}</Text>
               </View>
             ))}
           </View>
 
-          {/* 정보 카드 — 영업시간·위치·다음 일정까지 3행. */}
-          <View className="rounded-card border border-hairline bg-canvas px-lg">
+          <View
+            testID="execution-place-info"
+            className="rounded-[12px] border border-hairline bg-canvas px-[14px]"
+          >
             <InfoRow label="영업시간">
-              {view.openingHoursMissing ? (
-                <Text
-                  testID="execution-place-unknown-openhours"
-                  className="font-noto text-label text-ink"
-                >
-                  {view.openingHours}
-                </Text>
-              ) : (
-                <Text
-                  testID="execution-place-openhours"
-                  className="font-noto text-label text-ink"
-                >
-                  {view.openingHours}
-                </Text>
-              )}
+              <Text
+                testID={
+                  view.openingHoursMissing
+                    ? 'execution-place-unknown-openhours'
+                    : 'execution-place-openhours'
+                }
+                className="font-noto text-[13.5px] text-ink"
+              >
+                {view.openingHours}
+              </Text>
               {view.hoursCaption !== null ? (
                 <Text
                   testID="execution-place-hours-caption"
@@ -145,85 +293,79 @@ export function PlaceDetailScreen({
                 </Text>
               ) : null}
             </InfoRow>
-
             <Divider />
-
-            <InfoRow label="위치">
-              {/* 계약 공백 — 주소 데이터원이 없어 항상 "미확인"(D3). */}
-              <Text
-                testID="execution-place-unknown-location"
-                className="font-noto text-label text-ink"
-              >
-                {view.location}
-              </Text>
+            <InfoRow label="주소">
+              <ValueOrUnknown value={view.address} field="address" />
             </InfoRow>
-
             <Divider />
-
-            <InfoRow label="다음 일정까지">
-              <Text
-                testID="execution-place-slack"
-                className="font-noto text-label text-ink"
-              >
-                {view.slackLabel}
-              </Text>
+            <InfoRow label="입장료">
+              <ValueOrUnknown value={view.admissionFee} field="fee" />
             </InfoRow>
           </View>
 
-          {/* "지금 여기" — 계획 도착값(BR-U4-34) + 정적 안내 접미. "머무는 중" 활성 판정은 활성
-              슬롯 신호 미배선이라 정적(★6, 6-b). */}
-          <View className="gap-[5px] rounded-[14px] bg-surface-soft px-lg py-[14px]">
-            <Text className="font-noto-bold text-caption text-primary-text">
-              지금 여기
-            </Text>
-            <Text
-              testID="execution-place-here"
-              className="font-noto text-body text-ink"
+          {/* 미니맵 — 현재 장소 1핀 viewOnly(d06 동형). 단일 핀이라 경로선 없음. env 키 부재면 코어가
+              map-failure 로 접는다(INV-4), 실타일은 네이티브 재빌드 뒤(6-b). */}
+          {coords !== null ? (
+            <View
+              testID="execution-place-map"
+              className="h-[150px] w-full overflow-hidden rounded-[12px] border border-hairline bg-surface-soft"
             >
-              {`${view.arrival} · 머무는 중 · 천천히 둘러보세요`}
-            </Text>
-          </View>
-
-          {/* 미니맵 — 실 MapView 는 후속(D5, 네이티브 재빌드 함정). 이번엔 정적 placeholder.
-              ponytail: static box, lat/lng 단일핀 MapView(viewOnly) 배선은 후속 티켓. */}
-          <View
-            testID="execution-place-map"
-            className="h-[150px] w-full items-center justify-center gap-xs overflow-hidden rounded-[14px] border border-hairline bg-surface-soft"
-          >
-            <View className="h-[32px] w-[32px] items-center justify-center rounded-pill bg-primary">
-              <Text className="font-noto-bold text-caption text-on-primary">
-                현
-              </Text>
+              <MapView
+                center={coords}
+                pins={[{ number: 1, ...coords }]}
+                viewOnly
+                showScaleBar
+              />
             </View>
-            <Text className="font-noto text-caption text-muted">
-              지도 준비 중
-            </Text>
-          </View>
+          ) : null}
+
+          {view.galleryUrls.length >= THUMB_COUNT ? (
+            <View testID="execution-place-photos" className="gap-md pt-[6px]">
+              <View className="flex-row items-center justify-between">
+                <Text className="font-noto-bold text-[16px] text-ink">
+                  이곳의 사진
+                </Text>
+                {onPressSeeAll ? (
+                  <Pressable
+                    testID="execution-place-photos-seeall"
+                    accessibilityRole="button"
+                    onPress={onPressSeeAll}
+                  >
+                    <Text className="font-noto text-[12.5px] text-muted">
+                      모두 보기 ›
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
+              <View className="flex-row gap-sm">
+                {thumbs.map((uri, index) => (
+                  <View
+                    key={`${index}-${uri}`}
+                    className="h-[110px] flex-1 overflow-hidden rounded-[12px] bg-surface-strong"
+                  >
+                    <Image
+                      testID={`execution-place-photo-thumb-${index}`}
+                      source={{ uri }}
+                      resizeMode="cover"
+                      className="h-full w-full"
+                    />
+                    {index === THUMB_COUNT - 1 && moreCount > 0 ? (
+                      <View className="absolute inset-0 items-center justify-center bg-scrim/45">
+                        <Text
+                          testID="execution-place-photos-more"
+                          className="font-inter-bold text-[18px] text-on-primary"
+                        >
+                          {`+${moreCount}`}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                ))}
+              </View>
+            </View>
+          ) : null}
         </View>
       </ScrollView>
-
-      {/* 하단 바 — [길찾기]는 자리만(onPress 없음), [일정에서 보기]만 콜백(D7). */}
-      <View className="flex-row items-center gap-[10px] border-t border-hairline px-lg pb-lg pt-md">
-        <Pressable
-          testID="execution-place-cta-directions"
-          accessibilityRole="button"
-          className="items-center justify-center rounded-button border border-hairline-strong bg-canvas px-[28px] py-[15px]"
-        >
-          <Text className="font-noto-bold text-card-title text-ink">
-            길찾기
-          </Text>
-        </Pressable>
-        <Pressable
-          testID="execution-place-cta-itinerary"
-          accessibilityRole="button"
-          onPress={onPressItinerary}
-          className="flex-1 items-center justify-center rounded-button bg-primary py-[15px]"
-        >
-          <Text className="font-noto-bold text-card-title text-on-primary">
-            일정에서 보기
-          </Text>
-        </Pressable>
-      </View>
     </SafeAreaView>
   );
 }

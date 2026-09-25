@@ -130,14 +130,14 @@ export default function ExploreRoute(): ReactElement {
             : '/stays'
         ),
       // 카드 탭(TRIP-457 AC-6) — 화면은 card VM 만 올린다(순수 뷰, `@/features/stay` import 금지).
-      // 라우트가 key 로 원본 StayItem 을 역조회해 상세로 push 한다(객체형·raw stayKey·item JSON —
-      // expo-router 자동 인코딩, 수동 encode 금지 ★F-3). 하트 press 는 이 콜백을 안 부른다(★F-4).
+      // 라우트가 key 로 원본 StayItem 을 역조회해 상세로 push 한다(객체형·raw stayKey 만 — 상세가
+      // GET /stays/{stayId} 로 스스로 조회, TRIP-940. expo-router 자동 인코딩, 수동 encode 금지 ★F-3). 하트 press 는 이 콜백을 안 부른다(★F-4).
       onPressCard: (card) => {
         const item = items.find((it) => stayKey(it) === card.key);
         if (item) {
           router.push({
             pathname: '/stays/[stayId]',
-            params: { stayId: card.key, item: JSON.stringify(item) },
+            params: { stayId: card.key },
           });
         }
       },

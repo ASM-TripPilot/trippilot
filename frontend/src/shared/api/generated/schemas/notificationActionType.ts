@@ -4,15 +4,23 @@
  * TripPilot U1 API (소셜 로그인 전용 MVP)
  * U1 기반·계정·온보딩 (M1 Auth · M2 Profile · C3 Moderation). 소셜 로그인 전용 — 이메일/비밀번호 로그인은 후속 이연. 정본 대조: docs/design/U1-API-설계.md, U1-DB스키마-설계.md, U1-내부아키텍처-설계.md
  *
+ * **횡단 규약 — 입력 형식 오류는 어느 엔드포인트에서든 400이다.** 경로변수·쿼리의 타입 변환 실패(UUID·숫자·enum)와 필수 쿼리 누락은 표준 에러 봉투 (`ErrorResponse`, code=`VALIDATION_ERROR`, `fields[].field`=문제 파라미터 이름)로 나간다. 경로별 `'400'` 선언은 **업무 검증**이 있는 곳에만 적는다 — 형식 오류까지 경로마다 중복 선언하면 무엇이 그 엔드포인트 고유의 검증인지 안 보인다. (2026-09-01 이전에는 이 갈래가 500 `INTERNAL` 로 나갔다 — UUID-PATH-400)
+ *
  * OpenAPI spec version: 0.1.0-draft
  */
 
 /**
- * 알림에서 들어갈 화면. 진입이 없으면 `actionPayload` 와 함께 null.
+ * 알림에서 들어갈 화면. 진입이 없으면 `actionPayload` 와 함께 **둘 다 null** 이다 — 액션 없는 알림을 "액션 있는 척" 그리지 않는다(INV-4). 회고에 쓸 데이터가 없어 만들지 못한 알림이 그 경우다(BR-U6-12).
+ *
+ * `PLANB_REPLAN` 은 일정 화면이 아니라 **재계획 진입**이다(BR-U6-08 '대안 일정 보기').
  */
 export type NotificationActionType =
   (typeof NotificationActionType)[keyof typeof NotificationActionType] | null;
 
 export const NotificationActionType = {
   TRIP_ITINERARY: 'TRIP_ITINERARY',
+  PLANB_REPLAN: 'PLANB_REPLAN',
+  REFLECTION_DAILY: 'REFLECTION_DAILY',
+  TRIP_SUMMARY: 'TRIP_SUMMARY',
+  STAY_DETAIL: 'STAY_DETAIL',
 } as const;

@@ -29,6 +29,10 @@ class StayEntity(
     // text[] 매핑은 poi.tags 선례와 동일 — 컨버터 없이 Hibernate 네이티브 배열.
     @JdbcTypeCode(SqlTypes.ARRAY)
     @Column(name = "amenities") var amenities: Array<String> = emptyArray(),
+    // V2.51. 셋 다 nullable 이고 null 은 "모름"이다 — 공급자마다 주는 칸이 다르다.
+    @Column(name = "address") var address: String? = null,
+    @Column(name = "phone") var phone: String? = null,
+    @Column(name = "rooms") var rooms: Int? = null,
 )
 
 /** 복합 PK 식별자. 엔티티와 달리 ID 클래스는 값이므로 `data class` 가 맞다. */

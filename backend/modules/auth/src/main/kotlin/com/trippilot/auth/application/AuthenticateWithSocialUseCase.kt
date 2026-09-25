@@ -7,6 +7,8 @@ import com.trippilot.auth.domain.Provider
 import com.trippilot.auth.domain.SocialIdentity
 import com.trippilot.auth.domain.SocialProfile
 import com.trippilot.auth.domain.port.AccountRepository
+import com.trippilot.auth.domain.port.ProviderRevocationTokenRepository
+import com.trippilot.auth.domain.port.ProviderTokenRevocationPort
 import com.trippilot.auth.domain.port.SocialAuthPort
 import com.trippilot.auth.domain.port.SocialIdentityRepository
 import com.trippilot.auth.domain.port.TokenIssuer
@@ -36,6 +38,8 @@ class AuthenticateWithSocialUseCase(
     private val refreshTokenService: RefreshTokenService,
     private val eventPublisher: DomainEventPublisher,
     private val clock: Clock,
+    private val tokenRevocation: ProviderTokenRevocationPort,
+    private val revocationTokens: ProviderRevocationTokenRepository,
 ) {
     /** code 교환 흐름(웹·커스텀 스킴 redirect). */
     @Transactional
@@ -53,7 +57,14 @@ class AuthenticateWithSocialUseCase(
     @Transactional
     fun authenticateWithAccessToken(command: SocialTokenLoginCommand): SocialLoginResult {
         val profile = socialAuthPort.authenticateWithAccessToken(command.provider, command.accessToken)
-        return completeLogin(profile, command.ageMethod, command.birthDate, command.deviceId)
+        val result = completeLogin(profile, command.ageMethod, command.birthDate, command.deviceId)
+        // 로그인이 확정된 **뒤에** 교환한다 — 연령확인 누락(400) 등으로 로그인이 무산되면 일회용 code 를
+        // 태울 이유가 없다. 교환 실패는 null 이라 로그인 결과를 바꾸지 않는다(TRIP-933).
+        command.authorizationCode?.let { code ->
+            tokenRevocation.exchangeRevocationToken(profile.provider, code, profile.providerSub)
+                ?.let { revocationTokens.store(profile.provider, profile.providerSub, it) }
+        }
+        return result
     }
 
     /** 프로필 → account/social_identity upsert → 토큰 발급(두 흐름 공용). */

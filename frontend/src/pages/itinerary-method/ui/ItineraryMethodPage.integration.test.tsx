@@ -1,9 +1,4 @@
-import {
-  fireEvent,
-  render,
-  screen,
-  within,
-} from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import type { Itinerary } from '@/shared/api/generated/schemas';
 
@@ -19,7 +14,7 @@ import { ItineraryMethodPage } from './ItineraryMethodPage';
  * 바뀌었다**(h05 CTA 가 h09 로 잇는다 · 아래 첫 describe).
  *
  * 무엇을 보장하나:
- *  - 3방식 카드가 Figma 문구 그대로 뜨고, 추천 배지는 [AI와 같이 짜기] **하나**에만 있다.
+ *  - 3방식 카드가 Figma 문구 그대로 뜬다(TRIP-784: 서브카피·하단안내 교체 + 추천 배지 제거).
  *  - 🔴 완전AI 를 누르면 **h05(필수 방문지)로 navigate 하고 h04 에서는 POST 가 한 건도 안 나간다**
  *    (TRIP-454 로 h09 직행 → h05 편입 재작성 · 생성 POST 는 여전히 h09 가 소유).
  *  - 🔴 직접 짜기(manual)를 누르면 **h19(빈 일정)로 navigate 하고 POST 는 h04 에서 0**이다(TRIP-460
@@ -124,39 +119,23 @@ describe('🔴 3방식 카드 렌더 + Figma 문구', () => {
       screen.getByText('빈 일정에 원하는 장소를 직접 추가')
     ).toBeOnTheScreen();
 
-    // 상단 부제 + 하단 전환 안내(BR-U3-06 UX 사본).
+    // 상단 부제 + 하단 안내 — TRIP-784 Figma 문구로 교체(옛 문구는 부재 = 교체이지 병기 아님).
+    expect(screen.getByText('마음에 드는 방식을 골라주세요')).toBeOnTheScreen();
     expect(
-      screen.getByText('설정한 취향·거리는 세 방법 모두에 적용돼요')
+      screen.queryByText('설정한 취향·거리는 세 방법 모두에 적용돼요')
+    ).toBeNull();
+    expect(
+      screen.getByText('어떤 방식이든 마지막엔 직접 고칠 수 있어요')
     ).toBeOnTheScreen();
     expect(
-      screen.getByText('세 방법은 언제든 서로 전환할 수 있어요')
-    ).toBeOnTheScreen();
+      screen.queryByText('세 방법은 언제든 서로 전환할 수 있어요')
+    ).toBeNull();
   });
 });
 
-describe('🔴 추천 배지는 copick 에만', () => {
-  it('배지가 [AI와 같이 짜기] 카드 안에만 있고 화면 전체에 하나뿐이다', () => {
-    renderPage();
-
-    // 배지가 copick 카드 **안**에 있다.
-    expect(
-      within(screen.getByTestId('itinerary-method-copick')).getByTestId(
-        'itinerary-method-copick-badge'
-      )
-    ).toBeOnTheScreen();
-
-    // 다른 두 카드에는 '추천' 이 없다(짝 — 유일성).
-    expect(
-      within(screen.getByTestId('itinerary-method-fullai')).queryByText('추천')
-    ).toBeNull();
-    expect(
-      within(screen.getByTestId('itinerary-method-manual')).queryByText('추천')
-    ).toBeNull();
-
-    // 화면 통틀어 '추천' 은 정확히 하나.
-    expect(screen.getAllByText('추천')).toHaveLength(1);
-  });
-});
+// TRIP-784: '추천 배지는 copick 에만' describe 삭제 — Figma 에 없는 장식이라 배지 제거.
+// 배지 0개(testID·'추천' 텍스트 부재)의 회귀 심판은 co-located `MethodPickerScreen.test.tsx`
+// AC-4 로 이관됐다(같은 컴포넌트 트리를 직접 렌더).
 
 describe('🔴 완전AI → h05(필수 방문지)로 navigate, h04 POST 0 (TRIP-454 AC-1)', () => {
   it('완전AI 를 누르면 must-visits 라우트로 이동하고(tripId 실림) POST 는 h04 에서 안 나간다', () => {

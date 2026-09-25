@@ -1,12 +1,13 @@
 /**
- * e03 숙소 상세 · 무상태 프레젠테이션 화면(Figma 1700:1183 default · TRIP-457 · US-STAY-*).
+ * e03 숙소 상세 · 무상태 프레젠테이션 화면(Figma 1700:1183 default · 4514:2330 error · TRIP-457 ·
+ * TRIP-940 · US-STAY-*).
  *
- * `item: StayItem | null` + 상태 플래그·콜백만 받는다 — 네트워크·라우팅·저장 판정을 전혀 모른다
- * (FSD 경계, 배선은 `pages/stay-detail/ui/StayDetailPage.tsx`가 진다. 구조 가드가 useState·
- * 라우터·query·타 feature import 0을 잠근다). `item`이 `null`이면(파싱 실패/부재) notFound
- * 얼굴을 그린다(INV-4). 계약 GET이 없어 손에 든 카드 데이터로 그릴 수 있는 것까지만 그린다:
- * 사진 URL 필드가 없어 회색 자리(INV-1)·최저가(`formatPrice` 재사용, "· 1박" 없음 Q6)·편의시설
- * (결측→"미확인" BR-U1-18)·미니맵 정적 자리(Q5, i05 선례)·지역(거리·소요시간 없음 INV-1·INV-3)·
+ * `state`(조회 결과 판별 유니온) + 상태 플래그·콜백만 받는다 — 네트워크·라우팅·저장 판정을 전혀
+ * 모른다(FSD 경계, 조회·배선은 `pages/stay-detail/ui/StayDetailPage.tsx`가 진다. 구조 가드가
+ * useState·라우터·query·타 feature import 0을 잠근다). ready 가 아닌 네 얼굴(로딩·404·400·네트워크)은
+ * testID 로 갈리고 모두 뒤로 버튼을 갖는다. 재시도는 네트워크 오류에만 있다(INV-4, TRIP-940 Q2).
+ * ready 얼굴: 사진 URL 필드가 없어 회색 자리(INV-1)·최저가(`formatPrice` 재사용, "· 1박" 없음 Q6)·
+ * 편의시설(결측→"미확인" BR-U1-18)·미니맵·주소/전화/객실(전화 null 은 줄째 비움, TRIP-940 Q1)·
  * 제휴 고지·CTA 2종·저장 하트. **몰입 화면 = 하단 탭바 없음**(AC-14, e02 검색화면과 대비).
  *
  * 담김/미담김 하트는 색(SVG fill)이 아니라 **서로 다른 글리프 컴포넌트 = 다른 testID**
@@ -14,9 +15,15 @@
  * fill은 jest 렌더 트리에 안 남는다).
  */
 import type { ReactElement } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native';
 
-import type { StayItem } from '@/shared/api/generated/schemas';
+import type { StayDetail } from '@/shared/api/generated/schemas';
 
 import { formatPrice } from '@/entities/stay/lib/formatPrice';
 import { MapView } from '@/shared/map';
@@ -32,9 +39,17 @@ import {
   ShareGlyph,
 } from './StayGlyphs';
 
+/** 조회 결과 — `kind` 하나로 얼굴을 고른다. notFound=404 · invalid=400/stayId 없음 · error=5xx/네트워크. */
+export type StayDetailState =
+  | { kind: 'loading' }
+  | { kind: 'ready'; detail: StayDetail }
+  | { kind: 'notFound' }
+  | { kind: 'invalid' }
+  | { kind: 'error' };
+
 export interface StayDetailScreenProps {
-  /** 손에 든 카드 데이터(계약 GET 부재, 01b Q1). null이면 notFound 얼굴(파싱 실패/부재, INV-4). */
-  item: StayItem | null;
+  /** `GET /stays/{stayId}` 조회 결과(페이지가 판정한다). */
+  state: StayDetailState;
   /** 담김 여부(AC-11) — 찬 하트 + selected. */
   saved: boolean;
   /** 담기/해제 요청 중이면 하트 disabled(연타 가드). 미지정=활성. */
@@ -49,7 +64,18 @@ export interface StayDetailScreenProps {
   onPressBack?: () => void;
   /** AC-10 안내 표시 — 저장 성공 후 페이지가 true로 올린다. 미지정=미표시. */
   addedNotice?: boolean;
+  /** 전화 줄 press — `tel:` 열기는 페이지 몫. 미지정=정직한 스텁. */
+  onPressPhone?: () => void;
+  /** error 얼굴 "다시 시도" — 재조회는 페이지 몫. */
+  onRetry?: () => void;
 }
+
+const FACE_TEST_ID = {
+  loading: 'stay-detail-loading',
+  notFound: 'stay-detail-notfound',
+  invalid: 'stay-detail-invalid',
+  error: 'stay-detail-error',
+} as const;
 
 // 그림자(브리프 §4-2 관례 — #000000은 토큰화된 색 목록 밖이라 V1 가드 대상이 아니다,
 // StaySearchScreen.tsx cardShadow와 동형).
@@ -95,14 +121,26 @@ function Divider(): ReactElement {
   return <View className="h-[1px] w-full bg-hairline" />;
 }
 
-function AmenityChip({ value }: { value: string }): ReactElement {
+/** Figma e03 편의시설 행은 4칸 균등이다 — 이보다 많으면 줄바꿈 격자로 넘긴다(TRIP-918). */
+const AMENITY_COLUMNS = 4;
+
+function AmenityChip({
+  value,
+  wrap,
+}: {
+  value: string;
+  wrap: boolean;
+}): ReactElement {
   // 값별 아이콘(주차·조식·와이파이·오션뷰), 모르는 값은 AmenityGlyph 폴백(INV-1). 아이콘 leaf 에
   // testID 를 얹어 화면이 실제로 그 칩의 아이콘을 그리는지 잠근다(어느 아이콘·색은 config/6-b).
+  // wrap 폭 83px = Figma 4칸 폭 83.5 에서 0.5 내림 — 딱 맞추면 픽셀 반올림으로 4번째 칩이 줄을 넘을 여지가 있다.
   const Icon = resolveAmenityIcon(value);
   return (
     <View
       testID={`stay-detail-amenity-${value}`}
-      className="flex-1 items-center gap-sm"
+      className={
+        wrap ? 'w-[83px] items-center gap-sm' : 'flex-1 items-center gap-sm'
+      }
     >
       <View className="h-12 w-12 items-center justify-center rounded-card border border-hairline bg-surface-soft">
         <Icon testID={`stay-detail-amenity-icon-${value}`} size={24} />
@@ -115,7 +153,7 @@ function AmenityChip({ value }: { value: string }): ReactElement {
 }
 
 export function StayDetailScreen({
-  item,
+  state,
   saved,
   pending = false,
   onToggleSave,
@@ -123,25 +161,54 @@ export function StayDetailScreen({
   onPressAddToTrip,
   onPressBack,
   addedNotice = false,
+  onPressPhone,
+  onRetry,
 }: StayDetailScreenProps): ReactElement {
-  // 파싱 실패/부재 → notFound(INV-4). 손에 든 데이터가 없으면 "부재"가 정직하다(★F-9 — i05가
-  // 조회 5xx를 notFound로 오접는 사각과 다른 축: 여기선 애초에 GET 계약이 없다).
-  if (item === null) {
+  // ready 가 아니면 상세 내용·하트·CTA 없이 한 얼굴만(Figma 4514:2330 — 좌상단 뒤로 + 가운데 핀·
+  // 제목·부제). 404·400·네트워크는 문구가 같고 testID 로만 갈린다(TRIP-940 Q2).
+  if (state.kind !== 'ready') {
     return (
       <View
-        testID="stay-detail-notfound"
+        testID={FACE_TEST_ID[state.kind]}
         className="flex-1 items-center justify-center gap-md bg-canvas px-lg"
       >
-        <MapPinGlyph size={32} />
-        <Text className="text-center font-noto-bold text-section font-bold text-ink">
-          숙소 정보를 불러올 수 없어요
-        </Text>
-        <Text className="text-center font-noto text-label text-muted">
-          다시 시도하거나 목록으로 돌아가세요
-        </Text>
+        <View className="absolute left-lg top-12">
+          <HeroCircle testID="stay-detail-back" onPress={onPressBack}>
+            <BackChevronGlyph size={24} />
+          </HeroCircle>
+        </View>
+        {state.kind === 'loading' ? (
+          <ActivityIndicator />
+        ) : (
+          <>
+            <MapPinGlyph size={32} />
+            <Text className="text-center font-noto-bold text-section font-bold text-ink">
+              숙소 정보를 불러올 수 없어요
+            </Text>
+            <Text className="text-center font-noto text-label text-muted">
+              다시 시도하거나 목록으로 돌아가세요
+            </Text>
+            {/* 재시도는 네트워크 오류에만 — 404·400 은 다시 해도 결과가 같다. */}
+            {state.kind === 'error' ? (
+              <Pressable
+                testID="stay-detail-retry"
+                accessibilityRole="button"
+                onPress={onRetry}
+                className="h-12 w-[200px] items-center justify-center rounded-button bg-primary"
+              >
+                <Text className="font-noto-bold text-card-title font-bold text-on-primary">
+                  다시 시도
+                </Text>
+              </Pressable>
+            ) : null}
+          </>
+        )}
       </View>
     );
   }
+
+  const { detail } = state;
+  const amenityWrap = detail.amenities.length > AMENITY_COLUMNS;
 
   return (
     <View testID="stay-detail-root" className="flex-1 bg-canvas">
@@ -188,7 +255,7 @@ export function StayDetailScreen({
           {/* 제목 · 가격줄(좌 2톤 최저가 + 우 지역, justify-between) */}
           <View className="gap-[10px]">
             <Text className="font-noto-bold text-hero font-bold text-ink">
-              {item.name}
+              {detail.name}
             </Text>
             <View
               testID="stay-detail-price-row"
@@ -197,23 +264,23 @@ export function StayDetailScreen({
               {/* 좌 — 최저가 2톤: bold "{천단위}원" + muted "~"(1박 접미 없음 Q6, BR-U1-12).
                   바깥은 반드시 View(Text 아님) — 두 Text 가 형제라야 '145,000원~'로 결합 집계되지
                   않는다(StaySearchCard 725 선례). 결측("가격 미확인", "~" 없음)은 단일 muted 노드. */}
-              {formatPrice(item.price).endsWith('~') ? (
+              {formatPrice(detail.price).endsWith('~') ? (
                 <View className="flex-row items-baseline">
                   <Text className="font-inter-bold text-[18px] font-bold text-ink">
-                    {formatPrice(item.price).slice(0, -1)}
+                    {formatPrice(detail.price).slice(0, -1)}
                   </Text>
                   <Text className="font-noto text-caption text-muted">~</Text>
                 </View>
               ) : (
                 <Text className="font-noto text-label text-muted">
-                  {formatPrice(item.price)}
+                  {formatPrice(detail.price)}
                 </Text>
               )}
               {/* 우 — 지역(핀 + 라벨). 거리·소요시간 필드가 계약에 없어 지역만(INV-1·INV-3). */}
               <View className="flex-row items-center gap-xs">
                 <MapPinGlyph size={15} />
                 <Text className="font-noto text-label text-body">
-                  {item.region}
+                  {detail.region}
                 </Text>
               </View>
             </View>
@@ -226,10 +293,15 @@ export function StayDetailScreen({
             <Text className="font-noto-bold text-section font-bold text-ink">
               이 숙소 편의시설
             </Text>
-            {item.amenities.length > 0 ? (
-              <View className="flex-row gap-sm">
-                {item.amenities.map((value) => (
-                  <AmenityChip key={value} value={value} />
+            {detail.amenities.length > 0 ? (
+              <View
+                testID="stay-detail-amenities"
+                className={
+                  amenityWrap ? 'flex-row flex-wrap gap-sm' : 'flex-row gap-sm'
+                }
+              >
+                {detail.amenities.map((value) => (
+                  <AmenityChip key={value} value={value} wrap={amenityWrap} />
                 ))}
               </View>
             ) : (
@@ -244,8 +316,8 @@ export function StayDetailScreen({
 
           <Divider />
 
-          {/* 위치 — 실 MapView(viewOnly·단일 번호 핀, StayItem 좌표 실재) + 지역(거리·소요시간
-              없음 INV-1·INV-3). connectPins 미전달(핀 1개라 경로선 없음). 네이버 네이티브라 타일·
+          {/* 위치 — 실 MapView(viewOnly·단일 번호 핀) + 주소·전화·객실(거리·소요시간 없음
+              INV-1·INV-3). connectPins 미전달(핀 1개라 경로선 없음). 네이버 네이티브라 타일·
               제스처 잠금은 6-b 실기(코드만 머지 시 재빌드 전 회색), env 키 부재 시 코어가
               map-failure 로 접는다(INV-4). */}
           <View className="gap-md">
@@ -257,15 +329,43 @@ export function StayDetailScreen({
               className="h-[168px] w-full overflow-hidden rounded-card border border-hairline bg-surface-soft"
             >
               <MapView
-                center={{ lat: item.lat, lng: item.lng }}
-                pins={[{ number: 1, lat: item.lat, lng: item.lng }]}
+                center={{ lat: detail.lat, lng: detail.lng }}
+                pins={[{ number: 1, lat: detail.lat, lng: detail.lng }]}
                 viewOnly
               />
             </View>
-            <View className="flex-row items-center gap-xs">
-              <MapPinGlyph size={15} />
+            {/* 주소(Figma 1700:1183 지도 아래 줄, 먹색 핀). 결측은 "미확인"(BR-U1-18). */}
+            <View
+              testID="stay-detail-address"
+              className="flex-row items-center gap-xs"
+            >
+              <MapPinGlyph size={15} tone="ink" />
               <Text className="font-noto text-label text-body">
-                {item.region}
+                {detail.address ?? '미확인'}
+              </Text>
+            </View>
+            {/* 전화·객실 — Figma 근거 없음, 주소 줄과 같은 글자 스타일 2줄(TRIP-940 Q1). 전화 null 은
+                "모름"이라 줄째 비운다(계약 설명문). 객실 null 은 "미확인". */}
+            {detail.phone != null ? (
+              <Pressable
+                testID="stay-detail-phone"
+                accessibilityRole="button"
+                onPress={onPressPhone}
+                className="flex-row items-center gap-xs"
+              >
+                <Text className="font-noto text-label text-muted">전화</Text>
+                <Text className="font-noto text-label text-body">
+                  {detail.phone}
+                </Text>
+              </Pressable>
+            ) : null}
+            <View
+              testID="stay-detail-rooms"
+              className="flex-row items-center gap-xs"
+            >
+              <Text className="font-noto text-label text-muted">객실</Text>
+              <Text className="font-noto text-label text-body">
+                {detail.rooms != null ? `${detail.rooms}실` : '미확인'}
               </Text>
             </View>
           </View>

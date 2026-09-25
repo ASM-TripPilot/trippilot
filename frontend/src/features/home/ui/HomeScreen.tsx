@@ -31,7 +31,6 @@ import {
   BellGlyph,
   CloseGlyph,
   HeartFilledGlyph,
-  HeartOutlineGlyph,
   LocationPinGlyph,
   MapPinGlyph,
   PlusGlyph,
@@ -106,14 +105,18 @@ const heroDotShadow = {
 
 // ── 인사 헤더 ───────────────────────────────────────────────────────────
 // discovery는 고정 카피, 단계 얼굴은 greetTitle/greetSubtitle/greetName을 주입받는다.
+// TRIP-939 AC-9 — 종은 알림함 진입 버튼이다. role 은 콜백 유무가 아니라 구조로 굳힌다(370-AC-4 집합).
+// 하드코딩 빨간점은 뺐다(Q3 — 읽음 처리 미배선이라 켜지면 꺼지지 않는다).
 function GreetingHeader({
   title,
   subtitle,
   name,
+  onPressBell,
 }: {
   title: string;
   subtitle?: string;
   name?: string;
+  onPressBell?: () => void;
 }): ReactElement {
   return (
     <View className="w-full flex-row items-center gap-sm px-lg pb-[10px] pt-lg">
@@ -130,12 +133,12 @@ function GreetingHeader({
       </View>
       <Pressable
         testID="home-dashboard-bell"
-        onPress={undefined}
+        accessibilityRole="button"
+        onPress={onPressBell}
         style={softCardShadow}
         className="h-[40px] w-[40px] items-center justify-center rounded-full bg-canvas"
       >
         <BellGlyph size={22} />
-        <View className="absolute right-[8px] top-[8px] h-[8px] w-[8px] rounded-pill bg-primary" />
       </Pressable>
     </View>
   );
@@ -180,8 +183,8 @@ function MagazineHero({
   hero: HomeMagazineHero;
   testID?: string;
   showDots?: boolean;
-  // TRIP-700 — discovery 캐러셀 page0 만 a02 매거진 목록으로 가는 배선 CTA. asButton 은 role 을
-  // 구조로 굳히고(콜백 미주입 렌더에도 버튼 — 370-AC-4 버튼-집합), onPress 는 스레딩(AC-10)을 진다.
+  // TRIP-700 — discovery 캐러셀 page0 만 a02 매거진 목록으로 가는 배선 CTA. TRIP-935 R1 — 운영
+  // 라우트가 콜백을 안 넘겨 진입을 막으므로, page0 도 onPressMagazine 이 있을 때만 asButton 이다.
   // page1~4 슬라이드·planning/postTrip 슬라이드는 asButton 기본 false 라 비버튼 유지(집합 초과 방지).
   asButton?: boolean;
   onPress?: () => void;
@@ -291,7 +294,7 @@ function DiscoveryHeroCarousel({
               hero={hero}
               testID={i === 0 ? 'home-magazine-hero' : `home-hero-slide-${i}`}
               showDots={false}
-              asButton={i === 0}
+              asButton={i === 0 && onPressMagazine !== undefined}
               onPress={i === 0 ? onPressMagazine : undefined}
             />
           </View>
@@ -318,7 +321,8 @@ function DiscoveryHeroCarousel({
 // ── 공용 섹션 헤더(타이틀 + '더 보기') ──────────────────────────────────
 // asButton은 role(버튼으로 읽히는가)을, onMore는 press 핸들러를 각각 정한다 — 둘은 함께
 // 움직이지 않는다: 배선 인스턴스(뜨는 장소)는 콜백이 안 넘어온 단위 테스트에서도 버튼이어야
-// 하므로(370-AC-4) role은 콜백 유무가 아니라 구조로 굳힌다(비배선 더보기 2종은 role 제거).
+// 하므로(370-AC-4) role은 콜백 유무가 아니라 구조로 굳힌다. 비배선 인스턴스(asButton 없음 = 컬렉션)는
+// '더 보기' 자체를 그리지 않는다(TRIP-939 B-5 — 목적지가 생기면 asButton+onMore 로 되살린다).
 function SectionHeader({
   title,
   moreTestID,
@@ -335,15 +339,17 @@ function SectionHeader({
       <Text className="font-noto-bold text-section font-bold text-ink">
         {title}
       </Text>
-      <Pressable
-        testID={moreTestID}
-        accessibilityRole={asButton ? 'button' : undefined}
-        onPress={onMore}
-      >
-        <Text className="font-noto-bold text-[12.5px] font-bold text-muted underline">
-          더 보기
-        </Text>
-      </Pressable>
+      {asButton ? (
+        <Pressable
+          testID={moreTestID}
+          accessibilityRole="button"
+          onPress={onMore}
+        >
+          <Text className="font-noto-bold text-[12.5px] font-bold text-muted underline">
+            더 보기
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -380,7 +386,6 @@ function CollectionCard({
             {card.badge}
           </Text>
         </View>
-        <HeartOutlineGlyph size={26} />
       </View>
       <View className="absolute inset-x-0 bottom-[16px] gap-[6px] px-[14px]">
         <Text className="font-noto-bold text-[18px] font-bold text-on-primary">
@@ -421,9 +426,6 @@ function SpotCard({
         locations={SCRIM_LOCATIONS}
         style={ABSOLUTE_FILL}
       />
-      <View className="absolute right-[10px] top-[10px]">
-        <HeartOutlineGlyph size={22} />
-      </View>
       <View className="absolute inset-x-0 bottom-[12px] gap-[3px] px-[12px]">
         <Text className="font-noto-bold text-body font-bold text-on-primary">
           {card.title}
@@ -835,18 +837,21 @@ function DiscoveryBody({
   onPressSpotsMore,
   onPressSearch,
   onPressMagazine,
+  onPressBell,
 }: {
   hero: readonly HomeMagazineHero[];
   sections: HomeSections;
   onPressSpotsMore?: () => void;
   onPressSearch?: () => void;
   onPressMagazine?: () => void;
+  onPressBell?: () => void;
 }): ReactElement {
   return (
     <>
       <GreetingHeader
         title="오늘은 어디를 상상해볼까요"
         subtitle="떠나지 않아도, 구경하고 모으는 즐거움"
+        onPressBell={onPressBell}
       />
       <SearchBarBlock onPress={onPressSearch} />
       {/* TRIP-699 — 로딩이면 히어로는 캐러셀이 아니라 통짜 스켈레톤(390×470, Figma 2174:2307). */}
@@ -944,6 +949,7 @@ function PlanningBody({
   onPressSpotsMore,
   onPressTripHeroCta,
   onPressSearch,
+  onPressBell,
 }: {
   phase: Extract<HomePhase, { kind: 'planning' }>;
   hero: readonly HomeMagazineHero[];
@@ -951,6 +957,7 @@ function PlanningBody({
   onPressSpotsMore?: () => void;
   onPressTripHeroCta?: () => void;
   onPressSearch?: () => void;
+  onPressBell?: () => void;
 }): ReactElement {
   return (
     <>
@@ -958,6 +965,7 @@ function PlanningBody({
         title={phase.greetTitle}
         subtitle={phase.greetSubtitle}
         name={phase.greetName}
+        onPressBell={onPressBell}
       />
       <SearchBarBlock onPress={onPressSearch} />
       <PlanningHeroCarousel
@@ -988,15 +996,21 @@ function PostTripBody({
   hero,
   onPressTripHeroCta,
   onPressSearch,
+  onPressBell,
 }: {
   phase: Extract<HomePhase, { kind: 'postTrip' }>;
   hero: readonly HomeMagazineHero[];
   onPressTripHeroCta?: () => void;
   onPressSearch?: () => void;
+  onPressBell?: () => void;
 }): ReactElement {
   return (
     <>
-      <GreetingHeader title={phase.greetTitle} subtitle={phase.greetSubtitle} />
+      <GreetingHeader
+        title={phase.greetTitle}
+        subtitle={phase.greetSubtitle}
+        onPressBell={onPressBell}
+      />
       <SearchBarBlock onPress={onPressSearch} />
       <PlanningHeroCarousel
         trip={phase.trip}
@@ -1023,6 +1037,7 @@ function PhaseBody({
   onPressTripHeroCta,
   onPressSearch,
   onPressMagazine,
+  onPressBell,
 }: HomeScreenProps): ReactElement {
   if (phase === undefined || phase.kind === 'discovery') {
     return (
@@ -1032,6 +1047,7 @@ function PhaseBody({
         onPressSpotsMore={onPressSpotsMore}
         onPressSearch={onPressSearch}
         onPressMagazine={onPressMagazine}
+        onPressBell={onPressBell}
       />
     );
   }
@@ -1045,6 +1061,7 @@ function PhaseBody({
           onPressSpotsMore={onPressSpotsMore}
           onPressTripHeroCta={onPressTripHeroCta}
           onPressSearch={onPressSearch}
+          onPressBell={onPressBell}
         />
       );
     case 'postTrip':
@@ -1054,6 +1071,7 @@ function PhaseBody({
           hero={hero}
           onPressTripHeroCta={onPressTripHeroCta}
           onPressSearch={onPressSearch}
+          onPressBell={onPressBell}
         />
       );
   }
@@ -1070,6 +1088,7 @@ export function HomeScreen({
   onPressTripHeroCta,
   onPressSearch,
   onPressMagazine,
+  onPressBell,
   savedPlacesCount,
   savedStaysCount,
   savedMenuOpen,
@@ -1092,6 +1111,7 @@ export function HomeScreen({
             onPressTripHeroCta={onPressTripHeroCta}
             onPressSearch={onPressSearch}
             onPressMagazine={onPressMagazine}
+            onPressBell={onPressBell}
           />
         </ScrollView>
         {/* TRIP-699 — 로딩이면 두 FAB 숨김(Figma 2174:2307). 로딩은 항상 discovery라 phase 없음. */}

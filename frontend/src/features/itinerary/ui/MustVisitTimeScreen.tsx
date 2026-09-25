@@ -32,8 +32,8 @@ import {
  * 화면은 완성된 props 만 받는다. 여행 기간도 시각 목록도 배선이 계산해 내려주고, 여기서는
  * **시트가 열려 있는가** 하나만 스스로 쥔다(순수 표시 상태라 배선이 알 이유가 없다).
  *
- * 토글이 꺼져 있으면 날짜·시각·체류·저장이 **정말로** 잠긴다(01b D8) — 회색으로 칠하는 것만으로는
- * 부족해서 `disabled` prop 을 걸어 press 자체를 막는다.
+ * 토글이 꺼져 있으면 날짜·시각·체류는 **정말로** 잠기지만(회색 칠만으로는 부족해 `disabled` prop 으로
+ * press 자체를 막는다) 저장은 열린다 — OFF 는 ANYTIME(시각 미지정) 제출이다(BR-U1-48).
  */
 
 const SCREEN_TITLE = '방문 시각 지정';
@@ -47,7 +47,8 @@ const START_PLACEHOLDER = '시각 선택';
 const SHEET_CLOSE = '닫기';
 const DWELL_SECTION = '체류 시간';
 const NOTICE = '안 정하면 AI가 영업시간·동선 맞춰 자동 배치해요';
-const SUBMIT_LABEL = '이 시각으로 고정';
+const SUBMIT_LABEL_FIXED = '이 시각으로 고정';
+const SUBMIT_LABEL_ANYTIME = '아무 때나로 두기';
 const RETRY_LABEL = '다시 시도';
 
 /** 저장이 막힌 사유 → 사용자가 읽을 문장. 막혔는데 이유가 없으면 회색 버튼만 남는다
@@ -325,12 +326,25 @@ export function MustVisitTimeScreen({
             </View>
           )}
 
+          <View className="w-full flex-row items-center gap-[10px] rounded-button border border-hairline bg-surface-soft px-[14px] py-md">
+            <InfoCircleGlyph />
+            <Text
+              testID="itinerary-mustvisit-time-notice"
+              className="flex-1 font-noto text-label text-body"
+            >
+              {NOTICE}
+            </Text>
+          </View>
+
           {errorLine === undefined ? null : (
-            <View className="w-full flex-row items-center gap-[10px] rounded-button border border-hairline bg-surface-soft px-[14px] py-md">
+            <View
+              testID="itinerary-mustvisit-time-error-row"
+              className="min-h-[52px] w-full flex-row items-center gap-md rounded-button border border-hairline bg-canvas px-lg py-md"
+            >
               <AlertCircleGlyph />
               <Text
                 testID="itinerary-mustvisit-time-error"
-                className="flex-1 font-noto text-label text-primary-text"
+                className="flex-1 font-noto text-card-title text-ink"
               >
                 {errorLine}
               </Text>
@@ -341,23 +355,13 @@ export function MustVisitTimeScreen({
                   onPress={onRetry}
                   hitSlop={6}
                 >
-                  <Text className="font-noto-bold text-label font-bold text-primary">
+                  <Text className="font-noto-bold text-card-title font-bold text-primary">
                     {RETRY_LABEL}
                   </Text>
                 </Pressable>
               )}
             </View>
           )}
-
-          <View className="w-full flex-row items-center gap-[10px] rounded-button border border-hairline bg-surface-soft px-[14px] py-md">
-            <InfoCircleGlyph />
-            <Text
-              testID="itinerary-mustvisit-time-notice"
-              className="flex-1 font-noto text-label text-body"
-            >
-              {NOTICE}
-            </Text>
-          </View>
 
           <Pressable
             testID="itinerary-mustvisit-time-submit"
@@ -369,7 +373,7 @@ export function MustVisitTimeScreen({
             }`}
           >
             <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-              {SUBMIT_LABEL}
+              {form.fixed ? SUBMIT_LABEL_FIXED : SUBMIT_LABEL_ANYTIME}
             </Text>
           </Pressable>
         </ScrollView>

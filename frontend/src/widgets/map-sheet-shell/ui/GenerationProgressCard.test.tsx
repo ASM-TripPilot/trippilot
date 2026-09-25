@@ -10,6 +10,7 @@ import { GenerationProgressCard } from './GenerationProgressCard';
  *    판단을 안 한다 — 받은 status 로 톤을, 받은 label 로 글자를 그릴 뿐이다([[presentation-only
  *    위젯 — 판단은 소비처로]]).
  *  - done=primary 트랙 / active·waiting=회색 트랙 3톤 + onBack + **퍼센트·캡션 없음**(계약).
+ *  - TRIP-752: 선택형 `title`·`onCancel` — i05 는 제목을 바꾸고 [취소]를 단다(GP5). 안 주면 h07 그대로(GP6).
  *
  * 3동작 뼈대: 준비=cells 3종+onBack 주입 → 실행=렌더/back press → 단언=testID·라벨·톤·콜백.
  *
@@ -78,6 +79,47 @@ describe('🔴 GenerationProgressCard · GP3 — onBack 콜백', () => {
     fireEvent.press(screen.getByTestId('generation-progress-back'));
 
     expect(onBack).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('🔴 GenerationProgressCard · GP5 — i05 제목 주입 + [취소] (TRIP-752 AC-2)', () => {
+  it('주입한 제목을 그리고, [취소]는 onCancel 만·back 은 onBack 만 부른다', () => {
+    const onBack = jest.fn();
+    const onCancel = jest.fn();
+    render(
+      <GenerationProgressCard
+        title="AI가 일정을 다시 짜고 있어요"
+        cells={[
+          { status: 'done', label: '방문한 곳 그대로' },
+          { status: 'active', label: '17시 이후 다시 짜는 중' },
+        ]}
+        onBack={onBack}
+        onCancel={onCancel}
+      />
+    );
+
+    expect(screen.getByText('AI가 일정을 다시 짜고 있어요')).toBeOnTheScreen();
+    expect(screen.queryByText('AI가 일정을 짜고 있어요')).toBeNull();
+    const cancel = screen.getByTestId('generation-progress-cancel');
+    expect(cancel).toHaveTextContent('취소');
+
+    fireEvent.press(cancel);
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onBack).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('generation-progress-back'));
+    expect(onBack).toHaveBeenCalledTimes(1);
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('GenerationProgressCard · GP6 — h07 무회귀: 새 prop 을 안 주면 예전 그대로 (TRIP-752 AC-2)', () => {
+  it('제목은 기본 문구이고 [취소]는 없다', () => {
+    render(<GenerationProgressCard cells={CELLS} onBack={jest.fn()} />);
+
+    expect(screen.getByText('AI가 일정을 짜고 있어요')).toBeOnTheScreen();
+    expect(screen.queryByTestId('generation-progress-cancel')).toBeNull();
+    expect(screen.queryByText('취소')).toBeNull();
   });
 });
 

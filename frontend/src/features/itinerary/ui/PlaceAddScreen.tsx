@@ -1,74 +1,31 @@
 import type { ReactElement } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
-import { PoiCategory, type Place } from '@/shared/api/generated/schemas';
+import { PlaceRowCard } from '@/entities/place/ui/PlaceRowCard';
+import { PlaceSubtitle } from '@/entities/place/ui/PlaceSubtitle';
+import type { Place, PoiCategory } from '@/shared/api/generated/schemas';
 
-import {
-  BackChevronGlyph,
-  CheckCircleGlyph,
-  SearchGlyph,
-} from './ItineraryGlyphs';
-import { PlaceAddCard } from './PlaceAddCard';
+import { PlusGlyph, SearchGlyph } from './ItineraryGlyphs';
+import { PLACE_CATEGORY_CHIPS } from '../config/placeCategoryChips';
 
 /**
- * TRIP-338 · h20 장소 추가·검색 화면 — Figma `1894:1083`. **props-only**(검색어·카테고리·조회는
- * 페이지가 소유, 화면은 완성된 `places` 목록만 그린다). 검색 심판(AC-5)은 배선 층(msw)이 진다.
+ * TRIP-798 묶음 C · h13 장소 추가 시트 콘텐츠 순수 뷰 — Figma `4337:1923`. **props-only**.
  *
- * §8② 카테고리 칩은 `PoiCategory` enum 을 정본으로 확정한다 — Figma 칩 "전시"는 enum 에 없어
- * (문화?) 발명이 되므로 뺀다. "전체"(null) + enum 7종을 그린다. testID `itinerary-place-category-{enum}`
- * 는 한글 enum 을 그대로 담는다(슬롯 testID 가 `{date}#{poiId}` 임의 문자열을 담는 선례라 무해, 02a §2).
+ * 시트화(묶음 C)로 화면 자체 `FlatList`·앱바·전면 지도가 사라지고, 이 파일은 두 순수 조각으로
+ * 쪼개진다 — 리스트(FlatList)·헤더 텍스트·전면 지도는 페이지(`PlaceAddPage`)가 공용 `MapSheetShell`
+ * 로 조립한다(features→widgets 상향 참조 금지라 조립처는 pages, 리스트 슬롯 body 는 셸이 소유):
+ *  - `PlaceAddHeader` — 검색바 + 카테고리 칩 6종. 셸의 `children`(리스트 헤더 자리)에 얹힌다.
+ *  - `PlaceAddRow` — 후보 카드 한 줄. 페이지가 `MapSheetShell.list.renderItem` 으로 조립한다.
+ * foundation testID(`itinerary-place-search`·`-category-{라벨}`·`-card/add/added/distance`)는 두
+ * 조각에 그대로 보존된다(재조립 무회귀 그물 = `PlaceAddPage.integration` SC2).
  *
- * §8③ 각색: guide 카피는 Figma 원문("자동 배치돼요")을 안 쓴다 — `EditItineraryRequest` 가
- * `startAt`·`endAt` 을 필수로 받아 자동 배치가 불가능하다. "넣은 순서로 담겨요"로 정직하게 바꾼다.
+ * AC-2 칩은 `PLACE_CATEGORY_CHIPS`(config 정본) 6종·순서 그대로 — '전시' 칩은 서버로 '문화'를 보낸다
+ * (라벨≠전송값). AC-3 카드는 `entities/place/ui/PlaceRowCard`(접두 `itinerary-place-card`) 채택,
+ * "+추가"는 아웃라인(빨강 테두리·글자, 필 폐기). AC-4 거리줄은 `distanceLine` 이 있을 때만 렌더한다
+ * (없으면 지어내지 않는다, INV-3 — 실 GET 계약엔 거리 필드가 없어 픽스처/6-b 전용).
  */
 
-const SCREEN_TITLE = '장소 추가';
-const DONE_LABEL = '완료';
 const SEARCH_PLACEHOLDER = '장소·맛집·명소 검색';
-const ALL_CHIP_LABEL = '전체';
-const GUIDE_TEXT = '추가하면 빈 일정에 순서대로 담겨요';
-const NOT_READY_TEXT =
-  '아직 일정을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.';
-const EMPTY_TEXT = '검색 결과가 없어요';
-const VIEW_PLAN_CTA_LABEL = '일정에서 위치·순서 보기';
-
-const CATEGORIES: PoiCategory[] = Object.values(PoiCategory);
-
-export interface PlaceAddScreenProps {
-  /** 이미 이름 부분일치로 걸러진 목록(`visiblePlaces` 결과) — 화면은 그대로 그린다. */
-  places: Place[];
-  searchText: string;
-  selectedCategory: PoiCategory | null;
-  /** 이미 담은 장소 poiId — "추가됨" 비활성 상태. */
-  addedPoiIds: string[];
-  /**
-   * 일정 GET 이 아직 미도착·실패라 담을 대상 일자가 없다 — 안내를 노출해 추가가 조용히
-   * 버려지는 것을 사용자가 인지하게 한다(배선이 press 도 막는다). 미지정=정상(기존 동작 불변).
-   */
-  notReady?: boolean;
-  onChangeSearchText(text: string): void;
-  onSelectCategory(category: PoiCategory | null): void;
-  onPressAdd(place: Place): void;
-  /** appbar "완료" → h19 복귀. */
-  onPressDone(): void;
-  /** appbar 뒤로. */
-  onBack(): void;
-  /** 하단 "일정에서 위치·순서 보기" → h19 복귀. */
-  onPressViewPlan(): void;
-  /** 목록 끝에 닿으면 다음 장을 이어 받는다(TRIP-502 무한 스크롤). 미지정=무동작(additive). */
-  onEndReached?: () => void;
-  /** 다음 장을 받는 중이면 목록 하단 로딩(footer). 미지정=false. */
-  isFetchingMore?: boolean;
-}
 
 /** 카테고리 칩 하나 — 활성(primary bg + white) / 비활성(border + body). */
 function CategoryChip({
@@ -105,149 +62,120 @@ function CategoryChip({
   );
 }
 
-export function PlaceAddScreen({
-  places,
+export interface PlaceAddHeaderProps {
+  searchText: string;
+  selectedCategory: PoiCategory | null;
+  onChangeSearchText(text: string): void;
+  onSelectCategory(category: PoiCategory | null): void;
+}
+
+/** 검색바 + 카테고리 칩 6종 — `MapSheetShell` 의 `children`(리스트 헤더 자리)에 얹는 순수 헤더 뷰. */
+export function PlaceAddHeader({
   searchText,
   selectedCategory,
-  addedPoiIds,
-  notReady = false,
   onChangeSearchText,
   onSelectCategory,
-  onPressAdd,
-  onPressDone,
-  onBack,
-  onPressViewPlan,
-  onEndReached,
-  isFetchingMore = false,
-}: PlaceAddScreenProps): ReactElement {
+}: PlaceAddHeaderProps): ReactElement {
   return (
-    <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
-      <View className="flex-1 bg-canvas">
-        <View className="w-full flex-row items-center gap-[6px] bg-canvas py-[14px] pl-md pr-lg">
-          <Pressable
-            testID="itinerary-place-back"
-            accessibilityRole="button"
-            accessibilityLabel="뒤로"
-            onPress={onBack}
-            hitSlop={8}
-          >
-            <BackChevronGlyph />
-          </Pressable>
-          <Text className="font-noto-bold text-[18px] font-bold text-ink">
-            {SCREEN_TITLE}
-          </Text>
-          <View className="flex-1" />
-          <Pressable
-            testID="itinerary-place-done"
-            accessibilityRole="button"
-            onPress={onPressDone}
-            hitSlop={6}
-          >
-            <Text className="font-noto-bold text-[14.5px] font-bold text-primary">
-              {DONE_LABEL}
-            </Text>
-          </Pressable>
-        </View>
-
-        <View className="w-full gap-md px-lg pb-sm pt-sm">
-          <View className="h-[46px] w-full flex-row items-center gap-sm rounded-pill border border-hairline bg-surface-soft pl-lg pr-md">
-            <SearchGlyph size={20} />
-            <TextInput
-              testID="itinerary-place-search"
-              value={searchText}
-              onChangeText={onChangeSearchText}
-              placeholder={SEARCH_PLACEHOLDER}
-              className="flex-1 font-noto text-[14.5px] text-ink placeholder:text-muted-soft"
-            />
-          </View>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 8 }}
-          >
-            <CategoryChip
-              label={ALL_CHIP_LABEL}
-              testID="itinerary-place-category-all"
-              active={selectedCategory === null}
-              onPress={() => onSelectCategory(null)}
-            />
-            {CATEGORIES.map((category) => (
-              <CategoryChip
-                key={category}
-                label={category}
-                testID={`itinerary-place-category-${category}`}
-                active={selectedCategory === category}
-                onPress={() => onSelectCategory(category)}
-              />
-            ))}
-          </ScrollView>
-
-          {notReady ? (
-            <View
-              testID="itinerary-place-notready"
-              className="w-full flex-row items-center gap-sm rounded-[10px] bg-surface-soft px-md py-sm"
-            >
-              <Text className="font-noto text-[12.5px] text-muted">
-                {NOT_READY_TEXT}
-              </Text>
-            </View>
-          ) : (
-            <View className="w-full flex-row items-center gap-sm rounded-[10px] bg-primary-pale px-md py-sm">
-              <CheckCircleGlyph size={18} />
-              <Text className="font-noto text-[12.5px] text-primary-text">
-                {GUIDE_TEXT}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        <FlatList<Place>
-          testID="itinerary-place-list"
-          data={places}
-          keyExtractor={(place) => place.poiId}
-          contentContainerClassName="gap-md px-lg pb-2xl pt-sm"
-          ListEmptyComponent={
-            <View className="w-full items-center py-2xl">
-              <Text className="font-noto text-body text-muted">
-                {EMPTY_TEXT}
-              </Text>
-            </View>
-          }
-          renderItem={({ item }) => (
-            <PlaceAddCard
-              place={item}
-              added={addedPoiIds.includes(item.poiId)}
-              onPressAdd={() => onPressAdd(item)}
-            />
-          )}
-          onEndReached={onEndReached}
-          onEndReachedThreshold={0.5}
-          ListFooterComponent={
-            isFetchingMore ? (
-              <View
-                testID="itinerary-place-loading-more"
-                className="w-full items-center py-lg"
-              >
-                <ActivityIndicator />
-              </View>
-            ) : null
-          }
+    <View className="w-full gap-md px-lg pb-sm pt-sm">
+      <View className="h-[46px] w-full flex-row items-center gap-sm rounded-pill border border-hairline bg-surface-soft pl-lg pr-md">
+        <SearchGlyph size={20} />
+        <TextInput
+          testID="itinerary-place-search"
+          value={searchText}
+          onChangeText={onChangeSearchText}
+          placeholder={SEARCH_PLACEHOLDER}
+          className="flex-1 font-noto text-[14.5px] text-ink placeholder:text-muted-soft"
         />
+      </View>
 
-        <View className="w-full border-t border-hairline bg-canvas px-lg py-md">
-          <Pressable
-            testID="itinerary-place-back-cta"
-            accessibilityRole="button"
-            onPress={onPressViewPlan}
-            className="w-full items-center justify-center rounded-button border border-hairline-strong bg-canvas py-md"
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ gap: 8 }}
+      >
+        {PLACE_CATEGORY_CHIPS.map((chip) => (
+          <CategoryChip
+            key={chip.testId}
+            label={chip.label}
+            testID={`itinerary-place-category-${chip.testId}`}
+            active={selectedCategory === chip.category}
+            onPress={() => onSelectCategory(chip.category)}
+          />
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+export interface PlaceAddRowProps {
+  place: Place;
+  /** 이미 담은 장소면 "추가됨"(비활성). */
+  added: boolean;
+  /**
+   * pre-composed 거리줄 텍스트(예 `'③에서 1.1km'`). 값이 있을 때만 거리줄을 렌더한다 — 없으면
+   * 미렌더(지어내기 금지, INV-3). 실 GET 엔 거리 필드가 없어 실서비스에선 미렌더로 머문다(픽스처 전용).
+   */
+  distanceLine?: string;
+  onPressAdd(): void;
+}
+
+/** 후보 카드 한 줄 — 페이지가 `MapSheetShell.list.renderItem` 으로 조립한다(PlaceRowCard 채택). */
+export function PlaceAddRow({
+  place,
+  added,
+  distanceLine,
+  onPressAdd,
+}: PlaceAddRowProps): ReactElement {
+  return (
+    <PlaceRowCard
+      testIDPrefix="itinerary-place-card"
+      id={place.poiId}
+      name={place.nameKo}
+      imageUrl={place.imageUrl}
+      subtitle={
+        <View className="gap-[2px]">
+          <PlaceSubtitle
+            parts={[...place.tags.map((tag) => `#${tag}`), place.category]}
+            className="font-noto text-[12.5px] text-muted"
+            numberOfLines={1}
+          />
+          {distanceLine ? (
+            <Text
+              testID={`itinerary-place-distance-${place.poiId}`}
+              className="font-noto text-[12px] text-muted-soft"
+              numberOfLines={1}
+            >
+              {distanceLine}
+            </Text>
+          ) : null}
+        </View>
+      }
+      trailing={
+        added ? (
+          <View
+            testID={`itinerary-place-added-${place.poiId}`}
+            accessibilityState={{ disabled: true }}
+            className="items-center justify-center rounded-button bg-surface-strong px-md py-sm"
           >
-            <Text className="font-noto-bold text-[14.5px] font-bold text-ink">
-              {VIEW_PLAN_CTA_LABEL}
+            <Text className="font-noto-bold text-label font-bold text-muted">
+              추가됨
+            </Text>
+          </View>
+        ) : (
+          <Pressable
+            testID={`itinerary-place-add-${place.poiId}`}
+            accessibilityRole="button"
+            onPress={onPressAdd}
+            className="flex-row items-center gap-[3px] rounded-button border border-primary px-md py-sm"
+          >
+            <PlusGlyph size={14} tone="primary" />
+            <Text className="font-noto-bold text-label font-bold text-primary">
+              추가
             </Text>
           </Pressable>
-        </View>
-      </View>
-    </SafeAreaView>
+        )
+      }
+    />
   );
 }

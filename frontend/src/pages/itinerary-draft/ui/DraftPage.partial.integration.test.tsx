@@ -79,6 +79,8 @@ function trip(): Trip {
     status: 'PLANNED',
     createdAt: '2026-08-01T10:00:00.000Z',
     updatedAt: '2026-08-01T10:00:00.000Z',
+    baseCount: 0,
+    itineraryDayCount: 0,
   };
 }
 
@@ -344,6 +346,37 @@ describe('🔴 A8-1 · AC-8 — PARTIAL 이면 h07 부분 결과(셸) 얼굴이 
     // D9 — 생성 중이라 확정/완성 CTA 가 없다(셸 cta 미전달).
     expect(screen.queryByTestId('sheet-cta-root')).toBeNull();
     expect(screen.queryByTestId('itinerary-draft-complete')).toBeNull();
+  });
+});
+
+describe('🔴 A8-3 · TRIP-939 AC-7 — PARTIAL 셸에 눌러도 반응 없는 링크가 없다 (S8 · A-3)', () => {
+  beforeEach(() => {
+    // 준비 — day1 만 담긴 PARTIAL(생성 중 셸).
+    itineraryHandler = () =>
+      HttpResponse.json(itinerary({ dayCount: 1, generationState: 'PARTIAL' }));
+  });
+
+  it('A8-3a · "다른 후보 ›" 링크가 0개이고 장소 이름은 누를 수 없는 글자다', async () => {
+    // 실행: 초안 화면을 연다.
+    renderPage();
+    await screen.findByTestId('generation-progress-card');
+
+    // 단언: 교체 미배선이던 "다른 후보 ›"(빈 함수 주입)가 사라졌다.
+    // testID 문자열로 비교(요소 배열 toEqual 은 실패 출력이 fiber 트리 diff 라 OOM — 02a ★22).
+    expect(
+      screen
+        .queryAllByTestId(/^slot-stopcard-alt-/)
+        .map((node) => node.props.testID)
+    ).toEqual([]);
+    // 이름 노드 3개(도착 슬롯 3)는 그려지되(앵커) 호스트가 전부 터치 불가(onPressName 미주입).
+    const names = screen.queryAllByTestId(/^slot-stopcard-name-/);
+    expect(names).toHaveLength(3);
+    names.forEach((node) => {
+      expect(
+        typeof node.props.onStartShouldSetResponder === 'function' ||
+          typeof node.props.onClick === 'function'
+      ).toBe(false);
+    });
   });
 });
 

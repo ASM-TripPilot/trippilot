@@ -1,4 +1,4 @@
-import { type ReactElement, useState } from 'react';
+import { Fragment, type ReactElement, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -12,6 +12,7 @@ import {
 } from '@/shared/location/LocationGlyphs';
 import { LOCATION_ICON_COLORS } from '@/shared/location/lib/locationColors';
 import type { RevokeImpact } from '@/shared/location/revokeImpact';
+import { Toggle } from '@/shared/ui/Toggle';
 
 import { RevokeConfirmDialog } from './RevokeConfirmDialog';
 
@@ -25,8 +26,8 @@ import { RevokeConfirmDialog } from './RevokeConfirmDialog';
  *  - else(동의 OFF) → `onGrant()`(승낙은 게이트 없이).
  * 다이얼로그 [취소] → 닫기만. [동의 철회] → `onRevokeConfirmed()` + 닫기.
  *
- * 딤 실제 덮임·모달 실제 열림은 jest 원리적 사각(6-b 실기 전용). permission-denied dimmed 픽셀·글리프
- * SVG 색/모양도 6-b (repo-traps).
+ * 딤 실제 덮임·모달 실제 열림은 jest 원리적 사각(6-b 실기 전용). permission-denied 는 opacity 가 아니라
+ * 색으로 흐린다(TRIP-780, Figma 1612:2440) — 픽셀·글리프 SVG 색/모양은 6-b (repo-traps).
  */
 export interface LocationConsentScreenProps {
   consentOn: boolean;
@@ -57,6 +58,15 @@ const USAGE_ITEMS = [
   },
 ] as const;
 
+/** 카드 그림자(Figma 0,2,10 · 6%) — 그림자는 className 으로 못 준다(HomeScreen 선례). */
+const CARD_SHADOW = {
+  shadowColor: '#000000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.06,
+  shadowRadius: 10,
+  elevation: 2,
+} as const;
+
 export function LocationConsentScreen({
   consentOn,
   disabled,
@@ -83,9 +93,26 @@ export function LocationConsentScreen({
     }
   };
 
+  // denied 는 opacity 로 블록을 흐리지 않는다 — 용도 카드는 흰 카드 그대로, 글자·아이콘 색만 흐린 톤.
+  const tone = disabled
+    ? {
+        label: 'text-muted-soft',
+        title: 'text-muted',
+        desc: 'text-muted-soft',
+        tile: 'bg-surface-soft',
+        glyph: LOCATION_ICON_COLORS.mutedSoft,
+      }
+    : {
+        label: 'text-muted',
+        title: 'text-ink',
+        desc: 'text-muted',
+        tile: 'bg-surface-strong',
+        glyph: LOCATION_ICON_COLORS.body,
+      };
+
   return (
-    <SafeAreaView edges={['top']} className="flex-1 bg-canvas-alt">
-      <View className="flex-row items-center gap-sm border-b border-hairline px-lg pb-md pt-sm">
+    <SafeAreaView edges={['top']} className="flex-1 bg-canvas">
+      <View className="flex-row items-center gap-[6px] border-b border-hairline bg-canvas px-lg pb-md pt-sm">
         <Pressable
           testID="settings-location-back"
           accessibilityRole="button"
@@ -93,28 +120,35 @@ export function LocationConsentScreen({
         >
           <LocationBackChevronGlyph />
         </Pressable>
-        <Text className="text-[18px] font-noto-bold text-ink">
+        <Text className="font-noto-bold text-section text-ink">
           위치정보 동의
         </Text>
       </View>
 
-      <ScrollView contentContainerClassName="gap-lg px-lg pb-3xl pt-lg">
+      <ScrollView
+        contentContainerClassName={`px-lg pb-3xl pt-lg ${
+          disabled ? 'gap-lg' : 'gap-xl'
+        }`}
+      >
         {disabled ? (
           <View
             testID="settings-location-denied-banner"
-            className="flex-row items-center gap-sm rounded-[20px] border border-dashed border-hairline-strong px-lg py-md"
+            className="flex-row items-center gap-[10px] rounded-[12px] border-[1.4px] border-dashed border-hairline-strong py-md pl-[14px] pr-md"
           >
-            <LocationWarningGlyph size={18} />
-            <Text className="flex-1 font-noto text-body text-body">
+            <LocationWarningGlyph
+              size={18}
+              color={LOCATION_ICON_COLORS.muted}
+            />
+            <Text className="flex-1 font-noto text-label text-body">
               기기 설정에서 위치 권한을 허용하세요
             </Text>
             <Pressable
               testID="settings-location-open-settings"
               accessibilityRole="button"
               onPress={onOpenSettings}
-              className="rounded-pill border border-hairline-strong px-md py-xs"
+              className="rounded-[8px] border border-hairline-strong bg-canvas px-[13px] py-[7px]"
             >
-              <Text className="font-noto-bold text-label text-ink">
+              <Text className="text-[12.5px] font-noto-bold text-ink">
                 설정 이동
               </Text>
             </Pressable>
@@ -122,72 +156,86 @@ export function LocationConsentScreen({
         ) : null}
 
         {/* 토글 카드 */}
-        <View className="flex-row items-center gap-md rounded-[20px] bg-canvas px-lg py-lg">
+        <View
+          style={CARD_SHADOW}
+          className="flex-row items-center gap-md rounded-[12px] border border-hairline bg-canvas p-lg"
+        >
           <View className="flex-1">
             <Text className="font-noto-bold text-card-title text-ink">
               위치정보 수집
             </Text>
-            <Text className="mt-xs font-noto text-label text-muted">
+            <Text className="mt-[3px] text-[12.5px] font-noto text-muted">
               {subtitle}
             </Text>
           </View>
-          <Pressable
+          <Toggle
             testID="settings-location-toggle"
-            accessibilityRole="switch"
-            accessibilityState={{ checked: consentOn, disabled }}
+            checked={consentOn}
             disabled={disabled}
             onPress={handleTogglePress}
-            className={`h-[30px] w-[52px] justify-center rounded-pill px-[3px] ${
-              !disabled && consentOn
-                ? 'items-end bg-primary'
-                : 'items-start bg-hairline-strong'
-            }`}
-          >
-            <View className="h-6 w-6 rounded-pill bg-canvas" />
-          </Pressable>
+          />
         </View>
 
-        {/* 이렇게 사용해요 — permission-denied 는 dimmed */}
-        <View className={disabled ? 'gap-sm opacity-40' : 'gap-sm'}>
-          <Text className="font-noto-bold text-label text-muted">
+        {/* 이렇게 사용해요 — 카드 한 장 안에 3행, 행 사이에만 구분선 */}
+        <View testID="settings-location-usage-section" className="gap-[10px]">
+          <Text className={`font-noto-bold text-label ${tone.label}`}>
             이렇게 사용해요
           </Text>
-          <View className="gap-md rounded-[20px] bg-canvas px-lg py-lg">
-            {USAGE_ITEMS.map(({ Glyph, title, desc }) => (
-              <View key={title} className="flex-row items-center gap-md">
-                <View className="h-9 w-9 items-center justify-center rounded-card bg-surface-soft">
-                  <Glyph size={20} />
+          <View
+            testID="settings-location-usage-card"
+            style={CARD_SHADOW}
+            className="overflow-hidden rounded-[12px] border border-hairline bg-canvas"
+          >
+            {USAGE_ITEMS.map(({ Glyph, title, desc }, i) => (
+              <Fragment key={title}>
+                {i > 0 ? (
+                  <View
+                    testID="settings-location-usage-divider"
+                    className="h-px bg-hairline"
+                  />
+                ) : null}
+                <View
+                  testID="settings-location-usage-row"
+                  className="flex-row items-center gap-md px-lg py-[14px]"
+                >
+                  <View
+                    className={`h-10 w-[22px] items-center justify-center rounded-[10px] ${tone.tile}`}
+                  >
+                    <Glyph size={22} color={tone.glyph} />
+                  </View>
+                  <View className="flex-1">
+                    <Text
+                      className={`text-[14.5px] font-noto-bold ${tone.title}`}
+                    >
+                      {title}
+                    </Text>
+                    <Text
+                      className={`mt-[3px] text-[12.5px] font-noto ${tone.desc}`}
+                    >
+                      {desc}
+                    </Text>
+                  </View>
                 </View>
-                <View className="flex-1">
-                  <Text className="font-noto-bold text-body text-ink">
-                    {title}
-                  </Text>
-                  <Text className="mt-[2px] font-noto text-label text-muted">
-                    {desc}
-                  </Text>
-                </View>
-              </View>
+              </Fragment>
             ))}
           </View>
         </View>
 
-        {/* 동의를 꺼도 계속 동작해요 배너 */}
+        {/* 동의를 꺼도 계속 동작해요 배너 — denied 에서도 default 와 같다 */}
         <View
           testID="settings-location-continue-banner"
-          className={`gap-sm rounded-[20px] bg-surface-soft px-lg py-lg ${
-            disabled ? 'opacity-40' : ''
-          }`}
+          className="gap-[10px] rounded-[12px] bg-surface-soft p-[14px]"
         >
           <View className="flex-row items-center gap-sm">
-            <LocationInfoGlyph size={18} color={LOCATION_ICON_COLORS.ink} />
-            <Text className="font-noto-bold text-body text-ink">
+            <LocationInfoGlyph size={18} color={LOCATION_ICON_COLORS.muted} />
+            <Text className="text-[13.5px] font-noto-bold text-body">
               동의를 꺼도 계속 동작해요
             </Text>
           </View>
-          <View className="gap-xs pl-[26px]">
+          <View className="gap-[6px] pl-xs">
             {impact.continues.map((item) => (
-              <View key={item} className="flex-row gap-sm">
-                <Text className="font-noto text-label text-muted">·</Text>
+              <View key={item} className="flex-row items-center gap-sm">
+                <View className="h-1 w-1 rounded-pill bg-muted-soft" />
                 <Text className="flex-1 font-noto text-label text-muted">
                   {item}
                 </Text>

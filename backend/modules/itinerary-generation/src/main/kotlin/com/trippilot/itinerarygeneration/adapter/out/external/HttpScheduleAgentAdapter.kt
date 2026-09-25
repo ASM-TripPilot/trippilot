@@ -12,6 +12,7 @@ import com.trippilot.itinerarygeneration.domain.TimeWindow
 import com.trippilot.itinerarygeneration.domain.TripContext
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
+import com.trippilot.itinerarygeneration.domain.SlotExplanations
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesInput
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesOutput
@@ -107,7 +108,7 @@ class HttpScheduleAgentAdapter(
      * **실패를 삼킨다.** 근거가 없다고 일정을 죽이면 사용자가 잃는 것이 더 크다. 대신 조용히
      * 지나가지 않게 로그로 남긴다(INV-4) — 근거가 통째로 비는 화면은 눈에 띄지만 원인은 안 보인다.
      */
-    override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): Map<String, String> =
+    override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): SlotExplanations =
         runCatching {
             post(
                 EXPLANATIONS_PATH,
@@ -121,8 +122,14 @@ class HttpScheduleAgentAdapter(
             if (res.isFallback) {
                 log.info("추천 근거가 폴백입니다 — reason={} tripId={}", res.reason, tripId)
             }
-            res.explanations
-        } ?: emptyMap()
+            // **차선책 문장이 비는 것은 흔한 정상이다**(차선책 자체가 없는 일정이 대부분). 다만 사유가
+            // 실려 오면 남긴다 — `slot_explanations_unavailable`·`no_registered_alternatives`·`deadline:…`
+            // 로 "왜 안 왔나"가 갈리는데, 안 적으면 빈 맵만 보고 우리 배선을 의심하게 된다.
+            if (res.alternativesReason != null) {
+                log.info("차선책 문장이 비었습니다 — reason={} tripId={}", res.alternativesReason, tripId)
+            }
+            SlotExplanations(slots = res.explanations, alternatives = res.alternativeExplanations)
+        } ?: SlotExplanations()
 
     /**
      * 최소 조정 수리 — 시각·순서만 바꾸고 POI 는 불변이다(BR-U3-14).

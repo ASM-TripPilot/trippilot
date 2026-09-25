@@ -56,7 +56,7 @@ const [loaded] = useFonts({ 'Inter-Bold': require('...'), 'NotoSansKR-Bold': req
 
 ## testID 보존이 왜 중요한가
 
-화면은 **프레젠테이션(그림)만 바꾸고 동작 계약은 불변**이어야 한다. 기존 컴포넌트의 testID(`auth-login-google`·`shell-splash-root` 등)를 그대로 유지하면 dev-cycle의 행위 테스트(게이트① 동결 해시)가 **수정 없이 green**으로 남는다 → 비주얼 리팩토링이 회귀 0. testID를 바꾸면 승인된 테스트 계약을 깨는 것이라 게이트 재제시 사유가 된다. **먼저 기존 컴포넌트의 testID 목록을 확인**하고 재작성 시 1:1로 보존하라.
+화면은 **프레젠테이션(그림)만 바꾸고 동작 계약은 불변**이어야 한다. 기존 컴포넌트의 testID(`auth-login-google`·`shell-splash-root` 등)를 그대로 유지하면 dev-cycle의 행위 테스트가 **수정 없이 green**으로 남는다 → 비주얼 리팩토링이 회귀 0. testID를 바꾸면 test-designer가 확정한 테스트 계약을 깨는 것이고, implementer는 테스트를 고칠 수 없다. **먼저 기존 컴포넌트의 testID 목록을 확인**하고 재작성 시 1:1로 보존하라.
 
 ## 절대좌표 → flex 재구성
 
