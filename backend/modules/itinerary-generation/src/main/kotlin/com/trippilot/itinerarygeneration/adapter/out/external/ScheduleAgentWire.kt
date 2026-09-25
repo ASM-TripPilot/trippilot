@@ -1,5 +1,6 @@
 package com.trippilot.itinerarygeneration.adapter.out.external
 
+import com.trippilot.itinerarygeneration.domain.RejectedPoi
 import com.trippilot.itinerarygeneration.domain.CandidatesSummary
 import tools.jackson.databind.JsonNode
 import com.trippilot.itinerarygeneration.domain.DaySchedule
@@ -335,6 +336,15 @@ internal data class AiReplanRequest(
     val freeText: String? = null,
     /** 원 일정 슬롯 — KB 컨텍스트이자 후보 풀 합류 대상(설계 §4). */
     val currentSlots: List<AiReplanSlot> = emptyList(),
+    /**
+     * 거절 이력(TRIP-964) — **배제가 아니라 강등**이다. '다시 짜줘'가 실제로 도는 경로가
+     * 여기라 generate 와 같은 모양으로 싣는다.
+     *
+     * **지금은 항상 비어 있다** — 채우는 것은 TRIP-964 본체이고, 이 필드는 AI 계약과 키를
+     * 맞추기 위해 먼저 난다(`AiBoundaryOpenApiTest` 가 요청 키 정확 일치를 요구한다).
+     * 도메인 타입([RejectedPoi])을 그대로 쓴다 — 두 벌을 두면 한쪽만 고쳐진다.
+     */
+    val rejections: List<RejectedPoi> = emptyList(),
     /**
      * 담은 장소 — LLM 컨텍스트용. 이름 포함, 시각·메모 없음(목적 최소화).
      *

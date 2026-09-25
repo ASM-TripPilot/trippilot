@@ -63,6 +63,8 @@ from trippilot.domain.common import (
     ScheduleId,
     TraceId,
     TransportMode,
+    Rejection,
+    RejectionKind,
 )
 from trippilot.domain.context import PermissionDeniedError, Principal, ResourceRef
 from trippilot.domain.itinerary import (
@@ -159,6 +161,10 @@ class GenerateItineraryRequest:
     # 봉투가 아니라 여기 있다. generate 경로는 기본값(빈 집합)이라 무영향이다.
     prefer_categories: frozenset[PoiCategory] = frozenset()
     avoid_categories: frozenset[PoiCategory] = frozenset()
+    # 거절 이력 (TRIP-964) — 백엔드가 여행 단위로 누적해 싣는다. `pace`·지시와 같은 길이다
+    # (Provider 수집물이 아니라 요청에 실려 오는 값). generate·replan 양쪽에 실린다 —
+    # 다시 짜는 경로가 replan 이고, 처음부터 다시 만드는 경로가 generate 이기 때문이다.
+    rejections: tuple[Rejection, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.days:
@@ -277,6 +283,26 @@ class ScheduleAgent:
                 trace_id, now, "planb", "planb_rank", "planb_rank",
                 f"planb_rank_lifted:{sum(1 for c in candidates if c.poi_id in set(task.planb_rank))}"
                 f"/{len(task.planb_rank)}",
+            )
+
+        # ②‴ 거절 이력 강등 (TRIP-964) — 가산과 **같은 자리**라 자동으로 합성된다.
+        #    점수 원점이 LLM 이든 규칙이든 같게 빠지므로 경로마다 따로 실을 필요가 없다.
+        #    ②″ 뒤여야 한다: 랭크 가산이 먼저 오르고 그 위에서 거절이 깎여야, 설정이
+        #    강제하는 "상한 < 랭크 가산" 이 실제 점수에서도 순증으로 드러난다.
+        if request.rejections:
+            penalties = rejection_penalty(
+                request.rejections,
+                swapped=self._cfg.rejection_demote_swapped,
+                regenerated=self._cfg.rejection_demote_regenerated,
+                cap=self._cfg.rejection_demote_cap,
+            )
+            candidates = demote_rejected(candidates, penalties)
+            # 몇 건이 실제로 깎였는지 남긴다 — 이력이 전부 풀 밖 POI 면 0 건이고,
+            # 그러면 거절을 기억한 것이 일정에 아무 효과가 없었다는 뜻이다(침묵 금지).
+            self._observe(
+                trace_id, now, "rejection", "rejections", "rejections",
+                f"rejection_demoted:{sum(1 for c in candidates if c.poi_id in penalties)}"
+                f"/{len(penalties)}",
             )
 
         # ②′ 지도 실재 검증 (TRIP-904) — **점수가 나온 뒤**라야 배치될 후보를 검증할 수
@@ -883,6 +909,58 @@ def lift_planb_ranked(
     return tuple(
         replace(c, score=planb_lifted_score(c.score, order[c.poi_id], total, lift=lift))
         if c.poi_id in order else c
+        for c in candidates
+    )
+
+
+def rejection_penalty(
+    rejections: Sequence[Rejection],
+    *,
+    swapped: Sequence[float],
+    regenerated: Sequence[float],
+    cap: float,
+) -> dict[PoiId, float]:
+    """POI 별 총 강등 폭 — 종류별 계단을 더하고 `cap` 에서 자른다 (TRIP-964).
+
+    **계단은 횟수로 오른다**: n 번째 거절이면 그 표의 n 번째 값, 표보다 많이 거절했으면
+    마지막 값에서 멈춘다. 한 POI 가 두 종류에 다 걸리면(교체했다가 재생성에도 남아
+    있었다) 더한 뒤 자른다.
+
+    `cap` 이 `planb_rank_lift` 보다 작다는 것은 설정이 강제한다 — 여기서 다시 세지 않는다.
+    그 덕에 "겹치면 PlanB 가 조금 더 이긴다"가 반복 횟수와 무관하게 성립한다.
+
+    같은 (poi, kind) 가 여러 줄로 와도 **가장 큰 count 하나만** 읽는다. 백엔드가 집계해
+    보내는 것이 계약이지만, 경계가 중복을 흘려도 강등이 두 배가 되지는 않게 한다
+    (`lift_planb_ranked` 가 중복 랭킹을 순위표로만 읽는 것과 같은 규율).
+    """
+    def step(table: Sequence[float], count: int) -> float:
+        return table[min(count, len(table)) - 1] if table and count >= 1 else 0.0
+
+    counts: dict[tuple[PoiId, RejectionKind], int] = {}
+    for r in rejections:
+        key = (r.poi_id, r.kind)
+        counts[key] = max(counts.get(key, 0), r.count)
+
+    out: dict[PoiId, float] = {}
+    for (poi_id, kind), count in counts.items():
+        table = swapped if kind is RejectionKind.SWAPPED_OUT else regenerated
+        out[poi_id] = out.get(poi_id, 0.0) + step(table, count)
+    return {poi_id: min(v, cap) for poi_id, v in out.items()}
+
+
+def demote_rejected(
+    candidates: tuple[ScoredPoi, ...],
+    penalties: Mapping[PoiId, float],
+) -> tuple[ScoredPoi, ...]:
+    """거절한 후보의 점수를 **뺀다** — 후보 집합·개수는 그대로 (INV-1).
+
+    **배제가 아니라 강등이다.** 하드 제외로 처리하면 두세 번 누를 때 풀이 말라 일정이
+    비고, 사용자가 마음을 바꿔도 되돌아갈 길이 없다(`excluded_poi_ids` 를 쓰지 않은
+    이유). 점수는 0 아래로 내려갈 수 있다 — 자르면 여러 번 거절한 곳과 한 번 거절한
+    곳이 같아지고, 어셈블리 목적함수는 음수를 그대로 다룬다.
+    """
+    return tuple(
+        replace(c, score=c.score - penalties[c.poi_id]) if c.poi_id in penalties else c
         for c in candidates
     )
 

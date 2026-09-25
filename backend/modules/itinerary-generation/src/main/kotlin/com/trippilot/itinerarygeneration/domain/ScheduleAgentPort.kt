@@ -160,7 +160,39 @@ data class ScheduleAgentInput(
      * 맨 뒤 배치는 기본값 파라미터 규칙(anti-patterns) — 기존 호출 전부 무변경.
      */
     val includeExplanations: Boolean = true,
+    /**
+     * 거절 이력(TRIP-964) — 사용자가 밀어낸 POI 를 **배제가 아니라 강등**으로 반영한다.
+     * 하드 제외(`excludedPoiIds`)로 처리하면 두세 번 누를 때 후보가 말라 일정이 비고,
+     * 사용자가 마음을 바꿔도 되돌아갈 길이 없다.
+     *
+     * **지금은 항상 비어 있다** — 채우는 것(무엇을 거절로 볼지 판정·여행 단위 누적 저장)은
+     * TRIP-964 의 본체이고, 이 필드는 AI 계약(`GenerateItineraryRequest.rejections`)과
+     * 키를 맞추기 위해 먼저 난다. `AiBoundaryOpenApiTest` 가 요청 키 **정확 일치**를
+     * 요구하므로 한쪽만 늘면 그 게이트가 깨진다.
+     *
+     * 강등 폭은 보내지 않는다 — 크기는 AI 설정이 갖는다(팀 결정 2026-09-26). 비율 조정에
+     * 백엔드 재배포가 필요 없고, 두 서비스가 같은 숫자를 각자 갖지 않게 한다.
+     */
+    val rejections: List<RejectedPoi> = emptyList(),
 )
+
+/**
+ * 거절 이력 한 줄 (TRIP-964). `count` 는 **같은 곳을 또 거절했는가**다 — 집합만 보내면
+ * "처음"과 "세 번째"가 구분되지 않아 반복 강등이 불가능하다(AI 가 횟수로 계단을 오른다).
+ */
+data class RejectedPoi(
+    val poiId: UUID,
+    val kind: Kind,
+    val count: Int = 1,
+) {
+    enum class Kind {
+        /** 슬롯 후보 패널에서 다른 곳으로 교체해 빠졌다 — 가장 명확한 거절이라 강등이 크다. */
+        SWAPPED_OUT,
+
+        /** 재생성 직전 일정에 있었다 — "이 구성이 싫다"에 가까워 약하게 본다. */
+        REGENERATED,
+    }
+}
 
 data class TripContext(
     val destinations: List<String>,

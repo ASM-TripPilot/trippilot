@@ -701,6 +701,13 @@
             ],
             "title": "Recommendation Strength"
           },
+          "rejections": {
+            "items": {
+              "$ref": "#/components/schemas/RejectionSchema"
+            },
+            "title": "Rejections",
+            "type": "array"
+          },
           "request_meta": {
             "$ref": "#/components/schemas/RequestMetaSchema"
           },
@@ -1084,6 +1091,37 @@
         "title": "ReflectionNudgeResponse",
         "type": "object"
       },
+      "RejectionSchema": {
+        "additionalProperties": false,
+        "description": "거절 이력 한 줄 (TRIP-964) — 백엔드가 여행 단위로 누적해 싣는다.\n\n**크기는 오지 않는다.** `kind` 만 받고 강등 폭은 AI 설정(`OrchestratorConfig`)이\n갖는다 — 비율 조정에 백엔드 재배포가 필요 없고, 두 서비스가 같은 숫자를 각자\n갖지 않게 한다(팀 결정 2026-09-26).\n\n`count` 는 **같은 곳을 또 거절했는가**다. 집합만 받으면 \"처음\"과 \"세 번째\"가\n구분되지 않아 반복 강등이 불가능하다.",
+        "properties": {
+          "count": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "SWAPPED_OUT",
+              "REGENERATED"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "poi_id": {
+            "minLength": 1,
+            "title": "Poi Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "poi_id",
+          "kind"
+        ],
+        "title": "RejectionSchema",
+        "type": "object"
+      },
       "ReminderCopyItemSchema": {
         "additionalProperties": false,
         "description": "예약 1건 = 문구 1건. schedule_key 는 백엔드 예약 행 식별자(불투명 문자열).\n\n**slots 는 순서가 있다** — 조립(assembly)이 검증한 방문 순서 그대로 담아야 한다\n(INV-2). 프롬프트가 이 순서를 그대로 나열해 문구에 실리므로, 정렬 없이(예: DB\n조회에 ORDER BY 누락) 채우면 조립이 확인한 적 없는 순서 주장이 사용자에게 노출된다.",
@@ -1376,6 +1414,13 @@
               "type": "string"
             },
             "title": "Reasons",
+            "type": "array"
+          },
+          "rejections": {
+            "items": {
+              "$ref": "#/components/schemas/RejectionSchema"
+            },
+            "title": "Rejections",
             "type": "array"
           },
           "request_meta": {

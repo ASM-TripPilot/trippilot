@@ -118,6 +118,22 @@ class PreferenceProfileSchema(BoundaryModel):
     budget_tier: str | None = None
 
 
+class RejectionSchema(BoundaryModel):
+    """거절 이력 한 줄 (TRIP-964) — 백엔드가 여행 단위로 누적해 싣는다.
+
+    **크기는 오지 않는다.** `kind` 만 받고 강등 폭은 AI 설정(`OrchestratorConfig`)이
+    갖는다 — 비율 조정에 백엔드 재배포가 필요 없고, 두 서비스가 같은 숫자를 각자
+    갖지 않게 한다(팀 결정 2026-09-26).
+
+    `count` 는 **같은 곳을 또 거절했는가**다. 집합만 받으면 "처음"과 "세 번째"가
+    구분되지 않아 반복 강등이 불가능하다.
+    """
+
+    poi_id: str = Field(min_length=1)
+    kind: Literal["SWAPPED_OUT", "REGENERATED"]
+    count: int = Field(default=1, ge=1)
+
+
 class GenerateItineraryRequest(BoundaryModel):
     """`POST /ai/v1/itinerary/generate` 요청 = 백엔드 `ScheduleAgentInput`.
 
@@ -135,6 +151,8 @@ class GenerateItineraryRequest(BoundaryModel):
     recommendation_strength: str | None = None
     request_meta: RequestMetaSchema
     excluded_poi_ids: list[str] = Field(default_factory=list)
+    # 거절 이력 (TRIP-964) — additive optional. 옛 백엔드는 안 보내고 그때는 빈 목록이다.
+    rejections: list[RejectionSchema] = Field(default_factory=list)
     # 설명 생략 (TRIP-479) — 설명은 POST /ai/v1/itinerary/explanations로 별도 조회
     include_explanations: bool = True
 
@@ -463,6 +481,8 @@ class ReplanRequest(BoundaryModel):
 
     reasons: list[str] = Field(default_factory=list)  # AI 어휘 (백엔드가 번역)
     directives: list[str] = Field(default_factory=list)  # FE 키 그대로 — 번역하지 않는다
+    # 거절 이력 (TRIP-964) — generate 와 같은 모양. '다시 짜줘'가 실제로 도는 경로가 여기다.
+    rejections: list[RejectionSchema] = Field(default_factory=list)
     # 상한 500 은 `replan_session.free_text varchar(500)` 과 같은 값이다.
     # 계약이 DB 보다 좁으면 저장된 값이 경계에서 잘린다.
     free_text: str | None = Field(default=None, max_length=500)

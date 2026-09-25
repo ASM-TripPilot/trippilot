@@ -77,6 +77,19 @@ class OrchestratorConfig:
     # "다시 짜줘"를 두세 번 누를 때 풀이 말라 막다른 길이 된다.
     planb_rank_lift: float = 0.3
 
+    # 거절 이력 강등 (TRIP-964) — **반복할수록 커지는 계단**이다. n 번째 거절이면
+    # 아래 표의 n 번째 값을 쓰고, 표보다 많이 거절했으면 마지막 값에서 멈춘다.
+    # 종류별로 크기가 다른 것은 신호의 세기가 다르기 때문이다(팀 결정 2026-09-26):
+    # 슬롯 교체는 그 자리를 보고 바꾼 것이라 강하고, 재생성은 "이 구성이 싫다"에
+    # 가까워 약하다 — 맘에 들었던 곳까지 함께 걸린다.
+    rejection_demote_swapped: tuple[float, ...] = (0.15, 0.22, 0.25)
+    rejection_demote_regenerated: tuple[float, ...] = (0.10, 0.15, 0.18)
+    # 한 POI 의 총 강등 상한. **`planb_rank_lift` 보다 작아야 한다** — 그래야 결정
+    # "겹치면 PlanB 가 조금 더 이긴다"가 **반복 횟수와 무관하게** 성립한다. 상한이
+    # 없으면 두세 번 거절한 곳이 랭킹 가산을 넘어서고, 그때부터 그 결정은 거짓이 된다.
+    # 아래 __post_init__ 이 그 관계를 강제한다 — 숫자를 베껴 적지 않는 이유다.
+    rejection_demote_cap: float = 0.25
+
     def __post_init__(self) -> None:
         if not 0.0 < self.c2_min_share < 1.0:
             raise ValueError("c2_min_share ∈ (0, 1)")
@@ -98,6 +111,21 @@ class OrchestratorConfig:
             raise ValueError("existence_demote_penalty ∈ [0, ∞)")
         if not 0.0 <= self.planb_rank_lift < float("inf"):
             raise ValueError("planb_rank_lift ∈ [0, ∞) — 음수면 가산이 아니라 강등이다")
+        for name in ("rejection_demote_swapped", "rejection_demote_regenerated"):
+            steps = getattr(self, name)
+            if not steps:
+                raise ValueError(f"{name} 는 최소 1단계 — 빈 표는 강등 없음을 뜻하지 않는다")
+            if any(s < 0.0 for s in steps):
+                raise ValueError(f"{name} 의 각 단계 ≥ 0 — 음수면 강등이 아니라 가산이다")
+            if list(steps) != sorted(steps):
+                raise ValueError(f"{name} 는 비감소여야 한다 — 또 거절했는데 덜 내려가면 규칙이 뒤집힌다")
+            if steps[-1] > self.rejection_demote_cap:
+                raise ValueError(f"{name} 의 마지막 단계가 상한을 넘는다")
+        if not 0.0 <= self.rejection_demote_cap < self.planb_rank_lift:
+            raise ValueError(
+                "rejection_demote_cap ∈ [0, planb_rank_lift) — 상한이 랭크 가산 이상이면 "
+                "'겹치면 PlanB 가 조금 더 이긴다'(팀 결정)가 깨진다"
+            )
 
 
 @dataclass(frozen=True, slots=True)
