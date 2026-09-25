@@ -693,6 +693,8 @@ owner = "숙소"
 migration = false
 touches = ["backend/modules/accommodation-search", "backend/modules/saved-accommodation", "backend/docs/design/openapi.yaml"]
 note = """
+**숙소 트랙은 별도 세션 소유다**(2026-09-26 결정). 착수 전 `backend/docs/design/숙소트랙-인계.md` 를 읽는다 — 측정·조사·판단이 거기 모여 있다.
+
 **진행(2026-09-25) — 여섯 중 `address` 는 들어갔다**(PR #677, `StayItem`·`StayDetail`).
 남은 다섯 중 **`imageUrl` 은 공급원이 없다** — `STAY-CONTENT-TOURAPI` 가 측정 2.0% 로 접혔고
 (LOCALDATA·카카오·OSM 모두 사진 없음, Google Places 는 저장 금지), 수렴점은 **OTA 제휴 콘텐츠 API**
@@ -1077,6 +1079,8 @@ touches = [
   "backend/docs/design/openapi.yaml",
 ]
 note = """
+**숙소 트랙은 별도 세션 소유다**(2026-09-26 결정). 착수 전 `backend/docs/design/숙소트랙-인계.md` 를 읽는다 — 특히 §3(OTA 조사: 트립닷컴>아고다, 투플 선례)은 이 노드의 선행 판단이다.
+
 `제휴링크-연동-설계.md` 가 조사·칸 0~3 계획을 2026-09-11 에 박제해 두었고, **그 칸 0 이 지시한
 노드가 이것이다**(그때는 신설하지 않았다 — 2026-09-21 에 만든다).
 
