@@ -20,10 +20,20 @@ import {
   useGetMeExport,
   usePostMeDeletion,
 } from '@/shared/api/generated/account/account';
+import { useGetMeLocationConsent } from '@/shared/api/generated/location/location';
+import { useGetMePreferences } from '@/shared/api/generated/preferences/preferences';
 import {
+  getGetMeSettingsQueryKey,
   useGetMeProfile,
+  useGetMeSettings,
   usePatchMeProfileNickname,
+  usePatchMeSettings,
 } from '@/shared/api/generated/profile/profile';
+import { useGetMePersonalization } from '@/shared/api/generated/reflection/reflection';
+import {
+  type AccountSettings,
+  PersonalizationInfoReason,
+} from '@/shared/api/generated/schemas';
 import { validateNicknameFormat } from '@/shared/validation/nicknameFormat';
 
 /**
@@ -77,6 +87,44 @@ export function SettingsPage(): ReactElement {
 
   const [truncatedLabel, setTruncatedLabel] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+
+  // TRIP-778 행 값 — 조회 전·실패면 undefined 로 흘려 값·칩을 그리지 않는다(D4).
+  // 위치 동의는 GET 만 쓴다: `useLocationConsent` 는 마운트 시 OS 권한 미러 PATCH 를 쏜다.
+  const preferences = useGetMePreferences();
+  const locationConsent = useGetMeLocationConsent();
+  const personalization = useGetMePersonalization();
+  const personalizationReason = personalization.data?.reason;
+
+  // 제휴 안내: 진실은 `/me/settings` 쿼리 캐시 하나다(숙소 상세도 같은 키를 읽는다 — AC-11).
+  // 라벨이 "다시 보기"라 ON = dismissed:false — 서버 값 ↔ UI 반전은 여기 한 곳에서만 한다.
+  const settingsKey = getGetMeSettingsQueryKey();
+  const accountSettings = useGetMeSettings();
+  const dismissed = accountSettings.data?.affiliateNoticeDismissed;
+  const [affiliateNoticeError, setAffiliateNoticeError] = useState(false);
+  const patchSettings = usePatchMeSettings<
+    unknown,
+    { previous?: AccountSettings }
+  >({
+    mutation: {
+      // 낙관 반영 — 응답 전에 캐시를 먼저 바꾸고, 실패하면 이전 값으로 되돌린다(D7).
+      onMutate: ({ data }) => {
+        const previous = queryClient.getQueryData<AccountSettings>(settingsKey);
+        queryClient.setQueryData<AccountSettings>(settingsKey, {
+          affiliateNoticeDismissed: data.affiliateNoticeDismissed === true,
+        });
+        setAffiliateNoticeError(false);
+        return { previous };
+      },
+      onSuccess: (data) => {
+        queryClient.setQueryData(settingsKey, data);
+      },
+      onError: (_error, _variables, context) => {
+        if (context?.previous)
+          queryClient.setQueryData(settingsKey, context.previous);
+        setAffiliateNoticeError(true);
+      },
+    },
+  });
 
   const patchNickname = usePatchMeProfileNickname({
     mutation: {
@@ -171,6 +219,13 @@ export function SettingsPage(): ReactElement {
         buildSettingsSections({
           nickname: currentNickname,
           email: account.data?.email ?? null,
+          preferences: preferences.data,
+          locationConsent: locationConsent.data?.legalConsent,
+          personalizationOn:
+            personalizationReason === undefined
+              ? undefined
+              : personalizationReason !==
+                PersonalizationInfoReason.CONSENT_MISSING,
         })
       )}
       deletionState={deletionState}
@@ -190,6 +245,19 @@ export function SettingsPage(): ReactElement {
       onPressNotifications={() => loadRouter()?.push('/settings/notifications')}
       onPressTerms={(termsType) => loadRouter()?.push(`/terms/${termsType}`)}
       onPressLogout={() => void runLogout()}
+      onPressPreferences={() => loadRouter()?.push('/settings/preferences')}
+      onPressPersonalization={() =>
+        loadRouter()?.push('/settings/personalization')
+      }
+      affiliateNoticeOn={dismissed === undefined ? null : !dismissed}
+      affiliateNoticeError={affiliateNoticeError}
+      onToggleAffiliateNotice={() => {
+        if (dismissed === undefined) return;
+        // 보낸 필드만 바뀐다(생략 = 변경 없음) — 본문은 이 한 필드뿐이다.
+        patchSettings.mutate({
+          data: { affiliateNoticeDismissed: !dismissed },
+        });
+      }}
       // 스토어 버전과 같은 출처(app.config version). 없으면 화면이 버전 줄을 그리지 않는다(TRIP-935 R4).
       appVersion={Constants.expoConfig?.version}
       onPressOsmCopyright={() => {

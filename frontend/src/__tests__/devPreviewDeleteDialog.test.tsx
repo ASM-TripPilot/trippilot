@@ -102,3 +102,57 @@ describe('🔴 TRIP-779 · l05 삭제 다이얼로그 프리뷰 합성 (AC-3)', 
     expect(composed).toEqual(base);
   });
 });
+
+// TRIP-772 · AC-5 — l05 삭제 다이얼로그 2단(Figma 4531:3018) 전용 키.
+// 무엇을 보장하나: `settings-delete-dialog-final` 은 1단 키와 같은 설정 화면 위에 게이트 컴포넌트의
+// 2단 얼굴을 겹쳐 그린다. 문구는 코드(30일 유예)를 따른다 — Figma 의 "되돌릴 수 없어요"가 아니다(TRIP-935 Q7).
+describe('🔴 TRIP-772 · l05 삭제 다이얼로그 2단 프리뷰 키 (AC-5)', () => {
+  it('settings-delete-dialog-final 은 설정 화면 위에 2단 얼굴만 그린다', () => {
+    mockSearchParams.state = 'settings-delete-dialog-final';
+
+    render(<DevPreview />);
+
+    // 배경 = 설정 화면.
+    expect(screen.getByTestId('settings-back')).toBeOnTheScreen();
+    expect(screen.getByTestId('settings-delete-account')).toBeOnTheScreen();
+    // 전경 = 2단 최종 확인, 1단 [계속]은 없다.
+    expect(
+      screen.getByTestId('settings-delete-confirm-final')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('settings-delete-confirm')).toBeNull();
+  });
+
+  it('2단 다이얼로그가 설정 화면보다 뒤 형제라서 위에 그려진다', () => {
+    mockSearchParams.state = 'settings-delete-dialog-final';
+
+    render(<DevPreview />);
+    const ids = testIdsInOrder(screen.toJSON());
+
+    const screenAt = ids.indexOf('settings-back');
+    const dialogAt = ids.indexOf('settings-delete-confirm-final');
+    expect(screenAt).toBeGreaterThanOrEqual(0);
+    expect(dialogAt).toBeGreaterThan(screenAt);
+  });
+
+  it('배경 화면은 settings-default 키와 같은 화면이다', () => {
+    const base = screenIdsOf('settings-default');
+    const composed = screenIdsOf('settings-delete-dialog-final');
+
+    // 앵커 — 기준 화면이 실제로 그려졌다.
+    expect(base).toContain('settings-back');
+    expect(composed).toEqual(base);
+  });
+
+  it('2단 문구는 코드의 30일 유예 고지다("되돌릴 수 없" 없음)', () => {
+    mockSearchParams.state = 'settings-delete-dialog-final';
+
+    render(<DevPreview />);
+
+    // 앵커 — 2단이 그려졌다.
+    expect(
+      screen.getByTestId('settings-delete-confirm-final')
+    ).toBeOnTheScreen();
+    expect(screen.getAllByText(/30일/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryAllByText(/되돌릴 수 없/)).toHaveLength(0);
+  });
+});

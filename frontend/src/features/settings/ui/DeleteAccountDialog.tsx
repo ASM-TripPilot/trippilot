@@ -27,11 +27,14 @@ const DIALOG_SHADOW = {
 export function DeleteAccountDialog({
   onCancel,
   onConfirmDeletion,
+  initialStep = 'confirm1',
 }: {
   onCancel: () => void;
   onConfirmDeletion: () => void;
+  /** `_dev/preview` 전용(2단 얼굴 키). 프로덕션은 넘기지 않는다 — `deleteAccountDialogGate.test.ts` 가 잠근다. */
+  initialStep?: 'confirm1' | 'confirm2';
 }): ReactElement {
-  const [step, setStep] = useState<'confirm1' | 'confirm2'>('confirm1');
+  const [step, setStep] = useState<'confirm1' | 'confirm2'>(initialStep);
 
   return (
     <View className="absolute inset-0 items-center justify-center bg-scrim/55 px-2xl">

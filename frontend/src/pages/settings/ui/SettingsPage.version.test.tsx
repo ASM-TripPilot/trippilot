@@ -5,7 +5,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react-native';
 
 import { useGetMe } from '@/shared/api/generated/account/account';
-import { useGetMeProfile } from '@/shared/api/generated/profile/profile';
+import { useGetMeLocationConsent } from '@/shared/api/generated/location/location';
+import { useGetMePreferences } from '@/shared/api/generated/preferences/preferences';
+import {
+  useGetMeProfile,
+  useGetMeSettings,
+  usePatchMeSettings,
+} from '@/shared/api/generated/profile/profile';
+import { useGetMePersonalization } from '@/shared/api/generated/reflection/reflection';
 
 import { SettingsPage } from '..';
 
@@ -33,7 +40,19 @@ jest.mock('expo-constants', () => ({
 }));
 jest.mock('expo-linking', () => ({ openURL: jest.fn() }));
 jest.mock('@/shared/api/generated/account/account');
-jest.mock('@/shared/api/generated/profile/profile');
+// TRIP-778: profile 은 팩토리 목 — codegen(D1) 전엔 `useGetMeSettings`·`usePatchMeSettings` 가 생성물에
+// 없어 자동 목이 이름을 모른다. 기존 export 는 자동 목 그대로 두고 두 이름만 목 함수로 채운다(02a ★2).
+jest.mock('@/shared/api/generated/profile/profile', () => ({
+  ...jest.createMockFromModule<Record<string, unknown>>(
+    '@/shared/api/generated/profile/profile'
+  ),
+  useGetMeSettings: jest.fn(),
+  usePatchMeSettings: jest.fn(),
+}));
+// TRIP-778: 페이지가 새로 읽는 조회 3종(취향·위치 동의·개인화) — 실 훅이 네트워크로 나가지 않게 자동 목.
+jest.mock('@/shared/api/generated/preferences/preferences');
+jest.mock('@/shared/api/generated/location/location');
+jest.mock('@/shared/api/generated/reflection/reflection');
 
 const mockUseGetMe = useGetMe as jest.Mock;
 const mockUseGetMeProfile = useGetMeProfile as jest.Mock;
@@ -46,6 +65,21 @@ function renderPage() {
   );
 }
 
+/**
+ * TRIP-778 — 페이지가 새로 부르는 조회 4종·변경 1종을 "응답 전" 모양으로 채운다. 자동 목은 `undefined` 를
+ * 돌려줘 페이지가 `.data` 에서 죽으므로 이 파일의 관심사와 무관해도 채워야 한다(02a ★2).
+ */
+function primeL05Hooks(): void {
+  (useGetMePreferences as jest.Mock).mockReturnValue({ data: undefined });
+  (useGetMeLocationConsent as jest.Mock).mockReturnValue({ data: undefined });
+  (useGetMePersonalization as jest.Mock).mockReturnValue({ data: undefined });
+  (useGetMeSettings as jest.Mock).mockReturnValue({ data: undefined });
+  (usePatchMeSettings as jest.Mock).mockReturnValue({
+    mutate: jest.fn(),
+    isPending: false,
+  });
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockExpoConfig = null;
@@ -53,6 +87,7 @@ beforeEach(() => {
     data: { accountId: 'acc-1', status: 'ACTIVE', email: 'a@b.com' },
   });
   mockUseGetMeProfile.mockReturnValue({ data: { nickname: '여행자123' } });
+  primeL05Hooks();
 });
 
 describe('🔴 TRIP-935 AC-3 · 페이지가 빌드 설정의 버전을 내린다', () => {

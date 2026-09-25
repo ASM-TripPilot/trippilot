@@ -15,7 +15,8 @@ import { StyleSummaryCard } from './StyleSummaryCard';
  * 여기선 완성 VM 을 props 로 넣고 렌더 계약만 잠근다.
  *
  * 무엇을 보장하나(승인 계약):
- *  - 🔴 AC-S1(US-NOTIF-08) 정식 VM → 칩 N + 게이지 3행(라벨 3종) + "여행 N개 · 갱신 …" + 상세 어포던스.
+ *  - 🔴 AC-S1(US-NOTIF-08) 정식 VM → 칩 N + 게이지 3행(라벨 3종) + 상세 어포던스. 메타줄("여행 N개 · 갱신 …")은
+ *    없다(TRIP-775 — Figma 1602:2388 에 없고, 분석 여행 수·갱신 시점은 상세 화면이 보인다).
  *  - 🔴 AC-S2(BR-U6-24 핵심) 축 값 N → **채운 dot 정확히 N개**(나머지 empty). 채운/빈 dot 별도 testID 카운트.
  *  - 🔴 AC-S3(BR-U6-24) 미달 VM → 안내 한 줄만. 게이지·칩·상세 미렌더.
  *  - 🔴 AC-S4(INV-U5-09) preview.descriptors 가 온 envelope 라도 모델이 걸러 화면은 미달 얼굴(칩 0).
@@ -54,7 +55,7 @@ function officialVM(
 }
 
 describe('🔴 AC-S1 · 정식 렌더(US-NOTIF-08)', () => {
-  it('칩 N개 + 게이지 3행(라벨 3종) + "여행 N개 · 갱신 …" + 상세 어포던스를 그린다', () => {
+  it('칩 N개 + 게이지 3행(라벨 3종) + 상세 어포던스를 그리고, 메타줄("여행 N개 · 갱신 …")은 없다', () => {
     render(<StyleSummaryCard vm={officialVM()} />);
 
     // 카드 루트.
@@ -71,10 +72,9 @@ describe('🔴 AC-S1 · 정식 렌더(US-NOTIF-08)', () => {
     expect(screen.getByText('미식 취향')).toBeOnTheScreen();
     expect(screen.getByText('활동성')).toBeOnTheScreen();
 
-    // 메타줄 — sampleTripCount + slice(0,10)+formatKoreanDate 로 포맷된 갱신 시점.
-    //   (slice 를 빼면 formatKoreanDate 가 NaN 으로 깨지므로 이 단언이 그 회귀도 잡는다.)
-    expect(screen.getByText(/여행 6개/)).toBeOnTheScreen();
-    expect(screen.getByText(/갱신 8월 28일 금요일/)).toBeOnTheScreen();
+    // 메타줄 없음(TRIP-775) — VM 에 sampleTripCount·updatedAt 이 있어도 카드는 그리지 않는다.
+    expect(screen.queryAllByText(/여행 \d+개/)).toHaveLength(0);
+    expect(screen.queryAllByText(/갱신/)).toHaveLength(0);
 
     // 상세 진입 어포던스 존재(활성/비활성은 AC-S6).
     expect(screen.getByTestId('my-style-detail')).toBeOnTheScreen();

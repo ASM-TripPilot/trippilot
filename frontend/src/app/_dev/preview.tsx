@@ -85,6 +85,9 @@ import { MapFallbackBar } from '@/widgets/map-sheet-shell/ui/MapFallbackBar';
 import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
 import { SheetHeader } from '@/widgets/map-sheet-shell/ui/SheetHeader';
 import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
+import { PastTripRow } from '@/entities/trip/ui/PastTripRow';
+import { ChevronRightGlyph as TripChevronRightGlyph } from '@/entities/trip/ui/TripGlyphs';
+import type { PastTripCardVM } from '@/entities/trip/model';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { buildStatePins } from '@/entities/itinerary-slot/lib/slotMapPin';
 import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
@@ -106,6 +109,7 @@ import {
   buildSettingsSections,
   filterReadySettingsSections,
 } from '@/features/settings/model/settingsSections';
+import { BaseToggleDialog } from '@/features/settings/ui/BaseToggleDialog';
 import { DeleteAccountDialog } from '@/features/settings/ui/DeleteAccountDialog';
 import { LocationConsentScreen } from '@/features/settings/ui/LocationConsentScreen';
 import type { StyleCardVM } from '@/features/settings/model/styleCardModel';
@@ -1143,69 +1147,80 @@ const MY_TRIPS_PREVIEW_VMS: MyTripCardVM[] = [
   },
 ];
 
-// l03 마이페이지 · l03(TRIP-604) — 예정 카드(D-배지)와 지난 여행 카드(회고 chevron)의 두 얼굴을
-// 한 화면에서 대조하는 픽스처. 화면은 무상태라 VM + noop 한 벌로 충분(TripCardContainer 의 조회
-// 조립은 안 태움 — 배지 pill 위치·세그먼트 활성 그림자·아바타 원은 jest 사각, 6-b 육안 몫).
+// l03 마이페이지 default(Figma 1602:2388, TRIP-775) — 예정 카드 2장: D-12(14일 이하 → primary 배지)와
+// D-30(ink 배지, 일정 미생성이라 daysLabel null). 화면은 무상태라 VM + noop 한 벌로 충분(TripCardContainer 의
+// 조회 조립은 안 태움 — 배지 색·카드 그림자·칩 모양은 jest 사각, 스크린샷 대조 몫).
 const MY_PAGE_UPCOMING_VMS: TripCardVM[] = [
   {
     tripId: 'busan',
-    destinationLabel: '부산',
+    title: '부산 여행',
     dateRange: '6.10~6.12',
     basesLabel: '숙소 1',
     daysLabel: '일정 3일',
     dBadge: 'D-12',
+    dBadgeTone: 'primary',
     isEnded: false,
   },
   {
     tripId: 'jeju',
-    destinationLabel: '제주',
+    title: '제주 여행',
     dateRange: '7.1~7.4',
     basesLabel: '숙소 미등록',
     daysLabel: null,
     dBadge: 'D-30',
-    isEnded: false,
-  },
-  // bases 미도착(로딩·조회 실패) 엣지(TRIP-620 [604]) — basesLabel null 이라 숙소 칩 자체가 생략된다
-  // ('숙소 미등록'을 지어내지 않음). daysLabel 도 null 이라 기간 칩 하나만 뜨는 얼굴을 눈으로 대조.
-  {
-    tripId: 'sokcho',
-    destinationLabel: '속초',
-    dateRange: '8.5~8.7',
-    basesLabel: null,
-    daysLabel: null,
-    dBadge: 'D-60',
+    dBadgeTone: 'ink',
     isEnded: false,
   },
 ];
 
-const MY_PAGE_ENDED_VMS: TripCardVM[] = [
-  {
-    tripId: 'jeju-past',
-    destinationLabel: '제주',
-    dateRange: '5.1~5.3',
-    basesLabel: '숙소 2',
-    daysLabel: '일정 3일',
-    dBadge: null,
-    isEnded: true,
-  },
-  {
-    tripId: 'gangneung-past',
-    destinationLabel: '강릉',
-    dateRange: '4.18~4.20',
-    basesLabel: '숙소 1',
-    daysLabel: '일정 3일',
-    dBadge: null,
-    isEnded: true,
-  },
+// l03 마이페이지 empty(Figma 1603:2414, TRIP-776) — 지난 여행 썸네일 카드 3장(종료일 최근순). 사진은 Figma 목업
+// 사진 로컬 사본(`assets/my-page/CREDITS.md`, G7) — jest 는 .uri 가 undefined 라 회색 자리, 실기만 사진.
+const myPagePastVM = (
+  tripId: string,
+  title: string,
+  dateRangeLabel: string,
+  photoLabel: string,
+  source: number
+): PastTripCardVM => ({
+  tripId,
+  title,
+  dateRangeLabel,
+  nightsLabel: null,
+  photoLabel,
+  imageUrl: Image.resolveAssetSource?.(source)?.uri ?? null,
+});
+const MY_PAGE_PAST_VMS: PastTripCardVM[] = [
+  myPagePastVM(
+    'e-jeju',
+    '제주 여행',
+    '2026.5.1–5.3',
+    '사진 24',
+    require('@/assets/my-page/past-jeju.jpg')
+  ),
+  myPagePastVM(
+    'e-gangneung',
+    '강릉 여행',
+    '2026.4.18–4.20',
+    '사진 16',
+    require('@/assets/my-page/past-gangneung.jpg')
+  ),
+  myPagePastVM(
+    'e-busan',
+    '부산 여행',
+    '2025.10.3–10.5',
+    '사진 30',
+    require('@/assets/my-page/past-busan.jpg')
+  ),
 ];
 
-// l04 등록 숙소 3행 — 등록됨(연결 여행)·미등록·좌표 미확정(토글 disabled). 화면이 순수 프레젠테이션이라
-// 완성 VM 한 벌이면 세 표면을 다 본다(location 은 계약 공백이라 빈 값 — 화면이 줄을 안 그린다).
+// l04 등록 숙소 2행 — Figma 1604:2440 카드 그대로(등록됨 1 · 미등록 1). default·dialog 두 키가 이 한 벌을
+// 공유한다. 주소는 계약 공백(G6)이라 실앱은 빈 값으로 줄을 생략하고, 프리뷰만 Figma 값을 채운다.
+// 좌표 미확정(토글 disabled) 행은 Figma 프레임이 없어 여기서만 뺐다(G5 — 코드 분기·테스트는 유지).
 const MY_STAYS_PREVIEW_ROWS: MyStayRowVM[] = [
   {
     savedStayId: 'stay-assigned',
-    name: '해운대 오션뷰',
-    location: '',
+    name: '부산 그랜드 호텔',
+    location: '부산 해운대구 우동',
     dateRangeLabel: '6.10 ~ 6.13',
     sourceLabel: 'OTA 예약',
     memoLabel: null,
@@ -1217,27 +1232,14 @@ const MY_STAYS_PREVIEW_ROWS: MyStayRowVM[] = [
   },
   {
     savedStayId: 'stay-unassigned',
-    name: '남포동 게스트하우스',
-    location: '',
-    dateRangeLabel: null,
+    name: '○○ 게스트하우스',
+    location: '부산 중구 남포동',
+    dateRangeLabel: '6.14 ~ 6.15',
     sourceLabel: '앱 저장',
     memoLabel: '예약번호 미입력',
     linkedTripLabel: '연결된 여행 없음',
     baseState: 'unassigned',
     canAssignBase: true,
-    tripId: null,
-    baseAssignmentId: null,
-  },
-  {
-    savedStayId: 'stay-nocoord',
-    name: '좌표 미확정 숙소',
-    location: '',
-    dateRangeLabel: null,
-    sourceLabel: '앱 저장',
-    memoLabel: null,
-    linkedTripLabel: '연결된 여행 없음',
-    baseState: 'unassigned',
-    canAssignBase: false,
     tripId: null,
     baseAssignmentId: null,
   },
@@ -1254,7 +1256,7 @@ const NOTIF_PREVIEW_VALUES: ToggleValueMap = {
   REFLECTION: { pushEnabled: true, inAppEnabled: true },
 };
 
-// l03 스타일 요약 카드(TRIP-606) — 정식(칩+3축 dot 게이지+메타+상세 진입)·미달(안내 한 줄) 두 얼굴.
+// l03 스타일 요약 카드(TRIP-606) — 정식(칩+3축 dot 게이지+상세 진입)·미달(안내 한 줄) 두 얼굴.
 // dot 채움 색·빈 dot 토큰·칩 알약은 jest 사각(글리프 fill 함정)이라 이 키가 육안 대조 자리다.
 // 정식 얼굴은 아래 my-page-default 프리뷰에 얹어 프로필↔세그먼트 사이 배치까지 함께 본다.
 const STYLE_CARD_OFFICIAL_VM: Extract<StyleCardVM, { kind: 'official' }> = {
@@ -1262,7 +1264,7 @@ const STYLE_CARD_OFFICIAL_VM: Extract<StyleCardVM, { kind: 'official' }> = {
   descriptors: ['#바다', '#미식', '#느긋'],
   gauges: [
     { label: '여유로움', value: 4 },
-    { label: '미식 취향', value: 4 },
+    { label: '미식 취향', value: 5 },
     { label: '활동성', value: 3 },
   ],
   sampleTripCount: 6,
@@ -1810,6 +1812,32 @@ function renderPlanbRequestPreview(): ReactElement {
   );
 }
 
+// l05 설정(TRIP-778) — settings-* 5키가 함께 쓰는 배경. 취향은 서버 enum 원문(D5 — Figma 의 바다·해산물·
+// 느긋·맛집은 enum 밖이라 Figma 쪽 수정 대상), 예산만 미설정 칩. 위치 동의·개인화 사용 중·제휴 토글 ON.
+const L05_SETTINGS_BASE = {
+  groups: filterReadySettingsSections(
+    buildSettingsSections({
+      nickname: '여행자123',
+      email: 'trippilot@email.com',
+      preferences: {
+        styles: { value: ['휴양', '자연'], isNeutralDefault: false },
+        companion: {
+          companionTypes: ['친구'],
+          petFlag: false,
+          isNeutralDefault: false,
+        },
+        activities: { value: ['맛집투어', '전시'], isNeutralDefault: false },
+        transportModes: { value: ['대중교통'], isNeutralDefault: false },
+        foodTastes: { value: ['일식'], isNeutralDefault: false },
+        pace: { value: '느긋하게', isNeutralDefault: false },
+      },
+      locationConsent: true,
+      personalizationOn: true,
+    })
+  ),
+  affiliateNoticeOn: true,
+};
+
 // i07 일정 편집(TRIP-753) — Figma `4313:2100` 2일차 5곳. 행 1·2 방문 완료(잠금), 행 3 위반 배지.
 // 사진은 i06 과 같은 Figma 목업 사진 + 행 5 해운대(`assets/execution/CREDITS.md`). EditorView 는
 // `imageUrl` 문자열만 받으므로 `resolveAssetSource(...).uri` 로 풀어 넣는다(jest 는 undefined → 플레이스홀더).
@@ -1898,16 +1926,6 @@ const SETTINGS_PREF_PREVIEW_SELECTION: PreferenceSelection = {
   companionTypes: ['커플'],
   petFlag: true,
   budgetTier: '중간',
-};
-const SETTINGS_PREF_PREVIEW_EMPTY: PreferenceSelection = {
-  styles: null,
-  activities: null,
-  transportModes: null,
-  foodTastes: null,
-  pace: null,
-  companionTypes: null,
-  petFlag: false,
-  budgetTier: null,
 };
 
 // l01 알림함(TRIP-576) — Figma 1598:2389 의 5행(오늘 3·이전 2). 화면은 VM 만 받는 순수 뷰라
@@ -2112,29 +2130,12 @@ export const PREVIEW_STATES: PreviewState[] = [
     // 순수 뷰(PreferencesEditView)에 선택 픽스처를 얹어 태운다(pref1/pref2 정적 패턴과 동형).
     key: 'settings-preferences',
     band: 'l',
-    label: 'l05 · 취향 수정 기본',
+    label: 'l05 · 여행 취향 편집 default',
     login: null,
     render: () => (
       <PreferencesEditView
         selection={SETTINGS_PREF_PREVIEW_SELECTION}
         saveError={false}
-        onToggle={noop}
-        onTogglePet={noop}
-        onSave={noop}
-        onBack={noop}
-      />
-    ),
-  },
-  {
-    // 엣지: 미설정(전 축 null) + 400 저장 실패 인라인 오류(INV-4) 동시 얼굴.
-    key: 'settings-preferences-error',
-    band: 'l',
-    label: 'l05 · 취향 수정 미설정+400',
-    login: null,
-    render: () => (
-      <PreferencesEditView
-        selection={SETTINGS_PREF_PREVIEW_EMPTY}
-        saveError
         onToggle={noop}
         onTogglePet={noop}
         onSave={noop}
@@ -4469,64 +4470,92 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => <MyTripsListScreen mode="empty" onPressCreateTrip={noop} />,
   },
-  // l03 마이페이지 · l03(TRIP-604) — 프로필 카드·세그먼트·예정 카드·지난 여행(회고 chevron)·설정
-  // 행을 한 화면에서 Figma l03 default(1602:2388)와 대조한다. 예정 2건 + 종료 2건(회고 진입 chevron).
+  // l03 마이페이지 default(TRIP-775) — Figma 1602:2388 과 같은 데이터: 카운트 2/0/3 · 프로필 태그 ·
+  // 정식 스타일 카드 · 예정 카드 2장 · 메뉴 3행 · 헤더 톱니 · 탭바(마이). 예정이 있으므로 지난 여행 섹션은
+  // 없다(§F-3 A안). 헤드라인은 계약 공백이라 실앱처럼 비워 둔다(Figma 와 의도된 차이).
   {
     key: 'my-page-default',
     band: 'l',
-    label: 'l03 · 예정+지난 여행',
+    label: 'l03 · 마이페이지 default',
     login: null,
-    render: () => (
-      <MyPageScreen
-        nickname="여행자123"
-        email="trippilot@email.com"
-        counts={{ upcoming: 3, active: 0, ended: 2 }}
-        active="upcoming"
-        onChangeSegment={noop}
-        styleCard={<StyleSummaryCard vm={STYLE_CARD_OFFICIAL_VM} />}
-        cards={MY_PAGE_UPCOMING_VMS.map((vm) => (
-          <TripCard key={vm.tripId} vm={vm} onPressReflection={noop} />
-        ))}
-        activeEmpty={false}
-        onPressCreateTrip={noop}
-        showPast
-        pastCards={MY_PAGE_ENDED_VMS.map((vm) => (
-          <TripCard key={vm.tripId} vm={vm} onPressReflection={noop} />
-        ))}
-        pastEmpty={false}
-      />
-    ),
+    render: () =>
+      withShellTabBar(
+        <MyPageScreen
+          nickname="여행자123"
+          email="trippilot@email.com"
+          counts={{ upcoming: 2, active: 0, ended: 3 }}
+          tags={STYLE_CARD_OFFICIAL_VM.descriptors}
+          active="upcoming"
+          onChangeSegment={noop}
+          styleCard={
+            <StyleSummaryCard
+              vm={STYLE_CARD_OFFICIAL_VM}
+              onPressDetail={noop}
+            />
+          }
+          cards={MY_PAGE_UPCOMING_VMS.map((vm) => (
+            <TripCard key={vm.tripId} vm={vm} onPressReflection={noop} />
+          ))}
+          activeEmpty={false}
+          onPressCreateTrip={noop}
+          showPast={false}
+          pastCards={null}
+          pastEmpty={false}
+          onPressEdit={noop}
+          onPressSettings={noop}
+          onPressStays={noop}
+          onPressStyleAnalysis={noop}
+        />,
+        'my'
+      ),
   },
-  // l03 마이페이지 · 종료 0건 엣지(AC-5) — 예정 빈 상태(새 여행 CTA) + "아직 종료된 여행이 없습니다"
-  // (회고 진입 어포던스 0). Figma empty(1603:2414)의 CTA·지난 여행 영역을 대조하되, 사진 썸네일은
-  // 계약에 필드가 없어 그리지 않는다(드리프트 ① 해소).
+  // l03 마이페이지 empty(TRIP-776) — Figma 1603:2414 와 같은 데이터: 카운트 0/0/3 · 프로필 태그(스타일 카드
+  // 없음 — Figma 내부 모순 그대로) · 예정 빈 문구 + 플러스 CTA · 지난 여행 썸네일 카드 3장 + "캘린더 ›" ·
+  // 메뉴 3행 · 탭바(마이). 종료 0건 엣지("아직 종료된 여행이 없습니다")는 jest(MyPageScreen.l03empty)가 잰다.
   {
     key: 'my-page-empty',
     band: 'l',
-    label: 'l03 · 예정 0·종료 0',
+    label: 'l03 · 마이페이지 empty',
     login: null,
-    render: () => (
-      <MyPageScreen
-        nickname="여행자123"
-        email="trippilot@email.com"
-        counts={{ upcoming: 0, active: 0, ended: 0 }}
-        active="upcoming"
-        onChangeSegment={noop}
-        cards={null}
-        activeEmpty
-        onPressCreateTrip={noop}
-        showPast
-        pastCards={null}
-        pastEmpty
-      />
-    ),
+    render: () =>
+      withShellTabBar(
+        <MyPageScreen
+          nickname="여행자123"
+          email="trippilot@email.com"
+          counts={{ upcoming: 0, active: 0, ended: 3 }}
+          tags={STYLE_CARD_OFFICIAL_VM.descriptors}
+          active="upcoming"
+          onChangeSegment={noop}
+          cards={null}
+          activeEmpty
+          onPressCreateTrip={noop}
+          showPast
+          pastCards={MY_PAGE_PAST_VMS.map((vm) => (
+            <PastTripRow
+              key={vm.tripId}
+              compact
+              testID={`my-trip-reflection-${vm.tripId}`}
+              vm={vm}
+              onPress={noop}
+              trailing={<TripChevronRightGlyph size={20} />}
+            />
+          ))}
+          pastEmpty={false}
+          onPressCalendar={noop}
+          onPressEdit={noop}
+          onPressSettings={noop}
+          onPressStays={noop}
+          onPressStyleAnalysis={noop}
+        />,
+        'my'
+      ),
   },
   // l03 스타일 요약 카드 · 미달 얼굴(TRIP-606) — 누적 방문 <10곳이면 게이지·칩 없이 안내 한 줄만
   // (INV-U5-09). 실화면 딥링크로는 백엔드 없이 이 얼굴을 못 보므로 카드를 단독으로 세워 대조한다.
   {
     key: 'my-style-card-insufficient',
     band: 'l',
-    label: 'l03 · 스타일 카드 미달',
+    label: 'l03 · 마이페이지 style-insufficient',
     login: null,
     render: () => (
       <SafeAreaView edges={['top']} style={{ flex: 1 }}>
@@ -4536,13 +4565,13 @@ export const PREVIEW_STATES: PreviewState[] = [
       </SafeAreaView>
     ),
   },
-  // l04 등록 숙소·예약 기록(TRIP-605) — 등록됨(채움 pill + "출발점 변경 ›")·미등록(점선 "출발점 지정")·
-  // 좌표 미확정(토글 disabled) 세 행을 한 화면에서 Figma l04 default(1604:2440)와 대조한다. "출발점
-  // 변경/지정" 을 누르면 BaseToggleDialog(딤+중앙 카드)가 뜨는 것도 여기서 실제로 조작해 본다.
+  // l04 등록 숙소·예약 기록(TRIP-605·777) — 등록됨(채움 배지 + "출발점 변경" chevron)·미등록(점선
+  // "출발점 지정") 두 행을 Figma l04 default(1604:2440)와 대조한다. "출발점 변경/지정" 을 누르면
+  // BaseToggleDialog(딤+중앙 카드)가 뜨는 것도 여기서 실제로 조작해 본다.
   {
     key: 'my-stays-default',
     band: 'l',
-    label: 'l04 · 등록 숙소 3행',
+    label: 'l04 · 등록 숙소·예약 기록 default',
     login: null,
     render: () => (
       <MyStaysScreen
@@ -4558,7 +4587,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'my-stays-empty',
     band: 'l',
-    label: 'l04 · 등록 숙소 0건',
+    label: 'l04 · 등록 숙소·예약 기록 empty',
     login: null,
     render: () => (
       <MyStaysScreen
@@ -4570,13 +4599,34 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // l04 출발점 다이얼로그(1606:2440, TRIP-777) — default 화면 위에 BaseToggleDialog 를 형제로 겹친다
+  // (화면은 열림을 로컬 state 로 쥐어 prop 으로 못 연다 — settings-delete-dialog 와 같은 합성).
+  // 딤 전면 커버·중앙 정렬은 jest 원리적 사각이라 이 키가 육안 대조 자리다.
+  {
+    key: 'my-stays-dialog',
+    band: 'l',
+    label: 'l04 · 등록 숙소·예약 기록 dialog',
+    login: null,
+    render: () => (
+      <View style={StyleSheet.absoluteFill}>
+        <MyStaysScreen
+          rows={MY_STAYS_PREVIEW_ROWS}
+          isEmpty={false}
+          onConfirmBaseToggle={noop}
+          onPressExplore={noop}
+          onPressBack={noop}
+        />
+        <BaseToggleDialog onCancel={noop} onConfirm={noop} />
+      </View>
+    ),
+  },
   // l02 알림 설정 default(1600:2388) — 6행×인앱 1열(COMMUNITY 숨김, 푸시 열은 TRIP-939 개통 전 숨김)·
   // 상단 정보 배너·하단 SYSTEM 줄. 토글
   // 빨강/회색·thumb 위치·정보 배너 틴트는 jest 사각이라 이 키가 육안 대조 자리다.
   {
     key: 'l02-notification-default',
     band: 'l',
-    label: 'l02 · 알림 설정 기본',
+    label: 'l02 · 알림 설정 default',
     login: null,
     render: () => (
       <NotificationSettingsScreen
@@ -4594,7 +4644,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'l02-notification-denied',
     band: 'l',
-    label: 'l02 · 알림 설정 권한 거부',
+    label: 'l02 · 알림 설정 permission-denied',
     login: null,
     render: () => (
       <NotificationSettingsScreen
@@ -5320,22 +5370,17 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   // l05 설정(TRIP-608) — 실화면 딥링크로는 미인증 리다이렉트/백엔드 부재로 온전히 못 본다. jest 가
-  // 못 보는 것(카드 레이아웃·리딩 아이콘·위험/동의 pill)을 여기서 눈으로. 운영 화면과 같게 ready 행만
-  // 거른 5그룹을 그린다(TRIP-939 — "준비 중" 행은 개통 전까지 숨김 · TRIP-937 앱 정보 포함).
+  // 못 보는 것(카드 레이아웃·리딩 아이콘·값·칩·토글)을 여기서 눈으로. 운영 화면과 같게 ready 행만
+  // 거른다(TRIP-939) — TRIP-778 로 전부 개통돼 7그룹. 배경은 `L05_SETTINGS_BASE` 한 벌을 5키가 공유.
   // 하단 데이터 출처 블록(TRIP-886)은 운영처럼 OSM 줄이 링크인 모양 — 나머지 settings-* 는 콜백 없는 평문.
   {
     key: 'settings-default',
     band: 'l',
-    label: 'l05 · 설정 기본',
+    label: 'l05 · 설정 default',
     login: null,
     render: () => (
       <SettingsScreen
-        groups={filterReadySettingsSections(
-          buildSettingsSections({
-            nickname: '여행자123',
-            email: 'trippilot@email.com',
-          })
-        )}
+        {...L05_SETTINGS_BASE}
         deletionState="active"
         currentNickname="여행자123"
         onPressBack={noop}
@@ -5352,16 +5397,11 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'settings-export-truncated',
     band: 'l',
-    label: 'l05 · 내보내기 잘림',
+    label: 'l05 · 설정 export-truncated',
     login: null,
     render: () => (
       <SettingsScreen
-        groups={filterReadySettingsSections(
-          buildSettingsSections({
-            nickname: '여행자123',
-            email: null,
-          })
-        )}
+        {...L05_SETTINGS_BASE}
         deletionState="active"
         currentNickname="여행자123"
         truncatedLabel="일부 항목이 잘렸어요: photos, memos"
@@ -5378,16 +5418,11 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'settings-export-error',
     band: 'l',
-    label: 'l05 · 내보내기 실패',
+    label: 'l05 · 설정 export-error',
     login: null,
     render: () => (
       <SettingsScreen
-        groups={filterReadySettingsSections(
-          buildSettingsSections({
-            nickname: '여행자123',
-            email: null,
-          })
-        )}
+        {...L05_SETTINGS_BASE}
         deletionState="active"
         currentNickname="여행자123"
         exportError="내보내기 정보를 불러오지 못했어요. 다시 시도해 주세요."
@@ -5403,16 +5438,11 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'settings-pending',
     band: 'l',
-    label: 'l05 · 삭제 유예',
+    label: 'l05 · 설정 deletion-pending',
     login: null,
     render: () => (
       <SettingsScreen
-        groups={filterReadySettingsSections(
-          buildSettingsSections({
-            nickname: '여행자123',
-            email: 'trippilot@email.com',
-          })
-        )}
+        {...L05_SETTINGS_BASE}
         deletionState="pending"
         purgeAt="2026-09-13T00:00:00Z"
         currentNickname="여행자123"
@@ -5430,17 +5460,12 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'settings-delete-dialog',
     band: 'l',
-    label: 'l05 · 삭제 다이얼로그',
+    label: 'l05 · 설정 dialog 1단',
     login: null,
     render: () => (
       <View style={StyleSheet.absoluteFill}>
         <SettingsScreen
-          groups={filterReadySettingsSections(
-            buildSettingsSections({
-              nickname: '여행자123',
-              email: 'trippilot@email.com',
-            })
-          )}
+          {...L05_SETTINGS_BASE}
           deletionState="active"
           currentNickname="여행자123"
           onPressBack={noop}
@@ -5455,11 +5480,40 @@ export const PREVIEW_STATES: PreviewState[] = [
       </View>
     ),
   },
+  // 2단(Figma 4531:3018) — 1단 키와 같은 배경에 게이트 컴포넌트 실물을 2단부터 연다. 문구는 코드
+  // (30일 유예, TRIP-935 Q7)가 정본이라 Figma "되돌릴 수 없어요"와 다른 것이 의도다.
+  {
+    key: 'settings-delete-dialog-final',
+    band: 'l',
+    label: 'l05 · 설정 dialog 2단',
+    login: null,
+    render: () => (
+      <View style={StyleSheet.absoluteFill}>
+        <SettingsScreen
+          {...L05_SETTINGS_BASE}
+          deletionState="active"
+          currentNickname="여행자123"
+          onPressBack={noop}
+          onSubmitNickname={noop}
+          onPressExport={noop}
+          onPressDeleteAccount={noop}
+          onPressCancelDeletion={noop}
+          onPressOsmCopyright={noop}
+          appVersion="0.1.0"
+        />
+        <DeleteAccountDialog
+          onCancel={noop}
+          onConfirmDeletion={noop}
+          initialStep="confirm2"
+        />
+      </View>
+    ),
+  },
   // l06 위치정보 동의 — 동의 ON default. 용도 3항목·계속 배너 육안 대조(글리프 SVG·틴트는 jest 사각).
   {
     key: 'l06-location-consent-default',
     band: 'l',
-    label: 'l06 · 위치 동의 ON',
+    label: 'l06 · 위치정보 동의 default',
     login: null,
     render: () => (
       <LocationConsentScreen
@@ -5477,7 +5531,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'l06-location-consent-denied',
     band: 'l',
-    label: 'l06 · 위치 동의 거부',
+    label: 'l06 · 위치정보 동의 permission-denied',
     login: null,
     render: () => (
       <LocationConsentScreen
@@ -5496,7 +5550,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'l06-location-revoke-dialog',
     band: 'l',
-    label: 'l06 · 철회 다이얼로그',
+    label: 'l06 · 위치정보 동의 dialog',
     login: null,
     render: () => (
       <View style={StyleSheet.absoluteFill}>
@@ -5522,7 +5576,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'l07-affiliate-default',
     band: 'l',
-    label: 'l07 · 제휴 고지',
+    label: 'l07 · 제휴 고지 default',
     login: null,
     render: () => (
       <View style={StyleSheet.absoluteFill}>
@@ -5549,7 +5603,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'l07-affiliate-error',
     band: 'l',
-    label: 'l07 · 제휴 고지 실패',
+    label: 'l07 · 제휴 고지 error',
     login: null,
     render: () => (
       <View style={StyleSheet.absoluteFill}>
@@ -5578,7 +5632,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'l05-personalization-applied',
     band: 'l',
-    label: 'l05 · 개인화 반영중',
+    label: 'l05 · 개인화 applied',
     login: null,
     render: () => (
       <PersonalizationScreen
@@ -5597,7 +5651,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'l05-personalization-consent-missing',
     band: 'l',
-    label: 'l05 · 개인화 미동의',
+    label: 'l05 · 개인화 consent-missing',
     login: null,
     render: () => (
       <PersonalizationScreen
@@ -5613,7 +5667,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'l05-personalization-not-enough',
     band: 'l',
-    label: 'l05 · 개인화 기록부족',
+    label: 'l05 · 개인화 not-enough',
     login: null,
     render: () => (
       <PersonalizationScreen
@@ -5629,7 +5683,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'notification-inbox-default',
     band: 'l',
-    label: 'l01 · 알림함 기본',
+    label: 'l01 · 알림 default',
     login: null,
     render: () => (
       <NotificationInboxScreen
@@ -5645,7 +5699,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'notification-inbox-empty',
     band: 'l',
-    label: 'l01 · 알림함 빈 상태',
+    label: 'l01 · 알림 empty',
     login: null,
     render: () => (
       <NotificationInboxScreen

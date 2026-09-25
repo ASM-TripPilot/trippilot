@@ -12,9 +12,11 @@
 - `__mocks__/react-native-draggable-flatlist.tsx`  →  __dragLog · ScaleDecorator · OpacityDecorator · ShadowDecorator · NestableDraggableFlatList · NestableScrollContainer
 
 ## src/__tests__/
+- `src/__tests__/affiliateNoticeOneTruth.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/authSheetHandleStructure.test.ts`  →  (export 없음)
 - `src/__tests__/budgetEditSheetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/companionEditSheetStructure.test.ts`  →  (export 없음)
+- `src/__tests__/deleteAccountDialogGate.test.ts`  →  (export 없음)
 - `src/__tests__/deletionScopeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/design-tokens.test.ts`  →  (export 없음)
 - `src/__tests__/destinationEditSheetStructure.test.ts`  →  (export 없음)
@@ -31,9 +33,12 @@
 - `src/__tests__/devPreviewLocationConsent.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewMap.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewMapFallback.test.tsx`  →  (export 없음)
+- `src/__tests__/devPreviewMyPage.test.tsx`  →  (export 없음)
+- `src/__tests__/devPreviewMyStays.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewNotificationInbox.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewPref.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewReleaseGate.test.tsx`  →  (export 없음)
+- `src/__tests__/devPreviewSettingsDefault.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewSheetSnap.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewStayRecommend.test.tsx`  →  (export 없음)
 - `src/__tests__/editSheetBackdropStructure.test.ts`  →  (export 없음)
@@ -82,6 +87,7 @@
 - `src/__tests__/notFoundRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/notificationDurationStructure.test.ts`  →  (export 없음)
 - `src/__tests__/notificationKindGuard.test.tsx`  →  (export 없음)
+- `src/__tests__/notificationSettingsParityStructure.test.ts`  →  (export 없음)
 - `src/__tests__/notificationStructure.test.ts`  →  (export 없음)
 - `src/__tests__/onboardingEntryGuard.test.tsx`  →  (export 없음)
 - `src/__tests__/onboardingPrefRoutes.test.tsx`  →  (export 없음)
@@ -605,7 +611,8 @@
 - `src/features/settings/model/exportSummary.ts`  →  ExportSummary · resolveExportSummary
 - `src/features/settings/model/personalizationCopy.ts`  →  personalizationCopy
 - `src/features/settings/model/preferenceDraft.ts`  →  PreferenceSelection · initialSelection · buildPreferenceInput
-- `src/features/settings/model/settingsSections.ts`  →  SettingsInput · SettingsRowVM · SettingsGroupVM · buildSettingsSections · filterReadySettingsSections
+- `src/features/settings/model/preferenceSummary.ts`  →  PreferenceRowKey · PreferenceSummary · summarizePreferences
+- `src/features/settings/model/settingsSections.ts`  →  SettingsInput · SettingsRowChip · SettingsRowVM · SettingsGroupVM · buildSettingsSections · filterReadySettingsSections
 - `src/features/settings/model/stayTripLink.ts`  →  StayTripLink · buildStayTripLink
 - `src/features/settings/model/styleCardModel.ts`  →  StyleGauge · StyleCardVM · buildStyleCardModel
 - `src/features/settings/model/tripBuckets.ts`  →  TripBucket · tripStatusBucket · bucketTrips
@@ -616,6 +623,7 @@
 - `src/features/settings/ui/BaseToggleDialog.tsx`  →  BaseToggleDialog
 - `src/features/settings/ui/DeleteAccountDialog.tsx`  →  DeleteAccountDialog
 - `src/features/settings/ui/ExportRow.tsx`  →  ExportRow
+- `src/features/settings/ui/InfoChip.tsx`  →  InfoChip
 - `src/features/settings/ui/LocationConsentScreen.tsx`  →  LocationConsentScreenProps · LocationConsentScreen
 - `src/features/settings/ui/LogoutConfirmDialog.tsx`  →  LogoutConfirmDialog
 - `src/features/settings/ui/MyPageScreen.tsx`  →  MyPageScreenProps · MyPageScreen
@@ -626,16 +634,17 @@
 - `src/features/settings/ui/PreferencesEditView.tsx`  →  EditableAxis · isMultiAxis · PreferencesEditViewProps · PreferencesEditView
 - `src/features/settings/ui/ProfileCard.tsx`  →  ProfileCardCounts · ProfileCardProps · ProfileCard
 - `src/features/settings/ui/RevokeConfirmDialog.tsx`  →  RevokeConfirmDialog
-- `src/features/settings/ui/SettingsGlyphs.tsx`  →  ChevronRightGlyph · BookmarkGlyph · BarChartGlyph · ShareNodesGlyph · ListGlyph · EyeOffGlyph · GearGlyph · PencilGlyph · HeartGlyph · ChevronLeftGlyph · PersonGlyph · DownloadGlyph · ContrastGlyph · WonGlyph · PeopleGlyph · StarGlyph · ArrowsSwapGlyph · ForkKnifeGlyph · GaugeGlyph · PinGlyph · BellGlyph · ExternalLinkGlyph · BedGlyph · TrashGlyph · DocumentGlyph · LogoutGlyph
+- `src/features/settings/ui/SettingsGlyphs.tsx`  →  MUTED · MUTED_SOFT · ChevronRightGlyph · BookmarkGlyph · BarChartGlyph · ShareNodesGlyph · ListGlyph · EyeOffGlyph · GearGlyph · PencilGlyph · HeartGlyph · ChevronLeftGlyph · PersonGlyph · DownloadGlyph · ContrastGlyph · WonGlyph · PeopleGlyph · StarGlyph · ArrowsSwapGlyph · ForkKnifeGlyph · GaugeGlyph · PinGlyph · BellGlyph · SparkleGlyph · ExternalLinkGlyph · BedGlyph · MenuBedGlyph · TrashGlyph · DocumentGlyph · LogoutGlyph · PlusGlyph
 - `src/features/settings/ui/SettingsGroup.tsx`  →  SettingsGroup
 - `src/features/settings/ui/SettingsRow.tsx`  →  RowBody · PreparingRow · NavRow
 - `src/features/settings/ui/SettingsScreen.tsx`  →  SettingsScreenProps · SettingsScreen
 - `src/features/settings/ui/StyleSummaryCard.tsx`  →  StyleSummaryCardProps · StyleSummaryCard
 - `src/features/settings/ui/TripCard.tsx`  →  TripCardVM · TripCardProps · TripCard
 - `src/features/settings/ui/TripStatusSegment.tsx`  →  TripStatusSegmentProps · TripStatusSegment
+- `src/features/settings/ui/cardShadow.ts`  →  CARD_SHADOW
 
 ## src/features/stay/config/
-- `src/features/stay/config/affiliateNotice.ts`  →  AFFILIATE_NOTICE_DISMISSED_KEY · otaConfirmLabel
+- `src/features/stay/config/affiliateNotice.ts`  →  otaConfirmLabel
 - `src/features/stay/config/amenityIcons.ts`  →  resolveAmenityIcon
 
 ## src/features/stay/model/
@@ -1030,7 +1039,7 @@
 - `src/shared/api/generated/preferences/preferences.ts`  →  getMePreferences · getGetMePreferencesQueryKey · getGetMePreferencesQueryOptions · GetMePreferencesQueryResult · GetMePreferencesQueryError · useGetMePreferences · putMePreferences · getPutMePreferencesMutationOptions · PutMePreferencesMutationResult · PutMePreferencesMutationBody · PutMePreferencesMutationError · usePutMePreferences
 
 ## src/shared/api/generated/profile/
-- `src/shared/api/generated/profile/profile.ts`  →  getMeProfile · getGetMeProfileQueryKey · getGetMeProfileQueryOptions · GetMeProfileQueryResult · GetMeProfileQueryError · useGetMeProfile · patchMeProfileNickname · getPatchMeProfileNicknameMutationOptions · PatchMeProfileNicknameMutationResult · PatchMeProfileNicknameMutationBody · PatchMeProfileNicknameMutationError · usePatchMeProfileNickname · postNicknameSuggestions · getPostNicknameSuggestionsMutationOptions · PostNicknameSuggestionsMutationResult · PostNicknameSuggestionsMutationError · usePostNicknameSuggestions · postNicknameCheck · getPostNicknameCheckMutationOptions · PostNicknameCheckMutationResult · PostNicknameCheckMutationBody · PostNicknameCheckMutationError · usePostNicknameCheck
+- `src/shared/api/generated/profile/profile.ts`  →  getMeProfile · getGetMeProfileQueryKey · getGetMeProfileQueryOptions · GetMeProfileQueryResult · GetMeProfileQueryError · useGetMeProfile · patchMeProfileNickname · getPatchMeProfileNicknameMutationOptions · PatchMeProfileNicknameMutationResult · PatchMeProfileNicknameMutationBody · PatchMeProfileNicknameMutationError · usePatchMeProfileNickname · postNicknameSuggestions · getPostNicknameSuggestionsMutationOptions · PostNicknameSuggestionsMutationResult · PostNicknameSuggestionsMutationError · usePostNicknameSuggestions · postNicknameCheck · getPostNicknameCheckMutationOptions · PostNicknameCheckMutationResult · PostNicknameCheckMutationBody · PostNicknameCheckMutationError · usePostNicknameCheck · getMeSettings · getGetMeSettingsQueryKey · getGetMeSettingsQueryOptions · GetMeSettingsQueryResult · GetMeSettingsQueryError · useGetMeSettings · patchMeSettings · getPatchMeSettingsMutationOptions · PatchMeSettingsMutationResult · PatchMeSettingsMutationBody · PatchMeSettingsMutationError · usePatchMeSettings
 
 ## src/shared/api/generated/reflection/
 - `src/shared/api/generated/reflection/reflection.ts`  →  getMePersonalization · getGetMePersonalizationQueryKey · getGetMePersonalizationQueryOptions · GetMePersonalizationQueryResult · GetMePersonalizationQueryError · useGetMePersonalization · getMeStyle · getGetMeStyleQueryKey · getGetMeStyleQueryOptions · GetMeStyleQueryResult · GetMeStyleQueryError · useGetMeStyle · getTripsTripIdSummary · getGetTripsTripIdSummaryQueryKey · getGetTripsTripIdSummaryQueryOptions · GetTripsTripIdSummaryQueryResult · GetTripsTripIdSummaryQueryError · useGetTripsTripIdSummary · getTripsTripIdReflections · getGetTripsTripIdReflectionsQueryKey · getGetTripsTripIdReflectionsQueryOptions · GetTripsTripIdReflectionsQueryResult · GetTripsTripIdReflectionsQueryError · useGetTripsTripIdReflections · postTripsTripIdReflectionsDayDate · getPostTripsTripIdReflectionsDayDateMutationOptions · PostTripsTripIdReflectionsDayDateMutationResult · PostTripsTripIdReflectionsDayDateMutationError · usePostTripsTripIdReflectionsDayDate · putTripsTripIdReflectionsDayDate · getPutTripsTripIdReflectionsDayDateMutationOptions · PutTripsTripIdReflectionsDayDateMutationResult · PutTripsTripIdReflectionsDayDateMutationBody · PutTripsTripIdReflectionsDayDateMutationError · usePutTripsTripIdReflectionsDayDate
@@ -1040,6 +1049,7 @@
 
 ## src/shared/api/generated/schemas/
 - `src/shared/api/generated/schemas/accountExport.ts`  →  AccountExport
+- `src/shared/api/generated/schemas/accountSettings.ts`  →  AccountSettings
 - `src/shared/api/generated/schemas/accountSummary.ts`  →  AccountSummary
 - `src/shared/api/generated/schemas/accountSummarySocialProvidersItem.ts`  →  AccountSummarySocialProvidersItem
 - `src/shared/api/generated/schemas/accountSummaryStatus.ts`  →  AccountSummaryStatus
@@ -1221,6 +1231,7 @@
 - `src/shared/api/generated/schemas/tripSummarySource.ts`  →  TripSummarySource
 - `src/shared/api/generated/schemas/tripSummaryStats.ts`  →  TripSummaryStats
 - `src/shared/api/generated/schemas/tripSummaryStatsDistanceSource.ts`  →  TripSummaryStatsDistanceSource
+- `src/shared/api/generated/schemas/updateAccountSettingsRequest.ts`  →  UpdateAccountSettingsRequest
 - `src/shared/api/generated/schemas/updateToggleRequest.ts`  →  UpdateToggleRequest
 - `src/shared/api/generated/schemas/validationErrorResponse.ts`  →  ValidationErrorResponse
 - `src/shared/api/generated/schemas/visitCheck.ts`  →  VisitCheck
@@ -1283,7 +1294,6 @@
 - `src/shared/push/register.ts`  →  toServerOsPermission · isDeviceNotRegistered · unregisterDeviceToken · registerPushToken
 
 ## src/shared/storage/
-- `src/shared/storage/flag.ts`  →  readFlag · writeFlag
 - `src/shared/storage/idSet.ts`  →  readIdSet · writeIdSet
 - `src/shared/storage/index.ts`  →  TokenBundle · saveTokens · getTokens · clearTokens · hasStoredToken
 
@@ -1342,4 +1352,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 910개 파일
+합계 920개 파일

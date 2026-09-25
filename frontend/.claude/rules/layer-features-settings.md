@@ -16,7 +16,7 @@ paths:
 | `ui/SettingsScreen.tsx` | 설정 화면(TRIP-604) |
 | `ui/ProfileCard.tsx` / `ui/TripCard.tsx` / `ui/TripStatusSegment.tsx` | l03 프로필·여행 카드 구성 요소 |
 | `ui/SettingsGroup.tsx` / `ui/SettingsRow.tsx`(`RowBody`·`PreparingRow`·**`NavRow`**, TRIP-618 신규 export) / `ui/ExportRow.tsx` / `ui/NicknameEditRow.tsx` | 설정 화면 행 구성 요소 |
-| `ui/RevokeConfirmDialog.tsx` / `ui/DeleteAccountDialog.tsx` | 조건부 렌더 absolute 오버레이 다이얼로그 패턴 최초 선례(TRIP-608·609) — `BaseToggleDialog`(아래)가 이 형태를 그대로 따름. **TRIP-779(2026-09-24)**: 2단 게이트·문안·톤은 무변경, 라이브 Figma `1608:2440`/`4531:3018` 값만 재적용(불릿 `•` ink·간격6·목록 상한 `max-h-[248px]`·버튼 h52/라벨16·카드 그림자 `style`). 짝 테스트 `DeleteAccountDialog.l05parity.test.tsx`의 높이 상한 탐지기(`heightCapsAbove`)는 `[Npx]` 표기만 읽던 구멍을 **fail-closed**로 막았다(모르는 `max-h-*`/`h-*` 토큰 표기는 통과가 아니라 throw) — 이 파일의 `max-h-*`를 다시 만질 때 임의값 `[Npx]` 표기를 벗어나면 이 테스트가 즉시 걸린다는 뜻이다. |
+| `ui/RevokeConfirmDialog.tsx` / `ui/DeleteAccountDialog.tsx` | 조건부 렌더 absolute 오버레이 다이얼로그 패턴 최초 선례(TRIP-608·609) — `BaseToggleDialog`(아래)가 이 형태를 그대로 따름. **TRIP-779(2026-09-24)**: 2단 게이트·문안·톤은 무변경, 라이브 Figma `1608:2440`/`4531:3018` 값만 재적용(불릿 `•` ink·간격6·목록 상한 `max-h-[248px]`·버튼 h52/라벨16·카드 그림자 `style`). 짝 테스트 `DeleteAccountDialog.l05parity.test.tsx`의 높이 상한 탐지기(`heightCapsAbove`)는 `[Npx]` 표기만 읽던 구멍을 **fail-closed**로 막았다(모르는 `max-h-*`/`h-*` 토큰 표기는 통과가 아니라 throw) — 이 파일의 `max-h-*`를 다시 만질 때 임의값 `[Npx]` 표기를 벗어나면 이 테스트가 즉시 걸린다는 뜻이다. **TRIP-772(2026-09-25)**: `DeleteAccountDialog`에 선택 prop `initialStep?: 'confirm1'|'confirm2'`(기본 `'confirm1'`) 추가 — `_dev/preview.tsx`의 `settings-delete-dialog-final` 키가 2단(최종 확인)을 직접 여는 용도. 프로덕션 호출부(`SettingsScreen.tsx:283`)는 이 prop을 전달하지 않아 무변경으로 1단부터 열린다. 이 우회 경로가 프로덕션에 새는지는 `src/__tests__/deleteAccountDialogGate.test.ts`(신규, 아래)가 소스 스캔으로 막는다. |
 | `ui/LocationConsentScreen.tsx` | 위치 동의 철회 게이트 화면(TRIP-609) — 로컬 `useState` 다이얼로그 게이트 패턴의 최초 선례(`MyStaysScreen`의 출발점 전환 게이트가 이 형태를 그대로 따름) |
 | `model/settingsSections.ts` / `model/tripBuckets.ts` / `model/exportSummary.ts` / `model/deletionScope.ts` | 설정 화면 순수 파생 모델(섹션 구성·여행 버킷·내보내기 요약·삭제 고지 목록 정본) |
 
@@ -85,6 +85,48 @@ j05(여행 스타일 분석, `features/reflection`)가 `records/style` 라우트
 | 파일 | 내용 |
 |---|---|
 | `ui/StyleSummaryCard.tsx` | **변경(additive) — `my-style-detail` prop-gated 활성화.** `onPressDetail?: () => void` prop 추가, `disabled={onPressDetail == null}`·`onPress={onPressDetail}`. prop 미주입 시 여전히 `disabled`(기존 `StyleSummaryCard.test.tsx` AC-S6의 `toBeDisabled()` 무회귀 — 이게 backward-compat 증거). 실제 배선은 `pages/my-page/ui/MyPage.tsx`가 `onPressDetail={() => router.push('/records/style')}`를 주입(`layer-pages.md` `my-page` 행 참고). |
+
+## 이번 사이클(TRIP-775) 신규·변경 — l03 마이페이지 default Figma 정합
+
+| 파일 | 내용 |
+|---|---|
+| `ui/ProfileCard.tsx` | **변경.** `tags?: string[]` 슬롯 신설(정식 스타일 분석일 때만 주입 — 계약 공백 아님, 페이지가 판정). [편집] 아이콘(`PencilGlyph`) 제거 + r8 아웃라인, 카운트 3칸 사이 세로 hairline 막대 2개(`my-profile-count-divider`) 신설(기존 `border-t`만 있던 것에 추가). |
+| `ui/StyleSummaryCard.tsx` | **변경.** 게이지 dot을 `justify-between`(우측 정렬)에서 라벨 칸 고정폭(`w-[64px]`) + 좌측 정렬로. 메타줄("여행 N개 · 갱신 …", TRIP-606 self 서식) 제거 — `formatKoreanDate` import도 함께 삭제. `sampleTripCount`·`updatedAt` VM 필드는 `styleCardModel.test` AC-M1이 잠가 **필드 자체는 유지**. `headline?: string` 계약 공백 슬롯 신설(서버에 필드 없음, TRIP-623 후속). |
+| `ui/TripCard.tsx` | **변경.** 머리줄을 `flex-row`([배지][제목 flex-1][회고 chevron])로 — 기존엔 배지 줄과 제목 줄이 분리돼 있었다. 지역 `Chip`(pill·text-body) 삭제 → `InfoChip`으로 대체. |
+| `ui/TripStatusSegment.tsx` | **변경(값만).** 세그먼트 바탕 `bg-hairline`(#EDEDED)·안쪽 여백 4·탭 높이 34·글자 13.5(Figma D8 실측 드리프트, 구조 변경 없음). |
+| `ui/InfoChip.tsx` | **신규.** 회색 r8 칩 1종(`surface-strong`·11/6 패딩·12 muted) — 프로필 태그·스타일 칩·여행 카드 칩 3곳 공용. 누르지 않는 회색 칩 export가 `shared/ui`에 없어 신설(`PrefChip`은 누르는 선택 칩이라 용도가 다름). 소비처 3곳이 모두 settings 안이라 shared 미승격(README 승격 규칙 "feature 2곳 이상" 불충족). |
+| `ui/cardShadow.ts` | **신규.** `CARD_SHADOW`(RN `style` 객체, `0/2/10·6%·elevation2`) — 카드 껍데기 4종(프로필·스타일·여행·메뉴) 공용. `LocationConsentScreen.tsx`의 동명 지역 상수와 **값이 중복**되지만 features 경계 때문에 import 불가라 별도 export로 신설(drive-by 통합 금지, 5-c 후보로 보고만 함). |
+| `ui/SettingsGlyphs.tsx` | **변경.** `GearGlyph`·`BarChartGlyph`를 Figma 실측 path(22 격자·#3F3F3F·stroke2)로 재작도. `MenuBedGlyph` 신설(메뉴 첫 행, 기존 `BedGlyph`는 l04 empty용이라 모양이 다름). `ChevronRightGlyph`에 `color?` prop 추가(기본값 기존 연회색). `MUTED_SOFT` hex export 추가(비-글리프 파일이 raw hex 없이 chevron 색을 넘기기 위함). **`BookmarkGlyph`·`PencilGlyph`는 이 변경으로 프로덕션 소비처가 0이 됐다** — `MyPage.l03parity`·`ProfileCard.l03parity`의 부재 단언(짝 앵커)이 여전히 import하므로 남겨둠. **TRIP-776 추가**: `PlusGlyph` 신설(20×20, 흰 두 선, stroke 2.6, Figma) — `home`·`stay`·`record`·`itinerary`·`widgets/map-sheet-shell`에 동명 글리프가 있으나 features 경계로 import 불가라 복제(리포 관례). |
+| `ui/MyPageScreen.tsx` | **변경.** `showPast?: boolean` prop 추가(판정은 페이지, 화면은 값만 소비). 하트 FAB 제거(Figma 근거 없음, "장식·미배선"). 메뉴 카드 재구성 — `px-lg` 내부 여백 제거하고 행마다 `p-lg` + 행 사이 카드 폭 전체 구분선 막대(옛 코드는 들여진 `border-b`). `overflow-hidden` 의도적 미부착(iOS 그림자 클리핑 회피). 헤더를 `ScrollView` 밖으로 이동(스크롤해도 고정) + 톱니 아이콘 조건부 렌더(`onPressSettings` 있을 때만). 메뉴 행 → 콜백은 `menuHandlers: Partial<Record<MenuRowKey, () => void>>`. **TRIP-776 추가**: 빈 문구 왼쪽 정렬로 변경(`items-center` 제거) — 블록이 세 탭(예정·진행중·종료) 공용이라 진행중·종료 빈 문구도 함께 왼쪽으로 감(03b 참고-3, Figma에 그 두 탭 프레임이 없어 판단성 미해결). CTA 라벨 `'새 여행 만들기'` + 신규 `PlusGlyph`(`my-create-trip-plus`). `onPressCalendar?` prop 추가 — 있을 때만 "캘린더 ›" 링크 렌더(TRIP-939 원칙 승계: 누를 곳 없는 링크 안 만듦). |
+| `ui/MyPageScreen.l03empty.test.tsx` | **신규(TRIP-776)** — 빈 문구·CTA·캘린더 링크 3방향 분기(콜백+섹션/섹션 없음/콜백 없음) 단위. |
+
+## 이번 사이클(TRIP-777) 변경 — l04 등록 숙소 default·empty·dialog Figma 정합
+
+| 파일 | 내용 |
+|---|---|
+| `ui/MyStaysScreen.tsx` | **변경(값·구조 일부).** "출발점" 배지·"출발점 지정"·칩 3종을 `rounded-[8px]`로, 카드를 `rounded-[12px]`로 재작도. "출발점 변경 ›"에서 "›" 문자를 지우고 `ChevronRightGlyph`(muted, `SettingsGlyphs.MUTED` 신규 export)로 대체. empty를 `shared/ui/StateNotice` 우회 — 로컬 마크업으로 제목 생략·CTA 폭 조정(testID `my-stays-empty`·`my-stays-explore` 보존). **경고: 배지·칩·"출발점 지정" 상자를 `h-[..]`(고정 높이, `:60`·`:97`·`:108`)로 바꿔 큰 글씨 배율(iOS 약 1.5~1.8배)에서 글자가 상자를 넘칠 수 있다**(03b 경고-2, `min-h-[..]`로 바꾸면 완화 — 5-c 판단은 이번엔 보류, 다음에 이 파일을 만질 때 처리). **미등록 행("출발점 지정")을 누르는 경로를 지키는 테스트가 없다**(03b 경고-1, TRIP-605부터 있던 구멍 — 이번 사이클은 손대지 않음, 다음에 이 Pressable을 만질 때 `my-stays-base-toggle-s2`류 케이스를 추가할 것). |
+| `ui/BaseToggleDialog.tsx` | **변경(값만).** 카드 `w-[330px]`·제목 `text-[19px]`·본문 `text-body`(muted 아님)·버튼 h44·딤 `bg-scrim/55`로 Figma 1606 재작도. `DIALOG_SHADOW`는 `DeleteAccountDialog`와 값이 같다는 주석이 있었는데 실제로는 `RevokeConfirmDialog`(0.2/14)와 다르다 — 다이얼로그 틀을 `shared/ui`로 승격할 때 이 차이를 먼저 확인할 것(03b 지적-3). |
+| `ui/SettingsGlyphs.tsx` | **변경.** `BedGlyph`를 Figma path·`muted-soft`로 재작도(소비처는 `MyStaysScreen` 1곳뿐이라 회귀 없음). `MUTED` hex export 신규(chevron 색 전달용 — `myStaysStructure` G3 raw hex 가드는 화면 소스의 hex 문자열만 스캔하므로 이름으로 넘기면 안 걸린다, 참고-1). |
+| `src/__tests__/devPreviewMyStays.test.tsx` | **신규.** `my-stays-default`(2행 프리뷰)·`my-stays-dialog`(형제 합성 — `MyStaysScreen` 뒤에 `BaseToggleDialog`를 형제로 얹어 트리 순서로 열림을 확인, `@/shared/api` 네트워크 지뢰 미로드) 두 프리뷰 키 가드. `devPreviewBandNav`/`devPreviewBandSort` 카운트·정렬 가드도 이 사이클에서 +1(164→165, `my-stays-empty` 뒤 삽입). |
+| `ui/MyStaysScreen.l04parity.test.tsx` | **신규.** AC-1~7 — 배지·칩 토큰(`rounded-[8px]`/`[12px]`)·"출발점 변경" 완전일치+chevron 글리프·주소 줄 유무 짝·empty 로컬 마크업·dialog 치수(공통 host 조상으로 탐색, 명시 testID 없음)·`border-hairline` 구분선 막대. |
+
+**새 티켓 후보(범위 밖, 착수 안 함)**: l04 실주소(계약에 `SavedStay.address` 없음, 역지오코딩 우회 수단만 있음 — BR-U6-20 미충족 상태로 미룸) · `SavedStay` codegen 재생성(`linkedTripIds` 누락, N+1 제거 가능) · 좌표 미확정 행 비활성 표시+BR-U1-22 안내(Figma 프레임 선행 필요) · 다이얼로그 틀(딤·카드·그림자·버튼) `shared/ui` 승격.
+
+## 이번 사이클(TRIP-778) 변경 — l05 설정 default Figma 정합 + 제휴 "다시 보지 않기" 서버 전환
+
+| 파일 | 내용 |
+|---|---|
+| `model/preferenceSummary.ts` | **신규.** `summarize`(빈 값 거르고 `·`로 이어붙임, 없으면 unset) · `summarizePreferences`(기존 `initialSelection` 재사용, 동행 끝에 반려동물 붙임). 취향 7행을 `설정 안 함`/실제 값 요약으로 갈라 `SettingsScreen`에 넘긴다. 대체할 기존 함수 없음(재사용 탐색 결과 — `usePreferences`류 소비처 3곳 중 요약 함수는 없었다). |
+| `model/settingsSections.ts` | **변경.** 입력 3필드 추가(취향 요약·위치 동의·개인화). `SettingsRowChip` 타입, `PREFERENCE_ROWS`·`UNSET_CHIP` 상수, `preferenceRows`(값 모르면 값·칩 둘 다 없음), `consentChip`(undefined면 칩 없음), 개인화 행 신설. 취향 7행·개인화·제휴 전 행 `ready:true`로 개통(TRIP-624 분리로 미뤄 뒀던 `ready:false`가 풀림 — 새 티켓 후보 "운영 빌드 새 노출 행", 백엔드 `/me/settings` 배포 확인 필요). |
+| `ui/SettingsRow.tsx` | **변경.** `NavRow`에 `value`·`chip`·`chevron` 색(`MUTED_SOFT`)+testID 슬롯 추가, 내부 `RowChip`(tone 2종, r8) 신설. |
+| `ui/SettingsScreen.tsx` | **변경.** `PREFERENCE_ROW_KEYS` 도입, `renderRow`에 취향·개인화·제휴 분기(제휴는 `Toggle checked===true`·`disabled==null`+실패 안내 Text) 추가. 위험 칩 r8, 바탕 `bg-canvas`. |
+| `ui/SettingsGlyphs.tsx` / `ui/ExportRow.tsx` / `ui/NicknameEditRow.tsx` | **변경.** `SparkleGlyph` 신규(개인화 행 아이콘 — `HomeGlyphs`·`TripGlyphs`에 동명이 있으나 features 경계로 복제). `ExportRow`·`NicknameEditRow`는 chevron 색을 `MUTED_SOFT`로 한 줄씩(캡처 대조에서 발견, l05 화면 자신의 행이라 다른 화면으로 안 번짐). |
+| `ui/SettingsScreen.l05parity.test.tsx` | **신규.** 취향 7행 값/칩 짝·위치 동의 칩·개인화 `사용 중`·chevron 색·칩 r8·바탕 완전일치. |
+| `shared/storage/flag.ts`·`flag.test.ts` | **삭제(`git rm`).** "다시 보지 않기" 저장처가 기기 SecureStore에서 서버 `/me/settings`로 전환(아래 pages 절·`shared/api` 참고). |
+
+**저장처 전환 요지(pages 배선은 `layer-pages.md`의 `stay-detail`·`settings` 행 참고)**: `SettingsPage`(제휴 토글)와 `StayDetailPage`(고지 시트)가 같은 쿼리 키(`getGetMeSettingsQueryKey()`)를 읽고 써 "한 진실"을 이룬다. **실측 결함(03b 경고-1, 수정 완료)**: `enabled:false`로 꺼진 쿼리도 TanStack Query는 캐시에 남은 `data`를 그대로 돌려준다 — 게스트 판정에 `isAuthed &&`를 명시로 걸지 않으면 이전 계정의 `dismissed:true`가 게스트에게 새어 법정 제휴 고지를 우회한다. `enabled:false` ≠ "캐시 무시"라는 이 패턴은 다른 화면에서도 재발할 수 있는 일반 함정이다(문제로그 참고).
+
+**새 티켓 후보(범위 밖, 착수 안 함)**: 설정 토글 연타 시 PATCH 응답 순서 역전으로 캐시가 서버와 갈라질 가능성(참고-3, 확인 필요) · 세션 만료 후 다른 계정 로그인 시 이전 계정 캐시가 첫 GET 전까지 노출(재리뷰 참고-R1) · `useLocationConsent` 리터럴 키가 생성 키와 손으로만 맞물림(참고-2) · 전체 `pnpm codegen` 동기화(약 208파일, notification 스키마 드리프트 포함) · Figma 취향 값 문구(`바다·휴양` 등)가 서버 enum 밖(D5) · 운영 빌드에서 새로 열리는 행(취향·개인화·제휴) 백엔드 배포 확인.
 
 ## 관련
 

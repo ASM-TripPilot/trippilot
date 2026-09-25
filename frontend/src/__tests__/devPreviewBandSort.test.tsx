@@ -187,13 +187,16 @@ const EXPECTED_L = [
   'dev-preview-state-my-style-card-insufficient', // l03
   'dev-preview-state-my-stays-default', // l04
   'dev-preview-state-my-stays-empty', // l04
+  'dev-preview-state-my-stays-dialog', // l04 (TRIP-777)
   'dev-preview-state-settings-preferences', // l05
-  'dev-preview-state-settings-preferences-error', // l05
+  // TRIP-772: settings-preferences-error 삭제(대응 Figma 프레임 없음 — G5, saveError 분기 코드는 유지).
   'dev-preview-state-settings-default', // l05
   'dev-preview-state-settings-export-truncated', // l05
   'dev-preview-state-settings-export-error', // l05
   'dev-preview-state-settings-pending', // l05
   'dev-preview-state-settings-delete-dialog', // l05
+  // TRIP-772: 2단(Figma 4531:3018) — 같은 l05 라 배열 삽입 순서(1단 키 바로 뒤)로 안정정렬.
+  'dev-preview-state-settings-delete-dialog-final', // l05
   'dev-preview-state-l05-personalization-applied', // l05
   'dev-preview-state-l05-personalization-consent-missing', // l05
   'dev-preview-state-l05-personalization-not-enough', // l05

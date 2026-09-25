@@ -255,3 +255,23 @@ describe('T7 · 구조 토큰 (TRIP-781 AC-6 — 픽셀 아님, 토큰 문자열
     expect(classesOf('stay-ota-retry')).toContain('flex-1');
   });
 });
+
+describe('T8 · "다시 보지 않기" 표시 여부 prop (TRIP-778 D9 — 게스트는 저장할 곳이 없다)', () => {
+  it('showDontShowAgain=false 면 체크박스가 없고, 고지 본문·안내 박스·[이동]은 그대로다', () => {
+    render(<OtaChoiceSheet {...sheetProps({ showDontShowAgain: false })} />);
+
+    // 긍정 앵커 — default 얼굴이 실제로 그려졌다(법정 고지는 게스트에게도 그대로).
+    expect(screen.getByText(BODY)).toBeOnTheScreen();
+    expect(screen.getByTestId('stay-ota-notice-box')).toBeOnTheScreen();
+    expect(screen.getByTestId('stay-ota-confirm')).toBeOnTheScreen();
+    // 단언: 체크박스와 그 문구가 없다.
+    expect(screen.queryByTestId('stay-ota-dont-show')).toBeNull();
+    expect(screen.queryByText(DONT_SHOW)).toBeNull();
+  });
+
+  it('prop 을 생략하면(기본값) 체크박스가 있다 — 로그인 사용자·기존 소비처 무회귀', () => {
+    render(<OtaChoiceSheet {...sheetProps()} />);
+
+    expect(screen.getByTestId('stay-ota-dont-show')).toBeOnTheScreen();
+  });
+});

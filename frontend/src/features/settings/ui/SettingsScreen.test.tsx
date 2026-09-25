@@ -16,8 +16,8 @@ import { SettingsScreen } from './SettingsScreen';
  *    어포던스가 실재한다.
  *  - AC-2·AC-3(TRIP-618, 렌더): 위치정보·알림 행이 **네비 행으로 승격**된다 — 비활성 "준비 중"이
  *    아니라 활성 행(`settings-nav-*` testID)으로 그려진다.
- *  - AC-4(INV-4): 아직 진입이 안 열린 준비중 행(취향 7·제휴)은 렌더는 하되 비활성이고 "준비 중"을
- *    명시한다 — 침묵하지 않는다(안 그리거나 죽은 버튼 금지).
+ *  - TRIP-778 AC-4(재작성): 취향 7행은 활성 네비 행, 제휴 행은 토글이다 — 화면 어디에도 "준비 중"이
+ *    없다(구 "취향·제휴 준비 중 유지"는 01b 사용자 결정으로 계약이 뒤집혔다).
  *
  * ★ 왜 렌더를 보나(02a ★1): `renderRow`는 `switch(row.key)`로만 분기하고 `row.ready`를 안 읽는다.
  *   그래서 심판은 `ready` 플래그(그건 settingsSections.test.ts 몫)가 아니라 **네비 행이 실제로
@@ -109,26 +109,44 @@ describe('TRIP-608/618 · SettingsScreen (AC-1 · AC-2 · AC-3 · AC-4)', () => 
     expect(screen.getByTestId('settings-delete-account')).toBeOnTheScreen();
   });
 
-  it('AC-4: 준비중 그룹(여행 취향·제휴 안내)은 비활성 + "준비 중" 유지(범위 밖, INV-4)', () => {
+  it('TRIP-778 AC-4(재작성): 취향 7행은 활성 네비 행, 제휴 행은 토글 — "준비 중"이 화면에 없다', () => {
     renderScreen();
 
     const groups = screen.getAllByTestId('settings-group');
     const byLabel = (label: string) =>
       groups.find((g) => within(g).queryByText(label) !== null)!;
 
-    // 취향(7행)·제휴(1행): 취향은 TRIP-624 분리, 제휴는 목적지 라우트 없음 — 근거는 다르나
-    // 이번 사이클에서는 둘 다 준비 중 유지다(진입 미개통).
-    for (const label of ['여행 취향', '제휴 안내']) {
-      const group = byLabel(label);
-      const rows = within(group).getAllByTestId('settings-row');
-      expect(rows.length).toBeGreaterThan(0);
-      // 단언: 목적지가 없으니 눌러도 갈 곳이 없다 — 접근성상 전부 비활성.
-      for (const row of rows) expect(row).toBeDisabled();
-      // 단언(부분포함): 행마다 "준비 중"을 명시한다(INV-4 — 조용히 감추지 않음).
-      expect(within(group).getAllByText(/준비 중/)).toHaveLength(rows.length);
+    // 단언: 여행 취향 그룹 안에 7행이 네비 행(settings-nav-*)으로 그려지고 전부 활성이다.
+    // 모델만 ready:true 로 바꾸고 renderRow 에 case 를 안 더하면 PreparingRow 로 떨어져 여기서 red(02a ★15).
+    const preferences = byLabel('여행 취향');
+    for (const key of [
+      'style',
+      'budget',
+      'companions',
+      'activities',
+      'transport',
+      'food',
+      'pace',
+    ]) {
+      expect(
+        within(preferences).getByTestId(`settings-nav-${key}`)
+      ).not.toBeDisabled();
     }
+    // 단언: 준비중 행(PreparingRow 의 공통 testID)이 취향 그룹에 없다.
+    expect(within(preferences).queryAllByTestId('settings-row')).toHaveLength(
+      0
+    );
 
-    // 대조 짝: 상호작용 행(계정 삭제)은 비활성이 아니다 — "전부 disabled" 오탐 차단.
+    // 단언: 제휴 안내 그룹은 토글 행이다(스위치 역할).
+    const affiliate = byLabel('제휴 안내');
+    expect(
+      within(affiliate).getByTestId('settings-affiliate-toggle')
+    ).toBeOnTheScreen();
+
+    // 단언(부분포함): 화면 전체 어디에도 "준비 중"이 없다.
+    expect(screen.queryAllByText(/준비 중/)).toHaveLength(0);
+
+    // 대조 짝: 상호작용 행(계정 삭제)은 여전히 활성 — 화면이 통째로 빈 것이 아니다.
     expect(screen.getByTestId('settings-delete-account')).not.toBeDisabled();
   });
 
