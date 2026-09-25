@@ -121,14 +121,26 @@ function Divider(): ReactElement {
   return <View className="h-[1px] w-full bg-hairline" />;
 }
 
-function AmenityChip({ value }: { value: string }): ReactElement {
+/** Figma e03 편의시설 행은 4칸 균등이다 — 이보다 많으면 줄바꿈 격자로 넘긴다(TRIP-918). */
+const AMENITY_COLUMNS = 4;
+
+function AmenityChip({
+  value,
+  wrap,
+}: {
+  value: string;
+  wrap: boolean;
+}): ReactElement {
   // 값별 아이콘(주차·조식·와이파이·오션뷰), 모르는 값은 AmenityGlyph 폴백(INV-1). 아이콘 leaf 에
   // testID 를 얹어 화면이 실제로 그 칩의 아이콘을 그리는지 잠근다(어느 아이콘·색은 config/6-b).
+  // wrap 폭 83px = Figma 4칸 폭 83.5 에서 0.5 내림 — 딱 맞추면 픽셀 반올림으로 4번째 칩이 줄을 넘을 여지가 있다.
   const Icon = resolveAmenityIcon(value);
   return (
     <View
       testID={`stay-detail-amenity-${value}`}
-      className="flex-1 items-center gap-sm"
+      className={
+        wrap ? 'w-[83px] items-center gap-sm' : 'flex-1 items-center gap-sm'
+      }
     >
       <View className="h-12 w-12 items-center justify-center rounded-card border border-hairline bg-surface-soft">
         <Icon testID={`stay-detail-amenity-icon-${value}`} size={24} />
@@ -196,6 +208,7 @@ export function StayDetailScreen({
   }
 
   const { detail } = state;
+  const amenityWrap = detail.amenities.length > AMENITY_COLUMNS;
 
   return (
     <View testID="stay-detail-root" className="flex-1 bg-canvas">
@@ -281,9 +294,14 @@ export function StayDetailScreen({
               이 숙소 편의시설
             </Text>
             {detail.amenities.length > 0 ? (
-              <View className="flex-row gap-sm">
+              <View
+                testID="stay-detail-amenities"
+                className={
+                  amenityWrap ? 'flex-row flex-wrap gap-sm' : 'flex-row gap-sm'
+                }
+              >
                 {detail.amenities.map((value) => (
-                  <AmenityChip key={value} value={value} />
+                  <AmenityChip key={value} value={value} wrap={amenityWrap} />
                 ))}
               </View>
             ) : (
