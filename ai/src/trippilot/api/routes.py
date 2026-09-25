@@ -393,6 +393,36 @@ def reflection_share_card(
     return _guarded(lambda: handler(request))
 
 
+# ───────────── Plan-B 경계 별칭 (/ai/v1/planb — TRIP-960 1단계) ─────────────
+#
+# **같은 핸들러 함수를 두 경로에 단다.** 사본을 만들지 않는 것이 요점이다 — 한쪽만
+# 고쳐져 갈라지는 것이 이 별칭이 막으려는 바로 그 사고다.
+#
+# 왜 경로를 가르나: AI 경계 7종이 전부 `/ai/v1/itinerary/` 한 이름 아래 있어서
+# **여행 전 생성**과 **여행 중 변수 대응**이 경로로 구별되지 않았고, 그 혼동이 실제
+# 배선 오류로 이어졌다(PlanBAgent 가 변수 대응 경로에 없고 백지 생성 에이전트가
+# 거기 있었다 — #744 가 고쳤다). 경로 이름이 "어느 단계·어느 에이전트"인지 말해주면
+# 같은 뒤바뀜이 리뷰에서 보인다.
+#
+# **구 경로를 지금 지우지 않는다.** 백엔드 `HttpScheduleAgentAdapter.CALLED_PATHS` 가
+# 아직 구 경로를 들고 있어, 여기서 먼저 지우면 전부 404 다. 순서는 TRIP-960 에 있다:
+# ① AI 가 새 경로 + 별칭을 연다(이 커밋) → ② BE 가 상수를 바꾼다 → ③ 실왕복 확인 →
+# ④ AI 가 구 경로를 지운다. ④ 의 조건은 `CALLED_PATHS` 에 구 경로가 0건인 것이다.
+planb_router = APIRouter(prefix="/ai/v1/planb", tags=["planb"])
+
+# `add_api_route` 로 **함수 객체를 그대로** 단다(데코레이터 중복 선언이 아니다).
+# 이름을 달리 주는 이유: FastAPI 가 operationId 를 라우트 이름에서 만들어서, 같은
+# 이름이면 openapi 에 중복 operationId 가 생기고 클라이언트 생성기가 한쪽을 덮는다.
+planb_router.add_api_route(
+    "/replan", replan, methods=["POST"],
+    response_model=ReplanResponse, name="planb_replan",
+)
+planb_router.add_api_route(
+    "/alternatives", alternatives, methods=["POST"],
+    response_model=AlternativesResponse, name="planb_alternatives",
+)
+
+
 # ───────────── 리마인드 알림 문구 경계 (TRIP-836 — /ai/v1/notification) ─────────────
 notification_router = APIRouter(prefix="/ai/v1/notification", tags=["notification"])
 

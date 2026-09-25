@@ -2584,6 +2584,90 @@
         ]
       }
     },
+    "/ai/v1/planb/alternatives": {
+      "post": {
+        "description": "Plan-B 대안 제안 (TRIP-428) — KB 검색 + closed-set 교차 + LLM 선택(폴백: 규칙 랭킹).\n\n응답에 시각·순서·소요시간 없음(INV-2·3) — 선택된 대안의 배치 확정은 repair 몫.\n구형 조립(alternatives 미구현 오케스트레이터)은 503으로 명시 실패한다(INV-4).",
+        "operationId": "planb_alternatives_ai_v1_planb_alternatives_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlternativesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlternativesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Planb Alternatives",
+        "tags": [
+          "planb"
+        ]
+      }
+    },
+    "/ai/v1/planb/replan": {
+      "post": {
+        "description": "하루 재계획 (i04 → i06) — `generate` 재사용을 그만둔 자리.\n\n정본: `backend/docs/design/ai-backend-replan-연동-설계.md`. `generate` 와 다른 것은\n셋이다 — RAG(KB-3)를 탄다 · 재계획 의도(사유·지시·자유입력)를 받는다 · 원 일정을\n컨텍스트이자 후보로 받는다. 산출은 `ItineraryPayload` 라 백엔드 소비 코드가 그대로 돈다.\n\n**조립이 아직 이 경계를 구현하지 않으면 503 으로 명시 실패한다**(INV-4 — 침묵 금지).\n하루 전체를 다시 짜려면 선호 점수 단계가 필요한데 그것은 ScheduleAgent 소유이고,\n오케스트레이터가 `REPLAN` 정보 요구표로 그 경로를 여는 작업이 따로 진행 중이다.\n빈 일정을 `empty_reason` 으로 위장해 200 을 내보내지 않는다 — \"후보가 없다\"와\n\"아직 배선이 없다\"는 다른 사실이고, 섞으면 백엔드가 폴백 여부를 잘못 판정한다.",
+        "operationId": "planb_replan_ai_v1_planb_replan_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplanResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Planb Replan",
+        "tags": [
+          "planb"
+        ]
+      }
+    },
     "/ai/v1/reflection/generate": {
       "post": {
         "description": "회고 연출 템플릿 생성 (TRIP-429 — U6 FD Phase 1, 계약 §5).\n\nN회 생성(≤3) → 결정론 랭킹 → 하드 위반 결정론 교체. 전 시도 파싱 실패면\n고정 폴백 템플릿 200 (is_fallback=true — INV-4, 침묵 금지). 응답에\n시각·순서·duration 필드 자체가 없다(INV-3). 구형 조립은 503 명시 실패.",

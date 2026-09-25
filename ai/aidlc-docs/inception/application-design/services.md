@@ -15,10 +15,10 @@
 | 일정 생성 (포워드) | `POST /ai/v1/itinerary/generate` | **확정** — 구 표기 `POST /ai/generate` 폐기 |
 | 일정 검증 (포워드) | `POST /ai/v1/itinerary/validate` | **확정** |
 | 일정 수리 (포워드) | `POST /ai/v1/itinerary/repair` | **확정** |
-| Plan-B 대안 제안 (포워드) | `POST /ai/v1/itinerary/alternatives` | **확정** — TRIP-428 |
+| Plan-B 대안 제안 (포워드) | `POST /ai/v1/planb/alternatives`<br/>(구 `/ai/v1/itinerary/alternatives`) | **확정** — TRIP-428.<br/>**경로 이동 중(TRIP-960)** — `/ai/v1/planb/…` 별칭이 열려 있고 두 경로가 같은 핸들러다. 백엔드가 상수를 옮기면 구 경로를 지운다. |
 | 슬롯별 설명 조회 (포워드) | `POST /ai/v1/itinerary/explanations` | **확정** — TRIP-479 |
 | 일정 편집 (포워드) | `POST /ai/v1/itinerary/edit` | **확정** — TRIP-431 |
-| 하루 재계획 (포워드) | `POST /ai/v1/itinerary/replan` | **계약 확정** — 재계획 연동 설계 A-4. 조립 미배선 시 503 |
+| 하루 재계획 (포워드) | `POST /ai/v1/planb/replan`<br/>(구 `/ai/v1/itinerary/replan`) | **배선됨**(#744 — PlanBAgent RAG → ScheduleAgent 점수 가산 → 어셈블리). 재계획 연동 설계 A-4.<br/>**경로 이동 중(TRIP-960)** — `/ai/v1/planb/…` 별칭이 열려 있고 두 경로가 같은 핸들러다. 백엔드가 상수를 옮기면 구 경로를 지운다. |
 | POI 정본 read — 반경 (리버스) | `GET /internal/pois?centerLat&centerLng&radiusKm` | **확정** — 백엔드 구현 기준 |
 | POI 정본 read — 배치 (리버스) | `POST /internal/pois/batch-get` (요청 필드 `poi_ids`) | **확정** — 계약 초안의 `:batchGet`·`ids` 표기 정정 |
 

@@ -38,10 +38,10 @@
 | 포워드 | 일정 생성 (ScheduleAgent) | `POST /ai/v1/itinerary/generate` | **확정** — 구 표기 `POST /ai/generate`·`/ai/schedule` 폐기 |
 | 포워드 | 일정 검증 | `POST /ai/v1/itinerary/validate` | **확정** |
 | 포워드 | 일정 수리 | `POST /ai/v1/itinerary/repair` | **확정** |
-| 포워드 | Plan-B 대안 제안 | `POST /ai/v1/itinerary/alternatives` | **확정** — TRIP-428 |
+| 포워드 | Plan-B 대안 제안 | `POST /ai/v1/planb/alternatives`<br/>(구 `/ai/v1/itinerary/alternatives`) | **확정** — TRIP-428.<br/>**경로 이동 중(TRIP-960)** — `/ai/v1/planb/…` 별칭이 열려 있고 두 경로가 같은 핸들러다. 백엔드가 상수를 옮기면 구 경로를 지운다. |
 | 포워드 | 슬롯별 설명 조회 | `POST /ai/v1/itinerary/explanations` | **확정** — TRIP-479 |
 | 포워드 | 일정 편집 (EditAgent) | `POST /ai/v1/itinerary/edit` | **확정** — TRIP-431 |
-| 포워드 | 하루 재계획 (PlanBAgent) | `POST /ai/v1/itinerary/replan` | **계약 확정** — 재계획 연동 설계 A-4. `generate` 재사용을 그만둔 자리(RAG·재계획 의도·원 일정 후보 합류). 조립 미배선 시 503 |
+| 포워드 | 하루 재계획 (PlanBAgent → ScheduleAgent) | `POST /ai/v1/planb/replan`<br/>(구 `/ai/v1/itinerary/replan`) | **배선됨**(#744) — PlanBAgent 가 RAG 로 순서를 내고 ScheduleAgent 점수에 가산으로 실려 어셈블리가 시각을 확정한다. `generate` 재사용을 그만둔 세 이유(RAG·재계획 의도·원 일정 후보 합류)를 셋 다 되찾았다.<br/>**경로 이동 중(TRIP-960)** — `/ai/v1/planb/…` 별칭이 열려 있고 두 경로가 같은 핸들러다. 백엔드가 상수를 옮기면 구 경로를 지운다. |
 | 리버스 | POI 정본 read — 반경 (`find_by_radius`) | `GET /internal/pois?centerLat&centerLng&radiusKm` | **확정** — 백엔드 구현 기준 |
 | 리버스 | POI 정본 read — 배치 (`find_by_ids`) | `POST /internal/pois/batch-get` · 요청 필드 `poi_ids` | **확정** — 계약 초안의 `:batchGet`·`ids` 표기 정정 |
 
