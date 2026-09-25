@@ -39,14 +39,13 @@ import {
   SegmentedControl,
   type SegmentedOption,
 } from '@/shared/ui/SegmentedControl';
-
 import {
   daysInMonth,
   firstWeekdayOfMonth,
-  formatStayDateRange,
   isDateInRange,
-  nightsBetween,
-} from '../model/stayDates';
+} from '@/shared/date/monthGrid';
+
+import { formatStayDateRange, nightsBetween } from '../model/stayDates';
 import {
   canSubmitStayRegister,
   resolveName,

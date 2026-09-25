@@ -26,10 +26,10 @@ import {
 } from '@/shared/api/generated/stays/stays';
 import type { MapCenter } from '@/shared/map';
 import { seoulDate } from '@/shared/date/seoulDate';
+import { shiftMonth } from '@/shared/date/monthGrid';
 
 import {
   applyDatePick,
-  shiftMonth,
   type StayDateRange,
 } from '@/features/stay/model/stayDates';
 import {

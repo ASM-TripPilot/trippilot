@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 
-import { daysInMonth, shiftMonth } from './stayDates';
+import { daysInMonth, shiftMonth } from '@/shared/date/monthGrid';
 
 /**
  * W-1 수복분 심판 (5-b 지적 → 게이트② 제시 시 추가).

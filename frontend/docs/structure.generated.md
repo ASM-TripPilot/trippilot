@@ -79,6 +79,7 @@
 - `src/__tests__/magazineRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/mapBridgeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/mapSheetShellStructure.test.ts`  →  (export 없음)
+- `src/__tests__/monthGridSharedPromotion.test.ts`  →  (export 없음)
 - `src/__tests__/myStaysStructure.test.ts`  →  (export 없음)
 - `src/__tests__/nicknameSharedPromotion.test.ts`  →  (export 없음)
 - `src/__tests__/noDeadHandlers.test.ts`  →  (export 없음)
@@ -654,7 +655,7 @@
 - `src/features/stay/model/relaxCulpritFilter.ts`  →  relaxCulpritFilter
 - `src/features/stay/model/savedStayIndex.ts`  →  findSavedStayId · optimisticSavedStayId
 - `src/features/stay/model/savedStays.ts`  →  SavedStaysFailureReason · SavedStaysOutcome · useSavedStays
-- `src/features/stay/model/stayDates.ts`  →  StayDateRange · daysInMonth · shiftMonth · firstWeekdayOfMonth · nightsBetween · isDateInRange · isStayRangeValid · applyDatePick · commitDateRange · formatStayDateRange
+- `src/features/stay/model/stayDates.ts`  →  StayDateRange · nightsBetween · isStayRangeValid · applyDatePick · commitDateRange · formatStayDateRange
 - `src/features/stay/model/stayFilterOptions.ts`  →  StayFilterOption · StayFilterOptions · buildStayFilterOptions · toggleFilterValue · countActiveFilters
 - `src/features/stay/model/stayKey.ts`  →  stayKey
 - `src/features/stay/model/stayOutbound.ts`  →  buildStaySearchUrl · openStayOutbound
@@ -684,7 +685,7 @@
 - `src/features/trip/model/createTripRequest.ts`  →  CreateTripInput · buildCreateTripRequest
 - `src/features/trip/model/mustVisitSeed.ts`  →  MustVisitSeedItem · MUST_VISIT_THUMBNAIL_LIMIT · seedMustVisits · mergeMustVisitSeeds · MustVisitSectionView · resolveMustVisitSection · mustVisitFailureNotice
 - `src/features/trip/model/stayDateImport.ts`  →  StayImportView · StayImportInput · formatStayDateRange · resolveStayImport
-- `src/features/trip/model/tripDatePicker.ts`  →  daysInMonth · firstWeekdayOfMonth · shiftMonth · isDateInRange · dateCell · TripDateRange · applyRangePick
+- `src/features/trip/model/tripDatePicker.ts`  →  dateCell · TripDateRange · applyRangePick
 - `src/features/trip/model/tripDraft.ts`  →  TripViolationCode · TripDraft · tripLength · nightsSum · validateTripDraft · toCompanionType
 - `src/features/trip/model/tripSummary.ts`  →  wizardProgress · formatWizardStep · SummaryLine · PreferenceSummary · summaryDestinations · summaryPeriod · summaryCompanion · summaryPreferences · summaryBudget
 - `src/features/trip/model/tripWizardStep1.ts`  →  PeriodPresetCode · CompanionCode · PERIOD_PRESETS · COMPANION_OPTIONS · fromEpochDay · presetRange · deriveEndDate
@@ -1353,4 +1354,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 921개 파일
+합계 922개 파일

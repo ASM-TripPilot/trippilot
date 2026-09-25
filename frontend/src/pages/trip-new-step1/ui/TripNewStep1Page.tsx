@@ -12,6 +12,7 @@ import type {
 import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
 import { getAccessToken } from '@/shared/api/tokenManager';
 import { seoulDate } from '@/shared/date/seoulDate';
+import { shiftMonth } from '@/shared/date/monthGrid';
 import { toggleMulti } from '@/shared/pref/preferenceSelection';
 
 import {
@@ -21,7 +22,6 @@ import {
 import { buildCreateTripRequest } from '@/features/trip/model/createTripRequest';
 import {
   applyRangePick,
-  shiftMonth,
   type TripDateRange,
 } from '@/features/trip/model/tripDatePicker';
 import {
