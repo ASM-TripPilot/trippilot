@@ -89,6 +89,28 @@ CI(`ai-ci`)가 "실행 앱 스키마 == 커밋된 `docs/openapi.json`"을 강제
 **와이어 정본은 `docs/openapi.json`** — 손으로 고치지 말고 `scripts/export_openapi.py`로
 재생성한다.
 
+## 개발 워크플로우 (spec-kit + 서브에이전트)
+
+이 패키지에 [spec-kit](https://github.com/github/spec-kit) 이 설치돼 있다(`.specify/`,
+`.claude/skills/speckit-*`). 기능 작업은 `/speckit-specify` → (`/speckit-clarify`) →
+`/speckit-plan` → `/speckit-tasks` → `/speckit-implement` 순서로 `specs/NNN-<이름>/` 을 만든다.
+헌법 `.specify/memory/constitution.md` 는 리포 정본의 **요약**이다(4대 불변식 · 정본 위계 ·
+TDD+PBT · ponytail 최소 코드 · 아키텍처 경계) — 어긋나면 정본이 이기고 헌법을 고친다.
+팀 8단계 워크플로우와의 대응, 규모별 보정(버그픽스·chore 는 spec 생략)은 헌법에 있다.
+spec-kit 은 브랜치를 만들지 않는다 — `docs/conventions/` 규약대로 워크트리에서 만든다.
+
+**서브에이전트**(`.claude/agents/`)가 도구를 들고 다닌다:
+- 코드 쓰는 쪽(`worker-builder`, `pbt-writer`)은 frontmatter `skills:` 로 `ponytail:ponytail` +
+  `superpowers:test-driven-development` 를 프리로드하고, spec 디렉토리가 주어지면 `speckit-implement` 로
+  진행하며, 끝에 `superpowers:verification-before-completion` 을 호출한다.
+- `fd-designer` 는 FD 를 쓴 뒤 `speckit-plan` 을 호출한다(plan.md 는 FD 를 가리키기만 한다).
+- `invariant-reviewer` / `canon-auditor` 는 spec 디렉토리가 있으면 `speckit-analyze` 를 호출한다.
+  리뷰어의 `ponytail:ponytail-review` 는 과잉 설계 관점을 요청받았을 때만.
+- 위임할 때 프롬프트에 spec 디렉토리 경로를 넘긴다(서브에이전트는 컨텍스트를 상속하지 않는다).
+
+`ponytail`·`superpowers` 는 사용자 범위 Claude Code 플러그인이다. 없는 머신에서는 `skills:` 프리로드만
+빠지고, 헌법에 요약된 규칙은 그대로 적용된다.
+
 ## AI-DLC 규칙
 
 `.kiro/aws-aidlc-rule-details/`에 상세 규칙.
