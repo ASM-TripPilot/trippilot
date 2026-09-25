@@ -34,6 +34,10 @@ import {
   type AccountSettings,
   PersonalizationInfoReason,
 } from '@/shared/api/generated/schemas';
+import {
+  registerPushIfGranted,
+  unregisterStoredPushToken,
+} from '@/shared/push';
 import { validateNicknameFormat } from '@/shared/validation/nicknameFormat';
 
 /**
@@ -145,6 +149,8 @@ export function SettingsPage(): ReactElement {
         setDeletionOverride('pending');
         setPurgeAt(data?.purgeAt ?? null);
         setDeleteRequestError(false);
+        // 삭제를 요청한 계정으로 푸시가 가지 않게 이 기기 토큰을 해제한다(TRIP-835 AC-6).
+        void unregisterStoredPushToken();
       },
       // 5xx·네트워크 오류 모두 — 상태는 active 그대로, 인라인 오류로 알린다(TRIP-935 R5, INV-4).
       onError: () => {
@@ -159,6 +165,8 @@ export function SettingsPage(): ReactElement {
         setDeletionOverride('active');
         setPurgeAt(null);
         setCancelDeletionError(false);
+        // 철회하면 다시 받게 조용히 재등록한다 — 묻지 않는다(TRIP-835 Q4).
+        void registerPushIfGranted();
       },
       // 404 는 "유예 없음"이지 성공이 아니다. 그 밖의 실패도 조용히 넘기지 않고 안내한다(INV-4).
       onError: () => {
@@ -206,7 +214,10 @@ export function SettingsPage(): ReactElement {
 
   // 로그아웃(TRIP-938): 토큰 삭제 → 이전 계정 캐시 비우기 → 게이트('/')에 인계. replace 라 뒤로가기로
   // 설정에 못 돌아온다. 로그인 경로로 직접 가지 않는 이유 — (auth) 는 게이트가 재조회를 마쳐야 열린다.
+  // 푸시 토큰 해제를 먼저 기다린다(TRIP-835 AC-5) — 인증이 살아 있을 때 DELETE 가 닿아야 한다.
+  // 해제는 실패를 삼키고 3초에서 끊으므로 로그아웃을 막지 않는다.
   const runLogout = async (): Promise<void> => {
+    await unregisterStoredPushToken();
     await logout();
     queryClient.clear();
     usePreferenceStore.getState().reset();
