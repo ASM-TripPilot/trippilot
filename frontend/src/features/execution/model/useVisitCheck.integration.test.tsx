@@ -12,6 +12,7 @@ import { server } from '@/mocks/server';
 import { useGetTripsTripIdVisitsDaysDay } from '@/shared/api/generated/trips/trips';
 import type { ArriveRequest, VisitCheck } from '@/shared/api/generated/schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { flushNotifications } from '@/test-support/flushNotifications';
 
 import { useVisitCheck, type VisitCheckOutcome } from './useVisitCheck';
 
@@ -123,16 +124,6 @@ function createWrapper() {
     );
   }
   return Wrapper;
-}
-
-/**
- * 지금까지 예약된 react-query 알림이 전부 전달되고 그 재렌더가 커밋될 때까지 기다린다.
- * 같은 스케줄러에 뒤이어 예약하므로 시간이 아니라 순서로 기다린다.
- */
-async function flushNotifications() {
-  await act(async () => {
-    await new Promise<void>((resolve) => notifyManager.schedule(resolve));
-  });
 }
 
 /** 그 날 방문 기록 조회 + 훅을 함께 띄운다 — 낙관 캐시를 visits.data.visits 로 직접 관찰. */

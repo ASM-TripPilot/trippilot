@@ -1,6 +1,11 @@
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  defaultScheduler,
+  notifyManager,
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
@@ -8,6 +13,7 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { useGetTrips } from '@/shared/api/generated/trips/trips';
 import { useGetSavedStays } from '@/shared/api/generated/saved-stays/saved-stays';
 import type { SavedStay, StayItem } from '@/shared/api/generated/schemas';
+import { flushNotifications } from '@/test-support/flushNotifications';
 
 import { useSavedStays, type SavedStaysOutcome } from './savedStays';
 
@@ -32,6 +38,13 @@ import { useSavedStays, type SavedStaysOutcome } from './savedStays';
  * > 받아라"는 표시. **화면에 떠 있는(=활성) 쿼리만** 즉시 다시 요청한다 — probe가 두 쿼리를 함께 띄우는 이유.
  *
  * 왜 통합 버킷인가: 심판 대상이 "실제로 나간 요청"이다(해제가 어느 id를 실었나·재요청 횟수는 msw만 관찰).
+ *
+ * 화면 읽기 규율(TRIP-884·953): react-query 는 캐시 변경 알림을 스케줄러로 미뤄 보낸다. 이 파일은
+ * 그 알림을 일부러 5ms 늦춰(beforeAll) "알림을 안 기다리고 result.current 를 읽는" 단언을 드러낸다.
+ * ⚠️ 항상 red 는 아니다 — 기대값이 호출 전 값과 같은 단언(롤백 후 false 등)은 flush 를 빼먹어도
+ * 옛 화면을 읽고 통과한다. 그러니 화면을 읽기 전엔 예외 없이 `flushNotifications()` 를 거친다.
+ * 요청 도착(hitCount·captured*)은 알림과 무관한 비동기라 `waitFor` 로 기다리고, "0건·아직 1건" 같은
+ * 부정 단언은 즉시 단언으로 둔다(waitFor 로 감싸면 첫 시도에 통과해 공허해진다).
  */
 
 // authedClient(mutator의 인증 계층)가 @/shared/storage를 정적으로 물고 있다 — expo-secure-store
@@ -109,6 +122,7 @@ function hitCount(needle: string): number {
 }
 
 beforeAll(() => {
+  notifyManager.setScheduler((cb) => setTimeout(cb, 5));
   server.listen({ onUnhandledRequest: 'error' });
   server.events.on('request:start', ({ request }) => {
     observedHits.push(`${request.method} ${new URL(request.url).pathname}`);
@@ -130,7 +144,10 @@ afterEach(() => {
   server.resetHandlers();
 });
 
-afterAll(() => server.close());
+afterAll(() => {
+  notifyManager.setScheduler(defaultScheduler);
+  server.close();
+});
 
 function createWrapper() {
   const client = new QueryClient({
@@ -205,11 +222,12 @@ describe('AC-1 · 담기 — 응답 전 반영 + 담은 목록만 무효화 (I1)
     await act(async () => {
       pending = result.current.saved.save(ITEM_A);
     });
+    await flushNotifications();
 
     // 단언 ① — 서버가 아직 답하지 않았는데 이미 담김이다(낙관).
     expect(result.current.saved.isSaved(KEY_A)).toBe(true);
     // 단언 ② — 요청은 실제로 나갔고, 이 시점에 무효화는 아직 없다.
-    expect(hitCount('POST /api/v1/saved-stays')).toBe(1);
+    await waitFor(() => expect(hitCount('POST /api/v1/saved-stays')).toBe(1));
     expect(hitCount('GET /api/v1/saved-stays')).toBe(1);
 
     // 실행 ② — 문을 열어 서버가 답하게 한다.
@@ -249,11 +267,14 @@ describe('AC-2 · 해제 — externalId가 아니라 savedStayId로 나간다 (I
     await act(async () => {
       pending = result.current.saved.remove(ITEM_B);
     });
+    await flushNotifications();
 
     // 단언 ① — 서버가 답하기 전에 이미 빈 하트다.
     expect(result.current.saved.isSaved(KEY_B)).toBe(false);
     // 단언 ② — 나간 경로가 담기 기록 id다.
-    expect(hitCount(`DELETE /api/v1/saved-stays/${SAVED_ID_B}`)).toBe(1);
+    await waitFor(() =>
+      expect(hitCount(`DELETE /api/v1/saved-stays/${SAVED_ID_B}`)).toBe(1)
+    );
     // 단언 ③ (부정 짝) — externalId(또는 key)를 그대로 경로에 넣지 않았다. 이 짝이 없으면 그런
     // 구현이 404를 받고, 그 실패가 AC-4 롤백에 흡수되어 조용히 남는다.
     expect(hitCount(`DELETE /api/v1/saved-stays/${ITEM_B.externalId}`)).toBe(0);
@@ -300,6 +321,7 @@ describe('AC-5 · 409(이미 담음)는 실패가 아니라 담김으로 수렴�
     await act(async () => {
       outcome = await result.current.saved.save(ITEM_A);
     });
+    await flushNotifications();
 
     // 단언 ① — 실패 갈래가 아니다.
     expect(outcome).toEqual({ kind: 'saved' });
@@ -331,6 +353,7 @@ describe('AC-4 · INV-4 — 실패는 되돌리고 사유를 올린다 (I4)', ()
     await act(async () => {
       outcome = await result.current.saved.save(ITEM_A);
     });
+    await flushNotifications();
 
     // 단언 ① — 사유가 호출자에게 도달한다(조용히 삼키면 INV-4 위반).
     expect(outcome).toEqual({ kind: 'failed', reason: 'not-found' });
@@ -353,6 +376,7 @@ describe('AC-4 · INV-4 — 실패는 되돌리고 사유를 올린다 (I4)', ()
     await act(async () => {
       outcome = await result.current.saved.remove(ITEM_B);
     });
+    await flushNotifications();
 
     expect(outcome).toEqual({ kind: 'failed', reason: 'not-found' });
     // 되돌아왔다 = 다시 담김으로 보인다.
@@ -370,6 +394,7 @@ describe('AC-4 · INV-4 — 실패는 되돌리고 사유를 올린다 (I4)', ()
     await act(async () => {
       outcome = await result.current.saved.save(ITEM_A);
     });
+    await flushNotifications();
 
     expect(outcome).toEqual({ kind: 'failed', reason: 'network' });
     expect(result.current.saved.isSaved(KEY_A)).toBe(false);
