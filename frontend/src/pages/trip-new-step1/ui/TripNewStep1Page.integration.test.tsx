@@ -81,6 +81,8 @@ const TRIP: Trip = {
   status: 'PLANNED',
   createdAt: '2026-08-02T00:00:00Z',
   updatedAt: '2026-08-02T00:00:00Z',
+  baseCount: 0,
+  itineraryDayCount: 0,
 };
 
 let observedHits: string[] = [];

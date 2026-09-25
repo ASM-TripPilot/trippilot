@@ -14,7 +14,7 @@ import { server } from '@/mocks/server';
 import { SettingsPage } from '@/pages/settings';
 import { StayDetailPage } from '@/pages/stay-detail';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
-import type { StayItem } from '@/shared/api/generated/schemas';
+import type { StayDetail } from '@/shared/api/generated/schemas';
 
 /**
  * TRIP-778 AC-11 — "제휴 안내 다시 보지 않기"의 진실은 하나다(서버 `/me/settings`).
@@ -36,6 +36,10 @@ import type { StayItem } from '@/shared/api/generated/schemas';
  *  단언(시트 없음 · 웹검색 이동 1회).
  *
  * ⚠️ jest 사각: 실제 화면 전환(설정→뒤로→숙소 상세)과 실서버 반영은 6-b 몫.
+ *
+ * TRIP-940: 숙소 상세는 `item` param 대신 `GET /stays/{stayId}` 로 스스로 조회한다 — 그 핸들러를
+ * `installServer`에 더했다(onUnhandledRequest:'error' 라 없으면 준비 단계에서 무너진다). settleNetwork 가
+ * 시작한 요청 전부를 기다리므로 [예약하기]를 누를 땐 상세 조회도 끝나 있다.
  */
 
 const mockPush = jest.fn();
@@ -80,7 +84,8 @@ const BASE = `${
 const SHEET_BODY =
   '외부 OTA 사이트로 이동하며, 실제 예약·결제는 해당 사이트에서 진행됩니다.';
 
-const ITEM: StayItem = {
+const ITEM: StayDetail = {
+  stayId: 'NAVER:s1',
   externalSource: 'NAVER',
   externalId: 's1',
   name: '해운대 오션 호텔',
@@ -90,6 +95,9 @@ const ITEM: StayItem = {
   amenities: ['ocean'],
   stayType: 'HOTEL',
   price: { amount: 145000, currency: 'KRW' },
+  address: '부산 해운대구 우동 1411-1',
+  phone: null,
+  rooms: 120,
 };
 
 let serverDismissed = false;
@@ -136,7 +144,8 @@ function installServer(): void {
       }
       return HttpResponse.json({ affiliateNoticeDismissed: serverDismissed });
     }),
-    http.get(`${BASE}/saved-stays`, () => HttpResponse.json([]))
+    http.get(`${BASE}/saved-stays`, () => HttpResponse.json([])),
+    http.get(`${BASE}/stays/:stayId`, () => HttpResponse.json(ITEM))
   );
 }
 
@@ -177,7 +186,7 @@ beforeAll(() => {
 beforeEach(() => {
   jest.clearAllMocks();
   mockOpenURL.mockResolvedValue(true);
-  mockSearchParams = { stayId: 'NAVER:s1', item: JSON.stringify(ITEM) };
+  mockSearchParams = { stayId: ITEM.stayId };
   serverDismissed = false;
   patchBodies = [];
   started = 0;

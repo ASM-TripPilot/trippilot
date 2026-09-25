@@ -1,6 +1,11 @@
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  defaultScheduler,
+  notifyManager,
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
@@ -26,6 +31,11 @@ import { useVisitCheck, type VisitCheckOutcome } from './useVisitCheck';
  *
  * 왜 통합 버킷인가: 심판 대상이 "실제로 나간 요청·바디"와 "응답 전 캐시 상태"다 — msw + 실
  * QueryClient 로만 관측 가능(`savedPlaces.integration.test.tsx` 와 같은 자리·장치).
+ *
+ * 화면 읽기 규율(TRIP-884): react-query 는 캐시 변경 알림을 스케줄러로 미뤄 보낸다. 이 파일은
+ * 그 알림을 일부러 5ms 늦춰(beforeAll) "알림을 안 기다리고 result.current 를 읽는" 단언을 드러낸다.
+ * ⚠️ 항상 red 는 아니다 — 기대값이 호출 전 값과 같은 단언(롤백 후 false 등)은 flush 를 빼먹어도
+ * 옛 화면을 읽고 통과한다. 그러니 화면을 읽기 전엔 예외 없이 `flushNotifications()` 를 거친다.
  */
 
 // authedClient(생성 클라이언트의 mutator 인증 계층)가 @/shared/storage 를 정적으로 문다.
@@ -77,6 +87,7 @@ const hitCount = (needle: string) =>
   observedHits.filter((hit) => hit === needle).length;
 
 beforeAll(() => {
+  notifyManager.setScheduler((cb) => setTimeout(cb, 5));
   server.listen({ onUnhandledRequest: 'error' });
   server.events.on('request:start', ({ request }) => {
     observedHits.push(`${request.method} ${new URL(request.url).pathname}`);
@@ -94,7 +105,10 @@ afterEach(() => {
   clearAccessToken();
 });
 
-afterAll(() => server.close());
+afterAll(() => {
+  notifyManager.setScheduler(defaultScheduler);
+  server.close();
+});
 
 function createWrapper() {
   const client = new QueryClient({
@@ -109,6 +123,16 @@ function createWrapper() {
     );
   }
   return Wrapper;
+}
+
+/**
+ * 지금까지 예약된 react-query 알림이 전부 전달되고 그 재렌더가 커밋될 때까지 기다린다.
+ * 같은 스케줄러에 뒤이어 예약하므로 시간이 아니라 순서로 기다린다.
+ */
+async function flushNotifications() {
+  await act(async () => {
+    await new Promise<void>((resolve) => notifyManager.schedule(resolve));
+  });
 }
 
 /** 그 날 방문 기록 조회 + 훅을 함께 띄운다 — 낙관 캐시를 visits.data.visits 로 직접 관찰. */
@@ -186,11 +210,14 @@ describe('AC-3 · 방문 완료 — 응답 전 낙관 + 성공 후 재조회 (U1
     await act(async () => {
       pending = result.current.vc.complete('v1');
     });
+    await flushNotifications();
 
     // 단언 ① — 서버가 아직 답하지 않았는데 이미 완료(낙관).
     expect(cacheCompleted(result.current.visits, 'v1')).toBe(true);
     // 단언 ② — 완료 요청은 그 visitCheckId 로 실제로 나갔다.
-    expect(hitCount(`POST /api/v1/trips/${TRIP}/visits/v1/complete`)).toBe(1);
+    await waitFor(() =>
+      expect(hitCount(`POST /api/v1/trips/${TRIP}/visits/v1/complete`)).toBe(1)
+    );
 
     // 실행 ② — 문을 연다.
     gate.release();
@@ -217,11 +244,15 @@ describe('AC-3 · 완료 실패는 되돌리고 무효화하지 않는다 (U2 ·
         HttpResponse.error()
       )
     );
+    // 앵커 — 시작은 미완료. (act 전 .data 읽기 — tracked-props: 이 줄이 없으면 캐시가 바뀌어도
+    // 재렌더가 안 와서, 롤백을 지운 구현도 호출 전 화면(false)을 읽고 통과한다.)
+    expect(cacheCompleted(result.current.visits, 'v1')).toBe(false);
 
     let outcome!: VisitCheckOutcome;
     await act(async () => {
       outcome = await result.current.vc.complete('v1');
     });
+    await flushNotifications();
 
     // 단언 ① — 사유가 호출자에게 도달한다(조용히 삼키면 INV-4 위반).
     expect(outcome.kind).toBe('failed');
@@ -258,13 +289,16 @@ describe('AC-4 · 수동 체크인 — MANUAL 바디 + 응답 전 낙관 (U3)', 
         source: 'MANUAL',
       });
     });
+    await flushNotifications();
 
     // 단언 ① — 응답 전에 진행 중(도착)으로 낙관 반영.
     expect(cacheHasPoi(result.current.visits, 'p9')).toBe(true);
     // 단언 ② — 나간 바디가 수동 체크인이다(지오펜스 자동 아님).
-    expect(capturedBodies).toEqual([
-      { slotKey: `${DAY}#p9`, poiId: 'p9', source: 'MANUAL' },
-    ]);
+    await waitFor(() =>
+      expect(capturedBodies).toEqual([
+        { slotKey: `${DAY}#p9`, poiId: 'p9', source: 'MANUAL' },
+      ])
+    );
 
     // 실행 ② — 문 열고 마무리.
     gate.release();
@@ -317,6 +351,7 @@ describe('AC-4 · ★ W-2 — 동시 두 도착 중 한쪽 실패가 다른 쪽�
       });
       await pA; // A 는 404 로 즉시 실패 → 롤백이 여기서 돈다. B 는 문에 걸려 pending.
     });
+    await flushNotifications();
 
     // 단언 — A 롤백 후에도 B 의 낙관이 살아남는다(통짜 스냅숏 롤백이면 B 가 지워져 여기서 red).
     expect(cacheHasPoi(result.current.visits, 'b')).toBe(true);
@@ -362,6 +397,7 @@ describe('AC-3 · updatedAt 보관 — 서버 기준버전이 캐시에 살아 �
     await act(async () => {
       pending = result.current.vc.complete('v1');
     });
+    await flushNotifications();
 
     // 단언 ② — 서버가 답하기 전, 낙관 완료 패치({...v, completedAt})가 updatedAt 를 보존한다
     // (버전 시각을 덮어쓰거나 지우면 다음 재생의 기준버전을 잃는다 — 스프레드 보존 회귀 가드).

@@ -22,6 +22,7 @@ import {
   usePostTripsTripIdItinerary,
   usePutTripsTripIdItinerary,
 } from '@/shared/api/generated/trips/trips';
+import { promptAndRegisterPush } from '@/shared/push';
 import { EditorView } from '@/widgets/map-sheet-shell/ui/EditorView';
 import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
 
@@ -82,7 +83,11 @@ export function ManualPlanPage({ tripId }: { tripId: string }): ReactElement {
     if (itinerary.isPending) return;
     if (hasExisting) return;
     firedRef.current = true;
-    generate.mutate({ tripId, data: { generationMode: 'MANUAL' } });
+    generate.mutate(
+      { tripId, data: { generationMode: 'MANUAL' } },
+      // 빈 일정이 처음 생긴 순간 알림 권한을 묻는다(TRIP-835 · 01b Q2) — 기다리지 않는다.
+      { onSuccess: () => void promptAndRegisterPush() }
+    );
   }, [generate, tripId, itinerary.isPending, hasExisting]);
 
   // 조회는 시드 소스 — 데이터가 (다시) 도착할 때만 스토어를 채운다(편집 중 재렌더로 되돌려지지 않는다).

@@ -1,11 +1,11 @@
 import {
-  applyRangePick,
-  dateCell,
   daysInMonth,
   firstWeekdayOfMonth,
   isDateInRange,
   shiftMonth,
-} from './tripDatePicker';
+} from '@/shared/date/monthGrid';
+
+import { applyRangePick, dateCell } from './tripDatePicker';
 
 /**
  * TRIP-368 날짜 선택 순수 함수 — 달력 그리드 계산과 범위 판정(`isDateInRange`).

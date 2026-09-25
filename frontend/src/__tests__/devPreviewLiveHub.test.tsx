@@ -939,3 +939,88 @@ describe('🔴 TRIP-754 · i08 변경 반영 시트 프리뷰 (AC-11)', () => {
     expect(states.length).toBeGreaterThan(100);
   });
 });
+
+// ── TRIP-755 · i10 현재 장소 상세 1키 ────────────────────────────────────────
+//
+// Figma 4159:2673 — 옛 `live-place-default`·`-unknown` 2키를 `live-place` 1키로 합친다(결측 얼굴은
+// Figma 에 없어 키 삭제, 결측 처리는 model·화면 테스트가 잠근다). 라벨은 옛 "i05 · …"가 새 i05
+// (`planb-solving` "i05 · 다시 짜는 중")와 겹쳐 "i10 · …"으로 바로잡는다.
+//
+// ⚠️ 사진(갤러리·"이곳의 사진"·"+39")은 여기서 단언하지 않는다 — jest 에서 `Image.resolveAssetSource(
+// require(jpg))` 는 `{ testUri }` 를 돌려줘 `.uri` 가 undefined, 픽스처 사진이 전부 null 이 된다(02a ★5).
+// 어떤 올바른 구현도 jest 에선 사진 섹션을 못 그리므로, 사진은 6-b 육안 몫이다. "1 / 42"는 숫자
+// 필드(photoTotal)라 잰다.
+
+const LIVE_PLACE_OLD_KEYS = ['live-place-default', 'live-place-unknown'];
+
+describe('🔴 TRIP-755 · i10 현재 장소 상세 프리뷰 (AC-11)', () => {
+  it('live-place 는 Figma 픽스처(부산시립미술관)를 추천 카피·태그 4·정보 3행 원문·"1 / 42"로 그린다', () => {
+    // 준비 — 딥링크 state=live-place.
+    mockSearchParams.state = 'live-place';
+
+    // 실행
+    render(<DevPreview />);
+
+    // 단언 ① — 히어로: 장소명·핀 부제(category 원문).
+    expect(screen.getByTestId('execution-place-title')).toHaveTextContent(
+      '부산시립미술관'
+    );
+    expect(screen.getByText('미술관 · 전시')).toBeOnTheScreen();
+    expect(screen.getByTestId('execution-place-photo-count')).toHaveTextContent(
+      '1 / 42'
+    );
+    // 원형 버튼 — 프리뷰는 빈 핸들러로 뒤로·공유를 켠다. 하트는 없다(2026-09-25 결정, Figma 와 차이).
+    expect(screen.getByTestId('execution-place-back')).toBeTruthy();
+    expect(screen.getByTestId('execution-place-share')).toBeTruthy();
+    expect(screen.queryByTestId('execution-place-save')).toBeNull();
+
+    // 단언 ② — 추천 카피: 제목은 Figma 레이어명 = 내용이라 완전일치, 본문은 원문 미확인이라 비어 있지
+    //   않음만(02a D-i).
+    expect(screen.getByTestId('execution-place-pitch-title')).toHaveTextContent(
+      '비 오는 날에도 반나절이 아깝지 않은 곳'
+    );
+    const pitchBody = String(
+      screen.getByTestId('execution-place-pitch-body').props.children
+    );
+    expect(pitchBody.trim().length).toBeGreaterThan(0);
+
+    // 단언 ③ — 해시태그 4칩(Figma 4159:2708·2710·2712·2714).
+    ['#미술', '#실내', '#취향매칭', '#비와도좋음'].forEach((tag) =>
+      expect(
+        within(screen.getByTestId('execution-place-tags')).getByText(tag)
+      ).toBeOnTheScreen()
+    );
+
+    // 단언 ④ — 정보 카드 원문(Figma 4159:2718·2722·2726) 3행뿐 — "다음 일정까지" 없음(2026-09-25 결정).
+    expect(screen.getByTestId('execution-place-openhours')).toHaveTextContent(
+      '10:00~18:00 (월 휴관)'
+    );
+    expect(screen.getByTestId('execution-place-address')).toHaveTextContent(
+      '부산 부산진구 ○○로 12'
+    );
+    expect(screen.getByTestId('execution-place-fee')).toHaveTextContent(
+      '성인 12,000원'
+    );
+    expect(screen.queryByTestId('execution-place-slack')).toBeNull();
+
+    // 단언 ⑤ — 옛 표면은 없다.
+    expect(screen.queryByTestId('execution-place-cta-itinerary')).toBeNull();
+    expect(screen.queryByTestId('execution-place-here')).toBeNull();
+  });
+
+  it('live-place 는 band i · 라벨 "i10 · 현재 장소 상세" 이고, 옛 default·unknown 키는 없다', () => {
+    const states = PREVIEW_STATES as {
+      key: string;
+      band: string;
+      label: string;
+    }[];
+    const entry = states.find((state) => state.key === 'live-place');
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('i');
+    expect(entry?.label).toBe('i10 · 현재 장소 상세');
+
+    const keys = states.map((state) => state.key);
+    expect(keys.length).toBeGreaterThan(100);
+    LIVE_PLACE_OLD_KEYS.forEach((key) => expect(keys).not.toContain(key));
+  });
+});

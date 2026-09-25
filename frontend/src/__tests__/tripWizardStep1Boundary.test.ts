@@ -47,6 +47,9 @@ const DATE_PICKER = join(
   'model',
   'tripDatePicker.ts'
 );
+// TRIP-639 재조준 — 월 그리드 산술 네 함수가 tripDatePicker 에서 이 파일로 통합됐다. 금지를
+// DATE_PICKER 에만 두면 옮겨 간 산술을 아무 스캔도 안 본다(stay 판은 `new Date(` 생성자를 썼다).
+const MONTH_GRID = join(SRC_ROOT, 'shared', 'date', 'monthGrid.ts');
 const WIZARD_ROUTE_DIR = join(SRC_ROOT, 'app', 'trips', 'new');
 const SOURCE_EXTENSIONS = ['.ts', '.tsx'];
 
@@ -300,8 +303,8 @@ describe('AC-14 · 화면이 쿼리 훅·라우터·위치를 물지 않는다',
 });
 
 describe('AC-5 · 시계를 읽지 않는다 (01b D5 — 기준일은 주입받는다)', () => {
-  it('화면과 프리셋 계산 함수, 날짜 피커 파일 어디에도 현재 시각 읽기가 없다', () => {
-    [SCREEN, PURE, DATE_PICKER].forEach((file) => {
+  it('화면과 프리셋 계산 함수, 날짜 피커·월 그리드 파일 어디에도 현재 시각 읽기가 없다', () => {
+    [SCREEN, PURE, DATE_PICKER, MONTH_GRID].forEach((file) => {
       expect(existsPair(file)).toEqual({ file, exists: true });
 
       // 주석은 먼저 걷는다 — 머리말에 "화면이 new Date()를 부르면 안 된다"고 적는 것이
@@ -321,6 +324,20 @@ describe('AC-5 · 시계를 읽지 않는다 (01b D5 — 기준일은 주입받�
     ['presetRange', 'PERIOD_PRESETS', 'COMPANION_OPTIONS'].forEach((symbol) => {
       expect(pureSource).toMatch(
         new RegExp(`export\\s+(?:function\\s+|const\\s+)${symbol}\\b`)
+      );
+    });
+
+    // 긍정 짝(TRIP-639) — 월 그리드 파일에 산술 본문이 실제로 있다. 없으면 빈 파일이 위 금지를
+    // 공짜로 통과한다(재조준은 금지 목록과 앵커를 함께 옮긴다).
+    const gridSource = stripComments(readFileSync(MONTH_GRID, 'utf8'));
+    [
+      'daysInMonth',
+      'firstWeekdayOfMonth',
+      'shiftMonth',
+      'isDateInRange',
+    ].forEach((symbol) => {
+      expect(gridSource).toMatch(
+        new RegExp(`export\\s+function\\s+${symbol}\\b`)
       );
     });
   });

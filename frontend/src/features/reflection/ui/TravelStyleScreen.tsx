@@ -7,12 +7,11 @@ import type {
   StylePreview,
   StyleProgress,
 } from '@/shared/api/generated/schemas';
+import type { StyleFace } from '@/entities/style-analysis/lib/styleFace';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 
-import type { StyleFace } from '../model/styleThreshold';
 import { BackArrowGlyph } from './ReflectionGlyphs';
 import { CategoryBarList } from './CategoryBarList';
-import { EvidenceLink } from './EvidenceLink';
 import { StatTile } from './StatTile';
 
 /**
@@ -24,7 +23,7 @@ import { StatTile } from './StatTile';
  *
  * 무엇을 보장하나(승인 계약):
  *  - 정식(official, AC-2·AC-5): 카테고리 막대(`reflection-style-bar`)·StatTile 2(하루 평균 방문·평균
- *    체류)·EvidenceLink(목적지 주입 시). 평균 체류는 `avgDwellMinutes != null` 일 때만(null→미표시
+ *    체류). 평균 체류는 `avgDwellMinutes != null` 일 때만(null→미표시
  *    degrade, 0 채움 금지 — BR-U5-08a). 값은 값 인터폴레이션(리터럴 `N분` 금지, INV-3).
  *  - 임시(insufficient, AC-3): 진행(`reflection-style-progress`) `현재 N곳 / 필요 M곳` + "정식 아님"
  *    명시 + preview.descriptors 칩(`reflection-style-preview-chip`). 정식 얼굴 요소는 안 그린다(상호배타).
@@ -41,8 +40,6 @@ export interface TravelStyleScreenProps {
   analysis: StyleAnalysisBody | null;
   /** face==='insufficient' 일 때 참(온보딩 취향 미리보기 — 칩 원천). */
   preview: StylePreview | null;
-  /** 근거 진입 목적지(미주입이면 링크를 그리지 않는다 — TRIP-939 AC-5). */
-  onPressEvidence?: () => void;
   /** 앱바 뒤로가기(미주입이면 inert — iOS 엣지 스와이프가 대신). */
   onBack?: () => void;
   /** TRIP-765 — 하단 탭바 라우팅(옵셔널, j04 동형). 미주입이면 탭 press 는 no-op. */
@@ -81,7 +78,6 @@ export function TravelStyleScreen({
   progress,
   analysis,
   preview,
-  onPressEvidence,
   onBack,
   onPressTab,
 }: TravelStyleScreenProps): ReactElement {
@@ -124,11 +120,6 @@ export function TravelStyleScreen({
                 <View className="flex-1" />
               )}
             </View>
-
-            {/* 근거 목적지가 있을 때만 링크를 그린다(TRIP-939 AC-5 — 막다른 링크 제거). */}
-            {onPressEvidence ? (
-              <EvidenceLink onPress={onPressEvidence} />
-            ) : null}
           </>
         ) : (
           <>

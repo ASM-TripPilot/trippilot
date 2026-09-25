@@ -82,6 +82,8 @@ function trip(overrides: Partial<Trip>): Trip {
     status: 'PLANNED',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
+    baseCount: 0,
+    itineraryDayCount: 0,
     ...overrides,
   };
 }

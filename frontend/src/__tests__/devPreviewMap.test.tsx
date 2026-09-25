@@ -87,3 +87,25 @@ describe('TRIP-728 · e03 제휴 시트 프리뷰가 상세 배경(MapView)을 �
     expect(screen.getByTestId('map-root')).toBeOnTheScreen();
   });
 });
+
+describe('TRIP-940 Q4 · e03 프리뷰 픽스처 = StayDetail (키 수 유지)', () => {
+  it('state=stay-detail-default 는 조회 결과의 새 줄(주소·전화·객실)을 그린다', () => {
+    mockSearchParams.state = 'stay-detail-default';
+
+    render(<DevPreview />);
+
+    // 픽스처가 StayItem 그대로면 이 세 줄의 재료(address·phone·rooms)가 없다 → 사람 육안(6-b)이
+    // 새 줄을 볼 진입점이 사라진다. 값의 정확성은 화면 단위 테스트 몫, 여기선 존재만.
+    expect(screen.getByTestId('stay-detail-address')).toBeOnTheScreen();
+    expect(screen.getByTestId('stay-detail-phone')).toBeOnTheScreen();
+    expect(screen.getByTestId('stay-detail-rooms')).toBeOnTheScreen();
+  });
+
+  it('state=stay-detail-notfound 는 404 얼굴을 그린다', () => {
+    mockSearchParams.state = 'stay-detail-notfound';
+
+    render(<DevPreview />);
+
+    expect(screen.getByTestId('stay-detail-notfound')).toBeOnTheScreen();
+  });
+});

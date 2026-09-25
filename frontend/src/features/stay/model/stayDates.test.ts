@@ -3,14 +3,16 @@ import fc from 'fast-check';
 import {
   applyDatePick,
   commitDateRange,
-  daysInMonth,
-  firstWeekdayOfMonth,
   formatStayDateRange,
-  isDateInRange,
   isStayRangeValid,
   nightsBetween,
   type StayDateRange,
 } from './stayDates';
+import {
+  daysInMonth,
+  firstWeekdayOfMonth,
+  isDateInRange,
+} from '@/shared/date/monthGrid';
 
 /**
  * F-1~F-6 (01b Seed §3-4 · AC-4 · AC-5) — 숙소 등록 날짜 계산 순수 함수.

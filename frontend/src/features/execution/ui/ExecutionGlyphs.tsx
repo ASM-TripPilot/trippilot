@@ -2,7 +2,7 @@ import Svg, { Circle, Path } from 'react-native-svg';
 
 /**
  * TRIP-395 · 여행 중(i01·i05·i08) 인라인 벡터 글리프 — i01 허브 레일 상태 점 3종(TRIP-746),
- * i05 헤더, i02 트리거 알약 경고삼각(TRIP-748)·비구름. (i01 "일정 수정" FAB 연필은 itinerary `PencilGlyph` tone=white 를 쓴다.)
+ * i10 원형 버튼·히어로(TRIP-755), i02 트리거 알약 경고삼각(TRIP-748)·비구름. (i01 "일정 수정" FAB 연필은 itinerary `PencilGlyph` tone=white 를 쓴다.)
  *
  * 색은 이 파일 안에서만 raw hex 로 고정한다 — SVG `stroke`/`fill` 은 className 을 못 받고,
  * `*Glyphs.tsx` 는 raw-hex 스캔 가드 제외 관례다(`docs/structure.md` §지금 작업하려면,
@@ -13,8 +13,8 @@ const PRIMARY = '#FF385C';
 const SUCCESS = '#0E9384';
 // 비활성 회청(Figma #C2CCD6) — 토큰 없음, TripGlyphs `DISABLED` 선례와 같은 값.
 const DISABLED = '#C2CCD6';
-const MUTED_SOFT = '#9AA1AB';
 const WHITE = '#FFFFFF';
+const INK = '#222222';
 // 비구름 글리프 기본색(text-primary-text 토큰의 raw 값).
 const PRIMARY_TEXT = '#C13515';
 
@@ -78,11 +78,8 @@ export function RailUpcomingGlyph({ size = 12 }: GlyphProps) {
   );
 }
 
-// i05 헤더 뒤로가기(‹) — 화살표 없이 굵은 셰브론.
-export function BackArrowGlyph({
-  size = 24,
-  color = MUTED_SOFT,
-}: TintGlyphProps) {
+// i10 원형 버튼 뒤로가기(‹) — 화살표 없이 굵은 셰브론. 흰 원 위 먹색이 기본(TRIP-755).
+export function BackArrowGlyph({ size = 24, color = INK }: TintGlyphProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
@@ -96,8 +93,8 @@ export function BackArrowGlyph({
   );
 }
 
-// i05 헤더 공유 — 세 점 + 잇는 선.
-export function ShareGlyph({ size = 24, color = MUTED_SOFT }: TintGlyphProps) {
+// i10 원형 버튼 공유 — 세 점 + 잇는 선. 흰 원 위 먹색이 기본(TRIP-755).
+export function ShareGlyph({ size = 24, color = INK }: TintGlyphProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Circle cx={18} cy={5} r={2.4} stroke={color} strokeWidth={1.8} />
@@ -162,6 +159,68 @@ export function WeatherCloudGlyph({
         stroke={color}
         strokeWidth={1.6}
         strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+// ── TRIP-755 · i10 히어로(사진 위 흰 글리프) ──
+// 부제 앞 흰 핀(Figma 4159:2673). 형제 feature `MapPinGlyph`(explore on-primary)와 같은 도형이지만
+// features 간 import 금지라 여기 다시 그린다 — 동명 복제(traps-glyphs)를 피하려 이름을 달리했다.
+export function HeroPinGlyph({
+  size = 14,
+  testID,
+}: GlyphProps & { testID?: string }) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 32 32"
+      fill="none"
+    >
+      <Path
+        d="M26.6667 13.3333C26.6667 21.3333 16 29.3333 16 29.3333C16 29.3333 5.33333 21.3333 5.33333 13.3333C5.33333 10.5044 6.45714 7.79125 8.45753 5.79086C10.4579 3.79047 13.171 2.66667 16 2.66667C18.829 2.66667 21.5421 3.79047 23.5425 5.79086C25.5429 7.79125 26.6667 10.5044 26.6667 13.3333Z"
+        stroke={WHITE}
+        strokeWidth={2.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M16 17.3333C18.2091 17.3333 20 15.5425 20 13.3333C20 11.1242 18.2091 9.33333 16 9.33333C13.7909 9.33333 12 11.1242 12 13.3333C12 15.5425 13.7909 17.3333 16 17.3333Z"
+        stroke={WHITE}
+        strokeWidth={2.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// "1 / N" 카운터 칩 앞 흰 사진 아이콘. entities `PhotoGlyph`(ink·disabled 톤뿐)와 같은 도형의 흰 판.
+export function HeroPhotoGlyph({ size = 13 }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      <Path
+        d="M12.67 2.67H3.33C2.6 2.67 2 3.26 2 4V12C2 12.74 2.6 13.33 3.33 13.33H12.67C13.4 13.33 14 12.74 14 12V4C14 3.26 13.4 2.67 12.67 2.67Z"
+        stroke={WHITE}
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M5.67 7.07C6.26 7.07 6.73 6.59 6.73 6C6.73 5.41 6.26 4.93 5.67 4.93C5.08 4.93 4.6 5.41 4.6 6C4.6 6.59 5.08 7.07 5.67 7.07Z"
+        stroke={WHITE}
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M14 10.67L10.67 7.33L3.33 14"
+        stroke={WHITE}
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </Svg>
   );

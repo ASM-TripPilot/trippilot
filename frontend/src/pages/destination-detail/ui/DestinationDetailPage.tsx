@@ -92,7 +92,7 @@ export function DestinationDetailPage(): ReactElement {
     if (item) {
       router.push({
         pathname: '/stays/[stayId]',
-        params: { stayId: card.key, item: JSON.stringify(item) },
+        params: { stayId: card.key },
       });
     }
   }

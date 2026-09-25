@@ -205,7 +205,7 @@ function socialLoginResponse(provider: string, ageConfirmation: unknown) {
 }
 
 /**
- * TRIP-203 AC-8 — `Trip.required` 10필드를 갖춘 응답(상상해서 만들지 않는다). 요청 바디의
+ * TRIP-203 AC-8 — `Trip.required` 12필드를 갖춘 응답(상상해서 만들지 않는다). 요청 바디의
  * 필수 3필드는 그대로 반영하고, 나머지 선택 필드는 openapi 기본값·null로 채운다.
  */
 function tripFixture(body: CreateTripRequest): Trip {
@@ -222,6 +222,8 @@ function tripFixture(body: CreateTripRequest): Trip {
     status: 'PLANNED',
     createdAt: '2026-08-02T00:00:00Z',
     updatedAt: '2026-08-02T00:00:00Z',
+    baseCount: 0,
+    itineraryDayCount: 0,
   };
 }
 

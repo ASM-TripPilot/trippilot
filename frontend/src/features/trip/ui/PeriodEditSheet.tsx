@@ -32,15 +32,15 @@ import BottomSheet, {
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 
-import { SHEET_HANDLE_INDICATOR_STYLE } from '../lib/sheetHandle';
-
 import {
-  dateCell,
   daysInMonth,
   firstWeekdayOfMonth,
   isDateInRange,
-  type TripDateRange,
-} from '../model/tripDatePicker';
+} from '@/shared/date/monthGrid';
+
+import { SHEET_HANDLE_INDICATOR_STYLE } from '../lib/sheetHandle';
+
+import { dateCell, type TripDateRange } from '../model/tripDatePicker';
 import { summaryPeriod } from '../model/tripSummary';
 
 import { BackChevronGlyph, ChevronRightGlyph } from './TripGlyphs';

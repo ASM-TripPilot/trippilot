@@ -182,6 +182,7 @@ import { PreferencesEditView } from '@/features/settings/ui/PreferencesEditView'
 import type {
   ItineraryDaysItemSlotsItem,
   SlotCandidatesCandidatesItem,
+  StayDetail,
   StayItem,
   Trigger,
   TriggerKind,
@@ -321,18 +322,27 @@ const STAY_SEARCH_PREVIEW_ITEMS: StayItem[] = [
 
 // e03 상세(TRIP-457) — 편의시설 4칩·미니맵 자리·CTA 2종·제휴 고지를 눈으로 확인한다(jest 는
 // 픽셀·레이아웃을 못 본다, 6-b 실기 몫). 가격 미확인·notFound·시트 얼굴은 아래 프리뷰 키가
-// 유일한 열람처(실 라우트로는 백엔드/딥링크 없이 못 본다).
-const STAY_DETAIL_PREVIEW_ITEM: StayItem = {
+// 유일한 열람처(실 라우트로는 백엔드/딥링크 없이 못 본다). TRIP-940 — 조회 결과(`StayDetail`) 모양
+// 이라 지도 아래 주소·전화·객실 줄까지 그린다(OtaChoiceSheet 는 상위집합을 그대로 받는다).
+const STAY_DETAIL_PREVIEW_ITEM: StayDetail = {
+  stayId: 'NAVER:d1',
   externalSource: 'NAVER',
   externalId: 'd1',
   name: '해운대 오션 스위트',
   lat: 35.1587,
   lng: 129.1604,
-  region: '부산 해운대구 우동',
+  region: '해운대',
   amenities: ['주차', '조식', '와이파이', '오션뷰'],
   stayType: 'HOTEL',
   price: { amount: 145000, currency: 'KRW' },
+  address: '부산 해운대구 우동',
+  phone: '051-749-7000',
+  rooms: 120,
 };
+const STAY_DETAIL_PREVIEW_STATE = {
+  kind: 'ready',
+  detail: STAY_DETAIL_PREVIEW_ITEM,
+} as const;
 
 // 가볼 곳 가로 레인(TRIP-470) — 프리뷰에서 레인을 눈으로 보기 위한 표본 카드. `as const` 밖에
 // 둬야 cards 가 readonly 튜플로 굳지 않는다(placeLane.cards 는 PlaceCardVM[] 요구).
@@ -1513,20 +1523,29 @@ const SAVED_STAY_PREVIEW_CARDS: SavedStayCardVM[] = [
   },
 ];
 
-// i05 현재 장소 상세(TRIP-398) — Figma 대조용 완성 뷰. 결측 얼굴은 이 위에 상태만 얹는다.
+// i10 현재 장소 상세(TRIP-755) — Figma 4159:2673 카피 그대로(부산시립미술관). 계약 공백 필드(카피·
+// 주소·입장료·사진 수·갤러리)는 운영에선 null 이고 여기 픽스처만 채운다(INV-1·G6). 사진은
+// DRAFT_PREVIEW_PHOTOS 재사용 — jest 는 .uri 가 undefined 라 [] 가 되어 갤러리·"이곳의 사진"이 안
+// 그려진다(실기만 사진, 6-b). 좌표는 부산시립미술관 근사.
 const LIVE_PLACE_PREVIEW_VIEW: PlaceDetailView = {
-  name: '광안리 해수욕장',
-  category: '해변',
-  tags: ['해변', '포토스팟', '야경', '이동선근처'],
+  name: '부산시립미술관',
+  category: '미술관 · 전시',
+  tags: ['미술', '실내', '취향매칭', '비와도좋음'],
   imageUrl: null,
-  openingHours: '09:00~22:00 (상시 개방)',
+  galleryUrls: DRAFT_PREVIEW_PHOTOS.filter(
+    (uri): uri is string => uri !== null
+  ),
+  photoTotal: 42,
+  pitchTitle: '비 오는 날에도 반나절이 아깝지 않은 곳',
+  pitchBody:
+    '상설전은 무료로 열려 있고, 3층 전시실은 사람이 적어 오래 머물게 돼요. 창가 자리에서 쉬는 시간까지 넉넉히 잡아 두세요.',
+  openingHours: '10:00~18:00 (월 휴관)',
   openingHoursMissing: false,
   hoursCaption: null,
-  location: '미확인',
-  slackLabel: '여유 있음 · 다음 부산시립미술관',
-  arrival: '14:20 도착',
-  lat: 35.15,
-  lng: 129.11,
+  address: '부산 부산진구 ○○로 12',
+  admissionFee: '성인 12,000원',
+  lat: 35.1667,
+  lng: 129.1364,
 };
 
 // map-default(TRIP-745) — 핀 3상태를 한 지도에서 대조하는 픽스처. done 둘·current 하나·upcoming
@@ -2460,7 +2479,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       <StayDetailScreen
-        item={STAY_DETAIL_PREVIEW_ITEM}
+        state={STAY_DETAIL_PREVIEW_STATE}
         saved={true}
         onToggleSave={noop}
         onPressBook={noop}
@@ -2469,7 +2488,8 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // 파싱 실패/부재 얼굴(INV-4) — item=null.
+  // 없는 숙소 얼굴(404, INV-4 · Figma 4514:2330). 400·네트워크 얼굴은 문구·배치가 같고 testID·
+  // 재시도 버튼만 달라 키를 따로 두지 않는다(TRIP-940 Q4 — 키 수 유지).
   {
     key: 'stay-detail-notfound',
     band: 'e',
@@ -2477,7 +2497,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       <StayDetailScreen
-        item={null}
+        state={{ kind: 'notFound' }}
         saved={false}
         onToggleSave={noop}
         onPressBook={noop}
@@ -2496,7 +2516,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => (
       <View className="flex-1">
         <StayDetailScreen
-          item={STAY_DETAIL_PREVIEW_ITEM}
+          state={STAY_DETAIL_PREVIEW_STATE}
           saved={true}
           onToggleSave={noop}
           onPressBook={noop}
@@ -5063,36 +5083,20 @@ export const PREVIEW_STATES: PreviewState[] = [
       </MapSheetShell>
     ),
   },
-  // i05 현재 장소 상세(TRIP-398) — props-only 화면. jest 는 픽셀·레이아웃을 못 봐 이 자리가
-  // 유일하게 눈으로 보는 곳. 결측 얼굴은 model 결측 스위치를 켠 뷰를 그대로 얹는다.
+  // i10 현재 장소 상세(TRIP-755) — props-only 화면. 옛 default·unknown 2키를 1키로 합쳤다(결측
+  // 얼굴은 Figma 에 없고 결측 처리는 model·화면 테스트가 잠근다). 뒤로·공유·모두 보기는 Figma 에
+  // 있으니 빈 핸들러로 켠다. 하트 '준비 중' 안내는 누르면 뜬다(6-b).
   {
-    key: 'live-place-default',
+    key: 'live-place',
     band: 'i',
-    label: 'i05 · 현재 장소 상세',
+    label: 'i10 · 현재 장소 상세',
     login: null,
     render: () => (
       <PlaceDetailScreen
         view={LIVE_PLACE_PREVIEW_VIEW}
-        onPressItinerary={noop}
-      />
-    ),
-  },
-  {
-    key: 'live-place-unknown',
-    band: 'i',
-    label: 'i05 · 현재 장소 상세 결측',
-    login: null,
-    render: () => (
-      <PlaceDetailScreen
-        view={{
-          ...LIVE_PLACE_PREVIEW_VIEW,
-          name: '미확인',
-          openingHours: '미확인',
-          openingHoursMissing: true,
-          hoursCaption: '확인 필요',
-          slackLabel: '미확인',
-        }}
-        onPressItinerary={noop}
+        onPressBack={noop}
+        onPressShare={noop}
+        onPressSeeAll={noop}
       />
     ),
   },
@@ -5581,7 +5585,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => (
       <View style={StyleSheet.absoluteFill}>
         <StayDetailScreen
-          item={STAY_DETAIL_PREVIEW_ITEM}
+          state={STAY_DETAIL_PREVIEW_STATE}
           saved={true}
           onToggleSave={noop}
           onPressBook={noop}
@@ -5608,7 +5612,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => (
       <View style={StyleSheet.absoluteFill}>
         <StayDetailScreen
-          item={STAY_DETAIL_PREVIEW_ITEM}
+          state={STAY_DETAIL_PREVIEW_STATE}
           saved={true}
           onToggleSave={noop}
           onPressBook={noop}

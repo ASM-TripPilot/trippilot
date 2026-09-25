@@ -348,7 +348,10 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    + `settings-delete-dialog-final`(2단 4531:3018) 추가(+1)로 **순 0** → 165 유지. 777 이 넣은
     //    my-stays-dialog 는 이미 위 줄에 셌다(두 번 올리지 않는다). 정확한 25키·라벨은 아래 'TRIP-772'
     //    describe, 정렬은 devPreviewBandSort EXPECTED_L 이 못박는다.
-    expect(PREVIEW_STATES).toHaveLength(165);
+    // ⚠️ TRIP-755: i10 현재 장소 상세 2키(`live-place-default`·`-unknown`)를 `live-place` 1키(band `i`)로
+    //    합쳐 **순 −1** → 165→164. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에서
+    //    키만 바꾸고 이 가드는 안 만진다(재편 전엔 165개라 red). 정확한 키는 `devPreviewLiveHub.test.tsx`.
+    expect(PREVIEW_STATES).toHaveLength(164);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(

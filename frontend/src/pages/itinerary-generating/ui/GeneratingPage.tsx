@@ -15,6 +15,7 @@ import {
   usePostTripsTripIdItinerary,
 } from '@/shared/api/generated/trips/trips';
 import { getAccessToken } from '@/shared/api/tokenManager';
+import { promptAndRegisterPush } from '@/shared/push';
 
 /**
  * h09 배선(TRIP-305) — 생성 POST 를 소유·발화하고 진행/성공/실패/이탈을 화면에 잇는다.
@@ -68,6 +69,8 @@ export function GeneratingPage({
       { tripId, data: { generationMode: mode } },
       {
         onSuccess: (data: Itinerary) => {
+          // 일정이 처음 생긴 순간 알림 권한을 묻는다(TRIP-835) — 기다리지 않는다(이동이 다이얼로그에 막히지 않게).
+          void promptAndRegisterPush();
           // copick 씨앗은 허브가 아니라 **첫 비고정 슬롯**의 SlotFillPage 로 착지한다(01b 순회 세부,
           // AC-6). h05 는 slotKey 를 몰라 템플릿만 실어 보내므로, 채우는 것은 이 화면이다 — 생성
           // 응답이 곧 생성된 일정(days 포함, `customInstance<Itinerary>`)이라 별도 GET 불요.

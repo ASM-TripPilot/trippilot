@@ -2,9 +2,9 @@
 paths:
   - "src/entities/**"
 ---
-# `src/entities/` — FSD entities 층 (TRIP-804 규칙 신설 · TRIP-806~809 4슬라이스 입주 · TRIP-810 옛 자리 shim 전부 정리)
+# `src/entities/` — FSD entities 층 (TRIP-804 규칙 신설 · TRIP-806~809 4슬라이스 입주 · TRIP-810 옛 자리 shim 전부 정리 · TRIP-637로 5번째 슬라이스 `style-analysis` 입주)
 
-둘 이상 feature가 쓰는 **도메인 단위**(place·stay·trip·itinerary-slot 같은 카드·타입·업무 규칙)를 두는 층. **입주 순서 = `place`(TRIP-806) → `stay`(TRIP-807) → `trip`(TRIP-808) → `itinerary-slot`(TRIP-809).** TRIP-810이 806~809가 남긴 옛 자리 재수출 shim 10종(순수 6 삭제 + 부분 4 재수출 줄 제거)을 전부 걷어, 소비처는 이제 전부 `@/entities/...`를 직접 문다(옛 경로 shim 0). 슬라이스별 파일 목록의 정본은 `src/entities` 디렉토리와 `docs/structure.generated.md`.
+둘 이상 feature가 쓰는 **도메인 단위**(place·stay·trip·itinerary-slot·style-analysis 같은 카드·타입·업무 규칙)를 두는 층. **입주 순서 = `place`(TRIP-806) → `stay`(TRIP-807) → `trip`(TRIP-808) → `itinerary-slot`(TRIP-809) → `style-analysis`(TRIP-637, 2026-09-25).** TRIP-810이 806~809가 남긴 옛 자리 재수출 shim 10종(순수 6 삭제 + 부분 4 재수출 줄 제거)을 전부 걷어, 소비처는 이제 전부 `@/entities/...`를 직접 문다(옛 경로 shim 0). 슬라이스별 파일 목록의 정본은 `src/entities` 디렉토리와 `docs/structure.generated.md`.
 
 ## import 방향
 - entities → shared 만 참조한다. features · widgets · pages · app · app-shell 은 참조하지 못한다(하위 층은 상위 층을 모른다).
@@ -81,3 +81,14 @@ paths:
 | `ui/ReplanSlotRow.tsx` | `features/planb/ui/ReplanSlotRow.tsx`에서 바이트 이관(글리프 import→`SlotGlyphs`, VM 타입→`../model` import+재수출만 변경, 컴포넌트 본문 동일). ⚠️ 헤더 주석의 INV-3 가드명은 `entitiesItinerarySlotStructure G3`로 5-c에서 정정됨(이관 전 `executionDurationStructure` 표기는 stale — 그 가드는 이제 사정거리 밖). 옛 자리 shim(`features/planb/ui/ReplanSlotRow.tsx`)은 **TRIP-810에서 파일째 삭제** — 소비처는 이제 `pages/planb-draft/ui/ReplanDraftView.tsx`(TRIP-751, 구 `ReplanDraftScreen`은 같은 사이클로 파일째 삭제)·`app/_dev/preview.tsx`가 entities 직참조. **TRIP-751**: 렌더 본문 재작성 — 번호 원 톤(`tone==='visited'?bg-success:bg-primary`) · 사진/`SlotPhotoPlaceholder`(78px, 사진은 72px 선재 차이) · 시간 알약 · 흐림(`opacity-45`, 카드 루트에만) · "다른 후보"(예정 행만). 육안 게이트 지적으로 알약 `py-[4px]`·`leading-[15px]/[18px]`·카드 패딩 `p-[11px]`로 재조정(96/115pt 행 높이 맞춤, 03 §「6단계 수정」). |
 
 **이관 안 한 것(entities/itinerary-slot 범위 밖, TRIP-809 시점 서술)**: 티켓이 프레이밍한 "공용 슬롯 카드 하나로 통합"·"`HH:mm–HH:mm` 시각 칩 포맷터"는 **당시 코드에 존재하지 않아 신설하지 않았다**(01 브리프 실측 — `slice(0,5)` 인라인 처리가 표면마다 다 다름, 병합하면 회귀). **[TRIP-783 갱신]** 이후 h공통·지도+시트 셸 티켓이 위 `ui/SlotStopCard.tsx`로 공용 카드를 **신설**했다 — 단 `PoiSlotCard` **통합·대체가 아니라 병존**(둘 다 남고, 대체는 여전히 소비 화면 재작성 후속 몫)이라 이 문단의 "통합하지 않았다"는 결론 자체는 유지된다. `DraftScreen`/`ManualPlanScreen`/`ItineraryEditScreen` 슬롯·`ManualEditShell`(widgets) 슬롯은 화면 고유 계약이라 접히지 않음(3-a 결정). (i01의 옛 `LiveSlotCard`는 TRIP-746으로 파일째 삭제되고 위 `ui/SlotProgressCard.tsx`로 대체 — 이관이 아니라 재작성, 세 상태 계약 자체가 달라졌다.) (**`TimelineSlotCard`는 TRIP-801로 `TimelineScreen.tsx`째 삭제**됨 — 옛 예시였을 뿐 이 결정에 영향 없음, 아래 layer-features-itinerary.md 참고.) `SlotState`('done'|'active'|'upcoming', execution 방문기록 파생 사영)는 서버 enum이 아니라 이관하지 않고 정본 관측만(D1). **TRIP-810로 옛 자리 shim 6종(순수, orphan 3 포함) 전부 파일째 삭제 + `ItineraryGlyphs.tsx`의 Category 8종 재수출 줄 제거** — `ConceptPickerScreen.tsx`(브리프 오측 3, 실제 importer 존재)가 entities `SlotGlyphs`를 직참조하도록 재조준(위 `layer-features-itinerary.md` ItineraryGlyphs 행 참고). 옛 자리 파일 참조는 이제 0.
+
+## `src/entities/style-analysis/` (TRIP-637, 2026-09-25)
+
+파일 목록·export 전수는 `docs/structure.generated.md`(기계 생성). 여기엔 용도·함정만.
+
+| 파일 | 용도·함정 |
+|---|---|
+| `lib/styleFace.ts` | j05(reflection)·l03(settings) 두 feature가 각자 들고 있던 "정식 분석인가 임시 미리보기인가" 판정을 **한 곳으로 통합**(`features/reflection/model/styleThreshold.ts`에서 본문 무변경 이동, git mv 성격). `export type StyleFace = 'official' \| 'insufficient'` + `export function resolveStyleFace(envelope: StyleAnalysisEnvelope): StyleFace` — `official===true && analysis!=null`만 official(BR-U5-40, PBT-U5-F4). `progress.current`는 안 읽어 자체 승격 합성을 구조적으로 차단. [[반쪽 방어 (half-applied guard)]]: envelope/progress/analysis 중첩 결측에도 크래시 0·항상 insufficient. import는 `@/shared/api/generated/schemas` 타입 하나뿐(entities는 shared만 본다). 소비처 3곳: `pages/travel-style/ui/TravelStylePage.tsx`(함수)·`features/reflection/ui/TravelStyleScreen.tsx`(타입만)·`features/settings/model/styleCardModel.ts`(함수, TRIP-637 신규 소비). `categoryLabel`(표시 라벨 변환)은 j05 전용이라 옛 자리 `styleThreshold.ts`에 그대로 남았다 — **이 파일이 판정만 소유**한다. |
+| `lib/styleFace.test.ts` | `styleThreshold.test.ts`의 `resolveStyleFace` 블록을 **단언 무변경**으로 이동 — PBT-U5-F4 fast-check property 3종(numRuns 500) + 9↔10 경계 예제 + 반쪽 방어 5형태. |
+
+**옛 자리 shim 0**(TRIP-810 관례 계승) — `features/reflection/model/styleThreshold.ts`에 `resolveStyleFace`·`StyleFace` 토큰 0(정의도 재수출도 없음). `features/settings/model/styleCardModel.ts`의 `\|\| analysis == null`은 판정과 별개인 TS 타입 좁히기용 행동상 죽은 중복(동치 property `styleCardModel.face.test.ts`가 잠금).
