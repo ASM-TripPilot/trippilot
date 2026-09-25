@@ -14,7 +14,12 @@ from fastapi import FastAPI
 from trippilot.api.errors import install_error_handlers
 from trippilot.api.middleware import MiddlewareSettings, install_middlewares
 from trippilot.api.protocols import ItineraryOrchestrator
-from trippilot.api.routes import notification_router, reflection_router, router
+from trippilot.api.routes import (
+    notification_router,
+    planb_router,
+    reflection_router,
+    router,
+)
 
 HEALTH_BODY = {"status": "UP", "service": "ai"}
 
@@ -36,6 +41,9 @@ def create_app(
     install_error_handlers(app)
     install_middlewares(app, middleware)
     app.include_router(router)
+    # 여행 중 경계 별칭(/ai/v1/planb) — 같은 핸들러, 다른 이름. TRIP-960 1단계.
+    # 구 경로(/ai/v1/itinerary/{replan,alternatives})는 백엔드가 옮겨 갈 때까지 살아 있다.
+    app.include_router(planb_router)
     app.include_router(reflection_router)  # TRIP-429 — U6 Reflect 경계
     app.include_router(notification_router)  # 리마인드 알림 문구 경계
 

@@ -68,6 +68,11 @@ def test_openapi_snapshot_covers_boundary_routes() -> None:
         "/ai/v1/itinerary/explanations",   # TRIP-479
         "/ai/v1/itinerary/edit",           # TRIP-431
         "/ai/v1/itinerary/replan",         # 재계획 연동 설계 A-4
+        # 여행 중 경계 별칭 (TRIP-960 1단계) — 위 두 줄과 **같은 핸들러**다.
+        # 구 경로(/ai/v1/itinerary/{replan,alternatives})는 백엔드 CALLED_PATHS 가
+        # 옮겨 갈 때까지 살아 있다. ④단계에서 구 경로 두 줄을 지울 때 이 두 줄만 남는다.
+        "/ai/v1/planb/replan",
+        "/ai/v1/planb/alternatives",
             "/ai/v1/reflection/generate",      # TRIP-429 — U6 Reflect (FD v1.0)
             "/ai/v1/reflection/nudge",         # TRIP-429
             "/ai/v1/reflection/share-card",    # TRIP-429 후속 — j06 공유 카드 문구
