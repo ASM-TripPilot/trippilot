@@ -371,3 +371,166 @@ def test_planb_fallback_skips_the_rank_and_still_produces_an_itinerary() -> None
     assert any("planb_rank_skipped: fallback_level=" in n for n in body["notes"]), body["notes"]
     assert body["empty_reason"] is None, body["notes"]
     assert body["itinerary"]["days"][0]["slots"], body["notes"]
+
+
+# ── ⑧ 봉투 이음매 — 배선이 랭킹을 **실제로 실어 보내는가** ────────────
+#
+# 역검증이 여기 구멍을 잡았다: dev 앱은 실 LLM 이 없어 PlanB 가 항상 규칙 폴백이고,
+# 그래서 `planb_rank=planb_rank` 를 `()` 로 바꿔도 41건이 전부 초록이었다. 통합
+# 경로가 **비어 있지 않은 랭킹을 한 번도 안 실어 봤기** 때문이다. 봉투를 직접 본다.
+
+from trippilot.agents.planb.rag import Alternative, PlanBRagResult  # noqa: E402
+
+
+class _SpyScheduleAgent:
+    """`ScheduleAgent` 를 감싸 봉투를 붙잡는다 — 산출은 원본 그대로 흘린다."""
+
+    def __init__(self, inner) -> None:
+        self._inner = inner
+        self.tasks: list[object] = []
+
+    def run(self, task):
+        self.tasks.append(task)
+        return self._inner.run(task)
+
+
+class _StubRag:
+    """PlanB 가 **LLM 을 썼을 때**를 재현한다 (dev 앱에는 실 LLM 이 없다)."""
+
+    def __init__(self, ranked: tuple[str, ...]) -> None:
+        self._ranked = tuple(PoiId(r) for r in ranked)
+
+    def run(self, request):
+        return PlanBRagResult(
+            alternatives=(Alternative(label="A", poi_ids=self._ranked[:1], rationale="r"),),
+            is_fallback=False, fallback_level=0, notes=(),
+            retrieved={"SITUATION": 3}, dropped_out_of_pool=(),
+            empty_reason=None, ranked_poi_ids=self._ranked,
+        )
+
+
+def _app_with_spy(rag=None):
+    app = build_dev_app(directives=_DIRECTIVES)
+    orch = app.state.orchestrator
+    spy = _SpyScheduleAgent(orch._schedule_agent)
+    orch._schedule_agent = spy
+    if rag is not None:
+        orch._rag = rag
+    return app, spy
+
+
+def _slots(body) -> list[str]:
+    return [s["poi_id"] for s in body["itinerary"]["days"][0]["slots"]]
+
+
+def test_llm_backed_rank_reaches_the_schedule_task() -> None:
+    """PlanB 가 LLM 을 썼으면 랭킹이 봉투(`ScheduleTask.planb_rank`)에 실린다.
+
+    이 단언이 없으면 배선의 `planb_rank=` 인자를 `()` 로 바꿔도 아무것도 안 운다 —
+    실측으로 확인했다(역검증 ①).
+    """
+    ranked = ("e0000000-0000-4000-8000-000000000003",
+              "e0000000-0000-4000-8000-000000000001")
+    app, spy = _app_with_spy(_StubRag(ranked))
+    with TestClient(app, raise_server_exceptions=False) as client:
+        body = client.post("/ai/v1/itinerary/replan", json=_body()).json()
+
+    assert len(spy.tasks) == 1
+    assert [str(p) for p in spy.tasks[0].planb_rank] == list(ranked), "랭킹이 봉투에 안 실렸다"
+    assert body["retrieved"] == {"SITUATION": 3}  # PlanB 산출이 응답까지 흐른다
+    assert not any("planb_rank_skipped" in n for n in body["notes"])
+
+
+def test_llm_backed_rank_reaches_the_score_in_the_integration_path() -> None:
+    """봉투에 실리는 것으로 끝이 아니다 — 점수 단계까지 닿아야 한다.
+
+    `planb_rank_lifted:N/M` 관측이 통합 경로에서 실제로 발행되는지 본다. 봉투만
+    보면 에이전트가 그 필드를 무시해도 초록이다.
+
+    **배치가 바뀌는지는 여기서 보지 않는다** — 데모 시드로는 볼 수 없다. 시드 4건 중
+    성산일출봉·월정리는 앵커에서 **~40km 동쪽**이라 대중교통 반경 10km
+    (`poi_curation/config.py`)에 걸려 **후보 풀에 애초에 없다**(INV-1 — 풀 밖은 후보가
+    아니다). 남는 풀이 2건이고 둘 다 배치되므로 "올려서 밀어낼 여분"이 없다.
+    가산이 배치를 바꾸는 것은 `test_planb_rank_changes_the_itinerary` 가 같은
+    카테고리·근거리 후보 6건으로 증명한다.
+
+    (통합 테스트에서 "배치 안 된 후보"가 필요하면 데모 시드로는 안 된다 —
+    `build_dev_app(poi_db=…)` 로 앵커 근처 후보를 여러 건 넣어야 한다.)
+    """
+    in_pool = "e0000000-0000-4000-8000-000000000002"  # 흑돼지거리 — 앵커 근처
+    trace = InMemoryTrace()
+    app = build_dev_app(directives=_DIRECTIVES, trace=trace)
+    app.state.orchestrator._rag = _StubRag((in_pool,))
+    with TestClient(app, raise_server_exceptions=False) as client:
+        body = client.post("/ai/v1/itinerary/replan", json=_body()).json()
+
+    assert body["empty_reason"] is None, body["notes"]
+    assert any("planb_rank_lifted:1/1" in getattr(e, "reason", "") for e in trace.events), (
+        "가산이 점수 단계까지 안 닿았다 — 봉투에만 실렸다")
+
+
+def test_out_of_pool_rank_is_reported_as_zero_lifted() -> None:
+    """풀 밖 참조만 담긴 랭킹은 0 건으로 기록된다 — RAG 를 태웠는데 일정에 효과가
+    0 이었다는 사실이 보여야 한다(침묵 금지). 반경 밖 POI 가 실제로 그 경우다."""
+    trace = InMemoryTrace()
+    app = build_dev_app(directives=_DIRECTIVES, trace=trace)
+    app.state.orchestrator._rag = _StubRag(
+        ("e0000000-0000-4000-8000-000000000001",))  # 성산일출봉 — 반경 10km 밖
+    with TestClient(app, raise_server_exceptions=False) as client:
+        client.post("/ai/v1/itinerary/replan", json=_body())
+
+    assert any("planb_rank_lifted:0/1" in getattr(e, "reason", "") for e in trace.events)
+
+
+def test_rule_ranking_is_not_passed_as_a_rank() -> None:
+    """PlanB 가 규칙 폴백이면 봉투에 랭킹을 넘기지 않는다.
+
+    규칙 랭킹은 `build_rule_score` 가 이미 보는 신호(우천·거리·저장 장소)라 가산으로
+    또 실으면 같은 신호를 두 번 센다. dev 앱은 실 LLM 이 없어 항상 이 경로다 —
+    이 단언이 없으면 `is_fallback` 가드를 지워도 안 운다(역검증 ④).
+    """
+    app, spy = _app_with_spy()
+    with TestClient(app, raise_server_exceptions=False) as client:
+        body = client.post("/ai/v1/itinerary/replan", json=_body()).json()
+
+    assert len(spy.tasks) == 1
+    assert spy.tasks[0].planb_rank == (), "규칙 랭킹이 가산으로 실렸다"
+    assert any("planb_rank_skipped" in n for n in body["notes"]), body["notes"]
+
+
+# ── ⑨ PlanBAgent 가 실제로 ranked_poi_ids 를 낸다 ──────────────────────
+
+from trippilot.agents.planb.rag import PlanBAgent, PlanBRagConfig  # noqa: E402
+from trippilot.llm_gateway.workers.alternative_selection import (  # noqa: E402
+    AlternativeSelectionWorker,
+)
+from tests.fakes.fake_embedding import FakeEmbedding  # noqa: E402
+from tests.fakes.in_memory_vector_store import InMemoryVectorStore  # noqa: E402
+from tests.test_planb_rag import _SMALL, _pool as _planb_pool, _request as _planb_req, _select_gw  # noqa: E402
+
+
+def test_planb_exposes_the_full_ranking_not_just_the_shown_alternatives() -> None:
+    """`alternatives` 는 `max_alternatives` 로 잘린 화면용이고, `ranked_poi_ids` 는
+    잘리기 전 순서다 — /replan 이 점수 가산에 쓰는 쪽이 후자다."""
+    agent = PlanBAgent(
+        FakeEmbedding(dim=_SMALL), InMemoryVectorStore(),
+        alternative_worker=AlternativeSelectionWorker(
+            _select_gw(("p3", 0.9), ("p2", 0.6), ("p1", 0.3))),
+        config=PlanBRagConfig(max_alternatives=1),  # 화면엔 1건만
+    )
+    result = agent.run(_planb_req(_planb_pool("p1", "p2", "p3")))
+
+    assert result.is_fallback is False
+    assert len(result.alternatives) == 1                      # 화면은 잘린다
+    assert [str(p) for p in result.ranked_poi_ids] == ["p3", "p2", "p1"]  # 랭킹은 온전하다
+
+
+def test_rule_fallback_ranking_is_capped() -> None:
+    """규칙 랭킹 경로는 `kept` 가 **풀 전체**다 — 상한이 없으면 `ScheduleTask` 봉투가
+    풀 크기만큼 커진다(워커 미주입 = 규칙 랭킹)."""
+    pool = _planb_pool(*[f"p{i}" for i in range(1, MAX_RANKED + 6)])
+    result = PlanBAgent(FakeEmbedding(dim=_SMALL), InMemoryVectorStore()).run(
+        _planb_req(pool))
+
+    assert result.is_fallback is True                      # 워커 없음 → 규칙 랭킹
+    assert len(result.ranked_poi_ids) == MAX_RANKED        # 풀은 더 큰데 상한에서 끊긴다
