@@ -43,6 +43,7 @@ function makeSlot(
     isFixed: false,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     tags: ['바다', '산책'],
     nameKo: '광안리 해변',
     category: '자연',

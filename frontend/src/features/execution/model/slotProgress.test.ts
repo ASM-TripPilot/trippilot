@@ -34,6 +34,7 @@ const slotArb: fc.Arbitrary<ItineraryDaysItemSlotsItem> = fc.record({
   isFixed: fc.boolean(),
   endsNextDay: fc.boolean(),
   hasViolation: fc.boolean(),
+  alternatives: fc.constant([]),
   tags: fc.array(fc.string()),
 });
 
@@ -48,6 +49,7 @@ const slot = (
   isFixed: false,
   endsNextDay: false,
   hasViolation: false,
+  alternatives: [],
   tags: [],
 });
 

@@ -38,6 +38,7 @@ function stay(over: Partial<SavedStay> = {}): SavedStay {
     savedStayId: 'stay-a',
     name: '해운대 오션 호텔',
     coordConfirmed: true,
+    linkedTripIds: [],
     checkIn: '2026-06-10',
     checkOut: '2026-06-12',
     registerRoute: 'MAP_SEARCH',
@@ -66,6 +67,7 @@ const GAMCHEON = stay({
   checkIn: null,
   checkOut: null,
   coordConfirmed: false,
+  linkedTripIds: [],
 });
 
 function renderSheet(

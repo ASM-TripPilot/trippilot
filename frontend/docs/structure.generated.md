@@ -142,6 +142,7 @@
 - `src/__tests__/shareCardStructure.test.ts`  →  (export 없음)
 - `src/__tests__/sharedToggleStructure.test.ts`  →  (export 없음)
 - `src/__tests__/sharedUiStructure.test.ts`  →  (export 없음)
+- `src/__tests__/slotCandidatesGenerated.test.ts`  →  (export 없음)
 - `src/__tests__/socialSdkConfigPlugin.test.ts`  →  (export 없음)
 - `src/__tests__/socialSdkSecrets.test.ts`  →  (export 없음)
 - `src/__tests__/stayDetailStructure.test.ts`  →  (export 없음)
@@ -1124,6 +1125,7 @@
 - `src/shared/api/generated/schemas/itineraryCandidatesSummary.ts`  →  ItineraryCandidatesSummary
 - `src/shared/api/generated/schemas/itineraryDaysItem.ts`  →  ItineraryDaysItem
 - `src/shared/api/generated/schemas/itineraryDaysItemSlotsItem.ts`  →  ItineraryDaysItemSlotsItem
+- `src/shared/api/generated/schemas/itineraryDaysItemSlotsItemAlternativesItem.ts`  →  ItineraryDaysItemSlotsItemAlternativesItem
 - `src/shared/api/generated/schemas/itineraryGenerationMode.ts`  →  ItineraryGenerationMode
 - `src/shared/api/generated/schemas/itineraryGenerationState.ts`  →  ItineraryGenerationState
 - `src/shared/api/generated/schemas/itinerarySnapshot.ts`  →  ItinerarySnapshot
@@ -1216,6 +1218,7 @@
 - `src/shared/api/generated/schemas/savedStay.ts`  →  SavedStay
 - `src/shared/api/generated/schemas/slotCandidates.ts`  →  SlotCandidates
 - `src/shared/api/generated/schemas/slotCandidatesCandidatesItem.ts`  →  SlotCandidatesCandidatesItem
+- `src/shared/api/generated/schemas/slotCandidatesEmptyReason.ts`  →  SlotCandidatesEmptyReason
 - `src/shared/api/generated/schemas/slotCandidatesRequest.ts`  →  SlotCandidatesRequest
 - `src/shared/api/generated/schemas/startReplanRequest.ts`  →  StartReplanRequest
 - `src/shared/api/generated/schemas/startReplanRequestOriginKind.ts`  →  StartReplanRequestOriginKind
@@ -1379,4 +1382,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 945개 파일
+합계 948개 파일

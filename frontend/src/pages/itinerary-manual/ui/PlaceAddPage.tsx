@@ -134,6 +134,8 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
       endsNextDay: patch.endsNextDay,
       hasViolation: false,
       tags: [],
+      // 로컬로 만든 새 슬롯엔 AI 차선책이 없다 — 계약상 "편집하면 사라진다"(빈 배열).
+      alternatives: [],
     };
     const nextDays = days.map((day) =>
       day.date === targetDate

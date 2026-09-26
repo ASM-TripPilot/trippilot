@@ -56,6 +56,7 @@ const mkSlot = (
   isFixed: false,
   endsNextDay: false,
   hasViolation: false,
+  alternatives: [],
   nameKo,
   distanceRange: '약 1.2km',
   openingHours,

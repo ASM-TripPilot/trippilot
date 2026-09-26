@@ -57,6 +57,7 @@ const STAY_FIXTURE: SavedStay = {
   savedStayId: 'stay-a',
   name: '해운대 오션 호텔',
   coordConfirmed: true,
+  linkedTripIds: [],
   checkIn: '2026-06-10',
   checkOut: '2026-06-12',
   registerRoute: 'MAP_SEARCH',

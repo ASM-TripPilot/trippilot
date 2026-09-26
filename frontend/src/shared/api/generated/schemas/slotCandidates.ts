@@ -4,15 +4,28 @@
  * TripPilot U1 API (소셜 로그인 전용 MVP)
  * U1 기반·계정·온보딩 (M1 Auth · M2 Profile · C3 Moderation). 소셜 로그인 전용 — 이메일/비밀번호 로그인은 후속 이연. 정본 대조: docs/design/U1-API-설계.md, U1-DB스키마-설계.md, U1-내부아키텍처-설계.md
  *
+ * **횡단 규약 — 입력 형식 오류는 어느 엔드포인트에서든 400이다.** 경로변수·쿼리의 타입 변환 실패(UUID·숫자·enum)와 필수 쿼리 누락은 표준 에러 봉투 (`ErrorResponse`, code=`VALIDATION_ERROR`, `fields[].field`=문제 파라미터 이름)로 나간다. 경로별 `'400'` 선언은 **업무 검증**이 있는 곳에만 적는다 — 형식 오류까지 경로마다 중복 선언하면 무엇이 그 엔드포인트 고유의 검증인지 안 보인다. (2026-09-01 이전에는 이 갈래가 500 `INTERNAL` 로 나갔다 — UUID-PATH-400)
+ *
  * OpenAPI spec version: 0.1.0-draft
  */
 import type { SlotCandidatesCandidatesItem } from './slotCandidatesCandidatesItem';
+import type { SlotCandidatesEmptyReason } from './slotCandidatesEmptyReason';
 
 export interface SlotCandidates {
   /** 빈 목록 = 후보 0건 → 반경 확대·컨셉 변경 제안(BR-U3-25) */
   candidates: SlotCandidatesCandidatesItem[];
   /** 실제 사용 반경. 후보가 0건이면 서버가 한 번 넓혀 다시 보므로 그대로 표시한다 */
   radiusMUsed: number;
-  /** **AI 순위가 아니다**(true). 후보 집합은 정본 그대로지만 정렬이 거리순이고 근거 문구가 템플릿이며 앞뒤 슬롯과의 동선을 따지지 않았다. 화면은 "AI 추천 준비 중, 가까운 순" 을 안내한다 — 이 값이 없으면 사용자는 취향이 반영된 줄 안다(INV-4). */
+  /** **AI 가 LLM 랭킹을 못 냈을 때 true**(AI 폴백 응답 또는 미도달 폴백). 후보 집합은 정본 그대로지만 정렬이 거리순이고 근거 문구가 템플릿이며 앞뒤 슬롯과의 동선을 따지지 않았다. 화면은 "AI 추천 준비 중, 가까운 순" 을 안내한다 — 이 값이 없으면 사용자는 취향이 반영된 줄 안다(INV-4). */
   degraded: boolean;
+  /**
+   * 후보가 **0건인 이유**. 후보가 있으면 null 이다.
+   *
+   * `NO_NEARBY` — 넓힌 반경 안에 후보 자체가 없다. 반경 확대·컨셉 변경이 통한다(BR-U3-25).
+   *
+   * `ALL_IN_ITINERARY` — 주변에 있으나 **전부 이미 이 일정에 들어 있다**(BR-U3-24). 넓혀도 같은 결과이고, 사용자가 할 일은 다른 슬롯을 빼는 것이다.
+   *
+   * 둘을 뭉뚱그리면 화면이 "근처에서 바꿀 만한 후보를 찾지 못했어요" 하나로 말하고 사용자는 반경만 계속 넓히며 헛돈다.
+   */
+  emptyReason?: SlotCandidatesEmptyReason;
 }

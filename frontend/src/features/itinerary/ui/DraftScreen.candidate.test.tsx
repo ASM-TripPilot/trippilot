@@ -44,6 +44,7 @@ function slot(
     isFixed: false,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     tags: [],
     ...over,
   };

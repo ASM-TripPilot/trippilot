@@ -119,6 +119,7 @@ function daysUpTo(count: number): ItineraryDaysItem[] {
         isFixed: false,
         endsNextDay: false,
         hasViolation: false,
+        alternatives: [],
         tags: [],
         nameKo: `${date} 첫 장소`,
         lat: 33.458,

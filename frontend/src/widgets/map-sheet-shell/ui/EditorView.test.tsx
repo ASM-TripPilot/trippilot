@@ -62,6 +62,7 @@ function slot(poiId: string, overrides: Partial<EditorSlot> = {}): EditorSlot {
     isFixed: false,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     tags: ['바다'],
     nameKo: `장소-${poiId}`,
     ...overrides,
@@ -250,6 +251,7 @@ const I07_SLOTS: EditorSlot[] = [
     nameKo: '부산시립미술관',
     tags: ['미술', '실내'],
     hasViolation: true,
+    alternatives: [],
     violationReason: '숙소 고정 충돌',
   }),
   slot('p4', {

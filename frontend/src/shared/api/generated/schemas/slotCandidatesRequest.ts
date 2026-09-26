@@ -4,6 +4,8 @@
  * TripPilot U1 API (소셜 로그인 전용 MVP)
  * U1 기반·계정·온보딩 (M1 Auth · M2 Profile · C3 Moderation). 소셜 로그인 전용 — 이메일/비밀번호 로그인은 후속 이연. 정본 대조: docs/design/U1-API-설계.md, U1-DB스키마-설계.md, U1-내부아키텍처-설계.md
  *
+ * **횡단 규약 — 입력 형식 오류는 어느 엔드포인트에서든 400이다.** 경로변수·쿼리의 타입 변환 실패(UUID·숫자·enum)와 필수 쿼리 누락은 표준 에러 봉투 (`ErrorResponse`, code=`VALIDATION_ERROR`, `fields[].field`=문제 파라미터 이름)로 나간다. 경로별 `'400'` 선언은 **업무 검증**이 있는 곳에만 적는다 — 형식 오류까지 경로마다 중복 선언하면 무엇이 그 엔드포인트 고유의 검증인지 안 보인다. (2026-09-01 이전에는 이 갈래가 500 `INTERNAL` 로 나갔다 — UUID-PATH-400)
+ *
  * OpenAPI spec version: 0.1.0-draft
  */
 
@@ -24,4 +26,9 @@ export interface SlotCandidatesRequest {
    * @maxLength 40
    */
   concept?: string | null;
+  /**
+   * i14 재계획 사유 코드(FE 카탈로그 키 — `WEATHER`·`TEMP_CLOSED`·`SLOW_MOVE`·`LOW_ENERGY`· `FULLY_BOOKED`·`JUST_CHANGE`). 주면 AI 가 사유 기반 랭킹을 슬롯 교체에도 쓴다(비 오는 날 야외 후보를 뒤로). 사유 없는 편집 흐름(h12·h18)은 생략한다. **모르는 코드도 400 이 아니다** — 서버가 사유 없음으로 눕히고 로그를 남긴다(랭킹 힌트지 요청 성립 조건이 아니다).
+   * @maxLength 40
+   */
+  reason?: string | null;
 }

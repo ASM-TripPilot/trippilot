@@ -409,6 +409,13 @@ export function SlotFillPage({
       concept={concept}
       progress={conceptProgress()}
       stepperSlot={conceptStepper()}
+      // 후보 응답의 이름·태그·사진을 카드까지 내린다(TRIP-1024, QA #070 "이름 준비 중"·회색 사진).
+      candidateViews={Object.fromEntries(
+        candidates.map(({ poiId, nameKo, tags, imageUrl }) => [
+          poiId,
+          { nameKo, tags, imageUrl },
+        ])
+      )}
       // mapView 는 전달하지 않는다 — candidates 응답에 좌표가 없어 프로덕션은 지도 미표시(정직 degrade,
       // D6). 지도 픽스처는 프리뷰 전용.
       onSelectRadius={handleSelectRadius}

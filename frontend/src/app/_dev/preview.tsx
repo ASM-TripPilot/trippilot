@@ -533,6 +533,7 @@ const DRAFT_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     isFixed: false,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     nameKo: '성산일출봉',
     imageUrl: DRAFT_PREVIEW_PHOTOS[0],
     tags: ['바다', '포토'],
@@ -547,6 +548,7 @@ const DRAFT_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     isFixed: false,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     nameKo: null,
     imageUrl: null,
     tags: [],
@@ -560,6 +562,7 @@ const DRAFT_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     isFixed: false,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     nameKo: '카페 그레이',
     imageUrl: DRAFT_PREVIEW_PHOTOS[1],
     tags: ['카페'],
@@ -573,6 +576,7 @@ const DRAFT_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     isFixed: true,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     nameKo: '제주 신라스테이',
     imageUrl: DRAFT_PREVIEW_PHOTOS[2],
     tags: [],
@@ -601,6 +605,7 @@ const H08_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     isFixed: false,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     nameKo: '광안리 해변',
     category: '자연',
     tags: ['바다', '산책'],
@@ -615,6 +620,7 @@ const H08_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     isFixed: false,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     nameKo: '황령산 전망대',
     category: '자연',
     tags: ['전망', '야경'],
@@ -629,6 +635,7 @@ const H08_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     isFixed: false,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     nameKo: '부산시립미술관',
     category: '문화',
     tags: ['전시', '실내'],
@@ -643,6 +650,7 @@ const H08_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     isFixed: false,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     nameKo: '웨이브온 카페',
     category: '카페',
     tags: ['카페', '오션뷰'],
@@ -676,6 +684,7 @@ const H11_COPICK_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     isFixed: false,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     nameKo: '광안리 해변',
     category: '자연',
     tags: ['바다', '산책'],
@@ -691,6 +700,7 @@ const H11_COPICK_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     isFixed: false,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     nameKo: '황령산 전망대',
     category: '자연',
     tags: ['전망', '야경'],
@@ -706,6 +716,7 @@ const H11_COPICK_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     isFixed: false,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     nameKo: '부산시립미술관',
     category: '문화',
     tags: ['전시', '실내'],
@@ -721,6 +732,7 @@ const H11_COPICK_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     isFixed: false,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     nameKo: '웨이브온 카페',
     category: '카페',
     tags: ['카페', '오션뷰'],
@@ -736,6 +748,7 @@ const H11_COPICK_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     isFixed: true,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     nameKo: '해운대 그랜드 호텔',
     category: '숙소',
     tags: [],
@@ -748,8 +761,8 @@ const H11_COPICK_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
 
 const H11_COPICK_PREVIEW_DATE = '2026-06-10';
 
-// h10 후보 선택(TRIP-795) 프리뷰 픽스처 — candidates 계약엔 이름·태그·좌표·톤다운이 없어(BE 후속)
-// 전부 Figma 값으로 채운 프롭 전용이다(부산시립미술관·F1963·부산현대미술관·감천문화마을). default 는
+// h10 후보 선택(TRIP-795) 프리뷰 픽스처 — 이름·태그·사진은 TRIP-1024 로 candidates 계약에 들어왔지만
+// (페이지가 응답에서 채움) 좌표·톤다운은 여전히 계약 밖이라, 여기선 전부 Figma 값으로 채운 프롭 전용이다(부산시립미술관·F1963·부산현대미술관·감천문화마을). default 는
 // D 를 반경 밖 톤다운(dimmed), wide 는 D 활성(dimmed 없음)으로 갈린다.
 const H10_RADIUS_STEPS = [
   { key: 'near', label: '700m' },
@@ -771,14 +784,32 @@ const H10_DEFAULT_CANDIDATES: SlotCandidatesCandidatesItem[] = [
     rationale: '반경 밖 (넓히면 선택 가능)',
   },
 ];
-const H10_DEFAULT_VIEWS: Record<
-  string,
-  { nameKo?: string | null; tags?: string[]; dimmed?: boolean }
-> = {
-  A1: { nameKo: '부산시립미술관', tags: ['미술', '실내', '취향매칭'] },
-  B2: { nameKo: 'F1963 복합문화공간', tags: ['갤러리', '카페'] },
-  C3: { nameKo: '부산현대미술관', tags: ['미술', '자연'] },
-  D4: { nameKo: '감천문화마을', tags: ['전시', '포토'], dimmed: true },
+// 사진: A·B·D 는 로컬 에셋(78 썸네일), C 는 null 로 회색 자리 엣지를 함께 본다. D(반경 밖)에 사진을
+// 둔 건 흐림 톤다운이 사진에는 안 걸리는 차이(범위 밖 관측)를 눈으로 확인하려는 것이다.
+type H10View = {
+  nameKo?: string | null;
+  tags?: string[];
+  imageUrl?: string | null;
+  dimmed?: boolean;
+};
+const H10_DEFAULT_VIEWS: Record<string, H10View> = {
+  A1: {
+    nameKo: '부산시립미술관',
+    tags: ['미술', '실내', '취향매칭'],
+    imageUrl: DRAFT_PREVIEW_PHOTOS[0],
+  },
+  B2: {
+    nameKo: 'F1963 복합문화공간',
+    tags: ['갤러리', '카페'],
+    imageUrl: DRAFT_PREVIEW_PHOTOS[1],
+  },
+  C3: { nameKo: '부산현대미술관', tags: ['미술', '자연'], imageUrl: null },
+  D4: {
+    nameKo: '감천문화마을',
+    tags: ['전시', '포토'],
+    imageUrl: DRAFT_PREVIEW_PHOTOS[2],
+    dimmed: true,
+  },
 };
 const H10_WIDE_CANDIDATES: SlotCandidatesCandidatesItem[] = [
   { poiId: 'A1', distanceRange: '420m', rationale: '가장 가까운 실내 전시' },
@@ -790,14 +821,9 @@ const H10_WIDE_CANDIDATES: SlotCandidatesCandidatesItem[] = [
   },
   { poiId: 'D4', distanceRange: '약 9.9km', rationale: '넓힌 반경에 들어옴' },
 ];
-const H10_WIDE_VIEWS: Record<
-  string,
-  { nameKo?: string | null; tags?: string[]; dimmed?: boolean }
-> = {
-  A1: { nameKo: '부산시립미술관', tags: ['미술', '실내', '취향매칭'] },
-  B2: { nameKo: 'F1963 복합문화공간', tags: ['갤러리', '카페'] },
-  C3: { nameKo: '부산현대미술관', tags: ['미술', '자연'] },
-  D4: { nameKo: '감천문화마을', tags: ['전시', '포토'] },
+const H10_WIDE_VIEWS: Record<string, H10View> = {
+  ...H10_DEFAULT_VIEWS,
+  D4: { ...H10_DEFAULT_VIEWS.D4, dimmed: false },
 };
 const H10_STEPPER: ReactElement = (
   <CoPickStepper
@@ -1089,6 +1115,7 @@ const TIMELINE_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     isFixed: false,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     tags: [],
   },
   {
@@ -1098,6 +1125,7 @@ const TIMELINE_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     isFixed: true,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     tags: [],
   },
   {
@@ -1107,6 +1135,7 @@ const TIMELINE_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     isFixed: false,
     endsNextDay: false,
     hasViolation: true,
+    alternatives: [],
     violationReason: '영업 종료 후 도착',
     tags: [],
   },
@@ -1117,6 +1146,7 @@ const TIMELINE_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     isFixed: false,
     endsNextDay: true,
     hasViolation: false,
+    alternatives: [],
     tags: [],
   },
 ];
@@ -1591,6 +1621,7 @@ const liveHubSlot = (
   isFixed: false,
   endsNextDay: false,
   hasViolation: false,
+  alternatives: [],
   nameKo,
   distanceRange: null,
   openingHours,
@@ -1899,6 +1930,7 @@ const i07Slot = (
   isFixed: false,
   endsNextDay: false,
   hasViolation: violationReason !== undefined,
+  alternatives: [],
   violationReason: violationReason ?? null,
   nameKo,
   tags,
@@ -3886,6 +3918,7 @@ export const PREVIEW_STATES: PreviewState[] = [
             savedStayId: 'stay-gwangalli',
             name: '광안리 뷰 호텔',
             coordConfirmed: true,
+            linkedTripIds: [],
             checkIn: '2026-06-11',
             checkOut: '2026-06-12',
             registerRoute: 'MAP_SEARCH',
@@ -3899,6 +3932,7 @@ export const PREVIEW_STATES: PreviewState[] = [
             savedStayId: 'stay-haeundae',
             name: '해운대 오션 호텔',
             coordConfirmed: true,
+            linkedTripIds: [],
             checkIn: '2026-06-10',
             checkOut: '2026-06-12',
             registerRoute: 'MAP_SEARCH',
@@ -3912,6 +3946,7 @@ export const PREVIEW_STATES: PreviewState[] = [
             savedStayId: 'stay-gamcheon',
             name: '감천 게스트하우스',
             coordConfirmed: false,
+            linkedTripIds: [],
             checkIn: null,
             checkOut: null,
             registerRoute: 'MAP_SEARCH',
@@ -4800,7 +4835,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   // h08 다른 후보 시트(TRIP-793) — 옛 h12 인라인 패널·h18 옵션 교체를 하나의 바텀시트로 합쳤다.
-  // candidates 응답엔 이름·태그가 아직 없어(BE 후속) 픽스처(Figma 4298:1998·4452:1478 값)로만 그린다.
+  // 픽스처는 Figma 4298:1998·4452:1478 값이다(사진: 현재 행·p2 는 로컬 에셋, p3 는 null 로 회색 자리 엣지).
   // 실화면 딥링크로는 볼 수 없다(생성 POST 가 만드는 tripId + slot-candidates 응답이 백엔드 없이는
   // 안 생긴다). 바텀시트 실 열림·scrim 딤·2스냅은 통과형 목 사각이라 6-b 실기가 유일한 개폐 그물.
   {
@@ -4814,6 +4849,7 @@ export const PREVIEW_STATES: PreviewState[] = [
           poiId: 'cur',
           nameKo: '부산시립미술관',
           tags: ['미술', '실내'],
+          imageUrl: DRAFT_PREVIEW_PHOTOS[0],
           distanceRange: '560m',
         }}
         candidates={[
@@ -4821,6 +4857,7 @@ export const PREVIEW_STATES: PreviewState[] = [
             poiId: 'p2',
             nameKo: 'F1963 복합문화공간',
             tags: ['카페', '갤러리'],
+            imageUrl: DRAFT_PREVIEW_PHOTOS[1],
             distanceRange: '1.1km',
           },
           {

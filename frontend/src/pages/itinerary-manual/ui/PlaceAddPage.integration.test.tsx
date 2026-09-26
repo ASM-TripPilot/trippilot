@@ -132,6 +132,7 @@ function makeSlot(poiId: string): ItineraryDaysItemSlotsItem {
     isFixed: false,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     tags: [],
   };
 }

@@ -56,6 +56,7 @@ const mockItinerary: Itinerary = {
           isFixed: true,
           endsNextDay: false,
           hasViolation: false,
+          alternatives: [],
           tags: [],
         },
         {
@@ -65,6 +66,7 @@ const mockItinerary: Itinerary = {
           isFixed: false,
           endsNextDay: false,
           hasViolation: false,
+          alternatives: [],
           tags: [],
         },
         {
@@ -74,6 +76,7 @@ const mockItinerary: Itinerary = {
           isFixed: false,
           endsNextDay: false,
           hasViolation: false,
+          alternatives: [],
           tags: [],
         },
       ],

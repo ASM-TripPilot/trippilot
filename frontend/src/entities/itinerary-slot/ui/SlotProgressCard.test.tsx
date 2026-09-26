@@ -40,6 +40,7 @@ const mkSlot = (
   isFixed: false,
   endsNextDay: false,
   hasViolation: false,
+  alternatives: [],
   nameKo: '감천문화마을',
   distanceRange: null,
   openingHours: null,

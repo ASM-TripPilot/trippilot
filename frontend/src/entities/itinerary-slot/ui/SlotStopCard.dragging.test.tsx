@@ -28,6 +28,7 @@ function makeSlot(): ItineraryDaysItemSlotsItem {
     isFixed: false,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     tags: ['바다'],
     nameKo: '광안리 해변',
   };
