@@ -42,6 +42,16 @@ jest.mock('@/features/reflection/model/useTripSummary', () => ({
   useTripSummary: jest.fn(),
 }));
 
+// TRIP-987 B: 페이지가 여행 이름·기간을 위해 여행을 조회한다 — 이 파일은 공유 배선만 보므로 무해한
+// 기본값(조회 중)으로 막는다(QueryClient 없이 실 훅이 돌면 전 케이스가 죽는다, DailyReflectionPage 선례).
+jest.mock('@/shared/api/generated/trips/trips', () => ({
+  useGetTripsTripId: jest.fn(() => ({
+    data: undefined,
+    isPending: true,
+    isError: false,
+  })),
+}));
+
 jest.mock('@/features/reflection/ui/TripSummaryScreen', () => ({
   TripSummaryScreen: jest.fn(() => null),
 }));

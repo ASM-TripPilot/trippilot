@@ -614,7 +614,7 @@
 - `src/features/reflection/ui/ShareCardScreen.tsx`  →  ShareCardScreenProps · ShareCardScreen
 - `src/features/reflection/ui/StatTile.tsx`  →  StatTileProps · StatTile
 - `src/features/reflection/ui/TravelStyleScreen.tsx`  →  TravelStyleScreenProps · TravelStyleScreen
-- `src/features/reflection/ui/TripSummaryScreen.tsx`  →  SummaryViewMode · DayCardVM · TripSummaryScreenProps · TripSummaryScreen
+- `src/features/reflection/ui/TripSummaryScreen.tsx`  →  SummaryViewMode · DayReflectionVM · DayCardVM · TripSummaryScreenProps · TripSummaryScreen
 
 ## src/features/settings/model/
 - `src/features/settings/model/dataAttribution.ts`  →  OSM_COPYRIGHT_URL

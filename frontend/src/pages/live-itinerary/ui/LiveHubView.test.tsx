@@ -255,6 +255,61 @@ describe('LiveHubView · HV3 배선 (AC-1·AC-4 · Seed Q2)', () => {
   });
 });
 
+// ── TRIP-987 A · 슬롯 이름 → i10 (US-ONTRIP-02 · TRIP-939) ─────────────────────
+// 뷰는 목적지를 모른다 — `onPressSlotName(poiId)` 를 받으면 카드마다 이름 진입을 열고, 안 받으면
+// 어느 카드에도 '›' 가 없다. 라우트 조립(`/trips/{id}/live/place/{poiId}`)은 페이지 몫(통합 I9).
+
+const SLOT_NAME = /^execution-live-slot-name-2026-06-11#/;
+const SLOT_CHEVRON = /^execution-live-slot-chevron-2026-06-11#/;
+
+function isTouchable(node: ReactTestInstance): boolean {
+  return (
+    typeof node.props.onStartShouldSetResponder === 'function' ||
+    typeof node.props.onClick === 'function'
+  );
+}
+
+describe('LiveHubView · HV8 슬롯 이름 진입 (TRIP-987 A-1·A-2·A-4)', () => {
+  it('HV8a 이름을 누르면 그 카드의 poiId 로 onPressSlotName 이 불린다 — done·active·upcoming 5장 전부', () => {
+    const onPressSlotName = jest.fn();
+    renderHub({ onPressSlotName });
+
+    expect(screen.getAllByTestId(SLOT_CHEVRON)).toHaveLength(5);
+    const pois = ['gamcheon', 'gwangalli', 'museum', 'jeonpo', 'haeundae'];
+    pois.forEach((poiId, index) => {
+      fireEvent.press(
+        screen.getByTestId(`execution-live-slot-name-${DATE}#${poiId}`)
+      );
+      expect(onPressSlotName).toHaveBeenCalledTimes(index + 1);
+      expect(onPressSlotName).toHaveBeenLastCalledWith(poiId);
+    });
+  });
+
+  it("HV8b onPressSlotName 을 안 넘기면 어느 카드에도 '›' 가 없고 이름은 누를 수 없다 (TRIP-939)", () => {
+    renderHub();
+
+    const names = screen.getAllByTestId(SLOT_NAME);
+    expect(names).toHaveLength(5);
+    names.forEach((name) => expect(isTouchable(name)).toBe(false));
+    expect(screen.queryAllByTestId(SLOT_CHEVRON)).toHaveLength(0);
+  });
+
+  it('HV8c [방문 완료]는 이름 진입을 부르지 않고, 이름 진입은 [방문 완료]를 부르지 않는다 (A-4)', () => {
+    const onPressSlotName = jest.fn();
+    const handlers = renderHub({ onPressSlotName });
+
+    fireEvent.press(screen.getByTestId('execution-arrive-complete'));
+    expect(handlers.onPressComplete).toHaveBeenCalledTimes(1);
+    expect(onPressSlotName).not.toHaveBeenCalled();
+
+    fireEvent.press(
+      screen.getByTestId(`execution-live-slot-name-${DATE}#museum`)
+    );
+    expect(onPressSlotName).toHaveBeenCalledWith('museum');
+    expect(handlers.onPressComplete).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('LiveHubView · HV4 3스냅 (AC-7 전제)', () => {
   it.each([0, 1, 2])(
     'initialSnapIndex=%i 이면 시트가 그 index 와 3스냅을 받는다',

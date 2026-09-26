@@ -1674,6 +1674,12 @@ const LIVE_HUB_PREVIEW_SLOTS: LiveHubSlot[] = [
 // Figma 의 현재위치 점(부산시립미술관 근처).
 const LIVE_HUB_PREVIEW_LOCATION = { lat: 35.1655, lng: 129.1335 };
 
+// j04 요약의 일차 회고 칩(TRIP-987) — 여행 기간 3일(6/11~6/13) 전체. 페이지가 `tripDayChips` 로 조립하는 모양.
+const TRIP_SUMMARY_PREVIEW_DAY_REFLECTIONS = [1, 2, 3].map((day) => ({
+  day,
+  label: `${day}일차 회고`,
+}));
+
 // i01 기록 없음(TRIP-747, Figma 4076:2452) — 같은 5곳에서 done 2장의 사진·후기만 뺀다.
 const LIVE_HUB_PREVIEW_SLOTS_NO_RECORDS: LiveHubSlot[] =
   LIVE_HUB_PREVIEW_SLOTS.map(({ slot, state }) => ({ slot, state }));
@@ -1695,6 +1701,7 @@ function renderLiveHubPreview(
       onPressAiReplan={noop}
       onPressManualEdit={noop}
       onPressComplete={noop}
+      onPressSlotName={noop}
       {...extra}
     />
   );
@@ -3198,6 +3205,10 @@ export const PREVIEW_STATES: PreviewState[] = [
         shareEnabled
         onBack={noop}
         onPressTab={noop}
+        tripTitle="부산 여행"
+        onPressRecords={noop}
+        dayReflections={TRIP_SUMMARY_PREVIEW_DAY_REFLECTIONS}
+        onPressDayReflection={noop}
       />
     ),
   },
@@ -3222,6 +3233,10 @@ export const PREVIEW_STATES: PreviewState[] = [
         shareEnabled
         onBack={noop}
         onPressTab={noop}
+        tripTitle="부산 여행"
+        onPressRecords={noop}
+        dayReflections={TRIP_SUMMARY_PREVIEW_DAY_REFLECTIONS}
+        onPressDayReflection={noop}
       />
     ),
   },

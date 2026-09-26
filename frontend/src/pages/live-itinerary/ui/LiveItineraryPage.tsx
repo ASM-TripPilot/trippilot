@@ -242,6 +242,9 @@ export function LiveItineraryPage({
         triggerChip={triggerChip}
         triggerPillKey={chipTrigger?.triggerId}
         slotBadgeLabel={slotBadgeLabel}
+        onPressSlotName={(poiId) =>
+          router.push(`/trips/${tripId}/live/place/${poiId}`)
+        }
         initialSnapIndex={initialSnapIndex}
       />
       {riskSheet}
