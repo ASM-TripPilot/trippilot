@@ -211,7 +211,7 @@ class HttpScheduleAgentAdapterTest : StringSpec({
      */
     "재계획이 취향·동반·예산을 요청에 싣는다 — 중립으로 덮지 않는다" {
         val (adapter, server) = fixture()
-        server.expect(requestTo("http://ai.test/ai/v1/itinerary/replan"))
+        server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
             .andExpect(jsonPath("$.preference_profile.styles[0]").value("감성"))
             .andExpect(jsonPath("$.preference_profile.pace").value("여유"))
             .andExpect(jsonPath("$.trip_context.companion_type").value("친구"))
@@ -232,7 +232,7 @@ class HttpScheduleAgentAdapterTest : StringSpec({
      */
     "재계획이 사유·지시·자유입력·원 일정·담은 장소를 전용 경로에 싣는다" {
         val (adapter, server) = fixture()
-        server.expect(requestTo("http://ai.test/ai/v1/itinerary/replan"))
+        server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
             .andExpect(method(HttpMethod.POST))
             .andExpect(jsonPath("$.scope").value("FULL_DAY"))
             .andExpect(jsonPath("$.reasons[0]").value("WEATHER"))
@@ -259,7 +259,7 @@ class HttpScheduleAgentAdapterTest : StringSpec({
      */
     "재계획 응답의 total_distance_km 가 산출물에 실린다" {
         val (adapter, server) = fixture()
-        server.expect(requestTo("http://ai.test/ai/v1/itinerary/replan"))
+        server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
             .andRespond(withSuccess(replanBody(aiBody("OR_TOOLS")), MediaType.APPLICATION_JSON))
 
         adapter.replan(replanInput()).totalDistanceKm shouldBe 6.9
@@ -276,7 +276,7 @@ class HttpScheduleAgentAdapterTest : StringSpec({
             totalDistanceKm = "null",
             extra = ""","empty_reason":{"code":"NO_CANDIDATE","params":{"from":"17:00"}}""",
         )
-        server.expect(requestTo("http://ai.test/ai/v1/itinerary/replan"))
+        server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
             .andRespond(withSuccess(body, MediaType.APPLICATION_JSON))
 
         adapter.replan(replanInput()).days shouldBe emptyList()
@@ -289,7 +289,7 @@ class HttpScheduleAgentAdapterTest : StringSpec({
      */
     "상대가 재계획 경로를 배선 전이면(503) 종전 generate 경로로 내려간다" {
         val (adapter, server) = fixture()
-        server.expect(requestTo("http://ai.test/ai/v1/itinerary/replan"))
+        server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
             .andRespond(
                 withStatus(HttpStatus.SERVICE_UNAVAILABLE)
                     .body("""{"error_code":"ORCHESTRATOR_NOT_WIRED","message":"배선 미완료","retryable":false}""")
@@ -309,7 +309,7 @@ class HttpScheduleAgentAdapterTest : StringSpec({
      */
     "배선 전이 아닌 실패는 종전 경로로 내려가지 않는다" {
         val (adapter, server) = fixture()
-        server.expect(requestTo("http://ai.test/ai/v1/itinerary/replan"))
+        server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
             .andRespond(
                 withStatus(HttpStatus.SERVICE_UNAVAILABLE)
                     .body("""{"error_code":"UPSTREAM_DOWN","message":"LLM 게이트웨이 장애","retryable":true}""")
@@ -607,7 +607,7 @@ class HttpScheduleAgentAdapterTest : StringSpec({
 
     "슬롯 후보 요청이 설계 §2 매핑대로 나간다 — MANUAL 트리거·앵커·제외목록·배치사유" {
         val (adapter, server) = fixture(poolOf(place(nearPoi, 33.46, 126.56)))
-        server.expect(requestTo("http://ai.test/ai/v1/itinerary/alternatives"))
+        server.expect(requestTo("http://ai.test/ai/v1/planb/alternatives"))
             .andExpect(jsonPath("$.trigger.kind").value("MANUAL"))
             .andExpect(jsonPath("$.trigger.affected_date").value("2026-09-01"))
             .andExpect(jsonPath("$.dates[0]").value("2026-09-01"))
@@ -626,7 +626,7 @@ class HttpScheduleAgentAdapterTest : StringSpec({
 
     "FE 사유 코드는 상대 어휘로 번역돼 나간다 — 같은 표를 재계획과 공유한다(B-6)" {
         val (adapter, server) = fixture(poolOf(place(nearPoi, 33.46, 126.56)))
-        server.expect(requestTo("http://ai.test/ai/v1/itinerary/alternatives"))
+        server.expect(requestTo("http://ai.test/ai/v1/planb/alternatives"))
             // FE 는 'TEMP_CLOSED' 를 보내고 상대는 'closed' 만 안다 — 그대로 흘리면 KB 질의가 오염된다.
             .andExpect(jsonPath("$.reason").value("closed"))
             .andRespond(withSuccess(altBody(0, """{"label":"B","poi_ids":["$nearPoi"],"rationale":"근거"}"""), MediaType.APPLICATION_JSON))
@@ -638,7 +638,7 @@ class HttpScheduleAgentAdapterTest : StringSpec({
 
     "모르는 사유 코드가 와도 요청은 성립한다 — 사유 없음으로 눕는다(INV-4)" {
         val (adapter, server) = fixture(poolOf(place(nearPoi, 33.46, 126.56)))
-        server.expect(requestTo("http://ai.test/ai/v1/itinerary/alternatives"))
+        server.expect(requestTo("http://ai.test/ai/v1/planb/alternatives"))
             .andExpect(jsonPath("$.reason").value("none"))
             .andRespond(withSuccess(altBody(0, """{"label":"B","poi_ids":["$nearPoi"],"rationale":"근거"}"""), MediaType.APPLICATION_JSON))
 
@@ -651,7 +651,7 @@ class HttpScheduleAgentAdapterTest : StringSpec({
     "LLM 랭킹(fallback_level=0)이면 degraded=false · 근거 원문 · AI 순서 보존" {
         // AI 가 먼 곳을 먼저 꼽았다 — 거리순이 아니라 랭킹순이 살아야 한다(D-3a).
         val (adapter, server) = fixture(poolOf(place(farPoi, 33.51, 126.61), place(nearPoi, 33.46, 126.56)))
-        server.expect(requestTo("http://ai.test/ai/v1/itinerary/alternatives")).andRespond(
+        server.expect(requestTo("http://ai.test/ai/v1/planb/alternatives")).andRespond(
             withSuccess(
                 altBody(
                     0,
@@ -672,7 +672,7 @@ class HttpScheduleAgentAdapterTest : StringSpec({
 
     "규칙 폴백(fallback_level=1)이면 degraded=true · 기계 문자열 근거를 템플릿으로 · 거리 오름차순" {
         val (adapter, server) = fixture(poolOf(place(farPoi, 33.51, 126.61), place(nearPoi, 33.46, 126.56)))
-        server.expect(requestTo("http://ai.test/ai/v1/itinerary/alternatives")).andRespond(
+        server.expect(requestTo("http://ai.test/ai/v1/planb/alternatives")).andRespond(
             withSuccess(
                 altBody(
                     1,
@@ -694,7 +694,7 @@ class HttpScheduleAgentAdapterTest : StringSpec({
 
     "후보 0건(fallback_level=2)의 no_candidates 는 ALL_IN_ITINERARY 로 매핑된다" {
         val (adapter, server) = fixture()
-        server.expect(requestTo("http://ai.test/ai/v1/itinerary/alternatives"))
+        server.expect(requestTo("http://ai.test/ai/v1/planb/alternatives"))
             .andRespond(withSuccess(altBody(2, "", emptyReason = "no_candidates"), MediaType.APPLICATION_JSON))
 
         val out = adapter.proposeSlotCandidates(candidatesInput())
@@ -707,7 +707,7 @@ class HttpScheduleAgentAdapterTest : StringSpec({
     "반경 컷으로 0건이 되면 10km 로 한 번 넓혀 재컷한다 — 실사용 반경을 그대로 알린다" {
         // AI 는 ~8.1km 후보를 줬고 요청 반경은 3km — 컷 후 0건 → 10km 재컷에 걸린다.
         val (adapter, server) = fixture(poolOf(place(farPoi, 33.51, 126.61)))
-        server.expect(requestTo("http://ai.test/ai/v1/itinerary/alternatives")).andRespond(
+        server.expect(requestTo("http://ai.test/ai/v1/planb/alternatives")).andRespond(
             withSuccess(altBody(0, """{"label":"B","poi_ids":["$farPoi"],"rationale":"근거"}"""), MediaType.APPLICATION_JSON),
         )
 
@@ -721,7 +721,7 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         // ~12km 후보뿐 — 풀 상한(10km) 재컷에도 걸리지 않는다.
         val outsidePoi = UUID.fromString("e0000000-0000-4000-8000-00000000c004")
         val (adapter, server) = fixture(poolOf(place(outsidePoi, 33.55, 126.61)))
-        server.expect(requestTo("http://ai.test/ai/v1/itinerary/alternatives")).andRespond(
+        server.expect(requestTo("http://ai.test/ai/v1/planb/alternatives")).andRespond(
             withSuccess(altBody(0, """{"label":"B","poi_ids":["$outsidePoi"],"rationale":"근거"}"""), MediaType.APPLICATION_JSON),
         )
 
@@ -733,7 +733,7 @@ class HttpScheduleAgentAdapterTest : StringSpec({
 
     "반경 20km 요청은 AI 풀 상한 10km 로 접힌다 — 본 적 없는 범위를 표시하지 않는다" {
         val (adapter, server) = fixture(poolOf(place(nearPoi, 33.46, 126.56)))
-        server.expect(requestTo("http://ai.test/ai/v1/itinerary/alternatives")).andRespond(
+        server.expect(requestTo("http://ai.test/ai/v1/planb/alternatives")).andRespond(
             withSuccess(altBody(0, """{"label":"B","poi_ids":["$nearPoi"],"rationale":"근거"}"""), MediaType.APPLICATION_JSON),
         )
 
@@ -745,7 +745,7 @@ class HttpScheduleAgentAdapterTest : StringSpec({
     "ground 미통과 건은 그 건만 빠진다 — INV-1 게이트" {
         // 풀은 nearPoi 만 안다 — farPoi 는 상대가 뭐라 했든 후보가 될 수 없다.
         val (adapter, server) = fixture(poolOf(place(nearPoi, 33.46, 126.56)))
-        server.expect(requestTo("http://ai.test/ai/v1/itinerary/alternatives")).andRespond(
+        server.expect(requestTo("http://ai.test/ai/v1/planb/alternatives")).andRespond(
             withSuccess(
                 altBody(
                     0,
@@ -767,7 +767,7 @@ class HttpScheduleAgentAdapterTest : StringSpec({
      */
     "AI 가 5xx 면 예외가 새지 않고 로컬 후보풀 결과 + degraded=true 다" {
         val (adapter, server) = fixture()
-        server.expect(requestTo("http://ai.test/ai/v1/itinerary/alternatives"))
+        server.expect(requestTo("http://ai.test/ai/v1/planb/alternatives"))
             .andRespond(withServerError())
 
         val out = adapter.proposeSlotCandidates(candidatesInput())

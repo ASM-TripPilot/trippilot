@@ -84,7 +84,7 @@ data class ReplanInput(
     val freeText: String?,
     val excludedPoiIds: List<UUID>,
     /**
-     * 아래 다섯은 전용 재계획 경계(`/ai/v1/itinerary/replan`, 연동 설계 §2)의 입력이고
+     * 아래 다섯은 전용 재계획 경계(`/ai/v1/planb/replan`, 연동 설계 §2)의 입력이고
      * **지금은 전부 와이어에 실린다**(TRIP-854). 상대 계약이 열리기 전에는 generate 재사용이라
      * 조립만 해 두고 버렸었다 — 그 기간 동안 재계획은 NEUTRAL_PREFERENCES 로 취향을 덮고 있었다.
      * 기본값을 두지 않는다 — 조립 지점이 값을 말하지 않고 조용히 빠지는 것을 컴파일이 막는다.
