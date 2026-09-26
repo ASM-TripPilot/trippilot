@@ -411,6 +411,7 @@
 - `src/features/explore/model/placeListState.ts`  →  PlaceListState · resolvePlaceListState
 - `src/features/explore/model/placeListView.ts`  →  visiblePlaces
 - `src/features/explore/model/placeSaveGuard.ts`  →  PlaceSaveNotice · hasUsableCoords · SAVE_FAILURE_NOTICE · COORD_BLOCKED_NOTICE · REMOVE_FAILURE_NOTICE
+- `src/features/explore/model/regionPickerPurpose.ts`  →  RegionPickerPurpose · regionPickerHref
 - `src/features/explore/model/regions.ts`  →  useRegions · filterRegions · limitRegionsWhenEmpty · RegionGroup · groupRegionsBySido · regionTint
 - `src/features/explore/model/savedPlaceIndex.ts`  →  findSavedPlaceId · optimisticSavedPlaceId
 - `src/features/explore/model/savedPlaceList.ts`  →  orderSavedPlaces · SAVED_PLACE_BADGE
@@ -1368,4 +1369,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 934개 파일
+합계 935개 파일

@@ -43,6 +43,7 @@ import {
 import { usePlacesInfinite } from '@/features/explore/model/usePlacesInfinite';
 import { useMultiRegionPlaces } from '@/features/explore/model/useMultiRegionPlaces';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
 
 /** 카테고리 시트(TRIP-708 AC-6) — **페이지가 소유**한다(@gorhom/bottom-sheet). 열림 상태는
@@ -275,7 +276,7 @@ export function PlaceExplorePage(): ReactElement {
         pendingPoiIds={pendingPoiIds}
         saveError={saveError}
         onRetry={handleRetry}
-        onPressChangeRegion={() => router.push('/explore/region?purpose=trip')}
+        onPressChangeRegion={() => router.push(regionPickerHref('places'))}
         onClearFilter={handleClearFilter}
         onPressSaveErrorAction={handlePressSaveErrorAction}
         onEndReached={handleEndReached}

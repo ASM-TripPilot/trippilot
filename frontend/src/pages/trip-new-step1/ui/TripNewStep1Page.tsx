@@ -4,6 +4,7 @@ import { isAxiosError } from 'axios';
 import { useRouter } from 'expo-router';
 
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 import { postTripsTripIdMustVisits } from '@/shared/api/generated/trips/trips';
 import type {
   CompanionType,
@@ -572,7 +573,7 @@ export function TripNewStep1Page({
           destinations={destinations}
           onChangeNights={setNights}
           onRemove={removeDestination}
-          onAddCity={() => router.push('/explore/region?purpose=trip')}
+          onAddCity={() => router.push(regionPickerHref('trip'))}
           onApply={() => setDestinationSheetOpen(false)}
           onClose={() => setDestinationSheetOpen(false)}
           mustVisitCount={mustVisits.length}

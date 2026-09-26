@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import type { Region } from '@/shared/api/generated/schemas';
 import { RegionLevel } from '@/shared/api/generated/schemas';
+import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 
 import { RegionPickerPage } from './RegionPickerPage';
 
@@ -21,6 +22,7 @@ import { RegionPickerPage } from './RegionPickerPage';
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
+const mockDismissTo = jest.fn();
 const mockRefetch = jest.fn();
 const mockAddDestination = jest.fn();
 let mockParams: { purpose?: string } = {};
@@ -32,7 +34,11 @@ let mockRegionsResult: {
 };
 
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, back: mockBack }),
+  useRouter: () => ({
+    push: mockPush,
+    back: mockBack,
+    dismissTo: mockDismissTo,
+  }),
   useLocalSearchParams: () => ({ ...mockParams }),
 }));
 
@@ -150,6 +156,7 @@ const CATALOG: Region[] = [
 beforeEach(() => {
   mockPush.mockClear();
   mockBack.mockClear();
+  mockDismissTo.mockClear();
   mockRefetch.mockClear();
   mockAddDestination.mockClear();
   mockParams = {};
@@ -247,5 +254,107 @@ describe("AC · '내 주변' 배선이 렌더에 없다 (이월 유지)", () => 
 
     expect(screen.queryByTestId('explore-region-nearby')).toBeNull();
     expect(screen.queryByText('내 주변')).toBeNull();
+  });
+});
+
+// ── TRIP-985 · purpose 분리 (explore → 목적지 결과, places → d04 지역 교체) ──────────────
+//
+// 새 케이스의 purpose 는 리터럴로 쓰지 않고 **공유 헬퍼가 만든 URL 에서 꺼낸다**. 호출자 테스트도
+// 같은 헬퍼 출력을 기대값으로 쓰므로, 피커의 해석부가 다른 철자를 비교하면 stay 로 떨어져 여기가
+// red 가 된다(철자 사슬, 02a ★1).
+function purposeParamOf(href: string): string {
+  const match = /[?&]purpose=([^&#]*)/.exec(href);
+  if (!match) throw new Error(`purpose 쿼리가 없다: ${href}`);
+  return match[1];
+}
+
+describe('985 · explore → 목적지 결과 화면을 **코드**로 부른다 (US-EXPL-02 · D11)', () => {
+  it('검색으로 부산광역시를 고르면 dismissTo(/explore/destination/26) 1회, 담기·push·back 0회', () => {
+    mockParams = { purpose: purposeParamOf(regionPickerHref('explore')) };
+    render(<RegionPickerPage />);
+    fireEvent.changeText(screen.getByTestId('explore-region-search'), '부산');
+
+    fireEvent.press(screen.getByTestId('explore-region-26'));
+
+    // 이름('부산광역시')을 보내면 결과 화면 헤딩은 멀쩡한데 레인이 조용히 빈다 — 그래서 코드 완전 일치.
+    expect(mockDismissTo.mock.calls).toEqual([['/explore/destination/26']]);
+    expect(mockAddDestination).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockBack).not.toHaveBeenCalled();
+  });
+
+  it('드릴다운으로 구/군(미추홀구)을 골라도 이름이 아니라 코드 28177 로 부른다', () => {
+    mockParams = { purpose: purposeParamOf(regionPickerHref('explore')) };
+    render(<RegionPickerPage />);
+    fireEvent.press(screen.getByTestId('explore-region-sido-28')); // 인천 드릴인
+
+    fireEvent.press(screen.getByTestId('explore-region-28177'));
+
+    expect(mockDismissTo.mock.calls).toEqual([['/explore/destination/28177']]);
+    expect(mockAddDestination).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+});
+
+describe('985 · places → d04 로 돌아가며 지역 **이름**을 교체한다 (D11)', () => {
+  it('부산광역시를 고르면 dismissTo({ /explore/places, region: 부산광역시 }) 1회, 담기·push·back 0회', () => {
+    mockParams = { purpose: purposeParamOf(regionPickerHref('places')) };
+    render(<RegionPickerPage />);
+    fireEvent.changeText(screen.getByTestId('explore-region-search'), '부산');
+
+    fireEvent.press(screen.getByTestId('explore-region-26'));
+
+    // d04 는 결과 화면과 반대로 이름을 받는다(`PlaceExplorePage` 의 region 파라미터).
+    expect(mockDismissTo.mock.calls).toEqual([
+      [{ pathname: '/explore/places', params: { region: '부산광역시' } }],
+    ]);
+    expect(mockAddDestination).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockBack).not.toHaveBeenCalled();
+  });
+});
+
+describe('985 · 새 purpose 의 카피는 여행지 선택(trip) 카피다 (라이브 1834:2283)', () => {
+  it.each(['explore', 'places'] as const)(
+    '%s 는 "어디로 떠날까요?" 를 그린다',
+    (purpose) => {
+      mockParams = { purpose: purposeParamOf(regionPickerHref(purpose)) };
+      render(<RegionPickerPage />);
+
+      expect(screen.getByText('여행지 선택')).toBeTruthy();
+      expect(screen.getByText('어디로 떠날까요?')).toBeTruthy();
+      expect(screen.queryByText('어디서 묵을까요?')).toBeNull();
+    }
+  );
+});
+
+describe('985 · 회귀 — 헬퍼 철자의 trip 도 위저드 담기 그대로 (TRIP-683 AC-1)', () => {
+  it('부산광역시를 고르면 addDestination(이름,1)+back 1회이고 dismissTo·push 는 0회', () => {
+    mockParams = { purpose: purposeParamOf(regionPickerHref('trip')) };
+    render(<RegionPickerPage />);
+    fireEvent.changeText(screen.getByTestId('explore-region-search'), '부산');
+
+    fireEvent.press(screen.getByTestId('explore-region-26'));
+
+    expect(mockAddDestination.mock.calls).toEqual([['부산광역시', 1]]);
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockDismissTo).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+});
+
+describe('985 · URL 신뢰 경계 — 헬퍼에 없는 철자는 stay 로 떨어진다', () => {
+  it("'explorer'(explore 오타)는 숙소 카피를 그리고, 골라도 위저드에 담지 않는다", () => {
+    // 이 케이스만 리터럴이다 — "헬퍼에 없는 철자"가 목적이다. 이동은 단언하지 않는다(stay 분기는 989 소관).
+    mockParams = { purpose: 'explorer' };
+    render(<RegionPickerPage />);
+
+    expect(screen.getByText('어디서 묵을까요?')).toBeTruthy();
+    expect(screen.queryByText('어디로 떠날까요?')).toBeNull();
+
+    fireEvent.changeText(screen.getByTestId('explore-region-search'), '부산');
+    fireEvent.press(screen.getByTestId('explore-region-26'));
+
+    expect(mockAddDestination).not.toHaveBeenCalled();
   });
 });

@@ -6,6 +6,7 @@ import {
   useGetTripsTripIdItinerary,
 } from '@/shared/api/generated/trips/trips';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 import { useSavedStays } from '@/features/stay/model/savedStays';
 import HomeRoute from '@/app/(tabs)/index';
 
@@ -201,16 +202,15 @@ describe('🔴 935-AC-1 · 홈 매거진 히어로 → 이동 없음(진입 차�
 });
 
 // ── TRIP-499 · AC-1 홈 검색바 → 여행지 선택(정본) ─────────────────────────────
-describe('🔴 499-AC-1 · 검색바 → /explore/region?purpose=trip', () => {
-  it('홈 검색바를 누르면 여행지 선택(RegionPicker, trip)으로 이동한다', () => {
-    // 기본 목 = 빈 trips → discovery 얼굴. discovery 는 검색바를 그린다. 지금 소스는 옛 목적지
-    // (/explore/search)로 push 하므로 새 목적지 단언과 불일치 → red. 배선 뒤엔 정확히
-    // /explore/region?purpose=trip 한 곳으로 간다(trip↔stay 오타는 완전 일치 단언이 잡는다).
+describe('🔴 499-AC-1 · 985 · 검색바 → 지역 선택(purpose=explore)', () => {
+  it('홈 검색바를 누르면 여행지 선택(RegionPicker, explore)으로 이동한다', () => {
+    // 기본 목 = 빈 trips → discovery 얼굴. discovery 는 검색바를 그린다. 정확히 탐색용 지역 선택
+    // 한 곳으로 간다(TRIP-985 — trip 은 위저드 전용). 기대값이 공유 헬퍼 출력이라 철자 오타도 잡힌다.
     render(<HomeRoute />);
 
     fireEvent.press(screen.getByTestId('home-search-bar'));
 
-    expect(mockPush.mock.calls).toEqual([['/explore/region?purpose=trip']]);
+    expect(mockPush.mock.calls).toEqual([[regionPickerHref('explore')]]);
   });
 });
 
