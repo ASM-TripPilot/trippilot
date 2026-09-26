@@ -18,7 +18,10 @@ import {
   resolveItineraryDestination,
 } from '@/features/itinerary/model/planState';
 import { HOME_DEFAULT_PROPS } from '@/features/home/model/homeFixtures';
-import { resolveHomePhase } from '@/features/home/model/homePhase';
+import {
+  applyItineraryTarget,
+  resolveHomePhase,
+} from '@/features/home/model/homePhase';
 import type { HomePhase } from '@/features/home/model/homeTypes';
 import { HomeScreen } from '@/features/home/ui/HomeScreen';
 
@@ -44,34 +47,37 @@ function PlanningHome({
   nav,
 }: {
   dominantTripId: string;
-  phase: HomePhase;
+  phase: Extract<HomePhase, { kind: 'planning' }>;
   nav: HomeNav;
 }) {
   const router = useRouter();
   const itinerary = useGetTripsTripIdItinerary(dominantTripId);
 
-  // 지배 여행 일정 상태 → 목적지 문자열. 홈 카드 CTA 가 그 화면으로 push 한다(일정 탭과 같은
-  // resolveItineraryDestination 규칙 공유). itinerary GET 이 미정착(로딩·비-404 오류)이면 목적지를
-  // 모르므로 push 하지 않는다 — 정착 전 오이동 금지(형제 itinerary.tsx 의 INV-4 처리와 대칭).
+  // 지배 여행 일정 상태 → 목적지. 홈 카드 CTA 가 그 화면으로 push 하고(일정 탭과 같은
+  // resolveItineraryDestination 규칙 공유), 라벨·부제도 같은 목적지로 덮어쓴다(TRIP-986 D1 — 한 판정).
+  // itinerary GET 이 미정착(로딩·비-404 오류)이면 목적지를 모르므로 push 하지 않고 라벨도 여행 상태
+  // 폴백 그대로 둔다 — 정착 전 오이동 금지(형제 itinerary.tsx 의 INV-4 처리와 대칭, Q2).
+  const notFound = isNotFound(itinerary.error);
+  const settled = !itinerary.isPending && (!itinerary.isError || notFound);
+  const destination = settled
+    ? resolveItineraryDestination({
+        notFound,
+        generationState: itinerary.data?.generationState,
+        status: itinerary.data?.status,
+      })
+    : null;
+
   const onPressTripHeroCta = () => {
-    const notFound = isNotFound(itinerary.error);
-    if (itinerary.isPending || (itinerary.isError && !notFound)) return;
-    router.push(
-      itineraryDestinationHref(
-        dominantTripId,
-        resolveItineraryDestination({
-          notFound,
-          generationState: itinerary.data?.generationState,
-          status: itinerary.data?.status,
-        })
-      )
-    );
+    if (destination === null) return;
+    router.push(itineraryDestinationHref(dominantTripId, destination));
   };
 
   return (
     <HomeScreen
       {...HOME_DEFAULT_PROPS}
-      phase={phase}
+      phase={
+        destination === null ? phase : applyItineraryTarget(phase, destination)
+      }
       onPressTripHeroCta={onPressTripHeroCta}
       {...nav}
     />

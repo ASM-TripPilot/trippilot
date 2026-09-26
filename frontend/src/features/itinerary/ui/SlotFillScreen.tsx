@@ -23,7 +23,10 @@ import { SlotCandidateCard } from './SlotCandidateCard';
  *  - AC-4: 후보 카드 이름·태그 픽스처(`candidateViews`) + 반경 밖 톤다운(`dimmed` 관통, 기본 off).
  *  - AC-5: 결과 얼굴 하단바에 `{배지}로 선택` + 반경 버튼 **상시**. canExpandRadius 면 `반경 넓히기`,
  *    마지막 단계면 `반경 좁히기`(신규 onShrinkRadius). 0건 얼굴은 기존 반경확대·컨셉변경 유지.
- *  - AC-6: 셋째 반경 세그 라벨 = `radiusUsedLabel ?? step.label`(서버 파생값 포맷, 지어내지 않음).
+ *  - AC-6: 셋째 반경 세그 라벨 = `maxRadiusLabel ?? step.label`(서버 파생값 포맷, 지어내지 않음).
+ *    캡션(`radiusUsedLabel`)과는 분리 — 무엇을 어디에 채울지는 페이지가 정한다(TRIP-978).
+ *  - TRIP-978: `confirmLocked` 면 확정 버튼 비활성 + 잠금 사유(INV-4 — 활성으로 보이는 무반응 금지).
+ *    `candidatesErrorMessage` 면 0건 얼굴 대신 조회 실패 사유, `candidatesPending` 이면 0건 얼굴 보류.
  *  - INV-1: 렌더된 후보 카드 = 배선이 준 후보 poiId 집합(임의 POI 0).
  *  - 배지 **A부터**: 빈 슬롯 채우기엔 "현재"가 없어 후보가 A/B/C/D 다.
  *  - AC-8: 조회/저장 실패는 `errorMessage` 인라인(빈 문자열 0).
@@ -38,6 +41,7 @@ const ZERO_TITLE = '근처에서 조건에 맞는 곳을 못 찾았어요';
 const ZERO_MAX_HINT = '이 지역엔 더 넓혀도 후보가 없어요';
 const ZERO_RADIUS_LABEL = '반경 넓히기';
 const ZERO_CONCEPT_LABEL = '컨셉 변경';
+const CONFIRM_LOCKED_TEXT = '나머지 일정을 만드는 중이에요';
 
 /**
  * 후보 카드 배지 문자(**A부터**). 빈 슬롯을 채우는 문맥이라 "현재 선택"이 없어 첫 후보가 A 다
@@ -51,8 +55,16 @@ export interface SlotFillScreenProps {
   candidates: SlotCandidatesCandidatesItem[];
   radiusSteps: readonly { key: string; label: string }[];
   selectedRadiusKey: string;
-  /** `formatRadiusUsed(radiusMUsed)` — 응답 전엔 null(그 leaf 자체가 없다). 셋째 세그 라벨도 이 값. */
+  /** 캡션 전용 — 서버가 요청보다 넓혔을 때의 `formatRadiusUsed(radiusMUsed)`. null 이면 캡션 없음. */
   radiusUsedLabel?: string | null;
+  /** 셋째(마지막) 세그 라벨 대체값. null·undefined 면 `step.label`(최대). */
+  maxRadiusLabel?: string | null;
+  /** 확정 잠금(생성 중) — 버튼 비활성 + 하단 바 잠금 사유. */
+  confirmLocked?: boolean;
+  /** 후보 조회 실패 사유 — 있으면 0건 얼굴 대신 이 문구. */
+  candidatesErrorMessage?: string | null;
+  /** 후보 조회 중 — 결과가 없어도 0건 얼굴을 띄우지 않는다. */
+  candidatesPending?: boolean;
   /** "후보 3곳"(표시만). */
   candidateCountLabel?: string;
   /** controlled 선택 — 배선이 소유한다. */
@@ -94,6 +106,10 @@ export function SlotFillScreen({
   radiusSteps,
   selectedRadiusKey,
   radiusUsedLabel,
+  maxRadiusLabel,
+  confirmLocked = false,
+  candidatesErrorMessage,
+  candidatesPending = false,
   candidateCountLabel,
   selectedPoiId,
   canExpandRadius,
@@ -117,7 +133,9 @@ export function SlotFillScreen({
     selectedPoiId === null
       ? -1
       : candidates.findIndex((candidate) => candidate.poiId === selectedPoiId);
-  const confirmDisabled = selectedPoiId === null || isPending;
+  const confirmDisabled = selectedPoiId === null || isPending || confirmLocked;
+  const hasCandidatesError =
+    candidatesErrorMessage !== null && candidatesErrorMessage !== undefined;
   const confirmLabel =
     selectedIndex >= 0
       ? `${coPickBadge(selectedIndex)}로 선택`
@@ -216,7 +234,7 @@ export function SlotFillScreen({
           )}
 
           {/* 반경 3단 세그먼트 — 선택은 accessibilityState.selected 로 관찰(색 아님). 셋째 세그 라벨은
-              radiusUsedLabel(서버 radiusMUsed 포맷)이 있으면 그 값, 없으면 step.label(=최대, D4). */}
+              maxRadiusLabel(최대 조회의 서버 radiusMUsed 포맷)이 있으면 그 값, 없으면 step.label(=최대, D4). */}
           <View className="gap-xs">
             <Text className="font-noto text-caption text-muted">
               {RADIUS_LABEL}
@@ -227,9 +245,9 @@ export function SlotFillScreen({
                 const isLast = index === radiusSteps.length - 1;
                 const segLabel =
                   isLast &&
-                  radiusUsedLabel !== null &&
-                  radiusUsedLabel !== undefined
-                    ? radiusUsedLabel
+                  maxRadiusLabel !== null &&
+                  maxRadiusLabel !== undefined
+                    ? maxRadiusLabel
                     : step.label;
                 return (
                   <Pressable
@@ -282,7 +300,17 @@ export function SlotFillScreen({
             </View>
           )}
 
-          {isEmpty ? (
+          {hasCandidatesError ? (
+            <View
+              testID="itinerary-copick-candidates-error"
+              className="w-full flex-row items-center gap-sm rounded-button bg-primary-pale px-md py-sm"
+            >
+              <AlertCircleGlyph size={20} tone="primaryText" />
+              <Text className="flex-1 font-noto text-label text-primary-text">
+                {candidatesErrorMessage}
+              </Text>
+            </View>
+          ) : isEmpty && candidatesPending ? null : isEmpty ? (
             <View
               testID="itinerary-copick-zero"
               className="w-full items-center gap-md rounded-card border-[1.5px] border-dashed border-hairline-strong px-lg py-xl"
@@ -370,6 +398,17 @@ export function SlotFillScreen({
           )}
         </ScrollView>
 
+        {isEmpty || !confirmLocked ? null : (
+          <View
+            testID="itinerary-copick-confirm-locked"
+            className="mx-lg flex-row items-center gap-sm rounded-button bg-primary-pale px-md py-sm"
+          >
+            <AlertCircleGlyph size={20} tone="primaryText" />
+            <Text className="flex-1 font-noto text-label text-primary-text">
+              {CONFIRM_LOCKED_TEXT}
+            </Text>
+          </View>
+        )}
         {isEmpty ? null : (
           <View className="w-full flex-row items-center gap-sm px-lg pb-lg pt-sm">
             {/* 반경 버튼 상시 — canExpandRadius 면 넓히기(onExpandRadius), 마지막 단계면 좁히기

@@ -159,7 +159,7 @@ import { CompanionEditSheet } from '@/features/trip/ui/CompanionEditSheet';
 import { DestinationEditSheet } from '@/features/trip/ui/DestinationEditSheet';
 import { PeriodEditSheet } from '@/features/trip/ui/PeriodEditSheet';
 import { StaySelectSheet } from '@/features/trip/ui/StaySelectSheet';
-import { LiveLocationPage } from '@/pages/live-location';
+import { LiveLocationView } from '@/pages/live-location/ui/LiveLocationView';
 import { ConfirmedBanner } from '@/pages/itinerary-plan/ui/ConfirmedBanner';
 import { NoBaseNoticeCard } from '@/pages/itinerary-plan/ui/NoBaseNoticeCard';
 import { EditorView } from '@/widgets/map-sheet-shell/ui/EditorView';
@@ -1121,9 +1121,9 @@ const TIMELINE_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
   },
 ];
 
-// 내 여행 목록(h05/h06, TRIP-788) 카드 VM 4종 — 완성(사진 픽스처)·생성중(resume 없음)·초안(resume)·
-// 미도착(배지 degrade). 순수 카드라 픽스처를 얹어 네 얼굴을 한 화면에서 본다(컨테이너·react-query 없이).
-// 완성 상태문은 Figma 정합(TRIP-788)으로 '추천안이 준비됐어요'(구 '확정 장소 N곳' 대체), imageUrl 은
+// 내 여행 목록(h05/h06, TRIP-788) 카드 VM 5종 — 완성(사진 픽스처)·생성중(resume 없음)·초안(resume)·
+// 일정 없음(404, resume 없음)·미도착(배지 degrade). 순수 카드라 픽스처를 얹어 얼굴을 한 화면에서 본다.
+// 완성·일정 없음 상태문은 TRIP-986 D2('일정 확정'·'아직 일정이 없어요' — Figma 미반영), imageUrl 은
 // DRAFT_PREVIEW_PHOTOS(로컬 에셋 resolve — jest 는 .uri undefined 라 회색, 실기만 사진).
 const MY_TRIPS_PREVIEW_VMS: MyTripCardVM[] = [
   {
@@ -1131,7 +1131,7 @@ const MY_TRIPS_PREVIEW_VMS: MyTripCardVM[] = [
     title: '서귀포시 여행',
     metaLine: '6월 10일 ~ 13일 · 3박 4일 · 2명',
     badge: 'done',
-    extra: '추천안이 준비됐어요',
+    extra: '일정 확정',
     imageUrl: DRAFT_PREVIEW_PHOTOS[0],
   },
   {
@@ -1148,6 +1148,14 @@ const MY_TRIPS_PREVIEW_VMS: MyTripCardVM[] = [
     metaLine: '7월 2일 ~ 4일 · 2박 3일 · 4명',
     badge: 'draft',
     extra: '추천안 준비 중',
+  },
+  {
+    tripId: 'demo-none',
+    title: '강릉 여행',
+    metaLine: '10월 3일 ~ 4일 · 1박 2일 · 2명',
+    badge: 'draft',
+    extra: '아직 일정이 없어요',
+    resume: false,
   },
   {
     tripId: 'demo-load',
@@ -1667,6 +1675,12 @@ const LIVE_HUB_PREVIEW_SLOTS: LiveHubSlot[] = [
 // Figma 의 현재위치 점(부산시립미술관 근처).
 const LIVE_HUB_PREVIEW_LOCATION = { lat: 35.1655, lng: 129.1335 };
 
+// j04 요약의 일차 회고 칩(TRIP-987) — 여행 기간 3일(6/11~6/13) 전체. 페이지가 `tripDayChips` 로 조립하는 모양.
+const TRIP_SUMMARY_PREVIEW_DAY_REFLECTIONS = [1, 2, 3].map((day) => ({
+  day,
+  label: `${day}일차 회고`,
+}));
+
 // i01 기록 없음(TRIP-747, Figma 4076:2452) — 같은 5곳에서 done 2장의 사진·후기만 뺀다.
 const LIVE_HUB_PREVIEW_SLOTS_NO_RECORDS: LiveHubSlot[] =
   LIVE_HUB_PREVIEW_SLOTS.map(({ slot, state }) => ({ slot, state }));
@@ -1688,6 +1702,7 @@ function renderLiveHubPreview(
       onPressAiReplan={noop}
       onPressManualEdit={noop}
       onPressComplete={noop}
+      onPressSlotName={noop}
       {...extra}
     />
   );
@@ -3191,6 +3206,10 @@ export const PREVIEW_STATES: PreviewState[] = [
         shareEnabled
         onBack={noop}
         onPressTab={noop}
+        tripTitle="부산 여행"
+        onPressRecords={noop}
+        dayReflections={TRIP_SUMMARY_PREVIEW_DAY_REFLECTIONS}
+        onPressDayReflection={noop}
       />
     ),
   },
@@ -3215,6 +3234,10 @@ export const PREVIEW_STATES: PreviewState[] = [
         shareEnabled
         onBack={noop}
         onPressTab={noop}
+        tripTitle="부산 여행"
+        onPressRecords={noop}
+        dayReflections={TRIP_SUMMARY_PREVIEW_DAY_REFLECTIONS}
+        onPressDayReflection={noop}
       />
     ),
   },
@@ -4887,6 +4910,8 @@ export const PREVIEW_STATES: PreviewState[] = [
   // 뷰 SlotFillScreen 을 진행줄·스텝퍼·지도·후보 카드 픽스처 props 로 태운다(api import 0 이라 프리뷰
   // 지뢰 목 무해). 반경 점선 원·축척·letter 핀 래스터·톤다운 배지 회색·색은 jest 사각이라 이 2키가
   // 유일한 육안 그물(자율 세션 6-b SKIP). 지도는 네이버 네이티브라 사람 재빌드 전엔 미표시.
+  // TRIP-978: default 의 셋째 칸은 '최대'다 — Figma 는 서버 최대값을 보이지만 프론트는 최대 조회 전엔 그
+  // 값을 모른다(정직 degrade, Seed Q6). wide 는 최대 조회 결과라 셋째 칸이 서버값(maxRadiusLabel).
   {
     key: 'h10-copick-candidates',
     band: 'h',
@@ -4911,7 +4936,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         candidateViews={H10_DEFAULT_VIEWS}
         radiusSteps={H10_RADIUS_STEPS}
         selectedRadiusKey="mid"
-        radiusUsedLabel="약 11.3km"
         candidateCountLabel="후보 4곳"
         selectedPoiId="A1"
         canExpandRadius
@@ -4952,7 +4976,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         candidateViews={H10_WIDE_VIEWS}
         radiusSteps={H10_RADIUS_STEPS}
         selectedRadiusKey="max"
-        radiusUsedLabel="약 11.3km"
+        maxRadiusLabel="약 11.3km"
         candidateCountLabel="후보 4곳"
         selectedPoiId="D4"
         canExpandRadius={false}
@@ -5331,15 +5355,22 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: renderPlanbAppliedPreview,
   },
   // ── i20·i21 위치 수동 입력·권한 거부 폴백(TRIP-442) — 한 컴포넌트를 state prop 으로 두 얼굴.
-  //    지도 롱프레스 실동작·"이 위치로 계속" 핸드오프·핀 오버레이·Figma 픽셀은 jest 사각이라 이
-  //    두 키가 육안 대조 자리다(i20 `1790:3495`·i21 `1790:3549`). 자체 조회 없는 프리젠테이션이라
-  //    QueryClient 없이 렌더된다 ──
+  //    지도 실동작·핀 오버레이·Figma 픽셀은 jest 사각이라 이 두 키가 육안 대조 자리다(i20 `1790:3495`·
+  //    i21 `1790:3549`). 컨테이너(일정 조회·재계획 요청)가 아니라 **순수 뷰**를 태운다 — 배럴은
+  //    컨테이너를 함께 실어 네트워크 계층이 로드된다(TRIP-979 B, traps-shell TRIP-610) ──
   {
     key: 'live-location-manual',
     band: 'i',
     label: 'i20 · 수동 위치 입력',
     login: null,
-    render: () => <LiveLocationPage tripId="preview-trip" state="manual" />,
+    render: () => (
+      <LiveLocationView
+        state="manual"
+        center={{ lat: 37.5796, lng: 126.977 }}
+        placeName="경복궁"
+        onConfirm={noop}
+      />
+    ),
   },
   {
     key: 'live-location-denied',
@@ -5347,7 +5378,12 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'i21 · 위치 권한 거부',
     login: null,
     render: () => (
-      <LiveLocationPage tripId="preview-trip" state="permission-denied" />
+      <LiveLocationView
+        state="permission-denied"
+        center={{ lat: 37.5665, lng: 126.978 }}
+        placeName={null}
+        onConfirm={noop}
+      />
     ),
   },
   // i07 일정 편집(TRIP-753) — h12 편집기(EditorView)를 여행 중 모드(inTrip)로. 키 이름은 옛

@@ -43,18 +43,19 @@ function MapView({
 
 // TRIP-866(S4) — 중앙 고정 핀 picker 의 얇은 목. 소비 화면(StayRegister 핀 지정·LiveLocation)의
 // 테스트가 이 목을 통해 `onPick` 을 직접 발화해 "지도가 좌표를 보고했다"를 흉내낸다(구 onMapMessage
-// 직접 발화 선례 동형). `onPick`·나머지 props 는 host 로 그대로 통과시켜
-// `getByTestId('center-pin-picker').props.onPick({ lat, lng })` 로 관측·발화한다. 중앙 고정 핀은
+// 직접 발화 선례 동형). `center`·`onPick`·나머지 props 는 host 로 그대로 통과시켜
+// `getByTestId('center-pin-picker').props.onPick({ lat, lng })` 로 발화하고 `.props.center` 로
+// 마운트 때 넘긴 중심을 읽는다(TRIP-979 B — 위치 입력 화면의 중심을 관측할 자리가 여기뿐이다).
+// center 는 텍스트로 내지 않는다 — StayRegister 테스트의 getByText 와 겹칠 수 있다. 중앙 고정 핀은
 // `map-center-pin` 마커로 존재만 노출한다(실 크로스헤어·initialCenter 포획은 실물
 // CenterPinPicker.test.tsx 가 잰다 — 이 목은 소비처 배선 전용이라 그 내부를 재현하지 않는다).
-function CenterPinPicker({
-  center,
-  ...rest
-}: {
-  center: MapCenter;
-} & Record<string, unknown>) {
+function CenterPinPicker(
+  props: {
+    center: MapCenter;
+  } & Record<string, unknown>
+) {
   return (
-    <View testID="center-pin-picker" {...rest}>
+    <View testID="center-pin-picker" {...props}>
       <View testID="map-center-pin" />
     </View>
   );

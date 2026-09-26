@@ -294,3 +294,212 @@ describe('🟢 453-AC-3b · 카드 본체 배선 뒤에도 알약 press 는 정�
     expect(mockPush).toHaveBeenCalledWith(`/trips/${TRIP_ID}/itinerary/method`);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRIP-986 A · 홈 히어로의 라벨·부제·목적지가 **같은 판정(`itinerary.status`)**을 쓴다
+// (US-SHELL-02 · US-SCHED-12 · Seed D1 · Q1 · Q2 · Q6).
+//
+// 결함: 라벨은 `Trip.status`, 목적지는 `itinerary.status` 를 봤다. BE 는 `Trip.status` 를 CONFIRMED 로
+// 올리지 않고(날짜로 ACTIVE·ENDED 만 파생) 늘 PLANNED/ACTIVE 로 보내므로, 일정을 확정한 여행도 홈에선
+// "일정 이어서 짜기" + "일정을 이어서 짜볼까요"로 보였다. 아래 픽스처는 전부 **BE 실동작 그대로**
+// `Trip.status` 를 PLANNED(여행 전)·ACTIVE(여행 중)로 준다(02a ★A-1 — CONFIRMED 로 주면 옛 구현도 통과).
+//
+// 여행 전 = 2099 시작, 여행 중 = 2020-01-01~2099-12-31(실시계 오늘을 항상 포함, 02a ★A-3).
+
+const SUBTITLE = /일정을 이어서 짜볼까요/;
+
+function tripAt(
+  status: Trip['status'],
+  startDate: string,
+  endDate: string
+): Trip {
+  return { ...planningTrip(), status, startDate, endDate };
+}
+const beforeTrip = () => tripAt('PLANNED', '2099-06-10', '2099-06-13');
+const duringTrip = () => tripAt('ACTIVE', '2020-01-01', '2099-12-31');
+
+const itineraryPending = {
+  data: undefined,
+  error: null,
+  isPending: true,
+  isError: false,
+} as unknown as ItineraryHookResult;
+
+const itineraryServerError = {
+  data: undefined,
+  error: { isAxiosError: true, response: { status: 500 } },
+  isPending: false,
+  isError: true,
+} as unknown as ItineraryHookResult;
+
+function renderHome(trip: Trip, itinerary: ItineraryHookResult): void {
+  mockUseGetTrips.mockReturnValue(tripsResult([trip]));
+  mockUseItinerary.mockReturnValue(itinerary);
+  render(<HomeRoute />);
+}
+
+describe('🔴 986-A1 · 여행 전 + 일정 확정(Trip.status 는 PLANNED) → "확정 일정 보기" · 부제 없음 · live', () => {
+  it('라벨·부제·목적지가 모두 확정 판정을 따르고, 배지는 "계획 중"을 유지한다(Q6)', () => {
+    renderHome(
+      beforeTrip(),
+      itineraryOk(ItineraryGenerationState.COMPLETE, ItineraryStatus.CONFIRMED)
+    );
+
+    expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
+      '확정 일정 보기'
+    );
+    // 부제 부재 + 짝: 인사 제목은 그대로 있다(아무것도 안 그려 통과하는 것 차단, 02a ★A-4).
+    expect(screen.getByTestId('home-greeting')).not.toHaveTextContent(SUBTITLE);
+    expect(screen.getByTestId('home-greeting')).toHaveTextContent(
+      /부산 여행 D-/
+    );
+    expect(screen.getByTestId('home-trip-hero-badge')).toHaveTextContent(
+      /^계획 중/
+    );
+
+    fireEvent.press(screen.getByTestId('home-trip-hero-cta'));
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith(`/trips/${TRIP_ID}/live`);
+  });
+});
+
+describe('🔴 986-A2 · 여행 전 + 일정 없음(404) → "일정 만들기" · 부제 없음 · method (Q1)', () => {
+  it('일정이 없는데 "이어서 짜기"라고 말하지 않고, 누르면 생성 방식 화면으로 간다', () => {
+    renderHome(beforeTrip(), itineraryNotFound);
+
+    expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
+      '일정 만들기'
+    );
+    expect(screen.getByTestId('home-greeting')).not.toHaveTextContent(SUBTITLE);
+    expect(screen.getByTestId('home-greeting')).toHaveTextContent(
+      /부산 여행 D-/
+    );
+
+    fireEvent.press(screen.getByTestId('home-trip-hero-cta'));
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith(`/trips/${TRIP_ID}/itinerary/method`);
+  });
+});
+
+describe('🟢 986-A3 · 초안·생성 중은 옛 얼굴 그대로 (회귀 앵커)', () => {
+  it('초안(PLANNED+COMPLETE) → "일정 이어서 짜기" · 부제 있음 · draft', () => {
+    renderHome(
+      beforeTrip(),
+      itineraryOk(ItineraryGenerationState.COMPLETE, ItineraryStatus.PLANNED)
+    );
+
+    expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
+      '일정 이어서 짜기'
+    );
+    expect(screen.getByTestId('home-greeting')).toHaveTextContent(SUBTITLE);
+
+    fireEvent.press(screen.getByTestId('home-trip-hero-cta'));
+    expect(mockPush).toHaveBeenCalledWith(`/trips/${TRIP_ID}/itinerary/draft`);
+  });
+
+  it('생성 중(PARTIAL) → "일정 이어서 짜기" · generating', () => {
+    renderHome(
+      beforeTrip(),
+      itineraryOk(ItineraryGenerationState.PARTIAL, ItineraryStatus.PLANNED)
+    );
+
+    expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
+      '일정 이어서 짜기'
+    );
+
+    fireEvent.press(screen.getByTestId('home-trip-hero-cta'));
+    expect(mockPush).toHaveBeenCalledWith(
+      `/trips/${TRIP_ID}/itinerary/generating`
+    );
+  });
+});
+
+describe('986-A4 · 여행 중(Trip.status ACTIVE)도 라벨은 일정 상태를 따른다 (Seed D3 와 한 판정)', () => {
+  it('🟢 확정 → 배지 "여행 중" · "여행 일정 보기" · live', () => {
+    renderHome(
+      duringTrip(),
+      itineraryOk(ItineraryGenerationState.COMPLETE, ItineraryStatus.CONFIRMED)
+    );
+
+    expect(screen.getByTestId('home-trip-hero-badge')).toHaveTextContent(
+      /^여행 중/
+    );
+    expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
+      '여행 일정 보기'
+    );
+
+    fireEvent.press(screen.getByTestId('home-trip-hero-cta'));
+    expect(mockPush).toHaveBeenCalledWith(`/trips/${TRIP_ID}/live`);
+  });
+
+  it('🔴 미확정 초안 → "일정 이어서 짜기" · draft (라벨이 목적지와 같은 판정)', () => {
+    renderHome(
+      duringTrip(),
+      itineraryOk(ItineraryGenerationState.COMPLETE, ItineraryStatus.PLANNED)
+    );
+
+    expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
+      '일정 이어서 짜기'
+    );
+
+    fireEvent.press(screen.getByTestId('home-trip-hero-cta'));
+    expect(mockPush).toHaveBeenCalledWith(`/trips/${TRIP_ID}/itinerary/draft`);
+  });
+
+  it('🔴 일정 없음(404) → "일정 만들기" · method (Q1 — 여행 중 404 도 같은 라벨)', () => {
+    renderHome(duringTrip(), itineraryNotFound);
+
+    expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
+      '일정 만들기'
+    );
+
+    fireEvent.press(screen.getByTestId('home-trip-hero-cta'));
+    expect(mockPush).toHaveBeenCalledWith(`/trips/${TRIP_ID}/itinerary/method`);
+  });
+});
+
+describe('🟢 986-A5 · 일정 미정착(로딩·404 아닌 오류) → Trip.status 폴백 라벨 (Q2 · 02a ★A-2)', () => {
+  // 로딩·500·404 는 셋 다 data 가 없다. 라벨을 data 만 보고 만들면 로딩·500 까지 "일정 만들기"로
+  // 접힌다 — 아래는 그 오답에서 red 가 나는 트립와이어다(404 는 오류 코드로만 판정).
+  it('여행 전 + 로딩 중 → "일정 이어서 짜기" · 부제 있음 · 눌러도 이동 없음', () => {
+    renderHome(beforeTrip(), itineraryPending);
+
+    expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
+      '일정 이어서 짜기'
+    );
+    expect(screen.getByTestId('home-greeting')).toHaveTextContent(SUBTITLE);
+
+    fireEvent.press(screen.getByTestId('home-trip-hero-cta'));
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('여행 전 + 500 → "일정 이어서 짜기" · 부제 있음 (404 아닌 오류를 "일정 없음"으로 말하지 않는다, INV-4)', () => {
+    renderHome(beforeTrip(), itineraryServerError);
+
+    expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
+      '일정 이어서 짜기'
+    );
+    expect(screen.getByTestId('home-greeting')).toHaveTextContent(SUBTITLE);
+  });
+
+  it('여행 중 + 로딩 중 → "여행 일정 보기"', () => {
+    renderHome(duringTrip(), itineraryPending);
+
+    expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
+      '여행 일정 보기'
+    );
+  });
+
+  it('여행 중 + 500 → "여행 일정 보기" · 눌러도 이동 없음 (500 을 초안으로 접지 않는다, 03b 참고-1)', () => {
+    // 여행 전 + 500 은 폴백 라벨이 초안 라벨과 글자까지 같아 "500 → 초안" 오답을 못 가른다.
+    // 여행 중이면 폴백('여행 일정 보기')과 초안('일정 이어서 짜기')이 달라 그 오답에서 red 가 난다.
+    renderHome(duringTrip(), itineraryServerError);
+
+    expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
+      '여행 일정 보기'
+    );
+
+    fireEvent.press(screen.getByTestId('home-trip-hero-cta'));
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+});

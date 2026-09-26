@@ -14,7 +14,8 @@ import { deriveTripCardFace } from './tripCardFace';
  * 무엇을 보장하나:
  *  - 🔴 생성중(PARTIAL) → 'AI가 일정을 짜는 중' · 배지 draft · **resume 없음**.
  *  - 🔴 초안(COMPLETE/FAILED + PLANNED) → '추천안 준비 중' · 배지 draft · **resume 있음**.
- *  - 🔴 완성(CONFIRMED) → '추천안이 준비됐어요' · 배지 done · resume 없음(구 '확정 장소 N곳' 대체).
+ *  - 🔴 완성(CONFIRMED) → '일정 확정' · 배지 done · resume 없음(TRIP-986 Seed D2 — 구 '추천안이 준비됐어요' 교체).
+ *    일정 없음(404)·조회 실패 얼굴은 입력 모양이 구현 몫이라 컨테이너 층(`TripCardContainer.test.tsx`)에서 잰다.
  *  - 🔴 FAILED 는 별도 실패 얼굴 없이 초안으로 접는다(01b Q3, INV-4 재시도 · Figma 실패 프레임 없음).
  *
  * *(개념 — resume seam)* resume 는 배지 값과 **독립**이다. 생성중·초안이 같은 draft 배지를 쓰므로
@@ -47,10 +48,10 @@ describe('🔴 deriveTripCardFace · 상태 3종 + FAILED 착지 (Mapping A)', (
       { statusLine: '추천안 준비 중', badge: 'draft', resume: true },
     ],
     [
-      '완성(CONFIRMED) — 추천안이 준비됐어요 · 완성 · resume 없음',
+      '완성(CONFIRMED) — 일정 확정 · 완성 · resume 없음 (TRIP-986 D2)',
       ItineraryStatus.CONFIRMED,
       ItineraryGenerationState.COMPLETE,
-      { statusLine: '추천안이 준비됐어요', badge: 'done', resume: false },
+      { statusLine: '일정 확정', badge: 'done', resume: false },
     ],
   ] as const)('%s', (_label, status, generationState, expected) => {
     expect(deriveTripCardFace(status, generationState)).toEqual(expected);

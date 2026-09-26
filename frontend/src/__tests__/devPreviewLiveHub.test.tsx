@@ -140,6 +140,34 @@ describe('🔴 TRIP-746·748 · 옛 키 정리 (AC-7 · 748 AC-10)', () => {
   });
 });
 
+// ── TRIP-987 A · Seed Q6 — 허브 프리뷰는 이름 진입을 no-op 으로 받아 '›' 를 유지한다 ──────
+// 안 받으면 TRIP-939 규칙대로 '›' 가 사라져 6-b 육안이 Figma i01(세 상태 모두 `이름 ›`)과 어긋난다.
+
+describe('🔴 TRIP-987 · i01 허브 프리뷰의 이름 진입 (Seed Q6)', () => {
+  it.each(['live-hub-closed', 'live-hub-half', 'live-hub-expanded'])(
+    "%s 는 카드 5장 모두 이름이 누를 수 있는 영역이고 '›' 가 5개다",
+    (key) => {
+      mockSearchParams.state = key;
+
+      render(<DevPreview />);
+
+      const names = screen.getAllByTestId(
+        /^execution-live-slot-name-2026-06-11#/
+      );
+      expect(names).toHaveLength(5);
+      names.forEach((name) =>
+        expect(
+          typeof name.props.onStartShouldSetResponder === 'function' ||
+            typeof name.props.onClick === 'function'
+        ).toBe(true)
+      );
+      expect(
+        screen.getAllByTestId(/^execution-live-slot-chevron-2026-06-11#/)
+      ).toHaveLength(5);
+    }
+  );
+});
+
 // ── TRIP-747 · 수정 알약 열림 / 기록 없음 ─────────────────────────────────────
 
 const PILL_ANY = /^execution-live-edit-pill-(ai|manual)$/;

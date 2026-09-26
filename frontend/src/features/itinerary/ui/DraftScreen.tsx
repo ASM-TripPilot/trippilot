@@ -1,5 +1,4 @@
-import { Fragment } from 'react';
-import type { ReactElement, ReactNode } from 'react';
+import type { ReactElement } from 'react';
 import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -28,9 +27,9 @@ import {
  * 화면은 완성된 값만 받는다 — 조회도 판정도 하지 않는다. 선택된 날의 슬롯을 `days` 에서
  * 고르는 것은 규칙 판정이 아니라 키 조회다(정렬·번호·좌표 거르기는 전부 model 몫).
  *
- * **Figma 보다 짧다** — 추천 강도 세그먼트(요청 바디에 파라미터가 없다) · `다른 후보 N`
- * (개수를 알려면 슬롯마다 별도 POST)는 이번 범위 밖이라 정직한 스텁조차 그리지 않는다
- * (TRIP-483 이연). 우상단 `직접 고르기`·하단 `처음부터 직접`은 수동 짜기 라우트로 배선됐다
+ * **Figma 보다 짧다** — 추천 강도 세그먼트(요청 바디에 파라미터가 없다)는 범위 밖이라 정직한
+ * 스텁조차 그리지 않는다. `다른 후보` 는 카운트 없이 트리거만 그리고(`onPressSlot`), 교체 시트는
+ * 이 화면이 아니라 `DraftPage` 가 화면 뒤 형제로 마운트한다(TRIP-983). 우상단 `직접 고르기`·하단 `처음부터 직접`은 수동 짜기 라우트로 배선됐다
  * (`onManualPlan`). 시간대 라벨의 성격 축(`· 활동`)은 매핑 정본이 없어 시간 축만 낸다(01b D4).
  */
 
@@ -94,16 +93,10 @@ export interface DraftScreenProps {
    * `DraftPage` 몫이다(TRIP-454 AC-5). `listed` 얼굴(PARTIAL 생성 중 포함) 하단에만 뜬다. */
   onComplete?: () => void;
   /** 비고정 슬롯의 "다른 후보 ›" 를 누르면 그 슬롯 slotKey 로 부르는 콜백(TRIP-467→483). 화면은
-   * 어느 패널을 어떻게 여는지 모르고 이 콜백만 부른다 — 패널 토글·`SlotCandidatePanelContainer`
-   * 마운트는 `DraftPage` 몫이다. **미배선이면 트리거를 아예 안 그린다**(후방호환 gated — 기본
+   * 어느 시트를 어떻게 여는지 모르고 이 콜백만 부른다 — 시트 토글·`SlotCandidatePanelContainer`
+   * 마운트는 `DraftPage` 몫이다(스크롤 밖 형제 · TRIP-983). **미배선이면 트리거를 아예 안 그린다**(후방호환 gated — 기본
    * 미배선=트리거 0이라 동결 화면 테스트·프리뷰 동작 불변). */
   onPressSlot?: (slotKey: string) => void;
-  /** 어느 슬롯의 교체 패널이 펼쳐졌나(=그 slotKey). null/미지정=닫힘. 화면은 이 값과 일치하는
-   * 카드 아래에만 패널을 그린다 — 위치만 알고, 무엇을 그리나는 `renderSlotPanel` 배선 몫이다. */
-  expandedSlotKey?: string | null;
-  /** 펼친 슬롯 아래에 그릴 패널을 조립해 주는 배선 함수(`DraftPage` 공급). 화면은 **매칭 카드
-   * slotKey 로만** 이걸 부른다(패널 조립은 배선, 화면은 자리). */
-  renderSlotPanel?: (slotKey: string) => ReactNode;
   /** 「처음부터 직접」(하단)·「직접 고르기」(우상단) 공통 콜백 — 둘 다 수동 짜기 라우트로 간다.
    * 미배선이면 두 어포던스를 아예 안 그린다(후방호환 gated · 死버튼 회피). */
   onManualPlan?: () => void;
@@ -302,8 +295,6 @@ export function DraftScreen({
   onBack,
   onComplete,
   onPressSlot,
-  expandedSlotKey,
-  renderSlotPanel,
   onManualPlan,
 }: DraftScreenProps): ReactElement {
   // PARTIAL(2단계 생성 중) 얼굴은 이제 DraftPage 가 공용 지도+시트 셸로 그린다(TRIP-790 · D1) —
@@ -361,7 +352,10 @@ export function DraftScreen({
           </Pressable>
         </View>
 
-        <ScrollView contentContainerClassName="gap-[14px] px-lg pb-lg pt-md">
+        <ScrollView
+          testID="itinerary-draft-scroll"
+          contentContainerClassName="gap-[14px] px-lg pb-lg pt-md"
+        >
           {view.kind === 'listed' && view.staleFailed ? (
             <View
               testID="itinerary-draft-stale-failed"
@@ -452,26 +446,15 @@ export function DraftScreen({
                   {`${slots.length}곳`}
                 </Text>
               </View>
-              {slots.map((slot, index) => {
-                // 패널은 이 카드 **바로 아래** 스크롤 흐름에 인라인으로 삽입된다(바텀시트 아님).
-                // 펼친 슬롯 하나만(expandedSlotKey 일치) 그리고, 무엇을 그리나는 배선(renderSlotPanel)
-                // 몫이라 화면은 "어느 카드 자리인가"만 안다(TRIP-483 · ★B).
-                const slotKey = buildSlotKey(selectedDate, slot.poiId);
-                return (
-                  <Fragment key={slotKey}>
-                    <DraftSlotCard
-                      slot={slot}
-                      date={selectedDate}
-                      index={index}
-                      onPressSlot={onPressSlot}
-                    />
-                    {expandedSlotKey === slotKey &&
-                    renderSlotPanel !== undefined
-                      ? renderSlotPanel(slotKey)
-                      : null}
-                  </Fragment>
-                );
-              })}
+              {slots.map((slot, index) => (
+                <DraftSlotCard
+                  key={buildSlotKey(selectedDate, slot.poiId)}
+                  slot={slot}
+                  date={selectedDate}
+                  index={index}
+                  onPressSlot={onPressSlot}
+                />
+              ))}
             </>
           ) : null}
 

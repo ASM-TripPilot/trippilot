@@ -17,12 +17,17 @@ import * as SplashScreen from 'expo-splash-screen';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { SplashGate } from '@/app-shell';
+import { retryUnlessNotFound } from '@/shared/api/isNotFound';
 import { ToastHost } from '@/shared/ui/Toast';
 
 // 서버 상태(TanStack Query)의 앱 전역 캐시 저장소 — 모듈 스코프에서 한 번만 만들어 리렌더마다
-// 다시 만들지 않는다. 기본 옵션은 손대지 않는다(TRIP-179 D5) — staleTime 등은 그 값을 실제로
-// 쓰는 소비 화면이 붙는 칸에서 근거와 함께 정한다.
-const queryClient = new QueryClient();
+// 다시 만들지 않는다. 기본 옵션은 retry 하나만 연다(TRIP-986 #063) — 404("없다")는 다시 물어도
+// 답이 같고, 같은 캐시 키의 관찰자들은 요청 하나를 공유해 그 요청을 시작한 관찰자의 retry 가
+// 적용되므로 페이지 단독 옵션만으로는 막히지 않는다. staleTime 등 나머지는 여전히 그 값을 실제로
+// 쓰는 소비 화면이 붙는 칸에서 근거와 함께 정한다(TRIP-179 D5).
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: retryUnlessNotFound } },
+});
 
 // 네이티브 스플래시(OS 부팅 화면)를 폰트 로드가 끝날 때까지 자동으로 숨기지 않게 붙잡는다.
 // 이것은 인앱 SplashScreen 컴포넌트(SplashGate 가 부트스트랩 중 그리는 화면)와는 별개 레이어 —

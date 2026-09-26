@@ -19,20 +19,26 @@ export interface TripCardFace {
 }
 
 /**
- * 우선순위(결정론) — PARTIAL → CONFIRMED → 초안 순(`resolveItineraryDestination` 과 정렬).
+ * 우선순위(결정론) — 404 → PARTIAL → CONFIRMED → 초안 순(`resolveItineraryDestination` 과 정렬).
+ * - `notFound`(조회 404) → 일정 없음: '아직 일정이 없어요' · draft · resume 없음(TRIP-986 D2·Q3).
  * - `generationState==='PARTIAL'` → 생성중: 'AI가 일정을 짜는 중' · draft · resume 없음.
- * - `status==='CONFIRMED'` → 완성: '추천안이 준비됐어요' · done · resume 없음(구 '확정 장소 N곳' 대체).
- * - else(COMPLETE/FAILED+PLANNED · 404 undefined 포함) → 초안: '추천안 준비 중' · draft · resume 있음.
+ * - `status==='CONFIRMED'` → 완성: '일정 확정' · done · resume 없음(TRIP-986 D2).
+ * - else(COMPLETE/FAILED+PLANNED) → 초안: '추천안 준비 중' · draft · resume 있음.
+ * 404 가 아닌 조회 실패는 이 함수의 입력이 아니다 — 컨테이너가 로딩과 같은 degrade 로 접는다(INV-4).
  */
 export function deriveTripCardFace(
   status?: ItineraryStatus,
-  generationState?: ItineraryGenerationState
+  generationState?: ItineraryGenerationState,
+  notFound = false
 ): TripCardFace {
+  if (notFound) {
+    return { statusLine: '아직 일정이 없어요', badge: 'draft', resume: false };
+  }
   if (generationState === 'PARTIAL') {
     return { statusLine: 'AI가 일정을 짜는 중', badge: 'draft', resume: false };
   }
   if (status === 'CONFIRMED') {
-    return { statusLine: '추천안이 준비됐어요', badge: 'done', resume: false };
+    return { statusLine: '일정 확정', badge: 'done', resume: false };
   }
   return { statusLine: '추천안 준비 중', badge: 'draft', resume: true };
 }

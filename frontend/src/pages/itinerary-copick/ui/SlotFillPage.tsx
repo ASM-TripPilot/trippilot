@@ -1,11 +1,14 @@
 import type { ReactElement } from 'react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 
 import { buildEditItineraryRequest } from '@/features/itinerary/model/buildEditItineraryRequest';
 import { nextCoPickSlotKey } from '@/features/itinerary/model/coPickSlots';
-import { formatCoPickDayHeader } from '@/features/itinerary/model/draftView';
+import {
+  DRAFT_POLL_INTERVAL_MS,
+  formatCoPickDayHeader,
+} from '@/features/itinerary/model/draftView';
 import { isConfirmLocked } from '@/features/itinerary/model/planState';
 import { formatRadiusUsed } from '@/features/itinerary/model/radiusUsedLabel';
 import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
@@ -52,7 +55,14 @@ import {
  * 이중발사 방지 `firedRef`(useRef — 같은 틱 둘째 탭이 옛 값을 읽어 못 막는 useState 잠금 회피) ·
  * 콜드캐시 가드(itinerary GET 미도착 중 확정하면 `swapSlotPoi([], …)` 로 빈 days PUT = 일정 소실)는
  * `SlotCandidatePanelContainer`(h08) 동형 재사용이다.
+ *
+ * TRIP-978 · 생성 중(PARTIAL) 일정에 갇히지 않는다: PARTIAL 인 동안만 일정 GET 을 폴링하고(상한 없음 —
+ * 서버가 멈춘 생성을 FAILED 로 내린다, openapi POST /itinerary), 그동안 확정은 잠금 사유와 함께 비활성.
+ * 후보 조회 실패(409 포함)는 0건 얼굴이 아니라 사유 문구로 말한다 — 실서버 409 코드는 세 갈래 모두
+ * `CONFLICT` 라 "생성 중" 여부는 코드가 아니라 캐시의 generationState 로 가른다.
  */
+
+const CONFIRM_LOCKED_TEXT = '나머지 일정을 만드는 중이에요';
 
 const CONCEPTS: readonly { key: string; label: string }[] = [
   { key: 'meal', label: '식사' },
@@ -85,9 +95,24 @@ export function SlotFillPage({
 }: SlotFillPageProps): ReactElement {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const itinerary = useGetTripsTripIdItinerary(tripId);
-  const { mutate: fetchCandidates, data: candidatesData } =
-    usePostTripsTripIdItinerarySlotCandidates();
+  // PARTIAL 인 동안만 2초마다 다시 부르고 COMPLETE·FAILED 에서 멈춘다(함수형 refetchInterval — 매 응답
+  // 뒤 다음 간격을 정한다). 상한은 두지 않는다 — 짧은 상한은 반쪽 일정에서 조용히 멈춘다(openapi).
+  const itinerary = useGetTripsTripIdItinerary(tripId, {
+    query: {
+      refetchInterval: (query) =>
+        isConfirmLocked(query.state.data?.generationState)
+          ? DRAFT_POLL_INTERVAL_MS
+          : false,
+    },
+  });
+  const {
+    mutate: fetchCandidates,
+    data: candidatesData,
+    error: candidatesError,
+    isError: candidatesFailed,
+    isPending: candidatesPending,
+    variables: candidatesVariables,
+  } = usePostTripsTripIdItinerarySlotCandidates<unknown>();
   const { mutate: putItinerary, isPending } =
     usePutTripsTripIdItinerary<unknown>();
 
@@ -100,6 +125,30 @@ export function SlotFillPage({
   const firedRef = useRef(false);
 
   const parsed = parseSlotKey(slotKey);
+  const confirmLocked = isConfirmLocked(itinerary.data?.generationState);
+
+  // 잠금이 풀리는 순간(PARTIAL → COMPLETE·FAILED) 후보 얼굴에서 마지막 조회가 실패였다면 그 요청
+  // (같은 컨셉·반경)을 한 번 다시 보낸다 — 안 하면 폴링으로 풀려도 사용자는 오류 문구 앞에 남는다(Q2).
+  // ref 가 직전 잠금값을 기억해 다른 의존값 변화로 다시 돌아도 해제 전이에서만 발사된다.
+  const wasLockedRef = useRef(confirmLocked);
+  useEffect(() => {
+    if (
+      wasLockedRef.current &&
+      !confirmLocked &&
+      inFill &&
+      candidatesFailed &&
+      candidatesVariables !== undefined
+    ) {
+      fetchCandidates(candidatesVariables);
+    }
+    wasLockedRef.current = confirmLocked;
+  }, [
+    confirmLocked,
+    inFill,
+    candidatesFailed,
+    candidatesVariables,
+    fetchCandidates,
+  ]);
 
   // h13 상단 문맥 줄("오후 슬롯 · △△ 다음") — 채울 슬롯의 시간대(timeBandLabel)와 그 직전
   // 슬롯의 이름을 GET 캐시(itinerary.data, 이미 조회돼 있음)에서 그대로 읽는다. 이름 미도착
@@ -322,14 +371,34 @@ export function SlotFillPage({
   }
 
   const candidates = candidatesData?.candidates ?? [];
+  // 반경 라벨(Q3·Q6) — 요청 radiusM × 응답 radiusMUsed 로 가른다. 최대(null) 조회면 셋째 칸이 서버값,
+  // 숫자 요청을 서버가 넓혔으면 캡션이 그 사실을 말한다. 그 밖(요청 그대로 씀)은 둘 다 없음.
+  const requestedRadiusM = candidatesVariables?.data.radiusM;
+  const maxRadiusLabel =
+    candidatesData !== undefined && requestedRadiusM === null
+      ? formatRadiusUsed(candidatesData.radiusMUsed)
+      : null;
+  const radiusUsedLabel =
+    candidatesData !== undefined &&
+    typeof requestedRadiusM === 'number' &&
+    candidatesData.radiusMUsed > requestedRadiusM
+      ? formatRadiusUsed(candidatesData.radiusMUsed)
+      : null;
+  const candidatesErrorMessage = !candidatesFailed
+    ? null
+    : confirmLocked
+      ? CONFIRM_LOCKED_TEXT
+      : resolveSlotSwapError(candidatesError).message;
   return (
     <SlotFillScreen
       candidates={candidates}
       radiusSteps={RADIUS_STEPS}
       selectedRadiusKey={selectedRadiusKey}
-      radiusUsedLabel={
-        candidatesData ? formatRadiusUsed(candidatesData.radiusMUsed) : null
-      }
+      radiusUsedLabel={radiusUsedLabel}
+      maxRadiusLabel={maxRadiusLabel}
+      confirmLocked={confirmLocked}
+      candidatesErrorMessage={candidatesErrorMessage}
+      candidatesPending={candidatesPending}
       candidateCountLabel={`후보 ${candidates.length}곳`}
       selectedPoiId={selectedPoiId}
       canExpandRadius={selectedRadiusKey !== MAX_RADIUS_KEY}

@@ -1,6 +1,9 @@
 import { useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
 
+import { useLiveItinerary } from '@/features/execution/model/useLiveItinerary';
+import { readFromInstant } from '@/features/planb/model/replanFromInstant';
+import { deriveReplanMapAnchor } from '@/features/planb/model/replanMapCenter';
 import { resolveReplanState } from '@/features/planb/model/replanState';
 import { useApplyReplan } from '@/features/planb/model/useApplyReplan';
 import { useReplanSession } from '@/features/planb/model/useReplanSession';
@@ -25,8 +28,6 @@ import { ReplanDraftView } from './ReplanDraftView';
 
 // 라이브 대안 없음 부제 — Figma 앞 절("17시 이후 …")은 데이터별 사유라 서버가 주기 전엔 쓰지 않는다.
 const NO_SOLUTION_DESCRIPTION = '조건을 줄이거나 직접 고쳐 주세요';
-// 출발 좌표가 없는 세션(originLat/Lng nullable)의 지도 중심 — 옛 i13 화면의 부산 중심 플레이스홀더 계승.
-const FALLBACK_CENTER = { lat: 35.1587, lng: 129.1604 };
 
 export interface PlanbDraftPageProps {
   tripId: string;
@@ -40,6 +41,8 @@ export function PlanbDraftPage({
   const router = useRouter();
   const session = useReplanSession(tripId, sessionId);
   const apply = useApplyReplan();
+  // 출발 좌표 없는 세션의 지도 중심을 일정에서 고른다(TRIP-979 B). 훅이라 조기 반환 위에서 부른다.
+  const itinerary = useLiveItinerary(tripId);
 
   const data = session.data;
   if (data === undefined) return null;
@@ -55,10 +58,13 @@ export function PlanbDraftPage({
   return (
     <ReplanDraftView
       variant={state.kind}
-      center={{
-        lat: data.originLat ?? FALLBACK_CENTER.lat,
-        lng: data.originLng ?? FALLBACK_CENTER.lng,
-      }}
+      center={
+        deriveReplanMapAnchor({
+          days: itinerary.data?.days,
+          preferredDate: readFromInstant(data.fromInstant).date,
+          origin: { lat: data.originLat, lng: data.originLng },
+        }).center
+      }
       days={[]}
       selectedDayIndex={0}
       dayLabel=""

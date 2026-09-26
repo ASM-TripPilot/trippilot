@@ -1,7 +1,14 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
+import type { ReactTestInstance } from 'react-test-renderer';
 
 import type { ItineraryDaysItemSlotsItem } from '@/entities/itinerary-slot/model';
 
+import { ChevronRightGlyph } from './SlotGlyphs';
 import { SlotProgressCard } from './SlotProgressCard';
 
 /**
@@ -47,6 +54,7 @@ const MEMO = '골목마다 알록달록한 벽화. 전망대에서 인증샷 남
 
 describe('SlotProgressCard · done (AC-3)', () => {
   it('C1 이름·chevron·"09:30"+"방문"·사진 2장·후기를 그린다', () => {
+    // TRIP-987: '›' 는 이름 진입 목적지가 있을 때만 그린다 — 목적지를 준 모양으로 고정(C11 이 규칙을 잠근다).
     render(
       <SlotProgressCard
         slot={mkSlot()}
@@ -54,6 +62,7 @@ describe('SlotProgressCard · done (AC-3)', () => {
         state="done"
         photos={PHOTOS}
         memo={MEMO}
+        onPressName={jest.fn()}
       />
     );
 
@@ -114,7 +123,14 @@ describe('SlotProgressCard · active (AC-4)', () => {
   });
 
   it('C4 상태줄은 "13:00 도착 · 지금 관람 중" 이고, 진행 중 배지·영업시간 줄은 없다 (D4)', () => {
-    render(<SlotProgressCard slot={activeSlot} date={DATE} state="active" />);
+    render(
+      <SlotProgressCard
+        slot={activeSlot}
+        date={DATE}
+        state="active"
+        onPressName={jest.fn()}
+      />
+    );
 
     expect(screen.getByTestId(id('time'))).toHaveTextContent(
       '13:00 도착 · 지금 관람 중'
@@ -220,6 +236,7 @@ describe('SlotProgressCard · upcoming (AC-5)', () => {
         slot={upcoming('11:00 - 22:00')}
         date={DATE}
         state="upcoming"
+        onPressName={jest.fn()}
       />
     );
 
@@ -394,4 +411,100 @@ describe('SlotProgressCard · 배지 override (TRIP-748 C10)', () => {
       expect(screen.queryByText('비 예보')).toBeNull();
     }
   );
+});
+
+// ── TRIP-987 A · 이름·'›' → i10 현재 장소 상세 (US-ONTRIP-02 · TRIP-939) ──────────────
+//
+// 카드는 목적지를 모른다 — `onPressName` 을 받으면 이름+'›' 를 감싼 누름 영역(testID `…-name-…`)이
+// 생기고, 안 받으면 이름은 누를 수 없는 글자이고 '›' 도 없다(자매 SlotStopCard 선례, 02a ★1).
+
+/** 호스트가 누를 수 있는가 — Pressable 은 onPress 없이도 응답자 핸들러를 단다(SlotStopCard.test 선례). */
+function isTouchable(node: ReactTestInstance): boolean {
+  return (
+    typeof node.props.onStartShouldSetResponder === 'function' ||
+    typeof node.props.onClick === 'function'
+  );
+}
+
+describe('SlotProgressCard · 이름 진입 (TRIP-987 A-1·A-2·A-4)', () => {
+  const STATES = ['done', 'active', 'upcoming'] as const;
+
+  it.each(STATES)(
+    "C11a %s — onPressName 을 주면 이름이 버튼이고, 이름·'›' 어느 쪽을 눌러도 1회씩 불린다",
+    (state) => {
+      const onPressName = jest.fn();
+      render(
+        <SlotProgressCard
+          slot={mkSlot()}
+          date={DATE}
+          state={state}
+          onPressName={onPressName}
+        />
+      );
+
+      const name = screen.getByTestId(id('name'));
+      expect(name).toHaveTextContent('감천문화마을');
+      expect(isTouchable(name)).toBe(true);
+      // '›' 는 누름 영역 안에 있다 — 글리프만 따로 떠 있으면 눌러도 안 간다.
+      const chevron = within(name).getByTestId(id('chevron'));
+      expect(screen.UNSAFE_queryAllByType(ChevronRightGlyph)).toHaveLength(1);
+
+      fireEvent.press(name);
+      expect(onPressName).toHaveBeenCalledTimes(1);
+      fireEvent.press(chevron);
+      expect(onPressName).toHaveBeenCalledTimes(2);
+    }
+  );
+
+  it.each(STATES)(
+    "C11b %s — onPressName 이 없으면 이름은 누를 수 없는 글자이고 '›' 가 없다 (TRIP-939)",
+    (state) => {
+      render(<SlotProgressCard slot={mkSlot()} date={DATE} state={state} />);
+
+      const name = screen.getByTestId(id('name'));
+      expect(name).toHaveTextContent('감천문화마을');
+      expect(isTouchable(name)).toBe(false);
+      expect(screen.queryByTestId(id('chevron'))).toBeNull();
+      expect(screen.UNSAFE_queryAllByType(ChevronRightGlyph)).toHaveLength(0);
+    }
+  );
+
+  it('C11c 이름 testID 는 카드마다 하나다 — 누름 영역으로 옮기기만 한다', () => {
+    render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="done"
+        onPressName={jest.fn()}
+      />
+    );
+
+    expect(screen.getAllByTestId(id('name'))).toHaveLength(1);
+  });
+
+  it('C11d active — [방문 완료]와 이름 진입은 서로의 콜백을 부르지 않는다 (A-4)', () => {
+    const onPressName = jest.fn();
+    const onPressComplete = jest.fn();
+    render(
+      <SlotProgressCard
+        slot={mkSlot({ startAt: '13:00:00', nameKo: '부산시립미술관' })}
+        date={DATE}
+        state="active"
+        onPressName={onPressName}
+        onPressComplete={onPressComplete}
+      />
+    );
+
+    fireEvent.press(screen.getByTestId('execution-arrive-complete'));
+    expect(onPressComplete).toHaveBeenCalledTimes(1);
+    expect(onPressName).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId(id('name')));
+    expect(onPressName).toHaveBeenCalledTimes(1);
+    expect(onPressComplete).toHaveBeenCalledTimes(1);
+    // 기존 leaf 는 그대로다.
+    expect(screen.getByTestId(id('time'))).toHaveTextContent(
+      '13:00 도착 · 지금 관람 중'
+    );
+  });
 });

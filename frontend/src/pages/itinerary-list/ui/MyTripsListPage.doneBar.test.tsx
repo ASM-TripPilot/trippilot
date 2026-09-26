@@ -388,6 +388,20 @@ describe('🔴 AC-6 · 로딩·빈 목록·완성 없음이면 배너가 없다'
     expect(mockWriteIdSet).not.toHaveBeenCalled();
   });
 
+  it('TRIP-986 C1 · 완성 여행이 이미 끝난 여행(Trip.status ENDED)뿐이면 배너가 없다 (#016 · Seed D4)', async () => {
+    // BE 는 끝난 여행을 날짜로 ENDED 로 내려준다 — 확정 일정이 있어도 "완성됐어요 · 보기"는 뒷북이다.
+    const ended = { ...A, status: 'ENDED' as const };
+    scriptTrips([ended], { 'trip-a': DONE });
+
+    renderPage();
+    await settle();
+
+    // 짝 — 카드는 뜨고 seen 도 읽었다(판정 재료가 다 온 뒤의 "없음", ★2).
+    expect(screen.getByTestId('my-trip-card-trip-a')).toBeOnTheScreen();
+    expect(mockReadIdSet).toHaveBeenCalled();
+    expect(screen.queryByTestId('generation-done-bar')).toBeNull();
+  });
+
   it('로딩 → 목록으로 바뀌어도 크래시 없이 배너가 뜬다 (새 훅은 일찍 return 위에, ★4)', async () => {
     mockUseGetTrips.mockReturnValue({
       data: undefined,
