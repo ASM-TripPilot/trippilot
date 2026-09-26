@@ -23,11 +23,11 @@ import {
  * 어느 것도 모르고 완성된 카드 뷰모델만 받는다.
  *
  *  1. **박별 카드 파생** — `toBaseSections`(정렬·박 라벨 소유) → `nightlyBaseCards`(밤 목록·지역·
- *     날짜·숙소명 조인)로 밤 수(Σnights)만큼 카드를 만든다. 배정된 밤은 숙소명, 미배정 밤은
+ *     날짜·숙소명 조인)로 여행 기간의 밤 수만큼 카드를 만든다(TRIP-1010 — 박수 합 밖의 밤은 마지막 여행지). 배정된 밤은 숙소명, 미배정 밤은
  *     화면이 "숙소 미정"으로 그린다(옵션 A).
  *  2. **변형 판정(옵션 A — empty 없음)** — `createdTripId` 부재 → notrip · 조회 실패 → error ·
  *     진행 중 → loading · 그 밖 → default. **empty가 없다**: 목적지가 있으면(step1에서 강제)
- *     배정이 0이어도 Σnights 카드가 전부 "숙소 미정"으로 뜬다.
+ *     배정이 0이어도 기간의 밤 카드가 전부 "숙소 미정"으로 뜬다.
  *  3. **조회 껐다 켜기** — 위저드는 `Stack.Protected` 밖이라 딥링크로 tripId 없이 열린다.
  *     `enabled: tripId !== undefined`로 그때 요청을 아예 안 보낸다.
  *
@@ -52,6 +52,7 @@ export function TripNewStep2Page(): ReactElement {
   const {
     createdTripId: tripId,
     startDate,
+    endDate,
     destinations,
   } = useTripWizardStore();
 
@@ -79,9 +80,11 @@ export function TripNewStep2Page(): ReactElement {
   const sections = toBaseSections(assignments, savedStayList, {
     startDate: tripStartDate,
   });
+  // 카드 수(여행 기간 · 남은 밤 채움)는 nightlyBaseCards 가 소유한다 — 배선은 종료일을 넘기기만 한다(TRIP-1010).
   const cards = nightlyBaseCards({
     destinations,
     startDate: tripStartDate,
+    endDate,
     sections,
   });
 

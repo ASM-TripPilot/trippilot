@@ -246,6 +246,65 @@ describe('박별 카드 배선 — toBaseSections → nightlyBaseCards', () => {
   });
 });
 
+// TRIP-1010(D7) — 카드 수는 박수 합이 아니라 **여행 기간**이다. 배선이 스토어 `endDate` 를
+// `nightlyBaseCards` 에 넘겨야만 기간만큼 카드가 뜬다(AC-7). 위 기본 픽스처는 부산2+경주1 = 기간 3박이라
+// 두 규칙이 같은 답을 내므로, 여기서는 박수 합 < 기간인 드래프트로 다시 심는다.
+describe('TRIP-1010 · 카드 수 = 여행 기간 (박수 합이 모자라도 밤이 빠지지 않는다)', () => {
+  function seedDraft(
+    startDate: string,
+    endDate: string,
+    destinations: [string, number][]
+  ): void {
+    const store = useTripWizardStore.getState();
+    store.reset();
+    store.setPeriod(undefined, startDate, endDate);
+    store.setCreatedTripId(TRIP_ID);
+    destinations.forEach(([region, nights]) =>
+      store.addDestination(region, nights)
+    );
+  }
+
+  it('서울 1박 + 기간 9/26–9/28(2박)이면 카드 2장, 둘째 밤(9/27)도 서울이다 (QA #032)', () => {
+    // 준비 — 배정·저장 숙소는 기본값(6월 배정이라 9월 밤을 안 덮는다 → 전부 "숙소 미정").
+    seedDraft('2026-09-26', '2026-09-28', [['서울특별시', 1]]);
+
+    render(<TripNewStep2Page />);
+
+    expect(screen.getAllByTestId(/^trip-base-night-card-/)).toHaveLength(2);
+    const card2 = screen.getByTestId('trip-base-night-card-2');
+    expect(card2).toHaveTextContent(/서울특별시/);
+    expect(card2).toHaveTextContent(/9\/27/);
+    expect(screen.queryByTestId('trip-base-night-card-3')).toBeNull();
+  });
+
+  it('부산1·경주1 + 기간 3박이면 카드 3장, 남은 밤(3번째)은 마지막 여행지 경주다', () => {
+    seedDraft('2026-06-10', '2026-06-13', [
+      ['부산', 1],
+      ['경주', 1],
+    ]);
+
+    render(<TripNewStep2Page />);
+
+    expect(screen.getAllByTestId(/^trip-base-night-card-/)).toHaveLength(3);
+    expect(screen.getByTestId('trip-base-night-card-3')).toHaveTextContent(
+      /경주/
+    );
+  });
+
+  it('empty 얼굴(저장 숙소 0·배정 0)의 미정 행도 기간만큼 뜬다', () => {
+    seedDraft('2026-06-10', '2026-06-13', [
+      ['부산', 1],
+      ['경주', 1],
+    ]);
+    mockSavedStaysResult = loaded([]);
+    mockBasesResult = loaded([]);
+
+    render(<TripNewStep2Page />);
+
+    expect(screen.getAllByTestId(/^trip-base-empty-night-/)).toHaveLength(3);
+  });
+});
+
 // TRIP-674 · S10 — savedStays 0 은 이제 empty 얼굴이다(구 옵션 A 의 "전부 숙소 미정 default" 를 대체,
 // D1). ⚠️ grep sweep: 여기 있던 구 ★4("savedStays 0 → default·empty 없음")가 신 계약과 정면 충돌해
 // empty 얼굴 단언으로 교체됐다(02a ★1).

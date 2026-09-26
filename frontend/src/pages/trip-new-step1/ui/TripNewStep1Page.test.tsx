@@ -1,4 +1,9 @@
-import { render, screen, within } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 
 import type { PreferenceView } from '@/shared/api/generated/schemas';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
@@ -215,5 +220,160 @@ describe('재진입 보존 (BR-U1-33)', () => {
       )
     ).toBeOnTheScreen();
     expect(next()).toBeDisabled();
+  });
+});
+
+// ── TRIP-1010(D7) · 여행지 박수 ↔ 기간 정합 ─────────────────────────────────────────
+//
+// 1/4 에서 여행지 박수 합(Σnights)과 기간(endDate − startDate)이 어긋나면 2/4 에서 밤이 사라지거나
+// '다음'이 말없이 꺼졌다(QA #032). 두 가지를 잠근다.
+//  (a) 기간 시트 "적용" 순간 여행지가 1곳이면 그 박수를 기간에 맞춘다. 2곳 이상이면 건드리지 않는다.
+//  (b) 기간이 있고 Σnights ≠ 기간이면 요약 카드 아래 안내 한 줄을 보인다(문구는 페이지가 조립).
+// 안내 문구는 `toHaveTextContent('문자열')` = 완전 일치로 잰다(02a ★1).
+
+const NOTE = 'trip-wizard-nights-mismatch-note';
+
+/** 기간 요약 행 → 시트 → 두 날짜 셀 → 적용. BASE(6/10)가 오늘이라 6/11부터 누른다(02a ★11). */
+function applyPeriodViaSheet(start: string, end: string): void {
+  fireEvent.press(screen.getByTestId('trip-wizard-summary-period'));
+  fireEvent.press(screen.getByTestId(`trip-wizard-period-cell-${start}`));
+  fireEvent.press(screen.getByTestId(`trip-wizard-period-cell-${end}`));
+  fireEvent.press(screen.getByTestId('trip-wizard-period-apply'));
+}
+
+function destinationNights(): number[] {
+  return useTripWizardStore.getState().destinations.map((one) => one.nights);
+}
+
+describe('TRIP-1010 (a) · 기간을 적용하면 단일 여행지 박수가 기간을 따라온다', () => {
+  it('서울 1박에 2박 기간(6/11–6/13)을 적용하면 박수가 2박이 되고 요약·다음이 맞춰진다', () => {
+    // 준비 — 여행지 1곳, 1박(지역 선택이 늘 1박으로 담는다).
+    useTripWizardStore.getState().addDestination('서울특별시', 1);
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    // 실행
+    applyPeriodViaSheet('2026-06-11', '2026-06-13');
+
+    // 단언 — 스토어 박수 2, 요약 행 sub "2박", 게이트 열림, 합=기간이라 안내 없음(짝: root 존재).
+    expect(destinationNights()).toEqual([2]);
+    expect(
+      within(screen.getByTestId('trip-wizard-summary-destination')).getByText(
+        '2박'
+      )
+    ).toBeOnTheScreen();
+    expect(next()).toBeEnabled();
+    expect(root()).toBeOnTheScreen();
+    expect(screen.queryByTestId(NOTE)).toBeNull();
+  });
+
+  it('박수를 5박으로 올려 둔(기간 초과) 뒤 2박 기간을 적용해도 2박으로 맞춰진다', () => {
+    // 준비 — 3박 기간에 5박(초과). 먼저 "닫혀 있다"를 확인해 준비가 실제로 초과 상태임을 앵커한다(★12).
+    const store = useTripWizardStore.getState();
+    store.addDestination('서울특별시', 1);
+    store.setNights(1, 5);
+    store.setPeriod('3n4d', '2026-06-10', '2026-06-13');
+    render(<TripNewStep1Page baseDate={BASE} />);
+    expect(next()).toBeDisabled();
+
+    // 실행
+    applyPeriodViaSheet('2026-06-11', '2026-06-13');
+
+    // 단언
+    expect(destinationNights()).toEqual([2]);
+    expect(next()).toBeEnabled();
+  });
+
+  it('여행지가 2곳(부산1·경주1)이면 3박 기간을 적용해도 박수는 그대로고 안내 한 줄이 뜬다', () => {
+    const store = useTripWizardStore.getState();
+    store.addDestination('부산', 1);
+    store.addDestination('경주', 1);
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    applyPeriodViaSheet('2026-06-11', '2026-06-14');
+
+    // 박수 불변 — 다중 여행지는 어느 도시에 밤을 더할지 모르므로 건드리지 않는다(D7).
+    expect(destinationNights()).toEqual([1, 1]);
+    // 남은 1박은 마지막 여행지(경주)로 잡힌다는 안내 — 2/4 채움 규칙을 미리 알린다.
+    expect(screen.getByTestId(NOTE)).toHaveTextContent(
+      '여행지 박수(2박)가 기간(3박)보다 적어요 · 남은 1박은 경주로 잡아요'
+    );
+    // Σ < 기간은 BR-U1-34 위반이 아니다 — 다음은 열린다.
+    expect(next()).toBeEnabled();
+  });
+});
+
+describe('TRIP-1010 (b) · 박수·기간 불일치 안내 한 줄 (01b Q2·Q3)', () => {
+  it('단일 여행지라도 스토어에서 박수 < 기간이면(삭제로 1곳 남은 경우 등) 동기화 없이 안내만 뜬다', () => {
+    // 준비 — "적용"을 거치지 않은 선상태. 동기화는 적용·담기 사건에서만 일어난다(02a ★6).
+    const store = useTripWizardStore.getState();
+    store.addDestination('서울특별시', 1);
+    store.setPeriod(undefined, '2026-06-10', '2026-06-12');
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    expect(screen.getByTestId(NOTE)).toHaveTextContent(
+      '여행지 박수(1박)가 기간(2박)보다 적어요 · 남은 1박은 서울특별시로 잡아요'
+    );
+    // 렌더만으로 박수가 바뀌지 않는다.
+    expect(destinationNights()).toEqual([1]);
+  });
+
+  // 조사 로/으로 갈림(03b 경고-2) — 위 두 케이스는 받침 없는 이름(경주·서울특별시)이라 '로'만 지난다.
+  // 받침 있는 이름은 '으로', ㄹ받침은 예외로 '로'다. 마지막 여행지 이름만 바꿔 두 갈래를 잠근다.
+  it('마지막 여행지가 받침 있는 이름(부산)이면 "부산으로"라고 쓴다', () => {
+    const store = useTripWizardStore.getState();
+    store.addDestination('부산', 1);
+    store.setPeriod(undefined, '2026-06-10', '2026-06-12');
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    expect(screen.getByTestId(NOTE)).toHaveTextContent(
+      '여행지 박수(1박)가 기간(2박)보다 적어요 · 남은 1박은 부산으로 잡아요'
+    );
+  });
+
+  it('마지막 여행지가 ㄹ받침 이름(서울)이면 "서울로"라고 쓴다 (으로 아님)', () => {
+    const store = useTripWizardStore.getState();
+    store.addDestination('서울', 1);
+    store.setPeriod(undefined, '2026-06-10', '2026-06-12');
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    expect(screen.getByTestId(NOTE)).toHaveTextContent(
+      '여행지 박수(1박)가 기간(2박)보다 적어요 · 남은 1박은 서울로 잡아요'
+    );
+  });
+
+  it('박수 합이 기간보다 많으면 "많아요" 안내가 뜨고 다음은 닫혀 있다', () => {
+    const store = useTripWizardStore.getState();
+    store.addDestination('부산', 5);
+    store.setPeriod('3n4d', '2026-06-10', '2026-06-13');
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    expect(screen.getByTestId(NOTE)).toHaveTextContent(
+      '여행지 박수(5박)가 기간(3박)보다 많아요'
+    );
+    expect(next()).toBeDisabled();
+  });
+
+  it('박수 합 = 기간이면 안내가 없다', () => {
+    seedValidDraft(); // 부산 3박 + 3박 4일
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    expect(next()).toBeEnabled();
+    expect(screen.queryByTestId(NOTE)).toBeNull();
+  });
+
+  it('기간이 아직 없으면 안내가 없다', () => {
+    useTripWizardStore.getState().addDestination('부산', 2);
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    expect(root()).toBeOnTheScreen();
+    expect(screen.queryByTestId(NOTE)).toBeNull();
+  });
+
+  it('여행지가 0곳이면 기간이 있어도 안내가 없다 (남은 밤을 맡길 여행지가 없다)', () => {
+    useTripWizardStore.getState().setPeriod('3n4d', '2026-06-10', '2026-06-13');
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    expect(root()).toBeOnTheScreen();
+    expect(screen.queryByTestId(NOTE)).toBeNull();
   });
 });

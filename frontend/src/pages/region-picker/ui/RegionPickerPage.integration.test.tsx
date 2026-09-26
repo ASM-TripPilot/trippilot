@@ -49,11 +49,24 @@ jest.mock('@/features/explore/model/regions', () => ({
 
 // TRIP-683 AC-1 — trip 분기가 스토어에 담는다. 셀렉터 형태(`useTripWizardStore((s)=>s.addDestination)`)를
 // 그대로 받아 스파이를 돌려준다(호출 관측). 변수명은 팩토리 호이스팅 예외라 `mock`으로 시작해야 한다(★9).
-jest.mock('@/features/trip/model/tripWizardStore', () => ({
-  useTripWizardStore: (
-    selector: (s: { addDestination: jest.Mock }) => unknown
-  ) => selector({ addDestination: mockAddDestination }),
-}));
+// TRIP-1010(Q1): 첫 여행지를 담을 때 페이지가 기간·기존 여행지 수를 읽게 된다. 목 상태를 "여행지 0곳 ·
+// 기간 없음"(= 1박으로 담는 옛 동작)으로 넓혀, 셀렉터로 읽든 `getState()` 로 읽든 크래시 없이 돈다.
+// 이 파일의 단언(`('…', 1)`)은 그 상태에서 그대로 유효하다. 동기화 자체는 형제 `.nightsSync.test.tsx`.
+jest.mock('@/features/trip/model/tripWizardStore', () => {
+  const mockWizardState = () => ({
+    addDestination: mockAddDestination,
+    destinations: [],
+    startDate: undefined,
+    endDate: undefined,
+  });
+  return {
+    useTripWizardStore: Object.assign(
+      (selector: (s: ReturnType<typeof mockWizardState>) => unknown) =>
+        selector(mockWizardState()),
+      { getState: mockWizardState }
+    ),
+  };
+});
 
 /** 서버 `Region` 표본 도우미. */
 function region(

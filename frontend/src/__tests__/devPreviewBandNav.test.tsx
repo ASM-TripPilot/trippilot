@@ -351,7 +351,10 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     // ⚠️ TRIP-755: i10 현재 장소 상세 2키(`live-place-default`·`-unknown`)를 `live-place` 1키(band `i`)로
     //    합쳐 **순 −1** → 165→164. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에서
     //    키만 바꾸고 이 가드는 안 만진다(재편 전엔 165개라 red). 정확한 키는 `devPreviewLiveHub.test.tsx`.
-    expect(PREVIEW_STATES).toHaveLength(164);
+    // ⚠️ TRIP-1010: g01 박수·기간 불일치 안내 프리뷰 1키(`trip-new-step1-nights-mismatch`, band `g`) 추가로
+    //    164→165. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에 그 1키만 추가하고 이
+    //    가드는 안 만진다(추가 전엔 164개라 red). 정확히 그 키인지는 아래 'TRIP-1010' describe 가 못박는다.
+    expect(PREVIEW_STATES).toHaveLength(165);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -894,6 +897,31 @@ describe('TRIP-742 AC-1 · g 밴드 프리뷰 키 4개 삭제 (band g)', () => {
     // 긍정 짝 — 같은 화면(step1·step2)의 default 형제 키는 그대로(과잉 삭제·공허 통과 차단).
     expect(keys).toContain('trip-new-step1-default');
     expect(keys).toContain('trip-new-step2-default');
+  });
+});
+
+describe('🔴 TRIP-1010 · g01 박수·기간 불일치 안내 프리뷰 키 (band g)', () => {
+  it('trip-new-step1-nights-mismatch 키가 있고, 렌더하면 안내 한 줄이 뜬다', () => {
+    // 준비 — 새 키 엔트리를 찾는다(red-first: preview.tsx 에 추가 전엔 없다).
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'trip-new-step1-nights-mismatch'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('g');
+    expect(entry?.label).toBe('g01 · 여행 만들기 nights-mismatch');
+
+    // 실행 — 그 엔트리의 render() 를 그린다.
+    render(<>{entry?.render()}</>);
+
+    // 단언 — 공허 통과 방지: 기본 g01 이 아니라 nightsMismatchNote 를 넘긴 얼굴이어야 안내가 선다.
+    expect(
+      screen.getByTestId('trip-wizard-nights-mismatch-note')
+    ).toHaveTextContent(/박/);
+
+    // 이웃 앵커 — 기본 g01 default 키가 딸려 사라지지 않았다.
+    expect(PREVIEW_STATES.map((state) => state.key)).toContain(
+      'trip-new-step1-default'
+    );
   });
 });
 

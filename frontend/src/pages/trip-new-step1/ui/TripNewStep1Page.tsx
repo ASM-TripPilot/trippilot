@@ -26,6 +26,8 @@ import {
   type TripDateRange,
 } from '@/features/trip/model/tripDatePicker';
 import {
+  nightsSum,
+  tripLength,
   validateTripDraft,
   type TripDraft,
 } from '@/features/trip/model/tripDraft';
@@ -108,6 +110,15 @@ function isPrefillableBudget(
   value: number | null | undefined
 ): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+}
+
+/** 방향격 조사 로/으로 — 받침 없음·ㄹ받침이면 `로`, 그 밖의 받침이면 `으로`(경주로·서울로·기장군으로).
+ * 한글 음절이 아니면 `(으)로` 병기. 을/를 판정(`withObjectParticle`)과 ㄹ 예외가 달라 따로 둔다. */
+function withDirectionalParticle(word: string): string {
+  const code = word.charCodeAt(word.length - 1) - 0xac00;
+  if (code < 0 || code > 0xd7a3 - 0xac00) return `${word}(으)로`;
+  const final = code % 28;
+  return word + (final === 0 || final === 8 ? '로' : '으로');
 }
 
 export interface TripNewStep1PageProps {
@@ -289,6 +300,19 @@ export function TripNewStep1Page({
     startDate !== '' &&
     endDate !== undefined &&
     endDate !== '';
+
+  // 박수·기간 불일치 안내(TRIP-1010) — 기간이 있고 여행지가 1곳 이상이며 Σnights ≠ 기간일 때만.
+  // 남은 밤은 2/4가 seq 최대 여행지로 채우므로(nightlyBaseCards) 그 이름을 미리 알린다.
+  const period = tripLength(draft);
+  const sum = nightsSum(destinations);
+  let nightsMismatchNote: string | undefined;
+  if (periodFilled && destinations.length > 0 && sum !== period) {
+    const last = destinations.reduce((a, b) => (b.seq > a.seq ? b : a));
+    nightsMismatchNote =
+      sum < period
+        ? `여행지 박수(${sum}박)가 기간(${period}박)보다 적어요 · 남은 ${period - sum}박은 ${withDirectionalParticle(last.region)} 잡아요`
+        : `여행지 박수(${sum}박)가 기간(${period}박)보다 많아요`;
+  }
 
   // 담은 목록 도착 전이면 잠깐 막는다(BR-U1-55 침묵 실패 회피) — 그때 제출하면 시드가 비어 꼭
   // 갈 곳이 한 건도 등록되지 않은 여행이 조용히 만들어진다. 게스트 예외는 위 `savedPlacesLoading`.
@@ -505,6 +529,18 @@ export function TripNewStep1Page({
     if (periodRange.start === undefined || periodRange.end === undefined)
       return;
     setPeriod(undefined, periodRange.start, periodRange.end);
+    // TRIP-1010(D7) — 여행지가 정확히 1곳이면 박수를 기간에 맞춘다. 여러 곳이면 어느 도시에 밤을
+    // 더할지 모르므로 건드리지 않고 안내 한 줄로만 알린다. 달력은 최소 1박이라 setNights 하한과 무충돌.
+    if (destinations.length === 1) {
+      setNights(
+        destinations[0].seq,
+        tripLength({
+          ...draft,
+          startDate: periodRange.start,
+          endDate: periodRange.end,
+        })
+      );
+    }
     setPeriodSheetOpen(false);
   }
 
@@ -558,6 +594,7 @@ export function TripNewStep1Page({
         onNext={submit}
         onBack={() => router.back()}
         isLoading={isLoading}
+        nightsMismatchNote={nightsMismatchNote}
         submitError={submitError}
         onRetrySubmit={submit}
         mustVisitError={mustVisitError}

@@ -179,6 +179,19 @@ describe('★7(완화) · 정렬·박 번호는 순수 함수가 소유한다', 
     expect(offenders(sources, /\.sort\s*\(/)).toEqual([]);
   });
 
+  it('TRIP-1010 · 배선은 endDate 를 넘기기만 하고, 카드 수(기간·박수 합)를 스스로 계산하지 않는다 (AC-7)', () => {
+    const pageSource = readOne(PAGE_REL);
+    const sources = read([PAGE_REL, SCREEN_REL]);
+
+    // 긍정 짝 — 배선이 스토어 종료일을 실제로 다룬다(빈 파일·미배선 공짜 통과 차단).
+    expect(pageSource).toContain('endDate');
+    // 부정 — 기간(박)·박수 합 계산은 nightlyBaseCards 한 곳만 소유한다. 화면·배선이 다시 세면
+    // 카드 수의 진실이 두 곳으로 갈린다.
+    expect(offenders(sources, 'tripLength')).toEqual([]);
+    expect(offenders(sources, 'nightsSum')).toEqual([]);
+    expect(offenders(sources, /\.reduce\s*\(/)).toEqual([]);
+  });
+
   it('여행 조회를 새로 붙이지 않는다 — startDate 는 스토어에서 온다', () => {
     const pageSource = readOne(PAGE_REL);
 
