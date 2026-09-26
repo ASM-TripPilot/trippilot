@@ -1,3 +1,5 @@
+import { Keyboard } from 'react-native';
+import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { BudgetEditSheet } from './BudgetEditSheet';
@@ -34,6 +36,8 @@ interface SheetPropsForTest {
   onPressEdit: () => void;
   onApply: () => void;
   onClose: () => void;
+  applyDisabled: boolean;
+  onboardingTier: string | undefined;
 }
 
 function renderSheet(overrides: Partial<SheetPropsForTest> = {}) {
@@ -48,6 +52,9 @@ function renderSheet(overrides: Partial<SheetPropsForTest> = {}) {
   const props: SheetPropsForTest = {
     amountText: '800,000',
     tier: '중간',
+    // TRIP-984: 기본 얼굴 = 온보딩 중간이 금액까지 채운 상태(노트 표시) · 적용 활성.
+    onboardingTier: '중간',
+    applyDisabled: false,
     ...spies,
     ...overrides,
   };
@@ -111,20 +118,21 @@ describe('AC-2 · ★ tier 단일 선택 — 선택 칩만 활성 표식(교차)
   });
 });
 
-describe('AC-2b · 안내 range 가 활성 tier 를 따라 갱신된다 (하드코딩 red)', () => {
-  it('중간 → "50~150만", 고급 → "150~300만"(중간 range 부재)', () => {
-    renderSheet({ tier: '중간' });
+describe('AC-2b · 노트 range 는 온보딩 tier 를 따른다 (하드코딩 red, TRIP-984 D10 로 조건 이관)', () => {
+  it('온보딩=현재=중간 → "50~150만", 온보딩=현재=고급 → "150~300만"(중간 문구 부재)', () => {
+    renderSheet({ onboardingTier: '중간', tier: '중간' });
     // TRIP-739: 굽은 작은따옴표(‘ ’, U+2018/U+2019)로 감싼 전체 문구를 완전일치로 잠근다 — 직선 '(U+0027)로
-    // 되돌리면 red(Figma 3647:2068 정합). getByText 완전일치라 따옴표 종류 회귀를 문자 단위로 잡는다.
+    // 되돌리면 red(Figma 3647:2068 정합).
     expect(
       screen.getByText('온보딩에서 고른 ‘중간(50~150만)’ 범위로 채웠어요')
     ).toBeOnTheScreen();
 
-    // 다른 렌더로 tier 를 고급으로 — range 가 갱신되고 중간 range 는 안 품는다.
     screen.rerender(
       <BudgetEditSheet
         amountText="800,000"
         tier="고급"
+        onboardingTier="고급"
+        applyDisabled={false}
         onChangeAmount={jest.fn()}
         onBlurAmount={jest.fn()}
         onSelectTier={jest.fn()}
@@ -133,9 +141,12 @@ describe('AC-2b · 안내 range 가 활성 tier 를 따라 갱신된다 (하드�
         onClose={jest.fn()}
       />
     );
-    const note = screen.getByTestId('trip-wizard-budget-note');
-    expect(note).toHaveTextContent(/150~300만/);
-    expect(note).not.toHaveTextContent(/50~150만/);
+    expect(
+      screen.getByText('온보딩에서 고른 ‘고급(150~300만)’ 범위로 채웠어요')
+    ).toBeOnTheScreen();
+    expect(
+      screen.queryByText('온보딩에서 고른 ‘중간(50~150만)’ 범위로 채웠어요')
+    ).toBeNull();
   });
 });
 
@@ -200,5 +211,103 @@ describe('AC-S6E-1(슬롯) · budgetError prop 을 받으면 오류 노드를 �
     renderSheet();
 
     expect(screen.queryByTestId('trip-wizard-error-budget')).toBeNull();
+  });
+});
+
+/**
+ * TRIP-984 D10 · 예산 노트 "온보딩에서 고른 …" 은 온보딩 tier 가 있고(배선이 금액 프리필까지 확인해 내림)
+ * 현재 tier 가 그것과 같을 때만 그린다. 부재 단언은 시트 존재와 짝이다(시트가 안 떠도 null 은 참).
+ */
+describe('AC-C1·C3 · 노트는 온보딩 tier 가 있고 현재 tier 와 같을 때만', () => {
+  it('C1 · 온보딩 tier 가 없으면 tier 를 골라 둬도 노트가 없다', () => {
+    renderSheet({ onboardingTier: undefined, tier: '중간' });
+
+    expect(screen.getByTestId('trip-wizard-budget-sheet')).toBeOnTheScreen();
+    expect(screen.queryByTestId('trip-wizard-budget-note')).toBeNull();
+    expect(screen.queryByText(/온보딩/)).toBeNull();
+  });
+
+  it('C3 · 온보딩은 중간인데 현재 고급이면 노트가 없다 ("온보딩에서 고른 ‘고급…’" 거짓 금지)', () => {
+    renderSheet({ onboardingTier: '중간', tier: '고급' });
+
+    expect(screen.getByTestId('trip-wizard-budget-sheet')).toBeOnTheScreen();
+    expect(screen.queryByTestId('trip-wizard-budget-note')).toBeNull();
+    expect(screen.queryByText(/온보딩/)).toBeNull();
+  });
+});
+
+/**
+ * TRIP-984 D8 · 적용 비활성 표면(PeriodEditSheet 선례). 판정은 배선이 `applyDisabled` 로 내린다(D4 무상태).
+ * `toBeDisabled` 는 accessibilityState 만 읽으므로 press 결과(onApply 0회)와 짝으로 둔다.
+ */
+describe('AC-A · applyDisabled → 진짜 disabled + opacity-40', () => {
+  it('applyDisabled=true 면 적용이 비활성이고, 눌러도 onApply 가 불리지 않는다', () => {
+    const spies = renderSheet({ amountText: '', applyDisabled: true });
+
+    const apply = screen.getByTestId('trip-wizard-budget-apply');
+    expect(apply).toBeDisabled();
+    expect(String(apply.props.className).split(/\s+/)).toContain('opacity-40');
+
+    fireEvent.press(apply);
+    expect(spies.onApply).not.toHaveBeenCalled();
+  });
+
+  it('applyDisabled=false 면 활성이고(opacity-40 없음) press → onApply 1회 (짝)', () => {
+    const spies = renderSheet({ applyDisabled: false });
+
+    const apply = screen.getByTestId('trip-wizard-budget-apply');
+    expect(apply).not.toBeDisabled();
+    expect(String(apply.props.className).split(/\s+/)).not.toContain(
+      'opacity-40'
+    );
+
+    fireEvent.press(apply);
+    expect(spies.onApply).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * TRIP-984 D9 · 키보드 처방. 실제로 시트가 키보드만큼 올라가는지는 통과형 목이라 jest 사각(6-b) —
+ * 여기선 "BottomSheetTextInput 을 썼다 · keyboardBehavior 를 적었다 · 본문 탭이 Keyboard.dismiss 를
+ * 부른다"까지만 잠근다. 목의 BottomSheetTextInput 은 TextInput 과 다른 타입이라 플레인 회귀가 구분된다.
+ */
+describe('AC-B · 키보드 처방 (BottomSheetTextInput · keyboardBehavior · 본문 탭 dismiss)', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('B1 · 금액 입력칸은 BottomSheetTextInput 이다 (플레인 TextInput 이면 red)', () => {
+    renderSheet();
+
+    expect(screen.UNSAFE_getByType(BottomSheetTextInput).props.testID).toBe(
+      'trip-wizard-budget-input'
+    );
+  });
+
+  it('B2 · 시트가 keyboardBehavior="interactive" 를 명시한다', () => {
+    renderSheet();
+
+    expect(
+      screen.UNSAFE_queryAllByProps({ keyboardBehavior: 'interactive' })
+    ).not.toHaveLength(0);
+  });
+
+  it('B3 · 칩·수정은 제 콜백만 부르고, 본문 빈 곳(부제 글자) 탭은 Keyboard.dismiss 를 부른다', () => {
+    // 렌더 전에 건다 — onPress={Keyboard.dismiss} 처럼 참조를 렌더 때 잡는 구현도 스파이가 본다.
+    const dismiss = jest
+      .spyOn(Keyboard, 'dismiss')
+      .mockImplementation(() => {});
+    const spies = renderSheet();
+
+    fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-mid'));
+    expect(spies.onSelectTier).toHaveBeenCalledWith('중간');
+    expect(dismiss).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('trip-wizard-budget-edit'));
+    expect(spies.onPressEdit).toHaveBeenCalledTimes(1);
+    expect(dismiss).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByText('1인 총액 기준이에요'));
+    expect(dismiss).toHaveBeenCalledTimes(1);
   });
 });

@@ -3,7 +3,7 @@
 # 구조 인벤토리 (자동 생성)
 
 ## __mocks__/@gorhom/
-- `__mocks__/@gorhom/bottom-sheet.tsx`  →  BottomSheet · BottomSheetModal · BottomSheetView · BottomSheetModalProvider · BottomSheetBackdrop · BottomSheetScrollView · BottomSheetFlatList · useBottomSheetModal
+- `__mocks__/@gorhom/bottom-sheet.tsx`  →  BottomSheet · BottomSheetModal · BottomSheetView · BottomSheetModalProvider · BottomSheetBackdrop · BottomSheetScrollView · BottomSheetFlatList · BottomSheetTextInput · useBottomSheetModal
 
 ## __mocks__/@mj-studio/
 - `__mocks__/@mj-studio/react-native-naver-map.tsx`  →  NaverMapView · NaverMapMarkerOverlay · NaverMapPathOverlay · NaverMapCircleOverlay

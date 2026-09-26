@@ -131,11 +131,57 @@ describe('AC-1 · 앱바 + 진행바 4칸 + "1 / 4"', () => {
     render(<TripWizardStep1Screen {...props({ onBack })} />);
 
     expect(screen.getByText('어디로 떠날까요?')).toBeOnTheScreen();
-    // 부제는 길고 미들닷이 섞여 부분 정규식으로 본다.
-    expect(root()).toHaveTextContent(/온보딩에서 고른 취향/);
+    // TRIP-984 D10: 요약이 전부 null 이면 온보딩 값이 없으므로 "온보딩에서 고른 취향" 을 말하지 않는다
+    // (TRIP-732 AC-6 의 "전부 null → default 부제" 경계를 뒤집음). 뒤쪽 절만 남는다.
+    expect(root()).not.toHaveTextContent(/온보딩에서 고른 취향/);
+    expect(screen.getByText('행을 누르면 바꿀 수 있어요')).toBeOnTheScreen();
 
     fireEvent.press(screen.getByTestId('trip-wizard-step1-back'));
     expect(onBack).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * TRIP-984 D10 · 부제 "온보딩에서 고른 취향을 그대로 반영했어요" 는 취향이 온보딩 상속
+ * (`summaryPreferences.onboarding === true`)일 때만. 아니면 뒤쪽 절 "행을 누르면 바꿀 수 있어요" 만.
+ */
+describe('AC-D1·D2 · 부제 "온보딩에서" 는 취향이 온보딩 상속일 때만', () => {
+  it('D1 · 여행지는 있고 동행·취향·예산이 비었으면 "온보딩에서" 없이 뒤쪽 절만 보인다', () => {
+    render(
+      <TripWizardStep1Screen
+        {...filledProps({
+          summaryCompanion: null,
+          summaryPreferences: null,
+          summaryBudget: null,
+        })}
+      />
+    );
+
+    expect(screen.getByText('행을 누르면 바꿀 수 있어요')).toBeOnTheScreen();
+    expect(root()).not.toHaveTextContent(/온보딩에서/);
+  });
+
+  it('D1 · 취향을 이 여행에서 바꿨으면(onboarding=false) "온보딩에서" 없이 뒤쪽 절만 보인다', () => {
+    render(
+      <TripWizardStep1Screen
+        {...filledProps({
+          summaryPreferences: { main: '휴양', onboarding: false },
+        })}
+      />
+    );
+
+    expect(screen.getByText('행을 누르면 바꿀 수 있어요')).toBeOnTheScreen();
+    expect(root()).not.toHaveTextContent(/온보딩에서/);
+  });
+
+  it('D2 · 취향이 온보딩 상속이면 기존 default 부제 그대로다', () => {
+    render(<TripWizardStep1Screen {...filledProps()} />);
+
+    expect(
+      screen.getByText(
+        '온보딩에서 고른 취향을 그대로 반영했어요 · 행을 누르면 바꿀 수 있어요'
+      )
+    ).toBeOnTheScreen();
   });
 });
 

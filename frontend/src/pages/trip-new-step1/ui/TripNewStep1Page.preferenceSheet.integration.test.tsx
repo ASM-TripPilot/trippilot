@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
@@ -371,5 +372,40 @@ describe('PI-8 · ★ AC-S5G-1 프리필 미해결 중 취향 행 탭은 시트�
     // 현행(결함): 가드가 없어 빈 [] 드래프트로 시트가 열린다 → 적용 시 온보딩 취향 유실.
     // 가드(if preference.isPending return) 후엔 시트가 안 열린다.
     expect(screen.queryByTestId('trip-wizard-pref-sheet')).toBeNull();
+  });
+});
+
+/**
+ * TRIP-984 D10 · 취향 시트 하단 "온보딩에서 고른 취향을 가져왔어요" 는 온보딩 styles 가 1개 이상일 때만.
+ * 배선이 `prefillStyles.length > 0` 을 시트에 내린다(01b Q4) — 없으면 뒤쪽 절(BR-U1-38)만 남는다.
+ */
+describe('PI-9 · AC-D3·D4 취향 시트 문구는 온보딩 styles 가 있을 때만 "온보딩에서"', () => {
+  it('D3 · 온보딩 styles 가 0개면 "프로필 취향은 바뀌지 않아요" 만 보이고 "온보딩에서" 는 없다', async () => {
+    server.use(
+      http.get(`${BASE}/me/preferences`, () =>
+        HttpResponse.json({ ...PREFERENCE, styles: { value: [] } })
+      )
+    );
+    renderPage();
+    await waitForPrefill();
+    await openSheet();
+
+    const sheet = screen.getByTestId('trip-wizard-pref-sheet');
+    expect(
+      within(sheet).getByText('프로필 취향은 바뀌지 않아요')
+    ).toBeOnTheScreen();
+    expect(within(sheet).queryByText(/온보딩에서/)).toBeNull();
+  });
+
+  it('D4 · 온보딩 styles 가 있으면 기존 문구 그대로다 (무회귀)', async () => {
+    renderPage();
+    await waitForPrefill();
+    await openSheet();
+
+    expect(
+      screen.getByText(
+        '온보딩에서 고른 취향을 가져왔어요 · 프로필 취향은 바뀌지 않아요'
+      )
+    ).toBeOnTheScreen();
   });
 });

@@ -3772,6 +3772,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         onToggle={noop}
         onApply={noop}
         onClose={noop}
+        fromOnboarding
       />
     ),
   },
@@ -3792,6 +3793,8 @@ export const PREVIEW_STATES: PreviewState[] = [
         onSelectTier={noop}
         onApply={noop}
         onClose={noop}
+        applyDisabled={false}
+        onboardingTier="중간"
       />
     ),
   },
