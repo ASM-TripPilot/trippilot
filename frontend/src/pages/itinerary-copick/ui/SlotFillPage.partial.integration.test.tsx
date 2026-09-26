@@ -57,7 +57,10 @@ const BASE = 'http://localhost:8080/api/v1';
 const TRIP_ID = '33333333-3333-3333-3333-333333333333';
 const DAY1 = '2026-10-12';
 const DAY2 = '2026-10-13';
-const POLL_TEST_TIMEOUT = 20000;
+const POLL_TEST_TIMEOUT = 30000;
+// 폴링을 기다리는 waitFor 한도 — 간격의 5배. 3배(6초)는 CI 러너 부하에서 모자라 P-FAILED·P-UNLOCK 이
+// 간헐 실패했다(PR #755 첫 CI). 단언 내용은 그대로, 기다리는 시간만 늘린다.
+const POLL_WAIT_MS = DRAFT_POLL_INTERVAL_MS * 5;
 const LOCKED_TEXT = '나머지 일정을 만드는 중이에요';
 // resolveSlotSwapError 폴백 문구(slotSwapError.ts MESSAGE.fallback) — 실서버 409 코드는 늘 CONFLICT 라 여기로 떨어진다.
 const FALLBACK_TEXT = '지금은 바꿀 수 없어요. 잠시 후 다시 시도해 주세요';
@@ -205,7 +208,7 @@ describe('🔴 TRIP-978 · PARTIAL 폴링 (AC-1·AC-2)', () => {
       renderPage();
 
       await waitFor(() => expect(getCalls).toBe(2), {
-        timeout: DRAFT_POLL_INTERVAL_MS * 3,
+        timeout: POLL_WAIT_MS,
       });
       await sleep(DRAFT_POLL_INTERVAL_MS + 400);
       expect(getCalls).toBe(2);
@@ -224,12 +227,14 @@ describe('🔴 TRIP-978 · PARTIAL 폴링 (AC-1·AC-2)', () => {
       fireEvent.press(await screen.findByTestId('itinerary-candidate-radio-X'));
 
       await waitFor(() => expect(getCalls).toBe(2), {
-        timeout: DRAFT_POLL_INTERVAL_MS * 3,
+        timeout: POLL_WAIT_MS,
       });
-      await waitFor(() =>
-        expect(
-          screen.queryByTestId('itinerary-copick-confirm-locked')
-        ).toBeNull()
+      await waitFor(
+        () =>
+          expect(
+            screen.queryByTestId('itinerary-copick-confirm-locked')
+          ).toBeNull(),
+        { timeout: POLL_WAIT_MS }
       );
       expect(
         screen.getByTestId('itinerary-copick-slotfill-confirm').props
@@ -283,7 +288,7 @@ describe('🔴 TRIP-978 · 생성 중 확정 잠금과 해제 (AC-3~AC-6)', () =
           expect(
             screen.queryByTestId('itinerary-copick-confirm-locked')
           ).toBeNull(),
-        { timeout: DRAFT_POLL_INTERVAL_MS * 3 }
+        { timeout: POLL_WAIT_MS }
       );
       const confirm = screen.getByTestId('itinerary-copick-slotfill-confirm');
       expect(confirm.props.accessibilityState?.disabled).not.toBe(true);
@@ -314,7 +319,7 @@ describe('🔴 TRIP-978 · 생성 중 확정 잠금과 해제 (AC-3~AC-6)', () =
           expect(
             screen.getByTestId('itinerary-copick-slotfill-progress-day')
           ).toHaveTextContent(/^1일차 \/ 2 · /),
-        { timeout: DRAFT_POLL_INTERVAL_MS * 3 }
+        { timeout: POLL_WAIT_MS }
       );
     },
     POLL_TEST_TIMEOUT
@@ -365,7 +370,7 @@ describe('🔴 TRIP-978 · 후보 조회 실패를 말한다 (AC-7 · Q2)', () =
       await screen.findByTestId(
         'itinerary-candidate-radio-X',
         {},
-        { timeout: DRAFT_POLL_INTERVAL_MS * 3 }
+        { timeout: POLL_WAIT_MS }
       );
       expect(
         screen.queryByTestId('itinerary-copick-candidates-error')
