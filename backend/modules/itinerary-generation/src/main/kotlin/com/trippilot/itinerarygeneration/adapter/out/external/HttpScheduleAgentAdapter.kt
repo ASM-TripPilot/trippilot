@@ -156,7 +156,7 @@ class HttpScheduleAgentAdapter(
     }
 
     /**
-     * 재계획 — **전용 경로**(`POST /ai/v1/itinerary/replan` · 연동 설계 §2).
+     * 재계획 — **전용 경로**(`POST /ai/v1/planb/replan` · 연동 설계 §2).
      *
      * 종전에는 잠금을 고정 블록으로 승격해 `generate` 를 재사용했다. 그 계약에는 자리가 없어
      * **사유·지시·자유입력·원 일정 슬롯·담은 장소가 전부 버려졌다** — 상대는 그것들을 RAG 컨텍스트와
@@ -250,7 +250,7 @@ class HttpScheduleAgentAdapter(
     }
 
     /**
-     * 슬롯 후보 — `POST /ai/v1/itinerary/alternatives` 실호출(TRIP-463 · 연동 설계 정본:
+     * 슬롯 후보 — `POST /ai/v1/planb/alternatives` 실호출(TRIP-463 · 연동 설계 정본:
      * `backend/docs/design/ai-backend-alternatives-연동-설계.md`).
      *
      * AI 가 더하는 것은 **순위와 이유**다(집합의 주인은 C7·INV-1). 응답에 없는 값 — 거리·반경·시각 —

@@ -308,7 +308,7 @@ internal fun ScheduleAgentOutput.toWire(): AiSchedulePayload = AiSchedulePayload
 // ───────── 재계획 전용 경계(TRIP-854) — 연동 설계 §2·§4 ─────────
 
 /**
- * `POST /ai/v1/itinerary/replan` 요청.
+ * `POST /ai/v1/planb/replan` 요청.
  *
  * **`generate` 재사용을 끝내는 자리다.** 종전에는 잠금을 고정 블록으로 승격해 `generate` 를 썼는데,
  * 그 계약에는 사유·지시·자유입력·원 일정 슬롯·담은 장소를 실을 자리가 없어 **전부 버려지고 있었다.**
@@ -369,7 +369,7 @@ internal data class AiReplanSlot(
 )
 
 /**
- * `POST /ai/v1/itinerary/replan` 응답.
+ * `POST /ai/v1/planb/replan` 응답.
  *
  * `itinerary` 는 생성 응답과 같은 모양이라 그대로 재사용한다 — 다른 타입을 만들면 두 벌이 갈린다.
  * [totalDistanceKm] 는 **재계획에만 있는 값**이다(생성 응답에는 없다) — i08 의 "이동 −6.9km" 가
@@ -403,7 +403,7 @@ internal data class AiReplanEmptyReason(val code: String, val params: Map<String
 // ───────── 슬롯 후보(alternatives) — TRIP-463 · 연동 설계 §2·§3 ─────────
 
 /**
- * `POST /ai/v1/itinerary/alternatives` 요청. **계약을 한 글자도 안 바꾸고** 우리 입력을 상대 어휘로
+ * `POST /ai/v1/planb/alternatives` 요청. **계약을 한 글자도 안 바꾸고** 우리 입력을 상대 어휘로
  * 옮긴다 — 자리가 없는 값(`radiusM`·`concept`·`neighborSlotKeys`)은 백엔드가 응답 후처리에서
  * 소화하거나 버린다(설계 §2 "자리가 없는 것 3개").
  */
