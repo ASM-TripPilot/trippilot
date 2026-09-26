@@ -23,6 +23,12 @@ paths:
 
 - **하트 저장 글리프(Outline·Filled) 정본은 이제 `shared/ui/HeartGlyphs.tsx`다** — TRIP-806이 `entities/place/ui/PlaceGlyphs.tsx`로 승격했던 것을 TRIP-807이 `git mv`로 다시 `shared/ui`로 내렸다(place·stay 검색 카드가 공유, entities 교차 0). `features/explore/ui/ExploreGlyphs.tsx`의 동명 함수는 806 5-c에서 이미 삭제됐다. `traps-glyphs.md`의 `LocationOffGlyph` 세 벌 함정과 동형 위험이 두 차례(806 explore↔entities, 807 stay 신규 소비) 발생했다 — 새 하트 소비처를 만들 때 옛 경로(`entities/place/ui/PlaceGlyphs`·`ExploreGlyphs`)에서 다시 끌어오면 조용히 두 벌로 되돌아간다. raw-hex·fill 스캔은 `*Glyphs.tsx` 제외 관례라 분기해도 기계가 못 잡는다.
 
+## 지역 피커 → 결과 화면 복귀 (`dismissTo`, TRIP-985)
+
+- **`router.dismissTo(href)`는 이 리포 첫 사용이고, 재마운트를 안 한다** → expo-router가 `POP_TO` 액션으로 바꾸고(`expo-router/build/global-state/routing.js`), React Navigation `StackRouter`가 처리한다(`@react-navigation/routers`). 스택에 **같은 라우트 이름**이 있으면 그 자리로 올라가 그 화면의 params를 **통째로 교체**(merge 없음, expo가 `merge` 플래그를 안 싣는다) — 없으면 지금 화면(피커)을 그 자리에서 바꿔 끼운다. "같은 화면"은 **이름만**으로 판정한다(루트 Stack에 `getId`·`dangerouslySingular` 없음) — 코드가 다른 지역이어도 같은 라우트 이름이면 같은 인스턴스로 취급된다.
+- **재사용되는 인스턴스는 로컬 `useState`가 이전 params 시절 값을 그대로 들고 있다** → params만 바뀌고 컴포넌트는 새로 안 만들어지므로, 이전 지역에서 세운 배너·대기 표식이 새 지역 화면에 남을 수 있다(TRIP-985 03b 경고-1 실측 — `DestinationDetailPage`가 이 문제로 `key={regionCode}` 재마운트를 얹었다, `pages` 층 행 참고). **이 화면으로 `dismissTo`가 새로 들어오는 상태를 추가할 때마다 같은 함정이 재발할 수 있다** — `key` 재마운트 없이 상태를 추가하면 지역이 바뀌어도 안 지워진다.
+- **jest는 이 재사용/재마운트 여부를 원리적으로 못 본다** — 피커 테스트는 `dismissTo`가 어떤 인자로 불렸는지까지만 잠그고, expo-router는 목이라 실제 스택 동작을 실행하지 않는다. 실제 스택 상태 확인은 6-b 실기 전용이다.
+
 ## 장소 상세 (explore, d06, TRIP-456)
 
 - **d06 조회 오류가 notFound로 접힌다** → `PlaceDetailPage.tsx`는 `GET /places`가 5xx·네트워크로 실패해도 별도 오류 얼굴이 없어 "장소를 찾을 수 없어요"로 접는다(`live-place`/i05와 동형 한계, 위 execution 절 참고). 콜드 딥링크+조회 실패에서만 발동, 웜 캐시 주 동선(d04→d06·d02→d06)은 무해. 오류 얼굴을 붙일 땐 `LiveItineraryPage`의 `resolveLiveState`(error/notFound 분리) 선례를 복제한다.
