@@ -24,6 +24,22 @@ describe('formatOpeningHoursLabel — 예시 (OH1)', () => {
     expect(formatOpeningHoursLabel(raw)).toBe(expected);
   });
 
+  it('OH4 TRIP-988 원문 끝의 `<br>` 는 걷히고, `~` 범위는 규칙 밖이라 글자 그대로 남는다', () => {
+    expect(formatOpeningHoursLabel('10:00~17:00<br>')).toBe('10:00~17:00');
+  });
+
+  it('OH6 TRIP-988 태그 바로 뒤 원문 줄바꿈은 태그와 합쳐 하나 — 꼬리에 빈 줄이 끼지 않는다', () => {
+    expect(
+      formatOpeningHoursLabel(
+        '상시 개방<br>\n※ 일부 통제될 수 있으므로 방문 시 전화문의 요망'
+      )
+    ).toBe('상시 개방\n※ 일부 통제될 수 있으므로 방문 시 전화문의 요망');
+  });
+
+  it('OH7 TRIP-988 공백 변형 태그뿐인 원문(`< br>`)도 정리하면 비어 null', () => {
+    expect(formatOpeningHoursLabel('< br>')).toBeNull();
+  });
+
   it.each([[null], [undefined], [''], ['   ']])(
     '원문이 없으면(%j) null — 조각을 생략한다',
     (raw) => {
@@ -56,14 +72,43 @@ describe('formatOpeningHoursLabel — 성질 (PBT)', () => {
     );
   });
 
-  it('OH3 숫자가 없는 비어 있지 않은 원문은 손대지 않고 그대로 돌려준다', () => {
+  it('OH5 TRIP-988 원문에 `<br>` 계열 태그가 섞여 있어도 라벨에는 태그가 남지 않는다', () => {
+    const gap = fc.constantFrom('', ' ');
+    const tag = fc
+      .tuple(
+        gap,
+        fc.constantFrom('br', 'BR', 'Br'),
+        gap,
+        fc.constantFrom('', '/'),
+        gap
+      )
+      .map(
+        ([lead, name, space, slash, tail]) =>
+          `<${lead}${name}${space}${slash}${tail}>`
+      );
+    // 글자 조각에 `<` 를 빼서 글자와 태그가 붙어 새 태그가 생기는 입력을 막는다.
+    const text = fc.string().filter((s) => !s.includes('<'));
+
+    fc.assert(
+      fc.property(fc.array(fc.oneof(tag, text)), (parts) => {
+        const label = formatOpeningHoursLabel(parts.join(''));
+
+        expect(label === null || !/<\s*br\s*\/?\s*>/i.test(label)).toBe(true);
+      })
+    );
+  });
+
+  // TRIP-988 Q1 — 태그 정리 함수를 거치며 양끝 공백이 걷힌다. 그 밖의 원문은 여전히 그대로다.
+  it('OH3 숫자·`<br` 가 없는 비어 있지 않은 원문은 양끝 공백만 걷고 그대로 돌려준다', () => {
     fc.assert(
       fc.property(
         fc
           .string({ minLength: 1 })
-          .filter((s) => !/\d/.test(s) && s.trim() !== ''),
+          .filter(
+            (s) => !/\d/.test(s) && s.trim() !== '' && !/<\s*br/i.test(s)
+          ),
         (raw) => {
-          expect(formatOpeningHoursLabel(raw)).toBe(raw);
+          expect(formatOpeningHoursLabel(raw)).toBe(raw.trim());
         }
       )
     );

@@ -7,6 +7,7 @@ import { StateNotice } from '@/shared/ui/StateNotice';
 
 import {
   MUST_VISIT_NAME_PLACEHOLDER,
+  fixedTimeLabel,
   type MustVisitListItem,
   type MustVisitListView,
 } from '../model/mustVisitList';
@@ -245,7 +246,7 @@ function MustVisitCard({
           </Text>
         ) : (
           <Text numberOfLines={1} className="font-noto text-caption text-muted">
-            {fixed ? (item.fixedStart ?? '') : ANYTIME_NOTE}
+            {fixed ? fixedTimeLabel(item) : ANYTIME_NOTE}
           </Text>
         )}
         <View className="flex-row items-center gap-[6px]">

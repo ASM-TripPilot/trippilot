@@ -157,3 +157,45 @@ describe('🔴 AC-2 · 미니맵 실 MapView (단일 핀 · viewOnly · center/p
     expect(within(map).getByTestId('map-marker-pin-1')).toBeTruthy();
   });
 });
+
+/**
+ * TRIP-988 · A(BR-U3-09 · D3) — 영업시간 원문의 `<br>` 태그는 줄바꿈으로 그린다.
+ *
+ * `toHaveTextContent(문자열)` 기본 정규화는 줄바꿈을 공백으로 접는다 — 그대로 쓰면 태그를 공백으로
+ * 바꾼 화면도 통과한다. 그래서 정규화를 끈 항등 normalizer(`(s) => s`)로 줄바꿈까지 글자 그대로 잰다.
+ */
+describe('🔴 TRIP-988 A-1 · 영업시간 `<br>` → 줄바꿈 (d06)', () => {
+  const keepAsIs = (text: string): string => text;
+
+  it('원문 태그가 화면에 남지 않고, 태그 자리에서 두 줄로 나뉜다', () => {
+    // 준비 — QA 재현 원문(#012)을 가진 장소.
+    const place = makePlace({
+      openingHours: '월요일~토요일 12:00~22:30<br>- 일요일 12:00~21:30',
+    });
+
+    // 실행
+    render(<PlaceDetailScreen place={place} saved={false} />);
+
+    // 단언 — 두 줄 문자열과 글자 그대로 같고, `<br` 조각이 없다.
+    const hours = screen.getByTestId('explore-place-openhours');
+    expect(hours).toHaveTextContent(
+      '월요일~토요일 12:00~22:30\n- 일요일 12:00~21:30',
+      { normalizer: keepAsIs }
+    );
+    expect(hours).not.toHaveTextContent(/<br/i);
+  });
+
+  it('A-5 무회귀 — 영업시간이 없으면 "미확인" 자리를 그대로 쓴다', () => {
+    render(
+      <PlaceDetailScreen
+        place={makePlace({ openingHours: null })}
+        saved={false}
+      />
+    );
+
+    expect(
+      screen.getByTestId('explore-place-unknown-openhours')
+    ).toHaveTextContent('미확인');
+    expect(screen.queryByTestId('explore-place-openhours')).toBeNull();
+  });
+});

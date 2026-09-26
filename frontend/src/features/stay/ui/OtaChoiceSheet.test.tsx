@@ -88,14 +88,16 @@ describe('T1 · l07 default 고지 문구 (TRIP-781 AC-1 · BR-U1-30)', () => {
   });
 });
 
-describe('T2 · 단일 OTA 행 (01b Q2 — 복수 이연 · TRIP-781 AC-5 유지)', () => {
-  it('externalSource 이름 + 최저가를 한 행으로 그린다', () => {
+describe('T2 · 단일 OTA 행 (01b Q2 — 복수 이연 · TRIP-781 AC-5 유지 · TRIP-988 B-2)', () => {
+  // TRIP-988 D4 — 옛 계약은 행에 코드 원문('NAVER')을 그렸다. 새 계약은 사전 표시명이다.
+  it('사전에 있는 코드(NAVER)는 표시명 "네이버" + 최저가를 한 행으로 그리고, 코드 원문은 없다', () => {
     render(<OtaChoiceSheet {...sheetProps()} />);
 
     const row = screen.getByTestId('stay-ota-option-NAVER');
     expect(row).toBeOnTheScreen();
-    expect(within(row).getByText('NAVER')).toBeOnTheScreen();
+    expect(within(row).getByText('네이버')).toBeOnTheScreen();
     expect(within(row).getByText(formatPrice(ITEM.price))).toBeOnTheScreen();
+    expect(within(row).queryAllByText(/NAVER/).length).toBe(0);
   });
 });
 
@@ -274,4 +276,45 @@ describe('T8 · "다시 보지 않기" 표시 여부 prop (TRIP-778 D9 — 게�
 
     expect(screen.getByTestId('stay-ota-dont-show')).toBeOnTheScreen();
   });
+});
+
+/**
+ * TRIP-988 B(BR-U1-30 · BR-U1-31 · US-STAY-05 · D4) — 옵션 행에 내부 코드 대신 사용자가 읽을 이름.
+ *
+ * 무엇을 보장하나: 사전에 없는 코드(`LOCALDATA`·`STUB`·미등록)는 "외부 사이트"로 접히고, 코드 문자열은
+ * 시트 어디에도 **보이는 글자로** 남지 않는다. 행 자체와 가격은 남는다. testID
+ * `stay-ota-option-{코드}` 는 글자가 아니라 그대로 둔다(`queryAllByText` 는 testID 를 안 본다).
+ * `constructor` 는 사전이 객체 리터럴이면 프로토타입 멤버를 집어 오는 함정 입력이다.
+ */
+describe('T9 · OTA 행 표시명 (TRIP-988 B-1 · B-2)', () => {
+  it('AGODA 는 표시명 "아고다"로 그리고 코드 원문은 없다', () => {
+    render(
+      <OtaChoiceSheet
+        {...sheetProps({ item: { ...ITEM, externalSource: 'AGODA' } })}
+      />
+    );
+
+    const row = screen.getByTestId('stay-ota-option-AGODA');
+    expect(within(row).getByText('아고다')).toBeOnTheScreen();
+    expect(screen.queryAllByText(/AGODA/).length).toBe(0);
+  });
+
+  it.each(['LOCALDATA', 'STUB', 'KAKAO', 'constructor'])(
+    '사전에 없는 코드 %s 는 행에 "외부 사이트"로 그리고, 코드 글자는 시트 어디에도 없다',
+    (code) => {
+      // 준비 — 사전에 없는 코드를 가진 숙소.
+      const item: StayItem = { ...ITEM, externalSource: code };
+
+      // 실행
+      render(<OtaChoiceSheet {...sheetProps({ item })} />);
+
+      // 단언 — 행은 남고(testID 유지), 표시명은 폴백, 가격도 그대로다.
+      const row = screen.getByTestId(`stay-ota-option-${code}`);
+      expect(within(row).getByText('외부 사이트')).toBeOnTheScreen();
+      expect(within(row).getByText(formatPrice(ITEM.price))).toBeOnTheScreen();
+      // 단언 — 행만이 아니라 시트 전체에서 코드 글자가 0개다(제목·버튼으로 새는 것도 잡는다).
+      // 노드 배열을 matcher 에 그대로 넘기면 실패 메시지 직렬화가 순환 참조로 죽는다 — 개수만 비교한다.
+      expect(screen.queryAllByText(new RegExp(code)).length).toBe(0);
+    }
+  );
 });

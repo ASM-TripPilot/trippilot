@@ -873,3 +873,98 @@ describe('🔴 C-AC17 · AC-17 — 비활성 CTA 가 브랜드 주색으로 칠�
     ).toEqual([]);
   });
 });
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * TRIP-988 C — 고정 시각 표기 `M.D · HH:mm` (D5 · INV-U1-17)
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * 무엇을 보장하나: FIXED 카드 보조행은 서버 원문 `12:00:00` 대신 `9.27 · 12:00` 으로 쓴다. 월·일은
+ * 0 을 안 채우고(`dayChipLabel` 관례), 시각은 앞 5글자(`HH:mm`)만 — 초가 붙어 오든(`HH:mm:ss`, openapi
+ * 계약 범위) 안 붙어 오든 같은 결과다. 가운뎃점은 U+00B7.
+ *
+ * 보조행 Text 에는 testID 가 없다(신규 금지) — 카드 루트 안에서 `getByText(문자열)` 완전일치로 잡는다.
+ * 완전일치라 앞뒤에 다른 글자(요일·끝 시각·초)가 붙으면 red 다.
+ */
+describe('🔴 TRIP-988 C · 고정 시각 보조행 (D5)', () => {
+  it.each([
+    ['2026-09-27', '12:00:00', '9.27 · 12:00'],
+    ['2026-09-27', '12:00', '9.27 · 12:00'],
+    ['2026-10-05', '08:30:00', '10.5 · 08:30'],
+  ])(
+    'C-1 fixedDate %s + fixedStart %s → "%s" (초는 안 보인다)',
+    (fixedDate, fixedStart, expected) => {
+      // 준비 — 날짜·시각이 정해진 FIXED 항목 하나.
+      const fixed = item({
+        sourcePoiId: 'poi-t',
+        type: 'FIXED',
+        fixedDate,
+        fixedStart,
+      });
+
+      // 실행
+      render(<MustVisitPickerScreen view={listed([fixed])} />);
+
+      // 단언 — 카드 안에 그 표기가 한 덩어리로 있고, 초 붙은 시각은 어디에도 없다.
+      const card = screen.getByTestId('itinerary-mustvisit-poi-t');
+      expect(within(card).getByText(expected)).toBeOnTheScreen();
+      expect(card).not.toHaveTextContent(/\d{1,2}:\d{2}:\d{2}/);
+    }
+  );
+
+  it('C-2 기존 픽스처(6월 11일 · 13:00)도 같은 서식이다', () => {
+    render(<MustVisitPickerScreen view={listed([FIXED_A, ANYTIME_B])} />);
+
+    const fixedCard = screen.getByTestId('itinerary-mustvisit-poi-a');
+    expect(within(fixedCard).getByText('6.11 · 13:00')).toBeOnTheScreen();
+  });
+
+  it('C-3 fixedDate 가 없으면 날짜를 지어내지 않고 시각만 쓴다 (01b Q3)', () => {
+    // 준비 — INV-U1-17 위반 데이터(FIXED 인데 날짜 없음). 계약 타입이 optional 이라 이 경로가 있다.
+    const noDate = item({
+      sourcePoiId: 'poi-t',
+      type: 'FIXED',
+      fixedStart: '12:00:00',
+    });
+
+    render(<MustVisitPickerScreen view={listed([noDate])} />);
+
+    // 단언 — 완전일치 '12:00' 이라 앞에 날짜·가운뎃점이 붙으면 red.
+    const card = screen.getByTestId('itinerary-mustvisit-poi-t');
+    expect(within(card).getByText('12:00')).toBeOnTheScreen();
+    expect(card).not.toHaveTextContent(/12:00:00/);
+  });
+
+  it('C-3b fixedStart 가 없으면 기존처럼 비워 둔다 — 날짜만 따로 그리지 않는다 (01b Q3)', () => {
+    const noStart = item({
+      sourcePoiId: 'poi-t',
+      type: 'FIXED',
+      fixedDate: '2026-09-27',
+    });
+
+    render(<MustVisitPickerScreen view={listed([noStart])} />);
+
+    const card = screen.getByTestId('itinerary-mustvisit-poi-t');
+    // 긍정 앵커 — 카드는 실제로 그려졌다(이름).
+    expect(card).toHaveTextContent(/감천문화마을/);
+    expect(card).not.toHaveTextContent(/\d{1,2}:\d{2}/);
+    expect(card).not.toHaveTextContent(/9\.27/);
+  });
+
+  it('INV-3 새 서식은 소요시간 표기를 만들지 않는다', () => {
+    const fixed = item({
+      sourcePoiId: 'poi-t',
+      type: 'FIXED',
+      fixedDate: '2026-09-27',
+      fixedStart: '12:00:00',
+    });
+
+    render(<MustVisitPickerScreen view={listed([fixed, ANYTIME_B])} />);
+
+    // 긍정 앵커 — 새 서식이 실제로 그려졌다(없으면 빈 화면이 공짜 통과).
+    expect(screen.getByText('9.27 · 12:00')).toBeOnTheScreen();
+    expect(renderedTexts().filter((text) => DURATION_TEXT.test(text))).toEqual(
+      []
+    );
+  });
+});

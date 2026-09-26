@@ -450,7 +450,8 @@ const MUST_VISIT_PREVIEW_ITEMS: MustVisitListItem[] = [
     imageUrl: null,
     type: 'FIXED',
     fixedDate: '2026-06-11',
-    fixedStart: '13:00',
+    // 서버 원문 모양(`HH:mm:ss`) — 카드는 초를 떼고 `6.11 · 13:00` 으로 그린다(TRIP-988).
+    fixedStart: '13:00:00',
   },
   {
     mustVisitId: 'mv-b',
