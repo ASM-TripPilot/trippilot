@@ -31,6 +31,7 @@
 - `src/__tests__/devPreviewExploreLanding.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewHome.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewLiveHub.test.tsx`  →  (export 없음)
+- `src/__tests__/devPreviewLiveLocation.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewLocationConsent.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewMap.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewMapFallback.test.tsx`  →  (export 없음)
@@ -128,6 +129,7 @@
 - `src/__tests__/reflectionSummaryStructure.test.ts`  →  (export 없음)
 - `src/__tests__/regionCatalogStructure.test.ts`  →  (export 없음)
 - `src/__tests__/releaseBuildConfig.test.ts`  →  (export 없음)
+- `src/__tests__/replanMapCenterStructure.test.ts`  →  (export 없음)
 - `src/__tests__/riskSheetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/rootLayout.test.tsx`  →  (export 없음)
 - `src/__tests__/rootLayoutQueryProvider.test.tsx`  →  (export 없음)
@@ -532,6 +534,7 @@
 - `src/features/planb/model/reorderKeepingLocked.ts`  →  reorderKeepingLocked
 - `src/features/planb/model/replanFormStore.ts`  →  ReplanFormState · useReplanFormStore
 - `src/features/planb/model/replanFromInstant.ts`  →  readFromInstant
+- `src/features/planb/model/replanMapCenter.ts`  →  REPLAN_MAP_FALLBACK_CENTER · deriveReplanMapAnchor
 - `src/features/planb/model/replanOrigin.ts`  →  ReplanOrigin · buildManualOrigin · buildGpsOrigin · isEstimatedOrigin
 - `src/features/planb/model/replanRequest.ts`  →  ReplanFormValues · buildStartReplanRequest
 - `src/features/planb/model/replanScope.ts`  →  ReplanScopeOption · REPLAN_SCOPES · DEFAULT_REPLAN_SCOPE
@@ -807,7 +810,8 @@
 - `src/pages/live-location/index.ts`  →  LiveLocationPage
 
 ## src/pages/live-location/ui/
-- `src/pages/live-location/ui/LiveLocationPage.tsx`  →  LiveLocationState · LiveLocationPageProps · LiveLocationPage
+- `src/pages/live-location/ui/LiveLocationPage.tsx`  →  LiveLocationPageProps · LiveLocationPage
+- `src/pages/live-location/ui/LiveLocationView.tsx`  →  LiveLocationState · LiveLocationViewProps · LiveLocationView
 
 ## src/pages/live-place/
 - `src/pages/live-place/index.ts`  →  LivePlacePage
@@ -1369,4 +1373,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 935개 파일
+합계 939개 파일

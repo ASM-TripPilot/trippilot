@@ -159,7 +159,7 @@ import { CompanionEditSheet } from '@/features/trip/ui/CompanionEditSheet';
 import { DestinationEditSheet } from '@/features/trip/ui/DestinationEditSheet';
 import { PeriodEditSheet } from '@/features/trip/ui/PeriodEditSheet';
 import { StaySelectSheet } from '@/features/trip/ui/StaySelectSheet';
-import { LiveLocationPage } from '@/pages/live-location';
+import { LiveLocationView } from '@/pages/live-location/ui/LiveLocationView';
 import { ConfirmedBanner } from '@/pages/itinerary-plan/ui/ConfirmedBanner';
 import { NoBaseNoticeCard } from '@/pages/itinerary-plan/ui/NoBaseNoticeCard';
 import { EditorView } from '@/widgets/map-sheet-shell/ui/EditorView';
@@ -5336,15 +5336,22 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: renderPlanbAppliedPreview,
   },
   // ── i20·i21 위치 수동 입력·권한 거부 폴백(TRIP-442) — 한 컴포넌트를 state prop 으로 두 얼굴.
-  //    지도 롱프레스 실동작·"이 위치로 계속" 핸드오프·핀 오버레이·Figma 픽셀은 jest 사각이라 이
-  //    두 키가 육안 대조 자리다(i20 `1790:3495`·i21 `1790:3549`). 자체 조회 없는 프리젠테이션이라
-  //    QueryClient 없이 렌더된다 ──
+  //    지도 실동작·핀 오버레이·Figma 픽셀은 jest 사각이라 이 두 키가 육안 대조 자리다(i20 `1790:3495`·
+  //    i21 `1790:3549`). 컨테이너(일정 조회·재계획 요청)가 아니라 **순수 뷰**를 태운다 — 배럴은
+  //    컨테이너를 함께 실어 네트워크 계층이 로드된다(TRIP-979 B, traps-shell TRIP-610) ──
   {
     key: 'live-location-manual',
     band: 'i',
     label: 'i20 · 수동 위치 입력',
     login: null,
-    render: () => <LiveLocationPage tripId="preview-trip" state="manual" />,
+    render: () => (
+      <LiveLocationView
+        state="manual"
+        center={{ lat: 37.5796, lng: 126.977 }}
+        placeName="경복궁"
+        onConfirm={noop}
+      />
+    ),
   },
   {
     key: 'live-location-denied',
@@ -5352,7 +5359,12 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'i21 · 위치 권한 거부',
     login: null,
     render: () => (
-      <LiveLocationPage tripId="preview-trip" state="permission-denied" />
+      <LiveLocationView
+        state="permission-denied"
+        center={{ lat: 37.5665, lng: 126.978 }}
+        placeName={null}
+        onConfirm={noop}
+      />
     ),
   },
   // i07 일정 편집(TRIP-753) — h12 편집기(EditorView)를 여행 중 모드(inTrip)로. 키 이름은 옛

@@ -10,6 +10,7 @@ import { useLiveItinerary } from '@/features/execution/model/useLiveItinerary';
 import { deriveVisitProgress } from '@/features/execution/model/visitProgress';
 import { formatCoPickDayHeader } from '@/features/itinerary/model/draftView';
 import { readFromInstant } from '@/features/planb/model/replanFromInstant';
+import { deriveReplanMapAnchor } from '@/features/planb/model/replanMapCenter';
 import { resolveReplanState } from '@/features/planb/model/replanState';
 import { useReplanSession } from '@/features/planb/model/useReplanSession';
 import {
@@ -33,9 +34,6 @@ import { ReplanSolvingView } from './ReplanSolvingView';
  *    다시 발화하지 않는다.
  *  - closed·미도착 → null.
  */
-
-// 출발 좌표가 없는 세션(originLat/Lng nullable)의 지도 중심 — PlanbDraftPage 와 같은 부산 플레이스홀더.
-const FALLBACK_CENTER = { lat: 35.1587, lng: 129.1604 };
 
 export interface PlanbSolvingPageProps {
   tripId: string;
@@ -123,10 +121,14 @@ export function PlanbSolvingPage({
 
   return (
     <ReplanSolvingView
-      center={{
-        lat: data.originLat ?? FALLBACK_CENTER.lat,
-        lng: data.originLng ?? FALLBACK_CENTER.lng,
-      }}
+      // 세션 출발 좌표 → 그날 첫 좌표 슬롯 → 일정 전체 → 서울시청(TRIP-979 B).
+      center={
+        deriveReplanMapAnchor({
+          days,
+          preferredDate: from.date,
+          origin: { lat: data.originLat, lng: data.originLng },
+        }).center
+      }
       pins={buildStatePins(
         projected.map(({ slot, state }) => ({
           lat: slot.lat,

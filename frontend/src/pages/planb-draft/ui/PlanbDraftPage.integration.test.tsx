@@ -1,5 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 
+import type { Itinerary } from '@/shared/api/generated/schemas';
+
 import { PlanbDraftPage } from './PlanbDraftPage';
 
 /**
@@ -49,6 +51,17 @@ jest.mock('@/features/planb/model/useApplyReplan', () => ({
   }),
 }));
 
+// TRIP-979 B — 출발 좌표 없는 세션의 지도 중심을 일정에서 고르려고 페이지가 일정을 읽는다.
+// 기본은 미도착(undefined) — 기존 케이스는 세션 좌표가 있어 일정과 무관하다.
+let mockItinerary: Itinerary | undefined;
+jest.mock('@/features/execution/model/useLiveItinerary', () => ({
+  useLiveItinerary: () => ({
+    data: mockItinerary,
+    isPending: mockItinerary === undefined,
+    isError: false,
+  }),
+}));
+
 const mockPush = jest.fn();
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
@@ -56,7 +69,10 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, back: mockBack, replace: mockReplace }),
 }));
 
-function session(status: string): Record<string, unknown> {
+function session(
+  status: string,
+  over: Record<string, unknown> = {}
+): Record<string, unknown> {
   return {
     sessionId: SESSION_ID,
     tripId: TRIP_ID,
@@ -69,6 +85,7 @@ function session(status: string): Record<string, unknown> {
     originEstimated: false,
     status,
     createdAt: '2026-06-11T05:59:00Z',
+    ...over,
   };
 }
 
@@ -86,6 +103,7 @@ beforeEach(() => {
   mockApply.isPending = false;
   mockApply.isError = false;
   mockSession.data = undefined;
+  mockItinerary = undefined;
 });
 
 function renderPage() {
@@ -282,5 +300,104 @@ describe('🔴 P9 · Q8 — 뒤로가기', () => {
     fireEvent.press(screen.getByTestId('sheet-daychip-back'));
     expect(mockBack).toHaveBeenCalledTimes(1);
     expect(mockPush).not.toHaveBeenCalled();
+  });
+});
+
+// ── TRIP-979 B · AC-B4 — 세션 좌표가 없으면 지도 중심을 이 여행에서 고른다(부산 상수 제거) ──────────
+
+const seoulSlot = (
+  poiId: string,
+  nameKo: string,
+  coords: { lat: number; lng: number } | null
+) => ({
+  poiId,
+  nameKo,
+  startAt: '10:00:00',
+  endAt: '11:00:00',
+  isFixed: false,
+  endsNextDay: false,
+  hasViolation: false,
+  tags: [],
+  lat: coords?.lat ?? null,
+  lng: coords?.lng ?? null,
+});
+
+// fromInstant '2026-06-11T06:00:00Z' = KST 6/11 15시. 그날 첫 슬롯은 좌표가 없고 그 뒤가 경복궁,
+// 일정 전체 첫 좌표는 남산(6/10).
+const SEOUL_ITINERARY = {
+  itineraryId: 'it1',
+  tripId: TRIP_ID,
+  status: 'CONFIRMED',
+  solveMode: 'FULL',
+  generationMode: 'AI',
+  isFallback: false,
+  generationState: 'COMPLETE',
+  days: [
+    {
+      date: '2026-06-10',
+      slots: [seoulSlot('s0', '남산서울타워', { lat: 37.5512, lng: 126.9882 })],
+    },
+    {
+      date: '2026-06-11',
+      slots: [
+        seoulSlot('s1', '좌표 없는 곳', null),
+        seoulSlot('s2', '경복궁', { lat: 37.5796, lng: 126.977 }),
+      ],
+    },
+  ],
+} as unknown as Itinerary;
+
+const NO_ORIGIN = {
+  originKind: 'STAY_ANCHOR',
+  originLat: null,
+  originLng: null,
+  originEstimated: true,
+};
+
+describe('🔴 B4 · AC-B4 · Q5 — 출발 좌표 없는 세션의 지도 중심은 여행에서 유도한다', () => {
+  it.each([['DRAFT'], ['NO_SOLUTION'], ['FAILED']])(
+    '%s — fromInstant 날(KST 6/11)의 첫 좌표 슬롯(좌표 없는 앞 슬롯은 건너뜀)',
+    (status) => {
+      mockItinerary = SEOUL_ITINERARY;
+      mockSession.data = session(status, NO_ORIGIN);
+      renderPage();
+
+      expect(screen.getByTestId('map-root')).toHaveTextContent(
+        '37.5796,126.977'
+      );
+    }
+  );
+
+  it('그날이 일정에 없으면 일정 전체의 첫 좌표 슬롯', () => {
+    mockItinerary = SEOUL_ITINERARY;
+    mockSession.data = session('FAILED', {
+      ...NO_ORIGIN,
+      fromInstant: '2026-06-20T06:00:00Z',
+    });
+    renderPage();
+
+    expect(screen.getByTestId('map-root')).toHaveTextContent(
+      '37.5512,126.9882'
+    );
+  });
+
+  it('일정이 아직 안 왔으면 서울시청 상수(부산 아님)', () => {
+    mockSession.data = session('FAILED', NO_ORIGIN);
+    renderPage();
+
+    expect(screen.getByTestId('map-root')).toHaveTextContent('37.5665,126.978');
+  });
+
+  it('세션 좌표가 있으면 일정보다 세션 좌표가 먼저다(무회귀)', () => {
+    mockItinerary = SEOUL_ITINERARY;
+    mockSession.data = session('DRAFT', {
+      originLat: 37.4979,
+      originLng: 127.0276,
+    });
+    renderPage();
+
+    expect(screen.getByTestId('map-root')).toHaveTextContent(
+      '37.4979,127.0276'
+    );
   });
 });
