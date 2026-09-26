@@ -11,6 +11,7 @@ import {
   type ReflectionFace,
 } from '@/features/reflection/ui/DailyReflectionScreen';
 import { useGetTripsTripId } from '@/shared/api/generated/trips/trips';
+import { seoulDate } from '@/shared/date/seoulDate';
 import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
 
 /**
@@ -25,8 +26,11 @@ import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
  *
  * TRIP-762 · 일차 탭은 여행 기간(`Trip.startDate`~`endDate`, 실 계약 필드)에서 조립한다 — 회고 계약엔
  * 일차 소스가 없어 여행 조회로 얻는다(j01 TripRecordsPage 선례 동형, 단 거긴 itinerary.days, 여긴
- * 날짜 범위라 1-기반 번호로 센다). 보고 있는 날짜(`date`)가 곧 "오늘"이라 활성 탭이 오늘 탭이다
- * (Figma 2267:2021 의 "오늘 · Day2" 가 활성 pill 과 일치). 헤더 공유는 제거됐다(라이브 j03 에 공유 0).
+ * 날짜 범위라 1-기반 번호로 센다). 활성 탭 = 보고 있는 날짜(`date`)의 탭. 헤더 공유는 제거됐다(라이브 j03 에 공유 0).
+ *
+ * TRIP-980 · "오늘"은 보고 있는 날짜가 아니라 **KST 실제 오늘**(`today`, 기본 `seoulDate(new Date())`)로
+ * 정한다(사용자 확정 D1·D2) — `오늘 ·` 칩은 날짜가 오늘인 탭에만, 활성과 따로 판정한다. 보고 있는 날이
+ * 오늘이 아니면 화면이 헤더·empty 문구를 중립으로 바꾼다(`isToday`).
  *
  * ⚠️ 계약 공백(01b 범위 밖·후속): 회고 응답(`Reflection`)에 사진 URL·지도 좌표·변경 요약이 없다 —
  * 사진(`photos=[]`)·지도 핀(미전달)·changeSummary(미전달)는 실제 소스가 정의되면 배선한다.
@@ -36,6 +40,8 @@ export interface DailyReflectionPageProps {
   tripId: string;
   /** 'YYYY-MM-DD' — 라우트 `[date].tsx` 가 실어 온다. */
   date: string;
+  /** TRIP-980 · 'YYYY-MM-DD' KST 오늘 — 테스트 주입 seam(미주입이면 기기 시계). */
+  today?: string;
 }
 
 const DAY_MS = 86_400_000;
@@ -63,6 +69,7 @@ function dateForDayNumber(startDate: string, dayNumber: number): string {
 export function DailyReflectionPage({
   tripId,
   date,
+  today = seoulDate(new Date()),
 }: DailyReflectionPageProps): ReactElement {
   const daily = useDailyReflection(tripId, date);
   const res = daily.reflection;
@@ -79,8 +86,7 @@ export function DailyReflectionPage({
           { length: Math.max(0, dayNumberFor(startDate, endDate)) },
           (_, index) => {
             const day = index + 1;
-            // 보고 있는 날짜가 곧 "오늘" — 활성 탭이 오늘 탭이다(Figma 정합).
-            return { day, today: day === activeDay };
+            return { day, today: dateForDayNumber(startDate, day) === today };
           }
         )
       : [];
@@ -120,6 +126,7 @@ export function DailyReflectionPage({
       photos={[]}
       dayTabs={dayTabs}
       activeDay={activeDay}
+      isToday={date === today}
       onSelectDay={(day) => {
         if (!startDate) return;
         router.push(
@@ -133,9 +140,7 @@ export function DailyReflectionPage({
         // 편집 열림은 화면이 로컬로 진다. 생성 없이 PUT 경로(BR-U5-36)라 여기서 별도 조치 없음.
       }}
       onConfirm={handleConfirm}
-      onSaveEdit={(text) => {
-        daily.saveEdit(text);
-      }}
+      onSaveEdit={daily.saveEdit}
     />
   );
 }

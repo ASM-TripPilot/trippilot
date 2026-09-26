@@ -78,9 +78,18 @@ export interface DailyReflectionScreenProps {
   onSelectDay?: (day: number) => void;
   /** TRIP-762(default) — 하단 탭바 라우팅. */
   onPressTab?: (key: ShellTabKey) => void;
+  /**
+   * TRIP-980 · 보고 있는 날이 KST 오늘인가(옵셔널, 미주입=오늘). 아니면 헤더 "하루 회고"·empty
+   * "이 날 기록된 활동이 없습니다"(사용자 확정 D2).
+   */
+  isToday?: boolean;
   onEnterEdit: () => void;
   onConfirm: () => void;
-  onSaveEdit: (text: string) => void;
+  /**
+   * 저장. Promise 를 돌려주면 true(성공)일 때만 편집을 닫고, false 면 편집·입력을 그대로 둔 채 실패를
+   * 알린다(TRIP-980, INV-4). 결과를 안 돌려주는 호출자(프리뷰·화면 테스트)는 예전처럼 즉시 닫는다.
+   */
+  onSaveEdit: (text: string) => void | Promise<boolean>;
 }
 
 export function DailyReflectionScreen({
@@ -99,18 +108,21 @@ export function DailyReflectionScreen({
   activeDay,
   onSelectDay,
   onPressTab,
+  isToday = true,
   onEnterEdit,
   onConfirm,
   onSaveEdit,
 }: DailyReflectionScreenProps): ReactElement {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(editableText);
+  const [saveFailed, setSaveFailed] = useState(false);
   const canSave = text.trim().length > 0;
   const isDataFace = face === 'default' || face === 'data-insufficient';
 
   const handleEnterEdit = () => {
     onEnterEdit();
     setText(editableText);
+    setSaveFailed(false);
     setEditing(true);
   };
   const handleCancel = () => {
@@ -118,8 +130,16 @@ export function DailyReflectionScreen({
   };
   const handleSave = () => {
     if (!canSave) return;
-    onSaveEdit(text);
-    setEditing(false);
+    setSaveFailed(false);
+    const pending = onSaveEdit(text);
+    if (!(pending instanceof Promise)) {
+      setEditing(false);
+      return;
+    }
+    void pending.then((saved) => {
+      if (saved) setEditing(false);
+      else setSaveFailed(true);
+    });
   };
 
   const hasMap = mapCenter !== undefined && (mapPins?.length ?? 0) > 0;
@@ -162,7 +182,7 @@ export function DailyReflectionScreen({
           <BackArrowGlyph size={24} />
         </View>
         <Text className="font-noto-bold text-[18px] font-bold text-ink">
-          오늘의 회고
+          {isToday ? '오늘의 회고' : '하루 회고'}
         </Text>
         <View className="flex-1" />
         {!editing ? (
@@ -231,6 +251,11 @@ export function DailyReflectionScreen({
               placeholder="직접 회고를 작성해 보세요"
               className="min-h-[180px] rounded-card border border-hairline-strong bg-canvas p-lg font-noto text-body text-ink"
             />
+            {saveFailed ? (
+              <Text className="font-noto text-label text-primary-text">
+                저장하지 못했어요. 다시 시도해 주세요
+              </Text>
+            ) : null}
             <View className="flex-row gap-sm">
               <Pressable
                 testID="reflection-daily-edit-cancel"
@@ -267,7 +292,9 @@ export function DailyReflectionScreen({
           >
             <EmptyCircleGlyph size={60} />
             <Text className="font-noto text-body text-muted">
-              오늘 기록된 활동이 없습니다
+              {isToday
+                ? '오늘 기록된 활동이 없습니다'
+                : '이 날 기록된 활동이 없습니다'}
             </Text>
           </View>
         ) : face === 'error' ? (
