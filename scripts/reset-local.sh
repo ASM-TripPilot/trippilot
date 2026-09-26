@@ -33,6 +33,26 @@ select (select count(*) from app.account) accounts, (select count(*) from app.tr
 SQL
 
 [ -n "${SKIP_IOS:-}" ] && exit 0
+# Xcode 26/27 에는 Simulator.app 이 없어 `expo run:ios` 가 "Can't determine id of
+# Simulator app" 으로 죽는다 → xcodebuild + simctl 로 헤드리스 빌드·설치·실행.
+#  - IPHONEOS_DEPLOYMENT_TARGET=18.0: 앱 타깃 15.1 < Expo pod 최소 17.0
+#  - SENTRY_CLI_EXECUTABLE: dSYM 업로드 페이즈가 pnpm 레이아웃에서 sentry-cli 를 못 찾는다
 echo "== 앱 재설치 =="
-xcrun simctl uninstall booted com.trippilot.travel 2>/dev/null || true
-cd frontend && LANG=en_US.UTF-8 pnpm ios
+cd frontend
+BUNDLE_ID=com.trippilot.travel
+UDID=$(xcrun simctl list devices booted | grep -Eo '[0-9A-F-]{36}' | head -1)
+[ -n "$UDID" ] || { echo "부팅된 시뮬레이터 없음 — xcrun simctl boot <udid>"; exit 1; }
+
+lsof -ti :8081 >/dev/null || { LANG=en_US.UTF-8 nohup pnpm start >/tmp/trippilot-metro.log 2>&1 & echo "Metro 기동 (로그: /tmp/trippilot-metro.log)"; }
+
+export SENTRY_DISABLE_AUTO_UPLOAD=true
+SENTRY_CLI_EXECUTABLE=$(ls -d "$PWD"/node_modules/.pnpm/@sentry+cli@*/node_modules/@sentry/cli/bin/sentry-cli | head -1)
+export SENTRY_CLI_EXECUTABLE
+LANG=en_US.UTF-8 xcodebuild -quiet -workspace ios/TripPilot.xcworkspace -scheme TripPilot \
+  -configuration Debug -sdk iphonesimulator -destination "id=$UDID" \
+  -derivedDataPath ios/build IPHONEOS_DEPLOYMENT_TARGET=18.0 build
+
+xcrun simctl uninstall "$UDID" "$BUNDLE_ID" 2>/dev/null || true
+xcrun simctl install "$UDID" ios/build/Build/Products/Debug-iphonesimulator/TripPilot.app
+until curl -sf -m 2 http://localhost:8081/status | grep -q running; do sleep 2; done
+xcrun simctl launch "$UDID" "$BUNDLE_ID"
