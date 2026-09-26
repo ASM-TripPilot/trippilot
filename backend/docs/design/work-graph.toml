@@ -1936,6 +1936,13 @@ touches = [
   "backend/app/src/test/kotlin/com/trippilot/app/LiveAiRoundTripIT.kt",
 ]
 note = """
+**갱신(2026-09-27) — 상대 배선이 끝났다**(AI #744 PlanBAgent 복원 · #749 /planb 별칭). 우리 몫
+TRIP-960 ②(상수 교체)는 이 커밋으로 끝. **폴백 제거는 아직이다** — 실왕복에서 상대 500 이 나와
+"배선 완료 + 실왕복 200" 조건의 절반만 찼다: `_replan_fixed_blocks`(wiring.py:910)가
+`block.start_at`/`end_at` 을 읽는데 `FixedBlockSchema` 는 `start`/`dwell_min` 이다 —
+**locked_blocks 가 실리면 무조건 AttributeError 500**(별칭이라 구·신 경로 동일). AI 쪽 수정 후
+실왕복 10/10 을 보고 폴백(`legacyReplanViaGenerate`·NOT_WIRED 갈래)을 지운다.
+
 TRIP-854 에서 갈라져 나온 잔여. **우리가 할 일은 지우는 것뿐**이고, 선행은 상대(AI)의
 `ItineraryOrchestrator.replan` 배선이다 — 우리가 당길 수 없다.
 

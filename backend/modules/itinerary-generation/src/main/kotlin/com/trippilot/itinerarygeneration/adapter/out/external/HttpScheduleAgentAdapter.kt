@@ -356,8 +356,14 @@ class HttpScheduleAgentAdapter(
         internal const val VALIDATE_PATH = "/ai/v1/itinerary/validate"
         internal const val REPAIR_PATH = "/ai/v1/itinerary/repair"
         internal const val EXPLANATIONS_PATH = "/ai/v1/itinerary/explanations"
-        internal const val ALTERNATIVES_PATH = "/ai/v1/itinerary/alternatives"
-        internal const val REPLAN_PATH = "/ai/v1/itinerary/replan"
+        // **여행 중 변수 대응 둘은 `/planb` 접두사다**(TRIP-960 ② · AI #749 별칭 개통).
+        // 처리자가 PlanBAgent(RAG·상황 지식)라 경로 이름이 실제 배정을 말한다 — 접두사가
+        // `/itinerary` 하나뿐이던 시절, 그 혼동이 실제 배선 뒤바뀜으로 이어졌다(백지 생성
+        // 에이전트가 변수 대응 경로에 있었다 — AI #744 가 고쳤다).
+        // 구 경로(`/ai/v1/itinerary/{replan,alternatives}`)는 상대가 별칭과 함께 아직 열어 두고
+        // 있고, **이 상수에서 구 경로가 사라지는 것이 상대의 구 경로 삭제 조건**이다(TRIP-960 ④).
+        internal const val ALTERNATIVES_PATH = "/ai/v1/planb/alternatives"
+        internal const val REPLAN_PATH = "/ai/v1/planb/replan"
 
         /** 상대가 경로는 열었지만 배선 전일 때의 코드(`ai/src/trippilot/api/errors.py`). 한시 폴백의 유일한 방아쇠다. */
         private const val NOT_WIRED = "ORCHESTRATOR_NOT_WIRED"
