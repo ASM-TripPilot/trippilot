@@ -554,6 +554,7 @@
 - `src/features/planb/model/useActiveTriggers.ts`  →  useActiveTriggers
 - `src/features/planb/model/useApplyReplan.ts`  →  useApplyReplan
 - `src/features/planb/model/useCancelReplan.ts`  →  useCancelReplan
+- `src/features/planb/model/useReplanDiff.ts`  →  useReplanDiff
 - `src/features/planb/model/useReplanGpsOrigin.ts`  →  ReadReplanGpsOrigin · useReplanGpsOrigin
 - `src/features/planb/model/useReplanSession.ts`  →  useReplanSession
 - `src/features/planb/model/useSlotCandidates.ts`  →  useSlotCandidates
@@ -908,7 +909,8 @@
 ## src/pages/planb-draft/ui/
 - `src/pages/planb-draft/ui/PlanbDraftPage.tsx`  →  PlanbDraftPageProps · PlanbDraftPage
 - `src/pages/planb-draft/ui/PlanbSolvingPage.tsx`  →  PlanbSolvingPageProps · PlanbSolvingPage
-- `src/pages/planb-draft/ui/ReplanDraftView.tsx`  →  ReplanDraftViewProps · ReplanDraftView
+- `src/pages/planb-draft/ui/ReplanDraftView.tsx`  →  ReplanRemovedVM · ReplanDraftViewProps · ReplanDraftView
+- `src/pages/planb-draft/ui/ReplanLeaveDialog.tsx`  →  ReplanLeaveDialog
 - `src/pages/planb-draft/ui/ReplanSolvingView.tsx`  →  ReplanSolvingViewProps · ReplanSolvingView
 
 ## src/pages/planb-request/
@@ -1063,6 +1065,9 @@
 ## src/shared/api/generated/reflection/
 - `src/shared/api/generated/reflection/reflection.ts`  →  getMePersonalization · getGetMePersonalizationQueryKey · getGetMePersonalizationQueryOptions · GetMePersonalizationQueryResult · GetMePersonalizationQueryError · useGetMePersonalization · getMeStyle · getGetMeStyleQueryKey · getGetMeStyleQueryOptions · GetMeStyleQueryResult · GetMeStyleQueryError · useGetMeStyle · getTripsTripIdSummary · getGetTripsTripIdSummaryQueryKey · getGetTripsTripIdSummaryQueryOptions · GetTripsTripIdSummaryQueryResult · GetTripsTripIdSummaryQueryError · useGetTripsTripIdSummary · getTripsTripIdReflections · getGetTripsTripIdReflectionsQueryKey · getGetTripsTripIdReflectionsQueryOptions · GetTripsTripIdReflectionsQueryResult · GetTripsTripIdReflectionsQueryError · useGetTripsTripIdReflections · postTripsTripIdReflectionsDayDate · getPostTripsTripIdReflectionsDayDateMutationOptions · PostTripsTripIdReflectionsDayDateMutationResult · PostTripsTripIdReflectionsDayDateMutationError · usePostTripsTripIdReflectionsDayDate · putTripsTripIdReflectionsDayDate · getPutTripsTripIdReflectionsDayDateMutationOptions · PutTripsTripIdReflectionsDayDateMutationResult · PutTripsTripIdReflectionsDayDateMutationBody · PutTripsTripIdReflectionsDayDateMutationError · usePutTripsTripIdReflectionsDayDate
 
+## src/shared/api/generated/replan/
+- `src/shared/api/generated/replan/replan.ts`  →  getTripsTripIdReplanSessionsSessionIdDiff · getGetTripsTripIdReplanSessionsSessionIdDiffQueryKey · getGetTripsTripIdReplanSessionsSessionIdDiffQueryOptions · GetTripsTripIdReplanSessionsSessionIdDiffQueryResult · GetTripsTripIdReplanSessionsSessionIdDiffQueryError · useGetTripsTripIdReplanSessionsSessionIdDiff
+
 ## src/shared/api/generated/saved-stays/
 - `src/shared/api/generated/saved-stays/saved-stays.ts`  →  postSavedStays · getPostSavedStaysMutationOptions · PostSavedStaysMutationResult · PostSavedStaysMutationBody · PostSavedStaysMutationError · usePostSavedStays · getSavedStays · getGetSavedStaysQueryKey · getGetSavedStaysQueryOptions · GetSavedStaysQueryResult · GetSavedStaysQueryError · useGetSavedStays · getSavedStaysSavedStayId · getGetSavedStaysSavedStayIdQueryKey · getGetSavedStaysSavedStayIdQueryOptions · GetSavedStaysSavedStayIdQueryResult · GetSavedStaysSavedStayIdQueryError · useGetSavedStaysSavedStayId · patchSavedStaysSavedStayId · getPatchSavedStaysSavedStayIdMutationOptions · PatchSavedStaysSavedStayIdMutationResult · PatchSavedStaysSavedStayIdMutationBody · PatchSavedStaysSavedStayIdMutationError · usePatchSavedStaysSavedStayId · deleteSavedStaysSavedStayId · getDeleteSavedStaysSavedStayIdMutationOptions · DeleteSavedStaysSavedStayIdMutationResult · DeleteSavedStaysSavedStayIdMutationError · useDeleteSavedStaysSavedStayId
 
@@ -1206,6 +1211,12 @@
 - `src/shared/api/generated/schemas/registerRoute.ts`  →  RegisterRoute
 - `src/shared/api/generated/schemas/registerSavedStayRequest.ts`  →  RegisterSavedStayRequest
 - `src/shared/api/generated/schemas/reorderPhotosRequest.ts`  →  ReorderPhotosRequest
+- `src/shared/api/generated/schemas/replanDiff.ts`  →  ReplanDiff
+- `src/shared/api/generated/schemas/replanDiffEntry.ts`  →  ReplanDiffEntry
+- `src/shared/api/generated/schemas/replanDiffEntryChange.ts`  →  ReplanDiffEntryChange
+- `src/shared/api/generated/schemas/replanDiffSlot.ts`  →  ReplanDiffSlot
+- `src/shared/api/generated/schemas/replanDiffStatus.ts`  →  ReplanDiffStatus
+- `src/shared/api/generated/schemas/replanImpact.ts`  →  ReplanImpact
 - `src/shared/api/generated/schemas/replanSession.ts`  →  ReplanSession
 - `src/shared/api/generated/schemas/replanSessionOriginKind.ts`  →  ReplanSessionOriginKind
 - `src/shared/api/generated/schemas/replanSessionScope.ts`  →  ReplanSessionScope
@@ -1385,4 +1396,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 951개 파일
+합계 960개 파일

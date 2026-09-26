@@ -258,6 +258,8 @@ const GENERATED_TAG_DIRS = [
   'preferences',
   'profile',
   'reflection',
+  // TRIP-1007: replan 태그 추가(GET …/replan-sessions/{id}/diff 1오퍼레이션) → 폴더 1개 더.
+  'replan',
   'saved-stays',
   'schemas',
   'stays',
@@ -673,7 +675,7 @@ describe('AC-2 ②③ · 생성 파일 인벤토리 — 하한 목록 + 개수 +
    * D4(`/change-log` 앵커 미설치)가 정한 범위와 같다 — 그 계약을 쓰는 화면이 붙는 티켓에서
    * 앵커와 함께 닫는다.
    */
-  it('하한 67경로가 하나도 사라지지 않았고, 총 개수가 줄지 않았고, 태그 폴더가 정확히 12개다', () => {
+  it('하한 67경로가 하나도 사라지지 않았고, 총 개수가 줄지 않았고, 태그 폴더가 정확히 13개다', () => {
     const files = listGeneratedFiles();
 
     // 지킴 ① — 사라진 이름을 모아 비교한다. 실패 diff에 **무엇을 잃었는지**가 그대로 찍힌다.

@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { View } from 'react-native';
 
 import type { ReplanSlotVM } from '@/entities/itinerary-slot/model';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
@@ -18,6 +19,7 @@ import {
   usePostTripsTripIdReplanSessionsSessionIdCancel,
 } from '@/shared/api/generated/trips/trips';
 
+import { ReplanLeaveDialog } from './ReplanLeaveDialog';
 import { ReplanSolvingView } from './ReplanSolvingView';
 
 /**
@@ -28,7 +30,10 @@ import { ReplanSolvingView } from './ReplanSolvingView';
  *    헤더 곳 수 = 완료 + 진행 중(둘 다 기준 시각 이전이라 그대로 둔다, BR-U4-17·18).
  *    그날을 모르면(일정 미도착·그날 없음) 제목만 남기고 화면은 그대로 그린다.
  *  - [취소] → cancel 요청만(itinerary PUT 없음 — INV-U4-05). **성공한 뒤에만** 뒤로(없으면 허브로 replace).
- *  - ‹ → `router.back()` — 세션을 살린 채 나간다(옛 [백그라운드로]).
+ *  - ‹ → 이탈 확인부터(TRIP-1007 · QA #062 — 나간 뒤 다시 요청하면 새 POST 가 이 세션을 닫아 결과가
+ *    버려진다, INV-U4-06). [나가기]면 `router.back()` — 세션을 살린 채 나간다(cancel 0). [계속 기다리기]는
+ *    확인만 닫는다. 스와이프·Android 하드웨어 뒤로는 막지 않는다(범위 밖).
+ *  - 캡션: PARTIAL_SLOTS 는 `{H}시 이후 다시 짜는 중`, FULL_DAY 는 오늘 전체라 시각 없이(BR-U4-11).
  *  - DRAFT·NO_SOLUTION·FAILED → i06(`planb/draft`)으로 **replace** 1회. push 면 i06 에서 뒤로 갔을 때 이
  *    화면이 다시 떠 곧장 i06 로 되돌려 보내는 루프가 생긴다. 의존성을 kind 문자열로 둬 폴링 재렌더에
  *    다시 발화하지 않는다.
@@ -48,6 +53,7 @@ export function PlanbSolvingPage({
   const session = useReplanSession(tripId, sessionId);
   const cancel = usePostTripsTripIdReplanSessionsSessionIdCancel();
   const itinerary = useLiveItinerary(tripId);
+  const [leaveOpen, setLeaveOpen] = useState(false);
 
   const data = session.data;
   const kind =
@@ -120,41 +126,53 @@ export function PlanbSolvingPage({
   });
 
   return (
-    <ReplanSolvingView
-      // 세션 출발 좌표 → 그날 첫 좌표 슬롯 → 일정 전체 → 서울시청(TRIP-979 B).
-      center={
-        deriveReplanMapAnchor({
-          days,
-          preferredDate: from.date,
-          origin: { lat: data.originLat, lng: data.originLng },
-        }).center
-      }
-      pins={buildStatePins(
-        projected.map(({ slot, state }) => ({
-          lat: slot.lat,
-          lng: slot.lng,
-          progress: state,
-        }))
-      )}
-      solvingLabel={`${from.hour}시 이후 다시 짜는 중`}
-      dayLabel={day ? `${dayIndex + 1}일차` : ''}
-      dateLabel={day ? formatCoPickDayHeader(day.date) : ''}
-      meta={day && visitsKnown ? `방문한 ${kept}곳 그대로` : ''}
-      slots={slots}
-      unlinkedSlotKeys={unlinkedSlotKeys}
-      cancelPending={cancel.isPending}
-      onBack={() => router.back()}
-      onCancel={() =>
-        cancel.mutate(
-          { tripId, sessionId },
-          {
-            onSuccess: () => {
-              if (router.canGoBack()) router.back();
-              else router.replace(`/trips/${tripId}/live`);
-            },
-          }
-        )
-      }
-    />
+    <View className="flex-1">
+      <ReplanSolvingView
+        // 세션 출발 좌표 → 그날 첫 좌표 슬롯 → 일정 전체 → 서울시청(TRIP-979 B).
+        center={
+          deriveReplanMapAnchor({
+            days,
+            preferredDate: from.date,
+            origin: { lat: data.originLat, lng: data.originLng },
+          }).center
+        }
+        pins={buildStatePins(
+          projected.map(({ slot, state }) => ({
+            lat: slot.lat,
+            lng: slot.lng,
+            progress: state,
+          }))
+        )}
+        solvingLabel={
+          data.scope === 'FULL_DAY'
+            ? '오늘 일정 다시 짜는 중'
+            : `${from.hour}시 이후 다시 짜는 중`
+        }
+        dayLabel={day ? `${dayIndex + 1}일차` : ''}
+        dateLabel={day ? formatCoPickDayHeader(day.date) : ''}
+        meta={day && visitsKnown ? `방문한 ${kept}곳 그대로` : ''}
+        slots={slots}
+        unlinkedSlotKeys={unlinkedSlotKeys}
+        cancelPending={cancel.isPending}
+        onBack={() => setLeaveOpen(true)}
+        onCancel={() =>
+          cancel.mutate(
+            { tripId, sessionId },
+            {
+              onSuccess: () => {
+                if (router.canGoBack()) router.back();
+                else router.replace(`/trips/${tripId}/live`);
+              },
+            }
+          )
+        }
+      />
+      {leaveOpen ? (
+        <ReplanLeaveDialog
+          onStay={() => setLeaveOpen(false)}
+          onLeave={() => router.back()}
+        />
+      ) : null}
+    </View>
   );
 }
