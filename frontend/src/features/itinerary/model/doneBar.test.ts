@@ -161,6 +161,62 @@ describe('🔴 pickDoneBar · 저장할 seen (01b Q2·Q5)', () => {
   });
 });
 
+// ── TRIP-986 C · 끝난 여행(Trip.status ENDED)은 완료 바 대상이 아니다 (#016 · Seed D4) ──────────
+// ENDED 는 BE 가 날짜로 파생해 실제로 내려주는 값이다. 제외는 **바 대상 고르기에만** 적용한다 — 카드
+// 배지(`deriveTripCardFace`)는 여행 상태를 모른다(카드 쪽 앵커는 TripCardContainer.test 986-C3).
+// ENDED 여행을 seenNext 에 넣을지는 AC 밖이라 단언하지 않는다(어느 쪽이든 배너로 안 뜬다, 02a ★C-3).
+
+function tripWithStatus(
+  tripId: string,
+  updatedAt: string,
+  status: Trip['status']
+): Trip {
+  return { ...trip(tripId, updatedAt), status };
+}
+
+describe('🔴 986-C · pickDoneBar 는 끝난 여행(ENDED)을 고르지 않는다', () => {
+  it('C1 완성 여행이 ENDED 하나뿐이면 null', () => {
+    const pick = pickDoneBar(
+      [
+        entry(
+          tripWithStatus('trip-ended', '2026-08-20T00:00:00.000Z', 'ENDED')
+        ),
+      ],
+      []
+    );
+
+    expect(pick).toBeNull();
+  });
+
+  it.each([['PLANNED'], ['ACTIVE']] as const)(
+    'C2 ENDED 확정(더 최근)과 %s 확정(옛것)이 섞이면 비-ENDED 쪽을 고른다',
+    (status) => {
+      const entries = [
+        entry(
+          tripWithStatus('trip-ended', '2026-08-30T00:00:00.000Z', 'ENDED')
+        ),
+        entry(tripWithStatus('trip-live', '2026-08-10T00:00:00.000Z', status)),
+      ];
+
+      expect(pickDoneBar(entries, [])?.target.tripId).toBe('trip-live');
+    }
+  );
+
+  it('C4 ENDED 여행의 일정이 아직 안 왔어도(pending) 다른 완성 여행은 보류하지 않고 고른다 (03b 참고-2)', () => {
+    // 끝난 여행은 대상이 아니니 그 응답을 기다릴 이유도 없다 — "pending 보류"가 ENDED 건너뛰기보다
+    // 먼저 돌면 여기서 null 이 나온다(끝난 여행 404 재시도 약 7초 동안 바가 늦게 뜬다).
+    const entries = [
+      entry(
+        tripWithStatus('trip-ended', '2026-08-30T00:00:00.000Z', 'ENDED'),
+        'pending'
+      ),
+      entry(tripWithStatus('trip-live', '2026-08-10T00:00:00.000Z', 'PLANNED')),
+    ];
+
+    expect(pickDoneBar(entries, [])?.target.tripId).toBe('trip-live');
+  });
+});
+
 // ── PBT(AC-11) ─────────────────────────────────────────────────────────
 
 const statusArb = fc.constantFrom<ItineraryStatus | undefined>(

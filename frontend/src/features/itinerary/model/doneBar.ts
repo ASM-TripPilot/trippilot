@@ -9,6 +9,7 @@ import { deriveTripCardFace } from './tripCardFace';
 /**
  * TRIP-928 · h05 완료 도킹 배너 대상 고르기(순수). 정본 공백이라 프론트 규칙(01b Q1~Q5):
  * - 완성 = 카드 배지와 같은 판정(`deriveTripCardFace(...).badge==='done'`) — Mapping A 를 고치면 둘 다 따라간다.
+ * - 끝난 여행(`Trip.status==='ENDED'`)은 후보가 아니다(TRIP-986 D4).
  * - 일정이 하나라도 아직 안 왔으면 보류(null) — 먼저 도착한 덜 최근 완성이 배너를 선점하지 않게.
  * - 후보(완성 ∧ seen 밖) 중 `updatedAt ?? createdAt` 가 가장 최근인 1건.
  * - seenNext = (seen ∩ 목록 id) ∪ 지금 완성 전부 — 줄줄이 뜨지 않게 전부 기록하고, 목록 밖 id 는 버려
@@ -38,6 +39,9 @@ export function pickDoneBar(
 ): DoneBarPick | null {
   const done: Trip[] = [];
   for (const { trip, itinerary } of entries) {
+    // TRIP-986 D4 — 끝난 여행의 "완성됐어요"는 뒷북이라 바 대상에서만 뺀다(카드 배지는 그대로).
+    // 대상이 아니니 그 일정 응답을 기다리며 보류하지도 않는다.
+    if (trip.status === 'ENDED') continue;
     if (itinerary === 'pending') return null;
     const face = deriveTripCardFace(
       itinerary.status,

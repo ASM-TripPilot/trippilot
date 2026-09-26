@@ -1120,9 +1120,9 @@ const TIMELINE_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
   },
 ];
 
-// 내 여행 목록(h05/h06, TRIP-788) 카드 VM 4종 — 완성(사진 픽스처)·생성중(resume 없음)·초안(resume)·
-// 미도착(배지 degrade). 순수 카드라 픽스처를 얹어 네 얼굴을 한 화면에서 본다(컨테이너·react-query 없이).
-// 완성 상태문은 Figma 정합(TRIP-788)으로 '추천안이 준비됐어요'(구 '확정 장소 N곳' 대체), imageUrl 은
+// 내 여행 목록(h05/h06, TRIP-788) 카드 VM 5종 — 완성(사진 픽스처)·생성중(resume 없음)·초안(resume)·
+// 일정 없음(404, resume 없음)·미도착(배지 degrade). 순수 카드라 픽스처를 얹어 얼굴을 한 화면에서 본다.
+// 완성·일정 없음 상태문은 TRIP-986 D2('일정 확정'·'아직 일정이 없어요' — Figma 미반영), imageUrl 은
 // DRAFT_PREVIEW_PHOTOS(로컬 에셋 resolve — jest 는 .uri undefined 라 회색, 실기만 사진).
 const MY_TRIPS_PREVIEW_VMS: MyTripCardVM[] = [
   {
@@ -1130,7 +1130,7 @@ const MY_TRIPS_PREVIEW_VMS: MyTripCardVM[] = [
     title: '서귀포시 여행',
     metaLine: '6월 10일 ~ 13일 · 3박 4일 · 2명',
     badge: 'done',
-    extra: '추천안이 준비됐어요',
+    extra: '일정 확정',
     imageUrl: DRAFT_PREVIEW_PHOTOS[0],
   },
   {
@@ -1147,6 +1147,14 @@ const MY_TRIPS_PREVIEW_VMS: MyTripCardVM[] = [
     metaLine: '7월 2일 ~ 4일 · 2박 3일 · 4명',
     badge: 'draft',
     extra: '추천안 준비 중',
+  },
+  {
+    tripId: 'demo-none',
+    title: '강릉 여행',
+    metaLine: '10월 3일 ~ 4일 · 1박 2일 · 2명',
+    badge: 'draft',
+    extra: '아직 일정이 없어요',
+    resume: false,
   },
   {
     tripId: 'demo-load',

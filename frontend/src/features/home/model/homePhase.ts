@@ -157,3 +157,38 @@ export function resolveHomePhase(
     },
   };
 }
+
+/** 일정 상태로 정한 목적지 토큰 — 라우트가 판정해 넘긴다(서버 스키마 미참조 로컬 리터럴, 경계 ★). */
+export type HomeItineraryTarget = 'method' | 'generating' | 'draft' | 'live';
+
+type PlanningPhase = Extract<HomePhase, { kind: 'planning' }>;
+
+/**
+ * TRIP-986 D1 · 일정 응답이 정착한 뒤 CTA 라벨·부제를 **목적지와 같은 판정**으로 덮어쓴다.
+ * `resolveHomePhase` 의 라벨은 여행 상태(날짜 파생) 폴백일 뿐이다 — 서버는 여행 상태를 '확정'으로
+ * 올리지 않으므로, 확정 여부는 일정 쪽 판정(target)만 안다. 미정착이면 라우트가 이 함수를 안 불러
+ * 폴백 라벨이 남는다(Q2).
+ *  - live(확정) → 여행 중이면 '여행 일정 보기', 아니면 '확정 일정 보기' · 부제 없음.
+ *  - method(일정 없음) → '일정 만들기'(h04 제목 재사용, Q1) · 부제 없음.
+ *  - draft·generating(초안·생성 중) → '일정 이어서 짜기' · 부제는 폴백 그대로.
+ * 여행 중 판정은 `showSpots`(resolveHomePhase 가 여행 중일 때만 채움)를 그대로 쓴다.
+ */
+export function applyItineraryTarget(
+  phase: PlanningPhase,
+  target: HomeItineraryTarget
+): PlanningPhase {
+  if (target === 'draft' || target === 'generating') {
+    return { ...phase, trip: { ...phase.trip, ctaLabel: '일정 이어서 짜기' } };
+  }
+  const ctaLabel =
+    target === 'method'
+      ? '일정 만들기'
+      : phase.showSpots
+        ? '여행 일정 보기'
+        : '확정 일정 보기';
+  return {
+    ...phase,
+    greetSubtitle: undefined,
+    trip: { ...phase.trip, ctaLabel },
+  };
+}
