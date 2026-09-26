@@ -10,6 +10,8 @@ paths:
 (전역 불변식 INV-3 "소요시간 비표시, 거리만"은 코어 `repo-traps.md`에 남아 무조건 로드된다.)
 
 - **react-query 캐시 알림을 읽는 통합테스트는 `act` 직후 곧바로 `result.current`를 읽지 마라 — flush 헬퍼로 순서를 기다린다.** `notifyManager`가 알림을 `setTimeout(cb, 0)`으로 예약해서 보내므로, `act` 직후 즉시 읽으면 재렌더 전(구값)을 관측할 확률적 flake가 난다(원인 확증 TRIP-884, `useVisitCheck.integration.test.tsx` 11/20 재현 — 개념 [[테스트 워커 강제종료 flake (원인 미상)]]). 의심되면 `beforeAll`에 `notifyManager.setScheduler((cb) => setTimeout(cb, 5))`로 재현해 확인한다.
+- **동기 제출을 비동기(await 뒤 mutate)로 바꾸면 "대기 중 언마운트" 창이 새로 생긴다 — `mountedRef`류 가드 없이는 화면이 사라져도 POST가 나간다.** 실제 TanStack(5.101.2)에서는 언마운트 뒤 호출별 `onSuccess`/`onError`가 안 불리므로(`mutationObserver.js`) 이동도 오류 안내도 없이 조용히 서버 세션만 하나 더 생긴다(TRIP-979 03b 경고-1 실측, `ReplanSessionService.start`가 기존 열린 세션을 취소하고 새 세션을 연다). jest 목은 언마운트와 무관하게 콜백을 부르므로 이 창을 원리적으로 못 잡는다 — 재현하려면 실제 라이브러리 동작을 흉내 낸 통합 테스트(대기 중 언마운트 → 콜백 미호출 단언)를 따로 심어야 한다. 이 도메인 밖에서도 "누름→await→mutate" 패턴을 새로 들이면 같은 사각이 반복된다.
+- **expo-location 19.0.8 `getCurrentPositionAsync()`의 Android 기본값은 `mayShowUserSettingsDialog:true`다 — 옵션 없이 부르면 기기 위치가 꺼져 있을 때 시스템 "위치 사용" 대화상자가 뜬다.** `RD2`류 심판은 호출 **횟수**만 세고 인자는 안 보므로 이 함정을 못 잡는다(TRIP-979 03b 경고-2). 대화상자가 떠 있는 채로 5초 타임아웃 POST가 나가면 사용자가 뒤늦게 "사용"을 눌러도 좌표는 이미 버려진다. 새로 측위를 부르는 자리는 `{mayShowUserSettingsDialog:false}`를 명시한다(iOS는 옵션 자체가 없어 무해). 확인은 Android 실기(6-b)에서만 된다.
 
 ## 여행 중 실행 (execution, i01~i05)
 ⚠️ 이 절의 `i01`·`i05` 등은 **코드 라우트·프리뷰 키가 쓰는 옛 Figma 코드**다. 라이브 Figma i 밴드는 2026-09-11에 i01~i10으로 재번호됐다(옛 i05 현재 장소 상세 = 새 i10) — 대조는 `spec-perception/reference/figma-structure.md`의 매핑 포인터로.
