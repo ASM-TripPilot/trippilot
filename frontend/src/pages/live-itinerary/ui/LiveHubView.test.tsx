@@ -878,3 +878,29 @@ describe('LiveHubView · HT 트리거 알약·배지·로컬 숨김 (TRIP-748)',
     expect(screen.getByTestId(TRIGGER_PILL)).toBeOnTheScreen();
   });
 });
+
+describe('🔴 LiveHubView · TRIP-991 오버레이 접근성 (AC-1·AC-2·AC-4)', () => {
+  it('뒤로는 "뒤로" 버튼으로 읽히고, 누르면 onBack 이 1회 불린다', () => {
+    const handlers = renderHub();
+
+    const back = screen.getByRole('button', { name: '뒤로' });
+    expect(back).toHaveProp('testID', 'execution-live-back');
+
+    fireEvent.press(back);
+    expect(handlers.onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('일자 칩은 "N일차" 버튼으로 읽히고, 활성 일차(2일차)만 selected 다', () => {
+    renderHub();
+
+    expect(
+      screen.getByRole('button', { name: '2일차', selected: true })
+    ).toHaveProp('testID', 'execution-live-daychip-1');
+    expect(screen.getByRole('button', { name: '1일차' })).toHaveProp(
+      'testID',
+      'execution-live-daychip-0'
+    );
+    expect(screen.getByRole('button', { name: '1일차' })).not.toBeSelected();
+    expect(screen.getByRole('button', { name: '3일차' })).not.toBeSelected();
+  });
+});

@@ -234,6 +234,7 @@ export function LiveHubView({
       <Pressable
         testID="execution-live-back"
         accessibilityRole="button"
+        accessibilityLabel="뒤로"
         onPress={onBack}
         style={BACK_SHADOW}
         className="h-[40px] w-[40px] items-center justify-center rounded-pill bg-canvas"
@@ -250,6 +251,7 @@ export function LiveHubView({
               hidePill();
               onSelectDay(index);
             }}
+            accessibilityRole="button"
             accessibilityState={{ selected }}
             className={`rounded-pill px-[14px] py-sm ${
               selected

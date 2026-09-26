@@ -316,3 +316,13 @@ describe('🔴 TRIP-935 AC-3 · 버전 줄은 appVersion 으로만 그린다', (
     expect(screen.queryAllByText(/TripPilot v/)).toHaveLength(0);
   });
 });
+
+describe('🔴 TRIP-991 · 제휴 안내 스위치 이름 (AC-3)', () => {
+  it('제휴 토글은 행 제목 "외부 이동 시 제휴 안내 다시 보기" 스위치로 읽힌다', () => {
+    renderScreen();
+
+    expect(
+      screen.getByRole('switch', { name: '외부 이동 시 제휴 안내 다시 보기' })
+    ).toHaveProp('testID', 'settings-affiliate-toggle');
+  });
+});

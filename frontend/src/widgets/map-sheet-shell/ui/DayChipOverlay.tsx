@@ -39,6 +39,8 @@ export function DayChipOverlay({
     <View testID="sheet-daychip-root" className="flex-row items-center gap-sm">
       <Pressable
         testID="sheet-daychip-back"
+        accessibilityRole="button"
+        accessibilityLabel="뒤로"
         onPress={onBack}
         style={overlayShadow}
         className="h-[36px] w-[36px] items-center justify-center rounded-pill bg-canvas"
@@ -52,6 +54,7 @@ export function DayChipOverlay({
             key={day.label}
             testID={`sheet-daychip-${index}`}
             onPress={() => onSelectDay(index)}
+            accessibilityRole="button"
             accessibilityState={{ selected }}
             className={`rounded-pill px-md py-[6px] ${selected ? 'bg-primary' : 'border border-hairline-strong bg-canvas'}`}
           >

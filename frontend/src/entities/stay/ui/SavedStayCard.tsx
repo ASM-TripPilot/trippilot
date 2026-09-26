@@ -146,6 +146,7 @@ export function SavedStayCard({
   return (
     <Pressable
       testID={testID}
+      accessibilityRole="button"
       accessibilityState={{ selected }}
       onPress={onPress}
       style={cardShadow}

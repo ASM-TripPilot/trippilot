@@ -424,3 +424,17 @@ describe("AC · '내 주변'이 화면 어디에도 없다 (이월 유지)", () 
     expect(screen.queryByText('내 주변')).toBeNull();
   });
 });
+
+describe('🔴 TRIP-991 · 앱바 뒤로 접근성 (AC-1 role · AC-2 라벨)', () => {
+  it('앱바 뒤로는 VoiceOver 에 "뒤로" 버튼으로 읽히고, 누르면 onBack 이 1회 불린다', () => {
+    const onBack = jest.fn();
+    render(<RegionPickerScreen {...props({ onBack })} />);
+
+    // 역할(button)·이름("뒤로")으로 찾는다 — 둘 중 하나라도 없으면 여기서 실패한다.
+    const back = screen.getByRole('button', { name: '뒤로' });
+    expect(back).toHaveProp('testID', 'explore-region-back');
+
+    fireEvent.press(back);
+    expect(onBack).toHaveBeenCalledTimes(1);
+  });
+});

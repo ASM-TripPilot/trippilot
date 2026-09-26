@@ -62,6 +62,7 @@ export function NicknameEditRow({
             />
             <Pressable
               testID="settings-nickname-save"
+              accessibilityRole="button"
               onPress={() => onSubmit(draft)}
               className="h-11 items-center justify-center rounded-button bg-ink px-lg"
             >

@@ -375,7 +375,13 @@ export function RegionPickerScreen({
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-canvas">
       <View className="flex-row items-center gap-sm px-lg py-sm">
-        <Pressable testID="explore-region-back" onPress={onBack} hitSlop={8}>
+        <Pressable
+          testID="explore-region-back"
+          accessibilityRole="button"
+          accessibilityLabel="뒤로"
+          onPress={onBack}
+          hitSlop={8}
+        >
           <BackChevronGlyph />
         </Pressable>
         <Text className="font-noto-bold text-section font-bold text-ink">

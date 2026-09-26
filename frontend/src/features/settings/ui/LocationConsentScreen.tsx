@@ -58,6 +58,9 @@ const USAGE_ITEMS = [
   },
 ] as const;
 
+/** 토글 카드 제목 — 스위치 이름(accessibilityLabel)도 이 값을 쓴다(카피 수정 시 둘이 어긋나지 않게). */
+const TOGGLE_TITLE = '위치정보 수집';
+
 /** 카드 그림자(Figma 0,2,10 · 6%) — 그림자는 className 으로 못 준다(HomeScreen 선례). */
 const CARD_SHADOW = {
   shadowColor: '#000000',
@@ -162,7 +165,7 @@ export function LocationConsentScreen({
         >
           <View className="flex-1">
             <Text className="font-noto-bold text-card-title text-ink">
-              위치정보 수집
+              {TOGGLE_TITLE}
             </Text>
             <Text className="mt-[3px] text-[12.5px] font-noto text-muted">
               {subtitle}
@@ -170,6 +173,7 @@ export function LocationConsentScreen({
           </View>
           <Toggle
             testID="settings-location-toggle"
+            accessibilityLabel={TOGGLE_TITLE}
             checked={consentOn}
             disabled={disabled}
             onPress={handleTogglePress}

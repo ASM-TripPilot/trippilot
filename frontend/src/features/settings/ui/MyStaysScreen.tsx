@@ -158,7 +158,12 @@ export function MyStaysScreen({
       <View testID="my-stays-root" className="flex-1 bg-canvas">
         {/* 앱바 — 뒤로 + 타이틀 + 하단 hairline */}
         <View className="flex-row items-center gap-md border-b border-hairline px-lg pb-[14px] pt-sm">
-          <Pressable accessibilityRole="button" onPress={onPressBack}>
+          <Pressable
+            testID="my-stays-back"
+            accessibilityRole="button"
+            accessibilityLabel="뒤로"
+            onPress={onPressBack}
+          >
             <ChevronLeftGlyph />
           </Pressable>
           <Text className="text-[18px] font-noto-bold text-ink">

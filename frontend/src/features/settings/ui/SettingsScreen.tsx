@@ -159,6 +159,7 @@ export function SettingsScreen({
               right={
                 <Toggle
                   testID="settings-affiliate-toggle"
+                  accessibilityLabel={row.label}
                   checked={affiliateNoticeOn === true}
                   disabled={affiliateNoticeOn == null}
                   onPress={() => onToggleAffiliateNotice?.()}

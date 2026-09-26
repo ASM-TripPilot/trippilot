@@ -220,3 +220,17 @@ describe('AC-5 · INV-3 소요시간 미표시(렌더, 선제 green 회귀 앵�
     expect(screen.queryAllByText(DURATION)).toHaveLength(0);
   });
 });
+
+describe('🔴 TRIP-991 · 앱바 뒤로 접근성 (AC-2)', () => {
+  it('앱바 뒤로는 "뒤로" 버튼으로 읽히고, 누르면 onPressBack 이 1회 불린다', () => {
+    const onPressBack = jest.fn();
+    renderScreen({ onPressBack });
+
+    // 역할·이름으로 먼저 찾고 testID 는 뒤에 확인한다 — 라벨 누락과 testID 누락이 따로 드러난다.
+    const back = screen.getByRole('button', { name: '뒤로' });
+    expect(back).toHaveProp('testID', 'my-stays-back');
+
+    fireEvent.press(back);
+    expect(onPressBack).toHaveBeenCalledTimes(1);
+  });
+});

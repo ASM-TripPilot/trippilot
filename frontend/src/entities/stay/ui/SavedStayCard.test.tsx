@@ -385,3 +385,35 @@ describe('SavedStayCard — e04 vertical Figma 정합 (TRIP-729)', () => {
     expect(screen.getByText('해운대 오션뷰')).toBeOnTheScreen();
   });
 });
+
+describe('🔴 SavedStayCard — TRIP-991 vertical 카드 버튼 역할 (AC-1 · AC-4)', () => {
+  it('vertical 카드는 숙소 이름의 버튼으로 읽히고, 선택 상태가 그대로 유지된다', () => {
+    render(
+      <SavedStayCard
+        testID="saved-stay-card-ss-1"
+        name="해운대 오션뷰"
+        layout="vertical"
+        selected
+      />
+    );
+
+    expect(
+      screen.getByRole('button', { name: '해운대 오션뷰', selected: true })
+    ).toHaveProp('testID', 'saved-stay-card-ss-1');
+  });
+
+  it('vertical 카드 버튼을 누르면 onPress 가 1회 불린다', () => {
+    const onPress = jest.fn();
+    render(
+      <SavedStayCard
+        testID="saved-stay-card-ss-1"
+        name="해운대 오션뷰"
+        layout="vertical"
+        onPress={onPress}
+      />
+    );
+
+    fireEvent.press(screen.getByRole('button', { name: '해운대 오션뷰' }));
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+});

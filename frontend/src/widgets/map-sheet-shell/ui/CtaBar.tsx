@@ -13,8 +13,8 @@ export interface CtaButton {
   variant: 'primary' | 'outline';
   onPress: () => void;
   /** 비활성(TRIP-799 D6·AC-9). 참이면 CtaBar 가 `<Pressable disabled>`(+회색)로 렌더해 press 가
-   *  onPress 를 안 부른다. 미전달=활성(기존 소비처 무변경). 타입 선언만 — 렌더 배선은 [구현] 몫
-   *  (CTA3 가 red 로 강제). h14 PARTIAL 잠금이 이 값을 쓴다(isConfirmLocked). */
+   *  onPress 를 안 부른다. 미전달=활성(기존 소비처 무변경). 렌더 배선은 아래 CtaBar 본문
+   *  (CTA3 가 잠금). h14 PARTIAL 잠금이 이 값을 쓴다(isConfirmLocked). */
   disabled?: boolean;
 }
 
@@ -42,6 +42,7 @@ export function CtaBar({ buttons }: CtaBarProps): ReactElement {
           <Pressable
             key={button.label}
             testID={`sheet-cta-button-${index}`}
+            accessibilityRole="button"
             onPress={button.onPress}
             disabled={disabled}
             className={`h-[52px] items-center justify-center rounded-card ${shape}`}
