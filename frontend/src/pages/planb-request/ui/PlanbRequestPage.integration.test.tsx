@@ -1,6 +1,13 @@
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react-native';
 
 import { useReplanFormStore } from '@/features/planb/model/replanFormStore';
+import type { ReplanOrigin } from '@/features/planb/model/replanOrigin';
 import type {
   Itinerary,
   Trigger,
@@ -23,6 +30,10 @@ import { PlanbRequestPage } from './PlanbRequestPage';
  * seam 목(02a ★10): 페이지가 소비하는 래퍼 3개(`useStartReplan`·`useActiveTriggers`·`useLiveItinerary`)를
  * 목한다. 목 데이터는 같은 참조를 돌려준다(TanStack 구조 공유와 같다 — 새 객체면 가짜 루프).
  * jest.mock 팩토리는 `mock` 접두 변수만 볼 수 있다(호이스팅).
+ *
+ * TRIP-979: 제출은 이제 GPS origin 을 **먼저 읽고**(seam `useReplanGpsOrigin`, 목) 그 뒤에 POST 한다 —
+ * 누른 직후가 아니라 한 박자 뒤에 mutate 가 불린다. 그래서 제출은 `await submit()`(누르고 mutate 가
+ * 불릴 때까지 기다림)으로 쓴다. 기본 목은 origin 없음(undefined) → 기존 body(originKind:null) 그대로.
  */
 
 let mockPhase: 'idle' | 'success' | 'conflict' | 'serverError' | 'network' =
@@ -63,6 +74,15 @@ jest.mock('@/features/planb/model/useStartReplan', () => ({
     isPending: false,
     isError: false,
   }),
+}));
+
+// TRIP-979 seam — 동의·권한·측위는 이 훅 뒤에 숨는다(그 판정은 useReplanGpsOrigin.test 가 잠근다).
+// 기본은 origin 없음. 테스트가 GPS 조각·보류(deferred)로 바꿔 끼운다.
+const mockReadOrigin = jest.fn((): Promise<ReplanOrigin | undefined> =>
+  Promise.resolve(undefined)
+);
+jest.mock('@/features/planb/model/useReplanGpsOrigin', () => ({
+  useReplanGpsOrigin: () => () => mockReadOrigin(),
 }));
 
 jest.mock('@/features/planb/model/useActiveTriggers', () => ({
@@ -171,7 +191,16 @@ beforeEach(() => {
   mockTriggerData = triggerList();
   mockItineraryData = ITINERARY;
   useReplanFormStore.getState().reset();
+  mockReadOrigin
+    .mockReset()
+    .mockImplementation(() => Promise.resolve(undefined));
 });
+
+/** [AI가 다시 짜기]를 누르고, mutate 가 누적 `calls` 회 불릴 때까지 기다린다(GPS 읽기 뒤 POST). */
+async function submit(calls = 1): Promise<void> {
+  fireEvent.press(screen.getByTestId('planb-request-submit'));
+  await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(calls));
+}
 
 function postedBody(): unknown {
   expect(mockMutate).toHaveBeenCalledTimes(1);
@@ -210,7 +239,7 @@ const body = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('I1·I2 · 수동 진입 제출 (AC-6 · BR-U4-10·12)', () => {
-  it('🔴 I1 정적 날씨 + 자유텍스트를 조립해 POST(triggerId null)하고, 성공하면 받은 세션 id 로 solving 에 replace 한다 (TRIP-752 AC-10)', () => {
+  it('🔴 I1 정적 날씨 + 자유텍스트를 조립해 POST(triggerId null)하고, 성공하면 받은 세션 id 로 solving 에 replace 한다 (TRIP-752 AC-10)', async () => {
     mockPhase = 'success';
     render(<PlanbRequestPage tripId={TRIP_ID} />);
 
@@ -219,7 +248,7 @@ describe('I1·I2 · 수동 진입 제출 (AC-6 · BR-U4-10·12)', () => {
       screen.getByTestId('planb-request-freetext'),
       '광안리 야경'
     );
-    fireEvent.press(screen.getByTestId('planb-request-submit'));
+    await submit();
 
     expect(postedBody()).toEqual(
       body({ reasons: ['WEATHER'], freeText: '광안리 야경' })
@@ -230,10 +259,10 @@ describe('I1·I2 · 수동 진입 제출 (AC-6 · BR-U4-10·12)', () => {
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
-  it('🔴 I1b 제출 직후에는 아무 데도 가지 않고, 성공 콜백이 불린 뒤에만 solving 으로 간다 (TRIP-752 AC-10 · 751 차단-1)', () => {
+  it('🔴 I1b 제출 직후에는 아무 데도 가지 않고, 성공 콜백이 불린 뒤에만 solving 으로 간다 (TRIP-752 AC-10 · 751 차단-1)', async () => {
     render(<PlanbRequestPage tripId={TRIP_ID} />);
 
-    fireEvent.press(screen.getByTestId('planb-request-submit'));
+    await submit();
 
     expect(mockMutate).toHaveBeenCalledTimes(1);
     expect(forwardDestinations()).toEqual([]);
@@ -248,17 +277,17 @@ describe('I1·I2 · 수동 진입 제출 (AC-6 · BR-U4-10·12)', () => {
     expect(mockPush).not.toHaveBeenCalled();
   });
 
-  it('I2 아무것도 안 골라도 빈 배열·freeText null 로 POST 된다', () => {
+  it('I2 아무것도 안 골라도 빈 배열·freeText null 로 POST 된다', async () => {
     render(<PlanbRequestPage tripId={TRIP_ID} />);
 
-    fireEvent.press(screen.getByTestId('planb-request-submit'));
+    await submit();
 
     expect(postedBody()).toEqual(body());
   });
 });
 
 describe('🔴 I3 · 트리거 진입 — 감지 칩 시드 + 새 카탈로그 body (AC-6 완료 조건 · AC-7)', () => {
-  it('감지 칩이 선택된 채 시작하고, 새 방향 key 와 triggerId 가 body 로 나간다', () => {
+  it('감지 칩이 선택된 채 시작하고, 새 방향 key 와 triggerId 가 body 로 나간다', async () => {
     mockTriggerData = triggerList(mkTrigger());
     render(<PlanbRequestPage tripId={TRIP_ID} triggerId="trg-1" />);
 
@@ -277,7 +306,7 @@ describe('🔴 I3 · 트리거 진입 — 감지 칩 시드 + 새 카탈로그 b
     fireEvent.press(
       screen.getByTestId('planb-request-directive-AVOID_OUTDOOR')
     );
-    fireEvent.press(screen.getByTestId('planb-request-submit'));
+    await submit();
 
     expect(postedBody()).toEqual(
       body({
@@ -308,7 +337,7 @@ describe('🔴 I5 · CLOSURE·DELAY 트리거 — 매핑 key 로 시드·숨김�
     ['DELAY', '이동 지연 · 해운대 해변 방면', 'SLOW_MOVE'],
   ] as const)(
     '%s 면 감지 칩 "%s" 가 %s 로 선택되고 정적 날씨·그 key 칩이 숨는다',
-    (kind, copy, reasonKey) => {
+    async (kind, copy, reasonKey) => {
       mockTriggerData = triggerList(mkTrigger({ kind }));
       render(<PlanbRequestPage tripId={TRIP_ID} triggerId="trg-1" />);
 
@@ -320,7 +349,7 @@ describe('🔴 I5 · CLOSURE·DELAY 트리거 — 매핑 key 로 시드·숨김�
         screen.queryByTestId(`planb-request-reason-${reasonKey}`)
       ).toBeNull();
 
-      fireEvent.press(screen.getByTestId('planb-request-submit'));
+      await submit();
       expect(postedBody()).toEqual(
         body({ reasons: [reasonKey], triggerId: 'trg-1' })
       );
@@ -329,7 +358,7 @@ describe('🔴 I5 · CLOSURE·DELAY 트리거 — 매핑 key 로 시드·숨김�
 });
 
 describe('I6 · 감지 트리거가 성립하지 않는 진입 — 칩 0 · 정적 날씨 (AC-7)', () => {
-  it('I6a triggerId 가 활성 목록에 없으면 칩이 없고 triggerId 는 null 이다', () => {
+  it('I6a triggerId 가 활성 목록에 없으면 칩이 없고 triggerId 는 null 이다', async () => {
     mockTriggerData = triggerList(mkTrigger());
     render(<PlanbRequestPage tripId={TRIP_ID} triggerId="trg-x" />);
 
@@ -338,7 +367,7 @@ describe('I6 · 감지 트리거가 성립하지 않는 진입 — 칩 0 · 정�
       screen.getByTestId('planb-request-reason-WEATHER')
     ).toBeOnTheScreen();
 
-    fireEvent.press(screen.getByTestId('planb-request-submit'));
+    await submit();
     expect(postedBody()).toEqual(body());
   });
 
@@ -352,7 +381,7 @@ describe('I6 · 감지 트리거가 성립하지 않는 진입 — 칩 0 · 정�
     ).toBeOnTheScreen();
   });
 
-  it('I6c triggerId 없이 들어오면 활성 트리거가 있어도 칩이 없고 triggerId 는 null 이다(02a ★13)', () => {
+  it('I6c triggerId 없이 들어오면 활성 트리거가 있어도 칩이 없고 triggerId 는 null 이다(02a ★13)', async () => {
     mockTriggerData = triggerList(mkTrigger());
     render(<PlanbRequestPage tripId={TRIP_ID} />);
 
@@ -361,7 +390,7 @@ describe('I6 · 감지 트리거가 성립하지 않는 진입 — 칩 0 · 정�
       screen.getByTestId('planb-request-reason-WEATHER')
     ).toBeOnTheScreen();
 
-    fireEvent.press(screen.getByTestId('planb-request-submit'));
+    await submit();
     expect(postedBody()).toEqual(body());
   });
 });
@@ -387,7 +416,7 @@ describe('🔴 I7 · 트리거 조회 중엔 정적 날씨, 도착하면 감지 
 });
 
 describe('🔴 I8 · 진입 초기화 후 set 시드 (Q4 · 02a ★11)', () => {
-  it('이전 방문의 선택이 남지 않고, 이미 켜져 있던 WEATHER 도 꺼지지 않는다', () => {
+  it('이전 방문의 선택이 남지 않고, 이미 켜져 있던 WEATHER 도 꺼지지 않는다', async () => {
     const store = useReplanFormStore.getState();
     store.setScope('FULL_DAY');
     store.toggleReason('LOW_ENERGY');
@@ -410,7 +439,7 @@ describe('🔴 I8 · 진입 초기화 후 set 시드 (Q4 · 02a ★11)', () => {
     expect(screen.getByTestId('planb-request-freetext').props.value).toBe('');
     expect(screen.getByTestId(TRIGGER_CHIP)).toBeSelected();
 
-    fireEvent.press(screen.getByTestId('planb-request-submit'));
+    await submit();
     expect(postedBody()).toEqual(
       body({ reasons: ['WEATHER'], triggerId: 'trg-1' })
     );
@@ -418,11 +447,11 @@ describe('🔴 I8 · 진입 초기화 후 set 시드 (Q4 · 02a ★11)', () => {
 });
 
 describe('I9 · URL scope 시드 (TRIP-561 결정 3 · 02a ★9)', () => {
-  it('🔴 scope=FULL_DAY 면 오늘 전체로 시작해 그 범위로 제출된다', () => {
+  it('🔴 scope=FULL_DAY 면 오늘 전체로 시작해 그 범위로 제출된다', async () => {
     render(<PlanbRequestPage tripId={TRIP_ID} scope="FULL_DAY" />);
 
     expect(screen.getByTestId('planb-request-scope-FULL_DAY')).toBeSelected();
-    fireEvent.press(screen.getByTestId('planb-request-submit'));
+    await submit();
     expect(postedBody()).toEqual(body({ scope: 'FULL_DAY' }));
   });
 
@@ -436,7 +465,7 @@ describe('I9 · URL scope 시드 (TRIP-561 결정 3 · 02a ★9)', () => {
 });
 
 describe('🔴 I10 · 감지 칩을 끄면 다시 켜지지 않는다 (AC-2c · 02a ★12)', () => {
-  it('칩을 끄고 입력을 이어가도 꺼진 채이고, triggerId 는 선택과 무관하게 실린다(Q3)', () => {
+  it('칩을 끄고 입력을 이어가도 꺼진 채이고, triggerId 는 선택과 무관하게 실린다(Q3)', async () => {
     mockTriggerData = triggerList(mkTrigger());
     render(<PlanbRequestPage tripId={TRIP_ID} triggerId="trg-1" />);
 
@@ -446,7 +475,7 @@ describe('🔴 I10 · 감지 칩을 끄면 다시 켜지지 않는다 (AC-2c · 
     fireEvent.changeText(screen.getByTestId('planb-request-freetext'), '실내');
     expect(screen.getByTestId(TRIGGER_CHIP)).not.toBeSelected();
 
-    fireEvent.press(screen.getByTestId('planb-request-submit'));
+    await submit();
     expect(postedBody()).toEqual(
       body({ freeText: '실내', triggerId: 'trg-1' })
     );
@@ -495,7 +524,7 @@ describe('🔴 I11·I12 · 닫기 = 라우트 이탈 (AC-8 · Q8)', () => {
 });
 
 describe('🔴 I13 · 로딩 중 켠 사유 위에 도착한 시드는 set 이다 (Q4 · 02a ★11 · 5-b 경고-1)', () => {
-  it('로딩 중 정적 날씨를 켠 뒤 WEATHER 트리거가 도착해도 감지 칩은 켜진 채다', () => {
+  it('로딩 중 정적 날씨를 켠 뒤 WEATHER 트리거가 도착해도 감지 칩은 켜진 채다', async () => {
     mockTriggerData = undefined;
     const { rerender } = render(
       <PlanbRequestPage tripId={TRIP_ID} triggerId="trg-1" />
@@ -506,7 +535,7 @@ describe('🔴 I13 · 로딩 중 켠 사유 위에 도착한 시드는 set 이�
     rerender(<PlanbRequestPage tripId={TRIP_ID} triggerId="trg-1" />);
 
     expect(screen.getByTestId(TRIGGER_CHIP)).toBeSelected();
-    fireEvent.press(screen.getByTestId('planb-request-submit'));
+    await submit();
     expect(postedBody()).toEqual(
       body({ reasons: ['WEATHER'], triggerId: 'trg-1' })
     );
@@ -514,7 +543,7 @@ describe('🔴 I13 · 로딩 중 켠 사유 위에 도착한 시드는 set 이�
 });
 
 describe('🔴 I14 · 트리거가 목록에서 빠졌다 돌아와도 다시 시드하지 않는다 (02a ★12 · 5-b 참고-1)', () => {
-  it('감지 칩을 끈 뒤 트리거가 잠깐 사라졌다 돌아와도 칩은 꺼진 채다', () => {
+  it('감지 칩을 끈 뒤 트리거가 잠깐 사라졌다 돌아와도 칩은 꺼진 채다', async () => {
     mockTriggerData = triggerList(mkTrigger());
     const { rerender } = render(
       <PlanbRequestPage tripId={TRIP_ID} triggerId="trg-1" />
@@ -527,7 +556,7 @@ describe('🔴 I14 · 트리거가 목록에서 빠졌다 돌아와도 다시 �
     rerender(<PlanbRequestPage tripId={TRIP_ID} triggerId="trg-1" />);
 
     expect(screen.getByTestId(TRIGGER_CHIP)).not.toBeSelected();
-    fireEvent.press(screen.getByTestId('planb-request-submit'));
+    await submit();
     expect(postedBody()).toEqual(body({ triggerId: 'trg-1' }));
   });
 });
@@ -541,7 +570,7 @@ describe('🔴 I15 · 감지 칩이 정적 칩을 숨기면 숨긴 칩의 선택
     ['DELAY', 'SLOW_MOVE'],
   ] as const)(
     'I15a 로딩 중 날씨·체력 저하를 켠 뒤 %s 트리거가 오면 숨은 날씨만 빠지고 %s 가 켜진다',
-    (kind, reasonKey) => {
+    async (kind, reasonKey) => {
       mockTriggerData = undefined;
       const { rerender } = render(
         <PlanbRequestPage tripId={TRIP_ID} triggerId="trg-1" />
@@ -558,12 +587,12 @@ describe('🔴 I15 · 감지 칩이 정적 칩을 숨기면 숨긴 칩의 선택
       ).toBeSelected();
       expect(screen.getByTestId(TRIGGER_CHIP)).toBeSelected();
 
-      fireEvent.press(screen.getByTestId('planb-request-submit'));
+      await submit();
       expect(sortedReasons()).toEqual(['LOW_ENERGY', reasonKey].sort());
     }
   );
 
-  it('I15b 로딩 중 켠 정적 칩이 감지 칩 자신의 key 면 선택이 남는다', () => {
+  it('I15b 로딩 중 켠 정적 칩이 감지 칩 자신의 key 면 선택이 남는다', async () => {
     mockTriggerData = undefined;
     const { rerender } = render(
       <PlanbRequestPage tripId={TRIP_ID} triggerId="trg-1" />
@@ -574,7 +603,7 @@ describe('🔴 I15 · 감지 칩이 정적 칩을 숨기면 숨긴 칩의 선택
     rerender(<PlanbRequestPage tripId={TRIP_ID} triggerId="trg-1" />);
 
     expect(screen.getByTestId(TRIGGER_CHIP)).toBeSelected();
-    fireEvent.press(screen.getByTestId('planb-request-submit'));
+    await submit();
     expect(postedBody()).toEqual(
       body({ reasons: ['TEMP_CLOSED'], triggerId: 'trg-1' })
     );
@@ -620,11 +649,11 @@ describe('🔴 P-E · 시작 실패는 시트 안에 안내하고 이동하지 �
     expect(mockBack).not.toHaveBeenCalled();
   }
 
-  it('P-E1 409(여행 기간 밖)면 기간 안내를 띄우고 아무 데도 가지 않는다', () => {
+  it('P-E1 409(여행 기간 밖)면 기간 안내를 띄우고 아무 데도 가지 않는다', async () => {
     mockPhase = 'conflict';
     render(<PlanbRequestPage tripId={TRIP_ID} />);
 
-    fireEvent.press(screen.getByTestId('planb-request-submit'));
+    await submit();
 
     expect(mockMutate).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId(ERROR)).toHaveTextContent(CONFLICT_TEXT);
@@ -636,26 +665,26 @@ describe('🔴 P-E · 시작 실패는 시트 안에 안내하고 이동하지 �
     ['네트워크 오류', 'network'],
   ] as const)(
     'P-E2 %s 면 일반 실패 안내를 띄우고 아무 데도 가지 않는다',
-    (_label, phase) => {
+    async (_label, phase) => {
       mockPhase = phase;
       render(<PlanbRequestPage tripId={TRIP_ID} />);
 
-      fireEvent.press(screen.getByTestId('planb-request-submit'));
+      await submit();
 
       expect(screen.getByTestId(ERROR)).toHaveTextContent(GENERIC_TEXT);
       expectNoMove();
     }
   );
 
-  it('P-E3 다시 누르면 안내를 먼저 지우고, 새 실패는 안내 하나로 교체된다', () => {
+  it('P-E3 다시 누르면 안내를 먼저 지우고, 새 실패는 안내 하나로 교체된다', async () => {
     mockPhase = 'conflict';
     render(<PlanbRequestPage tripId={TRIP_ID} />);
-    fireEvent.press(screen.getByTestId('planb-request-submit'));
+    await submit();
     expect(screen.getByTestId(ERROR)).toHaveTextContent(CONFLICT_TEXT);
 
     // 응답이 아직 안 온 재시도 — 이때 안내가 남아 있으면 안 된다.
     mockPhase = 'idle';
-    fireEvent.press(screen.getByTestId('planb-request-submit'));
+    await submit(2);
     expect(mockMutate).toHaveBeenCalledTimes(2);
     expect(screen.queryByTestId(ERROR)).toBeNull();
 
@@ -667,4 +696,115 @@ describe('🔴 P-E · 시작 실패는 시트 안에 안내하고 이동하지 �
     expect(screen.getByTestId(ERROR)).toHaveTextContent(GENERIC_TEXT);
     expectNoMove();
   });
+});
+
+describe('🔴 P-G · TRIP-979 제출 직전 GPS origin 을 읽어 싣는다 (AC-A1·A3·A5 · BR-U4-17·19)', () => {
+  // lat ≠ lng — 축이 뒤바뀌면 드러난다.
+  const GPS_ORIGIN: ReplanOrigin = {
+    originKind: 'GPS',
+    originLat: 37.5512,
+    originLng: 126.9882,
+  };
+
+  /** 끝나지 않은 채 기다리는 origin 읽기 — 테스트가 resolve 를 쥔다(GPS 대기 중 상황). */
+  function deferOrigin(): (value: ReplanOrigin | undefined) => void {
+    let resolve!: (value: ReplanOrigin | undefined) => void;
+    mockReadOrigin.mockImplementation(
+      () =>
+        new Promise<ReplanOrigin | undefined>((r) => {
+          resolve = r;
+        })
+    );
+    return (value) => resolve(value);
+  }
+
+  it('P-G1 읽기가 GPS 조각을 주면 body 에 originKind GPS 와 좌표가 실린다', async () => {
+    mockReadOrigin.mockResolvedValue(GPS_ORIGIN);
+    render(<PlanbRequestPage tripId={TRIP_ID} />);
+
+    await submit();
+
+    expect(mockReadOrigin).toHaveBeenCalledTimes(1);
+    expect(postedBody()).toStrictEqual(
+      body({ originKind: 'GPS', originLat: 37.5512, originLng: 126.9882 })
+    );
+  });
+
+  it('P-G2 위치를 다 읽기 전에는 POST 하지 않고, 읽기가 끝나면 그 origin 으로 POST 한다', async () => {
+    const finishRead = deferOrigin();
+    render(<PlanbRequestPage tripId={TRIP_ID} />);
+
+    fireEvent.press(screen.getByTestId('planb-request-submit'));
+    // 대기 중 — 마이크로태스크를 흘려도 아직 POST 0.
+    await act(async () => {});
+    expect(mockReadOrigin).toHaveBeenCalledTimes(1);
+    expect(mockMutate).not.toHaveBeenCalled();
+
+    await act(async () => finishRead(GPS_ORIGIN));
+
+    await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1));
+    expect(postedBody()).toStrictEqual(
+      body({ originKind: 'GPS', originLat: 37.5512, originLng: 126.9882 })
+    );
+  });
+
+  it('P-G3 읽기가 origin 을 못 주면(동의 OFF·권한 없음·실패·5초 초과) 막지 않고 기존 body 로 POST, 위치 입력 화면으로 새지 않는다', async () => {
+    mockPhase = 'success';
+    render(<PlanbRequestPage tripId={TRIP_ID} />);
+
+    await submit();
+
+    expect(mockReadOrigin).toHaveBeenCalledTimes(1);
+    const data = postedBody();
+    // 키 부재가 정본 — toStrictEqual 은 "값 undefined 인 키"도 다르다고 본다.
+    expect(data).toStrictEqual(body());
+    expect(data).not.toHaveProperty('originLat');
+    expect(data).not.toHaveProperty('originLng');
+    // 이동은 solving 한 곳뿐 — live/location 우회 0(결정1).
+    expect(forwardDestinations()).toEqual(['/trips/[tripId]/planb/solving']);
+  });
+
+  it('P-G4 GPS 를 기다리는 동안 두 번 눌러도 위치 읽기·POST 는 각각 1회다', async () => {
+    const finishRead = deferOrigin();
+    render(<PlanbRequestPage tripId={TRIP_ID} />);
+
+    fireEvent.press(screen.getByTestId('planb-request-submit'));
+    fireEvent.press(screen.getByTestId('planb-request-submit'));
+    expect(mockReadOrigin).toHaveBeenCalledTimes(1);
+
+    await act(async () => finishRead(GPS_ORIGIN));
+    await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1));
+    // 두 번째 누름이 뒤늦게 줄 서서 나가지도 않는다.
+    await act(async () => {});
+    expect(mockMutate).toHaveBeenCalledTimes(1);
+    expect(mockReadOrigin).toHaveBeenCalledTimes(1);
+  });
+
+  // 03b 경고-1 — 화면이 사라진 뒤 POST 가 나가면 서버는 기존 열린 세션을 취소하고 아무도 안 보는 새
+  // 세션을 연다. 실제 TanStack 은 언마운트 뒤 호출별 콜백을 부르지 않아 이동·안내도 없다.
+  // 스크림을 거치지 않는 언마운트(안드로이드 뒤로 버튼·제스처)도 같은 계약이다.
+  it.each([
+    ['스크림을 누른 뒤 언마운트', true],
+    ['스크림 없이 곧바로 언마운트', false],
+  ])(
+    'P-G5 GPS 를 기다리는 동안 화면이 사라지면(%s) 읽기가 끝나도 POST 하지 않는다',
+    async (_label, pressScrim) => {
+      mockPhase = 'success';
+      const finishRead = deferOrigin();
+      const { unmount } = render(<PlanbRequestPage tripId={TRIP_ID} />);
+
+      fireEvent.press(screen.getByTestId('planb-request-submit'));
+      await act(async () => {});
+      expect(mockReadOrigin).toHaveBeenCalledTimes(1);
+      if (pressScrim)
+        fireEvent.press(screen.getByTestId('planb-request-scrim'));
+      unmount();
+
+      await act(async () => finishRead(GPS_ORIGIN));
+      await act(async () => {});
+
+      expect(mockMutate).not.toHaveBeenCalled();
+      expect(forwardDestinations()).toEqual([]);
+    }
+  );
 });

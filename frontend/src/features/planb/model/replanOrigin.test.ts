@@ -6,7 +6,11 @@ import path from 'path';
 
 import { StartReplanRequestOriginKind } from '@/shared/api/generated/schemas/startReplanRequestOriginKind';
 import type { ReplanOrigin } from './replanOrigin';
-import { buildManualOrigin, isEstimatedOrigin } from './replanOrigin';
+import {
+  buildGpsOrigin,
+  buildManualOrigin,
+  isEstimatedOrigin,
+} from './replanOrigin';
 import { buildStartReplanRequest } from './replanRequest';
 
 /**
@@ -146,6 +150,47 @@ describe('🔴 M4 · AC-3 — isEstimatedOrigin: GPS 만 실측, 그 외 전부 
     [null, true],
   ] as const)('originKind=%s → 추정 여부 %s', (kind, expected) => {
     expect(isEstimatedOrigin(kind)).toBe(expected);
+  });
+});
+
+describe('🔴 G1 · TRIP-979 AC-A1 — buildGpsOrigin: 측위 좌표 → GPS origin 조각', () => {
+  // lat ≠ lng — 축이 뒤바뀌면 드러난다.
+  const coords = { lat: 37.5512, lng: 126.9882 };
+
+  it('좌표를 originKind:GPS + originLat/originLng 로 조립한다(정확히 3키 · MANUAL 과 같은 모양)', () => {
+    const origin = buildGpsOrigin(coords);
+
+    expect(origin).toStrictEqual({
+      originKind: 'GPS',
+      originLat: 37.5512,
+      originLng: 126.9882,
+    });
+    // GPS 는 실측 — "(추정)" 을 붙이지 않는다(BR-U4-19 가정 표기).
+    expect(isEstimatedOrigin(origin.originKind)).toBe(false);
+  });
+
+  it('빌더에 넘기면 originKind:GPS + 좌표가 봉투에 실린다(9키)', () => {
+    const form = {
+      scope: 'PARTIAL_SLOTS' as const,
+      reasons: [],
+      directives: [],
+      freeText: '',
+    };
+
+    const result = buildStartReplanRequest(form, buildGpsOrigin(coords));
+
+    expect(result).toStrictEqual({
+      scope: 'PARTIAL_SLOTS',
+      originKind: 'GPS',
+      originLat: 37.5512,
+      originLng: 126.9882,
+      reasons: [],
+      directives: [],
+      freeText: null,
+      excludedPoiIds: [],
+      triggerId: null,
+    });
+    expect(Object.keys(result).sort()).toEqual(MANUAL_ENVELOPE_KEYS);
   });
 });
 

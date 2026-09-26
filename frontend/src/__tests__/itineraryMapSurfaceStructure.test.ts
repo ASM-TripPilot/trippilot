@@ -405,7 +405,7 @@ describe('S3 · AC-8 — 사진 도입이 화면·계약으로 새지 않았다 
    * `DraftScreen.tsx` 에 한 줄 느는 것은 이 조건이 금지하는 대상이 아니다(02a §3-5) — 그래서
    * 여기서 재는 것은 "화면 파일이 안 바뀌었다"가 아니라 **"사진 해결이 화면으로 새지 않았다"**다.
    */
-  it('MapPin 은 7필드(TRIP-745 state + TRIP-768 imageUrl·kind + TRIP-795 label additive 편입), DraftScreenProps 는 14필드(TRIP-791 fallbackNotice 제거), 화면에 에셋 해석 지문이 0건이다', () => {
+  it('MapPin 은 7필드(TRIP-745 state + TRIP-768 imageUrl·kind + TRIP-795 label additive 편입), DraftScreenProps 는 12필드(TRIP-791 fallbackNotice · TRIP-983 expandedSlotKey·renderSlotPanel 제거), 화면에 에셋 해석 지문이 0건이다', () => {
     const mapCoreSource = readOne(MAP_CORE_REL);
     const screenSource = readOne(SCREEN_REL);
 
@@ -459,15 +459,11 @@ describe('S3 · AC-8 — 사진 도입이 화면·계약으로 새지 않았다 
       // 조건부 마운트하는 `SlotCandidatePanelContainer` 로 이어진다. **프로퍼티형**
       // `onPressSlot?: (slotKey: string) => void` 여야 잡힌다(위와 동형).
       'onPressSlot',
-      // TRIP-483 — h12 바텀시트→인라인 패널 이관(3종, 후방호환 옵셔널·프로퍼티형).
-      //  · expandedSlotKey?: string | null — 어느 슬롯 패널이 열렸나(null=닫힘).
-      //  · renderSlotPanel?: (slotKey: string) => ReactNode — DraftPage 가 공급, 화면은 매칭
-      //    카드 slotKey 로만 호출(패널 조립은 배선 몫). **한 줄 유지**(여러 줄이면 내부 `slotKey:`
-      //    가 2칸 들여쓰기로 오지 않게 — interfaceFields 정규식 안전, 02a §1-A).
-      //  · onManualPlan?: () => void — 「처음부터 직접」·「직접 고르기」 공통(→ manual 라우트).
-      // 이 순서 그대로(toEqual 순서 민감). 12→15 는 additive 계약 변경(B 카운터 이행분).
-      'expandedSlotKey',
-      'renderSlotPanel',
+      // TRIP-483 — onManualPlan?: () => void — 「처음부터 직접」·「직접 고르기」 공통(→ manual 라우트).
+      // TRIP-983 — `expandedSlotKey`·`renderSlotPanel` 삭제(14→12). 카드 아래 인라인 자리는 바텀시트가
+      // 스크롤 안에 깔리는 결함의 원인이었다 — 교체 시트는 `DraftPage` 가 화면 루트 형제로 단독
+      // 마운트한다(features 층은 pages 컨테이너를 못 물어 prop 없이는 화면이 시트를 그릴 길이 없다).
+      // 정당한 계약 플립(이행 체크포인트 B). 이 순서 그대로(toEqual 순서 민감).
       'onManualPlan',
     ]);
 

@@ -24,6 +24,14 @@ export function buildManualOrigin(coords: {
   return { originKind: 'MANUAL', originLat: coords.lat, originLng: coords.lng };
 }
 
+/** 단말 측위 좌표 → GPS origin 조각(TRIP-979). `buildManualOrigin` 과 같은 3키 모양. */
+export function buildGpsOrigin(coords: {
+  lat: number;
+  lng: number;
+}): ReplanOrigin {
+  return { originKind: 'GPS', originLat: coords.lat, originLng: coords.lng };
+}
+
 /** "(추정)" 표기 판정 — GPS 만 실측, 그 외(MANUAL·LAST_VISIT·STAY_ANCHOR·null)는 추정.
  * 세션 originEstimated 되읽기 금지, originKind 로 로컬 즉시 도출한다(BR-U4-19, Seed 결정). */
 export function isEstimatedOrigin(

@@ -17,7 +17,7 @@ import { StateNotice } from '@/shared/ui/StateNotice';
  * usePlaceDetail(tripId) 조회 → 오늘 슬롯에서 poiId 를 찾아 buildPlaceDetailView 로 뷰 1회 조립 →
  * PlaceDetailScreen. 시각·순서는 솔버 검증값이라 재계산하지 않는다(INV-2).
  *
- * TRIP-755(i10): 원형 뒤로는 히스토리가 있으면 back, 없으면(콜드 딥링크 — 앱 안 push 경로 0건)
+ * TRIP-755(i10): 원형 뒤로는 히스토리가 있으면 back, 없으면(콜드 딥링크 — 앱 안 진입은 i01 슬롯 이름, TRIP-987)
  * 여행 중 허브로 replace 해 갇히지 않는다(d06 handleBack 선례). 공유는 OS 공유 시트에 장소명
  * (+주소)만 나른다(계약에 딥링크 URL 없음). 하트는 화면이 스스로 "준비 중"만 띄운다 — 배선 없음.
  *

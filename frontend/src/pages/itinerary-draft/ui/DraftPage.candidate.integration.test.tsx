@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
@@ -26,11 +27,13 @@ import { DraftPage } from './DraftPage';
  *
  * TRIP-793 변경: 인라인 패널(`itinerary-candidate-panel`)이 바텀시트(`itinerary-candidate-sheet` +
  * scrim)로 바뀌었고, **h08 지도+시트 셸의 슬롯 "다른 후보 ›" 트리거(옛 no-op)를 처음 실배선**한다.
- * 두 마운트 경로를 심판한다:
- *  - 경로1(DraftScreen · staleFailed) — 화면 자체 트리거 `itinerary-draft-alt-{slotKey}` +
- *    `renderSlotPanel`(무변경 인터페이스)이 컨테이너를 마운트한다.
+ * 두 얼굴을 심판한다(TRIP-983 부터 두 얼굴 모두 `DraftPage` 가 시트를 **화면 루트 형제**로 마운트):
+ *  - 경로1(DraftScreen · staleFailed) — 화면 자체 트리거 `itinerary-draft-alt-{slotKey}` 가
+ *    `onPressSlot` 으로 `editingSlotKey` 를 토글한다.
  *  - 경로2(h08 셸 · clean COMPLETE) — `SlotStopCard` 의 `slot-stopcard-alt-{slotKey}` 트리거가
  *    `onPressAlt`(옛 `() => {}`)를 통해 시트를 연다(첫 실배선).
+ *  - 경로3(폴백 dismiss → DraftScreen · TRIP-983, QA #024 재현) — 시트가 목록 스크롤 **밖**에,
+ *    트리 순서상 모든 카드·하단 두 버튼 **뒤**에 산다(F1·F2 짝). 실제 겹침·딤 터치 차단은 6-b 몫.
  *
  * 3동작 뼈대: 준비=가짜 서버 응답 → 실행=트리거/닫기/manual press → 단언=마운트·POST·push.
  */
@@ -166,7 +169,7 @@ let postBody: unknown = null;
 
 const SHEET = 'itinerary-candidate-sheet';
 
-/** DraftScreen 자체 트리거(renderSlotPanel 경로). */
+/** DraftScreen 자체 트리거(경로1·경로3). */
 function draftAltId(poiId: string): string {
   return `itinerary-draft-alt-${buildSlotKey(DAY1, poiId)}`;
 }
@@ -225,7 +228,7 @@ function renderPage() {
   return render(<DraftPage tripId={TRIP_ID} />, { wrapper: Wrapper });
 }
 
-// ─── 경로1: DraftScreen(staleFailed) · renderSlotPanel 마운트 ─────────────────
+// ─── 경로1: DraftScreen(staleFailed) · 형제 마운트 ───────────────────────────
 describe('🔴 D1 · AC-1 — 배선 전엔 시트가 없다 (조건부 마운트 · DraftScreen 경로)', () => {
   it('아무 트리거도 누르기 전엔 시트가 트리에 없고 slot-candidates POST 도 0건이다', async () => {
     renderPage();
@@ -345,5 +348,105 @@ describe('🔴 D7~D9 · h08 셸 트리거 실배선 (no-op → 실배선 · clea
 
     expect(screen.queryByTestId(stopcardAltId('poi-fixed'))).toBeNull();
     expect(screen.getByTestId(stopcardAltId('poi-a'))).toBeOnTheScreen();
+  });
+});
+
+// ─── 경로3: 폴백 dismiss → DraftScreen (TRIP-983 · QA #024 재현) ───────────────
+describe('🔴 F1~F3 · TRIP-983 — 폴백 얼굴의 "다른 후보" 시트는 목록 스크롤 밖, 목록 뒤에 산다', () => {
+  const SCRIM = 'itinerary-candidate-scrim';
+  const SCROLL = 'itinerary-draft-scroll';
+  const LIST_IDS = [
+    draftCardId('poi-fixed'),
+    draftCardId('poi-a'),
+    draftCardId('poi-b'),
+    'itinerary-draft-manual',
+    'itinerary-draft-complete',
+  ];
+  const SHEET_IDS = [SCRIM, SHEET];
+
+  /** 폴백 추천안 — COMPLETE + DETERMINISTIC + isFallback 이라 `deterministic` 인터스티셜이 먼저 뜨고,
+   * "기본 일정 보기"(로컬 dismiss)를 눌러야 `<DraftScreen>` 갈래에 닿는다(셸 조건에서 빠짐). */
+  function fallbackItinerary(): Itinerary {
+    return {
+      itineraryId: 'itin-1',
+      tripId: TRIP_ID,
+      status: 'PLANNED',
+      solveMode: 'DETERMINISTIC',
+      generationMode: 'FULLY_AI',
+      generationState: 'COMPLETE',
+      isFallback: true,
+      days: days(),
+    };
+  }
+
+  let putCalls = 0;
+
+  beforeEach(() => {
+    putCalls = 0;
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        HttpResponse.json(fallbackItinerary())
+      ),
+      http.put(`${BASE}/trips/:tripId/itinerary`, () => {
+        putCalls += 1;
+        return HttpResponse.json(fallbackItinerary());
+      })
+    );
+  });
+
+  /** 인터스티셜 "기본 일정 보기" → 그 슬롯 "다른 후보 ›" → 시트가 뜰 때까지. */
+  async function openFallbackSheet(poiId: string): Promise<void> {
+    renderPage();
+    fireEvent.press(await screen.findByTestId('itinerary-fallback-view-plan'));
+    fireEvent.press(await screen.findByTestId(draftAltId(poiId)));
+    await screen.findByTestId(SHEET);
+  }
+
+  function escapeRe(text: string): string {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  it('F1 · AC-1 — 시트·딤이 뜨고, 둘 다 목록 스크롤(itinerary-draft-scroll)의 자손이 아니다', async () => {
+    await openFallbackSheet('poi-a');
+
+    expect(screen.getByTestId(SHEET)).toBeOnTheScreen();
+    expect(screen.getByTestId(SCRIM)).toBeOnTheScreen();
+
+    const scroll = screen.getByTestId(SCROLL);
+    // 손잡이 검증 — 카드는 이 스크롤 안에 있다(빈 손잡이면 아래 부재 단언이 공허하게 통과한다).
+    expect(within(scroll).getByTestId(draftCardId('poi-a'))).toBeOnTheScreen();
+    expect(within(scroll).queryByTestId(SHEET)).toBeNull();
+    expect(within(scroll).queryByTestId(SCRIM)).toBeNull();
+  });
+
+  it('F2 · AC-2 — 트리 순서상 딤·시트가 모든 카드와 「처음부터 직접」·「이대로 확정」보다 뒤에 온다', async () => {
+    // poi-a 는 첫 비고정 슬롯이라 뒤에 poi-b 카드·하단 두 버튼이 더 있다.
+    await openFallbackSheet('poi-a');
+
+    const pattern = new RegExp(
+      `^(${[...LIST_IDS, ...SHEET_IDS].map(escapeRe).join('|')})$`
+    );
+    // getAllByTestId 는 호스트 요소를 트리 pre-order(부모→자식, 형→아우)로 돌려준다.
+    const order = screen
+      .getAllByTestId(pattern)
+      .map((node) => String(node.props.testID));
+
+    expect(order).toHaveLength(LIST_IDS.length + SHEET_IDS.length);
+    expect([...order.slice(0, LIST_IDS.length)].sort()).toEqual(
+      [...LIST_IDS].sort()
+    );
+    expect([...order.slice(LIST_IDS.length)].sort()).toEqual(
+      [...SHEET_IDS].sort()
+    );
+  });
+
+  it('F3 · AC-3 — 후보 라디오 → 「교체하기」 → PUT 1회 + 시트 닫힘 (폴백 경로 무회귀)', async () => {
+    await openFallbackSheet('poi-a');
+
+    fireEvent.press(await screen.findByTestId('itinerary-candidate-radio-X'));
+    fireEvent.press(screen.getByTestId('itinerary-candidate-confirm'));
+
+    await waitFor(() => expect(putCalls).toBe(1));
+    await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
   });
 });

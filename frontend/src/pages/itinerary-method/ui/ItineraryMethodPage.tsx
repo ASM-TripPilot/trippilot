@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import { MethodPickerScreen } from '@/features/itinerary/ui/MethodPickerScreen';
 import { useGetTripsTripIdItinerary } from '@/shared/api/generated/trips/trips';
+import { retryUnlessNotFound } from '@/shared/api/isNotFound';
 
 /**
  * h04 시작 방법 배선(TRIP-303 → TRIP-305 → TRIP-504). 방식을 고른다.
@@ -24,7 +25,14 @@ export function ItineraryMethodPage({
   tripId: string;
 }): ReactElement {
   const router = useRouter();
-  const itinerary = useGetTripsTripIdItinerary(tripId);
+  // TRIP-986 #063 — 404("없다")는 다시 물어도 답이 같다. 기본 재시도(3회 백오프, 약 7초) 동안
+  // `isPending` 이 켜져 새 여행에도 아래 교체 확인이 떴다 → 404 만 재시도를 끈다(창 → 1 RTT).
+  // 그 밖의 실패(500·네트워크)는 기본과 같이 3회 재시도한다. 같은 캐시 키의 다른 관찰자(홈·카드)가
+  // 먼저 요청을 시작하면 그쪽 retry 가 적용되므로 앱 전역 기본값(`_layout`)도 같은 함수를 쓴다.
+  // 이 옵션은 전역 기본값이 없는 클라이언트에서도 이 화면 혼자 막도록 유지한다.
+  const itinerary = useGetTripsTripIdItinerary(tripId, {
+    query: { retry: retryUnlessNotFound },
+  });
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
 
   // 덮어쓸 것이 있는가 = 이미 생성된 일정에 슬롯이 담긴 days 가 있는가(조회 부재·빈 일정은 없음).

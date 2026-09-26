@@ -9,7 +9,9 @@ import path from 'path';
  *
  * 무엇을 보장하나:
  *  - AC-5 비테스트 `src` 어디에도 UTC 로 오늘을 만드는 `new Date().toISOString().slice(0, 10)` 이
- *    남지 않고, 오늘을 쓰는 7곳(A 5 + B 2)이 `@/shared/date/seoulDate` 를 import 해 호출한다.
+ *    남지 않고, 오늘을 쓰는 6곳(A 4 + B 2)이 `@/shared/date/seoulDate` 를 import 해 호출한다.
+ *    (TRIP-986 Seed D3 로 일정 탭 카드 `pages/itinerary-list/ui/TripCardContainer.tsx` 의 "여행 중이면
+ *    live" 날짜 특례가 지워져 그 파일은 더는 오늘을 쓰지 않는다 — 7곳→6곳.)
  *  - 01b Q2 기기 로컬 `todayIso()` 사본 2개가 사라진다.
  *  - 01b Q1 헬퍼는 순수하다 — 시계를 스스로 읽지 않는다(시계 금지 소스 가드들은 import 를 안
  *    따라가므로, 시계를 읽는 공용 헬퍼는 그 가드들을 우회하는 통로가 된다).
@@ -24,7 +26,6 @@ const SRC = path.resolve('src');
 
 const A_CALL_SITES = [
   'app/(tabs)/index.tsx',
-  'pages/itinerary-list/ui/TripCardContainer.tsx',
   'pages/live-itinerary/ui/LiveItineraryPage.tsx',
   'pages/my-page/ui/TripCardContainer.tsx',
   'pages/records-calendar/ui/RecordsCalendarPage.tsx',

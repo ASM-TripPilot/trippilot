@@ -183,3 +183,50 @@ describe('🔴 TRIP-939 AC-4 · 날짜 카드는 목적지가 없으면 버튼�
     expect(onPress).toHaveBeenCalledTimes(1);
   });
 });
+
+// ── TRIP-987 B-4·B-5 · 위치 전무 + 방문 0곳이면 빈 문구 (BR-U5-39 · INV-4 · QA #025) ──────
+// "대신 방문 장소를 순서대로 보여드릴게요" 는 목록이 있을 때만 참이다 — 0곳이면 그 문장 대신 빈 문구를
+// 그린다. 문구 "기록된 방문 장소가 없어요" 는 정본·Figma 출처가 없다(Seed Q5, 학습 검토 표시).
+
+const INSTEAD = '대신 방문 장소를 순서대로 보여드릴게요';
+const NO_LOCATION = '위치 기록이 없어 지도를 표시할 수 없어요';
+
+describe('🔴 TRIP-987 B-4 · 방문 0곳이면 문장 아래가 비지 않는다', () => {
+  it('VISIT_LIST + orderedVisits=[] → "대신…" 문장 없음 · 빈 문구 있음 · 위치 없음 박스는 그대로', () => {
+    renderScreen({
+      view: 'VISIT_LIST',
+      stats: { totalVisits: 0, distanceText: '—', totalPhotos: 0 },
+      dayCards: [],
+      orderedVisits: [],
+    });
+
+    expect(screen.getByText(NO_LOCATION)).toBeOnTheScreen();
+    expect(screen.queryByText(INSTEAD)).toBeNull();
+    expect(
+      screen.getByTestId('reflection-summary-visit-empty')
+    ).toHaveTextContent('기록된 방문 장소가 없어요');
+    expect(
+      screen.queryAllByTestId('reflection-summary-visit-item')
+    ).toHaveLength(0);
+  });
+});
+
+describe('🟢 TRIP-987 B-5 · 방문이 있으면 지금 그대로(회귀 앵커)', () => {
+  it('VISIT_LIST + 방문 3곳 → "대신…" 문장과 행 3개, 빈 문구 없음', () => {
+    renderScreen({
+      view: 'VISIT_LIST',
+      stats: { totalVisits: 3, distanceText: '—', totalPhotos: 0 },
+      orderedVisits: [
+        { order: 1, dayLabel: '1일차', place: '광안리 해변' },
+        { order: 2, dayLabel: '1일차', place: '감천문화마을' },
+        { order: 3, dayLabel: '2일차', place: '해운대 해변' },
+      ],
+    });
+
+    expect(screen.getByText(INSTEAD)).toBeOnTheScreen();
+    expect(screen.getAllByTestId('reflection-summary-visit-item')).toHaveLength(
+      3
+    );
+    expect(screen.queryByTestId('reflection-summary-visit-empty')).toBeNull();
+  });
+});

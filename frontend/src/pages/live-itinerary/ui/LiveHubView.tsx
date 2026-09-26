@@ -125,6 +125,8 @@ export interface LiveHubViewProps {
   triggerPillKey?: string;
   /** 슬롯별 영향 배지 글자(TRIP-748) — 값을 주면 upcoming 카드의 "예정" 자리에 분홍 배지로. */
   slotBadgeLabel?: (slotKey: string) => string | null | undefined;
+  /** TRIP-987 — 슬롯 이름·'›' 진입(i10). 미주입이면 어느 카드에도 '›' 가 없다(TRIP-939). */
+  onPressSlotName?: (poiId: string) => void;
 }
 
 // 레일 점의 행 상단 여백 — 점 크기(18·16·12)가 달라 Figma 에서 상태마다 다르다(rail 인스턴스 y 실측).
@@ -183,6 +185,7 @@ export function LiveHubView({
   triggerChip,
   triggerPillKey,
   slotBadgeLabel,
+  onPressSlotName,
 }: LiveHubViewProps): ReactElement {
   // Provider 없는 렌더(jest)에서는 null — useSafeAreaInsets 는 throw 하므로 컨텍스트를 직접 읽는다.
   const safeTop = useContext(SafeAreaInsetsContext)?.top ?? 0;
@@ -329,6 +332,11 @@ export function LiveHubView({
                         : undefined
                     }
                     badgeLabel={slotBadgeLabel?.(slotKey) ?? undefined}
+                    onPressName={
+                      onPressSlotName
+                        ? () => onPressSlotName(slot.poiId)
+                        : undefined
+                    }
                   />
                 </View>
               </View>

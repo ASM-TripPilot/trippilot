@@ -32,6 +32,12 @@ import type { OrderedVisit } from '../model/summaryView';
 
 export type SummaryViewMode = 'MAP' | 'VISIT_LIST';
 
+export interface DayReflectionVM {
+  /** 1-기반 여행 일차 — j03 일차 탭과 같은 번호. */
+  day: number;
+  label: string;
+}
+
 export interface DayCardVM {
   key: string;
   dayLabel: string;
@@ -53,6 +59,13 @@ export interface TripSummaryScreenProps {
   onBack: () => void;
   /** TRIP-764 — 하단 탭바 라우팅(옵셔널, j03 동형). 미주입이면 탭 press 는 no-op. */
   onPressTab?: (key: ShellTabKey) => void;
+  /** TRIP-987 — 여행 이름. 미주입(여행 조회 전·실패)이면 줄을 그리지 않는다. */
+  tripTitle?: string;
+  /** TRIP-987 — [방문 기록 보기](j01). 미주입이면 버튼을 그리지 않는다. */
+  onPressRecords?: () => void;
+  /** TRIP-987 — 여행 기간 전체 일차의 회고 진입(j03). 비었으면 칩 줄을 그리지 않는다. */
+  dayReflections?: DayReflectionVM[];
+  onPressDayReflection?: (day: number) => void;
 }
 
 function StatCell({
@@ -89,6 +102,10 @@ export function TripSummaryScreen({
   onShare,
   onBack,
   onPressTab,
+  tripTitle,
+  onPressRecords,
+  dayReflections = [],
+  onPressDayReflection,
 }: TripSummaryScreenProps): ReactElement {
   // disabled 는 fireEvent.press 를 항상 막지는 않으므로(RNTL) 콜백 게이트를 한 번 더 둔다(571 저장버튼 동형).
   const handleShare = () => {
@@ -137,6 +154,16 @@ export function TripSummaryScreen({
         // pb-[120px] — 하단 탭바(96px 오버레이) 위로 콘텐츠가 가리지 않게 여백을 둔다(j03 default 동형).
         contentContainerClassName="gap-md px-lg pb-[120px] pt-[8px]"
       >
+        {tripTitle ? (
+          <Text
+            testID="reflection-summary-trip-title"
+            numberOfLines={1}
+            className="font-noto-bold text-card-title font-bold text-ink"
+          >
+            {tripTitle}
+          </Text>
+        ) : null}
+
         {/* stats 3셀 — 방문·거리(출처 라벨)·사진. 거리는 미측정이면 "—"(0km 아님). */}
         <View
           testID="reflection-summary-stats"
@@ -193,9 +220,19 @@ export function TripSummaryScreen({
                 위치 기록이 없어 지도를 표시할 수 없어요
               </Text>
             </View>
-            <Text className="font-noto text-label text-muted">
-              대신 방문 장소를 순서대로 보여드릴게요
-            </Text>
+            {/* 방문 0곳이면 "대신…" 은 거짓 약속이다 — 그 자리에 빈 문구(QA #025, 문구 출처 없음 Seed Q5). */}
+            {orderedVisits.length > 0 ? (
+              <Text className="font-noto text-label text-muted">
+                대신 방문 장소를 순서대로 보여드릴게요
+              </Text>
+            ) : (
+              <Text
+                testID="reflection-summary-visit-empty"
+                className="font-noto text-label text-muted"
+              >
+                기록된 방문 장소가 없어요
+              </Text>
+            )}
 
             {orderedVisits.map((visit) => (
               // 플레인 행(카드 테두리 없음) — 20 배지·N일차(약)·장소(15 bold), Figma 1572:2050 정합.
@@ -217,6 +254,36 @@ export function TripSummaryScreen({
             ))}
           </>
         )}
+
+        {/* TRIP-987 — 일차 회고(j03) 칩 · 방문 기록(j01) 버튼. Figma j04 에 없는 요소라 j03 일차 탭·
+            StateNotice outline 선례 토큰으로 그린다. */}
+        {dayReflections.length > 0 ? (
+          <View className="flex-row flex-wrap gap-sm">
+            {dayReflections.map((item) => (
+              <Pressable
+                key={item.day}
+                testID={`reflection-summary-day-reflection-${item.day}`}
+                accessibilityRole="button"
+                onPress={() => onPressDayReflection?.(item.day)}
+                className="rounded-pill border border-hairline-strong bg-canvas px-lg py-sm"
+              >
+                <Text className="text-label text-ink">{item.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
+        {onPressRecords ? (
+          <Pressable
+            testID="reflection-summary-records"
+            accessibilityRole="button"
+            onPress={onPressRecords}
+            className="h-12 w-full items-center justify-center rounded-button border border-hairline-strong bg-canvas"
+          >
+            <Text className="font-noto-bold text-card-title font-bold text-ink">
+              방문 기록 보기
+            </Text>
+          </Pressable>
+        ) : null}
       </ScrollView>
 
       {/* 하단 탭바(기록 활성) — 전 얼굴 공통 오버레이(absolute bottom-0, j03 동형). */}

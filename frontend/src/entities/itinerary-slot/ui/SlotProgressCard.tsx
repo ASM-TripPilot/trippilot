@@ -66,6 +66,8 @@ export interface SlotProgressCardProps {
   soonHintVisible?: boolean;
   /** upcoming 전용(TRIP-748) — 주면 "예정" 대신 이 글자를 분홍 배지로(트리거 영향 카드). */
   badgeLabel?: string;
+  /** TRIP-987 — 이름·'›' 진입(i10). 미주입이면 이름은 누를 수 없는 글자이고 '›' 도 없다(TRIP-939). */
+  onPressName?: () => void;
 }
 
 export function SlotProgressCard({
@@ -78,28 +80,45 @@ export function SlotProgressCard({
   onPressSoon,
   soonHintVisible,
   badgeLabel,
+  onPressName,
 }: SlotProgressCardProps): ReactElement {
   const slotKey = buildSlotKey(date, slot.poiId);
   const fieldId = (role: string): string =>
     `execution-live-slot-${role}-${slotKey}`;
   const hhmm = slot.startAt.slice(0, 5);
 
+  const nameText = (testID?: string): ReactElement => (
+    <Text
+      testID={testID}
+      numberOfLines={1}
+      className={`shrink font-noto-bold text-card-title font-bold ${
+        state === 'upcoming' ? 'text-body' : 'text-ink'
+      }`}
+    >
+      {slot.nameKo ?? ''}
+    </Text>
+  );
+
   const head = (
     <View className="flex-row items-center justify-between gap-sm">
-      <View className="shrink flex-row items-center gap-xs">
-        <Text
+      {/* 이름 진입 목적지가 없으면 누를 수 없는 글자로, '›' 도 뺀다(TRIP-939 — 자매 SlotStopCard 선례). */}
+      {onPressName ? (
+        <Pressable
           testID={fieldId('name')}
-          numberOfLines={1}
-          className={`shrink font-noto-bold text-card-title font-bold ${
-            state === 'upcoming' ? 'text-body' : 'text-ink'
-          }`}
+          accessibilityRole="button"
+          onPress={onPressName}
+          className="shrink flex-row items-center gap-xs"
         >
-          {slot.nameKo ?? ''}
-        </Text>
-        <View testID={fieldId('chevron')}>
-          <ChevronRightGlyph size={18} tone="ink" />
+          {nameText()}
+          <View testID={fieldId('chevron')}>
+            <ChevronRightGlyph size={18} tone="ink" />
+          </View>
+        </Pressable>
+      ) : (
+        <View className="shrink flex-row items-center gap-xs">
+          {nameText(fieldId('name'))}
         </View>
-      </View>
+      )}
       {state === 'done' ? (
         <View className="flex-row items-baseline">
           <Text

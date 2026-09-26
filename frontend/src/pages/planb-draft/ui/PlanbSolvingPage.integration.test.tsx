@@ -34,6 +34,11 @@ const DAY = '2026-06-11';
 
 let mockStatus: string | null = 'SOLVING';
 let mockFromInstant = '2026-06-11T04:00:00Z';
+// TRIP-979 B — 세션 출발 좌표(nullable). 기본은 좌표가 있는 GPS 세션이고, B4 가 null 로 바꾼다.
+let mockOrigin: { lat: number | null; lng: number | null } = {
+  lat: 35.1667,
+  lng: 129.137,
+};
 const mockSessionCache = new Map<string, unknown>();
 
 jest.mock('@/features/planb/model/useReplanSession', () => ({
@@ -41,7 +46,7 @@ jest.mock('@/features/planb/model/useReplanSession', () => ({
     if (mockStatus === null) {
       return { data: undefined, isPending: true, isError: false };
     }
-    const key = `${mockStatus}|${mockFromInstant}`;
+    const key = `${mockStatus}|${mockFromInstant}|${mockOrigin.lat}|${mockOrigin.lng}`;
     if (!mockSessionCache.has(key)) {
       mockSessionCache.set(key, {
         data: {
@@ -50,10 +55,10 @@ jest.mock('@/features/planb/model/useReplanSession', () => ({
           itineraryId: 'it1',
           scope: 'PARTIAL_SLOTS',
           fromInstant: mockFromInstant,
-          originKind: 'GPS',
-          originLat: 35.1667,
-          originLng: 129.137,
-          originEstimated: false,
+          originKind: mockOrigin.lat === null ? 'STAY_ANCHOR' : 'GPS',
+          originLat: mockOrigin.lat,
+          originLng: mockOrigin.lng,
+          originEstimated: mockOrigin.lat === null,
           status: mockStatus,
           createdAt: mockFromInstant,
         },
@@ -239,6 +244,7 @@ beforeEach(() => {
   mockVisitsState = 'ok';
   mockStatus = 'SOLVING';
   mockFromInstant = '2026-06-11T04:00:00Z';
+  mockOrigin = { lat: 35.1667, lng: 129.137 };
   mockSessionCache.clear();
   mockVisitsCache.clear();
   mockVisitsByDay = { [DAY]: DAY_VISITS };
@@ -592,5 +598,69 @@ describe('🔴 P16 · 5-b 참고-1 — 지도 핀은 그날 슬롯 전부를 진
       { number: 4, ...P4, state: 'upcoming' },
       { number: 5, ...P5, state: 'upcoming' },
     ]);
+  });
+});
+
+// ── TRIP-979 B · AC-B4 — 세션 좌표가 없으면 지도 중심을 이 여행에서 고른다(부산 상수 제거) ──────────
+
+const SEOUL_SLOT = (
+  poiId: string,
+  nameKo: string,
+  coords: { lat: number; lng: number } | null
+) => slot(poiId, nameKo, '10:00:00', null, coords);
+const NAMSAN = { lat: 37.5512, lng: 126.9882 };
+const GYEONGBOK = { lat: 37.5796, lng: 126.977 };
+
+// 서울 일정 — fromInstant 날(6/11)의 첫 슬롯은 좌표가 없고 그 뒤가 경복궁. 일정 전체 첫 좌표는 남산(6/10).
+const SEOUL_ITINERARY = {
+  ...ITINERARY,
+  days: [
+    { date: '2026-06-10', slots: [SEOUL_SLOT('s0', '남산서울타워', NAMSAN)] },
+    {
+      date: DAY,
+      slots: [
+        SEOUL_SLOT('s1', '좌표 없는 곳', null),
+        SEOUL_SLOT('s2', '경복궁', GYEONGBOK),
+      ],
+    },
+  ],
+} as unknown as Itinerary;
+
+describe('🔴 B4 · AC-B4 · Q5 — 출발 좌표 없는 세션의 지도 중심은 여행에서 유도한다', () => {
+  beforeEach(() => {
+    mockOrigin = { lat: null, lng: null };
+    mockItinerary = { data: SEOUL_ITINERARY, isPending: false };
+    mockVisitsByDay = {};
+  });
+
+  it('fromInstant 날(KST 6/11)의 첫 좌표 슬롯 — 좌표 없는 앞 슬롯은 건너뛴다', () => {
+    renderPage();
+
+    expect(screen.getByTestId('map-root')).toHaveTextContent('37.5796,126.977');
+  });
+
+  it('그날이 일정에 없으면 일정 전체의 첫 좌표 슬롯', () => {
+    mockFromInstant = '2026-06-20T04:00:00Z';
+    renderPage();
+
+    expect(screen.getByTestId('map-root')).toHaveTextContent(
+      '37.5512,126.9882'
+    );
+  });
+
+  it('일정이 아직 안 왔으면 서울시청 상수(부산 아님)', () => {
+    mockItinerary = { data: undefined, isPending: true };
+    renderPage();
+
+    expect(screen.getByTestId('map-root')).toHaveTextContent('37.5665,126.978');
+  });
+
+  it('세션 좌표가 있으면 일정보다 세션 좌표가 먼저다(무회귀)', () => {
+    mockOrigin = { lat: 37.4979, lng: 127.0276 };
+    renderPage();
+
+    expect(screen.getByTestId('map-root')).toHaveTextContent(
+      '37.4979,127.0276'
+    );
   });
 });

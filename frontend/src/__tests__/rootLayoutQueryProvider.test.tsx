@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react';
 import { render, screen } from '@testing-library/react-native';
 import { QueryClient } from '@tanstack/react-query';
+import { AxiosError } from 'axios';
 
 import {
   getObservedQueryClient,
@@ -75,5 +76,51 @@ describe('AC-3 · 루트 레이아웃 — QueryClientProvider 관찰 가능성 (
     // 가짜 통과 방지 짝 — 위 두 단언만 두면 프로브가 useQueryClient()를 부르지 않는
     // 멍청한 마커로 퇴화해도 초록이다. 진짜 클라이언트 인스턴스를 손에 쥐었는지까지 본다.
     expect(getObservedQueryClient()).toBeInstanceOf(QueryClient);
+  });
+});
+
+/**
+ * TRIP-986 5-c(03b 경고-1) — 앱 전역 QueryClient 의 재시도 기본값이 "404 만 다시 묻지 않는다"인가.
+ *
+ * 왜 전역인가: 재시도 규칙은 **요청을 시작한 관찰자**의 것만 적용된다. 방식 선택(h04) 한 곳에만 걸면
+ * 홈·카드처럼 기본 옵션으로 같은 일정을 먼저(또는 나중에) 조회하는 화면이 404 를 3번 다시 묻고, 그
+ * 약 7초 동안 방식 선택에 교체 경고가 다시 뜬다. 그래서 기본값 자체를 바꾼다.
+ *
+ * 문자열로 소스를 훑지 않고 **부팅된 앱이 실제로 쥔 클라이언트의 기본값을 불러 본다** — 값의 위치(모듈
+ * 스코프 상수·AppProviders 추출)가 바뀌어도 살아남고, 주석 속 이름에 속지 않는다.
+ * 3동작: 준비=앱 부팅 → 실행=기본 retry 를 404·500 오류로 호출 → 단언=404 false · 500 은 기본 3회.
+ */
+function httpError(status: number): AxiosError {
+  const error = new AxiosError('request failed');
+  error.response = {
+    status,
+    statusText: '',
+    data: {},
+    headers: {},
+    config: { headers: {} },
+  } as AxiosError['response'];
+  return error;
+}
+
+describe('🔴 TRIP-986 · 앱 전역 QueryClient 재시도 기본값 = 404 무재시도 (03b 경고-1)', () => {
+  beforeEach(() => {
+    resetObservedQueryClient();
+  });
+
+  it('부팅된 앱의 기본 retry 는 404 를 다시 묻지 않고, 500 은 기본처럼 3회까지 묻는다', () => {
+    // 준비 — 앱을 부팅해 셸 안쪽이 쥔 클라이언트를 손에 넣는다.
+    render(<RootLayout />);
+    const retry = getObservedQueryClient()?.getDefaultOptions().queries?.retry;
+
+    // 단언 ① — 함수여야 한다. 기본값을 안 건드리면 undefined(라이브러리 기본 3회)라 여기서 red.
+    expect(typeof retry).toBe('function');
+    const retryFn = retry as (failureCount: number, error: unknown) => boolean;
+
+    // 실행·단언 ② — 404 는 첫 실패부터 멈춘다.
+    expect(retryFn(0, httpError(404))).toBe(false);
+    // 단언 ③ — 짝: 500 은 여전히 묻는다(전부 끄는 `retry:false`·`() => false` 오답 차단) + 3회차에 멈춘다.
+    expect(retryFn(0, httpError(500))).toBe(true);
+    expect(retryFn(2, httpError(500))).toBe(true);
+    expect(retryFn(3, httpError(500))).toBe(false);
   });
 });

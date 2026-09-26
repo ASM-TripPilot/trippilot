@@ -9,6 +9,7 @@ import { buildStartReplanRequest } from '@/features/planb/model/replanRequest';
 import { useReplanFormStore } from '@/features/planb/model/replanFormStore';
 import { triggerPillCopy } from '@/features/planb/model/triggerPillCopy';
 import { useActiveTriggers } from '@/features/planb/model/useActiveTriggers';
+import { useReplanGpsOrigin } from '@/features/planb/model/useReplanGpsOrigin';
 import { useStartReplan } from '@/features/planb/model/useStartReplan';
 import { ReplanRequestSheet } from '@/features/planb/ui/ReplanRequestSheet';
 import type { ItineraryDaysItem } from '@/shared/api/generated/schemas';
@@ -20,7 +21,8 @@ import type { ItineraryDaysItem } from '@/shared/api/generated/schemas';
  *   라우트·페이지 effect 순서에 기대지 않기 위해서다.
  * - 감지 트리거 = URL `triggerId` 와 같은 id 의 활성 트리거(MANUAL 제외). 있으면 대응 사유를 **한 번만**
  *   켠다(토글이 아니라 set — 이미 켜져 있으면 그대로). 사용자가 끈 뒤엔 다시 켜지 않는다.
- * - `[AI가 다시 짜기]` → body 조립(감지 트리거 id 포함) → POST → 성공 시 응답 세션 id 를 싣고 solving 으로
+ * - `[AI가 다시 짜기]` → GPS origin 1회 읽기(최대 5초, 실패면 origin 없이 — 막지 않는다, TRIP-979)
+ *   → body 조립(감지 트리거 id 포함) → POST → 성공 시 응답 세션 id 를 싣고 solving 으로
  *   **replace**(TRIP-752). 이 시트는 허브 위 투명 모달이라 push 로 쌓으면 solving 의 ‹ 가 요청 시트로 돌아간다.
  * - 스크림·끌어 닫기 → 뒤로. 뒤로 갈 곳이 없으면(딥링크·푸시 직행) 허브로 replace.
  */
@@ -55,6 +57,7 @@ export function PlanbRequestPage({
   const [errorText, setErrorText] = useState<string | null>(null);
   const triggers = useActiveTriggers(tripId);
   const itinerary = useLiveItinerary(tripId);
+  const readGpsOrigin = useReplanGpsOrigin();
 
   const scope = useReplanFormStore((s) => s.scope);
   const reasons = useReplanFormStore((s) => s.reasons);
@@ -102,21 +105,42 @@ export function PlanbRequestPage({
     }
   }, [detectedReasonKey, toggleReason]);
 
-  function handleSubmit(): void {
+  // GPS 를 기다리는 동안 재누름은 무시한다 — 읽기·POST 각 1회(AC-A5). mutate 를 부른 직후 풀어
+  // 실패 뒤 재시도는 막지 않는다.
+  const submittingRef = useRef(false);
+  // GPS 를 기다리는 사이 화면이 사라지면(스크림·안드로이드 뒤로) POST 하지 않는다. 본문에서 true 로
+  // 다시 세워야 StrictMode 의 실행→정리→재실행 뒤에도 false 로 굳지 않는다.
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  async function handleSubmit(): Promise<void> {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setErrorText(null);
     // 이벤트 시점의 최신값을 스토어에서 직접 읽는다(렌더 클로저 stale 회피).
     const form = useReplanFormStore.getState();
-    const data = buildStartReplanRequest({
-      scope: form.scope,
-      // 감지 칩이 숨긴 정적 "날씨"는 화면에 없으니 보내지 않는다(감지 칩 자신의 key 면 남긴다).
-      reasons: form.reasons.filter(
-        (key) => !detected || key !== 'WEATHER' || key === detected.reasonKey
-      ),
-      directives: form.directives,
-      freeText: form.freeText,
-      // 칩을 껐는지와 무관하게 "트리거로 들어왔다"는 사실을 싣는다(BR-U4-31).
-      triggerId: detected && trigger ? trigger.triggerId : null,
-    });
+    // reject 하지 않는다 — 동의 OFF·권한 없음·실패·5초 초과는 undefined(= originKind:null, BR-U4-19).
+    const origin = await readGpsOrigin();
+    const data = buildStartReplanRequest(
+      {
+        scope: form.scope,
+        // 감지 칩이 숨긴 정적 "날씨"는 화면에 없으니 보내지 않는다(감지 칩 자신의 key 면 남긴다).
+        reasons: form.reasons.filter(
+          (key) => !detected || key !== 'WEATHER' || key === detected.reasonKey
+        ),
+        directives: form.directives,
+        freeText: form.freeText,
+        // 칩을 껐는지와 무관하게 "트리거로 들어왔다"는 사실을 싣는다(BR-U4-31).
+        triggerId: detected && trigger ? trigger.triggerId : null,
+      },
+      origin
+    );
+    submittingRef.current = false;
+    if (!mountedRef.current) return;
     startReplan.mutate(
       { tripId, data },
       {

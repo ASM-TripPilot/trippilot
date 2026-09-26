@@ -158,7 +158,10 @@ afterAll(() => server.close());
 
 function renderPage(slotKey: string = SLOT_KEY) {
   const client = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    defaultOptions: {
+      queries: { retry: false, gcTime: 0 },
+      mutations: { gcTime: 0 },
+    },
   });
   function Wrapper({ children }: { children: ReactNode }) {
     return (
@@ -427,6 +430,7 @@ describe('🔴 SlotFillPage (h13→h14/h15) 배선', () => {
     const client = new QueryClient({
       defaultOptions: {
         queries: { retry: false, staleTime: Infinity, gcTime: Infinity },
+        mutations: { gcTime: 0 },
       },
     });
     function Wrapper({ children }: { children: ReactNode }) {
@@ -565,5 +569,104 @@ describe('🔴 TRIP-795 · h10 진행줄·스텝퍼·반경 좁히기·좌표 de
 
     // candidates 에 lat/lng 없음 → 프로덕션은 지도 미표시(픽스처 지도는 프리뷰 전용, D6·INV-1).
     expect(screen.queryByTestId('map-root')).toBeNull();
+  });
+});
+
+/**
+ * TRIP-978 · 반경 라벨 — 셋째 칸과 캡션을 무엇으로 채울지는 **요청 radiusM × 응답 radiusMUsed** 로
+ * 페이지가 가른다(BR-U3-25 · Seed Q3·Q6).
+ *
+ * 무엇을 보장하나:
+ *  - AC-8: mid 조회에 서버가 1100 을 그대로 썼으면 셋째 칸은 '최대', 캡션 없음 — "1.1km" 는 가운데 칸 하나뿐.
+ *  - AC-9: 최대(radiusM=null) 조회면 셋째 칸이 서버값, 캡션 없음. 좁히기로 돌아오면 다시 '최대'(Q6).
+ *  - AC-10: mid 조회를 서버가 넓혔으면(radiusMUsed > radiusM) 셋째 칸은 '최대', 넓힌 사실은 캡션이 말한다.
+ */
+describe('🔴 TRIP-978 · 반경 셋째 칸·캡션 라벨', () => {
+  it('R-MID · AC-8 기본 반경(1.1km)을 서버가 그대로 썼으면 셋째 칸은 "최대"이고 "1.1km" 는 한 번만 보인다', async () => {
+    // 기본 후보 Y 의 거리 '1.1km' 가 세기를 흐리지 않게 거리를 바꾼다.
+    candidatesResponse = {
+      candidates: [
+        {
+          poiId: 'X',
+          distanceRange: '420m',
+          rationale: '가장 가까운 실내 전시',
+        },
+        { poiId: 'Y', distanceRange: '770m', rationale: '조용한 카페' },
+      ],
+      radiusMUsed: 1100,
+    };
+    renderPage();
+    await pickConcept('culture');
+    await screen.findByTestId('itinerary-candidate-radio-X');
+
+    expect(
+      screen.getByTestId('itinerary-copick-radius-seg-max')
+    ).toHaveTextContent('최대');
+    expect(screen.queryByTestId('itinerary-copick-radius-used')).toBeNull();
+    expect(screen.queryAllByText(/1\.1km/)).toHaveLength(1);
+  });
+
+  it('R-MAX · AC-9 "최대"로 조회하면 셋째 칸이 서버값이고 캡션은 없다 → 좁히기로 돌아오면 다시 "최대"', async () => {
+    // 요청 radiusM 에 따라 서버가 쓴 반경을 돌려준다 — null(최대)=11300·후보 W, 숫자=그 값·후보 X·Y.
+    // 응답마다 후보를 달리해, 그 응답이 화면에 반영된 뒤에 라벨을 읽는다(조회 중 라벨로 판정 금지).
+    server.use(
+      http.post(
+        `${BASE}/trips/:tripId/itinerary/slot-candidates`,
+        async ({ request }) => {
+          postCalls += 1;
+          postBody = (await request.json()) as SlotCandidatesRequest;
+          const radiusM = postBody.radiusM ?? null;
+          return HttpResponse.json(
+            radiusM === null
+              ? {
+                  candidates: [
+                    {
+                      poiId: 'W',
+                      distanceRange: '2.4km',
+                      rationale: '넓힌 곳',
+                    },
+                  ],
+                  radiusMUsed: 11300,
+                }
+              : {
+                  candidates: candidatesResponse.candidates,
+                  radiusMUsed: radiusM,
+                }
+          );
+        }
+      )
+    );
+    renderPage();
+    await pickConcept('culture');
+    await screen.findByTestId('itinerary-candidate-radio-X');
+
+    fireEvent.press(screen.getByTestId('itinerary-copick-radius-seg-max'));
+    await screen.findByTestId('itinerary-candidate-radio-W');
+    expect(postBody?.radiusM).toBeNull();
+    expect(
+      screen.getByTestId('itinerary-copick-radius-seg-max')
+    ).toHaveTextContent('약 11.3km');
+    expect(screen.queryByTestId('itinerary-copick-radius-used')).toBeNull();
+
+    // 좁히기 → mid(1100) 재조회 → 셋째 칸은 다시 '최대'(마지막 최대값을 기억하지 않는다, Q6).
+    fireEvent.press(screen.getByTestId('itinerary-copick-slotfill-radius'));
+    await screen.findByTestId('itinerary-candidate-radio-X');
+    expect(postCalls).toBe(3);
+    expect(postBody?.radiusM).toBe(1100);
+    expect(
+      screen.getByTestId('itinerary-copick-radius-seg-max')
+    ).toHaveTextContent('최대');
+  });
+
+  it('R-AUTO · AC-10 mid 조회를 서버가 11.3km 로 넓혔으면 셋째 칸은 "최대"이고 캡션이 "약 11.3km"', async () => {
+    // 기본 candidatesResponse.radiusMUsed = 11300 — mid(1100) 요청보다 크다(서버 자동 확대).
+    renderPage();
+    await pickConcept('culture');
+
+    const used = await screen.findByTestId('itinerary-copick-radius-used');
+    expect(used).toHaveTextContent('약 11.3km');
+    expect(
+      screen.getByTestId('itinerary-copick-radius-seg-max')
+    ).toHaveTextContent('최대');
   });
 });

@@ -1,5 +1,3 @@
-import type { ReactNode } from 'react';
-import { View } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import type {
@@ -14,22 +12,18 @@ import { DraftScreen } from './DraftScreen';
 /**
  * h11 초안 화면의 **슬롯 교체 표면 계약**.
  *  - SC1~3(TRIP-467, 계승): 비고정 슬롯 "다른 후보 ›" 트리거 → `onPressSlot(slotKey)`.
- *  - SC4~6(TRIP-483, 신규): **인라인 교체 패널을 그 카드 아래에 배치**(바텀시트 폐기) · 하단
- *    manual 어포던스 2개 · reason 부제.
+ *  - SC5~6(TRIP-483): 하단 manual 어포던스 2개 · reason 부제.
+ *  - (SC4 삭제 · TRIP-983) "패널은 expandedSlotKey 와 일치하는 카드 아래"는 인라인 시절 계약이다.
+ *    교체 시트는 이제 `DraftPage` 가 화면 루트 형제로 마운트하고(스크롤 밖·목록 뒤 — 심판은
+ *    `DraftPage.candidate.integration.test.tsx` F1·F2), 이 화면은 트리거 콜백만 부른다.
  *
  * 동결 `DraftScreen.test.tsx`(TRIP-297~483)는 라벨 1줄만 함께 갱신하고, 이 파일은 별도 additive
  * 스위트다.
  *
- * 무엇을 보장하나(TRIP-483 신규):
- *  - 🔴 **패널은 화면이 그린다 — `expandedSlotKey` 와 일치하는 카드 slotKey 로만 `renderSlotPanel`
- *    이 불린다**(AC-1 · ★B). 어느 카드 아래인지(위치)를 slotKey 바인딩으로 잰다. 픽셀 "바로 아래"는
- *    6-b 몫. 한 번에 한 슬롯(마커 1개).
+ * 무엇을 보장하나(TRIP-483):
  *  - 🔴 **하단 「처음부터 직접」·우상단 「직접 고르기」 → onManualPlan**(AC-4). 미배선이면 둘 다 부재
  *    (gated 짝 — 死버튼 회피).
  *  - 🔴 **reason 부제 1줄**(AC-5).
- *
- * *(개념)* **renderSlotPanel** — 패널의 *내용*(후보 조회·선택·PUT)은 배선(`DraftPage`)이 조립해
- * 함수로 내려주고, 화면은 그것을 **올바른 카드 아래 자리에만** 부른다. 화면은 위치만, 배선은 내용.
  *
  * 3동작 뼈대: 준비=view/prop 을 만들어 렌더 → 실행=press/렌더 → 단언=콜백·요소.
  */
@@ -88,14 +82,9 @@ function altId(poiId: string): string {
 function cardId(poiId: string): string {
   return `itinerary-draft-slot-${buildSlotKey(DAY1, poiId)}`;
 }
-function markerId(poiId: string): string {
-  return `panel-marker-${buildSlotKey(DAY1, poiId)}`;
-}
 
 type Over = {
   onPressSlot?: (slotKey: string) => void;
-  expandedSlotKey?: string | null;
-  renderSlotPanel?: (slotKey: string) => ReactNode;
   onManualPlan?: () => void;
 };
 
@@ -114,8 +103,6 @@ function renderScreen(over: Over = { onPressSlot }) {
       onBack={jest.fn()}
       onComplete={jest.fn()}
       onPressSlot={over.onPressSlot}
-      expandedSlotKey={over.expandedSlotKey}
-      renderSlotPanel={over.renderSlotPanel}
       onManualPlan={over.onManualPlan}
     />
   );
@@ -156,37 +143,6 @@ describe('SC3 · AC-후방호환 — onPressSlot 미배선이면 트리거가 �
     expect(screen.queryByTestId(altId('poi-a'))).toBeNull();
     expect(screen.queryByTestId(altId('poi-b'))).toBeNull();
     expect(screen.getByTestId(cardId('poi-a'))).toBeOnTheScreen();
-  });
-});
-
-describe('🔴 SC4 · AC-1 — 패널은 expandedSlotKey 와 일치하는 카드 아래에만, 한 번에 하나 (★B 위치)', () => {
-  it('expandedSlotKey=poi-b 면 poi-b 의 slotKey 로만 renderSlotPanel 이 불리고 마커가 1개 뜬다', () => {
-    const renderSlotPanel = jest.fn((slotKey: string) => (
-      <View testID={`panel-marker-${slotKey}`} />
-    ));
-    renderScreen({
-      onPressSlot,
-      expandedSlotKey: buildSlotKey(DAY1, 'poi-b'),
-      renderSlotPanel,
-    });
-
-    // 한 번에 한 슬롯 — 마커가 정확히 하나다(모든 카드 아래 렌더 뮤테이션은 여기서 red).
-    expect(screen.getAllByTestId(/^panel-marker-/)).toHaveLength(1);
-    // 열린 카드는 poi-b 다(긍정) — 그리고 poi-a 아래엔 패널이 없다(부정 짝).
-    expect(screen.getByTestId(markerId('poi-b'))).toBeOnTheScreen();
-    expect(screen.queryByTestId(markerId('poi-a'))).toBeNull();
-    // 위치 = 올바른 카드 바인딩: 화면이 poi-b 의 slotKey 로 패널을 부른다(첫 슬롯 하드코딩 살상).
-    expect(renderSlotPanel).toHaveBeenCalledWith(buildSlotKey(DAY1, 'poi-b'));
-  });
-
-  it('expandedSlotKey=null 이면 패널이 없고 renderSlotPanel 이 0회 불린다 (항상 렌더 살상)', () => {
-    const renderSlotPanel = jest.fn((slotKey: string) => (
-      <View testID={`panel-marker-${slotKey}`} />
-    ));
-    renderScreen({ onPressSlot, expandedSlotKey: null, renderSlotPanel });
-
-    expect(screen.queryAllByTestId(/^panel-marker-/)).toEqual([]);
-    expect(renderSlotPanel).toHaveBeenCalledTimes(0);
   });
 });
 
