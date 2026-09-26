@@ -968,3 +968,64 @@ describe('🔴 TRIP-988 C · 고정 시각 보조행 (D5)', () => {
     );
   });
 });
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * TRIP-982 B — 필수 방문지 0곳이어도 일정 짜기로 갈 수 있다 (D7 · INV-4)
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * 무엇을 보장하나: empty 얼굴(0곳)의 `이 구성으로 일정 짜기` CTA 는 **눌리고, 눌리는 것처럼
+ * 보인다**. 잠금은 loading·failed 에만 남는다(기존 C-AC9·C-AC15·C-AC17 이 그쪽을 계속 잰다).
+ *
+ * ★ `toBeDisabled` 는 색을 안 본다(C-AC17 독주석) — B1 의 `not.toBeDisabled()` 만으로는 "회색인데
+ *   눌리는" 버튼이 통과한다. B2 가 className 토큰으로 색까지 잰다. 회색 토큰 부재는 `hasToken`
+ *   부정형이 아니라 토큰 배열의 정확 비교로 잰다(`hasToken` 독주석 — 부정형에서 심판을 푼다).
+ */
+describe('🔴 TRIP-982 B · empty CTA 활성 (D7)', () => {
+  it('B1 0곳이어도 CTA 가 비활성이 아니고, 누르면 onProceed 가 1회 불린다', () => {
+    const onProceed = jest.fn();
+    render(
+      <MustVisitPickerScreen view={{ kind: 'empty' }} onProceed={onProceed} />
+    );
+
+    const proceed = screen.getByTestId('itinerary-mustvisit-screen-proceed');
+    expect(proceed).not.toBeDisabled();
+
+    fireEvent.press(proceed);
+    expect(onProceed).toHaveBeenCalledTimes(1);
+  });
+
+  it('B2 활성 색 — 배경 bg-primary·라벨 text-on-primary 이고 회색 토큰이 남지 않는다', () => {
+    render(<MustVisitPickerScreen view={{ kind: 'empty' }} />);
+
+    const proceed = screen.getByTestId('itinerary-mustvisit-screen-proceed');
+    const label = within(proceed).getByText(PROCEED_LABEL);
+
+    expect(brandTokensIn(classNameOf(proceed))).toEqual(['bg-primary']);
+    expect(brandTokensIn(classNameOf(label))).toEqual(['text-on-primary']);
+    // "회색인데 눌리는" 우회 차단 — 비활성 표면 토큰이 활성 토큰과 함께 남아 있으면 red.
+    expect(classNameOf(proceed).split(/\s+/)).not.toContain(
+      'bg-hairline-strong'
+    );
+    expect(classNameOf(label).split(/\s+/)).not.toContain('text-muted');
+  });
+});
+
+describe('TRIP-982 B4·B5 · 무회귀 — empty 얼굴의 나머지는 그대로다', () => {
+  it('B4 empty 에는 건너뛰기가 없고 empty 안내는 남는다 (건너뛰기는 failed 전용)', () => {
+    render(<MustVisitPickerScreen view={{ kind: 'empty' }} />);
+
+    expect(
+      screen.getByTestId('itinerary-mustvisit-screen-empty')
+    ).toBeOnTheScreen();
+    expect(countTestId('itinerary-mustvisit-screen-skip')).toBe(0);
+  });
+
+  it('B5 empty 화면에도 소요시간 표기가 0건이다 (INV-3)', () => {
+    render(<MustVisitPickerScreen view={{ kind: 'empty' }} />);
+
+    const texts = renderedTexts();
+    expect(texts).toContain(PROCEED_LABEL); // 긍정 앵커
+    expect(texts.filter((text) => DURATION_TEXT.test(text))).toEqual([]);
+  });
+});

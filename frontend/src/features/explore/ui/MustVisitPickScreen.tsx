@@ -30,6 +30,9 @@ export interface MustVisitPickScreenProps {
   state: PlaceListState;
   /** 그릴 순서 그대로의 목록 — 정렬은 페이지가 끝냈다(단일 출처). */
   savedPlaces: SavedPlace[];
+  /** 여행 지역 필터가 0건이라 페이지가 필터를 풀고 전체를 넘겼는가(TRIP-982 D6) — 목록 맨 위에
+   * 그 사실을 한 줄로 밝힌다(조용히 풀면 INV-4 위반). */
+  regionFallback?: boolean;
   /** 지금 선택된 poiId 들 — 선택 여부는 색이 아니라 이 집합 + 글리프 컴포넌트 정체성으로 잰다. */
   selectedPoiIds: string[];
   onToggleSelect: (poiId: string) => void;
@@ -200,12 +203,14 @@ function CompleteBar({
 
 function ResultsBody({
   savedPlaces,
+  regionFallback,
   selectedPoiIds,
   onToggleSelect,
   onComplete,
   onPressAddMore,
 }: {
   savedPlaces: SavedPlace[];
+  regionFallback: boolean;
   selectedPoiIds: string[];
   onToggleSelect: (poiId: string) => void;
   onComplete: () => void;
@@ -217,6 +222,15 @@ function ResultsBody({
         className="flex-1"
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16 }}
       >
+        {/* Figma 에 표면이 없다(D6 문구만 확정) — 부제와 같은 캡션 토큰으로 한 줄만 둔다. */}
+        {regionFallback ? (
+          <Text
+            testID="mustvisit-pick-region-fallback"
+            className="pt-sm font-noto text-caption text-muted"
+          >
+            여행 지역과 맞는 곳이 없어 전체를 보여드려요
+          </Text>
+        ) : null}
         {savedPlaces.map((saved, index) => (
           <PickRow
             key={saved.savedPlaceId}
@@ -372,6 +386,7 @@ function ErrorBody({ onRetry }: { onRetry: () => void }): ReactElement {
 export function MustVisitPickScreen({
   state,
   savedPlaces,
+  regionFallback = false,
   selectedPoiIds,
   onToggleSelect,
   onComplete,
@@ -412,6 +427,7 @@ export function MustVisitPickScreen({
         {face === 'results' ? (
           <ResultsBody
             savedPlaces={savedPlaces}
+            regionFallback={regionFallback}
             selectedPoiIds={selectedPoiIds}
             onToggleSelect={onToggleSelect}
             onComplete={onComplete}

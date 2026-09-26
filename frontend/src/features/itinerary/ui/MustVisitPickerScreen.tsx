@@ -20,7 +20,7 @@ import {
 } from './ItineraryGlyphs';
 
 /**
- * h05 필수 방문지 (선택) — Figma `1875:1083`.
+ * h02 필수 방문지 — Figma `3824:2173`(default) · `4294:8292`(error).
  *
  * 화면은 완성된 값만 받는다. 조회도 조인도 하지 않고 **핀 번호도 다시 매기지 않는다**(조합은
  * `pages` 층 몫 — `features` 간 직접 import 금지).
@@ -31,9 +31,9 @@ import {
  * 실패의 다른 이름이다.
  *
  * **얼굴마다 크롬이 다르다** — 헤드라인 제목은 `listed` 에서 숨고(그때만 서브카피만 남는다),
- * 건너뛰기는 `failed` 에서만 뜬다(에러에서 빠져나갈 유일한 문). CTA 는 `listed` 가 아니면
- * 잠긴다(로딩·에러·빈 목록은 아직 갈 다음 단계가 없다) — 색도 함께 바뀌어 "빨간데 안 눌리는"
- * 상태를 남기지 않는다(문제로그 2026-08-08).
+ * 건너뛰기는 `failed` 에서만 뜬다(에러에서 빠져나갈 유일한 문). CTA 는 로딩·에러에서만
+ * 잠긴다 — 빈 목록(0곳)은 필수 방문지 없이 생성으로 간다(TRIP-982 D7, 막다른 길 금지). 색도
+ * 함께 바뀌어 "빨간데 안 눌리는"·"회색인데 눌리는" 상태를 남기지 않는다(문제로그 2026-08-08).
  */
 
 const SCREEN_TITLE = '필수 방문지';
@@ -391,8 +391,11 @@ export function MustVisitPickerScreen({
   // 얼굴이 핀보다 세다 — 빈 목록·조회 실패 프레임에는 핀을 받아도 지도가 없다(Figma
   // `empty`·`error`). 항목은 있는데 좌표를 가진 것이 하나도 없을 때도 안 그린다(01b D9).
   const mapPins = view.kind === 'listed' ? (pins ?? []) : [];
-  // 다음 단계는 목록이 도착한 뒤에만 열린다 — 로딩·에러·빈 목록은 갈 곳이 없어 잠근다.
-  const blocked = view.kind !== 'listed' || proceedBlockedReason != null;
+  // 로딩·에러만 잠근다 — 0곳(empty)은 필수 방문지 없이 생성으로 간다(TRIP-982 D7).
+  const blocked =
+    view.kind === 'loading' ||
+    view.kind === 'failed' ||
+    proceedBlockedReason != null;
 
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>

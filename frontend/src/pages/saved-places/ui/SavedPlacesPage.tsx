@@ -102,13 +102,17 @@ export function SavedPlacesPage(): ReactElement {
 
   const orderedList = buildDisplayList(savedPlaces, releasedPoiIds, snapshots);
   // region 파라미터가 있으면 여행 지역 안 저장만 남긴다(fail-open은 순수함수가 진다). 없으면 전체.
-  const displayList =
+  const filteredList =
     regions.length > 0
       ? filterSavedPlacesByTripRegions(orderedList, regions)
       : orderedList;
   // 저장은 있는데 지역 필터로 0건이면 "담은 곳 없음"이 아니라 구분 안내를 그린다(AC-5).
   const regionFilterEmpty =
-    regions.length > 0 && orderedList.length > 0 && displayList.length === 0;
+    regions.length > 0 && orderedList.length > 0 && filteredList.length === 0;
+  // select 모드는 지역 필터 0건이면 필터를 풀고 전체를 보인다(TRIP-982 D6 — 폴백 안내와 함께).
+  // 화면 목록과 완료 시드가 같은 `displayList` 를 봐야 체크한 곳이 실제로 심긴다.
+  const regionFallback = mode === 'select' && regionFilterEmpty;
+  const displayList = regionFallback ? orderedList : filteredList;
   const listState = resolvePlaceListState({
     isPending,
     isError,
@@ -181,14 +185,20 @@ export function SavedPlacesPage(): ReactElement {
 
   // select 모드(TRIP-706) — 담기/해제 대신 '꼭 갈 곳 고르기'. 화면은 별 파일(props-only)이고,
   // 페이지가 선택 집합을 소유해 완료 시 **선택분만** 시드한다(D2 · AC-1 TRIP-491 재현 봉합).
-  // region 필터로 0건이어도 select-empty 한 얼굴로 수렴한다(D4 — listState 가 empty 로 판정,
-  // save 모드의 RegionEmptyBlock 제3 얼굴은 select 에 없다).
+  // region 필터로 0건이면 필터를 풀고 전체 + 폴백 안내를 그린다(TRIP-982 D6 — 위 `regionFallback`).
+  // select-empty 얼굴은 진짜로 담은 곳이 0일 때만 뜬다(save 모드의 RegionEmptyBlock 은 select 에 없다).
   if (mode === 'select') {
+    // 선택 수·완료 활성·시드는 보이는 목록 안의 선택만 센다 — 폴백이 풀려 목록이 줄면
+    // 안 보이는 선택이 "N곳 선택됨"에 남아 시드 0과 어긋난다(TRIP-982 A8).
+    const visibleSelectedPoiIds = selectedPoiIds.filter((id) =>
+      displayList.some((saved) => saved.place.poiId === id)
+    );
     return (
       <MustVisitPickScreen
         state={listState}
         savedPlaces={displayList}
-        selectedPoiIds={selectedPoiIds}
+        regionFallback={regionFallback}
+        selectedPoiIds={visibleSelectedPoiIds}
         onToggleSelect={(poiId) =>
           setSelectedPoiIds((prev) =>
             prev.includes(poiId)

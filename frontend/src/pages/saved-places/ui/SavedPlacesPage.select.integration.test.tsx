@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -222,5 +223,277 @@ describe('IS-3 · 0곳 완료는 무효 (AC-2)', () => {
     // 빈 시드로 위저드에 진입하지 않는다 — 시드 0회 + 네비 0회.
     expect(useTripWizardStore.getState().mustVisits).toEqual([]);
     expect(mockPush).not.toHaveBeenCalled();
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * TRIP-982 A — 여행 지역 필터가 0건이면 전체를 보여 주고 그 사실을 밝힌다 (D6 · INV-4)
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * 무엇을 보장하나: 위저드 '더 담기'로 온 select 화면에서, 담은 곳이 있는데 지역 필터 때문에 0건이
+ * 되면 필터를 풀고 **전체를 고를 수 있게** 보여 주며 "여행 지역과 맞는 곳이 없어 전체를
+ * 보여드려요"라고 알린다. "아직 담은 곳이 없어요"는 진짜로 0곳일 때만 나온다.
+ *
+ * 왜 이 픽스처인가: 여행 region 은 시도 이름(`서울특별시`)인데 담은 곳의 region 은 시군구
+ * 이름(`강남구`)이라 접두사 비교가 전부 빗나간다 — QA DB 실측 5행을 그대로 옮겼다.
+ *
+ * ★ 급소는 A2 다 — 화면은 전체를 그리면서 완료 쪽이 필터된 목록(0건)을 보면, 체크는 되는데
+ *   시드가 0개인 침묵 실패가 된다. 흩어서 두 곳(s2·s4)을 골라 "정확히 그 둘"만 심겼는지 잰다.
+ * ★ 부재 단언(폴백 안내 0개)은 로딩이 끝난 뒤에만 잰다 — 로딩 중엔 무엇이든 0개라 공허하다.
+ */
+
+const REGION_FALLBACK_TEXT = '여행 지역과 맞는 곳이 없어 전체를 보여드려요';
+const TRUE_EMPTY_TITLE = '아직 담은 곳이 없어요';
+
+function placeIn(poiId: string, region: string): Place {
+  return { ...makePlace(poiId, `장소 ${poiId}`), region };
+}
+
+function savedIn(poiId: string, region: string, savedAt: string): SavedPlace {
+  return {
+    savedPlaceId: `sp-${poiId}`,
+    savedAt,
+    place: placeIn(poiId, region),
+  };
+}
+
+/** QA DB 실측 — 서울 여행인데 담은 곳 region 은 전부 시군구 이름. savedAt 오름차순이라 s1..s5 순. */
+const SEOUL_QA: SavedPlace[] = [
+  savedIn('s1', '강남구', '2026-09-01T01:00:00.000Z'),
+  savedIn('s2', '강남구', '2026-09-01T02:00:00.000Z'),
+  savedIn('s3', '연천군', '2026-09-01T03:00:00.000Z'),
+  savedIn('s4', '종로구', '2026-09-01T04:00:00.000Z'),
+  savedIn('s5', '송파구', '2026-09-01T05:00:00.000Z'),
+];
+
+/** 담은 곳 응답을 이 케이스 것으로 갈아 끼운다(beforeEach 기본 6행 핸들러보다 먼저 매칭된다). */
+function serveSaved(rows: SavedPlace[]): void {
+  server.use(http.get(`${BASE}/saved-places`, () => HttpResponse.json(rows)));
+}
+
+function openSelect(region?: string[]): void {
+  mockSearchParams.mode = 'select';
+  if (region) mockSearchParams.region = region;
+  setAccessToken('valid-access');
+  renderPage();
+}
+
+function rowCount(): number {
+  return screen.queryAllByTestId(/^mustvisit-pick-row-/).length;
+}
+
+function fallbackCount(): number {
+  return screen.queryAllByTestId('mustvisit-pick-region-fallback').length;
+}
+
+describe('🔴 TRIP-982 A1 · 지역이 전혀 안 맞으면 전체를 보여 주고 알린다 (D6)', () => {
+  it('담은 5곳이 전부 행으로 뜨고, 폴백 안내가 정확한 문구로 뜨며, 빈 얼굴은 없다', async () => {
+    serveSaved(SEOUL_QA);
+    openSelect(['서울특별시']);
+
+    await waitFor(() => expect(rowCount()).toBe(5));
+    // 폴백 안내 — 문구 완전일치(D6 고정 문구).
+    expect(
+      screen.getByTestId('mustvisit-pick-region-fallback')
+    ).toHaveTextContent(REGION_FALLBACK_TEXT);
+    // 진짜 빈 얼굴은 안 뜬다.
+    expect(screen.queryAllByTestId('mustvisit-pick-empty').length).toBe(0);
+    // 부제의 N 은 그려진 전체 개수(01b Q2).
+    expect(screen.getByTestId('mustvisit-pick-subtitle')).toHaveTextContent(
+      '담은 곳 5곳 · 0곳 선택됨'
+    );
+  });
+});
+
+describe('🔴 TRIP-982 A2 · 폴백 목록에서 고른 곳이 실제로 시드된다 (급소)', () => {
+  it('5곳 중 s2·s4 를 골라 완료하면 위저드 스토어에 정확히 그 둘만 들어간다', async () => {
+    serveSaved(SEOUL_QA);
+    openSelect(['서울특별시']);
+    await waitFor(() => expect(rowCount()).toBe(5));
+
+    fireEvent.press(screen.getByTestId('mustvisit-pick-check-s2'));
+    fireEvent.press(screen.getByTestId('mustvisit-pick-check-s4'));
+    fireEvent.press(screen.getByTestId('mustvisit-pick-complete'));
+
+    // 0개(필터된 목록에서 뽑음)도 5개(전부 시드)도 아닌 정확히 고른 둘.
+    expect(
+      useTripWizardStore
+        .getState()
+        .mustVisits.map((m) => m.sourcePoiId)
+        .sort()
+    ).toEqual(['s2', 's4']);
+    expect(mockPush).toHaveBeenCalledWith('/trips/new/step1');
+  });
+});
+
+describe('🔴 TRIP-982 A3 · 담은 곳이 있으면 "없다"고 말하지 않는다 (INV-4)', () => {
+  it('로딩이 끝난 뒤 "아직 담은 곳이 없어요"가 0회이고 빈 얼굴도 없다', async () => {
+    serveSaved(SEOUL_QA);
+    openSelect(['서울특별시']);
+
+    // 행이 아니라 "로딩 끝"을 기다린다 — 구현 전에도 이 대기는 풀리고, 아래 단언이 red 이유가 된다.
+    await waitFor(() =>
+      expect(
+        screen.queryAllByTestId(/^mustvisit-pick-skeleton-row-/).length
+      ).toBe(0)
+    );
+    expect(screen.queryAllByText(TRUE_EMPTY_TITLE).length).toBe(0);
+    expect(screen.queryAllByTestId('mustvisit-pick-empty').length).toBe(0);
+  });
+});
+
+describe('TRIP-982 A4 · 무회귀 — 일부가 맞으면 맞는 것만, 안내는 없다', () => {
+  it('부산 여행에 부산 1곳·경주 1곳이면 부산 1행만 뜨고 폴백 안내는 0개다', async () => {
+    serveSaved([
+      savedIn('p-busan', '부산광역시 해운대구', '2026-09-01T01:00:00.000Z'),
+      savedIn('p-gyeongju', '경주시', '2026-09-01T02:00:00.000Z'),
+    ]);
+    openSelect(['부산광역시']);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('mustvisit-pick-row-p-busan')).toBeOnTheScreen()
+    );
+    expect(rowCount()).toBe(1);
+    expect(
+      screen.queryAllByTestId('mustvisit-pick-row-p-gyeongju').length
+    ).toBe(0);
+    expect(fallbackCount()).toBe(0);
+  });
+});
+
+describe('TRIP-982 A5 · 무회귀 — 진짜로 0곳이면 빈 얼굴 그대로', () => {
+  it('담은 곳이 0이면 "아직 담은 곳이 없어요"와 둘러보기가 뜨고 폴백 안내는 0개다', async () => {
+    serveSaved([]);
+    openSelect(['서울특별시']);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('mustvisit-pick-empty')).toBeOnTheScreen()
+    );
+    expect(screen.getByTestId('mustvisit-pick-browse')).toBeOnTheScreen();
+    expect(screen.queryAllByText(TRUE_EMPTY_TITLE).length).toBe(1);
+    expect(fallbackCount()).toBe(0);
+  });
+});
+
+describe('TRIP-982 A6 · 무회귀 — region 이 없으면 무필터, 안내도 없다', () => {
+  it('region 파라미터 없이 오면 5곳 전부 뜨고 폴백 안내는 0개다', async () => {
+    serveSaved(SEOUL_QA);
+    openSelect();
+
+    await waitFor(() => expect(rowCount()).toBe(5));
+    expect(fallbackCount()).toBe(0);
+  });
+});
+
+describe('🔴 TRIP-982 A-INV3 · 폴백 화면에도 소요시간 표기가 없다 (INV-3)', () => {
+  it('폴백 안내가 뜬 화면에서 분·시간·소요 표기가 0건이다', async () => {
+    serveSaved(SEOUL_QA);
+    openSelect(['서울특별시']);
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('mustvisit-pick-region-fallback')
+      ).toBeOnTheScreen()
+    );
+    // 긍정 앵커 — 정규식 탐색이 이 화면의 글자를 실제로 읽는다(부제 `담은 곳 5곳 · …`).
+    expect(screen.queryAllByText(/담은 곳/).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(/\d+\s*분|\d+\s*시간|소요/).length).toBe(0);
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * TRIP-982 A8 — 폴백이 조작 도중에 풀려도 선택 수·완료·시드가 서로 맞는다 (5-b 경고-1)
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * 무엇을 보장하나: 부제의 `N곳 선택됨`, 완료 버튼 활성, 완료 때 심는 시드는 **지금 보이는 행 안의
+ * 선택만** 센다. 폴백 5행에서 s2·s4 를 고른 뒤 담은 곳 목록이 바뀌어 폴백이 풀리고 1행(s6)만
+ * 남으면, 안 보이는 s2·s4 는 셋 중 어디에도 세지 않는다 — "2곳 선택됨인데 시드 0" 금지.
+ *
+ * 왜 QueryClient 를 손에 쥐나: '더 담기'에서 돌아오면 담기 뮤테이션의 `invalidateQueries` 가
+ * 목록을 다시 받는다. 테스트는 그 효과만 재현한다 — 응답 행을 바꾸고 캐시를 무효화한다.
+ *
+ * ★ 전제 단언(1행·폴백 안내 0개)을 먼저 잰다 — 재조회가 안 일어나면 화면은 5행 그대로라
+ *   아래 단언이 엉뚱한 이유로 red/green 이 된다.
+ */
+
+/** 여행 region 과 접두사로 맞는 새 담은 곳 — 필터 결과를 1건으로 만들어 폴백을 푼다. */
+const SEOUL_MATCH = savedIn(
+  's6',
+  '서울특별시 마포구',
+  '2026-09-01T06:00:00.000Z'
+);
+
+/** 폴백 5행에서 s2·s4 를 고른 뒤, 목록이 바뀌어 폴백이 풀린(s6 1행) 상태까지 만든다. */
+async function arrangeFallbackLiftedWithHiddenPicks(): Promise<void> {
+  let rows: SavedPlace[] = SEOUL_QA;
+  server.use(http.get(`${BASE}/saved-places`, () => HttpResponse.json(rows)));
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, gcTime: 0 },
+      mutations: { gcTime: 0 },
+    },
+  });
+  mockSearchParams.mode = 'select';
+  mockSearchParams.region = ['서울특별시'];
+  setAccessToken('valid-access');
+  render(
+    <QueryClientProvider client={client}>
+      <SavedPlacesPage />
+    </QueryClientProvider>
+  );
+  await waitFor(() => expect(rowCount()).toBe(5));
+  expect(fallbackCount()).toBe(1);
+
+  fireEvent.press(screen.getByTestId('mustvisit-pick-check-s2'));
+  fireEvent.press(screen.getByTestId('mustvisit-pick-check-s4'));
+
+  // '더 담기'에서 서울 장소 1곳을 담고 돌아온 효과 — 응답이 바뀌고 목록을 다시 받는다.
+  rows = [...SEOUL_QA, SEOUL_MATCH];
+  await act(async () => {
+    await client.invalidateQueries();
+  });
+
+  // 전제 — 폴백이 풀려 s6 1행만 보이고 안내가 사라졌다.
+  await waitFor(() => expect(rowCount()).toBe(1));
+  expect(screen.getByTestId('mustvisit-pick-row-s6')).toBeOnTheScreen();
+  expect(fallbackCount()).toBe(0);
+}
+
+describe('🔴 TRIP-982 A8 · 폴백이 풀리면 안 보이는 선택은 세지 않는다 (경고-1)', () => {
+  it('보이는 선택이 0이면 부제 0곳·완료 disabled·눌러도 시드 0·이동 0이다', async () => {
+    await arrangeFallbackLiftedWithHiddenPicks();
+
+    expect(screen.getByTestId('mustvisit-pick-subtitle')).toHaveTextContent(
+      '담은 곳 1곳 · 0곳 선택됨'
+    );
+    const complete = screen.getByTestId('mustvisit-pick-complete');
+    expect(complete).toBeDisabled();
+
+    fireEvent.press(complete);
+
+    expect(useTripWizardStore.getState().mustVisits.length).toBe(0);
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('보이는 s6 을 고르면 부제 1곳·완료 활성·시드는 정확히 s6 하나다', async () => {
+    await arrangeFallbackLiftedWithHiddenPicks();
+
+    fireEvent.press(screen.getByTestId('mustvisit-pick-check-s6'));
+
+    expect(screen.getByTestId('mustvisit-pick-subtitle')).toHaveTextContent(
+      '담은 곳 1곳 · 1곳 선택됨'
+    );
+    const complete = screen.getByTestId('mustvisit-pick-complete');
+    expect(complete).not.toBeDisabled();
+
+    fireEvent.press(complete);
+
+    // 부제가 센 1곳과 같은 1곳 — 안 보이는 s2·s4 가 딸려 들어가지 않는다.
+    expect(
+      useTripWizardStore.getState().mustVisits.map((m) => m.sourcePoiId)
+    ).toEqual(['s6']);
+    expect(mockPush).toHaveBeenCalledWith('/trips/new/step1');
   });
 });

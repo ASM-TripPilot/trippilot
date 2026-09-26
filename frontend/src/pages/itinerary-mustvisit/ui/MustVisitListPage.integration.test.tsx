@@ -610,3 +610,56 @@ describe('🔴 I16 · TRIP-504 AC-5 · TRIP-785 — copick 갈래는 CO_PLAN gen
     expect(hitsFor('DELETE', '/must-visits')).toBe(0);
   });
 });
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * TRIP-982 B3 — 필수 방문지 0곳인 채로 생성 중(h09)으로 간다 (D7)
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * 무엇을 보장하나: must-visits 가 `[]` 여도 CTA 를 누르면 지금의 `goToGenerating` 목적지 그대로
+ * h09 로 간다 — 완전AI 는 `{tripId}` 만, copick 갈래는 CO_PLAN + 첫 슬롯 successRoute 가 유지된다.
+ * 페이지 배선은 안 바뀌므로 목적지를 **객체 완전일치**로 박는다(0곳 전용 목적지가 끼어들면 red).
+ *
+ * 0곳 생성의 실제 왕복(백엔드가 0건으로 초안을 만드는가)은 jest 사각 — 6-b 실기 몫.
+ */
+describe('🔴 TRIP-982 B3 · 0곳 → 생성 중 (D7)', () => {
+  async function openEmpty(
+    mode?: GenerateItineraryRequestGenerationMode
+  ): Promise<void> {
+    mustVisitStore = [];
+    renderPage({ mode });
+    await screen.findByTestId('itinerary-mustvisit-screen-empty');
+  }
+
+  it('완전AI — 누르면 generating 으로 {tripId} 만 싣고 1회 이동하며 요청은 0건이다', async () => {
+    await openEmpty();
+
+    fireEvent.press(screen.getByTestId('itinerary-mustvisit-screen-proceed'));
+
+    await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/itinerary/generating',
+      params: { tripId: TRIP_ID },
+    });
+    expect(hitsFor('POST', '/must-visits')).toBe(0);
+    expect(hitsFor('DELETE', '/must-visits')).toBe(0);
+  });
+
+  it('copick 갈래 — 누르면 CO_PLAN + 첫 슬롯 successRoute 를 유지한 채 1회 이동한다', async () => {
+    await openEmpty('CO_PLAN');
+
+    fireEvent.press(screen.getByTestId('itinerary-mustvisit-screen-proceed'));
+
+    await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/itinerary/generating',
+      params: {
+        tripId: TRIP_ID,
+        mode: 'CO_PLAN',
+        successRoute: '/trips/[tripId]/itinerary/copick/[slotKey]',
+      },
+    });
+    expect(hitsFor('POST', '/must-visits')).toBe(0);
+    expect(hitsFor('DELETE', '/must-visits')).toBe(0);
+  });
+});
