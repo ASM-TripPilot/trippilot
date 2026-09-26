@@ -317,6 +317,7 @@
 - `src/entities/itinerary-slot/lib/openingHoursLabel.ts`  →  formatOpeningHoursLabel
 - `src/entities/itinerary-slot/lib/slotKey.ts`  →  buildSlotKey · ParsedSlotKey · parseSlotKey · SlotKeySet · buildSlotKeys
 - `src/entities/itinerary-slot/lib/slotMapPin.ts`  →  SlotProgressState · StatePinInput · toMapPinState · buildStatePins
+- `src/entities/itinerary-slot/lib/suggestNextSlotTime.ts`  →  suggestNextSlotTime
 
 ## src/entities/itinerary-slot/model/
 - `src/entities/itinerary-slot/model/index.ts`  →  ReplanSlotTone · ReplanSlotVM · PoiCategory
@@ -1396,4 +1397,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 960개 파일
+합계 961개 파일

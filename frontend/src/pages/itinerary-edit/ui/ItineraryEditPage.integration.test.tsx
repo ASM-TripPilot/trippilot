@@ -59,8 +59,10 @@ jest.mock('@/shared/storage', () => ({
 }));
 
 const mockBack = jest.fn();
+// TRIP-1009 C3 — replace 도 이름을 붙여 "편집 ‹ 는 여전히 back" 을 잰다(직접 짜기만 일정 탭 replace).
+const mockReplace = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), back: mockBack, replace: jest.fn() }),
+  useRouter: () => ({ push: jest.fn(), back: mockBack, replace: mockReplace }),
 }));
 
 // EditorView 가 조립하는 MapSheetShell → MapView(네이버 네이티브)는 jest 에서 못 뜬다 — 관찰 목으로
@@ -200,6 +202,7 @@ beforeEach(() => {
   putCalls = 0;
   putBody = null;
   mockBack.mockClear();
+  mockReplace.mockClear();
   setAccessToken('valid-access');
   // 편집 스토어는 모듈 싱글턴 — 테스트 사이 값이 새므로 초기화(store 선례).
   useItineraryEditStore.getState().reset();
@@ -441,5 +444,23 @@ describe('TRIP-926 · M — 지도 중심 (핀 0개면 서울 시청, 있으면 
     expect(screen.getByTestId('map-root')).toHaveTextContent(
       '33.4581,126.9425'
     );
+  });
+});
+
+/**
+ * TRIP-1009 · C3 — 공유 편집 뷰(`EditorView`)의 ‹ 목적지는 페이지 몫이다. 직접 짜기만 일정 탭으로 바뀌고,
+ * h12 일정 편집·i07 여행 중 편집의 ‹ 는 여전히 이전 화면(`router.back`)이다.
+ *
+ * 3동작 뼈대: 준비=기본 픽스처 → 실행=카드 도착 뒤 ‹ → 단언=back 1회·replace 0회.
+ */
+describe('TRIP-1009 · C3 — 일정 편집의 ‹ 는 여전히 이전 화면이다 (공유 뷰 무회귀 · 선제 green)', () => {
+  it('‹ 를 누르면 router.back 1회 · replace 0회', async () => {
+    renderPage();
+    await screen.findByTestId(cardId('poi-a'));
+
+    fireEvent.press(screen.getByTestId('itinerary-edit-back'));
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 });
