@@ -217,7 +217,7 @@ describe('🔴 SlotFillScreen (h14/h15)', () => {
  *  - AC-3 지도 카드 additive(mapView 주면 렌더, 미주입 degrade)(D6·D7).
  *  - AC-4 후보 카드 픽스처(이름·태그) + 반경 밖 톤다운(dimmed 관통)(D1·D8).
  *  - AC-5 반경 넓히기/좁히기 **상시**(결과 얼굴 하단바, onShrinkRadius 신규)(D10).
- *  - AC-6 셋째 반경 세그 라벨 = radiusUsedLabel ?? '최대'(D4).
+ *  - AC-6 셋째 반경 세그 라벨 = maxRadiusLabel ?? '최대'(D4 → TRIP-978 에서 캡션값과 분리).
  *
  * ★ toHaveTextContent/getByText 는 **완전일치**(node_modules 실측, 02a §5) — 부분포함은 regex.
  *   그래서 앱바 폴백 구분에 exact 를 쓰고(getByText('후보 고르기')가 '전시 후보 고르기'를 안 잡음),
@@ -350,20 +350,108 @@ describe('🔴 SlotFillScreen (h10) — 반경 넓히기/좁히기 상시(결과
   });
 });
 
-describe('🔴 SlotFillScreen (h10) — 셋째 반경 세그 라벨(radiusUsedLabel ?? 최대)', () => {
-  it('T-SEG3 · radiusUsedLabel 있으면 셋째 세그 라벨이 그 값이고, 없으면 "최대"', () => {
-    // 있음 — Figma wide 프레임의 '약 11.3km'(서버 radiusMUsed 포맷, D4).
-    renderScreen({ radiusUsedLabel: '약 11.3km' });
+/**
+ * TRIP-978 — 셋째 반경 칸은 `maxRadiusLabel` 만 덮는다. 옛 T-SEG3 는 "radiusUsedLabel 이 있으면
+ * 선택과 무관하게 셋째 칸"을 굳혀 가운데 "1.1km" 옆에 "약 1.1km" 가 뜨는 버그의 계약이었다(교체).
+ * 캡션(radiusUsedLabel)과 셋째 칸(maxRadiusLabel)을 무엇으로 채울지는 페이지가 정한다.
+ */
+describe('🔴 SlotFillScreen (h10) — 셋째 반경 세그 라벨(maxRadiusLabel ?? 최대)', () => {
+  it('T-SEG3 · maxRadiusLabel 만 셋째 칸을 덮고, 캡션값(radiusUsedLabel)만 오면 셋째 칸은 "최대"', () => {
+    // 최대로 조회한 결과 — 셋째 칸이 서버값(Figma 3850:2227 '약 11.3km').
+    renderScreen({
+      selectedRadiusKey: 'max',
+      maxRadiusLabel: '약 11.3km',
+      radiusUsedLabel: null,
+    });
     expect(
       screen.getByTestId('itinerary-copick-radius-seg-max')
     ).toHaveTextContent('약 11.3km');
 
-    // 없음(조회 전) — 정적 '최대'(INV-2 지어내지 않음).
+    // 캡션값만 있음 — 캡션에만 뜨고 셋째 칸은 '최대' 그대로(가운데 '1.1km' 와 중복 금지).
     screen.unmount();
-    renderScreen({ radiusUsedLabel: null });
+    renderScreen({ maxRadiusLabel: null, radiusUsedLabel: '약 1.1km' });
     expect(
       screen.getByTestId('itinerary-copick-radius-seg-max')
     ).toHaveTextContent('최대');
+    expect(
+      screen.getByTestId('itinerary-copick-radius-used')
+    ).toHaveTextContent('약 1.1km');
+
+    // 둘 다 없음(조회 전) — 정적 '최대'(INV-2 지어내지 않음).
+    screen.unmount();
+    renderScreen({ maxRadiusLabel: null, radiusUsedLabel: null });
+    expect(
+      screen.getByTestId('itinerary-copick-radius-seg-max')
+    ).toHaveTextContent('최대');
+  });
+});
+
+/**
+ * TRIP-978 — 생성 중(PARTIAL) 잠금 표시 · 후보 조회 실패 얼굴.
+ *
+ * 무엇을 보장하나:
+ *  - AC-3: `confirmLocked` 면 골랐어도 확정 버튼이 비활성이고 이유 문구가 곁에 뜬다(INV-4 — 활성으로
+ *    보이는데 눌러도 무반응 금지).
+ *  - AC-7: `candidatesErrorMessage` 가 오면 0건 얼굴 대신 그 문구를 보인다(실패를 "못 찾았어요"로 속이지 않음).
+ *  - AC-11: 두 표면 어디에도 소요시간 문자열이 없다(INV-3).
+ */
+const LOCKED_TEXT = '나머지 일정을 만드는 중이에요';
+const DURATION_TEXT = /(\d+\s*분|\d+\s*시간|소요)/;
+
+describe('🔴 SlotFillScreen (h10) — 생성 중 잠금 · 후보 조회 실패 (TRIP-978)', () => {
+  it('T-LOCK-1 · confirmLocked 면 골랐어도 확정 버튼이 비활성이고 잠금 사유 문구가 보인다', () => {
+    const { onConfirm } = renderScreen({
+      selectedPoiId: 'A1',
+      confirmLocked: true,
+    });
+
+    const confirm = screen.getByTestId('itinerary-copick-slotfill-confirm');
+    fireEvent.press(confirm);
+
+    expect(confirm.props.accessibilityState?.disabled).toBe(true);
+    expect(onConfirm).toHaveBeenCalledTimes(0);
+    expect(
+      screen.getByTestId('itinerary-copick-confirm-locked')
+    ).toHaveTextContent(LOCKED_TEXT);
+  });
+
+  it('T-LOCK-2 · 잠금이 아니면 잠금 문구가 없고 확정 버튼은 살아 있다(부정 짝)', () => {
+    renderScreen({ selectedPoiId: 'A1', confirmLocked: false });
+
+    const confirm = screen.getByTestId('itinerary-copick-slotfill-confirm');
+    expect(confirm.props.accessibilityState?.disabled).not.toBe(true);
+    expect(screen.queryByTestId('itinerary-copick-confirm-locked')).toBeNull();
+  });
+
+  it('T-CERR-1 · 후보 조회 실패 문구가 오면 0건 얼굴 대신 그 사유를 보인다', () => {
+    renderScreen({ candidates: [], candidatesErrorMessage: LOCKED_TEXT });
+
+    expect(
+      screen.getByTestId('itinerary-copick-candidates-error')
+    ).toHaveTextContent(LOCKED_TEXT);
+    expect(screen.queryByTestId('itinerary-copick-zero')).toBeNull();
+
+    // 실패가 아니면(진짜 0건) 오류 얼굴은 없고 0건 얼굴이 그대로 뜬다.
+    screen.unmount();
+    renderScreen({ candidates: [], candidatesErrorMessage: null });
+    expect(
+      screen.queryByTestId('itinerary-copick-candidates-error')
+    ).toBeNull();
+    expect(screen.getByTestId('itinerary-copick-zero')).toBeTruthy();
+  });
+
+  it('T-INV3 · 잠금 문구·후보 오류 얼굴 어디에도 소요시간 문자열이 없다', () => {
+    // 표면이 실제로 떠 있어야 "없다"가 의미를 갖는다(긍정 짝 먼저).
+    renderScreen({ selectedPoiId: 'A1', confirmLocked: true });
+    expect(screen.getByTestId('itinerary-copick-confirm-locked')).toBeTruthy();
+    expect(screen.queryAllByText(DURATION_TEXT)).toEqual([]);
+
+    screen.unmount();
+    renderScreen({ candidates: [], candidatesErrorMessage: LOCKED_TEXT });
+    expect(
+      screen.getByTestId('itinerary-copick-candidates-error')
+    ).toBeTruthy();
+    expect(screen.queryAllByText(DURATION_TEXT)).toEqual([]);
   });
 });
 

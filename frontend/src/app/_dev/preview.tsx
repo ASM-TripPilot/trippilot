@@ -4883,6 +4883,8 @@ export const PREVIEW_STATES: PreviewState[] = [
   // 뷰 SlotFillScreen 을 진행줄·스텝퍼·지도·후보 카드 픽스처 props 로 태운다(api import 0 이라 프리뷰
   // 지뢰 목 무해). 반경 점선 원·축척·letter 핀 래스터·톤다운 배지 회색·색은 jest 사각이라 이 2키가
   // 유일한 육안 그물(자율 세션 6-b SKIP). 지도는 네이버 네이티브라 사람 재빌드 전엔 미표시.
+  // TRIP-978: default 의 셋째 칸은 '최대'다 — Figma 는 서버 최대값을 보이지만 프론트는 최대 조회 전엔 그
+  // 값을 모른다(정직 degrade, Seed Q6). wide 는 최대 조회 결과라 셋째 칸이 서버값(maxRadiusLabel).
   {
     key: 'h10-copick-candidates',
     band: 'h',
@@ -4907,7 +4909,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         candidateViews={H10_DEFAULT_VIEWS}
         radiusSteps={H10_RADIUS_STEPS}
         selectedRadiusKey="mid"
-        radiusUsedLabel="약 11.3km"
         candidateCountLabel="후보 4곳"
         selectedPoiId="A1"
         canExpandRadius
@@ -4948,7 +4949,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         candidateViews={H10_WIDE_VIEWS}
         radiusSteps={H10_RADIUS_STEPS}
         selectedRadiusKey="max"
-        radiusUsedLabel="약 11.3km"
+        maxRadiusLabel="약 11.3km"
         candidateCountLabel="후보 4곳"
         selectedPoiId="D4"
         canExpandRadius={false}
