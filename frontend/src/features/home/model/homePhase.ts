@@ -159,7 +159,8 @@ export function resolveHomePhase(
 }
 
 /** 일정 상태로 정한 목적지 토큰 — 라우트가 판정해 넘긴다(서버 스키마 미참조 로컬 리터럴, 경계 ★). */
-export type HomeItineraryTarget = 'method' | 'generating' | 'draft' | 'live';
+export type HomeItineraryTarget =
+  'method' | 'copick' | 'generating' | 'draft' | 'live';
 
 type PlanningPhase = Extract<HomePhase, { kind: 'planning' }>;
 
@@ -170,14 +171,14 @@ type PlanningPhase = Extract<HomePhase, { kind: 'planning' }>;
  * 폴백 라벨이 남는다(Q2).
  *  - live(확정) → 여행 중이면 '여행 일정 보기', 아니면 '확정 일정 보기' · 부제 없음.
  *  - method(일정 없음) → '일정 만들기'(h04 제목 재사용, Q1) · 부제 없음.
- *  - draft·generating(초안·생성 중) → '일정 이어서 짜기' · 부제는 폴백 그대로.
+ *  - draft·generating·copick(초안·생성 중·같이 짜기 중) → '일정 이어서 짜기' · 부제는 폴백 그대로.
  * 여행 중 판정은 `showSpots`(resolveHomePhase 가 여행 중일 때만 채움)를 그대로 쓴다.
  */
 export function applyItineraryTarget(
   phase: PlanningPhase,
   target: HomeItineraryTarget
 ): PlanningPhase {
-  if (target === 'draft' || target === 'generating') {
+  if (target === 'draft' || target === 'generating' || target === 'copick') {
     return { ...phase, trip: { ...phase.trip, ctaLabel: '일정 이어서 짜기' } };
   }
   const ctaLabel =

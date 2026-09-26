@@ -84,8 +84,15 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
    *
    * `useRef` 는 **다시 그리지 않고 값만 들고 있는 상자**다 — 이 값은 화면에 안 보이고
    * 판정에만 쓰이므로 바뀌었다고 다시 그릴 이유가 없다.
+   *
+   * 처음 값은 0이 아니라 **마운트 순간의 캐시 카운터**다(TRIP-1006 #084). 카운터는 이 화면 것이
+   * 아니라 캐시 속 쿼리 하나의 것이라, 같은 일정을 보는 다른 화면(같이 짜기의 PARTIAL 폴링 등)이
+   * 이미 30 넘게 올려 둘 수 있다. 0부터 세면 열자마자 "상한 도달"로 판정해 폴링을 시작조차 안 한다.
+   * (`useRef` 의 인자는 첫 렌더에서만 쓰인다 — 이후 렌더에서 다시 계산돼도 버려진다.)
    */
-  const pollBaseline = useRef(0);
+  const pollBaseline = useRef(
+    queryClient.getQueryState(itineraryQueryKey)?.dataUpdateCount ?? 0
+  );
 
   /** 캐시가 새로 만들어져 카운터가 되감기면 음수가 될 수 있어 0으로 바닥을 둔다. */
   function pollsSinceBaseline(dataUpdateCount: number): number {

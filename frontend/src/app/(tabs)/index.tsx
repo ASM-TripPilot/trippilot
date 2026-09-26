@@ -64,12 +64,19 @@ function PlanningHome({
         notFound,
         generationState: itinerary.data?.generationState,
         status: itinerary.data?.status,
+        generationMode: itinerary.data?.generationMode,
       })
     : null;
 
   const onPressTripHeroCta = () => {
     if (destination === null) return;
-    router.push(itineraryDestinationHref(dominantTripId, destination));
+    router.push(
+      itineraryDestinationHref(
+        dominantTripId,
+        destination,
+        itinerary.data?.days
+      )
+    );
   };
 
   return (

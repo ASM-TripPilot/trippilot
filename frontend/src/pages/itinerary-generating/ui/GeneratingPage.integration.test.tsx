@@ -12,6 +12,8 @@ import { GeneratingPage } from './GeneratingPage';
  *
  * 무엇을 보장하나:
  *  - 🔴 마운트 시 생성 POST 를 **1회** 쏜다(`{ generationMode:'FULLY_AI' }` 하나뿐, 여분 키 0).
+ *    TRIP-1006: 이 파일은 `mode="FULLY_AI"` 를 **명시해** 연다. mode 가 없으면 이제 생성 모드를 지어내지
+ *    않고 관찰 모드(POST 0)로 뜬다(A4 · INV-4) — 그쪽은 `GeneratingPage.observe.integration.test.tsx`.
  *  - 🔴 201(성공)이면 draft 로 **`router.replace` 1회**(뒤로가면 생성 화면으로 안 돌아온다).
  *  - 🔴 오류면 실패 표면을 띄우고(침묵 금지·INV-4) draft 로 안 가며, [다시 시도]가 POST 를 재발화한다.
  *  - 🔴 앱바 뒤로 셰브론이 **백그라운드 이탈**(여행/홈 forward)이지 뒤로가기(router.back)·세션 cancel 이 아니다.
@@ -116,7 +118,7 @@ beforeEach(() => {
 });
 
 function renderPage() {
-  return render(<GeneratingPage tripId={TRIP_ID} />);
+  return render(<GeneratingPage tripId={TRIP_ID} mode="FULLY_AI" />);
 }
 
 /** 모든 forward nav(push/replace/navigate)의 목적지를 직렬화해 모은다 — 형태(문자열/객체)를

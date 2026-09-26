@@ -1,8 +1,11 @@
 import type {
   ItineraryDaysItem,
+  ItineraryGenerationMode,
   ItineraryGenerationState,
   ItineraryStatus,
 } from '@/shared/api/generated/schemas';
+
+import { firstCoPickSlotKey } from './coPickSlots';
 
 /**
  * TRIP-299 · h25 완성 일정 시간표 뷰의 순수 판정/조립.
@@ -70,16 +73,24 @@ export function isConfirmLocked(
  * CONFIRMED(확정)→live · 그 외(COMPLETE+PLANNED, 미확정 초안)→draft. generationState 는
  * status 와 독립 축이라(계약) 진행 상태를 확정 상태보다 먼저 본다(BR-U3-04/07/28 성격에서 파생).
  * 확정 일정은 날짜와 상관없이 여행 중 화면(허브)으로 보낸다 — 2026-09-23 사용자 결정(제품 규칙).
+ *
+ * TRIP-1006 D2 · PARTIAL 은 생성 방식으로 한 번 더 가른다 — 같이 짜기(CO_PLAN)면 슬롯 채우기(`copick`),
+ * 그 밖(FULLY_AI·MANUAL·모드 불명)이면 생성 중 화면의 관찰 모드(`generating`, POST 없이 GET 만).
+ * 어느 쪽도 생성을 다시 쏘지 않는다(#083). PARTIAL 이 아니면 모드는 목적지를 바꾸지 않는다.
  */
-export type ItineraryDestination = 'method' | 'generating' | 'draft' | 'live';
+export type ItineraryDestination =
+  'method' | 'copick' | 'generating' | 'draft' | 'live';
 
 export function resolveItineraryDestination(input: {
   notFound: boolean;
   generationState?: ItineraryGenerationState;
   status?: ItineraryStatus;
+  generationMode?: ItineraryGenerationMode;
 }): ItineraryDestination {
   if (input.notFound) return 'method';
-  if (input.generationState === 'PARTIAL') return 'generating';
+  if (input.generationState === 'PARTIAL') {
+    return input.generationMode === 'CO_PLAN' ? 'copick' : 'generating';
+  }
   if (input.generationState === 'FAILED') return 'draft';
   if (input.status === 'CONFIRMED') return 'live';
   return 'draft';
@@ -93,20 +104,33 @@ export function resolveItineraryDestination(input: {
  * `typedRoutes` 가 `router.push`/`Redirect href` 에서 거부한다(라우트 파일에서 인라인 템플릿만
  * 문맥 타이핑돼 통과하므로, 조립기를 밖에 두려면 라우트 타입을 직접 실어야 한다). expo-router 를
  * import 하지 않아 이 model 층은 라우팅 무지로 남는다.
+ *
+ * `days` 는 `copick` 이 첫 비고정 슬롯을 고르는 데만 쓴다. 선택 인자가 아니라 **필수**인 이유: 호출처가
+ * 빠뜨려도 컴파일되면 같이 짜기 재진입이 조용히 `copick/complete`(완성 확인)로 샌다 — 필수면 tsc 가
+ * 잡는다. 슬롯 키 `"{date}#{poiId}"` 의 `#` 는 문자열 경로에서 URL 조각(fragment) 구분자라 그대로
+ * 이으면 라우터가 `#` 뒤를 잘라낸다 → `encodeURIComponent`(`#`→`%23`)로 감싸 보낸다.
  */
 export type ItineraryDestinationHref =
   | `/trips/${string}/live`
   | `/trips/${string}/itinerary/method`
+  | `/trips/${string}/itinerary/copick/${string}`
   | `/trips/${string}/itinerary/generating`
   | `/trips/${string}/itinerary/draft`;
 
 export function itineraryDestinationHref(
   tripId: string,
-  destination: ItineraryDestination
+  destination: ItineraryDestination,
+  days: ItineraryDaysItem[] | undefined
 ): ItineraryDestinationHref {
   switch (destination) {
     case 'method':
       return `/trips/${tripId}/itinerary/method`;
+    case 'copick': {
+      const slotKey = firstCoPickSlotKey(days ?? []);
+      return slotKey === null
+        ? `/trips/${tripId}/itinerary/copick/complete`
+        : `/trips/${tripId}/itinerary/copick/${encodeURIComponent(slotKey)}`;
+    }
     case 'generating':
       return `/trips/${tripId}/itinerary/generating`;
     case 'draft':

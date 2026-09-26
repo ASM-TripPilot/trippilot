@@ -264,3 +264,71 @@ describe('986-C3 · 끝난 여행(ENDED)도 카드 얼굴은 일정 상태만 �
     );
   });
 });
+
+/**
+ * TRIP-1006 A1·A2·A3 · 생성 중(PARTIAL) 카드를 다시 누르면 **생성 방식별로** 간다(D2).
+ * 같이 짜기면 슬롯 채우기의 첫 비고정 슬롯, 완전 AI 면 생성 중 화면의 관찰 모드(mode 꼬리 없음 =
+ * POST 없이 GET 만). 어느 쪽도 생성을 다시 쏘는 경로가 아니다(#083).
+ */
+function partialItin(mode: Itinerary['generationMode']): Itinerary {
+  return {
+    ...itin('PARTIAL', 'PLANNED'),
+    generationMode: mode,
+    days: [
+      {
+        date: '2026-06-10',
+        slots: [
+          {
+            poiId: 'hotel',
+            startAt: '00:00:00',
+            endAt: '00:00:00',
+            isFixed: true,
+            endsNextDay: false,
+            hasViolation: false,
+            alternatives: [],
+            tags: [],
+          },
+          {
+            poiId: 'a',
+            startAt: '09:30:00',
+            endAt: '11:00:00',
+            isFixed: false,
+            endsNextDay: false,
+            hasViolation: false,
+            alternatives: [],
+            tags: [],
+          },
+        ],
+      },
+    ],
+  };
+}
+
+describe('🔴 1006 · 생성 중 카드 탭 — 생성 방식별 목적지 (D2)', () => {
+  it('같이 짜기(CO_PLAN)면 첫 비고정 슬롯의 슬롯 채우기로 1회 간다 — 슬롯 키의 # 는 %23 으로', () => {
+    // 준비 — 1일차 맨 앞은 고정 숙소, 첫 비고정은 a.
+    mockUseItinerary.mockReturnValue(itinOk(partialItin('CO_PLAN')));
+
+    // 실행
+    render(<TripCardContainer trip={trip()} />);
+    fireEvent.press(screen.getByTestId('my-trip-card-t1'));
+
+    // 단언 — 인코딩된 리터럴을 손으로 적는다(02a ★1).
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(String(mockPush.mock.calls[0][0])).toBe(
+      '/trips/t1/itinerary/copick/2026-06-10%23a'
+    );
+  });
+
+  it('완전 AI(FULLY_AI)면 생성 중 화면으로 가되 mode 를 싣지 않는다(관찰 모드)', () => {
+    mockUseItinerary.mockReturnValue(itinOk(partialItin('FULLY_AI')));
+
+    render(<TripCardContainer trip={trip()} />);
+    fireEvent.press(screen.getByTestId('my-trip-card-t1'));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(String(mockPush.mock.calls[0][0])).toBe(
+      '/trips/t1/itinerary/generating'
+    );
+  });
+});

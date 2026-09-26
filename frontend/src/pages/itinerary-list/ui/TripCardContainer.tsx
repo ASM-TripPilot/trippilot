@@ -86,7 +86,9 @@ export function TripCardContainer({
           notFound,
           generationState: itinerary.data?.generationState,
           status: itinerary.data?.status,
-        })
+          generationMode: itinerary.data?.generationMode,
+        }),
+        itinerary.data?.days
       )
     );
   };

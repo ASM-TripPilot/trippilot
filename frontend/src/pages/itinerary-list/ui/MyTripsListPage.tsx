@@ -114,7 +114,9 @@ export function MyTripsListPage(): ReactElement {
           notFound: isNotFound(query?.error),
           generationState: query?.data?.generationState,
           status: query?.data?.status,
-        })
+          generationMode: query?.data?.generationMode,
+        }),
+        query?.data?.days
       )
     );
   };

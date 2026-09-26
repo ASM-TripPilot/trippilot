@@ -90,7 +90,8 @@ export function MustVisitListPage({
   // 다음/건너뛰기는 둘 다 h09(생성 중)로 간다. copick 갈래(mode=CO_PLAN)면 h04 에서 실려 온 신호를
   // 그대로 h09 로 넘기고, successRoute 를 **첫 슬롯 경로 템플릿**으로 싣는다(01b Q3·AC-5). h05 시점엔
   // slotKey 를 아직 모르므로 `[slotKey]` 세그먼트가 든 템플릿이고, h09 가 생성 후 실 slotKey 를
-  // 채운다(GeneratingPage). 완전AI 갈래(mode 없음)는 기존 FULLY_AI generating 그대로다(무회귀).
+  // 채운다(GeneratingPage). 완전AI 갈래(h04 에서 mode 없음)는 FULLY_AI 를 **명시해** 싣는다 — h09 는
+  // mode 가 없으면 생성을 쏘지 않는 관찰 모드로 뜬다(TRIP-1006 A4·A5).
   function goToGenerating(): void {
     if (mode === 'CO_PLAN') {
       router.push({
@@ -105,7 +106,7 @@ export function MustVisitListPage({
     }
     router.push({
       pathname: '/trips/[tripId]/itinerary/generating',
-      params: { tripId },
+      params: { tripId, mode: 'FULLY_AI' },
     });
   }
 

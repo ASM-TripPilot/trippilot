@@ -2,9 +2,13 @@ import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
+import { View } from 'react-native';
 
 import { buildEditItineraryRequest } from '@/features/itinerary/model/buildEditItineraryRequest';
-import { nextCoPickSlotKey } from '@/features/itinerary/model/coPickSlots';
+import {
+  countPickedCoPickSlots,
+  nextCoPickSlotKey,
+} from '@/features/itinerary/model/coPickSlots';
 import {
   DRAFT_POLL_INTERVAL_MS,
   formatCoPickDayHeader,
@@ -19,6 +23,7 @@ import {
   ConceptPickerScreen,
   type ConceptProgress,
 } from '@/features/itinerary/ui/ConceptPickerScreen';
+import { CoPickLeaveDialog } from '@/features/itinerary/ui/CoPickLeaveDialog';
 import { SlotFillScreen } from '@/features/itinerary/ui/SlotFillScreen';
 import type {
   ItineraryDaysItemSlotsItem,
@@ -122,6 +127,7 @@ export function SlotFillPage({
     useState(DEFAULT_RADIUS_KEY);
   const [selectedPoiId, setSelectedPoiId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [leaveOpen, setLeaveOpen] = useState(false);
   const firedRef = useRef(false);
 
   const parsed = parseSlotKey(slotKey);
@@ -357,16 +363,36 @@ export function SlotFillPage({
   }
 
   if (!inFill) {
+    // TRIP-1006 (B) · 컨셉 얼굴 ‹ 는 `router.back()` 이 아니다 — 스택상 뒤는 필수 방문지(h02)라, 거기서
+    // CTA 를 누르면 생성이 다시 돌아 고른 슬롯이 사라졌다(#072). 대신 홈으로 나가고(Q2, 생성 중 화면의
+    // 백그라운드 이탈과 같은 결), 앞에서 1곳 이상 골랐으면 확인부터 띄운다(D3). 고른 곳 수는 일자를
+    // 건너 센다 — `coPickContext().index` 는 그날 안 순번이라 2일차 첫 슬롯에서 0이 된다.
+    const pickedCount = countPickedCoPickSlots(
+      itinerary.data?.days ?? [],
+      slotKey
+    );
+    const leave = (): void => {
+      router.replace('/(tabs)');
+    };
     return (
-      <ConceptPickerScreen
-        concepts={CONCEPTS}
-        progress={conceptProgress()}
-        stepperSlot={conceptStepper()}
-        slotContextLabel={slotContextLabel()}
-        onPickConcept={handlePickConcept}
-        onSkip={handleSkip}
-        onBack={() => router.back()}
-      />
+      <View className="flex-1">
+        <ConceptPickerScreen
+          concepts={CONCEPTS}
+          progress={conceptProgress()}
+          stepperSlot={conceptStepper()}
+          slotContextLabel={slotContextLabel()}
+          onPickConcept={handlePickConcept}
+          onSkip={handleSkip}
+          onBack={() => (pickedCount === 0 ? leave() : setLeaveOpen(true))}
+        />
+        {leaveOpen ? (
+          <CoPickLeaveDialog
+            pickedCount={pickedCount}
+            onStay={() => setLeaveOpen(false)}
+            onLeave={leave}
+          />
+        ) : null}
+      </View>
     );
   }
 
