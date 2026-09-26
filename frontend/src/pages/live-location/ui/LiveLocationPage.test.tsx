@@ -113,3 +113,22 @@ describe('🔴 AC-9 · i20 좌표 확정 — 중심좌표를 확정 콜백으로
     expect(mockReverse).toHaveBeenCalledTimes(0);
   });
 });
+
+describe('🔴 TRIP-979 AC-A7 · state 미지정·미지 값은 manual 얼굴로 폴백한다 (INV-4)', () => {
+  // 라우트는 URL `?state=` 원문을 검증 없이 내린다 — 빠지면 undefined, 오타면 아무 문자열,
+  // 같은 키가 두 번이면 배열(expo-router 검색 파라미터 모양)이 온다.
+  it.each([
+    ['미지정(undefined)', undefined],
+    ["미지 값('foo')", 'foo'],
+    ["배열(['manual'])", ['manual']],
+  ])('%s 이면 던지지 않고 manual 얼굴을 그린다', (_label, raw) => {
+    render(<LiveLocationPage tripId="trip-1" state={raw} />);
+
+    expect(screen.getByTestId('live-location-manual')).toBeOnTheScreen();
+    expect(screen.queryByTestId('live-location-permission-denied')).toBeNull();
+    expect(screen.getByText(/위치를 확인할 수 없어/)).toBeOnTheScreen();
+    expect(screen.getByTestId('center-pin-picker')).toBeOnTheScreen();
+    // INV-3 — 폴백 얼굴 어디에도 소요시간 문구가 없다.
+    expect(screen.queryByText(/\d+\s*(분|시간)|소요/)).toBeNull();
+  });
+});

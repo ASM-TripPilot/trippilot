@@ -31,7 +31,9 @@ export interface LiveLocationPageProps {
   /** origin 을 이어 붙일 재계획 세션의 여행 id. 라이브 세션 배선(후속)이 쓴다 — 이 프리젠테이션
    *  단계에서는 소비하지 않는다(진입은 딥링크/프리뷰 전용). */
   tripId: string;
-  state: LiveLocationState;
+  /** URL `?state=` 원문(라우트가 검증 없이 내린다) — 'permission-denied' 만 i21, 그 외(미지정·
+   *  미지 값·배열)는 전부 manual 얼굴로 폴백한다(TRIP-979 AC-A7 · INV-4). */
+  state?: string | string[];
   /** "이 위치로 계속" 확정 콜백(TRIP-866 S4). 지도를 움직여 맞춘 중심 좌표(없으면 기준점)를
    *  올린다 — 라이브 세션 배선(후속)이 MANUAL origin 으로 이어 붙인다. StayRegister 와 달리
    *  **역지오코딩을 하지 않는다**(좌표만 쓴다, AC-9). */
@@ -87,7 +89,7 @@ export function LiveLocationPage({
   state,
   onConfirm,
 }: LiveLocationPageProps): ReactElement {
-  const face = FACES[state];
+  const face = FACES[state === 'permission-denied' ? state : 'manual'];
   const selectedValue = `${face.selectedLabel}${
     isEstimatedOrigin(face.originKind) ? '(추정)' : ''
   }`;

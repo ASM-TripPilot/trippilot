@@ -532,7 +532,7 @@
 - `src/features/planb/model/reorderKeepingLocked.ts`  →  reorderKeepingLocked
 - `src/features/planb/model/replanFormStore.ts`  →  ReplanFormState · useReplanFormStore
 - `src/features/planb/model/replanFromInstant.ts`  →  readFromInstant
-- `src/features/planb/model/replanOrigin.ts`  →  ReplanOrigin · buildManualOrigin · isEstimatedOrigin
+- `src/features/planb/model/replanOrigin.ts`  →  ReplanOrigin · buildManualOrigin · buildGpsOrigin · isEstimatedOrigin
 - `src/features/planb/model/replanRequest.ts`  →  ReplanFormValues · buildStartReplanRequest
 - `src/features/planb/model/replanScope.ts`  →  ReplanScopeOption · REPLAN_SCOPES · DEFAULT_REPLAN_SCOPE
 - `src/features/planb/model/replanState.ts`  →  ReplanState · resolveReplanState
@@ -544,6 +544,7 @@
 - `src/features/planb/model/useActiveTriggers.ts`  →  useActiveTriggers
 - `src/features/planb/model/useApplyReplan.ts`  →  useApplyReplan
 - `src/features/planb/model/useCancelReplan.ts`  →  useCancelReplan
+- `src/features/planb/model/useReplanGpsOrigin.ts`  →  ReadReplanGpsOrigin · useReplanGpsOrigin
 - `src/features/planb/model/useReplanSession.ts`  →  useReplanSession
 - `src/features/planb/model/useSlotCandidates.ts`  →  useSlotCandidates
 - `src/features/planb/model/useStartReplan.ts`  →  useStartReplan
@@ -1286,6 +1287,7 @@
 - `src/shared/location/lib/locationColors.ts`  →  LOCATION_ICON_COLORS
 
 ## src/shared/location/
+- `src/shared/location/readDevicePosition.ts`  →  readDevicePosition
 - `src/shared/location/revokeImpact.ts`  →  RevokeImpact · revokeImpact
 - `src/shared/location/useLocationConsent.ts`  →  LocationConsentModel · useLocationConsent
 
@@ -1367,4 +1369,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 933개 파일
+합계 935개 파일
