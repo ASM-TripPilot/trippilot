@@ -405,7 +405,7 @@ describe('S3 · AC-8 — 사진 도입이 화면·계약으로 새지 않았다 
    * `DraftScreen.tsx` 에 한 줄 느는 것은 이 조건이 금지하는 대상이 아니다(02a §3-5) — 그래서
    * 여기서 재는 것은 "화면 파일이 안 바뀌었다"가 아니라 **"사진 해결이 화면으로 새지 않았다"**다.
    */
-  it('MapPin 은 7필드(TRIP-745 state + TRIP-768 imageUrl·kind + TRIP-795 label additive 편입), DraftScreenProps 는 12필드(TRIP-791 fallbackNotice · TRIP-983 expandedSlotKey·renderSlotPanel 제거), 화면에 에셋 해석 지문이 0건이다', () => {
+  it('MapPin 은 7필드(TRIP-745 state + TRIP-768 imageUrl·kind + TRIP-795 label additive 편입), DraftScreenProps 는 13필드(TRIP-791 fallbackNotice · TRIP-983 expandedSlotKey·renderSlotPanel 제거 · TRIP-1008 fallback 추가), 화면에 에셋 해석 지문이 0건이다', () => {
     const mapCoreSource = readOne(MAP_CORE_REL);
     const screenSource = readOne(SCREEN_REL);
 
@@ -465,6 +465,10 @@ describe('S3 · AC-8 — 사진 도입이 화면·계약으로 새지 않았다 
       // 마운트한다(features 층은 pages 컨테이너를 못 물어 prop 없이는 화면이 시트를 그릴 길이 없다).
       // 정당한 계약 플립(이행 체크포인트 B). 이 순서 그대로(toEqual 순서 민감).
       'onManualPlan',
+      // TRIP-1008 — `fallback?: boolean` 끝에 추가(12→13). 인터스티셜을 넘긴 폴백 목록이 "AI 추천"을
+      // 거짓으로 달지 않게 판정 **결과**만 받는다(DraftPage 의 fallbackNotice !== null). 이름은 G6 금지
+      // 어휘 `isFallback` 부분 문자열을 피한다. 정당한 계약 플립(이행 체크포인트 B).
+      'fallback',
     ]);
 
     // 에셋 해석은 픽스처 몫이다 — 화면이 로컬 파일을 알면 계약이 둘로 갈린다.

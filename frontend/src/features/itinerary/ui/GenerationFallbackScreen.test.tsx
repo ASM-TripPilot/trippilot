@@ -13,7 +13,8 @@ import { GenerationFallbackScreen } from './GenerationFallbackScreen';
  * h07 [완전AI] 일정 생성 · fallback — Figma `3831:2177` 전용 인터스티셜 화면의 렌더 계약.
  *
  * 무엇을 보장하나 — 화면은 완성된 값(`failed`·`mustVisitCount`·`pins`·콜백)만 받는다(props-only):
- *  - 🔴 성공(폴백) 변형: 앱바·진행표시·메시지 카피·체크리스트 4행·N·안내바·CTA 2개(AC-1~6).
+ *  - 🔴 성공(폴백) 변형: 앱바·진행표시·메시지 카피·체크리스트 4행·N·CTA 2개(AC-1~6). 메시지 본문은
+ *    원인을 특정하지 않고 알림 약속 안내바는 없다(TRIP-1008 A1~A3 — 옛 AC-2 본문·AC-5 안내바 플립).
  *  - 🔴 실패(하드) 변형: 체크리스트 대신 실패 히어로 + CTA 갈림(AC-7). 성공/실패 상호배타(AC-8).
  *  - 🔴 화면 전체에 소요시간 표기 0건(AC-9 · INV-3).
  *  - 초록 체크·회색 대시 마커의 **색은 심판하지 않는다**(글리프 raw-hex 사각 · 02a ★4) — 마커
@@ -133,19 +134,23 @@ describe('🔴 AC-1 · 성공 — 앱바 제목과 진행 표시가 뜬다', () 
   });
 });
 
-describe('🔴 AC-2 · 성공 — 메시지 카드 카피가 원문 그대로 뜬다 (완전일치)', () => {
-  it('제목·본문이 Figma 원문(en-dash·중점 포함)과 완전일치한다', () => {
+describe('🔴 AC-2 · 성공 — 메시지 카드 카피가 원인을 특정하지 않는다 (TRIP-1008 A1·A2 플립)', () => {
+  it('제목은 그대로, 본문은 원인 중립 문구와 완전일치하고 "연결이 불안정" 은 화면 어디에도 없다', () => {
     renderScreen();
 
     const message = screen.getByTestId('itinerary-fallback-message');
+    // A4 무회귀 — 제목은 그대로다.
     expect(
       within(message).getByText('AI 추천은 잠시 쉬어요')
     ).toBeOnTheScreen();
+    // A2 긍정 짝 — 본문을 통째로 지우는 구현을 막는다(Seed Q1 · US-SCHED-09 "기본 모드" 결).
     expect(
       within(message).getByText(
-        '연결이 불안정해서 취향 반영 없이 기본 일정을 먼저 만들었어요 · 나중에 다시 짤 수 있어요'
+        '이번엔 취향 반영 없이 기본 일정을 먼저 만들었어요 · 나중에 다시 짤 수 있어요'
       )
     ).toBeOnTheScreen();
+    // A1 금지 — 폴백 원인은 연결 말고도 조립 409·LLM 잘림이 있다. 한 원인을 박으면 나머지에 거짓말이다.
+    expect(screen.queryAllByText(/연결이 불안정/).length).toBe(0);
   });
 });
 
@@ -194,14 +199,16 @@ describe('🔴 AC-4 · 성공 — N 이 주입값과 일치한다 (하드코딩/
   });
 });
 
-describe('🔴 AC-5 · 성공 — 안내바 카피가 뜬다', () => {
-  it('"준비되면 알림으로 알려드릴게요" 가 안내바에 있다', () => {
+describe('🔴 AC-5 · 성공 — 알림 약속 안내바가 없다 (TRIP-1008 A3 플립 · D6)', () => {
+  it('안내바 testID 와 "알림으로 알려" 문구가 0건이다 — 재시도 알림이 실재하지 않는 약속이라서', () => {
     renderScreen();
 
-    const info = screen.getByTestId('itinerary-fallback-info');
-    expect(
-      within(info).getByText('준비되면 알림으로 알려드릴게요')
-    ).toBeOnTheScreen();
+    // 긍정 앵커 — 화면은 떠 있다(아무것도 안 그리는 구현이 아래 부정을 공짜로 통과하지 못하게).
+    expect(screen.getByTestId('itinerary-fallback-root')).toBeOnTheScreen();
+    expect(screen.getByText('기본 일정 완성')).toBeOnTheScreen();
+
+    expect(screen.queryAllByTestId('itinerary-fallback-info').length).toBe(0);
+    expect(screen.queryAllByText(/알림으로 알려/).length).toBe(0);
   });
 });
 
@@ -253,9 +260,11 @@ describe('🔴 AC-8 · 성공/실패 상호배타', () => {
   it('성공 변형엔 실패 문구가 0건이다', () => {
     renderScreen();
     expect(screen.queryAllByTestId('itinerary-fallback-failed')).toEqual([]);
-    // 성공 표면(체크리스트·메시지·지도·안내바)은 있다(긍정 짝).
+    // 성공 표면(메시지·체크리스트)은 있다(긍정 짝). 안내바는 TRIP-1008 로 없어져 짝에서 뺐다.
     expect(screen.getByTestId('itinerary-fallback-message')).toBeOnTheScreen();
-    expect(screen.getByTestId('itinerary-fallback-info')).toBeOnTheScreen();
+    expect(
+      screen.queryAllByTestId(/^itinerary-fallback-check-\d$/).length
+    ).toBe(4);
   });
 
   it('실패 변형엔 성공 표면(체크리스트·메시지·지도·안내바)이 모두 0건이다 (히어로만 · D5)', () => {

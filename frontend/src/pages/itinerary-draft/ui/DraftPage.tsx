@@ -19,6 +19,7 @@ import { legDistance } from '@/features/itinerary/model/legDistance';
 import { DraftScreen } from '@/features/itinerary/ui/DraftScreen';
 import { GenerationFallbackScreen } from '@/features/itinerary/ui/GenerationFallbackScreen';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+import { VIOLATION_NOTICE } from '@/entities/itinerary-slot/lib/violationLabel';
 import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
 import {
   getGetTripsTripIdItineraryQueryKey,
@@ -476,6 +477,7 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
                             buildSlotKey(selectedDate, slot.poiId)
                           )
                   }
+                  violation={slot.hasViolation ? VIOLATION_NOTICE : null}
                 />,
               ];
               if (index < listedSlots.length - 1) {
@@ -508,6 +510,9 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
         )}
         dayHeader={formatDraftDayHeader(selectedDate)}
         canRetry={itinerary.data?.status !== 'CONFIRMED'}
+        // 폴백 판정은 위에서 접은 값 그대로(재발명 금지 → F-7 승계). 인터스티셜을 넘긴 목록이 폴백임을
+        // 제목·배지로 계속 말한다(BR-U3-11 · TRIP-1008).
+        fallback={fallbackNotice !== null}
         onSelectDay={setPickedDate}
         onRetry={() => void handleRetry()}
         onBack={handleBack}

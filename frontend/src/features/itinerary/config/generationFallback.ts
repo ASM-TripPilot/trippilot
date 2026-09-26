@@ -20,13 +20,11 @@ export const GENERATION_FALLBACK_MAP_PILL = '기본 동선으로 그렸어요';
 // 메시지 카드 제목·본문(en-dash 없음 · 중점 U+00B7).
 export const GENERATION_FALLBACK_MESSAGE_TITLE = 'AI 추천은 잠시 쉬어요';
 export const GENERATION_FALLBACK_MESSAGE_BODY =
-  '연결이 불안정해서 취향 반영 없이 기본 일정을 먼저 만들었어요 · 나중에 다시 짤 수 있어요';
+  '이번엔 취향 반영 없이 기본 일정을 먼저 만들었어요 · 나중에 다시 짤 수 있어요';
 // 체크리스트 ②③④(①은 화면이 N 을 붙여 조립).
 export const GENERATION_FALLBACK_CHECK_ROUTE = '동선·거리 계산';
 export const GENERATION_FALLBACK_CHECK_SKIPPED = '취향 반영 (건너뜀)';
 export const GENERATION_FALLBACK_CHECK_DONE = '기본 일정 완성';
-// 안내바.
-export const GENERATION_FALLBACK_INFO = '준비되면 알림으로 알려드릴게요';
 // 하단 CTA — 성공(폴백) 변형.
 export const GENERATION_FALLBACK_VIEW_PLAN = '기본 일정 보기';
 export const GENERATION_FALLBACK_MANUAL = '직접 짜기';

@@ -8,6 +8,7 @@ import { StateNotice } from '@/shared/ui/StateNotice';
 
 import type { DraftDayTab, DraftPin, DraftView } from '../model/draftView';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+import { VIOLATION_NOTICE } from '@/entities/itinerary-slot/lib/violationLabel';
 import { timeBandLabel } from '../model/timeBandLabel';
 import {
   AlertCircleGlyph,
@@ -46,6 +47,10 @@ const REASON_SUBTITLE = '슬롯 하나만 다른 후보로 바꿔도 좋고 — 
 /** 초안을 새로 생성한다(POST 재호출). 확정된 일정에서는 확정이 풀리므로 비활성이다. */
 const RETRY_LABEL = '다시 만들기';
 const AI_BADGE = 'AI 추천';
+/** 폴백(인터스티셜을 넘긴 목록)이면 제목·reason 제목·배지가 "AI 추천"을 말하지 않는다 — 취향 반영
+ * 없이 만든 일정이라서다(BR-U3-11 · US-SCHED-09 "기본 모드" 결 · TRIP-1008 D6). 부제는 폴백에서도 참이라 그대로. */
+const FALLBACK_LABEL = '기본 일정';
+const FALLBACK_REASON_TITLE = '취향 반영 없이 만든 기본 일정이에요';
 const FIXED_CHIP = '고정';
 /** 비고정 슬롯의 교체 트리거 라벨. h24 `ItineraryEditScreen.ALT_LABEL` 과 같은 값 —
  * 카운트를 안 붙인다(후보 수는 슬롯별 POST 조회 뒤에만 알아 pre-fetch 불가, 01b Q3). */
@@ -100,6 +105,8 @@ export interface DraftScreenProps {
   /** 「처음부터 직접」(하단)·「직접 고르기」(우상단) 공통 콜백 — 둘 다 수동 짜기 라우트로 간다.
    * 미배선이면 두 어포던스를 아예 안 그린다(후방호환 gated · 死버튼 회피). */
   onManualPlan?: () => void;
+  /** 폴백 일정의 목록인가 — `DraftPage` 가 접은 판정 결과만 받는다(원천 신호 어휘는 모른다 · G6). */
+  fallback?: boolean;
 }
 
 function DayTab({
@@ -146,13 +153,16 @@ function DraftSlotCard({
   date,
   index,
   onPressSlot,
+  fallback,
 }: {
   slot: ItineraryDaysItemSlotsItem;
   date: string;
   index: number;
   onPressSlot?: (slotKey: string) => void;
+  fallback: boolean;
 }): ReactElement {
   const slotKey = buildSlotKey(date, slot.poiId);
+  const violation = slot.hasViolation ? VIOLATION_NOTICE : null;
   const tagText =
     slot.tags.length > 0 ? slot.tags.map((tag) => `#${tag}`).join(' · ') : null;
   const distance = slot.distanceRange ?? null;
@@ -199,7 +209,7 @@ function DraftSlotCard({
               className="flex-row items-center justify-center rounded-pill bg-primary-pale px-[7px] py-[2px]"
             >
               <Text className="font-noto-bold text-micro font-bold text-primary-text">
-                {AI_BADGE}
+                {fallback ? FALLBACK_LABEL : AI_BADGE}
               </Text>
             </View>
           )}
@@ -233,6 +243,19 @@ function DraftSlotCard({
             {distance}
           </Text>
         )}
+
+        {/* 위반 알약 — SlotStopCard 와 같은 모양(i07 Figma). testID 는 카드 접두 **밖**이라 카드 개수
+            셀렉터에 오계수되지 않는다(`itinerary-draft-alt-` 와 같은 이유). 문구는 고정 라벨뿐(INV-3 · 02c). */}
+        {violation ? (
+          <View
+            testID={`itinerary-draft-violation-${slotKey}`}
+            className="self-start rounded-[12px] bg-primary-pale px-sm py-[3px]"
+          >
+            <Text className="font-noto-bold text-micro font-bold text-primary">
+              {violation}
+            </Text>
+          </View>
+        ) : null}
 
         {/* 슬롯 교체 트리거 — 비고정 슬롯에만, 그리고 배선(`onPressSlot`)이 있을 때만 그린다.
             고정(숙소 앵커)엔 안 그려 교체 대상에서 뺀다(Q1 · INV). testID 는 카드 접두
@@ -296,6 +319,7 @@ export function DraftScreen({
   onComplete,
   onPressSlot,
   onManualPlan,
+  fallback = false,
 }: DraftScreenProps): ReactElement {
   // PARTIAL(2단계 생성 중) 얼굴은 이제 DraftPage 가 공용 지도+시트 셸로 그린다(TRIP-790 · D1) —
   // 이 화면은 view.generating 을 읽지 않고 listed 얼굴만 그린다(완성 CTA 는 그대로 · C16 무회귀).
@@ -317,8 +341,11 @@ export function DraftScreen({
           >
             <BackChevronGlyph />
           </Pressable>
-          <Text className="font-noto-bold text-[19px] font-bold text-ink">
-            {SCREEN_TITLE}
+          <Text
+            testID="itinerary-draft-title"
+            className="font-noto-bold text-[19px] font-bold text-ink"
+          >
+            {fallback ? FALLBACK_LABEL : SCREEN_TITLE}
           </Text>
           <View className="flex-1" />
           {/* 우상단 「직접 고르기」 — 수동 짜기로 나가는 링크(gated · TRIP-483 AC-4). 재생성
@@ -371,8 +398,11 @@ export function DraftScreen({
           <View className="w-full flex-row items-start gap-[10px]">
             <CheckCircleGlyph />
             <View className="flex-1 gap-[3px]">
-              <Text className="font-noto-bold text-body font-bold text-ink">
-                {REASON_TITLE}
+              <Text
+                testID="itinerary-draft-reason-title"
+                className="font-noto-bold text-body font-bold text-ink"
+              >
+                {fallback ? FALLBACK_REASON_TITLE : REASON_TITLE}
               </Text>
               {/* 부제는 슬롯 교체를 권하는 행동 유도 문구라 바꿀 슬롯이 실재하는
                   `listed` 얼굴에서만 뜬다 — loading·failed·empty(슬롯 0건)에선 감춘다
@@ -453,6 +483,7 @@ export function DraftScreen({
                   date={selectedDate}
                   index={index}
                   onPressSlot={onPressSlot}
+                  fallback={fallback}
                 />
               ))}
             </>

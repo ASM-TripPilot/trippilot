@@ -11,7 +11,6 @@ import {
   GENERATION_FALLBACK_CHECK_SKIPPED,
   GENERATION_FALLBACK_FAILED_NOTE,
   GENERATION_FALLBACK_FAILED_TITLE,
-  GENERATION_FALLBACK_INFO,
   GENERATION_FALLBACK_MANUAL,
   GENERATION_FALLBACK_MAP_PILL,
   GENERATION_FALLBACK_MESSAGE_BODY,
@@ -26,7 +25,6 @@ import {
   BackChevronGlyph,
   CheckGlyph,
   DashGlyph,
-  InfoCircleGlyph,
 } from './ItineraryGlyphs';
 
 /**
@@ -142,7 +140,7 @@ export function GenerationFallbackScreen({
         </View>
 
         {failed ? (
-          // 하드 실패 — 히어로만(지도·메시지·체크리스트·안내바 감춤). 생성 자체가 실패라 그릴 동선이
+          // 하드 실패 — 히어로만(지도·메시지·체크리스트 감춤). 생성 자체가 실패라 그릴 동선이
           // 없다(01b D5). itinerary-fallback-failed 는 제목 Text 에만 달아 완전일치 단언이 노트를
           // 함께 물지 않게 한다(02a §5 · RNTL toHaveTextContent = 완전일치).
           <View className="flex-1 items-center justify-center gap-md px-lg">
@@ -229,17 +227,6 @@ export function GenerationFallbackScreen({
                   </Text>
                 </View>
               ))}
-            </View>
-
-            {/* 안내바. */}
-            <View
-              testID="itinerary-fallback-info"
-              className="min-h-[52px] w-full flex-row items-center gap-md rounded-button border border-hairline bg-canvas px-lg py-md"
-            >
-              <InfoCircleGlyph />
-              <Text className="flex-1 font-noto text-card-title text-ink">
-                {GENERATION_FALLBACK_INFO}
-              </Text>
             </View>
           </ScrollView>
         )}
