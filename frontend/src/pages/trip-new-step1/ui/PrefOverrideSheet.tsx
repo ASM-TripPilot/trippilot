@@ -56,6 +56,8 @@ export interface PrefOverrideSheetProps {
   onApply: () => void;
   /** 딤 바깥 탭·아래로 스와이프 → 배선: 시트 닫기(TRIP-683 AC-2·AC-3). */
   onClose: () => void;
+  /** TRIP-984 D10 — 온보딩 styles 가 1개 이상일 때만 true("온보딩에서 …" 문구 조건). */
+  fromOnboarding: boolean;
 }
 
 /** 딤(backdrop) — 리포 표준 idiom(OtaChoiceSheet 선례). */
@@ -84,6 +86,7 @@ export function PrefOverrideSheet({
   onToggle,
   onApply,
   onClose,
+  fromOnboarding,
 }: PrefOverrideSheetProps): ReactElement {
   return (
     <BottomSheet
@@ -138,9 +141,11 @@ export function PrefOverrideSheet({
           })}
         </View>
 
-        {/* 안내문 — 고정 문구(데이터 의존 없음, AC-4) */}
+        {/* 안내문 — "온보딩에서 …" 절은 온보딩 취향이 있을 때만(TRIP-984 D10) */}
         <Text className="font-noto text-caption text-muted">
-          온보딩에서 고른 취향을 가져왔어요 · 프로필 취향은 바뀌지 않아요
+          {fromOnboarding
+            ? '온보딩에서 고른 취향을 가져왔어요 · 프로필 취향은 바뀌지 않아요'
+            : '프로필 취향은 바뀌지 않아요'}
         </Text>
 
         {/* 적용 — 항상 활성(최소 0 허용, 전해제여도 적용 가능·닫기 버튼 없음) */}

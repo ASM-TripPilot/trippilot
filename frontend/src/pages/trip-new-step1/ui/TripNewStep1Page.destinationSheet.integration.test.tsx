@@ -11,6 +11,7 @@ import {
 import { server } from '@/mocks/server';
 import type { PreferenceView } from '@/shared/api/generated/schemas';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 
 import { TripNewStep1Page } from './TripNewStep1Page';
 
@@ -151,6 +152,20 @@ describe('W-3 · 도시 추가가 explore/region 라우트를 연다 (AC-3)', ()
 
     await waitFor(() =>
       expect(mockPush).toHaveBeenCalledWith('/explore/region?purpose=trip')
+    );
+  });
+
+  // TRIP-985 5-b 참고-1 — 위 리터럴은 "지금 철자"를, 이 단언은 "피커가 위저드로 알아듣는 철자와
+  // 같은 출처"를 잠근다. 헬퍼 유니온에서 'trip' 이름이 바뀌면 여기 인자가 먼저 `pnpm tsc` 에서
+  // 걸리고, 인자를 새 이름으로 고치는 순간 페이지 리터럴과 어긋나 jest 가 red 가 된다.
+  it('도시 추가가 여는 주소는 regionPickerHref("trip") 와 같다 (TRIP-985)', async () => {
+    renderPage();
+    await openSheet();
+
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+
+    await waitFor(() =>
+      expect(mockPush.mock.calls).toEqual([[regionPickerHref('trip')]])
     );
   });
 });

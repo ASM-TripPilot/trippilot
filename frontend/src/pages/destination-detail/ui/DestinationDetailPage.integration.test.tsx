@@ -1,8 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 
 import type { Region, StayItem } from '@/shared/api/generated/schemas';
 import { RegionLevel } from '@/shared/api/generated/schemas';
 import { stayKey } from '@/features/stay/model/stayKey';
+import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 
 import { DestinationDetailPage } from './DestinationDetailPage';
 
@@ -161,10 +162,11 @@ describe('P1 · regionCode → 이름 역인덱스 + enabled 게이팅', () => {
 });
 
 describe('P2 · 라우팅 배선', () => {
-  it('검색바 press → d1b 여행지 선택(purpose=trip)으로 돌아간다', () => {
+  it('검색바 press → 지역 선택(purpose=explore)으로 정확히 1회 간다 (TRIP-985)', () => {
     render(<DestinationDetailPage />);
     fireEvent.press(screen.getByTestId('destination-detail-search'));
-    expect(mockPush).toHaveBeenCalledWith('/explore/region?purpose=trip');
+    // trip 은 위저드 전용 — 다른 지역을 다시 고르면 결과 화면이 그 지역으로 바뀌어야 한다.
+    expect(mockPush.mock.calls).toEqual([[regionPickerHref('explore')]]);
   });
 
   it('탭 press → replace(스택에 안 쌓는다)', () => {
@@ -290,5 +292,110 @@ describe('AC-8 · 하트 실배선 (거짓말 방지)', () => {
     expect(mockPush).toHaveBeenCalledWith('/(auth)/login');
     expect(mockSave).not.toHaveBeenCalled();
     expect(mockRemove).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * ── TRIP-985 5-b 경고-1 · 같은 화면을 다른 지역으로 되돌려 써도 이전 지역의 상태가 안 남는다.
+ * 위 케이스는 무수정, 아래만 추가한다.
+ *
+ * 피커가 `router.dismissTo`로 돌아오면 스택 밑의 이 화면은 새로 만들어지지 않고 `region`
+ * 파라미터만 바뀐다(재마운트 없음). 그 재사용을 jest 에서는 "파라미터 목을 바꾸고 같은 트리에
+ * `rerender`"로 흉내 낸다 — 같은 컴포넌트를 같은 자리에 다시 그리면 React 는 인스턴스(와 그
+ * `useState`)를 그대로 쓴다. 그래서 이 심판은 페이지 **안**에서의 초기화만 본다(라우트 파일에
+ * `key`를 주는 식의 수정은 이 렌더 경로 밖이라 red 가 안 풀린다).
+ */
+const MICHUHOL = region({
+  regionCode: '28177',
+  name: '미추홀구',
+  sidoName: '인천광역시',
+});
+
+/** dismissTo 재현 — 같은 렌더 트리에서 region 파라미터만 바꿔 다시 그린다. */
+function switchRegionTo(
+  code: string,
+  rerender: (el: React.ReactElement) => void
+): void {
+  mockParams = { region: code };
+  rerender(<DestinationDetailPage />);
+}
+
+describe('R · 지역이 바뀌어 재사용돼도 이전 지역의 로컬 상태가 안 남는다 (TRIP-985 경고-1)', () => {
+  beforeEach(() => {
+    mockRegionsResult = { data: [BUSAN, MICHUHOL] };
+  });
+
+  it('R-1 부산에서 뜬 저장 실패 배너는 미추홀구로 바뀐 뒤엔 없다', async () => {
+    mockSave.mockResolvedValue({ kind: 'failed' });
+    withStayItem();
+    const { rerender } = render(<DestinationDetailPage />);
+
+    fireEvent.press(
+      screen.getByTestId(`destination-detail-stay-save-${STAY_ITEM_KEY}`)
+    );
+    // 전제: 부산 화면에 실패 배너가 떴다.
+    expect(
+      await screen.findByTestId('destination-detail-stay-save-error')
+    ).toBeOnTheScreen();
+
+    switchRegionTo(MICHUHOL.regionCode, rerender);
+
+    // 전제: 정말 미추홀구 화면으로 바뀌었다(헤딩이 새 이름).
+    expect(screen.getByTestId('destination-detail-heading')).toHaveTextContent(
+      /미추홀구/
+    );
+    // 본 단언: 사용자가 미추홀구에서 아무것도 안 했으니 배너가 없어야 한다.
+    expect(
+      screen.queryByTestId('destination-detail-stay-save-error')
+    ).toBeNull();
+  });
+
+  it('R-2 부산에서 저장 대기 중이던 하트 표식(pending)이 미추홀구로 넘어오지 않는다', () => {
+    // 저장 요청을 끝나지 않게 붙잡아 대기 상태를 만든다.
+    mockSave.mockReturnValue(new Promise(() => {}));
+    // 숙소 목은 지역과 무관하게 같은 1건을 돌려준다 — 같은 키의 하트가 새 지역에도 그려져야
+    // "대기 표식이 따라왔나"를 볼 수 있다.
+    withStayItem();
+    const { rerender } = render(<DestinationDetailPage />);
+    const heartId = `destination-detail-stay-save-${STAY_ITEM_KEY}`;
+
+    fireEvent.press(screen.getByTestId(heartId));
+    // 전제: 부산에서 그 하트가 대기 중(연타 가드 disabled)이다.
+    expect(screen.getByTestId(heartId)).toBeDisabled();
+
+    switchRegionTo(MICHUHOL.regionCode, rerender);
+
+    expect(screen.getByTestId('destination-detail-heading')).toHaveTextContent(
+      /미추홀구/
+    );
+    expect(screen.getByTestId(heartId)).not.toBeDisabled();
+  });
+
+  it('R-3 부산의 저장 요청이 지역을 바꾼 뒤에 늦게 실패해도 미추홀구에 배너가 안 뜬다', async () => {
+    let finishSave!: (outcome: { kind: 'failed' }) => void;
+    mockSave.mockReturnValue(
+      new Promise((resolve) => {
+        finishSave = resolve;
+      })
+    );
+    withStayItem();
+    const { rerender } = render(<DestinationDetailPage />);
+
+    fireEvent.press(
+      screen.getByTestId(`destination-detail-stay-save-${STAY_ITEM_KEY}`)
+    );
+    switchRegionTo(MICHUHOL.regionCode, rerender);
+
+    // 부산에서 보낸 요청이 이제야 실패로 끝난다.
+    await act(async () => {
+      finishSave({ kind: 'failed' });
+    });
+
+    expect(screen.getByTestId('destination-detail-heading')).toHaveTextContent(
+      /미추홀구/
+    );
+    expect(
+      screen.queryByTestId('destination-detail-stay-save-error')
+    ).toBeNull();
   });
 });

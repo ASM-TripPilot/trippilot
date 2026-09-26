@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import type { Region } from '@/shared/api/generated/schemas';
 import { filterRegions, useRegions } from '@/features/explore/model/regions';
+import type { RegionPickerPurpose } from '@/features/explore/model/regionPickerPurpose';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
 import type { RegionPurpose } from '@/features/explore/ui/RegionPickerScreen';
@@ -21,7 +22,12 @@ export function RegionPickerPage(): ReactElement {
   const router = useRouter();
   // URL은 신뢰 경계 — 아는 값이 아니면 전부 'stay'로 떨어뜨린다("부분적으로 해석"하지 않는다).
   const { purpose: rawPurpose } = useLocalSearchParams<{ purpose?: string }>();
-  const purpose: RegionPurpose = rawPurpose === 'trip' ? 'trip' : 'stay';
+  const purpose: RegionPickerPurpose =
+    rawPurpose === 'trip' || rawPurpose === 'explore' || rawPurpose === 'places'
+      ? rawPurpose
+      : 'stay';
+  // 화면 카피는 둘뿐이다(BR-U1-07) — 숙소가 아니면 전부 여행지 선택 카피(라이브 1834:2283).
+  const copy: RegionPurpose = purpose === 'stay' ? 'stay' : 'trip';
 
   const [query, setQuery] = useState('');
   // TRIP-683 AC-1 — trip 분기가 이 orphan 액션을 다시 문다(g 밴드 이전 때 옛 인라인 시트의
@@ -42,13 +48,29 @@ export function RegionPickerPage(): ReactElement {
       router.back();
       return;
     }
-    // 서버 `region`은 자유 문자열 계약이라 코드가 아니라 한글 이름을 보낸다.
-    router.push(`/stays?region=${encodeURIComponent(region.name)}`);
+    if (purpose === 'explore') {
+      // TRIP-985 — 탐색 진입(랜딩·홈·결과 화면 검색). 결과 화면은 **코드**를 받는다(이름은 캐시
+      // 역인덱스). dismissTo: 스택에 결과 화면이 있으면 그리로 돌아가 교체하고, 없으면 피커를 바꿔
+      // 끼운다 — "결과→피커→결과" 누적이 없다.
+      router.dismissTo(`/explore/destination/${region.regionCode}`);
+      return;
+    }
+    if (purpose === 'places') {
+      // TRIP-985 — d04 "지역 바꾸기". d04 는 지역을 URL 로만 들고 있어 **이름**을 실어 돌아간다.
+      router.dismissTo({
+        pathname: '/explore/places',
+        params: { region: region.name },
+      });
+      return;
+    }
+    // 서버 `region`은 자유 문자열 계약이라 코드가 아니라 한글 이름을 보낸다. dismissTo 로 결과
+    // 화면에 돌아가 지역만 교체한다 — push 면 "결과→피커→결과"가 쌓였다(TRIP-989 D16).
+    router.dismissTo(`/stays?region=${encodeURIComponent(region.name)}`);
   }
 
   return (
     <RegionPickerScreen
-      purpose={purpose}
+      purpose={copy}
       query={query}
       regions={visible}
       isLoading={regions.isPending}

@@ -14,7 +14,8 @@ import { ChevronRightGlyph, MUTED_SOFT } from './SettingsGlyphs';
  * TRIP-777 · l04 등록 숙소 — 라이브 Figma(default 1604:2440 · empty 1605:2440 · dialog 1606:2440) 값 정렬.
  *
  * 무엇을 보장하나:
- *  - AC-1: "출발점" 배지·"출발점 지정" 점선 모서리 8, "출발점 변경"은 13 Regular body + muted chevron 글리프.
+ *  - AC-1: "출발점" 배지 모서리 8, "출발점 변경"은 13 Regular body + muted chevron 글리프.
+ *    미등록 행의 "출발점 지정" 점선 배지는 TRIP-989(D13)로 사라졌다 — 없음을 잠근다.
  *  - AC-2: 칩 모서리 8·글자색(날짜 body / 출처·메모 muted), 카드 r12·카드 간 16, 주소 줄 유무, 구분선 막대.
  *  - AC-3: empty 는 제목 없이 96 회색 원 + Figma 침대 + 설명 14 + 내용 폭 CTA h44.
  *  - AC-4: 출발점 다이얼로그 딤 55%·카드 330·제목 19·본문 body색·버튼 h44.
@@ -187,20 +188,21 @@ describe('🔴 TRIP-777 · l04 default — 출발점 배지·링크 (AC-1)', () 
     expect(tokens(badge)).not.toContain('rounded-pill');
   });
 
-  it('미등록 행의 "출발점 지정"은 muted-soft 점선 · 모서리 8 이다(실선 hairline-strong 아님)', () => {
+  it('미등록 행에는 점선 "출발점 지정" 배지도 "출발점" 배지도 없다 (TRIP-989 D13 — Figma 1604 와 다름)', () => {
     renderRows([unassignedRow()]);
 
-    const toggle = screen.getByTestId('my-stays-base-toggle-s2');
-    expect(within(toggle).getByText('출발점 지정')).toBeOnTheScreen();
-    expect(tokens(toggle)).toEqual(
-      expect.arrayContaining([
-        'border-dashed',
-        'border-muted-soft',
-        'rounded-[8px]',
-      ])
-    );
-    expect(tokens(toggle)).not.toContain('rounded-pill');
-    expect(tokens(toggle)).not.toContain('border-hairline-strong');
+    // 행 자체는 그려진다 — 아래 "없음" 단언이 빈 화면으로 통과하지 않게.
+    const row = screen.getByTestId('my-stays-row-s2');
+    expect(within(row).getByText('○○ 게스트하우스')).toBeOnTheScreen();
+
+    expect(within(row).queryByText('출발점 지정')).toBeNull();
+    expect(within(row).queryByText('출발점')).toBeNull();
+    // 문구만 지우고 점선 상자를 남기는 우회도 잡는다.
+    expect(
+      row.findAll(
+        (n) => typeof n.type === 'string' && tokens(n).includes('border-dashed')
+      )
+    ).toHaveLength(0);
   });
 
   it('"출발점 변경" 글자는 정확히 "출발점 변경"(› 문자 없음)이고 13 Regular body색이다', () => {

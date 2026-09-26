@@ -405,13 +405,13 @@ export function MustVisitTimeScreen({
                   </Text>
                 </Pressable>
               </View>
+              {/* 탭·스크롤 정지 모두 값만 확정한다 — 정지에 시트를 닫으면 굴리다 멈추는 순간 닫힌다
+                  (TRIP-990 Q6). 시트는 "닫기"로만 닫힌다. */}
               <WheelPicker
+                testID="itinerary-mustvisit-time-start-wheel"
                 values={startOptions}
                 selected={form.fixedStart}
-                onSelect={(value) => {
-                  onPickStart?.(value);
-                  setStartSheetOpen(false);
-                }}
+                onSelect={(value) => onPickStart?.(value)}
                 renderLabel={startTimeLabel}
                 testIDForValue={(value) =>
                   `itinerary-mustvisit-time-start-option-${value}`

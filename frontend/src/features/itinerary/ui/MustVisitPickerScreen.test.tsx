@@ -873,3 +873,159 @@ describe('🔴 C-AC17 · AC-17 — 비활성 CTA 가 브랜드 주색으로 칠�
     ).toEqual([]);
   });
 });
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * TRIP-988 C — 고정 시각 표기 `M.D · HH:mm` (D5 · INV-U1-17)
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * 무엇을 보장하나: FIXED 카드 보조행은 서버 원문 `12:00:00` 대신 `9.27 · 12:00` 으로 쓴다. 월·일은
+ * 0 을 안 채우고(`dayChipLabel` 관례), 시각은 앞 5글자(`HH:mm`)만 — 초가 붙어 오든(`HH:mm:ss`, openapi
+ * 계약 범위) 안 붙어 오든 같은 결과다. 가운뎃점은 U+00B7.
+ *
+ * 보조행 Text 에는 testID 가 없다(신규 금지) — 카드 루트 안에서 `getByText(문자열)` 완전일치로 잡는다.
+ * 완전일치라 앞뒤에 다른 글자(요일·끝 시각·초)가 붙으면 red 다.
+ */
+describe('🔴 TRIP-988 C · 고정 시각 보조행 (D5)', () => {
+  it.each([
+    ['2026-09-27', '12:00:00', '9.27 · 12:00'],
+    ['2026-09-27', '12:00', '9.27 · 12:00'],
+    ['2026-10-05', '08:30:00', '10.5 · 08:30'],
+  ])(
+    'C-1 fixedDate %s + fixedStart %s → "%s" (초는 안 보인다)',
+    (fixedDate, fixedStart, expected) => {
+      // 준비 — 날짜·시각이 정해진 FIXED 항목 하나.
+      const fixed = item({
+        sourcePoiId: 'poi-t',
+        type: 'FIXED',
+        fixedDate,
+        fixedStart,
+      });
+
+      // 실행
+      render(<MustVisitPickerScreen view={listed([fixed])} />);
+
+      // 단언 — 카드 안에 그 표기가 한 덩어리로 있고, 초 붙은 시각은 어디에도 없다.
+      const card = screen.getByTestId('itinerary-mustvisit-poi-t');
+      expect(within(card).getByText(expected)).toBeOnTheScreen();
+      expect(card).not.toHaveTextContent(/\d{1,2}:\d{2}:\d{2}/);
+    }
+  );
+
+  it('C-2 기존 픽스처(6월 11일 · 13:00)도 같은 서식이다', () => {
+    render(<MustVisitPickerScreen view={listed([FIXED_A, ANYTIME_B])} />);
+
+    const fixedCard = screen.getByTestId('itinerary-mustvisit-poi-a');
+    expect(within(fixedCard).getByText('6.11 · 13:00')).toBeOnTheScreen();
+  });
+
+  it('C-3 fixedDate 가 없으면 날짜를 지어내지 않고 시각만 쓴다 (01b Q3)', () => {
+    // 준비 — INV-U1-17 위반 데이터(FIXED 인데 날짜 없음). 계약 타입이 optional 이라 이 경로가 있다.
+    const noDate = item({
+      sourcePoiId: 'poi-t',
+      type: 'FIXED',
+      fixedStart: '12:00:00',
+    });
+
+    render(<MustVisitPickerScreen view={listed([noDate])} />);
+
+    // 단언 — 완전일치 '12:00' 이라 앞에 날짜·가운뎃점이 붙으면 red.
+    const card = screen.getByTestId('itinerary-mustvisit-poi-t');
+    expect(within(card).getByText('12:00')).toBeOnTheScreen();
+    expect(card).not.toHaveTextContent(/12:00:00/);
+  });
+
+  it('C-3b fixedStart 가 없으면 기존처럼 비워 둔다 — 날짜만 따로 그리지 않는다 (01b Q3)', () => {
+    const noStart = item({
+      sourcePoiId: 'poi-t',
+      type: 'FIXED',
+      fixedDate: '2026-09-27',
+    });
+
+    render(<MustVisitPickerScreen view={listed([noStart])} />);
+
+    const card = screen.getByTestId('itinerary-mustvisit-poi-t');
+    // 긍정 앵커 — 카드는 실제로 그려졌다(이름).
+    expect(card).toHaveTextContent(/감천문화마을/);
+    expect(card).not.toHaveTextContent(/\d{1,2}:\d{2}/);
+    expect(card).not.toHaveTextContent(/9\.27/);
+  });
+
+  it('INV-3 새 서식은 소요시간 표기를 만들지 않는다', () => {
+    const fixed = item({
+      sourcePoiId: 'poi-t',
+      type: 'FIXED',
+      fixedDate: '2026-09-27',
+      fixedStart: '12:00:00',
+    });
+
+    render(<MustVisitPickerScreen view={listed([fixed, ANYTIME_B])} />);
+
+    // 긍정 앵커 — 새 서식이 실제로 그려졌다(없으면 빈 화면이 공짜 통과).
+    expect(screen.getByText('9.27 · 12:00')).toBeOnTheScreen();
+    expect(renderedTexts().filter((text) => DURATION_TEXT.test(text))).toEqual(
+      []
+    );
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * TRIP-982 B — 필수 방문지 0곳이어도 일정 짜기로 갈 수 있다 (D7 · INV-4)
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * 무엇을 보장하나: empty 얼굴(0곳)의 `이 구성으로 일정 짜기` CTA 는 **눌리고, 눌리는 것처럼
+ * 보인다**. 잠금은 loading·failed 에만 남는다(기존 C-AC9·C-AC15·C-AC17 이 그쪽을 계속 잰다).
+ *
+ * ★ `toBeDisabled` 는 색을 안 본다(C-AC17 독주석) — B1 의 `not.toBeDisabled()` 만으로는 "회색인데
+ *   눌리는" 버튼이 통과한다. B2 가 className 토큰으로 색까지 잰다. 회색 토큰 부재는 `hasToken`
+ *   부정형이 아니라 토큰 배열의 정확 비교로 잰다(`hasToken` 독주석 — 부정형에서 심판을 푼다).
+ */
+describe('🔴 TRIP-982 B · empty CTA 활성 (D7)', () => {
+  it('B1 0곳이어도 CTA 가 비활성이 아니고, 누르면 onProceed 가 1회 불린다', () => {
+    const onProceed = jest.fn();
+    render(
+      <MustVisitPickerScreen view={{ kind: 'empty' }} onProceed={onProceed} />
+    );
+
+    const proceed = screen.getByTestId('itinerary-mustvisit-screen-proceed');
+    expect(proceed).not.toBeDisabled();
+
+    fireEvent.press(proceed);
+    expect(onProceed).toHaveBeenCalledTimes(1);
+  });
+
+  it('B2 활성 색 — 배경 bg-primary·라벨 text-on-primary 이고 회색 토큰이 남지 않는다', () => {
+    render(<MustVisitPickerScreen view={{ kind: 'empty' }} />);
+
+    const proceed = screen.getByTestId('itinerary-mustvisit-screen-proceed');
+    const label = within(proceed).getByText(PROCEED_LABEL);
+
+    expect(brandTokensIn(classNameOf(proceed))).toEqual(['bg-primary']);
+    expect(brandTokensIn(classNameOf(label))).toEqual(['text-on-primary']);
+    // "회색인데 눌리는" 우회 차단 — 비활성 표면 토큰이 활성 토큰과 함께 남아 있으면 red.
+    expect(classNameOf(proceed).split(/\s+/)).not.toContain(
+      'bg-hairline-strong'
+    );
+    expect(classNameOf(label).split(/\s+/)).not.toContain('text-muted');
+  });
+});
+
+describe('TRIP-982 B4·B5 · 무회귀 — empty 얼굴의 나머지는 그대로다', () => {
+  it('B4 empty 에는 건너뛰기가 없고 empty 안내는 남는다 (건너뛰기는 failed 전용)', () => {
+    render(<MustVisitPickerScreen view={{ kind: 'empty' }} />);
+
+    expect(
+      screen.getByTestId('itinerary-mustvisit-screen-empty')
+    ).toBeOnTheScreen();
+    expect(countTestId('itinerary-mustvisit-screen-skip')).toBe(0);
+  });
+
+  it('B5 empty 화면에도 소요시간 표기가 0건이다 (INV-3)', () => {
+    render(<MustVisitPickerScreen view={{ kind: 'empty' }} />);
+
+    const texts = renderedTexts();
+    expect(texts).toContain(PROCEED_LABEL); // 긍정 앵커
+    expect(texts.filter((text) => DURATION_TEXT.test(text))).toEqual([]);
+  });
+});

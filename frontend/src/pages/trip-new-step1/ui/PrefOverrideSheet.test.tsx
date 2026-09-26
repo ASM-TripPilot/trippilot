@@ -45,6 +45,7 @@ interface SheetPropsForTest {
   onToggle: (label: string) => void;
   onApply: () => void;
   onClose: () => void;
+  fromOnboarding: boolean;
 }
 
 function renderSheet(overrides: Partial<SheetPropsForTest> = {}) {
@@ -55,6 +56,7 @@ function renderSheet(overrides: Partial<SheetPropsForTest> = {}) {
   };
   const props: SheetPropsForTest = {
     selected: [],
+    fromOnboarding: true, // TRIP-984: 기본 얼굴 = 온보딩 styles 가 있는 상태(PS-1 문구)
     ...spies,
     ...overrides,
   };
@@ -152,5 +154,15 @@ describe('PS-6 · 닫기 버튼 부재 회귀 (구 2버튼 폐기)', () => {
 
     // 구 시트의 [닫기]/[적용] 2버튼 회귀 트립와이어.
     expect(screen.queryByTestId('trip-wizard-pref-sheet-close')).toBeNull();
+  });
+});
+
+describe('PS-7 · AC-D3 (TRIP-984 D10) — 온보딩 취향이 없으면 "온보딩에서" 문구를 뺀다', () => {
+  it('fromOnboarding=false 면 하단 문구가 "프로필 취향은 바뀌지 않아요" 뿐이다', () => {
+    renderSheet({ fromOnboarding: false });
+
+    // 완전일치 — 앞 절이 남아 있으면 이 노드와 안 맞아 red.
+    expect(screen.getByText('프로필 취향은 바뀌지 않아요')).toBeOnTheScreen();
+    expect(screen.queryByText(/온보딩에서/)).toBeNull();
   });
 });

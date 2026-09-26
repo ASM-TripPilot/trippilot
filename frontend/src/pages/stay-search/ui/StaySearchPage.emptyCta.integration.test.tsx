@@ -9,6 +9,7 @@ import {
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
+import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 import { StaySearchPage } from './StaySearchPage';
 
 /**
@@ -104,8 +105,8 @@ describe('StaySearchPage — empty 지역 바꾸기 (TRIP-499 · AC-4)', () => {
     // 실행
     fireEvent.press(screen.getByTestId('stay-search-empty-region'));
 
-    // 단언 — 지금 소스는 옛 목적지(/explore/search)로 push → red.
-    expect(mockPush).toHaveBeenCalledWith('/explore/region?purpose=stay');
+    // 단언 — 상단 지역 칩과 같은 목적지. 철자는 공유 헬퍼 출력으로 잠근다(TRIP-989 F 철자 사슬).
+    expect(mockPush).toHaveBeenCalledWith(regionPickerHref('stay'));
   });
 });
 

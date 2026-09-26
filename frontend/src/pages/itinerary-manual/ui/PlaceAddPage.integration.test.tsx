@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { Keyboard } from 'react-native';
 import {
   act,
   fireEvent,
@@ -712,5 +714,388 @@ describe('TRIP-926 · M — 지도 중심 (핀 0개면 서울 시청, 있으면 
         '35.0979,129.0256'
       )
     );
+  });
+});
+
+/**
+ * TRIP-990 · S6 (#051 · D9 · US-SCHED-07) — 장소 추가 검색 입력이 키보드에 가리지 않도록 시트에 알린다.
+ *
+ * 검색 입력을 `BottomSheetTextInput` 으로 바꾸고, 이 화면 시트에 `keyboardBehavior="interactive"` 를
+ * 명시한다(값은 라이브러리 기본값과 같아 동작으로는 못 가르고, 적혀 있는지만 본다). 기존 검색 입력
+ * 테스트(P2 changeText)는 testID 가 그대로라 계속 통과해야 한다. 첫 결과가 키보드 위에 보이는지는 6-b.
+ *
+ * 3동작 뼈대: 준비=페이지 렌더(카드 도착까지) → 실행=해당 요소 찾기 → 단언=타입·prop.
+ */
+describe('🔴 S6 · 장소 추가 검색 키보드 처방 (#051 · D9)', () => {
+  it('검색 입력이 BottomSheetTextInput 이다 (플레인 TextInput 이면 red)', async () => {
+    await renderPage();
+
+    const ids = screen
+      .UNSAFE_getAllByType(BottomSheetTextInput)
+      .map((node) => node.props.testID);
+    expect(ids).toContain('itinerary-place-search');
+  });
+
+  it('시트가 keyboardBehavior="interactive" 를 명시한다', async () => {
+    await renderPage();
+
+    expect(
+      screen.UNSAFE_queryAllByProps({ keyboardBehavior: 'interactive' })
+    ).not.toHaveLength(0);
+  });
+});
+
+/**
+ * TRIP-981 · A (#057 · US-SCHED-10 · INV-4) — '+ 추가'를 한 번 누르면 시각 시트가 뜬다.
+ *
+ * 근본 원인(브리프 후보5): 기본 시각 시트는 딤으로 닫혀도 페이지에 알리지 않아 `pendingPlace` 가 남는다.
+ * 시트는 마운트된 채 닫혀 있고, 이후 어떤 행의 '+ 추가'도 다시 열지 못한다. 테스트용 시트 목은 시트를
+ * 항상 열린 채로 그려 "닫힌 상태"를 못 만들므로, 시트의 `onClose` 를 불러 딤 닫힘을 흉내 내고
+ * "시트가 트리에서 빠졌다 → 다른 행이 새로 연다"를 잰다(실제로 열리는지는 6-b).
+ *
+ * 함께: 검색 중 첫 탭이 키보드 내리기에 먹히지 않게 목록이 탭을 통과시키고(`keyboardShouldPersistTaps`),
+ * 시트가 키보드 밑에 깔리지 않게 '+ 추가'가 키보드를 내린다(`Keyboard.dismiss`).
+ *
+ * 3동작 뼈대: 준비=페이지 렌더(카드 도착) → 실행=add·close·칩 → 단언=시트 유무·PUT 바디·호출 수·prop.
+ */
+describe('TRIP-981 · A — 장소 추가 시트의 "+ 추가" 무반응', () => {
+  const SHEET = 'itinerary-edit-time-sheet';
+  const DURATION_TEXT = /(\d+\s*분|\d+\s*시간|소요)/;
+  let dismiss: jest.SpyInstance;
+
+  beforeEach(() => {
+    // 렌더 전에 건다 — onPress={Keyboard.dismiss} 처럼 참조를 렌더 때 잡는 구현도 스파이가 본다.
+    dismiss = jest.spyOn(Keyboard, 'dismiss').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    // 테스트가 중간에 실패해도 다음 테스트로 스파이가 새지 않게 여기서 푼다.
+    dismiss.mockRestore();
+  });
+
+  /** 화면에 그려진 문자열 전부 — 소요시간 부정 스캔의 모집단. */
+  function renderedTexts(): string[] {
+    const out: string[] = [];
+    screen.root
+      .findAll(() => true)
+      .forEach((node) => {
+        const children = node.props?.children as unknown;
+        const list = Array.isArray(children) ? children : [children];
+        list.forEach((child) => {
+          if (typeof child === 'string') out.push(child);
+        });
+      });
+    return out;
+  }
+
+  it('🔴 A2 · 시각 시트가 딤으로 닫히면 트리에서 빠지고, 다른 행 "+ 추가"가 시트를 새로 열어 그 장소를 담는다', async () => {
+    await renderPage();
+
+    fireEvent.press(screen.getByTestId('itinerary-place-add-p1'));
+    const sheet = await screen.findByTestId(SHEET);
+
+    // 딤 탭 닫힘 대리 — 시트의 onClose 를 부른다(없으면 조용히 아무 일도 안 일어난다).
+    fireEvent(sheet, 'close');
+    await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
+
+    fireEvent.press(screen.getByTestId('itinerary-place-add-p2'));
+    expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
+    fireEvent.press(screen.getByTestId('itinerary-edit-time-apply'));
+
+    await waitFor(() => expect(putBodies.length).toBeGreaterThanOrEqual(1));
+    const day = putBodies[putBodies.length - 1].days.find(
+      (d) => d.date === '2026-06-10'
+    );
+    const poiIds = day?.slots.map((slot) => slot.poiId) ?? [];
+    expect(poiIds).toContain('p2');
+    expect(poiIds).not.toContain('p1');
+  });
+
+  it('🔴 A3 · 검색 입력에 포커스가 있을 때 "+ 추가"를 누르면 키보드 내림을 요청한다 (시트가 키보드 밑에 안 깔리게)', async () => {
+    await renderPage();
+    fireEvent(screen.getByTestId('itinerary-place-search'), 'focus');
+    const before = dismiss.mock.calls.length;
+
+    fireEvent.press(screen.getByTestId('itinerary-place-add-p1'));
+
+    expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
+    expect(dismiss.mock.calls.length).toBeGreaterThan(before);
+  });
+
+  it('🔴 A4 · 후보 목록은 키보드가 떠 있어도 탭을 행에 넘긴다 (keyboardShouldPersistTaps="handled")', async () => {
+    await renderPage();
+
+    expect(
+      screen.getByTestId('itinerary-place-list').props.keyboardShouldPersistTaps
+    ).toBe('handled');
+  });
+
+  it('A5 · 칩을 바꿔 목록이 바뀐 뒤에도 새 행 "+ 추가"가 시트를 연다 (특성화 · 선제 green)', async () => {
+    await renderPage();
+
+    fireEvent.press(screen.getByTestId('itinerary-place-category-맛집'));
+    await waitFor(() =>
+      expect(screen.queryByTestId('itinerary-place-card-p1')).toBeNull()
+    );
+    fireEvent.press(await screen.findByTestId('itinerary-place-add-p5'));
+
+    expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
+  });
+
+  it('X1 · 후보 행과 시각 시트 어디에도 소요시간 표기가 없다 (INV-3 · 선제 green)', async () => {
+    await renderPage();
+    fireEvent.press(screen.getByTestId('itinerary-place-add-p1'));
+    await screen.findByTestId(SHEET);
+
+    const texts = renderedTexts();
+    // 모집단 긍정 짝 — 카드 이름과 시각 셀 숫자가 실제로 스캔 대상에 있다.
+    expect(texts).toContain('감천문화마을');
+    expect(texts).toContain('10');
+    expect(texts.filter((text) => DURATION_TEXT.test(text))).toEqual([]);
+  });
+});
+
+/**
+ * TRIP-981 · B (#041) — 후보 목록을 여행 목적지로 좁힌다(`GET /places?region=<이름>`).
+ *
+ * 목적지는 `GET /trips/{tripId}` 의 `destinations[].region` 이다. 여행 조회가 끝날 때까지 장소 조회를
+ * 미뤄 전국 목록이 먼저 보였다가 바뀌는 깜빡임을 막는다(01b Q2). 목적지가 2곳 이상이면 지역마다 조회해
+ * 합친다(`useMultiRegionPlaces`, 01b Q2·브리프 Q3). 여행 조회가 실패하거나 목적지가 없으면 region 없이
+ * 조회해 목록을 그린다(빈 화면·무한 로딩 금지).
+ *
+ * 칩·검색·무한 스크롤 무회귀(AC-B4)는 위 P1~P4·A2b·E1~E3 가 그대로 맡는다(기본 목적지 = 부산 1곳).
+ *
+ * 3동작 뼈대: 준비=여행 응답(목적지)·장소 핸들러 → 실행=렌더·칩·검색 → 단언=나간 /places 의 region·화면 카드.
+ */
+describe('TRIP-981 · B — 후보를 여행 목적지로 좁힌다 (region)', () => {
+  function tripJson(
+    destinations: { seq: number; region: string; nights: number }[]
+  ) {
+    return {
+      tripId: 't1',
+      title: '부산',
+      startDate: '2026-06-10',
+      endDate: '2026-06-12',
+      party: 2,
+      preferenceSnapshot: {},
+      destinations,
+      status: 'PLANNED',
+      createdAt: '2026-06-01T00:00:00Z',
+      updatedAt: '2026-06-01T00:00:00Z',
+    };
+  }
+
+  const TWO_REGIONS = [
+    { seq: 1, region: '부산', nights: 1 },
+    { seq: 2, region: '경주', nights: 1 },
+  ];
+
+  /** 부산 1곳 + 경주 2곳 — 지역마다 다른 장소가 와야 "합쳐졌다"를 잴 수 있다. */
+  const REGIONAL_PLACES: Place[] = [
+    makePlace('p1', '감천문화마을', '명소', 12),
+    { ...makePlace('g1', '불국사', '명소', 40), region: '경주' },
+    { ...makePlace('g2', '황리단길 카페', '카페', 9), region: '경주' },
+  ];
+
+  /** 서버처럼 region·category·q 로 거르는 장소 핸들러. */
+  function serveRegionalPlaces(): void {
+    server.use(
+      http.get(`${BASE}/places`, ({ request }) => {
+        const url = new URL(request.url);
+        const region = url.searchParams.get('region');
+        const category = url.searchParams.get('category');
+        const q = url.searchParams.get('q');
+        let result = REGIONAL_PLACES;
+        if (region !== null) {
+          result = result.filter((place) => place.region === region);
+        }
+        if (category !== null) {
+          result = result.filter((place) => place.category === category);
+        }
+        if (q) result = result.filter((place) => place.nameKo.includes(q));
+        return HttpResponse.json({ items: result, nextCursor: null });
+      })
+    );
+  }
+
+  function placeHits() {
+    return hitsOf('GET', '/api/v1/places');
+  }
+
+  /** 나간 /places 요청들의 region 값(없으면 null). */
+  function regionsOf(hits: { url: string }[]): (string | null)[] {
+    return hits.map((hit) => new URL(hit.url).searchParams.get('region'));
+  }
+
+  function uniqueSorted(values: (string | null)[]): (string | null)[] {
+    return [...new Set(values)].sort();
+  }
+
+  function tripHits() {
+    return hitsOf('GET', '/api/v1/trips/t1');
+  }
+
+  it('🔴 B1a · 여행 조회가 끝날 때까지 장소를 조회하지 않고, 첫 요청부터 region=부산 이 실린다', async () => {
+    // 준비 — 여행 응답을 손으로 풀 때까지 붙잡는다(목적지 부산).
+    let releaseTrip!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseTrip = resolve;
+    });
+    server.use(
+      http.get(`${BASE}/trips/:tripId`, async () => {
+        await gate;
+        return HttpResponse.json(
+          tripJson([{ seq: 1, region: '부산', nights: 2 }])
+        );
+      })
+    );
+
+    // 실행 — 렌더. 여행 요청이 나갔고(붙잡힘) 일정 요청도 나간 뒤 조금 더 흘린다.
+    render(<PlaceAddPage tripId="t1" />, { wrapper: createWrapper() });
+    await waitFor(() => expect(tripHits().length).toBeGreaterThanOrEqual(1));
+    await waitFor(() =>
+      expect(
+        hitsOf('GET', '/api/v1/trips/t1/itinerary').length
+      ).toBeGreaterThanOrEqual(1)
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    // 단언 ① — 여행을 모르는 동안엔 전국 목록을 부르지 않는다.
+    expect(placeHits()).toHaveLength(0);
+
+    // 실행 — 여행 응답을 푼다.
+    releaseTrip();
+    await waitFor(() =>
+      expect(screen.getByTestId('itinerary-place-card-p1')).toBeOnTheScreen()
+    );
+
+    // 단언 ② — 나간 장소 요청은 전부 region=부산 이다.
+    const regions = regionsOf(placeHits());
+    expect(regions.length).toBeGreaterThanOrEqual(1);
+    expect(regions).toEqual(regions.map(() => '부산'));
+  });
+
+  it('🔴 B1b · 목적지가 부산 1곳이면 나간 장소 요청이 전부 region=부산 이다', async () => {
+    await renderPage();
+
+    expect(tripHits().length).toBeGreaterThanOrEqual(1);
+    const regions = regionsOf(placeHits());
+    expect(regions.length).toBeGreaterThanOrEqual(1);
+    expect(regions).toEqual(regions.map(() => '부산'));
+  });
+
+  it('🔴 B2a · 목적지가 부산·경주 2곳이면 지역마다 조회해 두 지역 장소를 함께 그린다', async () => {
+    server.use(
+      http.get(`${BASE}/trips/:tripId`, () =>
+        HttpResponse.json(tripJson(TWO_REGIONS))
+      )
+    );
+    serveRegionalPlaces();
+
+    render(<PlaceAddPage tripId="t1" />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(screen.getByTestId('itinerary-place-card-g1')).toBeOnTheScreen()
+    );
+
+    const regions = regionsOf(placeHits());
+    expect(regions).not.toContain(null);
+    expect(uniqueSorted(regions)).toEqual(['경주', '부산']);
+    expect(screen.getByTestId('itinerary-place-card-p1')).toBeOnTheScreen();
+    expect(screen.getByTestId('itinerary-place-card-g2')).toBeOnTheScreen();
+  });
+
+  it('🔴 B2b · 다지역에서도 칩(category)·검색어(q)가 두 지역 요청 모두에 실린다', async () => {
+    server.use(
+      http.get(`${BASE}/trips/:tripId`, () =>
+        HttpResponse.json(tripJson(TWO_REGIONS))
+      )
+    );
+    serveRegionalPlaces();
+    render(<PlaceAddPage tripId="t1" />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(screen.getByTestId('itinerary-place-card-g1')).toBeOnTheScreen()
+    );
+
+    // 실행 ① — 카페 칩. 칩 뒤에 나간 요청만 본다.
+    const beforeChip = placeHits().length;
+    fireEvent.press(screen.getByTestId('itinerary-place-category-카페'));
+    await waitFor(() =>
+      expect(screen.queryByTestId('itinerary-place-card-p1')).toBeNull()
+    );
+    const chipHits = placeHits()
+      .slice(beforeChip)
+      .filter(
+        (hit) => new URL(hit.url).searchParams.get('category') === '카페'
+      );
+    expect(uniqueSorted(regionsOf(chipHits))).toEqual(['경주', '부산']);
+
+    // 실행 ② — 검색어 '황리'. 검색 뒤에 나간 요청만 본다.
+    const beforeSearch = placeHits().length;
+    fireEvent.changeText(screen.getByTestId('itinerary-place-search'), '황리');
+    await waitFor(() =>
+      expect(screen.queryByTestId('itinerary-place-card-g1')).toBeNull()
+    );
+    const searchHits = placeHits()
+      .slice(beforeSearch)
+      .filter((hit) => new URL(hit.url).searchParams.get('q') === '황리');
+    expect(uniqueSorted(regionsOf(searchHits))).toEqual(['경주', '부산']);
+    expect(screen.getByTestId('itinerary-place-card-g2')).toBeOnTheScreen();
+  });
+
+  it('🔴 B2c · 다지역 조회가 성공했는데 0건이면 "검색 결과가 없어요"가 뜬다 (INV-4)', async () => {
+    server.use(
+      http.get(`${BASE}/trips/:tripId`, () =>
+        HttpResponse.json(tripJson(TWO_REGIONS))
+      ),
+      http.get(`${BASE}/places`, () =>
+        HttpResponse.json({ items: [], nextCursor: null })
+      )
+    );
+
+    render(<PlaceAddPage tripId="t1" />, { wrapper: createWrapper() });
+
+    expect(
+      await screen.findByTestId('itinerary-place-empty')
+    ).toHaveTextContent('검색 결과가 없어요');
+    // 앵커 — 지역별 조회가 실제로 나갔다(단일 경로의 0건 안내와 구분).
+    expect(uniqueSorted(regionsOf(placeHits()))).toEqual(['경주', '부산']);
+  });
+
+  it('🔴 B3a · 여행 조회가 실패하면 region 없이 조회해 목록을 그린다 (폴백)', async () => {
+    server.use(
+      http.get(
+        `${BASE}/trips/:tripId`,
+        () => new HttpResponse(null, { status: 500 })
+      )
+    );
+
+    render(<PlaceAddPage tripId="t1" />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(screen.getByTestId('itinerary-place-card-p1')).toBeOnTheScreen()
+    );
+
+    // 앵커 — 여행을 읽으려 했다(원래 안 읽던 코드가 그대로 통과하지 않게).
+    expect(tripHits().length).toBeGreaterThanOrEqual(1);
+    const regions = regionsOf(placeHits());
+    expect(regions.length).toBeGreaterThanOrEqual(1);
+    expect(regions).toEqual(regions.map(() => null));
+  });
+
+  it('🔴 B3b · 목적지가 0곳이면 region 없이 조회해 목록을 그린다 (폴백)', async () => {
+    server.use(
+      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(tripJson([])))
+    );
+
+    render(<PlaceAddPage tripId="t1" />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(screen.getByTestId('itinerary-place-card-p1')).toBeOnTheScreen()
+    );
+
+    expect(tripHits().length).toBeGreaterThanOrEqual(1);
+    const regions = regionsOf(placeHits());
+    expect(regions.length).toBeGreaterThanOrEqual(1);
+    expect(regions).toEqual(regions.map(() => null));
   });
 });

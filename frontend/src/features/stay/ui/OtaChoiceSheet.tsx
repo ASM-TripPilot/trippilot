@@ -21,7 +21,7 @@ import BottomSheet, {
 import type { StayItem } from '@/shared/api/generated/schemas';
 
 import { formatPrice } from '@/entities/stay/lib/formatPrice';
-import { otaConfirmLabel } from '../config/affiliateNotice';
+import { otaConfirmLabel, otaDisplayName } from '../config/affiliateNotice';
 import {
   CheckGlyph,
   ChevronRightGlyph,
@@ -108,7 +108,7 @@ export function OtaChoiceSheet({
           </View>
         ) : (
           <>
-            {/* 단일 OTA 행 — externalSource 이름 + 최저가(복수 OTA·정확가는 이연, 01b Q2). */}
+            {/* 단일 OTA 행 — 표시명(코드 원문 금지, TRIP-988) + 최저가(복수 OTA·정확가는 이연, 01b Q2). */}
             <View
               testID={`stay-ota-option-${item.externalSource}`}
               className="w-full flex-row items-center gap-md rounded-[14px] border-[1.5px] border-primary bg-canvas py-md pl-lg pr-md"
@@ -128,7 +128,7 @@ export function OtaChoiceSheet({
               </View>
               <View className="flex-1 flex-row items-center gap-xs">
                 <Text className="font-inter-bold text-body font-bold text-ink">
-                  {item.externalSource}
+                  {otaDisplayName(item.externalSource)}
                 </Text>
                 <Text className="font-noto text-label text-muted-soft">·</Text>
                 <Text className="font-inter-bold text-body font-bold text-ink">

@@ -23,6 +23,7 @@ import { useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import * as Linking from 'expo-linking';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Share } from 'react-native';
 
 import { isNotFound } from '@/shared/api/isNotFound';
 import { getAccessToken } from '@/shared/api/tokenManager';
@@ -210,6 +211,10 @@ export function StayDetailPage(): ReactElement {
           }
         }}
         onRetry={() => void detailQuery.refetch()}
+        // 딥링크 URL 계약이 없어 이름만 나른다(장소 상세 선례, TRIP-989 Q5).
+        onPressShare={() => {
+          if (item !== null) void Share.share({ message: item.name });
+        }}
       />
       {otaOpen && item !== null ? (
         <OtaChoiceSheet

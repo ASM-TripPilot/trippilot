@@ -40,8 +40,10 @@ import {
 } from '@/features/stay/model/stayRegisterForm';
 import { StayRegisterScreen } from '@/features/stay/ui/StayRegisterScreen';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { showToast } from '@/shared/ui/Toast';
 
 const EMPTY_RANGE: StayDateRange = { checkIn: null, checkOut: null };
+const STAY_SAVED_TOAST = '숙소를 등록했어요';
 
 /** `baseDate`는 달력 기준 '오늘' 주입점(TRIP-390 · 선례 `TripNewStep1Page`) — 페이지 달력
  *  테스트를 결정론으로 만든다. 미지정이면 실시계(`seoulDate`·KST)로 폴백한다(프로덕션 경로). */
@@ -238,7 +240,9 @@ export function StayRegisterPage({
     setSubmitStatus('submitting');
     try {
       await postSavedStays.mutateAsync({ data: request });
+      // 들어온 곳으로 돌아간 뒤 토스트(TRIP-990 D22 — 루트 호스트라 돌아간 화면 위에 보인다).
       router.back();
+      showToast({ message: STAY_SAVED_TOAST, testID: 'stay-register-saved' });
     } catch {
       setSubmitStatus('error');
     }

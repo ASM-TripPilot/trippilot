@@ -3,7 +3,7 @@
 # 구조 인벤토리 (자동 생성)
 
 ## __mocks__/@gorhom/
-- `__mocks__/@gorhom/bottom-sheet.tsx`  →  BottomSheet · BottomSheetModal · BottomSheetView · BottomSheetModalProvider · BottomSheetBackdrop · BottomSheetScrollView · BottomSheetFlatList · useBottomSheetModal
+- `__mocks__/@gorhom/bottom-sheet.tsx`  →  BottomSheet · BottomSheetModal · BottomSheetView · BottomSheetModalProvider · BottomSheetBackdrop · BottomSheetScrollView · BottomSheetFlatList · BottomSheetTextInput · useBottomSheetModal
 
 ## __mocks__/@mj-studio/
 - `__mocks__/@mj-studio/react-native-naver-map.tsx`  →  NaverMapView · NaverMapMarkerOverlay · NaverMapPathOverlay · NaverMapCircleOverlay
@@ -134,6 +134,7 @@
 - `src/__tests__/rootLayout.test.tsx`  →  (export 없음)
 - `src/__tests__/rootLayoutQueryProvider.test.tsx`  →  (export 없음)
 - `src/__tests__/rootLayoutSafeArea.test.tsx`  →  (export 없음)
+- `src/__tests__/rootLayoutToastHost.test.tsx`  →  (export 없음)
 - `src/__tests__/savedPlacesStructure.test.ts`  →  (export 없음)
 - `src/__tests__/savedStaysStructure.test.ts`  →  (export 없음)
 - `src/__tests__/seoulTodayStructure.test.ts`  →  (export 없음)
@@ -309,6 +310,7 @@
 ## src/entities/itinerary-slot/lib/
 - `src/entities/itinerary-slot/lib/categoryPlaceholder.ts`  →  CategoryPlaceholder · resolveCategoryPlaceholder
 - `src/entities/itinerary-slot/lib/endsNextDay.ts`  →  deriveEndsNextDay
+- `src/entities/itinerary-slot/lib/normalizeOpeningHours.ts`  →  normalizeOpeningHours
 - `src/entities/itinerary-slot/lib/openingHoursLabel.ts`  →  formatOpeningHoursLabel
 - `src/entities/itinerary-slot/lib/slotKey.ts`  →  buildSlotKey · ParsedSlotKey · parseSlotKey · SlotKeySet · buildSlotKeys
 - `src/entities/itinerary-slot/lib/slotMapPin.ts`  →  SlotProgressState · StatePinInput · toMapPinState · buildStatePins
@@ -412,6 +414,7 @@
 - `src/features/explore/model/placeListState.ts`  →  PlaceListState · resolvePlaceListState
 - `src/features/explore/model/placeListView.ts`  →  visiblePlaces
 - `src/features/explore/model/placeSaveGuard.ts`  →  PlaceSaveNotice · hasUsableCoords · SAVE_FAILURE_NOTICE · COORD_BLOCKED_NOTICE · REMOVE_FAILURE_NOTICE
+- `src/features/explore/model/regionPickerPurpose.ts`  →  RegionPickerPurpose · regionPickerHref
 - `src/features/explore/model/regions.ts`  →  useRegions · filterRegions · limitRegionsWhenEmpty · RegionGroup · groupRegionsBySido · regionTint
 - `src/features/explore/model/savedPlaceIndex.ts`  →  findSavedPlaceId · optimisticSavedPlaceId
 - `src/features/explore/model/savedPlaceList.ts`  →  orderSavedPlaces · SAVED_PLACE_BADGE
@@ -461,7 +464,7 @@
 - `src/features/itinerary/model/draftView.ts`  →  DRAFT_POLL_INTERVAL_MS · DRAFT_POLL_MAX_COUNT · DraftDayTab · buildDraftDayTabs · GenerationDayState · GenerationGaugeCell · buildGenerationGauge · formatDraftDayHeader · formatCoPickDayHeader · DraftPin · buildDraftPins · shouldKeepPollingDraft · DraftView · isCandidatesDemoted · FallbackNotice · resolveFallbackNotice · resolveDraftView
 - `src/features/itinerary/model/itineraryEditStore.ts`  →  EditorSlot · EditorDaysItem · removeSlot · addSlot · insertSlotAt · reorderKeepingFixed · ItineraryEditState · useItineraryEditStore
 - `src/features/itinerary/model/legDistance.ts`  →  legDistance
-- `src/features/itinerary/model/mustVisitList.ts`  →  MUST_VISIT_NAME_PLACEHOLDER · MustVisitListItem · MustVisitListView · joinMustVisits · buildMustVisitPins · resolveMustVisitListView
+- `src/features/itinerary/model/mustVisitList.ts`  →  MUST_VISIT_NAME_PLACEHOLDER · MustVisitListItem · MustVisitListView · joinMustVisits · fixedTimeLabel · buildMustVisitPins · resolveMustVisitListView
 - `src/features/itinerary/model/mustVisitTimeForm.ts`  →  DwellKey · MustVisitTimeForm · DWELL_OPTIONS · DEFAULT_DWELL_KEY · tripDayChips · startTimeOptions · startTimeLabel · mustVisitTimeBlockReason · canSubmitMustVisitTime · buildFixedMustVisitRequest · buildAnytimeMustVisitRequest
 - `src/features/itinerary/model/planState.ts`  →  PlanState · PlanDayTab · resolvePlanState · isConfirmLocked · ItineraryDestination · resolveItineraryDestination · ItineraryDestinationHref · itineraryDestinationHref · buildPlanDayTabs
 - `src/features/itinerary/model/radiusUsedLabel.ts`  →  formatRadiusUsed
@@ -655,7 +658,7 @@
 - `src/features/settings/ui/cardShadow.ts`  →  CARD_SHADOW · SEGMENT_SHADOW
 
 ## src/features/stay/config/
-- `src/features/stay/config/affiliateNotice.ts`  →  otaConfirmLabel
+- `src/features/stay/config/affiliateNotice.ts`  →  otaDisplayName · otaConfirmLabel
 - `src/features/stay/config/amenityIcons.ts`  →  resolveAmenityIcon
 
 ## src/features/stay/model/
@@ -1321,8 +1324,10 @@
 - `src/shared/ui/HeartGlyphs.tsx`  →  HeartOutlineGlyph · HeartFilledGlyph · HeartBadgeGlyph
 - `src/shared/ui/SegmentedControl.tsx`  →  SegmentedOption · SegmentedControlProps · SegmentedControl
 - `src/shared/ui/StateNotice.tsx`  →  StateNoticeAction · StateNoticeProps · StateNotice
+- `src/shared/ui/Toast.tsx`  →  TOAST_VISIBLE_MS · showToast · hideToast · ToastHost
+- `src/shared/ui/ToastGlyphs.tsx`  →  ToastSuccessGlyph
 - `src/shared/ui/Toggle.tsx`  →  ToggleProps · Toggle
-- `src/shared/ui/WheelPicker.tsx`  →  WheelPickerProps · WheelPicker
+- `src/shared/ui/WheelPicker.tsx`  →  WHEEL_CELL_HEIGHT · WheelPickerProps · WheelPicker
 
 ## src/shared/ui/pref/
 - `src/shared/ui/pref/PrefChip.tsx`  →  PrefChipProps · PrefChip
@@ -1348,6 +1353,7 @@
 - `src/test-support/pushOsFake.ts`  →  OsPermission · primeOsPermission · primeExpoToken
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
+- `src/test-support/toastHarness.tsx`  →  WithToastHost · resetToast
 
 ## src/widgets/copick-stepper/ui/
 - `src/widgets/copick-stepper/ui/CoPickStepper.tsx`  →  CoPickStep · CoPickStepperProps · CoPickStepper
@@ -1373,4 +1379,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 939개 파일
+합계 945개 파일

@@ -137,7 +137,13 @@ export function PreferencesEditView({
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
       <View testID="settings-pref-root" className="flex-1 bg-canvas">
         <View className="flex-row items-center gap-sm px-lg pb-sm pt-2xl">
-          <Pressable accessibilityRole="button" onPress={onBack} hitSlop={8}>
+          <Pressable
+            testID="settings-pref-back"
+            accessibilityRole="button"
+            accessibilityLabel="뒤로"
+            onPress={onBack}
+            hitSlop={8}
+          >
             <ChevronLeftGlyph />
           </Pressable>
           <Text className="font-noto-bold text-section font-bold text-ink">

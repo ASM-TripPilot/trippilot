@@ -95,10 +95,9 @@ describe('🔴 TRIP-777 · l04 default 프리뷰 = Figma 1604 카드 2장 (AC-6)
     }
     expect(within(first).queryByText('예약번호 미입력')).toBeNull();
 
-    // 2번째 — 미등록(점선 "출발점 지정").
+    // 2번째 — 미등록. 점선 "출발점 지정" 배지는 TRIP-989(D13)로 사라졌다(Figma 1604 와 다름).
     for (const text of [
       '○○ 게스트하우스',
-      '출발점 지정',
       '부산 중구 남포동',
       '6.14 ~ 6.15',
       '앱 저장',
@@ -108,11 +107,16 @@ describe('🔴 TRIP-777 · l04 default 프리뷰 = Figma 1604 카드 2장 (AC-6)
       expect(within(second).getByText(text)).toBeOnTheScreen();
     }
 
-    // 좌표 미확정 행 없음 — 토글 2개 모두 눌린다.
+    expect(within(second).queryByText('출발점 지정')).toBeNull();
+
+    // 좌표 미확정 행 없음 — 출발점 토글은 등록 카드의 1개뿐이고 눌린다.
     expect(screen.queryByText('좌표 미확정 숙소')).toBeNull();
     const toggles = screen.getAllByTestId(/^my-stays-base-toggle-/);
-    expect(toggles).toHaveLength(2);
-    toggles.forEach((toggle) => expect(toggle).not.toBeDisabled());
+    expect(toggles).toHaveLength(1);
+    expect(
+      within(first).queryAllByTestId(/^my-stays-base-toggle-/)
+    ).toHaveLength(1);
+    expect(toggles[0]).not.toBeDisabled();
   });
 });
 

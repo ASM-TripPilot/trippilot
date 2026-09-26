@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import {
@@ -130,8 +132,19 @@ function mockApi(items: Reflection[]) {
   });
 }
 
+/** 훅이 캐시를 고치려고 useQueryClient() 를 불러도 렌더가 죽지 않게 Provider 로 감싼다(TRIP-980). */
+function Wrapper({ children }: { children: ReactNode }) {
+  return (
+    <QueryClientProvider client={new QueryClient()}>
+      {children}
+    </QueryClientProvider>
+  );
+}
+
 function renderPage() {
-  render(<DailyReflectionPage tripId={TRIP_ID} date={DAY} />);
+  render(<DailyReflectionPage tripId={TRIP_ID} date={DAY} />, {
+    wrapper: Wrapper,
+  });
 }
 
 function saveEdit(text: string) {

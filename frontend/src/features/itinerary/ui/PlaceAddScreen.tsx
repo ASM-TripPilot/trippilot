@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
+import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 
 import { PlaceRowCard } from '@/entities/place/ui/PlaceRowCard';
 import { PlaceSubtitle } from '@/entities/place/ui/PlaceSubtitle';
@@ -80,7 +81,7 @@ export function PlaceAddHeader({
     <View className="w-full gap-md px-lg pb-sm pt-sm">
       <View className="h-[46px] w-full flex-row items-center gap-sm rounded-pill border border-hairline bg-surface-soft pl-lg pr-md">
         <SearchGlyph size={20} />
-        <TextInput
+        <BottomSheetTextInput
           testID="itinerary-place-search"
           value={searchText}
           onChangeText={onChangeSearchText}

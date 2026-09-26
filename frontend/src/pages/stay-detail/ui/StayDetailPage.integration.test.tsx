@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import * as Linking from 'expo-linking';
+import { Share } from 'react-native';
 import { http, HttpResponse } from 'msw';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
@@ -1051,5 +1052,23 @@ describe('I22~I24 · 같은 화면 재누름·체크 해제 (781 AC-9·10 → TR
 
     expect(screen.getByText(BODY)).toBeOnTheScreen();
     expect(mockOpenURL).toHaveBeenCalledTimes(1);
+  });
+});
+
+// TRIP-989 A-2 — 공유 원 → OS 공유 시트. 딥링크 URL 계약이 없어 숙소 이름만 나른다(장소 상세 선례·01b Q5).
+// 진짜 Share.share 는 네이티브 모듈이라 스파이로 막고, 끝에서 원래 함수로 되돌린다.
+describe('A-2 · 공유 → Share.share(숙소 이름) (TRIP-989 · INV-4)', () => {
+  it('ready 뒤 공유 원을 누르면 Share.share 가 숙소 이름을 message 로 한 번 불린다', async () => {
+    const spy = jest
+      .spyOn(Share, 'share')
+      .mockResolvedValue({ action: 'sharedAction' } as never);
+    render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
+
+    fireEvent.press(screen.getByTestId('stay-detail-share'));
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][0].message).toBe(DETAIL.name);
+    spy.mockRestore();
   });
 });

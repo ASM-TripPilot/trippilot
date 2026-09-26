@@ -1,4 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 
 import {
   MyStaysScreen,
@@ -14,6 +19,7 @@ import {
  *  - 🔴 AC-1(BR-U6-20) 행에 숙소명·위치·체크인/아웃·등록 출처·연결 여행이 보이고, 미연결은 정확히 '연결된 여행 없음'.
  *  - 🔴 AC-2(BR-U6-21 핵심) 출발점 토글 press → **다이얼로그가 먼저** 뜨고 확정 전엔 콜백 0회, 확정에서만 1회.
  *  - 🔴 AC-3(INV-U1-08) coordConfirmed=false → 토글 real disabled + press 무반응 + 콜백 0.
+ *  - 🔴 TRIP-989 C(D13) 미등록 행에는 출발점 버튼이 없다 — 토글은 등록 행에만 있다.
  *  - 🔴 AC-4(US-NOTIF-06) 0건 → empty 안내 + 탐색 콜백.
  *  - AC-5(INV-3) 렌더에 소요시간 문자열 0(선제 green 회귀 앵커).
  *
@@ -121,26 +127,27 @@ describe('🔴 AC-2 · 출발점 전환 다이얼로그 게이트(BR-U6-21)', ()
     expect(screen.queryByTestId('my-stays-base-dialog')).toBeNull();
   });
 
-  it('미등록 행의 "출발점 지정" press 도 같은 게이트를 거쳐 확정에서만 그 행(미등록)으로 1회 부른다', () => {
-    // 등록 행과 함께 그려, 눌린 행이 아닌 다른 행이 넘어가는 혼동도 잡는다.
-    const { onConfirmBaseToggle } = renderScreen({
-      rows: [assignedRow(), unassignedRow()],
-    });
-    expect(screen.queryByTestId('my-stays-base-dialog')).toBeNull();
+  it('미등록 행에는 "출발점 지정" 버튼이 없어 그 행에서 다이얼로그를 열 길이 없다 (TRIP-989 C-1·C-3 · D13)', () => {
+    // 미등록 지정(POST)은 어느 여행에 붙일지 모르는 채로는 할 수 없다(TRIP-621 로 분리). 묻고 나서
+    // 아무것도 안 하면 침묵 실패(INV-4)라, 물을 수 없는 행에서는 묻지도 않는다.
+    renderScreen({ rows: [assignedRow(), unassignedRow()] });
 
-    fireEvent.press(screen.getByTestId('my-stays-base-toggle-s2'));
+    // 행은 그대로 있고 "연결된 여행 없음"도 남는다(BR-U6-20) — 아래 "없음" 단언의 짝.
+    const row = screen.getByTestId('my-stays-row-s2');
+    expect(within(row).getByText('남포동 게스트하우스')).toBeOnTheScreen();
+    expect(within(row).getByText('연결된 여행 없음')).toBeOnTheScreen();
 
-    expect(screen.getByTestId('my-stays-base-dialog')).toBeOnTheScreen();
-    expect(onConfirmBaseToggle).not.toHaveBeenCalled();
+    // 지정 버튼·문구가 없고, 행 안에 누를 수 있는 버튼이 하나도 없다(다른 testID 로 남기는 우회 차단).
+    expect(within(row).queryByText('출발점 지정')).toBeNull();
+    expect(screen.queryByTestId('my-stays-base-toggle-s2')).toBeNull();
+    expect(within(row).queryAllByRole('button')).toHaveLength(0);
 
-    fireEvent.press(screen.getByTestId('my-stays-base-confirm'));
-
-    expect(onConfirmBaseToggle).toHaveBeenCalledTimes(1);
-    expect(onConfirmBaseToggle.mock.calls[0][0]).toMatchObject({
-      savedStayId: 's2',
-      baseState: 'unassigned',
-    });
-    expect(screen.queryByTestId('my-stays-base-dialog')).toBeNull();
+    // 화면 전체의 출발점 버튼은 등록 행(s1)의 것 하나뿐이다.
+    expect(
+      screen
+        .getAllByTestId(/^my-stays-base-toggle-/)
+        .map((node) => node.props.testID)
+    ).toEqual(['my-stays-base-toggle-s1']);
   });
 
   it('취소하면 콜백 0회로 다이얼로그만 닫힌다(짝)', () => {
@@ -157,9 +164,11 @@ describe('🔴 AC-2 · 출발점 전환 다이얼로그 게이트(BR-U6-21)', ()
 });
 
 describe('🔴 AC-3 · 좌표 미확정 → 토글 비활성(INV-U1-08)', () => {
+  // TRIP-989 — 미등록 행의 토글이 사라져 이 심판을 **등록 행으로 옮겼다**(지우면 등록 행 disabled 를
+  // 지키는 심판이 0개가 된다). 등록 행도 canAssignBase = coordConfirmed 라 false 가 실제로 가능하다.
   it('canAssignBase=false 면 토글이 real disabled 이고 press 해도 다이얼로그·콜백이 없다', () => {
     const { onConfirmBaseToggle } = renderScreen({
-      rows: [unassignedRow({ savedStayId: 's3', canAssignBase: false })],
+      rows: [assignedRow({ savedStayId: 's3', canAssignBase: false })],
     });
 
     const toggle = screen.getByTestId('my-stays-base-toggle-s3');
@@ -174,7 +183,7 @@ describe('🔴 AC-3 · 좌표 미확정 → 토글 비활성(INV-U1-08)', () => 
 
   it('canAssignBase=true 면 토글이 비활성이 아니다(짝)', () => {
     renderScreen({
-      rows: [unassignedRow({ savedStayId: 's4', canAssignBase: true })],
+      rows: [assignedRow({ savedStayId: 's4', canAssignBase: true })],
     });
 
     expect(screen.getByTestId('my-stays-base-toggle-s4')).not.toBeDisabled();
@@ -209,5 +218,19 @@ describe('AC-5 · INV-3 소요시간 미표시(렌더, 선제 green 회귀 앵�
 
     // 렌더 결과를 훑는다 — 소요시간 문자열 0건.
     expect(screen.queryAllByText(DURATION)).toHaveLength(0);
+  });
+});
+
+describe('🔴 TRIP-991 · 앱바 뒤로 접근성 (AC-2)', () => {
+  it('앱바 뒤로는 "뒤로" 버튼으로 읽히고, 누르면 onPressBack 이 1회 불린다', () => {
+    const onPressBack = jest.fn();
+    renderScreen({ onPressBack });
+
+    // 역할·이름으로 먼저 찾고 testID 는 뒤에 확인한다 — 라벨 누락과 testID 누락이 따로 드러난다.
+    const back = screen.getByRole('button', { name: '뒤로' });
+    expect(back).toHaveProp('testID', 'my-stays-back');
+
+    fireEvent.press(back);
+    expect(onPressBack).toHaveBeenCalledTimes(1);
   });
 });

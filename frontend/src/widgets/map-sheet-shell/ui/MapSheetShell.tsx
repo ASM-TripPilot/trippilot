@@ -210,6 +210,8 @@ export function MapSheetShell<T = unknown>({
         snapPoints={snapPoints ?? SNAP_POINTS}
         // v5 기본 true 는 콘텐츠 높이 칸을 배열에 몰래 끼워 index·onChange 번호가 어긋난다(03b 경고-1).
         enableDynamicSizing={false}
+        // 라이브러리 기본값과 같지만 명시한다 — 시트 안 입력(h13 검색)의 키보드 회피 계약(TRIP-990 D9).
+        keyboardBehavior="interactive"
         onChange={setSnapIndex}
         onAnimate={onSheetAnimate}
       >
@@ -228,6 +230,9 @@ export function MapSheetShell<T = unknown>({
             ListEmptyComponent={list.ListEmptyComponent}
             onEndReached={list.onEndReached}
             onEndReachedThreshold={list.onEndReachedThreshold}
+            // 헤더 검색 입력의 키보드가 떠 있어도 첫 탭이 행으로 간다 — 기본값(never)은 첫 탭을 키보드
+            // 내리기로 먹는다(TRIP-981 #057). 키보드는 안 내려 주므로 내림은 소비처가 한다.
+            keyboardShouldPersistTaps="handled"
             testID={list.testID}
           />
         ) : (

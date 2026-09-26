@@ -9,6 +9,7 @@ import { stayKey } from '@/features/stay/model/stayKey';
 import { useSavedStays } from '@/features/stay/model/savedStays';
 import { useStaySearch } from '@/features/stay/model/useStaySearch';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 import { useGetPlaces } from '@/shared/api/generated/places/places';
 import {
   ExploreLandingScreen,
@@ -26,7 +27,7 @@ import {
  * `formatPrice`/`stayKey` 카드 매핑, 그리고 숙소 담기 하트(`useSavedStays`) 배선은 스캔 밖인
  * 이 라우트(app 층)가 진다 — `itinerary.tsx` 승격과 동형(브리프 §0-1).
  *
- * 검색창 탭 → `/explore/region?purpose=trip`(입력 불가 진입 버튼 — 여행지 선택 정본으로 진입,
+ * 검색창 탭 → `regionPickerHref('explore')`(입력 불가 진입 버튼 — 여행지 선택 정본으로 진입,
  * TRIP-499 통합검색 은퇴) · 모두 보기 → `/stays?region={레인 지역}`(첫 카드 지역을 실어 부산 폴백 회피) ·
  * 담은 곳 saved-menu FAB(TRIP-494) → 펼치면 담은 장소 `/explore/saved-places`(d02) · 저장한 숙소
  * `/stays/saved`(e04), 0곳이어도 유지 — TRIP-448 계승). 구획별 독립 쿼리라 숙소 레인 실패가
@@ -99,7 +100,7 @@ export default function ExploreRoute(): ReactElement {
       title: '무엇을 둘러볼까요?',
       subtitle: '숙소·장소를 둘러보고 담아요',
     },
-    onPressSearch: () => router.push('/explore/region?purpose=trip'),
+    onPressSearch: () => router.push(regionPickerHref('explore')),
     // "가볼 곳" 진입점 → d04 장소 목록(TRIP-453 entry 2). guest·SavableStayLane 양쪽이
     // base 를 spread 하므로 한 곳에 두면 두 경로 모두 배선된다.
     onPressPlaces: () => router.push('/explore/places'),

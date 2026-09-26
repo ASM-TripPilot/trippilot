@@ -155,3 +155,13 @@ describe('TRIP-609 · LocationConsentScreen — 승낙 경로(게이트 없음)'
     expect(screen.queryByTestId('settings-location-revoke-confirm')).toBeNull();
   });
 });
+
+describe('🔴 TRIP-991 · 위치정보 스위치 이름 (AC-3)', () => {
+  it('토글은 "위치정보 수집" 스위치로 읽히고, 켜짐은 이름이 아니라 checked 상태로 전달된다', () => {
+    renderScreen({ consentOn: true });
+
+    const toggle = screen.getByRole('switch', { name: '위치정보 수집' });
+    expect(toggle).toHaveProp('testID', 'settings-location-toggle');
+    expect(toggle).toBeChecked();
+  });
+});

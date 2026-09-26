@@ -9,6 +9,7 @@ import { type ReactElement, useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 
 import { toggleMulti, toggleSingle } from '@/shared/pref/preferenceSelection';
+import { showToast } from '@/shared/ui/Toast';
 import { type PreferenceView } from '@/shared/api/generated/schemas';
 
 import {
@@ -22,6 +23,8 @@ import {
   isMultiAxis,
   PreferencesEditView,
 } from './PreferencesEditView';
+
+const PREF_SAVED_TOAST = '취향을 저장했어요';
 
 export function PreferencesEditScreen(): ReactElement {
   const router = useRouter();
@@ -60,9 +63,13 @@ export function PreferencesEditScreen(): ReactElement {
 
   const handleSave = useCallback(() => {
     if (baseView && selection) {
-      save(buildPreferenceInput(baseView, selection));
+      // 성공하면 설정으로 돌아가고 토스트로 알린다(TRIP-990 · 루트 호스트라 돌아간 뒤에도 보인다).
+      save(buildPreferenceInput(baseView, selection), () => {
+        router.back();
+        showToast({ message: PREF_SAVED_TOAST, testID: 'settings-pref-saved' });
+      });
     }
-  }, [baseView, selection, save]);
+  }, [baseView, selection, save, router]);
 
   return (
     <PreferencesEditView

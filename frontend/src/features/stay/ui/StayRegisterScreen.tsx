@@ -34,7 +34,12 @@ import BottomSheet, {
 } from '@gorhom/bottom-sheet';
 
 import type { GeocodeCandidate } from '@/shared/api/generated/schemas';
-import { CenterPinPicker, MapView, type MapCenter } from '@/shared/map';
+import {
+  CenterPinPicker,
+  MapView,
+  type MapCenter,
+  type MapPin,
+} from '@/shared/map';
 import {
   SegmentedControl,
   type SegmentedOption,
@@ -580,6 +585,11 @@ function renderMapSheetBackdrop(props: BottomSheetBackdropProps): ReactElement {
   );
 }
 
+/** 고른 후보 좌표의 숙소 핀 1개 — Figma e05 미니맵의 침대 마커(TRIP-989 D). `number`는 타입상 필수라 1. */
+function stayPins(candidate: GeocodeCandidate): MapPin[] {
+  return [{ number: 1, lat: candidate.lat, lng: candidate.lng, kind: 'stay' }];
+}
+
 function MapSheet({
   mapSheetState,
   candidate,
@@ -606,7 +616,10 @@ function MapSheet({
         {mapSheetState === 'open' ? (
           <>
             <View className="h-[240px] w-full overflow-hidden rounded-card">
-              <MapView center={{ lat: candidate.lat, lng: candidate.lng }} />
+              <MapView
+                center={{ lat: candidate.lat, lng: candidate.lng }}
+                pins={stayPins(candidate)}
+              />
             </View>
             <Pressable
               testID="stay-register-mapsheet-confirm"
@@ -767,7 +780,14 @@ export function StayRegisterScreen({
                       testID="stay-register-map-preview"
                       className="h-[196px] overflow-hidden rounded-card"
                     >
-                      <MapView center={mapPreviewCenter} />
+                      <MapView
+                        center={mapPreviewCenter}
+                        pins={
+                          flow.selectedCandidate !== null
+                            ? stayPins(flow.selectedCandidate)
+                            : undefined
+                        }
+                      />
                     </View>
                   </View>
                 ) : null}

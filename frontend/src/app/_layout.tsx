@@ -18,6 +18,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { SplashGate } from '@/app-shell';
 import { retryUnlessNotFound } from '@/shared/api/isNotFound';
+import { ToastHost } from '@/shared/ui/Toast';
 
 // 서버 상태(TanStack Query)의 앱 전역 캐시 저장소 — 모듈 스코프에서 한 번만 만들어 리렌더마다
 // 다시 만들지 않는다. 기본 옵션은 retry 하나만 연다(TRIP-986 #063) — 404("없다")는 다시 물어도
@@ -74,6 +75,8 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <SplashGate />
         </QueryClientProvider>
+        {/* TRIP-990 — 토스트 호스트는 Stack(SplashGate) 바깥에 한 번. 화면이 back 으로 떠나도 남는다. */}
+        <ToastHost />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

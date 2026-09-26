@@ -64,6 +64,21 @@ export function joinMustVisits(input: {
 }
 
 /**
+ * TRIP-988 · FIXED 카드 보조행 `9.27 · 12:00`(D5). 월·일은 0 을 안 채우고, 시각은 앞 5글자만 —
+ * 계약이 `HH:mm[:ss]` 라 초가 붙어 올 수 있다. 시각이 없으면 빈 문자열(날짜만 그리지 않는다),
+ * 날짜가 없으면(INV-U1-17 위반 데이터) 시각만 — 없는 날짜를 지어내지 않는다.
+ */
+export function fixedTimeLabel(
+  item: Pick<MustVisitListItem, 'fixedDate' | 'fixedStart'>
+): string {
+  if (!item.fixedStart) return '';
+  const time = item.fixedStart.slice(0, 5);
+  if (!item.fixedDate) return time;
+  const [, month, day] = item.fixedDate.split('-').map(Number);
+  return `${month}.${day} · ${time}`;
+}
+
+/**
  * 지도에 찍을 번호 핀. 좌표는 담은 장소(`saved-places`)에만 있으므로 조인과 같은 키로 다시
  * 읽는다 — 좌표를 못 얻은 항목은 **건너뛰되 뒤 항목의 번호를 당기지 않는다**(`buildDraftPins`
  * 와 같은 규칙). 재번호하면 사용자가 지도 ② 를 누르고 카드 ② 를 기대할 때 다른 장소가 나온다.

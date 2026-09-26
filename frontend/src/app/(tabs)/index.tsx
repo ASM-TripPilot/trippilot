@@ -11,6 +11,7 @@ import { seoulDate } from '@/shared/date/seoulDate';
 import { formatNightsLabel } from '@/entities/trip/lib/formatNights';
 import { formatTripRange } from '@/entities/trip/lib/formatTripPeriod';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 import { useSavedStays } from '@/features/stay/model/savedStays';
 import {
   itineraryDestinationHref,
@@ -113,7 +114,7 @@ export default function HomeRoute() {
       router.push('/stays/saved');
     },
     onPressSpotsMore: () => router.push('/explore/places'),
-    onPressSearch: () => router.push('/explore/region?purpose=trip'),
+    onPressSearch: () => router.push(regionPickerHref('explore')),
     // TRIP-935 R1 — 매거진(a02) 진입을 막는다: onPressMagazine 을 넘기지 않아 page0 은 버튼이 아니다.
     // 매거진 화면은 고정 샘플에 무반응 요소뿐이라(심사 2.1) 실데이터가 생기면 여기서 다시 잇는다.
     // TRIP-939 AC-9 — 인사 헤더 종 press → l01 알림함(/notifications, U6 "어디서든 종 아이콘으로 진입").

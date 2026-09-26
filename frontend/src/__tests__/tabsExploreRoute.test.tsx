@@ -11,6 +11,7 @@ import { stayKey } from '@/features/stay/model/stayKey';
 import { useStaySearch } from '@/features/stay/model/useStaySearch';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import { useGetPlaces } from '@/shared/api/generated/places/places';
+import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 import ExploreRoute from '@/app/(tabs)/explore';
 
 /**
@@ -20,8 +21,8 @@ import ExploreRoute from '@/app/(tabs)/explore';
  *  - 🔴 헤딩·검색·lane_stay·lane_itin 자리·담은 곳 FAB 5구획을 그린다(AC-E1) ·
  *    nearby 는 안 그린다(AC-E8, 좌표 없음). 축 세그먼트(axisSeg)는 걷어냈다(TRIP-447 AC-1,
  *    소스 0건은 `exploreLandingAxisRemoval.test.ts` 가 별도로 잠근다).
- *  - 🔴 검색창 탭(입력 불가 진입 버튼) → `/explore/region?purpose=trip`(여행지 선택 정본,
- *    TRIP-499 재배선 — 입력은 RegionPicker 에서 받아 자유 문자열이 region 으로 새지 않는다, AC-E2).
+ *  - 🔴 검색창 탭(입력 불가 진입 버튼) → `regionPickerHref('explore')`(여행지 선택 정본 — TRIP-985 로
+ *    위저드 전용 trip 에서 탐색용 explore 로 분리, TRIP-499 재배선 — 입력은 RegionPicker 에서 받아 자유 문자열이 region 으로 새지 않는다, AC-E2).
  *    #2(submitEditing 무동작) 유지.
  *  - 🔴 lane_stay = `useStaySearch` items 를 가로 카드로, 금액은 `formatPrice` 정확 일치,
  *    "· 1박"(정확 1박가) 없음, "모두 보기" → `/stays`(AC-E3).
@@ -164,20 +165,20 @@ describe('🔴 AC-E1 · AC-E8 — 구획 렌더 + nearby·여행자 레인 부�
   });
 });
 
-describe('🔴 AC-E2(TRIP-499) — 검색창은 입력 불가 진입 버튼 → /explore/region?purpose=trip', () => {
-  it('검색창을 누르면 여행지 선택(RegionPicker, trip)으로 이동한다 — 자유 문자열이 region 으로 새지 않는다', () => {
+describe('🔴 AC-E2(TRIP-499·985) — 검색창은 입력 불가 진입 버튼 → 지역 선택(purpose=explore)', () => {
+  it('검색창을 누르면 여행지 선택(RegionPicker, explore)으로 이동한다 — 자유 문자열이 region 으로 새지 않는다', () => {
     render(<ExploreRoute />);
 
     // 검색창은 여전히 TextInput 이 아니라 Pressable 진입 버튼이다 — 제출이 아니라 탭이다.
     // TRIP-499 로 목적지를 통합 검색(/explore/search)에서 여행지 선택 정본(/explore/region?purpose=trip)
     // 으로 재배선한다. 입력은 RegionPicker searchBar 에서 받으므로 d01 은 여전히 문자열을 안
-    // 다룬다(TRIP-412 가드 그대로 산다). 지금 소스는 옛 목적지라 red. #2(submitEditing 무동작)는 무변경 green.
+    // 다룬다(TRIP-412 가드 그대로 산다). #2(submitEditing 무동작)는 무변경 green.
+    // TRIP-985: purpose=trip 은 위저드 "도시 추가" 전용이 됐다 — 탐색에서 고른 지역이 위저드로 새지
+    // 않게 탐색용 purpose 로 간다. 기대값은 공유 헬퍼 출력이라 철자가 한 곳에서만 정해진다.
     fireEvent.press(screen.getByTestId('explore-landing-search'));
 
     expect(mockPush).toHaveBeenCalledTimes(1);
-    expect(String(mockPush.mock.calls[0][0])).toBe(
-      '/explore/region?purpose=trip'
-    );
+    expect(String(mockPush.mock.calls[0][0])).toBe(regionPickerHref('explore'));
   });
 
   it('자유 문자열이 region 으로 새지 않는다 — 제출(submitEditing)에는 반응하지 않는다', () => {

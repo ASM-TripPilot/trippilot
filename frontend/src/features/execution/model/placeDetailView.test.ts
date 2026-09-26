@@ -150,6 +150,27 @@ describe('buildPlaceDetailView — 슬롯 POI → 표시용 뷰', () => {
   });
 });
 
+describe('TRIP-988 A-1 · 영업시간 `<br>` → 줄바꿈 (i05/i10 · BR-U3-09)', () => {
+  it('V-10 슬롯 원문의 태그는 뷰에서 줄바꿈이 된다 — 화면은 뷰 값을 그대로 그린다', () => {
+    // 준비 — QA 재현 원문(#066 계열)을 가진 슬롯.
+    const slots = [
+      slot({
+        poiId: 'p1',
+        openingHours: '월요일~토요일 12:00~22:30<br>- 일요일 12:00~21:30',
+      }),
+    ];
+
+    // 실행
+    const view = buildPlaceDetailView(slots, 'p1');
+
+    // 단언 — 표시용 뷰가 이미 두 줄이다(정규화 자리는 model).
+    expect(view?.openingHours).toBe(
+      '월요일~토요일 12:00~22:30\n- 일요일 12:00~21:30'
+    );
+    expect(view?.openingHoursMissing).toBe(false);
+  });
+});
+
 describe('buildPlaceShareMessage — OS 공유 문구 (TRIP-755 AC-5)', () => {
   it('V-9 주소가 없으면 장소명만, 있으면 장소명 다음 줄에 주소를 붙인다', () => {
     // 운영 경로(address 늘 null)로는 주소 분기에 닿을 수 없어 순수 함수로 잰다(02a D-c · ★11).

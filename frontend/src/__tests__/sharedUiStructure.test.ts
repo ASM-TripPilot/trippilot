@@ -43,6 +43,11 @@ const TABBAR_REL = 'shared/ui/BottomTabBar.tsx';
 // (place 카드·stay 검색 카드가 공유 = entities 교차 0). SVG stroke/fill 색 상수(#ff385c·#222222·
 // #ffffff)를 갖는 `*Glyphs.tsx` 라 raw-hex 면제(BottomTabBar 선례와 동일 근거).
 const HEART_GLYPHS_REL = 'shared/ui/HeartGlyphs.tsx';
+// TRIP-990 — 공용 토스트(스토어+호스트)와 그 성공 체크 글리프. 글리프는 SVG stroke 색(#0E9384 success)을
+// 상수로 갖는 `*Glyphs.tsx` 라 className 을 못 채운다 → raw-hex·className 면제(HeartGlyphs 선례와 동일 근거).
+// 면제 자기검사(`files.toContain`)가 ToastGlyphs 의 실재를 red→green 앵커로 겸한다.
+const TOAST_REL = 'shared/ui/Toast.tsx';
+const TOAST_GLYPHS_REL = 'shared/ui/ToastGlyphs.tsx';
 const STAY_STATE_NOTICE = path.join(
   ROOT,
   'features',
@@ -66,7 +71,7 @@ const STAY_SCREEN = path.join(
  * `HeartGlyphs.tsx`(TRIP-807 이동)도 같은 `*Glyphs.tsx` 근거로 면제한다 — 아래 `files.toContain`
  * 자기검사가 이 파일의 shared/ui 이동 완료(존재)를 red→green 앵커로 겸한다(★6).
  */
-const HEX_EXEMPT = [TABBAR_REL, HEART_GLYPHS_REL];
+const HEX_EXEMPT = [TABBAR_REL, HEART_GLYPHS_REL, TOAST_GLYPHS_REL];
 
 /** 토큰으로 이미 존재하는 9색 — raw hex 로 적으면 토큰 우회다(`placeExploreStructure` 와 동일). */
 const TOKENIZED_HEX = [
@@ -218,6 +223,19 @@ describe('AC-G2 · 토큰 우회 금지 — shared/ui', () => {
       )
     );
     expect(offenders).toEqual([]);
+  });
+});
+
+describe('🔴 TRIP-990 T5 · 토스트 스토어가 shared/ui 가드 사정거리 안에 있다 (01b Q1)', () => {
+  it('Toast.tsx 가 모집단에 있고, React 내장 useSyncExternalStore 로 구독하며 호출 함수·호스트를 내보낸다', () => {
+    const toast = sharedUiSources().find(({ file }) => file === TOAST_REL);
+
+    // 긍정 — 모집단에 들어와야 위의 zustand·duration·URL·className·hex 부정 스캔이 이 파일에도 걸린다.
+    expect(toast).toBeDefined();
+    // 01b Q1: 라이브러리 0 — 상태는 React 내장 훅으로 구독한다(zustand 금지는 위 it 가 이미 잰다).
+    expect(toast?.source).toMatch(/\buseSyncExternalStore\b/);
+    expect(toast?.source).toMatch(/export (function|const) showToast\b/);
+    expect(toast?.source).toMatch(/export (function|const) ToastHost\b/);
   });
 });
 

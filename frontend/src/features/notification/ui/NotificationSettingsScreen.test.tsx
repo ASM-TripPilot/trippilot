@@ -209,3 +209,12 @@ describe('TRIP-607 · NotificationSettingsScreen — 권한 거부 (금지-1 렌
     });
   });
 });
+
+describe('🔴 TRIP-991 · 인앱 스위치 이름 (AC-3)', () => {
+  it('인앱 스위치 6개가 모두 "{행 라벨} 인앱" 이름으로 읽힌다', () => {
+    renderScreen();
+
+    // 정규식(부분 일치) — 행 라벨 카피 자체는 잠그지 않고 " 인앱" 접미만 센다.
+    expect(screen.getAllByRole('switch', { name: / 인앱$/ })).toHaveLength(6);
+  });
+});

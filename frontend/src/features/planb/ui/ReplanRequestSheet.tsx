@@ -1,6 +1,9 @@
 import type { ReactElement } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
-import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { Pressable, Text, View } from 'react-native';
+import BottomSheet, {
+  BottomSheetScrollView,
+  BottomSheetTextInput,
+} from '@gorhom/bottom-sheet';
 
 import {
   REPLAN_DIRECTIVES,
@@ -20,8 +23,8 @@ import { RiskWarningGlyph } from './PlanbGlyphs';
  * `detected`(감지 트리거)가 있으면 사유 맨 앞에 감지 칩을 세우고, 그와 겹치는 정적 칩
  * (날씨 · 감지 칩이 대신하는 사유)은 숨긴다. 스크림 탭·아래로 끌기 → onClose.
  *
- * 바텀시트의 실제 열림/닫힘·딤 커버는 jest 무심판(통과형 목) — 6-b 실기 몫. 자유텍스트는 목이
- * `BottomSheetTextInput` 을 안 줘서 플레인 RN `TextInput`.
+ * 바텀시트의 실제 열림/닫힘·딤 커버는 jest 무심판(통과형 목) — 6-b 실기 몫. 자유텍스트는
+ * `BottomSheetTextInput` 이라 포커스 때 시트가 키보드 위로 올라간다(TRIP-990 #051 · D9, 실동작은 6-b).
  */
 
 const SHEET_TITLE = '✦ AI에게 맡길게요';
@@ -178,6 +181,7 @@ export function ReplanRequestSheet({
     <BottomSheet
       enablePanDownToClose
       onClose={onClose}
+      keyboardBehavior="interactive"
       backgroundStyle={SHEET_BACKGROUND}
       backdropComponent={() => (
         // 목/실라이브러리 모두 backdrop 에 prop 을 안 넘길 수 있어 onClose 를 클로저로 문다
@@ -193,6 +197,8 @@ export function ReplanRequestSheet({
     >
       <BottomSheetScrollView
         testID="planb-request-sheet"
+        // 입력 중 "AI가 다시 짜기" 첫 탭이 키보드 닫기에만 먹히지 않게(TRIP-990 Q10).
+        keyboardShouldPersistTaps="handled"
         contentContainerClassName="w-full gap-lg px-lg pb-2xl pt-sm"
       >
         <Text className="font-noto-bold text-[20px] font-bold text-ink">
@@ -259,7 +265,7 @@ export function ReplanRequestSheet({
         {/* 직접 말하기 — 1줄 입력(Figma ≈44). 테두리는 라이브 #E3E3E3 의 가까운 토큰(Q6) */}
         <View className="gap-sm">
           <SectionLabel>{FREETEXT_LABEL}</SectionLabel>
-          <TextInput
+          <BottomSheetTextInput
             testID="planb-request-freetext"
             value={freeText}
             onChangeText={onChangeFreeText}

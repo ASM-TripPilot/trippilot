@@ -4,6 +4,8 @@ import {
   screen,
   within,
 } from '@testing-library/react-native';
+import { ScrollView } from 'react-native';
+import type { ReactTestInstance } from 'react-test-renderer';
 
 import { buildSettingsSections } from '../model/settingsSections';
 import { SettingsScreen } from './SettingsScreen';
@@ -314,5 +316,50 @@ describe('🔴 TRIP-935 AC-3 · 버전 줄은 appVersion 으로만 그린다', (
     // 앵커 — 화면 하단(출처 블록)은 그려졌다.
     expect(screen.getByTestId('settings-data-attribution')).toBeOnTheScreen();
     expect(screen.queryAllByText(/TripPilot v/)).toHaveLength(0);
+  });
+});
+
+describe('🔴 TRIP-991 · 제휴 안내 스위치 이름 (AC-3)', () => {
+  it('제휴 토글은 행 제목 "외부 이동 시 제휴 안내 다시 보기" 스위치로 읽힌다', () => {
+    renderScreen();
+
+    expect(
+      screen.getByRole('switch', { name: '외부 이동 시 제휴 안내 다시 보기' })
+    ).toHaveProp('testID', 'settings-affiliate-toggle');
+  });
+});
+
+/**
+ * TRIP-990 · S3 구조 (#027 · D23) — 닉네임 행을 품은 스크롤 영역이 `keyboardShouldPersistTaps="handled"` 다.
+ *
+ * *(개념)* 키보드가 떠 있을 때 버튼을 탭하면, 그 탭을 "키보드 닫기"에만 쓰지 말고 버튼에도 전달하라는
+ * 설정. RN 기본값은 `never` 라서 입력 중 "저장"을 처음 누르면 키보드만 닫히고 저장은 안 된다.
+ *
+ * 화면 안 다른 스크롤에 붙여도 통과하지 않게, 닉네임 행에서 위로 올라가 **처음 만나는 ScrollView** 의
+ * 값을 읽는다. 실제로 첫 탭이 버튼에 닿는지(원인 가설이 맞는지)는 jest 사각 — 6-b 실기.
+ *
+ * 3동작 뼈대: 준비=설정 화면 렌더 → 실행=닉네임 행의 조상 ScrollView 찾기 → 단언=그 prop 값.
+ */
+describe('🔴 S3 · 닉네임 행 스크롤이 키보드 위 첫 탭을 버튼에 넘긴다 (D23)', () => {
+  function nearestScrollView(
+    node: ReactTestInstance
+  ): ReactTestInstance | null {
+    let current: ReactTestInstance | null = node.parent;
+    while (current !== null && current.type !== ScrollView) {
+      current = current.parent;
+    }
+    return current;
+  }
+
+  it('닉네임 행의 조상 ScrollView 가 keyboardShouldPersistTaps="handled" 다', () => {
+    renderScreen();
+
+    const scroll = nearestScrollView(
+      screen.getByTestId('settings-nickname-edit')
+    );
+
+    // 짝 — 조상 스크롤이 실제로 있다(없으면 아래 단언이 무엇을 재는지 모호해진다).
+    expect(scroll).not.toBeNull();
+    expect(scroll?.props.keyboardShouldPersistTaps).toBe('handled');
   });
 });

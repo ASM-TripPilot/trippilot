@@ -159,6 +159,7 @@ export function SettingsScreen({
               right={
                 <Toggle
                   testID="settings-affiliate-toggle"
+                  accessibilityLabel={row.label}
                   checked={affiliateNoticeOn === true}
                   disabled={affiliateNoticeOn == null}
                   onPress={() => onToggleAffiliateNotice?.()}
@@ -261,7 +262,8 @@ export function SettingsScreen({
         <Text className="text-[18px] font-noto-bold text-ink">설정</Text>
       </View>
 
-      <ScrollView>
+      {/* 키보드가 떠 있을 때 닉네임 "저장" 첫 탭이 키보드 닫기에만 먹히지 않게(TRIP-990 D23). */}
+      <ScrollView keyboardShouldPersistTaps="handled">
         <View className="gap-[22px] px-lg pb-3xl pt-lg">
           {groups.map((group) => (
             <SettingsGroup key={group.key} label={group.label}>

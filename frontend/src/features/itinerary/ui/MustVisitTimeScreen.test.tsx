@@ -1,6 +1,8 @@
 import type { ComponentProps } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
+import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
+
 import type { MustVisitTimeForm } from '../model/mustVisitTimeForm';
 import { MustVisitTimeScreen } from './MustVisitTimeScreen';
 
@@ -456,5 +458,66 @@ describe('🔴 C34 · AC-b1 · AC-b2 — 저장 실패 행이 안내 배너 아�
     // 앵커 — hairline 테두리 + r12(rounded-button=12px 실측). 실제 흰 렌더·픽셀은 6-b 대조.
     expect(className).toContain('border-hairline');
     expect(className).toContain('rounded-button');
+  });
+});
+
+/**
+ * TRIP-990 · W3 (D21 · 01b Q6) — h07 시작 시각 시트: 휠을 굴리다 멈추면 그 값이 확정되고, 시트는
+ * "닫기"로만 닫힌다.
+ *
+ * 왜 닫힘을 떼는가: 휠이 스크롤 정지로도 값을 확정하게 되면, 예전처럼 "값이 넘어오면 시트를 닫는다"를
+ * 두면 굴리다 잠깐 멈추는 순간 시트가 닫혀 버린다. 그래서 탭이든 스크롤 정지든 값만 넘기고, 닫기는
+ * 사용자가 "닫기"를 눌러서만 한다.
+ *
+ * 무엇을 보장하나:
+ *  - 휠이 12:00 칸(48개 중 24번째)에서 멈추면 `onPickStart('12:00')` 가 1회 불리고 시트는 열린 채다.
+ *  - 셀을 탭해도 값만 넘어가고 시트는 열린 채다. "닫기"를 누르면 그때 닫힌다.
+ *
+ * 3동작 뼈대: 준비=시트를 연다 → 실행=휠 정지 / 셀 탭 / 닫기 → 단언=넘어간 값·시트 존재 여부.
+ */
+describe('🔴 W3 · 휠 정지 확정 + 닫기로만 닫힘 (D21 · Q6)', () => {
+  const SHEET = 'itinerary-mustvisit-time-start-sheet';
+  const WHEEL = 'itinerary-mustvisit-time-start-wheel';
+
+  function openSheet(onPickStart: jest.Mock): void {
+    renderScreen({ onPickStart });
+    fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-start-field'));
+  }
+
+  it('휠이 12:00 에서 멈추면 그 값이 넘어가고 시트는 열린 채다', () => {
+    const onPickStart = jest.fn();
+    openSheet(onPickStart);
+
+    fireEvent(screen.getByTestId(WHEEL), 'momentumScrollEnd', {
+      nativeEvent: {
+        contentOffset: {
+          x: 0,
+          y: START_OPTIONS.indexOf('12:00') * WHEEL_CELL_HEIGHT,
+        },
+      },
+    });
+
+    expect(onPickStart).toHaveBeenCalledWith('12:00');
+    expect(onPickStart).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId(SHEET)).toBeOnTheScreen();
+  });
+
+  it('셀을 탭해도 값만 넘어가고 시트는 열린 채이며, "닫기"를 눌러야 닫힌다', () => {
+    const onPickStart = jest.fn();
+    openSheet(onPickStart);
+
+    fireEvent.press(
+      screen.getByTestId('itinerary-mustvisit-time-start-option-13:00')
+    );
+
+    expect(onPickStart).toHaveBeenCalledWith('13:00');
+    expect(screen.getByTestId(SHEET)).toBeOnTheScreen();
+
+    fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-start-close'));
+
+    expect(screen.queryAllByTestId(SHEET)).toEqual([]);
+    expect(
+      screen.getByTestId('itinerary-mustvisit-time-start-field')
+    ).toBeOnTheScreen();
   });
 });

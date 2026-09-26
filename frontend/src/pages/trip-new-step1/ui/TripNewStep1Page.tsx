@@ -4,6 +4,7 @@ import { isAxiosError } from 'axios';
 import { useRouter } from 'expo-router';
 
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 import { postTripsTripIdMustVisits } from '@/shared/api/generated/trips/trips';
 import type {
   CompanionType,
@@ -162,8 +163,8 @@ export function TripNewStep1Page({
 
   const preference = usePreferencePrefill();
   // 계정 취향 프리필(GET /me/preferences)은 이미 한국어 도메인 값이다(slug 아님) — 그대로 요약·
-  // 스냅숏에 흐른다. 여행 단위 취향 override(BR-U1-38)는 편집 시트(S5)로 이연했으므로, 지금 실효
-  // 취향은 항상 프리필이고 온보딩 상속이다(`fromOnboarding = true`).
+  // 스냅숏에 흐른다. 여행 단위 취향 override(BR-U1-38)는 편집 시트(TRIP-669)가 소유한다 — 실효 취향은
+  // 오버라이드 ?? 프리필이다(아래 `effectiveStyles`). 시트의 `fromOnboarding` 은 프리필 유무로 정해진다.
   const prefillStyles = preference.data?.styles?.value ?? [];
   const prefillActivities = preference.data?.activities?.value ?? [];
   // 실효 취향(TRIP-669 D2) — 오버라이드가 있으면(빈 `[]` 포함) 그것, 없으면(undefined) 프리필.
@@ -180,6 +181,10 @@ export function TripNewStep1Page({
   const prefillBudgetText = canPrefillBudget
     ? formatBudgetAmount(rawAmount)
     : '';
+  // TRIP-984 D10 — 예산 노트 "온보딩에서 고른 …" 은 온보딩이 tier 와 금액(>0)을 **둘 다** 채웠을 때만
+  // 참이다. tier-only 면 금액칸이 비어 "금액을 입력해 주세요" 와 모순되므로 내리지 않는다(01b Q1).
+  const onboardingBudgetTier =
+    canPrefillBudget && rawAmount > 0 ? tierLabel : undefined;
   // 제출 복원(TRIP-670 D3) — 사용자가 시트에서 편집한 스토어 값이 유효하면 그것, 아니면 프리필.
   // TRIP-207 "사용자 입력 우선"을 S1(프리필-only)이 되돌린 것을 S6 이 되살린다.
   const effectiveBudgetText =
@@ -244,6 +249,12 @@ export function TripNewStep1Page({
   const [budgetSheetOpen, setBudgetSheetOpen] = useState(false);
   const [draftAmountText, setDraftAmountText] = useState('');
   const [draftTier, setDraftTier] = useState<string>();
+  const draftBudget = parseBudgetAmount(draftAmountText);
+  const draftBudgetKind = draftBudget.kind;
+  // TRIP-984 D10 조건 3 — 노트는 지금 입력칸 금액이 온보딩 금액과 **같을 때만**(숫자 비교라 콤마 유무
+  // 무관). 지우거나 바꾸면 그 칸의 값은 더 이상 "온보딩이 채운 값"이 아니므로 노트를 내린다.
+  const draftMatchesOnboarding =
+    draftBudget.kind === 'amount' && draftBudget.amount === rawAmount;
 
   // 제출 경로 잠금(useRef — 상태와 달리 같은 틱에 즉시 읽힌다, 연타 두 번째가 옛 값을 읽지
   // 않게). 두 뜻을 겸한다: ① 등록 요청이 날아가는 중 ② 이미 성공해 이 화면의 일이 끝남.
@@ -431,10 +442,11 @@ export function TripNewStep1Page({
   }
 
   /** "적용" — 드래프트 금액을 store 에 커밋(`setBudgetText`) + 닫기. tier 는 커밋 대상이 아니다
-   * (honest — 스토어·요청 어디에도 안 감, 표시·프리필 축 전용). invalid(비숫자) 면 커밋·닫기를
-   * 건너뛴다(S6E — 조용한 소멸 방지: 안 그러면 잘못된 입력이 오류 없이 사라진다). */
+   * (honest — 스토어·요청 어디에도 안 감, 표시·프리필 축 전용). 금액이 아니면(invalid·empty) 커밋·닫기를
+   * 건너뛴다 — invalid 는 S6E(잘못된 입력의 조용한 소멸 방지), empty 는 TRIP-984 D8(빈 적용이 이미
+   * 커밋된 금액을 지우거나 시트만 닫히는 침묵 실패 방지, 버튼도 비활성). */
   function applyBudget(): void {
-    if (parseBudgetAmount(draftAmountText).kind === 'invalid') return;
+    if (parseBudgetAmount(draftAmountText).kind !== 'amount') return;
     setBudgetText(draftAmountText);
     setBudgetSheetOpen(false);
   }
@@ -561,7 +573,7 @@ export function TripNewStep1Page({
           destinations={destinations}
           onChangeNights={setNights}
           onRemove={removeDestination}
-          onAddCity={() => router.push('/explore/region?purpose=trip')}
+          onAddCity={() => router.push(regionPickerHref('trip'))}
           onApply={() => setDestinationSheetOpen(false)}
           onClose={() => setDestinationSheetOpen(false)}
           mustVisitCount={mustVisits.length}
@@ -607,6 +619,7 @@ export function TripNewStep1Page({
           onToggle={togglePrefStyle}
           onApply={applyPrefSheet}
           onClose={() => setPrefSheetOpen(false)}
+          fromOnboarding={prefillStyles.length > 0}
         />
       ) : null}
       {/* 예산 편집 시트도 화면의 형제로 조건부 마운트 — tier·금액 press 는 드래프트만 바꾸고
@@ -617,16 +630,22 @@ export function TripNewStep1Page({
           amountText={draftAmountText}
           tier={draftTier}
           budgetError={
-            // 페이지가 드래프트 파싱 오류를 도출해 시트 슬롯에 내린다(S6E — 시트는 props-only 라
+            // 페이지가 드래프트 금액 오류(파싱 실패·빈 금액)를 도출해 시트 슬롯에 내린다(S6E — 시트는 props-only 라
             // amountText 로 스스로 오류를 도출하지 않는다). 카피는 오케 확정값.
-            parseBudgetAmount(draftAmountText).kind === 'invalid'
+            draftBudgetKind === 'invalid'
               ? '숫자만 입력해 주세요'
-              : undefined
+              : draftBudgetKind === 'empty'
+                ? '금액을 입력해 주세요'
+                : undefined
           }
           onChangeAmount={setDraftAmountText}
           onSelectTier={setDraftTier}
           onApply={applyBudget}
           onClose={() => setBudgetSheetOpen(false)}
+          applyDisabled={draftBudgetKind === 'empty'}
+          onboardingTier={
+            draftMatchesOnboarding ? onboardingBudgetTier : undefined
+          }
         />
       ) : null}
     </>

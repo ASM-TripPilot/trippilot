@@ -12,6 +12,7 @@ import {
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
+import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 
 import { PlaceExplorePage } from './PlaceExplorePage';
 
@@ -226,7 +227,7 @@ describe('S-1 · 첫 조회 중에는 스켈레톤이 뜬다 (AC-4)', () => {
 });
 
 describe('S-2 · 0건이면 다른 지역으로 보낸다 (AC-5 · 01b Seed Q4)', () => {
-  it('안내가 뜨고 "다른 지역 보기"가 여행 목적 지역 선택으로 보낸다', async () => {
+  it('안내가 뜨고 "다른 지역 보기"가 d04 지역 교체용 지역 선택(purpose=places)으로 보낸다', async () => {
     setAccessToken('valid-access');
     server.use(
       http.get(`${BASE}/places`, () =>
@@ -242,8 +243,9 @@ describe('S-2 · 0건이면 다른 지역으로 보낸다 (AC-5 · 01b Seed Q4)'
 
     fireEvent.press(screen.getByTestId('explore-places-empty-region'));
 
-    // d04 는 여행지 맥락이다(01b Seed Q4 ⓐ) — 숙소 기본값으로 보내면 사용자가 다른 흐름에 떨어진다.
-    expect(mockPush.mock.calls).toEqual([['/explore/region?purpose=trip']]);
+    // d04 는 여행지 맥락이다(01b Seed Q4 ⓐ). TRIP-985: 고른 지역은 위저드가 아니라 이 d04 의 지역을
+    // 바꿔야 하므로 위저드 전용 trip 이 아니라 places 로 간다.
+    expect(mockPush.mock.calls).toEqual([[regionPickerHref('places')]]);
   });
 });
 

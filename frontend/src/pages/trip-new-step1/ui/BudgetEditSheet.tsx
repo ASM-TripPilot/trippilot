@@ -29,10 +29,11 @@
  * 목이라 jest가 원리적으로 못 본다(repo-traps 바텀시트 함정) — 6-b 실기(`_dev/preview.tsx`의
  * 예산 시트 키) 몫이다.
  */
-import { type ReactElement, useRef } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { type ComponentRef, type ReactElement, useRef } from 'react';
+import { Keyboard, Pressable, Text, View } from 'react-native';
 import BottomSheet, {
   BottomSheetBackdrop,
+  BottomSheetTextInput,
   BottomSheetView,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
@@ -44,7 +45,7 @@ export interface BudgetEditSheetProps {
   amountText: string;
   /** 활성 tier(한국어 '저가'|'중간'|'고급'|'럭셔리', 프리필 파생) — 하이라이트 + 안내 range 도출원. */
   tier?: string;
-  /** 파싱 실패 문구 — 있으면 오류를 그린다(배선이 정할 몫, 현재 미배선). */
+  /** 금액 오류 문구(파싱 실패·빈 금액, 배선이 도출) — 있으면 오류를 그린다. */
   budgetError?: string;
   /** TextInput onChangeText → 배선: 드래프트 금액 전이(store 는 적용에서만). */
   onChangeAmount: (next: string) => void;
@@ -58,6 +59,10 @@ export interface BudgetEditSheetProps {
   onApply: () => void;
   /** 딤 바깥 탭·아래로 스와이프 → 배선: 시트 닫기(TRIP-683 AC-2·AC-3). */
   onClose: () => void;
+  /** TRIP-984 D8 — 배선이 드래프트 금액이 비었을 때 true 로 내린다(시트는 disabled + opacity-40 만). */
+  applyDisabled: boolean;
+  /** TRIP-984 D10 — 온보딩 tier·금액(>0)이 있고 지금 금액이 온보딩 금액과 같을 때만 그 tier(아니면 undefined). 노트 표시 조건. */
+  onboardingTier: string | undefined;
 }
 
 /** 딤(backdrop) — 리포 표준 idiom(OtaChoiceSheet 선례). */
@@ -86,9 +91,12 @@ export function BudgetEditSheet({
   onPressEdit,
   onApply,
   onClose,
+  applyDisabled,
+  onboardingTier,
 }: BudgetEditSheetProps): ReactElement {
   // "수정" 이 금액 입력에 포커스를 준다 — 로컬 imperative(상태 아님, jest 무심판).
-  const inputRef = useRef<TextInput>(null);
+  // ref 타입은 RN TextInput 이 아니라 BottomSheetTextInput 이 넘기는 gesture-handler TextInput 이다.
+  const inputRef = useRef<ComponentRef<typeof BottomSheetTextInput>>(null);
   function handlePressEdit(): void {
     inputRef.current?.focus();
     onPressEdit?.();
@@ -100,6 +108,8 @@ export function BudgetEditSheet({
   const noteText = activeTier
     ? `온보딩에서 고른 ‘${activeTier.label}(${activeTier.range})’ 범위로 채웠어요`
     : '온보딩에서 고른 범위로 채웠어요';
+  // TRIP-984 D10 — 온보딩이 채운 tier 를 지금도 고르고 있을 때만 "온보딩에서 …" 가 참이다.
+  const showNote = onboardingTier !== undefined && tier === onboardingTier;
 
   return (
     <BottomSheet
@@ -108,114 +118,125 @@ export function BudgetEditSheet({
       onClose={onClose}
       backdropComponent={renderBackdrop}
       handleIndicatorStyle={SHEET_HANDLE_INDICATOR_STYLE}
+      keyboardBehavior="interactive"
     >
-      <BottomSheetView
-        testID="trip-wizard-budget-sheet"
-        className="gap-lg px-xl pb-[34px] pt-[10px]"
-      >
-        {/* header */}
-        <View className="gap-xs">
-          <Text className="text-[20px] font-noto-bold font-bold text-ink">
-            예산
-          </Text>
-          <Text className="font-noto text-label text-muted">
-            1인 총액 기준이에요
-          </Text>
-        </View>
+      <BottomSheetView testID="trip-wizard-budget-sheet">
+        {/* TRIP-984 D9 — 본문 빈 곳 탭 = 키보드 내림. 칩·수정·적용은 제 onPress 에서 멈춰 가로채이지 않는다.
+            accessible={false}: 안 주면 자식 버튼들이 접근성 요소 하나로 뭉친다. */}
+        <Pressable
+          accessible={false}
+          onPress={Keyboard.dismiss}
+          className="gap-lg px-xl pb-[34px] pt-[10px]"
+        >
+          {/* header */}
+          <View className="gap-xs">
+            <Text className="text-[20px] font-noto-bold font-bold text-ink">
+              예산
+            </Text>
+            <Text className="font-noto text-label text-muted">
+              1인 총액 기준이에요
+            </Text>
+          </View>
 
-        {/* tier 세그 4칩 — 선택 칩만 분홍 배경 + 별 활성 마커 testID(색 fill 아님, 무심판 회피) */}
-        <View className="flex-row gap-sm">
-          {BUDGET_TIERS.map((option) => {
-            const isActive = tier === option.label;
-            return (
-              <Pressable
-                key={option.code}
-                testID={`trip-wizard-budget-tier-${option.code}`}
-                accessibilityRole="button"
-                accessibilityState={{ selected: isActive }}
-                onPress={() => onSelectTier(option.label)}
-                className={`items-center rounded-pill px-[16px] py-[9px] ${
-                  isActive
-                    ? 'bg-primary'
-                    : 'border border-hairline-strong bg-canvas'
-                }`}
-              >
-                {/* 활성 마커 — 색 fill 이 아니라 별 testID(무심판 회피). 절대배치라 레이아웃 무영향. */}
-                {isActive ? (
-                  <View
-                    testID={`trip-wizard-budget-tier-active-${option.code}`}
-                    className="absolute"
-                  />
-                ) : null}
-                <Text
-                  className={`font-noto-bold text-label font-bold ${
-                    isActive ? 'text-on-primary' : 'text-ink'
+          {/* tier 세그 4칩 — 선택 칩만 분홍 배경 + 별 활성 마커 testID(색 fill 아님, 무심판 회피) */}
+          <View className="flex-row gap-sm">
+            {BUDGET_TIERS.map((option) => {
+              const isActive = tier === option.label;
+              return (
+                <Pressable
+                  key={option.code}
+                  testID={`trip-wizard-budget-tier-${option.code}`}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isActive }}
+                  onPress={() => onSelectTier(option.label)}
+                  className={`items-center rounded-pill px-[16px] py-[9px] ${
+                    isActive
+                      ? 'bg-primary'
+                      : 'border border-hairline-strong bg-canvas'
                   }`}
                 >
-                  {option.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+                  {/* 활성 마커 — 색 fill 이 아니라 별 testID(무심판 회피). 절대배치라 레이아웃 무영향. */}
+                  {isActive ? (
+                    <View
+                      testID={`trip-wizard-budget-tier-active-${option.code}`}
+                      className="absolute"
+                    />
+                  ) : null}
+                  <Text
+                    className={`font-noto-bold text-label font-bold ${
+                      isActive ? 'text-on-primary' : 'text-ink'
+                    }`}
+                  >
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
 
-        {/* 금액 필드 — "₩ 금액 원"이 좌측에 한 덩어리로 붙고(입력은 내용 폭·flex-1 없음), "수정"은
+          {/* 금액 필드 — "₩ 금액 원"이 좌측에 한 덩어리로 붙고(입력은 내용 폭·flex-1 없음), "수정"은
             우측 슬롯에 간격(ml)을 두고 붙는다(TRIP-739 — 옛 flex-1 입력이 "원"을 우측 끝으로 밀어
             "원수정"으로 붙던 것을 해소, Figma `3647:2068`). */}
-        <View className="flex-row items-center justify-between rounded-button border border-hairline-strong px-[16px] py-[14px]">
-          <View className="flex-row items-center gap-[6px]">
-            <Text className="font-noto text-card-title text-muted">₩</Text>
-            <TextInput
-              ref={inputRef}
-              testID="trip-wizard-budget-input"
-              keyboardType="number-pad"
-              value={amountText}
-              onChangeText={onChangeAmount}
-              onBlur={onBlurAmount}
-              className="min-w-[88px] font-noto-bold text-card-title font-bold text-ink"
-            />
-            <Text className="font-noto text-card-title text-ink">원</Text>
+          <View className="flex-row items-center justify-between rounded-button border border-hairline-strong px-[16px] py-[14px]">
+            <View className="flex-row items-center gap-[6px]">
+              <Text className="font-noto text-card-title text-muted">₩</Text>
+              <BottomSheetTextInput
+                ref={inputRef}
+                testID="trip-wizard-budget-input"
+                keyboardType="number-pad"
+                value={amountText}
+                onChangeText={onChangeAmount}
+                onBlur={onBlurAmount}
+                className="min-w-[88px] font-noto-bold text-card-title font-bold text-ink"
+              />
+              <Text className="font-noto text-card-title text-ink">원</Text>
+            </View>
+            <Pressable
+              testID="trip-wizard-budget-edit"
+              accessibilityRole="button"
+              onPress={handlePressEdit}
+              className="ml-md"
+            >
+              <Text className="font-noto-bold text-label font-bold text-primary-text">
+                수정
+              </Text>
+            </Pressable>
           </View>
+
+          {/* 금액 오류 — 배선이 문구를 줄 때만 */}
+          {budgetError !== undefined ? (
+            <Text
+              testID="trip-wizard-error-budget"
+              className="font-noto text-caption text-primary"
+            >
+              {budgetError}
+            </Text>
+          ) : null}
+
+          {/* 안내문 — 활성 tier 의 range 를 따라 갱신(하드코딩 아님), 온보딩 tier 일 때만 */}
+          {showNote ? (
+            <Text
+              testID="trip-wizard-budget-note"
+              className="font-noto text-caption text-muted"
+            >
+              {noteText}
+            </Text>
+          ) : null}
+
+          {/* 적용 — 배선이 비활성을 정한다(진짜 disabled prop, PeriodEditSheet 선례) */}
           <Pressable
-            testID="trip-wizard-budget-edit"
+            testID="trip-wizard-budget-apply"
             accessibilityRole="button"
-            onPress={handlePressEdit}
-            className="ml-md"
+            disabled={applyDisabled}
+            onPress={onApply}
+            className={`h-[52px] items-center justify-center rounded-button bg-primary ${
+              applyDisabled ? 'opacity-40' : ''
+            }`}
           >
-            <Text className="font-noto-bold text-label font-bold text-primary-text">
-              수정
+            <Text className="text-[16px] font-noto-bold font-bold text-on-primary">
+              적용
             </Text>
           </Pressable>
-        </View>
-
-        {/* 파싱 오류 — 배선이 문구를 줄 때만(현재 미배선) */}
-        {budgetError !== undefined ? (
-          <Text
-            testID="trip-wizard-error-budget"
-            className="font-noto text-caption text-primary"
-          >
-            {budgetError}
-          </Text>
-        ) : null}
-
-        {/* 안내문 — 활성 tier 의 range 를 따라 갱신(하드코딩 아님) */}
-        <Text
-          testID="trip-wizard-budget-note"
-          className="font-noto text-caption text-muted"
-        >
-          {noteText}
-        </Text>
-
-        {/* 적용 — 항상 활성(커밋·닫기는 배선 몫) */}
-        <Pressable
-          testID="trip-wizard-budget-apply"
-          accessibilityRole="button"
-          onPress={onApply}
-          className="h-[52px] items-center justify-center rounded-button bg-primary"
-        >
-          <Text className="text-[16px] font-noto-bold font-bold text-on-primary">
-            적용
-          </Text>
         </Pressable>
       </BottomSheetView>
     </BottomSheet>

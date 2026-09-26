@@ -70,8 +70,9 @@ function Chip({
   );
 }
 
-/** 등록 숙소 한 행(카드). 출발점 전환 버튼(`my-stays-base-toggle-{id}`)은 행당 정확히 1개다 —
- *  등록됨이면 하단 "출발점 변경" + chevron 링크, 미등록이면 상단 "출발점 지정" 점선 배지. */
+/** 등록 숙소 한 행(카드). 출발점 전환 버튼(`my-stays-base-toggle-{id}`)은 등록됨 행에만 하나 —
+ *  하단 "출발점 변경" + chevron 링크. 미등록 행은 버튼이 없다: 어느 여행에 지정할지 모르는 채
+ *  다이얼로그만 열고 아무것도 안 하던 무반응(INV-4)을 막는다(TRIP-989 D13, 실제 지정은 TRIP-621). */
 function MyStayRow({
   row,
   onPressToggle,
@@ -88,7 +89,7 @@ function MyStayRow({
       style={CARD_SHADOW}
       className="rounded-[12px] border border-hairline bg-canvas p-lg"
     >
-      {/* 상단: 숙소명 ↔ 출발점 배지(등록됨)/지정 버튼(미등록) */}
+      {/* 상단: 숙소명 ↔ 출발점 배지(등록됨만) */}
       <View className="flex-row items-center justify-between gap-md">
         <Text className="flex-1 text-[16px] font-noto-bold text-ink">
           {row.name}
@@ -99,19 +100,7 @@ function MyStayRow({
               출발점
             </Text>
           </View>
-        ) : (
-          <Pressable
-            testID={toggleTestID}
-            accessibilityRole="button"
-            disabled={!row.canAssignBase}
-            onPress={() => onPressToggle(row)}
-            className="min-h-[24px] justify-center rounded-[8px] border border-dashed border-muted-soft px-[11px]"
-          >
-            <Text className="font-noto text-caption text-muted">
-              출발점 지정
-            </Text>
-          </Pressable>
-        )}
+        ) : null}
       </View>
 
       {/* 위치 — 계약에 주소 필드가 없어 빈 값이면 줄 자체를 안 그린다(F-1). */}
@@ -169,7 +158,12 @@ export function MyStaysScreen({
       <View testID="my-stays-root" className="flex-1 bg-canvas">
         {/* 앱바 — 뒤로 + 타이틀 + 하단 hairline */}
         <View className="flex-row items-center gap-md border-b border-hairline px-lg pb-[14px] pt-sm">
-          <Pressable accessibilityRole="button" onPress={onPressBack}>
+          <Pressable
+            testID="my-stays-back"
+            accessibilityRole="button"
+            accessibilityLabel="뒤로"
+            onPress={onPressBack}
+          >
             <ChevronLeftGlyph />
           </Pressable>
           <Text className="text-[18px] font-noto-bold text-ink">
