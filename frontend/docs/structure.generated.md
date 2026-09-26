@@ -648,7 +648,7 @@
 - `src/features/settings/ui/StyleSummaryCard.tsx`  →  StyleSummaryCardProps · StyleSummaryCard
 - `src/features/settings/ui/TripCard.tsx`  →  TripCardVM · TripCardProps · TripCard
 - `src/features/settings/ui/TripStatusSegment.tsx`  →  TripStatusSegmentProps · TripStatusSegment
-- `src/features/settings/ui/cardShadow.ts`  →  CARD_SHADOW
+- `src/features/settings/ui/cardShadow.ts`  →  CARD_SHADOW · SEGMENT_SHADOW
 
 ## src/features/stay/config/
 - `src/features/stay/config/affiliateNotice.ts`  →  otaConfirmLabel
