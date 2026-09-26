@@ -132,6 +132,7 @@
 - `src/__tests__/rootLayout.test.tsx`  →  (export 없음)
 - `src/__tests__/rootLayoutQueryProvider.test.tsx`  →  (export 없음)
 - `src/__tests__/rootLayoutSafeArea.test.tsx`  →  (export 없음)
+- `src/__tests__/rootLayoutToastHost.test.tsx`  →  (export 없음)
 - `src/__tests__/savedPlacesStructure.test.ts`  →  (export 없음)
 - `src/__tests__/savedStaysStructure.test.ts`  →  (export 없음)
 - `src/__tests__/seoulTodayStructure.test.ts`  →  (export 없음)
@@ -1317,8 +1318,10 @@
 - `src/shared/ui/HeartGlyphs.tsx`  →  HeartOutlineGlyph · HeartFilledGlyph · HeartBadgeGlyph
 - `src/shared/ui/SegmentedControl.tsx`  →  SegmentedOption · SegmentedControlProps · SegmentedControl
 - `src/shared/ui/StateNotice.tsx`  →  StateNoticeAction · StateNoticeProps · StateNotice
+- `src/shared/ui/Toast.tsx`  →  TOAST_VISIBLE_MS · showToast · hideToast · ToastHost
+- `src/shared/ui/ToastGlyphs.tsx`  →  ToastSuccessGlyph
 - `src/shared/ui/Toggle.tsx`  →  ToggleProps · Toggle
-- `src/shared/ui/WheelPicker.tsx`  →  WheelPickerProps · WheelPicker
+- `src/shared/ui/WheelPicker.tsx`  →  WHEEL_CELL_HEIGHT · WheelPickerProps · WheelPicker
 
 ## src/shared/ui/pref/
 - `src/shared/ui/pref/PrefChip.tsx`  →  PrefChipProps · PrefChip
@@ -1344,6 +1347,7 @@
 - `src/test-support/pushOsFake.ts`  →  OsPermission · primeOsPermission · primeExpoToken
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
+- `src/test-support/toastHarness.tsx`  →  WithToastHost · resetToast
 
 ## src/widgets/copick-stepper/ui/
 - `src/widgets/copick-stepper/ui/CoPickStepper.tsx`  →  CoPickStep · CoPickStepperProps · CoPickStepper
@@ -1369,4 +1373,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 935개 파일
+합계 939개 파일

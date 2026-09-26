@@ -17,6 +17,8 @@ import type {
   Trip,
 } from '@/shared/api/generated/schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
+import { startTimeOptions } from '@/features/itinerary/model/mustVisitTimeForm';
 
 import { MustVisitTimePage } from './MustVisitTimePage';
 
@@ -488,5 +490,57 @@ describe('🔴 I13 · AC-a4 · BR-U1-48 — 토글 OFF 저장은 ANYTIME 본문�
     expect(screen.queryAllByTestId('itinerary-mustvisit-time-error')).toEqual(
       []
     );
+  });
+});
+
+/**
+ * TRIP-990 · W3 배선 (D21 · INV-2) — 휠을 굴려 멈춘 값이 말없이 버려지지 않는다(#049).
+ *
+ * 증상: 시작 시각 휠을 12:00 까지 굴리고 "닫기"를 누르면 필드가 비어 있고 "시작 시각을 골라 주세요"가
+ * 남았다 — 화면 가운데 보인 값과 저장될 값이 어긋났다(INV-2). 이제 스크롤이 멈추면 그 값이 폼에
+ * 들어간다.
+ *
+ * 무엇을 보장하나: 휠 정지 → 닫기 뒤에 필드가 12:00 을 보이고, 시작 시각 누락 안내가 사라지고, 저장
+ * 버튼이 열린다. 짝으로, 정지 전에는 누락 안내가 실제로 떠 있었다(날짜를 만져 touched 상태).
+ *
+ * 3동작 뼈대: 준비=날짜 고르고 시트 열기 → 실행=휠 12:00 정지 → "닫기" → 단언=필드·안내·저장 버튼.
+ */
+describe('🔴 W3 · 휠을 굴려 멈춘 값이 폼에 들어간다 (#049 · D21)', () => {
+  const START_MISSING_TEXT = '시작 시각을 골라 주세요';
+
+  it('12:00 에서 멈추고 닫으면 필드가 12:00 이고, 누락 안내가 없고, 저장이 열린다', async () => {
+    renderPage();
+    await ready();
+    ensureFixed(true);
+    fireEvent.press(
+      screen.getByTestId('itinerary-mustvisit-time-date-2026-06-11')
+    );
+    fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-start-field'));
+
+    // 짝 — 정지 전에는 누락 안내가 떠 있다(여기가 비면 아래 "사라졌다"가 공허해진다).
+    expect(screen.getByText(START_MISSING_TEXT)).toBeOnTheScreen();
+
+    fireEvent(
+      screen.getByTestId('itinerary-mustvisit-time-start-wheel'),
+      'momentumScrollEnd',
+      {
+        nativeEvent: {
+          contentOffset: {
+            x: 0,
+            y: startTimeOptions().indexOf('12:00') * WHEEL_CELL_HEIGHT,
+          },
+        },
+      }
+    );
+    fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-start-close'));
+
+    expect(
+      screen.queryAllByTestId('itinerary-mustvisit-time-start-sheet')
+    ).toEqual([]);
+    expect(
+      screen.getByTestId('itinerary-mustvisit-time-start-field')
+    ).toHaveTextContent(/오후 12:00/);
+    expect(screen.queryByText(START_MISSING_TEXT)).toBeNull();
+    expect(screen.getByTestId('itinerary-mustvisit-time-submit')).toBeEnabled();
   });
 });

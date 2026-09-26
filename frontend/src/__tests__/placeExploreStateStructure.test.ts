@@ -47,6 +47,16 @@ const TIMER_SCAN_DIRS = [
   path.join(ROOT, 'shared', 'ui'),
 ];
 
+/**
+ * 타이머 금지 면제 1종 — `shared/ui/Toast.tsx`(TRIP-990 D19). 토스트는 탐색 배너가 아니고,
+ * **스스로 사라지는 것 자체가 결정**이라 타이머가 본질이다. 이 가드가 지키는 것은 "d04 배너를
+ * 타이머로 지우지 않는다"이므로 `shared/ui` 모집단(=`StateNotice` 가 사는 곳)은 그대로 두고 이
+ * 파일만 뺀다. 면제는 **자기검사와 함께** 쓴다(아래 it) — `HEX_EXEMPT` 와 같은 형태.
+ */
+const TIMER_EXEMPT = ['shared/ui/Toast.tsx'];
+
+const STATE_NOTICE_REL = 'shared/ui/StateNotice.tsx';
+
 const EXPLORE_UI_DIR = path.join(ROOT, 'features', 'explore', 'ui');
 
 /**
@@ -109,6 +119,12 @@ function readOne(rel: string): string {
 
 function timerScanSources() {
   return readAll(TIMER_SCAN_DIRS.flatMap((dir) => listSourceFiles(dir)));
+}
+
+function timerScanFiles(): string[] {
+  return TIMER_SCAN_DIRS.flatMap((dir) => listSourceFiles(dir)).map((full) =>
+    path.relative(ROOT, full).split(path.sep).join('/')
+  );
 }
 
 /** 토큰 스캔 대상 — `features/explore/ui` 재귀에서 글리프와 면제 파일을 뺀 나머지.
@@ -200,13 +216,22 @@ describe('01b Seed Q1 ⓑ · 승격한 안내 블록을 가져다 쓴다', () =>
 });
 
 describe('01b Seed Q5 · 배너에 타이머를 쓰지 않는다', () => {
-  it('탐색 표면과 shared/ui 어디에도 setTimeout·setInterval 이 없다', () => {
-    const sources = timerScanSources();
+  it('탐색 표면과 shared/ui(면제 제외) 어디에도 setTimeout·setInterval 이 없다', () => {
+    // 면제 자기검사 — 오타면 면제가 무효가 되고(정당한 파일이 red), 파일이 사라지면 면제가
+    // 과잉이 된다(조용한 통과). 둘 다 잡는다.
+    const allFiles = timerScanFiles();
+    TIMER_EXEMPT.forEach((exempt) => expect(allFiles).toContain(exempt));
 
-    // 긍정 짝 — 모집단에 화면·배선이 실제로 들어 있다.
+    const sources = timerScanSources().filter(
+      ({ file }) => !TIMER_EXEMPT.includes(file)
+    );
+
+    // 긍정 짝 — 모집단에 화면·배선과, 이 가드가 shared/ui 를 보는 이유인 StateNotice 가 실제로
+    // 들어 있다(면제가 넓어져 StateNotice 까지 빠지면 여기서 red).
     const files = sources.map(({ file }) => file);
     expect(files).toContain(SCREEN_REL);
     expect(files).toContain(PAGE_REL);
+    expect(files).toContain(STATE_NOTICE_REL);
 
     // 부정 — 배너는 **다음 조작 시** 사라진다. 타이머로 지우면 테스트에 가짜 타이머가 들어오고,
     // 그 순간 이 칸의 상태 판정·PBT 가 전부 타이밍 의존이 된다.

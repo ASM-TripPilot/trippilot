@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import { WheelPicker } from './WheelPicker';
+import { WHEEL_CELL_HEIGHT, WheelPicker } from './WheelPicker';
 
 /**
  * shared/ui 값-컬럼 휠 primitive 의 **계약**(TRIP-599 · AC-1·2).
@@ -93,5 +93,68 @@ describe('AC-2 · 선택 셀만 accessibilityState.selected (INV-2)', () => {
     VALUES.forEach((value) =>
       expect(screen.getByTestId(cellTestID(value))).not.toBeSelected()
     );
+  });
+});
+
+/**
+ * TRIP-990 · W1 (D21) — 스크롤이 멈추면 가운데 값을 자동으로 확정한다.
+ *
+ * *(개념)* `onMomentumScrollEnd` = 손을 뗀 뒤 관성으로 굴러가던 스크롤이 완전히 멈춘 순간 한 번 불리는
+ * 이벤트. `nativeEvent.contentOffset.y` 로 멈춘 위치를 알려 준다. 위 패딩 덕에 y 가 `k × 셀 높이` 이면
+ * k 번째 값이 가운데 밴드에 온다.
+ *
+ * 무엇을 보장하나: 멈춘 위치 → 가장 가까운 칸(반올림) → 양 끝을 넘으면 끝 값으로 자름(clamp) →
+ * `onSelect` **정확히 1회**. 1.6칸은 2칸이다(내림이면 1칸이라 여기서 갈린다).
+ *
+ * 커버하지 않는 것: 실제 관성·스냅·관성 없이 손을 뗄 때 이벤트가 안 오는 경우는 jest 가 이벤트를 직접
+ * 쏘므로 못 본다 — 6-b 실기(프리뷰 `itinerary-mustvisit-time-default`).
+ *
+ * 3동작 뼈대: 준비=값 5개 휠 → 실행=스크롤 정지 이벤트 → 단언=확정된 값과 횟수.
+ */
+describe('🔴 W1 · 스크롤 정지 → 가운데 값 자동 확정 (D21 · INV-2)', () => {
+  const FIVE = ['a', 'b', 'c', 'd', 'e'];
+
+  function renderWheel() {
+    const onSelect = jest.fn();
+    render(
+      <WheelPicker
+        testID="wheel-scroll"
+        values={FIVE}
+        selected={null}
+        onSelect={onSelect}
+        testIDForValue={cellTestID}
+      />
+    );
+    return onSelect;
+  }
+
+  function settleAt(y: number): void {
+    fireEvent(screen.getByTestId('wheel-scroll'), 'momentumScrollEnd', {
+      nativeEvent: { contentOffset: { x: 0, y } },
+    });
+  }
+
+  it('정확히 2칸에서 멈추면 세 번째 값으로 onSelect 가 1회 불린다', () => {
+    const onSelect = renderWheel();
+    expect(onSelect).not.toHaveBeenCalled();
+
+    settleAt(2 * WHEEL_CELL_HEIGHT);
+
+    expect(onSelect).toHaveBeenCalledWith('c');
+    expect(onSelect).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [1.4, 'b', '반올림 — 1.4칸은 1칸'],
+    [1.6, 'c', '반올림 — 1.6칸은 2칸(내림과 갈리는 자리)'],
+    [-1, 'a', '위로 넘치면 첫 값'],
+    [100, 'e', '아래로 넘치면 마지막 값'],
+  ])('%s칸에서 멈추면 %s (%s)', (cells, expected) => {
+    const onSelect = renderWheel();
+
+    settleAt(cells * WHEEL_CELL_HEIGHT);
+
+    expect(onSelect).toHaveBeenCalledWith(expected);
+    expect(onSelect).toHaveBeenCalledTimes(1);
   });
 });

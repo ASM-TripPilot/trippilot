@@ -10,6 +10,7 @@ import {
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
+import { WithToastHost, resetToast } from '@/test-support/toastHarness';
 import { StayRegisterPage } from './StayRegisterPage';
 
 /**
@@ -131,6 +132,9 @@ beforeEach(() => {
 
 afterEach(() => {
   server.resetHandlers();
+  // 토스트 스토어는 모듈 싱글턴이라 파일 안 테스트 사이로 샌다 — 새 describe 만이 아니라 모든 테스트 뒤에
+  // 비운다(03b 차단-1).
+  resetToast();
   if (ORIGINAL_ENV === undefined) {
     delete process.env[ENV_KEY];
   } else {
@@ -444,5 +448,62 @@ describe('I-8 · 좌표 있는 후보는 선택만으로 등록이 열린다 (TR
       registerRoute: 'MAP_SEARCH',
       coordConfirmed: true,
     });
+  });
+});
+
+/**
+ * TRIP-990 · S5 (#036 · D22 · US-STAY-06·08) — 숙소 등록이 성공하면 들어온 곳으로 돌아가고 "숙소를
+ * 등록했어요" 토스트를 띄운다.
+ *
+ * 돌아간 뒤에도 토스트는 루트 호스트가 그리므로 보인다(D19). 실패하면 기존처럼 실패 문구만 뜨고 화면을
+ * 떠나지 않는다(I-7). US-STAY-06 의 "등록 후 AI 일정 생성 진입"은 이번 범위 밖(새 티켓 후보).
+ *
+ * 3동작 뼈대: 준비=후보 검색·선택·확정 → 실행=등록 → 단언=토스트·back.
+ */
+describe('🔴 S5 · 등록 성공 토스트 + 뒤로 (#036 · D22)', () => {
+  function renderWithToast() {
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <WithToastHost>
+          <StayRegisterPage />
+        </WithToastHost>
+      </Wrapper>
+    );
+  }
+
+  it('POST 201 이면 "숙소를 등록했어요" 토스트가 뜨고 뒤로 1회 간다', async () => {
+    renderWithToast();
+
+    searchFor('busan');
+    await selectAndConfirm(0);
+    fireEvent.press(screen.getByTestId('stay-register-submit'));
+
+    const toast = await screen.findByTestId('stay-register-saved');
+    expect(within(toast).getByText('숙소를 등록했어요')).toBeOnTheScreen();
+    await waitFor(() => expect(mockBack).toHaveBeenCalledTimes(1));
+  });
+
+  it('짝: POST 400 이면 실패 문구만 뜨고 토스트도 뒤로도 없다', async () => {
+    server.use(
+      http.post(`${BASE}/saved-stays`, () =>
+        HttpResponse.json(
+          { code: 'VALIDATION_ERROR', message: 'bad request' },
+          { status: 400 }
+        )
+      )
+    );
+    renderWithToast();
+
+    searchFor('busan');
+    await selectAndConfirm(0);
+    fireEvent.press(screen.getByTestId('stay-register-submit'));
+
+    // 실패가 처리된 뒤에 센다.
+    expect(
+      await screen.findByTestId('stay-register-submitfail')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('stay-register-saved')).toBeNull();
+    expect(mockBack).not.toHaveBeenCalled();
   });
 });

@@ -23,6 +23,7 @@ import {
   usePutTripsTripIdItinerary,
 } from '@/shared/api/generated/trips/trips';
 import { promptAndRegisterPush } from '@/shared/push';
+import { showToast } from '@/shared/ui/Toast';
 import { EditorView } from '@/widgets/map-sheet-shell/ui/EditorView';
 import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
 
@@ -48,6 +49,7 @@ import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
  */
 
 const SAVE_ERROR_NOTE = '일정을 저장하지 못했어요. 잠시 후 다시 시도해 주세요';
+const SAVED_TOAST = '일정을 저장했어요';
 
 // 핀이 없을 때 지도 중심 — 서울 시청(LiveHubView 선례). {0,0} 은 기니만 바다(null-island)라 무의미하다.
 const FALLBACK_CENTER = { lat: 37.5665, lng: 126.978 };
@@ -112,11 +114,14 @@ export function ManualPlanPage({ tripId }: { tripId: string }): ReactElement {
       { tripId, data: buildEditItineraryRequest(days) },
       {
         // 서버 재검증 결과를 조회 캐시에 직접 써넣는다(재조회 0) — 시드 effect 가 다시 돈다.
-        onSuccess: (data) =>
+        // 편집을 이어 가는 화면이라 제자리에 남고 토스트로만 알린다(TRIP-990 D20).
+        onSuccess: (data) => {
           queryClient.setQueryData(
             getGetTripsTripIdItineraryQueryKey(tripId),
             data
-          ),
+          );
+          showToast({ message: SAVED_TOAST, testID: 'itinerary-manual-saved' });
+        },
         onError: () => setSaveError(SAVE_ERROR_NOTE),
       }
     );

@@ -210,6 +210,8 @@ export function MapSheetShell<T = unknown>({
         snapPoints={snapPoints ?? SNAP_POINTS}
         // v5 기본 true 는 콘텐츠 높이 칸을 배열에 몰래 끼워 index·onChange 번호가 어긋난다(03b 경고-1).
         enableDynamicSizing={false}
+        // 라이브러리 기본값과 같지만 명시한다 — 시트 안 입력(h13 검색)의 키보드 회피 계약(TRIP-990 D9).
+        keyboardBehavior="interactive"
         onChange={setSnapIndex}
         onAnimate={onSheetAnimate}
       >

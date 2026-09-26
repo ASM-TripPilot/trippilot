@@ -7,6 +7,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
@@ -24,6 +25,7 @@ import {
   fireEditDragEnd,
   fireEditDropOnZone,
 } from '@/test-support/editDragList';
+import { WithToastHost, resetToast } from '@/test-support/toastHarness';
 
 import { ManualPlanPage } from './ManualPlanPage';
 
@@ -166,6 +168,9 @@ beforeEach(() => {
 afterEach(() => {
   server.resetHandlers();
   clearAccessToken();
+  // 토스트 스토어는 모듈 싱글턴이라 파일 안 테스트 사이로 샌다. S1 만이 아니라 **모든** 테스트 뒤에 비운다 —
+  // 앞선 V3 저장이 띄운 토스트가 S1 첫 테스트까지 남아 거짓 green 을 만든 실측(03b 차단-1).
+  resetToast();
 });
 
 afterAll(() => server.close());
@@ -426,5 +431,61 @@ describe('🔴 M8 · AC-9 · 5-b 경고-4 — 다른 여행의 남은 드래프�
       await new Promise((resolve) => setTimeout(resolve, 100));
     });
     expect(putCalls).toBe(0);
+  });
+});
+
+/**
+ * TRIP-990 · S1 (#043 · D20 · US-SCHED-08) — 직접 짜기 저장이 성공하면 "일정을 저장했어요" 토스트가 뜨고
+ * 화면에 그대로 남는다.
+ *
+ * 왜: 저장된 일정이 실행 기준선이 되는데(US-SCHED-08) 성공해도 화면이 아무 말도 안 하면 사용자는 저장이
+ * 됐는지 모른다. 편집을 이어 가는 화면이라 떠나지 않는다(D20) — 라우터 세 방법 모두 0회.
+ *
+ * 토스트 호스트는 실제 앱에서 루트에 있다 — 이 테스트는 페이지 옆에 호스트를 함께 그려 "보였다"를 잰다
+ * (`toastHarness`). 스토어가 모듈 싱글턴이라 파일 최상위 `afterEach` 가 테스트마다 비운다.
+ *
+ * 3동작 뼈대: 준비=PUT 200/500 → 실행=저장 → 단언=토스트 유무·라우터.
+ */
+describe('🔴 S1 · 저장 성공 토스트 + 제자리 (#043 · D20)', () => {
+  function renderPageWithToast() {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    return render(
+      <QueryClientProvider client={client}>
+        <WithToastHost>
+          <ManualPlanPage tripId={TRIP_ID} />
+        </WithToastHost>
+      </QueryClientProvider>
+    );
+  }
+
+  it('PUT 200 이면 "일정을 저장했어요" 토스트가 뜨고 라우터는 0회다', async () => {
+    renderPageWithToast();
+    await ready();
+    // 앵커: 저장 전엔 토스트가 없다 — 뒤에서 보이는 토스트가 이번 저장이 띄운 것임을 가른다.
+    expect(screen.queryByTestId('itinerary-manual-saved')).toBeNull();
+
+    await save();
+
+    // 앵커: 이번 저장 PUT 이 실제로 1회 나갔다(저장 동작을 지우면 여기서 red).
+    expect(putCalls).toBe(1);
+    const toast = await screen.findByTestId('itinerary-manual-saved');
+    expect(within(toast).getByText('일정을 저장했어요')).toBeOnTheScreen();
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('짝: PUT 500 이면 실패 안내만 뜨고 성공 토스트는 없다', async () => {
+    putHandler = () => new HttpResponse(null, { status: 500 });
+    renderPageWithToast();
+    await ready();
+
+    await save();
+
+    // 실패가 처리된 뒤에 센다 — 응답 전이면 어떤 구현이든 토스트가 없다.
+    expect(await screen.findByTestId(SAVE_ERROR)).toBeOnTheScreen();
+    expect(screen.queryByTestId('itinerary-manual-saved')).toBeNull();
   });
 });

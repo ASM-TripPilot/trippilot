@@ -3,7 +3,7 @@ import { isAxiosError } from 'axios';
 import Constants from 'expo-constants';
 import * as Linking from 'expo-linking';
 import { type ReactElement, useState } from 'react';
-import { Share } from 'react-native';
+import { Keyboard, Share } from 'react-native';
 
 import { usePreferenceStore } from '@/features/onboarding/model/preferenceStore';
 import { OSM_COPYRIGHT_URL } from '@/features/settings/model/dataAttribution';
@@ -38,7 +38,10 @@ import {
   registerPushIfGranted,
   unregisterStoredPushToken,
 } from '@/shared/push';
+import { showToast } from '@/shared/ui/Toast';
 import { validateNicknameFormat } from '@/shared/validation/nicknameFormat';
+
+const NICKNAME_SAVED_TOAST = '닉네임을 바꿨어요';
 
 /**
  * 라우팅 — `expo-router` 를 **정적 import 하지 않는다.** 정적 import 면 이 파일의 node-버킷 테스트
@@ -136,6 +139,12 @@ export function SettingsPage(): ReactElement {
         // 서버 응답 닉네임을 우선하되, 없으면 방금 보낸 값으로 요약을 갱신한다.
         setNicknameOverride(data?.nickname ?? variables.data.nickname);
         setNicknameError(null);
+        // 저장 뒤에도 입력칸이 포커스를 쥐어(persistTaps) 키보드가 토스트를 덮는다 — 성공 때만 내린다.
+        Keyboard.dismiss();
+        showToast({
+          message: NICKNAME_SAVED_TOAST,
+          testID: 'settings-nickname-saved',
+        });
       },
       onError: (error) => {
         setNicknameError(classifyNicknameError(error));

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import {
   act,
   fireEvent,
@@ -712,5 +713,33 @@ describe('TRIP-926 · M — 지도 중심 (핀 0개면 서울 시청, 있으면 
         '35.0979,129.0256'
       )
     );
+  });
+});
+
+/**
+ * TRIP-990 · S6 (#051 · D9 · US-SCHED-07) — 장소 추가 검색 입력이 키보드에 가리지 않도록 시트에 알린다.
+ *
+ * 검색 입력을 `BottomSheetTextInput` 으로 바꾸고, 이 화면 시트에 `keyboardBehavior="interactive"` 를
+ * 명시한다(값은 라이브러리 기본값과 같아 동작으로는 못 가르고, 적혀 있는지만 본다). 기존 검색 입력
+ * 테스트(P2 changeText)는 testID 가 그대로라 계속 통과해야 한다. 첫 결과가 키보드 위에 보이는지는 6-b.
+ *
+ * 3동작 뼈대: 준비=페이지 렌더(카드 도착까지) → 실행=해당 요소 찾기 → 단언=타입·prop.
+ */
+describe('🔴 S6 · 장소 추가 검색 키보드 처방 (#051 · D9)', () => {
+  it('검색 입력이 BottomSheetTextInput 이다 (플레인 TextInput 이면 red)', async () => {
+    await renderPage();
+
+    const ids = screen
+      .UNSAFE_getAllByType(BottomSheetTextInput)
+      .map((node) => node.props.testID);
+    expect(ids).toContain('itinerary-place-search');
+  });
+
+  it('시트가 keyboardBehavior="interactive" 를 명시한다', async () => {
+    await renderPage();
+
+    expect(
+      screen.UNSAFE_queryAllByProps({ keyboardBehavior: 'interactive' })
+    ).not.toHaveLength(0);
   });
 });

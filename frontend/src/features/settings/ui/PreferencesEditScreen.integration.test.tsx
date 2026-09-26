@@ -6,11 +6,13 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { PreferenceView } from '@/shared/api/generated/schemas';
+import { WithToastHost, resetToast } from '@/test-support/toastHarness';
 
 import { PreferencesEditScreen } from './PreferencesEditScreen';
 
@@ -67,6 +69,9 @@ beforeEach(() => {
 afterEach(() => {
   server.resetHandlers();
   clearAccessToken();
+  // 토스트 스토어는 모듈 싱글턴이라 파일 안 테스트 사이로 샌다 — 새 describe 만이 아니라 모든 테스트 뒤에
+  // 비운다(03b 차단-1).
+  resetToast();
 });
 
 afterAll(() => server.close());
@@ -245,5 +250,61 @@ describe('PreferencesEditScreen — 저장 뒤 취향 조회 무효화 (TRIP-778
     expect(await screen.findByTestId('settings-pref-error')).toBeOnTheScreen();
 
     expect(gets).toBe(1);
+  });
+});
+
+/**
+ * TRIP-990 · S2 (#030 · BR-U6-28 · 01b Q5) — 취향 저장이 성공하면 "취향을 저장했어요" 토스트를 띄우고
+ * 설정으로 돌아간다(back + 토스트).
+ *
+ * 왜 둘 다인가: 성공해도 화면이 말이 없으면 저장됐는지 모른다(INV-4 정신). 돌아간 뒤에도 토스트는
+ * 루트 호스트가 그리므로 보인다(D19). 설정의 취향 요약은 저장 뒤 무효화(TRIP-778 D11)로 이미 갱신된다.
+ *
+ * 무엇을 보장하나: 200 → 토스트 + back 1회. 짝: 400 → 인라인 오류만, 토스트·back 없음.
+ *
+ * 3동작 뼈대: 준비=GET·PUT 응답 → 실행=타일 하나 바꿔 저장 → 단언=토스트·back.
+ */
+describe('🔴 S2 · 취향 저장 성공 토스트 + 뒤로 (#030)', () => {
+  function renderWithToast() {
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, gcTime: 0 },
+        mutations: { retry: false },
+      },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <WithToastHost>
+          <PreferencesEditScreen />
+        </WithToastHost>
+      </QueryClientProvider>
+    );
+  }
+
+  it('PUT 200 이면 "취향을 저장했어요" 토스트가 뜨고 뒤로 1회 간다', async () => {
+    seedGet({ styles: { value: ['휴양'], isNeutralDefault: false } });
+    capturePut(200);
+
+    renderWithToast();
+    fireEvent.press(await screen.findByTestId('settings-pref-style-미식'));
+    fireEvent.press(screen.getByTestId('settings-pref-save'));
+
+    const toast = await screen.findByTestId('settings-pref-saved');
+    expect(within(toast).getByText('취향을 저장했어요')).toBeOnTheScreen();
+    await waitFor(() => expect(mockBack).toHaveBeenCalledTimes(1));
+  });
+
+  it('짝: PUT 400 이면 인라인 오류만 뜨고 토스트도 뒤로도 없다', async () => {
+    seedGet({ styles: { value: ['휴양'], isNeutralDefault: false } });
+    capturePut(400);
+
+    renderWithToast();
+    fireEvent.press(await screen.findByTestId('settings-pref-style-미식'));
+    fireEvent.press(screen.getByTestId('settings-pref-save'));
+
+    // 실패가 처리된 뒤에 센다.
+    expect(await screen.findByTestId('settings-pref-error')).toBeOnTheScreen();
+    expect(screen.queryByTestId('settings-pref-saved')).toBeNull();
+    expect(mockBack).not.toHaveBeenCalled();
   });
 });

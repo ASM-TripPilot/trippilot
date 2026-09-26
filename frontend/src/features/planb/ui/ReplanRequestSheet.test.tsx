@@ -1,3 +1,4 @@
+import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import type { ReactTestInstance } from 'react-test-renderer';
 import {
   act,
@@ -399,5 +400,45 @@ describe('🔴 S-E · 실패 안내 (03b 경고-1 · INV-4)', () => {
 
     expect(screen.queryByTestId('planb-request-error')).toBeNull();
     expect(screen.getByTestId('planb-request-submit')).toBeOnTheScreen();
+  });
+});
+
+/**
+ * TRIP-990 · S6 (#051 · D9 · US-PLANB-12) + 01b Q10 — 자유텍스트 입력이 키보드에 가리지 않도록 시트에
+ * 알리고, 입력 중 "AI가 다시 짜기" 첫 탭이 키보드 닫기에 먹히지 않게 한다.
+ *
+ * *(개념)* `BottomSheetTextInput` = 시트에 "내 안의 입력칸이 포커스를 받았다"고 알려서 키보드 높이만큼
+ * 시트를 밀어 올리게 하는 입력칸. 플레인 `TextInput` 으로는 `keyboardBehavior` 를 무엇으로 줘도 시트가
+ * 안 움직인다(TRIP-984 브리프에서 라이브러리 코드로 확인).
+ *
+ * 여기서 보는 것은 구조뿐이다 — 그 입력칸을 썼는가, `keyboardBehavior="interactive"` 를 적었는가,
+ * 본문 스크롤이 `keyboardShouldPersistTaps="handled"` 인가. 목의 `BottomSheetTextInput` 은 별 타입이라
+ * 플레인 `TextInput` 으로 되돌리면 구분된다(984 목). 실제로 시트가 올라가 입력·CTA 가 보이는지는 6-b.
+ *
+ * 3동작 뼈대: 준비=시트 렌더 → 실행=해당 요소 찾기 → 단언=타입·prop 값.
+ */
+describe('🔴 S6 · 재계획 시트 키보드 처방 (#051 · D9 · Q10)', () => {
+  it('자유텍스트 입력은 BottomSheetTextInput 이다 (플레인 TextInput 이면 red)', () => {
+    render(<ReplanRequestSheet {...baseProps()} />);
+
+    expect(screen.UNSAFE_getByType(BottomSheetTextInput).props.testID).toBe(
+      'planb-request-freetext'
+    );
+  });
+
+  it('시트가 keyboardBehavior="interactive" 를 명시한다', () => {
+    render(<ReplanRequestSheet {...baseProps()} />);
+
+    expect(
+      screen.UNSAFE_queryAllByProps({ keyboardBehavior: 'interactive' })
+    ).not.toHaveLength(0);
+  });
+
+  it('본문 스크롤이 keyboardShouldPersistTaps="handled" 라 입력 중 CTA 첫 탭이 닿는다 (Q10)', () => {
+    render(<ReplanRequestSheet {...baseProps()} />);
+
+    expect(
+      screen.getByTestId('planb-request-sheet').props.keyboardShouldPersistTaps
+    ).toBe('handled');
   });
 });

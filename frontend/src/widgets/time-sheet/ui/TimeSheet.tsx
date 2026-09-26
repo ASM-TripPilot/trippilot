@@ -17,8 +17,8 @@ import { WheelPicker } from '@/shared/ui/WheelPicker';
  * 하나로 접었다. 접두(`testIDPrefix`)·섹션 라벨(`labels`)·제목(`title`)만 소비처가 주입하고,
  * 나머지 계약(값 형식·셀 press·endsNextDay 유도)은 두 원본과 동일하다.
  *
- * 이 리포엔 휠(스크롤-스냅) 시각 피커가 없고 jest 는 스크롤-스냅을 구동하지 못한다. 그래서 시·분을
- * **값별 셀**로 두고 누르면 그 값이 선택된다(h07/h24 선례). "휠" 비주얼은 그 위의 스크롤이다.
+ * 기본 변형은 시·분을 **값별 셀**(자체 `TimeColumn`)로 두고 셀 탭으로만 고른다. h04 변형은
+ * 공용 `WheelPicker` 3열이라 셀 탭 또는 스크롤 정지로 활성 탭(시작/종료) 값이 바뀐다(TRIP-990 D21).
  *
  * 클라는 시간 타당성을 판정하지 않는다(INV-2) — [적용]은 항상 열려 있고, `endsNextDay` 는
  * `end ≤ start`(HH:mm 사전식 비교)의 **기계적 유도**다(HC4). 최종 판정은 저장 시 서버 재검증 몫이다.
@@ -180,7 +180,7 @@ const H04_END_UNSET = '설정 안 됨';
 const MERIDIEMS = ['오전', '오후'];
 const HOURS_12 = Array.from({ length: 12 }, (_, i) => String(i + 1));
 
-/** WheelPicker 내부 눈금(CELL_HEIGHT 44 · PAD 88, 미export)에 맞춰 손으로 맞춘 h04 selband·페이드
+/** WheelPicker 내부 눈금(WHEEL_CELL_HEIGHT 44 · PAD 88)에 맞춰 손으로 맞춘 h04 selband·페이드
  *  좌표. 세 열의 가운데 셀을 잇는 회색 밴드와 위아래 흰 페이드가 이 값에 정렬한다(정렬 실측은 6-b). */
 const H04_BAND_TOP = 88;
 const H04_BAND_HEIGHT = 44;
@@ -392,6 +392,7 @@ export function TimeSheet(props: TimeSheetProps): ReactElement {
             />
             <View className="flex-1">
               <WheelPicker
+                testID={`${testIDPrefix}-wheel-ap`}
                 values={MERIDIEMS}
                 selected={meridiem}
                 onSelect={(value) => setActiveHour(compose24(value, hour12))}
@@ -400,6 +401,7 @@ export function TimeSheet(props: TimeSheetProps): ReactElement {
             </View>
             <View className="flex-1">
               <WheelPicker
+                testID={`${testIDPrefix}-wheel-h`}
                 values={HOURS_12}
                 selected={hour12}
                 onSelect={(value) => setActiveHour(compose24(meridiem, value))}
@@ -408,6 +410,7 @@ export function TimeSheet(props: TimeSheetProps): ReactElement {
             </View>
             <View className="flex-1">
               <WheelPicker
+                testID={`${testIDPrefix}-wheel-m`}
                 values={MINUTES}
                 selected={activeMinute}
                 onSelect={setActiveMinute}

@@ -17,6 +17,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { SplashGate } from '@/app-shell';
+import { ToastHost } from '@/shared/ui/Toast';
 
 // 서버 상태(TanStack Query)의 앱 전역 캐시 저장소 — 모듈 스코프에서 한 번만 만들어 리렌더마다
 // 다시 만들지 않는다. 기본 옵션은 손대지 않는다(TRIP-179 D5) — staleTime 등은 그 값을 실제로
@@ -69,6 +70,8 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <SplashGate />
         </QueryClientProvider>
+        {/* TRIP-990 — 토스트 호스트는 Stack(SplashGate) 바깥에 한 번. 화면이 back 으로 떠나도 남는다. */}
+        <ToastHost />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

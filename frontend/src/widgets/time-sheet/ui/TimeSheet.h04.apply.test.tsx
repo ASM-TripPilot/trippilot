@@ -1,6 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 
+import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
+
 import { TimeSheet } from './TimeSheet';
 
 /**
@@ -200,5 +202,55 @@ describe('🔴 AC-7 · 스와이프·딤으로 닫혀도 onCancel 이 불린다'
       owner = owner.parent;
     }
     expect(owner?.props.enablePanDownToClose).toBe(true);
+  });
+});
+
+/**
+ * TRIP-990 · W4 (D21 파급) — h04 휠 3열도 스크롤이 멈추면 **활성 탭**의 값을 바꾼다.
+ *
+ * 공용 휠이 스크롤 정지로 값을 확정하게 되면서 h12 편집·i07 여행 중 편집(`ItineraryEditPage`)의 시각
+ * 시트도 같은 동작을 물려받는다. 셀을 탭했을 때와 결과가 같아야 한다 — 시작 탭이면 시작 시각, 종료 탭이면
+ * 종료 시각이 바뀌고, 종료가 바뀌면 "설정됨"이 켜져 적용 결과에 종료가 실린다.
+ *
+ * 열 순서는 [오전/오후, 시(1~12), 분(00~59)]. 시작 13:00 은 오후 1시라, 시 열의 '11' 은 23시다.
+ *
+ * 3동작 뼈대: 준비=h04(13:00–14:30) → 실행=(종료 탭) → 열 하나를 k칸에서 멈춤 → 적용 → 단언=onApply 인자.
+ */
+describe('🔴 W4 · h04 휠 스크롤 정지 = 셀 탭과 같은 결과 (D21)', () => {
+  function settle(column: 'ap' | 'h' | 'm', cells: number): void {
+    fireEvent(screen.getByTestId(id(`wheel-${column}`)), 'momentumScrollEnd', {
+      nativeEvent: { contentOffset: { x: 0, y: cells * WHEEL_CELL_HEIGHT } },
+    });
+  }
+
+  it.each([
+    ['h', 10, '23:00:00', '시 열 11(오후) → 23시'],
+    ['ap', 0, '01:00:00', '오전/오후 열 오전 → 1시'],
+    ['m', 15, '13:15:00', '분 열 15'],
+  ] as const)(
+    '시작 탭에서 %s 열이 %i칸에 멈추면 startAt %s (%s)',
+    (column, cells, startAt, _label) => {
+      renderH04();
+
+      settle(column, cells);
+      press('apply');
+
+      expect(appliedPatch()).toStrictEqual({ startAt, endAt: null });
+    }
+  );
+
+  it('종료 탭에서 시 열이 3에 멈추면 종료가 설정되어 15:30 으로 실린다', () => {
+    renderH04();
+
+    press('seg-end');
+    settle('h', 2);
+
+    expect(screen.getByTestId(id('readout'))).toHaveTextContent(/오후 3:30/);
+    press('apply');
+    expect(appliedPatch()).toStrictEqual({
+      startAt: '13:00:00',
+      endAt: '15:30:00',
+      endsNextDay: false,
+    });
   });
 });
