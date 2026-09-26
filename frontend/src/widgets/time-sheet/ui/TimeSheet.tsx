@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import BottomSheet, {
   BottomSheetBackdrop,
@@ -97,6 +97,11 @@ function renderTimeSheetBackdrop(
   );
 }
 
+/** 기본 변형 열 눈금 — 초기 스크롤 위치(`contentOffset`)를 셀 번호로 계산하려고 셀·창 높이를 고정한다
+ *  (TRIP-981 C). `className` 높이는 jest 가 못 읽어 `style` 숫자로 둔다. */
+const CELL_HEIGHT = 40;
+const COLUMN_HEIGHT = 168;
+
 /** 값 하나 = 누를 수 있는 셀. 선택되면 `accessibilityState.selected` 로 표시(h07 선례). */
 function TimeCell({
   testID,
@@ -115,7 +120,8 @@ function TimeCell({
       accessibilityRole="button"
       accessibilityState={{ selected }}
       onPress={onPress}
-      className={`items-center justify-center rounded-button px-md py-sm ${
+      style={{ height: CELL_HEIGHT }}
+      className={`items-center justify-center rounded-button px-md ${
         selected ? 'bg-primary-pale' : ''
       }`}
     >
@@ -133,7 +139,9 @@ function TimeCell({
 }
 
 /** 한 컬럼(시 또는 분) — 모든 값 셀이 트리에 실재해야 한다(jest 는 뷰포트가 아니라 트리를 본다).
- * FlatList 가상화 대신 ScrollView + map 으로 전 값을 렌더한다. */
+ * FlatList 가상화 대신 ScrollView + map 으로 전 값을 렌더한다.
+ * 처음 선택값이 창 가운데 오도록 시작 위치를 잡고, 양 끝은 스크롤 범위로 자른다(TRIP-981 #042).
+ * 첫 렌더 값으로 얼린다 — `contentOffset` 은 값이 바뀔 때마다 다시 적용돼 셀 탭마다 열이 튄다. */
 function TimeColumn({
   testIDPrefix,
   field,
@@ -149,9 +157,23 @@ function TimeColumn({
   selected: string;
   onSelect: (value: string) => void;
 }): ReactElement {
+  const initialOffset = useRef({
+    x: 0,
+    y: Math.min(
+      Math.max(
+        0,
+        values.indexOf(selected) * CELL_HEIGHT -
+          (COLUMN_HEIGHT - CELL_HEIGHT) / 2
+      ),
+      values.length * CELL_HEIGHT - COLUMN_HEIGHT
+    ),
+  }).current;
   return (
     <ScrollView
-      className="h-[168px] w-[60px]"
+      testID={`${testIDPrefix}-${field}-${unit}-column`}
+      style={{ height: COLUMN_HEIGHT }}
+      className="w-[60px]"
+      contentOffset={initialOffset}
       showsVerticalScrollIndicator={false}
     >
       {values.map((value) => (
@@ -458,7 +480,10 @@ export function TimeSheet(props: TimeSheetProps): ReactElement {
   }
 
   return (
-    <BottomSheet backdropComponent={renderTimeSheetBackdrop}>
+    // 딤 탭 닫힘도 onCancel 로 알린다 — 안 알리면 소비처의 "열림" 상태가 남아 시트가 마운트된 채 닫혀,
+    // 다음 '+ 추가'·시각 칩이 다시 열지 못한다(TRIP-981 #057, h04 와 같은 배선). 끌어 닫기는 안 켠다 —
+    // 시·분 열이 평범한 ScrollView 라 열을 굴리다 시트가 닫힐 수 있다.
+    <BottomSheet backdropComponent={renderTimeSheetBackdrop} onClose={onCancel}>
       <BottomSheetView
         testID={`${testIDPrefix}-sheet`}
         className="w-full gap-lg px-lg pb-2xl pt-sm"

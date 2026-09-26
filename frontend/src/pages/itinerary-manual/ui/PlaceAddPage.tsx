@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { ActivityIndicator, Keyboard, Text, View } from 'react-native';
 
 import {
   addSlot,
@@ -10,6 +10,7 @@ import {
 } from '@/features/itinerary/model/itineraryEditStore';
 import { buildEditItineraryRequest } from '@/features/itinerary/model/buildEditItineraryRequest';
 import { buildDraftPins } from '@/features/itinerary/model/draftView';
+import { useMultiRegionPlaces } from '@/features/explore/model/useMultiRegionPlaces';
 import { usePlacesInfinite } from '@/features/explore/model/usePlacesInfinite';
 import {
   PlaceAddHeader,
@@ -19,6 +20,7 @@ import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
 import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
 import {
   getGetTripsTripIdItineraryQueryKey,
+  useGetTripsTripId,
   useGetTripsTripIdItinerary,
   usePutTripsTripIdItinerary,
 } from '@/shared/api/generated/trips/trips';
@@ -36,7 +38,9 @@ const FALLBACK_CENTER = { lat: 37.5665, lng: 126.978 };
  * 앱바·완료·하단 CTA·안내/notReady 배너는 h13 재편으로 걷었다.
  *
  * 검색 규율(AC-5 · TRIP-502): 카테고리·검색어를 서버 파라미터로(`GET /places?category=&q=`) — 검색은
- * 서버가 하고 커서 무한 스크롤로 전량 수신을 없앤다(`region` 은 이 화면 라우트에 출처가 없어 안 보냄).
+ * 서버가 하고 커서 무한 스크롤로 전량 수신을 없앤다. 후보는 여행 목적지(`GET /trips/{tripId}` 의
+ * `destinations[].region`)로 좁힌다(TRIP-981 #041) — 여행 조회가 끝날 때까지 장소 조회를 미루고(전국
+ * 목록 깜빡임 방지), 2곳 이상이면 지역별 병합(`useMultiRegionPlaces`), 실패·0곳이면 `region` 없이 연다.
  *
  * 추가 저장(TRIP-338 무심판 해소 — AC-6 통합 심판이 이 플로우를 잠근다): "추가" → `TimeSheet` 로 시각
  * 자유입력 → **삽입 index 분기**(AC-7): 라우트 `insertAfter`(선행 슬롯 index)가 있으면
@@ -63,11 +67,32 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
 
   // 검색은 서버가 한다(q) + 커서 무한 스크롤(TRIP-502) — 클라 이름 필터·전량 수신을 없앤다.
   const trimmedQuery = searchText.trim();
-  const { items, fetchNextPage, hasNextPage, isFetchingNextPage, isSuccess } =
-    usePlacesInfinite({
+  // 후보는 여행 목적지로 좁힌다(TRIP-981 #041). 여행 조회가 끝나기 전엔 장소 조회를 켜지 않는다 —
+  // 켜면 전국 목록이 먼저 떴다가 바뀐다. 실패·목적지 0곳이면 regions 가 비어 region 없이 연다(INV-4).
+  // 재시도 없음 — 기본 3회(1+2+4초)를 다 기다리면 실패 시 목록이 ~7초 빈다.
+  const trip = useGetTripsTripId(tripId, { query: { retry: false } });
+  const regions = (trip.data?.destinations ?? []).map((dest) => dest.region);
+  const isMultiRegion = regions.length >= 2;
+  // 두 훅 모두 호출하고 enabled 로 가른다(훅 규칙, PlaceExplorePage 선례). 다지역 훅은 스스로
+  // regions.length >= 2 일 때만 켜진다.
+  const infinite = usePlacesInfinite(
+    {
+      ...(regions.length === 1 ? { region: regions[0] } : {}),
       ...(selectedCategory ? { category: selectedCategory } : {}),
       ...(trimmedQuery ? { q: trimmedQuery } : {}),
-    });
+    },
+    { enabled: !trip.isPending && !isMultiRegion }
+  );
+  const multi = useMultiRegionPlaces(regions, {
+    category: selectedCategory,
+    q: trimmedQuery,
+  });
+  const { items, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    isMultiRegion ? multi : infinite;
+  // 다지역 훅은 isSuccess 를 안 준다 — 도착했고 실패가 아니면 성공으로 본다.
+  const isSuccess = isMultiRegion
+    ? !multi.isPending && !multi.isError
+    : infinite.isSuccess;
   const itinerary = useGetTripsTripIdItinerary(tripId);
   const save = usePutTripsTripIdItinerary();
 
@@ -158,6 +183,9 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
               onPressAdd={() => {
                 // 담을 일자가 없으면 시트를 안 연다(조용한 소실 차단, W-2 — 배너는 제거됐다).
                 if (notReady) return;
+                // 검색 키보드를 내린다 — 목록은 탭을 행에 넘기되(handled) 키보드는 그대로 두므로,
+                // 안 내리면 새 시각 시트가 키보드 밑에 깔린다(TRIP-981 #057).
+                Keyboard.dismiss();
                 setPendingPlace(item);
               }}
             />

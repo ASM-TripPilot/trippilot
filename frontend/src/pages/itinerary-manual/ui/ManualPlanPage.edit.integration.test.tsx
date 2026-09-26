@@ -489,3 +489,38 @@ describe('🔴 S1 · 저장 성공 토스트 + 제자리 (#043 · D20)', () => {
     expect(screen.queryByTestId('itinerary-manual-saved')).toBeNull();
   });
 });
+
+/**
+ * TRIP-981 · MC (#057 같은 결함 · 브리프 후보5) — 직접 짜기 시각 시트도 딤으로 닫히면 페이지에 알린다.
+ *
+ * 기본 시각 시트가 딤 닫힘을 알리지 않으면 `editingSlotKey` 가 남아 시트가 마운트된 채 닫혀 있고, 시각
+ * 칩을 다시 눌러도 열리지 않는다. 게다가 마운트된 채 다른 슬롯으로 바뀌면 시트가 옛 시각(처음 연 슬롯)을
+ * 그대로 보여 준다. 테스트용 시트 목은 항상 열린 채라 `onClose` 를 불러 딤 닫힘을 흉내 낸다.
+ *
+ * 3동작 뼈대: 준비=c(13:00)·a(09:00) 초안 → 실행=c 칩 → close → a 칩 → 단언=시트 사라짐·재등장·a 시각 시드.
+ */
+describe('🔴 MC · TRIP-981 — 직접 짜기 시각 시트도 딤으로 닫히면 다시 열린다', () => {
+  it('MC1 · c 칩 시트를 딤으로 닫으면 트리에서 빠지고, a 칩을 누르면 a 의 09시로 새로 열린다', async () => {
+    renderPage();
+    await ready();
+
+    fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('c')}`));
+    const sheet = await screen.findByTestId(SHEET);
+    expect(
+      screen.getByTestId('itinerary-manual-time-start-h-13')
+    ).toBeSelected();
+
+    // 딤 탭 닫힘 대리 — 시트의 onClose 를 부른다(없으면 조용히 아무 일도 안 일어난다).
+    fireEvent(sheet, 'close');
+    await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
+
+    fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('a')}`));
+    expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('itinerary-manual-time-start-h-09')
+    ).toBeSelected();
+    expect(
+      screen.getByTestId('itinerary-manual-time-start-h-13')
+    ).not.toBeSelected();
+  });
+});

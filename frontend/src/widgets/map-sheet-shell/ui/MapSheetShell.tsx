@@ -230,6 +230,9 @@ export function MapSheetShell<T = unknown>({
             ListEmptyComponent={list.ListEmptyComponent}
             onEndReached={list.onEndReached}
             onEndReachedThreshold={list.onEndReachedThreshold}
+            // 헤더 검색 입력의 키보드가 떠 있어도 첫 탭이 행으로 간다 — 기본값(never)은 첫 탭을 키보드
+            // 내리기로 먹는다(TRIP-981 #057). 키보드는 안 내려 주므로 내림은 소비처가 한다.
+            keyboardShouldPersistTaps="handled"
             testID={list.testID}
           />
         ) : (
