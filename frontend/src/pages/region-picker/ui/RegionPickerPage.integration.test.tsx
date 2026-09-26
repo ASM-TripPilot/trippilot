@@ -180,8 +180,9 @@ describe('AC-1 · 페이지가 전체 카탈로그를 내리고 화면이 시/�
   });
 });
 
-describe('AC-6 · 검색 경로 → 원본 카탈로그 이름으로 라우팅 (TRIP-387 성질)', () => {
-  it('검색으로 좁힌 뒤 구/군 카드를 누르면 그 지역명을 쿼리에 실어 /stays로 간다 (stay)', () => {
+describe('AC-6 · 검색 경로 → 원본 카탈로그 이름으로 라우팅 (TRIP-387 성질 · TRIP-989 F-1)', () => {
+  it('검색으로 좁힌 뒤 구/군 카드를 누르면 그 지역명을 쿼리에 실어 /stays로 되감는다 (purpose 없음 = stay)', () => {
+    // 준비: purpose 없이 진입 — URL 신뢰 경계가 stay 로 떨어뜨리는 폴백 경로도 dismissTo 로 가야 한다(02a ★9).
     render(<RegionPickerPage />);
 
     // 검색 — '춘천'으로 좁히면 평면 카드(드릴다운 우회).
@@ -189,9 +190,11 @@ describe('AC-6 · 검색 경로 → 원본 카탈로그 이름으로 라우팅 (
     fireEvent.press(screen.getByTestId('explore-region-51110'));
 
     // 서버 `region`은 자유 문자열 계약이라 원본 카탈로그의 한글 이름을 그대로 보낸다(코드 아님).
-    expect(mockPush).toHaveBeenCalledWith(
-      `/stays?region=${encodeURIComponent('춘천시')}`
-    );
+    // TRIP-989 F(D16) — push 가 아니라 dismissTo: 스택 아래 결과 화면으로 되감아 지역만 바꾼다(화면이 안 쌓인다).
+    expect(mockDismissTo.mock.calls).toEqual([
+      [`/stays?region=${encodeURIComponent('춘천시')}`],
+    ]);
+    expect(mockPush).not.toHaveBeenCalled();
     // 좁혀졌는지도 함께 본다 — 필터가 안 걸리면 이 단언이 무의미해진다.
     expect(screen.queryByTestId('explore-region-28177')).toBeNull();
   });
@@ -217,16 +220,21 @@ describe('AC-1 · 여행지 담기 재배선 (trip 분기 — TRIP-683)', () => 
   });
 });
 
-describe('AC-4 · stay 분기 회귀 (드릴다운 → /stays, TRIP-683 무변경 ★4)', () => {
-  it('드릴다운 안 구/군 카드를 누르면 그 구/군 이름으로 /stays로 간다 (stay)', () => {
+describe('AC-4 · stay 분기 (드릴다운 → /stays 되감기, TRIP-989 F-1 · D16)', () => {
+  it('드릴다운 안 구/군 카드를 누르면 그 구/군 이름으로 /stays 까지 dismissTo 한다 (헬퍼 철자 stay)', () => {
+    // 준비: 호출자(StaySearchPage)와 같은 헬퍼 철자로 진입한다 — 철자 사슬의 stay 고리(02a ★9).
+    mockParams = { purpose: purposeParamOf(regionPickerHref('stay')) };
     render(<RegionPickerPage />);
 
     fireEvent.press(screen.getByTestId('explore-region-sido-28')); // 인천 드릴인
     fireEvent.press(screen.getByTestId('explore-region-28177')); // 미추홀구
 
-    expect(mockPush).toHaveBeenCalledWith(
-      `/stays?region=${encodeURIComponent('미추홀구')}`
-    );
+    expect(mockDismissTo.mock.calls).toEqual([
+      [`/stays?region=${encodeURIComponent('미추홀구')}`],
+    ]);
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockAddDestination).not.toHaveBeenCalled();
   });
 });
 

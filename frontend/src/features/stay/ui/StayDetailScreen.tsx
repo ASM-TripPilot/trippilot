@@ -68,6 +68,8 @@ export interface StayDetailScreenProps {
   onPressPhone?: () => void;
   /** error 얼굴 "다시 시도" — 재조회는 페이지 몫. */
   onRetry?: () => void;
+  /** hero 공유 원 press — OS 공유 시트는 페이지 몫(TRIP-989). 미지정=정직한 스텁. */
+  onPressShare?: () => void;
 }
 
 const FACE_TEST_ID = {
@@ -94,17 +96,20 @@ function HeroCircle({
   onPress,
   disabled,
   selected,
+  accessibilityLabel,
 }: {
   children: ReactElement;
   testID: string;
   onPress?: () => void;
   disabled?: boolean;
   selected?: boolean;
+  accessibilityLabel?: string;
 }): ReactElement {
   return (
     <Pressable
       testID={testID}
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
       accessibilityState={selected === undefined ? undefined : { selected }}
       disabled={disabled}
       onPress={onPress}
@@ -163,6 +168,7 @@ export function StayDetailScreen({
   addedNotice = false,
   onPressPhone,
   onRetry,
+  onPressShare,
 }: StayDetailScreenProps): ReactElement {
   // ready 가 아니면 상세 내용·하트·CTA 없이 한 얼굴만(Figma 4514:2330 — 좌상단 뒤로 + 가운데 핀·
   // 제목·부제). 404·400·네트워크는 문구가 같고 testID 로만 갈린다(TRIP-940 Q2).
@@ -224,13 +230,13 @@ export function StayDetailScreen({
             </HeroCircle>
           </View>
           <View className="absolute right-[68px] top-12">
-            {/* 공유 — 표시만(공유 계약 미존재, 범위 밖). 정적 어포던스라 Pressable이 아니다. */}
-            <View
-              style={heroButtonShadow}
-              className="h-11 w-11 items-center justify-center rounded-pill bg-canvas"
+            <HeroCircle
+              testID="stay-detail-share"
+              accessibilityLabel="공유"
+              onPress={onPressShare}
             >
               <ShareGlyph size={24} />
-            </View>
+            </HeroCircle>
           </View>
           <View className="absolute right-lg top-12">
             <HeroCircle

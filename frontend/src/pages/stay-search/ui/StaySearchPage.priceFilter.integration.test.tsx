@@ -6,10 +6,16 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
 import type { StayItem } from '@/shared/api/generated/schemas';
+import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
+import {
+  PRICE_BUCKETS,
+  type PriceBucketId,
+} from '@/features/stay/model/priceRangeFilter';
 import { StaySearchPage } from './StaySearchPage';
 
 /**
@@ -34,7 +40,7 @@ jest.mock('@/shared/storage', () => ({
   hasStoredToken: jest.fn().mockResolvedValue(true),
 }));
 
-let mockSearchParams: { region?: string } = {};
+let mockSearchParams: { region?: string; amenity?: string } = {};
 const mockPush = jest.fn();
 
 jest.mock('expo-router', () => ({
@@ -134,6 +140,144 @@ describe('PF3 · 지역 칩 무회귀 (TRIP-499 · AC-3)', () => {
 
     fireEvent.press(screen.getByTestId('stay-search-filter-region'));
 
-    expect(mockPush).toHaveBeenCalledWith('/explore/region?purpose=stay');
+    // 철자는 공유 헬퍼 출력으로 잠근다(TRIP-989 F — 985 철자 사슬의 stay 고리).
+    expect(mockPush).toHaveBeenCalledWith(regionPickerHref('stay'));
+  });
+});
+
+// ── TRIP-989 E · Q4 ─────────────────────────────────────────────────────────────────────
+// 가격대는 서버 파라미터가 없어 클라이언트에서만 거른다(BR-U1-15, priceRangeFilter). 그래서 가격 때문에
+// 0곳이 되면 서버 filterZeroReasons 가 비어 **empty** 얼굴이 된다 — 사용자가 보는 탈출구는 "필터 완화"다
+// (02a ★4). 표본 버킷은 5만·25만 두 장을 다 빼는 100k-200k 다(★5).
+
+/** 0건 + 필터 사유 있음 → filter-zero(가격이 아니라 amenity 가 원인). */
+const FILTER_ZERO_RESPONSE = {
+  items: [],
+  degraded: false,
+  filterZeroReasons: ['amenity:오션뷰'],
+};
+
+function priceChip() {
+  return screen.getByTestId('stay-search-filter-price');
+}
+
+function bucketLabel(id: PriceBucketId): string {
+  const label = PRICE_BUCKETS.find((bucket) => bucket.id === id)?.label;
+  if (!label) throw new Error(`PRICE_BUCKETS 에 ${id} 가 없다`);
+  return label;
+}
+
+/** 가격대 칩 → 시트 → 버킷 선택. 시트는 고른 뒤에도 열려 있어 같은 라벨이 두 곳에 뜬다(★6). */
+function applyPrice(id: PriceBucketId): void {
+  fireEvent.press(priceChip());
+  fireEvent.press(screen.getByTestId(`stay-price-option-${id}`));
+}
+
+/** 가격대 칩이 "안 걸린" 얼굴인가 — 선택 아님 + 라벨 "가격대". */
+function expectPriceCleared(): void {
+  expect(priceChip()).not.toBeSelected();
+  expect(within(priceChip()).getByText('가격대')).toBeOnTheScreen();
+}
+
+describe('E-2 · 가격대도 적용 필터로 센다 (TRIP-989 · 01b Q1 · BR-U1-16)', () => {
+  it('가격대만 걸어도 "필터" 배지가 1이 되고, 0곳 카드의 "필터 완화"가 켜진다', async () => {
+    render(<StaySearchPage />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen()
+    );
+    // 준비 확인: 아무 필터도 없으면 배지 숫자가 없다.
+    expect(screen.getByTestId('stay-search-filter-more')).not.toHaveTextContent(
+      /\d/
+    );
+
+    applyPrice('100k-200k');
+
+    expect(screen.getByTestId('stay-search-empty')).toBeOnTheScreen();
+    expect(screen.getByTestId('stay-search-filter-more')).toHaveTextContent(
+      /1/
+    );
+    expect(screen.getByTestId('stay-search-empty-filter')).not.toBeDisabled();
+    expect(priceChip()).toBeSelected();
+  });
+});
+
+describe('E-3 · 가격 때문에 0곳 → "필터 완화"로 빠져나온다 (TRIP-989 · 01b E · INV-4)', () => {
+  it('empty "필터 완화"를 누르면 가격대가 풀리고 두 카드가 다시 보인다', async () => {
+    render(<StaySearchPage />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen()
+    );
+    applyPrice('100k-200k');
+    expect(screen.getByTestId('stay-search-empty')).toBeOnTheScreen();
+
+    fireEvent.press(screen.getByTestId('stay-search-empty-filter'));
+
+    expect(screen.getByTestId(`stay-card-${KEY_CHEAP}`)).toBeOnTheScreen();
+    expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen();
+    expectPriceCleared();
+  });
+
+  it('filter-zero "필터 초기화"도 가격대까지 푼다', async () => {
+    mockSearchParams = { region: '부산', amenity: '오션뷰' };
+    server.use(
+      http.get(`${BASE}/stays/search`, () =>
+        HttpResponse.json(FILTER_ZERO_RESPONSE)
+      )
+    );
+    render(<StaySearchPage />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(screen.getByTestId('stay-search-filterzero')).toBeOnTheScreen()
+    );
+    applyPrice('over-200k');
+    expect(priceChip()).toBeSelected();
+
+    fireEvent.press(screen.getByTestId('stay-search-filterzero-reset'));
+
+    expectPriceCleared();
+  });
+});
+
+// Q4 — 지역 선택이 dismissTo 로 **같은 결과 화면 인스턴스**에 돌아오므로(F), 로컬 state 인 가격대·
+// 검색어가 남는다. params 목을 바꿔 rerender 해 그 순간을 흉내 낸다(02a ★7).
+describe('Q4 · 지역이 바뀌면 가격대·검색어를 비운다 (TRIP-989 F · 01b Q4)', () => {
+  it('다른 지역으로 돌아오면 가격대 칩이 풀리고 검색창이 빈다', async () => {
+    const { rerender } = render(<StaySearchPage />, {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen()
+    );
+    applyPrice('over-200k');
+    fireEvent.changeText(screen.getByTestId('stay-search-name-input'), '오션');
+    expect(priceChip()).toBeSelected();
+
+    mockSearchParams = { region: '무주' };
+    rerender(<StaySearchPage />);
+
+    expectPriceCleared();
+    expect(screen.getByTestId('stay-search-name-input')).toHaveDisplayValue('');
+  });
+
+  it('짝: 지역은 그대로이고 다른 조건만 바뀌면 가격대·검색어가 남는다', async () => {
+    const { rerender } = render(<StaySearchPage />, {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen()
+    );
+    applyPrice('over-200k');
+    fireEvent.changeText(screen.getByTestId('stay-search-name-input'), '오션');
+    expect(priceChip()).toBeSelected();
+
+    mockSearchParams = { region: '부산', amenity: '오션뷰' };
+    rerender(<StaySearchPage />);
+
+    expect(priceChip()).toBeSelected();
+    expect(
+      within(priceChip()).getByText(bucketLabel('over-200k'))
+    ).toBeOnTheScreen();
+    expect(screen.getByTestId('stay-search-name-input')).toHaveDisplayValue(
+      '오션'
+    );
   });
 });

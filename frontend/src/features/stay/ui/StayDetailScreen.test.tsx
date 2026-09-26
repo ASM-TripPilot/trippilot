@@ -550,3 +550,37 @@ describe('S18 · 금지 표면 — 리뷰·평점·소요시간 없음 (TRIP-940
     expect(screen.queryAllByText(/\d+\s*분/)).toHaveLength(0);
   });
 });
+
+// TRIP-989 A — 히어로 공유 원이 `View`(정적 어포던스)라 눌러도 무반응이었고 접근성 트리에도 없었다.
+// 화면은 `Share` 를 모른다(FSD 경계) — 콜백만 올리고, OS 공유 시트는 페이지가 띄운다.
+describe('S19 · 공유 원 (TRIP-989 A-1 · A-3 · INV-4)', () => {
+  it('ready 얼굴의 공유 원은 이름이 "공유"인 버튼이고, 누르면 onPressShare 만 한 번 불린다', () => {
+    const onPressShare = jest.fn();
+    const onToggleSave = jest.fn();
+    const onPressBack = jest.fn();
+    render(
+      <StayDetailScreen
+        {...baseProps()}
+        onPressShare={onPressShare}
+        onToggleSave={onToggleSave}
+        onPressBack={onPressBack}
+      />
+    );
+
+    const share = screen.getByRole('button', { name: '공유' });
+    expect(share.props.testID).toBe('stay-detail-share');
+
+    fireEvent.press(share);
+
+    expect(onPressShare).toHaveBeenCalledTimes(1);
+    expect(onToggleSave).not.toHaveBeenCalled();
+    expect(onPressBack).not.toHaveBeenCalled();
+  });
+
+  it.each(NON_READY)('$kind 얼굴에는 공유 원이 없다', ({ kind, face }) => {
+    render(<StayDetailScreen {...baseProps()} state={{ kind }} />);
+
+    expect(screen.getByTestId(face)).toBeOnTheScreen();
+    expect(screen.queryByTestId('stay-detail-share')).toBeNull();
+  });
+});

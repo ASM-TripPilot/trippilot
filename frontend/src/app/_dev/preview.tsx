@@ -4589,9 +4589,9 @@ export const PREVIEW_STATES: PreviewState[] = [
       </SafeAreaView>
     ),
   },
-  // l04 등록 숙소·예약 기록(TRIP-605·777) — 등록됨(채움 배지 + "출발점 변경" chevron)·미등록(점선
-  // "출발점 지정") 두 행을 Figma l04 default(1604:2440)와 대조한다. "출발점 변경/지정" 을 누르면
-  // BaseToggleDialog(딤+중앙 카드)가 뜨는 것도 여기서 실제로 조작해 본다.
+  // l04 등록 숙소·예약 기록(TRIP-605·777) — 등록됨(채움 배지 + "출발점 변경" chevron)·미등록 두 행을
+  // Figma l04 default(1604:2440)와 대조한다. 미등록 행의 점선 "출발점 지정"은 TRIP-989(D13)로 숨겨
+  // Figma 와 다르다. "출발점 변경" 을 누르면 BaseToggleDialog(딤+중앙 카드)가 뜨는 것도 여기서 조작해 본다.
   {
     key: 'my-stays-default',
     band: 'l',

@@ -217,36 +217,23 @@ function CategoryChips({
   );
 }
 
-/** 정렬 칩 3개 — 선택지가 아니라 **현재 정렬을 알리는 라벨**이다(01b Seed Q8: `savedCount`가
- * 계약의 유일한 정렬 재료라 "지금 뜨는 순"을 더해도 완전히 같은 순서가 되고, "가까운 순"은
- * 좌표 파라미터가 없다). 활성 "요즘 담긴 순"(연핑크 `bg-primary-pale`) + 표시 전용
- * "지금 뜨는 순"·"가까운 순"(회색). 셋 다 `Pressable`이 아니라 `View`다 — 누를 수 있는 것
- * 목록(AC-1 개수 계약)에 걸리면 안 된다. */
+/** 정렬 칩 — 선택지가 아니라 **현재 정렬을 알리는 라벨**이다. 활성 "요즘 담긴 순"(연핑크
+ * `bg-primary-pale`) 하나만 그린다: "지금 뜨는 순"은 `savedCount`가 계약의 유일한 정렬 재료라
+ * 같은 순서가 되고, "가까운 순"은 좌표 파라미터가 없어 둘 다 숨긴다(TRIP-989 D15 · u1 F-2 미노출).
+ * `Pressable`이 아니라 `View`다 — 누를 수 있는 것 목록(AC-1 개수 계약)에 걸리면 안 된다. */
 function SortChip({
   testID,
   label,
-  active,
 }: {
   testID: string;
   label: string;
-  active: boolean;
 }): ReactElement {
   return (
     <View
       testID={testID}
-      className={
-        active
-          ? 'rounded-pill bg-primary-pale px-[13px] py-[7px]'
-          : 'rounded-pill bg-surface-soft px-[13px] py-[7px]'
-      }
+      className="rounded-pill bg-primary-pale px-[13px] py-[7px]"
     >
-      <Text
-        className={
-          active
-            ? 'font-noto-bold text-[12.5px] font-bold text-primary'
-            : 'font-noto text-[12.5px] text-muted'
-        }
-      >
+      <Text className="font-noto-bold text-[12.5px] font-bold text-primary">
         {label}
       </Text>
     </View>
@@ -259,21 +246,7 @@ function SortRow(): ReactElement {
       <Text className="font-noto-bold text-caption font-bold text-muted-soft">
         정렬
       </Text>
-      <SortChip
-        testID="explore-places-sort-saved"
-        label="요즘 담긴 순"
-        active
-      />
-      <SortChip
-        testID="explore-places-sort-trending"
-        label="지금 뜨는 순"
-        active={false}
-      />
-      <SortChip
-        testID="explore-places-sort-nearby"
-        label="가까운 순"
-        active={false}
-      />
+      <SortChip testID="explore-places-sort-saved" label="요즘 담긴 순" />
     </View>
   );
 }

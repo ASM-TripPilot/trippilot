@@ -18,7 +18,7 @@ import {
  * d04 장소 탐색 default 의 **프레젠테이션 화면**.
  *
  * 무엇을 보장하나: `PlaceExploreScreen` 은 네트워크·라우팅·로컬 상태 없이 검색바(우측 필터
- * 버튼) · 카테고리 칩 8개 · 정렬 칩 3개(1 활성 + 2 표시전용) · 2열 카드 그리드 · 우하단 FAB
+ * 버튼) · 카테고리 칩 8개 · 정렬 칩 1개("요즘 담긴 순" 활성 — TRIP-989 로 표시전용 2개 제거) · 2열 카드 그리드 · 우하단 FAB
  * 2단(♥ 담은장소 · ＋ 여행만들기)을 그린다(TRIP-708 로 CtaBar → FAB 로 교체). 받은 순서를
  * 그대로 그리고(정렬·검색은 페이지가 끝내서 넘긴다), 담김 여부는 `savedPoiIds` 하나에서만
  * 파생하며, **계약에 판정 재료가 없는 컨트롤은 그리지 않는다**(01b Seed §2). BottomTabBar·
@@ -266,26 +266,22 @@ describe('PlaceExploreScreen — 카테고리 칩 (AC-3)', () => {
   });
 });
 
-describe('PlaceExploreScreen — 정렬 칩 3개 (AC-3 · 01b Seed §2·Q8)', () => {
-  it('정렬 칩 3개를 그리되 전부 표시 전용(비-Pressable)이고, 활성은 "요즘 담긴 순" 하나다', () => {
+describe('PlaceExploreScreen — 정렬 칩은 "요즘 담긴 순" 하나 (TRIP-989 B · D15 · u1 F-2)', () => {
+  it('"지금 뜨는 순"·"가까운 순" 칩은 그리지 않고, "요즘 담긴 순" 활성 칩과 필터 버튼은 남는다', () => {
     renderScreen();
 
-    // 3칩이 라벨과 함께 뜬다. "지금 뜨는 순"은 계약 재료가 savedCount 하나뿐이라 "요즘 담긴
-    // 순"과 완전히 같은 순서가 되고(Seed Q8), "가까운 순"은 좌표 파라미터가 없다 — 둘 다
-    // 눌러도 아무 일이 없는 **표시 라벨**이라 View(비-Pressable)로 둔다.
+    // 남는 것 — 활성(연핑크) 칩 하나와 검색바 필터 버튼. "없음" 단언이 빈 화면으로 통과하지 않게 먼저 본다.
     const saved = screen.getByTestId('explore-places-sort-saved');
-    const trending = screen.getByTestId('explore-places-sort-trending');
-    const nearby = screen.getByTestId('explore-places-sort-nearby');
     expect(within(saved).getByText('요즘 담긴 순')).toBeOnTheScreen();
-    expect(within(trending).getByText('지금 뜨는 순')).toBeOnTheScreen();
-    expect(within(nearby).getByText('가까운 순')).toBeOnTheScreen();
-
-    // 활성/비활성은 색으로 갈린다(활성 = 연핑크 `bg-primary-pale`). NativeWind className 은
-    // style 로는 안 바뀌어도 렌더 트리에 `props.className` 문자열로 남으므로 문자열 포함으로
-    // 잰다(TimelineScreen.placeholder 선례). 셋 다 핑크(또는 셋 다 회색)인 회귀를 잡는다.
     expect(String(saved.props.className)).toContain('primary-pale');
-    expect(String(trending.props.className)).not.toContain('primary-pale');
-    expect(String(nearby.props.className)).not.toContain('primary-pale');
+    expect(screen.getByTestId('explore-places-filter')).toBeOnTheScreen();
+
+    // 숨기는 것 — 계약에 판정 재료가 없어(뜨는 순 = 담긴 순과 같은 순서, 가까운 순 = 좌표 파라미터 없음)
+    // 눌러도 아무 일이 없던 두 칩. 정본 u1 F-2 는 이미 "미노출"이다.
+    expect(screen.queryByTestId('explore-places-sort-trending')).toBeNull();
+    expect(screen.queryByTestId('explore-places-sort-nearby')).toBeNull();
+    expect(screen.queryAllByText('지금 뜨는 순')).toHaveLength(0);
+    expect(screen.queryAllByText('가까운 순')).toHaveLength(0);
   });
 });
 

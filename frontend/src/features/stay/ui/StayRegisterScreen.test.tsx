@@ -464,6 +464,48 @@ describe('R-11 · 인라인 지도는 항상 뜨고, 고른 후보의 좌표를 
   });
 });
 
+// TRIP-989 D — 지도가 좌표를 가운데로 옮기기만 하고 "여기"를 표시하지 않았다. Figma e05 미니맵
+// (1703:1201·4520:2350)은 분홍 침대 마커 1개다 → `kind:'stay'`(01b Q3). `number` 는 타입상 필수라 1.
+// 목은 pins 를 host prop 으로 통과시킬 뿐이라 "넘겼다"까지만 본다 — 실제 마커가 찍히는지는 6-b.
+describe('R-19 · 고른 후보 좌표에 침대 핀 1개 (TRIP-989 D · US-STAY-08 · BR-U1-21)', () => {
+  it('인라인 지도 미리보기에 고른 후보 좌표의 stay 핀 하나를 넘긴다', () => {
+    renderScreen({ ...READY_FLOW, selectedCandidate: CANDIDATE_B });
+
+    const preview = screen.getByTestId('stay-register-map-preview');
+    expect(within(preview).getByTestId('map-root').props.pins).toEqual([
+      { number: 1, lat: CANDIDATE_B.lat, lng: CANDIDATE_B.lng, kind: 'stay' },
+    ]);
+  });
+
+  it('지도 시트(open)의 지도에도 같은 후보 좌표의 stay 핀 하나를 넘긴다', () => {
+    renderScreen({
+      ...READY_FLOW,
+      coordConfirmed: false,
+      mapSheetState: 'open',
+    });
+
+    const sheet = screen.getByTestId('stay-register-mapsheet');
+    expect(within(sheet).getByTestId('map-root').props.pins).toEqual([
+      { number: 1, lat: CANDIDATE_A.lat, lng: CANDIDATE_A.lng, kind: 'stay' },
+    ]);
+  });
+
+  it('짝: 후보를 고르기 전에는 지도는 떠 있어도 핀이 없다', () => {
+    renderScreen({
+      ...IDLE_FLOW,
+      searchStatus: 'success',
+      candidates: [CANDIDATE_A, CANDIDATE_B],
+      selectedCandidate: null,
+    });
+
+    const map = within(
+      screen.getByTestId('stay-register-map-preview')
+    ).getByTestId('map-root');
+    // 핀을 안 넘기든(undefined) 빈 배열을 넘기든 "핀 없음"이다(02a ★12).
+    expect(map.props.pins ?? []).toHaveLength(0);
+  });
+});
+
 describe('R-12 · 시트 지도가 실패해도 막다른 길이 아니다 (§3-3 · INV-4)', () => {
   it('이름·주소를 대신 보여주고 "이 주소로 확인"으로 확정할 수 있다', () => {
     const handlers = renderScreen({

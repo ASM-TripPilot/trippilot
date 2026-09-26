@@ -12,6 +12,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import type { StayItem } from '@/shared/api/generated/schemas';
 import { getAccessToken } from '@/shared/api/tokenManager';
 
+import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 import {
   filterByPriceRange,
   type PriceBucketId,
@@ -78,6 +79,16 @@ export function StaySearchPage(): ReactElement {
   // 좁히기·no-match 판정은 화면(순수)이 지므로 서버 판정(state)엔 안 섞는다.
   const [nameQuery, setNameQuery] = useState('');
 
+  // 지역 선택은 `dismissTo`로 이 인스턴스에 돌아온다(TRIP-989 F) — URL 필터는 교체돼 사라지지만
+  // 로컬 필터(가격대·검색어)는 남는다. "새 지역 = 새 검색"을 지키려고 지역이 바뀐 렌더에서만 비운다(01b Q4).
+  // 이펙트가 아니라 렌더 중 조정이라 옛 필터로 한 번 그려지는 프레임이 없다.
+  const [seenRegion, setSeenRegion] = useState(resolvedRegion);
+  if (seenRegion !== resolvedRegion) {
+    setSeenRegion(resolvedRegion);
+    setPriceBucket('all');
+    setNameQuery('');
+  }
+
   async function attemptToggle(item: StayItem): Promise<void> {
     const key = stayKey(item);
     setPendingKeys((keys) => [...keys, key]);
@@ -106,7 +117,7 @@ export function StaySearchPage(): ReactElement {
   // 지역 선택 정본으로 복귀), 필터=시트 열기, 가격대=가격대 시트 열기.
   function handlePressFilter(axis: 'price' | 'region' | 'more'): void {
     if (axis === 'region') {
-      router.push('/explore/region?purpose=stay');
+      router.push(regionPickerHref('stay'));
       return;
     }
     if (axis === 'price') {
@@ -156,15 +167,25 @@ export function StaySearchPage(): ReactElement {
         // 흰 원 하트 FAB(TRIP-725) — 담은 숙소 목록(e04)으로. 화면은 라우터를 모른다(구조 가드).
         // + FAB 는 아래 onPressRegister 를 재사용한다(같은 목적지 /stays/register).
         onPressSaved={() => router.push('/stays/saved')}
-        // 지역·필터 칩(TRIP-415) — 배지는 적용된 필터 개수(초안 아님).
+        // 지역·필터 칩(TRIP-415) — 배지는 적용된 필터 개수(초안 아님). 가격대도 1로 센다(TRIP-989 Q1) —
+        // 이 값이 empty "필터 완화" 활성도 정해, 가격만으로 0곳이 됐을 때 완화가 꺼져 갇히지 않는다.
         onPressFilter={handlePressFilter}
-        activeFilterCount={countActiveFilters(amenityList, stayTypeList)}
+        activeFilterCount={
+          countActiveFilters(amenityList, stayTypeList) +
+          (priceBucket === 'all' ? 0 : 1)
+        }
+        priceBucket={priceBucket}
         // 빈 상태 카드 CTA(TRIP-416) — 화면은 라우터를 모른다(구조 가드), 배선은 이 페이지 몫.
         // 지역 바꾸기는 필터 칩과 같은 목적지(/explore/region?purpose=stay, 여행지 선택)로 진입한다(TRIP-499).
-        onPressChangeRegion={() => router.push('/explore/region?purpose=stay')}
+        onPressChangeRegion={() => router.push(regionPickerHref('stay'))}
         // 필터 완화(AC-2)·초기화(AC-4) 공용 — amenity/stayType 두 키만 비운다(region 은 merge 로
         // 유지되므로 넣지 않는다, ★4). setParams 갱신 → useLocalSearchParams 갱신 → 재조회.
-        onRelaxFilters={() => router.setParams({ amenity: [], stayType: [] })}
+        // 가격대(로컬 상태)도 푼다 — 가격 때문에 0곳이면 서버 원인이 비어 empty 얼굴이 되고,
+        // 이 버튼이 유일한 탈출구다(TRIP-989 E-3).
+        onRelaxFilters={() => {
+          router.setParams({ amenity: [], stayType: [] });
+          setPriceBucket('all');
+        }}
         // 원인 필터만 해제(AC-5) — relaxCulpritFilter 가 reason(=reasons[0])을 지금 적용된 두
         // 배열에 매핑해 그 원인만 뺀 {amenity, stayType}를 낸다(정확히 두 키라 그대로 넘긴다).
         onClearCulpritFilter={(reason) =>

@@ -63,8 +63,9 @@ export function RegionPickerPage(): ReactElement {
       });
       return;
     }
-    // 서버 `region`은 자유 문자열 계약이라 코드가 아니라 한글 이름을 보낸다.
-    router.push(`/stays?region=${encodeURIComponent(region.name)}`);
+    // 서버 `region`은 자유 문자열 계약이라 코드가 아니라 한글 이름을 보낸다. dismissTo 로 결과
+    // 화면에 돌아가 지역만 교체한다 — push 면 "결과→피커→결과"가 쌓였다(TRIP-989 D16).
+    router.dismissTo(`/stays?region=${encodeURIComponent(region.name)}`);
   }
 
   return (
