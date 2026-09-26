@@ -128,6 +128,16 @@ j05(여행 스타일 분석, `features/reflection`)가 `records/style` 라우트
 
 **새 티켓 후보(범위 밖, 착수 안 함)**: 설정 토글 연타 시 PATCH 응답 순서 역전으로 캐시가 서버와 갈라질 가능성(참고-3, 확인 필요) · 세션 만료 후 다른 계정 로그인 시 이전 계정 캐시가 첫 GET 전까지 노출(재리뷰 참고-R1) · `useLocationConsent` 리터럴 키가 생성 키와 손으로만 맞물림(참고-2) · 전체 `pnpm codegen` 동기화(약 208파일, notification 스키마 드리프트 포함) · Figma 취향 값 문구(`바다·휴양` 등)가 서버 enum 밖(D5) · 운영 빌드에서 새로 열리는 행(취향·개인화·제휴) 백엔드 배포 확인.
 
+## 이번 사이클(TRIP-977) 변경 — l03 세그먼트 탭 크래시 수정(selected 그림자 className→style)
+
+| 파일 | 내용 |
+|---|---|
+| `ui/TripStatusSegment.tsx` | **변경(값 무회귀, 메커니즘 변경).** 선택 탭에만 붙던 className `shadow-sm` 제거 → `style={selected ? SEGMENT_SHADOW : undefined}`(`cardShadow.ts`). **원인**: `shadow-sm`은 NativeWind 네이티브 컴파일에서 CSS 변수(`--tw-shadow-color`)를 선언하고, 탭 전환으로 그 변수가 새로 생기면 `react-native-css-interop`이 해당 Pressable을 `VariableContext.Provider`로 재마운트하며 dev 경고에서 props 전체를 직렬화한다 — 그 직렬화가 크래시를 낸다(QA #026). `bg-canvas`는 고정 hex라 변수를 안 선언해 className 유지 가능. |
+| `ui/cardShadow.ts` | **변경 — `SEGMENT_SHADOW` 신규 export.** 값은 **NativeWind 네이티브 프리셋 `shadow-sm`**(`0px 1px 1px rgba(0,0,0,0.35)`, iOS 실효 불투명도 35% — 웹 Tailwind `shadow-sm`의 0/1/2·5%와 다르다, 03b 경고-2 정정 반영)와 동일 값으로 맞춤. 기존 `CARD_SHADOW`(0/2/10·6%)는 값이 달라 재사용 불가(더 게으른 대안으로 검토했으나 시각이 달라져 기각). |
+| `ui/TripStatusSegment.test.tsx` | **신규.** 소스 가드 — 변수 선언·애니메이션 계열 정규식 `\b(shadow\|ring\|scale\|translate\|rotate\|skew\|transition\|animate)(-…)?\b(?![A-Z])`로 셀렉터별 이름이 아니라 **계열**을 막는다(이름 목록으로 시작했다가 5-c에서 확장 — `bg-canvas shadow`·`ring-1`·`shadow-black/10`·`scale-105` 등 형제 유틸의 재도입도 잡음, `tabular-nums`·`from-*`는 `from` import 오탐이라 사정거리 밖으로 명시 제외). 선택 탭만 `toHaveStyle({shadowOpacity: expect.any(Number)})`. |
+
+**같은 패턴이 다른 곳에도 있는가 — 03b 실측 0건(2026-09-26 기준).** `shared/ui/SegmentedControl.tsx`는 애초부터 이 파일과 동일한 처방(style 그림자 + `bg-canvas`)을 쓰고 있었다 — TripStatusSegment는 TRIP-604 때 role·치수가 달라 별도로 만들어졌을 뿐 처방 자체는 선행 사례가 있었다. **재발 방지용 리포 전역 가드(lint/전역 스캔)는 아직 없다** — 새 티켓 후보(낮음), 지금 있는 결함이 아니라 예방 장치라 우선순위가 낮게 매겨졌다.
+
 ## 관련
 
 - 경계 가드: `src/__tests__/settingsBoundary.test.ts`(소스 재귀 스캔, eslint 무강제 — repo-traps 참고). TRIP-610도 이 가드가 `features/onboarding` 재사용을 막아 shared 승격을 강제한 세 번째 실측.
