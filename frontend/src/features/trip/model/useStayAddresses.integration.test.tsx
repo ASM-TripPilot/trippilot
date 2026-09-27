@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
@@ -228,5 +228,98 @@ describe('U5 · 같은 좌표는 한 번만 요청한다 (중복 등록 #021 · 
     } finally {
       warn.mockRestore();
     }
+  });
+});
+
+/**
+ * TRIP-1028 — 주소는 "시트를 열 때" 묻고, 받은 주소는 앱 세션 동안 기억한다.
+ *
+ * 훅 계약: `useStayAddresses(stays, { enabled })`. `enabled` 를 안 주면 지금처럼 켜져 있다(위 U1~U5 가
+ * 옵션 없이 부르는 것이 그 앵커다). 페이지가 "시트를 한 번이라도 열었나"를 이 손잡이로 넘긴다.
+ */
+
+/** 이 파일 기본 래퍼와 같은 설정이지만, 두 번의 렌더가 **같은 캐시**를 보게 client 를 밖에서 받는다. */
+function wrapperFor(client: QueryClient) {
+  function Wrapper({ children }: { children: ReactNode }) {
+    return (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+  }
+  return Wrapper;
+}
+
+/** 요청이 나갈 틈을 준다 — 0건 단언이 "아직 안 나갔을 뿐"으로 공짜 통과하지 않게(실시간 50ms). */
+async function settle(): Promise<void> {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+describe('TRIP-1028 H1 · enabled:false 면 묻지 않고, 켜는 순간 묻는다 (AC-1·AC-2)', () => {
+  it('꺼진 동안 요청 0건 · 좌표 있는 숙소는 loading(모름이 아니다) → 켜면 그 좌표로 요청하고 known', async () => {
+    const { result, rerender } = renderHook(
+      ({ enabled }: { enabled: boolean }) =>
+        useStayAddresses([JW, NO_COORD], { enabled }),
+      { wrapper: createWrapper(), initialProps: { enabled: false } }
+    );
+
+    await settle();
+    // 꺼진 동안 — 아무것도 안 나갔다.
+    expect(requested).toEqual([]);
+    // 아직 묻지 않은 것은 "조회 전"이지 "위치 확인 안 됨"(unknown)이 아니다 — unknown 으로 돌려주면
+    // 시트가 묻지도 않은 숙소를 "위치 확인 안 됨"으로 단정한다. 좌표 없는 숙소만 unknown.
+    expect(result.current.jw).toEqual({ status: 'loading' });
+    expect(result.current['no-coord']).toEqual({ status: 'unknown' });
+
+    // 켠다 — 이제 나간다(0건이 "핸들러가 죽어서"가 아님을 같은 it 안에서 보인다).
+    rerender({ enabled: true });
+    await waitFor(() => expect(result.current.jw?.status).toBe('known'));
+    expect(requested).toEqual(['37.57,127.009']);
+  });
+});
+
+describe('TRIP-1028 H2 · 받은 주소는 세션 동안 기억한다 — 전역 기본값이 아니라 이 조회가 스스로 (AC-4·AC-6)', () => {
+  it('받은 뒤 언마운트하고 하루가 지나 다시 써도 같은 좌표는 다시 묻지 않고, 새 좌표만 묻는다', async () => {
+    // 래퍼 기본값 gcTime:0 은 "캐시를 바로 지운다"는 뜻이다. 그런데도 살아남아야 한다 = 이 조회가
+    // 자기 옵션으로 수명을 들고 있다(앱 전역 QueryClient 기본값에 기대지 않는다, AC-6).
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+
+    const first = renderHook(() => useStayAddresses([JW]), {
+      wrapper: wrapperFor(client),
+    });
+    await waitFor(() => expect(first.result.current.jw?.status).toBe('known'));
+    expect(requested).toEqual(['37.57,127.009']);
+
+    // 화면을 떠난다(관찰자 0명 → 캐시 정리 타이머가 여기서 걸린다) → 하루를 흘린다.
+    // 가짜 시계는 이 구간에만 켠다 — 요청·응답(msw)은 진짜 시계 구간에서만 오간다.
+    jest.useFakeTimers();
+    try {
+      first.unmount();
+      act(() => {
+        jest.advanceTimersByTime(DAY_MS);
+      });
+    } finally {
+      jest.useRealTimers();
+    }
+
+    const second = renderHook(() => useStayAddresses([JW, DENBA]), {
+      wrapper: wrapperFor(client),
+    });
+    // 같은 틱 — JW 는 캐시에서 곧바로 known(다시 묻는 중이면 loading 이 나온다).
+    expect(second.result.current.jw).toEqual({
+      status: 'known',
+      address: '서울특별시 종로구 청계천로 279',
+    });
+    await waitFor(() =>
+      expect(second.result.current.denba?.status).toBe('known')
+    );
+    // 새 좌표(DENBA)만 한 번 더 나갔다.
+    expect(requested).toEqual(['37.57,127.009', '35.26,129.09']);
+
+    client.clear();
   });
 });

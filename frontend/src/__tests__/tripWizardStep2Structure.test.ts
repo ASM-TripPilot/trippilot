@@ -300,3 +300,17 @@ describe('TRIP-493 · 하단 CTA는 스크롤 밖에 고정된다', () => {
     expect(footerIndex).toBeGreaterThan(scrollCloseIndex);
   });
 });
+
+describe('TRIP-1028 AC-6 · 주소 캐시 수명은 그 조회에만 — 앱 전역 QueryClient 기본값은 그대로다', () => {
+  it('_layout 의 전역 QueryClient 기본값에 gcTime·staleTime 이 없다 (TRIP-179 D5)', () => {
+    const layoutSource = readOne('app/_layout.tsx');
+
+    // 긍정 짝 — 읽은 것이 정말 전역 QueryClient 기본값 자리다(빈 파일·이사 공짜 통과 차단).
+    expect(layoutSource).toContain('new QueryClient(');
+    expect(layoutSource).toContain('retryUnlessNotFound');
+    // 부정 — 역지오코딩 하나를 오래 기억하려고 전역 기본값을 늘리면 모든 조회의 수명이 딸려 바뀐다.
+    // (현 머리말 주석의 "staleTime" 낱말은 stripComments 가 걷는다.)
+    expect(layoutSource).not.toContain('gcTime');
+    expect(layoutSource).not.toContain('staleTime');
+  });
+});

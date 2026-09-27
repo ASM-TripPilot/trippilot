@@ -76,8 +76,13 @@ export function TripNewStep2Page(): ReactElement {
 
   const savedStayList = savedStays.data ?? [];
   const assignments = bases.data ?? [];
-  // TRIP-1011 — 시트 섹션 재료(숙소 주소). 시트를 열기 전부터 받아 두어 열 때 목록이 튀지 않게 한다.
-  const stayAddresses = useStayAddresses(savedStayList);
+  // TRIP-1011 — 시트 섹션 재료(숙소 주소). TRIP-1028 — 시트를 처음 열 때 묻기 시작하고, 닫아도
+  // 끄지 않는다(닫는 사이 새로 저장한 숙소도 바로 묻는다). 훅은 시트가 아니라 페이지에 둔다 —
+  // 시트와 함께 언마운트되면 응답 전 닫기가 요청을 취소해 다시 열 때 또 묻는다.
+  const [sheetEverOpened, setSheetEverOpened] = useState(false);
+  const stayAddresses = useStayAddresses(savedStayList, {
+    enabled: sheetEverOpened,
+  });
   // 딥링크 진입에서는 빈 문자열이 그대로 흘러간다 — 목적지가 없어 카드는 어차피 0장이다.
   const tripStartDate = startDate ?? '';
 
@@ -121,6 +126,7 @@ export function TripNewStep2Page(): ReactElement {
   /** 카드 탭 → 그 밤의 시트를 연다. 새로 여는 밤마다 선택·실패·잠금을 비워 깨끗이 시작한다. */
   function openSheet(nightNumber: number): void {
     assignLockRef.current = false;
+    setSheetEverOpened(true);
     setOpenNight(nightNumber);
     setSelectedSavedStayId(null);
     setAssignFailed(false);

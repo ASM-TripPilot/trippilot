@@ -11,10 +11,15 @@ import type { StayAddressState } from './staySheetSections';
  *
  * 같은 좌표(중복 등록 #021)는 한 번만 묻는다 — useQueries 에 같은 키를 두 번 넣으면 TanStack 이
  * "Duplicate Queries" 경고를 낸다. 좌표의 주소는 안 바뀌므로 `staleTime: Infinity`.
- * 페이지 테스트가 이 모듈 경로를 목으로 바꿔 끼운다(QueryClientProvider 없음).
+ *
+ * TRIP-1028 — `enabled: false` 면 묻지 않는다(좌표 있는 숙소는 `loading`, 없는 숙소는 `unknown`).
+ * 받은 주소는 앱 세션 동안 남긴다(`gcTime: Infinity` — 이 조회에만, 전역 기본값은 그대로).
+ * 기존 2/4 페이지 테스트 일부는 이 모듈을 목으로 바꿔 끼우고(QueryClientProvider 없음),
+ * `TripNewStep2Page.geocodeLazy` 테스트는 실물로 돌려 요청 수를 잰다.
  */
 export function useStayAddresses(
-  stays: SavedStay[]
+  stays: SavedStay[],
+  options?: { enabled?: boolean }
 ): Record<string, StayAddressState> {
   // 좌표 키 → 요청 파라미터(좌표 없는 숙소는 빠진다 = 요청 0).
   const coords = new Map<string, { lat: number; lng: number }>();
@@ -28,7 +33,11 @@ export function useStayAddresses(
   const results = useQueries({
     queries: [...coords.values()].map((params) =>
       getGetStaysReverseGeocodeQueryOptions(params, {
-        query: { staleTime: Infinity },
+        query: {
+          staleTime: Infinity,
+          gcTime: Infinity,
+          enabled: options?.enabled,
+        },
       })
     ),
   });
