@@ -398,6 +398,7 @@
 - `src/features/auth/lib/realAuthorize.ts`  →  realAuthorize
 
 ## src/features/auth/model/
+- `src/features/auth/model/gateDestination.ts`  →  publishGateDestination · getGateDestination · waitForGateDestination · resetGateDestination
 - `src/features/auth/model/resolveBootstrapDestination.ts`  →  BootstrapDestination · resolveBootstrapDestination
 - `src/features/auth/model/useAppleButton.ts`  →  useAppleButton
 - `src/features/auth/model/useBootstrapGate.ts`  →  BOOTSTRAP_TIMEOUT_MS · useBootstrapGate
@@ -1426,4 +1427,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 986개 파일
+합계 987개 파일

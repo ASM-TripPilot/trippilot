@@ -9,6 +9,7 @@ import {
   subscribeAccessToken,
 } from '@/shared/api/tokenManager';
 import { subscribeBootstrapReeval } from '@/shared/bootstrap/bootstrapReeval';
+import { publishGateDestination } from './gateDestination';
 import {
   resolveBootstrapDestination,
   type BootstrapDestination,
@@ -46,17 +47,20 @@ export function useBootstrapGate(): BootstrapGateState {
     let cancelled = false;
     let settled = false;
     let hadStoredToken = false;
+    // 요청 세대 — 더 새 요청이 나간 뒤 돌아온 옛 응답은 버린다(TRIP-1034 03b 경고-2).
+    let generation = 0;
     let unsubscribeToken: (() => void) | null = null;
     let unsubscribeReeval: (() => void) | null = null;
 
     const applyServerResult = async () => {
+      const mine = ++generation;
       try {
         const response = await fetchBootstrap();
-        if (cancelled) {
+        if (cancelled || mine !== generation) {
           return;
         }
         const hasToken = await hasStoredToken();
-        if (cancelled) {
+        if (cancelled || mine !== generation) {
           return;
         }
         settled = true;
@@ -64,7 +68,7 @@ export function useBootstrapGate(): BootstrapGateState {
         setIsProvisional(false);
         setPhase('resolved');
       } catch {
-        if (cancelled) {
+        if (cancelled || mine !== generation) {
           return;
         }
         if (!settled) {
@@ -101,18 +105,18 @@ export function useBootstrapGate(): BootstrapGateState {
       }
       // 결함 B 판별의 절반 — "부팅 시 저장 토큰이 hydrate 됐나"(홀더가 401 로 비면 인증 실패).
       hadStoredToken = Boolean(stored?.accessToken);
-      await applyServerResult();
-      if (cancelled) {
-        return;
-      }
-      // 첫 왕복이 끝난 뒤에만 구독한다 — hydrate 의 복원 통지가 이 콜백을 다시 부르면
-      // 부트스트랩이 부팅 시 두 번 나가버린다(케이스 3).
+      // hydrate 뒤·첫 왕복 앞에 구독한다 — hydrate 통지는 이미 지나가 부팅 중복 요청이 없고(케이스 3),
+      // 첫 왕복이 느린 동안의 로그아웃도 재조회를 부른다(TRIP-1034 03b 경고-2).
       unsubscribeToken = subscribeAccessToken(() => {
         if (cancelled) {
           return;
         }
         void applyServerResult();
       });
+      await applyServerResult();
+      if (cancelled) {
+        return;
+      }
       // 온보딩 완료 재평가 신호(결함 A) — 토큰 구독과 같은 자리·같은 방식(effect 재실행이
       // 아니라 같은 applyServerResult 재호출)이라 3초 타이머가 재무장되지 않는다(AC-S2).
       unsubscribeReeval = subscribeBootstrapReeval(() => {
@@ -152,6 +156,14 @@ export function useBootstrapGate(): BootstrapGateState {
       unsubscribeReeval?.();
     };
   }, []);
+
+  // 목적지 공개(TRIP-1034) — setDestination 호출부 4곳 대신 여기 한 곳. effect 는 commit 뒤에
+  // 돌므로 공개 시점엔 SplashGate 가 이미 새 가드로 렌더를 마쳤다.
+  useEffect(() => {
+    if (destination !== null) {
+      publishGateDestination(destination);
+    }
+  }, [destination]);
 
   return { phase, destination, isProvisional };
 }
