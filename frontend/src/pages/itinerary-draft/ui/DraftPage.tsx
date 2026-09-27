@@ -10,6 +10,7 @@ import {
   buildDraftPins,
   buildGenerationGauge,
   DRAFT_POLL_INTERVAL_MS,
+  foldGenerationGauge,
   formatDraftDayHeader,
   resolveDraftView,
   resolveFallbackNotice,
@@ -33,6 +34,7 @@ import { isNotFound } from '@/shared/api/isNotFound';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
 import { GenerationProgressCard } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
+import type { GenerationProgressCell } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
 import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
 import { SheetHeader } from '@/widgets/map-sheet-shell/ui/SheetHeader';
 
@@ -46,6 +48,9 @@ const GENERATION_STATUS_LABEL: Record<GenerationDayState, string> = {
   active: '생성 중',
   waiting: '대기',
 };
+
+/** 진행 카드 칸 상한 — 5일 이상 여행은 `…` 접기 칸 포함 4칸으로 접는다(TRIP-1040 결정 1). */
+const GAUGE_MAX_CELLS = 4;
 
 /**
  * h11 배선(TRIP-297) — 두 조회를 잇고, 2단계 생성을 폴링으로 잇고, 재생성은 생성 화면으로 보낸다.
@@ -395,10 +400,18 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
     // 게이지 셀은 여기서 tabs 에서 도출해 `{status,label}` 로 매핑 주입한다 — 위젯은 features
     // (`buildGenerationGauge`)를 못 물어 상태를 못 도출한다(D4). 3셀의 출처는 `days.length` 가
     // 아니라 **여행 기간**(tabs)이라, day1 만 도착해도 셀은 여행 일수만큼 선다(01b D7 급소).
-    const cells = buildGenerationGauge(tabs).map((cell) => ({
-      status: cell.state,
-      label: `${cell.dayNumber}일차 ${GENERATION_STATUS_LABEL[cell.state]}`,
-    }));
+    // 5일 이상이면 칸 상한(4) 안으로 접는다 — 지금 만드는 일차는 항상 남는다(TRIP-1040).
+    const cells: GenerationProgressCell[] = foldGenerationGauge(
+      buildGenerationGauge(tabs),
+      GAUGE_MAX_CELLS
+    ).map((cell) =>
+      'kind' in cell
+        ? { status: 'more' }
+        : {
+            status: cell.state,
+            label: `${cell.dayNumber}일차 ${GENERATION_STATUS_LABEL[cell.state]}`,
+          }
+    );
     const selectedDayNumber =
       tabs.find((tab) => tab.date === selectedDate)?.dayNumber ?? 1;
     // 헤더 meta = "N곳 · X.Xkm". `legDistance` 는 "이동 3.5km" 를 주지만 헤더는 **km 부만** 쓴다

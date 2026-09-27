@@ -88,6 +88,10 @@ const EXPECTED_H = [
   // h07 부분 결과(셸 얼굴)로 개명. 라벨 코드가 h07 이라 안정 정렬이 mustvisit-time 뒤에 붙는다
   // (개명 엔트리는 PREVIEW_STATES 배열상 draft 구역이라 mustvisit-time 보다 늦다 · 02a ★10).
   'dev-preview-state-h07-generating-partial', // h07
+  // TRIP-1040: h07 부분 결과 5일(뒤 접기)·7일(앞 접기) 2키. 같은 h07 코드라 PREVIEW_STATES 배열에서
+  // h07-generating-partial **바로 뒤**에 이 순서(5d→7d)로 넣으면 안정 정렬이 partial→5d→7d→loading 을 낸다.
+  'dev-preview-state-h07-generating-partial-5d', // h07 (TRIP-1040 · 5일 뒤 접기)
+  'dev-preview-state-h07-generating-partial-7d', // h07 (TRIP-1040 · 7일 앞 접기)
   // TRIP-789: 옛 h09 itinerary-generating(생성 중 loading · GeneratingScreen)을 h07-generating-loading
   // 으로 개명. 라벨 코드가 h07 이라 안정 정렬이 partial 바로 뒤에 붙는다 — PREVIEW_STATES 배열에서 이
   // 항목(구 itinerary-generating)이 h07-generating-partial 보다 뒤 위치라 안정 정렬이 partial→loading
