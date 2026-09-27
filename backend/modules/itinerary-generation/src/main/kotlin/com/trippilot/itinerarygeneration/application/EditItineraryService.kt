@@ -10,6 +10,8 @@ import com.trippilot.itinerarygeneration.domain.GenerationState
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
+import com.trippilot.itinerarygeneration.domain.RejectedPoi
+import com.trippilot.itinerarygeneration.domain.RejectionStore
 import com.trippilot.itinerarygeneration.domain.ItineraryStatus
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
@@ -51,6 +53,7 @@ class EditItineraryService(
     private val scheduleAgent: ScheduleAgentPort,
     private val revisions: ItineraryRevisionService,
     transactionManager: PlatformTransactionManager,
+    private val rejections: RejectionStore,
     private val clock: Clock,
 ) {
     private val tx = TransactionTemplate(transactionManager)
@@ -81,6 +84,12 @@ class EditItineraryService(
                 // 이력은 **같은 트랜잭션**에 — 일정만 바뀌고 이력이 빠지는 상태를 만들지 않는다(INV-U3-06).
                 revisions.record(saved, RevisionActor.USER, RevisionKind.EDIT, edit.reason ?: "일정을 직접 수정함")
             }
+            // 빠진 POI = 거절(TRIP-964). 사용자가 그 자리를 보고 바꾼 것이라 가장 명확한 신호다.
+            // **같은 트랜잭션이어야 한다** — 편집이 롤백되면 거절도 남으면 안 된다(없던 편집을 기억하게 된다).
+            // 시간만 바꾼 편집은 집합 차가 공집합이라 아무것도 안 쌓인다.
+            val removed = beforeWrite.days.flatMap { d -> d.slots.map { it.sourcePoiId } }.toSet() -
+                saved.days.flatMap { d -> d.slots.map { it.sourcePoiId } }.toSet()
+            rejections.record(tripId, removed, RejectedPoi.Kind.SWAPPED_OUT)
             saved
         }!!
     }

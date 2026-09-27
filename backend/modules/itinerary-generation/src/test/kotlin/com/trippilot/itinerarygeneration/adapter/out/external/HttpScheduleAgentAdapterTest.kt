@@ -3,6 +3,7 @@ package com.trippilot.itinerarygeneration.adapter.out.external
 import com.trippilot.itinerarygeneration.domain.FixedBlock
 import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.PreferenceProfile
+import com.trippilot.itinerarygeneration.domain.RejectedPoi
 import com.trippilot.itinerarygeneration.domain.ReplanCurrentSlot
 import com.trippilot.itinerarygeneration.domain.ReplanInput
 import com.trippilot.itinerarygeneration.domain.SavedPlaceRef
@@ -242,6 +243,10 @@ class HttpScheduleAgentAdapterTest : StringSpec({
             .andExpect(jsonPath("$.current_slots[0].start_at").value("10:00:00"))
             .andExpect(jsonPath("$.current_slots[0].placement_reason").value("동선상 가까워요"))
             .andExpect(jsonPath("$.saved_places[0].name").value("담아 둔 카페"))
+            // 거절 이력(TRIP-964) — 횟수까지 실려야 반복 강등 계단이 성립한다. 강등 폭은 안 싣는다(AI 설정 소유).
+            .andExpect(jsonPath("$.rejections[0].poi_id").value(REJECTED_POI.toString()))
+            .andExpect(jsonPath("$.rejections[0].kind").value("SWAPPED_OUT"))
+            .andExpect(jsonPath("$.rejections[0].count").value(2))
             // 창은 **하루 전체**다 — 좁히면 오전에 잠긴 고정 블록이 창 밖이 되어 상대가 409 로 거부한다.
             .andExpect(jsonPath("$.time_window.start").value("09:00:00"))
             .andExpect(jsonPath("$.time_window.end").value("21:00:00"))
@@ -784,6 +789,7 @@ private fun dummyOutput() = com.trippilot.itinerarygeneration.domain.ScheduleAge
 )
 
 private val REPLAN_POI: UUID = UUID.randomUUID()
+private val REJECTED_POI: UUID = UUID.randomUUID()
 
 /** 다섯 값을 전부 채운 표본. 비워 두면 "안 싣는다"와 "빈 값을 싣는다"가 구분되지 않는다. */
 private fun richReplanInput() = replanInput().copy(
@@ -795,6 +801,7 @@ private fun richReplanInput() = replanInput().copy(
         ),
     ),
     savedPlaces = listOf(SavedPlaceRef(UUID.randomUUID(), "담아 둔 카페")),
+    rejections = listOf(RejectedPoi(REJECTED_POI, RejectedPoi.Kind.SWAPPED_OUT, 2)),
 )
 
 /** 재계획 입력 표본 — 취향·동반·예산을 **실값으로** 채운다(중립이면 이 스펙이 무의미해진다). */
@@ -821,5 +828,6 @@ private fun replanInput() = ReplanInput(
     ),
     currentSlots = emptyList(),
     savedPlaces = emptyList(),
+                rejections = emptyList(),
     requestMeta = RequestMeta("replan-1", Instant.parse("2026-08-07T00:00:00Z"), 25_000),
 )

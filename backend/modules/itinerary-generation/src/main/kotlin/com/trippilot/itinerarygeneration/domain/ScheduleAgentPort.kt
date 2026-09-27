@@ -98,6 +98,13 @@ data class ReplanInput(
     val currentSlots: List<ReplanCurrentSlot>,
     /** 담은 장소 — LLM 컨텍스트("저장한 장소 — …")용. 이름 포함, 시각·메모 없음(목적 최소화). */
     val savedPlaces: List<SavedPlaceRef>,
+    /**
+     * 거절 이력(TRIP-964) — generate 와 같은 뜻([ScheduleAgentInput.rejections]).
+     * **기본값을 두지 않는다** — 이 타입의 규약이다(조립 지점이 값을 말하지 않고 조용히 빠지는
+     * 것을 컴파일이 막는다). '다시 짜줘' 직후의 재계획이 정확히 이 이력의 소비처라 여기가 빠지면
+     * 기억한 것이 가장 필요한 순간에 안 쓰인다.
+     */
+    val rejections: List<RejectedPoi>,
     val requestMeta: RequestMeta,
 )
 

@@ -16,6 +16,7 @@ import com.trippilot.itinerarygeneration.domain.FixedBlock
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
+import com.trippilot.itinerarygeneration.domain.RejectionStore
 import com.trippilot.itinerarygeneration.domain.ItineraryStatus
 import com.trippilot.itinerarygeneration.domain.ReplanInput
 import com.trippilot.itinerarygeneration.domain.ReplanScope
@@ -58,6 +59,7 @@ class ReplanFacadeService(
     private val personalization: PersonalizationPort,
     private val savedPlaces: SavedPlaceLookupFacade,
     private val regions: com.trippilot.placedata.api.RegionLookupFacade,
+    private val rejectionStore: RejectionStore,
     private val clock: Clock,
 ) : ReplanFacade {
 
@@ -98,6 +100,9 @@ class ReplanFacadeService(
                     ReplanCurrentSlot(it.sourcePoiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay, it.placementReason)
                 },
                 savedPlaces = this.savedPlaces.findSaved(command.accountId).map { SavedPlaceRef(it.poiId, it.nameKo) },
+                // 거절 이력(TRIP-964). '다시 짜줘' 직후의 재계획이 정확히 이 이력의 소비처다 —
+                // 방금 밀어낸 곳을 다시 제안하지 않게 하는 것이 저장의 목적이다.
+                rejections = rejectionStore.findByTrip(command.tripId),
                 requestMeta = RequestMeta(UUID.randomUUID().toString(), clock.instant(), REPLAN_DEADLINE_MS),
             ),
         )

@@ -19,6 +19,9 @@ import com.trippilot.itinerarygeneration.domain.UnplacedMustVisit
 import com.trippilot.itinerarygeneration.domain.UnplacedReason
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
+import com.trippilot.itinerarygeneration.domain.RejectedPoi
+import com.trippilot.itinerarygeneration.domain.VisitSlot
+import com.trippilot.itinerarygeneration.domain.RejectionStore
 import com.trippilot.itinerarygeneration.domain.SlotExplanations
 import io.kotest.assertions.withClue
 import com.trippilot.itinerarygeneration.domain.SlotAlternative
@@ -233,6 +236,7 @@ class GenerateItineraryServiceTest : StringSpec({
         fixedVisits: List<FixedVisit> = listOf(FixedVisit(poi, start, LocalTime.parse("12:00"), 90)),
         destinations: List<String> = listOf("제주"),
         clock: Clock = Clock.fixed(now, ZoneOffset.UTC),
+        rejectionStore: RejectionStore = FakeRejectionStore(),
         // 기본값 인자는 **맨 뒤에** 둔다 — 중간에 끼우면 위치 인자로 부르는 호출이 조용히 어긋난다.
         personalization: PersonalizationPort = NoPersonalization,
     ): GenerateItineraryService {
@@ -258,7 +262,7 @@ class GenerateItineraryServiceTest : StringSpec({
         // 1차·2차가 **같은 세션**을 봐야 취소가 2차에 전달된다 — 인스턴스를 나누면 취소가 사라진다.
         val sessions = genSessions(trips, sessionRepo, clock, defaultDeadlines)
         val second = SecondPhaseGenerator(agent, repo, genRevisions(repo, trips), sessions, NOOP_TX, clock)
-        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, publisher, second, sessions, genRevisions(repo, trips), StubRegions, personalization, NOOP_TX, clock, defaultDeadlines)
+        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, publisher, second, sessions, genRevisions(repo, trips), StubRegions, rejectionStore, personalization, NOOP_TX, clock, defaultDeadlines)
     }
 
     val fullPrefs = PreferenceSnapshot(
@@ -471,6 +475,64 @@ class GenerateItineraryServiceTest : StringSpec({
         )
     }
 
+    // ── 거절 이력 (TRIP-964) ────────────────────────────────────────────────
+
+    /**
+     * **재생성 = 직전 배치 전부에 대한 약한 거절.** 그리고 **바로 이번 생성이 첫 소비처다** —
+     * 기록만 하고 입력에 안 실으면 "다시 짜줘"가 같은 구성을 그대로 다시 내놓는다(이 티켓의
+     * 출발점이 된 사용자 요청이 정확히 그 불만이다).
+     */
+    "재생성이 직전 배치를 REGENERATED 로 기록하고 이번 입력에 싣는다" {
+        val placed = UUID.randomUUID()
+        val repo = FakeItineraries().apply {
+            byTrip[tripId] = Itinerary.create(
+                tripId, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+                listOf(ItineraryDay.of(start, 0, listOf(VisitSlot.of(placed, null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"))))),
+                now, GenerationState.COMPLETE,
+            )
+        }
+        val store = FakeRejectionStore()
+        val agent = CapturingAgent(now)
+
+        service(agent, fullPrefs, emptyList(), repo = repo, clock = clockAt("2026-07-31"), rejectionStore = store)
+            .generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        store.findByTrip(tripId) shouldBe listOf(RejectedPoi(placed, RejectedPoi.Kind.REGENERATED, 1))
+        agent.captured!!.rejections shouldBe listOf(RejectedPoi(placed, RejectedPoi.Kind.REGENERATED, 1))
+    }
+
+    /**
+     * **직접 만들기로 갈아타는 것도 재생성이다.** MANUAL 갈래는 조기 반환이라 공용 기록 지점을
+     * 안 지난다 — 검수에서 실제로 빠뜨렸던 자리라, 이 스펙이 그 갈래를 따로 지킨다.
+     */
+    "기존 일정을 두고 직접 만들기로 갈아타면 직전 배치가 REGENERATED 로 쌓인다" {
+        val placed = UUID.randomUUID()
+        val repo = FakeItineraries().apply {
+            byTrip[tripId] = Itinerary.create(
+                tripId, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+                listOf(ItineraryDay.of(start, 0, listOf(VisitSlot.of(placed, null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"))))),
+                now, GenerationState.COMPLETE,
+            )
+        }
+        val store = FakeRejectionStore()
+
+        service(CapturingAgent(now), fullPrefs, emptyList(), repo = repo, clock = clockAt("2026-07-31"), rejectionStore = store)
+            .generate(acc, tripId, GenerationMode.MANUAL)
+
+        store.findByTrip(tripId) shouldBe listOf(RejectedPoi(placed, RejectedPoi.Kind.REGENERATED, 1))
+    }
+
+    /** 첫 생성에는 지운 계획이 없다 — 거절이 성립하지 않는다. */
+    "첫 생성은 아무 거절도 기록하지 않는다" {
+        val store = FakeRejectionStore()
+        val agent = CapturingAgent(now)
+
+        service(agent, fullPrefs, emptyList(), rejectionStore = store).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        store.byTrip shouldBe emptyMap()
+        agent.captured!!.rejections shouldBe emptyList()
+    }
+
     "여행 시작 전이면 재생성된다" {
         val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt("2026-07-31"))
 
@@ -617,7 +679,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         // 1차·2차가 **같은 세션**을 봐야 취소가 2차에 전달된다.
         val sessions = genSessions(trips, sessionRepo, clock, deadlines)
         val second = SecondPhaseGenerator(agent, repo, genRevisions(repo, trips), sessions, NOOP_TX, clock)
-        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, sessions, genRevisions(repo, trips), StubRegions, NoPersonalization, NOOP_TX, clock, deadlines)
+        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, sessions, genRevisions(repo, trips), StubRegions, FakeRejectionStore(), NoPersonalization, NOOP_TX, clock, deadlines)
     }
 
     "추천 근거가 slotKey 로 슬롯에 붙어 영속된다(TRIP-306 · BR-U2-04)" {
@@ -1185,7 +1247,7 @@ class TwoPhaseDayCoverageTest : StringSpec({
                 override fun findStayNightAnchors(tripId: UUID, startDate: LocalDate, endDate: LocalDate) = emptyList<DayAnchorView>()
             }
             val second = SecondPhaseGenerator(agent, repo, genRevisions(repo, trips), genSessions(), NOOP_TX, clock)
-            GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, genSessions(), genRevisions(repo, trips), StubRegions, NoPersonalization, NOOP_TX, clock, defaultDeadlines)
+            GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, genSessions(), genRevisions(repo, trips), StubRegions, FakeRejectionStore(), NoPersonalization, NOOP_TX, clock, defaultDeadlines)
                 .generate(acc, tripId, GenerationMode.FULLY_AI)
 
             // 두 호출이 요청한 일자의 합 = 여행 일자, 중복 없음

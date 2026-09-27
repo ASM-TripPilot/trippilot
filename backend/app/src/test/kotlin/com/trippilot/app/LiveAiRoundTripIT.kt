@@ -6,6 +6,7 @@ import com.trippilot.itinerarygeneration.domain.DayAnchor
 import com.trippilot.itinerarygeneration.domain.FixedBlock
 import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.PreferenceProfile
+import com.trippilot.itinerarygeneration.domain.RejectedPoi
 import com.trippilot.itinerarygeneration.domain.ReplanCurrentSlot
 import com.trippilot.itinerarygeneration.domain.ReplanInput
 import com.trippilot.itinerarygeneration.domain.ReplanScope
@@ -220,6 +221,9 @@ class LiveAiRoundTripIT : AbstractPostgresIntegrationTest() {
                     ReplanCurrentSlot(poi, LocalTime.parse("09:00"), LocalTime.parse("10:00"), true, false, "예약이 있어요"),
                 ),
                 savedPlaces = listOf(SavedPlaceRef(UUID.randomUUID(), "담아 둔 카페")),
+                // 거절 이력(TRIP-964) — 실물이 받아 rejection_demoted 로그를 남기는지는 AI 쪽 몫이고,
+                // 여기서는 계약 수용(422 아님)만 본다.
+                rejections = listOf(RejectedPoi(UUID.randomUUID(), RejectedPoi.Kind.SWAPPED_OUT, 1)),
                 requestMeta = RequestMeta(UUID.randomUUID().toString(), Instant.now(), 25_000L),
             ),
         )
