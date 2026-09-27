@@ -1138,9 +1138,11 @@ C5 는 U1 **1차 컴포넌트인데 유일하게 안 만들어졌다.** 설계�
 지금 수수료가 발생하는 실 제휴 이동은 **0%** 다. FE 의 `stayOutbound.ts` 가 웹검색 폴백
 (`"{숙소명} 예약"`)으로 이동하는데, BR-U1-31 이 "장소 검색 우회"를 명시 허용해 규칙 위반은 아니다.
 
-**계약 무관으로 지금 되는 것**(설계 문서 칸 1): 아웃바운드를 서버로 승격 —
-`GET /stays/{stayId}/outbound` 가 클릭을 적고 302 로 보낸다. 계약 전부터 클릭 데이터가 쌓여
-협상 근거가 되고, OTA 교체가 앱 배포 없이 서버 변경만으로 된다. 이 노드를 쪼갤지는 착수 때 정한다.
+**진행(2026-09-27) — 칸 1(아웃바운드 서버 승격) 완료.** `modules/affiliate-link` 신설,
+`GET /stays/{stayId}/outbound` 가 클릭(`affiliate_click`, V2.54)을 적고 302 로 웹검색 폴백에 보낸다.
+숙소 이름은 accommodation-search 의 신설 `StayLookupFacade`(api) 로 가져온다. `AffiliateLinkFacade` 는
+소비자 0이라 안 만들었다(칸 2·3 에서 연다). FE 몫(orval 재생성 → `stayOutbound.ts` 교체)은 남아 있다.
+남은 것은 칸 2·3 — 여전히 계약(OTA) 선행이라 status 는 blocked 유지.
 
 가격(`LivePricePort`)도 여기 딸려 온다 — TourAPI 는 가격을 주지 않는다. 다만 BR-U1-14·15 가
 **가격 없이도 성립하도록** 설계해 두어(가격 부재는 카드 제외 사유가 아니다 · 실시간 가격순 미제공)

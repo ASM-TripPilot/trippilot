@@ -117,6 +117,10 @@ trippilot:
   stay:
     content:
       mode: ${STAY_CONTENT_MODE:stub}
+  # 제휴 아웃바운드 경로. OTA 계약 전이라 fallback(웹검색 — 수수료 없음) 하나뿐이다.
+  # 계약이 열리면 벤더 값이 추가되고, 그때 이 스위치가 딥링크 전환을 배포 없이 켠다.
+  affiliate:
+    mode: ${AFFILIATE_MODE:fallback}
 
 # 통합 테스트용 — AI 서비스 위치(compose 에서 AI_URL 주입). 미설정이면 integration 이 degrade.
 ai:

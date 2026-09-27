@@ -75,6 +75,7 @@ class RuntimeModeSummary(private val env: Environment) {
             Triple("reflect", "trippilot.ai.reflection.mode", "rule"),
             Triple("push", "trippilot.push.mode", "off"),
             Triple("reminder", "trippilot.ai.reminder-copy.mode", "off"),
+            Triple("affiliate", "trippilot.affiliate.mode", "fallback"),
         )
 
         /**
