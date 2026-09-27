@@ -363,7 +363,10 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     // ⚠️ TRIP-1027: g01 기간이 박수에서 파생돼 불일치 안내가 사라지며 `trip-new-step1-nights-mismatch`(band `g`)
     //    1키 삭제로 167→166. test-designer 선반영 — implementer 는 preview.tsx 에서 그 1키만 지우고 이 가드는
     //    안 만진다(지우기 전엔 167개라 red). 정확히 그 키인지는 아래 'TRIP-1027' describe 가 못박는다.
-    expect(PREVIEW_STATES).toHaveLength(166);
+    // ⚠️ TRIP-1026: d04 위저드 출처(＋ FAB 없음) 프리뷰 1키(`places-wizard`, band `d`) 추가로 166→167.
+    //    test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에 그 1키만 추가하고 이 가드는
+    //    안 만진다(추가 전엔 166개라 red). 정확히 그 키인지는 아래 'TRIP-1026' describe 가 못박는다.
+    expect(PREVIEW_STATES).toHaveLength(167);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -1399,6 +1402,29 @@ describe('🔴 TRIP-1012 · d02 select "이 여행 지역 밖 N곳" 머리글 �
     // 이웃 앵커 — 기존 select default 키가 딸려 사라지지 않았다.
     expect(PREVIEW_STATES.map((state) => state.key)).toContain(
       'saved-places-select'
+    );
+  });
+});
+
+describe('🔴 TRIP-1026 · d04 위저드 출처(＋ FAB 없음) 프리뷰 키 (band d)', () => {
+  it('places-wizard 키가 있고, 렌더하면 ♥ FAB 만 있고 ＋ FAB 는 없다', () => {
+    // 준비 — 새 키 엔트리를 찾는다(red-first: preview.tsx 에 추가 전엔 없다).
+    const entry = PREVIEW_STATES.find((state) => state.key === 'places-wizard');
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('d');
+    expect(entry?.label).toBe('d04 · 장소 탐색 위저드 출처');
+
+    // 실행 — 그 엔트리의 render() 를 그린다.
+    render(<>{entry?.render()}</>);
+
+    // 단언 — Figma 에 없는 새 상태라 6-b 육안 대조 자리다(＋ 가 빠져 ♥ 가 아래로 내려앉는 모양, 01b Q3).
+    expect(screen.getByTestId('explore-places-root')).toBeOnTheScreen();
+    expect(screen.getByTestId('explore-places-saved-fab')).toBeOnTheScreen();
+    expect(screen.queryByTestId('explore-places-create-fab')).toBeNull();
+
+    // 이웃 앵커 — 기존 d04 default 키가 딸려 사라지지 않았다.
+    expect(PREVIEW_STATES.map((state) => state.key)).toContain(
+      'places-default'
     );
   });
 });

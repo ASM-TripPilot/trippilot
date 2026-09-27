@@ -4,6 +4,7 @@ import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import { seedMustVisits } from '@/features/trip/model/mustVisitSeed';
+import { wizardOriginParams } from '@/features/explore/model/wizardOrigin';
 
 import { TripNewStep1Page } from './TripNewStep1Page';
 
@@ -221,6 +222,8 @@ describe('더 담기 목적지 분기 (TRIP-367 보존 · TRIP-689 d02 계약 �
   it('담은 곳이 0곳이면 장소 탐색(d04)으로 간다 — 목적지 없으면 region 빈 배열(TRIP-687 AC-3)', () => {
     // 이 테스트는 destinations 를 안 심는다(seedValidDraft 미호출) → 0지역 폴백 케이스다.
     // TRIP-687 로 d04 push 가 평문 문자열 → 객체형(`{pathname, params:{region}}`)으로 바뀐다.
+    // TRIP-1026: d04 갈래에만 위저드 출처 파라미터가 함께 실린다(d04 가 ＋ FAB 를 숨기는 신호). 기대값은
+    // 헬퍼 출력으로 만든다 — 'from' 을 여기 손으로 적으면 생산자 철자가 틀려도 green 이다(AC-6).
     // 0지역이면 `destinations.map(d=>d.region)` 이 `[]` 라 region 파라미터가 비어 전국 전체가 뜬다(AC-3).
     mockSavedPlaces = loaded([]);
     render(<TripNewStep1Page baseDate={BASE} />);
@@ -229,7 +232,7 @@ describe('더 담기 목적지 분기 (TRIP-367 보존 · TRIP-689 d02 계약 �
 
     expect(routerMock.push).toHaveBeenCalledWith({
       pathname: '/explore/places',
-      params: { region: [] },
+      params: { region: [], ...wizardOriginParams() },
     });
     expect(routerMock.push).toHaveBeenCalledTimes(1);
   });
@@ -239,7 +242,7 @@ describe('더 담기 → d04 지역 필터 파라미터 (TRIP-687)', () => {
   // 더 담기가 d04(전체 탐색)로 갈 때, 여행에 담은 지역들을 라우트 파라미터로 실어 보낸다(AC-5).
   // d04 갈래는 담은 곳이 0곳일 때만 타므로(TRIP-367 삼항 보존) 아래는 전부 savedPlaces=[] 로 둔다.
   // ⚠️ router.push 객체 인자는 재귀 완전 일치로 비교된다(expect spyMatchers isEqualCall = equals +
-  //    arity) — params 에 region 외 키가 붙거나 배열 순서가 다르면 red.
+  //    arity) — params 에 region·위저드 출처(TRIP-1026) 외 키가 붙거나 배열 순서가 다르면 red.
 
   it('AC-5·AC-6 · 2지역이면 두 표준명이 순서대로 region 파라미터에 실린다(원문 무변형)', () => {
     const store = useTripWizardStore.getState();
@@ -252,7 +255,7 @@ describe('더 담기 → d04 지역 필터 파라미터 (TRIP-687)', () => {
 
     expect(routerMock.push).toHaveBeenCalledWith({
       pathname: '/explore/places',
-      params: { region: ['부산광역시', '경주시'] },
+      params: { region: ['부산광역시', '경주시'], ...wizardOriginParams() },
     });
     expect(routerMock.push).toHaveBeenCalledTimes(1);
   });
@@ -266,7 +269,7 @@ describe('더 담기 → d04 지역 필터 파라미터 (TRIP-687)', () => {
 
     expect(routerMock.push).toHaveBeenCalledWith({
       pathname: '/explore/places',
-      params: { region: ['부산광역시'] },
+      params: { region: ['부산광역시'], ...wizardOriginParams() },
     });
     expect(routerMock.push).toHaveBeenCalledTimes(1);
   });

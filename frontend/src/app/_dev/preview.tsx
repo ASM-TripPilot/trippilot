@@ -3426,6 +3426,30 @@ export const PREVIEW_STATES: PreviewState[] = [
       ),
   },
   {
+    // TRIP-1026: 위저드에서 들른 d04 — ＋ FAB 없음, ♥ 가 그 자리로 내려앉는다(Figma 에 없는 상태, 01b Q3).
+    key: 'places-wizard',
+    band: 'd',
+    label: 'd04 · 장소 탐색 위저드 출처',
+    login: null,
+    render: () =>
+      withShellTabBar(
+        <PlaceExploreScreen
+          places={PREVIEW_PLACES}
+          savedPoiIds={PREVIEW_SAVED_POI_IDS}
+          selectedCategory={null}
+          searchText=""
+          onSelectCategory={noop}
+          onChangeSearchText={noop}
+          onToggleSave={noop}
+          onPressCreateTrip={noop}
+          hideCreateTrip
+          onPressSavedPlaces={noop}
+          onPressFilter={noop}
+        />,
+        'explore'
+      ),
+  },
+  {
     // TRIP-705: `saved-places-results` → `saved-places-default` 개명. Figma 1693:1183 default 6행.
     key: 'saved-places-default',
     band: 'd',

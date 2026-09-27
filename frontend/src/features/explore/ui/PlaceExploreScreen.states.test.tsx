@@ -373,6 +373,49 @@ describe('PlaceExploreScreen — 상태와 무관하게 FAB 2단을 유지한다
   );
 });
 
+// ── TRIP-1026 · 위저드에서 들어온 d04 는 ＋ FAB 를 그리지 않는다 (결정 1 = 숨김) ─────────────
+// 숨김 입력은 **새 옵셔널 prop `hideCreateTrip`** 이다. "onPressCreateTrip 미지정 = 숨김"으로 얹지
+// 않는다 — 형제 d05(`DestinationDetailScreen`)는 미지정을 "그리되 no-op"으로 잠가 두었다(AC-5).
+// 미지정(= false) 경로는 위 두 describe(17개·상태 무관 ＋ 상시)가 그대로 지킨다.
+describe('🔴 1026 · hideCreateTrip 이면 ＋ FAB 만 빠진다 (AC-1 · AC-5)', () => {
+  it('누를 수 있는 것은 17개에서 ＋ 하나만 빠진 16개다 — ♥·필터·칩·하트는 그대로', () => {
+    renderScreen({ hideCreateTrip: true });
+
+    // 앵커 — 목록 얼굴이 실제로 그려졌다(카드 5장).
+    expect(cardTestIds()).toHaveLength(5);
+
+    // 완전일치 목록 — ＋ 가 남아도, ♥ 가 딸려 사라져도 어긋난다.
+    expect(
+      screen
+        .getAllByRole('button')
+        .map((node) => String(node.props.testID))
+        .sort()
+    ).toEqual(
+      [
+        'explore-places-back',
+        ...CATEGORY_CODES.map((code) => `explore-places-category-${code}`),
+        ...['p1', 'p2', 'p3', 'p4', 'p5'].map(
+          (id) => `explore-places-save-${id}`
+        ),
+        'explore-places-saved-fab',
+        'explore-places-filter',
+      ].sort()
+    );
+  });
+
+  it.each(['loading', 'empty', 'error'] as const)(
+    '%s 얼굴에서도 ♥ 는 남고 ＋ 는 없다',
+    (kind) => {
+      renderState({ kind }, { hideCreateTrip: true });
+
+      // 짝 — 안내가 실제로 그려진 화면이어야 "없다"가 의미를 갖는다.
+      expect(screen.getByTestId(`explore-places-${kind}`)).toBeOnTheScreen();
+      expect(screen.getByTestId('explore-places-saved-fab')).toBeOnTheScreen();
+      expect(screen.queryByTestId('explore-places-create-fab')).toBeNull();
+    }
+  );
+});
+
 describe('PlaceExploreScreen — 담기 실패 배너 (AC-9 · AC-10 · AC-12 · 01b Seed Q5·Q6)', () => {
   const NOTICES: {
     name: string;

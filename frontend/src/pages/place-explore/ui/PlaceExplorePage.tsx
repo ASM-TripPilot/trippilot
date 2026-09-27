@@ -44,6 +44,7 @@ import { usePlacesInfinite } from '@/features/explore/model/usePlacesInfinite';
 import { useMultiRegionPlaces } from '@/features/explore/model/useMultiRegionPlaces';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
+import { isWizardOrigin } from '@/features/explore/model/wizardOrigin';
 import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 
@@ -135,7 +136,10 @@ function CategorySheet({
 }
 
 export function PlaceExplorePage(): ReactElement {
-  const { region } = useLocalSearchParams<{ region?: string | string[] }>();
+  const params = useLocalSearchParams<{ region?: string | string[] }>();
+  const { region } = params;
+  // 위저드에서 들른 d04 는 ＋(새 여행 = reset)를 그리지 않는다 — 진행 중 입력 보존(TRIP-1026).
+  const fromWizard = isWizardOrigin(params);
   // '더 담기'가 여행 지역들을 배열로 실어 보낸다(TRIP-687, 같은 키 반복 → 배열). 0/1지역은 기존
   // 무한스크롤 경로를, 2+지역은 지역별 병렬 조회 후 병합 경로를 탄다(어느 쪽이 그려지는지는 6-b 실기).
   const regions = Array.isArray(region) ? region : region ? [region] : [];
@@ -274,6 +278,7 @@ export function PlaceExplorePage(): ReactElement {
           useTripWizardStore.getState().reset();
           router.push('/trips/new/step1');
         }}
+        hideCreateTrip={fromWizard}
         onPressSavedPlaces={() => router.push('/explore/saved-places')}
         onPressFilter={() => setCategorySheetOpen(true)}
         onBack={() => router.back()}

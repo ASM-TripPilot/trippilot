@@ -64,6 +64,8 @@ export interface PlaceExploreScreenProps {
   /** 카드 본문 탭 → d06 상세. 미지정이면 카드는 눌러도 무동작(additive, 게이트① 재개봉 없음). */
   onPressCard?: (place: Place) => void;
   onPressCreateTrip: () => void;
+  /** true 면 ＋ FAB(여행 만들기)를 그리지 않는다 — 위저드에서 들어온 d04(TRIP-1026). 미지정 = false. */
+  hideCreateTrip?: boolean;
   /** ♥ FAB(우하단 위) → 담은 장소 d02. 미지정이면 무동작(옵셔널) — FAB 자체는 상시 렌더한다
    * (Figma 상시 노출, 콜백은 선택). 라우팅은 페이지가 `/explore/saved-places`로 배선. */
   onPressSavedPlaces?: () => void;
@@ -459,6 +461,7 @@ export function PlaceExploreScreen({
   onToggleSave,
   onPressCard,
   onPressCreateTrip,
+  hideCreateTrip = false,
   onPressSavedPlaces,
   onPressFilter,
   onBack,
@@ -555,7 +558,8 @@ export function PlaceExploreScreen({
 
         {/* 우하단 세로 2단 FAB(TRIP-708, d01 703 FAB 구조 재사용): 위=♥ 담은 장소(흰 원)·
             아래=＋ 여행 만들기(핑크 원). CtaBar(담은 수>0 조건부)를 대체한다 — 담은 수·상태
-            얼굴과 무관하게 상시 노출한다(Figma). 콜백은 옵셔널(♥)이라 미전달이면 무동작. */}
+            얼굴과 무관하게 상시 노출한다(Figma). 콜백은 옵셔널(♥)이라 미전달이면 무동작.
+            단 `hideCreateTrip`(위저드 출처, TRIP-1026)이면 ＋만 빠지고 ♥가 그 자리로 내려앉는다. */}
         <View className="absolute bottom-[100px] right-lg items-end gap-md">
           <Pressable
             testID="explore-places-saved-fab"
@@ -567,16 +571,18 @@ export function PlaceExploreScreen({
           >
             <HeartFilledGlyph size={26} />
           </Pressable>
-          <Pressable
-            testID="explore-places-create-fab"
-            accessibilityRole="button"
-            accessibilityLabel="여행 만들기"
-            onPress={onPressCreateTrip}
-            style={FAB_SHADOW}
-            className="h-[56px] w-[56px] items-center justify-center rounded-full bg-primary"
-          >
-            <PlusGlyph size={24} />
-          </Pressable>
+          {hideCreateTrip ? null : (
+            <Pressable
+              testID="explore-places-create-fab"
+              accessibilityRole="button"
+              accessibilityLabel="여행 만들기"
+              onPress={onPressCreateTrip}
+              style={FAB_SHADOW}
+              className="h-[56px] w-[56px] items-center justify-center rounded-full bg-primary"
+            >
+              <PlusGlyph size={24} />
+            </Pressable>
+          )}
         </View>
       </View>
     </SafeAreaView>

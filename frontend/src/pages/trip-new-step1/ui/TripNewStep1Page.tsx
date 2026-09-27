@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
+import { wizardOriginParams } from '@/features/explore/model/wizardOrigin';
 import { postTripsTripIdMustVisits } from '@/shared/api/generated/trips/trips';
 import type {
   CompanionType,
@@ -537,8 +538,12 @@ export function TripNewStep1Page({
                   },
                 }
               : {
+                  // 위저드 출처 표식 — d04 가 ＋(새 여행 = reset)를 숨긴다(TRIP-1026).
                   pathname: '/explore/places',
-                  params: { region: destinations.map((d) => d.region) },
+                  params: {
+                    region: destinations.map((d) => d.region),
+                    ...wizardOriginParams(),
+                  },
                 }
           )
         }

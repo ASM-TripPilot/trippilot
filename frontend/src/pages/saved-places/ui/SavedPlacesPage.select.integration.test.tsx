@@ -15,6 +15,7 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
 import type { MustVisitSeedItem } from '@/features/trip/model/mustVisitSeed';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { wizardOriginParams } from '@/features/explore/model/wizardOrigin';
 
 import { SavedPlacesPage } from './SavedPlacesPage';
 
@@ -841,5 +842,37 @@ describe('TRIP-1012 B2 · select 완료는 위저드 안 왕복 — 손으로 �
 
     expect(typedDraft()).toEqual(before);
     expect(seededIds()).toEqual(['p1']);
+  });
+});
+
+// ── TRIP-1026 · select 모드에서 d04 로 갈 때는 위저드 출처를 싣는다 (AC-2 · AC-6) ──────────────
+// select 는 위저드 안(1/4 '더 담기'·'전체 보기')에서만 열리므로 여기서 d04 로 가는 두 버튼은 곧 "위저드 →
+// d04" 다. d04 는 그 신호를 보고 ＋ FAB 를 숨긴다. save 모드 '둘러보기'는 위저드 밖이라 신호를 안 싣는다
+// (`SavedPlacesPage.integration.test.tsx` S-7 `[['/explore/places']]` 가 그대로 지킨다).
+// 기대값은 헬퍼 출력으로 만든다 — 'from' 을 손으로 적으면 생산자 철자가 틀려도 green 이다.
+
+describe('🔴 1026 AC-2 · select 의 d04 진입 두 곳이 위저드 출처를 싣는다', () => {
+  it('W2 · "+ 탐색에서 더 담기"를 누르면 위저드 출처를 실어 d04 로 간다', async () => {
+    await renderSelectLoaded();
+
+    fireEvent.press(screen.getByTestId('mustvisit-pick-addmore'));
+
+    expect(mockPush.mock.calls).toEqual([
+      [{ pathname: '/explore/places', params: wizardOriginParams() }],
+    ]);
+  });
+
+  it('W3 · 담은 곳 0곳 얼굴의 둘러보기를 누르면 위저드 출처를 실어 d04 로 간다', async () => {
+    serveSaved([]);
+    openSelect();
+    await waitFor(() =>
+      expect(screen.getByTestId('mustvisit-pick-empty')).toBeOnTheScreen()
+    );
+
+    fireEvent.press(screen.getByTestId('mustvisit-pick-browse'));
+
+    expect(mockPush.mock.calls).toEqual([
+      [{ pathname: '/explore/places', params: wizardOriginParams() }],
+    ]);
   });
 });
