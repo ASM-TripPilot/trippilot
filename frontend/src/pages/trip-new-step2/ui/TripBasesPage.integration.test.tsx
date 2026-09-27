@@ -231,6 +231,10 @@ function useFakeServer(): void {
   );
 }
 
+// 교체 흐름은 DELETE→POST→재조회 왕복이 여럿이라 로컬 ~1.7s, CI 러너에서 5s 기본 제한을 넘는다
+// (PR #766 CI 실측). DraftPage.integration 의 20s 선례와 같은 이유.
+jest.setTimeout(20000);
+
 beforeAll(() => {
   server.listen({ onUnhandledRequest: 'error' });
   server.events.on('request:start', ({ request }) => {
