@@ -1580,9 +1580,16 @@
         "description": "원 일정 슬롯 1개 — KB-1 컨텍스트이자 후보 풀 합류 대상.\n\n`VisitSlotDisplaySchema` 를 재사용하지 않는다: 그것은 **AI 산출물의 사영**이고\n이쪽은 **백엔드가 주는 입력**이다. 모양이 닮아도 방향이 반대라, 한쪽을 고치면\n다른 쪽이 끌려가는 결합을 만들지 않는다. `placement_reason` 은 산출물 쪽엔 없다.",
         "properties": {
           "end_at": {
-            "format": "time",
-            "title": "End At",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End At"
           },
           "ends_next_day": {
             "default": false,
@@ -1611,15 +1618,20 @@
             "type": "string"
           },
           "start_at": {
-            "format": "time",
-            "title": "Start At",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start At"
           }
         },
         "required": [
-          "poi_id",
-          "start_at",
-          "end_at"
+          "poi_id"
         ],
         "title": "ReplanSlotSchema",
         "type": "object"
@@ -2185,9 +2197,16 @@
             "title": "Distance Range"
           },
           "end_at": {
-            "format": "time",
-            "title": "End At",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End At"
           },
           "ends_next_day": {
             "default": false,
@@ -2204,15 +2223,20 @@
             "type": "string"
           },
           "start_at": {
-            "format": "time",
-            "title": "Start At",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start At"
           }
         },
         "required": [
-          "poi_id",
-          "start_at",
-          "end_at"
+          "poi_id"
         ],
         "title": "VisitSlotDisplaySchema",
         "type": "object"
