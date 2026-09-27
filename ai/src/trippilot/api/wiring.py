@@ -904,14 +904,12 @@ def _replan_fixed_blocks(
         if block.poi_id in seen:
             continue
         seen.add(block.poi_id)
-        blocks.append(FixedBlock(
-            poi_id=PoiId(block.poi_id),
-            window=TimeWindow(
-                start=datetime.combine(date, block.start_at, tzinfo=tz),
-                end=datetime.combine(date, block.end_at, tzinfo=tz),
-            ),
-            reason="locked_block",
-        ))
+        # generate 와 같은 변환기를 쓴다. `FixedBlockSchema` 는 start·dwell_min 이지
+        # start_at·end_at 이 아니다 — 손으로 다시 쓰면 그 차이를 밟는다. 실제로
+        # #744 가 여기서 `block.start_at` 을 읽어 **잠금 슬롯이 한 건이라도 실리면
+        # AttributeError 500** 이었다(백엔드 실왕복 실측, 2026-09-28). 스텁 계약
+        # 테스트가 locked_blocks: [] 만 보내 못 잡았다.
+        blocks.append(_fixed_block(block, tz))
     for slot in request.current_slots:
         if not slot.is_fixed or slot.poi_id in seen:
             continue
