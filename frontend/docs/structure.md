@@ -181,6 +181,9 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `EditorView` · `EditorViewSlot` · `SlotDropZone` | `widgets/map-sheet-shell/ui` | **TRIP-797 신규 → TRIP-921로 widgets 승격** — 셸 위 일정 편집 뷰(롱프레스 재정렬·리스트 끝 드롭존 삭제). h12 편집·i07·직접 짜기가 같은 뷰를 쓴다. 편집 화면을 또 만들지 말고 이 뷰에 슬롯·콜백을 넘긴다. 상세는 `.claude/rules/layer-widgets.md`·`traps-draglist.md` |
 | `SlotStopCard` | `entities/itinerary-slot/ui` | **신규(TRIP-783)** — `PoiSlotCard`와 병존하는 결과 화면 공용 슬롯 카드(번호 배지·시각 칩·다른 후보 링크·72 사진). `PoiSlotCard`를 대체하지 않는다(표면이 다름) |
 | `ALT_LABEL` | `entities/itinerary-slot/config/altLabel` | **신규(TRIP-783)** — `'다른 후보 ›'` 단일 공용 상수(config 세그먼트). `DraftScreen`의 옛 로컬 상수는 아직 교체 안 됨(소비 화면 재작성 후속 몫). `ItineraryEditScreen`의 동명 로컬 상수는 TRIP-797 묶음 C로 그 화면째 삭제돼 드리프트 해소(2026-09-21) |
+| `canOpenTripRecords` | `features/record/model/recordsCalendar`(TRIP-1015 신규) | 여행 하나가 "기록 화면을 열 수 있는가"(ENDED이거나 시작일 ≤ 오늘) 판정 순수 함수. 비공개 `isPastTrip`(지난 여행만)과 다르다 — 진행 중 여행도 true를 낸다. 찾아봤으나 없어서 신설(grep `canOpen\|isOngoing\|activeTrip` 0건) |
+| `recordsTripIdForDate` | `features/record/model/recordsCalendar`(TRIP-1015 신규) | 캘린더 날짜 → 그 날을 덮고 `canOpenTripRecords`인 여행 중 시작일이 가장 늦은 것의 id(없으면 `null`). `markedDaysOfMonth`(정방향: 여행→날짜)의 역방향 짝 — 역조회 함수가 이전엔 없었다 |
+| `RegionPickerTab` | `features/explore/model/regionPickerPurpose`(TRIP-1015 신규) | `'home'` 하나뿐인 좁은 유니온 타입. `regionPickerHref(purpose, opts?: { tab: RegionPickerTab })`가 opts를 받으면 결과 화면에 진입 탭을 실어 보낸다(홈 검색 → 지역 결과에서 탭바가 "탐색"으로 잘못 보이던 것의 배선). tab 없는 호출은 기존 문자열 그대로(완전 일치 유지) |
 
 > ⚠️ **재사용 API 의 위젯 행(`widgets/` 위치 행 전부)은 "화면·컨테이너 제외" 규칙의 예외다** — `widgets/` 층은 여러 화면이 공유하는 조립 단위를 두는 자리라 재구현 방지 색인에 싣는 것이 오히려 목적에 맞는다(TRIP-805).
 
