@@ -85,7 +85,10 @@ export function SavedPlacesPage(): ReactElement {
   );
   // select 모드(TRIP-706)에서 고른 poiId 들 — 이 화면(페이지)이 선택 집합을 소유하고(D2), 완료 시
   // 선택분만 시드한다(TRIP-491 재현 봉합 — 전에는 그려진 전부를 시드했다). save 모드에선 미사용.
-  const [selectedPoiIds, setSelectedPoiIds] = useState<string[]>([]);
+  // 초기값은 위저드에 이미 있는 꼭 갈 곳이다(TRIP-1012 #035 — '더 담기'로 오면 체크된 채 보인다).
+  const [selectedPoiIds, setSelectedPoiIds] = useState<string[]>(() =>
+    useTripWizardStore.getState().mustVisits.map((m) => m.sourcePoiId)
+  );
 
   // 여행 지역 필터(TRIP-689) — g01·꼭 갈 곳의 '더 담기'가 d02로 올 때 실어 보낸 region.
   // expo-router는 1원소 배열 파라미터를 문자열로 되돌릴 수 있어(단일 목적지 여행) 배열로 정규화한다.
@@ -188,15 +191,22 @@ export function SavedPlacesPage(): ReactElement {
   // region 필터로 0건이면 필터를 풀고 전체 + 폴백 안내를 그린다(TRIP-982 D6 — 위 `regionFallback`).
   // select-empty 얼굴은 진짜로 담은 곳이 0일 때만 뜬다(save 모드의 RegionEmptyBlock 은 select 에 없다).
   if (mode === 'select') {
-    // 선택 수·완료 활성·시드는 보이는 목록 안의 선택만 센다 — 폴백이 풀려 목록이 줄면
-    // 안 보이는 선택이 "N곳 선택됨"에 남아 시드 0과 어긋난다(TRIP-982 A8).
+    // 지역 밖도 숨기지 않는다(TRIP-1012 A4 · INV-4) — 안(`displayList`) 뒤에 "이 여행 지역 밖 N곳"
+    // 머리글과 함께 이어 그린다. 폴백이면 `displayList`가 이미 전체라 밖은 빈다(01b Q2).
+    const outsideRegionPlaces = orderedList.filter(
+      (saved) => !displayList.includes(saved)
+    );
+    const visibleList = [...displayList, ...outsideRegionPlaces];
+    // 선택 수·완료 활성·시드는 보이는 목록 안의 선택만 센다 — 목록이 줄면 안 보이는 선택이
+    // "N곳 선택됨"에 남아 시드 0과 어긋난다(TRIP-982 A8).
     const visibleSelectedPoiIds = selectedPoiIds.filter((id) =>
-      displayList.some((saved) => saved.place.poiId === id)
+      visibleList.some((saved) => saved.place.poiId === id)
     );
     return (
       <MustVisitPickScreen
         state={listState}
         savedPlaces={displayList}
+        outsideRegionPlaces={outsideRegionPlaces}
         regionFallback={regionFallback}
         selectedPoiIds={visibleSelectedPoiIds}
         onToggleSelect={(poiId) =>
@@ -208,12 +218,19 @@ export function SavedPlacesPage(): ReactElement {
         }
         onComplete={() => {
           // 지금 화면에 그려진 목록 중 고른 것만 시드로 옮긴다(전부 아님 — TRIP-491 급소).
-          const chosen = displayList.filter((saved) =>
+          const chosen = visibleList.filter((saved) =>
             selectedPoiIds.includes(saved.place.poiId)
           );
-          useTripWizardStore
-            .getState()
-            .seedMustVisitsFromD02(seedMustVisits(chosen));
+          // 행이 없어 풀 수도 없던 위저드 항목(담기를 푼 곳)은 뺀 것으로 치지 않고 원래 시드
+          // 그대로 남긴다(TRIP-1012 Q1 · BR-U1-04). 단 사용자가 체크를 푼 항목은 그 뒤 목록에서
+          // 사라져도 되살리지 않는다(03b 경고-1). 완료는 여전히 교체다.
+          const store = useTripWizardStore.getState();
+          const kept = store.mustVisits.filter(
+            (m) =>
+              selectedPoiIds.includes(m.sourcePoiId) &&
+              !visibleList.some((saved) => saved.place.poiId === m.sourcePoiId)
+          );
+          store.seedMustVisitsFromD02([...seedMustVisits(chosen), ...kept]);
           router.push('/trips/new/step1');
         }}
         onPressAddMore={() => router.push('/explore/places')}
@@ -246,9 +263,11 @@ export function SavedPlacesPage(): ReactElement {
         const activePlaces = displayList.filter(
           (saved) => !releasedPoiIds.has(saved.place.poiId)
         );
-        useTripWizardStore
-          .getState()
-          .seedMustVisitsFromD02(seedMustVisits(activePlaces));
+        // 새 여행 진입이다(TRIP-1012 #031·#074) — 직전 드래프트를 비운 **뒤에** 시드한다. 거꾸로면
+        // reset 이 방금 켠 `preserveMustVisitsOnce` 를 꺼 셸이 시드를 지운다. 여행지는 추정하지 않는다.
+        const store = useTripWizardStore.getState();
+        store.reset();
+        store.seedMustVisitsFromD02(seedMustVisits(activePlaces));
         router.push('/trips/new/step1');
       }}
       onPressBrowse={() => router.push('/explore/places')}

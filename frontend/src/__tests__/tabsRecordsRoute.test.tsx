@@ -1,6 +1,14 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import type { Trip } from '@/shared/api/generated/schemas';
+import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import {
+  captureDraftAtNextCall,
+  freshWizardDraft,
+  leavePreviousTripDraft,
+  resetWizardDraft,
+  wizardDraftData,
+} from '@/test-support/wizardDraftFixture';
 
 /**
  * TRIP-575 · (tabs)/records.tsx — 기록 탭 허브 라우트 배선(항법).
@@ -120,5 +128,30 @@ describe('월 이동 상태 전이 (AC-6)', () => {
     const afterPrev = screen.getByTestId('record-calendar-month-label').props
       .children;
     expect(afterPrev).toBe(before);
+  });
+});
+
+// ── TRIP-1012 B1 · 새 진입점은 이동 직전 위저드 드래프트를 비운다 (#074 · D9) ─────────────
+// 직전 여행이 남긴 드래프트(여행지·기간·인원·동반·예산·취향·만든 여행 id·꼭 갈 곳)가 새 여행으로
+// 새지 않게, push 가 불리는 **그 순간** 드래프트가 새 여행의 얼굴(스토어 초기값)인지 잰다.
+// 위저드 안 왕복(더 담기 완료·2/4 '처음부터')은 비우지 않는다 — `tripWizardEntryCensus` 참고.
+afterEach(resetWizardDraft);
+
+describe('🔴 1012-B1 · 기록 빈 상태 [새 여행] 은 직전 드래프트를 비우고 위저드로 간다', () => {
+  it('저장 여행 0건에서 누르면 push 시점의 드래프트가 새 여행의 초기값이고, push 는 step1 로 1회다', () => {
+    leavePreviousTripDraft();
+    // 앵커 — 아직 안 비었다(픽스처가 조용히 망가지면 아래 단언이 공짜로 통과한다).
+    expect(wizardDraftData()).not.toEqual(freshWizardDraft());
+    expect(useTripWizardStore.getState().destinations).toHaveLength(1);
+    const draftAtPush = captureDraftAtNextCall(mockPush);
+
+    setTrips([]);
+    render(<RecordsRoute />);
+
+    fireEvent.press(screen.getByTestId('record-calendar-empty-create'));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(String(mockPush.mock.calls[0][0])).toBe('/trips/new/step1');
+    expect(draftAtPush()).toEqual(freshWizardDraft());
   });
 });

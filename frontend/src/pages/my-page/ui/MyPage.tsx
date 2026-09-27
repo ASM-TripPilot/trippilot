@@ -20,6 +20,7 @@ import {
 } from '@/features/settings/model/tripBuckets';
 import { MyPageScreen } from '@/features/settings/ui/MyPageScreen';
 import { StyleSummaryCard } from '@/features/settings/ui/StyleSummaryCard';
+import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 
 import { TripCardContainer } from './TripCardContainer';
 
@@ -83,7 +84,11 @@ export function MyPage(): ReactElement {
   const styleVM = style.data ? buildStyleCardModel(style.data) : undefined;
   const tags = styleVM?.kind === 'official' ? styleVM.descriptors : undefined;
 
-  const onPressCreateTrip = (): void => router.push('/trips/new/step1');
+  // 새 여행 진입 — 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074).
+  const onPressCreateTrip = (): void => {
+    useTripWizardStore.getState().reset();
+    router.push('/trips/new/step1');
+  };
 
   const photoCountByTrip = new Map(
     (records.data?.items ?? []).map((item) => [item.tripId, item.photoCount])

@@ -12,6 +12,14 @@ import {
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
+import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import {
+  captureDraftAtNextCall,
+  freshWizardDraft,
+  leavePreviousTripDraft,
+  resetWizardDraft,
+  wizardDraftData,
+} from '@/test-support/wizardDraftFixture';
 
 import { PlaceExplorePage } from './PlaceExplorePage';
 
@@ -707,5 +715,28 @@ describe('P-11 · 다지역 부분 실패면 degraded 배너를 얹고 다시 �
     await waitFor(() =>
       expect(hitsOf('GET', '/api/v1/places')).toHaveLength(4)
     );
+  });
+});
+
+// ── TRIP-1012 B1 · 새 진입점은 이동 직전 위저드 드래프트를 비운다 (#074 · D9) ─────────────
+// d04 ＋ FAB 는 위저드 '더 담기'(담은 곳 0곳)로 들어와서도 닿는다 — FAB 는 명시적인 "새 여행"이라
+// 그때도 비운다(브리프 맹점 ①). push 가 불리는 **그 순간** 드래프트가 스토어 초기값인지 잰다.
+afterEach(resetWizardDraft);
+
+describe('🔴 1012-B1 · d04 ＋ FAB 는 직전 드래프트를 비우고 위저드로 간다', () => {
+  it('push 시점의 드래프트가 새 여행의 초기값이고, push 는 step1 로 1회다', async () => {
+    leavePreviousTripDraft();
+    // 앵커 — 아직 안 비었다(픽스처가 조용히 망가지면 아래 단언이 공짜로 통과한다).
+    expect(wizardDraftData()).not.toEqual(freshWizardDraft());
+    expect(useTripWizardStore.getState().destinations).toHaveLength(1);
+    const draftAtPush = captureDraftAtNextCall(mockPush);
+    setAccessToken('valid-access');
+    savedRows = [savedRowOf('p1')];
+
+    await renderPage();
+    fireEvent.press(screen.getByTestId('explore-places-create-fab'));
+
+    expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
+    expect(draftAtPush()).toEqual(freshWizardDraft());
   });
 });

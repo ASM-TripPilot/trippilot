@@ -460,3 +460,29 @@ describe('헤더 뒤로 가기', () => {
     expect(routerMock.push).not.toHaveBeenCalled();
   });
 });
+
+describe("TRIP-1012 Q3 · notrip '처음부터'는 위저드 안 왕복 — 드래프트를 비우지 않는다 (#074 금지)", () => {
+  it('여행지·기간이 그대로 남은 채 step1 로 1회 이동한다(재제출이 쉽도록)', () => {
+    // 준비 — beforeEach 드래프트(부산 2·경주 1·기간)에서 만든 여행 id 만 없다 → notrip 얼굴.
+    useTripWizardStore.setState({ createdTripId: undefined });
+    const snapshot = () => {
+      const s = useTripWizardStore.getState();
+      return {
+        destinations: s.destinations,
+        startDate: s.startDate,
+        endDate: s.endDate,
+      };
+    };
+    const before = snapshot();
+    // 앵커 — 보존을 잴 값이 실제로 있다.
+    expect(before.destinations).toHaveLength(2);
+    render(<TripNewStep2Page />);
+
+    fireEvent.press(screen.getByTestId('trip-base-notrip-restart'));
+
+    expect(routerMock.push).toHaveBeenCalledTimes(1);
+    expect(routerMock.push).toHaveBeenCalledWith('/trips/new/step1');
+    // "새 진입점은 비운다"를 여기까지 넓히면 이 사용자는 여행지를 처음부터 다시 친다.
+    expect(snapshot()).toEqual(before);
+  });
+});

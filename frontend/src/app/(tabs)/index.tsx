@@ -24,6 +24,7 @@ import {
 } from '@/features/home/model/homePhase';
 import type { HomePhase } from '@/features/home/model/homeTypes';
 import { HomeScreen } from '@/features/home/ui/HomeScreen';
+import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 
 interface HomeNav {
   onPressCreateTrip: () => void;
@@ -111,7 +112,11 @@ export default function HomeRoute() {
   const [savedMenuOpen, setSavedMenuOpen] = useState(false);
 
   const nav: HomeNav = {
-    onPressCreateTrip: () => router.push('/trips/new/step1'),
+    // 새 여행 진입 — 직전 여행 드래프트를 이동 전에 비운다(TRIP-1012 #074).
+    onPressCreateTrip: () => {
+      useTripWizardStore.getState().reset();
+      router.push('/trips/new/step1');
+    },
     onPressSavedPlaces: () => {
       setSavedMenuOpen(false);
       router.push('/explore/saved-places');

@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import { Fragment, type ReactElement } from 'react';
 import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -33,6 +33,8 @@ export interface MustVisitPickScreenProps {
   /** 여행 지역 필터가 0건이라 페이지가 필터를 풀고 전체를 넘겼는가(TRIP-982 D6) — 목록 맨 위에
    * 그 사실을 한 줄로 밝힌다(조용히 풀면 INV-4 위반). */
   regionFallback?: boolean;
+  /** 여행 지역 밖 담은 곳(TRIP-1012) — 목록 뒤 "이 여행 지역 밖 N곳" 머리글 아래에 그린다. */
+  outsideRegionPlaces?: SavedPlace[];
   /** 지금 선택된 poiId 들 — 선택 여부는 색이 아니라 이 집합 + 글리프 컴포넌트 정체성으로 잰다. */
   selectedPoiIds: string[];
   onToggleSelect: (poiId: string) => void;
@@ -203,6 +205,7 @@ function CompleteBar({
 
 function ResultsBody({
   savedPlaces,
+  outsideRegionPlaces,
   regionFallback,
   selectedPoiIds,
   onToggleSelect,
@@ -210,12 +213,15 @@ function ResultsBody({
   onPressAddMore,
 }: {
   savedPlaces: SavedPlace[];
+  outsideRegionPlaces: SavedPlace[];
   regionFallback: boolean;
   selectedPoiIds: string[];
   onToggleSelect: (poiId: string) => void;
   onComplete: () => void;
   onPressAddMore: () => void;
 }): ReactElement {
+  // 안 → (밖이 있으면) 머리글 → 밖. 순번·마지막 행 판정은 보이는 전체 순서로 이어 센다(01b Q2).
+  const rows = [...savedPlaces, ...outsideRegionPlaces];
   return (
     <>
       <ScrollView
@@ -231,15 +237,25 @@ function ResultsBody({
             여행 지역과 맞는 곳이 없어 전체를 보여드려요
           </Text>
         ) : null}
-        {savedPlaces.map((saved, index) => (
-          <PickRow
-            key={saved.savedPlaceId}
-            saved={saved}
-            rank={index + 1}
-            selected={selectedPoiIds.includes(saved.place.poiId)}
-            isLast={index === savedPlaces.length - 1}
-            onToggleSelect={onToggleSelect}
-          />
+        {rows.map((saved, index) => (
+          <Fragment key={saved.savedPlaceId}>
+            {/* Figma 에 표면이 없다(TRIP-1012) — 폴백 한 줄과 같은 캡션 토큰으로 머리글만 둔다. */}
+            {index === savedPlaces.length && outsideRegionPlaces.length > 0 ? (
+              <Text
+                testID="mustvisit-pick-region-outside"
+                className="pt-sm font-noto text-caption text-muted"
+              >
+                {`이 여행 지역 밖 ${outsideRegionPlaces.length}곳`}
+              </Text>
+            ) : null}
+            <PickRow
+              saved={saved}
+              rank={index + 1}
+              selected={selectedPoiIds.includes(saved.place.poiId)}
+              isLast={index === rows.length - 1}
+              onToggleSelect={onToggleSelect}
+            />
+          </Fragment>
         ))}
         <Pressable
           testID="mustvisit-pick-addmore"
@@ -387,6 +403,7 @@ export function MustVisitPickScreen({
   state,
   savedPlaces,
   regionFallback = false,
+  outsideRegionPlaces = [],
   selectedPoiIds,
   onToggleSelect,
   onComplete,
@@ -408,7 +425,7 @@ export function MustVisitPickScreen({
 
   const subtitle =
     face === 'results'
-      ? `담은 곳 ${savedPlaces.length}곳 · ${selectedPoiIds.length}곳 선택됨`
+      ? `담은 곳 ${savedPlaces.length + outsideRegionPlaces.length}곳 · ${selectedPoiIds.length}곳 선택됨`
       : face === 'loading'
         ? '담은 곳 불러오는 중'
         : null;
@@ -427,6 +444,7 @@ export function MustVisitPickScreen({
         {face === 'results' ? (
           <ResultsBody
             savedPlaces={savedPlaces}
+            outsideRegionPlaces={outsideRegionPlaces}
             regionFallback={regionFallback}
             selectedPoiIds={selectedPoiIds}
             onToggleSelect={onToggleSelect}

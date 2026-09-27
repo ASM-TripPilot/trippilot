@@ -3496,6 +3496,27 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   {
+    // TRIP-1012 — Figma 에 없는 새 표면("이 여행 지역 밖 N곳" 머리글). 6-b 육안 자리.
+    key: 'saved-places-select-outside',
+    band: 'd',
+    label: 'd02 · 꼭 갈 곳 고르기 지역 밖',
+    login: null,
+    render: () => (
+      <MustVisitPickScreen
+        state={{ kind: 'results' }}
+        savedPlaces={PREVIEW_SAVED_PLACES.slice(0, 2)}
+        outsideRegionPlaces={PREVIEW_SAVED_PLACES.slice(2)}
+        selectedPoiIds={['p-1', 'p-3']}
+        onToggleSelect={noop}
+        onComplete={noop}
+        onPressAddMore={noop}
+        onRetry={noop}
+        onPressBrowse={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  {
     key: 'saved-places-select-loading',
     band: 'd',
     label: 'd02 · 꼭 갈 곳 고르기 loading',

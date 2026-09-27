@@ -357,7 +357,10 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     // ⚠️ TRIP-1011: g02 숙소 선택 시트 섹션 분리 프리뷰 1키(`trip-new-step2-staysheet-sections`, band `g`) 추가로
     //    165→166. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에 그 1키만 추가하고 이
     //    가드는 안 만진다(추가 전엔 165개라 red). 정확히 그 키인지는 아래 'TRIP-1011' describe 가 못박는다.
-    expect(PREVIEW_STATES).toHaveLength(166);
+    // ⚠️ TRIP-1012: d02 select 지역 밖 머리글 프리뷰 1키(`saved-places-select-outside`, band `d`) 추가로
+    //    166→167. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에 그 1키만 추가하고 이
+    //    가드는 안 만진다(추가 전엔 166개라 red). 정확히 그 키인지는 아래 'TRIP-1012' describe 가 못박는다.
+    expect(PREVIEW_STATES).toHaveLength(167);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -1379,6 +1382,31 @@ describe('🔴 TRIP-1011 · g02 숙소 선택 시트 섹션 분리 프리뷰 키
     // 이웃 앵커 — 기존 평면 시트 키가 딸려 사라지지 않았다.
     expect(PREVIEW_STATES.map((state) => state.key)).toContain(
       'trip-new-step2-staysheet'
+    );
+  });
+});
+
+describe('🔴 TRIP-1012 · d02 select "이 여행 지역 밖 N곳" 머리글 프리뷰 키 (band d)', () => {
+  it('saved-places-select-outside 키가 있고, 렌더하면 지역 밖 머리글이 뜬다', () => {
+    // 준비 — 새 키 엔트리를 찾는다(red-first: preview.tsx 에 추가 전엔 없다).
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'saved-places-select-outside'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('d');
+    expect(entry?.label).toBe('d02 · 꼭 갈 곳 고르기 지역 밖');
+
+    // 실행 — 그 엔트리의 render() 를 그린다.
+    render(<>{entry?.render()}</>);
+
+    // 단언 — Figma 에 없는 새 표면이라 6-b 육안 대조 자리다. 지역 밖 목록을 실제로 넘긴 얼굴이어야 뜬다.
+    expect(
+      screen.getByTestId('mustvisit-pick-region-outside')
+    ).toBeOnTheScreen();
+
+    // 이웃 앵커 — 기존 select default 키가 딸려 사라지지 않았다.
+    expect(PREVIEW_STATES.map((state) => state.key)).toContain(
+      'saved-places-select'
     );
   });
 });

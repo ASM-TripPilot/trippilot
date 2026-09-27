@@ -6,6 +6,14 @@ import { stayKey } from '@/features/stay/model/stayKey';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 
 import { DestinationDetailPage } from './DestinationDetailPage';
+import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import {
+  captureDraftAtNextCall,
+  freshWizardDraft,
+  leavePreviousTripDraft,
+  resetWizardDraft,
+  wizardDraftData,
+} from '@/test-support/wizardDraftFixture';
 
 /**
  * U1 소급 백필(20260824) · d03 목적지 상세 배선 회귀 심판.
@@ -397,5 +405,29 @@ describe('R · 지역이 바뀌어 재사용돼도 이전 지역의 로컬 상�
     expect(
       screen.queryByTestId('destination-detail-stay-save-error')
     ).toBeNull();
+  });
+});
+
+// ── TRIP-1012 B1 · 새 진입점은 이동 직전 위저드 드래프트를 비운다 (#074 · D9) ─────────────
+// 직전 여행이 남긴 드래프트(여행지·기간·인원·동반·예산·취향·만든 여행 id·꼭 갈 곳)가 새 여행으로
+// 새지 않게, push 가 불리는 **그 순간** 드래프트가 새 여행의 얼굴(스토어 초기값)인지 잰다.
+// 위저드 안 왕복(더 담기 완료·2/4 '처음부터')은 비우지 않는다 — `tripWizardEntryCensus` 참고.
+afterEach(resetWizardDraft);
+
+describe('🔴 1012-B1 · d03 목적지 상세 ＋ 여행 만들기 FAB 는 직전 드래프트를 비우고 위저드로 간다', () => {
+  it('push 시점의 드래프트가 새 여행의 초기값이고, push 는 step1 로 1회다', () => {
+    leavePreviousTripDraft();
+    // 앵커 — 아직 안 비었다(픽스처가 조용히 망가지면 아래 단언이 공짜로 통과한다).
+    expect(wizardDraftData()).not.toEqual(freshWizardDraft());
+    expect(useTripWizardStore.getState().destinations).toHaveLength(1);
+    const draftAtPush = captureDraftAtNextCall(mockPush);
+
+    render(<DestinationDetailPage />);
+
+    fireEvent.press(screen.getByTestId('destination-detail-create-trip-fab'));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(String(mockPush.mock.calls[0][0])).toBe('/trips/new/step1');
+    expect(draftAtPush()).toEqual(freshWizardDraft());
   });
 });
