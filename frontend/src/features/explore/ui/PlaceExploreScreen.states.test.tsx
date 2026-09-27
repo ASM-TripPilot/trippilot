@@ -270,6 +270,111 @@ describe('PlaceExploreScreen — filter-zero (AC-6 · BR-U1-16 취지 · 01b See
   });
 });
 
+/** filter-zero 안내 안에서 누를 수 있는 것의 testID(정렬) — "이 얼굴의 버튼은 정확히 이것뿐"을
+ * 완전일치로 잰다. 안내 서브트리로 좁혀 FAB·칩·필터 버튼이 섞이지 않게 한다. */
+function filterZeroButtonIds(): string[] {
+  return within(screen.getByTestId('explore-places-filterzero'))
+    .getAllByRole('button')
+    .map((node) => String(node.props.testID))
+    .sort();
+}
+
+// TRIP-1019 #027 — 검색어와 카테고리가 **둘 다** 걸려 0건이면, 지목한 하나만 푸는 기존 버튼 옆에
+// 두 조건을 한 번에 푸는 두 번째 버튼(`-clear-all`, "조건 모두 해제", e02 의 link 선례)을 준다.
+// 제목은 지금처럼 검색어 하나를 지목한다(01b Q6 ⓐ — 기존 filter-zero 테스트 무변경).
+// 판정 재료는 화면이 이미 받는 `searchText`·`selectedCategory` 두 prop 이다(상태 유니온 무변경).
+describe('🔴 TRIP-1019 #027 · filter-zero 에서 두 조건 모두 해제 (BR-U1-16 취지 · 01b Q6)', () => {
+  it('검색어·카테고리가 둘 다 걸려 있으면 "조건 모두 해제" 가 지목 해제 버튼 옆에 생기고, 누르면 onClearAllFilters 만 오른다', () => {
+    const onClearAllFilters = jest.fn();
+    const handlers = renderState(
+      { kind: 'filter-zero', blame: 'search' },
+      { searchText: '경복궁', selectedCategory: '카페', onClearAllFilters }
+    );
+
+    const notice = screen.getByTestId('explore-places-filterzero');
+    // 제목은 그대로 검색어 하나를 지목한다(Q6 ⓐ).
+    expect(
+      within(notice).getByText('‘경복궁’ 때문에 0건이에요')
+    ).toBeOnTheScreen();
+
+    // 이 얼굴의 버튼은 정확히 두 개 — 지목 해제(기존) + 모두 해제(신규).
+    expect(filterZeroButtonIds()).toEqual([
+      'explore-places-filterzero-clear',
+      'explore-places-filterzero-clear-all',
+    ]);
+    expect(
+      within(screen.getByTestId('explore-places-filterzero-clear')).getByText(
+        '검색어 지우기'
+      )
+    ).toBeOnTheScreen();
+
+    const clearAll = screen.getByTestId('explore-places-filterzero-clear-all');
+    const label = within(clearAll).getByText('조건 모두 해제');
+    // e02 선례의 두 번째 버튼 위계(link — 테두리 없는 primary 글자). outline 이면 글자가 text-ink 다.
+    expect(String(label.props.className).split(/\s+/)).toContain(
+      'text-primary'
+    );
+
+    fireEvent.press(clearAll);
+    // 두 콜백이 섞이면 "하나만 풀기"와 "둘 다 풀기"가 같은 일을 하게 된다.
+    expect(onClearAllFilters).toHaveBeenCalledTimes(1);
+    expect(handlers.onClearFilter).not.toHaveBeenCalled();
+  });
+
+  it('검색어만 걸려 0건이면 풀 것이 하나라 "조건 모두 해제" 는 없다', () => {
+    renderState(
+      { kind: 'filter-zero', blame: 'search' },
+      {
+        searchText: '경복궁',
+        selectedCategory: null,
+        onClearAllFilters: jest.fn(),
+      }
+    );
+
+    // 긍정 앵커 — 안내와 지목 해제 버튼은 떠 있다(부재 단언이 빈 화면으로 통과하지 않게).
+    expect(filterZeroButtonIds()).toEqual(['explore-places-filterzero-clear']);
+    expect(
+      screen.queryByTestId('explore-places-filterzero-clear-all')
+    ).toBeNull();
+    expect(screen.queryAllByText('조건 모두 해제')).toHaveLength(0);
+  });
+
+  it('카테고리만 걸려 0건이면 "조건 모두 해제" 는 없다', () => {
+    renderState(
+      { kind: 'filter-zero', blame: 'category' },
+      { searchText: '', selectedCategory: '카페', onClearAllFilters: jest.fn() }
+    );
+
+    expect(filterZeroButtonIds()).toEqual(['explore-places-filterzero-clear']);
+    expect(
+      within(screen.getByTestId('explore-places-filterzero-clear')).getByText(
+        '‘카페’ 필터 해제'
+      )
+    ).toBeOnTheScreen();
+    expect(
+      screen.queryByTestId('explore-places-filterzero-clear-all')
+    ).toBeNull();
+  });
+
+  it('검색어가 공백뿐이면 조건이 아니다 — 카테고리 하나만 걸린 것으로 보고 "조건 모두 해제" 를 두지 않는다', () => {
+    // 페이지는 `searchText.trim()` 으로 hasQuery 를 판정한다(공백 검색어 = 검색 조건 없음 → blame
+    // category). 화면이 trim 없이 `searchText !== ''` 로 보면 여기서 버튼이 하나 더 생겨 red.
+    renderState(
+      { kind: 'filter-zero', blame: 'category' },
+      {
+        searchText: '   ',
+        selectedCategory: '카페',
+        onClearAllFilters: jest.fn(),
+      }
+    );
+
+    expect(filterZeroButtonIds()).toEqual(['explore-places-filterzero-clear']);
+    expect(
+      screen.queryByTestId('explore-places-filterzero-clear-all')
+    ).toBeNull();
+  });
+});
+
 describe('PlaceExploreScreen — error (AC-7 · INV-4)', () => {
   it('에러 안내와 재시도를 그리고, 빈 목록으로 위장하지 않는다', () => {
     const handlers = renderState({ kind: 'error' });

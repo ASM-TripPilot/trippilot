@@ -437,7 +437,7 @@ export function DestinationDetailScreen({
               accessibilityLabel={
                 savedMenu.open
                   ? '담은 곳 메뉴 닫기'
-                  : `담은 곳 ${savedMenu.savedCount}곳`
+                  : `담은 장소 ${savedMenu.savedCount}곳`
               }
               onPress={savedMenu.onToggle}
               style={FAB_SHADOW}

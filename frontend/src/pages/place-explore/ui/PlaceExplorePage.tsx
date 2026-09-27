@@ -247,6 +247,12 @@ export function PlaceExplorePage(): ReactElement {
     }
   }
 
+  function handleClearAllFilters(): void {
+    setSaveError(null);
+    setSearchText('');
+    setSelectedCategory(null);
+  }
+
   function handleRetry(): void {
     setSaveError(null);
     void refetch();
@@ -288,6 +294,7 @@ export function PlaceExplorePage(): ReactElement {
         onRetry={handleRetry}
         onPressChangeRegion={() => router.push(regionPickerHref('places'))}
         onClearFilter={handleClearFilter}
+        onClearAllFilters={handleClearAllFilters}
         onPressSaveErrorAction={handlePressSaveErrorAction}
         onEndReached={handleEndReached}
         isFetchingMore={isFetchingNextPage}

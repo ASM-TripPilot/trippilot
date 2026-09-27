@@ -87,6 +87,9 @@ export interface PlaceExploreScreenProps {
   onPressChangeRegion?: () => void;
   /** filter-zero 안내의 해제 버튼 — 지목한 하나만 해제한다(01b Seed Q3 ⓐ). */
   onClearFilter?: () => void;
+  /** filter-zero 안내의 "조건 모두 해제" — 검색어·카테고리가 둘 다 걸렸을 때만 보이는 두 번째
+   * 버튼(TRIP-1019 #027). 미지정 = 무동작. */
+  onClearAllFilters?: () => void;
   /** 배너 액션 버튼(재시도·로그인하기 공용) — 무엇을 하는지는 `saveError.action`이 정한다. */
   onPressSaveErrorAction?: () => void;
   /** 목록 끝에 닿으면 다음 장을 이어 받는다(TRIP-502 무한 스크롤). 미지정이면 무동작(additive). */
@@ -219,40 +222,6 @@ function CategoryChips({
   );
 }
 
-/** 정렬 칩 — 선택지가 아니라 **현재 정렬을 알리는 라벨**이다. 활성 "요즘 담긴 순"(연핑크
- * `bg-primary-pale`) 하나만 그린다: "지금 뜨는 순"은 `savedCount`가 계약의 유일한 정렬 재료라
- * 같은 순서가 되고, "가까운 순"은 좌표 파라미터가 없어 둘 다 숨긴다(TRIP-989 D15 · u1 F-2 미노출).
- * `Pressable`이 아니라 `View`다 — 누를 수 있는 것 목록(AC-1 개수 계약)에 걸리면 안 된다. */
-function SortChip({
-  testID,
-  label,
-}: {
-  testID: string;
-  label: string;
-}): ReactElement {
-  return (
-    <View
-      testID={testID}
-      className="rounded-pill bg-primary-pale px-[13px] py-[7px]"
-    >
-      <Text className="font-noto-bold text-[12.5px] font-bold text-primary">
-        {label}
-      </Text>
-    </View>
-  );
-}
-
-function SortRow(): ReactElement {
-  return (
-    <View className="flex-row items-center gap-sm">
-      <Text className="font-noto-bold text-caption font-bold text-muted-soft">
-        정렬
-      </Text>
-      <SortChip testID="explore-places-sort-saved" label="요즘 담긴 순" />
-    </View>
-  );
-}
-
 /** loading(AC-4·01b Seed Q8) — 2열×2행 스켈레톤 카드 4장. d04 카드 형상(사진 132px·radius
  * 14)을 회색 블록으로 접는다. 행 testID가 2열 판정의 유일한 렌더 관측 수단이다 — NativeWind
  * `className`은 jest에서 `style`로 안 남아 `flexDirection` 신호를 못 쓴다(★1). */
@@ -315,12 +284,14 @@ function ListEmptyBlock({
   selectedCategory,
   onPressChangeRegion,
   onClearFilter,
+  onClearAllFilters,
 }: {
   state: PlaceListState;
   searchText: string;
   selectedCategory: PoiCategory | null;
   onPressChangeRegion?: () => void;
   onClearFilter?: () => void;
+  onClearAllFilters?: () => void;
 }): ReactElement | null {
   if (state.kind === 'loading') {
     return <SkeletonGrid />;
@@ -371,6 +342,18 @@ function ListEmptyBlock({
               variant: 'outline',
               onPress: onClearFilter,
             },
+            // 풀 조건이 둘일 때만 한 번에 푸는 선택지를 더한다(TRIP-1019 #027). 공백 검색어는
+            // 페이지 판정(`trim`)과 같이 조건이 아니다.
+            ...(searchText.trim() !== '' && selectedCategory !== null
+              ? [
+                  {
+                    testID: 'explore-places-filterzero-clear-all',
+                    label: '조건 모두 해제',
+                    variant: 'link' as const,
+                    onPress: onClearAllFilters,
+                  },
+                ]
+              : []),
           ]}
         />
       </View>
@@ -471,6 +454,7 @@ export function PlaceExploreScreen({
   onRetry,
   onPressChangeRegion,
   onClearFilter,
+  onClearAllFilters,
   onPressSaveErrorAction,
   onEndReached,
   isFetchingMore = false,
@@ -510,7 +494,6 @@ export function PlaceExploreScreen({
                 selected={selectedCategory}
                 onSelect={onSelectCategory}
               />
-              <SortRow />
               {state.kind === 'error' ? (
                 <ErrorNotice onRetry={onRetry} />
               ) : null}
@@ -524,6 +507,7 @@ export function PlaceExploreScreen({
               selectedCategory={selectedCategory}
               onPressChangeRegion={onPressChangeRegion}
               onClearFilter={onClearFilter}
+              onClearAllFilters={onClearAllFilters}
             />
           }
           renderItem={({ item }) => (

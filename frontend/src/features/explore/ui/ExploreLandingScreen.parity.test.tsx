@@ -180,3 +180,59 @@ describe('AC-6 · 여행자 일정 레인 제거', () => {
     expect(screen.queryByText(/준비\s*중/)).toBeNull();
   });
 });
+
+// TRIP-1019 #024(결정 1) — 닫힌 하트 토글의 음성 라벨이 세는 것은 **담은 장소 수**뿐이다
+// (`savedCount` = 라우트의 `savedPoiIds.length`, 저장 숙소는 안 센다). 그래서 "담은 곳 N곳" 은
+// 숙소만 저장한 사용자에게 "0곳" 이라는 거짓을 말한다 — 라벨을 "담은 장소 N곳" 으로 좁힌다.
+// 라벨은 음성(접근성) 전용이라 Figma 로 판정할 것이 없다(브리프 §5).
+// ★ `toHaveAccessibleName(문자열)` 은 **완전일치**다(RNTL 13.3.3 `matches.js` exact 기본 true,
+//   node_modules 실검증) — "담은 장소 2곳 더보기" 같은 군더더기도 red.
+describe('🔴 TRIP-1019 #024 · 닫힌 하트 토글 라벨 "담은 장소 N곳"', () => {
+  function renderWithSavedMenu(open: boolean, savedCount: number) {
+    render(
+      <ExploreLandingScreen
+        {...baseProps({
+          savedMenu: {
+            open,
+            savedCount,
+            onToggle: () => {},
+            onPressSavedPlaces: () => {},
+            onPressSavedStays: () => {},
+          },
+        })}
+      />
+    );
+  }
+
+  it('담은 장소 2개면 토글의 접근성 이름이 "담은 장소 2곳" 이고, "담은 곳 N곳" 라벨은 어디에도 없다', () => {
+    renderWithSavedMenu(false, 2);
+
+    const toggle = screen.getByTestId('explore-saved-menu-toggle');
+    expect(toggle).toHaveAccessibleName('담은 장소 2곳');
+    // 긍정 앵커는 바로 위 토글 — 옛 문구가 다른 요소로 새지 않았는지 화면 전체를 본다.
+    expect(screen.queryAllByLabelText(/담은 곳 \d+곳/)).toHaveLength(0);
+  });
+
+  it('담은 장소 0개(숙소만 저장한 사용자 포함)면 "담은 장소 0곳" 이다 — "담은 곳 0곳" 이 아니다', () => {
+    renderWithSavedMenu(false, 0);
+
+    const toggle = screen.getByTestId('explore-saved-menu-toggle');
+    expect(toggle).toHaveAccessibleName('담은 장소 0곳');
+    expect(screen.queryAllByLabelText('담은 곳 0곳')).toHaveLength(0);
+  });
+
+  it('열린 상태 라벨 "담은 곳 메뉴 닫기" 와 미니 FAB "담은 장소 N곳" 은 그대로다 (01b Q5 유지)', () => {
+    renderWithSavedMenu(true, 2);
+
+    // 열린 메뉴는 장소·숙소를 둘 다 담으므로 "담은 곳" 이 맞다(Q5) — 바꾸지 않는다.
+    expect(
+      screen.getByTestId('explore-saved-menu-toggle')
+    ).toHaveAccessibleName('담은 곳 메뉴 닫기');
+    expect(screen.getByTestId('explore-saved-places-fab')).toHaveAccessibleName(
+      '담은 장소 2곳'
+    );
+    expect(screen.getByTestId('explore-saved-stays-fab')).toHaveAccessibleName(
+      '저장한 숙소'
+    );
+  });
+});
