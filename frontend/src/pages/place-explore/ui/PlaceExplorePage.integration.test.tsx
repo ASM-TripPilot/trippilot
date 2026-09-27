@@ -12,6 +12,7 @@ import {
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
+import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 import { wizardOriginParams } from '@/features/explore/model/wizardOrigin';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import {
@@ -814,5 +815,84 @@ describe('🔴 1026 AC-4 · 위저드 출처 d04 에서 무엇을 눌러도 진�
     await screen.findByTestId('explore-places-saveerror-login');
     expect(wizardDraftData()).toEqual(before);
     expect(mockPush.mock.calls).not.toContainEqual(['/trips/new/step1']);
+  });
+});
+
+// ── TRIP-1023 칸 B #026 · d04 지역 칩(결정5 · Seed Q4·Q5·Q6) ─────────────────────────────────
+// 라벨은 라우트 `region` 을 배열로 편 값에서 나온다(없음 → "전국", 한 곳 → 이름, 여러 곳 → "{첫} 외 N곳").
+// 칩 목적지는 어디서 왔든 같다 — 지역 선택 places(Seed Q6). 기대 URL 은 **헬퍼 출력**
+// (`regionPickerHref('places')`)으로만 적는다 — 테스트가 철자를 손으로 적으면 헬퍼·수신자 철자가 틀려도
+// green 이 된다(TRIP-985 규약). 복귀 시 다지역·`from` 파라미터 소실은 Seed Q6 가 새 티켓 후보로 넘겼다
+// (jest 가 원리적으로 못 보는 `dismissTo` 교체 — traps-explore).
+
+describe('🔴 1023-B #026 · 지역 칩 라벨은 라우트 region 에서 나온다 (AC-B5 · AC-B6 · AC-B10)', () => {
+  it('region 이 없으면(탐색 탭·홈 "장소 더 보기") 칩이 "전국" 이다', async () => {
+    await renderPage();
+
+    // 앵커 — 전국 조회였다(region 파라미터 없음).
+    expect(
+      new URL(hitsOf('GET', '/api/v1/places')[0].url).searchParams.get('region')
+    ).toBeNull();
+    expect(
+      within(screen.getByTestId('explore-places-region')).getByText('전국')
+    ).toBeOnTheScreen();
+  });
+
+  it('region 이 한 곳이면 그 이름(피커가 싣는 한글 이름 그대로)이 라벨이다', async () => {
+    mockParams = { region: '강릉시' };
+
+    await renderPage();
+
+    const chip = screen.getByTestId('explore-places-region');
+    expect(within(chip).getByText('강릉시')).toBeOnTheScreen();
+    expect(within(chip).queryByText('전국')).toBeNull();
+  });
+
+  it('region 이 여러 곳(더 담기)이면 "{첫 지역} 외 N곳" 이다', async () => {
+    mockParams = { region: ['부산광역시', '경주시'] };
+    // 다지역 fan-out 경로(P-9)라 지역별로 서로 다른 카드를 준다 — 같은 poiId 가 겹치지 않게.
+    server.use(
+      http.get(`${BASE}/places`, ({ request }) => {
+        const region = new URL(request.url).searchParams.get('region');
+        const items =
+          region === '부산광역시'
+            ? [makePlace('b1', '감천문화마을', '명소', '부산광역시', 12)]
+            : region === '경주시'
+              ? [makePlace('g1', '불국사', '명소', '경주시', 40)]
+              : [];
+        return HttpResponse.json({ items, nextCursor: null });
+      })
+    );
+
+    await renderPage();
+
+    expect(
+      within(screen.getByTestId('explore-places-region')).getByText(
+        '부산광역시 외 1곳'
+      )
+    ).toBeOnTheScreen();
+  });
+});
+
+describe('🔴 1023-B #026 · 칩을 누르면 어디서 왔든 지역 선택(places)으로 간다 (AC-B7 · Seed Q6)', () => {
+  it.each([
+    { name: '지역 없음(전국)', region: undefined, wizard: false },
+    { name: '한 곳', region: '강릉시', wizard: false },
+    { name: '다지역', region: ['부산광역시', '경주시'], wizard: false },
+    { name: '위저드 출처(더 담기)', region: ['부산광역시'], wizard: true },
+  ])('$name', async ({ region, wizard }) => {
+    // 헬퍼 호출은 it 본문 안에서만 한다(위 1026 절 주석 — 표에서 부르면 수집 단계에서 죽는다).
+    mockParams = {
+      ...(region ? { region } : {}),
+      ...(wizard ? wizardOriginParams() : {}),
+    };
+
+    await renderPage();
+    fireEvent.press(screen.getByTestId('explore-places-region'));
+
+    // 빈 상태 "다른 지역 보기"(states 통합 테스트)와 같은 목적지 — push 한 번, 다른 곳으로는 안 간다.
+    expect(mockPush.mock.calls).toEqual([[regionPickerHref('places')]]);
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockBack).not.toHaveBeenCalled();
   });
 });

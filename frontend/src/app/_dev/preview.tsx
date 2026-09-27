@@ -2297,6 +2297,27 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  {
+    // TRIP-1023 #007 — 검색 중 얼굴(제목 "검색 결과")·시군구 카드 시도명 부제. 표본은 이름에 '천'이 든
+    // 두 곳: 시도 행 인천광역시(부제 없음)·시군구 홍천군(부제 강원특별자치도 — 긴 시도명 줄바꿈 육안).
+    key: 'region-picker-search',
+    band: 'd',
+    label: 'd03 · 여행지 선택 검색 결과',
+    login: null,
+    render: () => (
+      <RegionPickerScreen
+        purpose="trip"
+        query="천"
+        regions={PREVIEW_REGIONS.filter((region) => region.name.includes('천'))}
+        isLoading={false}
+        isError={false}
+        onChangeQuery={noop}
+        onSelectRegion={noop}
+        onRetry={noop}
+        onBack={noop}
+      />
+    ),
+  },
   // e05 숙소 등록 default(TRIP-730, Figma 1703) — 좌표 확정 + 날짜 선택 완료. 확정 카드(분홍 침대)·
   // 요일 날짜 필드("6.10 (수) – 6.12 (금)" + "2박" + 달력/⌄)·"✓ 이 숙소 등록"을 눈으로 대조.
   {

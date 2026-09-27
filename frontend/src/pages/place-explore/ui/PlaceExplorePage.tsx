@@ -293,6 +293,7 @@ export function PlaceExplorePage(): ReactElement {
         saveError={saveError}
         onRetry={handleRetry}
         onPressChangeRegion={() => router.push(regionPickerHref('places'))}
+        regionNames={regions}
         onClearFilter={handleClearFilter}
         onClearAllFilters={handleClearAllFilters}
         onPressSaveErrorAction={handlePressSaveErrorAction}

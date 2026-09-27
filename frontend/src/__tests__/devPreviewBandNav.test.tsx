@@ -2,7 +2,12 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { ComponentType, ReactElement } from 'react';
 import type { ViewStyle } from 'react-native';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 
 /**
  * TRIP-641 파트 2 — dev 정적 프리뷰(`_dev/preview.tsx`)의 밴드 2단 네비.
@@ -369,7 +374,11 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     // ⚠️ TRIP-1032: h07 다른 여행 생성 중 안내 2키(`h07-generating-busy`·`-uncancelable`, band `h`) 추가로
     //    167→169. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에 그 2키만 추가하고 이
     //    가드는 안 만진다(추가 전엔 167개라 red). 정확히 그 키인지는 아래 'TRIP-1032' describe 가 못박는다.
-    expect(PREVIEW_STATES).toHaveLength(169);
+    // ⚠️ TRIP-1023 칸 B: d03 여행지 선택 검색 결과(제목 "검색 결과"·시군구 카드 시도명 부제) 프리뷰 1키
+    //    (`region-picker-search`, band `d`) 추가로 169→170. test-designer 선반영(카운트 가드만) — implementer 는
+    //    preview.tsx 에 그 1키만 추가하고 이 가드는 안 만진다(추가 전엔 169개라 red). 정확히 그 키인지는 아래
+    //    'TRIP-1023 칸 B' describe 가 못박는다. devPreviewBandSort 는 밴드 h·l 만 잠가 band d 와 무관(오갱신 금지).
+    expect(PREVIEW_STATES).toHaveLength(170);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -1428,6 +1437,42 @@ describe('🔴 TRIP-1026 · d04 위저드 출처(＋ FAB 없음) 프리뷰 키 (
     // 이웃 앵커 — 기존 d04 default 키가 딸려 사라지지 않았다.
     expect(PREVIEW_STATES.map((state) => state.key)).toContain(
       'places-default'
+    );
+  });
+});
+
+// TRIP-1023 칸 B #007 — 검색 중 얼굴은 화면 로컬 상태가 아니라 `query` prop 이라 정적으로 열 수 있다. 실화면은
+// 백엔드 카탈로그가 있어야 보이므로, 긴 시도명("강원특별자치도")이 48% 폭 카드에서 몇 줄이 되는지(브리프 §7 ⑨)를
+// 6-b 에서 눈으로 볼 수단이 이 키다. 표본은 `PREVIEW_REGIONS` 에서 이름에 '천'이 든 두 곳 — 시도 행(인천광역시,
+// 부제 없음)과 시군구(홍천군, 부제 강원특별자치도)가 한 화면에 나란히 선다.
+describe('🔴 TRIP-1023 칸 B · d03 여행지 선택 검색 결과 프리뷰 키 (band d)', () => {
+  it('region-picker-search 키가 있고, 렌더하면 "검색 결과" 제목과 시군구 카드의 시도명 부제가 보인다', () => {
+    // 준비 — 새 키 엔트리를 찾는다(red-first: preview.tsx 에 추가 전엔 없다).
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'region-picker-search'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('d');
+    expect(entry?.label).toBe('d03 · 여행지 선택 검색 결과');
+
+    // 실행 — 그 엔트리의 render() 를 그린다.
+    render(<>{entry?.render()}</>);
+
+    // 단언 — 검색 중 얼굴(제목)과 두 카드. 시군구엔 부제가 붙고 시도 행엔 같은 이름이 한 번뿐이다.
+    expect(screen.getByText('검색 결과')).toBeOnTheScreen();
+    expect(screen.queryByText('지역별 둘러보기')).toBeNull();
+    expect(
+      within(screen.getByTestId('explore-region-51720')).getByText(
+        '강원특별자치도'
+      )
+    ).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId('explore-region-28')).getAllByText('인천광역시')
+    ).toHaveLength(1);
+
+    // 이웃 앵커 — 기존 d03 default 키가 딸려 사라지지 않았다.
+    expect(PREVIEW_STATES.map((state) => state.key)).toContain(
+      'region-picker-default'
     );
   });
 });

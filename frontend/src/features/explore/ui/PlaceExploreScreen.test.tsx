@@ -290,8 +290,8 @@ describe('🔴 TRIP-1019 #025 · 정렬 줄은 그리지 않는다 (결정 7 · 
   });
 });
 
-describe('PlaceExploreScreen — 누를 수 있는 것 22개 (AC-1 · AC-2 · AC-3 · 01b Seed §2 · TRIP-1020 AC-B4)', () => {
-  it('뒤로 · 칩 8개 · 카드 5장 · 하트 5개 · FAB 2개 · 필터 = 22개다 (CTA 제거·FAB/필터 추가·정렬칩 비-Pressable·카드 버튼화)', () => {
+describe('PlaceExploreScreen — 누를 수 있는 것 23개 (AC-1 · AC-2 · AC-3 · 01b Seed §2 · TRIP-1020 AC-B4 · TRIP-1023 AC-B5)', () => {
+  it('뒤로 · 칩 8개 · 카드 5장 · 하트 5개 · FAB 2개 · 필터 · 지역 칩 = 23개다 (CTA 제거·FAB/필터 추가·정렬칩 비-Pressable·카드 버튼화·지역 칩 상시)', () => {
     // 이 렌더는 onPressSavedPlaces·onPressFilter 를 **안 넘긴다** — 그래도 두 FAB·필터가 떠야
     // 한다(Figma 는 상시 노출, 콜백은 옵셔널·무동작 허용). "콜백 없으면 안 그리는" 구현이면
     // 여기서 개수가 어긋나 red.
@@ -303,6 +303,7 @@ describe('PlaceExploreScreen — 누를 수 있는 것 22개 (AC-1 · AC-2 · AC
     // BottomTabBar 는 화면이 아니라 페이지가 그리므로(3-a) 여기 개수에 안 든다.
     // TRIP-1020: 카드 루트도 role=button 이 되어(스크린리더가 누를 수 있게) 카드 5장이 더해져 22.
     // 카드 하나라도 role 을 잃으면 목록이 어긋나 red 다.
+    // TRIP-1023 칸 B #026: 지역 칩(`explore-places-region`)이 상시 버튼으로 더해져 23.
     expect(
       screen
         .getAllByRole('button')
@@ -317,6 +318,7 @@ describe('PlaceExploreScreen — 누를 수 있는 것 22개 (AC-1 · AC-2 · AC
         'explore-places-saved-fab',
         'explore-places-create-fab',
         'explore-places-filter',
+        'explore-places-region',
       ].sort()
     );
   });

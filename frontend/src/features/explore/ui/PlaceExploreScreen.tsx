@@ -18,6 +18,7 @@ import { StateNotice } from '@/shared/ui/StateNotice';
 
 import type { PlaceListState } from '../model/placeListState';
 import type { PlaceSaveNotice } from '../model/placeSaveGuard';
+import { formatRegionChipLabel } from '../model/regionChipLabel';
 import {
   BackChevronGlyph,
   FilterSlidersGlyph,
@@ -83,8 +84,10 @@ export interface PlaceExploreScreenProps {
   saveError?: PlaceSaveNotice | null;
   /** error 안내의 `다시 시도` — 실제 재조회에 배선한다(스텁 금지). */
   onRetry?: () => void;
-  /** empty 안내의 `다른 지역 보기`. */
+  /** empty 안내의 `다른 지역 보기`·상단 지역 칩(TRIP-1023 #026) 공용. */
   onPressChangeRegion?: () => void;
+  /** 지역 칩 라벨의 출처 — 페이지가 라우트 `region`을 배열로 편 것. 미지정 = [] = "전국". */
+  regionNames?: readonly string[];
   /** filter-zero 안내의 해제 버튼 — 지목한 하나만 해제한다(01b Seed Q3 ⓐ). */
   onClearFilter?: () => void;
   /** filter-zero 안내의 "조건 모두 해제" — 검색어·카테고리가 둘 다 걸렸을 때만 보이는 두 번째
@@ -175,6 +178,30 @@ function SearchBar({
         <FilterSlidersGlyph size={20} tone="ink" />
       </Pressable>
     </View>
+  );
+}
+
+/** 카테고리 칩 줄 바로 아래 지역 칩(TRIP-1023 #026, Seed Q4) — Figma 에 없는 새 표면이라
+ * 카테고리 미선택 칩 토큰을 그대로 빌린다. 라벨 Text 에는 라벨만 담는다(핀 글리프는 별 요소). */
+function RegionChip({
+  label,
+  onPress,
+}: {
+  label: string;
+  onPress?: () => void;
+}): ReactElement {
+  return (
+    <Pressable
+      testID="explore-places-region"
+      accessibilityRole="button"
+      onPress={onPress}
+      className="flex-row items-center gap-xs self-start rounded-pill border border-hairline-strong bg-canvas px-[15px] py-[9px]"
+    >
+      <MapPinGlyph size={14} tone="muted" />
+      <Text className="font-noto-bold text-label font-bold text-ink">
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -453,6 +480,7 @@ export function PlaceExploreScreen({
   saveError,
   onRetry,
   onPressChangeRegion,
+  regionNames = [],
   onClearFilter,
   onClearAllFilters,
   onPressSaveErrorAction,
@@ -493,6 +521,10 @@ export function PlaceExploreScreen({
               <CategoryChips
                 selected={selectedCategory}
                 onSelect={onSelectCategory}
+              />
+              <RegionChip
+                label={formatRegionChipLabel(regionNames)}
+                onPress={onPressChangeRegion}
               />
               {state.kind === 'error' ? (
                 <ErrorNotice onRetry={onRetry} />
