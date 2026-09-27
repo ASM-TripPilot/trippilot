@@ -39,7 +39,10 @@ import type {
 } from '@/shared/api/generated/schemas';
 
 import { useSavedStays } from '@/features/stay/model/savedStays';
-import { openStayOutbound } from '@/features/stay/model/stayOutbound';
+import {
+  openStayOutbound,
+  stayOutboundMode,
+} from '@/features/stay/model/stayOutbound';
 import { stayKey } from '@/features/stay/model/stayKey';
 import { OtaChoiceSheet } from '@/features/stay/ui/OtaChoiceSheet';
 import {
@@ -211,9 +214,15 @@ export function StayDetailPage(): ReactElement {
           }
         }}
         onRetry={() => void detailQuery.refetch()}
-        // 딥링크 URL 계약이 없어 이름만 나른다(장소 상세 선례, TRIP-989 Q5).
+        // 딥링크 URL 계약이 없어 링크는 안 붙인다(TRIP-989 Q5). 주소가 비어 있지 않을 때만 둘째 줄로 붙인다
+        // (TRIP-1019 #017) — null·키 없음·"" 은 이름만(`"undefined"`·빈 줄이 새지 않게 truthy 로 가른다).
         onPressShare={() => {
-          if (item !== null) void Share.share({ message: item.name });
+          if (item !== null)
+            void Share.share({
+              message: item.address
+                ? `${item.name}\n${item.address}`
+                : item.name,
+            });
         }}
       />
       {otaOpen && item !== null ? (
@@ -223,6 +232,8 @@ export function StayDetailPage(): ReactElement {
           dontShowAgain={dontShowAgain}
           onToggleDontShowAgain={() => setDontShowAgain((on) => !on)}
           showDontShowAgain={isAuthed}
+          // 이동 방식이 시트 얼굴(수수료 고지 유무)을 정한다 — 지금은 늘 웹검색(TRIP-1019 #018).
+          outbound={stayOutboundMode()}
           onCancel={handleCancelOutbound}
           onConfirm={handleConfirmOutbound}
           onRetry={() => void runOutbound()}

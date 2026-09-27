@@ -336,7 +336,9 @@ export function StayDetailScreen({
             >
               <MapView
                 center={{ lat: detail.lat, lng: detail.lng }}
-                pins={[{ number: 1, lat: detail.lat, lng: detail.lng }]}
+                pins={[
+                  { number: 1, lat: detail.lat, lng: detail.lng, kind: 'stay' },
+                ]}
                 viewOnly
               />
             </View>

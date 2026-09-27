@@ -318,3 +318,77 @@ describe('T9 · OTA 행 표시명 (TRIP-988 B-1 · B-2)', () => {
     }
   );
 });
+
+/**
+ * TRIP-1019 #018(결정 6 · BR-U1-30 · BR-U1-31) — 이동 방식 prop `outbound`('affiliate' | 'webSearch').
+ *
+ * 무엇을 보장하나: 지금 [이동]은 제휴 딥링크가 아니라 구글 웹검색(BR-U1-31 검색 우회)이다. 그 얼굴(webSearch)은
+ * 수수료 고지를 숨기고 버튼을 "검색 결과로 이동"으로 바꾸며, "다시 보지 않기"도 그리지 않는다(01b Q3 — 계정
+ * 단위 제휴 고지 억제 동의를 고지 없는 시트에서 받지 않는다, BR-U6-33). 본문·OTA 행은 그대로다(01b Q4).
+ *
+ * ★ 짝(법정 고지 보존): 제휴 모드(affiliate)는 **그대로** 수수료 고지 + "{OTA명}로 이동" + 체크박스다. 실 딥링크
+ * 계약이 생기면 돌아와야 할 BR-U1-30 경로라, 고지를 통째로 지워 폴백 테스트만 초록으로 만드는 구현을 막는다.
+ * prop 을 생략하면 제휴 얼굴이다(위 T1~T9 가 그 얼굴을 잠근다) — 호출부가 방식을 빠뜨리면 고지 쪽으로 넘친다.
+ */
+describe('W · 웹검색 폴백 얼굴과 제휴 얼굴 (TRIP-1019 #018 · 01b Q3·Q4)', () => {
+  it('webSearch: 수수료 안내 박스·문구가 없고, 버튼 이름이 "검색 결과로 이동"이다', () => {
+    const onConfirm = jest.fn();
+    render(
+      <OtaChoiceSheet {...sheetProps({ outbound: 'webSearch', onConfirm })} />
+    );
+
+    // 앵커: default 얼굴이 그려졌다 — 본문·OTA 행은 그대로(01b Q4).
+    expect(screen.getByText(TITLE)).toBeOnTheScreen();
+    expect(screen.getByText(BODY)).toBeOnTheScreen();
+    expect(screen.getByTestId('stay-ota-option-NAVER')).toBeOnTheScreen();
+    // 금지: 수수료 고지.
+    expect(screen.queryByTestId('stay-ota-notice-box')).toBeNull();
+    expect(screen.queryByText(NOTICE)).toBeNull();
+    expect(screen.queryByText(/제휴 수수료/)).toBeNull();
+    // 정상: 버튼 이름 = 가는 곳(완전일치), 옛 "네이버로 이동" 아님.
+    const confirm = screen.getByRole('button', { name: '검색 결과로 이동' });
+    expect(confirm.props.testID).toBe('stay-ota-confirm');
+    expect(screen.queryByText('네이버로 이동')).toBeNull();
+
+    fireEvent.press(confirm);
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it('webSearch: showDontShowAgain 이 true(로그인 사용자)여도 "다시 보지 않기"가 없다', () => {
+    render(
+      <OtaChoiceSheet
+        {...sheetProps({ outbound: 'webSearch', showDontShowAgain: true })}
+      />
+    );
+
+    expect(screen.getByText(BODY)).toBeOnTheScreen();
+    expect(screen.queryByTestId('stay-ota-dont-show')).toBeNull();
+    expect(screen.queryByText(DONT_SHOW)).toBeNull();
+  });
+
+  it('webSearch + error: error 얼굴은 그대로다(제목·[다시 시도], [이동] 없음)', () => {
+    const onRetry = jest.fn();
+    render(
+      <OtaChoiceSheet
+        {...sheetProps({ outbound: 'webSearch', variant: 'error', onRetry })}
+      />
+    );
+
+    expect(screen.getByText(ERROR_TITLE)).toBeOnTheScreen();
+    expect(screen.queryByTestId('stay-ota-confirm')).toBeNull();
+    fireEvent.press(screen.getByTestId('stay-ota-retry'));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('짝 — affiliate: 수수료 안내 박스·문구, "네이버로 이동", 체크박스가 그대로 있다', () => {
+    render(<OtaChoiceSheet {...sheetProps({ outbound: 'affiliate' })} />);
+
+    expect(screen.getByTestId('stay-ota-notice-box')).toBeOnTheScreen();
+    expect(screen.getByText(NOTICE)).toBeOnTheScreen();
+    expect(screen.getByTestId('stay-ota-confirm')).toHaveTextContent(
+      '네이버로 이동'
+    );
+    expect(screen.getByTestId('stay-ota-dont-show')).toBeOnTheScreen();
+    expect(screen.queryByText('검색 결과로 이동')).toBeNull();
+  });
+});

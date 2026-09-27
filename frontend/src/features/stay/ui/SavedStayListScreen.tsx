@@ -49,7 +49,7 @@ export interface SavedStayListScreenProps {
   isGuest?: boolean;
   /** 카드 press → 페이지가 합성·push. 화면은 id 만 올린다(합성이 stayKey 를 쓰므로 페이지 몫). */
   onPressCard?: (savedStayId: string) => void;
-  /** 하단 "다른 숙소를 거점으로 지정" → e05 등록. */
+  /** 하단 "숙소 직접 등록" → e05 등록. */
   onPressRegister?: () => void;
   /** empty CTA "숙소 둘러보기" → 숙소 탐색. */
   onPressBrowse?: () => void;
@@ -159,7 +159,7 @@ function ResultsFace({
         >
           <MapPinGlyph size={19} tone="ink" />
           <Text className="font-noto-bold text-card-title font-bold text-ink">
-            다른 숙소를 거점으로 지정
+            숙소 직접 등록
           </Text>
         </Pressable>
       </View>

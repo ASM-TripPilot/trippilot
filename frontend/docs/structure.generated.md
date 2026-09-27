@@ -690,7 +690,7 @@
 - `src/features/stay/model/stayDates.ts`  →  StayDateRange · nightsBetween · isStayRangeValid · applyDatePick · commitDateRange · formatStayDateRange
 - `src/features/stay/model/stayFilterOptions.ts`  →  StayFilterOption · StayFilterOptions · buildStayFilterOptions · toggleFilterValue · countActiveFilters
 - `src/features/stay/model/stayKey.ts`  →  stayKey
-- `src/features/stay/model/stayOutbound.ts`  →  buildStaySearchUrl · openStayOutbound
+- `src/features/stay/model/stayOutbound.ts`  →  StayOutboundMode · stayOutboundMode · buildStaySearchUrl · openStayOutbound
 - `src/features/stay/model/stayRegisterForm.ts`  →  StayRegisterTab · StayRegisterFlow · stayRegisterSchema · resolveName · canSubmitStayRegister · buildStayRegisterRequest
 - `src/features/stay/model/staySearchState.ts`  →  StaySearchState · resolveStaySearchState
 - `src/features/stay/model/useStaySearch.ts`  →  useStaySearch
