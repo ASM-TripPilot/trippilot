@@ -27,7 +27,9 @@ import {
  *    그 플래그 하나로 되살아난다. [편집]은 onEditCaption 주입 시에만 그린다.
  */
 
-const NO_PHOTO_NOTICE = '사진이 없어도 동선 지도만으로 멋진 카드를 만들었어요';
+// TRIP-1016(D10·INV-4): 지도 히어로가 없으므로(TRIP-634) 카드에 실제로 그린 것만 말한다.
+const VISIT_ORDER_NOTICE = '사진이 없어 방문 순서로 카드를 만들었어요';
+const NO_VISIT_NOTICE = '사진과 방문 기록이 없어 여행 정보로 카드를 만들었어요';
 
 export interface ShareCardScreenProps {
   card: ShareCardVM;
@@ -97,7 +99,9 @@ export function ShareCardScreen({
           // TRIP-766: 박스 크롬 제거 → 좌정렬 플레인 텍스트(테두리·배경·라운드·가운데정렬 없음).
           <View testID="reflection-share-no-photo-notice" className="w-full">
             <Text className="font-noto text-caption text-muted">
-              {NO_PHOTO_NOTICE}
+              {card.orderedVisits.length > 0
+                ? VISIT_ORDER_NOTICE
+                : NO_VISIT_NOTICE}
             </Text>
           </View>
         ) : null}
