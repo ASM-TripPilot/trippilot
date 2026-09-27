@@ -3,6 +3,7 @@ package com.trippilot.itinerarygeneration.application
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.itinerarygeneration.domain.GenerationMode
+import com.trippilot.itinerarygeneration.domain.RejectedPoi
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.RevisionKind
 import com.trippilot.itinerarygeneration.domain.RevisionActor
@@ -149,7 +150,7 @@ class EditItineraryServiceTest : StringSpec({
     "이력 기록이 실패하면 편집도 롤백된다(같은 트랜잭션 — 이 PR 의 핵심 보장)" {
         val tx = RecordingTx()
         shouldThrow<RuntimeException> {
-            EditItineraryService(trips(true), repoWith(current()), EditFakeAgent(), revisionSvc(FakeRevisions().apply { failOnAppend = true }, repoWith(current()), tx, clock), tx, clock)
+            EditItineraryService(trips(true), repoWith(current()), EditFakeAgent(), revisionSvc(FakeRevisions().apply { failOnAppend = true }, repoWith(current()), tx, clock), tx, FakeRejectionStore(), clock)
                 .edit(acc, tripId, editReq)
         }
         // 기록이 tx 밖으로 나가면 이 단언이 깨진다 — 일정만 바뀌고 이력이 빠지는 상태를 막는 회귀 가드.
@@ -164,7 +165,7 @@ class EditItineraryServiceTest : StringSpec({
             base.days.map { d -> EditDay(d.date, d.slots.map { EditSlot(it.sourcePoiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay) }) },
         )
         val repo = repoWith(base)
-        EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(log, repo, NOOP_TX, clock), NOOP_TX, clock)
+        EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(log, repo, NOOP_TX, clock), NOOP_TX, FakeRejectionStore(), clock)
             .edit(acc, tripId, sameAsCurrent)
         // BASELINE(되돌리기 지점)은 남지만 EDIT 리비전은 쌓이지 않는다 — 같은 버전으로 목록이 도배된다.
         log.appended.none { it.kind == RevisionKind.EDIT } shouldBe true
@@ -173,7 +174,7 @@ class EditItineraryServiceTest : StringSpec({
     "편집하면 되돌리기 지점(편집 전)과 결과(EDIT)가 함께 남는다" {
         val repo = repoWith(current())
         val log = FakeRevisions()
-        EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(log, repo, NOOP_TX, clock), NOOP_TX, clock)
+        EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(log, repo, NOOP_TX, clock), NOOP_TX, FakeRejectionStore(), clock)
             .edit(acc, tripId, editReq.copy(reason = "비 예보로 실내로 변경"))
 
         // 첫 편집이면 편집 전 상태가 BASELINE 으로 먼저 남아야 한다 — 없으면 원본으로 못 돌아간다(INV-U3-08)
@@ -192,7 +193,7 @@ class EditItineraryServiceTest : StringSpec({
     "사유가 없으면 기본 문구로 남는다(summary 는 표시 문구라 비울 수 없다)" {
         val repo = repoWith(current())
         val log = FakeRevisions()
-        EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(log, repo, NOOP_TX, clock), NOOP_TX, clock)
+        EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(log, repo, NOOP_TX, clock), NOOP_TX, FakeRejectionStore(), clock)
             .edit(acc, tripId, editReq)
         log.appended.last().summary shouldBe "일정을 직접 수정함"
     }
@@ -203,7 +204,7 @@ class EditItineraryServiceTest : StringSpec({
         val repo = repoWith(base.confirm(snapshots, clock.instant()))
         val log = FakeRevisions()
         shouldThrow<ConflictDetected> {
-            EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(log, repo, NOOP_TX, clock), NOOP_TX, clock).edit(acc, tripId, editReq)
+            EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(log, repo, NOOP_TX, clock), NOOP_TX, FakeRejectionStore(), clock).edit(acc, tripId, editReq)
         }
         log.appended shouldBe emptyList()
     }
@@ -222,7 +223,7 @@ class EditItineraryServiceTest : StringSpec({
             ),
             clock.instant(), clock.instant(), CandidatesSummary("LOW", 7, listOf("CAFE")), emptyList(),
         )
-        val result = repoWith(base).let { r -> EditItineraryService(trips(true), r, EditFakeAgent(), revisionSvc(FakeRevisions(), r, NOOP_TX, clock), NOOP_TX, clock) }
+        val result = repoWith(base).let { r -> EditItineraryService(trips(true), r, EditFakeAgent(), revisionSvc(FakeRevisions(), r, NOOP_TX, clock), NOOP_TX, FakeRejectionStore(), clock) }
             .edit(acc, tripId, editReq)
 
         // 장소를 옮겼다고 "왜 이 장소를 골랐는지"가 사라지면 안 된다
@@ -232,7 +233,7 @@ class EditItineraryServiceTest : StringSpec({
 
     "편집하면 새 배열로 교체 + 위반 없으면 hasViolation=false" {
         val repo = repoWith(current())
-        val svc = EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, clock)
+        val svc = EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, FakeRejectionStore(), clock)
         val result = svc.edit(acc, tripId, editReq)
         val slots = result.days.single().slots
         slots.map { it.sourcePoiId } shouldBe listOf(poiB, poiA) // 편집 순서
@@ -241,7 +242,7 @@ class EditItineraryServiceTest : StringSpec({
 
     "validate 위반을 해당 슬롯 hasViolation 으로 표시(비차단 저장)" {
         val repo = repoWith(current())
-        val svc = EditItineraryService(trips(true), repo, EditFakeAgent(listOf(Violation("TRAVEL_TIME", 0, 1, null))), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, clock)
+        val svc = EditItineraryService(trips(true), repo, EditFakeAgent(listOf(Violation("TRAVEL_TIME", 0, 1, null))), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, FakeRejectionStore(), clock)
         val slots = svc.edit(acc, tripId, editReq).days.single().slots
         slots[0].hasViolation shouldBe false
         slots[1].hasViolation shouldBe true // day0/slot1 위반
@@ -252,7 +253,7 @@ class EditItineraryServiceTest : StringSpec({
         val midnightEdit = EditItinerary(
             listOf(EditDay(day, listOf(EditSlot(poiA, LocalTime.parse("23:00"), LocalTime.parse("01:00"), isFixed = false, endsNextDay = true)))),
         )
-        val slot = EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, clock)
+        val slot = EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, FakeRejectionStore(), clock)
             .edit(acc, tripId, midnightEdit).days.single().slots.single()
         slot.endsNextDay shouldBe true
         slot.endAt shouldBe LocalTime.parse("01:00")
@@ -260,16 +261,49 @@ class EditItineraryServiceTest : StringSpec({
 
     "확정된 일정은 편집 불가 409" {
         val repo = repoWith(current { it.confirm(clock.instant()) })
-        shouldThrow<ConflictDetected> { EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, clock).edit(acc, tripId, editReq) }
+        shouldThrow<ConflictDetected> { EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, FakeRejectionStore(), clock).edit(acc, tripId, editReq) }
+    }
+
+    // ── 거절 이력 (TRIP-964) ────────────────────────────────────────────────
+
+    /**
+     * **빠진 POI = 거절.** 사용자가 그 자리를 보고 바꾼 것이라 가장 명확한 신호다(SWAPPED_OUT).
+     * 편집 PUT 은 전체 교체라, 이전에 있었고 새 일정에 없는 것이 곧 밀려난 것이다.
+     */
+    "편집에서 빠진 POI 가 SWAPPED_OUT 으로 쌓인다" {
+        val store = FakeRejectionStore()
+        val repo = repoWith(current()) // 현행 = [poiA]
+        val edited = EditItinerary(
+            listOf(EditDay(day, listOf(EditSlot(poiB, LocalTime.parse("10:00"), LocalTime.parse("11:00"), isFixed = false, endsNextDay = false)))),
+        ) // poiA → poiB 교체
+
+        EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, store, clock)
+            .edit(acc, tripId, edited)
+
+        store.findByTrip(tripId) shouldBe listOf(RejectedPoi(poiA, RejectedPoi.Kind.SWAPPED_OUT, 1))
+    }
+
+    /** 시간만 옮긴 편집은 아무도 밀려나지 않았다 — 거절 0건이어야 한다. 아니면 시각 조정마다 애먼 강등이 쌓인다. */
+    "시간만 바꾼 편집은 거절을 쌓지 않는다" {
+        val store = FakeRejectionStore()
+        val repo = repoWith(current())
+        val timeOnly = EditItinerary(
+            listOf(EditDay(day, listOf(EditSlot(poiA, LocalTime.parse("14:00"), LocalTime.parse("15:00"), isFixed = false, endsNextDay = false)))),
+        )
+
+        EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, store, clock)
+            .edit(acc, tripId, timeOnly)
+
+        store.byTrip shouldBe emptyMap()
     }
 
     "생성된 일정 없으면 404" {
-        shouldThrow<ResourceNotFound> { EditFakeItineraries().let { r -> EditItineraryService(trips(true), r, EditFakeAgent(), revisionSvc(FakeRevisions(), r, NOOP_TX, clock), NOOP_TX, clock) }.edit(acc, tripId, editReq) }
+        shouldThrow<ResourceNotFound> { EditFakeItineraries().let { r -> EditItineraryService(trips(true), r, EditFakeAgent(), revisionSvc(FakeRevisions(), r, NOOP_TX, clock), NOOP_TX, FakeRejectionStore(), clock) }.edit(acc, tripId, editReq) }
     }
 
     "미소유 여행이면 404" {
         val repo = repoWith(current())
-        shouldThrow<ResourceNotFound> { EditItineraryService(trips(false), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, clock).edit(acc, tripId, editReq) }
+        shouldThrow<ResourceNotFound> { EditItineraryService(trips(false), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, FakeRejectionStore(), clock).edit(acc, tripId, editReq) }
     }
 
     "위반 사유가 슬롯에 저장된다 — 여러 건이면 이어 붙이고 중복은 접는다" {
@@ -281,7 +315,7 @@ class EditItineraryServiceTest : StringSpec({
                 Violation("TRAVEL_TIME", 0, 0, "이동이 빠듯해요"), // 중복
             ),
         )
-        val result = EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, clock)
+        val result = EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, FakeRejectionStore(), clock)
             .edit(acc, tripId, editReq)
 
         val slot = result.days.single().slots.first()
@@ -309,7 +343,7 @@ class EditItineraryServiceTest : StringSpec({
         val repo = repoWith(flagged)
         val down = EditFakeAgent(failure = RuntimeException("AI 다운"))
 
-        val result = EditItineraryService(trips(true), repo, down, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, clock)
+        val result = EditItineraryService(trips(true), repo, down, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, FakeRejectionStore(), clock)
             .edit(acc, tripId, editReq)
 
         // 편집은 사용자의 의도라 저장된다
@@ -332,7 +366,7 @@ class EditItineraryServiceTest : StringSpec({
             listOf(UnplacedMustVisit(missed, UnplacedReason.WINDOW_CONFLICT)),
         )
         val repo = repoWith(base)
-        val result = EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, clock)
+        val result = EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, FakeRejectionStore(), clock)
             .edit(acc, tripId, editReq)
 
         result.unplacedMustVisits.single().poiId shouldBe missed
@@ -341,7 +375,7 @@ class EditItineraryServiceTest : StringSpec({
     "사유 없는 위반은 배지만 켜고 사유는 비운다(CHECK 제약과도 맞는다)" {
         val repo = repoWith(current())
         val agent = EditFakeAgent(listOf(Violation("HC1", 0, 0, null)))
-        val slot = EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, clock)
+        val slot = EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, FakeRejectionStore(), clock)
             .edit(acc, tripId, editReq).days.single().slots.first()
 
         slot.hasViolation shouldBe true
@@ -351,7 +385,7 @@ class EditItineraryServiceTest : StringSpec({
     "위치를 못 찾은 위반은 어느 슬롯에도 안 붙는다 — 조용히 사라지지 않게 로그로 드러낸다" {
         val repo = repoWith(current())
         val agent = EditFakeAgent(listOf(Violation("HC3_UNPLACED", null, null, "필수 방문지가 배치되지 않았습니다")))
-        val result = EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, clock)
+        val result = EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, FakeRejectionStore(), clock)
             .edit(acc, tripId, editReq)
 
         // 슬롯 표시로는 나타나지 않는다(붙일 자리가 없다) — 사용자 표면 노출은 별도 계약이 필요하다.

@@ -17,6 +17,8 @@ import com.trippilot.itinerarygeneration.domain.RevisionActor
 import com.trippilot.itinerarygeneration.domain.RevisionKind
 import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.itinerarygeneration.domain.RequestMeta
+import com.trippilot.itinerarygeneration.domain.RejectedPoi
+import com.trippilot.itinerarygeneration.domain.RejectionStore
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
 import com.trippilot.itinerarygeneration.domain.UnplacedMustVisit
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
@@ -63,6 +65,7 @@ class GenerateItineraryService(
     private val revisions: ItineraryRevisionService,
     /** 숙소 없는 날의 앵커(TRIP-384) — 지역 대표 좌표. place-data.api 만 참조(R1). */
     private val regions: RegionLookupFacade,
+    private val rejectionStore: RejectionStore,
     /** 기록 기반 개인화(TRIP-556). **포트다** — 구현은 app 이 조립한다(순환 회피, 아래 주석). */
     private val personalization: PersonalizationPort,
     transactionManager: PlatformTransactionManager,
@@ -111,6 +114,13 @@ class GenerateItineraryService(
 
         // 재생성이라면 **직전 상태로 돌아갈 지점**이 반드시 있어야 한다(INV-U3-08 · BR-U3-19).
         val previous = previousOf(tripId)
+
+        // 재생성 = 직전 배치 전부에 대한 약한 거절이다(TRIP-964 — "이 구성이 싫다").
+        // **AI 호출 전에 기록한다** — 바로 이번 생성이 이 이력의 첫 소비처여야 하기 때문이다.
+        // 이후 생성이 실패해도 기록은 남는다: 신호는 "다시 만들어 줘"라는 행위이지 그 결과가 아니다.
+        previous?.let {
+            rejectionStore.record(tripId, it.days.flatMap { d -> d.slots.map { s -> s.sourcePoiId } }, RejectedPoi.Kind.REGENERATED)
+        }
 
         // 1차가 터지면 세션을 닫는다 — 안 닫으면 사용자는 500 을 받고도 화면에서 영원히 "생성 중"을 본다(INV-4 침묵 금지).
         val saved = try {
@@ -279,6 +289,9 @@ class GenerateItineraryService(
             requestMeta = RequestMeta(UUID.randomUUID().toString(), clock.instant(), deadlineMs),
                 excludedPoiIds = excluded,
                 includeExplanations = includeExplanations,
+                // 거절 이력(TRIP-964) — 조립마다 저장소를 읽는다. 1차·2차가 같은 스냅숏을 공유하려고
+                // 인자로 끌고 다니면 시그니처만 늘고, 그 사이에 이력이 늘어도 반영 못 한다.
+                rejections = rejectionStore.findByTrip(tripId),
             ),
             materialized.unplaced,
         )

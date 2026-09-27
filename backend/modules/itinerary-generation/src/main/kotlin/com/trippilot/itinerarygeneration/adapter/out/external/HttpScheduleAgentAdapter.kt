@@ -203,6 +203,7 @@ class HttpScheduleAgentAdapter(
                 )
             },
             savedPlaces = input.savedPlaces.map { AiSavedPlace(it.poiId.toString(), it.name) },
+            rejections = input.rejections,
             excludedPoiIds = input.excludedPoiIds,
         )
 

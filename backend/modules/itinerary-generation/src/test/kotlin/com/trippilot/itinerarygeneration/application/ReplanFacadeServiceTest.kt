@@ -2,6 +2,7 @@ package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.changelog.api.ChangeSourceType
 import com.trippilot.core.error.ConflictDetected
+import com.trippilot.itinerarygeneration.domain.RejectedPoi
 import com.trippilot.itinerarygeneration.api.ReplanCommand
 import com.trippilot.itinerarygeneration.api.ReplanProposal
 import com.trippilot.itinerarygeneration.api.ReplanSlot
@@ -157,11 +158,15 @@ class ReplanFacadeServiceTest : StringSpec({
         val changeLogs: CapturingChangeLogs,
     )
 
-    fun fixture(agent: Agent, repo: ReplanItineraries = ReplanItineraries()): Fx {
+    fun fixture(
+        agent: Agent,
+        repo: ReplanItineraries = ReplanItineraries(),
+        rejections: FakeRejectionStore = FakeRejectionStore(),
+    ): Fx {
         repo.byTrip[trip] = itinerary()
         val revisions = genRevisions(repo, replanTrips, clock)
         val changeLogs = CapturingChangeLogs()
-        return Fx(ReplanFacadeService(replanTrips, repo, agent, noAnchors, revisions, changeLogs, preferences, noHints, savedStub, clock), repo, revisions, changeLogs)
+        return Fx(ReplanFacadeService(replanTrips, repo, agent, noAnchors, revisions, changeLogs, preferences, noHints, savedStub, rejections, clock), repo, revisions, changeLogs)
     }
 
     fun command(fullDay: Boolean = false, completed: List<String> = emptyList()) = ReplanCommand(
@@ -169,6 +174,23 @@ class ReplanFacadeServiceTest : StringSpec({
         completedSlotKeys = completed, originLat = 33.45, originLng = 126.56,
         reasons = listOf("비가 와요"), directives = listOf("실내로"), freeText = null, excludedPoiIds = emptyList(),
     )
+
+    /**
+     * **저장된 거절이 재계획 입력에 실린다**(TRIP-964). '다시 짜줘' 직후의 재계획이 이 이력의
+     * 소비처다 — 여기가 비면 방금 밀어낸 곳이 대안으로 다시 나온다.
+     */
+    "누적된 거절 이력이 재계획 입력에 실린다" {
+        val rejected = UUID.randomUUID()
+        val store = FakeRejectionStore().apply {
+            record(trip, listOf(rejected), RejectedPoi.Kind.SWAPPED_OUT)
+            record(trip, listOf(rejected), RejectedPoi.Kind.SWAPPED_OUT) // 반복 거절 = count 2
+        }
+        val agent = Agent(proposal(replacement))
+
+        fixture(agent, rejections = store).svc.propose(command())
+
+        agent.inputs.single().rejections shouldBe listOf(RejectedPoi(rejected, RejectedPoi.Kind.SWAPPED_OUT, 2))
+    }
 
     "지금 이후만 다시 짤 때 — 지나간 슬롯과 시각 고정이 잠긴다" {
         val agent = Agent(proposal(replacement))
