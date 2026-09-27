@@ -91,7 +91,16 @@ class GenerateItineraryService(
 
         // 직접 만들기는 AI 를 아예 부르지 않는다 — 빈 일자만 깔고 사용자가 편집으로 채운다(US-SCHED-09).
         // 상대 enum 에 MANUAL 이 없어 경계로 나가면 422 이므로, 여기서 갈라 아예 호출 경로에 들어가지 않게 한다.
-        if (mode == GenerationMode.MANUAL) return createEmpty(tripId, ctx, planDates, previousOf(tripId))
+        if (mode == GenerationMode.MANUAL) {
+            val prev = previousOf(tripId)
+            // 기존 일정을 두고 직접 만들기로 갈아타는 것도 재생성이다(TRIP-964) — "이 구성이 싫다"는
+            // 신호는 어느 방식으로 다시 만들든 같다. 이 갈래는 조기 반환이라 아래 기록 지점을 안 지나서,
+            // 여기 없으면 직접 만들기 경로만 조용히 기억에서 빠진다(검수에서 실제로 빠뜨렸던 자리다).
+            prev?.let {
+                rejectionStore.record(tripId, it.days.flatMap { d -> d.slots.map { s -> s.sourcePoiId } }, RejectedPoi.Kind.REGENERATED)
+            }
+            return createEmpty(tripId, ctx, planDates, prev)
+        }
 
         // day1 조기 노출(TRIP-267 · PR #104 합의): 1차는 첫날만 짧은 시한으로 풀어 즉시 반환하고,
         // 나머지 일자는 배정된 POI 를 제외 목록으로 넘겨 백그라운드 2차 호출로 채운다(AI 는 동기 REST 유지).

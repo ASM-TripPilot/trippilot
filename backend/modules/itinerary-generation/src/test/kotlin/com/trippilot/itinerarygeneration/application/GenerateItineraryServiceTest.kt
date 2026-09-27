@@ -501,6 +501,27 @@ class GenerateItineraryServiceTest : StringSpec({
         agent.captured!!.rejections shouldBe listOf(RejectedPoi(placed, RejectedPoi.Kind.REGENERATED, 1))
     }
 
+    /**
+     * **직접 만들기로 갈아타는 것도 재생성이다.** MANUAL 갈래는 조기 반환이라 공용 기록 지점을
+     * 안 지난다 — 검수에서 실제로 빠뜨렸던 자리라, 이 스펙이 그 갈래를 따로 지킨다.
+     */
+    "기존 일정을 두고 직접 만들기로 갈아타면 직전 배치가 REGENERATED 로 쌓인다" {
+        val placed = UUID.randomUUID()
+        val repo = FakeItineraries().apply {
+            byTrip[tripId] = Itinerary.create(
+                tripId, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+                listOf(ItineraryDay.of(start, 0, listOf(VisitSlot.of(placed, null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"))))),
+                now, GenerationState.COMPLETE,
+            )
+        }
+        val store = FakeRejectionStore()
+
+        service(CapturingAgent(now), fullPrefs, emptyList(), repo = repo, clock = clockAt("2026-07-31"), rejectionStore = store)
+            .generate(acc, tripId, GenerationMode.MANUAL)
+
+        store.findByTrip(tripId) shouldBe listOf(RejectedPoi(placed, RejectedPoi.Kind.REGENERATED, 1))
+    }
+
     /** 첫 생성에는 지운 계획이 없다 — 거절이 성립하지 않는다. */
     "첫 생성은 아무 거절도 기록하지 않는다" {
         val store = FakeRejectionStore()
