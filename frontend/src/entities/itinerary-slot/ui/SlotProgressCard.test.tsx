@@ -20,7 +20,8 @@ import { SlotProgressCard } from './SlotProgressCard';
  *  - active = 상태줄 "13:00 도착 · 지금 관람 중"(D4 고정) + [방문 완료]·[사진]·[메모].
  *            "진행 중" 배지·영업시간 줄은 없다. [사진]·[메모]는 오류 없이 "준비 중"(BR-U4-38).
  *  - upcoming = "예정" 알약 + 상태줄 "15:00 도착 예정 · 11:00–22:00 영업" 한 줄 + 누를 수 없는 아이콘 3개.
- *            거리 줄·수동 [도착]은 없다(도착 자동 원칙).
+ *            거리 줄은 없다. 수동 [도착]은 `onPressArrive` 를 받을 때만 그린다(TRIP-1021 — TRIP-746 의
+ *            "도착 자동 원칙" 삭제를 되돌림. 자동 도착(TRIP-1018)이 보류라 수동이 유일한 도착 경로다).
  *
  * "준비 중" 힌트의 열림 상태는 카드가 갖지 않는다 — entities ui 는 useState 금지
  * (`entitiesItinerarySlotStructure` G2). 카드는 `onPressSoon` 을 부르고 `soonHintVisible` 로 그린다.
@@ -40,6 +41,7 @@ const mkSlot = (
   isFixed: false,
   endsNextDay: false,
   hasViolation: false,
+  alternatives: [],
   nameKo: '감천문화마을',
   distanceRange: null,
   openingHours: null,
@@ -270,7 +272,35 @@ describe('SlotProgressCard · upcoming (AC-5)', () => {
     expect(screen.getByTestId(id('time'))).toHaveTextContent('15:00 도착 예정');
   });
 
-  it('C8 아이콘 3개는 비활성이고 눌러도 아무 콜백이 없다 · 거리 줄·수동 [도착]·[방문 완료]는 없다', () => {
+  it('C7d TRIP-1021 AC-6 여러 줄 영업시간은 불릿 없이 " · " 로 이어진 한 줄로 붙는다', () => {
+    render(
+      <SlotProgressCard
+        slot={upcoming(
+          '- 화요일~목요일 / 일요일 10:00~20:00<br>\n- 금요일~토요일 10:00~22:00'
+        )}
+        date={DATE}
+        state="upcoming"
+      />
+    );
+
+    expect(screen.getByTestId(id('time'))).toHaveTextContent(
+      '15:00 도착 예정 · 화요일~목요일 / 일요일 10:00~20:00 · 금요일~토요일 10:00~22:00'
+    );
+  });
+
+  it('C13 TRIP-1021 AC-9 상태줄은 한 줄로 잘린다 (numberOfLines=1 — 실제 절단은 6-b)', () => {
+    render(
+      <SlotProgressCard
+        slot={upcoming('11:00 - 22:00')}
+        date={DATE}
+        state="upcoming"
+      />
+    );
+
+    expect(screen.getByTestId(id('time')).props.numberOfLines).toBe(1);
+  });
+
+  it('C8 아이콘 3개는 비활성이고 눌러도 아무 콜백이 없다 · 거리 줄·[방문 완료]가 없고, onPressArrive 미주입이면 [도착]도 없다', () => {
     const onPressComplete = jest.fn();
     const onPressSoon = jest.fn();
     render(
@@ -292,10 +322,11 @@ describe('SlotProgressCard · upcoming (AC-5)', () => {
     expect(onPressComplete).not.toHaveBeenCalled();
     expect(onPressSoon).not.toHaveBeenCalled();
 
-    // 부재 — distanceRange 를 줘도 거리 줄이 없다 · 도착 자동 원칙으로 수동 [도착] 삭제.
+    // 부재 — distanceRange 를 줘도 거리 줄이 없다 · [도착]은 onPressArrive 를 안 넘기면 없다(TRIP-1021).
+    // 옛 `execution-arrive-manual-*` 는 TRIP-746 에서 사라진 이름이라 영원히 null — 새 이름으로 재조준.
     expect(screen.queryByTestId(id('distance'))).toBeNull();
     expect(screen.queryByText('약 1.2km · 도보 추정')).toBeNull();
-    expect(screen.queryByTestId(`execution-arrive-manual-${KEY}`)).toBeNull();
+    expect(screen.queryByTestId(id('arrive'))).toBeNull();
     expect(screen.queryByTestId('execution-arrive-complete')).toBeNull();
   });
 });
@@ -507,4 +538,62 @@ describe('SlotProgressCard · 이름 진입 (TRIP-987 A-1·A-2·A-4)', () => {
       '13:00 도착 · 지금 관람 중'
     );
   });
+});
+
+// ── TRIP-1021 #059 · 예정 카드 수동 [도착] (AC-1·AC-3 카드 쪽) ──────────────────
+//
+// 카드는 "진행 중 슬롯이 있나"·"오늘인가"를 모른다 — `onPressArrive` 를 받으면 upcoming 에서만
+// [도착]을 그리고, 받은 대로 부른다. 누가 받을지는 허브 뷰(active 유무)·페이지(오늘 탭)가 정한다.
+
+describe('SlotProgressCard · 수동 [도착] (TRIP-1021 C12)', () => {
+  const upcomingSlot = mkSlot({
+    startAt: '15:00:00',
+    endAt: '16:30:00',
+    nameKo: '전포 카페거리',
+  });
+
+  it('C12a upcoming + onPressArrive → "도착" 버튼이 서고, 누르면 그 콜백만 1회 불린다', () => {
+    const onPressArrive = jest.fn();
+    const onPressName = jest.fn();
+    const onPressComplete = jest.fn();
+    render(
+      <SlotProgressCard
+        slot={upcomingSlot}
+        date={DATE}
+        state="upcoming"
+        onPressArrive={onPressArrive}
+        onPressName={onPressName}
+        onPressComplete={onPressComplete}
+      />
+    );
+
+    const arrive = screen.getByTestId(id('arrive'));
+    expect(arrive).toHaveTextContent('도착');
+
+    fireEvent.press(arrive);
+
+    expect(onPressArrive).toHaveBeenCalledTimes(1);
+    expect(onPressName).not.toHaveBeenCalled();
+    expect(onPressComplete).not.toHaveBeenCalled();
+    // 짝 — 상태줄 leaf 는 그대로다([도착]이 그 Text 안으로 들어가면 형제 통합 테스트들의 완전 일치가 깨진다).
+    expect(screen.getByTestId(id('time'))).toHaveTextContent('15:00 도착 예정');
+  });
+
+  it.each(['done', 'active'] as const)(
+    'C12b %s 카드는 onPressArrive 를 받아도 [도착]을 그리지 않는다 (AC-3)',
+    (state) => {
+      render(
+        <SlotProgressCard
+          slot={upcomingSlot}
+          date={DATE}
+          state={state}
+          onPressArrive={jest.fn()}
+        />
+      );
+
+      // 짝 앵커 — 카드가 실제로 그려졌다.
+      expect(screen.getByTestId(id('name'))).toHaveTextContent('전포 카페거리');
+      expect(screen.queryByTestId(id('arrive'))).toBeNull();
+    }
+  );
 });

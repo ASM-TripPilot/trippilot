@@ -135,6 +135,7 @@ const EXISTING_DRAFT: Itinerary = {
           isFixed: false,
           endsNextDay: false,
           hasViolation: false,
+          alternatives: [],
           tags: [],
         },
       ],

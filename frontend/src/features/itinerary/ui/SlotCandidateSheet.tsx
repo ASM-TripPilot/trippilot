@@ -43,7 +43,7 @@ const PENDING_LABEL = '바꾸는 중이에요';
 const CURRENT_CHIP = '현재';
 const TITLE_NAME_FALLBACK = '이 장소';
 
-/** 시트 한 행의 표시값 — candidates 응답엔 이름·태그가 아직 없어(BE 후속) 옵셔널이다. */
+/** 시트 한 행의 표시값 — 계약상 이름·태그·사진이 전부 선택 필드라 옵셔널이다. */
 export interface SlotCandidateSheetRow {
   poiId: string;
   /** 없으면 거리 leaf 가 빈 값(픽스처는 항상 채움). */
@@ -52,6 +52,8 @@ export interface SlotCandidateSheetRow {
   nameKo?: string | null;
   /** 미확보면 undefined → 태그줄 생략 · 있으면 첫 태그만 `#`. */
   tags?: string[];
+  /** 없거나 '' 면 회색 사진 자리(TRIP-1024). */
+  imageUrl?: string | null;
 }
 
 export interface SlotCandidateSheetProps {
@@ -223,6 +225,7 @@ export function SlotCandidateSheet({
               nameKo={current.nameKo}
               tags={current.tags}
               showImage
+              imageUrl={current.imageUrl}
               showRationale={false}
               distanceTone="muted"
               trailing={
@@ -255,6 +258,7 @@ export function SlotCandidateSheet({
                     nameKo={candidate.nameKo}
                     tags={candidate.tags}
                     showImage
+                    imageUrl={candidate.imageUrl}
                     showNameTestId
                     showRationale={false}
                     distanceTone="muted"

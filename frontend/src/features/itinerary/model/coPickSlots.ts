@@ -46,3 +46,22 @@ export function nextCoPickSlotKey(
   }
   return null;
 }
+
+/**
+ * TRIP-1006 · 현재 키 **앞에 있는 비고정 슬롯 수** = 같이 짜기에서 이미 고른 곳 수. 비고정 슬롯을
+ * 순서대로 하나씩 채우므로 앞의 비고정은 곧 고른 것이다. 일자 경계를 넘어 세고(2일차 첫 슬롯이면
+ * 1일차 비고정 전부), 고정 슬롯은 세지 않는다. 현재 키가 목록에 없으면 0(모르면 고른 게 없다고 본다).
+ */
+export function countPickedCoPickSlots(
+  days: ItineraryDaysItem[],
+  currentKey: string
+): number {
+  let count = 0;
+  for (const day of days) {
+    for (const slot of day.slots) {
+      if (buildSlotKey(day.date, slot.poiId) === currentKey) return count;
+      if (!slot.isFixed) count += 1;
+    }
+  }
+  return 0;
+}

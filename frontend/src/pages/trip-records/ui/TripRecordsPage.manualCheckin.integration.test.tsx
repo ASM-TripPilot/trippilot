@@ -23,7 +23,8 @@ import { TripRecordsPage } from './TripRecordsPage';
  *  - 🔴 AC-1·AC-3·AC-4  denied → 배너·⊘ 배지·"방문 체크" pill 이 실 라우트에서 뜬다(모드 판정=페이지).
  *  - 🔴 AC-2  denied → 안내문이 manual 카피(법 문구 "(좌표 자동기록 비활성)" 포함)로 교체되고 default 는 사라진다.
  *  - 🟢 AC-1·AC-3·AC-4 무회귀  granted → 세 표면 전부 부재 + 안내문은 현행 default(일반 모드 무변경).
- *  - 🔴 AC-5  denied + pill press → POST /trips/:tripId/visits 가 `{source:'MANUAL', poiId}` 로 **정확히 1회** 나간다.
+ *  - 🔴 AC-5  denied + pill press → POST /trips/:tripId/visits 가 `{slotKey, source:'MANUAL', poiId}` 로 **정확히 1회**
+ *            나간다(TRIP-1021 — 슬롯 키를 빼면 즉석 방문으로 기록되는 버그를 본문 정확 일치로 잡는다).
  *
  * ★모드 seam(02a §4-★6): 페이지가 `getForegroundPermissionsAsync`(LocationPage 선례)를 읽어 `!granted` 면
  *   manual 모드로 판정. integration 은 그 목의 반환값(denied/granted)으로 모드를 강제한다(프리뷰는 prop 직접).
@@ -234,7 +235,7 @@ describe('🟢 TRIP-761 · AC-1·AC-3·AC-4 무회귀 · granted → 일반 모�
 });
 
 describe('🔴 TRIP-761 · AC-5 · "방문 체크" press → arrive({source:MANUAL}) POST', () => {
-  it('C-arrive · POST /trips/:tripId/visits 가 {source:"MANUAL", poiId:"p3"} 로 정확히 1회 나간다', async () => {
+  it('C-arrive · POST /trips/:tripId/visits 가 {slotKey, source:"MANUAL", poiId:"p3"} 로 정확히 1회 나간다 (TRIP-1021 맹점 ①)', async () => {
     mockGetForeground.mockResolvedValue(DENIED);
 
     render(<TripRecordsPage tripId={TRIP_ID} />, { wrapper });
@@ -245,10 +246,13 @@ describe('🔴 TRIP-761 · AC-5 · "방문 체크" press → arrive({source:MANU
     // 실행 — pill press → onPressManualCheck(poiId) → arrive({source:'MANUAL', poiId}) → POST.
     fireEvent.press(pill);
 
-    // 단언 — POST 가 정확히 1회, 본문에 source='MANUAL' + poiId='p3'(slotKey 등 추가 필드는 허용).
+    // 단언 — POST 가 정확히 1회, 본문은 카드의 슬롯 키까지 실은 수동 도착 **정확히**(TRIP-1021 맹점 ①:
+    // 슬롯 키가 빠지면 서버가 "계획에 없던 곳" 즉석 방문으로 기록한다 — 옛 objectContaining 은 그걸 통과시켰다).
     await waitFor(() => expect(postBodies).toHaveLength(1));
-    expect(postBodies[0]).toEqual(
-      expect.objectContaining({ source: 'MANUAL', poiId: 'p3' })
-    );
+    expect(postBodies[0]).toEqual({
+      slotKey: `${DAY}#p3`,
+      source: 'MANUAL',
+      poiId: 'p3',
+    });
   });
 });

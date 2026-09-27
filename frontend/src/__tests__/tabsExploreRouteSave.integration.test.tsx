@@ -146,6 +146,7 @@ function savedFrom(source: StayItem, savedStayId: string): SavedStay {
     savedStayId,
     name: source.name,
     coordConfirmed: false,
+    linkedTripIds: [],
     registerRoute: 'MAP_SEARCH',
     externalSource: source.externalSource,
     externalId: source.externalId,

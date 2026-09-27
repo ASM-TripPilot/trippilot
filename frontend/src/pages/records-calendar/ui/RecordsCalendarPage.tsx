@@ -11,6 +11,7 @@ import {
 import { formatLegendDateRange } from '@/entities/trip/lib/formatTripPeriod';
 import { useRecordsCalendar } from '@/features/record/model/useRecordsCalendar';
 import { RecordsCalendarScreen } from '@/features/record/ui/RecordsCalendarScreen';
+import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import { buildMonthGrid, shiftMonth } from '@/shared/date/monthGrid';
 import { seoulDate } from '@/shared/date/seoulDate';
 import { StateNotice } from '@/shared/ui/StateNotice';
@@ -92,7 +93,11 @@ export function RecordsCalendarPage(): ReactElement {
       onPressPrevMonth={() => setYearMonth((ym) => shiftMonth(ym, -1))}
       onPressNextMonth={() => setYearMonth((ym) => shiftMonth(ym, 1))}
       onSelectTrip={(tripId) => router.push(`/trips/${tripId}/records/summary`)}
-      onPressCreateTrip={() => router.push('/trips/new/step1')}
+      onPressCreateTrip={() => {
+        // 새 여행 진입 — 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074).
+        useTripWizardStore.getState().reset();
+        router.push('/trips/new/step1');
+      }}
     />
   );
 }

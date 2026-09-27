@@ -16,6 +16,7 @@ import {
   resolveItineraryDestination,
 } from '@/features/itinerary/model/planState';
 import { MyTripsListScreen } from '@/features/itinerary/ui/MyTripsListScreen';
+import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import { GenerationDoneBar } from '@/widgets/generation-done-bar/ui/GenerationDoneBar';
 
 import { TripCardContainer } from './TripCardContainer';
@@ -86,7 +87,11 @@ export function MyTripsListPage(): ReactElement {
     writeIdSet(DONE_BAR_SEEN_KEY, pick.seenNext).catch(() => {});
   }, [pick]);
 
-  const onPressCreateTrip = (): void => router.push('/trips/new/step1');
+  // 새 여행 진입 — 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074).
+  const onPressCreateTrip = (): void => {
+    useTripWizardStore.getState().reset();
+    router.push('/trips/new/step1');
+  };
 
   if (trips.isPending) {
     return (
@@ -114,7 +119,9 @@ export function MyTripsListPage(): ReactElement {
           notFound: isNotFound(query?.error),
           generationState: query?.data?.generationState,
           status: query?.data?.status,
-        })
+          generationMode: query?.data?.generationMode,
+        }),
+        query?.data?.days
       )
     );
   };

@@ -74,6 +74,7 @@ function itinerary(): Itinerary {
           isFixed: false,
           endsNextDay: false,
           hasViolation: false,
+          alternatives: [],
           tags: [],
         },
         {
@@ -83,6 +84,7 @@ function itinerary(): Itinerary {
           isFixed: false,
           endsNextDay: false,
           hasViolation: false,
+          alternatives: [],
           tags: [],
         },
       ],

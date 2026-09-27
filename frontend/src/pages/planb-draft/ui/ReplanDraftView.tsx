@@ -35,6 +35,19 @@ const TITLE = 'AI 재계획안';
 
 type ReplanDraftVariant = 'draft' | 'noSolution' | 'failed';
 
+/** 원 일정에서 빠지는 슬롯 1행(BR-U4-25) — 번호 원 없이 흐리게, 원래 시각과 함께(TRIP-1007). */
+export interface ReplanRemovedVM {
+  slotKey: string;
+  placeName: string;
+  /** `원래 HH:mm` — 원래 시각을 모르면 null(요소째 안 그린다). */
+  timeLabel: string | null;
+}
+
+interface ReplanNotice {
+  title: string;
+  description: string;
+}
+
 export interface ReplanDraftViewProps {
   variant: ReplanDraftVariant;
   center: MapCenter;
@@ -45,6 +58,14 @@ export interface ReplanDraftViewProps {
   dateLabel: string;
   meta: string;
   slots: ReplanSlotVM[];
+  /** 빠지는 곳(TRIP-1007) — 초안 행 아래 따로 그린다. */
+  removed?: ReplanRemovedVM[];
+  /** 행 사이 거리 커넥터 — 기본 켬. 서버 초안엔 행 거리가 없어 페이지가 끈다(TRIP-1007). */
+  showConnectors?: boolean;
+  /** 초안 얼굴의 안내(초안 로딩·조회 실패, TRIP-1007) — 확정 실패 안내가 있으면 그쪽이 먼저다. */
+  draftNotice?: ReplanNotice | null;
+  /** 초안이 아직 없어 [적용하기]만 잠근다(INV-4) — [직접 수정]은 살린다. */
+  applyDisabled?: boolean;
   /** 대안 없음 부제 — 서버가 사유를 주지 않아 주입받는다(Seed Q4). */
   noSolutionDescription?: string;
   /** 확정 요청 중 — [적용하기] 잠금(이중 POST → 409 차단, Q6). */
@@ -68,8 +89,12 @@ export function ReplanDraftView({
   dateLabel,
   meta,
   slots,
+  removed = [],
+  showConnectors = true,
+  draftNotice = null,
   noSolutionDescription,
   applyPending,
+  applyDisabled,
   applyFailed,
   onBack,
   onManualEdit,
@@ -78,14 +103,14 @@ export function ReplanDraftView({
   onPressCandidates,
 }: ReplanDraftViewProps): ReactElement {
   const isDraft = variant === 'draft';
-  const notice =
+  const notice: ReplanNotice | null =
     variant === 'noSolution'
       ? { title: NO_SOLUTION_TITLE, description: noSolutionDescription ?? '' }
       : variant === 'failed'
         ? FAILED_NOTICE
         : applyFailed
           ? APPLY_FAILED_NOTICE
-          : null;
+          : draftNotice;
 
   const manualButton: CtaButton = {
     label: '직접 수정',
@@ -100,7 +125,7 @@ export function ReplanDraftView({
         label: '적용하기',
         variant: 'primary',
         onPress: onApply,
-        disabled: applyPending,
+        disabled: applyPending || applyDisabled,
       }
     : {
         label: variant === 'noSolution' ? '조건 바꿔 다시 짜기' : '다시 시도',
@@ -132,12 +157,14 @@ export function ReplanDraftView({
               >
                 {notice.title}
               </Text>
-              <Text
-                testID="planb-draft-notice-description"
-                className="font-noto text-label text-muted"
-              >
-                {notice.description}
-              </Text>
+              {notice.description !== '' ? (
+                <Text
+                  testID="planb-draft-notice-description"
+                  className="font-noto text-label text-muted"
+                >
+                  {notice.description}
+                </Text>
+              ) : null}
             </View>
           ) : null}
         </>
@@ -159,7 +186,7 @@ export function ReplanDraftView({
                   isDraft && planned ? onPressCandidates : undefined
                 }
               />
-              {next !== undefined ? (
+              {showConnectors && next !== undefined ? (
                 <DistanceConnector
                   slotKey={next.slotKey}
                   distanceRange={next.distanceRange}
@@ -168,6 +195,32 @@ export function ReplanDraftView({
             </Fragment>
           );
         })}
+        {removed.length > 0 ? (
+          <View className="mt-md gap-sm">
+            <Text className="font-noto-bold text-label text-muted">
+              {`이번 계획에서 빠지는 곳 ${removed.length}`}
+            </Text>
+            {removed.map((row) => (
+              <View
+                key={row.slotKey}
+                testID={`planb-draft-removed-${row.slotKey}`}
+                className="gap-[6px] rounded-card border border-hairline bg-canvas p-[11px] opacity-45"
+              >
+                {row.timeLabel !== null ? (
+                  <Text className="font-noto-bold text-caption leading-[15px] text-ink">
+                    {row.timeLabel}
+                  </Text>
+                ) : null}
+                <Text
+                  numberOfLines={1}
+                  className="font-noto-bold text-card-title font-bold leading-[18px] text-ink"
+                >
+                  {row.placeName}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
       </View>
     </MapSheetShell>
   );

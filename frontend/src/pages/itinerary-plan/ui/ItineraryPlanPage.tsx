@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useRouter, type Href } from 'expo-router';
 
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+import { VIOLATION_NOTICE } from '@/entities/itinerary-slot/lib/violationLabel';
 import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
 import {
   buildDraftDayTabs,
@@ -398,6 +399,8 @@ export function ItineraryPlanPage({
                   ? OPENING_HOURS_WARNING
                   : undefined
               }
+              // 위반은 휴관 경고와 달리 확정 여부로 가르지 않는다 — 데이터가 정한다(BR-U3-13 · TRIP-1008 Q3).
+              violation={slot.hasViolation ? VIOLATION_NOTICE : null}
             />,
           ];
           if (index < slots.length - 1) {

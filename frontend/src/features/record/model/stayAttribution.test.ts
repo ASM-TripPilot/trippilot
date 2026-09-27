@@ -90,6 +90,7 @@ function stay(savedStayId: string, name: string): SavedStay {
     savedStayId,
     name,
     coordConfirmed: true,
+    linkedTripIds: [],
     registerRoute: 'MAP_SEARCH' as RegisterRoute,
     createdAt: '2026-06-01T00:00:00Z',
     updatedAt: '2026-06-01T00:00:00Z',

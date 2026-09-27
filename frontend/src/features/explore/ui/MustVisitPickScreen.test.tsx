@@ -324,3 +324,66 @@ describe('CS-10 · 더 담기·뒤로 링크 (AC-7)', () => {
     expect(props.onBack).toHaveBeenCalledTimes(1);
   });
 });
+
+/** 행과 "지역 밖" 머리글을 화면 순서대로(트리 pre-order) testID 문자열로 — 요소 배열을 통째 비교하지 않는다. */
+function orderedPickIds(): string[] {
+  return screen
+    .queryAllByTestId(/^mustvisit-pick-(row-|region-outside$)/)
+    .map((node) => String(node.props.testID));
+}
+
+describe('🔴 CS-11 · 지역 밖 목록은 머리글 한 줄 아래 이어 그린다 (TRIP-1012 A4 · 01b Q2)', () => {
+  it('안 2곳 → "이 여행 지역 밖 2곳" → 밖 2곳 순이고, 순번·부제는 보이는 전체로 센다', () => {
+    const props = renderScreen({
+      savedPlaces: SIX.slice(0, 2),
+      outsideRegionPlaces: SIX.slice(2, 4),
+      selectedPoiIds: ['p3'],
+    });
+
+    expect(orderedPickIds()).toEqual([
+      'mustvisit-pick-row-p1',
+      'mustvisit-pick-row-p2',
+      'mustvisit-pick-region-outside',
+      'mustvisit-pick-row-p3',
+      'mustvisit-pick-row-p4',
+    ]);
+
+    // 머리글 — 문구 완전 일치(N=밖 개수), 새 색·크기 없이 기존 캡션 토큰(폴백 한 줄과 같은 결).
+    const header = screen.getByTestId('mustvisit-pick-region-outside');
+    expect(header).toHaveTextContent('이 여행 지역 밖 2곳');
+    expect(String(header.props.className)).toContain('text-caption');
+    expect(String(header.props.className)).toContain('text-muted');
+
+    // 순번은 이어 매긴다 — 밖 첫 행이 1로 되돌아가면 red.
+    [
+      ['p3', '3'],
+      ['p4', '4'],
+    ].forEach(([poiId, rank]) => {
+      expect(
+        within(screen.getByTestId(`mustvisit-pick-rank-${poiId}`)).getByText(
+          rank
+        )
+      ).toBeOnTheScreen();
+    });
+    expect(screen.getByTestId('mustvisit-pick-subtitle')).toHaveTextContent(
+      '담은 곳 4곳 · 1곳 선택됨'
+    );
+
+    // 밖 행도 같은 행이다 — 선택 표시와 토글 콜백이 그대로 선다.
+    expect(screen.getByTestId('mustvisit-pick-check-p3')).toBeSelected();
+    fireEvent.press(screen.getByTestId('mustvisit-pick-check-p4'));
+    expect(props.onToggleSelect).toHaveBeenCalledWith('p4');
+    expect(props.onToggleSelect).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('CS-12 · 지역 밖이 0곳이면 머리글을 그리지 않는다 (TRIP-1012 · 무회귀)', () => {
+  it('outsideRegionPlaces 가 비면 머리글 0개 · 행 6개 그대로다', () => {
+    renderScreen({ outsideRegionPlaces: [] });
+
+    expect(
+      screen.queryAllByTestId('mustvisit-pick-region-outside')
+    ).toHaveLength(0);
+    expect(screen.getAllByTestId(/^mustvisit-pick-row-/)).toHaveLength(6);
+  });
+});

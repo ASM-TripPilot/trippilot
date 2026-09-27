@@ -30,6 +30,7 @@ const slot = (
   isFixed: false,
   endsNextDay: false,
   hasViolation: false,
+  alternatives: [],
   nameKo: '광안리 해수욕장',
   lat: 35.15,
   lng: 129.11,

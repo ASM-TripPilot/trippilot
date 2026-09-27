@@ -545,9 +545,12 @@ describe('🔴 I13 · TRIP-454·TRIP-785 — listed 는 CTA 활성·건너뛰기
     const flat = typeof dest === 'string' ? dest : JSON.stringify(dest);
     expect(flat).toContain('generating');
     expect(flat).toContain(TRIP_ID);
-    // ★ 완전AI 갈래(mode 미전달)는 copick 신호를 얻지 않는다(TRIP-504 AC-5 회귀).
+    // ★ 완전AI 갈래(h04 에서 mode 미전달)는 copick 신호를 얻지 않는다(TRIP-504 AC-5 회귀).
     expect(flat).not.toContain('CO_PLAN');
     expect(flat).not.toContain('copick');
+    // ★ TRIP-1006 A5 — 대신 FULLY_AI 를 **명시해** 싣는다. 생성 중 화면은 mode 가 없으면 관찰
+    //   모드(POST 0)로 뜨므로, 여기서 빠지면 완전 AI 생성 자체가 시작되지 않는다(A4 의 짝).
+    expect(flat).toContain('FULLY_AI');
 
     // ④ 전진은 요청을 만들지 않는다 — 생성 POST 는 h09 가 마운트 시 소유한다(무회귀).
     expect(hitsFor('POST', '/must-visits')).toBe(0);
@@ -571,12 +574,14 @@ describe('🔴 I13 · TRIP-454·TRIP-785 — listed 는 CTA 활성·건너뛰기
     const flat = typeof dest === 'string' ? dest : JSON.stringify(dest);
     expect(flat).toContain('generating');
     expect(flat).toContain(TRIP_ID);
+    // ★ TRIP-1006 A5 — 건너뛰기도 완전 AI 생성을 FULLY_AI 명시로 시작한다(위 I13 과 같은 이유).
+    expect(flat).toContain('FULLY_AI');
   });
 });
 
 describe('🔴 I16 · TRIP-504 AC-5 · TRIP-785 — copick 갈래는 CO_PLAN generating + 첫 슬롯 successRoute, 건너뛰기 부재', () => {
   /**
-   * 완전AI 갈래(I13)는 mode 없이 generating 으로만 간다. copick 갈래는 h04 에서 실려 온 `mode`
+   * 완전AI 갈래(I13)는 FULLY_AI 를 명시해 generating 으로 간다(TRIP-1006 A5). copick 갈래는 h04 에서 실려 온 `mode`
    * 신호를 받아 CTA 목적지를 **CO_PLAN generating + successRoute=첫 슬롯 경로**로 바꾼다(01b Q3).
    *
    * ★ 목적지 값이 급소다(462 gate②-2). h05 시점엔 slotKey 를 아직 모르므로 successRoute 는
@@ -631,7 +636,7 @@ describe('🔴 TRIP-982 B3 · 0곳 → 생성 중 (D7)', () => {
     await screen.findByTestId('itinerary-mustvisit-screen-empty');
   }
 
-  it('완전AI — 누르면 generating 으로 {tripId} 만 싣고 1회 이동하며 요청은 0건이다', async () => {
+  it('완전AI — 누르면 generating 으로 {tripId, mode: FULLY_AI} 를 싣고 1회 이동하며 요청은 0건이다', async () => {
     await openEmpty();
 
     fireEvent.press(screen.getByTestId('itinerary-mustvisit-screen-proceed'));
@@ -639,7 +644,7 @@ describe('🔴 TRIP-982 B3 · 0곳 → 생성 중 (D7)', () => {
     await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/trips/[tripId]/itinerary/generating',
-      params: { tripId: TRIP_ID },
+      params: { tripId: TRIP_ID, mode: 'FULLY_AI' }, // TRIP-1006: 모드 없으면 관찰 모드(POST 없음)라 명시 필수
     });
     expect(hitsFor('POST', '/must-visits')).toBe(0);
     expect(hitsFor('DELETE', '/must-visits')).toBe(0);

@@ -154,7 +154,8 @@ export function ManualPlanPage({ tripId }: { tripId: string }): ReactElement {
         activeDate={activeDate}
         dateLabel={formatCoPickDayHeader(activeDate)}
         onSelectDay={setActiveDayIndex}
-        onBack={() => router.back()}
+        // ‹ 는 저장 여부와 무관하게 일정 탭으로(TRIP-1009 · 01b Q3) — 방식 선택 화면으로 되돌아가지 않는다.
+        onBack={() => router.replace('/(tabs)/itinerary')}
         onPressTimeChip={setEditingSlotKey}
         onPressAddPlace={() =>
           router.push({

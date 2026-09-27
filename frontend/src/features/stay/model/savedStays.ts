@@ -85,6 +85,8 @@ export function useSavedStays(deps: { isAuthed: boolean }) {
         savedStayId: optimisticSavedStayId(stayKey(item)),
         name: item.name,
         coordConfirmed: false,
+        // 방금 저장한 숙소는 아직 어느 여행의 거점도 아니다(BR-U6-20).
+        linkedTripIds: [],
         registerRoute: 'MAP_SEARCH',
         externalSource: item.externalSource,
         externalId: item.externalId,

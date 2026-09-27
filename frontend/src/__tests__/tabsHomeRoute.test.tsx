@@ -9,6 +9,14 @@ import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 import { useSavedStays } from '@/features/stay/model/savedStays';
 import HomeRoute from '@/app/(tabs)/index';
+import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import {
+  captureDraftAtNextCall,
+  freshWizardDraft,
+  leavePreviousTripDraft,
+  resetWizardDraft,
+  wizardDraftData,
+} from '@/test-support/wizardDraftFixture';
 
 /**
  * (tabs)/홈 진입 라우트 — CTA 배선(TRIP-370)에 더해 **실데이터 판정(TRIP-371)**을 배선한다.
@@ -397,5 +405,29 @@ describe('🔴 935-AC-5 · 계획 중 홈의 컬렉션 헤더는 기본 문구�
     expect(screen.getByTestId('home-trip-hero')).toBeOnTheScreen();
     expect(screen.getByText('요즘 사람들이 담는 곳')).toBeOnTheScreen();
     expect(screen.queryAllByText(/서울에서 담을 만한 곳/)).toHaveLength(0);
+  });
+});
+
+// ── TRIP-1012 B1 · 새 진입점은 이동 직전 위저드 드래프트를 비운다 (#074 · D9) ─────────────
+// 직전 여행이 남긴 드래프트(여행지·기간·인원·동반·예산·취향·만든 여행 id·꼭 갈 곳)가 새 여행으로
+// 새지 않게, push 가 불리는 **그 순간** 드래프트가 새 여행의 얼굴(스토어 초기값)인지 잰다.
+// 위저드 안 왕복(더 담기 완료·2/4 '처음부터')은 비우지 않는다 — `tripWizardEntryCensus` 참고.
+afterEach(resetWizardDraft);
+
+describe('🔴 1012-B1 · 홈 [여행 만들기] FAB 는 직전 드래프트를 비우고 위저드로 간다', () => {
+  it('push 시점의 드래프트가 새 여행의 초기값이고, push 는 step1 로 1회다', () => {
+    leavePreviousTripDraft();
+    // 앵커 — 아직 안 비었다(픽스처가 조용히 망가지면 아래 단언이 공짜로 통과한다).
+    expect(wizardDraftData()).not.toEqual(freshWizardDraft());
+    expect(useTripWizardStore.getState().destinations).toHaveLength(1);
+    const draftAtPush = captureDraftAtNextCall(mockPush);
+
+    render(<HomeRoute />);
+
+    fireEvent.press(screen.getByTestId('home-create-trip-fab'));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(String(mockPush.mock.calls[0][0])).toBe('/trips/new/step1');
+    expect(draftAtPush()).toEqual(freshWizardDraft());
   });
 });

@@ -107,7 +107,7 @@ export function SlotCandidatePanelContainer({
   }
 
   // 현 슬롯 실이름·시각·컨셉은 후보와 달리 이미 손에 있다 — GET 캐시 슬롯의 nameKo·startAt·endAt·
-  // category 를 내려 헤더 제목·부제를 세운다(후보 이름·사진·태그는 여전히 BE 후속이라 undefined).
+  // category·imageUrl 을 내려 헤더 제목·부제·현재 행 사진을 세운다.
   const currentSlot =
     parsed.kind === 'ok'
       ? itinerary.data?.days
@@ -121,11 +121,16 @@ export function SlotCandidatePanelContainer({
         poiId: parsed.kind === 'ok' ? parsed.poiId : '',
         nameKo: currentSlot?.nameKo,
         tags: currentSlot?.tags,
+        imageUrl: currentSlot?.imageUrl,
         distanceRange: currentSlot?.distanceRange,
       }}
+      // 후보 응답의 이름·태그·사진을 그대로 내린다(TRIP-1024, QA #053 "이름 준비 중"·회색 사진).
       candidates={(candidatesData?.candidates ?? []).map((candidate) => ({
         poiId: candidate.poiId,
         distanceRange: candidate.distanceRange,
+        nameKo: candidate.nameKo,
+        tags: candidate.tags,
+        imageUrl: candidate.imageUrl,
       }))}
       startAt={currentSlot?.startAt}
       endAt={currentSlot?.endAt}

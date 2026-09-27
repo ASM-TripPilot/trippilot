@@ -79,6 +79,7 @@ function slot(poiId: string, startAt: string, endAt: string) {
     isFixed: false,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     tags: [],
   };
 }

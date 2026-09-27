@@ -182,7 +182,11 @@ function renderPage(props?: {
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
   }
-  render(<GeneratingPage tripId={TRIP_ID} {...props} />, { wrapper: Wrapper });
+  // TRIP-1006: mode 가 없으면 관찰 모드(POST 0·일정 GET)라 이 파일의 POST 경로 단언이 성립하지 않는다 —
+  // 완전 AI 를 명시하고, 케이스가 준 mode(CO_PLAN)가 덮어쓴다.
+  render(<GeneratingPage tripId={TRIP_ID} mode="FULLY_AI" {...props} />, {
+    wrapper: Wrapper,
+  });
   return client;
 }
 

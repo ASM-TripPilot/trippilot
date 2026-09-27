@@ -9,6 +9,7 @@ import DraggableFlatList, {
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
 import type { MapCenter, MapPin } from '@/shared/map';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+import { violationLabel } from '@/entities/itinerary-slot/lib/violationLabel';
 import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
 
 import type { CtaButton } from './CtaBar';
@@ -74,8 +75,6 @@ export interface EditorViewProps {
 const GUIDE_H12 = '길게 눌러 순서를 바꾸거나, 아래로 끌어 삭제해요';
 const GUIDE_IN_TRIP =
   '방문한 곳은 그대로 두고, 길게 눌러 순서를 바꾸거나 아래로 끌어 삭제해요';
-// 위반 사유(AI detail)가 없을 때의 배지 문구 — 사유를 지어내지 않는다(Q4, 발명 카피·Figma 근거 없음).
-const VIOLATION_FALLBACK = '일정 충돌';
 
 // 리스트 끝 센티널(드롭존 칸). poiId 가 아니라 이 문자열이라 슬롯과 키가 겹치지 않는다.
 const DROP_SENTINEL = 'itinerary-edit-drop-sentinel';
@@ -163,11 +162,7 @@ export function EditorView({
             fixed={fixed}
             numberOutside
             dragging={isActive}
-            violation={
-              item.hasViolation
-                ? (item.violationReason ?? VIOLATION_FALLBACK)
-                : null
-            }
+            violation={violationLabel(item)}
             onPressTimeChip={
               canEditTime ? () => onPressTimeChip(slotKey) : undefined
             }

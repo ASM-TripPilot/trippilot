@@ -34,6 +34,7 @@ const base: Omit<
   isFixed: false,
   endsNextDay: false,
   hasViolation: false,
+  alternatives: [],
   tags: [],
 };
 

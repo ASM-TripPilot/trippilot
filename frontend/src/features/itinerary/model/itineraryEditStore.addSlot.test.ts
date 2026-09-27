@@ -32,6 +32,7 @@ function slot(poiId: string): ItineraryDaysItemSlotsItem {
     endsNextDay: false,
     // ↓ 서버 소유 읽기전용(PUT 봉투에 실리면 안 됨)
     hasViolation: false,
+    alternatives: [],
     violationReason: null,
     nameKo: '어떤 장소',
     distanceRange: '약 1.2km · 도보 추정',

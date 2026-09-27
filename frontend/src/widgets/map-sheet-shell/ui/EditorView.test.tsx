@@ -62,6 +62,7 @@ function slot(poiId: string, overrides: Partial<EditorSlot> = {}): EditorSlot {
     isFixed: false,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     tags: ['바다'],
     nameKo: `장소-${poiId}`,
     ...overrides,
@@ -250,6 +251,7 @@ const I07_SLOTS: EditorSlot[] = [
     nameKo: '부산시립미술관',
     tags: ['미술', '실내'],
     hasViolation: true,
+    alternatives: [],
     violationReason: '숙소 고정 충돌',
   }),
   slot('p4', {
@@ -457,6 +459,41 @@ describe('🔴 EditorView · V5 — 위반 배지는 카테고리 아래 연분�
     );
     expect(screen.queryAllByTestId(/^slot-stopcard-violation-/)).toHaveLength(
       0
+    );
+  });
+});
+
+describe('🔴 EditorView · V5-D — 위반 사유의 분 범위는 HH:mm 로 보인다 (TRIP-1008 D1·D3)', () => {
+  it('사유 "영업시간 밖: 543~618" 은 배지에 "영업시간 밖: 09:03~10:18" 로 뜬다', () => {
+    renderI07({
+      slots: I07_SLOTS.map((s) =>
+        s.poiId === 'p3' ? { ...s, violationReason: '영업시간 밖: 543~618' } : s
+      ),
+    });
+
+    expect(
+      screen.getByTestId(`slot-stopcard-violation-${k('p3')}`)
+    ).toHaveTextContent('영업시간 밖: 09:03~10:18');
+    expect(screen.queryAllByText(/\d{3,4}~\d{3,4}/).length).toBe(0);
+  });
+
+  it('" · " 로 이어진 사유는 분 범위만 바뀌고 "이동 N분 필요" 는 글자 그대로다 (D5 경계)', () => {
+    renderI07({
+      slots: I07_SLOTS.map((s) =>
+        s.poiId === 'p3'
+          ? {
+              ...s,
+              violationReason:
+                '영업시간 밖: 543~618 · 이동 54분 필요, 간격 -60분',
+            }
+          : s
+      ),
+    });
+
+    expect(
+      screen.getByTestId(`slot-stopcard-violation-${k('p3')}`)
+    ).toHaveTextContent(
+      '영업시간 밖: 09:03~10:18 · 이동 54분 필요, 간격 -60분'
     );
   });
 });

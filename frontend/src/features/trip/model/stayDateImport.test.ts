@@ -52,6 +52,7 @@ function stay(over: Partial<SavedStay> = {}): SavedStay {
     savedStayId: '00000000-0000-0000-0000-000000000001',
     name: '해운대 호텔',
     coordConfirmed: true,
+    linkedTripIds: [],
     registerRoute: 'MAP_SEARCH',
     createdAt: '2026-08-01T00:00:00Z',
     updatedAt: '2026-08-01T00:00:00Z',

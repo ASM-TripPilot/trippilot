@@ -36,6 +36,7 @@ const slot = (
   isFixed: false,
   endsNextDay: false,
   hasViolation: false,
+  alternatives: [],
   nameKo,
   tags: [],
   ...over,
@@ -77,6 +78,12 @@ describe('🔴 riskAffectedRow (i03 영향 장소 조인)', () => {
       '5번째 · 해변 · 10:00–18:00 영업',
     ],
     ['둘 다 없음', { category: null, openingHours: null }, '5번째'],
+    // TRIP-1021 D11 — 여러 줄 영업시간은 불릿 없이 " · " 한 줄로 이어 붙는다(i03 파급 수용).
+    [
+      '영업시간 여러 줄(불릿·<br>)',
+      { openingHours: '- 월~금 10:00~20:00<br>\n- 토 10:00~22:00' },
+      '5번째 · 해변 · 월~금 10:00~20:00 · 토 10:00~22:00',
+    ],
   ] as const)(
     'J2 %s → 메타 "%s" 에서 빈 조각이 빠진다',
     (_name, over, meta) => {

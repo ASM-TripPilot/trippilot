@@ -276,11 +276,17 @@ describe('AC-G5 · 화면 프레젠테이션 순수성 · AC-G6 · feature 경�
       '@/features/auth',
       '@/features/onboarding',
     ];
-    const offenders = sources.flatMap(({ file, source }) =>
-      OTHER_FEATURES.filter((needle) => source.includes(needle)).map(
+    // TRIP-1012 — pages 층은 features 를 조립하는 자리라(FSD, eslint 층 zone 이 이미 강제) d04
+    // 페이지가 FAB 진입 직전 위저드 드래프트를 비우려고 `tripWizardStore` 하나만 무는 것은 허용한다.
+    // 그 한 경로만 걷어내고 나머지는 그대로 잡는다 — features/explore·라우트는 예외 없음.
+    const PAGE_ALLOWED = '@/features/trip/model/tripWizardStore';
+    const offenders = sources.flatMap(({ file, source }) => {
+      const scanned =
+        file === PAGE_REL ? source.split(PAGE_ALLOWED).join('') : source;
+      return OTHER_FEATURES.filter((needle) => scanned.includes(needle)).map(
         (needle) => `${file}: ${needle}`
-      )
-    );
+      );
+    });
     // StateNotice·SkeletonList 가 `features/stay/ui` 에 있지만 이 칸은 쓰지 않는다 —
     // 정답은 "explore 가 stay 를 import" 가 아니라 `shared/ui` 승격이고, 그 결정은 TRIP-222 다.
     expect(offenders).toEqual([]);

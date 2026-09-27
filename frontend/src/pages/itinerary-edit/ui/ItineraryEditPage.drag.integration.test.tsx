@@ -79,6 +79,7 @@ function slot(
     isFixed,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     tags: [],
     nameKo: `장소-${poiId}`,
   };

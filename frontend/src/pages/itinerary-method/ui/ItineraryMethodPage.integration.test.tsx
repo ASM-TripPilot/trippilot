@@ -81,6 +81,7 @@ function withExistingItinerary(): void {
             isFixed: false,
             endsNextDay: false,
             hasViolation: false,
+            alternatives: [],
             tags: [],
           },
         ],

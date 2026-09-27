@@ -18,6 +18,7 @@ import {
 } from '@/features/itinerary/ui/PlaceAddScreen';
 import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
 import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
+import { suggestNextSlotTime } from '@/entities/itinerary-slot/lib/suggestNextSlotTime';
 import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripId,
@@ -114,6 +115,13 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
   const pins = buildDraftPins(targetSlots);
   const center =
     pins.length > 0 ? { lat: pins[0].lat, lng: pins[0].lng } : FALLBACK_CENTER;
+  // 시트 기본값 = 새 장소 바로 앞 슬롯(insertAfter 가 가리키는 카드, 없으면 마지막)의 종료부터 1시간
+  // (TRIP-1009). 제안값일 뿐 시각 재추정이 아니다 — 저장 후 서버가 재검증한다(INV-2).
+  const suggested = suggestNextSlotTime(
+    insertAfter !== undefined
+      ? targetSlots[Number(insertAfter)]
+      : targetSlots[targetSlots.length - 1]
+  );
 
   function handleApplyTime(patch: {
     startAt: string;
@@ -134,6 +142,8 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
       endsNextDay: patch.endsNextDay,
       hasViolation: false,
       tags: [],
+      // 로컬로 만든 새 슬롯엔 AI 차선책이 없다 — 계약상 "편집하면 사라진다"(빈 배열).
+      alternatives: [],
     };
     const nextDays = days.map((day) =>
       day.date === targetDate
@@ -225,8 +235,8 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
 
       {pendingPlace ? (
         <TimeSheet
-          startAt="10:00:00"
-          endAt="11:00:00"
+          startAt={suggested.startAt}
+          endAt={suggested.endAt}
           onApply={handleApplyTime}
           onCancel={() => setPendingPlace(null)}
           testIDPrefix="itinerary-edit-time"

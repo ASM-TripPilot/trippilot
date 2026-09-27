@@ -1,4 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 
 import type { SavedStay } from '@/shared/api/generated/schemas';
 import { formatBaseNightRange } from '@/entities/trip/lib/formatTripPeriod';
@@ -38,6 +43,7 @@ function stay(over: Partial<SavedStay> = {}): SavedStay {
     savedStayId: 'stay-a',
     name: '해운대 오션 호텔',
     coordConfirmed: true,
+    linkedTripIds: [],
     checkIn: '2026-06-10',
     checkOut: '2026-06-12',
     registerRoute: 'MAP_SEARCH',
@@ -66,6 +72,7 @@ const GAMCHEON = stay({
   checkIn: null,
   checkOut: null,
   coordConfirmed: false,
+  linkedTripIds: [],
 });
 
 function renderSheet(
@@ -241,5 +248,87 @@ describe('S10 · 새 포맷터 ≠ 옛 formatStayDateRange (★ en dash 함정)'
     expect(newLine).not.toContain('~');
     expect(oldLine).toContain('~'); // U+007E — 옛 포맷터는 살려 두되 재사용 금지
     expect(oldLine).not.toContain('–');
+  });
+});
+
+/**
+ * 후보 카드 **루트**만 고르는 testID 패턴. `SavedStayCard`는 루트 밑에 `{루트}-photo`·`-photo-placeholder`·
+ * `-base-badge` 하위 testID를 더 달아서, 접두만 보는 `/^trip-base-staysheet-cand-/`는 카드 한 장을 두 번
+ * 센다(실측 3장 → 6). 개수를 셀 때는 이 패턴을 쓴다.
+ */
+const CARD_ROOT =
+  /^trip-base-staysheet-cand-(?!.*-(photo|photo-placeholder|base-badge)$)/;
+
+/**
+ * TRIP-1011(#036 · D8) — 섹션 렌더. 나누는 계산은 배선·모델 몫이고(`staySheetSections`), 시트는 받은
+ * `sections` 를 헤더+카드 묶음으로 그리기만 한다(props-only 유지).
+ */
+describe('S11 · sections 가 오면 헤더+카드 묶음 두 개로 그린다 (AC-4 · 01b Q3)', () => {
+  const SECTIONS = [
+    { key: 'here' as const, title: '부산광역시 숙소', candidates: [HAEUNDAE] },
+    {
+      key: 'other' as const,
+      title: '다른 지역 · 위치 확인 안 됨',
+      candidates: [GWANGALLI, GAMCHEON],
+    },
+  ];
+
+  it('두 섹션 헤더 문구가 그대로 뜨고, 카드는 자기 섹션 안에 있다', () => {
+    renderSheet({ sections: SECTIONS });
+
+    const here = screen.getByTestId('trip-base-staysheet-section-here');
+    const other = screen.getByTestId('trip-base-staysheet-section-other');
+    // 헤더 문구 — 문자열 인자라 완전 일치(★1).
+    expect(
+      screen.getByTestId('trip-base-staysheet-section-here-title')
+    ).toHaveTextContent('부산광역시 숙소');
+    expect(
+      screen.getByTestId('trip-base-staysheet-section-other-title')
+    ).toHaveTextContent('다른 지역 · 위치 확인 안 됨');
+
+    // 카드 배치 — 섹션 컨테이너 안에서 센다.
+    expect(
+      within(here).getByTestId('trip-base-staysheet-cand-stay-haeundae')
+    ).toBeOnTheScreen();
+    expect(within(here).queryAllByTestId(CARD_ROOT)).toHaveLength(1);
+    expect(within(other).queryAllByTestId(CARD_ROOT)).toHaveLength(2);
+  });
+
+  it('★ candidates 와 sections 를 함께 받아도 카드는 한 번씩만 그린다 (중복 렌더 0 · 숨김 0)', () => {
+    // renderSheet 기본 candidates 는 같은 세 곳이다 — 둘 다 그리면 6장이 된다.
+    renderSheet({ sections: SECTIONS });
+
+    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(3);
+  });
+
+  it('다른 지역 섹션의 카드도 똑같이 선택·지정된다 (D8 — 숨기지도 막지도 않는다)', () => {
+    const props = renderSheet({
+      sections: SECTIONS,
+      selectedSavedStayId: 'stay-gamcheon',
+    });
+
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-stay-gamcheon')
+    ).toBeSelected();
+    fireEvent.press(
+      screen.getByTestId('trip-base-staysheet-cand-stay-gwangalli')
+    );
+    expect(props.onSelect).toHaveBeenCalledWith('stay-gwangalli');
+
+    expect(screen.getByTestId('trip-base-staysheet-assign')).toBeEnabled();
+    fireEvent.press(screen.getByTestId('trip-base-staysheet-assign'));
+    expect(props.onAssign).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('S12 · sections 가 없으면 지금처럼 헤더 없는 한 줄 목록 (01b Q3)', () => {
+  it('섹션 컨테이너·헤더가 0건이고 카드는 전부 그린다', () => {
+    renderSheet();
+
+    // 긍정 앵커 — 목록 자체는 그려졌다(시트가 통째로 안 그려진 공짜 통과 차단).
+    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(3);
+    expect(
+      screen.queryAllByTestId(/^trip-base-staysheet-section-/)
+    ).toHaveLength(0);
   });
 });

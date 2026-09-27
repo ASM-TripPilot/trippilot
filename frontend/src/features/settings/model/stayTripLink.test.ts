@@ -27,6 +27,7 @@ function stay(savedStayId: string): SavedStay {
     savedStayId,
     name: `숙소 ${savedStayId}`,
     coordConfirmed: true,
+    linkedTripIds: [],
     registerRoute: 'MAP_SEARCH',
     createdAt: '2026-08-01T00:00:00.000Z',
     updatedAt: '2026-08-01T00:00:00.000Z',
