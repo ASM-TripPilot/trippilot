@@ -418,37 +418,6 @@ describe('🔴 S7 · AC-10 — 폴백 안내의 「처음부터 직접 짜기」
   });
 });
 
-describe('🔴 S8 · AC-4 보강(02c) — 깨끗한 셸에서 「다시 짜기」가 서버 오류면 셸을 유지한 채 일부 실패 안내를 띄운다 (INV-4 · BR-U1-55)', () => {
-  it('재생성 POST 500 → 셸·카드 그대로 + itinerary-draft-stale-failed', async () => {
-    // 준비 — 캐시는 끝까지 COMPLETE 다. 안내를 켜는 신호는 generationState 가 아니라 **재생성 실패**
-    // (regenerate.isError)뿐이다 — 안내 조건을 FAILED 하나로 좁히는 회귀를 잡는 짝(03b 경고-2).
-    itineraryScript = () => itinerary({});
-    server.use(
-      http.post(`${BASE}/trips/:tripId/itinerary`, () =>
-        HttpResponse.json(
-          { code: 'INTERNAL', message: '서버 오류' },
-          { status: 500 }
-        )
-      )
-    );
-    renderPage();
-    await screen.findByTestId(cardId('poi-a'), {}, WAIT);
-    // 실행 전 앵커 — 아직 안내가 없다(처음부터 떠 있던 안내로 공짜 통과 차단).
-    expect(screen.queryByTestId(STALE)).toBeNull();
-
-    // 실행 — 셸 CTA 「다시 짜기」.
-    fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
-
-    // 단언 — 실패가 침묵하지 않고, 받은 목록·셸은 그대로다(얼굴을 갈아 끼우지 않는다).
-    expect(await screen.findByTestId(STALE, {}, WAIT)).toHaveTextContent(
-      STALE_FAILED_NOTE
-    );
-    expect(screen.getByTestId(SHELL)).toBeOnTheScreen();
-    expect(screen.getByTestId(cardId('poi-a'))).toBeOnTheScreen();
-    expect(screen.queryByTestId(BANNER)).toBeNull();
-  });
-});
-
 describe('🔴 S9 · 경고-1 보강(02c) — 셸 일차 칩은 데이터가 도착한 날만 그린다 (눌러도 무반응인 칩 금지)', () => {
   /** 칩 testID 는 `sheet-daychip-{index}`(뒤로 버튼·루트와 구별되게 숫자만) — 트리 순서대로. */
   function chipLabels(): string[] {

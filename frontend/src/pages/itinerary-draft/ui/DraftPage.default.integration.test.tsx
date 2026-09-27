@@ -34,7 +34,8 @@ import { DraftPage } from './DraftPage';
  *  - 🔴 **INV-4 는 셸 안에서 지킨다** — staleFailed 응답도 셸로 가고 셸 시트 안에 staleFailed 안내가 붙는다
  *    (TRIP-1039 로 narrow 를 풀었다 — 옛 계약 "staleFailed → DraftScreen" 을 뒤집음). fallback 응답은 여전히
  *    전용 인터스티셜이 먼저 잡는다(AC-1b · TRIP-791).
- *  - 🔴 확정하기 → h14(index 라우트) push 완전일치 / 다시 짜기 → 재생성 POST 1건(AC-2).
+ *  - 🔴 확정하기 → h14(index 라우트) push 완전일치 / 다시 짜기 → 생성 화면 replace 1회 · 초안 화면 POST 0
+ *    (AC-2 · TRIP-1037 플립 — POST 는 생성 화면이 마운트될 때 보낸다).
  *  - 🔴 전 슬롯 시각 칩(isFixed 무관, en-dash) · 제거요소 부재 · 헤더 "N곳 · X.Xkm" · INV-3 0 ·
  *    다른 후보 ›는 비고정만(AC-3~7).
  *
@@ -60,11 +61,13 @@ jest.mock('@/shared/storage', () => ({
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
+// TRIP-1037 — 다시 짜기가 생성 화면으로 replace 한다. 관찰하려고 익명 목을 이름 있는 목으로 승격한다.
+const mockReplace = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({
     push: mockPush,
     back: mockBack,
-    replace: jest.fn(),
+    replace: mockReplace,
     canGoBack: () => true,
   }),
 }));
@@ -211,6 +214,7 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 beforeEach(() => {
   mockPush.mockClear();
   mockBack.mockClear();
+  mockReplace.mockClear();
   postCount = 0;
   setAccessToken('valid-access');
   itineraryHandler = () =>
@@ -343,17 +347,23 @@ describe('🔴 A2 · AC-2 — CTA 두 갈래 배선 (혼동 방지)', () => {
     expect(dest.params?.tripId).toBe(TRIP_ID);
   });
 
-  it('다시 짜기 press → 재생성 POST 가 한 건 나간다', async () => {
+  it('다시 짜기 press → 생성 화면으로 replace 1회(mode=FULLY_AI) · 초안 화면 POST 0 (TRIP-1037 플립)', async () => {
     renderPage();
     await screen.findByTestId('sheet-cta-root');
 
     // 순서 계약 — cta[0]=다시 짜기(outline).
     const retry = screen.getByTestId('sheet-cta-button-0');
     expect(retry).toHaveTextContent('다시 짜기');
-    const before = postCount;
     fireEvent.press(retry);
 
-    await waitFor(() => expect(postCount).toBe(before + 1));
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/itinerary/generating',
+      params: { tripId: TRIP_ID, mode: 'FULLY_AI' },
+    });
+    // POST 는 생성 화면 몫 — 흘려 보낸 뒤에도 초안 화면이 보낸 것은 0이다.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(postCount).toBe(0);
   });
 });
 

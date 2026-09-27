@@ -17,12 +17,8 @@ import {
 } from '@/features/itinerary/model/draftView';
 import type { GenerationDayState } from '@/features/itinerary/model/draftView';
 import { legDistance } from '@/features/itinerary/model/legDistance';
-import {
-  isGenerationRunning,
-  useGenerationBusy,
-} from '@/features/itinerary/model/useGenerationBusy';
+import { isGenerationRunning } from '@/features/itinerary/model/useGenerationBusy';
 import { DraftScreen } from '@/features/itinerary/ui/DraftScreen';
-import { GeneratingScreen } from '@/features/itinerary/ui/GeneratingScreen';
 import { GenerationFallbackScreen } from '@/features/itinerary/ui/GenerationFallbackScreen';
 import { AlertCircleGlyph } from '@/features/itinerary/ui/ItineraryGlyphs';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
@@ -32,7 +28,6 @@ import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripId,
   useGetTripsTripIdItinerary,
-  usePostTripsTripIdItinerary,
 } from '@/shared/api/generated/trips/trips';
 import { isNotFound } from '@/shared/api/isNotFound';
 import { StateNotice } from '@/shared/ui/StateNotice';
@@ -53,7 +48,7 @@ const GENERATION_STATUS_LABEL: Record<GenerationDayState, string> = {
 };
 
 /**
- * h11 배선(TRIP-297) — 두 조회를 잇고, 2단계 생성을 폴링으로 잇고, 재생성을 보낸다.
+ * h11 배선(TRIP-297) — 두 조회를 잇고, 2단계 생성을 폴링으로 잇고, 재생성은 생성 화면으로 보낸다.
  *
  * 이 파일이 지는 책임 — 화면은 이 중 어느 것도 모른다:
  *  1. **탭의 출처는 여행 기간이다.** 서버는 첫날만 담긴 `PARTIAL` 을 먼저 주므로
@@ -86,17 +81,32 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   const [confirmingReset, setConfirmingReset] = useState(false);
   // MANUAL 빈 일정 → 편집기 replace 를 한 번만(라우터 객체가 렌더마다 새로 와도 다시 부르지 않는다).
   const manualRedirectedRef = useRef(false);
+  // TRIP-1037 — 재생성으로 생성 화면에 떠나는 중인가. `useState` 가 아니라 ref 인 이유: 같은 틱의 두 번째
+  // 탭은 다음 렌더 전에 들어와 상태로는 못 본다. 400ms `guardPress` 도 조회 await(수 초)를 못 덮는다.
+  // 이동 없이 끝나는 경로(모름·확정·MANUAL·확인 열기)에서는 풀어 다시 누를 수 있게 한다(AC-6).
+  const leavingRef = useRef(false);
+  // 조회를 기다리는 동안 사용자가 떠났나(5-b 경고-1). 홈·카드가 같은 일정 키를 들고 있으면 조회가 abort 되지
+  // 않고 도착하므로, 떠난 화면이 전역 라우터로 생성 화면을 불러 사용자를 끌고 가지 않게 await 뒤에 본다.
+  // 초기값 false + effect 에서 켜는 형태 — StrictMode 의 정리·재실행에도 값이 맞는다(PlanbRequestPage 선례).
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const itineraryQueryKey = getGetTripsTripIdItineraryQueryKey(tripId);
 
   /**
-   * 재생성 직전의 폴링 횟수. 상한은 "이번 생성에 대해 몇 번 물었나" 라서 절대값이 아니라
+   * 마운트 순간의 폴링 횟수. 상한은 "이번 생성에 대해 몇 번 물었나" 라서 절대값이 아니라
    * **기준선과의 차이**로 잰다.
    *
    * 왜 이렇게까지 하나: 카운터를 0으로 되감는 가장 쉬운 길(`resetQueries`)은 카운터와 함께
    * **마지막 성공 응답의 사본까지 버린다.** 그러면 재생성 뒤 재조회가 실패했을 때 이미 받아
    * 둔 목록이 통째로 사라지고 전면 실패 얼굴이 뜬다 — 이 사이클이 막으려던 바로 그 사고다
    * (AC-9 · AC-10 · INV-4). 기준선을 기억해 두면 캐시를 건드리지 않고도 다시 셀 수 있다.
+   * (재생성은 이제 생성 화면을 거쳐 이 화면을 **새로 마운트**하므로 그 마운트가 기준선을 다시 잡는다 — TRIP-1037.)
    *
    * `useRef` 는 **다시 그리지 않고 값만 들고 있는 상자**다 — 이 값은 화면에 안 보이고
    * 판정에만 쓰이므로 바뀌었다고 다시 그릴 이유가 없다.
@@ -133,7 +143,6 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
           : false,
     },
   });
-  const regenerate = usePostTripsTripIdItinerary();
 
   const days = itinerary.data?.days ?? [];
   const periodTabs = buildDraftDayTabs({
@@ -190,12 +199,9 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   const view = resolveDraftView({
     days,
     loading: trip.isPending || itinerary.isPending,
-    // 재생성 실패도 여기로 온다 — 실패하면 목록은 그대로인데 화면이 아무 말도 안 하게 된다
-    // (BR-U1-55 침묵 실패 금지).
     failed:
       trip.isError ||
       itinerary.isError ||
-      regenerate.isError ||
       itinerary.data?.generationState === 'FAILED' ||
       pollExhausted,
   });
@@ -218,7 +224,7 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   });
 
   /**
-   * 재생성 — **확정 일정에는 어떤 경로로도 보내지 않는다.**
+   * 재생성 — 생성 화면(POST 는 그 화면이 마운트 때 1회)으로 보낸다. **확정 일정은 어떤 경로로도 보내지 않는다.**
    *
    * ⚠️ 조회가 끝나기 전에는 `status` 를 모른다(`data` 가 `undefined`). 그 상태로 보내면
    * 확정 일정에도 POST 가 나가 확정이 풀리고 동결됐던 poi_snapshot 참조가 사라진다 —
@@ -230,53 +236,46 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
    * 그 밖의 실패(5xx · 네트워크 끊김)는 "모른다" 라서 확정 일정일 수도 있다.
    */
   async function handleRetry(): Promise<void> {
+    // 잠금은 await **앞**에서 — 조회를 기다리는 동안 들어온 누름도 막는다.
+    if (leavingRef.current) return;
+    leavingRef.current = true;
+
     const settled =
       itinerary.data !== undefined
         ? itinerary
         : await itinerary.refetch({ cancelRefetch: false });
+    if (!mountedRef.current) return;
     const status = settled.data?.status;
 
-    if (status === undefined) {
-      if (!isNotFound(settled.error)) return;
-    } else if (status === 'CONFIRMED') {
+    const stop =
+      (status === undefined && !isNotFound(settled.error)) ||
+      status === 'CONFIRMED' ||
+      // TRIP-1038 — 직접 짠 일정을 AI 생성으로 덮지 않는다(방어 한 줄 — 셸·빈 얼굴은 이미 이 길을 안 준다).
+      settled.data?.generationMode === 'MANUAL';
+    if (stop) {
+      leavingRef.current = false;
       return;
     }
-    // TRIP-1038 — 직접 짠 일정을 AI 생성으로 덮지 않는다(방어 한 줄 — 셸·빈 얼굴은 이미 이 길을 안 준다).
-    if (settled.data?.generationMode === 'MANUAL') return;
 
     // TRIP-1032 B — 이 여행이 생성 중이면 확인부터. 확인 뒤엔 cancel 을 따로 부르지 않는다 — 같은 여행
     // POST 가 서버에서 이전 세션을 닫는다(01b Q4).
     if (isGenerationRunning(settled.data)) {
+      leavingRef.current = false;
       setConfirmingInProgress(true);
       return;
     }
 
-    sendRegenerate();
+    goGenerating();
   }
 
-  /** 재생성 POST 1회 — 409 안내의 재시도도 이 함수로 **같은 요청**을 다시 보낸다(TRIP-1032). */
-  function sendRegenerate(): void {
-    regenerate.mutate(
-      { tripId },
-      {
-        onSuccess: () => {
-          // POST 응답은 day1 만 담긴 PARTIAL 이다 — 나머지는 GET 폴링이 받아 온다.
-          // ⚠️ 여기서 하는 일은 **카운터 되감기뿐이고 데이터는 건드리지 않는다.**
-          // 폴링 횟수는 Query 인스턴스의 상태라 `invalidateQueries` 로는 안 줄어드는데
-          // (실측: 4 → 5 로 이어진다), 줄이겠다고 `resetQueries` 를 쓰면 카운터와 함께
-          // **마지막 성공 응답 사본까지 버려서** 뒤이은 재조회 실패가 목록 전멸이 된다
-          // (실측: 카드 3장 → 0장 + 전면 실패 얼굴). 기준선을 옮겨 두고 무효화만 한다.
-          // 자체 타이머는 여전히 쓰지 않는다.
-          pollBaseline.current =
-            queryClient.getQueryState(itineraryQueryKey)?.dataUpdateCount ?? 0;
-          void queryClient.invalidateQueries({ queryKey: itineraryQueryKey });
-        },
-      }
-    );
+  /** 생성 화면으로 replace 1회 — 409 안내·실패·재시도는 그 화면이 진다(TRIP-1037 결정 A). */
+  function goGenerating(): void {
+    leavingRef.current = true;
+    router.replace({
+      pathname: '/trips/[tripId]/itinerary/generating',
+      params: { tripId, mode: 'FULLY_AI' },
+    });
   }
-
-  // TRIP-1032 A — 재생성 POST 가 409 GENERATION_IN_PROGRESS 면 일반 실패로 접지 않고 안내를 띄운다.
-  const busy = useGenerationBusy(regenerate.error, sendRegenerate);
 
   // 수동 짜기 라우트(h19, fresh 없음 = 기존 일정 이어 편집). 인터스티셜·DraftScreen·MANUAL 셸 「편집하기」가
   // 쓴다 — 셸 폴백 안내 링크는 비우기 확인을 거쳐 fresh 를 싣는다(TRIP-1038 C). 접미 있는 라우트라 객체형 push 로 `[tripId]` 를 해소한다(TRIP-483 AC-4).
@@ -308,17 +307,6 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
     }
   }
 
-  // TRIP-1032 A — 다른 여행 생성 중 안내. 생성 화면(h09)과 같은 얼굴을 쓴다(일반 실패·배너보다 앞선다).
-  if (busy !== null) {
-    return (
-      <GeneratingScreen
-        busy={{ ...busy, onWait: () => router.replace('/(tabs)') }}
-        onRetry={sendRegenerate}
-        onBackground={handleBack}
-      />
-    );
-  }
-
   // TRIP-1032 B — 이 여행이 생성 중일 때 재생성 확인(새 오버레이 없이 인라인 얼굴 — jest 로 심판된다).
   if (confirmingInProgress) {
     return (
@@ -335,8 +323,9 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
                 label: '계속',
                 variant: 'filled',
                 onPress: () => {
+                  if (leavingRef.current) return;
                   setConfirmingInProgress(false);
-                  sendRegenerate();
+                  goGenerating();
                 },
               },
               {

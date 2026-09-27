@@ -187,6 +187,17 @@ let itineraryScript: (call: number) => Itinerary;
 /** GET /trips/{id} 가 무엇을 돌려줄지 — 여행 기간을 케이스가 정한다(위 `itineraryScript` 와 동형). */
 let tripScript: () => Trip;
 
+/** 생성 화면(`/trips/[tripId]/itinerary/generating`)으로 간 라우터 호출 수 — replace·push 모두 센다(TRIP-1037). */
+function generatingMoves(): number {
+  return [...mockReplace.mock.calls, ...mockPush.mock.calls].filter(
+    ([arg]) =>
+      typeof arg === 'object' &&
+      arg !== null &&
+      (arg as { pathname?: string }).pathname ===
+        '/trips/[tripId]/itinerary/generating'
+  ).length;
+}
+
 function hitsFor(method: string, includes: string): number {
   return observedHits.filter(
     (hit) => hit.startsWith(method) && hit.includes(includes)
@@ -332,8 +343,8 @@ describe('🔴 I2 · AC-9 · AC-10 — 2차 실패해도 1차분은 살아남는
   });
 });
 
-describe('🔴 I3 · AC-11 — 다시 시도는 PLANNED 에서만 POST 를 낸다 (01b D8)', () => {
-  it('PLANNED 면 누를 때 재생성 POST 가 한 건 나간다', async () => {
+describe('🔴 I3 · AC-11 — 다시 시도는 PLANNED 에서만 생성 화면으로 보낸다 (01b D8 · TRIP-1037 플립)', () => {
+  it('PLANNED 면 누를 때 생성 화면으로 replace 1회 · 초안 화면 POST 0', async () => {
     itineraryScript = () =>
       itinerary({
         dayCount: 3,
@@ -346,12 +357,16 @@ describe('🔴 I3 · AC-11 — 다시 시도는 PLANNED 에서만 POST 를 낸�
     // TRIP-792 플립 — 깨끗한 COMPLETE·PLANNED → h08 셸. 재생성은 이제 셸의 '다시 짜기'(cta[0]).
     const retry = await screen.findByTestId('sheet-cta-button-0');
     expect(retry).toHaveTextContent('다시 짜기');
-    // 배선이 mount 시 POST 를 내든 안 내든 상관없게 **누르기 직전 값과의 차이**를 잰다.
-    const before = hitsFor('POST', '/itinerary');
-
     fireEvent.press(retry);
 
-    await waitFor(() => expect(hitsFor('POST', '/itinerary')).toBe(before + 1));
+    // TRIP-1037 — 재생성 POST 는 생성 화면이 마운트될 때 1회 보낸다. 초안 화면은 이동만 한다.
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/itinerary/generating',
+      params: { tripId: TRIP_ID, mode: 'FULLY_AI' },
+    });
+    await sleep(300);
+    expect(hitsFor('POST', '/itinerary')).toBe(0);
   });
 
   it('🔴 CONFIRMED 면 다시 짜기를 눌러도 재생성 POST 가 0건이다 — 확정이 풀리면 되돌릴 수 없다 (TRIP-792 플립)', async () => {
@@ -378,6 +393,9 @@ describe('🔴 I3 · AC-11 — 다시 시도는 PLANNED 에서만 POST 를 낸�
     await sleep(50);
 
     expect(hitsFor('POST', '/itinerary')).toBe(0);
+    // TRIP-1037 — 초안 화면은 이제 어떤 경우에도 POST 를 안 보내 위 단언만으론 공허하다. 확정 가드의
+    // 실체는 "생성 화면으로 보내지 않는다" 다(생성 화면이 마운트되면 POST 가 나가 확정이 풀린다).
+    expect(generatingMoves()).toBe(0);
   });
 });
 
@@ -596,6 +614,9 @@ describe('🔴 I10 · TRIP-466 AC-a1 / TRIP-792 — CONFIRMED 도 h08 셸로 가
     await sleep(50);
 
     expect(hitsFor('POST', '/itinerary')).toBe(0);
+    // TRIP-1037 — 초안 화면은 이제 어떤 경우에도 POST 를 안 보내 위 단언만으론 공허하다. 확정 가드의
+    // 실체는 "생성 화면으로 보내지 않는다" 다(생성 화면이 마운트되면 POST 가 나가 확정이 풀린다).
+    expect(generatingMoves()).toBe(0);
   });
 });
 
