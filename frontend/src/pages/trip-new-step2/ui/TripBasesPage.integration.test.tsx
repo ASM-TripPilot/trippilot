@@ -232,8 +232,8 @@ function useFakeServer(): void {
 }
 
 // 교체 흐름은 DELETE→POST→재조회 왕복이 여럿이라 로컬 ~1.7s, CI 러너에서 5s 기본 제한을 넘는다
-// (PR #766 CI 실측). DraftPage.integration 의 20s 선례와 같은 이유.
-jest.setTimeout(20000);
+// (PR #766 CI 실측). 한 테스트 안에 NETWORK_WAIT(15s) 대기가 여러 번이라 그보다 넉넉히.
+jest.setTimeout(60000);
 
 beforeAll(() => {
   server.listen({ onUnhandledRequest: 'error' });
@@ -307,7 +307,8 @@ afterAll(() => server.close());
  * 사슬을 못 기다려 단독 실행에서만 간헐 red 가 났다(실측 — 묶음 실행은 green). 결과를 바꾸지 않고
  * "얼마나 기다리나"만 늘린다.
  */
-const NETWORK_WAIT = { timeout: 5000 };
+// CI 러너는 로컬보다 ~4배 느리다(PR #766 실측 — 이 파일 로컬 10s · CI 40s). 교체 왕복을 기다리는 한도.
+const NETWORK_WAIT = { timeout: 15000 };
 
 function tripBasesPage(): ReactElement {
   return (
