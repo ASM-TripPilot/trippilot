@@ -360,7 +360,10 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     // ⚠️ TRIP-1012: d02 select 지역 밖 머리글 프리뷰 1키(`saved-places-select-outside`, band `d`) 추가로
     //    166→167. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에 그 1키만 추가하고 이
     //    가드는 안 만진다(추가 전엔 166개라 red). 정확히 그 키인지는 아래 'TRIP-1012' describe 가 못박는다.
-    expect(PREVIEW_STATES).toHaveLength(167);
+    // ⚠️ TRIP-1027: g01 기간이 박수에서 파생돼 불일치 안내가 사라지며 `trip-new-step1-nights-mismatch`(band `g`)
+    //    1키 삭제로 167→166. test-designer 선반영 — implementer 는 preview.tsx 에서 그 1키만 지우고 이 가드는
+    //    안 만진다(지우기 전엔 167개라 red). 정확히 그 키인지는 아래 'TRIP-1027' describe 가 못박는다.
+    expect(PREVIEW_STATES).toHaveLength(166);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -906,28 +909,17 @@ describe('TRIP-742 AC-1 · g 밴드 프리뷰 키 4개 삭제 (band g)', () => {
   });
 });
 
-describe('🔴 TRIP-1010 · g01 박수·기간 불일치 안내 프리뷰 키 (band g)', () => {
-  it('trip-new-step1-nights-mismatch 키가 있고, 렌더하면 안내 한 줄이 뜬다', () => {
-    // 준비 — 새 키 엔트리를 찾는다(red-first: preview.tsx 에 추가 전엔 없다).
-    const entry = PREVIEW_STATES.find(
-      (state) => state.key === 'trip-new-step1-nights-mismatch'
-    );
-    expect(entry).toBeDefined();
-    expect(entry?.band).toBe('g');
-    expect(entry?.label).toBe('g01 · 여행 만들기 nights-mismatch');
+describe('🔴 TRIP-1027 · g01 박수·기간 불일치 안내 프리뷰 키 삭제 (band g)', () => {
+  it('trip-new-step1-nights-mismatch 키가 없고, 형제 default·기간 시트 키는 남는다', () => {
+    // 준비 — 렌더 없이 key 집합만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
 
-    // 실행 — 그 엔트리의 render() 를 그린다.
-    render(<>{entry?.render()}</>);
-
-    // 단언 — 공허 통과 방지: 기본 g01 이 아니라 nightsMismatchNote 를 넘긴 얼굴이어야 안내가 선다.
-    expect(
-      screen.getByTestId('trip-wizard-nights-mismatch-note')
-    ).toHaveTextContent(/박/);
-
-    // 이웃 앵커 — 기본 g01 default 키가 딸려 사라지지 않았다.
-    expect(PREVIEW_STATES.map((state) => state.key)).toContain(
-      'trip-new-step1-default'
-    );
+    // 부정 — 안내 한 줄 자체가 사라져 그 얼굴을 보여 줄 키도 없다(지우기 전엔 present 라 red).
+    // 카운트(166)만으론 "아무 1키나 지워도" 통과하므로 이 짝이 '정확히 그 키'임을 못박는다.
+    expect(keys).not.toContain('trip-new-step1-nights-mismatch');
+    // 긍정 짝 — 같은 화면의 형제 키는 그대로(과잉 삭제·공허 통과 차단).
+    expect(keys).toContain('trip-new-step1-default');
+    expect(keys).toContain('trip-new-step1-period-sheet');
   });
 });
 

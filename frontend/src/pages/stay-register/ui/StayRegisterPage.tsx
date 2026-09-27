@@ -56,9 +56,11 @@ export function StayRegisterPage({
   // 여행 기간(위저드 스토어)을 달력 상·하한으로 흘려보낸다(TRIP-390 · Seed Q1). features/stay는
   // features/trip를 직접 못 읽으므로(조합은 pages 몫) 페이지가 구독해 문자열 prop으로 내린다.
   // 시작·종료 둘 다 있을 때만 제한하고, 하나라도 비면 상·하한 없음(현행 오늘+ 유지, AC-6).
+  // 당일(시작 = 끝, 여행지 0곳 — TRIP-1027)도 기간 없음으로 본다: 그대로 걸면 체크아웃을 못 고른다.
   const startDate = useTripWizardStore((state) => state.startDate);
   const endDate = useTripWizardStore((state) => state.endDate);
-  const hasTripPeriod = startDate !== undefined && endDate !== undefined;
+  const hasTripPeriod =
+    startDate !== undefined && endDate !== undefined && startDate !== endDate;
   const minDate = hasTripPeriod ? startDate : undefined;
   const maxDate = hasTripPeriod ? endDate : undefined;
 

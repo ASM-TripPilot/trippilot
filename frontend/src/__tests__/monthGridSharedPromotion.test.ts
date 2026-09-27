@@ -213,7 +213,8 @@ describe('G2 · 옛 자리 존치(AC-2) + 재수출 shim 금지(Q1)', () => {
       ...(/export\s+interface\s+StayDateRange\b/.test(stay)
         ? []
         : ['stayDates:StayDateRange']),
-      ...['applyRangePick', 'dateCell']
+      // TRIP-1027: `applyRangePick` 은 고아라 삭제됐다(01b O5 — 부재는 tripPeriodFromNightsStructure 가 잡는다).
+      ...['dateCell']
         .filter(
           (name) => !new RegExp(`export\\s+function\\s+${name}\\b`).test(trip)
         )

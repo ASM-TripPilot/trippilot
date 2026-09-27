@@ -5,7 +5,7 @@ import {
   shiftMonth,
 } from '@/shared/date/monthGrid';
 
-import { applyRangePick, dateCell } from './tripDatePicker';
+import { dateCell } from './tripDatePicker';
 
 /**
  * TRIP-368 날짜 선택 순수 함수 — 달력 그리드 계산과 범위 판정(`isDateInRange`).
@@ -16,6 +16,9 @@ import { applyRangePick, dateCell } from './tripDatePicker';
  * ⚠️ TRIP-389로 시트가 **단일 선택**이 되면서 2단 범위 전이(`applyDatePick`) describe를
  * 걷어냈다 — 그 전이를 부르던 소비자(`TripDateSheet`)가 사라져 dead가 됐다. 그리드 계산·
  * `isDateInRange`는 시트가 여전히 쓰므로 그대로 둔다.
+ *
+ * TRIP-1027: 기간 시트가 시작 날짜만 고르게 되며 2탭 범위 전이(`applyRangePick`)도 소비처를 잃어
+ * 함수째 지웠다(01b O5) — 그 describe 도 함께 걷었다.
  *
  * 3동작: 준비(입력 날짜) → 실행(함수 호출) → 단언(반환 형태).
  */
@@ -64,51 +67,5 @@ describe('tripDatePicker — isDateInRange', () => {
     // 달력 하이라이트가 왼쪽으로 번진다. 이 두 줄이 그 뮤테이션에 red 를 낸다.
     expect(isDateInRange('2026-06-09', '2026-06-10', '2026-06-13')).toBe(false);
     expect(isDateInRange('2026-06-01', '2026-06-10', '2026-06-13')).toBe(false);
-  });
-});
-
-describe('tripDatePicker — applyRangePick (범위 2단 전이, TRIP-667)', () => {
-  /**
-   * 무엇을 보장하나: 달력 셀 탭 한 번이 범위를 옳게 전이한다 — 첫 탭은 시작만, 뒤 셀 탭은 완성,
-   * 완성 뒤 탭은 재시작(last-wins), 같은날/앞셀은 **최소 1박 강제**라 완성이 아니라 재시작.
-   *
-   * 경계값은 실제 값으로 태워 확인했다(02a §5-1): 같은날 `picked===start` → `{start:picked}`(end 없음,
-   * 재시작), `picked>start` → 완성. 브리프 예시 요일은 손베끼지 않았다(요일은 여기선 무관 — 날짜만).
-   *
-   * 3동작: 준비(현재 범위·탭한 날짜) → 실행(applyRangePick) → 단언(다음 범위).
-   */
-
-  it('(a) 빈 상태에서 첫 셀 탭 → 시작만 (대기)', () => {
-    expect(applyRangePick({}, '2026-06-10')).toEqual({ start: '2026-06-10' });
-  });
-
-  it('(b) 시작만 있을 때 더 뒤 셀 탭 → 범위 완성 (picked > start)', () => {
-    expect(applyRangePick({ start: '2026-06-10' }, '2026-06-13')).toEqual({
-      start: '2026-06-10',
-      end: '2026-06-13',
-    });
-  });
-
-  it('(a) 이미 완성된 뒤 새 셀 탭 → 범위를 새로 시작 (last-wins, end 버림)', () => {
-    const next = applyRangePick(
-      { start: '2026-06-10', end: '2026-06-13' },
-      '2026-06-20'
-    );
-    expect(next).toEqual({ start: '2026-06-20' });
-    // end 가 남으면 옛 범위가 유령으로 이어진다 — 재시작은 end 를 반드시 버린다.
-    expect(next).not.toHaveProperty('end');
-  });
-
-  it('(c) 같은 날을 다시 탭 → 완성이 아니라 재시작 (최소 1박, end 없음)', () => {
-    // picked === start 는 picked ≤ start 라 (c) 재시작. 0박(end===start)을 만들지 않는다.
-    const next = applyRangePick({ start: '2026-06-10' }, '2026-06-10');
-    expect(next).toEqual({ start: '2026-06-10' });
-    expect(next).not.toHaveProperty('end');
-  });
-
-  it('(c) 시작보다 앞 셀 탭 → 그 앞 셀로 새로 시작', () => {
-    expect(applyRangePick({ start: '2026-06-10' }, '2026-06-09')).toEqual({
-      start: '2026-06-09',
-    });
   });
 });

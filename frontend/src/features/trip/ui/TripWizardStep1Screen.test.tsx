@@ -385,34 +385,3 @@ describe('AC-INV-3 · 소요 시간 미표시 (BR-U1-54)', () => {
     expect(root()).toHaveTextContent(/3박 4일/);
   });
 });
-
-describe('TRIP-1010 · 박수·기간 불일치 안내 한 줄 — 화면은 완성 문자열만 받아 그린다 (01b Q2)', () => {
-  const NOTE_TEXT =
-    '여행지 박수(2박)가 기간(3박)보다 적어요 · 남은 1박은 경주로 잡아요';
-
-  it('nightsMismatchNote 가 있으면 그 문자열 그대로 한 줄을 기존 안내 톤(note 토큰)으로 그린다', () => {
-    render(
-      <TripWizardStep1Screen
-        {...filledProps({ nightsMismatchNote: NOTE_TEXT })}
-      />
-    );
-
-    // 완전 일치 — 화면이 조사·숫자를 덧붙이거나 바꾸지 않는다(조립은 페이지 몫).
-    expect(
-      screen.getByTestId('trip-wizard-nights-mismatch-note')
-    ).toHaveTextContent(NOTE_TEXT);
-    // 톤 — 여행지 시트 안내(`trip-wizard-destination-note`)와 같은 토큰.
-    const tokens = classes('trip-wizard-nights-mismatch-note');
-    expect(tokens).toContain('font-noto');
-    expect(tokens).toContain('text-label');
-    expect(tokens).toContain('text-muted');
-  });
-
-  it('nightsMismatchNote 가 없으면 그 줄이 없다', () => {
-    render(<TripWizardStep1Screen {...filledProps()} />);
-
-    // 짝 — 화면은 실제로 그려졌다(부재 단언의 공허 통과 차단).
-    expect(root()).toBeOnTheScreen();
-    expect(screen.queryByTestId('trip-wizard-nights-mismatch-note')).toBeNull();
-  });
-});

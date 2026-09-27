@@ -178,11 +178,13 @@ function seedDraft(
 ): void {
   const store = useTripWizardStore.getState();
   store.reset();
-  store.setPeriod(undefined, startDate, endDate);
   store.setCreatedTripId(TRIP_ID);
   destinations.forEach(([region, nights]) =>
     store.addDestination(region, nights)
   );
+  // 기간은 여행지 **뒤에** 그대로 적는다 — TRIP-1027부터 시작이 있으면 담을 때마다 끝이 "시작 +
+  // 박수 합"으로 다시 계산되므로, 기간 > 박수 합(서버·옛 상태)을 만들려면 이 순서여야 한다.
+  store.setPeriod(undefined, startDate, endDate);
 }
 
 /**

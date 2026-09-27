@@ -3720,21 +3720,6 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // g01 박수·기간 불일치 안내(TRIP-1010) — Figma 근거 노드 없음, 요약 카드 아래 한 줄의 위치·톤 6-b 육안 자리.
-  {
-    key: 'trip-new-step1-nights-mismatch',
-    band: 'g',
-    label: 'g01 · 여행 만들기 nights-mismatch',
-    login: null,
-    render: () => (
-      <TripWizardStep1Screen
-        {...TRIP_WIZARD_BASE}
-        summaryDestinations={{ main: '부산', sub: '1박 · 경주 1박' }}
-        mustVisits={MUST_VISIT_THUMBNAILS}
-        nightsMismatchNote="여행지 박수(2박)가 기간(3박)보다 적어요 · 남은 1박은 경주로 잡아요"
-      />
-    ),
-  },
   // g01 empty·loading 두 상태 얼굴(TRIP-671, Figma empty `3652:2068`·loading `3712:2068`). empty 는
   // fresh 진입(여행지·기간 null → 신 카피/빈 줄, 동행·취향·예산은 프리필 채움, [다음] 비활성),
   // loading 은 `isLoading=true`(요약 5행·꼭 갈 곳 스켈레톤 + 로딩 부제 + [다음] 비활성). jest 는 회색바
