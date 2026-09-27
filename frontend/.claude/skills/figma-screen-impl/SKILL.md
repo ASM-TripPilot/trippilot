@@ -14,7 +14,7 @@ Figma 생성 CSS를 그대로 붙이면 두 가지가 망가진다: (1) RN엔 CS
 - Figma **fileKey + 화면 노드 ID**. 모르면 밴드 맵(`<리포 루트>/frontend/.claude/skills/spec-perception/reference/figma-structure.md`)에서 밴드를 정하고 `mcp__figma__get_metadata`로 찾는다. **리포에 화면 명세 사본은 없다** — Figma가 유일한 정본이다.
 - Figma MCP 도구는 deferred → ToolSearch로 **정규화된 이름**을 로드한다(접두사 없이는 매칭 실패):
   `mcp__figma__get_screenshot` · `mcp__figma__get_design_context` · `mcp__figma__get_variable_defs` · `mcp__figma__download_assets`
-- **비주얼 패키지 설치 확인** — `expo-linear-gradient`(그라디언트)·`react-native-svg`(+`react-native-svg-transformer`, SVG 아이콘)·`expo-font`(폰트 번들)가 `package.json`에 없으면 이 스킬 산출물이 컴파일되지 않는다. 없으면 dev-cycle 의존성 단계에서 추가한다(게이트 준수). 미설치 상태로 코드만 쓰는 경우 그 한계를 **정직하게 명시**하라 — 없는 API를 지어내지 말 것.
+- **비주얼 패키지 설치 확인** — `expo-linear-gradient`(그라디언트)·`react-native-svg`(SVG 아이콘 — 리포 관례는 `*Glyphs.tsx` 인라인 컴포넌트, `.svg` 파일 import 없음)·`expo-font`(폰트 번들)가 `package.json`에 없으면 이 스킬 산출물이 컴파일되지 않는다. 없으면 dev-cycle 의존성 단계에서 추가한다(게이트 준수). 미설치 상태로 코드만 쓰는 경우 그 한계를 **정직하게 명시**하라 — 없는 API를 지어내지 말 것.
 
 ## 절차 (5단계)
 
@@ -86,7 +86,7 @@ color  #FFFFFF00        투명 오버레이                   MISS 반투명 (�
 ### 3. 에셋
 
 - `download_assets(node)` 또는 design_context의 URL을 curl → **`src/assets/<feature>/`**. ⚠️ **URL은 7일 만료** → 즉시 다운로드.
-- 아이콘·로고·일러스트는 대개 **SVG** → `react-native-svg`. 래스터는 `<Image source={require(...)}/>`.
+- 아이콘·로고·일러스트는 **SVG** → `*Glyphs.tsx` 인라인 `react-native-svg` 컴포넌트. 래스터는 `<Image source={require(...)}/>`.
 - 같은 에셋이 화면별로 다른 URL로 중복 발급됨 → 정체성당 1개만 저장.
 
 ### 4. RN 번역 (핵심 판단) — 상세 매핑: `references/rn-translation.md`
