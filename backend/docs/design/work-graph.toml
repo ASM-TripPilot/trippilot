@@ -1237,6 +1237,76 @@ Kotlin 컴파일 데몬과 테스트 JVM 은 **각각 별도 프로세스라 데
 """
 
 [[nodes]]
+id = "TRIP-963"
+ticket = "TRIP-963"
+title = "재계획 좌표 폴백 — 생성에 있는 목적지 중심 단이 재계획 사다리에 없다"
+status = "todo"
+owner = "재계획"
+migration = false
+touches = ["backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/application/ReplanFacadeService.kt"]
+note = """
+재현된 버그(티켓에 로그·세션 ID 포함). 숙소 0·실적 0·GPS 0 이면 `groundingPoint` 가 AI 호출 전에
+던진다 — BR-U4-19("위치를 못 잡았다고 재계획을 막지 않으며")와 모순. 처방은 티켓에 있다:
+사다리 맨 뒤에 생성 경로의 `RegionAnchors.centerOf` 단을 붙인다. **목적지 좌표조차 없으면
+종전대로 실패**(지어낸 좌표를 AI 에 안 보낸다 — 생성 경로와 같은 판단).
+"""
+
+[[nodes]]
+id = "TRIP-964"
+ticket = "TRIP-964"
+title = "거절 이력을 여행별로 누적 저장 — 슬롯 교체·재생성 두 종류, 횟수 포함"
+status = "todo"
+owner = "재계획"
+migration = true
+touches = ["backend/app/src/main/resources/db/migration", "backend/modules/itinerary-generation"]
+note = """
+TRIP-975 의 재료다 — 싣기 전에 쌓아야 한다. AI 는 이미 소비 준비 완료: #747(거절 이력 → 선호
+점수 계단)·#754(KB-1 변경 이력 봉투)가 머지됐고 `ReplanRequest.rejections` 필드가 계약에 열려 있다.
+"""
+
+[[nodes]]
+id = "TRIP-975"
+ticket = "TRIP-975"
+title = "/replan 요청에 변경 이력(rejections)을 싣는다 — 같은 제안 반복 방지"
+status = "todo"
+owner = "재계획"
+migration = false
+touches = ["backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/adapter/out/external/HttpScheduleAgentAdapter.kt"]
+note = """
+**상대가 이미 기다린다** — 우리가 안 실으면 그쪽 KB-1·거절 계단이 빈 봉투로 돈다(조용한 미개통).
+TRIP-964 의 저장분을 어댑터가 `rejections` 로 번역해 싣는다. 선행: TRIP-964.
+"""
+
+[[nodes]]
+id = "TRIP-969"
+ticket = "TRIP-969"
+title = "생성 시점 점수 후보를 저장 — 슬롯 교체를 LLM 없이 즉답으로"
+status = "todo"
+owner = "일정"
+migration = true
+touches = ["backend/app/src/main/resources/db/migration", "backend/modules/itinerary-generation"]
+note = """
+준하 TRIP-970(/alternatives 를 ScheduleAgent 산출 재사용으로)과 짝. 착수 전 정본 확인이 무겁다 —
+생성 응답의 어떤 값을 저장하는지(후보·점수의 출처), 저장 형태(jsonb vs 테이블)가 미결.
+Flyway 번호는 TRIP-964 머지 후 채번.
+"""
+
+[[nodes]]
+id = "QA2-BE"
+ticket = "TRIP-994"
+title = "실화면 QA 2회차 BE 묶음 — 999·1000·1001·1002·1005·1030·1003·1004 (배분 대기)"
+status = "blocked"
+owner = "?"
+migration = false
+touches = ["backend/docs/design/openapi.yaml"]
+note = """
+**전부 태현 배정으로 잡혀 있다(트리아지 전으로 보임) — 배분 확정 전 착수 금지.**
+착수되면 `openapi.yaml` 을 다수가 만져 직렬 필수. 999(CONFIRMED 여행중 변경)는 INV-U1-03
+확정 안정성과 충돌 소지가 있어 정본 확인이 무거운 칸이다. 1004(약관 시드)는 초안이
+`backend/docs/legal/` 에 실재해 기계적 작업이다.
+"""
+
+[[nodes]]
 id = "FLAKY-HEALTHPING"
 ticket = ""
 title = "IntegrationHealthPingTimeoutTest 가 전체 빌드 부하에서만 간헐 실패"
@@ -1745,6 +1815,10 @@ touches = [
   "backend/app/src/main/resources/db/migration/R__seed_reference_data.sql",
 ]
 note = """
+**정정(2026-09-27) — "문구가 없다"는 서술이 낡았다.** `backend/docs/legal/` 에 6종 초안이
+**전부 실재한다**(gps-recording-consent.md 포함). 시드 반영은 TRIP-1004(배정: 태현)로 티켓화됐다.
+이 노드의 남은 몫은 "초안 작성"이 아니라 **법무 검토 여부 판단**이다.
+
 **법무에 넘길 사실 관계(코드 확인 2026-09-26).** 문구는 법무 몫이지만 *"무엇을 명시해야 하는가"* 는
 코드가 답한다 — 법무가 리포를 읽을 수는 없으므로 여기 적어 둔다.
 
