@@ -1029,3 +1029,112 @@ describe('TRIP-982 B4·B5 · 무회귀 — empty 얼굴의 나머지는 그대�
     expect(texts.filter((text) => DURATION_TEXT.test(text))).toEqual([]);
   });
 });
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * TRIP-1022 — #040 지도 영역 맞춤 · #068 빈 상태 "담은 장소 보기" 링크
+ *
+ * 무엇을 보장하나:
+ *  - 🔴 S1 (AC-B5) 지도 카드가 `fitPins` 를 켠 채 MapView 를 쓴다 — viewOnly 지도라 사용자가 손으로
+ *    옮길 수 없어서, 첫 핀만 비추면 나머지 핀은 영영 못 본다(#040).
+ *  - 🔴 L1 (AC-C1) 0곳 얼굴의 안내 **안에** 링크 하나가 있고, 누르면 새 콜백이 1회 불린다.
+ *  - 🟢 L2·L3 (AC-C2) 콜백을 안 준 호출부와 listed·loading·failed 얼굴에는 링크가 없다
+ *    (눌러도 아무 일 없는 표면 금지 — 이 파일 머리 주석과 같은 원칙).
+ *
+ * 부재는 전부 `.length` 숫자로 잰다(노드 배열 직렬화 함정 — 위 `countTestId` 독주석).
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+const EMPTY_LINK = 'itinerary-mustvisit-screen-empty-add';
+const EMPTY_LINK_LABEL = '담은 장소 보기';
+
+describe('🔴 TRIP-1022 S1 · AC-B5 — 지도 카드가 모든 핀에 맞춰 영역을 잡는다', () => {
+  it('listed + 핀 3개면 지도에 fitPins 가 켜져 넘어간다', () => {
+    render(
+      <MustVisitPickerScreen
+        view={listed([FIXED_A, ANYTIME_B, UNJOINED_Z])}
+        pins={[PIN_1, PIN_2, PIN_3]}
+      />
+    );
+
+    // 짝 — 지도 카드가 실제로 섰다(없으면 아래 단언이 getBy 에서 먼저 죽는다).
+    expect(
+      screen.getByTestId('itinerary-mustvisit-screen-map')
+    ).toBeOnTheScreen();
+    expect(screen.getByTestId('map-root').props.fitPins).toBe(true);
+  });
+});
+
+describe('🔴 TRIP-1022 L1 · AC-C1 — 0곳 안내 안에 "담은 장소 보기" 링크', () => {
+  it('링크가 빈 안내 안에 있고 문구가 정확하며, 누르면 콜백 1회·CTA 콜백 0회', () => {
+    // 준비
+    const onPressBrowseSaved = jest.fn();
+    const onProceed = jest.fn();
+    render(
+      <MustVisitPickerScreen
+        view={{ kind: 'empty' }}
+        onPressBrowseSaved={onPressBrowseSaved}
+        onProceed={onProceed}
+      />
+    );
+
+    // 단언 ① — 링크는 빈 안내 블록 **안**에 있다(화면 아무 데나 두면 red).
+    const empty = screen.getByTestId('itinerary-mustvisit-screen-empty');
+    const link = within(empty).getByTestId(EMPTY_LINK);
+    // 문자열 인자 = 완전 일치(02a §5 실측) — 꼬리 글자가 붙어도 red.
+    expect(link).toHaveTextContent(EMPTY_LINK_LABEL);
+
+    // 실행
+    fireEvent.press(link);
+
+    // 단언 ② — 링크는 자기 콜백만 부른다(생성 CTA 로 새지 않는다).
+    expect(onPressBrowseSaved).toHaveBeenCalledTimes(1);
+    expect(onProceed).toHaveBeenCalledTimes(0);
+  });
+});
+
+describe('TRIP-1022 L2·L3 · AC-C2 — 링크가 없어야 하는 자리 (선제 green)', () => {
+  it('L2 콜백을 안 준 호출부(프리뷰 등)에서는 빈 안내만 있고 링크는 없다', () => {
+    render(<MustVisitPickerScreen view={{ kind: 'empty' }} />);
+
+    // 짝 — 빈 얼굴은 떴다(공허 통과 방지).
+    expect(
+      screen.getByTestId('itinerary-mustvisit-screen-empty')
+    ).toBeOnTheScreen();
+    expect(countTestId(EMPTY_LINK)).toBe(0);
+  });
+
+  it('L3 listed·loading·failed 얼굴에는 콜백을 줘도 링크가 없다', () => {
+    const onPressBrowseSaved = jest.fn();
+
+    const { rerender } = render(
+      <MustVisitPickerScreen
+        view={listed([FIXED_A, ANYTIME_B])}
+        pins={[PIN_1, PIN_2]}
+        onPressBrowseSaved={onPressBrowseSaved}
+      />
+    );
+    expect(cardTestIds()).toHaveLength(2); // 짝 — listed 얼굴
+    expect(countTestId(EMPTY_LINK)).toBe(0);
+
+    rerender(
+      <MustVisitPickerScreen
+        view={{ kind: 'loading' }}
+        onPressBrowseSaved={onPressBrowseSaved}
+      />
+    );
+    expect(
+      screen.getByTestId('itinerary-mustvisit-screen-loading')
+    ).toBeOnTheScreen();
+    expect(countTestId(EMPTY_LINK)).toBe(0);
+
+    rerender(
+      <MustVisitPickerScreen
+        view={{ kind: 'failed' }}
+        onPressBrowseSaved={onPressBrowseSaved}
+      />
+    );
+    expect(
+      screen.getByTestId('itinerary-mustvisit-screen-failed')
+    ).toBeOnTheScreen();
+    expect(countTestId(EMPTY_LINK)).toBe(0);
+  });
+});

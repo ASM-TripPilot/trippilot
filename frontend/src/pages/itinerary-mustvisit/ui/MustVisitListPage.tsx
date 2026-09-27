@@ -130,6 +130,8 @@ export function MustVisitListPage({
       }
       onRemove={handleRemove}
       onRetry={handleRetry}
+      // 0곳 링크 → d02 save 모드(파라미터 없음, TRIP-1022 결정 2 — select 모드로 넓히지 않는다).
+      onPressBrowseSaved={() => router.push('/explore/saved-places')}
     />
   );
 }

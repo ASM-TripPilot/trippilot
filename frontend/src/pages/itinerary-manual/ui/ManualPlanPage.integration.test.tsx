@@ -1,11 +1,19 @@
 import type { ReactElement, ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render as rtlRender, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render as rtlRender,
+  screen,
+} from '@testing-library/react-native';
 
 import { ManualPlanPage } from './ManualPlanPage';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { useItineraryEditStore } from '@/features/itinerary/model/itineraryEditStore';
-import type { Itinerary } from '@/shared/api/generated/schemas';
+import type {
+  BaseAssignment,
+  Itinerary,
+  SavedStay,
+} from '@/shared/api/generated/schemas';
 
 /**
  * TRIP-338 · h19 배선 + TRIP-601 가드 a → TRIP-797 묶음 C 재조립 — 페이지→화면을 실제로 태우는 심판.
@@ -50,6 +58,18 @@ let mockGet: {
   isError: boolean;
 };
 
+// TRIP-1022 — 동기 목이라 첫 렌더부터 확정된 거점·숙소를 준다(02a ★3). 기본값은 "거점 0곳".
+let mockBases: {
+  data: BaseAssignment[] | undefined;
+  isPending: boolean;
+  isError: boolean;
+};
+let mockStays: {
+  data: SavedStay[] | undefined;
+  isPending: boolean;
+  isError: boolean;
+};
+
 const mockMutate = jest.fn();
 const mockPut = jest.fn();
 const mockPush = jest.fn();
@@ -72,6 +92,15 @@ jest.mock('@/shared/api/generated/trips/trips', () => ({
   getGetTripsTripIdItineraryQueryKey: (tripId: string) => [
     `/trips/${tripId}/itinerary`,
   ],
+  // TRIP-1022 — 빈 편집기 지도 중심을 거점 숙소로 잡으려고 페이지가 거점 조회를 부른다. 팩토리에 없는
+  // 이름을 부르면 무관한 G-a1~V1 이 "is not a function" 으로 한꺼번에 죽는다(02a ★1).
+  useGetTripsTripIdBases: () => mockBases,
+}));
+
+// TRIP-1022 — 거점 좌표는 등록 숙소(`SavedStay.lat/lng`)에 있다. 생성 모듈째 가로채야 `useSavedStays`
+// 래퍼를 거쳐도 이 목에 닿고, 실 axios 요청이 새지 않는다(02a ★2).
+jest.mock('@/shared/api/generated/saved-stays/saved-stays', () => ({
+  useGetSavedStays: () => mockStays,
 }));
 
 jest.mock('expo-router', () => ({
@@ -146,6 +175,9 @@ const EXISTING_DRAFT: Itinerary = {
 beforeEach(() => {
   // 기본값 — 각 케이스가 자기 GET 상태를 명시로 덮어쓴다.
   mockGet = { data: undefined, isPending: true, isError: false };
+  // TRIP-1022 — 기본은 거점 0곳(기존 M1 이 "거점 없음 → 서울시청" 갈래로 남는다, 01 AC-A5).
+  mockBases = { data: [], isPending: false, isError: false };
+  mockStays = { data: [], isPending: false, isError: false };
   mockMutate.mockClear();
   mockPut.mockClear();
   mockPush.mockClear();
@@ -315,5 +347,177 @@ describe('TRIP-590 · V — 서버 위반 슬롯에 배지 (h19 직접 짜기, �
     expect(screen.queryAllByTestId(/^slot-stopcard-violation-/)).toHaveLength(
       1
     );
+  });
+});
+
+/**
+ * TRIP-1022 #075 · 결정 1 — 빈 편집기(핀 0개) 지도 중심을 거점 숙소로.
+ *
+ * 무엇을 보장하나(01 AC-A4~A6 · 01b Q1):
+ *  - 🔴 C1 그날을 덮는 거점(`dateFrom ≤ date < dateTo`)이 있고 숙소 좌표가 온전하면 그 좌표를 비춘다.
+ *  - 🔴 C2 체크아웃 날(2일차)은 어느 거점도 덮지 않지만, 가장 이른 거점 숙소를 비춘다(Q1②) —
+ *    QA 사례(강릉 1박 2일)의 2일차가 다시 서울로 튀지 않는다.
+ *  - 🟢 C3 숙소 좌표가 반쪽(lat null)이면 서울시청(기존 폴백 유지, C1 과 같은 메커니즘의 짝).
+ *  - 🟢 C4 핀이 있으면 거점이 있어도 첫 핀이 이긴다(기존 M2 우선순위 유지).
+ *  - 🟢 C5 (5-c 보강, 03b 경고-2) 거점이 둘이면 **누른 날**을 덮는 거점을 비춘다 — 페이지가 활성
+ *    날짜를 판정에 넘기는지를 가른다. 거점 하나짜리(C1·C2)는 "그날 거점"과 "가장 이른 거점"이 같은
+ *    답이라 이걸 못 가른다.
+ *
+ * 거점·숙소는 동기 목이라 첫 렌더부터 확정된 입력이다 — "서울" 단언이 "아직 안 왔다"로 공허하게
+ * 통과하지 않는다(02a ★3). 좌표 비교는 mapViewMock 의 `map-root` 텍스트(완전 일치).
+ */
+describe('TRIP-1022 · C — 빈 편집기 지도 중심 = 거점 숙소 (결정 1)', () => {
+  const GANGNEUNG = '37.7519,128.8761';
+  const SEOUL_CITY_HALL = '37.5665,126.978';
+
+  /** 1박 2일 직접 짜기 — 두 날 모두 슬롯 0(핀 0). 칩이 뜨는 조건은 "2일 이상"(01 드리프트). */
+  const MANUAL_TWO_DAYS: Itinerary = {
+    ...MANUAL_EMPTY,
+    days: [
+      { date: '2026-10-20', slots: [] },
+      { date: '2026-10-21', slots: [] },
+    ],
+  };
+
+  const GN_BASE: BaseAssignment = {
+    baseAssignmentId: 'ba-gn',
+    savedStayId: 's-gn',
+    dateFrom: '2026-10-20',
+    dateTo: '2026-10-21',
+  };
+
+  function gangneungStay(over: Partial<SavedStay> = {}): SavedStay {
+    return {
+      savedStayId: 's-gn',
+      name: '강릉 바다 스테이',
+      lat: 37.7519,
+      lng: 128.8761,
+      coordConfirmed: true,
+      linkedTripIds: [TRIP_ID],
+      registerRoute: 'MAP_SEARCH',
+      createdAt: '2026-09-01T00:00:00Z',
+      updatedAt: '2026-09-01T00:00:00Z',
+      ...over,
+    };
+  }
+
+  function withBase(stay: SavedStay): void {
+    mockBases = { data: [GN_BASE], isPending: false, isError: false };
+    mockStays = { data: [stay], isPending: false, isError: false };
+  }
+
+  it('🔴 C1 (AC-A4) 핀 0개 · 1일차를 덮는 거점이 있으면 지도 중심이 그 숙소다', () => {
+    // 준비
+    mockGet = { data: MANUAL_TWO_DAYS, isPending: false, isError: false };
+    withBase(gangneungStay());
+
+    // 실행
+    render(<ManualPlanPage tripId={TRIP_ID} />);
+
+    // 단언 — 서울이 아니라 강릉.
+    expect(screen.getByTestId('map-root')).toHaveTextContent(GANGNEUNG);
+  });
+
+  it('🔴 C2 (Q1②) 2일차(체크아웃 날)로 바꿔도 가장 이른 거점 숙소를 비춘다', () => {
+    mockGet = { data: MANUAL_TWO_DAYS, isPending: false, isError: false };
+    withBase(gangneungStay());
+    render(<ManualPlanPage tripId={TRIP_ID} />);
+
+    // 실행 — 2일차 칩(1박 2일이라 칩이 뜬다).
+    fireEvent.press(screen.getByTestId('itinerary-edit-day-2'));
+
+    // 단언 — 날짜는 바뀌었고(짝), 지도는 여전히 강릉.
+    expect(screen.getByTestId('sheet-header-date')).toHaveTextContent(
+      '10월 21일(수)'
+    );
+    expect(screen.getByTestId('map-root')).toHaveTextContent(GANGNEUNG);
+  });
+
+  it('C3 (AC-A5) 숙소 좌표가 반쪽(lat null)이면 서울시청이다 (선제 green)', () => {
+    mockGet = { data: MANUAL_TWO_DAYS, isPending: false, isError: false };
+    withBase(gangneungStay({ lat: null }));
+
+    render(<ManualPlanPage tripId={TRIP_ID} />);
+
+    expect(screen.getByTestId('map-root')).toHaveTextContent(SEOUL_CITY_HALL);
+  });
+
+  it('C4 (AC-A6) 핀이 있으면 거점이 있어도 첫 핀이 중심이다 (선제 green)', () => {
+    const [first] = EXISTING_DRAFT.days[0].slots;
+    mockGet = {
+      data: {
+        ...EXISTING_DRAFT,
+        days: [
+          {
+            date: '2026-10-20',
+            slots: [{ ...first, lat: 37.5796, lng: 126.977 }],
+          },
+        ],
+      },
+      isPending: false,
+      isError: false,
+    };
+    withBase(gangneungStay());
+
+    render(<ManualPlanPage tripId={TRIP_ID} />);
+
+    expect(screen.getByText('경복궁')).toBeOnTheScreen(); // 짝 — 슬롯이 시드됐다
+    expect(screen.getByTestId('map-root')).toHaveTextContent('37.5796,126.977');
+  });
+
+  it('C5 (Q1①) 거점이 둘이면 3일차를 누를 때 그날을 덮는 속초 숙소로 옮겨 간다 (5-c 보강)', () => {
+    // 준비 — 2박 3일: 강릉 1박(10-20~10-21) → 속초 2박(10-21~10-23). 세 날 모두 핀 0.
+    const SOKCHO = '38.207,128.5918';
+    mockGet = {
+      data: {
+        ...MANUAL_EMPTY,
+        days: [
+          { date: '2026-10-20', slots: [] },
+          { date: '2026-10-21', slots: [] },
+          { date: '2026-10-22', slots: [] },
+        ],
+      },
+      isPending: false,
+      isError: false,
+    };
+    mockBases = {
+      data: [
+        GN_BASE,
+        {
+          baseAssignmentId: 'ba-sc',
+          savedStayId: 's-sc',
+          dateFrom: '2026-10-21',
+          dateTo: '2026-10-23',
+        },
+      ],
+      isPending: false,
+      isError: false,
+    };
+    mockStays = {
+      data: [
+        gangneungStay(),
+        gangneungStay({
+          savedStayId: 's-sc',
+          name: '속초 항구 스테이',
+          lat: 38.207,
+          lng: 128.5918,
+        }),
+      ],
+      isPending: false,
+      isError: false,
+    };
+    render(<ManualPlanPage tripId={TRIP_ID} />);
+
+    // 앵커 — 1일차는 강릉(가장 이른 거점과 그날 거점이 같다). 처음부터 속초면 아래 단언이 공허하다.
+    expect(screen.getByTestId('map-root')).toHaveTextContent(GANGNEUNG);
+
+    // 실행 — 3일차 칩.
+    fireEvent.press(screen.getByTestId('itinerary-edit-day-3'));
+
+    // 단언 — 날짜가 바뀌었고(짝), 지도는 그날을 덮는 속초. 날짜를 안 넘기면(가장 이른 거점) 강릉에 남아 red.
+    expect(screen.getByTestId('sheet-header-date')).toHaveTextContent(
+      '10월 22일(목)'
+    );
+    expect(screen.getByTestId('map-root')).toHaveTextContent(SOKCHO);
   });
 });

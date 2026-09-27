@@ -159,6 +159,9 @@ beforeEach(() => {
     http.get(`${BASE}/trips/:tripId/itinerary`, () =>
       HttpResponse.json(manualDraft(daySlots))
     ),
+    // TRIP-1022 — 페이지가 빈 편집기 지도 중심용 거점을 조회한다(단언 무관 준비). `/saved-stays` 는
+    // 기본 핸들러(`[]`)가 받는다. 없으면 `onUnhandledRequest:'error'` 에 걸린다(02a §3).
+    http.get(`${BASE}/trips/:tripId/bases`, () => HttpResponse.json([])),
     http.put(`${BASE}/trips/:tripId/itinerary`, async ({ request }) => {
       putCalls += 1;
       putBody = await request.json();
