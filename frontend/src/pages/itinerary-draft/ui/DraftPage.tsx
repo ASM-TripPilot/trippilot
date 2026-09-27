@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
@@ -82,6 +82,10 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   const [fallbackDismissed, setFallbackDismissed] = useState(false);
   // TRIP-1032 B — 이 여행이 생성 중일 때 재생성 전 확인이 떠 있나.
   const [confirmingInProgress, setConfirmingInProgress] = useState(false);
+  // TRIP-1038 C — 셸 폴백 안내 「처음부터 직접 짜기」의 비우기 확인이 떠 있나.
+  const [confirmingReset, setConfirmingReset] = useState(false);
+  // MANUAL 빈 일정 → 편집기 replace 를 한 번만(라우터 객체가 렌더마다 새로 와도 다시 부르지 않는다).
+  const manualRedirectedRef = useRef(false);
 
   const itineraryQueryKey = getGetTripsTripIdItineraryQueryKey(tripId);
 
@@ -200,6 +204,10 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   // 셸을 그린다(01b D1 · TRIP-790). features→widgets 상향 참조 금지라 이 조립은 pages(여기)에서만
   // 할 수 있다. 아래 shell 분기가 `view.kind==='listed' && isPartial` 에서 이 값을 쓴다.
   const isPartial = itinerary.data?.generationState === 'PARTIAL';
+  // TRIP-1038 A — 직접 짠 일정은 「AI 추천안」이 아니다. AI 생성 POST 로 가는 버튼을 주지 않는다(BR-U3-18).
+  const isManual = itinerary.data?.generationMode === 'MANUAL';
+  // MANUAL 인데 장소가 0곳이면 DraftScreen 빈 얼굴(「다시 만들기」=AI 생성)을 그리지 않고 편집기로 보낸다(01 Q1).
+  const redirectToManual = isManual && view.kind === 'empty';
 
   // 폴백·강등 배너 신호를 한 번만 접는다 — h08 라우팅 조건(깨끗한 COMPLETE 판별)과 DraftScreen
   // 프롭이 같은 값을 써야 갈라지지 않는다(같은 규칙이 두 층에서 다르게 진화하는 것 방지).
@@ -233,6 +241,8 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
     } else if (status === 'CONFIRMED') {
       return;
     }
+    // TRIP-1038 — 직접 짠 일정을 AI 생성으로 덮지 않는다(방어 한 줄 — 셸·빈 얼굴은 이미 이 길을 안 준다).
+    if (settled.data?.generationMode === 'MANUAL') return;
 
     // TRIP-1032 B — 이 여행이 생성 중이면 확인부터. 확인 뒤엔 cancel 을 따로 부르지 않는다 — 같은 여행
     // POST 가 서버에서 이전 세션을 닫는다(01b Q4).
@@ -268,14 +278,23 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   // TRIP-1032 A — 재생성 POST 가 409 GENERATION_IN_PROGRESS 면 일반 실패로 접지 않고 안내를 띄운다.
   const busy = useGenerationBusy(regenerate.error, sendRegenerate);
 
-  // 「처음부터 직접」 공통 목적지 — 수동 짜기 라우트(h19). 인터스티셜·셸 폴백 안내·DraftScreen 세 곳이
-  // 같은 곳으로 간다. 접미 있는 라우트라 객체형 push 로 `[tripId]` 를 해소한다(TRIP-483 AC-4).
+  // 수동 짜기 라우트(h19, fresh 없음 = 기존 일정 이어 편집). 인터스티셜·DraftScreen·MANUAL 셸 「편집하기」가
+  // 쓴다 — 셸 폴백 안내 링크는 비우기 확인을 거쳐 fresh 를 싣는다(TRIP-1038 C). 접미 있는 라우트라 객체형 push 로 `[tripId]` 를 해소한다(TRIP-483 AC-4).
   function goManualPlan(): void {
     router.push({
       pathname: '/trips/[tripId]/itinerary/manual',
       params: { tripId },
     });
   }
+
+  useEffect(() => {
+    if (!redirectToManual || manualRedirectedRef.current) return;
+    manualRedirectedRef.current = true;
+    router.replace({
+      pathname: '/trips/[tripId]/itinerary/manual',
+      params: { tripId },
+    });
+  }, [redirectToManual, router, tripId]);
 
   // 두 뒤로가기(h35 후보 0건 · h11 초안) 공통. 딥링크로 콜드 오픈돼 히스토리가 없으면
   // (`canGoBack()===false`) 침묵 no-op 이 아니라 홈으로 replace 한다(INV-4). `/(tabs)/itinerary`
@@ -331,6 +350,48 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
         </View>
       </SafeAreaView>
     );
+  }
+
+  // TRIP-1038 C — 비우기 확인(진행 중 확인과 같은 얼굴 교체형 — 셸이 트리에서 빠진다). 취소하면
+  // `fallbackDismissed` 가 그대로라 인터스티셜이 아니라 셸로 돌아간다. 복원 화면이 없어 되돌릴 수 있다고 쓰지 않는다.
+  if (confirmingReset) {
+    return (
+      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+        <View className="flex-1 justify-center bg-canvas px-lg">
+          <StateNotice
+            testID="itinerary-draft-manual-reset-confirm"
+            icon={<AlertCircleGlyph />}
+            title="지금 일정을 비우고 새로 짤까요?"
+            description="담아 둔 장소가 모두 빠지고 빈 일정에서 시작해요"
+            actions={[
+              {
+                testID: 'itinerary-draft-manual-reset-confirm-continue',
+                label: '비우고 시작',
+                variant: 'filled',
+                onPress: () => {
+                  setConfirmingReset(false);
+                  router.push({
+                    pathname: '/trips/[tripId]/itinerary/manual',
+                    params: { tripId, fresh: '1' },
+                  });
+                },
+              },
+              {
+                testID: 'itinerary-draft-manual-reset-confirm-cancel',
+                label: '취소',
+                variant: 'outline',
+                onPress: () => setConfirmingReset(false),
+              },
+            ]}
+          />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // 편집기로 replace 하는 중 — DraftScreen 빈 얼굴의 AI 문구를 한 프레임도 그리지 않는다.
+  if (redirectToManual) {
+    return <View className="flex-1 bg-canvas" />;
   }
 
   /**
@@ -506,18 +567,31 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
           onBack={handleBack}
           header={
             <SheetHeader
-              title={fallbackNotice !== null ? '기본 일정' : 'AI 추천안'}
+              title={
+                isManual
+                  ? '내 일정'
+                  : fallbackNotice !== null
+                    ? '기본 일정'
+                    : 'AI 추천안'
+              }
               dayLabel={`${selectedDayNumber}일차`}
               dateLabel={formatDraftDayHeader(selectedDate)}
               meta={meta}
             />
           }
           cta={[
-            {
-              label: '다시 짜기',
-              variant: 'outline',
-              onPress: () => void handleRetry(),
-            },
+            // MANUAL 은 편집기로 이어 편집(fresh 없음 — TRIP-601 가드 a 가 기존 일정을 지킨다 · POST 0).
+            isManual
+              ? {
+                  label: '편집하기',
+                  variant: 'outline',
+                  onPress: goManualPlan,
+                }
+              : {
+                  label: '다시 짜기',
+                  variant: 'outline',
+                  onPress: () => void handleRetry(),
+                },
             {
               label: '확정하기',
               variant: 'primary',
@@ -533,7 +607,12 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
             <DraftFallbackBanner
               fallback={fallbackNotice !== null}
               staleFailed={view.staleFailed}
-              onManualPlan={goManualPlan}
+              // 확정 일정은 비우지 않는다(확정 해제 API 없음) — 확인 없이 현행 이동만.
+              onManualPlan={
+                itinerary.data?.status === 'CONFIRMED'
+                  ? goManualPlan
+                  : () => setConfirmingReset(true)
+              }
             />
             {listedSlots.flatMap((slot, index) => {
               const items: ReactElement[] = [

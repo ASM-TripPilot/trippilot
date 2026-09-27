@@ -464,3 +464,35 @@ describe('TRIP-1009 · C3 — 일정 편집의 ‹ 는 여전히 이전 화면�
     expect(mockReplace).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * TRIP-1038 B6 — 직접 짜기 편집기만 「저장하고 확정하기」로 바뀌었다. 같은 뷰(`EditorView`)를 쓰는 h12 일정 편집은
+ * 라벨 「일정 저장하기」와 동작(PUT 만 · 제자리 · 확정 POST 0)이 그대로다(공용 위젯 무회귀 · 선제 green).
+ *
+ * 3동작 뼈대: 준비=기본 픽스처 + 확정 계수 핸들러 → 실행=저장 → 단언=라벨·PUT 1·확정 0·라우터 0.
+ */
+describe('TRIP-1038 · B6 — 일정 편집의 저장 CTA 는 라벨·동작이 그대로다 (공용 뷰 무회귀 · 선제 green)', () => {
+  it('CTA 글자 일정 저장하기(완전일치) · 저장하면 PUT 1 · 확정 POST 0 · back/replace 0', async () => {
+    let confirmCalls = 0;
+    server.use(
+      http.post(`${BASE}/trips/:tripId/itinerary/confirm`, () => {
+        confirmCalls += 1;
+        return HttpResponse.json({ ...itinerary(), status: 'CONFIRMED' });
+      })
+    );
+    renderPage();
+    await screen.findByTestId(cardId('poi-a'));
+
+    expect(screen.getByTestId(SAVE)).toHaveTextContent('일정 저장하기');
+    fireEvent.press(screen.getByTestId(SAVE));
+    await waitFor(() => expect(putCalls).toBe(1));
+    // 확정이 따라 나갔다면 여기까지 흘려 보낸 뒤 잡힌다(요청은 비동기).
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+
+    expect(confirmCalls).toBe(0);
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+});

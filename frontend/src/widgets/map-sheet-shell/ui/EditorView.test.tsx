@@ -211,6 +211,33 @@ describe('🔴 EditorView · B4-8 — CTA 저장(AC-10)', () => {
   });
 });
 
+/**
+ * TRIP-1038 B1·B6 — CTA 라벨은 소비처가 주입한다(`saveLabel`). 직접 짜기만 「저장하고 확정하기」를 넘기고,
+ * 안 넘기는 h12 일정 편집·i07 은 위 B4-1 의 기본 「일정 저장하기」 그대로다. 라벨만 바뀌고 0곳 비활성·press
+ * 콜백 규칙은 같다.
+ */
+describe('🔴 EditorView · L1 — 주입 라벨 saveLabel (TRIP-1038 B1)', () => {
+  it('saveLabel 을 넘기면 CTA 글자가 그 값과 완전일치하고, press 는 onSave 1회다', () => {
+    const cb = renderView({
+      slots: [slot('a')],
+      saveLabel: '저장하고 확정하기',
+    });
+
+    const cta = screen.getByTestId('sheet-cta-button-0');
+    expect(cta).toHaveTextContent('저장하고 확정하기');
+    fireEvent.press(cta);
+    expect(cb.onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it('주입 라벨이어도 0곳이면 비활성이다 (AC-10 규칙 불변)', () => {
+    renderView({ slots: [], saveLabel: '저장하고 확정하기' });
+
+    const cta = screen.getByTestId('sheet-cta-button-0');
+    expect(cta).toHaveTextContent('저장하고 확정하기');
+    expect(cta).toBeDisabled();
+  });
+});
+
 describe('🔴 EditorView · B4-9 — dragging 얼굴(AC-9)', () => {
   it('isDragging 이면 드롭존이 CTA 자리를 대체한다', () => {
     renderView({ slots: [slot('a'), slot('b')], isDragging: true });

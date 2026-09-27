@@ -389,8 +389,8 @@ describe('S6 · AC-6 — MANUAL(MINIMAL·isFallback=false)엔 폴백 안내가 �
   });
 });
 
-describe('🔴 S7 · AC-10 — 폴백 안내의 「처음부터 직접 짜기」는 수동 짜기로 가고 CTA 두 개는 그대로다 (D2)', () => {
-  it('링크 1개(안내 안) → manual push 1회 · CTA 다시 짜기/확정하기', async () => {
+describe('🔴 S7 · AC-10 — 폴백 안내의 「처음부터 직접 짜기」는 비우기 확인을 먼저 띄우고 CTA 두 개는 그대로다 (D2 · TRIP-1038 C)', () => {
+  it('링크 1개(안내 안) → 누르면 초기화 확인이 뜨고 push 0 · CTA 다시 짜기/확정하기', async () => {
     itineraryScript = () =>
       itinerary({ solveMode: 'DETERMINISTIC', isFallback: true });
 
@@ -409,12 +409,12 @@ describe('🔴 S7 · AC-10 — 폴백 안내의 「처음부터 직접 짜기」
 
     fireEvent.press(link);
 
-    // 「기본 일정 보기」는 로컬 dismiss 라 push 가 없다 — 이 1회는 링크 press 몫이다(02a ★11).
-    expect(mockPush).toHaveBeenCalledTimes(1);
-    expect(mockPush).toHaveBeenCalledWith({
-      pathname: '/trips/[tripId]/itinerary/manual',
-      params: { tripId: TRIP_ID },
-    });
+    // TRIP-1038 C(#036) — 곧장 수동 짜기로 가지 않는다. 비우기 확인이 먼저다(계속·취소는
+    // `DraftPage.manual.integration.test.tsx` C2·C5 가 잰다). 「기본 일정 보기」도 로컬 dismiss 라 push 0.
+    expect(
+      screen.getByTestId('itinerary-draft-manual-reset-confirm')
+    ).toBeOnTheScreen();
+    expect(mockPush).not.toHaveBeenCalled();
   });
 });
 

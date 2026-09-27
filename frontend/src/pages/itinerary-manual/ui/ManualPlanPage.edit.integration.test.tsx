@@ -41,7 +41,7 @@ import { ManualPlanPage } from './ManualPlanPage';
  *  - 🔴 M4 ⌄ → 시각 시트(`itinerary-manual-time-*`) → 적용값이 PUT 에 실린다.
  *  - 🔴 M5·M6 저장 실패·미지정 제외를 침묵하지 않는다(INV-4) — 페이지 소유 안내 testID 2종.
  *  - 🔴 M7 장소 추가·카드 사이 +·뒤로가 라우터로 이어진다(옛 `itinerary-manual-add-place` 대체).
- *    뒤로(‹)는 TRIP-1009 부터 `router.back` 이 아니라 일정 탭 `replace` 다(C1b 는 저장 뒤 ‹).
+ *    뒤로(‹)는 TRIP-1009 부터 `router.back` 이 아니라 일정 탭 `replace` 다(옛 C1b 는 TRIP-1038 로 삭제 — S1 주석).
  *
  * MANUAL 생성 POST 가드(G-a1~a3·I2)는 `ManualPlanPage.integration.test.tsx` 가 계속 잠근다 — 여기선
  * GET 이 기존 초안(days>0)을 돌려줘 POST 가 나가지 않는 경로만 쓴다.
@@ -142,6 +142,8 @@ let putCalls = 0;
 let putBody: unknown = null;
 let daySlots: ItineraryDaysItemSlotsItem[] = PLAIN;
 let putHandler: () => Response;
+/** TRIP-1038 B — 저장 성공 뒤 확정 POST 가 따라 나간다. 핸들러가 없으면 `onUnhandledRequest:'error'` 에 걸린다(02a ★3). */
+let confirmHandler: () => Response;
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 
@@ -153,6 +155,8 @@ beforeEach(() => {
   setAccessToken('valid-access');
   useItineraryEditStore.getState().reset();
   putHandler = () => HttpResponse.json(manualDraft(daySlots));
+  confirmHandler = () =>
+    HttpResponse.json({ ...manualDraft(daySlots), status: 'CONFIRMED' });
 
   server.use(
     http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
@@ -166,7 +170,8 @@ beforeEach(() => {
       putCalls += 1;
       putBody = await request.json();
       return putHandler();
-    })
+    }),
+    http.post(`${BASE}/trips/:tripId/itinerary/confirm`, () => confirmHandler())
   );
 });
 
@@ -353,14 +358,16 @@ describe('🟢 V3 · TRIP-590 AC1 · 5-b 경고-1 — 저장 응답의 서버 �
   it('위반 없는 초안을 저장하고 PUT 응답이 b 에 위반을 달면, 저장 뒤 b 에만 사유 배지가 뜬다', async () => {
     const REASON = '숙소 고정 충돌';
     // GET 은 위반 0(PLAIN), PUT 응답만 b 를 위반으로 재판정한다 — 배지의 출처가 PUT 응답뿐이게.
-    putHandler = () =>
-      HttpResponse.json(
-        manualDraft([
-          PLAIN[0],
-          { ...PLAIN[1], hasViolation: true, violationReason: REASON },
-          PLAIN[2],
-        ])
-      );
+    const judged = manualDraft([
+      PLAIN[0],
+      { ...PLAIN[1], hasViolation: true, violationReason: REASON },
+      PLAIN[2],
+    ]);
+    putHandler = () => HttpResponse.json(judged);
+    // TRIP-1038 B — 저장 뒤 확정이 따라 나가 그 응답이 캐시에 덮인다. 서버는 같은 일정을 확정하므로
+    // 같은 위반을 싣는다(기본 핸들러는 위반 없는 PLAIN 이라 배지가 지워진다 — 02a §6).
+    confirmHandler = () =>
+      HttpResponse.json({ ...judged, status: 'CONFIRMED' });
     renderPage();
     await ready();
     expect(screen.queryAllByTestId(/^slot-stopcard-violation-/)).toHaveLength(
@@ -446,18 +453,20 @@ describe('🔴 M8 · AC-9 · 5-b 경고-4 — 다른 여행의 남은 드래프�
 });
 
 /**
- * TRIP-990 · S1 (#043 · D20 · US-SCHED-08) — 직접 짜기 저장이 성공하면 "일정을 저장했어요" 토스트가 뜨고
- * 화면에 그대로 남는다.
+ * TRIP-990 · S1 (#043 · US-SCHED-08) → **TRIP-1038 B 로 뒤집음(D20 폐기)** — 직접 짜기 저장이 성공하면
+ * "일정을 저장했어요" 토스트는 그대로 뜨지만, 이제 제자리에 남지 않고 확정까지 이어 확정 화면(h16)으로
+ * 바꿔 간다(결정 1=(ii)). 토스트를 남기는 이유: 뒤이은 확정이 실패해도 저장은 됐다는 사실을 알린다(01 Q3).
+ * 확정 흐름 자체(순서·실패·연타·언마운트)는 `ManualPlanPage.confirm.integration.test.tsx` 가 잰다.
  *
- * 왜: 저장된 일정이 실행 기준선이 되는데(US-SCHED-08) 성공해도 화면이 아무 말도 안 하면 사용자는 저장이
- * 됐는지 모른다. 편집을 이어 가는 화면이라 떠나지 않는다(D20) — 라우터 세 방법 모두 0회.
+ * 옛 C1b(TRIP-1009 — 저장 뒤 ‹)는 "저장해도 제자리"가 전제라 전제가 사라져 지웠다. ‹ → 일정 탭 replace
+ * 계약은 위 M7 이 계속 잠근다.
  *
  * 토스트 호스트는 실제 앱에서 루트에 있다 — 이 테스트는 페이지 옆에 호스트를 함께 그려 "보였다"를 잰다
  * (`toastHarness`). 스토어가 모듈 싱글턴이라 파일 최상위 `afterEach` 가 테스트마다 비운다.
  *
  * 3동작 뼈대: 준비=PUT 200/500 → 실행=저장 → 단언=토스트 유무·라우터.
  */
-describe('🔴 S1 · 저장 성공 토스트 + 제자리 (#043 · D20)', () => {
+describe('🔴 S1 · 저장 성공 토스트 + 확정 화면으로 이동 (#043 · TRIP-1038 B)', () => {
   function renderPageWithToast() {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false, gcTime: 0 } },
@@ -471,7 +480,7 @@ describe('🔴 S1 · 저장 성공 토스트 + 제자리 (#043 · D20)', () => {
     );
   }
 
-  it('PUT 200 이면 "일정을 저장했어요" 토스트가 뜨고 라우터는 0회다', async () => {
+  it('PUT 200 이면 "일정을 저장했어요" 토스트가 뜨고, 확정 뒤 h16 으로 replace 1회 · push/back 0', async () => {
     renderPageWithToast();
     await ready();
     // 앵커: 저장 전엔 토스트가 없다 — 뒤에서 보이는 토스트가 이번 저장이 띄운 것임을 가른다.
@@ -483,9 +492,16 @@ describe('🔴 S1 · 저장 성공 토스트 + 제자리 (#043 · D20)', () => {
     expect(putCalls).toBe(1);
     const toast = await screen.findByTestId('itinerary-manual-saved');
     expect(within(toast).getByText('일정을 저장했어요')).toBeOnTheScreen();
+    // 저장+확정 2왕복 — CI 러너(약 4배 느림) 기준 한도.
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1), {
+      timeout: 4000,
+    });
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/itinerary',
+      params: { tripId: TRIP_ID },
+    });
     expect(mockBack).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
-    expect(mockReplace).not.toHaveBeenCalled();
   });
 
   it('짝: PUT 500 이면 실패 안내만 뜨고 성공 토스트는 없다', async () => {
@@ -498,47 +514,6 @@ describe('🔴 S1 · 저장 성공 토스트 + 제자리 (#043 · D20)', () => {
     // 실패가 처리된 뒤에 센다 — 응답 전이면 어떤 구현이든 토스트가 없다.
     expect(await screen.findByTestId(SAVE_ERROR)).toBeOnTheScreen();
     expect(screen.queryByTestId('itinerary-manual-saved')).toBeNull();
-  });
-});
-
-/**
- * TRIP-1009 · C (#081) — 저장한 뒤 ‹ 를 누르면 일정 탭으로 간다(QA 재현 순서: 저장 → ‹).
- *
- * 저장은 여전히 제자리 + 토스트다(D20) — ‹ 를 누르기 전까지 라우터는 0회다. ‹ 는 방식 선택으로 돌아가는
- * `back` 이 아니라 `replace('/(tabs)/itinerary')` 다. 탭의 여행 카드를 누르면 저장한 일정으로 다시 간다.
- * 토스트 스토어 비우기는 파일 최상위 `afterEach` 가 맡는다.
- *
- * 3동작 뼈대: 준비=PUT 200 + 토스트 호스트 → 실행=저장 → ‹ → 단언=토스트·저장 뒤 라우터 0회·‹ 뒤 replace 1회.
- */
-describe('🔴 C1b · TRIP-1009 — 저장 뒤 ‹ 는 일정 탭으로 간다 (#081)', () => {
-  it('저장하면 제자리에 토스트가 뜨고, 그 뒤 ‹ 를 누르면 replace("/(tabs)/itinerary") 1회 · back 0회다', async () => {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
-    render(
-      <QueryClientProvider client={client}>
-        <WithToastHost>
-          <ManualPlanPage tripId={TRIP_ID} />
-        </WithToastHost>
-      </QueryClientProvider>
-    );
-    await ready();
-    expect(screen.queryByTestId('itinerary-manual-saved')).toBeNull();
-
-    await save();
-    expect(
-      await screen.findByTestId('itinerary-manual-saved')
-    ).toBeOnTheScreen();
-    // 저장 자체는 화면을 옮기지 않는다(D20 무회귀).
-    expect(mockReplace).not.toHaveBeenCalled();
-    expect(mockBack).not.toHaveBeenCalled();
-    expect(mockPush).not.toHaveBeenCalled();
-
-    fireEvent.press(screen.getByTestId('itinerary-edit-back'));
-
-    expect(mockReplace).toHaveBeenCalledTimes(1);
-    expect(mockReplace).toHaveBeenCalledWith('/(tabs)/itinerary');
-    expect(mockBack).not.toHaveBeenCalled();
   });
 });
 
