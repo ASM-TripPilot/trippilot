@@ -57,6 +57,7 @@ const PROCEED_LABEL = '이 구성으로 일정 짜기';
 
 const EMPTY_TITLE = '아직 담은 필수 방문지가 없어요';
 const EMPTY_NOTE = '꼭 가고 싶은 곳을 담으면 AI가 알아서 배치해요';
+const BROWSE_SAVED_LABEL = '담은 장소 보기';
 /** 조회 실패 부제는 0곳 얼굴과 반드시 구분한다(정본 `frontend-components` L132). */
 const FAILED_TITLE = '담은 곳을 불러오지 못했어요';
 const FAILED_NOTE = '네트워크를 확인하고 다시 시도해 주세요';
@@ -88,6 +89,8 @@ export interface MustVisitPickerScreenProps {
   onRetry?(): void;
   onProceed?(): void;
   onSkip?(): void;
+  /** 0곳 얼굴의 `담은 장소 보기` 링크(TRIP-1022 결정 2). 안 주면 링크를 그리지 않는다. */
+  onPressBrowseSaved?(): void;
 }
 
 function Chip({
@@ -386,6 +389,7 @@ export function MustVisitPickerScreen({
   onRetry,
   onProceed,
   onSkip,
+  onPressBrowseSaved,
 }: MustVisitPickerScreenProps): ReactElement {
   const pinNumbers = new Set((pins ?? []).map((pin) => pin.number));
   // 얼굴이 핀보다 세다 — 빈 목록·조회 실패 프레임에는 핀을 받아도 지도가 없다(Figma
@@ -456,6 +460,7 @@ export function MustVisitPickerScreen({
                 pins={mapPins}
                 viewOnly
                 connectPins={false}
+                fitPins
               />
             </View>
           )}
@@ -469,7 +474,18 @@ export function MustVisitPickerScreen({
               icon={<InfoCircleGlyph size={32} tone="primaryText" />}
               title={EMPTY_TITLE}
               description={EMPTY_NOTE}
-              actions={[]}
+              actions={
+                onPressBrowseSaved === undefined
+                  ? []
+                  : [
+                      {
+                        testID: 'itinerary-mustvisit-screen-empty-add',
+                        label: BROWSE_SAVED_LABEL,
+                        variant: 'link',
+                        onPress: onPressBrowseSaved,
+                      },
+                    ]
+              }
             />
           ) : null}
 

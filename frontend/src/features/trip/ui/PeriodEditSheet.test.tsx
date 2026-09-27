@@ -148,6 +148,29 @@ describe('AC-2 · 범위 3상태 표식 (시작/사이/종료 서로 다른 test
 
     expect(spies.onPickDate).toHaveBeenCalledWith('2026-06-10');
   });
+
+  // TRIP-1027 AC-2 — 여행지 0곳이면 배선이 {시작: D, 끝: D}(당일)를 넘긴다. 시작 표식이 먼저 걸려
+  // 끝 원·사이 표식 없이 시작 원 하나만 뜨고, 범위는 완성이라 적용은 열린다(02a ★16).
+  it('당일 범위(시작 = 끝)면 시작 표식 하나만 뜨고, 끝·사이 표식은 없으며 적용은 열린다', () => {
+    const spies = renderSheet({
+      range: { start: '2026-06-10', end: '2026-06-10' },
+    });
+
+    expect(
+      screen.getByTestId('trip-wizard-period-cell-start-2026-06-10')
+    ).toBeOnTheScreen();
+    expect(
+      screen.queryByTestId('trip-wizard-period-cell-end-2026-06-10')
+    ).toBeNull();
+    expect(
+      screen.queryAllByTestId(/^trip-wizard-period-cell-between-/)
+    ).toHaveLength(0);
+
+    const apply = screen.getByTestId('trip-wizard-period-apply');
+    expect(apply).toBeEnabled();
+    fireEvent.press(apply);
+    expect(spies.onApply).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('AC-3 · 선택 요약 (범위만, 실제 달력 요일)', () => {

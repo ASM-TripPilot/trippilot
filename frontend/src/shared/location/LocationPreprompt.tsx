@@ -13,7 +13,6 @@ import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
-  LocationBackChevronGlyph,
   LocationInfoGlyph,
   LocationOffGlyph,
   LocationRadarHero,
@@ -44,9 +43,8 @@ export function LocationPreprompt({
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
       <View testID="onboarding-location-root" className="flex-1 bg-canvas">
-        <View className="h-[56px] flex-row items-center border-b border-hairline px-lg">
-          <LocationBackChevronGlyph />
-        </View>
+        {/* 머리 바는 남기고 눌리지 않던 뒤로 글리프만 뺐다(TRIP-1023 #005 · Q2 — 온보딩은 앞으로만). */}
+        <View className="h-[56px] flex-row items-center border-b border-hairline px-lg" />
 
         {denied ? (
           <View className="flex-1 items-center justify-center gap-lg px-2xl">

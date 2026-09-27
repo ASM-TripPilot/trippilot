@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import type { BaseAssignment, SavedStay } from '@/shared/api/generated/schemas';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { resetPressGuard } from '@/shared/press/pressGuard';
 
 import { TripNewStep2Page } from './TripNewStep2Page';
 
@@ -167,6 +168,7 @@ function staysRegionOf(call: unknown[] | undefined): string | undefined {
 }
 
 beforeEach(() => {
+  resetPressGuard(); // TRIP-1013 — 연타 가드 창(모듈 전역)이 앞 테스트에서 새지 않게 닫는다.
   // 모듈 싱글턴 스토어를 되돌린다 — 안 하면 앞 테스트 값이 뒤 판정을 뒤집는다.
   useTripWizardStore.getState().reset();
   useTripWizardStore.getState().setPeriod(undefined, TRIP_START, TRIP_END);
@@ -291,11 +293,13 @@ describe('TRIP-1010 · 카드 수 = 여행 기간 (박수 합이 모자라도 �
   ): void {
     const store = useTripWizardStore.getState();
     store.reset();
-    store.setPeriod(undefined, startDate, endDate);
     store.setCreatedTripId(TRIP_ID);
     destinations.forEach(([region, nights]) =>
       store.addDestination(region, nights)
     );
+    // 기간은 여행지 **뒤에** 그대로 적는다 — TRIP-1027부터 시작이 있으면 담을 때마다 끝이 "시작 +
+    // 박수 합"으로 다시 계산되므로, 기간 > 박수 합(서버·옛 상태)을 만들려면 이 순서여야 한다.
+    store.setPeriod(undefined, startDate, endDate);
   }
 
   it('서울 1박 + 기간 9/26–9/28(2박)이면 카드 2장, 둘째 밤(9/27)도 서울이다 (QA #032)', () => {

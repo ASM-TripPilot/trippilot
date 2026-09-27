@@ -6,7 +6,8 @@ import type {
 } from '@/shared/api/generated/schemas';
 
 import { mergeMustVisitSeeds, type MustVisitSeedItem } from './mustVisitSeed';
-import type { PeriodPresetCode } from './tripWizardStep1';
+import { nightsSum } from './tripDraft';
+import { deriveEndDate, type PeriodPresetCode } from './tripWizardStep1';
 
 /**
  * 위저드 1/2 드래프트 — 화면 밖에 사는 세션 메모리 상자(TRIP-205, 01b §10.1 · D3).
@@ -79,6 +80,9 @@ export interface TripWizardDraft {
     startDate: string,
     endDate: string
   ): void;
+  /** 시작 날짜만 고른다(TRIP-1027) — 끝은 `시작 + Σnights`로 파생된다. 여행지가 0곳이면 끝 =
+   * 시작(당일). 프리셋 출처가 아니므로 `presetCode`는 비운다. */
+  setStartDate(startDate: string): void;
   /** 1 미만은 1로 접는다(BR-U1-39 하한) — 화면의 `−` 비활성과 별개로 여기서도 방어한다. */
   setParty(next: number): void;
   selectCompanion(type: CompanionType): void;
@@ -143,6 +147,17 @@ function withTouched(
   return touched.includes(field) ? touched : [...touched, field];
 }
 
+/** 여행지 목록이 바뀐 뒤의 끝 날짜(TRIP-1027) — 시작이 있으면 `시작 + Σnights`로 다시 계산하고,
+ * 없으면 끝을 건드리지 않는다(시작 없이 끝만 생기는 상태를 만들지 않는다). */
+function endAfter(
+  state: TripWizardDraft,
+  destinations: TripDestination[]
+): string | undefined {
+  return state.startDate
+    ? deriveEndDate(state.startDate, nightsSum(destinations))
+    : state.endDate;
+}
+
 /** 목록 순서대로 1..N을 다시 매긴다 — 제거 뒤에도 `seq`에 구멍이 나면 서버가 방문 순서를
  * 읽을 수 없다. */
 function renumberSeq(destinations: TripDestination[]): TripDestination[] {
@@ -155,40 +170,56 @@ function renumberSeq(destinations: TripDestination[]): TripDestination[] {
 const createTripWizardDraft: StateCreator<TripWizardDraft> = (set) => ({
   ...INITIAL_DRAFT,
   addDestination: (regionName, nights) =>
-    set((state) => ({
-      destinations: renumberSeq([
+    set((state) => {
+      const destinations = renumberSeq([
         ...state.destinations,
         { seq: 0, region: regionName, nights },
-      ]),
-      touched: withTouched(state.touched, 'destinations'),
-    })),
+      ]);
+      return {
+        destinations,
+        endDate: endAfter(state, destinations),
+        touched: withTouched(state.touched, 'destinations'),
+      };
+    }),
   removeDestination: (seq) =>
-    set((state) => ({
+    set((state) => {
       // `seq`로 지운다(TRIP-364) — 이름과 달리 목록 안에서 유일하다(renumberSeq가 1..N을
       // 매긴다). 같은 지역을 두 번 담아도 사용자가 누른 *그* 칩을 정확히 짚는다. 이름으로
       // 지우던 옛 구현은 첫 일치만 지워 "누른 것을 지우지 못하던" 뿌리였고(더 전에는 `filter`로
       // 전부 지워 "부산 하나를 지우려다 부산 전부를 잃던" 버그였다), 코드/seq 식별로 그 뿌리를
       // 없앤다. 못 찾는 seq는 조용히 무동작(filter가 아무것도 안 지움).
-      destinations: renumberSeq(
+      const destinations = renumberSeq(
         state.destinations.filter((one) => one.seq !== seq)
-      ),
-      touched: withTouched(state.touched, 'destinations'),
-    })),
+      );
+      return {
+        destinations,
+        endDate: endAfter(state, destinations),
+        touched: withTouched(state.touched, 'destinations'),
+      };
+    }),
   setNights: (seq, nights) =>
-    set((state) => ({
+    set((state) => {
       // 해당 seq의 nights만 갈아 끼운다 — `map`이 seq 미일치 항목은 원본 그대로 되돌려주므로
       // 못 찾는 seq는 저절로 no-op이다(seq 재번호는 nights만 바뀌어 필요 없다). 하한 1은
       // `Math.max(1, …)` 하나로 접는다 — 상한은 없다(도시=최소 1박, 01b D1). renumberSeq는
       // 여기서 안 부른다: 목록 길이·순서가 그대로라 seq도 그대로다.
-      destinations: state.destinations.map((one) =>
+      const destinations = state.destinations.map((one) =>
         one.seq === seq ? { ...one, nights: Math.max(1, nights) } : one
-      ),
-    })),
+      );
+      return { destinations, endDate: endAfter(state, destinations) };
+    }),
   setPeriod: (presetCode, startDate, endDate) =>
     set((state) => ({
       presetCode,
       startDate,
       endDate,
+      touched: withTouched(state.touched, 'period'),
+    })),
+  setStartDate: (startDate) =>
+    set((state) => ({
+      presetCode: undefined,
+      startDate,
+      endDate: deriveEndDate(startDate, nightsSum(state.destinations)),
       touched: withTouched(state.touched, 'period'),
     })),
   setParty: (next) =>

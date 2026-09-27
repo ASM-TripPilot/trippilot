@@ -9,6 +9,7 @@ import {
 import type { BaseAssignment, SavedStay } from '@/shared/api/generated/schemas';
 import type { StayAddressState } from '@/features/trip/model/staySheetSections';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { resetPressGuard } from '@/shared/press/pressGuard';
 
 import { TripNewStep2Page } from './TripNewStep2Page';
 
@@ -178,11 +179,13 @@ function seedDraft(
 ): void {
   const store = useTripWizardStore.getState();
   store.reset();
-  store.setPeriod(undefined, startDate, endDate);
   store.setCreatedTripId(TRIP_ID);
   destinations.forEach(([region, nights]) =>
     store.addDestination(region, nights)
   );
+  // 기간은 여행지 **뒤에** 그대로 적는다 — TRIP-1027부터 시작이 있으면 담을 때마다 끝이 "시작 +
+  // 박수 합"으로 다시 계산되므로, 기간 > 박수 합(서버·옛 상태)을 만들려면 이 순서여야 한다.
+  store.setPeriod(undefined, startDate, endDate);
 }
 
 /**
@@ -226,6 +229,8 @@ function staysCalls(): unknown[][] {
 }
 
 beforeEach(() => {
+  // TRIP-1013 — 연타 가드의 400ms 창은 모듈 전역이라 앞 테스트의 "지정" 누름이 새지 않게 닫는다.
+  resetPressGuard();
   useTripWizardStore.getState().reset();
   useTripWizardStore.getState().setPeriod(undefined, TRIP_START, TRIP_END);
   useTripWizardStore.getState().setCreatedTripId(TRIP_ID);
@@ -373,6 +378,8 @@ describe('S9L · 지정 in-flight 잠금 (AC-S9-1·S9-2·S9-3)', () => {
 
     const assign = screen.getByTestId('trip-base-staysheet-assign');
     fireEvent.press(assign);
+    // TRIP-1013 — 연타 가드 창을 닫아, 둘째 press 를 막는 것이 ref 가드뿐인 상황을 유지한다.
+    resetPressGuard();
     fireEvent.press(assign);
 
     // ref 가드가 없으면 둘째 press 도 mutate 를 쏴 2회가 된다(잉여 POST).
@@ -389,6 +396,7 @@ describe('S9L · 지정 in-flight 잠금 (AC-S9-1·S9-2·S9-3)', () => {
 
     // 색만 흐린 가짜가 아니라 진짜 disabled 여야 재탭이 안 먹는다(disabled prop 3단).
     expect(screen.getByTestId('trip-base-staysheet-assign')).toBeDisabled();
+    resetPressGuard(); // TRIP-1013 — 막는 것이 disabled 뿐인 상황을 유지한다.
     fireEvent.press(screen.getByTestId('trip-base-staysheet-assign'));
     expect(mockAssignMutate).toHaveBeenCalledTimes(1);
   });
@@ -405,6 +413,8 @@ describe('S9L · 지정 in-flight 잠금 (AC-S9-1·S9-2·S9-3)', () => {
     });
     expect(screen.queryByTestId('trip-base-staysheet')).toBeNull();
 
+    // TRIP-1013 — 사람이 연타 가드 창(400ms) 밖에서 다시 누른 것과 같게 창을 닫는다.
+    resetPressGuard();
     // 다른 밤(밤3)에서 다시 지정 — 잠금 리셋을 빠뜨리면 여기서 mutate 가 안 나가 1회에 머문다.
     fireEvent.press(screen.getByTestId('trip-base-night-card-3'));
     fireEvent.press(screen.getByTestId('trip-base-staysheet-cand-stay-b'));
@@ -425,9 +435,94 @@ describe('S9L · 지정 in-flight 잠금 (AC-S9-1·S9-2·S9-3)', () => {
     });
     expect(screen.getByTestId('trip-base-staysheet')).toBeOnTheScreen();
 
+    // TRIP-1013 — 사람이 연타 가드 창(400ms) 밖에서 다시 누른 것과 같게 창을 닫는다.
+    resetPressGuard();
     // 재시도 — onError 에서 잠금을 안 풀면 영구 잠김이라 여기서 mutate 가 안 나간다.
     fireEvent.press(screen.getByTestId('trip-base-staysheet-assign'));
     expect(mockAssignMutate).toHaveBeenCalledTimes(2);
+  });
+});
+
+/** 가드 판정용으로 멈춰 둘 시각(값 자체는 의미 없다 — 흐르지 않는 것이 요점). */
+const FROZEN_NOW = 1_790_000_000_000;
+
+/**
+ * TRIP-1013 #038 — 거점 시트 '지정' 연타의 두 번째 탭이, 지정 성공으로 시트가 사라진 뒤 드러난
+ * '이 거점으로 일정 만들기'(`trip-base-generate`)를 누르지 않는다(실기에서는 2/4 를 확인 없이 지나갔다).
+ *
+ * 시트는 성공 콜백에서 조건부 렌더로 즉시 빠진다(닫힘 애니메이션·`onClose` 없음) — 그래서 기준점은
+ * 시트 닫힘 이벤트가 아니라 누름·성공 시각이다. "창 밖"은 `resetPressGuard()`로 만든다.
+ */
+describe('AC-038 · 지정 성공으로 시트가 사라진 직후, 창 안의 뒤 CTA 는 무시된다', () => {
+  // 시계를 멈춘다 — 화면을 그리고 응답을 기다리는 동안 실제 시간이 흘러 "창 안"이 400ms 를 넘기면
+  // 판정이 흔들린다(02a ★2). "창 밖"은 resetPressGuard() 로만 만든다.
+  let clock: jest.SpyInstance;
+  beforeEach(() => {
+    clock = jest.spyOn(Date, 'now').mockReturnValue(FROZEN_NOW);
+  });
+  afterEach(() => clock.mockRestore());
+
+  /** 방식 선택(h04)으로 가는 replace 만 센다. */
+  function methodReplaces(): unknown[] {
+    return routerMock.replace.mock.calls.filter(
+      (call: unknown[]) =>
+        (call[0] as { pathname?: string } | undefined)?.pathname ===
+        '/trips/[tripId]/itinerary/method'
+    );
+  }
+
+  /** 밤2 시트를 열고 후보를 고른 뒤 '지정'을 누른다(첫 탭). */
+  function assignNight2(): void {
+    render(<TripNewStep2Page />);
+    fireEvent.press(screen.getByTestId('trip-base-night-card-2'));
+    fireEvent.press(screen.getByTestId('trip-base-staysheet-cand-stay-a'));
+    fireEvent.press(screen.getByTestId('trip-base-staysheet-assign'));
+  }
+
+  /** 창이 닫힌 뒤(=사람이 다시 누름) 뒤 CTA 가 방식 선택으로 정확히 1회 replace 한다 — 앞의
+   * "0회"가 공짜 통과가 아니라는 긍정 앵커를 겸한다. */
+  function expectGenerateWorksAfterWindow(): void {
+    resetPressGuard();
+    fireEvent.press(screen.getByTestId('trip-base-generate'));
+
+    expect(methodReplaces()).toHaveLength(1);
+    expect(routerMock.replace).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/itinerary/method',
+      params: { tripId: TRIP_ID },
+    });
+  }
+
+  it('창 안의 "이 거점으로 일정 만들기"는 방식 선택 이동이 0회이고, 창이 지난 뒤 한 번 누르면 정확히 1회다', () => {
+    // 실행 ① — 첫 탭(지정). 기본 목은 즉시 성공 → 시트가 사라진다.
+    assignNight2();
+    // 앵커 — 첫 탭은 제 할 일을 했다(지정 1회, 시트 사라짐).
+    expect(mockAssignMutate).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('trip-base-staysheet')).toBeNull();
+
+    // 실행 ② — 드러난 뒤 CTA 에 떨어진 두 번째 탭.
+    fireEvent.press(screen.getByTestId('trip-base-generate'));
+
+    // 단언 — 무시된다.
+    expect(methodReplaces()).toHaveLength(0);
+    // 무회귀 — 창이 지난 뒤의 한 번은 정상 동작한다.
+    expectGenerateWorksAfterWindow();
+  });
+
+  it('01b Q2 · 지정 응답이 창(400ms)보다 늦어도, 시트가 사라지는 순간 창이 다시 열려 무시된다', async () => {
+    mockAssignDefer = 'silent';
+    assignNight2();
+    // 첫 탭의 창이 닫힐 만큼 응답이 늦었다(=400ms 이상 흐름).
+    resetPressGuard();
+
+    await act(async () => {
+      mockHeldAssigns[0].resolve();
+    });
+    expect(screen.queryByTestId('trip-base-staysheet')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('trip-base-generate'));
+
+    expect(methodReplaces()).toHaveLength(0);
+    expectGenerateWorksAfterWindow();
   });
 });
 

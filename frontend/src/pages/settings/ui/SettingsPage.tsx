@@ -23,6 +23,7 @@ import {
 import { useGetMeLocationConsent } from '@/shared/api/generated/location/location';
 import { useGetMePreferences } from '@/shared/api/generated/preferences/preferences';
 import {
+  getGetMeProfileQueryKey,
   getGetMeSettingsQueryKey,
   useGetMeProfile,
   useGetMeSettings,
@@ -139,6 +140,10 @@ export function SettingsPage(): ReactElement {
         // 서버 응답 닉네임을 우선하되, 없으면 방금 보낸 값으로 요약을 갱신한다.
         setNicknameOverride(data?.nickname ?? variables.data.nickname);
         setNicknameError(null);
+        // 같은 프로필 캐시를 보는 마이 탭(이미 떠 있는)이 새 닉네임으로 다시 묻게 한다. 실패 땐 안 건드린다.
+        void queryClient.invalidateQueries({
+          queryKey: getGetMeProfileQueryKey(),
+        });
         // 저장 뒤에도 입력칸이 포커스를 쥐어(persistTaps) 키보드가 토스트를 덮는다 — 성공 때만 내린다.
         Keyboard.dismiss();
         showToast({
@@ -240,7 +245,7 @@ export function SettingsPage(): ReactElement {
           nickname: currentNickname,
           email: account.data?.email ?? null,
           preferences: preferences.data,
-          locationConsent: locationConsent.data?.legalConsent,
+          locationConsent: locationConsent.data?.gpsRecordingOptIn,
           personalizationOn:
             personalizationReason === undefined
               ? undefined

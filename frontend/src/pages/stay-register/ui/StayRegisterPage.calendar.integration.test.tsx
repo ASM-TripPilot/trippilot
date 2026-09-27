@@ -124,3 +124,38 @@ describe('PC-2 · 여행 기간이 달력 상·하한으로 배선된다 (AC-5)'
     ).toBeEnabled();
   });
 });
+
+describe('PC-3 · 위저드 기간이 당일(시작 = 끝)이면 달력을 막지 않는다 (TRIP-1027 AC-10)', () => {
+  it('store 기간 6/16–6/16 이어도 오늘·기간 밖 날짜가 열려 있고, 6/16 체크인 → 6/17 체크아웃을 고를 수 있다', () => {
+    // 준비: 1/4 에서 여행지 없이 시작만 고른 채 떠난 상태(끝 = 시작). 기준 오늘 06-15.
+    useTripWizardStore.setState({
+      startDate: '2026-06-16',
+      endDate: '2026-06-16',
+    });
+    render(<StayRegisterPage baseDate="2026-06-15" />, {
+      wrapper: createWrapper(),
+    });
+
+    // 실행
+    fireEvent.press(screen.getByTestId('stay-register-date-field'));
+
+    // 단언 ① — 기간 없음과 같게 취급: 오늘(06-15)도, 당일 다음 날(06-17·06-19)도 열려 있다.
+    // (짝: PC-2 는 기간이 있으면 06-15·06-19 가 잠긴다.)
+    expect(
+      screen.getByTestId('stay-register-date-cell-2026-06-15')
+    ).toBeEnabled();
+    expect(
+      screen.getByTestId('stay-register-date-cell-2026-06-17')
+    ).toBeEnabled();
+    expect(
+      screen.getByTestId('stay-register-date-cell-2026-06-19')
+    ).toBeEnabled();
+
+    // 단언 ② — 실제로 1박을 고를 수 있다(체크아웃 > 체크인). 요약 표기(요일·구분자)는 이 테스트의
+    // 관심사가 아니라 두 날짜가 다 찍혔는지만 정규식(부분 포함)으로 본다(02a ★10).
+    fireEvent.press(screen.getByTestId('stay-register-date-cell-2026-06-16'));
+    fireEvent.press(screen.getByTestId('stay-register-date-cell-2026-06-17'));
+    expect(summary()).toHaveTextContent(/6\.16.*6\.17/);
+    expect(summary()).not.toHaveTextContent(/선택하세요/);
+  });
+});

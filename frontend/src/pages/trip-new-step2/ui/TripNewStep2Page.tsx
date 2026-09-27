@@ -15,6 +15,8 @@ import {
   useTripBases,
 } from '@/features/trip/model/useTripBases';
 import { StaySelectSheet } from '@/features/trip/ui/StaySelectSheet';
+import type { TripDestination } from '@/shared/api/generated/schemas';
+import { guardPress, openPressGuardWindow } from '@/shared/press/pressGuard';
 import {
   TripWizardStep2Screen,
   type Step2Variant,
@@ -58,6 +60,69 @@ export function TripNewStep2Page(): ReactElement {
     destinations,
   } = useTripWizardStore();
 
+  /** 두 출구 CTA의 공통 목적지 — 방식 선택(h04)으로 `replace`. `tripId`는 CTA가 보이는 얼굴에선
+   * `notrip`이 먼저 이겨 항상 정의되지만, 그 사실을 컴파일러에 알리는 가드를 둔다. */
+  function goToMethod(): void {
+    if (tripId === undefined) return;
+    router.replace({
+      pathname: '/trips/[tripId]/itinerary/method',
+      params: { tripId },
+    });
+  }
+
+  return (
+    <BaseNightsFlow
+      tripId={tripId}
+      startDate={startDate}
+      endDate={endDate}
+      destinations={destinations}
+      // TRIP-1013 #038 수신 — 지정 직후의 창 안이면 무시. `BaseNightsFlow` 안(onGenerate)이 아니라
+      // 여기서 건다: 여행 단위 화면(`TripBasesPage`)의 출구는 관찰 밖이라 가드 밖에 둔다.
+      onExit={guardPress(goToMethod)}
+      onBack={() => router.back()}
+      onRestart={() => router.push('/trips/new/step1')}
+    />
+  );
+}
+
+/** 여행 단위 입구(`TripBasesPage`)만 넘긴다 — 여행 자체를 서버에서 조회하는 상태. 위저드는
+ * 스토어에서 읽으므로 없다. */
+interface TripLoad {
+  isPending: boolean;
+  isError: boolean;
+  refetch: () => unknown;
+}
+
+export interface BaseNightsFlowProps {
+  tripId: string | undefined;
+  startDate: string | undefined;
+  endDate: string | undefined;
+  destinations: TripDestination[];
+  /** 두 CTA(주·보조)의 출구. */
+  onExit: () => void;
+  onBack: () => void;
+  /** notrip 얼굴 "처음부터". */
+  onRestart: () => void;
+  tripLoad?: TripLoad;
+}
+
+/**
+ * TRIP-1011 C — 거점 화면 공통 배선. 위저드 2/4(`TripNewStep2Page`, 스토어 출처)와 여행 단위 화면
+ * (`TripBasesPage`, 서버 여행 출처)이 **여행 값과 출구만 바꿔** 같은 조회·시트·지정을 쓴다. 본문이
+ * 이 파일에 남는 이유는 구조 가드(AC-3·1010·1011 긍정 단언)가 이 파일을 보기 때문이다.
+ */
+export function BaseNightsFlow({
+  tripId,
+  startDate,
+  endDate,
+  destinations,
+  onExit,
+  onBack,
+  onRestart,
+  tripLoad,
+}: BaseNightsFlowProps): ReactElement {
+  const router = useRouter();
+
   const savedStays = useSavedStays({ enabled: tripId !== undefined });
   const bases = useTripBases(tripId);
   const assignBase = useAssignBase();
@@ -76,8 +141,13 @@ export function TripNewStep2Page(): ReactElement {
 
   const savedStayList = savedStays.data ?? [];
   const assignments = bases.data ?? [];
-  // TRIP-1011 — 시트 섹션 재료(숙소 주소). 시트를 열기 전부터 받아 두어 열 때 목록이 튀지 않게 한다.
-  const stayAddresses = useStayAddresses(savedStayList);
+  // TRIP-1011 — 시트 섹션 재료(숙소 주소). TRIP-1028 — 시트를 처음 열 때 묻기 시작하고, 닫아도
+  // 끄지 않는다(닫는 사이 새로 저장한 숙소도 바로 묻는다). 훅은 시트가 아니라 페이지에 둔다 —
+  // 시트와 함께 언마운트되면 응답 전 닫기가 요청을 취소해 다시 열 때 또 묻는다.
+  const [sheetEverOpened, setSheetEverOpened] = useState(false);
+  const stayAddresses = useStayAddresses(savedStayList, {
+    enabled: sheetEverOpened,
+  });
   // 딥링크 진입에서는 빈 문자열이 그대로 흘러간다 — 목적지가 없어 카드는 어차피 0장이다.
   const tripStartDate = startDate ?? '';
 
@@ -94,8 +164,10 @@ export function TripNewStep2Page(): ReactElement {
 
   // 두 목록은 `saved-stays`·`bases`에서 나오므로 하나만 죽어도 골격이 없다 — 부분 표시를
   // 시도하면 상태 조합이 폭발한다.
-  const loadFailed = savedStays.isError || bases.isError;
-  const loading = savedStays.isPending || bases.isPending;
+  const loadFailed =
+    savedStays.isError || bases.isError || tripLoad?.isError === true;
+  const loading =
+    savedStays.isPending || bases.isPending || tripLoad?.isPending === true;
 
   function resolveVariant(): Step2Variant {
     if (tripId === undefined) return 'notrip';
@@ -108,19 +180,10 @@ export function TripNewStep2Page(): ReactElement {
     return 'default';
   }
 
-  /** 두 출구 CTA의 공통 목적지 — 방식 선택(h04)으로 `replace`. `tripId`는 CTA가 보이는 얼굴에선
-   * `notrip`이 먼저 이겨 항상 정의되지만, 그 사실을 컴파일러에 알리는 가드를 둔다. */
-  function goToMethod(): void {
-    if (tripId === undefined) return;
-    router.replace({
-      pathname: '/trips/[tripId]/itinerary/method',
-      params: { tripId },
-    });
-  }
-
   /** 카드 탭 → 그 밤의 시트를 연다. 새로 여는 밤마다 선택·실패·잠금을 비워 깨끗이 시작한다. */
   function openSheet(nightNumber: number): void {
     assignLockRef.current = false;
+    setSheetEverOpened(true);
     setOpenNight(nightNumber);
     setSelectedSavedStayId(null);
     setAssignFailed(false);
@@ -153,7 +216,11 @@ export function TripNewStep2Page(): ReactElement {
     assignBase.mutate(
       { tripId, data: { savedStayId: selectedSavedStayId, dateFrom, dateTo } },
       {
-        onSuccess: closeSheet,
+        onSuccess: () => {
+          // TRIP-1013 #038 — 시트가 빠지는 순간 창을 다시 연다(응답이 400ms보다 늦어도 관통 차단).
+          openPressGuardWindow();
+          closeSheet();
+        },
         onError: () => {
           assignLockRef.current = false;
           setAssignFailed(true);
@@ -181,15 +248,16 @@ export function TripNewStep2Page(): ReactElement {
         variant={resolveVariant()}
         cards={cards}
         onPressCard={openSheet}
-        onGenerate={goToMethod}
-        onNoStayStart={goToMethod}
+        onGenerate={onExit}
+        onNoStayStart={onExit}
         onBrowseStays={() => browseStays(destinations[0]?.region)}
-        onBack={() => router.back()}
+        onBack={onBack}
         onRetryAll={() => {
+          void tripLoad?.refetch();
           void savedStays.refetch();
           void bases.refetch();
         }}
-        onRestart={() => router.push('/trips/new/step1')}
+        onRestart={onRestart}
       />
       {openCard !== undefined ? (
         <StaySelectSheet
@@ -203,7 +271,7 @@ export function TripNewStep2Page(): ReactElement {
           selectedSavedStayId={selectedSavedStayId}
           onSelect={(savedStayId) => setSelectedSavedStayId(savedStayId)}
           onBrowse={() => browseStays(openCard.region)}
-          onAssign={handleAssign}
+          onAssign={guardPress(handleAssign)}
           assignPending={assignBase.isPending}
           assignFailed={assignFailed}
           onClose={closeSheet}

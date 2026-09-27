@@ -35,7 +35,7 @@ import {
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
-let mockParams: { region?: string } = {};
+let mockParams: { region?: string; tab?: string } = {};
 
 // 두 데이터 훅이 받은 인자를 캡처하는 스파이 — 게이팅·역인덱스 증명의 핵심.
 const mockUseStaySearch = jest.fn();
@@ -429,5 +429,57 @@ describe('🔴 1012-B1 · d03 목적지 상세 ＋ 여행 만들기 FAB 는 직�
     expect(mockPush).toHaveBeenCalledTimes(1);
     expect(String(mockPush.mock.calls[0][0])).toBe('/trips/new/step1');
     expect(draftAtPush()).toEqual(freshWizardDraft());
+  });
+});
+
+// ── TRIP-1015 E · 진입 탭이 탭바 활성 탭을 정한다 (QA #008 · 결정 4 · US-SHELL-03/04) ────────────
+// 결과 화면은 `(tabs)` 밖이라 탭바를 복제해 그린다. 지금은 활성 탭이 "탐색"으로 박혀 있어, 홈 검색으로
+// 들어와도 탭바가 탐색을 가리킨다. 관측은 BottomTabBar 의 기존 방식(`accessibilityState.selected`) 그대로.
+// 뒤로 버튼은 새로 만들지 않는다(2026-08-22 결정 유지) — 복귀는 탭바·시스템 제스처(6-b).
+describe('🔴 1015-E · 진입 탭이 home 이면 복제 탭바의 활성 탭이 홈이다', () => {
+  it('E1 tab=home 으로 열리면 홈 탭이 선택되고 탐색 탭은 선택되지 않는다', () => {
+    mockParams = { region: '26', tab: 'home' };
+
+    render(<DestinationDetailPage />);
+
+    expect(screen.getByTestId('shell-tabbar-tab-home')).toBeSelected();
+    expect(screen.getByTestId('shell-tabbar-tab-explore')).not.toBeSelected();
+  });
+
+  it('E1 진입 탭이 없으면(탐색 랜딩에서 옴) 지금처럼 탐색 탭이 선택된다 (무회귀 앵커)', () => {
+    mockParams = { region: '26' };
+
+    render(<DestinationDetailPage />);
+
+    expect(screen.getByTestId('shell-tabbar-tab-explore')).toBeSelected();
+    expect(screen.getByTestId('shell-tabbar-tab-home')).not.toBeSelected();
+  });
+
+  it('E2 홈에서 온 결과 화면의 검색 → 지역 선택 URL 에 진입 탭 home 을 다시 싣는다(dismissTo 뒤에도 홈 유지)', () => {
+    mockParams = { region: '26', tab: 'home' };
+    render(<DestinationDetailPage />);
+
+    fireEvent.press(screen.getByTestId('destination-detail-search'));
+
+    expect(mockPush.mock.calls).toEqual([
+      [regionPickerHref('explore', { tab: 'home' })],
+    ]);
+    // 헬퍼가 두 번째 인자를 버려도 위 단언은 통과한다 — 글자로 한 번 더 못박는다.
+    expect(String(mockPush.mock.calls[0][0])).toContain('tab=home');
+  });
+
+  it('E3 홈에서 들어와도 결과 화면에 뒤로 버튼이 생기지 않는다(2026-08-22 결정)', () => {
+    mockParams = { region: '26', tab: 'home' };
+    const view = render(<DestinationDetailPage />);
+
+    // 앵커 — 트리에 testID 가 실재한다(빈 트리에서 아래 부정이 공짜로 통과하지 않게).
+    const ids = view.UNSAFE_root.findAll(
+      (node) => typeof node.props.testID === 'string'
+    ).map((node) => node.props.testID as string);
+    expect(ids).toContain('shell-tabbar-tab-home');
+
+    // 부정 — '…-back' testID 도, 이름이 "뒤로"인 버튼도 없다.
+    expect(ids.filter((id) => /-back$/.test(id))).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: '뒤로' })).toBeNull();
   });
 });

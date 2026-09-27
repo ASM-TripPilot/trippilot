@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { usePreferenceStore } from '@/features/onboarding/model/preferenceStore';
 import { notifyBootstrapReeval } from '@/shared/bootstrap/bootstrapReeval';
+import { resetPressGuard } from '@/shared/press/pressGuard';
 import { PrefStep2Page } from './PrefStep2Page';
 
 /**
@@ -50,6 +51,7 @@ jest.mock('@/shared/api/generated/preferences/preferences', () => ({
 }));
 
 beforeEach(() => {
+  resetPressGuard(); // TRIP-1013 — 연타 가드 창(모듈 전역)이 앞 테스트에서 새지 않게 닫는다.
   usePreferenceStore.getState().reset();
   routerMock.replace.mockClear();
   routerMock.push.mockClear();

@@ -5,6 +5,7 @@ import { Text, View } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { buildEditItineraryRequest } from '@/features/itinerary/model/buildEditItineraryRequest';
+import { resolveEditorMapCenter } from '@/features/itinerary/model/editorMapCenter';
 import {
   buildDraftPins,
   formatCoPickDayHeader,
@@ -14,6 +15,8 @@ import {
   type EditorDaysItem,
 } from '@/features/itinerary/model/itineraryEditStore';
 import { buildPlanDayTabs } from '@/features/itinerary/model/planState';
+import { useSavedStays } from '@/features/trip/model/useSavedStays';
+import { useTripBases } from '@/features/trip/model/useTripBases';
 import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
 import {
@@ -51,15 +54,15 @@ import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
 const SAVE_ERROR_NOTE = '일정을 저장하지 못했어요. 잠시 후 다시 시도해 주세요';
 const SAVED_TOAST = '일정을 저장했어요';
 
-// 핀이 없을 때 지도 중심 — 서울 시청(LiveHubView 선례). {0,0} 은 기니만 바다(null-island)라 무의미하다.
-const FALLBACK_CENTER = { lat: 37.5665, lng: 126.978 };
-
 export function ManualPlanPage({ tripId }: { tripId: string }): ReactElement {
   const router = useRouter();
   const queryClient = useQueryClient();
   const generate = usePostTripsTripIdItinerary();
   const itinerary = useGetTripsTripIdItinerary(tripId);
   const save = usePutTripsTripIdItinerary<unknown>();
+  // 핀이 없는 날 지도 중심을 거점 숙소로 잡는 재료(TRIP-1022 결정 1) — 거점엔 좌표가 없어 등록 숙소와 잇는다.
+  const bases = useTripBases(tripId);
+  const savedStays = useSavedStays();
   const firedRef = useRef(false);
   const [activeDayIndex, setActiveDayIndex] = useState(0);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -87,10 +90,20 @@ export function ManualPlanPage({ tripId }: { tripId: string }): ReactElement {
     firedRef.current = true;
     generate.mutate(
       { tripId, data: { generationMode: 'MANUAL' } },
-      // 빈 일정이 처음 생긴 순간 알림 권한을 묻는다(TRIP-835 · 01b Q2) — 기다리지 않는다.
-      { onSuccess: () => void promptAndRegisterPush() }
+      {
+        onSuccess: () => {
+          // 조회가 404 로 정착해 있으면 방금 만든 일정(전 일자 빈 슬롯)을 모른다 — 다시 조회해 헤더
+          // 날짜·일차 칩을 띄운다(TRIP-1022 #075). 응답을 캐시에 박지 않는 이유: 계약(openapi POST 201)은
+          // "day1 만 담긴 PARTIAL" 이라 적고, MANUAL 이 전 일자를 준다는 사실은 서버 구현에만 있다.
+          void queryClient.invalidateQueries({
+            queryKey: getGetTripsTripIdItineraryQueryKey(tripId),
+          });
+          // 빈 일정이 처음 생긴 순간 알림 권한을 묻는다(TRIP-835 · 01b Q2) — 기다리지 않는다.
+          void promptAndRegisterPush();
+        },
+      }
     );
-  }, [generate, tripId, itinerary.isPending, hasExisting]);
+  }, [generate, tripId, itinerary.isPending, hasExisting, queryClient]);
 
   // 조회는 시드 소스 — 데이터가 (다시) 도착할 때만 스토어를 채운다(편집 중 재렌더로 되돌려지지 않는다).
   useEffect(() => {
@@ -132,8 +145,12 @@ export function ManualPlanPage({ tripId }: { tripId: string }): ReactElement {
   const activeDate = loadedDays[activeDayIndex]?.date ?? '';
   const activeSlots = loadedDays[activeDayIndex]?.slots ?? [];
   const pins = buildDraftPins(activeSlots);
-  const center =
-    pins.length > 0 ? { lat: pins[0].lat, lng: pins[0].lng } : FALLBACK_CENTER;
+  const center = resolveEditorMapCenter({
+    pins,
+    date: activeDate,
+    bases: bases.data,
+    stays: savedStays.data,
+  });
 
   const editing = editingSlotKey === null ? null : parseSlotKey(editingSlotKey);
   const editingSlot =

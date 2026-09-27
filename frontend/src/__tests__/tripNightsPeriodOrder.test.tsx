@@ -7,11 +7,13 @@ import { RegionPickerPage } from '@/pages/region-picker/ui/RegionPickerPage';
 import { TripNewStep1Page } from '@/pages/trip-new-step1/ui/TripNewStep1Page';
 
 /**
- * TRIP-1010 · 03b 경고-1 — **기간을 먼저 고르고 여행지 두 곳을 담는 순서**가 '다음'을 막지 않는다.
+ * TRIP-1027 AC-6 — **어떤 입력 순서로도** 박수 합과 기간이 어긋나 '다음'이 막히지 않는다.
  *
- * 무엇을 보장하나: 1/4에서 2박 기간을 적용 → 지역 선택에서 서울 → 다시 지역 선택에서 부산 →
- * 1/4로 돌아오면 박수 합 2 = 기간 2라 불일치 안내가 없고 '다음'이 열린다. 한때 지역 선택이
- * "첫 여행지 = 기간만큼"으로 담아 이 순서에서만 합 3 > 2로 막혔다(순서에 따라 결과가 갈림).
+ * 무엇을 보장하나: 여행지 담기(지역 선택 화면)와 시작 날짜 고르기(1/4 기간 시트), 박수 바꾸기·삭제
+ * (1/4 여행지 시트)를 어떤 순서로 섞어도, 끝 날짜는 늘 "시작 + 박수 합"이고 '다음'이 열린다.
+ * TRIP-1010 경고-1′(서울 담기 → 기간 적용 → 부산 담기면 박수 합 3 > 기간 2로 막힘)이 C1이다.
+ * 스토어 층의 무작위 순서 속성 테스트는 `tripWizardStore.periodFromNights.test.ts` P1 이 맡고,
+ * 여기서는 실제 두 페이지를 잇는 대표 순서 셋을 잠근다.
  *
  * 왜 여기(`src/__tests__`)인가: 지역 선택 페이지와 1/4 페이지를 한 사슬로 잇는다. pages 형제
  * 슬라이스끼리는 import 가 막혀 있어 어느 한 페이지 폴더에 둘 수 없다.
@@ -22,8 +24,8 @@ import { TripNewStep1Page } from '@/pages/trip-new-step1/ui/TripNewStep1Page';
  * ⚠️ 모듈 싱글턴 스토어 — 리셋을 파일 최상위 beforeEach·afterEach 둘 다에 건다.
  * ⚠️ `jest.mock` 팩토리 바깥 변수는 `mock` 접두어만 허용(호이스팅).
  *
- * 3동작: 준비(빈 스토어 · 카탈로그 서울·부산) → 실행(기간 적용 → 서울 담기 → 부산 담기) →
- * 단언(스토어 박수 하나씩 · 1/4 안내 없음 · 다음 열림).
+ * 3동작: 준비(빈 스토어 · 카탈로그 서울·부산) → 실행(담기·시작 고르기·박수 바꾸기를 순서대로) →
+ * 단언(스토어 기간 · 1/4 기간 행 · 다음 열림).
  */
 
 let mockParams: { purpose?: string } = {};
@@ -95,7 +97,6 @@ jest.mock('@/features/explore/model/savedPlaces', () => ({
 
 /** 기준일 고정 — 6/10이 오늘이라 달력은 6/11부터 누를 수 있다. */
 const BASE = '2026-06-10';
-const NOTE = 'trip-wizard-nights-mismatch-note';
 
 function store() {
   return useTripWizardStore.getState();
@@ -107,6 +108,19 @@ function pickRegion(query: string, regionCode: string): void {
   fireEvent.changeText(screen.getByTestId('explore-region-search'), query);
   fireEvent.press(screen.getByTestId(`explore-region-${regionCode}`));
   view.unmount();
+}
+
+/** 1/4 를 열어 기간 시트에서 시작 날짜 **한 번만** 누르고 적용한 뒤 닫는다. */
+function pickStart(date: string): void {
+  const view = render(<TripNewStep1Page baseDate={BASE} />);
+  fireEvent.press(screen.getByTestId('trip-wizard-summary-period'));
+  fireEvent.press(screen.getByTestId(`trip-wizard-period-cell-${date}`));
+  fireEvent.press(screen.getByTestId('trip-wizard-period-apply'));
+  view.unmount();
+}
+
+function period(): [string | undefined, string | undefined] {
+  return [store().startDate, store().endDate];
 }
 
 beforeEach(() => {
@@ -123,36 +137,60 @@ afterEach(() => {
   store().reset();
 });
 
-describe('TRIP-1010 경고-1 · 기간 → 서울 → 부산 순서', () => {
-  it('2박 기간을 먼저 적용하고 서울·부산을 차례로 담으면 합 2박 = 기간이라 안내 없이 다음이 열린다', () => {
-    // 준비 — "아직 0곳" 앵커(앞 테스트 누수가 아님을 확인).
+describe('TRIP-1027 AC-6 · 입력 순서가 달라도 끝 날짜 = 시작 + 박수 합', () => {
+  it('C1 (1010 경고-1′) 서울 담기 → 시작 6/11 → 부산 담기: 기간 6/11–6/13, 다음이 열린다', () => {
+    // 준비 — "아직 0곳" 앵커.
     expect(store().destinations).toHaveLength(0);
 
-    // 실행 ① — 1/4에서 기간 6/11–6/13(2박) 적용. 여행지 0곳이라 동기화 대상 없음.
-    const step1 = render(<TripNewStep1Page baseDate={BASE} />);
-    fireEvent.press(screen.getByTestId('trip-wizard-summary-period'));
-    fireEvent.press(screen.getByTestId('trip-wizard-period-cell-2026-06-11'));
-    fireEvent.press(screen.getByTestId('trip-wizard-period-cell-2026-06-13'));
-    fireEvent.press(screen.getByTestId('trip-wizard-period-apply'));
-    step1.unmount();
-    expect(store().endDate).toBe('2026-06-13');
+    // 실행
+    pickRegion('서울', '11');
+    pickStart('2026-06-11');
+    expect(period()).toEqual(['2026-06-11', '2026-06-12']);
+    pickRegion('부산', '26');
 
-    // 실행 ② — 지역 선택에서 서울, 다시 지역 선택에서 부산.
+    // 단언 ① — 두 곳 모두 1박, 기간은 부산을 담는 순간 하루 늘었다.
+    expect(store().destinations.map((one) => one.nights)).toEqual([1, 1]);
+    expect(period()).toEqual(['2026-06-11', '2026-06-13']);
+
+    // 단언 ② — 1/4로 돌아오면 2박 3일, 다음 열림.
+    render(<TripNewStep1Page baseDate={BASE} />);
+    expect(screen.getByTestId('trip-wizard-summary-period')).toHaveTextContent(
+      /2박 3일/
+    );
+    expect(screen.getByTestId('trip-wizard-step1-next')).toBeEnabled();
+  });
+
+  it('C2 시작 6/11 먼저(당일) → 서울 → 부산: 기간 6/11–6/13, 다음이 열린다', () => {
+    expect(store().destinations).toHaveLength(0);
+
+    pickStart('2026-06-11');
+    expect(period()).toEqual(['2026-06-11', '2026-06-11']);
     pickRegion('서울', '11');
     pickRegion('부산', '26');
 
-    // 단언 ① — 스토어: 두 곳 모두 1박(요소 하나씩).
-    const [first, second] = store().destinations;
-    expect(store().destinations).toHaveLength(2);
-    expect(first.region).toBe('서울특별시');
-    expect(first.nights).toBe(1);
-    expect(second.region).toBe('부산광역시');
-    expect(second.nights).toBe(1);
-
-    // 단언 ② — 1/4로 돌아오면 합 = 기간: 안내 없음(짝: 화면은 실제로 그려짐) · 다음 열림.
+    expect(period()).toEqual(['2026-06-11', '2026-06-13']);
     render(<TripNewStep1Page baseDate={BASE} />);
-    expect(screen.getByTestId('trip-wizard-step1-root')).toBeOnTheScreen();
-    expect(screen.queryByTestId(NOTE)).toBeNull();
+    expect(screen.getByTestId('trip-wizard-step1-next')).toBeEnabled();
+  });
+
+  it('C3 서울 → 부산 → 시작 6/11 → 부산 +1 → 서울 삭제: 끝이 6/13 → 6/14 → 6/13 으로 따라가고 다음은 계속 열린다', () => {
+    expect(store().destinations).toHaveLength(0);
+
+    pickRegion('서울', '11');
+    pickRegion('부산', '26');
+    pickStart('2026-06-11');
+    expect(period()).toEqual(['2026-06-11', '2026-06-13']);
+
+    // 1/4 여행지 시트에서 부산(seq 2) +1, 이어서 서울(seq 1) 삭제.
+    render(<TripNewStep1Page baseDate={BASE} />);
+    fireEvent.press(screen.getByTestId('trip-wizard-summary-destination'));
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-nights-inc-2'));
+    expect(period()).toEqual(['2026-06-11', '2026-06-14']);
+    expect(screen.getByTestId('trip-wizard-step1-next')).toBeEnabled();
+
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-remove-1'));
+    expect(store().destinations.map((one) => one.nights)).toEqual([2]);
+    expect(period()).toEqual(['2026-06-11', '2026-06-13']);
     expect(screen.getByTestId('trip-wizard-step1-next')).toBeEnabled();
   });
 });

@@ -24,6 +24,7 @@ import {
   useGetTripsTripIdMustVisits,
 } from '@/shared/api/generated/trips/trips';
 import { getAccessToken } from '@/shared/api/tokenManager';
+import { guardPress, openPressGuardWindow } from '@/shared/press/pressGuard';
 
 /**
  * h07 배선(TRIP-296) — `ANYTIME` 항목을 시각 고정 블록으로 **승격**한다.
@@ -139,6 +140,8 @@ export function MustVisitTimePage({
     // 409 는 여기서 멈춘다(게이트①-3 · AC-7) — 안내를 세운 직후 떠나면 그 안내가 실기에서
     // 한 프레임도 보이지 않아 침묵과 같아진다. 나가는 것은 사용자가 뒤로 눌러서 한다.
     if (duplicated) return;
+    // TRIP-1013 #042 — 목록으로 돌아가는 순간 창을 다시 연다(응답이 400ms보다 늦어도 관통 차단).
+    openPressGuardWindow();
     router.back();
   }
 
@@ -209,7 +212,8 @@ export function MustVisitTimePage({
       onPickDate={(date) => patchForm({ fixedDate: date })}
       onPickStart={(start) => patchForm({ fixedStart: start })}
       onPickDwell={(dwellKey) => patchForm({ dwellKey })}
-      onSubmit={() => void submit()}
+      // TRIP-1013 #042 송신 — 연타의 두 번째 탭이 돌아간 목록의 행을 관통하지 않게 창을 연다.
+      onSubmit={guardPress(() => void submit())}
       onRetry={failure?.kind === 'lost' ? retry : undefined}
     />
   );

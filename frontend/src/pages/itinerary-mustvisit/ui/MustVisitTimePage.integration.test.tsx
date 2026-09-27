@@ -19,6 +19,7 @@ import type {
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
 import { startTimeOptions } from '@/features/itinerary/model/mustVisitTimeForm';
+import { resetPressGuard } from '@/shared/press/pressGuard';
 
 import { MustVisitTimePage } from './MustVisitTimePage';
 
@@ -143,6 +144,7 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+  resetPressGuard(); // TRIP-1013 — 연타 가드 창(모듈 전역)이 앞 테스트에서 새지 않게 닫는다.
   observedHits = [];
   postBodies = [];
   postStatus = null;

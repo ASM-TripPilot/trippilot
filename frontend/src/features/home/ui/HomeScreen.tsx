@@ -204,7 +204,7 @@ function MagazineHero({
         locations={SCRIM_LOCATIONS}
         style={ABSOLUTE_FILL}
       />
-      <View className="flex-1 justify-between px-lg pb-xl pt-xl">
+      <View className="flex-1 justify-between px-lg pb-[44px] pt-xl">
         {/* 상단: eyebrow pill(하트는 TRIP-694로 제거) */}
         <View className="w-full flex-row items-start justify-between">
           <View className="flex-row items-center gap-[6px] self-start rounded-pill bg-canvas px-md py-[5px]">

@@ -28,6 +28,7 @@ paths:
 - **`router.dismissTo(href)`는 이 리포 첫 사용이고, 재마운트를 안 한다** → expo-router가 `POP_TO` 액션으로 바꾸고(`expo-router/build/global-state/routing.js`), React Navigation `StackRouter`가 처리한다(`@react-navigation/routers`). 스택에 **같은 라우트 이름**이 있으면 그 자리로 올라가 그 화면의 params를 **통째로 교체**(merge 없음, expo가 `merge` 플래그를 안 싣는다) — 없으면 지금 화면(피커)을 그 자리에서 바꿔 끼운다. "같은 화면"은 **이름만**으로 판정한다(루트 Stack에 `getId`·`dangerouslySingular` 없음) — 코드가 다른 지역이어도 같은 라우트 이름이면 같은 인스턴스로 취급된다.
 - **재사용되는 인스턴스는 로컬 `useState`가 이전 params 시절 값을 그대로 들고 있다** → params만 바뀌고 컴포넌트는 새로 안 만들어지므로, 이전 지역에서 세운 배너·대기 표식이 새 지역 화면에 남을 수 있다(TRIP-985 03b 경고-1 실측 — `DestinationDetailPage`가 이 문제로 `key={regionCode}` 재마운트를 얹었다, `pages` 층 행 참고). **이 화면으로 `dismissTo`가 새로 들어오는 상태를 추가할 때마다 같은 함정이 재발할 수 있다** — `key` 재마운트 없이 상태를 추가하면 지역이 바뀌어도 안 지워진다.
 - **jest는 이 재사용/재마운트 여부를 원리적으로 못 본다** — 피커 테스트는 `dismissTo`가 어떤 인자로 불렸는지까지만 잠그고, expo-router는 목이라 실제 스택 동작을 실행하지 않는다. 실제 스택 상태 확인은 6-b 실기 전용이다.
+- **같은 params 통째 교체가 기능 신호(`from=wizard`)도 지운다 → ＋ FAB 재노출로 재발할 수 있다(TRIP-1026, 확인 필요·새 티켓 후보)** — 위저드 출처 d04(`PlaceExplorePage`)에서 '지역 바꾸기'로 피커를 거쳐 `dismissTo` 복귀하면 params가 `{ region }`으로 교체되어 `from`이 함께 사라진다. `isWizardOrigin`이 false가 되어 ＋가 다시 그려지고, 누르면 `reset()`이 돌아 TRIP-1026이 막으려던 입력 소실이 한 칸 돌아서 재발한다. `expo-router@6.0.24` `getNavigateAction`(merge 미지원)과 `@react-navigation/routers@7.6.1` `StackRouter` `POP_TO` 분기(merge 거짓 시 새 params만 씀) 소스 대조로 확정(6-b 실기 대기가 아니라 소스로 답이 나온 사례). 1023 칸 B 지역 칩도 같은 경로.
 
 ## 장소 상세 (explore, d06, TRIP-456)
 

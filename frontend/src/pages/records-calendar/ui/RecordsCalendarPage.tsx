@@ -4,8 +4,10 @@ import { useRouter } from 'expo-router';
 
 import {
   buildPastTripCards,
+  canOpenTripRecords,
   markedDaysOfMonth,
   nightsLabel,
+  recordsTripIdForDate,
   type PastTripCardVM,
 } from '@/features/record/model/recordsCalendar';
 import { formatLegendDateRange } from '@/entities/trip/lib/formatTripPeriod';
@@ -93,6 +95,17 @@ export function RecordsCalendarPage(): ReactElement {
       onPressPrevMonth={() => setYearMonth((ym) => shiftMonth(ym, -1))}
       onPressNextMonth={() => setYearMonth((ym) => shiftMonth(ym, 1))}
       onSelectTrip={(tripId) => router.push(`/trips/${tripId}/records/summary`)}
+      // 마킹 날짜·범례 → 그 여행의 방문 기록. 미래 여행·마킹 없는 날은 무시(TRIP-1015 C · 결정 2).
+      onPressDay={(date) => {
+        const tripId = recordsTripIdForDate(trips, date, today);
+        if (tripId !== null) router.push(`/trips/${tripId}/records`);
+      }}
+      onPressLegend={(tripId) => {
+        const trip = trips.find((t) => t.tripId === tripId);
+        if (trip && canOpenTripRecords(trip, today)) {
+          router.push(`/trips/${tripId}/records`);
+        }
+      }}
       onPressCreateTrip={() => {
         // 새 여행 진입 — 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074).
         useTripWizardStore.getState().reset();

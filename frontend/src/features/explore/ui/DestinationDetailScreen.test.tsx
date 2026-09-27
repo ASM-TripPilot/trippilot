@@ -501,3 +501,59 @@ describe('AC-7 · FAB 2단 (하트 + ＋)', () => {
     ).not.toThrow();
   });
 });
+
+// TRIP-1019 #024(결정 1) — d03 하트 토글도 d01 과 같은 계약이다(`ExploreLandingScreen.parity`
+// 의 같은 describe 참고). `savedCount` 는 담은 장소 수뿐이라 라벨을 "담은 장소 N곳" 으로 좁힌다.
+// ★ `toHaveAccessibleName(문자열)` 은 완전일치(RNTL 13.3.3 실검증).
+describe('🔴 TRIP-1019 #024 · 닫힌 하트 토글 라벨 "담은 장소 N곳"', () => {
+  function savedMenu(open: boolean, savedCount: number) {
+    return {
+      open,
+      savedCount,
+      onToggle: jest.fn(),
+      onPressSavedPlaces: jest.fn(),
+      onPressSavedStays: jest.fn(),
+    };
+  }
+
+  it('닫힘 · 담은 장소 3개 → "담은 장소 3곳", 옛 "담은 곳 N곳" 라벨은 없다', () => {
+    render(
+      <DestinationDetailScreen
+        {...baseProps({ savedMenu: savedMenu(false, 3) })}
+      />
+    );
+
+    expect(
+      screen.getByTestId('destination-detail-saved-menu-toggle')
+    ).toHaveAccessibleName('담은 장소 3곳');
+    expect(screen.queryAllByLabelText(/담은 곳 \d+곳/)).toHaveLength(0);
+  });
+
+  it('닫힘 · 담은 장소 0개 → "담은 장소 0곳"', () => {
+    render(
+      <DestinationDetailScreen
+        {...baseProps({ savedMenu: savedMenu(false, 0) })}
+      />
+    );
+
+    expect(
+      screen.getByTestId('destination-detail-saved-menu-toggle')
+    ).toHaveAccessibleName('담은 장소 0곳');
+    expect(screen.queryAllByLabelText('담은 곳 0곳')).toHaveLength(0);
+  });
+
+  it('열림 · 토글 "담은 곳 메뉴 닫기"·미니 FAB "담은 장소 N곳" 은 그대로다 (01b Q5 유지)', () => {
+    render(
+      <DestinationDetailScreen
+        {...baseProps({ savedMenu: savedMenu(true, 3) })}
+      />
+    );
+
+    expect(
+      screen.getByTestId('destination-detail-saved-menu-toggle')
+    ).toHaveAccessibleName('담은 곳 메뉴 닫기');
+    expect(
+      screen.getByTestId('destination-detail-saved-places-fab')
+    ).toHaveAccessibleName('담은 장소 3곳');
+  });
+});

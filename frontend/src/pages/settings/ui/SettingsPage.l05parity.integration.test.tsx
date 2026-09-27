@@ -458,3 +458,108 @@ describe('TRIP-778 D7 · 모르면 못 누르고, 누르면 바로 바뀌고, �
     expect(screen.queryByTestId('settings-affiliate-error')).toBeNull();
   });
 });
+
+/**
+ * TRIP-1017 (D) #092 — 위치정보 그룹 첫 행은 "GPS 이동경로 기록"(L3)을 가리키고, 칩도 L3 값을 읽는다.
+ *
+ * 왜 두 값을 갈라 주나(02a ★10): 위 W1·W2 는 서버가 `legalConsent`(L2)와 `gpsRecordingOptIn`(L3)을 **같은 값**으로
+ *  준다 — 페이지가 어느 필드를 읽어도 green 이다. 온보딩 위치 약관(L2)은 동의했는데 GPS 기록(L3)은 안 한 계정이
+ *  #092 의 실제 모양이라, 둘을 갈라 줘야 "라벨과 값이 같은 것을 가리킨다"(01b Q6)가 잰다. 방향도 양쪽을 다 둔다 —
+ *  한쪽만 두면 "칩을 항상 미동의로" 같은 상수 구현이 통과한다.
+ *
+ * AC-D3 짝: 설정 화면은 위치 동의를 **읽기만** 한다 — 동의 저장소로 가는 GET 외 요청이 0건이다.
+ */
+describe('TRIP-1017 AC-D1·D2·D3 · "GPS 이동경로 기록" 행은 gpsRecordingOptIn 을 읽는다', () => {
+  let consentRequests: string[] = [];
+
+  beforeAll(() => {
+    server.events.on('request:start', ({ request }) => {
+      const { pathname } = new URL(request.url);
+      if (
+        pathname.includes('/location-consent') ||
+        pathname.includes('/consents')
+      ) {
+        consentRequests.push(`${request.method} ${pathname}`);
+      }
+    });
+  });
+
+  beforeEach(() => {
+    consentRequests = [];
+  });
+
+  /** 위 installServer 로 나머지 조회를 깔고, 위치 동의 응답만 L2·L3 를 갈라 덮는다(server.use 는 뒤가 이긴다). */
+  function installSplitConsent(
+    legalConsent: boolean,
+    gpsRecordingOptIn: boolean
+  ): void {
+    installServer({ legalConsent, reason: 'APPLIED' });
+    server.use(
+      http.get(`${BASE}/me/location-consent`, () =>
+        HttpResponse.json({
+          osPermissionMirror: 'GRANTED',
+          legalConsent,
+          gpsRecordingOptIn,
+        })
+      )
+    );
+  }
+
+  const locationRow = () => screen.getByTestId('settings-nav-location-consent');
+  const locationChip = () =>
+    within(locationRow()).getByTestId('settings-chip-location-consent');
+
+  it('🔴 D2-a 법정 동의(L2)는 했지만 GPS 기록(L3)은 안 했으면 행은 "GPS 이동경로 기록" · 칩은 "미동의"다', async () => {
+    // 준비 — #092 의 실제 계정 모양.
+    installSplitConsent(true, false);
+
+    // 실행
+    renderPage();
+
+    // 단언 — 행 이름이 GPS 기록을 가리키고, 온보딩 약관처럼 읽히는 옛 이름은 없다(AC-D1).
+    await waitFor(() => expect(locationChip()).toBeOnTheScreen());
+    await settleNetwork();
+    expect(
+      within(locationRow()).getByText('GPS 이동경로 기록')
+    ).toBeOnTheScreen();
+    expect(within(locationRow()).queryByText('위치정보 수집 동의')).toBeNull();
+    // 단언 — 칩이 L3 값을 읽는다(AC-D2).
+    expect(within(locationChip()).getByText('미동의')).toBeOnTheScreen();
+    expect(within(locationChip()).queryByText('동의')).toBeNull();
+  });
+
+  it('🔴 D2-b 반대로 L2 미동의 · L3 동의면 칩은 "동의"다(짝)', async () => {
+    installSplitConsent(false, true);
+
+    renderPage();
+
+    await waitFor(() => expect(locationChip()).toBeOnTheScreen());
+    await settleNetwork();
+    expect(within(locationChip()).getByText('동의')).toBeOnTheScreen();
+    expect(within(locationChip()).queryByText('미동의')).toBeNull();
+  });
+
+  it('🟢 D1 행을 누르면 여전히 위치 동의 화면(/settings/location)으로 1회 간다', async () => {
+    installSplitConsent(true, false);
+    renderPage();
+    await waitFor(() => expect(locationChip()).toBeOnTheScreen());
+
+    fireEvent.press(locationRow());
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith('/settings/location');
+  });
+
+  it('🟢 D3 설정 화면은 위치 동의를 읽기만 한다 — 동의 저장소로 가는 쓰기 요청 0', async () => {
+    installSplitConsent(true, false);
+    renderPage();
+    await waitFor(() => expect(locationChip()).toBeOnTheScreen());
+    await settleNetwork();
+
+    // 긍정 앵커 — 동의 조회는 실제로 나갔다(아래 "쓰기 0"이 요청 자체가 없어서 공짜로 참인 것을 막는다).
+    expect(consentRequests).toContain('GET /api/v1/me/location-consent');
+    expect(
+      consentRequests.filter((line) => !line.startsWith('GET '))
+    ).toHaveLength(0);
+  });
+});

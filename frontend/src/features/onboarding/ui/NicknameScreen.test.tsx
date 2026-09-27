@@ -149,3 +149,27 @@ describe('NicknameScreen — 탈출구 없음 (AC C6 · BR-U0-20)', () => {
     expect(screen.queryByText(/건너뛰기|건너뛰고 시작/)).toBeNull();
   });
 });
+
+/**
+ * TRIP-1023 #005 (결정1 · Q1) — 닉네임도 온보딩이라 앞으로만. 약관→닉네임→위치가 모두 replace 라
+ * 되돌아갈 곳이 없으므로 눌리지 않는 뒤로 셰브론을 뺀다. 글리프는 이름으로 찾는다(02a ★5).
+ */
+function backChevronCount(): number {
+  return screen.UNSAFE_root.findAll(
+    (node) =>
+      typeof node.type === 'function' &&
+      /BackChevron/.test((node.type as { name?: string }).name ?? '')
+  ).length;
+}
+
+describe('🔴 TRIP-1023 #005 — 닉네임 머리에 뒤로 글리프가 없다 (AC-A4 · AC-A5 · Q1)', () => {
+  it('제목 "닉네임 설정"은 남고, 뒤로 셰브론과 뒤로 역할 요소는 없다', () => {
+    render(<NicknameScreen {...makeProps()} />);
+
+    expect(screen.getByTestId('onboarding-nickname-root')).toBeOnTheScreen();
+    expect(screen.getByText('닉네임 설정')).toBeOnTheScreen();
+
+    expect(backChevronCount()).toBe(0);
+    expect(screen.queryAllByTestId(/back/).length).toBe(0);
+  });
+});

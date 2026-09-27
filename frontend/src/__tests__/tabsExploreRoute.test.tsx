@@ -279,7 +279,9 @@ describe('🔴 AC-E5 — 담은 곳 saved-menu FAB → 장소(d02)·숙소(e04)�
 
     // 풀폭 핑크 CTA 바에서 우하단 하트 saved-menu FAB 로 교체됐다(TRIP-494, Figma a01 3012:1731).
     const toggle = screen.getByTestId('explore-saved-menu-toggle');
-    expect(toggle).toHaveAccessibleName(/담은 곳 2곳/);
+    // TRIP-1019 #024 — 라우트가 넘기는 수는 담은 **장소** 수(savedPoiIds)뿐이라 라벨도 "담은 장소 N곳"
+    // (완전일치 — RNTL `toHaveAccessibleName(문자열)` exact 기본 true).
+    expect(toggle).toHaveAccessibleName('담은 장소 2곳');
     // 옛 풀폭 CTA 는 더 이상 없다.
     expect(screen.queryByTestId('explore-bridge-cta')).toBeNull();
     // 닫힌 상태엔 미니 FAB 이 없다.
@@ -307,7 +309,8 @@ describe('🔴 AC-E5 — 담은 곳 saved-menu FAB → 장소(d02)·숙소(e04)�
     // FAB 가 사라지지 않는다 — 0곳 분기로 없애면 d02/e04 빈 상태 도달 경로가 사라진다(TRIP-448).
     const toggle = screen.getByTestId('explore-saved-menu-toggle');
     expect(toggle).toBeOnTheScreen();
-    expect(toggle).toHaveAccessibleName(/담은 곳 0곳/);
+    // TRIP-1019 #024 — 0 도 "담은 장소 0곳"(숙소만 저장했어도 장소 0곳은 참이다, "담은 곳 0곳" 은 거짓).
+    expect(toggle).toHaveAccessibleName('담은 장소 0곳');
 
     fireEvent.press(toggle);
     fireEvent.press(screen.getByTestId('explore-saved-places-fab'));

@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
+import { wizardOriginParams } from '@/features/explore/model/wizardOrigin';
 import { postTripsTripIdMustVisits } from '@/shared/api/generated/trips/trips';
 import type {
   CompanionType,
@@ -22,15 +23,11 @@ import {
 } from '@/features/trip/model/budgetAmount';
 import { buildCreateTripRequest } from '@/features/trip/model/createTripRequest';
 import {
-  applyRangePick,
-  type TripDateRange,
-} from '@/features/trip/model/tripDatePicker';
-import {
   nightsSum,
-  tripLength,
   validateTripDraft,
   type TripDraft,
 } from '@/features/trip/model/tripDraft';
+import { deriveEndDate } from '@/features/trip/model/tripWizardStep1';
 import { mustVisitFailureNotice } from '@/features/trip/model/mustVisitSeed';
 import {
   summaryBudget,
@@ -112,15 +109,6 @@ function isPrefillableBudget(
   return typeof value === 'number' && Number.isInteger(value) && value >= 0;
 }
 
-/** 방향격 조사 로/으로 — 받침 없음·ㄹ받침이면 `로`, 그 밖의 받침이면 `으로`(경주로·서울로·기장군으로).
- * 한글 음절이 아니면 `(으)로` 병기. 을/를 판정(`withObjectParticle`)과 ㄹ 예외가 달라 따로 둔다. */
-function withDirectionalParticle(word: string): string {
-  const code = word.charCodeAt(word.length - 1) - 0xac00;
-  if (code < 0 || code > 0xd7a3 - 0xac00) return `${word}(으)로`;
-  const final = code % 28;
-  return word + (final === 0 || final === 8 ? '로' : '으로');
-}
-
 export interface TripNewStep1PageProps {
   /** 달력 기준 '오늘' 주입점('YYYY-MM-DD') — 기간 편집 시트(S3)의 과거 셀 비활성·이전 달 하한
    * 기준이다. 테스트가 이 값을 주입해 결정론이 된다. 미지정이면 실시계(`seoulDate`·KST)로 폴백한다
@@ -154,7 +142,8 @@ export function TripNewStep1Page({
   );
   // 기간 편집 시트(TRIP-667)가 "적용"에서 쓰는 커밋 액션. 시트는 스토어를 모르고(무상태 D5),
   // 페이지가 이 액션을 콜백으로 배선한다 — 여행지 시트의 즉시반영과 달리 **적용에서만** 커밋한다(D6).
-  const setPeriod = useTripWizardStore((state) => state.setPeriod);
+  // TRIP-1027: 시작만 커밋한다 — 끝은 스토어가 `시작 + Σnights`로 파생한다.
+  const setStartDate = useTripWizardStore((state) => state.setStartDate);
   // 동행 편집 시트(TRIP-668)가 "적용"에서 쓰는 두 커밋 액션. 기간 시트와 같은 커밋-온-어플라이 —
   // 드래프트는 아래 `draftParty`/`draftCompanion`(배선 소유)에 쌓이고 여기서만 스토어에 반영된다.
   const setParty = useTripWizardStore((state) => state.setParty);
@@ -235,14 +224,14 @@ export function TripNewStep1Page({
   // 여행지 편집 시트 개폐(TRIP-666) — 배선이 소유한다(화면은 무상태 D5). 시트는 화면의 형제로
   // 조건부 마운트한다(화면 슬롯 금지 — 화면 단독 렌더에서 시트/도시추가가 안 떠야 하는 프리즈 2건).
   const [destinationSheetOpen, setDestinationSheetOpen] = useState(false);
-  // 기간 편집 시트(TRIP-667) — 시트가 무상태(★1)라 개폐·보는 달·고른 범위를 전부 배선이 소유한다.
-  // `periodMonth`는 today 의 달로 시작하고(달 초기값은 마운트 1회), 셀 탭은 `applyRangePick`으로
-  // `periodRange`를 전이시켜 시트를 재렌더한다(전이가 여기서만 일어난다).
+  // 기간 편집 시트(TRIP-667) — 시트가 무상태(★1)라 개폐·보는 달·고른 시작을 전부 배선이 소유한다.
+  // `periodMonth`는 today 의 달로 시작한다(달 초기값은 마운트 1회). TRIP-1027: 셀 탭은 매번 새
+  // 시작이고, 시트에 보이는 끝은 `시작 + 지금 Σnights`다(사용자가 끝을 고르지 않는다).
   const [periodSheetOpen, setPeriodSheetOpen] = useState(false);
   const [periodMonth, setPeriodMonth] = useState(() =>
     resolvedToday.slice(0, 7)
   );
-  const [periodRange, setPeriodRange] = useState<TripDateRange>({});
+  const [periodStart, setPeriodStart] = useState<string>();
   // 동행 편집 시트(TRIP-668) — 시트가 무상태(D4)라 개폐·편집 드래프트를 배선이 소유한다.
   // 열 때 store 현재값에서 초기화하고(D3 프리필), 스테퍼·칩 press 는 이 드래프트만 갱신한다
   // (적용 전 store 불변) — "적용"에서만 `setParty`+`selectCompanion` 으로 커밋한다.
@@ -300,19 +289,6 @@ export function TripNewStep1Page({
     startDate !== '' &&
     endDate !== undefined &&
     endDate !== '';
-
-  // 박수·기간 불일치 안내(TRIP-1010) — 기간이 있고 여행지가 1곳 이상이며 Σnights ≠ 기간일 때만.
-  // 남은 밤은 2/4가 seq 최대 여행지로 채우므로(nightlyBaseCards) 그 이름을 미리 알린다.
-  const period = tripLength(draft);
-  const sum = nightsSum(destinations);
-  let nightsMismatchNote: string | undefined;
-  if (periodFilled && destinations.length > 0 && sum !== period) {
-    const last = destinations.reduce((a, b) => (b.seq > a.seq ? b : a));
-    nightsMismatchNote =
-      sum < period
-        ? `여행지 박수(${sum}박)가 기간(${period}박)보다 적어요 · 남은 ${period - sum}박은 ${withDirectionalParticle(last.region)} 잡아요`
-        : `여행지 박수(${sum}박)가 기간(${period}박)보다 많아요`;
-  }
 
   // 담은 목록 도착 전이면 잠깐 막는다(BR-U1-55 침묵 실패 회피) — 그때 제출하면 시드가 비어 꼭
   // 갈 곳이 한 건도 등록되지 않은 여행이 조용히 만들어진다. 게스트 예외는 위 `savedPlacesLoading`.
@@ -523,24 +499,11 @@ export function TripNewStep1Page({
     setPrefSheetOpen(false);
   }
 
-  /** "적용" — 범위가 완성됐을 때만 커밋한다(시트가 미완성이면 버튼이 진짜 disabled 라 여긴 안전
-   * 이중 방어 겸 TS 좁히기). `setPeriod`가 프리셋 없이(undefined) start·end 를 저장하고 시트를 닫는다. */
+  /** "적용" — 시작을 골랐을 때만 커밋한다(안 골랐으면 버튼이 진짜 disabled 라 여긴 안전 이중 방어
+   * 겸 TS 좁히기). `setStartDate`가 시작을 저장하고 끝을 파생한 뒤 시트를 닫는다(TRIP-1027). */
   function applyPeriod(): void {
-    if (periodRange.start === undefined || periodRange.end === undefined)
-      return;
-    setPeriod(undefined, periodRange.start, periodRange.end);
-    // TRIP-1010(D7) — 여행지가 정확히 1곳이면 박수를 기간에 맞춘다. 여러 곳이면 어느 도시에 밤을
-    // 더할지 모르므로 건드리지 않고 안내 한 줄로만 알린다. 달력은 최소 1박이라 setNights 하한과 무충돌.
-    if (destinations.length === 1) {
-      setNights(
-        destinations[0].seq,
-        tripLength({
-          ...draft,
-          startDate: periodRange.start,
-          endDate: periodRange.end,
-        })
-      );
-    }
+    if (periodStart === undefined) return;
+    setStartDate(periodStart);
     setPeriodSheetOpen(false);
   }
 
@@ -575,8 +538,12 @@ export function TripNewStep1Page({
                   },
                 }
               : {
+                  // 위저드 출처 표식 — d04 가 ＋(새 여행 = reset)를 숨긴다(TRIP-1026).
                   pathname: '/explore/places',
-                  params: { region: destinations.map((d) => d.region) },
+                  params: {
+                    region: destinations.map((d) => d.region),
+                    ...wizardOriginParams(),
+                  },
                 }
           )
         }
@@ -594,7 +561,6 @@ export function TripNewStep1Page({
         onNext={submit}
         onBack={() => router.back()}
         isLoading={isLoading}
-        nightsMismatchNote={nightsMismatchNote}
         submitError={submitError}
         onRetrySubmit={submit}
         mustVisitError={mustVisitError}
@@ -616,16 +582,21 @@ export function TripNewStep1Page({
           mustVisitCount={mustVisits.length}
         />
       ) : null}
-      {/* 기간 편집 시트도 화면의 형제로 조건부 마운트 — 셀 탭은 배선의 `applyRangePick`으로 범위를
-          전이시키고, "적용"에서만 스토어에 커밋한다(여행지 시트의 즉시반영과 반대, D6). */}
+      {/* 기간 편집 시트도 화면의 형제로 조건부 마운트 — 셀 탭은 새 시작을 고르고, "적용"에서만
+          스토어에 커밋한다(여행지 시트의 즉시반영과 반대, D6). */}
       {periodSheetOpen ? (
         <PeriodEditSheet
           today={resolvedToday}
           month={periodMonth}
-          range={periodRange}
-          onPickDate={(date) =>
-            setPeriodRange((current) => applyRangePick(current, date))
+          range={
+            periodStart === undefined
+              ? {}
+              : {
+                  start: periodStart,
+                  end: deriveEndDate(periodStart, nightsSum(destinations)),
+                }
           }
+          onPickDate={setPeriodStart}
           onPrevMonth={() =>
             setPeriodMonth((current) => shiftMonth(current, -1))
           }

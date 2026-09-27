@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { TermsScreen, type TermsScreenProps } from './TermsScreen';
 
@@ -101,7 +101,9 @@ describe('TermsScreen — 초기 상태 (AC A1)', () => {
 });
 
 describe('TermsScreen — 미동의 안내 (AC A2)', () => {
-  it('필수 1종만 체크되면 다음이 잠긴 채 미동의 항목의 이름이 안내된다', () => {
+  // TRIP-1023 #002(결정2)로 개정 — 안내는 '다음'을 한 번 시도한 뒤에만 뜬다. 옛 단언은 렌더 즉시
+  // 안내를 기대해 새 계약과 충돌했으므로 '다음' 탭 한 걸음을 넣었다(02a §7 축①).
+  it('필수 1종만 체크된 채 다음을 누르면 다음이 잠긴 채 미동의 항목의 이름이 안내된다', () => {
     render(
       <TermsScreen
         {...makeProps({
@@ -115,6 +117,8 @@ describe('TermsScreen — 미동의 안내 (AC A2)', () => {
         })}
       />
     );
+
+    fireEvent.press(screen.getByTestId('onboarding-terms-next'));
 
     expect(screen.getByTestId('onboarding-terms-next')).toBeDisabled();
     // "무언가 덜 됐다"가 아니라 **무엇이** 덜 됐는지 이름이 나와야 한다(US-ONB-02 예외 AC).
@@ -171,5 +175,176 @@ describe('TermsScreen — 탈출구 없음 (AC C6 · BR-U0-20)', () => {
     expect(screen.getByTestId('onboarding-terms-root')).toBeOnTheScreen();
     expect(screen.queryByTestId('onboarding-terms-skip')).toBeNull();
     expect(screen.queryByText(/건너뛰기|나중에 하기|건너뛰고/)).toBeNull();
+  });
+});
+
+/**
+ * TRIP-1023 #002 (결정2 · US-ONB-02 예외 · BR-U0-10) — 미동의 안내는 '다음'을 시도했을 때만.
+ *
+ * 무엇을 보장하나: 첫 진입엔 빨간 안내가 없고, 비활성으로 보이는 '다음'을 탭해야 안내가 뜬다.
+ * '다음'은 접근성상 disabled 로 알리되 탭은 받아야 한다 — Pressable 의 disabled prop 은 탭을 삼키므로
+ * (02a ★1) 그 prop 으로 막는 구현은 T-A11 을 통과할 수 없다. 한 번 뜬 안내는 화면에 머무는 동안
+ * 유지되고 목록만 props 를 따라 준다(Q7).
+ */
+const ALL_MISSING = [
+  LABELS.TERMS_OF_SERVICE,
+  LABELS.PRIVACY_POLICY,
+  LABELS.LOCATION_TERMS,
+];
+const MISSING_NOTICE = '아직 동의하지 않은 필수 항목이에요';
+
+/** 실제 첫 진입과 같은 값 — 훅은 약관이 도착하면 곧바로 미동의 3종을 준다. */
+function firstEntryProps(
+  overrides: Partial<TermsScreenProps> = {}
+): TermsScreenProps {
+  return makeProps({
+    canProceed: false,
+    missingRequiredLabels: ALL_MISSING,
+    ...overrides,
+  });
+}
+
+function checkedWhere(
+  predicate: (termsType: string) => boolean
+): TermsScreenProps['items'] {
+  return makeProps().items.map((item) => ({
+    ...item,
+    checked: predicate(item.termsType),
+  }));
+}
+
+describe('🔴 TRIP-1023 #002 — 첫 진입엔 미동의 안내가 없다 (AC-A10)', () => {
+  it('미동의 3종이 넘어와도 렌더만으로는 안내가 없고, 다음은 접근성상 비활성이다', () => {
+    render(<TermsScreen {...firstEntryProps()} />);
+
+    // 긍정 앵커 — 화면과 행이 실제로 그려졌다.
+    expect(screen.getByTestId('onboarding-terms-root')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('onboarding-terms-TERMS_OF_SERVICE')
+    ).toBeOnTheScreen();
+
+    expect(screen.queryByTestId('onboarding-terms-missing')).toBeNull();
+    expect(screen.queryByText(MISSING_NOTICE)).toBeNull();
+    expect(screen.getByTestId('onboarding-terms-next')).toBeDisabled();
+  });
+});
+
+describe('🔴 TRIP-1023 #002 — 비활성 다음을 탭하면 안내가 뜬다 (AC-A11)', () => {
+  it('탭 전엔 없던 안내와 세 항목 이름이 탭 뒤에 나타나고, onNext 는 부르지 않는다', () => {
+    const onNext = jest.fn();
+    render(<TermsScreen {...firstEntryProps({ onNext })} />);
+
+    // "아직 없다" 앵커 — 이게 없으면 처음부터 떠 있는 구현도 통과한다.
+    expect(screen.queryByTestId('onboarding-terms-missing')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('onboarding-terms-next'));
+
+    expect(screen.getByText(MISSING_NOTICE)).toBeOnTheScreen();
+    const missing = screen.getByTestId('onboarding-terms-missing');
+    expect(missing).toHaveTextContent(/서비스 이용약관/);
+    expect(missing).toHaveTextContent(/개인정보 수집·이용/);
+    expect(missing).toHaveTextContent(/위치기반서비스/);
+    // 비활성 탭은 진행 의도가 아니다 — 상위(저장·라우팅)로 올라가지 않는다.
+    expect(onNext).not.toHaveBeenCalled();
+    expect(screen.getByTestId('onboarding-terms-next')).toBeDisabled();
+  });
+});
+
+describe('🔴 TRIP-1023 #002 — 뜬 안내는 목록만 실시간으로 준다 (AC-A12 · Q7)', () => {
+  it('체크할수록 이름이 줄고, 전부 체크면 사라지고, 하나를 풀면 다음을 다시 안 눌러도 돌아온다', () => {
+    render(<TermsScreen {...firstEntryProps()} />);
+    expect(screen.queryByTestId('onboarding-terms-missing')).toBeNull();
+    fireEvent.press(screen.getByTestId('onboarding-terms-next'));
+
+    // 서비스 이용약관 체크 → 남은 두 이름만.
+    screen.rerender(
+      <TermsScreen
+        {...firstEntryProps({
+          items: checkedWhere((type) => type === 'TERMS_OF_SERVICE'),
+          missingRequiredLabels: [LABELS.PRIVACY_POLICY, LABELS.LOCATION_TERMS],
+        })}
+      />
+    );
+    expect(
+      screen.getByTestId('onboarding-terms-missing')
+    ).not.toHaveTextContent(/서비스 이용약관/);
+    expect(screen.getByTestId('onboarding-terms-missing')).toHaveTextContent(
+      /개인정보 수집·이용/
+    );
+
+    // 전부 체크 → 안내가 사라지고 다음이 열린다.
+    screen.rerender(
+      <TermsScreen
+        {...makeProps({
+          items: checkedWhere(() => true),
+          allChecked: true,
+          canProceed: true,
+          missingRequiredLabels: [],
+        })}
+      />
+    );
+    expect(screen.queryByTestId('onboarding-terms-missing')).toBeNull();
+    expect(screen.getByTestId('onboarding-terms-next')).toBeEnabled();
+
+    // 위치만 다시 해제 → '다음'을 또 누르지 않아도 안내가 곧바로 돌아온다(Q7).
+    screen.rerender(
+      <TermsScreen
+        {...firstEntryProps({
+          items: checkedWhere((type) => type !== 'LOCATION_TERMS'),
+          missingRequiredLabels: [LABELS.LOCATION_TERMS],
+        })}
+      />
+    );
+    expect(screen.getByTestId('onboarding-terms-missing')).toHaveTextContent(
+      /위치기반서비스/
+    );
+  });
+});
+
+describe('TRIP-1023 #002 — 활성 다음은 그대로 진행한다 (AC-A14 화면측 · 선제 green)', () => {
+  it('전부 동의 상태에서 다음을 누르면 onNext 가 정확히 1회 불리고 안내는 없다', () => {
+    const onNext = jest.fn();
+    render(
+      <TermsScreen
+        {...makeProps({
+          items: checkedWhere(() => true),
+          allChecked: true,
+          canProceed: true,
+          missingRequiredLabels: [],
+          onNext,
+        })}
+      />
+    );
+
+    fireEvent.press(screen.getByTestId('onboarding-terms-next'));
+
+    expect(onNext).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('onboarding-terms-missing')).toBeNull();
+  });
+});
+
+/**
+ * TRIP-1023 #005 (결정1 · US-ONB-11) — 온보딩은 앞으로만. 눌리지 않는 뒤로 셰브론을 머리에서 뺀다.
+ *
+ * 글리프는 컴포넌트 이름으로 찾는다(02a ★5) — `BackChevronGlyph`·`LocationBackChevronGlyph` 를
+ * 한 정규식으로 잡고, 테스트가 글리프 export 에 묶이지 않는다.
+ */
+function backChevronCount(): number {
+  return screen.UNSAFE_root.findAll(
+    (node) =>
+      typeof node.type === 'function' &&
+      /BackChevron/.test((node.type as { name?: string }).name ?? '')
+  ).length;
+}
+
+describe('🔴 TRIP-1023 #005 — 약관 머리에 뒤로 글리프가 없다 (AC-A4 · AC-A5)', () => {
+  it('제목 "약관 동의"는 남고, 뒤로 셰브론과 뒤로 역할 요소는 없다', () => {
+    render(<TermsScreen {...makeProps()} />);
+
+    expect(screen.getByTestId('onboarding-terms-root')).toBeOnTheScreen();
+    expect(screen.getByText('약관 동의')).toBeOnTheScreen();
+
+    expect(backChevronCount()).toBe(0);
+    expect(screen.queryAllByTestId(/back/).length).toBe(0);
   });
 });

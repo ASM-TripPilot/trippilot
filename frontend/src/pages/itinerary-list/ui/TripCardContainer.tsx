@@ -62,7 +62,8 @@ export function TripCardContainer({
     const face = deriveTripCardFace(
       itinerary.data?.status,
       itinerary.data?.generationState,
-      notFound
+      notFound,
+      itinerary.data?.generationMode
     );
     badge = face.badge;
     extra = face.statusLine;

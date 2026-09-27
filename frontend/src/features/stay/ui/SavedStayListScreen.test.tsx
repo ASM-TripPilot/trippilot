@@ -135,8 +135,23 @@ describe('S3 · loading/error/guest 얼굴 — empty 위장 금지 (AC-4·★4·
   });
 });
 
+// TRIP-1019 #019 — 하단 버튼이 "다른 숙소를 거점으로 지정"이라 적혀 있었지만 실제로는 숙소 등록 화면
+// (/stays/register)으로 간다. 저장(♥)과 거점은 다른 개념이다(BR-U1-19). 라벨을 가는 곳의 이름으로
+// 바꾼다 — 같은 목적지로 가는 e02 버튼이 이미 쓰는 "숙소 직접 등록"(01b Q2).
+describe('S4b · 하단 버튼 이름 = 숙소 직접 등록 (TRIP-1019 #019 · BR-U1-19 · US-STAY-08)', () => {
+  it('하단 버튼 안에 "거점" 글자가 없고, 이름이 "숙소 직접 등록"인 버튼이다', () => {
+    render(<SavedStayListScreen savedStays={STAYS} face="results" />);
+
+    const button = screen.getByTestId('saved-stay-register');
+    // 금지: 저장 목록에서 거점을 지정하는 버튼처럼 읽히지 않는다(부분 포함 정규식).
+    expect(button).not.toHaveTextContent(/거점/);
+    // 정상: 스크린리더가 읽는 버튼 이름이 가는 곳과 같다(완전일치).
+    expect(screen.getByRole('button', { name: '숙소 직접 등록' })).toBe(button);
+  });
+});
+
 describe('S4 · 버튼 콜백 (AC-6·AC-7)', () => {
-  it('하단 "거점 지정" press → onPressRegister 가 불린다 (AC-6)', () => {
+  it('하단 "숙소 직접 등록" press → onPressRegister 가 불린다 (AC-6)', () => {
     const onPressRegister = jest.fn();
     render(
       <SavedStayListScreen

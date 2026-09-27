@@ -476,3 +476,66 @@ describe('LivePlacePage', () => {
     expect(screen.queryByTestId('execution-place-retry')).toBeNull();
   });
 });
+
+// ── TRIP-1015 D · 장소 없음 얼굴에도 뒤로가 있다 (QA #096 · US-SHELL-04 예외 · INV-4 · 결정 3) ──
+// 여행 중 화면은 탭바를 숨긴다. 장소 없음 얼굴에 탈출구가 없으면 사용자는 갇힌다(시스템 제스처 말고는
+// 나갈 길이 없음). 뒤로는 안내(StateNotice) **밖** 앱바에 두고, 안내 자체엔 행동 버튼을 두지 않는다(결정 3).
+describe('🔴 1015-D · 여행 중 장소 없음 얼굴의 뒤로 (execution-place-notfound-back)', () => {
+  async function renderNotFound(): Promise<void> {
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        HttpResponse.json(itinerary())
+      )
+    );
+    render(<LivePlacePage tripId={TRIP_ID} poiId="ghost" />, { wrapper });
+    await waitFor(() =>
+      expect(screen.getByTestId('execution-place-notfound')).toBeTruthy()
+    );
+  }
+
+  it('D1 뒤로 버튼이 있고(역할 button · 이름 "뒤로"), 안내 상자 밖에 있으며, 안내엔 행동 버튼이 없다', async () => {
+    await renderNotFound();
+
+    // 역할 button · 접근성 이름 "뒤로"인 요소가 정확히 그 testID 다(스크린리더로도 찾을 수 있다).
+    const back = screen.getByRole('button', { name: '뒤로' });
+    expect(back).toHaveProp('testID', 'execution-place-notfound-back');
+    // 뒤로는 안내(StateNotice) 밖 — 안내 안에서 찾으면 없다.
+    const notFound = screen.getByTestId('execution-place-notfound');
+    expect(
+      within(notFound).queryByTestId('execution-place-notfound-back')
+    ).toBeNull();
+    // 결정 3 — 안내에는 행동 버튼이 하나도 없다(길이로 센다 — 0 이면 통과).
+    expect(within(notFound).queryAllByRole('button')).toHaveLength(0);
+  });
+
+  it('D2 히스토리가 있으면 back 1회 · replace 0회', async () => {
+    await renderNotFound();
+
+    fireEvent.press(screen.getByTestId('execution-place-notfound-back'));
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('D3 딥링크(히스토리 없음)면 여행 중 허브로 replace 1회 · back 0회', async () => {
+    mockCanGoBack.mockReturnValue(false);
+    await renderNotFound();
+
+    fireEvent.press(screen.getByTestId('execution-place-notfound-back'));
+
+    expect(mockReplace.mock.calls).toEqual([['/trips/trip-1/live']]);
+    expect(mockBack).not.toHaveBeenCalled();
+  });
+
+  it('D4 조회가 404 여도(장소 없음 얼굴) 같은 뒤로가 있다', async () => {
+    itineraryInSequence([() => new HttpResponse(null, { status: 404 })]);
+    render(<LivePlacePage tripId={TRIP_ID} poiId="p1" />, { wrapper });
+    await waitFor(() =>
+      expect(screen.getByTestId('execution-place-notfound')).toBeTruthy()
+    );
+
+    fireEvent.press(screen.getByTestId('execution-place-notfound-back'));
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+});

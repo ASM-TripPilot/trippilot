@@ -479,3 +479,68 @@ describe('🔴 SlotFillScreen (h10) — 지도 카드 additive(prop 전달·degr
     expect(screen.queryByTestId('map-root')).toBeNull();
   });
 });
+
+/**
+ * TRIP-1022 #071 — 후보 카드의 **본문**을 눌러도 선택된다(행 전체가 라디오).
+ *
+ * 무엇을 보장하나(01 AC-D1~D3, 선례 `SlotCandidateSheet` 행 Pressable):
+ *  - 🔴 T1·T2 이름·설명 텍스트를 누르면 그 후보가 선택된다(지금은 24px 원만 눌린다).
+ *  - 🔴 T3 `itinerary-candidate-radio-{poiId}` 는 후보마다 **정확히 1개**이고, 이름을 **품은** 행
+ *    요소에 붙는다 — role radio + accessibilityState.selected.
+ *  - 선택 전 확정 CTA 는 발화하지 않는다(AC-D3 — 기존 C2 와 짝).
+ *
+ * ★ testID 로 누르면 공허 통과다 — trailing 원이 그대로여도 그 testID 는 눌린다. 그래서 **텍스트**를
+ *   누른다. RNTL 13.3.3 `fireEvent.press` 는 위로 올라가며 onPress 를 찾고, 없으면 조용히 끝난다
+ *   (던지지 않음 — 02a §5 실측) → 지금은 spy 0회로 red.
+ */
+describe('🔴 SlotFillScreen (h10) — 후보 행 전체가 라디오 (TRIP-1022 #071)', () => {
+  const VIEWS = {
+    A1: { nameKo: '국립현대미술관 서울' },
+    B2: { nameKo: '서울공예박물관' },
+  };
+
+  it('T1 · AC-D1 후보 이름을 누르면 그 후보가 선택되고, 확정은 발화하지 않는다', () => {
+    const { onSelectRadio, onConfirm } = renderScreen({
+      candidateViews: VIEWS,
+      selectedPoiId: null,
+    });
+
+    fireEvent.press(screen.getByText('국립현대미술관 서울'));
+
+    expect(onSelectRadio).toHaveBeenCalledTimes(1);
+    expect(onSelectRadio).toHaveBeenCalledWith('A1');
+    expect(onConfirm).toHaveBeenCalledTimes(0);
+  });
+
+  it('T2 · AC-D1 후보 설명(rationale)을 눌러도 그 후보가 선택된다', () => {
+    const { onSelectRadio } = renderScreen({ candidateViews: VIEWS });
+
+    fireEvent.press(screen.getByText('전시+카페 한 번에'));
+
+    expect(onSelectRadio).toHaveBeenCalledTimes(1);
+    expect(onSelectRadio).toHaveBeenCalledWith('B2');
+  });
+
+  it('T3 · AC-D2 라디오 testID 는 후보마다 1개이고, 이름을 품은 행에 붙어 선택 상태를 낸다', () => {
+    renderScreen({ candidateViews: VIEWS, selectedPoiId: 'A1' });
+
+    // 개수 — 행과 trailing 원에 같은 testID 가 두 번 붙는 구현을 죽인다(숫자로 잰다).
+    expect(screen.queryAllByTestId('itinerary-candidate-radio-A1').length).toBe(
+      1
+    );
+    expect(screen.queryAllByTestId('itinerary-candidate-radio-B2').length).toBe(
+      1
+    );
+
+    // 행 — 라디오 요소 **안에** 후보 이름이 있다(24px 원이면 이름이 안 들어 있다).
+    const rowA = screen.getByTestId('itinerary-candidate-radio-A1');
+    const rowB = screen.getByTestId('itinerary-candidate-radio-B2');
+    expect(within(rowA).getByText('국립현대미술관 서울')).toBeOnTheScreen();
+    expect(within(rowB).getByText('서울공예박물관')).toBeOnTheScreen();
+
+    // 접근성 — 라디오 역할과 선택 상태는 행이 낸다.
+    expect(rowA.props.accessibilityRole).toBe('radio');
+    expect(rowA.props.accessibilityState?.selected).toBe(true);
+    expect(rowB.props.accessibilityState?.selected).toBe(false);
+  });
+});

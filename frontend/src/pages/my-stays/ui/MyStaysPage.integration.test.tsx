@@ -207,15 +207,15 @@ describe('🔴 AC-1 · 여행 0건 → 미연결 행 VM 생산', () => {
 // 기존 케이스는 라벨을 하드코딩 VM 으로 주입/단언해 파생 함수(sourceLabel·dateRangeLabel·monthDay)를
 // 실제 SavedStay 로 실행하는 심판이 0이었다(경고-1). 확정 후 무효화도 무심판이었다(경고-3a).
 
-/** 실 SavedStay — OTA 출처·체크인/아웃 세팅(파생 라벨을 실제로 실행시키는 픽스처). */
-function otaStay(): SavedStay {
+/** 실 SavedStay — 체크인/아웃 세팅(파생 라벨을 실제로 실행시키는 픽스처). */
+function datedStay(): SavedStay {
   return {
-    savedStayId: 's-ota',
+    savedStayId: 's-dated',
     name: '해운대 오션뷰',
     coordConfirmed: true,
     linkedTripIds: [],
     registerRoute: 'MAP_SEARCH',
-    externalSource: 'AIRBNB',
+    externalSource: 'LOCALDATA',
     checkIn: '2026-06-10',
     checkOut: '2026-06-13',
     memo: null,
@@ -224,33 +224,141 @@ function otaStay(): SavedStay {
   };
 }
 
-describe('🔴 경고-1 · 실 SavedStay 로 파생 라벨(출처·날짜 범위·monthDay)을 조립한다', () => {
-  it('OTA·체크인/아웃 숙소는 sourceLabel="OTA 예약", dateRangeLabel="6.10 ~ 6.13" 으로 파생된다', () => {
+describe('🔴 경고-1 · 실 SavedStay 로 날짜 범위(monthDay)를 조립한다', () => {
+  it('체크인/아웃이 있으면 dateRangeLabel="6.10 ~ 6.13" 으로 파생된다', () => {
     // Arrange: 하드코딩 VM 이 아니라 실 SavedStay 를 조회 결과로 주입해 파생 함수를 실제로 태운다.
-    mockUseSaved.mockReturnValue(savedResult([otaStay()]));
+    mockUseSaved.mockReturnValue(savedResult([datedStay()]));
 
-    // Act: 페이지를 렌더하면 sourceLabel·dateRangeLabel·monthDay 가 이 숙소로 실행된다.
+    // Act: 페이지를 렌더하면 dateRangeLabel·monthDay 가 이 숙소로 실행된다.
     renderPage();
 
-    // Assert: 페이지가 조립해 화면에 넘긴 VM 이 실 SavedStay 파생값을 담는다.
-    //   monthDay('2026-06-10') → '6.10' (뒤집힌 `${day}.${month}` 면 '10.6' → 이 단언이 red).
+    // Assert: monthDay('2026-06-10') → '6.10' (뒤집힌 `${day}.${month}` 면 '10.6' → 이 단언이 red).
     const rows = mockScreenProps.current?.rows ?? [];
     expect(rows).toHaveLength(1);
-    expect(rows[0].sourceLabel).toBe('OTA 예약');
     expect(rows[0].dateRangeLabel).toBe('6.10 ~ 6.13');
   });
 
-  it('앱 저장·날짜 없음 숙소는 sourceLabel="앱 저장", dateRangeLabel=null 로 파생된다(짝)', () => {
-    // 반대 분기 — externalSource·checkIn/Out 부재. sourceLabel 상수 반환·날짜 가드 회귀를 함께 잡는다.
-    mockUseSaved.mockReturnValue(savedResult([stay('s-app')]));
+  it('체크인/아웃이 없으면 dateRangeLabel=null 이다(짝)', () => {
+    mockUseSaved.mockReturnValue(savedResult([stay('s-nodate')]));
 
     renderPage();
 
     const rows = mockScreenProps.current?.rows ?? [];
     expect(rows).toHaveLength(1);
-    expect(rows[0].sourceLabel).toBe('앱 저장');
     expect(rows[0].dateRangeLabel).toBeNull();
   });
+});
+
+/**
+ * TRIP-1017 (C) #090 — 등록 출처 라벨은 `externalSource` 로 가른다(01b 결정2 · Q5).
+ *
+ * `registerRoute` 로는 못 가른다: ♥ 저장도 `MAP_SEARCH` 로 들어온다(브리프 §3-C). 그래서 판정 키는
+ * `externalSource` 하나다 — OTA 사전(NAVER·AGODA) 코드면 "OTA 예약", 그 밖의 값이 있으면 "탐색에서 저장",
+ * 없으면(null·필드 없음) "직접 등록". "예약번호 미입력"은 **OTA 일 때만** 붙는다.
+ * 옛 계약(AIRBNB → "OTA 예약", 출처 없음 → "앱 저장")은 이 표로 대체했다.
+ */
+type SourceCase = {
+  title: string;
+  externalSource?: string | null;
+  memo?: string | null;
+  sourceLabel: string;
+  memoLabel: string | null;
+};
+
+const SOURCE_CASES: SourceCase[] = [
+  // AC-C1 — 지자체 인허가 데이터(탐색 카탈로그)는 예약이 아니다.
+  {
+    title: 'LOCALDATA · 메모 null',
+    externalSource: 'LOCALDATA',
+    memo: null,
+    sourceLabel: '탐색에서 저장',
+    memoLabel: null,
+  },
+  {
+    title: 'LOCALDATA · 메모 빈 문자열',
+    externalSource: 'LOCALDATA',
+    memo: '',
+    sourceLabel: '탐색에서 저장',
+    memoLabel: null,
+  },
+  // AC-C2 — 직접 등록(핀 지정)은 외부 원천이 없다. 필드가 아예 빠진 응답도 같은 뜻이다.
+  {
+    title: 'null · 메모 null',
+    externalSource: null,
+    memo: null,
+    sourceLabel: '직접 등록',
+    memoLabel: null,
+  },
+  { title: '필드 없음', sourceLabel: '직접 등록', memoLabel: null },
+  // AC-C3 — 사전에 있는 OTA 코드만 예약으로 말한다. 메모(예약번호)가 비면 안내를 붙인다.
+  {
+    title: 'NAVER · 메모 null',
+    externalSource: 'NAVER',
+    memo: null,
+    sourceLabel: 'OTA 예약',
+    memoLabel: '예약번호 미입력',
+  },
+  {
+    title: 'AGODA · 메모 빈 문자열',
+    externalSource: 'AGODA',
+    memo: '',
+    sourceLabel: 'OTA 예약',
+    memoLabel: '예약번호 미입력',
+  },
+  {
+    title: 'NAVER · 메모 있음',
+    externalSource: 'NAVER',
+    memo: 'NV-20260610',
+    sourceLabel: 'OTA 예약',
+    memoLabel: null,
+  },
+  // AC-C4 — 사전에 없는 코드는 예약이라고 지어내지 않는다(Q5: 탐색 원천으로 본다).
+  {
+    title: 'STUB',
+    externalSource: 'STUB',
+    memo: null,
+    sourceLabel: '탐색에서 저장',
+    memoLabel: null,
+  },
+  {
+    title: 'TOURAPI',
+    externalSource: 'TOURAPI',
+    memo: null,
+    sourceLabel: '탐색에서 저장',
+    memoLabel: null,
+  },
+  {
+    title: 'AIRBNB',
+    externalSource: 'AIRBNB',
+    memo: null,
+    sourceLabel: '탐색에서 저장',
+    memoLabel: null,
+  },
+];
+
+describe('🔴 TRIP-1017 AC-C1~C4 · 등록 출처·메모 칩은 externalSource 로 가른다 (BR-U6-20)', () => {
+  it.each(SOURCE_CASES)(
+    '$title → 출처 "$sourceLabel" · 메모 칩 $memoLabel',
+    ({ externalSource, memo, sourceLabel, memoLabel }) => {
+      // Arrange: 판정 입력만 바꾼 실 SavedStay. 'externalSource' in 을 지키려고 undefined 는 키째 뺀다.
+      const base = stay('s-src');
+      const input: SavedStay = {
+        ...base,
+        ...(externalSource === undefined ? {} : { externalSource }),
+        ...(memo === undefined ? {} : { memo }),
+      };
+      mockUseSaved.mockReturnValue(savedResult([input]));
+
+      // Act
+      renderPage();
+
+      // Assert: 페이지가 화면에 넘긴 행 VM 의 두 라벨이 표와 완전일치한다.
+      const rows = mockScreenProps.current?.rows ?? [];
+      expect(rows).toHaveLength(1);
+      expect(rows[0].sourceLabel).toBe(sourceLabel);
+      expect(rows[0].memoLabel).toBe(memoLabel);
+    }
+  );
 });
 
 describe('🔴 경고-3a · 확정(DELETE) 성공 후 bases 쿼리 무효화', () => {

@@ -69,6 +69,8 @@ export interface DestinationDetailScreenProps {
   };
   /** 하단 탭 press(뒤로가기 대체) — 목적지는 페이지가 정한다(`/stays` `onPressTab` 선례). */
   onPressTab: (key: ShellTabKey) => void;
+  /** 복제 탭바 활성 탭 — 진입 탭(홈 검색이면 home, TRIP-1015 E). 미지정이면 explore. */
+  activeTab?: ShellTabKey;
   /** ＋ 여행 만들기 FAB press — 미지정이면 no-op(d01 계약 복제). */
   onPressCreateTrip?: () => void;
   /** 담은 곳 하트 FAB(`ExploreLandingScreen.savedMenu`와 동일 계약). */
@@ -234,6 +236,7 @@ export function DestinationDetailScreen({
   stayLane,
   placeLane,
   onPressTab,
+  activeTab = 'explore',
   onPressCreateTrip,
   savedMenu,
 }: DestinationDetailScreenProps): ReactElement {
@@ -388,7 +391,7 @@ export function DestinationDetailScreen({
           ) : null}
         </ScrollView>
 
-        <BottomTabBar activeKey="explore" onPressTab={onPressTab} />
+        <BottomTabBar activeKey={activeTab} onPressTab={onPressTab} />
 
         {/* 우하단 세로 2단 FAB(TRIP-709, d01 `ExploreLandingScreen` 패턴 복제): 위=담은 곳
             saved-menu 하트(펼치면 담은 장소→d02·저장한 숙소→e04 미니 FAB 이 왼쪽으로 나온다) ·
@@ -434,7 +437,7 @@ export function DestinationDetailScreen({
               accessibilityLabel={
                 savedMenu.open
                   ? '담은 곳 메뉴 닫기'
-                  : `담은 곳 ${savedMenu.savedCount}곳`
+                  : `담은 장소 ${savedMenu.savedCount}곳`
               }
               onPress={savedMenu.onToggle}
               style={FAB_SHADOW}

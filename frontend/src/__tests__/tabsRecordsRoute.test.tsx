@@ -155,3 +155,126 @@ describe('🔴 1012-B1 · 기록 빈 상태 [새 여행] 은 직전 드래프트
     expect(draftAtPush()).toEqual(freshWizardDraft());
   });
 });
+
+// ── TRIP-1015 C · 마킹 날짜·범례를 누르면 그 여행의 방문 기록으로 (US-REC-14 · BR-U5-49 · 결정 2) ──
+// 페이지 조립(범례 목록·콜백 배선)은 이 라우트 렌더가 유일한 jest 심판이다 — 화면 콜백만 잠그면 페이지의
+// 목적지 문자열 회귀를 못 본다(브리프 맹점 ①). 그래서 라우트를 통째 렌더해 실제 push 인자를 본다.
+//
+// "오늘"은 페이지가 `seoulDate(new Date())` 로 읽는다 → Date 만 가짜로 고정한다(타이머는 진짜 그대로 —
+// 렌더·press 는 동기라 타이머가 필요 없고, 타이머까지 가짜로 바꾸면 다른 describe 에 새기 쉽다).
+// 2026-06-11T03:00Z = KST 2026-06-11 12:00.
+describe('🔴 1015-C · 기록 캘린더 마킹 날짜·범례 → 그 여행의 방문 기록', () => {
+  const NOW = trip({
+    tripId: 't-now',
+    title: '진행 중 여행',
+    startDate: '2026-06-10',
+    endDate: '2026-06-12',
+    status: 'ACTIVE',
+  });
+  const PAST = trip({
+    tripId: 't-past',
+    title: '지난 여행',
+    startDate: '2026-06-01',
+    endDate: '2026-06-03',
+    status: 'ENDED',
+  });
+  const FUTURE = trip({
+    tripId: 't-fut',
+    title: '미래 여행',
+    startDate: '2026-06-20',
+    endDate: '2026-06-22',
+    status: 'PLANNED',
+  });
+
+  beforeEach(() => {
+    jest.useFakeTimers({
+      now: new Date('2026-06-11T03:00:00Z'),
+      doNotFake: [
+        'hrtime',
+        'nextTick',
+        'performance',
+        'queueMicrotask',
+        'requestAnimationFrame',
+        'cancelAnimationFrame',
+        'requestIdleCallback',
+        'cancelIdleCallback',
+        'setImmediate',
+        'clearImmediate',
+        'setInterval',
+        'clearInterval',
+        'setTimeout',
+        'clearTimeout',
+      ],
+    });
+    setTrips([NOW, PAST, FUTURE]);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('앵커 — 오늘이 고정돼 6월이 떠 있고, 세 여행의 기간이 마킹돼 있다(마킹 표시는 무회귀)', () => {
+    render(<RecordsRoute />);
+
+    expect(screen.getByTestId('record-calendar-month-label')).toHaveTextContent(
+      '2026년 6월'
+    );
+    expect(screen.getByTestId('record-calendar-day-2026-06-11')).toBeSelected();
+    expect(screen.getByTestId('record-calendar-day-2026-06-02')).toBeSelected();
+    expect(screen.getByTestId('record-calendar-day-2026-06-21')).toBeSelected();
+    expect(
+      screen.getByTestId('record-calendar-day-2026-06-15')
+    ).not.toBeSelected();
+    // 누르기 전엔 아무 데도 안 갔다.
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('진행 중 여행의 마킹 날짜를 누르면 /trips/{id}/records 로 1회 간다', () => {
+    render(<RecordsRoute />);
+
+    fireEvent.press(screen.getByTestId('record-calendar-day-2026-06-11'));
+
+    expect(mockPush.mock.calls).toEqual([['/trips/t-now/records']]);
+  });
+
+  it('지난 여행의 마킹 날짜를 누르면 그 여행의 /records 로 1회 간다(요약 summary 아님)', () => {
+    render(<RecordsRoute />);
+
+    fireEvent.press(screen.getByTestId('record-calendar-day-2026-06-02'));
+
+    expect(mockPush.mock.calls).toEqual([['/trips/t-past/records']]);
+  });
+
+  it.each([
+    ['t-now', '/trips/t-now/records'],
+    ['t-past', '/trips/t-past/records'],
+  ])('범례 %s 를 누르면 %s 로 1회 간다', (tripId, href) => {
+    render(<RecordsRoute />);
+
+    fireEvent.press(screen.getByTestId(`record-calendar-legend-${tripId}`));
+
+    expect(mockPush.mock.calls).toEqual([[href]]);
+  });
+
+  it('미래 여행의 마킹 날짜·범례, 마킹 없는 날짜를 눌러도 아무 데도 안 간다', () => {
+    render(<RecordsRoute />);
+    // 앵커 — 누를 대상이 실재한다(없으면 getByTestId 가 던져 공짜 통과를 막는다).
+    const futureDay = screen.getByTestId('record-calendar-day-2026-06-21');
+    const futureLegend = screen.getByTestId('record-calendar-legend-t-fut');
+    const emptyDay = screen.getByTestId('record-calendar-day-2026-06-15');
+
+    fireEvent.press(futureDay);
+    fireEvent.press(futureLegend);
+    fireEvent.press(emptyDay);
+
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('지난 여행 목록 카드는 계속 요약(/records/summary)으로 간다 (무회귀 · TRIP-767)', () => {
+    render(<RecordsRoute />);
+
+    fireEvent.press(screen.getByTestId('record-calendar-past-trip-t-past'));
+
+    expect(mockPush.mock.calls).toEqual([['/trips/t-past/records/summary']]);
+  });
+});

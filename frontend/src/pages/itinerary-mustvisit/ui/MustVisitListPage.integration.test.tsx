@@ -18,6 +18,7 @@ import type {
   SavedPlace,
 } from '@/shared/api/generated/schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { resetPressGuard } from '@/shared/press/pressGuard';
 
 import { MustVisitListPage } from './MustVisitListPage';
 
@@ -136,6 +137,7 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+  resetPressGuard(); // TRIP-1013 — 연타 가드 창(모듈 전역)이 앞 테스트에서 새지 않게 닫는다.
   observedHits = [];
   listStatus = null;
   releaseHeldResponse = null;
@@ -664,6 +666,36 @@ describe('🔴 TRIP-982 B3 · 0곳 → 생성 중 (D7)', () => {
         successRoute: '/trips/[tripId]/itinerary/copick/[slotKey]',
       },
     });
+    expect(hitsFor('POST', '/must-visits')).toBe(0);
+    expect(hitsFor('DELETE', '/must-visits')).toBe(0);
+  });
+});
+
+/**
+ * TRIP-1022 #068 · 결정 2 — 0곳 얼굴의 "담은 장소 보기" 링크는 d02 를 **save 모드**로 연다.
+ *
+ * 무엇을 보장하나(01 AC-C1·C2):
+ *  - 목적지는 파라미터 없는 문자열 `'/explore/saved-places'` 하나다. select 모드(위저드 1/4 가 싣는
+ *    파라미터)로 넓히지 않는다 — 객체형·파라미터형 push 는 완전 일치에서 red.
+ *  - 링크는 이동만 한다 — 필수 방문지 POST·DELETE 는 0건(추가 경로는 이번에도 없다, 01 맹점 ③).
+ */
+describe('🔴 TRIP-1022 L4 · AC-C1·C2 — 0곳 링크 → d02 save 모드, 요청 0건', () => {
+  it('누르면 /explore/saved-places 로 1회 이동하고 must-visits 요청이 0건이다', async () => {
+    // 준비 — 서버에 담은 필수 방문지가 0곳이다.
+    mustVisitStore = [];
+    renderPage();
+    await screen.findByTestId('itinerary-mustvisit-screen-empty');
+
+    // 실행
+    fireEvent.press(
+      within(
+        screen.getByTestId('itinerary-mustvisit-screen-empty')
+      ).getByTestId('itinerary-mustvisit-screen-empty-add')
+    );
+
+    // 단언
+    await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+    expect(mockPush).toHaveBeenCalledWith('/explore/saved-places');
     expect(hitsFor('POST', '/must-visits')).toBe(0);
     expect(hitsFor('DELETE', '/must-visits')).toBe(0);
   });

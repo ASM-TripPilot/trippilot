@@ -278,6 +278,62 @@ describe('S-3 · 검색어가 0건을 만들면 그 검색어를 지목한다 (A
   });
 });
 
+// TRIP-1019 #027 — 두 조건이 다 걸려 0건일 때 "조건 모두 해제" 가 **실제로 두 상태를 다** 푼다.
+// 한쪽만 풀면 남은 조건 때문에 목록이 5장으로 돌아오지 않는다(검색어만 풀면 카페 1장, 카테고리만
+// 풀면 '해변' 1장) — 그래서 "5장 복귀" 하나가 "둘 다 풀었다"의 심판이 된다.
+describe('🔴 S-12 · TRIP-1019 #027 · 조건 모두 해제는 검색어와 카테고리를 함께 푼다 (BR-U1-16 취지)', () => {
+  it('카페 + "해변" 으로 0건일 때 누르면 검색어가 비고 "전체" 로 돌아가 목록 5장이 온다', async () => {
+    setAccessToken('valid-access');
+    // 이 케이스만 카테고리도 서버가 거른다(기본 스텁은 q 만 본다) — 카테고리 해제 여부가 결과에
+    // 드러나야 "하나만 풀기" 구현이 red 가 된다.
+    server.use(
+      http.get(`${BASE}/places`, ({ request }) => {
+        const params = new URL(request.url).searchParams;
+        const q = params.get('q');
+        const category = params.get('category');
+        const result = PLACES.filter(
+          (p) =>
+            (!q || p.nameKo.includes(q)) &&
+            (!category || p.category === category)
+        );
+        return HttpResponse.json({ items: result, nextCursor: null });
+      })
+    );
+
+    await renderLoaded();
+
+    // 조건 ① 카테고리 '카페' → 전포 카페거리 1장.
+    fireEvent.press(screen.getByTestId('explore-places-category-cafe'));
+    await waitFor(() =>
+      expect(cardTestIds()).toEqual(['explore-places-card-p3'])
+    );
+
+    // 조건 ② 검색어 '해변' → 카페 중엔 없어 0건(filter-zero, 두 조건 모두 걸림).
+    fireEvent.changeText(screen.getByTestId('explore-places-search'), '해변');
+    await waitFor(() =>
+      expect(screen.getByTestId('explore-places-filterzero')).toBeOnTheScreen()
+    );
+
+    fireEvent.press(screen.getByTestId('explore-places-filterzero-clear-all'));
+
+    // 두 조건이 모두 풀려야 5장이 돌아온다.
+    await waitFor(() => expect(cardTestIds()).toHaveLength(5));
+    expect(screen.getByTestId('explore-places-search').props.value).toBe('');
+    expect(screen.getByTestId('explore-places-category-all')).toBeSelected();
+    expect(
+      screen.getByTestId('explore-places-category-cafe')
+    ).not.toBeSelected();
+
+    // 마지막으로 나간 조회에 q·category 가 둘 다 없다(서버 기준으로도 조건이 풀렸다).
+    const placeHits = hitsOf('GET', '/api/v1/places');
+    const last = new URL(placeHits[placeHits.length - 1].url).searchParams;
+    expect({ q: last.get('q'), category: last.get('category') }).toEqual({
+      q: null,
+      category: null,
+    });
+  });
+});
+
 describe('S-4 · 조회 실패의 재시도가 실제로 서버를 다시 부른다 (AC-7 · INV-4)', () => {
   it('에러 안내가 뜨고, 다시 시도를 누르면 재조회해 목록이 온다', async () => {
     setAccessToken('valid-access');

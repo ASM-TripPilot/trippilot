@@ -72,6 +72,15 @@ const ASSIGNMENT_FIXTURE: BaseAssignment = {
   dateTo: '2026-06-12',
 };
 
+/**
+ * 지정 요청이 노리는 밤 — `ASSIGNMENT_FIXTURE`(6/10·6/11 을 덮는다)가 **안 덮는** 6/12 한 밤.
+ * TRIP-1011 C 부터 지정은 "교체"다(그 밤을 이미 같은 숙소가 덮으면 요청 0건, 다른 숙소가 덮으면
+ * DELETE 뒤 POST). 옛 요청(6/10–6/12, 같은 숙소 stay-a)은 이제 "이미 지정됨 → 0건"이 될 수 있어
+ * 이 파일이 재려는 "POST 한 번 → 재조회" 경로를 비껴간다. 그래서 겹치지 않는 밤으로 옮겼다.
+ */
+const UNCOVERED_FROM = '2026-06-12';
+const UNCOVERED_TO = '2026-06-13';
+
 /** 나간 요청의 `METHOD /경로` 누적 — 재요청 횟수를 세는 데 쓴다. */
 let observedHits: string[] = [];
 /** `POST /trips/{id}/bases`가 실제로 실어 보낸 본문(JSON 직렬화 **이후**). */
@@ -176,8 +185,8 @@ describe('★4 · 01b D11 — 지정은 bases 를 다시 받아오되 saved-stay
         tripId: TRIP_ID,
         data: {
           savedStayId: 'stay-a',
-          dateFrom: '2026-06-10',
-          dateTo: '2026-06-12',
+          dateFrom: UNCOVERED_FROM,
+          dateTo: UNCOVERED_TO,
         },
       });
     });
@@ -198,8 +207,8 @@ describe('★4 · 01b D11 — 지정은 bases 를 다시 받아오되 saved-stay
         tripId: TRIP_ID,
         data: {
           savedStayId: 'stay-a',
-          dateFrom: '2026-06-10',
-          dateTo: '2026-06-12',
+          dateFrom: UNCOVERED_FROM,
+          dateTo: UNCOVERED_TO,
         },
       });
     });
@@ -208,8 +217,8 @@ describe('★4 · 01b D11 — 지정은 bases 를 다시 받아오되 saved-stay
     expect(capturedBody).not.toBeNull();
     expect(capturedBody).toEqual({
       savedStayId: 'stay-a',
-      dateFrom: '2026-06-10',
-      dateTo: '2026-06-12',
+      dateFrom: UNCOVERED_FROM,
+      dateTo: UNCOVERED_TO,
     });
   });
 });
@@ -228,8 +237,8 @@ describe('01b D13-b — 409는 실패가 아니라 성공이다', () => {
           tripId: TRIP_ID,
           data: {
             savedStayId: 'stay-a',
-            dateFrom: '2026-06-10',
-            dateTo: '2026-06-12',
+            dateFrom: UNCOVERED_FROM,
+            dateTo: UNCOVERED_TO,
           },
         })
         .catch(() => {
@@ -241,7 +250,7 @@ describe('01b D13-b — 409는 실패가 아니라 성공이다', () => {
     await waitFor(() => expect(hitCount(BASES_HIT)).toBe(2));
   });
 
-  it('🔴 짝 — 그 밖의 실패는 거부되고 재조회도 하지 않는다', async () => {
+  it('🔴 짝 — 그 밖의 실패는 거부된다 (그리고 거점은 다시 받는다 — TRIP-1011 C)', async () => {
     // 이 짝이 없으면 "모든 오류를 삼키는" 구현이 위 케이스를 통과하고, 진짜 실패가
     // 조용해진다(BR-U1-55 침묵 실패 금지).
     postStatus = 500;
@@ -254,8 +263,8 @@ describe('01b D13-b — 409는 실패가 아니라 성공이다', () => {
           tripId: TRIP_ID,
           data: {
             savedStayId: 'stay-a',
-            dateFrom: '2026-06-10',
-            dateTo: '2026-06-12',
+            dateFrom: UNCOVERED_FROM,
+            dateTo: UNCOVERED_TO,
           },
         })
         .catch(() => {
@@ -264,7 +273,10 @@ describe('01b D13-b — 409는 실패가 아니라 성공이다', () => {
     });
 
     expect(rejected).toBe(true);
-    expect(hitCount(BASES_HIT)).toBe(1);
+    // TRIP-1011 C(01b Q1 · INV-4) — 실패해도 거점을 다시 받는다. 교체는 DELETE·POST 두 요청이라
+    // 중간에 끊기면 서버 상태가 이미 바뀌었을 수 있다 → 화면이 옛 목록을 들고 있으면 안 된다.
+    // (옛 단언 "재조회도 하지 않는다"는 이 계약과 정면 충돌해 뒤집었다.)
+    await waitFor(() => expect(hitCount(BASES_HIT)).toBe(2));
   });
 });
 

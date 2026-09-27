@@ -366,39 +366,41 @@ export function SlotFillScreen({
               {candidates.map((candidate, index) => {
                 const isSelected = candidate.poiId === selectedPoiId;
                 const view = candidateViews?.[candidate.poiId];
+                // 행 전체가 라디오(TRIP-1022 #071, `SlotCandidateSheet` 선례) — 본문을 눌러도 고른다.
+                // trailing 원은 선택 상태를 보이는 그림일 뿐이라 Pressable 이 아니다(testID 두 겹 금지).
                 return (
-                  <SlotCandidateCard
+                  <Pressable
                     key={candidate.poiId}
-                    candidate={candidate}
-                    badge={coPickBadge(index)}
-                    selected={isSelected}
-                    nameKo={view?.nameKo}
-                    tags={view?.tags}
-                    imageUrl={view?.imageUrl}
-                    dimmed={view?.dimmed}
-                    trailing={
-                      <Pressable
-                        testID={`itinerary-candidate-radio-${candidate.poiId}`}
-                        accessibilityRole="radio"
-                        accessibilityState={{ selected: isSelected }}
-                        onPress={() => onSelectRadio(candidate.poiId)}
-                        hitSlop={6}
-                        className="h-[24px] w-[24px] items-center justify-center"
-                      >
-                        <View
-                          className={`h-[22px] w-[22px] items-center justify-center rounded-pill border-2 ${
-                            isSelected
-                              ? 'border-primary'
-                              : 'border-hairline-strong'
-                          }`}
-                        >
-                          {isSelected ? (
-                            <View className="h-[12px] w-[12px] rounded-pill bg-primary" />
-                          ) : null}
+                    testID={`itinerary-candidate-radio-${candidate.poiId}`}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: isSelected }}
+                    onPress={() => onSelectRadio(candidate.poiId)}
+                  >
+                    <SlotCandidateCard
+                      candidate={candidate}
+                      badge={coPickBadge(index)}
+                      selected={isSelected}
+                      nameKo={view?.nameKo}
+                      tags={view?.tags}
+                      imageUrl={view?.imageUrl}
+                      dimmed={view?.dimmed}
+                      trailing={
+                        <View className="h-[24px] w-[24px] items-center justify-center">
+                          <View
+                            className={`h-[22px] w-[22px] items-center justify-center rounded-pill border-2 ${
+                              isSelected
+                                ? 'border-primary'
+                                : 'border-hairline-strong'
+                            }`}
+                          >
+                            {isSelected ? (
+                              <View className="h-[12px] w-[12px] rounded-pill bg-primary" />
+                            ) : null}
+                          </View>
                         </View>
-                      </Pressable>
-                    }
-                  />
+                      }
+                    />
+                  </Pressable>
                 );
               })}
             </View>

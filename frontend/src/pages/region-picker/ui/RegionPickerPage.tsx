@@ -21,7 +21,10 @@ import type { RegionPurpose } from '@/features/explore/ui/RegionPickerScreen';
 export function RegionPickerPage(): ReactElement {
   const router = useRouter();
   // URL은 신뢰 경계 — 아는 값이 아니면 전부 'stay'로 떨어뜨린다("부분적으로 해석"하지 않는다).
-  const { purpose: rawPurpose } = useLocalSearchParams<{ purpose?: string }>();
+  const { purpose: rawPurpose, tab } = useLocalSearchParams<{
+    purpose?: string;
+    tab?: string;
+  }>();
   const purpose: RegionPickerPurpose =
     rawPurpose === 'trip' || rawPurpose === 'explore' || rawPurpose === 'places'
       ? rawPurpose
@@ -52,6 +55,14 @@ export function RegionPickerPage(): ReactElement {
       // TRIP-985 — 탐색 진입(랜딩·홈·결과 화면 검색). 결과 화면은 **코드**를 받는다(이름은 캐시
       // 역인덱스). dismissTo: 스택에 결과 화면이 있으면 그리로 돌아가 교체하고, 없으면 피커를 바꿔
       // 끼운다 — "결과→피커→결과" 누적이 없다.
+      // TRIP-1015 E — 홈에서 왔으면 진입 탭을 결과 화면에 되싣는다(dismissTo 는 파라미터를 통째로 바꾼다).
+      if (tab === 'home') {
+        router.dismissTo({
+          pathname: '/explore/destination/[region]',
+          params: { region: region.regionCode, tab },
+        });
+        return;
+      }
       router.dismissTo(`/explore/destination/${region.regionCode}`);
       return;
     }

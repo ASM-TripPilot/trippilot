@@ -1274,7 +1274,7 @@ const MY_STAYS_PREVIEW_ROWS: MyStayRowVM[] = [
     name: '부산 그랜드 호텔',
     location: '부산 해운대구 우동',
     dateRangeLabel: '6.10 ~ 6.13',
-    sourceLabel: 'OTA 예약',
+    sourceLabel: '탐색에서 저장',
     memoLabel: null,
     linkedTripLabel: '연결 여행 · 부산 여행',
     baseState: 'assigned',
@@ -1287,8 +1287,8 @@ const MY_STAYS_PREVIEW_ROWS: MyStayRowVM[] = [
     name: '○○ 게스트하우스',
     location: '부산 중구 남포동',
     dateRangeLabel: '6.14 ~ 6.15',
-    sourceLabel: '앱 저장',
-    memoLabel: '예약번호 미입력',
+    sourceLabel: '직접 등록',
+    memoLabel: null,
     linkedTripLabel: '연결된 여행 없음',
     baseState: 'unassigned',
     canAssignBase: true,
@@ -2297,6 +2297,27 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  {
+    // TRIP-1023 #007 — 검색 중 얼굴(제목 "검색 결과")·시군구 카드 시도명 부제. 표본은 이름에 '천'이 든
+    // 두 곳: 시도 행 인천광역시(부제 없음)·시군구 홍천군(부제 강원특별자치도 — 긴 시도명 줄바꿈 육안).
+    key: 'region-picker-search',
+    band: 'd',
+    label: 'd03 · 여행지 선택 검색 결과',
+    login: null,
+    render: () => (
+      <RegionPickerScreen
+        purpose="trip"
+        query="천"
+        regions={PREVIEW_REGIONS.filter((region) => region.name.includes('천'))}
+        isLoading={false}
+        isError={false}
+        onChangeQuery={noop}
+        onSelectRegion={noop}
+        onRetry={noop}
+        onBack={noop}
+      />
+    ),
+  },
   // e05 숙소 등록 default(TRIP-730, Figma 1703) — 좌표 확정 + 날짜 선택 완료. 확정 카드(분홍 침대)·
   // 요일 날짜 필드("6.10 (수) – 6.12 (금)" + "2박" + 달력/⌄)·"✓ 이 숙소 등록"을 눈으로 대조.
   {
@@ -2558,11 +2579,12 @@ export const PREVIEW_STATES: PreviewState[] = [
   },
   // 제휴 고지 시트(BR-U1-30) — book press 시 뜨는 시트. 상세 화면(saved) 배경 위에 시트를 얹어
   // 실제 화면처럼 합성한다(딤은 gorhom BottomSheetBackdrop 이 진다 — 수동 스크림 래퍼 없음).
-  // gorhom 이라 실 슬라이드·딤 전면 커버는 실기 몫.
+  // gorhom 이라 실 슬라이드·딤 전면 커버는 실기 몫. 앱이 지금 실제로 띄우는 얼굴 = 웹검색 폴백
+  // (TRIP-1019 #018, 수수료 고지·"다시 보지 않기" 없음). 제휴 얼굴은 l07 키가 보여 준다.
   {
     key: 'stay-detail-affiliate-sheet',
     band: 'e',
-    label: 'e03 · 제휴 고지 시트',
+    label: 'e03 · 외부 이동 시트(웹검색)',
     login: null,
     render: () => (
       <View className="flex-1">
@@ -2576,6 +2598,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         />
         <OtaChoiceSheet
           item={STAY_DETAIL_PREVIEW_ITEM}
+          outbound="webSearch"
           dontShowAgain={false}
           onToggleDontShowAgain={noop}
           onCancel={noop}
@@ -3426,6 +3449,30 @@ export const PREVIEW_STATES: PreviewState[] = [
       ),
   },
   {
+    // TRIP-1026: 위저드에서 들른 d04 — ＋ FAB 없음, ♥ 가 그 자리로 내려앉는다(Figma 에 없는 상태, 01b Q3).
+    key: 'places-wizard',
+    band: 'd',
+    label: 'd04 · 장소 탐색 위저드 출처',
+    login: null,
+    render: () =>
+      withShellTabBar(
+        <PlaceExploreScreen
+          places={PREVIEW_PLACES}
+          savedPoiIds={PREVIEW_SAVED_POI_IDS}
+          selectedCategory={null}
+          searchText=""
+          onSelectCategory={noop}
+          onChangeSearchText={noop}
+          onToggleSave={noop}
+          onPressCreateTrip={noop}
+          hideCreateTrip
+          onPressSavedPlaces={noop}
+          onPressFilter={noop}
+        />,
+        'explore'
+      ),
+  },
+  {
     // TRIP-705: `saved-places-results` → `saved-places-default` 개명. Figma 1693:1183 default 6행.
     key: 'saved-places-default',
     band: 'd',
@@ -3717,21 +3764,6 @@ export const PREVIEW_STATES: PreviewState[] = [
       <TripWizardStep1Screen
         {...TRIP_WIZARD_BASE}
         mustVisits={MUST_VISIT_THUMBNAILS}
-      />
-    ),
-  },
-  // g01 박수·기간 불일치 안내(TRIP-1010) — Figma 근거 노드 없음, 요약 카드 아래 한 줄의 위치·톤 6-b 육안 자리.
-  {
-    key: 'trip-new-step1-nights-mismatch',
-    band: 'g',
-    label: 'g01 · 여행 만들기 nights-mismatch',
-    login: null,
-    render: () => (
-      <TripWizardStep1Screen
-        {...TRIP_WIZARD_BASE}
-        summaryDestinations={{ main: '부산', sub: '1박 · 경주 1박' }}
-        mustVisits={MUST_VISIT_THUMBNAILS}
-        nightsMismatchNote="여행지 박수(2박)가 기간(3박)보다 적어요 · 남은 1박은 경주로 잡아요"
       />
     ),
   },
@@ -4442,6 +4474,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         onPressFullAi={noop}
         onPressManual={noop}
         onPressCoPick={noop}
+        onPressRebase={noop}
       />
     ),
   },
@@ -4516,6 +4549,34 @@ export const PREVIEW_STATES: PreviewState[] = [
         onManualPlan={noop}
         onRetry={noop}
         onBack={noop}
+      />
+    ),
+  },
+  // TRIP-1032 — 다른 여행 생성 중(409) 안내. Figma 프레임이 없는 새 얼굴이라 6-b 육안 대조 자리가 이
+  // 두 키뿐이다. 같은 h07 코드라 배열 위치 = 정렬 위치(fallback-failed 직후, busy → uncancelable).
+  {
+    key: 'h07-generating-busy',
+    band: 'h',
+    label: 'h07 · 다른 여행 생성 중',
+    login: null,
+    render: () => (
+      <GeneratingScreen
+        onBackground={noop}
+        onRetry={noop}
+        busy={{ cancelable: true, onCancelAndRetry: noop, onWait: noop }}
+      />
+    ),
+  },
+  {
+    key: 'h07-generating-busy-uncancelable',
+    band: 'h',
+    label: 'h07 · 다른 여행 생성 중 · 취소 불가',
+    login: null,
+    render: () => (
+      <GeneratingScreen
+        onBackground={noop}
+        onRetry={noop}
+        busy={{ cancelable: false, onCancelAndRetry: noop, onWait: noop }}
       />
     ),
   },

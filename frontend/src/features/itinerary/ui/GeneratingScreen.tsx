@@ -48,6 +48,14 @@ const STEPS = ['장소 수집', '동선 계산', '시간 배치'] as const;
 const FAILED_TITLE = '일정을 만들지 못했어요';
 const FAILED_NOTE = '네트워크를 확인하고 다시 시도해 주세요';
 const RETRY_LABEL = '다시 시도';
+// TRIP-1032 — 다른 여행 생성 중(409) 안내. Figma 프레임 없음(01b Q7 채택 문구 — 발명, 사용자 확인 대기).
+const BUSY_TITLE = '다른 여행의 일정을 만들고 있어요';
+const BUSY_NOTE =
+  '한 번에 하나만 만들 수 있어요. 기존 생성을 멈추고 이 여행을 만들까요?';
+const BUSY_UNCANCELABLE_NOTE =
+  '지금은 첫날을 만드는 중이라 취소할 수 없어요. 조금 뒤에 다시 시도해 주세요.';
+const BUSY_CANCEL_RETRY_LABEL = '취소하고 새로 만들기';
+const BUSY_WAIT_LABEL = '기다리기';
 
 // 카드 그림자(Figma `0px 2px 10px rgba(0,0,0,0.06)`). RN 은 box-shadow 가 없어 스타일
 // 프로퍼티로 옮긴다. `#000000` 은 raw-hex 가드의 브랜드 팔레트에 없어 그림자 색으로 정당하다
@@ -114,6 +122,12 @@ export interface GeneratingScreenProps {
   pins?: MapPin[];
   /** 지도 중심 — MapView 필수 prop. `pins`와 동반(둘 다 없으면 지도 생략). */
   center?: MapCenter;
+  /** TRIP-1032 — 다른 여행이 생성 중(409)이면 실패 표면 대신 안내. `cancelable=false` 면 [기다리기]만. */
+  busy?: {
+    cancelable: boolean;
+    onCancelAndRetry: () => void;
+    onWait: () => void;
+  } | null;
 }
 
 export function GeneratingScreen({
@@ -122,6 +136,7 @@ export function GeneratingScreen({
   failed = false,
   pins,
   center,
+  busy,
 }: GeneratingScreenProps): ReactElement {
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
@@ -146,7 +161,32 @@ export function GeneratingScreen({
         </View>
 
         <ScrollView contentContainerClassName="gap-lg px-lg pb-2xl pt-sm">
-          {failed ? (
+          {busy ? (
+            <StateNotice
+              testID="itinerary-generation-busy"
+              icon={<AlertCircleGlyph />}
+              title={BUSY_TITLE}
+              description={busy.cancelable ? BUSY_NOTE : BUSY_UNCANCELABLE_NOTE}
+              actions={[
+                ...(busy.cancelable
+                  ? [
+                      {
+                        testID: 'itinerary-generation-busy-cancel-retry',
+                        label: BUSY_CANCEL_RETRY_LABEL,
+                        variant: 'filled' as const,
+                        onPress: busy.onCancelAndRetry,
+                      },
+                    ]
+                  : []),
+                {
+                  testID: 'itinerary-generation-busy-wait',
+                  label: BUSY_WAIT_LABEL,
+                  variant: busy.cancelable ? 'outline' : 'filled',
+                  onPress: busy.onWait,
+                },
+              ]}
+            />
+          ) : failed ? (
             <StateNotice
               testID="itinerary-generating-failed"
               icon={<AlertCircleGlyph />}

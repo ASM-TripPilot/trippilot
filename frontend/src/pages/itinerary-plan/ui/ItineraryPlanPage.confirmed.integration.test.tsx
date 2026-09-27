@@ -10,6 +10,7 @@ import type {
   ItineraryDaysItemSlotsItem,
 } from '@/shared/api/generated/schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { resetPressGuard } from '@/shared/press/pressGuard';
 
 import { ItineraryPlanPage } from './ItineraryPlanPage';
 
@@ -217,6 +218,7 @@ function renderedText(): string {
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 
 beforeEach(() => {
+  resetPressGuard(); // TRIP-1013 — 연타 가드 창(모듈 전역)이 앞 테스트에서 새지 않게 닫는다.
   mockShareArmed.value = false;
   mockPush.mockClear();
   mockBack.mockClear();

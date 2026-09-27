@@ -18,7 +18,7 @@ import {
  * d04 장소 탐색 default 의 **프레젠테이션 화면**.
  *
  * 무엇을 보장하나: `PlaceExploreScreen` 은 네트워크·라우팅·로컬 상태 없이 검색바(우측 필터
- * 버튼) · 카테고리 칩 8개 · 정렬 칩 1개("요즘 담긴 순" 활성 — TRIP-989 로 표시전용 2개 제거) · 2열 카드 그리드 · 우하단 FAB
+ * 버튼) · 카테고리 칩 8개 · 2열 카드 그리드(정렬 줄은 TRIP-1019 #025 로 제거) · 우하단 FAB
  * 2단(♥ 담은장소 · ＋ 여행만들기)을 그린다(TRIP-708 로 CtaBar → FAB 로 교체). 받은 순서를
  * 그대로 그리고(정렬·검색은 페이지가 끝내서 넘긴다), 담김 여부는 `savedPoiIds` 하나에서만
  * 파생하며, **계약에 판정 재료가 없는 컨트롤은 그리지 않는다**(01b Seed §2). BottomTabBar·
@@ -266,18 +266,23 @@ describe('PlaceExploreScreen — 카테고리 칩 (AC-3)', () => {
   });
 });
 
-describe('PlaceExploreScreen — 정렬 칩은 "요즘 담긴 순" 하나 (TRIP-989 B · D15 · u1 F-2)', () => {
-  it('"지금 뜨는 순"·"가까운 순" 칩은 그리지 않고, "요즘 담긴 순" 활성 칩과 필터 버튼은 남는다', () => {
+describe('🔴 TRIP-1019 #025 · 정렬 줄은 그리지 않는다 (결정 7 · u1 F-2 · TRIP-989 D15 후속)', () => {
+  it('"요즘 담긴 순" 칩과 "정렬" 라벨이 모두 없고, 검색바 필터 버튼·카테고리 칩은 남는다', () => {
     renderScreen();
 
-    // 남는 것 — 활성(연핑크) 칩 하나와 검색바 필터 버튼. "없음" 단언이 빈 화면으로 통과하지 않게 먼저 본다.
-    const saved = screen.getByTestId('explore-places-sort-saved');
-    expect(within(saved).getByText('요즘 담긴 순')).toBeOnTheScreen();
-    expect(String(saved.props.className)).toContain('primary-pale');
+    // 남는 것 먼저(긍정 앵커) — 화면이 통째로 안 그려져도 아래 "없음" 단언이 초록이 되는 것을 막는다.
+    // 필터 버튼(카테고리 시트)은 정렬과 다른 기능이라 그대로다.
+    expect(screen.getByTestId('explore-places-root')).toBeOnTheScreen();
     expect(screen.getByTestId('explore-places-filter')).toBeOnTheScreen();
+    expect(screen.getByTestId('explore-places-category-all')).toBeOnTheScreen();
 
-    // 숨기는 것 — 계약에 판정 재료가 없어(뜨는 순 = 담긴 순과 같은 순서, 가까운 순 = 좌표 파라미터 없음)
-    // 눌러도 아무 일이 없던 두 칩. 정본 u1 F-2 는 이미 "미노출"이다.
+    // 없애는 것 — 선택지가 하나뿐인 칩은 고를 게 없어 "누를 수 있어 보이는 가짜"가 된다(결정 7).
+    // 칩만 지우고 "정렬" 라벨만 덩그러니 남는 반쪽 구현도 여기서 red 다.
+    expect(screen.queryByTestId('explore-places-sort-saved')).toBeNull();
+    expect(screen.queryAllByText('요즘 담긴 순')).toHaveLength(0);
+    expect(screen.queryAllByText('정렬')).toHaveLength(0);
+
+    // TRIP-989 에서 이미 숨긴 두 칩도 되살아나지 않는다(무회귀).
     expect(screen.queryByTestId('explore-places-sort-trending')).toBeNull();
     expect(screen.queryByTestId('explore-places-sort-nearby')).toBeNull();
     expect(screen.queryAllByText('지금 뜨는 순')).toHaveLength(0);
@@ -285,8 +290,8 @@ describe('PlaceExploreScreen — 정렬 칩은 "요즘 담긴 순" 하나 (TRIP-
   });
 });
 
-describe('PlaceExploreScreen — 누를 수 있는 것 17개 (AC-1 · AC-2 · AC-3 · 01b Seed §2)', () => {
-  it('뒤로 · 칩 8개 · 하트 5개 · FAB 2개 · 필터 = 17개다 (CTA 제거·FAB/필터 추가·정렬칩 비-Pressable)', () => {
+describe('PlaceExploreScreen — 누를 수 있는 것 23개 (AC-1 · AC-2 · AC-3 · 01b Seed §2 · TRIP-1020 AC-B4 · TRIP-1023 AC-B5)', () => {
+  it('뒤로 · 칩 8개 · 카드 5장 · 하트 5개 · FAB 2개 · 필터 · 지역 칩 = 23개다 (CTA 제거·FAB/필터 추가·정렬칩 비-Pressable·카드 버튼화·지역 칩 상시)', () => {
     // 이 렌더는 onPressSavedPlaces·onPressFilter 를 **안 넘긴다** — 그래도 두 FAB·필터가 떠야
     // 한다(Figma 는 상시 노출, 콜백은 옵셔널·무동작 허용). "콜백 없으면 안 그리는" 구현이면
     // 여기서 개수가 어긋나 red.
@@ -296,8 +301,9 @@ describe('PlaceExploreScreen — 누를 수 있는 것 17개 (AC-1 · AC-2 · AC
     // 필터 버튼(+1)·정렬 칩 3개(비-Pressable=0)로 현 15 → **17**(현 15 에서 델타로 직접 세어
     // 확정). 완전일치 목록이라 FAB 하나라도 빠지면(뮤테이션) 어긋나 red 다.
     // BottomTabBar 는 화면이 아니라 페이지가 그리므로(3-a) 여기 개수에 안 든다.
-    // 정직한 한계: `getAllByRole('button')` 은 accessibilityRole 이 **명시된** 요소만 잡는다
-    // — 카드 루트는 role 미부여 bare Pressable 이라 카드 자체는 안 세어진다(TRIP-456).
+    // TRIP-1020: 카드 루트도 role=button 이 되어(스크린리더가 누를 수 있게) 카드 5장이 더해져 22.
+    // 카드 하나라도 role 을 잃으면 목록이 어긋나 red 다.
+    // TRIP-1023 칸 B #026: 지역 칩(`explore-places-region`)이 상시 버튼으로 더해져 23.
     expect(
       screen
         .getAllByRole('button')
@@ -307,10 +313,12 @@ describe('PlaceExploreScreen — 누를 수 있는 것 17개 (AC-1 · AC-2 · AC
       [
         'explore-places-back',
         ...CATEGORY_CHIPS.map(({ code }) => `explore-places-category-${code}`),
+        ...PLACES.map(({ poiId }) => `explore-places-card-${poiId}`),
         ...PLACES.map(({ poiId }) => `explore-places-save-${poiId}`),
         'explore-places-saved-fab',
         'explore-places-create-fab',
         'explore-places-filter',
+        'explore-places-region',
       ].sort()
     );
   });

@@ -19,7 +19,10 @@ import type { ReactElement } from 'react';
 import { useRouter } from 'expo-router';
 
 import type { GeocodeCandidate } from '@/shared/api/generated/schemas';
-import { usePostSavedStays } from '@/shared/api/generated/saved-stays/saved-stays';
+import {
+  getGetSavedStaysQueryKey,
+  usePostSavedStays,
+} from '@/shared/api/generated/saved-stays/saved-stays';
 import {
   useGetStaysGeocode,
   useGetStaysReverseGeocode,
@@ -56,9 +59,11 @@ export function StayRegisterPage({
   // 여행 기간(위저드 스토어)을 달력 상·하한으로 흘려보낸다(TRIP-390 · Seed Q1). features/stay는
   // features/trip를 직접 못 읽으므로(조합은 pages 몫) 페이지가 구독해 문자열 prop으로 내린다.
   // 시작·종료 둘 다 있을 때만 제한하고, 하나라도 비면 상·하한 없음(현행 오늘+ 유지, AC-6).
+  // 당일(시작 = 끝, 여행지 0곳 — TRIP-1027)도 기간 없음으로 본다: 그대로 걸면 체크아웃을 못 고른다.
   const startDate = useTripWizardStore((state) => state.startDate);
   const endDate = useTripWizardStore((state) => state.endDate);
-  const hasTripPeriod = startDate !== undefined && endDate !== undefined;
+  const hasTripPeriod =
+    startDate !== undefined && endDate !== undefined && startDate !== endDate;
   const minDate = hasTripPeriod ? startDate : undefined;
   const maxDate = hasTripPeriod ? endDate : undefined;
 
@@ -91,7 +96,19 @@ export function StayRegisterPage({
     { q: submittedQuery ?? '' },
     { query: { enabled: (submittedQuery ?? '').trim() !== '' } }
   );
-  const postSavedStays = usePostSavedStays();
+  // 등록 성공이면 저장 숙소 목록(e04·위저드 1/4가 보는 키)을 무효화한다(TRIP-1023 #022). 훅 레벨
+  // onSuccess 라 제출 중 화면을 떠나도 돈다 — 호출별 `mutateAsync(vars, { onSuccess })`는 언마운트
+  // 뒤 안 불린다. 실패면 안 돈다(`savedStays.ts` 규율 동형). 클라이언트는 콜백 context 에서 받는다 —
+  // `useQueryClient()`를 부르면 Provider 없이 이 페이지를 그리는 pin 통합 테스트가 깨진다.
+  const postSavedStays = usePostSavedStays({
+    mutation: {
+      onSuccess: (_data, _variables, _onMutateResult, { client }) => {
+        void client.invalidateQueries({
+          queryKey: getGetSavedStaysQueryKey(),
+        });
+      },
+    },
+  });
 
   // 핀 좌표의 역지오코딩 — **단일 경로**(TRIP-866 S4). 옛 WebView 브리지(PIN_DROP→GEOCODE_OK)를
   // 걷어내고, 핀으로 찍은 좌표를 이 훅으로 주소로 바꾼다. 핀 좌표(coordSource='PIN' + 좌표 있음)가

@@ -12,6 +12,8 @@ import {
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
+import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
+import { wizardOriginParams } from '@/features/explore/model/wizardOrigin';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import {
   captureDraftAtNextCall,
@@ -68,9 +70,12 @@ const mockPush = jest.fn();
 // TRIP-708: 복제 BottomTabBar 는 push 가 아니라 replace 로 항법한다(StaySearchPage TRIP-413
 // 선례) — replace 도 같은 지연-참조 목으로 준다(P-13 이 관찰).
 const mockReplace = jest.fn();
+const mockBack = jest.fn();
 // region 은 '더 담기'가 여행지 여러 곳을 같은 키로 반복해 실으면 배열이 된다(expo-router 규약) —
 // P-9(다지역)를 위해 배열도 허용한다(단일지역 케이스 P-2 는 string 그대로 유효).
-let mockParams: { region?: string | string[] } = {};
+// TRIP-1026: 위저드 출처 파라미터(`wizardOriginParams()`)도 같은 창구로 싣는다 — 키 이름을 테스트가
+// 손으로 적지 않도록 값 타입만 넓힌다.
+let mockParams: Record<string, string | string[] | undefined> = {};
 
 // 정적 `router` 싱글턴과 `useRouter()` 훅을 **둘 다** 같은 목으로 준다 — 배선이 어느 쪽을
 // 쓰든 이 파일의 단언은 같다(리포에 두 선례가 공존한다: StaySearchPage vs TripNewStep1Page).
@@ -82,6 +87,8 @@ jest.mock('expo-router', () => ({
   router: {
     push: (href: string) => mockPush(href),
     replace: (href: string) => mockReplace(href),
+    // TRIP-1026 AC-4 가 뒤로 버튼까지 누른다 — 없으면 `router.back is not a function` 으로 죽는다.
+    back: () => mockBack(),
   },
   useRouter: () => ({ push: mockPush, replace: mockReplace }),
   useLocalSearchParams: () => ({ ...mockParams }),
@@ -171,6 +178,7 @@ beforeEach(() => {
   mockParams = {};
   mockPush.mockClear();
   mockReplace.mockClear();
+  mockBack.mockClear();
   clearAccessToken();
   // 기본 gate 는 열려 있다 — "즉시 반영"을 재는 케이스만 닫힌 문으로 갈아 끼운다.
   gate = createGate();
@@ -719,8 +727,8 @@ describe('P-11 · 다지역 부분 실패면 degraded 배너를 얹고 다시 �
 });
 
 // ── TRIP-1012 B1 · 새 진입점은 이동 직전 위저드 드래프트를 비운다 (#074 · D9) ─────────────
-// d04 ＋ FAB 는 위저드 '더 담기'(담은 곳 0곳)로 들어와서도 닿는다 — FAB 는 명시적인 "새 여행"이라
-// 그때도 비운다(브리프 맹점 ①). push 가 불리는 **그 순간** 드래프트가 스토어 초기값인지 잰다.
+// d04 ＋ FAB 는 명시적인 "새 여행"이라 비운다. 위저드 '더 담기'로 들어온 d04 에는 TRIP-1026 이후 ＋ 가
+// 없다(아래 1026 AC-1). push 가 불리는 **그 순간** 드래프트가 스토어 초기값인지 잰다.
 afterEach(resetWizardDraft);
 
 describe('🔴 1012-B1 · d04 ＋ FAB 는 직전 드래프트를 비우고 위저드로 간다', () => {
@@ -738,5 +746,153 @@ describe('🔴 1012-B1 · d04 ＋ FAB 는 직전 드래프트를 비우고 위�
 
     expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
     expect(draftAtPush()).toEqual(freshWizardDraft());
+  });
+});
+
+// ── TRIP-1026 · 위저드에서 들어온 d04 는 ＋ FAB 를 그리지 않는다 (결정 1 = 숨김) ─────────────
+// 출처 신호는 push 파라미터다. 파라미터는 **헬퍼 출력(`wizardOriginParams()`)으로만** 싣는다 —
+// 테스트가 'from'·'wizard' 를 손으로 적으면 수신자 철자가 틀려도 이 파일이 green 이 된다(AC-6).
+// ⚠️ 헬퍼 호출은 it 본문 안에서만 한다(it.each 표에서 부르면 수집 단계에서 파일째 죽는다).
+// 드래프트 리셋은 위 파일 최상위 `afterEach(resetWizardDraft)` 가 맡는다(모듈 싱글턴 누수 방지).
+
+describe('🔴 1026 AC-1 · 위저드 출처면 ＋ FAB 가 없고 ♥ FAB 는 남는다', () => {
+  it.each([
+    { name: 'W1 1/4 더 담기(여행 지역과 함께)', region: ['부산광역시'] },
+    { name: 'W2·W3 d02 select 더 담기·둘러보기(지역 없이)', region: undefined },
+  ])('$name', async ({ region }) => {
+    mockParams = { ...(region ? { region } : {}), ...wizardOriginParams() };
+
+    await renderPage();
+
+    expect(screen.queryByTestId('explore-places-create-fab')).toBeNull();
+    expect(screen.getByTestId('explore-places-saved-fab')).toBeOnTheScreen();
+  });
+});
+
+describe('1026 AC-3 · region 만으로는 위저드 출처가 아니다 (d03 모두 보기·지역 피커 무회귀)', () => {
+  it('region 만 싣고 오면 ＋ FAB 가 있고, 누르면 드래프트를 비운 뒤 step1 로 간다', async () => {
+    // region 은 위저드 밖(d03 '모두 보기'·피커 places)도 싣는다 — 이걸 신호로 쓰면 그 경로의 ＋ 가 사라진다.
+    leavePreviousTripDraft();
+    expect(wizardDraftData()).not.toEqual(freshWizardDraft());
+    const draftAtPush = captureDraftAtNextCall(mockPush);
+    mockParams = { region: '부산광역시' };
+
+    await renderPage();
+    fireEvent.press(screen.getByTestId('explore-places-create-fab'));
+
+    expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
+    expect(draftAtPush()).toEqual(freshWizardDraft());
+  });
+});
+
+describe('🔴 1026 AC-4 · 위저드 출처 d04 에서 무엇을 눌러도 진행 중 드래프트가 그대로다', () => {
+  it('화면의 버튼을 전부 눌러도 드래프트가 누르기 전과 같고, step1 으로 가지 않는다', async () => {
+    // 준비 — 1/4 에서 손으로 채운 드래프트(여행지·기간·꼭 갈 곳 등 전 필드).
+    leavePreviousTripDraft();
+    const before = wizardDraftData();
+    // 앵커 — 채워졌다(픽스처가 조용히 망가지면 "그대로다"가 공짜로 통과한다).
+    expect(before).not.toEqual(freshWizardDraft());
+    mockParams = { region: ['부산광역시'], ...wizardOriginParams() };
+    await renderPage();
+
+    // 실행 — 지금 화면의 버튼을 **뒤에서부터** 전부 누른다. 앞(칩)부터 누르면 목록이 로딩으로
+    // 바뀌어 뒤쪽 카드가 트리에서 빠진다 — 뒤(탭바·FAB·카드)부터 누르면 누를 대상이 끝까지 남는다.
+    const buttons = screen.getAllByRole('button');
+    const pressedIds = buttons.map((node) => String(node.props.testID));
+    // 모집단 앵커 — 실제로 여러 버튼을 눌렀고, 그중에 ♥ FAB·카드 하트·뒤로가 있다.
+    expect(pressedIds).toEqual(
+      expect.arrayContaining([
+        'explore-places-saved-fab',
+        'explore-places-save-p1',
+        'explore-places-back',
+      ])
+    );
+    [...buttons].reverse().forEach((button) => fireEvent.press(button));
+
+    // 단언 — 드래프트가 누르기 전과 같다. 비동기 담기 시도가 **끝난 표시**(게스트라 결국 뜨는 로그인
+    // 안내)를 먼저 기다린 뒤 동기로 본다 — `waitFor` 로 비교하면 첫 검사에서 같으면 바로 끝나
+    // `await` 뒤의 변경을 못 잡는다(5-b 경고-1, 오케 보강).
+    await screen.findByTestId('explore-places-saveerror-login');
+    expect(wizardDraftData()).toEqual(before);
+    expect(mockPush.mock.calls).not.toContainEqual(['/trips/new/step1']);
+  });
+});
+
+// ── TRIP-1023 칸 B #026 · d04 지역 칩(결정5 · Seed Q4·Q5·Q6) ─────────────────────────────────
+// 라벨은 라우트 `region` 을 배열로 편 값에서 나온다(없음 → "전국", 한 곳 → 이름, 여러 곳 → "{첫} 외 N곳").
+// 칩 목적지는 어디서 왔든 같다 — 지역 선택 places(Seed Q6). 기대 URL 은 **헬퍼 출력**
+// (`regionPickerHref('places')`)으로만 적는다 — 테스트가 철자를 손으로 적으면 헬퍼·수신자 철자가 틀려도
+// green 이 된다(TRIP-985 규약). 복귀 시 다지역·`from` 파라미터 소실은 Seed Q6 가 새 티켓 후보로 넘겼다
+// (jest 가 원리적으로 못 보는 `dismissTo` 교체 — traps-explore).
+
+describe('🔴 1023-B #026 · 지역 칩 라벨은 라우트 region 에서 나온다 (AC-B5 · AC-B6 · AC-B10)', () => {
+  it('region 이 없으면(탐색 탭·홈 "장소 더 보기") 칩이 "전국" 이다', async () => {
+    await renderPage();
+
+    // 앵커 — 전국 조회였다(region 파라미터 없음).
+    expect(
+      new URL(hitsOf('GET', '/api/v1/places')[0].url).searchParams.get('region')
+    ).toBeNull();
+    expect(
+      within(screen.getByTestId('explore-places-region')).getByText('전국')
+    ).toBeOnTheScreen();
+  });
+
+  it('region 이 한 곳이면 그 이름(피커가 싣는 한글 이름 그대로)이 라벨이다', async () => {
+    mockParams = { region: '강릉시' };
+
+    await renderPage();
+
+    const chip = screen.getByTestId('explore-places-region');
+    expect(within(chip).getByText('강릉시')).toBeOnTheScreen();
+    expect(within(chip).queryByText('전국')).toBeNull();
+  });
+
+  it('region 이 여러 곳(더 담기)이면 "{첫 지역} 외 N곳" 이다', async () => {
+    mockParams = { region: ['부산광역시', '경주시'] };
+    // 다지역 fan-out 경로(P-9)라 지역별로 서로 다른 카드를 준다 — 같은 poiId 가 겹치지 않게.
+    server.use(
+      http.get(`${BASE}/places`, ({ request }) => {
+        const region = new URL(request.url).searchParams.get('region');
+        const items =
+          region === '부산광역시'
+            ? [makePlace('b1', '감천문화마을', '명소', '부산광역시', 12)]
+            : region === '경주시'
+              ? [makePlace('g1', '불국사', '명소', '경주시', 40)]
+              : [];
+        return HttpResponse.json({ items, nextCursor: null });
+      })
+    );
+
+    await renderPage();
+
+    expect(
+      within(screen.getByTestId('explore-places-region')).getByText(
+        '부산광역시 외 1곳'
+      )
+    ).toBeOnTheScreen();
+  });
+});
+
+describe('🔴 1023-B #026 · 칩을 누르면 어디서 왔든 지역 선택(places)으로 간다 (AC-B7 · Seed Q6)', () => {
+  it.each([
+    { name: '지역 없음(전국)', region: undefined, wizard: false },
+    { name: '한 곳', region: '강릉시', wizard: false },
+    { name: '다지역', region: ['부산광역시', '경주시'], wizard: false },
+    { name: '위저드 출처(더 담기)', region: ['부산광역시'], wizard: true },
+  ])('$name', async ({ region, wizard }) => {
+    // 헬퍼 호출은 it 본문 안에서만 한다(위 1026 절 주석 — 표에서 부르면 수집 단계에서 죽는다).
+    mockParams = {
+      ...(region ? { region } : {}),
+      ...(wizard ? wizardOriginParams() : {}),
+    };
+
+    await renderPage();
+    fireEvent.press(screen.getByTestId('explore-places-region'));
+
+    // 빈 상태 "다른 지역 보기"(states 통합 테스트)와 같은 목적지 — push 한 번, 다른 곳으로는 안 간다.
+    expect(mockPush.mock.calls).toEqual([[regionPickerHref('places')]]);
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockBack).not.toHaveBeenCalled();
   });
 });

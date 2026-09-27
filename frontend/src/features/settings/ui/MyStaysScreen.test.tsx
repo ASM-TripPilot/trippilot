@@ -115,7 +115,7 @@ describe('🔴 AC-2 · 출발점 전환 다이얼로그 게이트(BR-U6-21)', ()
 
     // 급소: 다이얼로그가 먼저 뜨고, 확정 없이 mutate 콜백이 나가지 않는다(즉시 배정 금지).
     expect(screen.getByTestId('my-stays-base-dialog')).toBeOnTheScreen();
-    expect(screen.getByText('출발점을 바꿀까요?')).toBeOnTheScreen();
+    expect(screen.getByText('출발점을 해제할까요?')).toBeOnTheScreen();
     expect(onConfirmBaseToggle).not.toHaveBeenCalled();
 
     // 실행2: 확정.
@@ -160,6 +160,45 @@ describe('🔴 AC-2 · 출발점 전환 다이얼로그 게이트(BR-U6-21)', ()
 
     expect(onConfirmBaseToggle).not.toHaveBeenCalled();
     expect(screen.queryByTestId('my-stays-base-dialog')).toBeNull();
+  });
+});
+
+/**
+ * TRIP-1017 (B) #091 — 버튼·다이얼로그가 실제 동작(출발점 해제, 일정은 그대로)을 그대로 말한다.
+ *
+ * 옛 문구("출발점을 바꿀까요?" · "처음부터 다시 생성" · [일정 다시 생성])는 재생성을 약속했지만 확정은
+ * 거점 한 행만 지운다(BE `remove`, 브리프 §3-B). 01b 결정1=(a) 해제만 · Q1·Q2 문구. Figma 1604·1606 과
+ * 의도적으로 갈라진다(Figma 반영은 이 사이클 밖).
+ */
+describe('🔴 TRIP-1017 AC-B1 · 출발점 해제 문구 (결정1=(a) · Q1·Q2)', () => {
+  it('행 버튼은 "출발점 해제" 버튼으로 읽히고 "출발점 변경"이라는 글자는 없다', () => {
+    renderScreen({ rows: [assignedRow()] });
+
+    // 역할·이름으로 먼저 찾고 testID 를 확인한다 — 글자와 testID 가 따로 드러난다.
+    const toggle = screen.getByRole('button', { name: '출발점 해제' });
+    expect(toggle).toHaveProp('testID', 'my-stays-base-toggle-s1');
+    expect(within(toggle).getByText('출발점 해제')).toBeOnTheScreen();
+    expect(screen.queryByText('출발점 변경')).toBeNull();
+  });
+
+  it('다이얼로그는 해제와 "일정은 그대로"를 말하고, 재생성 약속은 어디에도 없다', () => {
+    renderScreen({ rows: [assignedRow()] });
+
+    fireEvent.press(screen.getByTestId('my-stays-base-toggle-s1'));
+
+    const dialog = screen.getByTestId('my-stays-base-dialog');
+    // 긍정 앵커 — 다이얼로그가 실제로 열렸고 제목·본문이 그 안에 있다(아래 "없음"이 공허하지 않게).
+    expect(within(dialog).getByText('출발점을 해제할까요?')).toBeOnTheScreen();
+    expect(within(dialog).getByText('일정은 그대로예요.')).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId('my-stays-base-confirm')).getByText('해제')
+    ).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId('my-stays-base-cancel')).getByText('취소')
+    ).toBeOnTheScreen();
+
+    // 금지 — 제목·본문·버튼 어디에도 재생성 약속이 없다.
+    expect(within(dialog).queryAllByText(/다시 생성|재생성/)).toHaveLength(0);
   });
 });
 

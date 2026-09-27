@@ -87,3 +87,36 @@ describe('TRIP-781 · l07 제휴 고지 프리뷰 합성 (AC-13)', () => {
     expectSheetAboveScreen();
   });
 });
+
+// TRIP-1019 #018 — 앱이 지금 실제로 띄우는 시트는 웹검색 폴백 얼굴이다(이동이 늘 구글 검색). 그 얼굴을 눈으로
+// 볼 자리(6-b)가 필요해 e 밴드 `stay-detail-affiliate-sheet`(e03 상세 + 시트 합성)를 폴백 얼굴로 돌린다 — 키
+// 수는 그대로(총량 가드 무변경). l07 두 키는 Figma l07(제휴 얼굴)과 1:1 이라 제휴 얼굴로 남는다(위 describe).
+describe('TRIP-1019 · e03 상세 위 시트 프리뷰 = 웹검색 폴백 얼굴 (#018)', () => {
+  it('stay-detail-affiliate-sheet 는 수수료 안내·체크박스 없이 "검색 결과로 이동" 시트를 겹쳐 그린다', () => {
+    mockSearchParams.state = 'stay-detail-affiliate-sheet';
+
+    render(<DevPreview />);
+
+    // 앵커: 상세 위에 시트가 떴다.
+    expect(screen.getByTestId('stay-detail-root')).toBeOnTheScreen();
+    expect(screen.getByText(BODY)).toBeOnTheScreen();
+    expectSheetAboveScreen();
+    // 폴백 얼굴.
+    expect(screen.queryByTestId('stay-ota-notice-box')).toBeNull();
+    expect(screen.queryByTestId('stay-ota-dont-show')).toBeNull();
+    expect(screen.getByTestId('stay-ota-confirm')).toHaveTextContent(
+      '검색 결과로 이동'
+    );
+  });
+
+  it('짝: l07-affiliate-default 는 여전히 수수료 안내 박스가 있는 제휴 얼굴이다', () => {
+    mockSearchParams.state = 'l07-affiliate-default';
+
+    render(<DevPreview />);
+
+    expect(screen.getByTestId('stay-ota-notice-box')).toBeOnTheScreen();
+    expect(screen.getByTestId('stay-ota-confirm')).toHaveTextContent(
+      '네이버로 이동'
+    );
+  });
+});

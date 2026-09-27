@@ -18,6 +18,8 @@ import {
   MyStaysScreen,
   type MyStayRowVM,
 } from '@/features/settings/ui/MyStaysScreen';
+import { isOtaSource } from '@/features/stay/config/affiliateNotice';
+import { showToast } from '@/shared/ui/Toast';
 
 /**
  * TRIP-605 · l04 페이지 배선 — 조회(`useGetSavedStays`·`useGetTrips`·N+1 bases)·역참조 조립
@@ -48,15 +50,19 @@ function TripBasesProbe({
   return null;
 }
 
-/** 등록 출처 라벨 — 외부 OTA 출처가 있으면 예약, 없으면 앱 저장(BR-U6-20 등록 출처). */
+/**
+ * 등록 출처 라벨(BR-U6-20) — `externalSource` 는 예약처가 아니라 카탈로그 원천이다(LOCALDATA 등).
+ * 사전에 있는 OTA 코드만 예약, 그 밖의 원천은 탐색에서 저장, 없으면(null·필드 없음) 직접 등록.
+ */
 function sourceLabel(stay: SavedStay): string {
-  return stay.externalSource ? 'OTA 예약' : '앱 저장';
+  if (isOtaSource(stay.externalSource)) return 'OTA 예약';
+  return stay.externalSource ? '탐색에서 저장' : '직접 등록';
 }
 
 /** 메모(예약번호) 상태 칩 — OTA 예약인데 번호가 비어 있으면 안내, 그 외 없음. */
 function memoLabel(stay: SavedStay): string | null {
   const missingBookingNo =
-    stay.externalSource != null && (stay.memo == null || stay.memo === '');
+    isOtaSource(stay.externalSource) && (stay.memo == null || stay.memo === '');
   return missingBookingNo ? '예약번호 미입력' : null;
 }
 
@@ -96,7 +102,26 @@ export function MyStaysPage(): ReactElement {
   const queryClient = useQueryClient();
   const savedQuery = useGetSavedStays();
   const tripsQuery = useGetTrips();
-  const deleteBase = useDeleteTripsTripIdBasesBaseAssignmentId();
+  // 콜백은 훅 레벨에 둔다 — `mutate(vars, callbacks)` 의 호출별 콜백은 응답 전에 화면을 떠나면 안 불린다.
+  // bases 캐시는 성공·실패(404 포함) 모두 낡음으로 표시 → 다음 표시가 서버 상태를 다시 묻는다.
+  const invalidateBases = (tripId: string): void => {
+    void queryClient.invalidateQueries({
+      queryKey: getGetTripsTripIdBasesQueryKey(tripId),
+    });
+  };
+  const deleteBase = useDeleteTripsTripIdBasesBaseAssignmentId({
+    mutation: {
+      onSuccess: (_data, { tripId }) => invalidateBases(tripId),
+      // 실패는 알린다(INV-4) — 루트 토스트 호스트라 화면을 떠나도 뜬다.
+      onError: (_error, { tripId }) => {
+        invalidateBases(tripId);
+        showToast({
+          message: '출발점을 해제하지 못했어요. 다시 시도해 주세요',
+          testID: 'my-stays-base-release-error',
+        });
+      },
+    },
+  });
 
   const savedStays = savedQuery.data ?? [];
   const trips = tripsQuery.data ?? [];
@@ -129,18 +154,10 @@ export function MyStaysPage(): ReactElement {
       row.tripId !== null &&
       row.baseAssignmentId !== null
     ) {
-      const tripId = row.tripId;
-      deleteBase.mutate(
-        { tripId, baseAssignmentId: row.baseAssignmentId },
-        {
-          // 성공 시 bases 조회 캐시를 낡음으로 표시 → 재조회로 행이 '연결된 여행 없음'으로 갱신된다.
-          onSuccess: () => {
-            void queryClient.invalidateQueries({
-              queryKey: getGetTripsTripIdBasesQueryKey(tripId),
-            });
-          },
-        }
-      );
+      deleteBase.mutate({
+        tripId: row.tripId,
+        baseAssignmentId: row.baseAssignmentId,
+      });
     }
   };
 

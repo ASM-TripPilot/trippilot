@@ -38,6 +38,7 @@ import {
 } from '@/features/explore/model/placeSaveGuard';
 import { orderSavedPlaces } from '@/features/explore/model/savedPlaceList';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { wizardOriginParams } from '@/features/explore/model/wizardOrigin';
 import { MustVisitPickScreen } from '@/features/explore/ui/MustVisitPickScreen';
 import { SavedPlaceListScreen } from '@/features/explore/ui/SavedPlaceListScreen';
 import { seedMustVisits } from '@/features/trip/model/mustVisitSeed';
@@ -233,9 +234,20 @@ export function SavedPlacesPage(): ReactElement {
           store.seedMustVisitsFromD02([...seedMustVisits(chosen), ...kept]);
           router.push('/trips/new/step1');
         }}
-        onPressAddMore={() => router.push('/explore/places')}
+        // select 는 위저드 안이다 — d04 가 ＋(새 여행 = reset)를 숨기도록 출처를 싣는다(TRIP-1026).
+        onPressAddMore={() =>
+          router.push({
+            pathname: '/explore/places',
+            params: wizardOriginParams(),
+          })
+        }
         onRetry={handleRetry}
-        onPressBrowse={() => router.push('/explore/places')}
+        onPressBrowse={() =>
+          router.push({
+            pathname: '/explore/places',
+            params: wizardOriginParams(),
+          })
+        }
         onBack={() => router.back()}
       />
     );
