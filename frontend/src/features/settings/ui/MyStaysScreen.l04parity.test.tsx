@@ -14,7 +14,7 @@ import { ChevronRightGlyph, MUTED_SOFT } from './SettingsGlyphs';
  * TRIP-777 · l04 등록 숙소 — 라이브 Figma(default 1604:2440 · empty 1605:2440 · dialog 1606:2440) 값 정렬.
  *
  * 무엇을 보장하나:
- *  - AC-1: "출발점" 배지 모서리 8, "출발점 변경"은 13 Regular body + muted chevron 글리프.
+ *  - AC-1: "출발점" 배지 모서리 8, "출발점 해제"는 13 Regular body + muted chevron 글리프.
  *    미등록 행의 "출발점 지정" 점선 배지는 TRIP-989(D13)로 사라졌다 — 없음을 잠근다.
  *  - AC-2: 칩 모서리 8·글자색(날짜 body / 출처·메모 muted), 카드 r12·카드 간 16, 주소 줄 유무, 구분선 막대.
  *  - AC-3: empty 는 제목 없이 96 회색 원 + Figma 침대 + 설명 14 + 내용 폭 CTA h44.
@@ -22,6 +22,8 @@ import { ChevronRightGlyph, MUTED_SOFT } from './SettingsGlyphs';
  *  - AC-7: `ChevronRightGlyph` 기본색(다른 화면 4곳이 기대는 값)은 그대로.
  *
  * 게이트(확정 전 콜백 0회·행당 토글 1개·disabled)는 `MyStaysScreen.test.tsx`(무수정)가 잠근다.
+ * TRIP-1017: 버튼·다이얼로그 **글자**는 Figma 1604·1606 과 의도적으로 다르다(01b 결정1=(a) 해제만 · Q1·Q2) —
+ *  크기·색·모양 단언은 그대로 두고 대상을 찾는 글자만 새 문구로 바꿨다.
  * 그림자·딤 실제 덮임·점선 간격·세부 여백은 jest 사각 — [검증] 스크린샷·6-b 몫.
  */
 
@@ -205,11 +207,11 @@ describe('🔴 TRIP-777 · l04 default — 출발점 배지·링크 (AC-1)', () 
     ).toHaveLength(0);
   });
 
-  it('"출발점 변경" 글자는 정확히 "출발점 변경"(› 문자 없음)이고 13 Regular body색이다', () => {
+  it('"출발점 해제" 글자는 정확히 "출발점 해제"(› 문자 없음)이고 13 Regular body색이다', () => {
     renderRows([assignedRow()]);
 
     const toggle = screen.getByTestId('my-stays-base-toggle-s1');
-    const label = within(toggle).getByText('출발점 변경');
+    const label = within(toggle).getByText('출발점 해제');
     expect(tokens(label)).toEqual(
       expect.arrayContaining(['font-noto', 'text-label', 'text-body'])
     );
@@ -219,7 +221,7 @@ describe('🔴 TRIP-777 · l04 default — 출발점 배지·링크 (AC-1)', () 
     expect(screen.queryAllByText(/›/)).toHaveLength(0);
   });
 
-  it('"출발점 변경" 옆 chevron 은 muted 색 오른쪽 꺾쇠 글리프 하나다', () => {
+  it('"출발점 해제" 옆 chevron 은 muted 색 오른쪽 꺾쇠 글리프 하나다', () => {
     renderRows([assignedRow()]);
 
     const toggle = screen.getByTestId('my-stays-base-toggle-s1');
@@ -411,7 +413,7 @@ describe('🔴 TRIP-777 · l04 출발점 다이얼로그 (AC-4)', () => {
     openDialog();
 
     const card = nearestCommonHost(
-      screen.getByText('출발점을 바꿀까요?'),
+      screen.getByText('출발점을 해제할까요?'),
       screen.getByTestId('my-stays-base-cancel')
     );
     expect(tokens(card)).toEqual(
@@ -423,13 +425,13 @@ describe('🔴 TRIP-777 · l04 출발점 다이얼로그 (AC-4)', () => {
   it('제목은 19 Bold ink 이고, 본문은 body색(muted 아님)이다', () => {
     openDialog();
 
-    const title = screen.getByText('출발점을 바꿀까요?');
+    const title = screen.getByText('출발점을 해제할까요?');
     expect(tokens(title)).toEqual(
       expect.arrayContaining(['text-[19px]', 'font-noto-bold', 'text-ink'])
     );
     expect(tokens(title)).not.toContain('text-[18px]');
 
-    const body = screen.getByText(/처음부터 다시 생성/);
+    const body = screen.getByText('일정은 그대로예요.');
     expect(tokens(body)).toContain('text-body');
     expect(tokens(body)).not.toContain('text-muted');
   });
@@ -451,7 +453,7 @@ describe('🔴 TRIP-777 · l04 출발점 다이얼로그 (AC-4)', () => {
 
     const confirm = within(
       screen.getByTestId('my-stays-base-confirm')
-    ).getByText('일정 다시 생성');
+    ).getByText('해제');
     expect(tokens(confirm)).toContain('text-on-primary');
   });
 });

@@ -167,7 +167,8 @@ const CANON = [
     'location',
     '위치정보',
     [
-      ['location-consent', '위치정보 수집 동의', true],
+      // TRIP-1017 결정3·Q7: 행은 GPS 기록 동의(L3)만 가리킨다 — 온보딩 위치 약관(L2)과 다른 동의임이 보이게.
+      ['location-consent', 'GPS 이동경로 기록', true],
       ['personalization', '개인화', true],
     ],
   ],

@@ -12,6 +12,13 @@ const OTA_NAMES: ReadonlyMap<string, string> = new Map([
   ['AGODA', '아고다'],
 ]);
 
+/** 사전에 있는 OTA 코드인가 — 등록 숙소 출처 라벨(TRIP-1017)이 사전을 복제하지 않고 이것을 쓴다. */
+export function isOtaSource(
+  externalSource: string | null | undefined
+): boolean {
+  return externalSource != null && OTA_NAMES.has(externalSource);
+}
+
 /** 옵션 행 표시명(TRIP-988 · BR-U1-31) — 모르는 코드는 "외부 사이트". */
 export function otaDisplayName(externalSource: string): string {
   return OTA_NAMES.get(externalSource) ?? '외부 사이트';

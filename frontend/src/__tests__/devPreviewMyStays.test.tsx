@@ -11,6 +11,10 @@ import { render, screen, within } from '@testing-library/react-native';
  *    (화면이 열림을 로컬 state 로 쥐어 prop 으로 못 연다 — l05·l06 합성과 같은 형태).
  *  - 프리뷰는 네트워크 계층을 로드하지 않는다(traps-shell).
  *
+ * TRIP-1017: 카드의 출처 칩은 새 어휘(탐색에서 저장·직접 등록)를, 다이얼로그는 해제 문구를 보인다 —
+ *  프리뷰가 옛 어휘(OTA 예약·앱 저장·예약번호 미입력)를 계속 보이면 6-b 육안이 옛 거짓말을 본다.
+ *  Figma 1604·1606 과는 의도적으로 다르다(01b 결정1·2). 프리뷰 키는 늘리지 않았다.
+ *
  * ⚠️ 딤이 화면을 실제로 덮는지·다이얼로그가 가운데 오는지는 jest 사각 — 6-b 몫.
  * 배경 동일성은 testID 순서열만 비교한다(표시값은 위 default 케이스가 박제한다).
  */
@@ -82,30 +86,34 @@ describe('🔴 TRIP-777 · l04 default 프리뷰 = Figma 1604 카드 2장 (AC-6)
       (typeof rows)[number],
     ];
 
-    // 1번째 — 등록됨(출발점 배지), 메모 칩 없음.
+    // 1번째 — 등록됨(출발점 배지), 탐색에서 저장한 숙소, 메모 칩 없음, 버튼은 "출발점 해제".
     for (const text of [
       '부산 그랜드 호텔',
       '출발점',
       '부산 해운대구 우동',
       '6.10 ~ 6.13',
-      'OTA 예약',
+      '탐색에서 저장',
       '연결 여행 · 부산 여행',
+      '출발점 해제',
     ]) {
       expect(within(first).getByText(text)).toBeOnTheScreen();
     }
+    expect(within(first).queryByText('OTA 예약')).toBeNull();
     expect(within(first).queryByText('예약번호 미입력')).toBeNull();
 
-    // 2번째 — 미등록. 점선 "출발점 지정" 배지는 TRIP-989(D13)로 사라졌다(Figma 1604 와 다름).
+    // 2번째 — 미등록·직접 등록. 점선 "출발점 지정" 배지는 TRIP-989(D13)로 사라졌다(Figma 1604 와 다름).
     for (const text of [
       '○○ 게스트하우스',
       '부산 중구 남포동',
       '6.14 ~ 6.15',
-      '앱 저장',
-      '예약번호 미입력',
+      '직접 등록',
       '연결된 여행 없음',
     ]) {
       expect(within(second).getByText(text)).toBeOnTheScreen();
     }
+    // 옛 어휘는 이 카드에 없다 — 직접 등록은 예약이 아니므로 예약번호 안내도 없다(TRIP-1017 AC-C2).
+    expect(within(second).queryByText('앱 저장')).toBeNull();
+    expect(within(second).queryByText('예약번호 미입력')).toBeNull();
 
     expect(within(second).queryByText('출발점 지정')).toBeNull();
 
@@ -131,7 +139,7 @@ describe('🔴 TRIP-777 · l04 다이얼로그 프리뷰 합성 (AC-6)', () => {
     expect(screen.getAllByTestId(/^my-stays-row-/)).toHaveLength(2);
     // 전경 = 출발점 다이얼로그.
     expect(screen.getByTestId('my-stays-base-dialog')).toBeOnTheScreen();
-    expect(screen.getByText('출발점을 바꿀까요?')).toBeOnTheScreen();
+    expect(screen.getByText('출발점을 해제할까요?')).toBeOnTheScreen();
   });
 
   it('다이얼로그가 화면보다 뒤 형제라서 위에 그려진다(순서가 뒤집히면 화면이 가린다)', () => {

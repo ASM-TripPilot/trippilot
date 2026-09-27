@@ -16,7 +16,7 @@ import {
  * 페이지(`pages/my-stays`)가 진다(MyPageScreen↔TripCardContainer 분리 규율, features/settings 경계).
  *
  * 출발점 전환 게이트(BR-U6-21): 토글 press = 다이얼로그를 먼저 연다(로컬 `openRow` 상태). 비즈니스
- * 콜백(`onConfirmBaseToggle`)은 다이얼로그 [일정 다시 생성] 확정에서만 부른다 — 즉시 배정/재생성 금지.
+ * 콜백(`onConfirmBaseToggle`)은 다이얼로그 [해제] 확정에서만 부른다 — 즉시 배정/재생성 금지.
  * `LocationConsentScreen`(위치 철회 재확인) 게이트와 정확히 같은 형태.
  *
  * 좌표 미확정(INV-U1-08, `canAssignBase=false`)이면 토글이 real `disabled` 라 게이트에 진입조차 못 한다.
@@ -71,7 +71,7 @@ function Chip({
 }
 
 /** 등록 숙소 한 행(카드). 출발점 전환 버튼(`my-stays-base-toggle-{id}`)은 등록됨 행에만 하나 —
- *  하단 "출발점 변경" + chevron 링크. 미등록 행은 버튼이 없다: 어느 여행에 지정할지 모르는 채
+ *  하단 "출발점 해제" + chevron 링크. 미등록 행은 버튼이 없다: 어느 여행에 지정할지 모르는 채
  *  다이얼로그만 열고 아무것도 안 하던 무반응(INV-4)을 막는다(TRIP-989 D13, 실제 지정은 TRIP-621). */
 function MyStayRow({
   row,
@@ -122,7 +122,7 @@ function MyStayRow({
       {/* 구분선은 막대로 — `border-t border-hairline` 은 네 변 두께를 함께 건드려 모서리가 각진다. */}
       <View className="mt-md h-px bg-hairline" />
 
-      {/* 하단: 연결 여행 ↔ 출발점 변경(등록됨만) */}
+      {/* 하단: 연결 여행 ↔ 출발점 해제(등록됨만) */}
       <View className="mt-md flex-row items-center justify-between gap-md">
         <Text className="flex-1 font-noto text-caption text-muted">
           {row.linkedTripLabel}
@@ -135,7 +135,7 @@ function MyStayRow({
             onPress={() => onPressToggle(row)}
             className="flex-row items-center gap-[2px]"
           >
-            <Text className="font-noto text-label text-body">출발점 변경</Text>
+            <Text className="font-noto text-label text-body">출발점 해제</Text>
             <ChevronRightGlyph size={15} color={MUTED} />
           </Pressable>
         ) : null}

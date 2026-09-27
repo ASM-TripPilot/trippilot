@@ -6,7 +6,7 @@ import { Text, View } from 'react-native';
  * 구분선을 넣는다. testID 는 그룹 계수용 공통 `settings-group`.
  *
  * 라벨은 별도 Text 라 `within(group).getByText('위치정보')` 가 그룹 라벨을 완전일치로 잡는다
- * (행 라벨 '위치정보 수집 동의'와 갈린다 — 문자열 매처는 완전일치).
+ * (행 라벨 'GPS 이동경로 기록'과 갈린다 — 문자열 매처는 완전일치).
  */
 export function SettingsGroup({
   label,

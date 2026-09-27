@@ -86,6 +86,7 @@
 - `src/__tests__/mapSheetShellStructure.test.ts`  →  (export 없음)
 - `src/__tests__/monthGridSharedPromotion.test.ts`  →  (export 없음)
 - `src/__tests__/myStaysStructure.test.ts`  →  (export 없음)
+- `src/__tests__/nicknameMyPageSync.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/nicknameSharedPromotion.test.ts`  →  (export 없음)
 - `src/__tests__/noDeadHandlers.test.ts`  →  (export 없음)
 - `src/__tests__/noMswInStaticGraph.test.ts`  →  (export 없음)
@@ -100,6 +101,7 @@
 - `src/__tests__/onboardingPrefStructure.test.ts`  →  (export 없음)
 - `src/__tests__/onboardingStructure.test.ts`  →  (export 없음)
 - `src/__tests__/openapiContract.test.ts`  →  (export 없음)
+- `src/__tests__/otaSourceDictionary.test.ts`  →  (export 없음)
 - `src/__tests__/pagesLayerStructure.test.ts`  →  (export 없음)
 - `src/__tests__/periodEditSheetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/personalizationStructure.test.ts`  →  (export 없음)
@@ -675,7 +677,7 @@
 - `src/features/settings/ui/cardShadow.ts`  →  CARD_SHADOW · SEGMENT_SHADOW
 
 ## src/features/stay/config/
-- `src/features/stay/config/affiliateNotice.ts`  →  otaDisplayName · otaConfirmLabel
+- `src/features/stay/config/affiliateNotice.ts`  →  isOtaSource · otaDisplayName · otaConfirmLabel
 - `src/features/stay/config/amenityIcons.ts`  →  resolveAmenityIcon
 
 ## src/features/stay/model/
@@ -1416,4 +1418,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 978개 파일
+합계 980개 파일
