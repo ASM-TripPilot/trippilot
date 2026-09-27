@@ -187,8 +187,13 @@ class VisitSlotDisplaySchema(BoundaryModel):
     """
 
     poi_id: str
-    start_at: dt.time
-    end_at: dt.time
+    # 시각 nullable (TRIP-827) — **null = 시간 미정(무배치)**. FE 가 "시간대 설정"
+    # 칩으로 그리는 그 슬롯이다: 백엔드가 저장은 하는데 이 스키마가 required 라
+    # 검증·편집 왕복에서 422 였다. 반쪽(둘 중 하나만 null)은 미정이 아니라 기형이라
+    # 경계에서 거절한다. **산출 쪽은 항상 채워진다**(INV-2 — 어셈블리 검증값만
+    # 사영되며, 테스트가 산출 null 을 잠근다).
+    start_at: dt.time | None = None
+    end_at: dt.time | None = None
     ends_next_day: bool = False
     distance_range: str | None = None
     is_fixed: bool = False
@@ -448,8 +453,12 @@ class ReplanSlotSchema(BoundaryModel):
     """
 
     poi_id: str = Field(min_length=1)
-    start_at: dt.time
-    end_at: dt.time
+    # 시각 nullable (TRIP-827) — 시간 미정 슬롯도 원 일정의 일부다. 재계획에서
+    # 비고정 슬롯의 시각은 아무도 읽지 않으므로(후보 합류는 poi_id, 컨텍스트는
+    # placement_reason) null 이 자연스럽다. **is_fixed 인데 시각이 없으면 422** —
+    # 시각 없는 고정은 HC3 로 표현 불가다(ANYTIME 백스톱과 같은 규칙).
+    start_at: dt.time | None = None
+    end_at: dt.time | None = None
     is_fixed: bool = False
     ends_next_day: bool = False
     placement_reason: str | None = None  # visit_slot.placement_reason

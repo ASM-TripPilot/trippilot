@@ -679,14 +679,39 @@ def _render_change(change: RepairChange) -> str:
 
 
 def _solution_from_payload(
-    payload: schemas.ItineraryPayload, schedule_id: ScheduleId, tz: timezone
+    payload: schemas.ItineraryPayload, schedule_id: ScheduleId, tz: timezone,
+    *, untimed: str,
 ) -> ItinerarySolution:
-    """ItineraryPayload → 도메인 해. 도메인 불변식 위반(역순 슬롯 등)은 ValueError→422."""
+    """ItineraryPayload → 도메인 해. 도메인 불변식 위반(역순 슬롯 등)은 ValueError→422.
+
+    `untimed` — **시간 미정 슬롯**(start_at·end_at 둘 다 null, TRIP-827) 정책.
+    기본값이 없는 것은 의도다: 새 호출자는 자기 정책을 말해야 한다.
+    - "skip":   무배치로 취급해 도메인 해에서 뺀다. 시각 주장이 없으니 시간
+                검증(HC)의 대상이 아니다 — validate·explanations 용.
+    - "reject": 명시 422. **산출을 되돌려주는 경계**(repair·edit)용 — 여기서
+                건너뛰면 응답 일정에서 사용자 저장 슬롯이 조용히 사라진다.
+                시간 미정 슬롯의 배치는 별건이다(미지원을 숨기지 않는다).
+    반쪽 시각(둘 중 하나만 null)은 정책과 무관하게 기형이라 항상 422 다.
+    """
     days: list[DaySolution] = []
     for day_schema in payload.days:
         slots: list[VisitSlot] = []
         day_fixed: list[FixedBlock] = []
         for slot_schema in day_schema.slots:
+            if (slot_schema.start_at is None) != (slot_schema.end_at is None):
+                raise ValueError(
+                    f"반쪽 시각 슬롯: {slot_schema.poi_id} — start_at·end_at 은 "
+                    "둘 다 있거나 둘 다 null 이어야 한다")
+            if slot_schema.start_at is None:
+                if slot_schema.is_fixed:
+                    raise ValueError(
+                        f"시각 없는 고정 슬롯: {slot_schema.poi_id} — "
+                        "시간 미정은 고정(HC3)으로 표현 불가")
+                if untimed == "reject":
+                    raise ValueError(
+                        f"시간 미정 슬롯: {slot_schema.poi_id} — 이 경계는 배치된 "
+                        "슬롯만 받는다(배치는 미지원). 빼고 보내라")
+                continue  # skip — 무배치. 시각 주장이 없으니 검증 대상이 아니다
             start = datetime.combine(day_schema.date, slot_schema.start_at, tzinfo=tz)
             end_date = (day_schema.date + timedelta(days=1)
                         if slot_schema.ends_next_day else day_schema.date)
@@ -913,6 +938,11 @@ def _replan_fixed_blocks(
     for slot in request.current_slots:
         if not slot.is_fixed or slot.poi_id in seen:
             continue
+        if slot.start_at is None or slot.end_at is None:
+            # 시각 없는 고정은 HC3 로 표현 불가 — ANYTIME 백스톱과 같은 규칙(422).
+            # 조용히 비고정 취급하면 사용자가 고정한 곳이 움직인다(INV-4).
+            raise ValueError(
+                f"시각 없는 고정 슬롯: {slot.poi_id} — 시간 미정은 고정으로 표현 불가")
         seen.add(slot.poi_id)
         blocks.append(FixedBlock(
             poi_id=PoiId(slot.poi_id),
@@ -1126,7 +1156,8 @@ class WiredItineraryOrchestrator:
         self, request: schemas.ValidateItineraryRequest
     ) -> WiredValidateOutcome:
         solution, problem, poi_index, unverified = self._reconstruct(
-            request.itinerary, request.request_meta
+            request.itinerary, request.request_meta,
+            untimed="skip",  # 미정 슬롯은 시각 주장이 없다 — 배치분만 검증
         )
         facade = self._assembly_provider.for_pool(poi_index)
         return WiredValidateOutcome(
@@ -1139,7 +1170,8 @@ class WiredItineraryOrchestrator:
 
     def repair(self, request: schemas.RepairItineraryRequest) -> WiredRepairOutcome:
         solution, problem, poi_index, unverified = self._reconstruct(
-            request.itinerary, request.request_meta
+            request.itinerary, request.request_meta,
+            untimed="reject",  # 수리 결과가 곧 응답 일정 — 건너뛰면 저장 슬롯 소실
         )
         facade = self._assembly_provider.for_pool(poi_index)
         result = facade.repair(
@@ -1153,12 +1185,14 @@ class WiredItineraryOrchestrator:
         )
 
     def _reconstruct(
-        self, payload: schemas.ItineraryPayload, meta: schemas.RequestMetaSchema
+        self, payload: schemas.ItineraryPayload, meta: schemas.RequestMetaSchema,
+        *, untimed: str,
     ) -> tuple[
         ItinerarySolution, ItineraryProblem, dict[PoiId, Poi],
         tuple[WiredUnverifiedSlot, ...],
     ]:
-        solution = _solution_from_payload(payload, ScheduleId(meta.request_id), self._tz)
+        solution = _solution_from_payload(
+            payload, ScheduleId(meta.request_id), self._tz, untimed=untimed)
         problem = _problem_for(solution, self._tz)
         ids = frozenset(s.poi_id for day in solution.days for s in day.slots)
         # 미등록 POI는 인덱스에 없다 → HC1·HC2 미적용("정보 없음은 막지 않는다", c2 규칙).
@@ -1659,7 +1693,8 @@ class WiredItineraryOrchestrator:
         now = _tz_aware(meta.requested_at, self._tz)
         trace_id = TraceId(meta.request_id)
         solution = _solution_from_payload(
-            request.itinerary, ScheduleId(request.trip_id), self._tz)
+            request.itinerary, ScheduleId(request.trip_id), self._tz,
+            untimed="skip")  # 설명은 배치분 대상 — 미정 슬롯은 설명할 배치가 없다
         ids = frozenset(s.poi_id for day in solution.days for s in day.slots)
         # 차선책(TRIP-887) — payload 의 슬롯별 alternatives 를 (날짜, 슬롯 POI, 선택지 POI)로.
         # 좌표·풀 조립은 배치 POI 와 한 번의 재조회로 합친다.
@@ -1769,7 +1804,10 @@ class WiredItineraryOrchestrator:
         meta = request.request_meta
         now = _tz_aware(meta.requested_at, self._tz)
         # 편집은 확인 게이트·재타이밍이 따로 있어 미검증 목록을 소비하지 않는다
-        solution, _, poi_index, _ = self._reconstruct(request.itinerary, meta)
+        solution, _, poi_index, _ = self._reconstruct(
+            request.itinerary, meta,
+            untimed="reject",  # 편집 결과가 곧 응답 일정 — 건너뛰면 저장 슬롯 소실
+        )
         transport = _token_or(
             _TRANSPORT_TOKENS, request.transport_mode, TransportMode.PUBLIC)
         # 수집은 요구표 경유 (2026-09-16) — EDIT 행은 Place 하나뿐이지만, 풀 빌더
