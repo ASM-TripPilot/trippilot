@@ -4,9 +4,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MapView, type MapCenter, type MapPin } from '@/shared/map';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
+import { StateNotice } from '@/shared/ui/StateNotice';
 
 import { SpontaneousVisitButton } from './SpontaneousVisitButton';
-import { BackArrowGlyph, GpsOffGlyph, InfoCircleGlyph } from './RecordGlyphs';
+import {
+  BackArrowGlyph,
+  GpsOffGlyph,
+  InfoCircleGlyph,
+  VisitCheckUpcomingGlyph,
+} from './RecordGlyphs';
 import { VisitRecordCard, type VisitRecordCardVM } from './VisitRecordCard';
 
 /**
@@ -19,6 +25,10 @@ import { VisitRecordCard, type VisitRecordCardVM } from './VisitRecordCard';
  * 완료 방문 카드의 사진/메모는 페이지가 `renderCard` 로 실데이터 슬롯을 조립해 내려준다
  * (useVisitAttachments 는 훅이라 카드 map 안에서 못 부른다 → per-card 컨테이너). renderCard 가
  * 카드를 안 그리면(undefined) 정적 스캐폴딩 VisitRecordCard 로 폴백한다(프리뷰·빈 카드 무영향).
+ *
+ * TRIP-1021 — 방문 카드가 0장이면 부제 아래 별도 안내(`record-trip-empty`, 부제의 법 근거 문구를 덮지
+ * 않는다). 카드 뒤에는 페이지가 내린 계획 행(레코드 없는 그날 슬롯)을 그린다 — `VisitRecordCard` 가 아니다
+ * (그 카드는 레코드 id 로 [건너뜀]을 쏘는데 계획 행엔 id 가 없다). 수동 체크인 모드면 행에 "방문 체크".
  *
  * ★ 지도(MapView) 위에 인터랙티브 요소를 얹지 않는다(repo-traps 터치 흡수 함정). 방문 추가
  * 버튼·카드는 지도 **아래 flow 형제**다. 지도는 viewOnly 글랜스(제스처 없음).
@@ -36,6 +46,13 @@ export interface TripRecordsDayTab {
 export interface DayAttributionHeader {
   dayLabel: string;
   stayName?: string | null;
+}
+
+/** TRIP-1021 — 방문 레코드가 없는 그날 계획 슬롯 한 행(VisitRecordCard 재사용 금지 — 레코드 id 없음). */
+export interface RecordPlanRowVM {
+  slotKey: string;
+  poiId: string;
+  nameKo: string;
 }
 
 export interface TripRecordsScreenProps {
@@ -65,6 +82,14 @@ export interface TripRecordsScreenProps {
   manualCheckin?: boolean;
   /** TRIP-761 — UPCOMING 카드 "방문 체크" press 를 페이지로 올린다(arg = card.poiId → arrive MANUAL). */
   onPressManualCheck?: (poiId: string) => void;
+  /** TRIP-1021 — 계획 행(레코드 없는 슬롯). 미주입이면 행 없음. */
+  planRows?: RecordPlanRowVM[];
+  /** TRIP-1021 — 계획 행 "방문 체크"(수동 체크인 모드에서만 그린다) → arrive MANUAL + slotKey. */
+  onPressPlanCheck?: (row: RecordPlanRowVM) => void;
+  /** TRIP-1021 — 기록 조회 상태. 미주입 = 'ready'. loading 이면 빈 안내 없음, error 면 오류 표면. */
+  recordsStatus?: 'ready' | 'loading' | 'error';
+  /** TRIP-1021 — 오류 표면 [다시 시도] → 페이지가 기록 재조회. */
+  onPressRetryRecords?: () => void;
   onPressComplete: (visitCheckId: string) => void;
   onPressSkip: (visitCheckId: string) => void;
   /** 즉석 방문 추가 — 미주입이면 [방문 추가]를 그리지 않는다(TRIP-939, 장소 피커 배선 전). */
@@ -85,6 +110,10 @@ export function TripRecordsScreen({
   renderCard,
   manualCheckin,
   onPressManualCheck,
+  planRows = [],
+  onPressPlanCheck,
+  recordsStatus = 'ready',
+  onPressRetryRecords,
   onPressComplete,
   onPressSkip,
   onPressSpontaneous,
@@ -212,6 +241,32 @@ export function TripRecordsScreen({
           {noticeCopy ?? '오늘의 동선 · 방문한 곳을 사진과 메모로 남겨요'}
         </Text>
 
+        {recordsStatus === 'error' ? (
+          <StateNotice
+            testID="record-trip-error"
+            illustration={
+              <View className="h-[72px] w-[72px] rounded-full bg-surface-soft" />
+            }
+            title="기록을 불러오지 못했어요"
+            description="잠시 후 다시 시도해 주세요"
+            actions={[
+              {
+                testID: 'record-trip-error-retry',
+                label: '다시 시도',
+                variant: 'outline',
+                onPress: onPressRetryRecords,
+              },
+            ]}
+          />
+        ) : recordsStatus === 'ready' && cards.length === 0 ? (
+          <Text
+            testID="record-trip-empty"
+            className="w-full py-sm text-center text-label text-muted"
+          >
+            아직 방문 기록이 없어요
+          </Text>
+        ) : null}
+
         {/* 카드 목록 — 페이지가 renderCard 를 주면 그것으로(완료 카드=실데이터 사진/메모 슬롯),
             안 주거나 undefined 를 돌려주면 정적 스캐폴딩 VisitRecordCard 로 폴백한다. key 는 감싸는
             Fragment 가 쥔다 — 방문이 바뀌면 리마운트돼 MemoInline 초안이 새로 심긴다(seed-once). */}
@@ -227,6 +282,41 @@ export function TripRecordsScreen({
               />
             )}
           </Fragment>
+        ))}
+
+        {/* 계획 행 — Figma j01 manual-checkin 의 미방문 장소 행 모양(빈 원 + 이름 + "방문 체크" pill).
+            사진·메모 칸은 레코드가 생긴 뒤(방문 카드)에만 있다. */}
+        {planRows.map((row) => (
+          <View
+            key={row.slotKey}
+            testID={`record-trip-plan-row-${row.slotKey}`}
+            className="w-full gap-md rounded-card border border-hairline bg-canvas px-[15px] py-[14px]"
+          >
+            <View className="flex-row items-center gap-sm">
+              <VisitCheckUpcomingGlyph size={22} />
+              <Text className="font-noto-bold text-card-title text-ink">
+                {row.nameKo}
+              </Text>
+            </View>
+            {manualCheckin && onPressPlanCheck ? (
+              <View className="flex-row items-center gap-[10px]">
+                <Pressable
+                  testID={`record-trip-plan-check-${row.slotKey}`}
+                  accessibilityRole="button"
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  onPress={() => onPressPlanCheck(row)}
+                  className="flex-row items-center rounded-[8px] bg-primary px-[15px] py-sm"
+                >
+                  <Text className="font-noto-bold text-label text-white">
+                    방문 체크
+                  </Text>
+                </Pressable>
+                <Text className="text-caption text-muted">
+                  좌표 없이 장소 직접 선택
+                </Text>
+              </View>
+            ) : null}
+          </View>
         ))}
 
         {onPressSpontaneous ? (

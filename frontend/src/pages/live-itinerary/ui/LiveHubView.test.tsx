@@ -23,7 +23,8 @@ import { LiveHubView, type LiveHubSlot } from './LiveHubView';
  * 무엇을 보장하나:
  *  - 골격: 전면 지도(셸) 위 좌상단 뒤로가기 + 일자 칩, 시트 헤더 한 줄
  *    "부산 여행 · 2일차 · 6월 11일(목) · 5곳", 카드 5장, 우하단 연필 FAB(`execution-live-replan-fab`).
- *  - 부재: 탭바·세그먼트·방패 FAB·옛 헤더·지도 세그먼트·수동 [도착]·다음 길찾기·레일 시각 열.
+ *  - 부재: 탭바·세그먼트·방패 FAB·옛 헤더·지도 세그먼트·다음 길찾기·레일 시각 열. 수동 [도착]은
+ *    `onPressArrive` 를 받고 진행 중 슬롯이 없을 때만 예정 카드에 선다(TRIP-1021 HV9).
  *  - 배선: 뒤로·칩·[방문 완료] 가 콜백으로 이어진다. [사진]/[메모]는 운영 화면에 없다(TRIP-939 AC-6 —
  *    눌러도 "준비 중"만 뜨던 버튼 제거, 심사 2.1).
  *  - TRIP-747 수정 알약: 연필 FAB 는 이동하지 않고 제자리 토글이다 — 열면 × 얼굴 + 흰 알약 2개
@@ -185,7 +186,7 @@ describe('LiveHubView · HV1 골격 (AC-1)', () => {
 });
 
 describe('LiveHubView · HV2 부재 (AC-2)', () => {
-  it('탭바·세그먼트·방패 FAB·옛 헤더·지도 세그먼트·수동 [도착]·다음 길찾기·레일 시각이 없다', () => {
+  it('탭바·세그먼트·방패 FAB·옛 헤더·지도 세그먼트·수동 [도착](미주입)·다음 길찾기·레일 시각이 없다', () => {
     renderHub();
 
     // 짝 앵커 — 카드 5장이 실제로 있다(빈 렌더 공허 통과 차단, 02a ★5).
@@ -203,9 +204,10 @@ describe('LiveHubView · HV2 부재 (AC-2)', () => {
       'execution-arrive-next-distance',
     ];
     gone.forEach((testID) => expect(screen.queryByTestId(testID)).toBeNull());
-    expect(screen.queryAllByTestId(/^execution-arrive-manual-/)).toHaveLength(
-      0
-    );
+    // TRIP-1021 재조준 — 옛 `execution-arrive-manual-*` 는 사라진 이름이라 늘 0(공허). 새 [도착] 이름으로 센다.
+    expect(
+      screen.queryAllByTestId(/^execution-live-slot-arrive-/)
+    ).toHaveLength(0);
     expect(screen.queryAllByTestId(/^execution-live-segment-/)).toHaveLength(0);
     expect(
       screen.queryAllByTestId(/^execution-live-slot-distance-/)
@@ -958,5 +960,58 @@ describe('🔴 LiveHubView · TRIP-991 오버레이 접근성 (AC-1·AC-2·AC-4)
     );
     expect(screen.getByRole('button', { name: '1일차' })).not.toBeSelected();
     expect(screen.getByRole('button', { name: '3일차' })).not.toBeSelected();
+  });
+});
+
+// ── TRIP-1021 #059 · 예정 카드 수동 [도착] (AC-1·AC-3 · Seed Q1) ────────────────
+//
+// 뷰는 "오늘인가"를 모른다(페이지가 오늘 탭일 때만 `onPressArrive` 를 넘긴다). 뷰가 정하는 것은 하나 —
+// 진행 중(active) 슬롯이 있으면 어느 카드에도 [도착]을 주지 않는다(deriveVisitProgress 가 active 를
+// 하나만 인정해, 두 번째 도착은 앞 슬롯을 '예정'으로 되돌려 보이게 만든다 — 브리프 Q1).
+
+const ARRIVE_ANY = /^execution-live-slot-arrive-/;
+const arriveId = (poiId: string) =>
+  `execution-live-slot-arrive-${DATE}#${poiId}`;
+/** 진행 중을 뺀 픽스처 — museum 을 예정으로 돌린다(done 2 · upcoming 3). */
+const NO_ACTIVE: LiveHubSlot[] = SLOTS.map((entry) =>
+  entry.state === 'active' ? { ...entry, state: 'upcoming' as const } : entry
+);
+
+describe('LiveHubView · HV9 수동 [도착] (TRIP-1021 AC-1·AC-3 · Q1)', () => {
+  it('HV9a 진행 중이 없으면 예정 카드마다 [도착]이 서고, 누르면 그 poiId 로 1회 불린다', () => {
+    const onPressArrive = jest.fn();
+    const handlers = renderHub({ slots: NO_ACTIVE, onPressArrive });
+
+    // 예정 3장(museum·jeonpo·haeundae)에만 — done 2장에는 없다.
+    for (const poiId of ['museum', 'jeonpo', 'haeundae']) {
+      expect(screen.getByTestId(arriveId(poiId))).toBeOnTheScreen();
+    }
+    for (const poiId of ['gamcheon', 'gwangalli']) {
+      expect(screen.queryByTestId(arriveId(poiId))).toBeNull();
+    }
+
+    fireEvent.press(screen.getByTestId(arriveId('jeonpo')));
+
+    expect(onPressArrive).toHaveBeenCalledTimes(1);
+    expect(onPressArrive).toHaveBeenCalledWith('jeonpo');
+    expect(handlers.onPressComplete).not.toHaveBeenCalled();
+  });
+
+  it('HV9b 진행 중 슬롯이 있으면 onPressArrive 를 받아도 어느 카드에도 [도착]이 없다', () => {
+    renderHub({ onPressArrive: jest.fn() });
+
+    // 짝 앵커 — 카드 5장이 있고, 예정 카드도 실제로 있다(부재가 빈 렌더에서 공허하게 통과하지 않게).
+    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(5);
+    expect(
+      screen.getByTestId(`execution-live-slot-status-${DATE}#jeonpo`)
+    ).toHaveTextContent('예정');
+    expect(screen.queryAllByTestId(ARRIVE_ANY)).toHaveLength(0);
+  });
+
+  it('HV9c onPressArrive 를 안 넘기면 진행 중이 없어도 [도착]이 없다', () => {
+    renderHub({ slots: NO_ACTIVE });
+
+    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(5);
+    expect(screen.queryAllByTestId(ARRIVE_ANY)).toHaveLength(0);
   });
 });

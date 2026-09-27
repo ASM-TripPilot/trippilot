@@ -127,6 +127,8 @@ export interface LiveHubViewProps {
   slotBadgeLabel?: (slotKey: string) => string | null | undefined;
   /** TRIP-987 — 슬롯 이름·'›' 진입(i10). 미주입이면 어느 카드에도 '›' 가 없다(TRIP-939). */
   onPressSlotName?: (poiId: string) => void;
+  /** TRIP-1021 — 예정 카드 수동 [도착](arg = poiId). active 슬롯이 있으면 어느 카드에도 안 넘긴다. */
+  onPressArrive?: (poiId: string) => void;
 }
 
 // 레일 점의 행 상단 여백 — 점 크기(18·16·12)가 달라 Figma 에서 상태마다 다르다(rail 인스턴스 y 실측).
@@ -186,6 +188,7 @@ export function LiveHubView({
   triggerPillKey,
   slotBadgeLabel,
   onPressSlotName,
+  onPressArrive,
 }: LiveHubViewProps): ReactElement {
   // Provider 없는 렌더(jest)에서는 null — useSafeAreaInsets 는 throw 하므로 컨텍스트를 직접 읽는다.
   const safeTop = useContext(SafeAreaInsetsContext)?.top ?? 0;
@@ -211,6 +214,11 @@ export function LiveHubView({
     go();
   };
   const activeDate = days[activeDayIndex]?.date ?? '';
+  // 진행 중 슬롯이 있으면 어느 카드에도 [도착]을 안 준다(Q1) — 진행 도출은 active 를 하나만 인정해,
+  // 다른 곳에 도착하면 앞 슬롯이 '예정'으로 되돌아 보이고 거기서 다시 누르면 409 가 난다.
+  const arrive = slots.some(({ state }) => state === 'active')
+    ? undefined
+    : onPressArrive;
 
   const header = [
     tripTitle,
@@ -338,6 +346,9 @@ export function LiveHubView({
                       onPressSlotName
                         ? () => onPressSlotName(slot.poiId)
                         : undefined
+                    }
+                    onPressArrive={
+                      arrive ? () => arrive(slot.poiId) : undefined
                     }
                   />
                 </View>

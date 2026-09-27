@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import * as Location from 'expo-location';
 import { router } from 'expo-router';
 
+import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { formatDayLabel } from '@/entities/trip/lib/formatDayLabel';
 import { deriveStayAttribution } from '@/features/record/model/stayAttribution';
 import {
@@ -10,12 +11,16 @@ import {
   useTripRecords,
 } from '@/features/record/model/useTripRecords';
 import { useVisitCheck } from '@/features/record/model/useVisitCheck';
-import { TripRecordsScreen } from '@/features/record/ui/TripRecordsScreen';
+import {
+  TripRecordsScreen,
+  type RecordPlanRowVM,
+} from '@/features/record/ui/TripRecordsScreen';
 import type { VisitRecordCardVM } from '@/features/record/ui/VisitRecordCard';
 import { VisitRecordCardContainer } from '@/features/record/ui/VisitRecordCardContainer';
 import { useGetTripsTripIdItinerary } from '@/shared/api/generated/trips/trips';
 import { ArriveRequestSource } from '@/shared/api/generated/schemas';
 import type { MapCenter, MapPin } from '@/shared/map';
+import { seoulDate } from '@/shared/date/seoulDate';
 import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
 
 /**
@@ -34,6 +39,8 @@ export interface TripRecordsPageProps {
   tripId: string;
   /** 'YYYY-MM-DD' — 딥링크/캘린더(j07) 경유 진입 시 시작 일자. 없으면 첫 일자. */
   day?: string;
+  /** TRIP-1021 'YYYY-MM-DD' 오늘 주입 seam(LiveItineraryPage 선례) — 계획 행 "방문 체크"는 이 날 탭에서만. */
+  today?: string;
 }
 
 const DEFAULT_CENTER: MapCenter = { lat: 37.5665, lng: 126.978 };
@@ -46,6 +53,7 @@ const MANUAL_NOTICE =
 export function TripRecordsPage({
   tripId,
   day,
+  today = seoulDate(new Date()),
 }: TripRecordsPageProps): React.ReactElement {
   const itinerary = useGetTripsTripIdItinerary(tripId);
   const days = itinerary.data?.days ?? [];
@@ -128,6 +136,23 @@ export function TripRecordsPage({
     })
   );
 
+  // TRIP-1021 계획 행 — 그날 계획 슬롯 중 방문 레코드(슬롯 키 기준)가 없는 것. 방문이 있어도 남는다
+  // (Q4 — 첫 체크 뒤에도 다음 곳을 여기서 체크할 수 있게). 도착하면 낙관 레코드가 그 키를 채워 행이 빠진다.
+  // 그날 기록이 아직 안 왔으면 행을 안 그린다 — 이미 기록된 곳이 잠깐 행으로 떠 다시 체크(409)되지 않게.
+  const visitsOfDay = records.data?.visits;
+  const recordedSlotKeys = new Set(
+    (visitsOfDay ?? []).map((visit) => visit.slotKey)
+  );
+  const planRows: RecordPlanRowVM[] = visitsOfDay
+    ? activeSlots
+        .map((slot) => ({
+          slotKey: buildSlotKey(activeDay, slot.poiId),
+          poiId: slot.poiId,
+          nameKo: slot.nameKo ?? slot.poiId,
+        }))
+        .filter((row) => !recordedSlotKeys.has(row.slotKey))
+    : [];
+
   const handleComplete = (id: string): void => {
     void visitCheck.complete(id);
   };
@@ -136,8 +161,23 @@ export function TripRecordsPage({
   };
   // TRIP-761 "방문 체크"(arrive) — 새 HTTP 없이 기존 arrive 재사용. source=MANUAL 로 도착을 생성한다
   // (complete 아님 — 완료 게이트 불변). arrive 는 무효화 대신 응답 레코드로 낙관 삽입을 교체한다.
+  // TRIP-1021 — 슬롯 키를 반드시 싣는다. 비면 서버가 계획한 곳을 "계획에 없던 곳"(즉석 방문)으로 기록한다.
   const handleManualCheck = (poiId: string): void => {
-    void visitCheck.arrive({ source: ArriveRequestSource.MANUAL, poiId });
+    void visitCheck.arrive({
+      // pill 은 도착 전(UPCOMING) 카드에만 선다 — 같은 poi 의 다른 카드(즉석 방문 등)를 집지 않게 좁힌다.
+      slotKey:
+        cards.find((card) => card.poiId === poiId && card.arrivedAt === null)
+          ?.slotKey ?? null,
+      poiId,
+      source: ArriveRequestSource.MANUAL,
+    });
+  };
+  const handlePlanCheck = (row: RecordPlanRowVM): void => {
+    void visitCheck.arrive({
+      slotKey: row.slotKey,
+      poiId: row.poiId,
+      source: ArriveRequestSource.MANUAL,
+    });
   };
 
   return (
@@ -154,6 +194,16 @@ export function TripRecordsPage({
       manualCheckin={manualCheckin}
       noticeCopy={manualCheckin ? MANUAL_NOTICE : undefined}
       onPressManualCheck={handleManualCheck}
+      planRows={planRows}
+      // TRIP-1021 — 지난·미래 날에 체크하면 그날 슬롯에 오늘 도착이 찍힌다. 행은 두고 버튼만 뺀다.
+      onPressPlanCheck={activeDay === today ? handlePlanCheck : undefined}
+      // 빈 안내는 기록이 실제로 0건일 때만 — 로딩 중엔 아무것도, 실패면 오류 표면 + 재조회.
+      recordsStatus={
+        records.data ? 'ready' : records.isError ? 'error' : 'loading'
+      }
+      onPressRetryRecords={() => {
+        void records.refetch();
+      }}
       // 완료 방문 카드만 사진/메모 슬롯을 실데이터로 배선한다(useVisitAttachments 를 카드당 1회
       // 부르는 per-card 컨테이너). 미완료 카드는 undefined → 화면이 정적 스캐폴딩으로 폴백한다.
       renderCard={(card) =>

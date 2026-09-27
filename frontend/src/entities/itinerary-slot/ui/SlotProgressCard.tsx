@@ -26,7 +26,9 @@ import {
  *  - active   = 상태줄 "13:00 도착 · 지금 관람 중"(D4 고정) + [방문 완료]·[사진]·[메모].
  *               [사진]·[메모]는 `onPressSoon` 만 부른다 — "준비 중" 힌트의 열림 상태는 부모가 쥔다(BR-U4-38).
  *               `onPressSoon` 미주입이면 [사진]·[메모]·힌트를 그리지 않는다(TRIP-939 — 심사 2.1).
- *  - upcoming = "예정" 알약(트리거 영향이면 `badgeLabel` 분홍 배지, TRIP-748) + 상태줄 "15:00 도착 예정 · {영업시간}" + 누를 수 없는 아이콘 3개.
+ *  - upcoming = "예정" 알약(트리거 영향이면 `badgeLabel` 분홍 배지, TRIP-748) + 상태줄 "15:00 도착 예정 · {영업시간}"
+ *               (한 줄 말줄임, TRIP-1021) + 누를 수 없는 아이콘 3개. `onPressArrive` 를 받으면 같은 줄 오른쪽에
+ *               수동 [✓ 도착](TRIP-1021 — 자동 도착 TRIP-1018 보류 중 유일한 도착 경로). 누가 받을지는 허브가 정한다.
  *
  * 시각은 서버 `startAt` 을 자를 뿐(BR-U4-34). 각 leaf 는 값 하나 — 시각과 "방문" 은 형제 leaf 다.
  */
@@ -68,6 +70,8 @@ export interface SlotProgressCardProps {
   badgeLabel?: string;
   /** TRIP-987 — 이름·'›' 진입(i10). 미주입이면 이름은 누를 수 없는 글자이고 '›' 도 없다(TRIP-939). */
   onPressName?: () => void;
+  /** TRIP-1021 — upcoming 수동 [도착]. 미주입이면 그리지 않는다. */
+  onPressArrive?: () => void;
 }
 
 export function SlotProgressCard({
@@ -81,6 +85,7 @@ export function SlotProgressCard({
   soonHintVisible,
   badgeLabel,
   onPressName,
+  onPressArrive,
 }: SlotProgressCardProps): ReactElement {
   const slotKey = buildSlotKey(date, slot.poiId);
   const fieldId = (role: string): string =>
@@ -268,25 +273,41 @@ export function SlotProgressCard({
       {head}
       <Text
         testID={fieldId('time')}
+        numberOfLines={1}
         className="font-noto text-caption text-muted"
       >
         {hoursLabel === null
           ? `${hhmm} 도착 예정`
           : `${hhmm} 도착 예정 · ${hoursLabel}`}
       </Text>
-      {/* 도착은 지오펜스 자동이라 예정 카드의 아이콘은 모양만 있고 누를 수 없다. */}
-      <View className="flex-row gap-[6px]">
-        {disabledIcons.map(({ role, icon }) => (
+      {/* 예정 카드의 아이콘은 모양만 있고 누를 수 없다. 도착은 옆의 [도착](주입 시)으로만. */}
+      <View className="flex-row items-center justify-between">
+        <View className="flex-row gap-[6px]">
+          {disabledIcons.map(({ role, icon }) => (
+            <Pressable
+              key={role}
+              testID={fieldId(role)}
+              disabled
+              accessibilityState={{ disabled: true }}
+              className="h-[32px] w-[32px] items-center justify-center rounded-[8px] border border-hairline"
+            >
+              {icon}
+            </Pressable>
+          ))}
+        </View>
+        {onPressArrive ? (
           <Pressable
-            key={role}
-            testID={fieldId(role)}
-            disabled
-            accessibilityState={{ disabled: true }}
-            className="h-[32px] w-[32px] items-center justify-center rounded-[8px] border border-hairline"
+            testID={fieldId('arrive')}
+            accessibilityRole="button"
+            onPress={onPressArrive}
+            className="flex-row items-center gap-[4px] rounded-button bg-primary px-md py-[6px]"
           >
-            {icon}
+            <CheckGlyph size={15} tone="onPrimary" />
+            <Text className="font-noto-bold text-label font-bold text-on-primary">
+              도착
+            </Text>
           </Pressable>
-        ))}
+        ) : null}
       </View>
     </View>
   );
