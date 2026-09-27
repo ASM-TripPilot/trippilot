@@ -32,8 +32,9 @@ import { StayDetailPage } from './StayDetailPage';
  *  - 그 밖의 I·G·F 는 모두 **조회가 끝난 뒤**(`await ready()`) 누른다 — 로딩 얼굴엔 버튼이 없다(AC-4).
  *  - I4 (AC-8 · TRIP-781 AC-1) `stay-detail-book` → 제휴 고지 시트(l07 본문 정확 문구) 마운트.
  *  - I5 (AC-9) 시트 [이동] → 웹검색 URL 로 Linking.openURL(01b Q2 웹검색 폴백).
- *  - I6 (AC-10) 로그인 사용자 `stay-detail-addtotrip` → POST /saved-stays + 거점 편입 안내.
- *  - I7 (AC-10) 게스트 addtotrip → 요청 0 + /(auth)/login push(죽은 버튼 아님, BR-U1-03·55).
+ *  - R1 (TRIP-1041 AC-1) "일정에 추가" 버튼·담기 안내는 없다(QA #011 사용자 결정 — 구 I6·I7 폐기).
+ *  - R2 (TRIP-1041 AC-4) 로그인 하트 담기 = POST 1회 + 찬 하트(무회귀).
+ *  - R3 (TRIP-1041 AC-3 · 맹점 4) 같은 순간 두 번 누른 하트 = POST 1회, 첫 요청이 끝날 때까지 하트 잠김.
  *  - I8 (AC-11) 게스트 하트 → 요청 0 + /(auth)/login push.
  *  - I9~I12 (TRIP-781 AC-7·8) 이동 실패 → error 얼굴·재시도.
  *  - I13~I24 (TRIP-781 AC-9~11 → TRIP-778 AC-10 재작성) "다시 보지 않기"의 저장처가 기기(SecureStore)에서
@@ -329,7 +330,7 @@ describe('D1·D2 · 데이터는 서버 조회 GET /stays/{stayId} 하나에서 
 });
 
 describe('D3 · 로딩 얼굴 (TRIP-940 AC-4 · AC-11)', () => {
-  it('응답 전에는 로딩 얼굴과 뒤로 버튼만 있고, 하트·예약·일정 추가가 없다', async () => {
+  it('응답 전에는 로딩 얼굴과 뒤로 버튼만 있고, 하트·예약 버튼이 없다', async () => {
     // 준비: 응답을 멈춰 둔다.
     const release = holdDetail();
 
@@ -339,10 +340,9 @@ describe('D3 · 로딩 얼굴 (TRIP-940 AC-4 · AC-11)', () => {
     // 단언: 로딩 얼굴 + 그 안의 뒤로 버튼.
     const face = await screen.findByTestId('stay-detail-loading');
     expect(within(face).getByTestId('stay-detail-back')).toBeOnTheScreen();
-    // 단언: 조회가 끝나기 전엔 저장·예약·일정 추가가 일어날 수 없다(버튼 부재).
+    // 단언: 조회가 끝나기 전엔 저장·예약이 일어날 수 없다(버튼 부재).
     expect(screen.queryByTestId('stay-detail-save')).toBeNull();
     expect(screen.queryByTestId('stay-detail-book')).toBeNull();
-    expect(screen.queryByTestId('stay-detail-addtotrip')).toBeNull();
 
     // 정리: 멈춘 요청을 풀어 준다.
     release();
@@ -567,48 +567,142 @@ describe('I4·I5 · 예약하기 → 제휴 시트 → 이동 (AC-8 · AC-9)', (
   });
 });
 
-describe('I6·I7 · 일정에 추가 (AC-10)', () => {
-  it('I6 · 로그인 사용자 → POST /saved-stays + 거점 편입 안내', async () => {
-    setAccessToken('valid-access');
-    server.use(
-      http.post(`${BASE}/saved-stays`, () =>
-        HttpResponse.json(
-          {
-            savedStayId: 'new-1',
-            name: DETAIL.name,
-            coordConfirmed: false,
-            registerRoute: 'MAP_SEARCH',
-            externalSource: DETAIL.externalSource,
-            externalId: DETAIL.externalId,
-            lat: DETAIL.lat,
-            lng: DETAIL.lng,
-            createdAt: '2026-08-01T00:00:00Z',
-            updatedAt: '2026-08-01T00:00:00Z',
-          },
-          { status: 201 }
-        )
-      )
-    );
+/** 서버가 담기 성공 때 돌려주는 SavedStay(openapi 201 본문 — 필수 필드 전부). */
+function savedFromDetail(savedStayId: string) {
+  return {
+    savedStayId,
+    name: DETAIL.name,
+    coordConfirmed: false,
+    linkedTripIds: [],
+    registerRoute: 'MAP_SEARCH',
+    externalSource: DETAIL.externalSource,
+    externalId: DETAIL.externalId,
+    lat: DETAIL.lat,
+    lng: DETAIL.lng,
+    createdAt: '2026-08-01T00:00:00Z',
+    updatedAt: '2026-08-01T00:00:00Z',
+  };
+}
+
+/**
+ * 담은 목록 서버 흉내 — POST 가 성공하면 그 뒤의 GET /saved-stays 에 그 숙소가 들어 있다. 목의 두 응답이
+ * 서로 모순되면(담았다고 201 을 주고 목록엔 없음) 성공 후 재조회가 찬 하트를 빈 하트로 되돌려, 담기
+ * 무회귀를 잴 수 없다. `hold: true` 면 테스트가 돌려받은 함수를 부를 때까지 POST 응답을 멈춘다.
+ */
+function installSaveServer({ hold }: { hold: boolean }): () => void {
+  let release: () => void = () => {};
+  const gate = hold
+    ? new Promise<void>((resolve) => {
+        release = resolve;
+      })
+    : Promise.resolve();
+  const onServer: ReturnType<typeof savedFromDetail>[] = [];
+  server.use(
+    http.get(`${BASE}/saved-stays`, () => HttpResponse.json(onServer)),
+    http.post(`${BASE}/saved-stays`, async () => {
+      await gate;
+      const row = savedFromDetail(`new-${onServer.length + 1}`);
+      onServer.push(row);
+      return HttpResponse.json(row, { status: 201 });
+    })
+  );
+  return () => release();
+}
+
+describe('R1 · 일정에 추가·담기 안내가 없다 (TRIP-1041 AC-1 · QA #011)', () => {
+  it('ready 얼굴에 일정에 추가 버튼·아이콘·담기 안내가 없고, 예약 버튼과 제휴 고지는 남아 있다', async () => {
+    // 준비 — 로그인 사용자(안내가 뜰 수 있던 쪽)로 상세를 연다. 설정 조회(GET /me/settings)도 답하게 한다.
+    signInWithDismissed(false);
     render(<StayDetailPage />, { wrapper: createWrapper() });
+
+    // 실행 — 조회가 끝나 ready 얼굴이 뜰 때까지 기다린다.
     await ready();
 
-    fireEvent.press(screen.getByTestId('stay-detail-addtotrip'));
-
-    await waitFor(() => expect(hitCount('POST /api/v1/saved-stays')).toBe(1));
-    await waitFor(() =>
-      expect(screen.getByTestId('stay-detail-add-notice')).toBeOnTheScreen()
-    );
+    // 단언 ① (짝 앵커) — 하단 액션 자체는 그려졌다(빈 화면이라 없는 게 아니다).
+    expect(screen.getByTestId('stay-detail-book')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('stay-detail-affiliate-notice')
+    ).toBeOnTheScreen();
+    // 단언 ② — 지운 세 testID 가 없다.
+    expect(screen.queryByTestId('stay-detail-addtotrip')).toBeNull();
+    expect(screen.queryByTestId('stay-detail-addtotrip-icon')).toBeNull();
+    expect(screen.queryByTestId('stay-detail-add-notice')).toBeNull();
+    // 단언 ③ — 글자로도 남지 않았다(testID 만 떼고 버튼을 남기는 구현 차단).
+    expect(screen.queryByText('일정에 추가')).toBeNull();
   });
+});
 
-  it('I7 · 게스트 → 요청 0 + /(auth)/login push (죽은 버튼 아님)', async () => {
-    clearAccessToken();
+describe('R2 · 로그인 하트 담기는 그대로 (TRIP-1041 AC-4 · US-STAY-04 무회귀)', () => {
+  it('미담김 하트를 누르면 POST 가 한 번 나가고 찬 하트로 바뀐다', async () => {
+    // 준비
+    signInWithDismissed(false);
+    installSaveServer({ hold: false });
     render(<StayDetailPage />, { wrapper: createWrapper() });
     await ready();
+    // 앵커 — 시작은 빈 하트다.
+    expect(screen.getByTestId('stay-detail-save-outline')).toBeOnTheScreen();
 
-    fireEvent.press(screen.getByTestId('stay-detail-addtotrip'));
+    // 실행 — 누르고, 나간 요청이 끝나 화면에 반영될 때까지 기다린다.
+    fireEvent.press(screen.getByTestId('stay-detail-save'));
+    await waitFor(() =>
+      expect(hitCount('POST /api/v1/saved-stays')).toBeGreaterThanOrEqual(1)
+    );
+    await settleAll();
 
-    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/(auth)/login'));
-    expect(hitCount('POST /api/v1/saved-stays')).toBe(0);
+    // 단언
+    expect(hitCount('POST /api/v1/saved-stays')).toBe(1);
+    expect(screen.getByTestId('stay-detail-save-filled')).toBeOnTheScreen();
+  });
+});
+
+describe('R3 · 같은 순간 두 번 누른 하트 (TRIP-1041 AC-3 · 맹점 4 · QA #012)', () => {
+  /**
+   * "같은 프레임 두 탭"을 만드는 법: `fireEvent.press` 두 번을 **바깥 `act` 하나 안에** 넣는다. 안쪽
+   * act 는 바깥 act 가 끝날 때까지 화면을 다시 그리지 않으므로, 두 번째 누름도 첫 누름과 같은 화면
+   * (아직 disabled 가 아닌 하트, 아직 빈 하트)을 본다(02a §5 실검증). 따로따로 부르면 첫 누름 직후
+   * disabled 가 반영돼 두 번째가 무시되므로 연타를 재현하지 못한다.
+   */
+  it('POST 는 한 번뿐이고, 첫 요청이 끝날 때까지 하트는 잠겨 있으며, 끝나면 찬 하트가 된다', async () => {
+    // 준비 — 로그인 + 담기 응답을 멈춰 둔다.
+    signInWithDismissed(false);
+    const release = installSaveServer({ hold: true });
+    render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
+    const heart = screen.getByTestId('stay-detail-save');
+    // 앵커 — 누르기 전: 빈 하트, 눌 수 있음.
+    expect(screen.getByTestId('stay-detail-save-outline')).toBeOnTheScreen();
+    expect(heart).not.toBeDisabled();
+
+    // 실행 ① — 같은 순간 두 번 누른다.
+    await act(async () => {
+      fireEvent.press(heart);
+      fireEvent.press(heart);
+    });
+    await waitFor(() =>
+      expect(hitCount('POST /api/v1/saved-stays')).toBeGreaterThanOrEqual(1)
+    );
+    await act(async () => {});
+
+    // 단언 ① — 두 번째 누름은 요청을 만들지 않았다.
+    expect(hitCount('POST /api/v1/saved-stays')).toBe(1);
+    // 단언 ② (맹점 4) — 첫 요청이 아직 대기 중이면 하트는 계속 잠겨 있다. 두 번째 호출이 먼저 끝나
+    // 잠금을 풀어 버리면, 다음 누름이 "담김(임시 행)"을 보고 해제로 가서 saved-id-unknown 이 된다.
+    expect(screen.getByTestId('stay-detail-save')).toBeDisabled();
+
+    // 실행 ② — 잠긴 채로 한 번 더 누른다(무동작이어야 한다).
+    fireEvent.press(screen.getByTestId('stay-detail-save'));
+
+    // 실행 ③ — 응답을 풀어 준다.
+    release();
+    await settleAll();
+
+    // 단언 ③ — 끝나면 찬 하트 + 다시 누를 수 있다. 해제 요청은 한 번도 없었다.
+    expect(screen.getByTestId('stay-detail-save-filled')).toBeOnTheScreen();
+    expect(screen.getByTestId('stay-detail-save')).not.toBeDisabled();
+    expect(hitCount('POST /api/v1/saved-stays')).toBe(1);
+    expect(observedHits.filter((hit) => hit.startsWith('DELETE ')).length).toBe(
+      0
+    );
   });
 });
 

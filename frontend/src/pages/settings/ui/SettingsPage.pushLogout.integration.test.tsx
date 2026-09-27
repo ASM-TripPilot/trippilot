@@ -20,6 +20,10 @@ import {
 import * as Notifications from 'expo-notifications';
 import { http, HttpResponse } from 'msw';
 
+import {
+  publishGateDestination,
+  resetGateDestination,
+} from '@/features/auth/model/gateDestination';
 import { server } from '@/mocks/server';
 import { useGetMe } from '@/shared/api/generated/account/account';
 import { useGetMeLocationConsent } from '@/shared/api/generated/location/location';
@@ -30,7 +34,11 @@ import {
   usePatchMeSettings,
 } from '@/shared/api/generated/profile/profile';
 import { useGetMePersonalization } from '@/shared/api/generated/reflection/reflection';
-import { getAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import {
+  getAccessToken,
+  setAccessToken,
+  subscribeAccessToken,
+} from '@/shared/api/tokenManager';
 import { registerPushToken } from '@/shared/push';
 import { clearTokens, getTokens, saveTokens } from '@/shared/storage';
 import { primeExpoToken, primeOsPermission } from '@/test-support/pushOsFake';
@@ -43,8 +51,8 @@ import { SettingsPage } from '..';
  *
  * 무엇을 보장하나(사용자가 겪는 순서대로):
  *  - L1: 이번 세션에 등록한 토큰으로 `DELETE /me/push-tokens/{토큰}` 이 1번 나가고, 그 요청에 **아직 살아 있는
- *    로그인 헤더**(`Bearer access-A`)가 실린다 — 인증을 지우기 전에 출발했다는 뜻이다. 로그아웃은 종전대로
- *    `replace('/')` 로 끝난다.
+ *    로그인 헤더**(`Bearer access-A`)가 실린다 — 인증을 지우기 전에 출발했다는 뜻이다. 로그아웃은
+ *    `replace('/login')` 로 끝난다(TRIP-1034 — 게이트가 LOGIN 을 공개한 뒤).
  *  - L2: 해제가 500·404 로 실패해도 로그아웃은 똑같이 끝난다(토큰 삭제·이동·화면 생존).
  *  - L3: 해제 요청에 서버가 끝내 답하지 않아도 3초 상한 뒤 로그아웃이 끝난다(TRIP-938 "기다리지 않고 이동"과의
  *    절충, 01b Q3).
@@ -58,6 +66,9 @@ import { SettingsPage } from '..';
  * ★ 경로 토큰은 `decodeURIComponent` 로 비교한다(02a ★10) — 구현이 인코딩해도 틀린 게 아니다.
  *
  * ⚠️ jest 사각(6-b 실기): 실제 기기에서 토큰이 발급되는지(EAS projectId 선행), 서버 행이 실제로 지워지는지.
+ *
+ * ★ 가짜 게이트(TRIP-1034): 토큰이 비면 한 턴 뒤 LOGIN 을 공개해 SplashGate 의 재조회를 흉내 낸다.
+ *   이 파일의 관심사는 해제 순서라 타이밍 변주는 `SettingsPage.logout.integration.test.tsx` G5·G6 에 맡긴다.
  *
  * 3동작 뼈대: 준비=로그인 상태 + 이번 세션 등록 + MSW → 실행=[로그아웃] → 확인 → 단언=DELETE·헤더·이동.
  */
@@ -92,6 +103,15 @@ type DeleteSeen = {
 
 let deletes: DeleteSeen[] = [];
 let releaseGate: () => void = () => {};
+let stopFakeGate: () => void = () => {};
+
+/** 게이트의 재조회를 흉내 낸다 — 메모리 토큰이 비면 한 턴 뒤 LOGIN 을 공개한다. */
+function startFakeGate() {
+  stopFakeGate = subscribeAccessToken((token) => {
+    if (token !== null) return;
+    setTimeout(() => publishGateDestination('LOGIN'), 0);
+  });
+}
 
 /** POST(등록)는 늘 200, DELETE(해제)는 테스트가 정한 응답. */
 function servePushTokens(respondDelete: () => Response | Promise<Response>) {
@@ -163,17 +183,24 @@ beforeEach(async () => {
     mutate: jest.fn(),
     isPending: false,
   });
+
+  // 로그인 상태의 게이트는 HOME 이고, 토큰이 비면 LOGIN 을 공개한다.
+  publishGateDestination('HOME');
+  startFakeGate();
 });
 
 afterEach(() => {
   releaseGate();
   server.resetHandlers();
+  // 모듈 싱글턴 두 개(토큰 구독·게이트 목적지)를 파일 최상위에서 비운다.
+  stopFakeGate();
+  resetGateDestination();
 });
 
 afterAll(() => server.close());
 
 describe('TRIP-835 AC-5 · 로그아웃 → 이 기기 토큰 해제', () => {
-  it('L1 등록한 토큰으로 DELETE 1번, 로그인 헤더가 살아 있는 채로 출발하고, 로그아웃은 replace("/") 로 끝난다', async () => {
+  it('L1 등록한 토큰으로 DELETE 1번, 로그인 헤더가 살아 있는 채로 출발하고, 로그아웃은 replace("/login") 로 끝난다', async () => {
     // 준비
     servePushTokens(() => new HttpResponse(null, { status: 204 }));
     await registerThisSession('ExponentPushToken[L1]');
@@ -184,7 +211,7 @@ describe('TRIP-835 AC-5 · 로그아웃 → 이 기기 토큰 해제', () => {
 
     // 단언: 로그아웃이 끝났다.
     await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
-    expect(mockReplace).toHaveBeenCalledWith('/');
+    expect(mockReplace).toHaveBeenCalledWith('/login');
 
     // 단언(급소): 해제 요청 1번, 이번 세션 토큰, 인증을 지우기 전에 출발.
     expect(deletes).toHaveLength(1);
@@ -201,7 +228,7 @@ describe('TRIP-835 AC-5 · 로그아웃 → 이 기기 토큰 해제', () => {
     [500, 'ExponentPushToken[L2-500]'],
     [404, 'ExponentPushToken[L2-404]'],
   ])(
-    'L2 해제가 %i 로 실패해도 로그아웃은 끝난다(토큰 삭제 · replace("/") · 화면 생존)',
+    'L2 해제가 %i 로 실패해도 로그아웃은 끝난다(토큰 삭제 · replace("/login") · 화면 생존)',
     async (status, token) => {
       servePushTokens(() => new HttpResponse(null, { status }));
       await registerThisSession(token);
@@ -209,7 +236,7 @@ describe('TRIP-835 AC-5 · 로그아웃 → 이 기기 토큰 해제', () => {
 
       confirmLogout();
 
-      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/'));
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/login'));
       expect(mockReplace).toHaveBeenCalledTimes(1);
       await expect(getTokens()).resolves.toBeNull();
       expect(getAccessToken()).toBeNull();
@@ -233,7 +260,7 @@ describe('TRIP-835 AC-5 · 로그아웃 → 이 기기 토큰 해제', () => {
     confirmLogout();
 
     // 단언: 상한 안에서 로그아웃이 끝난다.
-    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/'), {
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/login'), {
       timeout: 5000,
     });
     expect(getAccessToken()).toBeNull();
@@ -268,7 +295,7 @@ describe('TRIP-835 AC-5 · 로그아웃 → 이 기기 토큰 해제', () => {
     releaseGate();
 
     // 단언: 그제야 로그아웃이 끝난다.
-    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/'));
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/login'));
     expect(getAccessToken()).toBeNull();
   });
 });

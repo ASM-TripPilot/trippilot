@@ -92,9 +92,9 @@ export interface MapSheetShellProps<T = unknown> {
    *  미전달이면 MapView 를 그리고, 그 MapView 가 로드 실패를 알리면 셸 기본 `MapFallbackBar` 로
    *  바꾼다(TRIP-919). */
   mapFallback?: ReactNode;
-  /** 지도 위 성공 배너 등 추가 카드(TRIP-801 D3·AC-1). 주면 day-chip 오버레이 **아래에** 추가로
+  /** 지도 위 추가 카드(TRIP-801 D3·AC-1). 주면 day-chip 오버레이 **아래에** 추가로
    *  렌더한다(`overlay` 교체와 달리 추가). 미전달=미렌더(후방호환). 타입 선언만 — 렌더 배선은
-   *  [구현] 몫(SH7b 가 red 로 강제). h16 확정 성공 배너가 이 슬롯을 쓴다. */
+   *  [구현] 몫(SH7b 가 red 로 강제). i01 트리거 알약(LiveHubView)이 이 슬롯을 쓴다. */
   mapCard?: ReactNode;
   /** 시트 body 리스트 슬롯(TRIP-798 묶음 C 가산) — 주면 body 를 `<BottomSheetFlatList>` 로 그려
    *  header·children 을 `ListHeaderComponent` 로 얹는다. 미전달=현행 `<BottomSheetScrollView>`
@@ -201,8 +201,8 @@ export function MapSheetShell<T = unknown>({
             onBack={onBack ?? (() => {})}
           />
         )}
-        {/* 성공 배너 등 추가 카드 — day-chip 오버레이 **아래에** 추가로 그린다(교체 아닌 추가 · D3).
-            미전달이면 아무것도 안 그린다(후방호환). h16 확정 성공 배너가 이 슬롯을 쓴다. */}
+        {/* 추가 카드 — day-chip 오버레이 **아래에** 추가로 그린다(교체 아닌 추가 · D3).
+            미전달이면 아무것도 안 그린다(후방호환). i01 트리거 알약이 이 슬롯을 쓴다. */}
         {mapCard}
       </SafeAreaView>
 

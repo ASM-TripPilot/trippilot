@@ -88,6 +88,10 @@ const EXPECTED_H = [
   // h07 부분 결과(셸 얼굴)로 개명. 라벨 코드가 h07 이라 안정 정렬이 mustvisit-time 뒤에 붙는다
   // (개명 엔트리는 PREVIEW_STATES 배열상 draft 구역이라 mustvisit-time 보다 늦다 · 02a ★10).
   'dev-preview-state-h07-generating-partial', // h07
+  // TRIP-1040: h07 부분 결과 5일(뒤 접기)·7일(앞 접기) 2키. 같은 h07 코드라 PREVIEW_STATES 배열에서
+  // h07-generating-partial **바로 뒤**에 이 순서(5d→7d)로 넣으면 안정 정렬이 partial→5d→7d→loading 을 낸다.
+  'dev-preview-state-h07-generating-partial-5d', // h07 (TRIP-1040 · 5일 뒤 접기)
+  'dev-preview-state-h07-generating-partial-7d', // h07 (TRIP-1040 · 7일 앞 접기)
   // TRIP-789: 옛 h09 itinerary-generating(생성 중 loading · GeneratingScreen)을 h07-generating-loading
   // 으로 개명. 라벨 코드가 h07 이라 안정 정렬이 partial 바로 뒤에 붙는다 — PREVIEW_STATES 배열에서 이
   // 항목(구 itinerary-generating)이 h07-generating-partial 보다 뒤 위치라 안정 정렬이 partial→loading
@@ -109,6 +113,10 @@ const EXPECTED_H = [
   // 그래야 안정 정렬이 이 순서를 낸다). 동시에 옛 h11 DraftScreen 초안 5키(default·stale-failed·
   // loading·empty·nopins)는 삭제돼 이 배열에서도 빠진다(band h 소비처 이동, 폴백 3키는 유지).
   'dev-preview-state-h08-draft-expanded', // h08 (TRIP-792 지도+시트 셸 펼침)
+  // TRIP-1039: h08 셸 폴백·일부 실패 2키. 같은 h08 코드라 PREVIEW_STATES 배열에서 expanded **직후**에 이 순서
+  // (fallback→stale-failed)로 넣으면 안정 정렬이 그대로 낸다(배열 위치=정렬 위치). candidate-sheet 보다 앞이다.
+  'dev-preview-state-h08-draft-fallback', // h08 (TRIP-1039 셸 폴백)
+  'dev-preview-state-h08-draft-stale-failed', // h08 (TRIP-1039 셸 일부 실패)
   // TRIP-793: h08 "다른 후보 시트"(정상·0건). 코드가 h08 이라 안정 정렬이 draft-expanded 바로 뒤에
   // 붙는다 — PREVIEW_STATES 배열에서 이 2키를 옛 slot-candidate-panel 블록 자리(h11-copick 뒤)에 넣어도
   // 코드가 h08 이라 정렬이 draft-* 뒤로 끌어올린다. 같은 h08 코드 4키는 배열 삽입 순서(collapsed→

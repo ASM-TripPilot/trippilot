@@ -5,6 +5,7 @@ import * as Linking from 'expo-linking';
 import { type ReactElement, useState } from 'react';
 import { Keyboard, Share } from 'react-native';
 
+import { waitForGateDestination } from '@/features/auth/model/gateDestination';
 import { usePreferenceStore } from '@/features/onboarding/model/preferenceStore';
 import { OSM_COPYRIGHT_URL } from '@/features/settings/model/dataAttribution';
 import { resolveExportSummary } from '@/features/settings/model/exportSummary';
@@ -226,16 +227,19 @@ export function SettingsPage(): ReactElement {
     await Share.share({ message: parts.join('\n\n') });
   };
 
-  // 로그아웃(TRIP-938): 토큰 삭제 → 이전 계정 캐시 비우기 → 게이트('/')에 인계. replace 라 뒤로가기로
-  // 설정에 못 돌아온다. 로그인 경로로 직접 가지 않는 이유 — (auth) 는 게이트가 재조회를 마쳐야 열린다.
+  // 로그아웃(TRIP-938·1034): 토큰 삭제 → 게이트가 LOGIN 을 공개할 때까지 대기 → 이전 계정 캐시 비우기 →
+  // 로그인으로 replace(뒤로가기로 설정에 못 돌아온다). 설정은 가드 밖이라 가드 전환이 옮겨 주지 않는다 —
+  // (auth) 는 게이트가 재조회를 마쳐야 열리고, 그 전의 이동은 무시돼 설정에 갇힌다(TRIP-1034).
+  // 캐시는 대기 뒤에 비운다 — 대기 중에 비우면 설정이 토큰 없이 재조회한다.
   // 푸시 토큰 해제를 먼저 기다린다(TRIP-835 AC-5) — 인증이 살아 있을 때 DELETE 가 닿아야 한다.
   // 해제는 실패를 삼키고 3초에서 끊으므로 로그아웃을 막지 않는다.
   const runLogout = async (): Promise<void> => {
     await unregisterStoredPushToken();
     await logout();
+    await waitForGateDestination('LOGIN');
     queryClient.clear();
     usePreferenceStore.getState().reset();
-    loadRouter()?.replace('/');
+    loadRouter()?.replace('/login');
   };
 
   return (

@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
+import { useRef } from 'react';
 
 import {
   deleteSavedStaysSavedStayId,
@@ -51,6 +52,8 @@ export function useSavedStays(deps: { isAuthed: boolean }) {
     query: { enabled: deps.isAuthed },
   });
   const listKey = getGetSavedStaysQueryKey();
+  // 같은 숙소의 진행 중 담기(stayKey → 그 요청의 결과). 렌더를 건너 유지돼야 해서 ref다.
+  const inFlightSaves = useRef(new Map<string, Promise<SavedStaysOutcome>>());
 
   // 담김 표시 키 목록 — 외부키(두 값 다 non-null)가 있는 담기 기록만 검색 카드와 매칭 가능하다
   // (핀·수동 등록은 외부키 null이라 어느 카드와도 매칭 안 됨). `enabled:false`는 새 요청만 막고
@@ -72,12 +75,42 @@ export function useSavedStays(deps: { isAuthed: boolean }) {
     void queryClient.invalidateQueries({ queryKey: listKey });
   }
 
+  // 멱등(TRIP-1041) — 인증 판정이 먼저다(캐시가 남은 게스트에게 saved가 새지 않게, BR-U1-03).
+  // 같은 숙소 담기가 진행 중이면 새 요청 없이 그 결과를 기다린다: 즉시 끝나면 화면의 pending이
+  // 첫 요청 도중에 풀린다. 진행 중이 아니면 렌더 사본(isSaved)이 아니라 지금 캐시를 읽고,
+  // 낙관 행도 담김으로 친다(findSavedStayId는 낙관 행에 null이라 여기 못 쓴다).
   async function save(item: StayItem): Promise<SavedStaysOutcome> {
     if (!deps.isAuthed) {
       return { kind: 'failed', reason: 'unauthenticated' };
     }
 
+    const key = stayKey(item);
+    const inFlight = inFlightSaves.current.get(key);
+    if (inFlight) {
+      return inFlight;
+    }
+
     const previous = queryClient.getQueryData<SavedStay[]>(listKey);
+    const alreadySaved = previous?.some(
+      (entry) =>
+        entry.externalSource === item.externalSource &&
+        entry.externalId === item.externalId
+    );
+    if (alreadySaved) {
+      return { kind: 'saved' };
+    }
+
+    const request = postSave(item, previous).finally(() => {
+      inFlightSaves.current.delete(key);
+    });
+    inFlightSaves.current.set(key, request);
+    return request;
+  }
+
+  async function postSave(
+    item: StayItem,
+    previous: SavedStay[] | undefined
+  ): Promise<SavedStaysOutcome> {
     const now = new Date().toISOString();
     queryClient.setQueryData<SavedStay[]>(listKey, [
       ...(previous ?? []),

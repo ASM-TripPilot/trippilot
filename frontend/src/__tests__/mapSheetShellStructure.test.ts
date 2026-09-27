@@ -142,14 +142,19 @@ describe('🔴 G1 · AC-1 배치 — 신규 9파일이 정본 경로에 실재',
 });
 
 describe('🔴 G2 · AC-4 INV-3 — 위젯 층에 소요시간 표기 0 (위젯 유일 그물)', () => {
-  it('widgets/map-sheet-shell 전 소스에 소요시간 0 + 커넥터 계산중 문구 긍정 짝', () => {
+  it('widgets/map-sheet-shell 전 소스에 소요시간 0 + 커넥터 "바로 옆" 문구 긍정 짝', () => {
     const sources = readScoped(SHELL_DIR);
 
-    // 긍정 앵커 — 모집단이 채워졌고 커넥터가 "이동 거리 계산 중"을 그린다(빈 dir 공허 통과 차단).
+    // 긍정 앵커 — 모집단이 채워졌고 커넥터가 0km 를 "바로 옆"으로 그린다(빈 dir 공허 통과 차단, TRIP-1054).
     expect(sources.length).toBeGreaterThanOrEqual(1);
+    expect(sources.some(({ source }) => source.includes('바로 옆'))).toBe(true);
+
+    // 부정 — 옛 거짓 신호 "이동 거리 계산 중"은 위젯 코드에서 사라졌다(주석은 stripComments 로 제외).
     expect(
-      sources.some(({ source }) => source.includes('이동 거리 계산 중'))
-    ).toBe(true);
+      sources
+        .filter(({ source }) => source.includes('이동 거리 계산 중'))
+        .map(({ file }) => file)
+    ).toEqual([]);
 
     // 부정 — 소요시간 표기 0(분·시간·소요). 위젯 층엔 다른 INV-3 스캔이 없다(02a ★8).
     const offenders = sources

@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
@@ -10,6 +10,7 @@ import {
   buildDraftPins,
   buildGenerationGauge,
   DRAFT_POLL_INTERVAL_MS,
+  foldGenerationGauge,
   formatDraftDayHeader,
   resolveDraftView,
   resolveFallbackNotice,
@@ -17,12 +18,8 @@ import {
 } from '@/features/itinerary/model/draftView';
 import type { GenerationDayState } from '@/features/itinerary/model/draftView';
 import { legDistance } from '@/features/itinerary/model/legDistance';
-import {
-  isGenerationRunning,
-  useGenerationBusy,
-} from '@/features/itinerary/model/useGenerationBusy';
+import { isGenerationRunning } from '@/features/itinerary/model/useGenerationBusy';
 import { DraftScreen } from '@/features/itinerary/ui/DraftScreen';
-import { GeneratingScreen } from '@/features/itinerary/ui/GeneratingScreen';
 import { GenerationFallbackScreen } from '@/features/itinerary/ui/GenerationFallbackScreen';
 import { AlertCircleGlyph } from '@/features/itinerary/ui/ItineraryGlyphs';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
@@ -32,15 +29,16 @@ import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripId,
   useGetTripsTripIdItinerary,
-  usePostTripsTripIdItinerary,
 } from '@/shared/api/generated/trips/trips';
 import { isNotFound } from '@/shared/api/isNotFound';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
 import { GenerationProgressCard } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
+import type { GenerationProgressCell } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
 import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
 import { SheetHeader } from '@/widgets/map-sheet-shell/ui/SheetHeader';
 
+import { DraftFallbackBanner } from './DraftFallbackBanner';
 import { SlotCandidatePanelContainer } from './SlotCandidatePanelContainer';
 
 /** 진행 게이지 셀 라벨의 상태부 — `{n}일차 {완성|생성 중|대기}`(한글 · AC-6). 위젯은 features 를
@@ -51,8 +49,11 @@ const GENERATION_STATUS_LABEL: Record<GenerationDayState, string> = {
   waiting: '대기',
 };
 
+/** 진행 카드 칸 상한 — 5일 이상 여행은 `…` 접기 칸 포함 4칸으로 접는다(TRIP-1040 결정 1). */
+const GAUGE_MAX_CELLS = 4;
+
 /**
- * h11 배선(TRIP-297) — 두 조회를 잇고, 2단계 생성을 폴링으로 잇고, 재생성을 보낸다.
+ * h11 배선(TRIP-297) — 두 조회를 잇고, 2단계 생성을 폴링으로 잇고, 재생성은 생성 화면으로 보낸다.
  *
  * 이 파일이 지는 책임 — 화면은 이 중 어느 것도 모른다:
  *  1. **탭의 출처는 여행 기간이다.** 서버는 첫날만 담긴 `PARTIAL` 을 먼저 주므로
@@ -81,17 +82,36 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   const [fallbackDismissed, setFallbackDismissed] = useState(false);
   // TRIP-1032 B — 이 여행이 생성 중일 때 재생성 전 확인이 떠 있나.
   const [confirmingInProgress, setConfirmingInProgress] = useState(false);
+  // TRIP-1038 C — 셸 폴백 안내 「처음부터 직접 짜기」의 비우기 확인이 떠 있나.
+  const [confirmingReset, setConfirmingReset] = useState(false);
+  // MANUAL 빈 일정 → 편집기 replace 를 한 번만(라우터 객체가 렌더마다 새로 와도 다시 부르지 않는다).
+  const manualRedirectedRef = useRef(false);
+  // TRIP-1037 — 재생성으로 생성 화면에 떠나는 중인가. `useState` 가 아니라 ref 인 이유: 같은 틱의 두 번째
+  // 탭은 다음 렌더 전에 들어와 상태로는 못 본다. 400ms `guardPress` 도 조회 await(수 초)를 못 덮는다.
+  // 이동 없이 끝나는 경로(모름·확정·MANUAL·확인 열기)에서는 풀어 다시 누를 수 있게 한다(AC-6).
+  const leavingRef = useRef(false);
+  // 조회를 기다리는 동안 사용자가 떠났나(5-b 경고-1). 홈·카드가 같은 일정 키를 들고 있으면 조회가 abort 되지
+  // 않고 도착하므로, 떠난 화면이 전역 라우터로 생성 화면을 불러 사용자를 끌고 가지 않게 await 뒤에 본다.
+  // 초기값 false + effect 에서 켜는 형태 — StrictMode 의 정리·재실행에도 값이 맞는다(PlanbRequestPage 선례).
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const itineraryQueryKey = getGetTripsTripIdItineraryQueryKey(tripId);
 
   /**
-   * 재생성 직전의 폴링 횟수. 상한은 "이번 생성에 대해 몇 번 물었나" 라서 절대값이 아니라
+   * 마운트 순간의 폴링 횟수. 상한은 "이번 생성에 대해 몇 번 물었나" 라서 절대값이 아니라
    * **기준선과의 차이**로 잰다.
    *
    * 왜 이렇게까지 하나: 카운터를 0으로 되감는 가장 쉬운 길(`resetQueries`)은 카운터와 함께
    * **마지막 성공 응답의 사본까지 버린다.** 그러면 재생성 뒤 재조회가 실패했을 때 이미 받아
    * 둔 목록이 통째로 사라지고 전면 실패 얼굴이 뜬다 — 이 사이클이 막으려던 바로 그 사고다
    * (AC-9 · AC-10 · INV-4). 기준선을 기억해 두면 캐시를 건드리지 않고도 다시 셀 수 있다.
+   * (재생성은 이제 생성 화면을 거쳐 이 화면을 **새로 마운트**하므로 그 마운트가 기준선을 다시 잡는다 — TRIP-1037.)
    *
    * `useRef` 는 **다시 그리지 않고 값만 들고 있는 상자**다 — 이 값은 화면에 안 보이고
    * 판정에만 쓰이므로 바뀌었다고 다시 그릴 이유가 없다.
@@ -128,7 +148,6 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
           : false,
     },
   });
-  const regenerate = usePostTripsTripIdItinerary();
 
   const days = itinerary.data?.days ?? [];
   const periodTabs = buildDraftDayTabs({
@@ -185,12 +204,9 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   const view = resolveDraftView({
     days,
     loading: trip.isPending || itinerary.isPending,
-    // 재생성 실패도 여기로 온다 — 실패하면 목록은 그대로인데 화면이 아무 말도 안 하게 된다
-    // (BR-U1-55 침묵 실패 금지).
     failed:
       trip.isError ||
       itinerary.isError ||
-      regenerate.isError ||
       itinerary.data?.generationState === 'FAILED' ||
       pollExhausted,
   });
@@ -199,6 +215,10 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   // 셸을 그린다(01b D1 · TRIP-790). features→widgets 상향 참조 금지라 이 조립은 pages(여기)에서만
   // 할 수 있다. 아래 shell 분기가 `view.kind==='listed' && isPartial` 에서 이 값을 쓴다.
   const isPartial = itinerary.data?.generationState === 'PARTIAL';
+  // TRIP-1038 A — 직접 짠 일정은 「AI 추천안」이 아니다. AI 생성 POST 로 가는 버튼을 주지 않는다(BR-U3-18).
+  const isManual = itinerary.data?.generationMode === 'MANUAL';
+  // MANUAL 인데 장소가 0곳이면 DraftScreen 빈 얼굴(「다시 만들기」=AI 생성)을 그리지 않고 편집기로 보낸다(01 Q1).
+  const redirectToManual = isManual && view.kind === 'empty';
 
   // 폴백·강등 배너 신호를 한 번만 접는다 — h08 라우팅 조건(깨끗한 COMPLETE 판별)과 DraftScreen
   // 프롭이 같은 값을 써야 갈라지지 않는다(같은 규칙이 두 층에서 다르게 진화하는 것 방지).
@@ -209,7 +229,7 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   });
 
   /**
-   * 재생성 — **확정 일정에는 어떤 경로로도 보내지 않는다.**
+   * 재생성 — 생성 화면(POST 는 그 화면이 마운트 때 1회)으로 보낸다. **확정 일정은 어떤 경로로도 보내지 않는다.**
    *
    * ⚠️ 조회가 끝나기 전에는 `status` 를 모른다(`data` 가 `undefined`). 그 상태로 보내면
    * 확정 일정에도 POST 가 나가 확정이 풀리고 동결됐던 poi_snapshot 참조가 사라진다 —
@@ -221,51 +241,64 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
    * 그 밖의 실패(5xx · 네트워크 끊김)는 "모른다" 라서 확정 일정일 수도 있다.
    */
   async function handleRetry(): Promise<void> {
+    // 잠금은 await **앞**에서 — 조회를 기다리는 동안 들어온 누름도 막는다.
+    if (leavingRef.current) return;
+    leavingRef.current = true;
+
     const settled =
       itinerary.data !== undefined
         ? itinerary
         : await itinerary.refetch({ cancelRefetch: false });
+    if (!mountedRef.current) return;
     const status = settled.data?.status;
 
-    if (status === undefined) {
-      if (!isNotFound(settled.error)) return;
-    } else if (status === 'CONFIRMED') {
+    const stop =
+      (status === undefined && !isNotFound(settled.error)) ||
+      status === 'CONFIRMED' ||
+      // TRIP-1038 — 직접 짠 일정을 AI 생성으로 덮지 않는다(방어 한 줄 — 셸·빈 얼굴은 이미 이 길을 안 준다).
+      settled.data?.generationMode === 'MANUAL';
+    if (stop) {
+      leavingRef.current = false;
       return;
     }
 
     // TRIP-1032 B — 이 여행이 생성 중이면 확인부터. 확인 뒤엔 cancel 을 따로 부르지 않는다 — 같은 여행
     // POST 가 서버에서 이전 세션을 닫는다(01b Q4).
     if (isGenerationRunning(settled.data)) {
+      leavingRef.current = false;
       setConfirmingInProgress(true);
       return;
     }
 
-    sendRegenerate();
+    goGenerating();
   }
 
-  /** 재생성 POST 1회 — 409 안내의 재시도도 이 함수로 **같은 요청**을 다시 보낸다(TRIP-1032). */
-  function sendRegenerate(): void {
-    regenerate.mutate(
-      { tripId },
-      {
-        onSuccess: () => {
-          // POST 응답은 day1 만 담긴 PARTIAL 이다 — 나머지는 GET 폴링이 받아 온다.
-          // ⚠️ 여기서 하는 일은 **카운터 되감기뿐이고 데이터는 건드리지 않는다.**
-          // 폴링 횟수는 Query 인스턴스의 상태라 `invalidateQueries` 로는 안 줄어드는데
-          // (실측: 4 → 5 로 이어진다), 줄이겠다고 `resetQueries` 를 쓰면 카운터와 함께
-          // **마지막 성공 응답 사본까지 버려서** 뒤이은 재조회 실패가 목록 전멸이 된다
-          // (실측: 카드 3장 → 0장 + 전면 실패 얼굴). 기준선을 옮겨 두고 무효화만 한다.
-          // 자체 타이머는 여전히 쓰지 않는다.
-          pollBaseline.current =
-            queryClient.getQueryState(itineraryQueryKey)?.dataUpdateCount ?? 0;
-          void queryClient.invalidateQueries({ queryKey: itineraryQueryKey });
-        },
-      }
-    );
+  /** 생성 화면으로 replace 1회 — 409 안내·실패·재시도는 그 화면이 진다(TRIP-1037 결정 A). */
+  function goGenerating(): void {
+    leavingRef.current = true;
+    router.replace({
+      pathname: '/trips/[tripId]/itinerary/generating',
+      params: { tripId, mode: 'FULLY_AI' },
+    });
   }
 
-  // TRIP-1032 A — 재생성 POST 가 409 GENERATION_IN_PROGRESS 면 일반 실패로 접지 않고 안내를 띄운다.
-  const busy = useGenerationBusy(regenerate.error, sendRegenerate);
+  // 수동 짜기 라우트(h19, fresh 없음 = 기존 일정 이어 편집). 인터스티셜·DraftScreen·MANUAL 셸 「편집하기」가
+  // 쓴다 — 셸 폴백 안내 링크는 비우기 확인을 거쳐 fresh 를 싣는다(TRIP-1038 C). 접미 있는 라우트라 객체형 push 로 `[tripId]` 를 해소한다(TRIP-483 AC-4).
+  function goManualPlan(): void {
+    router.push({
+      pathname: '/trips/[tripId]/itinerary/manual',
+      params: { tripId },
+    });
+  }
+
+  useEffect(() => {
+    if (!redirectToManual || manualRedirectedRef.current) return;
+    manualRedirectedRef.current = true;
+    router.replace({
+      pathname: '/trips/[tripId]/itinerary/manual',
+      params: { tripId },
+    });
+  }, [redirectToManual, router, tripId]);
 
   // 두 뒤로가기(h35 후보 0건 · h11 초안) 공통. 딥링크로 콜드 오픈돼 히스토리가 없으면
   // (`canGoBack()===false`) 침묵 no-op 이 아니라 홈으로 replace 한다(INV-4). `/(tabs)/itinerary`
@@ -277,17 +310,6 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
     } else {
       router.replace('/(tabs)');
     }
-  }
-
-  // TRIP-1032 A — 다른 여행 생성 중 안내. 생성 화면(h09)과 같은 얼굴을 쓴다(일반 실패·배너보다 앞선다).
-  if (busy !== null) {
-    return (
-      <GeneratingScreen
-        busy={{ ...busy, onWait: () => router.replace('/(tabs)') }}
-        onRetry={sendRegenerate}
-        onBackground={handleBack}
-      />
-    );
   }
 
   // TRIP-1032 B — 이 여행이 생성 중일 때 재생성 확인(새 오버레이 없이 인라인 얼굴 — jest 로 심판된다).
@@ -306,8 +328,9 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
                 label: '계속',
                 variant: 'filled',
                 onPress: () => {
+                  if (leavingRef.current) return;
                   setConfirmingInProgress(false);
-                  sendRegenerate();
+                  goGenerating();
                 },
               },
               {
@@ -323,6 +346,48 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
     );
   }
 
+  // TRIP-1038 C — 비우기 확인(진행 중 확인과 같은 얼굴 교체형 — 셸이 트리에서 빠진다). 취소하면
+  // `fallbackDismissed` 가 그대로라 인터스티셜이 아니라 셸로 돌아간다. 복원 화면이 없어 되돌릴 수 있다고 쓰지 않는다.
+  if (confirmingReset) {
+    return (
+      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+        <View className="flex-1 justify-center bg-canvas px-lg">
+          <StateNotice
+            testID="itinerary-draft-manual-reset-confirm"
+            icon={<AlertCircleGlyph />}
+            title="지금 일정을 비우고 새로 짤까요?"
+            description="담아 둔 장소가 모두 빠지고 빈 일정에서 시작해요"
+            actions={[
+              {
+                testID: 'itinerary-draft-manual-reset-confirm-continue',
+                label: '비우고 시작',
+                variant: 'filled',
+                onPress: () => {
+                  setConfirmingReset(false);
+                  router.push({
+                    pathname: '/trips/[tripId]/itinerary/manual',
+                    params: { tripId, fresh: '1' },
+                  });
+                },
+              },
+              {
+                testID: 'itinerary-draft-manual-reset-confirm-cancel',
+                label: '취소',
+                variant: 'outline',
+                onPress: () => setConfirmingReset(false),
+              },
+            ]}
+          />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // 편집기로 replace 하는 중 — DraftScreen 빈 얼굴의 AI 문구를 한 프레임도 그리지 않는다.
+  if (redirectToManual) {
+    return <View className="flex-1 bg-canvas" />;
+  }
+
   /**
    * h07 부분 결과(PARTIAL) — 2단계 생성이 진행 중이면 완성 얼굴 대신 **공용 지도+시트 셸**을 그린다
    * (01b D1). 진행 카드가 day-chip 자리를 대체하고(overlay), 하단 peek 시트에 이미 도착한 1일차
@@ -335,10 +400,18 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
     // 게이지 셀은 여기서 tabs 에서 도출해 `{status,label}` 로 매핑 주입한다 — 위젯은 features
     // (`buildGenerationGauge`)를 못 물어 상태를 못 도출한다(D4). 3셀의 출처는 `days.length` 가
     // 아니라 **여행 기간**(tabs)이라, day1 만 도착해도 셀은 여행 일수만큼 선다(01b D7 급소).
-    const cells = buildGenerationGauge(tabs).map((cell) => ({
-      status: cell.state,
-      label: `${cell.dayNumber}일차 ${GENERATION_STATUS_LABEL[cell.state]}`,
-    }));
+    // 5일 이상이면 칸 상한(4) 안으로 접는다 — 지금 만드는 일차는 항상 남는다(TRIP-1040).
+    const cells: GenerationProgressCell[] = foldGenerationGauge(
+      buildGenerationGauge(tabs),
+      GAUGE_MAX_CELLS
+    ).map((cell) =>
+      'kind' in cell
+        ? { status: 'more' }
+        : {
+            status: cell.state,
+            label: `${cell.dayNumber}일차 ${GENERATION_STATUS_LABEL[cell.state]}`,
+          }
+    );
     const selectedDayNumber =
       tabs.find((tab) => tab.date === selectedDate)?.dayNumber ?? 1;
     // 헤더 meta = "N곳 · X.Xkm". `legDistance` 는 "이동 3.5km" 를 주지만 헤더는 **km 부만** 쓴다
@@ -433,12 +506,7 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
           days.find((day) => day.date === selectedDate)?.slots ?? []
         )}
         onViewPlan={() => setFallbackDismissed(true)}
-        onManualPlan={() =>
-          router.push({
-            pathname: '/trips/[tripId]/itinerary/manual',
-            params: { tripId },
-          })
-        }
+        onManualPlan={goManualPlan}
         onRetry={() => void handleRetry()}
         onBack={handleBack}
       />
@@ -456,24 +524,26 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
     ) : null;
 
   /**
-   * h08 AI 추천안(깨끗한 COMPLETE) — 2단계 생성이 끝나고(!isPartial) 2차 실패도 폴백도 없는
-   * 목록이면 완성 얼굴을 **공용 지도+시트 셸**로 그린다(01b D1-R NARROW · TRIP-792). staleFailed·
-   * 폴백·강등이 곁에 붙은 목록은 이 조건에서 빠져 기존 `<DraftScreen>` 으로 가 배너를 유지한다
-   * (INV-4 — 셸엔 배너 슬롯이 없어 broad 로 보내면 배너가 삼켜진다). h07 셸과 달리 day-chip
-   * 오버레이(overlay 미전달=기본 렌더)와 하단 CTA 두 갈래(다시 짜기·확정하기)를 얹는다.
+   * h08 초안 셸 — 2단계 생성이 끝난(!isPartial) 목록이면 **공용 지도+시트 셸**로 그린다(TRIP-792).
+   * TRIP-1039 부터 폴백·강등·staleFailed 목록도 여기로 온다 — 그 사실은 시트 맨 위
+   * `DraftFallbackBanner` 가 계속 말한다(BR-U3-11 · INV-4). 폴백이면 제목이 「기본 일정」이고 안내 안에
+   * 「처음부터 직접 짜기」 링크가 붙는다(D2). h07 셸과 달리 day-chip 오버레이(overlay 미전달=기본 렌더)와
+   * 하단 CTA 두 갈래(다시 짜기·확정하기)를 얹는다.
    */
-  if (
-    view.kind === 'listed' &&
-    !isPartial &&
-    !view.staleFailed &&
-    fallbackNotice === null
-  ) {
+  if (view.kind === 'listed' && !isPartial) {
     const listedSlots =
       days.find((day) => day.date === selectedDate)?.slots ?? [];
     const listedPins = buildDraftPins(listedSlots);
-    // 일차 칩은 여행 기간(tabs)에서 나온다 — day1 만 도착한 순간에도 셀 수가 흔들리지 않는다(01b D7).
-    const dayChips = tabs.map((tab) => ({ label: `${tab.dayNumber}일차` }));
-    const selectedDayIndex = tabs.findIndex((tab) => tab.date === selectedDate);
+    // 일차 칩은 **데이터가 도착한 날만** 그린다(TRIP-1039 · 03b 경고-1). 셸 칩(`DayChip`)엔 disabled 가
+    // 없어 빈 날 칩을 두면 눌러도 `selectedDate` 가 되돌아가 무반응이 된다(staleFailed 로 2·3일차가 안 온 목록).
+    // 칩 번호는 이 줄인 목록 기준이라 index ↔ 날짜도 같은 배열로 찾는다. 라벨은 여행 기간의 일차 번호 그대로.
+    const chipTabs = tabs.filter((tab) => tab.hasData);
+    const dayChips = chipTabs.map((tab) => ({
+      label: `${tab.dayNumber}일차`,
+    }));
+    const selectedDayIndex = chipTabs.findIndex(
+      (tab) => tab.date === selectedDate
+    );
     const selectedDayNumber =
       tabs.find((tab) => tab.date === selectedDate)?.dayNumber ?? 1;
     // 헤더 meta = "N곳 · X.Xkm". `legDistance` 의 "이동 " 접두는 떼고 km 부만(D8 · INV-3).
@@ -495,22 +565,35 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
           pins={listedPins}
           days={dayChips}
           selectedDayIndex={selectedDayIndex < 0 ? 0 : selectedDayIndex}
-          onSelectDay={(index) => setPickedDate(tabs[index]?.date ?? null)}
+          onSelectDay={(index) => setPickedDate(chipTabs[index]?.date ?? null)}
           onBack={handleBack}
           header={
             <SheetHeader
-              title="AI 추천안"
+              title={
+                isManual
+                  ? '내 일정'
+                  : fallbackNotice !== null
+                    ? '기본 일정'
+                    : 'AI 추천안'
+              }
               dayLabel={`${selectedDayNumber}일차`}
               dateLabel={formatDraftDayHeader(selectedDate)}
               meta={meta}
             />
           }
           cta={[
-            {
-              label: '다시 짜기',
-              variant: 'outline',
-              onPress: () => void handleRetry(),
-            },
+            // MANUAL 은 편집기로 이어 편집(fresh 없음 — TRIP-601 가드 a 가 기존 일정을 지킨다 · POST 0).
+            isManual
+              ? {
+                  label: '편집하기',
+                  variant: 'outline',
+                  onPress: goManualPlan,
+                }
+              : {
+                  label: '다시 짜기',
+                  variant: 'outline',
+                  onPress: () => void handleRetry(),
+                },
             {
               label: '확정하기',
               variant: 'primary',
@@ -523,6 +606,16 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
           ]}
         >
           <View className="gap-md px-lg pb-2xl pt-xs">
+            <DraftFallbackBanner
+              fallback={fallbackNotice !== null}
+              staleFailed={view.staleFailed}
+              // 확정 일정은 비우지 않는다(확정 해제 API 없음) — 확인 없이 현행 이동만.
+              onManualPlan={
+                itinerary.data?.status === 'CONFIRMED'
+                  ? goManualPlan
+                  : () => setConfirmingReset(true)
+              }
+            />
             {listedSlots.flatMap((slot, index) => {
               const items: ReactElement[] = [
                 <SlotStopCard
@@ -598,14 +691,7 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
         onPressSlot={(slotKey) =>
           setEditingSlotKey((prev) => (prev === slotKey ? null : slotKey))
         }
-        // 「처음부터 직접」·「직접 고르기」 공통 목적지 — 수동 짜기 라우트(h19). 접미 있는 라우트라
-        // 객체형 push 로 `[tripId]` 를 해소한다(onComplete 선례 · TRIP-483 AC-4).
-        onManualPlan={() =>
-          router.push({
-            pathname: '/trips/[tripId]/itinerary/manual',
-            params: { tripId },
-          })
-        }
+        onManualPlan={goManualPlan}
       />
       {/* 스크롤 밖 뒤 형제라야 카드·하단 버튼 위에 그려진다(TRIP-983). */}
       {candidateSheet}

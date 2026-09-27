@@ -25,7 +25,11 @@ import { LoginPage } from './LoginPage';
  * flag 아래서 못 뜬다 — 02 §테스트 인프라 참조). 실 axios→MSW 경로가 핵심이므로 @/shared/api 는
  * 목킹하지 않는다(기존 57 유닛테스트의 jest.mock 과 무관 — 회귀 0).
  *
- * 3동작: 준비(시나리오 set) → 실행(소셜 버튼 press) → 단언(화면 전이 / 라우팅 / 요청 경로).
+ * TRIP-1035 — 이 버킷은 fake 인가라 **모든 버튼이 code 갈래**이고, code 갈래는 인가 전에 연령 시트를
+ * 띄운다. 그래서 버튼 press 뒤에는 늘 시트 확인 한 단계(`pressAndConfirmAge`)가 끼어든다. 시트 자체의
+ * 표시·취소·연령 제한은 LoginPage.codeAgeFirst.integration.test.tsx 가 본다.
+ *
+ * 3동작: 준비(시나리오 set) → 실행(소셜 버튼 press → 연령 시트 확인) → 단언(화면 전이 / 라우팅 / 요청 경로).
  */
 
 // @gorhom/bottom-sheet 은 통과 컴포넌트로 목킹(수동 목: __mocks__/@gorhom/bottom-sheet.tsx).
@@ -51,6 +55,8 @@ jest.mock('expo-router', () => {
 const mockReplace = require('expo-router').router.replace as jest.Mock;
 
 const socialRequests: string[] = [];
+// 요청 body — 리스너가 받은 요청은 본문을 한 번만 읽을 수 있어 clone() 으로 떠서 읽는다(비동기).
+const socialBodies: unknown[] = [];
 
 beforeAll(() => {
   process.env.EXPO_PUBLIC_AUTH_FAKE = '1';
@@ -59,12 +65,23 @@ beforeAll(() => {
     const pathname = new URL(request.url).pathname;
     if (pathname.includes('/auth/social/')) {
       socialRequests.push(pathname);
+      void request
+        .clone()
+        .json()
+        .then((body) => socialBodies.push(body));
     }
   });
 });
 
+/** 소셜 버튼을 누르고, 인가 전에 뜨는 연령 시트에서 "네, 확인했어요"를 누른다. */
+async function pressAndConfirmAge(buttonTestId: string) {
+  fireEvent.press(screen.getByTestId(buttonTestId));
+  fireEvent.press(await screen.findByTestId('auth-age-sheet-confirm'));
+}
+
 beforeEach(() => {
   socialRequests.length = 0;
+  socialBodies.length = 0;
   mockReplace.mockClear();
   // 가짜 인가 결과의 출처는 env 다(게이트①-2 계약 — makeAuthorize 는 @/mocks 를 참조하지 않는다).
   // 미지정 = success 이므로 매 테스트 전에 지워 기본값으로 되돌린다.
@@ -106,43 +123,47 @@ describe('LoginPage — 상태↔화면 배선 (AC-W-07)', () => {
 });
 
 describe('LoginPage — fake×MSW 결합 전이 (AC-W-09)', () => {
-  it('성공(기존) → 부트스트랩 재평가로 게이트("/")로 복귀한다 (AC-W-10 · D3)', async () => {
+  it('성공(기존) → 부트스트랩 재평가로 게이트("/")로 복귀한다 (AC-W-10 · D3 · TRIP-1035 AC-3)', async () => {
     setScenario('login-success-existing');
     render(<LoginPage />);
 
-    fireEvent.press(screen.getByTestId('auth-login-google'));
+    // 기존 가입자도 code 갈래면 같은 시트를 거친다 — 서버는 기존 계정이면 선언을 읽지 않는다.
+    await pressAndConfirmAge('auth-login-google');
 
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/'));
     expect(socialRequests).toContain('/api/v1/auth/social/google');
   });
 
   /**
-   * TRIP-248 D3 · AC-13 의 화면 관측. 이전 판은 여기서 구글 버튼으로 연령확인 시트를 기대했는데,
-   * 그건 목이 신규 첫 요청에 200 을 주던 시절의 흐름이다. 실서버는 400 으로 거절하고, code
-   * 갈래(구글)는 인가코드가 이미 소진돼 재전송할 수 없으므로 이 칸에서는 error 로 남긴다(D0·D3).
-   *
-   * ⚠️ code 갈래 재인가를 붙이는 칸에서는 이 기대가 뒤집힌다(배너 → 시트). 영구 규칙이 아니다.
-   * 카카오(token 갈래)가 시트까지 가는 것은 LoginPage.ageGate.integration.test.tsx 가 본다.
+   * TRIP-1035 AC-2 — TRIP-248 D3·AC-13 의 화면 심판을 **뒤집은** 자리. 이전 판은 "신규 구글은 시트가
+   * 아니라 배너"였다: 인가코드가 첫 요청에서 소진돼, 400 뒤에 확인을 받아도 재전송할 수 없었기 때문이다.
+   * 이제는 인가 **전에** 묻고 첫 요청에 선언을 실으므로, 신규 구글 가입이 요청 한 번으로 끝난다.
+   * (선언 없이 보낸 code 요청의 400 이 error 라는 성질은 useSocialLogin.tokenPath.test.tsx 에 남는다.)
    */
-  it('신규 판정이라도 code 갈래(구글)는 시트가 아니라 에러 배너를 띄운다', async () => {
+  it('신규 구글 → 인가 전 시트에서 확인 → 선언을 실은 첫 요청 1회로 가입이 끝나 게이트로 간다', async () => {
+    // 준비 — 선언 없는 첫 요청이면 서버(목)가 400 을 주는 시나리오.
     setScenario('login-success-new');
     render(<LoginPage />);
 
-    fireEvent.press(screen.getByTestId('auth-login-google'));
+    // 실행
+    await pressAndConfirmAge('auth-login-google');
 
+    // 단언 — 요청이 **정확히 한 번**이다(400 뒤 재시도로 성공한 것이 아니다).
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/'));
+    expect(socialRequests).toEqual(['/api/v1/auth/social/google']);
     await waitFor(() =>
-      expect(screen.getByTestId('auth-login-error-banner')).toBeOnTheScreen()
+      expect(socialBodies[0]).toMatchObject({
+        ageConfirmation: { method: 'SELF_DECLARED' },
+      })
     );
-    // 완결 불가능한 흐름(확인 후 반드시 401)으로 사용자를 끌고 가지 않는다.
-    expect(screen.queryByTestId('auth-age-sheet')).toBeNull();
-    expect(mockReplace).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('auth-login-error-banner')).toBeNull();
   });
 
   it('401 인증 실패 → 에러 배너(auth-login-error-banner)를 보여준다', async () => {
     setScenario('login-error-auth');
     render(<LoginPage />);
 
-    fireEvent.press(screen.getByTestId('auth-login-google'));
+    await pressAndConfirmAge('auth-login-google');
 
     await waitFor(() =>
       expect(screen.getByTestId('auth-login-error-banner')).toBeOnTheScreen()
@@ -150,13 +171,13 @@ describe('LoginPage — fake×MSW 결합 전이 (AC-W-09)', () => {
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
-  it('사용자 취소(cancel) → 취소 안내를 보여주고 서버를 호출하지 않는다', async () => {
+  it('시트 확인 뒤 브라우저에서 취소(cancel) → 취소 안내를 보여주고 서버를 호출하지 않는다 (TRIP-1035 AC-12)', async () => {
     // 인가 결과(cancel)는 env 로, 서버 거동은 시나리오로 — 출처가 분리됐다(게이트①-2 계약).
     process.env.EXPO_PUBLIC_AUTH_FAKE_OUTCOME = 'cancel';
     setScenario('login-success-existing');
     render(<LoginPage />);
 
-    fireEvent.press(screen.getByTestId('auth-login-google'));
+    await pressAndConfirmAge('auth-login-google');
 
     await waitFor(() =>
       expect(screen.getByTestId('auth-login-cancel-notice')).toBeOnTheScreen()
@@ -170,7 +191,7 @@ describe('LoginPage — 409 이메일 충돌·재로그인 (AC-W-09 · AC-W-16)'
     setScenario('login-email-conflict');
     render(<LoginPage />);
 
-    fireEvent.press(screen.getByTestId('auth-login-google'));
+    await pressAndConfirmAge('auth-login-google');
 
     await waitFor(() =>
       expect(screen.getByTestId('auth-login-conflict-sheet')).toBeOnTheScreen()
@@ -188,7 +209,7 @@ describe('LoginPage — 409 이메일 충돌·재로그인 (AC-W-09 · AC-W-16)'
     setScenario('login-email-conflict');
     render(<LoginPage />);
 
-    fireEvent.press(screen.getByTestId('auth-login-google'));
+    await pressAndConfirmAge('auth-login-google');
     await waitFor(() =>
       expect(
         screen.getByTestId('auth-login-conflict-continue')
@@ -196,6 +217,12 @@ describe('LoginPage — 409 이메일 충돌·재로그인 (AC-W-09 · AC-W-16)'
     );
 
     fireEvent.press(screen.getByTestId('auth-login-conflict-continue'));
+
+    // TRIP-1035 Q1 — 재로그인도 code 갈래(이 버킷의 fake)면 연령 시트를 **다시** 띄운다. 방금 구글에서
+    // 한 선언을 다른 제공자 계정으로 옮겨 싣지 않는다(결정 A). 확인 전에는 카카오 요청이 없다.
+    const confirmAgain = await screen.findByTestId('auth-age-sheet-confirm');
+    expect(socialRequests).toEqual(['/api/v1/auth/social/google']);
+    fireEvent.press(confirmAgain);
 
     // 재로그인 요청이 표시명이 아니라 코드 엔드포인트(/auth/social/kakao)로 나간다.
     await waitFor(() =>
@@ -219,7 +246,7 @@ describe('LoginPage — 네트워크 실패(백엔드 미기동) 관통 (AC-S6 �
     render(<LoginPage />);
 
     // 실행
-    fireEvent.press(screen.getByTestId('auth-login-google'));
+    await pressAndConfirmAge('auth-login-google');
 
     // 단언 — 지금은 NETWORK_ERROR 가 SocialLoginScreen 의 어느 분기에도 안 걸려 화면이
     // 침묵한다. waitFor 가 타임아웃으로 실패한다(도커 미기동 상황의 실제 재현).

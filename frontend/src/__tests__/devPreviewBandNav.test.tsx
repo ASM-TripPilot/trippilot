@@ -378,7 +378,15 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    (`region-picker-search`, band `d`) 추가로 169→170. test-designer 선반영(카운트 가드만) — implementer 는
     //    preview.tsx 에 그 1키만 추가하고 이 가드는 안 만진다(추가 전엔 169개라 red). 정확히 그 키인지는 아래
     //    'TRIP-1023 칸 B' describe 가 못박는다. devPreviewBandSort 는 밴드 h·l 만 잠가 band d 와 무관(오갱신 금지).
-    expect(PREVIEW_STATES).toHaveLength(170);
+    // ⚠️ TRIP-1039: h08 셸 폴백·일부 실패 2키(`h08-draft-fallback`·`h08-draft-stale-failed`, band `h`) 추가로
+    //    170→172. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 2키만 `h08-draft-expanded`
+    //    바로 뒤에 추가하고 이 가드는 안 만진다(추가 전엔 170개라 red). 정확히 그 키인지는 아래 'TRIP-1039'
+    //    describe 가 못박고, devPreviewBandSort 는 EXPECTED_H 에 expanded 직후 2줄을 넣었다.
+    // ⚠️ TRIP-1040: h07 부분 결과 5일·7일 접기 2키(`h07-generating-partial-5d`·`-7d`, band `h`) 추가로
+    //    172→174. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 2키만
+    //    `h07-generating-partial` 바로 뒤에 추가하고 이 가드는 안 만진다(추가 전엔 172개라 red). 정확히 그 키인지는
+    //    아래 'TRIP-1040' describe 가 못박고, devPreviewBandSort 는 EXPECTED_H 에 partial 직후 2줄을 넣었다.
+    expect(PREVIEW_STATES).toHaveLength(174);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -1535,5 +1543,135 @@ describe('🔴 TRIP-1032 · h07 다른 여행 생성 중 안내 프리뷰 2키 (
     expect(PREVIEW_STATES.map((state) => state.key)).toContain(
       'h07-generating-loading'
     );
+  });
+});
+
+// TRIP-1039 — 셸 폴백·일부 실패 얼굴은 Figma 전용 프레임이 없는 합성 얼굴이라(h08 `4221:2448` + NoticeBar
+// `4466:1794`) 6-b 육안 대조 자리가 이 두 키뿐이다. peek 에서 안내가 보이는지는 jest 사각(바텀시트 목)이다.
+describe('🔴 TRIP-1039 · h08 셸 폴백·일부 실패 프리뷰 2키 (band h)', () => {
+  it('h08-draft-fallback 은 기본 일정 셸 + 폴백 안내, h08-draft-stale-failed 는 AI 추천안 셸 + 일부 실패 안내를 그린다', () => {
+    // 준비 — 새 키 엔트리를 찾는다(red-first: preview.tsx 에 추가 전엔 없다).
+    const fallback = PREVIEW_STATES.find(
+      (state) => state.key === 'h08-draft-fallback'
+    );
+    const stale = PREVIEW_STATES.find(
+      (state) => state.key === 'h08-draft-stale-failed'
+    );
+    expect(fallback).toBeDefined();
+    expect(fallback?.band).toBe('h');
+    expect(fallback?.label).toBe('h08 · 기본 일정(폴백)');
+    expect(stale).toBeDefined();
+    expect(stale?.band).toBe('h');
+    expect(stale?.label).toBe('h08 · 일부 실패');
+
+    // 실행·단언 ① — 폴백 얼굴. leaf 마다 완전 일치(toHaveTextContent 문자열 = exact).
+    const first = render(<>{fallback?.render()}</>);
+    expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
+    expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
+      '기본 일정'
+    );
+    expect(
+      screen.getByTestId('itinerary-draft-fallback-banner')
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('itinerary-draft-reason-title')
+    ).toHaveTextContent('취향 반영 없이 만든 기본 일정이에요');
+    expect(
+      screen.getByTestId('itinerary-draft-reason-subtitle')
+    ).toHaveTextContent('장소 하나만 다른 후보로 바꿀 수도 있어요');
+    expect(screen.getByTestId('itinerary-draft-manual')).toHaveTextContent(
+      '처음부터 직접 짜기'
+    );
+    expect(screen.getByTestId('sheet-cta-button-0')).toHaveTextContent(
+      '다시 짜기'
+    );
+    expect(screen.getByTestId('sheet-cta-button-1')).toHaveTextContent(
+      '확정하기'
+    );
+    expect(screen.queryByTestId('itinerary-draft-stale-failed')).toBeNull();
+    first.unmount();
+
+    // 실행·단언 ② — 일부 실패 얼굴(폴백 아님).
+    render(<>{stale?.render()}</>);
+    expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
+    expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
+      'AI 추천안'
+    );
+    expect(
+      screen.getByTestId('itinerary-draft-stale-failed')
+    ).toHaveTextContent('일부 정보를 불러오지 못했어요');
+    expect(screen.queryByTestId('itinerary-draft-fallback-banner')).toBeNull();
+
+    // 이웃 앵커 — 기존 h08 셸 키가 딸려 사라지지 않았다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+    expect(keys).toContain('h08-draft-collapsed');
+    expect(keys).toContain('h08-draft-expanded');
+  });
+});
+
+// TRIP-1040 — 칸 상한·`…` 접기는 Figma 프레임이 없는 합성 얼굴이라(h07 `4309:1923` 은 3칸 1장뿐) 6-b 육안
+// 대조 자리가 이 두 키뿐이다. 실제 말줄임·겹침 해소·`…` 칸 폭은 픽셀이라 jest 사각이다.
+// ★ 칸 testID 의 n 은 칸 위치다 — 7일 키에서 `cell-2-done` 의 글자는 "3일차 완성"이다(일차는 글자로 읽는다).
+describe('🔴 TRIP-1040 · h07 부분 결과 5일·7일 접기 프리뷰 2키 (band h)', () => {
+  it('5일 키는 뒤 접기 [1·2·3일차, …], 7일 키는 앞 접기 […, 3·4·5일차] 를 그린다', () => {
+    // 준비 — 새 키 엔트리를 찾는다(red-first: preview.tsx 에 추가 전엔 없다).
+    const fiveDays = PREVIEW_STATES.find(
+      (state) => state.key === 'h07-generating-partial-5d'
+    );
+    const sevenDays = PREVIEW_STATES.find(
+      (state) => state.key === 'h07-generating-partial-7d'
+    );
+    expect(fiveDays).toBeDefined();
+    expect(fiveDays?.band).toBe('h');
+    expect(fiveDays?.label).toBe('h07 · 부분 결과 · 5일');
+    expect(sevenDays).toBeDefined();
+    expect(sevenDays?.band).toBe('h');
+    expect(sevenDays?.label).toBe('h07 · 부분 결과 · 7일');
+
+    const cellOrder = () =>
+      screen
+        .getAllByTestId(/^generation-gauge-cell-/)
+        .map((node) => node.props.testID);
+
+    // 실행·단언 ① — 5일·day1 도착: 뒤 접기.
+    const first = render(<>{fiveDays?.render()}</>);
+    expect(screen.getByTestId('generation-progress-card')).toBeOnTheScreen();
+    expect(cellOrder()).toEqual([
+      'generation-gauge-cell-1-done',
+      'generation-gauge-cell-2-active',
+      'generation-gauge-cell-3-waiting',
+      'generation-gauge-cell-more',
+    ]);
+    expect(
+      screen.getByTestId('generation-gauge-cell-1-done')
+    ).toHaveTextContent('1일차 완성');
+    expect(
+      screen.getByTestId('generation-gauge-cell-2-active')
+    ).toHaveTextContent('2일차 생성 중');
+    expect(
+      screen.getByTestId('generation-gauge-cell-3-waiting')
+    ).toHaveTextContent('3일차 대기');
+    expect(screen.getByTestId('generation-gauge-cell-more')).toHaveTextContent(
+      '…'
+    );
+    first.unmount();
+
+    // 실행·단언 ② — 7일·day1~4 도착: 앞 접기, 지금 만드는 5일차가 창 끝.
+    render(<>{sevenDays?.render()}</>);
+    expect(cellOrder()).toEqual([
+      'generation-gauge-cell-more',
+      'generation-gauge-cell-2-done',
+      'generation-gauge-cell-3-done',
+      'generation-gauge-cell-4-active',
+    ]);
+    expect(
+      screen.getByTestId('generation-gauge-cell-2-done')
+    ).toHaveTextContent('3일차 완성');
+    expect(
+      screen.getByTestId('generation-gauge-cell-3-done')
+    ).toHaveTextContent('4일차 완성');
+    expect(
+      screen.getByTestId('generation-gauge-cell-4-active')
+    ).toHaveTextContent('5일차 생성 중');
   });
 });

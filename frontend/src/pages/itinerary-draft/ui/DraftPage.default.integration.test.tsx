@@ -31,9 +31,11 @@ import { DraftPage } from './DraftPage';
  *  - 🔴 셸 얼굴이 뜬다 — 전면 지도(`map-root`) + 좌상단 day-chip 오버레이(`sheet-daychip-*`) +
  *    시트 헤더(`sheet-header-*`) + 슬롯 카드(`slot-stopcard-*`) + 하단 CTA 바(`sheet-cta-root`).
  *    옛 DraftScreen 앱바(`itinerary-draft-back`·`-retry`·`-complete`·일차 탭)는 사라진다(AC-1).
- *  - 🟢 **narrow 가 INV-4 를 지킨다** — staleFailed 응답은 셸이 아니라 DraftScreen(staleFailed 배너)으로,
- *    fallback 응답은 전용 인터스티셜로 간다(AC-1b · INV-4 · TRIP-791 — broad 로 회귀하면 셸이 삼켜 red).
- *  - 🔴 확정하기 → h14(index 라우트) push 완전일치 / 다시 짜기 → 재생성 POST 1건(AC-2).
+ *  - 🔴 **INV-4 는 셸 안에서 지킨다** — staleFailed 응답도 셸로 가고 셸 시트 안에 staleFailed 안내가 붙는다
+ *    (TRIP-1039 로 narrow 를 풀었다 — 옛 계약 "staleFailed → DraftScreen" 을 뒤집음). fallback 응답은 여전히
+ *    전용 인터스티셜이 먼저 잡는다(AC-1b · TRIP-791).
+ *  - 🔴 확정하기 → h14(index 라우트) push 완전일치 / 다시 짜기 → 생성 화면 replace 1회 · 초안 화면 POST 0
+ *    (AC-2 · TRIP-1037 플립 — POST 는 생성 화면이 마운트될 때 보낸다).
  *  - 🔴 전 슬롯 시각 칩(isFixed 무관, en-dash) · 제거요소 부재 · 헤더 "N곳 · X.Xkm" · INV-3 0 ·
  *    다른 후보 ›는 비고정만(AC-3~7).
  *
@@ -59,11 +61,13 @@ jest.mock('@/shared/storage', () => ({
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
+// TRIP-1037 — 다시 짜기가 생성 화면으로 replace 한다. 관찰하려고 익명 목을 이름 있는 목으로 승격한다.
+const mockReplace = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({
     push: mockPush,
     back: mockBack,
-    replace: jest.fn(),
+    replace: mockReplace,
     canGoBack: () => true,
   }),
 }));
@@ -210,6 +214,7 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 beforeEach(() => {
   mockPush.mockClear();
   mockBack.mockClear();
+  mockReplace.mockClear();
   postCount = 0;
   setAccessToken('valid-access');
   itineraryHandler = () =>
@@ -274,22 +279,25 @@ describe('🔴 A1 · AC-1 — 깨끗한 COMPLETE 면 h08 셸 얼굴이 뜬다 (D
   });
 });
 
-describe('A1b · AC-1b — narrow 가 INV-4 를 지킨다 (staleFailed → DraftScreen · fallback → 인터스티셜)', () => {
-  it('staleFailed(FAILED+슬롯) 응답은 셸이 아니라 DraftScreen(staleFailed 배너)로 간다 (선제 green)', async () => {
-    // 준비 — FAILED+day1 슬롯 → resolveDraftView: listed + staleFailed. narrow 는 이걸 셸에서 뺀다.
-    // TRIP-791 무영향: FAILED 는 fallbackNotice=null(isFallback=false)이라 인터스티셜로 안 가고
-    // 목록 곁 staleFailed 배너를 유지한다(stale-failed 배너는 폴백 배너와 별개, 삭제 대상 아님).
+describe('A1b · AC-1b — INV-4 는 셸 안에서 지킨다 (staleFailed → 셸 + 안내 · fallback → 인터스티셜)', () => {
+  it('🔴 staleFailed(FAILED+슬롯) 응답은 셸로 가고 시트 안에 staleFailed 안내가 붙는다 (TRIP-1039 플립)', async () => {
+    // 준비 — FAILED+day1 슬롯 → resolveDraftView: listed + staleFailed. TRIP-1039 가 셸 조건에서
+    // `!staleFailed` 를 뺐다 — 안내는 셸 시트 안으로 옮겨 간다(INV-4 — 안내 소실 금지).
     itineraryHandler = () =>
       HttpResponse.json(itinerary({ dayCount: 1, generationState: 'FAILED' }));
 
     renderPage();
 
-    // DraftScreen staleFailed 배너가 그대로 뜬다(INV-4 — 목록 곁 배너 소실 금지).
     expect(
-      await screen.findByTestId('itinerary-draft-stale-failed')
+      await screen.findByTestId(
+        'itinerary-draft-stale-failed',
+        {},
+        { timeout: 4000 }
+      )
     ).toBeOnTheScreen();
-    // ★ 셸이 아니다 — broad 로 회귀하면(이 응답까지 셸로 보내면) 여기가 red 로 잡는다.
-    expect(screen.queryByTestId('map-sheet-shell-root')).toBeNull();
+    // ★ 셸이다 — 옛 목록(DraftScreen 스크롤)으로 새면 여기가 red 로 잡는다.
+    expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
+    expect(screen.queryByTestId('itinerary-draft-scroll')).toBeNull();
   });
 
   it('🔴 fallback(DETERMINISTIC+isFallback) 응답은 셸도 DraftScreen 도 아닌 인터스티셜로 간다 (TRIP-791)', async () => {
@@ -339,17 +347,23 @@ describe('🔴 A2 · AC-2 — CTA 두 갈래 배선 (혼동 방지)', () => {
     expect(dest.params?.tripId).toBe(TRIP_ID);
   });
 
-  it('다시 짜기 press → 재생성 POST 가 한 건 나간다', async () => {
+  it('다시 짜기 press → 생성 화면으로 replace 1회(mode=FULLY_AI) · 초안 화면 POST 0 (TRIP-1037 플립)', async () => {
     renderPage();
     await screen.findByTestId('sheet-cta-root');
 
     // 순서 계약 — cta[0]=다시 짜기(outline).
     const retry = screen.getByTestId('sheet-cta-button-0');
     expect(retry).toHaveTextContent('다시 짜기');
-    const before = postCount;
     fireEvent.press(retry);
 
-    await waitFor(() => expect(postCount).toBe(before + 1));
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/itinerary/generating',
+      params: { tripId: TRIP_ID, mode: 'FULLY_AI' },
+    });
+    // POST 는 생성 화면 몫 — 흘려 보낸 뒤에도 초안 화면이 보낸 것은 0이다.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(postCount).toBe(0);
   });
 });
 

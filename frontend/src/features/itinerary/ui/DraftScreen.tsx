@@ -41,9 +41,8 @@ const COMPLETE_LABEL = '이대로 확정';
 const MANUAL_LABEL = '처음부터 직접';
 const PICK_MANUAL_LABEL = '직접 고르기';
 const REASON_TITLE = '취향·거리로 채운 추천안이에요';
-/** reason 블록 부제(정적 · 상태 비의존 — YAGNI). Figma "바꾸는 중"은 상호작용 중 캡처라 정지
- * 배너엔 부적합해 티켓 의도 문구로 둔다(01b 결정 5 · em-dash `—`). */
-const REASON_SUBTITLE = '슬롯 하나만 다른 후보로 바꿔도 좋고 — 나머지는 그대로';
+/** reason 블록 부제(정적 · 상태 비의존 — YAGNI). 내부 용어 「슬롯」 대신 「장소」(TRIP-1039 D3 · QA #033). */
+const REASON_SUBTITLE = '장소 하나만 다른 후보로 바꿀 수도 있어요';
 /** 초안을 새로 생성한다(POST 재호출). 확정된 일정에서는 확정이 풀리므로 비활성이다. */
 const RETRY_LABEL = '다시 만들기';
 const AI_BADGE = 'AI 추천';
@@ -362,6 +361,13 @@ export function DraftScreen({
               </Text>
             </Pressable>
           )}
+          {/* 두 텍스트 버튼이 한 줄로 붙어 읽히지 않게 가는 세로 막대로 가른다(TRIP-1039 · QA #033). */}
+          {onManualPlan === undefined ? null : (
+            <View
+              testID="itinerary-draft-header-divider"
+              className="mx-xs h-md w-px bg-hairline-strong"
+            />
+          )}
           <Pressable
             testID="itinerary-draft-retry"
             accessibilityRole="button"
@@ -396,7 +402,8 @@ export function DraftScreen({
           ) : null}
 
           <View className="w-full flex-row items-start gap-[10px]">
-            <CheckCircleGlyph />
+            {/* 폴백은 완료(✓)가 아니라 주의라 AlertCircle(TRIP-1039 · QA #033). */}
+            {fallback ? <AlertCircleGlyph /> : <CheckCircleGlyph />}
             <View className="flex-1 gap-[3px]">
               <Text
                 testID="itinerary-draft-reason-title"

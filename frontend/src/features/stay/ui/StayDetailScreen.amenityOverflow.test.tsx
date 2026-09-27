@@ -98,7 +98,6 @@ function renderWith(amenities: string[]): void {
       saved={false}
       onToggleSave={noop}
       onPressBook={noop}
-      onPressAddToTrip={noop}
       onPressBack={noop}
       onPressPhone={noop}
       onRetry={noop}

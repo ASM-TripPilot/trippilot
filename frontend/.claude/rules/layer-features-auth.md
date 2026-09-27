@@ -14,6 +14,7 @@ paths:
 | `src/features/auth/model/useBootstrapGate.ts` | 앱 시작 토큰 복원·잠정/확정 분기, 로그인 성공 구독 재조회 |
 | `src/features/auth/model/useSocialLogin.ts` | 소셜 로그인 흐름(PKCE·single-flight), code/token 엔드포인트 분기·신규가입 연령확인 분기 |
 | `src/features/auth/model/resolveBootstrapDestination.ts` | 순수 함수 — 부트스트랩 상태→목적지(onboardingCompleted 분기) |
+| `src/features/auth/model/gateDestination.ts` | 게이트 밖 화면(설정 등)이 부트스트랩 목적지를 기다릴 통로(TRIP-1034 신규) — 모듈 전역 pub/sub, `waitFor`는 지금 값이 이미 target이면 즉시 끝남(재생), `reset`은 테스트 전용 |
 | `src/features/auth/lib/makeAuthorize.ts` | authorize 팩토리(DI 주입점) — apple은 네이티브 SDK, kakao·naver는 env가 있으면 네이티브 SDK, 그 외는 expo-auth-session/fake. SDK 어댑터는 동적 import |
 | `src/features/auth/lib/kakaoAuthorize.ts` | 카카오 SDK를 import하는 유일 파일, 취소는 message 매칭 |
 | `src/features/auth/lib/naverAuthorize.ts` | 네이버 SDK를 import하는 유일 파일 |

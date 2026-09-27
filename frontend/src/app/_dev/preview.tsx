@@ -57,6 +57,8 @@ import { MAGAZINE_DEFAULT_PROPS } from '@/features/home/model/magazineFixtures';
 import { MagazineScreen } from '@/features/home/ui/MagazineScreen';
 import {
   buildDraftPins,
+  buildGenerationGauge,
+  foldGenerationGauge,
   formatCoPickDayHeader,
 } from '@/features/itinerary/model/draftView';
 import { type PlanDayTab } from '@/features/itinerary/model/planState';
@@ -81,6 +83,7 @@ import { CoPickStepper } from '@/widgets/copick-stepper/ui/CoPickStepper';
 import { GenerationDoneBar } from '@/widgets/generation-done-bar/ui/GenerationDoneBar';
 import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
 import { GenerationProgressCard } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
+import type { GenerationProgressCell } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
 import { MapFallbackBar } from '@/widgets/map-sheet-shell/ui/MapFallbackBar';
 import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
 import { SheetHeader } from '@/widgets/map-sheet-shell/ui/SheetHeader';
@@ -163,8 +166,8 @@ import {
   type StaySelectCandidate,
 } from '@/features/trip/ui/StaySelectSheet';
 import { LiveLocationView } from '@/pages/live-location/ui/LiveLocationView';
-import { ConfirmedBanner } from '@/pages/itinerary-plan/ui/ConfirmedBanner';
 import { NoBaseNoticeCard } from '@/pages/itinerary-plan/ui/NoBaseNoticeCard';
+import { DraftFallbackBanner } from '@/pages/itinerary-draft/ui/DraftFallbackBanner';
 import { EditorView } from '@/widgets/map-sheet-shell/ui/EditorView';
 import {
   LiveHubView,
@@ -676,6 +679,145 @@ const H08_PREVIEW_TIME_LABELS = [
 const H08_PREVIEW_CONNECTORS = ['차량 · 2.1km', '0.8km', '0.6km'];
 
 const H08_PREVIEW_DATE = '2026-06-10';
+
+// TRIP-1039 h08 셸 폴백·일부 실패 얼굴 — Figma 전용 프레임이 없어 `4221:2448` 셸 + NoticeBar `4466:1794`
+// 자리로 합성한다. 안내는 시트 맨 위(헤더 뒤·첫 카드 앞), peek 에서 보이는지는 6-b 실기 몫(바텀시트 목 사각).
+function renderH08DraftNoticeShell(options: {
+  fallback: boolean;
+  staleFailed: boolean;
+}): ReactElement {
+  const { fallback, staleFailed } = options;
+  return (
+    <MapSheetShell
+      center={{ lat: 35.1532, lng: 129.1188 }}
+      pins={buildDraftPins(H08_PREVIEW_SLOTS)}
+      days={[
+        { label: '1일차' },
+        { label: '2일차' },
+        { label: '3일차' },
+        { label: '4일차' },
+      ]}
+      selectedDayIndex={0}
+      onSelectDay={noop}
+      onBack={noop}
+      header={
+        <SheetHeader
+          title={fallback ? '기본 일정' : 'AI 추천안'}
+          dayLabel="1일차"
+          dateLabel="6월 10일(수)"
+          meta="4곳 · 3.5km"
+        />
+      }
+      cta={[
+        { label: '다시 짜기', variant: 'outline', onPress: noop },
+        { label: '확정하기', variant: 'primary', onPress: noop },
+      ]}
+    >
+      <View className="gap-md px-lg pb-2xl pt-xs">
+        <DraftFallbackBanner
+          fallback={fallback}
+          staleFailed={staleFailed}
+          onManualPlan={noop}
+        />
+        {H08_PREVIEW_SLOTS.flatMap((slot, index) => {
+          const items = [
+            <SlotStopCard
+              key={`card-${slot.poiId}`}
+              slot={slot}
+              date={H08_PREVIEW_DATE}
+              index={index}
+              timeLabel={H08_PREVIEW_TIME_LABELS[index]}
+              onPressAlt={noop}
+            />,
+          ];
+          if (index < H08_PREVIEW_CONNECTORS.length) {
+            items.push(
+              <DistanceConnector
+                key={`conn-${slot.poiId}`}
+                slotKey={buildSlotKey(H08_PREVIEW_DATE, slot.poiId)}
+                distanceRange={H08_PREVIEW_CONNECTORS[index]}
+              />
+            );
+          }
+          return items;
+        })}
+      </View>
+    </MapSheetShell>
+  );
+}
+
+// h07 부분 결과 셸 얼굴(TRIP-790) — 진행 카드 칸만 바꿔 3일(기본)·5일·7일 접기(TRIP-1040) 키가 공유한다.
+function renderH07PartialShell(cells: GenerationProgressCell[]): ReactElement {
+  return (
+    <MapSheetShell
+      center={{ lat: 35.1532, lng: 129.1188 }}
+      pins={buildDraftPins(H08_PREVIEW_SLOTS)}
+      overlay={<GenerationProgressCard cells={cells} onBack={noop} />}
+      header={
+        // 제목에 날짜를 합쳐 한 leaf 로(진행 카드 게이지 done 라벨 "1일차 완성" 과 겹치지 않게 —
+        // DraftPage 실배선과 같은 구조, A8-1b/A8-1e 근거). 프리뷰는 Figma 형식 "(수)" 로 세운다.
+        <SheetHeader
+          title="1일차 완성 · 6월 10일(수)"
+          dayLabel=""
+          dateLabel=""
+          meta="4곳 · 3.5km"
+        />
+      }
+    >
+      <View className="gap-md px-lg pb-2xl pt-xs">
+        {H08_PREVIEW_SLOTS.flatMap((slot, index) => {
+          const items = [
+            <SlotStopCard
+              key={`card-${slot.poiId}`}
+              slot={slot}
+              date={H08_PREVIEW_DATE}
+              index={index}
+              timeLabel={H08_PREVIEW_TIME_LABELS[index]}
+              onPressAlt={noop}
+            />,
+          ];
+          if (index < H08_PREVIEW_CONNECTORS.length) {
+            items.push(
+              <DistanceConnector
+                key={`conn-${slot.poiId}`}
+                slotKey={buildSlotKey(H08_PREVIEW_DATE, slot.poiId)}
+                distanceRange={H08_PREVIEW_CONNECTORS[index]}
+              />
+            );
+          }
+          return items;
+        })}
+      </View>
+    </MapSheetShell>
+  );
+}
+
+const GENERATION_STATUS_PREVIEW_LABEL = {
+  done: '완성',
+  active: '생성 중',
+  waiting: '대기',
+} as const;
+
+// TRIP-1040 5일·7일 접기 키 — 합성 tabs(앞 `arrived` 일 도착) → buildGenerationGauge → foldGenerationGauge(4)
+// 실제 도출 경로를 태운다(매핑은 DraftPage 와 같은 `{n}일차 {상태}`). Figma 대응 프레임 없는 합성 얼굴.
+function foldedPreviewCells(
+  totalDays: number,
+  arrived: number
+): GenerationProgressCell[] {
+  const tabs = Array.from({ length: totalDays }, (_, index) => ({
+    date: `2026-06-${String(10 + index).padStart(2, '0')}`,
+    dayNumber: index + 1,
+    hasData: index < arrived,
+  }));
+  return foldGenerationGauge(buildGenerationGauge(tabs), 4).map((cell) =>
+    'kind' in cell
+      ? { status: 'more' }
+      : {
+          status: cell.state,
+          label: `${cell.dayNumber}일차 ${GENERATION_STATUS_PREVIEW_LABEL[cell.state]}`,
+        }
+  );
+}
 
 // h11 같이 결과(CoPick 완료, TRIP-796) — 비고정 4 + 고정 숙소 1(21:00). 고정 슬롯은 단일 시각·부제·
 // 고정 배지, 비고정은 시각 범위 칩만(다른 후보 링크 없음). meta 는 비고정 4 → `4/4 골랐어요`.
@@ -2555,7 +2697,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         saved={true}
         onToggleSave={noop}
         onPressBook={noop}
-        onPressAddToTrip={noop}
         onPressBack={noop}
       />
     ),
@@ -2573,7 +2714,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         saved={false}
         onToggleSave={noop}
         onPressBook={noop}
-        onPressAddToTrip={noop}
       />
     ),
   },
@@ -2593,7 +2733,6 @@ export const PREVIEW_STATES: PreviewState[] = [
           saved={true}
           onToggleSave={noop}
           onPressBook={noop}
-          onPressAddToTrip={noop}
           onPressBack={noop}
         />
         <OtaChoiceSheet
@@ -4331,6 +4470,22 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   {
+    key: 'h08-draft-fallback',
+    band: 'h',
+    label: 'h08 · 기본 일정(폴백)',
+    login: null,
+    render: () =>
+      renderH08DraftNoticeShell({ fallback: true, staleFailed: false }),
+  },
+  {
+    key: 'h08-draft-stale-failed',
+    band: 'h',
+    label: 'h08 · 일부 실패',
+    login: null,
+    render: () =>
+      renderH08DraftNoticeShell({ fallback: false, staleFailed: true }),
+  },
+  {
     // h07 부분 결과(TRIP-790) — 옛 h10 DraftScreen 인라인 게이지를 공용 지도+시트 셸 얼굴로 개명·
     // 재작성. 진행 카드가 day-chip 자리를 대체(overlay)하고, peek 시트에 도착한 1일차 슬롯을 얹는다.
     // 게이지 3셀(day1 완성/day2 생성 중/day3 대기)은 3일 여행에서 도출되나 프리뷰는 표시값을 직접
@@ -4339,57 +4494,26 @@ export const PREVIEW_STATES: PreviewState[] = [
     band: 'h',
     label: 'h07 · 부분 결과',
     login: null,
-    render: () => (
-      <MapSheetShell
-        center={{ lat: 35.1532, lng: 129.1188 }}
-        pins={buildDraftPins(H08_PREVIEW_SLOTS)}
-        overlay={
-          <GenerationProgressCard
-            cells={[
-              { status: 'done', label: '1일차 완성' },
-              { status: 'active', label: '2일차 생성 중' },
-              { status: 'waiting', label: '3일차 대기' },
-            ]}
-            onBack={noop}
-          />
-        }
-        header={
-          // 제목에 날짜를 합쳐 한 leaf 로(진행 카드 게이지 done 라벨 "1일차 완성" 과 겹치지 않게 —
-          // DraftPage 실배선과 같은 구조, A8-1b/A8-1e 근거). 프리뷰는 Figma 형식 "(수)" 로 세운다.
-          <SheetHeader
-            title="1일차 완성 · 6월 10일(수)"
-            dayLabel=""
-            dateLabel=""
-            meta="4곳 · 3.5km"
-          />
-        }
-      >
-        <View className="gap-md px-lg pb-2xl pt-xs">
-          {H08_PREVIEW_SLOTS.flatMap((slot, index) => {
-            const items = [
-              <SlotStopCard
-                key={`card-${slot.poiId}`}
-                slot={slot}
-                date={H08_PREVIEW_DATE}
-                index={index}
-                timeLabel={H08_PREVIEW_TIME_LABELS[index]}
-                onPressAlt={noop}
-              />,
-            ];
-            if (index < H08_PREVIEW_CONNECTORS.length) {
-              items.push(
-                <DistanceConnector
-                  key={`conn-${slot.poiId}`}
-                  slotKey={buildSlotKey(H08_PREVIEW_DATE, slot.poiId)}
-                  distanceRange={H08_PREVIEW_CONNECTORS[index]}
-                />
-              );
-            }
-            return items;
-          })}
-        </View>
-      </MapSheetShell>
-    ),
+    render: () =>
+      renderH07PartialShell([
+        { status: 'done', label: '1일차 완성' },
+        { status: 'active', label: '2일차 생성 중' },
+        { status: 'waiting', label: '3일차 대기' },
+      ]),
+  },
+  {
+    key: 'h07-generating-partial-5d',
+    band: 'h',
+    label: 'h07 · 부분 결과 · 5일',
+    login: null,
+    render: () => renderH07PartialShell(foldedPreviewCells(5, 1)),
+  },
+  {
+    key: 'h07-generating-partial-7d',
+    band: 'h',
+    label: 'h07 · 부분 결과 · 7일',
+    login: null,
+    render: () => renderH07PartialShell(foldedPreviewCells(7, 4)),
   },
   // h11 같이 결과(CoPick 완료, TRIP-796) — Figma `4257:2148` 대조용. 공용 지도+시트 셸에 CoPick 5슬롯
   // (비고정 4 + 고정 숙소 1)을 얹는다. 고정 숙소는 단일 시각 `21:00`+부제+고정 배지, 비고정은 시각
@@ -4916,8 +5040,8 @@ export const PREVIEW_STATES: PreviewState[] = [
   },
   // h16 확정 일정(TRIP-801) — CONFIRMED 지도+시트 셸(옛 h34 TimelineScreen 읽기전용을 대체). 페이지
   // (ItineraryPlanPage)는 react-query·라우터가 필요해 프리뷰에서 직접 못 쓰므로 셸 조립을 축소해
-  // 그린다(h14 선례). 확정 얼굴의 신규 3요소(지도 위 성공 배너·이름 옆 휴관 경고·[일정 수정]·[공유하기]
-  // 2버튼)를 한 화면에서 육안 대조한다. 슬롯은 h11 결과 픽스처를 재사용한다.
+  // 그린다(h14 선례). 확정 얼굴의 요소(이름 옆 휴관 경고·[일정 수정]·[공유하기] 2버튼 — 성공 배너는
+  // TRIP-1047 로 확정 직후 토스트가 됐다)를 한 화면에서 육안 대조한다. 슬롯은 h11 결과 픽스처를 재사용한다.
   {
     key: 'h16-plan-confirmed',
     band: 'h',
@@ -4936,7 +5060,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         selectedDayIndex={0}
         onSelectDay={noop}
         onBack={noop}
-        mapCard={<ConfirmedBanner />}
         header={
           <SheetHeader
             title="부산 여행"
@@ -5817,7 +5940,6 @@ export const PREVIEW_STATES: PreviewState[] = [
           saved={true}
           onToggleSave={noop}
           onPressBook={noop}
-          onPressAddToTrip={noop}
           onPressBack={noop}
         />
         <OtaChoiceSheet
@@ -5844,7 +5966,6 @@ export const PREVIEW_STATES: PreviewState[] = [
           saved={true}
           onToggleSave={noop}
           onPressBook={noop}
-          onPressAddToTrip={noop}
           onPressBack={noop}
         />
         <OtaChoiceSheet

@@ -48,7 +48,7 @@ paths:
 | `src/app/trips/[tripId]/itinerary/draft.tsx` | AI 추천안 초안 — `@/pages/itinerary-draft` 얇은 래퍼 |
 | `src/app/trips/[tripId]/itinerary/index.tsx` | 완성 일정 — `tripId`만 읽어 `@/pages/itinerary-plan` 얇은 래퍼 |
 | `src/app/trips/[tripId]/itinerary/edit.tsx` | 일정 편집 — `@/pages/itinerary-edit` 얇은 래퍼 |
-| `src/app/trips/[tripId]/itinerary/manual/index.tsx` | 직접 짜기 — `@/pages/itinerary-manual` 얇은 래퍼 |
+| `src/app/trips/[tripId]/itinerary/manual/index.tsx` | 직접 짜기 — `@/pages/itinerary-manual` 얇은 래퍼. **`fresh` 쿼리 파라미터를 읽어 `startFresh={fresh === '1'}`로 내린다**(TRIP-1038, 값은 항상 문자열). `fresh`는 URL에 남아 재마운트(딥링크·상태 복원) 시 다시 비운다 — `firedRef`는 마운트 단위라 막지 못한다 |
 | `src/app/trips/[tripId]/itinerary/manual/add.tsx` | 장소 추가 — 같은 배럴 얇은 래퍼 |
 | `src/app/trips/[tripId]/live/index.tsx` | 여행 중 허브(i01) — `tripId`만 읽어 `@/pages/live-itinerary` 얇은 래퍼 |
 | `src/app/trips/[tripId]/live/place/[poiId].tsx` | 여행 중 장소 상세 — `tripId`·`poiId`만 읽어 `@/pages/live-place` 얇은 래퍼 |

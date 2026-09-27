@@ -36,11 +36,11 @@ import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
 import { isNotFound } from '@/shared/api/isNotFound';
 import { guardPress, openPressGuardWindow } from '@/shared/press/pressGuard';
 import { StateNotice, type StateNoticeAction } from '@/shared/ui/StateNotice';
+import { showToast } from '@/shared/ui/Toast';
 import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
 import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
 import { SheetHeader } from '@/widgets/map-sheet-shell/ui/SheetHeader';
 
-import { ConfirmedBanner } from './ConfirmedBanner';
 import { NoBaseNoticeCard } from './NoBaseNoticeCard';
 
 /**
@@ -119,6 +119,7 @@ function PlanFace({
  * 원인 단정 없이 재시도를 안내한다 — 정확한 문구는 심판이 아니라 비-공백만 잠근다(02a §8). */
 const CONFIRM_ERROR_NOTE =
   '일정을 확정하지 못했어요. 잠시 후 다시 시도해 주세요';
+const CONFIRMED_TOAST = '일정이 확정됐어요';
 
 /** h16 휴관 경고 문구(TRIP-801 D4 · 발명 display copy, 정본 부재). 트리거는 서버 신호
  * `openingHoursKnown === false` 이고, 문구는 이 상수다(요일 발명 금지 · 02a ★5). */
@@ -199,6 +200,11 @@ export function ItineraryPlanPage({
         onSuccess: (data) => {
           // TRIP-1013 #057 — CTA 가 '일정 수정'으로 바뀌는 순간 창을 다시 연다(응답이 400ms보다 늦어도 관통 차단).
           openPressGuardWindow();
+          // 확정 알림은 성공 사건에서 1회만(TRIP-1047) — 재진입·재렌더·409 재조회 정합에선 안 뜬다.
+          showToast({
+            message: CONFIRMED_TOAST,
+            testID: 'itinerary-confirmed-toast',
+          });
           // 응답이 곧 최신 Itinerary(CONFIRMED)라 조회 캐시에 직접 써넣는다 — 재조회 0회로
           // 읽기전용으로 전환된다. resetQueries/removeQueries 는 data 까지 버려 금지(02a ★3).
           queryClient.setQueryData(
@@ -282,7 +288,7 @@ export function ItineraryPlanPage({
   // listed(완성/확정) — 전면 지도 + 3스냅 시트 셸. CONFIRMED(h16)·PLANNED(h14) 둘 다 이 셸을 조립한다
   // (TRIP-801 계약 플립 — CONFIRMED 도 옛 `TimelineScreen` 대신 셸로 갈아끼웠다). `features→widgets`
   // 상향 참조 금지라 셸 조립은 페이지가 진다(h07/h08 `DraftPage`·h11 `CoPickCompletePage` 선례). 두
-  // 얼굴의 차이(성공 배너·"확정됨" meta 접두·휴관 경고·CTA 2버튼)는 `isConfirmed` 하나로 갈린다. 탭·
+  // 얼굴의 차이("확정됨" meta 접두·휴관 경고·CTA 2버튼)는 `isConfirmed` 하나로 갈린다. 탭·
   // 날짜·일차는 여행 기간(`buildDraftDayTabs`)에서 나오고 선택 날짜는 로컬 `activeDayIndex` 로 든다.
   const isConfirmed = itinerary.data?.status === 'CONFIRMED';
   const tabs = buildDraftDayTabs({
@@ -331,9 +337,6 @@ export function ItineraryPlanPage({
       selectedDayIndex={selectedDayIndex}
       onSelectDay={setActiveDayIndex}
       onBack={handleBack}
-      // 확정(h16)이면 지도 위 일차 칩 아래에 성공 배너를 얹는다(추가 슬롯 · TRIP-801 AC-1). 미확정은
-      // 미주입(후방호환).
-      mapCard={isConfirmed ? <ConfirmedBanner /> : undefined}
       header={
         <SheetHeader
           title={trip.data?.title ?? ''}

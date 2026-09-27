@@ -95,6 +95,13 @@ jest.mock('@/shared/api/generated/trips/trips', () => ({
   // TRIP-1022 — 빈 편집기 지도 중심을 거점 숙소로 잡으려고 페이지가 거점 조회를 부른다. 팩토리에 없는
   // 이름을 부르면 무관한 G-a1~V1 이 "is not a function" 으로 한꺼번에 죽는다(02a ★1).
   useGetTripsTripIdBases: () => mockBases,
+  // TRIP-1038 B — 「저장하고 확정하기」가 확정 POST 훅을 부른다(이 파일은 저장을 누르지 않는다 · 단언 무관 준비).
+  usePostTripsTripIdItineraryConfirm: () => ({
+    mutate: jest.fn(),
+    mutateAsync: jest.fn(),
+    isPending: false,
+    isError: false,
+  }),
 }));
 
 // TRIP-1022 — 거점 좌표는 등록 숙소(`SavedStay.lat/lng`)에 있다. 생성 모듈째 가로채야 `useSavedStays`
