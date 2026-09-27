@@ -56,7 +56,8 @@ const CASES = [
   { key: 'login-age-sheet', marker: 'auth-age-sheet' },
   { key: 'login-age-restriction', marker: 'auth-age-restriction' },
   // 온보딩 (TRIP-162) — TRIP-722: terms-agreed·nickname-taken 프리뷰 키 삭제(Figma 부재)
-  { key: 'onboarding-terms-default', marker: 'onboarding-terms-missing' },
+  // TRIP-1023 #002: 결정2 뒤 c06 기본 얼굴엔 미동의 안내가 없다 → 마커를 그 키에서만 그려지는 루트로 교체.
+  { key: 'onboarding-terms-default', marker: 'onboarding-terms-root' },
   { key: 'onboarding-nickname-default', marker: 'onboarding-nickname-helper' },
   { key: 'onboarding-location-default', marker: 'onboarding-location-purpose' },
   {
@@ -133,5 +134,21 @@ describe('dev 정적 프리뷰 — 11개 시각 상태', () => {
     CONDITIONAL_MARKERS.forEach((marker) => {
       expect(screen.queryByTestId(marker)).toBeNull();
     });
+  });
+});
+
+/**
+ * TRIP-1023 #002 (결정2) — 6-b 육안이 보는 "c06 · 기본"은 첫 진입 얼굴이어야 한다. 미동의 안내는
+ * '다음'을 탭했을 때만 뜨므로 기본 프리뷰에 안내가 그려져 있으면 결정과 다른 화면을 확인하게 된다.
+ * 안내가 뜬 얼굴은 같은 프리뷰에서 '다음'을 탭해 본다(새 프리뷰 키 없음 — 총량 가드 무관).
+ */
+describe('🔴 TRIP-1023 #002 — c06 기본 프리뷰는 미동의 안내가 없는 첫 진입 얼굴이다 (AC-A10)', () => {
+  it('onboarding-terms-default 를 고르면 약관 화면은 그려지고 미동의 안내는 없다', () => {
+    render(<DevPreview />);
+
+    selectState('onboarding-terms-default');
+
+    expect(screen.getByTestId('onboarding-terms-root')).toBeOnTheScreen();
+    expect(screen.queryByTestId('onboarding-terms-missing')).toBeNull();
   });
 });

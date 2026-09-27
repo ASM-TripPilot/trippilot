@@ -61,7 +61,7 @@ const FACES: Record<LiveLocationState, FaceConfig> = {
   manual: {
     rootTestID: 'live-location-manual',
     banner: '위치를 확인할 수 없어 현재 위치를 직접 입력해 주세요',
-    mapHint: '지도를 길게 눌러 원하는 위치를 지정할 수 있어요',
+    mapHint: '지도를 움직여 핀을 원하는 위치에 맞춰 주세요',
   },
   'permission-denied': {
     rootTestID: 'live-location-permission-denied',

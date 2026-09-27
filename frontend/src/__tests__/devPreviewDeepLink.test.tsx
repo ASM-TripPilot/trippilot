@@ -57,7 +57,8 @@ const MATRIX_CASES = [
   {
     frame: 'c06 default',
     state: 'onboarding-terms-default',
-    marker: 'onboarding-terms-missing',
+    // TRIP-1023 #002: 기본 얼굴엔 미동의 안내가 없다(결정2) → 그 상태에서만 그려지는 루트로 교체.
+    marker: 'onboarding-terms-root',
   },
   {
     frame: 'c07 default',

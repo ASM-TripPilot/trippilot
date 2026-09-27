@@ -1,5 +1,6 @@
 import { http, HttpResponse } from 'msw';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -285,4 +286,119 @@ describe('TermsPage — 약관 "보기" → 열람 라우트 (TRIP-937 AC-1 · U
       ).not.toBeChecked();
     }
   );
+});
+
+/**
+ * TRIP-1023 #002 (결정2 · US-ONB-02 예외 · BR-U0-10) — 실제 훅·실제 GET /terms 로 미동의 안내 시점을 잰다.
+ *
+ * 무엇을 보장하나: 서버 약관이 도착한 첫 화면엔 안내가 없고(A10), 비활성으로 보이는 '다음'을 누르면
+ * 그때 안내가 뜨되 서버 저장·이동은 0회다(A11). 한 번 뜬 안내는 체크에 따라 목록만 줄고, 전부 체크면
+ * 사라지며, 다시 풀면 곧바로 돌아온다(A12 · Q7). '다음'을 안 누르면 체크·해제를 해도 끝까지 안 뜬다(A13).
+ *
+ * "안 일어났다"(POST 0회)는 안내가 뜬 **뒤** 시간을 흘려서 센다(02a ★12).
+ */
+describe('🔴 TRIP-1023 #002 — 미동의 안내는 다음을 시도했을 때만 (AC-A10~A13)', () => {
+  const MISSING_NOTICE = '아직 동의하지 않은 필수 항목이에요';
+  let consentPosts = 0;
+
+  beforeEach(() => {
+    consentPosts = 0;
+    server.use(
+      http.post(`${BASE}/me/consents`, () => {
+        consentPosts += 1;
+        return new HttpResponse(null, { status: 200 });
+      })
+    );
+  });
+
+  async function settle(): Promise<void> {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+  }
+
+  it('A10 · 약관이 도착한 첫 화면엔 안내가 없고 다음은 접근성상 비활성이다', async () => {
+    await renderLoaded();
+
+    expect(screen.getByTestId(ROW.privacy)).toBeOnTheScreen();
+    expect(screen.getByTestId(ROW.location)).toBeOnTheScreen();
+
+    expect(screen.queryByTestId('onboarding-terms-missing')).toBeNull();
+    expect(screen.queryByText(MISSING_NOTICE)).toBeNull();
+    expect(screen.getByTestId('onboarding-terms-next')).toBeDisabled();
+  });
+
+  it('A11 · 비활성으로 보이는 다음을 탭하면 안내와 세 이름이 뜨고, 저장 요청·이동은 없다', async () => {
+    await renderLoaded();
+    expect(screen.queryByTestId('onboarding-terms-missing')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('onboarding-terms-next'));
+
+    const missing = await screen.findByTestId('onboarding-terms-missing');
+    expect(missing).toHaveTextContent(/서비스 이용약관/);
+    expect(missing).toHaveTextContent(/개인정보 수집·이용/);
+    expect(missing).toHaveTextContent(/위치기반서비스/);
+    expect(screen.getByText(MISSING_NOTICE)).toBeOnTheScreen();
+
+    await settle();
+    expect(consentPosts).toBe(0);
+    expect(navigationTargets()).toHaveLength(0);
+  });
+
+  it('A12 · 뜬 안내는 체크할수록 줄고, 전부 체크면 사라지며, 하나를 풀면 다음 없이도 돌아온다', async () => {
+    await renderLoaded();
+    expect(screen.queryByTestId('onboarding-terms-missing')).toBeNull();
+    fireEvent.press(screen.getByTestId('onboarding-terms-next'));
+    await screen.findByTestId('onboarding-terms-missing');
+
+    fireEvent.press(screen.getByTestId(ROW.service));
+    await waitFor(() => expect(screen.getByTestId(ROW.service)).toBeChecked());
+    expect(
+      screen.getByTestId('onboarding-terms-missing')
+    ).not.toHaveTextContent(/서비스 이용약관/);
+    expect(screen.getByTestId('onboarding-terms-missing')).toHaveTextContent(
+      /개인정보 수집·이용/
+    );
+
+    fireEvent.press(screen.getByTestId(ROW.privacy));
+    fireEvent.press(screen.getByTestId(ROW.location));
+    await waitFor(() =>
+      expect(screen.getByTestId('onboarding-terms-next')).toBeEnabled()
+    );
+    expect(screen.queryByTestId('onboarding-terms-missing')).toBeNull();
+
+    fireEvent.press(screen.getByTestId(ROW.location));
+    await waitFor(() =>
+      expect(screen.getByTestId(ROW.location)).not.toBeChecked()
+    );
+    expect(screen.getByTestId('onboarding-terms-missing')).toHaveTextContent(
+      /위치기반서비스/
+    );
+  });
+
+  it('A13 · 다음을 누르지 않고 체크·해제만 하면 안내는 끝까지 뜨지 않는다', async () => {
+    await renderLoaded();
+
+    fireEvent.press(screen.getByTestId(ROW.service));
+    await waitFor(() => expect(screen.getByTestId(ROW.service)).toBeChecked());
+    expect(screen.queryByTestId('onboarding-terms-missing')).toBeNull();
+
+    fireEvent.press(screen.getByTestId(ROW.service));
+    await waitFor(() =>
+      expect(screen.getByTestId(ROW.service)).not.toBeChecked()
+    );
+    expect(screen.queryByTestId('onboarding-terms-missing')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('onboarding-terms-agreeall'));
+    await waitFor(() =>
+      expect(screen.getByTestId('onboarding-terms-agreeall')).toBeChecked()
+    );
+    fireEvent.press(screen.getByTestId('onboarding-terms-agreeall'));
+    await waitFor(() =>
+      expect(screen.getByTestId('onboarding-terms-agreeall')).not.toBeChecked()
+    );
+
+    expect(screen.queryByTestId('onboarding-terms-missing')).toBeNull();
+    expect(screen.queryByText(MISSING_NOTICE)).toBeNull();
+  });
 });

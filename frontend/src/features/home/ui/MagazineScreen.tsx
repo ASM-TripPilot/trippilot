@@ -7,7 +7,7 @@
  *
  * 존(위→아래): 앱바(뒤로가기·"여행지 둘러보기"·돋보기) → 인트로 2줄 → 필터 칩 5(시각 전용
  * 선택, 01b Q4) → 에디토리얼 카드(사진+스크림) → gridHead → 매서너리 2열(6장, height 가
- * 불균등을 결정 — 라이브러리·측정 로직 없음) → FAB 2종(시각 전용, role 없음, 01b Q2).
+ * 불균등을 결정 — 라이브러리·측정 로직 없음). 눌리지 않던 FAB 2종은 TRIP-1023 #095 로 뺐다.
  *
  * INV-3: 소요시간 문자열·필드 0(칩·해시태그·카피만). 색·간격·radius 는 토큰 클래스로만 쓴다 —
  * raw hex 0(D-3). 스크림 rgba 그라디언트·카드 그림자 #000000 은 토큰 대상이 아니라 명시 예외
@@ -25,13 +25,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import {
-  BackChevronGlyph,
-  HeartFilledGlyph,
-  HeartOutlineGlyph,
-  PlusGlyph,
-  SearchGlyph,
-} from './HomeGlyphs';
+import { BackChevronGlyph, HeartOutlineGlyph, SearchGlyph } from './HomeGlyphs';
 import type { MagazineCard, MagazineScreenProps } from '../model/magazineTypes';
 
 const ABSOLUTE_FILL = StyleSheet.absoluteFillObject;
@@ -47,8 +41,8 @@ const TRANSLUCENT_CHIP_STYLE = {
   backgroundColor: 'rgba(255,255,255,0.22)',
 } as const;
 
-// 그림자 3종(명시 raw 예외 — RN 은 box-shadow 가 없어 shadow-* 프로퍼티로 옮긴다. shadowColor
-// '#000000' 은 D-3 13색 밖이라 무제재). 에디토리얼 0 4 16/.08 · 카드 0 2 10/.06 · FAB 0 6 16/.22.
+// 그림자 2종(명시 raw 예외 — RN 은 box-shadow 가 없어 shadow-* 프로퍼티로 옮긴다. shadowColor
+// '#000000' 은 D-3 13색 밖이라 무제재). 에디토리얼 0 4 16/.08 · 카드 0 2 10/.06.
 const editorialShadow = {
   shadowColor: '#000000',
   shadowOffset: { width: 0, height: 4 },
@@ -63,14 +57,6 @@ const cardShadow = {
   shadowOpacity: 0.06,
   shadowRadius: 10,
   elevation: 2,
-} as const;
-
-const fabShadow = {
-  shadowColor: '#000000',
-  shadowOffset: { width: 0, height: 6 },
-  shadowOpacity: 0.22,
-  shadowRadius: 16,
-  elevation: 8,
 } as const;
 
 // ── 앱바 ────────────────────────────────────────────────────────────────
@@ -358,22 +344,6 @@ export function MagazineScreen({
           <GridHead />
           <MasonryGrid cards={cards} onPressCard={onPressCard} />
         </ScrollView>
-        {/* FAB 2종 — 시각 전용(role 없음·무동작, 01b Q2 죽은 버튼 회피). 홈 SavedMenuFab/
-            CreateTripFab 와 같은 배치(하트 152 · + 84). 실제 무동작·스택 여백은 6-b 육안. */}
-        <View
-          testID="magazine-fab-saved"
-          style={fabShadow}
-          className="absolute bottom-[152px] right-lg h-[56px] w-[56px] items-center justify-center rounded-full bg-canvas"
-        >
-          <HeartFilledGlyph size={26} />
-        </View>
-        <View
-          testID="magazine-fab-create"
-          style={fabShadow}
-          className="absolute bottom-[84px] right-lg h-[56px] w-[56px] items-center justify-center rounded-full bg-primary"
-        >
-          <PlusGlyph size={22} />
-        </View>
       </View>
     </SafeAreaView>
   );

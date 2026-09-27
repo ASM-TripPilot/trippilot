@@ -19,7 +19,10 @@ import type { ReactElement } from 'react';
 import { useRouter } from 'expo-router';
 
 import type { GeocodeCandidate } from '@/shared/api/generated/schemas';
-import { usePostSavedStays } from '@/shared/api/generated/saved-stays/saved-stays';
+import {
+  getGetSavedStaysQueryKey,
+  usePostSavedStays,
+} from '@/shared/api/generated/saved-stays/saved-stays';
 import {
   useGetStaysGeocode,
   useGetStaysReverseGeocode,
@@ -93,7 +96,19 @@ export function StayRegisterPage({
     { q: submittedQuery ?? '' },
     { query: { enabled: (submittedQuery ?? '').trim() !== '' } }
   );
-  const postSavedStays = usePostSavedStays();
+  // 등록 성공이면 저장 숙소 목록(e04·위저드 1/4가 보는 키)을 무효화한다(TRIP-1023 #022). 훅 레벨
+  // onSuccess 라 제출 중 화면을 떠나도 돈다 — 호출별 `mutateAsync(vars, { onSuccess })`는 언마운트
+  // 뒤 안 불린다. 실패면 안 돈다(`savedStays.ts` 규율 동형). 클라이언트는 콜백 context 에서 받는다 —
+  // `useQueryClient()`를 부르면 Provider 없이 이 페이지를 그리는 pin 통합 테스트가 깨진다.
+  const postSavedStays = usePostSavedStays({
+    mutation: {
+      onSuccess: (_data, _variables, _onMutateResult, { client }) => {
+        void client.invalidateQueries({
+          queryKey: getGetSavedStaysQueryKey(),
+        });
+      },
+    },
+  });
 
   // 핀 좌표의 역지오코딩 — **단일 경로**(TRIP-866 S4). 옛 WebView 브리지(PIN_DROP→GEOCODE_OK)를
   // 걷어내고, 핀으로 찍은 좌표를 이 훅으로 주소로 바꾼다. 핀 좌표(coordSource='PIN' + 좌표 있음)가
