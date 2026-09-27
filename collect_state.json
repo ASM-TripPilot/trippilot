@@ -30,7 +30,7 @@
       },
       "14": {
         "next_page": 1,
-        "completed": false
+        "completed": true
       },
       "28": {
         "next_page": 1,
@@ -144,7 +144,7 @@
       },
       "28": {
         "next_page": 1,
-        "completed": false
+        "completed": true
       },
       "38": {
         "next_page": 1,
@@ -19700,9 +19700,9 @@
     "999012": "20251120110453",
     "999751": "20250424161924"
   },
-  "next_area": "35",
+  "next_area": "36",
   "last_run": {
-    "at": "2026-09-26T21:57:32.816658+00:00",
+    "at": "2026-09-27T21:56:14.426470+00:00",
     "area_codes": [
       "1",
       "2",
@@ -19729,9 +19729,9 @@
       "38",
       "39"
     ],
-    "http_calls": 253,
+    "http_calls": 255,
     "passed": 0,
-    "skipped_unchanged": 17341,
+    "skipped_unchanged": 17824,
     "per_area": {
       "1": {
         "calls": 27,
@@ -19739,9 +19739,9 @@
         "skipped": 1702
       },
       "2": {
-        "calls": 9,
+        "calls": 10,
         "passed": 0,
-        "skipped": 526
+        "skipped": 553
       },
       "3": {
         "calls": 6,
@@ -19751,7 +19751,7 @@
       "4": {
         "calls": 7,
         "passed": 0,
-        "skipped": 456
+        "skipped": 455
       },
       "5": {
         "calls": 5,
@@ -19776,12 +19776,12 @@
       "31": {
         "calls": 46,
         "passed": 0,
-        "skipped": 3844
+        "skipped": 3944
       },
       "32": {
         "calls": 25,
         "passed": 0,
-        "skipped": 1797
+        "skipped": 1980
       },
       "33": {
         "calls": 13,
@@ -19789,9 +19789,9 @@
         "skipped": 944
       },
       "34": {
-        "calls": 14,
+        "calls": 15,
         "passed": 0,
-        "skipped": 1041
+        "skipped": 1219
       },
       "35": {
         "calls": 18,
@@ -19811,7 +19811,7 @@
       "38": {
         "calls": 17,
         "passed": 0,
-        "skipped": 1130
+        "skipped": 1126
       },
       "39": {
         "calls": 12,
