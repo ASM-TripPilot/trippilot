@@ -366,7 +366,10 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     // ⚠️ TRIP-1026: d04 위저드 출처(＋ FAB 없음) 프리뷰 1키(`places-wizard`, band `d`) 추가로 166→167.
     //    test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에 그 1키만 추가하고 이 가드는
     //    안 만진다(추가 전엔 166개라 red). 정확히 그 키인지는 아래 'TRIP-1026' describe 가 못박는다.
-    expect(PREVIEW_STATES).toHaveLength(167);
+    // ⚠️ TRIP-1032: h07 다른 여행 생성 중 안내 2키(`h07-generating-busy`·`-uncancelable`, band `h`) 추가로
+    //    167→169. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에 그 2키만 추가하고 이
+    //    가드는 안 만진다(추가 전엔 167개라 red). 정확히 그 키인지는 아래 'TRIP-1032' describe 가 못박는다.
+    expect(PREVIEW_STATES).toHaveLength(169);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -1442,5 +1445,50 @@ describe('🔴 TRIP-1011 C · h01-method 프리뷰가 "거점 숙소 다시 고�
     // 짝 — 정말 h01 화면이다.
     expect(screen.getByTestId('itinerary-method-copick')).toBeTruthy();
     expect(screen.getByTestId('itinerary-method-rebase')).toBeTruthy();
+  });
+});
+
+// TRIP-1032 — 다른 여행 생성 중(409) 안내는 Figma 프레임이 없는 새 얼굴이라 6-b 육안 대조 자리가 이 두 키뿐이다.
+describe('🔴 TRIP-1032 · h07 다른 여행 생성 중 안내 프리뷰 2키 (band h)', () => {
+  it('h07-generating-busy 는 취소·기다리기 두 버튼, -uncancelable 은 기다리기만 그린다', () => {
+    // 준비 — 새 키 엔트리를 찾는다(red-first: preview.tsx 에 추가 전엔 없다).
+    const busy = PREVIEW_STATES.find(
+      (state) => state.key === 'h07-generating-busy'
+    );
+    const uncancelable = PREVIEW_STATES.find(
+      (state) => state.key === 'h07-generating-busy-uncancelable'
+    );
+    expect(busy).toBeDefined();
+    expect(busy?.band).toBe('h');
+    expect(busy?.label).toBe('h07 · 다른 여행 생성 중');
+    expect(uncancelable).toBeDefined();
+    expect(uncancelable?.band).toBe('h');
+    expect(uncancelable?.label).toBe('h07 · 다른 여행 생성 중 · 취소 불가');
+
+    // 실행·단언 ① — 취소 가능한 얼굴.
+    const first = render(<>{busy?.render()}</>);
+    expect(screen.getByTestId('itinerary-generation-busy')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('itinerary-generation-busy-cancel-retry')
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('itinerary-generation-busy-wait')
+    ).toBeOnTheScreen();
+    first.unmount();
+
+    // 실행·단언 ② — 취소 불가 얼굴(세션 id 를 못 얻었을 때, 01b Q1).
+    render(<>{uncancelable?.render()}</>);
+    expect(screen.getByTestId('itinerary-generation-busy')).toBeOnTheScreen();
+    expect(
+      screen.queryByTestId('itinerary-generation-busy-cancel-retry')
+    ).toBeNull();
+    expect(
+      screen.getByTestId('itinerary-generation-busy-wait')
+    ).toBeOnTheScreen();
+
+    // 이웃 앵커 — 기존 h07 로딩 키가 딸려 사라지지 않았다.
+    expect(PREVIEW_STATES.map((state) => state.key)).toContain(
+      'h07-generating-loading'
+    );
   });
 });

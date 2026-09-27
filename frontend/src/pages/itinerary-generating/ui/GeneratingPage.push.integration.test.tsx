@@ -62,6 +62,13 @@ jest.mock('@/shared/api/generated/trips/trips', () => ({
     isPending: mockPhase === 'pending',
     isError: mockPhase === 'error',
   }),
+  // TRIP-1032: 생성 화면이 다른 여행 생성 취소(409 안내)용 cancel 훅을 물 수 있다 — 형제 두 파일처럼
+  // 무해한 스텁을 둔다(없으면 페이지 최상위 호출이 `is not a function` 으로 이 파일 전체를 죽인다).
+  usePostTripsTripIdGenerationSessionsSessionIdCancel: () => ({
+    mutate: jest.fn(),
+    isPending: false,
+    isError: false,
+  }),
   useGetTripsTripIdMustVisits: () => ({
     data: [],
     isPending: false,

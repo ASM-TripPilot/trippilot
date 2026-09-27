@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { useRef, useState } from 'react';
 import { View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 
@@ -16,8 +17,14 @@ import {
 } from '@/features/itinerary/model/draftView';
 import type { GenerationDayState } from '@/features/itinerary/model/draftView';
 import { legDistance } from '@/features/itinerary/model/legDistance';
+import {
+  isGenerationRunning,
+  useGenerationBusy,
+} from '@/features/itinerary/model/useGenerationBusy';
 import { DraftScreen } from '@/features/itinerary/ui/DraftScreen';
+import { GeneratingScreen } from '@/features/itinerary/ui/GeneratingScreen';
 import { GenerationFallbackScreen } from '@/features/itinerary/ui/GenerationFallbackScreen';
+import { AlertCircleGlyph } from '@/features/itinerary/ui/ItineraryGlyphs';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { VIOLATION_NOTICE } from '@/entities/itinerary-slot/lib/violationLabel';
 import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
@@ -28,6 +35,7 @@ import {
   usePostTripsTripIdItinerary,
 } from '@/shared/api/generated/trips/trips';
 import { isNotFound } from '@/shared/api/isNotFound';
+import { StateNotice } from '@/shared/ui/StateNotice';
 import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
 import { GenerationProgressCard } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
 import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
@@ -71,6 +79,8 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   // 폴백 인터스티셜을 "기본 일정 보기"로 넘겼나(01b D3) — 로컬 dismiss 다(route push 아님).
   // true 면 폴백 신호가 있어도 인터스티셜을 감추고 같은 데이터의 초안 얼굴을 그린다.
   const [fallbackDismissed, setFallbackDismissed] = useState(false);
+  // TRIP-1032 B — 이 여행이 생성 중일 때 재생성 전 확인이 떠 있나.
+  const [confirmingInProgress, setConfirmingInProgress] = useState(false);
 
   const itineraryQueryKey = getGetTripsTripIdItineraryQueryKey(tripId);
 
@@ -223,6 +233,18 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
       return;
     }
 
+    // TRIP-1032 B — 이 여행이 생성 중이면 확인부터. 확인 뒤엔 cancel 을 따로 부르지 않는다 — 같은 여행
+    // POST 가 서버에서 이전 세션을 닫는다(01b Q4).
+    if (isGenerationRunning(settled.data)) {
+      setConfirmingInProgress(true);
+      return;
+    }
+
+    sendRegenerate();
+  }
+
+  /** 재생성 POST 1회 — 409 안내의 재시도도 이 함수로 **같은 요청**을 다시 보낸다(TRIP-1032). */
+  function sendRegenerate(): void {
     regenerate.mutate(
       { tripId },
       {
@@ -242,6 +264,9 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
     );
   }
 
+  // TRIP-1032 A — 재생성 POST 가 409 GENERATION_IN_PROGRESS 면 일반 실패로 접지 않고 안내를 띄운다.
+  const busy = useGenerationBusy(regenerate.error, sendRegenerate);
+
   // 두 뒤로가기(h35 후보 0건 · h11 초안) 공통. 딥링크로 콜드 오픈돼 히스토리가 없으면
   // (`canGoBack()===false`) 침묵 no-op 이 아니라 홈으로 replace 한다(INV-4). `/(tabs)/itinerary`
   // 는 trips[0] 리다이렉트 함정이라 접미 없는 `/(tabs)` 로 간다. `ItineraryPlanPage.handleBack`
@@ -252,6 +277,50 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
     } else {
       router.replace('/(tabs)');
     }
+  }
+
+  // TRIP-1032 A — 다른 여행 생성 중 안내. 생성 화면(h09)과 같은 얼굴을 쓴다(일반 실패·배너보다 앞선다).
+  if (busy !== null) {
+    return (
+      <GeneratingScreen
+        busy={{ ...busy, onWait: () => router.replace('/(tabs)') }}
+        onRetry={sendRegenerate}
+        onBackground={handleBack}
+      />
+    );
+  }
+
+  // TRIP-1032 B — 이 여행이 생성 중일 때 재생성 확인(새 오버레이 없이 인라인 얼굴 — jest 로 심판된다).
+  if (confirmingInProgress) {
+    return (
+      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+        <View className="flex-1 justify-center bg-canvas px-lg">
+          <StateNotice
+            testID="itinerary-draft-inprogress-confirm"
+            icon={<AlertCircleGlyph />}
+            title="지금 만들고 있는 일정이 있어요"
+            description="새로 만들면 진행 중인 생성을 멈추고 새 초안으로 바꿔요. 계속할까요?"
+            actions={[
+              {
+                testID: 'itinerary-draft-inprogress-confirm-continue',
+                label: '계속',
+                variant: 'filled',
+                onPress: () => {
+                  setConfirmingInProgress(false);
+                  sendRegenerate();
+                },
+              },
+              {
+                testID: 'itinerary-draft-inprogress-confirm-cancel',
+                label: '취소',
+                variant: 'outline',
+                onPress: () => setConfirmingInProgress(false),
+              },
+            ]}
+          />
+        </View>
+      </SafeAreaView>
+    );
   }
 
   /**

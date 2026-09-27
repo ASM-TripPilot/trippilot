@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import { firstCoPickSlotKey } from '@/features/itinerary/model/coPickSlots';
 import { buildMustVisitPins } from '@/features/itinerary/model/mustVisitList';
+import { useGenerationBusy } from '@/features/itinerary/model/useGenerationBusy';
 import { GeneratingScreen } from '@/features/itinerary/ui/GeneratingScreen';
 import type {
   GenerateItineraryRequestGenerationMode,
@@ -36,9 +37,11 @@ import { promptAndRegisterPush } from '@/shared/push';
  *     돌아오지 않게. 이후 PARTIAL→COMPLETE 폴링은 목적지 페이지 소관(중복 제거).
  *  3. **오류는 침묵하지 않는다(INV-4).** `isError` 를 화면에 내려 실패 표면을 띄우고, [다시 시도]가
  *     POST 를 재발화한다.
- *  4. **POST 경로는 세션 GET 폴링·cancel 뮤테이션을 쓰지 않는다.** in-flight 라 sessionId 가 없다(Seed
+ *  4. **POST 경로는 자기 세션 GET 폴링·cancel 을 쓰지 않는다.** in-flight 라 sessionId 가 없다(Seed
  *     결정 3). 일정 GET 은 관찰 모드 가지(`ObserveGeneration`)에서만 부른다 — 그 가지는 mode 가 없을
- *     때만 마운트되므로 POST 경로는 여전히 GET 을 모른다.
+ *     때만 마운트되므로 POST 경로는 여전히 GET 을 모른다. **예외(TRIP-1032)**: POST 가 409
+ *     `GENERATION_IN_PROGRESS` 면 안내를 띄우고, 사용자가 [취소하고 새로 만들기]를 누를 때만 **다른
+ *     여행**(`activeTripId`)의 일정 GET → cancel → 같은 body 로 재POST 한다(`useGenerationBusy`).
  *  5. **꼭 갈 곳 지도 좌표(TRIP-929).** 핀이 0개면 `pins`·`center` 둘 다 `undefined` 로 넘긴다 —
  *     화면 게이트 `pins && center` 를 두 겹으로 닫는 이중 방어다(INV-4 빈 지도 금지). 어느 한 겹도
  *     중복이 아니다: 서울 폴백 `center` 를 넣으면 `pins` 겹만 남고, `pins` 를 `[]` 그대로 넘기면
@@ -106,6 +109,8 @@ export function GeneratingPage({
     );
   }, [generate, router, tripId, mode, successRoute]);
 
+  const busy = useGenerationBusy(generate.error, start);
+
   useEffect(() => {
     if (firedRef.current) return;
     firedRef.current = true;
@@ -135,6 +140,7 @@ export function GeneratingPage({
   return (
     <GeneratingScreen
       failed={generate.isError}
+      busy={busy && { ...busy, onWait: goHome }}
       pins={mapPins}
       center={mapCenter}
       onRetry={start}

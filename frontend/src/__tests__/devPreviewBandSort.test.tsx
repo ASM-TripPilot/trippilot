@@ -99,6 +99,10 @@ const EXPECTED_H = [
   // 이 순서(loading → fallback → fallback-failed)를 낸다(배열 위치=정렬 위치, h08 collapsed/expanded 선례).
   'dev-preview-state-h07-generating-fallback', // h07 (TRIP-791 · 폴백 성공 인터스티셜)
   'dev-preview-state-h07-generating-fallback-failed', // h07 (TRIP-791 · 하드실패 인터스티셜)
+  // TRIP-1032: 다른 여행 생성 중(409) 안내 2키. 같은 h07 코드라 PREVIEW_STATES 배열에서
+  // fallback-failed **직후**에 이 순서(busy→uncancelable)로 넣으면 안정 정렬이 그대로 낸다.
+  'dev-preview-state-h07-generating-busy', // h07 (TRIP-1032 · 취소 가능)
+  'dev-preview-state-h07-generating-busy-uncancelable', // h07 (TRIP-1032 · 취소 불가)
   'dev-preview-state-h08-draft-collapsed', // h08 (TRIP-783 지도+시트 셸 접힘)
   // TRIP-792: h08 펼침(시트 상단 스냅 · TRIP-920 부터 initialIndex={2}) 신규. 코드가 h08 이라 안정 정렬이
   // collapsed 바로 뒤에 붙는다(PREVIEW_STATES 배열에서도 expanded 를 collapsed 직후에 삽입 —

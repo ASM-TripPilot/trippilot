@@ -4529,6 +4529,34 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // TRIP-1032 — 다른 여행 생성 중(409) 안내. Figma 프레임이 없는 새 얼굴이라 6-b 육안 대조 자리가 이
+  // 두 키뿐이다. 같은 h07 코드라 배열 위치 = 정렬 위치(fallback-failed 직후, busy → uncancelable).
+  {
+    key: 'h07-generating-busy',
+    band: 'h',
+    label: 'h07 · 다른 여행 생성 중',
+    login: null,
+    render: () => (
+      <GeneratingScreen
+        onBackground={noop}
+        onRetry={noop}
+        busy={{ cancelable: true, onCancelAndRetry: noop, onWait: noop }}
+      />
+    ),
+  },
+  {
+    key: 'h07-generating-busy-uncancelable',
+    band: 'h',
+    label: 'h07 · 다른 여행 생성 중 · 취소 불가',
+    login: null,
+    render: () => (
+      <GeneratingScreen
+        onBackground={noop}
+        onRetry={noop}
+        busy={{ cancelable: false, onCancelAndRetry: noop, onWait: noop }}
+      />
+    ),
+  },
   // h07 생성 실패 프리뷰 키(itinerary-generating-failed)는 TRIP-789로 삭제 — 실패 표면·핸들링
   // 코드(GeneratingScreen failed/onRetry·GeneratingPage isError→failed)는 그대로 유지되고,
   // 폴백 전용 화면(TRIP-791)이 이 얼굴을 흡수한다(부모 결정 G: 코드 유지·키만 삭제).
