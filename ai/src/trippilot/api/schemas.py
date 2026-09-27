@@ -456,7 +456,7 @@ class ReplanSlotSchema(BoundaryModel):
 
 
 class ReplanRequest(BoundaryModel):
-    """POST /ai/v1/itinerary/replan — 하루를 다시 짠다 (i04 → i06).
+    """POST /ai/v1/planb/replan — 하루를 다시 짠다 (i04 → i06). (구 itinerary 경로는 TRIP-960 ④ 에서 삭제)
 
     `generate` 와 **다른 것**: RAG(KB-3)를 탄다 · 재계획 의도를 받는다 ·
     원 일정을 컨텍스트이자 후보로 받는다.

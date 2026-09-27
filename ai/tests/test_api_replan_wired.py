@@ -72,7 +72,7 @@ def _body(**over: object) -> dict:
 
 def _post(app, **over: object):
     with TestClient(app, raise_server_exceptions=False) as client:
-        return client.post("/ai/v1/itinerary/replan", json=_body(**over))
+        return client.post("/ai/v1/planb/replan", json=_body(**over))
 
 
 # ── ① 실 배선이 일정을 낸다 ────────────────────────────────────────────
@@ -245,7 +245,7 @@ def test_에이전트_주입을_끊으면_재계획이_죽는다() -> None:
 
     object.__setattr__(orchestrator, "_schedule_agent", None)
     with TestClient(app, raise_server_exceptions=False) as client:
-        response = client.post("/ai/v1/itinerary/replan", json=_body())
+        response = client.post("/ai/v1/planb/replan", json=_body())
     assert response.status_code != 200, "에이전트 없이 200 이 나오면 재사용이 거짓이다"
 
 
@@ -273,7 +273,7 @@ def test_해석한_지시가_에이전트_요청까지_실린다() -> None:
     object.__setattr__(orchestrator, "_schedule_agent", _Spy())
     with TestClient(app, raise_server_exceptions=False) as client:
         response = client.post(
-            "/ai/v1/itinerary/replan",
+            "/ai/v1/planb/replan",
             json=_body(directives=["AVOID_STRENUOUS", "ADD_CAFE"]),
         )
 
@@ -299,7 +299,7 @@ def test_지시가_없으면_요청에도_빈_집합이_실린다() -> None:
 
     object.__setattr__(orchestrator, "_schedule_agent", _Spy())
     with TestClient(app, raise_server_exceptions=False) as client:
-        client.post("/ai/v1/itinerary/replan", json=_body())
+        client.post("/ai/v1/planb/replan", json=_body())
 
     assert seen
     assert seen[0].prefer_categories == frozenset()
