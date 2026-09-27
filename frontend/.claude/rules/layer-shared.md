@@ -137,3 +137,14 @@ paths:
 | `src/shared/pref/preferenceSelection.ts` | **신규.** `toggleMulti`/`toggleSingle`(전부 해제 시 `[]`가 아니라 `null` 복귀, US-ONB-14) — `features/onboarding/model/preferenceSelection.ts`가 이 파일을 재수출(하위호환, 기존 온보딩 테스트 무수정 green). `shared/ui`가 아니라 `shared/pref`(non-ui)에 둔 이유: `sharedUiStructure.test.ts`가 `shared/ui/**`에 `className=` 없는 순수 로직 파일을 두는 것을 red로 잡는다 — UI 아닌 순수 함수는 형제 비-ui 폴더가 정본 위치. |
 
 **소비처**: `features/onboarding/ui/PrefStep1Screen.tsx`·`PrefStep2Screen.tsx`(재배선, testID·props 불변 — AC-6 회귀 심판) · `features/settings/ui/PreferencesEditView.tsx`(신규 소비, `settings-pref-*` testID). 온보딩 쪽 −170줄(중복 타일 코드 제거).
+
+### `src/shared/press/` — 연타 관통 공용 가드 (TRIP-1013 신설)
+
+| 파일 | 역할 |
+|---|---|
+| `src/shared/press/pressGuard.ts` | **신규.** `guardPress(fn)`(감싼 함수 — 모듈 전역 400ms 창이 열려 있으면 무시, 아니면 창을 열고 `fn(...args)`) · `openPressGuardWindow()`(누름 없이 창만 연다 — 서버 응답으로 표면이 바뀌는 순간 호출) · `resetPressGuard()`(테스트 전용, 창을 닫는다). 훅이 아니다(창 상태가 렌더를 유발하지 않는다) — `setTimeout` 대신 `Date.now()` 비교로 판정(pages 층 타이머 금지 `pagesLayerStructure` G-3 + 페이지 테스트가 `Date.now`를 멈춰 판정을 고정하는 전제). **음수 경과(기기 시계가 뒤로 감)는 창 밖으로 명시 처리**(`elapsed >= 0 && elapsed < 400`) — 5-b 경고-1로 5-c에서 추가된 조건, 없으면 시계가 뒤로 간 만큼 가드 걸린 버튼 8개가 전부 먹통이 된다. |
+| `src/shared/press/pressGuard.test.ts` | 단위 10건(경계 399/400ms·무시된 누름 비연장·인자 전달·리셋·시계 역행) + `pressGuardStructure.test.ts`(소비처 8페이지 완전일치 — 아래). |
+
+**소비처(정확히 이 8개 — `pressGuardStructure.test.ts` T-S1이 완전일치로 잠근다)**: `pages/onboarding-pref1/ui/PrefStep1Page.tsx`(송신) · `pages/onboarding-pref2/ui/PrefStep2Page.tsx`(수신) · `pages/destination-detail/ui/DestinationDetailPage.tsx`(송신, 숙소 레인 `onSeeAll`만) · `pages/stay-search/ui/StaySearchPage.tsx`(수신) · `pages/trip-new-step2/ui/TripNewStep2Page.tsx`(송신+재오픈+수신, `BaseNightsFlow` 안 `handleAssign`/`onSuccess` + 페이지가 넘기는 `onExit`) · `pages/itinerary-mustvisit/ui/MustVisitTimePage.tsx`(송신+재오픈) · `pages/itinerary-mustvisit/ui/MustVisitListPage.tsx`(수신) · `pages/itinerary-plan/ui/ItineraryPlanPage.tsx`(송신+재오픈+수신). **걸지 않는 곳(의도)**: `widgets/map-sheet-shell/ui/CtaBar.tsx`·features 화면 전부·`TripBasesPage` 출구·`#097`(iOS 공유 시트, 별도 관찰) — 결정 1(관찰된 5곳만)에 따른 경계, 이 층 규칙은 소비처가 늘 때만 갱신한다.
+
+⚠️ **판단성 이상(03b 참고, 03b·04 확인 완료 — 새 티켓 후보로만 유지, 코드 무변경)**: (a) #038·#042의 **송신** 가드는 재오픈과 완전히 겹쳐 지워도 어떤 테스트도 red가 안 된다(참고-1) (b) #057 확정 409→재조회로 CTA가 교체되는 경로엔 재오픈이 없다(참고-2, 실기 확인 필요) (c) 전역 창이라 안 보이는 화면(스택 아래)의 재오픈이 앞 화면의 가드 버튼을 1회 먹일 수 있다(참고-3, `TripNewStep2Page` 지정 성공 응답 × `StaySearchPage` 카드). 상세는 문제로그·개발로그.
