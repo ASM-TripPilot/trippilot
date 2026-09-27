@@ -158,7 +158,10 @@ import {
 import { CompanionEditSheet } from '@/features/trip/ui/CompanionEditSheet';
 import { DestinationEditSheet } from '@/features/trip/ui/DestinationEditSheet';
 import { PeriodEditSheet } from '@/features/trip/ui/PeriodEditSheet';
-import { StaySelectSheet } from '@/features/trip/ui/StaySelectSheet';
+import {
+  StaySelectSheet,
+  type StaySelectCandidate,
+} from '@/features/trip/ui/StaySelectSheet';
 import { LiveLocationView } from '@/pages/live-location/ui/LiveLocationView';
 import { ConfirmedBanner } from '@/pages/itinerary-plan/ui/ConfirmedBanner';
 import { NoBaseNoticeCard } from '@/pages/itinerary-plan/ui/NoBaseNoticeCard';
@@ -3979,6 +3982,57 @@ export const PREVIEW_STATES: PreviewState[] = [
         onClose={noop}
       />
     ),
+  },
+  // g02 숙소 선택 시트 섹션 분리(TRIP-1011 #036) — QA 재현: 서울 밤에 서울 1 / 부산 2 + 주소 모름 1.
+  // 섹션 헤더는 Figma 노드가 없어(부제 톤 재사용) 6-b 육안이 "기존 톤에서 튀지 않나"를 보는 자리.
+  // 후보가 4장으로 늘면 스크롤 없는 BottomSheetView 가 넘치는지도 여기서 본다(바텀시트 목 사각).
+  {
+    key: 'trip-new-step2-staysheet-sections',
+    band: 'g',
+    label: 'g02 · 숙소 선택 시트 sections',
+    login: null,
+    render: () => {
+      const stay = (
+        savedStayId: string,
+        name: string
+      ): StaySelectCandidate => ({
+        savedStayId,
+        name,
+        coordConfirmed: true,
+        linkedTripIds: [],
+        checkIn: null,
+        checkOut: null,
+        registerRoute: 'MAP_SEARCH',
+        createdAt: '2026-08-01T00:00:00Z',
+        updatedAt: '2026-08-01T00:00:00Z',
+      });
+      const jw = stay('jw', 'JW 메리어트 동대문');
+      const others = [
+        stay('denba', '덴바스타 구서점'),
+        stay('para', '파라다이스호텔부산'),
+        stay('no-coord', '좌표 없는 숙소'),
+      ];
+      return (
+        <StaySelectSheet
+          title="1박 · 서울특별시"
+          dateLabel="9/26(토)"
+          candidates={[jw, ...others]}
+          sections={[
+            { key: 'here', title: '서울특별시 숙소', candidates: [jw] },
+            {
+              key: 'other',
+              title: '다른 지역 · 위치 확인 안 됨',
+              candidates: others,
+            },
+          ]}
+          selectedSavedStayId={null}
+          onSelect={noop}
+          onBrowse={noop}
+          onAssign={noop}
+          onClose={noop}
+        />
+      );
+    },
   },
   // h02 꼭 갈 곳 (TRIP-785) — Figma 대조용 격리 렌더. default→loading→error 순으로 삽입해
   // (안정 정렬 = 배열 위치) devPreviewBandSort EXPECTED_H 의 h02 3키 순서를 맞춘다.

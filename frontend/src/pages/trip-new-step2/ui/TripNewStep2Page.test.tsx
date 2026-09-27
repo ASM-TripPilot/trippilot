@@ -14,7 +14,7 @@ import { TripNewStep2Page } from './TripNewStep2Page';
  *    조회 실패→error · 진행 중→loading · **저장 숙소 0→empty**(신, D1, `savedStayList.length === 0`) ·
  *    그 밖→default. ⚠️ loading 이 empty 를 이긴다 — 조회 중엔 savedStayList 가 [] 라도 loading 얼굴이다.
  *  - **박별 카드 파생** `toBaseSections` → `nightlyBaseCards`로 배정된 밤은 숙소명, 미배정 밤은 "숙소 미정".
- *  - **empty 배선(신)** 저장 숙소 0 → empty 얼굴. 보조 CTA "숙소 둘러보기"→`router.push('/stays')`,
+ *  - **empty 배선(신)** 저장 숙소 0 → empty 얼굴. 보조 CTA "숙소 둘러보기"→`/stays`(첫 여행지 region 동봉, TRIP-1011),
  *    주 CTA "숙소 없이 계속"→goToMethod(default nostay 와 같은 동작).
  *  - **제거(D2)** 후보 하트·연박 묶음·coverage/blocked·fixSheet·fallback 경고가 렌더에서 사라진다.
  *  - **CTA 목적지** default·loading 의 두 CTA 다 게이트 없이 활성이고 h04 method 로 replace 이동한다(AC-5).
@@ -79,6 +79,13 @@ jest.mock('@/features/trip/model/useTripBases', () => ({
   }),
 }));
 
+// TRIP-1011 — 배선이 저장 숙소 주소 조회 훅을 문다. 이 파일엔 QueryClientProvider 가 없어 실물 훅이면
+// 전 케이스가 "No QueryClient" 로 죽는다 → 모듈 경로를 목으로 바꿔 끼운다(useSavedStays 선례). 이 파일은
+// 시트를 안 열어 주소는 관찰 대상이 아니다 — 전부 "모름"(빈 맵).
+jest.mock('@/features/trip/model/useStayAddresses', () => ({
+  useStayAddresses: () => ({}),
+}));
+
 const TRIP_ID = 'trip-1';
 const TRIP_START = '2026-06-10';
 const TRIP_END = '2026-06-13';
@@ -130,6 +137,33 @@ function pending<T>(): QueryStub<T> {
 
 function failed<T>(refetch: jest.Mock): QueryStub<T> {
   return { data: undefined, isPending: false, isError: true, refetch };
+}
+
+/**
+ * push 인자에서 `/stays` 로 실은 region 값을 꺼낸다 — 문자열(`/stays?region=…`)과 객체
+ * (`{ pathname: '/stays', params: { region } }`) 두 형태를 다 읽는다. `/stays` 가 아니면 undefined.
+ * URLSearchParams 는 RN jest 환경의 폴리필에 기대지 않으려고 손으로 가른다.
+ */
+function staysRegionOf(call: unknown[] | undefined): string | undefined {
+  const arg = call?.[0];
+  if (typeof arg === 'string') {
+    const [path, query = ''] = arg.split('?');
+    if (path !== '/stays') return undefined;
+    const pair = query
+      .split('&')
+      .map((part) => part.split('='))
+      .find(([key]) => key === 'region');
+    return pair?.[1] === undefined ? undefined : decodeURIComponent(pair[1]);
+  }
+  if (typeof arg === 'object' && arg !== null) {
+    const { pathname, params } = arg as {
+      pathname?: unknown;
+      params?: { region?: unknown };
+    };
+    if (pathname !== '/stays') return undefined;
+    return typeof params?.region === 'string' ? params.region : undefined;
+  }
+  return undefined;
 }
 
 beforeEach(() => {
@@ -329,13 +363,22 @@ describe('empty 얼굴 (D1) — 저장 숙소 0', () => {
     expect(screen.queryByTestId('trip-base-generate')).toBeNull();
   });
 
-  it('둘러보기를 누르면 /stays 로 push 한다 (S9·SavedStayPage 선례)', () => {
-    render(<TripNewStep2Page />);
+  // TRIP-1011(#037) — 옛 단언 `toHaveBeenCalledWith('/stays')`(지역 없이 → 검색 화면 기본값 '부산')는
+  // D8 결정과 정반대라 교체했다. 인자 **형태**(`?region=` 문자열이든 `{pathname, params}`든)가 아니라
+  // **region 값**을 잰다(브리프 AC-1 주석).
+  it('AC-2 · 둘러보기를 누르면 첫 여행지(seq 1) 지역을 실어 /stays 로 push 한다', () => {
+    const store = useTripWizardStore.getState();
+    store.reset();
+    store.setPeriod(undefined, TRIP_START, TRIP_END);
+    store.setCreatedTripId(TRIP_ID);
+    store.addDestination('부산광역시', 2);
+    store.addDestination('경주시', 1);
 
+    render(<TripNewStep2Page />);
     fireEvent.press(screen.getByTestId('trip-base-browse'));
 
     expect(routerMock.push).toHaveBeenCalledTimes(1);
-    expect(routerMock.push).toHaveBeenCalledWith('/stays');
+    expect(staysRegionOf(routerMock.push.mock.calls[0])).toBe('부산광역시');
   });
 
   it('주 CTA "숙소 없이 계속"은 default nostay 와 같은 동작 — h04 method 로 replace 한다', () => {

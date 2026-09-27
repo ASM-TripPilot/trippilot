@@ -200,6 +200,22 @@ describe('★7(완화) · 정렬·박 번호는 순수 함수가 소유한다', 
   });
 });
 
+describe('TRIP-1011 · 섹션 분리·주소 조회는 배선이 아니라 모델·훅이 소유한다 (#036)', () => {
+  it('배선은 주소 훅·섹션 함수를 부르기만 하고, 직접 조회·지역 판정을 하지 않는다', () => {
+    const pageSource = readOne(PAGE_REL);
+
+    // 긍정 짝 — 새 두 부품을 실제로 문다(빈 파일·미배선 공짜 통과 차단).
+    expect(pageSource).toContain('useStayAddresses');
+    expect(pageSource).toContain('staySheetSections');
+    // 부정 — 역지오코딩을 페이지가 직접 부르면 QueryClientProvider 없는 페이지 테스트가 통째로 죽고,
+    // 지역 판정을 페이지가 다시 하면 진실이 두 곳으로 갈린다.
+    const page = read([PAGE_REL]);
+    ['useQueries', 'ReverseGeocode', 'sidoKey', 'addressInRegion'].forEach(
+      (needle) => expect(offenders(page, needle)).toEqual([])
+    );
+  });
+});
+
 describe('AC-1 · 진행 표시는 formatWizardStep(2)이다 (옛 "2 / 2" 하드코딩 제거)', () => {
   it('화면이 formatWizardStep 을 소비하고, 하드코딩 "2 / 2"가 사라졌다', () => {
     const screenSource = readOne(SCREEN_REL);

@@ -5,9 +5,11 @@ import {
   nightlyBaseCards,
   toBaseSections,
 } from '@/features/trip/model/baseSections';
+import { staySheetSections } from '@/features/trip/model/staySheetSections';
 import { deriveEndDate } from '@/features/trip/model/tripWizardStep1';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import { useSavedStays } from '@/features/trip/model/useSavedStays';
+import { useStayAddresses } from '@/features/trip/model/useStayAddresses';
 import {
   useAssignBase,
   useTripBases,
@@ -74,6 +76,8 @@ export function TripNewStep2Page(): ReactElement {
 
   const savedStayList = savedStays.data ?? [];
   const assignments = bases.data ?? [];
+  // TRIP-1011 — 시트 섹션 재료(숙소 주소). 시트를 열기 전부터 받아 두어 열 때 목록이 튀지 않게 한다.
+  const stayAddresses = useStayAddresses(savedStayList);
   // 딥링크 진입에서는 빈 문자열이 그대로 흘러간다 — 목적지가 없어 카드는 어차피 0장이다.
   const tripStartDate = startDate ?? '';
 
@@ -162,6 +166,15 @@ export function TripNewStep2Page(): ReactElement {
   // 카드 메타처럼 `{박수}박 · {지역}`, 날짜 라벨은 카드가 이미 요일을 붙여 낸 값을 그대로 쓴다.
   const openCard = cards.find((card) => card.nightNumber === openNight);
 
+  /** 둘러보기 — 지역을 실어 보낸다. 안 실으면 검색 화면이 기본값 '부산'을 연다(TRIP-1011 #037). */
+  function browseStays(region: string | undefined): void {
+    router.push(
+      region === undefined
+        ? '/stays'
+        : `/stays?region=${encodeURIComponent(region)}`
+    );
+  }
+
   return (
     <>
       <TripWizardStep2Screen
@@ -170,7 +183,7 @@ export function TripNewStep2Page(): ReactElement {
         onPressCard={openSheet}
         onGenerate={goToMethod}
         onNoStayStart={goToMethod}
-        onBrowseStays={() => router.push('/stays')}
+        onBrowseStays={() => browseStays(destinations[0]?.region)}
         onBack={() => router.back()}
         onRetryAll={() => {
           void savedStays.refetch();
@@ -183,9 +196,13 @@ export function TripNewStep2Page(): ReactElement {
           title={`${openCard.nightNumber}박 · ${openCard.region}`}
           dateLabel={openCard.dateLabel}
           candidates={savedStayList}
+          sections={
+            staySheetSections(savedStayList, stayAddresses, openCard.region) ??
+            undefined
+          }
           selectedSavedStayId={selectedSavedStayId}
           onSelect={(savedStayId) => setSelectedSavedStayId(savedStayId)}
-          onBrowse={() => router.push('/stays')}
+          onBrowse={() => browseStays(openCard.region)}
           onAssign={handleAssign}
           assignPending={assignBase.isPending}
           assignFailed={assignFailed}
