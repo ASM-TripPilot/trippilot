@@ -1,8 +1,11 @@
 import type { ReactElement, ReactNode } from 'react';
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 import { View } from 'react-native';
 import type { ListRenderItem } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  SafeAreaInsetsContext,
+  SafeAreaView,
+} from 'react-native-safe-area-context';
 import BottomSheet, {
   BottomSheetFlatList,
   BottomSheetScrollView,
@@ -158,6 +161,9 @@ export function MapSheetShell<T = unknown>({
   const sheetClosed = snapPoints === undefined && snapIndex === 0;
   // 태그 밖 상수 — `<MapView>` 태그 안 viewOnly 앞에 `>` 가 들어가면 위 태그 정규식이 잘린다.
   const mapLocked = mapViewOnly ?? !sheetClosed;
+  // 시트 윗변 한계 = 상태바·다이내믹 아일랜드 아래(TRIP-1014 #076). useSafeAreaInsets() 는 Provider 가
+  // 없으면 throw 하므로(jest 전반) null 을 허용해 읽는다.
+  const topInset = useContext(SafeAreaInsetsContext)?.top ?? 0;
 
   return (
     <View testID="map-sheet-shell-root" className="flex-1 bg-canvas">
@@ -212,6 +218,9 @@ export function MapSheetShell<T = unknown>({
         enableDynamicSizing={false}
         // 라이브러리 기본값과 같지만 명시한다 — 시트 안 입력(h13 검색)의 키보드 회피 계약(TRIP-990 D9).
         keyboardBehavior="interactive"
+        // 키보드가 내려가면 키보드 전 칸으로 돌아온다(TRIP-1014 #076, 기본 'none' 은 올라간 채 남는다).
+        keyboardBlurBehavior="restore"
+        topInset={topInset}
         onChange={setSnapIndex}
         onAnimate={onSheetAnimate}
       >
