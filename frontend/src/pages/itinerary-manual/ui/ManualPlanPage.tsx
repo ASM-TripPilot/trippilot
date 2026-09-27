@@ -62,6 +62,7 @@ import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
 
 const SAVE_ERROR_NOTE = '일정을 저장하지 못했어요. 잠시 후 다시 시도해 주세요';
 const SAVED_TOAST = '일정을 저장했어요';
+const CONFIRMED_TOAST = '일정이 확정됐어요';
 /** 409 세 원인·404 를 가르지 못해 원인을 단정하지 않는다(ItineraryPlanPage `CONFIRM_ERROR_NOTE` 와 같은 문구). */
 const CONFIRM_ERROR_NOTE =
   '일정을 확정하지 못했어요. 잠시 후 다시 시도해 주세요';
@@ -216,11 +217,17 @@ export function ManualPlanPage({
           confirm.mutate(
             { tripId },
             {
-              onSuccess: () =>
+              // 확정 토스트는 떠나기 전에 — h16 은 이미 확정된 캐시로 열려 재진입과 구별이 안 된다(TRIP-1047).
+              onSuccess: () => {
+                showToast({
+                  message: CONFIRMED_TOAST,
+                  testID: 'itinerary-confirmed-toast',
+                });
                 router.replace({
                   pathname: '/trips/[tripId]/itinerary',
                   params: { tripId },
-                }),
+                });
+              },
               onError: (error) => {
                 inFlightRef.current = false;
                 setConfirmError(CONFIRM_ERROR_NOTE);

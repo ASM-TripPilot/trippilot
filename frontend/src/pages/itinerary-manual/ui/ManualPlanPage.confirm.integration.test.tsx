@@ -70,6 +70,8 @@ const CTA = 'sheet-cta-button-0';
 const SAVE_ERROR = 'itinerary-manual-save-error';
 const CONFIRM_ERROR = 'itinerary-manual-confirm-error';
 const SAVED_TOAST = 'itinerary-manual-saved';
+/** TRIP-1047 — 확정 토스트(h16 `ItineraryPlanPage` 와 같은 testID·문구). */
+const CONFIRMED_TOAST = 'itinerary-confirmed-toast';
 const H16 = {
   pathname: '/trips/[tripId]/itinerary',
   params: { tripId: TRIP_ID },
@@ -264,6 +266,8 @@ describe('🔴 B4 · INV-4 — 확정이 실패하면 이동하지 않고 확정
       await screen.findByTestId(CONFIRM_ERROR, {}, WAIT)
     ).toHaveTextContent(/\S/);
     expect(screen.getByTestId(SAVED_TOAST)).toBeOnTheScreen();
+    // TRIP-1047 AC-5 — 확정이 실패했으니 확정 토스트는 없다(INV-4).
+    expect(screen.queryByTestId(CONFIRMED_TOAST)).toBeNull();
     expect(screen.queryByTestId(SAVE_ERROR)).toBeNull();
     await flush();
     expect(putCalls).toBe(1);
@@ -293,6 +297,35 @@ describe('🔴 B4 · INV-4 — 확정이 실패하면 이동하지 않고 확정
     await waitFor(() => expect(itineraryGets).toBe(2), WAIT);
     expect(mockReplace).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
+    // TRIP-1047 AC-5 — 409 는 확정 실패다. 재조회 뒤에도 확정 토스트는 없다.
+    expect(screen.queryByTestId(CONFIRMED_TOAST)).toBeNull();
+  });
+});
+
+/**
+ * TRIP-1047 AC-1 (편집기 경로 · 01b) — 편집기의 「저장하고 확정하기」도 "확정한 그 순간"이다. 확정 POST 가
+ * 성공하면 h16 으로 떠나기 전에 같은 확정 토스트를 띄운다. 토스트는 루트 호스트가 그리므로 화면이 바뀌어도
+ * 남는다. h16(`ItineraryPlanPage`)은 캐시에 이미 CONFIRMED 가 든 채 새로 열려 재진입과 구별이 안 되므로,
+ * 여기서 안 띄우면 이 경로엔 확정 알림이 없다. 한 번에 하나라 앞서 뜬 저장 토스트는 확정 토스트로 바뀐다.
+ *
+ * 3동작 뼈대: 준비=PUT 200·확정 200 → 실행=CTA press → 단언=replace·확정 토스트 문구·저장 토스트 교체.
+ */
+describe('🔴 T1 · TRIP-1047 AC-1 — 편집기에서 저장하고 확정하면 확정 토스트가 뜬다', () => {
+  it('확정 성공 → h16 replace 1회 · "일정이 확정됐어요" 토스트 · 저장 토스트는 확정 토스트로 바뀐다', async () => {
+    renderPage();
+    await ready();
+    // 앵커 — 확정 전엔 확정 토스트가 없다.
+    expect(screen.queryByTestId(CONFIRMED_TOAST)).toBeNull();
+
+    fireEvent.press(screen.getByTestId(CTA));
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1), WAIT);
+    expect(mockReplace).toHaveBeenCalledWith(H16);
+    expect(await screen.findByTestId(CONFIRMED_TOAST)).toHaveTextContent(
+      '일정이 확정됐어요'
+    );
+    expect(screen.queryByTestId(SAVED_TOAST)).toBeNull();
+    expect(confirmCalls).toBe(1);
   });
 });
 

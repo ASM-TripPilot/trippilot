@@ -143,7 +143,7 @@ let putBody: unknown = null;
 let daySlots: ItineraryDaysItemSlotsItem[] = PLAIN;
 let putHandler: () => Response;
 /** TRIP-1038 B — 저장 성공 뒤 확정 POST 가 따라 나간다. 핸들러가 없으면 `onUnhandledRequest:'error'` 에 걸린다(02a ★3). */
-let confirmHandler: () => Response;
+let confirmHandler: () => Response | Promise<Response>;
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 
@@ -481,6 +481,19 @@ describe('🔴 S1 · 저장 성공 토스트 + 확정 화면으로 이동 (#043 
   }
 
   it('PUT 200 이면 "일정을 저장했어요" 토스트가 뜨고, 확정 뒤 h16 으로 replace 1회 · push/back 0', async () => {
+    // TRIP-1047 — 확정이 성공하면 저장 토스트는 곧바로 확정 토스트로 바뀐다. 확정 응답을 문으로 붙잡아
+    // "저장은 끝났고 확정은 아직"인 동안에 저장 토스트를 본다(안 붙잡으면 수 ms 만에 바뀌어 못 본다).
+    let openDoor = () => {};
+    const door = new Promise<void>((resolve) => {
+      openDoor = resolve;
+    });
+    confirmHandler = async () => {
+      await door;
+      return HttpResponse.json({
+        ...manualDraft(daySlots),
+        status: 'CONFIRMED',
+      });
+    };
     renderPageWithToast();
     await ready();
     // 앵커: 저장 전엔 토스트가 없다 — 뒤에서 보이는 토스트가 이번 저장이 띄운 것임을 가른다.
@@ -492,6 +505,8 @@ describe('🔴 S1 · 저장 성공 토스트 + 확정 화면으로 이동 (#043 
     expect(putCalls).toBe(1);
     const toast = await screen.findByTestId('itinerary-manual-saved');
     expect(within(toast).getByText('일정을 저장했어요')).toBeOnTheScreen();
+    // 저장 토스트를 본 **뒤에** 확정 응답을 보낸다.
+    openDoor();
     // 저장+확정 2왕복 — CI 러너(약 4배 느림) 기준 한도.
     await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1), {
       timeout: 4000,

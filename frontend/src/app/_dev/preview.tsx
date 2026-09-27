@@ -163,7 +163,6 @@ import {
   type StaySelectCandidate,
 } from '@/features/trip/ui/StaySelectSheet';
 import { LiveLocationView } from '@/pages/live-location/ui/LiveLocationView';
-import { ConfirmedBanner } from '@/pages/itinerary-plan/ui/ConfirmedBanner';
 import { NoBaseNoticeCard } from '@/pages/itinerary-plan/ui/NoBaseNoticeCard';
 import { DraftFallbackBanner } from '@/pages/itinerary-draft/ui/DraftFallbackBanner';
 import { EditorView } from '@/widgets/map-sheet-shell/ui/EditorView';
@@ -4996,8 +4995,8 @@ export const PREVIEW_STATES: PreviewState[] = [
   },
   // h16 확정 일정(TRIP-801) — CONFIRMED 지도+시트 셸(옛 h34 TimelineScreen 읽기전용을 대체). 페이지
   // (ItineraryPlanPage)는 react-query·라우터가 필요해 프리뷰에서 직접 못 쓰므로 셸 조립을 축소해
-  // 그린다(h14 선례). 확정 얼굴의 신규 3요소(지도 위 성공 배너·이름 옆 휴관 경고·[일정 수정]·[공유하기]
-  // 2버튼)를 한 화면에서 육안 대조한다. 슬롯은 h11 결과 픽스처를 재사용한다.
+  // 그린다(h14 선례). 확정 얼굴의 요소(이름 옆 휴관 경고·[일정 수정]·[공유하기] 2버튼 — 성공 배너는
+  // TRIP-1047 로 확정 직후 토스트가 됐다)를 한 화면에서 육안 대조한다. 슬롯은 h11 결과 픽스처를 재사용한다.
   {
     key: 'h16-plan-confirmed',
     band: 'h',
@@ -5016,7 +5015,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         selectedDayIndex={0}
         onSelectDay={noop}
         onBack={noop}
-        mapCard={<ConfirmedBanner />}
         header={
           <SheetHeader
             title="부산 여행"

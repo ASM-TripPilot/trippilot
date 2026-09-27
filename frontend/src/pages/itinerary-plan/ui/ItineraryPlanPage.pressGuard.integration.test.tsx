@@ -1,7 +1,13 @@
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
 import type {
@@ -179,7 +185,12 @@ async function openPlanned(): Promise<void> {
 
 /** 확정 성공으로 같은 자리가 '일정 수정'으로 바뀔 때까지 기다린다. */
 async function waitForEditCta(): Promise<void> {
-  await screen.findByTestId('itinerary-confirmed-banner');
+  // 착지 앵커 = 확정 전용 meta 접두(TRIP-1047 — 상주 배너가 사라져 옮김).
+  await waitFor(() =>
+    expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(
+      /^확정됨 · /
+    )
+  );
   expect(screen.getByTestId('sheet-cta-button-0')).toHaveTextContent(
     '일정 수정'
   );
