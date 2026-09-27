@@ -13,6 +13,7 @@ import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { BaseAssignment, SavedStay } from '@/shared/api/generated/schemas';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { resetPressGuard } from '@/shared/press/pressGuard';
 
 import { TripNewStep2Page } from './TripNewStep2Page';
 
@@ -193,6 +194,7 @@ function page(): ReactElement {
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 
 beforeEach(() => {
+  resetPressGuard(); // TRIP-1013 — 연타 가드 창(모듈 전역)이 앞 테스트에서 새지 않게 닫는다.
   requested = [];
   holdResponses = false;
   held = [];

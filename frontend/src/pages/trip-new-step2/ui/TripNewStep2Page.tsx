@@ -16,6 +16,7 @@ import {
 } from '@/features/trip/model/useTripBases';
 import { StaySelectSheet } from '@/features/trip/ui/StaySelectSheet';
 import type { TripDestination } from '@/shared/api/generated/schemas';
+import { guardPress, openPressGuardWindow } from '@/shared/press/pressGuard';
 import {
   TripWizardStep2Screen,
   type Step2Variant,
@@ -75,7 +76,9 @@ export function TripNewStep2Page(): ReactElement {
       startDate={startDate}
       endDate={endDate}
       destinations={destinations}
-      onExit={goToMethod}
+      // TRIP-1013 #038 수신 — 지정 직후의 창 안이면 무시. `BaseNightsFlow` 안(onGenerate)이 아니라
+      // 여기서 건다: 여행 단위 화면(`TripBasesPage`)의 출구는 관찰 밖이라 가드 밖에 둔다.
+      onExit={guardPress(goToMethod)}
       onBack={() => router.back()}
       onRestart={() => router.push('/trips/new/step1')}
     />
@@ -213,7 +216,11 @@ export function BaseNightsFlow({
     assignBase.mutate(
       { tripId, data: { savedStayId: selectedSavedStayId, dateFrom, dateTo } },
       {
-        onSuccess: closeSheet,
+        onSuccess: () => {
+          // TRIP-1013 #038 — 시트가 빠지는 순간 창을 다시 연다(응답이 400ms보다 늦어도 관통 차단).
+          openPressGuardWindow();
+          closeSheet();
+        },
         onError: () => {
           assignLockRef.current = false;
           setAssignFailed(true);
@@ -264,7 +271,7 @@ export function BaseNightsFlow({
           selectedSavedStayId={selectedSavedStayId}
           onSelect={(savedStayId) => setSelectedSavedStayId(savedStayId)}
           onBrowse={() => browseStays(openCard.region)}
-          onAssign={handleAssign}
+          onAssign={guardPress(handleAssign)}
           assignPending={assignBase.isPending}
           assignFailed={assignFailed}
           onClose={closeSheet}

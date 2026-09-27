@@ -11,6 +11,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 
 import type { StayItem } from '@/shared/api/generated/schemas';
 import { getAccessToken } from '@/shared/api/tokenManager';
+import { guardPress } from '@/shared/press/pressGuard';
 
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 import {
@@ -201,12 +202,13 @@ export function StaySearchPage(): ReactElement {
         onToggleSave={(item) => void attemptToggle(item)}
         // 카드 탭(TRIP-457 AC-5) → 상세 라우트로 push(객체형·raw stayKey 만 — 상세가 스스로 조회,
         // TRIP-940. expo-router 자동 인코딩이라 수동 encode 안 함 ★F-3). 화면은 라우터를 모른다(구조 가드).
-        onPressCard={(item) =>
+        // TRIP-1013 #012 — 목적지 상세 '모두 보기'의 창 안이면 무시(연타 관통).
+        onPressCard={guardPress((item: StayItem) =>
           router.push({
             pathname: '/stays/[stayId]',
             params: { stayId: stayKey(item) },
           })
-        }
+        )}
         nameQuery={nameQuery}
         onChangeNameQuery={setNameQuery}
       />

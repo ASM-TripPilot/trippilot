@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import type { BaseAssignment, SavedStay } from '@/shared/api/generated/schemas';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { resetPressGuard } from '@/shared/press/pressGuard';
 
 import { TripNewStep2Page } from './TripNewStep2Page';
 
@@ -167,6 +168,7 @@ function staysRegionOf(call: unknown[] | undefined): string | undefined {
 }
 
 beforeEach(() => {
+  resetPressGuard(); // TRIP-1013 — 연타 가드 창(모듈 전역)이 앞 테스트에서 새지 않게 닫는다.
   // 모듈 싱글턴 스토어를 되돌린다 — 안 하면 앞 테스트 값이 뒤 판정을 뒤집는다.
   useTripWizardStore.getState().reset();
   useTripWizardStore.getState().setPeriod(undefined, TRIP_START, TRIP_END);

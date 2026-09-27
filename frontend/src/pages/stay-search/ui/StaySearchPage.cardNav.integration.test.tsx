@@ -10,6 +10,7 @@ import {
 
 import { server } from '@/mocks/server';
 import type { StayItem } from '@/shared/api/generated/schemas';
+import { resetPressGuard } from '@/shared/press/pressGuard';
 import { StaySearchPage } from './StaySearchPage';
 
 /**
@@ -70,6 +71,7 @@ const SEARCH_RESPONSE = {
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 beforeEach(() => {
+  resetPressGuard(); // TRIP-1013 — 연타 가드 창(모듈 전역)이 앞 테스트에서 새지 않게 닫는다.
   mockSearchParams = { region: '해운대' };
   mockPush.mockClear();
   server.use(

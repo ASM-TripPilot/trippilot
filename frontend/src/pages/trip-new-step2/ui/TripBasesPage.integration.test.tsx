@@ -18,6 +18,7 @@ import type {
   Trip,
 } from '@/shared/api/generated/schemas';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { resetPressGuard } from '@/shared/press/pressGuard';
 
 import { TripBasesPage } from './TripBasesPage';
 import { TripNewStep2Page } from './TripNewStep2Page';
@@ -260,6 +261,8 @@ function storeSnapshot() {
 let client: QueryClient;
 
 beforeEach(() => {
+  // TRIP-1013 — 연타 가드의 400ms 창은 모듈 전역이라 앞 테스트의 "지정" 누름이 새지 않게 닫는다.
+  resetPressGuard();
   serverBases = [];
   serverTrip = trip();
   savedStays = [STAY_A, STAY_B];
@@ -454,6 +457,35 @@ describe('AC-C4 · 두 CTA 는 3/4 로 돌아간다 (위저드로 가지 않는�
       (call) => JSON.stringify(call)
     );
     expect(routed.filter((call) => call.includes('/trips/new'))).toEqual([]);
+  });
+});
+
+// ── TRIP-1013 AC-S ───────────────────────────────────────────────────────────
+
+/** 가드 판정용으로 멈춰 둘 시각(값 자체는 의미 없다 — 흐르지 않는 것이 요점). */
+const FROZEN_NOW = 1_790_000_000_000;
+
+describe('TRIP-1013 AC-S · 여행 단위 화면의 출구는 연타 가드 밖이다 (가드는 관찰된 5곳에만)', () => {
+  // 시계를 멈춘다 — 화면을 그리고 응답을 기다리는 동안 실제 시간이 흘러 "창 안"이 400ms 를 넘기면
+  // 판정이 흔들린다(02a ★2). "창 밖"은 resetPressGuard() 로만 만든다.
+  let clock: jest.SpyInstance;
+  beforeEach(() => {
+    clock = jest.spyOn(Date, 'now').mockReturnValue(FROZEN_NOW);
+  });
+  afterEach(() => clock.mockRestore());
+
+  it('지정 성공 직후 주 CTA 를 한 번 누르면 back() 이 정확히 1회다', async () => {
+    mockCanGoBack.mockReturnValue(true);
+    await renderTripBases();
+    assignNight(1, 'stay-b');
+    await sheetClosed();
+    // 앵커 — 지정이 실제로 끝났다(시트 닫힘은 성공 경로에서만).
+    expect(screen.queryByTestId('trip-base-staysheet')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('trip-base-generate'));
+
+    // 위저드 2/4 의 같은 CTA 는 창 안이면 무시되지만(#038), 이 화면의 복귀는 가드를 안 탄다.
+    expect(mockBack).toHaveBeenCalledTimes(1);
   });
 });
 

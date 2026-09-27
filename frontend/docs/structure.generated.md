@@ -121,6 +121,10 @@
 - `src/__tests__/planbScopeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbSolvingStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbTriggerKindStructure.test.ts`  →  (export 없음)
+- `src/__tests__/pressGuardMustVisit.integration.test.tsx`  →  (export 없음)
+- `src/__tests__/pressGuardOnboardingPref.test.tsx`  →  (export 없음)
+- `src/__tests__/pressGuardStaySeeAll.test.tsx`  →  (export 없음)
+- `src/__tests__/pressGuardStructure.test.ts`  →  (export 없음)
 - `src/__tests__/recordAttributionStructure.test.ts`  →  (export 없음)
 - `src/__tests__/recordPhotoBinaryGuard.test.ts`  →  (export 없음)
 - `src/__tests__/recordsCalendarStructure.test.ts`  →  (export 없음)
@@ -1348,6 +1352,9 @@
 ## src/shared/pref/
 - `src/shared/pref/preferenceSelection.ts`  →  toggleMulti · toggleSingle
 
+## src/shared/press/
+- `src/shared/press/pressGuard.ts`  →  guardPress · openPressGuardWindow · resetPressGuard
+
 ## src/shared/push/
 - `src/shared/push/index.ts`  →  getPushPermission · type PushPermissionStatus · requestPushPermission · registerPushToken · unregisterDeviceToken · toServerOsPermission · isDeviceNotRegistered · promptAndRegisterPush · registerPushIfGranted · unregisterStoredPushToken
 - `src/shared/push/permissions.ts`  →  PushPermissionStatus · getPushPermission
@@ -1419,4 +1426,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 981개 파일
+합계 986개 파일

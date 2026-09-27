@@ -34,6 +34,7 @@ import {
 } from '@/shared/api/generated/trips/trips';
 import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
 import { isNotFound } from '@/shared/api/isNotFound';
+import { guardPress, openPressGuardWindow } from '@/shared/press/pressGuard';
 import { StateNotice, type StateNoticeAction } from '@/shared/ui/StateNotice';
 import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
 import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
@@ -168,12 +169,13 @@ export function ItineraryPlanPage({
 
   // 완성/확정 일정 → h12 편집 진입(TRIP-482·801 AC-2). `goCreate` 의 동적 라우트 push 관용구(객체
   // 1인자)를 복제해 tripId 를 경로 파라미터에 싣는다. 셸은 라우팅을 모르므로 여기서 배선한다.
-  function goEdit(): void {
+  // TRIP-1013 #057 수신 — '일정 저장하기'의 창 안이면 무시(두 CTA 갈래가 이 함수를 같이 쓴다).
+  const goEdit = guardPress((): void => {
     router.push({
       pathname: '/trips/[tripId]/itinerary/edit',
       params: { tripId },
     });
-  }
+  });
 
   // 확정(h16) 셸의 [공유하기] → j06 공유 카드 진입(TRIP-801 AC-2). `goEdit` 의 객체형 push 관용구
   // 복제(pathname·params 완전일치가 심판, 02a ★2). j06 라우트(`records/share`)는 이미 실재한다.
@@ -195,6 +197,8 @@ export function ItineraryPlanPage({
       { tripId },
       {
         onSuccess: (data) => {
+          // TRIP-1013 #057 — CTA 가 '일정 수정'으로 바뀌는 순간 창을 다시 연다(응답이 400ms보다 늦어도 관통 차단).
+          openPressGuardWindow();
           // 응답이 곧 최신 Itinerary(CONFIRMED)라 조회 캐시에 직접 써넣는다 — 재조회 0회로
           // 읽기전용으로 전환된다. resetQueries/removeQueries 는 data 까지 버려 금지(02a ★3).
           queryClient.setQueryData(
@@ -353,7 +357,8 @@ export function ItineraryPlanPage({
               {
                 label: '일정 저장하기',
                 variant: 'primary',
-                onPress: handleConfirm,
+                // TRIP-1013 #057 — '일정 저장하기'가 창을 열고, 창 안의 '일정 수정'(위 두 갈래)은 무시된다.
+                onPress: guardPress(handleConfirm),
                 disabled: isConfirmLocked(itinerary.data?.generationState),
               },
             ]

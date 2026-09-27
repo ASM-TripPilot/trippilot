@@ -25,6 +25,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { StayItem } from '@/shared/api/generated/schemas';
 import { useGetPlaces } from '@/shared/api/generated/places/places';
 import { getAccessToken } from '@/shared/api/tokenManager';
+import { guardPress } from '@/shared/press/pressGuard';
 import { formatPrice } from '@/entities/stay/lib/formatPrice';
 import { useSavedStays } from '@/features/stay/model/savedStays';
 import { stayKey } from '@/features/stay/model/stayKey';
@@ -160,8 +161,10 @@ function DestinationDetailBody({
         error: stay.isError,
         cards: stayCards,
         onRetry: () => void stay.refetch(),
-        onSeeAll: () =>
-          router.push(`/stays?region=${encodeURIComponent(displayName)}`),
+        // TRIP-1013 #012 — 연타의 두 번째 탭이 숙소 검색의 첫 카드를 관통하지 않게 창을 연다.
+        onSeeAll: guardPress(() =>
+          router.push(`/stays?region=${encodeURIComponent(displayName)}`)
+        ),
         onPressCard: pressStayCard,
         savedKeys,
         pendingKeys,
