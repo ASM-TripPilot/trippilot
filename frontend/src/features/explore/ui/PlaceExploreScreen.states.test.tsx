@@ -22,8 +22,8 @@ import {
  * 그리고(판정은 페이지가 끝낸다 — 화면은 다시 판정하지 않는다), 0건을 만든 조건을 **문구에
  * 지목**하며(BR-U1-16 취지), 담기 실패가 화면에 드러나고(INV-4), 응답 대기 중인 하트는 눌리지
  * 않는다(01b Seed Q7 ⓑ). 그리고 **TRIP-708 새 default 렌더**(CtaBar 제거 → 우하단 FAB 2단 +
- * 필터 버튼 + 정렬 칩 3개)에서 누를 수 있는 것이 정확히 **17개**여야 하고, FAB 는 상태와
- * 무관하게 상시 뜬다.
+ * 필터 버튼 + 정렬 칩 3개)에서 누를 수 있는 것이 정확히 **17개**(TRIP-1020 카드 버튼화 뒤 22개)여야
+ * 하고, FAB 는 상태와 무관하게 상시 뜬다.
  *
  * 왜 파일을 새로 쓰나: `PlaceExploreScreen.test.tsx` 는 게이트① 해시가 동결된 TRIP-221
  * 산출물이라 한 글자도 못 고친다(`StaySearchScreen.test.tsx` → `.states.test.tsx` 선례).
@@ -304,8 +304,8 @@ describe('PlaceExploreScreen — error (AC-7 · INV-4)', () => {
   });
 });
 
-describe('PlaceExploreScreen — 새 default 렌더 · 누를 수 있는 것 17개 (AC-1 · AC-2 · AC-3)', () => {
-  it('새 콜백을 하나도 안 넘겨도 FAB 2개·필터가 뜨고, 누를 수 있는 것은 정확히 17개다', () => {
+describe('PlaceExploreScreen — 새 default 렌더 · 누를 수 있는 것 22개 (AC-1 · AC-2 · AC-3 · TRIP-1020 AC-B4)', () => {
+  it('새 콜백을 하나도 안 넘겨도 FAB 2개·필터가 뜨고, 누를 수 있는 것은 정확히 22개다', () => {
     renderAsFrozenHelper();
 
     // ① 카드는 그대로 5장이고, ② 상태 안내·배너는 하나도 안 나온다.
@@ -313,7 +313,8 @@ describe('PlaceExploreScreen — 새 default 렌더 · 누를 수 있는 것 17�
     expect(visibleNotices()).toEqual([]);
     expect(screen.queryByTestId('explore-places-saveerror')).toBeNull();
 
-    // ③ 누를 수 있는 것 = 뒤로(1) + 칩 8 + 하트 5 + ♥FAB + ＋FAB + 필터 = 17.
+    // ③ 누를 수 있는 것 = 뒤로(1) + 칩 8 + 카드 5 + 하트 5 + ♥FAB + ＋FAB + 필터 = 22
+    //    (TRIP-1020 이전 17 — 카드 루트가 role=button 이 되어 5장이 더해졌다).
     //    renderAsFrozenHelper 는 onPressSavedPlaces·onPressFilter 를 **안 넘긴다** — 그래도
     //    두 FAB·필터가 떠야 한다(콜백 옵셔널·무동작 허용, Figma 상시 노출). 이 완전일치 목록은
     //    FAB 하나라도 빠지면(뮤테이션) 어긋나 red 다 — 현 15 에서 CTA(-1)·FAB(+2)·필터(+1)로
@@ -327,6 +328,9 @@ describe('PlaceExploreScreen — 새 default 렌더 · 누를 수 있는 것 17�
       [
         'explore-places-back',
         ...CATEGORY_CODES.map((code) => `explore-places-category-${code}`),
+        ...['p1', 'p2', 'p3', 'p4', 'p5'].map(
+          (id) => `explore-places-card-${id}`
+        ),
         ...['p1', 'p2', 'p3', 'p4', 'p5'].map(
           (id) => `explore-places-save-${id}`
         ),
@@ -376,9 +380,9 @@ describe('PlaceExploreScreen — 상태와 무관하게 FAB 2단을 유지한다
 // ── TRIP-1026 · 위저드에서 들어온 d04 는 ＋ FAB 를 그리지 않는다 (결정 1 = 숨김) ─────────────
 // 숨김 입력은 **새 옵셔널 prop `hideCreateTrip`** 이다. "onPressCreateTrip 미지정 = 숨김"으로 얹지
 // 않는다 — 형제 d05(`DestinationDetailScreen`)는 미지정을 "그리되 no-op"으로 잠가 두었다(AC-5).
-// 미지정(= false) 경로는 위 두 describe(17개·상태 무관 ＋ 상시)가 그대로 지킨다.
+// 미지정(= false) 경로는 위 두 describe(22개·상태 무관 ＋ 상시)가 그대로 지킨다.
 describe('🔴 1026 · hideCreateTrip 이면 ＋ FAB 만 빠진다 (AC-1 · AC-5)', () => {
-  it('누를 수 있는 것은 17개에서 ＋ 하나만 빠진 16개다 — ♥·필터·칩·하트는 그대로', () => {
+  it('누를 수 있는 것은 22개에서 ＋ 하나만 빠진 21개다 — ♥·필터·칩·카드·하트는 그대로', () => {
     renderScreen({ hideCreateTrip: true });
 
     // 앵커 — 목록 얼굴이 실제로 그려졌다(카드 5장).
@@ -394,6 +398,9 @@ describe('🔴 1026 · hideCreateTrip 이면 ＋ FAB 만 빠진다 (AC-1 · AC-5
       [
         'explore-places-back',
         ...CATEGORY_CODES.map((code) => `explore-places-category-${code}`),
+        ...['p1', 'p2', 'p3', 'p4', 'p5'].map(
+          (id) => `explore-places-card-${id}`
+        ),
         ...['p1', 'p2', 'p3', 'p4', 'p5'].map(
           (id) => `explore-places-save-${id}`
         ),

@@ -285,8 +285,8 @@ describe('PlaceExploreScreen — 정렬 칩은 "요즘 담긴 순" 하나 (TRIP-
   });
 });
 
-describe('PlaceExploreScreen — 누를 수 있는 것 17개 (AC-1 · AC-2 · AC-3 · 01b Seed §2)', () => {
-  it('뒤로 · 칩 8개 · 하트 5개 · FAB 2개 · 필터 = 17개다 (CTA 제거·FAB/필터 추가·정렬칩 비-Pressable)', () => {
+describe('PlaceExploreScreen — 누를 수 있는 것 22개 (AC-1 · AC-2 · AC-3 · 01b Seed §2 · TRIP-1020 AC-B4)', () => {
+  it('뒤로 · 칩 8개 · 카드 5장 · 하트 5개 · FAB 2개 · 필터 = 22개다 (CTA 제거·FAB/필터 추가·정렬칩 비-Pressable·카드 버튼화)', () => {
     // 이 렌더는 onPressSavedPlaces·onPressFilter 를 **안 넘긴다** — 그래도 두 FAB·필터가 떠야
     // 한다(Figma 는 상시 노출, 콜백은 옵셔널·무동작 허용). "콜백 없으면 안 그리는" 구현이면
     // 여기서 개수가 어긋나 red.
@@ -296,8 +296,8 @@ describe('PlaceExploreScreen — 누를 수 있는 것 17개 (AC-1 · AC-2 · AC
     // 필터 버튼(+1)·정렬 칩 3개(비-Pressable=0)로 현 15 → **17**(현 15 에서 델타로 직접 세어
     // 확정). 완전일치 목록이라 FAB 하나라도 빠지면(뮤테이션) 어긋나 red 다.
     // BottomTabBar 는 화면이 아니라 페이지가 그리므로(3-a) 여기 개수에 안 든다.
-    // 정직한 한계: `getAllByRole('button')` 은 accessibilityRole 이 **명시된** 요소만 잡는다
-    // — 카드 루트는 role 미부여 bare Pressable 이라 카드 자체는 안 세어진다(TRIP-456).
+    // TRIP-1020: 카드 루트도 role=button 이 되어(스크린리더가 누를 수 있게) 카드 5장이 더해져 22.
+    // 카드 하나라도 role 을 잃으면 목록이 어긋나 red 다.
     expect(
       screen
         .getAllByRole('button')
@@ -307,6 +307,7 @@ describe('PlaceExploreScreen — 누를 수 있는 것 17개 (AC-1 · AC-2 · AC
       [
         'explore-places-back',
         ...CATEGORY_CHIPS.map(({ code }) => `explore-places-category-${code}`),
+        ...PLACES.map(({ poiId }) => `explore-places-card-${poiId}`),
         ...PLACES.map(({ poiId }) => `explore-places-save-${poiId}`),
         'explore-places-saved-fab',
         'explore-places-create-fab',

@@ -4,6 +4,7 @@ import {
   fireEvent,
   within,
 } from '@testing-library/react-native';
+import { View } from 'react-native';
 
 import type { Place } from '@/entities/place/model';
 
@@ -104,5 +105,77 @@ describe('🔴 PlaceGridCard (AC-M2·M4 d04)', () => {
     // 사진 leaf(Image role) 없음 — 회색 자리만. 부제는 region 이 없으므로 카테고리 하나.
     expect(within(card).queryByText('맛집 · 부산 해운대구')).toBeNull();
     expect(within(card).getByText('맛집')).toBeTruthy();
+  });
+});
+
+// TRIP-1020 (B) #029 — 카드 루트가 버튼이 아니면 VoiceOver·agent-device 트리에서 누를 수 없다.
+// 라벨 = 이름 + 카드에 이미 보이는 부제 조각(01b Q1) + 담겼으면 ', 담음'(5-b 경고-1 오케 개정 — 명시 라벨이
+// 안쪽 글자 읽기를 대체해, 빼면 VoiceOver 가 담김 여부를 못 듣는다).
+const P2: Place = {
+  ...PLACE,
+  poiId: 'p2',
+  nameKo: '감천문화마을',
+  category: '문화',
+  region: null,
+};
+const LABEL_P1 = '해운대 암소갈비집, 맛집 · 부산 해운대구, 담음';
+const LABEL_P2 = '감천문화마을, 문화';
+
+function renderTwoCards() {
+  render(
+    <View>
+      <PlaceGridCard
+        place={PLACE}
+        saved
+        pending={false}
+        onToggleSave={jest.fn()}
+        onPressCard={jest.fn()}
+      />
+      <PlaceGridCard
+        place={P2}
+        saved={false}
+        pending={false}
+        onToggleSave={jest.fn()}
+        onPressCard={jest.fn()}
+      />
+    </View>
+  );
+}
+
+describe('TRIP-1020 AC-B1·B2 · 카드 루트는 이름 라벨을 가진 버튼', () => {
+  it.each([
+    ['p1', LABEL_P1],
+    ['p2', LABEL_P2],
+  ])(
+    '%s 카드 루트가 button 이고 라벨이 "%s" 로 그 카드 자신에게 붙어 있다',
+    (poiId, label) => {
+      renderTwoCards();
+
+      // name 은 자식 텍스트·자식 라벨로도 맞으므로(02a ★1) 라벨이 루트 자신에 있는지 따로 본다.
+      expect(screen.getByRole('button', { name: label }).props.testID).toBe(
+        `explore-places-card-${poiId}`
+      );
+      expect(screen.getByLabelText(label).props.testID).toBe(
+        `explore-places-card-${poiId}`
+      );
+    }
+  );
+
+  it('저장 하트는 카드와 다른 별도 button 노드로 남고 selected 상태를 유지한다', () => {
+    renderTwoCards();
+
+    expect(
+      screen
+        .getAllByRole('button')
+        .map((node) => String(node.props.testID))
+        .sort()
+    ).toEqual([
+      'explore-places-card-p1',
+      'explore-places-card-p2',
+      'explore-places-save-p1',
+      'explore-places-save-p2',
+    ]);
+    expect(screen.getByTestId('explore-places-save-p1')).toBeSelected();
+    expect(screen.getByTestId('explore-places-save-p2')).not.toBeSelected();
   });
 });
