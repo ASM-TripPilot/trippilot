@@ -214,16 +214,14 @@ export function SearchGlyph({
 }
 
 // 플러스 — 수동 등록 유도 카드 배지(22, 분홍 PRIMARY, 연분홍 원 위, Figma 1341:1391) ·
-// e02 분홍 원 FAB(24, 흰색 ON_PRIMARY, Figma 4463:2113) · e03 CTA2 "일정에 추가"(19, 흰 버튼 위라
-// 먹색 INK, Figma 1700:1278) 겸용. 색만 tone prop 으로 뺀다(SearchGlyph tone 선례). 기본값
-// primary: 등록 카드가 먼저 이 색을 썼다(무prop 호출 무회귀).
+// e02 분홍 원 FAB(24, 흰색 ON_PRIMARY, Figma 4463:2113) 겸용. 색만 tone prop 으로 뺀다(SearchGlyph
+// tone 선례). 기본값 primary: 등록 카드가 먼저 이 색을 썼다(무prop 호출 무회귀).
 export function PlusGlyph({
   size = 22,
   tone = 'primary',
   testID,
-}: GlyphProps & { tone?: 'primary' | 'onPrimary' | 'ink' }) {
-  const stroke =
-    tone === 'onPrimary' ? ON_PRIMARY : tone === 'ink' ? INK : PRIMARY;
+}: GlyphProps & { tone?: 'primary' | 'onPrimary' }) {
+  const stroke = tone === 'onPrimary' ? ON_PRIMARY : PRIMARY;
   return (
     <Svg
       testID={testID}

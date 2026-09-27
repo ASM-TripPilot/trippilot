@@ -2622,7 +2622,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         saved={true}
         onToggleSave={noop}
         onPressBook={noop}
-        onPressAddToTrip={noop}
         onPressBack={noop}
       />
     ),
@@ -2640,7 +2639,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         saved={false}
         onToggleSave={noop}
         onPressBook={noop}
-        onPressAddToTrip={noop}
       />
     ),
   },
@@ -2660,7 +2658,6 @@ export const PREVIEW_STATES: PreviewState[] = [
           saved={true}
           onToggleSave={noop}
           onPressBook={noop}
-          onPressAddToTrip={noop}
           onPressBack={noop}
         />
         <OtaChoiceSheet
@@ -5900,7 +5897,6 @@ export const PREVIEW_STATES: PreviewState[] = [
           saved={true}
           onToggleSave={noop}
           onPressBook={noop}
-          onPressAddToTrip={noop}
           onPressBack={noop}
         />
         <OtaChoiceSheet
@@ -5927,7 +5923,6 @@ export const PREVIEW_STATES: PreviewState[] = [
           saved={true}
           onToggleSave={noop}
           onPressBook={noop}
-          onPressAddToTrip={noop}
           onPressBack={noop}
         />
         <OtaChoiceSheet
