@@ -106,6 +106,8 @@ paths:
 | `src/__tests__/planbReplanDraftStructure.test.ts` | i13·i16 소스 가드 — INV-3 · 무쓰기(apply 훅 import 0) · 화면 순수성(dispatch는 페이지 1곳) |
 | `src/__tests__/liveLocationRoute.test.tsx` | i20·i21 라우트 얇은 위임 — `useLocalSearchParams` 값이 페이지에 도달하는지(한 쌍만 확인이라 하드코딩도 통과) |
 | `src/features/itinerary/ui/GenerationFallbackScreen.test.tsx` | h07 폴백 인터스티셜 렌더 — 카피 완전일치·체크리스트·하드실패 변형·INV-3 렌더 텍스트 스캔. 지도는 `@/test-support/mapViewMock` |
+| `src/features/itinerary/ui/GeneratingScreen.pulse.test.tsx` | h07 3단계 원 펄스(TRIP-1046, 20ms 표본) — `jest.spyOn(NativeAnimatedHelper.default,'shouldUseNativeDriver').mockReturnValue(false)`로 JS 드라이버 강제(네이티브 드라이버 아래선 가짜 타이머로도 opacity가 안 움직임) + `Animated.timing` 스파이 인자로 `useNativeDriver:true` 설정을 별도 확인. 처음 움직인 표본 순서 1<2<3(엄격 증가)로 stagger 판정, 3~4초 창의 얼굴 종류 수(`Set.size>1`)로 loop 반복(1회성 펄스 회귀) 판정, 언마운트 뒤 애니메이션 값 불변 2건(응답 전/후 이탈). 세 원의 구조 서명(호스트+className, style 제외)이 같아야 함(⚑C 동일 얼굴) |
+| `src/pages/itinerary-generating/ui/GeneratingPage.leaveToast.integration.test.tsx` | h09 이탈 토스트(TRIP-1046) — `leave()`(`rerender(null)`로 페이지만 트리에서 빼고 `ToastHost`는 유지, `unmount()`는 호스트까지 지워 못 씀) + `jest.spyOn(ToastModule,'showToast')` 호출횟수로 "정확히 1회" 판정(호스트는 1개만 그려 화면상으론 안 갈림). phase를 바꿔 `rerender`할 때 새 엘리먼트(`cloneElement`)를 넘겨야 재렌더됨(같은 JSX 참조면 React가 건너뜀). StrictMode 흉내 cleanup(mount 2·cleanup 1)에서 토스트 0건 단언 포함 |
 | `src/__tests__/itineraryTimeStructure.test.ts` | `features/itinerary/ui` 재귀 소요시간 문자열 0(INV-3) + 일정 라우트 두께 |
 | `src/__tests__/itineraryEditStructure.test.ts` | h24 편집 파일 정본 경로 실재 + 재귀 모집단 편입 앵커 + INV-3·raw hex |
 | `src/__tests__/itineraryEditSheetStructure.test.ts` | h24 편집 화면이 `@gorhom/bottom-sheet`·`useItineraryEditStore`를 직참조하지 않는지(화면 순수성) |
