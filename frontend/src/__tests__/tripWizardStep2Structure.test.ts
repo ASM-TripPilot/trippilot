@@ -314,3 +314,66 @@ describe('TRIP-1028 AC-6 · 주소 캐시 수명은 그 조회에만 — 앱 전
     expect(layoutSource).not.toContain('staleTime');
   });
 });
+
+/**
+ * TRIP-1011 C(#039) — 여행 단위 거점 화면. 01b Q2(a): **같은 슬라이스 `pages/trip-new-step2` 의 두 번째
+ * 페이지** + 라우트 `/trips/[tripId]/bases`(정본 frontend-components §1 의 계획 이름).
+ *
+ * 무엇을 보장하나(렌더로 못 보는 것만):
+ *  - 라우트는 얇다 — `tripId` 파라미터를 읽어 배럴의 `TripBasesPage` 에 내릴 뿐이다.
+ *  - 여행 단위 페이지는 위저드 스토어를 **출처로 쓰지 않는다**(AC-C5) — 기간·여행지는 서버 여행이다.
+ *  - 여행 단위 페이지는 위저드 경로(`/trips/new/…`)를 모른다(AC-C4 · `tripWizardEntryCensus` 표 무변경).
+ *
+ * 위 "여행 조회를 새로 붙이지 않는다"(TripNewStep2Page.tsx 한정)와 AC-3·TRIP-1010·TRIP-1011 긍정 단언은
+ * **그대로 둔다** — 조회는 새 파일에, 공통 배선 본문은 TripNewStep2Page.tsx 에 남긴다(가드 개정 0건).
+ */
+describe('TRIP-1011 C · 여행 단위 거점 화면 — 라우트 /trips/[tripId]/bases · 같은 슬라이스 두 번째 페이지', () => {
+  const TRIP_ROUTE_REL = 'app/trips/[tripId]/bases.tsx';
+  const TRIP_PAGE_REL = 'pages/trip-new-step2/ui/TripBasesPage.tsx';
+
+  it('라우트가 실재하고 tripId 를 읽어 배럴의 TripBasesPage 에 내리며, 마크업·조회를 갖지 않는다', () => {
+    expect(existsPair(TRIP_ROUTE_REL)).toEqual({
+      file: TRIP_ROUTE_REL,
+      exists: true,
+    });
+
+    const source = readOne(TRIP_ROUTE_REL);
+
+    // 긍정 짝 — 배럴 경유로 새 페이지를 가리키고, 파라미터는 라우트가 읽는다(method.tsx 선례).
+    expect(source).toMatch(/export\s+default\s+function\s+\w+/);
+    expect(source).toContain('@/pages/trip-new-step2');
+    expect(source).toContain('TripBasesPage');
+    expect(source).toContain('useLocalSearchParams');
+
+    const FORBIDDEN = [
+      'View',
+      'Text',
+      'useTripBases',
+      'useSavedStays',
+      'useGetTripsTripId',
+      '@tanstack/react-query',
+    ];
+    expect(FORBIDDEN.filter((needle) => source.includes(needle))).toEqual([]);
+  });
+
+  it('페이지가 같은 슬라이스에 있고 배럴이 재수출하며, 위저드 스토어·위저드 경로를 모른다', () => {
+    expect(existsPair(TRIP_PAGE_REL)).toEqual({
+      file: TRIP_PAGE_REL,
+      exists: true,
+    });
+    const pageSource = readOne(TRIP_PAGE_REL);
+
+    // 긍정 짝 — 실제 페이지 심볼이고 배럴이 내보낸다.
+    expect(pageSource).toMatch(/export function TripBasesPage\b/);
+    expect(readOne(BARREL_REL)).toContain('TripBasesPage');
+    // 긍정 짝 — 스텁이 아니라 실제로 화면을 그린다(공통 배선 경유든 직접이든 거점 화면이 나온다).
+    expect(pageSource).toMatch(
+      /TripWizardStep2Screen|from '\.\/TripNewStep2Page'/
+    );
+
+    // 부정 — 위저드 스토어를 출처로 쓰면 3/4 에서 들어온 다른 여행 값이 카드로 샌다(AC-C5).
+    expect(pageSource).not.toContain('useTripWizardStore');
+    // 부정 — 위저드 경로로 보내는 길이 없다(AC-C4). '처음부터'를 복사하면 census 표도 red.
+    expect(pageSource).not.toContain('/trips/new/');
+  });
+});

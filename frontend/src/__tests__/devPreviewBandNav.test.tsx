@@ -1428,3 +1428,19 @@ describe('🔴 TRIP-1026 · d04 위저드 출처(＋ FAB 없음) 프리뷰 키 (
     );
   });
 });
+
+// TRIP-1011 C(#039) — 새 키가 아니라 기존 `h01-method` 가 새 링크 콜백을 넘기게 한다(총량 167 무변경).
+// MethodPickerScreen 은 "콜백이 없으면 안 그린다" 관례라, 프리뷰가 안 넘기면 6-b 육안 수단이 사라진다.
+describe('🔴 TRIP-1011 C · h01-method 프리뷰가 "거점 숙소 다시 고르기" 링크를 그린다 (band h · 키 수 무변경)', () => {
+  it('h01-method 엔트리를 렌더하면 itinerary-method-rebase 가 있다', () => {
+    const entry = PREVIEW_STATES.find((state) => state.key === 'h01-method');
+    // 앵커 — 엔트리가 실재한다(없으면 아래가 빈 렌더에서 공짜로 red/green 이 된다).
+    expect(entry).toBeDefined();
+
+    render(<>{entry?.render()}</>);
+
+    // 짝 — 정말 h01 화면이다.
+    expect(screen.getByTestId('itinerary-method-copick')).toBeTruthy();
+    expect(screen.getByTestId('itinerary-method-rebase')).toBeTruthy();
+  });
+});

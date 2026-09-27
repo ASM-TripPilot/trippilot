@@ -233,3 +233,59 @@ describe('TRIP-784 · h01 시작 방법 Figma 재정합', () => {
     expect(screen.queryByTestId('itinerary-method-soon')).toBeNull();
   });
 });
+
+// TRIP-1011 C(#039) — "거점 숙소 다시 고르기" 링크. 화면 관례("콜백이 없으면 그리지 않는다")를 따른다 —
+// 빈 핸들러로 그리면 누르면 아무 일도 없는 버튼이 된다(noDeadHandlers 계열).
+describe('TRIP-1011 C · 거점 숙소 다시 고르기 링크 (01b Q3)', () => {
+  it('onPressRebase 를 받으면 문구 그대로 링크를 그리고, 누르면 콜백을 한 번 부른다', () => {
+    const onPressRebase = jest.fn();
+    render(
+      <MethodPickerScreen
+        onBack={noop}
+        onPressFullAi={noop}
+        onPressManual={noop}
+        onPressCoPick={noop}
+        onPressRebase={onPressRebase}
+      />
+    );
+
+    // getByText(문자열) = 노드 텍스트 완전 일치 — D8 대안 문구("거점 다시 고르기")는 여기서 red.
+    expect(screen.getByText('거점 숙소 다시 고르기')).toBeOnTheScreen();
+    fireEvent.press(screen.getByTestId('itinerary-method-rebase'));
+
+    expect(onPressRebase).toHaveBeenCalledTimes(1);
+  });
+
+  it('링크 글자는 같은 화면의 기존 링크 톤(text-primary-text)을 쓴다', () => {
+    render(
+      <MethodPickerScreen
+        onBack={noop}
+        onPressFullAi={noop}
+        onPressManual={noop}
+        onPressCoPick={noop}
+        onPressRebase={noop}
+      />
+    );
+
+    // className 은 jest 렌더 트리에 평문 prop 으로 남는다(위 AC-4 선례). 간격·굵기는 6-b 육안 몫.
+    expect(screen.getByText('거점 숙소 다시 고르기').props.className).toContain(
+      'text-primary-text'
+    );
+  });
+
+  it('onPressRebase 가 없으면 링크를 그리지 않는다 (프리뷰·다른 소비처 무회귀)', () => {
+    render(
+      <MethodPickerScreen
+        onBack={noop}
+        onPressFullAi={noop}
+        onPressManual={noop}
+        onPressCoPick={noop}
+      />
+    );
+
+    // 짝 — 화면은 그려졌다(빈 트리 공짜 통과 차단).
+    expect(screen.getByTestId('itinerary-method-copick')).toBeOnTheScreen();
+    expect(screen.queryByTestId('itinerary-method-rebase')).toBeNull();
+    expect(screen.queryByText('거점 숙소 다시 고르기')).toBeNull();
+  });
+});

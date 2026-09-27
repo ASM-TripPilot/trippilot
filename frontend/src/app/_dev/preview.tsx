@@ -4451,6 +4451,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         onPressFullAi={noop}
         onPressManual={noop}
         onPressCoPick={noop}
+        onPressRebase={noop}
       />
     ),
   },

@@ -98,6 +98,7 @@ export interface ActiveGeneration {
 const BLOCKED_REASON =
   '다른 여행의 일정을 만들고 있어요 — 한 번에 하나만 만들 수 있어요';
 const GOTO_ACTIVE_LABEL = '진행 중인 여행으로 가기';
+const REBASE_LABEL = '거점 숙소 다시 고르기';
 
 // TRIP-504 재생성 확인 — 문구는 일반형이다. "직접 바꾼 N곳이 사라져요"의 N 을 FE 가 셀 계약이
 // 없어(01b 맹점 5) 곳 수를 발명하지 않고 일반 문구로 낮춘다. 리비전 스냅숏은 서버(U3) 책임.
@@ -126,6 +127,8 @@ export interface MethodPickerScreenProps {
   showRegenerateConfirm?: boolean;
   onRegenerateContinue?: () => void;
   onRegenerateCancel?: () => void;
+  /** TRIP-1011 C — "거점 숙소 다시 고르기" 링크. 미전달이면 링크를 그리지 않는다. */
+  onPressRebase?: () => void;
 }
 
 export function MethodPickerScreen({
@@ -138,6 +141,7 @@ export function MethodPickerScreen({
   showRegenerateConfirm = false,
   onRegenerateContinue,
   onRegenerateCancel,
+  onPressRebase,
 }: MethodPickerScreenProps): ReactElement {
   const blocked = activeGeneration != null;
 
@@ -285,6 +289,20 @@ export function MethodPickerScreen({
           <Text className="w-full text-center font-noto text-[12.5px] text-muted-soft">
             {METHOD_SWITCH_NOTE}
           </Text>
+
+          {onPressRebase ? (
+            <Pressable
+              testID="itinerary-method-rebase"
+              accessibilityRole="button"
+              onPress={onPressRebase}
+              className="self-center"
+              hitSlop={6}
+            >
+              <Text className="font-noto-bold text-label font-bold text-primary-text">
+                {REBASE_LABEL}
+              </Text>
+            </Pressable>
+          ) : null}
         </ScrollView>
       </View>
     </SafeAreaView>

@@ -84,6 +84,11 @@ export function ItineraryMethodPage({
         goToCoPickMustVisits();
       }}
       onRegenerateCancel={() => setShowRegenerateConfirm(false)}
+      // TRIP-1011 C — 2/4→3/4 가 replace 라 뒤로가기로는 거점에 못 돌아간다. push 로 쌓아야 거점
+      // 화면의 CTA 가 back() 으로 이 화면에 돌아온다.
+      onPressRebase={() =>
+        router.push({ pathname: '/trips/[tripId]/bases', params: { tripId } })
+      }
       // ponytail: 낙관적 스텁(TRIP-404). 서버 동시생성 판정면(선행 BE 칸)이 아직 없어 항상 미차단.
       // 필드 신설 시 여기서 그 판정면을 넘기고 onPressActiveGeneration 을 배선한다.
       activeGeneration={null}

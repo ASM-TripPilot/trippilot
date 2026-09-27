@@ -167,6 +167,7 @@
 - `src/__tests__/termsRoutes.test.tsx`  →  (export 없음)
 - `src/__tests__/travelStyleParityStructure.test.ts`  →  (export 없음)
 - `src/__tests__/travelStyleStructure.test.ts`  →  (export 없음)
+- `src/__tests__/tripBasesRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/tripBudgetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/tripDraftBoundary.test.ts`  →  (export 없음)
 - `src/__tests__/tripNightsPeriodOrder.test.tsx`  →  (export 없음)
@@ -256,6 +257,9 @@
 
 ## src/app/terms/
 - `src/app/terms/[termsType].tsx`  →  (export 없음)
+
+## src/app/trips/[tripId]/
+- `src/app/trips/[tripId]/bases.tsx`  →  (export 없음)
 
 ## src/app/trips/[tripId]/itinerary/copick/
 - `src/app/trips/[tripId]/itinerary/copick/[slotKey].tsx`  →  (export 없음)
@@ -703,6 +707,7 @@
 - `src/features/trip/lib/sheetHandle.ts`  →  SHEET_HANDLE_INDICATOR_STYLE
 
 ## src/features/trip/model/
+- `src/features/trip/model/baseAssignPlan.ts`  →  BaseAssignPlan · planBaseAssign
 - `src/features/trip/model/baseScreen.ts`  →  UnresolvedDaysView · unresolvedDaysView
 - `src/features/trip/model/baseSections.ts`  →  BaseSection · toBaseSections · NightlyBaseCard · nightlyBaseCards
 - `src/features/trip/model/budgetAmount.ts`  →  BudgetAmount · parseBudgetAmount · formatBudgetAmount
@@ -1033,10 +1038,11 @@
 - `src/pages/trip-new-step1/ui/TripNewStep1Page.tsx`  →  TripNewStep1PageProps · TripNewStep1Page
 
 ## src/pages/trip-new-step2/
-- `src/pages/trip-new-step2/index.ts`  →  TripNewStep2Page
+- `src/pages/trip-new-step2/index.ts`  →  TripNewStep2Page · TripBasesPage
 
 ## src/pages/trip-new-step2/ui/
-- `src/pages/trip-new-step2/ui/TripNewStep2Page.tsx`  →  TripNewStep2Page
+- `src/pages/trip-new-step2/ui/TripBasesPage.tsx`  →  TripBasesPage
+- `src/pages/trip-new-step2/ui/TripNewStep2Page.tsx`  →  TripNewStep2Page · BaseNightsFlowProps · BaseNightsFlow
 
 ## src/pages/trip-records/
 - `src/pages/trip-records/index.ts`  →  TripRecordsPage
@@ -1406,4 +1412,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 970개 파일
+합계 974개 파일
