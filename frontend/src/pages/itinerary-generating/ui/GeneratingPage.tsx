@@ -21,6 +21,9 @@ import { isNotFound } from '@/shared/api/isNotFound';
 import { getAccessToken } from '@/shared/api/tokenManager';
 import type { MapCenter, MapPin } from '@/shared/map';
 import { promptAndRegisterPush } from '@/shared/push';
+import { showToast } from '@/shared/ui/Toast';
+
+const LEAVE_TOAST_MESSAGE = '백그라운드에서 계속 만들고 있어요';
 
 /**
  * h09 배선(TRIP-305) — 생성 POST 를 소유·발화하고 진행/성공/실패/이탈을 화면에 잇는다.
@@ -48,6 +51,10 @@ import { promptAndRegisterPush } from '@/shared/push';
  *     중복이 아니다: 서울 폴백 `center` 를 넣으면 `pins` 겹만 남고, `pins` 를 `[]` 그대로 넘기면
  *     (`[]` 는 참) `center` 겹만 남는다. 조회 오류는 지도만 생략하고 `failed` 에 합치지 않는다 —
  *     합치면 POST 가 진행 중인데 생성 실패가 뜬다.
+ *  6. **진행 중 이탈 토스트(TRIP-1046).** 화면이 트리에서 빠질 때(‹ replace·스와이프 pop 모두
+ *     언마운트) 마지막 렌더가 진행 중이고 성공 콜백 전이면 한 번 알린다. 발화는 언마운트 한 곳뿐 —
+ *     `goHome` 은 409 [기다리기]·관찰 모드와 공유라 거기 넣으면 거짓 토스트가 샌다. 성공 표지는
+ *     호출별 onSuccess 첫 줄: replace 가 결과 재렌더보다 먼저 화면을 내릴 수 있어서다.
  */
 export function GeneratingPage({
   tripId,
@@ -79,6 +86,20 @@ export function GeneratingPage({
     },
   });
   const firedRef = useRef(false);
+  const succeededRef = useRef(false);
+  const pendingRef = useRef(false);
+  pendingRef.current = generate.isPending;
+  useEffect(
+    () => () => {
+      if (pendingRef.current && !succeededRef.current) {
+        showToast({
+          message: LEAVE_TOAST_MESSAGE,
+          testID: 'itinerary-generating-background-toast',
+        });
+      }
+    },
+    []
+  );
 
   const mustVisits = useGetTripsTripIdMustVisits(tripId);
   const savedPlaces = useSavedPlaces({ isAuthed: getAccessToken() !== null });
@@ -94,6 +115,7 @@ export function GeneratingPage({
       { tripId, data: { generationMode: mode } },
       {
         onSuccess: (data: Itinerary) => {
+          succeededRef.current = true;
           // 일정이 처음 생긴 순간 알림 권한을 묻는다(TRIP-835) — 기다리지 않는다(이동이 다이얼로그에 막히지 않게).
           void promptAndRegisterPush();
           // copick 씨앗은 허브가 아니라 **첫 비고정 슬롯**의 SlotFillPage 로 착지한다(01b 순회 세부,

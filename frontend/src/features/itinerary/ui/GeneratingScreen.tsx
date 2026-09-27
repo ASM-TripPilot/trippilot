@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import {
+  AccessibilityInfo,
   Animated,
   Easing,
   Pressable,
@@ -20,7 +21,7 @@ import {
 } from './ItineraryGlyphs';
 
 /**
- * h09 [완전AI] "AI가 일정 짜는 중" 화면 — Figma `1905:1083`. 프레젠테이션(props만, 재판정 금지).
+ * h07 [완전AI] "AI가 일정 짜는 중" 화면 — Figma `4294:8516`. 프레젠테이션(props만, 재판정 금지).
  *
  * 이 화면은 언제나 "생성 중"이다 — 진행 여부를 스스로 판정하지 않고(`generating` prop 없음) 진행
  * 표면을 상시 그린다. `failed` 일 때만 실패 표면으로 갈아 낀다(배선의 `isError`).
@@ -111,6 +112,51 @@ function IndeterminateBar(): ReactElement {
   );
 }
 
+/**
+ * 3단계 원의 순차 펄스(TRIP-1046 · QA #025) — 세 원이 같은 박자로 옅어졌다 돌아오되 시작만 300ms씩
+ * 어긋난다(stagger). 어느 단계가 끝났다고 주장하지 않으므로 세 원의 얼굴은 같다(⚑C). 박자·진폭은
+ * Figma 모션 정의가 없어 발명값(6-b 육안 조정). 기기 "동작 줄이기"면 시작하지 않아 정지 원으로 남는다.
+ */
+function useStepPulse(count: number): Animated.Value[] {
+  const [values] = useState(() =>
+    Array.from({ length: count }, () => new Animated.Value(1))
+  );
+
+  useEffect(() => {
+    let active = true;
+    const pulse = Animated.stagger(
+      300,
+      values.map((value) =>
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(value, {
+              toValue: 0.3,
+              duration: 600,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+            Animated.timing(value, {
+              toValue: 1,
+              duration: 600,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+          ])
+        )
+      )
+    );
+    void AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
+      if (active && !reduce) pulse.start();
+    });
+    return () => {
+      active = false;
+      pulse.stop();
+    };
+  }, [values]);
+
+  return values;
+}
+
 export interface GeneratingScreenProps {
   /** 앱바 뒤로 셰브론 press — 배선이 앞으로 이탈(여행/홈), 뮤테이션은 살아 있음(뒤로가기=백그라운드). */
   onBackground: () => void;
@@ -138,6 +184,7 @@ export function GeneratingScreen({
   center,
   busy,
 }: GeneratingScreenProps): ReactElement {
+  const pulse = useStepPulse(STEPS.length);
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
       <View className="flex-1 bg-canvas">
@@ -246,7 +293,11 @@ export function GeneratingScreen({
                   >
                     {/* 균일한 진행 중 표식 — 단계별 완료/대기 차등을 두지 않는다(⚑C). */}
                     <View className="h-5 w-5 items-center justify-center">
-                      <View className="h-[13px] w-[13px] rounded-pill border-[1.5px] border-muted-soft" />
+                      <Animated.View
+                        testID={`itinerary-generating-pulse-${index + 1}`}
+                        style={{ opacity: pulse[index] }}
+                        className="h-[13px] w-[13px] rounded-pill border-[1.5px] border-muted-soft"
+                      />
                     </View>
                     <Text className="font-noto-bold text-[14.5px] font-bold text-ink">
                       {label}
