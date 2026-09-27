@@ -75,7 +75,7 @@ function renderScreen(overrides: Partial<Props> = {}) {
 }
 
 describe('c02-social-login — 기본 화면 (AC-ONB-01-12 · §10 이메일 버튼 숨김)', () => {
-  it('애플 버튼을 받지 않으면(Android·판정 전) 브랜드와 소셜 3버튼(구글·카카오·네이버)·약관 안내만 렌더한다 (TRIP-932 AC-10·AC-12)', () => {
+  it('애플 버튼을 받지 않으면(Android·판정 전) 브랜드와 소셜 3버튼(구글·카카오·네이버)만 렌더한다 (TRIP-932 AC-10·AC-12)', () => {
     // 준비 + 실행 — AppleButton 없음.
     renderScreen();
 
@@ -88,7 +88,8 @@ describe('c02-social-login — 기본 화면 (AC-ONB-01-12 · §10 이메일 버
       'auth-login-naver',
     ]);
     expect(screen.queryByTestId('auth-login-apple')).toBeNull();
-    expect(screen.getByTestId('auth-login-terms')).toBeOnTheScreen();
+    // TRIP-1053 — 약관 안내 줄은 지웠다(동의는 약관 화면에서만 받는다, BR-U0-10).
+    expect(screen.queryByTestId('auth-login-terms')).toBeNull();
   });
 
   it('애플 버튼을 받으면(iOS) 둘째 자리 래퍼 auth-login-apple 안에 그려 4버튼(구글·애플·카카오·네이버)이 된다 (TRIP-932 AC-11)', () => {
@@ -163,8 +164,34 @@ describe('c02-social-login — 취소 안내 (AC-ONB-01-4)', () => {
     renderScreen({ phase: 'cancelled' });
     const notice = screen.getByTestId('auth-login-cancel-notice');
     expect(notice).toBeOnTheScreen();
-    expect(screen.getByText('로그인이 취소되었습니다')).toBeOnTheScreen();
+    // 문구는 안내 노드 '안'에서 찾는다 — 화면 전역으로 찾으면 문구만 버튼 위로 빠지고 빈 testID
+    // 껍데기가 남는 회귀(5-b 경고-1 M1)를 놓친다(에러 배너 AC-V3 의 within 과 대칭).
+    expect(
+      within(notice).getByText('로그인이 취소되었습니다')
+    ).toBeOnTheScreen();
   });
+});
+
+describe('c02-social-login — 약관 문구 없음 (TRIP-1053 AC-3 · BR-U0-10)', () => {
+  it.each([
+    { name: 'idle', override: {} },
+    { name: 'cancelled', override: { phase: 'cancelled' } },
+    {
+      name: 'error',
+      override: { phase: 'error', errorCode: 'SOCIAL_AUTH_FAILED' },
+    },
+  ] as { name: string; override: Partial<Props> }[])(
+    '$name 상태에서 "약관에 동의" 문구와 auth-login-terms 가 화면 어디에도 없다',
+    ({ override }) => {
+      // 준비 + 실행
+      renderScreen(override);
+
+      // 단언 — 루트 앵커(공허한 통과 방지) + testID 부재 + 문구 부재(정규식 = 부분 일치).
+      expect(screen.getByTestId('auth-login-root')).toBeOnTheScreen();
+      expect(screen.queryByTestId('auth-login-terms')).toBeNull();
+      expect(screen.queryByText(/약관에 동의/)).toBeNull();
+    }
+  );
 });
 
 describe('c02-social-login — 에러 배너 (AC-ONB-01-5)', () => {
