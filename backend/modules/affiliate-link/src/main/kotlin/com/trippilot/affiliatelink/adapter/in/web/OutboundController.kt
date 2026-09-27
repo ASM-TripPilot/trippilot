@@ -23,6 +23,10 @@ import java.util.UUID
  * 목적지 교체(웹검색 → OTA 딥링크)는 앱 배포 없이 서버 변경만으로 된다.
  * 응답에 Location 외 아무것도 싣지 않는다 — 클릭·전환 지표는 내부 전용(BR-U1-32).
  *
+ * **인증은 선택이다**(SecurityConfig permitAll + bootstrap 선례). 브라우저·커스텀탭이 여는
+ * 경로라 Authorization 을 실을 수 없다 — 익명이면 [Principal] 이 null 로 온다(익명 인증은
+ * getUserPrincipal 에서 걸러진다). 토큰이 있으면 계정이 클릭에 남는다.
+ *
  * 기저 경로가 accommodation-search 의 컨트롤러들과 같지만 세그먼트 수가 달라
  * (`/{stayId}/outbound` 2단) 리터럴 경로들(`/search`·`/geocode`)과 충돌하지 않는다.
  */
@@ -33,14 +37,14 @@ class OutboundController(
 ) {
     @GetMapping("/{stayId}/outbound")
     fun outbound(
-        principal: Principal,
+        principal: Principal?,
         @PathVariable stayId: String,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) checkin: LocalDate?,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) checkout: LocalDate?,
         @RequestParam(required = false) adults: Int?,
     ): ResponseEntity<Void> {
         val link = service.outbound(
-            principal.accountId(),
+            principal?.accountId(),
             stayId,
             OutboundQuery(checkIn = checkin, checkOut = checkout, adults = adults),
         )

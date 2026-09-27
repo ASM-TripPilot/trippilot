@@ -580,6 +580,13 @@ paths:
 
 
         응답 본문은 없다. 클릭·전환 지표는 내부 전용이라 사용자 대면 응답에 싣지 않는다(BR-U1-32).
+
+
+        Bearer 선택(bootstrap 선례) — 브라우저·커스텀탭이 열어 Authorization 을 실을 수 없다.
+        토큰이 오면 계정이 클릭에 남고, 없으면 익명 클릭이다.
+      security:
+        - bearerAuth: []
+        - {}
       parameters:
         - name: stayId
           in: path

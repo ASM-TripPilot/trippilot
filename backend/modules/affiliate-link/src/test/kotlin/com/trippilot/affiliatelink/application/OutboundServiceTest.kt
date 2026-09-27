@@ -73,6 +73,16 @@ class OutboundServiceTest : StringSpec({
         c.clickedAt shouldBe now
     }
 
+    "익명 클릭도 남는다 — 계정만 null 이다(브라우저가 열어 토큰을 못 싣는 경로)" {
+        val clicks = RecordingClicks()
+
+        svc(clicks).outbound(null, stayId, OutboundQuery())
+
+        val c = clicks.recorded.single()
+        c.accountId shouldBe null
+        c.stayId shouldBe stayId
+    }
+
     "기록 실패해도 302 는 산다 — 클릭 유실이 이동 실패보다 싸다" {
         val link = svc(BrokenClicks()).outbound(account, stayId, OutboundQuery())
 

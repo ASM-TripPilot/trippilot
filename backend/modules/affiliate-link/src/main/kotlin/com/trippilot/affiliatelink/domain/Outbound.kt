@@ -29,10 +29,15 @@ interface OtaDeeplinkPort {
     fun buildOutbound(stay: OutboundStay, query: OutboundQuery, clickId: UUID): OutboundLink
 }
 
-/** 클릭 한 건 — 내부 지표 전용(BR-U1-32). 사용자 대면 응답 어디에도 싣지 않는다. */
+/**
+ * 클릭 한 건 — 내부 지표 전용(BR-U1-32). 사용자 대면 응답 어디에도 싣지 않는다.
+ *
+ * [accountId] 가 null 이면 **익명 클릭**이다 — 이 엔드포인트는 브라우저·커스텀탭이 열어
+ * Authorization 을 실을 수 없다(domain-entities C5 의 accountId 필수에서 이탈, 사유는 V2.54 주석).
+ */
 data class OutboundClick(
     val clickId: UUID,
-    val accountId: UUID,
+    val accountId: UUID?,
     val stayId: String,
     val vendor: String,
     val query: OutboundQuery,

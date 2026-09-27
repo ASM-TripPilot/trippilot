@@ -17,7 +17,7 @@ import java.util.UUID
 @Table(name = "affiliate_click")
 class AffiliateClickEntity(
     @Id @Column(name = "click_id") var clickId: UUID,
-    @Column(name = "account_id") var accountId: UUID,
+    @Column(name = "account_id") var accountId: UUID?,
     @Column(name = "stay_id") var stayId: String,
     @Column(name = "vendor") var vendor: String,
     @Column(name = "check_in") var checkIn: LocalDate?,

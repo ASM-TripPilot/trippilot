@@ -26,7 +26,7 @@ class OutboundService(
     private val clicks: OutboundClickPort,
     private val clock: Clock,
 ) {
-    fun outbound(accountId: UUID, stayId: String, query: OutboundQuery): OutboundLink {
+    fun outbound(accountId: UUID?, stayId: String, query: OutboundQuery): OutboundLink {
         val name = stays.findName(stayId) ?: throw ResourceNotFound()
         val clickId = UUID.randomUUID()
         val link = deeplink.buildOutbound(OutboundStay(stayId, name), query, clickId)
