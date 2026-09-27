@@ -210,15 +210,20 @@ describe('🔴 935-AC-1 · 홈 매거진 히어로 → 이동 없음(진입 차�
 });
 
 // ── TRIP-499 · AC-1 홈 검색바 → 여행지 선택(정본) ─────────────────────────────
-describe('🔴 499-AC-1 · 985 · 검색바 → 지역 선택(purpose=explore)', () => {
-  it('홈 검색바를 누르면 여행지 선택(RegionPicker, explore)으로 이동한다', () => {
+describe('🔴 499-AC-1 · 985 · 1015-E · 검색바 → 지역 선택(purpose=explore, 진입 탭 home)', () => {
+  it('홈 검색바를 누르면 여행지 선택(RegionPicker, explore)으로 이동하고, 진입 탭 home 을 싣는다', () => {
     // 기본 목 = 빈 trips → discovery 얼굴. discovery 는 검색바를 그린다. 정확히 탐색용 지역 선택
     // 한 곳으로 간다(TRIP-985 — trip 은 위저드 전용). 기대값이 공유 헬퍼 출력이라 철자 오타도 잡힌다.
+    // TRIP-1015 E(결정 4) — 결과 화면의 탭바가 "홈"을 가리키도록 진입 탭을 URL 에 싣는다. 이 파일의
+    // 옛 기대값(`regionPickerHref('explore')`, 신호 없음)은 새 계약과 충돌해 여기서 개정했다(02 기록).
     render(<HomeRoute />);
 
     fireEvent.press(screen.getByTestId('home-search-bar'));
 
-    expect(mockPush.mock.calls).toEqual([[regionPickerHref('explore')]]);
+    expect(mockPush.mock.calls).toEqual([
+      [regionPickerHref('explore', { tab: 'home' })],
+    ]);
+    expect(String(mockPush.mock.calls[0][0])).toContain('tab=home');
   });
 });
 

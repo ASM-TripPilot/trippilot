@@ -31,7 +31,10 @@ import { stayKey } from '@/features/stay/model/stayKey';
 import { useStaySearch } from '@/features/stay/model/useStaySearch';
 import { useRegions } from '@/features/explore/model/regions';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
-import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
+import {
+  regionPickerHref,
+  type RegionPickerTab,
+} from '@/features/explore/model/regionPickerPurpose';
 import { DestinationDetailScreen } from '@/features/explore/ui/DestinationDetailScreen';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import type {
@@ -44,17 +47,31 @@ import type {
 const PLACE_LANE_LIMIT = 8;
 
 export function DestinationDetailPage(): ReactElement {
-  const { region: regionCode } = useLocalSearchParams<{ region?: string }>();
+  const { region: regionCode, tab } = useLocalSearchParams<{
+    region?: string;
+    tab?: string;
+  }>();
+  // 홈 검색으로 들어왔으면 복제 탭바가 홈을 가리킨다(TRIP-1015 E · 결정 4). 아는 값만 받는다(URL 신뢰 경계).
+  const entryTab: RegionPickerTab | undefined =
+    tab === 'home' ? 'home' : undefined;
   // 피커의 `dismissTo`는 스택 밑의 이 화면을 재마운트 없이 params만 바꿔 되살린다(TRIP-985).
   // 지역이 바뀌면 key로 본문을 새로 만들어 이전 지역의 로컬 상태(저장 실패 배너·대기 표식)와
   // 이전 지역에서 늦게 끝난 저장 결과가 새 지역 화면에 닿지 않게 한다.
-  return <DestinationDetailBody key={regionCode} regionCode={regionCode} />;
+  return (
+    <DestinationDetailBody
+      key={regionCode}
+      regionCode={regionCode}
+      entryTab={entryTab}
+    />
+  );
 }
 
 function DestinationDetailBody({
   regionCode,
+  entryTab,
 }: {
   regionCode: string | undefined;
+  entryTab: RegionPickerTab | undefined;
 }): ReactElement {
   const router = useRouter();
 
@@ -134,7 +151,11 @@ function DestinationDetailBody({
       regionName={displayName}
       // 다시 검색(=다른 지역 고르기) → d1b 여행지 선택(RegionPickerScreen). 이 화면엔 자유
       // 검색어를 다루는 계약이 없다(위 헤더 주석 참고) — 그 화면에서 새로 고른다.
-      onPressSearch={() => router.push(regionPickerHref('explore'))}
+      // 진입 탭을 다시 실어 보낸다 — 안 실으면 다른 지역을 고른 뒤 탭바가 탐색으로 돌아간다.
+      onPressSearch={() =>
+        router.push(regionPickerHref('explore', entryTab && { tab: entryTab }))
+      }
+      activeTab={entryTab ?? 'explore'}
       stayLane={{
         error: stay.isError,
         cards: stayCards,

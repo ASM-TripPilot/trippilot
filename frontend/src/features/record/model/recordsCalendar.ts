@@ -75,3 +75,37 @@ export function buildPastTripCards(
       nightsLabel: nightsLabel(trip.startDate ?? null, trip.endDate ?? null),
     }));
 }
+
+/**
+ * TRIP-1015 C · 캘린더에서 이 여행 기록(`/trips/{id}/records`)을 열 수 있나 — 진행 중(시작 ≤ 오늘) 또는
+ * 지난(ENDED) 여행만. 미래 여행은 탭을 무시한다(사용자 결정 2). 끝이 지난 여행은 시작도 지났으므로
+ * `isPastTrip` 의 endDate 조건은 시작일 조건에 이미 담긴다.
+ */
+export function canOpenTripRecords(trip: Trip, today: string): boolean {
+  return (
+    trip.status === 'ENDED' ||
+    (trip.startDate != null && trip.startDate <= today)
+  );
+}
+
+/**
+ * 마킹 날짜 탭 → 열 여행 id. 그 날짜를 포함하고 열 수 있는 여행 중 **시작일이 가장 늦은** 것(겹친 날은
+ * 나중에 시작한 여행 — Seed Q3). 없으면 null(마킹 없는 날·미래 여행만 걸린 날).
+ */
+export function recordsTripIdForDate(
+  trips: readonly (Trip | null)[] | null | undefined,
+  date: string,
+  today: string
+): string | null {
+  let picked: Trip | null = null;
+  for (const trip of safeList(trips)) {
+    if (!isDateInRange(date, trip.startDate ?? null, trip.endDate ?? null)) {
+      continue;
+    }
+    if (!canOpenTripRecords(trip, today)) continue;
+    if (picked === null || (trip.startDate ?? '') > (picked.startDate ?? '')) {
+      picked = trip;
+    }
+  }
+  return picked?.tripId ?? null;
+}

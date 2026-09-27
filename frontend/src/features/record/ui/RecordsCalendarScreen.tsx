@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PastTripList } from './PastTripList';
@@ -36,6 +36,10 @@ export interface RecordsCalendarScreenProps {
   onPressNextMonth: () => void;
   onSelectTrip: (tripId: string) => void;
   onPressCreateTrip: () => void;
+  /** 마킹 날짜 탭(TRIP-1015 C) — 목적지 판정은 페이지 몫. */
+  onPressDay?: (date: string) => void;
+  /** 범례 행 탭(TRIP-1015 C) — 미래 여행 무시 판정은 페이지 몫. */
+  onPressLegend?: (tripId: string) => void;
 }
 
 function CalendarAppBar(): ReactElement {
@@ -59,6 +63,8 @@ export function RecordsCalendarScreen({
   onPressNextMonth,
   onSelectTrip,
   onPressCreateTrip,
+  onPressDay,
+  onPressLegend,
 }: RecordsCalendarScreenProps): ReactElement {
   if (isEmpty) {
     return (
@@ -100,6 +106,7 @@ export function RecordsCalendarScreen({
             markedDays={markedDays}
             onPressPrev={onPressPrevMonth}
             onPressNext={onPressNextMonth}
+            onPressDay={onPressDay}
           />
         </View>
 
@@ -107,9 +114,11 @@ export function RecordsCalendarScreen({
         {monthLegends && monthLegends.length > 0 && (
           <View className="w-full gap-[6px] px-lg pb-[6px] pt-[10px]">
             {monthLegends.map((legend) => (
-              <View
+              <Pressable
                 key={legend.tripId}
+                testID={`record-calendar-legend-${legend.tripId}`}
                 className="w-full flex-row items-center gap-sm"
+                onPress={onPressLegend && (() => onPressLegend(legend.tripId))}
               >
                 <View className="h-[9px] w-[9px] rounded-pill bg-primary" />
                 <Text className="font-noto text-label text-body">
@@ -117,7 +126,7 @@ export function RecordsCalendarScreen({
                     .filter((part) => part !== null && part !== '')
                     .join(' · ')}
                 </Text>
-              </View>
+              </Pressable>
             ))}
           </View>
         )}

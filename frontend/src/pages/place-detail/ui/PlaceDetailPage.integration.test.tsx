@@ -7,6 +7,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
@@ -402,5 +403,49 @@ describe('D10·D11 · code-critic 사각 봉합 (TRIP-501)', () => {
       '부산시립미술관'
     );
     expect(placesHandler).not.toHaveBeenCalled();
+  });
+});
+
+// ── TRIP-1015 D · d06 장소 없음 얼굴에도 뒤로가 있다 (QA #096 · US-SHELL-04 예외 · 결정 3) ──
+// 상세 얼굴의 뒤로(`explore-place-back`)와 같은 폴백 규칙(canGoBack → back, 아니면 홈 replace)을 쓰되,
+// testID 는 따로 둔다. 안내(StateNotice)엔 행동 버튼을 두지 않는다(결정 3).
+describe('🔴 1015-D · d06 장소 없음 얼굴의 뒤로 (explore-place-notfound-back)', () => {
+  async function renderNotFound(): Promise<void> {
+    renderSeeded('ghost', { listCache: [] });
+    await waitFor(() =>
+      expect(screen.getByTestId('explore-place-notfound')).toBeOnTheScreen()
+    );
+  }
+
+  it('D1 뒤로 버튼이 있고(역할 button · 이름 "뒤로"), 안내 밖에 있으며, 안내엔 행동 버튼이 없다', async () => {
+    await renderNotFound();
+
+    // 역할 button · 접근성 이름 "뒤로"인 요소가 정확히 그 testID 다(스크린리더로도 찾을 수 있다).
+    const back = screen.getByRole('button', { name: '뒤로' });
+    expect(back).toHaveProp('testID', 'explore-place-notfound-back');
+    const notFound = screen.getByTestId('explore-place-notfound');
+    expect(
+      within(notFound).queryByTestId('explore-place-notfound-back')
+    ).toBeNull();
+    expect(within(notFound).queryAllByRole('button')).toHaveLength(0);
+  });
+
+  it('D2 히스토리가 있으면 back 1회 · replace 0회', async () => {
+    await renderNotFound();
+
+    fireEvent.press(screen.getByTestId('explore-place-notfound-back'));
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('D3 딥링크(히스토리 없음)면 홈으로 replace 1회 · back 0회', async () => {
+    mockCanGoBack.mockReturnValue(false);
+    await renderNotFound();
+
+    fireEvent.press(screen.getByTestId('explore-place-notfound-back'));
+
+    expect(mockReplace.mock.calls).toEqual([['/(tabs)']]);
+    expect(mockBack).not.toHaveBeenCalled();
   });
 });

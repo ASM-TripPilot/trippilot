@@ -29,3 +29,20 @@ describe('regionPickerHref — purpose 별 지역 선택 URL', () => {
     expect(typeof typo).toBe('function');
   });
 });
+
+/**
+ * TRIP-1015 E · 진입 탭 신호(결정 4 · Seed Q4). 홈 검색으로 들어온 여행지 결과 화면은 탭바가 "홈"을
+ * 가리켜야 한다. 결과 화면은 `(tabs)` 밖이라 어느 탭에서 왔는지 모르므로, 지역 선택 URL 에 진입 탭을
+ * 싣고 피커가 결과 화면으로 되실어 보낸다. 철자는 이 헬퍼 한 곳에서만 정한다(TRIP-985 규약).
+ */
+describe('🔴 1015-E · regionPickerHref — 진입 탭(tab) 선택 인자', () => {
+  it("('explore', { tab: 'home' }) → purpose 뒤에 &tab=home 이 붙는다", () => {
+    expect(regionPickerHref('explore', { tab: 'home' })).toBe(
+      '/explore/region?purpose=explore&tab=home'
+    );
+  });
+
+  it('두 번째 인자가 없으면 지금 URL 그대로다(탐색 랜딩·결과 화면 기본 — 무회귀)', () => {
+    expect(regionPickerHref('explore')).toBe('/explore/region?purpose=explore');
+  });
+});

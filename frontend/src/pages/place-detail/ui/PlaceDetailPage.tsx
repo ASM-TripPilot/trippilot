@@ -16,11 +16,13 @@
  * 저장 하트는 `useSavedPlaces` 를 그대로 타 서버 토글한다(낙관/롤백은 훅이 이미 이행) — 실패면
  * `saveError` 배너를 세운다(INV-4). 뒤로가기는 딥링크(히스토리 없음)에서 갇히지 않게 canGoBack
  * 폴백을 쓴다(TRIP-402·446 계승). 공유는 계약에 딥링크 URL 이 없어 이름만 나른다(Share.share).
+ * 장소 없음 얼굴에도 같은 뒤로를 앱바에 둔다 — 안내엔 행동 버튼 없음(TRIP-1015 D · 결정 3).
  */
 import type { ReactElement } from 'react';
 import { useEffect, useState } from 'react';
-import { Share, View } from 'react-native';
+import { Pressable, Share, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import type { InfiniteData } from '@tanstack/react-query';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -34,6 +36,7 @@ import {
   type PlaceSaveNotice,
 } from '@/features/explore/model/placeSaveGuard';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { BackChevronGlyph } from '@/features/explore/ui/ExploreGlyphs';
 import { PlaceDetailScreen } from '@/features/explore/ui/PlaceDetailScreen';
 
 // 딥링크로 이 화면에 직접 떨어지면(explore/** 는 (tabs) 밖) 뒤로 갈 히스토리가 없다 — 홈으로
@@ -90,30 +93,6 @@ export function PlaceDetailPage({ poiId }: { poiId: string }): ReactElement {
     if (place !== null && snapshot === null) setSnapshot(place);
   }, [place, snapshot]);
 
-  // 목록 캐시엔 없고 담은목록 조회가 아직 해소 중이면(authed) loading — 성급히 notFound 로 접지 않는다.
-  if (place === null && isAuthed && isPending) {
-    return <View testID="explore-place-loading" className="flex-1 bg-canvas" />;
-  }
-
-  if (place === null) {
-    return (
-      <View className="flex-1 items-center justify-center bg-canvas px-lg">
-        <StateNotice
-          testID="explore-place-notfound"
-          illustration={NEUTRAL_BADGE}
-          title="장소를 찾을 수 없어요"
-          description="목록에서 다시 찾아 담아 보세요"
-          actions={[]}
-        />
-      </View>
-    );
-  }
-
-  // place 는 위 가드로 non-null 이 확정됐다. 아래 `attemptToggle`(호이스트되는 함수 선언)이
-  // 캡처할 때 CFA 좁힘이 풀려 Place|null 로 넓어지므로, 좁혀진 값을 Place 로 고정해 둔다.
-  const resolvedPlace = place;
-  const saved = savedPoiIds.includes(poiId);
-
   function handleBack(): void {
     if (router.canGoBack()) {
       router.back();
@@ -121,6 +100,46 @@ export function PlaceDetailPage({ poiId }: { poiId: string }): ReactElement {
       router.replace(HOME_FALLBACK);
     }
   }
+
+  // 목록 캐시엔 없고 담은목록 조회가 아직 해소 중이면(authed) loading — 성급히 notFound 로 접지 않는다.
+  if (place === null && isAuthed && isPending) {
+    return <View testID="explore-place-loading" className="flex-1 bg-canvas" />;
+  }
+
+  if (place === null) {
+    return (
+      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+        <View className="flex-1 bg-canvas">
+          {/* 앱바 뒤로 — `ItineraryPlanPage` PlanAppBar 셰브론 패턴(StateNotice 밖) */}
+          <View className="w-full flex-row items-center bg-canvas pb-sm pl-md pr-lg pt-lg">
+            <Pressable
+              testID="explore-place-notfound-back"
+              accessibilityRole="button"
+              accessibilityLabel="뒤로"
+              onPress={handleBack}
+              hitSlop={8}
+            >
+              <BackChevronGlyph />
+            </Pressable>
+          </View>
+          <View className="flex-1 items-center justify-center px-lg">
+            <StateNotice
+              testID="explore-place-notfound"
+              illustration={NEUTRAL_BADGE}
+              title="장소를 찾을 수 없어요"
+              description="목록에서 다시 찾아 담아 보세요"
+              actions={[]}
+            />
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // place 는 위 가드로 non-null 이 확정됐다. 아래 `attemptToggle`(호이스트되는 함수 선언)이
+  // 캡처할 때 CFA 좁힘이 풀려 Place|null 로 넓어지므로, 좁혀진 값을 Place 로 고정해 둔다.
+  const resolvedPlace = place;
+  const saved = savedPoiIds.includes(poiId);
 
   async function attemptToggle(): Promise<void> {
     setSaveError(null);

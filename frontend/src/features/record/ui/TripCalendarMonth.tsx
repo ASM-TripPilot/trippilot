@@ -25,6 +25,8 @@ export interface TripCalendarMonthProps {
   markedDays: string[];
   onPressPrev: () => void;
   onPressNext: () => void;
+  /** 날짜 셀 탭(TRIP-1015 C). 어느 여행으로 갈지(또는 무시)는 페이지가 판정한다. */
+  onPressDay?: (date: string) => void;
 }
 
 export function TripCalendarMonth({
@@ -33,6 +35,7 @@ export function TripCalendarMonth({
   markedDays,
   onPressPrev,
   onPressNext,
+  onPressDay,
 }: TripCalendarMonthProps): ReactElement {
   const markedSet = new Set(markedDays);
   const weeks: (MonthCell | null)[][] = [];
@@ -96,11 +99,13 @@ export function TripCalendarMonth({
                   isMarked && (di === 0 || !prev || !markedSet.has(prev.date));
                 const roundRight =
                   isMarked && (di === 6 || !next || !markedSet.has(next.date));
+                // testID 와 selected 는 같은 요소에 둔다 — `toBeSelected()` 가 이 요소를 본다.
                 return (
-                  <View
+                  <Pressable
                     key={di}
                     testID={`record-calendar-day-${cell.date}`}
                     accessibilityState={{ selected: isMarked }}
+                    onPress={onPressDay && (() => onPressDay(cell.date))}
                     className={`flex-1 items-center justify-center py-[9px] ${
                       isMarked ? 'bg-primary-pale' : ''
                     } ${roundLeft ? 'rounded-l-[9px]' : ''} ${
@@ -116,7 +121,7 @@ export function TripCalendarMonth({
                     >
                       {cell.day}
                     </Text>
-                  </View>
+                  </Pressable>
                 );
               })}
             </View>

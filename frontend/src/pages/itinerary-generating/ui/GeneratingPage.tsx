@@ -12,6 +12,7 @@ import type {
   Itinerary,
 } from '@/shared/api/generated/schemas';
 import {
+  getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripIdItinerary,
   useGetTripsTripIdMustVisits,
   usePostTripsTripIdItinerary,
@@ -65,7 +66,18 @@ export function GeneratingPage({
     | '/trips/[tripId]/itinerary/copick/[slotKey]';
 }): ReactElement {
   const router = useRouter();
-  const generate = usePostTripsTripIdItinerary();
+  // 캐시 반영은 훅 옵션 자리에 둔다 — `mutate(…, { onSuccess })` 콜백은 화면이 떠나면 불리지 않아,
+  // 생성 중 홈으로 이탈하면 홈이 들고 있던 404 가 남는다(TRIP-1015 A · QA #046).
+  const generate = usePostTripsTripIdItinerary({
+    mutation: {
+      onSuccess: (data, vars, _onMutateResult, context) => {
+        context.client.setQueryData(
+          getGetTripsTripIdItineraryQueryKey(vars.tripId),
+          data
+        );
+      },
+    },
+  });
   const firedRef = useRef(false);
 
   const mustVisits = useGetTripsTripIdMustVisits(tripId);
