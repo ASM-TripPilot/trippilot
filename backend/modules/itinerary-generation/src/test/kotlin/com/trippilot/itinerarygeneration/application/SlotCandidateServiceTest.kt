@@ -10,7 +10,11 @@ import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
+import com.trippilot.itinerarygeneration.domain.ScoredCandidate
+import com.trippilot.itinerarygeneration.domain.ScoredCandidatePool
+import com.trippilot.itinerarygeneration.domain.ScoredCandidatePoolStore
 import com.trippilot.itinerarygeneration.domain.SlotCandidate
+import com.trippilot.itinerarygeneration.domain.SlotCandidatesEmptyReason
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesInput
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesOutput
 import com.trippilot.itinerarygeneration.domain.SolveMode
@@ -27,6 +31,7 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
@@ -83,16 +88,20 @@ class SlotCandidateServiceTest : StringSpec({
         override fun findGenerationContext(accountId: UUID, tripId: UUID) = null
     }
 
-    class CapturingAgent(private val failure: ScheduleAgentCallFailed? = null) : StubScheduleAgent() {
+    class CapturingAgent(
+        private val failure: ScheduleAgentCallFailed? = null,
+        /** true 면 0건 응답 — 즉답 구제(TRIP-969 "전개가 저장분보다 나쁘면") 검증용. */
+        private val respondEmpty: Boolean = false,
+    ) : StubScheduleAgent() {
         var captured: SlotCandidatesInput? = null
         override fun proposeSlotCandidates(input: SlotCandidatesInput): SlotCandidatesOutput {
             captured = input
             failure?.let { throw it }
             return SlotCandidatesOutput(
-                listOf(SlotCandidate(UUID.randomUUID(), "약 1.1km", "주변 카페")),
+                if (respondEmpty) emptyList() else listOf(SlotCandidate(UUID.randomUUID(), "약 1.1km", "주변 카페")),
                 radiusMUsed = 12_000,
                 freshness = FreshnessMeta(Instant.parse("2026-08-06T00:00:00Z"), false),
-                emptyReason = null, // 후보가 있다 — 0건 사유는 없는 것이 맞다
+                emptyReason = if (respondEmpty) SlotCandidatesEmptyReason.NO_NEARBY else null,
             )
         }
     }
@@ -107,8 +116,12 @@ class SlotCandidateServiceTest : StringSpec({
         }
     }
 
-    fun service(agent: CapturingAgent, stored: Itinerary? = itinerary) =
-        SlotCandidateService(trips, Repo(stored), agent, surfaces, pool, clock)
+    fun service(
+        agent: CapturingAgent,
+        stored: Itinerary? = itinerary,
+        scored: ScoredCandidatePoolStore = FakeScoredCandidatePoolStore(), // 기본 빈 풀 — 종전 경로 그대로
+        candidates: CandidatePoolPort = pool,
+    ) = SlotCandidateService(trips, Repo(stored), agent, surfaces, candidates, scored, clock)
 
     "경계가 실패하면 503 으로 표면화한다 — 500(우리가 터졌다)이 아니다" {
         // 감싸지 않으면 RuntimeException 이라 전역 핸들러가 500 으로 떨구는데, 사실은 "지금은 못 준다"다.
@@ -207,5 +220,106 @@ class SlotCandidateServiceTest : StringSpec({
         val before = pool.grounded
         service(CapturingAgent()).propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
         pool.grounded shouldBe before + 1
+    }
+
+    // ───── 즉답 — 생성 시점 점수 후보(TRIP-969) ─────────────────────────────
+
+    val cafeSpareHigh = UUID.randomUUID()
+    val cafeSpareLow = UUID.randomUUID()
+
+    /** 교체 대상(카페) + 같은 카테고리 예비 2 + 다른 카테고리 1 + 이미 일정에 있는 카페 1. */
+    fun storedPool(radiusM: Int = 12_000) = FakeScoredCandidatePoolStore().apply {
+        replace(
+            tripId,
+            ScoredCandidatePool(
+                radiusM,
+                listOf(
+                    ScoredCandidate(target, 0.9, "카페"),
+                    ScoredCandidate(cafeSpareLow, 0.8, "카페"),
+                    ScoredCandidate(cafeSpareHigh, 0.95, "카페"),
+                    ScoredCandidate(UUID.randomUUID(), 0.99, "명소"), // 다른 카테고리 — 즉답 대상 아님
+                    ScoredCandidate(neighborBefore, 0.97, "카페"),    // 이미 일정에 있음 — 제외(BR-U3-24)
+                ),
+            ),
+        )
+    }
+
+    /** 반경 조회가 돌려주는 것(= 지금도 ACTIVE 인 것)과 거리를 지정한다. */
+    fun resolving(vararg distances: Pair<UUID, Double>) = object : CandidatePoolPort {
+        override fun resolve(area: Area, categories: Set<String>) =
+            distances.map { (id, m) -> GroundedPlace(id, "장소", 33.45, 126.56, "카페", null, m) }
+        override fun ground(poiIds: List<UUID>) =
+            poiIds.map { GroundedPlace(it, "장소", 33.45, 126.56, "카페", null, null) }
+    }
+
+    "저장된 점수 후보가 요청을 덮으면 AI 를 부르지 않는다 — 같은 카테고리를 점수 내림차순으로 즉답" {
+        val agent = CapturingAgent()
+        val out = service(agent, scored = storedPool(), candidates = resolving(cafeSpareHigh to 500.0, cafeSpareLow to 300.0))
+            .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+
+        agent.captured shouldBe null // LLM 0회 — 버튼마다 25초 예산을 태우지 않는 것이 이 티켓의 요점
+        out.candidates.map { it.poiId } shouldContainExactly listOf(cafeSpareHigh, cafeSpareLow)
+        out.candidates[0].distanceRange shouldBe "약 0.5km" // 거리만(INV-3)
+        out.radiusMUsed shouldBe 12_000 // 요청이 반경을 안 줬으면 저장 반경이 실제 사용 반경이다
+    }
+
+    "concept 이 오면 전개한다 — 저장 점수는 '이런 느낌으로'를 모른다" {
+        val agent = CapturingAgent()
+        service(agent, scored = storedPool(), candidates = resolving(cafeSpareHigh to 500.0))
+            .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, "감성", null))
+
+        agent.captured!!.concept shouldBe "감성"
+    }
+
+    "요청 반경이 저장 반경을 넘으면 전개한다 — 저장 풀이 그 반경을 안 덮는다" {
+        val agent = CapturingAgent()
+        service(agent, scored = storedPool(radiusM = 3_000), candidates = resolving(cafeSpareHigh to 500.0))
+            .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), 10_000, null, null))
+
+        agent.captured!!.radiusM shouldBe 10_000
+    }
+
+    "같은 카테고리 예비가 0건이면 전개한다 — 실측에서 유일하게 실제 발동하는 조건" {
+        val agent = CapturingAgent()
+        val scored = FakeScoredCandidatePoolStore().apply {
+            replace(
+                tripId,
+                ScoredCandidatePool(12_000, listOf(ScoredCandidate(target, 0.9, "카페"), ScoredCandidate(UUID.randomUUID(), 0.99, "명소"))),
+            )
+        }
+        service(agent, scored = scored, candidates = resolving())
+            .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+
+        agent.captured shouldNotBe null
+    }
+
+    "교체 대상이 풀에 없으면 전개한다 — 카테고리를 모르는 채 즉답하지 않는다" {
+        val agent = CapturingAgent()
+        val scored = FakeScoredCandidatePoolStore().apply {
+            replace(tripId, ScoredCandidatePool(12_000, listOf(ScoredCandidate(cafeSpareHigh, 0.95, "카페"))))
+        }
+        service(agent, scored = scored, candidates = resolving(cafeSpareHigh to 500.0))
+            .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+
+        agent.captured shouldNotBe null
+    }
+
+    "생성 뒤 비활성된 후보는 즉답에 싣지 않는다 — 반경 조회(ACTIVE)에 없으면 빠진다" {
+        val agent = CapturingAgent()
+        val out = service(agent, scored = storedPool(), candidates = resolving(cafeSpareHigh to 500.0))
+            .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+
+        out.candidates.map { it.poiId } shouldContainExactly listOf(cafeSpareHigh)
+    }
+
+    "전개가 0건이면 저장분으로 구제한다 — 지금보다 나빠지는 경우 0" {
+        // 요청 반경(10km) > 저장 반경(3km)이라 전개로 갔는데 결과가 비었다 — 저장 반경 안의
+        // 예비는 요청 반경 안이기도 하므로 그것을 주는 쪽이 빈 손보다 낫다.
+        val agent = CapturingAgent(respondEmpty = true)
+        val out = service(agent, scored = storedPool(radiusM = 3_000), candidates = resolving(cafeSpareHigh to 500.0))
+            .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), 10_000, null, null))
+
+        agent.captured shouldNotBe null // 전개는 갔다 — 그 결과가 저장분보다 나빠 저장분이 나간다
+        out.candidates.map { it.poiId } shouldContainExactly listOf(cafeSpareHigh)
     }
 })

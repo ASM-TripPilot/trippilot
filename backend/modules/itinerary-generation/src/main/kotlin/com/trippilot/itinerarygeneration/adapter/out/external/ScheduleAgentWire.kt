@@ -135,6 +135,9 @@ internal fun AiScheduleResponse.toDomain(receivedAt: Instant): ScheduleAgentOutp
     isFallback = isFallback,
     freshness = FreshnessMeta(freshness?.fetchedAt ?: receivedAt, degraded = freshness?.stale ?: false),
     unplacedMustVisits = unplacedMustVisits.mapNotNull { it.toDomain() },
+    // 점수 후보 풀(TRIP-969)은 **와이어에 아직 없다** — AI 짝 티켓(TRIP-970)이 계약에 필드를 열면
+    // 여기서 매핑한다. 그때까지 http 모드는 null(= 저장 안 함)이고 슬롯 교체는 종전 경로 그대로다.
+    scoredCandidates = null,
 )
 
 /**

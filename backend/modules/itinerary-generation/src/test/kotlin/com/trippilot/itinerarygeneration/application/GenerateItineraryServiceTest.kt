@@ -22,6 +22,9 @@ import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
 import com.trippilot.itinerarygeneration.domain.RejectedPoi
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.itinerarygeneration.domain.RejectionStore
+import com.trippilot.itinerarygeneration.domain.ScoredCandidate
+import com.trippilot.itinerarygeneration.domain.ScoredCandidatePool
+import com.trippilot.itinerarygeneration.domain.ScoredCandidatePoolStore
 import com.trippilot.itinerarygeneration.domain.SlotExplanations
 import io.kotest.assertions.withClue
 import com.trippilot.itinerarygeneration.domain.SlotAlternative
@@ -126,8 +129,13 @@ private class TwoPhaseReportingAgent(
     override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): SlotExplanations = SlotExplanations()
 }
 
-private class CapturingAgent(private val now: Instant, private val emit: (LocalDate) -> List<VisitSlotDisplay> = { emptyList() }) :
-    StubScheduleAgent() {
+private class CapturingAgent(
+    private val now: Instant,
+    /** 점수 후보 풀(TRIP-969) — 호출별로 다른 풀을 줄 수 있다(1차·2차). 기본 null = 옛 응답.
+     * `emit` 앞에 있는 이유: 트레일링 람다로 `emit` 을 넘기는 기존 호출들이 그대로 살게. */
+    private val scored: (ScheduleAgentInput) -> ScoredCandidatePool? = { null },
+    private val emit: (LocalDate) -> List<VisitSlotDisplay> = { emptyList() },
+) : StubScheduleAgent() {
     val captures = mutableListOf<ScheduleAgentInput>()
     val captured: ScheduleAgentInput? get() = captures.firstOrNull()
     override fun generate(input: ScheduleAgentInput): ScheduleAgentOutput {
@@ -137,6 +145,7 @@ private class CapturingAgent(private val now: Instant, private val emit: (LocalD
             day1ReadyAt = null, explanations = emptyMap(),
             solveMode = SolveMode.DETERMINISTIC, isFallback = false,
             freshness = FreshnessMeta(now, degraded = false),
+            scoredCandidates = scored(input),
         )
     }
     override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
@@ -239,6 +248,7 @@ class GenerateItineraryServiceTest : StringSpec({
         rejectionStore: RejectionStore = FakeRejectionStore(),
         // 기본값 인자는 **맨 뒤에** 둔다 — 중간에 끼우면 위치 인자로 부르는 호출이 조용히 어긋난다.
         personalization: PersonalizationPort = NoPersonalization,
+        scoredPools: ScoredCandidatePoolStore = FakeScoredCandidatePoolStore(),
     ): GenerateItineraryService {
         val trips = object : TripFacade {
             override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(start, end)
@@ -261,8 +271,8 @@ class GenerateItineraryServiceTest : StringSpec({
         // 단위 테스트엔 Spring 프록시가 없어 @Async 가 걸리지 않는다 → 2차가 그 자리에서 동기 실행된다(결정론).
         // 1차·2차가 **같은 세션**을 봐야 취소가 2차에 전달된다 — 인스턴스를 나누면 취소가 사라진다.
         val sessions = genSessions(trips, sessionRepo, clock, defaultDeadlines)
-        val second = SecondPhaseGenerator(agent, repo, genRevisions(repo, trips), sessions, NOOP_TX, clock)
-        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, publisher, second, sessions, genRevisions(repo, trips), StubRegions, rejectionStore, personalization, NOOP_TX, clock, defaultDeadlines)
+        val second = SecondPhaseGenerator(agent, repo, genRevisions(repo, trips), sessions, scoredPools, NOOP_TX, clock)
+        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, publisher, second, sessions, genRevisions(repo, trips), StubRegions, rejectionStore, scoredPools, personalization, NOOP_TX, clock, defaultDeadlines)
     }
 
     val fullPrefs = PreferenceSnapshot(
@@ -664,6 +674,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         sessionRepo: FakeGenerationSessions = FakeGenerationSessions(),
         // 기본값 인자는 **맨 뒤에** 둔다 — 중간에 끼우면 위치 인자로 부르는 호출이 조용히 어긋난다.
         deadlines: ScheduleDeadlineProperties = defaultDeadlines,
+        scoredPools: ScoredCandidatePoolStore = FakeScoredCandidatePoolStore(),
     ): GenerateItineraryService {
         val trips = object : TripFacade {
             override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(start, end)
@@ -678,8 +689,8 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         }
         // 1차·2차가 **같은 세션**을 봐야 취소가 2차에 전달된다.
         val sessions = genSessions(trips, sessionRepo, clock, deadlines)
-        val second = SecondPhaseGenerator(agent, repo, genRevisions(repo, trips), sessions, NOOP_TX, clock)
-        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, sessions, genRevisions(repo, trips), StubRegions, FakeRejectionStore(), NoPersonalization, NOOP_TX, clock, deadlines)
+        val second = SecondPhaseGenerator(agent, repo, genRevisions(repo, trips), sessions, scoredPools, NOOP_TX, clock)
+        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, sessions, genRevisions(repo, trips), StubRegions, FakeRejectionStore(), scoredPools, NoPersonalization, NOOP_TX, clock, deadlines)
     }
 
     "추천 근거가 slotKey 로 슬롯에 붙어 영속된다(TRIP-306 · BR-U2-04)" {
@@ -742,6 +753,52 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         switched.generationMode shouldBe GenerationMode.MANUAL
         switched.days.all { it.slots.isEmpty() } shouldBe true
         // 전환 전 일정으로 되돌아가는 것은 리비전(TRIP-310)이 담당한다 — 여기서는 전환 자체만 본다.
+    }
+
+    // ───── 점수 후보 풀 저장(TRIP-969) ─────────────────────────────────────
+
+    "생성이 점수 후보 풀을 저장한다 — 1차 갈아끼움 + 2차 합침, 반경은 큰 쪽" {
+        val end = start.plusDays(1)
+        val poiA = UUID.randomUUID()
+        val poiB = UUID.randomUUID()
+        val agent = CapturingAgent(now, scored = { input ->
+            if (input.timeWindows.first().date == start) {
+                ScoredCandidatePool(3_000, listOf(ScoredCandidate(poiA, 0.9, "카페")))
+            } else {
+                ScoredCandidatePool(5_000, listOf(ScoredCandidate(poiB, 0.8, "명소")))
+            }
+        })
+        val store = FakeScoredCandidatePoolStore().apply {
+            // 이전 생성의 풀 — 1차가 갈아끼워야 한다(합치면 낡은 판단이 섞인다).
+            replace(tripId, ScoredCandidatePool(9_000, listOf(ScoredCandidate(UUID.randomUUID(), 0.5, "맛집"))))
+        }
+        service(agent, FakeItineraries(), end, scoredPools = store).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        val saved = store.find(tripId)!!
+        saved.radiusM shouldBe 5_000 // 두 호출 중 큰 쪽
+        saved.candidates.map { it.poiId }.toSet() shouldBe setOf(poiA, poiB) // 이전 생성 몫은 없다
+    }
+
+    "풀 없이 온 생성은 이전 풀을 지운다 — 낡은 판단으로 즉답하지 않게" {
+        val end = start.plusDays(1)
+        val (agent, _) = emittingAgent(end) // scoredCandidates = null (http 미개통·옛 응답)
+        val store = FakeScoredCandidatePoolStore().apply {
+            replace(tripId, ScoredCandidatePool(9_000, listOf(ScoredCandidate(UUID.randomUUID(), 0.5, "맛집"))))
+        }
+        service(agent, FakeItineraries(), end, scoredPools = store).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        store.find(tripId) shouldBe null
+    }
+
+    "직접 만들기 전환도 풀을 지운다 — 빈 일정에 이전 생성의 판단이 남지 않게" {
+        val end = start.plusDays(1)
+        val (agent, _) = emittingAgent(end)
+        val store = FakeScoredCandidatePoolStore().apply {
+            replace(tripId, ScoredCandidatePool(9_000, listOf(ScoredCandidate(UUID.randomUUID(), 0.5, "맛집"))))
+        }
+        service(agent, FakeItineraries(), end, scoredPools = store).generate(acc, tripId, GenerationMode.MANUAL)
+
+        store.find(tripId) shouldBe null
     }
 
     "다일 여행: 반환은 day1 만·PARTIAL, 2차 완료 후 전 일자·COMPLETE" {
@@ -1062,7 +1119,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
             listOf(ItineraryDay.of(start, 0, emptyList())), now, GenerationState.COMPLETE,
         )
         repo.byTrip[tripId] = edited
-        SecondPhaseGenerator(agent, repo, genRevisions(repo, stubTrips), genSessions(), NOOP_TX, clock)
+        SecondPhaseGenerator(agent, repo, genRevisions(repo, stubTrips), genSessions(), FakeScoredCandidatePoolStore(), NOOP_TX, clock)
             .completeRemaining(tripId, edited.itineraryId, agentInputFor(end), isRegeneration = false)
 
         repo.byTrip.getValue(tripId) shouldBe edited // 그대로
@@ -1077,7 +1134,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         )
         repo.byTrip[tripId] = regenerated
         // 앞선 1차가 만들었던(이미 교체된) 일정 id 로 도착한 2차
-        SecondPhaseGenerator(agent, repo, genRevisions(repo, stubTrips), genSessions(), NOOP_TX, clock)
+        SecondPhaseGenerator(agent, repo, genRevisions(repo, stubTrips), genSessions(), FakeScoredCandidatePoolStore(), NOOP_TX, clock)
             .completeRemaining(tripId, UUID.randomUUID(), agentInputFor(end), isRegeneration = false)
 
         repo.byTrip.getValue(tripId) shouldBe regenerated // 새 일정은 여전히 PARTIAL(제 2차를 기다린다)
@@ -1173,7 +1230,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
             }
         }
         repo.byTrip[tripId] = partial
-        SecondPhaseGenerator(agent, repo, genRevisions(repo, stubTrips), genSessions(), NOOP_TX, clock).completeRemaining(tripId, partial.itineraryId, agentInputFor(end), isRegeneration = false)
+        SecondPhaseGenerator(agent, repo, genRevisions(repo, stubTrips), genSessions(), FakeScoredCandidatePoolStore(), NOOP_TX, clock).completeRemaining(tripId, partial.itineraryId, agentInputFor(end), isRegeneration = false)
 
         val finished = repo.byTrip.getValue(tripId)
         finished.generationState shouldBe GenerationState.FAILED
@@ -1246,8 +1303,8 @@ class TwoPhaseDayCoverageTest : StringSpec({
             val baseAnchors = object : BaseAnchorFacade {
                 override fun findStayNightAnchors(tripId: UUID, startDate: LocalDate, endDate: LocalDate) = emptyList<DayAnchorView>()
             }
-            val second = SecondPhaseGenerator(agent, repo, genRevisions(repo, trips), genSessions(), NOOP_TX, clock)
-            GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, genSessions(), genRevisions(repo, trips), StubRegions, FakeRejectionStore(), NoPersonalization, NOOP_TX, clock, defaultDeadlines)
+            val second = SecondPhaseGenerator(agent, repo, genRevisions(repo, trips), genSessions(), FakeScoredCandidatePoolStore(), NOOP_TX, clock)
+            GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, genSessions(), genRevisions(repo, trips), StubRegions, FakeRejectionStore(), FakeScoredCandidatePoolStore(), NoPersonalization, NOOP_TX, clock, defaultDeadlines)
                 .generate(acc, tripId, GenerationMode.FULLY_AI)
 
             // 두 호출이 요청한 일자의 합 = 여행 일자, 중복 없음
