@@ -29,6 +29,7 @@ import com.trippilot.itinerarygeneration.domain.TripContext
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.itinerarygeneration.domain.PersonalizationHints
 import com.trippilot.itinerarygeneration.domain.PersonalizationPort
+import com.trippilot.itinerarygeneration.domain.ScoredCandidatePoolStore
 import com.trippilot.profile.api.PreferenceFacade
 import com.trippilot.profile.api.PreferenceSnapshot
 import com.trippilot.savedaccommodation.api.BaseAnchorFacade
@@ -66,6 +67,8 @@ class GenerateItineraryService(
     /** 숙소 없는 날의 앵커(TRIP-384) — 지역 대표 좌표. place-data.api 만 참조(R1). */
     private val regions: RegionLookupFacade,
     private val rejectionStore: RejectionStore,
+    /** 생성 시점 점수 후보 풀(TRIP-969) — 슬롯 교체 즉답의 재료. 새 생성이 통째로 갈아끼운다. */
+    private val scoredPools: ScoredCandidatePoolStore,
     /** 기록 기반 개인화(TRIP-556). **포트다** — 구현은 app 이 조립한다(순환 회피, 아래 주석). */
     private val personalization: PersonalizationPort,
     transactionManager: PlatformTransactionManager,
@@ -158,6 +161,11 @@ class GenerateItineraryService(
             // 영속 + 생성이벤트(TRIP-230)를 한 트랜잭션으로 — confirm()과 대칭(향후 아웃박스 relay 원자성). 발행은 인프로세스.
             tx.execute {
                 previous?.let { revisions.ensureRestorePoint(it) }
+                // 점수 후보 풀(TRIP-969)은 **이번 생성의 파생물**이다 — 새 일정과 함께 갈아끼우고,
+                // 풀 없이 온 생성(http 미개통·폴백)은 **지운다**. 이전 생성의 풀을 남겨 두면
+                // 슬롯 교체 즉답이 지금 일정과 무관한 판단으로 답한다.
+                output.scoredCandidates?.let { pool -> scoredPools.replace(tripId, pool) }
+                    ?: scoredPools.delete(tripId)
                 val it = itineraries.replaceForTrip(tripId, output.toItinerary(tripId, mode, state, firstDates, firstAssembly.unplaced))
                 events.publish(ItineraryGenerated(it.itineraryId.toString(), tripId.toString(), it.isFallback))
                 // day1 이 나왔다 — 폴백 여부·후보 등급을 함께 실어 배너가 **첫 노출부터** 사실을 말하게 한다(BR-U3-11).
@@ -218,6 +226,8 @@ class GenerateItineraryService(
         previous: Itinerary?,
     ): Itinerary = tx.execute {
         previous?.let { revisions.ensureRestorePoint(it) } // 전환 전 상태를 남긴다 — 진행분이 사라지지 않게
+        // 직접 만들기엔 점수 풀이 없다(TRIP-969) — 이전 생성의 풀이 남으면 그 판단으로 즉답하게 된다.
+        scoredPools.delete(tripId)
         val empty = Itinerary.create(
             tripId, SolveMode.MINIMAL, GenerationMode.MANUAL, isFallback = false,
             days = dates.mapIndexed { i, d -> ItineraryDay.of(d, i, emptyList()) },
