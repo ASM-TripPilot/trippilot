@@ -165,6 +165,7 @@ import {
 import { LiveLocationView } from '@/pages/live-location/ui/LiveLocationView';
 import { ConfirmedBanner } from '@/pages/itinerary-plan/ui/ConfirmedBanner';
 import { NoBaseNoticeCard } from '@/pages/itinerary-plan/ui/NoBaseNoticeCard';
+import { DraftFallbackBanner } from '@/pages/itinerary-draft/ui/DraftFallbackBanner';
 import { EditorView } from '@/widgets/map-sheet-shell/ui/EditorView';
 import {
   LiveHubView,
@@ -676,6 +677,72 @@ const H08_PREVIEW_TIME_LABELS = [
 const H08_PREVIEW_CONNECTORS = ['차량 · 2.1km', '0.8km', '0.6km'];
 
 const H08_PREVIEW_DATE = '2026-06-10';
+
+// TRIP-1039 h08 셸 폴백·일부 실패 얼굴 — Figma 전용 프레임이 없어 `4221:2448` 셸 + NoticeBar `4466:1794`
+// 자리로 합성한다. 안내는 시트 맨 위(헤더 뒤·첫 카드 앞), peek 에서 보이는지는 6-b 실기 몫(바텀시트 목 사각).
+function renderH08DraftNoticeShell(options: {
+  fallback: boolean;
+  staleFailed: boolean;
+}): ReactElement {
+  const { fallback, staleFailed } = options;
+  return (
+    <MapSheetShell
+      center={{ lat: 35.1532, lng: 129.1188 }}
+      pins={buildDraftPins(H08_PREVIEW_SLOTS)}
+      days={[
+        { label: '1일차' },
+        { label: '2일차' },
+        { label: '3일차' },
+        { label: '4일차' },
+      ]}
+      selectedDayIndex={0}
+      onSelectDay={noop}
+      onBack={noop}
+      header={
+        <SheetHeader
+          title={fallback ? '기본 일정' : 'AI 추천안'}
+          dayLabel="1일차"
+          dateLabel="6월 10일(수)"
+          meta="4곳 · 3.5km"
+        />
+      }
+      cta={[
+        { label: '다시 짜기', variant: 'outline', onPress: noop },
+        { label: '확정하기', variant: 'primary', onPress: noop },
+      ]}
+    >
+      <View className="gap-md px-lg pb-2xl pt-xs">
+        <DraftFallbackBanner
+          fallback={fallback}
+          staleFailed={staleFailed}
+          onManualPlan={noop}
+        />
+        {H08_PREVIEW_SLOTS.flatMap((slot, index) => {
+          const items = [
+            <SlotStopCard
+              key={`card-${slot.poiId}`}
+              slot={slot}
+              date={H08_PREVIEW_DATE}
+              index={index}
+              timeLabel={H08_PREVIEW_TIME_LABELS[index]}
+              onPressAlt={noop}
+            />,
+          ];
+          if (index < H08_PREVIEW_CONNECTORS.length) {
+            items.push(
+              <DistanceConnector
+                key={`conn-${slot.poiId}`}
+                slotKey={buildSlotKey(H08_PREVIEW_DATE, slot.poiId)}
+                distanceRange={H08_PREVIEW_CONNECTORS[index]}
+              />
+            );
+          }
+          return items;
+        })}
+      </View>
+    </MapSheetShell>
+  );
+}
 
 // h11 같이 결과(CoPick 완료, TRIP-796) — 비고정 4 + 고정 숙소 1(21:00). 고정 슬롯은 단일 시각·부제·
 // 고정 배지, 비고정은 시각 범위 칩만(다른 후보 링크 없음). meta 는 비고정 4 → `4/4 골랐어요`.
@@ -4329,6 +4396,22 @@ export const PREVIEW_STATES: PreviewState[] = [
         </View>
       </MapSheetShell>
     ),
+  },
+  {
+    key: 'h08-draft-fallback',
+    band: 'h',
+    label: 'h08 · 기본 일정(폴백)',
+    login: null,
+    render: () =>
+      renderH08DraftNoticeShell({ fallback: true, staleFailed: false }),
+  },
+  {
+    key: 'h08-draft-stale-failed',
+    band: 'h',
+    label: 'h08 · 일부 실패',
+    login: null,
+    render: () =>
+      renderH08DraftNoticeShell({ fallback: false, staleFailed: true }),
   },
   {
     // h07 부분 결과(TRIP-790) — 옛 h10 DraftScreen 인라인 게이지를 공용 지도+시트 셸 얼굴로 개명·

@@ -41,6 +41,7 @@ import { GenerationProgressCard } from '@/widgets/map-sheet-shell/ui/GenerationP
 import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
 import { SheetHeader } from '@/widgets/map-sheet-shell/ui/SheetHeader';
 
+import { DraftFallbackBanner } from './DraftFallbackBanner';
 import { SlotCandidatePanelContainer } from './SlotCandidatePanelContainer';
 
 /** 진행 게이지 셀 라벨의 상태부 — `{n}일차 {완성|생성 중|대기}`(한글 · AC-6). 위젯은 features 를
@@ -267,6 +268,15 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   // TRIP-1032 A — 재생성 POST 가 409 GENERATION_IN_PROGRESS 면 일반 실패로 접지 않고 안내를 띄운다.
   const busy = useGenerationBusy(regenerate.error, sendRegenerate);
 
+  // 「처음부터 직접」 공통 목적지 — 수동 짜기 라우트(h19). 인터스티셜·셸 폴백 안내·DraftScreen 세 곳이
+  // 같은 곳으로 간다. 접미 있는 라우트라 객체형 push 로 `[tripId]` 를 해소한다(TRIP-483 AC-4).
+  function goManualPlan(): void {
+    router.push({
+      pathname: '/trips/[tripId]/itinerary/manual',
+      params: { tripId },
+    });
+  }
+
   // 두 뒤로가기(h35 후보 0건 · h11 초안) 공통. 딥링크로 콜드 오픈돼 히스토리가 없으면
   // (`canGoBack()===false`) 침묵 no-op 이 아니라 홈으로 replace 한다(INV-4). `/(tabs)/itinerary`
   // 는 trips[0] 리다이렉트 함정이라 접미 없는 `/(tabs)` 로 간다. `ItineraryPlanPage.handleBack`
@@ -433,12 +443,7 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
           days.find((day) => day.date === selectedDate)?.slots ?? []
         )}
         onViewPlan={() => setFallbackDismissed(true)}
-        onManualPlan={() =>
-          router.push({
-            pathname: '/trips/[tripId]/itinerary/manual',
-            params: { tripId },
-          })
-        }
+        onManualPlan={goManualPlan}
         onRetry={() => void handleRetry()}
         onBack={handleBack}
       />
@@ -456,24 +461,26 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
     ) : null;
 
   /**
-   * h08 AI 추천안(깨끗한 COMPLETE) — 2단계 생성이 끝나고(!isPartial) 2차 실패도 폴백도 없는
-   * 목록이면 완성 얼굴을 **공용 지도+시트 셸**로 그린다(01b D1-R NARROW · TRIP-792). staleFailed·
-   * 폴백·강등이 곁에 붙은 목록은 이 조건에서 빠져 기존 `<DraftScreen>` 으로 가 배너를 유지한다
-   * (INV-4 — 셸엔 배너 슬롯이 없어 broad 로 보내면 배너가 삼켜진다). h07 셸과 달리 day-chip
-   * 오버레이(overlay 미전달=기본 렌더)와 하단 CTA 두 갈래(다시 짜기·확정하기)를 얹는다.
+   * h08 초안 셸 — 2단계 생성이 끝난(!isPartial) 목록이면 **공용 지도+시트 셸**로 그린다(TRIP-792).
+   * TRIP-1039 부터 폴백·강등·staleFailed 목록도 여기로 온다 — 그 사실은 시트 맨 위
+   * `DraftFallbackBanner` 가 계속 말한다(BR-U3-11 · INV-4). 폴백이면 제목이 「기본 일정」이고 안내 안에
+   * 「처음부터 직접 짜기」 링크가 붙는다(D2). h07 셸과 달리 day-chip 오버레이(overlay 미전달=기본 렌더)와
+   * 하단 CTA 두 갈래(다시 짜기·확정하기)를 얹는다.
    */
-  if (
-    view.kind === 'listed' &&
-    !isPartial &&
-    !view.staleFailed &&
-    fallbackNotice === null
-  ) {
+  if (view.kind === 'listed' && !isPartial) {
     const listedSlots =
       days.find((day) => day.date === selectedDate)?.slots ?? [];
     const listedPins = buildDraftPins(listedSlots);
-    // 일차 칩은 여행 기간(tabs)에서 나온다 — day1 만 도착한 순간에도 셀 수가 흔들리지 않는다(01b D7).
-    const dayChips = tabs.map((tab) => ({ label: `${tab.dayNumber}일차` }));
-    const selectedDayIndex = tabs.findIndex((tab) => tab.date === selectedDate);
+    // 일차 칩은 **데이터가 도착한 날만** 그린다(TRIP-1039 · 03b 경고-1). 셸 칩(`DayChip`)엔 disabled 가
+    // 없어 빈 날 칩을 두면 눌러도 `selectedDate` 가 되돌아가 무반응이 된다(staleFailed 로 2·3일차가 안 온 목록).
+    // 칩 번호는 이 줄인 목록 기준이라 index ↔ 날짜도 같은 배열로 찾는다. 라벨은 여행 기간의 일차 번호 그대로.
+    const chipTabs = tabs.filter((tab) => tab.hasData);
+    const dayChips = chipTabs.map((tab) => ({
+      label: `${tab.dayNumber}일차`,
+    }));
+    const selectedDayIndex = chipTabs.findIndex(
+      (tab) => tab.date === selectedDate
+    );
     const selectedDayNumber =
       tabs.find((tab) => tab.date === selectedDate)?.dayNumber ?? 1;
     // 헤더 meta = "N곳 · X.Xkm". `legDistance` 의 "이동 " 접두는 떼고 km 부만(D8 · INV-3).
@@ -495,11 +502,11 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
           pins={listedPins}
           days={dayChips}
           selectedDayIndex={selectedDayIndex < 0 ? 0 : selectedDayIndex}
-          onSelectDay={(index) => setPickedDate(tabs[index]?.date ?? null)}
+          onSelectDay={(index) => setPickedDate(chipTabs[index]?.date ?? null)}
           onBack={handleBack}
           header={
             <SheetHeader
-              title="AI 추천안"
+              title={fallbackNotice !== null ? '기본 일정' : 'AI 추천안'}
               dayLabel={`${selectedDayNumber}일차`}
               dateLabel={formatDraftDayHeader(selectedDate)}
               meta={meta}
@@ -523,6 +530,11 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
           ]}
         >
           <View className="gap-md px-lg pb-2xl pt-xs">
+            <DraftFallbackBanner
+              fallback={fallbackNotice !== null}
+              staleFailed={view.staleFailed}
+              onManualPlan={goManualPlan}
+            />
             {listedSlots.flatMap((slot, index) => {
               const items: ReactElement[] = [
                 <SlotStopCard
@@ -598,14 +610,7 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
         onPressSlot={(slotKey) =>
           setEditingSlotKey((prev) => (prev === slotKey ? null : slotKey))
         }
-        // 「처음부터 직접」·「직접 고르기」 공통 목적지 — 수동 짜기 라우트(h19). 접미 있는 라우트라
-        // 객체형 push 로 `[tripId]` 를 해소한다(onComplete 선례 · TRIP-483 AC-4).
-        onManualPlan={() =>
-          router.push({
-            pathname: '/trips/[tripId]/itinerary/manual',
-            params: { tripId },
-          })
-        }
+        onManualPlan={goManualPlan}
       />
       {/* 스크롤 밖 뒤 형제라야 카드·하단 버튼 위에 그려진다(TRIP-983). */}
       {candidateSheet}

@@ -66,6 +66,7 @@
 - `src/__tests__/importBoundary.test.ts`  →  (export 없음)
 - `src/__tests__/importBoundaryLayers.test.ts`  →  (export 없음)
 - `src/__tests__/itineraryCoPickStructure.test.ts`  →  (export 없음)
+- `src/__tests__/itineraryDraftFallbackShellStructure.test.ts`  →  (export 없음)
 - `src/__tests__/itineraryDraftStructure.test.ts`  →  (export 없음)
 - `src/__tests__/itineraryEditSheetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/itineraryEditStructure.test.ts`  →  (export 없음)
@@ -774,6 +775,7 @@
 - `src/pages/itinerary-draft/index.ts`  →  DraftPage
 
 ## src/pages/itinerary-draft/ui/
+- `src/pages/itinerary-draft/ui/DraftFallbackBanner.tsx`  →  DraftFallbackBanner
 - `src/pages/itinerary-draft/ui/DraftPage.tsx`  →  DraftPage
 - `src/pages/itinerary-draft/ui/SlotCandidatePanelContainer.tsx`  →  SlotCandidatePanelContainerProps · SlotCandidatePanelContainer
 
@@ -1427,4 +1429,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 987개 파일
+합계 989개 파일
