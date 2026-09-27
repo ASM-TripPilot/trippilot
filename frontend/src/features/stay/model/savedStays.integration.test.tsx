@@ -93,6 +93,7 @@ function makeSaved(item: StayItem, savedStayId: string): SavedStay {
     savedStayId,
     name: item.name,
     coordConfirmed: false,
+    linkedTripIds: [],
     registerRoute: 'MAP_SEARCH',
     externalSource: item.externalSource,
     externalId: item.externalId,

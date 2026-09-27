@@ -33,6 +33,7 @@ import { useRegions } from '@/features/explore/model/regions';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 import { DestinationDetailScreen } from '@/features/explore/ui/DestinationDetailScreen';
+import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import type {
   PlaceCardVM,
   StayCardVM,
@@ -162,7 +163,11 @@ function DestinationDetailBody({
         router.replace(key === 'home' ? '/(tabs)' : `/${key}`)
       }
       // ＋ 여행 만들기 FAB → g01 위저드(d01 라우트 선례).
-      onPressCreateTrip={() => router.push('/trips/new/step1')}
+      onPressCreateTrip={() => {
+        // 새 여행 진입이라 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074).
+        useTripWizardStore.getState().reset();
+        router.push('/trips/new/step1');
+      }}
       savedMenu={{
         open: savedMenuOpen,
         savedCount: savedPoiIds.length,

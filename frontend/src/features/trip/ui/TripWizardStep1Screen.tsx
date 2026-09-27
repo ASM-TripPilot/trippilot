@@ -70,6 +70,10 @@ export interface TripWizardStep1ScreenProps {
    * additive optional 이라 기존 호출부·동결 테스트 무회귀. */
   isLoading?: boolean;
 
+  /** 여행지 박수 합 ↔ 기간 불일치 안내 한 줄(TRIP-1010, 완성형). 조립·조건은 페이지 몫이고 화면은
+   * 받은 문자열을 요약 카드 아래에 그대로 그린다. 없으면 안 그린다. */
+  nightsMismatchNote?: string;
+
   /** 제출 실패 배너 본문(완성형). 제목·버튼 라벨은 Figma 고정 문구라 화면이 갖는다. */
   submitError?: string;
   onRetrySubmit?(): void;
@@ -334,6 +338,7 @@ export function TripWizardStep1Screen({
   onNext,
   onBack,
   isLoading,
+  nightsMismatchNote,
   submitError,
   onRetrySubmit,
   mustVisitError,
@@ -496,6 +501,16 @@ export function TripWizardStep1Screen({
                 skeletonWidths={[64, 78]}
               />
             </View>
+
+            {/* 박수·기간 불일치 안내 — Figma 근거 노드 없음, 여행지 시트 안내(`trip-wizard-destination-note`) 톤 재사용. */}
+            {nightsMismatchNote ? (
+              <Text
+                testID="trip-wizard-nights-mismatch-note"
+                className="font-noto text-label text-muted"
+              >
+                {nightsMismatchNote}
+              </Text>
+            ) : null}
 
             {/* 꼭 갈 곳 — loading 이면 스켈레톤 카드, 아니면 실제 스트립 */}
             {isLoading ? (

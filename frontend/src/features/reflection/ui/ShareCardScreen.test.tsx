@@ -1,4 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 
 import { SHARE_FORMATS, type ShareCardVM } from '../model/shareCard';
@@ -78,6 +83,33 @@ function frameAspect(): number {
   return StyleSheet.flatten(frame.props.style).aspectRatio as number;
 }
 
+interface FrameLayout {
+  aspectRatio?: number;
+  width?: number | string;
+  height?: number | string;
+  alignSelf?: string;
+  className: string;
+}
+
+function frameLayout(): FrameLayout {
+  const frame = screen.getByTestId('reflection-share-preview-frame');
+  const style = (StyleSheet.flatten(frame.props.style) ?? {}) as Omit<
+    FrameLayout,
+    'className'
+  >;
+  return { ...style, className: String(frame.props.className ?? '') };
+}
+
+/** 카드 프레임 안의 회색 박스(bg-surface-soft) 호스트 View 수 — testID 를 옮겨 달아 회색 박스만 남기는 우회를 잡는다. */
+function greyBoxHostsInFrame(): number {
+  const frame = screen.getByTestId('reflection-share-preview-frame');
+  return frame.findAll(
+    (node) =>
+      typeof node.type === 'string' &&
+      /(^|\s)bg-surface-soft(\s|$)/.test(String(node.props.className ?? ''))
+  ).length;
+}
+
 describe('🔴 AC-1 · 정상 렌더 — 카드·세그·버튼·캡션', () => {
   it('제목·포맷 세그(3셀)·프리뷰·저장/공유·캡션을 그린다', () => {
     const props = renderScreen();
@@ -103,17 +135,36 @@ describe('🔴 AC-1 · 정상 렌더 — 카드·세그·버튼·캡션', () => 
   });
 });
 
-describe('🔴 AC-2 · no-photo 안내(BR-U5-47)', () => {
-  it('mode "no-photo" 면 안내 문구가 뜬다', () => {
+// TRIP-1016(D10·INV-4): 지도 히어로가 없으므로(TRIP-634) 안내는 "지도로 만들었다"가 아니라 사실만 말한다.
+const VISIT_ORDER_NOTICE = '사진이 없어 방문 순서로 카드를 만들었어요';
+const NO_VISIT_NOTICE = '사진과 방문 기록이 없어 여행 정보로 카드를 만들었어요';
+
+describe('🔴 TRIP-1016 AC-4 · no-photo 안내 = 사실 문구(BR-U5-47 · D10)', () => {
+  it('mode "no-photo"(방문 있음) → 안내 안에 방문 순서 사실 문구가 뜨고, "동선 지도만으로"는 어디에도 없다', () => {
     renderScreen({ card: baseCard({ mode: 'no-photo' }) });
+
+    const notice = screen.getByTestId('reflection-share-no-photo-notice');
+    expect(within(notice).getByText(VISIT_ORDER_NOTICE)).toBeOnTheScreen();
+    expect(screen.queryByText(/동선 지도만으로/)).toBeNull();
+  });
+
+  it('mode "default" → 안내 컨테이너도, "…카드를 만들었어요" 문구(옛·새·0곳 전부)도 없다(짝)', () => {
+    renderScreen({ card: baseCard({ mode: 'default' }) });
+
+    expect(screen.queryByTestId('reflection-share-no-photo-notice')).toBeNull();
+    expect(screen.queryByText(/카드를 만들었어요/)).toBeNull();
+    // 짝 앵커 — 카드는 그려졌다(화면이 통째로 비어 부재가 공허해진 것이 아님).
     expect(
-      screen.queryByText(/사진이 없어도 동선 지도만으로/)
+      screen.getByTestId('reflection-share-preview-frame')
     ).toBeOnTheScreen();
   });
 
-  it('mode "default" 면 안내 문구가 없다(짝)', () => {
-    renderScreen({ card: baseCard({ mode: 'default' }) });
-    expect(screen.queryByText(/사진이 없어도 동선 지도만으로/)).toBeNull();
+  it('mode "no-photo" + 방문 0곳 → 0곳 전용 사실 문구가 뜨고, "방문 순서로" 문구는 없다(Q1)', () => {
+    renderScreen({ card: baseCard({ mode: 'no-photo', orderedVisits: [] }) });
+
+    const notice = screen.getByTestId('reflection-share-no-photo-notice');
+    expect(within(notice).getByText(NO_VISIT_NOTICE)).toBeOnTheScreen();
+    expect(screen.queryByText(/방문 순서로/)).toBeNull();
   });
 });
 
@@ -181,7 +232,7 @@ describe('🔴 AC-5 · no-photo 안내 = 박스 없는 플레인 텍스트(좌�
     expect(noticeCls).not.toContain('rounded-card');
 
     // 부정 — 내부 문구는 좌정렬(현 text-center 제거 → red).
-    const text = screen.getByText(/사진이 없어도 동선 지도만으로/);
+    const text = screen.getByText(VISIT_ORDER_NOTICE);
     expect(String(text.props.className)).not.toContain('text-center');
 
     // 긍정 짝 — 문구·testID 는 그대로(현 AC-2 유지 · 공허 통과 차단).
@@ -237,5 +288,110 @@ describe('🔴 TRIP-939 A-1 · 캡션 [편집]은 onEditCaption 이 있을 때�
     fireEvent.press(screen.getByTestId('reflection-share-caption-edit'));
 
     expect(onEditCaption).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('🔴 TRIP-1016 AC-1 · 1:1·4:5 프레임은 폭이 크기를 정한다(높이 530 고정 금지)', () => {
+  it.each([
+    ['reflection-share-format-square', 1],
+    ['reflection-share-format-feed', 4 / 5],
+  ])(
+    '%s 선택 → 높이 지정 없음 + 폭은 부모 기준(고정 숫자 폭 없음) + 폭의 출처가 있다',
+    (formatTestId, ratio) => {
+      renderScreen();
+
+      fireEvent.press(screen.getByTestId(formatTestId));
+      const layout = frameLayout();
+
+      // 앵커 — 비율은 그대로 style 에 있다(AC-3 계약 유지).
+      expect(layout.aspectRatio).toBeCloseTo(ratio, 5);
+
+      // 높이는 aspectRatio 가 폭에서 뽑는다 — 어떤 높이 지정도 없다.
+      expect(layout.height).toBeUndefined();
+
+      // 폭은 부모 기준 — 고정 숫자 폭(예 530)은 좁은 기기에서 화면을 넘는다(QA #087).
+      expect([undefined, '100%']).toContain(layout.width);
+
+      // 폭 출처 — style 폭·alignSelf stretch·className w-full/self-stretch 중 하나(없으면 실기에서 0폭).
+      const hasWidthSource =
+        layout.width !== undefined ||
+        layout.alignSelf === 'stretch' ||
+        /(^|\s)(w-full|self-stretch)(\s|$)/.test(layout.className);
+      expect(hasWidthSource).toBe(true);
+    }
+  );
+});
+
+describe('🔴 TRIP-1016 AC-2 · 9:16 프레임은 높이 530 상한(무회귀 ≈298×530)', () => {
+  it('story(기본) → 숫자 높이 530 + aspectRatio 만 있고 폭 지정은 없다(폭까지 주면 비율이 무력화된다)', () => {
+    renderScreen();
+
+    const layout = frameLayout();
+
+    expect(layout.aspectRatio).toBeCloseTo(9 / 16, 5);
+    expect(typeof layout.height).toBe('number');
+    expect(layout.height as number).toBeLessThanOrEqual(530);
+    expect(layout.height as number).toBeCloseTo(530, 0);
+    // 폭·높이가 둘 다 정해지면 Yoga 는 aspectRatio 를 안 쓴다 — 폭은 비율이 높이에서 뽑게 비워 둔다.
+    expect(layout.width).toBeUndefined();
+    expect(layout.alignSelf).not.toBe('stretch');
+    expect(layout.className).not.toMatch(/(^|\s)(w-full|self-stretch)(\s|$)/);
+  });
+
+  it('story→square→story 로 돌아오면 다시 높이 530 상한 모양이다(포맷 전환이 상한을 잃지 않는다)', () => {
+    renderScreen();
+
+    fireEvent.press(screen.getByTestId('reflection-share-format-square'));
+    fireEvent.press(screen.getByTestId('reflection-share-format-story'));
+    const layout = frameLayout();
+
+    expect(layout.aspectRatio).toBeCloseTo(9 / 16, 5);
+    expect(layout.height as number).toBeCloseTo(530, 0);
+    expect(layout.width).toBeUndefined();
+  });
+});
+
+describe('🔴 TRIP-1016 AC-5 · 방문 순서 박스(reflection-share-visit-order)는 방문이 있을 때만(D10 · Q2)', () => {
+  it('no-photo + 방문 0곳 → 박스가 없고, 카드 프레임·제목은 남는다', () => {
+    const props = renderScreen({
+      card: baseCard({ mode: 'no-photo', orderedVisits: [] }),
+    });
+
+    expect(screen.queryByTestId('reflection-share-visit-order')).toBeNull();
+    expect(greyBoxHostsInFrame()).toBe(0);
+    // 짝 앵커 — 카드 자체와 하단 텍스트는 그대로(Q4: 박스만 빠진다).
+    expect(
+      screen.getByTestId('reflection-share-preview-frame')
+    ).toBeOnTheScreen();
+    expect(screen.getByText(props.card.title)).toBeOnTheScreen();
+  });
+
+  it('no-photo + 방문 2곳 → 박스가 있고 그 안에 방문 행이 그려진다(짝)', () => {
+    renderScreen({ card: baseCard({ mode: 'no-photo' }) });
+
+    const box = screen.getByTestId('reflection-share-visit-order');
+    expect(within(box).getByText('광안리 해변')).toBeOnTheScreen();
+    expect(within(box).getByText('감천문화마을')).toBeOnTheScreen();
+    // 짝 — testID 는 회색 박스 그 자체에 달려 있고, 프레임 안 회색 박스는 이것 하나다.
+    expect(String(box.props.className)).toMatch(/(^|\s)bg-surface-soft(\s|$)/);
+    expect(greyBoxHostsInFrame()).toBe(1);
+  });
+
+  it('default + 방문 0곳 → 박스가 없다(판정 기준은 mode 가 아니라 orderedVisits)', () => {
+    renderScreen({ card: baseCard({ mode: 'default', orderedVisits: [] }) });
+
+    expect(screen.queryByTestId('reflection-share-visit-order')).toBeNull();
+    expect(greyBoxHostsInFrame()).toBe(0);
+    expect(
+      screen.getByTestId('reflection-share-preview-frame')
+    ).toBeOnTheScreen();
+  });
+
+  it('default + 방문 2곳 → 박스가 있다(짝)', () => {
+    renderScreen({ card: baseCard({ mode: 'default' }) });
+
+    const box = screen.getByTestId('reflection-share-visit-order');
+    expect(within(box).getByText('광안리 해변')).toBeOnTheScreen();
+    expect(greyBoxHostsInFrame()).toBe(1);
   });
 });

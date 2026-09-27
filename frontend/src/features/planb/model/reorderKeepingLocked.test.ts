@@ -24,6 +24,7 @@ function slot(poiId: string, isFixed = false): Slot {
     isFixed,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     tags: [],
   };
 }

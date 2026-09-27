@@ -45,6 +45,7 @@ import { useMultiRegionPlaces } from '@/features/explore/model/useMultiRegionPla
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
+import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 
 /** 카테고리 시트(TRIP-708 AC-6) — **페이지가 소유**한다(@gorhom/bottom-sheet). 열림 상태는
  * 페이지 `useState`이고, 닫히면 트리에서 통째로 사라진다(조건부 마운트) — gorhom 목이 통과형
@@ -268,7 +269,11 @@ export function PlaceExplorePage(): ReactElement {
         onChangeSearchText={handleChangeSearchText}
         onToggleSave={handleToggleSave}
         onPressCard={(place) => router.push(`/explore/places/${place.poiId}`)}
-        onPressCreateTrip={() => router.push('/trips/new/step1')}
+        onPressCreateTrip={() => {
+          // 새 여행 진입 — 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074).
+          useTripWizardStore.getState().reset();
+          router.push('/trips/new/step1');
+        }}
         onPressSavedPlaces={() => router.push('/explore/saved-places')}
         onPressFilter={() => setCategorySheetOpen(true)}
         onBack={() => router.back()}

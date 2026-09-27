@@ -97,7 +97,7 @@ describe('TRIP-835 AC-3 · 첫 일정 생성 성공 → 권한 요청 루틴 1�
     mockPhase = 'success';
 
     // 실행
-    render(<GeneratingPage tripId={TRIP_ID} />);
+    render(<GeneratingPage tripId={TRIP_ID} mode="FULLY_AI" />);
 
     // 단언
     expect(mockPrompt).toHaveBeenCalledTimes(1);
@@ -128,7 +128,7 @@ describe('TRIP-835 AC-3 · 성공이 아니면 묻지 않는다', () => {
   it('G3 생성이 실패하면 루틴 0회', () => {
     mockPhase = 'error';
 
-    render(<GeneratingPage tripId={TRIP_ID} />);
+    render(<GeneratingPage tripId={TRIP_ID} mode="FULLY_AI" />);
 
     expect(mockPrompt).not.toHaveBeenCalled();
   });
@@ -136,7 +136,7 @@ describe('TRIP-835 AC-3 · 성공이 아니면 묻지 않는다', () => {
   it('G4 생성이 아직 진행 중이면 루틴 0회(마운트하자마자 묻지 않는다)', () => {
     mockPhase = 'pending';
 
-    render(<GeneratingPage tripId={TRIP_ID} />);
+    render(<GeneratingPage tripId={TRIP_ID} mode="FULLY_AI" />);
 
     expect(mockPrompt).not.toHaveBeenCalled();
   });
@@ -148,7 +148,7 @@ describe('TRIP-835 AC-3 · 루틴은 화면 이동을 막지 않는다', () => {
     mockPhase = 'success';
     mockPrompt.mockImplementation(() => new Promise(() => {}));
 
-    render(<GeneratingPage tripId={TRIP_ID} />);
+    render(<GeneratingPage tripId={TRIP_ID} mode="FULLY_AI" />);
 
     expect(mockPrompt).toHaveBeenCalledTimes(1);
     expect(mockReplace).toHaveBeenCalledTimes(1);
@@ -161,7 +161,7 @@ describe('TRIP-835 AC-3 · 루틴은 화면 이동을 막지 않는다', () => {
   it('G6 생성 화면은 "묻고 등록" 루틴 하나만 쓴다 — 조회 전용 등록·요청 함수를 따로 부르지 않는다', () => {
     mockPhase = 'success';
 
-    render(<GeneratingPage tripId={TRIP_ID} />);
+    render(<GeneratingPage tripId={TRIP_ID} mode="FULLY_AI" />);
 
     expect(registerPushIfGranted).not.toHaveBeenCalled();
     expect(requestPushPermission).not.toHaveBeenCalled();

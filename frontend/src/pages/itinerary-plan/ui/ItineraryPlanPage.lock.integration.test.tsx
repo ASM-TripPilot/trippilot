@@ -111,6 +111,7 @@ function itinerary(input: {
             isFixed: false,
             endsNextDay: false,
             hasViolation: false,
+            alternatives: [],
             tags: [],
             nameKo: '성산일출봉',
           },

@@ -18,7 +18,8 @@ import HomeRoute from '@/app/(tabs)/index';
  *
  * 무엇을 보장하나:
  *  - 🔴 지배(planning) 여행의 일정이 **없으면(404)** CTA 가 생성 방식(h04)으로 push 한다(AC-1).
- *  - 🔴 지배 여행의 일정이 **PARTIAL** 이면 CTA 가 생성 중(h09)으로 push 한다(AC-5 홈측).
+ *  - 🔴 지배 여행의 일정이 **PARTIAL** 이면 생성 방식별로 간다(TRIP-1006 D2) — 완전 AI 는 생성 중(h09)
+ *    관찰 모드(mode 꼬리 없음 = POST 0), 같이 짜기는 첫 비고정 슬롯의 슬롯 채우기.
  *
  * 왜 이렇게 테스트하나: 화면(`HomeScreen`)은 라우터·서버를 모른다. 홈 route 만 두 여행 조회 +
  * 지배 여행의 itinerary GET 을 물어 목적지를 정하고, `home-trip-hero-cta` 콜백에 그 목적지 push
@@ -154,8 +155,8 @@ describe('🔴 AC-1 · planning + itinerary 404 → home-trip-hero-cta push meth
   });
 });
 
-describe('🔴 AC-5(홈측) · planning + itinerary PARTIAL → push generating(h09)', () => {
-  it('생성 중인 계획 여행 카드 CTA 를 누르면 생성 중 화면으로 push 한다(탭과 같은 규칙)', () => {
+describe('🔴 AC-5(홈측) · planning + itinerary PARTIAL(완전 AI) → push generating(h09 관찰 모드)', () => {
+  it('완전 AI 로 생성 중인 계획 여행 카드 CTA 를 누르면 mode 없이 생성 중 화면으로 push 한다(탭과 같은 규칙)', () => {
     mockUseItinerary.mockReturnValue(
       itineraryOk(ItineraryGenerationState.PARTIAL, ItineraryStatus.PLANNED)
     );
@@ -397,7 +398,7 @@ describe('🟢 986-A3 · 초안·생성 중은 옛 얼굴 그대로 (회귀 앵�
     expect(mockPush).toHaveBeenCalledWith(`/trips/${TRIP_ID}/itinerary/draft`);
   });
 
-  it('생성 중(PARTIAL) → "일정 이어서 짜기" · generating', () => {
+  it('생성 중(PARTIAL · 완전 AI) → "일정 이어서 짜기" · generating(관찰 모드)', () => {
     renderHome(
       beforeTrip(),
       itineraryOk(ItineraryGenerationState.PARTIAL, ItineraryStatus.PLANNED)
@@ -501,5 +502,64 @@ describe('🟢 986-A5 · 일정 미정착(로딩·404 아닌 오류) → Trip.st
 
     fireEvent.press(screen.getByTestId('home-trip-hero-cta'));
     expect(mockPush).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 1006 A2(홈측) · 같이 짜기 생성 중(PARTIAL · CO_PLAN) → "일정 이어서 짜기" · 첫 비고정 슬롯 채우기', () => {
+  it('라벨은 그대로 두고, 누르면 생성을 다시 쏘는 화면이 아니라 슬롯 채우기(#→%23)로 1회 간다', () => {
+    // 준비 — 같이 짜기 일정. 1일차 맨 앞은 고정 숙소, 첫 비고정은 poi-a.
+    const base = itineraryOk(
+      ItineraryGenerationState.PARTIAL,
+      ItineraryStatus.PLANNED
+    );
+    const coPlan = {
+      ...base,
+      data: {
+        ...(base.data as object),
+        generationMode: 'CO_PLAN',
+        days: [
+          {
+            date: '2099-06-10',
+            slots: [
+              {
+                poiId: 'hotel',
+                startAt: '00:00:00',
+                endAt: '00:00:00',
+                isFixed: true,
+                endsNextDay: false,
+                hasViolation: false,
+                alternatives: [],
+                tags: [],
+              },
+              {
+                poiId: 'poi-a',
+                startAt: '09:30:00',
+                endAt: '11:00:00',
+                isFixed: false,
+                endsNextDay: false,
+                hasViolation: false,
+                alternatives: [],
+                tags: [],
+              },
+            ],
+          },
+        ],
+      },
+    } as unknown as ItineraryHookResult;
+
+    // 실행
+    renderHome(beforeTrip(), coPlan);
+
+    // 단언 ① 라벨 유지(A2).
+    expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
+      '일정 이어서 짜기'
+    );
+
+    // 단언 ② 목적지 — 인코딩된 리터럴을 손으로 적는다(02a ★1).
+    fireEvent.press(screen.getByTestId('home-trip-hero-cta'));
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith(
+      `/trips/${TRIP_ID}/itinerary/copick/2099-06-10%23poi-a`
+    );
   });
 });

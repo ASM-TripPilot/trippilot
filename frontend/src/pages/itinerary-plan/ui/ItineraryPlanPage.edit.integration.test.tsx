@@ -104,6 +104,7 @@ function itineraryOf(status: ItineraryStatus): Itinerary {
           isFixed: false,
           endsNextDay: false,
           hasViolation: false,
+          alternatives: [],
           tags: [],
         },
         {
@@ -113,6 +114,7 @@ function itineraryOf(status: ItineraryStatus): Itinerary {
           isFixed: false,
           endsNextDay: false,
           hasViolation: false,
+          alternatives: [],
           tags: [],
         },
       ],
@@ -127,6 +129,7 @@ function itineraryOf(status: ItineraryStatus): Itinerary {
           isFixed: false,
           endsNextDay: false,
           hasViolation: false,
+          alternatives: [],
           tags: [],
         },
       ],

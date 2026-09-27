@@ -113,8 +113,9 @@ const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'] as const;
  *
  * 세 파생을 이 함수 하나가 소유한다:
  *  1. **밤 목록·지역** — `destinations`를 seq 순서로 nights만큼 펼친 타임라인. 트립 전체 밤
- *     (옵션 A)이라 배정이 하나도 없어도 카드는 Σnights 장이 뜬다(전부 stayName 없음 →
- *     화면이 "숙소 미정"으로 그린다).
+ *     (옵션 A)이라 배정이 하나도 없어도 카드는 밤 수만큼 뜬다(전부 stayName 없음 →
+ *     화면이 "숙소 미정"으로 그린다). 밤 수는 `endDate`가 있으면 여행 기간이고, 박수 합 밖의
+ *     밤은 마지막(seq 최대) 여행지로 채운다(TRIP-1010 D7). `endDate`를 못 읽으면 Σnights.
  *  2. **날짜 라벨** — `startDate`부터 하루씩 더한 `"M/D(요일)"`(예 `6/10(수)`). 요일은
  *     `dayOfWeek`(에포크 산술)로 구해 시계를 안 읽는다.
  *  3. **숙소명** — `sections`(toBaseSections 출력)를 그 밤 날짜로 조인. 그 날짜를 덮는 배정이
@@ -149,24 +150,33 @@ function stayNameForNight(
 export function nightlyBaseCards({
   destinations,
   startDate,
+  endDate,
   sections,
 }: {
   destinations: TripDestination[];
   startDate: string;
+  endDate?: string;
   sections: BaseSection[];
 }): NightlyBaseCard[] {
   // destinations를 seq 순서로 nights만큼 펼쳐 밤별 지역 타임라인을 만든다. 입력을 안 뒤집으려
   // 사본을 정렬한다 — 정렬 소유는 이 model 파일 몫이다(화면·배선 소스엔 `.sort(` 0건, ★7).
+  const bySeq = [...destinations].sort((a, b) => a.seq - b.seq);
   const regionByNight: string[] = [];
-  [...destinations]
-    .sort((a, b) => a.seq - b.seq)
-    .forEach((destination) => {
-      for (let night = 0; night < destination.nights; night += 1) {
-        regionByNight.push(destination.region);
-      }
-    });
+  bySeq.forEach((destination) => {
+    for (let night = 0; night < destination.nights; night += 1) {
+      regionByNight.push(destination.region);
+    }
+  });
 
   const startEpoch = toEpochDay(startDate);
+  // TRIP-1010(D7) — 카드 수는 여행 기간(endDate − startDate)이다. 박수 합으로 못 덮은 밤은 seq가
+  // 가장 큰 여행지로 채운다. 종료일이 없거나 못 읽으면 period가 NaN이라 `<` 비교가 false →
+  // 채우지 않고 Σnights장 그대로(Q4 폴백). 여행지 0곳이면 채울 지역이 없어 0장이다.
+  const period = endDate ? toEpochDay(endDate) - startEpoch : NaN;
+  const lastRegion = bySeq[bySeq.length - 1]?.region;
+  while (lastRegion !== undefined && regionByNight.length < period) {
+    regionByNight.push(lastRegion);
+  }
   return regionByNight.map((region, index) => {
     const nightEpoch = startEpoch + index;
     const [, month, day] = fromEpochDay(nightEpoch).split('-').map(Number);

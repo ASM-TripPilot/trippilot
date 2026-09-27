@@ -42,6 +42,7 @@ describe('🔴 AC-1 · entities/stay/model 재수출 + 카드 뷰모델', () => 
       savedStayId: 'ss-1',
       name: '해운대 오션뷰',
       coordConfirmed: true,
+      linkedTripIds: [],
       registerRoute: 'MAP_SEARCH',
       createdAt: '2026-09-13T00:00:00Z',
       updatedAt: '2026-09-13T00:00:00Z',

@@ -58,6 +58,10 @@ import { PlaceAddPage } from './PlaceAddPage';
  *  - 🔴 **M1** 일정 도착 후 담을 일자가 비었으면(핀 0개) center = 서울 시청.
  *  - 🟢선제 **M2** 핀이 있으면 center = 첫 핀 좌표(무회귀 — 상수로 박아 버리는 구현을 막는 짝).
  *
+ * TRIP-1009 추가 — 시각 시트 기본값 = 앞 장소 종료 시각부터 1시간(자정 넘김·폴백 규칙):
+ *  - 🔴 **1009-B1·B2·B5** 앞 장소(insertAfter 있으면 그 슬롯, 없으면 마지막) 종료부터 1시간이 PUT 에 실린다.
+ *  - 🟢선제 **1009-B3·B4** 앞 장소 없음·자정 넘겨 끝남이면 10:00–11:00 (무회귀).
+ *
  * 왜 통합 버킷인가: 최종 직렬화된 URL·나간 PUT 바디·재요청 횟수·캐시 무효화는 msw/스파이만 본다.
  * 3동작 뼈대: 준비=핸들러/래퍼/params → 실행=렌더/입력/칩/add → 단언=나간 URL·PUT 바디·보이는 트리.
  */
@@ -132,6 +136,7 @@ function makeSlot(poiId: string): ItineraryDaysItemSlotsItem {
     isFixed: false,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     tags: [],
   };
 }
@@ -1097,5 +1102,154 @@ describe('TRIP-981 · B — 후보를 여행 목적지로 좁힌다 (region)', (
     const regions = regionsOf(placeHits());
     expect(regions.length).toBeGreaterThanOrEqual(1);
     expect(regions).toEqual(regions.map(() => null));
+  });
+});
+
+/**
+ * TRIP-1009 · B (#080) — 새 장소 시각 시트의 기본값 = 앞 장소가 끝나는 시각(간격 0, 길이 1시간).
+ *
+ * 앞 장소는 `insertAfter` 가 있으면 그 index 슬롯, 없으면 담을 일자(`days[0]`)의 마지막 슬롯이다.
+ * 앞 장소가 없거나 자정을 넘겨 끝나면 옛 기본값 10:00–11:00 이다(01b Q2-a). 23시 이후 시작이면 종료가
+ * 자정을 넘기고, 그 `endsNextDay` 는 시트가 유도한다(01b Q2-b). 이 페이지는 직접 짜기·일정 편집·AI 추천안
+ * 장소 검색 세 입구가 같이 쓰므로 여기 한 곳이 세 입구를 덮는다.
+ *
+ * 기본값은 시트 셀이 아니라 **셀을 건드리지 않고 [적용]했을 때 나간 PUT 의 새 슬롯**으로 잰다.
+ * 한 테스트에 추가는 한 번 — 연속 추가는 재조회 경합이라 앞 장소를 픽스처에 미리 심는다.
+ *
+ * 3동작 뼈대: 준비=일정 GET 의 days[0].slots(+insertAfter) → 실행=일정 도착 뒤 p1 추가·그대로 적용 →
+ * 단언=PUT 의 p1 슬롯 startAt·endAt·endsNextDay.
+ */
+describe('TRIP-1009 · B — 새 장소 기본 시각은 앞 장소가 끝나는 시각부터 1시간', () => {
+  function timedSlot(
+    poiId: string,
+    startAt: string,
+    endAt: string,
+    endsNextDay = false
+  ): ItineraryDaysItemSlotsItem {
+    return { ...makeSlot(poiId), startAt, endAt, endsNextDay };
+  }
+
+  function serveDay(slots: ItineraryDaysItemSlotsItem[]): void {
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        HttpResponse.json({
+          ...ITINERARY_ENVELOPE,
+          days: [{ date: '2026-06-10', slots }],
+        })
+      )
+    );
+  }
+
+  /** 일정이 도착한 뒤 p1 을 담고 시트를 그대로 적용한다 → 나간 PUT 의 그 날 슬롯들과 p1 슬롯. */
+  async function addP1WithDefaultTime() {
+    const client = makeClient();
+    renderPageWith(client);
+    // 일정 도착 전 "+ 추가"는 조용히 무시된다(W-2) — 캐시 성공 + 한 틱 뒤에 누른다(M1 선례).
+    await waitFor(() =>
+      expect(
+        client.getQueryState(getGetTripsTripIdItineraryQueryKey('t1'))?.status
+      ).toBe('success')
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    await addPlaceAndApply('p1');
+
+    await waitFor(() => expect(putBodies).toHaveLength(1));
+    const day = putBodies[0].days.find((d) => d.date === '2026-06-10');
+    const added = day?.slots.find((slot) => slot.poiId === 'p1');
+    return {
+      slots: day?.slots ?? [],
+      time: {
+        startAt: added?.startAt,
+        endAt: added?.endAt,
+        endsNextDay: added?.endsNextDay,
+      },
+    };
+  }
+
+  it('🔴 1009-B1 · 앞 장소가 10:00–11:00 이면 새 장소는 11:00–12:00 이다 (겹치지 않는다)', async () => {
+    serveDay([timedSlot('sA', '10:00:00', '11:00:00')]);
+
+    const { time } = await addP1WithDefaultTime();
+
+    expect(time).toEqual({
+      startAt: '11:00:00',
+      endAt: '12:00:00',
+      endsNextDay: false,
+    });
+  });
+
+  it('🔴 1009-B2 · 카드 사이 + 면 마지막 장소가 아니라 바로 앞 장소(index 0, 09:30 종료)를 기준으로 삼는다', async () => {
+    mockParams = { tripId: 't1', insertAfter: '0' };
+    serveDay([
+      timedSlot('sA', '08:00:00', '09:30:00'),
+      timedSlot('sB', '13:00:00', '14:00:00'),
+    ]);
+
+    const { slots, time } = await addP1WithDefaultTime();
+
+    // 앵커 — 선행 index 0 다음 자리에 들어갔다(기준 슬롯이 sA 인 전제).
+    expect(slots[1]?.poiId).toBe('p1');
+    expect(time).toEqual({
+      startAt: '09:30:00',
+      endAt: '10:30:00',
+      endsNextDay: false,
+    });
+  });
+
+  it('1009-B6 · 말미 추가(insertAfter 없음)는 첫 장소가 아니라 마지막 장소(14:00 종료)를 기준으로 삼는다 (03b 경고-1)', async () => {
+    // 준비 — 슬롯이 2개라야 "첫 번째 = 마지막"이 갈린다(B1·B4·B5 는 1개, B3 은 0개).
+    serveDay([
+      timedSlot('sA', '08:00:00', '09:30:00'),
+      timedSlot('sB', '13:00:00', '14:00:00'),
+    ]);
+
+    const { slots, time } = await addP1WithDefaultTime();
+
+    // 앵커 — 말미에 붙었다.
+    expect(slots[slots.length - 1]?.poiId).toBe('p1');
+    expect(time).toEqual({
+      startAt: '14:00:00',
+      endAt: '15:00:00',
+      endsNextDay: false,
+    });
+  });
+
+  it('1009-B3 · 빈 일자의 첫 장소는 10:00–11:00 이다 (무회귀 · 선제 green)', async () => {
+    serveDay([]);
+
+    const { time } = await addP1WithDefaultTime();
+
+    expect(time).toEqual({
+      startAt: '10:00:00',
+      endAt: '11:00:00',
+      endsNextDay: false,
+    });
+  });
+
+  it('1009-B4 · 앞 장소가 자정을 넘겨(01:00 익일) 끝나면 10:00–11:00 으로 돌아간다 (폴백 · 선제 green)', async () => {
+    serveDay([timedSlot('sA', '23:00:00', '01:00:00', true)]);
+
+    const { time } = await addP1WithDefaultTime();
+
+    expect(time).toEqual({
+      startAt: '10:00:00',
+      endAt: '11:00:00',
+      endsNextDay: false,
+    });
+  });
+
+  it('🔴 1009-B5 · 앞 장소가 23:30 에 끝나면 23:30–00:30 이고 자정 넘김(endsNextDay)으로 저장된다', async () => {
+    serveDay([timedSlot('sA', '22:30:00', '23:30:00')]);
+
+    const { time } = await addP1WithDefaultTime();
+
+    expect(time).toEqual({
+      startAt: '23:30:00',
+      endAt: '00:30:00',
+      endsNextDay: true,
+    });
   });
 });

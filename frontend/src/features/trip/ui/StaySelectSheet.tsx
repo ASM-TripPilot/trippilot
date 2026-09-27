@@ -49,6 +49,13 @@ export type StaySelectCandidate = SavedStay & {
   priceLabel?: string;
 };
 
+/** TRIP-1011 — 후보를 나눠 그릴 섹션 하나(헤더 제목 + 그 섹션의 후보). */
+export interface StaySelectSection {
+  key: 'here' | 'other';
+  title: string;
+  candidates: StaySelectCandidate[];
+}
+
 export interface StaySelectSheetProps {
   /** 헤더 제목(박 라벨·지역 — 배선이 조립). 예 "2박 · 부산". */
   title: string;
@@ -56,6 +63,8 @@ export interface StaySelectSheetProps {
   dateLabel: string;
   /** 후보 = 저장 숙소 목록(useSavedStays 결과, 배선이 내림). */
   candidates: StaySelectCandidate[];
+  /** TRIP-1011 — 있으면 섹션(헤더+카드)으로 그린다. 없으면 `candidates` 평면 목록(현행). */
+  sections?: StaySelectSection[];
   /** 드래프트 선택 — 배선이 소유. null 이면 미선택(지정 disabled). */
   selectedSavedStayId: string | null;
   /** 후보 press → 배선 드래프트 갱신. */
@@ -86,6 +95,7 @@ export function StaySelectSheet({
   title,
   dateLabel,
   candidates,
+  sections,
   selectedSavedStayId,
   onSelect,
   onBrowse,
@@ -97,6 +107,32 @@ export function StaySelectSheet({
   const empty = candidates.length === 0;
   // 미선택이거나 지정이 진행 중이면 버튼을 진짜 disable 한다(색만 흐린 가짜는 press 가 발화).
   const assignDisabled = selectedSavedStayId === null || assignPending === true;
+
+  function renderCandidate(stay: StaySelectCandidate): ReactElement {
+    const selected = stay.savedStayId === selectedSavedStayId;
+    // 날짜 서브라인 = M/D–M/D · N박(en dash·미들닷), 한쪽이라도 없으면 "날짜 없음".
+    const dateLine = formatBaseNightRange(stay.checkIn, stay.checkOut);
+    // 후보 카드를 entities degrade 카드로 위임(★16). 선택은 색이 아니라
+    // accessibilityState + 우측 체크(trailing, tone primary)로 잰다(★2). 사진·동네·거리·가격은
+    // SavedStay 계약에 없어(실측) 실데이터는 미렌더(카드 optional 슬롯, 값은 프리뷰만 — INV-1).
+    return (
+      <SavedStayCard
+        key={stay.savedStayId}
+        testID={`trip-base-staysheet-cand-${stay.savedStayId}`}
+        name={stay.name}
+        layout="row"
+        selected={selected}
+        imageUrl={stay.imageUrl}
+        region={stay.region}
+        priceLabel={stay.priceLabel}
+        subtitle={
+          <Text className="font-noto text-caption text-muted">{dateLine}</Text>
+        }
+        trailing={selected ? <CheckGlyph size={22} tone="primary" /> : null}
+        onPress={() => onSelect(stay.savedStayId)}
+      />
+    );
+  }
 
   return (
     <BottomSheet
@@ -127,41 +163,27 @@ export function StaySelectSheet({
               {EMPTY_MESSAGE}
             </Text>
           </View>
-        ) : (
-          <View className="gap-sm">
-            {candidates.map((stay) => {
-              const selected = stay.savedStayId === selectedSavedStayId;
-              // 날짜 서브라인 = M/D–M/D · N박(en dash·미들닷), 한쪽이라도 없으면 "날짜 없음".
-              const dateLine = formatBaseNightRange(
-                stay.checkIn,
-                stay.checkOut
-              );
-              // 후보 카드를 entities degrade 카드로 위임(★16). 선택은 색이 아니라
-              // accessibilityState + 우측 체크(trailing, tone primary)로 잰다(★2). 사진·동네·거리·가격은
-              // SavedStay 계약에 없어(실측) 실데이터는 미렌더(카드 optional 슬롯, 값은 프리뷰만 — INV-1).
-              return (
-                <SavedStayCard
-                  key={stay.savedStayId}
-                  testID={`trip-base-staysheet-cand-${stay.savedStayId}`}
-                  name={stay.name}
-                  layout="row"
-                  selected={selected}
-                  imageUrl={stay.imageUrl}
-                  region={stay.region}
-                  priceLabel={stay.priceLabel}
-                  subtitle={
-                    <Text className="font-noto text-caption text-muted">
-                      {dateLine}
-                    </Text>
-                  }
-                  trailing={
-                    selected ? <CheckGlyph size={22} tone="primary" /> : null
-                  }
-                  onPress={() => onSelect(stay.savedStayId)}
-                />
-              );
-            })}
+        ) : sections !== undefined ? (
+          // TRIP-1011 — 섹션이 오면 섹션마다 헤더 + 그 섹션 카드. `candidates` 는 다시 그리지 않는다.
+          <View className="gap-lg">
+            {sections.map((section) => (
+              <View
+                key={section.key}
+                testID={`trip-base-staysheet-section-${section.key}`}
+                className="gap-sm"
+              >
+                <Text
+                  testID={`trip-base-staysheet-section-${section.key}-title`}
+                  className="font-noto text-label text-muted"
+                >
+                  {section.title}
+                </Text>
+                {section.candidates.map(renderCandidate)}
+              </View>
+            ))}
           </View>
+        ) : (
+          <View className="gap-sm">{candidates.map(renderCandidate)}</View>
         )}
 
         {/* 실패 인라인(INV-4) — 침묵하지 않는다. 성공/미시도면 미렌더. */}

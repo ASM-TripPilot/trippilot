@@ -258,6 +258,8 @@ const GENERATED_TAG_DIRS = [
   'preferences',
   'profile',
   'reflection',
+  // TRIP-1007: replan 태그 추가(GET …/replan-sessions/{id}/diff 1오퍼레이션) → 폴더 1개 더.
+  'replan',
   'saved-stays',
   'schemas',
   'stays',
@@ -290,6 +292,8 @@ const GENERATED_FILE_COUNT_FLOOR = 75;
  *      포매터를 안 돌리면 순수 포맷 차이로 어긋난다(02a ★1).
  */
 const ENDPOINT_FILE_SHA256: Record<string, string> = {
+  // TRIP-1024 에서 saved-stays·places·preferences 갱신: openapi `info.description` 한 단락(횡단 400
+  // 규약) 추가로 생성 파일 헤더 주석만 바뀌었다 — 코드 줄 diff 0(git diff 로 확인).
   // TRIP-640 에서 갱신: GET /stays/{stayId}(StayDetail) 오퍼레이션 추가(정당한 계약 변경 — BE #659).
   // TRIP-503 에서 갱신 — 다만 이 파일이 바뀐 이유는 **이 티켓이 아니다.** 역지오코딩
   // (GET /stays/reverse-geocode)이 openapi 에 머지됐는데 재생성이 안 돼 밀려 있었다.
@@ -297,7 +301,7 @@ const ENDPOINT_FILE_SHA256: Record<string, string> = {
   'stays/stays.ts':
     'ac1a5bfd2a6fe0fb49579eaf9e0f830bd83cc7b4040000aadebdc9e1d19f2f5f',
   'saved-stays/saved-stays.ts':
-    '79fe27571bb827aaa31a24849ed111b87ef260341bf6769bf43bea5d15a44a46',
+    'a2d4929164e981baf14239c87471dcbdcf57dcb70004a705cd1ae981660af3ca',
   // TRIP-294에서 places·preferences로 넓혔다(01b Seed 확정 6). 근거는 문제로그
   // `2026-08-02 TRIP-211이 openapi만 고치고 재생성 없이 머지됐다` — 밀린 코드젠 빚이
   // 무관한 티켓의 diff에 섞여 들어오는 사고가 실제로 있었다. 사정거리가 넓을수록 그
@@ -310,9 +314,9 @@ const ENDPOINT_FILE_SHA256: Record<string, string> = {
   // TRIP-503 에서 갱신: 목록 계약이 배열 → `{items, nextCursor}` 로 바뀌고
   // q·limit·cursor 파라미터가 붙었다(정당한 계약 변경).
   'places/places.ts':
-    '960202f0ba94183a6dcaffd70d5516d0cf7497ef312884418aa5309c8c660607',
+    '5c8853677a899f309ac2184c5347c7d23ebbf840dcefa4c5561a3f8374e13e37',
   'preferences/preferences.ts':
-    'c583726ab8b40694c99f5b3cc54d5da91a3b0bd0bd83f1b692ee9435e129a6fc',
+    'f753c225200adf07e8765df29f3ae52412f40feac5a88954cd249939b13ec580',
 };
 
 /** BR-U1-10(날짜·인원 없이 탐색)·BR-U1-15(정렬은 서버 고정) 위반의 흔적. */
@@ -671,7 +675,7 @@ describe('AC-2 ②③ · 생성 파일 인벤토리 — 하한 목록 + 개수 +
    * D4(`/change-log` 앵커 미설치)가 정한 범위와 같다 — 그 계약을 쓰는 화면이 붙는 티켓에서
    * 앵커와 함께 닫는다.
    */
-  it('하한 67경로가 하나도 사라지지 않았고, 총 개수가 줄지 않았고, 태그 폴더가 정확히 12개다', () => {
+  it('하한 67경로가 하나도 사라지지 않았고, 총 개수가 줄지 않았고, 태그 폴더가 정확히 13개다', () => {
     const files = listGeneratedFiles();
 
     // 지킴 ① — 사라진 이름을 모아 비교한다. 실패 diff에 **무엇을 잃었는지**가 그대로 찍힌다.

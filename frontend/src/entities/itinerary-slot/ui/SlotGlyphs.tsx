@@ -18,6 +18,7 @@ const BODY = '#3F3F3F';
 const INK = '#222222';
 // 비활성 회청(Figma #C2CCD6) — 토큰 없음, TripGlyphs `DISABLED` 선례와 같은 값.
 const DISABLED = '#C2CCD6';
+const ON_PRIMARY = '#FFFFFF';
 
 type GlyphProps = {
   size?: number;
@@ -349,9 +350,10 @@ export function LockGlyph({ size = 14 }: GlyphProps) {
 
 // TRIP-746 · i01 허브 진행 카드 아이콘 3종(Figma 4125:3957 벡터 그대로) — active [사진]·[메모]는
 // ink(16), upcoming 비활성 버튼은 회청(15). 같은 모양을 `tone` 으로 가른다(ChevronRightGlyph 패턴).
-type ProgressTone = 'ink' | 'disabled';
+// TRIP-1021 — upcoming 수동 [✓ 도착](bg-primary 알약)의 체크는 흰색(onPrimary).
+type ProgressTone = 'ink' | 'disabled' | 'onPrimary';
 const progressStroke = (tone: ProgressTone): string =>
-  tone === 'disabled' ? DISABLED : INK;
+  tone === 'disabled' ? DISABLED : tone === 'onPrimary' ? ON_PRIMARY : INK;
 
 export function PhotoGlyph({
   size = 16,

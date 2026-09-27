@@ -58,6 +58,7 @@ class ReplanFacadeService(
     private val preferences: PreferenceFacade,
     private val personalization: PersonalizationPort,
     private val savedPlaces: SavedPlaceLookupFacade,
+    private val regions: com.trippilot.placedata.api.RegionLookupFacade,
     private val rejectionStore: RejectionStore,
     private val clock: Clock,
 ) : ReplanFacade {
@@ -129,19 +130,30 @@ class ReplanFacadeService(
     }
 
     /**
-     * 후보 풀을 매달 좌표. 현재 위치가 없으면 그 날 숙소 앵커로 내려간다.
-     * 둘 다 없으면 **다시 짤 근거가 없다** — 조용히 빈 결과를 주지 않고 실패로 올려 수동 편집으로 넘긴다(INV-4).
-     * 그래서 null 을 돌려주지 않는다(없으면 던진다) — nullable 로 두면 "좌표 없이도 부른다"로 읽힌다.
+     * 후보 풀을 매달 좌표. 사다리: 현재 위치 → 그 날 숙소 앵커 → **목적지 중심**(TRIP-963).
+     *
+     * 마지막 단은 생성 경로가 TRIP-384 에서 같은 문제를 푼 그 단이다(`GenerateItineraryService.dayAnchors`
+     * 의 `RegionAnchors.centerOf` 폴백). 재계획에만 이 단이 없어서, 숙소 0·실적 0·GPS 0 인 사용자가
+     * 재계획을 누르면 **AI 를 부르지도 않고 40ms 만에 FAILED** 였다(재현 세션 8e72c8e7) —
+     * BR-U4-19 "위치를 못 잡았다고 재계획을 막지 않으며"와 모순이었다.
+     *
+     * **반드시 맨 뒤 단이어야 한다.** 도시 중심은 사용자가 실제로 서 있는 곳과 멀 수 있다 —
+     * 실측·핀·숙소가 있으면 항상 그쪽이 이긴다.
+     *
+     * 목적지 좌표조차 없으면 **종전대로 실패**다(INV-4 — 조용히 빈 결과 대신 수동 편집으로).
+     * 지어낸 좌표를 AI 에 보내지 않는다 — 생성 경로도 같은 판단이다(앵커 없이 간다).
      */
     private fun groundingPoint(command: ReplanCommand, ctx: TripGenerationContext): Pair<Double, Double> {
         command.originLat?.let { lat -> command.originLng?.let { lng -> return lat to lng } }
-        val anchor = baseAnchors.findStayNightAnchors(command.tripId, ctx.startDate, ctx.endDate)
+        baseAnchors.findStayNightAnchors(command.tripId, ctx.startDate, ctx.endDate)
             .firstOrNull { it.date == command.targetDate }
-            ?: throw ScheduleAgentCallFailed(
-                "NO_GROUNDING_POINT", retryable = false,
-                message = "현재 위치도 숙소 거점도 없어 재계획 기준점을 정할 수 없습니다.",
-            )
-        return anchor.lat to anchor.lng
+            ?.let { return it.lat to it.lng }
+        ctx.destinationRefs.firstNotNullOfOrNull { RegionAnchors.centerOf(regions, it) }
+            ?.let { return it.lat to it.lng }
+        throw ScheduleAgentCallFailed(
+            "NO_GROUNDING_POINT", retryable = false,
+            message = "현재 위치도 숙소 거점도 목적지 중심도 없어 재계획 기준점을 정할 수 없습니다.",
+        )
     }
 
     /**

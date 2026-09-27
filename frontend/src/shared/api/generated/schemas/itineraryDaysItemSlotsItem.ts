@@ -4,8 +4,11 @@
  * TripPilot U1 API (소셜 로그인 전용 MVP)
  * U1 기반·계정·온보딩 (M1 Auth · M2 Profile · C3 Moderation). 소셜 로그인 전용 — 이메일/비밀번호 로그인은 후속 이연. 정본 대조: docs/design/U1-API-설계.md, U1-DB스키마-설계.md, U1-내부아키텍처-설계.md
  *
+ * **횡단 규약 — 입력 형식 오류는 어느 엔드포인트에서든 400이다.** 경로변수·쿼리의 타입 변환 실패(UUID·숫자·enum)와 필수 쿼리 누락은 표준 에러 봉투 (`ErrorResponse`, code=`VALIDATION_ERROR`, `fields[].field`=문제 파라미터 이름)로 나간다. 경로별 `'400'` 선언은 **업무 검증**이 있는 곳에만 적는다 — 형식 오류까지 경로마다 중복 선언하면 무엇이 그 엔드포인트 고유의 검증인지 안 보인다. (2026-09-01 이전에는 이 갈래가 500 `INTERNAL` 로 나갔다 — UUID-PATH-400)
+ *
  * OpenAPI spec version: 0.1.0-draft
  */
+import type { ItineraryDaysItemSlotsItemAlternativesItem } from './itineraryDaysItemSlotsItemAlternativesItem';
 
 export type ItineraryDaysItemSlotsItem = {
   poiId: string;
@@ -35,4 +38,11 @@ export type ItineraryDaysItemSlotsItem = {
   imageUrl?: string | null;
   /** 미확보 시 빈 배열 */
   tags: string[];
+  /**
+   * 생성 시점에 AI 가 같이 준 **다른 선택지**(TRIP-873) — 슬롯당 **최대 2건**, 없으면 빈 배열. 있으면 화면이 추가 왕복 없이 "다른 선택지"를 그린다.
+   * **제안일 뿐이다** — 시각도 순서도 없다(INV-2). 교체 확정은 기존 편집 경로 (edit → validate) 그대로다. 정본에 없는 장소는 서버가 이미 걸러 냈다(INV-1).
+   * **편집하면 사라진다**(빈 배열). 편집 응답에 차선책이 없고, 옛 값을 들고 가면 바뀐 슬롯에 옛 대안이 붙어 distanceRange 가 틀려진다.
+   * 반경·컨셉을 바꿔 다시 묻고 싶으면 온디맨드 후보 조회를 쓴다(목적이 다르다).
+   */
+  alternatives: ItineraryDaysItemSlotsItemAlternativesItem[];
 };

@@ -33,6 +33,7 @@ function slot(
     isFixed,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     tags: [],
   };
 }

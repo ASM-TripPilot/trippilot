@@ -5,9 +5,11 @@ import {
   nightlyBaseCards,
   toBaseSections,
 } from '@/features/trip/model/baseSections';
+import { staySheetSections } from '@/features/trip/model/staySheetSections';
 import { deriveEndDate } from '@/features/trip/model/tripWizardStep1';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import { useSavedStays } from '@/features/trip/model/useSavedStays';
+import { useStayAddresses } from '@/features/trip/model/useStayAddresses';
 import {
   useAssignBase,
   useTripBases,
@@ -23,11 +25,11 @@ import {
  * 어느 것도 모르고 완성된 카드 뷰모델만 받는다.
  *
  *  1. **박별 카드 파생** — `toBaseSections`(정렬·박 라벨 소유) → `nightlyBaseCards`(밤 목록·지역·
- *     날짜·숙소명 조인)로 밤 수(Σnights)만큼 카드를 만든다. 배정된 밤은 숙소명, 미배정 밤은
+ *     날짜·숙소명 조인)로 여행 기간의 밤 수만큼 카드를 만든다(TRIP-1010 — 박수 합 밖의 밤은 마지막 여행지). 배정된 밤은 숙소명, 미배정 밤은
  *     화면이 "숙소 미정"으로 그린다(옵션 A).
  *  2. **변형 판정(옵션 A — empty 없음)** — `createdTripId` 부재 → notrip · 조회 실패 → error ·
  *     진행 중 → loading · 그 밖 → default. **empty가 없다**: 목적지가 있으면(step1에서 강제)
- *     배정이 0이어도 Σnights 카드가 전부 "숙소 미정"으로 뜬다.
+ *     배정이 0이어도 기간의 밤 카드가 전부 "숙소 미정"으로 뜬다.
  *  3. **조회 껐다 켜기** — 위저드는 `Stack.Protected` 밖이라 딥링크로 tripId 없이 열린다.
  *     `enabled: tripId !== undefined`로 그때 요청을 아예 안 보낸다.
  *
@@ -52,6 +54,7 @@ export function TripNewStep2Page(): ReactElement {
   const {
     createdTripId: tripId,
     startDate,
+    endDate,
     destinations,
   } = useTripWizardStore();
 
@@ -73,15 +76,19 @@ export function TripNewStep2Page(): ReactElement {
 
   const savedStayList = savedStays.data ?? [];
   const assignments = bases.data ?? [];
+  // TRIP-1011 — 시트 섹션 재료(숙소 주소). 시트를 열기 전부터 받아 두어 열 때 목록이 튀지 않게 한다.
+  const stayAddresses = useStayAddresses(savedStayList);
   // 딥링크 진입에서는 빈 문자열이 그대로 흘러간다 — 목적지가 없어 카드는 어차피 0장이다.
   const tripStartDate = startDate ?? '';
 
   const sections = toBaseSections(assignments, savedStayList, {
     startDate: tripStartDate,
   });
+  // 카드 수(여행 기간 · 남은 밤 채움)는 nightlyBaseCards 가 소유한다 — 배선은 종료일을 넘기기만 한다(TRIP-1010).
   const cards = nightlyBaseCards({
     destinations,
     startDate: tripStartDate,
+    endDate,
     sections,
   });
 
@@ -159,6 +166,15 @@ export function TripNewStep2Page(): ReactElement {
   // 카드 메타처럼 `{박수}박 · {지역}`, 날짜 라벨은 카드가 이미 요일을 붙여 낸 값을 그대로 쓴다.
   const openCard = cards.find((card) => card.nightNumber === openNight);
 
+  /** 둘러보기 — 지역을 실어 보낸다. 안 실으면 검색 화면이 기본값 '부산'을 연다(TRIP-1011 #037). */
+  function browseStays(region: string | undefined): void {
+    router.push(
+      region === undefined
+        ? '/stays'
+        : `/stays?region=${encodeURIComponent(region)}`
+    );
+  }
+
   return (
     <>
       <TripWizardStep2Screen
@@ -167,7 +183,7 @@ export function TripNewStep2Page(): ReactElement {
         onPressCard={openSheet}
         onGenerate={goToMethod}
         onNoStayStart={goToMethod}
-        onBrowseStays={() => router.push('/stays')}
+        onBrowseStays={() => browseStays(destinations[0]?.region)}
         onBack={() => router.back()}
         onRetryAll={() => {
           void savedStays.refetch();
@@ -180,9 +196,13 @@ export function TripNewStep2Page(): ReactElement {
           title={`${openCard.nightNumber}박 · ${openCard.region}`}
           dateLabel={openCard.dateLabel}
           candidates={savedStayList}
+          sections={
+            staySheetSections(savedStayList, stayAddresses, openCard.region) ??
+            undefined
+          }
           selectedSavedStayId={selectedSavedStayId}
           onSelect={(savedStayId) => setSelectedSavedStayId(savedStayId)}
-          onBrowse={() => router.push('/stays')}
+          onBrowse={() => browseStays(openCard.region)}
           onAssign={handleAssign}
           assignPending={assignBase.isPending}
           assignFailed={assignFailed}

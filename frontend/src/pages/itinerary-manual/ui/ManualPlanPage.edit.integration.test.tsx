@@ -41,6 +41,7 @@ import { ManualPlanPage } from './ManualPlanPage';
  *  - 🔴 M4 ⌄ → 시각 시트(`itinerary-manual-time-*`) → 적용값이 PUT 에 실린다.
  *  - 🔴 M5·M6 저장 실패·미지정 제외를 침묵하지 않는다(INV-4) — 페이지 소유 안내 testID 2종.
  *  - 🔴 M7 장소 추가·카드 사이 +·뒤로가 라우터로 이어진다(옛 `itinerary-manual-add-place` 대체).
+ *    뒤로(‹)는 TRIP-1009 부터 `router.back` 이 아니라 일정 탭 `replace` 다(C1b 는 저장 뒤 ‹).
  *
  * MANUAL 생성 POST 가드(G-a1~a3·I2)는 `ManualPlanPage.integration.test.tsx` 가 계속 잠근다 — 여기선
  * GET 이 기존 초안(days>0)을 돌려줘 POST 가 나가지 않는 경로만 쓴다.
@@ -93,6 +94,7 @@ function slot(
     isFixed: false,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     tags: [],
     nameKo: `장소-${poiId}`,
   };
@@ -374,7 +376,9 @@ describe('🟢 V3 · TRIP-590 AC1 · 5-b 경고-1 — 저장 응답의 서버 �
 });
 
 describe('🔴 M7 · AC-9 — 장소 추가·카드 사이 +·뒤로가 라우터로 이어진다', () => {
-  it('장소 추가는 h13 말미, 카드 사이 + 는 선행 index, 뒤로는 back 을 부른다', async () => {
+  // TRIP-1009 C(01b Q3) — ‹ 는 이전 화면(방식 선택)이 아니라 일정 탭으로 바꿔 간다. 편집기에 들어온 순간
+  // MANUAL 일정이 이미 있으므로 방식 선택으로 돌아가면 "일정이 없다"는 거짓 신호가 된다.
+  it('장소 추가는 h13 말미, 카드 사이 + 는 선행 index, 뒤로는 일정 탭으로 replace 한다 (back 0회)', async () => {
     renderPage();
     await ready();
 
@@ -390,8 +394,12 @@ describe('🔴 M7 · AC-9 — 장소 추가·카드 사이 +·뒤로가 라우�
       params: { tripId: TRIP_ID, insertAfter: '0' },
     });
 
+    // 앵커 — ‹ 전엔 replace 0회(앞 동작이 부른 호출이 셈에 섞이지 않게).
+    expect(mockReplace).not.toHaveBeenCalled();
     fireEvent.press(screen.getByTestId('itinerary-edit-back'));
-    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith('/(tabs)/itinerary');
+    expect(mockBack).not.toHaveBeenCalled();
   });
 });
 
@@ -487,6 +495,47 @@ describe('🔴 S1 · 저장 성공 토스트 + 제자리 (#043 · D20)', () => {
     // 실패가 처리된 뒤에 센다 — 응답 전이면 어떤 구현이든 토스트가 없다.
     expect(await screen.findByTestId(SAVE_ERROR)).toBeOnTheScreen();
     expect(screen.queryByTestId('itinerary-manual-saved')).toBeNull();
+  });
+});
+
+/**
+ * TRIP-1009 · C (#081) — 저장한 뒤 ‹ 를 누르면 일정 탭으로 간다(QA 재현 순서: 저장 → ‹).
+ *
+ * 저장은 여전히 제자리 + 토스트다(D20) — ‹ 를 누르기 전까지 라우터는 0회다. ‹ 는 방식 선택으로 돌아가는
+ * `back` 이 아니라 `replace('/(tabs)/itinerary')` 다. 탭의 여행 카드를 누르면 저장한 일정으로 다시 간다.
+ * 토스트 스토어 비우기는 파일 최상위 `afterEach` 가 맡는다.
+ *
+ * 3동작 뼈대: 준비=PUT 200 + 토스트 호스트 → 실행=저장 → ‹ → 단언=토스트·저장 뒤 라우터 0회·‹ 뒤 replace 1회.
+ */
+describe('🔴 C1b · TRIP-1009 — 저장 뒤 ‹ 는 일정 탭으로 간다 (#081)', () => {
+  it('저장하면 제자리에 토스트가 뜨고, 그 뒤 ‹ 를 누르면 replace("/(tabs)/itinerary") 1회 · back 0회다', async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <WithToastHost>
+          <ManualPlanPage tripId={TRIP_ID} />
+        </WithToastHost>
+      </QueryClientProvider>
+    );
+    await ready();
+    expect(screen.queryByTestId('itinerary-manual-saved')).toBeNull();
+
+    await save();
+    expect(
+      await screen.findByTestId('itinerary-manual-saved')
+    ).toBeOnTheScreen();
+    // 저장 자체는 화면을 옮기지 않는다(D20 무회귀).
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('itinerary-edit-back'));
+
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith('/(tabs)/itinerary');
+    expect(mockBack).not.toHaveBeenCalled();
   });
 });
 

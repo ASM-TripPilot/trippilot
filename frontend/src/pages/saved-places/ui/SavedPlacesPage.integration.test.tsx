@@ -13,7 +13,16 @@ import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
 import { optimisticSavedPlaceId } from '@/features/explore/model/savedPlaceIndex';
+import type { MustVisitSeedItem } from '@/features/trip/model/mustVisitSeed';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import {
+  captureDraftAtNextCall,
+  freshWizardDraft,
+  leavePreviousTripDraft,
+  resetWizardDraft,
+  wizardDraftData,
+  withoutSeedFields,
+} from '@/test-support/wizardDraftFixture';
 
 import { SavedPlacesPage } from './SavedPlacesPage';
 
@@ -226,6 +235,9 @@ beforeEach(() => {
 afterEach(() => {
   server.resetHandlers();
 });
+
+// 위저드 드래프트는 모듈 싱글턴이다 — describe 안에만 걸면 앞 테스트가 남긴 시드가 뒤로 샌다(TRIP-1012).
+afterEach(resetWizardDraft);
 
 afterAll(() => server.close());
 
@@ -710,5 +722,68 @@ describe('S-11 · 필수 방문지를 건드리지 않는다 (N-4 · AC-9 · BR-
       new URL(hit.url).pathname.includes('must-visits')
     );
     expect(mustVisitHits).toEqual([]);
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * TRIP-1012 C — '이 장소들로 여행 만들기'는 새 여행 진입이다 (#031 · #074 · D9)
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * 무엇을 보장하나: 이 CTA 는 위저드 **밖**에서 새 여행을 시작한다. 그래서 이동 직전에 직전 여행의
+ * 드래프트(여행지·기간·인원·동반·예산·취향·만든 여행 id·뺀 곳 기억)를 전부 비우고, 그 **다음에**
+ * 지금 목록을 꼭 갈 곳으로 심는다. 여행지는 담은 곳에서 추정해 채우지 않는다(#031 현행 유지).
+ *
+ * ★ push 가 불리는 **그 순간**의 드래프트를 붙잡는다(`captureDraftAtNextCall`). 순서가 거꾸로(시드
+ *   → 비우기)면 비우기가 방금 켠 "셸 초기화 1회 건너뛰기" 표시를 꺼서 셸이 시드를 지운다 — 그
+ *   표시가 push 시점에 켜져 있는지까지 잰다(셸이 그 표시를 존중하는 것은 `tripWizardEntryReset`
+ *   GC-3 이 잠근다).
+ */
+describe('🔴 TRIP-1012 C1 · 담은 장소 CTA 는 드래프트를 비운 뒤 지금 목록만 시드한다', () => {
+  it('직전 여행 드래프트가 있어도 push 시점엔 여행지·기간·예산 등이 초기값이고, 꼭 갈 곳은 지금 4곳이며 셸 통과 표시가 켜져 있다', async () => {
+    leavePreviousTripDraft();
+    // 앵커 — 아직 안 비었다(픽스처가 조용히 망가지면 아래 단언이 공짜로 통과한다).
+    expect(wizardDraftData()).not.toEqual(freshWizardDraft());
+    expect(useTripWizardStore.getState().destinations).toHaveLength(1);
+    const draftAtPush = captureDraftAtNextCall(mockPush);
+
+    await renderLoaded();
+    await waitFor(() => expect(itemTestIds()).toHaveLength(4));
+    fireEvent.press(screen.getByTestId('explore-saved-createtrip'));
+
+    expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
+    const atPush = draftAtPush();
+    expect(atPush).toBeDefined();
+    // 시드 3필드를 뺀 나머지는 새 여행의 얼굴 그대로다(뺀 곳 기억 poi-prev-2 도 사라진다).
+    expect(withoutSeedFields(atPush ?? {})).toEqual(
+      withoutSeedFields(freshWizardDraft())
+    );
+    // 시드는 지금 화면의 목록 — 직전 여행의 poi-prev-1 은 없다.
+    expect(
+      ((atPush?.mustVisits ?? []) as MustVisitSeedItem[])
+        .map((one) => one.sourcePoiId)
+        .sort()
+    ).toEqual(['p1', 'p2', 'p3', 'p4']);
+    expect(atPush?.mustVisitsInitialized).toBe(true);
+    expect(atPush?.preserveMustVisitsOnce).toBe(true);
+  });
+});
+
+describe('TRIP-1012 C2 · 담은 곳에서 여행지를 추정해 채우지 않는다 (#031 현행 유지)', () => {
+  it('담은 곳이 전부 수영구여도 push 시점과 이후의 여행지는 비어 있다', async () => {
+    savedRows = ['p1', 'p2', 'p3'].map((poiId, index) => ({
+      savedPlaceId: `sp-${poiId}`,
+      savedAt: `2026-08-0${index + 1}T10:00:00.000Z`,
+      place: makePlace(poiId, `장소 ${poiId}`, '수영구'),
+    }));
+    const draftAtPush = captureDraftAtNextCall(mockPush);
+
+    await renderLoaded();
+    await waitFor(() => expect(itemTestIds()).toHaveLength(3));
+    fireEvent.press(screen.getByTestId('explore-saved-createtrip'));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(draftAtPush()?.destinations).toEqual([]);
+    expect(useTripWizardStore.getState().destinations).toEqual([]);
   });
 });

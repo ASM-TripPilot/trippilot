@@ -26,6 +26,7 @@ import {
 import { isNotFound } from '@/shared/api/isNotFound';
 import { seoulDate } from '@/shared/date/seoulDate';
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { ArriveRequestSource } from '@/shared/api/generated/schemas';
 
 import { LiveHubView } from './LiveHubView';
 
@@ -244,6 +245,23 @@ export function LiveItineraryPage({
         slotBadgeLabel={slotBadgeLabel}
         onPressSlotName={(poiId) =>
           router.push(`/trips/${tripId}/live/place/${poiId}`)
+        }
+        // TRIP-1021 수동 [도착] — 보는 날짜가 실제 오늘일 때만(Q6, 날짜 문자열 비교 — todayIndex 는 여행
+        // 밖이면 첫날/마지막 날로 끼운 값이라 못 쓴다). 다른 날에 열면 그날 슬롯에 오늘 도착이 찍힌다.
+        // 방문 기록 데이터가 있을 때만 — 첫 로딩·첫 실패 중엔 전부 '예정'으로 보여 이미 도착한 곳에 409 가 난다.
+        // isSuccess 가 아니라 data 기준: 재조회 한 번 실패로 캐시 데이터가 있는데 버튼이 전부 사라지면 안 된다(03b 재리뷰 R1).
+        // 위치 권한은 보지 않는다(Q2 — 자동 도착 TRIP-1018 보류 중 유일한 도착 경로).
+        // 슬롯 키가 비면 서버가 즉석 방문으로 기록하므로 반드시 싣는다. 실패는 훅이 그 레코드만 롤백한다.
+        onPressArrive={
+          activeDate === today && visits.data !== undefined
+            ? (poiId) => {
+                void visitCheck.arrive({
+                  slotKey: buildSlotKey(activeDate, poiId),
+                  poiId,
+                  source: ArriveRequestSource.MANUAL,
+                });
+              }
+            : undefined
         }
         initialSnapIndex={initialSnapIndex}
       />

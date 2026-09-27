@@ -79,10 +79,16 @@ export interface SlotFillScreenProps {
   progress?: ConceptProgress;
   /** CoPickStepper 노드. 미주입 → 미렌더(features→widgets 금지라 pages 가 조립, D9). */
   stepperSlot?: ReactNode;
-  /** poiId→표시 픽스처(이름·태그·톤다운). candidates 응답엔 없어 프롭 전용(D1·D8). */
+  /** poiId→표시값(이름·태그·사진·톤다운). 이름·태그·사진은 페이지가 후보 응답에서 채운다(TRIP-1024),
+   * 톤다운은 계약에 없어 프롭 전용(D1·D8). */
   candidateViews?: Record<
     string,
-    { nameKo?: string | null; tags?: string[]; dimmed?: boolean }
+    {
+      nameKo?: string | null;
+      tags?: string[];
+      imageUrl?: string | null;
+      dimmed?: boolean;
+    }
   >;
   /** 지도 카드. 미주입 → 미렌더(좌표 도착 전 정직 degrade, D6·D7). */
   mapView?: {
@@ -368,6 +374,7 @@ export function SlotFillScreen({
                     selected={isSelected}
                     nameKo={view?.nameKo}
                     tags={view?.tags}
+                    imageUrl={view?.imageUrl}
                     dimmed={view?.dimmed}
                     trailing={
                       <Pressable

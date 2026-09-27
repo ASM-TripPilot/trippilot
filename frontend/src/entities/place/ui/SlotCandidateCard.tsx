@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
-import { Text, View } from 'react-native';
+import { Image, Text, View } from 'react-native';
 
 import type { SlotCandidatesCandidatesItem } from '@/shared/api/generated/schemas';
 
@@ -13,7 +13,7 @@ import type { SlotCandidatesCandidatesItem } from '@/shared/api/generated/schema
  * ★6-a: planb 무수정 테스트의 루트 정규식이 `image-`·`name-` 를 제외하지 않아, planb 구성에선 그 두
  *   testID 를 그리면 후보 루트 집합이 깨진다 → `showImage`·`showNameTestId` 기본 false 로 둔다.
  *
- * 이름은 기본이 중립 플레이스홀더(candidates 에 nameKo 없음 · poiId 원문 비노출 INV-1). 거리·근거 leaf 에
+ * 이름은 기본이 중립 플레이스홀더(소비처가 nameKo 를 안 주면 · poiId 원문 비노출 INV-1). 거리·근거 leaf 에
  * 소요시간 단위 0(INV-3, slack leaf 는 두 고정시각 차라 예외).
  *
  * TRIP-793 additive(전부 기본값이 기존 렌더 불변): h08 "다른 후보 시트"가 이 카드를 직접 소비하며
@@ -24,6 +24,11 @@ import type { SlotCandidatesCandidatesItem } from '@/shared/api/generated/schema
  *  - `distanceLabel?`(옵셔널화) — 미주입이면 거리 앞 라벨 Text 를 안 그린다(h08 시트는 라벨 없이 태그·거리만).
  *  - `distanceTone?`(기본 'ink') — 'muted' 면 거리 leaf 를 태그줄과 같은 muted 로(h08 시트 한 줄 정합).
  *    planb·CC 는 미주입=ink 라 굵은 잉크 거리 그대로.
+ *
+ * TRIP-1024 additive: `imageUrl?` 를 주면 사진 자리가 그 URL 의 이미지가 된다(없거나 '' 면 회색 자리 그대로).
+ * 어느 쪽이든 **같은 testID** 를 유지한다(CC1 은 회색 자리의 testID 를 단언). `imageSize?`(기본 56)는
+ * h10 이 78 로 키운다. 이름·사진은 소비처가 명시로 줄 때만 켠다 — 후보 객체의 `nameKo`·`imageUrl` 을
+ * 기본으로 읽으면 실데이터를 받는 planb(i14)가 조용히 켜진다(AC-8).
  */
 export interface SlotCandidateCardProps {
   candidate: SlotCandidatesCandidatesItem;
@@ -45,6 +50,10 @@ export interface SlotCandidateCardProps {
   showNameTestId?: boolean;
   /** 회색 이미지 자리를 그릴지(itin true / planb false, ★6-a). */
   showImage?: boolean;
+  /** 사진 URL — showImage 일 때만 쓴다. null·undefined·'' 면 회색 자리. */
+  imageUrl?: string | null;
+  /** 사진 한 변(px) — h08 56(기본) · h10 78. */
+  imageSize?: 56 | 78;
   /** 알파벳 배지(A/B/C…, itin) — planb 미지정. */
   badge?: string;
   /** h18 선택 강조 테두리(itin) — planb 미지정. */
@@ -57,6 +66,12 @@ export interface SlotCandidateCardProps {
    * 낮춘다. 미전달=기존 렌더 불변(planb i14·h08 무회귀). 톤다운 판정은 계약에 없어 프롭 전용(D1·D8). */
   dimmed?: boolean;
 }
+
+// NativeWind 는 소스의 클래스 문자열을 정적으로 스캔한다 — 크기 클래스를 조립하지 말고 통째로 둔다.
+const IMAGE_SIZE_CLASS = {
+  56: 'h-[56px] w-[56px]',
+  78: 'h-[78px] w-[78px]',
+} as const;
 
 // 카드 그림자(itinerary h12·h18 값) — planb 는 그림자 없음이라 showImage 로 게이트한다.
 const cardShadow = {
@@ -78,6 +93,8 @@ export function SlotCandidateCard({
   namePlaceholder = '이름 준비 중',
   showNameTestId = false,
   showImage = false,
+  imageUrl,
+  imageSize = 56,
   badge,
   selected = false,
   slack,
@@ -123,10 +140,19 @@ export function SlotCandidateCard({
       ) : null}
 
       {showImage ? (
-        <View
-          testID={leafId('image')}
-          className="h-[56px] w-[56px] rounded-thumb bg-surface-soft"
-        />
+        imageUrl ? (
+          <Image
+            testID={leafId('image')}
+            source={{ uri: imageUrl }}
+            resizeMode="cover"
+            className={`${IMAGE_SIZE_CLASS[imageSize]} rounded-thumb bg-surface-soft`}
+          />
+        ) : (
+          <View
+            testID={leafId('image')}
+            className={`${IMAGE_SIZE_CLASS[imageSize]} rounded-thumb bg-surface-soft`}
+          />
+        )
       ) : null}
 
       <View className="min-w-0 flex-1 gap-[3px]">

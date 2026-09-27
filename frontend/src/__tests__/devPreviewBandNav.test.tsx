@@ -351,7 +351,16 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     // ⚠️ TRIP-755: i10 현재 장소 상세 2키(`live-place-default`·`-unknown`)를 `live-place` 1키(band `i`)로
     //    합쳐 **순 −1** → 165→164. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에서
     //    키만 바꾸고 이 가드는 안 만진다(재편 전엔 165개라 red). 정확한 키는 `devPreviewLiveHub.test.tsx`.
-    expect(PREVIEW_STATES).toHaveLength(164);
+    // ⚠️ TRIP-1010: g01 박수·기간 불일치 안내 프리뷰 1키(`trip-new-step1-nights-mismatch`, band `g`) 추가로
+    //    164→165. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에 그 1키만 추가하고 이
+    //    가드는 안 만진다(추가 전엔 164개라 red). 정확히 그 키인지는 아래 'TRIP-1010' describe 가 못박는다.
+    // ⚠️ TRIP-1011: g02 숙소 선택 시트 섹션 분리 프리뷰 1키(`trip-new-step2-staysheet-sections`, band `g`) 추가로
+    //    165→166. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에 그 1키만 추가하고 이
+    //    가드는 안 만진다(추가 전엔 165개라 red). 정확히 그 키인지는 아래 'TRIP-1011' describe 가 못박는다.
+    // ⚠️ TRIP-1012: d02 select 지역 밖 머리글 프리뷰 1키(`saved-places-select-outside`, band `d`) 추가로
+    //    166→167. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에 그 1키만 추가하고 이
+    //    가드는 안 만진다(추가 전엔 166개라 red). 정확히 그 키인지는 아래 'TRIP-1012' describe 가 못박는다.
+    expect(PREVIEW_STATES).toHaveLength(167);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -897,6 +906,31 @@ describe('TRIP-742 AC-1 · g 밴드 프리뷰 키 4개 삭제 (band g)', () => {
   });
 });
 
+describe('🔴 TRIP-1010 · g01 박수·기간 불일치 안내 프리뷰 키 (band g)', () => {
+  it('trip-new-step1-nights-mismatch 키가 있고, 렌더하면 안내 한 줄이 뜬다', () => {
+    // 준비 — 새 키 엔트리를 찾는다(red-first: preview.tsx 에 추가 전엔 없다).
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'trip-new-step1-nights-mismatch'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('g');
+    expect(entry?.label).toBe('g01 · 여행 만들기 nights-mismatch');
+
+    // 실행 — 그 엔트리의 render() 를 그린다.
+    render(<>{entry?.render()}</>);
+
+    // 단언 — 공허 통과 방지: 기본 g01 이 아니라 nightsMismatchNote 를 넘긴 얼굴이어야 안내가 선다.
+    expect(
+      screen.getByTestId('trip-wizard-nights-mismatch-note')
+    ).toHaveTextContent(/박/);
+
+    // 이웃 앵커 — 기본 g01 default 키가 딸려 사라지지 않았다.
+    expect(PREVIEW_STATES.map((state) => state.key)).toContain(
+      'trip-new-step1-default'
+    );
+  });
+});
+
 describe('TRIP-742 AC-3 · g 밴드 라벨 규약 개정 (gNN · 화면명 상태)', () => {
   // 목표 라벨(브리프 AC-3 표) — 7키. 모두 ' · ' 구분자 + g0N 접두를 유지하므로 devPreviewBandSort
   // AC-1(접두 /^[a-l]\d{2}/) 은 계속 green(그 파일은 band h·l 만 잠가 band g 라벨 문자열엔 무관).
@@ -1321,5 +1355,58 @@ describe('🔴 TRIP-772 · l 밴드 25키·라벨 완전 일치 (AC-1·AC-3)', (
     // 단언: 앵커(형제 픽스처는 settings-preferences 가 계속 쓴다) + 고아 이름 부재.
     expect(source.includes('SETTINGS_PREF_PREVIEW_SELECTION')).toBe(true);
     expect(source.includes('SETTINGS_PREF_PREVIEW_EMPTY')).toBe(false);
+  });
+});
+
+describe('🔴 TRIP-1011 · g02 숙소 선택 시트 섹션 분리 프리뷰 키 (band g)', () => {
+  it('trip-new-step2-staysheet-sections 키가 있고, 렌더하면 두 섹션 헤더가 뜬다', () => {
+    // 준비 — 새 키 엔트리를 찾는다(red-first: preview.tsx 에 추가 전엔 없다).
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'trip-new-step2-staysheet-sections'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('g');
+    expect(entry?.label).toBe('g02 · 숙소 선택 시트 sections');
+
+    // 실행 — 그 엔트리의 render() 를 그린다.
+    render(<>{entry?.render()}</>);
+
+    // 단언 — 공허 통과 방지: 평면 시트가 아니라 sections 를 넘긴 얼굴이어야 두 헤더가 선다(6-b 육안 대조 자리).
+    expect(
+      screen.getByTestId('trip-base-staysheet-section-here')
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('trip-base-staysheet-section-other')
+    ).toBeOnTheScreen();
+
+    // 이웃 앵커 — 기존 평면 시트 키가 딸려 사라지지 않았다.
+    expect(PREVIEW_STATES.map((state) => state.key)).toContain(
+      'trip-new-step2-staysheet'
+    );
+  });
+});
+
+describe('🔴 TRIP-1012 · d02 select "이 여행 지역 밖 N곳" 머리글 프리뷰 키 (band d)', () => {
+  it('saved-places-select-outside 키가 있고, 렌더하면 지역 밖 머리글이 뜬다', () => {
+    // 준비 — 새 키 엔트리를 찾는다(red-first: preview.tsx 에 추가 전엔 없다).
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'saved-places-select-outside'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('d');
+    expect(entry?.label).toBe('d02 · 꼭 갈 곳 고르기 지역 밖');
+
+    // 실행 — 그 엔트리의 render() 를 그린다.
+    render(<>{entry?.render()}</>);
+
+    // 단언 — Figma 에 없는 새 표면이라 6-b 육안 대조 자리다. 지역 밖 목록을 실제로 넘긴 얼굴이어야 뜬다.
+    expect(
+      screen.getByTestId('mustvisit-pick-region-outside')
+    ).toBeOnTheScreen();
+
+    // 이웃 앵커 — 기존 select default 키가 딸려 사라지지 않았다.
+    expect(PREVIEW_STATES.map((state) => state.key)).toContain(
+      'saved-places-select'
+    );
   });
 });

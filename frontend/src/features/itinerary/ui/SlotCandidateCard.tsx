@@ -25,6 +25,8 @@ export interface SlotCandidateCardProps {
   /** TRIP-795 h10 표시 픽스처(계약엔 없어 프롭 전용) — 미전달이면 기존 렌더 불변. */
   nameKo?: string | null;
   tags?: string[];
+  /** TRIP-1024 사진 URL — 없거나 '' 면 회색 자리. h10 사진은 78(Figma `3849:2272`). */
+  imageUrl?: string | null;
   dimmed?: boolean;
 }
 
@@ -35,6 +37,7 @@ export function SlotCandidateCard({
   trailing,
   nameKo,
   tags,
+  imageUrl,
   dimmed,
 }: SlotCandidateCardProps): ReactElement {
   return (
@@ -44,6 +47,8 @@ export function SlotCandidateCard({
       distanceLabel={DISTANCE_LABEL}
       showNameTestId
       showImage
+      imageUrl={imageUrl}
+      imageSize={78}
       badge={badge}
       selected={selected}
       trailing={trailing}
