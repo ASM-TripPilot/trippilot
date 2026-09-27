@@ -8,7 +8,7 @@
 tags 가 DB 엔 있는데 내부 DTO 엔 없었고, 경계가 열렸는데 받는 쪽 주석은 "아직"이었다.
 그래서 조각이 아니라 **줄 전체**를 본다:
 
-    POST /ai/v1/itinerary/alternatives
+    POST /ai/v1/planb/alternatives
       → 풀 조립(Poi.source_ref)
       → PlanBAgent.retrieve → fetch_place_knowledge (KB-5 collection)
       → RagContext.place_knowledge
@@ -109,7 +109,7 @@ def test_장소_문서가_그_후보_줄에_실린다() -> None:
     """
     client, spy, expected = _wired(with_doc=True)
     with client:
-        response = client.post("/ai/v1/itinerary/alternatives", json=_body())
+        response = client.post("/ai/v1/planb/alternatives", json=_body())
 
     assert response.status_code == 200, response.text
     assert spy.prompts, "LLM 이 불리지 않았다 — 앞 단계에서 폴백했다"
@@ -131,7 +131,7 @@ def test_문서가_없으면_칸이_안_생긴다() -> None:
     """
     client, spy, _ = _wired(with_doc=False)
     with client:
-        response = client.post("/ai/v1/itinerary/alternatives", json=_body())
+        response = client.post("/ai/v1/planb/alternatives", json=_body())
 
     assert response.status_code == 200, response.text
     assert spy.prompts

@@ -1,4 +1,4 @@
-"""재계획 경계 (`POST /ai/v1/itinerary/replan`) — 계약과 명시 실패.
+"""재계획 경계 (`POST /ai/v1/planb/replan`) — 계약과 명시 실패.
 
 정본: `backend/docs/design/ai-backend-replan-연동-설계.md` §4·§5 (A-4).
 
@@ -82,7 +82,7 @@ def test_assembly_without_replan_fails_loudly_instead_of_pretending_no_candidate
     app = create_app()
     app.dependency_overrides[get_orchestrator] = _OldAssembly
 
-    res = TestClient(app).post("/ai/v1/itinerary/replan", json=_body())
+    res = TestClient(app).post("/ai/v1/planb/replan", json=_body())
 
     assert res.status_code == 503
     assert "itinerary" not in res.json()  # 빈 산출물로 위장하지 않는다
@@ -125,7 +125,7 @@ def test_request_reaches_the_assembly_unchanged() -> None:
     """
     client, orch = _wired()
 
-    client.post("/ai/v1/itinerary/replan", json=_body())
+    client.post("/ai/v1/planb/replan", json=_body())
 
     assert orch.seen is not None
     assert orch.seen.reasons == ["weather"]
@@ -139,7 +139,7 @@ def test_unknown_directives_come_back_instead_of_disappearing() -> None:
     """모르는 지시를 **조용히 무시하지 않는다** — FE 가 알릴 수 있어야 한다."""
     client, _ = _wired()
 
-    body = client.post("/ai/v1/itinerary/replan", json=_body()).json()
+    body = client.post("/ai/v1/planb/replan", json=_body()).json()
 
     assert body["unknown_directives"] == ["NOPE"]
     assert body["empty_reason"] == {
@@ -158,16 +158,16 @@ def test_free_text_limit_matches_the_column_it_is_stored_in() -> None:
     """
     client, _ = _wired()
 
-    assert client.post("/ai/v1/itinerary/replan", json=_body(free_text="가" * 500)).status_code == 200
-    assert client.post("/ai/v1/itinerary/replan", json=_body(free_text="가" * 501)).status_code == 422
+    assert client.post("/ai/v1/planb/replan", json=_body(free_text="가" * 500)).status_code == 200
+    assert client.post("/ai/v1/planb/replan", json=_body(free_text="가" * 501)).status_code == 422
 
 
 def test_scope_is_a_closed_set() -> None:
     """`scope` 는 두 값뿐 — 자유 문자열이면 백엔드 오타가 조용히 통과한다."""
     client, _ = _wired()
 
-    assert client.post("/ai/v1/itinerary/replan", json=_body(scope="PARTIAL_SLOTS")).status_code == 200
-    assert client.post("/ai/v1/itinerary/replan", json=_body(scope="ALL")).status_code == 422
+    assert client.post("/ai/v1/planb/replan", json=_body(scope="PARTIAL_SLOTS")).status_code == 200
+    assert client.post("/ai/v1/planb/replan", json=_body(scope="ALL")).status_code == 422
 
 
 # ── ⑤ INV-3 ──────────────────────────────────────────────────────────
@@ -197,7 +197,7 @@ def test_transport_mode_reaches_the_assembly_because_it_sets_the_pool_radius() -
     """
     client, orch = _wired()
 
-    client.post("/ai/v1/itinerary/replan", json=_body(transport_mode="도보"))
+    client.post("/ai/v1/planb/replan", json=_body(transport_mode="도보"))
 
     assert orch.seen is not None
     assert orch.seen.transport_mode == "도보"
@@ -213,5 +213,5 @@ def test_transport_mode_is_optional_so_older_callers_keep_working() -> None:
 
     body = _body()
     del body["transport_mode"]
-    assert client.post("/ai/v1/itinerary/replan", json=body).status_code == 200
+    assert client.post("/ai/v1/planb/replan", json=body).status_code == 200
     assert orch.seen is not None and orch.seen.transport_mode is None

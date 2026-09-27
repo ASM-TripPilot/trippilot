@@ -338,7 +338,7 @@ from trippilot.api.wiring import build_dev_app  # noqa: E402
 def _replan_response(**over):
     with TestClient(build_dev_app(directives=_DIRECTIVES),
                     raise_server_exceptions=False) as client:
-        return client.post("/ai/v1/itinerary/replan", json=_body(**over))
+        return client.post("/ai/v1/planb/replan", json=_body(**over))
 
 
 def test_replan_response_carries_kb_hit_counts() -> None:
@@ -435,7 +435,7 @@ def test_llm_backed_rank_reaches_the_schedule_task() -> None:
               "e0000000-0000-4000-8000-000000000001")
     app, spy = _app_with_spy(_StubRag(ranked))
     with TestClient(app, raise_server_exceptions=False) as client:
-        body = client.post("/ai/v1/itinerary/replan", json=_body()).json()
+        body = client.post("/ai/v1/planb/replan", json=_body()).json()
 
     assert len(spy.tasks) == 1
     assert [str(p) for p in spy.tasks[0].planb_rank] == list(ranked), "랭킹이 봉투에 안 실렸다"
@@ -464,7 +464,7 @@ def test_llm_backed_rank_reaches_the_score_in_the_integration_path() -> None:
     app = build_dev_app(directives=_DIRECTIVES, trace=trace)
     app.state.orchestrator._rag = _StubRag((in_pool,))
     with TestClient(app, raise_server_exceptions=False) as client:
-        body = client.post("/ai/v1/itinerary/replan", json=_body()).json()
+        body = client.post("/ai/v1/planb/replan", json=_body()).json()
 
     assert body["empty_reason"] is None, body["notes"]
     assert any("planb_rank_lifted:1/1" in getattr(e, "reason", "") for e in trace.events), (
@@ -479,7 +479,7 @@ def test_out_of_pool_rank_is_reported_as_zero_lifted() -> None:
     app.state.orchestrator._rag = _StubRag(
         ("e0000000-0000-4000-8000-000000000001",))  # 성산일출봉 — 반경 10km 밖
     with TestClient(app, raise_server_exceptions=False) as client:
-        client.post("/ai/v1/itinerary/replan", json=_body())
+        client.post("/ai/v1/planb/replan", json=_body())
 
     assert any("planb_rank_lifted:0/1" in getattr(e, "reason", "") for e in trace.events)
 
@@ -493,7 +493,7 @@ def test_rule_ranking_is_not_passed_as_a_rank() -> None:
     """
     app, spy = _app_with_spy()
     with TestClient(app, raise_server_exceptions=False) as client:
-        body = client.post("/ai/v1/itinerary/replan", json=_body()).json()
+        body = client.post("/ai/v1/planb/replan", json=_body()).json()
 
     assert len(spy.tasks) == 1
     assert spy.tasks[0].planb_rank == (), "규칙 랭킹이 가산으로 실렸다"

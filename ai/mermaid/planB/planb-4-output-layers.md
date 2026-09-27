@@ -3,7 +3,7 @@
 > 코드 구조도 — 재계획 시트 한 화면이 서로 다른 두 산출물을 요구한다.
 > 윗층 i06(하루 재계획안 — 시각 있음, PlanBAgent→ScheduleAgent 합성)과 아랫층 h08
 > (슬롯 교체 후보 — 시각 없음, `PlanBAgent` RAG). RAG 는 양쪽 다 탄다.
-> 기준: origin/develop (6e1c5857), 2026-09-26.
+> 기준: origin/develop (TRIP-960 ④ 반영), 2026-09-28.
 
 ```mermaid
 flowchart TB
@@ -11,13 +11,13 @@ flowchart TB
 
   subgraph UP["윗층 — i06 재계획안"]
     U1["하루 일정 1안"] --> U2["시각·순서 필요<br/>어셈블리 solve() 통과 필수"]
-    U2 --> U3["POST /ai/v1/itinerary/replan"]
+    U2 --> U3["POST /ai/v1/planb/replan"]
     U3 --> U4["배선됨 — PlanBAgent(RAG) → ScheduleAgent<br/>RAG 순서를 점수 가산으로 · 시각은 어셈블리"]
   end
 
   subgraph LOW["아랫층 — h08 슬롯 교체 후보"]
     D1["대안 ≤3"] --> D2["시각·순서 없음<br/>배치는 repair 몫"]
-    D2 --> D3["POST /ai/v1/itinerary/alternatives"]
+    D2 --> D3["POST /ai/v1/planb/alternatives"]
     D3 --> D4["개통됨 — PlanBAgent RAG<br/>그림 ①②③ 이 이 경로"]
   end
 
