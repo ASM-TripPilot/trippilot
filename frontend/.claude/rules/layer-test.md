@@ -102,6 +102,7 @@ paths:
 | `src/__tests__/staySelectSheetStructure.test.ts` | 시트 props-only 소스 가드 — `useState`·router·query·store·타 feature import 0 + 가격/사진 미렌더 소스 짝 |
 | `src/__tests__/itineraryMustVisitStructure.test.ts` | h05·h07 소스 층 가드 — `pagesLayerStructure` 자동 편입 + 409 판정 공용 승격 요구 |
 | `src/__tests__/itineraryDraftStructure.test.ts` | h11 소스 가드 — 라우트 두께·`pages`+`features/itinerary` 타이머 0(폴링 결과는 `draftView.test.ts`) · 심볼·경로 계약(`ZeroCandidateScreen.tsx` 부재). `startAt` 소스 스캔은 고정 블록 예외 때문에 표현 불가라 두지 않는다 |
+| `src/__tests__/generationGaugeFoldStructure.test.ts` | TRIP-1040 배치 감시관 — `foldGenerationGauge` 자가검사(예시 3종) + `DraftPage.tsx`·`preview.tsx`가 실제로 그 함수를 named import·호출하는지(문자열 스캔, "판단은 소비처" 계약이 소스에서 새지 않게 고정) |
 | `src/__tests__/itineraryMapSurfaceStructure.test.ts` | 지도 호출부 옵트인 경계 — `src/` 전체에서 `<MapView`를 쓰는 파일이 명부(`OPEN_CALLERS`·`LOCKED_CALLERS`·`NO_LINE_CALLERS`)와 정확히 같아야 하고, `MapSheetShell`의 `mapViewOnly={false}`는 `LiveHubView.tsx` 하나(`SHELL_UNLOCK`). **새 지도 호출부는 명부 등재와 파생 카운트(`openTags`·`defaultTags`) 갱신이 필요**하다(미등재면 fail-closed red — 반복 실측) · 사진·URL 유출 0 · 좌표 간격 · `DraftScreenProps` 필드 동결 |
 | `src/__tests__/planbReplanDraftStructure.test.ts` | i13·i16 소스 가드 — INV-3 · 무쓰기(apply 훅 import 0) · 화면 순수성(dispatch는 페이지 1곳) |
 | `src/__tests__/liveLocationRoute.test.tsx` | i20·i21 라우트 얇은 위임 — `useLocalSearchParams` 값이 페이지에 도달하는지(한 쌍만 확인이라 하드코딩도 통과) |
