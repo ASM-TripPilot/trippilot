@@ -4,24 +4,18 @@ import { Pressable, Text, View } from 'react-native';
 import type { SettingsRowChip } from '../model/settingsSections';
 
 import {
-  ArrowsSwapGlyph,
   BellGlyph,
   ChevronRightGlyph,
   ContrastGlyph,
   DocumentGlyph,
   DownloadGlyph,
   ExternalLinkGlyph,
-  ForkKnifeGlyph,
-  GaugeGlyph,
   LogoutGlyph,
   MUTED_SOFT,
-  PeopleGlyph,
   PersonGlyph,
   PinGlyph,
   SparkleGlyph,
-  StarGlyph,
   TrashGlyph,
-  WonGlyph,
 } from './SettingsGlyphs';
 
 /** 행 key → 리딩 아이콘. Figma `1607:2440` 아이콘 배치. */
@@ -31,13 +25,7 @@ const LEADING_GLYPHS: Record<
 > = {
   nickname: PersonGlyph,
   export: DownloadGlyph,
-  style: ContrastGlyph,
-  budget: WonGlyph,
-  companions: PeopleGlyph,
-  activities: StarGlyph,
-  transport: ArrowsSwapGlyph,
-  food: ForkKnifeGlyph,
-  pace: GaugeGlyph,
+  preferences: ContrastGlyph,
   'location-consent': PinGlyph,
   personalization: SparkleGlyph,
   notifications: BellGlyph,

@@ -59,8 +59,12 @@ import { SettingsPage } from '..';
  *  거르지만, 취향 7·제휴·개인화가 ready:true 로 열려 운영 화면에 7그룹이 모두 보이고 "준비 중"은 없다
  *  (구 "여행 취향·제휴 그룹째 부재"는 01b 사용자 결정으로 뒤집혔다).
  *
- * TRIP-778 AC-8: 취향 7행은 모두 `/settings/preferences`(전체 편집 화면 하나 — 축 인자 없음)로, 개인화
- *  행은 `/settings/personalization` 으로 push 한다. 라우트 문자열은 페이지가 쥐므로 여기서 잠근다.
+ * TRIP-778 AC-8 · TRIP-1051 AC-4: 취향 한 행은 `/settings/preferences`(전체 편집 화면 하나 — 축 인자 없음)로,
+ *  개인화 행은 `/settings/personalization` 으로 push 한다. 라우트 문자열은 페이지가 쥐므로 여기서 잠근다.
+ *
+ * TRIP-1051 AC-3(페이지): 취향 조회가 아직 없으면(`data: undefined`) 페이지가 그걸 그대로 넘겨 값이 비어야
+ *  한다. 화면 테스트는 VM 을 직접 넣으므로 "페이지가 `data ?? {}` 로 넘겨 0/7 을 만든다"는 여기서만 잡힌다
+ *  (02a ★7).
  *
  * TRIP-937 AC-3: 앱 정보 그룹의 약관 3행을 누르면 열람 라우트 `/terms/{termsType}` 로 push 한다(심사
  *  가이드라인 5.1.1(i) — 개인정보처리방침 앱 내 접근). 라우트 문자열은 페이지가 쥐므로 여기서 잠근다.
@@ -133,7 +137,7 @@ describe('TRIP-618 · SettingsPage 진입 배선', () => {
 
     const labels = [
       '계정',
-      '여행 취향',
+      null, // TRIP-1051 — 여행 취향 그룹은 머리글 없음(행으로 확인)
       '위치정보',
       '알림',
       '제휴 안내',
@@ -144,33 +148,40 @@ describe('TRIP-618 · SettingsPage 진입 배선', () => {
     const groups = screen.getAllByTestId('settings-group');
     expect(groups).toHaveLength(7);
     labels.forEach((label, i) => {
-      expect(within(groups[i]).getByText(label)).toBeOnTheScreen();
+      if (label === null) {
+        // 머리글 없는 칸: 그 자리에 취향 행이 있고, '여행 취향' 글자는 행 라벨 1개뿐이다.
+        expect(
+          within(groups[i]).getByTestId('settings-nav-preferences')
+        ).toBeOnTheScreen();
+        expect(within(groups[i]).getAllByText('여행 취향')).toHaveLength(1);
+      } else {
+        expect(within(groups[i]).getByText(label)).toBeOnTheScreen();
+      }
     });
     // 단언(부분포함): 준비 중 표기는 어디에도 없다(TRIP-939 — 심사 2.1).
     expect(screen.queryByText(/준비 중/)).toBeNull();
   });
 
-  it.each([
-    ['style'],
-    ['budget'],
-    ['companions'],
-    ['activities'],
-    ['transport'],
-    ['food'],
-    ['pace'],
-  ])(
-    'TRIP-778 AC-8: 취향 행(%s) press → router.push("/settings/preferences") 정확히 1회',
-    (key) => {
-      renderPage();
+  it('TRIP-1051 AC-4: 취향 한 행 press → router.push("/settings/preferences") 정확히 1회', () => {
+    renderPage();
 
-      // 실행
-      fireEvent.press(screen.getByTestId(`settings-nav-${key}`));
+    // 실행
+    fireEvent.press(screen.getByTestId('settings-nav-preferences'));
 
-      // 단언: 전체 편집 화면 하나로(축을 URL 에 싣지 않는다), 정확히 한 번.
-      expect(mockPush).toHaveBeenCalledTimes(1);
-      expect(mockPush).toHaveBeenCalledWith('/settings/preferences');
-    }
-  );
+    // 단언: 전체 편집 화면 하나로(축을 URL 에 싣지 않는다), 정확히 한 번.
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith('/settings/preferences');
+  });
+
+  it('TRIP-1051 AC-3(페이지): 취향 응답이 없으면 행은 있지만 "N/7"을 지어내지 않는다', () => {
+    // 준비: beforeEach 가 useGetMePreferences → { data: undefined }(응답 전·실패 모양)로 둔다.
+    renderPage();
+
+    // 긍정 앵커: 행은 있다.
+    const row = screen.getByTestId('settings-nav-preferences');
+    // 단언(부분포함): 어떤 숫자든 "/7" 이 없다 — 페이지가 {} 로 채워 넘기면 "0/7 설정됨"이 떠서 red.
+    expect(within(row).queryByText(/\/7/)).toBeNull();
+  });
 
   it('TRIP-778 AC-8: 개인화 행 press → router.push("/settings/personalization") 정확히 1회', () => {
     renderPage();

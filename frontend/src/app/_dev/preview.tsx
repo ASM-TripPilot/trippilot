@@ -2034,7 +2034,8 @@ function renderPlanbRequestPreview(): ReactElement {
 }
 
 // l05 설정(TRIP-778) — settings-* 5키가 함께 쓰는 배경. 취향은 서버 enum 원문(D5 — Figma 의 바다·해산물·
-// 느긋·맛집은 enum 밖이라 Figma 쪽 수정 대상), 예산만 미설정 칩. 위치 동의·개인화 사용 중·제휴 토글 ON.
+// 느긋·맛집은 enum 밖이라 Figma 쪽 수정 대상), 예산만 미설정 → 취향 한 행 `6/7 설정됨`(TRIP-1051 ·
+// Figma 4664:3279 와 같은 숫자). 위치 동의·개인화 사용 중·제휴 토글 ON.
 const L05_SETTINGS_BASE = {
   groups: filterReadySettingsSections(
     buildSettingsSections({
