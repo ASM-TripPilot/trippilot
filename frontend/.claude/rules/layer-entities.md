@@ -23,7 +23,7 @@ paths:
 |---|---|
 | `model/index.ts` | `Place`·`PoiCategory`·`SavedPlace` 재수출 + 화면 전용 `PlaceCardVM`(서버 계약 아님). |
 | `lib/formatDistance.ts` | 미터→`"820m"`/`"3.2km"` 반올림 코어. 거리 라벨은 이걸 위임해 쓴다(재발명 금지). |
-| `ui/PlaceRailCard.tsx` | d05 목적지 상세 레인 카드(폭 `160px`). |
+| `ui/PlaceRailCard.tsx` | 장소 카드 공용 — `variant?: 'rail' \| 'fill'`(기본 `'rail'`, 폭 `160px`) / `'fill'`은 `w-full`로 부모 칸 폭을 그대로 채운다(d05 검색 결과 2열 격자용, TRIP-1048). d01 `ExploreLandingScreen`은 `variant` 미지정으로 기존 `160px` 그대로. |
 | `ui/PlaceGridCard.tsx` | d04 탐색 그리드 카드. 하트 저장 testID·"담음" 배지·pending(연타 방지) 가드. |
 | `ui/PlaceRowCard.tsx` | 범용 행 카드(save?/trailing?/subtitle 옵셔널 슬롯). |
 | `ui/SlotCandidateCard.tsx` | itinerary(h08·h10)·planb(i14) 후보 시트 공용, `testIDPrefix`로 소비처 구조 차이를 흡수. `tags?`·`nameKo?`·`showRationale?`·`distanceLabel?`·`distanceTone?`·`dimmed?`는 전부 기본값이 기존 렌더 불변(`entitiesPlaceConsumers` 앵커). candidates 응답에 이름·사진·태그·"반경 밖" 필드가 없어 이 값들은 픽스처로만 채워진다(프로덕션 톤다운 0). planb 루트 정규식이 `image-`·`name-`를 감산하지 않으니 테스트에서 `queryByTestId`로 null을 확인한다. |
