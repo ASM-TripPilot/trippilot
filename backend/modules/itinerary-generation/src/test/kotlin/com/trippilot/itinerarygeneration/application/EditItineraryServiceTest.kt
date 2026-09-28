@@ -30,6 +30,9 @@ import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripGenerationContext
 import com.trippilot.trip.api.TripPeriod
+import io.kotest.property.Arb
+import io.kotest.property.arbitrary.shuffle
+import io.kotest.property.checkAll
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
@@ -328,6 +331,75 @@ class EditItineraryServiceTest : StringSpec({
         shouldThrow<ConflictDetected> {
             EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock)
                 .edit(acc, tripId, withNewDay)
+        }
+    }
+
+    // ───── 거리 보존 (TRIP-1002 결정 (a)) ──────────────────────────────────
+
+    fun distSlot(poi: UUID, order: Int, start: String, distance: String?) = VisitSlot.of(
+        poi, null, order, LocalTime.parse(start), LocalTime.parse(start).plusHours(1), distanceRange = distance,
+    )
+
+    fun editOf(vararg pois: UUID) = EditItinerary(
+        listOf(EditDay(day, pois.mapIndexed { i, p -> EditSlot(p, LocalTime.of(9 + i, 0), LocalTime.of(10 + i, 0), isFixed = false, endsNextDay = false) })),
+    )
+
+    "시각만 바꾼 편집은 거리를 전부 보존한다 — 커넥터 '계산 중' 영구 고착의 원인 제거(QA #055)" {
+        val poiC = UUID.randomUUID()
+        val withDistances = Itinerary.create(tripId, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+            listOf(ItineraryDay.of(day, 0, listOf(
+                distSlot(poiA, 0, "09:00", "약 0.2km · 대중교통 추정"),
+                distSlot(poiB, 1, "11:00", "약 0.7km"),
+                distSlot(poiC, 2, "13:00", "약 1.8km"),
+            ))), clock.instant(),
+        )
+        val repo = repoWith(withDistances)
+        val saved = EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock)
+            .edit(acc, tripId, editOf(poiA, poiB, poiC)) // 순서 그대로, 시각만 이동
+
+        saved.days.single().slots.map { it.distanceRange } shouldBe
+            listOf("약 0.2km · 대중교통 추정", "약 0.7km", "약 1.8km")
+    }
+
+    "슬롯 하나를 교체하면 인접 쌍이 바뀐 구간만 비운다 — 나머지 거리는 남는다" {
+        val poiC = UUID.randomUUID()
+        val poiD = UUID.randomUUID()
+        val poiX = UUID.randomUUID() // 교체 투입
+        val withDistances = Itinerary.create(tripId, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+            listOf(ItineraryDay.of(day, 0, listOf(
+                distSlot(poiA, 0, "09:00", "dA"),
+                distSlot(poiB, 1, "11:00", "dB"),
+                distSlot(poiC, 2, "13:00", "dC"),
+                distSlot(poiD, 3, "15:00", "dD"),
+            ))), clock.instant(),
+        )
+        val repo = repoWith(withDistances)
+        val saved = EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock)
+            .edit(acc, tripId, editOf(poiA, poiX, poiC, poiD)) // B → X 교체
+
+        val byPoi = saved.days.single().slots.associateBy { it.sourcePoiId }
+        byPoi.getValue(poiA).distanceRange shouldBe "dA" // 첫 구간(앵커→A) 불변
+        byPoi.getValue(poiX).distanceRange shouldBe null // A→X 는 새 구간 — 지어내지 않는다(INV-2)
+        byPoi.getValue(poiC).distanceRange shouldBe null // 직전이 B→X 로 바뀜
+        byPoi.getValue(poiD).distanceRange shouldBe "dD" // C→D 불변
+    }
+
+    "속성: 임의 순열 편집에서 거리 보존 = 인접 쌍 불변(TRIP-1002 AC)" {
+        val pois = List(6) { UUID.randomUUID() }
+        checkAll(Arb.shuffle(pois)) { order ->
+            val withDistances = Itinerary.create(tripId, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+                listOf(ItineraryDay.of(day, 0, pois.mapIndexed { i, p -> distSlot(p, i, "0${i + 1}:00", "d$i") })),
+                clock.instant(),
+            )
+            val repo = repoWith(withDistances)
+            val saved = EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock)
+                .edit(acc, tripId, editOf(*order.toTypedArray()))
+
+            val originalLegs = pois.mapIndexed { i, p -> (if (i == 0) null else pois[i - 1]) to p }.toSet()
+            saved.days.single().slots.forEachIndexed { i, slot ->
+                val leg = (if (i == 0) null else order[i - 1]) to order[i]
+                (slot.distanceRange != null) shouldBe (leg in originalLegs) // 보존 ⇔ 인접 쌍 불변
+            }
         }
     }
 
