@@ -315,7 +315,9 @@ export function TripRecordsPage({
       ) : null}
 
       {editingCard != null ? (
+        // key — 시트가 뜬 채 다른 카드를 열면 새로 마운트해 그 카드 값으로 다시 시드한다(useState 는 첫 마운트만 읽는다).
         <VisitTimeSheet
+          key={editingCard.visitCheckId}
           visitCheckId={editingCard.visitCheckId}
           placeName={editingCard.nameKo}
           arrivedAt={editingCard.arrivedAt ?? null}
