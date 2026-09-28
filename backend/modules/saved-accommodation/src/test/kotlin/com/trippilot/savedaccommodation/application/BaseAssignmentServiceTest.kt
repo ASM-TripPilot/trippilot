@@ -41,6 +41,8 @@ private class FakeStays : SavedStayRepository {
     override fun findById(savedStayId: UUID) = store[savedStayId]
     override fun findByAccount(accountId: UUID) = store.values.filter { it.accountId == accountId }
     override fun delete(stay: SavedStay) { store.remove(stay.savedStayId) }
+    override fun existsByAccountAndExternal(accountId: UUID, externalSource: String, externalId: String) =
+        error("이 테스트는 중복 선검사를 쓰지 않는다")
 }
 
 /** (acc,tripId) → period 를 등록해두면 소유로 간주. 미등록은 null(404). */
