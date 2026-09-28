@@ -43,6 +43,8 @@ private class PickStays : SavedStayRepository {
     override fun findById(savedStayId: UUID) = store[savedStayId]
     override fun findByAccount(accountId: UUID) = store.values.filter { it.accountId == accountId }
     override fun delete(stay: SavedStay) { store.remove(stay.savedStayId) }
+    override fun existsByAccountAndExternal(accountId: UUID, externalSource: String, externalId: String) =
+        error("이 테스트는 중복 선검사를 쓰지 않는다")
 }
 
 private class PickTrips : TripFacade {

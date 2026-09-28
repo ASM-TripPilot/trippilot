@@ -8,6 +8,7 @@ import com.trippilot.core.event.DomainEventPublisher
 import com.trippilot.savedaccommodation.api.event.StayRegistered
 import com.trippilot.savedaccommodation.domain.SavedStay
 import com.trippilot.savedaccommodation.domain.SavedStayRepository
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
@@ -57,7 +58,23 @@ class SavedStayService(
      * 소비는 U6 몫이고 이 모듈은 notification 을 모른다 — 배달은 아웃박스 릴레이가 한다(R1).
      */
     @Transactional
-    fun register(accountId: UUID, cmd: RegisterStayCommand): SavedStay =
+    fun register(accountId: UUID, cmd: RegisterStayCommand): SavedStay {
+        // 같은 외부 숙소는 계정당 1건(TRIP-1059 · QA #012 — 연타로 30행). 외부 키 없는 등록(핀 지정)은
+        // 자연 키가 없어 막지 않는다. 선검사 + 유니크 번역의 이중 가드는 SavedPlaceService 선례.
+        if (cmd.externalSource != null && cmd.externalId != null &&
+            repo.existsByAccountAndExternal(accountId, cmd.externalSource, cmd.externalId)
+        ) {
+            throw ConflictDetected(message = "이미 저장한 숙소입니다.")
+        }
+        return try {
+            doRegister(accountId, cmd)
+        } catch (e: DataIntegrityViolationException) {
+            // 동시 등록 경합 — 선검사를 빠져나간 레이스(ux_saved_stay_external). 500 이 아니라 409 다.
+            throw ConflictDetected(message = "이미 저장한 숙소입니다.")
+        }
+    }
+
+    private fun doRegister(accountId: UUID, cmd: RegisterStayCommand): SavedStay =
         repo.save(
             SavedStay.register(
                 accountId, cmd.name, cmd.lat, cmd.lng, cmd.coordConfirmed,

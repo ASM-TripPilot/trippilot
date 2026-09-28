@@ -713,6 +713,14 @@ paths:
       responses:
         '201': { description: 등록됨, content: { application/json: { schema: { $ref: '#/components/schemas/SavedStay' } } } }
         '400': { $ref: '#/components/responses/ValidationError' }
+        '409':
+          description: >
+            같은 외부 숙소(externalSource·externalId)를 이미 저장함(TRIP-1059 — 계정당 1건).
+            연타·재시도는 이 응답을 '이미 저장됨 = 성공'으로 읽으면 된다. 외부 키 없는 등록(핀 지정)은
+            자연 키가 없어 이 제한에 걸리지 않는다.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
     get:
       tags: [saved-stays]
       summary: 내 저장 숙소 목록
