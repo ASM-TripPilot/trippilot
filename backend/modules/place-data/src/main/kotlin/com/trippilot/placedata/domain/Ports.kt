@@ -86,4 +86,4 @@ interface MapPlacePort {
  * 같은 장소가 두 번 나오거나 통째로 건너뛰는데, 사용자에게는 그냥 "목록이 이상하다"로 보인다.
  * 지점 기준(keyset)은 삽입과 무관하다 — "이 이름 다음"은 언제 물어도 같은 뜻이다.
  */
-data class PoiCursor(val nameKo: String, val poiId: java.util.UUID)
+data class PoiCursor(val rank: Int, val sortKey: String, val poiId: java.util.UUID)
