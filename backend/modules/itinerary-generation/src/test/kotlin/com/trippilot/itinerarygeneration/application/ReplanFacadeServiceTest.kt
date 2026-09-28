@@ -1,6 +1,7 @@
 package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.changelog.api.ChangeSourceType
+import com.trippilot.itinerarygeneration.domain.ItineraryStatus
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.itinerarygeneration.domain.RejectedPoi
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
@@ -176,11 +177,12 @@ class ReplanFacadeServiceTest : StringSpec({
         repo: ReplanItineraries = ReplanItineraries(),
         rejections: FakeRejectionStore = FakeRejectionStore(),
         regions: RegionLookupFacade = regionsWith(jejuCenter),
+        snapshots: FreezeAllSnapshots = FreezeAllSnapshots(),
     ): Fx {
         repo.byTrip[trip] = itinerary()
         val revisions = genRevisions(repo, replanTrips, clock)
         val changeLogs = CapturingChangeLogs()
-        return Fx(ReplanFacadeService(replanTrips, repo, agent, noAnchors, revisions, changeLogs, preferences, noHints, savedStub, regions, rejections, clock), repo, revisions, changeLogs)
+        return Fx(ReplanFacadeService(replanTrips, repo, agent, noAnchors, revisions, changeLogs, preferences, noHints, savedStub, regions, rejections, snapshots, clock), repo, revisions, changeLogs)
     }
 
     fun command(fullDay: Boolean = false, completed: List<String> = emptyList()) = ReplanCommand(
@@ -357,10 +359,12 @@ class ReplanFacadeServiceTest : StringSpec({
     }
 
     "반영하지 않고 끝나면 이력도 남기지 않는다" {
+        // 거부 트리거 = 그 사이 일정 교체(다른 itineraryId). 종전에는 확정을 트리거로 썼는데,
+        // 확정 일정 반영이 열리면서(TRIP-999) 그쪽은 더 이상 거부 사유가 아니다.
         val agent = Agent(proposal(replacement))
         val f = fixture(agent)
         val proposal = f.svc.propose(command())!!
-        f.repo.byTrip[trip] = f.repo.byTrip.getValue(trip).confirm(now)
+        f.repo.byTrip[trip] = itinerary() // 재생성으로 새 itineraryId
 
         shouldThrow<ConflictDetected> { f.svc.apply(acc, trip, proposal, REASON) }
 
@@ -378,15 +382,24 @@ class ReplanFacadeServiceTest : StringSpec({
         shouldThrow<ConflictDetected> { svc.apply(acc, trip, proposal, REASON) }
     }
 
-    "확정된 일정에는 반영하지 않는다" {
+    "확정 일정에도 반영된다 — 동결은 이어지고 새 슬롯은 지금 동결된다(TRIP-999)" {
+        // 재계획 세션은 여행 기간 안에서만 열린다 — 여기 오는 확정 일정은 전부 여행 중이고,
+        // 여행 중 확정 잠금은 없다(결정 (a)). 종전에는 산출까지 다 하고 여기서만 409 였다(QA #063).
         val agent = Agent(proposal(replacement))
-        val f = fixture(agent)
-        val svc = f.svc
-        val repo = f.repo
-        val proposal = svc.propose(command())!!
-        repo.byTrip[trip] = repo.byTrip.getValue(trip).confirm(now)
+        val freezer = FreezeAllSnapshots()
+        val f = fixture(agent, snapshots = freezer)
+        val proposal = f.svc.propose(command())!!
+        val before = f.repo.byTrip.getValue(trip)
+        val frozenByPoi = before.days.flatMap { it.slots }.associate { it.sourcePoiId to UUID.randomUUID() }
+        f.repo.byTrip[trip] = before.confirm(frozenByPoi, now)
 
-        shouldThrow<ConflictDetected> { svc.apply(acc, trip, proposal, REASON) }
+        f.svc.apply(acc, trip, proposal, REASON)
+
+        val after = f.repo.byTrip.getValue(trip)
+        after.status shouldBe ItineraryStatus.CONFIRMED // 반영이 확정을 풀지 않는다
+        // 전 슬롯이 동결 참조를 가진다 — 남은 슬롯은 승계, 재계획이 새로 넣은 슬롯은 지금 동결(INV-U1-03).
+        after.days.flatMap { it.slots }.forEach { it.poiSnapshotId shouldNotBe null }
+        f.changeLogs.appended.single().sourceType shouldBe ChangeSourceType.PLAN_B // BR-U4-30 그대로
     }
 
     "초안 왕복이 항등이다 — 저장했다 돌아와도 값이 새지 않는다" {

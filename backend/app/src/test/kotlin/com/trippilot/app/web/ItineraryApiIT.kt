@@ -596,14 +596,26 @@ fun `차선책이 저장·조회·확정을 관통한다(TRIP-873)`() {
     }
 
     @Test
-    fun `확정된 일정 편집은 409`() {
+    fun `확정 일정 편집 — 여행 시작 전엔 409, 여행 중엔 200(TRIP-999)`() {
         val token = newToken()
-        val trip = newTrip(token)
+
+        // 여행 전 — 확정 잠금이 산다(BR-U3-28 개정 후에도 남는 절반).
+        val future = newFutureTrip(token)
+        call(HttpMethod.POST, "/api/v1/trips/$future/itinerary", token).first shouldBe 201
+        awaitComplete(future, token)
+        call(HttpMethod.POST, "/api/v1/trips/$future/itinerary/confirm", token).first shouldBe 200
+        val futureStart = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul")).plusDays(30)
+        call(HttpMethod.PUT, "/api/v1/trips/$future/itinerary", token, """{"days":[{"date":"$futureStart","slots":[]}]}""")
+            .first shouldBe 409
+
+        // 여행 중(시작일이 지났다) — 확정 일정도 편집이 열린다(QA #066 회귀 잠금).
+        val trip = newTrip(token) // 2026-08-01 시작 — 서버 실 시계 기준 이미 시작됨
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
         awaitComplete(trip, token)
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token).first shouldBe 200
-        val editBody = """{"days":[{"date":"2026-08-01","slots":[]}]}"""
-        call(HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token, editBody).first shouldBe 409
+        val (rc, body) = call(HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token, """{"days":[{"date":"2026-08-01","slots":[]}]}""")
+        rc shouldBe 200
+        body["status"].asText() shouldBe "CONFIRMED" // 편집이 확정을 풀지 않는다
     }
 
     @Test
