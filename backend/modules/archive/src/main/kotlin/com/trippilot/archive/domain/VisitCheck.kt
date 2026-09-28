@@ -48,6 +48,15 @@ data class VisitCheck(
         fun arrive(tripId: UUID, slotKey: String?, poiId: UUID, source: CheckSource, at: Instant) =
             VisitCheck(UUID.randomUUID(), tripId, slotKey, poiId, at, null, null, source, at, at)
 
+        /**
+         * **도착 전 건너뜀**(TRIP-1029) — 계획 슬롯을 가 보지도 않고 접는 경로. 종전에는 도착으로
+         * 생긴 레코드에만 skip 을 걸 수 있어 도착 전 슬롯은 접을 방법이 없었다(FE 1021 D11 이 이 칸 대기).
+         * 계획 슬롯 전용이라 slotKey 가 필수다 — 즉석 방문에는 "안 간 계획"이라는 개념이 없다.
+         * 항상 사용자 행위(MANUAL)다 — 지오펜스는 건너뛰기를 만들지 않는다.
+         */
+        fun skipPlanned(tripId: UUID, slotKey: String, poiId: UUID, at: Instant) =
+            VisitCheck(UUID.randomUUID(), tripId, slotKey, poiId, null, null, at, CheckSource.MANUAL, at, at)
+
         fun reconstitute(
             visitCheckId: UUID, tripId: UUID, slotKey: String?, poiId: UUID,
             arrivedAt: Instant?, completedAt: Instant?, skippedAt: Instant?, source: CheckSource,
