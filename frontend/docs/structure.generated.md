@@ -201,6 +201,9 @@
 ## src/app-shell/
 - `src/app-shell/index.ts`  →  SplashGate
 
+## src/app-shell/model/
+- `src/app-shell/model/useAccountBoundaryReset.ts`  →  useAccountBoundaryReset
+
 ## src/app-shell/ui/
 - `src/app-shell/ui/SplashGate.tsx`  →  SPLASH_MIN_VISIBLE_MS · SplashGate
 
@@ -1459,4 +1462,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 1015개 파일
+합계 1016개 파일
