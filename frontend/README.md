@@ -96,6 +96,7 @@ frontend/
 - 환경 3종: `development` / `preview` / `production` — `eas.json` 프로파일과 1:1.
 - API base URL 등 환경값은 `app.config.ts` + EAS 환경변수로 주입. 코드에 하드코딩 금지, `.env`는 로컬 개발 편의용(미커밋).
 - 앱에는 시크릿을 두지 않는다(소셜 로그인은 PKCE, 교환은 서버). 지도 앱 키 등은 EAS 시크릿으로 빌드 시 주입.
+- **구글 로그인(TRIP-1057)**: Google Cloud 콘솔의 **iOS 유형 OAuth 클라이언트**(번들 ID `com.trippilot.travel`)를 쓴다 — 시크릿 없는 공개 클라이언트라 앱은 PKCE 로 인가 코드만 받고 교환은 서버가 한다. **앱과 백엔드가 같은 클라이언트 ID** 를 쓰고(`EXPO_PUBLIC_GOOGLE_CLIENT_ID` ↔ 루트 `.env` `GOOGLE_CLIENT_ID`), 백엔드 `GOOGLE_CLIENT_SECRET` 은 **비운다**(보내면 `invalid_client` — 루트 `.env.example` 주석). redirect 는 iOS 클라이언트의 역방향 스킴 `com.googleusercontent.apps.{ID 앞부분}:/oauthredirect`. 변수 이름·형식은 `frontend/.env.example`. env 를 바꾸면 Metro `--clear` 로 다시 띄운다(인라인 치환).
 - **예외(D5 · TRIP-210)**: 네이버 네이티브 SDK(`@react-native-seoul/naver-login`)의 `initialize()`는 `consumerSecret`을 **필수 파라미터**로 요구한다 — 서버 교환 없이 SDK 초기화 시점에 바로 필요하므로 PKCE로 피할 수 없는 SDK 자체의 제약이다. 값은 하드코딩하지 않고 `EXPO_PUBLIC_NAVER_CLIENT_SECRET`(env)으로만 전달한다(`.env`에만 실값, `.env.example`은 이름만). 서버 쪽 access token 검증(BR-U0-02 fail-closed)은 이 값과 무관하게 그대로 유지되므로 보안 경계는 서버가 여전히 지킨다. 카카오 어댑터는 이 예외가 없다(시크릿 0).
 
 ## 테스트 전략
