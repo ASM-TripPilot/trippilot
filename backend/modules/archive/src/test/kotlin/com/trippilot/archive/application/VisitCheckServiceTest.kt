@@ -54,6 +54,34 @@ class VisitCheckServiceTest : StringSpec({
     fun service(visits: Visits, clock: Clock = clockAt("2026-08-11T03:00:00Z")) =
         VisitCheckService(trips, visits, CapturingEvents(), clock)
 
+    "도착 전 건너뛰기 — 실적 없는 계획 슬롯이 SKIPPED 로 남는다(TRIP-1029)" {
+        val visits = Visits()
+        val v = service(visits).skipPlanned(acc, tripId, slot, poi)
+
+        v.arrivedAt shouldBe null // 가지 않았다 — 거짓 도착을 만들지 않는다
+        v.skippedAt shouldBe Instant.parse("2026-08-11T03:00:00Z")
+        v.source shouldBe CheckSource.MANUAL // 건너뛰기는 항상 사용자 행위다
+        visits.stored.size shouldBe 1
+    }
+
+    "같은 건너뛰기 재전송은 ALREADY, 다른 실적 위 건너뛰기는 CONFLICT — 클라이언트가 갈 길이 다르다(BR-U5-20)" {
+        val visits = Visits()
+        val svc = service(visits)
+        svc.skipPlanned(acc, tripId, slot, poi)
+
+        val replay = shouldThrow<ConflictDetected> { svc.skipPlanned(acc, tripId, slot, poi) }
+        replay.errorCode shouldBe com.trippilot.core.error.ErrorCode.VISIT_ALREADY_RECORDED // 수렴하면 된다
+
+        val arrivedSlot = "$day#${UUID.randomUUID()}"
+        svc.arrive(acc, tripId, arrivedSlot, poi, CheckSource.MANUAL)
+        val onArrived = shouldThrow<ConflictDetected> { svc.skipPlanned(acc, tripId, arrivedSlot, poi) }
+        onArrived.errorCode shouldBe com.trippilot.core.error.ErrorCode.VISIT_CONFLICT // 도착분은 기존 skip 경로로
+    }
+
+    "타 계정의 도착 전 건너뛰기는 404 — 존재를 숨긴다" {
+        shouldThrow<ResourceNotFound> { service(Visits()).skipPlanned(UUID.randomUUID(), tripId, slot, poi) }
+    }
+
     "도착 체크가 남는다" {
         val visits = Visits()
         val v = service(visits).arrive(acc, tripId, slot, poi, CheckSource.AUTO_GEOFENCE)
