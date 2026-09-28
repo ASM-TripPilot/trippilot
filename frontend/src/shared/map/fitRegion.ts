@@ -39,3 +39,23 @@ export function buildFitRegion(points: readonly MapCenter[]): Region | null {
     longitudeDelta,
   };
 }
+
+/** 위도 1도의 대략 길이(m). 경도 1도는 여기에 cos(위도)를 곱한다(극으로 갈수록 짧아진다). */
+const M_PER_DEG_LAT = 111_320;
+
+/**
+ * 반경 원 전체가 한 화면에 들어오는 `Region`(TRIP-1043 #044). 원의 남북동서 끝을 경계 상자로 삼고
+ * 핀과 같은 여백 배율을 곱한다 — 줌 고정 카메라로는 1km 넘는 원 테두리가 작은 카드 밖으로 나갔다.
+ */
+export function buildCircleRegion(center: MapCenter, radiusM: number): Region {
+  const dLat = radiusM / M_PER_DEG_LAT;
+  const dLng = dLat / Math.cos((center.lat * Math.PI) / 180);
+  const latitudeDelta = 2 * dLat * PADDING_FACTOR;
+  const longitudeDelta = 2 * dLng * PADDING_FACTOR;
+  return {
+    latitude: center.lat - latitudeDelta / 2,
+    longitude: center.lng - longitudeDelta / 2,
+    latitudeDelta,
+    longitudeDelta,
+  };
+}

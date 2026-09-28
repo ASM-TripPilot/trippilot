@@ -16,6 +16,7 @@ import type {
   Itinerary,
   ItineraryDaysItem,
   SlotCandidatesRequest,
+  Trip,
 } from '@/shared/api/generated/schemas';
 import { getGetTripsTripIdItineraryQueryKey } from '@/shared/api/generated/trips/trips';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
@@ -58,6 +59,24 @@ jest.mock('expo-router', () => ({
 
 const BASE = 'http://localhost:8080/api/v1';
 const TRIP_ID = '22222222-2222-2222-2222-222222222222';
+
+// TRIP-1043 — 페이지가 진행 줄 여행지 접두를 위해 여행(`GET /trips/:tripId`)을 조회한다. 이 파일은 접두를
+// 재지 않으므로 여행지 없는 여행으로 답한다(접두 생략 degrade — 기존 `N일차` 단언이 그대로 유효). 핸들러를
+// 빼면 MSW 'error' 전략이 console.error 만 찍고 쿼리를 조용히 실패시켜 누락이 드러나지 않는다(02a ★1).
+const TRIP_NO_DESTINATIONS: Trip = {
+  tripId: TRIP_ID,
+  title: '테스트 여행',
+  startDate: '2026-06-10',
+  endDate: '2026-06-11',
+  party: 1,
+  preferenceSnapshot: {},
+  destinations: [],
+  status: 'PLANNED',
+  createdAt: '2026-06-01T00:00:00Z',
+  updatedAt: '2026-06-01T00:00:00Z',
+  baseCount: 0,
+  itineraryDayCount: 1,
+};
 const DAY1 = '2026-06-10';
 const SLOT_KEY = buildSlotKey(DAY1, 'a');
 
@@ -132,6 +151,9 @@ beforeEach(() => {
   setAccessToken('valid-access');
 
   server.use(
+    http.get(`${BASE}/trips/:tripId`, () =>
+      HttpResponse.json(TRIP_NO_DESTINATIONS)
+    ),
     http.get(`${BASE}/trips/:tripId/itinerary`, () =>
       HttpResponse.json(itinerary())
     ),
@@ -485,10 +507,11 @@ describe('🔴 SlotFillPage (h13→h14/h15) 배선', () => {
 });
 
 /**
- * U3 소급 백필(20260824) · h13 문맥 줄 도출 회귀 심판.
+ * U3 소급 백필(20260824) · h13 문맥 줄 도출 회귀 심판. TRIP-1043(QA #041)로 문구가 "{시간대} 일정 ·
+ * {직전 이름} 다음"이 됐다 — 내부 용어 「슬롯」을 화면에서 뺀다(결정 1b).
  *
- * 무엇을 보장하나: 커밋 7cda1f5(발표용 domo, 사이클 없이 들어옴)가 문맥 줄 "{시간대} 슬롯 ·
- * {직전 이름} 다음"을 prop 이 아니라 SlotFillPage 안 `slotContextLabel()` 로 **도출**하도록 바꿨는데
+ * 무엇을 보장하나: 커밋 7cda1f5(발표용 domo, 사이클 없이 들어옴)가 문맥 줄을
+ * prop 이 아니라 SlotFillPage 안 `slotContextLabel()` 로 **도출**하도록 바꿨는데
  * 심판이 0이었다. 이 도출은 채울 슬롯의 `startAt`(→timeBandLabel)과 그 **직전** 슬롯 이름을
  * itinerary GET 캐시(위 fixture)에서 읽는다. 직전 슬롯이 없으면(첫 슬롯) "· 다음" 구간을 접는다.
  *
@@ -496,19 +519,19 @@ describe('🔴 SlotFillPage (h13→h14/h15) 배선', () => {
  * 05:00·11:00·14:00·17:00(동결).
  */
 describe('U3 · h13 문맥 줄 도출 (slotContextLabel)', () => {
-  it('첫 슬롯(a·09:30·직전 없음) → "오전 슬롯"만이고 "…다음"은 없다', async () => {
+  it('첫 슬롯(a·09:30·직전 없음) → "오전 일정"만이고 "…다음"은 없다', async () => {
     renderPage(SLOT_KEY); // slot a — index 0, 직전 없음
 
     // itinerary GET 도착 후 문맥 줄이 뜬다(async).
-    expect(await screen.findByText('오전 슬롯')).toBeTruthy();
+    expect(await screen.findByText('오전 일정')).toBeTruthy();
     // 직전이 없으므로 "…다음" 꼬리는 붙지 않는다.
     expect(screen.queryByText(/다음$/)).toBeNull();
   });
 
-  it('둘째 슬롯(b·13:00·직전 경복궁) → "점심 슬롯 · 경복궁 다음"', async () => {
+  it('둘째 슬롯(b·13:00·직전 경복궁) → "점심 일정 · 경복궁 다음"', async () => {
     renderPage(buildSlotKey(DAY1, 'b')); // slot b — index 1, 직전 = a(경복궁)
 
-    expect(await screen.findByText('점심 슬롯 · 경복궁 다음')).toBeTruthy();
+    expect(await screen.findByText('점심 일정 · 경복궁 다음')).toBeTruthy();
   });
 });
 
@@ -519,7 +542,7 @@ describe('U3 · h13 문맥 줄 도출 (slotContextLabel)', () => {
  * fixture: day1 비고정 [a 경복궁, b]. slot a = index 0(스텝퍼 없음), slot b = index 1(스텝퍼 있음).
  */
 describe('🔴 TRIP-795 · h10 진행줄·스텝퍼·반경 좁히기·좌표 degrade 배선', () => {
-  it('I-PROG · 후보 얼굴에 진행줄(신규 namespace)이 뜨고 슬롯 카운트가 1 / 2', async () => {
+  it('I-PROG · 후보 얼굴에 진행줄(신규 namespace)이 뜨고 카운트가 1번째 / 2', async () => {
     renderPage(SLOT_KEY); // slot a — index 0, nonFixed [a,b]
     await pickConcept('culture');
 
@@ -528,7 +551,7 @@ describe('🔴 TRIP-795 · h10 진행줄·스텝퍼·반경 좁히기·좌표 de
     ).toBeTruthy();
     expect(
       screen.getByTestId('itinerary-copick-slotfill-progress-count')
-    ).toHaveTextContent('1 / 2');
+    ).toHaveTextContent('1번째 / 2');
   });
 
   it('I-STEP · 둘째 슬롯(index 1)엔 스텝퍼가 뜨고, 첫 슬롯(index 0)엔 안 뜬다', async () => {
@@ -564,12 +587,13 @@ describe('🔴 TRIP-795 · h10 진행줄·스텝퍼·반경 좁히기·좌표 de
     expect(postBody?.radiusM).toBe(1100);
   });
 
-  it('I-DEGRADE · 좌표 없는 후보(계약 밖)에선 지도 카드를 안 그린다(선제 green)', async () => {
+  it('I-DEGRADE · 현재 슬롯에 좌표가 없으면 지도 카드를 안 그린다(선제 green)', async () => {
     renderPage();
     await pickConcept('culture');
     await screen.findByTestId('itinerary-candidate-radio-X');
 
-    // candidates 에 lat/lng 없음 → 프로덕션은 지도 미표시(픽스처 지도는 프리뷰 전용, D6·INV-1).
+    // TRIP-1043 — 지도 기준점은 현재 슬롯 좌표다. 이 픽스처 슬롯엔 lat/lng 가 없어 지도를 안 그린다
+    // (0,0·서울 폴백 금지). 좌표가 있을 때의 지도는 SlotFillPage.context.integration.test.tsx B1~B4.
     expect(screen.queryByTestId('map-root')).toBeNull();
   });
 });

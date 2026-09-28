@@ -13,6 +13,7 @@ import {
   DRAFT_POLL_INTERVAL_MS,
   formatCoPickDayHeader,
 } from '@/features/itinerary/model/draftView';
+import { regionForDay } from '@/features/itinerary/model/dayRegion';
 import { isConfirmLocked } from '@/features/itinerary/model/planState';
 import { formatRadiusUsed } from '@/features/itinerary/model/radiusUsedLabel';
 import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
@@ -31,6 +32,7 @@ import type {
 } from '@/shared/api/generated/schemas';
 import {
   getGetTripsTripIdItineraryQueryKey,
+  useGetTripsTripId,
   useGetTripsTripIdItinerary,
   usePostTripsTripIdItinerarySlotCandidates,
   usePutTripsTripIdItinerary,
@@ -110,6 +112,8 @@ export function SlotFillPage({
           : false,
     },
   });
+  // 진행 줄 앞 그날 여행지(TRIP-1043)용 — 기다리지 않는다. 조회 중·실패·빈 목록이면 접두 없이 그린다(INV-4).
+  const trip = useGetTripsTripId(tripId, { query: { retry: false } });
   const {
     mutate: fetchCandidates,
     data: candidatesData,
@@ -156,9 +160,9 @@ export function SlotFillPage({
     fetchCandidates,
   ]);
 
-  // h13 상단 문맥 줄("오후 슬롯 · △△ 다음") — 채울 슬롯의 시간대(timeBandLabel)와 그 직전
+  // h13 상단 문맥 줄("오후 일정 · △△ 다음") — 채울 슬롯의 시간대(timeBandLabel)와 그 직전
   // 슬롯의 이름을 GET 캐시(itinerary.data, 이미 조회돼 있음)에서 그대로 읽는다. 이름 미도착
-  // (nameKo null)이면 그 구간만 접어 "N 슬롯"만 보인다 — 플레이스홀더 문구를 문맥 줄에 새지
+  // (nameKo null)이면 그 구간만 접어 "N 일정"만 보인다 — 플레이스홀더 문구를 문맥 줄에 새지
   // 않게 한다(INV-1 정신, SlotCandidateCard의 "이름 준비 중" 표기 함정과 동형 회피).
   function slotContextLabel(): string | undefined {
     if (parsed.kind !== 'ok' || itinerary.data === undefined) return undefined;
@@ -169,8 +173,8 @@ export function SlotFillPage({
     const band = timeBandLabel(day.slots[index].startAt);
     const prevName = index > 0 ? day.slots[index - 1].nameKo : undefined;
     return prevName !== null && prevName !== undefined && prevName !== ''
-      ? `${band} 슬롯 · ${prevName} 다음`
-      : `${band} 슬롯`;
+      ? `${band} 일정 · ${prevName} 다음`
+      : `${band} 일정`;
   }
 
   // h09 진행 줄·스텝퍼 데이터를 itinerary GET 캐시(이미 조회돼 있음)에서 조립한다 — 화면은 순수라 값만
@@ -214,10 +218,16 @@ export function SlotFillPage({
     if (ctx === null) return undefined;
     // 우 슬롯 N/M(slotCurrent/Total)은 슬롯 진행, 진행바(barFilled/Total)는 일차 진행 — 서로 다른 축이라
     // Figma 처럼 어긋날 수 있다(브리프 §B, 화면은 안 고침).
+    // 일차는 itinerary days 안 순번이다(trip.startDate 로 세지 않는다 — 두 축이 갈리는 경우는 정본 미정).
+    const region =
+      trip.data === undefined
+        ? null
+        : regionForDay(trip.data.destinations, ctx.dayNumber);
+    const dayText = `${ctx.dayNumber}일차 / ${ctx.totalDays} · ${formatCoPickDayHeader(
+      ctx.date
+    )}`;
     return {
-      dayLabel: `${ctx.dayNumber}일차 / ${ctx.totalDays} · ${formatCoPickDayHeader(
-        ctx.date
-      )}`,
+      dayLabel: region === null ? dayText : `${region} · ${dayText}`,
       slotCurrent: ctx.index + 1,
       slotTotal: ctx.nonFixed.length,
       barFilled: ctx.dayNumber,
@@ -410,6 +420,30 @@ export function SlotFillPage({
     candidatesData.radiusMUsed > requestedRadiusM
       ? formatRadiusUsed(candidatesData.radiusMUsed)
       : null;
+  // 지도 카드(TRIP-1043) — 기준점은 지금 채우는 슬롯의 장소다(사용자 위치가 아니라 currentLocation·
+  // '현재 위치' 라벨을 쓰지 않는다). 좌표가 하나라도 없으면 지도를 안 그린다(0,0·폴백 좌표 금지).
+  // 원 반경은 서버가 실제로 쓴 radiusMUsed 우선, 조회 중엔 요청 반경, 최대(null) 조회 중엔 원 없음.
+  // 후보 핀은 후보 좌표 계약이 생긴 뒤 붙인다 — 지금 핀은 기준 핀 하나(label '' 로 번호를 안 그린다).
+  const ctx = coPickContext();
+  const currentSlot = ctx === null ? undefined : ctx.nonFixed[ctx.index];
+  const circleRadiusM =
+    candidatesData?.radiusMUsed ??
+    (typeof requestedRadiusM === 'number' ? requestedRadiusM : undefined);
+  const mapCenter =
+    typeof currentSlot?.lat === 'number' && typeof currentSlot.lng === 'number'
+      ? { lat: currentSlot.lat, lng: currentSlot.lng }
+      : undefined;
+  const mapView =
+    mapCenter === undefined
+      ? undefined
+      : {
+          center: mapCenter,
+          radiusCircle:
+            circleRadiusM === undefined
+              ? undefined
+              : { center: mapCenter, radiusM: circleRadiusM },
+          pins: [{ number: 1, ...mapCenter, label: '' }],
+        };
   const candidatesErrorMessage = !candidatesFailed
     ? null
     : confirmLocked
@@ -442,8 +476,7 @@ export function SlotFillPage({
           { nameKo, tags, imageUrl },
         ])
       )}
-      // mapView 는 전달하지 않는다 — candidates 응답에 좌표가 없어 프로덕션은 지도 미표시(정직 degrade,
-      // D6). 지도 픽스처는 프리뷰 전용.
+      mapView={mapView}
       onSelectRadius={handleSelectRadius}
       onSelectRadio={setSelectedPoiId}
       onConfirm={handleConfirm}

@@ -258,13 +258,17 @@ describe('🔴 SlotFillScreen (h10) — 진행줄·스텝퍼 슬롯(재사용)',
   it('T-PROG-1 · progress 주면 신규 namespace 진행줄(-slotfill-progress*)을 그린다', () => {
     renderScreen({ progress: PROGRESS });
 
-    // 단언: slotfill 접두 진행줄이 뜨고 슬롯 카운트가 보인다.
+    // 단언: slotfill 접두 진행줄이 뜨고 카운트가 `N번째 / M` 이다(TRIP-1043 — 「슬롯」 캡션 제거).
     expect(
       screen.getByTestId('itinerary-copick-slotfill-progress')
     ).toBeTruthy();
     expect(
       screen.getByTestId('itinerary-copick-slotfill-progress-count')
-    ).toHaveTextContent('2 / 4');
+    ).toHaveTextContent('2번째 / 4');
+    // 화면 어디에도 내부 용어 「슬롯」이 없다(QA #041).
+    expect(
+      screen.queryAllByText(/슬롯/).map((node) => node.props.children)
+    ).toEqual([]);
 
     // ★ 신규 namespace 다 — h09 의 `-concept-progress*` 를 공유·오염하지 않는다(D3).
     expect(
@@ -465,6 +469,10 @@ describe('🔴 SlotFillScreen (h10) — 지도 카드 additive(prop 전달·degr
   it('T-MAP · mapView 주면 지도 카드(map-root)를 viewOnly+connectPins=false 로 소비한다', () => {
     renderScreen({ mapView: MAP_VIEW });
 
+    // TRIP-1043 — 지도는 카드 컨테이너(itinerary-copick-slotfill-map) 안에 있다(페이지 배선 관측 자리).
+    const card = screen.getByTestId('itinerary-copick-slotfill-map');
+    expect(within(card).getByTestId('map-root')).toBeTruthy();
+
     // 목이 props 를 host 로 노출한다 — 보여주기 전용(viewOnly) + 검증된 동선 아님(connectPins=false).
     const map = screen.getByTestId('map-root');
     expect(map.props.viewOnly).toBe(true);
@@ -477,6 +485,7 @@ describe('🔴 SlotFillScreen (h10) — 지도 카드 additive(prop 전달·degr
     renderScreen({ mapView: undefined });
 
     expect(screen.queryByTestId('map-root')).toBeNull();
+    expect(screen.queryByTestId('itinerary-copick-slotfill-map')).toBeNull();
   });
 });
 

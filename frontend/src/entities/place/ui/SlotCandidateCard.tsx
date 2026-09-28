@@ -108,6 +108,7 @@ export function SlotCandidateCard({
       ? namePlaceholder
       : nameKo;
   // 첫 태그만 `#` — join 이 나머지 사이에 ` · ` 를 넣고, 앞에 한 번만 `#` 를 붙인다(`#미술 · 실내`).
+  // 태그가 길면 태그만 한 줄로 줄어들고 거리는 끝까지 보인다(TRIP-1043 #043 — 거리 leaf 는 자르지 않는다, INV-3).
   const tagLine =
     tags !== undefined && tags.length > 0 ? `#${tags.join(' · ')}` : null;
   const distanceClass =
@@ -179,7 +180,8 @@ export function SlotCandidateCard({
           {tagLine !== null ? (
             <Text
               testID={leafId('tags')}
-              className="font-noto text-caption text-muted"
+              numberOfLines={1}
+              className="shrink font-noto text-caption text-muted"
             >
               {tagLine}
             </Text>
@@ -192,7 +194,10 @@ export function SlotCandidateCard({
               {distanceLabel}
             </Text>
           ) : null}
-          <Text testID={leafId('distance')} className={distanceClass}>
+          <Text
+            testID={leafId('distance')}
+            className={`shrink-0 ${distanceClass}`}
+          >
             {candidate.distanceRange}
           </Text>
         </View>

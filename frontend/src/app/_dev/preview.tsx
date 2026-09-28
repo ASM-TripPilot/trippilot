@@ -949,6 +949,9 @@ const H10_RADIUS_STEPS = [
   { key: 'max', label: '최대' },
 ] as const;
 const H10_CENTER = { lat: 35.1587, lng: 129.1604 };
+// TRIP-1043 — 지도는 지금 채우는 슬롯 장소의 기준 핀 하나 + 반경 원(후보 A/B/C 핀은 후보 좌표 계약 뒤,
+// '현재 위치' 점은 사용자 위치가 아니라 안 씀). label '' 는 물방울 안 번호를 지운다(페이지와 같은 모양).
+const H10_BASE_PINS = [{ number: 1, ...H10_CENTER, label: '' }];
 const H10_DEFAULT_CANDIDATES: SlotCandidatesCandidatesItem[] = [
   { poiId: 'A1', distanceRange: '420m', rationale: '가장 가까운 실내 전시' },
   { poiId: 'B2', distanceRange: '770m', rationale: '전시+카페 한 번에' },
@@ -1012,7 +1015,7 @@ const H10_STEPPER: ReactElement = (
   />
 );
 const H10_PROGRESS = {
-  dayLabel: '1일차 / 4 · 6월 10일(수)',
+  dayLabel: '부산 · 1일차 / 4 · 6월 10일(수)',
   slotCurrent: 3,
   slotTotal: 4,
   barFilled: 1,
@@ -5194,7 +5197,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   },
   // h09 컨셉 고르기(TRIP-794) — 같이 고르기(co-pick) 위저드의 컨셉 선택 화면(Figma 3845:2227). 진행 줄·
   // CoPickStepper 위젯 노드·컨셉 카드 5장을 픽스처 props 로 태운다(순수 화면 · api import 0 이라 프리뷰
-  // 지뢰 목 무해). 배지·N곳은 BE 계약 부재라 미표시(D5). 첫 카드 primary 테두리·현재 단 빨강·색은 jest
+  // 지뢰 목 무해). 배지·N곳은 BE 계약 부재라 미표시(D5). 현재 단 빨강·색은 jest
   // 사각이라 이 키가 유일한 육안 그물(자율 세션 6-b SKIP, 다음 세션 확인 대상).
   {
     key: 'h09-copick-concept',
@@ -5211,7 +5214,7 @@ export const PREVIEW_STATES: PreviewState[] = [
           { key: 'shopping', label: '쇼핑' },
         ]}
         progress={{
-          dayLabel: '1일차 / 4 · 6월 10일(수)',
+          dayLabel: '부산 · 1일차 / 4 · 6월 10일(수)',
           slotCurrent: 3,
           slotTotal: 4,
           barFilled: 1,
@@ -5232,7 +5235,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   },
   // h10 후보 선택(TRIP-795) — 같이 고르기 위저드의 후보 화면(Figma 3849 default·3850 반경 넓힘). 순수
   // 뷰 SlotFillScreen 을 진행줄·스텝퍼·지도·후보 카드 픽스처 props 로 태운다(api import 0 이라 프리뷰
-  // 지뢰 목 무해). 반경 점선 원·축척·letter 핀 래스터·톤다운 배지 회색·색은 jest 사각이라 이 2키가
+  // 지뢰 목 무해). 반경 점선 원·축척·기준 핀 래스터(번호 없음)·톤다운 배지 회색·색은 jest 사각이라 이 2키가
   // 유일한 육안 그물(자율 세션 6-b SKIP). 지도는 네이버 네이티브라 사람 재빌드 전엔 미표시.
   // TRIP-978: default 의 셋째 칸은 '최대'다 — Figma 는 서버 최대값을 보이지만 프론트는 최대 조회 전엔 그
   // 값을 모른다(정직 degrade, Seed Q6). wide 는 최대 조회 결과라 셋째 칸이 서버값(maxRadiusLabel).
@@ -5249,12 +5252,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         mapView={{
           center: H10_CENTER,
           radiusCircle: { center: H10_CENTER, radiusM: 1100 },
-          pins: [
-            { number: 1, lat: 35.1601, lng: 129.163, label: 'A' },
-            { number: 2, lat: 35.1571, lng: 129.1568, label: 'B' },
-            { number: 3, lat: 35.1622, lng: 129.1604, label: 'C' },
-          ],
-          currentLocation: H10_CENTER,
+          pins: H10_BASE_PINS,
         }}
         candidates={H10_DEFAULT_CANDIDATES}
         candidateViews={H10_DEFAULT_VIEWS}
@@ -5288,13 +5286,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         mapView={{
           center: H10_CENTER,
           radiusCircle: { center: H10_CENTER, radiusM: 11300 },
-          pins: [
-            { number: 1, lat: 35.1601, lng: 129.163, label: 'A' },
-            { number: 2, lat: 35.1571, lng: 129.1568, label: 'B' },
-            { number: 3, lat: 35.1622, lng: 129.1604, label: 'C' },
-            { number: 4, lat: 35.0975, lng: 129.0106, label: 'D' },
-          ],
-          currentLocation: H10_CENTER,
+          pins: H10_BASE_PINS,
         }}
         candidates={H10_WIDE_CANDIDATES}
         candidateViews={H10_WIDE_VIEWS}
