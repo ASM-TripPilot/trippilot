@@ -631,7 +631,9 @@
 - `src/features/reflection/model/editCard.ts`  →  buildEditCard
 - `src/features/reflection/model/missingParts.ts`  →  MissingParts · missingParts
 - `src/features/reflection/model/reflectionFallback.ts`  →  resolveDisplayNarrative
-- `src/features/reflection/model/shareCard.ts`  →  ShareFormat · SHARE_FORMATS · ShareCardMode · ShareCardVM · BuildShareCardInput · buildShareCard · formatShareCardStats · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · validateCaption · validateHashtags · captureShareImage
+- `src/features/reflection/model/shareCapture.ts`  →  SaveShareCardResult · ShareShareCardResult · isShareCaptureArmed · saveShareCardImage · shareShareCardImage
+- `src/features/reflection/model/shareCaptureNative.ts`  →  captureRef · requestPermissionsAsync · saveToLibraryAsync · shareAsync
+- `src/features/reflection/model/shareCard.ts`  →  ShareFormat · SHARE_FORMATS · ShareCardMode · ShareCardVM · BuildShareCardInput · buildShareCard · formatShareCardStats · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · validateCaption · validateHashtags
 - `src/features/reflection/model/statsCard.ts`  →  statsCard
 - `src/features/reflection/model/styleThreshold.ts`  →  categoryLabel
 - `src/features/reflection/model/summaryStats.ts`  →  SummaryStatCells · summaryStats
@@ -1440,4 +1442,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 1000개 파일
+합계 1002개 파일

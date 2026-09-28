@@ -51,6 +51,14 @@ jest.mock('@/shared/storage', () => ({
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
+// TRIP-1071 — [공유] 진입은 네이티브 캡처 모듈 3종이 이 빌드에 있을 때만(`isShareCaptureArmed`). jest-expo 는
+// 세 모듈을 "있는 척"해서 실 판정이면 늘 true 가 된다 → 이 파일(B-6 "공유 진입이 되살아나지 않는다")은
+// **재빌드 전 빌드**를 뜻하도록 false 로 고정한다. 개통 짝은 TripSummaryPage.share.test 가 진다.
+jest.mock('@/features/reflection/model/shareCapture', () => ({
+  ...jest.requireActual('@/features/reflection/model/shareCapture'),
+  isShareCaptureArmed: () => false,
+}));
+
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
 jest.mock('expo-router', () => ({
@@ -290,7 +298,7 @@ describe('🔴 TRIP-987 B-8 · 요약 대기 얼굴에도 방문 기록 진입 (
 });
 
 describe('🟢 TRIP-987 B-6·B-9 · 되살리지 않는 것(회귀 앵커)', () => {
-  it('공유 진입이 없고(TRIP-939 Q2), 날짜 카드는 누를 수 없으며 "›" 가 없다(Seed Q2)', async () => {
+  it('캡처 미장전 빌드면 공유 진입이 없고(TRIP-939 Q2), 날짜 카드는 누를 수 없으며 "›" 가 없다(Seed Q2)', async () => {
     server.use(
       summaryHandler({ ready: true, summary: summary(true, ['코엑스']) }),
       tripOk()

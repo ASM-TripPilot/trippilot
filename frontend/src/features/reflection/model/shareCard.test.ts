@@ -5,11 +5,11 @@ import {
   HASHTAG_MAX_COUNT,
   SHARE_FORMATS,
   buildShareCard,
-  captureShareImage,
   formatShareCardStats,
   validateCaption,
   validateHashtags,
 } from './shareCard';
+import * as shareCardModule from './shareCard';
 import { summaryStats } from './summaryStats';
 import { distanceSourceLabel, toOrderedVisitList } from './summaryView';
 
@@ -26,7 +26,8 @@ import { distanceSourceLabel, toOrderedVisitList } from './summaryView';
  *  - ★ 반쪽 방어: summary null·stats/highlights 결측·trip null 계약 위반에도 크래시 0(571·572 재발 방지).
  *  - AC-8(INV-3): 직렬화한 VM 에 duration·소요시간 문자열 0(거리만).
  *  - AC-7: validateCaption/validateHashtags 는 순수(온디바이스만) — 상한 초과 시 invalid·트렁케이트.
- *  - INV-4: captureShareImage() = {armed:false}(정직한 degrade — 실 캡처는 네이티브 리빌드 후속).
+ *  - INV-4(TRIP-1071): 옛 degrade 스텁 captureShareImage(늘 armed:false)는 사라진다 — armed 판정은
+ *    `shareCapture.isShareCaptureArmed` 하나뿐(두 번째 판정이 남으면 한쪽 진입점이 영영 숨는다).
  *
  * (개념) `toBeCloseTo(n, 자릿수)` = 부동소수 근사 비교 · `toEqual` = 깊은 값 동치 ·
  *   `not.toThrow()` = 호출이 예외를 안 던짐 · `JSON.stringify` 왕복 = 직렬화 표면에 금칙 문자열 0 확인
@@ -303,8 +304,14 @@ describe('🔴 AC-7 · 폼검증은 온디바이스 순수 함수(서버 저장 
   });
 });
 
-describe('🔴 INV-4 · captureShareImage degrade 스텁(가짜 성공 금지)', () => {
-  it('armed:false 를 돌려준다(실 캡처는 네이티브 리빌드 후속)', () => {
-    expect(captureShareImage()).toEqual({ armed: false });
+describe('🔴 INV-4 · TRIP-1071 — 순수 조립 모듈은 캡처 스텁을 더 내보내지 않는다(판정 단일 출처)', () => {
+  it('captureShareImage(늘 armed:false 스텁)가 없고, 조립 함수는 그대로 있다(짝)', () => {
+    // 준비·실행: 모듈이 내보내는 이름 목록을 읽는다.
+    const exported = Object.keys(shareCardModule);
+
+    // 단언: 옛 스텁 부재 — 판정은 shareCapture.isShareCaptureArmed 가 진다.
+    expect(exported).not.toContain('captureShareImage');
+    // 짝 앵커 — 모듈이 통째로 비어 부재가 공허해진 것이 아니다.
+    expect(exported).toContain('buildShareCard');
   });
 });

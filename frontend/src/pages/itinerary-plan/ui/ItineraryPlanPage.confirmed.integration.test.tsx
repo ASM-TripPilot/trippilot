@@ -71,12 +71,13 @@ jest.mock('expo-router', () => ({
   }),
 }));
 
-// TRIP-939 AC-2b(Q2) — [공유하기]는 공유 카드 캡처가 장전(`captureShareImage().armed`)됐을 때만
-// 보인다(미장전이면 j06 이 보기만 하는 막다른 화면). 홀더로 armed 를 갈아끼운다(기본 false).
+// TRIP-939 AC-2b(Q2) — [공유하기]는 공유 카드 캡처가 장전됐을 때만 보인다(미장전이면 j06 이 막다른
+// 화면). TRIP-1071: 판정은 `isShareCaptureArmed()`(네이티브 캡처 모듈 3종 실재) 하나 — 결정 4(c)로
+// 요약 ready 와 무관하다. jest-expo 는 세 모듈을 "있는 척"하므로 false 짝은 이 홀더로만 만든다(기본 false).
 const mockShareArmed = { value: false };
-jest.mock('@/features/reflection/model/shareCard', () => ({
-  ...jest.requireActual('@/features/reflection/model/shareCard'),
-  captureShareImage: () => ({ armed: mockShareArmed.value }),
+jest.mock('@/features/reflection/model/shareCapture', () => ({
+  ...jest.requireActual('@/features/reflection/model/shareCapture'),
+  isShareCaptureArmed: () => mockShareArmed.value,
 }));
 
 const BASE = 'http://localhost:8080/api/v1';
