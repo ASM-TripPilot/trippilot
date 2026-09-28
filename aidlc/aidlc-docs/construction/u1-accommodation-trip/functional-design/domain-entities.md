@@ -15,7 +15,7 @@
 | coord | Point(lat, lng) | **필수** — 좌표 없는 POI는 존재할 수 없음 |
 | category | enum | 명소·맛집·카페·야경·자연·쇼핑·문화 (d04 필터 칩과 동일 도메인) |
 | region | string | 시·군·구 (표시용: "사하구", "수영구") |
-| regionCode ⚠ | string? | **[개정 · 2026-09-28, TRIP-1042]** 행정구역 코드(시군구 5자리, 앞 2자리 = 시도). 여행 지역 매칭의 입력(BR-U1-58·INV-U1-21). null 허용 — 판정 불가 장소는 숨기지 않는다. API 노출은 BE 계약 소관 |
+| regionCode ⚠ | string? | **[개정 · 2026-09-28, TRIP-1042]** 행정구역 코드(시군구 5자리, 앞 2자리 = 시도). 여행 지역 매칭의 입력(BR-U1-58·INV-U1-21). null 허용 — 판정 불가 장소는 숨기지 않는다. API 노출은 BE 계약 소관. **[보완 · 2026-09-28, TRIP-1042 후속]** 값은 **시군구 5자리 또는 시도 2자리, 없으면 null** — 시드 POI는 시도 2자리 코드만 가진다 |
 | openingHours | string? | 미확인 시 null → 화면은 "미확인" 표기 |
 | dataStatus | enum | `ACTIVE` · `UNVERIFIED` · `LOST` · `CLOSED` |
 | source | enum ⚠ | `KAKAO_LOCAL` · `TOURAPI` · `MANUAL` — 수집 게이트 판정 입력 |
@@ -87,7 +87,7 @@
 | startDate · endDate | date | **필수** |
 | party | int | 기본 1 |
 | companionType | enum ⚠ | 혼자 · 친구 · 연인 · 가족 (g01) — 온보딩 `커플`↔`연인` 매핑(G-U1-10) |
-| budgetTotal | long? | 온보딩 취향 예산에서 상속. **입력 화면은 현재 없음**(G-U1-09) |
+| budgetTotal | long? | 온보딩 취향 예산에서 상속. **입력 화면은 현재 없음**(G-U1-09) — **[정정 · 2026-09-28, TRIP-1067]** 입력 화면 있음: 여행 생성 위저드 `BudgetInputField`(TRIP-207 구현, frontend-components §4). 값은 **인당(1인) 여행 전체 총액**(US-TRIP-01 개정)이며 인원과 무관하다 |
 | preferenceSnapshot | json ⚠ | 생성 시점 취향 동결 + 여행별 오버라이드(g01 "바꾸기", G-U1-11) |
 | status | enum | `PLANNED` · `CONFIRMED` · `ACTIVE` · `ENDED` (DEC-7) |
 | deletedAt | timestamp? | 소프트 삭제 |
@@ -107,7 +107,7 @@
 
 - **INV-U1-14**: `Σ nights ≤ (endDate − startDate)`. 도시별 박수 합이 여행 기간을 넘을 수 없다.
 - 단일 도시 여행은 원소 1개짜리 목록으로 표현한다(특수 케이스 없음).
-- **INV-U1-21** **[신설 · 2026-09-28, TRIP-1042]**: 담은 장소 `p`가 여행 지역 안이라는 판정은 `p.regionCode`가 어떤 목적지 `d.regionCode`로 **시작하는가**(코드 접두사)다 — 이름 접두사 비교 금지("종로구"와 "서울특별시"는 이름으로 매칭되지 않는다). `p.regionCode = null`이면 판정 불가로 보고 숨기지 않는다(fail-open). 지역 밖 장소는 꼭 갈 곳으로 선택될 수 없다(BR-U1-58).
+- **INV-U1-21** **[신설 · 2026-09-28, TRIP-1042]**: 담은 장소 `p`가 여행 지역 안이라는 판정은 `p.regionCode`가 어떤 목적지 `d.regionCode`로 **시작하는가**(코드 접두사)다 — 이름 접두사 비교 금지("종로구"와 "서울특별시"는 이름으로 매칭되지 않는다). `p.regionCode = null`이면 판정 불가로 보고 숨기지 않는다(fail-open). 지역 밖 장소는 꼭 갈 곳으로 선택될 수 없다(BR-U1-58). **[보완 · 2026-09-28, TRIP-1042 후속 — 구현 실측]** 접두사 매칭은 **양방향**이다 — 두 코드 중 **짧은 쪽이 긴 쪽의 접두면** 지역 안(시드 POI는 시도 2자리 코드만 가지므로, 시군구 5자리 목적지 `11110`에 대해 POI `11`도 지역 안). 목적지 중 **하나라도 `regionCode`가 없으면** 지역 판정 자체를 생략한다(전부 지역 안처럼 선택 가능 — 섹션 분리·빈 상태 없음). 시도 코드는 행정구역 카탈로그 실측 **16개**다(`12` 전남광주통합특별시 존재, `29`·`46` 없음). 원문의 "`p.regionCode`가 `d.regionCode`로 시작"(한 방향)은 이 양방향 규칙으로 읽는다.
 
 ### BaseAssignment — 구간 거점
 `tripId · savedStayId · dateFrom · dateTo`
