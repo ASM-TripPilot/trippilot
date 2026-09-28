@@ -28,6 +28,9 @@ interface BaseAssignmentRepository {
 
     /** 숙소가 거점으로 사용 중인지 — 숙소 삭제·좌표 해제 차단(INV-U1-08). */
     fun existsByStayId(savedStayId: UUID): Boolean
+
+    /** 숙소의 배정 행 전부 삭제 — 숙소 삭제 직전 정리(TRIP-1061: 이 시점 잔존분은 전부 삭제된 여행 몫). */
+    fun deleteByStayId(savedStayId: UUID)
 }
 
 /**

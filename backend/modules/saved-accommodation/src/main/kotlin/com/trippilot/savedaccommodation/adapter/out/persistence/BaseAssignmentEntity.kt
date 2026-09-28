@@ -26,8 +26,22 @@ class BaseAssignmentEntity(
 
 interface BaseAssignmentJpaRepository : JpaRepository<BaseAssignmentEntity, UUID> {
     fun findByTripId(tripId: UUID): List<BaseAssignmentEntity>
-    fun existsBySavedStayId(savedStayId: UUID): Boolean
     fun findBySavedStayIdIn(savedStayIds: Collection<UUID>): List<BaseAssignmentEntity>
+
+    /**
+     * 살아 있는 여행의 거점만 '사용 중'이다(TRIP-1061 (b)). 소프트 삭제된 여행의 배정 행은 남는데
+     * 그것까지 세면, 화면은 '연결된 여행 없음'(조회는 삭제분을 거른다)인데 숙소 삭제는 409 로 막히는
+     * 모순이 된다 — 그 숙소를 **영영 못 지운다.**
+     */
+    @org.springframework.data.jpa.repository.Query(
+        nativeQuery = true,
+        value = "select exists(select 1 from base_assignment b join trip t on t.trip_id = b.trip_id " +
+            "where b.saved_stay_id = :savedStayId and t.deleted_at is null)",
+    )
+    fun existsForLiveTrip(savedStayId: UUID): Boolean
+
+    @org.springframework.data.jpa.repository.Modifying
+    fun deleteBySavedStayId(savedStayId: UUID)
 }
 
 @Component
@@ -53,7 +67,9 @@ class BaseAssignmentRepositoryAdapter(
 
     override fun delete(base: BaseAssignment) = jpa.deleteById(base.baseAssignmentId)
 
-    override fun existsByStayId(savedStayId: UUID): Boolean = jpa.existsBySavedStayId(savedStayId)
+    override fun existsByStayId(savedStayId: UUID): Boolean = jpa.existsForLiveTrip(savedStayId)
+
+    override fun deleteByStayId(savedStayId: UUID) = jpa.deleteBySavedStayId(savedStayId)
 
     private fun BaseAssignment.toEntity() = BaseAssignmentEntity(
         baseAssignmentId = baseAssignmentId, tripId = tripId, savedStayId = savedStayId,
