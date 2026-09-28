@@ -56,6 +56,8 @@ import io.kotest.property.Arb
 import io.kotest.property.arbitrary.int
 import io.kotest.property.checkAll
 import com.trippilot.core.error.ConflictDetected
+import com.trippilot.core.error.ErrorCode
+import com.trippilot.itinerarygeneration.domain.GenerationSession
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.shouldBe
@@ -1110,6 +1112,67 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         stored.days.map { it.date } shouldContainExactly listOf(start)   // 2차 일자가 붙지 않았다
         stored.generationState shouldBe GenerationState.PARTIAL
         sessionRepo.rows.values.single().status shouldBe GenerationStatus.CANCELED
+    }
+
+    /**
+     * **1일차가 오기 전에 닫힌 세션은 409 로 끝난다 — 500 이 아니다**(TRIP-1058 · QA #029·#046).
+     *
+     * 재생성 연타·취소 API 가 1차 AI 호출 중에 세션을 닫으면, 뒤늦게 도착한 1일차가 day1 전이의
+     * require 에서 IllegalArgumentException 으로 터져 사용자에게 500 이 나갔다. 조용히 넘기면(takeIf)
+     * 낡은 1일차가 새 요청의 일정을 덮으므로 **예외는 유지하되 도메인 예외(409)** 여야 하고,
+     * 화면이 갈아탈 **진행 중인 새 세션**을 함께 싣는다.
+     */
+    "1일차 전에 취소된 세션이면 409 도메인 예외다 — 500 이 아니다" {
+        val end = start // 하루 여행 — 1차만 본다
+        val sessionRepo = FakeGenerationSessions()
+        var newSessionId: UUID? = null
+        val agent = object : StubScheduleAgent() {
+            override fun generate(input: ScheduleAgentInput): ScheduleAgentOutput {
+                // 1차가 도는 사이 재생성 연타가 이 세션을 닫고 새로 열었다(QA #029 — 17:37:11.682).
+                sessionRepo.findRunningByTrip(tripId)?.let { sessionRepo.save(it.canceled(now)) }
+                newSessionId = sessionRepo.save(GenerationSession.start(acc, tripId, GenerationMode.FULLY_AI, now)).sessionId
+                return ScheduleAgentOutput(
+                    days = input.timeWindows.map { tw ->
+                        DaySchedule(tw.date, listOf(VisitSlotDisplay(UUID.randomUUID(), LocalTime.parse("10:00"), LocalTime.parse("11:00"), false, null, isFixed = false)))
+                    },
+                    day1ReadyAt = null, explanations = emptyMap(),
+                    solveMode = SolveMode.DETERMINISTIC, isFallback = false,
+                    freshness = FreshnessMeta(now, degraded = false),
+                )
+            }
+        }
+        val ex = shouldThrow<ConflictDetected> {
+            service(agent, FakeItineraries(), end, sessionRepo).generate(acc, tripId, GenerationMode.FULLY_AI)
+        }
+        ex.errorCode shouldBe ErrorCode.GENERATION_SUPERSEDED
+        ex.current shouldBe newSessionId // 화면이 폴링을 갈아탈 대상
+    }
+
+    /**
+     * **취소만 되고 새 요청이 없어도 같은 409 다**(QA #046 — cancel API 후 늦은 1차 도착).
+     * 새 세션이 없으면 실을 것도 없다 — current 는 비운다.
+     */
+    "취소 후 새 요청이 없으면 409 에 새 세션 없이 끝난다" {
+        val end = start
+        val sessionRepo = FakeGenerationSessions()
+        val agent = object : StubScheduleAgent() {
+            override fun generate(input: ScheduleAgentInput): ScheduleAgentOutput {
+                sessionRepo.findRunningByTrip(tripId)?.let { sessionRepo.save(it.canceled(now)) }
+                return ScheduleAgentOutput(
+                    days = input.timeWindows.map { tw ->
+                        DaySchedule(tw.date, listOf(VisitSlotDisplay(UUID.randomUUID(), LocalTime.parse("10:00"), LocalTime.parse("11:00"), false, null, isFixed = false)))
+                    },
+                    day1ReadyAt = null, explanations = emptyMap(),
+                    solveMode = SolveMode.DETERMINISTIC, isFallback = false,
+                    freshness = FreshnessMeta(now, degraded = false),
+                )
+            }
+        }
+        val ex = shouldThrow<ConflictDetected> {
+            service(agent, FakeItineraries(), end, sessionRepo).generate(acc, tripId, GenerationMode.FULLY_AI)
+        }
+        ex.errorCode shouldBe ErrorCode.GENERATION_SUPERSEDED
+        ex.current shouldBe null
     }
 
     /**
