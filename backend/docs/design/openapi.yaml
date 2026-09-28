@@ -927,9 +927,13 @@ paths:
         '404': { description: 여행 없음/타 계정 }
         '409':
           description: >
-            다른 여행의 생성이 진행 중(TRIP-403). `error.code` = `GENERATION_IN_PROGRESS`,
-            `error.activeTripId` = 지금 생성 중인 여행 — 어느 여행을 기다려야 하는지 화면이 안내할 수 있어야 한다.
+            둘 중 하나. (1) 다른 여행의 생성이 진행 중(TRIP-403) — `error.code` = `GENERATION_IN_PROGRESS`,
+            `error.activeTripId` = 지금 생성 중인 여행. 어느 여행을 기다려야 하는지 화면이 안내할 수 있어야 한다.
             같은 여행의 재생성은 이 제한에 걸리지 않는다.
+            (2) 이 요청의 세션이 1일차 도착 전에 취소·대체됨(TRIP-1058 — 재생성 연타·cancel API) —
+            `error.code` = `GENERATION_SUPERSEDED`, `error.activeSessionId` = 진행 중인 새 세션(새 요청이
+            있을 때만). 이 요청의 1일차는 반영되지 않았다(낡은 결과가 새 요청의 일정을 덮지 않는다).
+            화면은 실패가 아니라 "새 요청이 이어받았다"로 읽고 그 세션을 폴링한다.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -3018,6 +3022,14 @@ components:
                 GENERATION_IN_PROGRESS 에만 존재(TRIP-403). 지금 일정을 생성 중인 여행.
                 거절 사유만 주면 사용자는 무엇이 끝나기를 기다려야 하는지 모른다 — 화면이 이 값으로
                 그 여행으로 이동시킨다. `existingProvider` 와 같은 방식으로 다른 에러 코드의 응답에는
+                나타나지 않는다(직렬화 생략).
+            activeSessionId:
+              type: string
+              format: uuid
+              description: >
+                GENERATION_SUPERSEDED 에만 존재(TRIP-1058). 취소·대체된 생성 요청이 거절될 때
+                지금 진행 중인 **새 세션** — 화면이 이 값으로 폴링을 갈아탄다. 취소만 되고
+                새 요청이 없으면(cancel API 경로) 싣지 않는다. 다른 에러 코드의 응답에는
                 나타나지 않는다(직렬화 생략).
             visitCheckId:
               type: string
