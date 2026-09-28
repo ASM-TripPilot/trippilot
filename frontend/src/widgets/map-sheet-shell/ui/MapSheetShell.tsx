@@ -10,6 +10,7 @@ import BottomSheet, {
   BottomSheetFlatList,
   BottomSheetScrollView,
 } from '@gorhom/bottom-sheet';
+import type { SharedValue } from 'react-native-reanimated';
 
 import {
   MapView,
@@ -124,6 +125,10 @@ export interface MapSheetShellProps<T = unknown> {
   /** 핀 전부 맞추기(TRIP-1076 가산, h07·h08·h11·h14·h16 결과) — `<MapView fitPins>` 로 흘린다.
    *  미전달=center 카메라(기존 소비처 무변경). 시트가 가리는 아래 영역은 맞춤에 반영하지 않는다. */
   fitPins?: boolean;
+  /** 시트 윗변 위치 상자(TRIP-1083 가산) — `<BottomSheet animatedPosition>` 으로 그대로 흘린다. gorhom 이
+   *  매 프레임 셸 루트 위끝→시트 윗변 y(topInset 포함)를 써 넣는다. 값은 소비처(i01 허브)가 만들어 쥔다.
+   *  미전달=미부착. */
+  animatedPosition?: SharedValue<number>;
 }
 
 export function MapSheetShell<T = unknown>({
@@ -149,6 +154,7 @@ export function MapSheetShell<T = unknown>({
   onMapTap,
   radiusCircle,
   fitPins,
+  animatedPosition,
 }: MapSheetShellProps<T>): ReactElement {
   // 지도 로드 실패(TRIP-919). 폴백 중엔 MapView 가 트리에서 빠지므로, 재시도로 이 값을 풀면 MapView 가
   // 새 인스턴스로 다시 마운트돼 실패 알림(notifiedRef)도 처음부터 다시 돈다 — 별도 key 가 필요 없다.
@@ -228,6 +234,7 @@ export function MapSheetShell<T = unknown>({
         topInset={topInset}
         onChange={setSnapIndex}
         onAnimate={onSheetAnimate}
+        animatedPosition={animatedPosition}
       >
         {list ? (
           <BottomSheetFlatList
