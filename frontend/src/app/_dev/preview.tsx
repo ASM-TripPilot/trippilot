@@ -3966,7 +3966,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         summaryPeriod={null}
         // empty 얼굴(Figma `3652:2068`) — 동행·취향은 프리필로 채워지고, 예산은 금액 없이 프리필
         // tier 만 있는 **tier-only**(TRIP-732: main=tier, sub="1인 총액 · 온보딩").
-        summaryCompanion={{ main: '혼자 1명' }}
+        summaryCompanion={{ main: '혼자' }}
         summaryPreferences={{ main: '휴양 · 미식', onboarding: true }}
         summaryBudget={{ main: '중간', sub: '1인 총액 · 온보딩' }}
         mustVisits={[]}
@@ -4085,9 +4085,9 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // g01 예산 편집 시트(TRIP-670, Figma `3647:2068`) — 중간 tier 선택·₩1,200,000 열린 상태.
+  // g01 예산 편집 시트(TRIP-670, Figma `3647:2068`) — 중간 tier 선택·300,000(중간 10만 × 3박) 열린 상태.
   // `BudgetEditSheet`은 props-only 순수 뷰(스토어·라우터 미참조)라 컨테이너 import 사슬 함정 없이
-  // 그대로 태운다. jest 는 활성 칩 분홍 배경·흰 글자·₩/원 정렬·안내 range·시트 딤/개폐를 못 봐
+  // 그대로 태운다. jest 는 활성 칩 분홍 배경·흰 글자·금액/원 정렬·필드 패딩·시트 딤/개폐를 못 봐
   // (바텀시트 통과형 목) 이 키가 유일한 6-b 육안 대조 자리다.
   {
     key: 'trip-new-step1-budget-sheet',
@@ -4096,14 +4096,13 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       <BudgetEditSheet
-        amountText="1,200,000"
+        amountText="300,000"
         tier="중간"
         onChangeAmount={noop}
         onSelectTier={noop}
         onApply={noop}
         onClose={noop}
         applyDisabled={false}
-        onboardingTier="중간"
       />
     ),
   },

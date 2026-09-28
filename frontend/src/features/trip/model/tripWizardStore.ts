@@ -126,7 +126,8 @@ const INITIAL_DRAFT = {
   endDate: undefined as string | undefined,
   presetCode: undefined as PeriodPresetCode | undefined,
   party: 1,
-  companionType: undefined as CompanionType | undefined,
+  // 동반 기본값 '혼자'(TRIP-1045, `PartyPicker`) — 기본값이라 `touched`는 켜지 않는다.
+  companionType: '혼자' as CompanionType | undefined,
   budgetText: '',
   // `undefined`=오버라이드 없음. `INITIAL_DRAFT`에 이 키를 둬야 병합형 `reset()`이 지운다(SO-4).
   prefStyleOverride: undefined as string[] | undefined,

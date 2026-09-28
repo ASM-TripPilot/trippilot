@@ -103,8 +103,8 @@ const SUMMARY_CARD_SHADOW = {
  * `text-muted`)을 그린다. sub 가 없는 행(동행)은 caption 요소 자체를 안 만든다. 취향 행은 sub 대신
  * `trailing`(스파클+온보딩 배지)을 main 뒤에 얹는다.
  *
- * 플레이스홀더는 **행별**이다(TRIP-671 D1): 여행지 null → "어디로 갈까요?"(진한 값 톤), 기간 null →
- * 값 줄 자체 없음(`placeholder=null`), 나머지 → muted "{라벨} 선택". `isLoading` 이면 값 자리를 회색
+ * 플레이스홀더는 **행별**이다(TRIP-671 D1): 여행지 null → "어디로 갈까요?"(진한 값 톤), 나머지 → muted
+ * "{라벨} 선택"(기간도 — 값 줄이 있어야 선택 전후 행 높이가 같다, TRIP-1045). `isLoading` 이면 값 자리를 회색
  * 스켈레톤 바로 갈아 실값·플레이스홀더를 가린다(loading 얼굴).
  */
 function SummaryRow({
@@ -123,8 +123,8 @@ function SummaryRow({
   label: string;
   /** 2톤 값(`{main; sub?}`). `null` 이면 미선택(플레이스홀더). */
   value: SummaryLine | null;
-  /** value 가 null 일 때 그릴 카피. `null` 이면 값 줄 자체를 안 그린다(기간 행). */
-  placeholder: string | null;
+  /** value 가 null 일 때 그릴 카피. */
+  placeholder: string;
   /** 플레이스홀더 색 톤 — 여행지만 'ink'(Figma empty 진한 값 톤), 나머지는 'muted'. */
   placeholderTone: 'ink' | 'muted';
   onPress(): void;
@@ -156,17 +156,15 @@ function SummaryRow({
             ))}
           </View>
         ) : value === null ? (
-          placeholder === null ? null : (
-            <Text
-              className={
-                placeholderTone === 'ink'
-                  ? 'font-noto-bold text-card-title font-bold text-ink'
-                  : 'font-noto text-card-title text-muted'
-              }
-            >
-              {placeholder}
-            </Text>
-          )
+          <Text
+            className={
+              placeholderTone === 'ink'
+                ? 'font-noto-bold text-card-title font-bold text-ink'
+                : 'font-noto text-card-title text-muted'
+            }
+          >
+            {placeholder}
+          </Text>
         ) : (
           <View className="flex-row items-center gap-[6px]">
             <Text className="font-noto-bold text-card-title font-bold text-ink">
@@ -432,7 +430,7 @@ export function TripWizardStep1Screen({
                 testID="trip-wizard-summary-period"
                 label="기간"
                 value={summaryPeriod}
-                placeholder={null}
+                placeholder="기간 선택"
                 placeholderTone="muted"
                 onPress={onPressSummaryPeriod}
                 isLoading={isLoading}

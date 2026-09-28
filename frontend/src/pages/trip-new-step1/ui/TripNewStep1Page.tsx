@@ -18,8 +18,10 @@ import { shiftMonth } from '@/shared/date/monthGrid';
 import { toggleMulti } from '@/shared/pref/preferenceSelection';
 
 import {
+  budgetForTier,
   formatBudgetAmount,
   parseBudgetAmount,
+  type BudgetTier,
 } from '@/features/trip/model/budgetAmount';
 import { buildCreateTripRequest } from '@/features/trip/model/createTripRequest';
 import {
@@ -181,10 +183,6 @@ export function TripNewStep1Page({
   const prefillBudgetText = canPrefillBudget
     ? formatBudgetAmount(rawAmount)
     : '';
-  // TRIP-984 D10 — 예산 노트 "온보딩에서 고른 …" 은 온보딩이 tier 와 금액(>0)을 **둘 다** 채웠을 때만
-  // 참이다. tier-only 면 금액칸이 비어 "금액을 입력해 주세요" 와 모순되므로 내리지 않는다(01b Q1).
-  const onboardingBudgetTier =
-    canPrefillBudget && rawAmount > 0 ? tierLabel : undefined;
   // 제출 복원(TRIP-670 D3) — 사용자가 시트에서 편집한 스토어 값이 유효하면 그것, 아니면 프리필.
   // TRIP-207 "사용자 입력 우선"을 S1(프리필-only)이 되돌린 것을 S6 이 되살린다.
   const effectiveBudgetText =
@@ -251,10 +249,6 @@ export function TripNewStep1Page({
   const [draftTier, setDraftTier] = useState<string>();
   const draftBudget = parseBudgetAmount(draftAmountText);
   const draftBudgetKind = draftBudget.kind;
-  // TRIP-984 D10 조건 3 — 노트는 지금 입력칸 금액이 온보딩 금액과 **같을 때만**(숫자 비교라 콤마 유무
-  // 무관). 지우거나 바꾸면 그 칸의 값은 더 이상 "온보딩이 채운 값"이 아니므로 노트를 내린다.
-  const draftMatchesOnboarding =
-    draftBudget.kind === 'amount' && draftBudget.amount === rawAmount;
 
   // 제출 경로 잠금(useRef — 상태와 달리 같은 틱에 즉시 읽힌다, 연타 두 번째가 옛 값을 읽지
   // 않게). 두 뜻을 겸한다: ① 등록 요청이 날아가는 중 ② 이미 성공해 이 화면의 일이 끝남.
@@ -449,6 +443,16 @@ export function TripNewStep1Page({
     if (parseBudgetAmount(draftAmountText).kind !== 'amount') return;
     setBudgetText(draftAmountText);
     setBudgetSheetOpen(false);
+  }
+
+  /** tier 칩 — 드래프트 tier 와 함께 대표 금액(단가 × 박수 합, 0이면 1박)을 금액 칸에 채운다(TRIP-1045).
+   * press 핸들러에서 직접 쓴다 — tier 변화에 매달면 이미 켜진 칩 재press 때 채움이 안 일어난다.
+   * press 할 때만 계산하므로 인원·여행지가 바뀌어도, 시트를 다시 열어도 재계산하지 않는다. */
+  function selectBudgetTier(tier: BudgetTier): void {
+    setDraftTier(tier);
+    setDraftAmountText(
+      formatBudgetAmount(budgetForTier(tier, nightsSum(destinations)))
+    );
   }
 
   /** 동행 시트 열기 — 드래프트를 store 현재값에서 초기화한다(D3 프리필). 렌더 클로저가 아니라
@@ -647,13 +651,10 @@ export function TripNewStep1Page({
                 : undefined
           }
           onChangeAmount={setDraftAmountText}
-          onSelectTier={setDraftTier}
+          onSelectTier={selectBudgetTier}
           onApply={applyBudget}
           onClose={() => setBudgetSheetOpen(false)}
           applyDisabled={draftBudgetKind === 'empty'}
-          onboardingTier={
-            draftMatchesOnboarding ? onboardingBudgetTier : undefined
-          }
         />
       ) : null}
     </>

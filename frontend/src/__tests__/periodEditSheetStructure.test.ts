@@ -57,7 +57,46 @@ describe('g0 · 탐지기 자가검사 (전처리 × 탐지기 조합)', () => {
     expect(DURATION_TEXT.test(stripComments('// 소요시간'))).toBe(false); // 주석만이면 미검출
     expect(stripped).toContain('https://example.com/x'); // URL 오인 안 함
   });
+
+  it('TRIP-1045 · 클래스 토큰 카운트는 주석 속 rem 유틸을 안 세고, top-1/2·top-10 을 top-1 로 안 센다', () => {
+    const sample = stripComments(
+      [
+        '// 옛 top-1 h-9 는 rem 이라 어긋났다', // 주석 → 안 셈
+        '<View className="absolute right-0 top-[4px] h-[36px] w-1/2" />',
+        '<View className="absolute left-0 top-xs h-[36px] w-1/2" />',
+        '<View className="absolute top-1/2 top-10 inset-x-0" />', // 비슷한 이름 → 안 셈
+        'className={`h-[36px] w-[36px] ${on ? "a" : ""}`}', // 템플릿 리터럴 안 → 셈
+        '<View className="absolute right-0 top-1 h-9 w-1/2" />', // 코드 속 rem → 셈
+      ].join('\n')
+    );
+
+    expect({
+      'top-1': countToken(sample, 'top-1'),
+      'h-9': countToken(sample, 'h-9'),
+      'w-9': countToken(sample, 'w-9'),
+      'h-[36px]': countToken(sample, 'h-[36px]'),
+      'w-[36px]': countToken(sample, 'w-[36px]'),
+      'top-[4px]': countToken(sample, 'top-[4px]'),
+      'top-xs': countToken(sample, 'top-xs'),
+    }).toEqual({
+      'top-1': 1,
+      'h-9': 1,
+      'w-9': 0,
+      'h-[36px]': 3,
+      'w-[36px]': 1,
+      'top-[4px]': 1,
+      'top-xs': 1,
+    });
+  });
 });
+
+/**
+ * 클래스 토큰 정확 일치 카운트 — 공백·따옴표·백틱·중괄호로 쪼갠다. 부분 문자열 검색이면 `top-1` 이
+ * `top-1/2`·`top-10` 에, `h-9` 가 `h-90` 에 걸린다(g0 두 번째 케이스가 실제 문자열로 확인).
+ */
+function countToken(source: string, token: string): number {
+  return source.split(/[\s"'`{}]+/).filter((t) => t === token).length;
+}
 
 describe('AC-7 · PeriodEditSheet.tsx 소스 가드', () => {
   it('g1 · 파일이 실재한다 (빈 스캔 공허통과 차단)', () => {
@@ -83,5 +122,22 @@ describe('AC-7 · PeriodEditSheet.tsx 소스 가드', () => {
     // 짝(긍정) — 콜백 계약이 실재한다(무관 파일/빈 파일 공허통과 차단).
     expect(src).toContain('onPickDate');
     expect(src).toContain('onApply');
+  });
+
+  it('g5 · TRIP-1045 AC-B2 — 띠·원에 rem 유틸(top-1·h-9·w-9) 0, px 고정값이 실재한다', () => {
+    // 시작·끝 반쪽 띠는 testID 가 없어 렌더 쿼리로 못 잡는다 — 이 스캔이 유일한 자동 그물이다.
+    const src = stripComments(readFileSync(SHEET, 'utf8'));
+
+    expect({
+      'top-1': countToken(src, 'top-1'),
+      'h-9': countToken(src, 'h-9'),
+      'w-9': countToken(src, 'w-9'),
+    }).toEqual({ 'top-1': 0, 'h-9': 0, 'w-9': 0 });
+    // 짝(긍정) — 띠 3종(사이·시작 반쪽·끝 반쪽) + 원 1 = h-[36px] 4곳 이상, 원 폭, 띠 top 4px 3곳 이상.
+    expect(countToken(src, 'h-[36px]')).toBeGreaterThanOrEqual(4);
+    expect(countToken(src, 'w-[36px]')).toBeGreaterThanOrEqual(1);
+    expect(
+      countToken(src, 'top-[4px]') + countToken(src, 'top-xs')
+    ).toBeGreaterThanOrEqual(3);
   });
 });
