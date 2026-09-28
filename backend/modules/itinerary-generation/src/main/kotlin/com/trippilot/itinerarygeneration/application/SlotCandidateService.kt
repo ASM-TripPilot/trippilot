@@ -69,12 +69,17 @@ class SlotCandidateService(
         if (itinerary.status != ItineraryStatus.PLANNED) {
             throw ConflictDetected(message = "확정된 일정은 슬롯을 교체할 수 없습니다.")
         }
-        if (itinerary.generationState == GenerationState.PARTIAL) {
-            throw ConflictDetected(message = "일정 생성이 진행 중입니다. 완료 후 교체할 수 있습니다.")
-        }
 
+        // 생성 중(PARTIAL) 일괄 409 를 없앴다(TRIP-1000) — day1 조기 노출의 취지가 "보고 고칠 수
+        // 있다"인데(BR-U3-06), 2차가 도는 10분간 이미 도착한 1일차까지 잠겼다(QA #073 실측).
+        // 이미 만들어진 일자는 통과시키고, **아직 없는 일자만** 아래에서 409 로 가른다.
         val day = itinerary.days.firstOrNull { it.date == date }
-            ?: throw ResourceNotFound("해당 날짜의 일정이 없습니다.")
+            ?: if (itinerary.generationState == GenerationState.PARTIAL) {
+                // 404 로 내면 "일정이 없다"로 읽힌다 — 사실은 "아직 만드는 중"이다(INV-4 침묵 금지).
+                throw ConflictDetected(message = "그 일자는 아직 만드는 중입니다. 완료 후 교체할 수 있습니다.")
+            } else {
+                throw ResourceNotFound("해당 날짜의 일정이 없습니다.")
+            }
         val matches = day.slots.withIndex().filter { it.value.sourcePoiId == targetPoiId }
         if (matches.isEmpty()) throw ResourceNotFound("해당 슬롯을 찾을 수 없습니다.")
         // slotKey 규약이 "{date}#{poiId}" 라(BR-U2-04) 같은 날 같은 장소가 둘이면 어느 쪽인지 알 수 없다.

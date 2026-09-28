@@ -642,9 +642,12 @@ fun `차선책이 저장·조회·확정을 관통한다(TRIP-873)`() {
 
         // 생성 중 확정은 409 — day1 만 동결된 채 잠기는 것 방지
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token).first shouldBe 409
-        // 생성 중 편집도 409 — 뒤이어 오는 2차 결과가 편집을 덮어써 유실되는 것 방지
-        val editBody = """{"days":[{"date":"2026-08-01","slots":[]}]}"""
-        call(HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token, editBody).first shouldBe 409
+        // 생성 중 편집 — **이미 만들어진 일자**는 허용(TRIP-1000: day1 조기 노출은 "보고 고칠 수 있다"),
+        // 아직 없는 일자를 싣는 편집만 409(2차와 누가 이길지 정의가 없다).
+        call(HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token, """{"days":[{"date":"2026-08-01","slots":[]}]}""")
+            .first shouldBe 200
+        call(HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token, """{"days":[{"date":"2026-08-02","slots":[]}]}""")
+            .first shouldBe 409
     }
 
     @Test

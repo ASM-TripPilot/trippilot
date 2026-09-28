@@ -6,6 +6,7 @@ import com.trippilot.core.error.ValidationFailed
 import com.trippilot.core.error.UpstreamUnavailable
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
 import com.trippilot.itinerarygeneration.domain.GenerationMode
+import com.trippilot.itinerarygeneration.domain.GenerationState
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
@@ -212,6 +213,31 @@ class SlotCandidateServiceTest : StringSpec({
         )
         shouldThrow<ConflictDetected> {
             service(CapturingAgent(), stored = dup).propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+        }
+    }
+
+    "생성 중이어도 이미 만들어진 일자의 후보는 준다(TRIP-1000)" {
+        // day1 조기 노출(BR-U3-04·06) — 2차가 도는 10분간 이미 도착한 1일차까지 잠겼던 것이 QA #073.
+        val partial = Itinerary.create(
+            tripId, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+            listOf(ItineraryDay.of(d1, 0, listOf(slot(target, 0, "11:00")))),
+            now, GenerationState.PARTIAL,
+        )
+        val agent = CapturingAgent()
+        service(agent, stored = partial).propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+
+        agent.captured shouldNotBe null // 잠기지 않고 경계까지 간다
+    }
+
+    "생성 중인 일자(아직 없음)는 409 — 404 로 '일정이 없다'고 말하지 않는다" {
+        val partial = Itinerary.create(
+            tripId, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+            listOf(ItineraryDay.of(d1, 0, listOf(slot(target, 0, "11:00")))),
+            now, GenerationState.PARTIAL,
+        )
+        shouldThrow<ConflictDetected> {
+            service(CapturingAgent(), stored = partial)
+                .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1.plusDays(1), target), null, null, null))
         }
     }
 
