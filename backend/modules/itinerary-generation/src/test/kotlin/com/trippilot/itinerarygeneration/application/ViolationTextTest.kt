@@ -21,24 +21,24 @@ class ViolationTextTest : StringSpec({
         (0 until slots).map { VisitSlot.of(UUID.randomUUID(), null, it, LocalTime.parse("10:00"), LocalTime.parse("11:00")) },
     )
 
-    "사유를 이어 붙이고 중복은 접는다" {
+    "타입을 사용자 문구로 번역하고 중복은 접는다(TRIP-1030) — detail 은 싣지 않는다" {
         ViolationText.reasonOf(
             listOf(
-                Violation("A", 0, 0, "이동이 빠듯해요"),
-                Violation("B", 0, 0, "영업시간 밖"),
-                Violation("A", 0, 0, "이동이 빠듯해요"),
+                Violation("HC2", 0, 0, "이동 54분 필요, 간격 -60분"),
+                Violation("HC1", 0, 0, "영업시간 밖: 543~618"),
+                Violation("TRAVEL_TIME", 0, 0, null), // HC2 와 같은 축 — 문구가 같아 접힌다
             ),
-        ) shouldBe "이동이 빠듯해요 · 영업시간 밖"
+        ) shouldBe "앞 장소에서 이동할 시간이 빠듯해요 · 영업시간과 맞지 않아요"
     }
 
-    "사유가 전부 비면 null — 빈 문자열을 저장하면 CHECK 와 화면 판정이 어긋난다" {
-        ViolationText.reasonOf(listOf(Violation("A", 0, 0, null))) shouldBe null
+    "위반이 없으면 null — 빈 문자열을 저장하면 CHECK 와 화면 판정이 어긋난다" {
         ViolationText.reasonOf(emptyList()) shouldBe null
     }
 
-    "상한을 넘는 사유는 잘린다(컬럼 상한과 같은 값)" {
-        val long = ViolationText.reasonOf(listOf(Violation("A", 0, 0, "가".repeat(400))))!!
-        (long.length <= BoundedText.VIOLATION_REASON_MAX) shouldBe true
+    "모르는 타입도 한국어 일반 문구다 — 영문 코드·원시 detail 이 화면에 새지 않는다" {
+        val reason = ViolationText.reasonOf(listOf(Violation("SOMETHING_NEW", 0, 0, "day window(540~1320) 밖")))!!
+        reason shouldBe "일정 조건과 맞지 않아요"
+        Regex("""\d|[A-Za-z_]""").containsMatchIn(reason) shouldBe false
     }
 
     "한 슬롯에 위반이 여러 건이어도 '범위 밖'으로 잘못 세지 않는다" {

@@ -457,13 +457,13 @@ class EditItineraryServiceTest : StringSpec({
         shouldThrow<ResourceNotFound> { EditItineraryService(trips(false), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock).edit(acc, tripId, editReq) }
     }
 
-    "위반 사유가 슬롯에 저장된다 — 여러 건이면 이어 붙이고 중복은 접는다" {
+    "위반 사유는 사용자 정성 문구다 — 타입으로 번역하고 중복은 접는다(TRIP-1030)" {
         val repo = repoWith(current())
         val agent = EditFakeAgent(
             listOf(
-                Violation("TRAVEL_TIME", 0, 0, "이동이 빠듯해요"),
-                Violation("OPENING_HOURS", 0, 0, "영업시간 밖"),
-                Violation("TRAVEL_TIME", 0, 0, "이동이 빠듯해요"), // 중복
+                Violation("TRAVEL_TIME", 0, 0, "이동 54분 필요, 간격 -60분"), // 상대 detail — 그대로 내보내면 INV-3 위반
+                Violation("OPENING_HOURS", 0, 0, "영업시간 밖: 543~618"),
+                Violation("TRAVEL_TIME", 0, 0, "이동 54분 필요, 간격 -60분"), // 중복
             ),
         )
         val result = EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock)
@@ -471,7 +471,9 @@ class EditItineraryServiceTest : StringSpec({
 
         val slot = result.days.single().slots.first()
         slot.hasViolation shouldBe true
-        slot.violationReason shouldBe "이동이 빠듯해요 · 영업시간 밖"
+        slot.violationReason shouldBe "앞 장소에서 이동할 시간이 빠듯해요 · 영업시간과 맞지 않아요"
+        // 숫자 소요시간·원시 분값·영문 코드가 새지 않는다(QA #079 #064 재발 잠금)
+        Regex("""\d+\s*분|\d+\s*시간|\d{3,}|[A-Z_]{2,}""").containsMatchIn(slot.violationReason!!) shouldBe false
     }
 
     "AI 재검증이 실패해도 편집은 500 이 되지 않는다 — 저장되고 직전 위반 표시가 유지된다" {
@@ -499,10 +501,11 @@ class EditItineraryServiceTest : StringSpec({
 
         // 편집은 사용자의 의도라 저장된다
         result.days.single().slots.map { it.sourcePoiId } shouldBe listOf(poiB, poiA)
-        // 판정을 못 했으니 "깨끗하다"고 말하지 않는다 — poiA 의 직전 표시가 그대로 남는다
+        // 판정을 못 했으니 "깨끗하다"고 말하지 않는다 — 플래그는 남는다. 다만 이 편집이 poiA 의
+        // 시각을 옮겼으므로 옛 사유를 그대로 붙이면 바뀐 시각에 참이 아닐 수 있다 → 중립 문구(TRIP-1030 결정 3).
         val a = result.days.single().slots.single { it.sourcePoiId == poiA }
         a.hasViolation shouldBe true
-        a.violationReason shouldBe "영업시간 밖"
+        a.violationReason shouldBe PriorViolations.STALE_REASON
         // 이력 없는 새 슬롯은 표시가 없다(원래 기본값 — 새 거짓을 만들지 않는다)
         result.days.single().slots.single { it.sourcePoiId == poiB }.hasViolation shouldBe false
     }
@@ -523,14 +526,23 @@ class EditItineraryServiceTest : StringSpec({
         result.unplacedMustVisits.single().poiId shouldBe missed
     }
 
-    "사유 없는 위반은 배지만 켜고 사유는 비운다(CHECK 제약과도 맞는다)" {
+    "detail 이 없어도 타입만으로 사용자 문구를 만든다 — 배지만 켜고 이유를 숨기지 않는다(TRIP-1030)" {
         val repo = repoWith(current())
         val agent = EditFakeAgent(listOf(Violation("HC1", 0, 0, null)))
         val slot = EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock)
             .edit(acc, tripId, editReq).days.single().slots.first()
 
         slot.hasViolation shouldBe true
-        slot.violationReason shouldBe null
+        slot.violationReason shouldBe "영업시간과 맞지 않아요"
+    }
+
+    "모르는 위반 타입도 한국어 일반 문구다 — 영문 코드가 화면에 새지 않는다" {
+        val repo = repoWith(current())
+        val agent = EditFakeAgent(listOf(Violation("HC9_FUTURE", 0, 0, "whatever")))
+        val slot = EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock)
+            .edit(acc, tripId, editReq).days.single().slots.first()
+
+        slot.violationReason shouldBe "일정 조건과 맞지 않아요"
     }
 
     "위치를 못 찾은 위반은 어느 슬롯에도 안 붙는다 — 조용히 사라지지 않게 로그로 드러낸다" {
