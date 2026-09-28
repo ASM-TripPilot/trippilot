@@ -2,6 +2,9 @@
  * @jest-environment ./src/test-support/deviceTimeZoneEnvironment.cjs
  */
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import type { ReactTestInstance } from 'react-test-renderer';
+
+import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
 
 import { VisitTimeSheet } from './VisitTimeSheet';
 
@@ -18,7 +21,8 @@ import { VisitTimeSheet } from './VisitTimeSheet';
  * *(개념)* 이 파일은 기기 시간대를 **LA 로 바꿔** 돈다 — 로컬 개발기가 KST 라 그냥 돌리면 기기 시계
  *   구현도 통과해 버린다(seoulDate.test 선례).
  * *(개념)* `@gorhom/bottom-sheet` 목은 children 을 무조건 렌더한다 — 딤·개폐는 6-b(AC-11).
- * *(개념)* `fireEvent.press` 는 disabled 를 막지 않는다 → "완료가 실리지 않는다"는 onSave 인자로 판정.
+ * *(개념)* `fireEvent.press` 는 `disabled` Pressable 을 막는다(RNTL 13.3.3 실측, TRIP-1080 02a §5) — 그래도
+ *   "완료가 실리지 않는다"는 막는 방식과 무관하게 onSave 인자로 판정한다.
  *
  * 3동작: 준비 = 원본 순간·now 로 렌더 → 실행 = 셀·버튼 press → 단언 = 선택 셀·오류·onSave 인자.
  */
@@ -317,5 +321,208 @@ describe('S9 · 취소 — onCancel 만, onSave 는 안 부른다', () => {
 
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(onSave).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * TRIP-1080 · W — 셀 컬럼을 공용 휠(`shared/ui/WheelPicker`) 4열로 바꾼 뒤의 계약.
+ *
+ * 무엇을 보장하나:
+ *  - W1 시트를 열면 네 휠이 **현재 서울 시각 위치**에서 시작한다(00 부터가 아니라).
+ *  - W2·W3 스크롤이 멈춘 값이 곧 선택이고 저장에 실린다(TRIP-990 D21 — 굴린 값이 버려지지 않는다, INV-4).
+ *  - W4 본문 끌기를 끈다(`enableContentPanningGesture={false}`) — 휠을 굴릴 때 시트가 같이 끌려가지 않게.
+ *    `onClose` 를 쥔 바깥 `BottomSheet` 에 있어야 한다.
+ *  - W5 딤 탭 등으로 시트가 닫히면 `onCancel` 을 불러 페이지의 편집 상태를 푼다(다시 열 수 있게).
+ *  - W6·W7 원본 완료가 없으면 완료 휠이 닫힌다(TRIP-1069 D1) — 있으면 평소대로 움직인다.
+ *  - W8 현재 위치에서 멈춰도 "바뀜"이 아니다(분 단위 diff — 헛 PATCH 없음, TRIP-1069 AC-7).
+ *
+ * *(개념)* `contentOffset` = 스크롤뷰가 처음에 몇 px 내려간 곳에서 시작하는지. jest 는 실제로 굴리지
+ *   못하므로 이 prop 을 읽어 "어디서 시작하나"를 본다. 위 패딩 덕에 `k × 셀 높이` 면 k 번째 값이 가운데다.
+ * *(개념)* `fireEvent(휠, 'momentumScrollEnd', …)` = "관성 스크롤이 이 위치에서 멈췄다"는 신호를 직접 쏜다.
+ *
+ * 커버하지 않는 것(6-b 실기): 실제 스냅·관성, 관성 없이 손을 뗄 때 정지 이벤트가 오는지, 휠을 끌 때
+ *   시트가 정말 안 따라오는지(목은 prop 만 받는다), 닫힌 완료 휠의 흐린 모양.
+ *
+ * 3동작 뼈대: 준비=원본 순간으로 렌더 → 실행=휠 정지·닫힘 신호·[저장] → 단언=휠 위치·선택 표식·onSave 인자.
+ */
+describe('🔴 W · TRIP-1080 — 공용 휠 4열 시트', () => {
+  /** 서울 21:42 도착 · 22:30 완료 — 문자열 slice 면 12:42, LA 기기 시계면 05:42 라 셋이 다 갈린다. */
+  const LATE = {
+    arrivedAt: '2026-09-28T12:42:00Z',
+    completedAt: '2026-09-28T13:30:00Z',
+    now: '2026-09-28T15:00:00Z',
+  };
+  const SHEET = 'record-trip-visit-time-sheet';
+
+  const wheel = (field: 'arrived' | 'completed', unit: 'h' | 'm') =>
+    `record-trip-visit-time-${field}-${unit}-wheel`;
+
+  /** 휠이 index 번째 값이 가운데 오는 위치에서 멈췄다고 알린다. */
+  function settle(
+    field: 'arrived' | 'completed',
+    unit: 'h' | 'm',
+    index: number
+  ) {
+    fireEvent(screen.getByTestId(wheel(field, unit)), 'momentumScrollEnd', {
+      nativeEvent: { contentOffset: { x: 0, y: index * WHEEL_CELL_HEIGHT } },
+    });
+  }
+
+  it('W1 · AC-1 — 열면 네 휠이 21·42·22·30 위치에서 시작하고 그 셀이 선택돼 있다', () => {
+    renderSheet(LATE);
+
+    expect(
+      screen.getByTestId(wheel('arrived', 'h')).props.contentOffset?.y
+    ).toBe(21 * WHEEL_CELL_HEIGHT);
+    expect(
+      screen.getByTestId(wheel('arrived', 'm')).props.contentOffset?.y
+    ).toBe(42 * WHEEL_CELL_HEIGHT);
+    expect(
+      screen.getByTestId(wheel('completed', 'h')).props.contentOffset?.y
+    ).toBe(22 * WHEEL_CELL_HEIGHT);
+    expect(
+      screen.getByTestId(wheel('completed', 'm')).props.contentOffset?.y
+    ).toBe(30 * WHEEL_CELL_HEIGHT);
+
+    expect(screen.getByTestId(cell('arrived', 'h', '21'))).toBeSelected();
+    expect(screen.getByTestId(cell('arrived', 'm', '42'))).toBeSelected();
+    expect(screen.getByTestId(cell('completed', 'h', '22'))).toBeSelected();
+    expect(screen.getByTestId(cell('completed', 'm', '30'))).toBeSelected();
+  });
+
+  it('W2 · AC-2 — 도착 시 휠이 20 에서 멈추면 20 이 선택되고, 저장하면 도착만 11:42Z 로 실린다', () => {
+    renderSheet(LATE);
+
+    settle('arrived', 'h', 20);
+
+    expect(screen.getByTestId(cell('arrived', 'h', '20'))).toBeSelected();
+    expect(screen.getByTestId(cell('arrived', 'h', '21'))).not.toBeSelected();
+
+    save();
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    const [patch] = onSave.mock.calls[0]!;
+    expect(Object.keys(patch)).toEqual(['arrivedAt']);
+    expect(patch.arrivedAt).toMatch(/Z$/);
+    expect(Date.parse(patch.arrivedAt!)).toBe(
+      Date.parse('2026-09-28T11:42:00Z')
+    );
+  });
+
+  it('W3 · AC-2 짝 — 도착 분 휠이 05 에서 멈추면 저장에 12:05Z 로 실린다', () => {
+    renderSheet(LATE);
+
+    settle('arrived', 'm', 5);
+
+    expect(screen.getByTestId(cell('arrived', 'm', '05'))).toBeSelected();
+
+    save();
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    const [patch] = onSave.mock.calls[0]!;
+    expect(Object.keys(patch)).toEqual(['arrivedAt']);
+    expect(Date.parse(patch.arrivedAt!)).toBe(
+      Date.parse('2026-09-28T12:05:00Z')
+    );
+  });
+
+  it('W4 · AC-4 — 닫힘을 쥔 바깥 시트가 본문 끌기를 끈다(enableContentPanningGesture false)', () => {
+    renderSheet(LATE);
+
+    // onClose 를 가진 가장 가까운 조상 = 닫힘을 쥔 BottomSheet(MustVisit A3 선례).
+    let owner: ReactTestInstance | null = screen.getByTestId(SHEET);
+    while (owner !== null && typeof owner.props.onClose !== 'function') {
+      owner = owner.parent;
+    }
+
+    expect(owner).not.toBeNull();
+    // toBe(false) — prop 을 지우면(undefined) 라이브러리 기본값 true 로 돌아간다(02a ★4).
+    expect(owner?.props.enableContentPanningGesture).toBe(false);
+    // 안쪽 BottomSheetView(testID 를 가진 자리)에 onClose 를 달면 실기에선 딤이 안 먹는다(02a ★5).
+    expect(owner?.props.testID).not.toBe(SHEET);
+  });
+
+  it('W5 · AC-5 — 시트가 닫히면(딤 탭 대역) onCancel 1회, onSave 0회', () => {
+    renderSheet(LATE);
+    expect(onCancel).not.toHaveBeenCalled();
+
+    fireEvent(screen.getByTestId(SHEET), 'close');
+
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('W6 · AC-8 · D1 — 완료 없는 방문: 완료 휠은 닫혀 멈춤·press 로 선택이 안 생기고, 저장엔 도착만 실린다', () => {
+    renderSheet({ ...LATE, completedAt: null });
+    const COMPLETED_CELL = /^record-trip-visit-time-completed-[hm]-\d{2}$/;
+    const selectedCompleted = () =>
+      screen
+        .queryAllByTestId(COMPLETED_CELL)
+        .filter((node) => node.props.accessibilityState?.selected === true)
+        .map((node) => node.props.testID as string);
+
+    // 모집단 앵커 — 완료 셀 24(시)+60(분)이 실재해야 아래 [] 가 뜻을 가진다(02a ★9).
+    expect(screen.queryAllByTestId(COMPLETED_CELL).length).toBe(84);
+    expect(
+      screen.getByTestId('record-trip-visit-time-completed')
+    ).toBeDisabled();
+    // 완료 휠 둘은 스크롤이 꺼지고, 도착 휠은 아니다(짝).
+    expect(
+      screen.getByTestId(wheel('completed', 'h')).props.scrollEnabled
+    ).toBe(false);
+    expect(
+      screen.getByTestId(wheel('completed', 'm')).props.scrollEnabled
+    ).toBe(false);
+    expect(
+      screen.getByTestId(wheel('arrived', 'h')).props.scrollEnabled
+    ).not.toBe(false);
+    expect(selectedCompleted()).toEqual([]);
+
+    settle('completed', 'h', 15);
+    settle('completed', 'm', 45);
+    press(cell('completed', 'h', '16'));
+    settle('arrived', 'h', 20);
+
+    expect(selectedCompleted()).toEqual([]);
+    save();
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    const [patch] = onSave.mock.calls[0]!;
+    // 짝 — 도착은 실린다(공허 통과 방지), 완료는 안 실린다.
+    expect(Object.keys(patch)).toEqual(['arrivedAt']);
+  });
+
+  it('W7 · AC-8 짝 — 완료가 있는 방문은 완료 시 휠이 23 에서 멈추면 선택이 옮겨 가고 14:30Z 로 실린다', () => {
+    renderSheet(LATE);
+
+    settle('completed', 'h', 23);
+
+    expect(screen.getByTestId(cell('completed', 'h', '23'))).toBeSelected();
+    expect(screen.getByTestId(cell('completed', 'h', '22'))).not.toBeSelected();
+
+    save();
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    const [patch] = onSave.mock.calls[0]!;
+    expect(Object.keys(patch)).toEqual(['completedAt']);
+    expect(patch.completedAt).toMatch(/Z$/);
+    expect(Date.parse(patch.completedAt!)).toBe(
+      Date.parse('2026-09-28T14:30:00Z')
+    );
+  });
+
+  it('W8 · AC-9 — 네 휠이 모두 현재 위치에서 멈추고 저장하면 onSave 1회, 시각 키 0개', () => {
+    renderSheet(LATE);
+
+    settle('arrived', 'h', 21);
+    settle('arrived', 'm', 42);
+    settle('completed', 'h', 22);
+    settle('completed', 'm', 30);
+    save();
+
+    // 1회 + 빈 patch — 0회면 "시각 키 없음"이 공허하게 참이 된다(02a ★8).
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(Object.keys(onSave.mock.calls[0]![0])).toEqual([]);
+    expect(screen.queryByTestId('record-trip-visit-time-error')).toBeNull();
   });
 });

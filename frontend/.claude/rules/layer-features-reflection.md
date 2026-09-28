@@ -22,7 +22,7 @@ paths:
 | `model/useDailyReflection.ts` | POST(생성)·PUT(저장)·GET(목록) 훅을 감싼다(새 HTTP 0). 목록 GET에서 `dayDate` 항목을 고르고(`items?.find` — `items`도 옵셔널 체이닝해야 `{items:null}`에 안 죽는다, [[옵셔널 체이닝은 매 단계 필요]]) create/saveEdit 래핑. `source`는 보존만(BR-U5-33). POST·PUT 성공은 같은 지역 함수 `replaceDay`로 목록 캐시의 그 날 항목을 응답으로 교체(캐시가 비면 무효화)한다 — 재조회 없이 화면이 갱신된다(TRIP-1068, TRIP-980과 동형). `isCreateError`(=`post.isError`)가 생성 실패를 페이지에 노출한다(BR-U5-36) |
 | `ui/DailyReflectionScreen.tsx` | 무상태 **5얼굴**(default·data-insufficient·empty·error·**pending**, TRIP-1068) + 편집 모드. `pending`은 조회·생성 진행 중 안내(`StateNotice` 재사용, `ShareCardPage.tsx` 선례)만 보이고 하단 CTA는 없다. 편집 진입은 데이터 얼굴이면 헤더 `reflection-daily-edit`, empty/error면 하단 CTA `reflection-daily-compose`. 저장은 `canSave = text.trim().length>0`(`disabled`+`accessibilityState.disabled` 짝), `onSaveEdit`가 Promise면 성공일 때만 편집을 닫고 실패면 안내 문구를 보인다. 편집 상한 **4000자**(서버 권위 `EditReflectionRequest.maxLength`). 지도는 실 좌표가 있을 때만 `MapView`(`LOCKED_CALLERS` 등재), 없으면 placeholder — 계약에 좌표가 없어 오늘은 늘 placeholder([[degrade 스텁 — 못 켜는 기능은 정직하게 꺼둔다]]). ⚠️ 얼굴 판정은 "레코드 존재"를 "생성 실패"보다 먼저 본다 — `post.isError`는 PUT 성공 뒤에도 남아 두 조건이 동시에 참일 수 있는데 이 순서를 지키는 단위 테스트가 없다(03b W-1, 문제로그 없이 각주로만 인계). 공유 아이콘은 `onShare`가 있을 때만(`canShare`는 페이지가 trip `status === 'ENDED'`로 판정, BR-U5-48) |
 | `ui/DailyReflectionScreen.test.tsx` | empty/error CTA·편집 모드 `maxLength`·저장 활성 짝·렌더 스모크 |
-| `ui/ReflectionStatsRow.tsx` | `reflection-daily-stats` 3열(방문·이동·사진), `distanceDash`면 "—". 소요시간 문자열 0(INV-3) |
+| `ui/ReflectionStatsRow.tsx` | `reflection-daily-stats` 3열(방문·이동·사진), `distanceDash`면 "—" 아니면 `formatKm`. 소요시간 문자열 0(INV-3) |
 | `ui/NarrativeBlock.tsx` | `reflection-daily-narrative` — 완성 표시본을 그대로 렌더. `draftCard`·`editedCard`·`resolveDisplayNarrative`를 참조하지 않는다(AC-8 소스 강제). 내부 주석의 옛 필드명은 낡았다 |
 | `ui/ReflectionPhotoGrid.tsx` | `reflection-daily-photo-grid` — `Reflection`에 사진 URL이 없어 페이지가 항상 `photos=[]` |
 | `ui/ChangeSummaryRow.tsx` | `reflection-daily-change-summary` 변경 요약 행 — 하트 버튼은 근거가 없어 자리만 |
@@ -36,7 +36,9 @@ paths:
 |---|---|
 | `model/summaryView.ts` | `shareEnabled(envelope)=envelope.ready===true` · `resolveSummaryView(stats)=hasLocationData?'MAP':'VISIT_LIST'` · `toOrderedVisitList`(일자 넘어 전역 1..N 평탄화, 순서 보존) · `distanceSourceLabel`(`ROUTE→'경로'`/그 외→`'근사'`) · `daySubtitle`(≥2→`첫→마지막`, 테마 문구 발명 금지 BR-U5-31) |
 | `model/summaryView.test.ts` | 진리표 + `toOrderedVisitList` PBT(순서 보존·번호 연속) |
-| `model/summaryStats.ts` | `summaryStats(stats?)` — 방문·사진 `?? 0`, 거리는 `!hasLocationData`면 `'—'`(0km 아님) |
+| `model/formatKm.ts` | `formatKm(km) → 'X.Ykm'` (TRIP-1086) — 서버 double 거리를 0.1 반올림·끝 `.0` 생략(`1.929…→'1.9km'`, `12→'12km'`). 거리 문자열은 **이 함수 하나**로 만든다(소비처: `ReflectionStatsRow`·`summaryStats`·`reflectionFallback` ③ — `reflectionDistanceFormatStructure.test.ts`가 직접 보간 재발을 소스 스캔으로 막는다). ★ `toFixed(1)`은 0.15를 '0.1'로 내려 쓰지 않는다. **'—'(측정 못 함) 판정은 호출부 몫이고 `formatKm`은 모른다** — 그런데 `reflectionFallback` ③ `basicNarrative`에는 그 판정이 없어 방문 1곳 이하에도 `이동 0km`을 쓴다(타일은 `—`, 이번 diff 전부터의 동작·후속 티켓 후보). 50m 미만(방문 2곳 이상)은 `'0km'`. 미터 입력·m 단위의 `entities/place` `formatDistance`와는 별개다(입력 단위·`.0` 처리가 달라 재사용 안 함) |
+| `model/formatKm.test.ts` | 경계 예제(0.15·0.35·0.95·1.15) + PBT(형식·오차≤0.05·단조·동점 half-up) — `toFixed(1)` 뮤테이션에 red |
+| `model/summaryStats.ts` | `summaryStats(stats?)` — 방문·사진 `?? 0`, 거리는 `!hasLocationData`면 `'—'`(0km 아님), 아니면 `formatKm` |
 | `model/summaryStats.test.ts` | 0채움·거리 대시·완전 입력 |
 | `model/useTripSummary.ts` | `useGetTripsTripIdSummary` 얇은 래퍼(새 HTTP 0), envelope 그대로 |
 | `ui/TripSummaryScreen.tsx` | 무상태 — stats 3셀 · MAP 분기(좌표 없으면 `reflection-summary-map-pending`, 가짜 기본센터 금지) · VISIT_LIST 분기 · `DayHighlightCard` · 공유 버튼(`disabled` 짝 — press 콜백 0회가 실질 그물). `LOCKED_CALLERS` 등재 |

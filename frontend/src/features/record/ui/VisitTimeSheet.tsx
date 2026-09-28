@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import { useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetView,
@@ -8,16 +8,18 @@ import BottomSheet, {
 } from '@gorhom/bottom-sheet';
 
 import { seoulDate, seoulInstant, seoulTime } from '@/shared/date/seoulDate';
+import { WheelPicker } from '@/shared/ui/WheelPicker';
 
 import { adjustTimesDraft } from '../model/adjustTimesDraft';
 
 /**
- * TRIP-613 · j01 방문 시각 편집 시트 — 도착·완료 시각을 셀 press 로 고쳐 저장한다.
+ * TRIP-613 · j01 방문 시각 편집 시트 — 도착·완료 시각을 휠로 골라 저장한다.
  *
- * SlotTimeSheet(features/itinerary) 구조를 준용하되 record 에 자체 구현했다(features 간 import 금지).
- * 이 리포엔 휠(스크롤-스냅) 시각 피커 라이브러리가 없고 jest 는 스크롤-스냅을 구동하지 못한다 —
- * 게다가 휠을 바텀시트에 넣으면 `enableContentPanningGesture` 회귀가 재발한다(repo-traps TRIP-599).
- * 그래서 시·분을 값별 셀로 두고 press 로 고른다. 분 셀은 맨 숫자다("30"이지 "30분" 금지 — INV-3).
+ * TRIP-1080 — 시·분은 공용 `shared/ui/WheelPicker` 4열(도착 시·분, 완료 시·분)이다. 휠은 셀 press 와
+ * 스크롤 정지 두 길로 값을 확정한다. 바텀시트 본문 끌기가 휠 제스처를 삼키지 않도록 바깥 시트에
+ * `enableContentPanningGesture={false}` 를 준다(jest 목은 이 prop 을 렌더로 구분 못 한다 — repo-traps
+ * 바텀시트 절, 실제 분리는 6-b 실기). 딤으로 닫히면 `onClose` 가 `onCancel` 을 불러 부모 열림 상태를 푼다.
+ * 분 셀은 맨 숫자다("30"이지 "30분" 금지 — INV-3).
  *
  * TRIP-1069 — 셀은 원본 순간을 **서울 시계**로 읽어 시드하고, 저장은 "원본의 서울 날짜 + 고른 서울 HH:mm"
  * 을 UTC 순간(`Z`)으로 되돌린다. 바뀜 판정은 **분 단위**(피커 해상도)라 원본의 초·소수는 헛 PATCH 를 안 낸다.
@@ -73,46 +75,8 @@ function renderTimeSheetBackdrop(
   );
 }
 
-/** 값 하나 = 누를 수 있는 셀. 선택되면 `accessibilityState.selected` 로 표시(SlotTimeSheet 선례). */
-function TimeCell({
-  testID,
-  label,
-  selected,
-  disabled,
-  onPress,
-}: {
-  testID: string;
-  label: string;
-  selected: boolean;
-  disabled: boolean;
-  onPress: () => void;
-}): ReactElement {
-  return (
-    <Pressable
-      testID={testID}
-      accessibilityRole="button"
-      accessibilityState={{ selected, disabled }}
-      disabled={disabled}
-      onPress={onPress}
-      className={`items-center justify-center rounded-button px-md py-sm ${
-        selected ? 'bg-primary-pale' : ''
-      }`}
-    >
-      <Text
-        className={`text-card-title ${
-          selected
-            ? 'font-noto-bold font-bold text-primary-text'
-            : 'font-noto text-body'
-        }`}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
-/** 한 컬럼(시 또는 분) — 모든 값 셀이 트리에 실재한다(jest 는 뷰포트가 아니라 트리를 본다). */
-function TimeColumn({
+/** 한 휠(시 또는 분) — 값 셀 testID 는 셀 컬럼 시절 그대로 주입한다. 폭은 휠 루트가 w-full 이라 래퍼가 정한다. */
+function TimeWheel({
   field,
   unit,
   values,
@@ -124,26 +88,23 @@ function TimeColumn({
   unit: 'h' | 'm';
   values: string[];
   selected: string;
-  /** 닫힌 칸 — 셀이 눌리지 않고 선택 표시도 없다(가짜 00:00 시드를 보이지 않게). */
+  /** 닫힌 칸 — 굴리지도 누르지도 못하고 선택 표시도 없다(가짜 00:00 시드를 강조하지 않게). */
   disabled?: boolean;
   onSelect: (value: string) => void;
 }): ReactElement {
   return (
-    <ScrollView
-      className="h-[168px] w-[60px]"
-      showsVerticalScrollIndicator={false}
-    >
-      {values.map((value) => (
-        <TimeCell
-          key={value}
-          testID={`record-trip-visit-time-${field}-${unit}-${value}`}
-          label={value}
-          selected={!disabled && selected === value}
-          disabled={disabled}
-          onPress={() => onSelect(value)}
-        />
-      ))}
-    </ScrollView>
+    <View className="w-[60px]">
+      <WheelPicker
+        testID={`record-trip-visit-time-${field}-${unit}-wheel`}
+        values={values}
+        selected={selected}
+        disabled={disabled}
+        onSelect={onSelect}
+        testIDForValue={(value) =>
+          `record-trip-visit-time-${field}-${unit}-${value}`
+        }
+      />
+    </View>
   );
 }
 
@@ -170,7 +131,7 @@ export function VisitTimeSheet({
   );
   const [showError, setShowError] = useState(false);
 
-  // 원본 완료가 없으면 완료 칸을 닫는다(D1) — 셀 자체가 안 눌려 버려질 입력이 생기지 않는다(INV-4).
+  // 원본 완료가 없으면 완료 칸을 닫는다(D1) — 휠이 안 굴러가고 안 눌려 버려질 입력이 생기지 않는다(INV-4).
   const completedDisabled = completedAt == null;
 
   function handleSave(): void {
@@ -204,7 +165,11 @@ export function VisitTimeSheet({
   }
 
   return (
-    <BottomSheet backdropComponent={renderTimeSheetBackdrop}>
+    <BottomSheet
+      backdropComponent={renderTimeSheetBackdrop}
+      enableContentPanningGesture={false}
+      onClose={onCancel}
+    >
       <BottomSheetView
         testID="record-trip-visit-time-sheet"
         className="w-full gap-lg px-lg pb-[28px] pt-md"
@@ -221,8 +186,8 @@ export function VisitTimeSheet({
           </Text>
         </View>
 
-        {/* Figma 4524:2383 — 도착·완료 두 칸을 가로 2열로. 칸 안은 HH:mm 박스 대신 셀 피커(탭 뒤 상태가
-            Figma 에 없고, 바텀시트 안 휠은 제스처 회귀 — 위 머리 주석). */}
+        {/* Figma 4524:2383 — 도착·완료 두 칸을 가로 2열로. 칸 안은 HH:mm 박스 대신 시·분 휠(편집 상태
+            프레임이 Figma 에 없어 기존 토큰으로 최소 모양 — 휠 제스처 분리는 위 머리 주석). */}
         <View className="w-full flex-row gap-md">
           <View
             testID="record-trip-visit-time-arrived"
@@ -232,7 +197,7 @@ export function VisitTimeSheet({
               {ARRIVED_LABEL}
             </Text>
             <View className="w-full flex-row items-center justify-center gap-sm">
-              <TimeColumn
+              <TimeWheel
                 field="arrived"
                 unit="h"
                 values={HOURS}
@@ -242,7 +207,7 @@ export function VisitTimeSheet({
               <Text className="font-noto-bold text-section font-bold text-ink">
                 :
               </Text>
-              <TimeColumn
+              <TimeWheel
                 field="arrived"
                 unit="m"
                 values={MINUTES}
@@ -261,7 +226,7 @@ export function VisitTimeSheet({
               {COMPLETED_LABEL}
             </Text>
             <View className="w-full flex-row items-center justify-center gap-sm">
-              <TimeColumn
+              <TimeWheel
                 field="completed"
                 unit="h"
                 values={HOURS}
@@ -272,7 +237,7 @@ export function VisitTimeSheet({
               <Text className="font-noto-bold text-section font-bold text-ink">
                 :
               </Text>
-              <TimeColumn
+              <TimeWheel
                 field="completed"
                 unit="m"
                 values={MINUTES}

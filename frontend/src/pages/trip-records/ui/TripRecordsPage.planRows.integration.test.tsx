@@ -11,6 +11,7 @@ import {
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { tripRecordsTrip } from '@/test-support/tripRecordsTrip';
 
 import { TripRecordsPage } from './TripRecordsPage';
 
@@ -157,6 +158,10 @@ beforeEach(() => {
   observedHits = [];
   mockGetForeground.mockReset();
   server.use(
+    // TRIP-1085 — 페이지가 시트 헤더 여행명을 GET /trips/{tripId} 로 얻는다.
+    http.get(`${BASE}/trips/:tripId`, () =>
+      HttpResponse.json(tripRecordsTrip())
+    ),
     http.get(`${BASE}/trips/:tripId/itinerary`, () =>
       HttpResponse.json(itinerary())
     ),
@@ -339,9 +344,8 @@ describe('TripRecordsPage · 기록 조회 실패·로딩 (TRIP-1021 5-c 경고5
     render(<TripRecordsPage tripId={TRIP_ID} today={DAY} />, { wrapper });
 
     // 앵커 — 일자 탭이 그려졌고(일정 도착) 기록 조회가 나가 응답을 기다리는 중이다.
-    expect(
-      await screen.findByTestId(`record-trip-day-tab-${DAY}`)
-    ).toBeOnTheScreen();
+    // (TRIP-1085 — 옛 `record-trip-day-tab-{date}` → 셸 `sheet-daychip-{index}`. DAY=0 · DAY2=1.)
+    expect(await screen.findByTestId('sheet-daychip-0')).toBeOnTheScreen();
     await waitFor(() => expect(hitCount(VISITS_GET)).toBe(1));
     expect(screen.queryByTestId('record-trip-empty')).toBeNull();
     expect(screen.queryByTestId('record-trip-error')).toBeNull();
@@ -379,12 +383,12 @@ describe('TripRecordsPage · "방문 체크"는 오늘 탭에서만 (TRIP-1021 5
     expect(await screen.findByTestId(checkId(KEY_P4))).toBeOnTheScreen();
 
     // 미래(2일차) — 행은 보이되 버튼은 0.
-    fireEvent.press(screen.getByTestId(`record-trip-day-tab-${DAY2}`));
+    fireEvent.press(screen.getByTestId('sheet-daychip-1'));
     expect(await screen.findByTestId(rowId(KEY_P5))).toBeOnTheScreen();
     expect(screen.queryAllByTestId(/^record-trip-plan-check-/)).toHaveLength(0);
 
     // 오늘로 돌아오면 다시 선다("탭을 한 번이라도 고르면 끔" 오구현 차단).
-    fireEvent.press(screen.getByTestId(`record-trip-day-tab-${DAY}`));
+    fireEvent.press(screen.getByTestId('sheet-daychip-0'));
     expect(await screen.findByTestId(checkId(KEY_P4))).toBeOnTheScreen();
     expect(postBodies).toHaveLength(0);
   });
@@ -399,7 +403,7 @@ describe('TripRecordsPage · "방문 체크"는 오늘 탭에서만 (TRIP-1021 5
     expect(screen.queryAllByTestId(/^record-trip-plan-check-/)).toHaveLength(0);
 
     // 오늘(2일차) — 버튼이 있다.
-    fireEvent.press(screen.getByTestId(`record-trip-day-tab-${DAY2}`));
+    fireEvent.press(screen.getByTestId('sheet-daychip-1'));
     expect(await screen.findByTestId(checkId(KEY_P5))).toBeOnTheScreen();
   });
 });

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
   getGetTripsTripIdVisitsVisitCheckIdPhotosQueryKey,
@@ -27,6 +27,12 @@ import { photoAttach, type PhotoAssetMeta } from './photoAttach';
  *    노출 → fire-and-forget 호출자가 unhandled rejection 을 안 낸다). 기존 `addPhoto`(reject-on-fail)는 무변경.
  *  - `failedUploads` = 실패로 노출 중인 자산 목록(재시도 대상). 성공하면 그 자산이 목록에서 빠진다.
  *  - `retryUpload(localAssetId)` = 저장해 둔 자산·동의로 같은 POST 를 다시 부른다(재실패=재노출, 중복 없음).
+ *
+ * TRIP-1078 · 메모 세션 캐시(결정 2(b)) — 메모를 읽는 GET 이 없어서, PUT 에 성공한 텍스트를 Query 캐시
+ * (`['visit-memo', tripId, visitCheckId]`)에 두고 `savedMemo` 로 노출한다. 카드가 다시 마운트되면 이 값으로
+ * 입력칸을 시드한다. 앱을 다시 켜면 빈다(BE 조회 계약 전까지의 한계).
+ *  - ★ 관찰자 쿼리를 `gcTime: Infinity` 로 건다 — 없으면 화면을 떠난 뒤 GC 가 값을 지운다.
+ *  - 마지막 성공값과 같은 텍스트면 PUT 0회(blur 마다 같은 PUT 방지). 실패는 캐시에 안 남으므로 재시도는 나간다.
  */
 export function useVisitAttachments({
   tripId,
@@ -41,6 +47,15 @@ export function useVisitAttachments({
     visitCheckId
   );
   const query = useGetTripsTripIdVisitsVisitCheckIdPhotos(tripId, visitCheckId);
+  const memoKey = ['visit-memo', tripId, visitCheckId];
+  // 서버에서 읽지 않는다(enabled false) — saveMemo 가 setQueryData 로만 채우는 세션 저장소.
+  const memoQuery = useQuery<string | null>({
+    queryKey: memoKey,
+    queryFn: () => null,
+    enabled: false,
+    gcTime: Infinity,
+    staleTime: Infinity,
+  });
 
   // 실패로 노출 중인 자산 — 재시도가 같은 POST 를 다시 부를 수 있게 자산 메타·동의를 함께 쥔다.
   const [failures, setFailures] = useState<
@@ -89,9 +104,11 @@ export function useVisitAttachments({
   async function saveMemo(text: string): Promise<void> {
     const trimmed = text.trim();
     if (trimmed === '') return;
+    if (queryClient.getQueryData<string | null>(memoKey) === trimmed) return;
     await putTripsTripIdVisitsVisitCheckIdMemo(tripId, visitCheckId, {
       text: trimmed,
     });
+    queryClient.setQueryData(memoKey, trimmed);
   }
 
   return {
@@ -105,5 +122,6 @@ export function useVisitAttachments({
     })),
     retryUpload,
     saveMemo,
+    savedMemo: memoQuery.data ?? null,
   };
 }

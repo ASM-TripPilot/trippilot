@@ -15,6 +15,9 @@ import {
 import { PlusGlyph } from '@/features/record/ui/RecordGlyphs';
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
+import { renderedText } from '@/test-support/sheetTree';
+import { tripRecordsTrip } from '@/test-support/tripRecordsTrip';
 
 import { TripRecordsPage } from './TripRecordsPage';
 
@@ -217,6 +220,10 @@ beforeEach(() => {
   patchBodies = [];
   memoBodies = [];
   server.use(
+    // TRIP-1085 — 페이지가 시트 헤더 여행명을 GET /trips/{tripId} 로 얻는다.
+    http.get(`${BASE}/trips/:tripId`, () =>
+      HttpResponse.json(tripRecordsTrip())
+    ),
     http.get(`${BASE}/trips/:tripId/itinerary`, () =>
       HttpResponse.json(itinerary())
     ),
@@ -556,7 +563,7 @@ describe('AC-9 · 저장 결과 안내', () => {
 });
 
 describe('AC-12·AC-13·AC-15 · 메모 실배선 + 무반응 폴백 0', () => {
-  it('도착만 한 카드에서 메모를 제출하면 PUT memo 1회, 페이지 어디에도 정적 +·메모 글자가 없다', async () => {
+  it('도착만 한 카드에서 메모를 쓰고 포커스를 빼면 PUT memo 1회, 페이지 어디에도 정적 +·메모 글자가 없다', async () => {
     serverVisits = [V_DONE(), V_IN(), V_SKIPPED()];
 
     renderPage();
@@ -566,7 +573,8 @@ describe('AC-12·AC-13·AC-15 · 메모 실배선 + 무반응 폴백 0', () => {
     );
 
     fireEvent.changeText(memo, '파도 소리가 좋았다');
-    fireEvent(memo, 'submitEditing');
+    // TRIP-1078 — 저장 경로는 blur 하나(실기 iOS multiline 은 submitEditing 을 안 낸다).
+    fireEvent(memo, 'blur');
 
     await waitFor(() => expect(memoBodies).toHaveLength(1));
     expect(memoBodies[0]).toMatchObject({ text: '파도 소리가 좋았다' });
@@ -807,7 +815,9 @@ describe('AC-25 · INV-3 — 시트·다이얼로그 어디에도 체류 시간�
 
     renderPage();
     await openSheet('v-done');
-    const withSheet = JSON.stringify(screen.toJSON());
+    // TRIP-1085 — 셸 list 경로에선 `JSON.stringify(screen.toJSON())` 가 순환 참조로 죽는다(FlatList 가
+    // 헤더·푸터 엘리먼트를 호스트 props 로 흘린다). 화면의 Text 글자만 모아 본다.
+    const withSheet = renderedText(screen.UNSAFE_root);
     expect(withSheet).toContain('부산시립미술관');
     expect(DURATION_TEXT.test(withSheet)).toBe(false);
 
@@ -816,7 +826,118 @@ describe('AC-25 · INV-3 — 시트·다이얼로그 어디에도 체류 시간�
       within(cardOf('v-in')).getByTestId('record-visit-skip-v-in')
     );
     await screen.findByTestId('record-visit-skip-dialog');
-    const withDialog = JSON.stringify(screen.toJSON());
+    const withDialog = renderedText(screen.UNSAFE_root);
     expect(DURATION_TEXT.test(withDialog)).toBe(false);
+  });
+});
+
+/**
+ * TRIP-1080 · 시트를 딤으로 닫아도 다시 열리고, 다른 카드로 바꾸면 그 카드 값으로 열린다.
+ *
+ * 왜: 라이브러리가 딤 탭으로 시트를 닫아도 페이지의 "편집 중" 상태가 그대로면 '시각 수정'을 다시 눌러도
+ * 아무 일도 안 일어난다(INV-4 무반응). 또 시트가 떠 있는 채 다른 카드를 누르면, 시트는 처음 받은 값만
+ * 기억하므로(`useState` 초깃값은 첫 마운트에서만 읽힌다) 이전 카드 시각이 그대로 보인다.
+ *
+ * 무엇을 보장하나:
+ *  - P1·P2 닫힘 신호 뒤 시트가 사라지고, 같은 카드·다른 카드 어느 쪽을 눌러도 그 카드 시각으로 다시 뜬다.
+ *  - P3 시트가 떠 있는 채 다른 카드를 누르면 그 카드 시각으로 바뀐다(`key` 리마운트의 유일한 심판).
+ *  - P4 휠을 현재 위치에 멈추고 저장하면 PATCH 가 안 나가고, 휠로 바꿔 저장하면 PATCH 1회로 반영된다.
+ *
+ * ⚠️ `fireEvent(시트, 'close')` 는 딤 탭의 대역이다 — `onClose` 를 못 찾으면 조용히 끝나므로, "닫힌 뒤
+ *   부재"를 다시 누르기 **전에** 먼저 본다(02a ★6). 실제 딤 탭은 6-b 실기.
+ *
+ * 3동작 뼈대: 준비=두 카드 서버 상태 → 실행=열기·닫힘 신호·다른 카드 탭·휠 정지·저장 → 단언=시트 개수·선택 셀·PATCH 본문.
+ */
+describe('🔴 TRIP-1080 · 시트 닫힘·재오픈·카드 전환·휠 저장', () => {
+  const SHEET = 'record-trip-visit-time-sheet';
+  /** 도착만(광안리) — 서울 10:05. A(V_DONE, 14:20·15:20)와 시·분이 모두 다르다. */
+  const V_B = () => visit('v-b', 'p1', { arrivedAt: '2026-08-20T01:05:00Z' });
+
+  const pressEdit = (id: string) =>
+    fireEvent.press(
+      within(cardOf(id)).getByTestId(`record-trip-visit-time-edit-${id}`)
+    );
+  const settleArrivedHour = (index: number) =>
+    fireEvent(
+      screen.getByTestId('record-trip-visit-time-arrived-h-wheel'),
+      'momentumScrollEnd',
+      {
+        nativeEvent: { contentOffset: { x: 0, y: index * WHEEL_CELL_HEIGHT } },
+      }
+    );
+
+  it('P1 · AC-5 — 딤으로 닫은 뒤 같은 카드를 다시 누르면 시트가 1개로 다시 뜨고 14:20 이 선택돼 있다', async () => {
+    serverVisits = [V_DONE(), V_B()];
+    renderPage();
+    await openSheet('v-done');
+
+    fireEvent(screen.getByTestId(SHEET), 'close');
+    // 앵커 — 먼저 닫혔어야 "다시 열림"이 뜻을 가진다.
+    expect(screen.queryByTestId(SHEET)).not.toBeOnTheScreen();
+
+    pressEdit('v-done');
+
+    expect(screen.getAllByTestId(SHEET).length).toBe(1);
+    expect(screen.getByTestId(cell('arrived', 'h', '14'))).toBeSelected();
+    expect(screen.getByTestId(cell('arrived', 'm', '20'))).toBeSelected();
+  });
+
+  it('P2 · AC-5 짝 — 딤으로 닫은 뒤 다른 카드를 누르면 그 카드 시각(10:05)으로 뜬다', async () => {
+    serverVisits = [V_DONE(), V_B()];
+    renderPage();
+    await openSheet('v-done');
+
+    fireEvent(screen.getByTestId(SHEET), 'close');
+    expect(screen.queryByTestId(SHEET)).not.toBeOnTheScreen();
+
+    pressEdit('v-b');
+
+    expect(screen.getAllByTestId(SHEET).length).toBe(1);
+    expect(screen.getByTestId(cell('arrived', 'h', '10'))).toBeSelected();
+    expect(screen.getByTestId(cell('arrived', 'm', '05'))).toBeSelected();
+  });
+
+  it('P3 · AC-6 — 시트가 떠 있는 채 다른 카드를 누르면 시트는 1개, 그 카드 시각(10:05)이고 이전 카드(14:20)는 아니다', async () => {
+    serverVisits = [V_DONE(), V_B()];
+    renderPage();
+    await openSheet('v-done');
+    expect(screen.getByTestId(cell('arrived', 'h', '14'))).toBeSelected();
+
+    pressEdit('v-b');
+
+    expect(screen.getAllByTestId(SHEET).length).toBe(1);
+    expect(screen.getByTestId(cell('arrived', 'h', '10'))).toBeSelected();
+    expect(screen.getByTestId(cell('arrived', 'm', '05'))).toBeSelected();
+    expect(screen.getByTestId(cell('arrived', 'h', '14'))).not.toBeSelected();
+    expect(screen.getByTestId(cell('arrived', 'm', '20'))).not.toBeSelected();
+  });
+
+  it('P4 · AC-2·AC-7·AC-9 — 현재 위치에서 멈춘 저장은 PATCH 0, 휠로 13 에 멈춘 저장은 PATCH 1회(04:20Z)', async () => {
+    serverVisits = [V_DONE()];
+    renderPage();
+
+    // ① 무변경 — 도착 시 휠이 현재 값(14)에서 멈춘 채 저장. 시트는 닫힌다(무반응 아님).
+    await openSheet('v-done');
+    settleArrivedHour(14);
+    fireEvent.press(screen.getByTestId('record-trip-visit-time-save'));
+    await waitFor(() =>
+      expect(screen.queryByTestId(SHEET)).not.toBeOnTheScreen()
+    );
+
+    // ② 진짜 변경 — 다시 열어 13 에서 멈추고 저장.
+    await openSheet('v-done');
+    settleArrivedHour(13);
+    fireEvent.press(screen.getByTestId('record-trip-visit-time-save'));
+
+    await waitFor(() => expect(patchBodies.length).toBeGreaterThanOrEqual(1));
+    // 순서 앵커 — ①이 헛 PATCH 를 냈다면 ②보다 먼저 도착해 여기서 2개다(02a ★8).
+    expect(patchBodies.length).toBe(1);
+    const body = patchBodies[0]!;
+    expect(Date.parse(body.arrivedAt as string)).toBe(
+      Date.parse('2026-08-20T04:20:00Z')
+    );
+    await waitFor(() =>
+      expect(screen.queryByTestId(SHEET)).not.toBeOnTheScreen()
+    );
   });
 });

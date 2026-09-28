@@ -7,6 +7,7 @@ import path from 'path';
 /**
  * TRIP-768 · AC-9 — records-default 프리뷰 픽스처가 j 밴드 마커족(visited 사진 2·planned 2·stay 1)을
  * **로컬 번들 사진**으로 주입한다는 소스 층 가드. 렌더로 못 보는 것(픽스처 구성·에셋 출처)만 본다.
+ * ⚠️ TRIP-1085 로 AC-9 본문은 state 축(done 2·upcoming 2·kind 0)으로 개정됐다 — 아래 describe 주석.
  *
  * 무엇을 보장하나:
  *  - records-default 지도가 5핀(사진2·planned2·stay1)으로 채워졌다 — kind 분기·연결선 검증(파일 B)이
@@ -52,6 +53,10 @@ function countKind(block: string, kind: string): number {
   return [...block.matchAll(new RegExp(`kind:\\s*'${kind}'`, 'g'))].length;
 }
 
+function countState(block: string, state: string): number {
+  return [...block.matchAll(new RegExp(`state:\\s*'${state}'`, 'g'))].length;
+}
+
 describe('조합 자가검사 — stripComments 와 kind 탐지기가 서로를 지우지 않는다', () => {
   it('주석 속 kind 지문은 걷히고 코드의 kind 리터럴은 살아남는다', () => {
     const sample = [
@@ -70,10 +75,30 @@ describe('조합 자가검사 — stripComments 와 kind 탐지기가 서로를 
       "require('@/assets/itinerary/draft-preview-1.jpg')"
     );
   });
+
+  it("TRIP-1085 · 주석 속 state 지문은 걷히고 코드의 state: 'done' 은 한 번만 센다", () => {
+    const stripped = stripComments(
+      [
+        "// 체크 핀은 state: 'done' 으로 그린다",
+        "{ number: 1, lat: 35.1, lng: 129.1, state: 'done' },",
+        "{ number: 2, lat: 35.2, lng: 129.2, state: 'upcoming' },",
+      ].join('\n')
+    );
+
+    expect(countState(stripped, 'done')).toBe(1);
+    expect(countState(stripped, 'upcoming')).toBe(1);
+  });
 });
 
-describe('🔴 AC-9 — records-default 픽스처: visited 2·planned 2·stay 1 + 로컬 require 사진 2', () => {
-  it('블록에 kind 5핀 구성과 실재하는 @/assets require 가 있고 외부 URL 은 없다', () => {
+/**
+ * TRIP-1085 개정 — j01 이 풀 지도(Figma 4705:2756)로 바뀌며 지도 핀은 **state 축**(체크 핀 `done` ·
+ * 번호 핀 `upcoming`)이 됐다. 프로덕션 페이지가 그렇게 그리므로(결정 3(c)) 프리뷰도 같은 축이어야 6-b 육안
+ * 대조가 뜻을 갖는다. 옛 TRIP-768 kind 마커족(사진 visited·점선 planned·침대 stay)은 records-default 에서
+ * 빠진다 — 숙소 핀은 이번 범위 밖(Q3)이고, kind 를 붙이면 지도가 state 물방울 대신 마커족으로 그린다.
+ * 구성은 Figma default 프레임과 같다: 체크 2(방문 완료) · 번호 2(미방문·건너뜀).
+ */
+describe('🔴 AC-9(TRIP-1085 개정) — records-default 픽스처: 체크 핀 2 · 번호 핀 2 · kind 0', () => {
+  it('블록의 지도 핀이 state done 2 · upcoming 2 이고, kind 마커족과 외부 URL 은 없다', () => {
     const source = readPreview();
     const block = fixtureBlock(source, RECORDS_KEY);
 
@@ -82,25 +107,19 @@ describe('🔴 AC-9 — records-default 픽스처: visited 2·planned 2·stay 1 
     expect(block.length).toBeGreaterThan(0);
     expect(block).toContain(RECORDS_KEY);
 
-    // ① kind 구성 — 사진(visited) 2 · planned 2 · stay 1 (= 5핀).
-    expect(countKind(block, 'visited')).toBe(2);
-    expect(countKind(block, 'planned')).toBe(2);
-    expect(countKind(block, 'stay')).toBe(1);
+    // ① state 축 — 체크 핀 2 · 번호 핀 2(Figma 4705:2756 pin 1·2 / 3·4).
+    expect(countState(block, 'done')).toBe(2);
+    expect(countState(block, 'upcoming')).toBe(2);
 
-    // ② 사진은 인라인 로컬 require(번들 number source) 로 최소 2개.
-    const required = [
-      ...block.matchAll(/require\(\s*['"]@\/assets\/([^'"]+)['"]\s*\)/g),
-    ].map((match) => match[1]);
-    expect(required.length).toBeGreaterThanOrEqual(2);
-
-    // ③ 가리키는 파일이 전부 디스크에 실재한다(없는 경로 require 는 Metro 번들을 깨뜨린다).
-    const missing = required.filter(
-      (rel) => !fs.existsSync(path.join(ROOT, 'assets', rel))
+    // ② kind 마커족 0 — 붙으면 지도가 사진 썸네일·점선 원·침대로 그린다.
+    (['visited', 'planned', 'stay', 'candidate'] as const).forEach((kind) =>
+      expect({ kind, count: countKind(block, kind) }).toEqual({
+        kind,
+        count: 0,
+      })
     );
-    expect(missing).toEqual([]);
 
-    // ④ 외부 URL 0건(S4 전역과 이중, records 블록 국한). 죽은 링크·오프라인 미표시가 프리뷰를
-    //    실제보다 나쁘게 보이게 하는 것을 막는다.
+    // ③ 외부 URL 0건(S4 전역과 이중, records 블록 국한).
     expect(/https?:\/\//.test(block)).toBe(false);
   });
 });

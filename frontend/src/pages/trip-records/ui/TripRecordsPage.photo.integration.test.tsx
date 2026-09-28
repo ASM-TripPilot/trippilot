@@ -14,6 +14,7 @@ import { server } from '@/mocks/server';
 import type { VisitPhoto } from '@/shared/api/generated/schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { resetPressGuard } from '@/shared/press/pressGuard';
+import { tripRecordsTrip } from '@/test-support/tripRecordsTrip';
 
 import { TripRecordsPage } from './TripRecordsPage';
 
@@ -203,6 +204,10 @@ beforeEach(() => {
   mockGetInstallId.mockReset().mockResolvedValue('dev-A');
   setAccessToken('a');
   server.use(
+    // TRIP-1085 — 페이지가 시트 헤더 여행명을 GET /trips/{tripId} 로 얻는다.
+    http.get(`${BASE}/trips/:tripId`, () =>
+      HttpResponse.json(tripRecordsTrip())
+    ),
     http.get(`${BASE}/trips/:tripId/itinerary`, () =>
       HttpResponse.json(itinerary())
     ),

@@ -31,6 +31,8 @@ paths:
 | `src/test-support/nativeSocialSdkMock.ts` | 카카오·네이버 로그인 SDK `{virtual:true}` 가짜 모듈 + 스파이(default·named 네임스페이스·named 함수 세 import 형태가 같은 스파이에 닿는다). `naverInitializeSpy`는 **일부러 리셋하지 않는다**(모듈 스코프 메모이즈 구현도 관측되게) |
 | `src/test-support/flushNotifications.ts` | react-query `notifyManager`에 이미 예약된 알림 **뒤에** 자기 차례를 끼워 FIFO로 기다리는 헬퍼(시간이 아니라 순서로 기다림). **스케줄러 잠금(`setScheduler(cb => setTimeout(cb, 5))`)은 여기 두지 않고 소비 파일 `beforeAll`에 인라인으로만 건다** — 공용 setup으로 옮기면 지연이 전 파일로 샌다 |
 | `src/test-support/toastHarness.tsx` | `Toast.tsx` 모듈 싱글턴용 `resetToast`(타이머까지 정리) + `WithToastHost` 렌더 래퍼. 리셋은 파일 최상위 `afterEach`에 건다 |
+| `src/test-support/sheetTree.ts` | 셸(`MapSheetShell`) 화면 렌더 트리 읽기 도우미(`closestAncestor`·`isInsideSheet`·`sheetScrollOf`·`renderedText`). 전제: `__mocks__/@gorhom/bottom-sheet`의 `BottomSheet`·`BottomSheetScrollView`는 같은 통과형이고 `BottomSheetFlatList`는 RN `FlatList` 그대로. ⚠️ **`JSON.stringify(screen.toJSON())`는 셸 list 경로에서 순환 참조로 죽는다**(FlatList가 헤더·푸터 엘리먼트를 호스트 props로 흘림) → 글자 검사는 화면 Text를 모으는 `renderedText`로. 소비: j01 뷰·페이지 테스트 |
+| `src/test-support/tripRecordsTrip.ts` | `GET /trips/{tripId}` `Trip` 픽스처(`tripRecordsTrip(title, tripId)`) — j01 페이지가 헤더 여행명을 얻으려 그 GET을 쏘므로, MSW `onUnhandledRequest: 'error'`인 통합 테스트는 파일마다 핸들러가 필요하다 → 모양을 한 곳에 |
 | `src/test-support/wizardDraftFixture.ts` | 위저드 드래프트(`useTripWizardStore`) 도우미 — `freshWizardDraft`(`getInitialState()`로 기대 초기값 도출) · `captureDraftAtNextCall`(`router.push`가 불리는 **순간**의 드래프트 포획 — 사후 비교는 push 뒤 reset을 거짓 green으로 통과시킨다) · `resetWizardDraft`(파일 최상위 `afterEach` 전용) 등 |
 | `src/__tests__/tripWizardEntryCensus.test.ts` | `'/trips/new/step1'` 리터럴의 **파일별 등장 횟수**를 표로 `toEqual` — 파일 집합만 보면 같은 화면의 두 번째 "여행 만들기" 버튼을 못 잡는다. 리터럴을 헬퍼로 옮기면 red — 호출처에 그대로 둔다 |
 | `__mocks__/@gorhom/bottom-sheet.tsx` | 네이티브 모듈 자동 목(통과형 — children 무조건 렌더) |
@@ -73,6 +75,7 @@ paths:
 | `src/__tests__/recordsDurationStructure.test.ts` | `features/record/ui/**` 재귀 소요시간 표기 0(INV-3). `recordsStructure` G6과 기능적으로 겹친다 — 동적 `${m}분` 렌더 사각은 `VisitTimeSheet.test.tsx`(렌더 층)가 메운다 |
 | `src/__tests__/recordAttributionStructure.test.ts` | `stayAttribution.ts`에 `new Date(`/`Date.now(` 0(타임존 안전) + record가 생성 훅을 직접 감싸는 긍정 앵커 |
 | `src/__tests__/recordPhotoBinaryGuard.test.ts` | `features/record`+`shared/photo` 재귀 — 사진 바이너리·`storage_key` 금칙어와 `expo-image-picker`/`expo-media-library` import 0(INV-U5-03). 범위를 `shared` 전체로 넓히면 생성 코드 주석의 `storage_key`로 거짓 red |
+| `src/__tests__/reflectionDistanceFormatStructure.test.ts` | 회고 거리 표기 단일출처(TRIP-1086) — `formatKm.ts` 실재 + 세 소비처(`ReflectionStatsRow`·`summaryStats`·`reflectionFallback`)가 `formatKm(`을 부르고 `${…istanceKm}km` 직접 보간 0. **주석을 걷은 뒤 줄 내용으로 판정**한다(줄 번호 판정은 첫 실행 red였음) |
 | `src/__tests__/reflectionFallbackStructure.test.ts` | 표시본 단일출처 — `resolveDisplayNarrative`는 `reflectionFallback.ts`에만 있고 페이지만 호출, `features/reflection/ui/**`에 `draftNarrative`·`editedNarrative` 참조 0 |
 | `src/__tests__/reflectionStructure.test.ts` | `features/reflection/**` 경계(다른 feature import 0)·3층·새 HTTP 0·INV-3 재귀 가드 — j04 요약·j06 공유 카드 파일도 재귀로 자동 편입 |
 | `src/__tests__/reflectionSummaryStructure.test.ts` | j04 요약 표면 전용 — testID 소유 앵커·3층·`useTripSummary` 무HTTP. 경계·재귀 INV-3은 `reflectionStructure`에 위임 |

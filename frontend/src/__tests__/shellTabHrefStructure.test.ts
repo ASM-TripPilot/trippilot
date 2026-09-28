@@ -29,7 +29,7 @@ const TAB_PAGES = [
   'pages/place-explore/ui/PlaceExplorePage.tsx',
   'pages/stay-search/ui/StaySearchPage.tsx',
   'pages/travel-style/ui/TravelStylePage.tsx',
-  'pages/trip-records/ui/TripRecordsPage.tsx',
+  // TRIP-1085 — j01 방문 기록(TripRecordsPage)은 풀 지도 + 바텀시트로 바뀌며 탭바를 뺐다(결정 1(b)) → 7 → 6.
   'pages/trip-summary/ui/TripSummaryPage.tsx',
 ];
 
@@ -135,7 +135,7 @@ describe('S0 · 조합 자가검사 — 주석 제거가 슬래시 리터럴을 
 });
 
 describe('S1 · 탭바 배선을 가진 페이지 모집단 (모집단 앵커)', () => {
-  it('pages 중 onPressTab= 을 쓰는 파일은 정확히 7곳이다', () => {
+  it('pages 중 onPressTab= 을 쓰는 파일은 정확히 6곳이다', () => {
     const withTabBar = listSourceFiles(PAGES_DIR)
       .filter((full) =>
         /onPressTab=/.test(stripComments(fs.readFileSync(full, 'utf8')))
@@ -146,7 +146,7 @@ describe('S1 · 탭바 배선을 가진 페이지 모집단 (모집단 앵커)',
   });
 });
 
-describe('🔴 S2 · 7곳이 같은 탭 경로 함수를 import 하고 부른다 (AC-1)', () => {
+describe('🔴 S2 · 6곳이 같은 탭 경로 함수를 import 하고 부른다 (AC-1)', () => {
   it.each(TAB_PAGES)('%s', (relPath) => {
     const code = readCode(relPath);
 

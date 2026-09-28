@@ -10,6 +10,7 @@ import {
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { tripRecordsTrip } from '@/test-support/tripRecordsTrip';
 
 import { TripRecordsPage } from './TripRecordsPage';
 
@@ -165,6 +166,10 @@ beforeEach(() => {
   mockGetForeground.mockReset();
   // 페이지가 마운트에 쏘는 GET 전부 + arrive POST 를 등록(onUnhandledRequest:'error' 라 누락 시 크래시).
   server.use(
+    // TRIP-1085 — 페이지가 시트 헤더 여행명을 GET /trips/{tripId} 로 얻는다.
+    http.get(`${BASE}/trips/:tripId`, () =>
+      HttpResponse.json(tripRecordsTrip())
+    ),
     http.get(`${BASE}/trips/:tripId/itinerary`, () =>
       HttpResponse.json(itinerary())
     ),
