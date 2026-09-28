@@ -47,6 +47,8 @@ class PoiEntity(
     @Column(name = "tags") var tags: Array<String> = emptyArray(),
     /** V2.23 — 출처 원본 식별자. 수동 등록분은 null. (source, source_ref) 부분 유니크. */
     @Column(name = "source_ref") var sourceRef: String? = null,
+    /** V2.58 — 지번·도로명 주소(TRIP-1062). 미확보 null. */
+    @Column(name = "address") var address: String? = null,
 )
 
 interface PoiJpaRepository : JpaRepository<PoiEntity, UUID> {
@@ -215,7 +217,7 @@ class PoiRepositoryAdapter(
         regionCode = regionCode,
         openingHours = openingHours, dataStatus = dataStatus.name, source = source.name,
         savedCount = savedCount, createdAt = createdAt, updatedAt = updatedAt,
-        imageUrl = imageUrl, tags = tags.toTypedArray(), sourceRef = sourceRef,
+        imageUrl = imageUrl, tags = tags.toTypedArray(), sourceRef = sourceRef, address = address,
     )
 
     private fun PoiEntity.toDomain() = Poi.reconstitute(
@@ -223,7 +225,7 @@ class PoiRepositoryAdapter(
         regionCode = regionCode,
         openingHours = openingHours, dataStatus = DataStatus.valueOf(dataStatus), source = PoiSource.valueOf(source),
         savedCount = savedCount, createdAt = createdAt, updatedAt = updatedAt,
-        imageUrl = imageUrl, tags = tags.toList(), sourceRef = sourceRef,
+        imageUrl = imageUrl, tags = tags.toList(), sourceRef = sourceRef, address = address,
     )
 
     private companion object {

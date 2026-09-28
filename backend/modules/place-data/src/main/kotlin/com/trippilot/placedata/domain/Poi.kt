@@ -72,6 +72,8 @@ class Poi private constructor(
     val tags: List<String> = emptyList(),   // 표시용 열린 집합. 미확보=빈 배열
     /** 출처가 준 원본 식별자. 수동 등록분은 null — 그때는 멱등 판정 대상이 아니다. */
     val sourceRef: String? = null,
+    /** 지번·도로명 주소(TRIP-1062 · 1003 F). 미확보=null — 지어내지 않는다. */
+    val address: String? = null,
 ) {
     companion object {
         /**
@@ -94,11 +96,12 @@ class Poi private constructor(
             imageUrl: String? = null,
             // 기본값 인자는 **맨 뒤에** — 가운데 끼우면 위치 인자로 부르는 호출이 조용히 어긋난다(실제로 깨졌다).
             regionCode: String? = null,
+            address: String? = null,
         ): Poi {
             if (nameKo.isBlank()) throw ValidationFailed(listOf(FieldError("nameKo", "POI 이름은 필수입니다.")))
             return Poi(
                 UUID.randomUUID(), nameKo, lat, lng, category, region, regionCode, openingHours, dataStatus, source, 0,
-                now, now, imageUrl = imageUrl, tags = tags, sourceRef = sourceRef,
+                now, now, imageUrl = imageUrl, tags = tags, sourceRef = sourceRef, address = address,
             )
         }
 
@@ -113,6 +116,7 @@ class Poi private constructor(
             existing: Poi, nameKo: String, lat: Double, lng: Double, category: PoiCategory,
             region: String?, openingHours: String?, now: Instant,
             tags: List<String> = emptyList(), imageUrl: String? = null, regionCode: String? = null,
+            address: String? = null,
         ): Poi = Poi(
             existing.poiId, nameKo, lat, lng, category, region,
             // 못 정했으면 **기존 값을 지킨다**. 벤더가 이번에 주소를 안 준 것과 "지역을 모른다"는 다르다 —
@@ -128,6 +132,8 @@ class Poi private constructor(
             // 태그는 갱신한다 — 벤더가 분류를 고치는 일이 있고, 표시용이라 최신이 맞다.
             tags.ifEmpty { existing.tags },
             existing.sourceRef,
+            // 주소도 이미지와 같은 규칙 — 벤더가 이번에 안 준 것과 "주소가 없다"는 다르다.
+            address ?: existing.address,
         )
 
         @Suppress("LongParameterList")
@@ -135,10 +141,10 @@ class Poi private constructor(
             poiId: UUID, nameKo: String, lat: Double, lng: Double, category: PoiCategory, region: String?,
             openingHours: String?, dataStatus: DataStatus, source: PoiSource, savedCount: Long,
             createdAt: Instant, updatedAt: Instant, imageUrl: String? = null, tags: List<String> = emptyList(),
-            sourceRef: String? = null, regionCode: String? = null,
+            sourceRef: String? = null, regionCode: String? = null, address: String? = null,
         ): Poi = Poi(
             poiId, nameKo, lat, lng, category, region, regionCode, openingHours, dataStatus, source, savedCount,
-            createdAt, updatedAt, imageUrl, tags, sourceRef,
+            createdAt, updatedAt, imageUrl, tags, sourceRef, address,
         )
     }
 }

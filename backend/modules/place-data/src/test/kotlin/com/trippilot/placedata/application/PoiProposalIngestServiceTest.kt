@@ -96,6 +96,30 @@ class PoiProposalIngestServiceTest : StringSpec({
         repo.stored.single().regionCode shouldBe "26170"
     }
 
+    /** 종전에는 주소를 지역 코드 해석에만 쓰고 버렸다 — 화면(d06·탐색)이 보일 값이 없었다(TRIP-1062 · 1003 F). */
+    "주소가 POI 에 저장된다 — 등록·갱신 모두" {
+        val repo = InMemoryPoiRepository()
+        PoiProposalIngestService(repo, FakeRegionCatalog, clock)
+            .ingest(PoiSource.TOURAPI, listOf(proposal(address = "부산광역시 동구 초량동 1")))
+        repo.stored.single().address shouldBe "부산광역시 동구 초량동 1"
+
+        // 갱신분의 새 주소가 이긴다 — 도로명 개편·표기 정정이 실제로 온다.
+        PoiProposalIngestService(repo, FakeRegionCatalog, later)
+            .ingest(PoiSource.TOURAPI, listOf(proposal(address = "부산광역시 동구 초량로 2")))
+        repo.stored.single().address shouldBe "부산광역시 동구 초량로 2"
+    }
+
+    "갱신분에 주소가 없으면 이미 저장된 주소를 지키다 — 재수집 백필이 무너지지 않게" {
+        val repo = InMemoryPoiRepository()
+        PoiProposalIngestService(repo, FakeRegionCatalog, clock)
+            .ingest(PoiSource.TOURAPI, listOf(proposal(address = "부산광역시 동구 초량동 1")))
+
+        PoiProposalIngestService(repo, FakeRegionCatalog, later)
+            .ingest(PoiSource.TOURAPI, listOf(proposal(address = null)))
+
+        repo.stored.single().address shouldBe "부산광역시 동구 초량동 1"
+    }
+
     "게이트를 통과한 제안이 ACTIVE 로 등록된다" {
         val repo = InMemoryPoiRepository()
 
