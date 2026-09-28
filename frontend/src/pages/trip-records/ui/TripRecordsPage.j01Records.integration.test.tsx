@@ -556,7 +556,7 @@ describe('AC-9 · 저장 결과 안내', () => {
 });
 
 describe('AC-12·AC-13·AC-15 · 메모 실배선 + 무반응 폴백 0', () => {
-  it('도착만 한 카드에서 메모를 제출하면 PUT memo 1회, 페이지 어디에도 정적 +·메모 글자가 없다', async () => {
+  it('도착만 한 카드에서 메모를 쓰고 포커스를 빼면 PUT memo 1회, 페이지 어디에도 정적 +·메모 글자가 없다', async () => {
     serverVisits = [V_DONE(), V_IN(), V_SKIPPED()];
 
     renderPage();
@@ -566,7 +566,8 @@ describe('AC-12·AC-13·AC-15 · 메모 실배선 + 무반응 폴백 0', () => {
     );
 
     fireEvent.changeText(memo, '파도 소리가 좋았다');
-    fireEvent(memo, 'submitEditing');
+    // TRIP-1078 — 저장 경로는 blur 하나(실기 iOS multiline 은 submitEditing 을 안 낸다).
+    fireEvent(memo, 'blur');
 
     await waitFor(() => expect(memoBodies).toHaveLength(1));
     expect(memoBodies[0]).toMatchObject({ text: '파도 소리가 좋았다' });
