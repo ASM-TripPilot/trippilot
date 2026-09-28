@@ -86,6 +86,7 @@ paths:
 | `src/__tests__/tripWizardStep1Boundary.test.ts` | g01 화면 그래프에 쿼리 훅·라우터·`expo-location` 0 · `new Date(`·`Date.now(` 0(기준일 주입) · 위저드 라우트 존재·`(tabs)` 아래 부재 |
 | `src/__tests__/tripWizardStep2Structure.test.ts` | g02 라우트 두께 + 화면·배선에 `.sort(`·인라인 박수 재계산 0(`nightlyBaseCards`가 소유) + 제거된 배선 needle 부재(`setPeriod` 등) · 주소 조회·지역 판정(`useQueries`·`sidoKey` 등)은 `features/trip/model`에만 |
 | `src/__tests__/tripBudgetStructure.test.ts` | 예산 3파일에 `toLocaleString`·`Intl.` 0 — node 동작 테스트는 Hermes 서식 차이를 못 봐 이 파일이 유일한 그물 |
+| `src/features/trip/model/budgetAmount.tier.test.ts` | `budgetForTier(tier, nights)` PBT(TRIP-1045) — 단가표(저가5만·중간10만·고급20만·럭셔리40만)×박수, tier 단조증가·정수성·0 이하 없음을 예제 5건+fast-check로 |
 | `src/__tests__/savedPlacesStructure.test.ts` | 서버 DTO 식별자를 Zustand 스토어에 복사하지 않는다(`frontend/README.md`). 파생값만 복사한 스토어는 못 잡는다 |
 | `src/__tests__/placeDetailStubRoute.test.tsx` | `explore/places/[poiId].tsx` 라우트가 `@/pages/place-detail`에 위임하는지(페이지 목으로 QueryClient 없이 렌더) |
 | `src/__tests__/placeExploreStructure.test.ts` | d04 소스 스캔 — INV-3·zustand 0·이미지 URL 발명 금지·화면 순수성·`@/features/stay`/`@/features/trip` 0(예외: `PlaceExplorePage.tsx`의 `tripWizardStore` 한 경로)·raw hex·SafeArea |
@@ -154,7 +155,7 @@ paths:
 | `src/shared/api/patchConsent.test.ts` | `patchConsent` 와이어 계약 — URL에 termsType, body는 `{action, termsVersion}` 두 필드만 |
 | `src/__tests__/personalizationStructure.test.ts` | l05 3층 배선·라우트 무로직(경계는 `settingsBoundary.test.ts`가 재귀로 편입) |
 | `src/__tests__/editSheetHandleStructure.test.ts` | g01/g02 편집 시트 핸들 단일화 — `handleIndicatorStyle={SHEET_HANDLE_INDICATOR_STYLE}` 바인딩 + 그래버 바 부재(클래스 순서 무관 정규식). `#DDDDDD`는 `hairline-strong` 토큰 값의 손 복제라 토큰이 바뀌어도 green |
-| `src/__tests__/homeGlyphColorStructure.test.ts` | `HomeGlyphs.tsx` `LocationPinGlyph` stroke 색 소스 스캔 — RNTL이 SVG `stroke`를 못 봐서 유일한 그물 |
+| `src/__tests__/homeGlyphColorStructure.test.ts` | `HomeGlyphs.tsx` `LocationPinGlyph` stroke 색 소스 스캔 — 이 테스트가 만들어질 당시엔 "RNTL이 SVG `stroke`를 못 봐서 유일한 그물"로 적었으나, TRIP-1050 실측 정정: host 노드(`typeof n.type==='string'`)의 `props.stroke.payload`(`processColor` 정수)로 렌더 트리에서도 잴 수 있다 — `findAll`이 이 파일에서 소스 스캔을 쓴 것은 원리적 불가가 아니라 이 파일이 그 방식을 먼저 택한 것뿐(근거: `frontend/src/features/explore/ui/SavedPlaceListScreen.test.tsx:680-687`) |
 | `src/__tests__/tripPeriodFromNightsStructure.test.ts` | g01 기간 시트 "시작만 고르기" 전환 — 옛 표면 prop·testID·헬퍼 부재 + `applyRangePick` 고아 0 + 프리뷰 총량 |
 | `src/features/trip/model/tripWizardStore.periodFromNights.test.ts` | 시작·박수 재계산 예시 + fast-check 액션열 PBT(**매 단계 뒤** 끝−시작=Σnights, 오라클은 구현과 다른 계산 경로). `reset()`은 파일 최상위 `beforeEach`+`afterEach` 둘 다 |
 | `src/__tests__/devPreviewDeleteDialog.test.tsx` | `settings-delete-dialog` 프리뷰가 설정 화면 위에 다이얼로그를 나중 형제로 겹쳐 그리는지. 배경 비교는 testID 순서열만이라 표시값 드리프트는 못 잡는다 |

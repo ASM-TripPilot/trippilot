@@ -51,9 +51,11 @@ paths:
 
 | 파일 | 역할 |
 |---|---|
-| `src/shared/map/MapView.tsx` | 공급자 중립 `MapView` + `MapCenter`·`MapPin`·`MapPinState`·`MapPinKind`·`MapViewProps` 타입의 집(prop 목록의 정본은 `MapViewProps`). 계약: `center`는 **제어형 `camera`**로 memo(`initialCamera`는 마운트 후 안 바뀌어 재중심 회귀를 냈다) · `onPinTap(index)`은 **배열 index**(핀 번호 아님) · `viewOnly`는 제스처 4종을 개별로 끈다 · `maxLevel`은 네이버 `minZoom`(축 반대, jest는 전달만 본다) · 경로선은 `visited`(+무-kind) 핀만 잇는다. 키(`EXPO_PUBLIC_NAVER_MAP_CLIENT_ID`) 부재면 `map-failure` 표면(INV-4). duration 필드 0(INV-3). 훅은 조기 반환 위에 둔다. 점선 원·축척·핀 래스터는 prop-기록형 목만 잠그고 실렌더는 실기 전용 |
+| `src/shared/map/MapView.tsx` | 공급자 중립 `MapView` + `MapCenter`·`MapPin`·`MapPinState`·`MapPinKind`·`MapViewProps` 타입의 집(prop 목록의 정본은 `MapViewProps`). 계약: `center`는 **제어형 `camera`**로 memo(`initialCamera`는 마운트 후 안 바뀌어 재중심 회귀를 냈다) · `onPinTap(index)`은 **배열 index**(핀 번호 아님) · `viewOnly`는 제스처 4종을 개별로 끈다 · `maxLevel`은 네이버 `minZoom`(축 반대, jest는 전달만 본다) · 경로선은 `visited`(+무-kind) 핀만 잇는다. 키(`EXPO_PUBLIC_NAVER_MAP_CLIENT_ID`) 부재면 `map-failure` 표면(INV-4). duration 필드 0(INV-3). 훅은 조기 반환 위에 둔다. region 우선순위는 `fitPins` > `radiusCircle` > 고정 camera(둘 다 없으면 zoom 14 camera). **`onLayout`에서 같은 region을 `ref.animateRegionTo`(easing:'None')로 한 번 더 맞춘다** — 네이버 SDK가 레이아웃 확정 전 임시 프레임으로 먼저 맞추고 같은 값 재전달은 무시하기 때문(TRIP-1043, `traps-map.md`). jest 가짜 지도는 `onLayout`을 발화하지 않아 이 재맞춤은 jest 무심판. 점선 원·축척·핀 래스터는 prop-기록형 목만 잠그고 실렌더는 실기 전용 |
+| `src/shared/map/fitRegion.ts` | `buildFitRegion(pins, padding)`(핀 전체를 담는 영역, 기존) · `buildCircleRegion(center, radiusM)`(원 남서/북동 끝을 위도 1도≈111,320m + 경도 `cos(위도)` 보정으로 계산, 여백 1.4배 — TRIP-1043 신규). 둘 다 순수 함수, `MapView.tsx`의 region 우선순위가 소비. |
 | `src/shared/map/CenterPinPicker.tsx` | 중앙 고정 핀 좌표 선택기 — center를 **마운트 1회 포획**(제어형 camera 되먹임이 pan을 되돌리는 것 방지)하고, 핀은 `pointerEvents="none"` 자식 오버레이. `onCameraIdle`→`onPick({lat,lng})` |
 | `src/shared/map/MapView.test.tsx` | 실 `MapView` + `__mocks__/@mj-studio/react-native-naver-map.tsx`(prop-기록형 목)를 태우는 코어 테스트. 핀 번호·현재위치 라벨은 SVG Text라 `toHaveTextContent`가 아니라 `UNSAFE_queryAllByProps({content})`로 본다. done 체크 색은 래퍼 `<Svg>` 선언값만 읽는 사각이 있다(안쪽 `Path` stroke는 못 봄) |
+| `src/shared/map/MapView.fitRadius.test.tsx` | `radiusCircle` region 우선순위(반경 3종이 영역 안에 들어옴·반경 커지면 폭 증가·원 없으면 camera 그대로) — 오케 선작성 심판(TRIP-1043 수정 루프 1). `onLayout` 재맞춤 자체는 목이 이벤트를 안 불러 무심판. |
 | `src/shared/map/index.ts` | 배럴 — `MapView`·타입들·`CenterPinPicker` |
 
 ### `src/shared/api/generated/` — orval 생성물
