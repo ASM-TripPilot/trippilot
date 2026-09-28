@@ -73,6 +73,7 @@ paths:
 | `src/__tests__/recordsDurationStructure.test.ts` | `features/record/ui/**` 재귀 소요시간 표기 0(INV-3). `recordsStructure` G6과 기능적으로 겹친다 — 동적 `${m}분` 렌더 사각은 `VisitTimeSheet.test.tsx`(렌더 층)가 메운다 |
 | `src/__tests__/recordAttributionStructure.test.ts` | `stayAttribution.ts`에 `new Date(`/`Date.now(` 0(타임존 안전) + record가 생성 훅을 직접 감싸는 긍정 앵커 |
 | `src/__tests__/recordPhotoBinaryGuard.test.ts` | `features/record`+`shared/photo` 재귀 — 사진 바이너리·`storage_key` 금칙어와 `expo-image-picker`/`expo-media-library` import 0(INV-U5-03). 범위를 `shared` 전체로 넓히면 생성 코드 주석의 `storage_key`로 거짓 red |
+| `src/__tests__/reflectionDistanceFormatStructure.test.ts` | 회고 거리 표기 단일출처(TRIP-1086) — `formatKm.ts` 실재 + 세 소비처(`ReflectionStatsRow`·`summaryStats`·`reflectionFallback`)가 `formatKm(`을 부르고 `${…istanceKm}km` 직접 보간 0. **주석을 걷은 뒤 줄 내용으로 판정**한다(줄 번호 판정은 첫 실행 red였음) |
 | `src/__tests__/reflectionFallbackStructure.test.ts` | 표시본 단일출처 — `resolveDisplayNarrative`는 `reflectionFallback.ts`에만 있고 페이지만 호출, `features/reflection/ui/**`에 `draftNarrative`·`editedNarrative` 참조 0 |
 | `src/__tests__/reflectionStructure.test.ts` | `features/reflection/**` 경계(다른 feature import 0)·3층·새 HTTP 0·INV-3 재귀 가드 — j04 요약·j06 공유 카드 파일도 재귀로 자동 편입 |
 | `src/__tests__/reflectionSummaryStructure.test.ts` | j04 요약 표면 전용 — testID 소유 앵커·3층·`useTripSummary` 무HTTP. 경계·재귀 INV-3은 `reflectionStructure`에 위임 |
