@@ -243,7 +243,9 @@ export function ItineraryEditPage({
 
   // 완료 poiId → slotKey(활성 일자). EditorView 가 이 배열로 per-slot 잠금을 판정한다(AC-11).
   const { completedPoiIds } = deriveVisitProgress(
-    visits.data ?? { visits: [] }
+    visits.data ?? { visits: [] },
+    activeDate,
+    activeSlots.map((slot) => slot.poiId)
   );
   const completedSlotKeys = completedPoiIds.map((poiId) =>
     buildSlotKey(activeDate, poiId)
