@@ -8,6 +8,7 @@ import { formatPrice } from '@/entities/stay/lib/formatPrice';
 import { stayKey } from '@/features/stay/model/stayKey';
 import { useSavedStays } from '@/features/stay/model/savedStays';
 import { useStaySearch } from '@/features/stay/model/useStaySearch';
+import { usePlaceSaveToggle } from '@/features/explore/model/placeSaveToggle';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 import { useGetPlaces } from '@/shared/api/generated/places/places';
@@ -67,7 +68,18 @@ export default function ExploreRoute(): ReactElement {
   // limit 을 실어 필요한 개수만 받는다(계약 TRIP-503). '모두 보기'(세로 목록)만 무한 스크롤이다.
   const places = useGetPlaces({ limit: PLACE_LANE_LIMIT });
   const isAuthed = getAccessToken() !== null;
-  const { savedPoiIds } = useSavedPlaces({ isAuthed });
+  const savedPlaces = useSavedPlaces({ isAuthed });
+  const { savedPoiIds } = savedPlaces;
+  // 장소 담기 하트(TRIP-1049) — useState 만 쓰는 훅이라 게스트/로그인 분기 위에서 한 번 부르고
+  // base.placeLane 으로 두 경로에 함께 내린다. 게스트 press → 로그인(숙소 하트와 동일).
+  const placeSave = usePlaceSaveToggle({
+    isAuthed,
+    savedPoiIds,
+    save: savedPlaces.save,
+    remove: savedPlaces.remove,
+    places: places.data?.items ?? [],
+    onRequireLogin: () => router.push('/(auth)/login'),
+  });
 
   // 담은 곳 saved-menu 열림 상태(TRIP-494) — 순수 화면이 useState 0건이라 라우트가 소유해
   // 화면에 내린다(sheet 열림을 페이지가 쥐는 선례와 동형).
@@ -122,6 +134,8 @@ export default function ExploreRoute(): ReactElement {
         void places.refetch();
       },
       onPressCard: (poiId) => router.push(`/explore/places/${poiId}`),
+      savedPoiIds,
+      ...placeSave,
     },
     stayLane: {
       error: stay.isError,

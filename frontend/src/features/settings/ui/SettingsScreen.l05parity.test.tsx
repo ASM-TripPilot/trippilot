@@ -9,14 +9,16 @@ import {
   buildSettingsSections,
   type SettingsInput,
 } from '../model/settingsSections';
+import { ContrastGlyph } from './SettingsGlyphs';
 import { SettingsScreen } from './SettingsScreen';
 
 /**
- * TRIP-778 AC-4·5·6·7 — l05 설정 default(라이브 Figma 1607:2440) 행 표면(프레젠테이션).
+ * TRIP-778 AC-5·6·7 · TRIP-1051 — l05 설정 default(라이브 Figma 4664:3279) 행 표면(프레젠테이션).
  *
  * 무엇을 보장하나:
- *  - AC-4: 취향 7행이 값(서버 enum 원문)을 행 오른쪽에 보이고, 미설정 축은 회색 `미설정` 칩이다.
- *    7행 모두 누르면 같은 진입 콜백(`onPressPreferences`)이 나간다(목적지 1곳 — 브리프 화면·IO).
+ *  - TRIP-1051: 취향은 한 행 `여행 취향 · N/7 설정됨 ›`(반원 아이콘). N 은 설정된 축 수, 모르면 값을
+ *    비운다(0/7 금지). 누르면 진입 콜백(`onPressPreferences`)이 1번 나간다. (구 TRIP-778 AC-4 7행 값·
+ *    `미설정` 칩은 사용자 결정 A 로 폐기.)
  *  - AC-5: 위치정보 수집 동의 행에 `동의`(분홍)/`미동의`(회색) 칩, 모르면 칩 없음(D4).
  *  - AC-6: 위치정보 그룹의 개인화 행 — 리딩 글리프 + 동의면 `사용 중` + chevron, 누르면 진입 콜백.
  *  - AC-7: 제휴 안내 행은 chevron 이 아니라 스위치다. `affiliateNoticeOn` 을 그대로 보이고, 모르면
@@ -34,41 +36,26 @@ import { SettingsScreen } from './SettingsScreen';
  * (개념) `getByTestId(/-chevron$/)` — testID 도 정규식으로 찾을 수 있다(끝이 `-chevron` 인 것 전부).
  */
 
-const DOT = '·';
+type Preferences = NonNullable<SettingsInput['preferences']>;
 
-/** D5 프리뷰 픽스처 — 예산만 미설정. */
-const PREFERENCES: NonNullable<SettingsInput['preferences']> = {
-  styles: { value: ['휴양', '자연'], isNeutralDefault: false },
-  companion: {
-    companionTypes: ['친구'],
-    petFlag: false,
-    isNeutralDefault: false,
-  },
-  activities: { value: ['맛집투어', '전시'], isNeutralDefault: false },
-  transportModes: { value: ['대중교통'], isNeutralDefault: false },
-  foodTastes: { value: ['일식'], isNeutralDefault: false },
+/** 7축 중 3축(스타일·밀도·예산)만 설정 → 3/7. */
+const THREE_SET: Preferences = {
+  styles: { value: ['휴양'], isNeutralDefault: false },
   pace: { value: '느긋하게', isNeutralDefault: false },
+  budget: { tier: '중간', isNeutralDefault: false },
 };
 
-/** 값 행 6개 — [rowKey, 행 오른쪽 값]. */
-const VALUE_ROWS = [
-  ['style', `휴양${DOT}자연`],
-  ['companions', '친구'],
-  ['activities', `맛집투어${DOT}전시`],
-  ['transport', '대중교통'],
-  ['food', '일식'],
-  ['pace', '느긋하게'],
-] as const;
+/** 7축 모두 미설정 — 모양이 전부 다르다(중립 기본값·빈 배열·축 없음·value 없음·null). */
+const ALL_UNSET_MIXED: Preferences = {
+  styles: { value: ['휴양'], isNeutralDefault: true },
+  activities: { value: [], isNeutralDefault: false },
+  foodTastes: { isNeutralDefault: false },
+  pace: { value: null, isNeutralDefault: false },
+  companion: { companionTypes: [], petFlag: false, isNeutralDefault: false },
+  budget: { tier: '중간', rawAmount: 500000, isNeutralDefault: true },
+};
 
-const PREFERENCE_KEYS = [
-  'style',
-  'budget',
-  'companions',
-  'activities',
-  'transport',
-  'food',
-  'pace',
-];
+const PREF_ROW = 'settings-nav-preferences';
 
 const noop = () => {};
 
@@ -117,43 +104,60 @@ function svgCount(testID: string): number {
     .findAll((node) => String(node.type) === 'RNSVGSvgView').length;
 }
 
-describe('TRIP-778 AC-4 · 취향 7행 값·미설정 칩·진입', () => {
-  it('A1 값이 있는 6행은 행 안에 요약 문자열(완전일치)과 chevron 을 보인다', () => {
-    renderScreen({ preferences: PREFERENCES });
+/**
+ * ★ 행 안에서만 찾는다(`within(row)`) — '설정됨' 같은 글자가 다른 곳에 생겨도 헷갈리지 않게.
+ * ★ AC-3 은 정규식 `/\/7/` 로 "숫자/7" 모양 전부를 막는다 — 문자열 인자는 완전일치라 `'0/7 설정됨'` 하나만
+ *   막게 된다(02a ★6).
+ */
+describe('TRIP-1051 · 여행 취향 한 행 — N/7 설정됨·진입', () => {
+  it('A1 AC-1: 3축만 설정이면 행 안에 "3/7 설정됨"(완전일치)·chevron, 칩은 없다', () => {
+    renderScreen({ preferences: THREE_SET });
 
-    for (const [key, text] of VALUE_ROWS) {
-      const row = screen.getByTestId(`settings-nav-${key}`);
-      // 단언(완전일치 · 행 안): 값이 독립 Text 로 행 안에 있다.
-      expect(within(row).getByText(text)).toBeOnTheScreen();
-      // 단언: 네비 행 어포던스(chevron)는 그대로다.
-      expect(
-        within(row).getByTestId(`settings-nav-${key}-chevron`)
-      ).toBeOnTheScreen();
-    }
+    const row = screen.getByTestId(PREF_ROW);
+    expect(within(row).getByText('3/7 설정됨')).toBeOnTheScreen();
+    expect(within(row).getByTestId(`${PREF_ROW}-chevron`)).toBeOnTheScreen();
+    expect(within(row).queryAllByTestId(/^settings-chip-/)).toHaveLength(0);
   });
 
-  it('A2 미설정 축(예산)은 값 대신 회색 "미설정" 칩이다', () => {
-    renderScreen({ preferences: PREFERENCES });
+  it('A2 AC-2: 7축 모두 미설정이면 "0/7 설정됨" — "미설정" 칩·글자는 없다', () => {
+    renderScreen({ preferences: ALL_UNSET_MIXED });
 
-    const row = screen.getByTestId('settings-nav-budget');
-    const chip = within(row).getByTestId('settings-chip-budget');
-    // 단언(완전일치): 칩 글자.
-    expect(within(chip).getByText('미설정')).toBeOnTheScreen();
-    // 단언(토큰): 회색 칩 바탕.
-    expect(tokensOf('settings-chip-budget')).toContain('bg-surface-strong');
+    const row = screen.getByTestId(PREF_ROW);
+    expect(within(row).getByText('0/7 설정됨')).toBeOnTheScreen();
+    expect(within(row).queryByText('미설정')).toBeNull();
+    expect(within(row).queryAllByTestId(/^settings-chip-/)).toHaveLength(0);
   });
 
-  it('A3 7행 어느 것을 눌러도 onPressPreferences 가 한 번씩 나간다(7회)', () => {
+  it('A3 AC-3: 취향을 모르면(응답 전·실패) 행과 chevron 은 있지만 "N/7"·"설정됨"을 지어내지 않는다', () => {
+    renderScreen();
+
+    // 긍정 앵커: 행과 chevron 은 있다(누르면 편집 화면으로 갈 수 있다).
+    const row = screen.getByTestId(PREF_ROW);
+    expect(within(row).getByTestId(`${PREF_ROW}-chevron`)).toBeOnTheScreen();
+    // 단언(부분포함): 어떤 숫자든 "/7" 이 없고, "설정됨"도 없다.
+    expect(within(row).queryByText(/\/7/)).toBeNull();
+    expect(within(row).queryByText(/설정됨/)).toBeNull();
+    expect(within(row).queryAllByTestId(/^settings-chip-/)).toHaveLength(0);
+  });
+
+  it('A4 AC-4: 취향 행을 누르면 onPressPreferences 가 정확히 1번 나간다', () => {
     const onPressPreferences = jest.fn();
-    renderScreen({ preferences: PREFERENCES }, { onPressPreferences });
+    renderScreen({ preferences: THREE_SET }, { onPressPreferences });
 
     // 실행
-    for (const key of PREFERENCE_KEYS) {
-      fireEvent.press(screen.getByTestId(`settings-nav-${key}`));
-    }
+    fireEvent.press(screen.getByTestId(PREF_ROW));
 
     // 단언
-    expect(onPressPreferences).toHaveBeenCalledTimes(7);
+    expect(onPressPreferences).toHaveBeenCalledTimes(1);
+  });
+
+  it('A5 AC-8(구조): 리딩 아이콘은 반원(ContrastGlyph) 1개 — SVG 는 아이콘+chevron 2개', () => {
+    renderScreen({ preferences: THREE_SET });
+
+    const row = screen.getByTestId(PREF_ROW);
+    // 컴포넌트 종류로 센다 — SVG 개수만 보면 다른 글리프가 들어가도 통과한다(02a ★10).
+    expect(row.findAllByType(ContrastGlyph)).toHaveLength(1);
+    expect(svgCount(PREF_ROW)).toBe(2);
   });
 });
 

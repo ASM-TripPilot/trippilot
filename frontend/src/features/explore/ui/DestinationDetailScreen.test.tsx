@@ -279,21 +279,9 @@ describe('D5 · 담은 곳 하트 FAB', () => {
 /**
  * ── TRIP-709 신규(d05 Figma 정합) — 게이트① 동결: 위 D1~D5 는 무수정, 아래만 추가한다.
  * 신규 prop 은 전부 옵셔널(stayLane 저장 5필드 · onPressCreateTrip)이라 baseProps 가 그대로
- * 유효하고, 세그먼트 상태는 화면 로컬 useState('all')(D1) 라 prop 이 아니다.
+ * 유효하다. (TRIP-709 의 AC-1 부제·AC-3 세그 3탭·AC-4 세그 필터는 TRIP-1048 이 세그먼트를 없애며
+ * 삭제했다 — 파일 끝 `TRIP-1048` describe 가 대체한다.)
  */
-
-describe('AC-1 · 부제 G11 교체', () => {
-  it('부제가 "여행지 · 장소 · 숙소에서 찾았어요"를 담고, 옛 문구는 0건이다', () => {
-    render(<DestinationDetailScreen {...baseProps()} />);
-
-    // 헤딩(제목+부제)이 새 부제를 담는다 — 제목의 곡선/직선 따옴표에 안 걸리게 부분(정규식)으로.
-    expect(screen.getByTestId('destination-detail-heading')).toHaveTextContent(
-      /여행지 · 장소 · 숙소에서 찾았어요/
-    );
-    // 옛 부제(…여행자 일정에서 찾았어요)는 사라졌다.
-    expect(screen.queryByText(/여행자 일정에서 찾았어요/)).toBeNull();
-  });
-});
 
 describe('AC-2 · 여행자 일정 레인 제거', () => {
   it('itin 레인 testID·"준비 중" 문구가 모두 사라진다', () => {
@@ -301,74 +289,6 @@ describe('AC-2 · 여행자 일정 레인 제거', () => {
 
     expect(screen.queryByTestId('destination-detail-lane-itin')).toBeNull();
     expect(screen.queryByText(/여행자들의 일정을 준비/)).toBeNull();
-  });
-});
-
-describe('AC-3 · 세그먼트 3탭', () => {
-  it('전체·숙소·장소 3탭이 뜨고(여행자 일정 세그 0건), 초기 활성은 전체다', () => {
-    render(<DestinationDetailScreen {...baseProps()} />);
-
-    // 3탭 존재 + 라벨(seg subtree 텍스트가 라벨 하나뿐이라 문자열 완전일치로 안전).
-    expect(screen.getByTestId('destination-detail-seg-all')).toHaveTextContent(
-      '전체'
-    );
-    expect(screen.getByTestId('destination-detail-seg-stay')).toHaveTextContent(
-      '숙소'
-    );
-    expect(
-      screen.getByTestId('destination-detail-seg-place')
-    ).toHaveTextContent('장소');
-    // 여행자 일정 세그(및 옛 레인 헤더)는 어디에도 없다.
-    expect(screen.queryByText('여행자 일정')).toBeNull();
-
-    // 활성 표식은 색 fill 이 아니라 accessibilityState.selected — 초기 'all' 만 selected.
-    expect(screen.getByTestId('destination-detail-seg-all')).toBeSelected();
-    expect(
-      screen.getByTestId('destination-detail-seg-stay')
-    ).not.toBeSelected();
-    expect(
-      screen.getByTestId('destination-detail-seg-place')
-    ).not.toBeSelected();
-  });
-});
-
-describe('AC-4 · 세그먼트 레인 필터 (화면 로컬 useState)', () => {
-  it('all=두 레인 / 숙소=stay만 / 장소=place만 로 갈리고 활성 표식이 따라간다', () => {
-    render(<DestinationDetailScreen {...baseProps()} />);
-
-    // 초기(all) — 두 레인 다 렌더.
-    expect(
-      screen.getByTestId('destination-detail-lane-stay')
-    ).toBeOnTheScreen();
-    expect(
-      screen.getByTestId('destination-detail-lane-place')
-    ).toBeOnTheScreen();
-
-    // 숙소 세그 press → stay 레인만, place 레인 null, seg-stay 활성.
-    fireEvent.press(screen.getByTestId('destination-detail-seg-stay'));
-    expect(
-      screen.getByTestId('destination-detail-lane-stay')
-    ).toBeOnTheScreen();
-    expect(screen.queryByTestId('destination-detail-lane-place')).toBeNull();
-    expect(screen.getByTestId('destination-detail-seg-stay')).toBeSelected();
-
-    // 장소 세그 press → place 레인만, stay 레인 null, seg-place 활성.
-    fireEvent.press(screen.getByTestId('destination-detail-seg-place'));
-    expect(
-      screen.getByTestId('destination-detail-lane-place')
-    ).toBeOnTheScreen();
-    expect(screen.queryByTestId('destination-detail-lane-stay')).toBeNull();
-    expect(screen.getByTestId('destination-detail-seg-place')).toBeSelected();
-
-    // 전체 세그 press → 두 레인 복귀, seg-all 활성.
-    fireEvent.press(screen.getByTestId('destination-detail-seg-all'));
-    expect(
-      screen.getByTestId('destination-detail-lane-stay')
-    ).toBeOnTheScreen();
-    expect(
-      screen.getByTestId('destination-detail-lane-place')
-    ).toBeOnTheScreen();
-    expect(screen.getByTestId('destination-detail-seg-all')).toBeSelected();
   });
 });
 
@@ -555,5 +475,426 @@ describe('🔴 TRIP-1019 #024 · 닫힌 하트 토글 라벨 "담은 장소 N곳
     expect(
       screen.getByTestId('destination-detail-saved-places-fab')
     ).toHaveAccessibleName('담은 장소 3곳');
+  });
+});
+
+/**
+ * ── TRIP-1048 (QA 2026-09-28 #009, Figma `4663:2540`) — 세그먼트 제거 · 부제 · 장소 2열 격자.
+ *
+ * 무엇을 보장하나: 전체/숙소/장소 세그먼트가 사라져 두 레인이 늘 함께 보이고, 부제에서 없는
+ * "여행지"가 빠지고, 장소 레인이 가로 줄이 아니라 2열 격자(행 × 칸 2개)가 된다.
+ *
+ * (개념) jest 는 레이아웃을 계산하지 않는다 — "2열·같은 폭"은 픽셀로 못 잰다. 그래서 격자를
+ * **행 testID · 칸 testID · 칸 className** 구조로 잰다: 모든 행에 칸이 2개이고, 모든 칸의
+ * className 이 같고, 카드는 칸을 채운다(`w-full`). 실제 173pt·간격 12 는 스크린샷 대조 몫이다.
+ * 장소 카드 하트는 TRIP-1049 몫이라 여기서 단언하지 않는다.
+ */
+describe('TRIP-1048 · 세그먼트 제거 · 부제 · 장소 2열 격자', () => {
+  // 카드 루트만 센다 — 사진 leaf(`…-card-image-{poiId}`)가 같은 접두라 부정 전방탐색으로 뺀다.
+  const CARD_ROOT = /^destination-detail-place-card-(?!image-)/;
+
+  function places(n: number): PlaceCardVM[] {
+    return Array.from({ length: n }, (_, i) => ({
+      poiId: `p${i + 1}`,
+      name: `장소 ${i + 1}`,
+      region: '부산 중구',
+      imageUrl: i % 2 === 0 ? `https://example.com/p${i + 1}.jpg` : null,
+    }));
+  }
+
+  function placeLaneOf(
+    cards: PlaceCardVM[],
+    onPressCard: (poiId: string) => void = jest.fn()
+  ): DestinationDetailScreenProps['placeLane'] {
+    return {
+      error: false,
+      cards,
+      onRetry: jest.fn(),
+      onSeeAll: jest.fn(),
+      onPressCard,
+    };
+  }
+
+  // className 문자열 → 정렬된 토큰 배열. 순서만 다른 같은 className 을 같다고 보려고 정렬한다.
+  function tokens(node: { props: { className?: string } }): string[] {
+    return String(node.props.className ?? '')
+      .trim()
+      .split(/\s+/)
+      .sort();
+  }
+
+  it('G1 · 세그먼트 탭(destination-detail-seg-*)이 하나도 없다', () => {
+    render(<DestinationDetailScreen {...baseProps()} />);
+
+    expect(screen.queryAllByTestId(/^destination-detail-seg-/)).toHaveLength(0);
+    // G11(여행자 일정 제거) 계약은 계속 산다 — 옛 세그 테스트에서 옮겨 온 단언.
+    expect(screen.queryByText('여행자 일정')).toBeNull();
+  });
+
+  it('G2 · 숙소 레인과 장소 레인이 처음부터 함께 있고, 각 "모두 보기"가 제 콜백을 부른다', () => {
+    const staySeeAll = jest.fn();
+    const placeSeeAll = jest.fn();
+    render(
+      <DestinationDetailScreen
+        {...baseProps({
+          stayLane: {
+            error: false,
+            cards: [STAY],
+            onRetry: jest.fn(),
+            onSeeAll: staySeeAll,
+            onPressCard: jest.fn(),
+          },
+          placeLane: {
+            error: false,
+            cards: [PLACE],
+            onRetry: jest.fn(),
+            onSeeAll: placeSeeAll,
+            onPressCard: jest.fn(),
+          },
+        })}
+      />
+    );
+
+    expect(
+      screen.getByTestId('destination-detail-lane-stay')
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('destination-detail-lane-place')
+    ).toBeOnTheScreen();
+
+    fireEvent.press(screen.getByTestId('destination-detail-stay-seeall'));
+    expect(staySeeAll).toHaveBeenCalledTimes(1);
+    expect(placeSeeAll).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('destination-detail-place-seeall'));
+    expect(placeSeeAll).toHaveBeenCalledTimes(1);
+    expect(staySeeAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('G3 · 부제는 정확히 "장소 · 숙소에서 찾았어요"이고 헤딩에 "여행지"가 없다', () => {
+    render(<DestinationDetailScreen {...baseProps()} />);
+
+    // getByText(문자열)은 완전 일치 — 앞뒤에 다른 글자가 붙으면 못 찾는다.
+    expect(screen.getByText('장소 · 숙소에서 찾았어요')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('destination-detail-heading')
+    ).not.toHaveTextContent(/여행지/);
+    // 그보다 옛 부제(…여행자 일정에서 찾았어요)도 계속 없다(옛 AC-1 에서 옮겨 온 단언).
+    expect(screen.queryByText(/여행자 일정에서 찾았어요/)).toBeNull();
+  });
+
+  it('G4 · 장소 8장이면 격자 4행 × 2칸에 입력 순서대로 놓이고, 카드 press → onPressCard(poiId)', () => {
+    const onPressCard = jest.fn();
+    const cards = places(8);
+    render(
+      <DestinationDetailScreen
+        {...baseProps({ placeLane: placeLaneOf(cards, onPressCard) })}
+      />
+    );
+
+    const grid = within(
+      screen.getByTestId('destination-detail-lane-place')
+    ).getByTestId('destination-detail-place-grid');
+
+    // 카드 8장이 격자 안에, 입력 순서(행 우선)대로.
+    expect(
+      within(grid)
+        .getAllByTestId(CARD_ROOT)
+        .map((node) => node.props.testID)
+    ).toEqual(cards.map((c) => `destination-detail-place-card-${c.poiId}`));
+
+    // 4행, 행마다 칸 2개, 칸마다 카드 1장(짝수라 빈 칸 없음).
+    const rows = within(grid).getAllByTestId(
+      'destination-detail-place-grid-row'
+    );
+    expect(rows).toHaveLength(4);
+    for (const row of rows) {
+      const cells = within(row).getAllByTestId(
+        'destination-detail-place-grid-cell'
+      );
+      expect(cells).toHaveLength(2);
+      for (const cell of cells) {
+        expect(within(cell).queryAllByTestId(CARD_ROOT)).toHaveLength(1);
+      }
+    }
+
+    fireEvent.press(screen.getByTestId('destination-detail-place-card-p5'));
+    expect(onPressCard).toHaveBeenCalledWith('p5');
+  });
+
+  it('G5 · 장소 레인엔 가로 스크롤이 없고, 숙소 레인엔 그대로 있다', () => {
+    render(<DestinationDetailScreen {...baseProps()} />);
+
+    // 가로 ScrollView 하나가 트리에선 여러 노드로 잡힌다 — 숙소 쪽은 "0보다 크다"로만 본다.
+    const horizontalIn = (testID: string) =>
+      screen
+        .getByTestId(testID)
+        .findAll((node) => node.props.horizontal === true).length;
+
+    expect(horizontalIn('destination-detail-lane-place')).toBe(0);
+    expect(horizontalIn('destination-detail-lane-stay')).toBeGreaterThan(0);
+  });
+
+  it('G6 · 홀수(5장)면 마지막 행은 왼쪽 칸에만 카드가 있고, 빈 칸도 다른 칸과 같은 className 이다', () => {
+    render(
+      <DestinationDetailScreen
+        {...baseProps({ placeLane: placeLaneOf(places(5)) })}
+      />
+    );
+
+    const grid = screen.getByTestId('destination-detail-place-grid');
+    const rows = within(grid).getAllByTestId(
+      'destination-detail-place-grid-row'
+    );
+    expect(rows).toHaveLength(3);
+
+    // 모든 행이 칸 2개 — 마지막 행도 빈 칸을 하나 둔다(카드가 한 줄 전체로 늘어나지 않게).
+    const cellsPerRow = rows.map((row) =>
+      within(row).getAllByTestId('destination-detail-place-grid-cell')
+    );
+    for (const cells of cellsPerRow) {
+      expect(cells).toHaveLength(2);
+    }
+
+    // 행은 가로로 칸을 늘어놓는다 — 이 토큰이 빠지면 격자가 1열로 무너진다(5-b 경고-1).
+    for (const row of rows) {
+      expect(tokens(row)).toContain('flex-row');
+    }
+
+    // 모든 칸(빈 칸 포함)의 className 이 같다 = 같은 폭 규칙.
+    const allCells = cellsPerRow.flat();
+    // 칸은 행 폭을 반씩 나눈다 — 빈 문자열끼리 같아도 통과하지 않게 토큰을 직접 본다.
+    for (const cell of allCells) {
+      expect(tokens(cell)).toContain('flex-1');
+    }
+    const first = tokens(allCells[0]);
+    for (const cell of allCells) {
+      expect(tokens(cell)).toEqual(first);
+    }
+
+    // 마지막 행: 왼쪽 칸에 5번째 카드, 오른쪽 칸은 비었다.
+    const [lastLeft, lastRight] = cellsPerRow[2];
+    expect(
+      within(lastLeft)
+        .getAllByTestId(CARD_ROOT)
+        .map((node) => node.props.testID)
+    ).toEqual(['destination-detail-place-card-p5']);
+    expect(within(lastRight).queryAllByTestId(CARD_ROOT)).toHaveLength(0);
+
+    // 격자 안 카드는 칸을 채운다(w-full) — d01 레인의 160 고정폭이 아니다.
+    for (const card of within(grid).getAllByTestId(CARD_ROOT)) {
+      expect(tokens(card)).toContain('w-full');
+      expect(tokens(card)).not.toContain('w-[160px]');
+    }
+  });
+
+  it('G7a · 장소 조회 실패면 재시도 블록만 있고 격자는 없다(INV-4)', () => {
+    render(
+      <DestinationDetailScreen
+        {...baseProps({
+          placeLane: { ...placeLaneOf(places(4)), error: true },
+        })}
+      />
+    );
+
+    expect(
+      screen.getByTestId('destination-detail-place-retry')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('destination-detail-place-grid')).toBeNull();
+  });
+
+  it('G7b · 장소 0건이면 빈 자리 프롬프트만 있고 격자는 없다', () => {
+    render(
+      <DestinationDetailScreen {...baseProps({ placeLane: placeLaneOf([]) })} />
+    );
+
+    expect(
+      screen.getByTestId('destination-detail-place-empty')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('destination-detail-place-grid')).toBeNull();
+  });
+});
+
+/**
+ * ── TRIP-1049 · 장소 격자 카드 저장 하트 (d05, Figma 4663:2540) ──────────────────────────
+ * 숙소 레인(TRIP-709 AC-5)과 같은 계약을 장소 격자에 얹는다. 위 케이스는 무수정, 아래만 추가.
+ *
+ * 무엇을 보장하나:
+ *  - 저장 배선(onToggleSave)이 없으면 하트가 없다(프리뷰·기존 테스트 무회귀, AC-8).
+ *  - 담김/안 담김은 서로 다른 글리프 testID + `selected` 로 갈린다(색 X — SVG fill 은 jest 사각).
+ *  - 하트 press 는 카드 이동을 부르지 않는다(AC-4). 대기 중엔 하트도 카드도 반응하지 않는다 —
+ *    disabled 하트 press 는 부모 카드로 새기 때문이다(02a ★2).
+ *  - 실패 안내는 받은 문구를 그대로 보이고, 누르면 닫힌다(AC-7 표시면).
+ */
+describe('TRIP-1049 · 장소 격자 저장 하트', () => {
+  const PLACE_B: PlaceCardVM = {
+    poiId: 'poi-2',
+    name: '감천문화마을',
+    region: '사하구',
+    imageUrl: null,
+  };
+
+  function placeLaneWithSave(
+    over: Partial<DestinationDetailScreenProps['placeLane']> = {}
+  ): DestinationDetailScreenProps['placeLane'] {
+    return {
+      error: false,
+      cards: [PLACE, PLACE_B],
+      onRetry: jest.fn(),
+      onSeeAll: jest.fn(),
+      onPressCard: jest.fn(),
+      savedPoiIds: [],
+      pendingPoiIds: [],
+      onToggleSave: jest.fn(),
+      saveErrorMessage: null,
+      onDismissSaveError: jest.fn(),
+      ...over,
+    };
+  }
+
+  it('S-1 · 저장 배선이 없으면(기존 baseProps) 하트가 없고 카드·격자는 그대로다', () => {
+    render(<DestinationDetailScreen {...baseProps()} />);
+
+    expect(
+      screen.queryByTestId(`destination-detail-place-save-${PLACE.poiId}`)
+    ).toBeNull();
+    expect(
+      screen.getByTestId(`destination-detail-place-card-${PLACE.poiId}`)
+    ).toBeOnTheScreen();
+  });
+
+  it('S-2 · 담긴 장소는 찬 하트+선택됨, 안 담긴 장소는 빈 하트+선택 아님', () => {
+    render(
+      <DestinationDetailScreen
+        {...baseProps({
+          placeLane: placeLaneWithSave({ savedPoiIds: [PLACE_B.poiId] }),
+        })}
+      />
+    );
+
+    // 안 담김(PLACE)
+    expect(
+      screen.getByTestId(
+        `destination-detail-place-heart-outline-${PLACE.poiId}`
+      )
+    ).toBeOnTheScreen();
+    expect(
+      screen.queryByTestId(
+        `destination-detail-place-heart-filled-${PLACE.poiId}`
+      )
+    ).toBeNull();
+    expect(
+      screen.getByTestId(`destination-detail-place-save-${PLACE.poiId}`)
+    ).not.toBeSelected();
+    // 담김(PLACE_B)
+    expect(
+      screen.getByTestId(
+        `destination-detail-place-heart-filled-${PLACE_B.poiId}`
+      )
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId(`destination-detail-place-save-${PLACE_B.poiId}`)
+    ).toBeSelected();
+  });
+
+  it('S-3 · 하트 press → onToggleSave(poiId) 1회, 카드 이동(onPressCard)은 0회', () => {
+    const onToggleSave = jest.fn();
+    const onPressCard = jest.fn();
+    render(
+      <DestinationDetailScreen
+        {...baseProps({
+          placeLane: placeLaneWithSave({ onToggleSave, onPressCard }),
+        })}
+      />
+    );
+
+    fireEvent.press(
+      screen.getByTestId(`destination-detail-place-save-${PLACE.poiId}`)
+    );
+
+    expect(onToggleSave).toHaveBeenCalledTimes(1);
+    expect(onToggleSave).toHaveBeenCalledWith(PLACE.poiId);
+    expect(onPressCard).not.toHaveBeenCalled();
+  });
+
+  it('S-4 · 대기 중 하트는 disabled 이고, 눌러도 담기·카드 이동 모두 0회다', () => {
+    const onToggleSave = jest.fn();
+    const onPressCard = jest.fn();
+    render(
+      <DestinationDetailScreen
+        {...baseProps({
+          placeLane: placeLaneWithSave({
+            pendingPoiIds: [PLACE.poiId],
+            onToggleSave,
+            onPressCard,
+          }),
+        })}
+      />
+    );
+    const heart = screen.getByTestId(
+      `destination-detail-place-save-${PLACE.poiId}`
+    );
+
+    expect(heart).toBeDisabled();
+    fireEvent.press(heart);
+
+    expect(onToggleSave).not.toHaveBeenCalled();
+    // disabled 하트 press 는 부모 카드로 샌다 — 카드가 대기를 보고 막아야 0 이다(02a ★2).
+    expect(onPressCard).not.toHaveBeenCalled();
+    // 짝 — 대기 중이 아닌 옆 카드 하트는 살아 있다(전체를 막는 구현 차단).
+    expect(
+      screen.getByTestId(`destination-detail-place-save-${PLACE_B.poiId}`)
+    ).not.toBeDisabled();
+  });
+
+  it('S-5 · 실패 문구가 오면 배너에 그대로 보이고, 누르면 닫기 콜백이 온다 · 없으면 배너 없음', () => {
+    const onDismissSaveError = jest.fn();
+    const message = '연결이 불안정해 담지 못했어요';
+    const { rerender } = render(
+      <DestinationDetailScreen
+        {...baseProps({ placeLane: placeLaneWithSave() })}
+      />
+    );
+    // 앵커 — 문구가 없으면 배너도 없다.
+    expect(
+      screen.queryByTestId('destination-detail-place-save-error')
+    ).toBeNull();
+
+    rerender(
+      <DestinationDetailScreen
+        {...baseProps({
+          placeLane: placeLaneWithSave({
+            saveErrorMessage: message,
+            onDismissSaveError,
+          }),
+        })}
+      />
+    );
+    const banner = screen.getByTestId('destination-detail-place-save-error');
+
+    // 문구는 한 Text 노드의 완전 일치로 잰다(02a ★13).
+    expect(within(banner).getByText(message)).toBeOnTheScreen();
+    fireEvent.press(banner);
+    expect(onDismissSaveError).toHaveBeenCalledTimes(1);
+  });
+
+  it('S-7 · 하트는 격자 칸 안(카드 위)에 그려진다 — 격자 밖에 따로 그리지 않는다', () => {
+    render(
+      <DestinationDetailScreen
+        {...baseProps({ placeLane: placeLaneWithSave() })}
+      />
+    );
+
+    const cells = screen.getAllByTestId('destination-detail-place-grid-cell');
+    expect(
+      within(cells[0]).getByTestId(
+        `destination-detail-place-save-${PLACE.poiId}`
+      )
+    ).toBeOnTheScreen();
+    expect(
+      within(cells[1]).getByTestId(
+        `destination-detail-place-save-${PLACE_B.poiId}`
+      )
+    ).toBeOnTheScreen();
   });
 });

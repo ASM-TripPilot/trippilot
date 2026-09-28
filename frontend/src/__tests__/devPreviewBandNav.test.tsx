@@ -1328,7 +1328,7 @@ describe('🔴 TRIP-772 · l 밴드 25키·라벨 완전 일치 (AC-1·AC-3)', (
     ['my-stays-default', 'l04 · 등록 숙소·예약 기록 default'], // 1604:2440
     ['my-stays-empty', 'l04 · 등록 숙소·예약 기록 empty'], // 1605:2440
     ['my-stays-dialog', 'l04 · 등록 숙소·예약 기록 dialog'], // 1606:2440
-    ['settings-default', 'l05 · 설정 default'], // 1607:2440
+    ['settings-default', 'l05 · 설정 default'], // 4664:3279 (TRIP-1051 — 옛 1607:2440 대체)
     ['settings-delete-dialog', 'l05 · 설정 dialog 1단'], // 1608:2440
     ['settings-delete-dialog-final', 'l05 · 설정 dialog 2단'], // 4531:3018
     ['settings-export-truncated', 'l05 · 설정 export-truncated'], // 4533:3260

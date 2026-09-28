@@ -5,11 +5,14 @@ import {
   useGetTrips,
   useGetTripsTripIdItinerary,
 } from '@/shared/api/generated/trips/trips';
+import { useGetPlaces } from '@/shared/api/generated/places/places';
 import { getAccessToken } from '@/shared/api/tokenManager';
 import { isNotFound } from '@/shared/api/isNotFound';
 import { seoulDate } from '@/shared/date/seoulDate';
 import { formatNightsLabel } from '@/entities/trip/lib/formatNights';
 import { formatTripRange } from '@/entities/trip/lib/formatTripPeriod';
+import { pickTrendingPlaces } from '@/entities/place/lib/trendingPlaces';
+import { usePlaceSaveToggle } from '@/features/explore/model/placeSaveToggle';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 import { useSavedStays } from '@/features/stay/model/savedStays';
@@ -22,7 +25,7 @@ import {
   applyItineraryTarget,
   resolveHomePhase,
 } from '@/features/home/model/homePhase';
-import type { HomePhase } from '@/features/home/model/homeTypes';
+import type { HomePhase, HomeSpotsLane } from '@/features/home/model/homeTypes';
 import { HomeScreen } from '@/features/home/ui/HomeScreen';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 
@@ -37,6 +40,7 @@ interface HomeNav {
   savedStaysCount: number;
   savedMenuOpen: boolean;
   onToggleSavedMenu: () => void;
+  spotsLane: HomeSpotsLane;
 }
 
 // 지배 planning 여행이 있을 때만 마운트되는 자식 — 여기서만 지배 여행의 itinerary GET 을 문다.
@@ -102,7 +106,8 @@ export default function HomeRoute() {
   const router = useRouter();
   const trips = useGetTrips();
   const isAuthed = getAccessToken() !== null;
-  const { savedPoiIds } = useSavedPlaces({ isAuthed });
+  const savedPlaces = useSavedPlaces({ isAuthed });
+  const { savedPoiIds } = savedPlaces;
   // 담은 곳 미니 FAB 개수 배지(TRIP-695) — 담은 장소 수·전체 저장 숙소 수를 실데이터에서 뽑아
   // 화면에 주입한다. useSavedStays 는 features/stay 것(savedCount 노출) — features/trip 동명 훅 아님.
   const { savedCount: savedStaysCount } = useSavedStays({ isAuthed });
@@ -110,6 +115,54 @@ export default function HomeRoute() {
   // 담은 곳 saved-menu 열림 상태(TRIP-494) — 순수 화면이 useState 0건이라 라우트가 소유한다
   // (탐색 랜딩 선례와 동형). 미니 FAB press 는 메뉴를 닫고 각각 d02/e04 로 이동한다.
   const [savedMenuOpen, setSavedMenuOpen] = useState(false);
+
+  // 데이터 도착 후에만 여행 유무를 판정한다(대기·실패면 data 가 없어 undefined). 비-ENDED 지배 여행이
+  // 있으면 planning, 없으면 undefined→discovery. 스팟 조회 지역이 이 판정을 써서 early return 위에 둔다.
+  const phase = resolveHomePhase({
+    trips: trips.data ?? [],
+    today: seoulDate(new Date()),
+    savedCount: savedPoiIds.length,
+    formatTripMeta: (trip) =>
+      `${formatTripRange(trip.startDate, trip.endDate)} · ${formatNightsLabel(
+        trip.startDate,
+        trip.endDate
+      )} · ${trip.party}명`,
+  });
+
+  // '지금 뜨는 장소'(TRIP-1049) — 여행 중이면 지배 여행 첫 목적지 지역, 아니면 전국에서 200곳을
+  // 받아 담긴 수 순 4장. 서버엔 인기순 정렬이 없어 클라가 고른다(pickTrendingPlaces).
+  const spotsRegion =
+    phase?.kind === 'planning' && phase.showSpots
+      ? trips.data?.find((t) => t.tripId === phase.dominantTripId)
+          ?.destinations[0]?.region
+      : undefined;
+  // 여행 조회 대기 중엔 지역을 모르므로 보내지 않는다(여행 중 사용자에게 전국 200행 낭비 방지).
+  // 실패면 발견 얼굴로 폴백하므로 전국 조회를 켠다(끄면 스팟이 영원히 스켈레톤).
+  const places = useGetPlaces(
+    { ...(spotsRegion ? { region: spotsRegion } : {}), limit: 200 },
+    { query: { enabled: !trips.isPending } }
+  );
+  const trending = pickTrendingPlaces(places.data?.items ?? [], 4);
+  const placeSave = usePlaceSaveToggle({
+    isAuthed,
+    savedPoiIds,
+    save: savedPlaces.save,
+    remove: savedPlaces.remove,
+    places: trending,
+    onRequireLogin: () => router.push('/(auth)/login'),
+  });
+  const spotsLane: HomeSpotsLane = {
+    status: places.isPending ? 'loading' : places.isError ? 'error' : 'ready',
+    cards: trending.map((place) => ({
+      poiId: place.poiId,
+      title: place.nameKo,
+      tag: `#${place.tags[0] || place.category}`,
+      imageUrl: place.imageUrl,
+    })),
+    onRetry: () => void places.refetch(),
+    savedPoiIds,
+    ...placeSave,
+  };
 
   const nav: HomeNav = {
     // 새 여행 진입 — 직전 여행 드래프트를 이동 전에 비운다(TRIP-1012 #074).
@@ -136,6 +189,7 @@ export default function HomeRoute() {
     savedStaysCount,
     savedMenuOpen,
     onToggleSavedMenu: () => setSavedMenuOpen((v) => !v),
+    spotsLane,
   };
 
   // 조회 진행 중 — 섹션만 로딩 스켈레톤, phase 미전달. no-trip(discovery)으로 확정하지 않는다(INV-4).
@@ -153,18 +207,6 @@ export default function HomeRoute() {
   if (trips.isError) {
     return <HomeScreen {...HOME_DEFAULT_PROPS} {...nav} />;
   }
-
-  // 데이터 도착 후에만 여행 유무를 판정한다. 비-ENDED 지배 여행이 있으면 planning, 없으면 undefined→discovery.
-  const phase = resolveHomePhase({
-    trips: trips.data ?? [],
-    today: seoulDate(new Date()),
-    savedCount: savedPoiIds.length,
-    formatTripMeta: (trip) =>
-      `${formatTripRange(trip.startDate, trip.endDate)} · ${formatNightsLabel(
-        trip.startDate,
-        trip.endDate
-      )} · ${trip.party}명`,
-  });
 
   // planning 이면 지배 여행 일정을 물어 카드 CTA 목적지를 정하는 자식으로 그린다(조건부-자식 —
   // 위 로딩·오류·빈 목록 렌더는 이 itinerary 훅을 아예 호출하지 않는다).

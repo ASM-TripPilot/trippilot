@@ -23,6 +23,7 @@ import {
   HOME_POST_TRIP_PROPS,
   HOME_TRAVELING_PROPS,
 } from '@/features/home/model/homeFixtures';
+import type { HomeSpotsLane } from '@/features/home/model/homeTypes';
 import {
   PREVIEW_PLACES,
   PREVIEW_REGIONS,
@@ -367,6 +368,39 @@ const EXPLORE_LANDING_PLACE_LANE = {
   onRetry: noop,
   onPressCard: noop,
 };
+
+// TRIP-1049 — 장소 저장 하트를 눈으로 보는 자리: 담김 1장(광안리 해변 p2, Figma 4663:2540·4664:2585).
+const PLACE_SAVE_PREVIEW = {
+  savedPoiIds: ['p2'],
+  pendingPoiIds: [],
+  onToggleSave: noop,
+};
+
+// 홈 '지금 뜨는 장소' 하트(TRIP-1049) — 실앱은 라우트가 GET /places 로 채운다. 프리뷰는 픽스처
+// 4장에 poiId 를 붙여 하트를 띄우고 3번째 장을 담김으로 둔다.
+const HOME_SPOTS_LANE: HomeSpotsLane = {
+  status: 'ready',
+  cards:
+    HOME_DEFAULT_PROPS.sections.kind === 'ready'
+      ? HOME_DEFAULT_PROPS.sections.spots.map((card, i) => ({
+          ...card,
+          poiId: `spot-${i}`,
+        }))
+      : [],
+  onRetry: noop,
+  savedPoiIds: ['spot-2'],
+  onToggleSave: noop,
+};
+
+// d05 목적지 상세 장소 격자 전용 6장(Figma 4663:2540 과 같은 데이터, TRIP-1048).
+const DESTINATION_DETAIL_PLACES = [
+  { poiId: 'p1', name: '감천문화마을', region: '부산 사하구' },
+  { poiId: 'p2', name: '광안리 해변', region: '부산 수영구' },
+  { poiId: 'p3', name: '해운대', region: '부산 해운대구' },
+  { poiId: 'p4', name: '전포 카페거리', region: '부산 부산진구' },
+  { poiId: 'p5', name: '해동용궁사', region: '부산 기장군' },
+  { poiId: 'p6', name: '자갈치 시장', region: '부산 중구' },
+];
 
 const EXPLORE_LANDING_BASE = {
   heading: {
@@ -2024,7 +2058,8 @@ function renderPlanbRequestPreview(): ReactElement {
 }
 
 // l05 설정(TRIP-778) — settings-* 5키가 함께 쓰는 배경. 취향은 서버 enum 원문(D5 — Figma 의 바다·해산물·
-// 느긋·맛집은 enum 밖이라 Figma 쪽 수정 대상), 예산만 미설정 칩. 위치 동의·개인화 사용 중·제휴 토글 ON.
+// 느긋·맛집은 enum 밖이라 Figma 쪽 수정 대상), 예산만 미설정 → 취향 한 행 `6/7 설정됨`(TRIP-1051 ·
+// Figma 4664:3279 와 같은 숫자). 위치 동의·개인화 사용 중·제휴 토글 ON.
 const L05_SETTINGS_BASE = {
   groups: filterReadySettingsSections(
     buildSettingsSections({
@@ -2793,7 +2828,10 @@ export const PREVIEW_STATES: PreviewState[] = [
     band: 'a',
     label: 'a01 · 기본',
     login: null,
-    render: () => withShellTabBar(<HomeScreen {...HOME_DEFAULT_PROPS} />),
+    render: () =>
+      withShellTabBar(
+        <HomeScreen {...HOME_DEFAULT_PROPS} spotsLane={HOME_SPOTS_LANE} />
+      ),
   },
   {
     key: 'home-loading',
@@ -2815,7 +2853,10 @@ export const PREVIEW_STATES: PreviewState[] = [
     band: 'a',
     label: 'a01 · 여행 중',
     login: null,
-    render: () => withShellTabBar(<HomeScreen {...HOME_TRAVELING_PROPS} />),
+    render: () =>
+      withShellTabBar(
+        <HomeScreen {...HOME_TRAVELING_PROPS} spotsLane={HOME_SPOTS_LANE} />
+      ),
   },
   {
     key: 'home-post-trip',
@@ -3772,6 +3813,7 @@ export const PREVIEW_STATES: PreviewState[] = [
       withShellTabBar(
         <ExploreLandingScreen
           {...EXPLORE_LANDING_BASE}
+          placeLane={{ ...EXPLORE_LANDING_PLACE_LANE, ...PLACE_SAVE_PREVIEW }}
           stayLane={{
             error: false,
             cards: EXPLORE_STAY_CARDS,
@@ -3815,10 +3857,11 @@ export const PREVIEW_STATES: PreviewState[] = [
       ),
   },
   {
-    // TRIP-709 — d05 목적지 상세 default(Figma 2176:2336). 세그 all 활성·숙소 담김 1건
-    // (savedKeys 첫 카드)·FAB 2단(하트+＋)이 한 화면에 보이게. 화면이 자체 BottomTabBar 를
-    // 그리므로 withShellTabBar 로 감싸지 않는다(props-only 직접 렌더). 세그 활성 흰칩·하트 분홍·
-    // FAB 위치·검색바 › 는 jest 사각이라 이 키가 6-b 육안 대조 자리.
+    // TRIP-709 — d05 목적지 상세 default. TRIP-1048 로 세그먼트가 사라지고 장소가 2열 격자가
+    // 됐다(Figma 4663:2540) — 장소는 Figma 와 같은 6장(이 키 전용 배열, d01 공용 픽스처 불변).
+    // 숙소 담김 1건(savedKeys 첫 카드)·FAB 2단(하트+＋)이 한 화면에 보이게. 화면이 자체
+    // BottomTabBar 를 그리므로 withShellTabBar 로 감싸지 않는다(props-only 직접 렌더). 격자 칸 폭·
+    // 간격·하트 분홍·FAB 위치·검색바 › 는 jest 사각이라 이 키가 6-b 육안 대조 자리.
     key: 'destination-detail-default',
     band: 'd',
     label: 'd05 · 통합 검색 결과 default',
@@ -3841,10 +3884,11 @@ export const PREVIEW_STATES: PreviewState[] = [
         }}
         placeLane={{
           error: false,
-          cards: EXPLORE_LANDING_PLACE_LANE.cards,
+          cards: DESTINATION_DETAIL_PLACES,
           onRetry: noop,
           onSeeAll: noop,
           onPressCard: noop,
+          ...PLACE_SAVE_PREVIEW,
         }}
         onPressTab={noop}
         onPressCreateTrip={noop}

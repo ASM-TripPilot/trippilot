@@ -3,24 +3,22 @@
  *
  * 정본 순서(Figma 라이브 = 화면 유일 정본): 계정 → 여행 취향 → 위치정보 → 알림 → 제휴 안내 →
  * (앱 정보 — TRIP-937, Figma 에 없음) → 위험 영역. 각 행은 `ready` 로 상호작용 여부를 표시한다 —
- * TRIP-778 로 모든 행이 `ready:true` 다(취향 7·제휴·개인화 개통).
+ * TRIP-778 로 모든 행이 `ready:true` 다(취향·제휴·개인화 개통). 취향 그룹은 머리글 없는 한 행이다
+ * (TRIP-1051 — 7행이 전부 같은 편집 화면으로 가는 가짜 선택지였다).
  *
- * 요약값: 닉네임(Q6 — null/undefined 를 문자열로 흘리지 않는다) · 취향 7행(서버 값 또는 `미설정` 칩)
+ * 요약값: 닉네임(Q6 — null/undefined 를 문자열로 흘리지 않는다) · 취향 `N/7 설정됨`
  * · 위치 동의 칩 · 개인화 `사용 중`. 입력이 없으면(응답 전·실패) 값도 칩도 두지 않는다 — 모를 때
  * `미설정`/`미동의` 라고 말하면 거짓 표면이다(D4).
  */
 import type { PreferenceView } from '@/shared/api/generated/schemas';
 
-import {
-  type PreferenceRowKey,
-  summarizePreferences,
-} from './preferenceSummary';
+import { summarizePreferences } from './preferenceSummary';
 
 export interface SettingsInput {
   nickname: string;
   /** 소셜 MVP 는 email 이 null 일 수 있다. Q6 확정으로 요약엔 닉네임만 쓰므로 여기선 참조하지 않는다. */
   email: string | null;
-  /** GET /me/preferences. 없으면(응답 전·실패) 취향 7행은 값·칩 없음. */
+  /** GET /me/preferences. 없으면(응답 전·실패) 취향 행은 값 없음. */
   preferences?: PreferenceView;
   /** GET /me/location-consent 의 gpsRecordingOptIn(L3 — 행 라벨과 같은 것). 없으면 칩 없음(D4). */
   locationConsent?: boolean;
@@ -41,27 +39,13 @@ export interface SettingsRowVM {
   ready: boolean;
 }
 
-const PREFERENCE_ROWS: [PreferenceRowKey, string][] = [
-  ['style', '여행 스타일'],
-  ['budget', '예산'],
-  ['companions', '동행 유형'],
-  ['activities', '선호 활동'],
-  ['transport', '이동 방식'],
-  ['food', '음식 취향'],
-  ['pace', '일정 밀도·이동 선호'],
-];
-
-const UNSET_CHIP: SettingsRowChip = { label: '미설정', tone: 'neutral' };
-
-function preferenceRows(view?: PreferenceView): SettingsRowVM[] {
-  const summary = view ? summarizePreferences(view) : null;
-  return PREFERENCE_ROWS.map(([key, label]) => {
-    const s = summary?.[key];
-    if (!s) return { key, label, ready: true };
-    return s.kind === 'value'
-      ? { key, label, value: s.text, ready: true }
-      : { key, label, chip: UNSET_CHIP, ready: true };
-  });
+/** 취향 행 값 — N = 설정된 축 수, 분모 = 축 개수. 모르면(응답 전·실패) 값 없음(D4). */
+function preferenceRow(view?: PreferenceView): SettingsRowVM {
+  const row = { key: 'preferences', label: '여행 취향', ready: true };
+  if (!view) return row;
+  const axes = Object.values(summarizePreferences(view));
+  const set = axes.filter((a) => a.kind === 'value').length;
+  return { ...row, value: `${set}/${axes.length} 설정됨` };
 }
 
 function consentChip(consent?: boolean): SettingsRowChip | null {
@@ -73,7 +57,8 @@ function consentChip(consent?: boolean): SettingsRowChip | null {
 
 export interface SettingsGroupVM {
   key: string;
-  label: string;
+  /** null = 머리글 없는 카드(취향 그룹). */
+  label: string | null;
   rows: SettingsRowVM[];
 }
 
@@ -95,8 +80,8 @@ export function buildSettingsSections(input: SettingsInput): SettingsGroupVM[] {
     },
     {
       key: 'preferences',
-      label: '여행 취향',
-      rows: preferenceRows(input.preferences),
+      label: null,
+      rows: [preferenceRow(input.preferences)],
     },
     {
       key: 'location',

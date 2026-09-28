@@ -31,6 +31,7 @@ import { useSavedStays } from '@/features/stay/model/savedStays';
 import { stayKey } from '@/features/stay/model/stayKey';
 import { useStaySearch } from '@/features/stay/model/useStaySearch';
 import { useRegions } from '@/features/explore/model/regions';
+import { usePlaceSaveToggle } from '@/features/explore/model/placeSaveToggle';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import {
   regionPickerHref,
@@ -43,7 +44,7 @@ import type {
   StayCardVM,
 } from '@/features/explore/ui/ExploreLandingScreen';
 
-// 장소 레인은 가로 레인이라 전량이 필요 없다 — 서버 limit으로 필요한 개수만 받는다
+// 장소 칸은 2열 격자 최대 4행이라 전량이 필요 없다 — 서버 limit으로 필요한 개수만 받는다
 // (ExploreLandingScreen의 PLACE_LANE_LIMIT 선례와 같은 값).
 const PLACE_LANE_LIMIT = 8;
 
@@ -77,7 +78,8 @@ function DestinationDetailBody({
   const router = useRouter();
 
   const isAuthed = getAccessToken() !== null;
-  const { savedPoiIds } = useSavedPlaces({ isAuthed });
+  const savedPlaces = useSavedPlaces({ isAuthed });
+  const { savedPoiIds } = savedPlaces;
   // 숙소 담기 하트(TRIP-709, `(tabs)/explore.tsx` SavableStayLane 선례) — 서버 상태 소유자는
   // useSavedStays(react-query 캐시)다. 로컬 useState 토글이 아니라 save/remove 실호출이라
   // "저장됐다는 거짓말"이 안 통한다(repo-trap 글리프 함정). 게스트는 훅이 enabled:false 로
@@ -110,6 +112,16 @@ function DestinationDetailBody({
     region: item.region,
     priceText: formatPrice(item.price),
   }));
+
+  // 장소 담기 하트(TRIP-1049) — 이 본문(key=regionCode) 안에 둬 지역이 바뀌면 대기·배너가 함께 사라진다.
+  const placeSave = usePlaceSaveToggle({
+    isAuthed,
+    savedPoiIds,
+    save: savedPlaces.save,
+    remove: savedPlaces.remove,
+    places: places.data?.items ?? [],
+    onRequireLogin: () => router.push('/(auth)/login'),
+  });
 
   const placeCards: PlaceCardVM[] = (places.data?.items ?? []).map((place) => ({
     poiId: place.poiId,
@@ -181,6 +193,8 @@ function DestinationDetailBody({
             `/explore/places?region=${encodeURIComponent(displayName)}`
           ),
         onPressCard: (poiId) => router.push(`/explore/places/${poiId}`),
+        savedPoiIds,
+        ...placeSave,
       }}
       // `/stays`(StaySearchPage) 선례와 동일한 탭 전환 배선 — replace라 스택에 안 쌓인다.
       onPressTab={(key) =>

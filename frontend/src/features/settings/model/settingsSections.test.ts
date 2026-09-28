@@ -1,3 +1,16 @@
+import fc from 'fast-check';
+
+import {
+  PreferenceInputActivitiesItem,
+  PreferenceInputBudgetTier,
+  PreferenceInputCompanionTypesItem,
+  PreferenceInputFoodTastesItem,
+  PreferenceInputPace,
+  PreferenceInputStylesItem,
+  PreferenceInputTransportModesItem,
+  type PreferenceView,
+} from '@/shared/api/generated/schemas';
+
 import { buildSettingsSections } from './settingsSections';
 
 /**
@@ -12,7 +25,8 @@ import { buildSettingsSections } from './settingsSections';
  *  (3) email 이 null(소셜 MVP)이어도 요약이 안 깨진다 — 'null'/'undefined' 문자열이 새지 않는다.
  *  (4) TRIP-778 AC-2: 모든 행이 ready:true 다(취향 7·제휴·개인화 개통) — 그룹·행 key·label·ready 를
  *      완전일치 표로 잠근다. 구 "취향·제휴 ready:false" 단언은 계약 변경(01b 사용자 결정)으로 재작성.
- *  (7) TRIP-778 AC-4·5·6(모델 몫): 취향 값/미설정 칩, 위치 동의 칩, 개인화 '사용 중' 값.
+ *  (7) TRIP-778 AC-5·6(모델 몫): 위치 동의 칩, 개인화 '사용 중' 값.
+ *  (8) TRIP-1051: 여행 취향은 머리글 없는 그룹(label null)에 한 행 `N/7 설정됨` — 아래 describe.
  *  (6) TRIP-938 AC-6: 계정 그룹 마지막 행 = 로그아웃(ready:true). 그룹 수(7)는 그대로다.
  *
  * 3동작 뼈대: 준비=닉네임/이메일 입력 → 실행=buildSettingsSections → 단언=그룹/행 VM.
@@ -27,7 +41,8 @@ import { buildSettingsSections } from './settingsSections';
  */
 const EXPECTED_GROUP_LABELS = [
   '계정',
-  '여행 취향',
+  null, // TRIP-1051 결정 (a) — 여행 취향 그룹은 머리글이 없다(행 라벨과 같은 말 두 번 금지)
+
   '위치정보',
   '알림',
   '제휴 안내',
@@ -130,14 +145,12 @@ describe('TRIP-608 · buildSettingsSections (AC-1 · AC-11)', () => {
  * AC-2: 7그룹의 그룹·행 key·label·ready 를 **정본 순서 완전일치 표**로 잠근다. 위치정보 그룹에 라이브
  *  `4526:2415` 의 개인화 행이 붙고(D3), 취향 7·제휴·개인화가 ready:true 다(구 TRIP-618 AC-5·AC-6 의
  *  "취향·제휴 ready:false 유지"는 01b 사용자 결정으로 뒤집혀 이 표로 대체).
- * AC-4·5·6(모델 몫): 서버 값이 행 VM 의 `value`·`chip` 으로 들어간다. 응답 전·실패("모름")는 값도 칩도
- *  없다 — 모를 때 `미설정`/`미동의` 라고 말하면 거짓 표면이다(D4, 02a ★4).
+ * AC-5·6(모델 몫): 서버 값이 행 VM 의 `value`·`chip` 으로 들어간다. 응답 전·실패("모름")는 값도 칩도
+ *  없다 — 모를 때 `미설정`/`미동의` 라고 말하면 거짓 표면이다(D4, 02a ★4). 취향은 TRIP-1051 describe.
  *
  * (개념) `x ?? null` — x 가 undefined 거나 null 이면 null. "없음"을 undefined 로 둘지 null 로 둘지는
  *  구현 재량이라 둘 다 받는다(02a ★5).
  */
-
-const DOT = '·';
 
 /** 그룹·행 정본 표(AC-2) — [그룹 key, 그룹 label, [행 key, 행 label, ready][]]. */
 const CANON = [
@@ -150,19 +163,8 @@ const CANON = [
       ['logout', '로그아웃', true],
     ],
   ],
-  [
-    'preferences',
-    '여행 취향',
-    [
-      ['style', '여행 스타일', true],
-      ['budget', '예산', true],
-      ['companions', '동행 유형', true],
-      ['activities', '선호 활동', true],
-      ['transport', '이동 방식', true],
-      ['food', '음식 취향', true],
-      ['pace', '일정 밀도·이동 선호', true],
-    ],
-  ],
+  // TRIP-1051: 머리글 없는 그룹(label null)에 한 행.
+  ['preferences', null, [['preferences', '여행 취향', true]]],
   [
     'location',
     '위치정보',
@@ -190,7 +192,8 @@ const CANON = [
   ['danger', '위험 영역', [['delete-account', '계정 삭제', true]]],
 ];
 
-const PREFERENCE_KEYS = [
+/** TRIP-778 시절 취향 7행의 행 key — TRIP-1051 로 한 행(`preferences`)에 합쳐져 사라졌다. */
+const OLD_PREFERENCE_ROW_KEYS = [
   'style',
   'budget',
   'companions',
@@ -251,47 +254,290 @@ describe('TRIP-778 AC-2 · 그룹·행 정본 표 완전일치', () => {
   });
 });
 
-describe('TRIP-778 AC-4 · 취향 7행 값·미설정 칩 (모델)', () => {
-  it('설정된 축은 value 에 요약 문자열, 미설정 축은 회색 "미설정" 칩', () => {
+/**
+ * TRIP-1051 — 여행 취향 7행을 한 행 `여행 취향 · N/7 설정됨 ›` 으로(사용자 결정 A · 결정 (a)).
+ *
+ * 무엇을 보장하나:
+ *  - AC-1·2: N = 서버가 "사용자가 고른 값"이라고 준 축의 수. 미설정 모양(축 없음·중립 기본값·빈 값)은
+ *    전부 세지 않는다. 행은 하나뿐이고 `미설정` 칩은 없다.
+ *  - AC-3: 취향을 아직 모르면(응답 전·실패) 값을 비운다 — `0/7` 로 채우면 모르는 것을 아는 척하는 것(D4).
+ *  - AC-5: 옛 7행 key 는 모델에서 사라진다.
+ *
+ * 3동작 뼈대: 준비=취향 픽스처 → 실행=buildSettingsSections → 단언=취향 그룹의 한 행.
+ */
+
+/** 7축 중 3축(스타일·밀도·예산)만 설정 → 3/7. */
+const THREE_SET: PreferenceView = {
+  styles: { value: ['휴양'], isNeutralDefault: false },
+  pace: { value: '느긋하게', isNeutralDefault: false },
+  budget: { tier: '중간', isNeutralDefault: false },
+};
+
+/** 7축 모두 미설정 — 모양이 전부 다르다(축 없음·중립 기본값·빈 배열·value 없음·null). */
+const ALL_UNSET_MIXED: PreferenceView = {
+  styles: { value: ['휴양'], isNeutralDefault: true },
+  activities: { value: [], isNeutralDefault: false },
+  // transportModes: 축 자체가 없다
+  foodTastes: { isNeutralDefault: false },
+  pace: { value: null, isNeutralDefault: false },
+  companion: { companionTypes: [], petFlag: false, isNeutralDefault: false },
+  budget: { tier: '중간', rawAmount: 500000, isNeutralDefault: true },
+};
+
+/** 취향 그룹을 찾는다 — 긍정 앵커(없으면 아래 단언이 공허해진다). */
+function preferenceGroup(groups: ReturnType<typeof buildSettingsSections>) {
+  const group = groups.find((g) => g.key === 'preferences');
+  expect(group).toBeDefined();
+  return group!;
+}
+
+describe('TRIP-1051 · 여행 취향 한 행 요약 (모델)', () => {
+  it('M1 AC-1: 3축만 설정이면 취향 그룹에 행 하나, 값 "3/7 설정됨", 칩 없음', () => {
     // 준비·실행
     const groups = buildSettingsSections({
       nickname: '여행자123',
       email: null,
-      preferences: PREFERENCES,
+      preferences: THREE_SET,
     });
 
-    // 단언 — 값 행: value 완전일치 + 칩 없음.
-    const expected: Record<string, string> = {
-      style: `휴양${DOT}자연`,
-      companions: '친구',
-      activities: `맛집투어${DOT}전시`,
-      transport: '대중교통',
-      food: '일식',
-      pace: '느긋하게',
-    };
-    for (const [key, text] of Object.entries(expected)) {
-      const row = rowOf(groups, key);
-      expect(row.value).toBe(text);
-      expect(row.chip ?? null).toBeNull();
-    }
-    // 단언 — 미설정 행(예산): 칩 + 값 없음.
-    const budget = rowOf(groups, 'budget');
-    expect(budget.chip).toEqual({ label: '미설정', tone: 'neutral' });
-    expect(budget.value ?? null).toBeNull();
+    // 단언
+    const group = preferenceGroup(groups);
+    expect(group.rows).toHaveLength(1);
+    expect(group.rows[0].value).toBe('3/7 설정됨');
+    expect(group.rows[0].chip ?? null).toBeNull();
   });
 
-  it('취향을 아직 모르면(응답 전·실패) 7행 모두 값도 칩도 없다 — 미설정이라고 말하지 않는다', () => {
+  it('M2 AC-2: 7축 모두 미설정이면(모양이 제각각이어도) "0/7 설정됨"', () => {
+    const groups = buildSettingsSections({
+      nickname: '여행자123',
+      email: null,
+      preferences: ALL_UNSET_MIXED,
+    });
+
+    const row = rowOf(groups, 'preferences');
+    expect(row.value).toBe('0/7 설정됨');
+    expect(row.chip ?? null).toBeNull();
+  });
+
+  it('M3 AC-3: 취향을 아직 모르면(응답 전·실패) 행은 있지만 값도 칩도 없다 — 0/7 로 채우지 않는다', () => {
     // 준비·실행 — preferences 입력 없음.
     const groups = buildSettingsSections({
       nickname: '여행자123',
       email: null,
     });
 
-    for (const key of PREFERENCE_KEYS) {
-      const row = rowOf(groups, key);
-      expect(row.value ?? null).toBeNull();
-      expect(row.chip ?? null).toBeNull();
+    const row = rowOf(groups, 'preferences');
+    expect(row.value ?? null).toBeNull();
+    expect(row.chip ?? null).toBeNull();
+  });
+
+  it('M4 AC-1: D5 프리뷰 픽스처(예산만 미설정)는 "6/7 설정됨" — Figma 4664:3279 와 같은 숫자', () => {
+    const groups = buildSettingsSections({
+      nickname: '여행자123',
+      email: null,
+      preferences: PREFERENCES,
+    });
+
+    expect(rowOf(groups, 'preferences').value).toBe('6/7 설정됨');
+  });
+
+  it('M5 AC-5: 옛 7행 key(style·budget·…·pace)가 어느 그룹에도 없다', () => {
+    const groups = buildSettingsSections({
+      nickname: '여행자123',
+      email: null,
+      preferences: PREFERENCES,
+    });
+
+    // 긍정 앵커: 새 행은 있다(빈 목록이면 아래 "없다"가 공허하다).
+    rowOf(groups, 'preferences');
+    const keys = groups.flatMap((g) => g.rows).map((r) => r.key);
+    for (const key of OLD_PREFERENCE_ROW_KEYS) {
+      expect(keys).not.toContain(key);
     }
+  });
+});
+
+/**
+ * TRIP-1051 AC-7 — 속성: 어떤 취향이 와도 값은 `${N}/7 설정됨` 이고 N 은 "설정된 축의 수"다.
+ *
+ * ★ 기대값 N 은 생성기가 센다(02a ★4): 축마다 먼저 "설정/미설정" 동전을 던지고, 설정이면 고른 값을,
+ *   미설정이면 미설정 모양 중 하나를 넣는다. 그러면 N = 앞면 수다. 구현이 쓰는 `summarizePreferences` 로
+ *   기대값을 만들면 둘이 같이 틀려도 green 이라 쓰지 않는다.
+ * ★ `isNeutralDefault` 를 빼먹은(undefined) 축은 "설정"이다(02a ★5) — 설정 쪽에 false|undefined 를 섞는다.
+ *
+ * (개념) `fc.oneof(a, b)` — a 나 b 중 하나로 만든다. `fc.record({k: 생성기})` — 필드마다 생성기를 돌려 객체를 만든다.
+ * (개념) `.map(f)` — 만든 값을 f 로 한 번 더 가공한다. 여기선 동전 결과를 세어 기대값을 붙인다.
+ */
+
+/** 계약 enum 값으로 만든, 중복 없는 비어있지 않은 부분집합(preferenceSummary.test.ts 와 같은 재료). */
+function subsetOf(values: readonly string[]) {
+  return fc.uniqueArray(fc.constantFrom(...values), {
+    minLength: 1,
+    maxLength: values.length,
+  });
+}
+
+/** "사용자가 고른 값" 표지 — 생략(undefined)도 중립이 아니다. */
+const notNeutral = fc.constantFrom(false, undefined);
+
+/** 배열 축(스타일·활동·이동·음식). */
+function arrayAxisArb(values: readonly string[]) {
+  return fc.oneof(
+    fc.record({
+      set: fc.constant(true),
+      axis: fc.record({
+        value: subsetOf(values),
+        isNeutralDefault: notNeutral,
+      }),
+    }),
+    fc.record({
+      set: fc.constant(false),
+      axis: fc.oneof(
+        fc.constant(undefined),
+        fc.record({
+          value: subsetOf(values),
+          isNeutralDefault: fc.constant(true),
+        }),
+        fc.record({
+          value: fc.constant([] as string[]),
+          isNeutralDefault: fc.constant(false),
+        }),
+        fc.record({ isNeutralDefault: fc.constant(false) })
+      ),
+    })
+  );
+}
+
+const PACES = Object.values(PreferenceInputPace);
+const paceArb = fc.oneof(
+  fc.record({
+    set: fc.constant(true),
+    axis: fc.record({
+      value: fc.constantFrom(...PACES),
+      isNeutralDefault: notNeutral,
+    }),
+  }),
+  fc.record({
+    set: fc.constant(false),
+    axis: fc.oneof(
+      fc.constant(undefined),
+      fc.record({
+        value: fc.constantFrom(...PACES),
+        isNeutralDefault: fc.constant(true),
+      }),
+      fc.record({
+        value: fc.constant(null),
+        isNeutralDefault: fc.constant(false),
+      })
+    ),
+  })
+);
+
+const COMPANIONS = Object.values(PreferenceInputCompanionTypesItem);
+const companionArb = fc.oneof(
+  fc.record({
+    set: fc.constant(true),
+    axis: fc.oneof(
+      fc.record({
+        companionTypes: subsetOf(COMPANIONS),
+        petFlag: fc.boolean(),
+        isNeutralDefault: notNeutral,
+      }),
+      // 반려동물만 있어도 설정이다.
+      fc.record({
+        companionTypes: fc.constant([] as string[]),
+        petFlag: fc.constant(true),
+        isNeutralDefault: notNeutral,
+      })
+    ),
+  }),
+  fc.record({
+    set: fc.constant(false),
+    axis: fc.oneof(
+      fc.constant(undefined),
+      fc.record({
+        companionTypes: subsetOf(COMPANIONS),
+        petFlag: fc.boolean(),
+        isNeutralDefault: fc.constant(true),
+      }),
+      fc.record({
+        companionTypes: fc.constant([] as string[]),
+        petFlag: fc.constant(false),
+        isNeutralDefault: fc.constant(false),
+      })
+    ),
+  })
+);
+
+const TIERS = Object.values(PreferenceInputBudgetTier);
+const budgetArb = fc.oneof(
+  fc.record({
+    set: fc.constant(true),
+    axis: fc.record({
+      tier: fc.constantFrom(...TIERS),
+      rawAmount: fc.option(fc.nat()),
+      isNeutralDefault: notNeutral,
+    }),
+  }),
+  fc.record({
+    set: fc.constant(false),
+    axis: fc.oneof(
+      fc.constant(undefined),
+      fc.record({
+        tier: fc.constantFrom(...TIERS),
+        isNeutralDefault: fc.constant(true),
+      }),
+      // 금액이 있어도 등급이 없으면 미설정(D6).
+      fc.record({
+        tier: fc.constant(null),
+        rawAmount: fc.nat(),
+        isNeutralDefault: fc.constant(false),
+      })
+    ),
+  })
+);
+
+/** 임의 취향 + 생성기가 센 설정 축 수(기대값 N). */
+const preferencesWithCount = fc
+  .record({
+    styles: arrayAxisArb(Object.values(PreferenceInputStylesItem)),
+    activities: arrayAxisArb(Object.values(PreferenceInputActivitiesItem)),
+    transportModes: arrayAxisArb(
+      Object.values(PreferenceInputTransportModesItem)
+    ),
+    foodTastes: arrayAxisArb(Object.values(PreferenceInputFoodTastesItem)),
+    pace: paceArb,
+    companion: companionArb,
+    budget: budgetArb,
+  })
+  .map((axes) => {
+    const view: Record<string, unknown> = {};
+    let setCount = 0;
+    for (const [name, { set, axis }] of Object.entries(axes)) {
+      if (set) setCount += 1;
+      if (axis !== undefined) view[name] = axis;
+    }
+    return { view: view as PreferenceView, setCount };
+  });
+
+describe('TRIP-1051 AC-7 · 취향 요약 — 속성', () => {
+  it('P1 어떤 취향이든 행은 하나, 값은 "{설정된 축 수}/7 설정됨"(0~7), 칩은 없다', () => {
+    fc.assert(
+      fc.property(preferencesWithCount, ({ view, setCount }) => {
+        // 준비·실행
+        const groups = buildSettingsSections({
+          nickname: '여행자123',
+          email: null,
+          preferences: view,
+        });
+
+        // 단언
+        const group = preferenceGroup(groups);
+        expect(group.rows).toHaveLength(1);
+        expect(group.rows[0].value).toBe(`${setCount}/7 설정됨`);
+        expect(group.rows[0].chip ?? null).toBeNull();
+      })
+    );
   });
 });
 
