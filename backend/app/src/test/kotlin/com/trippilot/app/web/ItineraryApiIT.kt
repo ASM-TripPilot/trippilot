@@ -293,6 +293,17 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         candidates.none { it in inItinerary } shouldBe true
         body["candidates"][0]["distanceRange"].isNull shouldBe false
         body["candidates"][0].has("duration") shouldBe false // INV-3
+
+        // POI 표면(TRIP-851)이 **실응답에** 실리는지 — 화면 "이름 준비 중" 재발 잠금(TRIP-1005 · QA #053 #070).
+        // 필드 존재만 보면 전부 null 이어도 초록이라, 정본(DB)과 값으로 대조한다.
+        val first = body["candidates"][0]
+        val dbRow = jdbc.queryForMap(
+            "SELECT name_ko, image_url, category FROM poi WHERE poi_id = ?", UUID.fromString(first["poiId"].asText()),
+        )
+        first["nameKo"].asText() shouldBe dbRow["name_ko"] as String
+        first["category"].asText() shouldBe dbRow["category"] as String // 한글 정본 그대로
+        (first["imageUrl"].isNull || first["imageUrl"].asText() == dbRow["image_url"]) shouldBe true // 있으면 정본 값
+        first["tags"].isArray shouldBe true // 미확보면 빈 배열 — null 로 지어내지 않는다
     }
 
     @Test
