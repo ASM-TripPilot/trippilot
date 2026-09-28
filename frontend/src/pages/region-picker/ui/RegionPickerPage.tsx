@@ -44,10 +44,10 @@ export function RegionPickerPage(): ReactElement {
   function handleSelectRegion(region: Region): void {
     if (purpose === 'trip') {
       // TRIP-683 AC-1 — 여행지 편집 시트의 "도시 추가"에서 왔다. 그 지역을 1박으로 담고
-      // 위저드로 복귀한다(사용자 확정). 스토어는 코드가 아니라 한글 **이름**을 받는다(destinations
-      // 행이 이름을 그린다 — code 를 넘기면 화면에 코드가 뜬다). 옛 `/explore/destination/{code}`
-      // 이탈(d03)은 담기 배선을 잃은 결함이었다.
-      addDestination(region.name, 1);
+      // 위저드로 복귀한다(사용자 확정). 표시는 한글 **이름**이 진다(destinations 행이 이름을 그린다 —
+      // code 를 이름 자리에 넘기면 화면에 코드가 뜬다). 코드는 따로 싣는다(TRIP-1042 AC-12 — 꼭 갈 곳
+      // 지역 판정). 옛 `/explore/destination/{code}` 이탈(d03)은 담기 배선을 잃은 결함이었다.
+      addDestination(region.name, 1, region.regionCode);
       router.back();
       return;
     }

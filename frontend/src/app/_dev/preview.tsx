@@ -3717,6 +3717,29 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   {
+    // TRIP-1042 — Figma 4685:2646. 지역 안 0건: 목록 머리 블록(제목+CTA, 삽화 없음) + 지역 밖 흐린 행,
+    // 더 담기 행 없음. 흐림·CTA 치수는 jest 사각이라 6-b 육안 자리.
+    key: 'saved-places-select-region-empty',
+    band: 'd',
+    label: 'd02 · 꼭 갈 곳 고르기 지역 빈 상태',
+    login: null,
+    render: () => (
+      <MustVisitPickScreen
+        state={{ kind: 'results' }}
+        savedPlaces={[]}
+        outsideRegionPlaces={PREVIEW_SAVED_PLACES.slice(0, 2)}
+        regionEmptyLabel="부산"
+        selectedPoiIds={[]}
+        onToggleSelect={noop}
+        onComplete={noop}
+        onPressAddMore={noop}
+        onRetry={noop}
+        onPressBrowse={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  {
     key: 'saved-places-select-loading',
     band: 'd',
     label: 'd02 · 꼭 갈 곳 고르기 loading',

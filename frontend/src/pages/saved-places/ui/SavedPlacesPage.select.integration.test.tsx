@@ -12,7 +12,8 @@ import {
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
-import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
+import type { Place, Region, SavedPlace } from '@/shared/api/generated/schemas';
+import { RegionLevel } from '@/shared/api/generated/schemas';
 import type { MustVisitSeedItem } from '@/features/trip/model/mustVisitSeed';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import { wizardOriginParams } from '@/features/explore/model/wizardOrigin';
@@ -230,23 +231,18 @@ describe('IS-3 · 0곳 완료는 무효 (AC-2)', () => {
 });
 
 /* ────────────────────────────────────────────────────────────────────────────
- * TRIP-982 A — 여행 지역 필터가 0건이면 전체를 보여 주고 그 사실을 밝힌다 (D6 · INV-4)
+ * 여행 지역 판정 공용 도우미 (TRIP-982 → TRIP-1012 → TRIP-1042)
  * ──────────────────────────────────────────────────────────────────────────── */
 
 /**
- * 무엇을 보장하나: 위저드 '더 담기'로 온 select 화면에서, 담은 곳이 있는데 지역 필터 때문에 0건이
- * 되면 필터를 풀고 **전체를 고를 수 있게** 보여 주며 "여행 지역과 맞는 곳이 없어 전체를
- * 보여드려요"라고 알린다. "아직 담은 곳이 없어요"는 진짜로 0곳일 때만 나온다.
+ * TRIP-1042 로 판정이 **이름 접두사 → 행정구역 코드 접두사**로 바뀌었다(BR-U1-58 · INV-U1-21). 지역 안이
+ * 0건이면 전체로 되돌리던 폴백(TRIP-982 D6)은 없어졌고, 그 자리를 region-empty 블록이 대신한다. 폴백을
+ * 굳히던 옛 케이스(982 A1·A2·A3·A-INV3 · 1012 Q2)는 계약째 지웠다 — 대체는 아래 TRIP-1042 절.
  *
- * 왜 이 픽스처인가: 여행 region 은 시도 이름(`서울특별시`)인데 담은 곳의 region 은 시군구
- * 이름(`강남구`)이라 접두사 비교가 전부 빗나간다 — QA DB 실측 5행을 그대로 옮겼다.
- *
- * ★ 급소는 A2 다 — 화면은 전체를 그리면서 완료 쪽이 필터된 목록(0건)을 보면, 체크는 되는데
- *   시드가 0개인 침묵 실패가 된다. 흩어서 두 곳(s2·s4)을 골라 "정확히 그 둘"만 심겼는지 잰다.
- * ★ 부재 단언(폴백 안내 0개)은 로딩이 끝난 뒤에만 잰다 — 로딩 중엔 무엇이든 0개라 공허하다.
+ * `savedIn`(이름만, 코드 없음) 픽스처는 지금 판정에선 전부 fail-open 이라 지역 안이다. 지역 안/밖을
+ * 가르는 케이스는 `savedCoded`(코드를 싣는다) + `openSelectForTrip`(스토어에 목적지 코드)을 쓴다.
  */
 
-const REGION_FALLBACK_TEXT = '여행 지역과 맞는 곳이 없어 전체를 보여드려요';
 const TRUE_EMPTY_TITLE = '아직 담은 곳이 없어요';
 
 function placeIn(poiId: string, region: string): Place {
@@ -298,71 +294,54 @@ function orderedPickIds(): string[] {
     .map((node) => String(node.props.testID));
 }
 
-describe('🔴 TRIP-982 A1 · 지역이 전혀 안 맞으면 전체를 보여 주고 알린다 (D6)', () => {
-  it('담은 5곳이 전부 행으로 뜨고, 폴백 안내가 정확한 문구로 뜨며, 빈 얼굴은 없다', async () => {
-    serveSaved(SEOUL_QA);
-    openSelect(['서울특별시']);
+/** 코드를 실은 담은 곳(TRIP-1042) — region 은 시군구 이름으로 둬 이름 비교로는 안 갈리게 한다(02a ★15). */
+function savedCoded(
+  poiId: string,
+  region: string | null,
+  regionCode: string | null,
+  savedAt: string
+): SavedPlace {
+  return {
+    savedPlaceId: `sp-${poiId}`,
+    savedAt,
+    place: { ...makePlace(poiId, `장소 ${poiId}`), region, regionCode },
+  };
+}
 
-    await waitFor(() => expect(rowCount()).toBe(5));
-    // 폴백 안내 — 문구 완전일치(D6 고정 문구).
-    expect(
-      screen.getByTestId('mustvisit-pick-region-fallback')
-    ).toHaveTextContent(REGION_FALLBACK_TEXT);
-    // 진짜 빈 얼굴은 안 뜬다.
-    expect(screen.queryAllByTestId('mustvisit-pick-empty').length).toBe(0);
-    // 부제의 N 은 그려진 전체 개수(01b Q2).
-    expect(screen.getByTestId('mustvisit-pick-subtitle')).toHaveTextContent(
-      '담은 곳 5곳 · 0곳 선택됨'
-    );
+type TripDest = { region: string; regionCode?: string };
+
+/**
+ * 여행 목적지를 **스토어와 URL 에 같은 값으로** 심고 select 로 연다(02a ★1·★3). 코드는 스토어에만 있다
+ * (1/4 는 URL 에 이름만 싣는다) — `setState` 는 부분 병합이라 나머지 드래프트는 그대로다.
+ */
+function openSelectForTrip(dests: TripDest[]): void {
+  useTripWizardStore.setState({
+    destinations: dests.map((dest, index) => ({
+      seq: index + 1,
+      region: dest.region,
+      nights: 1,
+      ...(dest.regionCode ? { regionCode: dest.regionCode } : {}),
+    })),
   });
-});
+  openSelect(dests.map((dest) => dest.region));
+}
 
-describe('🔴 TRIP-982 A2 · 폴백 목록에서 고른 곳이 실제로 시드된다 (급소)', () => {
-  it('5곳 중 s2·s4 를 골라 완료하면 위저드 스토어에 정확히 그 둘만 들어간다', async () => {
-    serveSaved(SEOUL_QA);
-    openSelect(['서울특별시']);
-    await waitFor(() => expect(rowCount()).toBe(5));
+const SEOUL_TRIP: TripDest[] = [{ region: '서울특별시', regionCode: '11' }];
 
-    fireEvent.press(screen.getByTestId('mustvisit-pick-check-s2'));
-    fireEvent.press(screen.getByTestId('mustvisit-pick-check-s4'));
-    fireEvent.press(screen.getByTestId('mustvisit-pick-complete'));
+function checkCount(): number {
+  return screen.queryAllByTestId(/^mustvisit-pick-check-(?!filled-|outline-)/)
+    .length;
+}
 
-    // 0개(필터된 목록에서 뽑음)도 5개(전부 시드)도 아닌 정확히 고른 둘.
-    expect(
-      useTripWizardStore
-        .getState()
-        .mustVisits.map((m) => m.sourcePoiId)
-        .sort()
-    ).toEqual(['s2', 's4']);
-    expect(mockPush).toHaveBeenCalledWith('/trips/new/step1');
-  });
-});
-
-describe('🔴 TRIP-982 A3 · 담은 곳이 있으면 "없다"고 말하지 않는다 (INV-4)', () => {
-  it('로딩이 끝난 뒤 "아직 담은 곳이 없어요"가 0회이고 빈 얼굴도 없다', async () => {
-    serveSaved(SEOUL_QA);
-    openSelect(['서울특별시']);
-
-    // 행이 아니라 "로딩 끝"을 기다린다 — 구현 전에도 이 대기는 풀리고, 아래 단언이 red 이유가 된다.
-    await waitFor(() =>
-      expect(
-        screen.queryAllByTestId(/^mustvisit-pick-skeleton-row-/).length
-      ).toBe(0)
-    );
-    expect(screen.queryAllByText(TRUE_EMPTY_TITLE).length).toBe(0);
-    expect(screen.queryAllByTestId('mustvisit-pick-empty').length).toBe(0);
-  });
-});
-
-// TRIP-1012 A5 — 옛 TRIP-982 A4("부산 1행만, 경주는 숨김")는 계약이 뒤집혔다. 이제 지역 밖도
-// 숨기지 않고 "이 여행 지역 밖 N곳" 머리글 아래 보인다(D9 · INV-4 — 조용히 빠지면 안 된다).
+// TRIP-1012 A5 — 옛 TRIP-982 A4("부산 1행만, 경주는 숨김")는 계약이 뒤집혔다. 지역 밖도 숨기지 않고
+// "이 여행 지역 밖 N곳" 머리글 아래 보인다(D9 · INV-4). TRIP-1042: 판정 근거가 코드로 바뀌어 픽스처도 코드판.
 describe('🔴 TRIP-1012 A5(구 982 A4 반전) · 일부가 맞으면 맞는 것 뒤에 지역 밖을 머리글과 함께', () => {
-  it('부산 여행에 부산 1곳·경주 1곳이면 부산 행 → "이 여행 지역 밖 1곳" → 경주 행 순이고 폴백 안내는 0개다', async () => {
+  it('부산(26) 여행에 해운대구(26350)·경주시(47130)면 해운대구 행 → "이 여행 지역 밖 1곳" → 경주시 행 순이고 폴백 안내는 0개다', async () => {
     serveSaved([
-      savedIn('p-busan', '부산광역시 해운대구', '2026-09-01T01:00:00.000Z'),
-      savedIn('p-gyeongju', '경주시', '2026-09-01T02:00:00.000Z'),
+      savedCoded('p-busan', '해운대구', '26350', '2026-09-01T01:00:00.000Z'),
+      savedCoded('p-gyeongju', '경주시', '47130', '2026-09-01T02:00:00.000Z'),
     ]);
-    openSelect(['부산광역시']);
+    openSelectForTrip([{ region: '부산광역시', regionCode: '26' }]);
 
     await waitFor(() =>
       expect(screen.getByTestId('mustvisit-pick-row-p-busan')).toBeOnTheScreen()
@@ -403,22 +382,6 @@ describe('TRIP-982 A6 · 무회귀 — region 이 없으면 무필터, 안내도
   });
 });
 
-describe('🔴 TRIP-982 A-INV3 · 폴백 화면에도 소요시간 표기가 없다 (INV-3)', () => {
-  it('폴백 안내가 뜬 화면에서 분·시간·소요 표기가 0건이다', async () => {
-    serveSaved(SEOUL_QA);
-    openSelect(['서울특별시']);
-
-    await waitFor(() =>
-      expect(
-        screen.getByTestId('mustvisit-pick-region-fallback')
-      ).toBeOnTheScreen()
-    );
-    // 긍정 앵커 — 정규식 탐색이 이 화면의 글자를 실제로 읽는다(부제 `담은 곳 5곳 · …`).
-    expect(screen.queryAllByText(/담은 곳/).length).toBeGreaterThan(0);
-    expect(screen.queryAllByText(/\d+\s*분|\d+\s*시간|소요/).length).toBe(0);
-  });
-});
-
 /* ────────────────────────────────────────────────────────────────────────────
  * TRIP-982 A8 — 폴백이 조작 도중에 풀려도 선택 수·완료·시드가 서로 맞는다 (5-b 경고-1)
  * ──────────────────────────────────────────────────────────────────────────── */
@@ -435,8 +398,10 @@ describe('🔴 TRIP-982 A-INV3 · 폴백 화면에도 소요시간 표기가 없
  * 왜 QueryClient 를 손에 쥐나: '더 담기'에서 돌아오면 담기 뮤테이션의 `invalidateQueries` 가
  * 목록을 다시 받는다. 테스트는 그 효과만 재현한다 — 응답 행을 바꾸고 캐시를 무효화한다.
  *
- * ★ 전제 단언(1행·폴백 안내 0개)을 먼저 잰다 — 재조회가 안 일어나면 화면은 5행 그대로라
+ * ★ 전제 단언(1행)을 먼저 잰다 — 재조회가 안 일어나면 화면은 5행 그대로라
  *   아래 단언이 엉뚱한 이유로 red/green 이 된다.
+ * ★ TRIP-1042: 폴백이 없어졌다. 스토어에 목적지 코드가 없으면 판정을 건너뛰어(01b Q6) 5행이 모두 고를
+ *   수 있는 행으로 뜬다 — "보이는 선택만 센다" 계약은 그대로라 준비 함수의 폴백 단언 두 줄만 뺐다.
  */
 
 /** 여행 region 과 접두사로 맞는 새 담은 곳 — 필터 결과를 1건으로 만들어 폴백을 푼다. */
@@ -465,7 +430,6 @@ async function arrangeFallbackLiftedWithHiddenPicks(): Promise<void> {
     </QueryClientProvider>
   );
   await waitFor(() => expect(rowCount()).toBe(5));
-  expect(fallbackCount()).toBe(1);
 
   fireEvent.press(screen.getByTestId('mustvisit-pick-check-s2'));
   fireEvent.press(screen.getByTestId('mustvisit-pick-check-s4'));
@@ -479,7 +443,6 @@ async function arrangeFallbackLiftedWithHiddenPicks(): Promise<void> {
   // 전제 — 폴백이 풀려 s6 1행만 보이고 안내가 사라졌다.
   await waitFor(() => expect(rowCount()).toBe(1));
   expect(screen.getByTestId('mustvisit-pick-row-s6')).toBeOnTheScreen();
-  expect(fallbackCount()).toBe(0);
 }
 
 describe('🔴 TRIP-982 A8 · 폴백이 풀리면 안 보이는 선택은 세지 않는다 (경고-1)', () => {
@@ -530,9 +493,10 @@ describe('🔴 TRIP-982 A8 · 폴백이 풀리면 안 보이는 선택은 세지
  *  - A2·A3 완료는 여전히 **교체**다 — 체크를 더하면 늘고, 사용자가 명시적으로 푼 것만 빠진다.
  *  - Q1 위저드엔 있는데 담은 목록엔 없는 곳(시드 뒤 담기를 푼 곳)은 행이 없어 풀 수도 없으니
  *    **완료해도 남는다** — 볼 수 없던 것은 뺀 것으로 치지 않는다. 단 부제·완료 활성엔 세지 않는다.
- *  - A4·A6 여행 지역 밖 담은 곳은 "이 여행 지역 밖 N곳" 머리글 아래 **고를 수 있는 행**으로 뜬다
- *    (region null 은 지역 안 쪽 — fail-open 유지). 위저드 항목이면 거기서도 체크된 채다.
- *  - Q2 지역 안이 0건이면 머리글 없이 기존 폴백 한 줄 + 전체(TRIP-982 A1 무회귀).
+ *  - A4·A6 여행 지역 밖 담은 곳은 "이 여행 지역 밖 N곳" 머리글 아래 뜨되 **흐리고 고를 수 없다**
+ *    (TRIP-1042 AC-2 · BR-U1-58 ② 로 뒤집힘). 코드 null 은 지역 안 쪽(fail-open 유지). 위저드에 이미 있던
+ *    밖 항목은 체크 없이 보이고, 완료해도 **남는다**(01b Q2 — 조용히 빼면 INV-4).
+ *  - (옛 Q2 "지역 안 0건이면 폴백"은 TRIP-1042 로 폐지 — region-empty 는 아래 TRIP-1042 절.)
  *  - B2 select 완료는 위저드 **안** 왕복이다 — 여행지·기간·인원·동반·예산을 비우지 않는다.
  *
  * ★ 위저드 항목은 `initMustVisits` 로 심는다 — beforeEach 가 `reset()` 하므로 첫 호출이 반영된다.
@@ -550,15 +514,6 @@ function wizardItem(
 
 function seededIds(): string[] {
   return useTripWizardStore.getState().mustVisits.map((m) => m.sourcePoiId);
-}
-
-/** 지역 미상(null) 담은 곳 — fail-open 이라 지역 안 쪽이다. */
-function savedUnknownRegion(poiId: string, savedAt: string): SavedPlace {
-  return {
-    savedPlaceId: `sp-${poiId}`,
-    savedAt,
-    place: { ...makePlace(poiId, `장소 ${poiId}`), region: null },
-  };
 }
 
 describe('🔴 TRIP-1012 A1 · 위저드의 꼭 갈 곳은 체크된 채로 뜬다 (#035)', () => {
@@ -704,17 +659,17 @@ describe('🔴 TRIP-1012 Q1 경계 · 체크를 푼 뒤 목록에서 사라진 �
   });
 });
 
-/** 서울 여행 — 지역 안(null)·밖(종로구)이 savedAt 으로 섞여 있다(j1 → n1 → j2). */
+/** 서울(11) 여행 — 지역 안(코드 null)·밖(해운대구 26350)이 savedAt 으로 섞여 있다(j1 → n1 → j2). */
 const SEOUL_MIXED: SavedPlace[] = [
-  savedIn('j1', '종로구', '2026-09-01T01:00:00.000Z'),
-  savedUnknownRegion('n1', '2026-09-01T02:00:00.000Z'),
-  savedIn('j2', '종로구', '2026-09-01T03:00:00.000Z'),
+  savedCoded('j1', '해운대구', '26350', '2026-09-01T01:00:00.000Z'),
+  savedCoded('n1', null, null, '2026-09-01T02:00:00.000Z'),
+  savedCoded('j2', '해운대구', '26350', '2026-09-01T03:00:00.000Z'),
 ];
 
-describe('🔴 TRIP-1012 A4 · 지역 밖도 숨기지 않고 머리글 아래 고를 수 있게 (금지: 조용한 누락)', () => {
-  it('서울 여행에 종로구 2곳·지역 미상 1곳이면 3곳 모두 뜨고, 종로구 2곳은 "이 여행 지역 밖 2곳" 아래다', async () => {
+describe('🔴 TRIP-1012 A4 → TRIP-1042 AC-2·3 · 지역 밖은 숨기지 않되 흐리고 고를 수 없다 (금지: 조용한 누락)', () => {
+  it('서울 여행에 해운대구 2곳·코드 모름 1곳이면 3곳 모두 뜨고, 해운대구 2곳은 머리글 아래 체크 없이 disabled 다', async () => {
     serveSaved(SEOUL_MIXED);
-    openSelect(['서울특별시']);
+    openSelectForTrip(SEOUL_TRIP);
 
     await waitFor(() => expect(rowCount()).toBe(3));
     // 순서 — 지역 안(n1) → 머리글 → 밖(j1·j2). 정렬만 하고 다시 모으지 않으면 n1 이 머리글 뒤로 샌다.
@@ -728,7 +683,7 @@ describe('🔴 TRIP-1012 A4 · 지역 밖도 숨기지 않고 머리글 아래 �
       screen.getByTestId('mustvisit-pick-region-outside')
     ).toHaveTextContent('이 여행 지역 밖 2곳');
     expect(fallbackCount()).toBe(0);
-    // 순번은 보이는 순서대로 이어 매긴다(01b Q2).
+    // 순번은 보이는 순서대로 이어 매긴다(01b Q2 · Figma 2437:1500).
     [
       ['n1', '1'],
       ['j1', '2'],
@@ -745,23 +700,37 @@ describe('🔴 TRIP-1012 A4 · 지역 밖도 숨기지 않고 머리글 아래 �
       '담은 곳 3곳 · 0곳 선택됨'
     );
 
-    // 밖 행도 고를 수 있고, 고른 것이 실제로 심긴다.
-    fireEvent.press(screen.getByTestId('mustvisit-pick-check-j1'));
-    fireEvent.press(screen.getByTestId('mustvisit-pick-complete'));
-    expect(seededIds()).toEqual(['j1']);
+    // AC-3 — 코드 모름(n1)은 지역 안이라 고를 수 있다(긍정 짝).
+    expect(screen.getByTestId('mustvisit-pick-check-n1')).toBeOnTheScreen();
+    // AC-2 — 밖 행엔 체크가 없고 행이 disabled 다(02a ★7 세 겹 중 (a)(b)).
+    ['j1', 'j2'].forEach((poiId) => {
+      expect(screen.queryByTestId(`mustvisit-pick-check-${poiId}`)).toBeNull();
+      expect(screen.getByTestId(`mustvisit-pick-row-${poiId}`)).toBeDisabled();
+    });
+
+    // (c) 밖 행을 눌러도 선택이 늘지 않고, 완료는 닫힌 채 눌러도 시드·이동이 없다.
+    fireEvent.press(screen.getByTestId('mustvisit-pick-row-j1'));
+    expect(screen.getByTestId('mustvisit-pick-subtitle')).toHaveTextContent(
+      '담은 곳 3곳 · 0곳 선택됨'
+    );
+    const complete = screen.getByTestId('mustvisit-pick-complete');
+    expect(complete).toBeDisabled();
+    fireEvent.press(complete);
+    expect(seededIds()).toEqual([]);
+    expect(mockPush).not.toHaveBeenCalled();
   });
 });
 
-describe('🔴 TRIP-1012 A6 · 지역 밖에 있는 위저드 항목도 체크된 채로 뜨고 남는다', () => {
-  it('위저드 j1(종로구)은 머리글 아래 체크 상태로 뜨고, 그대로 완료하면 j1 이 남는다', async () => {
+describe('🔴 TRIP-1012 A6 → TRIP-1042 Q2 · 위저드에 이미 있던 지역 밖 꼭 갈 곳은 체크 없이 보이고, 완료해도 남는다', () => {
+  it('위저드 j1(인천 남동구)은 머리글 아래 체크 없이 뜨고 부제에 안 세며, s-in 을 골라 완료하면 j1·s-in 이 남는다', async () => {
     useTripWizardStore
       .getState()
-      .initMustVisits([wizardItem('j1', '장소 j1', '종로구')]);
+      .initMustVisits([wizardItem('j1', '장소 j1', '남동구')]);
     serveSaved([
-      savedIn('j1', '종로구', '2026-09-01T01:00:00.000Z'),
-      savedIn('s-in', '서울특별시 마포구', '2026-09-01T02:00:00.000Z'),
+      savedCoded('j1', '남동구', '28200', '2026-09-01T01:00:00.000Z'),
+      savedCoded('s-in', '마포구', '11440', '2026-09-01T02:00:00.000Z'),
     ]);
-    openSelect(['서울특별시']);
+    openSelectForTrip(SEOUL_TRIP);
 
     await waitFor(() => expect(rowCount()).toBe(2));
     expect(orderedPickIds()).toEqual([
@@ -769,23 +738,29 @@ describe('🔴 TRIP-1012 A6 · 지역 밖에 있는 위저드 항목도 체크�
       'mustvisit-pick-region-outside',
       'mustvisit-pick-row-j1',
     ]);
-    expect(screen.getByTestId('mustvisit-pick-check-j1')).toBeSelected();
+    expect(screen.queryByTestId('mustvisit-pick-check-j1')).toBeNull();
+    // AC-11 — M 은 고를 수 있는 행 안의 선택만 센다(위저드 j1 은 밖이라 0).
+    expect(screen.getByTestId('mustvisit-pick-subtitle')).toHaveTextContent(
+      '담은 곳 2곳 · 0곳 선택됨'
+    );
+
+    fireEvent.press(screen.getByTestId('mustvisit-pick-check-s-in'));
     expect(screen.getByTestId('mustvisit-pick-subtitle')).toHaveTextContent(
       '담은 곳 2곳 · 1곳 선택됨'
     );
-
     fireEvent.press(screen.getByTestId('mustvisit-pick-complete'));
 
     // 짝 — 완료가 실제로 눌렸다(disabled 로 무시되면 준비 때 심은 j1 이 공짜로 남는다, ★9).
     expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
-    expect(seededIds()).toEqual(['j1']);
+    // Q2 — 조용히 빼지 않는다(INV-4). 새로 고른 s-in 과 원래 있던 j1 이 함께 남는다.
+    expect(seededIds().sort()).toEqual(['j1', 's-in']);
   });
 });
 
 describe('🔴 TRIP-1012 A7 · 지역 밖 머리글 화면에도 소요시간 표기가 없다 (INV-3)', () => {
   it('머리글이 뜬 화면에서 분·시간·소요 표기가 0건이다', async () => {
     serveSaved(SEOUL_MIXED);
-    openSelect(['서울특별시']);
+    openSelectForTrip(SEOUL_TRIP);
 
     await waitFor(() =>
       expect(
@@ -795,21 +770,6 @@ describe('🔴 TRIP-1012 A7 · 지역 밖 머리글 화면에도 소요시간 �
     // 긍정 앵커 — 정규식이 이 화면의 새 글자를 실제로 읽는다.
     expect(screen.queryAllByText(/지역 밖/).length).toBeGreaterThan(0);
     expect(screen.queryAllByText(/\d+\s*분|\d+\s*시간|소요/).length).toBe(0);
-  });
-});
-
-describe('TRIP-1012 Q2 · 지역 안이 0건이면 머리글 없이 기존 폴백 그대로 (TRIP-982 A1 무회귀)', () => {
-  it('서울 여행에 담은 곳이 전부 시군구면 폴백 한 줄 + 5행이고 "지역 밖" 머리글은 0개다', async () => {
-    serveSaved(SEOUL_QA);
-    openSelect(['서울특별시']);
-
-    await waitFor(() => expect(rowCount()).toBe(5));
-    expect(
-      screen.getByTestId('mustvisit-pick-region-fallback')
-    ).toHaveTextContent(REGION_FALLBACK_TEXT);
-    expect(
-      screen.queryAllByTestId('mustvisit-pick-region-outside')
-    ).toHaveLength(0);
   });
 });
 
@@ -874,5 +834,301 @@ describe('🔴 1026 AC-2 · select 의 d04 진입 두 곳이 위저드 출처를
     expect(mockPush.mock.calls).toEqual([
       [{ pathname: '/explore/places', params: wizardOriginParams() }],
     ]);
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * TRIP-1042 — 꼭 갈 곳 고르기 지역 판정: 코드 매칭 · 폴백 제거 · 지역 빈 상태 · 탐색 진입 region · 시도 표기
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * 무엇을 보장하나(BR-U1-58 · INV-U1-21 · 01b Q1~Q6):
+ *  - R1·R2 서울(11) 여행에서 종로구(11110)는 지역 안, 인천 남동구(28200)는 머리글 아래 흐린 행 — 고를 수
+ *    없고, 완료해도 지역 안에서 고른 것만 심긴다(AC-1·2·10·11).
+ *  - R3~R5 지역 안이 0건이면 폴백 없이 목록 머리에 `{여행지}에 담은 곳이 없어요` + CTA(AC-4·5·6, Q3·Q4).
+ *  - R6 d04 로 가는 세 버튼이 여행 지역 이름을 싣는다(AC-7 — d04 는 이름을 받는다).
+ *  - R7 담은 곳이 진짜 0이면 기존 빈 얼굴 그대로(AC-8), R8 목적지 코드가 없으면 판정 생략(Q6).
+ *  - R9 행 위치가 `인천 남동구`처럼 카탈로그의 시도 짧은 이름을 붙인다(AC-9).
+ *  - R11 새 블록 화면에도 소요시간 표기가 없다(INV-3).
+ *
+ * ★ 목적지 코드는 스토어에만 있다 — `openSelectForTrip` 이 스토어·URL 에 같은 값을 심는다(02a ★1·★3).
+ * ★ 부재 단언(폴백·빈 얼굴·체크 0)은 긍정 짝(블록·행 존재)을 먼저 잡은 뒤에 잰다(02a ★5).
+ */
+
+describe('🔴 TRIP-1042 R1 · 서울 여행 — 종로구는 지역 안, 인천 남동구는 흐린 밖 행 (AC-1·2·11)', () => {
+  it('지역 안 두 곳 뒤에 머리글과 밖 한 곳이 오고, 밖 행은 눌러도 선택이 늘지 않으며 안 행 체크는 센다', async () => {
+    serveSaved([
+      savedCoded('out1', '남동구', '28200', '2026-09-01T01:00:00.000Z'),
+      savedCoded('in1', '종로구', '11110', '2026-09-01T02:00:00.000Z'),
+      savedCoded('n1', null, null, '2026-09-01T03:00:00.000Z'),
+    ]);
+    openSelectForTrip(SEOUL_TRIP);
+
+    await waitFor(() => expect(rowCount()).toBe(3));
+    expect(orderedPickIds()).toEqual([
+      'mustvisit-pick-row-in1',
+      'mustvisit-pick-row-n1',
+      'mustvisit-pick-region-outside',
+      'mustvisit-pick-row-out1',
+    ]);
+    expect(screen.getByTestId('mustvisit-pick-check-in1')).toBeOnTheScreen();
+    expect(screen.getByTestId('mustvisit-pick-check-n1')).toBeOnTheScreen();
+    expect(screen.getByTestId('mustvisit-pick-row-in1')).not.toBeDisabled();
+    expect(screen.queryByTestId('mustvisit-pick-check-out1')).toBeNull();
+    expect(screen.getByTestId('mustvisit-pick-row-out1')).toBeDisabled();
+    expect(screen.getByTestId('mustvisit-pick-subtitle')).toHaveTextContent(
+      '담은 곳 3곳 · 0곳 선택됨'
+    );
+
+    fireEvent.press(screen.getByTestId('mustvisit-pick-row-out1'));
+    expect(screen.getByTestId('mustvisit-pick-subtitle')).toHaveTextContent(
+      '담은 곳 3곳 · 0곳 선택됨'
+    );
+
+    fireEvent.press(screen.getByTestId('mustvisit-pick-check-in1'));
+    expect(screen.getByTestId('mustvisit-pick-subtitle')).toHaveTextContent(
+      '담은 곳 3곳 · 1곳 선택됨'
+    );
+  });
+});
+
+describe('🔴 TRIP-1042 R2 · 완료하면 지역 안에서 고른 것만 심긴다 (AC-10)', () => {
+  it('in1·n1 을 골라 완료하면 꼭 갈 곳은 정확히 그 둘이고 밖 out1 은 없다', async () => {
+    serveSaved([
+      savedCoded('out1', '남동구', '28200', '2026-09-01T01:00:00.000Z'),
+      savedCoded('in1', '종로구', '11110', '2026-09-01T02:00:00.000Z'),
+      savedCoded('n1', null, null, '2026-09-01T03:00:00.000Z'),
+    ]);
+    openSelectForTrip(SEOUL_TRIP);
+    await waitFor(() => expect(rowCount()).toBe(3));
+
+    fireEvent.press(screen.getByTestId('mustvisit-pick-check-in1'));
+    fireEvent.press(screen.getByTestId('mustvisit-pick-check-n1'));
+    fireEvent.press(screen.getByTestId('mustvisit-pick-complete'));
+
+    expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
+    expect(seededIds().sort()).toEqual(['in1', 'n1']);
+    expect(seededIds().includes('out1')).toBe(false);
+  });
+});
+
+/** 서울 여행인데 담은 곳이 전부 밖(인천 남동구·부산 해운대구) — savedAt 오름차순 o1 → o2. */
+const ALL_OUTSIDE_SEOUL: SavedPlace[] = [
+  savedCoded('o1', '남동구', '28200', '2026-09-01T01:00:00.000Z'),
+  savedCoded('o2', '해운대구', '26350', '2026-09-01T02:00:00.000Z'),
+];
+
+describe('🔴 TRIP-1042 R3 · 지역 안이 0건이면 폴백 대신 region-empty 블록 (AC-4·6·8·11)', () => {
+  it('"서울에 담은 곳이 없어요"·CTA 가 정확히 뜨고, 밖 두 곳은 체크 없이 이어지며, 폴백·빈 얼굴·더 담기는 없다', async () => {
+    serveSaved(ALL_OUTSIDE_SEOUL);
+    openSelectForTrip(SEOUL_TRIP);
+
+    // 긍정 짝 먼저 — 블록이 떠야 아래 부재 단언이 로딩 중 공허 통과가 아니다(02a ★5).
+    const block = await screen.findByTestId('mustvisit-pick-region-empty');
+    expect(
+      within(block).getByText('서울에 담은 곳이 없어요')
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('mustvisit-pick-region-empty-browse')
+    ).toHaveTextContent('탐색에서 서울 장소 담기');
+    expect(
+      screen.getByTestId('mustvisit-pick-region-outside')
+    ).toHaveTextContent('이 여행 지역 밖 2곳');
+    expect(rowCount()).toBe(2);
+
+    // AC-6 — 폴백이 없고, 밖 행이 체크 가능한 행으로 섞이지 않는다.
+    expect(fallbackCount()).toBe(0);
+    expect(checkCount()).toBe(0);
+    // AC-8 과 구분 — 진짜 0곳 얼굴이 아니다. CTA 가 더 담기 행을 대신한다.
+    expect(screen.queryAllByTestId('mustvisit-pick-empty')).toHaveLength(0);
+    expect(screen.queryAllByText(TRUE_EMPTY_TITLE)).toHaveLength(0);
+    expect(screen.queryAllByTestId('mustvisit-pick-addmore')).toHaveLength(0);
+
+    expect(screen.getByTestId('mustvisit-pick-subtitle')).toHaveTextContent(
+      '담은 곳 2곳 · 0곳 선택됨'
+    );
+    expect(screen.getByTestId('mustvisit-pick-complete')).toBeDisabled();
+  });
+});
+
+describe('🔴 TRIP-1042 R4 · 다중 목적지 — 제목·CTA 를 "서울·부산"으로 잇고 두 이름을 싣는다 (AC-5·7 · Q3)', () => {
+  it('서울(11)·부산(26) 여행에 인천 장소만 있으면 "서울·부산에 담은 곳이 없어요", CTA 는 두 지역을 실어 d04 로 간다', async () => {
+    serveSaved([
+      savedCoded('o1', '남동구', '28200', '2026-09-01T01:00:00.000Z'),
+    ]);
+    openSelectForTrip([
+      { region: '서울특별시', regionCode: '11' },
+      { region: '부산광역시', regionCode: '26' },
+    ]);
+
+    const block = await screen.findByTestId('mustvisit-pick-region-empty');
+    expect(
+      within(block).getByText('서울·부산에 담은 곳이 없어요')
+    ).toBeOnTheScreen();
+    const cta = screen.getByTestId('mustvisit-pick-region-empty-browse');
+    expect(cta).toHaveTextContent('탐색에서 서울·부산 장소 담기');
+
+    fireEvent.press(cta);
+
+    expect(mockPush.mock.calls).toEqual([
+      [
+        {
+          pathname: '/explore/places',
+          params: {
+            region: ['서울특별시', '부산광역시'],
+            ...wizardOriginParams(),
+          },
+        },
+      ],
+    ]);
+  });
+});
+
+describe('🔴 TRIP-1042 R5 · 시군구 목적지는 표시 이름 그대로 (Q4)', () => {
+  it('해운대구(26350) 여행에 종로구 장소만 있으면 "해운대구에 담은 곳이 없어요"', async () => {
+    serveSaved([
+      savedCoded('o1', '종로구', '11110', '2026-09-01T01:00:00.000Z'),
+    ]);
+    openSelectForTrip([{ region: '해운대구', regionCode: '26350' }]);
+
+    const block = await screen.findByTestId('mustvisit-pick-region-empty');
+    expect(
+      within(block).getByText('해운대구에 담은 곳이 없어요')
+    ).toBeOnTheScreen();
+  });
+});
+
+/** d04 로 갈 때 실어야 할 파라미터 — 기대값은 헬퍼 출력으로 만든다(철자 손복제 금지, 1026 관례). */
+const SEOUL_TO_EXPLORE = {
+  pathname: '/explore/places',
+  params: { region: ['서울특별시'], ...wizardOriginParams() },
+};
+
+describe('🔴 TRIP-1042 R6 · d04 로 가는 세 버튼이 여행 지역 이름을 싣는다 (AC-7)', () => {
+  it('R6a · 지역 안이 있으면 "+ 탐색에서 더 담기"가 서울특별시를 실어 간다', async () => {
+    serveSaved([
+      savedCoded('in1', '종로구', '11110', '2026-09-01T01:00:00.000Z'),
+    ]);
+    openSelectForTrip(SEOUL_TRIP);
+    await waitFor(() => expect(rowCount()).toBe(1));
+
+    fireEvent.press(screen.getByTestId('mustvisit-pick-addmore'));
+
+    expect(mockPush.mock.calls).toEqual([[SEOUL_TO_EXPLORE]]);
+  });
+
+  it('R6b · region-empty CTA 가 서울특별시를 실어 간다', async () => {
+    serveSaved(ALL_OUTSIDE_SEOUL);
+    openSelectForTrip(SEOUL_TRIP);
+
+    fireEvent.press(
+      await screen.findByTestId('mustvisit-pick-region-empty-browse')
+    );
+
+    expect(mockPush.mock.calls).toEqual([[SEOUL_TO_EXPLORE]]);
+  });
+
+  it('R6c · 진짜 0곳 얼굴의 "장소 둘러보기"가 서울특별시를 실어 간다', async () => {
+    serveSaved([]);
+    openSelectForTrip(SEOUL_TRIP);
+
+    fireEvent.press(await screen.findByTestId('mustvisit-pick-browse'));
+
+    expect(mockPush.mock.calls).toEqual([[SEOUL_TO_EXPLORE]]);
+  });
+});
+
+describe('TRIP-1042 R7 · 무회귀 — 목적지 코드가 있어도 담은 곳이 0이면 기존 빈 얼굴 (AC-8)', () => {
+  it('"아직 담은 곳이 없어요" 얼굴이 뜨고 region-empty 블록은 없다', async () => {
+    serveSaved([]);
+    openSelectForTrip(SEOUL_TRIP);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('mustvisit-pick-empty')).toBeOnTheScreen()
+    );
+    expect(screen.queryAllByText(TRUE_EMPTY_TITLE)).toHaveLength(1);
+    expect(screen.queryAllByTestId('mustvisit-pick-region-empty')).toHaveLength(
+      0
+    );
+  });
+});
+
+describe('🔴 TRIP-1042 R8 · 목적지 코드가 없으면 판정을 건너뛴다 (Q6 — 이름 폴백 금지)', () => {
+  it('코드 없는 "부산" 여행이면 종로구·해운대구 두 곳 모두 고를 수 있고 머리글·빈 블록·폴백이 없다', async () => {
+    serveSaved([
+      savedCoded('a', '종로구', '11110', '2026-09-01T01:00:00.000Z'),
+      savedCoded('b', '해운대구', '26350', '2026-09-01T02:00:00.000Z'),
+    ]);
+    openSelectForTrip([{ region: '부산' }]);
+
+    await waitFor(() => expect(rowCount()).toBe(2));
+    expect(checkCount()).toBe(2);
+    expect(
+      screen.queryAllByTestId('mustvisit-pick-region-outside')
+    ).toHaveLength(0);
+    expect(screen.queryAllByTestId('mustvisit-pick-region-empty')).toHaveLength(
+      0
+    );
+    // 이름 비교가 살아 있으면 `부산` 이 두 곳과 안 맞아 폴백 한 줄이 뜬다(현행) — 그 경로가 없어야 한다.
+    expect(fallbackCount()).toBe(0);
+  });
+});
+
+function catalogRegion(
+  regionCode: string,
+  name: string,
+  sidoName: string,
+  level: RegionLevel
+): Region {
+  return { regionCode, name, sidoName, level, selectable: true, poiCount: 1 };
+}
+
+/** 실서버 모양의 숫자 코드 카탈로그 — 기본 목(`busan` 슬러그)은 숫자 코드와 안 맞아 이 케이스만 덮는다(02a ★11). */
+const NUMERIC_CATALOG: Region[] = [
+  catalogRegion('11', '서울특별시', '서울특별시', RegionLevel.SIDO),
+  catalogRegion('11110', '종로구', '서울특별시', RegionLevel.SIGUNGU),
+  catalogRegion('26', '부산광역시', '부산광역시', RegionLevel.SIDO),
+  catalogRegion('28', '인천광역시', '인천광역시', RegionLevel.SIDO),
+  catalogRegion('28200', '남동구', '인천광역시', RegionLevel.SIGUNGU),
+];
+
+describe('🔴 TRIP-1042 R9 · 행 위치에 시도 짧은 이름을 붙인다 (AC-9)', () => {
+  it('28200/남동구 → "인천 남동구", 26/부산 → "부산"(겹쳐 쓰지 않음), 코드 없는 종로구 → "종로구"', async () => {
+    server.use(
+      http.get(`${BASE}/regions`, () => HttpResponse.json(NUMERIC_CATALOG))
+    );
+    serveSaved([
+      savedCoded('c1', '남동구', '28200', '2026-09-01T01:00:00.000Z'),
+      savedCoded('c2', '부산', '26', '2026-09-01T02:00:00.000Z'),
+      savedCoded('c3', '종로구', null, '2026-09-01T03:00:00.000Z'),
+    ]);
+    openSelectForTrip(SEOUL_TRIP);
+
+    // 라벨은 카탈로그가 도착한 뒤에 붙는다 — 행이 아니라 라벨 자체를 기다린다(02a ★12).
+    await waitFor(() =>
+      expect(
+        within(screen.getByTestId('mustvisit-pick-row-c1')).getByText(
+          '인천 남동구'
+        )
+      ).toBeOnTheScreen()
+    );
+    const busanRow = screen.getByTestId('mustvisit-pick-row-c2');
+    expect(within(busanRow).getByText('부산')).toBeOnTheScreen();
+    expect(within(busanRow).queryByText('부산 부산')).toBeNull();
+    expect(
+      within(screen.getByTestId('mustvisit-pick-row-c3')).getByText('종로구')
+    ).toBeOnTheScreen();
+  });
+});
+
+describe('🔴 TRIP-1042 R11 · region-empty 화면에도 소요시간 표기가 없다 (INV-3)', () => {
+  it('블록이 뜬 화면에서 분·시간·소요 표기가 0건이다', async () => {
+    serveSaved(ALL_OUTSIDE_SEOUL);
+    openSelectForTrip(SEOUL_TRIP);
+
+    await screen.findByTestId('mustvisit-pick-region-empty');
+    // 긍정 앵커 — 정규식이 이 화면의 새 글자를 실제로 읽는다.
+    expect(screen.queryAllByText(/담은 곳이 없어요/).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(/\d+\s*분|\d+\s*시간|소요/).length).toBe(0);
   });
 });

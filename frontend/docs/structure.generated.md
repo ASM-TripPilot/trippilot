@@ -90,6 +90,7 @@
 - `src/__tests__/mapBridgeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/mapSheetShellStructure.test.ts`  →  (export 없음)
 - `src/__tests__/monthGridSharedPromotion.test.ts`  →  (export 없음)
+- `src/__tests__/mustVisitRegionStructure.test.ts`  →  (export 없음)
 - `src/__tests__/myStaysStructure.test.ts`  →  (export 없음)
 - `src/__tests__/nicknameMyPageSync.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/nicknameSharedPromotion.test.ts`  →  (export 없음)
@@ -733,7 +734,7 @@
 - `src/features/trip/model/budgetAmount.ts`  →  BudgetAmount · parseBudgetAmount · formatBudgetAmount · BudgetTier · budgetForTier
 - `src/features/trip/model/createTripRequest.ts`  →  CreateTripInput · buildCreateTripRequest
 - `src/features/trip/model/mustVisitSeed.ts`  →  MustVisitSeedItem · MUST_VISIT_THUMBNAIL_LIMIT · seedMustVisits · mergeMustVisitSeeds · MustVisitSectionView · resolveMustVisitSection · mustVisitFailureNotice
-- `src/features/trip/model/regionMatch.ts`  →  sidoKey · addressInRegion
+- `src/features/trip/model/regionMatch.ts`  →  sidoKey · addressInRegion · regionCodeInTrip · placeLocationLabel
 - `src/features/trip/model/staySheetSections.ts`  →  StayAddressState · StaySheetSection · staySheetSections
 - `src/features/trip/model/tripDatePicker.ts`  →  dateCell · TripDateRange
 - `src/features/trip/model/tripDraft.ts`  →  TripViolationCode · TripDraft · tripLength · nightsSum · validateTripDraft · toCompanionType
@@ -1438,4 +1439,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 998개 파일
+합계 999개 파일

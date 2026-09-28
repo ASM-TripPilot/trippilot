@@ -391,7 +391,11 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    implementer 는 preview.tsx 에서 그 1키만 지우고 이 가드는 안 만진다(지우기 전엔 174개라 red).
     //    정확히 그 키인지는 아래 'TRIP-724' describe 의 부정 단언이 못박는다. devPreviewBandSort 는
     //    밴드 h·l 만 잠가 band e 와 무관(오갱신 금지). Figma e05 calendar 프레임(4520:2349)도 삭제됐다.
-    expect(PREVIEW_STATES).toHaveLength(173);
+    // ⚠️ TRIP-1042: d02 select 지역 빈 상태 프리뷰 1키(`saved-places-select-region-empty`, band `d`) 추가로
+    //    173→174. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 1키만 추가하고 이 가드는
+    //    안 만진다(추가 전엔 173개라 red). 정확히 그 키인지는 아래 'TRIP-1042' describe 가 못박는다.
+    //    devPreviewBandSort 는 밴드 h·l 만 잠가 band d 와 무관(오갱신 금지). Figma 4685:2646 과 1:1 인 새 얼굴.
+    expect(PREVIEW_STATES).toHaveLength(174);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -1680,5 +1684,70 @@ describe('🔴 TRIP-1040 · h07 부분 결과 5일·7일 접기 프리뷰 2키 (
     expect(
       screen.getByTestId('generation-gauge-cell-4-active')
     ).toHaveTextContent('5일차 생성 중');
+  });
+});
+
+/** 행·머리글을 트리 순서대로 — 머리글 뒤의 행이 곧 지역 밖 행이다. */
+function pickOrder(): string[] {
+  return screen
+    .queryAllByTestId(/^mustvisit-pick-(row-|region-outside$)/)
+    .map((node) => String(node.props.testID));
+}
+
+describe('🔴 TRIP-1042 · d02 select 지역 빈 상태 프리뷰 키 + 지역 밖 흐린 행 (band d)', () => {
+  it('saved-places-select-region-empty 키가 있고, 렌더하면 빈 블록·지역 밖 머리글이 뜨고 체크·더 담기는 없다', () => {
+    // 준비 — 새 키 엔트리를 찾는다(red-first: preview.tsx 에 추가 전엔 없다).
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'saved-places-select-region-empty'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('d');
+    expect(entry?.label).toBe('d02 · 꼭 갈 곳 고르기 지역 빈 상태');
+
+    // 실행 — 그 엔트리의 render() 를 그린다.
+    render(<>{entry?.render()}</>);
+
+    // 단언 — Figma 4685:2646 얼굴: 목록 머리 블록 + 지역 밖 머리글·흐린 행, 더 담기 행 없음.
+    const block = screen.getByTestId('mustvisit-pick-region-empty');
+    expect(within(block).getByText(/에 담은 곳이 없어요$/)).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('mustvisit-pick-region-outside')
+    ).toBeOnTheScreen();
+    expect(
+      screen.queryAllByTestId(/^mustvisit-pick-row-/).length
+    ).toBeGreaterThan(0);
+    expect(screen.queryAllByTestId(/^mustvisit-pick-check-/)).toHaveLength(0);
+    expect(screen.queryAllByTestId('mustvisit-pick-addmore')).toHaveLength(0);
+
+    // 이웃 앵커 — 지역 밖 키가 딸려 사라지지 않았다.
+    expect(PREVIEW_STATES.map((state) => state.key)).toContain(
+      'saved-places-select-outside'
+    );
+  });
+
+  it('saved-places-select-outside 를 렌더하면 머리글 뒤 행엔 체크가 없고, 앞 행엔 있다', () => {
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'saved-places-select-outside'
+    );
+    render(<>{entry?.render()}</>);
+
+    const order = pickOrder();
+    const headerAt = order.indexOf('mustvisit-pick-region-outside');
+    // 앵커 — 머리글이 있고 앞뒤에 행이 있다(없으면 아래 판정이 공허해진다).
+    expect(headerAt).toBeGreaterThan(0);
+    expect(order.length).toBeGreaterThan(headerAt + 1);
+
+    const poiIdOf = (testID: string) =>
+      testID.replace('mustvisit-pick-row-', '');
+    order.slice(0, headerAt).forEach((testID) => {
+      expect(
+        screen.getByTestId(`mustvisit-pick-check-${poiIdOf(testID)}`)
+      ).toBeOnTheScreen();
+    });
+    order.slice(headerAt + 1).forEach((testID) => {
+      expect(
+        screen.queryByTestId(`mustvisit-pick-check-${poiIdOf(testID)}`)
+      ).toBeNull();
+    });
   });
 });

@@ -147,3 +147,16 @@ describe('TRIP-1027 AC-3 · 시작 날짜가 있으면 담는 순간 끝 날짜�
     expect(mockBack).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('🔴 TRIP-1042 AC-12 · 지역 피커가 쥔 코드가 스토어 목적지에 담긴다 (맹점 ①)', () => {
+  it('서울(11)을 고르면 목적지에 이름과 함께 regionCode 11 이 담긴다', () => {
+    expect(store().destinations).toHaveLength(0);
+    render(<RegionPickerPage />);
+
+    pickSeoul();
+
+    const [seoul] = store().destinations;
+    expect(seoul.region).toBe('서울특별시');
+    expect(seoul.regionCode).toBe('11');
+  });
+});
