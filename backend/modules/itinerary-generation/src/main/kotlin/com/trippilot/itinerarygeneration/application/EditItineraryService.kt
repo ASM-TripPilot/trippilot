@@ -77,9 +77,16 @@ class EditItineraryService(
         if (current.status == ItineraryStatus.CONFIRMED && today() < period.startDate) {
             throw ConflictDetected(message = "확정된 일정은 수정할 수 없습니다.")
         }
-        // 생성 중(PARTIAL) 편집 금지 — 뒤이어 도착하는 2차 결과가 편집을 덮어써 조용히 유실된다(확정 차단과 같은 이유).
+        // 생성 중(PARTIAL) 편집은 **이미 만들어진 일자에 한해** 허용한다(TRIP-1000 — day1 조기 노출의
+        // 취지가 "보고 고칠 수 있다"다, BR-U3-06). 유실 걱정("2차가 편집을 덮어쓴다")은 병합이
+        // 트랜잭션 안 재읽기 + 조건부 쓰기라 성립하지 않는다 — 2차는 최신 상태에 나머지 일자를
+        // **이어붙일 뿐** 기존 일자를 다시 만들지 않는다(SecondPhaseGenerator, 스펙으로 잠금).
+        // 아직 없는 일자를 싣는 편집만 409 — 그 일자는 2차와 이 편집 중 누가 이겨야 하는지 정의가 없다.
         if (current.generationState == GenerationState.PARTIAL) {
-            throw ConflictDetected(message = "일정 생성이 진행 중입니다. 완료 후 수정할 수 있습니다.")
+            val existing = current.days.map { it.date }.toSet()
+            if (edit.days.any { it.date !in existing }) {
+                throw ConflictDetected(message = "일정 생성이 진행 중입니다. 완료 후 수정할 수 있습니다.")
+            }
         }
 
         // 재검증(비차단) — 외부(ScheduleAgent) 호출은 트랜잭션 밖(DB 커넥션 안 물게, generate 와 동일). Fake 는 빈 목록.

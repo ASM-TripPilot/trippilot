@@ -940,7 +940,7 @@ paths:
       responses:
         '200': { description: 편집됨, content: { application/json: { schema: { $ref: '#/components/schemas/Itinerary' } } } }
         '404': { description: 여행 없음/타 계정/생성된 일정 없음 }
-        '409': { description: 여행 시작 전 확정 일정은 수정 불가(여행 중에는 허용 — TRIP-999) · 생성 진행 중(generationState=PARTIAL)은 수정 불가 }
+        '409': { description: 여행 시작 전 확정 일정은 수정 불가(여행 중에는 허용 — TRIP-999) · 생성 진행 중에는 아직 없는 일자를 싣는 편집만 불가(이미 만들어진 일자는 허용 — TRIP-1000) }
   /trips/{tripId}/generation-sessions/{sessionId}:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -990,7 +990,7 @@ paths:
         '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/SlotCandidates' } } } }
         '400': { description: 슬롯 키 형식 오류 }
         '404': { description: 여행 없음/타 계정/생성된 일정 없음/해당 슬롯 없음/장소 좌표 없음 }
-        '409': { description: 확정된 일정 · 생성 진행 중 · 같은 날 같은 장소가 둘이라 슬롯 특정 불가 }
+        '409': { description: 확정된 일정 · 아직 생성 중인 일자(이미 만들어진 일자는 허용 — TRIP-1000) · 같은 날 같은 장소가 둘이라 슬롯 특정 불가 }
   /trips/{tripId}/visits:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }

@@ -297,6 +297,40 @@ class EditItineraryServiceTest : StringSpec({
         byPoi.getValue(poiB).poiSnapshotId shouldBe null // 표면은 정본(live) 폴백으로 그려진다
     }
 
+    "생성 중에도 이미 만들어진 일자만 고치는 편집은 저장된다(TRIP-1000)" {
+        // day1 조기 노출(BR-U3-04·06) — 2차가 도는 동안에도 도착한 1일차는 손댈 수 있어야 한다.
+        val partial = Itinerary.create(
+            tripId, SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, false,
+            listOf(ItineraryDay.of(day, 0, listOf(VisitSlot.of(poiA, null, 0, LocalTime.parse("09:00"), LocalTime.parse("10:00"))))),
+            clock.instant(), GenerationState.PARTIAL,
+        )
+        val repo = repoWith(partial)
+        val saved = EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock)
+            .edit(acc, tripId, editReq) // editReq 는 day(이미 존재) 만 싣는다
+
+        saved.generationState shouldBe GenerationState.PARTIAL // 편집이 생성 진행 상태를 바꾸지 않는다
+        saved.days.single().slots.map { it.sourcePoiId } shouldBe listOf(poiB, poiA)
+    }
+
+    "생성 중에 아직 없는 일자를 실으면 409 — 2차와 누가 이길지 정의가 없다" {
+        val partial = Itinerary.create(
+            tripId, SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, false,
+            listOf(ItineraryDay.of(day, 0, listOf(VisitSlot.of(poiA, null, 0, LocalTime.parse("09:00"), LocalTime.parse("10:00"))))),
+            clock.instant(), GenerationState.PARTIAL,
+        )
+        val repo = repoWith(partial)
+        val withNewDay = EditItinerary(
+            listOf(
+                EditDay(day, listOf(EditSlot(poiA, LocalTime.parse("09:00"), LocalTime.parse("10:00"), isFixed = false, endsNextDay = false))),
+                EditDay(day.plusDays(1), listOf(EditSlot(poiB, LocalTime.parse("10:00"), LocalTime.parse("11:00"), isFixed = false, endsNextDay = false))),
+            ),
+        )
+        shouldThrow<ConflictDetected> {
+            EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock)
+                .edit(acc, tripId, withNewDay)
+        }
+    }
+
     "무변경 편집이면 변경 이력도 쌓이지 않는다" {
         val repo = repoWith(current())
         val logs = CapturingChangeLogs()

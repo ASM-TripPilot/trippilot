@@ -4,13 +4,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 import java.time.Duration
 
 /**
- * 생성이 쓰는 **시간 예산** 일체(TRIP-474).
+ * 생성이 쓰는 **시간 예산** 일체(TRIP-474 해제 → TRIP-1000 재도입).
  *
- * 2026-08-21 팀 결정으로 시간제약을 **일단 해제**한다 — FE 연동에서 시간 때문에 규칙 폴백으로
- * 강등되는 것을 먼저 걷어내기 위함이다. AI 는 `deadline_ms` 를 선택 필드로 바꿨고(TRIP-473),
- * **미지정 = 시간제약 없음**이다. 9월 재도입은 [enforced] 를 켜는 것뿐이다(TRIP-475).
- *
- * **값을 지우지 않고 끄는 이유**가 그것이다. 지우면 재도입이 재작업이 된다.
+ * 2026-08-21 팀 결정으로 시간제약을 일단 해제했다가(FE 연동에서 규칙 폴백 강등을 걷어내려고),
+ * **2026-09-28 다시 켰다(TRIP-1000, TRIP-475 를 앞당김)** — 시한 없는 2차에 AI 가 600초를
+ * 대입해, 몰아 재시도가 겹치면 10분짜리 생성이 되고 그동안 화면이 잠겼다(QA #073 실측:
+ * day1 12:02 준비 · 2차 12:12 도착). `deadline_ms` 는 선택 필드 그대로라(TRIP-473)
+ * [enforced] 를 끄면 언제든 무제한으로 돌아간다.
  *
  * ## 왜 한 클래스가 넷을 다 갖고 있나
  *
@@ -18,9 +18,12 @@ import java.time.Duration
  * "AI 를 붙였는데 전부 폴백" 이라 원인이 보이지 않는다. 그래서 파생 가능한 것은 파생시킨다 —
  * 손으로 맞춰야 하는 값이 적을수록 어긋날 자리가 적다.
  *
- * @property enforced AI 에 시한을 실을지. **기본 false = 안 싣는다(무제한).**
- * @property day1Ms day1 조기 노출(1차 호출) 예산. [enforced] 일 때만 쓰인다.
- * @property totalMs 전체(2차 호출) 예산. [enforced] 일 때만 쓰인다.
+ * @property enforced AI 에 시한을 실을지. **기본 true(TRIP-1000).** 끄면 무제한 — AI 가 600초를 대입한다.
+ * @property day1Ms day1 조기 노출(1차 호출) 예산. [enforced] 일 때만 쓰인다. 종전 5초는 상위 티어
+ *   모델이 사실상 못 타는 값이었다(슬롯 후보 3초→15초와 같은 실측 계열) — 15초로 재도입한다.
+ * @property totalMs 전체(2차 호출) 예산. [enforced] 일 때만 쓰인다. 종전 20초는 1박2일 기준
+ *   옛값 — 재도입 값 60초는 "무제한(600초 대입)보다 한 자리 짧게, 정상 2차(수십 초 실측)는
+ *   자르지 않게"다. 넘으면 결정론 폴백으로 닫힌다(INV-4) — 10분 잠금이 최악이지 폴백이 최악이 아니다.
  * @property unenforcedWaitMs 시한을 안 걸 때 **우리가 기다려 주는** 상한. 기본 610초 —
  *   AI 미들웨어의 행 방지 백스톱(600초)보다 커야 우리가 먼저 끊지 않는다.
  * @property editWaitMs 편집 요청 **안에서** 도는 호출(validate·repair)의 상한. 생성용과 나눠야 하는
@@ -28,9 +31,9 @@ import java.time.Duration
  */
 @ConfigurationProperties(prefix = "trippilot.ai.schedule.deadline")
 data class ScheduleDeadlineProperties(
-    val enforced: Boolean = false,
-    val day1Ms: Long = 5_000,
-    val totalMs: Long = 20_000,
+    val enforced: Boolean = true,
+    val day1Ms: Long = 15_000,
+    val totalMs: Long = 60_000,
     val unenforcedWaitMs: Long = 610_000,
     val editWaitMs: Long = 60_000,
 ) {

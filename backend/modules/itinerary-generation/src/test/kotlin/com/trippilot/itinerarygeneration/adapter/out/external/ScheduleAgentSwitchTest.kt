@@ -68,8 +68,11 @@ class ScheduleAgentSwitchTest : StringSpec({
      * 편집(PUT)은 `validate` 를 요청 안에서 동기로 부른다. "AI 가 죽어도 편집은 막지 않는다"가 설계
      * 의도인데(`Revalidation`), 그 회복은 **소켓이 끊긴 다음에야** 작동한다. 생성용 상한(시간제약을
      * 풀면 612초)을 공유하면 AI 가 응답을 멈췄을 때 편집이 10분간 막혀 의도가 뒤집힌다.
+     *
+     * 시한 재도입(TRIP-1000) 후 기본 모드에서는 생성 상한도 62초로 내려와 둘이 같다 —
+     * 이 구분이 실제로 갈라지는 것은 시한을 끈 모드다. 두 모드를 다 잠근다.
      */
-    "편집용 클라이언트는 생성용보다 짧은 read 상한을 쓴다" {
+    "편집용 클라이언트는 생성용보다 길게 기다리지 않는다 — 시한 끈 모드에선 확실히 짧다" {
         runner.withPropertyValues(
             "trippilot.ai.schedule.mode=http",
             "trippilot.ai.schedule.base-url=http://ai:8000",
@@ -77,9 +80,19 @@ class ScheduleAgentSwitchTest : StringSpec({
             val generate = readTimeoutOf(ctx.getBean("scheduleAgentRestClient", RestClient::class.java))
             val bounded = readTimeoutOf(ctx.getBean("scheduleAgentBoundedRestClient", RestClient::class.java))
 
-            // 기본(시한 미전송)에서 생성은 AI 백스톱 600초를 넘겨 기다린다.
+            // 기본(시한 60초 전송)에서 우리가 62초에 먼저 끊는다 — AI 백스톱(600초)에 안 끌려간다(TRIP-1000).
+            generate shouldBe Duration.ofMillis(62_000)
+            bounded shouldBe Duration.ofMillis(62_000)
+        }
+        runner.withPropertyValues(
+            "trippilot.ai.schedule.mode=http",
+            "trippilot.ai.schedule.base-url=http://ai:8000",
+            "trippilot.ai.schedule.deadline.enforced=false",
+        ).run { ctx ->
+            val generate = readTimeoutOf(ctx.getBean("scheduleAgentRestClient", RestClient::class.java))
+            val bounded = readTimeoutOf(ctx.getBean("scheduleAgentBoundedRestClient", RestClient::class.java))
+
             generate shouldBeGreaterThan Duration.ofSeconds(600)
-            // 편집은 짧게 끊되, 실측 재검증(약 20초)을 자르지 않을 만큼은 준다.
             bounded shouldBe Duration.ofMillis(62_000)
             bounded shouldBeLessThan generate
         }

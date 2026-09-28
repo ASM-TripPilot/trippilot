@@ -857,30 +857,27 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
     }
 
     /**
-     * **기본은 시한을 싣지 않는다**(TRIP-474). AI 계약상 미지정 = 시간제약 없음이라,
-     * 값을 실으면 시간 때문에 규칙 폴백으로 강등되는 경로가 도로 열린다.
+     * **기본이 시한을 싣는다**(TRIP-1000 재도입 · BR-U3-03 "deadlineMs 는 backend 소유").
+     * 안 실으면 AI 가 600초를 대입해, 몰아 재시도가 겹치면 2차가 10분이 된다(QA #073).
      */
-    "기본 설정에서는 시한을 싣지 않는다" {
+    "기본 설정에서 1차 15s · 2차 60s 시한을 싣는다(TRIP-1000)" {
         val end = start.plusDays(2)
         val (agent, _) = emittingAgent(end)
         service(agent, FakeItineraries(), end).generate(acc, tripId, GenerationMode.FULLY_AI)
 
-        agent.captures[0].requestMeta.deadlineMs shouldBe null
-        agent.captures[1].requestMeta.deadlineMs shouldBe null
+        agent.captures[0].requestMeta.deadlineMs shouldBe 15_000L
+        agent.captures[1].requestMeta.deadlineMs shouldBe 60_000L
     }
 
-    /**
-     * **재도입은 플래그 한 줄이다**(TRIP-475 9월 예정). 값을 지우지 않고 끈 이유가 이것이므로,
-     * 켰을 때 종전과 같은 값이 나가는지 지금 고정해 둔다 — 나중에 확인하면 이미 늦다.
-     */
-    "플래그를 켜면 1차 day1 예산(5s), 2차 전체 예산(20s) 그대로다" {
+    /** 끄면 무제한(미지정)으로 돌아간다 — 재도입 전 동작을 환경값 한 줄로 되살릴 수 있어야 한다. */
+    "플래그를 끄면 시한을 싣지 않는다" {
         val end = start.plusDays(2)
         val (agent, _) = emittingAgent(end)
-        service(agent, FakeItineraries(), end, deadlines = ScheduleDeadlineProperties(enforced = true))
+        service(agent, FakeItineraries(), end, deadlines = ScheduleDeadlineProperties(enforced = false))
             .generate(acc, tripId, GenerationMode.FULLY_AI)
 
-        agent.captures[0].requestMeta.deadlineMs shouldBe 5_000L
-        agent.captures[1].requestMeta.deadlineMs shouldBe 20_000L
+        agent.captures[0].requestMeta.deadlineMs shouldBe null
+        agent.captures[1].requestMeta.deadlineMs shouldBe null
     }
 
     /**
@@ -1123,6 +1120,28 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
             .completeRemaining(tripId, edited.itineraryId, agentInputFor(end), isRegeneration = false)
 
         repo.byTrip.getValue(tripId) shouldBe edited // 그대로
+    }
+
+    "2차 결과는 이어붙일 뿐이다 — 생성 중에 반영된 1일차 편집을 덮어쓰지 않는다(TRIP-1000)" {
+        // PARTIAL 편집이 열리면서(이미 만들어진 일자 한정) 이 보장이 계약이 됐다 — 병합이
+        // 트랜잭션 안에서 최신 상태를 다시 읽어 그 위에 나머지 일자만 얹는지를 잠근다.
+        val end = start.plusDays(1)
+        val userPick = UUID.randomUUID() // 사용자가 2차 도는 사이 1일차에 넣은 장소
+        val (agent, poiByDate) = emittingAgent(end)
+        val repo = FakeItineraries()
+        val editedDay1 = Itinerary.create(tripId, SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, false,
+            listOf(ItineraryDay.of(start, 0, listOf(VisitSlot.of(userPick, null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"))))),
+            now, GenerationState.PARTIAL,
+        )
+        repo.byTrip[tripId] = editedDay1
+
+        SecondPhaseGenerator(agent, repo, genRevisions(repo, stubTrips), genSessions(), FakeScoredCandidatePoolStore(), NOOP_TX, clock)
+            .completeRemaining(tripId, editedDay1.itineraryId, agentInputFor(end), isRegeneration = false)
+
+        val finished = repo.byTrip.getValue(tripId)
+        finished.generationState shouldBe GenerationState.COMPLETE
+        finished.days.first { it.date == start }.slots.single().sourcePoiId shouldBe userPick // 편집 보존
+        finished.days.first { it.date == end }.slots.single().sourcePoiId shouldBe poiByDate.getValue(end) // 2차 몫
     }
 
     "재생성으로 일정이 교체됐으면 낡은 2차 결과를 버린다" {

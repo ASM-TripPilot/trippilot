@@ -79,9 +79,9 @@ class ScheduleAgentPropertiesBindingTest : StringSpec({
         p.staleAfter shouldBeGreaterThan java.time.Duration.ofMillis(p.waitCeilingMs)
     }
 
-    "미설정이면 시한을 싣지 않는다 — 배포 기본" {
+    "미설정이면 시한이 실린다 — 배포 기본(TRIP-1000 재도입)" {
         val p = bindDeadlines()
-        p.enforced shouldBe false
-        p.day1Budget() shouldBe null
+        p.enforced shouldBe true
+        p.day1Budget() shouldBe 15_000L
     }
 })
