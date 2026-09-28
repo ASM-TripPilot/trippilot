@@ -574,3 +574,55 @@ describe('🔴 1006 A2(홈측) · 같이 짜기 생성 중(PARTIAL · CO_PLAN) �
     );
   });
 });
+
+describe('🔴 TRIP-1073 F4·F5(홈측) · 같이 짜기 완성(COMPLETE · PLANNED · CO_PLAN) → "일정 이어서 짜기" · h17 내가 고른 완성', () => {
+  it('폴백 일정이어도 라벨·부제는 이어서 짜기 그대로이고, 누르면 초안이 아니라 copick/complete 로 1회 간다 (#051)', () => {
+    // 준비 — 생성을 마친 같이 짜기 일정. isFallback=true 는 #051 실측 경로다(02a ★F-3).
+    //   비고정 슬롯 poi-a 가 남아 있어야 'copick' 오답이 complete 로 새지 않고 드러난다(02a ★F-2).
+    const base = itineraryOk(
+      ItineraryGenerationState.COMPLETE,
+      ItineraryStatus.PLANNED
+    );
+    const coPlanDone = {
+      ...base,
+      data: {
+        ...(base.data as object),
+        generationMode: 'CO_PLAN',
+        isFallback: true,
+        days: [
+          {
+            date: '2099-06-10',
+            slots: [
+              {
+                poiId: 'poi-a',
+                startAt: '09:30:00',
+                endAt: '11:00:00',
+                isFixed: false,
+                endsNextDay: false,
+                hasViolation: false,
+                alternatives: [],
+                tags: [],
+              },
+            ],
+          },
+        ],
+      },
+    } as unknown as ItineraryHookResult;
+
+    // 실행
+    renderHome(beforeTrip(), coPlanDone);
+
+    // 단언 ① 라벨·부제 — 새 토큰이 else 갈래('확정 일정 보기'·부제 삭제)로 떨어지면 red(02a ★F-4).
+    expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
+      '일정 이어서 짜기'
+    );
+    expect(screen.getByTestId('home-greeting')).toHaveTextContent(SUBTITLE);
+
+    // 단언 ② 목적지 — 완전 일치.
+    fireEvent.press(screen.getByTestId('home-trip-hero-cta'));
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith(
+      `/trips/${TRIP_ID}/itinerary/copick/complete`
+    );
+  });
+});
