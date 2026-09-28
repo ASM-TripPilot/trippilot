@@ -410,7 +410,17 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    복귀다(그때는 프레임이 없었다). test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그
     //    1키만 추가하고 이 가드는 안 만진다(추가 전엔 177개라 red). 건너뛰기 확인 다이얼로그는 Figma 프레임이
     //    없어 키를 두지 않는다. 정확한 j 목록은 아래 'TRIP-770' describe(16키)가 못박는다.
-    expect(PREVIEW_STATES).toHaveLength(178);
+    // ⚠️ TRIP-1081: h10 서버가 넓힌 반경 얼굴 `h10-copick-candidates-auto-wide`(band `h`) 1키 추가로
+    //    178→179. 칩은 사용자가 고른 1.1km 그대로 + muted 사실 캡션 + 후보 핀 fitPins 카메라(QA #067)는
+    //    jest 가 색·카메라를 못 봐 이 키가 유일한 육안 수단이다. Figma 상태 프레임은 아직 없다(figma 레인
+    //    후속). test-designer 선반영 — implementer 는 preview.tsx 에 그 1키만 추가하고 이 가드는 안
+    //    만진다(추가 전엔 178개라 red). 정확한 키는 아래 'TRIP-1081' describe, h 순서는 devPreviewBandSort.
+    // ⚠️ TRIP-1084: j07 legend 3줄+더 보기 얼굴 `records-calendar-legend-more`(band `j`) 1키 추가로
+    //    179→180. Figma 채택안 `4699:2630`(접힘)과 1:1, 펼침 `4699:2803` 은 그 키에서 탭으로 본다. 줄 간격·
+    //    들여쓰기·chevron 방향은 jest 사각이라 이 키가 유일한 육안 수단이다. test-designer 선반영 —
+    //    implementer 는 preview.tsx 에 그 1키만 추가하고 이 가드는 안 만진다(추가 전엔 179개라 red).
+    //    정확한 j 목록은 아래 'TRIP-770' describe(17키), 데이터 모양은 'TRIP-1084' describe 가 못박는다.
+    expect(PREVIEW_STATES).toHaveLength(180);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -590,6 +600,23 @@ describe('🔴 TRIP-795 · h10 후보 선택 프리뷰 2키 (band h)', () => {
     // 형제 band h 앵커 — 이웃 co-pick 키(h09 컨셉·h11 완료)가 딸려 사라지지 않았음(공허 통과 방지).
     expect(keys).toContain('h09-copick-concept');
     expect(keys).toContain('h11-copick-complete');
+  });
+});
+
+describe('🔴 TRIP-1081 · h10 서버가 넓힌 반경 프리뷰 1키 (band h)', () => {
+  it('키 집합에 h10-copick-candidates-auto-wide 가 band h 로 있고 기존 h10 2키는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES)만 읽는다.
+    const added = PREVIEW_STATES.find(
+      (state) => state.key === 'h10-copick-candidates-auto-wide'
+    );
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 카운트(179)만으론 "아무 키나 추가해도" 통과하므로 추가된 키가 이것임을 못박는다.
+    expect(added?.band).toBe('h');
+    expect(added?.label).toMatch(/^h10 /);
+    // 형제 앵커 — default·wide 가 딸려 사라지지 않았다.
+    expect(keys).toContain('h10-copick-candidates');
+    expect(keys).toContain('h10-copick-candidates-wide');
   });
 });
 
@@ -1300,9 +1327,10 @@ describe('AC-3 · 딥링크 초기 밴드 자동선택 (폴백 함수 재사용)
 });
 
 // TRIP-770 · j 밴드(기록·회고) 프리뷰 최종 정리 완료조건 — 22키 → 14키.
-// 무엇을 보장하나: band 'j' 가 정확히 16키(TRIP-770 의 14 + TRIP-1068 pending 1 + TRIP-1069 visit-time-sheet 1)이고, 각 키·라벨이
+// 무엇을 보장하나: band 'j' 가 정확히 17키(TRIP-770 의 14 + TRIP-1068 pending 1 + TRIP-1069 visit-time-sheet 1
+// + TRIP-1084 legend-more 1)이고, 각 키·라벨이
 // 최종 목록과 완전 일치한다(759~767 이 만든 라벨 편차를 통일). 순서 무관 — (key,label) 쌍 집합으로 대조한다.
-describe('🔴 TRIP-770 · j 밴드 최종 16키·라벨 완전 일치 (TRIP-1068·1069 +1씩)', () => {
+describe('🔴 TRIP-770 · j 밴드 최종 17키·라벨 완전 일치 (TRIP-1068·1069·1084 +1씩)', () => {
   const EXPECTED_J: readonly (readonly [string, string])[] = [
     ['records-default', 'j01 · 방문 기록 default'],
     ['records-error', 'j01 · 방문 기록 error'],
@@ -1324,9 +1352,11 @@ describe('🔴 TRIP-770 · j 밴드 최종 16키·라벨 완전 일치 (TRIP-106
     ['share-card-default', 'j06 · 공유 카드 default'],
     ['share-card-no-photo', 'j06 · 공유 카드 no-photo'],
     ['records-calendar-default', 'j07 · 여행 캘린더 default'],
+    // TRIP-1084 — Figma 4699:2630(legend 3줄+더 보기) 과 1:1.
+    ['records-calendar-legend-more', 'j07 · 여행 캘린더 legend-more'],
   ];
 
-  it('band j 가 정확히 16키이고 키·라벨이 최종 목록과 완전 일치한다(TRIP-1068 pending +1 · TRIP-1069 +1)', () => {
+  it('band j 가 정확히 17키이고 키·라벨이 최종 목록과 완전 일치한다(TRIP-1068 · 1069 · 1084 +1씩)', () => {
     // 준비: band 'j' 엔트리만 골라 (key\tlabel) 정렬 집합으로.
     const jStates = PREVIEW_STATES.filter((state) => state.band === 'j');
     const actual = jStates
@@ -1336,9 +1366,43 @@ describe('🔴 TRIP-770 · j 밴드 최종 16키·라벨 완전 일치 (TRIP-106
       ([key, label]) => `${key}\t${label}`
     ).sort();
 
-    // 단언: 16키 + (키,라벨) 집합 완전 일치(삭제된 22키의 잔재·라벨 편차 차단).
-    expect(jStates).toHaveLength(16);
+    // 단언: 17키 + (키,라벨) 집합 완전 일치(삭제된 22키의 잔재·라벨 편차 차단).
+    expect(jStates).toHaveLength(17);
     expect(actual).toEqual(expected);
+  });
+});
+
+// TRIP-1084 · j07 legend-more 프리뷰가 Figma 4699:2630 의 데이터를 그리는가(6-b 육안 대조의 전제).
+// 무엇을 보장하나: 새 키를 그대로 렌더하면 9월 · 묶음 두 줄('외 5'·'외 3') · '더 보기 2' 가 보인다 —
+// 키만 있고 데이터가 1줄이면 육안 대조할 얼굴 자체가 없다.
+describe('🔴 TRIP-1084 · records-calendar-legend-more 프리뷰 = Figma 4699:2630 데이터', () => {
+  it('9월, 묶음 2줄(외 5 · 외 3)과 "더 보기 2"를 그린다', () => {
+    // 준비 — 키의 render() 를 직접 렌더(밴드 탐색 UI 를 거치지 않는다).
+    const state = PREVIEW_STATES.find(
+      (s) => s.key === 'records-calendar-legend-more'
+    );
+    expect(state?.band).toBe('j');
+    if (state === undefined)
+      throw new Error('records-calendar-legend-more 키 없음');
+
+    // 실행
+    render(state.render());
+
+    // 단언
+    expect(screen.getByText('2026년 9월')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId(
+        'record-calendar-legend-group-count-2026-09-28_2026-09-30'
+      )
+    ).toHaveTextContent('외 5');
+    expect(
+      screen.getByTestId(
+        'record-calendar-legend-group-count-2026-09-28_2026-09-29'
+      )
+    ).toHaveTextContent('외 3');
+    expect(screen.getByTestId('record-calendar-legend-more')).toHaveTextContent(
+      '더 보기 2'
+    );
   });
 });
 

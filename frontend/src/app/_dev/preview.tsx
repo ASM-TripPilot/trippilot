@@ -93,6 +93,7 @@ import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
 import { PastTripRow } from '@/entities/trip/ui/PastTripRow';
 import { ChevronRightGlyph as TripChevronRightGlyph } from '@/entities/trip/ui/TripGlyphs';
 import type { PastTripCardVM } from '@/entities/trip/model';
+import type { MonthLegends } from '@/features/record/model/recordsCalendar';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { buildStatePins } from '@/entities/itinerary-slot/lib/slotMapPin';
 import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
@@ -951,7 +952,7 @@ const H10_RADIUS_STEPS = [
   { key: 'max', label: '최대' },
 ] as const;
 const H10_CENTER = { lat: 35.1587, lng: 129.1604 };
-// TRIP-1043 — 지도는 지금 채우는 슬롯 장소의 기준 핀 하나 + 반경 원(후보 A/B/C 핀은 후보 좌표 계약 뒤,
+// TRIP-1043 — 지도는 지금 채우는 슬롯 장소의 기준 핀 하나 + 반경 원(후보 A/B/C 핀은 TRIP-1081 auto-wide 키,
 // '현재 위치' 점은 사용자 위치가 아니라 안 씀). label '' 는 물방울 안 번호를 지운다(페이지와 같은 모양).
 const H10_BASE_PINS = [{ number: 1, ...H10_CENTER, label: '' }];
 const H10_DEFAULT_CANDIDATES: SlotCandidatesCandidatesItem[] = [
@@ -1009,6 +1010,14 @@ const H10_WIDE_VIEWS: Record<string, H10View> = {
   ...H10_DEFAULT_VIEWS,
   D4: { ...H10_DEFAULT_VIEWS.D4, dimmed: false },
 };
+// TRIP-1081 — 서버가 1.1km 요청을 약 11.3km 로 넓힌 얼굴(QA #067). 칩은 사용자가 고른 1.1km 그대로,
+// 캡션은 muted 사실 문장, 후보 A/B/C 핀(좌표 가상값)에 fitPins 카메라 — 페이지 조립과 같은 모양.
+const H10_AUTO_WIDE_PINS = [
+  ...H10_BASE_PINS,
+  { number: 2, lat: 35.1662, lng: 129.1368, label: 'A' },
+  { number: 3, lat: 35.1531, lng: 129.1189, label: 'B' },
+  { number: 4, lat: 35.1784, lng: 129.1752, label: 'C' },
+];
 const H10_STEPPER: ReactElement = (
   <CoPickStepper
     prev={{ title: '황령산 전망대', status: '고름', done: true }}
@@ -1467,6 +1476,45 @@ const MY_PAGE_PAST_VMS: PastTripCardVM[] = [
     require('@/assets/my-page/past-busan.jpg')
   ),
 ];
+
+// j07 legend-more(TRIP-1084) — Figma 4699:2630 의 9월. `buildMonthLegends` 결과 모양 그대로.
+const legendCard = (
+  tripId: string,
+  title: string,
+  dateRangeLabel: string,
+  nightsLabel: string
+): PastTripCardVM => ({ tripId, title, dateRangeLabel, nightsLabel });
+const RECORDS_CALENDAR_LEGEND_MORE: MonthLegends = {
+  rows: [
+    {
+      kind: 'group',
+      key: '2026-09-28_2026-09-30',
+      representativeTitle: '서울특별시 여행',
+      dateRangeLabel: '9.28–9.30',
+      nightsLabel: '2박 3일',
+      members: ['s1', 's2', 's3', 's4', 's5', 's6'].map((id) =>
+        legendCard(id, '서울특별시 여행', '9.28–9.30', '2박 3일')
+      ),
+    },
+    {
+      kind: 'group',
+      key: '2026-09-28_2026-09-29',
+      representativeTitle: '서울특별시 여행',
+      dateRangeLabel: '9.28–9.29',
+      nightsLabel: '1박 2일',
+      members: [
+        ['k1', '서울특별시 여행'],
+        ['k2', '강진군 여행'],
+        ['k3', '서울특별시 여행'],
+        ['k4', '서울특별시 여행'],
+      ].map(([id, title]) => legendCard(id, title, '9.28–9.29', '1박 2일')),
+    },
+    { kind: 'trip', ...legendCard('bs', '부산 여행', '9.12–9.14', '2박 3일') },
+    { kind: 'trip', ...legendCard('jj', '제주 여행', '9.3–9.5', '2박 3일') },
+    { kind: 'trip', ...legendCard('gn', '강릉 여행', '9.1–9.2', '1박 2일') },
+  ],
+  hiddenCount: 2,
+};
 
 // l04 등록 숙소 2행 — Figma 1604:2440 카드 그대로(등록됨 1 · 미등록 1). default·dialog 두 키가 이 한 벌을
 // 공유한다. 주소는 계약 공백(G6)이라 실앱은 빈 값으로 줄을 생략하고, 프리뷰만 Figma 값을 채운다.
@@ -5464,6 +5512,42 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  {
+    key: 'h10-copick-candidates-auto-wide',
+    band: 'h',
+    label: 'h10 · 후보 선택 서버가 넓힘',
+    login: null,
+    render: () => (
+      <SlotFillScreen
+        concept="전시"
+        progress={H10_PROGRESS}
+        stepperSlot={H10_STEPPER}
+        mapView={{
+          center: H10_CENTER,
+          radiusCircle: { center: H10_CENTER, radiusM: 11300 },
+          pins: H10_AUTO_WIDE_PINS,
+          fitPins: true,
+        }}
+        candidates={H10_DEFAULT_CANDIDATES.slice(0, 3)}
+        candidateViews={H10_DEFAULT_VIEWS}
+        radiusSteps={H10_RADIUS_STEPS}
+        selectedRadiusKey="mid"
+        radiusUsedLabel="1.1km 안에 없어 약 11.3km까지 넓혔어요"
+        candidateCountLabel="후보 3곳"
+        selectedPoiId="A1"
+        canExpandRadius
+        isPending={false}
+        errorMessage={null}
+        onSelectRadius={noop}
+        onSelectRadio={noop}
+        onConfirm={noop}
+        onExpandRadius={noop}
+        onShrinkRadius={noop}
+        onChangeConcept={noop}
+        onBack={noop}
+      />
+    ),
+  },
   // h12 편집기 통일(TRIP-797) — 지도+3스냅 시트 위 슬롯 카드 편집. 순수 뷰 EditorView 를 preview 가
   // 직접 태운다(컨테이너 api 사슬 없음, TRIP-610 회피). 빈/채움/드래그 세 정적 얼굴을 대조한다.
   // 실제 드래그·시트 개폐·딤은 통과형 목이 못 봄(6-b 실기 전용).
@@ -6241,14 +6325,18 @@ export const PREVIEW_STATES: PreviewState[] = [
         monthLabel="2026년 6월"
         grid={buildMonthGrid('2026-06')}
         markedDays={['2026-06-10', '2026-06-11', '2026-06-12']}
-        monthLegends={[
-          {
-            tripId: 't-busan',
-            title: '부산 여행',
-            dateRangeLabel: '6.10–6.12',
-            nightsLabel: '2박 3일',
-          },
-        ]}
+        monthLegends={{
+          rows: [
+            {
+              kind: 'trip',
+              tripId: 't-busan',
+              title: '부산 여행',
+              dateRangeLabel: '6.10–6.12',
+              nightsLabel: '2박 3일',
+            },
+          ],
+          hiddenCount: 0,
+        }}
         pastTrips={[
           {
             tripId: 't-jeju',
@@ -6267,6 +6355,52 @@ export const PREVIEW_STATES: PreviewState[] = [
             title: '부산 여행',
             dateRangeLabel: '2025.11.1–11.3',
             nightsLabel: '2박 3일',
+          },
+        ]}
+        isEmpty={false}
+        onPressPrevMonth={noop}
+        onPressNextMonth={noop}
+        onSelectTrip={noop}
+        onPressCreateTrip={noop}
+      />
+    ),
+  },
+  // j07 legend 3줄 + 더 보기(TRIP-1084) — Figma 채택안 4699:2630(접힘)과 1:1. 같은 기간 묶음 2줄('외 5'·
+  // '외 3', 후자는 서울 3 + 강진 1) + 개별 3줄 중 앞 3줄과 '더 보기 2'. 펼침(4699:2803)과 묶음 펼침은 이
+  // 키에서 탭으로 본다. 줄 간격 32·들여쓰기 33·chevron 방향은 jest 사각이라 이 키가 육안 그물(6-b).
+  {
+    key: 'records-calendar-legend-more',
+    band: 'j',
+    label: 'j07 · 여행 캘린더 legend-more',
+    login: null,
+    render: () => (
+      <RecordsCalendarScreen
+        monthLabel="2026년 9월"
+        grid={buildMonthGrid('2026-09')}
+        markedDays={[
+          ...['01', '02', '03', '04', '05'],
+          ...['12', '13', '14'],
+          ...['28', '29', '30'],
+        ].map((day) => `2026-09-${day}`)}
+        monthLegends={RECORDS_CALENDAR_LEGEND_MORE}
+        pastTrips={[
+          {
+            tripId: 'p-busan',
+            title: '부산 여행',
+            dateRangeLabel: '2026.9.12–9.14',
+            nightsLabel: '2박 3일',
+          },
+          {
+            tripId: 'p-jeju',
+            title: '제주 여행',
+            dateRangeLabel: '2026.9.3–9.5',
+            nightsLabel: '2박 3일',
+          },
+          {
+            tripId: 'p-gangneung',
+            title: '강릉 여행',
+            dateRangeLabel: '2026.9.1–9.2',
+            nightsLabel: '1박 2일',
           },
         ]}
         isEmpty={false}

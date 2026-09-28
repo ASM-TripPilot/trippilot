@@ -303,12 +303,13 @@ describe('🔴 SlotFillPage (h13→h14/h15) 배선', () => {
     expect(postBody?.radiusM).toBeNull(); // 3단째 = 명시적 null
   });
 
-  it('C7 · AC-4 서버 radiusMUsed(11300) → 화면 "약 11.3km" 표시', async () => {
+  it('C7 · AC-4 서버 radiusMUsed(11300) → 캡션이 "약 11.3km"를 넣어 넓힌 사실을 말한다', async () => {
     renderPage();
     await pickConcept('culture');
 
+    // TRIP-1081 결정 1 — 문자열 매처는 완전 일치다(02a §5-1).
     const used = await screen.findByTestId('itinerary-copick-radius-used');
-    expect(used).toHaveTextContent('약 11.3km');
+    expect(used).toHaveTextContent('1.1km 안에 없어 약 11.3km까지 넓혔어요');
   });
 
   it('C8 · AC-5 후보 0건 → 반경확대(재조회)·컨셉변경(h13 복귀) 배선', async () => {
@@ -684,15 +685,55 @@ describe('🔴 TRIP-978 · 반경 셋째 칸·캡션 라벨', () => {
     ).toHaveTextContent('최대');
   });
 
-  it('R-AUTO · AC-10 mid 조회를 서버가 11.3km 로 넓혔으면 셋째 칸은 "최대"이고 캡션이 "약 11.3km"', async () => {
+  it('R-AUTO · AC-10 mid 조회를 서버가 11.3km 로 넓혔으면 셋째 칸은 "최대"이고 캡션이 넓힌 사실을 말한다', async () => {
     // 기본 candidatesResponse.radiusMUsed = 11300 — mid(1100) 요청보다 크다(서버 자동 확대).
     renderPage();
     await pickConcept('culture');
 
     const used = await screen.findByTestId('itinerary-copick-radius-used');
-    expect(used).toHaveTextContent('약 11.3km');
+    expect(used).toHaveTextContent('1.1km 안에 없어 약 11.3km까지 넓혔어요');
     expect(
       screen.getByTestId('itinerary-copick-radius-seg-max')
     ).toHaveTextContent('최대');
+  });
+});
+
+/**
+ * TRIP-1081 결정 1(a) · QA #067 — 서버가 요청 반경을 넓혔을 때 칩은 사용자가 고른 그대로 두고, 캡션이
+ * "요청 반경 안에 없어 서버 반경까지 넓혔다"는 사실을 말한다(BR-U3-25 · INV-2 서버 값 그대로).
+ */
+describe('🔴 TRIP-1081 · 서버가 넓힌 반경 캡션 문구', () => {
+  it('R-WIDEN12 · 1.1km 요청을 12km 로 넓혔으면 가운데 칩은 선택 그대로, 캡션은 사실 문장', async () => {
+    candidatesResponse = { ...candidatesResponse, radiusMUsed: 12000 };
+    renderPage();
+    await pickConcept('culture');
+
+    const used = await screen.findByTestId('itinerary-copick-radius-used');
+    expect(used).toHaveTextContent('1.1km 안에 없어 약 12.0km까지 넓혔어요');
+    // 칩이 서버 반경 쪽으로 옮겨가지 않는다 — 사용자가 고른 1.1km 가 선택 상태.
+    expect(
+      screen.getByTestId('itinerary-copick-radius-seg-mid').props
+        .accessibilityState?.selected
+    ).toBe(true);
+    expect(
+      screen.getByTestId('itinerary-copick-radius-seg-max')
+    ).toHaveTextContent('최대');
+  });
+
+  it('R-WIDEN-NEAR · 700m 요청을 1.5km 로 넓혔으면 캡션 앞머리도 요청 반경 "700m" 다', async () => {
+    candidatesResponse = { ...candidatesResponse, radiusMUsed: 1500 };
+    renderPage();
+    await pickConcept('culture');
+    await screen.findByTestId('itinerary-copick-radius-used');
+
+    fireEvent.press(screen.getByTestId('itinerary-copick-radius-seg-near'));
+
+    // 요청 반경 쪽도 포맷한다 — '1.1km' 를 박아 둔 구현이면 red(02a ★10).
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('itinerary-copick-radius-used')
+      ).toHaveTextContent('700m 안에 없어 약 1.5km까지 넓혔어요')
+    );
+    expect(postBody?.radiusM).toBe(700);
   });
 });

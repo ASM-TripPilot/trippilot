@@ -278,3 +278,167 @@ describe('🔴 1015-C · 기록 캘린더 마킹 날짜·범례 → 그 여행�
     expect(mockPush.mock.calls).toEqual([['/trips/t-past/records/summary']]);
   });
 });
+
+// ── TRIP-1084 · legend 파생이 페이지에서 buildMonthLegends 로 배선된다 (사용자 요청 R2 · 결정 1·2·3) ──
+// 순수 함수·화면은 각자 단위 테스트가 잠근다. 여기선 **페이지가 그 둘을 실제로 잇는지**만 본다 —
+// 인라인 식이 남아 있으면 작성중 여행이 legend 에 나오고, 묶음·더 보기가 안 생긴다.
+// 오늘 = KST 2026-06-11(1015-C 와 같은 고정). `itineraryDayCount` 를 명시한다 — 0 은 작성중(제외).
+describe('🔴 TRIP-1084 · 기록 캘린더 legend — 제외·묶음·3줄+더 보기 배선', () => {
+  function withDays(t: Trip, itineraryDayCount: number): Trip {
+    return { ...t, itineraryDayCount };
+  }
+  const JUNE_TRIPS: Trip[] = [
+    withDays(
+      trip({
+        tripId: 't-d',
+        title: '속초 여행',
+        startDate: '2026-06-01',
+        endDate: '2026-06-02',
+        status: 'ENDED',
+      }),
+      2
+    ),
+    withDays(
+      trip({
+        tripId: 't-b1',
+        title: '제주 여행',
+        startDate: '2026-06-15',
+        endDate: '2026-06-16',
+        status: 'PLANNED',
+      }),
+      2
+    ),
+    withDays(
+      trip({
+        tripId: 't-draft',
+        title: '작성중 여행',
+        startDate: '2026-06-25',
+        endDate: '2026-06-27',
+        status: 'PLANNED',
+      }),
+      0
+    ),
+    withDays(
+      trip({
+        tripId: 't-a',
+        title: '부산 여행',
+        startDate: '2026-06-20',
+        endDate: '2026-06-22',
+        status: 'PLANNED',
+      }),
+      3
+    ),
+    withDays(
+      trip({
+        tripId: 't-b2',
+        title: '서귀포 여행',
+        startDate: '2026-06-15',
+        endDate: '2026-06-16',
+        status: 'PLANNED',
+      }),
+      2
+    ),
+    withDays(
+      trip({
+        tripId: 't-c',
+        title: '강릉 여행',
+        startDate: '2026-06-05',
+        endDate: '2026-06-07',
+        status: 'ENDED',
+      }),
+      2
+    ),
+  ];
+  const GROUP = 'record-calendar-legend-group-2026-06-15_2026-06-16';
+
+  beforeEach(() => {
+    jest.useFakeTimers({
+      now: new Date('2026-06-11T03:00:00Z'),
+      doNotFake: [
+        'hrtime',
+        'nextTick',
+        'performance',
+        'queueMicrotask',
+        'requestAnimationFrame',
+        'cancelAnimationFrame',
+        'requestIdleCallback',
+        'cancelIdleCallback',
+        'setImmediate',
+        'clearImmediate',
+        'setInterval',
+        'clearInterval',
+        'setTimeout',
+        'clearTimeout',
+      ],
+    });
+    setTrips(JUNE_TRIPS);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('작성중 여행은 legend 에서 빠지되 마킹은 남고, 같은 기간은 한 줄, 앞 3줄 + "더 보기 1" → 펼쳐 숨은 지난 여행으로 간다', () => {
+    // 준비 / 실행
+    render(<RecordsRoute />);
+
+    // 단언 ① 제외(결정 1) — legend 줄은 없고 그 날짜 마킹은 그대로(BR-U5-49).
+    expect(screen.getByTestId('record-calendar-month-label')).toHaveTextContent(
+      '2026년 6월'
+    );
+    expect(screen.queryByTestId('record-calendar-legend-t-draft')).toBeNull();
+    expect(screen.getByTestId('record-calendar-day-2026-06-26')).toBeSelected();
+
+    // 단언 ② 묶음(결정 2) — 6.15–6.16 두 여행이 한 줄, 대표는 입력 순서 첫째(제주).
+    expect(screen.getByTestId(GROUP)).toHaveTextContent(
+      '제주 여행 외 1 · 6.15–6.16 · 1박 2일'
+    );
+    expect(screen.queryByTestId('record-calendar-legend-t-b1')).toBeNull();
+
+    // 단언 ③ 정렬·자르기 — 시작일 내림차순 앞 3줄, 속초(6.1)는 숨고 '더 보기 1'.
+    expect(screen.getByTestId('record-calendar-legend-t-a')).toBeOnTheScreen();
+    expect(screen.getByTestId('record-calendar-legend-t-c')).toBeOnTheScreen();
+    expect(screen.queryByTestId('record-calendar-legend-t-d')).toBeNull();
+    expect(screen.getByTestId('record-calendar-legend-more')).toHaveTextContent(
+      '더 보기 1'
+    );
+
+    // 실행 ② 더 보기 → 숨었던 지난 여행 줄을 누른다(결정 3 제자리 펼침).
+    fireEvent.press(screen.getByTestId('record-calendar-legend-more'));
+    fireEvent.press(screen.getByTestId('record-calendar-legend-t-d'));
+
+    // 단언 ④ 펼친 줄도 같은 누름 배선(열 수 있는 여행 → 방문 기록).
+    expect(mockPush.mock.calls).toEqual([['/trips/t-d/records']]);
+  });
+
+  it('묶음 줄을 누르면 어디로도 가지 않고 구성원 줄이 나타난다', () => {
+    render(<RecordsRoute />);
+    // 앵커 — 누르기 전엔 구성원 줄이 없다.
+    expect(screen.queryByTestId('record-calendar-legend-t-b2')).toBeNull();
+
+    fireEvent.press(screen.getByTestId(GROUP));
+
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(screen.getByTestId('record-calendar-legend-t-b1')).toBeOnTheScreen();
+    expect(screen.getByTestId('record-calendar-legend-t-b2')).toBeOnTheScreen();
+  });
+
+  // 5-b 경고 1 보강(오케) — 페이지가 legend 를 **보고 있는 달**로 만드는지 잠근다. 오늘 달(6월)로
+  // 만들면 7월로 넘겨도 6월 여행 줄이 남는데, 위 두 케이스는 6월에서만 렌더해 그걸 못 본다.
+  it('다음 달로 넘기면 6월 여행 legend 줄이 사라진다(legend 는 보고 있는 달 기준)', () => {
+    // 준비 — 6월 앵커: 부산 줄이 보인다.
+    render(<RecordsRoute />);
+    expect(screen.getByTestId('record-calendar-legend-t-a')).toBeOnTheScreen();
+
+    // 실행 — 다음 달.
+    fireEvent.press(screen.getByTestId('record-calendar-next'));
+
+    // 단언 — 7월 라벨이고, 6월에만 걸친 여행 줄·묶음·더 보기가 없다.
+    expect(screen.getByTestId('record-calendar-month-label')).toHaveTextContent(
+      '2026년 7월'
+    );
+    expect(screen.queryByTestId('record-calendar-legend-t-a')).toBeNull();
+    expect(screen.queryByTestId(GROUP)).toBeNull();
+    expect(screen.queryByTestId('record-calendar-legend-more')).toBeNull();
+  });
+});

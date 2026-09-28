@@ -359,6 +359,18 @@ describe('🔴 SlotFillScreen (h10) — 반경 넓히기/좁히기 상시(결과
  * 선택과 무관하게 셋째 칸"을 굳혀 가운데 "1.1km" 옆에 "약 1.1km" 가 뜨는 버그의 계약이었다(교체).
  * 캡션(radiusUsedLabel)과 셋째 칸(maxRadiusLabel)을 무엇으로 채울지는 페이지가 정한다.
  */
+describe('🔴 SlotFillScreen (h10) — 넓힘 캡션은 사실 문장·muted 톤 (TRIP-1081 결정 1)', () => {
+  it('T-CAPTION-TONE · 캡션은 받은 문구를 그대로 그리고 색은 강조(primary-text)가 아니라 muted 다', () => {
+    const caption = '1.1km 안에 없어 약 12.0km까지 넓혔어요';
+    renderScreen({ radiusUsedLabel: caption });
+
+    const used = screen.getByTestId('itinerary-copick-radius-used');
+    expect(used).toHaveTextContent(caption);
+    expect(used.props.className).toContain('text-muted');
+    expect(used.props.className).not.toContain('text-primary-text');
+  });
+});
+
 describe('🔴 SlotFillScreen (h10) — 셋째 반경 세그 라벨(maxRadiusLabel ?? 최대)', () => {
   it('T-SEG3 · maxRadiusLabel 만 셋째 칸을 덮고, 캡션값(radiusUsedLabel)만 오면 셋째 칸은 "최대"', () => {
     // 최대로 조회한 결과 — 셋째 칸이 서버값(Figma 3850:2227 '약 11.3km').
@@ -479,6 +491,20 @@ describe('🔴 SlotFillScreen (h10) — 지도 카드 additive(prop 전달·degr
     expect(map.props.connectPins).toBe(false);
     // 반경 원 prop 이 지도까지 흘러간다(전달 잠금 — 실 원은 6-b).
     expect(map.props.radiusCircle).toBeDefined();
+  });
+
+  it('T-MAP-FIT · mapView.fitPins 를 주면 지도까지 흘러가고 반경 원도 함께 넘어간다(TRIP-1081 결정 2)', () => {
+    renderScreen({ mapView: { ...MAP_VIEW, fitPins: true } });
+
+    const map = screen.getByTestId('map-root');
+    expect(map.props.fitPins).toBe(true);
+    // 핀에 맞춰 열어도 원은 그대로 그린다(결정 2 (b)).
+    expect(map.props.radiusCircle).toEqual(MAP_VIEW.radiusCircle);
+
+    // 짝 — fitPins 없는 mapView 면 지도에도 없다(원 기준 카메라 유지).
+    screen.unmount();
+    renderScreen({ mapView: MAP_VIEW });
+    expect(screen.getByTestId('map-root').props.fitPins).toBeUndefined();
   });
 
   it('T-MAP-DEGRADE · mapView 미주입이면 지도 카드가 없다(좌표 도착 전 정직 degrade)', () => {

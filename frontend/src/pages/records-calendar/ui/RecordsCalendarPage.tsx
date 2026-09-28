@@ -3,14 +3,12 @@ import { ActivityIndicator, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import {
+  buildMonthLegends,
   buildPastTripCards,
   canOpenTripRecords,
   markedDaysOfMonth,
-  nightsLabel,
   recordsTripIdForDate,
-  type PastTripCardVM,
 } from '@/features/record/model/recordsCalendar';
-import { formatLegendDateRange } from '@/entities/trip/lib/formatTripPeriod';
 import { useRecordsCalendar } from '@/features/record/model/useRecordsCalendar';
 import { RecordsCalendarScreen } from '@/features/record/ui/RecordsCalendarScreen';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
@@ -30,8 +28,7 @@ import { StateNotice } from '@/shared/ui/StateNotice';
  * `useRouter()` 를 쓴다(imperative `router` 아님, ★D9) — tabsShell(expoRouterTabsMock)·route 목이
  * `useRouter` 를 제공해 이 페이지가 크래시 없이 렌더된다.
  *
- * ⚠️ 페이지 조립(월 라벨 서식·legend 파생·콜백 배선)은 jest 무심판이다 — 6-b 실기가 유일한 그물
- * (`TripRecordsPage` 동형 사각).
+ * legend 파생은 순수 함수 `buildMonthLegends`(TRIP-1084)가 맡고, 페이지 배선은 `tabsRecordsRoute` 가 잠근다.
  */
 export function RecordsCalendarPage(): ReactElement {
   const { trips, isPending, isError } = useRecordsCalendar();
@@ -71,18 +68,7 @@ export function RecordsCalendarPage(): ReactElement {
   const markedDays = markedDaysOfMonth(trips, yearMonth);
   const pastTrips = buildPastTripCards(trips, today);
 
-  // legend — 이 달에 걸친 여행만(과거·미래 무관). 화면 props 에 여행 라벨이 없어 페이지가 완성해 넘긴다.
-  const monthLegends: PastTripCardVM[] = trips
-    .filter((trip) => markedDaysOfMonth([trip], yearMonth).length > 0)
-    .map((trip) => ({
-      tripId: trip.tripId,
-      title: trip.title,
-      dateRangeLabel: formatLegendDateRange(
-        trip.startDate ?? null,
-        trip.endDate ?? null
-      ),
-      nightsLabel: nightsLabel(trip.startDate ?? null, trip.endDate ?? null),
-    }));
+  const monthLegends = buildMonthLegends(trips, yearMonth);
 
   return (
     <RecordsCalendarScreen
