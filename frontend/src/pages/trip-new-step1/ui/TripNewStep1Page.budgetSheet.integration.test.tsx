@@ -23,7 +23,7 @@ import { TripNewStep1Page } from './TripNewStep1Page';
  *  적용에서만 `setBudgetText` 커밋 + 닫힘(★ 드래프트 계약, B-apply) ③ 금액을 편집·적용하면 제출
  *  `budgetTotal` 이 **사용자 입력값**으로 나간다(★회귀 복원, B-restore) ④ 칩으로 채워 적용해도 제출
  *  바디에 **budgetTier/tier 키가 없고** 칩이 채운 금액만 budgetTotal 로 나간다(★ tier 전송 0, B-tier0)
- *  ⑤ 칩 press 가 대표 금액(단가 × 박수)을 금액 칸에 채운다(TRIP-1045, D 블록).
+ *  ⑤ 칩 press 가 대표 금액(tier 고정 금액, 박수·인원 무관)을 금액 칸에 채운다(TRIP-1045 → TRIP-1067, D 블록).
  *
  * ★ tier 전송 0 계약: tier 는 스토어·요청 어디에도 안 간다(`CreateTripRequest` 에 budgetTier 없음 —
  * openapi 실측). tier 를 제출에 실으면 B-tier0 의 키 부재 단언이 red. TRIP-1045 부터 tier 칩은 금액을
@@ -250,17 +250,17 @@ describe('B-restore · ★회귀 제출 budgetTotal = 사용자 입력(프리필
 });
 
 describe('B-tier0 · ★ D9 tier 전송 0 — 칩이 채운 대표 금액만 budgetTotal 로 나간다 (TRIP-1045)', () => {
-  it('고급 칩으로 채워 적용하면 바디에 budgetTier/tier 가 없고 budgetTotal 은 고급 × 3박 = 600000 이다', async () => {
+  it('고급 칩으로 채워 적용하면 바디에 budgetTier/tier 가 없고 budgetTotal 은 고급 대표 금액 2000000 이다', async () => {
     // 준비 — 부산 3박, 프리필 중간·800,000.
     seedValidDraft();
     renderPage();
     await waitForPrefill();
     await openSheet();
 
-    // 실행 — 고급 칩(20만 × 3박) → 적용 → 제출.
+    // 실행 — 고급 칩(200만, 박수 무관) → 적용 → 제출.
     fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-high'));
     expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-      '600,000'
+      '2,000,000'
     );
     fireEvent.press(screen.getByTestId('trip-wizard-budget-apply'));
     await waitFor(() =>
@@ -275,7 +275,7 @@ describe('B-tier0 · ★ D9 tier 전송 0 — 칩이 채운 대표 금액만 bud
     expect(Object.keys(body)).not.toContain('budgetTier');
     expect(Object.keys(body)).not.toContain('tier');
     // 칩이 채운 금액이 곧 사용자 금액이다 — 프리필(800000)이 남으면 red.
-    expect(body).toMatchObject({ budgetTotal: 600000 });
+    expect(body).toMatchObject({ budgetTotal: 2000000 });
   });
 });
 
@@ -589,14 +589,15 @@ describe('D7 · ★ 노트·range 문자열 없음 — 옛 노트 얼굴(온보�
 });
 
 /**
- * TRIP-1045 AC-D2~D6 · 칩을 누르면 대표 금액(1인 1박 단가 × 박수, 인원 미곱)이 금액 칸에 채워진다
- * (frontend-components `BudgetInputField` c2bda113, 01b 확정 산식). 박수 = 여행지 박수 합, 0 이면 1박,
- * 시작일 선택 여부와 무관(01b Q1). 칩 press 마다 덮어쓰고(이미 켜진 칩 포함), 인원·기간이 바뀌어도
- * 재계산하지 않는다. 채운 금액은 사람이 고칠 수 있다.
- * 입력칸 단언은 콤마 포함 완전 일치(`toHaveDisplayValue`) — `formatBudgetAmount` 로 채워야 한다.
+ * TRIP-1067 AC-1·AC-3·AC-4 · 칩을 누르면 대표 금액(온보딩 범위 가운데값, 1인 총액)이 금액 칸에 채워진다
+ * (frontend-components `BudgetInputField` 2026-09-28 개정). 저가 300,000 · 중간 1,000,000 · 고급
+ * 2,000,000 · 럭셔리 4,000,000 — **박수·인원과 무관**(TRIP-1045 의 "단가 × 박수"는 폐기).
+ * 칩 press 마다 덮어쓰고(이미 켜진 칩 포함), 인원·기간이 바뀌어도 재계산하지 않는다. 채운 금액은
+ * 사람이 고칠 수 있다. 입력칸 단언은 콤마 포함 완전 일치(`toHaveDisplayValue`) — `formatBudgetAmount`
+ * 로 채워야 한다.
  */
-describe('D · ★ 칩 = 대표 금액 프리필 (TRIP-1045 QA #020)', () => {
-  it('D2 · 3박·2명에서 중간을 누르면 300,000 이 채워지고(600,000 아님) 적용이 열린다', async () => {
+describe('D · ★ 칩 = 대표 금액 프리필 (TRIP-1045 QA #020 → TRIP-1067 가운데값)', () => {
+  it('D2 · 3박·2명에서 중간을 누르면 1,000,000 이 채워지고 적용이 열린다', async () => {
     // 준비 — 부산 3박 + 친구 2명, 온보딩 예산 없음(빈칸으로 열린다).
     seedValidDraft();
     useTripWizardStore.getState().selectCompanion('친구');
@@ -610,9 +611,10 @@ describe('D · ★ 칩 = 대표 금액 프리필 (TRIP-1045 QA #020)', () => {
     // 실행
     fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-mid'));
 
-    // 단언 — 10만 × 3박. 인원을 곱하면 600,000 으로 red(앱 표기가 '1인 총액').
+    // 단언 — 고정 100만. 박수를 곱하면 3,000,000, 인원을 곱하면 2,000,000, 옛 1박 단가(10만 × 3박)면
+    // 300,000 으로 red.
     expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-      '300,000'
+      '1,000,000'
     );
     expect(
       screen.getByTestId('trip-wizard-budget-tier-active-mid')
@@ -621,7 +623,7 @@ describe('D · ★ 칩 = 대표 금액 프리필 (TRIP-1045 QA #020)', () => {
     expect(screen.queryByTestId('trip-wizard-error-budget')).toBeNull();
   });
 
-  it('D3a · 여행지가 없으면(박수 0) 1박 기준 — 저가 50,000', async () => {
+  it('D3a · 여행지가 없어도(박수 0) 저가는 300,000', async () => {
     serveBudget(NO_BUDGET);
     renderPage();
     // 짝(전제) — 여행지 0곳(beforeEach reset).
@@ -632,11 +634,11 @@ describe('D · ★ 칩 = 대표 금액 프리필 (TRIP-1045 QA #020)', () => {
     fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-low'));
 
     expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-      '50,000'
+      '300,000'
     );
   });
 
-  it('D3b · 시작일을 안 골라도 여행지 박수 합(3박)으로 센다 — 저가 150,000 (01b Q1)', async () => {
+  it('D3b · 여행지 3박이어도 저가는 같은 300,000 — 박수로 곱하지 않는다', async () => {
     // 준비 — 여행지만 담고 기간(시작일)은 안 골랐다.
     useTripWizardStore.getState().addDestination('부산', 3);
     serveBudget(NO_BUDGET);
@@ -647,9 +649,9 @@ describe('D · ★ 칩 = 대표 금액 프리필 (TRIP-1045 QA #020)', () => {
 
     fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-low'));
 
-    // "기간 미정 → 1박"으로 읽은 구현이면 50,000 으로 red.
+    // D3a 와 같은 값. 박수 합을 곱하면 900,000, 옛 1박 단가(5만 × 3박)면 150,000 으로 red.
     expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-      '150,000'
+      '300,000'
     );
   });
 
@@ -665,7 +667,7 @@ describe('D · ★ 칩 = 대표 금액 프리필 (TRIP-1045 QA #020)', () => {
 
     fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-mid'));
     expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-      '300,000'
+      '1,000,000'
     );
     fireEvent.changeText(
       screen.getByTestId('trip-wizard-budget-input'),
@@ -700,33 +702,39 @@ describe('D · ★ 칩 = 대표 금액 프리필 (TRIP-1045 QA #020)', () => {
     // 실행 ① — 이미 켜진 중간을 누른다(tier 값이 안 바뀌어도 채워야 한다 — QA #020 원형).
     fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-mid'));
     expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-      '300,000'
+      '1,000,000'
     );
 
-    // 실행 ② — 손으로 고친 뒤 럭셔리 → 럭셔리 대표 금액으로 덮어쓴다(40만 × 3박).
+    // 실행 ② — 손으로 고친 뒤 럭셔리 → 럭셔리 대표 금액으로 덮어쓴다.
     fireEvent.changeText(screen.getByTestId('trip-wizard-budget-input'), '999');
     fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-luxury'));
     expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-      '1,200,000'
+      '4,000,000'
     );
 
     // 실행 ③ — 다시 중간.
     fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-mid'));
     expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-      '300,000'
+      '1,000,000'
     );
   });
 
-  it('D6 · 채워 적용한 뒤 인원·여행지를 바꿔도 금액은 다시 계산되지 않는다 (다시 열어도 그대로)', async () => {
+  it('D6 · 고쳐 적용한 금액은 인원·여행지를 바꾸고 다시 열어도 그대로고, 그 뒤 칩은 5박이어도 같은 대표 금액이다', async () => {
+    // 준비 — 3박에서 중간으로 채운 뒤 칩 값과 다른 1,100,000 으로 고쳐 적용한다. 칩 값 그대로 두면
+    // "다시 계산" 뮤턴트도 같은 1,000,000 을 내서 구분이 안 된다(대표 금액이 tier 만의 함수라서).
     seedValidDraft();
     serveBudget(NO_BUDGET);
     renderPage();
     await waitForPreferenceRow();
     await openSheet();
     fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-mid'));
+    fireEvent.changeText(
+      screen.getByTestId('trip-wizard-budget-input'),
+      '1,100,000'
+    );
     fireEvent.press(screen.getByTestId('trip-wizard-budget-apply'));
     await waitFor(() =>
-      expect(useTripWizardStore.getState().budgetText).toBe('300,000')
+      expect(useTripWizardStore.getState().budgetText).toBe('1,100,000')
     );
 
     // 실행 — 인원과 박수(3 → 5)를 바꾼다. 렌더 밖 store 갱신이라 act 로 감싼다.
@@ -737,21 +745,26 @@ describe('D · ★ 칩 = 대표 금액 프리필 (TRIP-1045 QA #020)', () => {
       store.addDestination('경주', 2);
     });
 
-    // 단언 — store·요약은 그대로.
-    expect(useTripWizardStore.getState().budgetText).toBe('300,000');
+    // 단언 — store·요약은 그대로(AC-4 재계산 없음).
+    expect(useTripWizardStore.getState().budgetText).toBe('1,100,000');
     expect(screen.getByTestId('trip-wizard-summary-budget')).toHaveTextContent(
-      /30만원/
+      /110만원/
     );
-    // 다시 열어도 칩으로 재계산(5박 → 500,000)하지 않는다 — 여는 순간 재계산하는 뮤턴트를 잡는다.
+    // 다시 열어도 칩 금액으로 되돌리지 않는다 — 여는 순간 재계산하는 뮤턴트면 1,000,000 으로 red.
     await openSheet();
+    expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
+      '1,100,000'
+    );
+    // AC-3 — 5박이 된 **뒤에** 칩을 눌러도 박수 무관. 저가를 먼저 눌러 press 가 실제로 먹는 것을
+    // 확인한 뒤 중간으로 돌아온다. 박수를 곱하면 1,500,000 / 5,000,000, 옛 1박 단가면 250,000 / 500,000
+    // 으로 red.
+    fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-low'));
     expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
       '300,000'
     );
-    // 5-b 경고-1 보강 — 여행지가 바뀐 **뒤에** 칩을 누르면 최신 박수 합(3+2=5박)으로 채운다.
-    // 마운트 순간 박수 고정(→100,000)·첫 여행지 박수만(→300,000) 뮤턴트를 잡는다.
     fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-mid'));
     expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-      '500,000'
+      '1,000,000'
     );
   });
 });

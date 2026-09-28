@@ -4139,7 +4139,7 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // g01 예산 편집 시트(TRIP-670, Figma `3647:2068`) — 중간 tier 선택·300,000(중간 10만 × 3박) 열린 상태.
+  // g01 예산 편집 시트(TRIP-670, Figma `3647:2068`) — 중간 tier 선택·1,000,000(온보딩 범위 가운데값, TRIP-1067) 열린 상태.
   // `BudgetEditSheet`은 props-only 순수 뷰(스토어·라우터 미참조)라 컨테이너 import 사슬 함정 없이
   // 그대로 태운다. jest 는 활성 칩 분홍 배경·흰 글자·금액/원 정렬·필드 패딩·시트 딤/개폐를 못 봐
   // (바텀시트 통과형 목) 이 키가 유일한 6-b 육안 대조 자리다.
@@ -4150,7 +4150,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       <BudgetEditSheet
-        amountText="300,000"
+        amountText="1,000,000"
         tier="중간"
         onChangeAmount={noop}
         onSelectTier={noop}
