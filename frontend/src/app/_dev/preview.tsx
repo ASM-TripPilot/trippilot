@@ -1516,10 +1516,10 @@ function withShellTabBar(
 
 /**
  * e05 숙소 등록(TRIP-730 세대 병합) — 3탭 셸 + default 확정 콘텐츠. 네 얼굴을 파생 규칙
- * (`coordConfirmed`·`candidates`·`searchStatus`)로 가른다(새 flow 필드 없음). 15개 콜백은
+ * (`coordConfirmed`·`candidates`·`searchStatus`)로 가른다(새 flow 필드 없음). 12개 콜백은
  * 전부 noop 이라 아래 `STAY_REGISTER_HANDLERS` 한 벌로 스프레드한다.
  *
- * 왜 프리뷰가 필요한가: jest 는 세그먼트 흰 알약·라디오 채움·침대/체크/달력/↻ 글리프·지도
+ * 왜 프리뷰가 필요한가: jest 는 세그먼트 흰 알약·라디오 채움·침대/체크/↻ 글리프·지도
  * 타일·선택 카드 픽셀을 원리적으로 못 본다(02a §5 ★2~★4) — 이 4키가 6-b 육안의 유일한 그물이다.
  */
 const STAY_REGISTER_CANDIDATE_A = {
@@ -1546,9 +1546,6 @@ const STAY_REGISTER_BASE_FLOW: StayRegisterScreenProps['flow'] = {
   pinAddressStatus: 'idle',
   coordConfirmed: false,
   mapSheetState: 'closed',
-  checkIn: null,
-  checkOut: null,
-  dateSheetOpen: false,
   submitStatus: 'idle',
 };
 
@@ -1559,12 +1556,10 @@ const STAY_REGISTER_MULTI_CANDIDATE_FLOW: StayRegisterScreenProps['flow'] = {
   selectedCandidate: STAY_REGISTER_CANDIDATE_A,
 };
 
-/** default(Figma 1703) — 좌표 확정 + 날짜 선택 완료. 확정 카드 + 요일 날짜 필드 + "✓ 이 숙소 등록". */
+/** default(Figma 1703) — 좌표 확정. 확정 카드 + "✓ 이 숙소 등록"(날짜 입력 없음, TRIP-1052). */
 const STAY_REGISTER_DEFAULT_FLOW: StayRegisterScreenProps['flow'] = {
   ...STAY_REGISTER_BASE_FLOW,
   coordConfirmed: true,
-  checkIn: '2026-06-10',
-  checkOut: '2026-06-12',
 };
 
 /** multi(Figma 1358) — 단일 후보 선택, 좌표 미확정. coordnotice(민트 ⓘ) + disabled CTA. */
@@ -1581,7 +1576,7 @@ const STAY_REGISTER_ERROR_FLOW: StayRegisterScreenProps['flow'] = {
   coordConfirmed: false,
 };
 
-/** e05 화면의 콜백 15종은 프리뷰에서 전부 무동작 — 한 벌로 스프레드한다. */
+/** e05 화면의 콜백 12종은 프리뷰에서 전부 무동작 — 한 벌로 스프레드한다. */
 const STAY_REGISTER_HANDLERS = {
   onBack: noop,
   onSelectTab: noop,
@@ -1594,9 +1589,6 @@ const STAY_REGISTER_HANDLERS = {
   onOpenMapSheet: noop,
   onConfirmCoord: noop,
   onCloseMapSheet: noop,
-  onOpenDateSheet: noop,
-  onPickDate: noop,
-  onCloseDateSheet: noop,
   onSubmit: noop,
 };
 
@@ -2495,8 +2487,8 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // e05 숙소 등록 default(TRIP-730, Figma 1703) — 좌표 확정 + 날짜 선택 완료. 확정 카드(분홍 침대)·
-  // 요일 날짜 필드("6.10 (수) – 6.12 (금)" + "2박" + 달력/⌄)·"✓ 이 숙소 등록"을 눈으로 대조.
+  // e05 숙소 등록 default(TRIP-730, Figma 1703) — 좌표 확정. 확정 카드(분홍 침대) 바로 아래
+  // "✓ 이 숙소 등록"(날짜 행 없음, TRIP-1052)을 눈으로 대조.
   {
     key: 'stay-register-default',
     band: 'e',
@@ -2505,7 +2497,6 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => (
       <StayRegisterScreen
         flow={STAY_REGISTER_DEFAULT_FLOW}
-        today="2026-06-01"
         {...STAY_REGISTER_HANDLERS}
       />
     ),
@@ -2520,7 +2511,6 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => (
       <StayRegisterScreen
         flow={STAY_REGISTER_MULTI_CANDIDATE_FLOW}
-        today="2026-06-01"
         {...STAY_REGISTER_HANDLERS}
       />
     ),
@@ -2535,7 +2525,6 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => (
       <StayRegisterScreen
         flow={STAY_REGISTER_MULTI_FLOW}
-        today="2026-06-01"
         {...STAY_REGISTER_HANDLERS}
       />
     ),
@@ -2550,7 +2539,6 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => (
       <StayRegisterScreen
         flow={STAY_REGISTER_ERROR_FLOW}
-        today="2026-06-01"
         {...STAY_REGISTER_HANDLERS}
       />
     ),
@@ -2566,24 +2554,6 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => (
       <StayRegisterScreen
         flow={STAY_REGISTER_PIN_FLOW}
-        today="2026-06-01"
-        {...STAY_REGISTER_HANDLERS}
-      />
-    ),
-  },
-  // e05 숙소 등록 달력 범위(TRIP-724 복원, Figma 4520:2349) — 날짜 시트 열림·범위 하이라이트·여행 기간
-  // 상하한을 눈으로 보는 자리. CalendarSheet 코드는 730에서 유지, 프리뷰 키만 복원. 6-b/TRIP-831 몫.
-  {
-    key: 'stay-register-calendar',
-    band: 'e',
-    label: 'e05 · 등록 달력 범위',
-    login: null,
-    render: () => (
-      <StayRegisterScreen
-        flow={{ ...STAY_REGISTER_DEFAULT_FLOW, dateSheetOpen: true }}
-        today="2026-06-01"
-        minDate="2026-06-08"
-        maxDate="2026-06-20"
         {...STAY_REGISTER_HANDLERS}
       />
     ),
@@ -4155,7 +4125,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   // g02 숙소 선택 시트(TRIP-673 S9 → TRIP-741 후보 카드 Figma 정합, `3669:2068`) — 광안리 선택 상태.
   // 3후보 전부 사진(draft-preview 재사용)·동네·거리·가격·날짜를 채워 Figma 육안 동일(rich 필드는
   // StaySelectCandidate optional — SavedStay 계약엔 없어 실데이터는 미렌더, 프리뷰만 채운다 INV-1).
-  // 감천은 날짜 없음 후보(→"날짜 없음" 서브라인). jest 는 딤·실개폐·사진 실렌더·선택 테두리 분홍
+  // 감천은 날짜 없음 후보(→ 날짜 서브라인 생략, TRIP-1052). jest 는 딤·실개폐·사진 실렌더·선택 테두리 분홍
   // 1.5px·체크 분홍을 못 봐(바텀시트 통과형 목·svg 정수화) 이 키가 유일한 6-b 육안 대조 자리다.
   {
     key: 'trip-new-step2-staysheet',

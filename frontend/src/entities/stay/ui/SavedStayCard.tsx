@@ -119,9 +119,13 @@ export function SavedStayCard({
           <Text className="font-noto-bold text-card-title font-bold text-ink">
             {name}
           </Text>
-          {/* 서브라인 = 동네 · 날짜(subtitle). 동네는 값 있을 때만(degrade). 거리 표시는 제거됨(기준점 미정·BE 미제공, 제품 결정 2026-09-17). */}
+          {/* 서브라인 = 동네 · 날짜(subtitle). 동네는 값 있을 때만(degrade), 구분자는 둘 다 있을 때만(TRIP-1052 — 날짜 없는 숙소). 거리 표시는 제거됨(기준점 미정·BE 미제공, 제품 결정 2026-09-17). */}
           <Text className="font-noto text-caption text-muted">
-            {region !== undefined ? `${region} · ` : null}
+            {region !== undefined
+              ? subtitle !== undefined && subtitle !== null
+                ? `${region} · `
+                : region
+              : null}
             {subtitle}
           </Text>
           {/* 가격 줄 — 값 있을 때만(계약 공백이면 미렌더). */}

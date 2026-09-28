@@ -441,42 +441,6 @@ export function CheckGlyph({ size = 20, testID }: GlyphProps) {
   );
 }
 
-// e05 날짜 필드 달력 아이콘(TRIP-730) — 라벨 옆 muted 달력(옛 CalendarPlusGlyph 는 TRIP-727 로
-// 삭제됨, 이 화면 전용으로 새로 그린다). 상단 고리 2개 + 헤더 구분선.
-export function CalendarGlyph({ size = 16, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 20 20"
-      fill="none"
-    >
-      <Path
-        d="M4 4H16C16.5523 4 17 4.4477 17 5V16C17 16.5523 16.5523 17 16 17H4C3.4477 17 3 16.5523 3 16V5C3 4.4477 3.4477 4 4 4Z"
-        stroke={MUTED}
-        strokeWidth={1.5}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M3 8H17"
-        stroke={MUTED}
-        strokeWidth={1.5}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M7 2.5V5.5M13 2.5V5.5"
-        stroke={MUTED}
-        strokeWidth={1.5}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
 // e05 지도 검색 실패 배너 재시도(TRIP-730) — 원형 화살표(↻). text-primary 옆이라 분홍.
 export function RefreshGlyph({ size = 16, testID }: GlyphProps) {
   return (

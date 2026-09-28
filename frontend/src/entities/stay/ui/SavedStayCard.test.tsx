@@ -185,6 +185,14 @@ describe('SavedStayCard — g02 row optional 슬롯 (TRIP-741)', () => {
     expect(card).not.toHaveTextContent(/\d+\s*m\b|km/);
   });
 
+  it('TRIP-1052 5-b W-1 · region 만 있고 subtitle(날짜) 없음 → 구분자 `·` 를 남기지 않는다', () => {
+    // 준비 — 날짜 줄이 사라진 후보(동네만 있음). 실행 — 렌더. 단언 — 카드 전체 글자가 "이름+동네"뿐(꼬리 ' · ' 없음).
+    render(
+      <SavedStayCard testID={rootId} name="숙소 A" layout="row" region="감천" />
+    );
+    expect(screen.getByTestId(rootId)).toHaveTextContent('숙소 A감천');
+  });
+
   it('🔴 AC-6b · region·priceLabel 미지정 → 미렌더 (degrade)', () => {
     render(
       <SavedStayCard

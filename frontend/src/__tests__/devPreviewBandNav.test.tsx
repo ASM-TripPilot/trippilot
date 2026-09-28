@@ -386,7 +386,12 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    172→174. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 2키만
     //    `h07-generating-partial` 바로 뒤에 추가하고 이 가드는 안 만진다(추가 전엔 172개라 red). 정확히 그 키인지는
     //    아래 'TRIP-1040' describe 가 못박고, devPreviewBandSort 는 EXPECTED_H 에 partial 직후 2줄을 넣었다.
-    expect(PREVIEW_STATES).toHaveLength(174);
+    // ⚠️ TRIP-1052: e05 숙소 등록 날짜 입력(달력 시트 `CalendarSheet`)이 코드째 사라져 그 얼굴을 보던
+    //    `stay-register-calendar`(band `e`) 1키를 지운다 → 174→173. test-designer 선반영(카운트 가드) —
+    //    implementer 는 preview.tsx 에서 그 1키만 지우고 이 가드는 안 만진다(지우기 전엔 174개라 red).
+    //    정확히 그 키인지는 아래 'TRIP-724' describe 의 부정 단언이 못박는다. devPreviewBandSort 는
+    //    밴드 h·l 만 잠가 band e 와 무관(오갱신 금지). Figma e05 calendar 프레임(4520:2349)도 삭제됐다.
+    expect(PREVIEW_STATES).toHaveLength(173);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -702,16 +707,18 @@ describe('🔴 TRIP-730 · e05 등록 프리뷰 키 재편 (band e)', () => {
   });
 });
 
-describe('🔴 TRIP-724 · e밴드 19키 복원·신설 (band e)', () => {
-  it('pin·calendar 복원 + filter-sheet 신설 3키가 실재하고, 형제 e키는 남는다', () => {
+describe('🔴 TRIP-724 · e밴드 복원·신설 키 (band e) — TRIP-1052 calendar 삭제 반영', () => {
+  it('pin 복원·filter-sheet 신설 2키가 실재하고, calendar 키는 없으며, 형제 e키는 남는다', () => {
     // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
     const keys = PREVIEW_STATES.map((state) => state.key);
 
-    // 긍정 — 730 이 지운 pin·calendar 복원(코드 PinPanel·CalendarSheet 유지) + filter-sheet 신설
-    // (StayFilterSheet 코드 실재). TRIP-822 재산정 19키의 마지막 3키. 없으면 red(추가 전엔 부재).
+    // 긍정 — 730 이 지운 pin 복원(코드 PinPanel 유지) + filter-sheet 신설(StayFilterSheet 코드 실재).
     expect(keys).toContain('stay-register-pin');
-    expect(keys).toContain('stay-register-calendar');
     expect(keys).toContain('stay-filter-sheet');
+
+    // 부정 — TRIP-1052: 등록 날짜 입력과 달력 시트가 코드째 사라져 그 얼굴 키도 사라진다(지우기 전엔
+    // present 라 red). 총량(173)만으론 "아무 키나 하나 지워도" 통과하므로 이 단언이 '정확히 그 키'를 못박는다.
+    expect(keys).not.toContain('stay-register-calendar');
 
     // 형제 e 앵커 — 기존 e05·e02 키가 딸려 사라지지 않았음(공허 통과 방지).
     expect(keys).toContain('stay-register-default');

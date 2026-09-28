@@ -215,9 +215,14 @@ describe('I-1 · 정상 등록 (AC-1 · §3-5)', () => {
   });
 });
 
-describe('I-2 · 날짜 없이도 등록된다 (AC-5)', () => {
-  it('체크인·체크아웃을 건드리지 않아도 등록이 성립하고 요청에 날짜가 실리지 않는다', async () => {
+describe('🔴 I-2 · 날짜 입력 없이 등록되고 요청 본문에 checkIn·checkOut 키가 없다 (TRIP-1052 AC-1·AC-2)', () => {
+  it('페이지에 날짜 입력 표면이 없고, 등록 요청 본문에 날짜 키 자체가 실리지 않는다', async () => {
     render(<StayRegisterPage />, { wrapper: createWrapper() });
+
+    // 준비 — 페이지 층에서도 날짜 입력 표면(필드·요약·오류·시트·칸)이 0개다. 짝으로 등록
+    // 버튼은 있다(화면이 통째로 비어서 참이 된 게 아니다).
+    expect(screen.queryAllByTestId(/^stay-register-date/)).toHaveLength(0);
+    expect(screen.getByTestId('stay-register-submit')).toBeOnTheScreen();
 
     searchFor('busan');
     await selectAndConfirm(0);
@@ -225,9 +230,10 @@ describe('I-2 · 날짜 없이도 등록된다 (AC-5)', () => {
 
     await waitFor(() => expect(postedBodies).toHaveLength(1));
 
-    // "전송되지 않거나 null" 둘 다 AC를 만족한다 — 두 형태를 함께 받아들인다.
-    expect(postedBodies[0].checkIn ?? null).toBeNull();
-    expect(postedBodies[0].checkOut ?? null).toBeNull();
+    // 개정 정본(US-STAY-08)은 "싣지 않는다"다 — 옛 `?? null` 단언은 `checkIn: null`을 실어도
+    // 통과했다. 키 부재로 잰다(toHaveProperty는 값이 null이어도 키가 있으면 "있다").
+    expect(postedBodies[0]).not.toHaveProperty('checkIn');
+    expect(postedBodies[0]).not.toHaveProperty('checkOut');
     // 날짜를 필수로 막으면 위반 — 등록 자체는 실제로 나갔다.
     expect(postHits()).toHaveLength(1);
   });

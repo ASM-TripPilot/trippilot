@@ -37,7 +37,7 @@ paths:
 
 ## e05 프리뷰 키 (렌더 얼굴 무심판)
 
-- **`stay-register-pin`·`stay-register-calendar`·`stay-filter-sheet` 3키의 "렌더된 얼굴"은 어떤 jest 심판도 안 본다** → `devPreviewBandNav.test.tsx`는 `PREVIEW_STATES` 키 존재·개수(정본은 그 파일의 `toHaveLength`)·라벨만 잰다. `preview.tsx`의 `STAY_REGISTER_PIN_FLOW.activeTab`을 `'pin'`→`'mapsearch'`로 바꾸거나 `stay-filter-sheet` 픽스처에 `amenities:[] stayTypes:[]`를 넘겨도(빈 시트) 전 스위트가 green이다 — 6-b 육안 전까지는 "코드상 맞다"이지 "화면이 맞게 뜬다"가 아니다.
+- **`stay-register-pin`·`stay-filter-sheet` 2키의 "렌더된 얼굴"은 어떤 jest 심판도 안 본다** → `devPreviewBandNav.test.tsx`는 `PREVIEW_STATES` 키 존재·개수(정본은 그 파일의 `toHaveLength`)·라벨만 잰다. `preview.tsx`의 `STAY_REGISTER_PIN_FLOW.activeTab`을 `'pin'`→`'mapsearch'`로 바꾸거나 `stay-filter-sheet` 픽스처에 `amenities:[] stayTypes:[]`를 넘겨도(빈 시트) 전 스위트가 green이다 — 6-b 육안 전까지는 "코드상 맞다"이지 "화면이 맞게 뜬다"가 아니다.
 
 ## stay 저장 (하트)
 

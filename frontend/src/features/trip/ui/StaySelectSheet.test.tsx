@@ -6,9 +6,6 @@ import {
 } from '@testing-library/react-native';
 
 import type { SavedStay } from '@/shared/api/generated/schemas';
-import { formatBaseNightRange } from '@/entities/trip/lib/formatTripPeriod';
-
-import { formatStayDateRange } from '../model/stayDateImport';
 
 import { StaySelectSheet } from './StaySelectSheet';
 import { CheckGlyph } from './TripGlyphs';
@@ -19,8 +16,9 @@ import { CheckGlyph } from './TripGlyphs';
  * 무엇을 보장하나 — 시트는 조회·라우터·드래프트를 모른다. 완성된 props(제목·날짜 라벨·후보·
  * 선택 id·콜백)만 받아 그린다:
  *  - **헤더**(AC-1) 박 라벨·지역 제목 + "{날짜(요일)} 밤 · 어디서 묵을까요?" 부제.
- *  - **후보 카드**(AC-1) 이름 + 날짜 서브라인 = `M/D–M/D · N박`(en dash U+2013, 없으면 "날짜 없음").
- *    옛 `6.10~6.13`(ASCII ~)이 아니다 — S10 이 두 포맷터를 같은 인자로 태워 구분자가 다름을 못박는다.
+ *  - **후보 카드**(AC-1) 이름 + 날짜 서브라인 = `M/D–M/D · N박`(en dash U+2013). 날짜가 없는 후보는
+ *    그 줄을 그리지 않는다(TRIP-1052 결정 1(b) — '날짜 없음' 문구 금지). 구분자 잠금은
+ *    `entities/trip/lib/formatTripPeriod.test.ts` B 가 진다(옛 ASCII ~ 포맷터는 TRIP-1052 에서 삭제).
  *    **가격·거리·사진 미렌더**(SavedStay 계약에 없음 — 발명 금지, INV-1).
  *  - **선택 체크 톤**(AC-2) 선택 후보 체크에 `tone="primary"` 전달(색 자체는 react-native-svg 정수화로
  *    jest 사각 → prop 기록형까지만, 분홍 실색은 6-b).
@@ -53,7 +51,7 @@ function stay(over: Partial<SavedStay> = {}): SavedStay {
   };
 }
 
-// TRIP-741 픽스처 3건 — 광안리 뷰 호텔(선택)/해운대 오션 호텔/감천 게스트하우스(날짜 없음).
+// TRIP-741 픽스처 3건 — 광안리 뷰 호텔(선택)/해운대 오션 호텔/감천 게스트하우스(날짜 없는 후보).
 const GWANGALLI = stay({
   savedStayId: 'stay-gwangalli',
   name: '광안리 뷰 호텔',
@@ -105,8 +103,8 @@ describe('S1 · 헤더 (AC-1)', () => {
   });
 });
 
-describe('S2 · 후보 카드 날짜 서브라인 (AC-1)', () => {
-  it('이름과 날짜 서브라인(M/D–M/D · N박 / 없으면 "날짜 없음")을 그린다', () => {
+describe('🔴 S2 · 후보 카드 날짜 서브라인 (AC-1 · TRIP-1052 AC-5)', () => {
+  it('이름과 날짜 서브라인(M/D–M/D · N박)을 그리고, 날짜가 없는 후보는 그 줄을 그리지 않는다', () => {
     renderSheet();
 
     const cardGwangalli = screen.getByTestId(
@@ -124,8 +122,10 @@ describe('S2 · 후보 카드 날짜 서브라인 (AC-1)', () => {
     const cardGamcheon = screen.getByTestId(
       'trip-base-staysheet-cand-stay-gamcheon'
     );
-    expect(cardGamcheon).toHaveTextContent(/감천 게스트하우스/);
-    expect(cardGamcheon).toHaveTextContent(/날짜 없음/);
+    // 날짜 없는 후보 — 문자열 인자는 **완전 일치**라 카드 전체 글자가 이름뿐일 때만 통과한다.
+    // '날짜 없음'·'미입력'·'–'·'박' 어떤 대체 문구가 붙어도 red(빈 Text 노드는 못 본다 — 6-b).
+    expect(cardGamcheon).toHaveTextContent('감천 게스트하우스');
+    expect(within(cardGamcheon).queryByText(/날짜 없음|미입력/)).toBeNull();
   });
 
   it('★5 · 가격·거리를 그리지 않는다 (계약 부재 — Figma 목업 복붙 금지, AC-5)', () => {
@@ -236,18 +236,6 @@ describe('S9 · 선택 체크 톤 (AC-2)', () => {
 
     // 선택 1개 → CheckGlyph 정확히 1개(2개 이상이면 UNSAFE_getAllByType 로 검출됨).
     expect(screen.UNSAFE_getAllByType(CheckGlyph)).toHaveLength(1);
-  });
-});
-
-describe('S10 · 새 포맷터 ≠ 옛 formatStayDateRange (★ en dash 함정)', () => {
-  it('formatBaseNightRange 는 en dash(U+2013), formatStayDateRange 는 ASCII ~(U+007E) — 둘을 같은 인자로 태워 구분자가 다름을 못박는다', () => {
-    const newLine = formatBaseNightRange('2026-06-10', '2026-06-12');
-    const oldLine = formatStayDateRange('2026-06-10', '2026-06-12');
-
-    expect(newLine).toContain('–'); // U+2013
-    expect(newLine).not.toContain('~');
-    expect(oldLine).toContain('~'); // U+007E — 옛 포맷터는 살려 두되 재사용 금지
-    expect(oldLine).not.toContain('–');
   });
 });
 

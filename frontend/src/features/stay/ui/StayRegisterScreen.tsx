@@ -1,6 +1,6 @@
 /**
  * e05 숙소 직접 등록 · 무상태 프레젠테이션 화면(Figma default 1703:1183 골격 + 3탭 셸 절충안,
- * 01b Seed §1~§3-6). `flow`·`today` 2개 prop과 콜백 11개만 받는다 — 상태·네트워크·라우팅을
+ * 01b Seed §1~§3-6). `flow` prop과 콜백만 받는다 — 상태·네트워크·라우팅을
  * 전혀 모른다(FSD 경계, `pages/stay-register/ui/StayRegisterPage.tsx`가 진다). 지도는
  * `@/shared/map`(검색·시트는 `MapView`, 핀 지정은 `CenterPinPicker`=중앙 고정 핀, TRIP-866)을 쓴다.
  *
@@ -44,13 +44,7 @@ import {
   SegmentedControl,
   type SegmentedOption,
 } from '@/shared/ui/SegmentedControl';
-import {
-  daysInMonth,
-  firstWeekdayOfMonth,
-  isDateInRange,
-} from '@/shared/date/monthGrid';
 
-import { formatStayDateRange, nightsBetween } from '../model/stayDates';
 import {
   canSubmitStayRegister,
   resolveName,
@@ -60,9 +54,7 @@ import {
 import {
   BackChevronGlyph,
   BedGlyph,
-  CalendarGlyph,
   CheckGlyph,
-  ChevronDownGlyph,
   InfoGlyph,
   RefreshGlyph,
   SearchGlyph,
@@ -71,8 +63,6 @@ import {
 
 export interface StayRegisterScreenProps {
   flow: StayRegisterFlow;
-  /** 'YYYY-MM-DD' — 과거 날짜 비활성 기준. 주입해야 테스트가 결정론적이다. */
-  today: string;
   onSelectTab: (tab: StayRegisterTab) => void;
   onChangeQuery: (value: string) => void;
   onChangeName: (value: string) => void;
@@ -85,25 +75,9 @@ export interface StayRegisterScreenProps {
   onOpenMapSheet: () => void;
   onConfirmCoord: () => void;
   onCloseMapSheet: () => void;
-  onOpenDateSheet: () => void;
-  onPickDate: (date: string) => void;
-  onCloseDateSheet: () => void;
   onSubmit: () => void;
   /** 목적지(뒤로가기 chevron)는 잠그지 않는다(02a §3-4) — 미지정이어도 화면은 그대로 동작한다. */
   onBack?: () => void;
-  /**
-   * 달력이 보여줄 달 'YYYY-MM'. 미지정이면 `checkIn ?? today`의 달을 쓴다(5-b W-1 이전 동작).
-   * 아래 `onShiftCalendarMonth`와 함께 **옵셔널이어야 한다** — 승인된
-   * `StayRegisterScreen.test.tsx`가 화면을 prop 11개로 부르므로 필수로 만들면 그쪽이 깨진다.
-   */
-  calendarMonth?: string;
-  /** 달 이동. 미지정이면 이동 버튼이 잠긴다(한 달만 그리던 기존 동작으로 정확히 되돌아간다). */
-  onShiftCalendarMonth?: (delta: number) => void;
-  /** 선택 가능 하한/상한 'YYYY-MM-DD'(TRIP-390, 여행 기간). 둘 다 미지정이면 상·하한 없음
-   *  (오늘+ 유지). 실효 하한은 `max(today, minDate)`. 배선은 페이지가 `useTripWizardStore`에서
-   *  읽어 내린다 — 이 선언은 테스트 컴파일용이고, `CalendarSheet` 전달·셀 disable 계산은 구현자 몫. */
-  minDate?: string;
-  maxDate?: string;
 }
 
 function isSameCandidate(a: GeocodeCandidate, b: GeocodeCandidate): boolean {
@@ -113,10 +87,6 @@ function isSameCandidate(a: GeocodeCandidate, b: GeocodeCandidate): boolean {
     a.lat === b.lat &&
     a.lng === b.lng
   );
-}
-
-function pad2(value: number): string {
-  return String(value).padStart(2, '0');
 }
 
 /** 선택 후보 행의 흰 배경을 띄우는 은은한 그림자(Figma multi-candidate 선택 행) — 색 토큰이 아닌
@@ -430,144 +400,6 @@ function CandidateList({
   );
 }
 
-function CalendarSheet({
-  today,
-  checkIn,
-  checkOut,
-  minDate,
-  maxDate,
-  calendarMonth,
-  onShiftCalendarMonth,
-  onPickDate,
-  onCloseDateSheet,
-}: {
-  today: string;
-  checkIn: string | null;
-  checkOut: string | null;
-  minDate?: string;
-  maxDate?: string;
-  calendarMonth?: string;
-  onShiftCalendarMonth?: (delta: number) => void;
-  onPickDate: (date: string) => void;
-  onCloseDateSheet: () => void;
-}): ReactElement {
-  const [refYear, refMonth] = (calendarMonth ?? checkIn ?? today)
-    .split('-')
-    .slice(0, 2)
-    .map(Number);
-  const totalDays = daysInMonth(refYear, refMonth);
-  const leadingBlanks = firstWeekdayOfMonth(refYear, refMonth);
-  const dayNumbers = Array.from({ length: totalDays }, (_, i) => i + 1);
-
-  // 실효 하한 = max(오늘, 여행 시작일). 여행 기간을 모르면(minDate 없음) 오늘이 하한이다
-  // (기존 동작 유지). ISO 날짜 문자열은 사전식 비교가 시간 순서와 일치한다(stayDates 관례).
-  const effectiveMin =
-    minDate !== undefined && minDate > today ? minDate : today;
-
-  // 지난 달로는 가지 않는다 — 그 달은 전 칸이 과거라 비활성이고, 빈 달을 보여줄 이유가 없다.
-  const refMonthStr = `${refYear}-${pad2(refMonth)}`;
-  const canGoPrev =
-    onShiftCalendarMonth !== undefined && refMonthStr > today.slice(0, 7);
-  const canGoNext = onShiftCalendarMonth !== undefined;
-
-  return (
-    <BottomSheet>
-      <BottomSheetView testID="stay-register-datesheet" className="gap-md p-lg">
-        <View className="flex-row items-center justify-between">
-          <Pressable
-            testID="stay-register-datesheet-prev"
-            accessibilityRole="button"
-            accessibilityLabel="이전 달"
-            disabled={!canGoPrev}
-            onPress={() => onShiftCalendarMonth?.(-1)}
-            className="h-10 w-10 items-center justify-center"
-          >
-            <Text
-              className={`font-noto-bold text-section font-bold ${
-                canGoPrev ? 'text-ink' : 'text-muted-soft'
-              }`}
-            >
-              ‹
-            </Text>
-          </Pressable>
-          <Text className="font-noto-bold text-section font-bold text-ink">
-            {refYear}년 {refMonth}월
-          </Text>
-          <Pressable
-            testID="stay-register-datesheet-next"
-            accessibilityRole="button"
-            accessibilityLabel="다음 달"
-            disabled={!canGoNext}
-            onPress={() => onShiftCalendarMonth?.(1)}
-            className="h-10 w-10 items-center justify-center"
-          >
-            <Text
-              className={`font-noto-bold text-section font-bold ${
-                canGoNext ? 'text-ink' : 'text-muted-soft'
-              }`}
-            >
-              ›
-            </Text>
-          </Pressable>
-        </View>
-        <View className="w-full flex-row flex-wrap">
-          {Array.from({ length: leadingBlanks }, (_, i) => (
-            <View key={`blank-${i}`} className="h-10 w-[14.28%]" />
-          ))}
-          {dayNumbers.map((day) => {
-            const dateStr = `${refYear}-${pad2(refMonth)}-${pad2(day)}`;
-            // 하한(오늘/여행 시작일 이전) 또는 상한(여행 종료일 이후)이면 잠근다. 실 `disabled`
-            // prop이라야 press가 실제로 막힌다 — accessibilityState만 세우면 회색인데 눌린다.
-            const disabled =
-              dateStr < effectiveMin ||
-              (maxDate !== undefined && dateStr > maxDate);
-            // 고른 끝점(체크인/체크아웃)과 그 사이(범위)를 서로 다른 얼굴로 그린다. 삼항이
-            // bg-primary를 먼저 집어 끝점이 범위색으로 덮이지 않는다. isDateInRange는 한쪽이
-            // null이면 항상 false라 반쪽 범위는 사이가 안 칠해진다.
-            const isEndpoint = dateStr === checkIn || dateStr === checkOut;
-            const inRange = isDateInRange(dateStr, checkIn, checkOut);
-            return (
-              <Pressable
-                key={dateStr}
-                testID={`stay-register-date-cell-${dateStr}`}
-                accessibilityRole="button"
-                accessibilityState={{ selected: isEndpoint || inRange }}
-                disabled={disabled}
-                onPress={() => onPickDate(dateStr)}
-                className={`h-10 w-[14.28%] items-center justify-center ${
-                  isEndpoint ? 'bg-primary' : inRange ? 'bg-primary-pale' : ''
-                }`}
-              >
-                <Text
-                  className={`font-noto text-body ${
-                    isEndpoint
-                      ? 'text-on-primary'
-                      : disabled
-                        ? 'text-muted-soft'
-                        : 'text-ink'
-                  }`}
-                >
-                  {day}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-        <Pressable
-          testID="stay-register-datesheet-close"
-          accessibilityRole="button"
-          onPress={onCloseDateSheet}
-          className="h-12 items-center justify-center rounded-button border border-hairline-strong"
-        >
-          <Text className="font-noto-medium text-card-title font-medium text-ink">
-            완료
-          </Text>
-        </Pressable>
-      </BottomSheetView>
-    </BottomSheet>
-  );
-}
-
 /** 5-c(W-10) — 배경막. 시트는 콘텐츠 높이만큼만 올라와 위쪽 핀 지도를 덮지 않으므로, 배경막
  * 없이는 그 지도가 열려 있는 동안에도 눌린다(롱프레스 → PIN_DROP → 확인하려던 좌표가
  * 바뀐다). `appearsOnIndex={0}·disappearsOnIndex={-1}`은 스냅포인트가 하나뿐인(동적 크기)
@@ -662,7 +494,6 @@ function MapSheet({
 
 export function StayRegisterScreen({
   flow,
-  today,
   onSelectTab,
   onChangeQuery,
   onChangeName,
@@ -673,31 +504,9 @@ export function StayRegisterScreen({
   onOpenMapSheet,
   onConfirmCoord,
   onCloseMapSheet,
-  onOpenDateSheet,
-  onPickDate,
-  onCloseDateSheet,
   onSubmit,
   onBack,
-  calendarMonth,
-  onShiftCalendarMonth,
-  minDate,
-  maxDate,
 }: StayRegisterScreenProps): ReactElement {
-  const nights = nightsBetween(flow.checkIn, flow.checkOut);
-  // TRIP-730 — 완성 범위는 요일 포함 포맷("6.10 (수) – 6.12 (금)")으로, 박수("2박")는 별 노드로
-  // 가른다(R-13 둘째). 요일은 날짜에서 계산한다(Figma 목업 텍스트 화/목이 아니라 실제 수/금).
-  const dateRangeText =
-    flow.checkIn !== null && flow.checkOut !== null && nights !== null
-      ? formatStayDateRange(flow.checkIn, flow.checkOut)
-      : null;
-  // 체크인만 고른 반쪽 상태는 '날짜를 선택하세요'(아무것도 안 고른 것)와 구별해 다음 걸음을
-  // 안내한다(AC-3). date-summary 노드에는 '박'을 넣지 않는다(R-13 첫째 — 박은 위 별 노드 몫).
-  const emptyDateSummary =
-    flow.checkIn !== null && flow.checkOut === null
-      ? '체크아웃도 선택하세요'
-      : '날짜를 선택하세요';
-  const dateError =
-    flow.checkIn !== null && flow.checkOut !== null && nights === null;
   const canSubmit = canSubmitStayRegister(flow);
   // AC-3 문구는 coordConfirmed 하나에만 걸린다(후보 유무를 조건에 넣지 않는다) — 재검색으로
   // 이전 후보가 풀려도(§3-2 초기화) 안내는 그대로 남아야 한다(I-5). 핀 탭 좌표 미확정(P-6,
@@ -913,46 +722,6 @@ export function StayRegisterScreen({
             ) : null}
 
             <Pressable
-              testID="stay-register-date-field"
-              accessibilityRole="button"
-              onPress={onOpenDateSheet}
-              className="mx-lg gap-xs rounded-button border border-hairline-strong px-md py-sm"
-            >
-              {/* TRIP-730 — 라벨(달력 아이콘 + "체크인 · 체크아웃"), Figma default 1703. */}
-              <View className="flex-row items-center gap-xs">
-                <CalendarGlyph size={16} />
-                <Text className="font-noto text-label text-muted">
-                  체크인 · 체크아웃
-                </Text>
-              </View>
-              <View className="flex-row items-center justify-between">
-                <Text
-                  testID="stay-register-date-summary"
-                  className="font-noto-bold text-card-title font-bold text-ink"
-                >
-                  {dateRangeText ?? emptyDateSummary}
-                </Text>
-                <View className="flex-row items-center gap-sm">
-                  {/* "2박" 별 노드 — date-summary 는 '박'을 담지 않는다(R-13 첫째). */}
-                  {nights !== null ? (
-                    <Text className="font-noto text-label text-muted">
-                      {nights}박
-                    </Text>
-                  ) : null}
-                  <ChevronDownGlyph size={14} />
-                </View>
-              </View>
-              {dateError ? (
-                <Text
-                  testID="stay-register-date-error"
-                  className="font-noto text-caption text-primary-text"
-                >
-                  체크아웃은 체크인 이후 날짜를 선택하세요
-                </Text>
-              ) : null}
-            </Pressable>
-
-            <Pressable
               testID="stay-register-submit"
               accessibilityRole="button"
               disabled={!canSubmit}
@@ -1024,20 +793,6 @@ export function StayRegisterScreen({
             candidate={flow.selectedCandidate}
             onConfirmCoord={onConfirmCoord}
             onCloseMapSheet={onCloseMapSheet}
-          />
-        ) : null}
-
-        {flow.dateSheetOpen ? (
-          <CalendarSheet
-            today={today}
-            checkIn={flow.checkIn}
-            checkOut={flow.checkOut}
-            minDate={minDate}
-            maxDate={maxDate}
-            calendarMonth={calendarMonth}
-            onShiftCalendarMonth={onShiftCalendarMonth}
-            onPickDate={onPickDate}
-            onCloseDateSheet={onCloseDateSheet}
           />
         ) : null}
       </View>

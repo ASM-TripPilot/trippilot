@@ -10,7 +10,7 @@
  *  - **헤더**(AC-1) 박 라벨·지역 제목 + "{날짜(요일)} 밤 · 어디서 묵을까요?" 부제. 정적 카피는
  *    시트가 소유하고, 제목·날짜 라벨은 배선이 밤 카드에서 조립해 내린다.
  *  - **후보 카드**(AC-1·2) `SavedStayCard`(row) 위임 — 이름 + 날짜 서브라인
- *    `formatBaseNightRange`(`6/11–6/12 · 1박`, en dash·미들닷, 없으면 "날짜 없음") + 선택 시 체크(tone
+ *    `formatBaseNightRange`(`6/11–6/12 · 1박`, en dash·미들닷, 없으면 줄 생략) + 선택 시 체크(tone
  *    primary). SavedStay 계약에 price·imageUrl·region 이 없어(실측) 실데이터 경로는 사진·동네·
  *    가격을 **미렌더**(카드 optional 슬롯 additive, 값은 프리뷰만 — INV-1 · 계약 예정 TRIP-825).
  *    거리는 표시 자체를 제거함(기준점 미정·BE 미제공, 제품 결정 2026-09-17 — Figma 프레임과 의도적 드리프트, TRIP-811 동기 대상).
@@ -110,7 +110,7 @@ export function StaySelectSheet({
 
   function renderCandidate(stay: StaySelectCandidate): ReactElement {
     const selected = stay.savedStayId === selectedSavedStayId;
-    // 날짜 서브라인 = M/D–M/D · N박(en dash·미들닷), 한쪽이라도 없으면 "날짜 없음".
+    // 날짜 서브라인 = M/D–M/D · N박(en dash·미들닷), 한쪽이라도 없으면 줄을 그리지 않는다.
     const dateLine = formatBaseNightRange(stay.checkIn, stay.checkOut);
     // 후보 카드를 entities degrade 카드로 위임(★16). 선택은 색이 아니라
     // accessibilityState + 우측 체크(trailing, tone primary)로 잰다(★2). 사진·동네·거리·가격은
@@ -126,7 +126,11 @@ export function StaySelectSheet({
         region={stay.region}
         priceLabel={stay.priceLabel}
         subtitle={
-          <Text className="font-noto text-caption text-muted">{dateLine}</Text>
+          dateLine !== null ? (
+            <Text className="font-noto text-caption text-muted">
+              {dateLine}
+            </Text>
+          ) : undefined
         }
         trailing={selected ? <CheckGlyph size={22} tone="primary" /> : null}
         onPress={() => onSelect(stay.savedStayId)}
