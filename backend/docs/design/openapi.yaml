@@ -2445,6 +2445,15 @@ components:
         startAt: { type: string, example: '10:00' }
         endAt: { type: string, example: '11:00' }
         isFixed: { type: boolean, description: 고정이라 손대지 않은 슬롯(BR-U4-18) }
+        # POI 표면(TRIP-1060 · QA #045) — 재계획이 새로 넣은 장소는 현재 일정 캐시에 없어
+        # FE lookup 이 원리적으로 실패한다. 일정 슬롯(BR-U3-09)·슬롯 후보(TRIP-851)와 같은 모양으로
+        # 응답이 직접 싣는다. before 는 일정 조회와 같은 합성(확정 슬롯 동결값 우선, INV-U1-03) —
+        # 두 응답의 이름이 갈리지 않는다. 정본에 없으면 전부 null(지어내지 않는다).
+        nameKo: { type: string, nullable: true }
+        category: { type: string, nullable: true, description: 한글 정본(맛집·카페 …) — 일정 슬롯과 같은 값 }
+        imageUrl: { type: string, nullable: true, description: NULL = 미확보. 대표 1장 }
+        lat: { type: number, format: double, nullable: true }
+        lng: { type: number, format: double, nullable: true }
         endsNextDay:
           type: boolean
           description: >

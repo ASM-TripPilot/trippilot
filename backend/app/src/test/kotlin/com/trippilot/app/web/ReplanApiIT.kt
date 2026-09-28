@@ -319,6 +319,19 @@ class ReplanApiIT : AbstractPostgresIntegrationTest() {
 
         when (settled["status"].asText()) {
             "DRAFT" -> {
+                // TRIP-1060 · QA #045 — 비교 응답이 장소 표면을 직접 싣는다. 재계획이 새로 넣은
+                // 장소는 현재 일정 캐시에 없어 FE lookup 이 원리적으로 실패하던 자리다.
+                val diff = call(HttpMethod.GET, "/api/v1/trips/$tripId/replan-sessions/$sessionId/diff", token).second
+                diff["ready"].asBoolean() shouldBe true
+                val afterSlots = diff["after"]
+                afterSlots.size() shouldBeGreaterThan 0
+                (0 until afterSlots.size()).forEach { i ->
+                    // 초안 POI 는 후보풀(실 poi 행)에서 왔다 — 표면이 정본 값으로 실려야 한다.
+                    afterSlots[i]["nameKo"].isNull shouldBe false
+                    afterSlots[i]["lat"].isNull shouldBe false
+                    afterSlots[i]["lng"].isNull shouldBe false
+                }
+
                 // 확정 전에는 이력이 없다 — 아래 1행이 확정으로 생겼음을 이 대조가 보장한다.
                 call(HttpMethod.GET, "/api/v1/trips/$tripId/change-log", token).second["entries"].size() shouldBe 0
 
