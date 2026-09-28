@@ -1336,8 +1336,8 @@ describe('🔴 TRIP-770 · j 밴드 최종 16키·라벨 완전 일치 (TRIP-106
       ([key, label]) => `${key}\t${label}`
     ).sort();
 
-    // 단언: 15키 + (키,라벨) 집합 완전 일치(삭제된 22키의 잔재·라벨 편차 차단).
-    expect(jStates).toHaveLength(15);
+    // 단언: 16키 + (키,라벨) 집합 완전 일치(삭제된 22키의 잔재·라벨 편차 차단).
+    expect(jStates).toHaveLength(16);
     expect(actual).toEqual(expected);
   });
 });

@@ -188,11 +188,31 @@ describe('🔴 G3 · TRIP-1070 네이티브 사진 모듈은 shared/photo 만 im
       }))
       .filter(({ modules }) => modules.length > 0);
 
-    // 부정 — shared/photo 밖에서 무는 파일 0.
+    // 부정 — shared/photo 밖에서 무는 파일 0. 단 예외 1: TRIP-1071 공유 카드 캡처 어댑터는 앨범 "저장"으로
+    // expo-media-library 만 문다(동적 경계 뒤 — shareCardStructure G5 가 그쪽을 잠근다). 피커는 예외 없음.
     const outside = importers.filter(
-      ({ file }) => !file.startsWith(`${NATIVE_ENTRY_DIR}/`)
+      ({ file, modules }) =>
+        !file.startsWith(`${NATIVE_ENTRY_DIR}/`) &&
+        !(
+          file === 'features/reflection/model/shareCaptureNative.ts' &&
+          modules.join() === 'expo-media-library'
+        )
     );
     expect(outside).toEqual([]);
+
+    // 부팅 크래시 방지 — 두 모듈은 import 순간 requireNativeModule 로 던진다. 입구는 정적 import 없이
+    // 함수 안 동적 import 로만 문다(재빌드 전 빌드가 라우트 평가 때 죽지 않게).
+    const entrySource = stripComments(
+      fs.readFileSync(path.join(ROOT, NATIVE_ENTRY_FILE), 'utf8')
+    );
+    NATIVE_MODULES.forEach((name) => {
+      expect({
+        name,
+        staticImport: new RegExp(`^\\s*import[^(]*['"]${name}['"]`, 'm').test(
+          entrySource
+        ),
+      }).toEqual({ name, staticImport: false });
+    });
 
     // 긍정 짝(🔴 red-first) — 입구 파일이 두 모듈을 실제로 문다(스텁이 아니다).
     const entry = importers.find(({ file }) => file === NATIVE_ENTRY_FILE);

@@ -171,8 +171,12 @@ function productionSources(): { file: string; source: string }[] {
 
 /** 캡처 패키지를 정적으로 끌어오는 프로덕션 파일 = 어댑터. */
 function captureAdapters(): { file: string; source: string }[] {
-  return productionSources().filter(({ source }) =>
-    CAPTURE_PACKAGES.some((pkg) => hasStaticImportOf(source, pkg))
+  // shared/photo 는 제외 — TRIP-1070 사진 첨부 입구가 expo-media-library 를 호출 시점 require 로 문다(앨범
+  // 읽기, 캡처 아님). 그쪽 부팅 안전(정적 import 0)은 recordPhotoBinaryGuard G3 가 잠근다.
+  return productionSources().filter(
+    ({ file, source }) =>
+      !file.split(path.sep).join('/').startsWith('shared/photo/') &&
+      CAPTURE_PACKAGES.some((pkg) => hasStaticImportOf(source, pkg))
   );
 }
 
