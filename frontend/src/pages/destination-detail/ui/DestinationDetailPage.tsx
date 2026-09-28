@@ -26,6 +26,7 @@ import type { StayItem } from '@/shared/api/generated/schemas';
 import { useGetPlaces } from '@/shared/api/generated/places/places';
 import { getAccessToken } from '@/shared/api/tokenManager';
 import { guardPress } from '@/shared/press/pressGuard';
+import { shellTabHref } from '@/shared/ui/BottomTabBar';
 import { formatPrice } from '@/entities/stay/lib/formatPrice';
 import { useSavedStays } from '@/features/stay/model/savedStays';
 import { stayKey } from '@/features/stay/model/stayKey';
@@ -197,9 +198,7 @@ function DestinationDetailBody({
         ...placeSave,
       }}
       // `/stays`(StaySearchPage) 선례와 동일한 탭 전환 배선 — replace라 스택에 안 쌓인다.
-      onPressTab={(key) =>
-        router.replace(key === 'home' ? '/(tabs)' : `/${key}`)
-      }
+      onPressTab={(key) => router.replace(shellTabHref(key))}
       // ＋ 여행 만들기 FAB → g01 위저드(d01 라우트 선례).
       onPressCreateTrip={() => {
         // 새 여행 진입이라 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074).

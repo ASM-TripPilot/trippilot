@@ -348,6 +348,7 @@ export function ItineraryPlanPage({
     <MapSheetShell
       center={center}
       pins={pins}
+      fitPins
       days={tabs.map((tab) => ({ label: `${tab.dayNumber}일차` }))}
       selectedDayIndex={selectedDayIndex}
       onSelectDay={setActiveDayIndex}

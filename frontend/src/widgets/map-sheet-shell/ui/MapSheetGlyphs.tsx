@@ -80,8 +80,8 @@ export function WalkGlyph({ size = 16, testID }: GlyphProps) {
   );
 }
 
-// 커넥터 이동수단 · 차량(16) — CarGlyph(ItineraryGlyphs) 바이트 복제. `distanceRange` 에 `차량` 이
-// 있으면 이 글리프를 쓴다. 거리 글자와 같은 muted.
+// 커넥터 이동수단 · 차량(16) — CarGlyph(ItineraryGlyphs) 바이트 복제. `distanceRange` 에 `자가용` 이
+// 있으면 이 글리프를 쓴다(AI 수단 어휘, TRIP-1076). 거리 글자와 같은 muted.
 export function CarGlyph({ size = 16, testID }: GlyphProps) {
   return (
     <Svg

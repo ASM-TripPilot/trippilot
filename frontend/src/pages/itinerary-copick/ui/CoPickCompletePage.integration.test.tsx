@@ -444,3 +444,14 @@ describe('🟢 TRIP-1073 F6 · 폴백으로 완성된 같이 짜기(isFallback=t
     expect(screen.queryByTestId('itinerary-copick-complete-error')).toBeNull();
   });
 });
+
+describe('🔴 TRIP-1076 AC-3 · h11 같이 짜기 결과 지도는 핀 전부에 맞춰 연다', () => {
+  it('셸 지도에 핀 2개 이상과 fitPins 가 함께 전달된다', async () => {
+    renderPage();
+    await screen.findByTestId('map-sheet-shell-root');
+
+    const map = screen.getByTestId('map-root');
+    expect((map.props.pins as unknown[]).length).toBeGreaterThanOrEqual(2);
+    expect(map.props.fitPins).toBe(true);
+  });
+});

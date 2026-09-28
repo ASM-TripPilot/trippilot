@@ -14,6 +14,7 @@ import {
 import { useGetTripsTripId } from '@/shared/api/generated/trips/trips';
 import { seoulDate } from '@/shared/date/seoulDate';
 import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
+import { shellTabHref } from '@/shared/ui/BottomTabBar';
 
 /**
  * TRIP-571 · daily-reflection 페이지 — 조회·표시본 조립·배선의 단일 출처(FSD).
@@ -161,9 +162,7 @@ export function DailyReflectionPage({
           `/trips/${tripId}/records/reflection/${dateForDayNumber(startDate, day)}`
         );
       }}
-      onPressTab={(key: ShellTabKey) =>
-        router.replace(key === 'home' ? '/' : `/${key}`)
-      }
+      onPressTab={(key: ShellTabKey) => router.replace(shellTabHref(key))}
       onEnterEdit={() => {
         // 편집 열림은 화면이 로컬로 진다. 생성 없이 PUT 경로(BR-U5-36)라 여기서 별도 조치 없음.
       }}

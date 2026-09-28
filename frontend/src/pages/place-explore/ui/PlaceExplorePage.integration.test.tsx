@@ -434,7 +434,7 @@ describe('P-12 · ♥ FAB 는 담은 장소(d02)로 보낸다 (AC-1 · 3-a)', ()
 });
 
 describe('P-13 · 복제 BottomTabBar 는 replace 로 항법한다 (AC-1 · DestinationDetail 선례)', () => {
-  it('탭을 누르면 router.replace 로 그 탭 라우트로 간다 (home→/, 나머지→/{key})', async () => {
+  it('탭을 누르면 router.replace 로 그 탭 라우트로 간다 (home→/(tabs), 나머지→/{key})', async () => {
     setAccessToken('valid-access');
 
     await renderPage();
@@ -443,7 +443,9 @@ describe('P-13 · 복제 BottomTabBar 는 replace 로 항법한다 (AC-1 · Dest
     fireEvent.press(screen.getByTestId('shell-tabbar-tab-records'));
 
     // push 가 아니라 replace 다(뒤로가기 스택을 안 쌓는다, StaySearchPage TRIP-413 선례).
-    expect(mockReplace.mock.calls).toEqual([['/'], ['/records']]);
+    // TRIP-1076 AC-1 반전: 홈은 '/' 가 아니라 '/(tabs)' — '/' 는 온보딩 그룹의 index 와 겹쳐
+    // 가드에 막히면 무반응이 된다(QA #059). 경로는 공용 shellTabHref 가 정한다.
+    expect(mockReplace.mock.calls).toEqual([['/(tabs)'], ['/records']]);
     expect(mockPush).not.toHaveBeenCalled();
   });
 });

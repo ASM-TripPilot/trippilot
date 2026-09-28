@@ -8,7 +8,8 @@ import { CarGlyph, WalkGlyph } from './MapSheetGlyphs';
  * 없이 그대로** 나른다(BR-U3-08, INV-3 — 소요시간 필드 없음, 거리만). TRIP-1054: 값이 없으면
  * (null·빈 문자열) 글리프만 남기고 문구 칸을 그리지 않으며(QA #038 — 편집 일정은 값이 영원히 없어
  * "계산 중"은 거짓 신호), `약 0.0km` 로 시작하면 `바로 옆`으로 바꾼다(QA #035). 이동수단 글리프는
- * `차량` 포함 여부로 고른다(SVG stroke/fill 이라 jest 원리적 사각 · 6-b 육안). 점선·[길찾기] 는 신
+ * `자가용` 포함 여부로 고른다(AI 수단 어휘 도보·대중교통·자가용 — TRIP-1076. 대중교통 글리프는 Figma
+ * 선행 전까지 보류라 도보 글리프. 선 모양·색은 jest 사각 · 6-b 육안). 점선·[길찾기] 는 신
  * 설계에서 제거 — 그리지 않는다(구 `SlotConnector` 스텁 폐기).
  */
 
@@ -32,7 +33,7 @@ export function DistanceConnector({
     distanceRange !== null &&
     distanceRange !== undefined &&
     distanceRange !== '';
-  const isCar = hasDistance && distanceRange.includes('차량');
+  const isCar = hasDistance && distanceRange.includes('자가용');
 
   return (
     <View

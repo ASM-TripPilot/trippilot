@@ -408,3 +408,20 @@ describe('🔴 A8-2 · TRIP-792 플립 — COMPLETE 면 h07 진행 카드가 사
     expect(screen.queryAllByTestId(/^itinerary-draft-day-/)).toEqual([]);
   });
 });
+
+describe('🔴 TRIP-1076 AC-3 · h07 부분 결과 지도는 핀 전부에 맞춰 연다', () => {
+  beforeEach(() => {
+    // 준비 — day1 만 담긴 PARTIAL(A8-1 과 같은 응답).
+    itineraryHandler = () =>
+      HttpResponse.json(itinerary({ dayCount: 1, generationState: 'PARTIAL' }));
+  });
+
+  it('셸 지도에 핀 2개 이상과 fitPins 가 함께 전달된다', async () => {
+    renderPage();
+    await screen.findByTestId('generation-progress-card');
+
+    const map = screen.getByTestId('map-root');
+    expect((map.props.pins as unknown[]).length).toBeGreaterThanOrEqual(2);
+    expect(map.props.fitPins).toBe(true);
+  });
+});

@@ -31,7 +31,7 @@ import BottomSheet, {
 import type { Place } from '@/shared/api/generated/schemas';
 import { PoiCategory } from '@/shared/api/generated/schemas';
 import { getAccessToken } from '@/shared/api/tokenManager';
-import { BottomTabBar } from '@/shared/ui/BottomTabBar';
+import { BottomTabBar, shellTabHref } from '@/shared/ui/BottomTabBar';
 
 import { resolvePlaceListState } from '@/features/explore/model/placeListState';
 import {
@@ -306,7 +306,7 @@ export function PlaceExplorePage(): ReactElement {
           onPressTab은 push가 아니라 replace로 항법한다(뒤로가기 스택을 안 쌓는다). */}
       <BottomTabBar
         activeKey="explore"
-        onPressTab={(key) => router.replace(key === 'home' ? '/' : `/${key}`)}
+        onPressTab={(key) => router.replace(shellTabHref(key))}
       />
 
       {/* 카테고리 시트 — 필터 버튼이 열고, 닫힘=트리 부재(조건부 마운트). */}

@@ -4,6 +4,7 @@ import {
   screen,
   within,
 } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 
 import {
   DestinationDetailScreen,
@@ -896,5 +897,99 @@ describe('TRIP-1049 · 장소 격자 저장 하트', () => {
         `destination-detail-place-save-${PLACE_B.poiId}`
       )
     ).toBeOnTheScreen();
+  });
+});
+
+/**
+ * TRIP-1076 (8) · AC-8 — 격자 오른쪽 열 하트가 우하단 FAB 묶음 아래로 숨지 않게, 격자가 FAB 폭만큼 오른쪽
+ * 여백을 가진다(결정 4 (A) — Figma d05 에 해법이 없어서, Figma 16/16 대칭과는 드리프트).
+ *
+ * 왜 이 부등식인가: 스크롤 콘텐츠는 이미 좌우 16 패딩이 있고 FAB 묶음은 화면 오른쪽 16(`right-lg`)에서 폭 56
+ * 이다. 격자가 오른쪽으로 56 을 더 비우면 격자 오른쪽 끝(16+56=72)과 FAB 왼쪽 끝(16+56=72)이 만나 가로로
+ * 겹치지 않는다. 실제 겹침(스크롤 위치별)은 jest 사각 — 6-b 육안이 유일한 그물.
+ *
+ * 3동작 뼈대: 준비=장소 4장 → 실행=렌더 → 단언=격자 노드의 오른쪽 여백 합 ≥ 56 + FAB 전제(폭 56·right-lg).
+ */
+describe('🔴 G-FAB · 격자 오른쪽 여백 ≥ FAB 폭 (TRIP-1076 AC-8)', () => {
+  const FAB_WIDTH = 56;
+  // tailwind.config.js spacing 확장 스케일(px). 최대가 32 라 56 은 임의값·style 로만 나온다(02a ★15).
+  const SCALE: Record<string, number> = {
+    xs: 4,
+    sm: 8,
+    md: 12,
+    lg: 16,
+    xl: 20,
+    '2xl': 24,
+    '3xl': 32,
+  };
+
+  function classTokens(node: { props: { className?: unknown } }): string[] {
+    return String(node.props.className ?? '')
+      .split(/\s+/)
+      .filter(Boolean);
+  }
+
+  /** 노드 자신의 오른쪽 여백(margin+padding) — className(임의값 `[Npx]`·스케일 이름) + style 합. */
+  function rightInset(node: {
+    props: { className?: unknown; style?: unknown };
+  }): number {
+    const fromClass = classTokens(node).reduce((sum, token) => {
+      const match = /^(mr|pr|mx|px)-(?:\[(\d+)px\]|([a-z0-9]+))$/.exec(token);
+      if (!match) return sum;
+      const value =
+        match[2] !== undefined ? Number(match[2]) : (SCALE[match[3]] ?? 0);
+      return sum + value;
+    }, 0);
+    const style = StyleSheet.flatten(node.props.style as never) as
+      Record<string, unknown> | undefined;
+    const num = (key: string) =>
+      typeof style?.[key] === 'number' ? (style[key] as number) : 0;
+    const fromStyle =
+      num('marginRight') +
+      num('paddingRight') +
+      (style?.marginRight === undefined ? num('marginHorizontal') : 0) +
+      (style?.paddingRight === undefined ? num('paddingHorizontal') : 0);
+    return fromClass + fromStyle;
+  }
+
+  const FOUR_PLACES: PlaceCardVM[] = Array.from({ length: 4 }, (_, i) => ({
+    poiId: `p${i + 1}`,
+    name: `장소 ${i + 1}`,
+    region: '부산 중구',
+    imageUrl: null,
+  }));
+
+  it('격자 노드의 오른쪽 여백 합이 FAB 폭(56) 이상이다', () => {
+    // 준비·실행 — 장소 4장(2행) 격자.
+    render(
+      <DestinationDetailScreen
+        {...baseProps({
+          placeLane: {
+            error: false,
+            cards: FOUR_PLACES,
+            onRetry: jest.fn(),
+            onSeeAll: jest.fn(),
+            onPressCard: jest.fn(),
+          },
+        })}
+      />
+    );
+
+    // 전제 앵커 — FAB 폭은 56 이고 묶음은 화면 오른쪽 16(right-lg)에 붙은 absolute 다.
+    // (이 값이 바뀌면 아래 부등식의 근거가 무너지므로 함께 잠근다.)
+    const fab = screen.getByTestId('destination-detail-create-trip-fab');
+    expect(classTokens(fab)).toContain('w-[56px]');
+    // 가장 가까운 absolute 조상 = FAB 묶음(합성 컴포넌트 층이 끼므로 위로 걸어 올라간다).
+    let group = fab.parent;
+    while (group !== null && !classTokens(group).includes('absolute')) {
+      group = group.parent;
+    }
+    expect(group).not.toBeNull();
+    if (group === null) return;
+    expect(classTokens(group)).toContain('right-lg');
+
+    // 단언 — 격자 그 노드(감싸는 View·ScrollView 패딩이 아니다, 02a ★14)가 오른쪽을 56 이상 비운다.
+    const grid = screen.getByTestId('destination-detail-place-grid');
+    expect(rightInset(grid)).toBeGreaterThanOrEqual(FAB_WIDTH);
   });
 });

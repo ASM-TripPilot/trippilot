@@ -436,3 +436,16 @@ describe('🔴 A7 · AC-7 — "다른 후보 ›"는 비고정 슬롯에만 뜬�
     expect(screen.queryByTestId(`slot-stopcard-alt-${DAY1}#poi-b`)).toBeNull();
   });
 });
+
+describe('🔴 TRIP-1076 AC-3 · h08 결과 지도는 핀 전부에 맞춰 연다', () => {
+  it('셸 지도에 핀 2개 이상과 fitPins 가 함께 전달된다', async () => {
+    // 준비·실행 — 기본 COMPLETE 응답으로 셸 얼굴을 연다.
+    renderPage();
+    await screen.findByTestId('map-sheet-shell-root');
+
+    // 단언 — 관찰 목(map-root)은 셸이 MapView 에 넘긴 props 를 그대로 싣는다.
+    const map = screen.getByTestId('map-root');
+    expect((map.props.pins as unknown[]).length).toBeGreaterThanOrEqual(2);
+    expect(map.props.fitPins).toBe(true);
+  });
+});
