@@ -86,7 +86,7 @@ paths:
 | `src/__tests__/tripWizardStep1Boundary.test.ts` | g01 화면 그래프에 쿼리 훅·라우터·`expo-location` 0 · `new Date(`·`Date.now(` 0(기준일 주입) · 위저드 라우트 존재·`(tabs)` 아래 부재 |
 | `src/__tests__/tripWizardStep2Structure.test.ts` | g02 라우트 두께 + 화면·배선에 `.sort(`·인라인 박수 재계산 0(`nightlyBaseCards`가 소유) + 제거된 배선 needle 부재(`setPeriod` 등) · 주소 조회·지역 판정(`useQueries`·`sidoKey` 등)은 `features/trip/model`에만 |
 | `src/__tests__/tripBudgetStructure.test.ts` | 예산 3파일에 `toLocaleString`·`Intl.` 0 — node 동작 테스트는 Hermes 서식 차이를 못 봐 이 파일이 유일한 그물 |
-| `src/features/trip/model/budgetAmount.tier.test.ts` | `budgetForTier(tier, nights)` PBT(TRIP-1045) — 단가표(저가5만·중간10만·고급20만·럭셔리40만)×박수, tier 단조증가·정수성·0 이하 없음을 예제 5건+fast-check로 |
+| `src/features/trip/model/budgetAmount.tier.test.ts` | `budgetForTier(tier)` 1인자(TRIP-1067) — 고정 맵(저가30만·중간100만·고급200만·럭셔리400만, 온보딩 범위 가운데값)×예제 4 + 무작위 500회(박수·인원 인자를 넘겨도 안 바뀜, `Function.length`로 박수 인자 부재 확인 — 기본값 인자는 `length`에 안 잡혀 `@ts-expect-error`로 이중 판정). 구 TRIP-1045 단가×박수 PBT는 폐기 |
 | `src/__tests__/savedPlacesStructure.test.ts` | 서버 DTO 식별자를 Zustand 스토어에 복사하지 않는다(`frontend/README.md`). 파생값만 복사한 스토어는 못 잡는다 |
 | `src/__tests__/placeDetailStubRoute.test.tsx` | `explore/places/[poiId].tsx` 라우트가 `@/pages/place-detail`에 위임하는지(페이지 목으로 QueryClient 없이 렌더) |
 | `src/__tests__/placeExploreStructure.test.ts` | d04 소스 스캔 — INV-3·zustand 0·이미지 URL 발명 금지·화면 순수성·`@/features/stay`/`@/features/trip` 0(예외: `PlaceExplorePage.tsx`의 `tripWizardStore` 한 경로)·raw hex·SafeArea |
