@@ -149,17 +149,26 @@ class EditItineraryService(
         // 편집은 전체 교체라 클라이언트가 안 보내는 파생값(추천 근거)은 여기서 이어받지 않으면 사라진다.
         // 장소를 30분 옮겼다고 "왜 이 장소를 골랐는지"가 달라지지는 않으므로 (날짜, poiId) 로 맞춰 옮긴다.
         val reasonBySlot = current.days.flatMap { d -> d.slots.map { (d.date to it.sourcePoiId) to it.placementReason } }.toMap()
+        // 거리 보존(TRIP-1002 결정 (a)). distanceRange 는 **직전 지점→이 슬롯** 구간 값이라
+        // (날짜, 직전 POI, 이 POI) 쌍이 그대로면 편집 뒤에도 참이다 — 시각만 옮긴 저장이 전 구간
+        // 거리를 지워 커넥터가 "이동 거리 계산 중"에 영구 고착됐다(QA #055·056: 재산출 경로가 없다 —
+        // TRIP-309 의 validate/repair 응답에 거리 필드가 없음을 실측). 쌍이 바뀐 구간만 null 로 비운다:
+        // 재산출은 여전히 상대(조립) 소유라 우리가 직선거리로 덧칠하지 않는다(INV-2).
+        val distanceByLeg = current.days.flatMap { d ->
+            d.slots.mapIndexed { i, s ->
+                Triple(d.date, d.slots.getOrNull(i - 1)?.sourcePoiId, s.sourcePoiId) to s.distanceRange
+            }
+        }.toMap()
         val days = edit.days.mapIndexed { dayIdx, d ->
             ItineraryDay.of(
                 d.date, dayIdx,
                 d.slots.mapIndexed { slotIdx, s ->
                     val hit = violations.filter { it.dayIndex == dayIdx && it.slotIndex == slotIdx }
-                    // distanceRange 는 싣지 않는다(null) — 순서·시각이 바뀌면 직전 거리는 이미 틀린 값이다.
-                    // 재산출은 AI 검증·수리(TRIP-309) 몫이라, 그때까지는 낡은 값을 보여주느니 비워 둔다.
                     VisitSlot.of(
                         s.poiId, null, slotIdx, s.startAt, s.endAt, s.isFixed,
                         hasViolation = if (prior != null) prior.flagOf(d.date, s.poiId) else hit.isNotEmpty(),
                         endsNextDay = s.endsNextDay,
+                        distanceRange = distanceByLeg[Triple(d.date, d.slots.getOrNull(slotIdx - 1)?.poiId, s.poiId)],
                         placementReason = reasonBySlot[d.date to s.poiId],
                         // 저장 후에도 "무엇이 왜 문제인지"가 남아야 한다(BR-U3-13 지속 가시화).
                         violationReason = if (prior != null) prior.reasonOf(d.date, s.poiId) else ViolationText.reasonOf(hit),
