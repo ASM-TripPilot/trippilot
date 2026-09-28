@@ -116,7 +116,7 @@
 | `SlotCandidateSheet.tsx` | h12·h18 | 후보 목록(거리·이유) |
 | `ZeroCandidateScreen.tsx` | h35 | **어느 조건이 0으로 만들었는지** + 완화 제안 |
 | `RegenerateConfirmSheet.tsx` | — | "직접 바꾼 N곳이 사라져요"(BR-U3-18·19) |
-| `ConceptPickerScreen.tsx` · `SlotFillScreen.tsx` | h13~h17 | 반경 확대는 **서버가 준 `radiusMUsed`를 표시만**(BR-U3-25) |
+| `ConceptPickerScreen.tsx` · `SlotFillScreen.tsx` | h13~h17 | 반경 확대는 **서버가 준 `radiusMUsed`를 표시만**(BR-U3-25). **[구현 결정 · 2026-09-28, TRIP-1043] 같이 짜기 카피·후보 지도 — 아래 참고** |
 | `ManualPlanScreen.tsx` · `PlaceAddSheet.tsx` | h19~h21 | |
 | `TimelineScreen.tsx` | h25·h26·h29~h34 | **검증 시각**(`09:30`) · 영업시간 · 휴관칩 · 구간 `도보 950m`/차량 + [길찾기](스텁) · **인라인 지도 글랜스(상시, `viewOnly`) + "지도 크게 보기"→h26 확대 오버레이(로컬 상태 `expanded`) — [구현 결정 · TRIP-354, 2026-08-14] 아래 참고** |
 | ~~`MapScreen.tsx`~~ | — | **폐기([구현 결정 · TRIP-354, 2026-08-14])** — 별도 파일이 아니라 `TimelineScreen.tsx` 안의 확대 오버레이로 흡수됐다. 아래 참고 |
@@ -126,6 +126,14 @@
 | `ReorderBanner.tsx` · `ReorderCompareScreen.tsx` | h25 배너·h28 | 배너에 **수치 단언 금지**(G-U3-1) |
 | `StaySuggestScreen.tsx` | h27 | |
 | `HistoryScreen.tsx` | h36 | actor 배지 · 상대 시각 · [되돌리기] · `기준 버전` 행 · empty. **`with-companions` 제외**(DEC-U3-8) |
+
+> **[구현 결정 · 2026-09-28, TRIP-1043 — 사용자 결정 QA #041·043·044] 같이 짜기(`ConceptPickerScreen`·`SlotFillScreen`) 표면.** ⚠️ 코드 대조: 이 문서의 h 코드는 옛 체계다 — 라이브 Figma 재번호 후 같이 짜기는 **h09(컨셉)·h10(후보)**이고, 이 표의 h09·h10(`GeneratingScreen`)과 다른 화면이다.
+>
+> - 진행 줄에 **그날 목적지 이름**을 붙인다(예 `강진군 · …`).
+> - 내부 용어 **'슬롯'을 사용자에게 노출하지 않는다** — 진행 줄 `슬롯 N / M`·문맥 줄 `{시간대} 슬롯`은 `N번째 / M`·`오전 일정` 류로 바꾼다.
+> - 컨셉 카드 설명은 **개인화를 주장하지 않는 중립 문구**다(지역·취향과 무관한 고정 문구가 "취향과 잘 맞아요"처럼 개인화를 주장하던 것을 폐기).
+> - 후보 화면 상단에 지도 — **기준 핀 + 선택 반경 원**(반경 칩 변경 시 갱신, `MapView` `viewOnly` 재사용). **후보 핀은 후보 좌표 계약(`SlotCandidates.candidates[]`의 좌표) 이후** — 계약 전에는 후보 핀 없이 출시한다.
+> - 후보 카드의 태그는 **한 줄 말줄임**, 거리는 **전문 유지**(잘리지 않음 · 소요시간 없이 거리만 — INV-3).
 
 > **[구현 결정 · TRIP-354, 2026-08-14] 인라인 지도 모델 — 세그먼트 토글 폐기, h26은 화면 내 확대 오버레이.** 이 문서(§1·§2·§4)는 원래 시간표(h25)/지도(h26)를 `SegmentButton`으로 전환하는 **두 세그먼트**로 서술했고(§4 옛 `MapScreen.tsx` 행), TRIP-301은 그 지도 세그먼트를 실지도(제스처+peekstrip+핀시트)로 채웠다. TRIP-354가 Figma 풀디자인 정합 과정에서 **세그먼트 토글 자체를 없앴다**(라이브 Figma h34가 지도를 상시 인라인으로 그림) — `SegmentButton`×2·`ViewSegmentValue`·`segment`/`onSegmentChange` prop·`itinerary-view-segment-*` testID를 전부 제거했다.
 >
