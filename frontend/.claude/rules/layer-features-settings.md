@@ -16,14 +16,14 @@ paths:
 | `ui/ProfileCard.tsx` | l03 프로필 카드 — `tags?` 슬롯(정식 스타일 분석일 때만 페이지가 주입), 카운트 3칸 사이 hairline 막대 |
 | `ui/TripCard.tsx` | l03 여행 카드 — 머리줄 `[배지][제목 flex-1][회고 chevron]`, 지역은 `InfoChip` |
 | `ui/TripStatusSegment.tsx` | l03 예정·진행중·종료 세그. 선택 탭 그림자는 className이 아니라 `style={SEGMENT_SHADOW}` — `shadow-sm`류 CSS 변수 선언 유틸은 탭 전환 시 css-interop 재마운트로 크래시를 낸다(`TripStatusSegment.test.tsx`가 계열 정규식으로 막는다, 리포 전역 가드는 없다) |
-| `ui/SettingsGroup.tsx` | 설정 그룹 카드 |
+| `ui/SettingsGroup.tsx` | 설정 그룹 카드 — `label: string \| null`(TRIP-1051). `null`이면 머리글 `Text` 자체를 안 그린다(`{조건 ? <Text/> : null}` — `<Text>{null}</Text>`이 아니다. 후자는 빈 글자칸이 남아 카드가 밀린다) |
 | `ui/SettingsRow.tsx` | 설정 행 부품 — `RowBody`·`PreparingRow`(`disabled`+`accessibilityState`)·`NavRow`(press+chevron, `value`·`chip` 슬롯, testID `settings-nav-{rowKey}`)·내부 `RowChip` |
 | `ui/ExportRow.tsx` | 내보내기 행 |
 | `ui/NicknameEditRow.tsx` | 닉네임 편집 행 |
 | `ui/RevokeConfirmDialog.tsx` | 위치 동의 철회 확인 다이얼로그(조건부 오버레이 패턴) |
 | `ui/DeleteAccountDialog.tsx` | 계정 삭제 2단 게이트 다이얼로그. `initialStep?`은 프리뷰 전용 — 프로덕션 호출부가 넘기지 않는지는 `src/__tests__/deleteAccountDialogGate.test.ts`가 소스 스캔으로 막는다. 목록 높이 상한은 임의값 `max-h-[Npx]` 표기여야 한다 — `DeleteAccountDialog.l05parity.test.tsx`의 탐지기가 모르는 토큰 표기에 throw한다(fail-closed) |
 | `ui/LocationConsentScreen.tsx` | 위치 동의 철회 게이트 화면 — 로컬 `useState` 다이얼로그 게이트의 원형 |
-| `model/settingsSections.ts` | 설정 섹션 구성 순수 파생 — 취향 7행(`preferenceRows`, 값 모르면 값·칩 둘 다 없음)·동의 칩(`consentChip`, undefined면 칩 없음)·개인화·제휴 행. `location-consent` 행 라벨은 'GPS 이동경로 기록'이고 칩은 L3(`gpsRecordingOptIn`)인데, 그 행이 여는 l06 화면 토글은 L2(`legalConsent`)를 읽어 값이 갈릴 수 있다 |
+| `model/settingsSections.ts` | 설정 섹션 구성 순수 파생 — 취향은 머리글 없는 카드 한 행(`preferenceRow`, TRIP-1051): `view` 없으면 값 없이 줄만(D4, 미설정 칩 없음), 있으면 `summarizePreferences`의 `kind==='value'` 축 수 / `axes.length`로 `N/7 설정됨`. 분모는 `axes.length`에서 뽑지만 축이 실제로 7개인 동안은 리터럴 `7`로 바꿔도 테스트가 못 잡는다(심판 사각, [[뮤테이션 테스팅]])·동의 칩(`consentChip`, undefined면 칩 없음)·개인화·제휴 행. `SettingsGroupVM.label`은 `string \| null` — 취향 그룹만 `null`(머리글 미렌더). `location-consent` 행 라벨은 'GPS 이동경로 기록'이고 칩은 L3(`gpsRecordingOptIn`)인데, 그 행이 여는 l06 화면 토글은 L2(`legalConsent`)를 읽어 값이 갈릴 수 있다 |
 | `model/tripBuckets.ts` | l03 여행 버킷(예정·진행중·종료) 파생 |
 | `model/exportSummary.ts` | 내보내기 요약 파생 |
 | `model/deletionScope.ts` | 계정 삭제 고지 목록 정본 |
@@ -31,7 +31,7 @@ paths:
 | `ui/MyStaysScreen.tsx` | l04 등록 숙소 순수 프레젠테이션 — 행당 출발점 버튼 1개(`my-stays-base-toggle-{savedStayId}`)가 로컬 `openRow`로 `BaseToggleDialog`를 열고, `onConfirmBaseToggle`은 확정에서만 부른다(BR-U6-21). 좌표 미확정(`canAssignBase=false`, INV-U1-08)이면 토글이 `disabled`. 등록 행 버튼은 "출발점 해제"(실제 동작이 해제뿐). `location`이 비면 위치 줄을 안 그린다 — 프로덕션에선 항상 비어 이 단언은 vacuous. ⚠️ 미등록 행("출발점 지정") press 경로를 지키는 테스트가 없다 |
 | `ui/MyStaysScreen.l04parity.test.tsx` | 배지·칩 토큰·"출발점" 문구+chevron·주소 줄 유무 짝·empty 로컬 마크업·dialog 치수·구분선 막대 |
 | `ui/BaseToggleDialog.tsx` | 출발점 해제 확인 다이얼로그 — "출발점을 해제할까요? / 일정은 그대로예요." + "해제". `DIALOG_SHADOW`는 `RevokeConfirmDialog`와 값이 다르다 — 다이얼로그 틀을 `shared/ui`로 승격할 때 먼저 맞출 것 |
-| `ui/SettingsGlyphs.tsx` | 설정·마이 글리프 + `MUTED`·`MUTED_SOFT` hex export(비-글리프 파일이 raw hex 없이 색을 넘기기 위함 — raw-hex 가드는 화면 소스의 hex 문자열만 스캔한다). `BookmarkGlyph`·`PencilGlyph`는 프로덕션 소비처 0이지만 parity 테스트의 부재 단언이 import하므로 남긴다 |
+| `ui/SettingsGlyphs.tsx` | 설정·마이 글리프 + `MUTED`·`MUTED_SOFT` hex export(비-글리프 파일이 raw hex 없이 색을 넘기기 위함 — raw-hex 가드는 화면 소스의 hex 문자열만 스캔한다). `BookmarkGlyph`·`PencilGlyph`는 프로덕션 소비처 0이지만 parity 테스트의 부재 단언이 import하므로 남긴다. **TRIP-1051**: 옛 취향 7행 아이콘 6개(`WonGlyph`·`PeopleGlyph`·`StarGlyph`·`ArrowsSwapGlyph`·`ForkKnifeGlyph`·`GaugeGlyph`) 삭제 — 취향 행이 하나로 합쳐지며 고아가 됐다. 취향 행 아이콘은 기존 `ContrastGlyph`(반원) 재사용, 새 글리프 추가 없음 |
 | `model/styleCardModel.ts` | `buildStyleCardModel(envelope) → StyleCardVM`(`official`\|`insufficient`) — 분기는 `@/entities/style-analysis`의 `resolveStyleFace`, `current`는 `resolveStyleProgress`(j05와 판정 공유 — 대칭 PBT가 잠금). `envelope.preview`는 **애초에 읽지 않는다**(INV-U5-09). 카테고리·평균 지표는 VM에 안 담는다(BR-U5-08a 이 카드 한정 비노출), 값 재계산 0(BR-U6-24) |
 | `ui/StyleSummaryCard.tsx` | l03 스타일 요약 카드 — dot 게이지는 **채운/빈 dot을 서로 다른 exact testID의 View로** 렌더해 개수로 값을 잰다(SVG fill 함정 회피). 빈 dot 색은 토큰(`bg-hairline`). `my-style-detail`은 `onPressDetail`이 없으면 `disabled`. `headline?`은 계약 공백 슬롯 |
 | `model/preferenceDraft.ts` | `initialSelection(view)`·`buildPreferenceInput(view, selection)` — `PreferenceView` ↔ `PreferenceInput` 역변환. 안 만진 축은 **키 자체를 omit**(openapi "생략=미변경, null=초기화"). [[역변환 함수 (View→Input)]] |
@@ -43,7 +43,7 @@ paths:
 | `ui/PersonalizationScreen.tsx` | 무상태(`consentOn`·`reason`·`sharedItems`·`onToggle`) — l06과 달리 재확인 다이얼로그가 없다(철회가 데이터 파기가 아니라 추천 입력 제외뿐). 토글은 `shared/ui/Toggle` |
 | `ui/InfoChip.tsx` | 누르지 않는 회색 칩 — 프로필 태그·스타일 칩·여행 카드 칩 공용(소비처가 settings 안뿐이라 shared 미승격) |
 | `ui/cardShadow.ts` | `CARD_SHADOW`(카드 껍데기 공용)·`SEGMENT_SHADOW`(NativeWind 네이티브 `shadow-sm`과 같은 값 — 웹 Tailwind 값과 다르다). `LocationConsentScreen`에 같은 값의 지역 상수가 있다 |
-| `model/preferenceSummary.ts` | `summarize`·`summarizePreferences` — 취향 7행을 `설정 안 함`/값 요약으로(`initialSelection` 재사용, 동행 끝에 반려동물) |
+| `model/preferenceSummary.ts` | `summarize`·`summarizePreferences` — 취향 7축을 `설정 안 함`/값 요약으로(`initialSelection` 재사용, 동행 끝에 반려동물). `settingsSections.ts`는 이제 `kind`만 읽는다 — `PreferenceSummary.text`(가운뎃점 요약 문자열)는 TRIP-1051 이후 운영 소비처 0(`preferenceSummary.test.ts`만 읽음), `PreferenceRowKey` export도 외부 소비자 0(03b 참고-2, 새 티켓 후보) |
 | `ui/SettingsScreen.l05parity.test.tsx` | 취향 값/칩 짝·동의 칩·개인화·chevron 색·칩 r8·바탕 |
 
 **관측된 함정**: `enabled:false`로 꺼진 쿼리도 TanStack Query는 캐시에 남은 `data`를 돌려준다 — `SettingsPage`(제휴 토글)·`StayDetailPage`(고지 시트)가 같은 `getGetMeSettingsQueryKey()`를 공유하므로 게스트 판정에 `isAuthed &&`를 명시하지 않으면 이전 계정의 `dismissed:true`가 새어 법정 제휴 고지를 우회한다.
