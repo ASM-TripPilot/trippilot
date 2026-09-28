@@ -14,8 +14,9 @@
  * 서식이 갈릴 수 있고, 그 갈림을 동작 테스트가 원리적으로 못 본다
  * (`src/__tests__/tripBudgetStructure.test.ts`가 소스 층에서 대신 잠근다).
  *
- * `budgetForTier`는 예산 tier 칩의 대표 금액이다(TRIP-1045, frontend-components `BudgetInputField`).
- * 1인 1박 단가 × 박수, 박수 0이면 1박. 인원은 곱하지 않는다 — 앱 예산 표기가 '1인 총액'이다.
+ * `budgetForTier`는 예산 tier 칩의 대표 금액이다(TRIP-1067, frontend-components `BudgetInputField`).
+ * 온보딩 예산 범위(~50만·50~150만·150~300만·300만+)의 가운데값 — 1인 여행 전체 금액이라
+ * 박수·인원과 무관하다(TRIP-1045의 1박 단가 × 박수는 폐기).
  */
 import type { PreferenceInputBudgetTier } from '@/shared/api/generated/schemas';
 
@@ -42,13 +43,13 @@ export function formatBudgetAmount(amount: number): string {
 
 export type BudgetTier = NonNullable<PreferenceInputBudgetTier>;
 
-const BUDGET_TIER_NIGHTLY: Record<BudgetTier, number> = {
-  저가: 50000,
-  중간: 100000,
-  고급: 200000,
-  럭셔리: 400000,
+const BUDGET_TIER_AMOUNT: Record<BudgetTier, number> = {
+  저가: 300000,
+  중간: 1000000,
+  고급: 2000000,
+  럭셔리: 4000000,
 };
 
-export function budgetForTier(tier: BudgetTier, nights: number): number {
-  return BUDGET_TIER_NIGHTLY[tier] * Math.max(nights, 1);
+export function budgetForTier(tier: BudgetTier): number {
+  return BUDGET_TIER_AMOUNT[tier];
 }

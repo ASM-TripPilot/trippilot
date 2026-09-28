@@ -22,6 +22,7 @@ import { ArriveRequestSource } from '@/shared/api/generated/schemas';
 import type { MapCenter, MapPin } from '@/shared/map';
 import { seoulDate } from '@/shared/date/seoulDate';
 import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
+import { shellTabHref } from '@/shared/ui/BottomTabBar';
 
 /**
  * TRIP-565 · trip-records 페이지 — 조회·조립·배선의 단일 출처(FSD).
@@ -224,9 +225,7 @@ export function TripRecordsPage({
       onPressBack={() => {
         if (router.canGoBack()) router.back();
       }}
-      onPressTab={(key: ShellTabKey) =>
-        router.replace(key === 'home' ? '/' : `/${key}`)
-      }
+      onPressTab={(key: ShellTabKey) => router.replace(shellTabHref(key))}
     />
   );
 }

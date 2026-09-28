@@ -825,3 +825,62 @@ describe('LiveItineraryPage · 도착 실패 뒤 재시도 (TRIP-1021 5-c 경고
     );
   });
 });
+
+describe('LiveItineraryPage · 도착 낙관 반영 (TRIP-1076 AC-2 — 선제 green 증거)', () => {
+  it('W15 POST /visits 응답이 오기 전에도 [도착] press 만으로 카드가 active 가 된다 (재조회 없이 낙관 캐시로)', async () => {
+    // QA #055 "도착 뒤 다음 터치까지 카드가 그대로" — JS 사슬(press → setQueryData → 사영 → 카드)이
+    // 끊겼는지 가른다. POST 를 끝까지 붙잡아 두므로 active 는 낙관 캐시에서만 올 수 있다.
+    // green 이면 JS 경로 정상 증거이고, 원인은 네이티브 커밋 쪽(6-b · 새 티켓)으로 넘긴다.
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      ...baseHandlers(),
+      http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
+        HttpResponse.json({ visits: [] })
+      ),
+      http.post(`${BASE}/trips/:tripId/visits`, async () => {
+        await gate;
+        return HttpResponse.json(
+          vc({ visitCheckId: 'v9', poiId: 'p1', arrivedAt: T }),
+          { status: 201 }
+        );
+      })
+    );
+
+    try {
+      render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+        wrapper,
+      });
+
+      // 준비 — 예정 카드와 [도착]이 섰고, 방문 기록 조회는 1회로 가라앉았다.
+      const arrive = await screen.findByTestId(arriveId(TODAY, 'p1'));
+      await waitFor(() => expect(hitCount(VISITS_GET_TODAY)).toBe(1));
+      expect(screen.queryByTestId('execution-arrive-complete')).toBeNull();
+
+      // 실행
+      fireEvent.press(arrive);
+
+      // 단언 — POST 는 나갔지만 아직 응답 전(gate 잠김)인데 카드가 active 다.
+      await waitFor(() => expect(hitCount(VISITS_PATH)).toBe(1));
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('execution-arrive-complete')
+        ).toBeOnTheScreen()
+      );
+      expect(screen.queryByTestId(arriveId(TODAY, 'p1'))).toBeNull();
+      // 재조회로 반영된 것이 아니다 — 방문 기록 조회 수가 press 전과 같다.
+      expect(hitCount(VISITS_GET_TODAY)).toBe(1);
+
+      // 정리 — 응답을 풀고 성공 뒤 재조회까지 이 테스트 안에서 끝낸다(다음 테스트로 요청이 새지 않게).
+      release();
+      await waitFor(() =>
+        expect(hitCount(VISITS_GET_TODAY)).toBeGreaterThanOrEqual(2)
+      );
+    } finally {
+      // 단언이 먼저 실패해도 붙잡힌 핸들러를 푼다(두 번 불러도 무해).
+      release();
+    }
+  });
+});

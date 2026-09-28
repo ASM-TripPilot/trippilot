@@ -70,3 +70,16 @@ export function placeLocationLabel(
   if (!region) return short;
   return region === short ? region : `${short} ${region}`;
 }
+
+/**
+ * TRIP-1074 — reverse-geocode 주소에서 숙소 카드 동네 라벨(시군구)을 뽑는다(결정 2(a)). 첫 토막(시도)은
+ * 보지 않고 둘째 토막만 본다 — `서울특별시`처럼 `시`로 끝나는 시도가 있어서다. 구가 있는 일반시는
+ * `수원시 영통구`로 잇는다(01b Q1-A). 시군구가 없는 주소(세종·시도 없는 주소)는 지어내지 않고 null(Q2 · INV-1).
+ */
+export function sigunguLabel(address: string): string | null {
+  const [, second, third] = address.trim().split(/\s+/);
+  if (second === undefined || !/[시군구]$/.test(second)) return null;
+  return second.endsWith('시') && third?.endsWith('구')
+    ? `${second} ${third}`
+    : second;
+}

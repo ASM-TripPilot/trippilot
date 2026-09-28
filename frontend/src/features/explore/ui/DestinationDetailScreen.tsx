@@ -216,7 +216,9 @@ function PlaceGrid({
     cards.slice(r * 2, r * 2 + 2)
   );
   return (
-    <View testID="destination-detail-place-grid" className="gap-md">
+    // mr-[56px] = FAB 폭(TRIP-1076 AC-8) — 오른쪽 열 하트가 FAB 열(right-lg + 56)과 가로로 겹치지 않게
+    // 격자만 비운다(스크롤 패딩을 늘리면 숙소 레인까지 줄어든다). Figma d05 는 16/16 대칭이라 갈라진다.
+    <View testID="destination-detail-place-grid" className="mr-[56px] gap-md">
       {rows.map((pair) => (
         <View
           key={pair[0].poiId}

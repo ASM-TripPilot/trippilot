@@ -86,7 +86,7 @@ describe('🔴 TRIP-777 · l04 default 프리뷰 = Figma 1604 카드 2장 (AC-6)
       (typeof rows)[number],
     ];
 
-    // 1번째 — 등록됨(출발점 배지), 탐색에서 저장한 숙소, 메모 칩 없음, 버튼은 "출발점 해제".
+    // 1번째 — 등록됨(출발점 배지), 탐색에서 저장한 숙소, 메모 칩 없음, 버튼은 "출발점 변경"(TRIP-1076 — Figma 1604).
     for (const text of [
       '부산 그랜드 호텔',
       '출발점',
@@ -94,7 +94,7 @@ describe('🔴 TRIP-777 · l04 default 프리뷰 = Figma 1604 카드 2장 (AC-6)
       '6.10 ~ 6.13',
       '탐색에서 저장',
       '연결 여행 · 부산 여행',
-      '출발점 해제',
+      '출발점 변경',
     ]) {
       expect(within(first).getByText(text)).toBeOnTheScreen();
     }

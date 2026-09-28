@@ -434,6 +434,7 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
       <MapSheetShell
         center={center}
         pins={partialPins}
+        fitPins
         overlay={<GenerationProgressCard cells={cells} onBack={handleBack} />}
         header={
           // 제목에 날짜를 **합쳐** 한 leaf 로 넣는다(dayLabel/dateLabel 빈 값). 진행 카드 게이지의
@@ -563,6 +564,7 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
         <MapSheetShell
           center={center}
           pins={listedPins}
+          fitPins
           days={dayChips}
           selectedDayIndex={selectedDayIndex < 0 ? 0 : selectedDayIndex}
           onSelectDay={(index) => setPickedDate(chipTabs[index]?.date ?? null)}

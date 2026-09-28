@@ -17,17 +17,18 @@ import {
  *
  * 무엇을 보장하나(승인 계약):
  *  - 🔴 AC-1(BR-U6-20) 행에 숙소명·위치·체크인/아웃·등록 출처·연결 여행이 보이고, 미연결은 정확히 '연결된 여행 없음'.
- *  - 🔴 AC-2(BR-U6-21 핵심) 출발점 토글 press → **다이얼로그가 먼저** 뜨고 확정 전엔 콜백 0회, 확정에서만 1회.
+ *  - 🔴 AC-2(TRIP-1076 결정 2(A) · 반전) 등록 행의 「출발점 변경」 press → 다이얼로그 없이 `onPressChangeBase(row)`
+ *    1회. 이 화면은 거점을 바꾸지 않는다 — 바꾸기는 그 여행의 거점 화면(페이지가 push)이 한다.
  *  - 🔴 AC-3(INV-U1-08) coordConfirmed=false → 토글 real disabled + press 무반응 + 콜백 0.
  *  - 🔴 TRIP-989 C(D13) 미등록 행에는 출발점 버튼이 없다 — 토글은 등록 행에만 있다.
  *  - 🔴 AC-4(US-NOTIF-06) 0건 → empty 안내 + 탐색 콜백.
  *  - AC-5(INV-3) 렌더에 소요시간 문자열 0(선제 green 회귀 앵커).
  *
  * 왜 이렇게 테스트하나(02a ★1·★2):
- *  - 게이트는 화면이 로컬 상태로 다이얼로그를 여는 것(`LocationConsentScreen` 철회 게이트 선례). "다이얼로그 없이
- *    mutate 0회"를 증명하는 이음매가 **주입된 `onConfirmBaseToggle` 스파이**다(= mutate 스파이).
- *  - 다이얼로그 실제 덮임/딤/중앙정렬·터치차단은 jest 원리적 사각(6-b 실기) — 심판은 testID 트리존재 + 확정 전 0회.
- *  - push 목적지('/stays')·DELETE 목적지는 페이지 배선이라 화면은 콜백 호출까지만(`MyStaysPage.integration.test.tsx`가 잠금).
+ *  - TRIP-1076: 옛 해제 다이얼로그 게이트(TRIP-605·1017)는 사라졌다. 확인 다이얼로그(Figma 1606 「일정 다시 생성」)를
+ *    띄우지 않는 이유 — 거점 화면은 일정을 재생성하지 않아 그 문구가 거짓 안내가 된다(01b Q1, INV-4).
+ *    `BaseToggleDialog` 는 프리뷰 키(`my-stays-dialog`) 때문에 파일로만 남는다(고아, 02a §3).
+ *  - push 목적지('/stays'·거점 화면)는 페이지 배선이라 화면은 콜백 호출까지만(`MyStaysPage.integration.test.tsx`가 잠금).
  *
  * (개념) `getByText('문자열')`=leaf 완전일치 · `getByText(/정규식/)`/`queryAllByText(/정규식/)`=부분포함
  *   (node_modules matches.js 실검증, 02a §5-A). `toBeDisabled()`=real disabled prop 판독(02a §5-B).
@@ -73,17 +74,17 @@ function unassignedRow(over: Partial<MyStayRowVM> = {}): MyStayRowVM {
 }
 
 function renderScreen(over: Partial<MyStaysScreenProps> = {}) {
-  const onConfirmBaseToggle = jest.fn();
+  const onPressChangeBase = jest.fn();
   const onPressExplore = jest.fn();
   const props: MyStaysScreenProps = {
     rows: [assignedRow()],
     isEmpty: false,
-    onConfirmBaseToggle,
+    onPressChangeBase,
     onPressExplore,
     ...over,
   };
   render(<MyStaysScreen {...props} />);
-  return { onConfirmBaseToggle, onPressExplore };
+  return { onPressChangeBase, onPressExplore };
 }
 
 describe('🔴 AC-1 · 행 표시(BR-U6-20)', () => {
@@ -119,27 +120,20 @@ describe('🔴 AC-1 · 행 표시(BR-U6-20)', () => {
   });
 });
 
-describe('🔴 AC-2 · 출발점 전환 다이얼로그 게이트(BR-U6-21)', () => {
-  it('토글 press 는 다이얼로그를 먼저 띄우고 확정 전엔 콜백 0회, 확정에서만 1회 그 행으로 부른다', () => {
-    const { onConfirmBaseToggle } = renderScreen({ rows: [assignedRow()] });
+describe('🔴 AC-2 · 「출발점 변경」은 다이얼로그 없이 콜백으로 (TRIP-1076 결정 2(A) · 반전)', () => {
+  it('등록 행 토글 press → 다이얼로그 없이 onPressChangeBase 를 그 행으로 1회 부른다', () => {
+    const { onPressChangeBase } = renderScreen({ rows: [assignedRow()] });
 
-    // 준비 확인: 열기 전엔 다이얼로그가 없다.
-    expect(screen.queryByTestId('my-stays-base-dialog')).toBeNull();
+    // 준비 확인: 누르기 전 콜백 0.
+    expect(onPressChangeBase).not.toHaveBeenCalled();
 
-    // 실행: 출발점 토글 press.
+    // 실행: 출발점 변경 press.
     fireEvent.press(screen.getByTestId('my-stays-base-toggle-s1'));
 
-    // 급소: 다이얼로그가 먼저 뜨고, 확정 없이 mutate 콜백이 나가지 않는다(즉시 배정 금지).
-    expect(screen.getByTestId('my-stays-base-dialog')).toBeOnTheScreen();
-    expect(screen.getByText('출발점을 해제할까요?')).toBeOnTheScreen();
-    expect(onConfirmBaseToggle).not.toHaveBeenCalled();
-
-    // 실행2: 확정.
-    fireEvent.press(screen.getByTestId('my-stays-base-confirm'));
-
-    // 확정에서만 그 행으로 1회 + 다이얼로그 닫힘.
-    expect(onConfirmBaseToggle).toHaveBeenCalledTimes(1);
-    expect(onConfirmBaseToggle.mock.calls[0][0].savedStayId).toBe('s1');
+    // 단언: 그 행으로 1회, 다이얼로그는 없다(옛 해제 게이트 소멸).
+    expect(onPressChangeBase).toHaveBeenCalledTimes(1);
+    expect(onPressChangeBase.mock.calls[0][0].savedStayId).toBe('s1');
+    expect(onPressChangeBase.mock.calls[0][0].tripId).toBe('t1');
     expect(screen.queryByTestId('my-stays-base-dialog')).toBeNull();
   });
 
@@ -165,56 +159,35 @@ describe('🔴 AC-2 · 출발점 전환 다이얼로그 게이트(BR-U6-21)', ()
         .map((node) => node.props.testID)
     ).toEqual(['my-stays-base-toggle-s1']);
   });
-
-  it('취소하면 콜백 0회로 다이얼로그만 닫힌다(짝)', () => {
-    const { onConfirmBaseToggle } = renderScreen({ rows: [assignedRow()] });
-
-    fireEvent.press(screen.getByTestId('my-stays-base-toggle-s1'));
-    expect(screen.getByTestId('my-stays-base-dialog')).toBeOnTheScreen();
-
-    fireEvent.press(screen.getByTestId('my-stays-base-cancel'));
-
-    expect(onConfirmBaseToggle).not.toHaveBeenCalled();
-    expect(screen.queryByTestId('my-stays-base-dialog')).toBeNull();
-  });
 });
 
 /**
- * TRIP-1017 (B) #091 — 버튼·다이얼로그가 실제 동작(출발점 해제, 일정은 그대로)을 그대로 말한다.
- *
- * 옛 문구("출발점을 바꿀까요?" · "처음부터 다시 생성" · [일정 다시 생성])는 재생성을 약속했지만 확정은
- * 거점 한 행만 지운다(BE `remove`, 브리프 §3-B). 01b 결정1=(a) 해제만 · Q1·Q2 문구. Figma 1604·1606 과
- * 의도적으로 갈라진다(Figma 반영은 이 사이클 밖).
+ * TRIP-1076 결정 2(A) — 버튼은 Figma l04(1604:2440)대로 「출발점 변경」이다(TRIP-1017 의 「출발점 해제」 반전).
+ * 누르면 거점 화면으로 가며, 이 화면에서 재생성을 약속하는 문구는 어디에도 없다(01b Q1 — 거점 화면은
+ * 재생성하지 않는다).
  */
-describe('🔴 TRIP-1017 AC-B1 · 출발점 해제 문구 (결정1=(a) · Q1·Q2)', () => {
-  it('행 버튼은 "출발점 해제" 버튼으로 읽히고 "출발점 변경"이라는 글자는 없다', () => {
+describe('🔴 TRIP-1076 AC-6 · 「출발점 변경」 문구 (결정 2(A) · 반전)', () => {
+  it('행 버튼은 "출발점 변경" 버튼으로 읽히고 "출발점 해제"라는 글자는 없다', () => {
     renderScreen({ rows: [assignedRow()] });
 
     // 역할·이름으로 먼저 찾고 testID 를 확인한다 — 글자와 testID 가 따로 드러난다.
-    const toggle = screen.getByRole('button', { name: '출발점 해제' });
+    const toggle = screen.getByRole('button', { name: '출발점 변경' });
     expect(toggle).toHaveProp('testID', 'my-stays-base-toggle-s1');
-    expect(within(toggle).getByText('출발점 해제')).toBeOnTheScreen();
-    expect(screen.queryByText('출발점 변경')).toBeNull();
+    expect(within(toggle).getByText('출발점 변경')).toBeOnTheScreen();
+    expect(screen.queryByText('출발점 해제')).toBeNull();
   });
 
-  it('다이얼로그는 해제와 "일정은 그대로"를 말하고, 재생성 약속은 어디에도 없다', () => {
+  it('누른 뒤에도 다이얼로그·재생성 약속 문구가 화면 어디에도 없다', () => {
     renderScreen({ rows: [assignedRow()] });
 
     fireEvent.press(screen.getByTestId('my-stays-base-toggle-s1'));
 
-    const dialog = screen.getByTestId('my-stays-base-dialog');
-    // 긍정 앵커 — 다이얼로그가 실제로 열렸고 제목·본문이 그 안에 있다(아래 "없음"이 공허하지 않게).
-    expect(within(dialog).getByText('출발점을 해제할까요?')).toBeOnTheScreen();
-    expect(within(dialog).getByText('일정은 그대로예요.')).toBeOnTheScreen();
-    expect(
-      within(screen.getByTestId('my-stays-base-confirm')).getByText('해제')
-    ).toBeOnTheScreen();
-    expect(
-      within(screen.getByTestId('my-stays-base-cancel')).getByText('취소')
-    ).toBeOnTheScreen();
-
-    // 금지 — 제목·본문·버튼 어디에도 재생성 약속이 없다.
-    expect(within(dialog).queryAllByText(/다시 생성|재생성/)).toHaveLength(0);
+    // 긍정 앵커 — 화면(행)은 그대로 있다(아래 "없음"이 빈 화면이라 공허하지 않게).
+    expect(screen.getByTestId('my-stays-row-s1')).toBeOnTheScreen();
+    expect(screen.queryByTestId('my-stays-base-dialog')).toBeNull();
+    expect(screen.queryAllByText(/다시 생성|재생성|해제할까요/)).toHaveLength(
+      0
+    );
   });
 });
 
@@ -222,7 +195,7 @@ describe('🔴 AC-3 · 좌표 미확정 → 토글 비활성(INV-U1-08)', () => 
   // TRIP-989 — 미등록 행의 토글이 사라져 이 심판을 **등록 행으로 옮겼다**(지우면 등록 행 disabled 를
   // 지키는 심판이 0개가 된다). 등록 행도 canAssignBase = coordConfirmed 라 false 가 실제로 가능하다.
   it('canAssignBase=false 면 토글이 real disabled 이고 press 해도 다이얼로그·콜백이 없다', () => {
-    const { onConfirmBaseToggle } = renderScreen({
+    const { onPressChangeBase } = renderScreen({
       rows: [assignedRow({ savedStayId: 's3', canAssignBase: false })],
     });
 
@@ -233,7 +206,7 @@ describe('🔴 AC-3 · 좌표 미확정 → 토글 비활성(INV-U1-08)', () => 
     fireEvent.press(toggle);
 
     expect(screen.queryByTestId('my-stays-base-dialog')).toBeNull();
-    expect(onConfirmBaseToggle).not.toHaveBeenCalled();
+    expect(onPressChangeBase).not.toHaveBeenCalled();
   });
 
   it('canAssignBase=true 면 토글이 비활성이 아니다(짝)', () => {

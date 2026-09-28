@@ -1,12 +1,9 @@
 import { type ReactElement, useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { useQueryClient } from '@tanstack/react-query';
 
 import type { BaseAssignment, SavedStay } from '@/shared/api/generated/schemas';
 import { useGetSavedStays } from '@/shared/api/generated/saved-stays/saved-stays';
 import {
-  getGetTripsTripIdBasesQueryKey,
-  useDeleteTripsTripIdBasesBaseAssignmentId,
   useGetTrips,
   useGetTripsTripIdBases,
 } from '@/shared/api/generated/trips/trips';
@@ -19,20 +16,19 @@ import {
   type MyStayRowVM,
 } from '@/features/settings/ui/MyStaysScreen';
 import { isOtaSource } from '@/features/stay/config/affiliateNotice';
-import { showToast } from '@/shared/ui/Toast';
 
 /**
  * TRIP-605 · l04 페이지 배선 — 조회(`useGetSavedStays`·`useGetTrips`·N+1 bases)·역참조 조립
- * (`buildStayTripLink`)·행 VM 조립·해제 DELETE·탐색 push 를 진다. 화면엔 완성 VM만 내린다.
+ * (`buildStayTripLink`)·행 VM 조립·거점 화면 push·탐색 push 를 진다. 화면엔 완성 VM만 내린다.
  *
  * 연결 여행은 파생이다 — SavedStay 에 `tripId` 가 없어 여행마다 `GET /trips/{id}/bases` 를 한 번씩 더
  * 부른다(N+1: 목록 1회 + 여행 N회). 훅은 루프를 못 도니 여행 1건당 `TripBasesProbe` 를 렌더해 그 거점
  * 목록을 페이지 상태(`basesByTripId`)로 모은 뒤 `buildStayTripLink` 로 역참조 Map 을 만든다
  * (`TripCardContainer`(l03) N+1 골격 동형).
  *
- * 출발점 확정 콜백은 **연결된 숙소 해제(DELETE)** 만 배선한다 — 미등록 숙소의 지정(POST)은
- * `AssignBaseRequest{savedStayId,dateFrom,dateTo}` 가 여행·기간 컨텍스트를 요구하는데 이 화면에 그 정보가
- * 없어 이 티켓 범위 밖(F-2, 후속 티켓). 그래서 화면은 다이얼로그까지만 띄우고 확정은 no-op 로 둔다.
+ * 「출발점 변경」(TRIP-1076 결정 2(A))은 그 여행의 거점 화면(`/trips/[tripId]/bases`)으로 push 만 한다 —
+ * 이 페이지는 거점을 쓰지 않는다(옛 해제 DELETE 배선 제거). push 라서 거점 화면 CTA 의 `back()` 이 여기로
+ * 돌아온다(`ItineraryMethodPage` onPressRebase 선례).
  */
 
 /** 여행 1건의 거점 목록을 조회해 페이지로 올린다(N+1 훅-per-여행 — 훅이 루프를 못 도는 우회). */
@@ -99,29 +95,8 @@ function toRowVM(stay: SavedStay, link: StayTripLink | undefined): MyStayRowVM {
 
 export function MyStaysPage(): ReactElement {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const savedQuery = useGetSavedStays();
   const tripsQuery = useGetTrips();
-  // 콜백은 훅 레벨에 둔다 — `mutate(vars, callbacks)` 의 호출별 콜백은 응답 전에 화면을 떠나면 안 불린다.
-  // bases 캐시는 성공·실패(404 포함) 모두 낡음으로 표시 → 다음 표시가 서버 상태를 다시 묻는다.
-  const invalidateBases = (tripId: string): void => {
-    void queryClient.invalidateQueries({
-      queryKey: getGetTripsTripIdBasesQueryKey(tripId),
-    });
-  };
-  const deleteBase = useDeleteTripsTripIdBasesBaseAssignmentId({
-    mutation: {
-      onSuccess: (_data, { tripId }) => invalidateBases(tripId),
-      // 실패는 알린다(INV-4) — 루트 토스트 호스트라 화면을 떠나도 뜬다.
-      onError: (_error, { tripId }) => {
-        invalidateBases(tripId);
-        showToast({
-          message: '출발점을 해제하지 못했어요. 다시 시도해 주세요',
-          testID: 'my-stays-base-release-error',
-        });
-      },
-    },
-  });
 
   const savedStays = savedQuery.data ?? [];
   const trips = tripsQuery.data ?? [];
@@ -147,18 +122,13 @@ export function MyStaysPage(): ReactElement {
 
   const isEmpty = !savedQuery.isPending && rows.length === 0;
 
-  const handleConfirmBaseToggle = (row: MyStayRowVM): void => {
-    // 연결된 숙소 해제만 배선 — 미등록 지정(POST)은 여행·기간 컨텍스트 부재로 이 티켓 밖(F-2).
-    if (
-      row.baseState === 'assigned' &&
-      row.tripId !== null &&
-      row.baseAssignmentId !== null
-    ) {
-      deleteBase.mutate({
-        tripId: row.tripId,
-        baseAssignmentId: row.baseAssignmentId,
-      });
-    }
+  const handleChangeBase = (row: MyStayRowVM): void => {
+    // 버튼은 등록 행에만 있고 등록 행은 tripId 가 있다 — null 은 방어만(갈 여행이 없으면 이동하지 않는다).
+    if (row.tripId === null) return;
+    router.push({
+      pathname: '/trips/[tripId]/bases',
+      params: { tripId: row.tripId },
+    });
   };
 
   return (
@@ -173,7 +143,7 @@ export function MyStaysPage(): ReactElement {
       <MyStaysScreen
         rows={rows}
         isEmpty={isEmpty}
-        onConfirmBaseToggle={handleConfirmBaseToggle}
+        onPressChangeBase={handleChangeBase}
         onPressExplore={() => router.push('/stays')}
         onPressBack={() => router.back()}
       />

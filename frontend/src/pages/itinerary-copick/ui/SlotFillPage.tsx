@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { View } from 'react-native';
 
 import { buildEditItineraryRequest } from '@/features/itinerary/model/buildEditItineraryRequest';
+import { resolveCandidateSelection } from '@/features/itinerary/model/candidateSelection';
 import {
   countPickedCoPickSlots,
   nextCoPickSlotKey,
@@ -129,11 +130,15 @@ export function SlotFillPage({
   const [concept, setConcept] = useState<string | undefined>(undefined);
   const [selectedRadiusKey, setSelectedRadiusKey] =
     useState(DEFAULT_RADIUS_KEY);
-  const [selectedPoiId, setSelectedPoiId] = useState<string | null>(null);
+  // 사용자가 **직접 탭한** 후보만 상태로 든다 — 화면에 내리는 선택은 매 렌더 지금 목록에서 도출한다
+  // (TRIP-1073 B: 탭한 후보가 목록에 있으면 그것, 아니면 첫 후보). 재조회가 탭 기록을 지우지 않는다.
+  const [tappedPoiId, setTappedPoiId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [leaveOpen, setLeaveOpen] = useState(false);
   const firedRef = useRef(false);
 
+  const candidates = candidatesData?.candidates ?? [];
+  const selectedPoiId = resolveCandidateSelection(candidates, tappedPoiId);
   const parsed = parseSlotKey(slotKey);
   const confirmLocked = isConfirmLocked(itinerary.data?.generationState);
 
@@ -313,7 +318,6 @@ export function SlotFillPage({
 
   function handleChangeConcept(): void {
     setInFill(false);
-    setSelectedPoiId(null);
   }
 
   function handleConfirm(): void {
@@ -406,7 +410,6 @@ export function SlotFillPage({
     );
   }
 
-  const candidates = candidatesData?.candidates ?? [];
   // 반경 라벨(Q3·Q6) — 요청 radiusM × 응답 radiusMUsed 로 가른다. 최대(null) 조회면 셋째 칸이 서버값,
   // 숫자 요청을 서버가 넓혔으면 캡션이 그 사실을 말한다. 그 밖(요청 그대로 씀)은 둘 다 없음.
   const requestedRadiusM = candidatesVariables?.data.radiusM;
@@ -478,7 +481,7 @@ export function SlotFillPage({
       )}
       mapView={mapView}
       onSelectRadius={handleSelectRadius}
-      onSelectRadio={setSelectedPoiId}
+      onSelectRadio={setTappedPoiId}
       onConfirm={handleConfirm}
       onExpandRadius={handleExpandRadius}
       onShrinkRadius={handleShrinkRadius}

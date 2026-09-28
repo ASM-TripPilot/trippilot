@@ -521,3 +521,36 @@ describe('🔴 T-AC6 · TRIP-1047 — 확정 토스트는 한 번뿐, 일차를 
     expect(confirmPostCalls).toBe(1);
   });
 });
+
+describe('🔴 TRIP-1076 AC-3 · h16 확정 일정 지도는 핀 전부에 맞춰 연다', () => {
+  it('셸 지도에 핀 2개 이상과 fitPins 가 함께 전달된다', async () => {
+    // 준비 — 기본 픽스처는 좌표가 없어 핀이 0개다. day1 두 곳에 좌표를 실어 핀 2개를 만든다.
+    const plan = itinerary();
+    const DAY1_COORDS = [
+      { lat: 33.458, lng: 126.942 },
+      { lat: 33.512, lng: 126.529 },
+    ];
+    itineraryHandler = () =>
+      HttpResponse.json({
+        ...plan,
+        days: plan.days.map((day, dayIndex) =>
+          dayIndex === 0
+            ? {
+                ...day,
+                slots: day.slots.map((slot, i) => ({
+                  ...slot,
+                  ...DAY1_COORDS[i],
+                })),
+              }
+            : day
+        ),
+      });
+
+    renderPage();
+    await screen.findByTestId('map-sheet-shell-root');
+
+    const map = screen.getByTestId('map-root');
+    expect((map.props.pins as unknown[]).length).toBeGreaterThanOrEqual(2);
+    expect(map.props.fitPins).toBe(true);
+  });
+});

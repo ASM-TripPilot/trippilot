@@ -117,6 +117,7 @@ export function CoPickCompletePage({
     <MapSheetShell
       center={center}
       pins={pins}
+      fitPins
       days={dayChips}
       selectedDayIndex={selectedDayIndex < 0 ? 0 : selectedDayIndex}
       onSelectDay={(index) => setPickedDate(tabs[index]?.date ?? null)}

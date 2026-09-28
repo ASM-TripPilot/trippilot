@@ -76,10 +76,14 @@ export function isConfirmLocked(
  *
  * TRIP-1006 D2 · PARTIAL 은 생성 방식으로 한 번 더 가른다 — 같이 짜기(CO_PLAN)면 슬롯 채우기(`copick`),
  * 그 밖(FULLY_AI·MANUAL·모드 불명)이면 생성 중 화면의 관찰 모드(`generating`, POST 없이 GET 만).
- * 어느 쪽도 생성을 다시 쏘지 않는다(#083). PARTIAL 이 아니면 모드는 목적지를 바꾸지 않는다.
+ * 어느 쪽도 생성을 다시 쏘지 않는다(#083).
+ *
+ * TRIP-1073 · 예외 하나 — 같이 짜기(CO_PLAN) 완성(COMPLETE)·미확정이면 초안이 아니라 h17 완성 확인
+ * (`copickComplete`)으로 보낸다(사용자 결정 3 (b), isFallback 무관). 그 밖에 PARTIAL 이 아니면 모드는
+ * 목적지를 바꾸지 않는다.
  */
 export type ItineraryDestination =
-  'method' | 'copick' | 'generating' | 'draft' | 'live';
+  'method' | 'copick' | 'copickComplete' | 'generating' | 'draft' | 'live';
 
 export function resolveItineraryDestination(input: {
   notFound: boolean;
@@ -93,6 +97,12 @@ export function resolveItineraryDestination(input: {
   }
   if (input.generationState === 'FAILED') return 'draft';
   if (input.status === 'CONFIRMED') return 'live';
+  if (
+    input.generationState === 'COMPLETE' &&
+    input.generationMode === 'CO_PLAN'
+  ) {
+    return 'copickComplete';
+  }
   return 'draft';
 }
 
@@ -131,6 +141,8 @@ export function itineraryDestinationHref(
         ? `/trips/${tripId}/itinerary/copick/complete`
         : `/trips/${tripId}/itinerary/copick/${encodeURIComponent(slotKey)}`;
     }
+    case 'copickComplete':
+      return `/trips/${tripId}/itinerary/copick/complete`;
     case 'generating':
       return `/trips/${tripId}/itinerary/generating`;
     case 'draft':

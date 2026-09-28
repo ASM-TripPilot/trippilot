@@ -9,7 +9,7 @@ import { CarGlyph, WalkGlyph } from './MapSheetGlyphs';
  * 가공 없이 그대로 나른다(BR-U3-08, INV-3 — 소요시간 필드 없음).
  * TRIP-1054 — 값이 없으면(null·undefined·'') 글리프 줄만 남기고 문구 칸을 그리지 않는다(QA #038,
  * 결정 1b). `약 0.0km` 로 시작하는 문자열은 `바로 옆`으로 바꾼다(QA #035, 결정 2b).
- * 이동수단 아이콘은 `차량` 포함 여부로 고른다 — 어느 글리프 컴포넌트인지까지만 보고, 색·모양은
+ * 이동수단 아이콘은 `자가용` 포함 여부로 고른다(TRIP-1076, 옛 키 `차량` 폐기) — 어느 글리프 컴포넌트인지까지만 보고, 색·모양은
  * SVG 라 jest 원리적 사각(6-b 육안). 점선·[길찾기]는 신 설계에서 제거 — 그 부재를 잠근다.
  *
  * 3동작 뼈대: 준비=거리 문자열/null 로 렌더 → 실행=렌더만 → 단언=문구 칸 완전일치·부재·소요시간 0.
@@ -95,6 +95,7 @@ describe('🔴 DistanceConnector · C3 — INV-3 렌더 스캔(소요시간 0)',
     '차량 · 15.0km',
     '약 0.0km · 대중교통 추정',
     '약 1.2km · 도보 추정',
+    '약 3.4km · 자가용 추정',
     null,
     undefined,
     '',
@@ -163,13 +164,34 @@ describe('🔴 DistanceConnector · C6 — 그 밖의 문자열은 원문 그대
   });
 });
 
-describe('🔴 DistanceConnector · C7 — 글리프 규칙 무변경(`차량` 포함 → 차, 아니면 도보)', () => {
-  it('"차량 · 2.1km" 는 차 글리프 하나를 그린다', () => {
+describe('🔴 DistanceConnector · C7 — 글리프 규칙: `자가용` 포함 → 차, 아니면 도보 (TRIP-1076 AC-4 · Seed Q2)', () => {
+  // 수단 어휘는 AI 가 만든다(`_TRANSPORT_LABELS` = 도보·대중교통·자가용). 옛 키 `차량`은 그 어휘에 없어
+  // 차 글리프가 실데이터로 한 번도 안 떴다 — 키를 `자가용`으로 바꾸고 `차량`은 폐기한다.
+  // `대중교통` 전용 글리프는 Figma 에 없어 보류 — 그동안 도보 글리프 그대로다.
+  it.each([
+    ['약 3.4km · 자가용 추정', { car: 1, walk: 0 }],
+    ['약 10.0km · 자가용', { car: 1, walk: 0 }],
+    ['차량 · 2.1km', { car: 0, walk: 1 }],
+    ['약 1.2km · 도보 추정', { car: 0, walk: 1 }],
+    ['약 2.0km · 대중교통 추정', { car: 0, walk: 1 }],
+  ])('distanceRange=%p → 글리프 %p', (distanceRange, expected) => {
     render(
-      <DistanceConnector slotKey={SLOT_KEY} distanceRange="차량 · 2.1km" />
+      <DistanceConnector slotKey={SLOT_KEY} distanceRange={distanceRange} />
+    );
+
+    expect(glyphCount()).toEqual(expected);
+  });
+
+  it('"약 3.4km · 자가용 추정" 은 차 글리프를 쓰면서 문구는 한 글자도 바꾸지 않는다', () => {
+    render(
+      <DistanceConnector
+        slotKey={SLOT_KEY}
+        distanceRange="약 3.4km · 자가용 추정"
+      />
     );
 
     expect(glyphCount()).toEqual({ car: 1, walk: 0 });
+    expect(renderedTexts()).toEqual(['약 3.4km · 자가용 추정']);
   });
 
   it('"약 0.0km · 대중교통 추정" 은 문구만 바뀌고 글리프는 도보 그대로다', () => {

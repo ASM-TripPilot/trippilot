@@ -380,3 +380,31 @@ describe('🔴 1015-B · 생성 방식별 카드 상태문 — 컨테이너가 �
     );
   });
 });
+
+describe('🔴 TRIP-1073 F4(내 여행 카드) · 같이 짜기 완성 카드 탭 → h17 내가 고른 완성 (#051)', () => {
+  it('폴백으로 완성된 같이 짜기 초안 카드를 누르면 draft 가 아니라 copick/complete 로 1회 간다', () => {
+    // 준비 — #051 실측 경로: CO_PLAN · COMPLETE · PLANNED · isFallback=true, 비고정 슬롯 a 가 남아 있다.
+    mockUseItinerary.mockReturnValue(
+      itinOk({
+        ...partialItin('CO_PLAN'),
+        generationState: 'COMPLETE',
+        isFallback: true,
+      })
+    );
+
+    // 실행
+    render(<TripCardContainer trip={trip()} />);
+    fireEvent.press(screen.getByTestId('my-trip-card-t1'));
+
+    // 단언 ① 목적지 — 완전 일치(02a ★F-2: 'copick' 오답이면 copick/2026-06-10%23a 로 간다).
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(String(mockPush.mock.calls[0][0])).toBe(
+      '/trips/t1/itinerary/copick/complete'
+    );
+    // 단언 ② 카드 얼굴은 이번에 안 바뀐다(무회귀 짝).
+    expect(screen.getByTestId('my-trip-badge-t1')).toHaveTextContent('작성중');
+    expect(screen.getByTestId('my-trip-extra-t1')).toHaveTextContent(
+      '같이 짜는 중'
+    );
+  });
+});

@@ -121,6 +121,9 @@ export interface MapSheetShellProps<T = unknown> {
   /** 반경 원(TRIP-800 가산, h15) — `<MapView radiusCircle>` 로 흘린다. 미전달=원 없음(기존 소비처
    *  무변경). */
   radiusCircle?: MapViewProps['radiusCircle'];
+  /** 핀 전부 맞추기(TRIP-1076 가산, h07·h08·h11·h14·h16 결과) — `<MapView fitPins>` 로 흘린다.
+   *  미전달=center 카메라(기존 소비처 무변경). 시트가 가리는 아래 영역은 맞춤에 반영하지 않는다. */
+  fitPins?: boolean;
 }
 
 export function MapSheetShell<T = unknown>({
@@ -145,6 +148,7 @@ export function MapSheetShell<T = unknown>({
   onSheetScrollBeginDrag,
   onMapTap,
   radiusCircle,
+  fitPins,
 }: MapSheetShellProps<T>): ReactElement {
   // 지도 로드 실패(TRIP-919). 폴백 중엔 MapView 가 트리에서 빠지므로, 재시도로 이 값을 풀면 MapView 가
   // 새 인스턴스로 다시 마운트돼 실패 알림(notifiedRef)도 처음부터 다시 돈다 — 별도 key 가 필요 없다.
@@ -182,6 +186,7 @@ export function MapSheetShell<T = unknown>({
               currentLocation={currentLocation}
               onTapMap={onMapTap}
               radiusCircle={radiusCircle}
+              fitPins={fitPins}
               onLoadFailed={handleMapLoadFailed}
             />
           ))}

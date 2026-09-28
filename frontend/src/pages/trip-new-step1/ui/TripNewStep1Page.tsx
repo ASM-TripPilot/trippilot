@@ -445,14 +445,12 @@ export function TripNewStep1Page({
     setBudgetSheetOpen(false);
   }
 
-  /** tier 칩 — 드래프트 tier 와 함께 대표 금액(단가 × 박수 합, 0이면 1박)을 금액 칸에 채운다(TRIP-1045).
+  /** tier 칩 — 드래프트 tier 와 함께 대표 금액(온보딩 범위 가운데값, 박수 무관 — TRIP-1067)을 금액 칸에 채운다.
    * press 핸들러에서 직접 쓴다 — tier 변화에 매달면 이미 켜진 칩 재press 때 채움이 안 일어난다.
    * press 할 때만 계산하므로 인원·여행지가 바뀌어도, 시트를 다시 열어도 재계산하지 않는다. */
   function selectBudgetTier(tier: BudgetTier): void {
     setDraftTier(tier);
-    setDraftAmountText(
-      formatBudgetAmount(budgetForTier(tier, nightsSum(destinations)))
-    );
+    setDraftAmountText(formatBudgetAmount(budgetForTier(tier)));
   }
 
   /** 동행 시트 열기 — 드래프트를 store 현재값에서 초기화한다(D3 프리필). 렌더 클로저가 아니라

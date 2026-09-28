@@ -6,8 +6,8 @@
  * 주는 한국어 문자열(서버 tier가 한국어)이라 그대로 쓰고, testID 슬러그만 영문(BUDGET 카탈로그
  * 정합)으로 분리한다. `CompanionEditSheet`·`PrefOverrideSheet` 크롬을 그대로 계승한다.
  *
- * tier 칩 press는 `onSelectTier`만 올린다 — 대표 금액(단가 × 박수, TRIP-1045)은 박수를 아는 배선이
- * 계산해 `amountText`로 내려준다. tier는 스토어·요청 어디에도 안 가는 화면 상태다.
+ * tier 칩 press는 `onSelectTier`만 올린다 — 대표 금액(온보딩 범위 가운데값, TRIP-1067)은 드래프트를
+ * 소유한 배선이 채워 `amountText`로 내려준다. tier는 스토어·요청 어디에도 안 가는 화면 상태다.
  *
  * 왜 선택을 색 fill이 아니라 별 testID 마커로 잠그나: 활성 칩 배경색 변화는 jest 렌더 트리에
  * 안 남는다(repo-traps "글리프/칩 fill 무심판"). 선택 칩만 `-tier-active-{code}` 마커(절대배치,

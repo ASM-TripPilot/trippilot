@@ -1,8 +1,7 @@
-import { type ReactElement, useState } from 'react';
+import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { BaseToggleDialog } from './BaseToggleDialog';
 import { CARD_SHADOW } from './cardShadow';
 import {
   BedGlyph,
@@ -15,11 +14,13 @@ import {
  * TRIP-605 · l04 등록 숙소·예약 기록 화면 — 순수 프레젠테이션(VM 주입). 조회·조합·N+1·포맷은
  * 페이지(`pages/my-stays`)가 진다(MyPageScreen↔TripCardContainer 분리 규율, features/settings 경계).
  *
- * 출발점 전환 게이트(BR-U6-21): 토글 press = 다이얼로그를 먼저 연다(로컬 `openRow` 상태). 비즈니스
- * 콜백(`onConfirmBaseToggle`)은 다이얼로그 [해제] 확정에서만 부른다 — 즉시 배정/재생성 금지.
- * `LocationConsentScreen`(위치 철회 재확인) 게이트와 정확히 같은 형태.
+ * 「출발점 변경」(TRIP-1076 결정 2(A)): 등록 행의 링크 press = `onPressChangeBase(row)` 1회 — 이 화면은
+ * 거점을 바꾸지도, 확인 다이얼로그를 띄우지도 않는다. 바꾸기는 페이지가 여는 그 여행의 거점 화면이 한다.
+ * Figma 확인 다이얼로그(1606 「일정 다시 생성」)를 안 띄우는 이유: 거점 화면은 일정을 재생성하지 않아 그
+ * 문구가 거짓 안내가 된다(INV-4). 옛 해제 다이얼로그(`BaseToggleDialog`)·`onConfirmBaseToggle` 은 프리뷰
+ * 키(`my-stays-dialog`)가 물고 있어 남겨 둔 고아다 — 이 화면은 쓰지 않는다.
  *
- * 좌표 미확정(INV-U1-08, `canAssignBase=false`)이면 토글이 real `disabled` 라 게이트에 진입조차 못 한다.
+ * 좌표 미확정(INV-U1-08, `canAssignBase=false`)이면 토글이 real `disabled` 라 콜백이 나가지 않는다.
  */
 
 export type MyStayBaseState = 'assigned' | 'unassigned';
@@ -41,7 +42,9 @@ export interface MyStayRowVM {
 export interface MyStaysScreenProps {
   rows: MyStayRowVM[];
   isEmpty: boolean;
-  onConfirmBaseToggle: (row: MyStayRowVM) => void;
+  onPressChangeBase?: (row: MyStayRowVM) => void;
+  /** 고아(TRIP-1076) — 화면이 쓰지 않는다. 프리뷰 키 `my-stays-dialog` 가 넘겨서 타입만 남긴다. */
+  onConfirmBaseToggle?: (row: MyStayRowVM) => void;
   onPressExplore: () => void;
   onPressBack?: () => void;
 }
@@ -71,7 +74,7 @@ function Chip({
 }
 
 /** 등록 숙소 한 행(카드). 출발점 전환 버튼(`my-stays-base-toggle-{id}`)은 등록됨 행에만 하나 —
- *  하단 "출발점 해제" + chevron 링크. 미등록 행은 버튼이 없다: 어느 여행에 지정할지 모르는 채
+ *  하단 "출발점 변경" + chevron 링크. 미등록 행은 버튼이 없다: 어느 여행에 지정할지 모르는 채
  *  다이얼로그만 열고 아무것도 안 하던 무반응(INV-4)을 막는다(TRIP-989 D13, 실제 지정은 TRIP-621). */
 function MyStayRow({
   row,
@@ -122,7 +125,7 @@ function MyStayRow({
       {/* 구분선은 막대로 — `border-t border-hairline` 은 네 변 두께를 함께 건드려 모서리가 각진다. */}
       <View className="mt-md h-px bg-hairline" />
 
-      {/* 하단: 연결 여행 ↔ 출발점 해제(등록됨만) */}
+      {/* 하단: 연결 여행 ↔ 출발점 변경(등록됨만) */}
       <View className="mt-md flex-row items-center justify-between gap-md">
         <Text className="flex-1 font-noto text-caption text-muted">
           {row.linkedTripLabel}
@@ -135,7 +138,7 @@ function MyStayRow({
             onPress={() => onPressToggle(row)}
             className="flex-row items-center gap-[2px]"
           >
-            <Text className="font-noto text-label text-body">출발점 해제</Text>
+            <Text className="font-noto text-label text-body">출발점 변경</Text>
             <ChevronRightGlyph size={15} color={MUTED} />
           </Pressable>
         ) : null}
@@ -147,12 +150,10 @@ function MyStayRow({
 export function MyStaysScreen({
   rows,
   isEmpty,
-  onConfirmBaseToggle,
+  onPressChangeBase,
   onPressExplore,
   onPressBack,
 }: MyStaysScreenProps): ReactElement {
-  const [openRow, setOpenRow] = useState<MyStayRowVM | null>(null);
-
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
       <View testID="my-stays-root" className="flex-1 bg-canvas">
@@ -202,22 +203,12 @@ export function MyStaysScreen({
               <MyStayRow
                 key={row.savedStayId}
                 row={row}
-                onPressToggle={setOpenRow}
+                onPressToggle={(pressed) => onPressChangeBase?.(pressed)}
               />
             ))}
           </ScrollView>
         )}
       </View>
-
-      {openRow !== null ? (
-        <BaseToggleDialog
-          onCancel={() => setOpenRow(null)}
-          onConfirm={() => {
-            onConfirmBaseToggle(openRow);
-            setOpenRow(null);
-          }}
-        />
-      ) : null}
     </SafeAreaView>
   );
 }

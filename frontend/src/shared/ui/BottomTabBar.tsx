@@ -1,9 +1,10 @@
 /**
  * 하단 5탭 셸 — 순수 뷰(TRIP-170 · Q4 전면 커스텀 · Figma BottomTab/1236:1177 정합).
- * 네비게이션을 전혀 모른다 — activeKey·onPressTab prop만으로 동작한다. 실 라우팅 상태→
- * activeKey 매핑과 press→navigate 배선은 `app/(tabs)/_layout.tsx` 어댑터의 책임이다(경계는
- * 그 파일에 둔다 — 이 컴포넌트가 shared/ui에 있는 이유는 탭바가 특정 도메인 feature가
- * 아니라서다).
+ * 네비게이션을 하지 않는다 — activeKey·onPressTab prop만으로 동작하고 라우터(expo-router)를 import
+ * 하지 않는다. 실 라우팅 상태→activeKey 매핑과 press→navigate 배선은 `app/(tabs)/_layout.tsx`
+ * 어댑터·탭바를 직접 그리는 pages 의 책임이다(경계는 그쪽에 둔다 — 이 컴포넌트가 shared/ui에 있는
+ * 이유는 탭바가 특정 도메인 feature가 아니라서다). 이 파일이 아는 것은 탭 key → 경로 문자열
+ * 대응(`shellTabHref`)까지다 — 경로를 계산만 하고 이동은 호출부가 한다.
  *
  * 비주얼은 Figma 마스터 `1236:1177`(SWT PRO · 화면 페이지)의 실물에 정합한다 — **투명**
  * 96px 밴드(오버레이: 이 탭바 루트가 `absolute bottom-0`이라 화면 위에 떠서 씬이 탭바 높이만큼
@@ -24,6 +25,17 @@ import { Pressable, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
 export type ShellTabKey = 'home' | 'explore' | 'itinerary' | 'records' | 'my';
+
+/**
+ * 탭 key → 라우트 경로(TRIP-1076 · US-SHELL-03). 홈만 '/' 가 아니라 '/(tabs)' 다 —
+ * `(tabs)/index` 와 `(onboarding)/index` 가 둘 다 '/' 라서, '/' 는 가드에 닫힌 온보딩 쪽으로
+ * 풀려 조용히 무시될 수 있다. 그룹 이름을 붙이면 탭 쪽 하나로만 풀린다.
+ */
+export function shellTabHref(
+  key: ShellTabKey
+): '/(tabs)' | `/${Exclude<ShellTabKey, 'home'>}` {
+  return key === 'home' ? '/(tabs)' : `/${key}`;
+}
 
 export interface BottomTabBarProps {
   activeKey: ShellTabKey;

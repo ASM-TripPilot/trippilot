@@ -156,6 +156,7 @@
 - `src/__tests__/shareCardStructure.test.ts`  →  (export 없음)
 - `src/__tests__/sharedToggleStructure.test.ts`  →  (export 없음)
 - `src/__tests__/sharedUiStructure.test.ts`  →  (export 없음)
+- `src/__tests__/shellTabHrefStructure.test.ts`  →  (export 없음)
 - `src/__tests__/slotCandidatesGenerated.test.ts`  →  (export 없음)
 - `src/__tests__/socialSdkConfigPlugin.test.ts`  →  (export 없음)
 - `src/__tests__/socialSdkSecrets.test.ts`  →  (export 없음)
@@ -491,6 +492,7 @@
 
 ## src/features/itinerary/model/
 - `src/features/itinerary/model/buildEditItineraryRequest.ts`  →  buildEditItineraryRequest
+- `src/features/itinerary/model/candidateSelection.ts`  →  resolveCandidateSelection
 - `src/features/itinerary/model/coPickSlots.ts`  →  firstCoPickSlotKey · nextCoPickSlotKey · countPickedCoPickSlots
 - `src/features/itinerary/model/dayRegion.ts`  →  regionForDay
 - `src/features/itinerary/model/doneBar.ts`  →  DoneBarEntry · DoneBarPick · pickDoneBar
@@ -737,7 +739,7 @@
 - `src/features/trip/model/budgetAmount.ts`  →  BudgetAmount · parseBudgetAmount · formatBudgetAmount · BudgetTier · budgetForTier
 - `src/features/trip/model/createTripRequest.ts`  →  CreateTripInput · buildCreateTripRequest
 - `src/features/trip/model/mustVisitSeed.ts`  →  MustVisitSeedItem · MUST_VISIT_THUMBNAIL_LIMIT · seedMustVisits · mergeMustVisitSeeds · MustVisitSectionView · resolveMustVisitSection · mustVisitFailureNotice
-- `src/features/trip/model/regionMatch.ts`  →  sidoKey · addressInRegion · regionCodeInTrip · placeLocationLabel
+- `src/features/trip/model/regionMatch.ts`  →  sidoKey · addressInRegion · regionCodeInTrip · placeLocationLabel · sigunguLabel
 - `src/features/trip/model/staySheetSections.ts`  →  StayAddressState · StaySheetSection · staySheetSections
 - `src/features/trip/model/tripDatePicker.ts`  →  dateCell · TripDateRange
 - `src/features/trip/model/tripDraft.ts`  →  TripViolationCode · TripDraft · tripLength · nightsSum · validateTripDraft · toCompanionType
@@ -1380,7 +1382,7 @@
 - `src/shared/storage/index.ts`  →  TokenBundle · saveTokens · getTokens · clearTokens · hasStoredToken
 
 ## src/shared/ui/
-- `src/shared/ui/BottomTabBar.tsx`  →  ShellTabKey · BottomTabBarProps · BottomTabBar
+- `src/shared/ui/BottomTabBar.tsx`  →  ShellTabKey · shellTabHref · BottomTabBarProps · BottomTabBar
 - `src/shared/ui/CollageEmptyState.tsx`  →  CollageEmptyStateProps · CollageEmptyState
 - `src/shared/ui/HeartButton.tsx`  →  HeartButtonProps · HeartButton
 - `src/shared/ui/HeartGlyphs.tsx`  →  HeartOutlineGlyph · HeartFilledGlyph · HeartBadgeGlyph
@@ -1442,4 +1444,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 1002개 파일
+합계 1004개 파일

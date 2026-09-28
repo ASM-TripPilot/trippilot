@@ -21,6 +21,7 @@ import { formatDayLabel } from '@/entities/trip/lib/formatDayLabel';
 import { useGetTripsTripId } from '@/shared/api/generated/trips/trips';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
+import { shellTabHref } from '@/shared/ui/BottomTabBar';
 
 /**
  * TRIP-572 · trip-summary 페이지 — j04 요약 조회·조립·배선의 단일 출처(FSD).
@@ -136,9 +137,7 @@ export function TripSummaryPage({
           : undefined
       }
       onBack={handleBack}
-      onPressTab={(key: ShellTabKey) =>
-        router.replace(key === 'home' ? '/' : `/${key}`)
-      }
+      onPressTab={(key: ShellTabKey) => router.replace(shellTabHref(key))}
       tripTitle={trip.data?.title}
       onPressRecords={openRecords}
       // 번호는 여행 기간 기준(1-기반, j03 탭과 같다) — `highlight.dayOrder` 는 기록 있는 날 순번이라 쓰지 않는다.

@@ -33,9 +33,10 @@ import { TripCardContainer } from './TripCardContainer';
  * 0건일 때만** 연다(TRIP-775 §F-3 A안, Figma default 에 없음). 활성 탭이 '종료'면 top 목록이 종료 여행을
  * 대신 그려(중복 회피) 섹션을 접는다.
  *
- * 프로필 태그는 **정식 분석**(`analysis.descriptors`)만 내린다(Seed Q4=A) — 미달 envelope 의
- * `preview.descriptors`(온보딩 취향)를 정식처럼 보이지 않는다(BR-U5-40). 스타일 헤드라인은 서버 필드가
- * 없어 주입하지 않는다(계약 공백).
+ * 프로필 태그는 정식이면 `analysis.descriptors`, 미달이면 `preview.descriptors`(온보딩 취향)만 내린다
+ * (TRIP-1076 결정 1(A) — TRIP-775 Seed Q4=A 를 뒤집음). 미달일 때 `analysis` 가 차 있어도 쓰지 않는다.
+ * 스타일 카드는 여전히 미달 얼굴이다 — 미리보기를 정식처럼 그리지 않는 가드(BR-U5-40)는 카드 VM 쪽이
+ * 그대로 진다. 스타일 헤드라인은 서버 필드가 없어 주입하지 않는다(계약 공백).
  *
  * 정렬(Seed Q4, 순수 함수 밖): 예정·진행 중 startDate 오름차순(임박순) · 종료 endDate 내림차순(최근순).
  *
@@ -80,9 +81,12 @@ export function MyPage(): ReactElement {
   // 목은 select 를 안 돌리므로 가공 전 응답(items)을 직접 읽는다.
   // 사진 수를 쓰는 곳은 지난 여행 섹션뿐 — 섹션이 숨으면 조회하지 않는다.
   const records = useGetMeRecords(undefined, { query: { enabled: showPast } });
-  // 정식/미달 판정은 모델 한 곳(buildStyleCardModel)이 진다 — 태그도 그 결과를 따른다.
+  // 정식/미달 판정은 모델 한 곳(buildStyleCardModel)이 진다 — 태그 출처도 그 결과로 가른다.
   const styleVM = style.data ? buildStyleCardModel(style.data) : undefined;
-  const tags = styleVM?.kind === 'official' ? styleVM.descriptors : undefined;
+  const tags =
+    styleVM?.kind === 'official'
+      ? styleVM.descriptors
+      : style.data?.preview?.descriptors;
 
   // 새 여행 진입 — 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074).
   const onPressCreateTrip = (): void => {

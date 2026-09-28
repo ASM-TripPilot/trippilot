@@ -1,12 +1,8 @@
-import {
-  fireEvent,
-  render,
-  screen,
-  within,
-} from '@testing-library/react-native';
+import { render, screen, within } from '@testing-library/react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 
 import tailwindConfig from '../../../../tailwind.config.js';
+import { BaseToggleDialog } from './BaseToggleDialog';
 import { MyStaysScreen, type MyStayRowVM } from './MyStaysScreen';
 import { ChevronRightGlyph, MUTED_SOFT } from './SettingsGlyphs';
 
@@ -14,11 +10,12 @@ import { ChevronRightGlyph, MUTED_SOFT } from './SettingsGlyphs';
  * TRIP-777 · l04 등록 숙소 — 라이브 Figma(default 1604:2440 · empty 1605:2440 · dialog 1606:2440) 값 정렬.
  *
  * 무엇을 보장하나:
- *  - AC-1: "출발점" 배지 모서리 8, "출발점 해제"는 13 Regular body + muted chevron 글리프.
+ *  - AC-1: "출발점" 배지 모서리 8, "출발점 변경"(TRIP-1076 — Figma 1604 문구로 복귀)은 13 Regular body + muted chevron 글리프.
  *    미등록 행의 "출발점 지정" 점선 배지는 TRIP-989(D13)로 사라졌다 — 없음을 잠근다.
  *  - AC-2: 칩 모서리 8·글자색(날짜 body / 출처·메모 muted), 카드 r12·카드 간 16, 주소 줄 유무, 구분선 막대.
  *  - AC-3: empty 는 제목 없이 96 회색 원 + Figma 침대 + 설명 14 + 내용 폭 CTA h44.
- *  - AC-4: 출발점 다이얼로그 딤 55%·카드 330·제목 19·본문 body색·버튼 h44.
+ *  - AC-4: 출발점 다이얼로그 딤 55%·카드 330·제목 19·본문 body색·버튼 h44. TRIP-1076 부터 화면은 이 다이얼로그를
+ *    열지 않는다 — 프리뷰 키(`my-stays-dialog`)만 쓰는 고아 컴포넌트라 직접 렌더해 잠근다(정리는 새 티켓 후보).
  *  - AC-7: `ChevronRightGlyph` 기본색(다른 화면 4곳이 기대는 값)은 그대로.
  *
  * 게이트(확정 전 콜백 0회·행당 토글 1개·disabled)는 `MyStaysScreen.test.tsx`(무수정)가 잠근다.
@@ -82,7 +79,7 @@ function renderRows(rows: MyStayRowVM[]) {
     <MyStaysScreen
       rows={rows}
       isEmpty={false}
-      onConfirmBaseToggle={jest.fn()}
+      onPressChangeBase={jest.fn()}
       onPressExplore={jest.fn()}
     />
   );
@@ -93,7 +90,7 @@ function renderEmpty() {
     <MyStaysScreen
       rows={[]}
       isEmpty
-      onConfirmBaseToggle={jest.fn()}
+      onPressChangeBase={jest.fn()}
       onPressExplore={jest.fn()}
     />
   );
@@ -207,11 +204,11 @@ describe('🔴 TRIP-777 · l04 default — 출발점 배지·링크 (AC-1)', () 
     ).toHaveLength(0);
   });
 
-  it('"출발점 해제" 글자는 정확히 "출발점 해제"(› 문자 없음)이고 13 Regular body색이다', () => {
+  it('"출발점 변경" 글자는 정확히 "출발점 변경"(› 문자 없음)이고 13 Regular body색이다', () => {
     renderRows([assignedRow()]);
 
     const toggle = screen.getByTestId('my-stays-base-toggle-s1');
-    const label = within(toggle).getByText('출발점 해제');
+    const label = within(toggle).getByText('출발점 변경');
     expect(tokens(label)).toEqual(
       expect.arrayContaining(['font-noto', 'text-label', 'text-body'])
     );
@@ -221,7 +218,7 @@ describe('🔴 TRIP-777 · l04 default — 출발점 배지·링크 (AC-1)', () 
     expect(screen.queryAllByText(/›/)).toHaveLength(0);
   });
 
-  it('"출발점 해제" 옆 chevron 은 muted 색 오른쪽 꺾쇠 글리프 하나다', () => {
+  it('"출발점 변경" 옆 chevron 은 muted 색 오른쪽 꺾쇠 글리프 하나다', () => {
     renderRows([assignedRow()]);
 
     const toggle = screen.getByTestId('my-stays-base-toggle-s1');
@@ -394,9 +391,9 @@ describe('🔴 TRIP-777 · l04 empty (AC-3)', () => {
 });
 
 describe('🔴 TRIP-777 · l04 출발점 다이얼로그 (AC-4)', () => {
+  // TRIP-1076: 화면 press 로는 더 이상 안 열린다 — 컴포넌트를 직접 그린다(프리뷰 키와 같은 합성).
   function openDialog() {
-    renderRows([assignedRow()]);
-    fireEvent.press(screen.getByTestId('my-stays-base-toggle-s1'));
+    render(<BaseToggleDialog onCancel={jest.fn()} onConfirm={jest.fn()} />);
   }
 
   it('딤은 화면 전체를 덮는 검정 55% 오버레이다', () => {

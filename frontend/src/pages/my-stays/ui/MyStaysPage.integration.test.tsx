@@ -3,7 +3,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import type { SavedStay } from '@/shared/api/generated/schemas';
 import { useGetSavedStays } from '@/shared/api/generated/saved-stays/saved-stays';
-import { useGetTrips } from '@/shared/api/generated/trips/trips';
+import {
+  useDeleteTripsTripIdBasesBaseAssignmentId,
+  useGetTrips,
+} from '@/shared/api/generated/trips/trips';
 import type { MyStayRowVM } from '@/features/settings/ui/MyStaysScreen';
 
 import { MyStaysPage } from './MyStaysPage';
@@ -13,43 +16,23 @@ import { MyStaysPage } from './MyStaysPage';
  *
  * 무엇을 보장하나:
  *  - 🔴 AC-4(US-NOTIF-06) empty 의 탐색 콜백이 `router.push('/stays')` 로 배선된다.
- *  - 🔴 AC-2(BR-U6-21) 확정 콜백에 assigned 행이 오면 `DELETE /trips/{tripId}/bases/{baseAssignmentId}` mutate 가
- *    정확한 인자로 1회, POST 는 0회(연결 숙소 해제 = 이 티켓 코어, 미등록 지정 POST 완주는 범위 밖).
+ *  - 🔴 AC-6(TRIP-1076 결정 2(A) · 반전) 「출발점 변경」 콜백에 등록 행이 오면 그 여행의 거점 화면
+ *    (`/trips/[tripId]/bases`)으로 push 1회. 이 페이지는 거점을 쓰지 않는다 — DELETE 훅을 부르지도 않고
+ *    POST 도 0회(옛 해제 DELETE 배선 제거, 옛 경고-3a 무효화 케이스는 함께 삭제).
  *  - 🔴 AC-1(BR-U6-20) 여행 0건이면 저장 숙소가 미연결 → 행 VM 이 정확히 '연결된 여행 없음'·unassigned 로 조립된다.
  *
  * 왜 이렇게 테스트하나(02a ★3):
  *  - 화면(`MyStaysScreen`)을 **props 캡처 목**으로 치환하고 페이지를 렌더한다(route 위임 선례 `liveLocationRoute`).
  *    콜백은 캡처해 직접 호출하고, VM 은 캡처된 `rows` 를 읽는다 — 페이지 내부 fetch/N+1 기전에 무의존
  *    (trips 0건 시나리오라 bases 조회가 발화하지 않아 mechanism-agnostic).
- *  - DELETE 인자는 generated 훅 mutate 변수 shape `{tripId, baseAssignmentId}`(trips.ts 실측) 완전 잠금.
+ *  - push 인자는 리포 선례(`ItineraryMethodPage` onPressRebase)와 같은 객체 모양으로 완전 잠금(02a ★11).
  */
 
 const mockPush = jest.fn();
 const mockPostMutate = jest.fn();
 
-/**
- * 확정(DELETE) 성공 후 bases 쿼리 무효화(경고-3a)를 관측하기 위한 이음매.
- * react-query 는 DELETE 성공 시 onSuccess 를 부르지만, mutate 를 목으로 치환하면 그 호출이 사라진다 —
- * 그래서 목 mutate 가 서버 성공을 흉내내 onSuccess 를 직접 발화한다. 훅-레벨(`{mutation:{onSuccess}}`)·
- * 호출-레벨(`mutate(vars,{onSuccess})`) 어느 배선이든 관측되도록 둘 다 부른다(구현 설계를 강요하지 않는다).
- */
-type DeleteHookOptions = {
-  mutation?: { onSuccess?: (...args: unknown[]) => void };
-};
-const mockDeleteHolder: { options?: DeleteHookOptions } = {};
-const mockDeleteMutate = jest.fn(
-  (
-    variables: { tripId: string; baseAssignmentId: string },
-    perCallOptions?: { onSuccess?: (...args: unknown[]) => void }
-  ) => {
-    mockDeleteHolder.options?.mutation?.onSuccess?.(
-      undefined,
-      variables,
-      undefined
-    );
-    perCallOptions?.onSuccess?.(undefined, variables, undefined);
-  }
-);
+// TRIP-1076: 이 페이지는 더 이상 DELETE 를 배선하지 않는다 — 훅이 불리면 red 로 드러나게 목은 남긴다.
+const mockDeleteMutate = jest.fn();
 const mockScreenProps: { current: MyStaysScreenPropsShape | null } = {
   current: null,
 };
@@ -57,7 +40,8 @@ const mockScreenProps: { current: MyStaysScreenPropsShape | null } = {
 interface MyStaysScreenPropsShape {
   rows: MyStayRowVM[];
   isEmpty: boolean;
-  onConfirmBaseToggle: (row: MyStayRowVM) => void;
+  onConfirmBaseToggle?: (row: MyStayRowVM) => void;
+  onPressChangeBase?: (row: MyStayRowVM) => void;
   onPressExplore: () => void;
 }
 
@@ -84,12 +68,9 @@ jest.mock('@/shared/api/generated/trips/trips', () => ({
   ...jest.requireActual('@/shared/api/generated/trips/trips'),
   useGetTrips: jest.fn(),
   usePostTripsTripIdBases: jest.fn(() => ({ mutate: mockPostMutate })),
-  useDeleteTripsTripIdBasesBaseAssignmentId: jest.fn(
-    (options?: DeleteHookOptions) => {
-      mockDeleteHolder.options = options;
-      return { mutate: mockDeleteMutate };
-    }
-  ),
+  useDeleteTripsTripIdBasesBaseAssignmentId: jest.fn(() => ({
+    mutate: mockDeleteMutate,
+  })),
 }));
 
 const mockUseSaved = useGetSavedStays as jest.MockedFunction<
@@ -138,7 +119,11 @@ beforeEach(() => {
   mockPush.mockClear();
   mockPostMutate.mockClear();
   mockDeleteMutate.mockClear();
-  mockDeleteHolder.options = undefined;
+  (
+    useDeleteTripsTripIdBasesBaseAssignmentId as jest.MockedFunction<
+      typeof useDeleteTripsTripIdBasesBaseAssignmentId
+    >
+  ).mockClear();
   mockScreenProps.current = null;
   mockUseSaved.mockReturnValue(savedResult([]));
   mockUseTrips.mockReturnValue(tripsResult());
@@ -158,8 +143,8 @@ describe('🔴 AC-4 · empty 탐색 → /stays', () => {
   });
 });
 
-describe('🔴 AC-2 · 확정(assigned) → DELETE', () => {
-  it('확정 콜백에 assigned 행이 오면 DELETE 를 {tripId, baseAssignmentId} 로 1회 부르고 POST 는 0회', () => {
+describe('🔴 AC-6 · 「출발점 변경」 → 거점 화면 push (TRIP-1076 결정 2(A) · 반전)', () => {
+  it('등록 행으로 onPressChangeBase 가 오면 /trips/[tripId]/bases 로 push 1회, 거점 쓰기는 0', () => {
     renderPage();
 
     const row: MyStayRowVM = {
@@ -176,16 +161,28 @@ describe('🔴 AC-2 · 확정(assigned) → DELETE', () => {
       baseAssignmentId: 'ba1',
     };
 
+    // 실행 — 화면이 넘겨받은 콜백을 직접 부른다(화면은 캡처 목).
     act(() => {
-      mockScreenProps.current?.onConfirmBaseToggle(row);
+      mockScreenProps.current?.onPressChangeBase?.(row);
     });
 
-    expect(mockDeleteMutate).toHaveBeenCalledTimes(1);
-    expect(mockDeleteMutate.mock.calls[0][0]).toEqual({
-      tripId: 't1',
-      baseAssignmentId: 'ba1',
-    });
+    // 단언 ① — 그 여행의 거점 화면으로 한 번(push 라서 거점 화면 CTA 의 back() 이 이 화면으로 돌아온다).
+    expect(mockPush.mock.calls).toEqual([
+      [{ pathname: '/trips/[tripId]/bases', params: { tripId: 't1' } }],
+    ]);
+    // 단언 ② — 이 화면은 거점을 바꾸지 않는다: DELETE 훅 자체가 배선되지 않고, POST 도 없다.
+    expect(useDeleteTripsTripIdBasesBaseAssignmentId).not.toHaveBeenCalled();
+    expect(mockDeleteMutate).not.toHaveBeenCalled();
     expect(mockPostMutate).not.toHaveBeenCalled();
+  });
+
+  it('화면에 옛 확정 콜백(onConfirmBaseToggle)을 넘기지 않는다 — 해제 경로가 배선째 사라졌다', () => {
+    renderPage();
+
+    // 짝 앵커 — 화면은 실제로 그려졌고 새 콜백은 받았다.
+    expect(mockScreenProps.current).not.toBeNull();
+    expect(typeof mockScreenProps.current?.onPressChangeBase).toBe('function');
+    expect(mockScreenProps.current?.onConfirmBaseToggle).toBeUndefined();
   });
 });
 
@@ -359,49 +356,4 @@ describe('🔴 TRIP-1017 AC-C1~C4 · 등록 출처·메모 칩은 externalSource
       expect(rows[0].memoLabel).toBe(memoLabel);
     }
   );
-});
-
-describe('🔴 경고-3a · 확정(DELETE) 성공 후 bases 쿼리 무효화', () => {
-  it('확정 콜백에 assigned 행이 오면 DELETE 성공 후 useGetTripsTripIdBases 를 무효화한다', () => {
-    // Arrange: 무효화를 관측할 수 있게 이 테스트 전용 client 로 렌더하고 invalidateQueries 를 감시한다.
-    //   (invalidateQueries = 조회 캐시를 낡음으로 표시해 재조회를 유발한다 — 안 하면 해제해도 화면이 stale.)
-    const client = new QueryClient();
-    const invalidateSpy = jest.spyOn(client, 'invalidateQueries');
-    render(
-      <QueryClientProvider client={client}>
-        <MyStaysPage />
-      </QueryClientProvider>
-    );
-
-    const row: MyStayRowVM = {
-      savedStayId: 's1',
-      name: '해운대 오션뷰',
-      location: '',
-      dateRangeLabel: '6.10 ~ 6.13',
-      sourceLabel: 'OTA 예약',
-      memoLabel: null,
-      linkedTripLabel: '연결 여행 · 부산 여행',
-      baseState: 'assigned',
-      canAssignBase: true,
-      tripId: 't1',
-      baseAssignmentId: 'ba1',
-    };
-
-    // Act: 출발점 해제 확정.
-    act(() => {
-      mockScreenProps.current?.onConfirmBaseToggle(row);
-    });
-
-    // Assert: DELETE 는 발화한다(경고-3 은 무효화 누락이지 mutate 누락이 아니다).
-    expect(mockDeleteMutate).toHaveBeenCalledTimes(1);
-
-    // 급소: 성공 후 bases 쿼리 무효화가 발화한다(현재 구현엔 onSuccess 무효화가 없어 red).
-    expect(invalidateSpy).toHaveBeenCalled();
-    const invalidatedKeys = invalidateSpy.mock.calls.map((call) =>
-      JSON.stringify(call[0] ?? {})
-    );
-    expect(invalidatedKeys.some((key) => key.includes('/bases'))).toBe(true);
-
-    invalidateSpy.mockRestore();
-  });
 });
