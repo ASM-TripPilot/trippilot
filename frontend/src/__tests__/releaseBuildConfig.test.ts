@@ -75,6 +75,14 @@ const SECURE_STORE_ALLOWED = [
   'faceIDPermission',
   'configureAndroidBackup',
 ] as const;
+// expo-media-library 18.2 plugin/build/withMediaLibrary.d.ts 의 옵션 키(TRIP-1071).
+const MEDIA_LIBRARY_ALLOWED = [
+  'photosPermission',
+  'savePhotosPermission',
+  'isAccessMediaLocationEnabled',
+  'preventAutomaticLimitedAccessAlert',
+  'granularPermissions',
+] as const;
 const SPLASH_ALLOWED = [
   'backgroundColor',
   'imageWidth',
@@ -88,6 +96,8 @@ const SPLASH_ALLOWED = [
 
 const WHEN_IN_USE_COPY =
   'TripPilot가 주변 여행지와 동선을 추천하기 위해 위치를 사용합니다.';
+const SAVE_PHOTOS_COPY =
+  'TripPilot가 여행 공유 카드를 사진 앨범에 저장하기 위해 사진 추가 권한을 사용합니다.';
 
 let infoPlist: Record<string, unknown> = {};
 let introspectedExtra: Record<string, unknown> = {};
@@ -175,6 +185,25 @@ describe('AC-3 안 쓰는 권한 문구 제거', () => {
     expect(secureStore).toBeDefined();
     expect(secureStore?.faceIDPermission).toBe(false);
     expect(unknownKeys(secureStore, SECURE_STORE_ALLOWED)).toEqual([]);
+  });
+});
+
+describe('TRIP-1071 AC-16 · 공유 카드 앨범 저장 권한 문구', () => {
+  it('해석된 Info.plist에 사진 "추가" 문구는 한국어로 있고, 사진 "읽기" 전체 접근 문구는 없다', () => {
+    // 저장 전용 — 읽기 문구가 남으면 쓰지 않는 권한을 영문 기본 문구로 신고하게 된다.
+    expect(infoPlist.NSPhotoLibraryAddUsageDescription).toBe(SAVE_PHOTOS_COPY);
+    expect(Object.keys(infoPlist)).not.toContain(
+      'NSPhotoLibraryUsageDescription'
+    );
+  });
+
+  it('expo-media-library 옵션은 패키지가 아는 키만 쓰고, 읽기 문구는 불리언 false 로 지운다', () => {
+    const mediaLibrary = optionsOf('expo-media-library');
+
+    expect(mediaLibrary).toBeDefined();
+    expect(mediaLibrary?.photosPermission).toBe(false);
+    expect(mediaLibrary?.savePhotosPermission).toBe(SAVE_PHOTOS_COPY);
+    expect(unknownKeys(mediaLibrary, MEDIA_LIBRARY_ALLOWED)).toEqual([]);
   });
 });
 

@@ -6,6 +6,7 @@ import {
   SHARE_FORMATS,
   buildShareCard,
 } from '@/features/reflection/model/shareCard';
+import { shareEnabled } from '@/features/reflection/model/summaryView';
 import { useTripSummary } from '@/features/reflection/model/useTripSummary';
 import { ShareCardScreen } from '@/features/reflection/ui/ShareCardScreen';
 import { useGetTripsTripId } from '@/shared/api/generated/trips/trips';
@@ -18,9 +19,11 @@ import { StateNotice } from '@/shared/ui/StateNotice';
  * `buildShareCard` 에 통과시켜 완성 VM 을 만들고 `ShareCardScreen`(무상태)에 넘긴다. 화면은 조립 함수
  * 어느 것도 직접 참조하지 않는다(구조 가드 G3 이 소스로 강제).
  *
- * ⚠️ 온디바이스 렌더(BR-U5-46): 서버 이미지 생성·저장 심볼 0 — 캡처/저장/공유는 화면 로컬 degrade
- * (captureShareImage armed:false). 페이지 조립 로직은 `TripSummaryPage`(j04)·`DailyReflectionPage`(j03)
- * 와 동형으로 jest 무심판 — 6-b 실기·프리뷰가 유일한 그물(자율/야간이라 이번엔 SKIP).
+ * ⚠️ 온디바이스 렌더(BR-U5-46): 서버 이미지 생성·저장 심볼 0 — 캡처/저장/공유는 화면이 `shareCapture`
+ * 로 직접 한다. TRIP-1071 결정 4(c): h16 [공유하기]는 여행 전에도 열리므로, 요약 미준비(`shareEnabled`
+ * false)면 빈 카드 대신 안내를 낸다(BR-U5-48 의 뜻을 여기서 진다). 조회 오류는 미준비와 섞지 않는다(INV-4).
+ * 얼굴 판정(조회 중·미준비·카드)은 `ShareCardPage.test.tsx`(TRIP-1071)가 심판한다. 카드 VM·해시태그
+ * 조립의 화면 결과는 여전히 6-b 실기·프리뷰 몫이다.
  */
 
 export interface ShareCardPageProps {
@@ -47,6 +50,44 @@ export function ShareCardPage({ tripId }: ShareCardPageProps): ReactElement {
         title="공유 카드를 준비하고 있어요"
         description="잠시만 기다려 주세요"
         actions={[]}
+      />
+    );
+  }
+
+  if (summary.isError) {
+    return (
+      <StateNotice
+        testID="reflection-share-error"
+        illustration={PENDING_ILLUSTRATION}
+        title="요약을 불러오지 못했어요"
+        description="잠시 후 다시 시도해 주세요"
+        actions={[
+          {
+            testID: 'reflection-share-retry',
+            label: '다시 시도',
+            variant: 'filled',
+            onPress: summary.refetch,
+          },
+        ]}
+      />
+    );
+  }
+
+  if (!summary.envelope || !shareEnabled(summary.envelope)) {
+    return (
+      <StateNotice
+        testID="reflection-share-not-ready"
+        illustration={PENDING_ILLUSTRATION}
+        title="여행이 끝나면 만들 수 있어요"
+        description="아직 공유할 여행 기록이 모이지 않았어요"
+        actions={[
+          {
+            testID: 'reflection-share-not-ready-back',
+            label: '돌아가기',
+            variant: 'outline',
+            onPress: handleBack,
+          },
+        ]}
       />
     );
   }

@@ -196,9 +196,11 @@ describe('AC-3 · 편집 입력칸의 초기값', () => {
     ).toHaveDisplayValue(RULE_SUBTITLE);
   });
 
-  it('회고가 없으면 입력칸은 빈 칸으로 열린다', () => {
+  it('회고가 없는 지난 날은 생성 중(pending)에도 헤더 "편집"으로 빈 칸 입력을 연다 (TRIP-1068 Q2)', () => {
     mockApi([]);
     renderPage();
+    // 전제 앵커 — 레코드 없는 지난 날(실시계 기준 06-11)은 이제 empty 가 아니라 생성 중이다.
+    expect(screen.getByTestId('reflection-daily-pending')).toBeOnTheScreen();
 
     fireEvent.press(screen.getByTestId('reflection-daily-edit'));
 

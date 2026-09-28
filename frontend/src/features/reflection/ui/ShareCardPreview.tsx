@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import type { ReactElement, Ref } from 'react';
 import { Text, View } from 'react-native';
 
 import {
@@ -27,11 +27,14 @@ const STORY_MAX_HEIGHT = 530;
 export interface ShareCardPreviewProps {
   card: ShareCardVM;
   aspectRatio: number;
+  /** TRIP-1071 캡처 대상 — 프레임 View 자체에 단다(래퍼에 달면 테두리·비율이 다른 이미지가 떠진다). */
+  frameRef?: Ref<View>;
 }
 
 export function ShareCardPreview({
   card,
   aspectRatio,
+  frameRef,
 }: ShareCardPreviewProps): ReactElement {
   const statsText = formatShareCardStats(card.statsCells, card.mode);
   const frameStyle =
@@ -44,6 +47,7 @@ export function ShareCardPreview({
 
   return (
     <View
+      ref={frameRef}
       testID="reflection-share-preview-frame"
       style={frameStyle}
       className="self-center overflow-hidden rounded-card border border-hairline bg-canvas"

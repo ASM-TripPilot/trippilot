@@ -2214,7 +2214,7 @@ const NOTIFICATION_INBOX_PREVIEW_SECTIONS: NotificationSection[] = [
         id: 'n2',
         icon: 'swap',
         title: "비 예보 — '○○공원' 일정이 영향받아요",
-        body: '',
+        body: "오후 2시부터 비 예보 — '○○공원' 대신 실내 장소를 추천했어요.",
         meta: 'Plan-B · 10분 전',
         unread: true,
         route: '/trips/t1/planb',
@@ -2224,7 +2224,7 @@ const NOTIFICATION_INBOX_PREVIEW_SECTIONS: NotificationSection[] = [
         id: 'n3',
         icon: 'list',
         title: '다음 일정: ○○ · 14:30 · 840m',
-        body: '',
+        body: '다음 일정: 경복궁 · 14:30 · 840m — 현재 위치에서 도보로 이동할 수 있어요. 입장 마감 전에 도착하도록 출발을 준비해 주세요.',
         meta: '일정 · 1시간 전',
         unread: false,
         route: null,
@@ -2240,7 +2240,7 @@ const NOTIFICATION_INBOX_PREVIEW_SECTIONS: NotificationSection[] = [
         id: 'n4',
         icon: 'document',
         title: '여행 기록이 정리되었습니다',
-        body: '',
+        body: '어제 다녀온 3곳의 기록을 확인해 보세요.',
         meta: '회고 · 어제',
         unread: false,
         route: '/trips/t1/records/reflection/2026-08-29',
@@ -3393,6 +3393,38 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  {
+    // pending — 조회·생성 중(TRIP-1068): 안내 본문만, 하단 CTA 없음. 실기에선 POST 왕복 동안만 보여
+    // 이 키가 육안 대조 자리다.
+    key: 'reflection-pending',
+    band: 'j',
+    label: 'j03 · 오늘의 회고 pending',
+    login: null,
+    render: () => (
+      <DailyReflectionScreen
+        face="pending"
+        narrative=""
+        editableText=""
+        stats={{
+          visitCount: 0,
+          distanceKm: 0,
+          distanceSource: 'VISIT_LINE',
+          photoCount: 0,
+        }}
+        distanceDash
+        mapNotice={null}
+        hidePhotoGrid
+        photos={[]}
+        dayTabs={[{ day: 1 }, { day: 2, today: true }, { day: 3 }]}
+        activeDay={2}
+        onSelectDay={noop}
+        onPressTab={noop}
+        onEnterEdit={noop}
+        onConfirm={noop}
+        onSaveEdit={noop}
+      />
+    ),
+  },
   // j04 여행 요약 2키(TRIP-764 개명·삭제) — 순수 뷰(`TripSummaryScreen`)를 격리 렌더한다(`@/shared/api`
   // 값 import 0 이라 프리뷰 지뢰 목 통과, 컨테이너를 별 파일로 분리해 import 사슬 전이 로드 없음).
   // jest 는 testID·행동만 잠그고 stats 3셀·지도 히어로·2톤 카드·방문목록 레이아웃·코랄 토큰·탭바는
@@ -3477,8 +3509,11 @@ export const PREVIEW_STATES: PreviewState[] = [
   },
   // j06 공유 카드 2키(TRIP-574) — 순수 뷰(`ShareCardScreen`)를 격리 렌더한다(`@/shared/api` 값 import 0
   // 이라 프리뷰 지뢰 목 통과 — 컨테이너 `ShareCardPage` 는 별 파일이라 import 사슬 전이 로드 없음).
-  // 라이브 지도·view-shot 미설치라 카드는 지도 없이 동선 목록·워터마크·하단 그라디언트로 degrade 조립.
-  // 캡처 미장전(armed:false)이라 저장/공유 버튼 줄은 운영 화면처럼 안 그려진다(TRIP-939). 포맷 전환(aspect)·워터마크·그라디언트
+  // 좌표 계약 공백이라 카드는 지도 없이 동선 목록·워터마크로 조립(TRIP-634 후속).
+  // 저장/공유 버튼 줄은 캡처 모듈 3종이 든 재빌드 빌드에서만 보이고, 그 빌드에선 여기서 눌러 실제로 앨범 저장·
+  // 공유 시트가 열린다(TRIP-1071). 재빌드 전 빌드에선 운영처럼 안 그려진다(TRIP-939). [편집]→해시태그 입력·한도
+  // 안내도 여기서 눌러 본다. 요약 미준비 안내는 페이지(`ShareCardPage`) 층이라 여기 없다 — h16 → j06 실경로로 본다.
+  // 포맷 전환(aspect)·워터마크·그라디언트
   // 오버레이 정렬·no-photo 안내 레이아웃은 픽셀이라 6-b/육안 몫 — 자율/야간이라 6-b SKIP, 이 2키가 유일한
   // 육안 대조 자리(포맷 세그를 눌러 9:16→1:1→4:5 종횡비가 바뀌는 것도 여기서 확인).
   {

@@ -16,6 +16,9 @@ import { DailyReflectionPage } from './DailyReflectionPage';
  *  - AC-6: 보고 있는 날짜가 오늘이 아니면 헤더 "하루 회고", empty 문구 "이 날 기록된 활동이 없습니다".
  *    오늘이면 기존 "오늘의 회고" / "오늘 기록된 활동이 없습니다".
  *  - AC-7: 지난 날 화면에도 소요시간 표기가 없다(INV-3).
+ *  - TRIP-1068 전제: 레코드가 없는 지난 날·오늘은 이제 생성 대상(pending)이라 empty 가 아니다. empty 는
+ *    방문 0·사진 0 레코드(결정 3)로 세운다. 일차 탭(AC-5)은 pending 에서도 남는 공통 크롬이라 레코드 없음
+ *    그대로 둔다.
  *
  * 페이지와 화면은 실물, 데이터 훅 2개(`useDailyReflection`·`useGetTripsTripId`)만 목한다 — 이 파일은
  * "페이지가 날짜를 비교해 화면에 무엇을 넘기나"만 보고, 네트워크·캐시는 save.integration 이 본다.
@@ -45,7 +48,7 @@ const BASIC_SUBTITLE = '기록이 없는 하루';
 /** 소요시간 표기 탐지기(INV-3) — reflectionStructure G6 · card.test 와 같은 식. */
 const DURATION_TEXT = /(소요|\d+\s*분|\d+\s*시간)/;
 
-/** 방문 0·사진 0 레코드 — 얼굴은 data-insufficient. */
+/** 방문 0·사진 0 레코드 — 얼굴은 empty(TRIP-1068 결정 3). */
 const BASIC_RECORD: Reflection = {
   dayDate: VIEWING,
   card: {
@@ -76,6 +79,12 @@ const BASIC_RECORD: Reflection = {
   },
   generatedAt: '2026-09-24T12:00:00Z',
   updatedAt: '2026-09-24T12:00:00Z',
+};
+
+/** 방문 1·사진 0 레코드 — 얼굴은 data-insufficient(본문이 그려진다). */
+const VISITED_RECORD: Reflection = {
+  ...BASIC_RECORD,
+  stats: { ...BASIC_RECORD.stats, visitCount: 1 },
 };
 
 function arrange(reflection: Reflection | undefined) {
@@ -162,8 +171,8 @@ describe('AC-5 · "오늘" 칩은 KST 실제 오늘인 일차에만 붙는다 (D
 });
 
 describe('AC-6 · 지난 날 헤더·empty 문구는 중립이다 (D2)', () => {
-  it('지난 날 empty 얼굴은 헤더 "하루 회고", 문구 "이 날 기록된 활동이 없습니다"다', () => {
-    arrange(undefined);
+  it('지난 날 empty 얼굴(0·0 레코드)은 헤더 "하루 회고", 문구 "이 날 기록된 활동이 없습니다"다', () => {
+    arrange(BASIC_RECORD);
 
     renderPage('2026-09-26');
 
@@ -175,7 +184,7 @@ describe('AC-6 · 지난 날 헤더·empty 문구는 중립이다 (D2)', () => {
   });
 
   it('지난 날 data 얼굴도 헤더가 "하루 회고"다', () => {
-    arrange(BASIC_RECORD);
+    arrange(VISITED_RECORD);
 
     renderPage('2026-09-26');
 
@@ -183,8 +192,8 @@ describe('AC-6 · 지난 날 헤더·empty 문구는 중립이다 (D2)', () => {
     expect(screen.queryByText('오늘의 회고')).toBeNull();
   });
 
-  it('보고 있는 날이 오늘이면 "오늘의 회고" / "오늘 기록된 활동이 없습니다"를 유지한다(짝)', () => {
-    arrange(undefined);
+  it('보고 있는 날이 오늘이면(0·0 레코드) "오늘의 회고" / "오늘 기록된 활동이 없습니다"를 유지한다(짝)', () => {
+    arrange(BASIC_RECORD);
 
     renderPage('2026-09-24');
 
@@ -198,7 +207,7 @@ describe('AC-6 · 지난 날 헤더·empty 문구는 중립이다 (D2)', () => {
 
 describe('AC-7 · 지난 날 화면에 소요시간 표기가 없다 (INV-3)', () => {
   it('지난 날 data 얼굴 전체 글자에 소요·N분·N시간이 없고, 본문은 그려진다', () => {
-    arrange(BASIC_RECORD);
+    arrange(VISITED_RECORD);
 
     renderPage('2026-09-26');
 

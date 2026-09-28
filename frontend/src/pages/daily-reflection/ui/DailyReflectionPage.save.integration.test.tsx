@@ -39,6 +39,10 @@ import { DailyReflectionPage } from './DailyReflectionPage';
  *
  * 장치(02a ★1): msw 서버가 상태를 기억한다 — PUT 이 만든 레코드를 서버 목록에 넣고 같은 값을 응답한다.
  * 그래서 캐시를 PUT 응답으로 직접 고치든(setQueryData) 목록을 다시 받든(invalidateQueries) 같은 결과다.
+ *
+ * TRIP-1068 전제: 레코드가 없는 지난 날은 진입 시 페이지가 POST 로 회고를 만든다. 서버는 방문 0 이어도
+ * BASIC 0·0 레코드를 만들어 돌려주므로(BR-U5-32) 첫 화면 empty 는 "그 0·0 레코드"의 얼굴이고, 직접 쓴
+ * 글은 그 레코드에 수정본으로 붙는다(stats 는 0·0 그대로). 오늘은 `TODAY` 로 고정해 전제를 시계에서 뗀다.
  */
 
 // 생성 클라이언트의 인증 계층(authedClient)이 @/shared/storage 를 정적으로 문다.
@@ -64,6 +68,8 @@ jest.mock('expo-router', () => ({
 const BASE = 'http://localhost:8080/api/v1';
 const TRIP_ID = 'trip-980';
 const DAY = '2026-09-24';
+/** 여행이 끝난 뒤 — DAY 는 지난 날이라 진입 시 생성(POST) 대상이다. */
+const TODAY = '2026-09-26';
 const PUT_PATH = `/api/v1/trips/${TRIP_ID}/reflections/${DAY}`;
 
 const WRITTEN = '바다를 보며 천천히 걸은 하루';
@@ -181,6 +187,7 @@ let serverItems: Reflection[];
 let putReply: PutReply;
 let putBodies: EditReflectionRequest[];
 let putPaths: string[];
+let postCount: number;
 
 function putCount(): number {
   return putBodies.length;
@@ -195,6 +202,7 @@ beforeEach(() => {
   putReply = 200;
   putBodies = [];
   putPaths = [];
+  postCount = 0;
   setAccessToken('a');
   server.use(
     http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(TRIP)),
@@ -202,6 +210,30 @@ beforeEach(() => {
     http.get(`${BASE}/trips/:tripId/reflections`, () =>
       HttpResponse.json({ items: serverItems })
     ),
+    // 생성 — 방문 0 인 날도 BASIC 0·0 레코드를 만들어 서버 목록에 넣는다(수정본 없음 → empty 얼굴).
+    http.post(`${BASE}/trips/:tripId/reflections/:dayDate`, ({ params }) => {
+      postCount += 1;
+      const made: Reflection = {
+        dayDate: String(params.dayDate),
+        card: BASIC_DRAFT,
+        draftCard: BASIC_DRAFT,
+        editedCard: null,
+        source: 'BASIC',
+        stats: {
+          visitCount: 0,
+          distanceKm: 0,
+          distanceSource: 'VISIT_LINE',
+          photoCount: 0,
+        },
+        generatedAt: '2026-09-26T00:30:00Z',
+        updatedAt: '2026-09-26T00:30:00Z',
+      };
+      serverItems = [
+        ...serverItems.filter((item) => item.dayDate !== made.dayDate),
+        made,
+      ];
+      return HttpResponse.json(made);
+    }),
     http.put(
       `${BASE}/trips/:tripId/reflections/:dayDate`,
       async ({ request, params }) => {
@@ -253,13 +285,13 @@ function renderPage() {
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
   }
-  render(<DailyReflectionPage tripId={TRIP_ID} date={DAY} />, {
+  render(<DailyReflectionPage tripId={TRIP_ID} date={DAY} today={TODAY} />, {
     wrapper: Wrapper,
   });
   return client;
 }
 
-/** 첫 화면(empty) 을 기다렸다가 "직접 회고 작성" → 글 입력 → 저장. */
+/** 첫 화면(생성된 0·0 레코드의 empty) 을 기다렸다가 "직접 회고 작성" → 글 입력 → 저장. */
 async function composeAndSave(text: string) {
   await screen.findByTestId('reflection-daily-empty');
   fireEvent.press(screen.getByTestId('reflection-daily-compose'));
@@ -282,7 +314,8 @@ describe('AC-1 · 저장하면 같은 화면에서 쓴 글이 보인다 (BR-U5-3
 
     await composeAndSave(WRITTEN);
 
-    // 앵커 — PUT 이 이 날짜로 한 번 나갔고, 쓴 글이 카드의 cover.subtitle 로 실렸다.
+    // 앵커 — 진입 생성(POST)은 한 번, PUT 이 이 날짜로 한 번 나갔고, 쓴 글이 cover.subtitle 로 실렸다.
+    expect(postCount).toBe(1);
     await waitFor(() => expect(putCount()).toBe(1));
     expect(putPaths).toEqual([PUT_PATH]);
     expect(JSON.parse(putBodies[0].card).cover.subtitle).toBe(WRITTEN);
@@ -382,6 +415,8 @@ describe('보강 · 이미 회고가 있는 날을 고쳐 저장한다 (BR-U5-35
     expect(cached?.items?.filter((item) => item.dayDate === DAY)).toHaveLength(
       1
     );
+    // (e) 레코드가 이미 있던 날이라 진입 생성(POST)은 없었다(TRIP-1068 AC-7).
+    expect(postCount).toBe(0);
   });
 });
 

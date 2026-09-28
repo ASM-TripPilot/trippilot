@@ -74,6 +74,20 @@ const config: ExpoConfig = {
         locationAlwaysAndWhenInUsePermission: false,
       },
     ],
+    // TRIP-1071 공유 카드 앨범 저장 — 추가 전용 문구만 둔다. 읽기 문구는 false(불리언)로 지운다(쓰지 않음,
+    // 앱은 requestPermissionsAsync(true) 로 추가 권한만 요청). granularPermissions [] 는 READ_MEDIA_IMAGES·
+    // VIDEO·AUDIO 선언만 뺀다 — READ_MEDIA_VISUAL_USER_SELECTED·READ/WRITE_EXTERNAL_STORAGE 는 패키지가
+    // 옵션과 무관하게 선언한다(Android 출시 시 Play 사진·동영상 권한 신고 대상인지 확인 필요).
+    // 사진 첨부(앨범 읽기)가 들어오면 photosPermission·granularPermissions 를 되돌리고 재빌드해야 한다.
+    [
+      'expo-media-library',
+      {
+        savePhotosPermission:
+          'TripPilot가 여행 공유 카드를 사진 앨범에 저장하기 위해 사진 추가 권한을 사용합니다.',
+        photosPermission: false,
+        granularPermissions: [],
+      },
+    ],
     // 튜플로 줘야 한다 — 문자열 단독이면 레거시 config.splash 경로로 빠진다.
     ['expo-splash-screen', { backgroundColor: '#ffffff' }],
     'expo-notifications',

@@ -19,8 +19,8 @@ paths:
 | `model/statsCard.test.ts` | undefined/null→0s · 완전 입력 통과 · 숫자 타입 |
 | `model/missingParts.ts` | `missingParts(stats) → {hidePhotoGrid, mapNotice, distanceDash}` — 부분 데이터 시 누락을 명시한다(BR-U5-34, 조용히 칸을 지우지 않는다). `distanceDash`는 값이 아니라 플래그 |
 | `model/missingParts.test.ts` | 각 플래그 on/off 짝 |
-| `model/useDailyReflection.ts` | 생성 3훅만 감싼다(새 HTTP 0) — 목록 GET에서 `dayDate` 항목을 고르고(`items?.find` — `items`도 옵셔널 체이닝해야 `{items:null}`에 안 죽는다, [[옵셔널 체이닝은 매 단계 필요]]) create/saveEdit 래핑. `source`는 보존만(BR-U5-33). `saveEdit(text) → Promise<boolean>`은 **PUT** `{ card: buildEditCard(reflection?.card, text) }` — 성공 시 목록 캐시의 그 날 항목을 서버 응답으로 교체(캐시가 비면 무효화), 실패 시 캐시 무변경 |
-| `ui/DailyReflectionScreen.tsx` | 무상태 4얼굴(default·data-insufficient·empty·error) + 편집 모드. 편집 진입은 데이터 얼굴이면 헤더 `reflection-daily-edit`, empty/error면 하단 CTA `reflection-daily-compose`. 저장은 `canSave = text.trim().length>0`(`disabled`+`accessibilityState.disabled` 짝), `onSaveEdit`가 Promise면 성공일 때만 편집을 닫고 실패면 안내 문구를 보인다. 편집 상한 **4000자**(서버 권위 `EditReflectionRequest.maxLength`). 지도는 실 좌표가 있을 때만 `MapView`(`LOCKED_CALLERS` 등재), 없으면 placeholder — 계약에 좌표가 없어 오늘은 늘 placeholder([[degrade 스텁 — 못 켜는 기능은 정직하게 꺼둔다]]). ⚠️ 로딩 얼굴이 없어 조회 중엔 empty 문구가 뜨고, 저장 중 취소하면 이후 PUT 실패가 표면에 안 뜬다. 공유 아이콘은 `onShare`가 있을 때만(`canShare`는 페이지가 trip `status === 'ENDED'`로 판정, BR-U5-48) |
+| `model/useDailyReflection.ts` | POST(생성)·PUT(저장)·GET(목록) 훅을 감싼다(새 HTTP 0). 목록 GET에서 `dayDate` 항목을 고르고(`items?.find` — `items`도 옵셔널 체이닝해야 `{items:null}`에 안 죽는다, [[옵셔널 체이닝은 매 단계 필요]]) create/saveEdit 래핑. `source`는 보존만(BR-U5-33). POST·PUT 성공은 같은 지역 함수 `replaceDay`로 목록 캐시의 그 날 항목을 응답으로 교체(캐시가 비면 무효화)한다 — 재조회 없이 화면이 갱신된다(TRIP-1068, TRIP-980과 동형). `isCreateError`(=`post.isError`)가 생성 실패를 페이지에 노출한다(BR-U5-36) |
+| `ui/DailyReflectionScreen.tsx` | 무상태 **5얼굴**(default·data-insufficient·empty·error·**pending**, TRIP-1068) + 편집 모드. `pending`은 조회·생성 진행 중 안내(`StateNotice` 재사용, `ShareCardPage.tsx` 선례)만 보이고 하단 CTA는 없다. 편집 진입은 데이터 얼굴이면 헤더 `reflection-daily-edit`, empty/error면 하단 CTA `reflection-daily-compose`. 저장은 `canSave = text.trim().length>0`(`disabled`+`accessibilityState.disabled` 짝), `onSaveEdit`가 Promise면 성공일 때만 편집을 닫고 실패면 안내 문구를 보인다. 편집 상한 **4000자**(서버 권위 `EditReflectionRequest.maxLength`). 지도는 실 좌표가 있을 때만 `MapView`(`LOCKED_CALLERS` 등재), 없으면 placeholder — 계약에 좌표가 없어 오늘은 늘 placeholder([[degrade 스텁 — 못 켜는 기능은 정직하게 꺼둔다]]). ⚠️ 얼굴 판정은 "레코드 존재"를 "생성 실패"보다 먼저 본다 — `post.isError`는 PUT 성공 뒤에도 남아 두 조건이 동시에 참일 수 있는데 이 순서를 지키는 단위 테스트가 없다(03b W-1, 문제로그 없이 각주로만 인계). 공유 아이콘은 `onShare`가 있을 때만(`canShare`는 페이지가 trip `status === 'ENDED'`로 판정, BR-U5-48) |
 | `ui/DailyReflectionScreen.test.tsx` | empty/error CTA·편집 모드 `maxLength`·저장 활성 짝·렌더 스모크 |
 | `ui/ReflectionStatsRow.tsx` | `reflection-daily-stats` 3열(방문·이동·사진), `distanceDash`면 "—". 소요시간 문자열 0(INV-3) |
 | `ui/NarrativeBlock.tsx` | `reflection-daily-narrative` — 완성 표시본을 그대로 렌더. `draftCard`·`editedCard`·`resolveDisplayNarrative`를 참조하지 않는다(AC-8 소스 강제). 내부 주석의 옛 필드명은 낡았다 |
@@ -45,15 +45,18 @@ paths:
 
 ## j06 공유 카드
 
-카드는 지도·경로 핀·사진을 그리지 않는다 — 계약에 좌표가 없다. 워터마크·동선 목록·그라디언트 오버레이로만 조립한다. 캡처·저장·공유 모듈이 미설치라 `captureShareImage()`는 `{armed:false}` degrade 스텁이다(`traps-reflection.md`).
+카드는 지도·경로 핀·사진을 그리지 않는다 — 계약에 좌표가 없다. 워터마크·동선 목록·그라디언트 오버레이로만 조립한다. 캡처(PNG)·앨범 저장·OS 공유·해시태그 인라인 편집은 TRIP-1071로 실구현(네이티브 3종 — `traps-reflection.md`, 재빌드 전엔 버튼 줄 자체가 안 뜬다).
 
 | 파일 | 역할 |
 |---|---|
-| `model/shareCard.ts` | `SHARE_FORMATS`(story·square·feed) · `buildShareCard({summary,trip,format})` 카드 VM(j04 모델 재사용, `totalPhotos===0`→`'no-photo'`, duration 필드 0) · `validateCaption`/`validateHashtags`(온디바이스만) · `captureShareImage()`. `periodText`는 시작·종료 **둘 다** 있을 때만 조합([[반쪽 방어 (half-applied guard)]]) |
+| `model/shareCard.ts` | `SHARE_FORMATS`(story·square·feed) · `buildShareCard({summary,trip,format})` 카드 VM(j04 모델 재사용, `totalPhotos===0`→`'no-photo'`, duration 필드 0) · `validateCaption`/`validateHashtags`(온디바이스만, 해시태그 인라인 편집이 재사용) · `periodText`는 시작·종료 **둘 다** 있을 때만 조합([[반쪽 방어 (half-applied guard)]]). 옛 `captureShareImage()` degrade 스텁은 제거됨(→ `model/shareCapture.ts`) |
 | `model/shareCard.test.ts` | 조립·mode·aspect·폼검증·INV-3(`JSON.stringify` 소요시간 0)·INV-4·null 방어 |
-| `ui/ShareCardScreen.tsx` | 무상태(로컬 상태는 선택 포맷·degrade 안내뿐) — 저장/공유 press → `armed:false`면 `reflection-share-degrade` 안내 |
-| `ui/ShareCardScreen.test.tsx` | 조립·포맷·INV-4 렌더 |
-| `ui/ShareCardPreview.tsx` | 카드 프리뷰 — `aspectRatio`를 인라인 `style`로 노출(`reflection-share-preview-frame`) |
+| `model/shareCapture.ts` | (신규) `isShareCaptureArmed()`(모듈 3종 존재 판정, 없으면 null 조회 — 패키지 정적 import 없음) · `saveShareCardImage(ref)`/`shareShareCardImage(ref)`(캡처→저장/공유, 실패는 전부 `{status:'failed'}` 반환, throw 없음) — `shareCaptureNative.ts`를 `await import`로만 부른다 |
+| `model/shareCapture.test.ts` | (신규) armed 판정 3종 개별 부재·저장/공유 성공·권한거부·각 단계 reject |
+| `model/shareCaptureNative.ts` | (신규) 캡처 3종 패키지를 **정적 import**하는 유일한 파일(re-export). `features/reflection/` 밖으로 옮기면 `recordPhotoBinaryGuard` 등 다른 스캔 가드에 걸린다(`traps-reflection.md`) |
+| `ui/ShareCardScreen.tsx` | `useRef<View>`(`frameRef`)를 `ShareCardPreview`에 내려 캡처 대상 지정 · 저장/공유 press(armed일 때만 버튼 노출) · 해시태그 인라인 편집(`hashtags`/`draft`/`draftError` 로컬 상태, 서버 저장 없음) · `reflection-share-result`(성공/실패/거부 공용 안내) |
+| `ui/ShareCardScreen.test.tsx` | armed 판정별 버튼 유무·저장/공유 성공·권한거부·해시태그 편집 검증(개수·길이)·1:1 포맷 캡처 대상 aspectRatio |
+| `ui/ShareCardPreview.tsx` | 카드 프리뷰 — `aspectRatio`를 인라인 `style`로 노출, `frameRef`를 프레임 View 자체에 직결(`reflection-share-preview-frame`, 래퍼에 달면 캡처 대상 불일치) |
 | `ui/FormatSegment.tsx` | 3셀 포맷 세그(`reflection-share-format-seg`) |
 | `ui/ShareCardGlyphs.tsx` | download·share·watermark SVG |
 
@@ -75,4 +78,4 @@ paths:
 
 ## 관련
 
-- 개념: [[회고 폴백 3단 (방어층 — 서버가 표시본 결정)]] · [[옵셔널 체이닝은 매 단계 필요]] · [[degrade 스텁 — 못 켜는 기능은 정직하게 꺼둔다]] · [[가드의 사정거리 (opt-in 등재는 넓히되 기존 사각은 그대로다)]] · [[소스 스캔 가드의 폴더 전수와 자동 편입]] · [[반쪽 방어 (half-applied guard)]] · [[페이지 조립은 jest 무심판]]
+- 개념: [[회고 폴백 3단 (방어층 — 서버가 표시본 결정)]] · [[옵셔널 체이닝은 매 단계 필요]] · [[degrade 스텁 — 못 켜는 기능은 정직하게 꺼둔다]] · [[가드의 사정거리 (opt-in 등재는 넓히되 기존 사각은 그대로다)]] · [[소스 스캔 가드의 폴더 전수와 자동 편입]] · [[반쪽 방어 (half-applied guard)]] · [[페이지 조립은 jest 무심판]] · [[마운트당 1회 발사 가드 (firedRef)]] · [[invalidateQueries (쿼리 무효화)]]

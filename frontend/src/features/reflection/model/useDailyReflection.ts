@@ -34,6 +34,8 @@ export interface UseDailyReflectionResult {
   refetch: () => void;
   /** 회고 생성·재생성(BR-U5-32). */
   create: () => void;
+  /** TRIP-1068 · 마지막 생성(POST)이 실패했나 — 페이지가 empty 대신 error 얼굴로 가른다(INV-4). */
+  isCreateError: boolean;
   /**
    * 회고 카드 수정 — 초안은 남는다(BR-U5-35, `EditReflectionRequest.card` · subtitle 만 교체).
    * 저장 성공이면 true, 실패면 false 로 풀린다 — 화면이 편집을 닫을지·실패를 알릴지 정한다(INV-4).
@@ -46,33 +48,34 @@ export function useDailyReflection(
   date: string
 ): UseDailyReflectionResult {
   const list = useGetTripsTripIdReflections(tripId);
-  const post = usePostTripsTripIdReflectionsDayDate();
   const queryClient = useQueryClient();
-  // 저장 성공 = 서버가 돌려준 Reflection 으로 목록 캐시의 그 날짜 항목을 갈아 끼운다(TRIP-980).
+  // 저장·생성 성공 = 서버가 돌려준 Reflection 으로 목록 캐시의 그 날짜 항목을 갈아 끼운다(TRIP-980·1068).
   // 재조회(invalidate)가 아니라 직접 갱신이라 응답 도착과 동시에 화면이 바뀐다 — 재조회 틈에
   // empty 얼굴이 비치지 않는다. 훅 수준 onSuccess 라 화면을 떠나도 캐시는 고쳐진다.
   // 목록을 아직 못 받은 캐시(조회 실패 얼굴에서 직접 작성, BR-U5-36)는 다른 날짜가 빠진 목록을
   // 지어내지 않고 재조회한다.
+  const replaceDay = (saved: Reflection) => {
+    const key = getGetTripsTripIdReflectionsQueryKey(tripId);
+    const current = queryClient.getQueryData<ReflectionList>(key);
+    if (!current) {
+      void queryClient.invalidateQueries({ queryKey: key });
+      return;
+    }
+    queryClient.setQueryData<ReflectionList>(key, {
+      ...current,
+      items: [
+        ...(current.items ?? []).filter(
+          (item) => item.dayDate !== saved.dayDate
+        ),
+        saved,
+      ],
+    });
+  };
+  const post = usePostTripsTripIdReflectionsDayDate({
+    mutation: { onSuccess: replaceDay },
+  });
   const put = usePutTripsTripIdReflectionsDayDate({
-    mutation: {
-      onSuccess: (saved) => {
-        const key = getGetTripsTripIdReflectionsQueryKey(tripId);
-        const current = queryClient.getQueryData<ReflectionList>(key);
-        if (!current) {
-          void queryClient.invalidateQueries({ queryKey: key });
-          return;
-        }
-        queryClient.setQueryData<ReflectionList>(key, {
-          ...current,
-          items: [
-            ...(current.items ?? []).filter(
-              (item) => item.dayDate !== saved.dayDate
-            ),
-            saved,
-          ],
-        });
-      },
-    },
+    mutation: { onSuccess: replaceDay },
   });
 
   // ?.items 까지 방어한다(?.data 만으론 부족) — 계약 위반 응답 {}/{items:null} 에서
@@ -89,6 +92,8 @@ export function useDailyReflection(
     create: () => {
       post.mutate({ tripId, dayDate: date });
     },
+    // 목 훅(`{ mutate }` 만)에선 undefined → false = 미실패로 읽는다.
+    isCreateError: post.isError === true,
     saveEdit: (text: string) =>
       new Promise<boolean>((resolve) => {
         put.mutate(

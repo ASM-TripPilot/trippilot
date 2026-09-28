@@ -21,7 +21,7 @@ paths:
 | `model/groupByDay.ts` | `groupByDay(items, now) → {today, earlier}` — 로컬 같은 날이면 오늘. 입력 순서 보존, 유실·중복 0(예제 테스트, PBT 아님) |
 | `model/useNotificationInbox.ts` | `useGetMeNotifications`를 감싼 조회 훅(`{items, isLoading, isError}`). ⚠️ 소비처 `NotificationInboxPage`가 `isError`를 안 읽어 조회 실패가 "알림 없음"으로 접힌다. `markAllRead`는 `postMeNotificationsReadAll()` 1회 → `await invalidateQueries` → boolean — 이 `await`를 지키는 테스트는 없다(지우면 재조회 전 버튼이 풀려 깜빡임) |
 | `ui/NotificationInboxScreen.tsx` | 순수 프레젠테이션 — 주입 `sections`·`isEmpty`·`onNavigate`만 받고 재판정하지 않는다. 미읽음 dot은 조건부 `View` — SVG `fill` 토글 금지(개념 [[글리프 fill 색 사각]]). "모두 읽음"은 `hasUnread`일 때만, 실패 안내는 `markAllError && hasUnread`일 때만. empty는 로컬 마크업(`StateNotice` 크기와 다름) |
-| `ui/NotificationRow.tsx` | 행 1건 — PLAN_B만 인라인 액션(`notification-inbox-action`) press, REFLECTION은 행 전체 press |
+| `ui/NotificationRow.tsx` | 행 1건 — 텍스트열은 제목 → **본문**(`notification-inbox-body`, `row.body.trim() !== ''`일 때만, `numberOfLines={2}` 화면만 자름) → 메타 순. PLAN_B만 인라인 액션(`notification-inbox-action`) press, 그 밖은 행 전체 press(본문 자체는 onPress 없음 — 눌러도 부모로 버블). 머리 주석의 "행 press는 REFLECTION일 때만"은 낡음(TRIP-1075 발견, 무수정) — 실제는 route 있고 인라인 액션 없으면 kind 무관 |
 | `ui/NotificationInboxGlyphs.tsx` | `NotificationKindIcon`(5 kind 디스패처)·`NotifBellGlyph`(empty). `strokeWidth` 실효 굵기는 `strokeWidth × size ÷ 24` — size만 키우면 선이 굵어진다 |
 
 ## 관련

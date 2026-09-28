@@ -24,7 +24,7 @@ import {
   BackChevronGlyph,
   InfoCircleGlyph,
 } from '@/features/itinerary/ui/ItineraryGlyphs';
-import { captureShareImage } from '@/features/reflection/model/shareCard';
+import { isShareCaptureArmed } from '@/features/reflection/model/shareCapture';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import {
   getGetTripsTripIdItineraryQueryKey,
@@ -53,7 +53,7 @@ import { NoBaseNoticeCard } from './NoBaseNoticeCard';
  *     로 갈라 `resolvePlanState` 의 우선순위가 실패 겹침을 정리한다(INV-4).
  *  3. **날짜 전환은 재조회를 유발하지 않는다** — 활성 날은 `useState` 라 쿼리 키가 그대로고, 캐시된
  *     쿼리는 리렌더에 다시 나가지 않는다. Zustand 는 pages 층 금지라 로컬 상태로 든다.
- *  4. **탈출구는 4얼굴 전부에 있다**(TRIP-402) — loading·notFound·failed·listed 어디에 착지해도
+ *  4. **탈출구는 얼굴 전부에 있다**(TRIP-402) — 삭제된 여행(TRIP-1075)·loading·notFound·failed·listed 어디에 착지해도
  *     `handleBack` 을 공유하는 뒤로가기가 있고, 뒤로 갈 히스토리가 없으면(딥링크로 직접 진입)
  *     조용히 무동작하지 않고 홈(`/(tabs)`)으로 간다(침묵 no-op 금지 · INV-4). 빈 얼굴(notFound)은
  *     나갈 길 대신 "일정 만들기" 다음 행동도 준다.
@@ -242,6 +242,21 @@ export function ItineraryPlanPage({
     days,
   });
 
+  // 여행 404(삭제)는 일정 조회와 무관하게 먼저 가른다 — 삭제된 여행은 일정도 404 라 notFound 가
+  // 이기면 '일정 만들기'라는 거짓 다음 행동이 뜬다(INV-4). 캐시에 옛 trip.data 가 남아 있어도 오류로 판정.
+  if (isNotFound(trip.error)) {
+    return (
+      <PlanFace
+        testID="itinerary-view-trip-deleted"
+        icon={<InfoCircleGlyph size={32} tone="primaryText" />}
+        title="삭제된 여행이에요"
+        description="이 여행은 삭제되어 일정을 볼 수 없어요"
+        onBack={handleBack}
+        actions={[]}
+      />
+    );
+  }
+
   if (state.kind === 'loading') {
     return (
       <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
@@ -348,9 +363,10 @@ export function ItineraryPlanPage({
       // 확정(h16)은 읽기전용이라 [일정 수정](h12)·[공유하기](j06) 2버튼(둘 다 활성 · AC-2). 미확정(h14)은
       // [일정 저장하기] 1버튼 — PARTIAL(생성 중)이면 확정을 예방 잠근다(계약 409 의 클라 사본 · 01b D6).
       // [공유하기]는 공유 카드 캡처가 장전됐을 때만 싣는다(TRIP-939 Q2 — 미장전이면 j06 이 막다른 화면).
+      // 요약 ready 는 보지 않는다(TRIP-1071 결정 4c — 여행 전이면 j06 이 '여행이 끝나면' 안내로 막는다).
       cta={
         isConfirmed
-          ? captureShareImage().armed
+          ? isShareCaptureArmed()
             ? [
                 { label: '일정 수정', variant: 'outline', onPress: goEdit },
                 { label: '공유하기', variant: 'primary', onPress: goShare },
