@@ -171,7 +171,7 @@ class EditItineraryService(
                         distanceRange = distanceByLeg[Triple(d.date, d.slots.getOrNull(slotIdx - 1)?.poiId, s.poiId)],
                         placementReason = reasonBySlot[d.date to s.poiId],
                         // 저장 후에도 "무엇이 왜 문제인지"가 남아야 한다(BR-U3-13 지속 가시화).
-                        violationReason = if (prior != null) prior.reasonOf(d.date, s.poiId) else ViolationText.reasonOf(hit),
+                        violationReason = if (prior != null) prior.reasonOf(d.date, s.poiId, s.startAt, s.endAt) else ViolationText.reasonOf(hit),
                     )
                 },
             )

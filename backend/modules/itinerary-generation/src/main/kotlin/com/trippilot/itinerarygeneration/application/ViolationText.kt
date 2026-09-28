@@ -13,11 +13,35 @@ import org.slf4j.LoggerFactory
  */
 object ViolationText {
 
-    fun reasonOf(hits: List<Violation>): String? =
-        BoundedText.clamp(
-            hits.mapNotNull { it.detail }.distinct().joinToString(" · ").ifBlank { null },
+    /**
+     * 위반 → **사용자 정성 문구**(TRIP-1030 · 사용자 결정 2026-09-27: INV-3 을 "소요시간 **숫자** 비표시"로
+     * 좁히고 정성 문구는 허용). 상대의 detail 은 "이동 54분 필요, 간격 -60분" · "영업시간 밖: 543~618" ·
+     * "0요일 휴무" 같은 숫자 소요시간·원시 분값·숫자 요일이라 그대로 내보내면 계약 위반이자 외계어였다
+     * (QA #079 #064). **type 만 믿고 문구를 우리가 소유한다** — 상대 detail 문자열 형식에 화면이 결합되지
+     * 않게. detail 은 진단용 로그로만 남긴다.
+     */
+    fun reasonOf(hits: List<Violation>): String? {
+        if (hits.isEmpty()) return null
+        hits.mapNotNull { it.detail }.takeIf { it.isNotEmpty() }
+            ?.let { log.debug("위반 상세(내부 진단용): {}", it) }
+        return BoundedText.clamp(
+            hits.map { phraseOf(it.type) }.distinct().joinToString(" · "),
             BoundedText.VIOLATION_REASON_MAX,
         )
+    }
+
+    /**
+     * 닫힌 번역 — AI 어휘(HC1~HC4)와 상징 이름(테스트·수리 경로) 둘 다 받는다. **모르는 type 도
+     * 한국어 일반 문구다** — 영문 코드가 화면에 새는 것이 침묵보다 나쁘고, 위반 자체를 숨기면
+     * 거짓 음성이다(INV-4).
+     */
+    private fun phraseOf(type: String): String = when (type.uppercase()) {
+        "HC1", "OPENING_HOURS" -> "영업시간과 맞지 않아요"
+        "HC2", "TRAVEL_TIME" -> "앞 장소에서 이동할 시간이 빠듯해요"
+        "HC3", "MUST_VISIT", "HC3_UNPLACED" -> "꼭 갈 곳이 일정에 들어가지 못했어요"
+        "HC4", "DAY_WINDOW" -> "그 날의 일정 시간대를 벗어났어요"
+        else -> "일정 조건과 맞지 않아요"
+    }
 
     /**
      * 어느 슬롯에도 붙지 못한 위반을 드러낸다. 슬롯 단위 표시가 불가능한 종류라 화면에 못 싣는 대신,

@@ -7,6 +7,7 @@ import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import org.slf4j.LoggerFactory
 import java.time.LocalDate
+import java.time.LocalTime
 import java.util.UUID
 
 /**
@@ -62,5 +63,19 @@ internal class PriorViolations(previous: Itinerary) {
 
     fun flagOf(date: LocalDate, poiId: UUID): Boolean = bySlot[date to poiId]?.hasViolation ?: false
 
-    fun reasonOf(date: LocalDate, poiId: UUID): String? = bySlot[date to poiId]?.violationReason
+    /**
+     * 사유 승계 — **시각이 그대로일 때만**(TRIP-1030 결정 3). 판정 보류 중 시각을 옮긴 슬롯에
+     * 옛 사유를 그대로 붙이면 바뀐 시각에 대해 참이 아닐 수 있는 문장이 나간다(QA 관측).
+     * 플래그는 유지한 채(위반이 풀렸다고 말하지 않는다 — 거짓 음성 회피) 문구만 중립으로 바꾼다.
+     */
+    fun reasonOf(date: LocalDate, poiId: UUID, startAt: LocalTime, endAt: LocalTime): String? {
+        val prior = bySlot[date to poiId] ?: return null
+        if (!prior.hasViolation) return prior.violationReason
+        return if (prior.startAt == startAt && prior.endAt == endAt) prior.violationReason else STALE_REASON
+    }
+
+    companion object {
+        /** 보류 중 시각이 바뀐 슬롯의 중립 문구 — 재검증이 돌면 실제 판정으로 대체된다. */
+        const val STALE_REASON = "시간이 바뀌어 다시 확인이 필요해요"
+    }
 }
