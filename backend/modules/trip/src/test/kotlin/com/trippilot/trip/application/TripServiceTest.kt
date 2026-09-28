@@ -26,6 +26,11 @@ private class FakeRepo : TripRepository {
     override fun findByAccount(accountId: UUID) = store.values.filter { it.accountId == accountId }
 }
 
+/** 발행만 삼키는 싱크 — 발행 여부는 삭제 스펙이 따로 본다(TRIP-1061). */
+private object NoTripEvents : com.trippilot.core.event.DomainEventPublisher {
+    override fun publish(event: com.trippilot.core.event.DomainEvent) = Unit
+}
+
 class TripServiceTest : StringSpec({
 
     val clock = Clock.fixed(Instant.parse("2026-07-26T00:00:00Z"), ZoneOffset.UTC)
@@ -38,7 +43,7 @@ class TripServiceTest : StringSpec({
     ) = CreateTripCommand(null, LocalDate.parse(start), LocalDate.parse(end), party, null, null, mapOf("pace" to "알차게"), dests)
 
     "생성 후 소유자 조회·목록(제목 자동생성·취향 동결)" {
-        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), clock)
+        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), NoTripEvents, clock)
         val t = svc.create(acc, cmd())
         t.title shouldBe "제주 여행"
         t.preferenceSnapshot["pace"] shouldBe "알차게"
@@ -47,19 +52,19 @@ class TripServiceTest : StringSpec({
     }
 
     "타 계정 리소스는 404" {
-        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), clock)
+        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), NoTripEvents, clock)
         val t = svc.create(acc, cmd())
         shouldThrow<ResourceNotFound> { svc.get(other, t.tripId) }
     }
 
     "국내 밖 목적지는 400(INV-U1-12)" {
-        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), clock)
+        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), NoTripEvents, clock)
         shouldThrow<ValidationFailed> { svc.create(acc, cmd(dests = listOf(TripDestination(0, "도쿄", 2)))) }
     }
 
     // 이전 구현은 지역명 28개와 문자열 일치를 봤다 — 아래가 전부 막혔다(실측).
     "목록에 없던 시·군·구도 국내로 통과한다" {
-        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), clock)
+        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), NoTripEvents, clock)
         listOf("천안", "속초시", "사하구").forEach { region ->
             svc.create(acc, cmd(dests = listOf(TripDestination(0, region, 2)))).tripId
         }
@@ -74,7 +79,7 @@ class TripServiceTest : StringSpec({
      * 그쪽이 카탈로그 경로라 외부를 부르지 않는다.
      */
     "확인하지 못한 목적지는 거절한다" {
-        val svc = TripService(FakeRepo(), FakeDomestic(down = true), FakeRegions(), clock)
+        val svc = TripService(FakeRepo(), FakeDomestic(down = true), FakeRegions(), NoTripEvents, clock)
         val e = shouldThrow<ValidationFailed> {
             svc.create(acc, cmd(dests = listOf(TripDestination(0, "어딘가", 2))))
         }
@@ -83,7 +88,7 @@ class TripServiceTest : StringSpec({
     }
 
     "거절 문구가 사유별로 갈린다" {
-        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), clock)
+        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), NoTripEvents, clock)
         val e = shouldThrow<ValidationFailed> {
             svc.create(acc, cmd(dests = listOf(TripDestination(0, "도쿄", 2))))
         }
@@ -91,19 +96,19 @@ class TripServiceTest : StringSpec({
     }
 
     "여러 목적지 중 하나만 국외여도 막는다" {
-        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), clock)
+        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), NoTripEvents, clock)
         shouldThrow<ValidationFailed> {
             svc.create(acc, cmd(dests = listOf(TripDestination(0, "제주", 1), TripDestination(1, "도쿄", 1))))
         }
     }
 
     "종료일 < 시작일은 400(INV-U1-11)" {
-        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), clock)
+        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), NoTripEvents, clock)
         shouldThrow<ValidationFailed> { svc.create(acc, cmd(start = "2026-08-04", end = "2026-08-01")) }
     }
 
     "도시 박수 합이 기간 초과면 400(INV-U1-14)" {
-        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), clock)
+        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), NoTripEvents, clock)
         // 3박4일인데 제주 3 + 부산 2 = 5박 > 3
         shouldThrow<ValidationFailed> {
             svc.create(acc, cmd(dests = listOf(TripDestination(0, "제주", 3), TripDestination(1, "부산", 2))))
@@ -111,7 +116,7 @@ class TripServiceTest : StringSpec({
     }
 
     "편집은 가변필드 대체" {
-        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), clock)
+        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), NoTripEvents, clock)
         val t = svc.create(acc, cmd())
         val edited = svc.edit(acc, t.tripId, EditTripCommand("내 여행", LocalDate.parse("2026-08-01"), LocalDate.parse("2026-08-03"), 4, null, null, listOf(TripDestination(0, "부산", 2))))
         edited.title shouldBe "내 여행"
@@ -121,7 +126,7 @@ class TripServiceTest : StringSpec({
 
     // ── 행정구역 표준코드 채우기(TRIP-361) ─────────────────────────────────────
     "확정되는 지역명은 표준코드가 채워진다" {
-        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), clock)
+        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), NoTripEvents, clock)
 
         val t = svc.create(acc, cmd(dests = listOf(TripDestination(0, "제주", 3))))
 
@@ -129,7 +134,7 @@ class TripServiceTest : StringSpec({
     }
 
     "별칭으로 들어와도 같은 코드로 모인다 — 표기 흔들림이 저장에 남지 않는다" {
-        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), clock)
+        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), NoTripEvents, clock)
 
         // 사용자가 '제주도'라고 골라도 저장되는 코드는 '제주'와 같아야 한다.
         val t = svc.create(acc, cmd(dests = listOf(TripDestination(0, "제주도", 3))))
@@ -143,7 +148,7 @@ class TripServiceTest : StringSpec({
      * 하나를 집으면 부산 중구를 고른 사용자에게 서울 중구가 조용히 박힌다.
      */
     "동명이지역은 코드를 비운다 — 임의로 하나 집지 않는다" {
-        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), clock)
+        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), NoTripEvents, clock)
 
         val t = svc.create(acc, cmd(dests = listOf(TripDestination(0, "중구", 3))))
 
@@ -156,7 +161,7 @@ class TripServiceTest : StringSpec({
      * 결과를 그대로 싣는 경로다.
      */
     "코드를 주면 이름이 애매해도 그 코드로 확정된다" {
-        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), clock)
+        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), NoTripEvents, clock)
 
         val t = svc.create(acc, cmd(dests = listOf(TripDestination(0, "중구", 3, regionCode = "26170"))))
 
@@ -169,7 +174,7 @@ class TripServiceTest : StringSpec({
      * 그쪽은 "정하지 못했다"이고 이쪽은 "틀린 것을 받았다"이다.
      */
     "없는 코드를 주면 거절한다 — 조용히 이름으로 되돌아가지 않는다" {
-        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), clock)
+        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), NoTripEvents, clock)
 
         shouldThrow<ValidationFailed> {
             svc.create(acc, cmd(dests = listOf(TripDestination(0, "중구", 3, regionCode = "99999"))))
@@ -178,7 +183,7 @@ class TripServiceTest : StringSpec({
 
     /** 기존 클라이언트는 코드를 안 보낸다 — 그 경로의 동작이 한 치도 바뀌지 않아야 한다. */
     "코드를 생략하면 종전대로 이름으로 찾는다" {
-        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), clock)
+        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), NoTripEvents, clock)
 
         val t = svc.create(acc, cmd(dests = listOf(TripDestination(0, "제주", 3))))
 
@@ -186,7 +191,7 @@ class TripServiceTest : StringSpec({
     }
 
     "편집해도 코드가 사라지지 않는다 — 생성만 채우면 편집이 지운다" {
-        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), clock)
+        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), NoTripEvents, clock)
         val t = svc.create(acc, cmd(dests = listOf(TripDestination(0, "제주", 3))))
 
         // 클라이언트는 코드를 보내지 않는다(계약 불변) — 편집 입력의 regionCode 는 항상 null 이다.
@@ -202,7 +207,7 @@ class TripServiceTest : StringSpec({
     }
 
     "소프트삭제 후 조회 404 · 목록 제외" {
-        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), clock)
+        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), NoTripEvents, clock)
         val t = svc.create(acc, cmd())
         svc.delete(acc, t.tripId)
         shouldThrow<ResourceNotFound> { svc.get(acc, t.tripId) }

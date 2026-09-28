@@ -31,6 +31,7 @@ private class PickBases : BaseAssignmentRepository {
     override fun findById(baseAssignmentId: UUID) = store[baseAssignmentId]
     override fun delete(base: BaseAssignment) { store.remove(base.baseAssignmentId) }
     override fun existsByStayId(savedStayId: UUID) = store.values.any { it.savedStayId == savedStayId }
+    override fun deleteByStayId(savedStayId: UUID) = error("이 테스트는 배정 정리를 쓰지 않는다")
     override fun findTripIdsByStays(savedStayIds: Collection<UUID>) =
         store.values.filter { it.savedStayId in savedStayIds }
             .groupBy { it.savedStayId }

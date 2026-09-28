@@ -45,6 +45,7 @@ private class StubBases(val inUse: MutableSet<UUID> = mutableSetOf()) : BaseAssi
     override fun findById(baseAssignmentId: UUID): BaseAssignment? = null
     override fun delete(base: BaseAssignment) {}
     override fun existsByStayId(savedStayId: UUID) = savedStayId in inUse
+    override fun deleteByStayId(savedStayId: UUID) { inUse.remove(savedStayId) }
 
     /** 이 대역은 '거점으로 쓰이는가'만 흉내 낸다 — 역참조는 이 테스트의 관심이 아니다. */
     override fun findTripIdsByStays(savedStayIds: Collection<UUID>) = emptyMap<UUID, List<UUID>>()

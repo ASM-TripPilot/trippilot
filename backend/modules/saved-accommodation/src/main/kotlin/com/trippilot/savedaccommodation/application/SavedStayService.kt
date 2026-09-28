@@ -106,12 +106,17 @@ class SavedStayService(
         )
     }
 
+    @Transactional
     fun delete(accountId: UUID, savedStayId: UUID) {
         val stay = ownedOrNotFound(accountId, savedStayId)
         // 거점으로 사용 중인 숙소 직접 삭제 차단(V2.4 DEFERRABLE FK가 커밋 시 터지는 500 대신 409).
+        // '사용 중' 판정은 살아 있는 여행만 본다(TRIP-1061 (b)) — 삭제된 여행 때문에 숙소를 영영 못 지우면 안 된다.
         if (bases.existsByStayId(savedStayId)) {
             throw ConflictDetected(message = "거점으로 사용 중인 숙소는 삭제할 수 없습니다. 거점 배정을 먼저 해제하세요.")
         }
+        // 가드를 통과했으면 잔존 배정 행은 전부 **삭제된 여행**의 것이다 — 의미 없는 참조라 함께
+        // 지운다. 남기면 saved_stay FK 가 커밋에서 터져 사용자에게 500 이 나간다(TRIP-1061).
+        bases.deleteByStayId(savedStayId)
         repo.delete(stay)
     }
 

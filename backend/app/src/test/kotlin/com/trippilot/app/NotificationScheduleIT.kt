@@ -55,6 +55,7 @@ class NotificationScheduleIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var publisher: DomainEventPublisher
     @Autowired private lateinit var relay: OutboxRelay
     @Autowired private lateinit var trips: TripRepository
+    @Autowired private lateinit var tripService: com.trippilot.trip.application.TripService
     @Autowired private lateinit var accounts: AccountRepository
     @Autowired private lateinit var jdbc: JdbcTemplate
     @Autowired private lateinit var txManager: PlatformTransactionManager
@@ -211,15 +212,20 @@ class NotificationScheduleIT : AbstractPostgresIntegrationTest() {
      * 소프트 삭제는 행이 남으므로 FK CASCADE 가 닿지 않는다 — 예약을 비우는 것은 `deletedAt` 을 보는
      * [com.trippilot.trip.api.TripOwnerFacade] 뿐이다. 그 필터가 빠지면 지운 여행의 알림이 계속 울린다.
      */
+    /**
+     * **운영 경로만으로** 비워져야 한다(TRIP-1061) — 종전 이 테스트는 삭제 뒤 reload 를 손으로 불러
+     * "삭제 시 reload 를 부르는 경로가 없다"는 운영 공백을 가렸다. 지금은 서비스 삭제가 TripDeleted 를
+     * 발행하고 릴레이→구독자가 비운다. reload 수동 호출이 남아 있으면 이 AC 를 증명한 것이 아니다.
+     */
     @Test
-    fun `여행을 소프트 삭제하면 미발화 예약이 비워진다`() {
+    fun `여행을 삭제하면 운영 경로(이벤트-릴레이)만으로 미발화 예약이 비워진다`() {
         val accountId = newAccount()
         val tripId = newTrip(accountId)
         scheduleService.reload(tripId)
         schedules.findPendingByTrip(tripId).size shouldBe 4
 
-        trips.save(trips.findById(tripId)!!.softDelete(Instant.now()))
-        scheduleService.reload(tripId)
+        tripService.delete(accountId, tripId)
+        repeat(3) { relay.relay() } // 배치 상한 대비 — 다른 IT 의 미발행분이 앞에 있을 수 있다
 
         schedules.findPendingByTrip(tripId) shouldBe emptyList()
     }
