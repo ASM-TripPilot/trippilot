@@ -1,5 +1,7 @@
 import type { TripSummaryStats } from '@/shared/api/generated/schemas';
 
+import { formatKm } from './formatKm';
+
 /**
  * TRIP-572 · summaryStats — 요약 stats 를 표시 3셀로 변환(INV-U5-07 0채움 · 거리 대시).
  *
@@ -7,7 +9,7 @@ import type { TripSummaryStats } from '@/shared/api/generated/schemas';
  *  - AC-4(INV-U5-07): 입력 결측(undefined·null)이어도 방문·사진은 0 으로 채운다(빈 칸 금지 —
  *    기본 카드가 이 값만으로 그려짐).
  *  - AC-2(BR-U5-39·error 프레임 실측): 이동 거리는 `hasLocationData:false` 면 "—"(0km 이 아니다 —
- *    "측정 못 함"과 "0km"를 섞지 않는다). true 면 `${km}km`.
+ *    "측정 못 함"과 "0km"를 섞지 않는다). true 면 `formatKm(km)`(TRIP-1086, 0.1 단위).
  *  - **소요시간 필드 없음**(INV-3) — 거리만. 571 daily `statsCard.ts`(필드명 다름)는 안 건드리고
  *    j04 전용 신규 함수(shape 가 달라 공용화하면 두 화면이 결합 + 테스트된 모듈을 건드림, ponytail lite).
  *
@@ -27,7 +29,9 @@ export function summaryStats(
 ): SummaryStatCells {
   return {
     totalVisits: stats?.totalVisits ?? 0,
-    distanceText: stats?.hasLocationData ? `${stats.totalDistanceKm}km` : '—',
+    distanceText: stats?.hasLocationData
+      ? formatKm(stats.totalDistanceKm)
+      : '—',
     totalPhotos: stats?.totalPhotos ?? 0,
   };
 }

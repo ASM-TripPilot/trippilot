@@ -90,7 +90,7 @@ function AppBar({
   onBack?: () => void;
 }): ReactElement {
   return (
-    <View className="w-full flex-row items-center gap-xs pb-sm pl-[10px] pr-lg">
+    <View className="w-full flex-row items-center gap-xs pb-sm pl-[10px] pr-lg pt-sm">
       <Pressable
         testID="explore-saved-back"
         accessibilityRole="button"

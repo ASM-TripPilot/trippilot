@@ -141,6 +141,7 @@
 - `src/__tests__/recordsMapMarkersStructure.test.ts`  →  (export 없음)
 - `src/__tests__/recordsStructure.test.ts`  →  (export 없음)
 - `src/__tests__/reflectionDailyStructure.test.ts`  →  (export 없음)
+- `src/__tests__/reflectionDistanceFormatStructure.test.ts`  →  (export 없음)
 - `src/__tests__/reflectionFallbackStructure.test.ts`  →  (export 없음)
 - `src/__tests__/reflectionStructure.test.ts`  →  (export 없음)
 - `src/__tests__/reflectionSummaryStructure.test.ts`  →  (export 없음)
@@ -642,6 +643,7 @@
 
 ## src/features/reflection/model/
 - `src/features/reflection/model/editCard.ts`  →  buildEditCard
+- `src/features/reflection/model/formatKm.ts`  →  formatKm
 - `src/features/reflection/model/missingParts.ts`  →  MissingParts · missingParts
 - `src/features/reflection/model/reflectionFallback.ts`  →  resolveDisplayNarrative
 - `src/features/reflection/model/shareCapture.ts`  →  SaveShareCardResult · ShareShareCardResult · isShareCaptureArmed · saveShareCardImage · shareShareCardImage
@@ -1464,4 +1466,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 1018개 파일
+합계 1020개 파일

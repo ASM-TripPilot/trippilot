@@ -143,14 +143,17 @@ export function VisitRecordCard({
       testID={`record-trip-visit-card-${card.visitCheckId}`}
       className="w-full gap-md rounded-card border border-hairline bg-canvas px-[15px] py-[14px]"
     >
-      <View className="w-full flex-row items-center justify-between">
-        <View className="flex-row items-center gap-sm">
+      <View className="w-full flex-row items-center justify-between gap-sm">
+        <View className="min-w-0 flex-1 flex-row items-center gap-sm">
           <StatusCircle
             status={status}
             visitCheckId={card.visitCheckId}
             onPressComplete={onPressComplete}
           />
-          <Text className="font-noto-bold text-card-title text-ink">
+          <Text
+            numberOfLines={1}
+            className="shrink font-noto-bold text-card-title text-ink"
+          >
             {card.nameKo}
           </Text>
         </View>

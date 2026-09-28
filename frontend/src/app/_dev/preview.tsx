@@ -3074,7 +3074,8 @@ export const PREVIEW_STATES: PreviewState[] = [
             visitCheckId: 'r4',
             slotKey: '2026-08-21#p4',
             poiId: 'p4',
-            nameKo: '건너뛴 전망대',
+            // TRIP-1086 — 긴 이름 말줄임(한 줄 `…`)·'— 건너뜀'과의 간격 육안 자리(jest 사각).
+            nameKo: '건너뛴 해운대 블루라인파크 청사포 다릿돌전망대',
             arrivedAt: '2026-08-21T16:10:00',
             completedAt: null,
             skippedAt: '2026-08-21T16:12:00',
