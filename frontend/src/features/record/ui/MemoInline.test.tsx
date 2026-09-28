@@ -1,3 +1,4 @@
+import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { MemoInline } from './MemoInline';
@@ -141,5 +142,26 @@ describe('🔴 TRIP-1078 AC-2 · return = 제출→blur, 한 번에 저장 1회'
 
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(onSubmit).toHaveBeenCalledWith('파도 소리가 좋았다');
+  });
+});
+
+/**
+ * 🔴 TRIP-1085 AC-8 — 카드가 셸 바텀시트 안으로 들어가므로 메모 입력은 `BottomSheetTextInput` 이다.
+ *
+ * 왜: 플레인 `TextInput` 이면 실기에서 키보드가 시트를 밀어 올리지 못해 입력칸이 키보드에 가린다
+ *   (repo-traps 바텀시트 절). 목(`__mocks__/@gorhom/bottom-sheet`)이 이 입력을 **별 타입**으로 감싸 두어
+ *   `UNSAFE_getByType(BottomSheetTextInput)` 만이 "플레인으로 되돌림" 회귀를 잡는다. 목 안에서 RN
+ *   TextInput 을 다시 그리므로 위 testID·blur 저장 단언은 그대로 산다.
+ * ⚠️ 실기 5.2.14 는 시트 밖에서 이 입력을 그리면 throw 한다 — jest 목은 모른다(프리뷰 쪽 그물은
+ *   recordsStructure G8).
+ *
+ * (개념) `UNSAFE_getByType(컴포넌트)` = 그 컴포넌트 타입으로 렌더된 노드를 정확히 1개 찾는다(없거나 여럿이면 throw).
+ */
+describe('🔴 TRIP-1085 AC-8 · 메모 입력 = BottomSheetTextInput', () => {
+  it('메모 입력칸이 BottomSheetTextInput 으로 그려지고 testID 는 그대로다', () => {
+    render(<MemoInline onSubmit={jest.fn()} />);
+
+    const sheetInput = screen.UNSAFE_getByType(BottomSheetTextInput);
+    expect(sheetInput.props.testID).toBe('record-trip-memo-input');
   });
 });

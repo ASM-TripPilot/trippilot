@@ -16,6 +16,8 @@ import { PlusGlyph } from '@/features/record/ui/RecordGlyphs';
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
+import { renderedText } from '@/test-support/sheetTree';
+import { tripRecordsTrip } from '@/test-support/tripRecordsTrip';
 
 import { TripRecordsPage } from './TripRecordsPage';
 
@@ -218,6 +220,10 @@ beforeEach(() => {
   patchBodies = [];
   memoBodies = [];
   server.use(
+    // TRIP-1085 — 페이지가 시트 헤더 여행명을 GET /trips/{tripId} 로 얻는다.
+    http.get(`${BASE}/trips/:tripId`, () =>
+      HttpResponse.json(tripRecordsTrip())
+    ),
     http.get(`${BASE}/trips/:tripId/itinerary`, () =>
       HttpResponse.json(itinerary())
     ),
@@ -809,7 +815,9 @@ describe('AC-25 · INV-3 — 시트·다이얼로그 어디에도 체류 시간�
 
     renderPage();
     await openSheet('v-done');
-    const withSheet = JSON.stringify(screen.toJSON());
+    // TRIP-1085 — 셸 list 경로에선 `JSON.stringify(screen.toJSON())` 가 순환 참조로 죽는다(FlatList 가
+    // 헤더·푸터 엘리먼트를 호스트 props 로 흘린다). 화면의 Text 글자만 모아 본다.
+    const withSheet = renderedText(screen.UNSAFE_root);
     expect(withSheet).toContain('부산시립미술관');
     expect(DURATION_TEXT.test(withSheet)).toBe(false);
 
@@ -818,7 +826,7 @@ describe('AC-25 · INV-3 — 시트·다이얼로그 어디에도 체류 시간�
       within(cardOf('v-in')).getByTestId('record-visit-skip-v-in')
     );
     await screen.findByTestId('record-visit-skip-dialog');
-    const withDialog = JSON.stringify(screen.toJSON());
+    const withDialog = renderedText(screen.UNSAFE_root);
     expect(DURATION_TEXT.test(withDialog)).toBe(false);
   });
 });

@@ -36,7 +36,6 @@ import { TriggerChip } from '@/features/execution/ui/TriggerChip';
 import { MemoInline } from '@/features/record/ui/MemoInline';
 import { PhotoThumbStrip } from '@/features/record/ui/PhotoThumbStrip';
 import { RecordsCalendarScreen } from '@/features/record/ui/RecordsCalendarScreen';
-import { TripRecordsScreen } from '@/features/record/ui/TripRecordsScreen';
 import { VisitRecordCard } from '@/features/record/ui/VisitRecordCard';
 import { VisitTimeSheet } from '@/features/record/ui/VisitTimeSheet';
 import { SHARE_FORMATS } from '@/features/reflection/model/shareCard';
@@ -141,6 +140,7 @@ import type { ReplanSlotVM } from '@/entities/itinerary-slot/model';
 import { ReplanDraftView } from '@/pages/planb-draft/ui/ReplanDraftView';
 // 뷰 파일 경로로 직접 — 페이지 배럴은 useAssignBase(요청 모듈)를 끌어와 프리뷰 네트워크 지뢰가 터진다.
 import { StayRecommendView } from '@/pages/itinerary-stay-recommend/ui/StayRecommendView';
+import { TripRecordsView } from '@/pages/trip-records/ui/TripRecordsView';
 import { ReplanSolvingView } from '@/pages/planb-draft/ui/ReplanSolvingView';
 import { SlotCandidateSheet } from '@/features/planb/ui/SlotCandidateSheet';
 import { RiskDetailSheet } from '@/features/planb/ui/RiskDetailSheet';
@@ -3007,37 +3007,25 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'j01 · 방문 기록 default',
     login: null,
     render: () => (
-      <TripRecordsScreen
+      <TripRecordsView
+        tripTitle="부산 여행"
         dayTabs={[
-          { day: '2026-08-20', label: 'Day1' },
-          { day: '2026-08-21', label: 'Day2' },
-          { day: '2026-08-22', label: 'Day3' },
+          { day: '2026-08-20', label: '1일차' },
+          { day: '2026-08-21', label: '2일차' },
+          { day: '2026-08-22', label: '3일차' },
         ]}
         activeDay="2026-08-21"
         onSelectDay={noop}
         attribution={{ stayName: '해운대 그랜드 호텔', dayLabel: '2일차' }}
         mapCenter={{ lat: 35.1532, lng: 129.1187 }}
-        // TRIP-768 j 밴드 마커족 — visited 사진 2(1→2 선), planned 점선 2, stay 침대 1. 사진은 인라인
-        // 로컬 require(번들 number source) — DRAFT_PREVIEW_PHOTOS(해석된 URI) 재사용 금지(마커 래스터가
-        // async URL 로 흔들림, seed 결정 2). 실 좌표·URL 배선은 TRIP-634 밖이라 여기 픽스처로만 본다.
+        // TRIP-1085 결정 3(c) — 방문 기준 state 핀(페이지와 같은 축): 체크 2(광안리·미술관 도착) · 번호 2
+        // (카페 도착 전 · 건너뛴 곳). kind 마커족을 붙이면 지도가 사진·점선·침대로 그린다(Figma 4705:2756 아님).
+        // 숙소 핀은 범위 밖(Q3).
         mapPins={[
-          {
-            number: 1,
-            lat: 35.1532,
-            lng: 129.1187,
-            kind: 'visited',
-            imageUrl: require('@/assets/itinerary/draft-preview-1.jpg'),
-          },
-          {
-            number: 2,
-            lat: 35.1555,
-            lng: 129.1216,
-            kind: 'visited',
-            imageUrl: require('@/assets/itinerary/draft-preview-2.jpg'),
-          },
-          { number: 3, lat: 35.156, lng: 129.1174, kind: 'planned' },
-          { number: 4, lat: 35.1538, lng: 129.115, kind: 'planned' },
-          { number: 5, lat: 35.1518, lng: 129.1226, kind: 'stay' },
+          { number: 1, lat: 35.1532, lng: 129.1187, state: 'done' },
+          { number: 2, lat: 35.1555, lng: 129.1216, state: 'done' },
+          { number: 3, lat: 35.156, lng: 129.1174, state: 'upcoming' },
+          { number: 4, lat: 35.1538, lng: 129.115, state: 'upcoming' },
         ]}
         cards={[
           {
@@ -3128,7 +3116,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         // TRIP-1072 — Figma default(1557:1738)처럼 [방문 추가] 버튼을 세운다.
         onPressSpontaneous={noop}
         onPressBack={noop}
-        onPressTab={noop}
       />
     ),
   },
@@ -3141,11 +3128,12 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'j01 · 방문 기록 error',
     login: null,
     render: () => (
-      <TripRecordsScreen
+      <TripRecordsView
+        tripTitle="부산 여행"
         dayTabs={[
-          { day: '2026-08-20', label: 'Day1' },
-          { day: '2026-08-21', label: 'Day2' },
-          { day: '2026-08-22', label: 'Day3' },
+          { day: '2026-08-20', label: '1일차' },
+          { day: '2026-08-21', label: '2일차' },
+          { day: '2026-08-22', label: '3일차' },
         ]}
         activeDay="2026-08-21"
         onSelectDay={noop}
@@ -3153,15 +3141,10 @@ export const PREVIEW_STATES: PreviewState[] = [
         noticeCopy="오늘 방문한 곳 — 핀은 방문 완료, 빈 핀은 예정"
         mapCenter={{ lat: 35.1532, lng: 129.1187 }}
         mapPins={[
-          {
-            number: 1,
-            lat: 35.1532,
-            lng: 129.1187,
-            kind: 'visited',
-            imageUrl: require('@/assets/itinerary/draft-preview-1.jpg'),
-          },
-          { number: 2, lat: 35.156, lng: 129.1174, kind: 'planned' },
-          { number: 3, lat: 35.1518, lng: 129.1226, kind: 'stay' },
+          { number: 1, lat: 35.1532, lng: 129.1187, state: 'done' },
+          { number: 2, lat: 35.1555, lng: 129.1216, state: 'done' },
+          { number: 3, lat: 35.156, lng: 129.1174, state: 'upcoming' },
+          { number: 4, lat: 35.1538, lng: 129.115, state: 'upcoming' },
         ]}
         cards={[
           {
@@ -3204,7 +3187,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         onPressComplete={noop}
         onPressSkip={noop}
         onPressBack={noop}
-        onPressTab={noop}
       />
     ),
   },
@@ -3218,36 +3200,24 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'j01 · 방문 기록 manual-checkin',
     login: null,
     render: () => (
-      <TripRecordsScreen
+      <TripRecordsView
+        tripTitle="부산 여행"
         manualCheckin
         noticeCopy="수동 체크인 · 방문한 곳을 직접 선택해 기록하세요 (좌표 자동기록 비활성)"
         dayTabs={[
-          { day: '2026-08-20', label: 'Day1' },
-          { day: '2026-08-21', label: 'Day2' },
-          { day: '2026-08-22', label: 'Day3' },
+          { day: '2026-08-20', label: '1일차' },
+          { day: '2026-08-21', label: '2일차' },
+          { day: '2026-08-22', label: '3일차' },
         ]}
         activeDay="2026-08-21"
         onSelectDay={noop}
         attribution={{ stayName: '해운대 그랜드 호텔', dayLabel: '2일차' }}
         mapCenter={{ lat: 35.1532, lng: 129.1187 }}
         mapPins={[
-          {
-            number: 1,
-            lat: 35.1532,
-            lng: 129.1187,
-            kind: 'visited',
-            imageUrl: require('@/assets/itinerary/draft-preview-1.jpg'),
-          },
-          {
-            number: 2,
-            lat: 35.1555,
-            lng: 129.1216,
-            kind: 'visited',
-            imageUrl: require('@/assets/itinerary/draft-preview-2.jpg'),
-          },
-          { number: 3, lat: 35.156, lng: 129.1174, kind: 'planned' },
-          { number: 4, lat: 35.1538, lng: 129.115, kind: 'planned' },
-          { number: 5, lat: 35.1518, lng: 129.1226, kind: 'stay' },
+          { number: 1, lat: 35.1532, lng: 129.1187, state: 'done' },
+          { number: 2, lat: 35.1555, lng: 129.1216, state: 'done' },
+          { number: 3, lat: 35.156, lng: 129.1174, state: 'upcoming' },
+          { number: 4, lat: 35.1538, lng: 129.115, state: 'upcoming' },
         ]}
         cards={[
           {
@@ -3309,7 +3279,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         onPressComplete={noop}
         onPressSkip={noop}
         onPressBack={noop}
-        onPressTab={noop}
       />
     ),
   },
@@ -3323,10 +3292,11 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       <View className="flex-1">
-        <TripRecordsScreen
+        <TripRecordsView
+          tripTitle="부산 여행"
           dayTabs={[
-            { day: '2026-08-20', label: 'Day1' },
-            { day: '2026-08-21', label: 'Day2' },
+            { day: '2026-08-20', label: '1일차' },
+            { day: '2026-08-21', label: '2일차' },
           ]}
           activeDay="2026-08-21"
           onSelectDay={noop}
@@ -3346,7 +3316,6 @@ export const PREVIEW_STATES: PreviewState[] = [
           onPressComplete={noop}
           onPressSkip={noop}
           onPressBack={noop}
-          onPressTab={noop}
         />
         <VisitTimeSheet
           visitCheckId="r2"
@@ -3358,6 +3327,47 @@ export const PREVIEW_STATES: PreviewState[] = [
           onCancel={noop}
         />
       </View>
+    ),
+  },
+  // j01 방문 기록 empty 얼굴(TRIP-1085 · Figma 4705:4054) — 방문 0건인 오늘 탭. 빈 안내 + 계획 행 4(오늘 탭이라
+  // 행마다 "방문 체크") + [방문 추가], 지도는 번호 핀만. 귀속 행은 코드상 방문에서 파생돼(BR-U5-25) 0건인 날엔
+  // 숙소명이 없다 → 날짜만(Figma 의 숙소명과 다름, 드리프트). 빈 안내 문구도 코드 정본 유지(Q7).
+  {
+    key: 'records-empty',
+    band: 'j',
+    label: 'j01 · 방문 기록 empty',
+    login: null,
+    render: () => (
+      <TripRecordsView
+        tripTitle="부산 여행"
+        dayTabs={[
+          { day: '2026-08-20', label: '1일차' },
+          { day: '2026-08-21', label: '2일차' },
+          { day: '2026-08-22', label: '3일차' },
+        ]}
+        activeDay="2026-08-21"
+        onSelectDay={noop}
+        attribution={{ stayName: null, dayLabel: '2일차' }}
+        mapCenter={{ lat: 35.1532, lng: 129.1187 }}
+        mapPins={[
+          { number: 1, lat: 35.1532, lng: 129.1187, state: 'upcoming' },
+          { number: 2, lat: 35.1555, lng: 129.1216, state: 'upcoming' },
+          { number: 3, lat: 35.156, lng: 129.1174, state: 'upcoming' },
+          { number: 4, lat: 35.1538, lng: 129.115, state: 'upcoming' },
+        ]}
+        cards={[]}
+        planRows={[
+          { slotKey: '2026-08-21#p1', poiId: 'p1', nameKo: '광안리 해변' },
+          { slotKey: '2026-08-21#p2', poiId: 'p2', nameKo: '부산시립미술관' },
+          { slotKey: '2026-08-21#p3', poiId: 'p3', nameKo: '○○ 카페' },
+          { slotKey: '2026-08-21#p4', poiId: 'p4', nameKo: '웨이브온 커피' },
+        ]}
+        onPressPlanCheck={noop}
+        onPressComplete={noop}
+        onPressSkip={noop}
+        onPressSpontaneous={noop}
+        onPressBack={noop}
+      />
     ),
   },
   // j03 오늘의 회고 4얼굴(TRIP-571) — 순수 뷰(`DailyReflectionScreen`)를 격리 렌더한다(`@/shared/api`

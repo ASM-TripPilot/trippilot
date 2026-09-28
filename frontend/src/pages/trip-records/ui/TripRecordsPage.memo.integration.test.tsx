@@ -14,6 +14,7 @@ import { server } from '@/mocks/server';
 import { getGetTripsTripIdVisitsVisitCheckIdPhotosQueryKey } from '@/shared/api/generated/trips/trips';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { flushNotifications } from '@/test-support/flushNotifications';
+import { tripRecordsTrip } from '@/test-support/tripRecordsTrip';
 
 import { TripRecordsPage } from './TripRecordsPage';
 
@@ -157,6 +158,10 @@ beforeEach(() => {
   memoReply = 'ok';
   memoBodies = [];
   server.use(
+    // TRIP-1085 — 페이지가 시트 헤더 여행명을 GET /trips/{tripId} 로 얻는다.
+    http.get(`${BASE}/trips/:tripId`, () =>
+      HttpResponse.json(tripRecordsTrip())
+    ),
     http.get(`${BASE}/trips/:tripId/itinerary`, () =>
       HttpResponse.json(itinerary())
     ),

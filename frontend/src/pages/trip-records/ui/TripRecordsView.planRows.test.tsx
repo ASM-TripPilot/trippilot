@@ -5,21 +5,25 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import type { MapCenter } from '@/shared/map';
-
 import {
-  TripRecordsScreen,
-  type RecordPlanRowVM,
-  type TripRecordsScreenProps,
-} from './TripRecordsScreen';
-import { VisitRecordCard, type VisitRecordCardVM } from './VisitRecordCard';
+  VisitRecordCard,
+  type VisitRecordCardVM,
+} from '@/features/record/ui/VisitRecordCard';
+import type { MapCenter } from '@/shared/map';
+import { renderedText } from '@/test-support/sheetTree';
 
-// 지도 히어로가 네이버 네이티브 MapView 를 태우므로 관찰 목으로 갈아끼운다(형제 TripRecordsScreen.test 선례).
+import { TripRecordsView, type TripRecordsViewProps } from './TripRecordsView';
+
+// 셸이 네이버 네이티브 MapView 를 태우므로 관찰 목으로 갈아끼운다(형제 TripRecordsView.test 선례).
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
+type RecordPlanRowVM = NonNullable<TripRecordsViewProps['planRows']>[number];
+
 /**
  * TRIP-1021 #086 · AC-10~14 (화면 쪽) — j01 방문 기록이 0건이면 빈 상태 안내 + 그날 계획 행.
+ * (TRIP-1085 — 옛 `features/record/ui/TripRecordsScreen.planRows.test.tsx` 를 옮겨 새 순수 뷰
+ *  `TripRecordsView`(셸 시트 본문)로 렌더한다. P1~P9 단언은 그대로, P7 의 글자 수집만 바꿨다.)
  *
  * 무엇을 보장하나:
  *  - 방문 카드가 0장이면 `record-trip-empty` 안내가 한 번 뜨고, 1장 이상이면 없다.
@@ -74,7 +78,7 @@ const rowId = (row: RecordPlanRowVM) => `record-trip-plan-row-${row.slotKey}`;
 const checkId = (row: RecordPlanRowVM) =>
   `record-trip-plan-check-${row.slotKey}`;
 
-function renderScreen(overrides: Partial<TripRecordsScreenProps> = {}) {
+function renderScreen(overrides: Partial<TripRecordsViewProps> = {}) {
   const handlers = {
     onSelectDay: jest.fn(),
     onPressComplete: jest.fn(),
@@ -83,7 +87,7 @@ function renderScreen(overrides: Partial<TripRecordsScreenProps> = {}) {
     onPressPlanCheck: jest.fn(),
   };
   render(
-    <TripRecordsScreen
+    <TripRecordsView
       dayTabs={[{ day: DAY, label: '1일차' }]}
       activeDay={DAY}
       mapCenter={CENTER}
@@ -96,7 +100,7 @@ function renderScreen(overrides: Partial<TripRecordsScreenProps> = {}) {
   return handlers;
 }
 
-describe('TripRecordsScreen · 빈 상태 + 계획 행 (TRIP-1021 AC-10·AC-14)', () => {
+describe('TripRecordsView · 빈 상태 + 계획 행 (TRIP-1021 AC-10·AC-14)', () => {
   it('P1 방문 0건 + 계획 2곳 → 빈 상태 안내 1개와 계획 행 2개(각자 장소 이름)가 선다 (AC-10)', () => {
     renderScreen({ planRows: [ROW_P3, ROW_P4] });
 
@@ -122,7 +126,7 @@ describe('TripRecordsScreen · 빈 상태 + 계획 행 (TRIP-1021 AC-10·AC-14)'
   });
 });
 
-describe('TripRecordsScreen · 계획 행 "방문 체크" (TRIP-1021 AC-11)', () => {
+describe('TripRecordsView · 계획 행 "방문 체크" (TRIP-1021 AC-11)', () => {
   it('P3 수동 체크인 모드 → 행의 "방문 체크"를 누르면 그 행이 1회 올라가고, 완료·건너뜀은 안 불린다', () => {
     const handlers = renderScreen({
       manualCheckin: true,
@@ -177,7 +181,7 @@ describe('TripRecordsScreen · 계획 행 "방문 체크" (TRIP-1021 AC-11)', ()
   });
 });
 
-describe('TripRecordsScreen · 계획 행은 방문 카드가 아니다 (TRIP-1021 맹점 ④)', () => {
+describe('TripRecordsView · 계획 행은 방문 카드가 아니다 (TRIP-1021 맹점 ④)', () => {
   it('P5 계획 행만 있을 때 VisitRecordCard·[건너뜀]·방문 카드 testID 가 하나도 없다', () => {
     renderScreen({ manualCheckin: true, planRows: [ROW_P3, ROW_P4] });
 
@@ -190,7 +194,7 @@ describe('TripRecordsScreen · 계획 행은 방문 카드가 아니다 (TRIP-10
   });
 });
 
-describe('TripRecordsScreen · 부제와 빈 상태는 따로다 (TRIP-1021 AC-13)', () => {
+describe('TripRecordsView · 부제와 빈 상태는 따로다 (TRIP-1021 AC-13)', () => {
   it('P6 수동 모드 + 방문 0건 → 법 근거 부제와 빈 상태 안내가 둘 다 있고, 안내는 부제를 담지 않는다', () => {
     renderScreen({
       manualCheckin: true,
@@ -204,7 +208,7 @@ describe('TripRecordsScreen · 부제와 빈 상태는 따로다 (TRIP-1021 AC-1
   });
 });
 
-describe('TripRecordsScreen · 기록 조회 로딩·실패 (TRIP-1021 5-c 경고5)', () => {
+describe('TripRecordsView · 기록 조회 로딩·실패 (TRIP-1021 5-c 경고5)', () => {
   it('P8 기록이 아직 로딩 중이면 빈 상태 안내도 오류 표면도 없다', () => {
     renderScreen({ recordsStatus: 'loading' });
 
@@ -229,7 +233,7 @@ describe('TripRecordsScreen · 기록 조회 로딩·실패 (TRIP-1021 5-c 경�
   });
 });
 
-describe('TripRecordsScreen · INV-3 (TRIP-1021 AC-12)', () => {
+describe('TripRecordsView · INV-3 (TRIP-1021 AC-12)', () => {
   it('P7 계획 행·방문 카드 어디에도 체류·소요 시간 문자열이 없다', () => {
     renderScreen({
       manualCheckin: true,
@@ -237,7 +241,9 @@ describe('TripRecordsScreen · INV-3 (TRIP-1021 AC-12)', () => {
       planRows: [ROW_P3, ROW_P4],
     });
 
-    const text = JSON.stringify(screen.toJSON());
+    // TRIP-1085 — 셸 list 경로에선 `JSON.stringify(screen.toJSON())` 가 순환 참조로 죽는다(FlatList 가
+    // 헤더·푸터 엘리먼트를 호스트 props 로 흘린다). 화면의 Text 글자만 모아 본다.
+    const text = renderedText(screen.UNSAFE_root);
     // 짝 — 렌더가 비지 않았다(행·카드 이름이 있다).
     expect(text).toContain('○○ 카페');
     expect(text).toContain('광안리 해변');

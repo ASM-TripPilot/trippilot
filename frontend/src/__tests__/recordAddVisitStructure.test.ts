@@ -126,8 +126,8 @@ describe('🔴 S5 · 프리뷰 records-default 에 [방문 추가]가 선다 (E8
   it('records-default 블록이 onPressSpontaneous 를 넘긴다', () => {
     const block = fixtureBlock(readOne(PREVIEW_REL), 'records-default');
 
-    // 긍정 앵커 — 블록을 실제로 찾았다.
-    expect(block).toContain('TripRecordsScreen');
+    // 긍정 앵커 — 블록을 실제로 찾았다(TRIP-1085 — 옛 TripRecordsScreen → 셸 조립 뷰 TripRecordsView).
+    expect(block).toContain('TripRecordsView');
     expect(block).toContain('onPressSpontaneous');
   });
 });

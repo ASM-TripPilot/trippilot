@@ -13,6 +13,7 @@ import { router } from 'expo-router';
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { resetPressGuard } from '@/shared/press/pressGuard';
+import { tripRecordsTrip } from '@/test-support/tripRecordsTrip';
 
 import { TripRecordsPage } from './TripRecordsPage';
 
@@ -148,6 +149,10 @@ beforeEach(() => {
   setAccessToken('a');
   // 페이지가 마운트에 쏘는 GET 전부 + 카드 photos 를 등록(onUnhandledRequest:'error' 라 누락 시 크래시).
   server.use(
+    // TRIP-1085 — 페이지가 시트 헤더 여행명을 GET /trips/{tripId} 로 얻는다.
+    http.get(`${BASE}/trips/:tripId`, () =>
+      HttpResponse.json(tripRecordsTrip())
+    ),
     http.get(`${BASE}/trips/:tripId/itinerary`, () =>
       HttpResponse.json(itinerary())
     ),
@@ -176,10 +181,11 @@ describe('🔴 AC-1 · 일자 탭 = "${n}일차"(Day${n} 폐기)', () => {
   it('탭 3개가 1일차·2일차·3일차 로 뜨고, 옛 Day1 라벨은 없다', async () => {
     render(<TripRecordsPage tripId={TRIP_ID} />, { wrapper });
 
-    // 준비/실행 — itinerary 3일이 도착하면 탭 3개가 마운트된다.
-    const tab0 = await screen.findByTestId('record-trip-day-tab-2026-08-20');
-    const tab1 = screen.getByTestId('record-trip-day-tab-2026-08-21');
-    const tab2 = screen.getByTestId('record-trip-day-tab-2026-08-22');
+    // 준비/실행 — itinerary 3일이 도착하면 탭 3개가 마운트된다. TRIP-1085 — 옛 일자 탭
+    // `record-trip-day-tab-{date}` 은 셸 일차 칩 `sheet-daychip-{index}`(0부터)로 옮겨 갔다.
+    const tab0 = await screen.findByTestId('sheet-daychip-0');
+    const tab1 = screen.getByTestId('sheet-daychip-1');
+    const tab2 = screen.getByTestId('sheet-daychip-2');
 
     // 단언 — 각 탭 서브트리 안에서 한국어 라벨(within 으로 귀속 헤더의 동일 문자열과 분리).
     expect(within(tab0).getByText('1일차')).toBeTruthy();
@@ -243,7 +249,7 @@ describe('🔴 TRIP-1072 AC-1~3 · [방문 추가]는 오늘 탭에만, 누르�
     expect(screen.queryByTestId(ADD)).toBeNull();
 
     // 실행 — 오늘 탭으로 옮기고 버튼을 누른다.
-    fireEvent.press(screen.getByTestId('record-trip-day-tab-2026-08-21'));
+    fireEvent.press(screen.getByTestId('sheet-daychip-1'));
     await screen.findByText('부산시립미술관');
     fireEvent.press(screen.getByTestId(ADD));
 
@@ -283,7 +289,7 @@ describe('🔴 AC-3(seed-once) · 메모 초안이 카드 전환에 새지 않�
     );
 
     // 실행 — 둘째날 탭으로 전환한다(위치0 방문이 v-a → v-b 로 바뀐다).
-    fireEvent.press(screen.getByTestId('record-trip-day-tab-2026-08-21'));
+    fireEvent.press(screen.getByTestId('sheet-daychip-1'));
     await screen.findByText('부산시립미술관');
 
     // 단언 — 새 방문 메모는 리마운트로 초기화돼 빈 값(초안이 새면 '초안 텍스트' 가 남아 red).

@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { router } from 'expo-router';
 
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+import { buildStatePins } from '@/entities/itinerary-slot/lib/slotMapPin';
 import { formatDayLabel } from '@/entities/trip/lib/formatDayLabel';
 import { deriveStayAttribution } from '@/features/record/model/stayAttribution';
 import {
@@ -17,28 +19,29 @@ import { useVisitCheck } from '@/features/record/model/useVisitCheck';
 import { orderByArrival } from '@/features/record/model/visitOrder';
 import { isOptimisticVisit } from '@/features/record/model/visitStatus';
 import { SkipVisitDialog } from '@/features/record/ui/SkipVisitDialog';
-import {
-  TripRecordsScreen,
-  type RecordPlanRowVM,
-} from '@/features/record/ui/TripRecordsScreen';
 import type { VisitRecordCardVM } from '@/features/record/ui/VisitRecordCard';
 import { VisitRecordCardContainer } from '@/features/record/ui/VisitRecordCardContainer';
 import { VisitTimeSheet } from '@/features/record/ui/VisitTimeSheet';
-import { useGetTripsTripIdItinerary } from '@/shared/api/generated/trips/trips';
+import {
+  useGetTripsTripId,
+  useGetTripsTripIdItinerary,
+} from '@/shared/api/generated/trips/trips';
 import { ArriveRequestSource } from '@/shared/api/generated/schemas';
-import type { MapCenter, MapPin } from '@/shared/map';
+import type { MapCenter } from '@/shared/map';
 import { seoulDate, seoulTime } from '@/shared/date/seoulDate';
 import { guardPress } from '@/shared/press/pressGuard';
-import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
-import { shellTabHref } from '@/shared/ui/BottomTabBar';
+
+import { TripRecordsView, type RecordPlanRowVM } from './TripRecordsView';
 
 /**
  * TRIP-565 · trip-records 페이지 — 조회·조립·배선의 단일 출처(FSD).
  *
- * itinerary 를 한 번 조회해 셋을 함께 얻는다: 일자 탭(days[].date)·장소명 맵(slots.poiId→nameKo)·
+ * itinerary 를 한 번 조회해 셋을 함께 얻는다: 일차 칩(days[].date)·장소명 맵(slots.poiId→nameKo)·
  * 지도 핀(slots.lat/lng). 방문 기록은 `useTripRecords(tripId, activeDay)` 로 따로 받아 카드 VM 으로
  * 조립한다(VisitCheck 엔 장소명이 없어 itinerary 로 조인). 낙관 갱신(complete/skip)은
- * `useVisitCheck` 가 진다. 화면(`TripRecordsScreen`)은 무상태 — 여기서 내린 VM·콜백만 그린다.
+ * `useVisitCheck` 가 진다. 뷰(`TripRecordsView`, 셸 조립)는 무상태 — 여기서 내린 VM·콜백만 그린다.
+ * TRIP-1085 — 전면 지도 + 바텀시트라 하단 탭바가 없다(결정 1(b)). 시트 헤더 여행명은 `GET /trips/{tripId}`
+ * 에서 오고, 실패하면 그 조각만 빠진다(INV-4).
  *
  * 카드의 `arrivedLabel` 은 서버 순간(UTC)을 **서울 시계** HH:mm 로 읽어 내린다(TRIP-1069 · BR-U5-27 —
  * 시각 표시일 뿐 소요시간이 아니다, INV-3). 카드는 도착 이른 순, 도착 없는 카드는 끝(결정 2(a)).
@@ -71,6 +74,7 @@ export function TripRecordsPage({
   today = seoulDate(new Date()),
 }: TripRecordsPageProps): React.ReactElement {
   const itinerary = useGetTripsTripIdItinerary(tripId);
+  const trip = useGetTripsTripId(tripId);
   const days = itinerary.data?.days ?? [];
 
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
@@ -138,10 +142,23 @@ export function TripRecordsPage({
   );
 
   const activeSlots = days.find((d) => d.date === activeDay)?.slots ?? [];
-  const pins: MapPin[] = activeSlots.flatMap((slot, index) =>
-    typeof slot.lat === 'number' && typeof slot.lng === 'number'
-      ? [{ number: index + 1, lat: slot.lat, lng: slot.lng }]
-      : []
+  // TRIP-1085 결정 3(c) — 방문 기준 핀. 그날 계획 슬롯 순서 그대로(번호 제자리, 좌표 없는 슬롯은 건너뜀).
+  // 슬롯 키가 같은 방문이 도착했고 건너뛰지 않았으면 체크 핀(done), 아니면 번호 핀(upcoming). poiId 로
+  // 맞추면 같은 장소의 즉석 방문(slotKey null)이 계획 핀을 체크한다 — 계획 행과 같은 슬롯 키 판정을 쓴다.
+  // 즉석 방문은 좌표가 없어(VisitCheck) 핀이 없다. `kind` 를 붙이면 지도가 기록 마커족으로 그린다(금지).
+  const arrivedSlotKeys = new Set(
+    (records.data?.visits ?? [])
+      .filter((visit) => visit.arrivedAt != null && visit.skippedAt == null)
+      .map((visit) => visit.slotKey)
+  );
+  const pins = buildStatePins(
+    activeSlots.map((slot) => ({
+      lat: slot.lat,
+      lng: slot.lng,
+      progress: arrivedSlotKeys.has(buildSlotKey(activeDay, slot.poiId))
+        ? 'done'
+        : 'upcoming',
+    }))
   );
   const firstPin = pins[0];
   const mapCenter: MapCenter = firstPin
@@ -240,7 +257,8 @@ export function TripRecordsPage({
 
   return (
     <View className="flex-1">
-      <TripRecordsScreen
+      <TripRecordsView
+        tripTitle={trip.data?.title}
         dayTabs={dayTabs}
         activeDay={activeDay}
         onSelectDay={setSelectedDay}
@@ -296,22 +314,28 @@ export function TripRecordsPage({
         onPressBack={() => {
           if (router.canGoBack()) router.back();
         }}
-        onPressTab={(key: ShellTabKey) => router.replace(shellTabHref(key))}
       />
 
       {timeResult != null ? (
-        // 탭하면 닫힌다 — 다음 시각 수정을 열 때도 지운다.
-        <Pressable
-          onPress={() => setTimeResult(null)}
-          className="absolute inset-x-lg bottom-[96px] rounded-button bg-ink px-lg py-md"
+        // 탭하면 닫힌다 — 다음 시각 수정을 열 때도 지운다. TRIP-1085 — 탭바가 빠져 화면 맨 아래(홈 인디케이터
+        // 위)에 뜬다. 시트보다 뒤 형제라 시트 위에 그려진다(실제 겹침은 6-b).
+        <SafeAreaView
+          edges={['bottom']}
+          pointerEvents="box-none"
+          className="absolute inset-x-0 bottom-0 px-lg pb-md"
         >
-          <Text
-            testID="record-trip-visit-time-result"
-            className="font-noto text-label text-white"
+          <Pressable
+            onPress={() => setTimeResult(null)}
+            className="rounded-button bg-ink px-lg py-md"
           >
-            {timeResult}
-          </Text>
-        </Pressable>
+            <Text
+              testID="record-trip-visit-time-result"
+              className="font-noto text-label text-white"
+            >
+              {timeResult}
+            </Text>
+          </Pressable>
+        </SafeAreaView>
       ) : null}
 
       {editingCard != null ? (
