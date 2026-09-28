@@ -19,6 +19,7 @@ import com.trippilot.itinerarygeneration.domain.ScoredCandidatePoolStore
 import com.trippilot.itinerarygeneration.domain.SlotCandidate
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesInput
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesOutput
+import com.trippilot.itinerarygeneration.domain.SlotCandidatesEmptyReason
 import com.trippilot.placedata.api.Area
 import com.trippilot.placedata.api.PoiSurfaceFacade
 import com.trippilot.placedata.api.PoiSurfaceView
@@ -153,15 +154,81 @@ class SlotCandidateService(
 
         // closed-set 재확인(INV-1) — 경계 너머가 지어낸 poiId 가 클라이언트로 나가면 그대로 일정에 들어간다.
         // 편집 경로에 POI 실재 검사가 없어 여기서 막지 않으면 확정 동결까지 흘러간다.
-        val grounded = candidatePool.ground(answered.candidates.map { it.poiId }).map { it.poiId }.toSet()
-        val kept = answered.candidates.filter { it.poiId in grounded }
+        val groundedById = candidatePool.ground(answered.candidates.map { it.poiId }).associateBy { it.poiId }
+        val kept = answered.candidates.filter { it.poiId in groundedById }
         if (kept.size != answered.candidates.size) {
             log.warn(
                 "후보 {}건이 정본에 없어 제외했습니다 — 경계가 closed-set 을 벗어났습니다(INV-1). tripId={}",
                 answered.candidates.size - kept.size, tripId,
             )
         }
-        return answered.copy(candidates = kept)
+
+        // 컨셉 필터(TRIP-1065 · QA #042) — '식사'를 골라도 명소가 오던 결함. concept 은 AI 계약에
+        // 자리가 없어 경계에서 버려지므로, **모든 경로**(AI LLM·규칙 폴백·로컬 폴백)의 결과를 여기
+        // 한 곳에서 거른다. 필터는 풀을 좁힐 뿐 넓히지 않는다(INV-1). 미매핑 컨셉(자유 문자열·
+        // 구버전 앱)은 400 이 아니라 필터 없음 + 로그 1줄(reason 선례).
+        val conceptSet = ConceptCategories.of(request.concept)
+        if (conceptSet == null) {
+            if (!request.concept.isNullOrBlank()) {
+                log.info("매핑에 없는 컨셉 — 필터 없이 응답합니다. concept={} tripId={}", request.concept, tripId)
+            }
+            return answered.copy(candidates = kept)
+        }
+        val matched = kept.filter { groundedById.getValue(it.poiId).category in conceptSet }
+        if (matched.isNotEmpty()) return answered.copy(candidates = matched)
+
+        // 경계가 컨셉 밖 후보만 줬다(예: LLM 빈 결과 → 규칙 폴백이 카테고리를 모름). 컨셉 카테고리로
+        // 풀을 직접 봐서 채운다 — 반경 안에 맛집이 실재하는데 "주변에 없음"이라 말하면 거짓이다.
+        return conceptRefill(request.concept!!, conceptSet, center, inItinerary, targetPoiId, answered)
+    }
+
+    /**
+     * 컨셉 카테고리 풀 채움(TRIP-1065) — closed-set 풀([CandidatePoolPort]) 그대로, 거리순.
+     * AI 순위가 아니므로 **degraded=true 로 정직하게** 표시한다(INV-4). 0건이면 로컬 폴백과 같은
+     * 규약으로 사유를 가른다(BR-U3-25): 반경을 한 번 넓혀 보고, 그래도 없으면 NO_NEARBY,
+     * 있는데 전부 일정에 들어 있으면 ALL_IN_ITINERARY.
+     */
+    private fun conceptRefill(
+        concept: String,
+        categories: Set<String>,
+        center: PoiSurfaceView,
+        inItinerary: List<UUID>,
+        targetPoiId: UUID,
+        base: SlotCandidatesOutput,
+    ): SlotCandidatesOutput {
+        val excluded = inItinerary.toSet()
+        fun search(radiusM: Int) = candidatePool
+            .resolve(Area.Radius(center.lat, center.lng, radiusM.toDouble()), categories)
+            .filterNot { it.poiId == targetPoiId }
+            .sortedBy { it.distanceM ?: Double.MAX_VALUE }
+
+        var radius = base.radiusMUsed
+        var nearby = search(radius)
+        var found = nearby.filterNot { it.poiId in excluded }
+        if (found.isEmpty() && radius < CONCEPT_WIDENED_RADIUS_M) {
+            radius = CONCEPT_WIDENED_RADIUS_M
+            nearby = search(radius)
+            found = nearby.filterNot { it.poiId in excluded }
+        }
+        return base.copy(
+            candidates = found.take(MAX_STORED_CANDIDATES).map {
+                SlotCandidate(
+                    poiId = it.poiId,
+                    // 거리만 — 소요시간은 어떤 이유로도 내보내지 않는다(INV-3).
+                    distanceRange = it.distanceM?.let { m -> "약 ${"%.1f".format(Locale.ROOT, m / 1000)}km" }
+                        ?: "거리 미확인",
+                    // 필터를 통과한 카테고리라 이 문구는 참이다(BR-U2-09 — 시각·소요시간 언급 없음).
+                    rationale = "$concept 컨셉에 맞는 ${it.category}",
+                )
+            },
+            radiusMUsed = radius,
+            freshness = FreshnessMeta(clock.instant(), degraded = true),
+            emptyReason = when {
+                found.isNotEmpty() -> null
+                nearby.isEmpty() -> SlotCandidatesEmptyReason.NO_NEARBY
+                else -> SlotCandidatesEmptyReason.ALL_IN_ITINERARY
+            },
+        )
     }
 
     /**
@@ -249,5 +316,8 @@ class SlotCandidateService(
 
         /** 즉답 후보 상한 — 로컬 폴백([LocalSlotCandidateSource])과 같은 개수를 준다. */
         private const val MAX_STORED_CANDIDATES = 5
+
+        /** 컨셉 채움의 넓힌 반경 — 로컬 폴백(h15 "반경 넓힘")과 같은 값. */
+        private const val CONCEPT_WIDENED_RADIUS_M = 12_000
     }
 }
