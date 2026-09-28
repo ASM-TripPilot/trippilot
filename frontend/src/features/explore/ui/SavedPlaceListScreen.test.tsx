@@ -5,6 +5,8 @@ import {
   within,
 } from '@testing-library/react-native';
 
+import { processColor } from 'react-native';
+
 import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
 
 import { optimisticSavedPlaceId } from '../model/savedPlaceIndex';
@@ -299,10 +301,10 @@ describe('T-8 · 빈 상태 (E-1·E-2·E-3 · 01b Seed Q4·Q5)', () => {
       within(empty).getByText('마음에 드는 곳을 담아 보세요')
     ).toBeOnTheScreen();
     // TRIP-705: 서브카피가 명시 줄바꿈(\n) 2줄이다(Figma 1695:1183). 한 Text 안 \n 이라
-    // getByText 는 \n 포함 정확 문자열로 잡는다.
+    // getByText 는 \n 포함 정확 문자열로 잡는다. TRIP-1050: 지역 무관 문구로 바뀌었다(`부산 ` 제거).
     expect(
       within(empty).getByText(
-        '부산 인기 장소를 둘러보고 ♥로 담으면\n여기에 모여 바로 여행이 돼요'
+        '인기 장소를 둘러보고 ♥로 담으면\n여기에 모여 바로 여행이 돼요'
       )
     ).toBeOnTheScreen();
 
@@ -660,5 +662,104 @@ describe('T-17 · released 는 목록에 남되 개수·CTA 에서 빠진다 (AC
     // 단언 ③ 그래도 빈 상태가 아니라 4행이 빈 하트로 남는다(되돌리기 여지).
     expect(itemTestIds()).toHaveLength(4);
     expect(screen.queryByTestId('explore-saved-empty')).toBeNull();
+  });
+});
+
+/**
+ * ── TRIP-1050 · 콜라주 빈 상태 공통 틀 (AC-1·AC-2·AC-8 · 01b Seed Q2) ─────────────
+ * d02 빈 상태가 e04 와 같은 `@/shared/ui/CollageEmptyState` 로 그려진다. 틀의 세부 값은
+ * `shared/ui/CollageEmptyState.test.tsx` 가 잰다 — 여기서는 d02 에 그 틀이 실제로 꽂혔는지와
+ * d02 몫(문구·흰 돋보기·지역 0건 블록 무변경)만 잰다.
+ */
+
+// className 토큰 배열 — 부분 문자열 오탐을 막으려 원소로 잰다(stay 화면 테스트 헬퍼와 같은 모양).
+function cls(el: { props: { className?: unknown } }): string[] {
+  return String(el.props.className ?? '').split(/\s+/);
+}
+
+// SVG 색은 host 노드(RNSVGPath·RNSVGCircle)의 `stroke.payload`(processColor 결과 정수)로 남는다.
+// composite `Path` 요소의 stroke 는 원문 문자열이라 섞지 않도록 host(type 이 문자열)만 고른다.
+function strokePayloads(
+  node: ReturnType<typeof screen.getByTestId>
+): unknown[] {
+  return node
+    .findAll((n) => typeof n.type === 'string' && n.props.stroke != null)
+    .map((n) => n.props.stroke?.payload);
+}
+
+describe('T-18 · TRIP-1050 콜라주 빈 상태 공통 틀 (AC-1·AC-2·AC-8 · Seed Q2)', () => {
+  it('d02 빈 상태가 공통 틀(위쪽 정렬 · 320 콜라주 사진 3장 · 제목 20 · CTA 52 r12)로 그려진다 (AC-1)', () => {
+    renderScreen({ savedPlaces: [], state: { kind: 'empty' } });
+
+    const root = cls(screen.getByTestId('explore-saved-empty'));
+    expect(root).toContain('pt-[96px]');
+    expect(root).not.toContain('justify-center');
+
+    expect(cls(screen.getByTestId('explore-saved-empty-art'))).toContain(
+      'w-[320px]'
+    );
+    // 공통 틀의 파생 testID — 옛 d02 콜라주(230 · rotate)에는 없던 노드다.
+    expect(screen.getAllByTestId(/^explore-saved-empty-photo-/)).toHaveLength(
+      3
+    );
+    expect(screen.getByTestId('explore-saved-empty-heart')).toBeOnTheScreen();
+
+    expect(cls(screen.getByText('마음에 드는 곳을 담아 보세요'))).toContain(
+      'text-[20px]'
+    );
+
+    const cta = cls(screen.getByTestId('explore-saved-browse'));
+    expect(cta).toContain('h-[52px]');
+    expect(cta).toContain('rounded-[12px]');
+    expect(cta).not.toContain('rounded-[14px]');
+    expect(cta).not.toContain('h-[48px]');
+  });
+
+  it('본문이 지역 무관 문구이고 `부산` 이 든 텍스트가 없다 (AC-2 · 사용자 결정)', () => {
+    renderScreen({ savedPlaces: [], state: { kind: 'empty' } });
+
+    // 긍정 — 새 본문(완전일치) · 제목 · CTA 라벨은 그대로.
+    expect(
+      screen.getByText(
+        '인기 장소를 둘러보고 ♥로 담으면\n여기에 모여 바로 여행이 돼요'
+      )
+    ).toBeOnTheScreen();
+    expect(screen.getByText('마음에 드는 곳을 담아 보세요')).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId('explore-saved-browse')).getByText(
+        '장소 둘러보기'
+      )
+    ).toBeOnTheScreen();
+    // 부정 — 정규식이라 부분 포함이다(문자열을 주면 완전일치라 공허해진다).
+    expect(screen.queryAllByText(/부산/)).toHaveLength(0);
+  });
+
+  it('CTA 돋보기가 19 크기의 흰색이다 — 분홍 위 회색이 아니다 (Seed Q2 · Figma 1695:1183)', () => {
+    renderScreen({ savedPlaces: [], state: { kind: 'empty' } });
+
+    expect(screen.getByTestId('explore-saved-browse-icon').props.width).toBe(
+      19
+    );
+
+    const payloads = strokePayloads(screen.getByTestId('explore-saved-browse'));
+    // 긍정 짝 — stroke 노드가 하나도 없으면 "전부 흰색"이 빈 배열에서 공허 통과한다.
+    expect(payloads.length).toBeGreaterThanOrEqual(1);
+    payloads.forEach((payload) => expect(payload).toBe(processColor('white')));
+  });
+
+  it('지역 필터 0건 블록은 이번 변경 전 그대로다 — 공통 틀이 새어 들지 않는다 (AC-8 · TRIP-1042 몫)', () => {
+    renderScreen({
+      savedPlaces: [],
+      state: { kind: 'empty' },
+      regionFilterEmpty: true,
+    });
+
+    const region = screen.getByTestId('explore-saved-region-empty');
+    // 옛 콜라주(230 폭)를 그대로 쓴다 — 같은 art testID 를 두 블록이 공유한다(상호배타).
+    expect(
+      cls(within(region).getByTestId('explore-saved-empty-art'))
+    ).toContain('w-[230px]');
+    expect(screen.queryByTestId('explore-saved-empty')).toBeNull();
+    expect(screen.queryByTestId('explore-saved-empty-photo-0')).toBeNull();
   });
 });

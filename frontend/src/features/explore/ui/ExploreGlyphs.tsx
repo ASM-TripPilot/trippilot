@@ -131,8 +131,13 @@ export function ShareGlyph({ size = 20, testID }: GlyphProps) {
   );
 }
 
-/** 검색 돋보기. */
-export function SearchGlyph({ size = 20, testID }: GlyphProps) {
+/** 검색 돋보기. `tone='on-primary'`는 분홍 버튼 위 흰 돋보기(TRIP-1050, d02 empty CTA). */
+export function SearchGlyph({
+  size = 20,
+  tone = 'muted-soft',
+  testID,
+}: GlyphProps & { tone?: 'muted-soft' | 'on-primary' }) {
+  const stroke = tone === 'on-primary' ? ON_PRIMARY : MUTED_SOFT;
   return (
     <Svg
       testID={testID}
@@ -141,10 +146,10 @@ export function SearchGlyph({ size = 20, testID }: GlyphProps) {
       viewBox="0 0 24 24"
       fill="none"
     >
-      <Circle cx={11} cy={11} r={6.5} stroke={MUTED_SOFT} strokeWidth={1.8} />
+      <Circle cx={11} cy={11} r={6.5} stroke={stroke} strokeWidth={1.8} />
       <Path
         d="M16 16l4.5 4.5"
-        stroke={MUTED_SOFT}
+        stroke={stroke}
         strokeWidth={1.8}
         strokeLinecap="round"
       />
