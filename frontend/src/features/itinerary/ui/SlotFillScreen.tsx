@@ -95,6 +95,8 @@ export interface SlotFillScreenProps {
     center: MapCenter;
     radiusCircle?: { center: MapCenter; radiusM: number };
     pins?: MapPin[];
+    /** 후보 핀까지 한 화면에 맞춘다(TRIP-1081 결정 2). 켤지는 페이지가 정한다. */
+    fitPins?: boolean;
   };
   onSelectRadius: (key: string) => void;
   onSelectRadio: (poiId: string) => void;
@@ -260,14 +262,14 @@ export function SlotFillScreen({
             radiusUsedLabel === undefined ? null : (
               <Text
                 testID="itinerary-copick-radius-used"
-                className="font-noto text-caption text-primary-text"
+                className="font-noto text-caption text-muted"
               >
                 {radiusUsedLabel}
               </Text>
             )}
           </View>
 
-          {/* 지도 카드 — 기준 핀·반경 원(TRIP-1043, 후보 핀은 후보 좌표 계약 뒤). Figma h10 순서대로 반경
+          {/* 지도 카드 — 기준 핀·반경 원(TRIP-1043)·후보 A/B/C 핀(TRIP-1081). Figma h10 순서대로 반경
               세그 아래. 보여주기 전용(viewOnly)·검증된 동선 아님(connectPins=false). 좌표 없으면 mapView
               미주입이라 이 블록 자체가 안 뜬다. */}
           {mapView === undefined ? null : (
@@ -279,6 +281,7 @@ export function SlotFillScreen({
                 center={mapView.center}
                 radiusCircle={mapView.radiusCircle}
                 pins={mapView.pins}
+                fitPins={mapView.fitPins}
                 viewOnly
                 connectPins={false}
               />

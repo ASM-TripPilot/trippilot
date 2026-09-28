@@ -137,6 +137,9 @@ const EXPECTED_H = [
   // (default→wide)로 안정정렬되므로 구현자는 그 순서로 삽입한다(배열 위치=정렬 위치, h02·h14 선례).
   'dev-preview-state-h10-copick-candidates', // h10 (TRIP-795 default)
   'dev-preview-state-h10-copick-candidates-wide', // h10 (TRIP-795 반경 넓힘)
+  // TRIP-1081: 서버가 넓힌 반경(칩 1.1km 그대로 + 사실 캡션 + 후보 핀). 같은 h10 코드라 배열 삽입 순서로
+  // 안정 정렬 — 구현자는 PREVIEW_STATES 에서 -wide 바로 뒤에 넣는다.
+  'dev-preview-state-h10-copick-candidates-auto-wide', // h10 (TRIP-1081 서버 넓힘)
   // TRIP-789: 옛 h09 두 키(itinerary-generating·itinerary-generating-failed)가 이 자리에서 사라진다 —
   // 전자는 h07-generating-loading 으로 개명·이동(위 h07 그룹), 후자는 프리뷰 키 삭제(핸들링 유지).
   // (TRIP-794 로 h09 코드 항목이 다시 생겼다 — h09-copick-concept, 위 h08 뒤 줄 참조. 옛 h09 생성

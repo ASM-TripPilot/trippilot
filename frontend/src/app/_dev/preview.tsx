@@ -951,7 +951,7 @@ const H10_RADIUS_STEPS = [
   { key: 'max', label: '최대' },
 ] as const;
 const H10_CENTER = { lat: 35.1587, lng: 129.1604 };
-// TRIP-1043 — 지도는 지금 채우는 슬롯 장소의 기준 핀 하나 + 반경 원(후보 A/B/C 핀은 후보 좌표 계약 뒤,
+// TRIP-1043 — 지도는 지금 채우는 슬롯 장소의 기준 핀 하나 + 반경 원(후보 A/B/C 핀은 TRIP-1081 auto-wide 키,
 // '현재 위치' 점은 사용자 위치가 아니라 안 씀). label '' 는 물방울 안 번호를 지운다(페이지와 같은 모양).
 const H10_BASE_PINS = [{ number: 1, ...H10_CENTER, label: '' }];
 const H10_DEFAULT_CANDIDATES: SlotCandidatesCandidatesItem[] = [
@@ -1009,6 +1009,14 @@ const H10_WIDE_VIEWS: Record<string, H10View> = {
   ...H10_DEFAULT_VIEWS,
   D4: { ...H10_DEFAULT_VIEWS.D4, dimmed: false },
 };
+// TRIP-1081 — 서버가 1.1km 요청을 약 11.3km 로 넓힌 얼굴(QA #067). 칩은 사용자가 고른 1.1km 그대로,
+// 캡션은 muted 사실 문장, 후보 A/B/C 핀(좌표 가상값)에 fitPins 카메라 — 페이지 조립과 같은 모양.
+const H10_AUTO_WIDE_PINS = [
+  ...H10_BASE_PINS,
+  { number: 2, lat: 35.1662, lng: 129.1368, label: 'A' },
+  { number: 3, lat: 35.1531, lng: 129.1189, label: 'B' },
+  { number: 4, lat: 35.1784, lng: 129.1752, label: 'C' },
+];
 const H10_STEPPER: ReactElement = (
   <CoPickStepper
     prev={{ title: '황령산 전망대', status: '고름', done: true }}
@@ -5452,6 +5460,42 @@ export const PREVIEW_STATES: PreviewState[] = [
         candidateCountLabel="후보 4곳"
         selectedPoiId="D4"
         canExpandRadius={false}
+        isPending={false}
+        errorMessage={null}
+        onSelectRadius={noop}
+        onSelectRadio={noop}
+        onConfirm={noop}
+        onExpandRadius={noop}
+        onShrinkRadius={noop}
+        onChangeConcept={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'h10-copick-candidates-auto-wide',
+    band: 'h',
+    label: 'h10 · 후보 선택 서버가 넓힘',
+    login: null,
+    render: () => (
+      <SlotFillScreen
+        concept="전시"
+        progress={H10_PROGRESS}
+        stepperSlot={H10_STEPPER}
+        mapView={{
+          center: H10_CENTER,
+          radiusCircle: { center: H10_CENTER, radiusM: 11300 },
+          pins: H10_AUTO_WIDE_PINS,
+          fitPins: true,
+        }}
+        candidates={H10_DEFAULT_CANDIDATES.slice(0, 3)}
+        candidateViews={H10_DEFAULT_VIEWS}
+        radiusSteps={H10_RADIUS_STEPS}
+        selectedRadiusKey="mid"
+        radiusUsedLabel="1.1km 안에 없어 약 11.3km까지 넓혔어요"
+        candidateCountLabel="후보 3곳"
+        selectedPoiId="A1"
+        canExpandRadius
         isPending={false}
         errorMessage={null}
         onSelectRadius={noop}

@@ -410,7 +410,12 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    복귀다(그때는 프레임이 없었다). test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그
     //    1키만 추가하고 이 가드는 안 만진다(추가 전엔 177개라 red). 건너뛰기 확인 다이얼로그는 Figma 프레임이
     //    없어 키를 두지 않는다. 정확한 j 목록은 아래 'TRIP-770' describe(16키)가 못박는다.
-    expect(PREVIEW_STATES).toHaveLength(178);
+    // ⚠️ TRIP-1081: h10 서버가 넓힌 반경 얼굴 `h10-copick-candidates-auto-wide`(band `h`) 1키 추가로
+    //    178→179. 칩은 사용자가 고른 1.1km 그대로 + muted 사실 캡션 + 후보 핀 fitPins 카메라(QA #067)는
+    //    jest 가 색·카메라를 못 봐 이 키가 유일한 육안 수단이다. Figma 상태 프레임은 아직 없다(figma 레인
+    //    후속). test-designer 선반영 — implementer 는 preview.tsx 에 그 1키만 추가하고 이 가드는 안
+    //    만진다(추가 전엔 178개라 red). 정확한 키는 아래 'TRIP-1081' describe, h 순서는 devPreviewBandSort.
+    expect(PREVIEW_STATES).toHaveLength(179);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -590,6 +595,23 @@ describe('🔴 TRIP-795 · h10 후보 선택 프리뷰 2키 (band h)', () => {
     // 형제 band h 앵커 — 이웃 co-pick 키(h09 컨셉·h11 완료)가 딸려 사라지지 않았음(공허 통과 방지).
     expect(keys).toContain('h09-copick-concept');
     expect(keys).toContain('h11-copick-complete');
+  });
+});
+
+describe('🔴 TRIP-1081 · h10 서버가 넓힌 반경 프리뷰 1키 (band h)', () => {
+  it('키 집합에 h10-copick-candidates-auto-wide 가 band h 로 있고 기존 h10 2키는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES)만 읽는다.
+    const added = PREVIEW_STATES.find(
+      (state) => state.key === 'h10-copick-candidates-auto-wide'
+    );
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 카운트(179)만으론 "아무 키나 추가해도" 통과하므로 추가된 키가 이것임을 못박는다.
+    expect(added?.band).toBe('h');
+    expect(added?.label).toMatch(/^h10 /);
+    // 형제 앵커 — default·wide 가 딸려 사라지지 않았다.
+    expect(keys).toContain('h10-copick-candidates');
+    expect(keys).toContain('h10-copick-candidates-wide');
   });
 });
 

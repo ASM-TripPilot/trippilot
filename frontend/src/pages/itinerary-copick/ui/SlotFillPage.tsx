@@ -17,6 +17,7 @@ import {
 import { regionForDay } from '@/features/itinerary/model/dayRegion';
 import { isConfirmLocked } from '@/features/itinerary/model/planState';
 import { formatRadiusUsed } from '@/features/itinerary/model/radiusUsedLabel';
+import { formatDistance } from '@/entities/place/lib/formatDistance';
 import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { resolveSlotSwapError } from '@/features/itinerary/model/slotSwapError';
 import { swapSlotPoi } from '@/features/itinerary/model/swapSlotPoi';
@@ -412,6 +413,8 @@ export function SlotFillPage({
 
   // 반경 라벨(Q3·Q6) — 요청 radiusM × 응답 radiusMUsed 로 가른다. 최대(null) 조회면 셋째 칸이 서버값,
   // 숫자 요청을 서버가 넓혔으면 캡션이 그 사실을 말한다. 그 밖(요청 그대로 씀)은 둘 다 없음.
+  // TRIP-1081 결정 1(a) · 넓혔을 때 칩은 사용자가 고른 그대로 두고, 캡션이 "요청 반경 안에 없어 서버가
+  // 넓혔다"를 문장으로 말한다(QA #067 — 숫자만 따로 뜨면 칩과 모순돼 보였다).
   const requestedRadiusM = candidatesVariables?.data.radiusM;
   const maxRadiusLabel =
     candidatesData !== undefined && requestedRadiusM === null
@@ -421,12 +424,18 @@ export function SlotFillPage({
     candidatesData !== undefined &&
     typeof requestedRadiusM === 'number' &&
     candidatesData.radiusMUsed > requestedRadiusM
-      ? formatRadiusUsed(candidatesData.radiusMUsed)
+      ? `${formatDistance(requestedRadiusM)} 안에 없어 ${formatRadiusUsed(
+          candidatesData.radiusMUsed
+        )}까지 넓혔어요`
       : null;
   // 지도 카드(TRIP-1043) — 기준점은 지금 채우는 슬롯의 장소다(사용자 위치가 아니라 currentLocation·
   // '현재 위치' 라벨을 쓰지 않는다). 좌표가 하나라도 없으면 지도를 안 그린다(0,0·폴백 좌표 금지).
   // 원 반경은 서버가 실제로 쓴 radiusMUsed 우선, 조회 중엔 요청 반경, 최대(null) 조회 중엔 원 없음.
-  // 후보 핀은 후보 좌표 계약이 생긴 뒤 붙인다 — 지금 핀은 기준 핀 하나(label '' 로 번호를 안 그린다).
+  // 기준 핀은 맨 앞 하나(label '' 로 번호를 안 그린다). 후보 핀(TRIP-1081)은 응답 후보 중 lat·lng 가
+  // 둘 다 숫자인 것만 — 없는 좌표를 0,0·기준점으로 대신 찍지 않는다(BR-U1-06·INV-4). 글자는 카드 배지와
+  // 같은 **카드 index** 기준이라 좌표 없는 후보를 건너뛰어도 당겨 붙지 않는다(A·C). 번호는 SDK 마커
+  // key 라 서로 달라야 한다(기준 1, 후보 index+2). 후보 핀이 2개 이상이면 원 대신 핀 묶음에 카메라를
+  // 맞춘다(결정 2(b)) — 서버가 12km 로 넓히면 원 기준 카메라에선 핀이 중심에 뭉친다. 원은 그대로 그린다.
   const ctx = coPickContext();
   const currentSlot = ctx === null ? undefined : ctx.nonFixed[ctx.index];
   const circleRadiusM =
@@ -436,6 +445,18 @@ export function SlotFillPage({
     typeof currentSlot?.lat === 'number' && typeof currentSlot.lng === 'number'
       ? { lat: currentSlot.lat, lng: currentSlot.lng }
       : undefined;
+  const candidatePins = candidates.flatMap(({ lat, lng }, index) =>
+    typeof lat === 'number' && typeof lng === 'number'
+      ? [
+          {
+            number: index + 2,
+            lat,
+            lng,
+            label: String.fromCharCode('A'.charCodeAt(0) + index),
+          },
+        ]
+      : []
+  );
   const mapView =
     mapCenter === undefined
       ? undefined
@@ -445,7 +466,8 @@ export function SlotFillPage({
             circleRadiusM === undefined
               ? undefined
               : { center: mapCenter, radiusM: circleRadiusM },
-          pins: [{ number: 1, ...mapCenter, label: '' }],
+          pins: [{ number: 1, ...mapCenter, label: '' }, ...candidatePins],
+          fitPins: candidatePins.length >= 2,
         };
   const candidatesErrorMessage = !candidatesFailed
     ? null

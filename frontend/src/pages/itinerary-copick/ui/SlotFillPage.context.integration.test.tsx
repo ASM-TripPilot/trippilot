@@ -35,10 +35,11 @@ import { SlotFillPage } from './SlotFillPage';
  *  - A3 여행 조회가 아직 안 왔거나 실패했거나 여행지가 비면 접두 없이 종전 모양 그대로 뜬다 —
  *    `undefined · ` 같은 글자가 새지 않고, 여행 조회를 기다리느라 진행 줄이 늦어지지도 않는다(INV-4).
  *  - 🔴 A4 두 화면 어디에도 내부 용어 「슬롯」이 없고 카운트는 `N번째 / M` 이다(QA #041).
- *  - 🔴 B1~B4 후보 화면 위에 지도 카드: 기준점 = **지금 채우는 슬롯의 장소**(사용자 GPS 아님 — '현재 위치'
+ *  - 🔴 B1~B3 후보 화면 위에 지도 카드: 기준점 = **지금 채우는 슬롯의 장소**(사용자 GPS 아님 — '현재 위치'
  *    라벨 금지, Seed Q1), 반경 원 = 응답 `radiusMUsed` 우선·조회 중엔 요청 반경·최대 조회 중엔 원 없음
- *    (Seed Q2 · BR-U3-25). 후보 A/B/C 핀은 없다 — 후보 좌표 계약이 아직 없다(결정 2). 슬롯 좌표가 없으면
- *    지도 카드 자체를 안 그린다(0,0·서울 폴백 금지).
+ *    (Seed Q2 · BR-U3-25). 슬롯 좌표가 없으면 지도 카드 자체를 안 그린다(0,0·서울 폴백 금지).
+ *  - 🔴 P1~P6(TRIP-1081, 옛 B4 "후보 핀 없음" 반전) 좌표가 둘 다 있는 후보만 카드 글자(A/B/C…)로 핀이
+ *    되고, 후보 핀이 2개 이상이면 지도가 핀 전부에 맞춰 열린다(fitPins, 반경 원은 유지).
  *
  * 3동작: 준비 = 가짜 서버(일정·여행·후보) → 실행 = 슬롯 화면 열기·컨셉/반경 누르기 → 단언 = 진행 줄
  * 글자·지도에 넘어간 값.
@@ -497,18 +498,176 @@ describe('B3 · 슬롯 좌표가 없으면 지도 카드 자체가 없다 (0,0·
   );
 });
 
-describe('🔴 B4 · 후보 A/B/C 핀은 그리지 않는다 (후보 좌표 계약 대기 · 결정 2)', () => {
-  it('후보가 3곳 와도 지도 핀은 기준 핀 1개뿐이고 letter 핀이 없다', async () => {
+// TRIP-1081 — 후보 좌표 픽스처. 전부 슬롯 a·b 좌표와 다르다(기준점 대체 뮤턴트와 구별, 02a ★3).
+const COORD_X = { lat: 37.581, lng: 126.975 };
+const COORD_Y = { lat: 37.577, lng: 126.983 };
+const COORD_Z = { lat: 37.583, lng: 126.98 };
+const COORD_V = { lat: 37.57, lng: 126.97 };
+const COORD_W = { lat: 37.59, lng: 126.99 };
+const DURATION_TEXT = /(\d+\s*분|\d+\s*시간|소요)/;
+
+function located(): SlotCandidatesCandidatesItem[] {
+  return [
+    { poiId: 'X', distanceRange: '420m', rationale: '실내 전시', ...COORD_X },
+    { poiId: 'Y', distanceRange: '770m', rationale: '조용한 카페', ...COORD_Y },
+    { poiId: 'Z', distanceRange: '980m', rationale: '야외 정원', ...COORD_Z },
+  ];
+}
+
+type Pin = { number: number; lat: number; lng: number; label?: string };
+
+function mapPins(): Pin[] {
+  return mapInCard().props.pins as Pin[];
+}
+
+/** 기준 핀(맨 앞)을 뺀 후보 핀을 글자·좌표만 남겨 비교한다(02a ★1). */
+function candidatePins(): { label?: string; lat: number; lng: number }[] {
+  return mapPins()
+    .slice(1)
+    .map(({ label, lat, lng }) => ({ label, lat, lng }));
+}
+
+async function openCandidates(lastPoiId: string): Promise<void> {
+  renderPage(buildSlotKey(DAY1, 'a'));
+  await pickConcept();
+  await screen.findByTestId(`itinerary-candidate-radio-${lastPoiId}`);
+}
+
+// B4(후보 핀 없음)는 결정 반전으로 삭제 — 후보 좌표 계약(TRIP-1063)이 생겼다.
+describe('🔴 TRIP-1081 · 후보 A/B/C 핀 (QA #068 · 결정 2)', () => {
+  it('P1 · 좌표 있는 후보 3곳 → 기준 핀 뒤에 A·B·C 핀이 카드 순서·후보 좌표로 붙는다', async () => {
+    candidates = located();
+    await openCandidates('Z');
+
+    const pins = mapPins();
+    expect(pins).toHaveLength(4);
+    // 맨 앞은 여전히 기준 핀(슬롯 a) — 글자 핀이 아니다.
+    expect({ lat: pins[0].lat, lng: pins[0].lng }).toEqual(SLOT_A);
+    expect(/^[A-Z]$/.test(pins[0].label ?? '')).toBe(false);
+    // 후보 핀 = 응답 후보뿐, 카드 순서 글자 + 그 후보 좌표(INV-1).
+    expect(candidatePins()).toEqual([
+      { label: 'A', ...COORD_X },
+      { label: 'B', ...COORD_Y },
+      { label: 'C', ...COORD_Z },
+    ]);
+    // 지도는 number 로 마커 key 를 만든다 — 겹치면 실기에서 핀이 조용히 사라진다(02a ★2).
+    expect(new Set(pins.map((pin) => pin.number)).size).toBe(pins.length);
+  });
+
+  it.each([
+    ['lat 가 null', { lat: null, lng: COORD_Y.lng }],
+    ['lng 가 null', { lat: COORD_Y.lat, lng: null }],
+    ['lat 키가 없음', { lng: COORD_Y.lng }],
+    ['lng 키가 없음', { lat: COORD_Y.lat }],
+  ])(
+    'P2 · 둘째 후보(Y)의 %s → 후보 핀은 A·C 두 개뿐(글자 유지, 0,0·기준점으로 대신 찍지 않음)',
+    async (_case, coords) => {
+      candidates = [
+        {
+          poiId: 'X',
+          distanceRange: '420m',
+          rationale: '실내 전시',
+          ...COORD_X,
+        },
+        {
+          poiId: 'Y',
+          distanceRange: '770m',
+          rationale: '조용한 카페',
+          ...coords,
+        },
+        {
+          poiId: 'Z',
+          distanceRange: '980m',
+          rationale: '야외 정원',
+          ...COORD_Z,
+        },
+      ];
+      await openCandidates('Z');
+
+      expect(mapPins()).toHaveLength(3);
+      expect(candidatePins()).toEqual([
+        { label: 'A', ...COORD_X },
+        { label: 'C', ...COORD_Z },
+      ]);
+    }
+  );
+
+  it('P3 · 반경을 바꿔 재조회하면 이전 후보 핀은 사라지고 새 후보 핀만 남는다', async () => {
+    candidates = located().slice(0, 2);
+    await openCandidates('Y');
+    expect(candidatePins()).toEqual([
+      { label: 'A', ...COORD_X },
+      { label: 'B', ...COORD_Y },
+    ]);
+
+    // 핸들러가 요청 시점에 candidates 를 읽는다 — 누르기 전에 바꾼다(02a ★11).
     candidates = [
-      ...TWO_CANDIDATES,
-      { poiId: 'Z', distanceRange: '980m', rationale: '야외 정원' },
+      { poiId: 'V', distanceRange: '300m', rationale: '골목 식당', ...COORD_V },
+      { poiId: 'W', distanceRange: '650m', rationale: '공원', ...COORD_W },
     ];
+    fireEvent.press(screen.getByTestId('itinerary-copick-radius-seg-near'));
+    await screen.findByTestId('itinerary-candidate-radio-V');
+
+    expect(candidatePins()).toEqual([
+      { label: 'A', ...COORD_V },
+      { label: 'B', ...COORD_W },
+    ]);
+  });
+
+  it.each([
+    [0, false],
+    [1, false],
+    [2, true],
+    [3, true],
+  ] as const)(
+    'P4 · 후보 3곳 중 좌표 있는 곳이 %i 곳이면 fitPins=%s, 반경 원은 그대로',
+    async (withCoords, fit) => {
+      candidates = located().map((candidate, index) =>
+        index < withCoords ? candidate : { ...candidate, lat: null, lng: null }
+      );
+      await openCandidates('Z');
+
+      const map = mapInCard();
+      expect(mapPins()).toHaveLength(1 + withCoords);
+      // 미설정은 false·undefined 둘 다 허용 — 지도는 === true 로만 분기한다(02a ★7).
+      if (fit) {
+        expect(map.props.fitPins).toBe(true);
+      } else {
+        expect(map.props.fitPins).not.toBe(true);
+      }
+      expect(map.props.radiusCircle).toEqual({
+        center: SLOT_A,
+        radiusM: 1100,
+      });
+    }
+  );
+
+  it('P5 · 슬롯 좌표가 없으면 후보 좌표가 있어도 지도 카드 자체가 없다(무회귀)', async () => {
+    slotALat = null;
+    candidates = located();
     renderPage(buildSlotKey(DAY1, 'a'));
     await pickConcept();
-    await screen.findByTestId('itinerary-candidate-radio-Z');
 
-    const pins = mapInCard().props.pins as { label?: string }[];
-    expect(pins).toHaveLength(1);
-    expect(pins.filter((pin) => /^[A-Z]$/.test(pin.label ?? ''))).toEqual([]);
+    // 긍정 짝 — 후보 얼굴이 떠 있다.
+    await screen.findByTestId('itinerary-candidate-radio-X');
+    expect(screen.queryByTestId('itinerary-copick-slotfill-map')).toBeNull();
+    expect(screen.queryByTestId('map-root')).toBeNull();
+  });
+
+  it('P6 · 후보 핀·넓힘 캡션이 떠 있어도 소요시간 문자열이 없다 (INV-3)', async () => {
+    candidates = located();
+    radiusUsedOverride = 12000;
+    await openCandidates('Z');
+
+    // 긍정 앵커 — 새 캡션과 후보 핀이 실제로 떠 있다(02a ★12).
+    expect(
+      screen.getByTestId('itinerary-copick-radius-used')
+    ).toHaveTextContent('1.1km 안에 없어 약 12.0km까지 넓혔어요');
+    expect(mapPins()).toHaveLength(4);
+
+    expect(screen.queryAllByText(DURATION_TEXT)).toEqual([]);
+    expect(
+      mapPins().filter((pin) => DURATION_TEXT.test(pin.label ?? ''))
+    ).toEqual([]);
   });
 });
