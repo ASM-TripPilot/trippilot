@@ -55,13 +55,18 @@ class DbContentAdapter(
 
         val stays = codes.flatMap { jpa.findByRegionPrefix(it) }
             .distinctBy { it.externalSource to it.externalId }
-            .sortedBy { it.name }
+            // 법인 접두("(W)"·"(사)"…)를 정렬 키에서만 뗀다(TRIP-1003 (A)) — 가격 전무 상태의 이름순
+            // 폴백에서 "(W)더블유 모텔"이 전국 첫 카드였다(QA #023). 표기는 그대로다(정본 조작 금지).
+            // place-data `PoiSearchOrder` 와 같은 취지의 지역 사본 — 모듈 경계(R1)라 공유하지 않는다.
+            .sortedBy { stay -> stay.name.replace(CORP_PREFIX, "").ifBlank { stay.name } }
         // **정본이 편의시설을 모른다**(LOCALDATA 인허가 대장에 그 칸이 없다). 빈 배열을 "없음"으로
         // 읽히게 두면 사용자가 필터를 걸었을 때 0건이 거짓말이 된다.
         return ContentResult(stays.map { it.toDomain() }, degraded = false, amenitiesKnown = false)
     }
 
     private companion object {
+        private val CORP_PREFIX = Regex("""^\s*(\([^)]*\)|（[^）]*）|[㈜㈔㈗㈐])\s*""")
+
         /** 지역을 안 고른 조회의 상한. 화면이 한 번에 보여줄 수 있는 규모를 넘지 않게. */
         private const val UNSCOPED_LIMIT = 200
         private val log = org.slf4j.LoggerFactory.getLogger(DbContentAdapter::class.java)

@@ -3,6 +3,7 @@ package com.trippilot.placedata
 import com.trippilot.placedata.domain.DataStatus
 import com.trippilot.placedata.domain.Poi
 import com.trippilot.placedata.domain.PoiCategory
+import com.trippilot.placedata.domain.PoiSearchOrder
 import com.trippilot.placedata.domain.PoiCursor
 import com.trippilot.placedata.domain.PoiRepository
 import com.trippilot.placedata.domain.PoiSource
@@ -42,11 +43,14 @@ class InMemoryPoiRepository : PoiRepository {
             (category == null || p.category == category) &&
             (regionCodes.isEmpty() || regionCodes.any { c -> p.regionCode?.startsWith(c) == true }) &&
             (query.isEmpty() || p.nameKo.contains(query, ignoreCase = true))
-    }.sortedWith(compareBy({ it.nameKo }, { it.poiId }))
+    }.sortedWith(compareBy({ PoiSearchOrder.rank(query, it.nameKo) }, { PoiSearchOrder.sortKey(it.nameKo) }, { it.poiId }))
         .filter { p ->
-            // 정렬 키와 **같은 순서로** 비교해야 커서가 정확히 맞물린다.
-            after == null || p.nameKo > after.nameKo ||
-                (p.nameKo == after.nameKo && p.poiId > after.poiId)
+            // 정렬 키와 **같은 순서로** 비교해야 커서가 정확히 맞물린다(TRIP-1003 (A) 3축).
+            after == null || run {
+                val r = PoiSearchOrder.rank(query, p.nameKo)
+                val k = PoiSearchOrder.sortKey(p.nameKo)
+                r > after.rank || (r == after.rank && (k > after.sortKey || (k == after.sortKey && p.poiId > after.poiId)))
+            }
         }
         .take(limit)
 
