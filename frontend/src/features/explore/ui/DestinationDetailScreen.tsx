@@ -25,7 +25,10 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { PlaceCardVM } from '@/entities/place/model';
-import { PlaceRailCard } from '@/entities/place/ui/PlaceRailCard';
+import {
+  PlaceRailCard,
+  type PlaceRailCardSave,
+} from '@/entities/place/ui/PlaceRailCard';
 import { StaySearchCard } from '@/entities/stay/ui/StaySearchCard';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
@@ -65,6 +68,12 @@ export interface DestinationDetailScreenProps {
     onRetry: () => void;
     onSeeAll: () => void;
     onPressCard: (poiId: string) => void;
+    // 저장 하트(TRIP-1049) — 전부 additive·옵셔널. onToggleSave 가 있을 때만 하트를 그린다.
+    savedPoiIds?: string[];
+    pendingPoiIds?: string[];
+    onToggleSave?: (poiId: string) => void;
+    saveErrorMessage?: string | null;
+    onDismissSaveError?: () => void;
   };
   /** 하단 탭 press(뒤로가기 대체) — 목적지는 페이지가 정한다(`/stays` `onPressTab` 선례). */
   onPressTab: (key: ShellTabKey) => void;
@@ -110,6 +119,27 @@ function StaySaveErrorBanner({
       <Text className="flex-1 font-noto text-label text-muted">
         담기에 실패했어요. 잠시 후 다시 시도해 주세요.
       </Text>
+    </Pressable>
+  );
+}
+
+// 장소 담기 실패 배너(TRIP-1049, INV-4) — 문구는 페이지가 담기/해제 갈래로 골라 준다.
+function PlaceSaveErrorBanner({
+  message,
+  onDismiss,
+}: {
+  message: string;
+  onDismiss?: () => void;
+}): ReactElement {
+  return (
+    <Pressable
+      testID="destination-detail-place-save-error"
+      accessibilityRole="button"
+      onPress={onDismiss}
+      className="mb-md flex-row items-center gap-sm rounded-card bg-surface-soft px-lg py-md"
+    >
+      <WarningTriangleGlyph size={18} tone="primary" />
+      <Text className="flex-1 font-noto text-label text-muted">{message}</Text>
     </Pressable>
   );
 }
@@ -176,9 +206,11 @@ function LaneErrorBlock({
 function PlaceGrid({
   cards,
   onPressCard,
+  saveFor,
 }: {
   cards: PlaceCardVM[];
   onPressCard: (poiId: string) => void;
+  saveFor: (poiId: string) => PlaceRailCardSave | undefined;
 }): ReactElement {
   const rows = Array.from({ length: Math.ceil(cards.length / 2) }, (_, r) =>
     cards.slice(r * 2, r * 2 + 2)
@@ -203,6 +235,7 @@ function PlaceGrid({
                   onPress={onPressCard}
                   testIDPrefix="destination-detail-place-card"
                   variant="fill"
+                  save={saveFor(card.poiId)}
                 />
               ) : null}
             </View>
@@ -230,6 +263,23 @@ export function DestinationDetailScreen({
     saveError = false,
     onDismissSaveError,
   } = stayLane;
+  const {
+    savedPoiIds = [],
+    pendingPoiIds = [],
+    onToggleSave: onTogglePlaceSave,
+  } = placeLane;
+  // 저장 배선(onToggleSave)이 있을 때만 하트를 그린다(AC-8 무회귀).
+  const placeSaveFor = (poiId: string): PlaceRailCardSave | undefined =>
+    onTogglePlaceSave
+      ? {
+          saved: savedPoiIds.includes(poiId),
+          pending: pendingPoiIds.includes(poiId),
+          onToggle: () => onTogglePlaceSave(poiId),
+          testID: `destination-detail-place-save-${poiId}`,
+          filledTestID: `destination-detail-place-heart-filled-${poiId}`,
+          outlineTestID: `destination-detail-place-heart-outline-${poiId}`,
+        }
+      : undefined;
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
@@ -326,6 +376,12 @@ export function DestinationDetailScreen({
               onSeeAll={placeLane.onSeeAll}
               seeAllTestID="destination-detail-place-seeall"
             />
+            {placeLane.saveErrorMessage ? (
+              <PlaceSaveErrorBanner
+                message={placeLane.saveErrorMessage}
+                onDismiss={placeLane.onDismissSaveError}
+              />
+            ) : null}
             {placeLane.error ? (
               <LaneErrorBlock
                 testID="destination-detail-place-retry"
@@ -336,6 +392,7 @@ export function DestinationDetailScreen({
               <PlaceGrid
                 cards={placeLane.cards}
                 onPressCard={placeLane.onPressCard}
+                saveFor={placeSaveFor}
               />
             ) : (
               <Pressable

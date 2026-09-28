@@ -23,6 +23,7 @@ import {
   HOME_POST_TRIP_PROPS,
   HOME_TRAVELING_PROPS,
 } from '@/features/home/model/homeFixtures';
+import type { HomeSpotsLane } from '@/features/home/model/homeTypes';
 import {
   PREVIEW_PLACES,
   PREVIEW_REGIONS,
@@ -366,6 +367,29 @@ const EXPLORE_LANDING_PLACE_LANE = {
   ],
   onRetry: noop,
   onPressCard: noop,
+};
+
+// TRIP-1049 — 장소 저장 하트를 눈으로 보는 자리: 담김 1장(광안리 해변 p2, Figma 4663:2540·4664:2585).
+const PLACE_SAVE_PREVIEW = {
+  savedPoiIds: ['p2'],
+  pendingPoiIds: [],
+  onToggleSave: noop,
+};
+
+// 홈 '지금 뜨는 장소' 하트(TRIP-1049) — 실앱은 라우트가 GET /places 로 채운다. 프리뷰는 픽스처
+// 4장에 poiId 를 붙여 하트를 띄우고 3번째 장을 담김으로 둔다.
+const HOME_SPOTS_LANE: HomeSpotsLane = {
+  status: 'ready',
+  cards:
+    HOME_DEFAULT_PROPS.sections.kind === 'ready'
+      ? HOME_DEFAULT_PROPS.sections.spots.map((card, i) => ({
+          ...card,
+          poiId: `spot-${i}`,
+        }))
+      : [],
+  onRetry: noop,
+  savedPoiIds: ['spot-2'],
+  onToggleSave: noop,
 };
 
 // d05 목적지 상세 장소 격자 전용 6장(Figma 4663:2540 과 같은 데이터, TRIP-1048).
@@ -2804,7 +2828,10 @@ export const PREVIEW_STATES: PreviewState[] = [
     band: 'a',
     label: 'a01 · 기본',
     login: null,
-    render: () => withShellTabBar(<HomeScreen {...HOME_DEFAULT_PROPS} />),
+    render: () =>
+      withShellTabBar(
+        <HomeScreen {...HOME_DEFAULT_PROPS} spotsLane={HOME_SPOTS_LANE} />
+      ),
   },
   {
     key: 'home-loading',
@@ -2826,7 +2853,10 @@ export const PREVIEW_STATES: PreviewState[] = [
     band: 'a',
     label: 'a01 · 여행 중',
     login: null,
-    render: () => withShellTabBar(<HomeScreen {...HOME_TRAVELING_PROPS} />),
+    render: () =>
+      withShellTabBar(
+        <HomeScreen {...HOME_TRAVELING_PROPS} spotsLane={HOME_SPOTS_LANE} />
+      ),
   },
   {
     key: 'home-post-trip',
@@ -3783,6 +3813,7 @@ export const PREVIEW_STATES: PreviewState[] = [
       withShellTabBar(
         <ExploreLandingScreen
           {...EXPLORE_LANDING_BASE}
+          placeLane={{ ...EXPLORE_LANDING_PLACE_LANE, ...PLACE_SAVE_PREVIEW }}
           stayLane={{
             error: false,
             cards: EXPLORE_STAY_CARDS,
@@ -3857,6 +3888,7 @@ export const PREVIEW_STATES: PreviewState[] = [
           onRetry: noop,
           onSeeAll: noop,
           onPressCard: noop,
+          ...PLACE_SAVE_PREVIEW,
         }}
         onPressTab={noop}
         onPressCreateTrip={noop}

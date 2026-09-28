@@ -714,3 +714,187 @@ describe('TRIP-1048 · 세그먼트 제거 · 부제 · 장소 2열 격자', () 
     expect(screen.queryByTestId('destination-detail-place-grid')).toBeNull();
   });
 });
+
+/**
+ * ── TRIP-1049 · 장소 격자 카드 저장 하트 (d05, Figma 4663:2540) ──────────────────────────
+ * 숙소 레인(TRIP-709 AC-5)과 같은 계약을 장소 격자에 얹는다. 위 케이스는 무수정, 아래만 추가.
+ *
+ * 무엇을 보장하나:
+ *  - 저장 배선(onToggleSave)이 없으면 하트가 없다(프리뷰·기존 테스트 무회귀, AC-8).
+ *  - 담김/안 담김은 서로 다른 글리프 testID + `selected` 로 갈린다(색 X — SVG fill 은 jest 사각).
+ *  - 하트 press 는 카드 이동을 부르지 않는다(AC-4). 대기 중엔 하트도 카드도 반응하지 않는다 —
+ *    disabled 하트 press 는 부모 카드로 새기 때문이다(02a ★2).
+ *  - 실패 안내는 받은 문구를 그대로 보이고, 누르면 닫힌다(AC-7 표시면).
+ */
+describe('TRIP-1049 · 장소 격자 저장 하트', () => {
+  const PLACE_B: PlaceCardVM = {
+    poiId: 'poi-2',
+    name: '감천문화마을',
+    region: '사하구',
+    imageUrl: null,
+  };
+
+  function placeLaneWithSave(
+    over: Partial<DestinationDetailScreenProps['placeLane']> = {}
+  ): DestinationDetailScreenProps['placeLane'] {
+    return {
+      error: false,
+      cards: [PLACE, PLACE_B],
+      onRetry: jest.fn(),
+      onSeeAll: jest.fn(),
+      onPressCard: jest.fn(),
+      savedPoiIds: [],
+      pendingPoiIds: [],
+      onToggleSave: jest.fn(),
+      saveErrorMessage: null,
+      onDismissSaveError: jest.fn(),
+      ...over,
+    };
+  }
+
+  it('S-1 · 저장 배선이 없으면(기존 baseProps) 하트가 없고 카드·격자는 그대로다', () => {
+    render(<DestinationDetailScreen {...baseProps()} />);
+
+    expect(
+      screen.queryByTestId(`destination-detail-place-save-${PLACE.poiId}`)
+    ).toBeNull();
+    expect(
+      screen.getByTestId(`destination-detail-place-card-${PLACE.poiId}`)
+    ).toBeOnTheScreen();
+  });
+
+  it('S-2 · 담긴 장소는 찬 하트+선택됨, 안 담긴 장소는 빈 하트+선택 아님', () => {
+    render(
+      <DestinationDetailScreen
+        {...baseProps({
+          placeLane: placeLaneWithSave({ savedPoiIds: [PLACE_B.poiId] }),
+        })}
+      />
+    );
+
+    // 안 담김(PLACE)
+    expect(
+      screen.getByTestId(
+        `destination-detail-place-heart-outline-${PLACE.poiId}`
+      )
+    ).toBeOnTheScreen();
+    expect(
+      screen.queryByTestId(
+        `destination-detail-place-heart-filled-${PLACE.poiId}`
+      )
+    ).toBeNull();
+    expect(
+      screen.getByTestId(`destination-detail-place-save-${PLACE.poiId}`)
+    ).not.toBeSelected();
+    // 담김(PLACE_B)
+    expect(
+      screen.getByTestId(
+        `destination-detail-place-heart-filled-${PLACE_B.poiId}`
+      )
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId(`destination-detail-place-save-${PLACE_B.poiId}`)
+    ).toBeSelected();
+  });
+
+  it('S-3 · 하트 press → onToggleSave(poiId) 1회, 카드 이동(onPressCard)은 0회', () => {
+    const onToggleSave = jest.fn();
+    const onPressCard = jest.fn();
+    render(
+      <DestinationDetailScreen
+        {...baseProps({
+          placeLane: placeLaneWithSave({ onToggleSave, onPressCard }),
+        })}
+      />
+    );
+
+    fireEvent.press(
+      screen.getByTestId(`destination-detail-place-save-${PLACE.poiId}`)
+    );
+
+    expect(onToggleSave).toHaveBeenCalledTimes(1);
+    expect(onToggleSave).toHaveBeenCalledWith(PLACE.poiId);
+    expect(onPressCard).not.toHaveBeenCalled();
+  });
+
+  it('S-4 · 대기 중 하트는 disabled 이고, 눌러도 담기·카드 이동 모두 0회다', () => {
+    const onToggleSave = jest.fn();
+    const onPressCard = jest.fn();
+    render(
+      <DestinationDetailScreen
+        {...baseProps({
+          placeLane: placeLaneWithSave({
+            pendingPoiIds: [PLACE.poiId],
+            onToggleSave,
+            onPressCard,
+          }),
+        })}
+      />
+    );
+    const heart = screen.getByTestId(
+      `destination-detail-place-save-${PLACE.poiId}`
+    );
+
+    expect(heart).toBeDisabled();
+    fireEvent.press(heart);
+
+    expect(onToggleSave).not.toHaveBeenCalled();
+    // disabled 하트 press 는 부모 카드로 샌다 — 카드가 대기를 보고 막아야 0 이다(02a ★2).
+    expect(onPressCard).not.toHaveBeenCalled();
+    // 짝 — 대기 중이 아닌 옆 카드 하트는 살아 있다(전체를 막는 구현 차단).
+    expect(
+      screen.getByTestId(`destination-detail-place-save-${PLACE_B.poiId}`)
+    ).not.toBeDisabled();
+  });
+
+  it('S-5 · 실패 문구가 오면 배너에 그대로 보이고, 누르면 닫기 콜백이 온다 · 없으면 배너 없음', () => {
+    const onDismissSaveError = jest.fn();
+    const message = '연결이 불안정해 담지 못했어요';
+    const { rerender } = render(
+      <DestinationDetailScreen
+        {...baseProps({ placeLane: placeLaneWithSave() })}
+      />
+    );
+    // 앵커 — 문구가 없으면 배너도 없다.
+    expect(
+      screen.queryByTestId('destination-detail-place-save-error')
+    ).toBeNull();
+
+    rerender(
+      <DestinationDetailScreen
+        {...baseProps({
+          placeLane: placeLaneWithSave({
+            saveErrorMessage: message,
+            onDismissSaveError,
+          }),
+        })}
+      />
+    );
+    const banner = screen.getByTestId('destination-detail-place-save-error');
+
+    // 문구는 한 Text 노드의 완전 일치로 잰다(02a ★13).
+    expect(within(banner).getByText(message)).toBeOnTheScreen();
+    fireEvent.press(banner);
+    expect(onDismissSaveError).toHaveBeenCalledTimes(1);
+  });
+
+  it('S-7 · 하트는 격자 칸 안(카드 위)에 그려진다 — 격자 밖에 따로 그리지 않는다', () => {
+    render(
+      <DestinationDetailScreen
+        {...baseProps({ placeLane: placeLaneWithSave() })}
+      />
+    );
+
+    const cells = screen.getAllByTestId('destination-detail-place-grid-cell');
+    expect(
+      within(cells[0]).getByTestId(
+        `destination-detail-place-save-${PLACE.poiId}`
+      )
+    ).toBeOnTheScreen();
+    expect(
+      within(cells[1]).getByTestId(
+        `destination-detail-place-save-${PLACE_B.poiId}`
+      )
+    ).toBeOnTheScreen();
+  });
+});

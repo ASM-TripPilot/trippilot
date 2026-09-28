@@ -109,3 +109,91 @@ describe('🔴 PlaceRailCard 폭 변형 (TRIP-1048)', () => {
     expect(onPress).toHaveBeenCalledWith('p1');
   });
 });
+
+/**
+ * TRIP-1049 — 카드 사진 우상단에 저장 하트(32 흰 원, HeartButton 대응)를 얹는 옵셔널 슬롯.
+ *
+ * 무엇을 보장하나:
+ *  - `save` 를 안 주면 하트가 없다(지금 소비처 무회귀).
+ *  - 담김/안 담김은 **색이 아니라** 서로 다른 글리프 testID + `selected` 로 갈린다(SVG fill 은 jest 사각).
+ *  - 하트 press 는 카드 이동(onPress)을 부르지 않는다.
+ *  - 대기(pending) 중 하트를 누르면 하트도 카드도 반응하지 않는다 — disabled 하트 press 는 부모
+ *    카드로 새므로(02a ★2 Probe C) 카드 쪽 가드가 필요하다.
+ */
+describe('🔴 PlaceRailCard 저장 하트 슬롯 (TRIP-1049)', () => {
+  function withSave(over: { saved?: boolean; pending?: boolean } = {}) {
+    const onToggle = jest.fn();
+    const onPress = jest.fn();
+    render(
+      <PlaceRailCard
+        card={VM}
+        onPress={onPress}
+        save={{
+          saved: over.saved ?? false,
+          pending: over.pending ?? false,
+          onToggle,
+          testID: 'heart-p1',
+          filledTestID: 'heart-filled-p1',
+          outlineTestID: 'heart-outline-p1',
+        }}
+      />
+    );
+    return { onToggle, onPress };
+  }
+
+  it('R6 · save 를 안 주면 하트가 없다(무회귀)', () => {
+    render(<PlaceRailCard card={VM} onPress={jest.fn()} />);
+
+    expect(screen.queryByTestId('heart-p1')).toBeNull();
+    expect(screen.queryByTestId('heart-outline-p1')).toBeNull();
+    expect(screen.queryByTestId('heart-filled-p1')).toBeNull();
+  });
+
+  it('R7a · 안 담김 = 빈 하트 + 선택 아님', () => {
+    withSave({ saved: false });
+
+    expect(screen.getByTestId('heart-outline-p1')).toBeOnTheScreen();
+    expect(screen.queryByTestId('heart-filled-p1')).toBeNull();
+    expect(screen.getByTestId('heart-p1')).not.toBeSelected();
+  });
+
+  it('R7b · 담김 = 찬 하트 + 선택됨 (색이 아니라 서로 다른 글리프로 갈린다)', () => {
+    withSave({ saved: true });
+
+    expect(screen.getByTestId('heart-filled-p1')).toBeOnTheScreen();
+    expect(screen.queryByTestId('heart-outline-p1')).toBeNull();
+    expect(screen.getByTestId('heart-p1')).toBeSelected();
+  });
+
+  it('R8 · 하트 press → onToggle 1회, 카드 이동(onPress)은 0회', () => {
+    const { onToggle, onPress } = withSave();
+
+    fireEvent.press(screen.getByTestId('heart-p1'));
+
+    expect(onToggle).toHaveBeenCalledTimes(1);
+    expect(onPress).not.toHaveBeenCalled();
+  });
+
+  it('R9 · 대기 중 하트는 disabled 이고, 눌러도 onToggle·카드 이동 모두 0회다', () => {
+    const { onToggle, onPress } = withSave({ pending: true });
+
+    expect(screen.getByTestId('heart-p1')).toBeDisabled();
+
+    fireEvent.press(screen.getByTestId('heart-p1'));
+
+    expect(onToggle).not.toHaveBeenCalled();
+    // disabled 하트 press 는 부모 카드로 샌다 — 카드가 pending 을 보고 이동을 막아야 0 이다.
+    expect(onPress).not.toHaveBeenCalled();
+  });
+
+  it('R10 · 하트는 32 흰 원이다(h-8·w-8·rounded-pill·bg-on-primary, 하트 32 통일 결정)', () => {
+    withSave();
+
+    const tokens = String(screen.getByTestId('heart-p1').props.className ?? '')
+      .trim()
+      .split(/\s+/);
+    expect(tokens).toEqual(
+      expect.arrayContaining(['h-8', 'w-8', 'rounded-pill', 'bg-on-primary'])
+    );
+  });
+});

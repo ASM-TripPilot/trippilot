@@ -55,6 +55,17 @@ jest.mock('@/features/explore/model/savedPlaces', () => ({
   useSavedPlaces: jest.fn(),
 }));
 
+// TRIP-1049 — 홈 라우트가 '지금 뜨는 장소' 실데이터로 `useGetPlaces` 를 문다. QueryClient 부재
+// 크래시를 막는 빈 목록 무해 스텁(이 파일은 여행 카드 CTA 만 본다, 단언 무변경).
+jest.mock('@/shared/api/generated/places/places', () => ({
+  useGetPlaces: () => ({
+    data: { items: [], nextCursor: null },
+    isPending: false,
+    isError: false,
+    refetch: () => {},
+  }),
+}));
+
 // TRIP-695 — 홈 라우트가 담은 곳 배지 수(숙소)를 useSavedStays().savedCount 로 물게 되면서
 // 이 파일도 <HomeRoute/> 를 렌더하므로 QueryClient 부재 크래시를 막는 무해 스텁이 필요하다
 // (딥 경로, features/trip 동명 훅 아님, tabsHomeRoute·tabsShell 선례와 동일 계열). 단언 무변경.

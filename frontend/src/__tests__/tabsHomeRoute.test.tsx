@@ -61,6 +61,36 @@ jest.mock('@/features/explore/model/savedPlaces', () => ({
   useSavedPlaces: jest.fn(),
 }));
 
+// TRIP-1049 — 홈 라우트가 '지금 뜨는 장소' 실데이터로 `useGetPlaces` 를 물게 되면서 이 파일이
+// QueryClient 부재로 죽는다(02a ★5). 장소 1건을 기본으로 준다 — 0건이면 스팟 섹션이 숨어
+// 아래 370-AC-1 "뜨는 장소 더 보기" 케이스가 버튼을 못 찾는다. 이 파일은 이 훅을 관찰하지 않는다
+// (조회 인자·정렬·하트는 tabsHomeRouteSpots.test.tsx 가 잰다).
+jest.mock('@/shared/api/generated/places/places', () => ({
+  useGetPlaces: () => ({
+    data: {
+      items: [
+        {
+          poiId: 'poi-stub',
+          nameKo: '스텁 장소',
+          category: '명소',
+          lat: 35.1,
+          lng: 129.0,
+          region: '부산',
+          openingHours: null,
+          imageUrl: null,
+          tags: [],
+          savedCount: 0,
+          dataStatus: 'ACTIVE',
+        },
+      ],
+      nextCursor: null,
+    },
+    isPending: false,
+    isError: false,
+    refetch: () => {},
+  }),
+}));
+
 // TRIP-695 — 라우트가 담은 곳 배지 수(숙소)를 `useSavedStays().savedCount` 로 물게 되면서
 // 이 훅이 호출된다. 딥 경로(`@/features/stay/model/savedStays`)로 목해야 실 훅이 안 돌아
 // QueryClient 부재 크래시를 막는다(배럴·`features/trip` 동명 훅 아님, traps-shell·02a ★D4).
