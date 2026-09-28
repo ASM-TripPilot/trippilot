@@ -93,6 +93,7 @@ import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
 import { PastTripRow } from '@/entities/trip/ui/PastTripRow';
 import { ChevronRightGlyph as TripChevronRightGlyph } from '@/entities/trip/ui/TripGlyphs';
 import type { PastTripCardVM } from '@/entities/trip/model';
+import type { MonthLegends } from '@/features/record/model/recordsCalendar';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { buildStatePins } from '@/entities/itinerary-slot/lib/slotMapPin';
 import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
@@ -1475,6 +1476,45 @@ const MY_PAGE_PAST_VMS: PastTripCardVM[] = [
     require('@/assets/my-page/past-busan.jpg')
   ),
 ];
+
+// j07 legend-more(TRIP-1084) — Figma 4699:2630 의 9월. `buildMonthLegends` 결과 모양 그대로.
+const legendCard = (
+  tripId: string,
+  title: string,
+  dateRangeLabel: string,
+  nightsLabel: string
+): PastTripCardVM => ({ tripId, title, dateRangeLabel, nightsLabel });
+const RECORDS_CALENDAR_LEGEND_MORE: MonthLegends = {
+  rows: [
+    {
+      kind: 'group',
+      key: '2026-09-28_2026-09-30',
+      representativeTitle: '서울특별시 여행',
+      dateRangeLabel: '9.28–9.30',
+      nightsLabel: '2박 3일',
+      members: ['s1', 's2', 's3', 's4', 's5', 's6'].map((id) =>
+        legendCard(id, '서울특별시 여행', '9.28–9.30', '2박 3일')
+      ),
+    },
+    {
+      kind: 'group',
+      key: '2026-09-28_2026-09-29',
+      representativeTitle: '서울특별시 여행',
+      dateRangeLabel: '9.28–9.29',
+      nightsLabel: '1박 2일',
+      members: [
+        ['k1', '서울특별시 여행'],
+        ['k2', '강진군 여행'],
+        ['k3', '서울특별시 여행'],
+        ['k4', '서울특별시 여행'],
+      ].map(([id, title]) => legendCard(id, title, '9.28–9.29', '1박 2일')),
+    },
+    { kind: 'trip', ...legendCard('bs', '부산 여행', '9.12–9.14', '2박 3일') },
+    { kind: 'trip', ...legendCard('jj', '제주 여행', '9.3–9.5', '2박 3일') },
+    { kind: 'trip', ...legendCard('gn', '강릉 여행', '9.1–9.2', '1박 2일') },
+  ],
+  hiddenCount: 2,
+};
 
 // l04 등록 숙소 2행 — Figma 1604:2440 카드 그대로(등록됨 1 · 미등록 1). default·dialog 두 키가 이 한 벌을
 // 공유한다. 주소는 계약 공백(G6)이라 실앱은 빈 값으로 줄을 생략하고, 프리뷰만 Figma 값을 채운다.
@@ -6285,14 +6325,18 @@ export const PREVIEW_STATES: PreviewState[] = [
         monthLabel="2026년 6월"
         grid={buildMonthGrid('2026-06')}
         markedDays={['2026-06-10', '2026-06-11', '2026-06-12']}
-        monthLegends={[
-          {
-            tripId: 't-busan',
-            title: '부산 여행',
-            dateRangeLabel: '6.10–6.12',
-            nightsLabel: '2박 3일',
-          },
-        ]}
+        monthLegends={{
+          rows: [
+            {
+              kind: 'trip',
+              tripId: 't-busan',
+              title: '부산 여행',
+              dateRangeLabel: '6.10–6.12',
+              nightsLabel: '2박 3일',
+            },
+          ],
+          hiddenCount: 0,
+        }}
         pastTrips={[
           {
             tripId: 't-jeju',
@@ -6311,6 +6355,52 @@ export const PREVIEW_STATES: PreviewState[] = [
             title: '부산 여행',
             dateRangeLabel: '2025.11.1–11.3',
             nightsLabel: '2박 3일',
+          },
+        ]}
+        isEmpty={false}
+        onPressPrevMonth={noop}
+        onPressNextMonth={noop}
+        onSelectTrip={noop}
+        onPressCreateTrip={noop}
+      />
+    ),
+  },
+  // j07 legend 3줄 + 더 보기(TRIP-1084) — Figma 채택안 4699:2630(접힘)과 1:1. 같은 기간 묶음 2줄('외 5'·
+  // '외 3', 후자는 서울 3 + 강진 1) + 개별 3줄 중 앞 3줄과 '더 보기 2'. 펼침(4699:2803)과 묶음 펼침은 이
+  // 키에서 탭으로 본다. 줄 간격 32·들여쓰기 33·chevron 방향은 jest 사각이라 이 키가 육안 그물(6-b).
+  {
+    key: 'records-calendar-legend-more',
+    band: 'j',
+    label: 'j07 · 여행 캘린더 legend-more',
+    login: null,
+    render: () => (
+      <RecordsCalendarScreen
+        monthLabel="2026년 9월"
+        grid={buildMonthGrid('2026-09')}
+        markedDays={[
+          ...['01', '02', '03', '04', '05'],
+          ...['12', '13', '14'],
+          ...['28', '29', '30'],
+        ].map((day) => `2026-09-${day}`)}
+        monthLegends={RECORDS_CALENDAR_LEGEND_MORE}
+        pastTrips={[
+          {
+            tripId: 'p-busan',
+            title: '부산 여행',
+            dateRangeLabel: '2026.9.12–9.14',
+            nightsLabel: '2박 3일',
+          },
+          {
+            tripId: 'p-jeju',
+            title: '제주 여행',
+            dateRangeLabel: '2026.9.3–9.5',
+            nightsLabel: '2박 3일',
+          },
+          {
+            tripId: 'p-gangneung',
+            title: '강릉 여행',
+            dateRangeLabel: '2026.9.1–9.2',
+            nightsLabel: '1박 2일',
           },
         ]}
         isEmpty={false}

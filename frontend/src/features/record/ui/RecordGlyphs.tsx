@@ -190,6 +190,27 @@ export function ChevronRightGlyph({
 }
 
 /**
+ * ⌄ legend '더 보기' chevron(TRIP-1084). Figma 4699:2914 Icon — 16 박스 가운데 9.6 벡터(stroke 0.8)를
+ * 16 좌표로 3.2 평행이동했다. '접기'는 호출부가 180° 돌린다(Figma Icon 세트에 up 이 없다).
+ */
+export function ChevronDownGlyph({
+  size = 16,
+  color = MUTED,
+}: GlyphProps & { color?: string }): ReactElement {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      <Path
+        d="M5.6 6.8L8 9.2L10.4 6.8"
+        stroke={color}
+        strokeWidth={0.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/**
  * ⓘ 안내 아이콘(원 + i) — TRIP-761 · GPS 미동의 배너 좌측. muted.
  * 색·정확한 벡터는 jest 사각(글리프 함정, 6-b 육안, Figma 1562:1949).
  */
