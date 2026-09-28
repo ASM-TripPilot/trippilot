@@ -108,6 +108,9 @@ export interface BaseNightsFlowProps {
   /** notrip 얼굴 "처음부터". */
   onRestart: () => void;
   tripLoad?: TripLoad;
+  /** TRIP-1082 — 거점 편집 얼굴의 [완료](있으면 편집 얼굴). 연타 가드로 감싸지 않는다 — 여행 단위
+   *  출구는 가드 밖(TRIP-1013 AC-S). */
+  onDone?: () => void;
 }
 
 /**
@@ -124,6 +127,7 @@ export function BaseNightsFlow({
   onBack,
   onRestart,
   tripLoad,
+  onDone,
 }: BaseNightsFlowProps): ReactElement {
   const router = useRouter();
 
@@ -270,6 +274,7 @@ export function BaseNightsFlow({
           void bases.refetch();
         }}
         onRestart={onRestart}
+        onDone={onDone}
       />
       {openCard !== undefined ? (
         <StaySelectSheet

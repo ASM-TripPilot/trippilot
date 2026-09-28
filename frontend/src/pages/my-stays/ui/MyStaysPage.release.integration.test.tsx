@@ -205,8 +205,14 @@ describe('🔴 TRIP-1076 AC-6 · 「출발점 변경」 → 거점 화면, 이 �
     await settleNetwork();
 
     // 단언 ① — 그 여행의 거점 화면으로 한 번.
+    // TRIP-1082 — l04 입구는 거점 **편집 모드**로 연다(진행바·생성 CTA 없이 [완료] 하나). h04 입구는 mode 없음.
     expect(mockPush.mock.calls).toEqual([
-      [{ pathname: '/trips/[tripId]/bases', params: { tripId: 't1' } }],
+      [
+        {
+          pathname: '/trips/[tripId]/bases',
+          params: { tripId: 't1', mode: 'edit' },
+        },
+      ],
     ]);
     // 단언 ② — 확인 없이 거점을 바꾸거나 재생성하지 않는다(BR-U6-21 금지 조항): 쓰기 요청이 하나도 없다.
     expect(writes).toEqual([]);

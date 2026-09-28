@@ -420,7 +420,12 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    들여쓰기·chevron 방향은 jest 사각이라 이 키가 유일한 육안 수단이다. test-designer 선반영 —
     //    implementer 는 preview.tsx 에 그 1키만 추가하고 이 가드는 안 만진다(추가 전엔 179개라 red).
     //    정확한 j 목록은 아래 'TRIP-770' describe(17키), 데이터 모양은 'TRIP-1084' describe 가 못박는다.
-    expect(PREVIEW_STATES).toHaveLength(180);
+    // ⚠️ TRIP-1082: g02 거점 편집 얼굴 2키(`trip-new-step2-edit`·`trip-new-step2-edit-regen-dialog`, band `g`)
+    //    추가로 180→182. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 2키만
+    //    `trip-new-step2-empty` 바로 뒤에 이 순서로 추가하고 이 가드는 안 만진다(추가 전엔 180개라 red).
+    //    정확히 그 키인지는 아래 'TRIP-1082' describe 가 못박는다. Figma 4700:2688(편집)·4700:2747(묻기)와 1:1
+    //    — 편집 제목만 코드가 '거점 숙소 바꾸기'로 앞서 있다(01b Q1, Figma 레인 후속).
+    expect(PREVIEW_STATES).toHaveLength(182);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -1909,5 +1914,42 @@ describe('🔴 TRIP-1068 · j03 오늘의 회고 pending 프리뷰 키 (band j)'
     const keys = PREVIEW_STATES.map((state) => state.key);
     expect(keys).toContain('reflection-empty');
     expect(keys).toContain('reflection-error');
+  });
+});
+
+describe('🔴 TRIP-1082 · g02 거점 편집 얼굴 프리뷰 2키 (band g)', () => {
+  it('trip-new-step2-edit — 편집 얼굴([완료] 하나, 생성 CTA 없음)을 그린다', () => {
+    // 준비 — 새 키 엔트리(red-first: preview.tsx 에 추가 전엔 없다).
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'trip-new-step2-edit'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('g');
+    expect(entry?.label).toBe('g02 · 거점 숙소 edit');
+
+    // 실행
+    render(<>{entry?.render()}</>);
+
+    // 단언 — 위저드 얼굴이 아니라 편집 얼굴이다(6-b 육안 대조 자리).
+    expect(screen.getByTestId('trip-base-edit-done')).toBeOnTheScreen();
+    expect(screen.queryByTestId('trip-base-generate')).toBeNull();
+    // 이웃 앵커 — 기존 위저드 default 키가 딸려 사라지지 않았다.
+    expect(PREVIEW_STATES.map((state) => state.key)).toContain(
+      'trip-new-step2-default'
+    );
+  });
+
+  it('trip-new-step2-edit-regen-dialog — 편집 얼굴 위에 재생성 묻기 다이얼로그가 겹친다', () => {
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'trip-new-step2-edit-regen-dialog'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('g');
+    expect(entry?.label).toBe('g02 · 거점 숙소 edit-regen-dialog');
+
+    render(<>{entry?.render()}</>);
+
+    expect(screen.getByTestId('trip-base-regen-dialog')).toBeOnTheScreen();
+    expect(screen.getByTestId('trip-base-edit-done')).toBeOnTheScreen();
   });
 });

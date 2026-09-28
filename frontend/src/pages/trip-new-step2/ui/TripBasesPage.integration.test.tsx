@@ -463,6 +463,19 @@ describe('AC-C4 · 두 CTA 는 3/4 로 돌아간다 (위저드로 가지 않는�
     );
     expect(routed.filter((call) => call.includes('/trips/new'))).toEqual([]);
   });
+
+  // TRIP-1082 03b 경고-2 — onBack 에 편집 모드 분기가 생겼다. mode 없이(h04 입구) 헤더 ‹ 는
+  // 여전히 3/4 로 가야 한다. 편집 출구(l04 폴백 '/my/stays')로 새면 여기서 red.
+  it('mode 없이(h04 입구) 딥링크에서 헤더 ‹ 도 3/4 로 replace — /my/stays 로 가지 않는다', async () => {
+    mockCanGoBack.mockReturnValue(false);
+    await renderTripBases();
+
+    fireEvent.press(screen.getByTestId('trip-base-back'));
+
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith(METHOD_ROUTE);
+    expect(mockBack).not.toHaveBeenCalled();
+  });
 });
 
 // ── TRIP-1013 AC-S ───────────────────────────────────────────────────────────

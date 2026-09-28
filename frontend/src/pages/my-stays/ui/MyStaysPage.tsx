@@ -127,7 +127,8 @@ export function MyStaysPage(): ReactElement {
     if (row.tripId === null) return;
     router.push({
       pathname: '/trips/[tripId]/bases',
-      params: { tripId: row.tripId },
+      // TRIP-1082 — 확정된 여행의 거점만 바꾸는 편집 얼굴로 연다(h04 입구는 mode 없이 위저드 얼굴).
+      params: { tripId: row.tripId, mode: 'edit' },
     });
   };
 

@@ -167,8 +167,14 @@ describe('🔴 AC-6 · 「출발점 변경」 → 거점 화면 push (TRIP-1076 
     });
 
     // 단언 ① — 그 여행의 거점 화면으로 한 번(push 라서 거점 화면 CTA 의 back() 이 이 화면으로 돌아온다).
+    // TRIP-1082 — l04 입구는 거점 **편집 모드**로 연다(진행바·생성 CTA 없이 [완료] 하나). h04 입구는 mode 없음.
     expect(mockPush.mock.calls).toEqual([
-      [{ pathname: '/trips/[tripId]/bases', params: { tripId: 't1' } }],
+      [
+        {
+          pathname: '/trips/[tripId]/bases',
+          params: { tripId: 't1', mode: 'edit' },
+        },
+      ],
     ]);
     // 단언 ② — 이 화면은 거점을 바꾸지 않는다: DELETE 훅 자체가 배선되지 않고, POST 도 없다.
     expect(useDeleteTripsTripIdBasesBaseAssignmentId).not.toHaveBeenCalled();

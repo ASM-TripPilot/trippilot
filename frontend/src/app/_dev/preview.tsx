@@ -184,6 +184,7 @@ import {
   TripWizardStep2Screen,
   type TripWizardStep2ScreenProps,
 } from '@/features/trip/ui/TripWizardStep2Screen';
+import { BaseRegenerateDialog } from '@/features/trip/ui/BaseRegenerateDialog';
 import { PrefStep1Screen } from '@/features/onboarding/ui/PrefStep1Screen';
 import { PrefStep2Screen } from '@/features/onboarding/ui/PrefStep2Screen';
 import { TermsScreen } from '@/features/onboarding/ui/TermsScreen';
@@ -4306,6 +4307,29 @@ export const PREVIEW_STATES: PreviewState[] = [
           { nightNumber: 3, dateLabel: '6/12(금)', region: '경주' },
         ]}
       />
+    ),
+  },
+  // g02 거점 편집 얼굴(TRIP-1082, Figma `4700:2688`) — l04 '출발점 변경' 입구. `onDone` 이 있으면 진행바·
+  // 위저드 문구·생성 CTA 없이 하단 [완료] 하나. 제목만 코드가 '거점 숙소 바꾸기'로 앞서 있다(01b Q1).
+  {
+    key: 'trip-new-step2-edit',
+    band: 'g',
+    label: 'g02 · 거점 숙소 edit',
+    login: null,
+    render: () => <TripWizardStep2Screen {...TRIP_BASE_SCREEN} onDone={noop} />,
+  },
+  // 편집 후 묻기(Figma `4700:2747`) — 편집 얼굴 위에 재생성 확인 다이얼로그를 형제로 겹친다. 딤 전면
+  // 커버·중앙 정렬은 조건부 렌더 오버레이의 jest 사각이라 이 키가 육안 대조 자리다.
+  {
+    key: 'trip-new-step2-edit-regen-dialog',
+    band: 'g',
+    label: 'g02 · 거점 숙소 edit-regen-dialog',
+    login: null,
+    render: () => (
+      <View style={StyleSheet.absoluteFill}>
+        <TripWizardStep2Screen {...TRIP_BASE_SCREEN} onDone={noop} />
+        <BaseRegenerateDialog onKeep={noop} onRegenerate={noop} />
+      </View>
     ),
   },
   // g02 숙소 선택 시트(TRIP-673 S9 → TRIP-741 후보 카드 Figma 정합, `3669:2068`) — 광안리 선택 상태.

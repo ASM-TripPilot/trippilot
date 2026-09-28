@@ -436,3 +436,87 @@ describe('단일 카드 컨테이너 구조 (AC-D1 · AC-E1 · AC-L1)', () => {
     ).toHaveLength(3);
   });
 });
+
+/**
+ * TRIP-1082 · g02 **거점 편집 얼굴**(Figma `4700:2688`, 결정 2 (a)) — `onDone` 이 있으면 편집 얼굴이다.
+ * l04 '출발점 변경'으로 확정된 여행의 거점만 바꾸러 들어온 화면이라, 위저드 온램프(진행바·'2 / 4'·
+ * GuideRow)와 **누르면 일정이 안 만들어지는 거짓 라벨**('이 거점으로 일정 만들기'·'숙소 없이 시작하기/계속',
+ * INV-4)을 전부 숨기고 하단에 [완료] 하나만 둔다. error 얼굴의 '숙소 없이 시작하기'도 같은 거짓 라벨이다.
+ *
+ * 편집 제목(01b Q1)은 **부재만** 잠근다 — '어디서 묵을까요?'가 편집엔 없고 위저드엔 있다. 새 문구는 Figma
+ * 레인 확정 전이라 완전 일치를 걸지 않는다(6-b 육안).
+ *
+ * 위 기존 it 들은 onDone 없이 그리므로 위저드·h04 얼굴의 무회귀 앵커로 그대로 남는다.
+ */
+const EDIT_HIDDEN_TEXT: (string | RegExp)[] = [
+  '2 / 4',
+  '어디서 묵을까요?',
+  '이 거점으로 일정 만들기',
+  /숙소 없이/,
+  /숙소는 나중에 정해도 돼요/,
+];
+
+const EDIT_HIDDEN_IDS = [
+  'trip-base-generate',
+  'trip-base-nostay-start',
+  'trip-base-browse',
+];
+
+describe('TRIP-1082 · 편집 얼굴 (onDone 있음) — 진행바·생성 CTA 없이 [완료] 하나', () => {
+  it.each([
+    ['default', CARDS, 'trip-base-night-card-1'],
+    ['loading', [], 'trip-base-skeleton-night-0'],
+    ['empty', EMPTY_CARDS, 'trip-base-empty-night-1'],
+  ] as const)(
+    '%s 얼굴 — 헤더·본문은 그대로, 진행바·위저드 문구·CTA 는 없고 하단 [완료]가 정확히 하나다',
+    (variant, cards, bodyAnchor) => {
+      // 준비 + 실행
+      renderScreen({ variant, cards: [...cards], onDone: jest.fn() });
+
+      // 단언 — 긍정 짝(빈 화면이 부정 단언을 공짜로 통과하지 않게).
+      const done = screen.getAllByTestId('trip-base-edit-done');
+      expect(done).toHaveLength(1);
+      expect(done[0]).toHaveTextContent('완료');
+      expect(screen.getByText('거점 숙소')).toBeOnTheScreen();
+      expect(screen.getByTestId('trip-base-back')).toBeOnTheScreen();
+      expect(screen.getByTestId(bodyAnchor)).toBeOnTheScreen();
+
+      // 단언 — 부정: 위저드 진행바·온램프·거짓 라벨 CTA.
+      expect(
+        screen.queryAllByTestId(/^trip-wizard-progress-seg-/)
+      ).toHaveLength(0);
+      EDIT_HIDDEN_IDS.forEach((id) =>
+        expect(screen.queryByTestId(id)).toBeNull()
+      );
+      EDIT_HIDDEN_TEXT.forEach((text) =>
+        expect(screen.queryByText(text)).toBeNull()
+      );
+    }
+  );
+
+  it('error 얼굴 — 다시 시도는 남고 "숙소 없이 시작하기"는 없다 (INV-4 거짓 라벨)', () => {
+    renderScreen({ variant: 'error', cards: [], onDone: jest.fn() });
+
+    expect(screen.getByTestId('trip-base-error-retry')).toBeOnTheScreen();
+    expect(screen.queryByTestId('trip-base-error-nostay')).toBeNull();
+    expect(screen.queryByText(/숙소 없이/)).toBeNull();
+  });
+
+  it('[완료]를 누르면 onDone 만 한 번 부른다 — 생성·숙소 없이 콜백은 안 부른다', () => {
+    const props = renderScreen({ onDone: jest.fn() });
+
+    fireEvent.press(screen.getByTestId('trip-base-edit-done'));
+
+    expect(props.onDone).toHaveBeenCalledTimes(1);
+    expect(props.onGenerate).not.toHaveBeenCalled();
+    expect(props.onNoStayStart).not.toHaveBeenCalled();
+  });
+
+  it('onDone 이 없으면(위저드·h04) 편집 [완료]는 없고 "어디서 묵을까요?"와 생성 CTA 가 있다', () => {
+    renderScreen();
+
+    expect(screen.getByText('어디서 묵을까요?')).toBeOnTheScreen();
+    expect(screen.getByTestId('trip-base-generate')).toBeOnTheScreen();
+    expect(screen.queryByTestId('trip-base-edit-done')).toBeNull();
+  });
+});
