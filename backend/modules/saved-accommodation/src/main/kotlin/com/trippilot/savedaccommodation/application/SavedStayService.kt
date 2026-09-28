@@ -70,8 +70,6 @@ class SavedStayService(
                     aggregateId = it.savedStayId.toString(),
                     accountId = accountId.toString(),
                     name = it.name,
-                    checkIn = it.checkIn.toString(),
-                    checkOut = it.checkOut.toString(),
                 ),
             )
         }

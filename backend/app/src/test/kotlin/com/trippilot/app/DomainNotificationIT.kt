@@ -103,13 +103,17 @@ class DomainNotificationIT : AbstractPostgresIntegrationTest() {
         val accountId = newAccount()
 
         events.publish(
-            StayRegistered(UUID.randomUUID().toString(), accountId.toString(), "제주 게스트하우스", "2026-08-10", "2026-08-12"),
+            StayRegistered(UUID.randomUUID().toString(), accountId.toString(), "제주 게스트하우스"),
         )
         deliver()
 
         val notification = notificationsOf(accountId, NotificationKind.STAY).single()
         // 문구에 재료가 실제로 들어갔는지 — payload 키가 하나만 어긋나도 여기서 빈 문자열이 된다.
         (notification.body.contains("제주 게스트하우스")) shouldBe true
+        // BR-U6-01 개정(TRIP-1052·1066): 본문은 숙소 이름만 — 날짜를 싣지 않는다.
+        // FE 가 날짜를 안 보내면서 모든 등록 알림이 "이름 · null ~ null" 로 나가던 결함(QA #013).
+        (notification.body.contains("null")) shouldBe false
+        (notification.body.contains("~")) shouldBe false
         notification.sourceEventId shouldNotBe null
     }
 
@@ -192,7 +196,7 @@ class DomainNotificationIT : AbstractPostgresIntegrationTest() {
     fun `같은 사건이 두 번 배달돼도 알림은 하나다(INV-U6-01)`() {
         val accountId = newAccount()
         val stayId = UUID.randomUUID().toString()
-        val event = StayRegistered(stayId, accountId.toString(), "같은 숙소", "2026-08-10", "2026-08-12")
+        val event = StayRegistered(stayId, accountId.toString(), "같은 숙소")
 
         events.publish(event)
         deliver()
