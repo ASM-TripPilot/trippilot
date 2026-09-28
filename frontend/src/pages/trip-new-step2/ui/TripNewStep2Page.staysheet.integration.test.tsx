@@ -573,11 +573,11 @@ describe('TRIP-1011 AC-3 · 둘러보기에 그 밤 지역이 실린다 (부산 
 
 /**
  * 후보 카드 **루트**만 고르는 testID 패턴. `SavedStayCard`는 루트 밑에 `{루트}-photo`·`-photo-placeholder`·
- * `-base-badge` 하위 testID를 더 달아서, 접두만 보는 `/^trip-base-staysheet-cand-/`는 카드 한 장을 두 번
- * 센다(실측 3장 → 6). 개수를 셀 때는 이 패턴을 쓴다.
+ * `-base-badge`·`-meta`·`-price`(TRIP-1074) 하위 testID를 더 달아서, 접두만 보는 `/^trip-base-staysheet-cand-/`는
+ * 카드 한 장을 두 번 센다(실측 3장 → 6). 개수를 셀 때는 이 패턴을 쓴다.
  */
 const CARD_ROOT =
-  /^trip-base-staysheet-cand-(?!.*-(photo|photo-placeholder|base-badge)$)/;
+  /^trip-base-staysheet-cand-(?!.*-(photo|photo-placeholder|base-badge|meta|price)$)/;
 
 /**
  * TRIP-1011(#036 · D8 · 브리프 AC-4·AC-6 · 01b Q2·Q3·Q5) — 시트 섹션 분리 배선.
@@ -755,5 +755,172 @@ describe('TRIP-1011 AC-4 · 시트가 "그 밤 지역 숙소" / "다른 지역"�
     expect(
       within(other).getByTestId('trip-base-staysheet-cand-jw')
     ).toBeOnTheScreen();
+  });
+});
+
+/**
+ * TRIP-1074 — 카드 서브라인 앞에 동네 라벨(주소의 시군구 토큰)을 붙인다. 재료는 페이지가 섹션 판정용으로
+ * 이미 받은 주소(`useStayAddresses` — 이 파일에선 `mockAddressById` 목)라 새 요청이 없다(요청 수는 형제
+ * geocodeLazy P5 가 실물 훅으로 잰다).
+ *
+ * 준비: 서울특별시 1박 여행 + 저장 숙소(STAY_A 파생 = 날짜 6/10–6/13 · 3박) + 숙소별 주소 상태.
+ * 실행: 1박 카드를 눌러 시트를 연다. 단언: 카드 `-meta` 줄 전체(문자열 = 완전 일치).
+ */
+describe('🔴 TRIP-1074 · 시트 카드 서브라인 = 시군구 라벨 · 날짜', () => {
+  const DATES = '6/10–6/13 · 3박';
+
+  function saved(savedStayId: string, name: string, lat: number): SavedStay {
+    return { ...STAY_A, savedStayId, name, lat, lng: 127 };
+  }
+  function undated(savedStayId: string, name: string, lat: number): SavedStay {
+    return { ...saved(savedStayId, name, lat), checkIn: null, checkOut: null };
+  }
+  function known(address: string): StayAddressState {
+    return { status: 'known', address };
+  }
+  const SEOUL = known('서울특별시 종로구 청계천로 279');
+
+  function openSeoulNight(): void {
+    seedDraft('2026-09-26', '2026-09-27', [['서울특별시', 1]]);
+    render(<TripNewStep2Page />);
+    fireEvent.press(screen.getByTestId('trip-base-night-card-1'));
+  }
+
+  it('AC-2 · AC-4 섹션 경로 — "그 밤 지역"과 "다른 지역" 두 섹션 카드 모두 라벨로 시작한다', () => {
+    mockSavedStaysResult = loaded([
+      saved('jw', 'JW 메리어트 동대문', 37.57),
+      saved('denba', '덴바스타 구서점', 35.26),
+      saved('para-1', '파라다이스호텔', 35.16),
+    ]);
+    mockAddressById = {
+      jw: SEOUL,
+      denba: known('부산 금정구 구서동 1'),
+      'para-1': known('부산광역시 해운대구 해운대해변로 296'),
+    };
+    openSeoulNight();
+
+    const here = screen.getByTestId('trip-base-staysheet-section-here');
+    const other = screen.getByTestId('trip-base-staysheet-section-other');
+    expect(
+      within(here).getByTestId('trip-base-staysheet-cand-jw-meta')
+    ).toHaveTextContent(`종로구 · ${DATES}`);
+    expect(
+      within(other).getByTestId('trip-base-staysheet-cand-denba-meta')
+    ).toHaveTextContent(`금정구 · ${DATES}`);
+    expect(
+      within(other).getByTestId('trip-base-staysheet-cand-para-1-meta')
+    ).toHaveTextContent(`해운대구 · ${DATES}`);
+  });
+
+  it('AC-4 · AC-3 평면 경로(섹션 없음) — 라벨이 붙고, 날짜 없는 숙소는 라벨만(꼬리 · 없음)', () => {
+    mockSavedStaysResult = loaded([
+      saved('jw', 'JW 메리어트 동대문', 37.57),
+      undated('jw-nodate', '동대문 게스트하우스', 37.58),
+    ]);
+    mockAddressById = { jw: SEOUL, 'jw-nodate': SEOUL };
+    openSeoulNight();
+
+    // 전부 그 밤 지역이라 섹션이 없다 = 평면 경로를 탔다.
+    expect(
+      screen.queryAllByTestId(/^trip-base-staysheet-section-/)
+    ).toHaveLength(0);
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-jw-meta')
+    ).toHaveTextContent(`종로구 · ${DATES}`);
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-jw-nodate-meta')
+    ).toHaveTextContent('종로구');
+  });
+
+  it('AC-5 · 주소 모름·조회 중이면 라벨 자리가 빈다 — 날짜만 남거나 줄이 없다 (대체 문구 0)', () => {
+    mockSavedStaysResult = loaded([
+      saved('jw', 'JW 메리어트 동대문', 37.57),
+      undated('pending', '동대문 게스트하우스', 37.58),
+      saved('known', '청계천 호텔', 37.59),
+    ]);
+    mockAddressById = {
+      jw: { status: 'unknown' },
+      pending: { status: 'loading' },
+      known: SEOUL,
+    };
+    openSeoulNight();
+
+    // 짝 앵커 — 주소를 아는 카드엔 라벨이 붙었다.
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-known-meta')
+    ).toHaveTextContent(`종로구 · ${DATES}`);
+    // 모름 — 완전 일치라 좌표·'위치 확인 안 됨'·시도명이 끼면 red.
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-jw-meta')
+    ).toHaveTextContent(DATES);
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-jw')
+    ).not.toHaveTextContent(/위치 확인|주소|서울/);
+    // 조회 중 + 날짜 없음 — 줄 자체가 없다.
+    expect(
+      screen.queryByTestId('trip-base-staysheet-cand-pending-meta')
+    ).toBeNull();
+  });
+
+  it('01b Q2 · 시군구가 없는 주소(세종 도로명·시도 없는 주소)는 라벨을 만들지 않는다', () => {
+    mockSavedStaysResult = loaded([
+      saved('jw', 'JW 메리어트 동대문', 37.57),
+      saved('sejong', '정부청사 앞 숙소', 36.5),
+      undated('bare', '첨단 게스트하우스', 35.2),
+    ]);
+    mockAddressById = {
+      jw: SEOUL,
+      sejong: known('세종특별자치시 한누리대로 2130'),
+      bare: known('첨단로 242'),
+    };
+    openSeoulNight();
+
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-jw-meta')
+    ).toHaveTextContent(`종로구 · ${DATES}`);
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-sejong-meta')
+    ).toHaveTextContent(DATES);
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-sejong')
+    ).not.toHaveTextContent(/세종/);
+    expect(
+      screen.queryByTestId('trip-base-staysheet-cand-bare-meta')
+    ).toBeNull();
+  });
+
+  it('AC-1 Q1-A · AC-7 · AC-8 · AC-9 — "성남시 분당구"·"수원시 영통구"가 뜨고, 거리·가격·소요시간 문자열은 없다', () => {
+    mockSavedStaysResult = loaded([
+      saved('bundang', '정자역 호텔', 37.36),
+      saved('suwon', '광교 호수 호텔', 37.28),
+    ]);
+    mockAddressById = {
+      bundang: known('경기 성남시 분당구 정자동 178-1'),
+      suwon: known('경기도 수원시 영통구 광교중앙로 140'),
+    };
+    openSeoulNight();
+
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-bundang-meta')
+    ).toHaveTextContent(`성남시 분당구 · ${DATES}`);
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-suwon-meta')
+    ).toHaveTextContent(`수원시 영통구 · ${DATES}`);
+
+    for (const id of ['bundang', 'suwon']) {
+      const card = screen.getByTestId(`trip-base-staysheet-cand-${id}`);
+      // 숫자를 붙여 잰다 — 숫자 없는 /분|원/ 은 '분당구'·'수원시'에서 오탐한다.
+      expect(card).not.toHaveTextContent(/\d+\s*분|\d+\s*시간|소요/); // INV-3
+      expect(card).not.toHaveTextContent(/\d+\s*m\b|km/); // 거리(결정 1(a))
+      expect(card).not.toHaveTextContent(/\d[\d,]*\s*원|₩|가격 미확인/); // 가격(결정 4(a))
+    }
+    // 짝 앵커 — 위 정규식이 지명과 실제로 만났다('분'·'원'이 카드에 있다).
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-bundang')
+    ).toHaveTextContent(/분당구/);
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-suwon')
+    ).toHaveTextContent(/수원시/);
+    expect(screen.queryAllByTestId(/-price$/)).toHaveLength(0);
   });
 });

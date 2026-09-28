@@ -413,3 +413,31 @@ describe('TRIP-1028 P4 · 받은 주소는 앱 세션 동안 기억한다 (AC-4)
     expect(requested).toHaveLength(3);
   });
 });
+
+describe('🔴 TRIP-1074 P5 · 받은 주소로 카드 동네 라벨을 붙여도 요청은 늘지 않는다 (AC-6)', () => {
+  it('섹션이 뜬 뒤 카드 서브라인이 시군구 라벨이고, reverse-geocode 는 여전히 2건이다', async () => {
+    render(page());
+
+    openNight(1);
+    await waitForSections();
+
+    // 실물 훅의 주소가 라벨까지 흐른다(이 파일 픽스처는 날짜가 없어 라벨만 남는다).
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-jw-meta')
+    ).toHaveTextContent('종로구');
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-para-1-meta')
+    ).toHaveTextContent('해운대구');
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-para-2-meta')
+    ).toHaveTextContent('해운대구');
+    // 좌표 없는 숙소 — 주소도 날짜도 없어 서브라인이 없다.
+    expect(
+      screen.queryByTestId('trip-base-staysheet-cand-no-coord-meta')
+    ).toBeNull();
+
+    // 라벨 계산이 조회를 새로 걸지 않는다 — 좌표 중복을 걷은 2건 그대로.
+    await settle();
+    expect(requested).toHaveLength(2);
+  });
+});

@@ -5,6 +5,7 @@ import {
   nightlyBaseCards,
   toBaseSections,
 } from '@/features/trip/model/baseSections';
+import { sigunguLabel } from '@/features/trip/model/regionMatch';
 import { staySheetSections } from '@/features/trip/model/staySheetSections';
 import { deriveEndDate } from '@/features/trip/model/tripWizardStep1';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
@@ -14,7 +15,10 @@ import {
   useAssignBase,
   useTripBases,
 } from '@/features/trip/model/useTripBases';
-import { StaySelectSheet } from '@/features/trip/ui/StaySelectSheet';
+import {
+  StaySelectSheet,
+  type StaySelectCandidate,
+} from '@/features/trip/ui/StaySelectSheet';
 import type { TripDestination } from '@/shared/api/generated/schemas';
 import { guardPress, openPressGuardWindow } from '@/shared/press/pressGuard';
 import {
@@ -232,6 +236,14 @@ export function BaseNightsFlow({
   // 그 밤 카드가 있을 때만 시트를 마운트한다(`openNight`이 null이면 find가 undefined). 제목은
   // 카드 메타처럼 `{박수}박 · {지역}`, 날짜 라벨은 카드가 이미 요일을 붙여 낸 값을 그대로 쓴다.
   const openCard = cards.find((card) => card.nightNumber === openNight);
+  // TRIP-1074 — 섹션 판정용으로 이미 받은 주소에서 카드 동네 라벨(시군구)을 붙인다(새 요청 0). 평면
+  // 목록(`candidates`)과 섹션(`section.candidates`)이 따로 그려지므로 둘 다 이 목록을 넘긴다.
+  const candidates: StaySelectCandidate[] = savedStayList.map((stay) => {
+    const address = stayAddresses[stay.savedStayId];
+    const region =
+      address?.status === 'known' ? sigunguLabel(address.address) : null;
+    return region === null ? stay : { ...stay, region };
+  });
 
   /** 둘러보기 — 지역을 실어 보낸다. 안 실으면 검색 화면이 기본값 '부산'을 연다(TRIP-1011 #037). */
   function browseStays(region: string | undefined): void {
@@ -263,9 +275,9 @@ export function BaseNightsFlow({
         <StaySelectSheet
           title={`${openCard.nightNumber}박 · ${openCard.region}`}
           dateLabel={openCard.dateLabel}
-          candidates={savedStayList}
+          candidates={candidates}
           sections={
-            staySheetSections(savedStayList, stayAddresses, openCard.region) ??
+            staySheetSections(candidates, stayAddresses, openCard.region) ??
             undefined
           }
           selectedSavedStayId={selectedSavedStayId}

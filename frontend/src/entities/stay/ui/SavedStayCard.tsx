@@ -89,6 +89,7 @@ export function SavedStayCard({
   isBase = false,
 }: SavedStayCardProps): ReactElement {
   if (layout === 'row') {
+    const hasSubtitle = subtitle !== undefined && subtitle !== null;
     return (
       <Pressable
         testID={testID}
@@ -119,18 +120,26 @@ export function SavedStayCard({
           <Text className="font-noto-bold text-card-title font-bold text-ink">
             {name}
           </Text>
-          {/* 서브라인 = 동네 · 날짜(subtitle). 동네는 값 있을 때만(degrade), 구분자는 둘 다 있을 때만(TRIP-1052 — 날짜 없는 숙소). 거리 표시는 제거됨(기준점 미정·BE 미제공, 제품 결정 2026-09-17). */}
-          <Text className="font-noto text-caption text-muted">
-            {region !== undefined
-              ? subtitle !== undefined && subtitle !== null
-                ? `${region} · `
-                : region
-              : null}
-            {subtitle}
-          </Text>
+          {/* 서브라인 = 동네 · 날짜(subtitle). 동네는 값 있을 때만(degrade), 구분자는 둘 다 있을 때만(TRIP-1052 — 날짜 없는 숙소). 둘 다 없으면 줄 자체를 안 그린다(TRIP-1074 — "줄 없음"을 `-meta` 부재로 잰다). 거리 표시는 제거됨(기준점 미정·BE 미제공, 제품 결정 2026-09-17). */}
+          {region !== undefined || hasSubtitle ? (
+            <Text
+              testID={`${testID}-meta`}
+              className="font-noto text-caption text-muted"
+            >
+              {region !== undefined
+                ? hasSubtitle
+                  ? `${region} · `
+                  : region
+                : null}
+              {subtitle}
+            </Text>
+          ) : null}
           {/* 가격 줄 — 값 있을 때만(계약 공백이면 미렌더). */}
           {priceLabel !== undefined ? (
-            <Text className="font-noto-bold text-card-title font-bold text-ink">
+            <Text
+              testID={`${testID}-price`}
+              className="font-noto-bold text-card-title font-bold text-ink"
+            >
               {priceLabel}
             </Text>
           ) : null}

@@ -241,11 +241,11 @@ describe('S9 · 선택 체크 톤 (AC-2)', () => {
 
 /**
  * 후보 카드 **루트**만 고르는 testID 패턴. `SavedStayCard`는 루트 밑에 `{루트}-photo`·`-photo-placeholder`·
- * `-base-badge` 하위 testID를 더 달아서, 접두만 보는 `/^trip-base-staysheet-cand-/`는 카드 한 장을 두 번
- * 센다(실측 3장 → 6). 개수를 셀 때는 이 패턴을 쓴다.
+ * `-base-badge`·`-meta`·`-price`(TRIP-1074) 하위 testID를 더 달아서, 접두만 보는 `/^trip-base-staysheet-cand-/`는
+ * 카드 한 장을 두 번 센다(실측 3장 → 6). 개수를 셀 때는 이 패턴을 쓴다.
  */
 const CARD_ROOT =
-  /^trip-base-staysheet-cand-(?!.*-(photo|photo-placeholder|base-badge)$)/;
+  /^trip-base-staysheet-cand-(?!.*-(photo|photo-placeholder|base-badge|meta|price)$)/;
 
 /**
  * TRIP-1011(#036 · D8) — 섹션 렌더. 나누는 계산은 배선·모델 몫이고(`staySheetSections`), 시트는 받은
@@ -319,4 +319,40 @@ describe('S12 · sections 가 없으면 지금처럼 헤더 없는 한 줄 목�
       screen.queryAllByTestId(/^trip-base-staysheet-section-/)
     ).toHaveLength(0);
   });
+});
+
+/**
+ * TRIP-1074 — 시트가 후보의 `region`(배선이 주소에서 뽑아 내린 시군구 라벨)을 평면·섹션 두 경로 모두에서
+ * 카드 서브라인으로 넘긴다. 라벨 계산은 시트 밖이라 여기선 region 을 직접 준다(시트는 props-only).
+ */
+describe('🔴 S13 · 동네 라벨이 서브라인 앞에 붙는다 — 평면·섹션 둘 다 (TRIP-1074 AC-4 · AC-8 · AC-11)', () => {
+  const LABELED = { ...GWANGALLI, region: '수영구' };
+
+  it.each<[string, Partial<Parameters<typeof StaySelectSheet>[0]>]>([
+    ['평면 목록', { candidates: [LABELED, GAMCHEON] }],
+    [
+      '섹션 목록',
+      {
+        candidates: [LABELED, GAMCHEON],
+        sections: [
+          { key: 'here', title: '부산광역시 숙소', candidates: [LABELED] },
+          { key: 'other', title: '다른 지역', candidates: [GAMCHEON] },
+        ],
+      },
+    ],
+  ])(
+    '%s — 라벨 카드는 "수영구 · 날짜", 라벨·날짜 없는 카드는 서브라인 없음, 가격 줄 0',
+    (_, over) => {
+      renderSheet(over);
+
+      expect(
+        screen.getByTestId('trip-base-staysheet-cand-stay-gwangalli-meta')
+      ).toHaveTextContent('수영구 · 6/11–6/12 · 1박');
+      expect(
+        screen.queryByTestId('trip-base-staysheet-cand-stay-gamcheon-meta')
+      ).toBeNull();
+      // 실데이터 경로엔 priceLabel 이 없다 — 가격 줄을 지어내지 않는다(결정 4(a)).
+      expect(screen.queryAllByTestId(/-price$/)).toHaveLength(0);
+    }
+  );
 });
