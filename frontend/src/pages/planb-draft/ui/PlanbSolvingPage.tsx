@@ -85,7 +85,11 @@ export function PlanbSolvingPage({
 
   // 방문 기록을 모르면(조회 중·실패) 곳 수·행을 비운다 — "방문한 0곳"은 거짓이다.
   const visitsKnown = visits.data !== undefined;
-  const progress = deriveVisitProgress(visits.data ?? { visits: [] });
+  const progress = deriveVisitProgress(
+    visits.data ?? { visits: [] },
+    day?.date ?? '',
+    (day?.slots ?? []).map((slot) => slot.poiId)
+  );
   const projected = day
     ? projectSlotProgress(day.slots, {
         completedPoiIds: progress.completedPoiIds,

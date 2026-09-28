@@ -160,7 +160,11 @@ export function LiveItineraryPage({
 
   // 방문 기록 → 진행 상태 도출 → projectSlotProgress 인자로 실제 주입(★도달성 — 빈 인자면
   // 전 슬롯 upcoming 이라 active 카드가 프로덕션에 안 뜬다). 도출·판정은 여기 1회.
-  const progress = deriveVisitProgress(visits.data ?? { visits: [] });
+  const progress = deriveVisitProgress(
+    visits.data ?? { visits: [] },
+    activeDate,
+    activeSlots.map((slot) => slot.poiId)
+  );
   const projected = projectSlotProgress(activeSlots, {
     completedPoiIds: progress.completedPoiIds,
     activePoiId: progress.activePoiId,

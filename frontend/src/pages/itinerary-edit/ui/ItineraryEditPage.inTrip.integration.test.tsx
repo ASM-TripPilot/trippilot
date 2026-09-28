@@ -136,10 +136,14 @@ function itinerary(status: ItineraryStatus = 'PLANNED'): Itinerary {
   };
 }
 
-/** p1·p2 는 도착·완료(건너뜀 아님) — `deriveVisitProgress` 가 완료로 잡는다. */
+/**
+ * p1·p2 는 도착·완료(건너뜀 아님) — `deriveVisitProgress` 가 완료로 잡는다.
+ * slotKey 는 필수다: 슬롯 키가 없으면 즉석 방문이라 잠금 판정에서 빠진다(TRIP-1079 결정 1).
+ */
 function visits(): VisitCheckList {
   const done = (poiId: string, hour: string) => ({
     visitCheckId: `vc-${poiId}`,
+    slotKey: k(poiId),
     poiId,
     source: 'MANUAL' as const,
     spontaneous: false,

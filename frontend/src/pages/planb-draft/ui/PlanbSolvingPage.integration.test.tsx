@@ -660,6 +660,29 @@ describe('🔴 P16 · 5-b 참고-1 — 지도 핀은 그날 슬롯 전부를 진
   });
 });
 
+describe('🔴 P17 · TRIP-1079 5-c 경고-1 · AC-6 — 도착 후보가 둘이면 일정 순서가 앞선 곳이 현재 핀이다', () => {
+  it('p3·p4 둘 다 도착·미완료이고 기록 목록이 p4 를 앞에 주어도 현재 핀은 p3, p4 는 예정이다', () => {
+    mockVisitsByDay = {
+      [DAY]: {
+        visits: [
+          visit('p4', { arrivedAt: '2026-06-11T04:30:00Z' }),
+          ...DAY_VISITS.visits,
+        ],
+      } as unknown as VisitCheckList,
+    };
+
+    renderPage();
+
+    expect(screen.getByTestId('map-root').props.pins).toEqual([
+      { number: 1, ...P1, state: 'done' },
+      { number: 2, ...P2, state: 'done' },
+      { number: 3, ...P3, state: 'current' },
+      { number: 4, ...P4, state: 'upcoming' },
+      { number: 5, ...P5, state: 'upcoming' },
+    ]);
+  });
+});
+
 // ── TRIP-979 B · AC-B4 — 세션 좌표가 없으면 지도 중심을 이 여행에서 고른다(부산 상수 제거) ──────────
 
 const SEOUL_SLOT = (
