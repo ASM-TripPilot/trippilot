@@ -2509,32 +2509,34 @@ reason = "워크플로가 ACM ISSUED 를 검사(aws-deploy.yml Check HTTPS certi
 id = "TRIP-1058"
 ticket = "TRIP-1058"
 title = "취소된 생성 세션에 1일차 도착 → 500 — 재생성 연타·취소 경합"
-status = "todo"
+status = "done"
 owner = "일정"
 migration = false
 touches = ["backend/modules/itinerary-generation"]
 note = """
 QA3 #029(#046 재현). 버그픽스 규모 — 재현 테스트 선행. FE 1037(연타 잠금) 짝.
+[완료 2026-09-29] #789 머지 — 409 GENERATION_SUPERSEDED + activeSessionId, 롤백 유지. 결정2(AI 취소 전파)는 준하 몫.
 """
 
 [[nodes]]
 id = "TRIP-1066"
 ticket = "TRIP-1066"
 title = "숙소 등록 알림 'null ~ null' — 날짜 없으면 이름만 (BR-U6-01 개정)"
-status = "todo"
+status = "done"
 owner = "알림"
 migration = false
 touches = ["backend/modules/notification", "backend/modules/saved-accommodation"]
 note = """
 TRIP-1064 는 같은 결함의 중복 티켓 — 1066 기준으로 정리(사용자 결정 2026-09-29, 닫기는 사용자).
 FE 1052(체크인·아웃 입력 제거)와 짝 — 날짜 없는 등록이 이제 기본 흐름이 된다.
+[완료 2026-09-29] #790 머지 — 본문 이름만, 이벤트 필드 제거, BR-U6-01 개정·02 폐기 기록. 1064 닫기는 사용자.
 """
 
 [[nodes]]
 id = "TRIP-1059"
 ticket = "TRIP-1059"
 title = "저장 숙소 중복 방지 — saved_stay 유니크 + 멱등"
-status = "todo"
+status = "done"
 owner = "숙소저장"
 migration = true
 touches = ["backend/app/src/main/resources/db/migration", "backend/modules/saved-accommodation"]
@@ -2542,13 +2544,14 @@ note = """
 QA3 #012③ 같은 외부 숙소 30행. 이 루프 소유(사용자 결정 2026-09-29 — 숙소 세션은 시드·OTA 축).
 기존 중복 행 정리 + (account, external_source, external_id) 유니크. 번호는 착수 시 확인
 (V2.54 는 열린 PR #767). FE 1041(멱등 no-op) 짝.
+[완료 2026-09-29] #791 머지 — V2.57 유니크+정리, 이중 가드 409, 동시 IT·마이그레이션 재연 IT. 정본 한 줄(결정2)은 사용자.
 """
 
 [[nodes]]
 id = "TRIP-1062-ADDR"
 ticket = "TRIP-1062"
 title = "장소 시·도 식별 + 주소 적재(1003 F · 824 부분) — 컬럼·계약·데이터 채움"
-status = "todo"
+status = "done"
 owner = "장소"
 migration = true
 touches = ["backend/app/src/main/resources/db/migration", "backend/modules/place-data", "backend/docs/design/openapi.yaml"]
@@ -2556,54 +2559,59 @@ note = """
 QA3 #021 + 1003(F) + TRIP-824 의 address 필드만(QA 필요분 — 사용자 결정 2026-09-29).
 수집 provenance.address 가 원천 — 기존 11,115건을 재수집 없이 채울 수 있는지(artifact 재적재)
 착수 시 확인. 시·도는 region_code 접두 해석으로 파생 가능성 먼저 본다(TRIP-356 축).
+[완료 2026-09-29] #792 머지 — V2.58 poi.address+수집 배관+계약. 시도 몫은 #780(TRIP-1042) 기배송. 백필=일일 수집 갱신 경로.
 """
 
 [[nodes]]
 id = "TRIP-1063"
 ticket = "TRIP-1063"
 title = "슬롯 후보 응답에 좌표 — 같이 짜기 지도 핀"
-status = "todo"
+status = "done"
 owner = "일정"
 migration = false
 touches = ["backend/modules/itinerary-generation", "backend/docs/design/openapi.yaml"]
 note = """
 1005 표면(nameKo·category·tags·imageUrl) 확장 — PoiSurfaceView 에 lat·lng 이미 있다. FE F10 대기.
+[완료 2026-09-29] #793 머지 — 후보 lat·lng(표면 좌표, 지어내지 않음).
 """
 
 [[nodes]]
 id = "TRIP-1060"
 ticket = "TRIP-1060"
 title = "재계획안 비교 응답에 장소 표면 — 이름·사진·카테고리·좌표"
-status = "todo"
+status = "done"
 owner = "재계획"
 migration = false
 touches = ["backend/modules/itinerary-recalculation", "backend/docs/design/openapi.yaml"]
 note = """
 QA3 #045 — 재계획이 새로 넣은 장소가 전부 "이름 준비 중". FE 1044 대기. 1005 컨트롤러 부착 선례.
+[완료 2026-09-29] #794 머지 — diff before·after 표면(결정1a: C8 파사드 확장). 실스택 대조는 사용자.
 """
 
 [[nodes]]
 id = "TRIP-1065-BE"
 ticket = "TRIP-1065"
 title = "슬롯 후보 concept 미반영 — BE 몫(요청 전달·거짓 근거 제거)"
-status = "todo"
+status = "done"
 owner = "일정"
 migration = false
 touches = ["backend/modules/itinerary-generation"]
 note = """
 concept 이 AI 요청에 실리는지·로컬 폴백이 필터하는지 실사부터. 로컬 근거 "$concept 컨셉에 맞는
 $category" 는 필터 없이 붙어 거짓(QA #042). AI 몫(랭킹 반영)은 준하 메시지.
+[완료 2026-09-29] #795 머지 — BE 후처리 필터+컨셉 풀 채움+NO_NEARBY(결정 1a·2a·3a). AI 몫(categories 계약·llm_empty)은 준하.
 """
 
 [[nodes]]
 id = "TRIP-1061"
 ticket = "TRIP-1061"
 title = "작성중 여행 삭제 — 스토리 신설 + 서버 삭제 범위 확정"
-status = "todo"
+status = "done"
 owner = "여행"
 migration = false
 touches = ["backend/modules/trip", "aidlc/aidlc-docs/inception/user-stories"]
 note = """
 FE 1055 가 이미 완료(DELETE /trips 호출) — 현행 서버 동작 실사가 1순위: 엔드포인트 유무·
 상태 제한·CASCADE 범위·예약 알림 정리. 정본(US 신설 초안) 동반.
+[완료 2026-09-29] #798 머지 — 코드 몫(TripDeleted→예약 비움, 거점 live-trip 판정+정리). 스토리 US-TRIP-10·결정1·PBT 는 승인 대기(초안 있음).
 """
