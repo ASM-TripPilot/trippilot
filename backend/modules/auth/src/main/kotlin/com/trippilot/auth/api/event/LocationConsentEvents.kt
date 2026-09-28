@@ -30,3 +30,22 @@ data class GpsRecordingOptOut(
         const val REASON_ACCOUNT_DELETION = "account_deletion"
     }
 }
+
+/**
+ * 위치 법정 동의(L2)가 철회됐다 — **저장된 단발 좌표를 지우라**는 신호(TRIP-992 · INV-L4).
+ * L3 철회(GpsRecordingOptOut = 발자취·EXIF)와 축이 다르다: 이쪽 소비처는 재계획 기준점 좌표다.
+ * 지우는 쪽(소유 모듈)이 자기 scope 로 파기 기록까지 남긴다 — auth 가 남의 테이블을 지우면 순환이다(R1).
+ */
+data class LocationLegalConsentRevoked(
+    override val aggregateId: String,
+    /** 왜 꺼졌나 — 사용자가 직접 철회했는지, 계정 삭제에 딸려 꺼졌는지. */
+    val reason: String,
+) : DomainEvent {
+    override val eventType: String = TYPE
+    override val aggregateType: String = "Account"
+
+    companion object {
+        const val TYPE = "auth.LocationLegalConsentRevoked"
+        const val REASON_REVOKED = "revoked"
+    }
+}
