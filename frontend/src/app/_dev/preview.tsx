@@ -3393,6 +3393,38 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  {
+    // pending — 조회·생성 중(TRIP-1068): 안내 본문만, 하단 CTA 없음. 실기에선 POST 왕복 동안만 보여
+    // 이 키가 육안 대조 자리다.
+    key: 'reflection-pending',
+    band: 'j',
+    label: 'j03 · 오늘의 회고 pending',
+    login: null,
+    render: () => (
+      <DailyReflectionScreen
+        face="pending"
+        narrative=""
+        editableText=""
+        stats={{
+          visitCount: 0,
+          distanceKm: 0,
+          distanceSource: 'VISIT_LINE',
+          photoCount: 0,
+        }}
+        distanceDash
+        mapNotice={null}
+        hidePhotoGrid
+        photos={[]}
+        dayTabs={[{ day: 1 }, { day: 2, today: true }, { day: 3 }]}
+        activeDay={2}
+        onSelectDay={noop}
+        onPressTab={noop}
+        onEnterEdit={noop}
+        onConfirm={noop}
+        onSaveEdit={noop}
+      />
+    ),
+  },
   // j04 여행 요약 2키(TRIP-764 개명·삭제) — 순수 뷰(`TripSummaryScreen`)를 격리 렌더한다(`@/shared/api`
   // 값 import 0 이라 프리뷰 지뢰 목 통과, 컨테이너를 별 파일로 분리해 import 사슬 전이 로드 없음).
   // jest 는 testID·행동만 잠그고 stats 3셀·지도 히어로·2톤 카드·방문목록 레이아웃·코랄 토큰·탭바는

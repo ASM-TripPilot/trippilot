@@ -400,7 +400,12 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    `h06-my-trips-empty` 바로 뒤에 이 순서로 추가하고 이 가드는 안 만진다(추가 전엔 174개라 red). 정확히 그
     //    키인지는 아래 'TRIP-1055' describe 가 못박고, devPreviewBandSort 는 EXPECTED_H 에 h06-empty 뒤 2줄을 넣었다.
     //    Figma 4682:2573(삭제 메뉴)·4682:3206(삭제 확인) 과 1:1.
-    expect(PREVIEW_STATES).toHaveLength(176);
+    // ⚠️ TRIP-1068: j03 오늘의 회고 pending 얼굴 신설로 `reflection-pending`(band `j`) 1키 추가 →
+    //    176→177. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 1키만 j03 error
+    //    뒤에 추가하고 이 가드는 안 만진다(추가 전엔 176개라 red). 정확히 그 키인지는 아래 'TRIP-770'
+    //    목록과 'TRIP-1068' describe 가 못박는다. devPreviewBandSort 는 밴드 h·l 만 잠가 band j 와 무관.
+    //    Figma j03 로딩 프레임 유무는 미확인(02a §1-4) — 실기에선 POST 왕복 동안만 보여 육안 수단이 이 키뿐.
+    expect(PREVIEW_STATES).toHaveLength(177);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -1301,6 +1306,7 @@ describe('🔴 TRIP-770 · j 밴드 최종 14키·라벨 완전 일치', () => {
     ['reflection-data-insufficient', 'j03 · 오늘의 회고 data-insufficient'],
     ['reflection-empty', 'j03 · 오늘의 회고 empty'],
     ['reflection-error', 'j03 · 오늘의 회고 error'],
+    ['reflection-pending', 'j03 · 오늘의 회고 pending'], // TRIP-1068 신설
     ['trip-summary-default', 'j04 · 여행 요약 default'],
     ['trip-summary-error', 'j04 · 여행 요약 error'],
     ['travel-style-default', 'j05 · 여행 스타일 분석 default'],
@@ -1313,7 +1319,7 @@ describe('🔴 TRIP-770 · j 밴드 최종 14키·라벨 완전 일치', () => {
     ['records-calendar-default', 'j07 · 여행 캘린더 default'],
   ];
 
-  it('band j 가 정확히 14키이고 키·라벨이 최종 목록과 완전 일치한다', () => {
+  it('band j 가 정확히 15키이고 키·라벨이 최종 목록과 완전 일치한다(TRIP-1068 pending +1)', () => {
     // 준비: band 'j' 엔트리만 골라 (key\tlabel) 정렬 집합으로.
     const jStates = PREVIEW_STATES.filter((state) => state.band === 'j');
     const actual = jStates
@@ -1323,8 +1329,8 @@ describe('🔴 TRIP-770 · j 밴드 최종 14키·라벨 완전 일치', () => {
       ([key, label]) => `${key}\t${label}`
     ).sort();
 
-    // 단언: 14키 + (키,라벨) 집합 완전 일치(삭제된 22키의 잔재·라벨 편차 차단).
-    expect(jStates).toHaveLength(14);
+    // 단언: 15키 + (키,라벨) 집합 완전 일치(삭제된 22키의 잔재·라벨 편차 차단).
+    expect(jStates).toHaveLength(15);
     expect(actual).toEqual(expected);
   });
 });
@@ -1804,5 +1810,33 @@ describe('🔴 TRIP-1055 · h06 작성중 여행 삭제 메뉴·삭제 확인 �
     const keys = PREVIEW_STATES.map((state) => state.key);
     expect(keys).toContain('h06-my-trips-loading');
     expect(keys).toContain('h06-my-trips-empty');
+  });
+});
+
+// TRIP-1068 · j03 pending 얼굴 프리뷰 — 실기에선 POST 왕복 동안만 보여 이 키가 6-b 육안의 유일한 자리.
+// 무엇을 보장하나: 키가 j 밴드에 있고, 렌더하면 pending 본문이 그려지며 empty·"직접 회고 작성"은 없다.
+describe('🔴 TRIP-1068 · j03 오늘의 회고 pending 프리뷰 키 (band j)', () => {
+  it('reflection-pending 은 pending 본문을 그리고 empty·하단 CTA 는 없다', () => {
+    // 준비
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'reflection-pending'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('j');
+    expect(entry?.label).toBe('j03 · 오늘의 회고 pending');
+
+    // 실행
+    render(<>{entry?.render()}</>);
+
+    // 단언 — pending 본문 + 공통 크롬(헤더 편집), empty·CTA 없음.
+    expect(screen.getByTestId('reflection-daily-pending')).toBeOnTheScreen();
+    expect(screen.getByTestId('reflection-daily-edit')).toBeOnTheScreen();
+    expect(screen.queryByTestId('reflection-daily-empty')).toBeNull();
+    expect(screen.queryByTestId('reflection-daily-compose')).toBeNull();
+
+    // 이웃 앵커 — 기존 j03 키가 딸려 사라지지 않았다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+    expect(keys).toContain('reflection-empty');
+    expect(keys).toContain('reflection-error');
   });
 });

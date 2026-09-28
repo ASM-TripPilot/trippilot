@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { formatDayLabel } from '@/entities/trip/lib/formatDayLabel';
 import { MapView, type MapCenter, type MapPin } from '@/shared/map';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
+import { StateNotice } from '@/shared/ui/StateNotice';
 import type { ReflectionStats } from '@/shared/api/generated/schemas';
 
 import { ChangeSummaryRow } from './ChangeSummaryRow';
@@ -26,11 +27,12 @@ import { ReflectionStatsRow } from './ReflectionStatsRow';
  * import — 프리뷰 격리 렌더 안전, FSD 경계). 화면은 완성된 `narrative`·`editableText` 를 받고,
  * `draftNarrative`/`editedNarrative`/`resolveDisplayNarrative` 어느 것도 참조하지 않는다.
  *
- * 4얼굴(TRIP-763: 일차 탭·하단 탭바(기록)·헤더 "편집"은 전 얼굴 공통 크롬):
+ * 5얼굴(TRIP-763: 일차 탭·하단 탭바(기록)·헤더 "편집"은 전 얼굴 공통 크롬):
  *  - default            : stats · 풀폭 지도(좌표 있을 때만) · 서술 카드 · 사진 그리드 · "확인".
  *  - data-insufficient  : stats(거리 "—") + 지도 자리 사유(제목/본문 2줄) + 서술 + "사진 없음" 자리 · "확인".
  *  - empty              : 빈 원 일러스트 + "오늘 기록된 활동이 없습니다" · 하단 CTA "직접 회고 작성".
  *  - error              : stats 채움(BASIC 카드, INV-U5-07) + 에러 카드(다시 시도) · CTA "직접 회고 작성".
+ *  - pending            : (TRIP-1068) 조회·생성 중 안내 본문만 · 하단 CTA 없음(empty 로 접지 않는다, INV-4).
  *
  * ★ 신규 표면 prop(dayTabs·activeDay·onSelectDay·onPressTab)은 전부 **옵셔널** — 미주입 호출자(프리뷰·
  *   무회귀 테스트)가 그대로 컴파일된다. Figma 의 기분 3택·메모 입력은 그리지 않는다(TRIP-935 R7) —
@@ -47,7 +49,7 @@ import { ReflectionStatsRow } from './ReflectionStatsRow';
  */
 
 export type ReflectionFace =
-  'default' | 'data-insufficient' | 'empty' | 'error';
+  'default' | 'data-insufficient' | 'empty' | 'error' | 'pending';
 
 /** 일차 탭 VM(페이지가 여행 기간에서 조립). `day` 는 1-기반 일차 번호(record 의 date 문자열과 다름, G2). */
 export interface ReflectionDayTab {
@@ -285,6 +287,16 @@ export function DailyReflectionScreen({
               </Pressable>
             </View>
           </View>
+        ) : face === 'pending' ? (
+          <StateNotice
+            testID="reflection-daily-pending"
+            illustration={
+              <View className="h-[72px] w-[72px] rounded-full bg-surface-soft" />
+            }
+            title="회고를 준비하고 있어요"
+            description="잠시만 기다려 주세요"
+            actions={[]}
+          />
         ) : face === 'empty' ? (
           <View
             testID="reflection-daily-empty"
@@ -400,12 +412,12 @@ export function DailyReflectionScreen({
         )}
       </ScrollView>
 
-      {/* 하단 — 탭바(기록 활성)는 전 얼굴 공통 오버레이. 비-default 얼굴은 그 위에 CTA 를 함께 얹는다
+      {/* 하단 — 탭바(기록 활성)는 전 얼굴 공통 오버레이. default·pending 외 얼굴은 그 위에 CTA 를 함께 얹는다
           (data-insufficient: "확인" · empty/error: "직접 회고 작성"=편집 진입). CTA 는 탭바 높이(96)만큼
           아래 여백을 둬 탭바 위에 앉는다(세로 순서 자체는 6-b 육안). 편집 중엔 모두 숨김. */}
       {editing ? null : (
         <>
-          {face !== 'default' ? (
+          {face !== 'default' && face !== 'pending' ? (
             <View className="w-full bg-canvas px-lg pb-[104px] pt-[8px]">
               {isDataFace ? (
                 <Pressable
