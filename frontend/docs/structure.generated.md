@@ -614,7 +614,8 @@
 - `src/features/record/model/useTripRecords.ts`  →  useTripRecords · useRecordBases · useRecordSavedStays
 - `src/features/record/model/useVisitAttachments.ts`  →  useVisitAttachments
 - `src/features/record/model/useVisitCheck.ts`  →  VisitCheckOutcome · useVisitCheck
-- `src/features/record/model/visitStatus.ts`  →  VisitStatus · deriveVisitStatus
+- `src/features/record/model/visitOrder.ts`  →  orderByArrival
+- `src/features/record/model/visitStatus.ts`  →  OPTIMISTIC_VISIT_ID_PREFIX · isOptimisticVisit · VisitStatus · deriveVisitStatus
 
 ## src/features/record/ui/
 - `src/features/record/ui/MemoInline.tsx`  →  MemoInlineProps · MemoInline
@@ -622,6 +623,7 @@
 - `src/features/record/ui/PhotoThumbStrip.tsx`  →  PhotoThumbVM · PhotoThumbStripProps · PhotoThumbStrip
 - `src/features/record/ui/RecordGlyphs.tsx`  →  VisitCheckDoneGlyph · VisitCheckActiveGlyph · VisitCheckUpcomingGlyph · VisitCheckSkippedGlyph · PlusGlyph · WarningTriangleGlyph · RetryGlyph · BackArrowGlyph · ChevronRightGlyph · InfoCircleGlyph · GpsOffGlyph · CalendarGlyph
 - `src/features/record/ui/RecordsCalendarScreen.tsx`  →  RecordsCalendarScreenProps · RecordsCalendarScreen
+- `src/features/record/ui/SkipVisitDialog.tsx`  →  SkipVisitDialog
 - `src/features/record/ui/SpontaneousVisitButton.tsx`  →  SpontaneousVisitButtonProps · SpontaneousVisitButton
 - `src/features/record/ui/TripCalendarMonth.tsx`  →  TripCalendarMonthProps · TripCalendarMonth
 - `src/features/record/ui/TripRecordsScreen.tsx`  →  TripRecordsDayTab · DayAttributionHeader · RecordPlanRowVM · TripRecordsScreenProps · TripRecordsScreen
@@ -1340,7 +1342,7 @@
 - `src/shared/date/formatKoreanDate.ts`  →  formatKoreanDate
 - `src/shared/date/formatRelativeTime.ts`  →  formatRelativeTime
 - `src/shared/date/monthGrid.ts`  →  MonthCell · daysInMonth · firstWeekdayOfMonth · shiftMonth · isDateInRange · buildMonthGrid
-- `src/shared/date/seoulDate.ts`  →  seoulDate
+- `src/shared/date/seoulDate.ts`  →  seoulDate · seoulTime · seoulInstant
 
 ## src/shared/location/
 - `src/shared/location/LocationGlyphs.tsx`  →  LocationBackChevronGlyph · LocationRadarHero · LocationOffGlyph · LocationInfoGlyph · LocationClockGlyph · LocationSwapGlyph · LocationPinGlyph · LocationWarningGlyph
@@ -1444,4 +1446,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 1004개 파일
+합계 1006개 파일

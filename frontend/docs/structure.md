@@ -192,6 +192,8 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `canOpenTripRecords` | `features/record/model/recordsCalendar`(TRIP-1015 신규) | 여행 하나가 "기록 화면을 열 수 있는가"(ENDED이거나 시작일 ≤ 오늘) 판정 순수 함수. 비공개 `isPastTrip`(지난 여행만)과 다르다 — 진행 중 여행도 true를 낸다. 찾아봤으나 없어서 신설(grep `canOpen\|isOngoing\|activeTrip` 0건) |
 | `recordsTripIdForDate` | `features/record/model/recordsCalendar`(TRIP-1015 신규) | 캘린더 날짜 → 그 날을 덮고 `canOpenTripRecords`인 여행 중 시작일이 가장 늦은 것의 id(없으면 `null`). `markedDaysOfMonth`(정방향: 여행→날짜)의 역방향 짝 — 역조회 함수가 이전엔 없었다 |
 | `RegionPickerTab` | `features/explore/model/regionPickerPurpose`(TRIP-1015 신규) | `'home'` 하나뿐인 좁은 유니온 타입. `regionPickerHref(purpose, opts?: { tab: RegionPickerTab })`가 opts를 받으면 결과 화면에 진입 탭을 실어 보낸다(홈 검색 → 지역 결과에서 탭바가 "탐색"으로 잘못 보이던 것의 배선). tab 없는 호출은 기존 문자열 그대로(완전 일치 유지) |
+| `seoulTime` · `seoulInstant` | `shared/date/seoulDate`(TRIP-1069 신규, 기존 `seoulDate`·`KST_OFFSET_MS` 옆) | 순간↔서울(KST, 서머타임 없음) 벽시계 상호 변환 — `seoulTime(at)`은 UTC+9h 뒤 UTC 게터(`toISOString`)로 읽어 `HH:mm`(기기 시간대 무관, `getHours()` 미사용), `seoulInstant(day, 'HH:mm')`은 역방향(−9h) + 항상 `Z`로 끝남. **주의(03b 대조)**: `features/planb/model/replanFromInstant.ts`에 같은 `KST_OFFSET_MS` 상수가 별도로 있다(순간→KST `{date,hour}`, `features`라 `shared`가 재사용 불가) — 통합은 planb 테스트 경계 때문에 별도 사이클 후보(문제로그 참고) |
+| `orderByArrival` | `features/record/model/visitOrder`(TRIP-1069 신규) | 방문 목록을 도착 에포크(`Date.parse`) 오름차순 정렬(사본 반환, 도착 없으면 `Infinity`로 끝) — 사전식 문자열 비교가 아니라 숫자 비교라 `.500Z` vs `Z` 포맷 혼재에도 안 뒤집힌다 |
 
 > ⚠️ **재사용 API 의 위젯 행(`widgets/` 위치 행 전부)은 "화면·컨테이너 제외" 규칙의 예외다** — `widgets/` 층은 여러 화면이 공유하는 조립 단위를 두는 자리라 재구현 방지 색인에 싣는 것이 오히려 목적에 맞는다(TRIP-805).
 

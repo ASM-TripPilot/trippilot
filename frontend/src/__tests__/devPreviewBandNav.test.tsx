@@ -405,7 +405,12 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    뒤에 추가하고 이 가드는 안 만진다(추가 전엔 176개라 red). 정확히 그 키인지는 아래 'TRIP-770'
     //    목록과 'TRIP-1068' describe 가 못박는다. devPreviewBandSort 는 밴드 h·l 만 잠가 band j 와 무관.
     //    Figma j03 로딩 프레임 유무는 미확인(02a §1-4) — 실기에선 POST 왕복 동안만 보여 육안 수단이 이 키뿐.
-    expect(PREVIEW_STATES).toHaveLength(177);
+    // ⚠️ TRIP-1069: j01 방문 시각 수정 시트 얼굴 `records-visit-time-sheet`(band `j`) 1키 추가로 177→178.
+    //    Figma `j01-[기록] 방문 기록 · visit-time-sheet`(4524:2383)와 1:1 — TRIP-770 이 지운 같은 이름 키의
+    //    복귀다(그때는 프레임이 없었다). test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그
+    //    1키만 추가하고 이 가드는 안 만진다(추가 전엔 177개라 red). 건너뛰기 확인 다이얼로그는 Figma 프레임이
+    //    없어 키를 두지 않는다. 정확한 j 목록은 아래 'TRIP-770' describe(16키)가 못박는다.
+    expect(PREVIEW_STATES).toHaveLength(178);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -1295,13 +1300,15 @@ describe('AC-3 · 딥링크 초기 밴드 자동선택 (폴백 함수 재사용)
 });
 
 // TRIP-770 · j 밴드(기록·회고) 프리뷰 최종 정리 완료조건 — 22키 → 14키.
-// 무엇을 보장하나: band 'j' 가 정확히 14키이고, 각 키·라벨이 TRIP-770 최종 목록과 완전 일치한다
-// (759~767 이 만든 라벨 편차를 통일). 순서 무관 — (key,label) 쌍 집합으로 대조한다.
-describe('🔴 TRIP-770 · j 밴드 최종 14키·라벨 완전 일치', () => {
+// 무엇을 보장하나: band 'j' 가 정확히 16키(TRIP-770 의 14 + TRIP-1068 pending 1 + TRIP-1069 visit-time-sheet 1)이고, 각 키·라벨이
+// 최종 목록과 완전 일치한다(759~767 이 만든 라벨 편차를 통일). 순서 무관 — (key,label) 쌍 집합으로 대조한다.
+describe('🔴 TRIP-770 · j 밴드 최종 16키·라벨 완전 일치 (TRIP-1068·1069 +1씩)', () => {
   const EXPECTED_J: readonly (readonly [string, string])[] = [
     ['records-default', 'j01 · 방문 기록 default'],
     ['records-error', 'j01 · 방문 기록 error'],
     ['records-manual-checkin', 'j01 · 방문 기록 manual-checkin'],
+    // TRIP-1069 — Figma 4524:2383 과 1:1(시트 부제·서울 시각 시드 육안 대조 자리).
+    ['records-visit-time-sheet', 'j01 · 방문 기록 visit-time-sheet'],
     ['reflection-default', 'j03 · 오늘의 회고 default'],
     ['reflection-data-insufficient', 'j03 · 오늘의 회고 data-insufficient'],
     ['reflection-empty', 'j03 · 오늘의 회고 empty'],
@@ -1319,7 +1326,7 @@ describe('🔴 TRIP-770 · j 밴드 최종 14키·라벨 완전 일치', () => {
     ['records-calendar-default', 'j07 · 여행 캘린더 default'],
   ];
 
-  it('band j 가 정확히 15키이고 키·라벨이 최종 목록과 완전 일치한다(TRIP-1068 pending +1)', () => {
+  it('band j 가 정확히 16키이고 키·라벨이 최종 목록과 완전 일치한다(TRIP-1068 pending +1 · TRIP-1069 +1)', () => {
     // 준비: band 'j' 엔트리만 골라 (key\tlabel) 정렬 집합으로.
     const jStates = PREVIEW_STATES.filter((state) => state.band === 'j');
     const actual = jStates

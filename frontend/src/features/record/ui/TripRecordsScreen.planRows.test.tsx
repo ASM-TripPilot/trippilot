@@ -25,7 +25,8 @@ jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
  *  - 방문 카드가 0장이면 `record-trip-empty` 안내가 한 번 뜨고, 1장 이상이면 없다.
  *  - 페이지가 내린 `planRows`(레코드 없는 계획 슬롯)는 행마다 `record-trip-plan-row-{slotKey}` 로 선다.
  *    방문이 있어도 레코드 없는 슬롯은 행으로 남는다(Q4 — 둘째 곳도 j01 에서 체크할 수 있게).
- *  - 수동 체크인 모드(위치 권한 없음)일 때만 행에 "방문 체크"가 붙고, 누르면 그 행을 페이지로 올린다.
+ *  - 페이지가 `onPressPlanCheck` 를 내리면(오늘 탭) 모드와 무관하게 행에 "방문 체크"가 붙고, 누르면 그 행을
+ *    페이지로 올린다(TRIP-1069 결정 1(c) — 옛 "수동 모드일 때만"을 뒤집음).
  *  - 계획 행은 `VisitRecordCard` 가 아니다 — 그 카드는 레코드 id 로 [건너뜀]을 쏘는데 계획 행엔 id 가
  *    없어, 합성 id 로 재사용하면 404 요청이 나간다(브리프 맹점 ④).
  *  - 빈 상태 안내는 부제(법 근거 문구 "(좌표 자동기록 비활성)")를 덮어쓰지 않는 별도 요소다(AC-13).
@@ -141,8 +142,33 @@ describe('TripRecordsScreen · 계획 행 "방문 체크" (TRIP-1021 AC-11)', ()
     expect(handlers.onPressSkip).not.toHaveBeenCalled();
   });
 
-  it('P4 수동 체크인 모드가 아니면 계획 행에 "방문 체크"가 없다', () => {
-    renderScreen({ manualCheckin: false, planRows: [ROW_P3, ROW_P4] });
+  // TRIP-1069 결정 1(c)·D8 — 옛 P4("수동 모드가 아니면 없다")를 뒤집었다. 위치 권한이 있어도 자동 도착이
+  // 안 잡힐 수 있으니 오늘 탭 계획 행에선 손으로 체크할 수 있어야 한다. 켜고 끄는 기준은 이제 모드가 아니라
+  // 페이지가 `onPressPlanCheck` 를 내렸는지(= 오늘 탭인지) 하나다.
+  it('P4 수동 체크인 모드가 아니어도 onPressPlanCheck 가 있으면 행마다 "방문 체크"가 서고, 누르면 그 행이 올라간다', () => {
+    const handlers = renderScreen({
+      manualCheckin: false,
+      planRows: [ROW_P3, ROW_P4],
+    });
+
+    expect(screen.getByTestId(checkId(ROW_P3))).toBeOnTheScreen();
+    const check = screen.getByTestId(checkId(ROW_P4));
+    expect(check.props.accessibilityRole).toBe('button');
+
+    fireEvent.press(check);
+
+    expect(handlers.onPressPlanCheck).toHaveBeenCalledTimes(1);
+    expect(handlers.onPressPlanCheck).toHaveBeenCalledWith(
+      expect.objectContaining({ slotKey: `${DAY}#p4`, poiId: 'p4' })
+    );
+  });
+
+  it('P4b onPressPlanCheck 를 안 내리면(지난·미래 날) 수동 모드여도 "방문 체크"가 없다', () => {
+    renderScreen({
+      manualCheckin: true,
+      planRows: [ROW_P3, ROW_P4],
+      onPressPlanCheck: undefined,
+    });
 
     // 짝 앵커 — 행 2개는 있다.
     expect(screen.getByTestId(rowId(ROW_P3))).toBeOnTheScreen();

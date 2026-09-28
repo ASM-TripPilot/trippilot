@@ -38,6 +38,7 @@ import { PhotoThumbStrip } from '@/features/record/ui/PhotoThumbStrip';
 import { RecordsCalendarScreen } from '@/features/record/ui/RecordsCalendarScreen';
 import { TripRecordsScreen } from '@/features/record/ui/TripRecordsScreen';
 import { VisitRecordCard } from '@/features/record/ui/VisitRecordCard';
+import { VisitTimeSheet } from '@/features/record/ui/VisitTimeSheet';
 import { SHARE_FORMATS } from '@/features/reflection/model/shareCard';
 import { DailyReflectionScreen } from '@/features/reflection/ui/DailyReflectionScreen';
 import { ShareCardScreen } from '@/features/reflection/ui/ShareCardScreen';
@@ -3030,7 +3031,8 @@ export const PREVIEW_STATES: PreviewState[] = [
         ]}
         // TRIP-759 — 완료 방문 카드(r1·r2)에 사진/메모 슬롯을 얹어 default 얼굴에서 육안 대조한다
         // (실 훅 대신 정적 픽스처: 네이티브 피커 미설치라 uri=null placeholder 셀 — 실 썸네일·간격은
-        // 6-b 몫). 미완료 카드(r3·r4)는 undefined → 화면이 정적 스캐폴딩으로 폴백한다. 광안리 2장·
+        // 6-b 몫). 미완료 카드(r3·r4)는 undefined → 슬롯 없는 기본 카드(사진·메모 칸 없음, TRIP-1069 D3 —
+        // r4 는 '— 건너뜀' 라벨). 광안리 2장·
         // 미술관 1장. 카드 사진 셀은 placeholder 라 로컬 require 는 지도 마커족(mapPins)만 쓴다.
         renderCard={(card) =>
           card.completedAt != null ? (
@@ -3225,8 +3227,8 @@ export const PREVIEW_STATES: PreviewState[] = [
             arrivedLabel: null,
           },
         ]}
-        // 완료 카드(r1·r2)만 사진/메모 슬롯을 얹고, UPCOMING r3 은 undefined → 화면이 정적 스캐폴딩
-        // 폴백으로 그리되 manualCheckin·onPressManualCheck 를 함께 받아 pill 을 surface 한다.
+        // 완료 카드(r1·r2)만 사진/메모 슬롯을 얹고, UPCOMING r3 은 undefined → 화면의 기본 카드(슬롯 없음)로
+        // 그리되 manualCheckin·onPressManualCheck 를 함께 받아 pill 을 surface 한다.
         renderCard={(card) =>
           card.completedAt != null ? (
             <VisitRecordCard
@@ -3254,6 +3256,53 @@ export const PREVIEW_STATES: PreviewState[] = [
         onPressBack={noop}
         onPressTab={noop}
       />
+    ),
+  },
+  // j01 방문 시각 수정 시트(TRIP-1069 · Figma 4524:2383) — 부산시립미술관 완료 카드에서 연 모습. 시트는
+  // 서버 순간(Z)을 받아 서울 시계로 시드한다(06:40Z→15:40 · 07:30Z→16:30). 시트 실제 열림·딤·셀 스크롤·
+  // 제스처 충돌은 jest 사각(바텀시트 목 통과형) — 여기가 6-b 육안 자리(AC-11).
+  {
+    key: 'records-visit-time-sheet',
+    band: 'j',
+    label: 'j01 · 방문 기록 visit-time-sheet',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <TripRecordsScreen
+          dayTabs={[
+            { day: '2026-08-20', label: 'Day1' },
+            { day: '2026-08-21', label: 'Day2' },
+          ]}
+          activeDay="2026-08-21"
+          onSelectDay={noop}
+          mapCenter={{ lat: 35.1555, lng: 129.1216 }}
+          cards={[
+            {
+              visitCheckId: 'r2',
+              slotKey: '2026-08-21#p2',
+              poiId: 'p2',
+              nameKo: '부산시립미술관',
+              arrivedAt: '2026-08-21T06:40:00Z',
+              completedAt: '2026-08-21T07:30:00Z',
+              skippedAt: null,
+              arrivedLabel: '15:40',
+            },
+          ]}
+          onPressComplete={noop}
+          onPressSkip={noop}
+          onPressBack={noop}
+          onPressTab={noop}
+        />
+        <VisitTimeSheet
+          visitCheckId="r2"
+          placeName="부산시립미술관"
+          arrivedAt="2026-08-21T06:40:00Z"
+          completedAt="2026-08-21T07:30:00Z"
+          now="2026-08-21T12:00:00Z"
+          onSave={noop}
+          onCancel={noop}
+        />
+      </View>
     ),
   },
   // j03 오늘의 회고 4얼굴(TRIP-571) — 순수 뷰(`DailyReflectionScreen`)를 격리 렌더한다(`@/shared/api`

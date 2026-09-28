@@ -6,7 +6,8 @@ import { PhotoThumbStrip, type PhotoThumbVM } from './PhotoThumbStrip';
 import { VisitRecordCard, type VisitRecordCardVM } from './VisitRecordCard';
 
 /**
- * TRIP-759 · j01 방문 기록 — 완료 방문 카드의 사진/메모 슬롯을 실데이터로 배선하는 per-card 컨테이너.
+ * TRIP-759 · j01 방문 기록 — 방문 카드의 사진/메모 슬롯을 실데이터로 배선하는 per-card 컨테이너
+ * (TRIP-1069 — 완료뿐 아니라 도착한 카드 전부. 메모 PUT 은 방문 기록만 있으면 된다).
  *
  * 왜 별 컴포넌트인가: `useVisitAttachments`(GET photos · PUT memo)는 훅이라 페이지의 `cards.map`
  * 루프 안에서 못 부른다(rules-of-hooks — 훅은 컴포넌트/커스텀훅 최상단에서만). 카드마다 이 컴포넌트를
@@ -24,6 +25,8 @@ export interface VisitRecordCardContainerProps {
   card: VisitRecordCardVM;
   onPressComplete?: (visitCheckId: string) => void;
   onPressSkip?: (visitCheckId: string) => void;
+  /** TRIP-1069 · 시각 수정 시트 진입 — 카드로 그대로 넘긴다(미주입이면 컨트롤 부재). */
+  onPressEditTime?: (visitCheckId: string) => void;
 }
 
 export function VisitRecordCardContainer({
@@ -31,6 +34,7 @@ export function VisitRecordCardContainer({
   card,
   onPressComplete,
   onPressSkip,
+  onPressEditTime,
 }: VisitRecordCardContainerProps): ReactElement {
   const { photos, failedUploads, retryUpload, saveMemo } = useVisitAttachments({
     tripId,
@@ -57,6 +61,7 @@ export function VisitRecordCardContainer({
       card={card}
       onPressComplete={onPressComplete}
       onPressSkip={onPressSkip}
+      onPressEditTime={onPressEditTime}
       photoSlot={<PhotoThumbStrip photos={photoVMs} />}
       memoSlot={<MemoInline onSubmit={(text) => void saveMemo(text)} />}
       // 카드-레벨 재시도(01b 결정 1) — 실패 자산 전체를 재발화. 실패가 없으면 버튼 자체를 안 내린다.

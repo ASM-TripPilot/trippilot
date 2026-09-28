@@ -24,11 +24,11 @@ import { VisitRecordCard, type VisitRecordCardVM } from './VisitRecordCard';
  *
  * 완료 방문 카드의 사진/메모는 페이지가 `renderCard` 로 실데이터 슬롯을 조립해 내려준다
  * (useVisitAttachments 는 훅이라 카드 map 안에서 못 부른다 → per-card 컨테이너). renderCard 가
- * 카드를 안 그리면(undefined) 정적 스캐폴딩 VisitRecordCard 로 폴백한다(프리뷰·빈 카드 무영향).
+ * 카드를 안 그리면(undefined) 슬롯 없는 기본 VisitRecordCard(사진·메모 칸 없음, TRIP-1069 D3) 로 폴백한다(프리뷰·빈 카드 무영향).
  *
  * TRIP-1021 — 방문 카드가 0장이면 부제 아래 별도 안내(`record-trip-empty`, 부제의 법 근거 문구를 덮지
  * 않는다). 카드 뒤에는 페이지가 내린 계획 행(레코드 없는 그날 슬롯)을 그린다 — `VisitRecordCard` 가 아니다
- * (그 카드는 레코드 id 로 [건너뜀]을 쏘는데 계획 행엔 id 가 없다). 수동 체크인 모드면 행에 "방문 체크".
+ * (그 카드는 레코드 id 로 [건너뛰기]를 쏘는데 계획 행엔 id 가 없다). `onPressPlanCheck` 가 오면 행에 "방문 체크".
  *
  * ★ 지도(MapView) 위에 인터랙티브 요소를 얹지 않는다(repo-traps 터치 흡수 함정). 방문 추가
  * 버튼·카드는 지도 **아래 flow 형제**다. 지도는 viewOnly 글랜스(제스처 없음).
@@ -71,7 +71,7 @@ export interface TripRecordsScreenProps {
   noticeCopy?: string;
   /**
    * TRIP-759 — 카드별 실데이터 렌더 훅(옵셔널). 페이지가 완료 방문 카드에 사진/메모 슬롯을 배선한
-   * per-card 컨테이너를 돌려준다. undefined 를 돌려주면 정적 스캐폴딩 VisitRecordCard 로 폴백한다.
+   * per-card 컨테이너를 돌려준다. undefined 를 돌려주면 슬롯 없는 기본 VisitRecordCard(사진·메모 칸 없음, TRIP-1069 D3) 로 폴백한다.
    */
   renderCard?: (card: VisitRecordCardVM) => ReactNode;
   /**
@@ -84,7 +84,7 @@ export interface TripRecordsScreenProps {
   onPressManualCheck?: (poiId: string) => void;
   /** TRIP-1021 — 계획 행(레코드 없는 슬롯). 미주입이면 행 없음. */
   planRows?: RecordPlanRowVM[];
-  /** TRIP-1021 — 계획 행 "방문 체크"(수동 체크인 모드에서만 그린다) → arrive MANUAL + slotKey. */
+  /** TRIP-1021 — 계획 행 "방문 체크" → arrive MANUAL + slotKey. TRIP-1069 D8 — 주입되면 모드와 무관하게 선다. */
   onPressPlanCheck?: (row: RecordPlanRowVM) => void;
   /** TRIP-1021 — 기록 조회 상태. 미주입 = 'ready'. loading 이면 빈 안내 없음, error 면 오류 표면. */
   recordsStatus?: 'ready' | 'loading' | 'error';
@@ -268,7 +268,7 @@ export function TripRecordsScreen({
         ) : null}
 
         {/* 카드 목록 — 페이지가 renderCard 를 주면 그것으로(완료 카드=실데이터 사진/메모 슬롯),
-            안 주거나 undefined 를 돌려주면 정적 스캐폴딩 VisitRecordCard 로 폴백한다. key 는 감싸는
+            안 주거나 undefined 를 돌려주면 슬롯 없는 기본 VisitRecordCard(사진·메모 칸 없음, TRIP-1069 D3) 로 폴백한다. key 는 감싸는
             Fragment 가 쥔다 — 방문이 바뀌면 리마운트돼 MemoInline 초안이 새로 심긴다(seed-once). */}
         {cards.map((card) => (
           <Fragment key={card.visitCheckId}>
@@ -298,7 +298,7 @@ export function TripRecordsScreen({
                 {row.nameKo}
               </Text>
             </View>
-            {manualCheckin && onPressPlanCheck ? (
+            {onPressPlanCheck ? (
               <View className="flex-row items-center gap-[10px]">
                 <Pressable
                   testID={`record-trip-plan-check-${row.slotKey}`}
@@ -311,9 +311,12 @@ export function TripRecordsScreen({
                     방문 체크
                   </Text>
                 </Pressable>
-                <Text className="text-caption text-muted">
-                  좌표 없이 장소 직접 선택
-                </Text>
+                {/* 수동 체크인 문맥 문구 — 권한이 있는 사용자에겐 뜻이 안 맞아 뺀다(03b N4). */}
+                {manualCheckin ? (
+                  <Text className="text-caption text-muted">
+                    좌표 없이 장소 직접 선택
+                  </Text>
+                ) : null}
               </View>
             ) : null}
           </View>
