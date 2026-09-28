@@ -1,5 +1,8 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.changelog.api.AppendChangeLog
+import com.trippilot.changelog.api.ChangeLogFacade
+import com.trippilot.changelog.api.ChangeSourceType
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.itinerarygeneration.domain.RevisionActor
 import com.trippilot.itinerarygeneration.domain.RevisionKind
@@ -20,6 +23,7 @@ import com.trippilot.itinerarygeneration.application.Revalidation.Companion.viol
 import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
+import com.trippilot.placedata.api.PoiSnapshotFacade
 import com.trippilot.trip.api.TripFacade
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
@@ -28,6 +32,7 @@ import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.ZoneId
 import java.util.UUID
 
 /** 편집 요청 — 전체 교체(사용자가 수정한 일자·슬롯 배열). 슬롯 순서 = 배열 순서. [reason] 은 선택(변경 이력에 남는다). */
@@ -43,7 +48,8 @@ data class EditSlot(
 
 /**
  * 일정 편집 + 재검증(C8 · US-SCHED-06·07). 편집은 **비차단** — solver.validate(HC1-4)로 위반을 찾아
- * has_violation 으로 표시하되 저장은 허용한다(변경 차단 아님, ADR-0011). PLANNED만 편집 가능(CONFIRMED는 409).
+ * has_violation 으로 표시하되 저장은 허용한다(변경 차단 아님, ADR-0011). CONFIRMED 는 **여행 시작 전**만
+ * 409 다(TRIP-999 결정 (a) · BR-U3-28 개정) — 여행 중에는 확정 일정도 이 경로로 고친다.
  * 위반 **내용**(type/detail) 실판정은 실 AI(TRIP-229); 현재 Fake validate 는 빈 목록 → 위반 없음으로 흐름 검증.
  */
 @Service
@@ -52,6 +58,10 @@ class EditItineraryService(
     private val itineraries: ItineraryRepository,
     private val scheduleAgent: ScheduleAgentPort,
     private val revisions: ItineraryRevisionService,
+    /** 여행 중 수동 편집의 변경 이력(BR-U4-30 MANUAL) — 재계획 반영과 같은 축. */
+    private val changeLogs: ChangeLogFacade,
+    /** 확정 일정 편집이 열리면서(TRIP-999) 새 슬롯 동결이 필요해졌다 — [ConfirmedSnapshots]. */
+    private val poiSnapshots: PoiSnapshotFacade,
     transactionManager: PlatformTransactionManager,
     private val rejections: RejectionStore,
     private val clock: Clock,
@@ -59,12 +69,24 @@ class EditItineraryService(
     private val tx = TransactionTemplate(transactionManager)
 
     fun edit(accountId: UUID, tripId: UUID, edit: EditItinerary): Itinerary {
-        trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
+        val period = trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
         val current = itineraries.findByTrip(tripId).firstOrNull() ?: throw ResourceNotFound("생성된 일정이 없습니다.")
-        if (current.status != ItineraryStatus.PLANNED) throw ConflictDetected(message = "확정된 일정은 수정할 수 없습니다.")
-        // 생성 중(PARTIAL) 편집 금지 — 뒤이어 도착하는 2차 결과가 편집을 덮어써 조용히 유실된다(확정 차단과 같은 이유).
+        // 확정 잠금은 **여행 시작 전**만이다(TRIP-999 결정 (a) · BR-U3-28 개정). 여행이 시작되면
+        // 이 편집이 확정 일정을 직접 고치는 유일한 수단이라, 여기서 막으면 여행 중 일정 변경 수단이
+        // 0 이 된다(QA #066 — FE 허브는 CONFIRMED 일정만 live 로 보낸다).
+        if (current.status == ItineraryStatus.CONFIRMED && today() < period.startDate) {
+            throw ConflictDetected(message = "확정된 일정은 수정할 수 없습니다.")
+        }
+        // 생성 중(PARTIAL) 편집은 **이미 만들어진 일자에 한해** 허용한다(TRIP-1000 — day1 조기 노출의
+        // 취지가 "보고 고칠 수 있다"다, BR-U3-06). 유실 걱정("2차가 편집을 덮어쓴다")은 병합이
+        // 트랜잭션 안 재읽기 + 조건부 쓰기라 성립하지 않는다 — 2차는 최신 상태에 나머지 일자를
+        // **이어붙일 뿐** 기존 일자를 다시 만들지 않는다(SecondPhaseGenerator, 스펙으로 잠금).
+        // 아직 없는 일자를 싣는 편집만 409 — 그 일자는 2차와 이 편집 중 누가 이겨야 하는지 정의가 없다.
         if (current.generationState == GenerationState.PARTIAL) {
-            throw ConflictDetected(message = "일정 생성이 진행 중입니다. 완료 후 수정할 수 있습니다.")
+            val existing = current.days.map { it.date }.toSet()
+            if (edit.days.any { it.date !in existing }) {
+                throw ConflictDetected(message = "일정 생성이 진행 중입니다. 완료 후 수정할 수 있습니다.")
+            }
         }
 
         // 재검증(비차단) — 외부(ScheduleAgent) 호출은 트랜잭션 밖(DB 커넥션 안 물게, generate 와 동일). Fake 는 빈 목록.
@@ -77,12 +99,29 @@ class EditItineraryService(
             val beforeWrite = itineraries.findByTrip(tripId).firstOrNull() ?: current
             // 편집 전 상태로 돌아갈 지점이 없으면 먼저 남긴다 — 첫 편집으로 원본이 사라지면 안 된다(INV-U3-08).
             revisions.ensureRestorePoint(beforeWrite)
-            val saved = itineraries.replaceForTrip(tripId, flagged)
+            // 확정 일정이면 동결을 잇는다(INV-U1-03) — 편집은 전체 교체라 여기서 안 이으면
+            // 시각 하나 바꾼 저장이 전 슬롯의 스냅숏 참조를 지운다. 새 장소는 지금 동결한다.
+            val toSave = ConfirmedSnapshots.carry(flagged, beforeWrite) { poiId -> poiSnapshots.freeze(poiId)?.poiSnapshotId }
+            val saved = itineraries.replaceForTrip(tripId, toSave)
             // 바뀐 게 없으면 쌓지 않는다 — 되돌리기 목록이 같은 버전으로 도배된다.
             // 위반 상태까지 포함해 비교한다(스냅숏 비교는 위반 변화를 못 본다).
             if (!ItineraryContent.sameAs(beforeWrite, saved)) {
                 // 이력은 **같은 트랜잭션**에 — 일정만 바뀌고 이력이 빠지는 상태를 만들지 않는다(INV-U3-06).
                 revisions.record(saved, RevisionActor.USER, RevisionKind.EDIT, edit.reason ?: "일정을 직접 수정함")
+                // 여행 중 수동 편집은 변경 이력 1행(BR-U4-30 MANUAL) — 재계획 반영(PLAN_B)과 같은 축이다.
+                // 여행 전 편집은 이 축의 대상이 아니다(그쪽 기록은 리비전 h36 이 담당한다).
+                if (today() >= period.startDate) {
+                    changeLogs.append(
+                        AppendChangeLog(
+                            tripId = tripId,
+                            actor = accountId.toString(),
+                            sourceType = ChangeSourceType.MANUAL,
+                            reason = edit.reason ?: "일정을 직접 수정함", // BR-U4-31 — 비워 두지 않는다
+                            before = beforeWrite.toChangeLogSnapshot(),
+                            after = saved.toChangeLogSnapshot(),
+                        ),
+                    )
+                }
             }
             // 빠진 POI = 거절(TRIP-964). 사용자가 그 자리를 보고 바꾼 것이라 가장 명확한 신호다.
             // **같은 트랜잭션이어야 한다** — 편집이 롤백되면 거절도 남으면 안 된다(없던 편집을 기억하게 된다).
@@ -92,6 +131,14 @@ class EditItineraryService(
             rejections.record(tripId, removed, RejectedPoi.Kind.SWAPPED_OUT)
             saved
         }!!
+    }
+
+    /** 여행지 기준 오늘(KST) — 러너 기본 존(UTC)으로 재면 하루가 어긋난다(verify-gates 실측). */
+    private fun today(): LocalDate = LocalDate.ofInstant(clock.instant(), TRAVEL_ZONE)
+
+    private companion object {
+        /** 국내 전용이라 고정(GenerateItineraryService 와 같은 값). */
+        private val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
     }
 
     /** 편집안 + 재검증 결과 → 새 일정 슬롯 배열(위반 슬롯 has_violation=true). identity·createdAt·solveMode 는 현행 보존. */
@@ -121,7 +168,9 @@ class EditItineraryService(
             )
         }
         return Itinerary.reconstitute(
-            current.itineraryId, current.tripId, ItineraryStatus.PLANNED, current.solveMode, current.generationMode, current.isFallback,
+            // 상태는 **보존**한다 — 여행 중 확정 일정 편집(TRIP-999 결정 (a))에서 PLANNED 로 적으면
+            // 편집 한 번에 확정이 조용히 풀리고, FE 허브 판정(CONFIRMED 만 live)이 그 자리에서 끊긴다.
+            current.itineraryId, current.tripId, current.status, current.solveMode, current.generationMode, current.isFallback,
             current.generationState, days, current.createdAt, clock.instant(), // 생성 진행 상태는 편집과 무관 — 보존
             current.candidatesSummary, // 후보 충분성도 편집과 무관 — 보존(빠뜨리면 편집 한 번에 영구 소실)
             // 미배치 보고도 보존한다. 사용자가 슬롯을 옮겼다고 "못 넣었던 곳"이 들어간 것은 아니다 —

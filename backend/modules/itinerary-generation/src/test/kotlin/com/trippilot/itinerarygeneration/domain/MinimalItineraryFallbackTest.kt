@@ -59,8 +59,18 @@ class MinimalItineraryFallbackTest : StringSpec({
         )
         val slot = out.days.first { it.date == d1 }.slots.single()
         slot.poiId shouldBe poiB
-        slot.isFixed shouldBe true
+        slot.isFixed shouldBe false // 날짜조차 사용자가 안 정했다 — "변경 불가"로 보이면 거짓(TRIP-1001)
         out.days.first { it.date == d2 }.slots shouldBe emptyList()
+    }
+
+    "물질화된 블록(userPinned=false)은 폴백에서도 고정으로 표시하지 않는다(TRIP-1001)" {
+        // ANYTIME 을 물질화가 날짜·시각에 앉힌 블록 — 시각은 우리가 골랐지 사용자가 아니다(QA #049).
+        val out = MinimalItineraryFallback.of(
+            input(listOf(FixedBlock(poiA, d1, LocalTime.of(9, 0), 60))),
+            at,
+            materializedPoiIds = setOf(poiA),
+        )
+        out.days.first { it.date == d1 }.slots.single().isFixed shouldBe false
     }
 
     "ANYTIME 이 하루 창을 넘치면 다음 날로 — 자정 감김으로 슬롯 검증이 터지지 않는다" {

@@ -933,14 +933,14 @@ paths:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
     put:
       tags: [trips]
-      summary: 일정 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 확정·생성 중 일정은 409
+      summary: 일정 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 여행 시작 전 확정·생성 중 일정은 409
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/EditItineraryRequest' } } }
       responses:
         '200': { description: 편집됨, content: { application/json: { schema: { $ref: '#/components/schemas/Itinerary' } } } }
         '404': { description: 여행 없음/타 계정/생성된 일정 없음 }
-        '409': { description: 확정된 일정은 수정 불가 · 생성 진행 중(generationState=PARTIAL)은 수정 불가 }
+        '409': { description: 여행 시작 전 확정 일정은 수정 불가(여행 중에는 허용 — TRIP-999) · 생성 진행 중에는 아직 없는 일자를 싣는 편집만 불가(이미 만들어진 일자는 허용 — TRIP-1000) }
   /trips/{tripId}/generation-sessions/{sessionId}:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -990,7 +990,7 @@ paths:
         '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/SlotCandidates' } } } }
         '400': { description: 슬롯 키 형식 오류 }
         '404': { description: 여행 없음/타 계정/생성된 일정 없음/해당 슬롯 없음/장소 좌표 없음 }
-        '409': { description: 확정된 일정 · 생성 진행 중 · 같은 날 같은 장소가 둘이라 슬롯 특정 불가 }
+        '409': { description: 확정된 일정 · 아직 생성 중인 일자(이미 만들어진 일자는 허용 — TRIP-1000) · 같은 날 같은 장소가 둘이라 슬롯 특정 불가 }
   /trips/{tripId}/visits:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1437,7 +1437,7 @@ paths:
       responses:
         '200': { description: 반영됨, content: { application/json: { schema: { $ref: '#/components/schemas/ReplanSession' } } } }
         '404': { description: 여행 없음/타 계정/세션 없음 }
-        '409': { description: 초안 없음(산출 중·대안 없음·이미 끝남) · 그 사이 일정이 교체됨 · 확정된 일정 }
+        '409': { description: 초안 없음(산출 중·대안 없음·이미 끝남) · 그 사이 일정이 교체됨 — 확정 일정은 막지 않는다(여행 중 반영 허용, TRIP-999) }
   /trips/{tripId}/replan-sessions/{sessionId}/diff:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }

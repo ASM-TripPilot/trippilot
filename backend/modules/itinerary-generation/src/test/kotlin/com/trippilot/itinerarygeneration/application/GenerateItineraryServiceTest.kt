@@ -14,6 +14,7 @@ import com.trippilot.itinerarygeneration.domain.ItineraryRevision
 import com.trippilot.itinerarygeneration.domain.ItineraryRevisionSummary
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import com.trippilot.itinerarygeneration.domain.RepairResult
+import com.trippilot.itinerarygeneration.domain.FixedBlock
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
 import com.trippilot.itinerarygeneration.domain.UnplacedMustVisit
 import com.trippilot.itinerarygeneration.domain.UnplacedReason
@@ -367,6 +368,38 @@ class GenerateItineraryServiceTest : StringSpec({
 
         agent.captures[0].fixedBlocks.map { it.poiId } shouldContainExactly listOf(poi)
         agent.captures[1].fixedBlocks.map { it.poiId } shouldContainExactly listOf(anytime)
+    }
+
+    "창 밖 고정 블록이 있는 날만 일과 창이 넓어진다 — 21:00+60분이면 그 날 끝이 22:00 (TRIP-1001 결정 (c))" {
+        // 안 넓히면 이 블록 하나가 HC4 를 깨 그 날 전체가 "해 없음" → 409 → 최소 폴백이다(QA #045).
+        val late = UUID.randomUUID()
+        val day2 = start.plusDays(1)
+        val agent = CapturingAgent(now)
+        service(agent, fullPrefs, emptyList(), fixedVisits = listOf(FixedVisit(late, day2, LocalTime.parse("21:00"), 60)))
+            .generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        val second = agent.captures[1]
+        second.timeWindows.first { it.date == day2 }.end shouldBe LocalTime.parse("22:00")
+        second.timeWindows.first { it.date == day2 }.start shouldBe LocalTime.parse("09:00") // 시작은 그대로
+        second.timeWindows.first { it.date != day2 }.end shouldBe LocalTime.parse("21:00") // 다른 날은 기본 창
+    }
+
+    "이른 고정 블록이면 창 시작이 앞으로 넓어진다" {
+        val early = UUID.randomUUID()
+        val agent = CapturingAgent(now)
+        service(agent, fullPrefs, emptyList(), fixedVisits = listOf(FixedVisit(early, start, LocalTime.parse("07:30"), 60)))
+            .generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        agent.captures[0].timeWindows.first { it.date == start }.start shouldBe LocalTime.parse("07:30")
+    }
+
+    "고정 블록이 자정을 넘으면 창 끝은 23:59 에 멈춘다 — end < start 인 모순 창을 만들지 않는다" {
+        val midnight = UUID.randomUUID()
+        val agent = CapturingAgent(now)
+        service(agent, fullPrefs, emptyList(), fixedVisits = listOf(FixedVisit(midnight, start, LocalTime.parse("23:30"), 60)))
+            .generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        agent.captures[0].timeWindows.first { it.date == start }.end shouldBe LocalTime.parse("23:59")
     }
 
     "ANYTIME 은 물질화돼 경계로 나간다 (M1) — null 이 하나라도 나가면 요청 전체가 422 다" {
@@ -857,30 +890,27 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
     }
 
     /**
-     * **기본은 시한을 싣지 않는다**(TRIP-474). AI 계약상 미지정 = 시간제약 없음이라,
-     * 값을 실으면 시간 때문에 규칙 폴백으로 강등되는 경로가 도로 열린다.
+     * **기본이 시한을 싣는다**(TRIP-1000 재도입 · BR-U3-03 "deadlineMs 는 backend 소유").
+     * 안 실으면 AI 가 600초를 대입해, 몰아 재시도가 겹치면 2차가 10분이 된다(QA #073).
      */
-    "기본 설정에서는 시한을 싣지 않는다" {
+    "기본 설정에서 1차 15s · 2차 60s 시한을 싣는다(TRIP-1000)" {
         val end = start.plusDays(2)
         val (agent, _) = emittingAgent(end)
         service(agent, FakeItineraries(), end).generate(acc, tripId, GenerationMode.FULLY_AI)
 
-        agent.captures[0].requestMeta.deadlineMs shouldBe null
-        agent.captures[1].requestMeta.deadlineMs shouldBe null
+        agent.captures[0].requestMeta.deadlineMs shouldBe 15_000L
+        agent.captures[1].requestMeta.deadlineMs shouldBe 60_000L
     }
 
-    /**
-     * **재도입은 플래그 한 줄이다**(TRIP-475 9월 예정). 값을 지우지 않고 끈 이유가 이것이므로,
-     * 켰을 때 종전과 같은 값이 나가는지 지금 고정해 둔다 — 나중에 확인하면 이미 늦다.
-     */
-    "플래그를 켜면 1차 day1 예산(5s), 2차 전체 예산(20s) 그대로다" {
+    /** 끄면 무제한(미지정)으로 돌아간다 — 재도입 전 동작을 환경값 한 줄로 되살릴 수 있어야 한다. */
+    "플래그를 끄면 시한을 싣지 않는다" {
         val end = start.plusDays(2)
         val (agent, _) = emittingAgent(end)
-        service(agent, FakeItineraries(), end, deadlines = ScheduleDeadlineProperties(enforced = true))
+        service(agent, FakeItineraries(), end, deadlines = ScheduleDeadlineProperties(enforced = false))
             .generate(acc, tripId, GenerationMode.FULLY_AI)
 
-        agent.captures[0].requestMeta.deadlineMs shouldBe 5_000L
-        agent.captures[1].requestMeta.deadlineMs shouldBe 20_000L
+        agent.captures[0].requestMeta.deadlineMs shouldBe null
+        agent.captures[1].requestMeta.deadlineMs shouldBe null
     }
 
     /**
@@ -1123,6 +1153,53 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
             .completeRemaining(tripId, edited.itineraryId, agentInputFor(end), isRegeneration = false)
 
         repo.byTrip.getValue(tripId) shouldBe edited // 그대로
+    }
+
+    "2차 결과는 이어붙일 뿐이다 — 생성 중에 반영된 1일차 편집을 덮어쓰지 않는다(TRIP-1000)" {
+        // PARTIAL 편집이 열리면서(이미 만들어진 일자 한정) 이 보장이 계약이 됐다 — 병합이
+        // 트랜잭션 안에서 최신 상태를 다시 읽어 그 위에 나머지 일자만 얹는지를 잠근다.
+        val end = start.plusDays(1)
+        val userPick = UUID.randomUUID() // 사용자가 2차 도는 사이 1일차에 넣은 장소
+        val (agent, poiByDate) = emittingAgent(end)
+        val repo = FakeItineraries()
+        val editedDay1 = Itinerary.create(tripId, SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, false,
+            listOf(ItineraryDay.of(start, 0, listOf(VisitSlot.of(userPick, null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"))))),
+            now, GenerationState.PARTIAL,
+        )
+        repo.byTrip[tripId] = editedDay1
+
+        SecondPhaseGenerator(agent, repo, genRevisions(repo, stubTrips), genSessions(), FakeScoredCandidatePoolStore(), NOOP_TX, clock)
+            .completeRemaining(tripId, editedDay1.itineraryId, agentInputFor(end), isRegeneration = false)
+
+        val finished = repo.byTrip.getValue(tripId)
+        finished.generationState shouldBe GenerationState.COMPLETE
+        finished.days.first { it.date == start }.slots.single().sourcePoiId shouldBe userPick // 편집 보존
+        finished.days.first { it.date == end }.slots.single().sourcePoiId shouldBe poiByDate.getValue(end) // 2차 몫
+    }
+
+    "2차 폴백의 물질화 슬롯은 '변경 불가'가 아니다 — 시각은 우리가 골랐다(TRIP-1001 · QA #049)" {
+        val end = start.plusDays(1)
+        val materializedPoi = UUID.randomUUID()
+        val agent = object : StubScheduleAgent() {
+            override fun generate(input: ScheduleAgentInput): ScheduleAgentOutput =
+                throw ScheduleAgentCallFailed("AI_ERROR", retryable = false, message = "조립 실패 재현")
+            override fun explanations(tripId: UUID, solution: ScheduleAgentOutput) = SlotExplanations()
+        }
+        val repo = FakeItineraries()
+        val partial = Itinerary.create(tripId, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+            listOf(ItineraryDay.of(start, 0, emptyList())), now, GenerationState.PARTIAL,
+        )
+        repo.byTrip[tripId] = partial
+        val input = agentInputFor(end).copy(
+            fixedBlocks = listOf(FixedBlock(materializedPoi, end, LocalTime.parse("09:00"), 60)),
+        )
+
+        SecondPhaseGenerator(agent, repo, genRevisions(repo, stubTrips), genSessions(), FakeScoredCandidatePoolStore(), NOOP_TX, clock)
+            .completeRemaining(tripId, partial.itineraryId, input, isRegeneration = false, materializedPoiIds = setOf(materializedPoi))
+
+        val slot = repo.byTrip.getValue(tripId).days.first { it.date == end }.slots.single()
+        slot.sourcePoiId shouldBe materializedPoi
+        slot.isFixed shouldBe false // 사용자가 고정하지 않았다 — 폴백 화면의 "변경 불가"는 거짓이었다
     }
 
     "재생성으로 일정이 교체됐으면 낡은 2차 결과를 버린다" {

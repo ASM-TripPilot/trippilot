@@ -12,22 +12,19 @@ import java.time.Duration
  */
 class ScheduleDeadlinePropertiesTest : StringSpec({
 
-    "기본은 시한을 싣지 않는다 — 값은 남아 있되 꺼져 있다" {
+    "기본은 시한을 싣는다 — TRIP-1000 재도입(1차 15s · 2차 60s)" {
         val p = ScheduleDeadlineProperties()
 
-        p.enforced shouldBe false
-        p.day1Budget() shouldBe null
-        p.totalBudget() shouldBe null
-        // 지우지 않았다 — 9월 재도입이 재작업이 되지 않게(TRIP-475).
-        p.day1Ms shouldBe 5_000L
-        p.totalMs shouldBe 20_000L
+        p.enforced shouldBe true
+        p.day1Budget() shouldBe 15_000L
+        p.totalBudget() shouldBe 60_000L
     }
 
-    "켜면 종전 값이 그대로 실린다" {
-        val p = ScheduleDeadlineProperties(enforced = true)
+    "끄면 무제한으로 돌아간다 — 재도입 전 동작 그대로(TRIP-474)" {
+        val p = ScheduleDeadlineProperties(enforced = false)
 
-        p.day1Budget() shouldBe 5_000L
-        p.totalBudget() shouldBe 20_000L
+        p.day1Budget() shouldBe null
+        p.totalBudget() shouldBe null
     }
 
     /**
@@ -35,10 +32,10 @@ class ScheduleDeadlinePropertiesTest : StringSpec({
      * 우리가 22초에 먼저 끊어, 제약을 푼 의미가 사라진다.
      */
     "시한을 안 걸면 대기 상한이 AI 백스톱(600초)보다 크다" {
-        val p = ScheduleDeadlineProperties()
+        val p = ScheduleDeadlineProperties(enforced = false)
 
         p.waitCeilingMs shouldBeGreaterThan 600_000L
-        ScheduleDeadlineProperties(enforced = true).waitCeilingMs shouldBe 20_000L
+        ScheduleDeadlineProperties(enforced = true).waitCeilingMs shouldBe 60_000L
     }
 
     /**
@@ -49,8 +46,8 @@ class ScheduleDeadlinePropertiesTest : StringSpec({
     "멈춘 생성 기준은 언제나 대기 상한보다 크다" {
         listOf(
             ScheduleDeadlineProperties(),
-            ScheduleDeadlineProperties(enforced = true),
-            ScheduleDeadlineProperties(unenforcedWaitMs = 1_800_000),
+            ScheduleDeadlineProperties(enforced = false),
+            ScheduleDeadlineProperties(enforced = false, unenforcedWaitMs = 1_800_000),
         ).forEach { p ->
             p.staleAfter shouldBeGreaterThan Duration.ofMillis(p.waitCeilingMs)
         }
@@ -58,7 +55,7 @@ class ScheduleDeadlinePropertiesTest : StringSpec({
 
     /** 시한을 거는 모드에서 기준을 **조이지 않는다** — 그 모드의 동작은 종전 그대로다. */
     "시한을 거는 모드의 기준은 종전 5분이다" {
-        ScheduleDeadlineProperties(enforced = true).staleAfter shouldBe Duration.ofMinutes(5)
+        ScheduleDeadlineProperties().staleAfter shouldBe Duration.ofMinutes(5)
     }
     /**
      * **편집 상한은 실측 재검증보다 넉넉하고 생성 상한보다는 짧다.** 시한(3·5초)에 맞춰 조이면
@@ -66,7 +63,7 @@ class ScheduleDeadlinePropertiesTest : StringSpec({
      * 실측(2026-08-21): validate 20.1초 · repair 20.7초.
      */
     "편집 상한은 실측 재검증보다 크고 생성 상한보다 작다" {
-        listOf(ScheduleDeadlineProperties(), ScheduleDeadlineProperties(enforced = true)).forEach { p ->
+        listOf(ScheduleDeadlineProperties(), ScheduleDeadlineProperties(enforced = false)).forEach { p ->
             p.editWait shouldBeGreaterThan Duration.ofSeconds(25)
             p.editWait.toMillis() shouldBeLessThan p.unenforcedWaitMs
         }

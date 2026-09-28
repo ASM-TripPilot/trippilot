@@ -1240,7 +1240,7 @@ Kotlin 컴파일 데몬과 테스트 JVM 은 **각각 별도 프로세스라 데
 id = "TRIP-963"
 ticket = "TRIP-963"
 title = "재계획 좌표 폴백 — 생성에 있는 목적지 중심 단이 재계획 사다리에 없다"
-status = "todo"
+status = "done"  # PR #762 (2026-09-27)
 owner = "재계획"
 migration = false
 touches = ["backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/application/ReplanFacadeService.kt"]
@@ -1255,7 +1255,7 @@ note = """
 id = "TRIP-964"
 ticket = "TRIP-964"
 title = "거절 이력을 여행별로 누적 저장 — 슬롯 교체·재생성 두 종류, 횟수 포함"
-status = "todo"
+status = "done"  # PR #763 (2026-09-27) — V2.53 trip_poi_rejection
 owner = "재계획"
 migration = true
 touches = ["backend/app/src/main/resources/db/migration", "backend/modules/itinerary-generation"]
@@ -1268,7 +1268,7 @@ TRIP-975 의 재료다 — 싣기 전에 쌓아야 한다. AI 는 이미 소비 
 id = "TRIP-975"
 ticket = "TRIP-975"
 title = "/replan 요청에 변경 이력(rejections)을 싣는다 — 같은 제안 반복 방지"
-status = "todo"
+status = "done"  # PR #763 에 포함 — AiReplanRequest.rejections 배선(어댑터 jsonPath 단언)
 owner = "재계획"
 migration = false
 touches = ["backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/adapter/out/external/HttpScheduleAgentAdapter.kt"]
@@ -1281,29 +1281,162 @@ TRIP-964 의 저장분을 어댑터가 `rejections` 로 번역해 싣는다. 선
 id = "TRIP-969"
 ticket = "TRIP-969"
 title = "생성 시점 점수 후보를 저장 — 슬롯 교체를 LLM 없이 즉답으로"
-status = "todo"
+status = "done"  # PR #764 (2026-09-27) — V2.55 trip_scored_candidate_pool
 owner = "일정"
 migration = true
 touches = ["backend/app/src/main/resources/db/migration", "backend/modules/itinerary-generation"]
 note = """
-준하 TRIP-970(/alternatives 를 ScheduleAgent 산출 재사용으로)과 짝. 착수 전 정본 확인이 무겁다 —
-생성 응답의 어떤 값을 저장하는지(후보·점수의 출처), 저장 형태(jsonb vs 테이블)가 미결.
-Flyway 번호는 TRIP-964 머지 후 채번.
+준하 TRIP-970(/alternatives 를 ScheduleAgent 산출 재사용으로)과 짝. 백엔드 몫은 #764 로 배송 —
+별도 테이블(V2.55, 티켓의 "itinerary 컬럼"에서 이탈·사유는 마이그레이션 주석) + 즉답 경로.
+남은 것: 실 AI 와이어 개통(TRIP-970) 후 생성 응답 매핑과 AlternativesRequest 에 저장분 싣기
+(ScheduleAgentWire 주석에 표시). 그때까지 http 모드는 풀 없음 = 종전 경로.
 """
 
 [[nodes]]
 id = "QA2-BE"
 ticket = "TRIP-994"
-title = "실화면 QA 2회차 BE 묶음 — 999·1000·1001·1002·1005·1030·1003·1004 (배분 대기)"
-status = "blocked"
-owner = "?"
+title = "실화면 QA 2회차 BE 부모 — 아래 개별 노드로 전개(2026-09-28 사용자 착수 지시)"
+status = "in-progress"
+owner = "송"
 migration = false
-touches = ["backend/docs/design/openapi.yaml"]
+touches = []
 note = """
-**전부 태현 배정으로 잡혀 있다(트리아지 전으로 보임) — 배분 확정 전 착수 금지.**
-착수되면 `openapi.yaml` 을 다수가 만져 직렬 필수. 999(CONFIRMED 여행중 변경)는 INV-U1-03
-확정 안정성과 충돌 소지가 있어 정본 확인이 무거운 칸이다. 1004(약관 시드)는 초안이
-`backend/docs/legal/` 에 실재해 기계적 작업이다.
+2026-09-28 사용자 확인으로 BE 몫 착수. Jira 담당자 필드는 태현(트리아지) 명의 그대로나
+BE 칸은 이 루프가 소유한다. 개별 칸은 아래 TRIP-999~1005·1029·1030·992 노드.
+바퀴 순서 근거: itinerary-generation 을 만지는 칸(999·1000·1001·1002·1005·1030)은
+같은 자원이라 바퀴당 하나씩 머지 후 다음 착수(#763 충돌 학습). DoD 재QA는 태현 몫.
+"""
+
+[[nodes]]
+id = "TRIP-999"
+ticket = "TRIP-999"
+title = "여행 중 CONFIRMED 편집 PUT·재계획 apply 허용 — 결정 (a) 확정됨"
+status = "todo"
+owner = "일정"
+migration = false
+touches = ["backend/modules/itinerary-generation", "backend/docs/design/openapi.yaml", "aidlc/aidlc-docs/construction/u3-ai-itinerary"]
+note = """
+critical·1순위. 결정 1 은 티켓에 기록됨(2026-09-27 사용자): (a) CONFIRMED 유지한 채
+편집·재계획 반영 허용, BR-U3-28 을 "여행 시작 전" 한정으로 개정(정본 개정이 DoD).
+결정 2(산출 전 선차단)는 (a) 채택으로 소멸. U3(확정 잠금)·U4(여행 중 반영)가 서로 모순인
+정본이라 backend-canon 필수. FE 통합테스트가 현 409 를 기대 동작으로 굳혀 둠 — FE 후속 보고.
+"""
+
+[[nodes]]
+id = "TRIP-1004"
+ticket = "TRIP-1004"
+title = "약관 6종 본문 시드 — legal 초안을 terms_version 에"
+status = "todo"
+owner = "법무"
+migration = false
+touches = ["backend/app/src/main/resources/db/migration"]
+note = """
+초안이 backend/docs/legal/ 에 실재(TRIP-847 로 사업자 정보까지 반영됨) — R__ 시드 갱신의
+기계적 작업. 지난 회차 #028 재발이라 재QA 확인 항목.
+"""
+
+[[nodes]]
+id = "TRIP-1000"
+ticket = "TRIP-1000"
+title = "같이 짜기 2차 생성 시한 + 생성 중 준비된 1일차 슬롯 교체 허용"
+status = "todo"
+owner = "일정"
+migration = false
+touches = ["backend/modules/itinerary-generation"]
+note = """
+1순위. 둘이 한 사건: 2차 호출에 deadline 미전파(AI 기본 600초 대입) + PARTIAL 인 동안
+이미 노출된 1일차의 슬롯 교체가 409. QA #073.
+"""
+
+[[nodes]]
+id = "TRIP-1001"
+ticket = "TRIP-1001"
+title = "필수 방문지 고정 시각 일과 창 검증 + ANYTIME 09:00 고정 해제 — BE 몫"
+status = "todo"
+owner = "일정"
+migration = false
+touches = ["backend/modules/itinerary-generation", "backend/modules/trip"]
+note = """
+1순위·AI 반반. BE 몫: 입구에서 창 밖 시각 400, "아무 때나"를 09:00 고정으로 잠그지 않기.
+AI 몫(조립 409 대신 명시 거절·ANYTIME 배치)은 준하 — 조율 메시지 초안은 바퀴 4 산출물.
+"""
+
+[[nodes]]
+id = "TRIP-1005"
+ticket = "TRIP-1005"
+title = "슬롯 후보 응답 장소 표면(nameKo·category·tags·imageUrl) + 통합 잠금"
+status = "todo"
+owner = "일정"
+migration = false
+touches = ["backend/modules/itinerary-generation", "backend/docs/design/openapi.yaml"]
+note = """
+1순위. 기존 백로그 TRIP-851 과 같은 표면 — 이 바퀴가 둘 다 접는다. 21b(FE 카드) 짝.
+"""
+
+[[nodes]]
+id = "TRIP-1002"
+ticket = "TRIP-1002"
+title = "편집 PUT 이 전 슬롯 distance_range 를 지움 — 보존·재산출"
+status = "todo"
+owner = "일정"
+migration = false
+touches = ["backend/modules/itinerary-generation"]
+note = """
+무변경 슬롯 거리 보존이 핵심 — "이동 거리 계산 중" 영구 고착(QA #055·056). 재산출은
+INV-2(거리는 상대 소유)와 정합하게 — 백엔드 직선거리 덧칠 금지, 재검증 경로에 태우거나 보존.
+"""
+
+[[nodes]]
+id = "TRIP-1030"
+ticket = "TRIP-1030"
+title = "일정 위반 사유를 사용자용 정성 문구로 — INV-3 정본 문구 개정 포함"
+status = "todo"
+owner = "일정"
+migration = false
+touches = ["backend/modules/itinerary-generation", "aidlc/aidlc-docs/construction/u2-itinerary-intelligence"]
+note = """
+FE TRIP-1031 이 이 칸을 기다린다. 소요시간 숫자·원시 분값·영문 코드 제거.
+INV-3 정본 개정(숫자만 금지) 이 DoD 에 포함 — 정본 문서 수정이 있는 칸.
+"""
+
+[[nodes]]
+id = "TRIP-1029"
+ticket = "TRIP-1029"
+title = "도착 전 예정 슬롯 건너뛰기 경로 + 건너뜀 상태"
+status = "todo"
+owner = "재계획"
+migration = true
+touches = ["backend/app/src/main/resources/db/migration", "backend/modules/itinerary-recalculation"]
+note = """
+FE TRIP-1021 이 이 칸을 기다린다. 마이그레이션 번호는 착수 시점에 untracked 초안까지
+확인 후 채번(안티패턴 2026-09-27).
+"""
+
+[[nodes]]
+id = "TRIP-992"
+ticket = "TRIP-992"
+title = "재계획 위치 좌표 — 위치 법정 로그 기록·서버 동의 확인"
+status = "todo"
+owner = "재계획"
+migration = false
+touches = ["backend/modules/itinerary-recalculation", "backend/modules/planb-detection"]
+note = """
+TRIP-979 후속. location_legal_log 는 append-only(DB 권한 강제) — 기존 테이블 유무를
+착수 전 확인. 위치사업 신고 법무 트랙과 짝.
+"""
+
+[[nodes]]
+id = "TRIP-1003-POI"
+ticket = "TRIP-1003"
+title = "탐색 데이터 POI 몫 — 대표 관광지 누락·정렬·종료 행사·주소·영업시간"
+status = "todo"
+owner = "데이터"
+migration = false
+touches = ["backend/modules/place-data", "ai"]
+note = """
+**숙소 몫(사진·가격 전무, 등록 검색 비숙박 후보)은 숙소 세션 소유로 분리**(2026-09-28
+사용자 결정) — 숙소트랙-인계.md 에 추기. 이 노드는 POI 쪽만: 수집 배치·정렬 규칙·
+종료 행사 필터·주소 표면. 코드 바퀴들과 자원이 겹치지 않아 순서 자유.
 """
 
 [[nodes]]

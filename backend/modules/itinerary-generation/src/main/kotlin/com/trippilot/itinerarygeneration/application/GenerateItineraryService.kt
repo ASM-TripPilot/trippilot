@@ -151,7 +151,7 @@ class GenerateItineraryService(
                 scheduleAgent.generate(firstInput)
             } catch (e: Exception) {
                 log.warn("ScheduleAgent 실패 — 결정론 최소 폴백 적용(INV-4). tripId={}", tripId, e)
-                MinimalItineraryFallback.of(firstInput, clock.instant())
+                MinimalItineraryFallback.of(firstInput, clock.instant(), firstAssembly.materializedPoiIds)
             }
             // **하루 여행도 PARTIAL 이다**(TRIP-511). 추천 근거가 생성에서 떨어져 나와 뒤따라오므로,
             // 여기서 COMPLETE 로 닫으면 화면이 폴링을 멈춰 근거를 영영 못 본다.
@@ -208,6 +208,7 @@ class GenerateItineraryService(
                 isRegeneration = previous != null,
                 assemblyUnplaced = secondAssembly.unplaced,
                 sessionId = session.sessionId,
+                materializedPoiIds = secondAssembly.materializedPoiIds,
             )
         }
         return saved
@@ -247,7 +248,27 @@ class GenerateItineraryService(
      * 조립 결과 — 요청과 **넣을 자리가 없어 보내지 못한 필수 방문지**를 함께 돌려준다.
      * 로그로만 남기면 사용자는 자기가 넣은 곳이 왜 없는지 끝내 알 수 없다(M2 채널로 이어붙인다).
      */
-    private data class Assembled(val input: ScheduleAgentInput, val unplaced: List<UnplacedMustVisit>)
+    private data class Assembled(val input: ScheduleAgentInput, val unplaced: List<UnplacedMustVisit>, val materializedPoiIds: Set<UUID>)
+
+    /**
+     * 그 날의 일과 창 — 고정 블록이 기본 창(09:00~21:00)을 넘으면 **그 블록을 포함하도록** 넓힌다
+     * (TRIP-1001 결정 (c)). 블록을 거절하지도(사용자 입력 보존, BR-U1-51), 창 밖인 채 보내
+     * 조립을 죽이지도(HC4) 않는다.
+     *
+     * 블록이 자정을 넘으면(23:30+60분) 창 끝은 23:59 에 멈춘다 — TimeWindow 는 하루 안 표현이라
+     * 감긴 시각(00:30)을 끝으로 적으면 end < start 가 되어 그 자체가 모순 입력이 된다.
+     */
+    private fun expandedWindow(date: LocalDate, blocks: List<FixedBlock>): TimeWindow {
+        val onDay = blocks.filter { it.date == date && it.start != null }
+        val start = (onDay.map { it.start!! } + DEFAULT_START).min()
+        val end = (
+            onDay.map { b ->
+                val e = b.start!!.plusMinutes((b.dwellMin ?: 60).toLong())
+                if (e <= b.start) LocalTime.of(23, 59) else e // 자정 감김 — 하루 끝에서 멈춘다
+            } + DEFAULT_END
+            ).max()
+        return TimeWindow(date, start, end)
+    }
 
     /** 최초 생성이면 기준 버전(BASELINE), 재생성이면 GENERATE. */
 
@@ -287,13 +308,18 @@ class GenerateItineraryService(
             )
         }
         return Assembled(
-            ScheduleAgentInput(
+            materializedPoiIds = materialized.materializedPoiIds,
+            input = ScheduleAgentInput(
             tripId = tripId,
             generationMode = mode,
             // budgetLevel(등급) = preference_set.budget_tier (경계 계약; trip.budget_total 아님)
             tripContext = TripContext(ctx.destinations, ctx.startDate, ctx.endDate, ctx.companionType, prefs.budgetTier),
             anchors = dayAnchors(ctx.startDate, ctx.endDate, stayAnchors, ctx.destinationRefs).filter { it.date in dates },          // 이 호출이 맡은 일자의 거점 좌표
-            timeWindows = dates.map { TimeWindow(it, DEFAULT_START, DEFAULT_END) },
+            // 창 밖 사용자 고정 블록이 있는 날은 **그 날만** 일과 창을 블록에 맞춰 넓힌다(TRIP-1001
+            // 결정 (c), 2026-09-27). 안 넓히면 21:00 고정 하나가 HC4(day window)를 깨 그 날 전체가
+            // "해 없음" → 409 → 2차 통째 최소 폴백이 된다(QA #045 실측). 물질화된 ANYTIME 은
+            // 기본 창 안에만 놓이므로 이 계산에 영향이 없다.
+            timeWindows = dates.map { d -> expandedWindow(d, materialized.fixedBlocks) },
             // must_visit → 고정 블록(HC3). 이 호출이 맡은 일자분만.
             // 날짜 미지정(ANYTIME)·여행 기간 밖 날짜는 **일자가 많은 쪽**(2차; 2차가 없으면 1차)에 싣는다 —
             // 하루짜리 1차에 전부 몰면 배치 공간이 없어 HC3 가 깨질 수 있고, 양쪽에 실으면 중복 배치된다.
@@ -312,7 +338,7 @@ class GenerateItineraryService(
                 // 인자로 끌고 다니면 시그니처만 늘고, 그 사이에 이력이 늘어도 반영 못 한다.
                 rejections = rejectionStore.findByTrip(tripId),
             ),
-            materialized.unplaced,
+            unplaced = materialized.unplaced,
         )
     }
 
