@@ -22,6 +22,7 @@ const EXPECTED = [
   'pages/onboarding-pref2/ui/PrefStep2Page.tsx', // #004 수신
   'pages/stay-search/ui/StaySearchPage.tsx', // #012 수신
   'pages/trip-new-step2/ui/TripNewStep2Page.tsx', // #038 송신·수신
+  'pages/trip-records/ui/TripRecordsPage.tsx', // TRIP-1072 [방문 추가] 송신
 ];
 
 /**

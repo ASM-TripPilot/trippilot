@@ -131,6 +131,9 @@
 - `src/__tests__/pressGuardOnboardingPref.test.tsx`  →  (export 없음)
 - `src/__tests__/pressGuardStaySeeAll.test.tsx`  →  (export 없음)
 - `src/__tests__/pressGuardStructure.test.ts`  →  (export 없음)
+- `src/__tests__/recordAddVisitFlow.integration.test.tsx`  →  (export 없음)
+- `src/__tests__/recordAddVisitRoute.test.tsx`  →  (export 없음)
+- `src/__tests__/recordAddVisitStructure.test.ts`  →  (export 없음)
 - `src/__tests__/recordAttributionStructure.test.ts`  →  (export 없음)
 - `src/__tests__/recordPhotoBinaryGuard.test.ts`  →  (export 없음)
 - `src/__tests__/recordsCalendarStructure.test.ts`  →  (export 없음)
@@ -316,6 +319,7 @@
 - `src/app/trips/[tripId]/planb/solving.tsx`  →  (export 없음)
 
 ## src/app/trips/[tripId]/records/
+- `src/app/trips/[tripId]/records/add-visit.tsx`  →  (export 없음)
 - `src/app/trips/[tripId]/records/index.tsx`  →  (export 없음)
 
 ## src/app/trips/[tripId]/records/reflection/
@@ -608,6 +612,7 @@
 - `src/features/record/model/photoAttach.ts`  →  photoAttach
 - `src/features/record/model/photoAvailability.ts`  →  PhotoAvailability · photoAvailability
 - `src/features/record/model/recordsCalendar.ts`  →  markedDaysOfMonth · buildPastTripCards · canOpenTripRecords · recordsTripIdForDate · formatTripDateRange · nightsLabel
+- `src/features/record/model/spontaneousNames.ts`  →  rememberSpontaneousName · useSpontaneousNames
 - `src/features/record/model/stayAttribution.ts`  →  AttributedStay · DayAttribution · deriveStayAttribution
 - `src/features/record/model/useAdjustVisitTimes.ts`  →  VISIT_CONFLICT_NOTICE · AdjustVisitTimesOutcome · useAdjustVisitTimes
 - `src/features/record/model/useRecordsCalendar.ts`  →  useRecordsCalendar
@@ -965,6 +970,12 @@
 
 ## src/pages/reconsent/ui/
 - `src/pages/reconsent/ui/ReconsentPage.tsx`  →  ReconsentPage
+
+## src/pages/record-add-visit/
+- `src/pages/record-add-visit/index.ts`  →  RecordAddVisitPage
+
+## src/pages/record-add-visit/ui/
+- `src/pages/record-add-visit/ui/RecordAddVisitPage.tsx`  →  RecordAddVisitPage
 
 ## src/pages/records-calendar/
 - `src/pages/records-calendar/index.ts`  →  RecordsCalendarPage
@@ -1446,4 +1457,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 1006개 파일
+합계 1013개 파일

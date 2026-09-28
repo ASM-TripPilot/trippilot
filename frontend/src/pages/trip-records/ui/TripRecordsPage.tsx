@@ -12,6 +12,7 @@ import {
   useTripRecords,
 } from '@/features/record/model/useTripRecords';
 import { useAdjustVisitTimes } from '@/features/record/model/useAdjustVisitTimes';
+import { useSpontaneousNames } from '@/features/record/model/spontaneousNames';
 import { useVisitCheck } from '@/features/record/model/useVisitCheck';
 import { orderByArrival } from '@/features/record/model/visitOrder';
 import { isOptimisticVisit } from '@/features/record/model/visitStatus';
@@ -27,6 +28,7 @@ import { useGetTripsTripIdItinerary } from '@/shared/api/generated/trips/trips';
 import { ArriveRequestSource } from '@/shared/api/generated/schemas';
 import type { MapCenter, MapPin } from '@/shared/map';
 import { seoulDate, seoulTime } from '@/shared/date/seoulDate';
+import { guardPress } from '@/shared/press/pressGuard';
 import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
 
@@ -94,6 +96,7 @@ export function TripRecordsPage({
   const savedStays = useRecordSavedStays();
   const visitCheck = useVisitCheck({ tripId, day: activeDay });
   const adjustTimes = useAdjustVisitTimes({ tripId, day: activeDay });
+  const spontaneousNames = useSpontaneousNames(tripId);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [timeResult, setTimeResult] = useState<string | null>(null);
@@ -126,8 +129,8 @@ export function TripRecordsPage({
         }
       : undefined;
 
-  // 장소명 조인 — VisitCheck 엔 poiId 만 있어 itinerary 슬롯에서 이름을 가져온다(즉석 방문은
-  // 계획에 없어 poiId 로 폴백).
+  // 장소명 조인 — VisitCheck 엔 poiId 만 있어 itinerary 슬롯에서 이름을 가져온다. 즉석 방문은 계획에
+  // 없어 피커가 남긴 세션 이름(TRIP-1072)으로, 그것도 없으면(앱 재시작 등) poiId 로 폴백.
   const nameByPoi = new Map(
     days
       .flatMap((d) => d.slots)
@@ -151,7 +154,10 @@ export function TripRecordsPage({
     visitCheckId: visit.visitCheckId,
     slotKey: visit.slotKey ?? null,
     poiId: visit.poiId,
-    nameKo: nameByPoi.get(visit.poiId) ?? visit.poiId,
+    nameKo:
+      nameByPoi.get(visit.poiId) ??
+      spontaneousNames[visit.poiId] ??
+      visit.poiId,
     arrivedAt: visit.arrivedAt ?? null,
     completedAt: visit.completedAt ?? null,
     skippedAt: visit.skippedAt ?? null,
@@ -276,9 +282,17 @@ export function TripRecordsPage({
         }
         onPressComplete={handleComplete}
         onPressSkip={handleSkip}
-        // onPressSpontaneous 는 넘기지 않는다(TRIP-939 — [방문 추가] 숨김). 즉석 방문은 장소를 골라야
-        // poiId 가 생긴다(useVisitCheck.arrive 의 입력) — 장소 선택 진입은 후속 티켓(US-REC-01 후반).
-        // ponytail: 장소 피커 라우트가 생기면 onPressSpontaneous 로 router.push 를 넘기면 버튼이 되살아난다.
+        // TRIP-1072 — [방문 추가]는 오늘 탭에만(다른 탭에서 추가하면 오늘 날짜로 묶여 그 탭엔 안 보인다).
+        // 피커에 활성 일자를 실어 두 화면이 같은 (tripId, day) 방문 캐시를 보게 한다. 연타는 guardPress.
+        onPressSpontaneous={
+          activeDay === today
+            ? guardPress(() =>
+                router.push(
+                  `/trips/${tripId}/records/add-visit?day=${activeDay}`
+                )
+              )
+            : undefined
+        }
         onPressBack={() => {
           if (router.canGoBack()) router.back();
         }}

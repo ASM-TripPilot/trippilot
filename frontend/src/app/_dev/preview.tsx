@@ -3072,6 +3072,8 @@ export const PREVIEW_STATES: PreviewState[] = [
         }
         onPressComplete={noop}
         onPressSkip={noop}
+        // TRIP-1072 — Figma default(1557:1738)처럼 [방문 추가] 버튼을 세운다.
+        onPressSpontaneous={noop}
         onPressBack={noop}
         onPressTab={noop}
       />

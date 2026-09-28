@@ -576,7 +576,17 @@ describe('AC-12·AC-13·AC-15 · 메모 실배선 + 무반응 폴백 0', () => {
       screen.getByTestId(`record-trip-plan-row-${DAY}#p4`)
     ).toBeOnTheScreen();
     expect(screen.queryByText('메모를 남겨보세요')).toBeNull();
-    expect(screen.UNSAFE_queryAllByType(PlusGlyph)).toHaveLength(0);
+    // TRIP-1072 — 오늘 탭엔 [방문 추가] 버튼이 같은 ＋ 글리프를 그린다(Figma 1557:1799). 그 버튼 밖의 ＋ 만 센다.
+    const addButton = screen.getByTestId('record-trip-spontaneous-add');
+    const plusOutsideAdd = screen
+      .UNSAFE_queryAllByType(PlusGlyph)
+      .filter((glyph) => {
+        for (let node = glyph.parent; node; node = node.parent) {
+          if (node === addButton) return false;
+        }
+        return true;
+      });
+    expect(plusOutsideAdd).toHaveLength(0);
     expect(screen.queryByTestId('record-trip-photo-add')).toBeNull();
   });
 });
