@@ -2,6 +2,7 @@ package com.trippilot.auth.application
 
 import com.trippilot.auth.domain.AccountId
 import com.trippilot.auth.api.event.GpsRecordingOptOut
+import com.trippilot.auth.api.event.LocationLegalConsentRevoked
 import com.trippilot.auth.domain.consent.ConsentAction
 import com.trippilot.auth.domain.consent.ConsentRecord
 import com.trippilot.auth.domain.consent.TermsType
@@ -96,6 +97,37 @@ class LocationConsentServiceTest : StringSpec({
         records.appended.single().action shouldBe ConsentAction.REVOKE
         log.events.map { it.eventType } shouldContainExactly
             listOf(LocationLegalEventType.CONSENT_REVOKED, LocationLegalEventType.PURGE)
+    }
+
+    "L2 철회 — 저장된 재계획 좌표를 지우라는 신호가 나간다(TRIP-992)" {
+        val events = Events()
+        val svc = LocationConsentService(FakeLocationStateRepo(), FakeLegalLogRepo(), FakeTerms(), FakeConsentRecords(), events, clock)
+        svc.update(account, legalConsent = true, gpsRecordingOptIn = null)
+        events.published.clear()
+
+        svc.update(account, legalConsent = false, gpsRecordingOptIn = null)
+
+        events.published.filterIsInstance<LocationLegalConsentRevoked>().single().aggregateId shouldBe account.value.toString()
+    }
+
+    "L2 부여로는 파기 신호가 없다 — 켜는 것은 지울 일이 아니다" {
+        val events = Events()
+        val svc = LocationConsentService(FakeLocationStateRepo(), FakeLegalLogRepo(), FakeTerms(), FakeConsentRecords(), events, clock)
+
+        svc.update(account, legalConsent = true, gpsRecordingOptIn = null)
+
+        events.published.filterIsInstance<LocationLegalConsentRevoked>().isEmpty() shouldBe true
+    }
+
+    "hasLocationLegalConsent 는 L2 정본을 그대로 읽는다 — 미설정 계정은 false" {
+        val state = FakeLocationStateRepo()
+        val svc = LocationConsentService(state, FakeLegalLogRepo(), FakeTerms(), FakeConsentRecords(), Events(), clock)
+
+        svc.hasLocationLegalConsent(account.value) shouldBe false
+        svc.update(account, legalConsent = true, gpsRecordingOptIn = null)
+        svc.hasLocationLegalConsent(account.value) shouldBe true
+        svc.update(account, legalConsent = false, gpsRecordingOptIn = null)
+        svc.hasLocationLegalConsent(account.value) shouldBe false
     }
 
     "값이 안 바뀌면 증적·로그 없음(멱등)" {

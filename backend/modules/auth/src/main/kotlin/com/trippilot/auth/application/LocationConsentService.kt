@@ -1,6 +1,7 @@
 package com.trippilot.auth.application
 
 import com.trippilot.auth.api.event.GpsRecordingOptOut
+import com.trippilot.auth.api.event.LocationLegalConsentRevoked
 import com.trippilot.core.event.DomainEventPublisher
 import com.trippilot.auth.api.LocationConsentFacade
 import com.trippilot.auth.api.LocationCollectionSource
@@ -77,6 +78,10 @@ class LocationConsentService(
     @Transactional(readOnly = true)
     override fun hasGpsRecordingOptIn(accountId: UUID): Boolean = get(AccountId(accountId)).gpsRecordingOptIn
 
+    /** 재계획 기준점 좌표 수용 판정(TRIP-992) — L2 상태를 정본에서 그대로 읽는다(파생 복사 금지). */
+    @Transactional(readOnly = true)
+    override fun hasLocationLegalConsent(accountId: UUID): Boolean = get(AccountId(accountId)).legalConsent
+
     /** 현재 3층 상태 — 미설정 계정은 기본값(모든 층 비활성). */
     @Transactional(readOnly = true)
     fun get(accountId: AccountId): LocationConsent =
@@ -94,6 +99,12 @@ class LocationConsentService(
         if (legalConsent != null && legalConsent != state.legalConsent) {
             recordConsentChange(accountId, TermsType.LOCATION_TERMS, legalConsent, now)
             state = state.withLegalConsent(legalConsent, now)
+            if (!legalConsent) {
+                // L2 철회 → 저장된 단발 좌표(재계획 기준점) 파기 신호(TRIP-992 · INV-L4).
+                // 게이팅은 앞으로 들어올 좌표만 막는다 — 철회 이전에 저장된 좌표는 소유 모듈이 지운다
+                // (L3 철회의 EXIF 파기와 같은 구조. auth 가 직접 지우면 순환이다, R1).
+                events.publish(LocationLegalConsentRevoked(accountId.value.toString(), LocationLegalConsentRevoked.REASON_REVOKED))
+            }
         }
         if (gpsRecordingOptIn != null && gpsRecordingOptIn != state.gpsRecordingOptIn) {
             recordConsentChange(accountId, TermsType.GPS_RECORDING, gpsRecordingOptIn, now)
