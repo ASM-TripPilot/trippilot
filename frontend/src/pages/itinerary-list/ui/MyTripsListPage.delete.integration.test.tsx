@@ -512,12 +512,15 @@ describe('🔴 TRIP-1055 Q5 · 404 는 "이미 없다" — 목록만 다시 받�
     fireEvent.press(screen.getByTestId('my-trip-delete-confirm'));
 
     // 단언
-    await waitFor(() =>
-      expect(screen.queryByTestId('my-trip-delete-dialog')).toBeNull()
+    // CI 러너는 404 → 무효화 → 재조회 왕복이 기본 1초를 넘길 때가 있다(PR #780 CI 실측) — 한도만 늘린다.
+    await waitFor(
+      () => expect(screen.queryByTestId('my-trip-delete-dialog')).toBeNull(),
+      { timeout: 5000 }
     );
     expect(screen.queryByTestId('my-trip-delete-error')).toBeNull();
-    await waitFor(() =>
-      expect(screen.queryByTestId(`my-trip-card-${A}`)).toBeNull()
+    await waitFor(
+      () => expect(screen.queryByTestId(`my-trip-card-${A}`)).toBeNull(),
+      { timeout: 5000 }
     );
     expect(count('GET /api/v1/trips')).toBe(2);
   });
