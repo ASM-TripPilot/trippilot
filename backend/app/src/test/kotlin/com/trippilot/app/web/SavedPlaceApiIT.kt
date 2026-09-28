@@ -109,4 +109,16 @@ class SavedPlaceApiIT : AbstractPostgresIntegrationTest() {
         place["tags"].isEmpty shouldBe false
         place["imageUrl"].isNull shouldBe true   // 실 수집 전이라 NULL(기본 이미지를 지어내지 않는다)
     }
+
+    /** 담기 목록의 장소도 같은 매핑을 탄다 — 저장 장소를 목적지 코드로 맞추는 쪽이 이 목록이다(TRIP-1042). */
+    @Test
+    fun `담기 목록의 장소에도 regionCode 키가 실린다`() {
+        val token = newToken()
+        val poiId = anyPoiId(token)
+        call(HttpMethod.POST, "/api/v1/saved-places", token, """{"poiId":"$poiId"}""").first shouldBe 201
+
+        val place = call(HttpMethod.GET, "/api/v1/saved-places", token).second[0]["place"]
+
+        place.has("regionCode") shouldBe true
+    }
 }

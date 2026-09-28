@@ -329,8 +329,48 @@ class PlaceApiIT : AbstractPostgresIntegrationTest() {
         body.names().size shouldBeLessThanOrEqual 200
     }
 
+    /**
+     * **응답에 시군구 코드(`regionCode`)가 실린다**(TRIP-1042).
+     *
+     * 화면은 저장 장소를 여행 목적지 코드의 접두사로 맞춰 보고, 앞 2자리로 시도 이름을 붙인다.
+     * 표시용 `region`(예: `동구`)만으로는 부산 동구와 대구 동구가 갈리지 않는다.
+     * 키 집합을 통째로 대조한다 — 있는 키만 골라 물으면 빠진 키는 영영 안 드러난다(anti-patterns TokenPair).
+     */
+    @Test
+    fun `장소 응답에 regionCode 가 실리고 키 집합이 계약과 같다`() {
+        val token = newToken()
+        val id = seedPoi("코드응답-부산동구", 35.13, 129.05, "26170")
+
+        try {
+            val item = call("/api/v1/places?region=동구&q=코드응답", token).second["items"][0]
+
+            item["regionCode"].asText() shouldBe "26170"
+            item.fieldNames().asSequence().toSet() shouldBe setOf(
+                "poiId", "nameKo", "category", "lat", "lng", "region", "regionCode",
+                "openingHours", "imageUrl", "tags", "savedCount", "dataStatus",
+            )
+        } finally {
+            cleanupJdbc.update("DELETE FROM poi WHERE poi_id = ?", id)
+        }
+    }
+
+    /** 코드를 못 정한 장소는 null 로 나간다 — 서버가 지어내지 않는다(키는 남는다). */
+    @Test
+    fun `코드 없는 장소는 regionCode 가 null 이다`() {
+        val id = seedPoi("코드없음-검증", 35.13, 129.05, null)
+
+        try {
+            val item = call("/api/v1/places?q=코드없음-검증", newToken()).second["items"][0]
+
+            item.has("regionCode") shouldBe true
+            item["regionCode"].isNull shouldBe true
+        } finally {
+            cleanupJdbc.update("DELETE FROM poi WHERE poi_id = ?", id)
+        }
+    }
+
     /** 지역 코드를 직접 심는다 — 수집 경로는 코드를 붙이지만 이 테스트가 보려는 것은 조회 규칙이다. */
-    private fun seedPoi(name: String, lat: Double, lng: Double, regionCode: String): java.util.UUID {
+    private fun seedPoi(name: String, lat: Double, lng: Double, regionCode: String?): java.util.UUID {
         val id = java.util.UUID.randomUUID()
         cleanupJdbc.update(
             """

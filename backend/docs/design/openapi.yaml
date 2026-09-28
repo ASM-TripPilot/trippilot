@@ -1765,6 +1765,14 @@ components:
         lat: { type: number, format: double }
         lng: { type: number, format: double }
         region: { type: string, nullable: true }
+        regionCode:
+          type: string
+          nullable: true
+          description: >
+            행정구역 코드(법정동코드 앞자리, TRIP-1042). 시군구를 알면 5자리(`28200`), 시도까지만 알면 2자리(`50`),
+            모르면 null — 서버가 지어내지 않는다. 표시용 `region`(`동구`)과 달리 **맞춰 볼 수 있는 키**라,
+            여행 목적지 `regionCode` 의 접두사 비교로 "이 여행 지역의 장소인가"를 가른다. 앞 2자리가 시도 코드다.
+          example: '28200'
         openingHours: { type: string, nullable: true, description: NULL=미확인 }
         imageUrl:
           type: string
