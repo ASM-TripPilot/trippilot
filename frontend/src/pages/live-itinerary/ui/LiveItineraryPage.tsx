@@ -7,6 +7,8 @@ import { resolveLiveState } from '@/features/execution/model/liveState';
 import { useLiveItinerary } from '@/features/execution/model/useLiveItinerary';
 import { projectSlotProgress } from '@/features/execution/model/slotProgress';
 import { useVisitCheck } from '@/features/execution/model/useVisitCheck';
+import { photoAttach } from '@/features/record/model/photoAttach';
+import { pickPhotoForVisit } from '@/features/record/model/pickPhotoForVisit';
 import { deriveVisitProgress } from '@/features/execution/model/visitProgress';
 import { TriggerChip } from '@/features/execution/ui/TriggerChip';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
@@ -20,6 +22,7 @@ import { ReplanAppliedSheet } from '@/features/planb/ui/ReplanAppliedSheet';
 import { RiskDetailSheet } from '@/features/planb/ui/RiskDetailSheet';
 import type { Trigger } from '@/shared/api/generated/schemas';
 import {
+  postTripsTripIdVisitsVisitCheckIdPhotos,
   useGetTripsTripId,
   useGetTripsTripIdVisitsDaysDay,
 } from '@/shared/api/generated/trips/trips';
@@ -54,6 +57,9 @@ const NEUTRAL_BADGE = (
   <View className="h-[72px] w-[72px] rounded-pill bg-surface-strong" />
 );
 
+/** 허브 [사진] 저장 실패 안내(INV-4) — 허브엔 사진 칸이 없어 실패 셀 대신 카드 아래 한 줄로. */
+const PHOTO_SAVE_FAILED = '사진을 기록하지 못했어요. 다시 시도해 주세요';
+
 /** 뒤로 갈 히스토리가 없을 때(딥링크·푸시 직행)의 폴백 — ItineraryPlanPage 관례(INV-4 침묵 금지). */
 const HOME_FALLBACK = '/(tabs)';
 
@@ -72,6 +78,8 @@ export function LiveItineraryPage({
   // 닫으며 applied 가 지워져도 펼친 허브를 도로 접지 않는다(Q5).
   const [revertNotice, setRevertNotice] = useState(false);
   const [initialSnapIndex] = useState(appliedSessionId ? 2 : undefined);
+  // 관람 중 카드 [사진] 안내 한 줄(TRIP-1070). 다음 [사진] 누름에 지운다.
+  const [photoNotice, setPhotoNotice] = useState<string | null>(null);
 
   const state = resolveLiveState({
     isLoading: query.isPending,
@@ -162,6 +170,26 @@ export function LiveItineraryPage({
       ? (progress.visitCheckIdByPoiId[progress.activePoiId] ?? null)
       : null;
 
+  // TRIP-1070 [사진] — 관람 중 방문에 메타만 POST 한다. 사진 목록은 조회하지 않는다(허브엔 사진 칸이
+  // 없다 — useVisitAttachments 는 GET 을 무조건 쏘고 조기 반환 아래라 훅으로 못 부른다, F6).
+  const attachActivePhoto = async (visitCheckId: string) => {
+    setPhotoNotice(null);
+    const picked = await pickPhotoForVisit();
+    if ('notice' in picked) {
+      setPhotoNotice(picked.notice);
+      return;
+    }
+    try {
+      await postTripsTripIdVisitsVisitCheckIdPhotos(
+        tripId,
+        visitCheckId,
+        photoAttach(picked.asset, picked.gpsConsent)
+      );
+    } catch {
+      setPhotoNotice(PHOTO_SAVE_FAILED);
+    }
+  };
+
   // MANUAL 은 표시 표면에서 숨긴다(알약·배지는 WEATHER·DELAY·CLOSURE 3변형만). triggerLabel 은
   // 4종 매핑을 갖되(구조 완전성), 화면 표시 필터는 여기서 — 서로 다른 축이다(★8, BR-U4-01).
   const displayTriggers = (triggers.data?.triggers ?? []).filter(
@@ -240,6 +268,18 @@ export function LiveItineraryPage({
               }
             : undefined
         }
+        onPressPhoto={
+          activeVisitCheckId !== null
+            ? () => void attachActivePhoto(activeVisitCheckId)
+            : undefined
+        }
+        // [메모] — 허브에 입력칸을 두지 않고 j01 그날로 간다(결정 1(c)).
+        onPressMemo={
+          activeVisitCheckId !== null
+            ? () => router.push(`/trips/${tripId}/records?day=${activeDate}`)
+            : undefined
+        }
+        photoNotice={photoNotice}
         triggerChip={triggerChip}
         triggerPillKey={chipTrigger?.triggerId}
         slotBadgeLabel={slotBadgeLabel}

@@ -25,8 +25,8 @@ import { LiveHubView, type LiveHubSlot } from './LiveHubView';
  *    "부산 여행 · 2일차 · 6월 11일(목) · 5곳", 카드 5장, 우하단 연필 FAB(`execution-live-replan-fab`).
  *  - 부재: 탭바·세그먼트·방패 FAB·옛 헤더·지도 세그먼트·다음 길찾기·레일 시각 열. 수동 [도착]은
  *    `onPressArrive` 를 받고 진행 중 슬롯이 없을 때만 예정 카드에 선다(TRIP-1021 HV9).
- *  - 배선: 뒤로·칩·[방문 완료] 가 콜백으로 이어진다. [사진]/[메모]는 운영 화면에 없다(TRIP-939 AC-6 —
- *    눌러도 "준비 중"만 뜨던 버튼 제거, 심사 2.1).
+ *  - 배선: 뒤로·칩·[방문 완료] 가 콜백으로 이어진다. [사진]/[메모]는 페이지가 콜백을 줄 때만 관람 중
+ *    카드에 서고 각자 제 콜백을 부른다(TRIP-1070). 안 주면 없다(TRIP-939 AC-6).
  *  - TRIP-747 수정 알약: 연필 FAB 는 이동하지 않고 제자리 토글이다 — 열면 × 얼굴 + 흰 알약 2개
  *    (`AI에게 맡기기`·`직접 수정`), 알약을 누르면 메뉴가 닫히고 그 콜백만 1회 불린다(BR-U4-10 진입).
  *    딤이 없고 바깥 탭으로는 닫히지 않는다(Seed ③). 초기 열림은 `initialEditMenuOpen`(프리뷰 입구).
@@ -245,16 +245,43 @@ describe('LiveHubView · HV3 배선 (AC-1·AC-4 · Seed Q2)', () => {
     expect(handlers.onPressComplete).toHaveBeenCalledTimes(1);
   });
 
-  it('TRIP-939 AC-6: 활성 카드에 [사진]·[메모]·"준비 중" 힌트가 없고 [방문 완료]는 있다', () => {
-    // 준비·실행: 허브를 그린다(허브는 카드에 사진·메모 진입을 넘기지 않는다).
+  it('TRIP-939 AC-6: 사진·메모 콜백을 안 주면 활성 카드에 [사진]·[메모]·"준비 중" 힌트가 없고 [방문 완료]는 있다', () => {
+    // 준비·실행: 사진·메모 콜백 없이 허브를 그린다.
     renderHub();
 
-    // 단언(부재): 누르면 "준비 중"만 뜨던 두 버튼과 힌트가 운영 화면에 없다.
+    // 단언(부재): 누를 곳 없는 두 버튼과 옛 힌트가 없다.
     expect(screen.queryByTestId('execution-arrive-photo')).toBeNull();
     expect(screen.queryByTestId('execution-arrive-memo')).toBeNull();
     expect(screen.queryByTestId('execution-arrive-soon-hint')).toBeNull();
     // 짝 앵커: [방문 완료]는 남는다.
     expect(screen.getByTestId('execution-arrive-complete')).toBeOnTheScreen();
+  });
+
+  it('TRIP-1070 AC-1: 사진·메모 콜백과 안내 문구를 주면 관람 중 카드에만 한 쌍이 서고, 각 버튼이 제 콜백만 부른다', () => {
+    // 준비 — 사진·메모 콜백 + 안내 문구.
+    const onPressPhoto = jest.fn();
+    const onPressMemo = jest.fn();
+    renderHub({
+      onPressPhoto,
+      onPressMemo,
+      photoNotice: '사진 접근 권한이 없어 사진을 불러올 수 없어요',
+    });
+
+    // 단언 — 5장 중 관람 중 카드 1장에만 선다.
+    expect(screen.getAllByTestId('execution-arrive-photo')).toHaveLength(1);
+    expect(screen.getAllByTestId('execution-arrive-memo')).toHaveLength(1);
+    expect(
+      screen.getByTestId('execution-arrive-photo-notice')
+    ).toHaveTextContent('사진 접근 권한이 없어 사진을 불러올 수 없어요');
+
+    // 실행·단언 — 각자 제 콜백만.
+    fireEvent.press(screen.getByTestId('execution-arrive-photo'));
+    expect(onPressPhoto).toHaveBeenCalledTimes(1);
+    expect(onPressMemo).not.toHaveBeenCalled();
+    fireEvent.press(screen.getByTestId('execution-arrive-memo'));
+    expect(onPressMemo).toHaveBeenCalledTimes(1);
+    expect(onPressPhoto).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('execution-arrive-soon-hint')).toBeNull();
   });
 });
 
@@ -831,7 +858,7 @@ describe('LiveHubView · HT 트리거 알약·배지·로컬 숨김 (TRIP-748)',
     expect(screen.queryByTestId(TRIGGER_PILL)).toBeNull();
     expect(handlers.onSelectDay).toHaveBeenCalledWith(2);
     expect(handlers.onPressComplete).toHaveBeenCalledTimes(1);
-    // TRIP-939 AC-6 — [사진]은 운영 화면에 없다(구 "[사진] → 준비 중 힌트" 경로 제거).
+    // 사진 콜백을 안 줬으므로 [사진]은 없다(TRIP-939 AC-6 · TRIP-1070 주입 시에만).
     expect(screen.queryByTestId('execution-arrive-photo')).toBeNull();
   });
 

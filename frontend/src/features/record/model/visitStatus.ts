@@ -9,6 +9,16 @@
  * execution 의 `deriveVisitProgress`(poi 집계)와 규칙은 같되 shape 가 다르다(per-record 4상태).
  */
 
+/**
+ * TRIP-1069 · D7 — `useVisitCheck.arrive` 가 응답 전에 심는 낙관 레코드의 id 접두. 이 id 는 서버에 없어
+ * 시각 수정·건너뛰기·완료·메모·사진 요청이 전부 404 로 간다 → 화면은 이 카드의 동작을 그리지 않는다.
+ */
+export const OPTIMISTIC_VISIT_ID_PREFIX = 'optimistic:';
+
+export function isOptimisticVisit(visitCheckId: string): boolean {
+  return visitCheckId.startsWith(OPTIMISTIC_VISIT_ID_PREFIX);
+}
+
 export type VisitStatus = 'UPCOMING' | 'IN_PROGRESS' | 'COMPLETED' | 'SKIPPED';
 
 export function deriveVisitStatus(input: {

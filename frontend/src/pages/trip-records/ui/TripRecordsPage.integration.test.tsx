@@ -8,8 +8,11 @@ import {
   within,
 } from '@testing-library/react-native';
 
+import { router } from 'expo-router';
+
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { resetPressGuard } from '@/shared/press/pressGuard';
 
 import { TripRecordsPage } from './TripRecordsPage';
 
@@ -18,9 +21,9 @@ import { TripRecordsPage } from './TripRecordsPage';
  *
  * 무엇을 보장하나(관측 가능한 결과만 — 화면의 새 prop 형태는 박제하지 않는다):
  *  - AC-1  일자 탭이 `Day${n}` 이 아니라 `${n}일차` 로 뜬다(formatDayLabel 배선).
- *  - AC-2  완료 방문 카드의 사진 자리에 PhotoThumbStrip 이 배선된다(`record-trip-photo-strip` = 실배선 신호 —
- *          TRIP-939 B-7 로 사진 선택이 없는 `+` 타일은 숨겨져 옛 신호 `record-trip-photo-add` 대신 스트립 루트).
- *  - TRIP-939 B-6·B-7(심사 2.1) — 장소 피커가 없는 [방문 추가]·사진 선택이 없는 `+` 타일을 그리지 않는다.
+ *  - AC-2  완료 방문 카드의 사진 자리에 PhotoThumbStrip 이 배선된다(`record-trip-photo-strip` = 실배선 신호).
+ *  - TRIP-1070 AC-4 — 사진 선택이 배선돼 `+` 타일(`record-trip-photo-add`)이 다시 선다(TRIP-939 B-7 숨김 해제).
+ *  - TRIP-1072 AC-1~3 — [방문 추가]는 오늘 탭에만 서고, 누르면 장소 피커로 (tripId·활성 일자)를 실어 1회 간다.
  *  - AC-3  완료 방문 카드의 메모 자리에 MemoInline 이 배선된다(`record-trip-memo-input`).
  *  - AC-3(seed-once) 카드 전환 시 타이핑한 메모 초안이 다음 방문으로 새지 않는다(key={visitCheckId}).
  *
@@ -43,8 +46,7 @@ import { TripRecordsPage } from './TripRecordsPage';
 const BASE = 'http://localhost:8080/api/v1';
 const TRIP_ID = 't1';
 
-// 스토리지·라우터는 페이지 마운트가 건드리므로 목킹(visitCheck 통합 선례). 라우터는 press 전엔 안 불리나
-// import 해소·메서드 접근 안전을 위해 3함수 제공.
+// 스토리지·라우터는 페이지 마운트가 건드리므로 목킹(visitCheck 통합 선례). push 는 [방문 추가] 이동 관측용.
 jest.mock('@/shared/storage', () => ({
   saveTokens: jest.fn().mockResolvedValue(undefined),
   getTokens: jest
@@ -54,13 +56,16 @@ jest.mock('@/shared/storage', () => ({
   hasStoredToken: jest.fn().mockResolvedValue(true),
 }));
 
-jest.mock('expo-router', () => ({
-  router: {
+// router 와 useRouter() 가 같은 객체 — 구현이 어느 쪽을 써도 같은 jest.fn 에 기록된다.
+jest.mock('expo-router', () => {
+  const router = {
     canGoBack: jest.fn(() => false),
     back: jest.fn(),
     replace: jest.fn(),
-  },
-}));
+    push: jest.fn(),
+  };
+  return { router, useRouter: () => router };
+});
 
 // 지도 히어로가 네이티브 지도(Kakao/Naver)를 태우므로 관찰 목으로 갈아끼운다(TripRecordsScreen.test 선례).
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -161,6 +166,9 @@ beforeEach(() => {
 afterEach(() => {
   server.resetHandlers();
   clearAccessToken();
+  // guardPress 창은 모듈 전역 — 앞 테스트의 press 가 다음 테스트 첫 press 를 먹지 않게 닫는다.
+  resetPressGuard();
+  jest.mocked(router.push).mockClear();
 });
 afterAll(() => server.close());
 
@@ -184,7 +192,7 @@ describe('🔴 AC-1 · 일자 탭 = "${n}일차"(Day${n} 폐기)', () => {
 });
 
 describe('🔴 AC-2·AC-3 · 완료 방문 카드에 사진/메모 슬롯이 실배선된다', () => {
-  it('record-trip-photo-strip(PhotoThumbStrip)·record-trip-memo-input(MemoInline) 이 실데이터 렌더에서 뜨고, 사진 선택 없는 + 타일은 없다', async () => {
+  it('record-trip-photo-strip(PhotoThumbStrip)·record-trip-memo-input(MemoInline)·사진 추가 + 타일이 실데이터 렌더에서 뜬다', async () => {
     render(<TripRecordsPage tripId={TRIP_ID} />, { wrapper });
 
     // 준비/실행 — 활성일(첫날) 완료 방문(v-a) 카드가 쿼리 완료 후 그려진다.
@@ -193,18 +201,73 @@ describe('🔴 AC-2·AC-3 · 완료 방문 카드에 사진/메모 슬롯이 실
     // 단언 — 정적 스캐폴딩엔 없는 실배선 testID 가 present(= 실 컴포넌트가 슬롯에 들어감).
     expect(await screen.findByTestId('record-trip-photo-strip')).toBeTruthy();
     expect(screen.getByTestId('record-trip-memo-input')).toBeTruthy();
-    // TRIP-939 B-7 — 페이지가 사진 선택(onPressAdd)을 넘기지 않아 `+` 타일은 그리지 않는다.
-    expect(screen.queryByTestId('record-trip-photo-add')).toBeNull();
+    // TRIP-1070 AC-4 — 사진 선택이 배선돼 `+` 타일이 선다(누른 뒤 거동은 TripRecordsPage.photo 통합이 본다).
+    expect(screen.getByTestId('record-trip-photo-add')).toBeTruthy();
   });
+});
 
-  it('TRIP-939 B-6: 장소 피커가 없는 [방문 추가] 버튼을 그리지 않는다', async () => {
-    // 준비·실행: 실 페이지를 그린다(페이지는 즉석 방문 진입을 넘기지 않는다).
-    render(<TripRecordsPage tripId={TRIP_ID} />, { wrapper });
+describe('🔴 TRIP-1072 AC-1~3 · [방문 추가]는 오늘 탭에만, 누르면 장소 피커로 간다', () => {
+  const ADD = 'record-trip-spontaneous-add';
+
+  it('B6-a: 활성 일자가 오늘이면 [방문 추가] 버튼이 선다 (AC-1)', async () => {
+    // 준비·실행 — 오늘 = 첫날(활성 기본 일자).
+    render(<TripRecordsPage tripId={TRIP_ID} today="2026-08-20" />, {
+      wrapper,
+    });
     await screen.findByText('광안리 해변');
 
-    // 단언: 눌러도 아무 일 없던 버튼 부재 + 짝 앵커(방문 카드는 그려졌다).
-    expect(screen.queryByTestId('record-trip-spontaneous-add')).toBeNull();
-    expect(screen.queryByText('방문 추가')).toBeNull();
+    // 단언 — 버튼과 라벨.
+    expect(within(screen.getByTestId(ADD)).getByText('방문 추가')).toBeTruthy();
+  });
+
+  it.each([
+    ['지난 날', '2026-08-21'],
+    ['미래 날', '2026-08-19'],
+  ])(
+    'B6-b: 활성 일자(1일차)가 %s 탭이면 버튼이 없다 (AC-2)',
+    async (_label, today) => {
+      render(<TripRecordsPage tripId={TRIP_ID} today={today} />, { wrapper });
+
+      // 앵커 — 카드는 그려졌다(부재 단언이 로딩 중에 공짜로 통과하지 않게).
+      await screen.findByText('광안리 해변');
+      expect(screen.queryByTestId(ADD)).toBeNull();
+    }
+  );
+
+  it('B6-c: 지난 탭엔 없다가 오늘 탭으로 옮기면 서고, 누르면 그 날짜로 피커에 간다 (AC-2·AC-3)', async () => {
+    // 준비 — 오늘 = 2일차. 활성 기본은 1일차(지난 날).
+    render(<TripRecordsPage tripId={TRIP_ID} today="2026-08-21" />, {
+      wrapper,
+    });
+    await screen.findByText('광안리 해변');
+    expect(screen.queryByTestId(ADD)).toBeNull();
+
+    // 실행 — 오늘 탭으로 옮기고 버튼을 누른다.
+    fireEvent.press(screen.getByTestId('record-trip-day-tab-2026-08-21'));
+    await screen.findByText('부산시립미술관');
+    fireEvent.press(screen.getByTestId(ADD));
+
+    // 단언 — tripId·활성 일자를 실어 1회 이동.
+    expect(jest.mocked(router.push).mock.calls).toEqual([
+      ['/trips/t1/records/add-visit?day=2026-08-21'],
+    ]);
+  });
+
+  it('B6-d: 버튼을 연타해도 피커 이동은 1회다 (AC-3)', async () => {
+    render(<TripRecordsPage tripId={TRIP_ID} today="2026-08-20" />, {
+      wrapper,
+    });
+    await screen.findByText('광안리 해변');
+
+    // 실행 — 같은 순간 두 번.
+    const button = screen.getByTestId(ADD);
+    fireEvent.press(button);
+    fireEvent.press(button);
+
+    // 단언 — push 는 한 번.
+    expect(jest.mocked(router.push).mock.calls).toEqual([
+      ['/trips/t1/records/add-visit?day=2026-08-20'],
+    ]);
   });
 });
 

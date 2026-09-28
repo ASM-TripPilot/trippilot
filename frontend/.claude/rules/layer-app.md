@@ -57,6 +57,7 @@ paths:
 | `src/app/trips/[tripId]/planb/diff.tsx` | 재계획 확정/취소 — `tripId`·`sessionId`만 읽어 `@/pages/planb-diff` 얇은 래퍼 |
 | `src/app/trips/[tripId]/planb/manual.tsx` | 여행 중 일정 편집 — `tripId`만 꺼내 `ItineraryEditPage`에 리터럴 `inTrip={true}`로 위임(params를 통째로 펼치지 않는다 — `planbManualRoute.test.tsx` RT1) |
 | `src/app/trips/[tripId]/records/index.tsx` | j01 방문 기록 — `tripId`·`day`만 읽어 `@/pages/trip-records` 얇은 래퍼 |
+| `src/app/trips/[tripId]/records/add-visit.tsx` | j01 즉석 방문 장소 피커(TRIP-1072) — `tripId`·`day`만 읽어 `@/pages/record-add-visit` 얇은 래퍼(RT1) |
 | `src/app/trips/[tripId]/records/reflection/[date].tsx` | j03 오늘의 회고 — `tripId`·`date`만 읽어 `@/pages/daily-reflection` 얇은 래퍼(G3 스캔이 `@/features/reflection`·조회 훅 직접 import 0을 잠금) |
 | `src/app/trips/[tripId]/records/summary.tsx` | j04 여행 요약 — `tripId`만 읽어 `@/pages/trip-summary` 얇은 래퍼 |
 | `src/app/trips/[tripId]/records/share.tsx` | j06 공유 카드(전체화면, 탭바 없음) — `tripId`만 읽어 `@/pages/share-card` 얇은 래퍼. j04·j03에서 push |

@@ -15,6 +15,8 @@ import type {
   VisitCheckList,
 } from '@/shared/api/generated/schemas';
 
+import { OPTIMISTIC_VISIT_ID_PREFIX } from './visitStatus';
+
 /**
  * TRIP-565 · AC-1·AC-2·AC-5·skip — record 소관 방문 체크 훅의 낙관적 갱신 + 레코드 단위 롤백.
  *
@@ -82,7 +84,7 @@ export function useVisitCheck(deps: { tripId: string; day: string }) {
       return { kind: 'failed', reason: 'conflict' };
     }
     arriving.current.add(inFlightKey);
-    const optimisticId = `optimistic:${input.poiId}`;
+    const optimisticId = `${OPTIMISTIC_VISIT_ID_PREFIX}${input.poiId}`;
     const optimistic: VisitCheck = {
       visitCheckId: optimisticId,
       slotKey: input.slotKey ?? null,

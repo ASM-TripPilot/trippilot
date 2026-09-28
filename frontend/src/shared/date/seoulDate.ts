@@ -12,3 +12,15 @@ const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 export function seoulDate(now: Date): string {
   return new Date(now.getTime() + KST_OFFSET_MS).toISOString().slice(0, 10);
 }
+
+/** TRIP-1069 · 순간 → KST 벽시계 'HH:mm'(같은 +9h 기준 — 기기 시간대 무관). */
+export function seoulTime(at: Date): string {
+  return new Date(at.getTime() + KST_OFFSET_MS).toISOString().slice(11, 16);
+}
+
+/** TRIP-1069 · KST 날짜 'YYYY-MM-DD' + KST 'HH:mm' → 그 벽시계가 가리키는 UTC 순간 ISO(`Z`). */
+export function seoulInstant(day: string, time: string): string {
+  return new Date(
+    Date.parse(`${day}T${time}:00Z`) - KST_OFFSET_MS
+  ).toISOString();
+}

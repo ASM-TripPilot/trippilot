@@ -68,6 +68,8 @@ export interface PlaceAddHeaderProps {
   selectedCategory: PoiCategory | null;
   onChangeSearchText(text: string): void;
   onSelectCategory(category: PoiCategory | null): void;
+  /** testID 접두(TRIP-1072 — j01 방문 추가 피커가 `record-add-visit` 로 재사용). 기본 `itinerary-place`. */
+  testIDPrefix?: string;
 }
 
 /** 검색바 + 카테고리 칩 6종 — `MapSheetShell` 의 `children`(리스트 헤더 자리)에 얹는 순수 헤더 뷰. */
@@ -76,13 +78,14 @@ export function PlaceAddHeader({
   selectedCategory,
   onChangeSearchText,
   onSelectCategory,
+  testIDPrefix = 'itinerary-place',
 }: PlaceAddHeaderProps): ReactElement {
   return (
     <View className="w-full gap-md px-lg pb-sm pt-sm">
       <View className="h-[46px] w-full flex-row items-center gap-sm rounded-pill border border-hairline bg-surface-soft pl-lg pr-md">
         <SearchGlyph size={20} />
         <BottomSheetTextInput
-          testID="itinerary-place-search"
+          testID={`${testIDPrefix}-search`}
           value={searchText}
           onChangeText={onChangeSearchText}
           placeholder={SEARCH_PLACEHOLDER}
@@ -99,7 +102,7 @@ export function PlaceAddHeader({
           <CategoryChip
             key={chip.testId}
             label={chip.label}
-            testID={`itinerary-place-category-${chip.testId}`}
+            testID={`${testIDPrefix}-category-${chip.testId}`}
             active={selectedCategory === chip.category}
             onPress={() => onSelectCategory(chip.category)}
           />

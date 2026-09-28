@@ -23,7 +23,8 @@ import { TripRecordsPage } from './TripRecordsPage';
  *        **정확히**(슬롯 키가 빠지면 서버가 "계획에 없던 곳" 즉석 방문으로 기록한다 — 브리프 맹점 ①).
  *        완료(`/complete`)는 0회(도착 없이 완료만 남길 수 없다, BR-U5-05).
  *  - R3  도착한 슬롯의 행만 사라지고 방문 카드가 생긴다. 다른 계획 행은 남고, 빈 상태 안내는 사라진다.
- *  - R4  위치 권한이 있으면 행은 보이되 "방문 체크"는 없다(AC-11 조건).
+ *  - R4  위치 권한이 있어도 오늘 탭이면 "방문 체크"가 서고 도착을 올린다(TRIP-1069 결정 1(c) — 옛 "없다"를
+ *        뒤집음). R4b 권한이 있어도 지난 날 탭엔 없다.
  *  - R5  연타해도 POST 는 1회(AC-11 "1회").
  *  - (5-c 수정 루프 1) R6 기록 조회 실패면 빈 상태 안내 대신 오류 표면 + [다시 시도]가 재조회한다(경고5) ·
  *        R7 로딩 중엔 빈 상태 안내가 없다(경고5) · R8·R9 "방문 체크"는 선택 일자가 실제 오늘일 때만 —
@@ -165,6 +166,10 @@ beforeEach(() => {
     ),
     http.get(`${BASE}/trips/:tripId/bases`, () => HttpResponse.json([])),
     http.get(`${BASE}/saved-stays`, () => HttpResponse.json([])),
+    // TRIP-1069 D3 — 도착한 카드도 사진·메모 컨테이너로 그려져 카드마다 사진 목록을 조회한다.
+    http.get(`${BASE}/trips/:tripId/visits/:visitCheckId/photos`, () =>
+      HttpResponse.json({ items: [], count: 0 })
+    ),
     http.post(`${BASE}/trips/:tripId/visits`, async ({ request }) => {
       postBodies.push(await request.json());
       return HttpResponse.json(createdVisitP4(), { status: 201 });
@@ -220,10 +225,33 @@ describe('TripRecordsPage · 계획 행 "방문 체크" → 도착 (TRIP-1021 AC
     expect(screen.queryByTestId('record-trip-empty')).toBeNull();
   });
 
-  it('R4 위치 권한이 있으면 계획 행은 보이되 "방문 체크"는 없다', async () => {
+  // TRIP-1069 결정 1(c)·AC-22 — 옛 R4("권한이 있으면 없다")를 뒤집었다. 권한이 있어도 오늘 탭이면 손으로
+  // 체크할 수 있다. 짝 R4b 가 "권한 있음이면 항상 켬" 오구현(지난 날에도 켬)을 막는다.
+  it('R4 위치 권한이 있어도 오늘 탭 계획 행엔 "방문 체크"가 서고, 누르면 {slotKey, poiId, MANUAL} 로 POST 1회', async () => {
     mockGetForeground.mockResolvedValue(GRANTED);
 
     render(<TripRecordsPage tripId={TRIP_ID} today={DAY} />, { wrapper });
+    await waitFor(() => expect(mockGetForeground).toHaveBeenCalled());
+
+    expect(await screen.findByTestId(checkId(KEY_P3))).toBeOnTheScreen();
+    fireEvent.press(screen.getByTestId(checkId(KEY_P4)));
+
+    await waitFor(() => expect(postBodies).toHaveLength(1));
+    expect(postBodies[0]).toEqual({
+      slotKey: KEY_P4,
+      poiId: 'p4',
+      source: 'MANUAL',
+    });
+    expect(screen.queryByTestId('record-gps-banner')).toBeNull();
+  });
+
+  it('R4b 위치 권한이 있어도 지난 날 탭 계획 행엔 "방문 체크"가 없다 (AC-23)', async () => {
+    mockGetForeground.mockResolvedValue(GRANTED);
+
+    // 오늘 = 다음 날 → 첫 탭(DAY)은 지난 날이다.
+    render(<TripRecordsPage tripId={TRIP_ID} today="2026-08-21" />, {
+      wrapper,
+    });
 
     // 짝 앵커 — 행 2개는 떴다(그 시점엔 권한 effect 도 flush 됐다).
     expect(await screen.findByTestId(rowId(KEY_P3))).toBeOnTheScreen();
