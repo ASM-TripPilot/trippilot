@@ -142,11 +142,8 @@ const REQUIRED_TEST_IDS = [
   'stay-register-mapsheet',
   'stay-register-mapsheet-confirm',
   'stay-register-mapsheet-close',
-  'stay-register-date-field',
-  'stay-register-date-summary',
-  'stay-register-date-error',
-  'stay-register-datesheet',
-  'stay-register-date-cell-',
+  // TRIP-1052 — 날짜 5종(date-field·date-summary·date-error·datesheet·date-cell-)은 입력이 사라져
+  // 뺐다. 부재는 `stayDateRemovalStructure.test.ts` R1이 잰다.
   'stay-register-submit',
   'stay-register-submitfail',
   'stay-register-submitfail-retry',
@@ -337,7 +334,9 @@ describe('G-4 · INV-3 — 등록 표면에 duration 식별자가 0건 (브리�
     // 앵커 — 이 칸이 만든 파일 3개가 실제로 스캔됐다. 기존 가드는 pages/stay-register를
     // 모집단에 넣지 않아 그 디렉토리가 통째로 사각지대였다(이 it의 존재 이유).
     const files = sources.map((s) => s.file);
-    expect(files).toContain('features/stay/model/stayDates.ts');
+    // TRIP-1052 — 앵커였던 `features/stay/model/stayDates.ts`가 날짜 입력과 함께 삭제돼 같은
+    // model 층의 폼 파일로 바꾼다(모집단이 features/stay/model까지 닿는다는 뜻은 같다).
+    expect(files).toContain('features/stay/model/stayRegisterForm.ts');
     expect(files).toContain('features/stay/ui/StayRegisterScreen.tsx');
     expect(files).toContain('pages/stay-register/ui/StayRegisterPage.tsx');
 
@@ -500,14 +499,18 @@ describe('G-9 · SafeArea — 몰입 화면이 상단 안전영역을 진다 (�
   });
 });
 
-describe('G-8 · zod + useState 규약, 새 의존성 0 (01b Seed §3-5 · §7)', () => {
-  it('폼 모델이 zod를 쓰고, RHF·zustand·새 라이브러리가 등록 표면과 package.json에 없다', () => {
-    // 긍정 — 폼 검증의 정본이 zod 스키마다(티켓 "Zod 폼 검증(UX 사본)").
+describe('🔴 G-8 · useState 규약(zod 없음), 새 의존성 0 (01b Seed §3-5 · §7 · TRIP-1052 Q2)', () => {
+  it('폼 모델이 zod를 쓰지 않고, RHF·zustand·새 라이브러리가 등록 표면과 package.json에 없다', () => {
+    // TRIP-1052 Q2(a) — 예전 긍정 앵커는 "폼 모델이 zod를 import한다"였다. 그 유일한 소비처가
+    // 날짜 순서 검사(refine)였고 날짜 입력이 사라지며 함께 사라진다. 이름·좌표 게이트는 처음부터
+    // 의도적으로 zod 밖(`if`)이었다. 그래서 부정으로 뒤집고, 새 긍정 앵커는 판정 함수 자체다.
     expect(existsPair(FORM_FILE)).toEqual({
       file: 'features/stay/model/stayRegisterForm.ts',
       exists: true,
     });
-    expect(readOne(FORM_FILE)).toMatch(/from\s+['"]zod['"]/);
+    const formSource = readOne(FORM_FILE);
+    expect(formSource).toMatch(/export\s+function\s+canSubmitStayRegister\b/);
+    expect(formSource).not.toMatch(/from\s+['"]zod['"]/);
 
     // 부정 — react-hook-form은 설치돼 있으나 사용 파일이 0이라 선례가 없고, 필드 5개 중
     // 3개가 입력창이 아니라 이점이 작다(Seed §3-5). 이 칸이 첫 소비자가 되지 않는다.

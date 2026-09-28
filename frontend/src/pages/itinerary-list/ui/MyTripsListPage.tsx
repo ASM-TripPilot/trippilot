@@ -1,11 +1,13 @@
-import { useEffect, useState, type ReactElement } from 'react';
+import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useQueries } from '@tanstack/react-query';
+import { useQueries, useQueryClient } from '@tanstack/react-query';
 
 import type { Trip } from '@/shared/api/generated/schemas';
 import {
+  getGetTripsQueryKey,
   getGetTripsTripIdItineraryQueryOptions,
+  useDeleteTripsTripId,
   useGetTrips,
 } from '@/shared/api/generated/trips/trips';
 import { isNotFound } from '@/shared/api/isNotFound';
@@ -16,6 +18,7 @@ import {
   resolveItineraryDestination,
 } from '@/features/itinerary/model/planState';
 import { MyTripsListScreen } from '@/features/itinerary/ui/MyTripsListScreen';
+import { TripDeleteDialog } from '@/features/itinerary/ui/TripDeleteDialog';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import { GenerationDoneBar } from '@/widgets/generation-done-bar/ui/GenerationDoneBar';
 
@@ -59,6 +62,15 @@ export function MyTripsListPage(): ReactElement {
   });
   const [seen, setSeen] = useState<readonly string[] | null>(null);
   const [shown, setShown] = useState<Trip | null>(null);
+
+  // TRIP-1055 · 삭제 — 대상·실패 표시·요청을 페이지가 쥔다(다이얼로그는 카드·스크롤 밖 형제).
+  const queryClient = useQueryClient();
+  const deleteTrip = useDeleteTripsTripId();
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  // 실패한 요청의 tripId — 대기 중 취소 뒤 다른 카드를 열면 앞 결과가 새 다이얼로그에 안 떨어지게 id 로 든다.
+  const [deleteFailedId, setDeleteFailedId] = useState<string | null>(null);
+  // 연타 잠금은 ref — isPending 은 늦게 알려져 같은 틱 두 번째 press 를 못 막는다(02a ★2).
+  const deletingRef = useRef(false);
 
   useEffect(() => {
     // 실패하면 seen 이 null 로 남아 배너가 안 뜬다(닫힌 쪽 실패).
@@ -106,6 +118,31 @@ export function MyTripsListPage(): ReactElement {
   }
 
   const sorted = [...list].sort((a, b) => sortKey(b).localeCompare(sortKey(a)));
+
+  const onConfirmDelete = (): void => {
+    if (deleteTargetId === null || deletingRef.current) return;
+    deletingRef.current = true;
+    setDeleteFailedId(null);
+    const tripId = deleteTargetId;
+    // 목록은 항상 다시 받고(지워진 건 사실), 다이얼로그는 보낸 여행의 것일 때만 닫는다.
+    const done = (): void => {
+      setDeleteTargetId((current) => (current === tripId ? null : current));
+      queryClient.invalidateQueries({ queryKey: getGetTripsQueryKey() });
+    };
+    deleteTrip.mutate(
+      { tripId },
+      {
+        onSuccess: done,
+        // 404 = 이미 없다(다른 기기에서 지움 등) → 성공처럼 목록만 다시 받는다(01b Q5).
+        // 500·네트워크는 다이얼로그 안에 알리고 카드를 남긴다(INV-4).
+        onError: (error) =>
+          isNotFound(error) ? done() : setDeleteFailedId(tripId),
+        onSettled: () => {
+          deletingRef.current = false;
+        },
+      }
+    );
+  };
   const doneTrip = shown ?? pick?.target;
 
   const onPressView = (): void => {
@@ -132,13 +169,27 @@ export function MyTripsListPage(): ReactElement {
         mode="list"
         onPressCreateTrip={onPressCreateTrip}
         cards={sorted.map((trip) => (
-          <TripCardContainer key={trip.tripId} trip={trip} />
+          <TripCardContainer
+            key={trip.tripId}
+            trip={trip}
+            onPressDelete={() => {
+              setDeleteFailedId(null);
+              setDeleteTargetId(trip.tripId);
+            }}
+          />
         ))}
       />
       {doneTrip ? (
         <GenerationDoneBar
           tripName={doneTrip.title}
           onPressView={onPressView}
+        />
+      ) : null}
+      {deleteTargetId !== null ? (
+        <TripDeleteDialog
+          failed={deleteFailedId === deleteTargetId}
+          onCancel={() => setDeleteTargetId(null)}
+          onConfirm={onConfirmDelete}
         />
       ) : null}
     </View>

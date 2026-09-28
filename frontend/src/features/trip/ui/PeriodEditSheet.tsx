@@ -111,25 +111,26 @@ function DateCell({
 }): ReactElement {
   return (
     <View className="h-[44px] w-[14.28%] items-center justify-center">
-      {/* 사이 칸은 셀 폭을 채우는 연한 배경, 시작/종료는 원 뒤로 이어지는 반쪽 연장 배경(6-b 시각). */}
+      {/* 사이 칸은 셀 폭을 채우는 연한 배경, 시작/종료는 원 뒤로 이어지는 반쪽 연장 배경(6-b 시각).
+          띠·원은 px 고정(4 + 36 + 4 = 셀 44) — rem 유틸(top-1·h-9)은 네이티브 1rem=14px 라 띠가 원보다 떠 보인다(TRIP-1045). */}
       {role === 'between' ? (
         <View
           testID={`trip-wizard-period-cell-between-${date}`}
-          className="absolute inset-x-0 top-1 h-9 bg-primary-pale"
+          className="absolute inset-x-0 top-xs h-[36px] bg-primary-pale"
         />
       ) : null}
       {role === 'start' && (
-        <View className="absolute right-0 top-1 h-9 w-1/2 bg-primary-pale" />
+        <View className="absolute right-0 top-xs h-[36px] w-1/2 bg-primary-pale" />
       )}
       {role === 'end' && (
-        <View className="absolute left-0 top-1 h-9 w-1/2 bg-primary-pale" />
+        <View className="absolute left-0 top-xs h-[36px] w-1/2 bg-primary-pale" />
       )}
       <Pressable
         testID={`trip-wizard-period-cell-${date}`}
         accessibilityRole="button"
         disabled={past}
         onPress={() => onPickDate(date)}
-        className="h-9 w-9 items-center justify-center rounded-full"
+        className="h-[36px] w-[36px] items-center justify-center rounded-full"
       >
         {role === 'start' ? (
           <View

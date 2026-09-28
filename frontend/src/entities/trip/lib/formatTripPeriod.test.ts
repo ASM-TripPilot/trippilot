@@ -210,10 +210,10 @@ describe('🔴 C. 요일 — dayOfWeek(에포크 산술) + WEEKDAY_LABELS', () =
  * 무엇을 보장하나:
  *  - 🔴 checkIn·checkOut 둘 다 있으면 "M/D–M/D · N박" — **en dash(U+2013)**·슬래시·미들닷(U+00B7),
  *    N=박수(=일수, INV-3 소요시간 아님). formatSectionRange(이미 en dash)를 재사용해 조립한다.
- *  - 🔴 한쪽이라도 null/undefined 면 "날짜 없음"(가짜 날짜 금지).
+ *  - 🔴 한쪽이라도 null/undefined 면 null(가짜 날짜·'날짜 없음' 문구 금지 — TRIP-1052 결정 1(b), 소비처가 줄을 생략).
  *  - 🔴 옛 formatStayDateRange 의 ASCII `~`(6.10~6.13)와 **문자가 다르다** — 여기 예제엔 진짜 U+2013 이
- *    박혀 있다(눈으로 안 보이는 바이트 잠금, 개념 [[en dash ≠ 하이픈 ≠ ASCII ~]]). 옛 포맷터와의
- *    "둘 다 태워 구분자 다름" 대조는 `features/trip/ui/StaySelectSheet.test.tsx`(양쪽 layer import 가능)에서.
+ *    박혀 있다(눈으로 안 보이는 바이트 잠금, 개념 [[en dash ≠ 하이픈 ≠ ASCII ~]]). 옛 포맷터는
+ *    TRIP-1052 에서 삭제됐다 — 구분자 잠금은 아래 셋째 it 이 혼자 진다.
  *
  * *(개념 — 미들닷)* ' · '(U+00B7, 가운뎃점)는 마침표·중점 아님. 아래 예제엔 진짜 U+00B7 이 박혀 있다.
  *
@@ -231,11 +231,13 @@ describe('🔴 B. g02 후보 카드 날짜 서브라인 — formatBaseNightRange
     );
   });
 
-  it('한쪽이라도 없으면 "날짜 없음"(감천 게스트하우스 · 가짜 날짜 금지)', () => {
-    expect(formatBaseNightRange(null, '2026-06-12')).toBe('날짜 없음');
-    expect(formatBaseNightRange('2026-06-11', null)).toBe('날짜 없음');
-    expect(formatBaseNightRange(null, null)).toBe('날짜 없음');
-    expect(formatBaseNightRange(undefined, undefined)).toBe('날짜 없음');
+  it('🔴 한쪽이라도 없으면 null — 줄을 생략할 수 있게 대체 문구를 만들지 않는다 (TRIP-1052 결정 1(b))', () => {
+    // 옛 계약은 "날짜 없음" 문자열이었다. 개정 정본(US-STAY-09)은 '날짜 없음'·'미입력' 표기를
+    // 금지하고 줄 자체를 생략한다 — 포맷터가 null을 돌려줘야 소비처가 "안 그림"을 고를 수 있다.
+    expect(formatBaseNightRange(null, '2026-06-12')).toBeNull();
+    expect(formatBaseNightRange('2026-06-11', null)).toBeNull();
+    expect(formatBaseNightRange(null, null)).toBeNull();
+    expect(formatBaseNightRange(undefined, undefined)).toBeNull();
   });
 
   it('구분자는 en dash(U+2013)·미들닷(U+00B7)이지 ASCII ~·하이픈이 아니다', () => {

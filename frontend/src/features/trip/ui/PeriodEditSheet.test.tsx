@@ -280,3 +280,39 @@ describe('월 네비 chevron — prev/next 가 뒤바뀌지 않는다', () => {
     expect(spies.onNextMonth).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * TRIP-1045 AC-B1(QA #018) — 범위 띠와 원을 px 고정 크기로 맞춘다. Tailwind 기본 눈금(`h-9`·`top-1`)은
+ * rem 이라 NativeWind 네이티브에서 1rem=14px 로 계산돼 원(31.5)과 띠(top 3.5)의 세로 중심이 어긋났다.
+ * Figma `3627:2068`: 셀 44 안에 띠 `h-[36px] top-[4px]`, 원 `36×36`(4+36+4=44).
+ * 실제 세로 중심이 맞는지는 픽셀이라 jest 사각 — 여기선 rem 유틸이 빠지고 px 값이 들어갔는지까지만 본다.
+ * 시작·끝 반쪽 띠는 testID 가 없어 `periodEditSheetStructure` g5(소스 스캔)가 맡는다.
+ */
+describe('AC-B1 · 띠·원은 rem 유틸 없이 36/4 px 고정 (TRIP-1045)', () => {
+  /** className 을 공백으로 쪼갠 토큰 — 부분 문자열 비교면 `h-9` 가 `h-90` 에도 걸린다. */
+  function tokens(testID: string): string[] {
+    return String(screen.getByTestId(testID).props.className ?? '').split(
+      /\s+/
+    );
+  }
+
+  it('원(날짜 버튼)은 h-[36px]·w-[36px] 이고 h-9·w-9 가 없다', () => {
+    renderSheet({ range: { start: '2026-06-10', end: '2026-06-13' } });
+
+    const circle = tokens('trip-wizard-period-cell-2026-06-10');
+    expect(circle).toEqual(expect.arrayContaining(['h-[36px]', 'w-[36px]']));
+    expect(circle).not.toContain('h-9');
+    expect(circle).not.toContain('w-9');
+  });
+
+  it('사이 띠는 h-[36px] + top 4px(top-[4px] 또는 top-xs) 이고 top-1·h-9 가 없다', () => {
+    renderSheet({ range: { start: '2026-06-10', end: '2026-06-13' } });
+
+    const band = tokens('trip-wizard-period-cell-between-2026-06-11');
+    expect(band).toContain('h-[36px]');
+    // `xs` 토큰은 tailwind.config 에서 '4px' 로 정의돼 있어(rem 아님) 둘 다 맞는 표기다.
+    expect(band.includes('top-[4px]') || band.includes('top-xs')).toBe(true);
+    expect(band).not.toContain('top-1');
+    expect(band).not.toContain('h-9');
+  });
+});

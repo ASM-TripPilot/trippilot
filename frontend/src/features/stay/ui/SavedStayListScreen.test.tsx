@@ -1,9 +1,13 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import { processColor, StyleSheet } from 'react-native';
+
+import { HeartFilledGlyph as SharedHeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
 
 import {
   SavedStayListScreen,
   type SavedStayCardVM,
 } from './SavedStayListScreen';
+import { HeartFilledGlyph as StayHeartFilledGlyph } from './StayGlyphs';
 
 /**
  * TRIP-461 AC-2·3·4·6·7·8 — e04 저장한 숙소 **무상태 화면**의 렌더 계약.
@@ -249,5 +253,78 @@ describe('S6 · empty 콜라주 — 3장 겹침 + 흰 3px 테두리 + 중앙 하
     const tokens = cls(screen.getByTestId('saved-stay-browse'));
     expect(tokens).toContain('rounded-[12px]');
     expect(tokens).not.toContain('rounded-[14px]');
+  });
+});
+
+/**
+ * ── TRIP-1050 · 공통 콜라주 빈 상태로 옮기며 Figma 쪽으로 정합 (AC-3 · 01b Seed Q1 ①②③) ─────
+ * e04 는 d02 와 같은 `@/shared/ui/CollageEmptyState` 로 그려진다. 문구·testID·onPress 는 그대로
+ * (S2·S4·S6 무수정 green + S7-1), 픽셀은 두 Figma 프레임 공통값으로 바뀐다(사진 그림자 · 공용
+ * 하트 · CTA 패딩 22/24). 그림자·하트 모양의 실제 렌더는 6-b 육안 몫이다.
+ */
+
+// SVG 색은 host 노드의 `stroke.payload`(processColor 결과 정수)로 남는다 — host 만 고른다.
+function strokePayloads(
+  node: ReturnType<typeof screen.getByTestId>
+): unknown[] {
+  return node
+    .findAll((n) => typeof n.type === 'string' && n.props.stroke != null)
+    .map((n) => n.props.stroke?.payload);
+}
+
+describe('S7 · TRIP-1050 공통 틀 이관 — 문구 무회귀 + Figma 정합 (AC-3 · Seed Q1)', () => {
+  it('본문·CTA 라벨 문구가 그대로다 (AC-3)', () => {
+    render(<SavedStayListScreen savedStays={[]} face="empty" />);
+
+    expect(
+      screen.getByText(
+        '인기 숙소를 둘러보고 ♥로 저장하면\n여기에 모아 바로 거점으로 쓸 수 있어요'
+      )
+    ).toBeOnTheScreen();
+    expect(screen.getByText('숙소 둘러보기')).toBeOnTheScreen();
+  });
+
+  it('🔴 사진 3장이 각각 작은 그림자(0/2/10 · .06)를 갖는다 (Seed Q1 ①)', () => {
+    render(<SavedStayListScreen savedStays={[]} face="empty" />);
+
+    const photos = screen.getAllByTestId(/^saved-stay-empty-photo-/);
+    expect(photos).toHaveLength(3);
+    photos.forEach((photo) => {
+      expect(StyleSheet.flatten(photo.props.style)).toMatchObject({
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 10,
+      });
+    });
+  });
+
+  it('🔴 하트 원 안의 하트가 shared/ui 공용 하트이고 StayGlyphs 하트가 아니다 (Seed Q1 ②)', () => {
+    render(<SavedStayListScreen savedStays={[]} face="empty" />);
+
+    const heart = screen.getByTestId('saved-stay-empty-heart');
+    // 이름이 같은 두 함수를 정체성으로 가른다 — 긍정(공용 1)과 부정(stay 0)을 함께 건다.
+    expect(heart.findAllByType(SharedHeartFilledGlyph)).toHaveLength(1);
+    expect(heart.findAllByType(StayHeartFilledGlyph)).toHaveLength(0);
+  });
+
+  it('🔴 CTA 좌우 패딩이 22/24 다 — px 28 이 아니다 (Seed Q1 ③)', () => {
+    render(<SavedStayListScreen savedStays={[]} face="empty" />);
+
+    const tokens = cls(screen.getByTestId('saved-stay-browse'));
+    expect(tokens).toContain('pl-[22px]');
+    expect(tokens).toContain('pr-2xl');
+    expect(tokens).not.toContain('px-[28px]');
+    // 높이·radius 는 그대로(AC-9 짝).
+    expect(tokens).toContain('h-[52px]');
+    expect(tokens).toContain('rounded-[12px]');
+  });
+
+  it('CTA 돋보기는 흰색이다 — 아이콘이 prop 으로 옮겨져도 색이 새지 않는다', () => {
+    render(<SavedStayListScreen savedStays={[]} face="empty" />);
+
+    const payloads = strokePayloads(screen.getByTestId('saved-stay-browse'));
+    // 긍정 짝 — stroke 노드가 없으면 아래 forEach 가 공허 통과한다.
+    expect(payloads.length).toBeGreaterThanOrEqual(1);
+    payloads.forEach((payload) => expect(payload).toBe(processColor('white')));
   });
 });

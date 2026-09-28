@@ -84,6 +84,10 @@ const EXPECTED_H = [
   'dev-preview-state-h05-my-trips-done-bar', // h05 (신규 · 완료 도킹 배너)
   'dev-preview-state-h06-my-trips-loading', // h06 (구 my-trips-loading)
   'dev-preview-state-h06-my-trips-empty', // h06 (구 my-trips-empty)
+  // TRIP-1055: h06 작성중 여행 삭제 메뉴·삭제 확인 2키. 같은 h06 코드라 PREVIEW_STATES 배열에서
+  // h06-my-trips-empty **바로 뒤**에 이 순서(menu→delete-confirm)로 넣으면 안정 정렬이 그대로 낸다.
+  'dev-preview-state-h06-my-trips-menu', // h06 (TRIP-1055 · 삭제 메뉴)
+  'dev-preview-state-h06-my-trips-delete-confirm', // h06 (TRIP-1055 · 삭제 확인)
   // TRIP-790: 옛 h10 `itinerary-draft-generating`(만드는 중 · DraftScreen 인라인 게이지)을
   // h07 부분 결과(셸 얼굴)로 개명. 라벨 코드가 h07 이라 안정 정렬이 mustvisit-time 뒤에 붙는다
   // (개명 엔트리는 PREVIEW_STATES 배열상 draft 구역이라 mustvisit-time 보다 늦다 · 02a ★10).

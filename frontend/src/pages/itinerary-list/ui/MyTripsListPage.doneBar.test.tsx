@@ -46,10 +46,22 @@ jest.mock('expo-router', () => ({
   },
 }));
 
+// TRIP-1055 준비부 확장(단언 무변경) — 페이지가 여행 삭제 mutation 을 물게 되어 삭제 훅 무해 스텁을 더한다.
+// 없으면 `useDeleteTripsTripId is not a function` 으로 스위트 전체가 죽는다. plain 함수라 mockReset 무관.
 jest.mock('@/shared/api/generated/trips/trips', () => ({
   useGetTrips: jest.fn(),
   useGetTripsTripIdItinerary: jest.fn(),
   getGetTripsTripIdItineraryQueryOptions: jest.fn(),
+  getGetTripsQueryKey: () => ['/trips'],
+  deleteTripsTripId: () => new Promise(() => {}),
+  useDeleteTripsTripId: () => ({
+    mutate: () => {},
+    mutateAsync: () => new Promise(() => {}),
+    reset: () => {},
+    isPending: false,
+    isError: false,
+    error: null,
+  }),
 }));
 
 jest.mock('@/shared/storage/idSet', () => ({

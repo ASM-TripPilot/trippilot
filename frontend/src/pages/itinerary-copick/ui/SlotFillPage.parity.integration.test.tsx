@@ -9,6 +9,7 @@ import type {
   Itinerary,
   ItineraryDaysItem,
   ItineraryDaysItemSlotsItem,
+  Trip,
 } from '@/shared/api/generated/schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 
@@ -50,6 +51,24 @@ jest.mock('expo-router', () => ({
 
 const BASE = 'http://localhost:8080/api/v1';
 const TRIP_ID = '33333333-3333-3333-3333-333333333333';
+
+// TRIP-1043 — 페이지가 진행 줄 여행지 접두를 위해 여행(`GET /trips/:tripId`)을 조회한다. 이 파일은 접두를
+// 재지 않으므로 여행지 없는 여행으로 답한다(접두 생략 degrade — 기존 `N일차` 단언이 그대로 유효). 핸들러를
+// 빼면 MSW 'error' 전략이 console.error 만 찍고 쿼리를 조용히 실패시켜 누락이 드러나지 않는다(02a ★1).
+const TRIP_NO_DESTINATIONS: Trip = {
+  tripId: TRIP_ID,
+  title: '테스트 여행',
+  startDate: '2026-06-10',
+  endDate: '2026-06-11',
+  party: 1,
+  preferenceSnapshot: {},
+  destinations: [],
+  status: 'PLANNED',
+  createdAt: '2026-06-01T00:00:00Z',
+  updatedAt: '2026-06-01T00:00:00Z',
+  baseCount: 0,
+  itineraryDayCount: 1,
+};
 const DAY1 = '2026-06-10';
 
 const DURATION_TEXT = /(\d+\s*분|\d+\s*시간|소요)/;
@@ -105,6 +124,9 @@ beforeEach(() => {
   currentHasCategory = true;
   setAccessToken('valid-access');
   server.use(
+    http.get(`${BASE}/trips/:tripId`, () =>
+      HttpResponse.json(TRIP_NO_DESTINATIONS)
+    ),
     http.get(`${BASE}/trips/:tripId/itinerary`, () =>
       HttpResponse.json(itinerary(currentHasCategory))
     )
@@ -135,16 +157,16 @@ function renderAtSlotB() {
 }
 
 describe('🔴 SlotFillPage — 진행줄·스텝퍼 배선(AC-9)', () => {
-  it('W1 · 진행줄 슬롯 수가 위치 도출(가운데 슬롯 → 2 / 3)이고 일차 라벨이 뜬다', async () => {
+  it('W1 · 진행줄 카운트가 위치 도출(가운데 슬롯 → 2번째 / 3)이고 일차 라벨이 뜬다', async () => {
     renderAtSlotB();
 
     // GET 도착 후 진행줄이 뜬다(비동기).
     await screen.findByTestId('itinerary-copick-concept-progress');
 
-    // 슬롯 수 = 비고정 index(b=1)+1 / 총 비고정 3 → '2 / 3'(위치 도출, Figma 고정 3/4 픽스처와 다름).
+    // 슬롯 수 = 비고정 index(b=1)+1 / 총 비고정 3 → '2번째 / 3'(위치 도출, Figma 고정 3/4 픽스처와 다름).
     expect(
       screen.getByTestId('itinerary-copick-concept-progress-count')
-    ).toHaveTextContent('2 / 3');
+    ).toHaveTextContent('2번째 / 3');
 
     // 일차 라벨은 '1일차' 를 포함한다(정확 날짜 서식은 6-b).
     expect(

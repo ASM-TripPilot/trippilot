@@ -13,7 +13,12 @@
  * `toLocaleString`/`Intl`을 쓰지 않는다 — 테스트는 node, 앱은 Hermes에서 돌아 로케일
  * 서식이 갈릴 수 있고, 그 갈림을 동작 테스트가 원리적으로 못 본다
  * (`src/__tests__/tripBudgetStructure.test.ts`가 소스 층에서 대신 잠근다).
+ *
+ * `budgetForTier`는 예산 tier 칩의 대표 금액이다(TRIP-1045, frontend-components `BudgetInputField`).
+ * 1인 1박 단가 × 박수, 박수 0이면 1박. 인원은 곱하지 않는다 — 앱 예산 표기가 '1인 총액'이다.
  */
+import type { PreferenceInputBudgetTier } from '@/shared/api/generated/schemas';
+
 export type BudgetAmount =
   { kind: 'empty' } | { kind: 'amount'; amount: number } | { kind: 'invalid' };
 
@@ -33,4 +38,17 @@ export function parseBudgetAmount(raw: string): BudgetAmount {
 
 export function formatBudgetAmount(amount: number): string {
   return String(amount).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+export type BudgetTier = NonNullable<PreferenceInputBudgetTier>;
+
+const BUDGET_TIER_NIGHTLY: Record<BudgetTier, number> = {
+  저가: 50000,
+  중간: 100000,
+  고급: 200000,
+  럭셔리: 400000,
+};
+
+export function budgetForTier(tier: BudgetTier, nights: number): number {
+  return BUDGET_TIER_NIGHTLY[tier] * Math.max(nights, 1);
 }

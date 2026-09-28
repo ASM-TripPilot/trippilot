@@ -8,6 +8,7 @@ import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import type {
   Itinerary,
   ItineraryDaysItemSlotsItem,
+  Trip,
 } from '@/shared/api/generated/schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 
@@ -60,6 +61,24 @@ jest.mock('expo-router', () => ({
 
 const BASE = 'http://localhost:8080/api/v1';
 const TRIP_ID = '55555555-5555-5555-5555-555555555555';
+
+// TRIP-1043 — 페이지가 진행 줄 여행지 접두를 위해 여행(`GET /trips/:tripId`)을 조회한다. 이 파일은 접두를
+// 재지 않으므로 여행지 없는 여행으로 답한다(접두 생략 degrade — 기존 `N일차` 단언이 그대로 유효). 핸들러를
+// 빼면 MSW 'error' 전략이 console.error 만 찍고 쿼리를 조용히 실패시켜 누락이 드러나지 않는다(02a ★1).
+const TRIP_NO_DESTINATIONS: Trip = {
+  tripId: TRIP_ID,
+  title: '테스트 여행',
+  startDate: '2026-06-10',
+  endDate: '2026-06-11',
+  party: 1,
+  preferenceSnapshot: {},
+  destinations: [],
+  status: 'PLANNED',
+  createdAt: '2026-06-01T00:00:00Z',
+  updatedAt: '2026-06-01T00:00:00Z',
+  baseCount: 0,
+  itineraryDayCount: 1,
+};
 const DAY1 = '2026-06-10';
 const DAY2 = '2026-06-11';
 
@@ -129,6 +148,9 @@ beforeEach(() => {
   setAccessToken('valid-access');
 
   server.use(
+    http.get(`${BASE}/trips/:tripId`, () =>
+      HttpResponse.json(TRIP_NO_DESTINATIONS)
+    ),
     http.get(`${BASE}/trips/:tripId/itinerary`, () =>
       HttpResponse.json(itinerary())
     ),

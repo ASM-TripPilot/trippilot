@@ -74,6 +74,18 @@ jest.mock('@/shared/api/generated/trips/trips', () => ({
     queryKey: [`/trips/${tripId}/itinerary`],
     queryFn: () => new Promise(() => {}),
   }),
+  // TRIP-1055 준비부 확장(단언 무변경) — 페이지가 여행 삭제 mutation 을 문다. 무해 스텁이 없으면
+  // `useDeleteTripsTripId is not a function` 으로 이 파일 전체가 죽는다(삭제 흐름은 MyTripsListPage.delete 소관).
+  getGetTripsQueryKey: () => ['/trips'],
+  deleteTripsTripId: () => new Promise(() => {}),
+  useDeleteTripsTripId: () => ({
+    mutate: () => {},
+    mutateAsync: () => new Promise(() => {}),
+    reset: () => {},
+    isPending: false,
+    isError: false,
+    error: null,
+  }),
 }));
 jest.mock('expo-secure-store', () => ({
   getItemAsync: jest.fn(() => new Promise(() => {})),

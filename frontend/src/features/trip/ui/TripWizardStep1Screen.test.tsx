@@ -239,7 +239,7 @@ describe('AC-2 · 요약 카드 5행 (값 present + 순서)', () => {
     ]);
   });
 
-  it('값이 null 일 때 행별 카피 — 여행지·기간 신 카피, 나머지 "{라벨} 선택" (TRIP-671)', () => {
+  it('값이 null 일 때 행별 카피 — 여행지 신 카피, 나머지 "{라벨} 선택"(기간 포함, TRIP-671·TRIP-1045)', () => {
     render(<TripWizardStep1Screen {...props()} />);
 
     // 여행지 null → 신 카피 "어디로 갈까요?"(옛 "여행지 선택" 전역 대체, TRIP-671 D1).
@@ -247,9 +247,13 @@ describe('AC-2 · 요약 카드 5행 (값 present + 순서)', () => {
     expect(within(dest).getByText('어디로 갈까요?')).toBeOnTheScreen();
     expect(within(dest).queryByText('여행지 선택')).toBeNull();
 
-    // 기간 null → 값 줄 없음(옛 "기간 선택" 제거). 라벨 "기간"은 생존.
+    // 기간 null → muted "기간 선택"(TRIP-1045 QA #017 — 값 줄이 있어야 선택 전후 행 높이가 같다).
+    // 라벨 "기간"도 생존(getByText 완전 일치라 둘이 갈린다).
     const period = screen.getByTestId('trip-wizard-summary-period');
-    expect(within(period).queryByText('기간 선택')).toBeNull();
+    const periodPlaceholder = within(period).getByText('기간 선택');
+    expect(
+      String(periodPlaceholder.props.className ?? '').split(/\s+/)
+    ).toContain('text-muted');
     expect(within(period).getByText('기간')).toBeOnTheScreen();
 
     // 나머지 3행은 "{라벨} 선택" 유지 + muted(값이 채워지면 ink 로 바뀐다).

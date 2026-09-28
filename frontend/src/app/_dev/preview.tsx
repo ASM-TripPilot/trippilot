@@ -101,6 +101,7 @@ import {
   type MyTripCardVM,
 } from '@/features/itinerary/ui/MyTripCard';
 import { MyTripsListScreen } from '@/features/itinerary/ui/MyTripsListScreen';
+import { TripDeleteDialog } from '@/features/itinerary/ui/TripDeleteDialog';
 import {
   NotificationInboxScreen,
   type NotificationSection,
@@ -949,6 +950,9 @@ const H10_RADIUS_STEPS = [
   { key: 'max', label: '최대' },
 ] as const;
 const H10_CENTER = { lat: 35.1587, lng: 129.1604 };
+// TRIP-1043 — 지도는 지금 채우는 슬롯 장소의 기준 핀 하나 + 반경 원(후보 A/B/C 핀은 후보 좌표 계약 뒤,
+// '현재 위치' 점은 사용자 위치가 아니라 안 씀). label '' 는 물방울 안 번호를 지운다(페이지와 같은 모양).
+const H10_BASE_PINS = [{ number: 1, ...H10_CENTER, label: '' }];
 const H10_DEFAULT_CANDIDATES: SlotCandidatesCandidatesItem[] = [
   { poiId: 'A1', distanceRange: '420m', rationale: '가장 가까운 실내 전시' },
   { poiId: 'B2', distanceRange: '770m', rationale: '전시+카페 한 번에' },
@@ -1012,7 +1016,7 @@ const H10_STEPPER: ReactElement = (
   />
 );
 const H10_PROGRESS = {
-  dayLabel: '1일차 / 4 · 6월 10일(수)',
+  dayLabel: '부산 · 1일차 / 4 · 6월 10일(수)',
   slotCurrent: 3,
   slotTotal: 4,
   barFilled: 1,
@@ -1375,6 +1379,28 @@ const MY_TRIPS_PREVIEW_VMS: MyTripCardVM[] = [
   },
 ];
 
+// h06 삭제 프리뷰(TRIP-1055) — 작성중 '부산 여행'(⋯ 있음) + 완성 '서귀포시 여행'(⋯ 없음) 순서, Figma 4682:2573.
+function renderH06DeleteList({ menuOpen }: { menuOpen: boolean }) {
+  const [done, , draft] = MY_TRIPS_PREVIEW_VMS;
+  return (
+    <MyTripsListScreen
+      mode="list"
+      onPressCreateTrip={noop}
+      cards={[
+        <MyTripCard
+          key={draft.tripId}
+          vm={draft}
+          onPress={noop}
+          onPressDelete={noop}
+          menuOpen={menuOpen}
+          onPressMenu={noop}
+        />,
+        <MyTripCard key={done.tripId} vm={done} onPress={noop} />,
+      ]}
+    />
+  );
+}
+
 // l03 마이페이지 default(Figma 1602:2388, TRIP-775) — 예정 카드 2장: D-12(14일 이하 → primary 배지)와
 // D-30(ink 배지, 일정 미생성이라 daysLabel null). 화면은 무상태라 VM + noop 한 벌로 충분(TripCardContainer 의
 // 조회 조립은 안 태움 — 배지 색·카드 그림자·칩 모양은 jest 사각, 스크린샷 대조 몫).
@@ -1516,10 +1542,10 @@ function withShellTabBar(
 
 /**
  * e05 숙소 등록(TRIP-730 세대 병합) — 3탭 셸 + default 확정 콘텐츠. 네 얼굴을 파생 규칙
- * (`coordConfirmed`·`candidates`·`searchStatus`)로 가른다(새 flow 필드 없음). 15개 콜백은
+ * (`coordConfirmed`·`candidates`·`searchStatus`)로 가른다(새 flow 필드 없음). 12개 콜백은
  * 전부 noop 이라 아래 `STAY_REGISTER_HANDLERS` 한 벌로 스프레드한다.
  *
- * 왜 프리뷰가 필요한가: jest 는 세그먼트 흰 알약·라디오 채움·침대/체크/달력/↻ 글리프·지도
+ * 왜 프리뷰가 필요한가: jest 는 세그먼트 흰 알약·라디오 채움·침대/체크/↻ 글리프·지도
  * 타일·선택 카드 픽셀을 원리적으로 못 본다(02a §5 ★2~★4) — 이 4키가 6-b 육안의 유일한 그물이다.
  */
 const STAY_REGISTER_CANDIDATE_A = {
@@ -1546,9 +1572,6 @@ const STAY_REGISTER_BASE_FLOW: StayRegisterScreenProps['flow'] = {
   pinAddressStatus: 'idle',
   coordConfirmed: false,
   mapSheetState: 'closed',
-  checkIn: null,
-  checkOut: null,
-  dateSheetOpen: false,
   submitStatus: 'idle',
 };
 
@@ -1559,12 +1582,10 @@ const STAY_REGISTER_MULTI_CANDIDATE_FLOW: StayRegisterScreenProps['flow'] = {
   selectedCandidate: STAY_REGISTER_CANDIDATE_A,
 };
 
-/** default(Figma 1703) — 좌표 확정 + 날짜 선택 완료. 확정 카드 + 요일 날짜 필드 + "✓ 이 숙소 등록". */
+/** default(Figma 1703) — 좌표 확정. 확정 카드 + "✓ 이 숙소 등록"(날짜 입력 없음, TRIP-1052). */
 const STAY_REGISTER_DEFAULT_FLOW: StayRegisterScreenProps['flow'] = {
   ...STAY_REGISTER_BASE_FLOW,
   coordConfirmed: true,
-  checkIn: '2026-06-10',
-  checkOut: '2026-06-12',
 };
 
 /** multi(Figma 1358) — 단일 후보 선택, 좌표 미확정. coordnotice(민트 ⓘ) + disabled CTA. */
@@ -1581,7 +1602,7 @@ const STAY_REGISTER_ERROR_FLOW: StayRegisterScreenProps['flow'] = {
   coordConfirmed: false,
 };
 
-/** e05 화면의 콜백 15종은 프리뷰에서 전부 무동작 — 한 벌로 스프레드한다. */
+/** e05 화면의 콜백 12종은 프리뷰에서 전부 무동작 — 한 벌로 스프레드한다. */
 const STAY_REGISTER_HANDLERS = {
   onBack: noop,
   onSelectTab: noop,
@@ -1594,9 +1615,6 @@ const STAY_REGISTER_HANDLERS = {
   onOpenMapSheet: noop,
   onConfirmCoord: noop,
   onCloseMapSheet: noop,
-  onOpenDateSheet: noop,
-  onPickDate: noop,
-  onCloseDateSheet: noop,
   onSubmit: noop,
 };
 
@@ -2495,8 +2513,8 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // e05 숙소 등록 default(TRIP-730, Figma 1703) — 좌표 확정 + 날짜 선택 완료. 확정 카드(분홍 침대)·
-  // 요일 날짜 필드("6.10 (수) – 6.12 (금)" + "2박" + 달력/⌄)·"✓ 이 숙소 등록"을 눈으로 대조.
+  // e05 숙소 등록 default(TRIP-730, Figma 1703) — 좌표 확정. 확정 카드(분홍 침대) 바로 아래
+  // "✓ 이 숙소 등록"(날짜 행 없음, TRIP-1052)을 눈으로 대조.
   {
     key: 'stay-register-default',
     band: 'e',
@@ -2505,7 +2523,6 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => (
       <StayRegisterScreen
         flow={STAY_REGISTER_DEFAULT_FLOW}
-        today="2026-06-01"
         {...STAY_REGISTER_HANDLERS}
       />
     ),
@@ -2520,7 +2537,6 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => (
       <StayRegisterScreen
         flow={STAY_REGISTER_MULTI_CANDIDATE_FLOW}
-        today="2026-06-01"
         {...STAY_REGISTER_HANDLERS}
       />
     ),
@@ -2535,7 +2551,6 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => (
       <StayRegisterScreen
         flow={STAY_REGISTER_MULTI_FLOW}
-        today="2026-06-01"
         {...STAY_REGISTER_HANDLERS}
       />
     ),
@@ -2550,7 +2565,6 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => (
       <StayRegisterScreen
         flow={STAY_REGISTER_ERROR_FLOW}
-        today="2026-06-01"
         {...STAY_REGISTER_HANDLERS}
       />
     ),
@@ -2566,24 +2580,6 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => (
       <StayRegisterScreen
         flow={STAY_REGISTER_PIN_FLOW}
-        today="2026-06-01"
-        {...STAY_REGISTER_HANDLERS}
-      />
-    ),
-  },
-  // e05 숙소 등록 달력 범위(TRIP-724 복원, Figma 4520:2349) — 날짜 시트 열림·범위 하이라이트·여행 기간
-  // 상하한을 눈으로 보는 자리. CalendarSheet 코드는 730에서 유지, 프리뷰 키만 복원. 6-b/TRIP-831 몫.
-  {
-    key: 'stay-register-calendar',
-    band: 'e',
-    label: 'e05 · 등록 달력 범위',
-    login: null,
-    render: () => (
-      <StayRegisterScreen
-        flow={{ ...STAY_REGISTER_DEFAULT_FLOW, dateSheetOpen: true }}
-        today="2026-06-01"
-        minDate="2026-06-08"
-        maxDate="2026-06-20"
         {...STAY_REGISTER_HANDLERS}
       />
     ),
@@ -3744,6 +3740,29 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   {
+    // TRIP-1042 — Figma 4685:2646. 지역 안 0건: 목록 머리 블록(제목+CTA, 삽화 없음) + 지역 밖 흐린 행,
+    // 더 담기 행 없음. 흐림·CTA 치수는 jest 사각이라 6-b 육안 자리.
+    key: 'saved-places-select-region-empty',
+    band: 'd',
+    label: 'd02 · 꼭 갈 곳 고르기 지역 빈 상태',
+    login: null,
+    render: () => (
+      <MustVisitPickScreen
+        state={{ kind: 'results' }}
+        savedPlaces={[]}
+        outsideRegionPlaces={PREVIEW_SAVED_PLACES.slice(0, 2)}
+        regionEmptyLabel="부산"
+        selectedPoiIds={[]}
+        onToggleSelect={noop}
+        onComplete={noop}
+        onPressAddMore={noop}
+        onRetry={noop}
+        onPressBrowse={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  {
     key: 'saved-places-select-loading',
     band: 'd',
     label: 'd02 · 꼭 갈 곳 고르기 loading',
@@ -3966,7 +3985,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         summaryPeriod={null}
         // empty 얼굴(Figma `3652:2068`) — 동행·취향은 프리필로 채워지고, 예산은 금액 없이 프리필
         // tier 만 있는 **tier-only**(TRIP-732: main=tier, sub="1인 총액 · 온보딩").
-        summaryCompanion={{ main: '혼자 1명' }}
+        summaryCompanion={{ main: '혼자' }}
         summaryPreferences={{ main: '휴양 · 미식', onboarding: true }}
         summaryBudget={{ main: '중간', sub: '1인 총액 · 온보딩' }}
         mustVisits={[]}
@@ -4085,9 +4104,9 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // g01 예산 편집 시트(TRIP-670, Figma `3647:2068`) — 중간 tier 선택·₩1,200,000 열린 상태.
+  // g01 예산 편집 시트(TRIP-670, Figma `3647:2068`) — 중간 tier 선택·300,000(중간 10만 × 3박) 열린 상태.
   // `BudgetEditSheet`은 props-only 순수 뷰(스토어·라우터 미참조)라 컨테이너 import 사슬 함정 없이
-  // 그대로 태운다. jest 는 활성 칩 분홍 배경·흰 글자·₩/원 정렬·안내 range·시트 딤/개폐를 못 봐
+  // 그대로 태운다. jest 는 활성 칩 분홍 배경·흰 글자·금액/원 정렬·필드 패딩·시트 딤/개폐를 못 봐
   // (바텀시트 통과형 목) 이 키가 유일한 6-b 육안 대조 자리다.
   {
     key: 'trip-new-step1-budget-sheet',
@@ -4096,14 +4115,13 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       <BudgetEditSheet
-        amountText="1,200,000"
+        amountText="300,000"
         tier="중간"
         onChangeAmount={noop}
         onSelectTier={noop}
         onApply={noop}
         onClose={noop}
         applyDisabled={false}
-        onboardingTier="중간"
       />
     ),
   },
@@ -4156,7 +4174,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   // g02 숙소 선택 시트(TRIP-673 S9 → TRIP-741 후보 카드 Figma 정합, `3669:2068`) — 광안리 선택 상태.
   // 3후보 전부 사진(draft-preview 재사용)·동네·거리·가격·날짜를 채워 Figma 육안 동일(rich 필드는
   // StaySelectCandidate optional — SavedStay 계약엔 없어 실데이터는 미렌더, 프리뷰만 채운다 INV-1).
-  // 감천은 날짜 없음 후보(→"날짜 없음" 서브라인). jest 는 딤·실개폐·사진 실렌더·선택 테두리 분홍
+  // 감천은 날짜 없음 후보(→ 날짜 서브라인 생략, TRIP-1052). jest 는 딤·실개폐·사진 실렌더·선택 테두리 분홍
   // 1.5px·체크 분홍을 못 봐(바텀시트 통과형 목·svg 정수화) 이 키가 유일한 6-b 육안 대조 자리다.
   {
     key: 'trip-new-step2-staysheet',
@@ -4871,6 +4889,27 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => <MyTripsListScreen mode="empty" onPressCreateTrip={noop} />,
   },
+  // h06 삭제 메뉴·삭제 확인(TRIP-1055, Figma 4682:2573·4682:3206) — Figma 와 같은 작성중(부산)+완성 2카드.
+  // 작성중 카드만 ⋯ 를 받는다. 메뉴 위치·그림자·딤 덮임·중앙 정렬은 jest 사각(6-b 대조 자리).
+  {
+    key: 'h06-my-trips-menu',
+    band: 'h',
+    label: 'h06 · 내 여행 삭제 메뉴',
+    login: null,
+    render: () => renderH06DeleteList({ menuOpen: true }),
+  },
+  {
+    key: 'h06-my-trips-delete-confirm',
+    band: 'h',
+    label: 'h06 · 내 여행 삭제 확인',
+    login: null,
+    render: () => (
+      <View style={{ flex: 1 }}>
+        {renderH06DeleteList({ menuOpen: false })}
+        <TripDeleteDialog failed={false} onCancel={noop} onConfirm={noop} />
+      </View>
+    ),
+  },
   // l03 마이페이지 default(TRIP-775) — Figma 1602:2388 과 같은 데이터: 카운트 2/0/3 · 프로필 태그 ·
   // 정식 스타일 카드 · 예정 카드 2장 · 메뉴 3행 · 헤더 톱니 · 탭바(마이). 예정이 있으므로 지난 여행 섹션은
   // 없다(§F-3 A안). 헤드라인은 계약 공백이라 실앱처럼 비워 둔다(Figma 와 의도된 차이).
@@ -5225,7 +5264,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   },
   // h09 컨셉 고르기(TRIP-794) — 같이 고르기(co-pick) 위저드의 컨셉 선택 화면(Figma 3845:2227). 진행 줄·
   // CoPickStepper 위젯 노드·컨셉 카드 5장을 픽스처 props 로 태운다(순수 화면 · api import 0 이라 프리뷰
-  // 지뢰 목 무해). 배지·N곳은 BE 계약 부재라 미표시(D5). 첫 카드 primary 테두리·현재 단 빨강·색은 jest
+  // 지뢰 목 무해). 배지·N곳은 BE 계약 부재라 미표시(D5). 현재 단 빨강·색은 jest
   // 사각이라 이 키가 유일한 육안 그물(자율 세션 6-b SKIP, 다음 세션 확인 대상).
   {
     key: 'h09-copick-concept',
@@ -5242,7 +5281,7 @@ export const PREVIEW_STATES: PreviewState[] = [
           { key: 'shopping', label: '쇼핑' },
         ]}
         progress={{
-          dayLabel: '1일차 / 4 · 6월 10일(수)',
+          dayLabel: '부산 · 1일차 / 4 · 6월 10일(수)',
           slotCurrent: 3,
           slotTotal: 4,
           barFilled: 1,
@@ -5263,7 +5302,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   },
   // h10 후보 선택(TRIP-795) — 같이 고르기 위저드의 후보 화면(Figma 3849 default·3850 반경 넓힘). 순수
   // 뷰 SlotFillScreen 을 진행줄·스텝퍼·지도·후보 카드 픽스처 props 로 태운다(api import 0 이라 프리뷰
-  // 지뢰 목 무해). 반경 점선 원·축척·letter 핀 래스터·톤다운 배지 회색·색은 jest 사각이라 이 2키가
+  // 지뢰 목 무해). 반경 점선 원·축척·기준 핀 래스터(번호 없음)·톤다운 배지 회색·색은 jest 사각이라 이 2키가
   // 유일한 육안 그물(자율 세션 6-b SKIP). 지도는 네이버 네이티브라 사람 재빌드 전엔 미표시.
   // TRIP-978: default 의 셋째 칸은 '최대'다 — Figma 는 서버 최대값을 보이지만 프론트는 최대 조회 전엔 그
   // 값을 모른다(정직 degrade, Seed Q6). wide 는 최대 조회 결과라 셋째 칸이 서버값(maxRadiusLabel).
@@ -5280,12 +5319,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         mapView={{
           center: H10_CENTER,
           radiusCircle: { center: H10_CENTER, radiusM: 1100 },
-          pins: [
-            { number: 1, lat: 35.1601, lng: 129.163, label: 'A' },
-            { number: 2, lat: 35.1571, lng: 129.1568, label: 'B' },
-            { number: 3, lat: 35.1622, lng: 129.1604, label: 'C' },
-          ],
-          currentLocation: H10_CENTER,
+          pins: H10_BASE_PINS,
         }}
         candidates={H10_DEFAULT_CANDIDATES}
         candidateViews={H10_DEFAULT_VIEWS}
@@ -5319,13 +5353,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         mapView={{
           center: H10_CENTER,
           radiusCircle: { center: H10_CENTER, radiusM: 11300 },
-          pins: [
-            { number: 1, lat: 35.1601, lng: 129.163, label: 'A' },
-            { number: 2, lat: 35.1571, lng: 129.1568, label: 'B' },
-            { number: 3, lat: 35.1622, lng: 129.1604, label: 'C' },
-            { number: 4, lat: 35.0975, lng: 129.0106, label: 'D' },
-          ],
-          currentLocation: H10_CENTER,
+          pins: H10_BASE_PINS,
         }}
         candidates={H10_WIDE_CANDIDATES}
         candidateViews={H10_WIDE_VIEWS}

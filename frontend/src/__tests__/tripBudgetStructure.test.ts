@@ -131,10 +131,14 @@ describe('AC-5 · 천단위 구분을 로케일 API로 찍지 않는다', () => 
     });
 
     const source = stripComments(readFileSync(BUDGET_MODULE, 'utf8'));
-    ['parseBudgetAmount', 'formatBudgetAmount'].forEach((symbol) => {
-      expect(source).toMatch(
-        new RegExp(`export\\s+(?:function\\s+|const\\s+)${symbol}\\b`)
-      );
-    });
+    // TRIP-1045 — tier 대표 금액(`budgetForTier`)도 이 모듈에 둔다. 그래야 위 로케일 가드가
+    // 새 금액 코드까지 덮는다(다른 파일로 가면 스캔 배열 밖이다).
+    ['parseBudgetAmount', 'formatBudgetAmount', 'budgetForTier'].forEach(
+      (symbol) => {
+        expect(source).toMatch(
+          new RegExp(`export\\s+(?:function\\s+|const\\s+)${symbol}\\b`)
+        );
+      }
+    );
   });
 });

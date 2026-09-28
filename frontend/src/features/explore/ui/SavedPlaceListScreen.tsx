@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { SavedStayCardVM as StayRowVM } from '@/entities/stay/model';
 import type { SavedPlace } from '@/shared/api/generated/schemas';
+import { CollageEmptyState } from '@/shared/ui/CollageEmptyState';
 import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
@@ -434,32 +435,25 @@ function EmptyBlock({
 }: {
   onPressBrowse: () => void;
 }): ReactElement {
-  // d02 전용 로컬 블록(TRIP-705) — shared StateNotice 를 확장하지 않고 여기서 직접 그린다:
-  // 제목 21px · 서브카피 명시 줄바꿈(\n) · CTA 는 돋보기 아이콘 + 콘텐츠 폭(Figma 1695:1183).
+  // TRIP-1050 — e04 와 같은 공통 틀(Figma 1695:1183). 본문은 지역 무관 문구(사용자 결정).
   return (
-    <View
+    <CollageEmptyState
       testID="explore-saved-empty"
-      className="w-full flex-1 items-center justify-center gap-lg px-2xl"
-    >
-      <EmptyCollage />
-      <Text className="font-noto-bold text-[21px] font-bold text-ink">
-        마음에 드는 곳을 담아 보세요
-      </Text>
-      <Text className="text-center font-noto text-body text-muted">
-        {'부산 인기 장소를 둘러보고 ♥로 담으면\n여기에 모여 바로 여행이 돼요'}
-      </Text>
-      <Pressable
-        testID="explore-saved-browse"
-        accessibilityRole="button"
-        onPress={onPressBrowse}
-        className="mt-sm h-[48px] flex-row items-center gap-sm self-center rounded-[14px] bg-primary px-xl"
-      >
-        <SearchGlyph size={18} testID="explore-saved-browse-icon" />
-        <Text className="font-noto-bold text-[15px] font-bold text-on-primary">
-          장소 둘러보기
-        </Text>
-      </Pressable>
-    </View>
+      title="마음에 드는 곳을 담아 보세요"
+      description={
+        '인기 장소를 둘러보고 ♥로 담으면\n여기에 모여 바로 여행이 돼요'
+      }
+      ctaTestID="explore-saved-browse"
+      ctaLabel="장소 둘러보기"
+      ctaIcon={
+        <SearchGlyph
+          size={19}
+          tone="on-primary"
+          testID="explore-saved-browse-icon"
+        />
+      }
+      onPressCta={onPressBrowse}
+    />
   );
 }
 

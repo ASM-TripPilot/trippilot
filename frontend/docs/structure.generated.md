@@ -68,6 +68,7 @@
 - `src/__tests__/importBoundary.test.ts`  →  (export 없음)
 - `src/__tests__/importBoundaryLayers.test.ts`  →  (export 없음)
 - `src/__tests__/itineraryCoPickStructure.test.ts`  →  (export 없음)
+- `src/__tests__/itineraryCopickCopyStructure.test.ts`  →  (export 없음)
 - `src/__tests__/itineraryDraftFallbackShellStructure.test.ts`  →  (export 없음)
 - `src/__tests__/itineraryDraftStructure.test.ts`  →  (export 없음)
 - `src/__tests__/itineraryEditSheetStructure.test.ts`  →  (export 없음)
@@ -89,6 +90,7 @@
 - `src/__tests__/mapBridgeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/mapSheetShellStructure.test.ts`  →  (export 없음)
 - `src/__tests__/monthGridSharedPromotion.test.ts`  →  (export 없음)
+- `src/__tests__/mustVisitRegionStructure.test.ts`  →  (export 없음)
 - `src/__tests__/myStaysStructure.test.ts`  →  (export 없음)
 - `src/__tests__/nicknameMyPageSync.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/nicknameSharedPromotion.test.ts`  →  (export 없음)
@@ -157,6 +159,7 @@
 - `src/__tests__/slotCandidatesGenerated.test.ts`  →  (export 없음)
 - `src/__tests__/socialSdkConfigPlugin.test.ts`  →  (export 없음)
 - `src/__tests__/socialSdkSecrets.test.ts`  →  (export 없음)
+- `src/__tests__/stayDateRemovalStructure.test.ts`  →  (export 없음)
 - `src/__tests__/stayDetailStructure.test.ts`  →  (export 없음)
 - `src/__tests__/stayRecommendStructure.test.ts`  →  (export 없음)
 - `src/__tests__/stayRegisterStructure.test.ts`  →  (export 없음)
@@ -391,7 +394,7 @@
 ## src/entities/trip/ui/
 - `src/entities/trip/ui/PastTripRow.tsx`  →  PastTripRowProps · PastTripRow
 - `src/entities/trip/ui/TripCard.tsx`  →  TripCardProps · TripCard
-- `src/entities/trip/ui/TripGlyphs.tsx`  →  ChevronRightGlyph
+- `src/entities/trip/ui/TripGlyphs.tsx`  →  ChevronRightGlyph · MoreDotsGlyph · TrashGlyph
 
 ## src/features/auth/config/
 - `src/features/auth/config/gradients.ts`  →  SPLASH_BACKGROUND_COLORS · SPLASH_BACKGROUND_LOCATIONS · APP_ICON_COLORS · AUTH_ICON_COLORS
@@ -489,6 +492,7 @@
 ## src/features/itinerary/model/
 - `src/features/itinerary/model/buildEditItineraryRequest.ts`  →  buildEditItineraryRequest
 - `src/features/itinerary/model/coPickSlots.ts`  →  firstCoPickSlotKey · nextCoPickSlotKey · countPickedCoPickSlots
+- `src/features/itinerary/model/dayRegion.ts`  →  regionForDay
 - `src/features/itinerary/model/doneBar.ts`  →  DoneBarEntry · DoneBarPick · pickDoneBar
 - `src/features/itinerary/model/draftView.ts`  →  DRAFT_POLL_INTERVAL_MS · DRAFT_POLL_MAX_COUNT · DraftDayTab · buildDraftDayTabs · GenerationDayState · GenerationGaugeCell · buildGenerationGauge · GenerationGaugeFold · FoldedGenerationGaugeCell · foldGenerationGauge · formatDraftDayHeader · formatCoPickDayHeader · DraftPin · buildDraftPins · shouldKeepPollingDraft · DraftView · isCandidatesDemoted · FallbackNotice · resolveFallbackNotice · resolveDraftView
 - `src/features/itinerary/model/editorMapCenter.ts`  →  resolveEditorMapCenter
@@ -521,6 +525,7 @@
 - `src/features/itinerary/ui/SlotCandidateCard.tsx`  →  SlotCandidateCardProps · SlotCandidateCard
 - `src/features/itinerary/ui/SlotCandidateSheet.tsx`  →  SlotCandidateSheetRow · SlotCandidateSheetProps · SlotCandidateSheet
 - `src/features/itinerary/ui/SlotFillScreen.tsx`  →  SlotFillScreenProps · SlotFillScreen
+- `src/features/itinerary/ui/TripDeleteDialog.tsx`  →  TripDeleteDialog
 
 ## src/features/notification/model/
 - `src/features/notification/model/channelAvailability.ts`  →  PushPermission · PushColumnState · resolvePushColumn
@@ -701,11 +706,10 @@
 - `src/features/stay/model/relaxCulpritFilter.ts`  →  relaxCulpritFilter
 - `src/features/stay/model/savedStayIndex.ts`  →  findSavedStayId · optimisticSavedStayId
 - `src/features/stay/model/savedStays.ts`  →  SavedStaysFailureReason · SavedStaysOutcome · useSavedStays
-- `src/features/stay/model/stayDates.ts`  →  StayDateRange · nightsBetween · isStayRangeValid · applyDatePick · commitDateRange · formatStayDateRange
 - `src/features/stay/model/stayFilterOptions.ts`  →  StayFilterOption · StayFilterOptions · buildStayFilterOptions · toggleFilterValue · countActiveFilters
 - `src/features/stay/model/stayKey.ts`  →  stayKey
 - `src/features/stay/model/stayOutbound.ts`  →  StayOutboundMode · stayOutboundMode · buildStaySearchUrl · openStayOutbound
-- `src/features/stay/model/stayRegisterForm.ts`  →  StayRegisterTab · StayRegisterFlow · stayRegisterSchema · resolveName · canSubmitStayRegister · buildStayRegisterRequest
+- `src/features/stay/model/stayRegisterForm.ts`  →  StayRegisterTab · StayRegisterFlow · resolveName · canSubmitStayRegister · buildStayRegisterRequest
 - `src/features/stay/model/staySearchState.ts`  →  StaySearchState · resolveStaySearchState
 - `src/features/stay/model/useStaySearch.ts`  →  useStaySearch
 
@@ -716,7 +720,7 @@
 - `src/features/stay/ui/SkeletonList.tsx`  →  SkeletonList
 - `src/features/stay/ui/StayDetailScreen.tsx`  →  StayDetailState · StayDetailScreenProps · StayDetailScreen
 - `src/features/stay/ui/StayFilterSheet.tsx`  →  StayFilterSheetProps · StayFilterSheet
-- `src/features/stay/ui/StayGlyphs.tsx`  →  BackChevronGlyph · ChevronDownGlyph · FilterSlidersGlyph · WarningTriangleGlyph · MapPinGlyph · SearchGlyph · PlusGlyph · ChevronRightGlyph · HeartOutlineGlyph · ShareGlyph · InfoGlyph · BedGlyph · CheckGlyph · CalendarGlyph · RefreshGlyph · ExternalLinkGlyph · AmenityGlyph · ParkingGlyph · BreakfastGlyph · WifiGlyph · OceanViewGlyph · HeartFilledGlyph
+- `src/features/stay/ui/StayGlyphs.tsx`  →  BackChevronGlyph · ChevronDownGlyph · FilterSlidersGlyph · WarningTriangleGlyph · MapPinGlyph · SearchGlyph · PlusGlyph · ChevronRightGlyph · HeartOutlineGlyph · ShareGlyph · InfoGlyph · BedGlyph · CheckGlyph · RefreshGlyph · ExternalLinkGlyph · AmenityGlyph · ParkingGlyph · BreakfastGlyph · WifiGlyph · OceanViewGlyph · HeartFilledGlyph
 - `src/features/stay/ui/StayPriceSheet.tsx`  →  StayPriceSheetProps · StayPriceSheet
 - `src/features/stay/ui/StayRegisterScreen.tsx`  →  StayRegisterScreenProps · StayRegisterScreen
 - `src/features/stay/ui/StaySearchScreen.tsx`  →  StaySearchScreenProps · StaySearchScreen
@@ -728,11 +732,10 @@
 - `src/features/trip/model/baseAssignPlan.ts`  →  BaseAssignPlan · planBaseAssign
 - `src/features/trip/model/baseScreen.ts`  →  UnresolvedDaysView · unresolvedDaysView
 - `src/features/trip/model/baseSections.ts`  →  BaseSection · toBaseSections · NightlyBaseCard · nightlyBaseCards
-- `src/features/trip/model/budgetAmount.ts`  →  BudgetAmount · parseBudgetAmount · formatBudgetAmount
+- `src/features/trip/model/budgetAmount.ts`  →  BudgetAmount · parseBudgetAmount · formatBudgetAmount · BudgetTier · budgetForTier
 - `src/features/trip/model/createTripRequest.ts`  →  CreateTripInput · buildCreateTripRequest
 - `src/features/trip/model/mustVisitSeed.ts`  →  MustVisitSeedItem · MUST_VISIT_THUMBNAIL_LIMIT · seedMustVisits · mergeMustVisitSeeds · MustVisitSectionView · resolveMustVisitSection · mustVisitFailureNotice
-- `src/features/trip/model/regionMatch.ts`  →  sidoKey · addressInRegion
-- `src/features/trip/model/stayDateImport.ts`  →  StayImportView · StayImportInput · formatStayDateRange · resolveStayImport
+- `src/features/trip/model/regionMatch.ts`  →  sidoKey · addressInRegion · regionCodeInTrip · placeLocationLabel
 - `src/features/trip/model/staySheetSections.ts`  →  StayAddressState · StaySheetSection · staySheetSections
 - `src/features/trip/model/tripDatePicker.ts`  →  dateCell · TripDateRange
 - `src/features/trip/model/tripDraft.ts`  →  TripViolationCode · TripDraft · tripLength · nightsSum · validateTripDraft · toCompanionType
@@ -1352,7 +1355,7 @@
 ## src/shared/map/
 - `src/shared/map/CenterPinPicker.tsx`  →  CenterPinPickerProps · CenterPinPicker
 - `src/shared/map/MapView.tsx`  →  MapCenter · MapPinState · MapPinKind · MapPin · MapViewProps · MapView
-- `src/shared/map/fitRegion.ts`  →  buildFitRegion
+- `src/shared/map/fitRegion.ts`  →  buildFitRegion · buildCircleRegion
 - `src/shared/map/index.ts`  →  MapView · CenterPinPicker
 
 ## src/shared/photo/
@@ -1376,6 +1379,7 @@
 
 ## src/shared/ui/
 - `src/shared/ui/BottomTabBar.tsx`  →  ShellTabKey · BottomTabBarProps · BottomTabBar
+- `src/shared/ui/CollageEmptyState.tsx`  →  CollageEmptyStateProps · CollageEmptyState
 - `src/shared/ui/HeartButton.tsx`  →  HeartButtonProps · HeartButton
 - `src/shared/ui/HeartGlyphs.tsx`  →  HeartOutlineGlyph · HeartFilledGlyph · HeartBadgeGlyph
 - `src/shared/ui/SegmentedControl.tsx`  →  SegmentedOption · SegmentedControlProps · SegmentedControl
@@ -1436,4 +1440,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 996개 파일
+합계 1000개 파일

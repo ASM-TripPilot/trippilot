@@ -66,7 +66,9 @@ export interface TripWizardDraft {
    * 마운트 시 이 값을 보고 `resetMustVisits()`를 건너뛴다(그 뒤 스스로 끈다). 그 외 진입은
    * 항상 `false`라 평소대로 비워진다. */
   preserveMustVisitsOnce: boolean;
-  addDestination(regionName: string, nights: number): void;
+  /** `regionCode` — 지역 피커가 쥔 행정구역 코드(TRIP-1042 AC-12). 꼭 갈 곳 고르기가 이 코드로 지역을
+   * 가르고, 생성 요청에도 그대로 실린다. 안 주면 비어 있다(서버가 이름으로 찾는다). */
+  addDestination(regionName: string, nights: number, regionCode?: string): void;
   removeDestination(seq: number): void;
   /** 해당 seq destination 의 nights 를 교체(하한 1 클램프). seq 미일치면 no-op. add/remove 는
    * 무변경 재사용(TRIP-666 여행지 편집 시트). */
@@ -126,7 +128,8 @@ const INITIAL_DRAFT = {
   endDate: undefined as string | undefined,
   presetCode: undefined as PeriodPresetCode | undefined,
   party: 1,
-  companionType: undefined as CompanionType | undefined,
+  // 동반 기본값 '혼자'(TRIP-1045, `PartyPicker`) — 기본값이라 `touched`는 켜지 않는다.
+  companionType: '혼자' as CompanionType | undefined,
   budgetText: '',
   // `undefined`=오버라이드 없음. `INITIAL_DRAFT`에 이 키를 둬야 병합형 `reset()`이 지운다(SO-4).
   prefStyleOverride: undefined as string[] | undefined,
@@ -169,11 +172,11 @@ function renumberSeq(destinations: TripDestination[]): TripDestination[] {
 
 const createTripWizardDraft: StateCreator<TripWizardDraft> = (set) => ({
   ...INITIAL_DRAFT,
-  addDestination: (regionName, nights) =>
+  addDestination: (regionName, nights, regionCode) =>
     set((state) => {
       const destinations = renumberSeq([
         ...state.destinations,
-        { seq: 0, region: regionName, nights },
+        { seq: 0, region: regionName, nights, regionCode },
       ]);
       return {
         destinations,

@@ -108,7 +108,7 @@ afterEach(() => {
 });
 
 describe('진입 직후 — 빈 스토어면 플레이스홀더 + 게이트 닫힘 (맹점①)', () => {
-  it('빈 스토어 = empty 얼굴 — 여행지 신 카피 · 기간 값 줄 없음 · [다음] 비활성 (TRIP-671)', () => {
+  it('빈 스토어 = empty 얼굴 — 여행지 신 카피 · 기간 "기간 선택" · [다음] 비활성 (TRIP-671·TRIP-1045)', () => {
     render(<TripNewStep1Page baseDate={BASE} />);
 
     // 여행지 null → 신 카피 "어디로 갈까요?"(옛 "여행지 선택" 대체, TRIP-671 D1).
@@ -117,12 +117,24 @@ describe('진입 직후 — 빈 스토어면 플레이스홀더 + 게이트 닫�
         '어디로 갈까요?'
       )
     ).toBeOnTheScreen();
-    // 기간 null → 값 줄 없음(옛 "기간 선택" 제거), 라벨은 생존.
+    // 기간 null → "기간 선택"(TRIP-1045 QA #017), 라벨도 생존.
     const period = screen.getByTestId('trip-wizard-summary-period');
-    expect(within(period).queryByText('기간 선택')).toBeNull();
+    expect(within(period).getByText('기간 선택')).toBeOnTheScreen();
     expect(within(period).getByText('기간')).toBeOnTheScreen();
     // 편집 시트가 S2~S6 스텁이라 빈 진입에선 게이트가 절대 안 열린다("다음 비활성"은 결함 아님).
     expect(next()).toBeDisabled();
+  });
+
+  it('TRIP-1045 · 빈 스토어의 동행 행은 "혼자"다 ("동행 선택"·"혼자 1명" 아님)', () => {
+    // 준비 — beforeEach 의 reset() 이 새 드래프트를 만든다(동행을 아무도 안 골랐다).
+    // 실행
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    // 단언 — 기본값 '혼자'가 요약까지 흐른다. 혼자는 인원을 붙이지 않는다(summaryCompanion 규칙).
+    const companion = screen.getByTestId('trip-wizard-summary-companion');
+    expect(within(companion).getByText('혼자')).toBeOnTheScreen();
+    expect(within(companion).queryByText('동행 선택')).toBeNull();
+    expect(within(companion).queryByText('혼자 1명')).toBeNull();
   });
 
   it('배선을 통과한 화면에도 위반 코드·오류 문구가 새지 않는다', () => {

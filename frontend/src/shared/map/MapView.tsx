@@ -17,9 +17,12 @@ import {
   NaverMapPathOverlay,
   NaverMapCircleOverlay,
 } from '@mj-studio/react-native-naver-map';
-import type { Region } from '@mj-studio/react-native-naver-map';
+import type {
+  NaverMapViewRef,
+  Region,
+} from '@mj-studio/react-native-naver-map';
 
-import { buildFitRegion } from './fitRegion';
+import { buildCircleRegion, buildFitRegion } from './fitRegion';
 
 /**
  * 공급자 중립 지도 래퍼(TRIP-863 S1). 카카오 WebView 브리지를 네이버 네이티브 지도로
@@ -477,12 +480,25 @@ export function MapView({
   );
   // region 도 같은 이유로 값 memo — 소비처가 렌더마다 새 핀 배열을 만들어도 값이 같으면 같은 객체다.
   // 네 숫자를 문자열 키로 삼는다(JS 숫자 → JSON 은 정확히 왕복한다).
-  const regionKey =
-    fitPins === true ? JSON.stringify(buildFitRegion(pins ?? [])) : 'null';
+  // 핀 맞춤이 없고 반경 원이 있으면 원 전체를 담는 영역으로 연다(TRIP-1043 — 줌 고정이면 원이 카드 밖).
+  const pinRegion = fitPins === true ? buildFitRegion(pins ?? []) : null;
+  const regionKey = JSON.stringify(
+    pinRegion ??
+      (radiusCircle
+        ? buildCircleRegion(radiusCircle.center, radiusCircle.radiusM)
+        : null)
+  );
   const region = useMemo(
     () => JSON.parse(regionKey) as Region | null,
     [regionKey]
   );
+  // SDK 는 region prop 을 받는 즉시(레이아웃 전 임시 프레임 기준) 맞춤 줌을 정하고, 같은 값이면 다시
+  // 맞추지 않는다 — 카드 높이가 잡힌 뒤 한 번 더 맞춰야 원·핀이 실제 카드 안에 든다(TRIP-1043 04b 실측).
+  const mapRef = useRef<NaverMapViewRef>(null);
+  const refitRegion = (): void => {
+    if (region !== null)
+      mapRef.current?.animateRegionTo({ ...region, easing: 'None' });
+  };
 
   if (!hasKey) {
     return (
@@ -513,7 +529,9 @@ export function MapView({
   return (
     <View testID="map-root" className="flex-1">
       <NaverMapView
+        ref={mapRef}
         style={{ flex: 1 }}
+        onLayout={refitRegion}
         {...(region !== null ? { region } : { camera })}
         isScrollGesturesEnabled={!viewOnly}
         isZoomGesturesEnabled={!viewOnly}

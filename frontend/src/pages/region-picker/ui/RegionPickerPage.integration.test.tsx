@@ -223,9 +223,10 @@ describe('AC-1 · 여행지 담기 재배선 (trip 분기 — TRIP-683)', () => 
     // 실행: '인천 전체' 행 press = trip 목적 지역 선택.
     fireEvent.press(screen.getByTestId('explore-region-28'));
 
-    // 단언: 지역 '이름'(코드 아님)으로 1박 담고(★5), 위저드로 복귀하며, d03(탐색)로 이탈하지 않는다.
+    // 단언: 지역 '이름'으로 1박 담고(★5 — 화면은 이름을 그린다), 코드도 함께 넘기며(TRIP-1042 AC-12 —
+    // 꼭 갈 곳 지역 판정·생성 요청이 코드를 쓴다), 위저드로 복귀하고, d03(탐색)로 이탈하지 않는다.
     expect(mockAddDestination).toHaveBeenCalledTimes(1);
-    expect(mockAddDestination).toHaveBeenCalledWith('인천광역시', 1);
+    expect(mockAddDestination).toHaveBeenCalledWith('인천광역시', 1, '28');
     expect(mockBack).toHaveBeenCalledTimes(1);
     expect(mockPush).not.toHaveBeenCalledWith(
       expect.stringContaining('/explore/destination')
@@ -357,7 +358,7 @@ describe('985 · 회귀 — 헬퍼 철자의 trip 도 위저드 담기 그대로
 
     fireEvent.press(screen.getByTestId('explore-region-26'));
 
-    expect(mockAddDestination.mock.calls).toEqual([['부산광역시', 1]]);
+    expect(mockAddDestination.mock.calls).toEqual([['부산광역시', 1, '26']]);
     expect(mockBack).toHaveBeenCalledTimes(1);
     expect(mockDismissTo).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();

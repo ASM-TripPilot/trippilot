@@ -47,10 +47,10 @@ paths:
 | `model/index.ts` | `Trip`·`TripStatus`·`TripDestination` 재수출 + `MyTripCardVM`·`MyTripBadge`·`PastTripCardVM`. `resume?`·`imageUrl?`·`photoLabel?`은 additive 옵셔널(미전달 소비처 무회귀, `imageUrl`은 픽스처 전용 — 프로덕션 null, INV-1). |
 | `lib/formatTripPeriod.ts` | 기간 포맷터 **6벌** + `dayOfWeek`·`WEEKDAY_LABELS`. en dash(U+2013)·미들닷(U+00B7)·공백·월 생략이 벌마다 달라 **병합·통일 금지**(합치면 회귀). 근거는 개념 [[바이트 지문과 심볼 보존의 자기모순]]. |
 | `lib/formatNights.ts` | 박수 포맷터 **3벌**(`formatNightsLabel` 실패 `''`·`nightsLabel` 실패 `null`·`nightsCountLabel`). **실패값 통일 금지**(`''`≠`null`이 계약). |
-| `ui/TripCard.tsx` | h06 여행 카드. `testIDPrefix` 명시 prop(카드가 `'my-trip'`을 하드코딩하지 않는다). resume 게이트는 `vm.resume ?? (badge==='draft')` — 생성중도 배지가 `'draft'`라 컨테이너가 `resume:false`를 실어 억제한다. 사진 testID는 `imageUrl`이 있을 때만 붙는다. |
+| `ui/TripCard.tsx` | h06 여행 카드. `testIDPrefix` 명시 prop(카드가 `'my-trip'`을 하드코딩하지 않는다). resume 게이트는 `vm.resume ?? (badge==='draft')` — 생성중도 배지가 `'draft'`라 컨테이너가 `resume:false`를 실어 억제한다. 사진 testID는 `imageUrl`이 있을 때만 붙는다. `onPressDelete` 콜백이 있을 때만 배지 옆 ⋯가 뜬다(TRIP-1055, 삭제 가능 판정은 이 컴포넌트가 안 함) — 누르면 `menuOpen`(부모가 쥔 스위치, controlled prop)로 카드 내 팝오버 메뉴(휴지통+'삭제')를 연다. `menuOpen`·`onPressMenu`도 없으면 없는 것과 같다(`useState` 금지 — entities는 무상태). 팝오버는 중첩 `Pressable`(카드 누름 안쪽에 `hitSlop={4}`)이라 카드 이동을 안 일으킨다. |
 | `ui/PastTripRow.tsx` | j07 지난 여행 행. **완성 full `testID`** prop(sub-part가 하나라 prefix 대신). `compact?`(기본 `false`)가 참이면 l03 변형(64/r12), 아니면 j07 원형(72/r10·카드 r16)이 className 그대로 유지된다. |
 | `ui/PastTripRow.compact.test.tsx` | `compact` 변형 단위 테스트 — 공백 분할 className 배열로 두 변형을 가른다(부분 문자열 오탐 방지). |
-| `ui/TripGlyphs.tsx` | `ChevronRightGlyph` 로컬 복제. |
+| `ui/TripGlyphs.tsx` | `ChevronRightGlyph` 로컬 복제. `MoreDotsGlyph`·`TrashGlyph`(TRIP-1055, 신규) — 모양이 같은 사본이 `features/settings/ui/SettingsGlyphs.tsx`·`widgets/map-sheet-shell/ui/EditorGlyphs.tsx`에 있으나 entities는 형제 feature·상위 층 어느 쪽도 import할 수 없어(층 경계) Figma path를 그대로 다시 그렸다(viewBox·색 각각 다름 — 병합 금지, `traps-glyphs.md`류 동명이심볼 주의). |
 
 `features/record/model/recordsCalendar.ts`는 아직 `formatTripDateRange`·`nightsLabel`을 로컬 재수출한다(유일하게 남은 shim).
 

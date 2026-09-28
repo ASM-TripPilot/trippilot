@@ -101,6 +101,22 @@ describe('🔴 AC-1 · 행 표시(BR-U6-20)', () => {
     // 미연결 행(s2) — 정본 문안 완전일치.
     expect(screen.getByText('연결된 여행 없음')).toBeOnTheScreen();
   });
+
+  it('날짜 없는 행은 날짜 칩을 그리지 않고 "날짜 없음"류 문구도 없다 (TRIP-1052 AC-6 · BR-U6-20)', () => {
+    // 준비 — 날짜 없는 행 하나만(dateRangeLabel: null). 옛 데이터가 아니면 이제 전부 이 모양이다.
+    renderScreen({ rows: [unassignedRow()] });
+
+    // 단언 ① — 부재. 날짜 칩 서식(`6.10 ~ 6.13`)도, 대체 문구도 없다(부분포함 정규식).
+    // 메모 칩 '예약번호 미입력'은 날짜가 아니라서 '미입력' 단독이 아니라 '날짜 미입력'으로 잰다.
+    expect(screen.queryAllByText(/\d+\.\d+\s*~/)).toHaveLength(0);
+    expect(
+      screen.queryAllByText(/날짜 없음|날짜 미입력|체크인|체크아웃/)
+    ).toHaveLength(0);
+
+    // 단언 ② — 짝. 행과 칩 줄이 통째로 사라져서 ①이 참이 된 게 아니다.
+    expect(screen.getByText('남포동 게스트하우스')).toBeOnTheScreen();
+    expect(screen.getByText('앱 저장')).toBeOnTheScreen();
+  });
 });
 
 describe('🔴 AC-2 · 출발점 전환 다이얼로그 게이트(BR-U6-21)', () => {
