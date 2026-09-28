@@ -14,6 +14,7 @@ import com.trippilot.itinerarygeneration.domain.ItineraryRevision
 import com.trippilot.itinerarygeneration.domain.ItineraryRevisionSummary
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import com.trippilot.itinerarygeneration.domain.RepairResult
+import com.trippilot.itinerarygeneration.domain.FixedBlock
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
 import com.trippilot.itinerarygeneration.domain.UnplacedMustVisit
 import com.trippilot.itinerarygeneration.domain.UnplacedReason
@@ -367,6 +368,38 @@ class GenerateItineraryServiceTest : StringSpec({
 
         agent.captures[0].fixedBlocks.map { it.poiId } shouldContainExactly listOf(poi)
         agent.captures[1].fixedBlocks.map { it.poiId } shouldContainExactly listOf(anytime)
+    }
+
+    "창 밖 고정 블록이 있는 날만 일과 창이 넓어진다 — 21:00+60분이면 그 날 끝이 22:00 (TRIP-1001 결정 (c))" {
+        // 안 넓히면 이 블록 하나가 HC4 를 깨 그 날 전체가 "해 없음" → 409 → 최소 폴백이다(QA #045).
+        val late = UUID.randomUUID()
+        val day2 = start.plusDays(1)
+        val agent = CapturingAgent(now)
+        service(agent, fullPrefs, emptyList(), fixedVisits = listOf(FixedVisit(late, day2, LocalTime.parse("21:00"), 60)))
+            .generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        val second = agent.captures[1]
+        second.timeWindows.first { it.date == day2 }.end shouldBe LocalTime.parse("22:00")
+        second.timeWindows.first { it.date == day2 }.start shouldBe LocalTime.parse("09:00") // 시작은 그대로
+        second.timeWindows.first { it.date != day2 }.end shouldBe LocalTime.parse("21:00") // 다른 날은 기본 창
+    }
+
+    "이른 고정 블록이면 창 시작이 앞으로 넓어진다" {
+        val early = UUID.randomUUID()
+        val agent = CapturingAgent(now)
+        service(agent, fullPrefs, emptyList(), fixedVisits = listOf(FixedVisit(early, start, LocalTime.parse("07:30"), 60)))
+            .generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        agent.captures[0].timeWindows.first { it.date == start }.start shouldBe LocalTime.parse("07:30")
+    }
+
+    "고정 블록이 자정을 넘으면 창 끝은 23:59 에 멈춘다 — end < start 인 모순 창을 만들지 않는다" {
+        val midnight = UUID.randomUUID()
+        val agent = CapturingAgent(now)
+        service(agent, fullPrefs, emptyList(), fixedVisits = listOf(FixedVisit(midnight, start, LocalTime.parse("23:30"), 60)))
+            .generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        agent.captures[0].timeWindows.first { it.date == start }.end shouldBe LocalTime.parse("23:59")
     }
 
     "ANYTIME 은 물질화돼 경계로 나간다 (M1) — null 이 하나라도 나가면 요청 전체가 422 다" {
@@ -1142,6 +1175,31 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         finished.generationState shouldBe GenerationState.COMPLETE
         finished.days.first { it.date == start }.slots.single().sourcePoiId shouldBe userPick // 편집 보존
         finished.days.first { it.date == end }.slots.single().sourcePoiId shouldBe poiByDate.getValue(end) // 2차 몫
+    }
+
+    "2차 폴백의 물질화 슬롯은 '변경 불가'가 아니다 — 시각은 우리가 골랐다(TRIP-1001 · QA #049)" {
+        val end = start.plusDays(1)
+        val materializedPoi = UUID.randomUUID()
+        val agent = object : StubScheduleAgent() {
+            override fun generate(input: ScheduleAgentInput): ScheduleAgentOutput =
+                throw ScheduleAgentCallFailed("AI_ERROR", retryable = false, message = "조립 실패 재현")
+            override fun explanations(tripId: UUID, solution: ScheduleAgentOutput) = SlotExplanations()
+        }
+        val repo = FakeItineraries()
+        val partial = Itinerary.create(tripId, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+            listOf(ItineraryDay.of(start, 0, emptyList())), now, GenerationState.PARTIAL,
+        )
+        repo.byTrip[tripId] = partial
+        val input = agentInputFor(end).copy(
+            fixedBlocks = listOf(FixedBlock(materializedPoi, end, LocalTime.parse("09:00"), 60)),
+        )
+
+        SecondPhaseGenerator(agent, repo, genRevisions(repo, stubTrips), genSessions(), FakeScoredCandidatePoolStore(), NOOP_TX, clock)
+            .completeRemaining(tripId, partial.itineraryId, input, isRegeneration = false, materializedPoiIds = setOf(materializedPoi))
+
+        val slot = repo.byTrip.getValue(tripId).days.first { it.date == end }.slots.single()
+        slot.sourcePoiId shouldBe materializedPoi
+        slot.isFixed shouldBe false // 사용자가 고정하지 않았다 — 폴백 화면의 "변경 불가"는 거짓이었다
     }
 
     "재생성으로 일정이 교체됐으면 낡은 2차 결과를 버린다" {

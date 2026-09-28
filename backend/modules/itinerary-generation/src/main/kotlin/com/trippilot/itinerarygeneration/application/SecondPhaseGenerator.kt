@@ -69,6 +69,8 @@ class SecondPhaseGenerator(
         assemblyUnplaced: List<UnplacedMustVisit> = emptyList(),
         /** 진행 상태 세션(h09·h10). 사용자가 취소했으면 결과를 버린다(BR-U3-05). */
         sessionId: UUID? = null,
+        /** 시각을 우리가 고른(물질화) 블록 — 폴백의 isFixed 판정용(TRIP-1001). 와이어 직결 타입엔 못 싣는다. */
+        materializedPoiIds: Set<UUID> = emptySet(),
     ) {
         // INV-4: 2차 실패도 1차와 **대칭**으로 결정론 최소 폴백(must_visit 고정블록)으로 채운다.
         // 실패를 이유로 나머지 일자를 비워두지 않되, solveMode=MINIMAL·isFallback 으로 저하를 드러낸다.
@@ -77,7 +79,7 @@ class SecondPhaseGenerator(
                 scheduleAgent.generate(input)
             } catch (e: Exception) {
                 log.warn("2차 생성 실패 — 결정론 최소 폴백 적용(INV-4). tripId={}", tripId, e)
-                MinimalItineraryFallback.of(input, clock.instant())
+                MinimalItineraryFallback.of(input, clock.instant(), materializedPoiIds)
             }
         }
 
