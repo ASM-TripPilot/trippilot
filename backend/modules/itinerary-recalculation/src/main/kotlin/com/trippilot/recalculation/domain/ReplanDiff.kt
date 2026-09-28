@@ -28,6 +28,15 @@ object ReplanDiff {
         val isFixed: Boolean,
         val endsNextDay: Boolean = false,
         val distanceM: Int? = null,
+        /**
+         * POI 표면(TRIP-1060 · QA #045) — 비교 화면이 장소를 그릴 재료. 비교 규칙([of])은 이 값을
+         * 보지 않는다 — slotKey 로만 짝을 맞춘다. 정본에 없으면 null(이름을 지어내지 않는다, INV-1).
+         */
+        val nameKo: String? = null,
+        val category: String? = null,
+        val imageUrl: String? = null,
+        val lat: Double? = null,
+        val lng: Double? = null,
     )
 
     enum class Change {
