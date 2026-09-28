@@ -2565,6 +2565,10 @@ components:
               category: { type: string, nullable: true, description: 경계 코드(SIGHT/FOOD/…) }
               tags: { type: array, items: { type: string }, description: 미확보 시 빈 배열 }
               imageUrl: { type: string, nullable: true, description: NULL = 미확보. 대표 1장 }
+              # 후보 핀 좌표(TRIP-1063 · QA #044) — '후보 고르기' 지도에 A/B/C 핀을 찍는 값.
+              # 표면과 같은 정본 조회에서 온다. 표면이 없으면 null — 지어내지 않는다(BR-U1-06).
+              lat: { type: number, format: double, nullable: true }
+              lng: { type: number, format: double, nullable: true }
         radiusMUsed:
           type: integer
           description: 실제 사용 반경. 후보가 0건이면 서버가 한 번 넓혀 다시 보므로 그대로 표시한다
