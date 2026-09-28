@@ -214,7 +214,7 @@ data class DayAnchor(val date: LocalDate, val lat: Double, val lng: Double)
 
 data class TimeWindow(val date: LocalDate, val start: LocalTime, val end: LocalTime)
 
-/** 고정 블록(HC3). ANYTIME이면 date/start/dwellMin 은 null. */
+/** 고정 블록(HC3). ANYTIME이면 date/start/dwellMin 은 null. **와이어에 직결**이라 필드를 더하지 않는다(계약 게이트가 잡는다 — TRIP-1001 실측). */
 data class FixedBlock(val poiId: UUID, val date: LocalDate?, val start: LocalTime?, val dwellMin: Int?)
 
 /** 취향 7축(preference_snapshot). AI가 선호 점수·소프트 가중치에 사용. */

@@ -26,7 +26,16 @@ import java.util.UUID
  */
 internal object MustVisitMaterializer {
 
-    data class Result(val fixedBlocks: List<FixedBlock>, val unplaced: List<UnplacedMustVisit>)
+    /**
+     * [materializedPoiIds] — 시각을 **우리가 고른** 블록(TRIP-1001). 화면 "변경 불가"(isFixed)는
+     * 사용자 고정에만 붙어야 해서 이 구분이 필요한데, `FixedBlock` 은 와이어 직결이라 필드를 못
+     * 늘린다(계약 키 정확일치 게이트) — 그래서 옆자리 집합으로 나른다.
+     */
+    data class Result(
+        val fixedBlocks: List<FixedBlock>,
+        val unplaced: List<UnplacedMustVisit>,
+        val materializedPoiIds: Set<UUID> = emptySet(),
+    )
 
     /**
      * @param dated 이미 날짜·시각이 정해진 블록(사용자가 고정한 것) — **건드리지 않는다**.
@@ -69,7 +78,7 @@ internal object MustVisitMaterializer {
             occupied.getValue(day).add(Slot(start, start.plusMinutes(dwell.toLong())))
             placed += FixedBlock(block.poiId, day, start, block.dwellMin)
         }
-        return Result(dated + placed, unplaced)
+        return Result(dated + placed, unplaced, materializedPoiIds = placed.map { it.poiId }.toSet())
     }
 
     /**
@@ -101,7 +110,12 @@ internal object MustVisitMaterializer {
             val end = candidate.plusMinutes(dwell.toLong())
             if (candidate < slot.end && slot.start < end) candidate = slot.end
         }
-        return candidate.takeIf { !it.plusMinutes(dwell.toLong()).isAfter(dayEnd) }
+        return candidate.takeIf {
+            val end = it.plusMinutes(dwell.toLong())
+            // `isAfter` 만 보면 자정 감김을 놓친다 — 20:00+587분은 05:47 로 감겨 "창 안"으로 통과했다
+            // (kotest-property 가 잡은 실측, TRIP-1001). 감긴 끝은 창 안일 수 없다.
+            end > it && !end.isAfter(dayEnd)
+        }
     }
 
     /** 체류 시간 기본값 — AI 쪽 기본과 같은 60분. 없으면 서로 다른 길이로 계산해 겹침 판정이 어긋난다. */
