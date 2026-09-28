@@ -40,6 +40,7 @@ class ReplanApiIT : AbstractPostgresIntegrationTest() {
     private var port: Int = 0
 
     @Autowired private lateinit var accessTokenIssuer: AccessTokenIssuer
+    @Autowired private lateinit var jdbc: org.springframework.jdbc.core.JdbcTemplate
     @Autowired private lateinit var accounts: AccountRepository
     @Autowired private lateinit var replans: PausingReplanFacade
 
@@ -59,12 +60,18 @@ class ReplanApiIT : AbstractPostgresIntegrationTest() {
         return res.statusCode.value() to parsed
     }
 
-    private fun newToken(): String =
-        accessTokenIssuer.issue(
-            accounts.save(
-                Account.registerViaSocial(null, AgeMethod.SELF_DECLARED, null, Instant.parse("2026-07-26T00:00:00Z")),
-            ).id.value.toString(),
-        ).value
+    private fun newToken(): String {
+        val account = accounts.save(
+            Account.registerViaSocial(null, AgeMethod.SELF_DECLARED, null, Instant.parse("2026-07-26T00:00:00Z")),
+        )
+        // 위치 동의(L2) ON — GPS·MANUAL 기준점을 쓰는 케이스의 전제(TRIP-992: 동의 없으면 좌표는
+        // 서버가 버리고 사다리로 강등한다). 강등 자체는 아래 동의-없음 케이스가 따로 잠근다.
+        jdbc.update(
+            "INSERT INTO location_consent_state (account_id, legal_consent) VALUES (?, true)",
+            account.id.value,
+        )
+        return accessTokenIssuer.issue(account.id.value.toString()).value
+    }
 
     private val today: LocalDate get() = LocalDate.now(ZoneId.of("Asia/Seoul"))
 
@@ -108,6 +115,41 @@ class ReplanApiIT : AbstractPostgresIntegrationTest() {
             }
         }
         error("2차 생성이 기한 내 끝나지 않았습니다. 마지막 상태=$last")
+    }
+
+    @Test
+    fun `위치 동의가 없으면 GPS 좌표를 버리고 사다리로 강등한다 - 수집 로그도 없다(TRIP-992)`() {
+        val account = accounts.save(
+            Account.registerViaSocial(null, AgeMethod.SELF_DECLARED, null, Instant.parse("2026-07-26T00:00:00Z")),
+        ) // 동의 행 없음 = L2 false
+        val token = accessTokenIssuer.issue(account.id.value.toString()).value
+        val tripId = createTrip(token)
+        generate(token, tripId) shouldBe 201
+
+        val (rc, body) = call(HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions", token, startBody)
+
+        rc shouldBe 201
+        body["originKind"].asText() shouldBe "STAY_ANCHOR" // 좌표를 버리고 사다리 끝(숙소 없는 여행)
+        body["originEstimated"].asBoolean() shouldBe true
+        jdbc.queryForObject(
+            "SELECT count(*) FROM location_legal_log WHERE account_id = ? AND event_type = 'COLLECTION'",
+            Int::class.java, account.id.value,
+        ) shouldBe 0
+    }
+
+    @Test
+    fun `동의가 있으면 GPS 저장과 함께 수집 로그가 남는다 - 대상은 세션 id(TRIP-992)`() {
+        val token = newToken()
+        val tripId = createTrip(token)
+        generate(token, tripId) shouldBe 201
+
+        val (rc, body) = call(HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions", token, startBody)
+
+        rc shouldBe 201
+        jdbc.queryForObject(
+            "SELECT count(*) FROM location_legal_log WHERE event_type = 'COLLECTION' AND detail->>'subjectId' = ?",
+            Int::class.java, body["sessionId"].asText(),
+        ) shouldBe 1
     }
 
     private val startBody = """
