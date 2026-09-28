@@ -101,6 +101,7 @@ import {
   type MyTripCardVM,
 } from '@/features/itinerary/ui/MyTripCard';
 import { MyTripsListScreen } from '@/features/itinerary/ui/MyTripsListScreen';
+import { TripDeleteDialog } from '@/features/itinerary/ui/TripDeleteDialog';
 import {
   NotificationInboxScreen,
   type NotificationSection,
@@ -1377,6 +1378,28 @@ const MY_TRIPS_PREVIEW_VMS: MyTripCardVM[] = [
     extra: null,
   },
 ];
+
+// h06 삭제 프리뷰(TRIP-1055) — 작성중 '부산 여행'(⋯ 있음) + 완성 '서귀포시 여행'(⋯ 없음) 순서, Figma 4682:2573.
+function renderH06DeleteList({ menuOpen }: { menuOpen: boolean }) {
+  const [done, , draft] = MY_TRIPS_PREVIEW_VMS;
+  return (
+    <MyTripsListScreen
+      mode="list"
+      onPressCreateTrip={noop}
+      cards={[
+        <MyTripCard
+          key={draft.tripId}
+          vm={draft}
+          onPress={noop}
+          onPressDelete={noop}
+          menuOpen={menuOpen}
+          onPressMenu={noop}
+        />,
+        <MyTripCard key={done.tripId} vm={done} onPress={noop} />,
+      ]}
+    />
+  );
+}
 
 // l03 마이페이지 default(Figma 1602:2388, TRIP-775) — 예정 카드 2장: D-12(14일 이하 → primary 배지)와
 // D-30(ink 배지, 일정 미생성이라 daysLabel null). 화면은 무상태라 VM + noop 한 벌로 충분(TripCardContainer 의
@@ -4865,6 +4888,27 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'h06 · 내 여행 empty',
     login: null,
     render: () => <MyTripsListScreen mode="empty" onPressCreateTrip={noop} />,
+  },
+  // h06 삭제 메뉴·삭제 확인(TRIP-1055, Figma 4682:2573·4682:3206) — Figma 와 같은 작성중(부산)+완성 2카드.
+  // 작성중 카드만 ⋯ 를 받는다. 메뉴 위치·그림자·딤 덮임·중앙 정렬은 jest 사각(6-b 대조 자리).
+  {
+    key: 'h06-my-trips-menu',
+    band: 'h',
+    label: 'h06 · 내 여행 삭제 메뉴',
+    login: null,
+    render: () => renderH06DeleteList({ menuOpen: true }),
+  },
+  {
+    key: 'h06-my-trips-delete-confirm',
+    band: 'h',
+    label: 'h06 · 내 여행 삭제 확인',
+    login: null,
+    render: () => (
+      <View style={{ flex: 1 }}>
+        {renderH06DeleteList({ menuOpen: false })}
+        <TripDeleteDialog failed={false} onCancel={noop} onConfirm={noop} />
+      </View>
+    ),
   },
   // l03 마이페이지 default(TRIP-775) — Figma 1602:2388 과 같은 데이터: 카운트 2/0/3 · 프로필 태그 ·
   // 정식 스타일 카드 · 예정 카드 2장 · 메뉴 3행 · 헤더 톱니 · 탭바(마이). 예정이 있으므로 지난 여행 섹션은

@@ -395,7 +395,12 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    173→174. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 1키만 추가하고 이 가드는
     //    안 만진다(추가 전엔 173개라 red). 정확히 그 키인지는 아래 'TRIP-1042' describe 가 못박는다.
     //    devPreviewBandSort 는 밴드 h·l 만 잠가 band d 와 무관(오갱신 금지). Figma 4685:2646 과 1:1 인 새 얼굴.
-    expect(PREVIEW_STATES).toHaveLength(174);
+    // ⚠️ TRIP-1055: h06 작성중 여행 삭제 메뉴·삭제 확인 2키(`h06-my-trips-menu`·`h06-my-trips-delete-confirm`,
+    //    band `h`) 추가로 174→176. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 2키만
+    //    `h06-my-trips-empty` 바로 뒤에 이 순서로 추가하고 이 가드는 안 만진다(추가 전엔 174개라 red). 정확히 그
+    //    키인지는 아래 'TRIP-1055' describe 가 못박고, devPreviewBandSort 는 EXPECTED_H 에 h06-empty 뒤 2줄을 넣었다.
+    //    Figma 4682:2573(삭제 메뉴)·4682:3206(삭제 확인) 과 1:1.
+    expect(PREVIEW_STATES).toHaveLength(176);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -1749,5 +1754,55 @@ describe('🔴 TRIP-1042 · d02 select 지역 빈 상태 프리뷰 키 + 지역 
         screen.queryByTestId(`mustvisit-pick-check-${poiIdOf(testID)}`)
       ).toBeNull();
     });
+  });
+});
+
+// TRIP-1055 — 메뉴 위치(⋯ 아래 오른쪽 맞춤)·딤 실제 덮임·다이얼로그 중앙 정렬은 픽셀이라 jest 사각이다.
+// 6-b 육안 대조 자리가 이 두 키다(Figma 4682:2573 · 4682:3206).
+describe('🔴 TRIP-1055 · h06 작성중 여행 삭제 메뉴·삭제 확인 프리뷰 2키 (band h)', () => {
+  it('h06-my-trips-menu 는 작성중 카드 한 장의 메뉴가 열린 목록을 그린다', () => {
+    // 준비 — 새 키 엔트리를 찾는다(red-first: preview.tsx 에 추가 전엔 없다).
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'h06-my-trips-menu'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('h');
+    expect(entry?.label).toBe('h06 · 내 여행 삭제 메뉴');
+
+    // 실행
+    render(<>{entry?.render()}</>);
+
+    // 단언 — 목록 위에 열린 메뉴가 정확히 하나, 그 안에 '삭제' 항목.
+    expect(screen.getByTestId('itinerary-tab-root')).toBeOnTheScreen();
+    expect(screen.queryAllByTestId(/^my-trip-menu-panel-/)).toHaveLength(1);
+    const items = screen.queryAllByTestId(/^my-trip-menu-delete-/);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toHaveTextContent('삭제');
+  });
+
+  it('h06-my-trips-delete-confirm 은 목록 위에 삭제 확인 다이얼로그를 그리고 실패 문구는 없다', () => {
+    // 준비
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'h06-my-trips-delete-confirm'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('h');
+    expect(entry?.label).toBe('h06 · 내 여행 삭제 확인');
+
+    // 실행
+    render(<>{entry?.render()}</>);
+
+    // 단언 — 배경 목록 + 다이얼로그(제목·취소·삭제), 실패 문구 없음.
+    expect(screen.getByTestId('itinerary-tab-root')).toBeOnTheScreen();
+    const dialog = screen.getByTestId('my-trip-delete-dialog');
+    expect(within(dialog).getByText('이 여행을 삭제할까요?')).toBeOnTheScreen();
+    expect(screen.getByTestId('my-trip-delete-cancel')).toBeOnTheScreen();
+    expect(screen.getByTestId('my-trip-delete-confirm')).toBeOnTheScreen();
+    expect(screen.queryByTestId('my-trip-delete-error')).toBeNull();
+
+    // 이웃 앵커 — 기존 h06 키가 딸려 사라지지 않았다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+    expect(keys).toContain('h06-my-trips-loading');
+    expect(keys).toContain('h06-my-trips-empty');
   });
 });
