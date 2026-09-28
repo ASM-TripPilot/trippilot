@@ -45,15 +45,18 @@ paths:
 
 ## j06 공유 카드
 
-카드는 지도·경로 핀·사진을 그리지 않는다 — 계약에 좌표가 없다. 워터마크·동선 목록·그라디언트 오버레이로만 조립한다. 캡처·저장·공유 모듈이 미설치라 `captureShareImage()`는 `{armed:false}` degrade 스텁이다(`traps-reflection.md`).
+카드는 지도·경로 핀·사진을 그리지 않는다 — 계약에 좌표가 없다. 워터마크·동선 목록·그라디언트 오버레이로만 조립한다. 캡처(PNG)·앨범 저장·OS 공유·해시태그 인라인 편집은 TRIP-1071로 실구현(네이티브 3종 — `traps-reflection.md`, 재빌드 전엔 버튼 줄 자체가 안 뜬다).
 
 | 파일 | 역할 |
 |---|---|
-| `model/shareCard.ts` | `SHARE_FORMATS`(story·square·feed) · `buildShareCard({summary,trip,format})` 카드 VM(j04 모델 재사용, `totalPhotos===0`→`'no-photo'`, duration 필드 0) · `validateCaption`/`validateHashtags`(온디바이스만) · `captureShareImage()`. `periodText`는 시작·종료 **둘 다** 있을 때만 조합([[반쪽 방어 (half-applied guard)]]) |
+| `model/shareCard.ts` | `SHARE_FORMATS`(story·square·feed) · `buildShareCard({summary,trip,format})` 카드 VM(j04 모델 재사용, `totalPhotos===0`→`'no-photo'`, duration 필드 0) · `validateCaption`/`validateHashtags`(온디바이스만, 해시태그 인라인 편집이 재사용) · `periodText`는 시작·종료 **둘 다** 있을 때만 조합([[반쪽 방어 (half-applied guard)]]). 옛 `captureShareImage()` degrade 스텁은 제거됨(→ `model/shareCapture.ts`) |
 | `model/shareCard.test.ts` | 조립·mode·aspect·폼검증·INV-3(`JSON.stringify` 소요시간 0)·INV-4·null 방어 |
-| `ui/ShareCardScreen.tsx` | 무상태(로컬 상태는 선택 포맷·degrade 안내뿐) — 저장/공유 press → `armed:false`면 `reflection-share-degrade` 안내 |
-| `ui/ShareCardScreen.test.tsx` | 조립·포맷·INV-4 렌더 |
-| `ui/ShareCardPreview.tsx` | 카드 프리뷰 — `aspectRatio`를 인라인 `style`로 노출(`reflection-share-preview-frame`) |
+| `model/shareCapture.ts` | (신규) `isShareCaptureArmed()`(모듈 3종 존재 판정, 없으면 null 조회 — 패키지 정적 import 없음) · `saveShareCardImage(ref)`/`shareShareCardImage(ref)`(캡처→저장/공유, 실패는 전부 `{status:'failed'}` 반환, throw 없음) — `shareCaptureNative.ts`를 `await import`로만 부른다 |
+| `model/shareCapture.test.ts` | (신규) armed 판정 3종 개별 부재·저장/공유 성공·권한거부·각 단계 reject |
+| `model/shareCaptureNative.ts` | (신규) 캡처 3종 패키지를 **정적 import**하는 유일한 파일(re-export). `features/reflection/` 밖으로 옮기면 `recordPhotoBinaryGuard` 등 다른 스캔 가드에 걸린다(`traps-reflection.md`) |
+| `ui/ShareCardScreen.tsx` | `useRef<View>`(`frameRef`)를 `ShareCardPreview`에 내려 캡처 대상 지정 · 저장/공유 press(armed일 때만 버튼 노출) · 해시태그 인라인 편집(`hashtags`/`draft`/`draftError` 로컬 상태, 서버 저장 없음) · `reflection-share-result`(성공/실패/거부 공용 안내) |
+| `ui/ShareCardScreen.test.tsx` | armed 판정별 버튼 유무·저장/공유 성공·권한거부·해시태그 편집 검증(개수·길이)·1:1 포맷 캡처 대상 aspectRatio |
+| `ui/ShareCardPreview.tsx` | 카드 프리뷰 — `aspectRatio`를 인라인 `style`로 노출, `frameRef`를 프레임 View 자체에 직결(`reflection-share-preview-frame`, 래퍼에 달면 캡처 대상 불일치) |
 | `ui/FormatSegment.tsx` | 3셀 포맷 세그(`reflection-share-format-seg`) |
 | `ui/ShareCardGlyphs.tsx` | download·share·watermark SVG |
 
