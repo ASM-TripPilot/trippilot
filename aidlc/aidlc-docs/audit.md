@@ -1425,3 +1425,21 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: INCEPTION·CONSTRUCTION 스테이지 승인 상태는 **유지**(재실행 아님, 국소 수정). 코드 변경 0 — 구현은 각 Jira 티켓에서 팀이 `frontend/`·`backend/`에서 수행.
 
 ---
+
+## Change Request — INCEPTION·CONSTRUCTION 산출물 사후 개정 3회차 (사용자 인터뷰 결정 · 예산 인당 총액·예산 맵 대체·지역 코드 보완·여행 삭제 보류 · TRIP-1067·1042·1055)
+**Timestamp**: 2026-09-28T12:48:48Z
+**User Input**: "정본 바로 고침 — 예"
+**Current State**: CONSTRUCTION 설계 문서 단계(SCOPE.md 2026-07-17 개정). INCEPTION은 2026-07-13 승인 완료, U0~U6 설계 종료. 같은 날 2회차 개정(위 항목) 직후.
+**Impact Assessment**: 2회차와 같은 `workflow-changes.md` §4 **Low impact → Modify and update dependents**(전면 재실행 아님). 결정 원문은 2026-09-28 사용자 인터뷰에서 확정한 것으로, 사용자 입력 자체를 명시 승인으로 받는다(오케스트레이터 전달).
+**User Confirmation**: 명시 승인 수령("정본 바로 고침 — 예").
+**Action Taken**:
+- **결정 1 — 예산 = 인당(1인) 총액 (TRIP-1067)**: `stories.md` US-TRIP-01 정상 AC 아래 `[개정 · 2026-09-28, TRIP-1067]` 줄 추가(원문 보존) — 예산은 인당 여행 전체 총액이고 인원이 바뀌어도 값은 그대로, "일수·인원으로 분배"는 일수 기준으로 읽는다. `components.md` C6 책임의 "예산 분배"에 같은 개정 주석. U1 `domain-entities.md` `budgetTotal` 비고의 "입력 화면은 현재 없음"을 **정정**(원문 보존 — 입력 화면 `BudgetInputField` 있음, 인당 총액). U1 `business-logic-model.md` **G-U1-09 해소** 기록. `requirements.md`는 같은 문구가 없어(grep 실측 — FR-TRIP-01에 예산 서술 없음) 손대지 않았다.
+- **결정 2 — 예산 tier→금액 맵 대체 (TRIP-1067, TRIP-1045 대체)**: U1 `frontend-components.md` `BudgetInputField` 행에 `[대체 · 2026-09-28, TRIP-1067]` — **온보딩 예산 범위 가운데값** 저가 300,000 · 중간 1,000,000 · 고급 2,000,000 · 럭셔리 4,000,000원(범위 ~50만·50~150만·150~300만·300만+, 열린 끝 30만·400만), 1인 여행 전체 금액, 박수·인원 무관. 칩 press 때만 채움·직접 수정 가능·재계산 없음·range 안내 문구 없음은 유지. 이전 TRIP-1045 결정(1인 1박 단가 × 박수)은 지우지 않고 대체 표기로 남겼다. 같은 행의 TRIP-207 안내 문구("온보딩에서 고른 '{티어}({구간})' 범위로 채웠어요")와 testID 목록의 `trip-wizard-budget-note`에 **폐기 표기**.
+- **결정 3 — 지역 코드 문서 보완 (TRIP-1042 후속)**: U1 `domain-entities.md` **INV-U1-21**에 `[보완]` — 접두사 매칭은 **양방향**(짧은 쪽 코드가 긴 쪽의 접두면 지역 안 — 시드 POI는 시도 2자리 코드만 가짐), 목적지 중 하나라도 코드가 없으면 **판정 생략**, 시도 코드 카탈로그 실측 16개(`12` 전남광주통합특별시, `29`·`46` 없음). `Poi.regionCode` 비고를 "시군구 5자리 또는 시도 2자리, 없으면 null"로 보완. U1 `business-rules.md` **BR-U1-58** 셀 끝에 같은 취지 `[보완]`. U1 `frontend-components.md` §4 지역 매칭 사본에 한 줄 보완(정본 포인터). 시도 개수를 17로 적은 곳은 aidlc/ 안에 없었다(grep 실측) — 16은 보완 문구에만 적었다.
+- **결정 4 — 여행 삭제 구현 차이 보류 기록 (개정 아님, TRIP-1055)**: `stories.md` US-TRIP-10 아래와 U1 `business-rules.md` BR-U1-57 표 아래에 **"미결 — 사용자 판단 보류(2026-09-28)"** 주석 — ① 생성 중 카드는 사유 안내 대신 ⋯ 숨김 ② 날짜 지난 미확정 초안(카드 '작성중')도 삭제 허용 ③ `DELETE` 404는 "이미 없음"으로 목록 재조회. **규칙 문면은 바꾸지 않았다**(INV-U1-20도 무변경).
+- `aidlc-state.md` INCEPTION 개정 이력에 3회차 항목 추가. 스토리 수 변동 없음(124, 유효 123).
+- 미수정(의도적): `stories.md` 온보딩 예산 스토리(러프값 4구간 또는 총액)는 온보딩 범위 정의라 그대로 · `inception/plans/*`(역사).
+**Artifacts Affected**: `inception/user-stories/stories.md` · `inception/application-design/components.md` · `construction/u1-accommodation-trip/functional-design/{business-rules,domain-entities,business-logic-model,frontend-components}.md` · `aidlc-state.md` · 이 `audit.md` append
+**Context**: INCEPTION·CONSTRUCTION 스테이지 승인 상태는 **유지**(재실행 아님, 국소 수정). 코드 변경 0 — 구현은 각 Jira 티켓에서 팀이 `frontend/`·`backend/`에서 수행.
+
+---
