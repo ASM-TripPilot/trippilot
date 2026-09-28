@@ -102,6 +102,7 @@ class PoiProposalIngestService(
                 category = proposal.category,
                 region = proposal.region,
                 regionCode = RegionResolver.resolve(proposal.address, regions),
+                address = proposal.address,
                 openingHours = proposal.openingHours,
                 source = source,
                 sourceRef = ref,
@@ -123,7 +124,7 @@ class PoiProposalIngestService(
                     nameKo = place.nameKo, lat = place.lat!!, lng = place.lng!!, category = place.category!!,
                     region = place.region, regionCode = place.regionCode,
                     openingHours = place.openingHours, now = now,
-                    tags = place.tags, imageUrl = place.imageUrl,
+                    tags = place.tags, imageUrl = place.imageUrl, address = place.address,
                 )
                 updated++
             }

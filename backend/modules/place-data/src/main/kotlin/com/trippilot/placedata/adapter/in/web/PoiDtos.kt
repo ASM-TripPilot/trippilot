@@ -23,6 +23,11 @@ data class PlaceResponse(
      * 카탈로그의 공식명(`인천광역시`)은 화면 표기(`인천`)와도 달라 어차피 클라가 줄여야 한다.
      */
     val regionCode: String?,
+    /**
+     * 지번·도로명 주소(TRIP-1062 · 1003 F). null = 미확보 — 기존 수집분은 재수집이 채울 때까지
+     * 비어 있고, 화면은 자리만 비운다(지어내지 않는다).
+     */
+    val address: String?,
     val openingHours: String?,
     val imageUrl: String?,
     val tags: List<String>,
@@ -32,7 +37,7 @@ data class PlaceResponse(
     companion object {
         fun from(p: Poi) = PlaceResponse(
             poiId = p.poiId, nameKo = p.nameKo, category = p.category, lat = p.lat, lng = p.lng,
-            region = p.region, regionCode = p.regionCode, openingHours = p.openingHours, imageUrl = p.imageUrl, tags = p.tags,
+            region = p.region, regionCode = p.regionCode, address = p.address, openingHours = p.openingHours, imageUrl = p.imageUrl, tags = p.tags,
             savedCount = p.savedCount, dataStatus = p.dataStatus,
         )
     }

@@ -347,6 +347,7 @@ class PlaceApiIT : AbstractPostgresIntegrationTest() {
             item["regionCode"].asText() shouldBe "26170"
             item.fieldNames().asSequence().toSet() shouldBe setOf(
                 "poiId", "nameKo", "category", "lat", "lng", "region", "regionCode",
+                "address", // TRIP-1062 · 1003 F — 수집 주소 표면(null=미확보)
                 "openingHours", "imageUrl", "tags", "savedCount", "dataStatus",
             )
         } finally {
