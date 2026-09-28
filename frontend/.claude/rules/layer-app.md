@@ -42,6 +42,7 @@ paths:
 | `src/app/trips/new/_layout.tsx` | 여행 생성 위저드 셸 — 네이티브 헤더만 끄고, **마운트 시에만** 시드 초기화(`resetMustVisits` 등). step1↔step2 왕복은 재마운트가 아니라 편집이 살고, `push('/trips/new/step1')` 재진입은 초기화된다 — 실제 재마운트 여부는 jest가 못 본다(expo-router 통째 목). |
 | `src/app/trips/new/step1.tsx` | g01 위저드 1/2 — `@/pages/trip-new-step1` 얇은 래퍼 |
 | `src/app/trips/new/step2.tsx` | g02 위저드 2/2 거점 숙소 — `@/pages/trip-new-step2` 얇은 래퍼 |
+| `src/app/trips/[tripId]/bases.tsx` | 거점 화면 라우트 — h04(mode 없음)·l04(`mode=edit`) 두 입구 공유. `mode === 'edit'`인 **정확 일치만** `'edit'`로 넘기고 그 밖은 `undefined`(다른 값이 새면 h04가 생성 CTA를 잃는다) |
 | `src/app/trips/[tripId]/itinerary/must-visits/index.tsx` | 필수 방문지 목록 — `@/pages/itinerary-mustvisit` 얇은 래퍼 |
 | `src/app/trips/[tripId]/itinerary/must-visits/[poiId].tsx` | 필수 방문지 시각 지정 — 같은 배럴. `poiId`는 그 방문지의 `sourcePoiId` |
 | `src/app/trips/[tripId]/itinerary/generating.tsx` | 생성 진행 — `tripId`·`mode`·`successRoute` params를 `GeneratingPage`에 forward(없으면 페이지 기본값 FULLY_AI/draft) |
