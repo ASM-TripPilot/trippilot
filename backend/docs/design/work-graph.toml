@@ -1240,7 +1240,7 @@ Kotlin 컴파일 데몬과 테스트 JVM 은 **각각 별도 프로세스라 데
 id = "TRIP-963"
 ticket = "TRIP-963"
 title = "재계획 좌표 폴백 — 생성에 있는 목적지 중심 단이 재계획 사다리에 없다"
-status = "todo"
+status = "done"  # PR #762 (2026-09-27)
 owner = "재계획"
 migration = false
 touches = ["backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/application/ReplanFacadeService.kt"]
@@ -1255,7 +1255,7 @@ note = """
 id = "TRIP-964"
 ticket = "TRIP-964"
 title = "거절 이력을 여행별로 누적 저장 — 슬롯 교체·재생성 두 종류, 횟수 포함"
-status = "todo"
+status = "done"  # PR #763 (2026-09-27) — V2.53 trip_poi_rejection
 owner = "재계획"
 migration = true
 touches = ["backend/app/src/main/resources/db/migration", "backend/modules/itinerary-generation"]
@@ -1268,7 +1268,7 @@ TRIP-975 의 재료다 — 싣기 전에 쌓아야 한다. AI 는 이미 소비 
 id = "TRIP-975"
 ticket = "TRIP-975"
 title = "/replan 요청에 변경 이력(rejections)을 싣는다 — 같은 제안 반복 방지"
-status = "todo"
+status = "done"  # PR #763 에 포함 — AiReplanRequest.rejections 배선(어댑터 jsonPath 단언)
 owner = "재계획"
 migration = false
 touches = ["backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/adapter/out/external/HttpScheduleAgentAdapter.kt"]
@@ -1281,14 +1281,15 @@ TRIP-964 의 저장분을 어댑터가 `rejections` 로 번역해 싣는다. 선
 id = "TRIP-969"
 ticket = "TRIP-969"
 title = "생성 시점 점수 후보를 저장 — 슬롯 교체를 LLM 없이 즉답으로"
-status = "todo"
+status = "done"  # PR #764 (2026-09-27) — V2.55 trip_scored_candidate_pool
 owner = "일정"
 migration = true
 touches = ["backend/app/src/main/resources/db/migration", "backend/modules/itinerary-generation"]
 note = """
-준하 TRIP-970(/alternatives 를 ScheduleAgent 산출 재사용으로)과 짝. 착수 전 정본 확인이 무겁다 —
-생성 응답의 어떤 값을 저장하는지(후보·점수의 출처), 저장 형태(jsonb vs 테이블)가 미결.
-Flyway 번호는 TRIP-964 머지 후 채번.
+준하 TRIP-970(/alternatives 를 ScheduleAgent 산출 재사용으로)과 짝. 백엔드 몫은 #764 로 배송 —
+별도 테이블(V2.55, 티켓의 "itinerary 컬럼"에서 이탈·사유는 마이그레이션 주석) + 즉답 경로.
+남은 것: 실 AI 와이어 개통(TRIP-970) 후 생성 응답 매핑과 AlternativesRequest 에 저장분 싣기
+(ScheduleAgentWire 주석에 표시). 그때까지 http 모드는 풀 없음 = 종전 경로.
 """
 
 [[nodes]]
