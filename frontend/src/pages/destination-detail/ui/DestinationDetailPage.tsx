@@ -43,7 +43,7 @@ import type {
   StayCardVM,
 } from '@/features/explore/ui/ExploreLandingScreen';
 
-// 장소 레인은 가로 레인이라 전량이 필요 없다 — 서버 limit으로 필요한 개수만 받는다
+// 장소 칸은 2열 격자 최대 4행이라 전량이 필요 없다 — 서버 limit으로 필요한 개수만 받는다
 // (ExploreLandingScreen의 PLACE_LANE_LIMIT 선례와 같은 값).
 const PLACE_LANE_LIMIT = 8;
 

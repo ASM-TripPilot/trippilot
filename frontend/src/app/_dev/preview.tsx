@@ -368,6 +368,16 @@ const EXPLORE_LANDING_PLACE_LANE = {
   onPressCard: noop,
 };
 
+// d05 목적지 상세 장소 격자 전용 6장(Figma 4663:2540 과 같은 데이터, TRIP-1048).
+const DESTINATION_DETAIL_PLACES = [
+  { poiId: 'p1', name: '감천문화마을', region: '부산 사하구' },
+  { poiId: 'p2', name: '광안리 해변', region: '부산 수영구' },
+  { poiId: 'p3', name: '해운대', region: '부산 해운대구' },
+  { poiId: 'p4', name: '전포 카페거리', region: '부산 부산진구' },
+  { poiId: 'p5', name: '해동용궁사', region: '부산 기장군' },
+  { poiId: 'p6', name: '자갈치 시장', region: '부산 중구' },
+];
+
 const EXPLORE_LANDING_BASE = {
   heading: {
     title: '무엇을 둘러볼까요?',
@@ -3815,10 +3825,11 @@ export const PREVIEW_STATES: PreviewState[] = [
       ),
   },
   {
-    // TRIP-709 — d05 목적지 상세 default(Figma 2176:2336). 세그 all 활성·숙소 담김 1건
-    // (savedKeys 첫 카드)·FAB 2단(하트+＋)이 한 화면에 보이게. 화면이 자체 BottomTabBar 를
-    // 그리므로 withShellTabBar 로 감싸지 않는다(props-only 직접 렌더). 세그 활성 흰칩·하트 분홍·
-    // FAB 위치·검색바 › 는 jest 사각이라 이 키가 6-b 육안 대조 자리.
+    // TRIP-709 — d05 목적지 상세 default. TRIP-1048 로 세그먼트가 사라지고 장소가 2열 격자가
+    // 됐다(Figma 4663:2540) — 장소는 Figma 와 같은 6장(이 키 전용 배열, d01 공용 픽스처 불변).
+    // 숙소 담김 1건(savedKeys 첫 카드)·FAB 2단(하트+＋)이 한 화면에 보이게. 화면이 자체
+    // BottomTabBar 를 그리므로 withShellTabBar 로 감싸지 않는다(props-only 직접 렌더). 격자 칸 폭·
+    // 간격·하트 분홍·FAB 위치·검색바 › 는 jest 사각이라 이 키가 6-b 육안 대조 자리.
     key: 'destination-detail-default',
     band: 'd',
     label: 'd05 · 통합 검색 결과 default',
@@ -3841,7 +3852,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         }}
         placeLane={{
           error: false,
-          cards: EXPLORE_LANDING_PLACE_LANE.cards,
+          cards: DESTINATION_DETAIL_PLACES,
           onRetry: noop,
           onSeeAll: noop,
           onPressCard: noop,
