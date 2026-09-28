@@ -3,6 +3,7 @@ package com.trippilot.itinerarygeneration.adapter.`in`.web
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.SlotCandidate
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesOutput
+import com.trippilot.placedata.api.PoiSurfaceView
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import java.time.Instant
@@ -38,5 +39,26 @@ class SlotCandidatesResponseTest : StringSpec({
         r.radiusMUsed shouldBe 3_000
         r.candidates.single().distanceRange shouldBe "약 0.3km"
         r.candidates.single().poiId shouldBe o.candidates.single().poiId
+    }
+
+    "표면이 있으면 이름·카테고리·태그·사진이 그대로 실린다(TRIP-851 · TRIP-1005)" {
+        val o = output(degraded = false)
+        val poiId = o.candidates.single().poiId
+        val surface = PoiSurfaceView(poiId, "희와제과", 35.1, 129.0, "카페", "CAFE", "부산", "https://img/1.jpg", listOf("빵", "디저트"))
+        val c = SlotCandidatesResponse.from(o, mapOf(poiId to surface)).candidates.single()
+
+        c.nameKo shouldBe "희와제과"
+        c.category shouldBe "카페"
+        c.tags shouldBe listOf("빵", "디저트")
+        c.imageUrl shouldBe "https://img/1.jpg"
+    }
+
+    "표면이 없으면 전부 null·빈 배열 — 이름을 지어내지 않는다" {
+        val c = SlotCandidatesResponse.from(output(degraded = false)).candidates.single()
+
+        c.nameKo shouldBe null
+        c.category shouldBe null
+        c.tags shouldBe emptyList<String>()
+        c.imageUrl shouldBe null
     }
 })
