@@ -7,7 +7,12 @@ jest.mock('@/shared/api/generated/notification/notification', () => ({
 
 import type { ReactElement } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 
 import { useGetMeNotifications } from '@/shared/api/generated/notification/notification';
 import type { Notification } from '@/shared/api/generated/schemas';
@@ -246,6 +251,30 @@ describe('조립 · 메타 = 라벨 · 상대시각', () => {
     mockItems([PLAN_B]);
     renderPage();
     expect(screen.getByText('Plan-B · 10분 전')).toBeOnTheScreen();
+  });
+});
+
+describe('조립 · 본문 = 서버 body 그대로 (TRIP-1075 AC-1 · BR-U6-03)', () => {
+  it('각 행의 notification-inbox-body 가 서버 body 와 글자 그대로 같다(비우기·자르기 없음)', () => {
+    // 준비 — 본문 있는 두 픽스처 + 20자를 넘는 일정 본문(자르기 회귀용).
+    const reminder = notification({
+      notificationId: 'd1',
+      body: '다음 일정: 경복궁 · 14:30 · 840m',
+    });
+    mockItems([PLAN_B, REFLECTION, reminder]);
+
+    // 실행.
+    renderPage();
+
+    // 단언 — 행 순서대로 서버 body 완전일치(항등 normalizer 로 공백 가공도 금지).
+    const asIs = { normalizer: (text: string) => text };
+    const rows = screen.getAllByTestId('notification-inbox-row');
+    expect(rows).toHaveLength(3);
+    [PLAN_B, REFLECTION, reminder].forEach((item, index) => {
+      expect(
+        within(rows[index]).getByTestId('notification-inbox-body')
+      ).toHaveTextContent(item.body, asIs);
+    });
   });
 });
 
