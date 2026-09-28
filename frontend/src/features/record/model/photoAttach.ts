@@ -13,7 +13,7 @@ export type { PhotoAssetMeta };
  *    있어도 자산에 좌표가 없으면 키를 만들지 않는다.
  *
  * ★ 순수 함수 — 동의를 직접 안 읽고 **plain boolean 을 인자로** 받는다(DI). 그래서 expo 타입/모듈을
- *   import 하지 않는다(하면 tsc/jest 가 깨진다). 배선 훅이 `useLocationConsent().consentOn` 을 넘긴다.
+ *   import 하지 않는다. 배선은 `pickPhotoForVisit` 이 읽은 서버 `gpsRecordingOptIn` 을 넘긴다(TRIP-1070).
  */
 export function photoAttach(
   asset: PhotoAssetMeta,

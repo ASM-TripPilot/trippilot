@@ -195,6 +195,9 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `RegionPickerTab` | `features/explore/model/regionPickerPurpose`(TRIP-1015 신규) | `'home'` 하나뿐인 좁은 유니온 타입. `regionPickerHref(purpose, opts?: { tab: RegionPickerTab })`가 opts를 받으면 결과 화면에 진입 탭을 실어 보낸다(홈 검색 → 지역 결과에서 탭바가 "탐색"으로 잘못 보이던 것의 배선). tab 없는 호출은 기존 문자열 그대로(완전 일치 유지) |
 | `seoulTime` · `seoulInstant` | `shared/date/seoulDate`(TRIP-1069 신규, 기존 `seoulDate`·`KST_OFFSET_MS` 옆) | 순간↔서울(KST, 서머타임 없음) 벽시계 상호 변환 — `seoulTime(at)`은 UTC+9h 뒤 UTC 게터(`toISOString`)로 읽어 `HH:mm`(기기 시간대 무관, `getHours()` 미사용), `seoulInstant(day, 'HH:mm')`은 역방향(−9h) + 항상 `Z`로 끝남. **주의(03b 대조)**: `features/planb/model/replanFromInstant.ts`에 같은 `KST_OFFSET_MS` 상수가 별도로 있다(순간→KST `{date,hour}`, `features`라 `shared`가 재사용 불가) — 통합은 planb 테스트 경계 때문에 별도 사이클 후보(문제로그 참고) |
 | `orderByArrival` | `features/record/model/visitOrder`(TRIP-1069 신규) | 방문 목록을 도착 에포크(`Date.parse`) 오름차순 정렬(사본 반환, 도착 없으면 `Infinity`로 끝) — 사전식 문자열 비교가 아니라 숫자 비교라 `.500Z` vs `Z` 포맷 혼재에도 안 뒤집힌다 |
+| `getInstallId` | `shared/storage/installId`(TRIP-1070 신규) | 기기 설치 식별자 — SecureStore에 있으면 그 값, 없으면 `randomUUID()`로 만들어 저장. 동시 최초 호출에도 id 하나만 만들도록 진행 중 Promise를 메모이즈 |
+| `pickPhotoAsset` · `resolvePhotoUri` | `shared/photo`(TRIP-1070 실장) | 두 네이티브 모듈(`expo-image-picker`·`expo-media-library`)의 유일한 입구(`recordPhotoBinaryGuard.test.ts` census로 잠김 — 다른 파일이 직접 import하면 red). `pickPhotoAsset`은 판별 유니온 `PhotoPickResult`(picked·canceled·denied·no-asset-id·failed)로 접는다. `resolvePhotoUri`는 권한 재요청 없이 로컬 uri만 |
+| `pickPhotoForVisit` | `features/record/model/pickPhotoForVisit`(TRIP-1070 신규) | `pickPhotoAsset()`을 부르고 picked가 아니면 문구표로 `{notice}`, picked면 그때 위치 동의(`gpsRecordingOptIn`)를 1회 조회해 좌표 포함 여부를 정함. 사진 고르기 흐름을 다시 만들기 전에 이걸 먼저 본다 |
 
 > ⚠️ **재사용 API 의 위젯 행(`widgets/` 위치 행 전부)은 "화면·컨테이너 제외" 규칙의 예외다** — `widgets/` 층은 여러 화면이 공유하는 조립 단위를 두는 자리라 재구현 방지 색인에 싣는 것이 오히려 목적에 맞는다(TRIP-805).
 

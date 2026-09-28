@@ -24,16 +24,14 @@ import {
  *  - done     = 이름 › + 우측 계획 시각 "09:30" + "방문" / 사진 N장 / 후기. 사진·후기가 없으면 그 칸을
  *               통째로 안 그린다(G6 — 실앱은 조회 계약이 없어 늘 없다).
  *  - active   = 상태줄 "13:00 도착 · 지금 관람 중"(D4 고정) + [방문 완료]·[사진]·[메모].
- *               [사진]·[메모]는 `onPressSoon` 만 부른다 — "준비 중" 힌트의 열림 상태는 부모가 쥔다(BR-U4-38).
- *               `onPressSoon` 미주입이면 [사진]·[메모]·힌트를 그리지 않는다(TRIP-939 — 심사 2.1).
+ *               [사진]은 `onPressPhoto`, [메모]는 `onPressMemo` 를 부른다(TRIP-1070). 받지 않은 버튼은
+ *               그리지 않는다(TRIP-939 — 심사 2.1). 사진 안내 한 줄(`photoNotice`)의 상태는 부모가 쥔다.
  *  - upcoming = "예정" 알약(트리거 영향이면 `badgeLabel` 분홍 배지, TRIP-748) + 상태줄 "15:00 도착 예정 · {영업시간}"
  *               (한 줄 말줄임, TRIP-1021) + 누를 수 없는 아이콘 3개. `onPressArrive` 를 받으면 같은 줄 오른쪽에
  *               수동 [✓ 도착](TRIP-1021 — 자동 도착 TRIP-1018 보류 중 유일한 도착 경로). 누가 받을지는 허브가 정한다.
  *
  * 시각은 서버 `startAt` 을 자를 뿐(BR-U4-34). 각 leaf 는 값 하나 — 시각과 "방문" 은 형제 leaf 다.
  */
-
-const SOON_HINT = '사진·메모는 준비 중이에요';
 
 // 그림자 색은 토큰이 없다 — SlotStopCard·DayChipOverlay 의 `#000000` 스타일 객체 관례.
 const DONE_SHADOW = {
@@ -62,10 +60,12 @@ export interface SlotProgressCardProps {
   memo?: string | null;
   /** active [방문 완료]. */
   onPressComplete?: () => void;
-  /** active [사진]·[메모] — 카드는 부르기만 한다(BR-U4-38). */
-  onPressSoon?: () => void;
-  /** "준비 중" 힌트 표시 여부 — 상태는 부모가 가진다. */
-  soonHintVisible?: boolean;
+  /** active [사진](TRIP-1070). 미주입이면 버튼을 그리지 않는다. */
+  onPressPhoto?: () => void;
+  /** active [메모](TRIP-1070). 미주입이면 버튼을 그리지 않는다. */
+  onPressMemo?: () => void;
+  /** active 사진 안내 한 줄(권한 거부·저장 실패 등) — 상태는 부모가 가진다. 비면 안 그린다. */
+  photoNotice?: string | null;
   /** upcoming 전용(TRIP-748) — 주면 "예정" 대신 이 글자를 분홍 배지로(트리거 영향 카드). */
   badgeLabel?: string;
   /** TRIP-987 — 이름·'›' 진입(i10). 미주입이면 이름은 누를 수 없는 글자이고 '›' 도 없다(TRIP-939). */
@@ -81,8 +81,9 @@ export function SlotProgressCard({
   photos = [],
   memo,
   onPressComplete,
-  onPressSoon,
-  soonHintVisible,
+  onPressPhoto,
+  onPressMemo,
+  photoNotice,
   badgeLabel,
   onPressName,
   onPressArrive,
@@ -219,39 +220,39 @@ export function SlotProgressCard({
               방문 완료
             </Text>
           </Pressable>
-          {onPressSoon ? (
-            <>
-              <Pressable
-                testID="execution-arrive-photo"
-                accessibilityRole="button"
-                onPress={onPressSoon}
-                className="flex-row items-center gap-[5px] rounded-[10px] border border-hairline-strong bg-canvas py-[10px] pl-md pr-[13px]"
-              >
-                <PhotoGlyph size={16} />
-                <Text className="font-noto-bold text-caption font-bold text-ink">
-                  사진
-                </Text>
-              </Pressable>
-              <Pressable
-                testID="execution-arrive-memo"
-                accessibilityRole="button"
-                onPress={onPressSoon}
-                className="flex-row items-center gap-[5px] rounded-[10px] border border-hairline-strong bg-canvas py-[10px] pl-md pr-[13px]"
-              >
-                <MemoGlyph size={16} />
-                <Text className="font-noto-bold text-caption font-bold text-ink">
-                  메모
-                </Text>
-              </Pressable>
-            </>
+          {onPressPhoto ? (
+            <Pressable
+              testID="execution-arrive-photo"
+              accessibilityRole="button"
+              onPress={onPressPhoto}
+              className="flex-row items-center gap-[5px] rounded-[10px] border border-hairline-strong bg-canvas py-[10px] pl-md pr-[13px]"
+            >
+              <PhotoGlyph size={16} />
+              <Text className="font-noto-bold text-caption font-bold text-ink">
+                사진
+              </Text>
+            </Pressable>
+          ) : null}
+          {onPressMemo ? (
+            <Pressable
+              testID="execution-arrive-memo"
+              accessibilityRole="button"
+              onPress={onPressMemo}
+              className="flex-row items-center gap-[5px] rounded-[10px] border border-hairline-strong bg-canvas py-[10px] pl-md pr-[13px]"
+            >
+              <MemoGlyph size={16} />
+              <Text className="font-noto-bold text-caption font-bold text-ink">
+                메모
+              </Text>
+            </Pressable>
           ) : null}
         </View>
-        {onPressSoon && soonHintVisible ? (
+        {photoNotice ? (
           <Text
-            testID="execution-arrive-soon-hint"
+            testID="execution-arrive-photo-notice"
             className="font-noto text-caption text-muted"
           >
-            {SOON_HINT}
+            {photoNotice}
           </Text>
         ) : null}
       </View>

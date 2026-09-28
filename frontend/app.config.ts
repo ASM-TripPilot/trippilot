@@ -15,6 +15,10 @@ const naverUrlScheme = process.env.EXPO_PUBLIC_NAVER_URL_SCHEME ?? '';
 // 표면으로 드러난다(INV-4, S1 계승).
 const naverMapClientId = process.env.EXPO_PUBLIC_NAVER_MAP_CLIENT_ID ?? '';
 
+// TRIP-1070 — 사진 앨범 권한 문구(expo-image-picker·expo-media-library 공용).
+const PHOTOS_PERMISSION =
+  'TripPilot가 방문한 곳의 사진을 기록에 보여 주기 위해 사진 보관함에 접근합니다.';
+
 const config: ExpoConfig = {
   name: 'TripPilot',
   slug: 'trippilot',
@@ -74,18 +78,27 @@ const config: ExpoConfig = {
         locationAlwaysAndWhenInUsePermission: false,
       },
     ],
-    // TRIP-1071 공유 카드 앨범 저장 — 추가 전용 문구만 둔다. 읽기 문구는 false(불리언)로 지운다(쓰지 않음,
-    // 앱은 requestPermissionsAsync(true) 로 추가 권한만 요청). granularPermissions [] 는 READ_MEDIA_IMAGES·
-    // VIDEO·AUDIO 선언만 뺀다 — READ_MEDIA_VISUAL_USER_SELECTED·READ/WRITE_EXTERNAL_STORAGE 는 패키지가
-    // 옵션과 무관하게 선언한다(Android 출시 시 Play 사진·동영상 권한 신고 대상인지 확인 필요).
-    // 사진 첨부(앨범 읽기)가 들어오면 photosPermission·granularPermissions 를 되돌리고 재빌드해야 한다.
+    // TRIP-1070 — 사진 첨부는 앨범 읽기. 두 플러그인이 같은 Info.plist 키(NSPhotoLibraryUsageDescription)를
+    // 쓰므로 문구를 같게 둔다(다르면 나중 것이 이긴다). 카메라·마이크·Android 사진 위치는 끈다.
+    [
+      'expo-image-picker',
+      {
+        photosPermission: PHOTOS_PERMISSION,
+        cameraPermission: false,
+        microphonePermission: false,
+      },
+    ],
+    // TRIP-1071 공유 카드 앨범 저장(추가 전용) + TRIP-1070 앨범 읽기 — 한 플러그인에 둘 다 둔다.
+    // granularPermissions ['photo'] 는 READ_MEDIA_VIDEO·AUDIO 선언만 뺀다. READ_MEDIA_VISUAL_USER_SELECTED·
+    // READ/WRITE_EXTERNAL_STORAGE 는 패키지가 옵션과 무관하게 선언한다(Android 출시 시 Play 사진 권한 신고 확인).
     [
       'expo-media-library',
       {
+        photosPermission: PHOTOS_PERMISSION,
         savePhotosPermission:
           'TripPilot가 여행 공유 카드를 사진 앨범에 저장하기 위해 사진 추가 권한을 사용합니다.',
-        photosPermission: false,
-        granularPermissions: [],
+        granularPermissions: ['photo'],
+        isAccessMediaLocationEnabled: false,
       },
     ],
     // 튜플로 줘야 한다 — 문자열 단독이면 레거시 config.splash 경로로 빠진다.

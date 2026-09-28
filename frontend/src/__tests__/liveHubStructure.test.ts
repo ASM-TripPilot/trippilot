@@ -277,3 +277,37 @@ describe('🔴 H6 · TRIP-748 AC-6·AC-7 — 배너·억제 훅이 사라졌고 
     expect(offenders).toEqual([]);
   });
 });
+
+// ── TRIP-1070 · AC-1 · F9 — "준비 중" 경로가 소스에서 사라지고 사진·메모 콜백 두 개로 대체된다 ──────────
+const SOON_SYMBOLS =
+  /\bonPressSoon\b|\bsoonHintVisible\b|\bSOON_HINT\b|execution-arrive-soon-hint/;
+const SLOT_PROGRESS_CARD_REL =
+  'entities/itinerary-slot/ui/SlotProgressCard.tsx';
+
+describe('🔴 H7 · TRIP-1070 AC-1 — onPressSoon·soonHintVisible·SOON_HINT·soon-hint testID 가 비테스트 src 에 0건이다', () => {
+  it('자가검사(주석은 걷힘) + 잔존 0 + 카드에 onPressPhoto·onPressMemo 존재', () => {
+    // 자가검사 — 주석 속 이름은 걷히고, 코드 속 이름은 잡힌다.
+    expect(SOON_SYMBOLS.test(stripComments('// onPressSoon 폐기'))).toBe(false);
+    expect(SOON_SYMBOLS.test('const a = { onPressSoon };')).toBe(true);
+
+    // 모집단 — 테스트 파일은 "없다" 단언에 testID 문자열을 쓰므로 뺀다.
+    const files = listAllSources(ROOT).filter(
+      (full) => !/\.test\.tsx?$/.test(full)
+    );
+    expect(files.length).toBeGreaterThan(100);
+
+    const offenders = files
+      .filter((full) =>
+        SOON_SYMBOLS.test(stripComments(fs.readFileSync(full, 'utf8')))
+      )
+      .map(relOf);
+    expect(offenders).toEqual([]);
+
+    // 긍정 짝 — 카드가 새 두 콜백을 받는다.
+    const card = stripComments(
+      fs.readFileSync(path.join(ROOT, SLOT_PROGRESS_CARD_REL), 'utf8')
+    );
+    expect(card).toMatch(/\bonPressPhoto\b/);
+    expect(card).toMatch(/\bonPressMemo\b/);
+  });
+});

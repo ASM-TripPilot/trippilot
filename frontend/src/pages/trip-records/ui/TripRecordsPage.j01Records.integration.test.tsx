@@ -28,7 +28,8 @@ import { TripRecordsPage } from './TripRecordsPage';
  *  - 저장하면 PATCH 본문엔 바꾼 필드 + expectedUpdatedAt 뿐이고, 시각은 "원본 서울 날짜 + 고른 서울
  *    HH:mm" 의 UTC 순간이다(AC-6·AC-7). 충돌·실패는 화면에 알린다(AC-9, INV-4).
  *  - 도착만 한 카드에서도 메모가 실제로 저장되고, 눌러도 반응 없는 +·메모 글자는 어디에도 없다
- *    (AC-12·AC-13·AC-15). 건너뛴 카드는 라벨만 있다(AC-14).
+ *    (AC-12·AC-13·AC-15). 건너뛴 카드는 라벨만 있다(AC-14). TRIP-1070 — 도착한 카드의 사진 추가 `+` 는
+ *    배선된 버튼이라 폴백 집계에서 뺀다(도착 카드에만 있고 건너뛴 카드엔 없다).
  *  - 건너뛰기는 확인을 거친다 — 확정 전 요청 0회, 실패는 다이얼로그 안에 알린다(AC-16~18).
  *  - 시트·다이얼로그 어디에도 체류 시간이 없다(AC-25 · INV-3).
  *
@@ -576,18 +577,31 @@ describe('AC-12·AC-13·AC-15 · 메모 실배선 + 무반응 폴백 0', () => {
       screen.getByTestId(`record-trip-plan-row-${DAY}#p4`)
     ).toBeOnTheScreen();
     expect(screen.queryByText('메모를 남겨보세요')).toBeNull();
-    // TRIP-1072 — 오늘 탭엔 [방문 추가] 버튼이 같은 ＋ 글리프를 그린다(Figma 1557:1799). 그 버튼 밖의 ＋ 만 센다.
-    const addButton = screen.getByTestId('record-trip-spontaneous-add');
-    const plusOutsideAdd = screen
+    // TRIP-1072 — 오늘 탭엔 [방문 추가] 버튼이 같은 ＋ 글리프를 그린다(Figma 1557:1799).
+    // TRIP-1070 — 도착 카드의 사진 추가 타일(record-trip-photo-add)도 배선된 ＋ 다. 두 버튼 밖의 ＋ 만 센다.
+    const wiredPlusOwners = [
+      screen.getByTestId('record-trip-spontaneous-add'),
+      ...screen.getAllByTestId('record-trip-photo-add'),
+    ];
+    const plusOutsideWired = screen
       .UNSAFE_queryAllByType(PlusGlyph)
       .filter((glyph) => {
         for (let node = glyph.parent; node; node = node.parent) {
-          if (node === addButton) return false;
+          if (wiredPlusOwners.includes(node)) return false;
         }
         return true;
       });
-    expect(plusOutsideAdd).toHaveLength(0);
-    expect(screen.queryByTestId('record-trip-photo-add')).toBeNull();
+    expect(plusOutsideWired).toHaveLength(0);
+    // 사진 추가 타일은 도착한 카드(완료·관람 중)에만 있고, 건너뛴 카드엔 없다.
+    expect(
+      within(cardOf('v-done')).getByTestId('record-trip-photo-add')
+    ).toBeOnTheScreen();
+    expect(
+      within(cardOf('v-in')).getByTestId('record-trip-photo-add')
+    ).toBeOnTheScreen();
+    expect(
+      within(cardOf('v-sk')).queryByTestId('record-trip-photo-add')
+    ).toBeNull();
   });
 });
 

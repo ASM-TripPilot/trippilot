@@ -611,6 +611,7 @@
 - `src/features/record/model/conflict.ts`  →  ConflictChoice · ConflictSelection · ConflictRow · ConflictVisitVM · isVisitConflict
 - `src/features/record/model/photoAttach.ts`  →  photoAttach
 - `src/features/record/model/photoAvailability.ts`  →  PhotoAvailability · photoAvailability
+- `src/features/record/model/pickPhotoForVisit.ts`  →  PhotoPickOutcome · pickPhotoForVisit
 - `src/features/record/model/recordsCalendar.ts`  →  markedDaysOfMonth · buildPastTripCards · canOpenTripRecords · recordsTripIdForDate · formatTripDateRange · nightsLabel
 - `src/features/record/model/spontaneousNames.ts`  →  rememberSpontaneousName · useSpontaneousNames
 - `src/features/record/model/stayAttribution.ts`  →  AttributedStay · DayAttribution · deriveStayAttribution
@@ -1376,7 +1377,7 @@
 - `src/shared/map/index.ts`  →  MapView · CenterPinPicker
 
 ## src/shared/photo/
-- `src/shared/photo/index.ts`  →  PhotoAssetMeta · PhotoPickResult · pickPhotoAsset
+- `src/shared/photo/index.ts`  →  PhotoAssetMeta · PhotoPickResult · pickPhotoAsset · resolvePhotoUri
 
 ## src/shared/pref/
 - `src/shared/pref/preferenceSelection.ts`  →  toggleMulti · toggleSingle
@@ -1393,6 +1394,7 @@
 ## src/shared/storage/
 - `src/shared/storage/idSet.ts`  →  readIdSet · writeIdSet
 - `src/shared/storage/index.ts`  →  TokenBundle · saveTokens · getTokens · clearTokens · hasStoredToken
+- `src/shared/storage/installId.ts`  →  getInstallId
 
 ## src/shared/ui/
 - `src/shared/ui/BottomTabBar.tsx`  →  ShellTabKey · shellTabHref · BottomTabBarProps · BottomTabBar
@@ -1457,4 +1459,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 1013개 파일
+합계 1015개 파일

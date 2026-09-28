@@ -18,13 +18,14 @@ import { SlotProgressCard } from './SlotProgressCard';
  *  - done  = 이름 › + 우측 "09:30"(계획 startAt, BR-U4-34) + "방문" / 사진 N장 / 후기 박스.
  *            사진·후기가 없으면 그 칸을 통째로 안 그린다(G6 — 실앱은 계약 공백이라 늘 없음).
  *  - active = 상태줄 "13:00 도착 · 지금 관람 중"(D4 고정) + [방문 완료]·[사진]·[메모].
- *            "진행 중" 배지·영업시간 줄은 없다. [사진]·[메모]는 오류 없이 "준비 중"(BR-U4-38).
+ *            "진행 중" 배지·영업시간 줄은 없다. [사진]·[메모]는 각자 제 콜백만 부른다(TRIP-1070 —
+ *            "준비 중" 힌트 폐기). 콜백을 안 받은 버튼은 그리지 않는다(TRIP-939).
  *  - upcoming = "예정" 알약 + 상태줄 "15:00 도착 예정 · 11:00–22:00 영업" 한 줄 + 누를 수 없는 아이콘 3개.
  *            거리 줄은 없다. 수동 [도착]은 `onPressArrive` 를 받을 때만 그린다(TRIP-1021 — TRIP-746 의
  *            "도착 자동 원칙" 삭제를 되돌림. 자동 도착(TRIP-1018)이 보류라 수동이 유일한 도착 경로다).
  *
- * "준비 중" 힌트의 열림 상태는 카드가 갖지 않는다 — entities ui 는 useState 금지
- * (`entitiesItinerarySlotStructure` G2). 카드는 `onPressSoon` 을 부르고 `soonHintVisible` 로 그린다.
+ * 사진 안내 문구(`photoNotice`)의 표시 여부는 카드가 갖지 않는다 — entities ui 는 useState 금지
+ * (`entitiesItinerarySlotStructure` G2). 부모가 문구를 주면 버튼 줄 아래에 그대로 그린다.
  *
  * 각 leaf 는 값 하나 — `toHaveTextContent(문자열)` 은 trim·공백 정규화 뒤 **완전 일치**다(02a ★3).
  * 3동작: 준비(슬롯·상태·사진/후기) → 실행(렌더·press) → 단언(leaf 문구·존재/부재·콜백 횟수).
@@ -161,43 +162,40 @@ describe('SlotProgressCard · active (AC-4)', () => {
     expect(onPressComplete).toHaveBeenCalledTimes(1);
   });
 
-  it('C6 [사진]·[메모]는 오류 없이 onPressSoon 만 부르고, soonHintVisible 이면 "준비 중" 힌트를 그린다 (BR-U4-38)', () => {
+  it('C6 TRIP-1070 AC-1: [사진]은 onPressPhoto 만, [메모]는 onPressMemo 만 1회 부르고 "준비 중" 힌트는 없다', () => {
+    // 준비 — 세 버튼에 서로 다른 콜백.
     const onPressComplete = jest.fn();
-    const onPressSoon = jest.fn();
-    const { rerender } = render(
+    const onPressPhoto = jest.fn();
+    const onPressMemo = jest.fn();
+    render(
       <SlotProgressCard
         slot={activeSlot}
         date={DATE}
         state="active"
         onPressComplete={onPressComplete}
-        onPressSoon={onPressSoon}
+        onPressPhoto={onPressPhoto}
+        onPressMemo={onPressMemo}
       />
     );
 
-    // 기본 프레임엔 힌트가 없다(Figma 와 충돌 없음).
-    expect(screen.queryByTestId('execution-arrive-soon-hint')).toBeNull();
-
+    // 실행·단언 — [사진]
     fireEvent.press(screen.getByTestId('execution-arrive-photo'));
-    fireEvent.press(screen.getByTestId('execution-arrive-memo'));
+    expect(onPressPhoto).toHaveBeenCalledTimes(1);
+    expect(onPressMemo).not.toHaveBeenCalled();
 
-    expect(onPressSoon).toHaveBeenCalledTimes(2);
+    // 실행·단언 — [메모]
+    fireEvent.press(screen.getByTestId('execution-arrive-memo'));
+    expect(onPressMemo).toHaveBeenCalledTimes(1);
+    expect(onPressPhoto).toHaveBeenCalledTimes(1);
     expect(onPressComplete).not.toHaveBeenCalled();
 
-    rerender(
-      <SlotProgressCard
-        slot={activeSlot}
-        date={DATE}
-        state="active"
-        onPressComplete={onPressComplete}
-        onPressSoon={onPressSoon}
-        soonHintVisible
-      />
-    );
-    expect(screen.getByTestId('execution-arrive-soon-hint')).toBeOnTheScreen();
+    // 부재 — 옛 "준비 중" 힌트는 어떤 경우에도 없다.
+    expect(screen.queryByTestId('execution-arrive-soon-hint')).toBeNull();
+    expect(screen.queryByText(/준비 중/)).toBeNull();
   });
 
-  it('C6b TRIP-939 AC-6: onPressSoon 미주입이면 [사진]·[메모]·"준비 중" 힌트가 없고 [방문 완료]만 남는다', () => {
-    // 준비·실행: 허브(LiveHubView)의 운영 모양 — 사진·메모 진입을 넘기지 않는다.
+  it('C6b TRIP-939 AC-6: 사진·메모 콜백을 안 받으면 [사진]·[메모]가 없고 [방문 완료]만 남는다', () => {
+    // 준비·실행: 사진·메모 진입을 넘기지 않은 모양.
     const onPressComplete = jest.fn();
     render(
       <SlotProgressCard
@@ -205,11 +203,10 @@ describe('SlotProgressCard · active (AC-4)', () => {
         date={DATE}
         state="active"
         onPressComplete={onPressComplete}
-        soonHintVisible
       />
     );
 
-    // 단언(부재): 눌러도 "준비 중"만 뜨던 두 버튼과 힌트가 없다(힌트 표시를 켜도).
+    // 단언(부재): 누를 곳 없는 버튼을 그리지 않는다.
     expect(screen.queryByTestId('execution-arrive-photo')).toBeNull();
     expect(screen.queryByTestId('execution-arrive-memo')).toBeNull();
     expect(screen.queryByTestId('execution-arrive-soon-hint')).toBeNull();
@@ -218,6 +215,38 @@ describe('SlotProgressCard · active (AC-4)', () => {
     // 실행·단언(짝): [방문 완료]는 그대로 동작한다.
     fireEvent.press(screen.getByTestId('execution-arrive-complete'));
     expect(onPressComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it('C6c TRIP-1070 F1: photoNotice 를 주면 그 문구 그대로 한 줄을 그리고, 안 주면 없다', () => {
+    // 준비·실행 — 문구 없음.
+    const { rerender } = render(
+      <SlotProgressCard
+        slot={activeSlot}
+        date={DATE}
+        state="active"
+        onPressPhoto={jest.fn()}
+        onPressMemo={jest.fn()}
+      />
+    );
+    // 단언(부재 앵커)
+    expect(screen.queryByTestId('execution-arrive-photo-notice')).toBeNull();
+
+    // 실행 — 부모가 문구를 준다.
+    rerender(
+      <SlotProgressCard
+        slot={activeSlot}
+        date={DATE}
+        state="active"
+        onPressPhoto={jest.fn()}
+        onPressMemo={jest.fn()}
+        photoNotice="사진을 기록하지 못했어요. 다시 시도해 주세요"
+      />
+    );
+
+    // 단언 — 완전 일치(toHaveTextContent 문자열 = 완전 일치, 02a ★13).
+    expect(
+      screen.getByTestId('execution-arrive-photo-notice')
+    ).toHaveTextContent('사진을 기록하지 못했어요. 다시 시도해 주세요');
   });
 });
 
@@ -302,14 +331,16 @@ describe('SlotProgressCard · upcoming (AC-5)', () => {
 
   it('C8 아이콘 3개는 비활성이고 눌러도 아무 콜백이 없다 · 거리 줄·[방문 완료]가 없고, onPressArrive 미주입이면 [도착]도 없다', () => {
     const onPressComplete = jest.fn();
-    const onPressSoon = jest.fn();
+    const onPressPhoto = jest.fn();
+    const onPressMemo = jest.fn();
     render(
       <SlotProgressCard
         slot={upcoming('11:00 - 22:00')}
         date={DATE}
         state="upcoming"
         onPressComplete={onPressComplete}
-        onPressSoon={onPressSoon}
+        onPressPhoto={onPressPhoto}
+        onPressMemo={onPressMemo}
       />
     );
 
@@ -320,7 +351,11 @@ describe('SlotProgressCard · upcoming (AC-5)', () => {
       fireEvent.press(icon);
     }
     expect(onPressComplete).not.toHaveBeenCalled();
-    expect(onPressSoon).not.toHaveBeenCalled();
+    expect(onPressPhoto).not.toHaveBeenCalled();
+    expect(onPressMemo).not.toHaveBeenCalled();
+    // TRIP-1070 — 사진·메모 진입은 관람 중 카드에만 선다(예정 카드는 콜백을 받아도 무시).
+    expect(screen.queryByTestId('execution-arrive-photo')).toBeNull();
+    expect(screen.queryByTestId('execution-arrive-memo')).toBeNull();
 
     // 부재 — distanceRange 를 줘도 거리 줄이 없다 · [도착]은 onPressArrive 를 안 넘기면 없다(TRIP-1021).
     // 옛 `execution-arrive-manual-*` 는 TRIP-746 에서 사라진 이름이라 영원히 null — 새 이름으로 재조준.

@@ -24,6 +24,7 @@ paths:
 | `model/conflict.test.ts` | base<server→true, ==→false, base>server→false |
 | `model/photoAttach.ts` | `photoAttach(asset, gpsConsent) → AddPhotoRequest` — 동의가 없거나 좌표가 없으면 `exifLat`/`exifLng` **키 자체를 안 만든다**(`undefined`로도 안 싣는다 — [[키 부재 vs 값 undefined]]). 동의는 boolean DI로 받는다 |
 | `model/photoAttach.test.ts` | PBT + 긍정 짝(consent=true→실림) |
+| `model/pickPhotoForVisit.ts` | `pickPhotoForVisit()`(TRIP-1070 신규) — `shared/photo`의 `pickPhotoAsset()`을 부르고 결과가 `picked`가 아니면 문구표(`PICK_NOTICE`)로 `{notice}`를 접는다(취소는 `null` — 무안내). `picked`면 **그때** `getMeLocationConsent()`를 1회 조회해 `gpsRecordingOptIn === true`일 때만 좌표 키를 살린다. 화면을 열 때가 아니라 고른 뒤 읽는 이유는 마운트 조회를 없애고 누른 순간의 최신 동의값을 쓰기 위함(02a §2-6) — "형제 통합 테스트가 red가 된다"는 초기 근거는 03b가 반증(이 리포 MSW `onUnhandledRequest:'error'`는 콘솔 에러만 찍고 테스트를 실패시키지 않는다) |
 | `model/photoAvailability.ts` | `photoAvailability(photo, currentDeviceId, assetOk) → 'available'\|'other-device'\|'unavailable'` — **deviceId가 assetOk를 이긴다**(BR-U5-15, 진리표가 순서를 잠근다) |
 | `model/photoAvailability.test.ts` | 진리표 4행(deviceId×assetOk) |
 | `model/useVisitAttachments.ts` | 생성 클라이언트 3함수(GET/POST photos·PUT memo)만 재사용(새 HTTP 0, `recordsStructure` G5). `addPhoto`는 `photoAttach` 경유 후 POST → 재조회(낙관 아님). `saveMemo`는 공백이면 PUT 0회 |
@@ -45,6 +46,7 @@ paths:
 | `ui/TripRecordsScreen.tsx` | 무상태 j01 화면 — appbar·일자 탭·지도 히어로(`MapView viewOnly`, 250px 블록)·카드 목록·즉석 추가. 지도 위 인터랙티브는 absolute 오버레이가 아니라 형제 노드로 둔다(repo-traps 지도 절). `itineraryMapSurfaceStructure`의 `LOCKED_CALLERS`에 등재([[가드의 사정거리 (opt-in 등재는 넓히되 기존 사각은 그대로다)]]). 귀속 헤더는 숙소 유무를 색이 아니라 상호배타 testID(`record-trip-attribution-stay`/`-date`)로 가른다. 카드는 `visitCheckId` key로 리마운트해 seed-once 메모 잔류를 막는다. 계획 행 '방문 체크' 버튼은 `onPressPlanCheck` 유무만으로 노출(TRIP-1069 D8 — `manualCheckin` 조건 제거, 위치 권한 있어도 오늘 탭이면 보임). 수동 모드 안내 캡션은 여전히 `manualCheckin`일 때만 |
 | `ui/PhotoThumbStrip.tsx` | 상태별 distinct testID(`record-photo-{available\|other-device\|unavailable}-{id}`). 실 `<Image>`는 available+uri일 때만 존재 — "깨진 썸네일 0"을 present/absent 짝으로 잠근다. `+` 타일 → `onPressAdd` |
 | `ui/PhotoThumbStrip.test.tsx` | 상태 present/absent 짝 + add + 다건 |
+| `ui/VisitRecordCardContainer.tsx` | j01 카드 컨테이너(TRIP-1070 신규) — 마운트 시 `getInstallId()`를 1회 조회(alive 플래그로 언마운트 후 setState 방지, 실패해도 캐치만 하고 안내 없음 — 칸이 조용히 0개가 된다, 03b 참고-2). 이 기기 사진만 `useQueries`로 `resolvePhotoUri`를 병렬 조회(`staleTime: Infinity`) — 사진 수만큼 훅을 따로 못 부르니 배열로 한 번에 묻는다. `installId===null`이거나 이 기기 사진의 uri가 아직 `undefined`(조회 미완)면 그 셀을 생략한다(로딩 중 깜빡임 방지 의도 — 지워도 테스트는 green, 03b 경고-1). `+` 누름 → `pickPhotoForVisit()` → notice면 안내 표시, picked면 `attachPhoto`(POST → 재조회) |
 | `ui/MemoInline.tsx` | `TextInput maxLength=2000`(서버 권위의 UX 사본 — `fireEvent.changeText`는 maxLength를 우회하므로 prop 값으로 잠금). 공백이면 무발화. ⚠️ **seed-once 파생 상태**(`useState(text ?? '')`) — 리스트에서 `key` 없이 재활용되면 다른 카드 메모가 잔류한다([[seed-once 파생 상태]]) |
 | `ui/MemoInline.test.tsx` | maxLength 잠금·공백 게이트·onSubmitEditing |
 | `__tests__/recordPhotoBinaryGuard.test.ts` | `src/__tests__/` 소재(`layer-test.md`) — INV-U5-03(사진 바이너리 서버 미전송)은 계약이 구조적으로 만족하고, 이 가드는 새 업로드 경로를 짓지 않게 소스 그래프를 잠근다([[계약이 구조적으로 막는다]]) |

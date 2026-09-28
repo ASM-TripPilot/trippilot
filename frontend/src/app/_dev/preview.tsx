@@ -1931,6 +1931,9 @@ function renderLiveHubPreview(
       onPressAiReplan={noop}
       onPressManualEdit={noop}
       onPressComplete={noop}
+      // TRIP-1070 — 관람 중 카드 [사진]·[메모](Figma 4125:4034).
+      onPressPhoto={noop}
+      onPressMemo={noop}
       onPressSlotName={noop}
       {...extra}
     />

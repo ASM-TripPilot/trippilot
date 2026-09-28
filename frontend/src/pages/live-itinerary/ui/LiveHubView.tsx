@@ -41,8 +41,8 @@ import { SlotProgressCard } from '@/entities/itinerary-slot/ui/SlotProgressCard'
  * 전면 지도(셸, 조작 가능) 위 좌상단 뒤로가기 + 일자 칩, 3스냅 시트(헤더 한 줄 + 레일 타임라인 +
  * 카드 3상태), 우하단 "일정 수정" 연필 FAB. 조회·판정·라우팅은 페이지(LiveItineraryPage) 몫이고,
  * 이 뷰가 가진 상태는 수정 알약 메뉴 열림(TRIP-747 — FAB 는 제자리 토글, 이동은 알약이 한다),
- * 트리거 알약 로컬 숨김(TRIP-748 D3) 둘이다. [사진]·[메모]는 카드에 `onPressSoon` 을 안 넘겨 그리지
- * 않는다(TRIP-939 — 기능 개통 시 넘기면 되살아난다).
+ * 트리거 알약 로컬 숨김(TRIP-748 D3) 둘이다. [사진]·[메모]는 페이지가 콜백을 줄 때만 관람 중 카드에
+ * 넘긴다(TRIP-1070 · 미주입이면 그리지 않는다 — TRIP-939).
  *
  * 트리거 알약 숨김은 **명시 열거 경로**로만 부른다 — 시트 본문 스크롤 시작 · 시트 스냅 이동(마운트
  * `-1→n` 제외) · 지도 탭 · 일자 칩/FAB/[방문 완료]. 루트 터치 캡처·투명 백드롭은 쓰지
@@ -119,6 +119,11 @@ export interface LiveHubViewProps {
   initialEditMenuOpen?: boolean;
   /** active 카드 [방문 완료]. */
   onPressComplete?: () => void;
+  /** active 카드 [사진]·[메모](TRIP-1070). 미주입이면 그 버튼이 없다. */
+  onPressPhoto?: () => void;
+  onPressMemo?: () => void;
+  /** active 카드 사진 안내 한 줄 — 상태는 페이지가 가진다. */
+  photoNotice?: string | null;
   /** 트리거 알약(TRIP-748) — 지도 위 일자 칩 아래(셸 `mapCard`)에 그린다. */
   triggerChip?: ReactNode;
   /** 알약이 가리키는 트리거 id — 이 키를 숨겼으면 알약을 안 그리고, 키가 바뀌면 다시 보인다. */
@@ -184,6 +189,9 @@ export function LiveHubView({
   onPressManualEdit,
   initialEditMenuOpen = false,
   onPressComplete,
+  onPressPhoto,
+  onPressMemo,
+  photoNotice,
   triggerChip,
   triggerPillKey,
   slotBadgeLabel,
@@ -341,6 +349,9 @@ export function LiveHubView({
                           }
                         : undefined
                     }
+                    onPressPhoto={state === 'active' ? onPressPhoto : undefined}
+                    onPressMemo={state === 'active' ? onPressMemo : undefined}
+                    photoNotice={state === 'active' ? photoNotice : undefined}
                     badgeLabel={slotBadgeLabel?.(slotKey) ?? undefined}
                     onPressName={
                       onPressSlotName

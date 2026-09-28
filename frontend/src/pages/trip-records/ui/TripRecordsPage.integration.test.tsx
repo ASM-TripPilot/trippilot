@@ -21,9 +21,8 @@ import { TripRecordsPage } from './TripRecordsPage';
  *
  * 무엇을 보장하나(관측 가능한 결과만 — 화면의 새 prop 형태는 박제하지 않는다):
  *  - AC-1  일자 탭이 `Day${n}` 이 아니라 `${n}일차` 로 뜬다(formatDayLabel 배선).
- *  - AC-2  완료 방문 카드의 사진 자리에 PhotoThumbStrip 이 배선된다(`record-trip-photo-strip` = 실배선 신호 —
- *          TRIP-939 B-7 로 사진 선택이 없는 `+` 타일은 숨겨져 옛 신호 `record-trip-photo-add` 대신 스트립 루트).
- *  - TRIP-939 B-7(심사 2.1) — 사진 선택이 없는 `+` 타일을 그리지 않는다.
+ *  - AC-2  완료 방문 카드의 사진 자리에 PhotoThumbStrip 이 배선된다(`record-trip-photo-strip` = 실배선 신호).
+ *  - TRIP-1070 AC-4 — 사진 선택이 배선돼 `+` 타일(`record-trip-photo-add`)이 다시 선다(TRIP-939 B-7 숨김 해제).
  *  - TRIP-1072 AC-1~3 — [방문 추가]는 오늘 탭에만 서고, 누르면 장소 피커로 (tripId·활성 일자)를 실어 1회 간다.
  *  - AC-3  완료 방문 카드의 메모 자리에 MemoInline 이 배선된다(`record-trip-memo-input`).
  *  - AC-3(seed-once) 카드 전환 시 타이핑한 메모 초안이 다음 방문으로 새지 않는다(key={visitCheckId}).
@@ -193,7 +192,7 @@ describe('🔴 AC-1 · 일자 탭 = "${n}일차"(Day${n} 폐기)', () => {
 });
 
 describe('🔴 AC-2·AC-3 · 완료 방문 카드에 사진/메모 슬롯이 실배선된다', () => {
-  it('record-trip-photo-strip(PhotoThumbStrip)·record-trip-memo-input(MemoInline) 이 실데이터 렌더에서 뜨고, 사진 선택 없는 + 타일은 없다', async () => {
+  it('record-trip-photo-strip(PhotoThumbStrip)·record-trip-memo-input(MemoInline)·사진 추가 + 타일이 실데이터 렌더에서 뜬다', async () => {
     render(<TripRecordsPage tripId={TRIP_ID} />, { wrapper });
 
     // 준비/실행 — 활성일(첫날) 완료 방문(v-a) 카드가 쿼리 완료 후 그려진다.
@@ -202,8 +201,8 @@ describe('🔴 AC-2·AC-3 · 완료 방문 카드에 사진/메모 슬롯이 실
     // 단언 — 정적 스캐폴딩엔 없는 실배선 testID 가 present(= 실 컴포넌트가 슬롯에 들어감).
     expect(await screen.findByTestId('record-trip-photo-strip')).toBeTruthy();
     expect(screen.getByTestId('record-trip-memo-input')).toBeTruthy();
-    // TRIP-939 B-7 — 페이지가 사진 선택(onPressAdd)을 넘기지 않아 `+` 타일은 그리지 않는다.
-    expect(screen.queryByTestId('record-trip-photo-add')).toBeNull();
+    // TRIP-1070 AC-4 — 사진 선택이 배선돼 `+` 타일이 선다(누른 뒤 거동은 TripRecordsPage.photo 통합이 본다).
+    expect(screen.getByTestId('record-trip-photo-add')).toBeTruthy();
   });
 });
 
