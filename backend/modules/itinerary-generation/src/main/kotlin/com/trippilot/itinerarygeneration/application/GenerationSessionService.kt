@@ -2,6 +2,7 @@ package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ErrorCode
+import com.trippilot.itinerarygeneration.domain.GenerationStatus
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.GenerationSession
@@ -88,15 +89,31 @@ class GenerationSessionService(
         )
     }
 
-    /** day1 이 나왔다 — 화면이 1일차를 먼저 그린다(BR-U3-04). */
+    /**
+     * day1 이 나왔다 — 화면이 1일차를 먼저 그린다(BR-U3-04).
+     *
+     * **닫힌 세션의 뒤늦은 1일차는 도메인 예외(409)로 거절한다**(TRIP-1058 · QA #029·#046).
+     * 재생성 연타·취소 API 가 1차 AI 호출 중에 세션을 닫으면 결과가 뒤늦게 도착하는데,
+     * [completed]·[failed] 처럼 `takeIf` 로 조용히 넘기면 **낡은 1일차가 새 요청의 일정을 덮는다** —
+     * 이 호출은 일정 교체와 같은 트랜잭션 안에 있어, 예외로 던져야 그 교체까지 롤백된다.
+     * 종전에는 도메인 require 가 IllegalArgumentException 으로 터져 사용자에게 500 이 나갔다.
+     */
     @Transactional
     fun day1Ready(
         sessionId: UUID,
         itineraryId: UUID,
         isFallback: Boolean,
         candidatesLevel: String?,
-    ): GenerationSession? = sessions.findById(sessionId)?.let {
-        sessions.save(it.day1Ready(itineraryId, isFallback, candidatesLevel, clock.instant()))
+    ): GenerationSession? = sessions.findById(sessionId)?.let { session ->
+        if (session.status != GenerationStatus.RUNNING) {
+            // 진행 중인 새 세션을 함께 싣는다 — 화면이 폴링을 갈아탈 대상(없으면 비운다, QA #046).
+            throw ConflictDetected(
+                current = sessions.findRunningByTrip(session.tripId)?.sessionId,
+                errorCode = ErrorCode.GENERATION_SUPERSEDED,
+                message = "이 생성 요청은 취소되었거나 새 요청으로 대체되었어요.",
+            )
+        }
+        sessions.save(session.day1Ready(itineraryId, isFallback, candidatesLevel, clock.instant()))
     }
 
     /** 전 일자 완료. 취소된 세션이면 아무 일도 하지 않는다 — 사용자가 이미 그만두겠다고 했다. */
