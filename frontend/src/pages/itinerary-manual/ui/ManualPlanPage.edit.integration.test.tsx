@@ -364,8 +364,8 @@ describe('🟢 V3 · TRIP-590 AC1 · 5-b 경고-1 — 저장 응답의 서버 �
       PLAIN[2],
     ]);
     putHandler = () => HttpResponse.json(judged);
-    // TRIP-1038 B — 저장 뒤 확정이 따라 나가 그 응답이 캐시에 덮인다. 서버는 같은 일정을 확정하므로
-    // 같은 위반을 싣는다(기본 핸들러는 위반 없는 PLAIN 이라 배지가 지워진다 — 02a §6).
+    // TRIP-1095 — 위반 응답이면 확정 전 요약 게이트에서 멈춰 확정이 안 나간다(배지 출처는 PUT 캐시뿐).
+    // 아래 확정 핸들러는 게이트가 새어 확정이 나가더라도 배지를 지우지 않게 둔 옛 준비(TRIP-1038 B)다.
     confirmHandler = () =>
       HttpResponse.json({ ...judged, status: 'CONFIRMED' });
     renderPage();

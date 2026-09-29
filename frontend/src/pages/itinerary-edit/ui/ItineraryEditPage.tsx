@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
@@ -31,6 +31,7 @@ import {
   AlertCircleGlyph,
   InfoCircleGlyph,
 } from '@/features/itinerary/ui/ItineraryGlyphs';
+import { SaveConflictDialog } from '@/features/itinerary/ui/SaveConflictDialog';
 import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
 import {
   getGetTripsTripIdItineraryQueryKey,
@@ -42,6 +43,7 @@ import {
 import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
 import { isNotFound } from '@/shared/api/isNotFound';
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { showToast } from '@/shared/ui/Toast';
 import { EditorView } from '@/widgets/map-sheet-shell/ui/EditorView';
 
 /**
@@ -68,6 +70,12 @@ import { EditorView } from '@/widgets/map-sheet-shell/ui/EditorView';
  *     곳인지 담은 안내를 렌더한다(조용히 사라지지 않게, AC-6).
  *  6. **방문 완료 슬롯을 잠근다(AC-11)** — 그 날 방문 기록을 조회해 완료 poiId → slotKey 를 EditorView
  *     에 내리면 그 카드가 잠긴다(편집 어포던스 부재). pages 층 특권으로 execution feature 를 조합한다.
+ *  7. **저장 성공은 알리고 떠난다(TRIP-1089)** — 토스트(루트 ToastHost 라 떠나도 남는다) 뒤 이전 화면으로.
+ *     단 응답에 위반이 있으면 머문다 — 배지가 보여야 하는데(BR-U3-13 지속 가시화) 복귀지 라이브 허브는
+ *     위반을 안 그린다. 미지정 제외 안내는 떠나면 배너가 안 보이므로 성공 시 토스트 문구로 옮긴다.
+ *  8. **위반 응답은 요약 게이트가 먼저다(TRIP-1095)** — 그때는 PUT 성공 시점에 토스트 없이
+ *     `SaveConflictDialog` 만 띄운다. [그대로 저장] = 7 의 토스트 + 복귀, [고치기] = 7 의 토스트 + 머묾(잠금
+ *     해제). 게이트가 떠 있는 동안은 잠금을 유지한다.
  */
 
 // 저장 실패 인라인 문구(INV-4 침묵 금지). 409 두 사유는 재조회한 상태로 갈라 서로 다른 문구를 준다.
@@ -75,6 +83,7 @@ const SAVE_CONFIRMED_NOTE = '확정된 일정은 수정할 수 없어요';
 const SAVE_GENERATING_NOTE =
   '일정을 만드는 중이에요. 잠시 후 다시 시도해 주세요';
 const SAVE_ERROR_NOTE = '일정을 저장하지 못했어요. 잠시 후 다시 시도해 주세요';
+const SAVED_TOAST = '일정을 저장했어요';
 
 // 핀이 없을 때 지도 중심 — 서울 시청(LiveHubView 선례). {0,0} 은 기니만 바다(null-island)라 무의미하다.
 const FALLBACK_CENTER = { lat: 37.5665, lng: 126.978 };
@@ -124,6 +133,16 @@ export function ItineraryEditPage({
   // 어느 슬롯의 시각조정 시트가 열렸나(null = 닫힘). 시트 개폐는 뷰가 아니라 여기가 쥔다(순수 뷰 유지,
   // h07 선례) — 조건부 마운트라 닫히면 시트가 트리에서 사라진다.
   const [editingSlotKey, setEditingSlotKey] = useState<string | null>(null);
+  // 저장 연타 잠금 — isPending 은 다음 렌더에야 참이라 같은 틱 연타를 못 막는다(ManualPlanPage 선례).
+  // 떠나는 성공에선 풀지 않는다(늦게 온 두 번째 응답이 back 을 한 번 더 부르지 않게).
+  const inFlightRef = useRef(false);
+  // 위반 요약 게이트(null = 닫힘) — 버튼을 누른 뒤 띄울 토스트 문구를 함께 든다. gateRef 는 그 버튼 연타
+  // 잠금(같은 틱 두 누름은 state 로 못 막는다).
+  const [conflict, setConflict] = useState<{
+    count: number;
+    toast: string;
+  } | null>(null);
+  const gateRef = useRef(false);
 
   const itinerary = useGetTripsTripIdItinerary(tripId);
   // TError=unknown 으로 열어 onError 의 error 를 axios 판정(isAlreadyRegistered)에 그대로 태운다(h11 선례).
@@ -150,7 +169,21 @@ export function ItineraryEditPage({
     query: { enabled: activeDate !== '' },
   });
 
+  // 저장 뒤 복귀 — 히스토리가 없으면(딥링크) 얼굴별 목적지로 replace(h12 일정 탭 · i07 라이브 허브).
+  function leaveAfterSave(): void {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace({
+      pathname: inTrip ? '/trips/[tripId]/live' : '/trips/[tripId]/itinerary',
+      params: { tripId },
+    });
+  }
+
   function handleSave(): void {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setSaveError(null);
     // 미지정(startAt null) 슬롯은 buildEditItineraryRequest 가 요청에서 뺀다 — 몇 곳이 빠지는지 미리
     // 세어 안내한다(INV-4 침묵 금지). 스토어 상태 타입은 서버(non-nullable)지만 런타임엔 null 이 흐른다
@@ -158,11 +191,8 @@ export function ItineraryEditPage({
     const droppedCount = (days as EditorDaysItem[])
       .flatMap((day) => day.slots)
       .filter((slot) => slot.startAt === null).length;
-    setUnspecifiedNotice(
-      droppedCount > 0
-        ? `시간대를 정하지 않은 ${droppedCount}곳은 저장에서 빠졌어요`
-        : null
-    );
+    // 안내는 결과가 나온 뒤에 세운다 — 성공이면 토스트 문구로, 실패면 배너로(요청 중 과거형 배너 깜빡임 방지).
+    setUnspecifiedNotice(null);
 
     save.mutate(
       { tripId, data: buildEditItineraryRequest(days) },
@@ -174,8 +204,30 @@ export function ItineraryEditPage({
             getGetTripsTripIdItineraryQueryKey(tripId),
             data
           );
+          // 떠나면 배너가 안 보이므로 제외 안내는 토스트 문구로 옮긴다(결정 2). 실패 경로는 배너 그대로.
+          const toast =
+            droppedCount > 0
+              ? `${SAVED_TOAST} · 시간 미정 ${droppedCount}곳은 빠졌어요`
+              : SAVED_TOAST;
+          const violations = data.days
+            .flatMap((day) => day.slots)
+            .filter((slot) => slot.hasViolation).length;
+          if (violations > 0) {
+            // 토스트·이동은 게이트 버튼이 정한다 — 잠금도 그때까지 유지(떠 있는 동안 저장 재누름 차단).
+            gateRef.current = true;
+            setConflict({ count: violations, toast });
+            return;
+          }
+          showToast({ message: toast, testID: 'itinerary-edit-saved' });
+          leaveAfterSave();
         },
         onError: (error) => {
+          inFlightRef.current = false;
+          if (droppedCount > 0) {
+            setUnspecifiedNotice(
+              `시간대를 정하지 않은 ${droppedCount}곳은 저장에서 빠졌어요`
+            );
+          }
           // 409 외(5xx·네트워크)는 상태로 못 가르니 원인 단정 없는 안내만(INV-4 · 404·409만 태우면 5xx 소실).
           if (!isAlreadyRegistered(error)) {
             setSaveError(SAVE_ERROR_NOTE);
@@ -197,6 +249,20 @@ export function ItineraryEditPage({
         },
       }
     );
+  }
+
+  // [그대로 저장] = 토스트 + 복귀(잠금 유지) · [고치기] = 토스트 + 머묾(재-시드된 배지를 보고 고쳐 다시
+  // 저장할 수 있게 잠금을 푼다, 결정 1).
+  function closeConflict(leave: boolean): void {
+    if (!gateRef.current || conflict === null) return;
+    gateRef.current = false;
+    setConflict(null);
+    showToast({ message: conflict.toast, testID: 'itinerary-edit-saved' });
+    if (leave) {
+      leaveAfterSave();
+      return;
+    }
+    inFlightRef.current = false;
   }
 
   const state = resolvePlanState({
@@ -369,6 +435,15 @@ export function ItineraryEditPage({
           onCancel={() => setEditingSlotKey(null)}
           testIDPrefix="itinerary-edit-time"
           labels={{ start: '시작', end: '종료' }}
+        />
+      ) : null}
+
+      {conflict !== null ? (
+        <SaveConflictDialog
+          count={conflict.count}
+          confirmLabel="그대로 저장"
+          onConfirm={() => closeConflict(true)}
+          onBack={() => closeConflict(false)}
         />
       ) : null}
     </View>

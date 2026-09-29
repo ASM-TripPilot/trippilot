@@ -137,6 +137,7 @@ paths:
 | `src/__tests__/planbEditUnifyStructure.test.ts` | i07·h12 통합 가드 — 옛 planb-manual 라우트·위젯·testID·문구 전역 0 + INV-3 |
 | `src/features/planb/model/reorderKeepingLocked.test.ts` | 잠긴 칸 고정 재정렬 예시 + fast-check PBT(고정 index 불변·순열·상대 순서 보존). 이 규칙을 부르는 프로덕션 드래그 표면은 아직 없다 |
 | `src/pages/itinerary-edit/ui/ItineraryEditPage.inTrip.integration.test.tsx` | h12·i07 페이지 계약 — 완료 알약 press는 시트 안 엶 · 드래그가 `reorderKeepingLocked` 경유 · CONFIRMED 409는 정직 안내(라우터 4메서드 0회) |
+| `src/pages/itinerary-edit/ui/ItineraryEditPage.save-exit.integration.test.tsx` | 저장 성공 뒤 복귀 계약 — 위반 없음→back/replace 폴백 · 위반(h12·i07·다른 날만)→머묾+배지 · 연타 PUT 1회 · 토스트 완전일치. 편집 스위트 6파일의 expo-router 목은 `canGoBack`이 있어야 한다(없으면 onSuccess TypeError가 삼켜짐) |
 | `src/__tests__/planbSafeAreaStructure.test.ts` | `PlanbDiffPage` top-edge 래퍼(≥2 — 이중 래핑 회귀는 못 잡음)·`useSafeAreaInsets` 미사용(Provider 부재 크래시 회피) · i19 시트는 전면화면 래퍼를 들고 오지 않음 |
 | `src/__tests__/savedStaysStructure.test.ts` | e04 저장한 숙소 3층 책임·화면 순수성·raw hex |
 | `src/__tests__/myStaysStructure.test.ts` | `features/settings/ui` 재귀 INV-3 · raw hex(파일명 필터 — 새 화면은 필터에 추가해야 한다) · `MyStaysScreen` SafeArea |

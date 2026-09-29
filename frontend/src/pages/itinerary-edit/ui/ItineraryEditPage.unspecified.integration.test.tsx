@@ -19,6 +19,7 @@ import type {
   Trip,
 } from '@/shared/api/generated/schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { WithToastHost, resetToast } from '@/test-support/toastHarness';
 
 import { ItineraryEditPage } from './ItineraryEditPage';
 
@@ -29,6 +30,9 @@ import { ItineraryEditPage } from './ItineraryEditPage';
  * FE 로컬 상태(`EditorSlot.startAt: string | null`)로만 산다. 저장 시 `buildEditItineraryRequest` 가
  * `startAt === null` 슬롯을 요청에서 걸러(이미 커밋된 필터), 그렇게 **빠진 곳이 있으면 페이지가 인라인
  * 안내**(`itinerary-edit-unspecified-notice`)를 띄운다 — 조용히 지우지 않는다(INV-4).
+ *
+ * TRIP-1089 결정 2 — 저장이 **성공**하면 화면을 떠나므로 배너가 한 프레임도 안 보인다. 그래서 성공 시 안내는
+ * 저장 토스트(`itinerary-edit-saved`) 문구로 옮겨 가고, 배너는 실패 경로에만 남는다(실패 배너는 save-exit 스위트 S6).
  *
  * 왜 통합인가: 순수 필터(A2, buildEditItineraryRequest.unspecified.test)는 "제외" 까지만 잠근다.
  * "제외했으면 사용자에게 알린다" 는 페이지 렌더 책임이라(02a ★6·§9 이연 항목) 페이지를 관통해야 관측된다.
@@ -47,7 +51,12 @@ jest.mock('@/shared/storage', () => ({
 }));
 
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), back: jest.fn(), replace: jest.fn() }),
+  useRouter: () => ({
+    push: jest.fn(),
+    back: jest.fn(),
+    replace: jest.fn(),
+    canGoBack: () => true,
+  }),
 }));
 
 jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
@@ -59,6 +68,7 @@ const DAY2 = '2026-06-11';
 
 const SAVE = 'sheet-cta-button-0';
 const NOTICE = 'itinerary-edit-unspecified-notice';
+const SAVED = 'itinerary-edit-saved';
 
 function trip(): Trip {
   return {
@@ -197,6 +207,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  resetToast();
   server.resetHandlers();
   clearAccessToken();
 });
@@ -209,7 +220,9 @@ function renderPage() {
   });
   function Wrapper({ children }: { children: ReactNode }) {
     return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      <QueryClientProvider client={client}>
+        <WithToastHost>{children}</WithToastHost>
+      </QueryClientProvider>
     );
   }
   return render(<ItineraryEditPage tripId={TRIP_ID} />, { wrapper: Wrapper });
@@ -233,14 +246,16 @@ describe('🔴 UN1 · AC-6·INV-4 — 미지정 슬롯은 저장에서 빠지고
     // INV-4 침묵 금지 — 빠진 곳을 사용자에게 알린다(제외 개수 1 을 담아 정직하게).
     // ★ 문자열 form 은 완전일치(matches exact=true, node_modules 실측)라 문장 안의 "1" 을 못 잡는다 —
     //   부분 포함은 regex 로 잰다(개수 없는 "빠진 곳이 있어요" 는 red 로 잡아 정직한 개수 표기를 강제).
-    const notice = await screen.findByTestId(NOTICE);
-    expect(notice).toHaveTextContent(/\S/);
-    expect(notice).toHaveTextContent(/1/);
+    //   TRIP-1089 결정 2 — 성공이면 그 안내가 저장 토스트 문구로 실린다(배너는 떠나면 안 보인다).
+    const toast = await screen.findByTestId(SAVED);
+    expect(toast).toHaveTextContent(/\S/);
+    expect(toast).toHaveTextContent(/1/);
+    expect(screen.queryByTestId(NOTICE)).toBeNull();
   });
 });
 
 describe('🔴 UN3 · TRIP-923 · INV-4 — 안내의 개수는 실제로 빠진 곳 수다', () => {
-  it('두 날에 걸친 미지정 2곳을 저장하면 안내가 "2곳" 문장과 완전 일치한다', async () => {
+  it('두 날에 걸친 미지정 2곳을 저장하면 저장 토스트가 "2곳" 문장과 완전 일치한다(TRIP-1089 결정 2)', async () => {
     getHandler = () => HttpResponse.json(itineraryWithTwoUnspecified());
 
     renderPage();
@@ -256,8 +271,8 @@ describe('🔴 UN3 · TRIP-923 · INV-4 — 안내의 개수는 실제로 빠진
       [],
     ]);
 
-    expect(await screen.findByTestId(NOTICE)).toHaveTextContent(
-      '시간대를 정하지 않은 2곳은 저장에서 빠졌어요'
+    expect(await screen.findByTestId(SAVED)).toHaveTextContent(
+      '일정을 저장했어요 · 시간 미정 2곳은 빠졌어요'
     );
   });
 });
@@ -273,6 +288,10 @@ describe('🔴 UN2 · AC-6 — 미지정 0 이면 저장해도 안내가 없다 
     await waitFor(() => expect(putCalls).toBe(1));
 
     // 미지정이 없으므로 안내는 안 뜬다 — "항상 렌더" 하는 공허 구현을 막는 부정 짝.
+    // 토스트는 뜨되 N곳 꼬리가 없다(TRIP-1089 결정 2 — 완전일치).
+    expect(await screen.findByTestId(SAVED)).toHaveTextContent(
+      '일정을 저장했어요'
+    );
     expect(screen.queryByTestId(NOTICE)).toBeNull();
   });
 });
