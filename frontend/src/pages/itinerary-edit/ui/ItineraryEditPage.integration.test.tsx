@@ -31,7 +31,8 @@ import { ItineraryEditPage } from './ItineraryEditPage';
  *    시트 헤더 곳수(`sheet-header-meta`)가 맞으며 첫 조회는 1건이다(R1 · AC1·AC5).
  *  - 🔴 저장은 편집 스토어 전체를 **5필드로 조립해 PUT**, 배열 순서(INV-U3-02)·전체 정밀도·
  *    endsNextDay 실어나르기가 실리고, 성공은 **재조회 0**(setQueryData) 이다(R2 · AC1·AC2·AC5).
- *  - 🔴 위반이 있어도 **곧장 저장**(비차단, BR-U3-13) 이다(R3 · AC3).
+ *  - 🔴 드래프트에 위반이 있어도 **곧장 저장**(PUT 전 차단 없음, BR-U3-12) 이다(R3 · AC3). 위반 응답 뒤의
+ *    요약 게이트는 PUT **다음**에 서고(TRIP-1095) `save-conflict` 스위트 몫이다.
  *  - 🔴 409 는 **재조회한 일정 상태**(신호 B)로 "확정" vs "만드는 중" 을 서로 다른 문구로 가른다
  *    (R4·R5 · AC6). 500·네트워크도 **인라인 안내**(INV-4 침묵 금지) 다(R6·R7 · AC7).
  *  - 🔴 다일자 칩(`itinerary-edit-day-2`) press 로 활성 일자가 바뀐다(R8 · AC4).
@@ -300,7 +301,7 @@ describe('🔴 R2 · AC1·AC2·AC5 — 저장: 편집 스토어 전체를 5필�
   });
 });
 
-describe('🔴 R3 · AC3 — 비차단: 위반 있어도 곧장 저장(저장 게이트 없음)', () => {
+describe('🔴 R3 · AC3 — 비차단: 위반 있어도 곧장 저장(PUT 전 차단 없음)', () => {
   it('드래프트에 위반이 있어도 저장 press → PUT 1건(차단하지 않는다)', async () => {
     getHandler = () => HttpResponse.json(withViolation());
 
@@ -309,7 +310,7 @@ describe('🔴 R3 · AC3 — 비차단: 위반 있어도 곧장 저장(저장 �
 
     fireEvent.press(screen.getByTestId(SAVE));
 
-    // 위반을 이유로 저장을 막지 않는다 — 시트도 없이 곧장 PUT.
+    // 위반을 이유로 저장을 막지 않는다 — PUT 전엔 아무것도 묻지 않고 곧장 보낸다.
     await waitFor(() => expect(putCalls).toBe(1));
   });
 });

@@ -27,7 +27,9 @@ import { ItineraryEditPage } from './ItineraryEditPage';
  * 무엇을 보장하나:
  *  - 위반 없는 저장 성공 → 토스트 `itinerary-edit-saved` + 이전 화면(canGoBack 이면 back, 아니면
  *    h12 는 일정 탭 · i07 은 라이브 허브로 replace).
- *  - 응답에 위반(hasViolation)이 있으면 제자리 — 배지가 보이고 토스트는 뜬다(BR-U3-13 지속 가시화).
+ *  - 응답에 위반(hasViolation)이 있으면 먼저 요약 게이트(TRIP-1095)가 뜨고, [고치기]를 고르면 제자리 —
+ *    토스트가 뜨고 배지가 보이며 다시 저장할 수 있다(BR-U3-13 지속 가시화). 게이트 자체·[그대로 저장]은
+ *    `save-conflict` 스위트 몫.
  *  - 시간 미정이 빠지면 그 수를 토스트 문구에 싣는다(복귀하면 배너가 안 보이므로).
  *  - 연타해도 PUT·이동은 1회, 실패하면 제자리 + 배너 + 다시 누를 수 있다. 확정 POST 는 어느 경로든 0.
  *
@@ -67,6 +69,8 @@ const SAVE = 'sheet-cta-button-0';
 const SAVED = 'itinerary-edit-saved';
 const SAVE_ERROR = 'itinerary-edit-save-error';
 const NOTICE = 'itinerary-edit-unspecified-notice';
+const CONFLICT = 'itinerary-edit-save-conflict';
+const FIX = 'itinerary-edit-save-back';
 const cardId = (poiId: string) => `slot-stopcard-${buildSlotKey(DAY1, poiId)}`;
 
 function slot(
@@ -191,6 +195,13 @@ async function openAndSave(inTrip?: boolean) {
   await waitFor(() => expect(putCalls).toBe(1));
 }
 
+/** TRIP-1095 — 위반 응답이면 요약 게이트가 먼저 선다. 머묾 분기는 그 게이트의 [고치기]다. */
+async function saveThenFix(inTrip?: boolean) {
+  await openAndSave(inTrip);
+  fireEvent.press(await screen.findByTestId(FIX));
+  expect(screen.queryByTestId(CONFLICT)).toBeNull();
+}
+
 describe('🔴 S1 · AC-1 — 위반 없는 저장 성공: 토스트 + back', () => {
   it('h12 · canGoBack true → 토스트 「일정을 저장했어요」(완전일치) · back 1 · replace 0', async () => {
     await openAndSave();
@@ -211,11 +222,11 @@ describe('🔴 S1 · AC-1 — 위반 없는 저장 성공: 토스트 + back', ()
   });
 });
 
-describe('🔴 S2 · AC-2 결정 1 — 응답에 위반이 있으면 제자리 + 배지 + 토스트', () => {
-  it('PUT 응답 poi-b hasViolation → back·replace 0 · 토스트 뜸 · poi-b 위반 배지 보임', async () => {
+describe('🔴 S2 · AC-2 결정 1 · TRIP-1095 — 위반 응답은 게이트를 거쳐 [고치기]면 제자리 + 배지 + 토스트', () => {
+  it('PUT 응답 poi-b hasViolation → [고치기] → 토스트 「일정을 저장했어요」 · poi-b 위반 배지 · back·replace 0', async () => {
     putHandler = () => HttpResponse.json(violatedResponse());
 
-    await openAndSave();
+    await saveThenFix();
 
     expect(await screen.findByTestId(SAVED)).toHaveTextContent(
       '일정을 저장했어요'
@@ -232,10 +243,10 @@ describe('🔴 S2 · AC-2 결정 1 — 응답에 위반이 있으면 제자리 +
   });
 
   // 03b 경고-1 — 머묾을 고른 이유(라이브 허브는 위반을 안 그린다)가 바로 i07 얼굴이라 그 얼굴로도 잰다.
-  it('i07(inTrip) 도 응답에 위반이 있으면 머문다 — back·replace 0 · 배지 보임', async () => {
+  it('i07(inTrip) 도 [고치기]면 머문다 — back·replace 0 · 배지 보임', async () => {
     putHandler = () => HttpResponse.json(violatedResponse());
 
-    await openAndSave(true);
+    await saveThenFix(true);
 
     await screen.findByTestId(SAVED);
     expect(
@@ -249,7 +260,7 @@ describe('🔴 S2 · AC-2 결정 1 — 응답에 위반이 있으면 제자리 +
   });
 
   // 03b 경고-2 — 판정은 응답 전 일자다. 활성 일자(1일차)만 보면 2일차 위반을 두고 떠난다.
-  it('활성 일자가 아닌 날(2일차)에만 위반이 있어도 머물고, 2일차 칩을 누르면 배지가 보인다', async () => {
+  it('활성 일자가 아닌 날(2일차)에만 위반이 있어도 게이트가 서고, [고치기] 뒤 2일차 칩을 누르면 배지가 보인다', async () => {
     const DAY2 = '2026-06-11';
     const twoDays = (violated: boolean): Itinerary => ({
       ...itinerary(),
@@ -269,7 +280,7 @@ describe('🔴 S2 · AC-2 결정 1 — 응답에 위반이 있으면 제자리 +
     getHandler = () => HttpResponse.json(twoDays(false));
     putHandler = () => HttpResponse.json(twoDays(true));
 
-    await openAndSave();
+    await saveThenFix();
 
     await screen.findByTestId(SAVED);
     await settle();
@@ -284,10 +295,10 @@ describe('🔴 S2 · AC-2 결정 1 — 응답에 위반이 있으면 제자리 +
     ).toBeOnTheScreen();
   });
 
-  it('머문 뒤엔 잠금이 풀려 다시 저장할 수 있다(PUT 2)', async () => {
+  it('[고치기] 뒤엔 잠금이 풀려 다시 저장할 수 있다(PUT 2)', async () => {
     putHandler = () => HttpResponse.json(violatedResponse());
 
-    await openAndSave();
+    await saveThenFix();
     await screen.findByTestId(SAVED);
 
     fireEvent.press(screen.getByTestId(SAVE));
@@ -457,9 +468,9 @@ describe('🔴 S7 · AC-9 — 어느 성공 경로든 확정 POST 는 0', () => 
     expect(confirmCalls).toBe(0);
   });
 
-  it('위반 머묾 경로도 confirm 0', async () => {
+  it('위반 머묾 경로([고치기])도 confirm 0', async () => {
     putHandler = () => HttpResponse.json(violatedResponse());
-    await openAndSave();
+    await saveThenFix();
     await screen.findByTestId(SAVED);
     await settle();
     expect(confirmCalls).toBe(0);

@@ -31,6 +31,7 @@ import {
   AlertCircleGlyph,
   InfoCircleGlyph,
 } from '@/features/itinerary/ui/ItineraryGlyphs';
+import { SaveConflictDialog } from '@/features/itinerary/ui/SaveConflictDialog';
 import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
 import {
   getGetTripsTripIdItineraryQueryKey,
@@ -72,6 +73,9 @@ import { EditorView } from '@/widgets/map-sheet-shell/ui/EditorView';
  *  7. **저장 성공은 알리고 떠난다(TRIP-1089)** — 토스트(루트 ToastHost 라 떠나도 남는다) 뒤 이전 화면으로.
  *     단 응답에 위반이 있으면 머문다 — 배지가 보여야 하는데(BR-U3-13 지속 가시화) 복귀지 라이브 허브는
  *     위반을 안 그린다. 미지정 제외 안내는 떠나면 배너가 안 보이므로 성공 시 토스트 문구로 옮긴다.
+ *  8. **위반 응답은 요약 게이트가 먼저다(TRIP-1095)** — 그때는 PUT 성공 시점에 토스트 없이
+ *     `SaveConflictDialog` 만 띄운다. [그대로 저장] = 7 의 토스트 + 복귀, [고치기] = 7 의 토스트 + 머묾(잠금
+ *     해제). 게이트가 떠 있는 동안은 잠금을 유지한다.
  */
 
 // 저장 실패 인라인 문구(INV-4 침묵 금지). 409 두 사유는 재조회한 상태로 갈라 서로 다른 문구를 준다.
@@ -132,6 +136,13 @@ export function ItineraryEditPage({
   // 저장 연타 잠금 — isPending 은 다음 렌더에야 참이라 같은 틱 연타를 못 막는다(ManualPlanPage 선례).
   // 떠나는 성공에선 풀지 않는다(늦게 온 두 번째 응답이 back 을 한 번 더 부르지 않게).
   const inFlightRef = useRef(false);
+  // 위반 요약 게이트(null = 닫힘) — 버튼을 누른 뒤 띄울 토스트 문구를 함께 든다. gateRef 는 그 버튼 연타
+  // 잠금(같은 틱 두 누름은 state 로 못 막는다).
+  const [conflict, setConflict] = useState<{
+    count: number;
+    toast: string;
+  } | null>(null);
+  const gateRef = useRef(false);
 
   const itinerary = useGetTripsTripIdItinerary(tripId);
   // TError=unknown 으로 열어 onError 의 error 를 axios 판정(isAlreadyRegistered)에 그대로 태운다(h11 선례).
@@ -194,21 +205,20 @@ export function ItineraryEditPage({
             data
           );
           // 떠나면 배너가 안 보이므로 제외 안내는 토스트 문구로 옮긴다(결정 2). 실패 경로는 배너 그대로.
-          showToast({
-            message:
-              droppedCount > 0
-                ? `${SAVED_TOAST} · 시간 미정 ${droppedCount}곳은 빠졌어요`
-                : SAVED_TOAST,
-            testID: 'itinerary-edit-saved',
-          });
-          const violated = data.days.some((day) =>
-            day.slots.some((slot) => slot.hasViolation)
-          );
-          if (violated) {
-            // 머문다 — 재-시드된 배지를 보고 고쳐 다시 저장할 수 있게 잠금을 푼다(결정 1).
-            inFlightRef.current = false;
+          const toast =
+            droppedCount > 0
+              ? `${SAVED_TOAST} · 시간 미정 ${droppedCount}곳은 빠졌어요`
+              : SAVED_TOAST;
+          const violations = data.days
+            .flatMap((day) => day.slots)
+            .filter((slot) => slot.hasViolation).length;
+          if (violations > 0) {
+            // 토스트·이동은 게이트 버튼이 정한다 — 잠금도 그때까지 유지(떠 있는 동안 저장 재누름 차단).
+            gateRef.current = true;
+            setConflict({ count: violations, toast });
             return;
           }
+          showToast({ message: toast, testID: 'itinerary-edit-saved' });
           leaveAfterSave();
         },
         onError: (error) => {
@@ -239,6 +249,20 @@ export function ItineraryEditPage({
         },
       }
     );
+  }
+
+  // [그대로 저장] = 토스트 + 복귀(잠금 유지) · [고치기] = 토스트 + 머묾(재-시드된 배지를 보고 고쳐 다시
+  // 저장할 수 있게 잠금을 푼다, 결정 1).
+  function closeConflict(leave: boolean): void {
+    if (!gateRef.current || conflict === null) return;
+    gateRef.current = false;
+    setConflict(null);
+    showToast({ message: conflict.toast, testID: 'itinerary-edit-saved' });
+    if (leave) {
+      leaveAfterSave();
+      return;
+    }
+    inFlightRef.current = false;
   }
 
   const state = resolvePlanState({
@@ -411,6 +435,15 @@ export function ItineraryEditPage({
           onCancel={() => setEditingSlotKey(null)}
           testIDPrefix="itinerary-edit-time"
           labels={{ start: '시작', end: '종료' }}
+        />
+      ) : null}
+
+      {conflict !== null ? (
+        <SaveConflictDialog
+          count={conflict.count}
+          confirmLabel="그대로 저장"
+          onConfirm={() => closeConflict(true)}
+          onBack={() => closeConflict(false)}
         />
       ) : null}
     </View>

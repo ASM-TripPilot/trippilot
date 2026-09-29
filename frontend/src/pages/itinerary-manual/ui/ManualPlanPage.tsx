@@ -15,6 +15,7 @@ import {
   type EditorDaysItem,
 } from '@/features/itinerary/model/itineraryEditStore';
 import { buildPlanDayTabs } from '@/features/itinerary/model/planState';
+import { SaveConflictDialog } from '@/features/itinerary/ui/SaveConflictDialog';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import { useSavedStays } from '@/features/trip/model/useSavedStays';
 import { useTripBases } from '@/features/trip/model/useTripBases';
@@ -58,6 +59,9 @@ import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
  *     (pages 끼리 import 금지) — 한쪽만 고치면 갈라진다.
  *  7. **`startFresh`(TRIP-1038 C)** — 초안의 비우기 확인을 거쳐 오면 가드 a 를 건너뛰고 비운다. 비우는
  *     동안(POST~새 조회 도착) 옛 슬롯을 그리지 않는다 — 그 틈에 저장하면 옛 일정이 확정된다.
+ *  8. **위반 있는 저장은 확정 전에 멈춘다(TRIP-1095)** — PUT 응답 전 일자에 위반이 있으면 확정 대신
+ *     요약 게이트(`SaveConflictDialog`)를 띄운다. 저장 토스트는 PUT 시점 그대로 1회. [그대로 확정]은 위
+ *     확정 경로, [고치기]는 게이트를 닫고 잠금을 푼다. 게이트가 떠 있는 동안은 잠금을 유지한다.
  */
 
 const SAVE_ERROR_NOTE = '일정을 저장하지 못했어요. 잠시 후 다시 시도해 주세요';
@@ -97,6 +101,9 @@ export function ManualPlanPage({
   });
   // 저장+확정 2왕복 잠금 — isPending 은 다음 렌더에야 참이라 같은 틱 연타·PUT~확정 틈을 못 막는다.
   const inFlightRef = useRef(false);
+  // 위반 요약 게이트(null = 닫힘)와 그 버튼 연타 잠금 — 같은 틱 두 누름은 state 로 못 막는다.
+  const [conflictCount, setConflictCount] = useState<number | null>(null);
+  const gateRef = useRef(false);
   // 비우기 POST 뒤 새 조회까지 끝났나(startFresh 전용). 그 전엔 캐시의 옛 일정을 그리지 않는다.
   const [freshDone, setFreshDone] = useState(false);
   // 비우기가 실패했나(startFresh 전용) — 켜지면 옛 슬롯을 계속 숨기고 저장·장소 추가를 막고 알린다.
@@ -214,32 +221,16 @@ export function ManualPlanPage({
             data
           );
           showToast({ message: SAVED_TOAST, testID: 'itinerary-manual-saved' });
-          confirm.mutate(
-            { tripId },
-            {
-              // 확정 토스트는 떠나기 전에 — h16 은 이미 확정된 캐시로 열려 재진입과 구별이 안 된다(TRIP-1047).
-              onSuccess: () => {
-                showToast({
-                  message: CONFIRMED_TOAST,
-                  testID: 'itinerary-confirmed-toast',
-                });
-                router.replace({
-                  pathname: '/trips/[tripId]/itinerary',
-                  params: { tripId },
-                });
-              },
-              onError: (error) => {
-                inFlightRef.current = false;
-                setConfirmError(CONFIRM_ERROR_NOTE);
-                // 409 만 재조회 — 서버 진실이 이미 확정일 수 있다. 500 은 상태가 안 바뀌었다(ItineraryPlanPage 선례).
-                if (isAlreadyRegistered(error)) {
-                  void queryClient.invalidateQueries({
-                    queryKey: getGetTripsTripIdItineraryQueryKey(tripId),
-                  });
-                }
-              },
-            }
-          );
+          const violations = data.days
+            .flatMap((day) => day.slots)
+            .filter((slot) => slot.hasViolation).length;
+          if (violations > 0) {
+            // 확정하지 않고 멈춘다 — 잠금은 게이트 버튼이 푼다(떠 있는 동안 저장 재누름 차단).
+            gateRef.current = true;
+            setConflictCount(violations);
+            return;
+          }
+          runConfirm();
         },
         onError: () => {
           inFlightRef.current = false;
@@ -247,6 +238,49 @@ export function ManualPlanPage({
         },
       }
     );
+  }
+
+  function runConfirm(): void {
+    confirm.mutate(
+      { tripId },
+      {
+        // 확정 토스트는 떠나기 전에 — h16 은 이미 확정된 캐시로 열려 재진입과 구별이 안 된다(TRIP-1047).
+        onSuccess: () => {
+          showToast({
+            message: CONFIRMED_TOAST,
+            testID: 'itinerary-confirmed-toast',
+          });
+          router.replace({
+            pathname: '/trips/[tripId]/itinerary',
+            params: { tripId },
+          });
+        },
+        onError: (error) => {
+          inFlightRef.current = false;
+          setConfirmError(CONFIRM_ERROR_NOTE);
+          // 409 만 재조회 — 서버 진실이 이미 확정일 수 있다. 500 은 상태가 안 바뀌었다(ItineraryPlanPage 선례).
+          if (isAlreadyRegistered(error)) {
+            void queryClient.invalidateQueries({
+              queryKey: getGetTripsTripIdItineraryQueryKey(tripId),
+            });
+          }
+        },
+      }
+    );
+  }
+
+  function handleConflictConfirm(): void {
+    if (!gateRef.current) return;
+    gateRef.current = false;
+    setConflictCount(null);
+    runConfirm();
+  }
+
+  function handleConflictBack(): void {
+    if (!gateRef.current) return;
+    gateRef.current = false;
+    setConflictCount(null);
+    inFlightRef.current = false;
   }
 
   // 조회 전엔 빈 편집기(스토어 싱글턴의 이전 드래프트를 그리지 않는다). startFresh 로 비우는 중이면
@@ -379,6 +413,15 @@ export function ManualPlanPage({
           onCancel={() => setEditingSlotKey(null)}
           testIDPrefix="itinerary-manual-time"
           labels={{ start: '시작', end: '종료' }}
+        />
+      ) : null}
+
+      {conflictCount !== null ? (
+        <SaveConflictDialog
+          count={conflictCount}
+          confirmLabel="그대로 확정"
+          onConfirm={handleConflictConfirm}
+          onBack={handleConflictBack}
         />
       ) : null}
     </View>
