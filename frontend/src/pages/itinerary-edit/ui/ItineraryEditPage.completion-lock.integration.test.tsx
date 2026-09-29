@@ -45,7 +45,12 @@ jest.mock('@/shared/storage', () => ({
 }));
 
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), back: jest.fn(), replace: jest.fn() }),
+  useRouter: () => ({
+    push: jest.fn(),
+    back: jest.fn(),
+    replace: jest.fn(),
+    canGoBack: () => true,
+  }),
 }));
 
 jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));

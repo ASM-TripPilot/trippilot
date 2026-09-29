@@ -62,7 +62,12 @@ const mockBack = jest.fn();
 // TRIP-1009 C3 — replace 도 이름을 붙여 "편집 ‹ 는 여전히 back" 을 잰다(직접 짜기만 일정 탭 replace).
 const mockReplace = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), back: mockBack, replace: mockReplace }),
+  useRouter: () => ({
+    push: jest.fn(),
+    back: mockBack,
+    replace: mockReplace,
+    canGoBack: () => true,
+  }),
 }));
 
 // EditorView 가 조립하는 MapSheetShell → MapView(네이버 네이티브)는 jest 에서 못 뜬다 — 관찰 목으로
@@ -467,12 +472,14 @@ describe('TRIP-1009 · C3 — 일정 편집의 ‹ 는 여전히 이전 화면�
 
 /**
  * TRIP-1038 B6 — 직접 짜기 편집기만 「저장하고 확정하기」로 바뀌었다. 같은 뷰(`EditorView`)를 쓰는 h12 일정 편집은
- * 라벨 「일정 저장하기」와 동작(PUT 만 · 제자리 · 확정 POST 0)이 그대로다(공용 위젯 무회귀 · 선제 green).
+ * 라벨 「일정 저장하기」와 동작(PUT 만 · 확정 POST 0)이 그대로다(공용 위젯 무회귀 · 선제 green).
+ * TRIP-1089 결정 1 로 "제자리" 는 뒤집혔다 — 위반 없는 저장 성공은 이전 화면(back)으로 돌아간다(상세는
+ * save-exit 스위트). 확정 POST 0 은 그대로 잠근다.
  *
- * 3동작 뼈대: 준비=기본 픽스처 + 확정 계수 핸들러 → 실행=저장 → 단언=라벨·PUT 1·확정 0·라우터 0.
+ * 3동작 뼈대: 준비=기본 픽스처 + 확정 계수 핸들러 → 실행=저장 → 단언=라벨·PUT 1·확정 0·back 1.
  */
 describe('TRIP-1038 · B6 — 일정 편집의 저장 CTA 는 라벨·동작이 그대로다 (공용 뷰 무회귀 · 선제 green)', () => {
-  it('CTA 글자 일정 저장하기(완전일치) · 저장하면 PUT 1 · 확정 POST 0 · back/replace 0', async () => {
+  it('CTA 글자 일정 저장하기(완전일치) · 저장하면 PUT 1 · 확정 POST 0 · back 1(TRIP-1089)', async () => {
     let confirmCalls = 0;
     server.use(
       http.post(`${BASE}/trips/:tripId/itinerary/confirm`, () => {
@@ -492,7 +499,7 @@ describe('TRIP-1038 · B6 — 일정 편집의 저장 CTA 는 라벨·동작이 
     });
 
     expect(confirmCalls).toBe(0);
-    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockBack).toHaveBeenCalledTimes(1);
     expect(mockReplace).not.toHaveBeenCalled();
   });
 });
