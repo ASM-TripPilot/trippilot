@@ -57,6 +57,7 @@ jest.mock('@/shared/storage', () => ({
 const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
+  useLocalSearchParams: () => ({}),
 }));
 
 // 데이터 소스 훅은 딥 경로 목(배럴 아님 — 02a ★5). 카드 2건·bridge 카운트만 공급한다.

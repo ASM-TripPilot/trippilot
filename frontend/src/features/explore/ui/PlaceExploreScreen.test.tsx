@@ -428,3 +428,28 @@ describe('PlaceExploreScreen — 소요 시간 금지 (AC-G2 · INV-3)', () => {
     ).toBeOnTheScreen();
   });
 });
+
+// TRIP-1103 AC-1 — FAB 묶음 루트 View 에는 testID 가 없다. FAB 에서 조상으로 올라가 처음 만나는
+// `absolute` 노드가 묶음 루트다(02a ★1). className 은 공백으로 쪼갠 토큰 배열로 완전일치 비교한다.
+function fabBundleRoot(fabTestId: string) {
+  let node = screen.getByTestId(fabTestId).parent;
+  while (node) {
+    const tokens = String(node.props.className ?? '').split(/\s+/);
+    if (tokens.includes('absolute')) return node;
+    node = node.parent;
+  }
+  throw new Error(`${fabTestId} 위에 absolute 조상이 없다`);
+}
+
+describe('TRIP-1103 AC-1 · d04 FAB 묶음 바닥 오프셋 84 (Figma d04 fabCollapsed 바닥 84)', () => {
+  it('♥·＋ FAB 묶음 루트가 bottom-[84px] 이고 bottom-[100px] 은 없다', () => {
+    renderScreen();
+
+    const root = fabBundleRoot('explore-places-create-fab');
+    // 앵커 — ♥ FAB 도 같은 묶음 루트에 닿는다(엉뚱한 absolute 노드가 아니다).
+    expect(fabBundleRoot('explore-places-saved-fab')).toBe(root);
+    const tokens = String(root.props.className ?? '').split(/\s+/);
+    expect(tokens).toContain('bottom-[84px]');
+    expect(tokens).not.toContain('bottom-[100px]');
+  });
+});

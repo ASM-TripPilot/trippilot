@@ -23,6 +23,7 @@
 - `src/__tests__/deletionScopeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/design-tokens.test.ts`  →  (export 없음)
 - `src/__tests__/destinationEditSheetStructure.test.ts`  →  (export 없음)
+- `src/__tests__/destinationRedirectRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreview.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewAffiliateNotice.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewBandNav.test.tsx`  →  (export 없음)
@@ -60,6 +61,8 @@
 - `src/__tests__/entitiesTripStructure.test.ts`  →  (export 없음)
 - `src/__tests__/executionDurationStructure.test.ts`  →  (export 없음)
 - `src/__tests__/exploreLandingAxisRemoval.test.ts`  →  (export 없음)
+- `src/__tests__/exploreRegionFilterStructure.test.ts`  →  (export 없음)
+- `src/__tests__/fabBottomOffsetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/fsdLayerStructure.test.ts`  →  (export 없음)
 - `src/__tests__/fsdStructure.test.ts`  →  (export 없음)
 - `src/__tests__/generatingRouteModePassthrough.test.tsx`  →  (export 없음)
@@ -107,6 +110,7 @@
 - `src/__tests__/onboardingEntryGuard.test.tsx`  →  (export 없음)
 - `src/__tests__/onboardingPrefRoutes.test.tsx`  →  (export 없음)
 - `src/__tests__/onboardingPrefStructure.test.ts`  →  (export 없음)
+- `src/__tests__/onboardingPushStructure.test.ts`  →  (export 없음)
 - `src/__tests__/onboardingStructure.test.ts`  →  (export 없음)
 - `src/__tests__/openapiContract.test.ts`  →  (export 없음)
 - `src/__tests__/otaSourceDictionary.test.ts`  →  (export 없음)
@@ -131,6 +135,7 @@
 - `src/__tests__/planbTriggerKindStructure.test.ts`  →  (export 없음)
 - `src/__tests__/pressGuardMustVisit.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/pressGuardOnboardingPref.test.tsx`  →  (export 없음)
+- `src/__tests__/pressGuardOnboardingPush.test.tsx`  →  (export 없음)
 - `src/__tests__/pressGuardStaySeeAll.test.tsx`  →  (export 없음)
 - `src/__tests__/pressGuardStructure.test.ts`  →  (export 없음)
 - `src/__tests__/recordAddVisitFlow.integration.test.tsx`  →  (export 없음)
@@ -178,6 +183,7 @@
 - `src/__tests__/tabsExploreRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/tabsExploreRouteCardNav.test.tsx`  →  (export 없음)
 - `src/__tests__/tabsExploreRoutePlaceSave.integration.test.tsx`  →  (export 없음)
+- `src/__tests__/tabsExploreRouteRegionFilter.test.tsx`  →  (export 없음)
 - `src/__tests__/tabsExploreRouteSave.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/tabsHomeItineraryCta.test.tsx`  →  (export 없음)
 - `src/__tests__/tabsHomeRoute.test.tsx`  →  (export 없음)
@@ -224,6 +230,7 @@
 - `src/app/(onboarding)/nickname.tsx`  →  (export 없음)
 - `src/app/(onboarding)/pref1.tsx`  →  (export 없음)
 - `src/app/(onboarding)/pref2.tsx`  →  (export 없음)
+- `src/app/(onboarding)/push.tsx`  →  (export 없음)
 - `src/app/(onboarding)/terms.tsx`  →  (export 없음)
 
 ## src/app/(tabs)/
@@ -431,7 +438,7 @@
 - `src/features/auth/model/useSocialLogin.ts`  →  SocialLoginPhase · AuthorizeResult · Authorize · useSocialLogin
 
 ## src/features/auth/ui/
-- `src/features/auth/ui/AuthGlyphs.tsx`  →  AppIconGlyph · GoogleIcon · KakaoIcon · NaverIcon · WarningTriangleGlyph
+- `src/features/auth/ui/AuthGlyphs.tsx`  →  AppIconGlyph · GoogleIcon · AppleLogoGlyph · KakaoIcon · NaverIcon · WarningTriangleGlyph
 - `src/features/auth/ui/SocialLoginScreen.tsx`  →  SocialLoginScreenProps · SocialLoginScreen
 - `src/features/auth/ui/SplashIllustration.tsx`  →  SplashIllustration
 - `src/features/auth/ui/SplashScreen.tsx`  →  SplashScreen
@@ -461,7 +468,7 @@
 - `src/features/explore/model/placeSaveGuard.ts`  →  PlaceSaveNotice · hasUsableCoords · SAVE_FAILURE_NOTICE · COORD_BLOCKED_NOTICE · REMOVE_FAILURE_NOTICE
 - `src/features/explore/model/placeSaveToggle.ts`  →  usePlaceSaveToggle
 - `src/features/explore/model/regionChipLabel.ts`  →  formatRegionChipLabel
-- `src/features/explore/model/regionPickerPurpose.ts`  →  RegionPickerPurpose · RegionPickerTab · regionPickerHref
+- `src/features/explore/model/regionPickerPurpose.ts`  →  RegionPickerPurpose · regionPickerHref
 - `src/features/explore/model/regions.ts`  →  useRegions · filterRegions · limitRegionsWhenEmpty · RegionGroup · groupRegionsBySido · regionTint
 - `src/features/explore/model/savedPlaceIndex.ts`  →  findSavedPlaceId · optimisticSavedPlaceId
 - `src/features/explore/model/savedPlaceList.ts`  →  orderSavedPlaces · SAVED_PLACE_BADGE
@@ -471,7 +478,6 @@
 - `src/features/explore/model/wizardOrigin.ts`  →  WizardOriginParams · wizardOriginParams · isWizardOrigin
 
 ## src/features/explore/ui/
-- `src/features/explore/ui/DestinationDetailScreen.tsx`  →  DestinationDetailScreenProps · DestinationDetailScreen
 - `src/features/explore/ui/ExploreGlyphs.tsx`  →  SuitcaseGlyph · CloseGlyph · PlusGlyph · BackChevronGlyph · ShareGlyph · SearchGlyph · MapPinGlyph · FilterSlidersGlyph · WarningTriangleGlyph · CheckCircleFilledGlyph · CheckCircleOutlineGlyph · CircleExclaimGlyph · InfoGlyph
 - `src/features/explore/ui/ExploreLandingScreen.tsx`  →  ExploreLandingScreenProps · ExploreLandingScreen
 - `src/features/explore/ui/MustVisitOutsideConfirmDialog.tsx`  →  MustVisitOutsideConfirmDialog
@@ -801,12 +807,6 @@
 ## src/pages/daily-reflection/ui/
 - `src/pages/daily-reflection/ui/DailyReflectionPage.tsx`  →  DailyReflectionPageProps · DailyReflectionPage
 
-## src/pages/destination-detail/
-- `src/pages/destination-detail/index.ts`  →  DestinationDetailPage
-
-## src/pages/destination-detail/ui/
-- `src/pages/destination-detail/ui/DestinationDetailPage.tsx`  →  DestinationDetailPage
-
 ## src/pages/itinerary-copick/
 - `src/pages/itinerary-copick/index.ts`  →  SlotFillPage · CoPickCompletePage
 
@@ -945,6 +945,12 @@
 
 ## src/pages/onboarding-pref2/ui/
 - `src/pages/onboarding-pref2/ui/PrefStep2Page.tsx`  →  PrefStep2Page
+
+## src/pages/onboarding-push/
+- `src/pages/onboarding-push/index.ts`  →  PushPage
+
+## src/pages/onboarding-push/ui/
+- `src/pages/onboarding-push/ui/PushPage.tsx`  →  PushPage
 
 ## src/pages/onboarding-terms/
 - `src/pages/onboarding-terms/index.ts`  →  TermsPage
@@ -1407,7 +1413,14 @@
 - `src/shared/press/pressGuard.ts`  →  guardPress · openPressGuardWindow · resetPressGuard
 
 ## src/shared/push/
+- `src/shared/push/PushGlyphs.tsx`  →  PushBellHero
+- `src/shared/push/PushPreprompt.tsx`  →  PushPrepromptProps · PushPreprompt
 - `src/shared/push/index.ts`  →  getPushPermission · type PushPermissionStatus · requestPushPermission · registerPushToken · unregisterDeviceToken · toServerOsPermission · isDeviceNotRegistered · promptAndRegisterPush · registerPushIfGranted · unregisterStoredPushToken
+
+## src/shared/push/lib/
+- `src/shared/push/lib/pushColors.ts`  →  PUSH_ICON_COLORS
+
+## src/shared/push/
 - `src/shared/push/permissions.ts`  →  PushPermissionStatus · getPushPermission
 - `src/shared/push/register.ts`  →  toServerOsPermission · isDeviceNotRegistered · unregisterDeviceToken · registerPushToken · promptAndRegisterPush · registerPushIfGranted · unregisterStoredPushToken
 - `src/shared/push/request.ts`  →  ensureAndroidChannels · requestPushPermission
@@ -1445,7 +1458,7 @@
 
 ## src/test-support/
 - `src/test-support/editDragList.ts`  →  EDIT_LIST · editListData · moveItem · fireEditDragEnd · fireEditDropOnZone · fireEditDragBegin
-- `src/test-support/expoAppleAuthenticationMock.tsx`  →  appleSignInAsyncSpy · appleIsAvailableAsyncSpy · appleButtonPropsSpy · expoAppleAuthenticationModule · resetExpoAppleAuthenticationMock
+- `src/test-support/expoAppleAuthenticationMock.tsx`  →  appleSignInAsyncSpy · appleIsAvailableAsyncSpy · expoAppleAuthenticationModule · resetExpoAppleAuthenticationMock
 - `src/test-support/expoAuthSessionMock.ts`  →  promptAsyncSpy · authRequestConstructorSpy · makeRedirectUriSpy · expoAuthSessionModule · expoWebBrowserModule · expoCryptoModule · setPromptResult · setCodeVerifier · resetExpoAuthSessionMock
 - `src/test-support/expoRouterRedirectMock.tsx`  →  Redirect · Stack
 - `src/test-support/expoRouterStackMock.tsx`  →  Stack
@@ -1487,4 +1500,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 1039개 파일
+합계 1048개 파일

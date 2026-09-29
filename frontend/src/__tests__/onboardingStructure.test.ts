@@ -23,6 +23,9 @@ const ONBOARDING_ROUTE_DIR = path.join(ROOT, 'app', '(onboarding)');
 const TABS_ROUTE_DIR = path.join(ROOT, 'app', '(tabs)');
 const FEATURE_DIR = path.join(ROOT, 'features', 'onboarding');
 const LOCATION_DIR = path.join(ROOT, 'shared', 'location');
+/** TRIP-1108 — 푸시 사전 안내 카드(위치 카드의 짝)도 온보딩 화면 표면이다. */
+const PUSH_DIR = path.join(ROOT, 'shared', 'push');
+const APP_DIR = path.join(ROOT, 'app');
 const PAGES_DIR = path.join(ROOT, 'pages');
 /**
  * 온보딩 전용 페이지 슬라이스만 나열한다(`login`은 제외 — 이 가드는 온보딩 전용이다).
@@ -32,13 +35,14 @@ const PAGES_DIR = path.join(ROOT, 'pages');
 const ONBOARDING_PAGE_SLICES = [
   'onboarding-location',
   'onboarding-nickname',
+  'onboarding-push', // TRIP-1108 — location → push → pref1
   'onboarding-pref1',
   'onboarding-pref2',
   'onboarding-terms',
 ];
 
 /**
- * 화면 표면 스캔이 실제로 이 8개를 찾았는지 단언하는 모집단 목록(순서 고정) — 이동 전에는
+ * 화면 표면 스캔이 실제로 이 10개(TRIP-1108 로 8→10)를 찾았는지 단언하는 모집단 목록(순서 고정) — 이동 전에는
  * `sources.length`만 봤지만, `ui/` 합류로 OnboardingGlyphs.tsx(raw-hex 12곳)가 같은 폴더에
  * 섞이면서 `*Screen.tsx` 필터만으로는 "몇 개를 찾았나"까지는 보장하지 못한다. 파일 목록을
  * 통째로 단언해야 필터가 조용히 축소되는 회귀를 잡는다(02a §3-C-4).
@@ -53,6 +57,9 @@ const SCREEN_SOURCE_FILES = [
   'features/onboarding/ui/TermsViewerScreen.tsx',
   'shared/location/LocationGlyphs.tsx',
   'shared/location/LocationPreprompt.tsx',
+  // TRIP-1108 — 푸시 카드(shared/push 의 .tsx 만 — register.ts 등 .ts 는 화면 표면이 아니다).
+  'shared/push/PushGlyphs.tsx',
+  'shared/push/PushPreprompt.tsx',
 ];
 
 /** Figma 토큰으로 이미 존재하는 13색 (브리프 §4-5) — 소스에 raw hex 로 나타나면 안 된다. */
@@ -112,6 +119,7 @@ function screenSources() {
       f.endsWith('Screen.tsx')
     ),
     ...listSourceFiles(LOCATION_DIR).filter((f) => f.endsWith('.tsx')),
+    ...listSourceFiles(PUSH_DIR).filter((f) => f.endsWith('.tsx')),
   ]);
 }
 
@@ -138,6 +146,28 @@ describe('온보딩 라우트 배치 (AC C5 · D4)', () => {
       ? fs.readdirSync(TABS_ROUTE_DIR)
       : [];
     expect(tabsFiles.filter((f) => /location/i.test(f))).toEqual([]);
+  });
+
+  it('🔴 TRIP-1108 — push 라우트가 (onboarding) 체인에 있고 푸시 카드 페이지를 가리키며, (tabs) 밖이고 알림함 URL 과 겹치지 않는다 (AC-V1 · R9)', () => {
+    // 긍정 — (onboarding) 에 push 라우트가 정확히 하나 있고, 그 라우트가 pages 층 푸시 카드를 그린다.
+    const onbRouteFiles = fs.readdirSync(ONBOARDING_ROUTE_DIR);
+    expect(onbRouteFiles.filter((f) => /push/i.test(f))).toEqual(['push.tsx']);
+    const pushRoute = fs.readFileSync(
+      path.join(ONBOARDING_ROUTE_DIR, 'push.tsx'),
+      'utf8'
+    );
+    expect(pushRoute).toContain('@/pages/onboarding-push');
+
+    // 부정(짝) — 탭 그룹에 push 라우트가 없다(BR-U0-29 — 온보딩 화면엔 탭바가 없다).
+    const tabsFiles = fs.existsSync(TABS_ROUTE_DIR)
+      ? fs.readdirSync(TABS_ROUTE_DIR)
+      : [];
+    expect(tabsFiles.filter((f) => /push/i.test(f))).toEqual([]);
+
+    // R9 — 괄호 그룹은 URL 에 안 들어간다: (onboarding)/notifications.tsx 는 알림함 app/notifications.tsx 와
+    // 같은 /notifications 가 된다. 알림함이 실재함을 짝으로 두고, 온보딩 쪽엔 그 이름이 없어야 한다.
+    expect(fs.existsSync(path.join(APP_DIR, 'notifications.tsx'))).toBe(true);
+    expect(onbRouteFiles.filter((f) => /notification/i.test(f))).toEqual([]);
   });
 
   it('온보딩 라우트는 탭 그룹 밖에 있어 탭바가 그려지지 않는다 (BR-U0-29)', () => {

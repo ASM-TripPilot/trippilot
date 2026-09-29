@@ -17,7 +17,7 @@ export interface SocialLoginScreenProps {
   onConflictCancel: () => void;
   onAgeConfirm: () => void;
   onAgeCancel: () => void;
-  // 애플 공식 버튼(TRIP-932). 컨테이너가 isAvailableAsync 로 판정해 iOS 에서만 넘긴다 — 없으면
+  // 애플 버튼(TRIP-932, TRIP-1124부터 HIG 커스텀). 컨테이너가 isAvailableAsync 로 판정해 iOS 에서만 넘긴다 — 없으면
   // (Android·판정 전·판정 실패) 애플 자리가 아예 없다. 화면이 SDK 를 직접 import 하지 않도록
   // 컴포넌트째 주입받는다(nativeSdkLazyBoundary 경계).
   AppleButton?: ComponentType<{ onPress: () => void }> | null;
@@ -30,7 +30,7 @@ type BrandIcon = ComponentType<{ size?: number; testID?: string }>;
 // (충돌 메시지)만 있다고 가정했기 때문이다. 그 단언은 이제 안내 메시지 testID
 // (auth-login-conflict-message) 스코프로 좁혀져 있어 더 이상 화면 전역 유일성을 요구하지
 // 않는다 — 버튼 라벨이 한글이어도 계약이 깨지지 않는다.
-// 애플은 이 표에 없다 — 커스텀 라벨·로고 대신 SDK 공식 버튼을 주입받아 구글 다음 자리에 그린다.
+// 애플은 이 표에 없다 — 애플 모듈(lib/appleAuthorize)이 그린 버튼을 주입받아 구글 다음 자리에 꽂는다.
 const SOCIAL_BUTTONS: {
   provider: SocialProvider;
   label: string;
@@ -206,8 +206,8 @@ export function SocialLoginScreen({
               onPress={() => onSignIn(provider)}
               className="h-[52px] w-full flex-row items-center justify-center gap-[10px] rounded-button border border-ink bg-canvas"
             >
-              <Icon size={20} testID={`auth-login-${provider}-icon`} />
-              <Text className="font-noto-bold text-card-title font-bold text-ink">
+              <Icon size={24} testID={`auth-login-${provider}-icon`} />
+              <Text className="font-noto-bold text-hero font-bold text-ink">
                 {label}
               </Text>
             </Pressable>

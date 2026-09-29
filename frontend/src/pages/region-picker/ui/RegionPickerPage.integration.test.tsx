@@ -290,16 +290,23 @@ function purposeParamOf(href: string): string {
   return match[1];
 }
 
-describe('985 · explore → 목적지 결과 화면을 **코드**로 부른다 (US-EXPL-02 · D11)', () => {
-  it('검색으로 부산광역시를 고르면 dismissTo(/explore/destination/26) 1회, 담기·push·back 0회', () => {
+// TRIP-1105 — 결과 화면이 목적지 상세(`/explore/destination/{code}`)에서 탐색 탭 d01 지역 필터
+// (`/explore?region={code}`)로 바뀌었다(결정 1 = A). 주소 모양(문자열/객체)은 구현 몫이라 아래
+// `targetOf` 로 "경로 + 파라미터"로 펴서 본다. 코드를 싣는 계약(이름 아님)은 그대로다.
+describe('985 · 1105 · explore → 탐색 탭 d01 을 **코드**로 부른다 (US-EXPL-02 · D11)', () => {
+  it('검색으로 부산광역시를 고르면 dismissTo(/explore, region=26) 1회, 담기·push·back 0회', () => {
     mockParams = { purpose: purposeParamOf(regionPickerHref('explore')) };
     render(<RegionPickerPage />);
     fireEvent.changeText(screen.getByTestId('explore-region-search'), '부산');
 
     fireEvent.press(screen.getByTestId('explore-region-26'));
 
-    // 이름('부산광역시')을 보내면 결과 화면 헤딩은 멀쩡한데 레인이 조용히 빈다 — 그래서 코드 완전 일치.
-    expect(mockDismissTo.mock.calls).toEqual([['/explore/destination/26']]);
+    // 이름('부산광역시')을 보내면 d01 칩은 멀쩡한데 레인이 조용히 빈다 — 그래서 코드 완전 일치.
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+    expect(targetOf(mockDismissTo.mock.calls[0][0])).toEqual({
+      path: '/explore',
+      params: { region: '26' },
+    });
     expect(mockAddDestination).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
     expect(mockBack).not.toHaveBeenCalled();
@@ -312,7 +319,11 @@ describe('985 · explore → 목적지 결과 화면을 **코드**로 부른다 
 
     fireEvent.press(screen.getByTestId('explore-region-28177'));
 
-    expect(mockDismissTo.mock.calls).toEqual([['/explore/destination/28177']]);
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+    expect(targetOf(mockDismissTo.mock.calls[0][0])).toEqual({
+      path: '/explore',
+      params: { region: '28177' },
+    });
     expect(mockAddDestination).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
   });
@@ -381,67 +392,55 @@ describe('985 · URL 신뢰 경계 — 헬퍼에 없는 철자는 stay 로 떨�
   });
 });
 
-// ── TRIP-1015 E · 진입 탭 신호를 결과 화면으로 되실어 보낸다 (결정 4 · Seed Q4) ────────────────
-// `dismissTo` 는 파라미터를 합치지 않고 통째로 바꾼다(traps-explore) — 피커가 받은 진입 탭을 결과 화면
-// 주소에 **다시 싣지 않으면** 결과 화면은 조용히 탐색 탭으로 돌아간다. 모양(문자열/객체)은 구현 몫이라
-// 아래 `destinationOf` 로 펴서 "경로 + tab" 만 본다. 파라미터는 공유 헬퍼 URL 에서 꺼낸다(철자 사슬).
-function paramsOf(href: string): { purpose?: string; tab?: string } {
-  const query = href.split('?')[1] ?? '';
-  const out: Record<string, string> = {};
-  for (const pair of query.split('&')) {
-    const [k, v] = pair.split('=');
-    if (k) out[k] = decodeURIComponent(v ?? '');
-  }
-  return out;
-}
+// ── TRIP-1105 · 진입 탭 신호(TRIP-1015 E) 폐기 ────────────────────────────────────────────
+// 결과가 진짜 탭바를 쓰는 탐색 탭 d01 로 가므로 탭바는 진입 경로와 상관없이 늘 '탐색'이다. 그래서
+// 피커는 `tab` 을 되싣지 않는다. 옛 URL(`&tab=home`)이 캐시·딥링크로 남아 들어와도 결과 주소에 새지
+// 않아야 한다 — 헬퍼는 더 이상 tab 을 만들지 못하므로 그 파라미터를 손으로 준다.
 
-/** dismissTo 인자(문자열 또는 {pathname, params})를 "경로 + tab" 으로 편다. */
-function destinationOf(arg: unknown): {
+/** dismissTo 인자(문자열 또는 {pathname, params})를 "경로 + 파라미터"로 편다(02a ★16). */
+function targetOf(arg: unknown): {
   path: string;
-  tab: string | undefined;
+  params: Record<string, string>;
 } {
   if (typeof arg === 'string') {
     const [path, query = ''] = arg.split('?');
-    const tab = /(?:^|&)tab=([^&#]*)/.exec(query)?.[1];
-    return { path, tab };
+    const params: Record<string, string> = {};
+    for (const pair of query.split('&')) {
+      const [k, v] = pair.split('=');
+      if (k) params[k] = decodeURIComponent(v ?? '');
+    }
+    return { path, params };
   }
   const { pathname, params = {} } = arg as {
     pathname: string;
     params?: Record<string, unknown>;
   };
-  const path = pathname.replace('[region]', String(params.region));
-  const tab = params.tab === undefined ? undefined : String(params.tab);
-  return { path, tab };
+  return {
+    path: pathname,
+    params: Object.fromEntries(
+      Object.entries(params)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, String(v)])
+    ),
+  };
 }
 
-describe('🔴 1015-E · explore + 진입 탭 home → 결과 화면 주소에 tab=home 을 되싣는다', () => {
-  it('홈에서 온 피커에서 부산을 고르면 /explore/destination/26 으로 1회, tab=home 을 싣는다', () => {
-    // 준비 — 홈 검색이 만든 URL 그대로의 파라미터(purpose=explore, tab=home).
-    mockParams = paramsOf(regionPickerHref('explore', { tab: 'home' }));
-    // 앵커 — 헬퍼가 만든 URL 에 정말 tab=home 이 실렸다(안 실리면 여기서 먼저 red — 원인이 헬퍼 쪽).
-    expect(mockParams).toEqual({ purpose: 'explore', tab: 'home' });
+describe('🔴 1105 · 옛 진입 탭(tab=home)이 들어와도 결과 주소에 싣지 않는다 (1015-E 반전)', () => {
+  it('purpose=explore&tab=home 피커에서 부산을 고르면 /explore 로 region=26 만 실어 1회 간다', () => {
+    // 준비 — 옛 홈 검색 URL 그대로의 파라미터(헬퍼가 더는 못 만들어 손으로 준다).
+    mockParams = { purpose: 'explore', tab: 'home' };
     render(<RegionPickerPage />);
     fireEvent.changeText(screen.getByTestId('explore-region-search'), '부산');
 
     // 실행
     fireEvent.press(screen.getByTestId('explore-region-26'));
 
-    // 단언
+    // 단언 — tab 없이 region 하나만.
     expect(mockDismissTo).toHaveBeenCalledTimes(1);
-    expect(destinationOf(mockDismissTo.mock.calls[0][0])).toEqual({
-      path: '/explore/destination/26',
-      tab: 'home',
+    expect(targetOf(mockDismissTo.mock.calls[0][0])).toEqual({
+      path: '/explore',
+      params: { region: '26' },
     });
     expect(mockPush).not.toHaveBeenCalled();
-  });
-
-  it('진입 탭이 없으면(탐색 랜딩) 결과 주소에 tab 을 싣지 않는다 — 지금 그대로 (무회귀)', () => {
-    mockParams = paramsOf(regionPickerHref('explore'));
-    render(<RegionPickerPage />);
-    fireEvent.changeText(screen.getByTestId('explore-region-search'), '부산');
-
-    fireEvent.press(screen.getByTestId('explore-region-26'));
-
-    expect(mockDismissTo.mock.calls).toEqual([['/explore/destination/26']]);
   });
 });

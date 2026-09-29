@@ -292,9 +292,10 @@ export function BottomTabBar({
       {/* 그림자 래퍼 — BlurView의 overflow-hidden 바깥에 둬야 그림자가 안 잘린다. */}
       <View className="rounded-pill" style={PILL_SHADOW_STYLE}>
         <BlurView
-          // ponytail: intensity는 실기 캘리브레이션 노브 — Figma 반투명 흰 68%에 눈으로
-          // 맞춰 조정한다(RN 네이티브 블러 ≠ Figma 벡터 렌더라 값은 시뮬레이터에서 확정).
-          intensity={24}
+          // intensity 70(TRIP-1104) — 24 는 사진 카드가 알약 뒤로 지날 때 회색 라벨이 무늬에
+          // 묻혔다(QA 5회차). 사용자 합의 범위 60~80 의 중앙이며 기기 확정 대기다 — iOS 실기에서
+          // 사진 배경 vs 흰 배경을 대조해 값을 확정하고, 부족하면 흰 68% 레이어를 더한다.
+          intensity={70}
           tint="light"
           experimentalBlurMethod="dimezisBlurView"
           className="flex-row items-center overflow-hidden rounded-pill px-[10px] py-[2px]"

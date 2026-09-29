@@ -27,8 +27,8 @@ const TEST_ONLY_DIRS = ['__tests__', '__mocks__', 'test-support', 'mocks'];
 
 const KAKAO_SDK = '@react-native-seoul/kakao-login';
 const NAVER_SDK = '@react-native-seoul/naver-login';
-// TRIP-932 — 애플 SDK 도 같은 경계 뒤에 둔다. 공식 버튼(AppleAuthenticationButton)도 이 패키지
-// 에서 오므로, 화면이 버튼을 직접 import 하는 우회도 아래 테스트 3 이 잡는다.
+// TRIP-932 — 애플 SDK 도 같은 경계 뒤에 둔다. 애플 버튼(AppleSignInButton)도 SDK 를 정적 import
+// 하는 어댑터 파일에 살므로, 화면이 SDK 를 직접 import 하는 우회도 아래 테스트 3 이 잡는다.
 const APPLE_SDK = 'expo-apple-authentication';
 
 /** 정적 형태의 import(정적 from / side-effect import / require)만 잡는다. 동적 import 는 제외. */

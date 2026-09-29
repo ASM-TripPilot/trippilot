@@ -19,7 +19,8 @@ paths:
 | `src/app/(onboarding)/index.tsx` | **진입 단계 리다이렉트** (미완 → terms) |
 | `src/app/(onboarding)/terms.tsx` | 약관 라우트 — 컨테이너를 꽂는 얇은 래퍼 |
 | `src/app/(onboarding)/nickname.tsx` | 닉네임 라우트 — 얇은 래퍼 |
-| `src/app/(onboarding)/location.tsx` | c08 위치 권한 프리프롬프트 라우트 — `LocationPage` 얇은 래퍼. 체인상 nickname과 pref1 사이(`onboardingStructure.test.ts`) |
+| `src/app/(onboarding)/location.tsx` | c08 위치 권한 프리프롬프트 라우트 — `LocationPage` 얇은 래퍼. 체인상 nickname과 push 사이(`onboardingStructure.test.ts`) |
+| `src/app/(onboarding)/push.tsx` | 온보딩 푸시 안내 카드 라우트(TRIP-1108) — `PushPage` 얇은 래퍼. 체인 location → push → pref1. 파일 이름이 `notifications`가 아닌 이유: 괄호 그룹은 URL에 안 들어가 `/notifications`(알림함 `app/notifications.tsx`)와 충돌(`onboardingPushStructure`가 짝으로 잠금) |
 | `src/app/(onboarding)/pref1.tsx` | 취향 1/2 라우트(c09) — `PrefStep1Page` 얇은 래퍼 |
 | `src/app/(onboarding)/pref2.tsx` | 취향 2/2 라우트(c09b) — `PrefStep2Page` 얇은 래퍼 |
 | `src/app/(tabs)/_layout.tsx` | 탭 네비게이터 — `tabBar` 렌더프롭 + `BottomTabBar` 어댑터(`routeNameToTabKey` index→home · `handlePressTab` home→index). `screenOptions.tabBarStyle`의 `position:'absolute'` 등은 **커스텀 `tabBar` 렌더프롭엔 무효**(react-navigation이 적용 안 함)인 죽은 문자열 — 실제 오버레이는 `shared/ui/BottomTabBar.tsx` 루트의 `absolute bottom-0`이 진다. |
@@ -35,7 +36,7 @@ paths:
 | `src/app/stays/register.tsx` | `/stays/register` — `@/pages/stay-register` 얇은 래퍼. 구조 가드가 `useState`·`useGetStaysGeocode`·`FlatList` 0건을 잠근다 |
 | `src/app/stays/saved.tsx` | `/stays/saved` e04 저장한 숙소 — `@/pages/stay-saved` 얇은 래퍼 |
 | `src/app/explore/region.tsx` | d1b·e00 지역 선택 — `@/pages/region-picker` 얇은 래퍼. 목적은 쿼리 `?purpose=trip`(기본 `stay`) |
-| `src/app/explore/destination/[region].tsx` | d03 목적지 상세 — `DestinationDetailPage` 얇은 래퍼(`region` params는 페이지가 읽는다) |
+| `src/app/explore/destination/[region].tsx` | 옛 목적지 상세 딥링크 리다이렉트 — `<Redirect>`로 `/explore?region={code}`(탐색 탭 d01 지역 필터)에 넘긴다(TRIP-1105) |
 | `src/app/explore/places.tsx` | d04 장소 탐색 — `@/pages/place-explore` 얇은 래퍼 |
 | `src/app/explore/places/[poiId].tsx` | d06 **explore** 장소 상세 — poiId만 읽어 `PlaceDetailPage`에 위임(`canGoBack` 폴백은 페이지 소관). 여행 중 장소 상세(`live/place/[poiId]`)와 다른 슬라이스 |
 | `src/app/explore/saved-places.tsx` | d02 담은 장소 — `@/pages/saved-places` 얇은 래퍼 |

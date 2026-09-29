@@ -18,10 +18,12 @@ paths:
 | `src/features/auth/lib/makeAuthorize.ts` | authorize 팩토리(DI 주입점) — apple은 네이티브 SDK, kakao·naver는 env가 있으면 네이티브 SDK, 그 외는 expo-auth-session/fake. SDK 어댑터는 동적 import |
 | `src/features/auth/lib/kakaoAuthorize.ts` | 카카오 SDK를 import하는 유일 파일, 취소는 message 매칭 |
 | `src/features/auth/lib/naverAuthorize.ts` | 네이버 SDK를 import하는 유일 파일 |
+| `src/features/auth/lib/appleAuthorize.tsx` | 애플 SDK를 정적 import하는 유일 파일(지연 로드로만 닿음) + `AppleSignInButton`. **버튼은 시스템 `AppleAuthenticationButton`이 아니라 직접 그리는 HIG 커스텀 `Pressable`**(TRIP-1124 — 이웃 구글 버튼과 표면 클래스 복사, 로고 24 `#000`, 제목 `text-hero text-black`: HIG가 버튼 안 로고·제목을 검정/흰색만 허용해 `text-ink`(#222) 불가). SDK를 하나도 안 쓰는 순수 UI인데 lib에 있다 — 가용성 판정 뒤에만 버튼을 건네는 주입 경로 때문. **`lib → ui`(`../ui/AuthGlyphs`의 `AppleLogoGlyph`) 역방향 import** — 위 계층 화살표의 반대라 가드가 없고(런타임 config→ui 선례는 `features/stay/config/amenityIcons.ts`), `AuthGlyphs`가 이 파일을 정적 import하는 날 순환 + SDK가 화면 그래프로 샌다 |
+| `src/features/auth/model/useAppleButton.ts` | 기기에서 애플 로그인이 가능하면 `AppleSignInButton` 컴포넌트를 state로 돌려주고 아니면 null(fail-closed, Android·판정 실패 포함) — `await import('../lib/appleAuthorize')`만으로 SDK에 닿음 |
 | `src/features/auth/lib/realAuthorize.ts` | expo-auth-session 참조 유일 프로덕션 파일 |
 | `src/features/auth/config/oauthConfig.ts` | provider별 OAuth config를 env에서 읽음, apple은 빈 슬롯(네이티브 SDK라 불필요) |
 | `src/features/auth/config/gradients.ts` | 그라디언트·앱아이콘 색 상수 |
-| `src/features/auth/ui/AuthGlyphs.tsx` | 인라인 SVG — 앱아이콘·소셜 4종·경고 삼각형 |
+| `src/features/auth/ui/AuthGlyphs.tsx` | 인라인 SVG — 앱아이콘·소셜 4종·경고 삼각형·`AppleLogoGlyph`(TRIP-1124 신설, Figma c02 벡터 보관본 `d` 그대로 — 공식 Apple Design Resources 파일이 아니다, 교체 여부 미결. `LoginPage.apple.test.tsx`의 `FIGMA_APPLE_LOGO_D` 상수가 바이트 대조로 잠근다) |
 | `src/features/auth/ui/SplashIllustration.tsx` | 인라인 SVG — 스플래시 일러스트 |
 
 > 구현 슬라이스는 배럴(`index.ts`) 없이 간다 — `src/features/auth/`에도 없다.

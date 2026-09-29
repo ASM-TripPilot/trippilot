@@ -45,7 +45,6 @@ import { DailyReflectionScreen } from '@/features/reflection/ui/DailyReflectionS
 import { ShareCardScreen } from '@/features/reflection/ui/ShareCardScreen';
 import { TravelStyleScreen } from '@/features/reflection/ui/TravelStyleScreen';
 import { TripSummaryScreen } from '@/features/reflection/ui/TripSummaryScreen';
-import { DestinationDetailScreen } from '@/features/explore/ui/DestinationDetailScreen';
 import { MustVisitOutsideConfirmDialog } from '@/features/explore/ui/MustVisitOutsideConfirmDialog';
 import { MustVisitPickScreen } from '@/features/explore/ui/MustVisitPickScreen';
 import { PlaceDetailScreen as ExplorePlaceDetailScreen } from '@/features/explore/ui/PlaceDetailScreen';
@@ -208,6 +207,8 @@ import type {
 import { PersonalizationInfoReason } from '@/shared/api/generated/schemas';
 import { buildMonthGrid } from '@/shared/date/monthGrid';
 import { LocationPreprompt } from '@/shared/location/LocationPreprompt';
+// 딥 경로 — 배럴(`@/shared/push`)로 끌면 권한 루틴(expo-notifications)까지 실린다(TRIP-1108 R10).
+import { PushPreprompt } from '@/shared/push/PushPreprompt';
 import { revokeImpact } from '@/shared/location/revokeImpact';
 import { MapView, type MapPin } from '@/shared/map';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
@@ -403,16 +404,6 @@ const HOME_SPOTS_LANE: HomeSpotsLane = {
   onToggleSave: noop,
 };
 
-// d05 목적지 상세 장소 격자 전용 6장(Figma 4663:2540 과 같은 데이터, TRIP-1048).
-const DESTINATION_DETAIL_PLACES = [
-  { poiId: 'p1', name: '감천문화마을', region: '부산 사하구' },
-  { poiId: 'p2', name: '광안리 해변', region: '부산 수영구' },
-  { poiId: 'p3', name: '해운대', region: '부산 해운대구' },
-  { poiId: 'p4', name: '전포 카페거리', region: '부산 부산진구' },
-  { poiId: 'p5', name: '해동용궁사', region: '부산 기장군' },
-  { poiId: 'p6', name: '자갈치 시장', region: '부산 중구' },
-];
-
 const EXPLORE_LANDING_BASE = {
   heading: {
     title: '무엇을 둘러볼까요?',
@@ -438,7 +429,7 @@ type LoginState = Pick<
   'phase' | 'errorCode' | 'conflictProvider'
 >;
 
-// 애플 버튼은 실 로그인과 같은 판정(useAppleButton)으로 얻는다 — iOS 실기에선 공식 버튼이 둘째
+// 애플 버튼은 실 로그인과 같은 판정(useAppleButton)으로 얻는다 — iOS 실기에선 애플 버튼이 둘째
 // 자리에 뜨고, Android·jest 에선 3버튼이다(TRIP-932).
 function LoginPreview(props: LoginState) {
   const AppleButton = useAppleButton();
@@ -2543,6 +2534,14 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  {
+    // TRIP-1108 — 위치 카드 다음 온보딩 단계(Figma 4774:2960). 상태 프레임은 default 하나뿐이다.
+    key: 'onboarding-push-default',
+    band: 'c',
+    label: 'c08-push · 기본',
+    login: null,
+    render: () => <PushPreprompt onProceed={noop} onDefer={noop} />,
+  },
   // ── e00·d1b 지역 선택 4키(TRIP-183) — 컨테이너 없이 화면에 props를 직접 넣는다 ──
   // ⚠️ 프리뷰는 정적이라 **실제 OS 권한 다이얼로그는 뜨지 않는다.** 여기서 보는 것은
   //    "권한이 거부됐을 때 화면이 어떻게 생겼나"까지고, 다이얼로그 자체는 실제 라우트
@@ -4107,50 +4106,35 @@ export const PREVIEW_STATES: PreviewState[] = [
       ),
   },
   {
-    // TRIP-709 — d05 목적지 상세 default. TRIP-1048 로 세그먼트가 사라지고 장소가 2열 격자가
-    // 됐다(Figma 4663:2540) — 장소는 Figma 와 같은 6장(이 키 전용 배열, d01 공용 픽스처 불변).
-    // 숙소 담김 1건(savedKeys 첫 카드)·FAB 2단(하트+＋)이 한 화면에 보이게. 화면이 자체
-    // BottomTabBar 를 그리므로 withShellTabBar 로 감싸지 않는다(props-only 직접 렌더). 격자 칸 폭·
-    // 간격·하트 분홍·FAB 위치·검색바 › 는 jest 사각이라 이 키가 6-b 육안 대조 자리.
-    key: 'destination-detail-default',
+    // TRIP-1105 — d01 지역 필터(Figma 4767:2957). 옛 d05 목적지 상세 키(destination-detail-default)를
+    // 1:1 교체했다 — 목적지 상세가 d01 한 화면의 필터 상태로 합쳐졌다. 검색바 안 칩(r8·연분홍)·분홍 ✕·
+    // `›`·레인 제목 접두·두 카드 같은 폭 160·탭바 탐색 활성은 jest 사각이라 이 키가 6-b 육안 대조 자리.
+    key: 'explore-landing-region-filter',
     band: 'd',
-    label: 'd05 · 통합 검색 결과 default',
+    label: 'd01 · 랜딩 지역 필터',
     login: null,
-    render: () => (
-      <DestinationDetailScreen
-        regionName="부산"
-        onPressSearch={noop}
-        stayLane={{
-          error: false,
-          cards: EXPLORE_STAY_CARDS,
-          onRetry: noop,
-          onSeeAll: noop,
-          onPressCard: noop,
-          savedKeys: ['yanolja:1'],
-          pendingKeys: [],
-          onToggleSave: noop,
-          saveError: false,
-          onDismissSaveError: noop,
-        }}
-        placeLane={{
-          error: false,
-          cards: DESTINATION_DETAIL_PLACES,
-          onRetry: noop,
-          onSeeAll: noop,
-          onPressCard: noop,
-          ...PLACE_SAVE_PREVIEW,
-        }}
-        onPressTab={noop}
-        onPressCreateTrip={noop}
-        savedMenu={{
-          open: false,
-          savedCount: 3,
-          onToggle: noop,
-          onPressSavedPlaces: noop,
-          onPressSavedStays: noop,
-        }}
-      />
-    ),
+    render: () =>
+      withShellTabBar(
+        <ExploreLandingScreen
+          {...EXPLORE_LANDING_BASE}
+          regionFilter={{ label: '부산광역시', onClear: noop }}
+          placeLane={{ ...EXPLORE_LANDING_PLACE_LANE, ...PLACE_SAVE_PREVIEW }}
+          stayLane={{
+            error: false,
+            cards: EXPLORE_STAY_CARDS,
+            onRetry: noop,
+            onSeeAll: noop,
+          }}
+          savedMenu={{
+            open: false,
+            savedCount: 3,
+            onToggle: noop,
+            onPressSavedPlaces: noop,
+            onPressSavedStays: noop,
+          }}
+        />,
+        'explore'
+      ),
   },
   {
     // TRIP-710 — d06 장소 상세 default(Figma 1907:1083). props-only 순수 뷰라 직접 렌더한다.

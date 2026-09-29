@@ -466,7 +466,14 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    `h06-my-trips-ongoing` 바로 뒤에 추가하고 이 가드는 안 만진다(추가 전엔 186개라 red). 정확한 키·얼굴은
     //    아래 'TRIP-1122' describe, h 순서는 devPreviewBandSort EXPECTED_H 가 못박는다. 시트·딤이 탭바를 덮는지,
     //    핸들·체크·행 높이의 육안 대조 자리가 이 키다.
-    expect(PREVIEW_STATES).toHaveLength(195);
+    // ⚠️ TRIP-1105: d05 목적지 상세가 d01 지역 필터로 합쳐져 `destination-detail-default` → `explore-landing-region-filter`
+    //    (band `d`) 1:1 교체 — 총량 185 불변. 정확한 키·얼굴은 아래 'TRIP-1105' describe 가 못박는다.
+    // ⚠️ TRIP-1108: c08-push 푸시 알림 사전 안내 카드 얼굴 `onboarding-push-default`(band `c`, Figma `4774:2960`)
+    //    1키 추가로 195→196(병렬 레인 합산). test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 1키만 추가하고
+    //    이 가드는 안 만진다(추가 전엔 195개라 red). 정확한 키·밴드·라벨은 아래 'TRIP-1108' describe 가 못박는다.
+    //    벨 히어로 링 값(브리프 §4-2 추정)·2줄 개행·위치 카드와 나란한 하단 버튼은 jest 가 픽셀을 못 봐 이 키가
+    //    유일한 육안 수단이다. devPreviewBandSort 는 밴드 h·l 만 잠가 band c 와 무관.
+    expect(PREVIEW_STATES).toHaveLength(196);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -906,17 +913,35 @@ describe('🔴 TRIP-700 AC-9 · 매거진 목록 프리뷰 키 (band a)', () => 
   });
 });
 
-describe('🔴 TRIP-709 AC-10 · d05 목적지 상세 프리뷰 키 (band d)', () => {
-  it('키 집합에 destination-detail-default 가 있고 형제 band d 키는 남는다', () => {
-    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+describe('🔴 TRIP-1105 · d01 지역 필터 프리뷰 키 (band d) — 옛 d05 목적지 상세 키를 1:1 교체', () => {
+  it('explore-landing-region-filter 키가 있고, 렌더하면 칩·✕·두 레인과 탭바(탐색 활성)가 뜬다 · 옛 키는 없다', () => {
+    // 준비 — 새 키 엔트리를 찾는다(red-first: preview.tsx 에 추가 전엔 없다).
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'explore-landing-region-filter'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('d');
+    expect(entry?.label).toBe('d01 · 랜딩 지역 필터');
+
+    // 실행 — 그 엔트리의 render() 를 그린다.
+    render(<>{entry?.render()}</>);
+
+    // 단언 — Figma 채택 프레임 4767:2957 의 육안 대조 자리다(칩 색·r8·✕·카드 폭은 jest 사각 · 6-b).
+    expect(screen.getByTestId('explore-region-chip')).toBeOnTheScreen();
+    expect(screen.getByTestId('explore-region-chip-clear')).toBeOnTheScreen();
+    expect(screen.getByTestId('explore-lane-stay')).toBeOnTheScreen();
+    expect(screen.getByTestId('explore-lane-place')).toBeOnTheScreen();
+    // 진짜 탭바(셸) 모양 — 필터 상태도 탐색 탭 화면이라 탐색이 켜진다(홈 아님).
+    expect(screen.getByTestId('shell-tabbar-tab-explore')).toBeSelected();
+    expect(screen.getByTestId('shell-tabbar-tab-home')).not.toBeSelected();
+    expect(screen.queryAllByTestId(/^destination-detail-/).length === 0).toBe(
+      true
+    );
+
+    // 옛 d05 목적지 상세 키는 사라졌다(1:1 교체라 총량 185 불변).
     const keys = PREVIEW_STATES.map((state) => state.key);
-
-    // red-first — destination-detail-default 는 implementer 가 preview.tsx 에 추가하기 전엔 없다
-    // (band d, DestinationDetailScreen 렌더). 카운트(161)만으론 "아무 키나 1개 추가해도" 통과하므로
-    // 이 단언이 '추가된 키가 destination-detail-default'임을 못박는다(TRIP-695/697/700 미러).
-    expect(keys).toContain('destination-detail-default');
-
-    // 형제 band d 앵커 — 기존 d 키가 딸려 사라지지 않았음을 못박는다(공허 통과 방지).
+    expect(keys).not.toContain('destination-detail-default');
+    // 형제 band d 앵커 — 기존 d01 키가 딸려 사라지지 않았다.
     expect(keys).toContain('explore-landing-default');
   });
 });
@@ -2351,6 +2376,29 @@ describe('🔴 TRIP-1109 · h08 다른 후보 시트 조회 상태 프리뷰 3�
     // 이웃 앵커 — 기존 h08 시트 키가 딸려 사라지지 않았다.
     expect(PREVIEW_STATES.map((state) => state.key)).toContain(
       'h08-candidate-sheet-empty'
+    );
+  });
+});
+
+describe('🔴 TRIP-1108 · c08-push 푸시 알림 사전 안내 카드 프리뷰 키 (band c)', () => {
+  it('onboarding-push-default — 실물 푸시 카드를 그리고, 위치 카드 키는 그대로 남는다', () => {
+    // 준비 — 새 키 엔트리(red-first: preview.tsx 에 추가 전엔 없다).
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'onboarding-push-default'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('c');
+    expect(entry?.label).toBe('c08-push · 기본');
+
+    // 실행
+    render(<>{entry?.render()}</>);
+
+    // 단언 — 푸시 카드 자신의 testID 가 그려진다(흉내 마크업이면 통과 못 한다).
+    expect(screen.getByTestId('onboarding-push-root')).toBeOnTheScreen();
+    expect(screen.getByTestId('onboarding-push-purpose')).toBeOnTheScreen();
+    // 이웃 앵커 — 짝인 위치 카드 키가 딸려 사라지지 않았다.
+    expect(PREVIEW_STATES.map((state) => state.key)).toContain(
+      'onboarding-location-default'
     );
   });
 });

@@ -236,3 +236,26 @@ describe('🔴 TRIP-1019 #024 · 닫힌 하트 토글 라벨 "담은 장소 N곳
     );
   });
 });
+
+// TRIP-1103 AC-1 — FAB 묶음 루트 View 에는 testID 가 없다. FAB 에서 조상으로 올라가 처음 만나는
+// `absolute` 노드가 묶음 루트다(02a ★1) — 두 FAB 이 같은 노드에 닿는지로 "묶음" 임을 짝 확인한다.
+function fabBundleRoot(fabTestId: string) {
+  let node = screen.getByTestId(fabTestId).parent;
+  while (node) {
+    if (classTokens(node).includes('absolute')) return node;
+    node = node.parent;
+  }
+  throw new Error(`${fabTestId} 위에 absolute 조상이 없다`);
+}
+
+describe('TRIP-1103 AC-1 · d01 FAB 묶음 바닥 오프셋 84 (Figma d01 fabCollapsed 바닥 84)', () => {
+  it('♥·＋ FAB 묶음 루트가 bottom-[84px] 이고 bottom-[100px] 은 없다', () => {
+    render(<ExploreLandingScreen {...baseProps()} />);
+
+    const root = fabBundleRoot('explore-create-trip-fab');
+    // 앵커 — 하트 토글도 같은 묶음 루트에 닿는다(엉뚱한 absolute 노드가 아니다).
+    expect(fabBundleRoot('explore-saved-menu-toggle')).toBe(root);
+    expect(classTokens(root)).toContain('bottom-[84px]');
+    expect(classTokens(root)).not.toContain('bottom-[100px]');
+  });
+});

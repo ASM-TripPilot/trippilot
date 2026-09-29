@@ -22,6 +22,7 @@ import ExploreRoute from '@/app/(tabs)/explore';
 const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
+  useLocalSearchParams: () => ({}),
 }));
 
 jest.mock('@/features/stay/model/useStaySearch', () => ({

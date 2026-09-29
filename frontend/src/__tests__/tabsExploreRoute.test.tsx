@@ -51,6 +51,7 @@ import {
 const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
+  useLocalSearchParams: () => ({}),
 }));
 
 jest.mock('@/features/stay/model/useStaySearch', () => ({
