@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 import { render, screen, within } from '@testing-library/react-native';
+import type { ReactTestInstance } from 'react-test-renderer';
 
 /**
  * TRIP-746 · AC-7 — i01 허브 프리뷰 3키(`live-hub-closed`·`-half`·`-expanded`)가 Figma 4251:2448 ·
@@ -1050,5 +1051,100 @@ describe('🔴 TRIP-755 · i10 현재 장소 상세 프리뷰 (AC-11)', () => {
     const keys = states.map((state) => state.key);
     expect(keys.length).toBeGreaterThan(100);
     LIVE_PLACE_OLD_KEYS.forEach((key) => expect(keys).not.toContain(key));
+  });
+});
+
+// ── TRIP-1117 · i01 허브 메모 시트 2키 ─────────────────────────────────────────────
+//
+// Figma A 4741:2833(허브 위 메모 시트 · 작성 중 · FAB 숨김) · B 4741:4650(시트 닫힘 · 관람 중 카드 메모 박스 ·
+// FAB 보임). 자매는 i01 중간(4251:2640)이라 허브 시트는 중간 스냅(index 1). 스크림 전면 덮임·키보드·시트 밖
+// throw 는 jest 사각이라 이 두 키가 6-b 육안 자리다. 프리뷰에 `<MemoInline` 리터럴을 직접 쓰면 recordsStructure G8
+// 이 red 다 — 시트 컴포넌트가 안에서 그린다.
+
+const MEMO_SHEET_KEYS = [
+  ['live-hub-memo-sheet', 'i01 · 여행중 허브 메모 시트'],
+  ['live-hub-memo-saved', 'i01 · 여행중 허브 메모 저장됨'],
+] as const;
+
+/** 가장 가까운 바텀시트 host — 통과형 목은 `index` 를 host View 에 펼친다(BottomSheetView 는 index 가 없다). */
+function nearestSheetHost(node: ReactTestInstance): ReactTestInstance | null {
+  let current: ReactTestInstance | null = node;
+  while (current !== null && typeof current.props.index !== 'number') {
+    current = current.parent;
+  }
+  return current;
+}
+
+describe('🔴 TRIP-1117 · i01 허브 메모 시트 프리뷰 (AC-19 · AC-6)', () => {
+  it('P1 live-hub-memo-sheet 는 중간 스냅 허브 위에 제목·작성 중 입력·글자 수를 가진 메모 시트를 별도 시트로 그리고 FAB 를 숨긴다', () => {
+    mockSearchParams.state = 'live-hub-memo-sheet';
+
+    render(<DevPreview />);
+
+    // 배경 — 허브 셸 시트는 중간(index 1).
+    const shellHost = nearestSheetHost(
+      screen.getByTestId('execution-live-sheet-header')
+    );
+    expect(shellHost?.props.index).toBe(1);
+    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(5);
+
+    // 시트 — 제목 · 작성 중 본문 · 글자 수 = 본문 길이.
+    expect(screen.getByTestId('live-memo-sheet')).toBeOnTheScreen();
+    expect(screen.getByTestId('live-memo-title')).toHaveTextContent(
+      '부산시립미술관 · 메모'
+    );
+    const input = screen.getByTestId('record-trip-memo-input');
+    const value = String(input.props.value ?? '');
+    expect(value.length).toBeGreaterThan(0);
+    expect(screen.getByTestId('live-memo-count')).toHaveTextContent(
+      `${value.length}/2000`
+    );
+    expect(screen.queryByTestId('live-memo-notice')).toBeNull();
+    expect(screen.queryByTestId('execution-live-replan-fab')).toBeNull();
+
+    // AC-6 — 입력칸은 허브 셸이 아닌, 닫힘을 쥔 별도 시트 안.
+    expect(typeof shellHost?.props.onClose).not.toBe('function');
+    const host = nearestSheetHost(input);
+    expect(typeof host?.props.onClose).toBe('function');
+    expect(
+      host?.findAll(
+        (node) => node.props.testID === 'execution-live-sheet-header'
+      )
+    ).toEqual([]);
+  });
+
+  it('P2 live-hub-memo-saved 는 시트 없이 관람 중 카드에 메모 박스를 그리고 FAB 가 보인다', () => {
+    mockSearchParams.state = 'live-hub-memo-saved';
+
+    render(<DevPreview />);
+
+    const shellHost = nearestSheetHost(
+      screen.getByTestId('execution-live-sheet-header')
+    );
+    expect(shellHost?.props.index).toBe(1);
+    expect(screen.queryByTestId('live-memo-sheet')).toBeNull();
+    // 본문이 비지 않았다(정규식 = 부분 일치 — 공백 아닌 글자 하나 이상, 02a §5-①).
+    expect(
+      screen.getByTestId('execution-live-slot-memo-2026-06-11#museum')
+    ).toHaveTextContent(/\S/);
+    // done 2장 + 관람 중 1장.
+    expect(screen.getAllByTestId(/^execution-live-slot-memo-/)).toHaveLength(3);
+    expect(screen.getByTestId('execution-live-replan-fab')).toBeOnTheScreen();
+  });
+
+  it('P3 두 키가 band i 이고 라벨이 정확하다', () => {
+    const states = PREVIEW_STATES as {
+      key: string;
+      band: string;
+      label: string;
+    }[];
+    MEMO_SHEET_KEYS.forEach(([key, label]) => {
+      const entry = states.find((state) => state.key === key);
+      expect({ key, band: entry?.band, label: entry?.label }).toEqual({
+        key,
+        band: 'i',
+        label,
+      });
+    });
   });
 });

@@ -25,9 +25,18 @@ import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 export interface MemoInlineProps {
   text?: string | null;
   onSubmit?: (text: string) => void;
+  /** TRIP-1117 — 초안이 바뀔 때마다(글자 수 표시용, i01 허브 메모 시트). */
+  onChangeDraft?: (draft: string) => void;
+  /** TRIP-1117 — 입력 모양 덮어쓰기(허브 시트는 Figma 14px·상자 안). 미지정이면 j01 모양 그대로. */
+  className?: string;
 }
 
-export function MemoInline({ text, onSubmit }: MemoInlineProps): ReactElement {
+export function MemoInline({
+  text,
+  onSubmit,
+  onChangeDraft,
+  className = 'min-h-[44px] py-sm font-noto text-label text-ink',
+}: MemoInlineProps): ReactElement {
   const [draft, setDraft] = useState(text ?? '');
 
   const handleSubmit = (): void => {
@@ -40,14 +49,17 @@ export function MemoInline({ text, onSubmit }: MemoInlineProps): ReactElement {
     <BottomSheetTextInput
       testID="record-trip-memo-input"
       value={draft}
-      onChangeText={setDraft}
+      onChangeText={(next) => {
+        setDraft(next);
+        onChangeDraft?.(next);
+      }}
       onBlur={handleSubmit}
       submitBehavior="blurAndSubmit"
       placeholder="메모를 남겨보세요"
       placeholderTextColor="#9AA1AB"
       maxLength={2000}
       multiline
-      className="min-h-[44px] py-sm font-noto text-label text-ink"
+      className={className}
     />
   );
 }

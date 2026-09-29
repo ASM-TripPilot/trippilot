@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { router } from 'expo-router';
 import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,6 +9,8 @@ import { projectSlotProgress } from '@/features/execution/model/slotProgress';
 import { useVisitCheck } from '@/features/execution/model/useVisitCheck';
 import { photoAttach } from '@/features/record/model/photoAttach';
 import { pickPhotoForVisit } from '@/features/record/model/pickPhotoForVisit';
+import { useVisitMemo } from '@/features/record/model/useVisitMemo';
+import { MemoSheet } from '@/features/record/ui/MemoSheet';
 import { deriveVisitProgress } from '@/features/execution/model/visitProgress';
 import { TriggerChip } from '@/features/execution/ui/TriggerChip';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
@@ -60,6 +62,9 @@ const NEUTRAL_BADGE = (
 /** 허브 [사진] 저장 실패 안내(INV-4) — 허브엔 사진 칸이 없어 실패 셀 대신 카드 아래 한 줄로. */
 const PHOTO_SAVE_FAILED = '사진을 기록하지 못했어요. 다시 시도해 주세요';
 
+/** 허브 메모 저장 실패 안내(INV-4) — j01 `VisitRecordCardContainer` 와 같은 문장(TRIP-1117). */
+const MEMO_SAVE_FAILED = '메모를 저장하지 못했어요. 다시 시도해 주세요.';
+
 /** 뒤로 갈 히스토리가 없을 때(딥링크·푸시 직행)의 폴백 — ItineraryPlanPage 관례(INV-4 침묵 금지). */
 const HOME_FALLBACK = '/(tabs)';
 
@@ -110,6 +115,34 @@ export function LiveItineraryPage({
   });
   const visitCheck = useVisitCheck({ tripId, day: liveDate });
 
+  // 방문 기록 → 진행 상태 도출(★도달성 — 빈 인자면 전 슬롯 upcoming 이라 active 카드가 프로덕션에 안 뜬다).
+  // 도출·판정은 여기 1회. TRIP-1117 — 메모 세션 캐시를 관람 중 방문 id 로 읽어야 해서(훅은 조기 반환 위에서만)
+  // 조기 반환 아래에 있던 도출을 여기로 올렸다. active 가 아니면 슬롯이 비어 관람 중이 없다.
+  const activeSlots =
+    state.kind === 'active'
+      ? (state.itinerary.days[liveDayIndex]?.slots ?? [])
+      : [];
+  const progress = deriveVisitProgress(
+    visits.data ?? { visits: [] },
+    liveDate,
+    activeSlots.map((slot) => slot.poiId)
+  );
+  const activeVisitCheckId =
+    progress.activePoiId !== null
+      ? (progress.visitCheckIdByPoiId[progress.activePoiId] ?? null)
+      : null;
+  // 메모 저장만 쓴다 — useVisitAttachments 는 사진 목록 GET 을 무조건 쏘므로 부르지 않는다(F6). 캐시 키는 j01 과 한 벌.
+  const visitMemo = useVisitMemo({
+    tripId,
+    visitCheckId: activeVisitCheckId ?? '',
+  });
+  // 메모 시트 열림 = "어느 방문으로 열었나"(AC-16) — 재조회로 관람 중 방문이 바뀌면 시트가 저절로 빠진다.
+  const [memoSheetFor, setMemoSheetFor] = useState<string | null>(null);
+  // 메모 저장 실패가 난 방문. 시트가 열려 있으면 시트 안, 닫혀 있으면 관람 중 카드 아래에 보인다(Q3).
+  const [memoFailedFor, setMemoFailedFor] = useState<string | null>(null);
+  // 늦게 온 옛 실패가 최신 시도를 덮지 않게 시도 번호를 센다(j01 onSubmitMemo 선례).
+  const memoAttempt = useRef(0);
+
   if (state.kind === 'loading') {
     return (
       <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
@@ -155,27 +188,19 @@ export function LiveItineraryPage({
 
   const { itinerary } = state;
   const activeDayIndex = liveDayIndex;
-  const activeDate = itinerary.days[activeDayIndex]?.date ?? '';
-  const activeSlots = itinerary.days[activeDayIndex]?.slots ?? [];
+  const activeDate = liveDate;
 
-  // 방문 기록 → 진행 상태 도출 → projectSlotProgress 인자로 실제 주입(★도달성 — 빈 인자면
-  // 전 슬롯 upcoming 이라 active 카드가 프로덕션에 안 뜬다). 도출·판정은 여기 1회.
-  const progress = deriveVisitProgress(
-    visits.data ?? { visits: [] },
-    activeDate,
-    activeSlots.map((slot) => slot.poiId)
-  );
   const projected = projectSlotProgress(activeSlots, {
     completedPoiIds: progress.completedPoiIds,
     activePoiId: progress.activePoiId,
   });
-  const activeVisitCheckId =
-    progress.activePoiId !== null
-      ? (progress.visitCheckIdByPoiId[progress.activePoiId] ?? null)
-      : null;
+  // 결정 2 — 세션 저장본을 관람 중 카드의 메모 박스로 내린다(done 카드는 범위 밖, Q5).
+  const hubSlots = projected.map((entry) =>
+    entry.state === 'active' ? { ...entry, memo: visitMemo.savedMemo } : entry
+  );
 
   // TRIP-1070 [사진] — 관람 중 방문에 메타만 POST 한다. 사진 목록은 조회하지 않는다(허브엔 사진 칸이
-  // 없다 — useVisitAttachments 는 GET 을 무조건 쏘고 조기 반환 아래라 훅으로 못 부른다, F6).
+  // 없다 — useVisitAttachments 는 GET 을 무조건 쏘므로 부르지 않는다, F6).
   const attachActivePhoto = async (visitCheckId: string) => {
     setPhotoNotice(null);
     const picked = await pickPhotoForVisit();
@@ -193,6 +218,38 @@ export function LiveItineraryPage({
       setPhotoNotice(PHOTO_SAVE_FAILED);
     }
   };
+
+  // TRIP-1117 [메모] — 허브 위 메모 시트에서 저장한다(TRIP-1070 결정 1(c) 번복). 닫힘은 저장 성공 뒤(Q1).
+  const memoSheetOpen =
+    activeVisitCheckId !== null && memoSheetFor === activeVisitCheckId;
+  const submitMemo = (visitCheckId: string, text: string) => {
+    const attempt = ++memoAttempt.current;
+    setMemoFailedFor(null);
+    visitMemo.saveMemo(text).then(
+      () => {
+        if (attempt === memoAttempt.current)
+          setMemoSheetFor((open) => (open === visitCheckId ? null : open));
+      },
+      () => {
+        if (attempt === memoAttempt.current) setMemoFailedFor(visitCheckId);
+      }
+    );
+  };
+  const memoFailed =
+    activeVisitCheckId !== null && memoFailedFor === activeVisitCheckId;
+  const memoSheet =
+    memoSheetOpen && activeVisitCheckId !== null ? (
+      <MemoSheet
+        placeName={
+          activeSlots.find((slot) => slot.poiId === progress.activePoiId)
+            ?.nameKo ?? ''
+        }
+        text={visitMemo.savedMemo}
+        notice={memoFailed ? MEMO_SAVE_FAILED : null}
+        onSubmit={(text) => submitMemo(activeVisitCheckId, text)}
+        onClose={() => setMemoSheetFor(null)}
+      />
+    ) : null;
 
   // MANUAL 은 표시 표면에서 숨긴다(알약·배지는 WEATHER·DELAY·CLOSURE 3변형만). triggerLabel 은
   // 4종 매핑을 갖되(구조 완전성), 화면 표시 필터는 여기서 — 서로 다른 축이다(★8, BR-U4-01).
@@ -256,7 +313,7 @@ export function LiveItineraryPage({
         tripTitle={trip.data?.title ?? ''}
         days={itinerary.days}
         activeDayIndex={activeDayIndex}
-        slots={projected}
+        slots={hubSlots}
         onSelectDay={setSelectedDay}
         onBack={() => {
           if (router.canGoBack()) router.back();
@@ -277,13 +334,18 @@ export function LiveItineraryPage({
             ? () => void attachActivePhoto(activeVisitCheckId)
             : undefined
         }
-        // [메모] — 허브에 입력칸을 두지 않고 j01 그날로 간다(결정 1(c)).
+        // [메모] — 허브 위 메모 시트를 연다(TRIP-1117). 카드 아래 실패 안내는 여기서 지운다.
         onPressMemo={
           activeVisitCheckId !== null
-            ? () => router.push(`/trips/${tripId}/records?day=${activeDate}`)
+            ? () => {
+                setMemoFailedFor(null);
+                setMemoSheetFor(activeVisitCheckId);
+              }
             : undefined
         }
         photoNotice={photoNotice}
+        memoNotice={!memoSheetOpen && memoFailed ? MEMO_SAVE_FAILED : null}
+        fabHidden={memoSheetOpen}
         triggerChip={triggerChip}
         triggerPillKey={chipTrigger?.triggerId}
         slotBadgeLabel={slotBadgeLabel}
@@ -310,6 +372,7 @@ export function LiveItineraryPage({
         initialSnapIndex={initialSnapIndex}
       />
       {riskSheet}
+      {memoSheet}
       {appliedSessionId ? (
         // i08 — 반영 직후 한 번 뜨는 알림. 닫기 = applied 쿼리 제거(값을 undefined 로 줘야 지워진다 —
         // setParams 는 병합이라 `{}` 는 무동작). 부제·배지·내역은 데이터 계약이 없어 안 넘긴다(E4).

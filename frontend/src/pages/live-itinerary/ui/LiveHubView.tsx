@@ -136,6 +136,10 @@ export interface LiveHubViewProps {
   onPressMemo?: () => void;
   /** active 카드 사진 안내 한 줄 — 상태는 페이지가 가진다. */
   photoNotice?: string | null;
+  /** TRIP-1117 — active 카드 메모 안내 한 줄(시트가 닫힌 뒤 도착한 저장 실패, Q3). 상태는 페이지가 가진다. */
+  memoNotice?: string | null;
+  /** TRIP-1117 — 메모 시트가 열린 동안 수정 FAB 를 숨긴다(Figma 4741:2833). 앵커 자리(HF8)는 그대로. */
+  fabHidden?: boolean;
   /** 트리거 알약(TRIP-748) — 지도 위 일자 칩 아래(셸 `mapCard`)에 그린다. */
   triggerChip?: ReactNode;
   /** 알약이 가리키는 트리거 id — 이 키를 숨겼으면 알약을 안 그리고, 키가 바뀌면 다시 보인다. */
@@ -204,6 +208,8 @@ export function LiveHubView({
   onPressPhoto,
   onPressMemo,
   photoNotice,
+  memoNotice,
+  fabHidden = false,
   triggerChip,
   triggerPillKey,
   slotBadgeLabel,
@@ -382,6 +388,7 @@ export function LiveHubView({
                     onPressPhoto={state === 'active' ? onPressPhoto : undefined}
                     onPressMemo={state === 'active' ? onPressMemo : undefined}
                     photoNotice={state === 'active' ? photoNotice : undefined}
+                    memoNotice={state === 'active' ? memoNotice : undefined}
                     badgeLabel={slotBadgeLabel?.(slotKey) ?? undefined}
                     onPressName={
                       onPressSlotName
@@ -402,52 +409,61 @@ export function LiveHubView({
       {/* 일정 수정 FAB + 수정 알약 — 시트 윗변 8 위 오른쪽에 붙어 시트와 함께 움직이고, 펼침에서는
           오버레이 줄 아래에서 멈춘다(TRIP-1083). 알약은 FAB 왼쪽 가로 한 줄(Figma 4702:3131). 딤이 없고
           바깥 탭으로 닫지 않는다(× 또는 알약으로만, Seed ③) — 빈 칸은 box-none 이라 아래 시트로 터치가 간다.
-          배치 className 은 안쪽 일반 View 에만 둔다(앵커는 reanimated 컴포넌트). */}
-      <Animated.View
-        testID="execution-live-fab-anchor"
-        pointerEvents="box-none"
-        style={[{ position: 'absolute', right: FAB_RIGHT }, fabAnchorStyle]}
-      >
-        <View pointerEvents="box-none" className="flex-row items-center gap-sm">
-          {editMenuOpen ? (
-            <>
-              <EditPill
-                testID="execution-live-edit-pill-ai"
-                icon={<FullAiGlyph />}
-                label="AI에게 맡기기"
-                onPress={pickEdit(onPressAiReplan)}
-              />
-              <EditPill
-                testID="execution-live-edit-pill-manual"
-                icon={<PencilGlyph size={18} tone="primary" />}
-                label="직접 수정"
-                onPress={pickEdit(onPressManualEdit)}
-              />
-            </>
-          ) : null}
-          <Pressable
-            testID="execution-live-replan-fab"
-            accessibilityRole="button"
-            accessibilityLabel={editMenuOpen ? '닫기' : '일정 수정'}
-            onPress={() => {
-              hidePill();
-              setEditMenuOpen((open) => !open);
-            }}
-            style={editMenuOpen ? FAB_OPEN_SHADOW : FAB_SHADOW}
-            className="h-[52px] w-[52px] items-center justify-center rounded-pill bg-primary"
+          배치 className 은 안쪽 일반 View 에만 둔다(앵커는 reanimated 컴포넌트).
+          메모 시트가 열린 동안(fabHidden)은 앵커째 빠진다(TRIP-1117, Figma 4741:2833) — 자리는 그대로 루트 직속. */}
+      {fabHidden ? null : (
+        <Animated.View
+          testID="execution-live-fab-anchor"
+          pointerEvents="box-none"
+          style={[{ position: 'absolute', right: FAB_RIGHT }, fabAnchorStyle]}
+        >
+          <View
+            pointerEvents="box-none"
+            className="flex-row items-center gap-sm"
           >
             {editMenuOpen ? (
-              <CloseGlyph size={26} testID="execution-live-replan-fab-close" />
-            ) : (
-              <PencilGlyph
-                size={24}
-                tone="white"
-                testID="execution-live-replan-fab-pencil"
-              />
-            )}
-          </Pressable>
-        </View>
-      </Animated.View>
+              <>
+                <EditPill
+                  testID="execution-live-edit-pill-ai"
+                  icon={<FullAiGlyph />}
+                  label="AI에게 맡기기"
+                  onPress={pickEdit(onPressAiReplan)}
+                />
+                <EditPill
+                  testID="execution-live-edit-pill-manual"
+                  icon={<PencilGlyph size={18} tone="primary" />}
+                  label="직접 수정"
+                  onPress={pickEdit(onPressManualEdit)}
+                />
+              </>
+            ) : null}
+            <Pressable
+              testID="execution-live-replan-fab"
+              accessibilityRole="button"
+              accessibilityLabel={editMenuOpen ? '닫기' : '일정 수정'}
+              onPress={() => {
+                hidePill();
+                setEditMenuOpen((open) => !open);
+              }}
+              style={editMenuOpen ? FAB_OPEN_SHADOW : FAB_SHADOW}
+              className="h-[52px] w-[52px] items-center justify-center rounded-pill bg-primary"
+            >
+              {editMenuOpen ? (
+                <CloseGlyph
+                  size={26}
+                  testID="execution-live-replan-fab-close"
+                />
+              ) : (
+                <PencilGlyph
+                  size={24}
+                  tone="white"
+                  testID="execution-live-replan-fab-pencil"
+                />
+              )}
+            </Pressable>
+          </View>
+        </Animated.View>
+      )}
     </View>
   );
 }
