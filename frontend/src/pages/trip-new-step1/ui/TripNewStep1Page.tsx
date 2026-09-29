@@ -2,12 +2,15 @@ import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { isAxiosError } from 'axios';
 import { useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 import { wizardOriginParams } from '@/features/explore/model/wizardOrigin';
 import {
+  deleteTripsTripId,
   deleteTripsTripIdMustVisitsMustVisitId,
+  getGetTripsQueryKey,
   getTripsTripIdMustVisits,
   patchTripsTripId,
   postTripsTripIdMustVisits,
@@ -18,6 +21,7 @@ import type {
   MustVisit,
 } from '@/shared/api/generated/schemas';
 import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
+import { isNotFound } from '@/shared/api/isNotFound';
 import { getAccessToken } from '@/shared/api/tokenManager';
 import { seoulDate } from '@/shared/date/seoulDate';
 import { shiftMonth } from '@/shared/date/monthGrid';
@@ -56,6 +60,7 @@ import { usePreferencePrefill } from '@/features/trip/model/usePreferencePrefill
 import { CompanionEditSheet } from '@/features/trip/ui/CompanionEditSheet';
 import { DestinationEditSheet } from '@/features/trip/ui/DestinationEditSheet';
 import { PeriodEditSheet } from '@/features/trip/ui/PeriodEditSheet';
+import { TripWizardLeaveDialog } from '@/features/trip/ui/TripWizardLeaveDialog';
 import { TripWizardStep1Screen } from '@/features/trip/ui/TripWizardStep1Screen';
 
 import { BudgetEditSheet } from './BudgetEditSheet';
@@ -142,6 +147,82 @@ function appliedBudgetTier(
   return applied.kind === 'amount' && applied.amount > 0
     ? tierForAmount(applied.amount)
     : prefillTier;
+}
+
+/** 위저드를 나간 뒤 뒤로 갈 곳이 없을 때(딥링크 진입) 가는 곳 — `ItineraryPlanPage` 선례. */
+const HOME_FALLBACK = '/(tabs)';
+
+/**
+ * TRIP-1114 · 이탈 확인 다이얼로그의 요청·잠금 배선. 다이얼로그가 열릴 때만 마운트된다 —
+ * `useQueryClient` 를 페이지 본체에서 부르면 provider 없이 페이지를 그리는 노드 테스트가 던진다.
+ *
+ * - 나가기(저장)나 삭제를 누르면 세 버튼을 모두 잠근다(`lockedRef`). 상태가 아니라 ref 라 같은 틱
+ *   두 번째 누름에도 이미 켜진 값을 읽고, 누름 가드(400ms)가 닫힌 뒤의 탭도 막는다. 저장 연타(01b Q7)도
+ *   이 잠금이 막는다 — 공용 `guardPress` 는 `pressGuardStructure` 가 소비처를 목록으로 잠가 여기 못 쓴다.
+ * - 204·404(이미 없음)면 `createdTripId` 만 비우고(드래프트 유지, BR-U1-33) 목록 캐시를 무효화한다.
+ *   500·네트워크면 잠금을 풀고 실패 문구를 띄운다 — 다시 누르면 다시 보낸다(INV-4).
+ * - 화면이 먼저 사라졌으면(스와이프 이탈) 응답이 와도 이동하지 않는다(`mountedRef`). 지워진 것은
+ *   사실이라 id 비우기·무효화는 그래도 한다.
+ */
+function LeaveDialogContainer({
+  tripId,
+  onExit,
+  onStay,
+}: {
+  tripId: string;
+  onExit: () => void;
+  onStay: () => void;
+}): ReactElement {
+  const queryClient = useQueryClient();
+  const [failed, setFailed] = useState(false);
+  const lockedRef = useRef(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  function save(): void {
+    if (lockedRef.current) return;
+    lockedRef.current = true;
+    onExit();
+  }
+
+  function remove(): void {
+    if (lockedRef.current) return;
+    lockedRef.current = true;
+    setFailed(false);
+    // 삭제는 끝났다 — 이동을 먼저 하고 그다음 정리한다. id 비우기는 다음 렌더에서 이 컨테이너를
+    // 내리므로 지금 순서를 뒤집어도 이동은 일어난다(5-b 실측) — 순서는 읽기 쉬움을 위한 것이고
+    // 이 순서를 잠그는 테스트는 없다.
+    const done = (): void => {
+      if (mountedRef.current) onExit();
+      useTripWizardStore.setState({ createdTripId: undefined });
+      queryClient.invalidateQueries({ queryKey: getGetTripsQueryKey() });
+    };
+    deleteTripsTripId(tripId).then(done, (error: unknown) => {
+      if (isNotFound(error)) {
+        done();
+        return;
+      }
+      lockedRef.current = false;
+      if (mountedRef.current) setFailed(true);
+    });
+  }
+
+  return (
+    <TripWizardLeaveDialog
+      failed={failed}
+      onSave={save}
+      onDelete={remove}
+      onStay={() => {
+        if (!lockedRef.current) onStay();
+      }}
+    />
+  );
 }
 
 export interface TripNewStep1PageProps {
@@ -302,6 +383,13 @@ export function TripNewStep1Page({
   // 않게). 요청(등록·PATCH·동기화)이 날아가는 동안만 켜진다 — 성공 뒤에는 풀어 둬야 step2 에서
   // 돌아와 값을 바꾼 `[다음]`이 PATCH 로 나간다(TRIP-1113 AC-2b).
   const submitLockedRef = useRef(false);
+
+  // 이탈 확인(TRIP-1114) — 이 세션에서 이미 여행을 만들었을 때만 ‹ 가 다이얼로그를 연다.
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  const exitWizard = (): void => {
+    if (router.canGoBack()) router.back();
+    else router.replace(HOME_FALLBACK);
+  };
 
   const createTrip = useCreateTrip();
 
@@ -701,7 +789,10 @@ export function TripNewStep1Page({
         onPressSeeAll={() => router.push(mustVisitSelectHref)}
         canProceed={canProceed}
         onNext={submit}
-        onBack={() => router.back()}
+        // 여행을 안 만들었으면 지금처럼 바로 나간다(01b Q5). 스와이프·하드웨어 뒤로는 가로채지 않는다(결정 1).
+        onBack={() =>
+          createdTripId === undefined ? router.back() : setLeaveOpen(true)
+        }
         isLoading={isLoading}
         submitError={submitError}
         onRetrySubmit={submit}
@@ -795,6 +886,14 @@ export function TripNewStep1Page({
           onApply={applyBudget}
           onClose={() => setBudgetSheetOpen(false)}
           applyDisabled={draftBudgetKind === 'empty'}
+        />
+      ) : null}
+      {/* 이탈 확인은 맨 위에 겹친다. 삭제가 성공해 id 가 비면 저절로 내려간다. */}
+      {leaveOpen && createdTripId !== undefined ? (
+        <LeaveDialogContainer
+          tripId={createdTripId}
+          onExit={exitWizard}
+          onStay={() => setLeaveOpen(false)}
         />
       ) : null}
     </>

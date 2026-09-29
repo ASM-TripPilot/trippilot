@@ -443,7 +443,12 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    `h08-candidate-sheet-empty` 바로 뒤에 이 순서로 추가하고 이 가드는 안 만진다(추가 전엔 187개라 red).
     //    정확한 키·얼굴은 아래 'TRIP-1109' describe, h 순서는 devPreviewBandSort EXPECTED_H 가 못박는다.
     //    Figma 프레임이 없어(결정 1) 이 3키의 6-b 캡처가 Figma 반영 후보다.
-    expect(PREVIEW_STATES).toHaveLength(190);
+    // ⚠️ TRIP-1114: g01 이탈 확인 다이얼로그 2키(`trip-new-step1-leave-dialog`·`-leave-dialog-failed`, band `g`)
+    //    추가로 185→187. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 2키만
+    //    `trip-new-step1-budget-sheet` 바로 뒤에 이 순서로 추가하고 이 가드는 안 만진다(추가 전엔 185개라 red).
+    //    정확한 키·얼굴은 아래 'TRIP-1114' describe 가 못박는다. Figma 프레임이 없는 발명 얼굴이고(01b Q1·Q2)
+    //    딤·중앙 정렬은 조건부 렌더 오버레이의 jest 사각이라 이 두 키가 유일한 육안 수단이다.
+    expect(PREVIEW_STATES).toHaveLength(192);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -2025,6 +2030,38 @@ describe('🔴 TRIP-1068 · j03 오늘의 회고 pending 프리뷰 키 (band j)'
     expect(keys).toContain('reflection-empty');
     expect(keys).toContain('reflection-error');
   });
+});
+
+describe('🔴 TRIP-1114 · g01 이탈 확인 다이얼로그 프리뷰 2키 (band g)', () => {
+  it.each([
+    ['trip-new-step1-leave-dialog', 'g01 · 여행 만들기 leave-dialog', false],
+    [
+      'trip-new-step1-leave-dialog-failed',
+      'g01 · 여행 만들기 leave-dialog-failed',
+      true,
+    ],
+  ] as const)(
+    '%s — g01 얼굴 위에 이탈 확인 다이얼로그가 겹친다',
+    (key, label, failed) => {
+      // 준비 — 새 키 엔트리(red-first: preview.tsx 에 추가 전엔 없다).
+      const entry = PREVIEW_STATES.find((state) => state.key === key);
+      expect(entry).toBeDefined();
+      expect(entry?.band).toBe('g');
+      expect(entry?.label).toBe(label);
+
+      // 실행
+      render(<>{entry?.render()}</>);
+
+      // 단언 — g01 화면(헤더 ‹)과 다이얼로그가 함께 있고, 실패 문구는 -failed 키에만 있다.
+      expect(screen.getByTestId('trip-wizard-step1-back')).toBeOnTheScreen();
+      expect(screen.getByTestId('trip-wizard-leave-dialog')).toBeOnTheScreen();
+      if (failed) {
+        expect(screen.getByTestId('trip-wizard-leave-error')).toBeOnTheScreen();
+      } else {
+        expect(screen.queryByTestId('trip-wizard-leave-error')).toBeNull();
+      }
+    }
+  );
 });
 
 describe('🔴 TRIP-1082 · g02 거점 편집 얼굴 프리뷰 2키 (band g)', () => {
