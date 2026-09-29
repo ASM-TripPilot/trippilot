@@ -46,6 +46,7 @@ import { ShareCardScreen } from '@/features/reflection/ui/ShareCardScreen';
 import { TravelStyleScreen } from '@/features/reflection/ui/TravelStyleScreen';
 import { TripSummaryScreen } from '@/features/reflection/ui/TripSummaryScreen';
 import { DestinationDetailScreen } from '@/features/explore/ui/DestinationDetailScreen';
+import { MustVisitOutsideConfirmDialog } from '@/features/explore/ui/MustVisitOutsideConfirmDialog';
 import { MustVisitPickScreen } from '@/features/explore/ui/MustVisitPickScreen';
 import { PlaceDetailScreen as ExplorePlaceDetailScreen } from '@/features/explore/ui/PlaceDetailScreen';
 import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
@@ -189,6 +190,7 @@ import {
   type TripWizardStep2ScreenProps,
 } from '@/features/trip/ui/TripWizardStep2Screen';
 import { BaseRegenerateDialog } from '@/features/trip/ui/BaseRegenerateDialog';
+import { TripWizardLeaveDialog } from '@/features/trip/ui/TripWizardLeaveDialog';
 import { PrefStep1Screen } from '@/features/onboarding/ui/PrefStep1Screen';
 import { PrefStep2Screen } from '@/features/onboarding/ui/PrefStep2Screen';
 import { TermsScreen } from '@/features/onboarding/ui/TermsScreen';
@@ -3929,6 +3931,35 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   {
+    // TRIP-1106 — 선택된 밖 행(p-3)이 있을 때 완료가 띄우는 확인. Figma 프레임이 없고(결정 3 — 코드 먼저)
+    // 딤 덮임·중앙 정렬·흐린 행 위 체크 가독성은 jest 사각이라 이 키가 6-b 육안 자리다.
+    key: 'saved-places-select-outside-confirm',
+    band: 'd',
+    label: 'd02 · 꼭 갈 곳 고르기 지역 밖 확인',
+    login: null,
+    render: () => (
+      <View style={StyleSheet.absoluteFill}>
+        <MustVisitPickScreen
+          state={{ kind: 'results' }}
+          savedPlaces={PREVIEW_SAVED_PLACES.slice(0, 2)}
+          outsideRegionPlaces={PREVIEW_SAVED_PLACES.slice(2)}
+          selectedPoiIds={['p-1', 'p-3']}
+          onToggleSelect={noop}
+          onComplete={noop}
+          onPressAddMore={noop}
+          onRetry={noop}
+          onPressBrowse={noop}
+          onBack={noop}
+        />
+        <MustVisitOutsideConfirmDialog
+          count={1}
+          onExclude={noop}
+          onKeep={noop}
+        />
+      </View>
+    ),
+  },
+  {
     // TRIP-1042 — Figma 4685:2646. 지역 안 0건: 목록 머리 블록(제목+CTA, 삽화 없음) + 지역 밖 흐린 행,
     // 더 담기 행 없음. 흐림·CTA 치수는 jest 사각이라 6-b 육안 자리.
     key: 'saved-places-select-region-empty',
@@ -4314,6 +4345,44 @@ export const PREVIEW_STATES: PreviewState[] = [
         onClose={noop}
         applyDisabled={false}
       />
+    ),
+  },
+  // g01 이탈 확인(TRIP-1114) — 이미 만든 여행이 있을 때 ‹ 가 띄우는 다이얼로그. Figma 프레임이 없는
+  // 발명 얼굴이고(01b Q1·Q2), 딤·중앙 정렬은 조건부 렌더 오버레이의 jest 사각이라 이 두 키가 유일한
+  // 육안 자리다. g01 화면 위에 겹친다(`trip-new-step2-edit-regen-dialog` 선례).
+  {
+    key: 'trip-new-step1-leave-dialog',
+    band: 'g',
+    label: 'g01 · 여행 만들기 leave-dialog',
+    login: null,
+    render: () => (
+      <View style={StyleSheet.absoluteFill}>
+        <TripWizardStep1Screen
+          {...TRIP_WIZARD_BASE}
+          mustVisits={MUST_VISIT_THUMBNAILS}
+        />
+        <TripWizardLeaveDialog onSave={noop} onDelete={noop} onStay={noop} />
+      </View>
+    ),
+  },
+  {
+    key: 'trip-new-step1-leave-dialog-failed',
+    band: 'g',
+    label: 'g01 · 여행 만들기 leave-dialog-failed',
+    login: null,
+    render: () => (
+      <View style={StyleSheet.absoluteFill}>
+        <TripWizardStep1Screen
+          {...TRIP_WIZARD_BASE}
+          mustVisits={MUST_VISIT_THUMBNAILS}
+        />
+        <TripWizardLeaveDialog
+          failed
+          onSave={noop}
+          onDelete={noop}
+          onStay={noop}
+        />
+      </View>
     ),
   },
   // g02 얼굴(TRIP-672 재작성). 화면이 완성된 카드 뷰모델만 받는 프레젠테이션이라 배선 없이

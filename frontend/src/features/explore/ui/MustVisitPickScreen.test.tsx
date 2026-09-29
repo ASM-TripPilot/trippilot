@@ -28,7 +28,8 @@ import {
  *  - **CS-9 (AC-10)** error 는 원형 느낌표 + 전용 카피 + 다시 시도, 완료 바 부재.
  *  - **CS-10 (AC-7)** 더 담기·뒤로가 각자의 콜백을 한 번 올린다.
  *  - **CS-11 (TRIP-1042 AC-2 · BR-U1-58 ②)** 지역 밖은 머리글 아래 보이되 **흐리고 고를 수 없다** —
- *    체크가 없고 행이 disabled 다(TRIP-1012 A4 "밖도 고를 수 있다"를 뒤집음).
+ *    체크가 없고 행이 disabled 다(TRIP-1012 A4 "밖도 고를 수 있다"를 뒤집음). 밖 행엔 순번이 없다(TRIP-1106 결정 1-A).
+ *  - **CS-16 (TRIP-1106 AC-1·2)** 이미 선택된 밖 행은 채운 체크로 보이고 누르면 해제 콜백이 나간다 — 흐림은 그대로.
  *  - **CS-13 (TRIP-1042 AC-4)** 지역 안이 0건이면 results 얼굴 목록 머리에 region-empty 블록(제목 + CTA,
  *    삽화 없음)이 끼고 '+ 탐색에서 더 담기' 행은 빠진다. CTA 는 더 담기 콜백을 올린다.
  *  - **CS-14 (TRIP-1042 AC-9)** 행 위치는 페이지가 준 표기(`부산 사하구`)를 쓰고, 없으면 `place.region`.
@@ -359,16 +360,19 @@ describe('🔴 CS-11 · 지역 밖 목록은 머리글 한 줄 아래 흐리게,
     expect(String(header.props.className)).toContain('text-caption');
     expect(String(header.props.className)).toContain('text-muted');
 
-    // 순번은 이어 매긴다(Figma 2437:1500 — 밖 행도 순번 원이 있다).
+    // 순번은 지역 안 행에만 있다(TRIP-1106 결정 1-A — 밖 행 순번이 "선택 번호"로 읽혀 뺐다).
     [
-      ['p3', '3'],
-      ['p4', '4'],
+      ['p1', '1'],
+      ['p2', '2'],
     ].forEach(([poiId, rank]) => {
       expect(
         within(screen.getByTestId(`mustvisit-pick-rank-${poiId}`)).getByText(
           rank
         )
       ).toBeOnTheScreen();
+    });
+    ['p3', 'p4'].forEach((poiId) => {
+      expect(screen.queryByTestId(`mustvisit-pick-rank-${poiId}`)).toBeNull();
     });
     expect(screen.getByTestId('mustvisit-pick-subtitle')).toHaveTextContent(
       '담은 곳 4곳 · 1곳 선택됨'
@@ -401,6 +405,53 @@ describe('🔴 CS-11 · 지역 밖 목록은 머리글 한 줄 아래 흐리게,
     // 밖 행을 눌러도 선택 콜백이 나가지 않는다.
     fireEvent.press(screen.getByTestId('mustvisit-pick-row-p3'));
     expect(props.onToggleSelect).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * TRIP-1106 — 여행지를 바꾸기 전에 담아 둔 밖 항목이 선택된 채 들어오면, 그 행엔 체크를 보여 주고 해제만
+ * 받는다. "선택된 것에만 체크를 그린다" 한 조건이라 해제 뒤 체크가 사라지는 것(다시 켤 수 없음)은 페이지
+ * 통합 테스트(W2)가 잰다 — 이 화면은 제어형이라 스스로 바뀌지 않는다(CS-4).
+ *
+ * ★ 체크가 disabled 행 안에 있어 `toBeDisabled()`는 조상 때문에 늘 true 다(RNTL 이 조상까지 본다, 02a ★5).
+ *   누를 수 있는지는 press → 콜백으로 잰다.
+ */
+describe('🔴 CS-16 · 이미 선택된 지역 밖 행은 채운 체크로 보이고 누르면 해제 콜백이 나간다 (TRIP-1106 AC-1·2·10 · Q4)', () => {
+  it('p3(밖·선택)은 채운 체크+selected, p4(밖·미선택)는 체크 없음, 둘 다 순번 없음, p3 흐림 유지, 누르면 onToggleSelect(p3)', () => {
+    const props = renderScreen({
+      savedPlaces: SIX.slice(0, 2),
+      outsideRegionPlaces: SIX.slice(2, 4),
+      selectedPoiIds: ['p1', 'p3'],
+    });
+
+    // 선택된 밖 행 — 안 행과 같은 체크(버튼 + 채운 글리프 + selected).
+    const outsideCheck = screen.getByTestId('mustvisit-pick-check-p3');
+    expect(outsideCheck).toBeSelected();
+    expect(
+      screen.getByTestId('mustvisit-pick-check-filled-p3')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('mustvisit-pick-check-outline-p3')).toBeNull();
+
+    // 선택 안 된 밖 행 — 새로 켤 수단이 없다(BR-U1-58 ②).
+    expect(screen.queryByTestId('mustvisit-pick-check-p4')).toBeNull();
+
+    // 밖 행은 순번 없음, 흐림은 그대로(Q4 — 가독성은 6-b 육안).
+    ['p3', 'p4'].forEach((poiId) => {
+      expect(screen.queryByTestId(`mustvisit-pick-rank-${poiId}`)).toBeNull();
+    });
+    expect(
+      String(screen.getByTestId('mustvisit-pick-row-p3').props.className)
+    ).toContain('opacity-40');
+
+    // 부제는 페이지가 준 선택 수 그대로(밖 선택 포함 여부는 페이지가 정한다 — 결정 0).
+    expect(screen.getByTestId('mustvisit-pick-subtitle')).toHaveTextContent(
+      '담은 곳 4곳 · 2곳 선택됨'
+    );
+
+    fireEvent.press(outsideCheck);
+
+    expect(props.onToggleSelect).toHaveBeenCalledTimes(1);
+    expect(props.onToggleSelect).toHaveBeenCalledWith('p3');
   });
 });
 

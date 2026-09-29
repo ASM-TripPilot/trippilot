@@ -24,6 +24,7 @@
  */
 import type { ReactElement } from 'react';
 import { useRef, useState } from 'react';
+import { View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -51,6 +52,7 @@ import {
 import { orderSavedPlaces } from '@/features/explore/model/savedPlaceList';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import { wizardOriginParams } from '@/features/explore/model/wizardOrigin';
+import { MustVisitOutsideConfirmDialog } from '@/features/explore/ui/MustVisitOutsideConfirmDialog';
 import { MustVisitPickScreen } from '@/features/explore/ui/MustVisitPickScreen';
 import { SavedPlaceListScreen } from '@/features/explore/ui/SavedPlaceListScreen';
 import { buildAnytimeMustVisitRequest } from '@/features/itinerary/model/mustVisitTimeForm';
@@ -125,8 +127,12 @@ function MustVisitPickSection({
   completeError?: string | null;
   /** 체크 토글마다 — 여행 모드가 실패 배너를 걷는다(타이머 없이 다음 조작에서, 01b Q3). */
   onToggle?: () => void;
-  /** 고른 poiId 전부와 고를 수 있는 행(지역 안)을 넘긴다 — 무엇을 보낼지는 감싸개가 정한다. */
-  onComplete: (selectedPoiIds: string[], insideList: SavedPlace[]) => void;
+  /** 고른 poiId 전부와 고를 수 있는 행(지역 안)·밖 행을 넘긴다 — 무엇을 보낼지는 감싸개가 정한다. */
+  onComplete: (
+    selectedPoiIds: string[],
+    insideList: SavedPlace[],
+    outsideList: SavedPlace[]
+  ) => void;
 }): ReactElement {
   const [selectedPoiIds, setSelectedPoiIds] = useState<string[]>(
     initialSelectedPoiIds
@@ -155,12 +161,18 @@ function MustVisitPickSection({
       return label ? [[saved.place.poiId, label]] : [];
     })
   );
-  // 선택 수·완료 활성·시드는 **고를 수 있는 행** 안의 선택만 센다 — 안 보이는 선택이나 밖 행의 선택이
-  // "N곳 선택됨"에 남으면 시드와 어긋난다(TRIP-982 A8 · TRIP-1042 AC-11).
-  // 잠긴(이미 등록) 곳은 채워진 체크로 보이므로 선택 수에 함께 센다(보이는 것과 숫자가 같게, 01b Q2).
+  // 선택 수·완료 활성은 **보이는 체크**만 센다 — 안 보이는 선택이 "N곳 선택됨"에 남으면 시드와 어긋난다
+  // (TRIP-982 A8 · TRIP-1042 AC-11). 잠긴(이미 등록) 곳은 채워진 체크로 보이므로 함께 센다(01b Q2).
+  // 밖 행은 잠기지 않은 선택만 체크로 보이고 센다(TRIP-1106 결정 0 · Q1 — 여행 모드의 등록된 밖 곳은 무변경).
+  const hasRow = (list: SavedPlace[], id: string): boolean =>
+    list.some((saved) => saved.place.poiId === id);
   const visibleSelectedPoiIds = [
     ...new Set([...selectedPoiIds, ...lockedPoiIds]),
-  ].filter((id) => insideList.some((saved) => saved.place.poiId === id));
+  ].filter(
+    (id) =>
+      hasRow(insideList, id) ||
+      (hasRow(outsideRegionPlaces, id) && !lockedPoiIds.includes(id))
+  );
   // d04 로 가는 세 버튼은 여행 지역 **이름**을 싣는다(TRIP-1042 AC-7 — d04 는 이름을 받는다). 목적지가
   // 없으면 region 키를 싣지 않는다. 위저드 출처는 d04 가 ＋(새 여행 = reset)를 숨기는 신호다(TRIP-1026).
   const exploreHref = {
@@ -188,7 +200,9 @@ function MustVisitPickSection({
             : [...prev, poiId]
         );
       }}
-      onComplete={() => onComplete(selectedPoiIds, insideList)}
+      onComplete={() =>
+        onComplete(selectedPoiIds, insideList, outsideRegionPlaces)
+      }
       onPressAddMore={() => router.push(exploreHref)}
       onRetry={onRetry}
       onPressBrowse={() => router.push(exploreHref)}
@@ -204,35 +218,89 @@ type PickWrapperProps = {
 };
 
 /** 위저드 모드 — 여행 지역·초기 선택은 위저드 드래프트, 완료는 드래프트 시드 후 1/4 로. */
+type WizardCompletion = {
+  selectedPoiIds: string[];
+  insideList: SavedPlace[];
+  /** 선택된 채 남은 밖 행 poiId — 다이얼로그 N 이고 [빼고 완료]가 빼는 대상이다. */
+  outsideSelectedIds: string[];
+};
+
 function WizardMustVisitPick(props: PickWrapperProps): ReactElement {
   // 여행 지역은 위저드 스토어 목적지가 진다(TRIP-1042) — 판정 키인 코드는 거기에만 있다(URL `region` 은 이름뿐).
   const destinations = useTripWizardStore((s) => s.destinations);
+  // 선택된 밖 행이 있을 때 완료가 멈춰 선 자리(TRIP-1106 AC-6) — 있으면 확인 다이얼로그가 뜬다.
+  const [pending, setPending] = useState<WizardCompletion | null>(null);
+  // 다이얼로그 버튼 잠금 — 상태가 아니라 ref 라 같은 틱 두 번째 누름도 이미 켜진 값을 읽는다(AC-11,
+  // TRIP-1114 `lockedRef` 선례). 공용 `guardPress` 는 `pressGuardStructure` 가 소비처를 잠가 못 쓴다.
+  const lockedRef = useRef(false);
+
+  // 시드 → 재진입 표식 → 1/4 이동. 두 버튼·곧장 완료가 모두 이 한 곳을 지난다(step1 리터럴 하나).
+  function finish(
+    { selectedPoiIds, insideList }: WizardCompletion,
+    dropPoiIds: string[]
+  ): void {
+    // 고를 수 있는 행 중 고른 것만 시드로 옮긴다(전부 아님 — TRIP-491 급소).
+    const chosen = insideList.filter((saved) =>
+      selectedPoiIds.includes(saved.place.poiId)
+    );
+    // 고를 수 있는 행이 없던 위저드 항목(담기를 푼 곳 · 지역 밖 행)은 원래 시드 그대로 남긴다(TRIP-1012 Q1 ·
+    // BR-U1-04 — 조용히 빼면 INV-4). 단 사용자가 체크를 푼 항목은 되살리지 않고(03b 경고-1), [빼고 완료]면
+    // 밖 행을 뺀다(TRIP-1106 AC-7 — 행이 없는 항목은 밖인지 알 수 없어 남긴다). 완료는 여전히 교체다.
+    const store = useTripWizardStore.getState();
+    const kept = store.mustVisits.filter(
+      (m) =>
+        selectedPoiIds.includes(m.sourcePoiId) &&
+        !insideList.some((saved) => saved.place.poiId === m.sourcePoiId) &&
+        !dropPoiIds.includes(m.sourcePoiId)
+    );
+    store.seedMustVisitsFromD02([...seedMustVisits(chosen), ...kept]);
+    // 위저드 안 재진입이다 — 셸이 다시 마운트돼도 이미 만든 여행 id를 지우지 않게 한다(TRIP-1113).
+    store.keepCreatedTripIdOnce();
+    router.push('/trips/new/step1');
+  }
+
+  function resolve(exclude: boolean): void {
+    if (!pending || lockedRef.current) return;
+    lockedRef.current = true;
+    setPending(null);
+    finish(pending, exclude ? pending.outsideSelectedIds : []);
+  }
+
   return (
-    <MustVisitPickSection
-      {...props}
-      destinations={destinations}
-      // 초기값은 위저드에 이미 있는 꼭 갈 곳이다(TRIP-1012 #035 — '더 담기'로 오면 체크된 채 보인다).
-      initialSelectedPoiIds={() =>
-        useTripWizardStore.getState().mustVisits.map((m) => m.sourcePoiId)
-      }
-      onComplete={(selectedPoiIds, insideList) => {
-        // 고를 수 있는 행 중 고른 것만 시드로 옮긴다(전부 아님 — TRIP-491 급소, 밖 행 제외 — AC-10).
-        const chosen = insideList.filter((saved) =>
-          selectedPoiIds.includes(saved.place.poiId)
-        );
-        // 고를 수 있는 행이 없던 위저드 항목(담기를 푼 곳 · 지역 밖 행)은 뺀 것으로 치지 않고 원래 시드
-        // 그대로 남긴다(TRIP-1012 Q1 · BR-U1-04 · TRIP-1042 Q2 — 조용히 빼면 INV-4). 단 사용자가 체크를
-        // 푼 항목은 그 뒤 목록에서 사라져도 되살리지 않는다(03b 경고-1). 완료는 여전히 교체다.
-        const store = useTripWizardStore.getState();
-        const kept = store.mustVisits.filter(
-          (m) =>
-            selectedPoiIds.includes(m.sourcePoiId) &&
-            !insideList.some((saved) => saved.place.poiId === m.sourcePoiId)
-        );
-        store.seedMustVisitsFromD02([...seedMustVisits(chosen), ...kept]);
-        router.push('/trips/new/step1');
-      }}
-    />
+    <View className="flex-1">
+      <MustVisitPickSection
+        {...props}
+        destinations={destinations}
+        // 초기값은 위저드에 이미 있는 꼭 갈 곳이다(TRIP-1012 #035 — '더 담기'로 오면 체크된 채 보인다).
+        initialSelectedPoiIds={() =>
+          useTripWizardStore.getState().mustVisits.map((m) => m.sourcePoiId)
+        }
+        onComplete={(selectedPoiIds, insideList, outsideList) => {
+          const completion = {
+            selectedPoiIds,
+            insideList,
+            outsideSelectedIds: outsideList
+              .map((saved) => saved.place.poiId)
+              .filter((poiId) => selectedPoiIds.includes(poiId)),
+          };
+          // 선택된 밖 행이 있으면 시드·표식·이동 전에 묻는다(AC-6 · INV-4 — 조용히 넣지 않는다). 떠 있는 동안
+          // 완료를 또 눌러도 같은 다이얼로그를 다시 세울 뿐이다(AC-11).
+          if (completion.outsideSelectedIds.length > 0) {
+            lockedRef.current = false;
+            setPending(completion);
+            return;
+          }
+          finish(completion, []);
+        }}
+      />
+      {pending ? (
+        <MustVisitOutsideConfirmDialog
+          count={pending.outsideSelectedIds.length}
+          onExclude={() => resolve(true)}
+          onKeep={() => resolve(false)}
+        />
+      ) : null}
+    </View>
   );
 }
 

@@ -443,7 +443,19 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    `h08-candidate-sheet-empty` 바로 뒤에 이 순서로 추가하고 이 가드는 안 만진다(추가 전엔 187개라 red).
     //    정확한 키·얼굴은 아래 'TRIP-1109' describe, h 순서는 devPreviewBandSort EXPECTED_H 가 못박는다.
     //    Figma 프레임이 없어(결정 1) 이 3키의 6-b 캡처가 Figma 반영 후보다.
-    expect(PREVIEW_STATES).toHaveLength(190);
+    // ⚠️ TRIP-1114: g01 이탈 확인 다이얼로그 2키(`trip-new-step1-leave-dialog`·`-leave-dialog-failed`, band `g`)
+    //    추가로 185→187. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 2키만
+    //    `trip-new-step1-budget-sheet` 바로 뒤에 이 순서로 추가하고 이 가드는 안 만진다(추가 전엔 185개라 red).
+    //    정확한 키·얼굴은 아래 'TRIP-1114' describe 가 못박는다. Figma 프레임이 없는 발명 얼굴이고(01b Q1·Q2)
+    //    딤·중앙 정렬은 조건부 렌더 오버레이의 jest 사각이라 이 두 키가 유일한 육안 수단이다.
+
+    // ⚠️ TRIP-1106: d02 지역 밖 확인 다이얼로그 1키(`saved-places-select-outside-confirm`, band `d`) 추가로
+    //    187→188. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 1키만
+    //    `saved-places-select-outside` 바로 뒤에 추가하고 이 가드는 안 만진다(추가 전엔 187개라 red). 정확한
+    //    키·얼굴은 아래 'TRIP-1106' describe 가 못박는다. Figma 프레임이 없는 얼굴이고(결정 3 — 코드 먼저)
+    //    딤·중앙 정렬은 조건부 렌더 오버레이의 jest 사각이라 이 키가 유일한 육안 수단이다.
+    //    devPreviewBandSort 는 밴드 h·l 만 잠가 band d 와 무관(오갱신 금지).
+    expect(PREVIEW_STATES).toHaveLength(193);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -1922,7 +1934,9 @@ describe('🔴 TRIP-1042 · d02 select 지역 빈 상태 프리뷰 키 + 지역 
     );
   });
 
-  it('saved-places-select-outside 를 렌더하면 머리글 뒤 행엔 체크가 없고, 앞 행엔 있다', () => {
+  // TRIP-1106 으로 개정 — 이 프리뷰는 밖 행 p-3 을 선택해 둔다(`selectedPoiIds={['p-1','p-3']}`). 이제 선택된
+  // 밖 행은 채운 체크(해제 수단)를 보이므로, "머리글 뒤엔 체크가 없다"는 선택 안 된 밖 행에만 맞다.
+  it('saved-places-select-outside 를 렌더하면 앞 행엔 체크가 있고, 머리글 뒤 행은 선택된 p-3 만 채운 체크이며 순번이 없다', () => {
     const entry = PREVIEW_STATES.find(
       (state) => state.key === 'saved-places-select-outside'
     );
@@ -1941,11 +1955,55 @@ describe('🔴 TRIP-1042 · d02 select 지역 빈 상태 프리뷰 키 + 지역 
         screen.getByTestId(`mustvisit-pick-check-${poiIdOf(testID)}`)
       ).toBeOnTheScreen();
     });
-    order.slice(headerAt + 1).forEach((testID) => {
-      expect(
-        screen.queryByTestId(`mustvisit-pick-check-${poiIdOf(testID)}`)
-      ).toBeNull();
+
+    const outsideIds = order.slice(headerAt + 1).map(poiIdOf);
+    // 앵커 — 선택된 밖 행과 선택 안 된 밖 행이 둘 다 있다(한쪽만이면 아래 갈래 하나가 공허하다).
+    expect(outsideIds).toContain('p-3');
+    expect(outsideIds.length).toBeGreaterThan(1);
+    outsideIds.forEach((poiId) => {
+      if (poiId === 'p-3') {
+        expect(
+          screen.getByTestId(`mustvisit-pick-check-filled-${poiId}`)
+        ).toBeOnTheScreen();
+      } else {
+        expect(
+          screen.queryByTestId(`mustvisit-pick-check-${poiId}`)
+        ).toBeNull();
+      }
+      expect(screen.queryByTestId(`mustvisit-pick-rank-${poiId}`)).toBeNull();
     });
+  });
+});
+
+// TRIP-1106 — 딤 실제 덮임·중앙 정렬·흐린 행 위 체크 가독성은 픽셀이라 jest 사각이다. 6-b 육안 자리가 이 키다.
+describe('🔴 TRIP-1106 · d02 select 지역 밖 확인 다이얼로그 프리뷰 키 (band d)', () => {
+  it('saved-places-select-outside-confirm 키가 있고, 렌더하면 고르기 화면 위에 지역 밖 확인 다이얼로그가 겹친다', () => {
+    // 준비 — 새 키 엔트리를 찾는다(red-first: preview.tsx 에 추가 전엔 없다).
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'saved-places-select-outside-confirm'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('d');
+    expect(entry?.label).toBe('d02 · 꼭 갈 곳 고르기 지역 밖 확인');
+
+    // 실행
+    render(<>{entry?.render()}</>);
+
+    // 단언 — 뒤에 고르기 화면이 있고(딤이 무엇을 덮는지 보려면 필요) 그 위에 다이얼로그·두 버튼이 있다.
+    expect(screen.getByTestId('mustvisit-pick-root')).toBeOnTheScreen();
+    const gate = screen.getByTestId('mustvisit-pick-outside-confirm');
+    expect(
+      within(gate).getByText(/^이 여행 지역 밖 \d+곳이 함께 들어가요$/)
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('mustvisit-pick-outside-exclude')
+    ).toBeOnTheScreen();
+    expect(screen.getByTestId('mustvisit-pick-outside-keep')).toBeOnTheScreen();
+
+    // 이웃 앵커 — 지역 밖 키가 딸려 사라지지 않았다.
+    expect(PREVIEW_STATES.map((state) => state.key)).toContain(
+      'saved-places-select-outside'
+    );
   });
 });
 
@@ -2025,6 +2083,38 @@ describe('🔴 TRIP-1068 · j03 오늘의 회고 pending 프리뷰 키 (band j)'
     expect(keys).toContain('reflection-empty');
     expect(keys).toContain('reflection-error');
   });
+});
+
+describe('🔴 TRIP-1114 · g01 이탈 확인 다이얼로그 프리뷰 2키 (band g)', () => {
+  it.each([
+    ['trip-new-step1-leave-dialog', 'g01 · 여행 만들기 leave-dialog', false],
+    [
+      'trip-new-step1-leave-dialog-failed',
+      'g01 · 여행 만들기 leave-dialog-failed',
+      true,
+    ],
+  ] as const)(
+    '%s — g01 얼굴 위에 이탈 확인 다이얼로그가 겹친다',
+    (key, label, failed) => {
+      // 준비 — 새 키 엔트리(red-first: preview.tsx 에 추가 전엔 없다).
+      const entry = PREVIEW_STATES.find((state) => state.key === key);
+      expect(entry).toBeDefined();
+      expect(entry?.band).toBe('g');
+      expect(entry?.label).toBe(label);
+
+      // 실행
+      render(<>{entry?.render()}</>);
+
+      // 단언 — g01 화면(헤더 ‹)과 다이얼로그가 함께 있고, 실패 문구는 -failed 키에만 있다.
+      expect(screen.getByTestId('trip-wizard-step1-back')).toBeOnTheScreen();
+      expect(screen.getByTestId('trip-wizard-leave-dialog')).toBeOnTheScreen();
+      if (failed) {
+        expect(screen.getByTestId('trip-wizard-leave-error')).toBeOnTheScreen();
+      } else {
+        expect(screen.queryByTestId('trip-wizard-leave-error')).toBeNull();
+      }
+    }
+  );
 });
 
 describe('🔴 TRIP-1082 · g02 거점 편집 얼굴 프리뷰 2키 (band g)', () => {
