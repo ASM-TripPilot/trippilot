@@ -14,7 +14,9 @@ import path from 'path';
  *    live" 날짜 특례가 지워져 그 파일은 더는 오늘을 쓰지 않는다 — 7곳→6곳. TRIP-1052 로 숙소 등록
  *    달력이 사라져 `pages/stay-register/ui/StayRegisterPage.tsx` 도 오늘을 쓰지 않는다 — 6곳→5곳.
  *    TRIP-1121 D4 로 일정 탭 목록 `pages/itinerary-list/ui/MyTripsListPage.tsx` 가 오늘을 한 번 만들어
- *    "여행 중" 정렬·카드 배지에 넘긴다 — 5곳→6곳. 이 가드는 목록에 적힌 호출부만 보므로 여기 적어야 잠긴다.)
+ *    "여행 중" 정렬·카드 배지에 넘긴다 — 5곳→6곳. TRIP-1123 로 마이페이지 여행 카드(`pages/my-page/ui/
+ *    TripCardContainer.tsx`)가 지워지고 페이지 `pages/my-page/ui/MyPage.tsx` 가 숫자 집계에 오늘을 한 번 만든다 —
+ *    교체라 6곳 그대로. 이 가드는 목록에 적힌 호출부만 보므로 여기 적어야 잠긴다.)
  *  - 01b Q2 기기 로컬 `todayIso()` 사본 2개가 사라진다.
  *  - 01b Q1 헬퍼는 순수하다 — 시계를 스스로 읽지 않는다(시계 금지 소스 가드들은 import 를 안
  *    따라가므로, 시계를 읽는 공용 헬퍼는 그 가드들을 우회하는 통로가 된다).
@@ -30,7 +32,7 @@ const SRC = path.resolve('src');
 const A_CALL_SITES = [
   'app/(tabs)/index.tsx',
   'pages/live-itinerary/ui/LiveItineraryPage.tsx',
-  'pages/my-page/ui/TripCardContainer.tsx',
+  'pages/my-page/ui/MyPage.tsx',
   'pages/records-calendar/ui/RecordsCalendarPage.tsx',
   'pages/itinerary-list/ui/MyTripsListPage.tsx',
 ];

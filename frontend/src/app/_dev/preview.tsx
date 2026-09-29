@@ -134,7 +134,6 @@ import {
 import { StyleSummaryCard } from '@/features/settings/ui/StyleSummaryCard';
 import { RevokeConfirmDialog } from '@/features/settings/ui/RevokeConfirmDialog';
 import { SettingsScreen } from '@/features/settings/ui/SettingsScreen';
-import { TripCard, type TripCardVM } from '@/features/settings/ui/TripCard';
 import { triggerLabel } from '@/features/planb/model/triggerLabel';
 import { triggerPillCopy } from '@/features/planb/model/triggerPillCopy';
 import { riskAffectedRow } from '@/features/planb/model/riskAffectedRow';
@@ -1476,32 +1475,6 @@ function renderH06Ongoing() {
     />
   );
 }
-
-// l03 마이페이지 default(Figma 1602:2388, TRIP-775) — 예정 카드 2장: D-12(14일 이하 → primary 배지)와
-// D-30(ink 배지, 일정 미생성이라 daysLabel null). 화면은 무상태라 VM + noop 한 벌로 충분(TripCardContainer 의
-// 조회 조립은 안 태움 — 배지 색·카드 그림자·칩 모양은 jest 사각, 스크린샷 대조 몫).
-const MY_PAGE_UPCOMING_VMS: TripCardVM[] = [
-  {
-    tripId: 'busan',
-    title: '부산 여행',
-    dateRange: '6.10~6.12',
-    basesLabel: '숙소 1',
-    daysLabel: '일정 3일',
-    dBadge: 'D-12',
-    dBadgeTone: 'primary',
-    isEnded: false,
-  },
-  {
-    tripId: 'jeju',
-    title: '제주 여행',
-    dateRange: '7.1~7.4',
-    basesLabel: '숙소 미등록',
-    daysLabel: null,
-    dBadge: 'D-30',
-    dBadgeTone: 'ink',
-    isEnded: false,
-  },
-];
 
 // l03 마이페이지 empty(Figma 1603:2414, TRIP-776) — 지난 여행 썸네일 카드 3장(종료일 최근순). 사진은 Figma 목업
 // 사진 로컬 사본(`assets/my-page/CREDITS.md`, G7) — jest 는 .uri 가 undefined 라 회색 자리, 실기만 사진.
@@ -5277,8 +5250,8 @@ export const PREVIEW_STATES: PreviewState[] = [
       </View>
     ),
   },
-  // l03 마이페이지 default(TRIP-775) — Figma 1602:2388 과 같은 데이터: 카운트 2/0/3 · 프로필 태그 ·
-  // 정식 스타일 카드 · 예정 카드 2장 · 메뉴 3행 · 헤더 톱니 · 탭바(마이). 예정이 있으므로 지난 여행 섹션은
+  // l03 마이페이지 default(TRIP-775·1123) — Figma 4755:2930 과 같은 데이터: 카운트 2/0/3(칸마다 ›) · 프로필 태그 ·
+  // 정식 스타일 카드 · 메뉴 3행 · 헤더 톱니 · 탭바(마이). 예정이 있으므로 지난 여행 섹션은
   // 없다(§F-3 A안). 헤드라인은 계약 공백이라 실앱처럼 비워 둔다(Figma 와 의도된 차이).
   {
     key: 'my-page-default',
@@ -5292,19 +5265,13 @@ export const PREVIEW_STATES: PreviewState[] = [
           email="trippilot@email.com"
           counts={{ upcoming: 2, active: 0, ended: 3 }}
           tags={STYLE_CARD_OFFICIAL_VM.descriptors}
-          active="upcoming"
-          onChangeSegment={noop}
+          onPressCount={noop}
           styleCard={
             <StyleSummaryCard
               vm={STYLE_CARD_OFFICIAL_VM}
               onPressDetail={noop}
             />
           }
-          cards={MY_PAGE_UPCOMING_VMS.map((vm) => (
-            <TripCard key={vm.tripId} vm={vm} onPressReflection={noop} />
-          ))}
-          activeEmpty={false}
-          onPressCreateTrip={noop}
           showPast={false}
           pastCards={null}
           pastEmpty={false}
@@ -5316,8 +5283,8 @@ export const PREVIEW_STATES: PreviewState[] = [
         'my'
       ),
   },
-  // l03 마이페이지 empty(TRIP-776) — Figma 1603:2414 와 같은 데이터: 카운트 0/0/3 · 프로필 태그(스타일 카드
-  // 없음 — Figma 내부 모순 그대로) · 예정 빈 문구 + 플러스 CTA · 지난 여행 썸네일 카드 3장 + "캘린더 ›" ·
+  // l03 마이페이지 empty(TRIP-776·1123) — Figma 4755:3123 과 같은 데이터: 카운트 0/0/3(칸마다 ›) · 프로필 태그(스타일 카드
+  // 없음 — Figma 내부 모순 그대로) · 지난 여행 썸네일 카드 3장 + "캘린더 ›" ·
   // 메뉴 3행 · 탭바(마이). 종료 0건 엣지("아직 종료된 여행이 없습니다")는 jest(MyPageScreen.l03empty)가 잰다.
   {
     key: 'my-page-empty',
@@ -5331,11 +5298,7 @@ export const PREVIEW_STATES: PreviewState[] = [
           email="trippilot@email.com"
           counts={{ upcoming: 0, active: 0, ended: 3 }}
           tags={STYLE_CARD_OFFICIAL_VM.descriptors}
-          active="upcoming"
-          onChangeSegment={noop}
-          cards={null}
-          activeEmpty
-          onPressCreateTrip={noop}
+          onPressCount={noop}
           showPast
           pastCards={MY_PAGE_PAST_VMS.map((vm) => (
             <PastTripRow

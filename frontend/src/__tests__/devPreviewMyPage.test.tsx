@@ -5,18 +5,21 @@ import type { ReactTestInstance } from 'react-test-renderer';
 import { HeartGlyph } from '@/features/settings/ui/SettingsGlyphs';
 
 /**
- * TRIP-775 · AC-10 — `my-page-default` 프리뷰가 Figma l03 default(1602:2388)의 데이터와 같다.
+ * TRIP-775 · AC-10 — `my-page-default` 프리뷰가 Figma l03 default 의 데이터와 같다.
+ * TRIP-1123 — Figma 채택본 default `4755:2930` · empty `4755:3123` 로 교체: 세그·여행 카드·[새 여행 만들기]·
+ * 빈 문구가 사라지고, 숫자 칸마다 라벨 뒤 회색 › 가 붙었다(프리뷰도 누를 곳을 넘겨 › 를 그린다).
  *
  * 무엇을 보장하나:
  *  - 프로필 카운트가 예정 2 · 진행 중 0 · 종료 3 순서다.
- *  - 여행 카드는 2장(부산 여행 D-12 primary / 제주 여행 D-30 ink)이고 속초 D-60 엣지 카드는 없다.
+ *  - 🔴 1123 세그·여행 카드·CTA 가 없고, 숫자 칸 3개에 › 가 하나씩 있다.
  *  - 하단 탭바가 합성돼 있고 '마이' 탭이 활성이다(`withShellTabBar(…, 'my')`).
  *  - 예정이 있으므로 "지난 여행" 섹션이 없다. 하트 FAB 도 없다(AC-8).
  *
- * 키 이름·개수 불변은 `devPreviewBandNav`·`devPreviewBandSort`(무수정)가 지킨다.
- * 픽셀(카드 모서리·그림자·폰트)은 jest 가 못 본다 — [검증] 스크린샷 대조 몫.
+ * 키 이름·개수 불변은 `devPreviewBandNav`·`devPreviewBandSort`(무수정)가 지킨다 — 모름(`–`) 상태는 Figma 프레임이
+ * 없어 l 밴드 25키 1:1 잠금에 새 키를 넣지 않는다(02 판정).
+ * 픽셀(카드 모서리·그림자·폰트·› 세로 정렬)은 jest 가 못 본다 — [검증] 스크린샷 대조 몫.
  *
- * TRIP-776 · AC-8 — `my-page-empty` 프리뷰가 Figma l03 empty(1603:2414)의 데이터와 같다(아래 두 번째 describe).
+ * TRIP-776 · AC-8 — `my-page-empty` 프리뷰가 Figma l03 empty 의 데이터와 같다(아래 두 번째 describe).
  *
  * 3동작: 준비(딥링크 state=키) → 실행(DevPreview 렌더) → 단언.
  */
@@ -47,24 +50,19 @@ const PREVIEW_STATES = require('@/app/_dev/preview').PREVIEW_STATES as {
 
 const CARD_ROOT = /^my-trip-card-/;
 
-function tokens(className: unknown): string[] {
-  return typeof className === 'string' ? className.split(/\s+/) : [];
+/** 프로필 카드 숫자 칸 안의 › (host Text, 글자 완전 일치) 개수. */
+function chevronCountIn(cellTestID: string): number {
+  return screen
+    .getByTestId(cellTestID)
+    .findAll((n) => (n.type as string) === 'Text' && n.props.children === '›')
+    .length;
 }
 
-/** 배지 글자부터 카드 루트 직전까지, 호스트 요소의 bg-* 토큰. */
-function badgeBgTokens(label: string): string[] {
-  const out: string[] = [];
-  let cur: ReactTestInstance | null = screen.getByText(label);
-  while (cur) {
-    if (typeof cur.type === 'string') {
-      const id = cur.props.testID;
-      if (typeof id === 'string' && CARD_ROOT.test(id)) break;
-      out.push(...tokens(cur.props.className));
-    }
-    cur = cur.parent;
-  }
-  return out.filter((token) => token.startsWith('bg-'));
-}
+const COUNT_CELLS = [
+  'my-profile-count-upcoming',
+  'my-profile-count-active',
+  'my-profile-count-ended',
+];
 
 beforeEach(() => {
   mockSearchParams.state = 'my-page-default';
@@ -87,28 +85,18 @@ describe('TRIP-775 · my-page-default 프리뷰 (AC-10)', () => {
     expect(numbers).toEqual(['2', '0', '3']);
   });
 
-  it('여행 카드는 부산 여행 · 제주 여행 2장이고 속초 엣지 카드는 없다', () => {
+  it('🔴 1123 · 세그·여행 카드·[새 여행 만들기]가 없고, 숫자 칸마다 › 가 하나씩 있다', () => {
     render(<DevPreview />);
 
-    const cardIds = screen
-      .queryAllByTestId(CARD_ROOT)
-      .map((node) => String(node.props.testID));
-    expect(cardIds).toHaveLength(2);
-    expect(screen.getByText('부산 여행')).toBeOnTheScreen();
-    expect(screen.getByText('제주 여행')).toBeOnTheScreen();
-    expect(screen.queryByText(/속초/)).toBeNull();
-  });
-
-  it('D-12 배지는 primary, D-30 배지는 ink 다', () => {
-    render(<DevPreview />);
-
-    const near = badgeBgTokens('D-12');
-    expect(near).toContain('bg-primary');
-    expect(near).not.toContain('bg-ink');
-
-    const far = badgeBgTokens('D-30');
-    expect(far).toContain('bg-ink');
-    expect(far).not.toContain('bg-primary');
+    // 단언(부재) — Figma 4755:2930 엔 목록이 없다.
+    expect(screen.queryAllByTestId(/^my-trip-segment/)).toHaveLength(0);
+    expect(screen.queryAllByTestId(CARD_ROOT)).toHaveLength(0);
+    expect(screen.queryByTestId('my-create-trip')).toBeNull();
+    expect(screen.queryByText('부산 여행')).toBeNull();
+    // 단언(존재) — 숫자 칸 3개, 각 칸에 › 하나.
+    COUNT_CELLS.forEach((id) => {
+      expect(chevronCountIn(id)).toBe(1);
+    });
   });
 
   it('하단 탭바가 합성돼 있고 마이 탭이 활성이다', () => {
@@ -168,15 +156,17 @@ describe('TRIP-776 · my-page-empty 프리뷰 (AC-8)', () => {
     expect(screen.queryByTestId('my-style-card')).toBeNull();
   });
 
-  it('예정 빈 문구 한 조각과 "새 여행 만들기" CTA 가 있고, 위 목록에 칩 카드는 없다', () => {
+  it('🔴 1123 · 빈 문구·[새 여행 만들기]·세그·칩 카드가 없고, 숫자 칸마다 › 가 있다(Figma 4755:3123)', () => {
     render(<DevPreview />);
 
-    expect(
-      screen.getByText('예정된 여행이 없어요 · 새 여행을 만들어 보세요')
-    ).toBeOnTheScreen();
-    const cta = screen.getByTestId('my-create-trip');
-    expect(within(cta).getByText('새 여행 만들기')).toBeOnTheScreen();
+    expect(screen.queryAllByText(/예정된 여행이 없어요/)).toHaveLength(0);
+    expect(screen.queryByTestId('my-create-trip')).toBeNull();
+    expect(screen.queryByText('새 여행 만들기')).toBeNull();
+    expect(screen.queryAllByTestId(/^my-trip-segment/)).toHaveLength(0);
     expect(screen.queryAllByTestId(CARD_ROOT)).toHaveLength(0);
+    COUNT_CELLS.forEach((id) => {
+      expect(chevronCountIn(id)).toBe(1);
+    });
   });
 
   it('지난 여행은 썸네일 카드 3장 — 제주 · 강릉 · 부산 순서, 날짜와 사진 수가 Figma 와 같다', () => {
