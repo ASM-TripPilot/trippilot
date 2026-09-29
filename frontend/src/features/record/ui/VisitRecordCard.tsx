@@ -1,5 +1,7 @@
-import type { ReactElement, ReactNode } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { useEffect, useRef, type ReactElement, type ReactNode } from 'react';
+import { Animated, Pressable, Text, View } from 'react-native';
+
+import { startUnlessReduceMotion } from '@/shared/motion/reduceMotion';
 
 import { deriveVisitStatus, isOptimisticVisit } from '../model/visitStatus';
 import {
@@ -79,6 +81,39 @@ function StatusCircle({
   visitCheckId: string;
   onPressComplete?: (visitCheckId: string) => void;
 }): ReactElement {
+  // TRIP-1125 — 진행 중 → 완료로 **바뀌는 순간만** 체크가 한 번 튄다. 처음부터 완료로 마운트(j01
+  // 진입·일차 전환)면 그대로 보인다. 리스트 key 가 visitCheckId 라 낙관 완료에도 이 컴포넌트는 살아 있어
+  // 이전 상태를 기억할 수 있다. 등장 모양·박자는 발명값(6-b 육안 조정).
+  const checkScale = useRef(new Animated.Value(1)).current;
+  const prevStatus = useRef(status);
+  useEffect(() => {
+    const justCompleted =
+      status === 'COMPLETED' && prevStatus.current === 'IN_PROGRESS';
+    prevStatus.current = status;
+    if (!justCompleted) return;
+    // 작게 시작하지 않고 제 크기에서 부풀었다 돌아온다 — 시작 여부는 동작 줄이기 답(Promise) 뒤에야 알 수
+    // 있어, 작게 시작하면 첫 프레임에 다 큰 체크가 보였다 줄어드는 번쩍임이 생긴다.
+    const stop = startUnlessReduceMotion(
+      Animated.sequence([
+        Animated.timing(checkScale, {
+          toValue: 1.25,
+          duration: 120,
+          useNativeDriver: true,
+        }),
+        Animated.spring(checkScale, {
+          toValue: 1,
+          friction: 4,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    // 등장 도중 상태가 바뀌면 다음 완료 표시가 중간 크기로 남지 않게 되돌린다.
+    return () => {
+      stop();
+      checkScale.setValue(1);
+    };
+  }, [status, checkScale]);
+
   // TRIP-1069 D7 — 아직 서버에 없는 낙관 카드는 완료를 쏠 수 없다(404). 표식만 그린다.
   if (status === 'IN_PROGRESS' && isOptimisticVisit(visitCheckId)) {
     return <VisitCheckActiveGlyph size={22} />;
@@ -87,9 +122,12 @@ function StatusCircle({
 
   if (status === 'COMPLETED') {
     return (
-      <View testID={`record-visit-check-done-${visitCheckId}`}>
+      <Animated.View
+        testID={`record-visit-check-done-${visitCheckId}`}
+        style={{ transform: [{ scale: checkScale }] }}
+      >
         <VisitCheckDoneGlyph size={22} />
-      </View>
+      </Animated.View>
     );
   }
   if (status === 'IN_PROGRESS') {

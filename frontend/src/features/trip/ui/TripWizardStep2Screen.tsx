@@ -10,6 +10,7 @@ import {
   WarningTriangleGlyph,
 } from '@/features/trip/ui/TripGlyphs';
 import { formatWizardStep } from '@/features/trip/model/tripSummary';
+import { Skeleton } from '@/shared/ui/Skeleton';
 
 /**
  * g02 거점 숙소 2/4 — **props만 받는 프레젠테이션 화면**(TRIP-672, Figma `3657:2068` 재작성).
@@ -219,12 +220,12 @@ function NightSkeleton({ index }: { index: number }): ReactElement {
       testID={`trip-base-skeleton-night-${index}`}
       className="w-full gap-md bg-canvas px-lg py-[14px]"
     >
-      <View className="h-[14px] w-[92px] rounded-[6px] bg-surface-strong" />
+      <Skeleton className="h-[14px] w-[92px] rounded-[6px] bg-surface-strong" />
       <View className="w-full flex-row items-center gap-md">
-        <View className="h-[48px] w-[48px] rounded-thumb bg-surface-strong" />
+        <Skeleton className="h-[48px] w-[48px] rounded-thumb bg-surface-strong" />
         <View className="flex-1 gap-sm">
-          <View className="h-[14px] w-[150px] rounded-[6px] bg-hairline" />
-          <View className="h-[12px] w-[104px] rounded-[6px] bg-surface-strong" />
+          <Skeleton className="h-[14px] w-[150px] rounded-[6px] bg-hairline" />
+          <Skeleton className="h-[12px] w-[104px] rounded-[6px] bg-surface-strong" />
         </View>
       </View>
     </View>

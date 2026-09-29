@@ -6,6 +6,7 @@ import type { SavedStayCardVM } from '@/entities/stay/model';
 import { SavedStayCard } from '@/entities/stay/ui/SavedStayCard';
 import { CollageEmptyState } from '@/shared/ui/CollageEmptyState';
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { Skeleton } from '@/shared/ui/Skeleton';
 
 import {
   BackChevronGlyph,
@@ -186,8 +187,8 @@ function LoadingFace(): ReactElement {
       </Text>
       {[0, 1].map((index) => (
         <View key={index} className="gap-md">
-          <View className="h-[178px] w-full rounded-card bg-surface-strong" />
-          <View className="h-[15px] w-2/3 rounded-thumb bg-hairline" />
+          <Skeleton className="h-[178px] w-full rounded-card bg-surface-strong" />
+          <Skeleton className="h-[15px] w-2/3 rounded-thumb bg-hairline" />
         </View>
       ))}
     </View>

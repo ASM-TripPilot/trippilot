@@ -7,6 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import type { Region } from '@/shared/api/generated/schemas';
 import { RegionLevel } from '@/shared/api/generated/schemas';
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { Skeleton } from '@/shared/ui/Skeleton';
 
 import { groupRegionsBySido, regionTint } from '../model/regions';
 import type { RegionGroup } from '../model/regions';
@@ -482,7 +483,7 @@ export function RegionPickerScreen({
             className="flex-row flex-wrap justify-between"
           >
             {[0, 1, 2, 3].map((slot) => (
-              <View
+              <Skeleton
                 key={slot}
                 className="mb-md h-[152px] w-[48%] rounded-card bg-surface-soft"
               />

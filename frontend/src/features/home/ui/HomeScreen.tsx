@@ -40,6 +40,7 @@ import {
 } from './HomeGlyphs';
 import { formatCountBadge } from '../lib/formatCountBadge';
 import { HeartButton } from '@/shared/ui/HeartButton';
+import { Skeleton } from '@/shared/ui/Skeleton';
 import type {
   HomeCollectionCard,
   HomeMagazineHero,
@@ -487,7 +488,7 @@ function CollectionsSection({
           className="mx-lg flex-row gap-md overflow-hidden"
         >
           {[0, 1].map((i) => (
-            <View
+            <Skeleton
               key={i}
               className="h-[300px] w-[230px] rounded-[18px] bg-surface-strong"
             />
@@ -567,7 +568,7 @@ function SpotsSection({
           {[0, 1].map((row) => (
             <View key={row} className="flex-row gap-md">
               {[0, 1].map((c) => (
-                <View
+                <Skeleton
                   key={c}
                   className="h-[166px] flex-1 rounded-card bg-surface-strong"
                 />
@@ -915,7 +916,7 @@ function DiscoveryBody({
       <SearchBarBlock onPress={onPressSearch} />
       {/* TRIP-699 — 로딩이면 히어로는 캐러셀이 아니라 통짜 스켈레톤(390×470, Figma 2174:2307). */}
       {sections.kind === 'loading' ? (
-        <View
+        <Skeleton
           testID="home-hero-skeleton"
           className="h-[470px] w-full bg-surface-strong"
         />

@@ -43,6 +43,7 @@ import {
   SuitcaseGlyph,
   WarningTriangleGlyph,
 } from '@/features/explore/ui/ExploreGlyphs';
+import { Skeleton } from '@/shared/ui/Skeleton';
 
 // 카드 뷰모델은 entities 로 이관됐다(StayCardVM=807 · PlaceCardVM=806) — 여기서 재수출해 기존
 // 소비처(placePhoto 테스트·라우트)의 `./ExploreLandingScreen`·이 파일 경유
@@ -194,7 +195,7 @@ function SkeletonRail({
     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
       <View className="flex-row gap-md">
         {Array.from({ length: count }).map((_, i) => (
-          <View
+          <Skeleton
             key={i}
             testID={`${testIDPrefix}-${i}`}
             className="rounded-card bg-surface-soft"

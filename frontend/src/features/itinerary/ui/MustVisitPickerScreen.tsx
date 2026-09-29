@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MapView, type MapPin } from '@/shared/map';
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { Skeleton } from '@/shared/ui/Skeleton';
 
 import {
   MUST_VISIT_NAME_PLACEHOLDER,
@@ -336,7 +337,7 @@ function LoadingFace(): ReactElement {
       className="w-full gap-lg"
       accessibilityLabel="목록을 불러오는 중"
     >
-      <View
+      <Skeleton
         testID="itinerary-mustvisit-screen-map-skeleton"
         className="h-[170px] w-full rounded-card bg-surface-soft"
       />
@@ -346,20 +347,20 @@ function LoadingFace(): ReactElement {
           testID="itinerary-mustvisit-screen-card-skeleton"
           className="w-full flex-row items-center gap-md rounded-card border border-hairline bg-canvas py-md pl-md pr-[14px]"
         >
-          <View
+          <Skeleton
             testID="itinerary-mustvisit-screen-skeleton-thumb"
             className="h-[26px] w-[26px] rounded-pill bg-surface-soft"
           />
-          <View
+          <Skeleton
             testID="itinerary-mustvisit-screen-skeleton-box"
             className="h-[78px] w-[78px] rounded-thumb bg-surface-soft"
           />
           <View className="flex-1 gap-xs">
-            <View
+            <Skeleton
               testID="itinerary-mustvisit-screen-skeleton-bar"
               className="h-[14px] w-1/3 rounded-pill bg-surface-soft"
             />
-            <View
+            <Skeleton
               testID="itinerary-mustvisit-screen-skeleton-bar"
               className="h-[14px] w-2/3 rounded-pill bg-surface-soft"
             />

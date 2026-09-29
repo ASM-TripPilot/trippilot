@@ -44,6 +44,7 @@ import {
   SegmentedControl,
   type SegmentedOption,
 } from '@/shared/ui/SegmentedControl';
+import { Skeleton } from '@/shared/ui/Skeleton';
 
 import {
   canSubmitStayRegister,
@@ -145,11 +146,11 @@ const REGISTER_TABS: SegmentedOption[] = [
 function CandidateSkeleton(): ReactElement {
   return (
     <View className="gap-sm px-lg">
-      <View
+      <Skeleton
         testID="stay-register-candidate-skeleton-0"
         className="h-16 w-full rounded-button bg-surface-strong"
       />
-      <View
+      <Skeleton
         testID="stay-register-candidate-skeleton-1"
         className="h-16 w-full rounded-button bg-surface-strong"
       />

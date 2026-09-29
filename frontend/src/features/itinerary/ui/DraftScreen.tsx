@@ -9,6 +9,7 @@ import { StateNotice } from '@/shared/ui/StateNotice';
 import type { DraftDayTab, DraftPin, DraftView } from '../model/draftView';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { VIOLATION_NOTICE } from '@/entities/itinerary-slot/lib/violationLabel';
+import { Skeleton } from '@/shared/ui/Skeleton';
 import { timeBandLabel } from '../model/timeBandLabel';
 import {
   AlertCircleGlyph,
@@ -296,7 +297,7 @@ function LoadingFace(): ReactElement {
       accessibilityLabel="추천안을 만드는 중"
     >
       {[0, 1, 2].map((row) => (
-        <View
+        <Skeleton
           key={row}
           className="h-[98px] w-full rounded-[14px] bg-surface-soft"
         />
