@@ -15,7 +15,7 @@ import type {
  */
 export interface TripCardFace {
   statusLine: string;
-  badge: 'done' | 'draft';
+  badge: 'done' | 'draft' | 'live';
   resume: boolean;
 }
 
@@ -28,12 +28,15 @@ export interface TripCardFace {
  * 404 가 아닌 조회 실패는 이 함수의 입력이 아니다 — 컨테이너가 로딩과 같은 degrade 로 접는다(INV-4).
  * `generationMode` 가 MANUAL/CO_PLAN 이면 생성중·초안의 **상태문만** '직접/같이 짜는 중'으로 바꾼다 —
  * 배지·resume 는 위 규칙 그대로(TRIP-1015 B · 결정 1 · Q2). MANUAL 은 AI 를 부르지 않는다(openapi).
+ * `ongoing`(TRIP-1121) 은 CONFIRMED 분기에서만 본다 — 여행 중이면 배지만 'live'. 생략하면 지금과 같다
+ * (doneBar 가 2인자로 불러 'done' 에 기댄다).
  */
 export function deriveTripCardFace(
   status?: ItineraryStatus,
   generationState?: ItineraryGenerationState,
   notFound = false,
-  generationMode?: ItineraryGenerationMode
+  generationMode?: ItineraryGenerationMode,
+  ongoing = false
 ): TripCardFace {
   if (notFound) {
     return { statusLine: '아직 일정이 없어요', badge: 'draft', resume: false };
@@ -52,7 +55,11 @@ export function deriveTripCardFace(
     };
   }
   if (status === 'CONFIRMED') {
-    return { statusLine: '일정 확정', badge: 'done', resume: false };
+    return {
+      statusLine: '일정 확정',
+      badge: ongoing ? 'live' : 'done',
+      resume: false,
+    };
   }
   return {
     statusLine: modeLine ?? '추천안 준비 중',

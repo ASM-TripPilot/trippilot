@@ -11,8 +11,13 @@ import {
   useGetTrips,
 } from '@/shared/api/generated/trips/trips';
 import { isNotFound } from '@/shared/api/isNotFound';
+import { seoulDate } from '@/shared/date/seoulDate';
 import { readIdSet, writeIdSet } from '@/shared/storage/idSet';
-import { pickDoneBar } from '@/features/itinerary/model/doneBar';
+import {
+  pickDoneBar,
+  type DoneBarEntry,
+} from '@/features/itinerary/model/doneBar';
+import { orderMyTrips } from '@/features/itinerary/model/myTripsOrder';
 import {
   itineraryDestinationHref,
   resolveItineraryDestination,
@@ -32,7 +37,9 @@ import { TripCardContainer } from './TripCardContainer';
  * 리다이렉트해 둘째 이후 여행이 이 탭에서 영영 접근 불가였다(핵심 결함, AC-1). 이제 리다이렉트하지
  * 않고 모든 여행을 카드로 나열한다.
  *
- * 정렬은 `updatedAt` 내림차순(없으면 `createdAt`) — "최신순" 표시 라벨과 짝(01b Q1).
+ * 정렬은 `updatedAt` 내림차순(없으면 `createdAt`) — "최신순" 표시 라벨과 짝(01b Q1). TRIP-1121 · 여행 중
+ * (확정 + 오늘이 기간 안)은 맨 위(`orderMyTrips`). 오늘을 여기서 한 번 만들어 정렬과 카드에 같은 값을 넘긴다
+ * — 일정이 도착하기 전엔 판정할 수 없어, 도착하는 순간 여행 중 카드가 위로 올라간다(INV-4).
  *
  * TRIP-928 · 완료 도킹 배너 — 여행별 일정(카드 훅과 같은 캐시 키)과 기기에 저장한 "배너로 알린 여행
  * id"(seen)를 모두 읽은 뒤에만 `pickDoneBar` 로 판정한다. 처음 띄울 때 seen 을 한 번 쓰고, 그
@@ -43,11 +50,6 @@ import { TripCardContainer } from './TripCardContainer';
 
 /** SecureStore 키 규칙(영숫자·`.`·`-`·`_`) · 토큰 키와 다른 이름. */
 const DONE_BAR_SEEN_KEY = 'itinerary.doneBar.seen';
-
-/** 최신순 정렬 키 — 갱신 시각이 없으면 생성 시각으로 접는다(계약상 updatedAt 은 항상 있으나 방어). */
-function sortKey(trip: Trip): string {
-  return trip.updatedAt ?? trip.createdAt;
-}
 
 export function MyTripsListPage(): ReactElement {
   const router = useRouter();
@@ -77,21 +79,22 @@ export function MyTripsListPage(): ReactElement {
     readIdSet(DONE_BAR_SEEN_KEY).then(setSeen, () => {});
   }, []);
 
+  // 여행별 일정 응답(카드 훅과 같은 캐시 키) — 완료 배너와 여행 중 고정이 같이 읽는다.
+  const entries: DoneBarEntry[] = list.map((trip, i) => ({
+    trip,
+    itinerary: itineraries[i].isPending
+      ? 'pending'
+      : {
+          status: itineraries[i].data?.status,
+          generationState: itineraries[i].data?.generationState,
+        },
+  }));
+  const today = seoulDate(new Date());
+
   const pick =
     shown || seen === null || trips.isPending
       ? null
-      : pickDoneBar(
-          list.map((trip, i) => ({
-            trip,
-            itinerary: itineraries[i].isPending
-              ? 'pending'
-              : {
-                  status: itineraries[i].data?.status,
-                  generationState: itineraries[i].data?.generationState,
-                },
-          })),
-          seen
-        );
+      : pickDoneBar(entries, seen);
 
   useEffect(() => {
     if (!pick) return;
@@ -117,7 +120,16 @@ export function MyTripsListPage(): ReactElement {
     );
   }
 
-  const sorted = [...list].sort((a, b) => sortKey(b).localeCompare(sortKey(a)));
+  // 정렬만 404 아닌 조회 실패(다시 받기 실패로 직전 data 가 남은 경우 포함)를 "모름"으로 접는다 — 카드의
+  // degrade(배지 없음)와 같은 해석이라 배지 없는 카드가 고정되지 않는다(D3). 배너 입력(entries)은 그대로.
+  const sorted = orderMyTrips(
+    entries.map((entry, i) =>
+      itineraries[i].isError && !isNotFound(itineraries[i].error)
+        ? { trip: entry.trip, itinerary: 'pending' as const }
+        : entry
+    ),
+    today
+  );
 
   const onConfirmDelete = (): void => {
     if (deleteTargetId === null || deletingRef.current) return;
@@ -172,6 +184,7 @@ export function MyTripsListPage(): ReactElement {
           <TripCardContainer
             key={trip.tripId}
             trip={trip}
+            today={today}
             onPressDelete={() => {
               setDeleteFailedId(null);
               setDeleteTargetId(trip.tripId);

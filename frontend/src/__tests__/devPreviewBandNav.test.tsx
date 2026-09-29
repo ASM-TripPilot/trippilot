@@ -455,7 +455,12 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    키·얼굴은 아래 'TRIP-1106' describe 가 못박는다. Figma 프레임이 없는 얼굴이고(결정 3 — 코드 먼저)
     //    딤·중앙 정렬은 조건부 렌더 오버레이의 jest 사각이라 이 키가 유일한 육안 수단이다.
     //    devPreviewBandSort 는 밴드 h·l 만 잠가 band d 와 무관(오갱신 금지).
-    expect(PREVIEW_STATES).toHaveLength(193);
+    // ⚠️ TRIP-1121: h06 여행 중 고정 얼굴 `h06-my-trips-ongoing`(band `h`, Figma `4745:2874`) 1키 추가로
+    //    185→186. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 1키만
+    //    `h06-my-trips-delete-confirm` 바로 뒤에 추가하고 이 가드는 안 만진다(추가 전엔 185개라 red). 정확한 키·
+    //    얼굴은 아래 'TRIP-1121' describe, h 순서는 devPreviewBandSort EXPECTED_H 가 못박는다. 배지가 사진 위
+    //    우상단에 붙는 모양·여행 중 카드 ⋯ 부재의 육안 대조 자리가 이 키다.
+    expect(PREVIEW_STATES).toHaveLength(194);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -2054,6 +2059,51 @@ describe('🔴 TRIP-1055 · h06 작성중 여행 삭제 메뉴·삭제 확인 �
     const keys = PREVIEW_STATES.map((state) => state.key);
     expect(keys).toContain('h06-my-trips-loading');
     expect(keys).toContain('h06-my-trips-empty');
+  });
+});
+
+// TRIP-1121 — 배지 위치(사진 우상단)·색·카드 간격은 픽셀이라 jest 사각이다. 6-b 육안 대조 자리가 이 키다
+// (Figma 4745:2874 — 여행 중 → 작성중 → 완성 3카드). 무엇을 보장하나: 키가 h 밴드에 있고, 렌더하면 배지가
+// 그 순서로 서며, 맨 위 여행 중 카드에는 ⋯·resume 이 없고 둘째 작성중 카드에는 둘 다 있다.
+describe('🔴 TRIP-1121 · h06 여행 중 고정 프리뷰 키 (band h)', () => {
+  it('h06-my-trips-ongoing 은 여행 중·작성중·완성 3카드를 그 순서로 그린다', () => {
+    // 준비 — 새 키 엔트리(red-first: preview.tsx 에 추가 전엔 없다)
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'h06-my-trips-ongoing'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('h');
+    expect(entry?.label).toBe('h06 · 내 여행 여행 중 고정');
+
+    // 실행
+    render(<>{entry?.render()}</>);
+
+    // 단언 — 목록 위 카드 3장, 배지가 여행 중 → 작성중 → 완성 순(트리 순서)
+    expect(screen.getByTestId('itinerary-tab-root')).toBeOnTheScreen();
+    const cardIds = screen
+      .getAllByTestId(/^my-trip-card-/)
+      .map((card) => String(card.props.testID).replace('my-trip-card-', ''));
+    expect(cardIds).toHaveLength(3);
+    const [live, draft, done] = cardIds;
+    expect(screen.getByTestId(`my-trip-badge-${live}`)).toHaveTextContent(
+      '여행 중'
+    );
+    expect(screen.getByTestId(`my-trip-badge-${draft}`)).toHaveTextContent(
+      '작성중'
+    );
+    expect(screen.getByTestId(`my-trip-badge-${done}`)).toHaveTextContent(
+      '완성'
+    );
+
+    // 여행 중 카드 — ⋯·resume 없음, 상태문 '일정 확정'(Figma 4745:2943)
+    expect(screen.queryByTestId(`my-trip-menu-${live}`)).toBeNull();
+    expect(screen.queryByTestId(`my-trip-resume-${live}`)).toBeNull();
+    expect(screen.getByTestId(`my-trip-extra-${live}`)).toHaveTextContent(
+      '일정 확정'
+    );
+    // 작성중 카드 — ⋯·resume 있음(긍정 짝 — 위 부재 단언의 공짜 통과 차단)
+    expect(screen.getByTestId(`my-trip-menu-${draft}`)).toBeOnTheScreen();
+    expect(screen.getByTestId(`my-trip-resume-${draft}`)).toBeOnTheScreen();
   });
 });
 

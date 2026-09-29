@@ -1439,6 +1439,43 @@ function renderH06DeleteList({ menuOpen }: { menuOpen: boolean }) {
   );
 }
 
+// h06 여행 중 고정(TRIP-1121, Figma 4745:2874) — 여행 중(⋯·resume 없음) → 작성중(⋯·resume) → 완성 순.
+// 순서·배지는 실앱에선 orderMyTrips·TripCardContainer 가 내지만 프리뷰는 VM 을 그 결과대로 놓는다.
+const H06_ONGOING_VM: MyTripCardVM = {
+  tripId: 'demo-live',
+  title: '부산 여행',
+  metaLine: '9월 29일 ~ 30일 · 1박 2일 · 2명',
+  badge: 'live',
+  extra: '일정 확정',
+  resume: false,
+  imageUrl: DRAFT_PREVIEW_PHOTOS[1],
+};
+
+function renderH06Ongoing() {
+  const [done, , draft] = MY_TRIPS_PREVIEW_VMS;
+  return (
+    <MyTripsListScreen
+      mode="list"
+      onPressCreateTrip={noop}
+      cards={[
+        <MyTripCard
+          key={H06_ONGOING_VM.tripId}
+          vm={H06_ONGOING_VM}
+          onPress={noop}
+        />,
+        <MyTripCard
+          key={draft.tripId}
+          vm={draft}
+          onPress={noop}
+          onPressDelete={noop}
+          onPressMenu={noop}
+        />,
+        <MyTripCard key={done.tripId} vm={done} onPress={noop} />,
+      ]}
+    />
+  );
+}
+
 // l03 마이페이지 default(Figma 1602:2388, TRIP-775) — 예정 카드 2장: D-12(14일 이하 → primary 배지)와
 // D-30(ink 배지, 일정 미생성이라 daysLabel null). 화면은 무상태라 VM + noop 한 벌로 충분(TripCardContainer 의
 // 조회 조립은 안 태움 — 배지 색·카드 그림자·칩 모양은 jest 사각, 스크린샷 대조 몫).
@@ -5217,6 +5254,13 @@ export const PREVIEW_STATES: PreviewState[] = [
         <TripDeleteDialog failed={false} onCancel={noop} onConfirm={noop} />
       </View>
     ),
+  },
+  {
+    key: 'h06-my-trips-ongoing',
+    band: 'h',
+    label: 'h06 · 내 여행 여행 중 고정',
+    login: null,
+    render: renderH06Ongoing,
   },
   // l03 마이페이지 default(TRIP-775) — Figma 1602:2388 과 같은 데이터: 카운트 2/0/3 · 프로필 태그 ·
   // 정식 스타일 카드 · 예정 카드 2장 · 메뉴 3행 · 헤더 톱니 · 탭바(마이). 예정이 있으므로 지난 여행 섹션은

@@ -6,6 +6,7 @@ import { useGetTripsTripIdItinerary } from '@/shared/api/generated/trips/trips';
 import { isNotFound } from '@/shared/api/isNotFound';
 import { formatNightsLabel } from '@/entities/trip/lib/formatNights';
 import { formatConfirmedDateRange } from '@/entities/trip/lib/formatTripPeriod';
+import { isTripOngoing } from '@/entities/trip/lib/tripPhase';
 import {
   itineraryDestinationHref,
   resolveItineraryDestination,
@@ -37,6 +38,9 @@ export interface TripCardContainerProps {
   trip: Trip;
   /** TRIP-1055 · 삭제 요청(다이얼로그 열기) — 페이지가 쥔다. 없으면 ⋯ 도 없다. */
   onPressDelete?: () => void;
+  /** TRIP-1121 · 오늘(서울 'YYYY-MM-DD') — 페이지가 정렬과 같은 값을 넘긴다. 없으면 여행 중 판정을 안 한다
+   * (컨테이너는 시계를 읽지 않는다, TRIP-986). */
+  today?: string;
 }
 
 /** 날짜범위 `~` 조립 — 공용 `formatConfirmedDateRange`(en-dash `–`, h25 확정 배너 공용)는 미수정하고
@@ -48,6 +52,7 @@ function formatCardDateRange(startDate: string, endDate: string): string {
 export function TripCardContainer({
   trip,
   onPressDelete,
+  today,
 }: TripCardContainerProps): ReactElement {
   const router = useRouter();
   const itinerary = useGetTripsTripIdItinerary(trip.tripId);
@@ -68,7 +73,8 @@ export function TripCardContainer({
       itinerary.data?.status,
       itinerary.data?.generationState,
       notFound,
-      itinerary.data?.generationMode
+      itinerary.data?.generationMode,
+      today !== undefined && isTripOngoing(trip, itinerary.data?.status, today)
     );
     badge = face.badge;
     extra = face.statusLine;

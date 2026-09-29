@@ -400,6 +400,7 @@
 - `src/entities/trip/lib/formatNights.ts`  →  formatNightsLabel · nightsLabel · nightsCountLabel
 - `src/entities/trip/lib/formatShareCardPeriod.ts`  →  ShareCardPeriodOptions · formatShareCardPeriod
 - `src/entities/trip/lib/formatTripPeriod.ts`  →  WEEKDAY_LABELS · dayOfWeek · formatDateRange · formatSectionRange · formatTripRange · formatConfirmedDateRange · formatTripDateRange · formatLegendDateRange · formatDateRangeWithDow · formatBaseNightRange
+- `src/entities/trip/lib/tripPhase.ts`  →  TripPhase · classifyTripPhase · isTripOngoing
 
 ## src/entities/trip/model/
 - `src/entities/trip/model/index.ts`  →  MyTripBadge · MyTripCardVM · PastTripCardVM
@@ -515,6 +516,7 @@
 - `src/features/itinerary/model/legDistance.ts`  →  legDistance
 - `src/features/itinerary/model/mustVisitList.ts`  →  MUST_VISIT_NAME_PLACEHOLDER · MustVisitListItem · MustVisitListView · joinMustVisits · fixedTimeLabel · buildMustVisitPins · resolveMustVisitListView
 - `src/features/itinerary/model/mustVisitTimeForm.ts`  →  DwellKey · MustVisitTimeForm · DWELL_OPTIONS · DEFAULT_DWELL_KEY · tripDayChips · startTimeOptions · startTimeLabel · mustVisitTimeBlockReason · canSubmitMustVisitTime · buildFixedMustVisitRequest · buildAnytimeMustVisitRequest
+- `src/features/itinerary/model/myTripsOrder.ts`  →  byLatest · orderMyTrips
 - `src/features/itinerary/model/planState.ts`  →  PlanState · PlanDayTab · resolvePlanState · isConfirmLocked · ItineraryDestination · resolveItineraryDestination · ItineraryDestinationHref · itineraryDestinationHref · buildPlanDayTabs
 - `src/features/itinerary/model/radiusUsedLabel.ts`  →  formatRadiusUsed
 - `src/features/itinerary/model/slotSwapError.ts`  →  SLOT_SWAP_CONFLICT_CODES · SlotSwapErrorKind · SlotSwapError · resolveSlotSwapError
@@ -1483,4 +1485,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 1035개 파일
+합계 1037개 파일

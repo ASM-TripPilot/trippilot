@@ -8,7 +8,8 @@ import { deriveTripCardFace } from './tripCardFace';
 
 /**
  * TRIP-928 · h05 완료 도킹 배너 대상 고르기(순수). 정본 공백이라 프론트 규칙(01b Q1~Q5):
- * - 완성 = 카드 배지와 같은 판정(`deriveTripCardFace(...).badge==='done'`) — Mapping A 를 고치면 둘 다 따라간다.
+ * - 완성 = `deriveTripCardFace(status, generationState).badge==='done'` — 카드 배지와 같은 Mapping A 를 쓰지만
+ *   여행 중 여부는 넘기지 않는다. 그래서 여행 중인 확정 여행은 카드엔 'live' 배지, 여기선 'done'(TRIP-1121).
  * - 끝난 여행(`Trip.status==='ENDED'`)은 후보가 아니다(TRIP-986 D4).
  * - 일정이 하나라도 아직 안 왔으면 보류(null) — 먼저 도착한 덜 최근 완성이 배너를 선점하지 않게.
  * - 후보(완성 ∧ seen 밖) 중 `updatedAt ?? createdAt` 가 가장 최근인 1건.

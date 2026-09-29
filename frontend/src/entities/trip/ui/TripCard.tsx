@@ -31,9 +31,10 @@ export interface TripCardProps {
   onPressMenu?: () => void;
 }
 
-const BADGE_LABEL: Record<'done' | 'draft', string> = {
+const BADGE_LABEL: Record<'done' | 'draft' | 'live', string> = {
   done: '완성',
   draft: '작성중',
+  live: '여행 중',
 };
 
 const RESUME_LABEL = '일정 이어서 짜기';
