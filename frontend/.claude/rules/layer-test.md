@@ -89,6 +89,8 @@ paths:
 | `src/__tests__/tripWizardStep1Boundary.test.ts` | g01 화면 그래프에 쿼리 훅·라우터·`expo-location` 0 · `new Date(`·`Date.now(` 0(기준일 주입) · 위저드 라우트 존재·`(tabs)` 아래 부재 |
 | `src/__tests__/tripWizardStep2Structure.test.ts` | g02 라우트 두께 + 화면·배선에 `.sort(`·인라인 박수 재계산 0(`nightlyBaseCards`가 소유) + 제거된 배선 needle 부재(`setPeriod` 등) · 주소 조회·지역 판정(`useQueries`·`sidoKey` 등)은 `features/trip/model`에만 |
 | `src/__tests__/tripBudgetStructure.test.ts` | 예산 3파일에 `toLocaleString`·`Intl.` 0 — node 동작 테스트는 Hermes 서식 차이를 못 봐 이 파일이 유일한 그물 |
+| `src/features/trip/model/budgetAmount.tierForAmount.test.ts` | `tierForAmount`(TRIP-1091) — 경계 6점(499,999/500,000/…/3,000,000)·0·1 예제 + PBT 4(범위 내·단조·칩 대표 금액 왕복·구간별). ⚠️ 생성기를 `oneof(0~5,000,000, 0~1e12)`로 섞는다 — 균등 0~1e12만 쓰면 세 경계가 있는 300만 아래를 거의 안 밟아 단조성이 공허하게 참 |
+| `src/pages/trip-new-step1/ui/TripNewStep1Page.budgetTier.integration.test.tsx` | g01 예산 행·시트 칩 등급 출처(TRIP-1091) R1~R10 — 프리필 등급을 기대 등급과 **다르게** 둔다(같으면 버그 코드도 통과). R5는 프리필 `고급+1,200,000`(역산하면 중간)으로 "프리필 금액은 역산하지 않는다"를 행·시트 양쪽에서 잠그고, R10은 `PUT/PATCH /me/preferences` 0회를 `GET` 관측 짝과 함께 단언 |
 | `src/features/trip/model/budgetAmount.tier.test.ts` | `budgetForTier(tier)` 1인자(TRIP-1067) — 고정 맵(저가30만·중간100만·고급200만·럭셔리400만, 온보딩 범위 가운데값)×예제 4 + 무작위 500회(박수·인원 인자를 넘겨도 안 바뀜, `Function.length`로 박수 인자 부재 확인 — 기본값 인자는 `length`에 안 잡혀 `@ts-expect-error`로 이중 판정). 구 TRIP-1045 단가×박수 PBT는 폐기 |
 | `src/__tests__/savedPlacesStructure.test.ts` | 서버 DTO 식별자를 Zustand 스토어에 복사하지 않는다(`frontend/README.md`). 파생값만 복사한 스토어는 못 잡는다 |
 | `src/__tests__/placeDetailStubRoute.test.tsx` | `explore/places/[poiId].tsx` 라우트가 `@/pages/place-detail`에 위임하는지(페이지 목으로 QueryClient 없이 렌더) |

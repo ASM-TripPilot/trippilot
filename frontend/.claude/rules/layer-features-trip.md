@@ -8,7 +8,7 @@ paths:
 
 | 파일 | 역할 |
 |---|---|
-| `src/features/trip/model/budgetAmount.ts` | `BudgetAmount`(`empty`\|`amount`\|`invalid`) + `parseBudgetAmount(raw)`(콤마 제거 후 `/^\d+$/`, `0` 유효, 빈 문자열은 `empty`)·`formatBudgetAmount`(수동 콤마 — `toLocaleString`/`Intl` 금지, node/Hermes 로케일 갈림). `Number.isSafeInteger` 밖 입력은 `String(n)`이 지수 표기로 깨져 왕복 불가(호출측 가드뿐, 심판 없음). |
+| `src/features/trip/model/budgetAmount.ts` | `BudgetAmount`(`empty`\|`amount`\|`invalid`) + `parseBudgetAmount(raw)`(콤마 제거 후 `/^\d+$/`, `0` 유효, 빈 문자열은 `empty`)·`formatBudgetAmount`(수동 콤마 — `toLocaleString`/`Intl` 금지, node/Hermes 로케일 갈림). `Number.isSafeInteger` 밖 입력은 `String(n)`이 지수 표기로 깨져 왕복 불가(호출측 가드뿐, 심판 없음). **`tierForAmount(amount)`(TRIP-1091)** — 금액→등급 역산(`< 500,000` 저가 · `< 1,500,000` 중간 · `< 3,000,000` 고급 · 그 위 럭셔리, 하한 포함·상한 제외, 0도 저가). ⚠️ 경계 숫자 셋은 온보딩 `BUDGET_OPTIONS` 라벨(`features/onboarding`)의 **손 복사본**이다 — 형제 feature라 import가 린트로 막히고 두 곳을 잇는 심판이 없다. 등급은 스토어·요청에 싣지 않는 화면 표시용 파생값. |
 | `src/features/trip/model/createTripRequest.ts` | `buildCreateTripRequest(input)` — 결과에 `budgetTotal` 키가 있다 ⟺ `typeof input.budgetTotal === 'number'`(사용자 입력 우선, 취향 자동 부착 없음). `preferenceSnapshot`은 구조 분해로 **런타임에서 걷어낸다**(`Omit`은 타입 선언일 뿐). |
 | `src/features/trip/model/useCreateTrip.ts` | 생성물 `usePostTrips` + 성공 시 `GET /trips` 목록만 무효화. 호출자가 `mutateAsync({ data })`로 `buildCreateTripRequest`를 우회해 `preferenceSnapshot`을 실어도 막는 장치가 없다. |
 | `src/features/trip/model/usePreferencePrefill.ts` | 서버에 저장된 취향 읽기(`useGetMePreferences`). onboarding의 `usePreferenceStore`(로컬 드래프트)와 다른 물건. |
