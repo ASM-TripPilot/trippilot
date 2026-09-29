@@ -434,3 +434,20 @@ describe('🔴 C7 · INV-3 — 셸 얼굴에 소요시간·% 가 0건이다 (배
     expect(text).not.toContain('%');
   });
 });
+
+describe('🔴 C3c · TRIP-1110 AC-4 — 확정 헤더도 커넥터 구간에 null 이 섞이면 km 를 접는다', () => {
+  it('일부 구간만 null 이면 meta 는 정확히 "확정됨 · 4곳"이다', async () => {
+    // 준비 — b→c 구간만 null. 옛 스킵 규약이면 "확정됨 · 4곳 · 3.3km"(2.1+0.6+0.6 부분합).
+    useItinerary(() =>
+      HttpResponse.json(
+        confirmed([...fourPois([null, '2.1km', null, '0.6km']), hotel('0.6km')])
+      )
+    );
+    renderPage();
+    await screen.findByTestId('map-sheet-shell-root');
+
+    const meta = screen.getByTestId('sheet-header-meta');
+    expect(meta).toHaveTextContent('확정됨 · 4곳'); // 완전 일치
+    expect(meta).not.toHaveTextContent(/km|이동|분|시간|소요/);
+  });
+});

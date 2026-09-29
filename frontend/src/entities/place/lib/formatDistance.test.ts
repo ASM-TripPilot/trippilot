@@ -14,8 +14,8 @@ import { formatDistance } from './formatDistance';
  *    green** 이 된다(02a §5-F 실검증 — 이 세션 node 1회로 전 경계 케이스 바이트 일치 확인).
  *  - 🔴 INV-3: 반환에 소요시간 단위(분·시간·소요)가 원리적으로 없다(거리만).
  *
- * ⚠️ `legDistance` 의 `null`/broken/스킵/`합계 0→null` 로직은 **이 함수 밖**에 남는다 — formatDistance 는
- *    항상 양수 미터를 받아 문자열을 낸다. 그 로직은 `legDistance.test.ts`(무수정)가 계속 심판한다.
+ * ⚠️ `legDistance` 의 null 섞임·broken 접기/`합계 0→null` 로직은 **이 함수 밖**에 남는다 — formatDistance 는
+ *    항상 양수 미터를 받아 문자열을 낸다. 그 로직은 `legDistance.test.ts` 가 심판한다(TRIP-1110 스킵→접기).
  *
  * *(개념)* **순수 함수** — 같은 입력이면 항상 같은 출력이라 fast-check(임의 입력 수백 개를 자동 생성해
  *  속성을 검사하는 도구)로 통째로 태울 수 있다.
