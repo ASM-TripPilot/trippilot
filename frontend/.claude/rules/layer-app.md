@@ -35,7 +35,7 @@ paths:
 | `src/app/stays/register.tsx` | `/stays/register` — `@/pages/stay-register` 얇은 래퍼. 구조 가드가 `useState`·`useGetStaysGeocode`·`FlatList` 0건을 잠근다 |
 | `src/app/stays/saved.tsx` | `/stays/saved` e04 저장한 숙소 — `@/pages/stay-saved` 얇은 래퍼 |
 | `src/app/explore/region.tsx` | d1b·e00 지역 선택 — `@/pages/region-picker` 얇은 래퍼. 목적은 쿼리 `?purpose=trip`(기본 `stay`) |
-| `src/app/explore/destination/[region].tsx` | d03 목적지 상세 — `DestinationDetailPage` 얇은 래퍼(`region` params는 페이지가 읽는다) |
+| `src/app/explore/destination/[region].tsx` | 옛 목적지 상세 딥링크 리다이렉트 — `<Redirect>`로 `/explore?region={code}`(탐색 탭 d01 지역 필터)에 넘긴다(TRIP-1105) |
 | `src/app/explore/places.tsx` | d04 장소 탐색 — `@/pages/place-explore` 얇은 래퍼 |
 | `src/app/explore/places/[poiId].tsx` | d06 **explore** 장소 상세 — poiId만 읽어 `PlaceDetailPage`에 위임(`canGoBack` 폴백은 페이지 소관). 여행 중 장소 상세(`live/place/[poiId]`)와 다른 슬라이스 |
 | `src/app/explore/saved-places.tsx` | d02 담은 장소 — `@/pages/saved-places` 얇은 래퍼 |
