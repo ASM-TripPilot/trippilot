@@ -197,6 +197,7 @@
 - `src/__tests__/tripWizardEntryReset.test.tsx`  →  (export 없음)
 - `src/__tests__/tripWizardStep1Boundary.test.ts`  →  (export 없음)
 - `src/__tests__/tripWizardStep2Structure.test.ts`  →  (export 없음)
+- `src/__tests__/unplacedMustVisitStructure.test.ts`  →  (export 없음)
 - `src/__tests__/visitCheckGenerated.test.ts`  →  (export 없음)
 - `src/__tests__/widgetsStructure.test.ts`  →  (export 없음)
 
@@ -518,6 +519,7 @@
 - `src/features/itinerary/model/swapSlotPoi.ts`  →  swapSlotPoi
 - `src/features/itinerary/model/timeBandLabel.ts`  →  TimeBandLabel · timeBandLabel
 - `src/features/itinerary/model/tripCardFace.ts`  →  TripCardFace · deriveTripCardFace
+- `src/features/itinerary/model/unplacedMustVisits.ts`  →  UnplacedMustVisitRow · resolveUnplacedNames
 - `src/features/itinerary/model/useGenerationBusy.ts`  →  isGenerationRunning · GenerationBusy · useGenerationBusy
 
 ## src/features/itinerary/ui/
@@ -537,6 +539,7 @@
 - `src/features/itinerary/ui/SlotCandidateSheet.tsx`  →  SlotCandidateSheetRow · SlotCandidateSheetProps · SlotCandidateSheet
 - `src/features/itinerary/ui/SlotFillScreen.tsx`  →  SlotFillScreenProps · SlotFillScreen
 - `src/features/itinerary/ui/TripDeleteDialog.tsx`  →  TripDeleteDialog
+- `src/features/itinerary/ui/UnplacedMustVisitNotice.tsx`  →  UnplacedMustVisitNotice
 
 ## src/features/notification/model/
 - `src/features/notification/model/channelAvailability.ts`  →  PushPermission · PushColumnState · resolvePushColumn
@@ -1469,4 +1472,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 1023개 파일
+합계 1026개 파일

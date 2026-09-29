@@ -121,6 +121,9 @@ const EXPECTED_H = [
   // (fallback→stale-failed)로 넣으면 안정 정렬이 그대로 낸다(배열 위치=정렬 위치). candidate-sheet 보다 앞이다.
   'dev-preview-state-h08-draft-fallback', // h08 (TRIP-1039 셸 폴백)
   'dev-preview-state-h08-draft-stale-failed', // h08 (TRIP-1039 셸 일부 실패)
+  // TRIP-1094: h08 셸 못 넣은 꼭 갈 곳 블록 1키. 같은 h08 코드라 PREVIEW_STATES 배열에서 stale-failed **바로 뒤**에
+  // 넣으면 안정 정렬이 그대로 낸다(배열 위치=정렬 위치). candidate-sheet 보다 앞이다.
+  'dev-preview-state-h08-draft-unplaced', // h08 (TRIP-1094 못 넣은 꼭 갈 곳)
   // TRIP-793: h08 "다른 후보 시트"(정상·0건). 코드가 h08 이라 안정 정렬이 draft-expanded 바로 뒤에
   // 붙는다 — PREVIEW_STATES 배열에서 이 2키를 옛 slot-candidate-panel 블록 자리(h11-copick 뒤)에 넣어도
   // 코드가 h08 이라 정렬이 draft-* 뒤로 끌어올린다. 같은 h08 코드 4키는 배열 삽입 순서(collapsed→
@@ -173,6 +176,8 @@ const EXPECTED_H = [
   'dev-preview-state-h14-plan-distance-pending', // h14
   'dev-preview-state-h14-plan-map-fallback', // h14
   'dev-preview-state-h14-plan-no-base', // h14
+  // TRIP-1094: h14 완성 일정 못 넣은 꼭 갈 곳 블록 1키 — PREVIEW_STATES 에서 no-base **바로 뒤**(같은 h14 코드 안정 정렬).
+  'dev-preview-state-h14-plan-unplaced', // h14 (TRIP-1094)
   // TRIP-800: h15 동선 기준 숙소 추천(신규 1키). 라벨 코드 h15 라 h14 4키 뒤·h16 앞에 선다(배열 위치 무관 —
   // 같은 코드가 하나뿐이라 안정 정렬 순서도 없다).
   'dev-preview-state-h15-stay-recommend', // h15

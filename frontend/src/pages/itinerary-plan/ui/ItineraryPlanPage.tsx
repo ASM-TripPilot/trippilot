@@ -8,6 +8,7 @@ import { useRouter, type Href } from 'expo-router';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { VIOLATION_NOTICE } from '@/entities/itinerary-slot/lib/violationLabel';
 import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
+import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import {
   buildDraftDayTabs,
   buildDraftPins,
@@ -19,11 +20,13 @@ import {
   resolvePlanState,
 } from '@/features/itinerary/model/planState';
 import { timeBandLabel } from '@/features/itinerary/model/timeBandLabel';
+import { resolveUnplacedNames } from '@/features/itinerary/model/unplacedMustVisits';
 import {
   AlertCircleGlyph,
   BackChevronGlyph,
   InfoCircleGlyph,
 } from '@/features/itinerary/ui/ItineraryGlyphs';
+import { UnplacedMustVisitNotice } from '@/features/itinerary/ui/UnplacedMustVisitNotice';
 import { isShareCaptureArmed } from '@/features/reflection/model/shareCapture';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import {
@@ -34,6 +37,7 @@ import {
 } from '@/shared/api/generated/trips/trips';
 import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
 import { isNotFound } from '@/shared/api/isNotFound';
+import { getAccessToken } from '@/shared/api/tokenManager';
 import { guardPress, openPressGuardWindow } from '@/shared/press/pressGuard';
 import { StateNotice, type StateNoticeAction } from '@/shared/ui/StateNotice';
 import { showToast } from '@/shared/ui/Toast';
@@ -242,6 +246,14 @@ export function ItineraryPlanPage({
     days,
   });
 
+  // TRIP-1094 — 넣지 못한 꼭 갈 곳은 여행 전체 단위라 일차 탭과 무관하다. 이름 조회는 미배치가 있고
+  // 로그인일 때만(AC-13), 대기·실패·게스트면 서버 문구만 먼저 보인다(Q4 · INV-4). 훅이라 아래 조기 반환 앞에 둔다.
+  const unplaced = itinerary.data?.unplacedMustVisits;
+  const { savedPlaces } = useSavedPlaces({
+    isAuthed: getAccessToken() !== null && (unplaced?.length ?? 0) > 0,
+  });
+  const unplacedRows = resolveUnplacedNames({ unplaced, savedPlaces });
+
   // 여행 404(삭제)는 일정 조회와 무관하게 먼저 가른다 — 삭제된 여행은 일정도 404 라 notFound 가
   // 이기면 '일정 만들기'라는 거짓 다음 행동이 뜬다(INV-4). 캐시에 옛 trip.data 가 남아 있어도 오류로 판정.
   if (isNotFound(trip.error)) {
@@ -396,6 +408,7 @@ export function ItineraryPlanPage({
             </Text>
           </View>
         ) : null}
+        <UnplacedMustVisitNotice rows={unplacedRows} />
         {slots.flatMap((slot, index) => {
           // 전 슬롯 검증 시각 칩(BR-U3-07 · 01b D3). 비고정=범위(en-dash U+2013), 고정 숙소=단일 시각.
           const timeLabel = slot.isFixed

@@ -15,6 +15,7 @@ import {
   formatCoPickDayHeader,
 } from '@/features/itinerary/model/draftView';
 import { regionForDay } from '@/features/itinerary/model/dayRegion';
+import { tripDayChips } from '@/features/itinerary/model/mustVisitTimeForm';
 import { isConfirmLocked } from '@/features/itinerary/model/planState';
 import { formatRadiusUsed } from '@/features/itinerary/model/radiusUsedLabel';
 import { formatDistance } from '@/entities/place/lib/formatDistance';
@@ -187,7 +188,6 @@ export function SlotFillPage({
   // 받는다(AC-9). co-pick 은 **비고정 슬롯**을 하나씩 채우므로 그 목록에서 현재 슬롯의 위치가 곧 진행이다.
   function coPickContext(): {
     dayNumber: number;
-    totalDays: number;
     date: string;
     nonFixed: ItineraryDaysItemSlotsItem[];
     index: number;
@@ -201,7 +201,6 @@ export function SlotFillPage({
     if (index === -1) return null;
     return {
       dayNumber: dayIndex + 1,
-      totalDays: days.length,
       date: days[dayIndex].date,
       nonFixed,
       index,
@@ -224,20 +223,26 @@ export function SlotFillPage({
     if (ctx === null) return undefined;
     // 우 슬롯 N/M(slotCurrent/Total)은 슬롯 진행, 진행바(barFilled/Total)는 일차 진행 — 서로 다른 축이라
     // Figma 처럼 어긋날 수 있다(브리프 §B, 화면은 안 고침).
-    // 일차는 itinerary days 안 순번이다(trip.startDate 로 세지 않는다 — 두 축이 갈리는 경우는 정본 미정).
+    // 분모는 여행 기간(tripDayChips), 분자는 itinerary days 안 순번이다(TRIP-1096 결정 2 — 분자를 trip.startDate
+    // 로 세지 않는다). days.length 는 생성 중(PARTIAL)·2차 실패(FAILED)에 day1 만 담겨 1이 되므로 분모로 못 쓴다.
+    // 여행을 모르면(조회 중·실패·기간 비었음) 분모와 진행바 칸을 통째로 뺀다 — 틀린 숫자를 사실처럼 안 보인다(결정 1).
     const region =
       trip.data === undefined
         ? null
         : regionForDay(trip.data.destinations, ctx.dayNumber);
-    const dayText = `${ctx.dayNumber}일차 / ${ctx.totalDays} · ${formatCoPickDayHeader(
-      ctx.date
-    )}`;
+    const totalDays =
+      trip.data === undefined ? 0 : tripDayChips(trip.data).length;
+    const known = totalDays > 0;
+    const dayHeader = formatCoPickDayHeader(ctx.date);
+    const dayText = known
+      ? `${ctx.dayNumber}일차 / ${totalDays} · ${dayHeader}`
+      : `${ctx.dayNumber}일차 · ${dayHeader}`;
     return {
       dayLabel: region === null ? dayText : `${region} · ${dayText}`,
       slotCurrent: ctx.index + 1,
       slotTotal: ctx.nonFixed.length,
-      barFilled: ctx.dayNumber,
-      barTotal: ctx.totalDays,
+      barFilled: known ? ctx.dayNumber : 0,
+      barTotal: totalDays,
     };
   }
 

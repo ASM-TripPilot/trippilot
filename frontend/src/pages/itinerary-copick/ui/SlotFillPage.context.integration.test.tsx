@@ -313,26 +313,49 @@ describe('🔴 A2 · 그날 여행지 = seq 순서로 박수 누적, 넘치는 �
           screen.getByTestId('itinerary-copick-concept-progress-day')
         ).toHaveTextContent(new RegExp(`^${region} · ${day}일차 / 4 · `))
       );
+      // 진행바도 같은 분자·분모다(TRIP-1096 03b 경고 2) — 채움 칸 = N일차, 빈 칸 = 4 − N.
+      expect(
+        screen.getAllByTestId('itinerary-copick-concept-progress-cell-filled')
+      ).toHaveLength(day);
+      expect(
+        screen.queryAllByTestId('itinerary-copick-concept-progress-cell-track')
+      ).toHaveLength(4 - day);
     }
   );
 });
 
 describe('A3 · 여행지를 모르면 접두 없이 종전 모양 그대로 (INV-4 정직 degrade)', () => {
-  it('여행 조회가 아직 안 와도 진행 줄은 뜨고, 접두 없이 "1일차 / 2 · "로 시작한다', async () => {
+  // TRIP-1096 결정 1 — 분모(여행 기간)도 여행 조회에서 온다. 여행을 모르면 "/ N" 을 통째로 뺀다
+  // (itinerary.days 길이로 폴백하지 않는다 — PARTIAL 에선 그 값이 1이라 틀린 분모가 된다).
+  it('여행 조회가 아직 안 와도 진행 줄은 뜨고, 접두·분모 없이 "1일차 · "로 시작한다', async () => {
     tripMode = 'pending';
     renderPage(buildSlotKey(DAY1, 'a'));
 
     const day = await screen.findByTestId(
       'itinerary-copick-concept-progress-day'
     );
-    expect(day).toHaveTextContent(/^1일차 \/ 2 · /);
+    expect(day).toHaveTextContent(/^1일차 · /);
+    expect(day).not.toHaveTextContent(/\//);
     expect(day).not.toHaveTextContent(/undefined/);
   });
 
-  it.each([
-    ['error', 'error'],
-    ['empty', 'success'],
-  ] as const)(
+  it('여행 조회가 error 로 끝나면 접두·분모 없이 "1일차 · "로 시작한다', async () => {
+    tripMode = 'error';
+    const client = renderPage(buildSlotKey(DAY1, 'a'));
+
+    await waitFor(() =>
+      expect(
+        client.getQueryState(getGetTripsTripIdQueryKey(TRIP_ID))?.status
+      ).toBe('error')
+    );
+    const day = await screen.findByTestId(
+      'itinerary-copick-concept-progress-day'
+    );
+    expect(day).toHaveTextContent(/^1일차 · /);
+    expect(day).not.toHaveTextContent(/\//);
+  });
+
+  it.each([['empty', 'success']] as const)(
     '여행 조회가 %s 로 끝나도 접두 없이 "1일차 / 2 · "로 시작한다',
     async (mode, settled) => {
       tripMode = mode;
