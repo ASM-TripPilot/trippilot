@@ -31,6 +31,7 @@ import { showToast } from '@/shared/ui/Toast';
 import {
   budgetForTier,
   formatBudgetAmount,
+  isBudgetTier,
   parseBudgetAmount,
   tierForAmount,
   type BudgetTier,
@@ -652,10 +653,17 @@ export function TripNewStep1Page({
     // 신호는 preference.isPending(≠isLoading — 담은목록 축이 섞이면 게스트를 오차단, ★3).
     if (preference.isPending) return;
     const currentBudgetText = useTripWizardStore.getState().budgetText;
+    // 등급만 있고 금액이 없는 온보딩(TRIP-1107)이면 칩 press 와 같은 대표 금액으로 연다 — 드래프트만
+    // 채우고 요약 행·제출은 그대로다(결정 1 A: 적용 전엔 budgetTotal 을 싣지 않는다).
+    const tierAmountText = isBudgetTier(tierLabel)
+      ? formatBudgetAmount(budgetForTier(tierLabel))
+      : '';
     setDraftAmountText(
       parseBudgetAmount(currentBudgetText).kind === 'amount'
         ? currentBudgetText
-        : prefillBudgetText
+        : prefillBudgetText !== ''
+          ? prefillBudgetText
+          : tierAmountText
     );
     setDraftTier(appliedBudgetTier(currentBudgetText, tierLabel));
     setBudgetSheetOpen(true);

@@ -686,7 +686,8 @@ describe('D · ★ 칩 = 대표 금액 프리필 (TRIP-1045 QA #020 → TRIP-106
   });
 
   it('D5 · 이미 켜진 칩을 다시 눌러도 채우고, 손으로 고친 뒤에도 마지막 칩이 이긴다', async () => {
-    // 준비 — 운영 모양: 온보딩 tier 는 중간인데 금액은 없다(시트가 "중간 활성 + 빈칸"으로 열린다).
+    // 준비 — 운영 모양: 온보딩 tier 는 중간인데 금액은 없다. TRIP-1107 부터 시트는 "중간 활성 +
+    // 1,000,000"(대표 금액 프리필)으로 열린다 — 옛 "빈칸으로 열린다" 전제는 폐기.
     seedValidDraft();
     serveBudget({ tier: '중간', rawAmount: null, isNeutralDefault: false });
     renderPage();
@@ -696,10 +697,12 @@ describe('D · ★ 칩 = 대표 금액 프리필 (TRIP-1045 QA #020 → TRIP-106
       screen.getByTestId('trip-wizard-budget-tier-active-mid')
     ).toBeOnTheScreen();
     expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
-      ''
+      '1,000,000'
     );
 
-    // 실행 ① — 이미 켜진 중간을 누른다(tier 값이 안 바뀌어도 채워야 한다 — QA #020 원형).
+    // 실행 ① — 금액을 비운 뒤 이미 켜진 중간을 누른다(tier 값이 안 바뀌어도 채워야 한다 — QA #020 원형).
+    // 비우지 않으면 press 전후 값이 같아 press 가 먹었는지 못 가른다.
+    fireEvent.changeText(screen.getByTestId('trip-wizard-budget-input'), '');
     fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-mid'));
     expect(screen.getByTestId('trip-wizard-budget-input')).toHaveDisplayValue(
       '1,000,000'
