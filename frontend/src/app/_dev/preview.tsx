@@ -4260,8 +4260,8 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // g01 취향 편집 시트(TRIP-669, Figma `3644:2068`) — 미식·문화예술·관광 선택된 열린 상태(TRIP-738
-  // 픽스처). `PrefOverrideSheet`은 props-only 순수 뷰(스토어·라우터 미참조)라 컨테이너 import 사슬
+  // g01 취향 편집 시트(TRIP-669, Figma `3644:2068`) — Figma 선택 상태(스타일 미식 · 활동 전시·야경,
+  // TRIP-1092)로 열린 상태. `PrefOverrideSheet`은 props-only 순수 뷰(스토어·라우터 미참조)라 컨테이너 import 사슬
   // 함정 없이 그대로 태운다. jest 는 칩 활성 분홍 배경·글리프 색·안내문·시트 딤/개폐를 못 봐(바텀시트
   // 통과형 목) 이 키가 유일한 6-b 육안 대조 자리다. 활성 칩 아이콘이 흰색(on-primary)인지도 여기서만 보인다.
   {
@@ -4271,8 +4271,10 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       <PrefOverrideSheet
-        selected={['미식', '문화예술', '관광']}
+        selected={['미식']}
         onToggle={noop}
+        selectedActivities={['전시', '야경']}
+        onToggleActivity={noop}
         onApply={noop}
         onClose={noop}
         fromOnboarding

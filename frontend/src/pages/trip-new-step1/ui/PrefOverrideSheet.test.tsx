@@ -1,4 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 
 import { PrefOverrideSheet } from './PrefOverrideSheet';
 
@@ -25,6 +30,11 @@ import { PrefOverrideSheet } from './PrefOverrideSheet';
  * (`TripNewStep1Page.preferenceSheet.integration`)가 store 상태로 증명한다 — 여기선 "칩 press→onToggle,
  * 적용 press→onApply"(배선 신호)까지만 잠근다.
  *
+ * TRIP-1092: 활동(ACTIVITY 8종) 칩 묶음이 「선호 활동」 소제목 아래 추가된다(TRIP-669 D5 뒤집기).
+ * 활동 축은 `selectedActivities`/`onToggleActivity` 로 **따로** 받는다 — 자연·쇼핑은 두 축에 같은
+ * 라벨로 있어 라벨로는 축을 못 가른다(PS-9·PS-10). 같은 이유로 칩 라벨은 `within(칩)` 으로 좁혀 찾는다
+ * (「자연」「쇼핑」 텍스트가 화면에 두 개라 `screen.getByText` 는 throw).
+ *
  * 3동작 뼈대: 준비=render(선택 상태 주입) → 실행=press → 단언=toBeSelected/콜백.
  */
 
@@ -40,9 +50,31 @@ const CHIPS: { slug: string; label: string }[] = [
   { slug: 'shopping', label: '쇼핑' },
 ];
 
+// 활동 칩(TRIP-1092) — ACTIVITY 카탈로그 순서 = 온보딩 순서 = Figma 3644:2068 순서.
+const ACTIVITY_CHIPS: { slug: string; label: string }[] = [
+  { slug: 'nature', label: '자연' },
+  { slug: 'history', label: '역사문화' },
+  { slug: 'themepark', label: '테마파크' },
+  { slug: 'foodtour', label: '맛집투어' },
+  { slug: 'cafe', label: '카페' },
+  { slug: 'exhibition', label: '전시' },
+  { slug: 'nightview', label: '야경' },
+  { slug: 'shopping', label: '쇼핑' },
+];
+
+function styleChip(slug: string) {
+  return screen.getByTestId(`trip-wizard-pref-chip-${slug}`);
+}
+
+function activityChip(slug: string) {
+  return screen.getByTestId(`trip-wizard-pref-activity-chip-${slug}`);
+}
+
 interface SheetPropsForTest {
   selected: readonly string[];
   onToggle: (label: string) => void;
+  selectedActivities: readonly string[];
+  onToggleActivity: (label: string) => void;
   onApply: () => void;
   onClose: () => void;
   fromOnboarding: boolean;
@@ -51,11 +83,13 @@ interface SheetPropsForTest {
 function renderSheet(overrides: Partial<SheetPropsForTest> = {}) {
   const spies = {
     onToggle: jest.fn(),
+    onToggleActivity: jest.fn(),
     onApply: jest.fn(),
     onClose: jest.fn(), // TRIP-683: 딤 바깥 탭 닫힘 콜백(필수 prop 화)
   };
   const props: SheetPropsForTest = {
     selected: [],
+    selectedActivities: [],
     fromOnboarding: true, // TRIP-984: 기본 얼굴 = 온보딩 styles 가 있는 상태(PS-1 문구)
     ...spies,
     ...overrides,
@@ -70,12 +104,12 @@ describe('PS-1 · AC-1·AC-4 — 7칩·안내 2문구·단일 적용 렌더', ()
 
     expect(screen.getByTestId('trip-wizard-pref-sheet')).toBeOnTheScreen();
 
-    // 7칩 — slug testID + 한국어 라벨(getByText 완전일치, 부분포함 오검출 없음).
+    // 7칩 — slug testID + 그 칩 **안의** 한국어 라벨(getByText 완전일치). TRIP-1092: 활동 칩에도
+    // 「자연」「쇼핑」이 있어 화면 전체 getByText 는 "여러 개" throw — within(칩)으로 좁힌다.
     for (const { slug, label } of CHIPS) {
-      expect(
-        screen.getByTestId(`trip-wizard-pref-chip-${slug}`)
-      ).toBeOnTheScreen();
-      expect(screen.getByText(label)).toBeOnTheScreen();
+      const chip = styleChip(slug);
+      expect(chip).toBeOnTheScreen();
+      expect(within(chip).getByText(label)).toBeOnTheScreen();
     }
 
     // 안내 2문구(AC-4) — 부제 + 하단(완전일치).
@@ -164,5 +198,77 @@ describe('PS-7 · AC-D3 (TRIP-984 D10) — 온보딩 취향이 없으면 "온보
     // 완전일치 — 앞 절이 남아 있으면 이 노드와 안 맞아 red.
     expect(screen.getByText('프로필 취향은 바뀌지 않아요')).toBeOnTheScreen();
     expect(screen.queryByText(/온보딩에서/)).toBeNull();
+  });
+});
+
+describe('PS-8 · TRIP-1092 AC-9 — 「여행 스타일」「선호 활동」 두 묶음, 활동 8칩(ACTIVITY 순서)', () => {
+  it('소제목 2개와 활동 8칩을 카탈로그 순서로 그리고, 스타일 칩은 그대로 7개다', () => {
+    renderSheet();
+
+    // 소제목(Figma 3644:2068 개정, 01b Q3) — 완전일치.
+    expect(screen.getByText('여행 스타일')).toBeOnTheScreen();
+    expect(screen.getByText('선호 활동')).toBeOnTheScreen();
+
+    // 활동 칩 — testID 목록이 순서까지 정확히 8개(getAllByTestId 는 트리 순서로 돌려준다).
+    const activityIds = screen
+      .getAllByTestId(/^trip-wizard-pref-activity-chip-/)
+      .map((node) => node.props.testID);
+    expect(activityIds).toEqual(
+      ACTIVITY_CHIPS.map(({ slug }) => `trip-wizard-pref-activity-chip-${slug}`)
+    );
+    for (const { slug, label } of ACTIVITY_CHIPS) {
+      expect(within(activityChip(slug)).getByText(label)).toBeOnTheScreen();
+    }
+
+    // 스타일 묶음 무변경 — 접두 `trip-wizard-pref-chip-` 은 활동 칩(`…-activity-chip-`)과 안 겹친다.
+    expect(screen.getAllByTestId(/^trip-wizard-pref-chip-/)).toHaveLength(7);
+  });
+});
+
+describe('PS-9 · ★ TRIP-1092 축 분리 — 선택 표식은 축마다 따로 (같은 라벨 자연·쇼핑)', () => {
+  it('스타일=[자연]·활동=[역사문화,쇼핑] 이면 스타일 쇼핑·활동 자연은 켜지지 않는다', () => {
+    renderSheet({
+      selected: ['자연'],
+      selectedActivities: ['역사문화', '쇼핑'],
+    });
+
+    // 스타일 축 — 자연만.
+    expect(styleChip('nature')).toBeSelected();
+    expect(styleChip('shopping')).not.toBeSelected(); // 활동 쇼핑이 번지면 red
+    for (const slug of ['rest', 'gourmet', 'art', 'activity', 'sightseeing']) {
+      expect(styleChip(slug)).not.toBeSelected();
+    }
+
+    // 활동 축 — 역사문화·쇼핑만.
+    expect(activityChip('history')).toBeSelected();
+    expect(activityChip('shopping')).toBeSelected();
+    expect(activityChip('nature')).not.toBeSelected(); // 스타일 자연이 번지면 red
+    for (const slug of [
+      'themepark',
+      'foodtour',
+      'cafe',
+      'exhibition',
+      'nightview',
+    ]) {
+      expect(activityChip(slug)).not.toBeSelected();
+    }
+  });
+});
+
+describe('PS-10 · ★ TRIP-1092 축 분리 — press 는 자기 축 콜백으로만 올라간다', () => {
+  it('활동 자연 → onToggleActivity("자연")만, 스타일 자연 → onToggle("자연")만', () => {
+    const spies = renderSheet();
+
+    fireEvent.press(activityChip('nature'));
+
+    expect(spies.onToggleActivity).toHaveBeenCalledTimes(1);
+    expect(spies.onToggleActivity).toHaveBeenCalledWith('자연');
+    expect(spies.onToggle).not.toHaveBeenCalled();
+
+    fireEvent.press(styleChip('nature'));
+
+    expect(spies.onToggle).toHaveBeenCalledTimes(1);
+    expect(spies.onToggle).toHaveBeenCalledWith('자연');
+    expect(spies.onToggleActivity).toHaveBeenCalledTimes(1); // 늘지 않았다
   });
 });

@@ -47,6 +47,9 @@ export interface TripWizardDraft {
    * (null-vs-empty — 배선이 `toggleMulti`의 `null`을 `[]`로 매핑). 계정 취향은 안 건드린다
    * (BR-U1-38 — 여기 담는 건 여행 로컬 값이다). */
   prefStyleOverride?: string[];
+  /** 활동 축 오버라이드(TRIP-1092) — `prefStyleOverride`와 같은 규약이고 서로 독립이다(자연·쇼핑이
+   * 두 축에 같은 라벨로 있어 한 필드로 합치면 "활동 자연만 끔"을 못 담는다). */
+  prefActivityOverride?: string[];
   /** 아직 소비자가 없다(문구를 안 그리므로) — TRIP-206이 이 값을 읽어 오류 문구를 건다. */
   touched: TripWizardField[];
   /** 제출 성공 응답이 준 `tripId`(01b D7). 라우트(`/trips/new/step2`)가 id를 안 나르므로
@@ -94,6 +97,8 @@ export interface TripWizardDraft {
   /** 여행 단위 취향 오버라이드 커밋(TRIP-669) — 빈 배열도 그대로 저장한다(최소 0 허용).
    * `undefined`(오버라이드 없음)와 `[]`(전해제한 오버라이드)를 서로 다른 상태로 남긴다. */
   setPrefStyleOverride(styles: string[]): void;
+  /** 활동 축 오버라이드 커밋(TRIP-1092) — 규약은 `setPrefStyleOverride`와 같다. */
+  setPrefActivityOverride(activities: string[]): void;
   setCreatedTripId(tripId: string): void;
   /** **첫 호출만** 반영한다 — 재조회·리렌더마다 다시 채우면 사용자가 x로 뺀 항목이
    * 되살아나고, 자기가 뺀 곳이 여행에 등록되는 것을 보게 된다. */
@@ -133,6 +138,7 @@ const INITIAL_DRAFT = {
   budgetText: '',
   // `undefined`=오버라이드 없음. `INITIAL_DRAFT`에 이 키를 둬야 병합형 `reset()`이 지운다(SO-4).
   prefStyleOverride: undefined as string[] | undefined,
+  prefActivityOverride: undefined as string[] | undefined,
   touched: [] as TripWizardField[],
   createdTripId: undefined as string | undefined,
   mustVisits: [] as MustVisitSeedItem[],
@@ -241,6 +247,8 @@ const createTripWizardDraft: StateCreator<TripWizardDraft> = (set) => ({
       touched: withTouched(state.touched, 'budget'),
     })),
   setPrefStyleOverride: (styles) => set({ prefStyleOverride: styles }),
+  setPrefActivityOverride: (activities) =>
+    set({ prefActivityOverride: activities }),
   setCreatedTripId: (tripId) => set({ createdTripId: tripId }),
   initMustVisits: (items) =>
     set((state) =>

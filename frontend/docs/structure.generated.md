@@ -561,7 +561,7 @@
 - `src/features/notification/ui/ToggleRow.tsx`  →  ToggleRowProps · ToggleRow
 
 ## src/features/onboarding/model/
-- `src/features/onboarding/model/preferenceInput.ts`  →  PreferenceDraftValues · STYLE · toPreferenceInput
+- `src/features/onboarding/model/preferenceInput.ts`  →  PreferenceDraftValues · STYLE · ACTIVITY · toPreferenceInput
 - `src/features/onboarding/model/preferenceSelection.ts`  →  toggleMulti · toggleSingle
 - `src/features/onboarding/model/preferenceStore.ts`  →  PreferenceDraft · usePreferenceStore
 - `src/features/onboarding/model/resolveOnboardingStep.ts`  →  OnboardingStep · OnboardingProgress · resolveOnboardingStep
