@@ -311,6 +311,15 @@ export function TripRecordsPage({
               )
             : undefined
         }
+        // TRIP-1088 — 선택된 일차의 j03 으로(오늘 고정 아님). 미래 일차엔 없다(결정 2, ISO 날짜 사전순 =
+        // 시간순), 끝난 여행은 가르지 않는다(결정 3). '' <= today 는 참이라 일정 로딩 전(빈 날짜)을 따로 막는다.
+        onPressReflection={
+          activeDay !== '' && activeDay <= today
+            ? guardPress(() =>
+                router.push(`/trips/${tripId}/records/reflection/${activeDay}`)
+              )
+            : undefined
+        }
         onPressBack={() => {
           if (router.canGoBack()) router.back();
         }}

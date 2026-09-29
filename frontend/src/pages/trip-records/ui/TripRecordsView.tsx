@@ -1,11 +1,16 @@
-import type { ReactElement, ReactNode } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { useState, type ReactElement, type ReactNode } from 'react';
+import { Pressable, Text, View, useWindowDimensions } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+} from 'react-native-reanimated';
 
 import { formatDayLabel } from '@/entities/trip/lib/formatDayLabel';
 import { formatCoPickDayHeader } from '@/features/itinerary/model/draftView';
 import {
   GpsOffGlyph,
   InfoCircleGlyph,
+  NoteGlyph,
   VisitCheckUpcomingGlyph,
 } from '@/features/record/ui/RecordGlyphs';
 import { SpontaneousVisitButton } from '@/features/record/ui/SpontaneousVisitButton';
@@ -15,10 +20,11 @@ import {
 } from '@/features/record/ui/VisitRecordCard';
 import type { MapCenter, MapPin } from '@/shared/map';
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { DayChipOverlay } from '@/widgets/map-sheet-shell/ui/DayChipOverlay';
 import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
 
 /**
- * TRIP-1085 · j01 방문 기록 **순수 뷰**(pages · 셸 조립) — 전면 지도 + 바텀시트(Figma 4705:2756).
+ * TRIP-1085 · j01 방문 기록 **순수 뷰**(pages · 셸 조립) — 전면 지도 + 바텀시트(Figma 4716:2833 — 옛 4705:2756 은 TRIP-1088 교체로 삭제).
  *
  * 셸(`MapSheetShell`)이 지도·좌상단 일차 칩(‹ 포함)·3스냅 시트를 그리고, 이 뷰는 시트 헤더 한 줄과 본문을
  * 채운다. 하단 탭바는 없다(결정 1(b)). 지도는 셸 기본 잠금(결정 2(a)) + 핀 전부 맞추기(결정 3(c)). 핀 판정·
@@ -92,6 +98,8 @@ export interface TripRecordsViewProps {
   onPressSkip: (visitCheckId: string) => void;
   /** 즉석 방문 추가 — 미주입이면 [방문 추가]를 그리지 않는다(TRIP-939). */
   onPressSpontaneous?: () => void;
+  /** TRIP-1088 「오늘의 회고」 FAB — 미주입이면 그리지 않는다(미래·로딩 판정은 페이지 몫). */
+  onPressReflection?: () => void;
 }
 
 type SheetItem =
@@ -99,6 +107,21 @@ type SheetItem =
   | { kind: 'plan'; row: RecordPlanRowVM };
 
 const DEFAULT_NOTICE = '오늘의 동선 · 방문한 곳을 사진과 메모로 남겨요';
+
+// TRIP-1088 회고 FAB 앵커 — i01 수정 FAB(LiveHubView, TRIP-1083)와 같은 식·값: FAB 윗변 y =
+// max(칩 줄 하단 + 간격, 시트 윗변 − 간격 − FAB). 앵커는 reanimated 컴포넌트라 className 대신 style 숫자
+// (토큰 sm 8·lg 16 과 같은 값). 한쪽만 바꾸면 두 FAB 간격이 갈라진다.
+const FAB_HEIGHT = 52;
+const FAB_GAP = 8;
+const FAB_RIGHT = 16;
+// 그림자 색은 토큰이 없다 — LiveHubView `FAB_SHADOW` 와 같은 값(Figma 0/4/16 8%).
+const FAB_SHADOW = {
+  shadowColor: '#000000',
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.08,
+  shadowRadius: 16,
+  elevation: 4,
+} as const;
 
 export function TripRecordsView({
   tripTitle,
@@ -121,8 +144,21 @@ export function TripRecordsView({
   onPressComplete,
   onPressSkip,
   onPressSpontaneous,
+  onPressReflection,
 }: TripRecordsViewProps): ReactElement {
   const activeIndex = dayTabs.findIndex((tab) => tab.day === activeDay);
+  const { height: windowHeight } = useWindowDimensions();
+  // 시트 윗변 y — 셸이 gorhom 에 넘기면 gorhom 이 매 프레임(끄는 중에도) 써 넣는다(topInset 포함이라
+  // safeTop 을 더하지 않는다). 첫 값 전엔 창 높이 — FAB 가 화면 아래에서 시작한다(상단 튐 방지, 6-b).
+  const sheetTop = useSharedValue(windowHeight);
+  // 칩 줄(‹ + 일차 칩) 하단 — onLayout 실측. 재기 전엔 0.
+  const [overlayBottom, setOverlayBottom] = useState(0);
+  const fabAnchorStyle = useAnimatedStyle(() => ({
+    top: Math.max(
+      overlayBottom + FAB_GAP,
+      sheetTop.value - FAB_GAP - FAB_HEIGHT
+    ),
+  }));
 
   // i01 헤더와 같은 조립(LiveHubView) — 'N곳' 은 시트에 보이는 곳 수(카드 + 계획 행, 01b Q2).
   const header = [
@@ -161,13 +197,28 @@ export function TripRecordsView({
         center={mapCenter}
         pins={mapPins}
         fitPins
-        days={dayTabs.map((tab) => ({ label: tab.label }))}
-        selectedDayIndex={activeIndex}
-        onSelectDay={(index) => {
-          const tab = dayTabs[index];
-          if (tab) onSelectDay(tab.day);
-        }}
-        onBack={onPressBack}
+        // TRIP-1088 — 셸 기본 칩 줄을 뷰가 직접 넘긴다: FAB 하한을 재려면 칩 줄에 onLayout 을 걸어야 하는데
+        // 셸 기본 오버레이엔 그 자리가 없다. ⚠️ 셸 기본 오버레이 배선의 사본 — 셸이 기본을 바꾸면 j01 만 남는다.
+        overlay={
+          <View
+            testID="record-trip-overlay-row"
+            onLayout={(event) => {
+              const { y, height } = event.nativeEvent.layout;
+              setOverlayBottom(y + height);
+            }}
+          >
+            <DayChipOverlay
+              days={dayTabs.map((tab) => ({ label: tab.label }))}
+              selectedIndex={activeIndex}
+              onSelectDay={(index) => {
+                const tab = dayTabs[index];
+                if (tab) onSelectDay(tab.day);
+              }}
+              onBack={onPressBack ?? (() => {})}
+            />
+          </View>
+        }
+        animatedPosition={sheetTop}
         // TRIP-761 ⊘ 배지 — 셸 `mapCard` 슬롯(일차 칩 줄 아래, Figma 4705:3557 y=63). 지도 위에 직접
         // absolute 로 얹지 않는다(repo-traps 지도 절). testID 노드 자신이 `pointerEvents="none"` 라 지도
         // 터치를 흡수하지 않는다(A3a — jest 가 볼 수 있는 유일한 그물, 실제 통과는 6-b).
@@ -277,6 +328,30 @@ export function TripRecordsView({
           ) : null}
         </View>
       </MapSheetShell>
+
+      {/* TRIP-1088 「오늘의 회고」 FAB — 시트 윗변 8 위 오른쪽 16 에 붙어 시트를 따라가고, 펼침에선 칩 줄
+          아래에서 멈춘다(Figma 4716:2946). 셸 뒤 형제라 셸 안(원점 어긋남)·mapCard(iOS 부모 밖 터치 막힘)가
+          아니다(TRIP-1083). 배치 className 은 안쪽 Pressable 에만 둔다(앵커는 reanimated 컴포넌트). */}
+      {onPressReflection ? (
+        <Animated.View
+          testID="record-trip-reflection-fab-anchor"
+          pointerEvents="box-none"
+          style={[{ position: 'absolute', right: FAB_RIGHT }, fabAnchorStyle]}
+        >
+          <Pressable
+            testID="record-trip-reflection-fab"
+            accessibilityRole="button"
+            onPress={onPressReflection}
+            style={FAB_SHADOW}
+            className="h-[52px] flex-row items-center gap-sm rounded-pill bg-primary px-xl"
+          >
+            <NoteGlyph />
+            <Text className="font-noto-bold text-card-title font-bold text-on-primary">
+              오늘의 회고
+            </Text>
+          </Pressable>
+        </Animated.View>
+      ) : null}
     </View>
   );
 }

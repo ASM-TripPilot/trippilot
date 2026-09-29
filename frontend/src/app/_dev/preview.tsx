@@ -3019,7 +3019,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         attribution={{ stayName: '해운대 그랜드 호텔', dayLabel: '2일차' }}
         mapCenter={{ lat: 35.1532, lng: 129.1187 }}
         // TRIP-1085 결정 3(c) — 방문 기준 state 핀(페이지와 같은 축): 체크 2(광안리·미술관 도착) · 번호 2
-        // (카페 도착 전 · 건너뛴 곳). kind 마커족을 붙이면 지도가 사진·점선·침대로 그린다(Figma 4705:2756 아님).
+        // (카페 도착 전 · 건너뛴 곳). kind 마커족을 붙이면 지도가 사진·점선·침대로 그린다(Figma 4716:2833 아님).
         // 숙소 핀은 범위 밖(Q3).
         mapPins={[
           { number: 1, lat: 35.1532, lng: 129.1187, state: 'done' },
@@ -3116,6 +3116,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         // TRIP-1072 — Figma default(1557:1738)처럼 [방문 추가] 버튼을 세운다.
         onPressSpontaneous={noop}
         onPressBack={noop}
+        onPressReflection={noop}
       />
     ),
   },
@@ -3187,6 +3188,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         onPressComplete={noop}
         onPressSkip={noop}
         onPressBack={noop}
+        onPressReflection={noop}
       />
     ),
   },
@@ -3279,6 +3281,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         onPressComplete={noop}
         onPressSkip={noop}
         onPressBack={noop}
+        onPressReflection={noop}
       />
     ),
   },
@@ -3367,6 +3370,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         onPressSkip={noop}
         onPressSpontaneous={noop}
         onPressBack={noop}
+        onPressReflection={noop}
       />
     ),
   },

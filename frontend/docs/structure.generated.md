@@ -41,6 +41,7 @@
 - `src/__tests__/devPreviewMyStays.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewNotificationInbox.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewPref.test.tsx`  →  (export 없음)
+- `src/__tests__/devPreviewRecordsReflectionFab.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewReleaseGate.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewSettingsDefault.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewSheetSnap.test.tsx`  →  (export 없음)
@@ -631,7 +632,7 @@
 - `src/features/record/ui/MemoInline.tsx`  →  MemoInlineProps · MemoInline
 - `src/features/record/ui/PastTripList.tsx`  →  PastTripListProps · PastTripList
 - `src/features/record/ui/PhotoThumbStrip.tsx`  →  PhotoThumbVM · PhotoThumbStripProps · PhotoThumbStrip
-- `src/features/record/ui/RecordGlyphs.tsx`  →  VisitCheckDoneGlyph · VisitCheckActiveGlyph · VisitCheckUpcomingGlyph · VisitCheckSkippedGlyph · PlusGlyph · WarningTriangleGlyph · RetryGlyph · BackArrowGlyph · ChevronRightGlyph · ChevronDownGlyph · InfoCircleGlyph · GpsOffGlyph · CalendarGlyph
+- `src/features/record/ui/RecordGlyphs.tsx`  →  VisitCheckDoneGlyph · VisitCheckActiveGlyph · VisitCheckUpcomingGlyph · VisitCheckSkippedGlyph · PlusGlyph · NoteGlyph · WarningTriangleGlyph · RetryGlyph · BackArrowGlyph · ChevronRightGlyph · ChevronDownGlyph · InfoCircleGlyph · GpsOffGlyph · CalendarGlyph
 - `src/features/record/ui/RecordsCalendarScreen.tsx`  →  RecordsCalendarScreenProps · RecordsCalendarScreen
 - `src/features/record/ui/SkipVisitDialog.tsx`  →  SkipVisitDialog
 - `src/features/record/ui/SpontaneousVisitButton.tsx`  →  SpontaneousVisitButtonProps · SpontaneousVisitButton
@@ -1468,4 +1469,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 1022개 파일
+합계 1023개 파일
