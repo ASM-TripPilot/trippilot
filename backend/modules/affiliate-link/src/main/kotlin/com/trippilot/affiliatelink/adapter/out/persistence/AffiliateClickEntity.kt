@@ -12,7 +12,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
-/** affiliate_click 매핑(V2.54). stay_id 는 합성 경계 키 — stay 테이블 FK 아님(시드 재생성이 지운다). */
+/** affiliate_click 매핑(V2.59 — 개번 사유는 마이그레이션 주석). stay_id 는 합성 경계 키 — stay 테이블 FK 아님(시드 재생성이 지운다). */
 @Entity
 @Table(name = "affiliate_click")
 class AffiliateClickEntity(
