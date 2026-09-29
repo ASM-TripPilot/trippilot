@@ -3019,7 +3019,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         attribution={{ stayName: '해운대 그랜드 호텔', dayLabel: '2일차' }}
         mapCenter={{ lat: 35.1532, lng: 129.1187 }}
         // TRIP-1085 결정 3(c) — 방문 기준 state 핀(페이지와 같은 축): 체크 2(광안리·미술관 도착) · 번호 2
-        // (카페 도착 전 · 건너뛴 곳). kind 마커족을 붙이면 지도가 사진·점선·침대로 그린다(Figma 4705:2756 아님).
+        // (카페 도착 전 · 건너뛴 곳). kind 마커족을 붙이면 지도가 사진·점선·침대로 그린다(Figma 4716:2833 아님).
         // 숙소 핀은 범위 밖(Q3).
         mapPins={[
           { number: 1, lat: 35.1532, lng: 129.1187, state: 'done' },
@@ -3116,6 +3116,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         // TRIP-1072 — Figma default(1557:1738)처럼 [방문 추가] 버튼을 세운다.
         onPressSpontaneous={noop}
         onPressBack={noop}
+        onPressReflection={noop}
       />
     ),
   },
@@ -3187,6 +3188,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         onPressComplete={noop}
         onPressSkip={noop}
         onPressBack={noop}
+        onPressReflection={noop}
       />
     ),
   },
@@ -3279,6 +3281,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         onPressComplete={noop}
         onPressSkip={noop}
         onPressBack={noop}
+        onPressReflection={noop}
       />
     ),
   },
@@ -3331,7 +3334,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   },
   // j01 방문 기록 empty 얼굴(TRIP-1085 · Figma 4705:4054) — 방문 0건인 오늘 탭. 빈 안내 + 계획 행 4(오늘 탭이라
   // 행마다 "방문 체크") + [방문 추가], 지도는 번호 핀만. 귀속 행은 코드상 방문에서 파생돼(BR-U5-25) 0건인 날엔
-  // 숙소명이 없다 → 날짜만(Figma 의 숙소명과 다름, 드리프트). 빈 안내 문구도 코드 정본 유지(Q7).
+  // 숙소명이 없다 → 귀속 줄 없음(TRIP-1097, 헤더가 날짜 귀속 · Figma 의 숙소명 줄과 다름, 드리프트). 빈 안내 문구도 코드 정본 유지(Q7).
   {
     key: 'records-empty',
     band: 'j',
@@ -3367,6 +3370,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         onPressSkip={noop}
         onPressSpontaneous={noop}
         onPressBack={noop}
+        onPressReflection={noop}
       />
     ),
   },

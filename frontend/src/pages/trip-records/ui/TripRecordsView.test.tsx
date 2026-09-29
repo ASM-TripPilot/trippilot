@@ -12,6 +12,7 @@ import { MemoInline } from '@/features/record/ui/MemoInline';
 import type { VisitRecordCardVM } from '@/features/record/ui/VisitRecordCard';
 import type { MapCenter, MapPin } from '@/shared/map';
 import {
+  closestAncestor,
   isInsideSheet,
   renderedText,
   sheetScrollOf,
@@ -278,7 +279,7 @@ describe('🔴 TRIP-1085 AC-14 · 체류·소요 시간 0 (BR-U5-08 · INV-3)', 
 
 /**
  * TRIP-569 · US-REC-05 · AC-7 — 일자별 귀속 그룹 헤더(옛 TripRecordsScreen.test 에서 옮김, 단언 무수정).
- * "숙소 있음/없음"을 색이 아니라 상호배타 testID(-stay/-date)로 가른다(SVG fill 사각 회피).
+ * 숙소 있는 날만 testID(-stay) 줄이 선다 — 숙소 없는 날은 줄 자체가 없다(TRIP-1097, 아래 describe).
  * 숙소명·라벨은 각자 별 Text leaf 라 `getByText(문자열)` 완전 일치로 찾는다.
  */
 /**
@@ -361,17 +362,38 @@ describe('AC-7 · 숙소 있는 날 — 숙소명 + 날짜 귀속 헤더', () =>
   });
 });
 
-describe('AC-7 · 숙소 없는 날 — 날짜만 헤더(당일치기·이동일)', () => {
-  it('record-trip-attribution-date 에 라벨만 뜨고 숙소 헤더는 없다', () => {
-    renderView({ attribution: { stayName: null, dayLabel: '3일차' } });
+/**
+ * TRIP-1097 결정 1 — 숙소 없는 날(당일치기·이동일)은 귀속 줄을 그리지 않는다. 일차·날짜는 시트 헤더
+ * 한 줄이 이미 보이므로 BR-U5-26 "날짜만으로 묶는다"는 헤더가 맡는다(옛 date-only 줄은 헤더와 중복).
+ * 3동작: 준비(숙소 null · 2일차) → 실행(렌더) → 단언(귀속 줄 둘 다 없음 · 헤더 그대로 · 일차 칩 밖에
+ * 딱 "2일차"만 적힌 글자 없음 · 안내문은 헤더 뒤 그대로).
+ */
+describe('🔴 TRIP-1097 · 숙소 없는 날 — 귀속 줄 없음(헤더가 날짜 귀속)', () => {
+  it('귀속 줄이 없고, 헤더는 그대로이며, "2일차" 단독 글자는 일차 칩뿐이다', () => {
+    renderView({ attribution: { stayName: null, dayLabel: '2일차' } });
 
-    expect(screen.getByTestId('record-trip-attribution-date')).toBeTruthy();
+    expect(screen.queryByTestId('record-trip-attribution-date')).toBeNull();
     expect(screen.queryByTestId('record-trip-attribution-stay')).toBeNull();
-    expect(
-      within(screen.getByTestId('record-trip-attribution-date')).getByText(
-        '3일차'
-      )
-    ).toBeTruthy();
+    expect(screen.getByTestId('record-trip-sheet-header')).toHaveTextContent(
+      '부산 여행 · 2일차 · 6월 11일(목) · 4곳'
+    );
+    // getAllByText('2일차') = 글자 전체가 정확히 "2일차"인 Text 전부(헤더 한 줄은 긴 문자열이라 안 걸린다).
+    // 일차 칩(sheet-daychip-*) 안의 것을 빼면 0개여야 한다 — 귀속 줄이 되살아나면 1개가 된다.
+    const outsideChips = screen
+      .getAllByText('2일차')
+      .filter(
+        (node) =>
+          closestAncestor(node, (candidate) =>
+            /^sheet-daychip-/.test(String(candidate.props.testID ?? ''))
+          ) === null
+      );
+    expect(outsideChips).toHaveLength(0);
+    // 무회귀 — 안내문은 헤더 뒤에 그대로 선다.
+    const at = (node: Parameters<typeof treeIndexOf>[1]) =>
+      treeIndexOf(screen.UNSAFE_root, node);
+    expect(at(screen.getByTestId('record-trip-sheet-header'))).toBeLessThan(
+      at(screen.getByText(DEFAULT_COPY))
+    );
   });
 });
 
