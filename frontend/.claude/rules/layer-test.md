@@ -45,6 +45,7 @@ paths:
 | `src/widgets/time-sheet/ui/TimeSheet.test.tsx` | 공용 시각 시트 렌더 — testID 트리·셀 선택·`endsNextDay` 시·분 두 축·분 셀 bare 숫자(INV-3) |
 | `src/__tests__/fsdStructure.test.ts` | FSD 폴더 배치(대표 파일 존재·pages 배럴·`app-shell` 위치)와 빈 배럴(`export {};`) 0 — **폴더 배치만 본다**(import 방향·내용은 안 봄). "슬라이스가 정확히 N개" 단언은 디렉토리 이름만 보므로 테스트 파일을 최종 위치에 쓰기만 해도 조기 green이 될 수 있다 |
 | `src/__tests__/staySearchStructure.test.ts` | e01 숙소 검색 소스 가드 — INV-3 · raw hex(`features/stay/ui` 동적 스캔, `*Glyphs.tsx` 제외) · 프레젠테이션 순수성 · SafeArea · `resolveStaySearchState`는 페이지만 호출 |
+| `src/__tests__/fabBottomOffsetStructure.test.ts` | FAB 바닥 오프셋 금칙어 가드(TRIP-1103) — `src/` 프로덕션 소스(`*.test.*` 제외)에 `bottom-[100px]` 0줄, **주석도 안 걷고 센다**(머리 주석 속 100도 잡음). 세 화면 파일을 실제로 읽었다는 앵커 포함. 84 가 아닌 다른 틀린 값(90 등)은 못 막는다 — 값 정본은 Figma·`HomeScreen.tsx` 주석 |
 | `src/__tests__/stayRegisterStructure.test.ts` | e05 등록 표면 구조 가드 — 화면 `useState` 0(페이지가 상태 소유) · INV-3 · raw hex · 지도 재사용 · e02→e05 진입 배선. duration 탐지는 `/duration/i`(단어 경계 `\b`를 쓰면 `stayDuration`을 못 잡는다) |
 | `src/__tests__/onboardingStructure.test.ts` | 온보딩 계층·경계 구조 가드(서버 권한 경계, `pages/` 온보딩 컨테이너 포함) |
 | `src/__tests__/onboardingPrefStructure.test.ts` | 취향 스토어·모델 구조 가드 — persist 금지·`@/shared/api` 미참조·`create(` 표기 |
