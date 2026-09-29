@@ -566,6 +566,52 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
 
+  /stays/{stayId}/outbound:
+    get:
+      tags: [stays]
+      summary: 예약 아웃바운드 302(C5 칸 1 · BR-U1-29~32)
+      description: >
+        클릭을 기록하고 예약 목적지로 302 리다이렉트한다. 클라이언트가 OTA URL 을 직접 조립하지
+        않는다 — 목적지 교체(웹검색 폴백 → OTA 딥링크)가 앱 배포 없이 서버 변경만으로 된다.
+
+
+        OTA 계약 전에는 웹검색 폴백(`"{숙소명} 예약"`, BR-U1-31 이 명시 허용하는 우회)으로 보낸다.
+        날짜·인원은 지금 목적지에 실리지 않지만 클릭에 남는다 — 계약 협상 근거 데이터다.
+
+
+        응답 본문은 없다. 클릭·전환 지표는 내부 전용이라 사용자 대면 응답에 싣지 않는다(BR-U1-32).
+
+
+        Bearer 선택(bootstrap 선례) — 브라우저·커스텀탭이 열어 Authorization 을 실을 수 없다.
+        토큰이 오면 계정이 클릭에 남고, 없으면 익명 클릭이다.
+      security:
+        - bearerAuth: []
+        - {}
+      parameters:
+        - name: stayId
+          in: path
+          required: true
+          schema: { type: string }
+          example: 'LOCALDATA:3000000-201-1965-00264'
+          description: '"{출처}:{식별자}" — 상세와 같은 합성 규약'
+        - { name: checkin, in: query, required: false, schema: { type: string, format: date } }
+        - { name: checkout, in: query, required: false, schema: { type: string, format: date } }
+        - { name: adults, in: query, required: false, schema: { type: integer } }
+      responses:
+        '302':
+          description: 목적지로 이동. 본문 없음 — Location 이 전부다.
+          headers:
+            Location:
+              schema: { type: string }
+              description: 예약 목적지 URL(현재 웹검색 폴백, 계약 후 OTA 딥링크)
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          description: 그런 숙소가 없다 — 이름 없이는 폴백 URL 조차 만들 수 없다.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
   /stays/geocode:
     get:
       tags: [stays]

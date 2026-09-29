@@ -37,3 +37,4 @@ include(":modules:change-log")   // 변경 이력(changelog 계층) — US-PLANB
 include(":modules:archive")   // C12 방문 실적·기록(actual 계층) — U4 에서 이관 (TRIP-540 · U5)
 include(":modules:reflection")   // C13 회고 — 하루 한 장 (TRIP-552 · U5)
 include(":modules:notification")   // C14 알림함·리마인드 스케줄 (TRIP-547 · U6)
+include(":modules:affiliate-link")   // C5 제휴 링크 — 아웃바운드 302·클릭 기록 (제휴링크-연동-설계.md 칸 1)

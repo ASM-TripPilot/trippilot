@@ -117,6 +117,13 @@ trippilot:
   stay:
     content:
       mode: ${STAY_CONTENT_MODE:stub}
+  # 제휴 아웃바운드 경로. fallback = 웹검색(수수료 없음) · tripcom = 트립닷컴 키워드 딥링크
+  # (수수료 추적). tripcom 은 어필리에이트 계정의 alliance-id·sid 가 있어야 뜬다(비면 기동 실패).
+  affiliate:
+    mode: ${AFFILIATE_MODE:fallback}
+    tripcom:
+      alliance-id: ${TRIPCOM_ALLIANCE_ID:}
+      sid: ${TRIPCOM_SID:}
 
 # 통합 테스트용 — AI 서비스 위치(compose 에서 AI_URL 주입). 미설정이면 integration 이 degrade.
 ai:

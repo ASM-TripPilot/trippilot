@@ -24,6 +24,7 @@ dependencies {
     implementation(project(":modules:archive"))
     implementation(project(":modules:reflection"))
     implementation(project(":modules:notification"))
+    implementation(project(":modules:affiliate-link"))
 
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.actuator)
