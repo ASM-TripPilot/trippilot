@@ -30,7 +30,10 @@ paths:
 | `src/shared/push/permissions.ts` | `getPushPermission()` — 조회 전용. 로컬 `UNDETERMINED`는 서버 `osPermission`의 `NOT_DETERMINED`와 **어휘가 다르다** — 서버로 보낼 때는 반드시 `register.ts`의 `toServerOsPermission`을 거친다(TS는 `GRANTED`·`DENIED`가 우연히 겹치는 것을 못 잡는다) |
 | `src/shared/push/register.ts` | 푸시 토큰 등록·해제(`registerPushToken`·`unregisterDeviceToken`·`toServerOsPermission`·`isDeviceNotRegistered`) + 모듈 보관 `storedToken`(POST 성공 뒤에만 채움)과 `promptAndRegisterPush`·`registerPushIfGranted`·`unregisterStoredPushToken`(3초 상한, 실패 삼킴). 소비처는 전부 `void` fire-and-forget |
 | `src/shared/push/request.ts` | `requestPushPermission()` — (안드로이드) 채널 3종 생성이 **끝난 뒤** 권한이 `UNDETERMINED`일 때만 OS 요청 1회. 채널 ID는 서버 `ExpoPushAdapter`의 `interruptionLevel` 문자열과 글자까지 맞춘다(`passive`/`active`/`time-sensitive`) |
-| `src/shared/push/index.ts` | 푸시 배럴. **소비처는 반드시 이 배럴로 import한다** — 페이지 테스트의 목이 배럴 경로에 걸려 있어 딥 import는 목을 우회한다 |
+| `src/shared/push/index.ts` | 푸시 배럴. **권한 루틴(`promptAndRegisterPush` 등)은 반드시 이 배럴로 import한다** — 페이지 테스트의 목이 배럴 경로에 걸려 있어 딥 import는 목을 우회한다. **단 `PushPreprompt`는 배럴에 없고 딥 경로로 가져온다**(TRIP-1108 — 테스트가 배럴을 통째로 목으로 바꿔 카드를 배럴에서 가져오면 `undefined`) |
+| `src/shared/push/PushPreprompt.tsx` | 온보딩 푸시 사전 안내 카드(TRIP-1108) — props는 `onProceed`·`onDefer` 둘뿐, 권한 루틴·`expo-notifications`를 import하지 않는다(구조적으로 OS 창을 못 부름). 버튼 라벨은 `계속`·`나중에 하기` — 렌더 텍스트에 "허용"을 쓰지 않는다(심사 문구 규칙). 머리 바·하단 바·버튼 className은 `LocationPreprompt` default와 글자까지 같다(두 화면이 연달아 나와 튀지 않게, 테스트가 `===` 비교) |
+| `src/shared/push/PushGlyphs.tsx` | `PushBellHero` — 위치 레이더와 같은 틀(동심원 3개)에 벨. 동심원 선 색·투명도는 위치 값을 그대로 쓴 **추정값**(Figma 에셋 404) |
+| `src/shared/push/lib/pushColors.ts` | 푸시 글리프 색 상수(raw hex 분리) — 토큰 색과 **수동 동기화** 필요 |
 | `src/shared/date/formatRelativeTime.ts` | `formatRelativeTime(iso, now)` — 경과 시각("방금·N분 전·어제·N일 전"). INV-3 소요시간과 무관 |
 | `src/shared/date/monthGrid.ts` | 월 그리드 순수 산술(`daysInMonth`·`firstWeekdayOfMonth`·`shiftMonth`·`isDateInRange`·`buildMonthGrid` — 7의 배수, 4~6주 가변). stay·trip·record가 공유하는 유일한 정의(재구현 금지). 에포크 일수 산술로 TZ-safe, `firstWeekdayOfMonth`는 음수 나머지를 흡수한다 |
 | `src/shared/date/monthGrid.test.ts` | 윤년·연 경계·양끝 포함·월/일요일 시작 패딩 표 전수 |

@@ -19,7 +19,8 @@ paths:
 | `src/app/(onboarding)/index.tsx` | **진입 단계 리다이렉트** (미완 → terms) |
 | `src/app/(onboarding)/terms.tsx` | 약관 라우트 — 컨테이너를 꽂는 얇은 래퍼 |
 | `src/app/(onboarding)/nickname.tsx` | 닉네임 라우트 — 얇은 래퍼 |
-| `src/app/(onboarding)/location.tsx` | c08 위치 권한 프리프롬프트 라우트 — `LocationPage` 얇은 래퍼. 체인상 nickname과 pref1 사이(`onboardingStructure.test.ts`) |
+| `src/app/(onboarding)/location.tsx` | c08 위치 권한 프리프롬프트 라우트 — `LocationPage` 얇은 래퍼. 체인상 nickname과 push 사이(`onboardingStructure.test.ts`) |
+| `src/app/(onboarding)/push.tsx` | 온보딩 푸시 안내 카드 라우트(TRIP-1108) — `PushPage` 얇은 래퍼. 체인 location → push → pref1. 파일 이름이 `notifications`가 아닌 이유: 괄호 그룹은 URL에 안 들어가 `/notifications`(알림함 `app/notifications.tsx`)와 충돌(`onboardingPushStructure`가 짝으로 잠금) |
 | `src/app/(onboarding)/pref1.tsx` | 취향 1/2 라우트(c09) — `PrefStep1Page` 얇은 래퍼 |
 | `src/app/(onboarding)/pref2.tsx` | 취향 2/2 라우트(c09b) — `PrefStep2Page` 얇은 래퍼 |
 | `src/app/(tabs)/_layout.tsx` | 탭 네비게이터 — `tabBar` 렌더프롭 + `BottomTabBar` 어댑터(`routeNameToTabKey` index→home · `handlePressTab` home→index). `screenOptions.tabBarStyle`의 `position:'absolute'` 등은 **커스텀 `tabBar` 렌더프롭엔 무효**(react-navigation이 적용 안 함)인 죽은 문자열 — 실제 오버레이는 `shared/ui/BottomTabBar.tsx` 루트의 `absolute bottom-0`이 진다. |
