@@ -9,6 +9,7 @@ import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import type { ReflectionStats } from '@/shared/api/generated/schemas';
 
+import type { MapNotice } from '../model/missingParts';
 import { ChangeSummaryRow } from './ChangeSummaryRow';
 import { NarrativeBlock } from './NarrativeBlock';
 import {
@@ -65,7 +66,7 @@ export interface DailyReflectionScreenProps {
   editableText: string;
   stats: ReflectionStats;
   distanceDash: boolean;
-  mapNotice: { title: string; body: string } | null;
+  mapNotice: MapNotice | null;
   hidePhotoGrid: boolean;
   // photos 는 읽기만 하므로 readonly — 호출자가 `[] as const` 로 넘겨도 받는다(가변 배열도 그대로 할당됨).
   photos: readonly { uri: string }[];
@@ -177,7 +178,10 @@ export function DailyReflectionScreen({
           <Text className="text-center font-noto-bold text-body font-bold text-ink">
             {mapNotice.title}
           </Text>
-          <Text className="text-center font-noto text-label text-muted">
+          <Text
+            testID={`reflection-daily-map-notice-reason-${mapNotice.reason}`}
+            className="text-center font-noto text-label text-muted"
+          >
             {mapNotice.body}
           </Text>
         </>

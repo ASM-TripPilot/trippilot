@@ -1,8 +1,12 @@
 import type { ReactElement } from 'react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import * as Location from 'expo-location';
 import { router } from 'expo-router';
 
-import { missingParts } from '@/features/reflection/model/missingParts';
+import {
+  missingParts,
+  type LocationPermissionState,
+} from '@/features/reflection/model/missingParts';
 import { resolveDisplayNarrative } from '@/features/reflection/model/reflectionFallback';
 import { statsCard } from '@/features/reflection/model/statsCard';
 import { useDailyReflection } from '@/features/reflection/model/useDailyReflection';
@@ -39,6 +43,10 @@ import { shellTabHref } from '@/shared/ui/BottomTabBar';
  * TRIP-980 · "오늘"은 보고 있는 날짜가 아니라 **KST 실제 오늘**(`today`, 기본 `seoulDate(new Date())`)로
  * 정한다(사용자 확정 D1·D2) — `오늘 ·` 칩은 날짜가 오늘인 탭에만, 활성과 따로 판정한다. 보고 있는 날이
  * 오늘이 아니면 화면이 헤더·empty 문구를 중립으로 바꾼다(`isToday`).
+ *
+ * TRIP-1118 · 지도 자리 사유는 단말 위치 권한을 **조회만** 해서 고른다(request 0회 — 다시 묻지 않음).
+ * `granted`/`denied` 외(undetermined·조회 실패·결과 없음)는 모름으로 접는다 — 모르면 권한 사유를 말하지
+ * 않는다(Seed Q3, j01 `!granted` 와 의도적으로 다른 어휘). 얼굴 판정은 사유와 떼어 방문<2(`distanceDash`)로 한다.
  *
  * ⚠️ 계약 공백(01b 범위 밖·후속): 회고 응답(`Reflection`)에 사진 URL·지도 좌표·변경 요약이 없다 —
  * 사진(`photos=[]`)·지도 핀(미전달)·changeSummary(미전달)는 실제 소스가 정의되면 배선한다.
@@ -99,8 +107,22 @@ export function DailyReflectionPage({
         )
       : [];
 
+  const [permission, setPermission] =
+    useState<LocationPermissionState>('unknown');
+  useEffect(() => {
+    void (async () => {
+      try {
+        const current = await Location.getForegroundPermissionsAsync();
+        if (current?.status === 'granted' || current?.status === 'denied')
+          setPermission(current.status);
+      } catch {
+        // 조회 실패 = 모름 유지(권한 사유를 쓰지 않는다).
+      }
+    })();
+  }, []);
+
   const stats = statsCard(res?.stats);
-  const missing = missingParts(stats);
+  const missing = missingParts(stats, permission);
   const narrative = resolveDisplayNarrative(res);
   const editableText = res?.card?.subtitle ?? '';
   // ISO 'YYYY-MM-DD' 는 사전순 = 시간순(monthGrid.isDateInRange 선례).
@@ -123,7 +145,7 @@ export function DailyReflectionPage({
       : res
         ? stats.visitCount === 0 && stats.photoCount === 0 && !res.editedCard
           ? 'empty'
-          : missing.mapNotice !== null || missing.hidePhotoGrid
+          : missing.distanceDash || missing.hidePhotoGrid
             ? 'data-insufficient'
             : 'default'
         : daily.isCreateError

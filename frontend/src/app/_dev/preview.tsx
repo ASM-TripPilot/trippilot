@@ -38,6 +38,7 @@ import { PhotoThumbStrip } from '@/features/record/ui/PhotoThumbStrip';
 import { RecordsCalendarScreen } from '@/features/record/ui/RecordsCalendarScreen';
 import { VisitRecordCard } from '@/features/record/ui/VisitRecordCard';
 import { VisitTimeSheet } from '@/features/record/ui/VisitTimeSheet';
+import { missingParts } from '@/features/reflection/model/missingParts';
 import { SHARE_FORMATS } from '@/features/reflection/model/shareCard';
 import { DailyReflectionScreen } from '@/features/reflection/ui/DailyReflectionScreen';
 import { ShareCardScreen } from '@/features/reflection/ui/ShareCardScreen';
@@ -194,6 +195,7 @@ import type { PreferenceSelection } from '@/features/settings/model/preferenceDr
 import { PreferencesEditView } from '@/features/settings/ui/PreferencesEditView';
 import type {
   ItineraryDaysItemSlotsItem,
+  ReflectionStats,
   SlotCandidatesCandidatesItem,
   StayDetail,
   StayItem,
@@ -3438,38 +3440,41 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   {
-    // 부분 데이터 — 방문<2(거리 "—" + 지도 자리 사유) · 사진 0장("사진 없음" 자리). BR-U5-34 실증.
+    // 부분 데이터 — 방문<2(거리 "—" + 지도 자리 사유 few-visits) · 사진 0장("사진 없음" 자리). BR-U5-34 실증.
+    // 권한·동선 사유(permission·no-route)는 키를 늘리지 않는다(band j 18키 Figma 1:1 잠금) — 6-b 실기로 본다.
     key: 'reflection-data-insufficient',
     band: 'j',
     label: 'j03 · 오늘의 회고 data-insufficient',
     login: null,
-    render: () => (
-      <DailyReflectionScreen
-        face="data-insufficient"
-        narrative="메모를 기반으로 오늘 기록을 정리했어요. 위치·사진 정보가 부족해 일부 항목은 제외했어요."
-        editableText="메모를 기반으로 오늘 기록을 정리했어요."
-        stats={{
-          visitCount: 2,
-          distanceKm: 0,
-          distanceSource: 'VISIT_LINE',
-          photoCount: 0,
-        }}
-        distanceDash
-        mapNotice={{
-          title: '위치 기록 없음',
-          body: 'GPS 미동의로 지도를 만들 수 없어요',
-        }}
-        hidePhotoGrid
-        photos={[]}
-        dayTabs={[{ day: 1 }, { day: 2, today: true }, { day: 3 }]}
-        activeDay={2}
-        onSelectDay={noop}
-        onPressTab={noop}
-        onEnterEdit={noop}
-        onConfirm={noop}
-        onSaveEdit={noop}
-      />
-    ),
+    render: () => {
+      // 대시·사유 문구·사진 자리는 운영과 같은 `missingParts` 에서 받는다 — 문구 사본을 두지 않는다.
+      const stats: ReflectionStats = {
+        visitCount: 1,
+        distanceKm: 0,
+        distanceSource: 'VISIT_LINE',
+        photoCount: 0,
+      };
+      const parts = missingParts(stats);
+      return (
+        <DailyReflectionScreen
+          face="data-insufficient"
+          narrative="메모를 기반으로 오늘 기록을 정리했어요. 위치·사진 정보가 부족해 일부 항목은 제외했어요."
+          editableText="메모를 기반으로 오늘 기록을 정리했어요."
+          stats={stats}
+          distanceDash={parts.distanceDash}
+          mapNotice={parts.mapNotice}
+          hidePhotoGrid={parts.hidePhotoGrid}
+          photos={[]}
+          dayTabs={[{ day: 1 }, { day: 2, today: true }, { day: 3 }]}
+          activeDay={2}
+          onSelectDay={noop}
+          onPressTab={noop}
+          onEnterEdit={noop}
+          onConfirm={noop}
+          onSaveEdit={noop}
+        />
+      );
+    },
   },
   {
     // empty — 기록 없음: 빈 원 일러스트 + CTA "직접 회고 작성"(누르면 편집 입력이 열린다).

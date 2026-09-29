@@ -649,7 +649,7 @@
 ## src/features/reflection/model/
 - `src/features/reflection/model/editCard.ts`  →  buildEditCard
 - `src/features/reflection/model/formatKm.ts`  →  formatKm
-- `src/features/reflection/model/missingParts.ts`  →  MissingParts · missingParts
+- `src/features/reflection/model/missingParts.ts`  →  LocationPermissionState · MapNoticeReason · MapNotice · MissingParts · missingParts
 - `src/features/reflection/model/reflectionFallback.ts`  →  resolveDisplayNarrative
 - `src/features/reflection/model/shareCapture.ts`  →  SaveShareCardResult · ShareShareCardResult · isShareCaptureArmed · saveShareCardImage · shareShareCardImage
 - `src/features/reflection/model/shareCaptureNative.ts`  →  captureRef · requestPermissionsAsync · saveToLibraryAsync · shareAsync
