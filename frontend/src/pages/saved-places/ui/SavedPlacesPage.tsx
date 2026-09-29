@@ -230,6 +230,8 @@ function WizardMustVisitPick(props: PickWrapperProps): ReactElement {
             !insideList.some((saved) => saved.place.poiId === m.sourcePoiId)
         );
         store.seedMustVisitsFromD02([...seedMustVisits(chosen), ...kept]);
+        // 위저드 안 재진입이다 — 셸이 다시 마운트돼도 이미 만든 여행 id를 지우지 않게 한다(TRIP-1113).
+        store.keepCreatedTripIdOnce();
         router.push('/trips/new/step1');
       }}
     />

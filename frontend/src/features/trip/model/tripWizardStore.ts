@@ -69,6 +69,10 @@ export interface TripWizardDraft {
    * 마운트 시 이 값을 보고 `resetMustVisits()`를 건너뛴다(그 뒤 스스로 끈다). 그 외 진입은
    * 항상 `false`라 평소대로 비워진다. */
   preserveMustVisitsOnce: boolean;
+  /** 꼭 갈 곳 고르기 완료(위저드 **안** 재진입)가 켜는 1회성 표시(TRIP-1113 결정 2) — 셸이 마운트 시
+   * 이 값을 보면 `createdTripId`를 비우지 않고 스스로 끈다. 그래야 돌아온 step1이 여행을 또 만들지
+   * 않고 고친다(PATCH). `INITIAL_DRAFT`에 있어 새 진입의 `reset()`이 함께 끈다. */
+  preserveCreatedTripIdOnce: boolean;
   /** `regionCode` — 지역 피커가 쥔 행정구역 코드(TRIP-1042 AC-12). 꼭 갈 곳 고르기가 이 코드로 지역을
    * 가르고, 생성 요청에도 그대로 실린다. 안 주면 비어 있다(서버가 이름으로 찾는다). */
   addDestination(regionName: string, nights: number, regionCode?: string): void;
@@ -100,6 +104,9 @@ export interface TripWizardDraft {
   /** 활동 축 오버라이드 커밋(TRIP-1092) — 규약은 `setPrefStyleOverride`와 같다. */
   setPrefActivityOverride(activities: string[]): void;
   setCreatedTripId(tripId: string): void;
+  /** `preserveCreatedTripIdOnce`만 켠다 — 켜는 곳은 꼭 갈 곳 고르기 완료 한 곳이다(d02 새 진입의
+   * `seedMustVisitsFromD02`에 합치면 새 여행이 옛 id를 물고 간다 — TRIP-601 가드 c). */
+  keepCreatedTripIdOnce(): void;
   /** **첫 호출만** 반영한다 — 재조회·리렌더마다 다시 채우면 사용자가 x로 뺀 항목이
    * 되살아나고, 자기가 뺀 곳이 여행에 등록되는 것을 보게 된다. */
   initMustVisits(items: MustVisitSeedItem[]): void;
@@ -116,8 +123,8 @@ export interface TripWizardDraft {
    * 범위다: 위저드에 새로 들어오는 것은 "새 여행을 시작한다"지 "지금까지 친 것을 버린다"가
    * 아니라, 사용자가 손으로 채운 축(여행지·기간·인원·동반·예산·`touched`)은 재진입에도
    * 남아야 한다(BR-U1-33 · AC-1은 초기화 대상으로 시드 3개만 열거한다).
-   * `createdTripId`도 남긴다 — 정본이 수명을 정하지 않았고, step1의 두 소비자가 화면 지역
-   * 상태(`pendingMustVisits`)와 짝이라 새 마운트에서는 발화하지 않는다(02a §9-2). */
+   * `createdTripId`도 남긴다 — 정본이 수명을 정하지 않았다. 비우는 것은 셸 마운트(TRIP-601 가드 c)와
+   * `reset()`이고, 남아 있으면 step1은 그 여행을 새로 만들지 않고 고친다(TRIP-1113). */
   resetMustVisits(): void;
   /** d02 "이 장소들로 여행 만들기" 전용 시드 문 — 사용자 결정으로 신설(자동 재시드 폐지 뒤,
    * 이 명시적 액션만은 살린다). `preserveMustVisitsOnce`를 함께 켠다 — 이 CTA는 늘 새 위저드
@@ -145,6 +152,7 @@ const INITIAL_DRAFT = {
   mustVisitsInitialized: false,
   excludedMustVisitPoiIds: [] as string[],
   preserveMustVisitsOnce: false,
+  preserveCreatedTripIdOnce: false,
 };
 
 /** 이미 켜져 있으면 그대로 둔다 — 집합이지 로그가 아니다(같은 축을 여러 번 건드려도
@@ -250,6 +258,7 @@ const createTripWizardDraft: StateCreator<TripWizardDraft> = (set) => ({
   setPrefActivityOverride: (activities) =>
     set({ prefActivityOverride: activities }),
   setCreatedTripId: (tripId) => set({ createdTripId: tripId }),
+  keepCreatedTripIdOnce: () => set({ preserveCreatedTripIdOnce: true }),
   initMustVisits: (items) =>
     set((state) =>
       state.mustVisitsInitialized

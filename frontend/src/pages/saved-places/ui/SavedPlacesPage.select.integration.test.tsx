@@ -1180,3 +1180,24 @@ describe('🔒 1093 AC-5 · 1/4 에서 x 로 뺀 곳은 select 에 체크 없이
     expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
   });
 });
+
+// ── TRIP-1113 결정 2 · select 완료는 위저드 안 재진입이다 — 이미 만든 여행 id 를 셸이 지우지 않게 표식을 켠다 ──
+// 표식이 켜지면 셸이 id 를 남긴다는 쪽은 `tripWizardReentryPreserve.test.tsx` GP 가 동작으로 잠근다(이 파일의
+// expo-router 목엔 Stack 이 없어 셸을 함께 그릴 수 없다). 새 진입(「이 장소들로」 CTA)이 표식을 켜지 않는 쪽은
+// `SavedPlacesPage.integration.test.tsx` C1 이 freshWizardDraft 비교로 잡는다.
+
+describe('🔴 TRIP-1113 SP-1 · select 완료가 셸 보존 표식을 켠다', () => {
+  it('p1 을 골라 완료하면 preserveCreatedTripIdOnce 가 켜지고 step1 으로 간다', async () => {
+    // 앵커 — 완료 전엔 켜져 있지 않다(구현 전 undefined · 구현 뒤 false 둘 다 통과).
+    expect(useTripWizardStore.getState().preserveCreatedTripIdOnce).not.toBe(
+      true
+    );
+
+    await renderSelectLoaded();
+    fireEvent.press(screen.getByTestId('mustvisit-pick-check-p1'));
+    fireEvent.press(screen.getByTestId('mustvisit-pick-complete'));
+
+    expect(useTripWizardStore.getState().preserveCreatedTripIdOnce).toBe(true);
+    expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
+  });
+});

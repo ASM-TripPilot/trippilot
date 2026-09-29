@@ -6,16 +6,23 @@ import { useRouter } from 'expo-router';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 import { wizardOriginParams } from '@/features/explore/model/wizardOrigin';
-import { postTripsTripIdMustVisits } from '@/shared/api/generated/trips/trips';
+import {
+  deleteTripsTripIdMustVisitsMustVisitId,
+  getTripsTripIdMustVisits,
+  patchTripsTripId,
+  postTripsTripIdMustVisits,
+} from '@/shared/api/generated/trips/trips';
 import type {
   CompanionType,
   CreateTripRequest,
+  MustVisit,
 } from '@/shared/api/generated/schemas';
 import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
 import { getAccessToken } from '@/shared/api/tokenManager';
 import { seoulDate } from '@/shared/date/seoulDate';
 import { shiftMonth } from '@/shared/date/monthGrid';
 import { toggleMulti } from '@/shared/pref/preferenceSelection';
+import { showToast } from '@/shared/ui/Toast';
 
 import {
   budgetForTier,
@@ -24,7 +31,10 @@ import {
   tierForAmount,
   type BudgetTier,
 } from '@/features/trip/model/budgetAmount';
-import { buildCreateTripRequest } from '@/features/trip/model/createTripRequest';
+import {
+  buildCreateTripRequest,
+  type CreateTripInput,
+} from '@/features/trip/model/createTripRequest';
 import {
   nightsSum,
   validateTripDraft,
@@ -32,6 +42,7 @@ import {
 } from '@/features/trip/model/tripDraft';
 import { deriveEndDate } from '@/features/trip/model/tripWizardStep1';
 import { mustVisitFailureNotice } from '@/features/trip/model/mustVisitSeed';
+import { planMustVisitSync } from '@/features/trip/model/mustVisitSync';
 import {
   summaryBudget,
   summaryCompanion,
@@ -74,6 +85,10 @@ import { PrefOverrideSheet } from './PrefOverrideSheet';
  *     `POST /trips/{tripId}/must-visits` 로 등록한다(계약에 생성 요청 필드가 없어 2단이 강제된다).
  *     등록은 여행 생성 `try` **바깥**이다 — 한 블록으로 묶으면 등록 실패가 "여행 생성 실패"로 둔갑해
  *     사용자가 [다시 시도]로 여행을 하나 더 만든다.
+ *  5. **이미 만든 여행(TRIP-1113)** — 스토어에 `createdTripId`가 있으면 `[다음]`은 새로 만들지 않고
+ *     `PATCH /trips/{id}`로 고친 뒤, 서버 꼭 갈 곳을 시드에 맞춘다(`planMustVisitSync` — 추가·삭제).
+ *     PATCH 는 대체 의미라 본문은 생성과 같은 전체 값이고, 취향 스냅숏은 계약에 없어 싣지 않는다 —
+ *     그래서 그 여행의 취향 행은 잠근다(토스트로 이유를 알린다).
  *
  * 의심할 지점: 요약 5행 문자열 도출·게이트·제출 바디는 이 파일의 조립 로직이라 렌더 테스트가
  * 왕복으로 잡는다. 반면 편집 시트 오픈 콜백은 스텁(S2~S6)이라 지금은 신호만 위로 올린다.
@@ -82,6 +97,10 @@ import { PrefOverrideSheet } from './PrefOverrideSheet';
 /** 서버 400 의 `error.code` 가 국내 밖 목적지를 가리키는 값. openapi 에 enum 이 없어 **발명값**이다
  * (01b D4) — BE 확인 뒤 이 상수 한 줄만 바꾸면 된다. */
 const OVERSEAS_DESTINATION_ERROR_CODE = 'OVERSEAS_DESTINATION';
+
+/** 이미 만든 여행의 취향 행을 눌렀을 때 — PATCH 계약에 취향 스냅숏이 없어 바꿔도 반영되지 않는다
+ * (TRIP-1113 결정 1, 발명 문구). */
+const PREF_LOCKED_MESSAGE = '이미 만든 여행은 취향을 바꿀 수 없어요';
 
 /** 제출 실패 배너 본문 — Figma 가 확정한 유일한 문구다(`2226:2128`). 미상 코드·미상 필드·응답
  * 자체 없음도 이 문구로 떨어진다(새 문구를 발명하는 대신 확정된 문구 하나를 재사용). */
@@ -280,10 +299,9 @@ export function TripNewStep1Page({
   const draftBudgetKind = draftBudget.kind;
 
   // 제출 경로 잠금(useRef — 상태와 달리 같은 틱에 즉시 읽힌다, 연타 두 번째가 옛 값을 읽지
-  // 않게). 두 뜻을 겸한다: ① 등록 요청이 날아가는 중 ② 이미 성공해 이 화면의 일이 끝남.
+  // 않게). 요청(등록·PATCH·동기화)이 날아가는 동안만 켜진다 — 성공 뒤에는 풀어 둬야 step2 에서
+  // 돌아와 값을 바꾼 `[다음]`이 PATCH 로 나간다(TRIP-1113 AC-2b).
   const submitLockedRef = useRef(false);
-  // 2/2 로 넘어간 적이 있는가 — `[다음]` 재탭을 이동으로 돌려보내는 문이 본다.
-  const navigatedRef = useRef(false);
 
   const createTrip = useCreateTrip();
 
@@ -362,39 +380,104 @@ export function TripNewStep1Page({
     }
 
     setMustVisitError(undefined);
-    // 성공 — 잠금을 **풀지 않는다**(스택에 남은 step1 으로 되돌아와 재탭해도 여행이 하나 더
-    // 만들어지면 안 된다). 다만 죽어 보이지 않게 이동만은 다시 하도록 이동 사실을 기록한다.
-    navigatedRef.current = true;
+    // 성공 — 잠금을 푼다. 되돌아와 재탭해도 여행이 또 생기지 않는 것은 이제 `createdTripId`가
+    // 막는다(아래 `submit` 이 PATCH 로 보낸다, TRIP-1113).
+    submitLockedRef.current = false;
     router.push('/trips/new/step2');
   }
 
-  function retryMustVisits(): void {
-    if (createdTripId === undefined || pendingMustVisits.length === 0) return;
-    void registerMustVisits(createdTripId, pendingMustVisits);
+  /** 요청이 끝날 때까지(성공·실패 무관) 제출 경로를 잠근다 — 이미 잠겨 있으면 아무것도 안 한다. */
+  async function withSubmitLock(task: () => Promise<void>): Promise<void> {
+    if (submitLockedRef.current) return;
+    submitLockedRef.current = true;
+    try {
+      await task();
+    } finally {
+      submitLockedRef.current = false;
+    }
   }
 
-  async function submit(): Promise<void> {
-    // 이미 넘어간 뒤면 새로 만들지 않고 그 여행의 2/2 로 다시 보낸다. 조건이 `submitLockedRef`
-    // 가 아니라 `navigatedRef` 인 이유: 잠금은 등록이 날아가는 중에도 켜져 있어 그것으로 열면
-    // 등록이 끝나기 전에 2/2 로 새어 나간다.
-    if (navigatedRef.current) {
-      router.push('/trips/new/step2');
+  /**
+   * 이미 만든 여행의 꼭 갈 곳(서버)을 지금 시드에 맞춘 뒤 2/2 로 간다(TRIP-1113 AC-3). 서버 목록을
+   * **매번 새로 조회**해 계획하므로 [다시 시도]는 저절로 남은 차이만 보낸다. 실패는 전부 꼭 갈 곳
+   * 배너 하나로 모은다 — 조회 실패는 무엇이 남았는지 모르니 시드 전부를 실패로 센다(01b Q5), 삭제
+   * 실패도 같은 문구에 합산한다(01b Q4 — "등록" 어휘는 새 티켓 후보). 추가 409 는 목표 상태라 성공이다.
+   */
+  async function syncMustVisits(tripId: string): Promise<void> {
+    const seedPoiIds = useTripWizardStore
+      .getState()
+      .mustVisits.map((seed) => seed.sourcePoiId);
+    let registered: MustVisit[];
+    try {
+      registered = await getTripsTripIdMustVisits(tripId);
+    } catch {
+      setMustVisitError(
+        mustVisitFailureNotice(seedPoiIds.length, seedPoiIds.length)
+      );
       return;
     }
-    if (!canProceed || createTrip.isPending || submitLockedRef.current) return;
 
-    // 여행은 이미 만들어졌고 등록만 남았으면(재시도 경로) 여행을 또 안 만들고 남은 등록만 잇는다.
-    if (createdTripId !== undefined && pendingMustVisits.length > 0) {
-      await registerMustVisits(createdTripId, pendingMustVisits);
+    const plan = planMustVisitSync({ registered, seedPoiIds });
+    const [added, deleted] = await Promise.all([
+      Promise.allSettled(
+        plan.toAdd.map((poiId) =>
+          postTripsTripIdMustVisits(tripId, { poiId, type: 'ANYTIME' })
+        )
+      ),
+      Promise.allSettled(
+        plan.toDelete.map((mustVisitId) =>
+          deleteTripsTripIdMustVisitsMustVisitId(tripId, mustVisitId)
+        )
+      ),
+    ]);
+    const failed =
+      added.filter(
+        (result) =>
+          result.status === 'rejected' && !isAlreadyRegistered(result.reason)
+      ).length +
+      deleted.filter((result) => result.status === 'rejected').length;
+
+    if (failed > 0) {
+      setMustVisitError(
+        mustVisitFailureNotice(added.length + deleted.length, failed)
+      );
       return;
     }
+    setMustVisitError(undefined);
+    router.push('/trips/new/step2');
+  }
 
+  /** 이미 만든 여행을 화면 값으로 고친다(TRIP-1113 AC-1·2). PATCH 가 실패하면 사유와 무관하게 제출
+   * 배너 하나다(결정 3) — 그 [다시 시도]는 다시 여기로 온다(여행을 새로 만들지 않는다). 동기화는
+   * PATCH 가 성공한 **뒤에만** 한다. */
+  async function editTrip(tripId: string): Promise<void> {
     setSubmitError(undefined);
-    setOverseasBlocked(false);
+    try {
+      // 생성과 같은 규칙으로 조립한다 — 입력에 취향 스냅숏이 없으니 결과에도 없다.
+      await patchTripsTripId(tripId, buildCreateTripRequest(tripFields()));
+    } catch {
+      setSubmitError(SUBMIT_ERROR_MESSAGE);
+      return;
+    }
+    await syncMustVisits(tripId);
+  }
 
-    // `CreateTripRequest`(변수)로 타이핑해야 `preferenceSnapshot` 을 실을 수 있다 —
-    // `CreateTripInput`(Omit)은 그 키를 리터럴에서 막는다.
-    const input: CreateTripRequest = {
+  function retryMustVisits(): void {
+    if (createdTripId === undefined) return;
+    // 생성 직후 등록 실패는 남은 poiId 만 다시 등록하고, 이미 만든 여행의 동기화 실패는 조회부터
+    // 다시 맞춘다(`syncMustVisits`는 `pendingMustVisits`를 쓰지 않아 늘 비어 있다).
+    if (pendingMustVisits.length > 0) {
+      void registerMustVisits(createdTripId, pendingMustVisits);
+      return;
+    }
+    const tripId = createdTripId;
+    void withSubmitLock(() => syncMustVisits(tripId));
+  }
+
+  /** 생성·수정 본문의 공통 필드 — PATCH 가 대체 의미라(빠진 선택 필드는 기본값으로 덮인다) 두 요청이
+   * 같은 전체 값을 싣는다. */
+  function tripFields(): CreateTripInput {
+    return {
       startDate: startDate ?? '',
       endDate: endDate ?? '',
       party,
@@ -408,6 +491,33 @@ export function TripNewStep1Page({
         parsedBudget.kind === 'amount' && parsedBudget.amount > 0
           ? parsedBudget.amount
           : undefined,
+    };
+  }
+
+  async function submit(): Promise<void> {
+    if (!canProceed || createTrip.isPending || submitLockedRef.current) return;
+
+    // 여행은 이미 만들어졌고 등록만 남았으면(재시도 경로) 여행을 또 안 만들고 남은 등록만 잇는다.
+    if (createdTripId !== undefined && pendingMustVisits.length > 0) {
+      await registerMustVisits(createdTripId, pendingMustVisits);
+      return;
+    }
+
+    // 이미 만든 여행이 있으면 새로 만들지 않고 고친다(TRIP-1113). 렌더 값이 아니라 스토어를 **지금**
+    // 읽는다 — 생성 성공 직후 리렌더 전에 한 번 더 눌려도 옛 `undefined`로 여행을 또 만들지 않게.
+    const existingTripId = useTripWizardStore.getState().createdTripId;
+    if (existingTripId !== undefined) {
+      await withSubmitLock(() => editTrip(existingTripId));
+      return;
+    }
+
+    setSubmitError(undefined);
+    setOverseasBlocked(false);
+
+    // `CreateTripRequest`(변수)로 타이핑해야 `preferenceSnapshot` 을 실을 수 있다 —
+    // `CreateTripInput`(Omit)은 그 키를 리터럴에서 막는다.
+    const input: CreateTripRequest = {
+      ...tripFields(),
       // 취향 스냅숏(정책 A) — 실효 취향(오버라이드 ?? 프리필)을 평평한 한국어 배열로 싣는다
       // (BE 는 받은 것만 저장하고 스스로 동결하지 않는다). 요약 취향 행과 같은 출처라 화면=서버가
       // 맞는다(두 축 모두, TRIP-1092).
@@ -508,6 +618,15 @@ export function TripNewStep1Page({
    * 오버라이드는 `getState()`로 여는 순간 값을 읽고(store 직접 세팅 직후 press 대비, `openCompanionSheet`
    * 선례), 프리필은 render 클로저값(react-query 라 store 를 안 타 클로저가 곧 최신값이다). */
   function openPrefSheet(): void {
+    // 이미 만든 여행이면 열지 않고 이유를 알린다(TRIP-1113 결정 1) — 바꾸게 두면 화면에 서버에 없는
+    // 취향이 남는다. 새 여행 진입(`reset()`)이면 id 가 비어 저절로 풀린다.
+    if (createdTripId !== undefined) {
+      showToast({
+        message: PREF_LOCKED_MESSAGE,
+        testID: 'trip-wizard-pref-locked-toast',
+      });
+      return;
+    }
     // 프리필 미도착이면 열지 않는다(S5G — 데이터 손실 봉합). GET /me/preferences 도착 전 열면
     // 드래프트가 빈 []로 열리고, 적용 시 `[] ?? prefill`(빈 배열은 값이라 ?? 폴백 안 함)로 온보딩
     // 취향이 영구 유실된다. 신호는 preference.isPending(예산 시트와 동일, ★3).
