@@ -9,6 +9,7 @@ import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import type { ReflectionStats } from '@/shared/api/generated/schemas';
 
+import type { MapNotice } from '../model/missingParts';
 import { ChangeSummaryRow } from './ChangeSummaryRow';
 import { NarrativeBlock } from './NarrativeBlock';
 import {
@@ -65,7 +66,7 @@ export interface DailyReflectionScreenProps {
   editableText: string;
   stats: ReflectionStats;
   distanceDash: boolean;
-  mapNotice: { title: string; body: string } | null;
+  mapNotice: MapNotice | null;
   hidePhotoGrid: boolean;
   // photos 는 읽기만 하므로 readonly — 호출자가 `[] as const` 로 넘겨도 받는다(가변 배열도 그대로 할당됨).
   photos: readonly { uri: string }[];
@@ -85,6 +86,11 @@ export interface DailyReflectionScreenProps {
    * "이 날 기록된 활동이 없습니다"(사용자 확정 D2).
    */
   isToday?: boolean;
+  /**
+   * TRIP-1119 · 헤더 ‹ 뒤로가기(옵셔널, 미주입=‹ 는 그리되 눌러도 이동 없음). 편집 중 ‹ 는 화면이
+   * 먼저 가로채 편집만 닫는다(결정 2 b — 편집은 화면 안 하위 상태, onBack 0회).
+   */
+  onBack?: () => void;
   onEnterEdit: () => void;
   onConfirm: () => void;
   /**
@@ -111,6 +117,7 @@ export function DailyReflectionScreen({
   onSelectDay,
   onPressTab,
   isToday = true,
+  onBack,
   onEnterEdit,
   onConfirm,
   onSaveEdit,
@@ -129,6 +136,13 @@ export function DailyReflectionScreen({
   };
   const handleCancel = () => {
     setEditing(false);
+  };
+  const handleBack = () => {
+    if (editing) {
+      handleCancel();
+      return;
+    }
+    onBack?.();
   };
   const handleSave = () => {
     if (!canSave) return;
@@ -164,7 +178,10 @@ export function DailyReflectionScreen({
           <Text className="text-center font-noto-bold text-body font-bold text-ink">
             {mapNotice.title}
           </Text>
-          <Text className="text-center font-noto text-label text-muted">
+          <Text
+            testID={`reflection-daily-map-notice-reason-${mapNotice.reason}`}
+            className="text-center font-noto text-label text-muted"
+          >
             {mapNotice.body}
           </Text>
         </>
@@ -180,9 +197,16 @@ export function DailyReflectionScreen({
     <SafeAreaView edges={['top']} style={{ flex: 1 }} className="bg-canvas">
       {/* 헤더 — 뒤로 · 제목 · (data 얼굴·비편집) 편집 링크. TRIP-762: 헤더 공유 제거(j03 공유 0). */}
       <View className="w-full flex-row items-center bg-canvas pb-[12px] pl-[12px] pr-lg pt-[4px]">
-        <View className="pr-[4px]">
+        <Pressable
+          testID="reflection-daily-back"
+          accessibilityRole="button"
+          accessibilityLabel="뒤로"
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          onPress={handleBack}
+          className="pr-[4px]"
+        >
           <BackArrowGlyph size={24} />
-        </View>
+        </Pressable>
         <Text className="font-noto-bold text-[18px] font-bold text-ink">
           {isToday ? '오늘의 회고' : '하루 회고'}
         </Text>

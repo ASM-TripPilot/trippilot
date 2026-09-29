@@ -310,3 +310,14 @@ export function CalendarGlyph({ size = 32 }: GlyphProps): ReactElement {
     </Svg>
   );
 }
+
+/** ✕ 닫기 — i01 허브 메모 시트 머리(Figma 4741:2993 · Icon close 1237:1058). ink 선이라 home·explore
+ *  ✕(흰·on-primary)를 못 쓰고, features 경계로 가져올 수도 없어 벡터만 옮겼다. */
+export function CloseGlyph({ size = 24 }: GlyphProps): ReactElement {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M6 6L18 18" stroke={INK} strokeWidth={2} strokeLinecap="round" />
+      <Path d="M18 6L6 18" stroke={INK} strokeWidth={2} strokeLinecap="round" />
+    </Svg>
+  );
+}

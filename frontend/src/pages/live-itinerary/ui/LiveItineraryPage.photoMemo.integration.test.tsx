@@ -21,7 +21,9 @@ import { LiveItineraryPage } from './LiveItineraryPage';
  * 무엇을 보장하나:
  *  - AC-1  관람 중 방문이 있으면 [사진]·[메모]가 서고, 옛 "준비 중" 힌트는 없다.
  *  - AC-2  [사진] → 앨범에서 1장 → `POST …/visits/{관람 중 방문}/photos` 1회, 본문엔 자산 번호·설치 식별자.
- *  - AC-3  [메모] → 기록 화면(j01)의 그날로 이동. 허브는 메모를 저장하지 않는다.
+ *  - AC-3  [메모] → 이동하지 않고 허브 위 메모 시트가 열린다(TRIP-1117 이 TRIP-1070 결정 1(c) "j01 그날로
+ *          이동"을 뒤집었다). 여는 것만으로는 저장 요청이 없다 — 저장·실패·표시 계약은
+ *          `LiveItineraryPage.memoSheet.integration.test.tsx`.
  *  - AC-8  좌표는 서버의 GPS 기록 동의(`gpsRecordingOptIn`)가 켜졌을 때만 싣는다. 동의 조회가 실패하면 끈 것으로.
  *  - AC-9·10·12  취소는 조용히, 권한 거부·자산 번호 없음·피커 실패·저장 실패는 카드 아래 안내 한 줄로.
  *  - F6  허브는 사진 목록을 조회하지 않고, 화면을 열 때 동의를 미리 조회하지도 않는다(누른 뒤에만).
@@ -264,17 +266,15 @@ describe('🔴 AC-2 · [사진] → 앨범에서 고른 사진의 메타가 관�
   });
 });
 
-describe('🔴 AC-3 · [메모] → 기록 화면의 그날로 간다', () => {
-  it('L3 [메모]를 누르면 /trips/trip-1/records?day=2026-08-20 으로 1회 이동하고, 메모 저장 요청은 없다', async () => {
+describe('🔴 AC-3 · [메모] → 허브를 떠나지 않고 메모 시트가 열린다 (TRIP-1117 · 결정 1(c) 번복)', () => {
+  it('L3 [메모]를 누르면 이동은 0회, 허브 위에 메모 시트가 열리고, 여는 것만으로는 메모 저장 요청이 없다', async () => {
     await renderHub();
 
     fireEvent.press(screen.getByTestId('execution-arrive-memo'));
     await settle();
 
-    expect(mockPush).toHaveBeenCalledTimes(1);
-    expect(mockPush).toHaveBeenCalledWith(
-      `/trips/${TRIP_ID}/records?day=${TODAY}`
-    );
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(screen.getByTestId('live-memo-sheet')).toBeOnTheScreen();
     expect(observedHits.filter((hit) => hit.endsWith('/memo')).length).toBe(0);
     expect(mockPick).not.toHaveBeenCalled();
   });

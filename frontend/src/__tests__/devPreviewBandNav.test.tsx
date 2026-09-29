@@ -434,7 +434,11 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    `h08-draft-stale-failed`·`h14-plan-no-base` 바로 뒤에 추가하고 이 가드는 안 만진다(추가 전엔 183개라
     //    red). 정확한 키·얼굴은 아래 'TRIP-1094' describe, h 순서는 devPreviewBandSort EXPECTED_H 가 못박는다.
     //    Figma 전용 프레임이 없는 합성 얼굴이라(브리프 §4-4) 접힘(peek) 가시성의 육안 수단이 이 두 키뿐이다.
-    expect(PREVIEW_STATES).toHaveLength(185);
+    // ⚠️ TRIP-1117: i01 허브 메모 시트 2키(`live-hub-memo-sheet`·`live-hub-memo-saved`, band `i`, Figma 4741:2833 ·
+    //    4741:4650) 추가로 185→187. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 2키만
+    //    `live-hub-no-records` 바로 뒤에 이 순서로 추가하고 이 가드는 안 만진다(추가 전엔 185개라 red). 정확한 키·얼굴은
+    //    devPreviewLiveHub 'TRIP-1117' describe 가 못박는다. i 밴드는 순서 가드(devPreviewBandSort)가 없다.
+    expect(PREVIEW_STATES).toHaveLength(187);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(

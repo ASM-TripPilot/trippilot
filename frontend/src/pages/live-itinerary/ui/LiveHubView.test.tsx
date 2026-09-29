@@ -1276,3 +1276,56 @@ describe('LiveHubView · HF 수정 FAB 시트 윗변 앵커 (TRIP-1083)', () => 
     expect(anchorTop()).toBe(Dimensions.get('window').height - 8 - 52);
   });
 });
+
+// ── TRIP-1117 · 허브 메모 시트의 뷰 쪽 배선 ─────────────────────────────────────────
+//
+// 뷰는 저장을 모른다 — 페이지가 준 값만 그린다. 관람 중 슬롯의 `memo`(세션 저장본)는 관람 중 카드 메모 박스로,
+// `memoNotice`(시트가 닫힌 뒤 도착한 저장 실패, Q3)는 관람 중 카드에만, `fabHidden`(메모 시트가 열림)은 수정
+// FAB 를 숨긴다(Figma 4741:2833 F5). FAB 를 숨기려고 앵커를 셸 안으로 옮기면 HF8 좌표 원점이 어긋난다.
+
+const MEMO_NOTICE = '메모를 저장하지 못했어요. 다시 시도해 주세요.';
+const ACTIVE_KEY = `${DATE}#museum`;
+
+describe('LiveHubView · HM 메모 시트 배선 (TRIP-1117)', () => {
+  it('🔴 HM1 결정 2: 관람 중 슬롯에 memo 가 있으면 관람 중 카드에 박스가 선다 — done 2개와 합쳐 3개', () => {
+    const slots = SLOTS.map((entry) =>
+      entry.state === 'active' ? { ...entry, memo: '바다가 예뻤다' } : entry
+    );
+
+    renderHub({ slots });
+
+    expect(
+      screen.getByTestId(`execution-live-slot-memo-${ACTIVE_KEY}`)
+    ).toHaveTextContent('바다가 예뻤다');
+    expect(screen.getAllByTestId(/^execution-live-slot-memo-/)).toHaveLength(3);
+  });
+
+  it('🔴 HM2 Q3: memoNotice 를 주면 안내 한 줄이 관람 중 카드에만 1개 선다', () => {
+    renderHub({ onPressMemo: jest.fn(), memoNotice: MEMO_NOTICE });
+
+    const notices = screen.getAllByTestId('execution-arrive-memo-notice');
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toHaveTextContent(MEMO_NOTICE);
+    expect(
+      within(
+        screen.getByTestId(`execution-live-slot-${ACTIVE_KEY}`)
+      ).getByTestId('execution-arrive-memo-notice')
+    ).toBeOnTheScreen();
+  });
+
+  it('🔴 HM3 AC-15: fabHidden 이면 수정 FAB 가 없고, 안 주면 FAB 가 있으며 앵커는 허브 루트 바로 아래다(HF8)', () => {
+    renderHub({ fabHidden: true });
+    // 짝 앵커 — 허브는 그려졌다.
+    expect(screen.getByTestId('execution-live-screen')).toBeOnTheScreen();
+    expect(screen.queryByTestId('execution-live-replan-fab')).toBeNull();
+
+    screen.unmount();
+    renderHub();
+
+    expect(screen.getByTestId('execution-live-replan-fab')).toBeOnTheScreen();
+    const hostParent = ancestorsOf(
+      screen.getByTestId('execution-live-fab-anchor')
+    ).find((node) => typeof node.type === 'string');
+    expect(hostParent?.props.testID).toBe('execution-live-screen');
+  });
+});

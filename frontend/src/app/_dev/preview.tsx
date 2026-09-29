@@ -34,10 +34,12 @@ import type { PlaceDetailView } from '@/features/execution/model/placeDetailView
 import { PlaceDetailScreen } from '@/features/execution/ui/PlaceDetailScreen';
 import { TriggerChip } from '@/features/execution/ui/TriggerChip';
 import { MemoInline } from '@/features/record/ui/MemoInline';
+import { MemoSheet } from '@/features/record/ui/MemoSheet';
 import { PhotoThumbStrip } from '@/features/record/ui/PhotoThumbStrip';
 import { RecordsCalendarScreen } from '@/features/record/ui/RecordsCalendarScreen';
 import { VisitRecordCard } from '@/features/record/ui/VisitRecordCard';
 import { VisitTimeSheet } from '@/features/record/ui/VisitTimeSheet';
+import { missingParts } from '@/features/reflection/model/missingParts';
 import { SHARE_FORMATS } from '@/features/reflection/model/shareCard';
 import { DailyReflectionScreen } from '@/features/reflection/ui/DailyReflectionScreen';
 import { ShareCardScreen } from '@/features/reflection/ui/ShareCardScreen';
@@ -194,6 +196,7 @@ import type { PreferenceSelection } from '@/features/settings/model/preferenceDr
 import { PreferencesEditView } from '@/features/settings/ui/PreferencesEditView';
 import type {
   ItineraryDaysItemSlotsItem,
+  ReflectionStats,
   SlotCandidatesCandidatesItem,
   StayDetail,
   StayItem,
@@ -2011,6 +2014,14 @@ function renderLiveHubPreview(
   );
 }
 
+// i01 허브 메모 시트(TRIP-1117) — 관람 중 부산시립미술관의 작성 중 본문(Figma 4741:2991 · 4741:4804 같은 글).
+const LIVE_HUB_PREVIEW_MEMO =
+  '이우환 공간이 조용해서 오래 머물렀다. 기획전은 다음에 또 보기.';
+const LIVE_HUB_PREVIEW_SLOTS_MEMO_SAVED: LiveHubSlot[] =
+  LIVE_HUB_PREVIEW_SLOTS.map((entry) =>
+    entry.state === 'active' ? { ...entry, memo: LIVE_HUB_PREVIEW_MEMO } : entry
+  );
+
 // i02 변수 감지(TRIP-748) — 펼침 5곳 위에 해운대(17:00) 매칭 트리거를 싣는다. 알약 카피·배지는
 // 페이지와 같은 순수 함수로 여기서 조립한다(api 로드 0 — TRIP-610).
 const LIVE_TRIGGER_SLOT_KEY = `${LIVE_HUB_PREVIEW_DATE}#haeundae`;
@@ -3438,38 +3449,41 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   {
-    // 부분 데이터 — 방문<2(거리 "—" + 지도 자리 사유) · 사진 0장("사진 없음" 자리). BR-U5-34 실증.
+    // 부분 데이터 — 방문<2(거리 "—" + 지도 자리 사유 few-visits) · 사진 0장("사진 없음" 자리). BR-U5-34 실증.
+    // 권한·동선 사유(permission·no-route)는 키를 늘리지 않는다(band j 18키 Figma 1:1 잠금) — 6-b 실기로 본다.
     key: 'reflection-data-insufficient',
     band: 'j',
     label: 'j03 · 오늘의 회고 data-insufficient',
     login: null,
-    render: () => (
-      <DailyReflectionScreen
-        face="data-insufficient"
-        narrative="메모를 기반으로 오늘 기록을 정리했어요. 위치·사진 정보가 부족해 일부 항목은 제외했어요."
-        editableText="메모를 기반으로 오늘 기록을 정리했어요."
-        stats={{
-          visitCount: 2,
-          distanceKm: 0,
-          distanceSource: 'VISIT_LINE',
-          photoCount: 0,
-        }}
-        distanceDash
-        mapNotice={{
-          title: '위치 기록 없음',
-          body: 'GPS 미동의로 지도를 만들 수 없어요',
-        }}
-        hidePhotoGrid
-        photos={[]}
-        dayTabs={[{ day: 1 }, { day: 2, today: true }, { day: 3 }]}
-        activeDay={2}
-        onSelectDay={noop}
-        onPressTab={noop}
-        onEnterEdit={noop}
-        onConfirm={noop}
-        onSaveEdit={noop}
-      />
-    ),
+    render: () => {
+      // 대시·사유 문구·사진 자리는 운영과 같은 `missingParts` 에서 받는다 — 문구 사본을 두지 않는다.
+      const stats: ReflectionStats = {
+        visitCount: 1,
+        distanceKm: 0,
+        distanceSource: 'VISIT_LINE',
+        photoCount: 0,
+      };
+      const parts = missingParts(stats);
+      return (
+        <DailyReflectionScreen
+          face="data-insufficient"
+          narrative="메모를 기반으로 오늘 기록을 정리했어요. 위치·사진 정보가 부족해 일부 항목은 제외했어요."
+          editableText="메모를 기반으로 오늘 기록을 정리했어요."
+          stats={stats}
+          distanceDash={parts.distanceDash}
+          mapNotice={parts.mapNotice}
+          hidePhotoGrid={parts.hidePhotoGrid}
+          photos={[]}
+          dayTabs={[{ day: 1 }, { day: 2, today: true }, { day: 3 }]}
+          activeDay={2}
+          onSelectDay={noop}
+          onPressTab={noop}
+          onEnterEdit={noop}
+          onConfirm={noop}
+          onSaveEdit={noop}
+        />
+      );
+    },
   },
   {
     // empty — 기록 없음: 빈 원 일러스트 + CTA "직접 회고 작성"(누르면 편집 입력이 열린다).
@@ -5811,6 +5825,34 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () =>
       renderLiveHubPreview(2, { slots: LIVE_HUB_PREVIEW_SLOTS_NO_RECORDS }),
+  },
+  // i01 메모 시트(TRIP-1117, Figma 4741:2833) — 중간 허브 위에 페이지처럼 형제 시트를 얹고 FAB 를 숨긴다.
+  // 저장본을 시드로 넣어 "작성 중" 모습을 낸다(입력칸은 첫 마운트에만 시드를 읽는다).
+  {
+    key: 'live-hub-memo-sheet',
+    band: 'i',
+    label: 'i01 · 여행중 허브 메모 시트',
+    login: null,
+    render: () => (
+      <>
+        {renderLiveHubPreview(1, { fabHidden: true })}
+        <MemoSheet
+          placeName="부산시립미술관"
+          text={LIVE_HUB_PREVIEW_MEMO}
+          onSubmit={noop}
+          onClose={noop}
+        />
+      </>
+    ),
+  },
+  // i01 메모 저장됨(TRIP-1117, Figma 4741:4650) — 시트 없이 관람 중 카드 버튼 줄 아래 메모 박스.
+  {
+    key: 'live-hub-memo-saved',
+    band: 'i',
+    label: 'i01 · 여행중 허브 메모 저장됨',
+    login: null,
+    render: () =>
+      renderLiveHubPreview(1, { slots: LIVE_HUB_PREVIEW_SLOTS_MEMO_SAVED }),
   },
   // i02 변수 감지(TRIP-748, Figma 4041:2427 · 4078:2477 · 4081:2502) — 지도 위 알약 + 해운대 배지.
   // 알약 카피는 D2 대로 슬롯명 전체("해운대 해변")라 Figma "해운대"와 다르다(허용 차이).

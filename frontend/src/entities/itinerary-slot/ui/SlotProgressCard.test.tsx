@@ -632,3 +632,132 @@ describe('SlotProgressCard · 수동 [도착] (TRIP-1021 C12)', () => {
     }
   );
 });
+
+// ── TRIP-1117 · 관람 중 카드의 메모 박스·메모 안내 줄 (결정 2 · Q3 · Q9) ─────────────────
+//
+// 허브 메모 시트에서 저장한 메모를 관람 중 카드 **버튼 줄 아래**에 done 과 같은 모양의 박스로 보인다
+// (Figma 4741:4804). 시트가 닫힌 뒤 도착한 저장 실패는 카드 아래 한 줄(`memoNotice`)로 드러낸다(INV-4).
+// 순서는 버튼 줄 → 사진 안내 → 메모 박스(Q9). 문구·표시 여부의 상태는 부모가 쥔다(entities useState 금지).
+
+const MEMO_NOTICE = '메모를 저장하지 못했어요. 다시 시도해 주세요.';
+
+/** 카드 안 testID 를 화면 위→아래(트리 깊이 우선) 순서로 — host 노드만 센다(합성 겹침 제외). */
+function testIdOrder(): string[] {
+  const card = screen.getByTestId(`execution-live-slot-${KEY}`);
+  return card
+    .findAll(
+      (node) =>
+        typeof node.type === 'string' && typeof node.props.testID === 'string'
+    )
+    .map((node) => node.props.testID as string);
+}
+
+describe('SlotProgressCard · active 메모 (TRIP-1117)', () => {
+  const activeSlot = mkSlot({
+    startAt: '13:00:00',
+    endAt: '14:30:00',
+    nameKo: '부산시립미술관',
+  });
+
+  it('🔴 C15 결정 2: active 에 memo 를 주면 메모 박스가 그 본문 그대로 서고, 안 주면 없다', () => {
+    // 준비·실행 — 메모 없음.
+    const { rerender } = render(
+      <SlotProgressCard
+        slot={activeSlot}
+        date={DATE}
+        state="active"
+        onPressMemo={jest.fn()}
+      />
+    );
+    // 단언(부재 + 짝 앵커)
+    expect(screen.getByTestId('execution-arrive-memo')).toBeOnTheScreen();
+    expect(screen.queryByTestId(id('memo'))).toBeNull();
+
+    // 실행 — 부모가 저장본을 준다.
+    rerender(
+      <SlotProgressCard
+        slot={activeSlot}
+        date={DATE}
+        state="active"
+        onPressMemo={jest.fn()}
+        memo="바다가 예뻤다"
+      />
+    );
+
+    expect(screen.getByTestId(id('memo'))).toHaveTextContent('바다가 예뻤다');
+  });
+
+  it('🔴 C16 Q9: 버튼 줄 → 사진 안내 → 메모 박스 순서다', () => {
+    render(
+      <SlotProgressCard
+        slot={activeSlot}
+        date={DATE}
+        state="active"
+        onPressPhoto={jest.fn()}
+        onPressMemo={jest.fn()}
+        photoNotice="사진을 기록하지 못했어요. 다시 시도해 주세요"
+        memo="바다가 예뻤다"
+      />
+    );
+
+    const order = testIdOrder();
+    const at = (testID: string) => order.indexOf(testID);
+    // 앵커 — 이미 있는 두 요소의 순서(추출기가 위→아래 순서를 낸다는 자가검사).
+    expect(at('execution-arrive-memo')).toBeGreaterThanOrEqual(0);
+    expect(at('execution-arrive-photo-notice')).toBeGreaterThan(
+      at('execution-arrive-memo')
+    );
+    expect(at(id('memo'))).toBeGreaterThan(at('execution-arrive-photo-notice'));
+  });
+
+  it('🔴 C17 Q3: memoNotice 를 주면 버튼 줄 아래에 그 문구 그대로 한 줄이 서고, 안 주면 없다', () => {
+    const { rerender } = render(
+      <SlotProgressCard
+        slot={activeSlot}
+        date={DATE}
+        state="active"
+        onPressMemo={jest.fn()}
+      />
+    );
+    expect(screen.getByTestId('execution-arrive-memo')).toBeOnTheScreen();
+    expect(screen.queryByTestId('execution-arrive-memo-notice')).toBeNull();
+
+    rerender(
+      <SlotProgressCard
+        slot={activeSlot}
+        date={DATE}
+        state="active"
+        onPressMemo={jest.fn()}
+        memoNotice={MEMO_NOTICE}
+      />
+    );
+
+    expect(
+      screen.getByTestId('execution-arrive-memo-notice')
+    ).toHaveTextContent(MEMO_NOTICE);
+    const order = testIdOrder();
+    expect(order.indexOf('execution-arrive-memo-notice')).toBeGreaterThan(
+      order.indexOf('execution-arrive-memo')
+    );
+  });
+
+  it.each(['done', 'upcoming'] as const)(
+    'C18 %s 카드는 memoNotice 를 받아도 안내 줄을 그리지 않는다',
+    (state) => {
+      render(
+        <SlotProgressCard
+          slot={activeSlot}
+          date={DATE}
+          state={state}
+          memoNotice={MEMO_NOTICE}
+        />
+      );
+
+      // 짝 앵커 — 카드가 실제로 그려졌다.
+      expect(screen.getByTestId(id('name'))).toHaveTextContent(
+        '부산시립미술관'
+      );
+      expect(screen.queryByTestId('execution-arrive-memo-notice')).toBeNull();
+    }
+  );
+});
