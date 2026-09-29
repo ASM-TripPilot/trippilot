@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import {
   DEFAULT_DWELL_KEY,
+  DWELL_OPTIONS,
   buildAnytimeMustVisitRequest,
   buildFixedMustVisitRequest,
   mustVisitTimeBlockReason,
@@ -104,12 +105,16 @@ export function MustVisitTimePage({
     : [];
 
   // 사용자가 손대기 전에는 서버가 아는 값이 폼이다(연필로 들어온 `FIXED` 항목의 값 보존).
-  // 토글 초기값은 Figma default 프레임대로 켜짐 — 이 화면에 온 목적이 시각 지정이다.
+  // 토글 초기값은 **저장된 유형**을 따른다(TRIP-1098 결정 1 · BR-U1-48 기본 ANYTIME) — 목록이 「아무 때나」인
+  // 항목을 켜진 채 열면 두 화면이 다른 말을 한다. 진입 문(행·「시간 정해두기」 세그·연필)과 무관하다.
+  // 체류도 저장값(dwellMin)을 칸으로 되돌린다 — 없거나 모르는 값이면 기본 「보통」.
   const form: MustVisitTimeForm = edited ?? {
-    fixed: true,
+    fixed: registered?.type === 'FIXED',
     fixedDate: registered?.fixedDate ?? null,
     fixedStart: toHourMinute(registered?.fixedStart),
-    dwellKey: DEFAULT_DWELL_KEY,
+    dwellKey:
+      DWELL_OPTIONS.find((option) => option.dwellMin === registered?.dwellMin)
+        ?.key ?? DEFAULT_DWELL_KEY,
   };
 
   function patchForm(next: Partial<MustVisitTimeForm>): void {
