@@ -42,6 +42,7 @@ export function leavePreviousTripDraft(): void {
   store.selectCompanion('가족');
   store.setBudgetText('500,000');
   store.setPrefStyleOverride(['힐링']);
+  store.setPrefActivityOverride(['역사문화']);
   store.setCreatedTripId('trip-prev');
   store.seedMustVisitsFromD02([
     {

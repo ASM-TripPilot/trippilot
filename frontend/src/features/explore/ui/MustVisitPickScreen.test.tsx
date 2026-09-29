@@ -478,3 +478,43 @@ describe('🔴 CS-14 · 행 위치는 페이지가 준 표기를 쓴다 (TRIP-10
     expect(within(second).getByText('수영구')).toBeOnTheScreen();
   });
 });
+
+/**
+ * TRIP-1093 결정 3 (01b Q3) — 여행 모드 완료가 실패하면 화면에 남아 한 줄로 알린다(INV-4 · BR-U1-55).
+ *
+ * 무엇을 보장하나:
+ *  - `completeError` 가 있으면 `mustvisit-pick-complete-error` 배너가 **완료 버튼보다 위**(트리 순서 앞)에
+ *    그 문구 그대로 뜬다. 재시도 버튼은 없다 — 완료를 다시 누르는 것이 재시도다.
+ *  - 값이 없으면(`null`·미지정) 배너가 없다 — 위저드 모드 호출부는 이 prop 을 모른다.
+ * 문구는 페이지가 `mustVisitFailureNotice` 로 만든다(화면은 받은 글자만 그린다).
+ */
+const COMPLETE_ERROR = 'mustvisit-pick-complete-error';
+const FAILURE_NOTICE = '꼭 갈 곳 2곳 중 1곳을 등록하지 못했어요';
+
+describe('🔴 CS-15 · 완료 실패 배너 (TRIP-1093 AC-11 · 01b Q3)', () => {
+  it('completeError 가 있으면 배너가 완료 버튼 위에 그 문구 그대로 뜬다', () => {
+    renderScreen({ selectedPoiIds: ['p1'], completeError: FAILURE_NOTICE });
+
+    expect(screen.queryAllByTestId(COMPLETE_ERROR).length).toBe(1);
+    // 문자열 인자 = 정규화 후 완전 일치(02a §5).
+    expect(screen.getByTestId(COMPLETE_ERROR)).toHaveTextContent(
+      FAILURE_NOTICE
+    );
+
+    const order = screen
+      .queryAllByTestId(/^mustvisit-pick-complete(-error)?$/)
+      .map((node) => String(node.props.testID));
+    expect(order).toEqual([COMPLETE_ERROR, 'mustvisit-pick-complete']);
+  });
+
+  it.each([
+    ['null', null],
+    ['미지정', undefined],
+  ])('completeError 가 %s 이면 배너가 없다 (선제 green)', (_label, value) => {
+    renderScreen({ selectedPoiIds: ['p1'], completeError: value });
+
+    // 앵커 — 결과 얼굴의 완료 버튼은 떴다(공허 통과 방지).
+    expect(screen.getByTestId('mustvisit-pick-complete')).toBeOnTheScreen();
+    expect(screen.queryAllByTestId(COMPLETE_ERROR).length).toBe(0);
+  });
+});

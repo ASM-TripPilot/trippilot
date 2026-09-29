@@ -1,3 +1,9 @@
+import {
+  freshWizardDraft,
+  leavePreviousTripDraft,
+  wizardDraftData,
+} from '@/test-support/wizardDraftFixture';
+
 import { useTripWizardStore } from './tripWizardStore';
 
 /**
@@ -70,5 +76,85 @@ describe('SO-4 · ★ reset() 이 새 필드도 되돌린다 (재진입·테스�
     // 그대로 남는다(테스트 오염·재진입 잔존). 구현자는 INITIAL_DRAFT 에
     // prefStyleOverride: undefined 를 넣어야 한다.
     expect(useTripWizardStore.getState().prefStyleOverride).toBeUndefined();
+  });
+});
+
+/**
+ * TRIP-1092 (01b Q1 A) — 활동 축 오버라이드 `prefActivityOverride` + `setPrefActivityOverride`.
+ * 스타일 필드와 **같은 규약**(undefined=프리필 사용, []=다 끔)이고 **서로 독립**이다 — 자연·쇼핑이
+ * 두 축에 같은 라벨로 있어, 한 필드로 합치면 "활동 자연만 끔"을 표현할 수 없다.
+ */
+describe('SA-1 · TRIP-1092 활동 오버라이드 초기값은 undefined', () => {
+  it('아무것도 안 했으면 prefActivityOverride 가 undefined 다', () => {
+    // ⚠️ SO-1 과 같은 공허 통과(필드가 없어도 undefined) — `[]` 초기화를 막는 계약 굳히기.
+    expect(useTripWizardStore.getState().prefActivityOverride).toBeUndefined();
+  });
+});
+
+describe('SA-2 · ★ TRIP-1092 활동 빈 오버라이드 — [] 는 undefined 와 다르다', () => {
+  it('setPrefActivityOverride([]) 는 [] 로 저장된다', () => {
+    useTripWizardStore.getState().setPrefActivityOverride([]);
+
+    const value = useTripWizardStore.getState().prefActivityOverride;
+    expect(value).toEqual([]);
+    expect(value).not.toBeUndefined();
+  });
+});
+
+describe('SA-3 · TRIP-1092 활동 오버라이드 저장', () => {
+  it('setPrefActivityOverride(["역사문화","야경"]) 를 그대로 담는다', () => {
+    useTripWizardStore.getState().setPrefActivityOverride(['역사문화', '야경']);
+
+    expect(useTripWizardStore.getState().prefActivityOverride).toEqual([
+      '역사문화',
+      '야경',
+    ]);
+  });
+});
+
+describe('SA-4 · ★ TRIP-1092 reset() 이 활동 오버라이드도 비운다', () => {
+  it('저장 뒤 reset() 하면 undefined 로 돌아간다 (INITIAL_DRAFT 에 키가 있어야 한다)', () => {
+    useTripWizardStore.getState().setPrefActivityOverride(['야경']);
+    expect(useTripWizardStore.getState().prefActivityOverride).toEqual([
+      '야경',
+    ]);
+
+    useTripWizardStore.getState().reset();
+
+    expect(useTripWizardStore.getState().prefActivityOverride).toBeUndefined();
+  });
+});
+
+describe('SA-5 · ★ TRIP-1092 두 축은 서로 안 건드린다', () => {
+  it('활동 저장은 스타일 필드를, 스타일 저장은 활동 필드를 바꾸지 않는다', () => {
+    useTripWizardStore.getState().setPrefActivityOverride(['자연']);
+    expect(useTripWizardStore.getState().prefStyleOverride).toBeUndefined();
+
+    useTripWizardStore.getState().setPrefStyleOverride(['쇼핑']);
+    expect(useTripWizardStore.getState().prefActivityOverride).toEqual([
+      '자연',
+    ]);
+    expect(useTripWizardStore.getState().prefStyleOverride).toEqual(['쇼핑']);
+  });
+});
+
+/**
+ * 리셋 픽스처 자기검사 — `leavePreviousTripDraft` 는 "모든 데이터 필드를 초기값과 다르게 채운다"고
+ * 주장하고, 탭 진입 테스트들이 이 픽스처로 "새 진입이면 드래프트가 비워진다"를 잰다. 새 필드를 픽스처가
+ * 안 채우면 그 필드는 처음부터 초기값이라 "리셋이 그 필드를 빼먹음" 회귀가 공짜로 통과한다.
+ */
+describe('SF-1 · ★ TRIP-1092 리셋 픽스처가 모든 데이터 필드를 초기값과 다르게 채운다', () => {
+  it('leavePreviousTripDraft() 뒤 초기값과 같은 데이터 키가 하나도 없다', () => {
+    const fresh = freshWizardDraft();
+    // 앵커 — 새 필드가 초기 상태 키 목록에 있다(INITIAL_DRAFT 누락이면 red).
+    expect(Object.keys(fresh)).toContain('prefActivityOverride');
+
+    leavePreviousTripDraft();
+
+    const left = wizardDraftData();
+    const unchanged = Object.keys(fresh).filter(
+      (key) => JSON.stringify(left[key]) === JSON.stringify(fresh[key])
+    );
+    expect(unchanged).toEqual([]);
   });
 });

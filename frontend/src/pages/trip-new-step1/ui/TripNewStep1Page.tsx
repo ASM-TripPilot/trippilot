@@ -21,6 +21,7 @@ import {
   budgetForTier,
   formatBudgetAmount,
   parseBudgetAmount,
+  tierForAmount,
   type BudgetTier,
 } from '@/features/trip/model/budgetAmount';
 import { buildCreateTripRequest } from '@/features/trip/model/createTripRequest';
@@ -111,6 +112,19 @@ function isPrefillableBudget(
   return typeof value === 'number' && Number.isInteger(value) && value >= 0;
 }
 
+/** 요약 행·시트 재오픈 칩의 등급(TRIP-1091) — 스토어에 커밋된 금액이 > 0 이면 그 금액의 역산 등급,
+ * 아니면(미적용·0·invalid) 프리필 tier. 프리필 금액은 역산하지 않는다 — 한 번도 안 건드린 여행은
+ * 온보딩 등급 그대로다(서버는 rawAmount·tier 정합을 검사하지 않는다). */
+function appliedBudgetTier(
+  storeText: string,
+  prefillTier: string | undefined
+): string | undefined {
+  const applied = parseBudgetAmount(storeText);
+  return applied.kind === 'amount' && applied.amount > 0
+    ? tierForAmount(applied.amount)
+    : prefillTier;
+}
+
 export interface TripNewStep1PageProps {
   /** 달력 기준 '오늘' 주입점('YYYY-MM-DD') — 기간 편집 시트(S3)의 과거 셀 비활성·이전 달 하한
    * 기준이다. 테스트가 이 값을 주입해 결정론이 된다. 미지정이면 실시계(`seoulDate`·KST)로 폴백한다
@@ -151,12 +165,18 @@ export function TripNewStep1Page({
   const setParty = useTripWizardStore((state) => state.setParty);
   const selectCompanion = useTripWizardStore((state) => state.selectCompanion);
   // 취향 편집 시트(TRIP-669)가 "적용"에서 쓰는 커밋 액션 + 현재 오버라이드(요약·제출의 실효
-  // 취향을 정하는 단일 값). 시트는 무상태(D3)라 드래프트는 아래 `prefDraftStyles`가 소유한다.
+  // 취향을 정하는 값, 축마다 하나 — TRIP-1092). 시트는 무상태(D3)라 드래프트는 아래 `prefDraft*`가 소유한다.
   const prefStyleOverride = useTripWizardStore(
     (state) => state.prefStyleOverride
   );
   const setPrefStyleOverride = useTripWizardStore(
     (state) => state.setPrefStyleOverride
+  );
+  const prefActivityOverride = useTripWizardStore(
+    (state) => state.prefActivityOverride
+  );
+  const setPrefActivityOverride = useTripWizardStore(
+    (state) => state.setPrefActivityOverride
   );
   // 예산 편집 시트(TRIP-670)가 "적용"에서 쓰는 커밋 액션 + 사용자 입력 원문(제출 복원의 재료).
   // S1 이 인라인 예산 블록을 지우며 고아가 된 축을 S6 이 첫 소비한다.
@@ -169,11 +189,18 @@ export function TripNewStep1Page({
   // 오버라이드 ?? 프리필이다(아래 `effectiveStyles`). 시트의 `fromOnboarding` 은 프리필 유무로 정해진다.
   const prefillStyles = preference.data?.styles?.value ?? [];
   const prefillActivities = preference.data?.activities?.value ?? [];
-  // 실효 취향(TRIP-669 D2) — 오버라이드가 있으면(빈 `[]` 포함) 그것, 없으면(undefined) 프리필.
-  // 요약 취향 행·제출 스냅숏 styles 의 단일 출처다. activities 는 시트가 안 건드려 프리필 원본 유지(D5).
+  // 실효 취향(TRIP-669 D2) — 축마다 오버라이드가 있으면(빈 `[]` 포함) 그것, 없으면(undefined) 프리필.
+  // 요약 취향 행·제출 스냅숏의 단일 출처다(TRIP-1092: activities 도 시트가 덮어쓴다 — D5 폐기).
   const effectiveStyles = prefStyleOverride ?? prefillStyles;
-  const hasOverride = prefStyleOverride !== undefined;
-  const preferenceChips = [...effectiveStyles, ...prefillActivities];
+  const effectiveActivities = prefActivityOverride ?? prefillActivities;
+  const hasOverride =
+    prefStyleOverride !== undefined || prefActivityOverride !== undefined;
+  // 자연·쇼핑은 두 축에 같은 라벨로 있다 — 행에는 한 번만(styles 먼저, Set 은 첫 등장 순서 유지).
+  const preferenceChips = [
+    ...new Set([...effectiveStyles, ...effectiveActivities]),
+  ];
+  const prefFromOnboarding =
+    prefillStyles.length > 0 || prefillActivities.length > 0;
 
   // 예산은 프리필에서만 온다(인라인 입력은 S6 으로 이연). 신뢰 경계(0 이상 정수)를 통과한 값만
   // 콤마 포맷 → 파싱해 제출 바디의 `budgetTotal` 로 쓴다(`budgetAmount` 순수 함수, 로케일 API 미사용).
@@ -190,6 +217,7 @@ export function TripNewStep1Page({
       ? storeBudgetText
       : prefillBudgetText;
   const parsedBudget = parseBudgetAmount(effectiveBudgetText);
+  const budgetTierLabel = appliedBudgetTier(storeBudgetText, tierLabel);
 
   // 요약 5행 도출 — 미선택은 셀렉터가 `null` 을 낸다(화면이 플레이스홀더로 그린다).
   const summaryDestinationsValue = summaryDestinations(destinations);
@@ -210,7 +238,7 @@ export function TripNewStep1Page({
   //    표시=제출 대칭이 유지된다(budgetSheet AC-S6D-1 — 0 이면 요약도 "예산 선택", 제출도 미전송).
   const summaryBudgetValue =
     parsedBudget.kind === 'amount' && parsedBudget.amount > 0
-      ? summaryBudget(parsedBudget.amount, tierLabel)
+      ? summaryBudget(parsedBudget.amount, budgetTierLabel)
       : parsedBudget.kind === 'empty'
         ? summaryBudget(0, tierLabel)
         : null;
@@ -241,8 +269,9 @@ export function TripNewStep1Page({
   // (적용 전 store 불변) — "적용"에서만 `setPrefStyleOverride` 로 커밋한다.
   const [prefSheetOpen, setPrefSheetOpen] = useState(false);
   const [prefDraftStyles, setPrefDraftStyles] = useState<string[]>([]);
+  const [prefDraftActivities, setPrefDraftActivities] = useState<string[]>([]);
   // 예산 편집 시트(TRIP-670) — 시트가 무상태(D4)라 개폐·편집 드래프트를 배선이 소유한다.
-  // 열 때 effective 예산 문자열·프리필 tier 에서 초기화하고, 금액/tier press 는 이 드래프트만
+  // 열 때 effective 예산 문자열·`appliedBudgetTier`(커밋 금액 역산 ?? 프리필 tier)에서 초기화하고, 금액/tier press 는 이 드래프트만
   // 갱신한다(적용 전 store 불변) — "적용"에서만 `setBudgetText` 로 커밋한다(tier 는 커밋 안 함).
   const [budgetSheetOpen, setBudgetSheetOpen] = useState(false);
   const [draftAmountText, setDraftAmountText] = useState('');
@@ -263,7 +292,6 @@ export function TripNewStep1Page({
   // ⚠️ 게스트는 `enabled: isAuthed` 라 요청이 안 나가고 `isPending` 이 영원히 true 다 — 그대로
   // 게이트에 태우면 비회원이 여행을 영영 못 만든다. `isAuthed &&` 로 접어 "정말 조회 중"만 막는다.
   const savedPlacesLoading = isAuthed && savedPlaces.isPending;
-  const savedPlaceList = savedPlaces.savedPlaces;
 
   // loading 얼굴 신호(TRIP-671 D4) — 프리필·담은목록 중 하나라도 조회 중이면 화면을 스켈레톤으로
   // 갈아 끼운다(combined, Figma 가 단일 "불러오는 중" 부제라 두 조회를 한 플래그로 접는다). 게스트는
@@ -382,10 +410,10 @@ export function TripNewStep1Page({
           : undefined,
       // 취향 스냅숏(정책 A) — 실효 취향(오버라이드 ?? 프리필)을 평평한 한국어 배열로 싣는다
       // (BE 는 받은 것만 저장하고 스스로 동결하지 않는다). 요약 취향 행과 같은 출처라 화면=서버가
-      // 맞는다. activities 는 시트가 안 건드려 프리필 원본을 그대로 싣는다(D5).
+      // 맞는다(두 축 모두, TRIP-1092).
       preferenceSnapshot: {
         styles: effectiveStyles,
-        activities: prefillActivities,
+        activities: effectiveActivities,
       },
     };
 
@@ -418,8 +446,8 @@ export function TripNewStep1Page({
     );
   }
 
-  /** 예산 시트 열기 — 드래프트를 effective 예산 문자열(스토어 유효 ? 스토어 : 프리필)·프리필 tier 에서
-   * 초기화한다(D3). 스토어는 `getState()`로 여는 순간 값을 읽고(`openCompanionSheet` 선례), 프리필은
+  /** 예산 시트 열기 — 드래프트를 effective 예산 문자열(스토어 유효 ? 스토어 : 프리필)·등급(커밋 금액 > 0
+   * 이면 역산, 아니면 프리필 tier — TRIP-1091, 요약 행과 같은 출처)에서 초기화한다(D3). 스토어는 `getState()`로 여는 순간 값을 읽고(`openCompanionSheet` 선례), 프리필은
    * render 클로저값(react-query 라 store 를 안 타 클로저가 곧 최신값). */
   function openBudgetSheet(): void {
     // 프리필 미도착이면 열지 않는다(S6G) — 빈 드래프트로 열리는 것을 막아 취향 시트와 결을 맞춘다.
@@ -431,7 +459,7 @@ export function TripNewStep1Page({
         ? currentBudgetText
         : prefillBudgetText
     );
-    setDraftTier(tierLabel);
+    setDraftTier(appliedBudgetTier(currentBudgetText, tierLabel));
     setBudgetSheetOpen(true);
   }
 
@@ -484,8 +512,13 @@ export function TripNewStep1Page({
     // 드래프트가 빈 []로 열리고, 적용 시 `[] ?? prefill`(빈 배열은 값이라 ?? 폴백 안 함)로 온보딩
     // 취향이 영구 유실된다. 신호는 preference.isPending(예산 시트와 동일, ★3).
     if (preference.isPending) return;
-    const override = useTripWizardStore.getState().prefStyleOverride;
-    setPrefDraftStyles([...(override ?? prefillStyles)]);
+    // 두 축 모두 이 가드 안에서 초기화한다 — 밖에서 따로 하면 같은 유실이 활동 축에 생긴다.
+    const {
+      prefStyleOverride: styleOverride,
+      prefActivityOverride: activityOverride,
+    } = useTripWizardStore.getState();
+    setPrefDraftStyles([...(styleOverride ?? prefillStyles)]);
+    setPrefDraftActivities([...(activityOverride ?? prefillActivities)]);
     setPrefSheetOpen(true);
   }
 
@@ -495,9 +528,15 @@ export function TripNewStep1Page({
     setPrefDraftStyles((current) => toggleMulti(current, label) ?? []);
   }
 
-  /** "적용" — 드래프트를 오버라이드로 커밋(빈 `[]` 도 그대로) + 닫기. */
+  /** 활동 칩 토글 — 스타일과 같은 null→[] 매핑, 드래프트는 축마다 따로(TRIP-1092). */
+  function togglePrefActivity(label: string): void {
+    setPrefDraftActivities((current) => toggleMulti(current, label) ?? []);
+  }
+
+  /** "적용" — 두 축 드래프트를 함께 오버라이드로 커밋(빈 `[]` 도 그대로) + 닫기. */
   function applyPrefSheet(): void {
     setPrefStyleOverride(prefDraftStyles);
+    setPrefActivityOverride(prefDraftActivities);
     setPrefSheetOpen(false);
   }
 
@@ -508,6 +547,16 @@ export function TripNewStep1Page({
     setStartDate(periodStart);
     setPeriodSheetOpen(false);
   }
+
+  // 꼭 갈 곳 고르기(d02 select) — 「더 담기」·「전체 보기」가 함께 쓴다. 위저드 출처 표식을 싣는다.
+  const mustVisitSelectHref = {
+    pathname: '/explore/saved-places',
+    params: {
+      mode: 'select',
+      region: destinations.map((d) => d.region),
+      ...wizardOriginParams(),
+    },
+  } as const;
 
   return (
     <>
@@ -524,41 +573,13 @@ export function TripNewStep1Page({
         onPressSummaryBudget={openBudgetSheet}
         mustVisits={mustVisits}
         onPressMore={() =>
-          // 담은 곳이 있으면 담은 장소 화면(d02)으로, 없으면 새로 담을 탐색으로 보낸다(TRIP-367).
-          // 두 갈래 모두 여행에 담은 지역들을 라우트 파라미터로 실어 보낸다 — d04는 TRIP-687,
-          // d02는 TRIP-689(담은 장소 화면이 이 지역으로 클라 필터한다). 표준명 원문·순서 그대로,
-          // 목적지가 없으면 빈 배열이라 전국 전체가 뜬다.
-          router.push(
-            savedPlaceList.length > 0
-              ? {
-                  // TRIP-706(AC-4 · D5): 위저드 축은 d02 로 갈 때 select 모드로 통일한다
-                  // (전체 보기와 동형 — { mode:'select', region }). 종전 region 만에서 바뀜.
-                  pathname: '/explore/saved-places',
-                  params: {
-                    mode: 'select',
-                    region: destinations.map((d) => d.region),
-                  },
-                }
-              : {
-                  // 위저드 출처 표식 — d04 가 ＋(새 여행 = reset)를 숨긴다(TRIP-1026).
-                  pathname: '/explore/places',
-                  params: {
-                    region: destinations.map((d) => d.region),
-                    ...wizardOriginParams(),
-                  },
-                }
-          )
+          // 담은 곳 수와 무관하게 늘 d02 select 로 보낸다(TRIP-1093 결정 2) — 새로 담기는 d02 의
+          // 「탐색에서 더 담기」로, 꼭 갈 곳은 거기서 체크 → 완료로만 들어간다. 여행 지역은 표준명
+          // 원문·순서 그대로(TRIP-689), 목적지가 없으면 빈 배열이라 전국 전체가 뜬다.
+          router.push(mustVisitSelectHref)
         }
-        onPressSeeAll={() =>
-          // TRIP-706(AC-4 · D5): 전체 보기도 더 담기 d02 와 동형으로 region 을 함께 싣는다.
-          router.push({
-            pathname: '/explore/saved-places',
-            params: {
-              mode: 'select',
-              region: destinations.map((d) => d.region),
-            },
-          })
-        }
+        // 전체 보기도 더 담기와 같은 인자다(TRIP-706 · TRIP-1093).
+        onPressSeeAll={() => router.push(mustVisitSelectHref)}
         canProceed={canProceed}
         onNext={submit}
         onBack={() => router.back()}
@@ -627,9 +648,11 @@ export function TripNewStep1Page({
         <PrefOverrideSheet
           selected={prefDraftStyles}
           onToggle={togglePrefStyle}
+          selectedActivities={prefDraftActivities}
+          onToggleActivity={togglePrefActivity}
           onApply={applyPrefSheet}
           onClose={() => setPrefSheetOpen(false)}
-          fromOnboarding={prefillStyles.length > 0}
+          fromOnboarding={prefFromOnboarding}
         />
       ) : null}
       {/* 예산 편집 시트도 화면의 형제로 조건부 마운트 — tier·금액 press 는 드래프트만 바꾸고

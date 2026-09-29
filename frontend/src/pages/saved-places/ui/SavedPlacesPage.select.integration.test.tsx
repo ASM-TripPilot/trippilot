@@ -1132,3 +1132,51 @@ describe('🔴 TRIP-1042 R11 · region-empty 화면에도 소요시간 표기가
     expect(screen.queryAllByText(/\d+\s*분|\d+\s*시간|소요/).length).toBe(0);
   });
 });
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * TRIP-1093 결정 2 — 1/4 「더 담기」가 담은 곳 수와 무관하게 이 화면으로 온다
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * 무엇을 보장하나(BR-U1-37 · 결정 2): 1/4 에서 x 로 뺀 곳(B)은 이 화면에 **체크 없이** 뜬다 — 체크 초기값이
+ * 위저드의 꼭 갈 곳에서 오기 때문이다. 그대로 완료하면 B 는 빠진 채고, 다시 체크하면 들어간다(개별 추가 허용).
+ * 결정 2 로 담은 곳 0곳 사용자도 이 화면을 타게 되어 경로가 늘었다 — 현행 동작을 잠근다(선제 green).
+ *
+ * ★ `initMustVisits` 는 첫 호출만 먹는다 — 최상위 beforeEach 의 `reset()` 뒤라 반영된다.
+ */
+function arrangeRemovedInWizard(): void {
+  const store = useTripWizardStore.getState();
+  store.initMustVisits([wizardItem('p1'), wizardItem('p2')]);
+  store.removeMustVisit('p2');
+  // 앵커 — 1/4 에서 p2 를 x 로 뺀 상태다(준비가 조용히 망가지면 "체크 없음"이 공짜로 통과한다).
+  expect(seededIds()).toEqual(['p1']);
+  expect(useTripWizardStore.getState().excludedMustVisitPoiIds).toEqual(['p2']);
+  serveSaved(ROWS.slice(0, 3));
+  openSelect();
+}
+
+describe('🔒 1093 AC-5 · 1/4 에서 x 로 뺀 곳은 select 에 체크 없이 뜬다 (BR-U1-37)', () => {
+  it('뺀 p2 는 체크 없이, 남은 p1 은 체크된 채 뜨고 — 그대로 완료하면 꼭 갈 곳은 p1 하나다', async () => {
+    arrangeRemovedInWizard();
+    await waitFor(() => expect(rowCount()).toBe(3));
+
+    expect(screen.getByTestId('mustvisit-pick-check-p1')).toBeSelected();
+    expect(screen.getByTestId('mustvisit-pick-check-p2')).not.toBeSelected();
+
+    fireEvent.press(screen.getByTestId('mustvisit-pick-complete'));
+
+    expect(seededIds()).toEqual(['p1']);
+    expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
+  });
+
+  it('뺀 p2 를 다시 체크해 완료하면 p2 가 꼭 갈 곳에 돌아온다 (개별 추가 허용)', async () => {
+    arrangeRemovedInWizard();
+    await waitFor(() => expect(rowCount()).toBe(3));
+
+    fireEvent.press(screen.getByTestId('mustvisit-pick-check-p2'));
+    fireEvent.press(screen.getByTestId('mustvisit-pick-complete'));
+
+    expect(seededIds().sort()).toEqual(['p1', 'p2']);
+    expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
+  });
+});
