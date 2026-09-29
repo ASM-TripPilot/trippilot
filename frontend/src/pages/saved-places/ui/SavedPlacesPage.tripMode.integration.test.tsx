@@ -709,3 +709,52 @@ describe('🔴 TRIP-1093 T13 · AC-7 — 체크한 뒤 목록에서 사라진 �
     expect(postBodies).toEqual([{ poiId: 'bs2', type: 'ANYTIME' }]);
   });
 });
+
+/* ── TRIP-1106 — 위저드 쪽 밖 행 규칙이 여행 모드로 새지 않는다 (위 T1~T13 은 무수정) ────────────── */
+
+/**
+ * 무엇을 보장하나(01b Q1·Q2):
+ *  - Q1 "선택된 밖 행에 체크를 보여 주고 부제에 센다"는 위저드의 **잠금 아닌** 선택에만 건다. 여행 모드에서
+ *    이미 등록된 곳이 여행 지역 밖이어도(se1) 그 행엔 체크가 없고 부제에 안 센다 — 지금 동작 그대로다.
+ *  - Q2 밖 행 순번 배지 제거는 두 모드 공통이다(행 컴포넌트를 모드로 가르지 않는다).
+ *
+ * ★ Q1 은 위 T1~T13 에 없는 경우다(잠긴 bs3 는 지역 안) — "선택 ∪ 잠금을 밖 행까지 센다"는 구현은
+ *   T1~T13 을 전부 green 으로 통과한다. 여기서 서버에 밖 se1 을 등록해 둬 그 누수를 잡는다(02a ★6).
+ */
+describe('🔒 TRIP-1106 TM-Q1 · 여행 모드 — 이미 등록된 지역 밖 곳은 체크·선택 수에 들지 않는다 (무변경)', () => {
+  it('se1(서울)이 여행 T 에 등록돼 있어도 se1 행엔 체크가 없고, 부제는 bs3 하나만 세며, 완료는 닫혀 있다', async () => {
+    mustVisitStore = [mustVisit('bs3'), mustVisit('se1')];
+    const { client } = openTripMode();
+    await settle(client);
+
+    expect(orderedPickIds()).toEqual(TRIP_ORDER);
+    // 앵커 — 잠금 목록이 실제로 들어왔다(안 행 bs3 는 체크된 채 잠김).
+    expect(check('bs3')).toBeSelected();
+
+    expect(screen.queryByTestId('mustvisit-pick-check-se1')).toBeNull();
+    expect(subtitle()).toHaveTextContent('담은 곳 4곳 · 1곳 선택됨');
+    expect(screen.getByTestId('mustvisit-pick-complete')).toBeDisabled();
+    expect(
+      screen.queryAllByTestId('mustvisit-pick-outside-confirm')
+    ).toHaveLength(0);
+  });
+});
+
+describe('🔴 TRIP-1106 TM-Q2 · 여행 모드도 밖 행엔 순번 배지가 없다 (결정 1-A · 01b Q2)', () => {
+  it('안 행 bs1·bs2·bs3 는 1·2·3, 밖 se1 은 순번 배지가 없다', async () => {
+    const { client } = openTripMode();
+    await settle(client);
+
+    [
+      ['bs1', '1'],
+      ['bs2', '2'],
+      ['bs3', '3'],
+    ].forEach(([poiId, rank]) => {
+      // 배지 안엔 숫자 Text 하나뿐이라 완전 일치로 잰다.
+      expect(
+        screen.getByTestId(`mustvisit-pick-rank-${poiId}`)
+      ).toHaveTextContent(rank);
+    });
+    expect(screen.queryByTestId('mustvisit-pick-rank-se1')).toBeNull();
+  });
+});

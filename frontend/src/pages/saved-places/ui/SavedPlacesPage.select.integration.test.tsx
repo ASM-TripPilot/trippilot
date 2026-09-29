@@ -495,13 +495,14 @@ describe('🔴 TRIP-982 A8 · 폴백이 풀리면 안 보이는 선택은 세지
  *    **완료해도 남는다** — 볼 수 없던 것은 뺀 것으로 치지 않는다. 단 부제·완료 활성엔 세지 않는다.
  *  - A4·A6 여행 지역 밖 담은 곳은 "이 여행 지역 밖 N곳" 머리글 아래 뜨되 **흐리고 고를 수 없다**
  *    (TRIP-1042 AC-2 · BR-U1-58 ② 로 뒤집힘). 코드 null 은 지역 안 쪽(fail-open 유지). 위저드에 이미 있던
- *    밖 항목은 체크 없이 보이고, 완료해도 **남는다**(01b Q2 — 조용히 빼면 INV-4).
+ *    밖 항목은 **채운 체크로 보이고 부제에 세며**, 완료하면 확인 다이얼로그가 뜬다 — [그대로 넣기]면
+ *    남는다(TRIP-1106 · 조용히 빼지도 조용히 넣지도 않는다, INV-4).
  *  - (옛 Q2 "지역 안 0건이면 폴백"은 TRIP-1042 로 폐지 — region-empty 는 아래 TRIP-1042 절.)
  *  - B2 select 완료는 위저드 **안** 왕복이다 — 여행지·기간·인원·동반·예산을 비우지 않는다.
  *
  * ★ 위저드 항목은 `initMustVisits` 로 심는다 — beforeEach 가 `reset()` 하므로 첫 호출이 반영된다.
- * ★ A6 은 "완료 disabled → press 무시 → 스토어엔 준비 때 심은 j1" 이 시드 단언을 공짜로 통과시킨다.
- *   push 1회·체크 상태를 짝으로 둬 그 거짓 green 을 막는다(02a ★9).
+ * ★ A6 은 "완료가 안 돌았는데 스토어엔 준비 때 심은 j1" 이 시드 단언을 공짜로 통과시킨다.
+ *   다이얼로그 존재·push 1회를 짝으로 둬 그 거짓 green 을 막는다(02a ★9 · TRIP-1106 02a ★8).
  */
 
 function wizardItem(
@@ -683,17 +684,12 @@ describe('🔴 TRIP-1012 A4 → TRIP-1042 AC-2·3 · 지역 밖은 숨기지 않
       screen.getByTestId('mustvisit-pick-region-outside')
     ).toHaveTextContent('이 여행 지역 밖 2곳');
     expect(fallbackCount()).toBe(0);
-    // 순번은 보이는 순서대로 이어 매긴다(01b Q2 · Figma 2437:1500).
-    [
-      ['n1', '1'],
-      ['j1', '2'],
-      ['j2', '3'],
-    ].forEach(([poiId, rank]) => {
-      expect(
-        within(screen.getByTestId(`mustvisit-pick-rank-${poiId}`)).getByText(
-          rank
-        )
-      ).toBeOnTheScreen();
+    // 순번은 지역 안 행에만 있다(TRIP-1106 결정 1-A — 밖 행 순번이 "선택 번호"로 읽혔다).
+    expect(
+      within(screen.getByTestId('mustvisit-pick-rank-n1')).getByText('1')
+    ).toBeOnTheScreen();
+    ['j1', 'j2'].forEach((poiId) => {
+      expect(screen.queryByTestId(`mustvisit-pick-rank-${poiId}`)).toBeNull();
     });
     // 부제 N 은 보이는 전체(안+밖).
     expect(screen.getByTestId('mustvisit-pick-subtitle')).toHaveTextContent(
@@ -721,8 +717,10 @@ describe('🔴 TRIP-1012 A4 → TRIP-1042 AC-2·3 · 지역 밖은 숨기지 않
   });
 });
 
-describe('🔴 TRIP-1012 A6 → TRIP-1042 Q2 · 위저드에 이미 있던 지역 밖 꼭 갈 곳은 체크 없이 보이고, 완료해도 남는다', () => {
-  it('위저드 j1(인천 남동구)은 머리글 아래 체크 없이 뜨고 부제에 안 세며, s-in 을 골라 완료하면 j1·s-in 이 남는다', async () => {
+// TRIP-1106 으로 뒤집혔다 — 옛 계약("체크 없이 보이고 부제 0곳, 완료하면 곧장 j1·s-in")은 "조용히 넣기"였다.
+// 옛 결과(j1·s-in 이 남는다)는 사용자가 [그대로 넣기]를 고른 경우로 살린다.
+describe('🔴 TRIP-1012 A6 → TRIP-1042 Q2 → TRIP-1106 · 위저드에 이미 있던 지역 밖 꼭 갈 곳은 체크된 채 세고, [그대로 넣기]면 남는다', () => {
+  it('위저드 j1(인천 남동구)은 머리글 아래 채운 체크로 뜨고 부제에 세며, s-in 을 골라 완료 → 다이얼로그 → [그대로 넣기]면 j1·s-in 이 남는다', async () => {
     useTripWizardStore
       .getState()
       .initMustVisits([wizardItem('j1', '장소 j1', '남동구')]);
@@ -738,21 +736,33 @@ describe('🔴 TRIP-1012 A6 → TRIP-1042 Q2 · 위저드에 이미 있던 지�
       'mustvisit-pick-region-outside',
       'mustvisit-pick-row-j1',
     ]);
-    expect(screen.queryByTestId('mustvisit-pick-check-j1')).toBeNull();
-    // AC-11 — M 은 고를 수 있는 행 안의 선택만 센다(위저드 j1 은 밖이라 0).
+    // AC-1 — 이미 선택된 밖 행은 체크가 보인다(해제 수단).
+    expect(screen.getByTestId('mustvisit-pick-check-j1')).toBeSelected();
+    expect(
+      screen.getByTestId('mustvisit-pick-check-filled-j1')
+    ).toBeOnTheScreen();
+    // AC-5 · 결정 0 — 보이는 체크와 M 이 같다(j1 을 센다).
     expect(screen.getByTestId('mustvisit-pick-subtitle')).toHaveTextContent(
-      '담은 곳 2곳 · 0곳 선택됨'
+      '담은 곳 2곳 · 1곳 선택됨'
     );
 
     fireEvent.press(screen.getByTestId('mustvisit-pick-check-s-in'));
     expect(screen.getByTestId('mustvisit-pick-subtitle')).toHaveTextContent(
-      '담은 곳 2곳 · 1곳 선택됨'
+      '담은 곳 2곳 · 2곳 선택됨'
     );
     fireEvent.press(screen.getByTestId('mustvisit-pick-complete'));
 
-    // 짝 — 완료가 실제로 눌렸다(disabled 로 무시되면 준비 때 심은 j1 이 공짜로 남는다, ★9).
+    // AC-6 — 곧장 가지 않고 묻는다.
+    expect(
+      screen.getByTestId('mustvisit-pick-outside-confirm')
+    ).toBeOnTheScreen();
+    expect(mockPush).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('mustvisit-pick-outside-keep'));
+
+    // 짝 — 버튼이 실제로 완료를 돌렸다(안 돌면 준비 때 심은 j1 이 공짜로 남는다, ★9).
     expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
-    // Q2 — 조용히 빼지 않는다(INV-4). 새로 고른 s-in 과 원래 있던 j1 이 함께 남는다.
+    // AC-8 — 새로 고른 s-in 과 원래 있던 j1 이 함께 남는다.
     expect(seededIds().sort()).toEqual(['j1', 's-in']);
   });
 });
@@ -1199,5 +1209,320 @@ describe('🔴 TRIP-1113 SP-1 · select 완료가 셸 보존 표식을 켠다', 
 
     expect(useTripWizardStore.getState().preserveCreatedTripIdOnce).toBe(true);
     expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * TRIP-1106 — 지역 밖 선택 행 해제 · 밖 포함 완료 경고 · 밖 행 순번 없음
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * 무엇을 보장하나(BR-U1-37 · BR-U1-58 ② · INV-4 · 결정 0~2 · 01b Q3):
+ *  - W1 여행지를 바꾸기 전에 담아 둔 밖 항목이 위저드에 있으면 그 밖 행엔 채운 체크가 보이고 부제에 센다.
+ *    선택 안 된 밖 행은 체크가 없고, 밖 행엔 순번이 없다.
+ *  - W2 그 체크를 누르면 풀리고 체크 자체가 사라져 다시 켤 수 없다 — 완료하면 시드에서도 빠진다.
+ *  - W4 선택된 밖 행이 있으면 완료가 곧장 가지 않고 「이 여행 지역 밖 N곳이 함께 들어가요」를 띄운다.
+ *    떠 있는 동안 시드·재진입 표식·이동은 0회다(표식이 먼저 켜지면 다른 길로 나갈 때 옛 여행 id 가 산다).
+ *  - W5·W6 [빼고 완료]는 밖 행을 빼고, [그대로 넣기]는 원래 시드 그대로 남긴다. 둘 다 누른 뒤에만
+ *    시드 → 표식 → step1 순서로 간다(TRIP-1113). 행이 없는 위저드 항목(px)은 두 버튼 모두 남긴다(1012 Q1).
+ *  - W7 선택된 밖 행이 없으면 다이얼로그 없이 지금 그대로 간다.
+ *  - W8·W9 떠 있는 동안 완료를 또 누르거나 다이얼로그 버튼을 같은 틱에 두 번 눌러도 한 번만 간다.
+ *
+ * ★ 시드 호출 수는 결과 목록이 아니라 스토어 구독으로 센다(02a ★2) — 시드는 목록을 **교체**하므로
+ *   일찍 시드한 구현도 목록이 준비값과 같아 보일 수 있다.
+ * ★ 순서는 push 목 안에서 그 순간의 스토어를 찍어 잰다(02a ★3).
+ * ★ 같은 틱 연타는 바깥 act 하나로 묶는다 — 묶지 않으면 첫 누름이 다이얼로그를 닫아 두 번째가
+ *   가드 없이도 무시된다(RNTL 은 언마운트된 요소에 press 를 안 보낸다, 02a ★1).
+ */
+
+/** 서울(11) 여행 — 밖 j1(인천 남동구) → 안 s-in(마포구) → 밖 j2(해운대구) → 밖 j3(연천군). */
+const OUTSIDE_GATE_ROWS: SavedPlace[] = [
+  savedCoded('j1', '남동구', '28200', '2026-09-01T01:00:00.000Z'),
+  savedCoded('s-in', '마포구', '11440', '2026-09-01T02:00:00.000Z'),
+  savedCoded('j2', '해운대구', '26350', '2026-09-01T03:00:00.000Z'),
+  savedCoded('j3', '연천군', '41800', '2026-09-01T04:00:00.000Z'),
+];
+
+/** 위저드에 이미 있던 꼭 갈 곳 — 밖 j1·j2 는 행이 있고, px 는 담기를 풀어 행이 없다. */
+const OUTSIDE_GATE_WIZARD: MustVisitSeedItem[] = [
+  wizardItem('j1', '인천 논현 포구', '남동구'),
+  wizardItem('j2', '장소 j2', '해운대구'),
+  wizardItem('px', '예전에 담았던 곳', '중구'),
+];
+
+const CONFIRM = 'mustvisit-pick-outside-confirm';
+const EXCLUDE = 'mustvisit-pick-outside-exclude';
+const KEEP = 'mustvisit-pick-outside-keep';
+
+// 모듈 싱글턴(위저드 스토어) 구독과 push 목 구현은 파일 최상위에서 걷는다 — describe 안에 걸면 앞 테스트의
+// 구독·구현이 뒤 테스트로 샌다(하네스 규칙). mockClear 는 구현을 안 지우므로 mockReset 이다.
+let storeUnsubscribers: (() => void)[] = [];
+afterEach(() => {
+  storeUnsubscribers.forEach((unsubscribe) => unsubscribe());
+  storeUnsubscribers = [];
+  mockPush.mockReset();
+});
+
+/** 지금부터 `mustVisits` 가 바뀐(=시드된) 횟수를 센다. 준비 단계의 쓰기는 세지 않는다. */
+function countSeedWrites(): () => number {
+  let writes = 0;
+  storeUnsubscribers.push(
+    useTripWizardStore.subscribe((state, prev) => {
+      if (state.mustVisits !== prev.mustVisits) writes += 1;
+    })
+  );
+  return () => writes;
+}
+
+type PushMoment = { seeded: string[]; preserve: boolean };
+
+/** push 가 불린 순간의 시드·재진입 표식을 기록한다 — 시드·표식이 push 보다 먼저인지 잰다. */
+function recordStoreAtPush(): PushMoment[] {
+  const moments: PushMoment[] = [];
+  mockPush.mockImplementation(() => {
+    const state = useTripWizardStore.getState();
+    moments.push({
+      seeded: state.mustVisits.map((m) => m.sourcePoiId).sort(),
+      preserve: state.preserveCreatedTripIdOnce,
+    });
+  });
+  return moments;
+}
+
+function seededName(poiId: string): string | undefined {
+  return useTripWizardStore
+    .getState()
+    .mustVisits.find((m) => m.sourcePoiId === poiId)?.name;
+}
+
+/** 위저드 j1·j2·px + 4행으로 열고 s-in 을 더 고른 상태(완료 직전)까지 만든다. */
+async function arrangeOutsideGate(): Promise<void> {
+  useTripWizardStore.getState().initMustVisits(OUTSIDE_GATE_WIZARD);
+  serveSaved(OUTSIDE_GATE_ROWS);
+  openSelectForTrip(SEOUL_TRIP);
+  await waitFor(() => expect(rowCount()).toBe(4));
+  fireEvent.press(screen.getByTestId('mustvisit-pick-check-s-in'));
+  expect(screen.getByTestId('mustvisit-pick-subtitle')).toHaveTextContent(
+    '담은 곳 4곳 · 3곳 선택됨'
+  );
+}
+
+/** 완료를 눌러 다이얼로그가 뜬 상태 — 긍정 앵커(뜸)를 먼저 잡는다(02a ★8). */
+async function arrangeGateOpen(): Promise<{ seedWrites: () => number }> {
+  await arrangeOutsideGate();
+  const seedWrites = countSeedWrites();
+  fireEvent.press(screen.getByTestId('mustvisit-pick-complete'));
+  expect(screen.getByTestId(CONFIRM)).toBeOnTheScreen();
+  return { seedWrites };
+}
+
+describe('🔴 TRIP-1106 W1 · 이미 선택된 밖 행은 채운 체크로 보이고 부제에 세며, 밖 행엔 순번이 없다 (AC-1·3·5·10)', () => {
+  it('j1·j2 는 채운 체크+selected, 선택 안 된 j3 는 체크 없음, 밖 3행 순번 없음, s-in 순번 1, 부제 4곳 · 2곳', async () => {
+    useTripWizardStore.getState().initMustVisits(OUTSIDE_GATE_WIZARD);
+    serveSaved(OUTSIDE_GATE_ROWS);
+    openSelectForTrip(SEOUL_TRIP);
+
+    await waitFor(() => expect(rowCount()).toBe(4));
+    expect(orderedPickIds()).toEqual([
+      'mustvisit-pick-row-s-in',
+      'mustvisit-pick-region-outside',
+      'mustvisit-pick-row-j1',
+      'mustvisit-pick-row-j2',
+      'mustvisit-pick-row-j3',
+    ]);
+    expect(
+      screen.getByTestId('mustvisit-pick-region-outside')
+    ).toHaveTextContent('이 여행 지역 밖 3곳');
+
+    ['j1', 'j2'].forEach((poiId) => {
+      expect(
+        screen.getByTestId(`mustvisit-pick-check-${poiId}`)
+      ).toBeSelected();
+      expect(
+        screen.getByTestId(`mustvisit-pick-check-filled-${poiId}`)
+      ).toBeOnTheScreen();
+    });
+    // AC-3 — 선택 안 된 밖 행은 켤 수단이 없다.
+    expect(screen.queryByTestId('mustvisit-pick-check-j3')).toBeNull();
+
+    // AC-10 — 순번은 안 행에만.
+    ['j1', 'j2', 'j3'].forEach((poiId) => {
+      expect(screen.queryByTestId(`mustvisit-pick-rank-${poiId}`)).toBeNull();
+    });
+    expect(
+      within(screen.getByTestId('mustvisit-pick-rank-s-in')).getByText('1')
+    ).toBeOnTheScreen();
+
+    // AC-5 — 보이는 체크(j1·j2)와 M 이 같다. 행 없는 px 는 세지 않는다.
+    expect(screen.getByTestId('mustvisit-pick-subtitle')).toHaveTextContent(
+      '담은 곳 4곳 · 2곳 선택됨'
+    );
+  });
+});
+
+describe('🔴 TRIP-1106 W2 · 밖 행 체크를 풀면 체크가 사라져 다시 켤 수 없고, 완료하면 시드에서도 빠진다 (AC-2·4)', () => {
+  it('j1 해제 → 체크 없음·부제 0곳 → j1 행을 눌러도 그대로 → s-in 골라 완료하면 다이얼로그 없이 꼭 갈 곳은 s-in 하나', async () => {
+    useTripWizardStore
+      .getState()
+      .initMustVisits([wizardItem('j1', '장소 j1', '남동구')]);
+    serveSaved([OUTSIDE_GATE_ROWS[0], OUTSIDE_GATE_ROWS[1]]);
+    openSelectForTrip(SEOUL_TRIP);
+    await waitFor(() => expect(rowCount()).toBe(2));
+    // 앵커 — 처음엔 체크된 채다(없으면 아래 "사라짐"이 공허하다).
+    expect(screen.getByTestId('mustvisit-pick-check-j1')).toBeSelected();
+
+    // AC-2 — 해제.
+    fireEvent.press(screen.getByTestId('mustvisit-pick-check-j1'));
+    expect(screen.queryByTestId('mustvisit-pick-check-j1')).toBeNull();
+    expect(screen.queryByTestId('mustvisit-pick-check-filled-j1')).toBeNull();
+    expect(screen.getByTestId('mustvisit-pick-subtitle')).toHaveTextContent(
+      '담은 곳 2곳 · 0곳 선택됨'
+    );
+
+    // AC-4 — 행을 눌러도 다시 선택되지 않는다.
+    fireEvent.press(screen.getByTestId('mustvisit-pick-row-j1'));
+    expect(screen.queryByTestId('mustvisit-pick-check-j1')).toBeNull();
+    expect(screen.getByTestId('mustvisit-pick-subtitle')).toHaveTextContent(
+      '담은 곳 2곳 · 0곳 선택됨'
+    );
+
+    fireEvent.press(screen.getByTestId('mustvisit-pick-check-s-in'));
+    fireEvent.press(screen.getByTestId('mustvisit-pick-complete'));
+
+    // 밖 선택이 남지 않았으니 묻지 않고 간다(짝: push 1).
+    expect(screen.queryAllByTestId(CONFIRM)).toHaveLength(0);
+    expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
+    expect(seededIds()).toEqual(['s-in']);
+  });
+});
+
+describe('🔴 TRIP-1106 W4 · 선택된 밖 행이 있으면 완료가 먼저 묻는다 — 떠 있는 동안 시드·표식·이동 0 (AC-6)', () => {
+  it('「이 여행 지역 밖 2곳이 함께 들어가요」(선택 안 된 j3·행 없는 px 는 안 셈)가 뜨고, 스토어·이동은 그대로다', async () => {
+    const { seedWrites } = await arrangeGateOpen();
+
+    const gate = screen.getByTestId(CONFIRM);
+    expect(
+      within(gate).getByText('이 여행 지역 밖 2곳이 함께 들어가요')
+    ).toBeOnTheScreen();
+    expect(screen.getByTestId(EXCLUDE)).toBeOnTheScreen();
+    expect(screen.getByTestId(KEEP)).toBeOnTheScreen();
+
+    expect(seedWrites()).toBe(0);
+    expect(seededIds()).toEqual(['j1', 'j2', 'px']);
+    expect(useTripWizardStore.getState().preserveCreatedTripIdOnce).not.toBe(
+      true
+    );
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 TRIP-1106 W5 · [빼고 완료]는 밖 행을 빼고 시드 → 표식 → step1 순서로 간다 (AC-7 · Q3)', () => {
+  it('꼭 갈 곳은 s-in·px(이름 그대로)이고 j1·j2 는 없으며, push 순간 이미 시드·표식이 반영돼 있다', async () => {
+    await arrangeGateOpen();
+    const moments = recordStoreAtPush();
+
+    fireEvent.press(screen.getByTestId(EXCLUDE));
+
+    expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
+    expect(seededIds().sort()).toEqual(['px', 's-in']);
+    expect(seededIds().some((id) => id === 'j1' || id === 'j2')).toBe(false);
+    expect(seededName('px')).toBe('예전에 담았던 곳');
+    expect(useTripWizardStore.getState().preserveCreatedTripIdOnce).toBe(true);
+    expect(moments).toEqual([{ seeded: ['px', 's-in'], preserve: true }]);
+  });
+
+  it('Q3 · 밖 j1 만 선택된 채 완료해도 완료가 열려 있고, [빼고 완료]면 빈 꼭 갈 곳으로 간다', async () => {
+    useTripWizardStore
+      .getState()
+      .initMustVisits([wizardItem('j1', '장소 j1', '남동구')]);
+    serveSaved([OUTSIDE_GATE_ROWS[0], OUTSIDE_GATE_ROWS[1]]);
+    openSelectForTrip(SEOUL_TRIP);
+    await waitFor(() => expect(rowCount()).toBe(2));
+
+    const complete = screen.getByTestId('mustvisit-pick-complete');
+    expect(complete).not.toBeDisabled();
+    fireEvent.press(complete);
+    expect(
+      within(screen.getByTestId(CONFIRM)).getByText(
+        '이 여행 지역 밖 1곳이 함께 들어가요'
+      )
+    ).toBeOnTheScreen();
+
+    fireEvent.press(screen.getByTestId(EXCLUDE));
+
+    expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
+    expect(seededIds()).toEqual([]);
+  });
+});
+
+describe('🔴 TRIP-1106 W6 · [그대로 넣기]는 원래 시드 그대로 남기고 시드 → 표식 → step1 순서로 간다 (AC-8)', () => {
+  it('꼭 갈 곳은 j1·j2·px·s-in 이고 j1 이름은 원래 시드 그대로이며, push 순간 이미 시드·표식이 반영돼 있다', async () => {
+    await arrangeGateOpen();
+    const moments = recordStoreAtPush();
+
+    fireEvent.press(screen.getByTestId(KEEP));
+
+    expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
+    expect(seededIds().sort()).toEqual(['j1', 'j2', 'px', 's-in']);
+    // 지어낸 값이 아니라 원래 시드(담은 목록의 이름 `장소 j1` 이 아니다).
+    expect(seededName('j1')).toBe('인천 논현 포구');
+    expect(useTripWizardStore.getState().preserveCreatedTripIdOnce).toBe(true);
+    expect(moments).toEqual([
+      { seeded: ['j1', 'j2', 'px', 's-in'], preserve: true },
+    ]);
+  });
+});
+
+describe('🔴 TRIP-1106 W7 · 선택된 밖 행이 없으면 묻지 않고 지금 그대로 간다 (AC-9 · 무회귀)', () => {
+  it('밖 3행이 있어도 위저드가 비어 있으면 s-in 을 골라 완료할 때 다이얼로그 없이 시드·표식·이동이 한 번이다', async () => {
+    serveSaved(OUTSIDE_GATE_ROWS);
+    openSelectForTrip(SEOUL_TRIP);
+    await waitFor(() => expect(rowCount()).toBe(4));
+
+    fireEvent.press(screen.getByTestId('mustvisit-pick-check-s-in'));
+    fireEvent.press(screen.getByTestId('mustvisit-pick-complete'));
+
+    expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
+    expect(screen.queryAllByTestId(CONFIRM)).toHaveLength(0);
+    expect(seededIds()).toEqual(['s-in']);
+    expect(useTripWizardStore.getState().preserveCreatedTripIdOnce).toBe(true);
+  });
+});
+
+describe('🔴 TRIP-1106 W8 · 다이얼로그가 떠 있는 동안 완료를 또 눌러도 다이얼로그는 하나이고 아무것도 안 나간다 (AC-11)', () => {
+  it('완료 두 번 더 → 다이얼로그 1개 · 시드 쓰기 0 · 표식 꺼짐 · push 0', async () => {
+    const { seedWrites } = await arrangeGateOpen();
+
+    // ★ jest 의 press 는 딤 뒤 완료 버튼에도 닿는다 — 막는 것은 코드여야 한다(repo-traps 오버레이 절).
+    fireEvent.press(screen.getByTestId('mustvisit-pick-complete'));
+    fireEvent.press(screen.getByTestId('mustvisit-pick-complete'));
+
+    expect(screen.getAllByTestId(CONFIRM)).toHaveLength(1);
+    expect(seedWrites()).toBe(0);
+    expect(useTripWizardStore.getState().preserveCreatedTripIdOnce).not.toBe(
+      true
+    );
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 TRIP-1106 W9 · 다이얼로그 버튼을 같은 틱에 두 번 눌러도 한 번만 간다 (AC-11)', () => {
+  it.each([
+    ['빼고 완료 ×2', EXCLUDE, EXCLUDE],
+    ['그대로 넣기 ×2', KEEP, KEEP],
+    ['빼고 완료 → 그대로 넣기', EXCLUDE, KEEP],
+  ])('%s → 시드 쓰기 1 · push 1', async (_label, first, second) => {
+    const { seedWrites } = await arrangeGateOpen();
+    const firstButton = screen.getByTestId(first);
+    const secondButton = screen.getByTestId(second);
+
+    // ★ 바깥 act 하나로 묶어야 두 누름이 다이얼로그가 닫히기 전 버튼에 닿는다(02a ★1).
+    await act(async () => {
+      fireEvent.press(firstButton);
+      fireEvent.press(secondButton);
+    });
+
+    expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
+    expect(seedWrites()).toBe(1);
   });
 });

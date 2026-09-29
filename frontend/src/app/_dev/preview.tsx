@@ -46,6 +46,7 @@ import { ShareCardScreen } from '@/features/reflection/ui/ShareCardScreen';
 import { TravelStyleScreen } from '@/features/reflection/ui/TravelStyleScreen';
 import { TripSummaryScreen } from '@/features/reflection/ui/TripSummaryScreen';
 import { DestinationDetailScreen } from '@/features/explore/ui/DestinationDetailScreen';
+import { MustVisitOutsideConfirmDialog } from '@/features/explore/ui/MustVisitOutsideConfirmDialog';
 import { MustVisitPickScreen } from '@/features/explore/ui/MustVisitPickScreen';
 import { PlaceDetailScreen as ExplorePlaceDetailScreen } from '@/features/explore/ui/PlaceDetailScreen';
 import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
@@ -3927,6 +3928,35 @@ export const PREVIEW_STATES: PreviewState[] = [
         onPressBrowse={noop}
         onBack={noop}
       />
+    ),
+  },
+  {
+    // TRIP-1106 — 선택된 밖 행(p-3)이 있을 때 완료가 띄우는 확인. Figma 프레임이 없고(결정 3 — 코드 먼저)
+    // 딤 덮임·중앙 정렬·흐린 행 위 체크 가독성은 jest 사각이라 이 키가 6-b 육안 자리다.
+    key: 'saved-places-select-outside-confirm',
+    band: 'd',
+    label: 'd02 · 꼭 갈 곳 고르기 지역 밖 확인',
+    login: null,
+    render: () => (
+      <View style={StyleSheet.absoluteFill}>
+        <MustVisitPickScreen
+          state={{ kind: 'results' }}
+          savedPlaces={PREVIEW_SAVED_PLACES.slice(0, 2)}
+          outsideRegionPlaces={PREVIEW_SAVED_PLACES.slice(2)}
+          selectedPoiIds={['p-1', 'p-3']}
+          onToggleSelect={noop}
+          onComplete={noop}
+          onPressAddMore={noop}
+          onRetry={noop}
+          onPressBrowse={noop}
+          onBack={noop}
+        />
+        <MustVisitOutsideConfirmDialog
+          count={1}
+          onExclude={noop}
+          onKeep={noop}
+        />
+      </View>
     ),
   },
   {

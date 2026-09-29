@@ -30,8 +30,9 @@ export interface MustVisitPickScreenProps {
   state: PlaceListState;
   /** 그릴 순서 그대로의 **고를 수 있는** 목록(지역 안) — 정렬은 페이지가 끝냈다(단일 출처). */
   savedPlaces: SavedPlace[];
-  /** 여행 지역 밖 담은 곳 — 목록 뒤 "이 여행 지역 밖 N곳" 머리글 아래에 **흐리게, 체크 없이** 그린다
-   * (TRIP-1042 · BR-U1-58 ② — 보이되 고를 수 없다. 숨기지 않는 것은 INV-4). */
+  /** 여행 지역 밖 담은 곳 — 목록 뒤 "이 여행 지역 밖 N곳" 머리글 아래에 **흐리게, 순번 없이** 그린다
+   * (TRIP-1042 · BR-U1-58 ② — 보이되 고를 수 없다. 숨기지 않는 것은 INV-4). 이미 선택돼 있으면 체크를
+   * 보여 해제만 받는다(TRIP-1106 — 풀면 체크가 사라져 다시 켤 수 없다). */
   outsideRegionPlaces?: SavedPlace[];
   /** 지역 안이 0건일 때 페이지가 주는 여행지 표시명(`서울`·`서울·부산`) — 있으면 목록 머리에 region-empty
    * 블록을 끼우고 '+ 탐색에서 더 담기' 행을 숨긴다(Figma 4685:2646 — CTA 가 대신한다). */
@@ -102,13 +103,15 @@ function PickRow({
   onToggleSelect,
 }: {
   saved: SavedPlace;
-  rank: number;
+  /** 지역 안 행의 순번. 밖 행은 없다(TRIP-1106 결정 1-A — "선택 번호"로 읽혔다). */
+  rank: number | null;
   selected: boolean;
   /** 이미 등록 — 선택 상태로 잠근다(진짜 `disabled` 라 press 가 막힌다). */
   locked: boolean;
   /** 마지막 행은 구분선을 안 그린다(Figma 2437:1500). */
   isLast: boolean;
-  /** 지역 밖 — 흐리게(opacity 0.4) 그리고 체크 원을 아예 안 그린다(Figma 2437:1500). */
+  /** 지역 밖 — 흐리게(opacity 0.4) 그리고 선택 안 된 행엔 체크 원을 아예 안 그린다(Figma 2437:1500).
+   * 선택된 밖 행엔 안 행과 같은 체크를 그려 해제만 받는다(TRIP-1106 AC-1·2). */
   outside: boolean;
   location: string | null | undefined;
   onToggleSelect: (poiId: string) => void;
@@ -124,14 +127,16 @@ function PickRow({
         isLast ? '' : 'border-b border-hairline'
       } ${outside ? 'opacity-40' : ''}`}
     >
-      <View
-        testID={`mustvisit-pick-rank-${place.poiId}`}
-        className="h-[26px] w-[26px] items-center justify-center rounded-pill bg-primary"
-      >
-        <Text className="font-inter-bold text-label font-bold text-on-primary">
-          {rank}
-        </Text>
-      </View>
+      {rank === null ? null : (
+        <View
+          testID={`mustvisit-pick-rank-${place.poiId}`}
+          className="h-[26px] w-[26px] items-center justify-center rounded-pill bg-primary"
+        >
+          <Text className="font-inter-bold text-label font-bold text-on-primary">
+            {rank}
+          </Text>
+        </View>
+      )}
 
       <View className="h-20 w-[104px] overflow-hidden rounded-thumb bg-surface-strong">
         {place.imageUrl ? (
@@ -162,7 +167,7 @@ function PickRow({
         ) : null}
       </View>
 
-      {outside ? null : (
+      {outside && !selected ? null : (
         <Pressable
           testID={`mustvisit-pick-check-${place.poiId}`}
           accessibilityRole="button"
@@ -290,7 +295,7 @@ function ResultsBody({
   onComplete: () => void;
   onPressAddMore: () => void;
 }): ReactElement {
-  // 안 → (밖이 있으면) 머리글 → 밖. 순번·마지막 행 판정은 보이는 전체 순서로 이어 센다(01b Q2).
+  // 안 → (밖이 있으면) 머리글 → 밖. 마지막 행 판정은 보이는 전체 순서로 센다(01b Q2). 순번은 안 행만.
   const rows = [...savedPlaces, ...outsideRegionPlaces];
   return (
     <>
@@ -317,7 +322,7 @@ function ResultsBody({
             ) : null}
             <PickRow
               saved={saved}
-              rank={index + 1}
+              rank={index < savedPlaces.length ? index + 1 : null}
               selected={selectedPoiIds.includes(saved.place.poiId)}
               locked={lockedPoiIds.includes(saved.place.poiId)}
               isLast={index === rows.length - 1}
