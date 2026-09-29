@@ -200,6 +200,7 @@
 - `src/__tests__/unplacedMustVisitStructure.test.ts`  →  (export 없음)
 - `src/__tests__/visitCheckGenerated.test.ts`  →  (export 없음)
 - `src/__tests__/widgetsStructure.test.ts`  →  (export 없음)
+- `src/__tests__/wizardOriginProducers.test.ts`  →  (export 없음)
 
 ## src/app-shell/
 - `src/app-shell/index.ts`  →  SplashGate
@@ -1473,4 +1474,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 1027개 파일
+합계 1028개 파일

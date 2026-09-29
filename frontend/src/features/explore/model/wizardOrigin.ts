@@ -1,9 +1,10 @@
 /**
  * 위저드 → d04(장소 탐색) "진입 출처" 파라미터 철자의 단일 출처 (TRIP-1026).
  *
- * 보내는 쪽(1/4 '더 담기'·d02 select '더 담기'/'둘러보기')은 `wizardOriginParams()`를 push params 에
- * 펼치고, 받는 쪽(d04 페이지)은 `isWizardOrigin(params)`로 판정한다 — 양쪽이 철자를 각자 적으면
- * 오타가 조용히 통과한다(`regionPickerPurpose` 선례). `region`은 신호가 아니다(d03·피커도 싣는다).
+ * 보내는 쪽(d02 select '더 담기'/'둘러보기' — 1/4 는 d02 select 로 갈 때 싣는다)은
+ * `wizardOriginParams()`를 push params 에 펼치고, 받는 쪽(d04 페이지)은 `isWizardOrigin(params)`로
+ * 판정한다 — 양쪽이 철자를 각자 적으면 오타가 조용히 통과한다(`regionPickerPurpose` 선례).
+ * `region`은 신호가 아니다(d03·피커도 싣는다).
  */
 export type WizardOriginParams = { from: 'wizard' };
 

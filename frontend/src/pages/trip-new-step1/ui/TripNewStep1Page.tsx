@@ -278,7 +278,6 @@ export function TripNewStep1Page({
   // ⚠️ 게스트는 `enabled: isAuthed` 라 요청이 안 나가고 `isPending` 이 영원히 true 다 — 그대로
   // 게이트에 태우면 비회원이 여행을 영영 못 만든다. `isAuthed &&` 로 접어 "정말 조회 중"만 막는다.
   const savedPlacesLoading = isAuthed && savedPlaces.isPending;
-  const savedPlaceList = savedPlaces.savedPlaces;
 
   // loading 얼굴 신호(TRIP-671 D4) — 프리필·담은목록 중 하나라도 조회 중이면 화면을 스켈레톤으로
   // 갈아 끼운다(combined, Figma 가 단일 "불러오는 중" 부제라 두 조회를 한 플래그로 접는다). 게스트는
@@ -524,6 +523,16 @@ export function TripNewStep1Page({
     setPeriodSheetOpen(false);
   }
 
+  // 꼭 갈 곳 고르기(d02 select) — 「더 담기」·「전체 보기」가 함께 쓴다. 위저드 출처 표식을 싣는다.
+  const mustVisitSelectHref = {
+    pathname: '/explore/saved-places',
+    params: {
+      mode: 'select',
+      region: destinations.map((d) => d.region),
+      ...wizardOriginParams(),
+    },
+  } as const;
+
   return (
     <>
       <TripWizardStep1Screen
@@ -539,41 +548,13 @@ export function TripNewStep1Page({
         onPressSummaryBudget={openBudgetSheet}
         mustVisits={mustVisits}
         onPressMore={() =>
-          // 담은 곳이 있으면 담은 장소 화면(d02)으로, 없으면 새로 담을 탐색으로 보낸다(TRIP-367).
-          // 두 갈래 모두 여행에 담은 지역들을 라우트 파라미터로 실어 보낸다 — d04는 TRIP-687,
-          // d02는 TRIP-689(담은 장소 화면이 이 지역으로 클라 필터한다). 표준명 원문·순서 그대로,
-          // 목적지가 없으면 빈 배열이라 전국 전체가 뜬다.
-          router.push(
-            savedPlaceList.length > 0
-              ? {
-                  // TRIP-706(AC-4 · D5): 위저드 축은 d02 로 갈 때 select 모드로 통일한다
-                  // (전체 보기와 동형 — { mode:'select', region }). 종전 region 만에서 바뀜.
-                  pathname: '/explore/saved-places',
-                  params: {
-                    mode: 'select',
-                    region: destinations.map((d) => d.region),
-                  },
-                }
-              : {
-                  // 위저드 출처 표식 — d04 가 ＋(새 여행 = reset)를 숨긴다(TRIP-1026).
-                  pathname: '/explore/places',
-                  params: {
-                    region: destinations.map((d) => d.region),
-                    ...wizardOriginParams(),
-                  },
-                }
-          )
+          // 담은 곳 수와 무관하게 늘 d02 select 로 보낸다(TRIP-1093 결정 2) — 새로 담기는 d02 의
+          // 「탐색에서 더 담기」로, 꼭 갈 곳은 거기서 체크 → 완료로만 들어간다. 여행 지역은 표준명
+          // 원문·순서 그대로(TRIP-689), 목적지가 없으면 빈 배열이라 전국 전체가 뜬다.
+          router.push(mustVisitSelectHref)
         }
-        onPressSeeAll={() =>
-          // TRIP-706(AC-4 · D5): 전체 보기도 더 담기 d02 와 동형으로 region 을 함께 싣는다.
-          router.push({
-            pathname: '/explore/saved-places',
-            params: {
-              mode: 'select',
-              region: destinations.map((d) => d.region),
-            },
-          })
-        }
+        // 전체 보기도 더 담기와 같은 인자다(TRIP-706 · TRIP-1093).
+        onPressSeeAll={() => router.push(mustVisitSelectHref)}
         canProceed={canProceed}
         onNext={submit}
         onBack={() => router.back()}

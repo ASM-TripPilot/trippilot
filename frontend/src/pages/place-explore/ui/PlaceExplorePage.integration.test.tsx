@@ -90,7 +90,8 @@ jest.mock('expo-router', () => ({
     // TRIP-1026 AC-4 가 뒤로 버튼까지 누른다 — 없으면 `router.back is not a function` 으로 죽는다.
     back: () => mockBack(),
   },
-  useRouter: () => ({ push: mockPush, replace: mockReplace }),
+  // TRIP-1093: 위저드 출처 ♥ 가 뒤로 간다 — 구현이 훅 쪽 back 을 골라도 같은 mockBack 에 모인다.
+  useRouter: () => ({ push: mockPush, replace: mockReplace, back: mockBack }),
   useLocalSearchParams: () => ({ ...mockParams }),
 }));
 
@@ -759,7 +760,7 @@ describe('🔴 1012-B1 · d04 ＋ FAB 는 직전 드래프트를 비우고 위�
 
 describe('🔴 1026 AC-1 · 위저드 출처면 ＋ FAB 가 없고 ♥ FAB 는 남는다', () => {
   it.each([
-    { name: 'W1 1/4 더 담기(여행 지역과 함께)', region: ['부산광역시'] },
+    { name: 'W2 d02 select 더 담기(여행 지역과 함께)', region: ['부산광역시'] },
     { name: 'W2·W3 d02 select 더 담기·둘러보기(지역 없이)', region: undefined },
   ])('$name', async ({ region }) => {
     mockParams = { ...(region ? { region } : {}), ...wizardOriginParams() };
@@ -817,6 +818,63 @@ describe('🔴 1026 AC-4 · 위저드 출처 d04 에서 무엇을 눌러도 진�
     await screen.findByTestId('explore-places-saveerror-login');
     expect(wizardDraftData()).toEqual(before);
     expect(mockPush.mock.calls).not.toContainEqual(['/trips/new/step1']);
+  });
+});
+
+// ── TRIP-1093 결정 2 · 위저드 출처 d04 에서 위저드 진행분이 지워지는 길을 없앤다 ─────────────────
+// 위저드 출처 d04 를 여는 곳은 이제 d02 select 하나뿐이다(wizardOriginProducers 가드) — 그래서 ♥ 는
+// 새 d02(save 모드 → 「이 장소들로 여행 만들기」 = reset)를 여는 대신 한 칸 뒤(d02 select)로 돌아간다(01b Q2 A3).
+// 비위저드 ♥ 는 P-12 그대로 push 다(짝). 실제 스택이 d02 select 로 돌아가는지는 jest 가 못 본다(6-b).
+// 드래프트 리셋은 위 파일 최상위 `afterEach(resetWizardDraft)` 가 맡는다.
+
+describe('🔴 1093 AC-6 · 위저드 출처 d04 의 ♥ 는 한 칸 뒤로 간다 — save 모드 d02 를 열지 않는다', () => {
+  it('♥ 를 누르면 back 1회·push 0회이고, 드래프트가 누르기 전과 같다', async () => {
+    leavePreviousTripDraft();
+    const before = wizardDraftData();
+    // 앵커 — 채워졌다(픽스처가 조용히 망가지면 "그대로다"가 공짜로 통과한다).
+    expect(before).not.toEqual(freshWizardDraft());
+    mockParams = { region: ['부산광역시'], ...wizardOriginParams() };
+    await renderPage();
+
+    fireEvent.press(screen.getByTestId('explore-places-saved-fab'));
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    // push 가 한 번도 없다 — 파라미터를 바꿔 d02 를 새로 여는 구현(select 로 push)도 여기서 red.
+    expect(mockPush.mock.calls).toEqual([]);
+    expect(wizardDraftData()).toEqual(before);
+  });
+});
+
+describe('🔒 1093 AC-4 · 위저드 출처 d04 의 하트는 담기만 한다 — 꼭 갈 곳은 그대로 (INV-U1-04)', () => {
+  it('로그인 상태에서 하트를 누르면 담기 요청이 1건 나가고, 꼭 갈 곳·뺀 목록·드래프트가 누르기 전과 같다', async () => {
+    // 준비 — 꼭 갈 곳 1곳(poi-prev-1)·뺀 곳 1곳(poi-prev-2)이 있는 위저드 드래프트.
+    leavePreviousTripDraft();
+    const before = wizardDraftData();
+    const mustVisitsBefore = useTripWizardStore.getState().mustVisits;
+    const excludedBefore =
+      useTripWizardStore.getState().excludedMustVisitPoiIds;
+    expect(mustVisitsBefore).toHaveLength(1);
+    expect(excludedBefore).toEqual(['poi-prev-2']);
+    // 게스트면 담기 요청이 아예 안 나가 "담기만"을 잴 수 없다(1026 AC-4 는 게스트판).
+    setAccessToken('valid-access');
+    mockParams = { region: ['부산광역시'], ...wizardOriginParams() };
+    await renderPage();
+
+    fireEvent.press(screen.getByTestId('explore-places-save-p1'));
+
+    // 담기는 실제로 나갔고, 무효화 재조회까지 끝났다 — 이 "끝난 표시"를 먼저 기다린 뒤 동기로 본다
+    // (waitFor 로 스토어를 비교하면 첫 검사에서 같아 바로 끝나, 그 뒤의 변경을 못 잡는다).
+    await waitFor(() =>
+      expect(hitsOf('POST', '/api/v1/saved-places')).toHaveLength(1)
+    );
+    await waitFor(() =>
+      expect(hitsOf('GET', '/api/v1/saved-places')).toHaveLength(2)
+    );
+    expect(useTripWizardStore.getState().mustVisits).toEqual(mustVisitsBefore);
+    expect(useTripWizardStore.getState().excludedMustVisitPoiIds).toEqual(
+      excludedBefore
+    );
+    expect(wizardDraftData()).toEqual(before);
   });
 });
 
