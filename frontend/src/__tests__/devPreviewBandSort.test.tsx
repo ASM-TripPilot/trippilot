@@ -131,6 +131,11 @@ const EXPECTED_H = [
   // 동시에 옛 h12 인라인 패널 5키(slot-candidate-panel*)·h18 옵션 교체 3키(option-swap*)는 삭제된다.
   'dev-preview-state-h08-candidate-sheet', // h08 (TRIP-793 다른 후보 시트)
   'dev-preview-state-h08-candidate-sheet-empty', // h08 (TRIP-793 0건)
+  // TRIP-1109: 조회 상태 3키. 같은 h08 코드라 PREVIEW_STATES 배열에서 candidate-sheet-empty **바로 뒤**에
+  // 이 순서(loading→slow→fetch-error)로 넣으면 안정 정렬이 그대로 낸다(배열 위치=정렬 위치).
+  'dev-preview-state-h08-candidate-sheet-loading', // h08 (TRIP-1109 조회 중)
+  'dev-preview-state-h08-candidate-sheet-slow', // h08 (TRIP-1109 조회 지연)
+  'dev-preview-state-h08-candidate-sheet-fetch-error', // h08 (TRIP-1109 조회 실패)
   // TRIP-794: h09 컨셉 고르기(같이 고르기 위저드 컨셉 선택). 코드가 h09 라 안정 정렬이 h08 뒤·h11
   // 앞에 이 칩을 세운다(옛 h09 생성 키가 TRIP-789 로 사라진 자리에 새 h09 표면이 들어옴). 단일 키라
   // 배열 위치와 무관하게 코드 h09 가 정렬 위치를 결정한다.

@@ -70,6 +70,12 @@ const UI_DIR_REL = 'features/itinerary/ui';
  * `features/itinerary` 는 **어느 가드도 타이머를 보지 않는다** — 폴링 카운터를 model 에 두면서
  * `setInterval` 을 쓰는 것이 이 칸에서 가장 있을 법한 우회다(01b 폴링 수치의 급소). */
 const TIMER_SCAN_DIRS = ['features/itinerary', 'pages/itinerary-draft'];
+/** 타이머를 감싼 `shared/time` 훅을 써도 되는 파일 — 두 디렉토리 중 이 배선 하나뿐이다(TRIP-1109
+ * 10초 지연 판정). 시트(features)는 프리뷰가 정적으로 그려야 해서 시간을 몰라야 한다. 전역 목록은
+ * `pagesLayerStructure` 에 있고, 여기는 그 가드가 안 보는 `features/itinerary` 까지 덮는다. */
+const ELAPSED_FLAG_ALLOWED = [
+  'pages/itinerary-draft/ui/SlotCandidatePanelContainer.tsx',
+];
 
 /**
  * 스캔 전처리 — 주석을 걷는다. 블록 주석을 먼저 지운다(순서를 바꾸면 한 줄 안의 코드가 소실된다).
@@ -219,6 +225,16 @@ describe('🔴 G4 · AC-9 — 폴링에 자체 타이머를 쓰지 않는다 (01
         .map((needle) => `${file}: ${needle}`)
     );
     expect(timerOffenders).toEqual([]);
+
+    // 글자 스캔의 사각 — 타이머를 `shared/time` 훅으로 감싸 부르는 파일은 허용 목록과 정확히 같다.
+    const elapsedFlagUsers = sources
+      .filter(
+        ({ source }) =>
+          /\buseElapsedFlag\b/.test(source) ||
+          /from\s+['"][^'"]*shared\/time\b/.test(source)
+      )
+      .map(({ file }) => file);
+    expect(elapsedFlagUsers).toEqual(ELAPSED_FLAG_ALLOWED);
   });
 });
 

@@ -9,6 +9,7 @@ import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { resolveSlotSwapError } from '@/features/itinerary/model/slotSwapError';
 import { swapSlotPoi } from '@/features/itinerary/model/swapSlotPoi';
 import { SlotCandidateSheet } from '@/features/itinerary/ui/SlotCandidateSheet';
+import { useElapsedFlag } from '@/shared/time/useElapsedFlag';
 import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripIdItinerary,
@@ -30,9 +31,16 @@ import {
  *   가드를 함께 옮겨야 2차 생성 중 day1-only 전체교체 PUT 이 뒷날을 덮어쓰지 않는다(traps-itinerary
  *   TRIP-467/483 잔여). 콜드캐시(GET 미도착)·PARTIAL·중복발사(firedRef) 셋을 handleConfirm 이 진다.
  *
+ * 조회 상태(TRIP-1109)도 여기가 정한다 — 응답 전(idle 포함)=loading, 10초 넘으면 slow, 실패=error,
+ * 도착=ready. 시트는 시간을 모르므로 10초 판정(`useElapsedFlag`)·[다시 시도] 잠금은 이 컨테이너가 진다. 요청은 끊지
+ * 않는다(abort·시한 없음) — slow 뒤에 응답이 오면 그대로 후보로 바뀐다.
+ *
  * 헤더 시각범위·컨셉(현 슬롯 startAt/endAt/category)도 여기서 관통시킨다 — 시트는 문자열만 받는다
  * (옛 timeBand 대체 · D5). degraded 는 시트에 안 넘긴다(강등 전용 표면 제거 · AC-6).
  */
+
+/** 이 시간이 지나도 후보 응답이 없으면 로딩 얼굴 안에 지연 안내 + [다시 시도](결정 2 — 끊지 않음). */
+const SLOW_AFTER_MS = 10_000;
 
 export interface SlotCandidatePanelContainerProps {
   tripId: string;
@@ -48,8 +56,13 @@ export function SlotCandidatePanelContainer({
   const router = useRouter();
   const queryClient = useQueryClient();
   const itinerary = useGetTripsTripIdItinerary(tripId);
-  const { mutate: fetchCandidates, data: candidatesData } =
-    usePostTripsTripIdItinerarySlotCandidates();
+  const {
+    mutate: fetchCandidates,
+    data: candidatesData,
+    isSuccess: candidatesArrived,
+    isError: candidatesFailed,
+    error: candidatesError,
+  } = usePostTripsTripIdItinerarySlotCandidates();
   const { mutate: putItinerary, isPending } =
     usePutTripsTripIdItinerary<unknown>();
 
@@ -58,12 +71,41 @@ export function SlotCandidatePanelContainer({
   // useState 잠금은 같은 틱의 둘째 탭이 옛 값을 읽어 못 막는다 — useRef 는 즉시 읽혀 펜딩 전파 전
   // 이중발사를 막는다(리포 함정 h09 firedRef · TripNewStep1 submitLockedRef 선례).
   const firedRef = useRef(false);
+  // [다시 시도] 한 틱 연타 잠금 — 같은 이유로 ref. isPending 으로 막으면 slow(=pending 중) 재시도가
+  // 죽는다. 잠금은 [다시 시도]가 다시 보일 때(error 재등장·slow 재등장) 푼다 — 응답(settle) 때만 풀면
+  // 두 번째 요청이 또 10초를 넘겨 뜬 버튼이 눌러도 아무 일 없는 침묵 실패가 된다.
+  const retryLockRef = useRef(false);
+  // attempt 는 [다시 시도]마다 바뀌어 10초를 새 요청 기준으로 다시 재게 한다.
+  const [attempt, setAttempt] = useState(0);
 
   // 마운트(=시트 열림)에 후보 조회 POST 를 딱 1회. `mutate` 는 referentially stable 이라 deps 가
   // 안정적이면 한 번만 돈다. 요청 바디는 `slotKey` 하나뿐이다(radiusM·concept·제외목록 없음).
   useEffect(() => {
     fetchCandidates({ tripId, data: { slotKey } });
   }, [fetchCandidates, tripId, slotKey]);
+
+  // idle(마운트 직후 mutate 전 한 렌더)도 "아직 응답 없음"이다 — 여기서 0건 얼굴이 새지 않게 한다.
+  const waiting = !candidatesArrived && !candidatesFailed;
+  const isSlow = useElapsedFlag(waiting, SLOW_AFTER_MS, attempt);
+  const fetchState = candidatesFailed
+    ? 'error'
+    : candidatesArrived
+      ? 'ready'
+      : isSlow
+        ? 'slow'
+        : 'loading';
+
+  useEffect(() => {
+    if (fetchState === 'error' || fetchState === 'slow')
+      retryLockRef.current = false;
+  }, [fetchState]);
+
+  function handleRetryFetch(): void {
+    if (retryLockRef.current) return;
+    retryLockRef.current = true;
+    setAttempt((count) => count + 1);
+    fetchCandidates({ tripId, data: { slotKey } });
+  }
 
   const parsed = parseSlotKey(slotKey);
 
@@ -147,6 +189,11 @@ export function SlotCandidatePanelContainer({
         })
       }
       onClose={onClose}
+      fetchState={fetchState}
+      fetchErrorMessage={
+        candidatesFailed ? resolveSlotSwapError(candidatesError).message : null
+      }
+      onRetryFetch={handleRetryFetch}
     />
   );
 }

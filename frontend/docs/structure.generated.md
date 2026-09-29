@@ -1411,6 +1411,9 @@
 - `src/shared/storage/index.ts`  →  TokenBundle · saveTokens · getTokens · clearTokens · hasStoredToken
 - `src/shared/storage/installId.ts`  →  getInstallId
 
+## src/shared/time/
+- `src/shared/time/useElapsedFlag.ts`  →  useElapsedFlag
+
 ## src/shared/ui/
 - `src/shared/ui/BottomTabBar.tsx`  →  ShellTabKey · shellTabHref · BottomTabBarProps · BottomTabBar
 - `src/shared/ui/CollageEmptyState.tsx`  →  CollageEmptyStateProps · CollageEmptyState
@@ -1476,4 +1479,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 1030개 파일
+합계 1031개 파일

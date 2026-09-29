@@ -22,7 +22,8 @@ import path from 'path';
  *  - `duration` 식별자를 갖지 않는다(INV-3 · 소요 시간은 솔버 검증값만 쓴다)
  *  - 서버 상태를 Zustand 로 복사하지 않는다(`frontend/README.md` §66)
  *  - URL 리터럴을 만들지 않는다(INV-1 — 클라가 이미지·엔드포인트를 지어내지 않는다)
- *  - 타이머를 쓰지 않는다(01b Seed Q9 — 안내는 **다음 조작 시** 사라진다)
+ *  - 타이머를 쓰지 않는다(01b Seed Q9 — 안내는 **다음 조작 시** 사라진다). 타이머를 감싼
+ *    `shared/time` 훅은 명시 허용 목록의 page 만 쓴다(TRIP-1109)
  *  - 토큰화된 색을 raw hex 로 우회하지 않는다
  *  + d02 의 라우트·배럴·배선·화면이 각자의 책임만 진다
  *
@@ -67,6 +68,24 @@ const TOKENIZED_HEX = [
   '#f7f7f7',
   '#ffe4e9',
 ];
+
+/** `shared/time` 의 경과 플래그 훅 — 안에서 `setTimeout` 을 쓴다. 아래 타이머 스캔은 글자만 보므로
+ * page 가 이 훅을 부르면 스캔이 못 본다. 그래서 쓰는 page 를 **명시 허용 목록**으로만 허용한다
+ * (`placeExploreStateStructure` 의 Toast `TIMER_EXEMPT` 와 같은 "보이는 면제" · TRIP-1109 03b 경고 1).
+ * 목록은 정렬 순서로 적는다(스캔 결과가 정렬돼 나온다). */
+const ELAPSED_FLAG_REL = 'shared/time/useElapsedFlag.ts';
+const ELAPSED_FLAG_ALLOWED = [
+  'pages/itinerary-draft/ui/SlotCandidatePanelContainer.tsx',
+];
+
+/** 경과 플래그 사용 판정 — 훅 이름을 부르거나 `shared/time` 에서 무엇이든 가져오면 쓴 것으로 본다
+ * (같은 폴더에 이름만 바꾼 두 번째 타이머 훅을 두는 우회까지 잡는다). */
+function usesElapsedFlag(source: string): boolean {
+  return (
+    /\buseElapsedFlag\b/.test(source) ||
+    /from\s+['"][^'"]*shared\/time\b/.test(source)
+  );
+}
 
 /**
  * 스캔 전처리 — 주석을 걷어낸다. 블록 주석을 먼저 지운다(순서를 바꾸면 한 줄 안의 코드가
@@ -212,6 +231,31 @@ describe('G-3·G-4 · pages 층 전수 — 층 규칙과 불변식', () => {
       )
     );
     expect(hexOffenders).toEqual([]);
+  });
+
+  it('경과 플래그 훅(타이머를 감싼 shared 훅)을 쓰는 page 가 허용 목록과 정확히 같다', () => {
+    // 긍정 짝 — 훅이 그 자리에 실재하고 정말 타이머를 쓴다. 이 전제가 무너지면(훅 이동·타이머 제거)
+    // 아래 목록 대조가 무엇을 막는지 불분명해지므로 먼저 red 로 알린다.
+    const hook = readOne(ELAPSED_FLAG_REL);
+    expect(hook).toMatch(/export function useElapsedFlag\b/);
+    expect(hook).toContain('setTimeout');
+
+    // 탐지기 자가검사(전처리 + 탐지 조합) — 주석 속 언급은 걷혀 사용으로 안 치고, 코드의 import
+    // 는 걷힌 뒤에도 살아남는다.
+    expect(
+      usesElapsedFlag(stripComments('// useElapsedFlag 는 쓰지 않는다'))
+    ).toBe(false);
+    expect(
+      usesElapsedFlag(
+        stripComments("import { useDelay } from '@/shared/time/useDelay';")
+      )
+    ).toBe(true);
+
+    // 목록 밖 page 가 쓰면 red(새 우회), 목록의 page 가 더는 안 쓰면 red(낡은 면제) — 정확 일치.
+    const users = pagesSources()
+      .filter(({ source }) => usesElapsedFlag(source))
+      .map(({ file }) => file);
+    expect(users).toEqual(ELAPSED_FLAG_ALLOWED);
   });
 });
 

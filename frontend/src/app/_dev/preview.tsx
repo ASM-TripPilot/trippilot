@@ -5501,6 +5501,95 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // h08 후보 조회 상태(TRIP-1109) — Figma 프레임이 없어(결정 1) 이 3키의 6-b 캡처가 Figma 반영 후보다.
+  // 시트는 시간을 모르므로 slow 도 정적 prop 으로 그린다. 실패 문구는 resolveSlotSwapError fallback 원문.
+  {
+    key: 'h08-candidate-sheet-loading',
+    band: 'h',
+    label: 'h08 · 다른 후보 조회 중',
+    login: null,
+    render: () => (
+      <ItinerarySlotCandidateSheet
+        current={{
+          poiId: 'cur',
+          nameKo: '부산시립미술관',
+          tags: ['미술', '실내'],
+          imageUrl: DRAFT_PREVIEW_PHOTOS[0],
+          distanceRange: '560m',
+        }}
+        candidates={[]}
+        startAt="13:00:00"
+        endAt="14:30:00"
+        category="전시"
+        selectedPoiId={null}
+        onSelectRadio={noop}
+        onConfirm={noop}
+        isPending={false}
+        onPressPlaceSearch={noop}
+        onClose={noop}
+        fetchState="loading"
+      />
+    ),
+  },
+  {
+    key: 'h08-candidate-sheet-slow',
+    band: 'h',
+    label: 'h08 · 다른 후보 조회 지연',
+    login: null,
+    render: () => (
+      <ItinerarySlotCandidateSheet
+        current={{
+          poiId: 'cur',
+          nameKo: '부산시립미술관',
+          tags: ['미술', '실내'],
+          imageUrl: DRAFT_PREVIEW_PHOTOS[0],
+          distanceRange: '560m',
+        }}
+        candidates={[]}
+        startAt="13:00:00"
+        endAt="14:30:00"
+        category="전시"
+        selectedPoiId={null}
+        onSelectRadio={noop}
+        onConfirm={noop}
+        isPending={false}
+        onPressPlaceSearch={noop}
+        onClose={noop}
+        fetchState="slow"
+        onRetryFetch={noop}
+      />
+    ),
+  },
+  {
+    key: 'h08-candidate-sheet-fetch-error',
+    band: 'h',
+    label: 'h08 · 다른 후보 조회 실패',
+    login: null,
+    render: () => (
+      <ItinerarySlotCandidateSheet
+        current={{
+          poiId: 'cur',
+          nameKo: '부산시립미술관',
+          tags: ['미술', '실내'],
+          imageUrl: DRAFT_PREVIEW_PHOTOS[0],
+          distanceRange: '560m',
+        }}
+        candidates={[]}
+        startAt="13:00:00"
+        endAt="14:30:00"
+        category="전시"
+        selectedPoiId={null}
+        onSelectRadio={noop}
+        onConfirm={noop}
+        isPending={false}
+        onPressPlaceSearch={noop}
+        onClose={noop}
+        fetchState="error"
+        fetchErrorMessage="지금은 바꿀 수 없어요. 잠시 후 다시 시도해 주세요"
+        onRetryFetch={noop}
+      />
+    ),
+  },
   // h09 컨셉 고르기(TRIP-794) — 같이 고르기(co-pick) 위저드의 컨셉 선택 화면(Figma 3845:2227). 진행 줄·
   // CoPickStepper 위젯 노드·컨셉 카드 5장을 픽스처 props 로 태운다(순수 화면 · api import 0 이라 프리뷰
   // 지뢰 목 무해). 배지·N곳은 BE 계약 부재라 미표시(D5). 현재 단 빨강·색은 jest

@@ -327,3 +327,236 @@ describe('🔴 SlotCandidateSheet — scrim·바텀시트 복귀(AC-1·D3)', () 
     expect(source).toContain('itinerary-candidate-sheet');
   });
 });
+
+/**
+ * TRIP-1109 — 후보 조회 상태 얼굴(loading·slow·error). 시트는 시간을 모른다: 컨테이너가 정한
+ * `fetchState` 를 **정적 prop** 으로 받아 그린다(프리뷰가 slow 를 정적으로 캡처할 수 있어야 한다).
+ * 생략하면 'ready'(응답 도착)라 위 S1~S15 는 그대로다.
+ *
+ * ★ 후보 행 개수는 `-radio-` 로 센다 — 위 CANDIDATE_ROOT 는 새 `loading`·`skeleton-row` 도 후보로
+ *   세므로(넓은 그물로 남겨 둔다) 로딩 중 "후보 0행" 단언에는 못 쓴다(02a ★10).
+ */
+const EMPTY_TITLE = '이 슬롯에 맞는 다른 후보가 없어요';
+const FETCH_FALLBACK = '지금은 바꿀 수 없어요. 잠시 후 다시 시도해 주세요';
+const RADIO_ROWS = /^itinerary-candidate-radio-/;
+const RAW_HEX = /#[0-9a-fA-F]{3,8}/;
+
+type SheetProps = Parameters<typeof SlotCandidateSheet>[0];
+
+/** 루트 아래(자신 포함) className 문자열을 모두 모은다 — V1 raw hex 스캔 재료. */
+function classNamesUnder(testID: string): string[] {
+  return screen
+    .getByTestId(testID)
+    .findAll((node) => typeof node.props.className === 'string')
+    .map((node) => String(node.props.className));
+}
+
+describe('🔴 SlotCandidateSheet — 조회 상태 얼굴(TRIP-1109 · L1·L2·T2·E1)', () => {
+  it('S16 · loading — 스켈레톤 3줄·현재 행·비활성 교체하기, 0건 얼굴은 없다(INV-4)', () => {
+    renderSheet({ fetchState: 'loading', candidates: [] });
+
+    const loading = screen.getByTestId('itinerary-candidate-loading');
+    expect(
+      within(loading).getAllByTestId('itinerary-candidate-skeleton-row')
+    ).toHaveLength(3);
+
+    // 도착 전에 0건을 단정하지 않는다.
+    expect(screen.queryByTestId('itinerary-candidate-empty')).toBeNull();
+    expect(screen.queryByText(EMPTY_TITLE)).toBeNull();
+    expect(screen.queryByTestId('itinerary-candidate-empty-search')).toBeNull();
+    expect(screen.queryAllByTestId(RADIO_ROWS)).toHaveLength(0);
+
+    // 이미 손에 있는 것(헤더·현재 행)은 그린다. 교체하기는 있되 눌리지 않는다.
+    expect(
+      screen.getByTestId('itinerary-candidate-sheet-title')
+    ).toHaveTextContent('부산시립미술관 대신');
+    expect(screen.getByTestId('itinerary-candidate-current')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('itinerary-candidate-place-search')
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('itinerary-candidate-confirm').props.accessibilityState
+        .disabled
+    ).toBe(true);
+
+    // 아직 10초 전이고 실패도 아니다.
+    expect(screen.queryByTestId('itinerary-candidate-slow')).toBeNull();
+    expect(screen.queryByTestId('itinerary-candidate-fetch-retry')).toBeNull();
+    expect(screen.queryByTestId('itinerary-candidate-fetch-error')).toBeNull();
+  });
+
+  it('S17 · slow — 로딩 얼굴 **안에** 안내 줄 + [다시 시도], 누르면 onRetryFetch 1회', () => {
+    const onRetryFetch = jest.fn();
+    renderSheet({ fetchState: 'slow', candidates: [], onRetryFetch });
+
+    expect(screen.getByTestId('itinerary-candidate-slow')).toHaveTextContent(
+      /시간이 걸리고 있어요/
+    );
+    // slow 는 별도 얼굴이 아니라 로딩에 겹친다 — 스켈레톤은 계속 보인다.
+    expect(screen.getByTestId('itinerary-candidate-loading')).toBeOnTheScreen();
+    expect(screen.queryByTestId('itinerary-candidate-empty')).toBeNull();
+    expect(
+      screen.getByTestId('itinerary-candidate-confirm').props.accessibilityState
+        .disabled
+    ).toBe(true);
+
+    const retry = screen.getByTestId('itinerary-candidate-fetch-retry');
+    expect(retry).toHaveTextContent(/다시 시도/);
+    fireEvent.press(retry);
+    expect(onRetryFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('S18 · error — 점선 카드(경고 글리프 + 문구 그대로) + 하단 [다시 시도], 교체하기·0건은 없다', () => {
+    const onRetryFetch = jest.fn();
+    renderSheet({
+      fetchState: 'error',
+      fetchErrorMessage: FETCH_FALLBACK,
+      candidates: [],
+      onRetryFetch,
+    });
+
+    const card = screen.getByTestId('itinerary-candidate-fetch-error');
+    // 문구는 받은 그대로 한 칸(완전 일치) — 잘라 붙이거나 바꾸면 red.
+    expect(within(card).getByText(FETCH_FALLBACK)).toBeOnTheScreen();
+    expect(
+      within(card).getByTestId('itinerary-candidate-fetch-error-icon')
+    ).toBeOnTheScreen();
+
+    // 조회 상태일 뿐 결과가 아니다 — 현재 행·장소 검색 탈출구는 남는다(Q2).
+    expect(screen.getByTestId('itinerary-candidate-current')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('itinerary-candidate-place-search')
+    ).toBeOnTheScreen();
+
+    // 교체하기 자리를 [다시 시도]가 대신한다. 다른 얼굴은 섞이지 않는다.
+    expect(screen.queryByTestId('itinerary-candidate-confirm')).toBeNull();
+    expect(screen.queryByTestId('itinerary-candidate-loading')).toBeNull();
+    expect(screen.queryByTestId('itinerary-candidate-empty')).toBeNull();
+    expect(screen.queryByTestId('itinerary-candidate-empty-search')).toBeNull();
+    expect(screen.queryByTestId('itinerary-candidate-slow')).toBeNull();
+    // 조회 실패는 PUT 인라인 오류(`-error`)와 다른 자리다.
+    expect(screen.queryByTestId('itinerary-candidate-error')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('itinerary-candidate-fetch-retry'));
+    expect(onRetryFetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('🔴 SlotCandidateSheet — 조회 상태 구조·INV-3·기본값(TRIP-1109 · V1·G1)', () => {
+  it('S19 · V1(Q1) — 실패 카드는 0건 점선 카드와 같은 클래스다(같은 시트 안 모양 일치)', () => {
+    const errorView = renderSheet({
+      fetchState: 'error',
+      fetchErrorMessage: FETCH_FALLBACK,
+      candidates: [],
+    });
+    const errorClass = screen.getByTestId('itinerary-candidate-fetch-error')
+      .props.className;
+    errorView.unmount();
+
+    renderSheet({ candidates: [] });
+    const emptyClass = screen.getByTestId('itinerary-candidate-empty').props
+      .className;
+
+    // 앵커 — 둘 다 undefined 여도 `toBe` 는 참이라, 점선 카드임을 먼저 못박는다.
+    expect(errorClass).toContain('border-dashed');
+    expect(errorClass).toBe(emptyClass);
+  });
+
+  it.each<[string, Partial<SheetProps>, string[]]>([
+    [
+      'loading',
+      { fetchState: 'loading', candidates: [] },
+      ['itinerary-candidate-loading'],
+    ],
+    [
+      'slow',
+      { fetchState: 'slow', candidates: [] },
+      ['itinerary-candidate-loading', 'itinerary-candidate-slow'],
+    ],
+    [
+      'error',
+      {
+        fetchState: 'error',
+        fetchErrorMessage: FETCH_FALLBACK,
+        candidates: [],
+      },
+      ['itinerary-candidate-fetch-error', 'itinerary-candidate-fetch-retry'],
+    ],
+  ])(
+    'S20 · V1 — %s 얼굴의 새 노드 className 에 raw hex 0',
+    (_face, props, roots) => {
+      renderSheet(props);
+
+      const classes = roots.flatMap(classNamesUnder);
+      // 앵커 — 실제로 훑었다(빈 목록이면 공허 통과).
+      expect(classes.length).toBeGreaterThan(0);
+      expect(classes.filter((value) => RAW_HEX.test(value))).toEqual([]);
+    }
+  );
+
+  it.each<[string, Partial<SheetProps>, string]>([
+    [
+      'loading',
+      { fetchState: 'loading', candidates: [] },
+      'itinerary-candidate-loading',
+    ],
+    [
+      'slow',
+      { fetchState: 'slow', candidates: [] },
+      'itinerary-candidate-slow',
+    ],
+    [
+      'error',
+      {
+        fetchState: 'error',
+        fetchErrorMessage: FETCH_FALLBACK,
+        candidates: [],
+      },
+      'itinerary-candidate-fetch-error',
+    ],
+    [
+      'ready 0건',
+      { fetchState: 'ready', candidates: [] },
+      'itinerary-candidate-empty',
+    ],
+    ['ready 2건', { fetchState: 'ready' }, 'itinerary-candidate-radio-p2'],
+  ])(
+    'S21 · G1 INV-3 — %s 얼굴에 소요시간 문자열 0(거리만)',
+    (_face, props, anchor) => {
+      renderSheet(props);
+
+      // 앵커 먼저 — 그 얼굴을 실제로 그렸을 때만 아래 부재 단언이 의미가 있다(02a ★6).
+      expect(screen.getByTestId(anchor)).toBeOnTheScreen();
+      const sheet = within(screen.getByTestId('itinerary-candidate-sheet'));
+      expect(sheet.queryByText(/\d+\s*(분|시간)|소요/)).toBeNull();
+    }
+  );
+
+  it('S22 · 기본값 — fetchState 생략 + 후보 0건이면 0건 얼굴(응답 도착으로 읽는다)', () => {
+    renderSheet({ candidates: [] });
+
+    expect(screen.getByTestId('itinerary-candidate-empty')).toBeOnTheScreen();
+    expect(screen.queryByTestId('itinerary-candidate-loading')).toBeNull();
+    expect(screen.queryByTestId('itinerary-candidate-fetch-error')).toBeNull();
+    expect(screen.queryByTestId('itinerary-candidate-slow')).toBeNull();
+  });
+
+  it('S23 · 기본값 — ready + 후보 2건이면 후보 행만, 조회 상태 노드는 없다', () => {
+    renderSheet({ fetchState: 'ready' });
+
+    expect(
+      screen.getByTestId('itinerary-candidate-radio-p2')
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('itinerary-candidate-radio-p3')
+    ).toBeOnTheScreen();
+    for (const id of [
+      'itinerary-candidate-loading',
+      'itinerary-candidate-slow',
+      'itinerary-candidate-fetch-retry',
+      'itinerary-candidate-fetch-error',
+    ]) {
+      expect(screen.queryByTestId(id)).toBeNull();
+    }
+  });
+});
