@@ -20,27 +20,25 @@ export function Skeleton({
   className,
   style,
 }: SkeletonProps): ReactElement {
-  const opacity = useRef(new Animated.Value(1)).current;
+  const progress = useRef(new Animated.Value(0)).current;
+  const opacity = progress.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [1, 0.45, 1],
+  });
 
+  // loop 의 자식이 네이티브 timing 하나여야 반복이 네이티브로 넘어간다(sequence 면 JS 가 매 바퀴 재시작).
   useEffect(
     () =>
       startUnlessReduceMotion(
         Animated.loop(
-          Animated.sequence([
-            Animated.timing(opacity, {
-              toValue: 0.45,
-              duration: 800,
-              useNativeDriver: true,
-            }),
-            Animated.timing(opacity, {
-              toValue: 1,
-              duration: 800,
-              useNativeDriver: true,
-            }),
-          ])
+          Animated.timing(progress, {
+            toValue: 1,
+            duration: 1600,
+            useNativeDriver: true,
+          })
         )
       ),
-    [opacity]
+    [progress]
   );
 
   return (
