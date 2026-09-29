@@ -92,7 +92,14 @@ export const ShadowDecorator = ({
 }: {
   children?: React.ReactNode;
 }) => <>{children}</>;
-export const NestableDraggableFlatList = MockDraggableFlatList;
+// TRIP-1112 — Nestable 은 **별 함수**로 감싸 기본 목을 그린다. 같은 함수(옛 재수출)면 plain
+// DraggableFlatList 로 되돌려도 `UNSAFE_getByType(NestableDraggableFlatList)` 가 green 이다. 안쪽이 기본
+// 목이라 `UNSAFE_getByType(DraggableFlatList)` 하네스(editDragList)·`__dragLog` 는 그대로 산다. props 는
+// 가공 없이 흘린다 — 실물의 activationDistance 20·scrollEnabled false 기본값은 흉내 내지 않는다(뷰가 **넘긴**
+// 값만 보이게, 02a ★3).
+export function NestableDraggableFlatList<T>(props: MockDraggableProps<T>) {
+  return <MockDraggableFlatList {...props} />;
+}
 export const NestableScrollContainer = ({
   children,
   ...rest

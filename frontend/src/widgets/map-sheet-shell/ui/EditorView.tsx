@@ -1,10 +1,13 @@
 import type { ReactElement } from 'react';
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import DraggableFlatList, {
+import {
+  NestableDraggableFlatList,
+  NestableScrollContainer,
   type DragEndParams,
   type RenderItemParams,
 } from 'react-native-draggable-flatlist';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
 import type { MapCenter, MapPin } from '@/shared/map';
@@ -82,6 +85,10 @@ const GUIDE_IN_TRIP =
 const DROP_SENTINEL = 'itinerary-edit-drop-sentinel';
 type ListItem = EditorViewSlot | typeof DROP_SENTINEL;
 
+// 셸 하단 CTA 바 높이 — CtaBar pt-md(12) + 버튼 52 + pb-lg(16) + 윗선 ≈ 81.3pt(TRIP-1112 실기 실측)를 올림.
+// 스크롤 끝의 「장소 추가」·안내줄이 CTA 바 뒤에 숨지 않게 본문 하단 여백으로 쓴다.
+const CTA_BAR_HEIGHT = 82;
+
 export function EditorView({
   center,
   pins,
@@ -106,6 +113,8 @@ export function EditorView({
   // 끌기 진행 중(onDragBegin ~ onDragEnd) — 뷰 국소 일시 상태(widgetsStructure STATE_EXEMPT 1).
   const [dragging, setDragging] = useState(false);
   const dragFace = isDragging === true || dragging;
+  // CTA 바가 하단 안전 영역 위에 얹히므로 여백에 그 높이를 더한다. Provider 없으면(jest) 0 — 셸과 같은 읽기.
+  const bottomInset = useContext(SafeAreaInsetsContext)?.bottom ?? 0;
 
   // 고정·방문 완료 슬롯 — 끌기·드롭 삭제·시각 편집 전부 막는다(INV-U3-03 · TRIP-753 AC-11).
   const isLocked = (slot: EditorViewSlot): boolean =>
@@ -255,53 +264,63 @@ export function EditorView({
       center={center}
       pins={pins}
       overlay={overlay}
-      header={header}
+      header={null}
       cta={cta}
       initialIndex={2}
+      // TRIP-1112: 셸 스크롤 안에 드래그 리스트를 넣으면 카드 위 스와이프를 리스트 Pan 이 먼저 가져가 스크롤도
+      // 시트도 안 움직였다(실기). 셸 스크롤을 끄고 시트는 손잡이로만 끌며, 스크롤은 Nestable 컨테이너가
+      // 리스트와 판정을 나눠 갖는다(실기 스파이크 A 통과). 두 값은 정적이다 — 렌더 중 바꾸면 본문이 재마운트된다.
+      bodyScroll={false}
+      contentPanning={false}
     >
-      <View className="px-lg pb-2xl pt-xs">
-        {/* 셸 body 스크롤 안에 중첩 — 리스트 자체 스크롤은 끈다(셸 무수정, 01b Q4). */}
-        <DraggableFlatList
-          testID="itinerary-edit-list"
-          data={data}
-          keyExtractor={(item) =>
-            item === DROP_SENTINEL ? DROP_SENTINEL : `card-${item.poiId}`
-          }
-          renderItem={renderItem}
-          onDragBegin={() => setDragging(true)}
-          onDragEnd={handleDragEnd}
-          // 원래 자리 점선 칸(Figma `4196:2468`) — 번호 원(24 + gap 10) 자리는 비운다.
-          renderPlaceholder={() => (
-            <View className="mb-md ml-[34px] flex-1 rounded-card border border-dashed border-hairline-strong" />
-          )}
-          scrollEnabled={false}
-        />
+      <NestableScrollContainer
+        contentContainerStyle={{ paddingBottom: CTA_BAR_HEIGHT + bottomInset }}
+      >
+        {header}
+        <View className="px-lg pb-2xl pt-xs">
+          {/* activationDistance·scrollEnabled 는 넘기지 않는다 — 라이브러리 기본(20·false)을 {...props} 가
+              덮으면(undefined 라도) 활성 거리 0 이 돼 스와이프를 드래그가 다시 뺏는다. */}
+          <NestableDraggableFlatList
+            testID="itinerary-edit-list"
+            data={data}
+            keyExtractor={(item) =>
+              item === DROP_SENTINEL ? DROP_SENTINEL : `card-${item.poiId}`
+            }
+            renderItem={renderItem}
+            onDragBegin={() => setDragging(true)}
+            onDragEnd={handleDragEnd}
+            // 원래 자리 점선 칸(Figma `4196:2468`) — 번호 원(24 + gap 10) 자리는 비운다.
+            renderPlaceholder={() => (
+              <View className="mb-md ml-[34px] flex-1 rounded-card border border-dashed border-hairline-strong" />
+            )}
+          />
 
-        <View className="gap-md">
-          {/* 점선 "+ 장소 추가"(index 미지정 = 말미, AC-8). */}
-          <Pressable
-            testID="itinerary-edit-add-place"
-            onPress={onPressAddPlace}
-            className="flex-row items-center justify-center gap-xs rounded-card border border-dashed border-hairline-strong bg-canvas py-md"
-          >
-            <PlusGlyph size={24} />
-            <Text className="font-noto-bold text-body font-bold text-muted">
-              장소 추가
-            </Text>
-          </Pressable>
+          <View className="gap-md">
+            {/* 점선 "+ 장소 추가"(index 미지정 = 말미, AC-8). */}
+            <Pressable
+              testID="itinerary-edit-add-place"
+              onPress={onPressAddPlace}
+              className="flex-row items-center justify-center gap-xs rounded-card border border-dashed border-hairline-strong bg-canvas py-md"
+            >
+              <PlusGlyph size={24} />
+              <Text className="font-noto-bold text-body font-bold text-muted">
+                장소 추가
+              </Text>
+            </Pressable>
 
-          {/* 안내줄(AC-12) — Figma 는 "장소 추가" 아래(h12·i07 공통), 문구만 모드별. */}
-          <View
-            testID="itinerary-edit-guide"
-            className="flex-row items-center gap-[6px]"
-          >
-            <InfoCircleGlyph size={16} />
-            <Text className="font-noto text-caption text-muted">
-              {inTrip ? GUIDE_IN_TRIP : GUIDE_H12}
-            </Text>
+            {/* 안내줄(AC-12) — Figma 는 "장소 추가" 아래(h12·i07 공통), 문구만 모드별. */}
+            <View
+              testID="itinerary-edit-guide"
+              className="flex-row items-center gap-[6px]"
+            >
+              <InfoCircleGlyph size={16} />
+              <Text className="font-noto text-caption text-muted">
+                {inTrip ? GUIDE_IN_TRIP : GUIDE_H12}
+              </Text>
+            </View>
           </View>
         </View>
-      </View>
+      </NestableScrollContainer>
     </MapSheetShell>
   );
 }

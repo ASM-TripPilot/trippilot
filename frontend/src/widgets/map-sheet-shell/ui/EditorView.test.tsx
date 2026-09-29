@@ -1,5 +1,8 @@
 import type { ReactElement } from 'react';
 import { StyleSheet } from 'react-native';
+import BottomSheet from '@gorhom/bottom-sheet';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
+import type { ReactTestInstance } from 'react-test-renderer';
 import {
   fireEvent,
   render,
@@ -856,5 +859,164 @@ describe('🔴 EditorView · D8 — 끌리는 카드는 떠 있는 얼굴(빨강
     expect(classTokens(`slot-stopcard-${keyA}`)).not.toContain(
       'border-primary'
     );
+  });
+});
+
+// ── TRIP-1112 · 시트 안 중첩 스크롤 구조(해법 A, 01b D2) ──────────────────────────────────────────
+//
+// 실기 결함: 카드 위 스와이프가 스크롤도 시트도 못 움직이고(드래그 리스트 Pan 이 활성 거리 0 으로 먼저
+// 이김), 스크롤을 고쳐도 「장소 추가」·안내줄이 CTA 바 뒤에 남는다. 고친 모양 = 셸 본문 스크롤을 끄고
+// (bodyScroll false) 시트는 손잡이로만 끌며(contentPanning false), 편집기가 `NestableScrollContainer`
+// 하나에 헤더·리스트·「장소 추가」·안내줄을 담고 리스트는 `NestableDraggableFlatList` 로 그린다.
+//
+// ⚠️ 원리적 사각: 두 목(gorhom·draggable)이 모두 통과형이라 **제스처가 누구에게 가는지는 jest 가 못 본다**
+//   — 스크롤·롱프레스·자동 스크롤·시트 불변·손잡이 스냅은 6-b 실기(AC-R1~R9). 여기선 그 판정이 라이브러리
+//   설계대로 돌 **구조**만 잠근다. 지금 전수 green 인 채로 실기가 죽어 있던 것이 그 증거다(02a ★0).
+//
+// 3동작 뼈대: 준비=i07/h12 픽스처(+안전 영역) 렌더 → 실행=렌더 → 단언=시트 본체 prop·조상 겹수·컨테이너 props.
+
+/** snapPoints 를 쥔 host 노드 = 셸이 그린 시트 본체. */
+function editorSheetHost(): ReactTestInstance {
+  const host = screen.root
+    .findAll((node) => Array.isArray(node.props?.snapPoints))
+    .find((node) => typeof node.type === 'string');
+  if (!host) throw new Error('시트 host 노드가 없다');
+  return host;
+}
+
+/** gorhom 통과형 조상 — 목에선 시트 본체와 셸 기본 스크롤러(BottomSheetScrollView)가 같은 타입이다(02a ★1). */
+function sheetPassthroughAncestors(
+  node: ReactTestInstance
+): ReactTestInstance[] {
+  const found: ReactTestInstance[] = [];
+  for (let cur = node.parent; cur; cur = cur.parent) {
+    if (cur.type === (BottomSheet as unknown)) found.push(cur);
+  }
+  return found;
+}
+
+function nestedContainer(): ReactTestInstance {
+  return screen.UNSAFE_getByType(DraggableModule.NestableScrollContainer);
+}
+
+/** i07 픽스처를 안전 영역 하단 값과 함께 그린다(null = Provider 없음 — 이 리포 jest 의 기본 상태). */
+function renderI07WithBottomInset(bottom: number | null): void {
+  const view = (
+    <EditorView
+      center={CENTER}
+      days={buildPlanDayTabs(daysOf('2026-06-10', I07_DATE, '2026-06-12'))}
+      slots={I07_SLOTS}
+      activeDayIndex={1}
+      activeDate={I07_DATE}
+      dateLabel="6월 11일(목)"
+      completedSlotKeys={[k('p1'), k('p2')]}
+      inTrip
+      onSelectDay={jest.fn()}
+      onBack={jest.fn()}
+      onPressTimeChip={jest.fn()}
+      onPressAddPlace={jest.fn()}
+      onPressAddBetween={jest.fn()}
+      onSave={jest.fn()}
+    />
+  );
+  render(
+    bottom === null ? (
+      view
+    ) : (
+      <SafeAreaInsetsContext.Provider
+        value={{ top: 47, bottom, left: 0, right: 0 }}
+      >
+        {view}
+      </SafeAreaInsetsContext.Provider>
+    )
+  );
+}
+
+describe('🔴 EditorView · N1 — 시트는 손잡이로만 끌린다: 콘텐츠 pan 정적 off (TRIP-1112 AC-J1)', () => {
+  it.each([
+    ['i07(inTrip)', { inTrip: true }],
+    ['h12·직접 짜기', {}],
+  ])(
+    '%s 에서 시트 본체가 enableContentPanningGesture=false 를 받는다',
+    (_label, overrides) => {
+      renderI07(overrides);
+
+      // toBe(false) — prop 을 지우면 undefined = 라이브러리 기본 true 로 되돌아가 스와이프를 시트가 뺏는다.
+      //   짝(기본 셸은 미지정)은 MapSheetShell.bodyScroll SH18c 가 잡는다.
+      expect(editorSheetHost().props.enableContentPanningGesture).toBe(false);
+    }
+  );
+});
+
+describe('🔴 EditorView · N2 — 헤더·리스트·장소 추가·안내줄이 한 NestableScrollContainer 안에 차례로 (TRIP-1112 AC-J2)', () => {
+  it('컨테이너는 하나, 네 표면이 그 안에 헤더 → 리스트 → 장소 추가 → 안내줄 순서이고 헤더는 한 번만 그려진다', () => {
+    renderI07({ inTrip: true });
+
+    expect(
+      screen.UNSAFE_getAllByType(DraggableModule.NestableScrollContainer)
+    ).toHaveLength(1);
+    const inside = within(nestedContainer());
+    const ids = [
+      'sheet-header-root',
+      EDIT_LIST,
+      'itinerary-edit-add-place',
+      'itinerary-edit-guide',
+    ];
+    ids.forEach((id) => expect(inside.getByTestId(id)).toBeOnTheScreen());
+    // 셸 header 슬롯에도 넘기면 헤더가 두 번 뜬다(셸 header 는 null — 01b D2).
+    expect(screen.getAllByTestId('sheet-header-root')).toHaveLength(1);
+
+    const order = treeOrder();
+    const positions = ids.map((id) => order.indexOf(id));
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
+  });
+});
+
+describe('🔴 EditorView · N3 — 스크롤 안의 스크롤 금지: 셸 기본 스크롤러가 조상에 없다 (TRIP-1112 AC-J2)', () => {
+  it('컨테이너·리스트 위 통과형 조상은 시트 본체 한 겹뿐이다', () => {
+    renderI07({ inTrip: true });
+
+    for (const node of [nestedContainer(), screen.getByTestId(EDIT_LIST)]) {
+      const ancestors = sheetPassthroughAncestors(node);
+      // 셸이 BottomSheetScrollView 로 한 번 더 감싸면 2겹이 된다(SH18c 가 기본 경로 2겹을 짝으로 잡는다).
+      expect(ancestors).toHaveLength(1);
+      expect(Array.isArray(ancestors[0].props.snapPoints)).toBe(true);
+    }
+  });
+});
+
+describe('🔴 EditorView · N4 — 리스트는 NestableDraggableFlatList, 활성 거리·스크롤 prop 을 넘기지 않는다 (TRIP-1112 AC-J3)', () => {
+  it('itinerary-edit-list 가 Nestable 리스트이고, props 키에 activationDistance·scrollEnabled 가 없다', () => {
+    renderI07({ inTrip: true });
+
+    const nestable = screen.UNSAFE_getByType(
+      DraggableModule.NestableDraggableFlatList
+    );
+    expect(nestable.props.testID).toBe(EDIT_LIST);
+    // 키 자체가 없어야 한다 — 실물은 기본값(20·false) 뒤에 {...props} 를 펼쳐서, `activationDistance={undefined}`
+    //   조차 20 을 덮어 활성 거리 0(=스와이프 뺏기, H1)으로 되돌린다(02a ★3).
+    const keys = Object.keys(nestable.props);
+    expect(keys).not.toContain('activationDistance');
+    expect(keys).not.toContain('scrollEnabled');
+    // 짝 — 끌기 배선은 그대로 넘어간다(키 검사가 빈 props 로 공짜 통과하지 않게).
+    expect(keys).toEqual(
+      expect.arrayContaining(['data', 'renderItem', 'onDragBegin', 'onDragEnd'])
+    );
+  });
+});
+
+describe('🔴 EditorView · N5 — 스크롤 끝의 장소 추가·안내줄이 CTA 바 뒤에 숨지 않는다: 하단 여백 ≥ CTA 81 + 안전 영역 (TRIP-1112 AC-J8)', () => {
+  it.each<[string, number, number | null]>([
+    ['안전 영역 Provider 없음(인셋 0)', 81, null],
+    ['하단 인셋 34(홈 인디케이터 기기)', 115, 34],
+    ['하단 인셋 120(고정값으로는 못 맞추는 큰 값)', 201, 120],
+  ])('%s → contentContainerStyle.paddingBottom ≥ %i', (_label, min, bottom) => {
+    renderI07WithBottomInset(bottom);
+
+    const style = StyleSheet.flatten(
+      nestedContainer().props.contentContainerStyle
+    ) as { paddingBottom?: unknown } | undefined;
+    expect(typeof style?.paddingBottom).toBe('number');
+    expect(style?.paddingBottom as number).toBeGreaterThanOrEqual(min);
   });
 });
