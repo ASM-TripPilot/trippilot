@@ -79,6 +79,8 @@ import {
 } from '@/features/itinerary/ui/PlaceAddScreen';
 import { SlotCandidateSheet as ItinerarySlotCandidateSheet } from '@/features/itinerary/ui/SlotCandidateSheet';
 import { SlotFillScreen } from '@/features/itinerary/ui/SlotFillScreen';
+import { UnplacedMustVisitNotice } from '@/features/itinerary/ui/UnplacedMustVisitNotice';
+import type { UnplacedMustVisitRow } from '@/features/itinerary/model/unplacedMustVisits';
 import type { StayRecommendView as StayRecommendViewModel } from '@/features/itinerary/model/stayRecommend';
 import { CoPickStepper } from '@/widgets/copick-stepper/ui/CoPickStepper';
 import { GenerationDoneBar } from '@/widgets/generation-done-bar/ui/GenerationDoneBar';
@@ -718,13 +720,30 @@ const H08_PREVIEW_CONNECTORS = ['차량 · 2.1km', '0.8km', '0.6km'];
 
 const H08_PREVIEW_DATE = '2026-06-10';
 
+// TRIP-1094 못 넣은 꼭 갈 곳 2건 — 문구는 서버 `UnplacedText.kt` 원문. 이름 있음·없음 두 얼굴을 한 키에서 본다.
+const PREVIEW_UNPLACED_ROWS: UnplacedMustVisitRow[] = [
+  {
+    poiId: 'preview-unplaced-1',
+    name: '해동용궁사',
+    message:
+      '남은 시간과 이동을 고려하면 넣을 자리가 없었어요. 시각 고정을 풀거나 일정을 줄여 보세요.',
+  },
+  {
+    poiId: 'preview-unplaced-2',
+    name: null,
+    message:
+      '다른 필수 방문지와 시간이 겹쳐 넣지 못했어요. 한쪽 시각을 옮겨 주세요.',
+  },
+];
+
 // TRIP-1039 h08 셸 폴백·일부 실패 얼굴 — Figma 전용 프레임이 없어 `4221:2448` 셸 + NoticeBar `4466:1794`
 // 자리로 합성한다. 안내는 시트 맨 위(헤더 뒤·첫 카드 앞), peek 에서 보이는지는 6-b 실기 몫(바텀시트 목 사각).
 function renderH08DraftNoticeShell(options: {
   fallback: boolean;
   staleFailed: boolean;
+  unplaced?: UnplacedMustVisitRow[];
 }): ReactElement {
-  const { fallback, staleFailed } = options;
+  const { fallback, staleFailed, unplaced } = options;
   return (
     <MapSheetShell
       center={{ lat: 35.1532, lng: 129.1188 }}
@@ -757,6 +776,7 @@ function renderH08DraftNoticeShell(options: {
           staleFailed={staleFailed}
           onManualPlan={noop}
         />
+        <UnplacedMustVisitNotice rows={unplaced ?? []} />
         {H08_PREVIEW_SLOTS.flatMap((slot, index) => {
           const items = [
             <SlotStopCard
@@ -1105,8 +1125,9 @@ function renderH14PlanSheet(options: {
   meta: string;
   mapFallback?: ReactElement;
   noBase?: boolean;
+  unplaced?: UnplacedMustVisitRow[];
 }): ReactElement {
-  const { slots, meta, mapFallback, noBase } = options;
+  const { slots, meta, mapFallback, noBase, unplaced } = options;
   return (
     <MapSheetShell
       center={{ lat: 35.1532, lng: 129.1188 }}
@@ -1132,6 +1153,7 @@ function renderH14PlanSheet(options: {
       cta={[{ label: '일정 저장하기', variant: 'primary', onPress: noop }]}
     >
       <View className="gap-md px-lg pb-2xl pt-xs">
+        <UnplacedMustVisitNotice rows={unplaced ?? []} />
         {slots.flatMap((slot, index) => {
           const timeLabel = slot.isFixed
             ? slot.startAt.slice(0, 5)
@@ -4724,6 +4746,18 @@ export const PREVIEW_STATES: PreviewState[] = [
       renderH08DraftNoticeShell({ fallback: false, staleFailed: true }),
   },
   {
+    key: 'h08-draft-unplaced',
+    band: 'h',
+    label: 'h08 · 못 넣은 꼭 갈 곳',
+    login: null,
+    render: () =>
+      renderH08DraftNoticeShell({
+        fallback: false,
+        staleFailed: false,
+        unplaced: PREVIEW_UNPLACED_ROWS,
+      }),
+  },
+  {
     // h07 부분 결과(TRIP-790) — 옛 h10 DraftScreen 인라인 게이지를 공용 지도+시트 셸 얼굴로 개명·
     // 재작성. 진행 카드가 day-chip 자리를 대체(overlay)하고, peek 시트에 도착한 1일차 슬롯을 얹는다.
     // 게이지 3셀(day1 완성/day2 생성 중/day3 대기)은 3일 여행에서 도출되나 프리뷰는 표시값을 직접
@@ -4994,6 +5028,18 @@ export const PREVIEW_STATES: PreviewState[] = [
         slots: H14_PLAN_NO_BASE_SLOTS,
         meta: '4곳 · 3.5km',
         noBase: true,
+      }),
+  },
+  {
+    key: 'h14-plan-unplaced',
+    band: 'h',
+    label: 'h14 · 완성 일정 못 넣은 꼭 갈 곳',
+    login: null,
+    render: () =>
+      renderH14PlanSheet({
+        slots: H11_COPICK_PREVIEW_SLOTS,
+        meta: '4곳 · 4.1km',
+        unplaced: PREVIEW_UNPLACED_ROWS,
       }),
   },
   // h15 동선 기준 숙소 추천(TRIP-800) — 순수 뷰 + 픽스처(페이지·요청 모듈 미로드). 선택은 첫 카드 고정.

@@ -429,7 +429,12 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    182→183. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 1키만 추가하고 이 가드는
     //    안 만진다(추가 전엔 182개라 red). 정확한 j 목록은 아래 'TRIP-770' describe(18키)가 못박는다.
     //    devPreviewBandSort 는 밴드 h·l 만 잠가 band j 와 무관.
-    expect(PREVIEW_STATES).toHaveLength(183);
+    // ⚠️ TRIP-1094: 못 넣은 꼭 갈 곳 블록 2키(`h08-draft-unplaced`·`h14-plan-unplaced`, band `h`) 추가로
+    //    183→185. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 2키만 각각
+    //    `h08-draft-stale-failed`·`h14-plan-no-base` 바로 뒤에 추가하고 이 가드는 안 만진다(추가 전엔 183개라
+    //    red). 정확한 키·얼굴은 아래 'TRIP-1094' describe, h 순서는 devPreviewBandSort EXPECTED_H 가 못박는다.
+    //    Figma 전용 프레임이 없는 합성 얼굴이라(브리프 §4-4) 접힘(peek) 가시성의 육안 수단이 이 두 키뿐이다.
+    expect(PREVIEW_STATES).toHaveLength(185);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -1710,6 +1715,96 @@ describe('🔴 TRIP-1039 · h08 셸 폴백·일부 실패 프리뷰 2키 (band h
     const keys = PREVIEW_STATES.map((state) => state.key);
     expect(keys).toContain('h08-draft-collapsed');
     expect(keys).toContain('h08-draft-expanded');
+  });
+});
+
+// TRIP-1094 — 못 넣은 꼭 갈 곳 블록은 Figma 전용 프레임이 없는 합성 얼굴이라(브리프 §4-4) 6-b 육안 대조 자리가
+// 이 두 키뿐이다. 블록이 접힘(peek)에서 보이는지·긴 문구 줄바꿈은 jest 사각(바텀시트 목)이다.
+// ★ 항목 testID 는 `itinerary-unplaced-mustvisit-{poiId}` — 블록 안 다른 요소는 이 접두를 안 쓴다(02a §3-2).
+describe('🔴 TRIP-1094 · 못 넣은 꼭 갈 곳 프리뷰 2키 (band h)', () => {
+  const BLOCK = 'itinerary-unplaced-mustvisit';
+  /** 서버 `UnplacedText.kt` 원문 — 프리뷰 픽스처가 이 두 문구를 그대로 쓴다(02a §3-4). */
+  const MSG_NO_SLOT =
+    '남은 시간과 이동을 고려하면 넣을 자리가 없었어요. 시각 고정을 풀거나 일정을 줄여 보세요.';
+  const MSG_WINDOW =
+    '다른 필수 방문지와 시간이 겹쳐 넣지 못했어요. 한쪽 시각을 옮겨 주세요.';
+
+  /** 블록이 헤더 뒤·첫 카드 앞에 있고, 항목 2(이름 없는 것 정확히 1)에 두 서버 문구가 그대로 있다. */
+  function expectUnplacedBlock(): void {
+    const block = screen.getByTestId(BLOCK);
+    const items = within(block).getAllByTestId(
+      /^itinerary-unplaced-mustvisit-/
+    );
+    expect(items).toHaveLength(2);
+    // 서버 문구는 각자 자기 Text 로 완전 일치(가공 0).
+    expect(within(block).getByText(MSG_NO_SLOT)).toBeOnTheScreen();
+    expect(within(block).getByText(MSG_WINDOW)).toBeOnTheScreen();
+    // 이름 없는 항목 = 글자가 문구 하나와 완전히 같은 항목. 정확히 1개(나머지 1개는 이름이 붙어 있다).
+    const messageOnly = items.filter((item) =>
+      [MSG_NO_SLOT, MSG_WINDOW].some((message) => {
+        try {
+          expect(item).toHaveTextContent(message);
+          return true;
+        } catch {
+          return false;
+        }
+      })
+    );
+    expect(messageOnly).toHaveLength(1);
+    // 자리 — 헤더 → 블록 → 첫 카드(트리 전위 순서).
+    const order = screen
+      .getAllByTestId(
+        /^(sheet-header-root|itinerary-unplaced-mustvisit|slot-stopcard-.+)$/
+      )
+      .map((node) => String(node.props.testID));
+    expect(order[0]).toBe('sheet-header-root');
+    expect(order[1]).toBe(BLOCK);
+    expect(order[2]).toMatch(/^slot-stopcard-/);
+  }
+
+  it('h08-draft-unplaced — AI 추천안 셸(폴백·일부 실패 안내 없음) 시트 맨 위에 블록을 그린다', () => {
+    // 준비 — 새 키 엔트리(red-first: preview.tsx 에 추가 전엔 없다).
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'h08-draft-unplaced'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('h');
+    expect(entry?.label).toBe('h08 · 못 넣은 꼭 갈 곳');
+
+    // 실행
+    render(<>{entry?.render()}</>);
+
+    // 단언
+    expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
+    expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
+      'AI 추천안'
+    );
+    expect(screen.queryByTestId('itinerary-draft-fallback-banner')).toBeNull();
+    expect(screen.queryByTestId('itinerary-draft-stale-failed')).toBeNull();
+    expectUnplacedBlock();
+
+    // 이웃 앵커 — 기존 h08 안내 키가 딸려 사라지지 않았다.
+    expect(PREVIEW_STATES.map((state) => state.key)).toContain(
+      'h08-draft-stale-failed'
+    );
+  });
+
+  it('h14-plan-unplaced — 완성 일정 셸 시트 맨 위에 블록을 그린다', () => {
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'h14-plan-unplaced'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('h');
+    expect(entry?.label).toBe('h14 · 완성 일정 못 넣은 꼭 갈 곳');
+
+    render(<>{entry?.render()}</>);
+
+    expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
+    expectUnplacedBlock();
+
+    expect(PREVIEW_STATES.map((state) => state.key)).toContain(
+      'h14-plan-no-base'
+    );
   });
 });
 

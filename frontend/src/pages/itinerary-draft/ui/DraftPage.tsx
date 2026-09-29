@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 
+import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import {
   buildDraftDayTabs,
   buildDraftPins,
@@ -18,10 +19,12 @@ import {
 } from '@/features/itinerary/model/draftView';
 import type { GenerationDayState } from '@/features/itinerary/model/draftView';
 import { legDistance } from '@/features/itinerary/model/legDistance';
+import { resolveUnplacedNames } from '@/features/itinerary/model/unplacedMustVisits';
 import { isGenerationRunning } from '@/features/itinerary/model/useGenerationBusy';
 import { DraftScreen } from '@/features/itinerary/ui/DraftScreen';
 import { GenerationFallbackScreen } from '@/features/itinerary/ui/GenerationFallbackScreen';
 import { AlertCircleGlyph } from '@/features/itinerary/ui/ItineraryGlyphs';
+import { UnplacedMustVisitNotice } from '@/features/itinerary/ui/UnplacedMustVisitNotice';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { VIOLATION_NOTICE } from '@/entities/itinerary-slot/lib/violationLabel';
 import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
@@ -31,6 +34,7 @@ import {
   useGetTripsTripIdItinerary,
 } from '@/shared/api/generated/trips/trips';
 import { isNotFound } from '@/shared/api/isNotFound';
+import { getAccessToken } from '@/shared/api/tokenManager';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
 import { GenerationProgressCard } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
@@ -219,6 +223,14 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   const isManual = itinerary.data?.generationMode === 'MANUAL';
   // MANUAL 인데 장소가 0곳이면 DraftScreen 빈 얼굴(「다시 만들기」=AI 생성)을 그리지 않고 편집기로 보낸다(01 Q1).
   const redirectToManual = isManual && view.kind === 'empty';
+
+  // TRIP-1094 — 넣지 못한 꼭 갈 곳의 이름은 담은 장소에서 찾는다. 조회는 미배치가 있고 로그인일 때만
+  // (AC-13). 조회 대기·실패·게스트면 담은 장소가 빈 배열이라 서버 문구만 먼저 보인다(Q4 · INV-4).
+  const unplaced = itinerary.data?.unplacedMustVisits;
+  const { savedPlaces } = useSavedPlaces({
+    isAuthed: getAccessToken() !== null && (unplaced?.length ?? 0) > 0,
+  });
+  const unplacedRows = resolveUnplacedNames({ unplaced, savedPlaces });
 
   // 폴백·강등 배너 신호를 한 번만 접는다 — h08 라우팅 조건(깨끗한 COMPLETE 판별)과 DraftScreen
   // 프롭이 같은 값을 써야 갈라지지 않는다(같은 규칙이 두 층에서 다르게 진화하는 것 방지).
@@ -618,6 +630,7 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
                   : () => setConfirmingReset(true)
               }
             />
+            <UnplacedMustVisitNotice rows={unplacedRows} />
             {listedSlots.flatMap((slot, index) => {
               const items: ReactElement[] = [
                 <SlotStopCard
