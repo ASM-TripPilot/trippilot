@@ -468,7 +468,18 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    핸들·체크·행 높이의 육안 대조 자리가 이 키다.
     // ⚠️ TRIP-1105: d05 목적지 상세가 d01 지역 필터로 합쳐져 `destination-detail-default` → `explore-landing-region-filter`
     //    (band `d`) 1:1 교체 — 총량 185 불변. 정확한 키·얼굴은 아래 'TRIP-1105' describe 가 못박는다.
+<<<<<<< HEAD
     expect(PREVIEW_STATES).toHaveLength(195);
+||||||| parent of 344014b4 (feat: 온보딩 푸시 알림 사전 안내 카드 — 권한 요청을 일정 생성에서 온보딩으로 이동 (TRIP-1108))
+    expect(PREVIEW_STATES).toHaveLength(185);
+=======
+    // ⚠️ TRIP-1108: c08-push 푸시 알림 사전 안내 카드 얼굴 `onboarding-push-default`(band `c`, Figma `4774:2960`)
+    //    1키 추가로 185→186. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 1키만 추가하고
+    //    이 가드는 안 만진다(추가 전엔 185개라 red). 정확한 키·밴드·라벨은 아래 'TRIP-1108' describe 가 못박는다.
+    //    벨 히어로 링 값(브리프 §4-2 추정)·2줄 개행·위치 카드와 나란한 하단 버튼은 jest 가 픽셀을 못 봐 이 키가
+    //    유일한 육안 수단이다. devPreviewBandSort 는 밴드 h·l 만 잠가 band c 와 무관.
+    expect(PREVIEW_STATES).toHaveLength(186);
+>>>>>>> 344014b4 (feat: 온보딩 푸시 알림 사전 안내 카드 — 권한 요청을 일정 생성에서 온보딩으로 이동 (TRIP-1108))
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -2320,6 +2331,7 @@ describe('🔴 TRIP-1082 · g02 거점 편집 얼굴 프리뷰 2키 (band g)', (
   });
 });
 
+<<<<<<< HEAD
 // TRIP-1109 — 조회 중·지연·실패 얼굴은 Figma 프레임이 없어(결정 1) 이 3키가 6-b 육안 대조·Figma 반영 후보다.
 // 시트는 시간을 모른다 — slow 도 정적 prop(`fetchState`)으로 그려져야 여기서 캡처된다(01b 배치).
 describe('🔴 TRIP-1109 · h08 다른 후보 시트 조회 상태 프리뷰 3키 (band h)', () => {
@@ -2371,6 +2383,28 @@ describe('🔴 TRIP-1109 · h08 다른 후보 시트 조회 상태 프리뷰 3�
     // 이웃 앵커 — 기존 h08 시트 키가 딸려 사라지지 않았다.
     expect(PREVIEW_STATES.map((state) => state.key)).toContain(
       'h08-candidate-sheet-empty'
+||||||| parent of 344014b4 (feat: 온보딩 푸시 알림 사전 안내 카드 — 권한 요청을 일정 생성에서 온보딩으로 이동 (TRIP-1108))
+=======
+describe('🔴 TRIP-1108 · c08-push 푸시 알림 사전 안내 카드 프리뷰 키 (band c)', () => {
+  it('onboarding-push-default — 실물 푸시 카드를 그리고, 위치 카드 키는 그대로 남는다', () => {
+    // 준비 — 새 키 엔트리(red-first: preview.tsx 에 추가 전엔 없다).
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'onboarding-push-default'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('c');
+    expect(entry?.label).toBe('c08-push · 기본');
+
+    // 실행
+    render(<>{entry?.render()}</>);
+
+    // 단언 — 푸시 카드 자신의 testID 가 그려진다(흉내 마크업이면 통과 못 한다).
+    expect(screen.getByTestId('onboarding-push-root')).toBeOnTheScreen();
+    expect(screen.getByTestId('onboarding-push-purpose')).toBeOnTheScreen();
+    // 이웃 앵커 — 짝인 위치 카드 키가 딸려 사라지지 않았다.
+    expect(PREVIEW_STATES.map((state) => state.key)).toContain(
+      'onboarding-location-default'
+>>>>>>> 344014b4 (feat: 온보딩 푸시 알림 사전 안내 카드 — 권한 요청을 일정 생성에서 온보딩으로 이동 (TRIP-1108))
     );
   });
 });

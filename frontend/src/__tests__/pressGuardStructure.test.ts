@@ -20,6 +20,8 @@ const EXPECTED = [
   'pages/itinerary-mustvisit/ui/MustVisitListPage.tsx', // #042 수신
   'pages/itinerary-mustvisit/ui/MustVisitTimePage.tsx', // #042 송신
   'pages/itinerary-plan/ui/ItineraryPlanPage.tsx', // #057 송신·수신
+  'pages/onboarding-location/ui/LocationPage.tsx', // TRIP-1108 R6 송신(나중에·거부 계속 → 푸시 카드)
+  'pages/onboarding-push/ui/PushPage.tsx', // TRIP-1108 R6 수신·송신(계속·나중에 → 취향 1/2)
   'pages/onboarding-pref1/ui/PrefStep1Page.tsx', // #004 송신
   'pages/onboarding-pref2/ui/PrefStep2Page.tsx', // #004 수신
   'pages/stay-search/ui/StaySearchPage.tsx', // #012 수신

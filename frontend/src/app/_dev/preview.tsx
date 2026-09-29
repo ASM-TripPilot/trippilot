@@ -207,6 +207,8 @@ import type {
 import { PersonalizationInfoReason } from '@/shared/api/generated/schemas';
 import { buildMonthGrid } from '@/shared/date/monthGrid';
 import { LocationPreprompt } from '@/shared/location/LocationPreprompt';
+// 딥 경로 — 배럴(`@/shared/push`)로 끌면 권한 루틴(expo-notifications)까지 실린다(TRIP-1108 R10).
+import { PushPreprompt } from '@/shared/push/PushPreprompt';
 import { revokeImpact } from '@/shared/location/revokeImpact';
 import { MapView, type MapPin } from '@/shared/map';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
@@ -2531,6 +2533,14 @@ export const PREVIEW_STATES: PreviewState[] = [
         onOpenSettings={noop}
       />
     ),
+  },
+  {
+    // TRIP-1108 — 위치 카드 다음 온보딩 단계(Figma 4774:2960). 상태 프레임은 default 하나뿐이다.
+    key: 'onboarding-push-default',
+    band: 'c',
+    label: 'c08-push · 기본',
+    login: null,
+    render: () => <PushPreprompt onProceed={noop} onDefer={noop} />,
   },
   // ── e00·d1b 지역 선택 4키(TRIP-183) — 컨테이너 없이 화면에 props를 직접 넣는다 ──
   // ⚠️ 프리뷰는 정적이라 **실제 OS 권한 다이얼로그는 뜨지 않는다.** 여기서 보는 것은

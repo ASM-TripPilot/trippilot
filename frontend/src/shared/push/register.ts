@@ -63,7 +63,7 @@ export async function registerPushToken(): Promise<void> {
   storedToken = token;
 }
 
-/** 일정을 처음 만든 직후(TRIP-835): 필요하면 묻고, 허용이면 등록. 화면이 기다리지 않고 부르므로 reject 하지 않는다. */
+/** 온보딩 푸시 안내 카드의 `계속`(TRIP-1108): 필요하면 묻고, 허용이면 등록. 화면이 기다리지 않고 부르므로 reject 하지 않는다. */
 export async function promptAndRegisterPush(): Promise<void> {
   try {
     if ((await requestPushPermission()) === 'GRANTED') {

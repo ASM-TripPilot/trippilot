@@ -30,7 +30,6 @@ import {
 } from '@/shared/api/generated/trips/trips';
 import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
 import { isNotFound } from '@/shared/api/isNotFound';
-import { promptAndRegisterPush } from '@/shared/push';
 import { showToast } from '@/shared/ui/Toast';
 import { EditorView } from '@/widgets/map-sheet-shell/ui/EditorView';
 import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
@@ -170,8 +169,6 @@ export function ManualPlanPage({
               setFreshFailed(true);
             }
           });
-          // 빈 일정이 처음 생긴 순간 알림 권한을 묻는다(TRIP-835 · 01b Q2) — 기다리지 않는다.
-          void promptAndRegisterPush();
         },
         // 여행 중 409 등 — 서버엔 옛 일정이 그대로다. 비-fresh 는 현행대로 침묵(표시는 startFresh 만).
         onError: () => setFreshFailed(true),

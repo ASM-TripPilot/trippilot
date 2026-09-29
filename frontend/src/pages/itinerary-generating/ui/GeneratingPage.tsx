@@ -20,7 +20,6 @@ import {
 import { isNotFound } from '@/shared/api/isNotFound';
 import { getAccessToken } from '@/shared/api/tokenManager';
 import type { MapCenter, MapPin } from '@/shared/map';
-import { promptAndRegisterPush } from '@/shared/push';
 import { showToast } from '@/shared/ui/Toast';
 
 const LEAVE_TOAST_MESSAGE = '백그라운드에서 계속 만들고 있어요';
@@ -116,8 +115,6 @@ export function GeneratingPage({
       {
         onSuccess: (data: Itinerary) => {
           succeededRef.current = true;
-          // 일정이 처음 생긴 순간 알림 권한을 묻는다(TRIP-835) — 기다리지 않는다(이동이 다이얼로그에 막히지 않게).
-          void promptAndRegisterPush();
           // copick 씨앗은 허브가 아니라 **첫 비고정 슬롯**의 SlotFillPage 로 착지한다(01b 순회 세부,
           // AC-6). h05 는 slotKey 를 몰라 템플릿만 실어 보내므로, 채우는 것은 이 화면이다 — 생성
           // 응답이 곧 생성된 일정(days 포함, `customInstance<Itinerary>`)이라 별도 GET 불요.

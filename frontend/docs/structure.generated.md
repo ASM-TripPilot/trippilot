@@ -110,6 +110,7 @@
 - `src/__tests__/onboardingEntryGuard.test.tsx`  →  (export 없음)
 - `src/__tests__/onboardingPrefRoutes.test.tsx`  →  (export 없음)
 - `src/__tests__/onboardingPrefStructure.test.ts`  →  (export 없음)
+- `src/__tests__/onboardingPushStructure.test.ts`  →  (export 없음)
 - `src/__tests__/onboardingStructure.test.ts`  →  (export 없음)
 - `src/__tests__/openapiContract.test.ts`  →  (export 없음)
 - `src/__tests__/otaSourceDictionary.test.ts`  →  (export 없음)
@@ -134,6 +135,7 @@
 - `src/__tests__/planbTriggerKindStructure.test.ts`  →  (export 없음)
 - `src/__tests__/pressGuardMustVisit.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/pressGuardOnboardingPref.test.tsx`  →  (export 없음)
+- `src/__tests__/pressGuardOnboardingPush.test.tsx`  →  (export 없음)
 - `src/__tests__/pressGuardStaySeeAll.test.tsx`  →  (export 없음)
 - `src/__tests__/pressGuardStructure.test.ts`  →  (export 없음)
 - `src/__tests__/recordAddVisitFlow.integration.test.tsx`  →  (export 없음)
@@ -228,6 +230,7 @@
 - `src/app/(onboarding)/nickname.tsx`  →  (export 없음)
 - `src/app/(onboarding)/pref1.tsx`  →  (export 없음)
 - `src/app/(onboarding)/pref2.tsx`  →  (export 없음)
+- `src/app/(onboarding)/push.tsx`  →  (export 없음)
 - `src/app/(onboarding)/terms.tsx`  →  (export 없음)
 
 ## src/app/(tabs)/
@@ -943,6 +946,12 @@
 ## src/pages/onboarding-pref2/ui/
 - `src/pages/onboarding-pref2/ui/PrefStep2Page.tsx`  →  PrefStep2Page
 
+## src/pages/onboarding-push/
+- `src/pages/onboarding-push/index.ts`  →  PushPage
+
+## src/pages/onboarding-push/ui/
+- `src/pages/onboarding-push/ui/PushPage.tsx`  →  PushPage
+
 ## src/pages/onboarding-terms/
 - `src/pages/onboarding-terms/index.ts`  →  TermsPage
 
@@ -1404,7 +1413,14 @@
 - `src/shared/press/pressGuard.ts`  →  guardPress · openPressGuardWindow · resetPressGuard
 
 ## src/shared/push/
+- `src/shared/push/PushGlyphs.tsx`  →  PushBellHero
+- `src/shared/push/PushPreprompt.tsx`  →  PushPrepromptProps · PushPreprompt
 - `src/shared/push/index.ts`  →  getPushPermission · type PushPermissionStatus · requestPushPermission · registerPushToken · unregisterDeviceToken · toServerOsPermission · isDeviceNotRegistered · promptAndRegisterPush · registerPushIfGranted · unregisterStoredPushToken
+
+## src/shared/push/lib/
+- `src/shared/push/lib/pushColors.ts`  →  PUSH_ICON_COLORS
+
+## src/shared/push/
 - `src/shared/push/permissions.ts`  →  PushPermissionStatus · getPushPermission
 - `src/shared/push/register.ts`  →  toServerOsPermission · isDeviceNotRegistered · unregisterDeviceToken · registerPushToken · promptAndRegisterPush · registerPushIfGranted · unregisterStoredPushToken
 - `src/shared/push/request.ts`  →  ensureAndroidChannels · requestPushPermission
@@ -1484,4 +1500,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 1040개 파일
+합계 1048개 파일
