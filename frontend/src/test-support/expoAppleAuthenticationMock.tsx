@@ -1,5 +1,3 @@
-import { Pressable } from 'react-native';
-
 /**
  * expo-apple-authentication 의 테스트용 목(네이티브 대체) + 관찰 스파이 (TRIP-932).
  *
@@ -25,19 +23,13 @@ export const appleSignInAsyncSpy = jest.fn();
 /** `isAvailableAsync()` 스파이. true/false/대기/reject 를 테스트가 주입한다. */
 export const appleIsAvailableAsyncSpy = jest.fn();
 
-/** 공식 버튼이 렌더될 때마다 받은 props 를 기록한다(마지막 호출 = 현재 props). */
-export const appleButtonPropsSpy = jest.fn();
-
 /**
- * 공식 `AppleAuthenticationButton` 대역. 구현이 준 testID 는 무시하고 항상
- * `mock-apple-auth-button` 을 그린다 — 테스트가 구현의 testID 선택에 흔들리지 않게 한다.
+ * jest.mock('expo-apple-authentication', …) 이 반환할 shape.
+ *
+ * 시스템 버튼(`AppleAuthenticationButton`)의 대역은 일부러 싣지 않는다(TRIP-1124) — 애플 버튼은
+ * 직접 그린 커스텀 버튼이라, 구현이 시스템 버튼으로 되돌아가면 undefined 엘리먼트로 렌더가 터져
+ * LoginPage.apple.test.tsx 가 빨개진다.
  */
-function MockAppleAuthenticationButton(props: { onPress?: () => void }) {
-  appleButtonPropsSpy(props);
-  return <Pressable testID="mock-apple-auth-button" onPress={props.onPress} />;
-}
-
-/** jest.mock('expo-apple-authentication', …) 이 반환할 shape. */
 export const expoAppleAuthenticationModule = {
   __esModule: true,
   ...jest.requireActual(
@@ -45,12 +37,10 @@ export const expoAppleAuthenticationModule = {
   ),
   signInAsync: appleSignInAsyncSpy,
   isAvailableAsync: appleIsAvailableAsyncSpy,
-  AppleAuthenticationButton: MockAppleAuthenticationButton,
 };
 
 /** 스파이의 호출 기록·주입값을 되돌린다(테스트 간 격리). */
 export function resetExpoAppleAuthenticationMock(): void {
   appleSignInAsyncSpy.mockReset();
   appleIsAvailableAsyncSpy.mockReset();
-  appleButtonPropsSpy.mockReset();
 }

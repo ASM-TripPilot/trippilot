@@ -429,7 +429,7 @@ type LoginState = Pick<
   'phase' | 'errorCode' | 'conflictProvider'
 >;
 
-// 애플 버튼은 실 로그인과 같은 판정(useAppleButton)으로 얻는다 — iOS 실기에선 공식 버튼이 둘째
+// 애플 버튼은 실 로그인과 같은 판정(useAppleButton)으로 얻는다 — iOS 실기에선 애플 버튼이 둘째
 // 자리에 뜨고, Android·jest 에선 3버튼이다(TRIP-932).
 function LoginPreview(props: LoginState) {
   const AppleButton = useAppleButton();
