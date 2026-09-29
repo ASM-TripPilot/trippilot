@@ -107,6 +107,7 @@ import {
   type MyTripCardVM,
 } from '@/features/itinerary/ui/MyTripCard';
 import { MyTripsListScreen } from '@/features/itinerary/ui/MyTripsListScreen';
+import { MyTripsSortSheet } from '@/features/itinerary/ui/MyTripsSortSheet';
 import { TripDeleteDialog } from '@/features/itinerary/ui/TripDeleteDialog';
 import {
   NotificationInboxScreen,
@@ -133,7 +134,6 @@ import {
 import { StyleSummaryCard } from '@/features/settings/ui/StyleSummaryCard';
 import { RevokeConfirmDialog } from '@/features/settings/ui/RevokeConfirmDialog';
 import { SettingsScreen } from '@/features/settings/ui/SettingsScreen';
-import { TripCard, type TripCardVM } from '@/features/settings/ui/TripCard';
 import { triggerLabel } from '@/features/planb/model/triggerLabel';
 import { triggerPillCopy } from '@/features/planb/model/triggerPillCopy';
 import { riskAffectedRow } from '@/features/planb/model/riskAffectedRow';
@@ -1439,31 +1439,42 @@ function renderH06DeleteList({ menuOpen }: { menuOpen: boolean }) {
   );
 }
 
-// l03 마이페이지 default(Figma 1602:2388, TRIP-775) — 예정 카드 2장: D-12(14일 이하 → primary 배지)와
-// D-30(ink 배지, 일정 미생성이라 daysLabel null). 화면은 무상태라 VM + noop 한 벌로 충분(TripCardContainer 의
-// 조회 조립은 안 태움 — 배지 색·카드 그림자·칩 모양은 jest 사각, 스크린샷 대조 몫).
-const MY_PAGE_UPCOMING_VMS: TripCardVM[] = [
-  {
-    tripId: 'busan',
-    title: '부산 여행',
-    dateRange: '6.10~6.12',
-    basesLabel: '숙소 1',
-    daysLabel: '일정 3일',
-    dBadge: 'D-12',
-    dBadgeTone: 'primary',
-    isEnded: false,
-  },
-  {
-    tripId: 'jeju',
-    title: '제주 여행',
-    dateRange: '7.1~7.4',
-    basesLabel: '숙소 미등록',
-    daysLabel: null,
-    dBadge: 'D-30',
-    dBadgeTone: 'ink',
-    isEnded: false,
-  },
-];
+// h06 여행 중 고정(TRIP-1121, Figma 4745:2874) — 여행 중(⋯·resume 없음) → 작성중(⋯·resume) → 완성 순.
+// 순서·배지는 실앱에선 orderMyTrips·TripCardContainer 가 내지만 프리뷰는 VM 을 그 결과대로 놓는다.
+const H06_ONGOING_VM: MyTripCardVM = {
+  tripId: 'demo-live',
+  title: '부산 여행',
+  metaLine: '9월 29일 ~ 30일 · 1박 2일 · 2명',
+  badge: 'live',
+  extra: '일정 확정',
+  resume: false,
+  imageUrl: DRAFT_PREVIEW_PHOTOS[1],
+};
+
+function renderH06Ongoing() {
+  const [done, , draft] = MY_TRIPS_PREVIEW_VMS;
+  return (
+    <MyTripsListScreen
+      mode="list"
+      onPressCreateTrip={noop}
+      cards={[
+        <MyTripCard
+          key={H06_ONGOING_VM.tripId}
+          vm={H06_ONGOING_VM}
+          onPress={noop}
+        />,
+        <MyTripCard
+          key={draft.tripId}
+          vm={draft}
+          onPress={noop}
+          onPressDelete={noop}
+          onPressMenu={noop}
+        />,
+        <MyTripCard key={done.tripId} vm={done} onPress={noop} />,
+      ]}
+    />
+  );
+}
 
 // l03 마이페이지 empty(Figma 1603:2414, TRIP-776) — 지난 여행 썸네일 카드 3장(종료일 최근순). 사진은 Figma 목업
 // 사진 로컬 사본(`assets/my-page/CREDITS.md`, G7) — jest 는 .uri 가 undefined 라 회색 자리, 실기만 사진.
@@ -5218,8 +5229,29 @@ export const PREVIEW_STATES: PreviewState[] = [
       </View>
     ),
   },
-  // l03 마이페이지 default(TRIP-775) — Figma 1602:2388 과 같은 데이터: 카운트 2/0/3 · 프로필 태그 ·
-  // 정식 스타일 카드 · 예정 카드 2장 · 메뉴 3행 · 헤더 톱니 · 탭바(마이). 예정이 있으므로 지난 여행 섹션은
+  {
+    key: 'h06-my-trips-ongoing',
+    band: 'h',
+    label: 'h06 · 내 여행 여행 중 고정',
+    login: null,
+    render: renderH06Ongoing,
+  },
+  // h06 정렬 시트(TRIP-1122, Figma 4750:2902) — 목록 위에 최신순이 선택된 시트. 딤·시트가 탭바를 덮는지,
+  // 핸들·체크·행 높이는 jest 사각이라 이 키가 6-b 육안 대조 자리다.
+  {
+    key: 'h06-my-trips-sort-sheet',
+    band: 'h',
+    label: 'h06 · 내 여행 정렬 시트',
+    login: null,
+    render: () => (
+      <View style={{ flex: 1 }}>
+        {renderH06DeleteList({ menuOpen: false })}
+        <MyTripsSortSheet selected="recent" onSelect={noop} onClose={noop} />
+      </View>
+    ),
+  },
+  // l03 마이페이지 default(TRIP-775·1123) — Figma 4755:2930 과 같은 데이터: 카운트 2/0/3(칸마다 ›) · 프로필 태그 ·
+  // 정식 스타일 카드 · 메뉴 3행 · 헤더 톱니 · 탭바(마이). 예정이 있으므로 지난 여행 섹션은
   // 없다(§F-3 A안). 헤드라인은 계약 공백이라 실앱처럼 비워 둔다(Figma 와 의도된 차이).
   {
     key: 'my-page-default',
@@ -5233,19 +5265,13 @@ export const PREVIEW_STATES: PreviewState[] = [
           email="trippilot@email.com"
           counts={{ upcoming: 2, active: 0, ended: 3 }}
           tags={STYLE_CARD_OFFICIAL_VM.descriptors}
-          active="upcoming"
-          onChangeSegment={noop}
+          onPressCount={noop}
           styleCard={
             <StyleSummaryCard
               vm={STYLE_CARD_OFFICIAL_VM}
               onPressDetail={noop}
             />
           }
-          cards={MY_PAGE_UPCOMING_VMS.map((vm) => (
-            <TripCard key={vm.tripId} vm={vm} onPressReflection={noop} />
-          ))}
-          activeEmpty={false}
-          onPressCreateTrip={noop}
           showPast={false}
           pastCards={null}
           pastEmpty={false}
@@ -5257,8 +5283,8 @@ export const PREVIEW_STATES: PreviewState[] = [
         'my'
       ),
   },
-  // l03 마이페이지 empty(TRIP-776) — Figma 1603:2414 와 같은 데이터: 카운트 0/0/3 · 프로필 태그(스타일 카드
-  // 없음 — Figma 내부 모순 그대로) · 예정 빈 문구 + 플러스 CTA · 지난 여행 썸네일 카드 3장 + "캘린더 ›" ·
+  // l03 마이페이지 empty(TRIP-776·1123) — Figma 4755:3123 과 같은 데이터: 카운트 0/0/3(칸마다 ›) · 프로필 태그(스타일 카드
+  // 없음 — Figma 내부 모순 그대로) · 지난 여행 썸네일 카드 3장 + "캘린더 ›" ·
   // 메뉴 3행 · 탭바(마이). 종료 0건 엣지("아직 종료된 여행이 없습니다")는 jest(MyPageScreen.l03empty)가 잰다.
   {
     key: 'my-page-empty',
@@ -5272,11 +5298,7 @@ export const PREVIEW_STATES: PreviewState[] = [
           email="trippilot@email.com"
           counts={{ upcoming: 0, active: 0, ended: 3 }}
           tags={STYLE_CARD_OFFICIAL_VM.descriptors}
-          active="upcoming"
-          onChangeSegment={noop}
-          cards={null}
-          activeEmpty
-          onPressCreateTrip={noop}
+          onPressCount={noop}
           showPast
           pastCards={MY_PAGE_PAST_VMS.map((vm) => (
             <PastTripRow
@@ -6603,6 +6625,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   // 제목·기간·박수, 실사진·통계 없음 — Q2 degrade)를 한 화면에서 육안 대조한다. 코랄 pill 색·정렬·회색 chevron
   // 픽셀은 jest 사각이라 이 키가 유일한 육안 그물(6-b). empty 얼굴은 화면 isEmpty 분기·RecordsCalendarScreen.test
   // 가 계속 잠그므로 별도 프리뷰 키를 두지 않는다(TRIP-767 로 records-calendar-empty 키 삭제).
+  // TRIP-1120 — Figma 4761:2930: 앱바 아래 진행 중 카드(부산 여행 2일차) + 부산 줄 `›`, 미래 제주 줄은 `›` 없음.
   {
     key: 'records-calendar-default',
     band: 'j',
@@ -6613,8 +6636,24 @@ export const PREVIEW_STATES: PreviewState[] = [
         monthLabel="2026년 6월"
         grid={buildMonthGrid('2026-06')}
         markedDays={['2026-06-10', '2026-06-11', '2026-06-12']}
+        ongoingTrip={{
+          tripId: 't-busan',
+          title: '부산 여행',
+          dateRangeLabel: '2026.6.10–6.12',
+          dayLabel: '2일차',
+        }}
+        onPressOngoingRecords={noop}
+        onPressOngoingHub={noop}
+        openableTripIds={new Set(['t-busan'])}
         monthLegends={{
           rows: [
+            {
+              kind: 'trip',
+              tripId: 't-jeju-future',
+              title: '제주 여행',
+              dateRangeLabel: '6.24–6.26',
+              nightsLabel: '2박 3일',
+            },
             {
               kind: 'trip',
               tripId: 't-busan',
@@ -6656,6 +6695,8 @@ export const PREVIEW_STATES: PreviewState[] = [
   // j07 legend 3줄 + 더 보기(TRIP-1084) — Figma 채택안 4699:2630(접힘)과 1:1. 같은 기간 묶음 2줄('외 5'·
   // '외 3', 후자는 서울 3 + 강진 1) + 개별 3줄 중 앞 3줄과 '더 보기 2'. 펼침(4699:2803)과 묶음 펼침은 이
   // 키에서 탭으로 본다. 줄 간격 32·들여쓰기 33·chevron 방향은 jest 사각이라 이 키가 육안 그물(6-b).
+  // TRIP-1120 — Figma 4761:3107(접힘)·4761:3301(펼침, 더 보기 탭): 서울특별시 여행 카드(9/29 가정 2일차,
+  // 제목만 — '외 N' 없음) + 9월 줄 전부 `›`(모두 시작 ≤ 오늘).
   {
     key: 'records-calendar-legend-more',
     band: 'j',
@@ -6671,6 +6712,23 @@ export const PREVIEW_STATES: PreviewState[] = [
           ...['28', '29', '30'],
         ].map((day) => `2026-09-${day}`)}
         monthLegends={RECORDS_CALENDAR_LEGEND_MORE}
+        ongoingTrip={{
+          tripId: 's1',
+          title: '서울특별시 여행',
+          dateRangeLabel: '2026.9.28–9.30',
+          dayLabel: '2일차',
+        }}
+        onPressOngoingRecords={noop}
+        onPressOngoingHub={noop}
+        openableTripIds={
+          new Set(
+            RECORDS_CALENDAR_LEGEND_MORE.rows.flatMap((row) =>
+              row.kind === 'group'
+                ? row.members.map((member) => member.tripId)
+                : [row.tripId]
+            )
+          )
+        }
         pastTrips={[
           {
             tripId: 'p-busan',

@@ -13,19 +13,20 @@ import {
   ListGlyph,
   MenuBedGlyph,
   MUTED_SOFT,
-  PlusGlyph,
   ShareNodesGlyph,
 } from './SettingsGlyphs';
-import { TripStatusSegment } from './TripStatusSegment';
 
 /**
  * TRIP-604 · l03 마이페이지 화면 — 순수 프레젠테이션(props + 콜백만). 셸 교체의 실화면.
  *
- * 조회·분류·정렬·N+1 컨테이너 조립은 페이지(`pages/my-page/MyPage`)가 진다 — 이 화면은 완성된
- * 프로필 값·세그먼트 상태·카드 노드를 받아 레이아웃만 그린다(h37 `MyTripsListScreen` 규율).
+ * 조회·분류·정렬·조립은 페이지(`pages/my-page/MyPage`)가 진다 — 이 화면은 완성된
+ * 프로필 값·숫자·카드 노드를 받아 레이아웃만 그린다(h37 `MyTripsListScreen` 규율).
  *
- * "지난 여행"(종료) 섹션은 `showPast` 로 켠다 — 언제 켤지(예정 0건 · 활성 탭이 '종료'가 아님, TRIP-775
- * §F-3 A안)는 페이지가 판정한다. 종료 여행이 0건이면 "아직 종료된 여행이 없습니다"만 뜨고 회고 진입
+ * TRIP-1123(Figma 4755:2930): 일정 탭과 겹치던 세그먼트·여행 카드·빈 문구·[새 여행 만들기]를 걷었다.
+ * 여행 목록 입구는 프로필 카드의 숫자 3칸(`onPressCount` → 탭 이동)이다.
+ *
+ * "지난 여행"(종료) 섹션은 `showPast` 로 켠다 — 언제 켤지(예정 0건, TRIP-775 §F-3 A안)는 페이지가
+ * 판정한다. 종료 여행이 0건이면 "아직 종료된 여행이 없습니다"만 뜨고 회고 진입
  * 어포던스는 하나도 없다(AC-5).
  *
  * TRIP-939(심사 2.1): 목적지가 없어 눌러도 반응 없던 것은 그리지 않는다 — `ready:false` 행은 숨기고
@@ -35,7 +36,6 @@ import { TripStatusSegment } from './TripStatusSegment';
  *
  * TRIP-776(Figma 1603:2414, Seed Q1=A): "캘린더 ›"(→ /records)를 되살렸다 — `onPressCalendar` 가 들어올 때만
  * 그린다(누를 곳 없는 링크 0). 캘린더는 회고 진입이 아니라 종료 0건이어도 섹션과 함께 남는다(BR-U6-23).
- * 예정 빈 상태는 왼쪽 정렬 한 줄 + 플러스 글리프 CTA.
  */
 
 // `ready` = 목적지가 선 행인가. false 행은 화면에 그리지 않는다(TRIP-939 — 개통 시 true 한 줄로 되살림).
@@ -91,26 +91,16 @@ const SETTINGS_ROWS: {
 ];
 const VISIBLE_SETTINGS_ROWS = SETTINGS_ROWS.filter((row) => row.ready);
 
-const EMPTY_TEXT: Record<TripBucket, string> = {
-  upcoming: '예정된 여행이 없어요 · 새 여행을 만들어 보세요',
-  active: '진행 중인 여행이 없어요',
-  ended: '종료된 여행이 없어요',
-};
-
 export interface MyPageScreenProps {
   nickname: string | null;
   email: string | null;
-  counts: ProfileCardCounts;
-  active: TripBucket;
-  onChangeSegment: (bucket: TripBucket) => void;
-  /** 활성 버킷 카드들(페이지가 TripCardContainer 배열로 조립). */
-  cards: ReactNode;
-  /** 활성 버킷이 비었으면 빈 상태를 그린다. */
-  activeEmpty: boolean;
-  /** 스타일 요약 카드(l03) — 페이지가 조회·조립해 내린다. 프로필↔세그먼트 사이에 놓인다. */
+  /** null = 모름(일정 조회 대기·실패) → 숫자 자리 `–`. */
+  counts: ProfileCardCounts | null;
+  /** 숫자 칸 누름 — 페이지가 탭 이동으로 주입(TRIP-1123). */
+  onPressCount?: (bucket: TripBucket) => void;
+  /** 스타일 요약 카드(l03) — 페이지가 조회·조립해 내린다. 프로필 바로 아래 놓인다. */
   styleCard?: ReactNode;
-  onPressCreateTrip: () => void;
-  /** 지난 여행(종료) 섹션 노출 여부 — 판정은 페이지(예정 0건 · 활성 탭 '종료' 아님). */
+  /** 지난 여행(종료) 섹션 노출 여부 — 판정은 페이지(예정 0건). */
   showPast: boolean;
   pastCards: ReactNode;
   /** 종료 0건 → "아직 종료된 여행이 없습니다"만. */
@@ -166,12 +156,8 @@ export function MyPageScreen({
   nickname,
   email,
   counts,
-  active,
-  onChangeSegment,
-  cards,
-  activeEmpty,
+  onPressCount,
   styleCard,
-  onPressCreateTrip,
   showPast,
   pastCards,
   pastEmpty,
@@ -215,39 +201,14 @@ export function MyPageScreen({
             nickname={nickname}
             email={email}
             counts={counts}
+            onPressCount={onPressCount}
             onPressEdit={onPressEdit}
             tags={tags}
           />
 
           {styleCard}
 
-          <TripStatusSegment active={active} onChange={onChangeSegment} />
-
-          {/* 활성 버킷 목록 또는 빈 상태 */}
-          {activeEmpty ? (
-            <View className="gap-md">
-              <Text className="font-noto text-label text-muted">
-                {EMPTY_TEXT[active]}
-              </Text>
-              {active === 'upcoming' ? (
-                <Pressable
-                  testID="my-create-trip"
-                  accessibilityRole="button"
-                  onPress={onPressCreateTrip}
-                  className="h-[50px] w-full flex-row items-center justify-center gap-sm rounded-button bg-primary"
-                >
-                  <PlusGlyph testID="my-create-trip-plus" />
-                  <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                    새 여행 만들기
-                  </Text>
-                </Pressable>
-              ) : null}
-            </View>
-          ) : (
-            <View className="gap-md">{cards}</View>
-          )}
-
-          {/* 지난 여행(종료) 섹션 — 페이지가 켤 때만(예정 0건 · 활성 탭이 종료 아님). */}
+          {/* 지난 여행(종료) 섹션 — 페이지가 켤 때만(예정 0건). */}
           {showPast ? (
             <View className="gap-md">
               <View className="flex-row items-center justify-between">

@@ -20,8 +20,8 @@ import { MyPage } from './MyPage';
  * 무엇을 보장하나:
  *  - 🔴 AC-I1 배선: MyPage 가 `useGetMeStyle()` envelope 를 `buildStyleCardModel` 에 태워 `StyleSummaryCard` 로
  *    그린다(칩·게이지가 envelope 값을 관통해 실제로 렌더).
- *  - 🔴 AC-I1 배치: 그 카드가 **ProfileCard(`my-profile-card`)와 TripStatusSegment(`my-trip-segment`) 사이**에
- *    additive prop 으로 놓이고, 기존 testID 는 무변경이다.
+ *  - 🔴 AC-I1 배치: 그 카드가 **ProfileCard(`my-profile-card`) 뒤, 메뉴 카드(`my-menu-card`) 앞**에 놓이고,
+ *    기존 testID 는 무변경이다. (TRIP-1123 에서 세그 `my-trip-segment` 가 사라져 뒤 기준을 메뉴 카드로 바꿨다.)
  *
  * 왜 이렇게 테스트하나(02a ★9):
  *  - 화면 목(props-capture)이 아니라 **real MyPage 렌더** — 배치는 MyPageScreen 몫이라 목으로는 못 본다.
@@ -30,13 +30,13 @@ import { MyPage } from './MyPage';
  *    (깨끗한 assertion red) — MyPage 배선 + MyPageScreen additive slot 둘 다 되어야 green.
  *
  * (개념) `getByTestId(id).findAll(pred)` = react-test-renderer DFS pre-order → 이 선형 레이아웃의 문서 순서
- *   (02a §5-D). 그 순서 배열에서 profile < style < segment 로 "사이" 배치를 잰다.
+ *   (02a §5-D). 그 순서 배열에서 profile < style < menu 로 "사이" 배치를 잰다.
  */
 
 const mockPush = jest.fn();
 
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => ({ push: mockPush, replace: jest.fn() }),
 }));
 
 jest.mock('@/shared/api/generated/account/account', () => ({
@@ -122,16 +122,18 @@ describe('🔴 AC-I1 · 조회→모델→배치', () => {
     expect(screen.getAllByTestId('my-style-gauge')).toHaveLength(3);
   });
 
-  it('카드는 ProfileCard 와 TripStatusSegment 사이에 놓이고 기존 testID 는 그대로다', () => {
+  it('카드는 ProfileCard 와 메뉴 카드 사이에 놓이고 기존 testID 는 그대로다(세그는 없다)', () => {
     renderPage();
 
     // 기존 testID 무변경(additive prop 이 헐지 않았다). 헤더 설정 아이콘은 TRIP-775 로 복원(→ /settings).
     expect(screen.getByTestId('my-page-root')).toBeOnTheScreen();
     expect(screen.getByTestId('my-header-settings')).toBeOnTheScreen();
     expect(screen.getByTestId('my-profile-card')).toBeOnTheScreen();
-    expect(screen.getByTestId('my-trip-segment')).toBeOnTheScreen();
+    expect(screen.getByTestId('my-menu-card')).toBeOnTheScreen();
+    // TRIP-1123 — 세그는 사라졌다.
+    expect(screen.queryAllByTestId(/^my-trip-segment/)).toHaveLength(0);
 
-    // 배치 — DFS 문서 순서에서 profile < style < segment.
+    // 배치 — DFS 문서 순서에서 profile < style < menu.
     const root = screen.getByTestId('my-page-root');
     const order = root
       .findAll((node) => typeof node.props.testID === 'string')
@@ -139,11 +141,11 @@ describe('🔴 AC-I1 · 조회→모델→배치', () => {
 
     const idxProfile = order.indexOf('my-profile-card');
     const idxStyle = order.indexOf('my-style-card');
-    const idxSegment = order.indexOf('my-trip-segment');
+    const idxMenu = order.indexOf('my-menu-card');
 
     expect(idxProfile).toBeGreaterThanOrEqual(0);
     expect(idxStyle).toBeGreaterThan(idxProfile);
-    expect(idxSegment).toBeGreaterThan(idxStyle);
+    expect(idxMenu).toBeGreaterThan(idxStyle);
   });
 });
 

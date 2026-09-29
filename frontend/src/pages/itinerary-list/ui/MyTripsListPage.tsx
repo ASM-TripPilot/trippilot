@@ -11,13 +11,30 @@ import {
   useGetTrips,
 } from '@/shared/api/generated/trips/trips';
 import { isNotFound } from '@/shared/api/isNotFound';
+import { seoulDate } from '@/shared/date/seoulDate';
 import { readIdSet, writeIdSet } from '@/shared/storage/idSet';
-import { pickDoneBar } from '@/features/itinerary/model/doneBar';
+import {
+  readStringValue,
+  writeStringValue,
+} from '@/shared/storage/stringValue';
+import {
+  pickDoneBar,
+  type DoneBarEntry,
+} from '@/features/itinerary/model/doneBar';
+import {
+  byLatest,
+  byStart,
+  byTitle,
+  orderMyTrips,
+  parseMyTripsSortKey,
+  type MyTripsSortKey,
+} from '@/features/itinerary/model/myTripsOrder';
 import {
   itineraryDestinationHref,
   resolveItineraryDestination,
 } from '@/features/itinerary/model/planState';
 import { MyTripsListScreen } from '@/features/itinerary/ui/MyTripsListScreen';
+import { MyTripsSortSheet } from '@/features/itinerary/ui/MyTripsSortSheet';
 import { TripDeleteDialog } from '@/features/itinerary/ui/TripDeleteDialog';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import { GenerationDoneBar } from '@/widgets/generation-done-bar/ui/GenerationDoneBar';
@@ -32,7 +49,11 @@ import { TripCardContainer } from './TripCardContainer';
  * 리다이렉트해 둘째 이후 여행이 이 탭에서 영영 접근 불가였다(핵심 결함, AC-1). 이제 리다이렉트하지
  * 않고 모든 여행을 카드로 나열한다.
  *
- * 정렬은 `updatedAt` 내림차순(없으면 `createdAt`) — "최신순" 표시 라벨과 짝(01b Q1).
+ * TRIP-1122 · 정렬 기준(최신순·출발일순·이름순)과 정렬 시트 열림을 페이지가 쥔다 — 시트는 열릴 때만 그린다.
+ * 고른 기준은 기기에 한 줄 남기고(`itinerary.myTrips.sort`), 마운트 때 한 번 읽는다: 읽기 전엔 최신순, 오면 그
+ * 기준, 읽기 실패·모르는 값은 최신순(INV-4). 사용자가 먼저 고르면 늦게 온 저장값은 무시한다. TRIP-1121 · 여행 중
+ * (확정 + 오늘이 기간 안)은 어느 기준에서도 맨 위(`orderMyTrips`). 오늘을 여기서 한 번 만들어 정렬과 카드에 같은 값을 넘긴다
+ * — 일정이 도착하기 전엔 판정할 수 없어, 도착하는 순간 여행 중 카드가 위로 올라간다(INV-4).
  *
  * TRIP-928 · 완료 도킹 배너 — 여행별 일정(카드 훅과 같은 캐시 키)과 기기에 저장한 "배너로 알린 여행
  * id"(seen)를 모두 읽은 뒤에만 `pickDoneBar` 로 판정한다. 처음 띄울 때 seen 을 한 번 쓰고, 그
@@ -43,11 +64,7 @@ import { TripCardContainer } from './TripCardContainer';
 
 /** SecureStore 키 규칙(영숫자·`.`·`-`·`_`) · 토큰 키와 다른 이름. */
 const DONE_BAR_SEEN_KEY = 'itinerary.doneBar.seen';
-
-/** 최신순 정렬 키 — 갱신 시각이 없으면 생성 시각으로 접는다(계약상 updatedAt 은 항상 있으나 방어). */
-function sortKey(trip: Trip): string {
-  return trip.updatedAt ?? trip.createdAt;
-}
+const SORT_KEY = 'itinerary.myTrips.sort';
 
 export function MyTripsListPage(): ReactElement {
   const router = useRouter();
@@ -72,26 +89,39 @@ export function MyTripsListPage(): ReactElement {
   // 연타 잠금은 ref — isPending 은 늦게 알려져 같은 틱 두 번째 press 를 못 막는다(02a ★2).
   const deletingRef = useRef(false);
 
+  // TRIP-1122 · 정렬 — 사용자가 한 번 고르면 뒤늦게 도착한 저장값이 그 선택을 덮지 않게 ref 로 표시한다.
+  const [sortKey, setSortKey] = useState<MyTripsSortKey>('recent');
+  const [sortOpen, setSortOpen] = useState(false);
+  const sortPickedRef = useRef(false);
+
   useEffect(() => {
     // 실패하면 seen 이 null 로 남아 배너가 안 뜬다(닫힌 쪽 실패).
     readIdSet(DONE_BAR_SEEN_KEY).then(setSeen, () => {});
+    // 읽기 실패는 최신순 그대로(INV-4 — 목록은 이미 최신순으로 서 있다).
+    readStringValue(SORT_KEY).then(
+      (raw) => {
+        if (!sortPickedRef.current) setSortKey(parseMyTripsSortKey(raw));
+      },
+      () => {}
+    );
   }, []);
+
+  // 여행별 일정 응답(카드 훅과 같은 캐시 키) — 완료 배너와 여행 중 고정이 같이 읽는다.
+  const entries: DoneBarEntry[] = list.map((trip, i) => ({
+    trip,
+    itinerary: itineraries[i].isPending
+      ? 'pending'
+      : {
+          status: itineraries[i].data?.status,
+          generationState: itineraries[i].data?.generationState,
+        },
+  }));
+  const today = seoulDate(new Date());
 
   const pick =
     shown || seen === null || trips.isPending
       ? null
-      : pickDoneBar(
-          list.map((trip, i) => ({
-            trip,
-            itinerary: itineraries[i].isPending
-              ? 'pending'
-              : {
-                  status: itineraries[i].data?.status,
-                  generationState: itineraries[i].data?.generationState,
-                },
-          })),
-          seen
-        );
+      : pickDoneBar(entries, seen);
 
   useEffect(() => {
     if (!pick) return;
@@ -117,7 +147,29 @@ export function MyTripsListPage(): ReactElement {
     );
   }
 
-  const sorted = [...list].sort((a, b) => sortKey(b).localeCompare(sortKey(a)));
+  // 정렬만 404 아닌 조회 실패(다시 받기 실패로 직전 data 가 남은 경우 포함)를 "모름"으로 접는다 — 카드의
+  // degrade(배지 없음)와 같은 해석이라 배지 없는 카드가 고정되지 않는다(D3). 배너 입력(entries)은 그대로.
+  const sorted = orderMyTrips(
+    entries.map((entry, i) =>
+      itineraries[i].isError && !isNotFound(itineraries[i].error)
+        ? { trip: entry.trip, itinerary: 'pending' as const }
+        : entry
+    ),
+    today,
+    sortKey === 'start'
+      ? byStart(today)
+      : sortKey === 'title'
+        ? byTitle
+        : byLatest
+  );
+
+  const onSelectSort = (key: MyTripsSortKey): void => {
+    sortPickedRef.current = true;
+    setSortKey(key);
+    setSortOpen(false);
+    // 저장 실패는 삼킨다 — 이번 마운트의 화면은 고른 대로 남는다(doneBar 쓰기와 같은 선례).
+    writeStringValue(SORT_KEY, key).catch(() => {});
+  };
 
   const onConfirmDelete = (): void => {
     if (deleteTargetId === null || deletingRef.current) return;
@@ -168,10 +220,13 @@ export function MyTripsListPage(): ReactElement {
       <MyTripsListScreen
         mode="list"
         onPressCreateTrip={onPressCreateTrip}
+        sortKey={sortKey}
+        onPressSort={() => setSortOpen(true)}
         cards={sorted.map((trip) => (
           <TripCardContainer
             key={trip.tripId}
             trip={trip}
+            today={today}
             onPressDelete={() => {
               setDeleteFailedId(null);
               setDeleteTargetId(trip.tripId);
@@ -190,6 +245,13 @@ export function MyTripsListPage(): ReactElement {
           failed={deleteFailedId === deleteTargetId}
           onCancel={() => setDeleteTargetId(null)}
           onConfirm={onConfirmDelete}
+        />
+      ) : null}
+      {sortOpen ? (
+        <MyTripsSortSheet
+          selected={sortKey}
+          onSelect={onSelectSort}
+          onClose={() => setSortOpen(false)}
         />
       ) : null}
     </View>

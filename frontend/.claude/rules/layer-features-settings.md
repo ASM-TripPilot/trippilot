@@ -11,11 +11,9 @@ paths:
 | 파일 | 역할 |
 |---|---|
 | `ui/MyPageScreen.tsx` | l03 마이페이지 화면 — 판정은 페이지가 하고 값만 소비(`showPast`·`styleCard?` 슬롯·`menuHandlers: Partial<Record<MenuRowKey, () => void>>`). 헤더는 `ScrollView` 밖(고정), 톱니·"캘린더 ›"는 콜백이 있을 때만 렌더(누를 곳 없는 링크를 만들지 않는다). 메뉴 카드는 `overflow-hidden`을 의도적으로 안 붙인다(iOS 그림자 클리핑) |
-| `ui/MyPageScreen.l03empty.test.tsx` | 빈 문구·CTA·캘린더 링크 3방향 분기 |
+| `ui/MyPageScreen.l03empty.test.tsx` | 세그·카드·빈 문구·CTA 부재(TRIP-1123)·`onPressCount` 배선·캘린더 링크 분기 |
 | `ui/SettingsScreen.tsx` | l05 설정 화면 — `renderRow` switch가 행 종류별로 그린다. **급소**: 이 switch는 `row.key` 리터럴만 보고 `row.ready`를 읽지 않는다 — `settingsSections.ts`의 `ready`와 switch 케이스는 따로 정합을 유지해야 한다(자동 교차심판 없음, [[가드의 사정거리]]). 제휴 토글은 `Toggle checked===true` + 실패 안내 |
-| `ui/ProfileCard.tsx` | l03 프로필 카드 — `tags?` 슬롯(정식 스타일 분석일 때만 페이지가 주입), 카운트 3칸 사이 hairline 막대 |
-| `ui/TripCard.tsx` | l03 여행 카드 — 머리줄 `[배지][제목 flex-1][회고 chevron]`, 지역은 `InfoChip` |
-| `ui/TripStatusSegment.tsx` | l03 예정·진행중·종료 세그. 선택 탭 그림자는 className이 아니라 `style={SEGMENT_SHADOW}` — `shadow-sm`류 CSS 변수 선언 유틸은 탭 전환 시 css-interop 재마운트로 크래시를 낸다(`TripStatusSegment.test.tsx`가 계열 정규식으로 막는다, 리포 전역 가드는 없다) |
+| `ui/ProfileCard.tsx` | l03 프로필 카드 — `tags?` 슬롯(정식 스타일 분석일 때만 페이지가 주입), 카운트 3칸 사이 hairline 막대. 숫자 칸(`my-profile-count-{bucket}`)은 `counts===null`이면 세 칸 모두 `–`(0을 그리지 않는다, INV-4), `onPressCount`가 있을 때만 누를 수 있고 라벨 뒤 별도 `›` Text가 붙는다(한 Text에 합치면 `ProfileCard.l03parity` AC-3이 red) |
 | `ui/SettingsGroup.tsx` | 설정 그룹 카드 — `label: string \| null`(TRIP-1051). `null`이면 머리글 `Text` 자체를 안 그린다(`{조건 ? <Text/> : null}` — `<Text>{null}</Text>`이 아니다. 후자는 빈 글자칸이 남아 카드가 밀린다) |
 | `ui/SettingsRow.tsx` | 설정 행 부품 — `RowBody`·`PreparingRow`(`disabled`+`accessibilityState`)·`NavRow`(press+chevron, `value`·`chip` 슬롯, testID `settings-nav-{rowKey}`)·내부 `RowChip` |
 | `ui/ExportRow.tsx` | 내보내기 행 |
@@ -24,7 +22,7 @@ paths:
 | `ui/DeleteAccountDialog.tsx` | 계정 삭제 2단 게이트 다이얼로그. `initialStep?`은 프리뷰 전용 — 프로덕션 호출부가 넘기지 않는지는 `src/__tests__/deleteAccountDialogGate.test.ts`가 소스 스캔으로 막는다. 목록 높이 상한은 임의값 `max-h-[Npx]` 표기여야 한다 — `DeleteAccountDialog.l05parity.test.tsx`의 탐지기가 모르는 토큰 표기에 throw한다(fail-closed) |
 | `ui/LocationConsentScreen.tsx` | 위치 동의 철회 게이트 화면 — 로컬 `useState` 다이얼로그 게이트의 원형 |
 | `model/settingsSections.ts` | 설정 섹션 구성 순수 파생 — 취향은 머리글 없는 카드 한 행(`preferenceRow`, TRIP-1051): `view` 없으면 값 없이 줄만(D4, 미설정 칩 없음), 있으면 `summarizePreferences`의 `kind==='value'` 축 수 / `axes.length`로 `N/7 설정됨`. 분모는 `axes.length`에서 뽑지만 축이 실제로 7개인 동안은 리터럴 `7`로 바꿔도 테스트가 못 잡는다(심판 사각, [[뮤테이션 테스팅]])·동의 칩(`consentChip`, undefined면 칩 없음)·개인화·제휴 행. `SettingsGroupVM.label`은 `string \| null` — 취향 그룹만 `null`(머리글 미렌더). `location-consent` 행 라벨은 'GPS 이동경로 기록'이고 칩은 L3(`gpsRecordingOptIn`)인데, 그 행이 여는 l06 화면 토글은 L2(`legalConsent`)를 읽어 값이 갈릴 수 있다 |
-| `model/tripBuckets.ts` | l03 여행 버킷(예정·진행중·종료) 파생 |
+| `model/tripBuckets.ts` | l03 숫자 집계 — `phaseBucket`(단계→칸, `draft`→null)·`bucketTrips`(모름이 하나라도 있으면 null). 서버 `Trip.status`는 쓰지 않는다(날짜 파생이라 초안도 ACTIVE) |
 | `model/exportSummary.ts` | 내보내기 요약 파생 |
 | `model/deletionScope.ts` | 계정 삭제 고지 목록 정본 |
 | `model/stayTripLink.ts` | `buildStayTripLink(savedStays, trips, basesByTripId) → Map<savedStayId, {tripId, tripName, baseAssignmentId}>` — `SavedStay`에 `tripId`가 없어 모든 여행의 거점을 역으로 뒤진다. savedStays를 바깥 루프로 돌아 유령 base를 자연 배제하고, 두 여행의 거점이면 **첫 여행이 이긴다**. `tripName`은 `Trip.title` |
@@ -42,7 +40,7 @@ paths:
 | `model/usePersonalization.ts` | 조회 + `consentOn = reason !== CONSENT_MISSING` — **`applied`가 아니라 `reason`에서 도출한다**(다른 축, 섞으면 NOT_ENOUGH_RECORDS 얼굴에서 토글이 틀린다 — 통합 테스트가 그 reason을 프라임해야 이 도출을 잡는다). 토글 → 약관 버전 조회 → GRANT/REVOKE → 무효화. 미도착은 `CONSENT_MISSING`으로 degrade |
 | `ui/PersonalizationScreen.tsx` | 무상태(`consentOn`·`reason`·`sharedItems`·`onToggle`) — l06과 달리 재확인 다이얼로그가 없다(철회가 데이터 파기가 아니라 추천 입력 제외뿐). 토글은 `shared/ui/Toggle` |
 | `ui/InfoChip.tsx` | 누르지 않는 회색 칩 — 프로필 태그·스타일 칩·여행 카드 칩 공용(소비처가 settings 안뿐이라 shared 미승격) |
-| `ui/cardShadow.ts` | `CARD_SHADOW`(카드 껍데기 공용)·`SEGMENT_SHADOW`(NativeWind 네이티브 `shadow-sm`과 같은 값 — 웹 Tailwind 값과 다르다). `LocationConsentScreen`에 같은 값의 지역 상수가 있다 |
+| `ui/cardShadow.ts` | `CARD_SHADOW`(카드 껍데기 공용). `LocationConsentScreen`에 같은 값의 지역 상수가 있다 |
 | `model/preferenceSummary.ts` | `summarize`·`summarizePreferences` — 취향 7축을 `설정 안 함`/값 요약으로(`initialSelection` 재사용, 동행 끝에 반려동물). `settingsSections.ts`는 이제 `kind`만 읽는다 — `PreferenceSummary.text`(가운뎃점 요약 문자열)는 TRIP-1051 이후 운영 소비처 0(`preferenceSummary.test.ts`만 읽음), `PreferenceRowKey` export도 외부 소비자 0(03b 참고-2, 새 티켓 후보) |
 | `ui/SettingsScreen.l05parity.test.tsx` | 취향 값/칩 짝·동의 칩·개인화·chevron 색·칩 r8·바탕 |
 

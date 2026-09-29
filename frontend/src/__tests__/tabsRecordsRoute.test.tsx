@@ -1,7 +1,17 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, screen, within } from '@testing-library/react-native';
 
-import type { Trip } from '@/shared/api/generated/schemas';
+import type { Itinerary, Trip } from '@/shared/api/generated/schemas';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import {
+  CONFIRMED,
+  PLANNED,
+  deferred,
+  newTestQueryClient,
+  renderWithQueryClient,
+  scriptItineraryOptions,
+  settle,
+  type ItinScript,
+} from '@/test-support/myPageItineraries';
 import {
   captureDraftAtNextCall,
   freshWizardDraft,
@@ -15,7 +25,10 @@ import {
  *
  * *(개념)* `tabsHomeRoute.test.tsx` 선례와 같은 자리다 — 라우트를 직접 렌더해 실제 네비게이션을
  * 관찰한다. 라우트→페이지가 `useGetTrips`(조회)와 `useRouter().push`(항법)를 물므로, 그 둘을
- * 파일-로컬 목으로 통제해 QueryClientProvider 없이 렌더한다.
+ * 파일-로컬 목으로 통제한다. TRIP-1120 부터 페이지가 여행마다 일정도 조회한다(`useQueries` +
+ * `getGetTripsTripIdItineraryQueryOptions`) — 그래서 실 `QueryClientProvider` 아래에서 그리고
+ * (`renderRoute`), 옵션 함수 목이 대본대로 `queryFn` 을 돌린다. 기본 대본은 "영영 안 옴"이라 일정을
+ * 다루지 않는 케이스는 조회 전과 똑같이 돈다(카드 없음 = 기존 화면).
  *
  * 무엇을 보장하나:
  *  - AC-4: 지난 여행 카드를 누르면 그 여행의 요약으로 push('/trips/{id}/records/summary').
@@ -32,12 +45,28 @@ jest.mock('expo-router', () => ({
 }));
 
 const mockUseGetTrips = jest.fn();
+const mockItineraryOptions = jest.fn();
 jest.mock('@/shared/api/generated/trips/trips', () => ({
   useGetTrips: (...args: unknown[]) => mockUseGetTrips(...args),
+  getGetTripsTripIdItineraryQueryOptions: (...args: unknown[]) =>
+    mockItineraryOptions(...args),
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const RecordsRoute = require('@/app/(tabs)/records').default;
+
+/** 기본 대본 — 일정이 영영 안 온다(대기에 머물러 상태 갱신·act 경고가 없다). */
+function itineraryNeverArrives(): void {
+  mockItineraryOptions.mockImplementation((tripId: string) => ({
+    queryKey: [`/trips/${tripId}/itinerary`],
+    queryFn: () => new Promise(() => {}),
+  }));
+}
+
+/** 라우트를 실 QueryClient 아래에서 그린다(useQueries 는 Provider 없으면 던진다). */
+function renderRoute(client = newTestQueryClient()) {
+  return renderWithQueryClient(<RecordsRoute />, client);
+}
 
 /** required 10필드를 채운 최소 Trip — 테스트가 보는 축만 덮어쓴다. */
 function trip(
@@ -64,6 +93,8 @@ function setTrips(data: Trip[]): void {
 beforeEach(() => {
   mockPush.mockClear();
   mockUseGetTrips.mockReset();
+  mockItineraryOptions.mockReset();
+  itineraryNeverArrives();
 });
 
 describe('지난 여행 선택 → 여행 요약 (AC-4)', () => {
@@ -79,7 +110,7 @@ describe('지난 여행 선택 → 여행 요약 (AC-4)', () => {
       }),
     ]);
 
-    render(<RecordsRoute />);
+    renderRoute();
     fireEvent.press(screen.getByTestId('record-calendar-past-trip-t9'));
 
     expect(mockPush).toHaveBeenCalledWith('/trips/t9/records/summary');
@@ -90,7 +121,7 @@ describe('빈 상태 → 새 여행 (AC-5 · AC-1)', () => {
   it('저장 여행 0건이면 placeholder가 사라지고 새 여행 버튼이 위저드로 push한다', () => {
     setTrips([]);
 
-    render(<RecordsRoute />);
+    renderRoute();
 
     // placeholder 계약 종료(셸 교체).
     expect(screen.queryByTestId('shell-tab-placeholder-records')).toBeNull();
@@ -113,7 +144,7 @@ describe('월 이동 상태 전이 (AC-6)', () => {
       }),
     ]);
 
-    render(<RecordsRoute />);
+    renderRoute();
 
     // 현재 달 라벨은 시계값이라 모르지만, 상대 변화만으로 shiftMonth 배선을 결정론적으로 잰다.
     const before = screen.getByTestId('record-calendar-month-label').props
@@ -146,7 +177,7 @@ describe('🔴 1012-B1 · 기록 빈 상태 [새 여행] 은 직전 드래프트
     const draftAtPush = captureDraftAtNextCall(mockPush);
 
     setTrips([]);
-    render(<RecordsRoute />);
+    renderRoute();
 
     fireEvent.press(screen.getByTestId('record-calendar-empty-create'));
 
@@ -214,7 +245,7 @@ describe('🔴 1015-C · 기록 캘린더 마킹 날짜·범례 → 그 여행�
   });
 
   it('앵커 — 오늘이 고정돼 6월이 떠 있고, 세 여행의 기간이 마킹돼 있다(마킹 표시는 무회귀)', () => {
-    render(<RecordsRoute />);
+    renderRoute();
 
     expect(screen.getByTestId('record-calendar-month-label')).toHaveTextContent(
       '2026년 6월'
@@ -230,7 +261,7 @@ describe('🔴 1015-C · 기록 캘린더 마킹 날짜·범례 → 그 여행�
   });
 
   it('진행 중 여행의 마킹 날짜를 누르면 /trips/{id}/records 로 1회 간다', () => {
-    render(<RecordsRoute />);
+    renderRoute();
 
     fireEvent.press(screen.getByTestId('record-calendar-day-2026-06-11'));
 
@@ -238,7 +269,7 @@ describe('🔴 1015-C · 기록 캘린더 마킹 날짜·범례 → 그 여행�
   });
 
   it('지난 여행의 마킹 날짜를 누르면 그 여행의 /records 로 1회 간다(요약 summary 아님)', () => {
-    render(<RecordsRoute />);
+    renderRoute();
 
     fireEvent.press(screen.getByTestId('record-calendar-day-2026-06-02'));
 
@@ -249,7 +280,7 @@ describe('🔴 1015-C · 기록 캘린더 마킹 날짜·범례 → 그 여행�
     ['t-now', '/trips/t-now/records'],
     ['t-past', '/trips/t-past/records'],
   ])('범례 %s 를 누르면 %s 로 1회 간다', (tripId, href) => {
-    render(<RecordsRoute />);
+    renderRoute();
 
     fireEvent.press(screen.getByTestId(`record-calendar-legend-${tripId}`));
 
@@ -257,7 +288,7 @@ describe('🔴 1015-C · 기록 캘린더 마킹 날짜·범례 → 그 여행�
   });
 
   it('미래 여행의 마킹 날짜·범례, 마킹 없는 날짜를 눌러도 아무 데도 안 간다', () => {
-    render(<RecordsRoute />);
+    renderRoute();
     // 앵커 — 누를 대상이 실재한다(없으면 getByTestId 가 던져 공짜 통과를 막는다).
     const futureDay = screen.getByTestId('record-calendar-day-2026-06-21');
     const futureLegend = screen.getByTestId('record-calendar-legend-t-fut');
@@ -271,7 +302,7 @@ describe('🔴 1015-C · 기록 캘린더 마킹 날짜·범례 → 그 여행�
   });
 
   it('지난 여행 목록 카드는 계속 요약(/records/summary)으로 간다 (무회귀 · TRIP-767)', () => {
-    render(<RecordsRoute />);
+    renderRoute();
 
     fireEvent.press(screen.getByTestId('record-calendar-past-trip-t-past'));
 
@@ -380,7 +411,7 @@ describe('🔴 TRIP-1084 · 기록 캘린더 legend — 제외·묶음·3줄+더
 
   it('작성중 여행은 legend 에서 빠지되 마킹은 남고, 같은 기간은 한 줄, 앞 3줄 + "더 보기 1" → 펼쳐 숨은 지난 여행으로 간다', () => {
     // 준비 / 실행
-    render(<RecordsRoute />);
+    renderRoute();
 
     // 단언 ① 제외(결정 1) — legend 줄은 없고 그 날짜 마킹은 그대로(BR-U5-49).
     expect(screen.getByTestId('record-calendar-month-label')).toHaveTextContent(
@@ -412,7 +443,7 @@ describe('🔴 TRIP-1084 · 기록 캘린더 legend — 제외·묶음·3줄+더
   });
 
   it('묶음 줄을 누르면 어디로도 가지 않고 구성원 줄이 나타난다', () => {
-    render(<RecordsRoute />);
+    renderRoute();
     // 앵커 — 누르기 전엔 구성원 줄이 없다.
     expect(screen.queryByTestId('record-calendar-legend-t-b2')).toBeNull();
 
@@ -427,7 +458,7 @@ describe('🔴 TRIP-1084 · 기록 캘린더 legend — 제외·묶음·3줄+더
   // 만들면 7월로 넘겨도 6월 여행 줄이 남는데, 위 두 케이스는 6월에서만 렌더해 그걸 못 본다.
   it('다음 달로 넘기면 6월 여행 legend 줄이 사라진다(legend 는 보고 있는 달 기준)', () => {
     // 준비 — 6월 앵커: 부산 줄이 보인다.
-    render(<RecordsRoute />);
+    renderRoute();
     expect(screen.getByTestId('record-calendar-legend-t-a')).toBeOnTheScreen();
 
     // 실행 — 다음 달.
@@ -440,5 +471,343 @@ describe('🔴 TRIP-1084 · 기록 캘린더 legend — 제외·묶음·3줄+더
     expect(screen.queryByTestId('record-calendar-legend-t-a')).toBeNull();
     expect(screen.queryByTestId(GROUP)).toBeNull();
     expect(screen.queryByTestId('record-calendar-legend-more')).toBeNull();
+  });
+});
+
+// ── TRIP-1120 · 진행 중 여행 카드 + legend `›` 배선 (US-REC-14 · INV-3 · INV-4 · 01b 확정 결정) ─────────
+// 순수 함수(`pickOngoingTrip`·`openableTripIds`)와 화면은 각자 단위 테스트가 잠근다. 여기선 **페이지가**
+// ① 여행마다 일정을 조회해 "확정·없음(404)·모름"으로 접는지 ② 카드 버튼 목적지를 맞게 잇는지
+// ③ `›` 와 누름 이동이 같은 판정을 보는지만 본다. 오늘 = KST 2026-06-11(1015-C 와 같은 고정 — Date 만 가짜,
+// 타이머는 진짜: react-query 알림이 setTimeout(0) 이라 settle() 이 흘러야 한다).
+//
+// "카드 없음" 단언은 페이지가 조회를 안 해도 참이다 — 그래서 조회가 실제로 끝났음(`getQueryState`)을
+// 먼저 앵커로 확인한다(공짜 통과 차단).
+describe('🔴 TRIP-1120 · 기록 캘린더 진행 중 카드 + legend `›`', () => {
+  const NOW = trip({
+    tripId: 't-now',
+    title: '부산 여행',
+    startDate: '2026-06-10',
+    endDate: '2026-06-12',
+    // 서버 status 는 적대적으로 — 카드 판정은 일정 확정 × 날짜만 본다.
+    status: 'ENDED',
+  });
+  const PAST = trip({
+    tripId: 't-past',
+    title: '지난 여행',
+    startDate: '2026-06-01',
+    endDate: '2026-06-03',
+    status: 'ENDED',
+  });
+  const FUTURE = trip({
+    tripId: 't-fut',
+    title: '미래 여행',
+    startDate: '2026-06-20',
+    endDate: '2026-06-22',
+    status: 'PLANNED',
+  });
+  // 오늘(6/11)을 포함하는 다른 여행 — 서버는 ACTIVE 로 주지만 일정은 초안일 수 있다.
+  const DRAFT_NOW = trip({
+    tripId: 't-draft-now',
+    title: '같은 날 초안',
+    startDate: '2026-06-11',
+    endDate: '2026-06-11',
+    status: 'ACTIVE',
+  });
+
+  const CARD = 'record-calendar-ongoing';
+  const key = (tripId: string) => [`/trips/${tripId}/itinerary`];
+
+  function script(trips: Trip[], itins: Record<string, ItinScript>): void {
+    setTrips(trips);
+    scriptItineraryOptions(mockItineraryOptions, itins);
+  }
+
+  beforeEach(() => {
+    jest.useFakeTimers({
+      now: new Date('2026-06-11T03:00:00Z'),
+      doNotFake: [
+        'hrtime',
+        'nextTick',
+        'performance',
+        'queueMicrotask',
+        'requestAnimationFrame',
+        'cancelAnimationFrame',
+        'requestIdleCallback',
+        'cancelIdleCallback',
+        'setImmediate',
+        'clearImmediate',
+        'setInterval',
+        'clearInterval',
+        'setTimeout',
+        'clearTimeout',
+      ],
+    });
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  // ── AC-11 정상 ──
+  it('확정 여행이 오늘 기간 안이면 일정이 도착한 뒤 카드가 뜨고, [오늘 기록 보기]는 /trips/t-now/records 로 1회 간다', async () => {
+    // 준비
+    script([NOW, PAST, FUTURE], {
+      't-now': CONFIRMED,
+      't-past': CONFIRMED,
+      't-fut': CONFIRMED,
+    });
+
+    // 실행 ① 렌더 직후 — 일정이 오기 전엔 날짜만으로 먼저 그리지 않는다.
+    renderRoute();
+    expect(screen.queryByTestId(CARD)).toBeNull();
+
+    // 실행 ② 도착
+    await settle();
+
+    // 단언 ① 카드 얼굴
+    const card = screen.getByTestId(CARD);
+    expect(within(card).getByText('부산 여행')).toBeOnTheScreen();
+    expect(within(card).getByText('여행 중')).toBeOnTheScreen();
+    expect(within(card).getByText('2026.6.10–6.12 · 2일차')).toBeOnTheScreen();
+
+    // 실행 ③ → 단언 ② 버튼 목적지(j01)
+    fireEvent.press(screen.getByTestId('record-calendar-ongoing-records'));
+    expect(mockPush.mock.calls).toEqual([['/trips/t-now/records']]);
+  });
+
+  it('다음 달로 넘겨도 카드는 그대로다(보고 있는 달이 아니라 오늘 기준)', async () => {
+    script([NOW], { 't-now': CONFIRMED });
+    renderRoute();
+    await settle();
+    expect(screen.getByTestId(CARD)).toBeOnTheScreen();
+
+    fireEvent.press(screen.getByTestId('record-calendar-next'));
+
+    expect(screen.getByTestId('record-calendar-month-label')).toHaveTextContent(
+      '2026년 7월'
+    );
+    expect(screen.getByTestId(CARD)).toBeOnTheScreen();
+  });
+
+  // ── AC-12 허브 ──
+  it('[일정 허브로] — 확정·생성 완료 일정이면 여행 중 허브(/trips/t-now/live)로 1회 간다', async () => {
+    script([NOW], { 't-now': CONFIRMED });
+    renderRoute();
+    await settle();
+
+    fireEvent.press(screen.getByTestId('record-calendar-ongoing-hub'));
+
+    expect(mockPush.mock.calls).toEqual([['/trips/t-now/live']]);
+  });
+
+  it('[일정 허브로] — 확정이어도 생성 중(PARTIAL)이면 h06·홈과 같은 목적지(생성 중 화면)로 간다', async () => {
+    // 준비 — /live 를 박아 넣은 구현과 resolveItineraryDestination 을 거친 구현을 가른다.
+    const partial: Itinerary = { ...CONFIRMED, generationState: 'PARTIAL' };
+    script([NOW], { 't-now': partial });
+    renderRoute();
+    await settle();
+
+    fireEvent.press(screen.getByTestId('record-calendar-ongoing-hub'));
+
+    expect(mockPush.mock.calls).toEqual([
+      ['/trips/t-now/itinerary/generating'],
+    ]);
+  });
+
+  it('[일정 허브로] — 앞자리에 다른 여행이 있어도 누른 여행(카드)의 일정으로 목적지를 판정한다', async () => {
+    // 준비 — 목록 첫 자리는 지난 여행(확정·생성 완료 → 혼자면 /live), 카드 여행은 둘째 자리(생성 중).
+    // 첫 자리 일정을 읽는 구현은 /trips/t-now/live 로 가서 갈린다(03b W1).
+    const partial: Itinerary = { ...CONFIRMED, generationState: 'PARTIAL' };
+    script([PAST, NOW], { 't-past': CONFIRMED, 't-now': partial });
+    renderRoute();
+    await settle();
+
+    // 실행
+    fireEvent.press(screen.getByTestId('record-calendar-ongoing-hub'));
+
+    // 단언 — 카드 여행(t-now)의 PARTIAL 일정 → 생성 중 화면
+    expect(mockPush.mock.calls).toEqual([
+      ['/trips/t-now/itinerary/generating'],
+    ]);
+  });
+
+  // ── AC-13 모름 ──
+  it('ⓐ 일정이 아직 안 왔으면 카드 없이 캘린더·legend 가 뜨고, 도착하면 카드가 나타난다', async () => {
+    // 준비
+    const late = deferred<Itinerary>();
+    script([NOW], { 't-now': late.promise });
+
+    // 실행 ① 대기
+    renderRoute();
+    await settle();
+
+    // 단언 ① 모름 — 카드 없음, 나머지 화면은 있음.
+    expect(screen.queryByTestId(CARD)).toBeNull();
+    expect(screen.getByTestId('record-calendar-month')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('record-calendar-legend-t-now')
+    ).toBeOnTheScreen();
+
+    // 실행 ② 도착 → 단언 ②
+    late.resolve(CONFIRMED);
+    await settle();
+    expect(screen.getByTestId(CARD)).toBeOnTheScreen();
+  });
+
+  it('ⓑ 일정 조회가 500 이면 카드 없음(404 가 아니면 "없음"이 아니라 "모름")', async () => {
+    script([NOW], { 't-now': 'serverError' });
+    const { client } = renderRoute();
+    await settle();
+
+    // 앵커 — 페이지가 조회했고 실패로 끝났다.
+    expect(client.getQueryState(key('t-now'))?.status).toBe('error');
+    expect(screen.queryByTestId(CARD)).toBeNull();
+  });
+
+  it("ⓑ' 받아 둔 확정 일정이 있어도 다시 받다 500 이면 카드 없음(남은 데이터를 믿지 않는다)", async () => {
+    // 준비 — 같은 키 캐시에 확정 일정, 마운트 재조회(staleTime 0)는 500.
+    script([NOW], { 't-now': 'serverError' });
+    const client = newTestQueryClient();
+    client.setQueryData(key('t-now'), CONFIRMED);
+
+    renderRoute(client);
+    await settle();
+
+    // 앵커 — 실패가 확정됐고 옛 데이터는 남아 있다.
+    expect(client.getQueryState(key('t-now'))?.status).toBe('error');
+    expect(client.getQueryData(key('t-now'))).toEqual(CONFIRMED);
+    expect(screen.queryByTestId(CARD)).toBeNull();
+  });
+
+  // 500 을 404 처럼 "일정 없음"으로 접는 구현은 t-now 자신이 500 일 때(ⓑ)는 결과가 같아 안 잡힌다 —
+  // 다른 여행이 500 일 때만 갈린다(모름이면 막고, 없음이면 안 막는다).
+  it.each([
+    ['아직 안 왔으면(대기)', 'never' as ItinScript],
+    ['500 으로 실패했으면', 'serverError' as ItinScript],
+  ])(
+    'ⓒ 오늘 기간 안 다른 여행의 일정이 %s, 확정 여행이 있어도 카드 없음',
+    async (_l, other) => {
+      script([NOW, DRAFT_NOW], { 't-now': CONFIRMED, 't-draft-now': other });
+      const { client } = renderRoute();
+      await settle();
+
+      // 앵커 — 확정 여행 쪽 조회는 성공으로 끝났다.
+      expect(client.getQueryState(key('t-now'))?.status).toBe('success');
+      expect(screen.queryByTestId(CARD)).toBeNull();
+    }
+  );
+
+  it('ⓔ 오늘 기간 안 다른 여행이 404(일정 없음)면 "아는 값"이라 막지 않고 카드가 뜬다', async () => {
+    script([NOW, DRAFT_NOW], {
+      't-now': CONFIRMED,
+      't-draft-now': 'notFound',
+    });
+    renderRoute();
+    await settle();
+
+    expect(screen.getByTestId(CARD)).toBeOnTheScreen();
+  });
+
+  it('ⓓ 기간 밖(미래) 여행의 일정만 모르면 카드는 뜬다(과하게 막지 않는다)', async () => {
+    script([NOW, FUTURE], { 't-now': CONFIRMED, 't-fut': 'never' });
+    renderRoute();
+    await settle();
+
+    expect(screen.getByTestId(CARD)).toBeOnTheScreen();
+  });
+
+  // ── AC-14 초안 ──
+  it.each([
+    ['미확정 초안(PLANNED)', PLANNED as ItinScript, 'success'],
+    ['일정 없음(404)', 'notFound' as ItinScript, 'error'],
+  ])('%s 이면 오늘이 기간 안이어도 카드 없음', async (_l, itin, settled) => {
+    script([NOW], { 't-now': itin });
+    const { client } = renderRoute();
+    await settle();
+
+    // 앵커 — 조회가 끝났다(대기 중이라 없는 게 아니다).
+    expect(client.getQueryState(key('t-now'))?.status).toBe(settled);
+    expect(screen.queryByTestId(CARD)).toBeNull();
+  });
+
+  // ── AC-15 legend `›` ──
+  it('진행 중·지난 여행 줄에는 `›`, 미래 줄에는 없다 — `›` 있는 줄만 누르면 이동한다', () => {
+    // 준비 — 일정은 기본 대본(안 옴). `›` 는 날짜 판정이라 일정과 무관하다.
+    setTrips([NOW, PAST, FUTURE]);
+    renderRoute();
+
+    // 단언 ① 있는 쪽 — 자기 줄 안.
+    for (const id of ['t-now', 't-past']) {
+      expect(
+        within(screen.getByTestId(`record-calendar-legend-${id}`)).getByTestId(
+          `record-calendar-legend-chevron-${id}`
+        )
+      ).toBeOnTheScreen();
+    }
+    // 단언 ② 없는 쪽 — 줄은 있고 `›` 만 없다.
+    expect(
+      screen.getByTestId('record-calendar-legend-t-fut')
+    ).toBeOnTheScreen();
+    expect(
+      screen.queryByTestId('record-calendar-legend-chevron-t-fut')
+    ).toBeNull();
+
+    // 실행 → 단언 ③ `›` 와 이동이 같은 판정.
+    fireEvent.press(screen.getByTestId('record-calendar-legend-t-now'));
+    fireEvent.press(screen.getByTestId('record-calendar-legend-t-past'));
+    fireEvent.press(screen.getByTestId('record-calendar-legend-t-fut'));
+    expect(mockPush.mock.calls).toEqual([
+      ['/trips/t-now/records'],
+      ['/trips/t-past/records'],
+    ]);
+  });
+
+  it('지난 묶음 줄에는 `›`, 미래 묶음 줄에는 없고, 지난 묶음을 펼치면 구성원 줄에도 `›` 가 있다', () => {
+    // 준비 — 같은 기간 2건씩: 지난(6/1–6/3) · 미래(6/20–6/22).
+    const pastPair = ['g-p1', 'g-p2'].map((tripId) =>
+      trip({
+        tripId,
+        title: `${tripId} 여행`,
+        startDate: '2026-06-01',
+        endDate: '2026-06-03',
+        status: 'ENDED',
+      })
+    );
+    const futurePair = ['g-f1', 'g-f2'].map((tripId) =>
+      trip({
+        tripId,
+        title: `${tripId} 여행`,
+        startDate: '2026-06-20',
+        endDate: '2026-06-22',
+        status: 'PLANNED',
+      })
+    );
+    setTrips([...pastPair, ...futurePair]);
+    const PAST_GROUP = 'record-calendar-legend-group-2026-06-01_2026-06-03';
+    const FUT_GROUP = 'record-calendar-legend-group-2026-06-20_2026-06-22';
+
+    renderRoute();
+
+    // 단언 ① 묶음 줄
+    expect(
+      within(screen.getByTestId(PAST_GROUP)).getByTestId(
+        'record-calendar-legend-group-chevron-2026-06-01_2026-06-03'
+      )
+    ).toBeOnTheScreen();
+    expect(screen.getByTestId(FUT_GROUP)).toBeOnTheScreen();
+    expect(
+      screen.queryByTestId(
+        'record-calendar-legend-group-chevron-2026-06-20_2026-06-22'
+      )
+    ).toBeNull();
+
+    // 실행 → 단언 ② 지난 묶음 펼침 — 구성원 줄에도 `›`.
+    fireEvent.press(screen.getByTestId(PAST_GROUP));
+    expect(
+      within(screen.getByTestId('record-calendar-legend-g-p1')).getByTestId(
+        'record-calendar-legend-chevron-g-p1'
+      )
+    ).toBeOnTheScreen();
+    expect(mockPush).not.toHaveBeenCalled();
   });
 });

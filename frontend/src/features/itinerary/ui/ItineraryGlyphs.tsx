@@ -161,6 +161,28 @@ export function CheckGlyph({
   );
 }
 
+// h06 정렬 시트 선택 체크(22) — Figma `4750:2946`. 위 `CheckGlyph` 와 색(primary)·굵기(3)가 달라
+// 따로 둔다.
+export function SortCheckGlyph({ size = 22, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 22 22"
+      fill="none"
+    >
+      <Path
+        d="M18.33 5.5L8.25 15.58L3.67 11"
+        stroke={PRIMARY}
+        strokeWidth={3}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 // h07 폴백 체크리스트 "취향 반영 (건너뜀)" 행 마커(18) — 건너뛴 항목의 회색 대시. Figma `3831:2215`.
 // 초록 체크와 다른 도형이라 "건너뜀"이 한눈에 갈린다(색은 심판 사각, testID·도형으로 계약).
 export function DashGlyph({ size = 18, testID }: GlyphProps) {

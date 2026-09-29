@@ -21,14 +21,14 @@ import path from 'path';
 
 const ROOT = path.resolve('src');
 
-/** 새 진입점 8곳(비움) + 위저드 안 2곳(보존). SavedPlacesPage 는 둘 다 가진다. */
+/** 새 진입점 7곳(비움) + 위저드 안 2곳(보존). SavedPlacesPage 는 둘 다 가진다.
+ * TRIP-1123 — 마이페이지 [새 여행 만들기]가 사라져 `pages/my-page/ui/MyPage.tsx` 항목을 뺐다(8→7). */
 const EXPECTED: Record<string, number> = {
   'app/(tabs)/index.tsx': 1, // 홈 FAB — 새 진입
   'app/(tabs)/explore.tsx': 1, // 탐색 FAB — 새 진입
   'pages/place-explore/ui/PlaceExplorePage.tsx': 1, // d04 FAB — 새 진입
   'pages/destination-detail/ui/DestinationDetailPage.tsx': 1, // d03 FAB — 새 진입
   'pages/itinerary-list/ui/MyTripsListPage.tsx': 1, // 내 여행 목록 — 새 진입
-  'pages/my-page/ui/MyPage.tsx': 1, // 마이 — 새 진입
   'pages/records-calendar/ui/RecordsCalendarPage.tsx': 1, // 기록 빈 상태 — 새 진입
   // select 완료(위저드 안 — 보존) + '이 장소들로 여행 만들기'(새 진입 — 비운 뒤 시드)
   'pages/saved-places/ui/SavedPlacesPage.tsx': 2,
@@ -84,7 +84,7 @@ describe('탐지기 자가검사 — 이게 통과해야 아래 표가 의미를
   });
 });
 
-describe('🟢 1012 · /trips/new/step1 호출처 전수 (새 진입 8 · 위저드 안 2)', () => {
+describe('🟢 1012 · /trips/new/step1 호출처 전수 (새 진입 7 · 위저드 안 2)', () => {
   it('리터럴을 가진 파일과 파일별 개수가 분류 표와 정확히 같다', () => {
     const files = listSourceFiles(ROOT);
     const found: Record<string, number> = {};

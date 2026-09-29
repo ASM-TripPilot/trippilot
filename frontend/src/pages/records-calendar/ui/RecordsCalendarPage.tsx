@@ -1,12 +1,20 @@
 import { useState, type ReactElement } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useQueries } from '@tanstack/react-query';
 
+import { getGetTripsTripIdItineraryQueryOptions } from '@/shared/api/generated/trips/trips';
+import { isNotFound } from '@/shared/api/isNotFound';
+import {
+  itineraryDestinationHref,
+  resolveItineraryDestination,
+} from '@/features/itinerary/model/planState';
 import {
   buildMonthLegends,
   buildPastTripCards,
-  canOpenTripRecords,
   markedDaysOfMonth,
+  openableTripIds,
+  pickOngoingTrip,
   recordsTripIdForDate,
 } from '@/features/record/model/recordsCalendar';
 import { useRecordsCalendar } from '@/features/record/model/useRecordsCalendar';
@@ -29,10 +37,20 @@ import { StateNotice } from '@/shared/ui/StateNotice';
  * `useRouter` 를 제공해 이 페이지가 크래시 없이 렌더된다.
  *
  * legend 파생은 순수 함수 `buildMonthLegends`(TRIP-1084)가 맡고, 페이지 배선은 `tabsRecordsRoute` 가 잠근다.
+ *
+ * TRIP-1120 · 진행 중 카드 — 여행마다 일정을 조회해(h06 과 같은 캐시 키) 확정·없음(404)·모름으로 접고
+ * `pickOngoingTrip` 이 한 장을 고른다. 404 아닌 실패는 옛 data 가 남아 있어도 모름이다(남은 값을 믿지
+ * 않는다). legend `›` 와 legend 누름은 같은 `openableTripIds` 집합을 본다.
  */
 export function RecordsCalendarPage(): ReactElement {
   const { trips, isPending, isError } = useRecordsCalendar();
   const router = useRouter();
+  // 훅 호출 순서 규칙 — 아래 일찍 return 들보다 위.
+  const itineraries = useQueries({
+    queries: trips.map((trip) =>
+      getGetTripsTripIdItineraryQueryOptions(trip.tripId)
+    ),
+  });
 
   const today = seoulDate(new Date());
   const [yearMonth, setYearMonth] = useState(today.slice(0, 7));
@@ -69,6 +87,22 @@ export function RecordsCalendarPage(): ReactElement {
   const pastTrips = buildPastTripCards(trips, today);
 
   const monthLegends = buildMonthLegends(trips, yearMonth);
+  const openable = openableTripIds(trips, today);
+
+  const ongoingTrip = pickOngoingTrip(
+    trips.map((trip, i) => {
+      const query = itineraries[i];
+      if (query.isError) {
+        return {
+          trip,
+          itinerary: isNotFound(query.error) ? undefined : 'unknown',
+        };
+      }
+      if (query.isPending) return { trip, itinerary: 'unknown' };
+      return { trip, itinerary: query.data.status };
+    }),
+    today
+  );
 
   return (
     <RecordsCalendarScreen
@@ -77,6 +111,8 @@ export function RecordsCalendarPage(): ReactElement {
       markedDays={markedDays}
       pastTrips={pastTrips}
       monthLegends={monthLegends}
+      ongoingTrip={ongoingTrip}
+      openableTripIds={openable}
       isEmpty={trips.length === 0}
       onPressPrevMonth={() => setYearMonth((ym) => shiftMonth(ym, -1))}
       onPressNextMonth={() => setYearMonth((ym) => shiftMonth(ym, 1))}
@@ -87,10 +123,26 @@ export function RecordsCalendarPage(): ReactElement {
         if (tripId !== null) router.push(`/trips/${tripId}/records`);
       }}
       onPressLegend={(tripId) => {
-        const trip = trips.find((t) => t.tripId === tripId);
-        if (trip && canOpenTripRecords(trip, today)) {
-          router.push(`/trips/${tripId}/records`);
-        }
+        if (openable.has(tripId)) router.push(`/trips/${tripId}/records`);
+      }}
+      onPressOngoingRecords={(tripId) =>
+        router.push(`/trips/${tripId}/records`)
+      }
+      onPressOngoingHub={(tripId) => {
+        const data =
+          itineraries[trips.findIndex((t) => t.tripId === tripId)]?.data;
+        router.push(
+          itineraryDestinationHref(
+            tripId,
+            resolveItineraryDestination({
+              notFound: false,
+              status: data?.status,
+              generationState: data?.generationState,
+              generationMode: data?.generationMode,
+            }),
+            data?.days
+          )
+        );
       }}
       onPressCreateTrip={() => {
         // 새 여행 진입 — 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074).

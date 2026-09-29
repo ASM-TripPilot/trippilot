@@ -1443,3 +1443,20 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: INCEPTION·CONSTRUCTION 스테이지 승인 상태는 **유지**(재실행 아님, 국소 수정). 코드 변경 0 — 구현은 각 Jira 티켓에서 팀이 `frontend/`·`backend/`에서 수행.
 
 ---
+
+## Change Request — INCEPTION·CONSTRUCTION 산출물 사후 개정 4회차 (마이페이지 여행 목록 제거·숫자 3칸 집계 · TRIP-1123)
+**Timestamp**: 2026-09-30T00:00:00+09:00 (사이클 [기록] 시점, 초 단위 미측정)
+**User Input**: 사용자 결정 원문(QA-2026-09-29 동행 QA, `_workspace/20260929-qa-r5-tickets/00_context.md`에 기록된 그대로) — "#28 마이페이지: 새 여행 만들기 버튼 제거 + 예정/진행/종료 목록 제거, 숫자 카드만 남기고 탭하면 일정 탭" · "29. l 마이페이지 집계 — "진행 중 4" = 확정 1 + 작성중 초안 3(날짜가 오늘에 걸림). 초안 제외 필요". 정본 반영 대상(US-NOTIF-07·BR-U6-22·BR-U6-23)은 사용자 레인 지시로 사전 확정된 선택이며, 그 지시 원문은 이 항목 작성자(scribe)에게 전달되지 않아 옮겨 적지 못했다.
+**Current State**: CONSTRUCTION 설계 문서 단계(SCOPE.md 2026-07-17 개정). INCEPTION은 2026-07-13 승인 완료, U0~U6 설계 종료. 2·3회차 개정(2026-09-28) 이후.
+**Impact Assessment**: 2·3회차와 같은 `workflow-changes.md` §4 **Low impact → Modify and update dependents**(전면 재실행 아님). 스테이지 승인 상태는 유지한다.
+**User Confirmation**: 사용자 레인 지시로 3건(US-NOTIF-07·BR-U6-22·BR-U6-23) 사전 선택됨. 명시 승인 문구 원문은 없다 — 아침에 사용자 확인 필요.
+**Action Taken**:
+- **`stories.md` US-NOTIF-07** — 정상·예외 원문 보존, 아래에 `[개정 · 2026-09-29, TRIP-1123 …]` 블록 추가: 마이페이지 여행 목록·세그·새 여행 만들기·카드 대표 정보 폐기, 숫자 3칸만 유지 · 집계는 일정 확정 × 서울 오늘, 초안은 어느 칸에도 미집계, 서버 `Trip.status` 미사용, 모르면 `–` · 지난 여행 섹션·회고 진입·캘린더 › 유지(결정 2 (b)).
+- **U6 `business-rules.md` BR-U6-22·23** — 원문 표 보존, 표 아래 개정 블록쿼트 추가: BR-U6-22 "3분류" → 숫자 집계(`숙소 미등록` 칩 폐기) · BR-U6-23에 "지난 여행 = 확정 && 종료"와 노출 조건 "예정 0건일 때만"(TRIP-775 §F-3 A안, 지금까지 정본 공백) 보완.
+- **사용자 결정 원문과 다른 점(명기)**: 사용자 결정 #28 원문은 "탭하면 일정 탭"(세 칸 모두)이나, 레인 조정자가 **종료 칸은 기록 탭**으로 정했다(예정·진행 중은 일정 탭). 이는 사용자 확인 전의 조정자 결정이다 — 아침 판단 대상. 두 문서 모두 개정 줄에 같은 사실을 적었다. 또한 조정자 정정으로 결정 필요 2는 (b)(지난 여행 유지)이며, 이는 Figma 채택본 4755:2930·4755:3123과 F21 결정 절과 일치한다.
+- **구현 결정 표기**: 종료 → 기록 탭 · 지난 여행 = 확정 && 종료 · 모름 시 `–`는 **TRIP-1123 구현 결정**이며 다음 사이클이 요구사항 근거로 인용하면 안 된다.
+- 미수정(의도적, 선택 밖): `u6/…/frontend-components.md`(4행 "26줄 마이 준비 중 셸" 낡음 · 67행 ui 목록의 `TripStatusSegment`·`TripCard` · §4 `model/` 표에 `tripBuckets.ts` 없음) · `u6/…/business-logic-model.md` §6 "07 여행 목록 분류" 행 이름 · `inception/application-design/unit-of-work-story-map.md` 24행 "여행 목록" 문구 · `aidlc-state.md`(INCEPTION 개정 이력 항목 미추가 — 선례와 달리 이번엔 선택 밖) — 개발로그에 드리프트 관측으로만 남김.
+**Artifacts Affected**: `inception/user-stories/stories.md` · `construction/u6-notification-settings/functional-design/business-rules.md` · 이 `audit.md` append
+**Context**: INCEPTION·CONSTRUCTION 스테이지 승인 상태는 **유지**(국소 수정). 코드 변경은 같은 사이클(`20260929-trip1123-mypage-counts`)에서 `frontend/`에 별도 수행.
+
+---

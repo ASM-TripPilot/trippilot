@@ -3,11 +3,16 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PastTripList } from './PastTripList';
-import { CalendarGlyph, ChevronDownGlyph } from './RecordGlyphs';
+import {
+  CalendarGlyph,
+  ChevronDownGlyph,
+  LegendChevronGlyph,
+} from './RecordGlyphs';
 import { TripCalendarMonth } from './TripCalendarMonth';
 import type {
   LegendRow,
   MonthLegends,
+  OngoingTripCardVM,
   PastTripCardVM,
 } from '../model/recordsCalendar';
 import type { MonthCell } from '@/shared/date/monthGrid';
@@ -27,6 +32,10 @@ import { StateNotice } from '@/shared/ui/StateNotice';
  * legend(TRIP-1084)는 페이지가 `buildMonthLegends`로 만든 `monthLegends`(옵셔널)를 받아 앞 줄만 그리고,
  * '더 보기 N'·묶음 줄 누름으로 같은 자리에서 펼친다. 펼침 두 가지는 화면 로컬 UI 상태이고 월이 바뀌면
  * 처음으로 돌아간다(`key={monthLabel}`).
+ *
+ * TRIP-1120 · 앱바 아래·캘린더 위 진행 중 여행 카드(`ongoingTrip`, Figma 4761:3065)와 legend 줄 끝 `›`
+ * (`openableTripIds` 에 든 줄만 — 미래 줄엔 없다, INV-4). 둘 다 판정은 페이지 몫이고 여기선 그리기만 한다.
+ * legend 줄은 32 높이로 붙어 있어 세로 hitSlop 을 주지 않는다(이웃 줄을 덮는다).
  */
 
 export interface RecordsCalendarScreenProps {
@@ -45,7 +54,22 @@ export interface RecordsCalendarScreenProps {
   onPressDay?: (date: string) => void;
   /** 범례 행 탭(TRIP-1015 C) — 미래 여행 무시 판정은 페이지 몫. */
   onPressLegend?: (tripId: string) => void;
+  /** 진행 중 여행 카드(미지정·null 이면 미표시). */
+  ongoingTrip?: OngoingTripCardVM | null;
+  onPressOngoingRecords?: (tripId: string) => void;
+  onPressOngoingHub?: (tripId: string) => void;
+  /** 누르면 이동하는 여행 — 이 집합에 든 legend 줄에만 `›`(미지정이면 어디에도 없음). */
+  openableTripIds?: ReadonlySet<string>;
 }
+
+// Figma 카드 그림자 0 2 10 rgba(0,0,0,.06) — className 으로 못 줘 style prop(StayRecommendCard 선례).
+const CARD_SHADOW = {
+  shadowColor: 'black',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.06,
+  shadowRadius: 10,
+  elevation: 2,
+} as const;
 
 function CalendarAppBar(): ReactElement {
   return (
@@ -57,13 +81,83 @@ function CalendarAppBar(): ReactElement {
   );
 }
 
-/** 한 줄 legend(Figma legend-row: 줄마다 pt10·pb6 → 32 높이). 텍스트 조각은 호출부가 넘긴다. */
+/** 진행 중 여행 카드(Figma 4761:3065) — 제목 + `여행 중` 배지, `기간 · N일차`, 두 버튼(44). */
+function OngoingTripCard({
+  trip,
+  onPressRecords,
+  onPressHub,
+}: {
+  trip: OngoingTripCardVM;
+  onPressRecords?: (tripId: string) => void;
+  onPressHub?: (tripId: string) => void;
+}): ReactElement {
+  return (
+    <View className="w-full px-lg pb-sm pt-xs">
+      <View
+        testID="record-calendar-ongoing"
+        className="w-full gap-md rounded-[12px] border border-hairline bg-canvas p-md"
+        style={CARD_SHADOW}
+      >
+        <View className="w-full gap-xs">
+          <View className="flex-row items-center gap-[6px]">
+            <Text
+              numberOfLines={1}
+              className="shrink font-noto-bold text-card-title font-bold text-ink"
+            >
+              {trip.title}
+            </Text>
+            <View className="rounded-button bg-primary-pale px-sm py-[3px]">
+              <Text className="font-noto-bold text-micro font-bold text-primary">
+                여행 중
+              </Text>
+            </View>
+          </View>
+          <Text className="font-noto text-label text-muted">
+            {trip.dateRangeLabel !== null && `${trip.dateRangeLabel} · `}
+            <Text className="font-noto-bold font-bold text-ink">
+              {trip.dayLabel}
+            </Text>
+          </Text>
+        </View>
+        <View className="w-full flex-row gap-sm">
+          <Pressable
+            testID="record-calendar-ongoing-records"
+            accessibilityRole="button"
+            className="h-[44px] flex-1 items-center justify-center rounded-button bg-primary"
+            onPress={onPressRecords && (() => onPressRecords(trip.tripId))}
+          >
+            <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
+              오늘 기록 보기
+            </Text>
+          </Pressable>
+          <Pressable
+            testID="record-calendar-ongoing-hub"
+            accessibilityRole="button"
+            className="h-[44px] flex-1 items-center justify-center rounded-button border border-hairline-strong bg-canvas"
+            onPress={onPressHub && (() => onPressHub(trip.tripId))}
+          >
+            <Text className="font-noto-bold text-[16px] font-bold text-ink">
+              일정 허브로
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+/**
+ * 한 줄 legend(Figma legend-row: 줄마다 pt10·pb6 → 32 높이). 텍스트 조각은 호출부가 넘긴다.
+ * `chevronTestID` 가 있으면 줄 끝에 `›`(14, Figma 4761:3104) — 누름 영역과 같은 Pressable 안.
+ */
 function LegendLine({
   testID,
+  chevronTestID,
   onPress,
   children,
 }: {
   testID: string;
+  chevronTestID?: string;
   onPress?: () => void;
   children: ReactNode;
 }): ReactElement {
@@ -74,7 +168,12 @@ function LegendLine({
       onPress={onPress}
     >
       <View className="h-[9px] w-[9px] rounded-pill bg-primary" />
-      <Text className="font-noto text-label text-body">{children}</Text>
+      <Text className="flex-1 font-noto text-label text-body">{children}</Text>
+      {chevronTestID !== undefined && (
+        <View testID={chevronTestID}>
+          <LegendChevronGlyph />
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -85,14 +184,21 @@ function joinLabel(parts: (string | null)[]): string {
 
 function TripLegendLine({
   trip,
+  openable,
   onPressLegend,
 }: {
   trip: PastTripCardVM;
+  openable?: ReadonlySet<string>;
   onPressLegend?: (tripId: string) => void;
 }): ReactElement {
   return (
     <LegendLine
       testID={`record-calendar-legend-${trip.tripId}`}
+      chevronTestID={
+        openable?.has(trip.tripId)
+          ? `record-calendar-legend-chevron-${trip.tripId}`
+          : undefined
+      }
       onPress={onPressLegend && (() => onPressLegend(trip.tripId))}
     >
       {joinLabel([trip.title, trip.dateRangeLabel, trip.nightsLabel])}
@@ -106,9 +212,11 @@ function TripLegendLine({
  */
 function MonthLegendBlock({
   legends,
+  openable,
   onPressLegend,
 }: {
   legends: MonthLegends;
+  openable?: ReadonlySet<string>;
   onPressLegend?: (tripId: string) => void;
 }): ReactElement {
   const [showAll, setShowAll] = useState(false);
@@ -131,6 +239,7 @@ function MonthLegendBlock({
         <TripLegendLine
           key={row.tripId}
           trip={row}
+          openable={openable}
           onPressLegend={onPressLegend}
         />
       );
@@ -140,6 +249,12 @@ function MonthLegendBlock({
       <Fragment key={row.key}>
         <LegendLine
           testID={`record-calendar-legend-group-${row.key}`}
+          // 묶음 줄 `›` = 구성원 중 하나라도 열림(누르면 펼침이라 동작은 늘 있다).
+          chevronTestID={
+            row.members.some((member) => openable?.has(member.tripId))
+              ? `record-calendar-legend-group-chevron-${row.key}`
+              : undefined
+          }
           onPress={() => toggleGroup(row.key)}
         >
           {row.representativeTitle}{' '}
@@ -153,6 +268,7 @@ function MonthLegendBlock({
             <TripLegendLine
               key={member.tripId}
               trip={member}
+              openable={openable}
               onPressLegend={onPressLegend}
             />
           ))}
@@ -197,6 +313,10 @@ export function RecordsCalendarScreen({
   onPressCreateTrip,
   onPressDay,
   onPressLegend,
+  ongoingTrip,
+  onPressOngoingRecords,
+  onPressOngoingHub,
+  openableTripIds,
 }: RecordsCalendarScreenProps): ReactElement {
   if (isEmpty) {
     return (
@@ -231,6 +351,14 @@ export function RecordsCalendarScreen({
     <SafeAreaView edges={['top']} style={{ flex: 1 }} className="bg-canvas">
       <CalendarAppBar />
       <ScrollView className="flex-1" contentContainerClassName="pb-[100px]">
+        {ongoingTrip && (
+          <OngoingTripCard
+            trip={ongoingTrip}
+            onPressRecords={onPressOngoingRecords}
+            onPressHub={onPressOngoingHub}
+          />
+        )}
+
         <View className="w-full px-lg py-[4px]">
           <TripCalendarMonth
             monthLabel={monthLabel}
@@ -247,6 +375,7 @@ export function RecordsCalendarScreen({
           <MonthLegendBlock
             key={monthLabel}
             legends={monthLegends}
+            openable={openableTripIds}
             onPressLegend={onPressLegend}
           />
         )}

@@ -88,6 +88,12 @@ const EXPECTED_H = [
   // h06-my-trips-empty **바로 뒤**에 이 순서(menu→delete-confirm)로 넣으면 안정 정렬이 그대로 낸다.
   'dev-preview-state-h06-my-trips-menu', // h06 (TRIP-1055 · 삭제 메뉴)
   'dev-preview-state-h06-my-trips-delete-confirm', // h06 (TRIP-1055 · 삭제 확인)
+  // TRIP-1121: h06 여행 중 고정 1키. 같은 h06 코드라 PREVIEW_STATES 배열에서 delete-confirm **바로 뒤**에
+  // 넣으면 안정 정렬이 그대로 낸다(배열 위치=정렬 위치). Figma 4745:2874 와 1:1.
+  'dev-preview-state-h06-my-trips-ongoing', // h06 (TRIP-1121 · 여행 중 고정)
+  // TRIP-1122: h06 정렬 시트 1키. 같은 h06 코드라 PREVIEW_STATES 배열에서 ongoing **바로 뒤**에 넣으면
+  // 안정 정렬이 그대로 낸다(배열 위치=정렬 위치). Figma 4750:2902 와 1:1.
+  'dev-preview-state-h06-my-trips-sort-sheet', // h06 (TRIP-1122 · 정렬 시트)
   // TRIP-790: 옛 h10 `itinerary-draft-generating`(만드는 중 · DraftScreen 인라인 게이지)을
   // h07 부분 결과(셸 얼굴)로 개명. 라벨 코드가 h07 이라 안정 정렬이 mustvisit-time 뒤에 붙는다
   // (개명 엔트리는 PREVIEW_STATES 배열상 draft 구역이라 mustvisit-time 보다 늦다 · 02a ★10).

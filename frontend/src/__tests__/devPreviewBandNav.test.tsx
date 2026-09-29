@@ -455,7 +455,18 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    키·얼굴은 아래 'TRIP-1106' describe 가 못박는다. Figma 프레임이 없는 얼굴이고(결정 3 — 코드 먼저)
     //    딤·중앙 정렬은 조건부 렌더 오버레이의 jest 사각이라 이 키가 유일한 육안 수단이다.
     //    devPreviewBandSort 는 밴드 h·l 만 잠가 band d 와 무관(오갱신 금지).
-    expect(PREVIEW_STATES).toHaveLength(193);
+    // ⚠️ TRIP-1121: h06 여행 중 고정 얼굴 `h06-my-trips-ongoing`(band `h`, Figma `4745:2874`) 1키 추가로
+    //    185→186. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 1키만
+    //    `h06-my-trips-delete-confirm` 바로 뒤에 추가하고 이 가드는 안 만진다(추가 전엔 185개라 red). 정확한 키·
+    //    얼굴은 아래 'TRIP-1121' describe, h 순서는 devPreviewBandSort EXPECTED_H 가 못박는다. 배지가 사진 위
+    //    우상단에 붙는 모양·여행 중 카드 ⋯ 부재의 육안 대조 자리가 이 키다.
+
+    // ⚠️ TRIP-1122: h06 정렬 시트 열린 얼굴 `h06-my-trips-sort-sheet`(band `h`, Figma `4750:2902`) 1키 추가로
+    //    186→187. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 1키만
+    //    `h06-my-trips-ongoing` 바로 뒤에 추가하고 이 가드는 안 만진다(추가 전엔 186개라 red). 정확한 키·얼굴은
+    //    아래 'TRIP-1122' describe, h 순서는 devPreviewBandSort EXPECTED_H 가 못박는다. 시트·딤이 탭바를 덮는지,
+    //    핸들·체크·행 높이의 육안 대조 자리가 이 키다.
+    expect(PREVIEW_STATES).toHaveLength(195);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -1388,8 +1399,9 @@ describe('🔴 TRIP-770 · j 밴드 최종 18키·라벨 완전 일치 (TRIP-106
     ],
     ['share-card-default', 'j06 · 공유 카드 default'],
     ['share-card-no-photo', 'j06 · 공유 카드 no-photo'],
+    // TRIP-1120 — Figma 4761:2930(진행 중 카드 + 미래 줄 `›` 없음) 과 1:1.
     ['records-calendar-default', 'j07 · 여행 캘린더 default'],
-    // TRIP-1084 — Figma 4699:2630(legend 3줄+더 보기) 과 1:1.
+    // TRIP-1084 — legend 3줄+더 보기. TRIP-1120 로 Figma 4761:3107(접힘)·4761:3301(펼침, 탭으로)과 1:1.
     ['records-calendar-legend-more', 'j07 · 여행 캘린더 legend-more'],
   ];
 
@@ -1440,6 +1452,70 @@ describe('🔴 TRIP-1084 · records-calendar-legend-more 프리뷰 = Figma 4699:
     expect(screen.getByTestId('record-calendar-legend-more')).toHaveTextContent(
       '더 보기 2'
     );
+  });
+});
+
+// TRIP-1120 · j07 두 프리뷰 키가 진행 중 카드 + legend `›` 를 그리는가(6-b 육안 대조의 전제).
+// 무엇을 보장하나: 새 키 없이 기존 2키가 Figma 4761:2930(default)·4761:3107/3301(legend 접힘/펼침) 의 얼굴을
+// 갖는다 — 카드·`›` 없이 키만 남으면 카드 반경·배지 칩·`›` 색을 눈으로 볼 자리가 없다. 총량·j 18키는 무변경.
+describe('🔴 TRIP-1120 · j07 프리뷰 — 진행 중 카드 + legend `›` (Figma 4761:2930·3107·3301)', () => {
+  const CARD = 'record-calendar-ongoing';
+  const ROW =
+    /^record-calendar-legend-(?!more)(?!group-count-)(?!chevron-)(?!group-chevron-)/;
+  const CHEVRON = /^record-calendar-legend-(group-)?chevron-/;
+
+  function renderKey(key: string): void {
+    const state = PREVIEW_STATES.find((s) => s.key === key);
+    expect(state?.band).toBe('j');
+    if (state === undefined) throw new Error(`${key} 키 없음`);
+    render(state.render());
+  }
+
+  it('records-calendar-default — 부산 여행 카드(2일차), 부산 줄에만 `›`, 미래 제주 줄은 `›` 없음', () => {
+    renderKey('records-calendar-default');
+
+    // 카드
+    const card = screen.getByTestId(CARD);
+    expect(within(card).getByText('부산 여행')).toBeOnTheScreen();
+    expect(within(card).getByText('여행 중')).toBeOnTheScreen();
+    expect(within(card).getByText('2026.6.10–6.12 · 2일차')).toBeOnTheScreen();
+
+    // legend — 2줄(부산 · 미래 제주) 중 `›` 는 부산 하나.
+    expect(screen.queryAllByTestId(ROW)).toHaveLength(2);
+    expect(
+      screen.getByText('제주 여행 · 6.24–6.26 · 2박 3일')
+    ).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId('record-calendar-legend-t-busan')).getByTestId(
+        'record-calendar-legend-chevron-t-busan'
+      )
+    ).toBeOnTheScreen();
+    expect(screen.queryAllByTestId(CHEVRON)).toHaveLength(1);
+  });
+
+  it('records-calendar-legend-more — 서울특별시 여행 카드("외 N" 없음), 두 묶음에 `›`, 더 보기로 5줄 모두 `›`', () => {
+    renderKey('records-calendar-legend-more');
+
+    // 카드 — 제목은 여행 하나(묶음 표기 금지, 01b).
+    const card = screen.getByTestId(CARD);
+    expect(within(card).getByText('서울특별시 여행')).toBeOnTheScreen();
+    expect(within(card).queryByText(/외 \d/)).toBeNull();
+    expect(within(card).getByText('2026.9.28–9.30 · 2일차')).toBeOnTheScreen();
+
+    // 접힘(4761:3107) — 묶음 두 줄 + 부산, 셋 다 `›`.
+    for (const key of ['2026-09-28_2026-09-30', '2026-09-28_2026-09-29']) {
+      expect(
+        within(
+          screen.getByTestId(`record-calendar-legend-group-${key}`)
+        ).getByTestId(`record-calendar-legend-group-chevron-${key}`)
+      ).toBeOnTheScreen();
+    }
+    expect(screen.queryAllByTestId(CHEVRON)).toHaveLength(3);
+
+    // 펼침(4761:3301) — 더 보기 뒤 5줄 모두 `›`(9월 여행은 전부 시작 ≤ 9/29).
+    fireEvent.press(screen.getByTestId('record-calendar-legend-more'));
+    expect(screen.queryAllByTestId(ROW)).toHaveLength(5);
+    expect(screen.queryAllByTestId(CHEVRON)).toHaveLength(5);
   });
 });
 
@@ -2054,6 +2130,76 @@ describe('🔴 TRIP-1055 · h06 작성중 여행 삭제 메뉴·삭제 확인 �
     const keys = PREVIEW_STATES.map((state) => state.key);
     expect(keys).toContain('h06-my-trips-loading');
     expect(keys).toContain('h06-my-trips-empty');
+  });
+});
+
+// TRIP-1121 — 배지 위치(사진 우상단)·색·카드 간격은 픽셀이라 jest 사각이다. 6-b 육안 대조 자리가 이 키다
+// (Figma 4745:2874 — 여행 중 → 작성중 → 완성 3카드). 무엇을 보장하나: 키가 h 밴드에 있고, 렌더하면 배지가
+// 그 순서로 서며, 맨 위 여행 중 카드에는 ⋯·resume 이 없고 둘째 작성중 카드에는 둘 다 있다.
+// TRIP-1122 — 시트 판·딤·핸들·체크의 픽셀과 "시트가 탭바를 덮는가"는 jest 사각이다(gorhom 목 통과형).
+// 6-b 육안 대조 자리가 이 키다(Figma 4750:2902). 무엇을 보장하나: 키가 h 밴드에 있고, 렌더하면 목록 위에
+// 정렬 시트가 열린 채 서며 최신순 옵션이 선택돼 있고 트리거 라벨도 최신순이다.
+describe('🔴 TRIP-1122 · h06 정렬 시트 프리뷰 키 (band h)', () => {
+  it('h06-my-trips-sort-sheet 는 목록 + 최신순이 선택된 정렬 시트를 그린다', () => {
+    // 준비 — 새 키 엔트리(red-first: preview.tsx 에 추가 전엔 없다)
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'h06-my-trips-sort-sheet'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('h');
+    expect(entry?.label).toBe('h06 · 내 여행 정렬 시트');
+
+    // 실행
+    render(<>{entry?.render()}</>);
+
+    // 단언 — 목록 화면 + 열린 시트, 선택 표시와 트리거 라벨이 같은 기준
+    expect(screen.getByTestId('itinerary-tab-root')).toBeOnTheScreen();
+    expect(screen.getByTestId('my-trips-sort')).toHaveTextContent('최신순');
+    expect(screen.getByTestId('my-trips-sort-sheet')).toBeOnTheScreen();
+    expect(screen.getByTestId('my-trips-sort-option-recent')).toBeSelected();
+    expect(screen.getByTestId('my-trips-sort-option-title')).not.toBeSelected();
+  });
+});
+
+describe('🔴 TRIP-1121 · h06 여행 중 고정 프리뷰 키 (band h)', () => {
+  it('h06-my-trips-ongoing 은 여행 중·작성중·완성 3카드를 그 순서로 그린다', () => {
+    // 준비 — 새 키 엔트리(red-first: preview.tsx 에 추가 전엔 없다)
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'h06-my-trips-ongoing'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('h');
+    expect(entry?.label).toBe('h06 · 내 여행 여행 중 고정');
+
+    // 실행
+    render(<>{entry?.render()}</>);
+
+    // 단언 — 목록 위 카드 3장, 배지가 여행 중 → 작성중 → 완성 순(트리 순서)
+    expect(screen.getByTestId('itinerary-tab-root')).toBeOnTheScreen();
+    const cardIds = screen
+      .getAllByTestId(/^my-trip-card-/)
+      .map((card) => String(card.props.testID).replace('my-trip-card-', ''));
+    expect(cardIds).toHaveLength(3);
+    const [live, draft, done] = cardIds;
+    expect(screen.getByTestId(`my-trip-badge-${live}`)).toHaveTextContent(
+      '여행 중'
+    );
+    expect(screen.getByTestId(`my-trip-badge-${draft}`)).toHaveTextContent(
+      '작성중'
+    );
+    expect(screen.getByTestId(`my-trip-badge-${done}`)).toHaveTextContent(
+      '완성'
+    );
+
+    // 여행 중 카드 — ⋯·resume 없음, 상태문 '일정 확정'(Figma 4745:2943)
+    expect(screen.queryByTestId(`my-trip-menu-${live}`)).toBeNull();
+    expect(screen.queryByTestId(`my-trip-resume-${live}`)).toBeNull();
+    expect(screen.getByTestId(`my-trip-extra-${live}`)).toHaveTextContent(
+      '일정 확정'
+    );
+    // 작성중 카드 — ⋯·resume 있음(긍정 짝 — 위 부재 단언의 공짜 통과 차단)
+    expect(screen.getByTestId(`my-trip-menu-${draft}`)).toBeOnTheScreen();
+    expect(screen.getByTestId(`my-trip-resume-${draft}`)).toBeOnTheScreen();
   });
 });
 
