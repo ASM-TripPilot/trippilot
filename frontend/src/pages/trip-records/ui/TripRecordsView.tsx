@@ -46,7 +46,7 @@ export interface TripRecordsDayTab {
 
 /**
  * TRIP-569 — 활성 일자의 귀속 헤더 완성값(라벨 조립은 페이지 몫). `stayName` 이 있으면 숙소명
- * 헤더, null/undefined 면 날짜만 헤더로 갈린다.
+ * 줄을 그리고, null/undefined 면 줄이 없다 — 날짜 귀속은 시트 헤더가 맡는다(TRIP-1097).
  */
 export interface DayAttributionHeader {
   dayLabel: string;
@@ -230,27 +230,20 @@ export function TripRecordsView({
             </View>
           ) : null}
 
-          {/* TRIP-569 일자별 귀속 헤더 — 숙소 있음/없음을 상호배타 testID 로 가른다. */}
-          {attribution ? (
-            attribution.stayName ? (
-              <View
-                testID="record-trip-attribution-stay"
-                className="w-full flex-row items-center gap-sm"
-              >
-                <Text className="font-noto-bold text-body text-ink">
-                  {attribution.stayName}
-                </Text>
-                <Text className="text-label text-muted">
-                  {attribution.dayLabel}
-                </Text>
-              </View>
-            ) : (
-              <View testID="record-trip-attribution-date" className="w-full">
-                <Text className="text-label text-muted">
-                  {attribution.dayLabel}
-                </Text>
-              </View>
-            )
+          {/* TRIP-569 숙소 귀속 줄 — 숙소 있는 날만. 숙소 없는 날의 날짜 귀속(BR-U5-26)은 시트 헤더가
+              맡는다(TRIP-1097 결정 1 — 옛 date-only 줄은 헤더의 "N일차"를 한 번 더 찍었다). */}
+          {attribution?.stayName ? (
+            <View
+              testID="record-trip-attribution-stay"
+              className="w-full flex-row items-center gap-sm"
+            >
+              <Text className="font-noto-bold text-body text-ink">
+                {attribution.stayName}
+              </Text>
+              <Text className="text-label text-muted">
+                {attribution.dayLabel}
+              </Text>
+            </View>
           ) : null}
 
           <Text className="w-full text-label text-muted">
