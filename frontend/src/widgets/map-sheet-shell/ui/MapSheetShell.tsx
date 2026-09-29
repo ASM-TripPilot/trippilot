@@ -129,6 +129,14 @@ export interface MapSheetShellProps<T = unknown> {
    *  매 프레임 셸 루트 위끝→시트 윗변 y(topInset 포함)를 써 넣는다. 값은 소비처(i01 허브)가 만들어 쥔다.
    *  미전달=미부착. */
   animatedPosition?: SharedValue<number>;
+  /** 본문 스크롤 래퍼(TRIP-1112 가산) — 기본 true. false 면 `header`·`children` 을 `BottomSheetScrollView`
+   *  대신 평범한 `flex-1` View 에 그리고, 스크롤러는 소비처가 직접 둔다(편집기의 중첩 드래그 스크롤).
+   *  `list` 를 주면 list 경로가 우선한다. */
+  bodyScroll?: boolean;
+  /** 시트 본문 끌기(TRIP-1112 가산) — `<BottomSheet enableContentPanningGesture>` 로 그대로 흘린다.
+   *  false 면 시트는 손잡이로만 끌린다. 미전달=라이브러리 기본(true).
+   *  ⚠️ 정적 값 — 렌더 중 토글 금지(gorhom 이 본문을 재마운트한다, BottomSheetContent.tsx 236–249). */
+  contentPanning?: boolean;
 }
 
 export function MapSheetShell<T = unknown>({
@@ -155,6 +163,8 @@ export function MapSheetShell<T = unknown>({
   radiusCircle,
   fitPins,
   animatedPosition,
+  bodyScroll = true,
+  contentPanning,
 }: MapSheetShellProps<T>): ReactElement {
   // 지도 로드 실패(TRIP-919). 폴백 중엔 MapView 가 트리에서 빠지므로, 재시도로 이 값을 풀면 MapView 가
   // 새 인스턴스로 다시 마운트돼 실패 알림(notifiedRef)도 처음부터 다시 돈다 — 별도 key 가 필요 없다.
@@ -235,6 +245,7 @@ export function MapSheetShell<T = unknown>({
         onChange={setSnapIndex}
         onAnimate={onSheetAnimate}
         animatedPosition={animatedPosition}
+        enableContentPanningGesture={contentPanning}
       >
         {list ? (
           <BottomSheetFlatList
@@ -256,6 +267,11 @@ export function MapSheetShell<T = unknown>({
             keyboardShouldPersistTaps="handled"
             testID={list.testID}
           />
+        ) : !bodyScroll ? (
+          <View className="flex-1">
+            {header}
+            {children}
+          </View>
         ) : (
           <BottomSheetScrollView onScrollBeginDrag={onSheetScrollBeginDrag}>
             {header}

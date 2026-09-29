@@ -804,8 +804,17 @@ describe('🔴 TRIP-753 · i07 일정 편집 프리뷰 (AC-12 · AC-10)', () => 
     // 행 3 위반 배지 하나.
     expectTexts(/^slot-stopcard-violation-/, ['숙소 고정 충돌']);
 
-    // i07 얼굴 — 카드 사이 + 없음, 안내 문구, 펼친 시트, 저장 CTA.
-    expect(screen.queryAllByTestId(/^itinerary-edit-insert-/)).toHaveLength(0);
+    // i07 얼굴 — 카드 사이 + 는 완료 i07-2 앞(0)만 빠지고 1·2·3(TRIP-1115), 안내 문구, 펼친 시트, 저장 CTA.
+    expect(
+      screen
+        .queryAllByTestId(/^itinerary-edit-insert-/)
+        .map((node) => node.props.testID)
+    ).toEqual([
+      'itinerary-edit-insert-1',
+      'itinerary-edit-insert-2',
+      'itinerary-edit-insert-3',
+    ]);
+    expect(screen.queryByTestId('itinerary-edit-insert-0')).toBeNull();
     expect(screen.getByTestId('itinerary-edit-guide')).toHaveTextContent(
       '방문한 곳은 그대로 두고, 길게 눌러 순서를 바꾸거나 아래로 끌어 삭제해요'
     );
