@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { delay, http, HttpResponse } from 'msw';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -196,6 +197,9 @@ afterEach(() => {
 
 afterAll(() => server.close());
 
+// TRIP-1096 D-FAILED — 화면이 FAILED 응답을 실제로 받았는지 캐시로 기다리려고 마지막 client 를 쥔다.
+let lastClient: QueryClient | null = null;
+
 function renderPage(slotKey: string = buildSlotKey(DAY1, 'a')) {
   const client = new QueryClient({
     defaultOptions: {
@@ -208,6 +212,7 @@ function renderPage(slotKey: string = buildSlotKey(DAY1, 'a')) {
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
   }
+  lastClient = client;
   return render(<SlotFillPage tripId={TRIP_ID} slotKey={slotKey} />, {
     wrapper: Wrapper,
   });
@@ -335,6 +340,13 @@ describe('🔴 TRIP-978 · 생성 중 확정 잠금과 해제 (AC-3~AC-6)', () =
         call === 0 ? itinerary('PARTIAL') : itinerary('COMPLETE');
 
       renderPage();
+      // TRIP-1096 — PARTIAL(days=[day1]) 첫 화면부터 분모는 여행 기간 2다("/ 1" 을 거치지 않는다).
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('itinerary-copick-concept-progress-day')
+        ).toHaveTextContent(/^1일차 \/ 2 · /)
+      );
+      expect(getCalls).toBe(1);
       await pickConcept();
 
       await waitFor(
@@ -436,5 +448,144 @@ describe('🔴 TRIP-978 · 후보 조회 실패를 말한다 (AC-7 · Q2)', () =
 
     expect(screen.getByTestId('itinerary-copick-slotfill-root')).toBeTruthy();
     expect(screen.queryByTestId('itinerary-copick-zero')).toBeNull();
+  });
+});
+
+/**
+ * TRIP-1096 · 같이 짜기 진행 줄 분모 = 여행 기간(QA-2026-09-29 A15).
+ *
+ * 무엇을 보장하나: 생성 중(PARTIAL)·2차 실패(FAILED)로 일정에 day1 만 있어도, 진행 줄 "N일차 / 총" 의 총과
+ * 진행바 칸 수는 여행 startDate~endDate 일수(2)다. 여행을 아직 모르거나 조회가 실패하면 틀린 숫자 대신
+ * 분모와 진행바 칸을 아예 안 그린다(결정 1 · INV-4). 분자는 일정 days 안 순번 그대로다(결정 2) — 이 파일의
+ * 여행 startDate(6/10)와 일정 날짜(10/12)는 일부러 다르다. 날짜 차로 셌다면 분자가 1이 아니다.
+ *
+ * 3동작: 준비 = 일정 GET 대본(PARTIAL/FAILED) + 여행 GET(2일 · 대기 · 실패) → 실행 = 화면 열기(·컨셉 고르기)
+ * → 단언 = 진행 줄 글자와 진행바 칸 수(채움 + 트랙).
+ */
+describe('🔴 TRIP-1096 · 진행 줄 분모 = 여행 기간', () => {
+  function conceptCells(): number {
+    return (
+      screen.queryAllByTestId('itinerary-copick-concept-progress-cell-filled')
+        .length +
+      screen.queryAllByTestId('itinerary-copick-concept-progress-cell-track')
+        .length
+    );
+  }
+
+  it('D-PARTIAL · day1 만 온 2일 여행 — 컨셉·후보 화면 둘 다 "1일차 / 2"이고 진행바 칸이 2개다', async () => {
+    itineraryScript = () => itinerary('PARTIAL');
+
+    renderPage();
+
+    const conceptDay = await screen.findByTestId(
+      'itinerary-copick-concept-progress-day'
+    );
+    await waitFor(() => expect(conceptDay).toHaveTextContent(/^1일차 \/ 2 · /));
+    expect(conceptCells()).toBe(2);
+    expect(
+      screen.getAllByTestId('itinerary-copick-concept-progress-cell-filled')
+    ).toHaveLength(1);
+
+    await pickConcept();
+    expect(
+      await screen.findByTestId('itinerary-copick-slotfill-progress-day')
+    ).toHaveTextContent(/^1일차 \/ 2 · /);
+    expect(
+      screen.getAllByTestId('itinerary-copick-slotfill-progress-cell-filled')
+        .length +
+        screen.queryAllByTestId('itinerary-copick-slotfill-progress-cell-track')
+          .length
+    ).toBe(2);
+  });
+
+  it(
+    'D-FAILED · 2차가 FAILED 로 끝나 day1 만 남아도 분모는 2다',
+    async () => {
+      itineraryScript = (call) =>
+        call === 0 ? itinerary('PARTIAL') : itinerary('FAILED');
+
+      renderPage();
+
+      // PARTIAL 과 FAILED 의 진행 줄 글자가 같아서, "두 번째 요청이 나갔다"만 기다리면 아직 PARTIAL 인 화면을
+      // 재고 통과할 수 있다(03b 경고 1). 캐시에 FAILED 가 들어온 것을 먼저 기다린 뒤 잰다.
+      await waitFor(
+        () =>
+          expect(
+            lastClient
+              ?.getQueryCache()
+              .findAll()
+              .map(
+                (query) =>
+                  (query.state.data as Itinerary | undefined)?.generationState
+              )
+          ).toContain('FAILED'),
+        { timeout: POLL_WAIT_MS }
+      );
+      // 캐시 갱신 뒤 구독 화면의 다시 그리기를 끝까지 흘려보낸 다음 잰다 — 안 하면 아직 PARTIAL 로 그려진
+      // 화면(글자가 같다)을 재고 통과할 수 있다.
+      await act(async () => {
+        await sleep(50);
+      });
+      expect(
+        screen.getByTestId('itinerary-copick-concept-progress-day')
+      ).toHaveTextContent(/^1일차 \/ 2 · /);
+      expect(conceptCells()).toBe(2);
+    },
+    POLL_TEST_TIMEOUT
+  );
+
+  it('D-LOADING · 여행 조회가 아직이면 분모·진행바 칸 없이 "1일차 · ", 도착하면 "1일차 / 2"', async () => {
+    let releaseTrip: () => void = () => undefined;
+    const tripGate = new Promise<void>((resolve) => {
+      releaseTrip = resolve;
+    });
+    server.use(
+      http.get(`${BASE}/trips/:tripId`, async () => {
+        await tripGate;
+        return HttpResponse.json(TRIP_NO_DESTINATIONS);
+      })
+    );
+    itineraryScript = () => itinerary('PARTIAL');
+
+    renderPage();
+
+    const day = await screen.findByTestId(
+      'itinerary-copick-concept-progress-day'
+    );
+    expect(day).toHaveTextContent(/^1일차 · /);
+    expect(day).not.toHaveTextContent(/\//);
+    // 진행 줄이 떠 있는데(루트 존재) 칸이 0 — "안 그렸다"가 의미를 갖게 짝으로 잰다.
+    expect(
+      screen.getByTestId('itinerary-copick-concept-progress')
+    ).toBeTruthy();
+    expect(conceptCells()).toBe(0);
+
+    releaseTrip();
+    await waitFor(() => expect(day).toHaveTextContent(/^1일차 \/ 2 · /));
+    expect(conceptCells()).toBe(2);
+  });
+
+  it('D-ERROR · 여행 조회가 실패하면 분모·진행바 칸 없이 "1일차 · "다(일정 days 길이로 폴백하지 않는다)', async () => {
+    let tripCalls = 0;
+    server.use(
+      http.get(`${BASE}/trips/:tripId`, () => {
+        tripCalls += 1;
+        return HttpResponse.json(
+          { code: 'INTERNAL', message: 'boom' },
+          { status: 500 }
+        );
+      })
+    );
+    itineraryScript = () => itinerary('PARTIAL');
+
+    renderPage();
+
+    await waitFor(() => expect(tripCalls).toBe(1));
+    const day = await screen.findByTestId(
+      'itinerary-copick-concept-progress-day'
+    );
+    await waitFor(() => expect(day).toHaveTextContent(/^1일차 · /));
+    expect(day).not.toHaveTextContent(/\//);
+    expect(conceptCells()).toBe(0);
   });
 });
