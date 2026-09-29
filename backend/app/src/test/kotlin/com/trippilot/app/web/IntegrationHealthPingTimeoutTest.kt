@@ -9,11 +9,9 @@ import io.kotest.matchers.types.shouldBeInstanceOf
 import org.springframework.web.client.ResourceAccessException
 import java.net.InetSocketAddress
 import java.net.ServerSocket
-import java.net.Socket
 import java.net.SocketTimeoutException
 import java.net.URI
 import java.time.Duration
-import kotlin.concurrent.thread
 import kotlin.system.measureTimeMillis
 
 /**
@@ -25,11 +23,22 @@ import kotlin.system.measureTimeMillis
  */
 class IntegrationHealthPingTimeoutTest : StringSpec({
 
+    /**
+     * **accept 하지 않는다 — 백로그가 곧 "붙여주고 응답 없음"이다**(FLAKY-HEALTHPING 처방).
+     *
+     * 종전에는 별도 스레드가 accept 만 하고 소켓을 들고 있었는데, 전체 빌드 부하에서 1회
+     * `Connection reset` 이 관측됐다(2026-09-01). 세 축의 재현이 전부 실패해 기전은 미확정이다 —
+     * CPU 부하(시도 1) · 병렬 소켓 경합(시도 2) · 전역 keep-alive 오염+동일 포트 재바인드(시도 3,
+     * 2026-09-30: 결정론 5/5 이 정상 타임아웃 — JDK 가 좀비 연결을 감지하고 GET 을 새 연결로
+     * 재시도해 자가치유된다). 그래서 단언을 넓히는 대신 **in-process 에서 그 소켓에 손댈 수 있는
+     * 유일한 행위자(accepter 스레드·held 목록)를 제거**했다: 리스너의 백로그에 앉은 연결은
+     * TCP 핸드셰이크가 끝나 클라이언트 입장에서 "붙었는데 한 바이트도 안 오는" 상대이고,
+     * 앱 수준 소켓이 아예 없어 누구도 닫거나 리셋할 수 없다. 스레드 스케줄링 변수도 0이 된다.
+     */
     "응답하지 않는 AI 에 헬스핑이 물리지 않는다" {
-        val server = ServerSocket(0)
-        val held = mutableListOf<Socket>()
-        // 연결은 받아주고 한 바이트도 쓰지 않는다.
-        val accepter = thread(isDaemon = true) { runCatching { while (true) held += server.accept() } }
+        // 루프백에 명시 바인드 — 와일드카드(0.0.0.0) 바인드가 만드는 스택 선택 변수까지 없앤다.
+        val server = ServerSocket()
+        server.bind(InetSocketAddress("127.0.0.1", 0), 1)
         try {
             val client = IntegrationController.healthClient(SHORT, SHORT)
 
@@ -44,12 +53,11 @@ class IntegrationHealthPingTimeoutTest : StringSpec({
             }
 
             // 원인이 타임아웃이어야 한다 — 연결 거부로 빨리 끝난 것과 구분한다.
+            // 이 검사를 "타임아웃 또는 리셋"으로 넓히지 않는다(work-graph FLAKY-HEALTHPING 규율).
             thrown.cause.shouldBeInstanceOf<SocketTimeoutException>()
             elapsed shouldBeLessThan UPPER_BOUND_MS
         } finally {
-            held.forEach { runCatching { it.close() } }
             server.close()
-            accepter.interrupt()
         }
     }
 
