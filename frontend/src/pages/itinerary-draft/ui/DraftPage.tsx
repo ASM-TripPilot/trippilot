@@ -427,9 +427,10 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
     const selectedDayNumber =
       tabs.find((tab) => tab.date === selectedDate)?.dayNumber ?? 1;
     // 헤더 meta = "N곳 · X.Xkm". `legDistance` 는 "이동 3.5km" 를 주지만 헤더는 **km 부만** 쓴다
-    // (D8 · INV-3 — "이동" 접두·소요 어휘 금지). 거리 합이 없으면 "N곳"만.
+    // (D8 · INV-3 — "이동" 접두·소요 어휘 금지). 합 대상은 커넥터가 그리는 구간(`slice(1)`)뿐이고,
+    // 그중 하나라도 거리를 모르면 "N곳"만(TRIP-1110 · INV-4).
     const legLabel = legDistance(
-      partialSlots.map((slot) => slot.distanceRange)
+      partialSlots.slice(1).map((slot) => slot.distanceRange)
     );
     const kmPart = legLabel === null ? null : legLabel.replace('이동 ', '');
     const meta =
@@ -560,7 +561,10 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
     const selectedDayNumber =
       tabs.find((tab) => tab.date === selectedDate)?.dayNumber ?? 1;
     // 헤더 meta = "N곳 · X.Xkm". `legDistance` 의 "이동 " 접두는 떼고 km 부만(D8 · INV-3).
-    const legLabel = legDistance(listedSlots.map((slot) => slot.distanceRange));
+    // 합 대상은 커넥터 구간(`slice(1)`)뿐, 하나라도 모르면 "N곳"만(TRIP-1110 · INV-4).
+    const legLabel = legDistance(
+      listedSlots.slice(1).map((slot) => slot.distanceRange)
+    );
     const kmPart = legLabel === null ? null : legLabel.replace('이동 ', '');
     const meta =
       kmPart === null

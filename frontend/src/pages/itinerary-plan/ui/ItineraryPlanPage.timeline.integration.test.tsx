@@ -463,3 +463,57 @@ describe('AC-10 · narrow 경계 — 도착·확정·404 얼굴 보존', () => {
     expect(screen.queryByTestId('map-sheet-shell-root')).toBeNull();
   });
 });
+
+describe('🔴 T5b · TRIP-1110 AC-4·AC-6 — 커넥터 구간(slice(1))에 null 이 섞이면 meta km 를 접는다', () => {
+  it('T5b-1 · 일부 구간만 null 이면 meta 는 정확히 "4곳"이고 null 커넥터는 글리프 줄만 남는다', async () => {
+    // 준비 — b→c·c→d 구간 null(교체 뒤), a→b 2.1km·d→숙소 0.6km. 옛 스킵 규약이면 "4곳 · 2.7km".
+    useItinerary(() =>
+      HttpResponse.json(
+        itineraryOf('PLANNED', [
+          ...fourPois([null, '2.1km', null, null]),
+          hotel('0.6km'),
+        ])
+      )
+    );
+    renderPage();
+    await screen.findByTestId('map-sheet-shell-root');
+
+    const meta = screen.getByTestId('sheet-header-meta');
+    expect(meta).toHaveTextContent('4곳'); // 문자열 인자 = 완전 일치(02a §5)
+    expect(meta).not.toHaveTextContent(/km|이동|분|시간|소요/);
+    // 커넥터는 무변경(결정 2=A): 값 구간은 문구 칸, null 구간은 줄만.
+    expect(
+      screen.getByTestId(`sheet-connector-distance-${DAY1}#poi-a`)
+    ).toHaveTextContent('2.1km');
+    expect(
+      screen.getByTestId(`sheet-connector-distance-${DAY1}#poi-d`)
+    ).toHaveTextContent('0.6km');
+    for (const poiId of ['poi-b', 'poi-c']) {
+      expect(
+        screen.getByTestId(`sheet-connector-${DAY1}#${poiId}`)
+      ).toBeOnTheScreen();
+      expect(
+        screen.queryByTestId(`sheet-connector-distance-${DAY1}#${poiId}`)
+      ).toBeNull();
+    }
+    expect(renderedText()).not.toMatch(/\d+\s*(분|시간)|소요/);
+  });
+
+  it('T5b-2 · 첫 슬롯(거점→첫 방문지) 거리는 헤더 합에 안 들어간다 — 커넥터 합 "4곳 · 4.1km" 그대로', async () => {
+    // 준비 — 첫 슬롯에 9.9km. slice(1) 을 버리고 전 슬롯을 더하면 14.0km 가 된다.
+    useItinerary(() =>
+      HttpResponse.json(
+        itineraryOf('PLANNED', [
+          ...fourPois(['9.9km', '2.1km', '0.8km', '0.6km']),
+          hotel('0.6km'),
+        ])
+      )
+    );
+    renderPage();
+    await screen.findByTestId('map-sheet-shell-root');
+
+    expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(
+      '4곳 · 4.1km'
+    );
+  });
+});

@@ -4,6 +4,7 @@ import type { ReactTestInstance } from 'react-test-renderer';
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
 
 import { ALT_LABEL } from '../config/altLabel';
+import { resolveCategoryPlaceholder } from '../lib/categoryPlaceholder';
 import { buildSlotKey } from '../lib/slotKey';
 import { ChevronRightGlyph } from './SlotGlyphs';
 import { SlotStopCard } from './SlotStopCard';
@@ -220,4 +221,115 @@ describe('🔴 SlotStopCard · CS8 — warning 가산(휴관 경고, 후방호�
     const { slotKey } = renderCard();
     expect(screen.queryByTestId(id(slotKey)('warning'))).toBeNull();
   });
+});
+
+/* ──────────── TRIP-1116 · 사진 대체 블록 크기 = 사진 자리(72) ────────────
+ * 사진 없는 슬롯의 대체 블록이 78 이라 옆 카드 사진(72)보다 커서 시각·이름 줄이 밀렸다.
+ * className 은 공백으로 쪼갠 토큰 배열로 비교한다 — 문자열 부분 포함은 `min-h-[78px]` 에 오탐한다.
+ * ⚠️ 실제 픽셀 정렬(이름 x 시작점·카드 높이)은 jest 사각 — 6-b 육안.
+ * ─────────────────────────────────────────────────────────────────────── */
+function classTokens(node: ReactTestInstance): string[] {
+  return String(node.props.className ?? '').split(/\s+/);
+}
+
+/** 크기 토큰(`h-*`·`w-*`)만 정렬해 뽑는다 — `min-h-*`·`max-w-*` 는 접두가 달라 빠진다. */
+function sizeTokens(node: ReactTestInstance): string[] {
+  return classTokens(node)
+    .filter((token) => /^[hw]-/.test(token))
+    .sort();
+}
+
+describe('🔴 SlotStopCard · CS9 — 사진 대체 블록이 사진 자리와 같은 72 (TRIP-1116)', () => {
+  it('CS9a · A1 — 사진 없는 슬롯의 대체 블록은 72×72·rounded-thumb 이고 78 토큰이 없다', () => {
+    const { slotKey } = renderCard({ slot: makeSlot({ imageUrl: null }) });
+
+    const tokens = classTokens(
+      screen.getByTestId(id(slotKey)('photoplaceholder'))
+    );
+    expect(tokens).toEqual(
+      expect.arrayContaining(['h-[72px]', 'w-[72px]', 'rounded-thumb'])
+    );
+    expect(tokens).not.toContain('h-[78px]');
+    expect(tokens).not.toContain('w-[78px]');
+  });
+
+  it('CS9b · A2 — 사진 있는 슬롯의 사진은 지금처럼 72×72·rounded-thumb 다 (무회귀 · 선제 green)', () => {
+    const { slotKey } = renderCard();
+
+    expect(classTokens(screen.getByTestId(id(slotKey)('photo')))).toEqual(
+      expect.arrayContaining(['h-[72px]', 'w-[72px]', 'rounded-thumb'])
+    );
+  });
+
+  it('CS9c · A6 — 같은 카드의 사진 크기 토큰과 대체 블록 크기 토큰이 같다', () => {
+    // 준비: 사진 있는 카드와 없는 카드를 한 화면에 나란히(slotKey 가 달라 testID 가 안 겹친다).
+    const withPhoto = makeSlot({ poiId: 'poi-photo' });
+    const noPhoto = makeSlot({ poiId: 'poi-nophoto', imageUrl: null });
+    render(
+      <>
+        <SlotStopCard slot={withPhoto} date={DATE} index={0} />
+        <SlotStopCard slot={noPhoto} date={DATE} index={1} />
+      </>
+    );
+
+    const photo = sizeTokens(
+      screen.getByTestId(id(buildSlotKey(DATE, withPhoto.poiId))('photo'))
+    );
+    const placeholder = sizeTokens(
+      screen.getByTestId(
+        id(buildSlotKey(DATE, noPhoto.poiId))('photoplaceholder')
+      )
+    );
+
+    // 앵커 — 비교할 크기 토큰이 실제로 있다(빈 배열끼리 같아지는 공허한 green 차단).
+    expect(photo).toHaveLength(2);
+    expect(placeholder).toEqual(photo);
+  });
+
+  // "기본" = 매핑 밖 폴백 타일 — 가장 흔한 실제 입력 null 로 대표한다.
+  const CATEGORIES: (string | null)[] = [
+    '명소',
+    '맛집',
+    '카페',
+    '야경',
+    '자연',
+    '쇼핑',
+    '문화',
+    null,
+  ];
+
+  it.each(CATEGORIES)(
+    'CS9d · A4 — 카테고리 %s: 틴트·72 크기가 testID 를 단 그 root 노드에 함께 있다 (★3 배선)',
+    (category) => {
+      const { slotKey } = renderCard({
+        slot: makeSlot({ imageUrl: null, category }),
+      });
+
+      const tokens = classTokens(
+        screen.getByTestId(id(slotKey)('photoplaceholder'))
+      );
+      // 틴트 값 자체는 categoryPlaceholder.test.ts 가 잠근다 — 여기선 "같은 노드" 배선만 본다.
+      expect(tokens).toContain(resolveCategoryPlaceholder(category).tintClass);
+      expect(tokens).toContain('h-[72px]');
+    }
+  );
+
+  it.each(CATEGORIES)(
+    'CS9e · A5 — 카테고리 %s: 대체 블록 안에 텍스트 노드가 없다 (INV-3 · 선제 green)',
+    (category) => {
+      const { slotKey } = renderCard({
+        slot: makeSlot({ imageUrl: null, category }),
+      });
+
+      // host 노드(문자열 타입)만 추린다 — RN `Text` 와 SVG `RNSVGText` 둘 다 이름에 Text 가 있다.
+      const hosts = screen
+        .getByTestId(id(slotKey)('photoplaceholder'))
+        .findAll((node) => typeof node.type === 'string')
+        .map((node) => String(node.type));
+
+      // 앵커 — 루트 View 말고도 아이콘이 실제로 그려졌다(아이콘이 통째로 빠져도 "텍스트 0"은 green 이라서).
+      expect(hosts.length).toBeGreaterThan(1);
+      expect(hosts.filter((type) => /Text/.test(type))).toEqual([]);
+    }
+  );
 });

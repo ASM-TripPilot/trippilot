@@ -438,7 +438,12 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    4741:4650) 추가로 185→187. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 2키만
     //    `live-hub-no-records` 바로 뒤에 이 순서로 추가하고 이 가드는 안 만진다(추가 전엔 185개라 red). 정확한 키·얼굴은
     //    devPreviewLiveHub 'TRIP-1117' describe 가 못박는다. i 밴드는 순서 가드(devPreviewBandSort)가 없다.
-    expect(PREVIEW_STATES).toHaveLength(187);
+    // ⚠️ TRIP-1109: h08 다른 후보 시트 조회 상태 3키(`h08-candidate-sheet-loading`·`-slow`·`-fetch-error`, band
+    //    `h`) 추가로 187→190(1117 합산). test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 3키만
+    //    `h08-candidate-sheet-empty` 바로 뒤에 이 순서로 추가하고 이 가드는 안 만진다(추가 전엔 187개라 red).
+    //    정확한 키·얼굴은 아래 'TRIP-1109' describe, h 순서는 devPreviewBandSort EXPECTED_H 가 못박는다.
+    //    Figma 프레임이 없어(결정 1) 이 3키의 6-b 캡처가 Figma 반영 후보다.
+    expect(PREVIEW_STATES).toHaveLength(190);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -2056,5 +2061,60 @@ describe('🔴 TRIP-1082 · g02 거점 편집 얼굴 프리뷰 2키 (band g)', (
 
     expect(screen.getByTestId('trip-base-regen-dialog')).toBeOnTheScreen();
     expect(screen.getByTestId('trip-base-edit-done')).toBeOnTheScreen();
+  });
+});
+
+// TRIP-1109 — 조회 중·지연·실패 얼굴은 Figma 프레임이 없어(결정 1) 이 3키가 6-b 육안 대조·Figma 반영 후보다.
+// 시트는 시간을 모른다 — slow 도 정적 prop(`fetchState`)으로 그려져야 여기서 캡처된다(01b 배치).
+describe('🔴 TRIP-1109 · h08 다른 후보 시트 조회 상태 프리뷰 3키 (band h)', () => {
+  function entryOf(key: string) {
+    const entry = PREVIEW_STATES.find((state) => state.key === key);
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('h');
+    return entry;
+  }
+
+  it('h08-candidate-sheet-loading — 스켈레톤, 0건 얼굴 없음', () => {
+    const entry = entryOf('h08-candidate-sheet-loading');
+    expect(entry?.label).toBe('h08 · 다른 후보 조회 중');
+
+    render(<>{entry?.render()}</>);
+
+    expect(screen.getByTestId('itinerary-candidate-loading')).toBeOnTheScreen();
+    expect(screen.queryByTestId('itinerary-candidate-empty')).toBeNull();
+    expect(screen.queryByTestId('itinerary-candidate-slow')).toBeNull();
+  });
+
+  it('h08-candidate-sheet-slow — 스켈레톤 위 지연 안내 + [다시 시도]', () => {
+    const entry = entryOf('h08-candidate-sheet-slow');
+    expect(entry?.label).toBe('h08 · 다른 후보 조회 지연');
+
+    render(<>{entry?.render()}</>);
+
+    expect(screen.getByTestId('itinerary-candidate-slow')).toBeOnTheScreen();
+    expect(screen.getByTestId('itinerary-candidate-loading')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('itinerary-candidate-fetch-retry')
+    ).toBeOnTheScreen();
+  });
+
+  it('h08-candidate-sheet-fetch-error — 실패 카드(문구 있음) + [다시 시도]', () => {
+    const entry = entryOf('h08-candidate-sheet-fetch-error');
+    expect(entry?.label).toBe('h08 · 다른 후보 조회 실패');
+
+    render(<>{entry?.render()}</>);
+
+    expect(
+      screen.getByTestId('itinerary-candidate-fetch-error')
+    ).toHaveTextContent(/\S/);
+    expect(
+      screen.getByTestId('itinerary-candidate-fetch-retry')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('itinerary-candidate-empty')).toBeNull();
+
+    // 이웃 앵커 — 기존 h08 시트 키가 딸려 사라지지 않았다.
+    expect(PREVIEW_STATES.map((state) => state.key)).toContain(
+      'h08-candidate-sheet-empty'
+    );
   });
 });

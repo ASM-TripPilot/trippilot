@@ -71,7 +71,7 @@ paths:
 | `ui/SlotProgressCard.tsx` | i01 허브 슬롯 카드 — 진행 상태 하나로 done/active/upcoming 세 모양 중 하나를 찍는 무상태 카드(`useState` 금지, `entitiesItinerarySlotStructure` G2). upcoming 아이콘은 `Pressable disabled`+`accessibilityState.disabled`. TRIP-1070부터 active 카드에 `onPressPhoto`·`onPressMemo`·`photoNotice` prop(옵셔널, 미주입이면 [사진]·[메모] 버튼 자체가 없음) — 구 `onPressSoon`/`soonHintVisible`/"준비 중" 힌트는 삭제됐다. |
 | `ui/SlotStopCard.tsx` | 결과 화면(h07·h08·h11·h14·h16)과 편집기(h12·i07 `EditorView`) 공용 슬롯 카드, `PoiSlotCard`와 **병존**(대체 아님). presentation-only — 옵셔널 prop(`warning`·`onPressTimeChip`·`unspecified`·`locked`·`numberOutside`·`violation`·`dragging`)은 전부 미전달=기존 leaf 그대로. `violation`은 카드가 `slot.hasViolation`을 스스로 읽지 않고 소비처가 문구를 내려준다(자가 판독하면 다른 화면이 조용히 배지를 얻는다). `locked`면 시각 알약 View 자체가 `slot-stopcard-locked-*`이고 `onPressTimeChip`을 무시한다(`editable = onPressTimeChip !== undefined && locked !== true`) — "잠김"과 "누를 수 없음"이 한 요소의 두 성질이라 press 단언까지 걸어야 잡힌다. `dragging`의 실제 강조는 목에서 `isActive`가 항상 false라 6-b 전용. |
 | `config/altLabel.ts` | `ALT_LABEL = '다른 후보 ›'`(공백+U+203A) 공용 상수. |
-| `ui/SlotPhotoPlaceholder.tsx` | `resolveCategoryPlaceholder` 소비 → 78×78 틴트+아이콘. 텍스트 0(INV-3). |
+| `ui/SlotPhotoPlaceholder.tsx` | `resolveCategoryPlaceholder` 소비 → 72×72(카드 사진 자리와 같음, TRIP-1116) 틴트+아이콘. 텍스트 0(INV-3). |
 | `ui/PoiSlotCard.tsx` | peek/list 겸용 POI 카드. |
 | `ui/ReplanSlotRow.tsx` | 재계획 초안 행. 번호 원 톤(`tone==='visited'`→`bg-success`)·사진/플레이스홀더·시간 알약·흐림(`opacity-45`, 카드 루트에만)·"다른 후보"(예정 행만). INV-3 가드는 `entitiesItinerarySlotStructure G3`. |
 

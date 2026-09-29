@@ -339,8 +339,9 @@ export function ItineraryPlanPage({
 
   // meta = "[확정됨 · ]N곳[ · X.Xkm]". N 은 **선택일 비고정 슬롯 수**(숙소 제외 · 01b D3 —
   // totalPlaces·coPickProgress 재사용 금지). km 은 커넥터가 그리는 leg(`slots.slice(1)`)의
-  // `legDistance` 합에서 "이동 " 접두를 뗀 값, 없으면(거리 계산 중) 곳 수만 그린다(01b D3·D5 · h08
-  // 선례). 확정(h16)이면 앞에 "확정됨 · " 접두를 단다(TRIP-801 AC-3).
+  // `legDistance` 합에서 "이동 " 접두를 뗀 값, 그중 한 구간이라도 거리를 모르면(거리 계산 중·교체 직후)
+  // 곳 수만 그린다(01b D3·D5 · h08 선례 · TRIP-1110 INV-4). 확정(h16)이면 앞에 "확정됨 · " 접두를
+  // 단다(TRIP-801 AC-3).
   const nonFixedCount = slots.filter((slot) => !slot.isFixed).length;
   const legLabel = legDistance(
     slots.slice(1).map((slot) => slot.distanceRange)

@@ -105,8 +105,8 @@ function trip(): Trip {
 /**
  * 하루치 3슬롯 — AC-3·AC-5·AC-7 을 한 픽스처로 잰다.
  *  - poi-b 는 **isFixed=true**(고정)인데도 시각 칩이 떠야 한다(AC-3 핵심 · BR-U3-07 개정).
- *  - 첫 슬롯 distanceRange 를 **null** 로 둬 legDistance 가 `slice(1)` 이든 전량 합이든 합이 같은
- *    3.5km 다(2.1+1.4) — 구현 해석에 안 흔들리게 한다.
+ *  - 첫 슬롯 distanceRange 는 **null**(거점 없는 날)이다. 헤더 합은 커넥터 구간(`slice(1)`)만 더하므로
+ *    3.5km(2.1+1.4)다 — TRIP-1110 이후 전 슬롯을 넘기면 첫 null 에 접혀 A5 가 red 가 된다(A5b-2 짝).
  *  - lat/lng 를 실어 셸 지도(map-root)가 마운트되고 DraftPage 가 center 를 계산하게 한다.
  */
 function daySlots(date: string): ItineraryDaysItemSlotsItem[] {
@@ -186,6 +186,21 @@ function itinerary(input: {
     isFallback: input.isFallback ?? false,
     candidatesSummary: input.candidatesSummary,
     days: daysUpTo(input.dayCount),
+  };
+}
+
+/** 깨끗한 COMPLETE 3일에서 매일 슬롯 a·b·c 의 distanceRange 만 `ranges` 로 덮어쓴다(TRIP-1110 헤더 케이스). */
+function completeWithRanges(ranges: (string | null)[]): Itinerary {
+  const base = itinerary({ dayCount: 3, generationState: 'COMPLETE' });
+  return {
+    ...base,
+    days: base.days.map((day) => ({
+      ...day,
+      slots: day.slots.map((slot, index) => ({
+        ...slot,
+        distanceRange: ranges[index],
+      })),
+    })),
   };
 }
 
@@ -447,5 +462,43 @@ describe('🔴 TRIP-1076 AC-3 · h08 결과 지도는 핀 전부에 맞춰 연�
     const map = screen.getByTestId('map-root');
     expect((map.props.pins as unknown[]).length).toBeGreaterThanOrEqual(2);
     expect(map.props.fitPins).toBe(true);
+  });
+});
+
+describe('🔴 A5b · TRIP-1110 AC-5·AC-6 — h08 헤더 meta 는 커넥터 구간(slice(1))만 보고, 하나라도 비면 km 를 접는다', () => {
+  it('A5b-1 · 커넥터 구간에 null 이 섞이면 meta 는 정확히 "3곳"이고 null 커넥터는 글리프 줄만 남는다', async () => {
+    // 준비 — a→b 구간 2.1km, b→c 구간 null(교체 뒤 재산출 전). 옛 스킵 규약이면 "3곳 · 2.1km"(부분합).
+    itineraryHandler = () =>
+      HttpResponse.json(completeWithRanges([null, '2.1km', null]));
+
+    renderPage();
+    await screen.findByTestId('map-sheet-shell-root');
+
+    const meta = screen.getByTestId('sheet-header-meta');
+    expect(meta).toHaveTextContent('3곳'); // 문자열 인자 = 완전 일치(02a §5)
+    expect(meta).not.toHaveTextContent(/km|이동|분|시간|소요/);
+    // 커넥터는 무변경(결정 2=A) — 값 있는 구간은 서버 문자열 그대로, null 구간은 줄만 있고 문구 칸이 없다.
+    expect(
+      screen.getByTestId(`sheet-connector-distance-${DAY1}#poi-a`)
+    ).toHaveTextContent('2.1km');
+    expect(
+      screen.getByTestId(`sheet-connector-${DAY1}#poi-b`)
+    ).toBeOnTheScreen();
+    expect(
+      screen.queryByTestId(`sheet-connector-distance-${DAY1}#poi-b`)
+    ).toBeNull();
+  });
+
+  it('A5b-2 · 첫 슬롯(거점→첫 방문지) 거리는 커넥터가 없으니 헤더 합에도 안 들어간다 — "3곳 · 3.5km"', async () => {
+    // 준비 — 거점 있는 날: 첫 슬롯에도 0.9km. 전 슬롯을 더하면 4.4km 가 된다(옛 Draft 모집단).
+    itineraryHandler = () =>
+      HttpResponse.json(completeWithRanges(['0.9km', '2.1km', '1.4km']));
+
+    renderPage();
+    await screen.findByTestId('map-sheet-shell-root');
+
+    expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(
+      '3곳 · 3.5km'
+    );
   });
 });

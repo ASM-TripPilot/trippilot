@@ -84,6 +84,13 @@ paths:
 | `src/shared/ui/pref/PrefChip.tsx` | 아이콘 없는 칩형 변형 |
 | `src/shared/pref/preferenceSelection.ts` | `toggleMulti`/`toggleSingle` — 전부 해제 시 `[]`가 아니라 `null` 복귀(US-ONB-14). `shared/ui`가 아니라 `shared/pref`인 이유: `shared/ui/**`에 `className=` 없는 순수 로직을 두면 `sharedUiStructure`가 red |
 
+### `src/shared/time/` — 시간 경과 플래그
+
+| 파일 | 역할 |
+|---|---|
+| `src/shared/time/useElapsedFlag.ts` | `useElapsedFlag(active, ms, restartKey?)` — `active`가 `ms` 동안 이어지면 true, 꺼지면 즉시 false(`active && elapsed`로 꺼진 그 렌더부터 보장), `restartKey`가 바뀌면 0부터 다시 잰다. 요청을 끊지 않는 "오래 걸린다" 플래그일 뿐. **타이머를 쓰는 shared 파일이다** — `pages`·`features/itinerary` 타이머 금지 가드는 이 훅을 import하는 파일 허용 목록(`pagesLayerStructure`·`itineraryDraftStructure`, 지금 `SlotCandidatePanelContainer` 1개)으로만 열어 준다. 소비처를 늘리면 두 목록을 같이 고친다 |
+| `src/shared/time/useElapsedFlag.test.ts` | 경계·꺼진 렌더 false·`restartKey` 리셋 |
+
 ### `src/shared/press/` — 연타 관통 공용 가드
 
 | 파일 | 역할 |
