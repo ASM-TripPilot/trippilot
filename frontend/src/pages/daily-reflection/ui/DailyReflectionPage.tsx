@@ -132,6 +132,13 @@ export function DailyReflectionPage({
             ? 'pending'
             : 'empty';
 
+  // TRIP-1119 · 딥링크(푸시 REFLECTION_DAILY) 콜드 스타트면 히스토리가 없어 canGoBack()===false —
+  // 침묵 no-op(죽은 버튼) 대신 기록 탭으로 replace(TravelStylePage 선례 동형, INV-4). ‹ 와 「확인」이 공유.
+  const handleBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(tabs)/records');
+  };
+
   const handleConfirm = () => {
     // error 얼굴의 "다시 시도" = 생성 실패면 POST 1회 재발사(Seed Q1), 조회 실패면 재조회. data 얼굴의
     // "저장/확인" = 닫기(mood/memo 비영속, narrative 는 수정 경로. 통합 저장은 계약 확장 티켓 TRIP-823).
@@ -140,7 +147,7 @@ export function DailyReflectionPage({
       else daily.refetch();
       return;
     }
-    if (router.canGoBack()) router.back();
+    handleBack();
   };
 
   return (
@@ -166,6 +173,7 @@ export function DailyReflectionPage({
       onEnterEdit={() => {
         // 편집 열림은 화면이 로컬로 진다. 생성 없이 PUT 경로(BR-U5-36)라 여기서 별도 조치 없음.
       }}
+      onBack={handleBack}
       onConfirm={handleConfirm}
       onSaveEdit={daily.saveEdit}
     />

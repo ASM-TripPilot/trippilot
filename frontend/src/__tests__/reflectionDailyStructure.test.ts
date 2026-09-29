@@ -153,3 +153,61 @@ describe('🔴 AC-11 · 빈 원 60(옛 72 부재)', () => {
     expect(screen).not.toMatch(/EmptyCircleGlyph\s+size=\{72\}/);
   });
 });
+
+/**
+ * TRIP-1119 · AC4 — 헤더 ‹(BackArrowGlyph)를 감싼 요소가 onPress 없는 View 가 아니다(형제 3화면 규율).
+ * 글리프 앞의 가장 가까운 여는 태그(`<대문자…`)를 래퍼로 보고, 그 사이 구간을 속성 문자열로 돌려준다.
+ */
+function wrappersOfBackGlyph(code: string): { tag: string; attrs: string }[] {
+  return [...code.matchAll(/<BackArrowGlyph\b/g)].map((glyph) => {
+    const before = code.slice(0, glyph.index);
+    const opens = [...before.matchAll(/<([A-Z]\w*)\b/g)];
+    const last = opens[opens.length - 1];
+    if (!last) return { tag: '', attrs: '' };
+    return { tag: last[1], attrs: before.slice(last.index) };
+  });
+}
+
+describe('G0c · 래퍼 추출기 자가검사 (TRIP-1119 · 주석 제거 + 추출 조합)', () => {
+  it('View 와 글리프 사이 주석 속 <Pressable onPress> 는 걷혀 래퍼가 View 로 판정된다', () => {
+    const trap = [
+      '<View className="pr-[4px]">',
+      '  {/* 옛: <Pressable onPress={onBack}> 로 감쌌었다 */}',
+      '  // <Pressable onPress={x}>',
+      '  <BackArrowGlyph size={24} />',
+      '</View>',
+    ].join('\n');
+
+    // 전처리 없이 돌리면 주석 속 Pressable 을 래퍼로 오판한다(이 조합이 필요한 이유).
+    expect(wrappersOfBackGlyph(trap)[0].tag).toBe('Pressable');
+    // 주석을 걷으면 진짜 래퍼 View 가 남는다.
+    expect(wrappersOfBackGlyph(stripComments(trap))).toEqual([
+      expect.objectContaining({ tag: 'View' }),
+    ]);
+  });
+
+  it('닫힌 형제(<X />)를 집으면 구간에 "/>" 가 남아 부모가 아님을 알 수 있다', () => {
+    const sibling = '<Pressable onPress={go} />\n<BackArrowGlyph size={24} />';
+
+    const [wrapper] = wrappersOfBackGlyph(sibling);
+
+    expect(wrapper.tag).toBe('Pressable');
+    expect(wrapper.attrs).toContain('/>');
+  });
+});
+
+describe('🔴 AC4 · 헤더 ‹ 는 onPress 있는 Pressable 안에 있다 (TRIP-1119)', () => {
+  it('BackArrowGlyph 는 1개이고, 래퍼는 reflection-daily-back Pressable 이며 onPress 를 갖는다', () => {
+    const wrappers = wrappersOfBackGlyph(readOne(SCREEN_REL));
+
+    // 앵커 — 글리프가 실제로 1개 있다(0개면 "View 안에 없다"가 공짜로 참).
+    expect(wrappers).toHaveLength(1);
+    const [wrapper] = wrappers;
+    // 진짜 부모다 — 사이에 닫힌 태그가 없다.
+    expect(wrapper.attrs).not.toContain('/>');
+    expect(wrapper.attrs).not.toContain('</');
+    expect(wrapper.tag).toBe('Pressable');
+    expect(wrapper.attrs).toContain('testID="reflection-daily-back"');
+    expect(wrapper.attrs).toMatch(/\bonPress=\{/);
+  });
+});
