@@ -398,10 +398,11 @@ describe('🔴 M7 · AC-9 — 장소 추가·카드 사이 +·뒤로가 라우�
       params: { tripId: TRIP_ID },
     });
 
+    // 카드 사이 + 는 보고 있는 날(date)도 싣는다(TRIP-1115 03b 차단-1). 말미 「장소 추가」는 위처럼 그대로.
     fireEvent.press(screen.getByTestId('itinerary-edit-insert-0'));
     expect(mockPush).toHaveBeenLastCalledWith({
       pathname: '/trips/[tripId]/itinerary/manual/add',
-      params: { tripId: TRIP_ID, insertAfter: '0' },
+      params: { tripId: TRIP_ID, insertAfter: '0', date: DAY },
     });
 
     // 앵커 — ‹ 전엔 replace 0회(앞 동작이 부른 호출이 셈에 섞이지 않게).
@@ -410,6 +411,43 @@ describe('🔴 M7 · AC-9 — 장소 추가·카드 사이 +·뒤로가 라우�
     expect(mockReplace).toHaveBeenCalledTimes(1);
     expect(mockReplace).toHaveBeenCalledWith('/(tabs)/itinerary');
     expect(mockBack).not.toHaveBeenCalled();
+  });
+
+  // 2일짜리라야 "항상 1일차 날짜"로 박는 구현과 갈린다.
+  it('2일차 칩으로 옮긴 뒤 카드 사이 + 는 2일차 date 를 싣는다 (TRIP-1115 03b 차단-1)', async () => {
+    const DAY2 = '2026-06-11';
+    const twoDays: Itinerary = {
+      ...manualDraft(PLAIN),
+      days: [
+        { date: DAY, slots: PLAIN },
+        {
+          date: DAY2,
+          slots: [
+            slot('d', '09:00:00', '10:00:00'),
+            slot('e', '11:00:00', '12:00:00'),
+          ],
+        },
+      ],
+    };
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        HttpResponse.json(twoDays)
+      )
+    );
+    renderPage();
+    await ready();
+
+    // 칩 testID 번호는 1부터다(day-2 = 2일차, EditorView 가 tab.dayIndex 를 쓴다).
+    fireEvent.press(screen.getByTestId('itinerary-edit-day-2'));
+    // 앵커 — 2일차 카드가 보인다.
+    await screen.findByTestId(`slot-stopcard-${buildSlotKey(DAY2, 'd')}`);
+    fireEvent.press(screen.getByTestId('itinerary-edit-insert-0'));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/itinerary/manual/add',
+      params: { tripId: TRIP_ID, insertAfter: '0', date: DAY2 },
+    });
   });
 });
 

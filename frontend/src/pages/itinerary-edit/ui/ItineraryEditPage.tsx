@@ -349,7 +349,12 @@ export function ItineraryEditPage({
         onPressAddBetween={(precedingIndex) =>
           router.push({
             pathname: '/trips/[tripId]/itinerary/manual/add',
-            params: { tripId, insertAfter: String(precedingIndex) },
+            params: {
+              tripId,
+              insertAfter: String(precedingIndex),
+              // 활성 일자 — insertAfter 는 이 날 기준 index 다(TRIP-1115, PlaceAddPage 가 이 날에 담는다).
+              date: activeDate,
+            },
           })
         }
         onSave={handleSave}

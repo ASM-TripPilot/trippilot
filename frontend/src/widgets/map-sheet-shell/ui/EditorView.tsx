@@ -72,8 +72,9 @@ export interface EditorViewProps {
   isDragging?: boolean;
   /** 방문 완료 잠금(AC-11). */
   completedSlotKeys?: string[];
-  /** TRIP-753 · i07(여행 중 편집) 진입 — 카드 사이 "+" 를 숨기고 안내 문구를 i07 문구로 바꾼다.
-   *  그 밖(완료 잠금·위반 배지)은 모드가 아니라 데이터가 정한다. */
+  /** TRIP-753 · i07(여행 중 편집) 진입 — 안내 문구를 i07 문구로 바꾸고, 방문 완료 카드 바로 앞의 카드 사이
+   *  "+" 를 빈 줄로 바꾼다(TRIP-1115 — 완료 카드 앞 삽입은 거짓 순서). 그 밖(완료 잠금·위반 배지)은
+   *  모드가 아니라 데이터가 정한다. */
   inTrip?: boolean;
 }
 
@@ -180,23 +181,29 @@ export function EditorView({
             }
           />
         </Pressable>
-        {/* 카드 사이 "+"(선행 index, AC-7) — i07 엔 없다. 끌기 중엔 안 보이고 안 눌리지만 **자리는 지킨다**:
-            라이브러리가 끌기 시작 순간 끄는 카드 위치를 스냅샷으로 적어 두므로, 여기서 줄이 사라지면
-            놓일 칸 계산이 드롭존 쪽으로 밀린다(03b 경고-1). display none·언마운트 금지. */}
-        {!inTrip && index < slots.length - 1 ? (
-          <Pressable
-            testID={`itinerary-edit-insert-${index}`}
-            onPress={() => onPressAddBetween(index)}
-            pointerEvents={dragFace ? 'none' : 'auto'}
-            accessibilityElementsHidden={dragFace}
-            importantForAccessibility={
-              dragFace ? 'no-hide-descendants' : 'auto'
-            }
-            style={dragFace ? { opacity: 0 } : undefined}
-            className="flex-row items-center justify-center py-[2px]"
-          >
-            <PlusGlyph size={20} tone="primary" />
-          </Pressable>
+        {/* 카드 사이 "+"(선행 index, AC-7). "+" i 는 카드 i 뒤·i+1 앞에 넣는다 — i07 에서 카드 i+1 이 방문
+            완료면 그 자리엔 "+" 대신 같은 높이(24)의 빈 줄을 둔다(TRIP-1115, Figma i07 4735:2958). h12 는
+            완료 데이터가 있어도 전 자리 "+"(칸 DoD 무회귀 — 판정은 inTrip 한정). 끌기 중엔 안 보이고 안
+            눌리지만 **자리는 지킨다**: 라이브러리가 끌기 시작 순간 끄는 카드 위치를 스냅샷으로 적어 두므로,
+            여기서 줄이 사라지면 놓일 칸 계산이 드롭존 쪽으로 밀린다(03b 경고-1). display none·언마운트 금지. */}
+        {index < slots.length - 1 ? (
+          inTrip === true && isLocked(slots[index + 1]) ? (
+            <View className="h-[24px]" />
+          ) : (
+            <Pressable
+              testID={`itinerary-edit-insert-${index}`}
+              onPress={() => onPressAddBetween(index)}
+              pointerEvents={dragFace ? 'none' : 'auto'}
+              accessibilityElementsHidden={dragFace}
+              importantForAccessibility={
+                dragFace ? 'no-hide-descendants' : 'auto'
+              }
+              style={dragFace ? { opacity: 0 } : undefined}
+              className="flex-row items-center justify-center py-[2px]"
+            >
+              <PlusGlyph size={20} tone="primary" />
+            </Pressable>
+          )
         ) : null}
       </View>
     );

@@ -62,6 +62,10 @@ import { PlaceAddPage } from './PlaceAddPage';
  *  - 🔴 **1009-B1·B2·B5** 앞 장소(insertAfter 있으면 그 슬롯, 없으면 마지막) 종료부터 1시간이 PUT 에 실린다.
  *  - 🟢선제 **1009-B3·B4** 앞 장소 없음·자정 넘겨 끝남이면 10:00–11:00 (무회귀).
  *
+ * TRIP-1115 추가 — 카드 사이 "+" 가 보고 있는 날(라우트 `date`)에 들어간다(5-b 차단-1):
+ *  - 🔴 **D1·D2** date 가 있으면 그 날 slots 에 splice·헤더 N일차·기본 시각 앞 장소도 그 날.
+ *  - 🟢선제 **D3·D4** date 미전달·일정에 없는 날이면 첫 날(후방호환·폴백).
+ *
  * 왜 통합 버킷인가: 최종 직렬화된 URL·나간 PUT 바디·재요청 횟수·캐시 무효화는 msw/스파이만 본다.
  * 3동작 뼈대: 준비=핸들러/래퍼/params → 실행=렌더/입력/칩/add → 단언=나간 URL·PUT 바디·보이는 트리.
  */
@@ -451,6 +455,123 @@ describe('🔴 A7 · TRIP-798 — 삽입 index 수신 (미전달=말미 append)'
     );
     // 미전달 = 말미 = [sA, sB, p1].
     expect(day?.slots.map((slot) => slot.poiId)).toEqual(['sA', 'sB', 'p1']);
+  });
+});
+
+/**
+ * TRIP-1115 5-b 차단-1 — 카드 사이 "+" 는 **보고 있는 날**의 번호다. 그래서 라우트 `date` 가 오면 그 날에
+ * 끼워 넣는다. `date` 가 없거나 일정에 없는 날이면 지금처럼 첫 날(후방호환 — 말미 「장소 추가」는 `date` 를
+ * 안 싣는다). 헤더 "N일차"와 시각 시트 기본값(앞 장소 종료부터 1시간)도 같은 날을 본다.
+ *
+ * 두 날의 슬롯 시각을 일부러 다르게 둔다 — 앞 장소를 첫 날에서 잘못 고르면 기본 시각이 달라져 드러난다.
+ *
+ * 3동작 뼈대: 준비=2일 일정 + 라우트 params(date·insertAfter) → 실행=일정 도착 뒤 p1 추가·그대로 적용 →
+ * 단언=나간 PUT 의 날별 슬롯 순서·p1 시각, 헤더 문구.
+ */
+describe('🔴 D · TRIP-1115 — 라우트 date 가 있으면 그 날에 끼워 넣는다 (없거나 모르는 날이면 첫 날)', () => {
+  const DAY1 = '2026-06-10';
+  const DAY2 = '2026-06-11';
+
+  function timed(
+    poiId: string,
+    startAt: string,
+    endAt: string
+  ): ItineraryDaysItemSlotsItem {
+    return { ...makeSlot(poiId), startAt, endAt };
+  }
+
+  beforeEach(() => {
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        HttpResponse.json({
+          ...ITINERARY_ENVELOPE,
+          days: [
+            {
+              date: DAY1,
+              slots: [
+                timed('sA', '08:00:00', '09:30:00'),
+                timed('sB', '13:00:00', '14:00:00'),
+              ],
+            },
+            {
+              date: DAY2,
+              slots: [
+                timed('tA', '10:00:00', '11:00:00'),
+                timed('tB', '15:00:00', '16:00:00'),
+                timed('tC', '18:00:00', '19:00:00'),
+              ],
+            },
+          ],
+        })
+      )
+    );
+  });
+
+  /** 일정이 도착한 뒤 p1 을 담고 시트를 그대로 적용한다 → 나간 PUT 의 날별 poiId 와 p1 슬롯. */
+  async function addP1AfterItinerary() {
+    const client = makeClient();
+    renderPageWith(client);
+    // 일정 도착 전 "+ 추가"는 조용히 무시된다(W-2) — 캐시 성공 + 한 틱 뒤에 누른다(1009 선례).
+    await waitFor(() =>
+      expect(
+        client.getQueryState(getGetTripsTripIdItineraryQueryKey('t1'))?.status
+      ).toBe('success')
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    await addPlaceAndApply('p1');
+
+    await waitFor(() => expect(putBodies).toHaveLength(1));
+    const idsOf = (date: string) =>
+      putBodies[0].days
+        .find((d) => d.date === date)
+        ?.slots.map((slot) => slot.poiId);
+    const p1 = putBodies[0].days
+      .flatMap((d) => d.slots)
+      .find((slot) => slot.poiId === 'p1');
+    return { day1: idsOf(DAY1), day2: idsOf(DAY2), p1 };
+  }
+
+  it('🔴 D1 · date=2일차·insertAfter=1 → 2일차 [tA, tB, p1, tC] · 1일차 불변 · p1 은 tB 종료(16:00)부터 1시간', async () => {
+    mockParams = { tripId: 't1', date: DAY2, insertAfter: '1' };
+
+    const { day1, day2, p1 } = await addP1AfterItinerary();
+
+    expect(day2).toEqual(['tA', 'tB', 'p1', 'tC']);
+    expect(day1).toEqual(['sA', 'sB']);
+    // 1일차 index 1(sB, 14:00 종료)을 앞 장소로 잘못 고르면 14:00–15:00 이 된다.
+    expect({ startAt: p1?.startAt, endAt: p1?.endAt }).toEqual({
+      startAt: '16:00:00',
+      endAt: '17:00:00',
+    });
+  });
+
+  it('🔴 D2 · date=2일차면 시트 헤더가 "장소 추가 · 2일차"다', async () => {
+    mockParams = { tripId: 't1', date: DAY2 };
+    render(<PlaceAddPage tripId="t1" />, { wrapper: createWrapper() });
+
+    expect(await screen.findByText('장소 추가 · 2일차')).toBeOnTheScreen();
+  });
+
+  it('D3 · date 미전달이면 첫 날에 넣는다 — 1일차 [sA, p1, sB] · 2일차 불변 (후방호환 · 선제 green)', async () => {
+    mockParams = { tripId: 't1', insertAfter: '0' };
+
+    const { day1, day2 } = await addP1AfterItinerary();
+
+    expect(day1).toEqual(['sA', 'p1', 'sB']);
+    expect(day2).toEqual(['tA', 'tB', 'tC']);
+  });
+
+  it('D4 · date 가 일정에 없는 날이면 첫 날에 넣고 헤더도 1일차다 (폴백 · 선제 green)', async () => {
+    mockParams = { tripId: 't1', date: '2026-07-01', insertAfter: '0' };
+
+    const { day1, day2 } = await addP1AfterItinerary();
+
+    expect(day1).toEqual(['sA', 'p1', 'sB']);
+    expect(day2).toEqual(['tA', 'tB', 'tC']);
+    expect(screen.getByText('장소 추가 · 1일차')).toBeOnTheScreen();
   });
 });
 

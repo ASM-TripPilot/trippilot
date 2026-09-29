@@ -50,13 +50,17 @@ const FALLBACK_CENTER = { lat: 37.5665, lng: 126.978 };
  * `PUT /trips/{tripId}/itinerary`(전체 교체) → 성공 시 일정 GET 캐시 무효화로 h19 가 갱신 재조회한다
  * (없으면 추가가 화면에 영영 안 보인다, W-1). 서버 재검증 결과(`hasViolation`)는 그 재조회가 표시한다
  * (INV-2 — 클라는 시각 타당성을 판정하지 않는다). 일정 GET 미도착·실패(`notReady`)면 추가를 조용히
- * 막는다(빈-PUT 미발사, W-2). 여러 일자면 첫 날에 담는다(일자 선택 UI 는 Figma 공백).
+ * 막는다(빈-PUT 미발사, W-2). 여러 일자면 라우트 `date` 의 날(카드 사이 "+", TRIP-1115), 없으면 첫 날에
+ * 담는다(말미 추가의 일자 선택 UI 는 Figma 공백).
  *
  * insertAfter 는 **prop 이 아니라 `useLocalSearchParams`** 로 받는다 — tripId(prop, P1~P4 무회귀)와
  * 라우트 계약(useLocalSearchParams, 797 호출부)을 동시에 만족시키는 조합이다.
  */
 export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
-  const { insertAfter } = useLocalSearchParams<{ insertAfter?: string }>();
+  const { insertAfter, date } = useLocalSearchParams<{
+    insertAfter?: string;
+    date?: string;
+  }>();
   const router = useRouter();
   const queryClient = useQueryClient();
   const [selectedCategory, setSelectedCategory] = useState<PoiCategory | null>(
@@ -101,17 +105,20 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
     if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
   }
 
-  // 담을 대상 일자 — 일정 GET 미도착·실패면 undefined(첫 날에 담는다, 일자 선택 UI Figma 공백).
+  // 담을 대상 일자 — 라우트 `date`(카드 사이 "+" 가 편집기의 활성 일자를 싣는다, TRIP-1115)가 일정에 있으면
+  // 그 날, 없거나 미전달(말미 「장소 추가」)이면 첫 날. insertAfter 는 그 날 기준 index 라 날이 어긋나면
+  // 다른 날의 완료 카드 앞에 끼어든다(INV-U3-03). 일정 GET 미도착·실패면 undefined.
   const days = itinerary.data?.days ?? [];
-  const targetDate = days[0]?.date;
+  const targetDay = days.find((day) => day.date === date) ?? days[0];
+  const targetDate = targetDay?.date;
   const notReady = targetDate === undefined;
-  // 시트 헤더 "장소 추가 · N일차" — N = 담을 일자 index+1(현행 day[0]=1일차).
+  // 시트 헤더 "장소 추가 · N일차" — N = 담을 일자 index+1.
   const targetDayIndex = days.findIndex((day) => day.date === targetDate);
   const dayNumber = (targetDayIndex >= 0 ? targetDayIndex : 0) + 1;
 
-  // 전면 지도 — 담을 일자(days[0]) 슬롯 좌표로 핀을 세운다(MapSheetShell 이 MapView 를 소유하므로
+  // 전면 지도 — 담을 일자 슬롯 좌표로 핀을 세운다(MapSheetShell 이 MapView 를 소유하므로
   // 지도 census 신규 등재 불필요). 좌표 없으면 서울 기본 중심(FALLBACK_CENTER).
-  const targetSlots = days[0]?.slots ?? [];
+  const targetSlots = targetDay?.slots ?? [];
   const pins = buildDraftPins(targetSlots);
   const center =
     pins.length > 0 ? { lat: pins[0].lat, lng: pins[0].lng } : FALLBACK_CENTER;

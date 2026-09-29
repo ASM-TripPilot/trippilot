@@ -257,8 +257,8 @@ describe('🔴 EditorView · B4-9 — dragging 얼굴(AC-9)', () => {
 // ── TRIP-753 · i07 일정 편집(inTrip) — h12 편집기를 여행 중 편집으로 재사용 ──────────────────────
 //
 // Figma 4313:2100 픽스처: 2일차(6/11) 5곳, 앞 두 곳은 방문 완료, 행 3 은 위반. 완료·위반은 모드가
-// 아니라 데이터(completedSlotKeys·hasViolation)가 정한다 — inTrip 이 끄는 것은 카드 사이 + 와 안내
-// 문구 둘뿐이다(Q5). 드래그·시트 실개폐는 jest 사각(02a ★8) — 콜백·트리 모양까지만 본다.
+// 아니라 데이터(completedSlotKeys·hasViolation)가 정한다 — inTrip 이 바꾸는 것은 카드 사이 + 의 잠김
+// 판정(TRIP-1115, 아래 V6)과 안내 문구 둘뿐이다(Q5). 드래그·시트 실개폐는 jest 사각(02a ★8) — 콜백·트리 모양까지만 본다.
 
 const I07_DATE = '2026-06-11';
 
@@ -528,11 +528,64 @@ describe('🔴 EditorView · V5-D — 위반 사유의 분 범위는 HH:mm 로 �
   });
 });
 
-describe('🔴 EditorView · V6 — inTrip 이면 카드 사이 + 가 없고 i07 안내가 장소 추가 아래 (TRIP-753 AC-7)', () => {
-  it('insert 0개 · 안내 문구 i07 완전일치 · 트리 순서 add-place → guide', () => {
+// ── TRIP-1115 · i07 카드 사이 "+" — 잠김 판정 ─────────────────────────────────────────────────────
+//
+// "+" index i 는 카드 i 뒤·카드 i+1 앞에 넣는다(PlaceAddPage insertAfter=i → insertSlotAt(i+1)). 그래서
+// i07(inTrip)에선 **카드 i+1 이 방문 완료(잠김)면 i 자리 "+" 없음** — 완료 카드 앞에 넣으면 순서가 거짓이다
+// (INV-U3-03). 뺀 자리엔 같은 높이(24)의 빈 줄을 남긴다(testID 없음·못 누름, 02a §2). h12 는 완료 데이터가
+// 있어도 지금처럼 전 자리 "+"다(보수안 — 판정은 inTrip 한정, V7 이 앵커).
+//
+// 3동작 뼈대: 준비=i07 픽스처(완료 목록 바꿔 가며) 렌더 → 실행=렌더/press → 단언=insert 번호 목록·행 구조.
+
+/** 보이는 카드 사이 "+" 의 index 목록(트리 순서). */
+function insertIndices(): number[] {
+  return screen
+    .queryAllByTestId(/^itinerary-edit-insert-/)
+    .map((node) =>
+      Number(String(node.props.testID).replace('itinerary-edit-insert-', ''))
+    );
+}
+
+/** composite 를 벗겨 가장 가까운 host 자식만 모은다(문자열 자식 제외). */
+function hostChildren(node: ReactTestInstance): ReactTestInstance[] {
+  return node.children.flatMap((child) => {
+    if (typeof child === 'string') return [];
+    return typeof child.type === 'string' ? [child] : hostChildren(child);
+  });
+}
+
+/** 카드 한 장의 행 = 드래그 리스트 host 바로 아래 host(className 에 기대지 않는다, 02a ★4). */
+function rowOfCard(poiId: string): ReactTestInstance {
+  const list = screen.getByTestId(EDIT_LIST);
+  let row: ReactTestInstance | null = null;
+  for (
+    let cur: ReactTestInstance | null = screen.getByTestId(
+      `slot-stopcard-${k(poiId)}`
+    );
+    cur !== null && cur !== list;
+    cur = cur.parent
+  ) {
+    if (typeof cur.type === 'string') row = cur;
+  }
+  if (row === null) throw new Error(`${poiId} 카드가 리스트 안에 없다`);
+  return row;
+}
+
+/** 줄 높이가 24 로 명시돼 있다 — className 토큰 `h-[24px]` 또는 style height 24(02a §2). */
+function hasHeight24(node: ReactTestInstance): boolean {
+  const tokens = String(node.props.className ?? '').split(/\s+/);
+  const flat = StyleSheet.flatten(node.props.style) as
+    { height?: unknown } | undefined;
+  return tokens.includes('h-[24px]') || flat?.height === 24;
+}
+
+describe('🔴 EditorView · V6 — inTrip 이면 카드 사이 + 는 다음 카드가 잠기지 않은 자리에만, i07 안내가 장소 추가 아래 (TRIP-1115 · TRIP-753 AC-7)', () => {
+  it('[완료 p1, 완료 p2, p3, p4, p5] → insert 가 정확히 1·2·3(0 = 완료 p2 앞, 4 = 마지막 뒤 없음) · 안내 i07 · 순서 add-place → guide', () => {
     renderI07({ inTrip: true });
 
-    expect(screen.queryAllByTestId(/^itinerary-edit-insert-/)).toHaveLength(0);
+    expect(insertIndices()).toEqual([1, 2, 3]);
+    expect(screen.queryByTestId('itinerary-edit-insert-0')).toBeNull();
+    expect(screen.queryByTestId('itinerary-edit-insert-4')).toBeNull();
     expect(screen.getByTestId('itinerary-edit-guide')).toHaveTextContent(
       I07_GUIDE
     );
@@ -542,6 +595,125 @@ describe('🔴 EditorView · V6 — inTrip 이면 카드 사이 + 가 없고 i07
     expect(order.indexOf('itinerary-edit-guide')).toBeGreaterThan(
       order.indexOf('itinerary-edit-add-place')
     );
+  });
+
+  it('i07 에서 insert-2 press 는 onPressAddBetween(2) 1회 — h12 와 같은 콜백', () => {
+    const cb = renderI07({ inTrip: true });
+
+    fireEvent.press(screen.getByTestId('itinerary-edit-insert-2'));
+
+    expect(cb.onPressAddBetween).toHaveBeenCalledTimes(1);
+    expect(cb.onPressAddBetween).toHaveBeenCalledWith(2);
+  });
+
+  it('★완료가 중간 p3 하나면 insert-1(p3 앞)만 빠진다 → [0,2,3] — "앞 몇 개" 가 아니라 "다음 카드 잠김" 판정 (02a ★2·★3)', () => {
+    renderI07({ inTrip: true, completedSlotKeys: [k('p3')] });
+
+    expect(insertIndices()).toEqual([0, 2, 3]);
+  });
+
+  it('완료 0개(다른 날)면 모든 카드 사이 + → [0,1,2,3]', () => {
+    renderI07({ inTrip: true, completedSlotKeys: [] });
+
+    expect(insertIndices()).toEqual([0, 1, 2, 3]);
+  });
+
+  // 03b 참고-1 — 판정은 "방문 완료"만 본다. 고정(isFixed)은 드래그만 막을 뿐 앞에 넣는 건 막지 않는다.
+  // 판정을 "잠김 = 고정 또는 완료"(isPinned)로 넓히면 이 테스트만 red 가 된다(다른 픽스처는 고정 0개).
+  it('★다음 카드 p4 가 고정(isFixed)·미완료면 p4 앞 insert-2 는 그대로 있다 → [1,2,3]', () => {
+    renderI07({
+      inTrip: true,
+      slots: I07_SLOTS.map((s) =>
+        s.poiId === 'p4' ? { ...s, isFixed: true } : s
+      ),
+    });
+
+    expect(insertIndices()).toEqual([1, 2, 3]);
+  });
+});
+
+describe('🔴 EditorView · V6-G — + 를 뺀 자리엔 같은 높이 빈 줄이 남는다 (TRIP-1115 결정 1)', () => {
+  it('p1 행은 [카드, 빈 줄] 두 칸(짝: p2 행 [카드, +]) · 빈 줄은 testID 없음·높이 24·눌러도 콜백 0 · 마지막 p5 행은 카드뿐', () => {
+    const cb = renderI07({ inTrip: true });
+
+    // 짝 — "+" 가 있는 p2 행은 host 자식 2개이고 두 번째가 insert-1 이다(행 찾기가 헛검사가 아님).
+    const plusRow = hostChildren(rowOfCard('p2'));
+    expect(plusRow).toHaveLength(2);
+    expect(plusRow[1].props.testID).toBe('itinerary-edit-insert-1');
+
+    // "+" 를 뺀 p1 행 — 줄 자체를 없애면(자식 1개) 카드 간격이 좁아지고 드래그 스냅샷이 흔들린다.
+    const lockedRow = hostChildren(rowOfCard('p1'));
+    expect(lockedRow).toHaveLength(2);
+    const blank = lockedRow[1];
+    expect(hasHeight24(blank)).toBe(true);
+    expect(
+      blank.findAll((node) => node.props.testID !== undefined)
+    ).toHaveLength(0);
+
+    fireEvent.press(blank);
+    expect(cb.onPressAddBetween).not.toHaveBeenCalled();
+    expect(cb.onPressTimeChip).not.toHaveBeenCalled();
+
+    // 마지막 카드 뒤엔 줄이 없다(말미는 「장소 추가」) — 빈 줄을 여기까지 깔면 말미 간격이 바뀐다.
+    expect(hostChildren(rowOfCard('p5'))).toHaveLength(1);
+  });
+
+  it('24 의 근거 — "+" 줄은 위아래 py-[2px] 에 크기 20 글리프다(바뀌면 빈 줄 높이도 같이 고칠 것)', () => {
+    renderI07({ inTrip: true });
+
+    const plus = screen.getByTestId('itinerary-edit-insert-1');
+    expect(String(plus.props.className ?? '').split(/\s+/)).toContain(
+      'py-[2px]'
+    );
+    expect(
+      plus.findAll(
+        (node) => node.props.width === 20 && node.props.height === 20
+      ).length
+    ).toBeGreaterThan(0);
+  });
+
+  it('h12(inTrip 없음)는 완료 데이터가 있어도 빈 줄이 없다 — p1 행 두 번째 칸이 insert-0', () => {
+    renderI07();
+
+    const row = hostChildren(rowOfCard('p1'));
+    expect(row).toHaveLength(2);
+    expect(row[1].props.testID).toBe('itinerary-edit-insert-0');
+  });
+});
+
+describe('🔴 EditorView · V6-D — 끄는 중에도 i07 의 + 3개는 자리만 남고, 빈 줄도 그대로다 (TRIP-1115 · 03b 경고-1)', () => {
+  it('isDragging 이면 insert 1·2·3 은 숨김·누름 불가·언마운트 안 됨, p1 행의 빈 줄은 높이 24 로 자리를 지킨다', () => {
+    const cb = renderI07({ inTrip: true, isDragging: true });
+
+    expectInsertsHeldButInert(cb, 3);
+    expect(
+      screen
+        .getAllByTestId(/^itinerary-edit-insert-/, {
+          includeHiddenElements: true,
+        })
+        .map((node) => node.props.testID)
+    ).toEqual([
+      'itinerary-edit-insert-1',
+      'itinerary-edit-insert-2',
+      'itinerary-edit-insert-3',
+    ]);
+
+    const lockedRow = hostChildren(rowOfCard('p1'));
+    expect(lockedRow).toHaveLength(2);
+    expect(hasHeight24(lockedRow[1])).toBe(true);
+    const list = screen.getByTestId(EDIT_LIST);
+    for (
+      let cur: ReactTestInstance | null = lockedRow[1];
+      cur !== null && cur !== list;
+      cur = cur.parent
+    ) {
+      const flat = StyleSheet.flatten(cur.props.style) as
+        { display?: string } | undefined;
+      expect(flat?.display).not.toBe('none');
+      expect(String(cur.props.className ?? '').split(/\s+/)).not.toContain(
+        'hidden'
+      );
+    }
   });
 });
 

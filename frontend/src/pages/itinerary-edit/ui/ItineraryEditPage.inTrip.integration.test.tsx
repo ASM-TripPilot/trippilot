@@ -29,7 +29,9 @@ import { ItineraryEditPage } from './ItineraryEditPage';
  * `inTrip` 으로 그대로 재사용한다. 이 파일은 그 모드에서 페이지 배선이 실제 HTTP 로 도는지 본다.
  *
  * 무엇을 보장하나:
- *  - 🔴 P1 페이지가 `inTrip` 을 뷰까지 내린다 — 카드 사이 + 가 없고 안내가 i07 문구다(AC-7).
+ *  - 🔴 P1 페이지가 `inTrip` 을 뷰까지 내린다 — 카드 사이 + 는 방문 완료 카드 앞 자리에만 없고(TRIP-1115),
+ *    누르면 h12 와 같은 장소 추가 경로로 가고, 보고 있는 날(`date`)을 함께 싣는다(03b 차단-1).
+ *    안내가 i07 문구다(AC-7).
  *    방문 기록으로 완료 행이 잠긴다(AC-4, 잠금 배선 자체는 h12 CL1 과 같다).
  *  - P2 예정 행 ⌄ → 시각 시트 → 적용 → 저장 PUT 에 바뀐 시각이 실린다(AC-5).
  *    TRIP-927 부터 시트는 h04(시간대 조정) 얼굴이다 — i07 도 h12 와 같은 얼굴·같은 종료 선택 사항
@@ -221,11 +223,20 @@ function putOrder(): string[] {
 }
 
 describe('🔴 P1 · AC-7·4 — 페이지가 inTrip 을 뷰로 내리고, 완료 행은 잠긴다', () => {
-  it('카드 사이 + 0개 · i07 안내 문구 · 5곳 · 완료 p1·p2 는 누름 칩 없음 · 예정 p3 는 있음', async () => {
+  it('카드 사이 + 는 1·2·3(완료 p2 앞 0 없음) · i07 안내 문구 · 5곳 · 완료 p1·p2 는 누름 칩 없음 · 예정 p3 는 있음', async () => {
     renderPage();
+    // 방문 조회 전엔 잠금이 비어 + 가 전 자리다 — 잠금이 뜬 뒤에 센다(02a ★9).
     await waitForLocked();
 
-    expect(screen.queryAllByTestId(/^itinerary-edit-insert-/)).toHaveLength(0);
+    expect(
+      screen
+        .queryAllByTestId(/^itinerary-edit-insert-/)
+        .map((node) => node.props.testID)
+    ).toEqual([
+      'itinerary-edit-insert-1',
+      'itinerary-edit-insert-2',
+      'itinerary-edit-insert-3',
+    ]);
     expect(screen.getByTestId('itinerary-edit-guide')).toHaveTextContent(
       I07_GUIDE
     );
@@ -244,6 +255,54 @@ describe('🔴 P1 · AC-7·4 — 페이지가 inTrip 을 뷰로 내리고, 완�
     // 완료 알약을 눌러도 시각 시트가 열리지 않는다(03b 경고-1 — press 불가를 직접 잠근다).
     fireEvent.press(screen.getByTestId(`slot-stopcard-locked-${k('p1')}`));
     expect(screen.queryByTestId(SHEET)).toBeNull();
+  });
+
+  it('i07 의 insert-2 press → 장소 추가 화면으로 insertAfter "2" 와 보고 있는 날 date 를 싣고 1회 push (TRIP-1115 · h12 와 같은 경로)', async () => {
+    renderPage();
+    await waitForLocked();
+
+    fireEvent.press(screen.getByTestId('itinerary-edit-insert-2'));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/itinerary/manual/add',
+      params: { tripId: TRIP_ID, insertAfter: '2', date: DAY },
+    });
+  });
+
+  // 5-b 차단-1 — "+" 번호는 **보고 있는 날** 목록 기준이다. 날짜를 안 실으면 장소 추가 화면이 1일차에
+  // 끼워 넣어, 2일차의 "+" 가 1일차 완료 카드 앞으로 들어간다. 2일짜리라야 1일차와 갈린다.
+  it('2일차 칩으로 옮긴 뒤 insert-1 press → push params.date 가 2일차 날짜다 (03b 차단-1)', async () => {
+    const DAY2 = '2026-06-12';
+    getHandler = () =>
+      HttpResponse.json({
+        ...itinerary(),
+        days: [
+          { date: DAY, slots: SLOTS },
+          {
+            date: DAY2,
+            slots: [
+              slot('q1', '09:00:00', '10:00:00', '태종대'),
+              slot('q2', '11:00:00', '12:00:00', '흰여울마을'),
+              slot('q3', '13:00:00', '14:00:00', '송도 해상케이블카'),
+            ],
+          },
+        ],
+      });
+    renderPage();
+    await waitForLocked();
+
+    // 칩 testID 번호는 1부터다(day-2 = 2일차, EditorView 가 tab.dayIndex 를 쓴다).
+    fireEvent.press(screen.getByTestId('itinerary-edit-day-2'));
+    // 앵커 — 2일차 카드가 보인다(칩 누름이 실제로 날을 바꿨다).
+    await screen.findByTestId(`slot-stopcard-${buildSlotKey(DAY2, 'q1')}`);
+    fireEvent.press(screen.getByTestId('itinerary-edit-insert-1'));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/itinerary/manual/add',
+      params: { tripId: TRIP_ID, insertAfter: '1', date: DAY2 },
+    });
   });
 });
 
