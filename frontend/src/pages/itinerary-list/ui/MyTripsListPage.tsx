@@ -14,15 +14,27 @@ import { isNotFound } from '@/shared/api/isNotFound';
 import { seoulDate } from '@/shared/date/seoulDate';
 import { readIdSet, writeIdSet } from '@/shared/storage/idSet';
 import {
+  readStringValue,
+  writeStringValue,
+} from '@/shared/storage/stringValue';
+import {
   pickDoneBar,
   type DoneBarEntry,
 } from '@/features/itinerary/model/doneBar';
-import { orderMyTrips } from '@/features/itinerary/model/myTripsOrder';
+import {
+  byLatest,
+  byStart,
+  byTitle,
+  orderMyTrips,
+  parseMyTripsSortKey,
+  type MyTripsSortKey,
+} from '@/features/itinerary/model/myTripsOrder';
 import {
   itineraryDestinationHref,
   resolveItineraryDestination,
 } from '@/features/itinerary/model/planState';
 import { MyTripsListScreen } from '@/features/itinerary/ui/MyTripsListScreen';
+import { MyTripsSortSheet } from '@/features/itinerary/ui/MyTripsSortSheet';
 import { TripDeleteDialog } from '@/features/itinerary/ui/TripDeleteDialog';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import { GenerationDoneBar } from '@/widgets/generation-done-bar/ui/GenerationDoneBar';
@@ -37,8 +49,10 @@ import { TripCardContainer } from './TripCardContainer';
  * 리다이렉트해 둘째 이후 여행이 이 탭에서 영영 접근 불가였다(핵심 결함, AC-1). 이제 리다이렉트하지
  * 않고 모든 여행을 카드로 나열한다.
  *
- * 정렬은 `updatedAt` 내림차순(없으면 `createdAt`) — "최신순" 표시 라벨과 짝(01b Q1). TRIP-1121 · 여행 중
- * (확정 + 오늘이 기간 안)은 맨 위(`orderMyTrips`). 오늘을 여기서 한 번 만들어 정렬과 카드에 같은 값을 넘긴다
+ * TRIP-1122 · 정렬 기준(최신순·출발일순·이름순)과 정렬 시트 열림을 페이지가 쥔다 — 시트는 열릴 때만 그린다.
+ * 고른 기준은 기기에 한 줄 남기고(`itinerary.myTrips.sort`), 마운트 때 한 번 읽는다: 읽기 전엔 최신순, 오면 그
+ * 기준, 읽기 실패·모르는 값은 최신순(INV-4). 사용자가 먼저 고르면 늦게 온 저장값은 무시한다. TRIP-1121 · 여행 중
+ * (확정 + 오늘이 기간 안)은 어느 기준에서도 맨 위(`orderMyTrips`). 오늘을 여기서 한 번 만들어 정렬과 카드에 같은 값을 넘긴다
  * — 일정이 도착하기 전엔 판정할 수 없어, 도착하는 순간 여행 중 카드가 위로 올라간다(INV-4).
  *
  * TRIP-928 · 완료 도킹 배너 — 여행별 일정(카드 훅과 같은 캐시 키)과 기기에 저장한 "배너로 알린 여행
@@ -50,6 +64,7 @@ import { TripCardContainer } from './TripCardContainer';
 
 /** SecureStore 키 규칙(영숫자·`.`·`-`·`_`) · 토큰 키와 다른 이름. */
 const DONE_BAR_SEEN_KEY = 'itinerary.doneBar.seen';
+const SORT_KEY = 'itinerary.myTrips.sort';
 
 export function MyTripsListPage(): ReactElement {
   const router = useRouter();
@@ -74,9 +89,21 @@ export function MyTripsListPage(): ReactElement {
   // 연타 잠금은 ref — isPending 은 늦게 알려져 같은 틱 두 번째 press 를 못 막는다(02a ★2).
   const deletingRef = useRef(false);
 
+  // TRIP-1122 · 정렬 — 사용자가 한 번 고르면 뒤늦게 도착한 저장값이 그 선택을 덮지 않게 ref 로 표시한다.
+  const [sortKey, setSortKey] = useState<MyTripsSortKey>('recent');
+  const [sortOpen, setSortOpen] = useState(false);
+  const sortPickedRef = useRef(false);
+
   useEffect(() => {
     // 실패하면 seen 이 null 로 남아 배너가 안 뜬다(닫힌 쪽 실패).
     readIdSet(DONE_BAR_SEEN_KEY).then(setSeen, () => {});
+    // 읽기 실패는 최신순 그대로(INV-4 — 목록은 이미 최신순으로 서 있다).
+    readStringValue(SORT_KEY).then(
+      (raw) => {
+        if (!sortPickedRef.current) setSortKey(parseMyTripsSortKey(raw));
+      },
+      () => {}
+    );
   }, []);
 
   // 여행별 일정 응답(카드 훅과 같은 캐시 키) — 완료 배너와 여행 중 고정이 같이 읽는다.
@@ -128,8 +155,21 @@ export function MyTripsListPage(): ReactElement {
         ? { trip: entry.trip, itinerary: 'pending' as const }
         : entry
     ),
-    today
+    today,
+    sortKey === 'start'
+      ? byStart(today)
+      : sortKey === 'title'
+        ? byTitle
+        : byLatest
   );
+
+  const onSelectSort = (key: MyTripsSortKey): void => {
+    sortPickedRef.current = true;
+    setSortKey(key);
+    setSortOpen(false);
+    // 저장 실패는 삼킨다 — 이번 마운트의 화면은 고른 대로 남는다(doneBar 쓰기와 같은 선례).
+    writeStringValue(SORT_KEY, key).catch(() => {});
+  };
 
   const onConfirmDelete = (): void => {
     if (deleteTargetId === null || deletingRef.current) return;
@@ -180,6 +220,8 @@ export function MyTripsListPage(): ReactElement {
       <MyTripsListScreen
         mode="list"
         onPressCreateTrip={onPressCreateTrip}
+        sortKey={sortKey}
+        onPressSort={() => setSortOpen(true)}
         cards={sorted.map((trip) => (
           <TripCardContainer
             key={trip.tripId}
@@ -203,6 +245,13 @@ export function MyTripsListPage(): ReactElement {
           failed={deleteFailedId === deleteTargetId}
           onCancel={() => setDeleteTargetId(null)}
           onConfirm={onConfirmDelete}
+        />
+      ) : null}
+      {sortOpen ? (
+        <MyTripsSortSheet
+          selected={sortKey}
+          onSelect={onSelectSort}
+          onClose={() => setSortOpen(false)}
         />
       ) : null}
     </View>

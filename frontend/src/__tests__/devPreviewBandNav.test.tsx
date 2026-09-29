@@ -460,7 +460,13 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    `h06-my-trips-delete-confirm` 바로 뒤에 추가하고 이 가드는 안 만진다(추가 전엔 185개라 red). 정확한 키·
     //    얼굴은 아래 'TRIP-1121' describe, h 순서는 devPreviewBandSort EXPECTED_H 가 못박는다. 배지가 사진 위
     //    우상단에 붙는 모양·여행 중 카드 ⋯ 부재의 육안 대조 자리가 이 키다.
-    expect(PREVIEW_STATES).toHaveLength(194);
+
+    // ⚠️ TRIP-1122: h06 정렬 시트 열린 얼굴 `h06-my-trips-sort-sheet`(band `h`, Figma `4750:2902`) 1키 추가로
+    //    186→187. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 1키만
+    //    `h06-my-trips-ongoing` 바로 뒤에 추가하고 이 가드는 안 만진다(추가 전엔 186개라 red). 정확한 키·얼굴은
+    //    아래 'TRIP-1122' describe, h 순서는 devPreviewBandSort EXPECTED_H 가 못박는다. 시트·딤이 탭바를 덮는지,
+    //    핸들·체크·행 높이의 육안 대조 자리가 이 키다.
+    expect(PREVIEW_STATES).toHaveLength(195);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -2065,6 +2071,31 @@ describe('🔴 TRIP-1055 · h06 작성중 여행 삭제 메뉴·삭제 확인 �
 // TRIP-1121 — 배지 위치(사진 우상단)·색·카드 간격은 픽셀이라 jest 사각이다. 6-b 육안 대조 자리가 이 키다
 // (Figma 4745:2874 — 여행 중 → 작성중 → 완성 3카드). 무엇을 보장하나: 키가 h 밴드에 있고, 렌더하면 배지가
 // 그 순서로 서며, 맨 위 여행 중 카드에는 ⋯·resume 이 없고 둘째 작성중 카드에는 둘 다 있다.
+// TRIP-1122 — 시트 판·딤·핸들·체크의 픽셀과 "시트가 탭바를 덮는가"는 jest 사각이다(gorhom 목 통과형).
+// 6-b 육안 대조 자리가 이 키다(Figma 4750:2902). 무엇을 보장하나: 키가 h 밴드에 있고, 렌더하면 목록 위에
+// 정렬 시트가 열린 채 서며 최신순 옵션이 선택돼 있고 트리거 라벨도 최신순이다.
+describe('🔴 TRIP-1122 · h06 정렬 시트 프리뷰 키 (band h)', () => {
+  it('h06-my-trips-sort-sheet 는 목록 + 최신순이 선택된 정렬 시트를 그린다', () => {
+    // 준비 — 새 키 엔트리(red-first: preview.tsx 에 추가 전엔 없다)
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'h06-my-trips-sort-sheet'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('h');
+    expect(entry?.label).toBe('h06 · 내 여행 정렬 시트');
+
+    // 실행
+    render(<>{entry?.render()}</>);
+
+    // 단언 — 목록 화면 + 열린 시트, 선택 표시와 트리거 라벨이 같은 기준
+    expect(screen.getByTestId('itinerary-tab-root')).toBeOnTheScreen();
+    expect(screen.getByTestId('my-trips-sort')).toHaveTextContent('최신순');
+    expect(screen.getByTestId('my-trips-sort-sheet')).toBeOnTheScreen();
+    expect(screen.getByTestId('my-trips-sort-option-recent')).toBeSelected();
+    expect(screen.getByTestId('my-trips-sort-option-title')).not.toBeSelected();
+  });
+});
+
 describe('🔴 TRIP-1121 · h06 여행 중 고정 프리뷰 키 (band h)', () => {
   it('h06-my-trips-ongoing 은 여행 중·작성중·완성 3카드를 그 순서로 그린다', () => {
     // 준비 — 새 키 엔트리(red-first: preview.tsx 에 추가 전엔 없다)

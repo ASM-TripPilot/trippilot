@@ -107,6 +107,7 @@ import {
   type MyTripCardVM,
 } from '@/features/itinerary/ui/MyTripCard';
 import { MyTripsListScreen } from '@/features/itinerary/ui/MyTripsListScreen';
+import { MyTripsSortSheet } from '@/features/itinerary/ui/MyTripsSortSheet';
 import { TripDeleteDialog } from '@/features/itinerary/ui/TripDeleteDialog';
 import {
   NotificationInboxScreen,
@@ -5261,6 +5262,20 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'h06 · 내 여행 여행 중 고정',
     login: null,
     render: renderH06Ongoing,
+  },
+  // h06 정렬 시트(TRIP-1122, Figma 4750:2902) — 목록 위에 최신순이 선택된 시트. 딤·시트가 탭바를 덮는지,
+  // 핸들·체크·행 높이는 jest 사각이라 이 키가 6-b 육안 대조 자리다.
+  {
+    key: 'h06-my-trips-sort-sheet',
+    band: 'h',
+    label: 'h06 · 내 여행 정렬 시트',
+    login: null,
+    render: () => (
+      <View style={{ flex: 1 }}>
+        {renderH06DeleteList({ menuOpen: false })}
+        <MyTripsSortSheet selected="recent" onSelect={noop} onClose={noop} />
+      </View>
+    ),
   },
   // l03 마이페이지 default(TRIP-775) — Figma 1602:2388 과 같은 데이터: 카운트 2/0/3 · 프로필 태그 ·
   // 정식 스타일 카드 · 예정 카드 2장 · 메뉴 3행 · 헤더 톱니 · 탭바(마이). 예정이 있으므로 지난 여행 섹션은
