@@ -263,8 +263,8 @@ compass:   <svg ..><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 1
 
 ---
 
-## 9. 운영 함정 (이 파일 고유 — `use_figma` 일반 규칙은 `figma-use` 스킬이 정본)
-`use_figma` 일반 규칙(**`return`이 유일한 출력 채널**·`figma.notify` throw·페이지 전환 호출당 1회·≤10 오퍼레이션·atomic·폰트 로드 레시피·sizing enum·pre-flight 체크리스트)은 공식 `figma-use` 스킬(`frontend/.claude/skills/figma-use/SKILL.md`)을 따른다. 이 절은 **이 파일에서만** 겪는 것.
+## 9. 운영 함정 (이 파일 고유 — `use_figma` 일반 규칙은 `figma:figma-use` 스킬이 정본)
+`use_figma` 일반 규칙(**`return`이 유일한 출력 채널**·`figma.notify` throw·페이지 전환 호출당 1회·호출 분할 기준·오류 재시도 판정·폰트 로드 레시피·sizing enum·pre-flight 체크리스트)은 공식 플러그인 `figma:figma-use` 스킬을 따른다. 이 절은 **이 파일에서만** 겪는 것.
 - **페이지**: `const P=await figma.getNodeByIdAsync('1228:1045'); if(!P||P.type!=='PAGE') throw new Error('BAD PAGE'); await figma.setCurrentPageAsync(P);` — **이름 가드 금지**(이름이 `Airbnb 하이파이`→`화면`으로 바뀜). `figma.root.children`·`get_metadata` 페이지 열거는 stale이라 이 페이지가 안 뜬다(이름 검색으로 엉뚱한 페이지에 그린 사고 이력).
 - **반환**: `return {createdNodeIds, mutatedNodeIds}`. 구 킷의 "throw로 값 반환 금지 → `figma.notify`로 끝내라"는 **폐기**(notify는 not implemented throw).
 - **폰트**: Noto Sans KR(Regular·Bold)·Inter(Regular·Semi Bold·Bold)만. Pretendard·Apple SD·Noto Medium 로드 실패. 텍스트 fills 변경은 폰트 로드 불필요, `characters` 설정은 fontName 먼저.

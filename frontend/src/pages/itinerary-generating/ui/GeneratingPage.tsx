@@ -5,12 +5,14 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import { firstCoPickSlotKey } from '@/features/itinerary/model/coPickSlots';
 import { buildMustVisitPins } from '@/features/itinerary/model/mustVisitList';
+import { useGenerationBusy } from '@/features/itinerary/model/useGenerationBusy';
 import { GeneratingScreen } from '@/features/itinerary/ui/GeneratingScreen';
 import type {
   GenerateItineraryRequestGenerationMode,
   Itinerary,
 } from '@/shared/api/generated/schemas';
 import {
+  getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripIdItinerary,
   useGetTripsTripIdMustVisits,
   usePostTripsTripIdItinerary,
@@ -19,6 +21,9 @@ import { isNotFound } from '@/shared/api/isNotFound';
 import { getAccessToken } from '@/shared/api/tokenManager';
 import type { MapCenter, MapPin } from '@/shared/map';
 import { promptAndRegisterPush } from '@/shared/push';
+import { showToast } from '@/shared/ui/Toast';
+
+const LEAVE_TOAST_MESSAGE = '백그라운드에서 계속 만들고 있어요';
 
 /**
  * h09 배선(TRIP-305) — 생성 POST 를 소유·발화하고 진행/성공/실패/이탈을 화면에 잇는다.
@@ -36,14 +41,20 @@ import { promptAndRegisterPush } from '@/shared/push';
  *     돌아오지 않게. 이후 PARTIAL→COMPLETE 폴링은 목적지 페이지 소관(중복 제거).
  *  3. **오류는 침묵하지 않는다(INV-4).** `isError` 를 화면에 내려 실패 표면을 띄우고, [다시 시도]가
  *     POST 를 재발화한다.
- *  4. **POST 경로는 세션 GET 폴링·cancel 뮤테이션을 쓰지 않는다.** in-flight 라 sessionId 가 없다(Seed
+ *  4. **POST 경로는 자기 세션 GET 폴링·cancel 을 쓰지 않는다.** in-flight 라 sessionId 가 없다(Seed
  *     결정 3). 일정 GET 은 관찰 모드 가지(`ObserveGeneration`)에서만 부른다 — 그 가지는 mode 가 없을
- *     때만 마운트되므로 POST 경로는 여전히 GET 을 모른다.
+ *     때만 마운트되므로 POST 경로는 여전히 GET 을 모른다. **예외(TRIP-1032)**: POST 가 409
+ *     `GENERATION_IN_PROGRESS` 면 안내를 띄우고, 사용자가 [취소하고 새로 만들기]를 누를 때만 **다른
+ *     여행**(`activeTripId`)의 일정 GET → cancel → 같은 body 로 재POST 한다(`useGenerationBusy`).
  *  5. **꼭 갈 곳 지도 좌표(TRIP-929).** 핀이 0개면 `pins`·`center` 둘 다 `undefined` 로 넘긴다 —
  *     화면 게이트 `pins && center` 를 두 겹으로 닫는 이중 방어다(INV-4 빈 지도 금지). 어느 한 겹도
  *     중복이 아니다: 서울 폴백 `center` 를 넣으면 `pins` 겹만 남고, `pins` 를 `[]` 그대로 넘기면
  *     (`[]` 는 참) `center` 겹만 남는다. 조회 오류는 지도만 생략하고 `failed` 에 합치지 않는다 —
  *     합치면 POST 가 진행 중인데 생성 실패가 뜬다.
+ *  6. **진행 중 이탈 토스트(TRIP-1046).** 화면이 트리에서 빠질 때(‹ replace·스와이프 pop 모두
+ *     언마운트) 마지막 렌더가 진행 중이고 성공 콜백 전이면 한 번 알린다. 발화는 언마운트 한 곳뿐 —
+ *     `goHome` 은 409 [기다리기]·관찰 모드와 공유라 거기 넣으면 거짓 토스트가 샌다. 성공 표지는
+ *     호출별 onSuccess 첫 줄: replace 가 결과 재렌더보다 먼저 화면을 내릴 수 있어서다.
  */
 export function GeneratingPage({
   tripId,
@@ -62,8 +73,33 @@ export function GeneratingPage({
     | '/trips/[tripId]/itinerary/copick/[slotKey]';
 }): ReactElement {
   const router = useRouter();
-  const generate = usePostTripsTripIdItinerary();
+  // 캐시 반영은 훅 옵션 자리에 둔다 — `mutate(…, { onSuccess })` 콜백은 화면이 떠나면 불리지 않아,
+  // 생성 중 홈으로 이탈하면 홈이 들고 있던 404 가 남는다(TRIP-1015 A · QA #046).
+  const generate = usePostTripsTripIdItinerary({
+    mutation: {
+      onSuccess: (data, vars, _onMutateResult, context) => {
+        context.client.setQueryData(
+          getGetTripsTripIdItineraryQueryKey(vars.tripId),
+          data
+        );
+      },
+    },
+  });
   const firedRef = useRef(false);
+  const succeededRef = useRef(false);
+  const pendingRef = useRef(false);
+  pendingRef.current = generate.isPending;
+  useEffect(
+    () => () => {
+      if (pendingRef.current && !succeededRef.current) {
+        showToast({
+          message: LEAVE_TOAST_MESSAGE,
+          testID: 'itinerary-generating-background-toast',
+        });
+      }
+    },
+    []
+  );
 
   const mustVisits = useGetTripsTripIdMustVisits(tripId);
   const savedPlaces = useSavedPlaces({ isAuthed: getAccessToken() !== null });
@@ -79,6 +115,7 @@ export function GeneratingPage({
       { tripId, data: { generationMode: mode } },
       {
         onSuccess: (data: Itinerary) => {
+          succeededRef.current = true;
           // 일정이 처음 생긴 순간 알림 권한을 묻는다(TRIP-835) — 기다리지 않는다(이동이 다이얼로그에 막히지 않게).
           void promptAndRegisterPush();
           // copick 씨앗은 허브가 아니라 **첫 비고정 슬롯**의 SlotFillPage 로 착지한다(01b 순회 세부,
@@ -105,6 +142,8 @@ export function GeneratingPage({
       }
     );
   }, [generate, router, tripId, mode, successRoute]);
+
+  const busy = useGenerationBusy(generate.error, start);
 
   useEffect(() => {
     if (firedRef.current) return;
@@ -135,6 +174,7 @@ export function GeneratingPage({
   return (
     <GeneratingScreen
       failed={generate.isError}
+      busy={busy && { ...busy, onWait: goHome }}
       pins={mapPins}
       center={mapCenter}
       onRetry={start}

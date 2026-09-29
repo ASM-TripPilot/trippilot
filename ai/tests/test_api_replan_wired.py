@@ -72,7 +72,7 @@ def _body(**over: object) -> dict:
 
 def _post(app, **over: object):
     with TestClient(app, raise_server_exceptions=False) as client:
-        return client.post("/ai/v1/itinerary/replan", json=_body(**over))
+        return client.post("/ai/v1/planb/replan", json=_body(**over))
 
 
 # ── ① 실 배선이 일정을 낸다 ────────────────────────────────────────────
@@ -245,7 +245,7 @@ def test_에이전트_주입을_끊으면_재계획이_죽는다() -> None:
 
     object.__setattr__(orchestrator, "_schedule_agent", None)
     with TestClient(app, raise_server_exceptions=False) as client:
-        response = client.post("/ai/v1/itinerary/replan", json=_body())
+        response = client.post("/ai/v1/planb/replan", json=_body())
     assert response.status_code != 200, "에이전트 없이 200 이 나오면 재사용이 거짓이다"
 
 
@@ -273,7 +273,7 @@ def test_해석한_지시가_에이전트_요청까지_실린다() -> None:
     object.__setattr__(orchestrator, "_schedule_agent", _Spy())
     with TestClient(app, raise_server_exceptions=False) as client:
         response = client.post(
-            "/ai/v1/itinerary/replan",
+            "/ai/v1/planb/replan",
             json=_body(directives=["AVOID_STRENUOUS", "ADD_CAFE"]),
         )
 
@@ -299,8 +299,58 @@ def test_지시가_없으면_요청에도_빈_집합이_실린다() -> None:
 
     object.__setattr__(orchestrator, "_schedule_agent", _Spy())
     with TestClient(app, raise_server_exceptions=False) as client:
-        client.post("/ai/v1/itinerary/replan", json=_body())
+        client.post("/ai/v1/planb/replan", json=_body())
 
     assert seen
     assert seen[0].prefer_categories == frozenset()
     assert seen[0].avoid_categories == frozenset()
+
+
+# ── 잠금 블록 — 백엔드 실왕복이 잡은 500 (2026-09-28 회신) ───────────────────
+
+
+def test_잠금_블록이_있어도_죽지_않고_그_시각에_고정된다() -> None:
+    """`locked_blocks` 는 `FixedBlockSchema`(start·dwell_min)인데 변환이
+    `start_at`·`end_at` 을 읽어 **한 건이라도 실리면 AttributeError 500** 이었다 —
+    사용자가 슬롯을 잠그고 재계획하는 케이스 전부다(#744 유입, 백엔드 실왕복 실측).
+    스텁 계약 테스트는 `locked_blocks: []` 만 보내서 못 잡았다.
+    """
+    response = _post(
+        build_dev_app(directives=_DIRECTIVES),
+        locked_blocks=[{
+            "poi_id": "e0000000-0000-4000-8000-000000000002",  # 흑돼지거리
+            "date": "2026-09-21",
+            "start": "12:00",
+            "dwell_min": 90,
+        }],
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    slots = body["itinerary"]["days"][0]["slots"]
+    locked = [s for s in slots
+              if s["poi_id"] == "e0000000-0000-4000-8000-000000000002"]
+    assert locked, body["notes"]
+    # 잠근 시각 그대로다(HC3) — 재계획이 사용자 확정을 옮기지 않는다.
+    assert locked[0]["start_at"] == "12:00:00" and locked[0]["is_fixed"] is True
+
+
+def test_잠금_블록의_dwell_미지정은_기본_체류로_돈다() -> None:
+    """`dwell_min` 은 계약상 nullable — generate 쪽 변환(`_fixed_block`)과 같은
+    기본값(60분)을 타야 한다. 경로마다 다른 기본값이 생기면 같은 잠금이
+    generate 와 replan 에서 다른 길이가 된다.
+    """
+    response = _post(
+        build_dev_app(directives=_DIRECTIVES),
+        locked_blocks=[{
+            "poi_id": "e0000000-0000-4000-8000-000000000003",  # 카페거리
+            "date": "2026-09-21",
+            "start": "15:00",
+        }],
+    )
+
+    assert response.status_code == 200, response.text
+    slots = response.json()["itinerary"]["days"][0]["slots"]
+    locked = [s for s in slots
+              if s["poi_id"] == "e0000000-0000-4000-8000-000000000003"]
+    assert locked and locked[0]["start_at"] == "15:00:00"

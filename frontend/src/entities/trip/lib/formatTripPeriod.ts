@@ -157,13 +157,13 @@ export function formatDateRangeWithDow(
 
 /** '6/11–6/12 · 1박' — g02 거점 선택 후보 카드 날짜 서브라인(TRIP-741). 범위는 formatSectionRange
  *  (이미 en dash·0패딩 제거)를 재사용하고 ' · N박'을 잇는다. N은 일수(=박수, INV-3 소요시간 아님).
- *  한쪽이라도 날짜가 없으면 "날짜 없음"(가짜 날짜 금지). 옛 formatStayDateRange(ASCII '~')와 구분자가
- *  달라 재사용 금지 — 여기 예제 문자열엔 진짜 en dash(U+2013)·미들닷(U+00B7)이 박혀 있다. */
+ *  한쪽이라도 날짜가 없으면 null — 소비처가 그 줄을 생략한다(가짜 날짜·'날짜 없음' 문구 금지,
+ *  TRIP-1052 · US-STAY-09). 여기 예제 문자열엔 진짜 en dash(U+2013)·미들닷(U+00B7)이 박혀 있다. */
 export function formatBaseNightRange(
   checkIn: string | null | undefined,
   checkOut: string | null | undefined
-): string {
-  if (!checkIn || !checkOut) return '날짜 없음';
+): string | null {
+  if (!checkIn || !checkOut) return null;
   const nights = toEpochDay(checkOut) - toEpochDay(checkIn);
   return `${formatSectionRange(checkIn, checkOut)} ${MIDDOT} ${nights}박`;
 }

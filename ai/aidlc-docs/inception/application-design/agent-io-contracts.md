@@ -38,10 +38,10 @@
 | 포워드 | 일정 생성 (ScheduleAgent) | `POST /ai/v1/itinerary/generate` | **확정** — 구 표기 `POST /ai/generate`·`/ai/schedule` 폐기 |
 | 포워드 | 일정 검증 | `POST /ai/v1/itinerary/validate` | **확정** |
 | 포워드 | 일정 수리 | `POST /ai/v1/itinerary/repair` | **확정** |
-| 포워드 | Plan-B 대안 제안 | `POST /ai/v1/planb/alternatives`<br/>(구 `/ai/v1/itinerary/alternatives`) | **확정** — TRIP-428.<br/>**경로 이동 중(TRIP-960)** — `/ai/v1/planb/…` 별칭이 열려 있고 두 경로가 같은 핸들러다. 백엔드가 상수를 옮기면 구 경로를 지운다. |
+| 포워드 | Plan-B 대안 제안 | `POST /ai/v1/planb/alternatives` | **확정** — TRIP-428.<br/>**경로 이동 완료(TRIP-960, 2026-09-28)** — 백엔드 #758 상수 교체·`CALLED_PATHS` 구 경로 0건 확인 후 구 경로 삭제. |
 | 포워드 | 슬롯별 설명 조회 | `POST /ai/v1/itinerary/explanations` | **확정** — TRIP-479 |
 | 포워드 | 일정 편집 (EditAgent) | `POST /ai/v1/itinerary/edit` | **확정** — TRIP-431 |
-| 포워드 | 하루 재계획 (PlanBAgent → ScheduleAgent) | `POST /ai/v1/planb/replan`<br/>(구 `/ai/v1/itinerary/replan`) | **배선됨**(#744) — PlanBAgent 가 RAG 로 순서를 내고 ScheduleAgent 점수에 가산으로 실려 어셈블리가 시각을 확정한다. `generate` 재사용을 그만둔 세 이유(RAG·재계획 의도·원 일정 후보 합류)를 셋 다 되찾았다.<br/>**경로 이동 중(TRIP-960)** — `/ai/v1/planb/…` 별칭이 열려 있고 두 경로가 같은 핸들러다. 백엔드가 상수를 옮기면 구 경로를 지운다. |
+| 포워드 | 하루 재계획 (PlanBAgent → ScheduleAgent) | `POST /ai/v1/planb/replan` | **배선됨**(#744) — PlanBAgent 가 RAG 로 순서를 내고 ScheduleAgent 점수에 가산으로 실려 어셈블리가 시각을 확정한다. `generate` 재사용을 그만둔 세 이유(RAG·재계획 의도·원 일정 후보 합류)를 셋 다 되찾았다.<br/>**경로 이동 완료(TRIP-960, 2026-09-28)** — 백엔드 #758 상수 교체·`CALLED_PATHS` 구 경로 0건 확인 후 구 경로 삭제. |
 | 리버스 | POI 정본 read — 반경 (`find_by_radius`) | `GET /internal/pois?centerLat&centerLng&radiusKm` | **확정** — 백엔드 구현 기준 |
 | 리버스 | POI 정본 read — 배치 (`find_by_ids`) | `POST /internal/pois/batch-get` · 요청 필드 `poi_ids` | **확정** — 계약 초안의 `:batchGet`·`ids` 표기 정정 |
 
@@ -360,7 +360,7 @@ class EventInfo:
 | 항목 | 상태 | 후속 |
 |---|---|---|
 | Kotlin↔Python 프로토콜 (REST vs gRPC) | **확정 — REST/JSON over HTTP** (PR #76 결정4, 2026-08-04. AI-D01 종결. gRPC는 보류) | 단일 `openapi.yaml`을 정본으로 양쪽 코드젠 (경로는 0.1) |
-| AI 도우미·Plan-B 경계 경로 리소스명 | **확정** — Plan-B `POST /ai/v1/itinerary/alternatives`(TRIP-428) · 편집·도우미 `POST /ai/v1/itinerary/edit`(TRIP-431) | §0.1 표 반영 완료 — 후속 없음 |
+| AI 도우미·Plan-B 경계 경로 리소스명 | **확정** — Plan-B `POST /ai/v1/planb/alternatives`(TRIP-428, 경로는 TRIP-960 에서 planb 로 이동) · 편집·도우미 `POST /ai/v1/itinerary/edit`(TRIP-431) | §0.1 표 반영 완료 — 후속 없음 |
 | `FreshnessMeta` 집계형 · `Violation` 스키마 | 협의 중 (TRIP-282) | 백엔드 회신 후 본 계약 갱신 |
 | ~~SolveMode 4↔3 매핑 · `explanations` 키 의미 · `candidates_summary` 대응~~ | **해소** — SolveMode 매핑은 `ScheduleAgentWire.kt` 구현 완료(OR_TOOLS·LLM→FULL_AI · RULE_FALLBACK→DETERMINISTIC · MINIMAL→MINIMAL), `explanations` 키는 `{date}#{poi_id}`(BR-U2-04), `candidates_summary` 형태는 `ai/docs/openapi.json::CandidatesSummarySchema`(`level`·`pool_size`·`shortfall_categories`) 확정 — 백엔드 `AiBoundaryOpenApiTest` 가 키를 대조한다 | — |
 | `dataQuality` 등급 수 (AI 3등급 MINIMAL/PARTIAL/FULL ↔ 백엔드 2등급) | AI가 **MINIMAL 추가 요청**, 백엔드 회신 대기 | 회신 후 리버스 read 응답 스키마 확정 |

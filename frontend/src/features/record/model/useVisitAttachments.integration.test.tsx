@@ -10,6 +10,7 @@ import type {
   VisitPhoto,
 } from '@/shared/api/generated/schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { flushNotifications } from '@/test-support/flushNotifications';
 
 import type { PhotoAssetMeta } from './photoAttach';
 import { useVisitAttachments } from './useVisitAttachments';
@@ -284,5 +285,106 @@ describe('🔴 AC-4 · 업로드 실패 노출 + 재시도 재호출(POST 2회 �
     expect(bodies[1].localAssetId).toBe('local-b');
     // 단언 ④ — 재실패=재노출(같은 자산 하나로 유지, 중복 push 없음).
     expect(api().failedUploads.length).toBe(1);
+  });
+});
+
+/**
+ * 🔴 TRIP-1078 · AC-4·AC-5·AC-6 — 메모 성공값 캐시(`savedMemo`) + 같은 값 재저장 차단.
+ *
+ * 무엇을 보장하나(훅 경계):
+ *  - PUT 성공 → `savedMemo` = trim 값(세션 캐시, 카드 재마운트 시드의 원천).
+ *  - 마지막 **성공** 텍스트와 같으면(trim 비교) PUT 0회. 다른 텍스트는 다시 나간다.
+ *  - 실패는 reject 유지(컨테이너가 안내로 바꾼다) · `savedMemo` 는 그대로 · 같은 텍스트 재시도는 PUT 이 나간다.
+ *
+ * ★ 같은 saveMemo 참조로 한 act 안에서 연속 호출한다 — 렌더값(클로저)으로 비교하면 재렌더 전 두 번째 호출이
+ *   여전히 null 을 봐서 PUT 이 또 나간다. 성공을 아는 곳(캐시·ref)에서 판정해야 통과한다.
+ * ★ "0회" 는 시간 대기 대신 바디 목록 전체 `toEqual` 로 본다 — 중복 PUT 이 있으면 다음 바디 앞에 끼어 있다.
+ * ★ 롤백성 단언(`savedMemo` 가 여전히 null) 앞 flushNotifications 는 지워도 green 으로 남는 줄이다(traps-record).
+ */
+interface MemoCacheApi {
+  savedMemo: string | null;
+  saveMemo: (text: string) => Promise<void>;
+}
+
+describe('🔴 TRIP-1078 · saveMemo 성공값 캐시 + 같은 값 PUT 0', () => {
+  let memoStatus: 200 | 404 = 200;
+  let memoBodies: PutMemoRequest[] = [];
+
+  beforeEach(() => {
+    memoStatus = 200;
+    memoBodies = [];
+  });
+
+  async function renderWithMemo() {
+    const rendered = await renderReady([]);
+    server.use(
+      http.put(
+        `${BASE}/trips/:tripId/visits/:visitCheckId/memo`,
+        async ({ request }) => {
+          const body = (await request.json()) as PutMemoRequest;
+          memoBodies.push(body);
+          if (memoStatus === 404) {
+            return HttpResponse.json({ error: 'not found' }, { status: 404 });
+          }
+          return HttpResponse.json({
+            text: body.text,
+            updatedAt: '2026-09-29T10:00:00Z',
+          });
+        }
+      )
+    );
+    return {
+      ...rendered,
+      api: () => rendered.result.current as unknown as MemoCacheApi,
+    };
+  }
+
+  it('H1: 저장 전 savedMemo 는 null, PUT 성공 뒤엔 trim 된 텍스트다', async () => {
+    const { api } = await renderWithMemo();
+    expect(api().savedMemo).toBeNull();
+
+    await act(async () => {
+      await api().saveMemo('  노을  ');
+    });
+
+    await flushNotifications();
+    await waitFor(() => expect(api().savedMemo).toBe('노을'));
+  });
+
+  it('H2: 마지막 성공값과 같은 텍스트(공백만 다른 것 포함)는 PUT 0회, 다른 텍스트는 나간다', async () => {
+    const { api } = await renderWithMemo();
+
+    await act(async () => {
+      const save = api().saveMemo;
+      await save('바다');
+      await save('바다');
+      await save('  바다  ');
+    });
+    await flushNotifications();
+    await act(async () => {
+      await api().saveMemo('산');
+    });
+
+    expect(memoBodies).toEqual([{ text: '바다' }, { text: '산' }]);
+  });
+
+  it('H3: PUT 404 는 reject·savedMemo 그대로, 같은 텍스트 재시도는 PUT 이 다시 나간다', async () => {
+    const { api } = await renderWithMemo();
+    memoStatus = 404;
+
+    await act(async () => {
+      await expect(api().saveMemo('노을')).rejects.toBeDefined();
+    });
+    await flushNotifications();
+    expect(api().savedMemo).toBeNull();
+
+    memoStatus = 200;
+    await act(async () => {
+      await api().saveMemo('노을');
+    });
+
+    expect(memoBodies).toEqual([{ text: '노을' }, { text: '노을' }]);
+    await flushNotifications();
+    await waitFor(() => expect(api().savedMemo).toBe('노을'));
   });
 });

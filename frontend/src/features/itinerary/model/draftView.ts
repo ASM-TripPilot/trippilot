@@ -101,6 +101,37 @@ export function buildGenerationGauge(
   });
 }
 
+/** 진행 카드의 `…` 접기 칸 — 숫자·남은 개수 통로가 없도록 필드는 `kind` 하나뿐이다(BR-U3-05). */
+export interface GenerationGaugeFold {
+  kind: 'more';
+}
+
+export type FoldedGenerationGaugeCell =
+  GenerationGaugeCell | GenerationGaugeFold;
+
+/**
+ * 게이지 칸을 `max` 칸 안으로 접는다(TRIP-1040). 일수가 `max` 이하면 그대로 둔다.
+ * 넘치면 기준 칸(첫 `active`, 없으면 마지막 일차)이 항상 보이도록 `max - 1` 칸 창을 고르고
+ * 나머지를 `…` 한 칸으로 접는다 — 기준이 앞쪽이면 뒤를, 창 밖으로 밀리면 앞을 접어 기준이 창 끝에 선다.
+ * 고르기만 하므로 남은 칸의 상태·일차는 입력과 같다. 전제: `max ≥ 2`.
+ */
+export function foldGenerationGauge(
+  cells: GenerationGaugeCell[],
+  max: number
+): FoldedGenerationGaugeCell[] {
+  if (cells.length <= max) return cells;
+  const windowSize = max - 1;
+  const activeIndex = cells.findIndex((cell) => cell.state === 'active');
+  const anchor = activeIndex === -1 ? cells.length - 1 : activeIndex;
+  if (anchor < windowSize) {
+    return [...cells.slice(0, windowSize), { kind: 'more' }];
+  }
+  return [
+    { kind: 'more' },
+    ...cells.slice(anchor - windowSize + 1, anchor + 1),
+  ];
+}
+
 /** `'2026-06-10'` → `'6월 10일 · 수'`. 요일은 달력에서 계산한다(Figma 목업의 요일은 틀렸다). */
 export function formatDraftDayHeader(date: string): string {
   const time = utcDayTime(date);

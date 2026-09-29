@@ -1,5 +1,8 @@
 package com.trippilot.recalculation.application
 
+import com.trippilot.auth.api.LocationCollectionSource
+import com.trippilot.auth.api.LocationPurgeScope
+
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.itinerarygeneration.api.ItineraryFacade
@@ -50,6 +53,15 @@ class ReplanSessionServiceTest : StringSpec({
         // 단일 스레드 테스트라 잠금은 의미가 없다 — 경합 자체는 실 DB IT 가 검증한다.
         override fun findByIdForUpdate(sessionId: UUID) = findById(sessionId)
         override fun findOpenByTrip(tripId: UUID) = stored.firstOrNull { it.tripId == tripId && it.isOpen }
+        override fun purgeOrigins(tripIds: List<UUID>): Int {
+            var n = 0
+            stored.replaceAll { s ->
+                if (s.tripId in tripIds && s.origin.kind in setOf(OriginKind.GPS, OriginKind.MANUAL)) {
+                    n++; s.copy(origin = ReplanOrigin(OriginKind.PURGED, null, null))
+                } else s
+            }
+            return n
+        }
     }
 
     val trips = object : TripFacade {
@@ -81,12 +93,19 @@ class ReplanSessionServiceTest : StringSpec({
         override fun findFrozenSurfaces(poiSnapshotIds: Collection<UUID>) = emptyMap<UUID, FrozenPoiView>()
     }
 
-    fun service(sessions: Sessions, clock: Clock, hasItinerary: Boolean = true) =
+    fun service(
+        sessions: Sessions,
+        clock: Clock,
+        hasItinerary: Boolean = true,
+        consents: FakeLocationConsents = FakeLocationConsents(),
+        legalLogs: CapturingLegalLogs = CapturingLegalLogs(),
+        purgeScope: FakeTripPurgeScope = FakeTripPurgeScope(),
+    ) =
         ReplanSessionService(
             trips, itineraries(hasItinerary), sessions, origins,
             FakeArchive(), emptySurfaces,
             ReplanSolver(sessions, FakeArchive(), FakeReplans(), NOOP_TX, clock),
-            FakeReplans(), CapturingReplanEvents(), clock,
+            FakeReplans(), consents, legalLogs, purgeScope, CapturingReplanEvents(), clock,
         )
 
     val gpsOrigin = ReplanOrigin(OriginKind.GPS, 33.45, 126.56)
@@ -99,6 +118,62 @@ class ReplanSessionServiceTest : StringSpec({
         excludedPoiIds = emptyList(),
         triggerId = null,
     )
+
+    // ───── 위치 동의·법정 로그 (TRIP-992) ──────────────────────────────────
+
+    "동의가 있으면 사용자 좌표가 저장되고 수집 로그 1건이 남는다 — 대상은 세션 id, 좌표는 로그에 없다" {
+        val sessions = Sessions()
+        val logs = CapturingLegalLogs()
+        val s = service(sessions, clockAt("2026-08-11T00:00:00Z"), legalLogs = logs).start(acc, tripId, request())
+
+        s.origin.kind shouldBe OriginKind.GPS
+        logs.collections shouldContainExactly listOf(LocationCollectionSource.REPLAN_ORIGIN to s.sessionId)
+    }
+
+    "동의가 없으면 좌표를 버리고 서버 사다리로 강등한다 — 수집 로그도 없다(그건 수집이 아니다)" {
+        val sessions = Sessions()
+        val logs = CapturingLegalLogs()
+        val s = service(sessions, clockAt("2026-08-11T00:00:00Z"), consents = FakeLocationConsents(legalConsent = false), legalLogs = logs)
+            .start(acc, tripId, request()) // 요청에는 GPS 좌표가 실려 있다
+
+        (s.origin.kind in setOf(OriginKind.GPS, OriginKind.MANUAL)) shouldBe false // 저장 안 됨
+        s.origin.lat shouldBe null
+        logs.collections.isEmpty() shouldBe true
+    }
+
+    "사다리로 유도된 기준점은 수집 로그를 남기지 않는다 — 사용자 위치를 모은 것이 아니다" {
+        val logs = CapturingLegalLogs()
+        service(Sessions(), clockAt("2026-08-11T00:00:00Z"), legalLogs = logs)
+            .start(acc, tripId, request().copy(origin = null))
+
+        logs.collections.isEmpty() shouldBe true
+    }
+
+    "동의 철회 파기 — GPS·MANUAL 좌표가 PURGED 로 지워지고 파기 로그에 건수가 남는다(INV-L4)" {
+        val sessions = Sessions()
+        val logs = CapturingLegalLogs()
+        val svc = service(sessions, clockAt("2026-08-11T00:00:00Z"), legalLogs = logs, purgeScope = FakeTripPurgeScope(listOf(tripId)))
+        val opened = svc.start(acc, tripId, request())
+
+        val purged = svc.purgeOriginCoordinates(acc)
+
+        purged shouldBe 1
+        sessions.stored.single { it.sessionId == opened.sessionId }.origin.kind shouldBe OriginKind.PURGED
+        sessions.stored.single { it.sessionId == opened.sessionId }.origin.lat shouldBe null
+        logs.purges shouldContainExactly listOf(LocationPurgeScope.REPLAN_ORIGIN to 1)
+
+        // 멱등 — 두 번째 배달(at-least-once)은 0건이라 기록이 부풀지 않는다.
+        svc.purgeOriginCoordinates(acc) shouldBe 0
+        logs.purges.size shouldBe 1
+    }
+
+    "지울 좌표가 없으면 파기 로그도 없다 — 확인자료가 '지운 적 없는 파기'를 말하면 안 된다" {
+        val logs = CapturingLegalLogs()
+        service(Sessions(), clockAt("2026-08-11T00:00:00Z"), legalLogs = logs, purgeScope = FakeTripPurgeScope(listOf(tripId)))
+            .purgeOriginCoordinates(acc) shouldBe 0
+
+        logs.purges.isEmpty() shouldBe true
+    }
 
     "여행 기간 안이면 세션이 열리고 곧바로 산출로 넘어간다 — 입력이 그대로 실린다" {
         val sessions = Sessions()

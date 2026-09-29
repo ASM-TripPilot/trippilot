@@ -55,7 +55,12 @@ jest.mock('@/shared/storage', () => ({
 
 const mockBack = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), back: mockBack, replace: jest.fn() }),
+  useRouter: () => ({
+    push: jest.fn(),
+    back: mockBack,
+    replace: jest.fn(),
+    canGoBack: () => true,
+  }),
 }));
 
 // EditorView 가 조립하는 MapSheetShell → MapView 는 jest 에서 못 뜬다 — 관찰 목으로 대체.

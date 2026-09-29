@@ -27,6 +27,11 @@ import {
  *  - **CS-8 (AC-9)** empty 는 안내 카피(save-empty 와 다름) + 개행 + 둘러보기, 완료 바 부재.
  *  - **CS-9 (AC-10)** error 는 원형 느낌표 + 전용 카피 + 다시 시도, 완료 바 부재.
  *  - **CS-10 (AC-7)** 더 담기·뒤로가 각자의 콜백을 한 번 올린다.
+ *  - **CS-11 (TRIP-1042 AC-2 · BR-U1-58 ②)** 지역 밖은 머리글 아래 보이되 **흐리고 고를 수 없다** —
+ *    체크가 없고 행이 disabled 다(TRIP-1012 A4 "밖도 고를 수 있다"를 뒤집음).
+ *  - **CS-13 (TRIP-1042 AC-4)** 지역 안이 0건이면 results 얼굴 목록 머리에 region-empty 블록(제목 + CTA,
+ *    삽화 없음)이 끼고 '+ 탐색에서 더 담기' 행은 빠진다. CTA 는 더 담기 콜백을 올린다.
+ *  - **CS-14 (TRIP-1042 AC-9)** 행 위치는 페이지가 준 표기(`부산 사하구`)를 쓰고, 없으면 `place.region`.
  *
  * 왜 화면 단위인가: 재는 것은 "props 를 받았을 때 무엇을 그리는가"다. 실제 나간 시드·라우팅은
  * `pages/saved-places/ui/SavedPlacesPage.select.integration.test.tsx` 몫이다. 이 화면은 훅 0(props-only)
@@ -332,12 +337,12 @@ function orderedPickIds(): string[] {
     .map((node) => String(node.props.testID));
 }
 
-describe('🔴 CS-11 · 지역 밖 목록은 머리글 한 줄 아래 이어 그린다 (TRIP-1012 A4 · 01b Q2)', () => {
-  it('안 2곳 → "이 여행 지역 밖 2곳" → 밖 2곳 순이고, 순번·부제는 보이는 전체로 센다', () => {
+describe('🔴 CS-11 · 지역 밖 목록은 머리글 한 줄 아래 흐리게, 고를 수 없게 (TRIP-1042 AC-2 · 1012 A4 반전)', () => {
+  it('안 2곳 → "이 여행 지역 밖 2곳" → 밖 2곳 순이고, 밖 행은 체크 없이 disabled·흐림이며 눌러도 콜백이 없다', () => {
     const props = renderScreen({
       savedPlaces: SIX.slice(0, 2),
       outsideRegionPlaces: SIX.slice(2, 4),
-      selectedPoiIds: ['p3'],
+      selectedPoiIds: ['p1'],
     });
 
     expect(orderedPickIds()).toEqual([
@@ -348,13 +353,13 @@ describe('🔴 CS-11 · 지역 밖 목록은 머리글 한 줄 아래 이어 그
       'mustvisit-pick-row-p4',
     ]);
 
-    // 머리글 — 문구 완전 일치(N=밖 개수), 새 색·크기 없이 기존 캡션 토큰(폴백 한 줄과 같은 결).
+    // 머리글 — 문구 완전 일치(N=밖 개수), 새 색·크기 없이 기존 캡션 토큰.
     const header = screen.getByTestId('mustvisit-pick-region-outside');
     expect(header).toHaveTextContent('이 여행 지역 밖 2곳');
     expect(String(header.props.className)).toContain('text-caption');
     expect(String(header.props.className)).toContain('text-muted');
 
-    // 순번은 이어 매긴다 — 밖 첫 행이 1로 되돌아가면 red.
+    // 순번은 이어 매긴다(Figma 2437:1500 — 밖 행도 순번 원이 있다).
     [
       ['p3', '3'],
       ['p4', '4'],
@@ -369,11 +374,33 @@ describe('🔴 CS-11 · 지역 밖 목록은 머리글 한 줄 아래 이어 그
       '담은 곳 4곳 · 1곳 선택됨'
     );
 
-    // 밖 행도 같은 행이다 — 선택 표시와 토글 콜백이 그대로 선다.
-    expect(screen.getByTestId('mustvisit-pick-check-p3')).toBeSelected();
-    fireEvent.press(screen.getByTestId('mustvisit-pick-check-p4'));
-    expect(props.onToggleSelect).toHaveBeenCalledWith('p4');
-    expect(props.onToggleSelect).toHaveBeenCalledTimes(1);
+    // 지역 안 — 체크가 서고 행은 열려 있다(긍정 짝).
+    ['p1', 'p2'].forEach((poiId) => {
+      const row = screen.getByTestId(`mustvisit-pick-row-${poiId}`);
+      expect(row).not.toBeDisabled();
+      expect(String(row.props.className)).not.toContain('opacity-40');
+      expect(
+        screen.getByTestId(`mustvisit-pick-check-${poiId}`)
+      ).toBeOnTheScreen();
+    });
+
+    // 지역 밖 — 체크(버튼·두 글리프) 자체가 없고, 행이 disabled 이며 흐리다(opacity 0.4).
+    ['p3', 'p4'].forEach((poiId) => {
+      const row = screen.getByTestId(`mustvisit-pick-row-${poiId}`);
+      expect(screen.queryByTestId(`mustvisit-pick-check-${poiId}`)).toBeNull();
+      expect(
+        screen.queryByTestId(`mustvisit-pick-check-filled-${poiId}`)
+      ).toBeNull();
+      expect(
+        screen.queryByTestId(`mustvisit-pick-check-outline-${poiId}`)
+      ).toBeNull();
+      expect(row).toBeDisabled();
+      expect(String(row.props.className)).toContain('opacity-40');
+    });
+
+    // 밖 행을 눌러도 선택 콜백이 나가지 않는다.
+    fireEvent.press(screen.getByTestId('mustvisit-pick-row-p3'));
+    expect(props.onToggleSelect).not.toHaveBeenCalled();
   });
 });
 
@@ -385,5 +412,109 @@ describe('CS-12 · 지역 밖이 0곳이면 머리글을 그리지 않는다 (TR
       screen.queryAllByTestId('mustvisit-pick-region-outside')
     ).toHaveLength(0);
     expect(screen.getAllByTestId(/^mustvisit-pick-row-/)).toHaveLength(6);
+  });
+});
+
+describe('🔴 CS-13 · 지역 안이 0건이면 목록 머리에 region-empty 블록 (TRIP-1042 AC-4 · Figma 4685:2646)', () => {
+  it('제목·CTA 가 정확한 문구로 뜨고, 지역 밖은 흐린 행으로 이어지며, 더 담기 행은 없다', () => {
+    const props = renderScreen({
+      savedPlaces: [],
+      outsideRegionPlaces: SIX.slice(0, 2),
+      regionEmptyLabel: '부산',
+      selectedPoiIds: [],
+    });
+
+    // 블록 — 제목은 Text 노드 완전 일치로 잰다(블록 전체 글자엔 CTA 가 섞여 완전 일치가 깨진다, 02a ★13).
+    const block = screen.getByTestId('mustvisit-pick-region-empty');
+    const title = within(block).getByText('부산에 담은 곳이 없어요');
+    expect(String(title.props.className)).toContain('text-section');
+    // 삽화 없음(진짜 0곳 얼굴의 콜라주와 다르다).
+    expect(within(block).queryByTestId('mustvisit-pick-empty-art')).toBeNull();
+
+    const cta = screen.getByTestId('mustvisit-pick-region-empty-browse');
+    expect(cta).toHaveTextContent('탐색에서 부산 장소 담기');
+    expect(String(cta.props.className)).toContain('bg-primary');
+
+    // 그 아래 지역 밖 — 머리글 + 흐린 행 2개, 체크는 하나도 없다.
+    expect(
+      screen.getByTestId('mustvisit-pick-region-outside')
+    ).toHaveTextContent('이 여행 지역 밖 2곳');
+    expect(screen.getAllByTestId(/^mustvisit-pick-row-/)).toHaveLength(2);
+    expect(screen.queryAllByTestId(/^mustvisit-pick-check-/)).toHaveLength(0);
+
+    // CTA 가 '+ 탐색에서 더 담기' 행을 대신한다. 진짜 0곳 얼굴도 아니다.
+    expect(screen.queryByTestId('mustvisit-pick-addmore')).toBeNull();
+    expect(screen.queryByTestId('mustvisit-pick-empty')).toBeNull();
+
+    // 부제·완료는 results 얼굴 그대로 — 담은 곳 2곳, 고를 수 있는 곳이 없어 완료는 닫힌다.
+    expect(screen.getByTestId('mustvisit-pick-subtitle')).toHaveTextContent(
+      '담은 곳 2곳 · 0곳 선택됨'
+    );
+    expect(screen.getByTestId('mustvisit-pick-complete')).toBeDisabled();
+
+    fireEvent.press(cta);
+    expect(props.onPressAddMore).toHaveBeenCalledTimes(1);
+  });
+
+  it('무회귀 · 라벨을 안 주면 블록이 없고 더 담기 행이 그대로 있다', () => {
+    renderScreen();
+
+    expect(screen.getByTestId('mustvisit-pick-addmore')).toBeOnTheScreen();
+    expect(screen.queryAllByTestId('mustvisit-pick-region-empty')).toHaveLength(
+      0
+    );
+  });
+});
+
+describe('🔴 CS-14 · 행 위치는 페이지가 준 표기를 쓴다 (TRIP-1042 AC-9)', () => {
+  it('p1 은 "부산 사하구", 표기를 안 준 p2 는 place.region(수영구) 그대로다', () => {
+    renderScreen({ locationLabels: { p1: '부산 사하구' } });
+
+    const first = screen.getByTestId('mustvisit-pick-row-p1');
+    expect(within(first).getByText('부산 사하구')).toBeOnTheScreen();
+    expect(within(first).queryByText('사하구')).toBeNull();
+
+    const second = screen.getByTestId('mustvisit-pick-row-p2');
+    expect(within(second).getByText('수영구')).toBeOnTheScreen();
+  });
+});
+
+/**
+ * TRIP-1093 결정 3 (01b Q3) — 여행 모드 완료가 실패하면 화면에 남아 한 줄로 알린다(INV-4 · BR-U1-55).
+ *
+ * 무엇을 보장하나:
+ *  - `completeError` 가 있으면 `mustvisit-pick-complete-error` 배너가 **완료 버튼보다 위**(트리 순서 앞)에
+ *    그 문구 그대로 뜬다. 재시도 버튼은 없다 — 완료를 다시 누르는 것이 재시도다.
+ *  - 값이 없으면(`null`·미지정) 배너가 없다 — 위저드 모드 호출부는 이 prop 을 모른다.
+ * 문구는 페이지가 `mustVisitFailureNotice` 로 만든다(화면은 받은 글자만 그린다).
+ */
+const COMPLETE_ERROR = 'mustvisit-pick-complete-error';
+const FAILURE_NOTICE = '꼭 갈 곳 2곳 중 1곳을 등록하지 못했어요';
+
+describe('🔴 CS-15 · 완료 실패 배너 (TRIP-1093 AC-11 · 01b Q3)', () => {
+  it('completeError 가 있으면 배너가 완료 버튼 위에 그 문구 그대로 뜬다', () => {
+    renderScreen({ selectedPoiIds: ['p1'], completeError: FAILURE_NOTICE });
+
+    expect(screen.queryAllByTestId(COMPLETE_ERROR).length).toBe(1);
+    // 문자열 인자 = 정규화 후 완전 일치(02a §5).
+    expect(screen.getByTestId(COMPLETE_ERROR)).toHaveTextContent(
+      FAILURE_NOTICE
+    );
+
+    const order = screen
+      .queryAllByTestId(/^mustvisit-pick-complete(-error)?$/)
+      .map((node) => String(node.props.testID));
+    expect(order).toEqual([COMPLETE_ERROR, 'mustvisit-pick-complete']);
+  });
+
+  it.each([
+    ['null', null],
+    ['미지정', undefined],
+  ])('completeError 가 %s 이면 배너가 없다 (선제 green)', (_label, value) => {
+    renderScreen({ selectedPoiIds: ['p1'], completeError: value });
+
+    // 앵커 — 결과 얼굴의 완료 버튼은 떴다(공허 통과 방지).
+    expect(screen.getByTestId('mustvisit-pick-complete')).toBeOnTheScreen();
+    expect(screen.queryAllByTestId(COMPLETE_ERROR).length).toBe(0);
   });
 });

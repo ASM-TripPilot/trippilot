@@ -55,6 +55,17 @@ jest.mock('@/features/explore/model/savedPlaces', () => ({
   useSavedPlaces: jest.fn(),
 }));
 
+// TRIP-1049 — 홈 라우트가 '지금 뜨는 장소' 실데이터로 `useGetPlaces` 를 문다. QueryClient 부재
+// 크래시를 막는 빈 목록 무해 스텁(이 파일은 여행 카드 CTA 만 본다, 단언 무변경).
+jest.mock('@/shared/api/generated/places/places', () => ({
+  useGetPlaces: () => ({
+    data: { items: [], nextCursor: null },
+    isPending: false,
+    isError: false,
+    refetch: () => {},
+  }),
+}));
+
 // TRIP-695 — 홈 라우트가 담은 곳 배지 수(숙소)를 useSavedStays().savedCount 로 물게 되면서
 // 이 파일도 <HomeRoute/> 를 렌더하므로 QueryClient 부재 크래시를 막는 무해 스텁이 필요하다
 // (딥 경로, features/trip 동명 훅 아님, tabsHomeRoute·tabsShell 선례와 동일 계열). 단언 무변경.
@@ -560,6 +571,58 @@ describe('🔴 1006 A2(홈측) · 같이 짜기 생성 중(PARTIAL · CO_PLAN) �
     expect(mockPush).toHaveBeenCalledTimes(1);
     expect(mockPush).toHaveBeenCalledWith(
       `/trips/${TRIP_ID}/itinerary/copick/2099-06-10%23poi-a`
+    );
+  });
+});
+
+describe('🔴 TRIP-1073 F4·F5(홈측) · 같이 짜기 완성(COMPLETE · PLANNED · CO_PLAN) → "일정 이어서 짜기" · h17 내가 고른 완성', () => {
+  it('폴백 일정이어도 라벨·부제는 이어서 짜기 그대로이고, 누르면 초안이 아니라 copick/complete 로 1회 간다 (#051)', () => {
+    // 준비 — 생성을 마친 같이 짜기 일정. isFallback=true 는 #051 실측 경로다(02a ★F-3).
+    //   비고정 슬롯 poi-a 가 남아 있어야 'copick' 오답이 complete 로 새지 않고 드러난다(02a ★F-2).
+    const base = itineraryOk(
+      ItineraryGenerationState.COMPLETE,
+      ItineraryStatus.PLANNED
+    );
+    const coPlanDone = {
+      ...base,
+      data: {
+        ...(base.data as object),
+        generationMode: 'CO_PLAN',
+        isFallback: true,
+        days: [
+          {
+            date: '2099-06-10',
+            slots: [
+              {
+                poiId: 'poi-a',
+                startAt: '09:30:00',
+                endAt: '11:00:00',
+                isFixed: false,
+                endsNextDay: false,
+                hasViolation: false,
+                alternatives: [],
+                tags: [],
+              },
+            ],
+          },
+        ],
+      },
+    } as unknown as ItineraryHookResult;
+
+    // 실행
+    renderHome(beforeTrip(), coPlanDone);
+
+    // 단언 ① 라벨·부제 — 새 토큰이 else 갈래('확정 일정 보기'·부제 삭제)로 떨어지면 red(02a ★F-4).
+    expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
+      '일정 이어서 짜기'
+    );
+    expect(screen.getByTestId('home-greeting')).toHaveTextContent(SUBTITLE);
+
+    // 단언 ② 목적지 — 완전 일치.
+    fireEvent.press(screen.getByTestId('home-trip-hero-cta'));
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith(
+      `/trips/${TRIP_ID}/itinerary/copick/complete`
     );
   });
 });

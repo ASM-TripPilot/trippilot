@@ -32,8 +32,9 @@ import { StayDetailPage } from './StayDetailPage';
  *  - 그 밖의 I·G·F 는 모두 **조회가 끝난 뒤**(`await ready()`) 누른다 — 로딩 얼굴엔 버튼이 없다(AC-4).
  *  - I4 (AC-8 · TRIP-781 AC-1) `stay-detail-book` → 제휴 고지 시트(l07 본문 정확 문구) 마운트.
  *  - I5 (AC-9) 시트 [이동] → 웹검색 URL 로 Linking.openURL(01b Q2 웹검색 폴백).
- *  - I6 (AC-10) 로그인 사용자 `stay-detail-addtotrip` → POST /saved-stays + 거점 편입 안내.
- *  - I7 (AC-10) 게스트 addtotrip → 요청 0 + /(auth)/login push(죽은 버튼 아님, BR-U1-03·55).
+ *  - R1 (TRIP-1041 AC-1) "일정에 추가" 버튼·담기 안내는 없다(QA #011 사용자 결정 — 구 I6·I7 폐기).
+ *  - R2 (TRIP-1041 AC-4) 로그인 하트 담기 = POST 1회 + 찬 하트(무회귀).
+ *  - R3 (TRIP-1041 AC-3 · 맹점 4) 같은 순간 두 번 누른 하트 = POST 1회, 첫 요청이 끝날 때까지 하트 잠김.
  *  - I8 (AC-11) 게스트 하트 → 요청 0 + /(auth)/login push.
  *  - I9~I12 (TRIP-781 AC-7·8) 이동 실패 → error 얼굴·재시도.
  *  - I13~I24 (TRIP-781 AC-9~11 → TRIP-778 AC-10 재작성) "다시 보지 않기"의 저장처가 기기(SecureStore)에서
@@ -78,6 +79,30 @@ jest.mock('expo-linking', () => ({
   openURL: jest.fn().mockResolvedValue(true),
   canOpenURL: jest.fn().mockResolvedValue(true),
 }));
+
+// TRIP-1019 #018 — 이동 방식 판정(`stayOutboundMode`)의 목 자리. 기본(undefined)은 **실제 함수**를 부른다 —
+// 지금 계약에선 이동이 항상 웹검색 폴백이라 시트가 폴백 얼굴이 된다(W1). "다시 보지 않기"·제휴 고지는
+// 제휴 딥링크 모드에서만 있는 경로라(BR-U1-30 · BR-U6-33), 그 경로를 지키는 기존 심판(G1·G2·F1·I13~I24)은
+// describe 마다 `inAffiliateMode()`로 이 값을 'affiliate' 로 바꿔 계속 돌린다(심판 소실 금지). 함수 이름·
+// 인자 없음은 02a 계약이다 — 이름을 바꾸면 이 목이 안 물려 affiliate 심판이 red 가 된다.
+let mockOutboundMode: 'affiliate' | 'webSearch' | undefined;
+
+jest.mock('@/features/stay/model/stayOutbound', () => {
+  const actual = jest.requireActual<
+    typeof import('@/features/stay/model/stayOutbound')
+  >('@/features/stay/model/stayOutbound');
+  return {
+    ...actual,
+    stayOutboundMode: () => mockOutboundMode ?? actual.stayOutboundMode(),
+  };
+});
+
+/** 이 describe 의 테스트를 제휴 딥링크 모드로 돌린다(위 목 자리 설명). */
+function inAffiliateMode(): void {
+  beforeEach(() => {
+    mockOutboundMode = 'affiliate';
+  });
+}
 
 const mockOpenURL = Linking.openURL as jest.Mock;
 
@@ -173,6 +198,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   observedHits = [];
+  mockOutboundMode = undefined;
   mockSearchParams = validParams();
   mockPush.mockClear();
   mockBack.mockClear();
@@ -304,7 +330,7 @@ describe('D1·D2 · 데이터는 서버 조회 GET /stays/{stayId} 하나에서 
 });
 
 describe('D3 · 로딩 얼굴 (TRIP-940 AC-4 · AC-11)', () => {
-  it('응답 전에는 로딩 얼굴과 뒤로 버튼만 있고, 하트·예약·일정 추가가 없다', async () => {
+  it('응답 전에는 로딩 얼굴과 뒤로 버튼만 있고, 하트·예약 버튼이 없다', async () => {
     // 준비: 응답을 멈춰 둔다.
     const release = holdDetail();
 
@@ -314,10 +340,9 @@ describe('D3 · 로딩 얼굴 (TRIP-940 AC-4 · AC-11)', () => {
     // 단언: 로딩 얼굴 + 그 안의 뒤로 버튼.
     const face = await screen.findByTestId('stay-detail-loading');
     expect(within(face).getByTestId('stay-detail-back')).toBeOnTheScreen();
-    // 단언: 조회가 끝나기 전엔 저장·예약·일정 추가가 일어날 수 없다(버튼 부재).
+    // 단언: 조회가 끝나기 전엔 저장·예약이 일어날 수 없다(버튼 부재).
     expect(screen.queryByTestId('stay-detail-save')).toBeNull();
     expect(screen.queryByTestId('stay-detail-book')).toBeNull();
-    expect(screen.queryByTestId('stay-detail-addtotrip')).toBeNull();
 
     // 정리: 멈춘 요청을 풀어 준다.
     release();
@@ -542,48 +567,142 @@ describe('I4·I5 · 예약하기 → 제휴 시트 → 이동 (AC-8 · AC-9)', (
   });
 });
 
-describe('I6·I7 · 일정에 추가 (AC-10)', () => {
-  it('I6 · 로그인 사용자 → POST /saved-stays + 거점 편입 안내', async () => {
-    setAccessToken('valid-access');
-    server.use(
-      http.post(`${BASE}/saved-stays`, () =>
-        HttpResponse.json(
-          {
-            savedStayId: 'new-1',
-            name: DETAIL.name,
-            coordConfirmed: false,
-            registerRoute: 'MAP_SEARCH',
-            externalSource: DETAIL.externalSource,
-            externalId: DETAIL.externalId,
-            lat: DETAIL.lat,
-            lng: DETAIL.lng,
-            createdAt: '2026-08-01T00:00:00Z',
-            updatedAt: '2026-08-01T00:00:00Z',
-          },
-          { status: 201 }
-        )
-      )
-    );
+/** 서버가 담기 성공 때 돌려주는 SavedStay(openapi 201 본문 — 필수 필드 전부). */
+function savedFromDetail(savedStayId: string) {
+  return {
+    savedStayId,
+    name: DETAIL.name,
+    coordConfirmed: false,
+    linkedTripIds: [],
+    registerRoute: 'MAP_SEARCH',
+    externalSource: DETAIL.externalSource,
+    externalId: DETAIL.externalId,
+    lat: DETAIL.lat,
+    lng: DETAIL.lng,
+    createdAt: '2026-08-01T00:00:00Z',
+    updatedAt: '2026-08-01T00:00:00Z',
+  };
+}
+
+/**
+ * 담은 목록 서버 흉내 — POST 가 성공하면 그 뒤의 GET /saved-stays 에 그 숙소가 들어 있다. 목의 두 응답이
+ * 서로 모순되면(담았다고 201 을 주고 목록엔 없음) 성공 후 재조회가 찬 하트를 빈 하트로 되돌려, 담기
+ * 무회귀를 잴 수 없다. `hold: true` 면 테스트가 돌려받은 함수를 부를 때까지 POST 응답을 멈춘다.
+ */
+function installSaveServer({ hold }: { hold: boolean }): () => void {
+  let release: () => void = () => {};
+  const gate = hold
+    ? new Promise<void>((resolve) => {
+        release = resolve;
+      })
+    : Promise.resolve();
+  const onServer: ReturnType<typeof savedFromDetail>[] = [];
+  server.use(
+    http.get(`${BASE}/saved-stays`, () => HttpResponse.json(onServer)),
+    http.post(`${BASE}/saved-stays`, async () => {
+      await gate;
+      const row = savedFromDetail(`new-${onServer.length + 1}`);
+      onServer.push(row);
+      return HttpResponse.json(row, { status: 201 });
+    })
+  );
+  return () => release();
+}
+
+describe('R1 · 일정에 추가·담기 안내가 없다 (TRIP-1041 AC-1 · QA #011)', () => {
+  it('ready 얼굴에 일정에 추가 버튼·아이콘·담기 안내가 없고, 예약 버튼과 제휴 고지는 남아 있다', async () => {
+    // 준비 — 로그인 사용자(안내가 뜰 수 있던 쪽)로 상세를 연다. 설정 조회(GET /me/settings)도 답하게 한다.
+    signInWithDismissed(false);
     render(<StayDetailPage />, { wrapper: createWrapper() });
+
+    // 실행 — 조회가 끝나 ready 얼굴이 뜰 때까지 기다린다.
     await ready();
 
-    fireEvent.press(screen.getByTestId('stay-detail-addtotrip'));
-
-    await waitFor(() => expect(hitCount('POST /api/v1/saved-stays')).toBe(1));
-    await waitFor(() =>
-      expect(screen.getByTestId('stay-detail-add-notice')).toBeOnTheScreen()
-    );
+    // 단언 ① (짝 앵커) — 하단 액션 자체는 그려졌다(빈 화면이라 없는 게 아니다).
+    expect(screen.getByTestId('stay-detail-book')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('stay-detail-affiliate-notice')
+    ).toBeOnTheScreen();
+    // 단언 ② — 지운 세 testID 가 없다.
+    expect(screen.queryByTestId('stay-detail-addtotrip')).toBeNull();
+    expect(screen.queryByTestId('stay-detail-addtotrip-icon')).toBeNull();
+    expect(screen.queryByTestId('stay-detail-add-notice')).toBeNull();
+    // 단언 ③ — 글자로도 남지 않았다(testID 만 떼고 버튼을 남기는 구현 차단).
+    expect(screen.queryByText('일정에 추가')).toBeNull();
   });
+});
 
-  it('I7 · 게스트 → 요청 0 + /(auth)/login push (죽은 버튼 아님)', async () => {
-    clearAccessToken();
+describe('R2 · 로그인 하트 담기는 그대로 (TRIP-1041 AC-4 · US-STAY-04 무회귀)', () => {
+  it('미담김 하트를 누르면 POST 가 한 번 나가고 찬 하트로 바뀐다', async () => {
+    // 준비
+    signInWithDismissed(false);
+    installSaveServer({ hold: false });
     render(<StayDetailPage />, { wrapper: createWrapper() });
     await ready();
+    // 앵커 — 시작은 빈 하트다.
+    expect(screen.getByTestId('stay-detail-save-outline')).toBeOnTheScreen();
 
-    fireEvent.press(screen.getByTestId('stay-detail-addtotrip'));
+    // 실행 — 누르고, 나간 요청이 끝나 화면에 반영될 때까지 기다린다.
+    fireEvent.press(screen.getByTestId('stay-detail-save'));
+    await waitFor(() =>
+      expect(hitCount('POST /api/v1/saved-stays')).toBeGreaterThanOrEqual(1)
+    );
+    await settleAll();
 
-    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/(auth)/login'));
-    expect(hitCount('POST /api/v1/saved-stays')).toBe(0);
+    // 단언
+    expect(hitCount('POST /api/v1/saved-stays')).toBe(1);
+    expect(screen.getByTestId('stay-detail-save-filled')).toBeOnTheScreen();
+  });
+});
+
+describe('R3 · 같은 순간 두 번 누른 하트 (TRIP-1041 AC-3 · 맹점 4 · QA #012)', () => {
+  /**
+   * "같은 프레임 두 탭"을 만드는 법: `fireEvent.press` 두 번을 **바깥 `act` 하나 안에** 넣는다. 안쪽
+   * act 는 바깥 act 가 끝날 때까지 화면을 다시 그리지 않으므로, 두 번째 누름도 첫 누름과 같은 화면
+   * (아직 disabled 가 아닌 하트, 아직 빈 하트)을 본다(02a §5 실검증). 따로따로 부르면 첫 누름 직후
+   * disabled 가 반영돼 두 번째가 무시되므로 연타를 재현하지 못한다.
+   */
+  it('POST 는 한 번뿐이고, 첫 요청이 끝날 때까지 하트는 잠겨 있으며, 끝나면 찬 하트가 된다', async () => {
+    // 준비 — 로그인 + 담기 응답을 멈춰 둔다.
+    signInWithDismissed(false);
+    const release = installSaveServer({ hold: true });
+    render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
+    const heart = screen.getByTestId('stay-detail-save');
+    // 앵커 — 누르기 전: 빈 하트, 눌 수 있음.
+    expect(screen.getByTestId('stay-detail-save-outline')).toBeOnTheScreen();
+    expect(heart).not.toBeDisabled();
+
+    // 실행 ① — 같은 순간 두 번 누른다.
+    await act(async () => {
+      fireEvent.press(heart);
+      fireEvent.press(heart);
+    });
+    await waitFor(() =>
+      expect(hitCount('POST /api/v1/saved-stays')).toBeGreaterThanOrEqual(1)
+    );
+    await act(async () => {});
+
+    // 단언 ① — 두 번째 누름은 요청을 만들지 않았다.
+    expect(hitCount('POST /api/v1/saved-stays')).toBe(1);
+    // 단언 ② (맹점 4) — 첫 요청이 아직 대기 중이면 하트는 계속 잠겨 있다. 두 번째 호출이 먼저 끝나
+    // 잠금을 풀어 버리면, 다음 누름이 "담김(임시 행)"을 보고 해제로 가서 saved-id-unknown 이 된다.
+    expect(screen.getByTestId('stay-detail-save')).toBeDisabled();
+
+    // 실행 ② — 잠긴 채로 한 번 더 누른다(무동작이어야 한다).
+    fireEvent.press(screen.getByTestId('stay-detail-save'));
+
+    // 실행 ③ — 응답을 풀어 준다.
+    release();
+    await settleAll();
+
+    // 단언 ③ — 끝나면 찬 하트 + 다시 누를 수 있다. 해제 요청은 한 번도 없었다.
+    expect(screen.getByTestId('stay-detail-save-filled')).toBeOnTheScreen();
+    expect(screen.getByTestId('stay-detail-save')).not.toBeDisabled();
+    expect(hitCount('POST /api/v1/saved-stays')).toBe(1);
+    expect(observedHits.filter((hit) => hit.startsWith('DELETE ')).length).toBe(
+      0
+    );
   });
 });
 
@@ -699,6 +818,9 @@ describe('I9~I12 · 이동 실패 → error 얼굴 → 재시도/취소 (TRIP-78
 // ── TRIP-778 · "다시 보지 않기" 저장처 = 서버 /me/settings (AC-10 · D9) ─────────
 
 describe('G1 · 게스트 (TRIP-778 D9)', () => {
+  // TRIP-1019 #018 — 체크박스·고지는 제휴 모드에만 있다(폴백 얼굴엔 없음, 01b Q3).
+  inAffiliateMode();
+
   it('게스트는 서버 설정을 조회하지 않고, 시트는 뜨되 "다시 보지 않기"가 없다', async () => {
     // 준비: 게스트(토큰 없음). 핸들러는 걸어 두되 불리면 안 된다.
     installSettingsServer();
@@ -711,6 +833,8 @@ describe('G1 · 게스트 (TRIP-778 D9)', () => {
 
     // 단언(긍정 앵커): 고지 시트는 뜬다.
     expect(screen.getByText(BODY)).toBeOnTheScreen();
+    // 단언(얼굴 앵커): 제휴 얼굴이다 — 목이 안 먹혀 폴백 얼굴이 떠도 체크박스 부재는 참이라 공허해진다(5-b 참고-1).
+    expect(screen.getByTestId('stay-ota-notice-box')).toBeOnTheScreen();
     // 단언: 저장할 곳이 없으니 체크박스를 보이지 않는다.
     expect(screen.queryByTestId('stay-ota-dont-show')).toBeNull();
     // 단언: 로그인이 필요한 조회를 보내지 않았다(onUnhandledRequest 는 실패를 로그만 하므로 직접 센다).
@@ -719,6 +843,9 @@ describe('G1 · 게스트 (TRIP-778 D9)', () => {
 });
 
 describe('G2 · 캐시가 남은 게스트 (TRIP-778 D9 · 5-b 경고-1)', () => {
+  // TRIP-1019 #018 — 체크박스·고지는 제휴 모드에만 있다(폴백 얼굴엔 없음, 01b Q3).
+  inAffiliateMode();
+
   it('이전 계정의 dismissed:true 가 캐시에 남아 있어도, 게스트는 고지 시트를 본다', async () => {
     // 준비: 세션 만료(토큰만 지워짐 — beforeEach 의 clearAccessToken) + 캐시는 그대로인 상태.
     // gcTime: Infinity — 관찰자가 붙기 전에 캐시가 수거되지 않게(앱 기본 5분과 같은 효과).
@@ -742,6 +869,7 @@ describe('G2 · 캐시가 남은 게스트 (TRIP-778 D9 · 5-b 경고-1)', () =>
 
     // 단언: 바로 이동하지 않고 고지 시트가 뜬다.
     expect(screen.getByText(BODY)).toBeOnTheScreen();
+    expect(screen.getByTestId('stay-ota-notice-box')).toBeOnTheScreen();
     expect(mockOpenURL).not.toHaveBeenCalled();
     // 단언: 게스트라 체크박스는 없고(D9), 조회도 보내지 않았다(G1 과 같은 계약).
     expect(screen.queryByTestId('stay-ota-dont-show')).toBeNull();
@@ -750,6 +878,9 @@ describe('G2 · 캐시가 남은 게스트 (TRIP-778 D9 · 5-b 경고-1)', () =>
 });
 
 describe('F1 · 저장 실패는 고지 쪽으로 닫힌다 (TRIP-778 · 5-b 경고-2)', () => {
+  // TRIP-1019 #018 — 체크박스·고지는 제휴 모드에만 있다(폴백 얼굴엔 없음, 01b Q3).
+  inAffiliateMode();
+
   it('오프라인 — PATCH 와 재조회 GET 이 모두 실패하면, 다시 눌렀을 때 시트가 또 뜬다', async () => {
     // 준비: 로그인 · 첫 GET 만 dismissed:false 로 성공하고, 그 뒤 GET·PATCH 는 네트워크 오류.
     setAccessToken('valid-access');
@@ -833,6 +964,9 @@ describe('F1 · 저장 실패는 고지 쪽으로 닫힌다 (TRIP-778 · 5-b 경
 });
 
 describe('I13~I16 · "다시 보지 않기" 저장 = PATCH /me/settings (TRIP-778 AC-10 · 781 AC-9 재작성)', () => {
+  // TRIP-1019 #018 — 체크박스·고지는 제휴 모드에만 있다(폴백 얼굴엔 없음, 01b Q3).
+  inAffiliateMode();
+
   it('I13 · 체크하고 [이동]을 누르면 {affiliateNoticeDismissed:true} 한 필드를 한 번 보낸다', async () => {
     signInWithDismissed(false);
     render(<StayDetailPage />, { wrapper: createWrapper() });
@@ -903,6 +1037,9 @@ describe('I13~I16 · "다시 보지 않기" 저장 = PATCH /me/settings (TRIP-77
 });
 
 describe('I17~I21 · 서버 값이 켜져 있으면 시트 생략, 모르면 고지 쪽 (TRIP-778 AC-10 · 781 AC-10·11 재작성)', () => {
+  // TRIP-1019 #018 — 체크박스·고지는 제휴 모드에만 있다(폴백 얼굴엔 없음, 01b Q3).
+  inAffiliateMode();
+
   it('I17 · 서버 값 true → [예약하기]가 시트 없이 바로 웹검색을 연다', async () => {
     signInWithDismissed(true);
     render(<StayDetailPage />, { wrapper: createWrapper() });
@@ -996,6 +1133,9 @@ describe('I17~I21 · 서버 값이 켜져 있으면 시트 생략, 모르면 고
 });
 
 describe('I22~I24 · 같은 화면 재누름·체크 해제 (781 AC-9·10 → TRIP-778 서버 기준)', () => {
+  // TRIP-1019 #018 — 체크박스·고지는 제휴 모드에만 있다(폴백 얼굴엔 없음, 01b Q3).
+  inAffiliateMode();
+
   it('I22 · 체크 없이 [이동]한 뒤 같은 화면에서 다시 누르면 고지 시트가 또 뜬다', async () => {
     signInWithDismissed(false);
     render(<StayDetailPage />, { wrapper: createWrapper() });
@@ -1055,20 +1195,100 @@ describe('I22~I24 · 같은 화면 재누름·체크 해제 (781 AC-9·10 → TR
   });
 });
 
-// TRIP-989 A-2 — 공유 원 → OS 공유 시트. 딥링크 URL 계약이 없어 숙소 이름만 나른다(장소 상세 선례·01b Q5).
-// 진짜 Share.share 는 네이티브 모듈이라 스파이로 막고, 끝에서 원래 함수로 되돌린다.
-describe('A-2 · 공유 → Share.share(숙소 이름) (TRIP-989 · INV-4)', () => {
-  it('ready 뒤 공유 원을 누르면 Share.share 가 숙소 이름을 message 로 한 번 불린다', async () => {
+// TRIP-989 A-2 → TRIP-1019 #017(결정 5) — 공유 문구에 주소를 붙인다. 단 응답에 주소가 **있을 때만**
+// (`StayDetail.address` 는 옵셔널이라 null · 키 없음 · 빈 문자열이 모두 올 수 있다 — 브리프 맹점 ②:
+// `buildPlaceShareMessage` 선례는 null 만 막아 키가 빠지면 "undefined" 가 공유된다). 딥링크·지도 URL 은
+// 계약이 없어 붙이지 않는다 — message 를 완전일치로 재 그것까지 막는다. 진짜 Share.share 는 네이티브
+// 모듈이라 스파이로 막고, 끝에서 원래 함수로 되돌린다.
+describe('A-2 · 공유 → Share.share(이름 + 있으면 주소) (TRIP-1019 #017 · TRIP-989 · INV-4)', () => {
+  async function shareMessageFor(detail: StayDetail): Promise<unknown> {
+    server.use(
+      http.get(`${BASE}/stays/:stayId`, () => HttpResponse.json(detail))
+    );
     const spy = jest
       .spyOn(Share, 'share')
       .mockResolvedValue({ action: 'sharedAction' } as never);
+    try {
+      render(<StayDetailPage />, { wrapper: createWrapper() });
+      await ready();
+
+      fireEvent.press(screen.getByTestId('stay-detail-share'));
+
+      expect(spy).toHaveBeenCalledTimes(1);
+      return spy.mock.calls[0][0].message;
+    } finally {
+      spy.mockRestore();
+    }
+  }
+
+  it('주소가 있으면 message 가 "{이름}\\n{주소}" 다', async () => {
+    const message = await shareMessageFor(DETAIL);
+
+    expect(message).toBe(`${DETAIL.name}\n${DETAIL.address}`);
+  });
+
+  it('주소가 null 이면 message 는 이름뿐이다', async () => {
+    const message = await shareMessageFor({ ...DETAIL, address: null });
+
+    expect(message).toBe(DETAIL.name);
+  });
+
+  it('주소 키가 아예 없으면(undefined) 이름뿐이고, "undefined" 글자가 새지 않는다', async () => {
+    const { address: _omitted, ...withoutAddress } = DETAIL;
+    const message = await shareMessageFor(withoutAddress);
+
+    expect(message).toBe(DETAIL.name);
+    expect(String(message)).not.toContain('undefined');
+  });
+
+  it('주소가 빈 문자열이면 이름뿐이다(빈 줄을 붙이지 않는다)', async () => {
+    const message = await shareMessageFor({ ...DETAIL, address: '' });
+
+    expect(message).toBe(DETAIL.name);
+  });
+});
+
+// TRIP-1019 #018(결정 6) — 지금 [이동]은 늘 구글 웹검색이다(BR-U1-31 검색 우회, `stayOutbound.ts`). 제휴 딥링크
+// 이동이 아니니 BR-U1-30 의 "딥링크 이동 전 제휴 수수료 고지"가 성립하지 않는다 → 폴백 얼굴은 수수료 안내를
+// 숨기고 버튼을 "검색 결과로 이동"으로 바꾼다. "다시 보지 않기"도 숨긴다(01b Q3 — 계정 단위 제휴 고지 억제
+// 동의를 고지가 없는 시트에서 받지 않는다, BR-U6-33). 시트 본문·OTA 행은 이번엔 그대로다(01b Q4).
+// 이 describe 는 목을 안 바꾼다 = 실제 `stayOutboundMode` 가 판정한다. 제휴 얼굴이 살아 있는지는 시트 단위
+// 테스트(OtaChoiceSheet W 절)와 위 affiliate describe 들이 지킨다.
+describe('W1 · 웹검색 폴백 얼굴 — 수수료 고지 없음 · "검색 결과로 이동" (TRIP-1019 #018 · BR-U1-30 · BR-U1-31)', () => {
+  it('로그인 사용자가 [외부에서 예약하기]를 누르면 시트에 수수료 안내·체크박스가 없고 버튼이 "검색 결과로 이동"이다', async () => {
+    signInWithDismissed(false);
     render(<StayDetailPage />, { wrapper: createWrapper() });
     await ready();
+    await settleSettings();
 
-    fireEvent.press(screen.getByTestId('stay-detail-share'));
+    fireEvent.press(screen.getByTestId('stay-detail-book'));
 
-    expect(spy).toHaveBeenCalledTimes(1);
-    expect(spy.mock.calls[0][0].message).toBe(DETAIL.name);
-    spy.mockRestore();
+    // 앵커: 시트는 떴다(본문은 그대로 — 01b Q4).
+    expect(screen.getByTestId('stay-ota-sheet')).toBeOnTheScreen();
+    expect(screen.getByText(BODY)).toBeOnTheScreen();
+    // 금지: 수수료 고지 박스·문구가 없다.
+    expect(screen.queryByTestId('stay-ota-notice-box')).toBeNull();
+    expect(screen.queryByText(/제휴 수수료/)).toBeNull();
+    // 금지: 로그인 사용자여도 "다시 보지 않기"가 없다(01b Q3).
+    expect(screen.queryByTestId('stay-ota-dont-show')).toBeNull();
+    // 정상: 확인 버튼 이름이 가는 곳을 말한다.
+    expect(screen.getByTestId('stay-ota-confirm')).toHaveTextContent(
+      '검색 결과로 이동'
+    );
+  });
+
+  it('"검색 결과로 이동"을 누르면 전처럼 웹검색 URL 을 연다', async () => {
+    render(<StayDetailPage />, { wrapper: createWrapper() });
+    await ready();
+    fireEvent.press(screen.getByTestId('stay-detail-book'));
+
+    fireEvent.press(screen.getByTestId('stay-ota-confirm'));
+
+    await waitFor(() =>
+      expect(mockOpenURL).toHaveBeenCalledWith(
+        expect.stringContaining(encodeURIComponent(`${DETAIL.name} 예약`))
+      )
+    );
+    expect(mockOpenURL).toHaveBeenCalledTimes(1);
   });
 });

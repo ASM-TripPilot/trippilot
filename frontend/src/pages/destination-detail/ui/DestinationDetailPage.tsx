@@ -25,13 +25,19 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { StayItem } from '@/shared/api/generated/schemas';
 import { useGetPlaces } from '@/shared/api/generated/places/places';
 import { getAccessToken } from '@/shared/api/tokenManager';
+import { guardPress } from '@/shared/press/pressGuard';
+import { shellTabHref } from '@/shared/ui/BottomTabBar';
 import { formatPrice } from '@/entities/stay/lib/formatPrice';
 import { useSavedStays } from '@/features/stay/model/savedStays';
 import { stayKey } from '@/features/stay/model/stayKey';
 import { useStaySearch } from '@/features/stay/model/useStaySearch';
 import { useRegions } from '@/features/explore/model/regions';
+import { usePlaceSaveToggle } from '@/features/explore/model/placeSaveToggle';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
-import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
+import {
+  regionPickerHref,
+  type RegionPickerTab,
+} from '@/features/explore/model/regionPickerPurpose';
 import { DestinationDetailScreen } from '@/features/explore/ui/DestinationDetailScreen';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import type {
@@ -39,27 +45,42 @@ import type {
   StayCardVM,
 } from '@/features/explore/ui/ExploreLandingScreen';
 
-// 장소 레인은 가로 레인이라 전량이 필요 없다 — 서버 limit으로 필요한 개수만 받는다
+// 장소 칸은 2열 격자 최대 4행이라 전량이 필요 없다 — 서버 limit으로 필요한 개수만 받는다
 // (ExploreLandingScreen의 PLACE_LANE_LIMIT 선례와 같은 값).
 const PLACE_LANE_LIMIT = 8;
 
 export function DestinationDetailPage(): ReactElement {
-  const { region: regionCode } = useLocalSearchParams<{ region?: string }>();
+  const { region: regionCode, tab } = useLocalSearchParams<{
+    region?: string;
+    tab?: string;
+  }>();
+  // 홈 검색으로 들어왔으면 복제 탭바가 홈을 가리킨다(TRIP-1015 E · 결정 4). 아는 값만 받는다(URL 신뢰 경계).
+  const entryTab: RegionPickerTab | undefined =
+    tab === 'home' ? 'home' : undefined;
   // 피커의 `dismissTo`는 스택 밑의 이 화면을 재마운트 없이 params만 바꿔 되살린다(TRIP-985).
   // 지역이 바뀌면 key로 본문을 새로 만들어 이전 지역의 로컬 상태(저장 실패 배너·대기 표식)와
   // 이전 지역에서 늦게 끝난 저장 결과가 새 지역 화면에 닿지 않게 한다.
-  return <DestinationDetailBody key={regionCode} regionCode={regionCode} />;
+  return (
+    <DestinationDetailBody
+      key={regionCode}
+      regionCode={regionCode}
+      entryTab={entryTab}
+    />
+  );
 }
 
 function DestinationDetailBody({
   regionCode,
+  entryTab,
 }: {
   regionCode: string | undefined;
+  entryTab: RegionPickerTab | undefined;
 }): ReactElement {
   const router = useRouter();
 
   const isAuthed = getAccessToken() !== null;
-  const { savedPoiIds } = useSavedPlaces({ isAuthed });
+  const savedPlaces = useSavedPlaces({ isAuthed });
+  const { savedPoiIds } = savedPlaces;
   // 숙소 담기 하트(TRIP-709, `(tabs)/explore.tsx` SavableStayLane 선례) — 서버 상태 소유자는
   // useSavedStays(react-query 캐시)다. 로컬 useState 토글이 아니라 save/remove 실호출이라
   // "저장됐다는 거짓말"이 안 통한다(repo-trap 글리프 함정). 게스트는 훅이 enabled:false 로
@@ -92,6 +113,16 @@ function DestinationDetailBody({
     region: item.region,
     priceText: formatPrice(item.price),
   }));
+
+  // 장소 담기 하트(TRIP-1049) — 이 본문(key=regionCode) 안에 둬 지역이 바뀌면 대기·배너가 함께 사라진다.
+  const placeSave = usePlaceSaveToggle({
+    isAuthed,
+    savedPoiIds,
+    save: savedPlaces.save,
+    remove: savedPlaces.remove,
+    places: places.data?.items ?? [],
+    onRequireLogin: () => router.push('/(auth)/login'),
+  });
 
   const placeCards: PlaceCardVM[] = (places.data?.items ?? []).map((place) => ({
     poiId: place.poiId,
@@ -134,13 +165,19 @@ function DestinationDetailBody({
       regionName={displayName}
       // 다시 검색(=다른 지역 고르기) → d1b 여행지 선택(RegionPickerScreen). 이 화면엔 자유
       // 검색어를 다루는 계약이 없다(위 헤더 주석 참고) — 그 화면에서 새로 고른다.
-      onPressSearch={() => router.push(regionPickerHref('explore'))}
+      // 진입 탭을 다시 실어 보낸다 — 안 실으면 다른 지역을 고른 뒤 탭바가 탐색으로 돌아간다.
+      onPressSearch={() =>
+        router.push(regionPickerHref('explore', entryTab && { tab: entryTab }))
+      }
+      activeTab={entryTab ?? 'explore'}
       stayLane={{
         error: stay.isError,
         cards: stayCards,
         onRetry: () => void stay.refetch(),
-        onSeeAll: () =>
-          router.push(`/stays?region=${encodeURIComponent(displayName)}`),
+        // TRIP-1013 #012 — 연타의 두 번째 탭이 숙소 검색의 첫 카드를 관통하지 않게 창을 연다.
+        onSeeAll: guardPress(() =>
+          router.push(`/stays?region=${encodeURIComponent(displayName)}`)
+        ),
         onPressCard: pressStayCard,
         savedKeys,
         pendingKeys,
@@ -157,11 +194,11 @@ function DestinationDetailBody({
             `/explore/places?region=${encodeURIComponent(displayName)}`
           ),
         onPressCard: (poiId) => router.push(`/explore/places/${poiId}`),
+        savedPoiIds,
+        ...placeSave,
       }}
       // `/stays`(StaySearchPage) 선례와 동일한 탭 전환 배선 — replace라 스택에 안 쌓인다.
-      onPressTab={(key) =>
-        router.replace(key === 'home' ? '/(tabs)' : `/${key}`)
-      }
+      onPressTab={(key) => router.replace(shellTabHref(key))}
       // ＋ 여행 만들기 FAB → g01 위저드(d01 라우트 선례).
       onPressCreateTrip={() => {
         // 새 여행 진입이라 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074).

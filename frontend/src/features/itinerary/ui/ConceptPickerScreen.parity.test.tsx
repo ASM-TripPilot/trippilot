@@ -11,12 +11,14 @@ import { ConceptPickerScreen } from './ConceptPickerScreen';
  * 새로 붙는 표면만 잠근다.
  *
  * 무엇을 보장하나:
- *  - 🔴 AC-1 진행줄(일차/날짜 좌 · 슬롯 N/M 우 · 4분할 진행바) — props 로 받아 **Figma 그대로** 그린다
- *       (슬롯 3/4인데 bar 1칸인 모순도 화면이 안 고침, 브리프 §B).
+ *  - 🔴 AC-1 진행줄(일차/날짜 좌 · `N번째 / M` 우 · 4분할 진행바) — props 로 받아 **Figma 그대로** 그린다
+ *       (3번째/4인데 bar 1칸인 모순도 화면이 안 고침, 브리프 §B). TRIP-1043: 우측 작은 「슬롯」 캡션
+ *       제거 — 진행줄 어디에도 「슬롯」이 없다(QA #041).
  *  - 🔴 AC-3 헤드라인('다음, 뭘 할까요?'+부제) 제거.
- *  - 🔴 AC-4 컨셉 설명 5종을 config 값으로 렌더(문구 정본 = 브리프 §D).
+ *  - 🔴 AC-4 컨셉 설명 5종을 config 값으로 렌더(TRIP-1043 중립 문구).
  *  - 🔴 AC-5 배지(AI 추천/컨셉 매칭)·N곳 **렌더 0**(BE 계약 대기 — 픽스처 억지주입 금지).
- *  - 🔴 AC-6 첫 카드만 primary 테두리(정적, selectedKey prop 없음).
+ *  - 🔴 AC-6 (TRIP-1043 뒤집음) 다섯 카드 모두 같은 hairline 테두리 — 고르지 않았는데 고른 것처럼 보이던
+ *       첫 카드 정적 강조를 없앤다(Figma F4).
  *  - 🔴 AC-7 건너뛰기 회색 full pill 한 줄('테마 없이 건너뛰기 · AI가 알아서 추천'), 점선 제거.
  *  - 🔴 AC-2 배선 stepperSlot(ReactNode) 를 그린다 — CoPickStepper 위젯 자체는 별 파일(층 경계상
  *       features 는 widgets 를 import 못 해 SlotFillPage 가 노드로 내린다).
@@ -34,13 +36,13 @@ const CONCEPTS = [
   { key: 'shopping', label: '쇼핑' },
 ] as const;
 
-// 설명 문구 정본 — 브리프 §D 표(config `CONCEPT_DESCRIPTIONS` 와 값 일치, F4 가 config 소스를 잠근다).
+// 설명 문구 — TRIP-1043 중립 문구(config `CONCEPT_DESCRIPTIONS` 와 값 일치, conceptCards.test G1 이 config 를 잠근다).
 const DESC: Record<string, string> = {
-  meal: '근처 로컬 맛집',
-  cafe: '전시 보고 쉬어가기 좋아요',
-  culture: '미술 취향과 잘 맞아요',
-  outdoor: '바다·공원 가까워요',
-  shopping: '근처 상권',
+  meal: '근처 식당',
+  cafe: '쉬어 가기',
+  culture: '전시·박물관',
+  outdoor: '공원·산책로',
+  shopping: '상점·시장',
 };
 
 const PROGRESS = {
@@ -88,7 +90,7 @@ describe('🔴 S0 · INV-3 탐지기 자가검사', () => {
   });
 });
 
-describe('🔴 AC-1 · 진행줄 (일차/날짜 · 슬롯 N/M · 4분할 바)', () => {
+describe('🔴 AC-1 · 진행줄 (일차/날짜 · N번째 / M · 4분할 바)', () => {
   it('progress prop 을 Figma 그대로 렌더한다(모순 포함, 화면은 안 고침)', () => {
     renderParity();
 
@@ -101,7 +103,7 @@ describe('🔴 AC-1 · 진행줄 (일차/날짜 · 슬롯 N/M · 4분할 바)', 
     ).toHaveTextContent('1일차 / 4 · 6월 10일(수)');
     expect(
       screen.getByTestId('itinerary-copick-concept-progress-count')
-    ).toHaveTextContent('3 / 4');
+    ).toHaveTextContent('3번째 / 4');
 
     // 4분할 진행바 — 채운 1칸 + 빈 3칸(색이 아니라 개수 계약).
     expect(
@@ -110,6 +112,23 @@ describe('🔴 AC-1 · 진행줄 (일차/날짜 · 슬롯 N/M · 4분할 바)', 
     expect(
       screen.getAllByTestId('itinerary-copick-concept-progress-cell-track')
     ).toHaveLength(3);
+  });
+});
+
+describe('🔴 TRIP-1043 · 화면에 내부 용어 「슬롯」이 없다 (QA #041)', () => {
+  it('진행줄·문맥 줄이 떠 있는 상태에서 「슬롯」을 품은 글자가 0개다', () => {
+    renderParity({ slotContextLabel: '점심 일정 · 경복궁 다음' });
+
+    // 긍정 짝 — 진행줄 카운트와 문맥 줄이 실제로 떠 있다(없어서 0개인 공허 통과 차단).
+    expect(
+      screen.getByTestId('itinerary-copick-concept-progress-count')
+    ).toBeTruthy();
+    expect(screen.getByText('점심 일정 · 경복궁 다음')).toBeTruthy();
+
+    // 부정 — 우측 「슬롯」 캡션을 포함해 어떤 Text 에도 「슬롯」이 없다.
+    expect(
+      screen.queryAllByText(/슬롯/).map((node) => node.props.children)
+    ).toEqual([]);
   });
 });
 
@@ -158,16 +177,27 @@ describe('🔴 AC-5 · 배지·N곳 렌더 0 (BE 대기, 억지주입 금지)', 
   });
 });
 
-describe('🔴 AC-6 · 첫 카드 정적 primary 테두리', () => {
-  it('첫 카드(meal)만 border-primary, 둘째(cafe)는 아니다', () => {
+describe('🔴 AC-6 · 다섯 카드 모두 같은 hairline 테두리 (TRIP-1043 — 첫 카드 강조 제거)', () => {
+  it('첫 카드(meal)를 포함해 어느 카드도 primary·1.5px 테두리가 아니고 모두 hairline 이다', () => {
     renderParity();
 
-    expect(
-      classSet('itinerary-copick-concept-meal').has('border-primary')
-    ).toBe(true);
-    expect(
-      classSet('itinerary-copick-concept-cafe').has('border-primary')
-    ).toBe(false);
+    const faces = CONCEPTS.map(({ key }) => {
+      const classes = classSet(`itinerary-copick-concept-${key}`);
+      return {
+        key,
+        primary: classes.has('border-primary'),
+        thick: classes.has('border-[1.5px]'),
+        hairline: classes.has('border-hairline'),
+      };
+    });
+    expect(faces).toEqual(
+      CONCEPTS.map(({ key }) => ({
+        key,
+        primary: false,
+        thick: false,
+        hairline: true,
+      }))
+    );
   });
 });
 

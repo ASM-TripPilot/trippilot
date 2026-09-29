@@ -6,7 +6,7 @@ import { BackChevronGlyph, CheckGlyph, FullAiGlyph } from './MapSheetGlyphs';
 /**
  * TRIP-790 · h07 부분 결과의 상단 진행 카드(widgets · presentation-only, useState 0). 전면 지도 위
  * 좌상단 오버레이로 얹히며, 셸의 `DayChipOverlay` 자리를 대체한다(D3·D4). 좌 원형 back + AI 표식 +
- * 일자별 진행 게이지(4셀까지) 한 벌.
+ * 일자별 진행 게이지 한 벌(칸 상한·접기는 소비처가 정해 넘긴다 · TRIP-1040).
  *
  * 무엇을 보장하나:
  *  - **셀은 주입받는다**(`{status, label}[]`). 위젯은 features(`buildGenerationGauge`)를 못 물어
@@ -46,12 +46,18 @@ const backShadow = {
   elevation: 3,
 } as const;
 
-/** 진행 게이지 셀 하나 — 상태(3톤 트랙)와 이미 조립된 한글 라벨. 위젯은 이 값을 그대로 그린다. */
-export interface GenerationProgressCell {
-  status: 'done' | 'active' | 'waiting';
-  /** 예: `1일차 완성`·`2일차 생성 중`·`3일차 대기`(소비처가 도착 여부에서 조립). */
-  label: string;
-}
+/**
+ * 진행 게이지 셀 하나 — 일차 칸(상태 3톤 트랙 + 이미 조립된 한글 라벨) 또는 `…` 접기 칸.
+ * 접기 칸엔 label 이 없다 — 남은 개수 같은 숫자를 끼울 통로를 타입에서 막는다(TRIP-1040 · BR-U3-05).
+ * 위젯은 받은 칸 수·순서 그대로 그리고 스스로 접지 않는다(상한은 소비처 몫).
+ */
+export type GenerationProgressCell =
+  | {
+      status: 'done' | 'active' | 'waiting';
+      /** 예: `1일차 완성`·`2일차 생성 중`·`3일차 대기`(소비처가 도착 여부에서 조립). */
+      label: string;
+    }
+  | { status: 'more' };
 
 export interface GenerationProgressCardProps {
   cells: GenerationProgressCell[];
@@ -115,6 +121,18 @@ export function GenerationProgressCard({
         <View className="flex-row gap-[4px]">
           {cells.map((cell, index) => {
             const cellNumber = index + 1;
+            // 접기 칸 — 트랙 없이 흐린 `…` 한 글자(트랙 톤은 완성/미완성 주장이라 안 그린다).
+            if (cell.status === 'more') {
+              return (
+                <View
+                  key={cellNumber}
+                  testID="generation-gauge-cell-more"
+                  className="flex-1 items-center justify-end"
+                >
+                  <Text className="font-noto text-micro text-muted">…</Text>
+                </View>
+              );
+            }
             // 트랙 배경 톤 — done 만 브랜드 채움, 나머지는 회색(active 안쪽 부분채움은 아래 자식).
             const trackTone =
               cell.status === 'done' ? 'bg-primary' : 'bg-surface-strong';
@@ -140,9 +158,13 @@ export function GenerationProgressCard({
                     <View className="h-full w-1/3 rounded-pill bg-primary" />
                   ) : null}
                 </View>
-                <View className="flex-row items-center gap-[3px]">
+                <View className="min-w-0 flex-row items-center gap-[3px]">
                   {cell.status === 'done' ? <CheckGlyph size={12} /> : null}
-                  <Text className={`text-micro ${labelTone}`}>
+                  <Text
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                    className={`shrink text-micro ${labelTone}`}
+                  >
                     {cell.label}
                   </Text>
                 </View>

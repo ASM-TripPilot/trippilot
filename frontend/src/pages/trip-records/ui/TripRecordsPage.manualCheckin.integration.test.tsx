@@ -10,6 +10,7 @@ import {
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { tripRecordsTrip } from '@/test-support/tripRecordsTrip';
 
 import { TripRecordsPage } from './TripRecordsPage';
 
@@ -165,6 +166,10 @@ beforeEach(() => {
   mockGetForeground.mockReset();
   // 페이지가 마운트에 쏘는 GET 전부 + arrive POST 를 등록(onUnhandledRequest:'error' 라 누락 시 크래시).
   server.use(
+    // TRIP-1085 — 페이지가 시트 헤더 여행명을 GET /trips/{tripId} 로 얻는다.
+    http.get(`${BASE}/trips/:tripId`, () =>
+      HttpResponse.json(tripRecordsTrip())
+    ),
     http.get(`${BASE}/trips/:tripId/itinerary`, () =>
       HttpResponse.json(itinerary())
     ),
@@ -173,6 +178,10 @@ beforeEach(() => {
     ),
     http.get(`${BASE}/trips/:tripId/bases`, () => HttpResponse.json([])),
     http.get(`${BASE}/saved-stays`, () => HttpResponse.json([])),
+    // TRIP-1069 D3 — 도착한 카드도 사진·메모 컨테이너로 그려져 카드마다 사진 목록을 조회한다.
+    http.get(`${BASE}/trips/:tripId/visits/:visitCheckId/photos`, () =>
+      HttpResponse.json({ items: [], count: 0 })
+    ),
     http.post(`${BASE}/trips/:tripId/visits`, async ({ request }) => {
       postBodies.push(await request.json());
       return HttpResponse.json(createdVisit());

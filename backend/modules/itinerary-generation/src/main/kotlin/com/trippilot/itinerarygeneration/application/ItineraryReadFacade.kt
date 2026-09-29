@@ -46,8 +46,12 @@ class ItineraryReadFacade(
     override fun findPlanSlots(accountId: UUID, tripId: UUID): List<PlannedSlotView> {
         trips.findPeriod(accountId, tripId) ?: return emptyList()
         val itinerary = itineraries.findByTrip(tripId).firstOrNull() ?: return emptyList()
+        // 표면은 일정 조회와 **같은 합성**(SlotSurfaceAssembler)이다 — 확정 슬롯의 동결값 우선(INV-U1-03)이
+        // 두 응답에서 갈리면 비교 화면과 일정 화면이 다른 이름을 말한다(TRIP-1060 결정 1).
+        val byPoi = surfaces.assemble(itinerary)
         return itinerary.days.flatMap { day ->
             day.slots.map {
+                val s = byPoi[it.sourcePoiId]
                 PlannedSlotView(
                     slotKey = SlotKey.of(day.date, it.sourcePoiId),
                     date = day.date,
@@ -57,6 +61,11 @@ class ItineraryReadFacade(
                     endAt = it.endAt,
                     isFixed = it.isFixed,
                     endsNextDay = it.endsNextDay,
+                    nameKo = s?.nameKo,
+                    category = s?.category,
+                    imageUrl = s?.imageUrl,
+                    lat = s?.lat,
+                    lng = s?.lng,
                 )
             }
         }

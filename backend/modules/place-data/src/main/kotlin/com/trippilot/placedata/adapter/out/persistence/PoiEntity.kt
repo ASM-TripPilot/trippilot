@@ -4,6 +4,7 @@ import com.trippilot.placedata.domain.DataStatus
 import com.trippilot.placedata.domain.Poi
 import com.trippilot.placedata.domain.PoiCategory
 import com.trippilot.placedata.domain.PoiCursor
+import com.trippilot.placedata.domain.PoiSearchOrder
 import com.trippilot.placedata.domain.PoiRepository
 import com.trippilot.placedata.domain.PoiSource
 import jakarta.persistence.Column
@@ -46,6 +47,8 @@ class PoiEntity(
     @Column(name = "tags") var tags: Array<String> = emptyArray(),
     /** V2.23 — 출처 원본 식별자. 수동 등록분은 null. (source, source_ref) 부분 유니크. */
     @Column(name = "source_ref") var sourceRef: String? = null,
+    /** V2.58 — 지번·도로명 주소(TRIP-1062). 미확보 null. */
+    @Column(name = "address") var address: String? = null,
 )
 
 interface PoiJpaRepository : JpaRepository<PoiEntity, UUID> {
@@ -62,19 +65,23 @@ interface PoiJpaRepository : JpaRepository<PoiEntity, UUID> {
      * 둘 다 DB 가 한다. 한쪽이라도 앱으로 넘어오면 콜레이션과 코드포인트 순서가 갈려
      * 커서가 가리키는 지점이 정렬 순서와 어긋나고, 행이 중복·누락된다.
      */
+    // 정렬 = (관련도, 법인 접두를 뗀 이름, id) — TRIP-1003 (A). 식은 도메인 `PoiSearchOrder` 와
+    // **같아야 한다**(커서는 그쪽이 만든다). JPQL 엔 regexp 가 없어 네이티브다.
     @Query(
-        "select p from PoiEntity p where p.dataStatus = 'ACTIVE' " +
+        nativeQuery = true,
+        value = "select p.* from poi p where p.data_status = 'ACTIVE' " +
             "and (:category is null or p.category = :category) " +
-            "and lower(p.nameKo) like lower(concat('%', :q, '%')) escape '\\' " +
-            "and (p.nameKo > :afterName or (p.nameKo = :afterName and p.poiId > :afterId)) " +
-            "order by p.nameKo, p.poiId",
+            "and lower(p.name_ko) like lower('%' || :q || '%') escape '\\' " +
+            "and ((case when :q = '' then 0 when lower(p.name_ko) = lower(:q) then 0 when lower(p.name_ko) like lower(:q) || '%' escape '\\' then 1 else 2 end), coalesce(nullif(regexp_replace(p.name_ko, '^\\s*(\\([^)]*\\)|（[^）]*）|[㈜㈔㈗㈐])\\s*', ''), ''), p.name_ko), p.poi_id) > (:afterRank, :afterKey, :afterId) " +
+            "order by (case when :q = '' then 0 when lower(p.name_ko) = lower(:q) then 0 when lower(p.name_ko) like lower(:q) || '%' escape '\\' then 1 else 2 end), coalesce(nullif(regexp_replace(p.name_ko, '^\\s*(\\([^)]*\\)|（[^）]*）|[㈜㈔㈗㈐])\\s*', ''), ''), p.name_ko), p.poi_id limit :limit",
     )
     fun findActive(
         @Param("category") category: String?,
         @Param("q") q: String,
-        @Param("afterName") afterName: String,
+        @Param("afterRank") afterRank: Int,
+        @Param("afterKey") afterKey: String,
         @Param("afterId") afterId: UUID,
-        pageable: Pageable,
+        @Param("limit") limit: Int,
     ): List<PoiEntity>
 
     /**
@@ -86,21 +93,23 @@ interface PoiJpaRepository : JpaRepository<PoiEntity, UUID> {
      * 숙소(`StayEntity.findByRegionPrefix`)가 같은 방식이다.
      */
     @Query(
-        "select p from PoiEntity p where p.dataStatus = 'ACTIVE' " +
+        nativeQuery = true,
+        value = "select p.* from poi p where p.data_status = 'ACTIVE' " +
             "and (:category is null or p.category = :category) " +
-            "and substring(p.regionCode, 1, :len) in :codes " +
-            "and lower(p.nameKo) like lower(concat('%', :q, '%')) escape '\\' " +
-            "and (p.nameKo > :afterName or (p.nameKo = :afterName and p.poiId > :afterId)) " +
-            "order by p.nameKo, p.poiId",
+            "and substring(p.region_code, 1, :len) in (:codes) " +
+            "and lower(p.name_ko) like lower('%' || :q || '%') escape '\\' " +
+            "and ((case when :q = '' then 0 when lower(p.name_ko) = lower(:q) then 0 when lower(p.name_ko) like lower(:q) || '%' escape '\\' then 1 else 2 end), coalesce(nullif(regexp_replace(p.name_ko, '^\\s*(\\([^)]*\\)|（[^）]*）|[㈜㈔㈗㈐])\\s*', ''), ''), p.name_ko), p.poi_id) > (:afterRank, :afterKey, :afterId) " +
+            "order by (case when :q = '' then 0 when lower(p.name_ko) = lower(:q) then 0 when lower(p.name_ko) like lower(:q) || '%' escape '\\' then 1 else 2 end), coalesce(nullif(regexp_replace(p.name_ko, '^\\s*(\\([^)]*\\)|（[^）]*）|[㈜㈔㈗㈐])\\s*', ''), ''), p.name_ko), p.poi_id limit :limit",
     )
     fun findActiveByRegionPrefixes(
         @Param("len") len: Int,
         @Param("codes") codes: Collection<String>,
         @Param("category") category: String?,
         @Param("q") q: String,
-        @Param("afterName") afterName: String,
+        @Param("afterRank") afterRank: Int,
+        @Param("afterKey") afterKey: String,
         @Param("afterId") afterId: UUID,
-        pageable: Pageable,
+        @Param("limit") limit: Int,
     ): List<PoiEntity>
 
     @Query(
@@ -161,25 +170,26 @@ class PoiRepositoryAdapter(
         after: PoiCursor?,
         limit: Int,
     ): List<Poi> {
-        val page = PageRequest.of(0, limit)
-        val name = after?.nameKo ?: ""          // 빈 이름은 모든 행보다 앞 — "처음부터"
+        // (-1, "") 은 모든 행보다 앞 — "처음부터". rank 최소값이 0 이라 -1 이 안전한 바닥이다.
+        val rank = after?.rank ?: -1
+        val key = after?.sortKey ?: ""
         val id = after?.poiId ?: FIRST_ID
         if (regionCodes.isEmpty()) {
-            return jpa.findActive(category?.name, query, name, id, page).map { it.toDomain() }
+            return jpa.findActive(category?.name, query, rank, key, id, limit).map { it.toDomain() }
         }
         val byLength = regionCodes.groupBy { it.length }
         if (byLength.size == 1) {
             val (len, codes) = byLength.entries.single()
-            return jpa.findActiveByRegionPrefixes(len, codes, category?.name, query, name, id, page)
+            return jpa.findActiveByRegionPrefixes(len, codes, category?.name, query, rank, key, id, limit)
                 .map { it.toDomain() }
         }
-        // 층이 섞이는 이름은 현재 카탈로그에 없다. 생기면 정렬 권한이 앱으로 넘어오므로 로그로 드러낸다.
-        log.warn("지역 코드 길이가 섞였습니다 — 정렬이 DB 콜레이션을 따르지 않습니다. codes={}", regionCodes)
+        // 층이 섞이는 이름은 현재 카탈로그에 없다. 생기면 병합 정렬을 앱이 맡는다(도메인과 같은 식) — 로그로 드러낸다.
+        log.warn("지역 코드 길이가 섞였습니다 — 병합 정렬을 앱에서 수행합니다. codes={}", regionCodes)
         return byLength.entries
-            .flatMap { (len, codes) -> jpa.findActiveByRegionPrefixes(len, codes, category?.name, query, name, id, page) }
+            .flatMap { (len, codes) -> jpa.findActiveByRegionPrefixes(len, codes, category?.name, query, rank, key, id, limit) }
             .distinctBy { it.poiId }
             .map { it.toDomain() }
-            .sortedWith(compareBy({ it.nameKo }, { it.poiId }))
+            .sortedWith(compareBy({ PoiSearchOrder.rank(query, it.nameKo) }, { PoiSearchOrder.sortKey(it.nameKo) }, { it.poiId }))
             .take(limit)
     }
 
@@ -207,7 +217,7 @@ class PoiRepositoryAdapter(
         regionCode = regionCode,
         openingHours = openingHours, dataStatus = dataStatus.name, source = source.name,
         savedCount = savedCount, createdAt = createdAt, updatedAt = updatedAt,
-        imageUrl = imageUrl, tags = tags.toTypedArray(), sourceRef = sourceRef,
+        imageUrl = imageUrl, tags = tags.toTypedArray(), sourceRef = sourceRef, address = address,
     )
 
     private fun PoiEntity.toDomain() = Poi.reconstitute(
@@ -215,7 +225,7 @@ class PoiRepositoryAdapter(
         regionCode = regionCode,
         openingHours = openingHours, dataStatus = DataStatus.valueOf(dataStatus), source = PoiSource.valueOf(source),
         savedCount = savedCount, createdAt = createdAt, updatedAt = updatedAt,
-        imageUrl = imageUrl, tags = tags.toList(), sourceRef = sourceRef,
+        imageUrl = imageUrl, tags = tags.toList(), sourceRef = sourceRef, address = address,
     )
 
     private companion object {

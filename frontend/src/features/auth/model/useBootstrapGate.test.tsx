@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
 import NetInfo from '@react-native-community/netinfo';
 
-import { fetchBootstrap } from '@/shared/api';
+import { fetchBootstrap, type BootstrapResponse } from '@/shared/api';
 import { hasStoredToken, getTokens } from '@/shared/storage';
 import {
   clearAccessToken,
@@ -13,6 +13,11 @@ import {
 // 실물 로드(딥 경로) — @/shared/api 목과 다른 모듈 specifier 라 목킹되지 않는다(케이스 3~8 이
 // tokenManager 실물 위에 선 것과 같은 사실). 신호를 실제로 발화해 훅의 구독을 관통 검증한다.
 import { notifyBootstrapReeval } from '@/shared/bootstrap/bootstrapReeval';
+import {
+  getGateDestination,
+  resetGateDestination,
+  waitForGateDestination,
+} from './gateDestination';
 import { BOOTSTRAP_TIMEOUT_MS, useBootstrapGate } from './useBootstrapGate';
 
 jest.mock('@/shared/api', () => ({ fetchBootstrap: jest.fn() }));
@@ -77,6 +82,8 @@ beforeEach(() => {
 
 afterEach(() => {
   jest.useRealTimers();
+  // 게이트 목적지 통로도 모듈 스코프 단일 상태다 — 훅이 공개한 값이 다음 테스트로 새지 않게 비운다.
+  resetGateDestination();
 });
 
 describe('useBootstrapGate — 타임아웃 상수', () => {
@@ -522,5 +529,176 @@ describe('useBootstrapGate — 언마운트 시 구독 해제 (누수 가드)', 
 
     // 단언 — 언마운트 이후로는 호출 횟수가 늘지 않는다(구독이 끊겼다).
     expect(mockFetchBootstrap).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * TRIP-1034 AC-2 — 게이트가 목적지를 게이트 밖으로 공개한다(쓰는 쪽).
+ *
+ * 무엇을 보장하나: 로그인 상태에서 로그아웃이 토큰을 지우면, 게이트의 재조회 결과(LOGIN)가 통로에도
+ * 공개되고, 그 LOGIN 을 기다리던 쪽(설정의 로그아웃)의 대기가 풀린다. 페이지 테스트는 LOGIN 을 손으로
+ * 공개하므로 게이트가 실제로 공개하는지는 여기서만 보인다(02a ★1).
+ */
+describe('useBootstrapGate — 목적지 공개 통로 (TRIP-1034 AC-2)', () => {
+  it('B1 로그인 상태에서 토큰이 지워지고 재조회가 GUEST 면 LOGIN 을 공개하고, LOGIN 대기가 풀린다', async () => {
+    // 준비: 아직 아무것도 공개되지 않았다(앵커).
+    expect(getGateDestination()).toBeNull();
+    mockGetTokens.mockResolvedValue({
+      accessToken: 'access-A',
+      refreshToken: 'refresh-A',
+    });
+    mockHasStoredToken.mockResolvedValue(true);
+    mockFetchBootstrap
+      .mockResolvedValueOnce(bootstrap('AUTHENTICATED'))
+      .mockResolvedValue(bootstrap('GUEST'));
+
+    const { result } = renderHook(() => useBootstrapGate(), {
+      wrapper: createWrapper(),
+    });
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(10);
+    });
+    // 준비 확인: 로그인 상태의 게이트는 HOME 이고, 그 값이 공개됐다.
+    expect(result.current.destination).toBe('HOME');
+    expect(getGateDestination()).toBe('HOME');
+
+    let arrived = false;
+    void waitForGateDestination('LOGIN').then(() => {
+      arrived = true;
+    });
+
+    // 실행: 로그아웃이 메모리 토큰을 지운다 → 게이트가 재조회한다.
+    await act(async () => {
+      clearAccessToken();
+      await jest.advanceTimersByTimeAsync(10);
+    });
+
+    // 단언
+    expect(mockFetchBootstrap).toHaveBeenCalledTimes(2);
+    expect(result.current.destination).toBe('LOGIN');
+    expect(getGateDestination()).toBe('LOGIN');
+    expect(arrived).toBe(true);
+  });
+
+  it('B2 토큰이 지워진 뒤 재조회가 네트워크 실패여도 LOGIN 을 공개한다', async () => {
+    // 준비: 로그인 상태(HOME), 두 번째 조회부터는 네트워크 실패.
+    mockGetTokens.mockResolvedValue({
+      accessToken: 'access-A',
+      refreshToken: 'refresh-A',
+    });
+    mockHasStoredToken.mockResolvedValue(true);
+    mockFetchBootstrap
+      .mockResolvedValueOnce(bootstrap('AUTHENTICATED'))
+      .mockRejectedValue(new Error('Network Error'));
+
+    renderHook(() => useBootstrapGate(), { wrapper: createWrapper() });
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(10);
+    });
+    expect(getGateDestination()).toBe('HOME');
+
+    // 실행
+    await act(async () => {
+      clearAccessToken();
+      await jest.advanceTimersByTimeAsync(10);
+    });
+
+    // 단언: 홀더가 비었으니 실패해도 LOGIN 이다(settled 뒤 catch 분기).
+    expect(mockFetchBootstrap).toHaveBeenCalledTimes(2);
+    expect(getGateDestination()).toBe('LOGIN');
+  });
+
+  it('B3 LOGIN 대기가 풀리는 그 순간, 게이트 상태는 이미 LOGIN 으로 반영돼 있다', async () => {
+    // 공개가 상태 반영보다 먼저 오면 로그아웃이 `(auth)` 가 열리기 전에 이동해 다시 갇힌다(03b 경고-1).
+    // 준비: B1 과 같은 로그인 상태(HOME).
+    mockGetTokens.mockResolvedValue({
+      accessToken: 'access-A',
+      refreshToken: 'refresh-A',
+    });
+    mockHasStoredToken.mockResolvedValue(true);
+    mockFetchBootstrap
+      .mockResolvedValueOnce(bootstrap('AUTHENTICATED'))
+      .mockResolvedValue(bootstrap('GUEST'));
+
+    const { result } = renderHook(() => useBootstrapGate(), {
+      wrapper: createWrapper(),
+    });
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(10);
+    });
+    expect(result.current.destination).toBe('HOME');
+
+    // 대기가 풀리는 순간의 게이트 상태를 그 자리에서 찍는다(끝난 뒤가 아니라).
+    let seenAtArrival: string | null | undefined;
+    void waitForGateDestination('LOGIN').then(() => {
+      seenAtArrival = result.current.destination;
+    });
+
+    // 실행
+    await act(async () => {
+      clearAccessToken();
+      await jest.advanceTimersByTimeAsync(10);
+    });
+
+    // 단언
+    expect(seenAtArrival).toBe('LOGIN');
+  });
+
+  it('B4 첫 부트스트랩이 느려 잠정 HOME 으로 열린 동안 로그아웃하면 LOGIN 을 공개하고, 늦게 온 옛 응답이 덮어쓰지 않는다', async () => {
+    // 03b 경고-2: 토큰 구독은 첫 왕복이 끝난 뒤에 걸리므로, 그 전에 토큰이 지워지면 재조회가 안 일어난다.
+    // 준비: 저장 토큰이 있고, 첫 요청은 손으로 끝낼 때까지 걸려 있다(느린 망). 이후 요청은 GUEST.
+    mockGetTokens.mockResolvedValue({
+      accessToken: 'access-A',
+      refreshToken: 'refresh-A',
+    });
+    mockHasStoredToken.mockResolvedValue(true);
+    let answerFirstRequest: (response: BootstrapResponse) => void = () => {};
+    mockFetchBootstrap
+      .mockImplementationOnce(
+        () =>
+          new Promise<BootstrapResponse>((resolve) => {
+            answerFirstRequest = resolve;
+          })
+      )
+      .mockResolvedValue(bootstrap('GUEST') as BootstrapResponse);
+
+    const { result } = renderHook(() => useBootstrapGate(), {
+      wrapper: createWrapper(),
+    });
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(BOOTSTRAP_TIMEOUT_MS);
+    });
+    // 준비 확인: 3초가 지나 잠정 HOME 으로 열렸고, 첫 요청은 아직 안 끝났다.
+    expect(result.current.destination).toBe('HOME');
+    expect(result.current.isProvisional).toBe(true);
+    expect(getGateDestination()).toBe('HOME');
+    expect(mockFetchBootstrap).toHaveBeenCalledTimes(1);
+
+    let arrived = false;
+    void waitForGateDestination('LOGIN').then(() => {
+      arrived = true;
+    });
+
+    // 실행 ①: 로그아웃이 저장소와 메모리 토큰을 지운다. 첫 요청은 여전히 응답 전이다.
+    await act(async () => {
+      mockHasStoredToken.mockResolvedValue(false);
+      clearAccessToken();
+      await jest.advanceTimersByTimeAsync(10);
+    });
+
+    // 단언 ①: 옛 요청을 기다리지 않고 다시 물어 LOGIN 을 공개했다(옛 요청이 영영 안 와도 갇히지 않는다).
+    expect(mockFetchBootstrap).toHaveBeenCalledTimes(2);
+    expect(getGateDestination()).toBe('LOGIN');
+    expect(arrived).toBe(true);
+
+    // 실행 ②: 옛 토큰으로 보낸 첫 요청이 이제야 AUTHENTICATED 를 들고 돌아온다.
+    await act(async () => {
+      answerFirstRequest(bootstrap('AUTHENTICATED') as BootstrapResponse);
+      await jest.advanceTimersByTimeAsync(10);
+    });
+
+    // 단언 ②: 늦은 옛 응답이 LOGIN 을 HOME 으로 덮어쓰지 않는다.
+    expect(result.current.destination).toBe('LOGIN');
+    expect(getGateDestination()).toBe('LOGIN');
   });
 });

@@ -21,7 +21,10 @@ import type { RegionPurpose } from '@/features/explore/ui/RegionPickerScreen';
 export function RegionPickerPage(): ReactElement {
   const router = useRouter();
   // URL은 신뢰 경계 — 아는 값이 아니면 전부 'stay'로 떨어뜨린다("부분적으로 해석"하지 않는다).
-  const { purpose: rawPurpose } = useLocalSearchParams<{ purpose?: string }>();
+  const { purpose: rawPurpose, tab } = useLocalSearchParams<{
+    purpose?: string;
+    tab?: string;
+  }>();
   const purpose: RegionPickerPurpose =
     rawPurpose === 'trip' || rawPurpose === 'explore' || rawPurpose === 'places'
       ? rawPurpose
@@ -41,10 +44,10 @@ export function RegionPickerPage(): ReactElement {
   function handleSelectRegion(region: Region): void {
     if (purpose === 'trip') {
       // TRIP-683 AC-1 — 여행지 편집 시트의 "도시 추가"에서 왔다. 그 지역을 1박으로 담고
-      // 위저드로 복귀한다(사용자 확정). 스토어는 코드가 아니라 한글 **이름**을 받는다(destinations
-      // 행이 이름을 그린다 — code 를 넘기면 화면에 코드가 뜬다). 옛 `/explore/destination/{code}`
-      // 이탈(d03)은 담기 배선을 잃은 결함이었다.
-      addDestination(region.name, 1);
+      // 위저드로 복귀한다(사용자 확정). 표시는 한글 **이름**이 진다(destinations 행이 이름을 그린다 —
+      // code 를 이름 자리에 넘기면 화면에 코드가 뜬다). 코드는 따로 싣는다(TRIP-1042 AC-12 — 꼭 갈 곳
+      // 지역 판정). 옛 `/explore/destination/{code}` 이탈(d03)은 담기 배선을 잃은 결함이었다.
+      addDestination(region.name, 1, region.regionCode);
       router.back();
       return;
     }
@@ -52,6 +55,14 @@ export function RegionPickerPage(): ReactElement {
       // TRIP-985 — 탐색 진입(랜딩·홈·결과 화면 검색). 결과 화면은 **코드**를 받는다(이름은 캐시
       // 역인덱스). dismissTo: 스택에 결과 화면이 있으면 그리로 돌아가 교체하고, 없으면 피커를 바꿔
       // 끼운다 — "결과→피커→결과" 누적이 없다.
+      // TRIP-1015 E — 홈에서 왔으면 진입 탭을 결과 화면에 되싣는다(dismissTo 는 파라미터를 통째로 바꾼다).
+      if (tab === 'home') {
+        router.dismissTo({
+          pathname: '/explore/destination/[region]',
+          params: { region: region.regionCode, tab },
+        });
+        return;
+      }
       router.dismissTo(`/explore/destination/${region.regionCode}`);
       return;
     }

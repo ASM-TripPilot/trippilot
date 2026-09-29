@@ -2,7 +2,12 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { ComponentType, ReactElement } from 'react';
 import type { ViewStyle } from 'react-native';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 
 /**
  * TRIP-641 파트 2 — dev 정적 프리뷰(`_dev/preview.tsx`)의 밴드 2단 네비.
@@ -360,7 +365,76 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     // ⚠️ TRIP-1012: d02 select 지역 밖 머리글 프리뷰 1키(`saved-places-select-outside`, band `d`) 추가로
     //    166→167. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에 그 1키만 추가하고 이
     //    가드는 안 만진다(추가 전엔 166개라 red). 정확히 그 키인지는 아래 'TRIP-1012' describe 가 못박는다.
-    expect(PREVIEW_STATES).toHaveLength(167);
+    // ⚠️ TRIP-1027: g01 기간이 박수에서 파생돼 불일치 안내가 사라지며 `trip-new-step1-nights-mismatch`(band `g`)
+    //    1키 삭제로 167→166. test-designer 선반영 — implementer 는 preview.tsx 에서 그 1키만 지우고 이 가드는
+    //    안 만진다(지우기 전엔 167개라 red). 정확히 그 키인지는 아래 'TRIP-1027' describe 가 못박는다.
+    // ⚠️ TRIP-1026: d04 위저드 출처(＋ FAB 없음) 프리뷰 1키(`places-wizard`, band `d`) 추가로 166→167.
+    //    test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에 그 1키만 추가하고 이 가드는
+    //    안 만진다(추가 전엔 166개라 red). 정확히 그 키인지는 아래 'TRIP-1026' describe 가 못박는다.
+    // ⚠️ TRIP-1032: h07 다른 여행 생성 중 안내 2키(`h07-generating-busy`·`-uncancelable`, band `h`) 추가로
+    //    167→169. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에 그 2키만 추가하고 이
+    //    가드는 안 만진다(추가 전엔 167개라 red). 정확히 그 키인지는 아래 'TRIP-1032' describe 가 못박는다.
+    // ⚠️ TRIP-1023 칸 B: d03 여행지 선택 검색 결과(제목 "검색 결과"·시군구 카드 시도명 부제) 프리뷰 1키
+    //    (`region-picker-search`, band `d`) 추가로 169→170. test-designer 선반영(카운트 가드만) — implementer 는
+    //    preview.tsx 에 그 1키만 추가하고 이 가드는 안 만진다(추가 전엔 169개라 red). 정확히 그 키인지는 아래
+    //    'TRIP-1023 칸 B' describe 가 못박는다. devPreviewBandSort 는 밴드 h·l 만 잠가 band d 와 무관(오갱신 금지).
+    // ⚠️ TRIP-1039: h08 셸 폴백·일부 실패 2키(`h08-draft-fallback`·`h08-draft-stale-failed`, band `h`) 추가로
+    //    170→172. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 2키만 `h08-draft-expanded`
+    //    바로 뒤에 추가하고 이 가드는 안 만진다(추가 전엔 170개라 red). 정확히 그 키인지는 아래 'TRIP-1039'
+    //    describe 가 못박고, devPreviewBandSort 는 EXPECTED_H 에 expanded 직후 2줄을 넣었다.
+    // ⚠️ TRIP-1040: h07 부분 결과 5일·7일 접기 2키(`h07-generating-partial-5d`·`-7d`, band `h`) 추가로
+    //    172→174. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 2키만
+    //    `h07-generating-partial` 바로 뒤에 추가하고 이 가드는 안 만진다(추가 전엔 172개라 red). 정확히 그 키인지는
+    //    아래 'TRIP-1040' describe 가 못박고, devPreviewBandSort 는 EXPECTED_H 에 partial 직후 2줄을 넣었다.
+    // ⚠️ TRIP-1052: e05 숙소 등록 날짜 입력(달력 시트 `CalendarSheet`)이 코드째 사라져 그 얼굴을 보던
+    //    `stay-register-calendar`(band `e`) 1키를 지운다 → 174→173. test-designer 선반영(카운트 가드) —
+    //    implementer 는 preview.tsx 에서 그 1키만 지우고 이 가드는 안 만진다(지우기 전엔 174개라 red).
+    //    정확히 그 키인지는 아래 'TRIP-724' describe 의 부정 단언이 못박는다. devPreviewBandSort 는
+    //    밴드 h·l 만 잠가 band e 와 무관(오갱신 금지). Figma e05 calendar 프레임(4520:2349)도 삭제됐다.
+    // ⚠️ TRIP-1042: d02 select 지역 빈 상태 프리뷰 1키(`saved-places-select-region-empty`, band `d`) 추가로
+    //    173→174. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 1키만 추가하고 이 가드는
+    //    안 만진다(추가 전엔 173개라 red). 정확히 그 키인지는 아래 'TRIP-1042' describe 가 못박는다.
+    //    devPreviewBandSort 는 밴드 h·l 만 잠가 band d 와 무관(오갱신 금지). Figma 4685:2646 과 1:1 인 새 얼굴.
+    // ⚠️ TRIP-1055: h06 작성중 여행 삭제 메뉴·삭제 확인 2키(`h06-my-trips-menu`·`h06-my-trips-delete-confirm`,
+    //    band `h`) 추가로 174→176. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 2키만
+    //    `h06-my-trips-empty` 바로 뒤에 이 순서로 추가하고 이 가드는 안 만진다(추가 전엔 174개라 red). 정확히 그
+    //    키인지는 아래 'TRIP-1055' describe 가 못박고, devPreviewBandSort 는 EXPECTED_H 에 h06-empty 뒤 2줄을 넣었다.
+    //    Figma 4682:2573(삭제 메뉴)·4682:3206(삭제 확인) 과 1:1.
+    // ⚠️ TRIP-1068: j03 오늘의 회고 pending 얼굴 신설로 `reflection-pending`(band `j`) 1키 추가 →
+    //    176→177. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 1키만 j03 error
+    //    뒤에 추가하고 이 가드는 안 만진다(추가 전엔 176개라 red). 정확히 그 키인지는 아래 'TRIP-770'
+    //    목록과 'TRIP-1068' describe 가 못박는다. devPreviewBandSort 는 밴드 h·l 만 잠가 band j 와 무관.
+    //    Figma j03 로딩 프레임 유무는 미확인(02a §1-4) — 실기에선 POST 왕복 동안만 보여 육안 수단이 이 키뿐.
+    // ⚠️ TRIP-1069: j01 방문 시각 수정 시트 얼굴 `records-visit-time-sheet`(band `j`) 1키 추가로 177→178.
+    //    Figma `j01-[기록] 방문 기록 · visit-time-sheet`(4524:2383)와 1:1 — TRIP-770 이 지운 같은 이름 키의
+    //    복귀다(그때는 프레임이 없었다). test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그
+    //    1키만 추가하고 이 가드는 안 만진다(추가 전엔 177개라 red). 건너뛰기 확인 다이얼로그는 Figma 프레임이
+    //    없어 키를 두지 않는다. 정확한 j 목록은 아래 'TRIP-770' describe(16키)가 못박는다.
+    // ⚠️ TRIP-1081: h10 서버가 넓힌 반경 얼굴 `h10-copick-candidates-auto-wide`(band `h`) 1키 추가로
+    //    178→179. 칩은 사용자가 고른 1.1km 그대로 + muted 사실 캡션 + 후보 핀 fitPins 카메라(QA #067)는
+    //    jest 가 색·카메라를 못 봐 이 키가 유일한 육안 수단이다. Figma 상태 프레임은 아직 없다(figma 레인
+    //    후속). test-designer 선반영 — implementer 는 preview.tsx 에 그 1키만 추가하고 이 가드는 안
+    //    만진다(추가 전엔 178개라 red). 정확한 키는 아래 'TRIP-1081' describe, h 순서는 devPreviewBandSort.
+    // ⚠️ TRIP-1084: j07 legend 3줄+더 보기 얼굴 `records-calendar-legend-more`(band `j`) 1키 추가로
+    //    179→180. Figma 채택안 `4699:2630`(접힘)과 1:1, 펼침 `4699:2803` 은 그 키에서 탭으로 본다. 줄 간격·
+    //    들여쓰기·chevron 방향은 jest 사각이라 이 키가 유일한 육안 수단이다. test-designer 선반영 —
+    //    implementer 는 preview.tsx 에 그 1키만 추가하고 이 가드는 안 만진다(추가 전엔 179개라 red).
+    //    정확한 j 목록은 아래 'TRIP-770' describe(17키), 데이터 모양은 'TRIP-1084' describe 가 못박는다.
+    // ⚠️ TRIP-1082: g02 거점 편집 얼굴 2키(`trip-new-step2-edit`·`trip-new-step2-edit-regen-dialog`, band `g`)
+    //    추가로 180→182. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 2키만
+    //    `trip-new-step2-empty` 바로 뒤에 이 순서로 추가하고 이 가드는 안 만진다(추가 전엔 180개라 red).
+    //    정확히 그 키인지는 아래 'TRIP-1082' describe 가 못박는다. Figma 4700:2688(편집)·4700:2747(묻기)와 1:1
+    //    — 편집 제목만 코드가 '거점 숙소 바꾸기'로 앞서 있다(01b Q1, Figma 레인 후속).
+    // ⚠️ TRIP-1085: j01 풀 지도 전환으로 빈 상태 얼굴 `records-empty`(band `j`, Figma `4705:4054`) 1키 추가로
+    //    182→183. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 1키만 추가하고 이 가드는
+    //    안 만진다(추가 전엔 182개라 red). 정확한 j 목록은 아래 'TRIP-770' describe(18키)가 못박는다.
+    //    devPreviewBandSort 는 밴드 h·l 만 잠가 band j 와 무관.
+    // ⚠️ TRIP-1094: 못 넣은 꼭 갈 곳 블록 2키(`h08-draft-unplaced`·`h14-plan-unplaced`, band `h`) 추가로
+    //    183→185. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 2키만 각각
+    //    `h08-draft-stale-failed`·`h14-plan-no-base` 바로 뒤에 추가하고 이 가드는 안 만진다(추가 전엔 183개라
+    //    red). 정확한 키·얼굴은 아래 'TRIP-1094' describe, h 순서는 devPreviewBandSort EXPECTED_H 가 못박는다.
+    //    Figma 전용 프레임이 없는 합성 얼굴이라(브리프 §4-4) 접힘(peek) 가시성의 육안 수단이 이 두 키뿐이다.
+    expect(PREVIEW_STATES).toHaveLength(185);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -543,6 +617,23 @@ describe('🔴 TRIP-795 · h10 후보 선택 프리뷰 2키 (band h)', () => {
   });
 });
 
+describe('🔴 TRIP-1081 · h10 서버가 넓힌 반경 프리뷰 1키 (band h)', () => {
+  it('키 집합에 h10-copick-candidates-auto-wide 가 band h 로 있고 기존 h10 2키는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES)만 읽는다.
+    const added = PREVIEW_STATES.find(
+      (state) => state.key === 'h10-copick-candidates-auto-wide'
+    );
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 카운트(179)만으론 "아무 키나 추가해도" 통과하므로 추가된 키가 이것임을 못박는다.
+    expect(added?.band).toBe('h');
+    expect(added?.label).toMatch(/^h10 /);
+    // 형제 앵커 — default·wide 가 딸려 사라지지 않았다.
+    expect(keys).toContain('h10-copick-candidates');
+    expect(keys).toContain('h10-copick-candidates-wide');
+  });
+});
+
 describe('🔴 TRIP-785 · h02 꼭 갈 곳 프리뷰 키 재편 (band h)', () => {
   it('h02-mustvisit-default 로 개명되고, loading·error 2키가 생기며, 옛 키는 없다', () => {
     // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
@@ -676,16 +767,18 @@ describe('🔴 TRIP-730 · e05 등록 프리뷰 키 재편 (band e)', () => {
   });
 });
 
-describe('🔴 TRIP-724 · e밴드 19키 복원·신설 (band e)', () => {
-  it('pin·calendar 복원 + filter-sheet 신설 3키가 실재하고, 형제 e키는 남는다', () => {
+describe('🔴 TRIP-724 · e밴드 복원·신설 키 (band e) — TRIP-1052 calendar 삭제 반영', () => {
+  it('pin 복원·filter-sheet 신설 2키가 실재하고, calendar 키는 없으며, 형제 e키는 남는다', () => {
     // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
     const keys = PREVIEW_STATES.map((state) => state.key);
 
-    // 긍정 — 730 이 지운 pin·calendar 복원(코드 PinPanel·CalendarSheet 유지) + filter-sheet 신설
-    // (StayFilterSheet 코드 실재). TRIP-822 재산정 19키의 마지막 3키. 없으면 red(추가 전엔 부재).
+    // 긍정 — 730 이 지운 pin 복원(코드 PinPanel 유지) + filter-sheet 신설(StayFilterSheet 코드 실재).
     expect(keys).toContain('stay-register-pin');
-    expect(keys).toContain('stay-register-calendar');
     expect(keys).toContain('stay-filter-sheet');
+
+    // 부정 — TRIP-1052: 등록 날짜 입력과 달력 시트가 코드째 사라져 그 얼굴 키도 사라진다(지우기 전엔
+    // present 라 red). 총량(173)만으론 "아무 키나 하나 지워도" 통과하므로 이 단언이 '정확히 그 키'를 못박는다.
+    expect(keys).not.toContain('stay-register-calendar');
 
     // 형제 e 앵커 — 기존 e05·e02 키가 딸려 사라지지 않았음(공허 통과 방지).
     expect(keys).toContain('stay-register-default');
@@ -906,28 +999,17 @@ describe('TRIP-742 AC-1 · g 밴드 프리뷰 키 4개 삭제 (band g)', () => {
   });
 });
 
-describe('🔴 TRIP-1010 · g01 박수·기간 불일치 안내 프리뷰 키 (band g)', () => {
-  it('trip-new-step1-nights-mismatch 키가 있고, 렌더하면 안내 한 줄이 뜬다', () => {
-    // 준비 — 새 키 엔트리를 찾는다(red-first: preview.tsx 에 추가 전엔 없다).
-    const entry = PREVIEW_STATES.find(
-      (state) => state.key === 'trip-new-step1-nights-mismatch'
-    );
-    expect(entry).toBeDefined();
-    expect(entry?.band).toBe('g');
-    expect(entry?.label).toBe('g01 · 여행 만들기 nights-mismatch');
+describe('🔴 TRIP-1027 · g01 박수·기간 불일치 안내 프리뷰 키 삭제 (band g)', () => {
+  it('trip-new-step1-nights-mismatch 키가 없고, 형제 default·기간 시트 키는 남는다', () => {
+    // 준비 — 렌더 없이 key 집합만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
 
-    // 실행 — 그 엔트리의 render() 를 그린다.
-    render(<>{entry?.render()}</>);
-
-    // 단언 — 공허 통과 방지: 기본 g01 이 아니라 nightsMismatchNote 를 넘긴 얼굴이어야 안내가 선다.
-    expect(
-      screen.getByTestId('trip-wizard-nights-mismatch-note')
-    ).toHaveTextContent(/박/);
-
-    // 이웃 앵커 — 기본 g01 default 키가 딸려 사라지지 않았다.
-    expect(PREVIEW_STATES.map((state) => state.key)).toContain(
-      'trip-new-step1-default'
-    );
+    // 부정 — 안내 한 줄 자체가 사라져 그 얼굴을 보여 줄 키도 없다(지우기 전엔 present 라 red).
+    // 카운트(166)만으론 "아무 1키나 지워도" 통과하므로 이 짝이 '정확히 그 키'임을 못박는다.
+    expect(keys).not.toContain('trip-new-step1-nights-mismatch');
+    // 긍정 짝 — 같은 화면의 형제 키는 그대로(과잉 삭제·공허 통과 차단).
+    expect(keys).toContain('trip-new-step1-default');
+    expect(keys).toContain('trip-new-step1-period-sheet');
   });
 });
 
@@ -1259,17 +1341,23 @@ describe('AC-3 · 딥링크 초기 밴드 자동선택 (폴백 함수 재사용)
 });
 
 // TRIP-770 · j 밴드(기록·회고) 프리뷰 최종 정리 완료조건 — 22키 → 14키.
-// 무엇을 보장하나: band 'j' 가 정확히 14키이고, 각 키·라벨이 TRIP-770 최종 목록과 완전 일치한다
-// (759~767 이 만든 라벨 편차를 통일). 순서 무관 — (key,label) 쌍 집합으로 대조한다.
-describe('🔴 TRIP-770 · j 밴드 최종 14키·라벨 완전 일치', () => {
+// 무엇을 보장하나: band 'j' 가 정확히 18키(TRIP-770 의 14 + TRIP-1068 pending 1 + TRIP-1069 visit-time-sheet 1
+// + TRIP-1084 legend-more 1 + TRIP-1085 empty 1)이고, 각 키·라벨이
+// 최종 목록과 완전 일치한다(759~767 이 만든 라벨 편차를 통일). 순서 무관 — (key,label) 쌍 집합으로 대조한다.
+describe('🔴 TRIP-770 · j 밴드 최종 18키·라벨 완전 일치 (TRIP-1068·1069·1084·1085 +1씩)', () => {
   const EXPECTED_J: readonly (readonly [string, string])[] = [
     ['records-default', 'j01 · 방문 기록 default'],
     ['records-error', 'j01 · 방문 기록 error'],
     ['records-manual-checkin', 'j01 · 방문 기록 manual-checkin'],
+    // TRIP-1069 — Figma 4524:2383 과 1:1(시트 부제·서울 시각 시드 육안 대조 자리).
+    ['records-visit-time-sheet', 'j01 · 방문 기록 visit-time-sheet'],
+    // TRIP-1085 — Figma 4705:4054(방문 0건 · 계획 행 · 번호 핀만)와 1:1.
+    ['records-empty', 'j01 · 방문 기록 empty'],
     ['reflection-default', 'j03 · 오늘의 회고 default'],
     ['reflection-data-insufficient', 'j03 · 오늘의 회고 data-insufficient'],
     ['reflection-empty', 'j03 · 오늘의 회고 empty'],
     ['reflection-error', 'j03 · 오늘의 회고 error'],
+    ['reflection-pending', 'j03 · 오늘의 회고 pending'], // TRIP-1068 신설
     ['trip-summary-default', 'j04 · 여행 요약 default'],
     ['trip-summary-error', 'j04 · 여행 요약 error'],
     ['travel-style-default', 'j05 · 여행 스타일 분석 default'],
@@ -1280,9 +1368,11 @@ describe('🔴 TRIP-770 · j 밴드 최종 14키·라벨 완전 일치', () => {
     ['share-card-default', 'j06 · 공유 카드 default'],
     ['share-card-no-photo', 'j06 · 공유 카드 no-photo'],
     ['records-calendar-default', 'j07 · 여행 캘린더 default'],
+    // TRIP-1084 — Figma 4699:2630(legend 3줄+더 보기) 과 1:1.
+    ['records-calendar-legend-more', 'j07 · 여행 캘린더 legend-more'],
   ];
 
-  it('band j 가 정확히 14키이고 키·라벨이 최종 목록과 완전 일치한다', () => {
+  it('band j 가 정확히 18키이고 키·라벨이 최종 목록과 완전 일치한다(TRIP-1068 · 1069 · 1084 · 1085 +1씩)', () => {
     // 준비: band 'j' 엔트리만 골라 (key\tlabel) 정렬 집합으로.
     const jStates = PREVIEW_STATES.filter((state) => state.band === 'j');
     const actual = jStates
@@ -1292,9 +1382,43 @@ describe('🔴 TRIP-770 · j 밴드 최종 14키·라벨 완전 일치', () => {
       ([key, label]) => `${key}\t${label}`
     ).sort();
 
-    // 단언: 14키 + (키,라벨) 집합 완전 일치(삭제된 22키의 잔재·라벨 편차 차단).
-    expect(jStates).toHaveLength(14);
+    // 단언: 18키 + (키,라벨) 집합 완전 일치(삭제된 22키의 잔재·라벨 편차 차단).
+    expect(jStates).toHaveLength(18);
     expect(actual).toEqual(expected);
+  });
+});
+
+// TRIP-1084 · j07 legend-more 프리뷰가 Figma 4699:2630 의 데이터를 그리는가(6-b 육안 대조의 전제).
+// 무엇을 보장하나: 새 키를 그대로 렌더하면 9월 · 묶음 두 줄('외 5'·'외 3') · '더 보기 2' 가 보인다 —
+// 키만 있고 데이터가 1줄이면 육안 대조할 얼굴 자체가 없다.
+describe('🔴 TRIP-1084 · records-calendar-legend-more 프리뷰 = Figma 4699:2630 데이터', () => {
+  it('9월, 묶음 2줄(외 5 · 외 3)과 "더 보기 2"를 그린다', () => {
+    // 준비 — 키의 render() 를 직접 렌더(밴드 탐색 UI 를 거치지 않는다).
+    const state = PREVIEW_STATES.find(
+      (s) => s.key === 'records-calendar-legend-more'
+    );
+    expect(state?.band).toBe('j');
+    if (state === undefined)
+      throw new Error('records-calendar-legend-more 키 없음');
+
+    // 실행
+    render(state.render());
+
+    // 단언
+    expect(screen.getByText('2026년 9월')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId(
+        'record-calendar-legend-group-count-2026-09-28_2026-09-30'
+      )
+    ).toHaveTextContent('외 5');
+    expect(
+      screen.getByTestId(
+        'record-calendar-legend-group-count-2026-09-28_2026-09-29'
+      )
+    ).toHaveTextContent('외 3');
+    expect(screen.getByTestId('record-calendar-legend-more')).toHaveTextContent(
+      '더 보기 2'
+    );
   });
 });
 
@@ -1313,7 +1437,7 @@ describe('🔴 TRIP-772 · l 밴드 25키·라벨 완전 일치 (AC-1·AC-3)', (
     ['my-stays-default', 'l04 · 등록 숙소·예약 기록 default'], // 1604:2440
     ['my-stays-empty', 'l04 · 등록 숙소·예약 기록 empty'], // 1605:2440
     ['my-stays-dialog', 'l04 · 등록 숙소·예약 기록 dialog'], // 1606:2440
-    ['settings-default', 'l05 · 설정 default'], // 1607:2440
+    ['settings-default', 'l05 · 설정 default'], // 4664:3279 (TRIP-1051 — 옛 1607:2440 대체)
     ['settings-delete-dialog', 'l05 · 설정 dialog 1단'], // 1608:2440
     ['settings-delete-dialog-final', 'l05 · 설정 dialog 2단'], // 4531:3018
     ['settings-export-truncated', 'l05 · 설정 export-truncated'], // 4533:3260
@@ -1408,5 +1532,525 @@ describe('🔴 TRIP-1012 · d02 select "이 여행 지역 밖 N곳" 머리글 �
     expect(PREVIEW_STATES.map((state) => state.key)).toContain(
       'saved-places-select'
     );
+  });
+});
+
+describe('🔴 TRIP-1026 · d04 위저드 출처(＋ FAB 없음) 프리뷰 키 (band d)', () => {
+  it('places-wizard 키가 있고, 렌더하면 ♥ FAB 만 있고 ＋ FAB 는 없다', () => {
+    // 준비 — 새 키 엔트리를 찾는다(red-first: preview.tsx 에 추가 전엔 없다).
+    const entry = PREVIEW_STATES.find((state) => state.key === 'places-wizard');
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('d');
+    expect(entry?.label).toBe('d04 · 장소 탐색 위저드 출처');
+
+    // 실행 — 그 엔트리의 render() 를 그린다.
+    render(<>{entry?.render()}</>);
+
+    // 단언 — Figma 에 없는 새 상태라 6-b 육안 대조 자리다(＋ 가 빠져 ♥ 가 아래로 내려앉는 모양, 01b Q3).
+    expect(screen.getByTestId('explore-places-root')).toBeOnTheScreen();
+    expect(screen.getByTestId('explore-places-saved-fab')).toBeOnTheScreen();
+    expect(screen.queryByTestId('explore-places-create-fab')).toBeNull();
+
+    // 이웃 앵커 — 기존 d04 default 키가 딸려 사라지지 않았다.
+    expect(PREVIEW_STATES.map((state) => state.key)).toContain(
+      'places-default'
+    );
+  });
+});
+
+// TRIP-1023 칸 B #007 — 검색 중 얼굴은 화면 로컬 상태가 아니라 `query` prop 이라 정적으로 열 수 있다. 실화면은
+// 백엔드 카탈로그가 있어야 보이므로, 긴 시도명("강원특별자치도")이 48% 폭 카드에서 몇 줄이 되는지(브리프 §7 ⑨)를
+// 6-b 에서 눈으로 볼 수단이 이 키다. 표본은 `PREVIEW_REGIONS` 에서 이름에 '천'이 든 두 곳 — 시도 행(인천광역시,
+// 부제 없음)과 시군구(홍천군, 부제 강원특별자치도)가 한 화면에 나란히 선다.
+describe('🔴 TRIP-1023 칸 B · d03 여행지 선택 검색 결과 프리뷰 키 (band d)', () => {
+  it('region-picker-search 키가 있고, 렌더하면 "검색 결과" 제목과 시군구 카드의 시도명 부제가 보인다', () => {
+    // 준비 — 새 키 엔트리를 찾는다(red-first: preview.tsx 에 추가 전엔 없다).
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'region-picker-search'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('d');
+    expect(entry?.label).toBe('d03 · 여행지 선택 검색 결과');
+
+    // 실행 — 그 엔트리의 render() 를 그린다.
+    render(<>{entry?.render()}</>);
+
+    // 단언 — 검색 중 얼굴(제목)과 두 카드. 시군구엔 부제가 붙고 시도 행엔 같은 이름이 한 번뿐이다.
+    expect(screen.getByText('검색 결과')).toBeOnTheScreen();
+    expect(screen.queryByText('지역별 둘러보기')).toBeNull();
+    expect(
+      within(screen.getByTestId('explore-region-51720')).getByText(
+        '강원특별자치도'
+      )
+    ).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId('explore-region-28')).getAllByText('인천광역시')
+    ).toHaveLength(1);
+
+    // 이웃 앵커 — 기존 d03 default 키가 딸려 사라지지 않았다.
+    expect(PREVIEW_STATES.map((state) => state.key)).toContain(
+      'region-picker-default'
+    );
+  });
+});
+
+// TRIP-1011 C(#039) — 새 키가 아니라 기존 `h01-method` 가 새 링크 콜백을 넘기게 한다(총량 167 무변경).
+// MethodPickerScreen 은 "콜백이 없으면 안 그린다" 관례라, 프리뷰가 안 넘기면 6-b 육안 수단이 사라진다.
+describe('🔴 TRIP-1011 C · h01-method 프리뷰가 "거점 숙소 다시 고르기" 링크를 그린다 (band h · 키 수 무변경)', () => {
+  it('h01-method 엔트리를 렌더하면 itinerary-method-rebase 가 있다', () => {
+    const entry = PREVIEW_STATES.find((state) => state.key === 'h01-method');
+    // 앵커 — 엔트리가 실재한다(없으면 아래가 빈 렌더에서 공짜로 red/green 이 된다).
+    expect(entry).toBeDefined();
+
+    render(<>{entry?.render()}</>);
+
+    // 짝 — 정말 h01 화면이다.
+    expect(screen.getByTestId('itinerary-method-copick')).toBeTruthy();
+    expect(screen.getByTestId('itinerary-method-rebase')).toBeTruthy();
+  });
+});
+
+// TRIP-1032 — 다른 여행 생성 중(409) 안내는 Figma 프레임이 없는 새 얼굴이라 6-b 육안 대조 자리가 이 두 키뿐이다.
+describe('🔴 TRIP-1032 · h07 다른 여행 생성 중 안내 프리뷰 2키 (band h)', () => {
+  it('h07-generating-busy 는 취소·기다리기 두 버튼, -uncancelable 은 기다리기만 그린다', () => {
+    // 준비 — 새 키 엔트리를 찾는다(red-first: preview.tsx 에 추가 전엔 없다).
+    const busy = PREVIEW_STATES.find(
+      (state) => state.key === 'h07-generating-busy'
+    );
+    const uncancelable = PREVIEW_STATES.find(
+      (state) => state.key === 'h07-generating-busy-uncancelable'
+    );
+    expect(busy).toBeDefined();
+    expect(busy?.band).toBe('h');
+    expect(busy?.label).toBe('h07 · 다른 여행 생성 중');
+    expect(uncancelable).toBeDefined();
+    expect(uncancelable?.band).toBe('h');
+    expect(uncancelable?.label).toBe('h07 · 다른 여행 생성 중 · 취소 불가');
+
+    // 실행·단언 ① — 취소 가능한 얼굴.
+    const first = render(<>{busy?.render()}</>);
+    expect(screen.getByTestId('itinerary-generation-busy')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('itinerary-generation-busy-cancel-retry')
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('itinerary-generation-busy-wait')
+    ).toBeOnTheScreen();
+    first.unmount();
+
+    // 실행·단언 ② — 취소 불가 얼굴(세션 id 를 못 얻었을 때, 01b Q1).
+    render(<>{uncancelable?.render()}</>);
+    expect(screen.getByTestId('itinerary-generation-busy')).toBeOnTheScreen();
+    expect(
+      screen.queryByTestId('itinerary-generation-busy-cancel-retry')
+    ).toBeNull();
+    expect(
+      screen.getByTestId('itinerary-generation-busy-wait')
+    ).toBeOnTheScreen();
+
+    // 이웃 앵커 — 기존 h07 로딩 키가 딸려 사라지지 않았다.
+    expect(PREVIEW_STATES.map((state) => state.key)).toContain(
+      'h07-generating-loading'
+    );
+  });
+});
+
+// TRIP-1039 — 셸 폴백·일부 실패 얼굴은 Figma 전용 프레임이 없는 합성 얼굴이라(h08 `4221:2448` + NoticeBar
+// `4466:1794`) 6-b 육안 대조 자리가 이 두 키뿐이다. peek 에서 안내가 보이는지는 jest 사각(바텀시트 목)이다.
+describe('🔴 TRIP-1039 · h08 셸 폴백·일부 실패 프리뷰 2키 (band h)', () => {
+  it('h08-draft-fallback 은 기본 일정 셸 + 폴백 안내, h08-draft-stale-failed 는 AI 추천안 셸 + 일부 실패 안내를 그린다', () => {
+    // 준비 — 새 키 엔트리를 찾는다(red-first: preview.tsx 에 추가 전엔 없다).
+    const fallback = PREVIEW_STATES.find(
+      (state) => state.key === 'h08-draft-fallback'
+    );
+    const stale = PREVIEW_STATES.find(
+      (state) => state.key === 'h08-draft-stale-failed'
+    );
+    expect(fallback).toBeDefined();
+    expect(fallback?.band).toBe('h');
+    expect(fallback?.label).toBe('h08 · 기본 일정(폴백)');
+    expect(stale).toBeDefined();
+    expect(stale?.band).toBe('h');
+    expect(stale?.label).toBe('h08 · 일부 실패');
+
+    // 실행·단언 ① — 폴백 얼굴. leaf 마다 완전 일치(toHaveTextContent 문자열 = exact).
+    const first = render(<>{fallback?.render()}</>);
+    expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
+    expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
+      '기본 일정'
+    );
+    expect(
+      screen.getByTestId('itinerary-draft-fallback-banner')
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('itinerary-draft-reason-title')
+    ).toHaveTextContent('취향 반영 없이 만든 기본 일정이에요');
+    expect(
+      screen.getByTestId('itinerary-draft-reason-subtitle')
+    ).toHaveTextContent('장소 하나만 다른 후보로 바꿀 수도 있어요');
+    expect(screen.getByTestId('itinerary-draft-manual')).toHaveTextContent(
+      '처음부터 직접 짜기'
+    );
+    expect(screen.getByTestId('sheet-cta-button-0')).toHaveTextContent(
+      '다시 짜기'
+    );
+    expect(screen.getByTestId('sheet-cta-button-1')).toHaveTextContent(
+      '확정하기'
+    );
+    expect(screen.queryByTestId('itinerary-draft-stale-failed')).toBeNull();
+    first.unmount();
+
+    // 실행·단언 ② — 일부 실패 얼굴(폴백 아님).
+    render(<>{stale?.render()}</>);
+    expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
+    expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
+      'AI 추천안'
+    );
+    expect(
+      screen.getByTestId('itinerary-draft-stale-failed')
+    ).toHaveTextContent('일부 정보를 불러오지 못했어요');
+    expect(screen.queryByTestId('itinerary-draft-fallback-banner')).toBeNull();
+
+    // 이웃 앵커 — 기존 h08 셸 키가 딸려 사라지지 않았다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+    expect(keys).toContain('h08-draft-collapsed');
+    expect(keys).toContain('h08-draft-expanded');
+  });
+});
+
+// TRIP-1094 — 못 넣은 꼭 갈 곳 블록은 Figma 전용 프레임이 없는 합성 얼굴이라(브리프 §4-4) 6-b 육안 대조 자리가
+// 이 두 키뿐이다. 블록이 접힘(peek)에서 보이는지·긴 문구 줄바꿈은 jest 사각(바텀시트 목)이다.
+// ★ 항목 testID 는 `itinerary-unplaced-mustvisit-{poiId}` — 블록 안 다른 요소는 이 접두를 안 쓴다(02a §3-2).
+describe('🔴 TRIP-1094 · 못 넣은 꼭 갈 곳 프리뷰 2키 (band h)', () => {
+  const BLOCK = 'itinerary-unplaced-mustvisit';
+  /** 서버 `UnplacedText.kt` 원문 — 프리뷰 픽스처가 이 두 문구를 그대로 쓴다(02a §3-4). */
+  const MSG_NO_SLOT =
+    '남은 시간과 이동을 고려하면 넣을 자리가 없었어요. 시각 고정을 풀거나 일정을 줄여 보세요.';
+  const MSG_WINDOW =
+    '다른 필수 방문지와 시간이 겹쳐 넣지 못했어요. 한쪽 시각을 옮겨 주세요.';
+
+  /** 블록이 헤더 뒤·첫 카드 앞에 있고, 항목 2(이름 없는 것 정확히 1)에 두 서버 문구가 그대로 있다. */
+  function expectUnplacedBlock(): void {
+    const block = screen.getByTestId(BLOCK);
+    const items = within(block).getAllByTestId(
+      /^itinerary-unplaced-mustvisit-/
+    );
+    expect(items).toHaveLength(2);
+    // 서버 문구는 각자 자기 Text 로 완전 일치(가공 0).
+    expect(within(block).getByText(MSG_NO_SLOT)).toBeOnTheScreen();
+    expect(within(block).getByText(MSG_WINDOW)).toBeOnTheScreen();
+    // 이름 없는 항목 = 글자가 문구 하나와 완전히 같은 항목. 정확히 1개(나머지 1개는 이름이 붙어 있다).
+    const messageOnly = items.filter((item) =>
+      [MSG_NO_SLOT, MSG_WINDOW].some((message) => {
+        try {
+          expect(item).toHaveTextContent(message);
+          return true;
+        } catch {
+          return false;
+        }
+      })
+    );
+    expect(messageOnly).toHaveLength(1);
+    // 자리 — 헤더 → 블록 → 첫 카드(트리 전위 순서).
+    const order = screen
+      .getAllByTestId(
+        /^(sheet-header-root|itinerary-unplaced-mustvisit|slot-stopcard-.+)$/
+      )
+      .map((node) => String(node.props.testID));
+    expect(order[0]).toBe('sheet-header-root');
+    expect(order[1]).toBe(BLOCK);
+    expect(order[2]).toMatch(/^slot-stopcard-/);
+  }
+
+  it('h08-draft-unplaced — AI 추천안 셸(폴백·일부 실패 안내 없음) 시트 맨 위에 블록을 그린다', () => {
+    // 준비 — 새 키 엔트리(red-first: preview.tsx 에 추가 전엔 없다).
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'h08-draft-unplaced'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('h');
+    expect(entry?.label).toBe('h08 · 못 넣은 꼭 갈 곳');
+
+    // 실행
+    render(<>{entry?.render()}</>);
+
+    // 단언
+    expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
+    expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
+      'AI 추천안'
+    );
+    expect(screen.queryByTestId('itinerary-draft-fallback-banner')).toBeNull();
+    expect(screen.queryByTestId('itinerary-draft-stale-failed')).toBeNull();
+    expectUnplacedBlock();
+
+    // 이웃 앵커 — 기존 h08 안내 키가 딸려 사라지지 않았다.
+    expect(PREVIEW_STATES.map((state) => state.key)).toContain(
+      'h08-draft-stale-failed'
+    );
+  });
+
+  it('h14-plan-unplaced — 완성 일정 셸 시트 맨 위에 블록을 그린다', () => {
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'h14-plan-unplaced'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('h');
+    expect(entry?.label).toBe('h14 · 완성 일정 못 넣은 꼭 갈 곳');
+
+    render(<>{entry?.render()}</>);
+
+    expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
+    expectUnplacedBlock();
+
+    expect(PREVIEW_STATES.map((state) => state.key)).toContain(
+      'h14-plan-no-base'
+    );
+  });
+});
+
+// TRIP-1040 — 칸 상한·`…` 접기는 Figma 프레임이 없는 합성 얼굴이라(h07 `4309:1923` 은 3칸 1장뿐) 6-b 육안
+// 대조 자리가 이 두 키뿐이다. 실제 말줄임·겹침 해소·`…` 칸 폭은 픽셀이라 jest 사각이다.
+// ★ 칸 testID 의 n 은 칸 위치다 — 7일 키에서 `cell-2-done` 의 글자는 "3일차 완성"이다(일차는 글자로 읽는다).
+describe('🔴 TRIP-1040 · h07 부분 결과 5일·7일 접기 프리뷰 2키 (band h)', () => {
+  it('5일 키는 뒤 접기 [1·2·3일차, …], 7일 키는 앞 접기 […, 3·4·5일차] 를 그린다', () => {
+    // 준비 — 새 키 엔트리를 찾는다(red-first: preview.tsx 에 추가 전엔 없다).
+    const fiveDays = PREVIEW_STATES.find(
+      (state) => state.key === 'h07-generating-partial-5d'
+    );
+    const sevenDays = PREVIEW_STATES.find(
+      (state) => state.key === 'h07-generating-partial-7d'
+    );
+    expect(fiveDays).toBeDefined();
+    expect(fiveDays?.band).toBe('h');
+    expect(fiveDays?.label).toBe('h07 · 부분 결과 · 5일');
+    expect(sevenDays).toBeDefined();
+    expect(sevenDays?.band).toBe('h');
+    expect(sevenDays?.label).toBe('h07 · 부분 결과 · 7일');
+
+    const cellOrder = () =>
+      screen
+        .getAllByTestId(/^generation-gauge-cell-/)
+        .map((node) => node.props.testID);
+
+    // 실행·단언 ① — 5일·day1 도착: 뒤 접기.
+    const first = render(<>{fiveDays?.render()}</>);
+    expect(screen.getByTestId('generation-progress-card')).toBeOnTheScreen();
+    expect(cellOrder()).toEqual([
+      'generation-gauge-cell-1-done',
+      'generation-gauge-cell-2-active',
+      'generation-gauge-cell-3-waiting',
+      'generation-gauge-cell-more',
+    ]);
+    expect(
+      screen.getByTestId('generation-gauge-cell-1-done')
+    ).toHaveTextContent('1일차 완성');
+    expect(
+      screen.getByTestId('generation-gauge-cell-2-active')
+    ).toHaveTextContent('2일차 생성 중');
+    expect(
+      screen.getByTestId('generation-gauge-cell-3-waiting')
+    ).toHaveTextContent('3일차 대기');
+    expect(screen.getByTestId('generation-gauge-cell-more')).toHaveTextContent(
+      '…'
+    );
+    first.unmount();
+
+    // 실행·단언 ② — 7일·day1~4 도착: 앞 접기, 지금 만드는 5일차가 창 끝.
+    render(<>{sevenDays?.render()}</>);
+    expect(cellOrder()).toEqual([
+      'generation-gauge-cell-more',
+      'generation-gauge-cell-2-done',
+      'generation-gauge-cell-3-done',
+      'generation-gauge-cell-4-active',
+    ]);
+    expect(
+      screen.getByTestId('generation-gauge-cell-2-done')
+    ).toHaveTextContent('3일차 완성');
+    expect(
+      screen.getByTestId('generation-gauge-cell-3-done')
+    ).toHaveTextContent('4일차 완성');
+    expect(
+      screen.getByTestId('generation-gauge-cell-4-active')
+    ).toHaveTextContent('5일차 생성 중');
+  });
+});
+
+/** 행·머리글을 트리 순서대로 — 머리글 뒤의 행이 곧 지역 밖 행이다. */
+function pickOrder(): string[] {
+  return screen
+    .queryAllByTestId(/^mustvisit-pick-(row-|region-outside$)/)
+    .map((node) => String(node.props.testID));
+}
+
+describe('🔴 TRIP-1042 · d02 select 지역 빈 상태 프리뷰 키 + 지역 밖 흐린 행 (band d)', () => {
+  it('saved-places-select-region-empty 키가 있고, 렌더하면 빈 블록·지역 밖 머리글이 뜨고 체크·더 담기는 없다', () => {
+    // 준비 — 새 키 엔트리를 찾는다(red-first: preview.tsx 에 추가 전엔 없다).
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'saved-places-select-region-empty'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('d');
+    expect(entry?.label).toBe('d02 · 꼭 갈 곳 고르기 지역 빈 상태');
+
+    // 실행 — 그 엔트리의 render() 를 그린다.
+    render(<>{entry?.render()}</>);
+
+    // 단언 — Figma 4685:2646 얼굴: 목록 머리 블록 + 지역 밖 머리글·흐린 행, 더 담기 행 없음.
+    const block = screen.getByTestId('mustvisit-pick-region-empty');
+    expect(within(block).getByText(/에 담은 곳이 없어요$/)).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('mustvisit-pick-region-outside')
+    ).toBeOnTheScreen();
+    expect(
+      screen.queryAllByTestId(/^mustvisit-pick-row-/).length
+    ).toBeGreaterThan(0);
+    expect(screen.queryAllByTestId(/^mustvisit-pick-check-/)).toHaveLength(0);
+    expect(screen.queryAllByTestId('mustvisit-pick-addmore')).toHaveLength(0);
+
+    // 이웃 앵커 — 지역 밖 키가 딸려 사라지지 않았다.
+    expect(PREVIEW_STATES.map((state) => state.key)).toContain(
+      'saved-places-select-outside'
+    );
+  });
+
+  it('saved-places-select-outside 를 렌더하면 머리글 뒤 행엔 체크가 없고, 앞 행엔 있다', () => {
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'saved-places-select-outside'
+    );
+    render(<>{entry?.render()}</>);
+
+    const order = pickOrder();
+    const headerAt = order.indexOf('mustvisit-pick-region-outside');
+    // 앵커 — 머리글이 있고 앞뒤에 행이 있다(없으면 아래 판정이 공허해진다).
+    expect(headerAt).toBeGreaterThan(0);
+    expect(order.length).toBeGreaterThan(headerAt + 1);
+
+    const poiIdOf = (testID: string) =>
+      testID.replace('mustvisit-pick-row-', '');
+    order.slice(0, headerAt).forEach((testID) => {
+      expect(
+        screen.getByTestId(`mustvisit-pick-check-${poiIdOf(testID)}`)
+      ).toBeOnTheScreen();
+    });
+    order.slice(headerAt + 1).forEach((testID) => {
+      expect(
+        screen.queryByTestId(`mustvisit-pick-check-${poiIdOf(testID)}`)
+      ).toBeNull();
+    });
+  });
+});
+
+// TRIP-1055 — 메뉴 위치(⋯ 아래 오른쪽 맞춤)·딤 실제 덮임·다이얼로그 중앙 정렬은 픽셀이라 jest 사각이다.
+// 6-b 육안 대조 자리가 이 두 키다(Figma 4682:2573 · 4682:3206).
+describe('🔴 TRIP-1055 · h06 작성중 여행 삭제 메뉴·삭제 확인 프리뷰 2키 (band h)', () => {
+  it('h06-my-trips-menu 는 작성중 카드 한 장의 메뉴가 열린 목록을 그린다', () => {
+    // 준비 — 새 키 엔트리를 찾는다(red-first: preview.tsx 에 추가 전엔 없다).
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'h06-my-trips-menu'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('h');
+    expect(entry?.label).toBe('h06 · 내 여행 삭제 메뉴');
+
+    // 실행
+    render(<>{entry?.render()}</>);
+
+    // 단언 — 목록 위에 열린 메뉴가 정확히 하나, 그 안에 '삭제' 항목.
+    expect(screen.getByTestId('itinerary-tab-root')).toBeOnTheScreen();
+    expect(screen.queryAllByTestId(/^my-trip-menu-panel-/)).toHaveLength(1);
+    const items = screen.queryAllByTestId(/^my-trip-menu-delete-/);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toHaveTextContent('삭제');
+  });
+
+  it('h06-my-trips-delete-confirm 은 목록 위에 삭제 확인 다이얼로그를 그리고 실패 문구는 없다', () => {
+    // 준비
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'h06-my-trips-delete-confirm'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('h');
+    expect(entry?.label).toBe('h06 · 내 여행 삭제 확인');
+
+    // 실행
+    render(<>{entry?.render()}</>);
+
+    // 단언 — 배경 목록 + 다이얼로그(제목·취소·삭제), 실패 문구 없음.
+    expect(screen.getByTestId('itinerary-tab-root')).toBeOnTheScreen();
+    const dialog = screen.getByTestId('my-trip-delete-dialog');
+    expect(within(dialog).getByText('이 여행을 삭제할까요?')).toBeOnTheScreen();
+    expect(screen.getByTestId('my-trip-delete-cancel')).toBeOnTheScreen();
+    expect(screen.getByTestId('my-trip-delete-confirm')).toBeOnTheScreen();
+    expect(screen.queryByTestId('my-trip-delete-error')).toBeNull();
+
+    // 이웃 앵커 — 기존 h06 키가 딸려 사라지지 않았다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+    expect(keys).toContain('h06-my-trips-loading');
+    expect(keys).toContain('h06-my-trips-empty');
+  });
+});
+
+// TRIP-1068 · j03 pending 얼굴 프리뷰 — 실기에선 POST 왕복 동안만 보여 이 키가 6-b 육안의 유일한 자리.
+// 무엇을 보장하나: 키가 j 밴드에 있고, 렌더하면 pending 본문이 그려지며 empty·"직접 회고 작성"은 없다.
+describe('🔴 TRIP-1068 · j03 오늘의 회고 pending 프리뷰 키 (band j)', () => {
+  it('reflection-pending 은 pending 본문을 그리고 empty·하단 CTA 는 없다', () => {
+    // 준비
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'reflection-pending'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('j');
+    expect(entry?.label).toBe('j03 · 오늘의 회고 pending');
+
+    // 실행
+    render(<>{entry?.render()}</>);
+
+    // 단언 — pending 본문 + 공통 크롬(헤더 편집), empty·CTA 없음.
+    expect(screen.getByTestId('reflection-daily-pending')).toBeOnTheScreen();
+    expect(screen.getByTestId('reflection-daily-edit')).toBeOnTheScreen();
+    expect(screen.queryByTestId('reflection-daily-empty')).toBeNull();
+    expect(screen.queryByTestId('reflection-daily-compose')).toBeNull();
+
+    // 이웃 앵커 — 기존 j03 키가 딸려 사라지지 않았다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+    expect(keys).toContain('reflection-empty');
+    expect(keys).toContain('reflection-error');
+  });
+});
+
+describe('🔴 TRIP-1082 · g02 거점 편집 얼굴 프리뷰 2키 (band g)', () => {
+  it('trip-new-step2-edit — 편집 얼굴([완료] 하나, 생성 CTA 없음)을 그린다', () => {
+    // 준비 — 새 키 엔트리(red-first: preview.tsx 에 추가 전엔 없다).
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'trip-new-step2-edit'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('g');
+    expect(entry?.label).toBe('g02 · 거점 숙소 edit');
+
+    // 실행
+    render(<>{entry?.render()}</>);
+
+    // 단언 — 위저드 얼굴이 아니라 편집 얼굴이다(6-b 육안 대조 자리).
+    expect(screen.getByTestId('trip-base-edit-done')).toBeOnTheScreen();
+    expect(screen.queryByTestId('trip-base-generate')).toBeNull();
+    // 이웃 앵커 — 기존 위저드 default 키가 딸려 사라지지 않았다.
+    expect(PREVIEW_STATES.map((state) => state.key)).toContain(
+      'trip-new-step2-default'
+    );
+  });
+
+  it('trip-new-step2-edit-regen-dialog — 편집 얼굴 위에 재생성 묻기 다이얼로그가 겹친다', () => {
+    const entry = PREVIEW_STATES.find(
+      (state) => state.key === 'trip-new-step2-edit-regen-dialog'
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.band).toBe('g');
+    expect(entry?.label).toBe('g02 · 거점 숙소 edit-regen-dialog');
+
+    render(<>{entry?.render()}</>);
+
+    expect(screen.getByTestId('trip-base-regen-dialog')).toBeOnTheScreen();
+    expect(screen.getByTestId('trip-base-edit-done')).toBeOnTheScreen();
   });
 });

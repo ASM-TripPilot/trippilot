@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
+import { useRef } from 'react';
 
 import {
   deleteSavedPlacesSavedPlaceId,
@@ -46,6 +47,7 @@ export function useSavedPlaces(deps: { isAuthed: boolean }) {
     query: { enabled: deps.isAuthed },
   });
   const listKey = getGetSavedPlacesQueryKey();
+  const inFlightSaves = useRef(new Map<string, Promise<SavedPlacesOutcome>>());
 
   function isSaved(poiId: string): boolean {
     return (savedListQuery.data ?? []).some(
@@ -76,12 +78,35 @@ export function useSavedPlaces(deps: { isAuthed: boolean }) {
     void queryClient.invalidateQueries({ queryKey: getGetPlacesQueryKey() });
   }
 
+  // 멱등(TRIP-1049, useSavedStays TRIP-1041 동형) — 인증 판정이 먼저다(캐시가 남은 게스트에게
+  // saved가 새지 않게). 같은 장소 담기가 진행 중이면 새 요청 없이 그 결과를 기다린다. 진행 중이
+  // 아니면 렌더 사본(isSaved)이 아니라 지금 캐시를 읽고, 낙관 행도 담김으로 친다.
   async function save(place: Place): Promise<SavedPlacesOutcome> {
     if (!deps.isAuthed) {
       return { kind: 'failed', reason: 'unauthenticated' };
     }
 
+    const inFlight = inFlightSaves.current.get(place.poiId);
+    if (inFlight) {
+      return inFlight;
+    }
+
     const previous = queryClient.getQueryData<SavedPlace[]>(listKey);
+    if (previous?.some((entry) => entry.place.poiId === place.poiId)) {
+      return { kind: 'saved' };
+    }
+
+    const request = postSave(place, previous).finally(() => {
+      inFlightSaves.current.delete(place.poiId);
+    });
+    inFlightSaves.current.set(place.poiId, request);
+    return request;
+  }
+
+  async function postSave(
+    place: Place,
+    previous: SavedPlace[] | undefined
+  ): Promise<SavedPlacesOutcome> {
     queryClient.setQueryData<SavedPlace[]>(listKey, [
       ...(previous ?? []),
       {

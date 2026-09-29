@@ -35,7 +35,6 @@ import {
   HeartOutlineGlyph,
   InfoGlyph,
   MapPinGlyph,
-  PlusGlyph,
   ShareGlyph,
 } from './StayGlyphs';
 
@@ -58,12 +57,8 @@ export interface StayDetailScreenProps {
   onToggleSave: () => void;
   /** 외부에서 예약하기(AC-8) — 제휴 시트 열기는 페이지 몫. */
   onPressBook: () => void;
-  /** 일정에 추가(AC-10) — 저장 + 거점 편입 안내는 페이지 몫. */
-  onPressAddToTrip: () => void;
   /** hero 뒤로 오버레이. 목적지는 페이지가 정한다(화면은 라우터를 모른다). 미지정=정직한 스텁. */
   onPressBack?: () => void;
-  /** AC-10 안내 표시 — 저장 성공 후 페이지가 true로 올린다. 미지정=미표시. */
-  addedNotice?: boolean;
   /** 전화 줄 press — `tel:` 열기는 페이지 몫. 미지정=정직한 스텁. */
   onPressPhone?: () => void;
   /** error 얼굴 "다시 시도" — 재조회는 페이지 몫. */
@@ -163,9 +158,7 @@ export function StayDetailScreen({
   pending = false,
   onToggleSave,
   onPressBook,
-  onPressAddToTrip,
   onPressBack,
-  addedNotice = false,
   onPressPhone,
   onRetry,
   onPressShare,
@@ -336,7 +329,9 @@ export function StayDetailScreen({
             >
               <MapView
                 center={{ lat: detail.lat, lng: detail.lng }}
-                pins={[{ number: 1, lat: detail.lat, lng: detail.lng }]}
+                pins={[
+                  { number: 1, lat: detail.lat, lng: detail.lng, kind: 'stay' },
+                ]}
                 viewOnly
               />
             </View>
@@ -378,7 +373,7 @@ export function StayDetailScreen({
 
           <Divider />
 
-          {/* 하단 액션 — 제휴 고지 + CTA 2종 */}
+          {/* 하단 액션 — 제휴 고지 + 예약 CTA */}
           <View className="gap-md">
             <View
               testID="stay-detail-affiliate-notice"
@@ -401,35 +396,6 @@ export function StayDetailScreen({
                 외부에서 예약하기
               </Text>
             </Pressable>
-
-            <Pressable
-              testID="stay-detail-addtotrip"
-              accessibilityRole="button"
-              onPress={onPressAddToTrip}
-              className="h-[52px] flex-row items-center justify-center gap-sm rounded-button border border-hairline-strong bg-canvas"
-            >
-              <PlusGlyph
-                testID="stay-detail-addtotrip-icon"
-                size={19}
-                tone="ink"
-              />
-              <Text className="font-noto-bold text-card-title font-bold text-ink">
-                일정에 추가
-              </Text>
-            </Pressable>
-
-            {/* 담기 성공 안내(AC-10) — 페이지가 저장 성공 후 addedNotice를 올린다. */}
-            {addedNotice ? (
-              <View className="flex-row items-center gap-xs rounded-card bg-surface-soft px-lg py-md">
-                <InfoGlyph size={15} />
-                <Text
-                  testID="stay-detail-add-notice"
-                  className="flex-1 font-noto text-label text-muted"
-                >
-                  담은 숙소는 여행 만들 때 거점으로 추가할 수 있어요
-                </Text>
-              </View>
-            ) : null}
           </View>
         </View>
       </ScrollView>

@@ -1,5 +1,6 @@
 import type { TripSummaryStats } from '@/shared/api/generated/schemas';
 
+import { formatShareCardStats } from './shareCard';
 import { summaryStats } from './summaryStats';
 
 /**
@@ -68,5 +69,52 @@ describe('AC-2 · summaryStats — 거리 셀은 hasLocationData 로 갈린다',
       distanceText: '38km',
       totalPhotos: 24,
     });
+  });
+});
+
+/**
+ * TRIP-1086 · 거리 표기 — j04 통계·j06 공유 카드가 같은 `distanceText` 를 쓴다.
+ * 날값 double('1.9294…km')이 아니라 0.1 단위('1.9km'). 대시 판정(hasLocationData)이 반올림보다 먼저다.
+ */
+describe('🔴 TRIP-1086 AC-2·AC-6 · distanceText 는 0.1 단위 표기', () => {
+  function located(
+    totalDistanceKm: number,
+    hasLocationData = true
+  ): TripSummaryStats {
+    return {
+      totalVisits: 3,
+      totalDistanceKm,
+      distanceSource: 'VISIT_LINE',
+      totalPhotos: 5,
+      hasLocationData,
+    };
+  }
+
+  it('1.9294588176597474km → "1.9km"', () => {
+    expect(summaryStats(located(1.9294588176597474)).distanceText).toBe(
+      '1.9km'
+    );
+  });
+
+  it('50m 미만(0.04km)이고 위치가 있으면 "0km" — 대시가 아니다(01b 판단 1)', () => {
+    expect(summaryStats(located(0.04)).distanceText).toBe('0km');
+  });
+
+  it('hasLocationData:false 면 거리 값이 있어도 "—"(반올림보다 대시 판정이 먼저)', () => {
+    expect(summaryStats(located(1.93, false)).distanceText).toBe('—');
+  });
+
+  it('j06 공유 카드 문구에도 반올림된 거리가 흘러간다(두 포맷)', () => {
+    const cells = summaryStats(located(1.9294588176597474));
+
+    expect(formatShareCardStats(cells, 'default')).toBe(
+      '3곳 · 1.9km · 사진 5장'
+    );
+    expect(
+      formatShareCardStats(
+        summaryStats({ ...located(1.9294588176597474), totalPhotos: 0 }),
+        'no-photo'
+      )
+    ).toBe('방문 3 · 이동 1.9km · 사진 0');
   });
 });

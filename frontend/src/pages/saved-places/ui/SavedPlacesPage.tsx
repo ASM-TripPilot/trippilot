@@ -23,14 +23,26 @@
  * 배너는 타이머 없이 다음 조작에서 지운다(01b Seed Q9) — 매 조작 시작에서 `removeError`를 비운다.
  */
 import type { ReactElement } from 'react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 
 import type { SavedPlace } from '@/shared/api/generated/schemas';
+import {
+  getGetTripsTripIdMustVisitsQueryKey,
+  postTripsTripIdMustVisits,
+  useGetTripsTripId,
+  useGetTripsTripIdMustVisits,
+} from '@/shared/api/generated/trips/trips';
+import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
 import { getAccessToken } from '@/shared/api/tokenManager';
 
 import { filterSavedPlacesByTripRegions } from '@/features/explore/model/filterSavedPlacesByTripRegions';
-import { resolvePlaceListState } from '@/features/explore/model/placeListState';
+import {
+  resolvePlaceListState,
+  type PlaceListState,
+} from '@/features/explore/model/placeListState';
+import { useRegions } from '@/features/explore/model/regions';
 import {
   REMOVE_FAILURE_NOTICE,
   SAVE_FAILURE_NOTICE,
@@ -38,9 +50,19 @@ import {
 } from '@/features/explore/model/placeSaveGuard';
 import { orderSavedPlaces } from '@/features/explore/model/savedPlaceList';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { wizardOriginParams } from '@/features/explore/model/wizardOrigin';
 import { MustVisitPickScreen } from '@/features/explore/ui/MustVisitPickScreen';
 import { SavedPlaceListScreen } from '@/features/explore/ui/SavedPlaceListScreen';
-import { seedMustVisits } from '@/features/trip/model/mustVisitSeed';
+import { buildAnytimeMustVisitRequest } from '@/features/itinerary/model/mustVisitTimeForm';
+import {
+  mustVisitFailureNotice,
+  seedMustVisits,
+} from '@/features/trip/model/mustVisitSeed';
+import {
+  placeLocationLabel,
+  regionCodeInTrip,
+  sidoKey,
+} from '@/features/trip/model/regionMatch';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 
 /** 실패 시 재시도가 다시 밟아야 할 마지막 조작 — 해제냐 되돌리기냐를 함께 기억한다. */
@@ -71,6 +93,241 @@ function buildDisplayList(
   return orderSavedPlaces([...overridden, ...orphanedReleased]);
 }
 
+/**
+ * select 모드(TRIP-706) — 담기/해제 대신 '꼭 갈 곳 고르기'. 화면은 별 파일(props-only)이고, 이
+ * 하위 컴포넌트가 선택 집합을 소유해 완료 시 **선택분만** 넘긴다(D2 · AC-1 TRIP-491 재현 봉합).
+ * select-empty 얼굴은 진짜로 담은 곳이 0일 때만 뜬다(save 모드의 RegionEmptyBlock 은 select 에 없다).
+ *
+ * 지역 판정·표기는 여기 한 벌이고, **여행 지역·초기 선택·완료는 감싸개가 준다**(TRIP-1093 S1-A) —
+ * 위저드 모드(`WizardMustVisitPick`, 드래프트)와 여행 모드(`TripMustVisitPick`, 서버). 판정을 복제하면
+ * 한쪽만 고쳐지는 드리프트가 생긴다.
+ */
+function MustVisitPickSection({
+  state,
+  orderedList,
+  onRetry,
+  destinations,
+  initialSelectedPoiIds,
+  lockedPoiIds = [],
+  completeError,
+  onToggle,
+  onComplete,
+}: {
+  state: PlaceListState;
+  orderedList: SavedPlace[];
+  onRetry: () => void;
+  /** 여행 지역 — 판정 키는 `regionCode`, 표시·d04 파라미터는 `region` 이름. */
+  destinations: readonly { region: string; regionCode?: string | null }[];
+  /** 마운트 때 한 번 읽는 초기 선택. */
+  initialSelectedPoiIds: () => string[];
+  /** 이미 등록돼 체크된 채 잠긴 곳(여행 모드). */
+  lockedPoiIds?: string[];
+  completeError?: string | null;
+  /** 체크 토글마다 — 여행 모드가 실패 배너를 걷는다(타이머 없이 다음 조작에서, 01b Q3). */
+  onToggle?: () => void;
+  /** 고른 poiId 전부와 고를 수 있는 행(지역 안)을 넘긴다 — 무엇을 보낼지는 감싸개가 정한다. */
+  onComplete: (selectedPoiIds: string[], insideList: SavedPlace[]) => void;
+}): ReactElement {
+  const [selectedPoiIds, setSelectedPoiIds] = useState<string[]>(
+    initialSelectedPoiIds
+  );
+  // 행 위치의 시도 짧은 이름은 서버 카탈로그에서 얻는다(상수표 없음, TRIP-445).
+  const catalog = useRegions().data;
+
+  // 지역 판정은 코드 접두사(TRIP-1042 · BR-U1-58 · INV-U1-21). 밖은 숨기지 않고 "이 여행 지역 밖 N곳"
+  // 머리글 아래 흐리게 그리되 고를 수 없다(INV-4). 지역 안이 0건이어도 전체로 되돌리지 않는다.
+  const destinationCodes = destinations.map((d) => d.regionCode);
+  const insideList = orderedList.filter((saved) =>
+    regionCodeInTrip(saved.place.regionCode, destinationCodes)
+  );
+  const outsideRegionPlaces = orderedList.filter(
+    (saved) => !insideList.includes(saved)
+  );
+  // 같은 지역을 두 번 담아도(스토어 허용) 한 번만 — 첫 등장 순서 유지(03b 참고-2).
+  const destinationNames = [...new Set(destinations.map((d) => d.region))];
+  const regionEmptyLabel =
+    insideList.length === 0 && outsideRegionPlaces.length > 0
+      ? destinationNames.map(sidoKey).join('·')
+      : undefined;
+  const locationLabels = Object.fromEntries(
+    orderedList.flatMap((saved) => {
+      const label = placeLocationLabel(saved.place, catalog ?? []);
+      return label ? [[saved.place.poiId, label]] : [];
+    })
+  );
+  // 선택 수·완료 활성·시드는 **고를 수 있는 행** 안의 선택만 센다 — 안 보이는 선택이나 밖 행의 선택이
+  // "N곳 선택됨"에 남으면 시드와 어긋난다(TRIP-982 A8 · TRIP-1042 AC-11).
+  // 잠긴(이미 등록) 곳은 채워진 체크로 보이므로 선택 수에 함께 센다(보이는 것과 숫자가 같게, 01b Q2).
+  const visibleSelectedPoiIds = [
+    ...new Set([...selectedPoiIds, ...lockedPoiIds]),
+  ].filter((id) => insideList.some((saved) => saved.place.poiId === id));
+  // d04 로 가는 세 버튼은 여행 지역 **이름**을 싣는다(TRIP-1042 AC-7 — d04 는 이름을 받는다). 목적지가
+  // 없으면 region 키를 싣지 않는다. 위저드 출처는 d04 가 ＋(새 여행 = reset)를 숨기는 신호다(TRIP-1026).
+  const exploreHref = {
+    pathname: '/explore/places',
+    params:
+      destinationNames.length > 0
+        ? { region: destinationNames, ...wizardOriginParams() }
+        : wizardOriginParams(),
+  } as const;
+  return (
+    <MustVisitPickScreen
+      state={state}
+      savedPlaces={insideList}
+      outsideRegionPlaces={outsideRegionPlaces}
+      regionEmptyLabel={regionEmptyLabel}
+      locationLabels={locationLabels}
+      selectedPoiIds={visibleSelectedPoiIds}
+      lockedPoiIds={lockedPoiIds}
+      completeError={completeError}
+      onToggleSelect={(poiId) => {
+        onToggle?.();
+        setSelectedPoiIds((prev) =>
+          prev.includes(poiId)
+            ? prev.filter((id) => id !== poiId)
+            : [...prev, poiId]
+        );
+      }}
+      onComplete={() => onComplete(selectedPoiIds, insideList)}
+      onPressAddMore={() => router.push(exploreHref)}
+      onRetry={onRetry}
+      onPressBrowse={() => router.push(exploreHref)}
+      onBack={() => router.back()}
+    />
+  );
+}
+
+type PickWrapperProps = {
+  state: PlaceListState;
+  orderedList: SavedPlace[];
+  onRetry: () => void;
+};
+
+/** 위저드 모드 — 여행 지역·초기 선택은 위저드 드래프트, 완료는 드래프트 시드 후 1/4 로. */
+function WizardMustVisitPick(props: PickWrapperProps): ReactElement {
+  // 여행 지역은 위저드 스토어 목적지가 진다(TRIP-1042) — 판정 키인 코드는 거기에만 있다(URL `region` 은 이름뿐).
+  const destinations = useTripWizardStore((s) => s.destinations);
+  return (
+    <MustVisitPickSection
+      {...props}
+      destinations={destinations}
+      // 초기값은 위저드에 이미 있는 꼭 갈 곳이다(TRIP-1012 #035 — '더 담기'로 오면 체크된 채 보인다).
+      initialSelectedPoiIds={() =>
+        useTripWizardStore.getState().mustVisits.map((m) => m.sourcePoiId)
+      }
+      onComplete={(selectedPoiIds, insideList) => {
+        // 고를 수 있는 행 중 고른 것만 시드로 옮긴다(전부 아님 — TRIP-491 급소, 밖 행 제외 — AC-10).
+        const chosen = insideList.filter((saved) =>
+          selectedPoiIds.includes(saved.place.poiId)
+        );
+        // 고를 수 있는 행이 없던 위저드 항목(담기를 푼 곳 · 지역 밖 행)은 뺀 것으로 치지 않고 원래 시드
+        // 그대로 남긴다(TRIP-1012 Q1 · BR-U1-04 · TRIP-1042 Q2 — 조용히 빼면 INV-4). 단 사용자가 체크를
+        // 푼 항목은 그 뒤 목록에서 사라져도 되살리지 않는다(03b 경고-1). 완료는 여전히 교체다.
+        const store = useTripWizardStore.getState();
+        const kept = store.mustVisits.filter(
+          (m) =>
+            selectedPoiIds.includes(m.sourcePoiId) &&
+            !insideList.some((saved) => saved.place.poiId === m.sourcePoiId)
+        );
+        store.seedMustVisitsFromD02([...seedMustVisits(chosen), ...kept]);
+        router.push('/trips/new/step1');
+      }}
+    />
+  );
+}
+
+/**
+ * 여행 모드(TRIP-1093 결정 3) — h02 「꼭 갈 곳 추가」로 들어와 이미 만든 여행에 더한다. 여행 지역·이미
+ * 등록된 곳은 서버에서 받고, 위저드 드래프트는 읽지도 쓰지도 않는다(다른 여행의 드래프트가 남아 있을 수
+ * 있다). 완료 = 새로 고른 곳마다 ANYTIME POST(일괄 API 없음) → h02 가 보는 목록 캐시 무효화 → 뒤로.
+ */
+function TripMustVisitPick({
+  tripId,
+  state,
+  orderedList,
+  onRetry,
+}: PickWrapperProps & { tripId: string }): ReactElement {
+  const queryClient = useQueryClient();
+  const trip = useGetTripsTripId(tripId);
+  const registered = useGetTripsTripIdMustVisits(tripId);
+  const [completeError, setCompleteError] = useState<string | null>(null);
+  // 요청 중 잠금 — 응답 전 연타가 POST 를 겹쳐 내지 않게(AC-12).
+  const submittingRef = useRef(false);
+
+  const lockedPoiIds = (registered.data ?? []).map((m) => m.sourcePoiId);
+  // 여행·등록 목록이 오기 전엔 결과를 그리지 않는다 — 목적지가 빈 채 판정하면 "전부 안"으로
+  // fail-open 해 지역 밖이 잠깐 골라진다(AC-13 · 01 맹점 ③).
+  const tripState: PlaceListState =
+    trip.isError || registered.isError
+      ? { kind: 'error' }
+      : trip.isPending || registered.isPending
+        ? { kind: 'loading' }
+        : state;
+
+  async function complete(
+    selectedPoiIds: string[],
+    insideList: SavedPlace[]
+  ): Promise<void> {
+    if (submittingRef.current) return;
+    const poiIds = insideList
+      .map((saved) => saved.place.poiId)
+      .filter(
+        (poiId) =>
+          selectedPoiIds.includes(poiId) && !lockedPoiIds.includes(poiId)
+      );
+    if (poiIds.length === 0) return;
+    submittingRef.current = true;
+    setCompleteError(null);
+
+    // allSettled — "N곳 중 M곳 실패"를 세야 해서 all(첫 실패에 던짐)로는 안 된다(TripNewStep1Page 선례).
+    const results = await Promise.allSettled(
+      poiIds.map((poiId) =>
+        postTripsTripIdMustVisits(
+          tripId,
+          buildAnytimeMustVisitRequest({ poiId })
+        )
+      )
+    );
+    // 409 = 이미 그 여행에 있다 → 목표 상태와 같으니 성공(BR-U1-50).
+    const failed = results.filter(
+      (result) =>
+        result.status === 'rejected' && !isAlreadyRegistered(result.reason)
+    ).length;
+    // 성공분이 있든 없든 다시 읽는다 — 실패여도 성공한 곳은 잠겨 재시도가 실패분만 보낸다(AC-11).
+    void queryClient.invalidateQueries({
+      queryKey: getGetTripsTripIdMustVisitsQueryKey(tripId),
+    });
+    if (failed > 0) {
+      submittingRef.current = false;
+      setCompleteError(mustVisitFailureNotice(poiIds.length, failed));
+      return;
+    }
+    // 성공이면 잠금을 풀지 않는다 — 재조회를 기다리지 않아 잠금 목록이 아직 옛 값이라, 화면이
+    // 사라지기 전 한 번 더 누르면 같은 곳을 또 보내고 back() 이 두 번 불린다(AC-12).
+    router.back();
+  }
+
+  return (
+    <MustVisitPickSection
+      state={tripState}
+      orderedList={orderedList}
+      onRetry={() => {
+        onRetry();
+        if (trip.isError) void trip.refetch();
+        if (registered.isError) void registered.refetch();
+      }}
+      destinations={trip.data?.destinations ?? []}
+      initialSelectedPoiIds={() => []}
+      lockedPoiIds={lockedPoiIds}
+      completeError={completeError}
+      onToggle={() => setCompleteError(null)}
+      onComplete={(selectedPoiIds, insideList) =>
+        void complete(selectedPoiIds, insideList)
+      }
+    />
+  );
+}
+
 export function SavedPlacesPage(): ReactElement {
   const [removeError, setRemoveError] = useState<PlaceSaveNotice | null>(null);
   const [lastAttempted, setLastAttempted] = useState<LastAttempt | null>(null);
@@ -83,19 +340,15 @@ export function SavedPlacesPage(): ReactElement {
   const [snapshots, setSnapshots] = useState<Map<string, SavedPlace>>(
     () => new Map()
   );
-  // select 모드(TRIP-706)에서 고른 poiId 들 — 이 화면(페이지)이 선택 집합을 소유하고(D2), 완료 시
-  // 선택분만 시드한다(TRIP-491 재현 봉합 — 전에는 그려진 전부를 시드했다). save 모드에선 미사용.
-  // 초기값은 위저드에 이미 있는 꼭 갈 곳이다(TRIP-1012 #035 — '더 담기'로 오면 체크된 채 보인다).
-  const [selectedPoiIds, setSelectedPoiIds] = useState<string[]>(() =>
-    useTripWizardStore.getState().mustVisits.map((m) => m.sourcePoiId)
-  );
 
   // 여행 지역 필터(TRIP-689) — g01·꼭 갈 곳의 '더 담기'가 d02로 올 때 실어 보낸 region.
   // expo-router는 1원소 배열 파라미터를 문자열로 되돌릴 수 있어(단일 목적지 여행) 배열로 정규화한다.
   // mode='select'(TRIP-706)면 담기/해제가 아니라 '꼭 갈 곳 고르기' 화면으로 갈린다(AC-3).
-  const { mode, region } = useLocalSearchParams<{
+  // tripId 가 함께 오면 select 는 여행 모드다(TRIP-1093 — h02 「꼭 갈 곳 추가」).
+  const { mode, region, tripId } = useLocalSearchParams<{
     mode?: string;
     region?: string | string[];
+    tripId?: string;
   }>();
   const regions = Array.isArray(region) ? region : region ? [region] : [];
 
@@ -104,22 +357,20 @@ export function SavedPlacesPage(): ReactElement {
     useSavedPlaces({ isAuthed });
 
   const orderedList = buildDisplayList(savedPlaces, releasedPoiIds, snapshots);
-  // region 파라미터가 있으면 여행 지역 안 저장만 남긴다(fail-open은 순수함수가 진다). 없으면 전체.
-  const filteredList =
+  // save 모드 — region 파라미터가 있으면 여행 지역 안 저장만 남긴다(fail-open은 순수함수가 진다). 없으면 전체.
+  const displayList =
     regions.length > 0
       ? filterSavedPlacesByTripRegions(orderedList, regions)
       : orderedList;
   // 저장은 있는데 지역 필터로 0건이면 "담은 곳 없음"이 아니라 구분 안내를 그린다(AC-5).
   const regionFilterEmpty =
-    regions.length > 0 && orderedList.length > 0 && filteredList.length === 0;
-  // select 모드는 지역 필터 0건이면 필터를 풀고 전체를 보인다(TRIP-982 D6 — 폴백 안내와 함께).
-  // 화면 목록과 완료 시드가 같은 `displayList` 를 봐야 체크한 곳이 실제로 심긴다.
-  const regionFallback = mode === 'select' && regionFilterEmpty;
-  const displayList = regionFallback ? orderedList : filteredList;
+    regions.length > 0 && orderedList.length > 0 && displayList.length === 0;
+  // select 모드는 지역 안·밖을 모두 그리므로(TRIP-1042) 얼굴 판정은 담은 곳 전체 개수로 한다 — 지역 안이
+  // 0건이어도 results 얼굴 안에 region-empty 블록이 뜬다(진짜 0곳 얼굴은 담은 곳이 0일 때만).
   const listState = resolvePlaceListState({
     isPending,
     isError,
-    itemCount: displayList.length,
+    itemCount: mode === 'select' ? orderedList.length : displayList.length,
     hasQuery: false,
     hasCategory: false,
   });
@@ -186,57 +437,21 @@ export function SavedPlacesPage(): ReactElement {
     }
   }
 
-  // select 모드(TRIP-706) — 담기/해제 대신 '꼭 갈 곳 고르기'. 화면은 별 파일(props-only)이고,
-  // 페이지가 선택 집합을 소유해 완료 시 **선택분만** 시드한다(D2 · AC-1 TRIP-491 재현 봉합).
-  // region 필터로 0건이면 필터를 풀고 전체 + 폴백 안내를 그린다(TRIP-982 D6 — 위 `regionFallback`).
-  // select-empty 얼굴은 진짜로 담은 곳이 0일 때만 뜬다(save 모드의 RegionEmptyBlock 은 select 에 없다).
+  // select 모드(TRIP-706) — 담기/해제 대신 '꼭 갈 곳 고르기'. 카탈로그 구독은 그 하위 컴포넌트에만
+  // 둔다 — save 모드에서 `GET /regions` 가 나가지 않게(03b 참고-5).
   if (mode === 'select') {
-    // 지역 밖도 숨기지 않는다(TRIP-1012 A4 · INV-4) — 안(`displayList`) 뒤에 "이 여행 지역 밖 N곳"
-    // 머리글과 함께 이어 그린다. 폴백이면 `displayList`가 이미 전체라 밖은 빈다(01b Q2).
-    const outsideRegionPlaces = orderedList.filter(
-      (saved) => !displayList.includes(saved)
-    );
-    const visibleList = [...displayList, ...outsideRegionPlaces];
-    // 선택 수·완료 활성·시드는 보이는 목록 안의 선택만 센다 — 목록이 줄면 안 보이는 선택이
-    // "N곳 선택됨"에 남아 시드 0과 어긋난다(TRIP-982 A8).
-    const visibleSelectedPoiIds = selectedPoiIds.filter((id) =>
-      visibleList.some((saved) => saved.place.poiId === id)
-    );
-    return (
-      <MustVisitPickScreen
+    return tripId ? (
+      <TripMustVisitPick
+        tripId={tripId}
         state={listState}
-        savedPlaces={displayList}
-        outsideRegionPlaces={outsideRegionPlaces}
-        regionFallback={regionFallback}
-        selectedPoiIds={visibleSelectedPoiIds}
-        onToggleSelect={(poiId) =>
-          setSelectedPoiIds((prev) =>
-            prev.includes(poiId)
-              ? prev.filter((id) => id !== poiId)
-              : [...prev, poiId]
-          )
-        }
-        onComplete={() => {
-          // 지금 화면에 그려진 목록 중 고른 것만 시드로 옮긴다(전부 아님 — TRIP-491 급소).
-          const chosen = visibleList.filter((saved) =>
-            selectedPoiIds.includes(saved.place.poiId)
-          );
-          // 행이 없어 풀 수도 없던 위저드 항목(담기를 푼 곳)은 뺀 것으로 치지 않고 원래 시드
-          // 그대로 남긴다(TRIP-1012 Q1 · BR-U1-04). 단 사용자가 체크를 푼 항목은 그 뒤 목록에서
-          // 사라져도 되살리지 않는다(03b 경고-1). 완료는 여전히 교체다.
-          const store = useTripWizardStore.getState();
-          const kept = store.mustVisits.filter(
-            (m) =>
-              selectedPoiIds.includes(m.sourcePoiId) &&
-              !visibleList.some((saved) => saved.place.poiId === m.sourcePoiId)
-          );
-          store.seedMustVisitsFromD02([...seedMustVisits(chosen), ...kept]);
-          router.push('/trips/new/step1');
-        }}
-        onPressAddMore={() => router.push('/explore/places')}
+        orderedList={orderedList}
         onRetry={handleRetry}
-        onPressBrowse={() => router.push('/explore/places')}
-        onBack={() => router.back()}
+      />
+    ) : (
+      <WizardMustVisitPick
+        state={listState}
+        orderedList={orderedList}
+        onRetry={handleRetry}
       />
     );
   }

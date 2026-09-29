@@ -26,6 +26,7 @@ import type {
 
 import type {
   EditSavedStayRequest,
+  ErrorResponse,
   RegisterSavedStayRequest,
   SavedStay,
   ValidationErrorResponse,
@@ -68,7 +69,7 @@ export const postSavedStays = (
 };
 
 export const getPostSavedStaysMutationOptions = <
-  TError = ValidationErrorResponse,
+  TError = ValidationErrorResponse | ErrorResponse,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -108,13 +109,14 @@ export type PostSavedStaysMutationResult = NonNullable<
   Awaited<ReturnType<typeof postSavedStays>>
 >;
 export type PostSavedStaysMutationBody = RegisterSavedStayRequest;
-export type PostSavedStaysMutationError = ValidationErrorResponse;
+export type PostSavedStaysMutationError =
+  ValidationErrorResponse | ErrorResponse;
 
 /**
  * @summary 숙소 등록(3경로 · 좌표/날짜 선택)
  */
 export const usePostSavedStays = <
-  TError = ValidationErrorResponse,
+  TError = ValidationErrorResponse | ErrorResponse,
   TContext = unknown,
 >(
   options?: {

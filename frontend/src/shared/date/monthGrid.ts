@@ -1,7 +1,7 @@
 /**
  * TRIP-575 · 월 캘린더 순수 계산(도메인 무지). 커스텀 월 그리드를 그리는 네 계산(월 일수 · 1일
  * 요일 · 월 이동 · 범위 판정)과 주 단위(7의 배수) 셀 배열 조립을 담는다. j07 기록 캘린더(record),
- * 숙소 날짜 시트(stay), 여행 기간 시트(trip)가 쓴다.
+ * 여행 기간 시트(trip)가 쓴다(숙소 날짜 시트는 TRIP-1052에서 제거).
  *
  * TRIP-575 때 이 수학이 `features/stay/model/stayDates.ts`·`features/trip/model/tripDatePicker.ts`에
  * 두 벌 있었고, record 가 그 둘을 직접 import 하면 경계(recordsStructure G2) 위반이라 여기 신설했다.

@@ -180,6 +180,44 @@ describe('AC-3 · ★ 유형 칩 단일 선택 — 선택 칩만 활성 표식(�
   });
 });
 
+// TRIP-1020 (A) #033 — 색·활성 마커는 스크린리더가 못 읽는다. 선택은 accessibilityState 로도 알린다.
+// 기대값은 COMPANION_OPTIONS 를 import 하지 않고 리터럴로 둔다(상수가 뒤바뀌면 같이 틀리지 않게).
+const CHIP_CODE_BY_TYPE: [CompanionType, string][] = [
+  ['혼자', 'alone'],
+  ['친구', 'friend'],
+  ['연인', 'partner'],
+  ['가족', 'family'],
+];
+
+describe('TRIP-1020 AC-A1·A2 · 선택 칩만 accessibilityState.selected', () => {
+  it.each(CHIP_CODE_BY_TYPE)(
+    '%s 선택이면 %s 칩만 selected, 나머지 3칩은 아니다',
+    (type, code) => {
+      renderSheet({ companionType: type });
+
+      expect(
+        screen.getByTestId(`trip-wizard-companion-chip-${code}`)
+      ).toBeSelected();
+      for (const [, other] of CHIP_CODE_BY_TYPE) {
+        if (other === code) continue;
+        expect(
+          screen.getByTestId(`trip-wizard-companion-chip-${other}`)
+        ).not.toBeSelected();
+      }
+    }
+  );
+
+  it('미선택(undefined)이면 4칩 모두 selected 가 아니다', () => {
+    renderSheet({ companionType: undefined });
+
+    for (const [, code] of CHIP_CODE_BY_TYPE) {
+      expect(
+        screen.getByTestId(`trip-wizard-companion-chip-${code}`)
+      ).not.toBeSelected();
+    }
+  });
+});
+
 describe('AC-4 · 적용 → onApply 만 (편집 콜백 없음)', () => {
   it('"적용" press 가 onApply 를 한 번 부르고 편집 콜백은 안 부른다 (커밋은 배선 몫)', () => {
     const spies = renderSheet({ party: 2, companionType: '친구' });

@@ -10,6 +10,7 @@ import type {
   ItineraryDaysItemSlotsItem,
 } from '@/shared/api/generated/schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { resetPressGuard } from '@/shared/press/pressGuard';
 
 import { ItineraryPlanPage } from './ItineraryPlanPage';
 
@@ -18,8 +19,9 @@ import { ItineraryPlanPage } from './ItineraryPlanPage';
  * (01b D1 계약 플립 · AC-1~6 · INV-3). 799(h14 PLANNED 셸)의 CONFIRMED 짝.
  *
  * 무엇을 보장하나:
- *  - 🔴 CONFIRMED 면 `ItineraryPlanPage` 가 옛 `TimelineScreen` 대신 공용 지도+시트 셸을 조립하고,
- *    지도 위 성공 배너(`itinerary-confirmed-banner`)를 얹는다. 옛 CONFIRMED 앵커는 사라진다(AC-1).
+ *  - 🔴 CONFIRMED 면 `ItineraryPlanPage` 가 옛 `TimelineScreen` 대신 공용 지도+시트 셸을 조립한다.
+ *    옛 CONFIRMED 앵커는 사라진다(AC-1). TRIP-1047 로 지도 위 상주 성공 배너(`itinerary-confirmed-banner`)
+ *    는 없어졌다 — 확정 알림은 확정한 순간의 토스트 1회로 옮겼다(그 심판은 `ItineraryPlanPage.integration`).
  *  - 🔴 하단 CTA — `일정 수정`→h12 은 항상, `공유하기`→j06 은 공유 카드 캡처 개통(armed) 시에만(TRIP-939
  *    Q2 — 미장전이면 1버튼). 완전일치 push, 활성(AC-2).
  *  - 🔴 헤더 meta 가 "확정됨 · " 접두를 단다(km null 이면 "확정됨 · N곳", AC-3).
@@ -32,8 +34,8 @@ import { ItineraryPlanPage } from './ItineraryPlanPage';
  * 그 판정이 테스트의 *가정*이 된다 — 실 HTTP 로 강제해 판정 회귀를 가시화한다(기존 5파일 관례).
  *
  * ⚠️ 함정(02a §4):
- *  - ★2 CONFIRMED 셸도 `map-sheet-shell-root` 를 쓴다 → 전이 착지 앵커는 `itinerary-confirmed-banner`
- *    (TRIP-939: 공유하기가 개통 전엔 숨으므로 CONFIRMED 전용 배너로 옮김).
+ *  - ★2 CONFIRMED 셸도 `map-sheet-shell-root` 를 쓴다 → 전이 착지 앵커는 헤더 meta 의 "확정됨 · " 접두
+ *    (TRIP-1047: CONFIRMED 전용 배너가 사라져 옮김. 토스트는 사라지고 재진입엔 없어 앵커 불가).
  *  - ★5 warning 트리거는 boolean `openingHoursKnown` 하나, 문구는 상수 `휴관일 확인`(요일 발명 금지).
  *  - ★12 "1일차"는 day-chip·헤더 둘 다 → getByText 금지, testID 로만 스코프.
  *  - ★13 meta 카운트는 선택일 **비고정만**(확정됨 접두). totalPlaces·coPickProgress 재사용 시 red.
@@ -69,12 +71,13 @@ jest.mock('expo-router', () => ({
   }),
 }));
 
-// TRIP-939 AC-2b(Q2) — [공유하기]는 공유 카드 캡처가 장전(`captureShareImage().armed`)됐을 때만
-// 보인다(미장전이면 j06 이 보기만 하는 막다른 화면). 홀더로 armed 를 갈아끼운다(기본 false).
+// TRIP-939 AC-2b(Q2) — [공유하기]는 공유 카드 캡처가 장전됐을 때만 보인다(미장전이면 j06 이 막다른
+// 화면). TRIP-1071: 판정은 `isShareCaptureArmed()`(네이티브 캡처 모듈 3종 실재) 하나 — 결정 4(c)로
+// 요약 ready 와 무관하다. jest-expo 는 세 모듈을 "있는 척"하므로 false 짝은 이 홀더로만 만든다(기본 false).
 const mockShareArmed = { value: false };
-jest.mock('@/features/reflection/model/shareCard', () => ({
-  ...jest.requireActual('@/features/reflection/model/shareCard'),
-  captureShareImage: () => ({ armed: mockShareArmed.value }),
+jest.mock('@/features/reflection/model/shareCapture', () => ({
+  ...jest.requireActual('@/features/reflection/model/shareCapture'),
+  isShareCaptureArmed: () => mockShareArmed.value,
 }));
 
 const BASE = 'http://localhost:8080/api/v1';
@@ -217,6 +220,7 @@ function renderedText(): string {
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 
 beforeEach(() => {
+  resetPressGuard(); // TRIP-1013 — 연타 가드 창(모듈 전역)이 앞 테스트에서 새지 않게 닫는다.
   mockShareArmed.value = false;
   mockPush.mockClear();
   mockBack.mockClear();
@@ -253,16 +257,18 @@ function useItinerary(response: () => Response) {
   );
 }
 
-describe('🔴 C1 · AC-1 — CONFIRMED 면 지도+시트 셸 + 성공 배너, 옛 앵커는 사라진다 (계약 플립)', () => {
-  it('셸 골격·성공 배너가 뜨고 옛 TimelineScreen CONFIRMED 앵커는 부재한다', async () => {
+describe('🔴 C1 · AC-1 · TRIP-1047 AC-3 — CONFIRMED 면 지도+시트 셸, 상주 성공 배너와 옛 앵커는 없다 (계약 플립)', () => {
+  it('셸 골격이 확정 얼굴(meta "확정됨 · ")로 뜨고, 상주 배너·옛 TimelineScreen CONFIRMED 앵커는 부재한다', async () => {
     useItinerary(() => HttpResponse.json(confirmedDefault()));
     renderPage();
 
     await screen.findByTestId('map-sheet-shell-root');
-    // 지도 위 성공 배너(mapCard) — 정확 카피·색은 6-b 라 정규식 부분(★4).
-    expect(screen.getByTestId('itinerary-confirmed-banner')).toHaveTextContent(
-      /확정/
+    // 짝 — 확정 얼굴이다(AC-4). 이게 있어야 아래 "배너 없음"이 PLANNED 셸에서 공짜로 통과한 게 아니다.
+    expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(
+      /^확정됨 · /
     );
+    // TRIP-1047 AC-3 — 지도 위 상주 배너는 없다(확정 상태 표시는 meta 가 맡는다).
+    expect(screen.queryByTestId('itinerary-confirmed-banner')).toBeNull();
 
     // ★1 옛 CONFIRMED 앵커(TimelineScreen)는 소멸 — 셸로 갈아끼워졌다.
     expect(screen.queryByTestId('itinerary-view-timeline')).toBeNull();

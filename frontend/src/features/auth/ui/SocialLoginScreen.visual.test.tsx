@@ -234,6 +234,40 @@ describe('AC-Q3 · 애플 자리는 공식 버튼만 — 커스텀 사과 아이
   });
 });
 
+// ── TRIP-1053: 커스텀 3버튼 테두리를 애플 공식 버튼(검은 1px)에 맞춘다 (AC-1 · AC-2) ──
+describe('AC-1 · 구글·카카오·네이버 테두리가 ink 1px 이다 (TRIP-1053)', () => {
+  it.each(CUSTOM_PROVIDERS)(
+    '%s 버튼의 테두리 토큰이 정확히 border·border-ink 둘이다 — 옛 border-[1.5px]·border-hairline-strong 은 없다',
+    (provider) => {
+      // ▸준비+실행
+      renderDefault();
+      const tokens = classTokens(screen.getByTestId(`auth-login-${provider}`));
+      // 테두리 토큰만 거른다. 'border'(두께 1px)는 접두어 'border-' 로 안 잡혀 두 조건이 다 필요하다.
+      const borderTokens = tokens.filter(
+        (t) => t === 'border' || t.startsWith('border-')
+      );
+
+      // ▸단언 — 정렬 후 비교(className 안 순서는 계약이 아니다). 옛 토큰이 섞여 남으면 어느 쪽이
+      // 이길지 jest 가 모르므로 '정확히 이 둘'을 잠근다.
+      expect([...borderTokens].sort()).toEqual(['border', 'border-ink']);
+    }
+  );
+
+  it.each(CUSTOM_PROVIDERS)(
+    '%s 버튼이 높이 52·rounded-button·bg-canvas 를 유지한다 (AC-2 무회귀)',
+    (provider) => {
+      // ▸준비+실행
+      renderDefault();
+      const tokens = classTokens(screen.getByTestId(`auth-login-${provider}`));
+
+      // ▸단언 — arrayContaining 은 부분집합 검사(셋이 다 있으면 통과, 순서·여분 무관).
+      expect(tokens).toEqual(
+        expect.arrayContaining(['h-[52px]', 'rounded-button', 'bg-canvas'])
+      );
+    }
+  );
+});
+
 const ERROR_COPY = '로그인에 실패했어요. 잠시 후 다시 시도해 주세요';
 
 // TRIP-592(→ C안)은 파스텔 채움(bg-primary-pale)을 폐기하고 카드 없는 배경 없는 인라인으로 갔다.
@@ -292,7 +326,7 @@ describe('AC-V3 · 에러 배너가 카드·아이콘 없는 텍스트 인라인
   });
 });
 
-// ── 신규: 레이아웃 구조 (AC-L1/L2/L4) ────────────────────────────────────────
+// ── 신규: 레이아웃 구조 (AC-L1/L4 — L2 는 TRIP-1056 AC-6 으로 교체) ────────────────────────────────────────
 describe('AC-L1 · 루트는 상단정렬 컨테이너다 (렌더)', () => {
   it('루트 className 토큰에 justify-center·justify-between 이 없다 — 로고가 튀는 가운데 정렬 위반 차단', () => {
     // ▸준비+실행
@@ -307,28 +341,119 @@ describe('AC-L1 · 루트는 상단정렬 컨테이너다 (렌더)', () => {
   });
 });
 
-describe('AC-L2 · error 상태에서 로고가 배너보다 먼저 온다 (DOM 순서)', () => {
-  it('brand → errorBanner → 소셜버튼 → terms 순서다 — 배너 등장에도 로고 세로 이동 없음', () => {
-    // ▸준비 — SOCIAL_AUTH_FAILED 는 시트를 안 타는 평범한 에러라 배너가 뜬다.
+// ── TRIP-1056: 취소 안내·실패 배너가 버튼을 밀지 않는다 (AC-5 · AC-6) ─────────
+// 옛 AC-L2(brand → error-banner → google → terms)는 배너를 버튼 '위'에 굳히고 있었다 — 그 자리가
+// 버튼을 아래로 미는 원인이라 AC-6 으로 계약을 교체했다(terms 는 TRIP-1053 에서 삭제).
+// jest 사각: 좌표는 못 본다. AC-5 는 "버튼 위에 끼는 노드가 없다"는 대리 관측이라, 노드 없이
+// 조건부 여백(pt-*/mt-*)으로 버튼을 미는 회귀는 6-b 실기에서만 잡힌다.
+
+// 트리 순서에서 첫 소셜 버튼(google) '앞'에 오는 testID 만 자른다.
+function idsBeforeGoogle(): string[] {
+  const ids = testIdOrder();
+  // 앵커 — google 이 없으면 indexOf 가 -1 이고 slice(0, -1) 이 엉뚱한 배열을 준다.
+  expect(ids).toContain('auth-login-google');
+  return ids.slice(0, ids.indexOf('auth-login-google'));
+}
+
+// 루트(auth-login-root)의 직계 자식 노드들. testIdOrder 는 깊이를 무시하므로, "래퍼 밖 형제"는
+// 이것으로 따로 잰다.
+function rootChildren(): JsonNode[] {
+  const find = (n: JsonNode | string | null | undefined): JsonNode | null => {
+    if (!n || typeof n === 'string') return null;
+    if (n.props?.testID === 'auth-login-root') return n;
+    for (const c of n.children ?? []) {
+      const hit = find(c);
+      if (hit) return hit;
+    }
+    return null;
+  };
+  const tree = screen.toJSON() as unknown as JsonNode | JsonNode[] | null;
+  const root = Array.isArray(tree)
+    ? (tree.map(find).find(Boolean) ?? null)
+    : find(tree);
+  return (root?.children ?? []).filter(
+    (c): c is JsonNode => typeof c !== 'string'
+  );
+}
+
+describe('AC-5 · 취소·실패 상태에서도 버튼 위에 끼어드는 노드가 없다 (TRIP-1056)', () => {
+  it('idle·cancelled·error 세 상태에서 google 버튼 앞의 testID 목록과 루트 안 버튼 래퍼 자리가 같다', () => {
+    // testID 목록만 비교하면 testID 없는 노드(스페이서·맨 Text)가 버튼 위에 끼어도 green 이다
+    // (5-b 경고-1 M1·M2). 그래서 "루트의 몇 번째 자식이 버튼 래퍼인가"(구조 인덱스)도 함께 잰다.
+    const wrapperIndex = (): number => {
+      const idx = rootChildren().findIndex((k) =>
+        classTokens(k).includes('gap-md')
+      );
+      // 앵커 — 래퍼를 못 찾으면 -1 끼리 같아져 공허 통과한다.
+      expect(idx).toBeGreaterThanOrEqual(0);
+      return idx;
+    };
+
+    // ▸준비+실행 — 한 it 안에서 세 번 렌더한다. screen 은 늘 마지막 렌더를 가리킨다(02a ★6).
+    renderDefault();
+    const idle = { ids: idsBeforeGoogle(), wrapperAt: wrapperIndex() };
+    renderDefault({ phase: 'cancelled' });
+    const cancelled = { ids: idsBeforeGoogle(), wrapperAt: wrapperIndex() };
     renderDefault({ phase: 'error', errorCode: 'SOCIAL_AUTH_FAILED' });
+    const error = { ids: idsBeforeGoogle(), wrapperAt: wrapperIndex() };
 
-    // ▸실행 — 관심 4개 testID 만 등장 순서대로 뽑는다.
-    const WATCH = [
-      'auth-login-brand',
-      'auth-login-error-banner',
-      'auth-login-google',
-      'auth-login-terms',
-    ];
-    const order = testIdOrder().filter((t) => WATCH.includes(t));
-
-    // ▸단언 — 순서가 정확히 이것이어야 한다(로고가 배너 앞 = 위에 고정).
-    expect(order).toEqual([
-      'auth-login-brand',
-      'auth-login-error-banner',
-      'auth-login-google',
-      'auth-login-terms',
-    ]);
+    // ▸단언 — 버튼 위에 무엇이든(이름표 유무 무관) 끼면 그 상태의 목록 또는 래퍼 자리가 달라진다.
+    expect({ cancelled, error }).toEqual({ cancelled: idle, error: idle });
   });
+});
+
+describe('AC-6 · 취소 안내·실패 배너는 버튼 묶음 뒤 형제다 (TRIP-1056 · AC-L2 교체)', () => {
+  it.each([
+    {
+      name: 'cancelled',
+      override: { phase: 'cancelled' },
+      noticeId: 'auth-login-cancel-notice',
+    },
+    {
+      name: 'error',
+      override: { phase: 'error', errorCode: 'SOCIAL_AUTH_FAILED' },
+      noticeId: 'auth-login-error-banner',
+    },
+  ] as { name: string; override: Partial<Props>; noticeId: string }[])(
+    '$name: brand → 소셜 버튼 → $noticeId 순서이고, 안내는 버튼 래퍼 밖(루트 직계)에서 래퍼 뒤에 온다',
+    ({ override, noticeId }) => {
+      // ▸준비+실행
+      renderDefault(override);
+      const WATCH = [
+        'auth-login-brand',
+        'auth-login-google',
+        'auth-login-kakao',
+        'auth-login-naver',
+        noticeId,
+      ];
+      const order = testIdOrder().filter((t) => WATCH.includes(t));
+      const kids = rootChildren();
+      // 버튼 래퍼는 testID 가 없어 gap-md 토큰으로 잡는다(AC-L4 와 같은 앵커).
+      const wrapperIdx = kids.findIndex((k) =>
+        classTokens(k).includes('gap-md')
+      );
+      const noticeIdx = kids.findIndex((k) => k.props?.testID === noticeId);
+
+      // ▸단언 — 순서(로고 → 버튼 → 안내).
+      expect(order).toEqual([
+        'auth-login-brand',
+        'auth-login-google',
+        'auth-login-kakao',
+        'auth-login-naver',
+        noticeId,
+      ]);
+      // ▸단언 — 위치: 래퍼 안이면 루트 직계가 아니고, 래퍼 앞이면 인덱스가 작다.
+      expect({
+        wrapperFound: wrapperIdx >= 0,
+        noticeIsRootChild: noticeIdx >= 0,
+        noticeAfterWrapper: noticeIdx > wrapperIdx,
+      }).toEqual({
+        wrapperFound: true,
+        noticeIsRootChild: true,
+        noticeAfterWrapper: true,
+      });
+    }
+  );
 });
 
 describe('AC-L4 · 회귀 토큰 유지 (렌더)', () => {

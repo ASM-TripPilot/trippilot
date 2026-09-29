@@ -14,6 +14,18 @@ import type { StayItem } from '@/shared/api/generated/schemas';
  * 그대로 두므로 복귀가 저절로 성립한다.
  */
 
+/** [이동]이 어디로 가는가 — 제휴 딥링크(수수료 고지 대상, BR-U1-30) 또는 웹검색 폴백(BR-U1-31). */
+export type StayOutboundMode = 'affiliate' | 'webSearch';
+
+/**
+ * 지금 계약의 이동 방식(TRIP-1019 #018). 딥링크 계약이 없어 이동은 늘 `openStayOutbound`의 웹검색이므로
+ * 항상 `'webSearch'`다. 제휴 시트가 이 값으로 얼굴(수수료 고지 유무)을 고른다 — 딥링크 계약이 생기면
+ * 판정 입력을 인자로 받아 여기서 `'affiliate'`를 돌려준다.
+ */
+export function stayOutboundMode(): StayOutboundMode {
+  return 'webSearch';
+}
+
 export function buildStaySearchUrl(item: Pick<StayItem, 'name'>): string {
   return (
     'https://www.google.com/search?q=' + encodeURIComponent(`${item.name} 예약`)

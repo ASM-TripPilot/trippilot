@@ -6,6 +6,7 @@ import com.trippilot.core.error.ValidationFailed
 import com.trippilot.core.error.UpstreamUnavailable
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
 import com.trippilot.itinerarygeneration.domain.GenerationMode
+import com.trippilot.itinerarygeneration.domain.GenerationState
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
@@ -32,6 +33,10 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import io.kotest.property.Arb
+import io.kotest.property.arbitrary.int
+import io.kotest.property.arbitrary.list
+import io.kotest.property.checkAll
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
@@ -215,6 +220,31 @@ class SlotCandidateServiceTest : StringSpec({
         }
     }
 
+    "생성 중이어도 이미 만들어진 일자의 후보는 준다(TRIP-1000)" {
+        // day1 조기 노출(BR-U3-04·06) — 2차가 도는 10분간 이미 도착한 1일차까지 잠겼던 것이 QA #073.
+        val partial = Itinerary.create(
+            tripId, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+            listOf(ItineraryDay.of(d1, 0, listOf(slot(target, 0, "11:00")))),
+            now, GenerationState.PARTIAL,
+        )
+        val agent = CapturingAgent()
+        service(agent, stored = partial).propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+
+        agent.captured shouldNotBe null // 잠기지 않고 경계까지 간다
+    }
+
+    "생성 중인 일자(아직 없음)는 409 — 404 로 '일정이 없다'고 말하지 않는다" {
+        val partial = Itinerary.create(
+            tripId, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+            listOf(ItineraryDay.of(d1, 0, listOf(slot(target, 0, "11:00")))),
+            now, GenerationState.PARTIAL,
+        )
+        shouldThrow<ConflictDetected> {
+            service(CapturingAgent(), stored = partial)
+                .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1.plusDays(1), target), null, null, null))
+        }
+    }
+
     "후보는 정본에 실재하는지 다시 확인한다(INV-1 closed-set)" {
         // 스펙 스코프에서 pool 을 공유하므로 증분으로 본다.
         val before = pool.grounded
@@ -321,5 +351,95 @@ class SlotCandidateServiceTest : StringSpec({
 
         agent.captured shouldNotBe null // 전개는 갔다 — 그 결과가 저장분보다 나빠 저장분이 나간다
         out.candidates.map { it.poiId } shouldContainExactly listOf(cafeSpareHigh)
+    }
+
+    // ─── 컨셉 필터(TRIP-1065 · QA #042 — '식사'를 골라도 기념탑·도서관이 오던 결함) ───
+
+    fun fixedAgent(vararg cands: SlotCandidate) = object : StubScheduleAgent() {
+        override fun proposeSlotCandidates(input: SlotCandidatesInput) = SlotCandidatesOutput(
+            cands.toList(), radiusMUsed = 3_000,
+            freshness = FreshnessMeta(now, degraded = false), emptyReason = null,
+        )
+    }
+
+    // 종전 거짓 근거를 그대로 재현한 문구 — 필터가 없으면 이대로 나갔다.
+    fun cand(id: UUID) = SlotCandidate(id, "약 1.0km", "식사 컨셉에 맞는 명소")
+
+    /** ground = poiId 별 카테고리, resolve = 컨셉 채움용 풀(요청 카테고리로 거른다). */
+    fun conceptPool(categoriesById: Map<UUID, String>, refill: List<GroundedPlace> = emptyList()) =
+        object : CandidatePoolPort {
+            override fun resolve(area: Area, categories: Set<String>) =
+                refill.filter { categories.isEmpty() || it.category in categories }
+            override fun ground(poiIds: List<UUID>) = poiIds.mapNotNull { id ->
+                categoriesById[id]?.let { GroundedPlace(id, "장소", 33.45, 126.56, it, null, null) }
+            }
+        }
+
+    fun conceptSvc(agent: StubScheduleAgent, pool: CandidatePoolPort) =
+        SlotCandidateService(trips, Repo(itinerary), agent, surfaces, pool, FakeScoredCandidatePoolStore(), clock)
+
+    fun req(concept: String?) = RequestSlotCandidates(SlotKey.of(d1, target), null, concept, null)
+
+    "'식사' 컨셉이면 맛집만 남는다 — 경계가 명소를 섞어 줘도(모든 경로 공통 후처리)" {
+        val food1 = UUID.randomUUID()
+        val sight = UUID.randomUUID()
+        val food2 = UUID.randomUUID()
+        val out = conceptSvc(
+            fixedAgent(cand(food1), cand(sight), cand(food2)),
+            conceptPool(mapOf(food1 to "맛집", sight to "명소", food2 to "맛집")),
+        ).propose(acc, tripId, req("식사"))
+
+        out.candidates.map { it.poiId } shouldContainExactly listOf(food1, food2)
+    }
+
+    "경계가 컨셉 밖 후보만 주면 컨셉 카테고리 풀로 채운다 — 문구는 참, 강등 표시(INV-4)" {
+        val sight = UUID.randomUUID()
+        val food = UUID.randomUUID()
+        val out = conceptSvc(
+            fixedAgent(cand(sight)),
+            conceptPool(mapOf(sight to "명소"), refill = listOf(GroundedPlace(food, "국밥집", 33.45, 126.56, "맛집", null, 500.0))),
+        ).propose(acc, tripId, req("식사"))
+
+        out.candidates.single().poiId shouldBe food
+        out.candidates.single().rationale shouldBe "식사 컨셉에 맞는 맛집"
+        out.freshness.degraded shouldBe true // 거리순 채움은 AI 추천이 아니다 — 화면이 사실을 알게
+    }
+
+    "컨셉 카테고리가 반경(넓힘 포함) 안에 없으면 0건 + NO_NEARBY — 명소로 채우면 위반(결정 3a)" {
+        val sight = UUID.randomUUID()
+        val out = conceptSvc(fixedAgent(cand(sight)), conceptPool(mapOf(sight to "명소")))
+            .propose(acc, tripId, req("식사"))
+
+        out.candidates shouldBe emptyList()
+        out.emptyReason shouldBe SlotCandidatesEmptyReason.NO_NEARBY
+    }
+
+    "매핑에 없는 컨셉은 필터 없이 기존 동작 — 400 이 아니다(reason 선례)" {
+        val sight = UUID.randomUUID()
+        val out = conceptSvc(fixedAgent(cand(sight)), conceptPool(mapOf(sight to "명소")))
+            .propose(acc, tripId, req("아무거나"))
+
+        out.candidates.single().poiId shouldBe sight
+    }
+
+    /** 필터는 **좁히기만** 한다(INV-1) — 매핑 컨셉이면 결과 전원이 매핑 집합, 아니면 무변경. */
+    "임의 풀·임의 컨셉에서 결과는 입력의 부분집합이고 매핑 규칙을 지킨다" {
+        val cats = listOf("명소", "맛집", "카페", "야경", "자연", "쇼핑", "문화", "액티비티")
+        val concepts = listOf("식사", "카페", "전시·문화", "야외·산책", "쇼핑", "아무거나", null)
+        checkAll(Arb.list(Arb.int(0..7), 0..8), Arb.int(0..6)) { pickCats, ci ->
+            val concept = concepts[ci]
+            val ids = pickCats.map { UUID.randomUUID() to cats[it] }
+            val out = conceptSvc(
+                fixedAgent(*ids.map { cand(it.first) }.toTypedArray()),
+                conceptPool(ids.toMap()),
+            ).propose(acc, tripId, req(concept))
+
+            val mapped = ConceptCategories.of(concept)
+            if (mapped == null) {
+                out.candidates.map { it.poiId } shouldBe ids.map { it.first } // 무변경
+            } else {
+                out.candidates.map { it.poiId } shouldBe ids.filter { it.second in mapped }.map { it.first }
+            }
+        }
     }
 })

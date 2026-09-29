@@ -1029,3 +1029,198 @@ describe('TRIP-982 B4·B5 · 무회귀 — empty 얼굴의 나머지는 그대�
     expect(texts.filter((text) => DURATION_TEXT.test(text))).toEqual([]);
   });
 });
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * TRIP-1022 — #040 지도 영역 맞춤
+ * TRIP-1093 결정 3 — 필수 방문지 「꼭 갈 곳 추가」 버튼(TRIP-1022 결정 2 "담은 장소 보기 링크" 뒤집기)
+ *
+ * 무엇을 보장하나:
+ *  - 🔴 S1 (AC-B5) 지도 카드가 `fitPins` 를 켠 채 MapView 를 쓴다 — viewOnly 지도라 사용자가 손으로
+ *    옮길 수 없어서, 첫 핀만 비추면 나머지 핀은 영영 못 본다(#040).
+ *  - 🔴 A1 (1093 AC-1) 목록 얼굴: 마지막 카드와 CTA **사이**에 `꼭 갈 곳 추가` 버튼(Figma 4723:2833).
+ *  - 🔴 A2 (1093 AC-2) 0곳 얼굴: 버튼이 점선 안내 **밖**, 안내와 CTA 사이(Figma 4724:2851).
+ *  - A3 (1093 AC-3) 콜백을 안 주면 두 버튼 모두 없고, 얼굴마다 자기 버튼 하나만 뜬다.
+ *
+ * 순서는 `queryAllByTestId(정규식)` 배열의 순서(트리 깊이 우선 = 화면 위→아래)로 잰다.
+ * 부재는 전부 `.length` 숫자로 잰다(노드 배열 직렬화 함정 — 위 `countTestId` 독주석).
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+const LISTED_ADD = 'itinerary-mustvisit-screen-add';
+const EMPTY_ADD = 'itinerary-mustvisit-screen-empty-add';
+const ADD_LABEL = '꼭 갈 곳 추가';
+/** 뒤집힌 옛 링크 문구 — 다시 나타나면 red. */
+const OLD_LINK_LABEL = '담은 장소 보기';
+
+/** 화면 위→아래 순서의 testID 목록(문자열 배열 — 직렬화 함정 무관). */
+function orderedTestIds(): string[] {
+  return screen
+    .queryAllByTestId(/^itinerary-mustvisit-/)
+    .map((node) => String(node.props.testID));
+}
+
+describe('🔴 TRIP-1022 S1 · AC-B5 — 지도 카드가 모든 핀에 맞춰 영역을 잡는다', () => {
+  it('listed + 핀 3개면 지도에 fitPins 가 켜져 넘어간다', () => {
+    render(
+      <MustVisitPickerScreen
+        view={listed([FIXED_A, ANYTIME_B, UNJOINED_Z])}
+        pins={[PIN_1, PIN_2, PIN_3]}
+      />
+    );
+
+    // 짝 — 지도 카드가 실제로 섰다(없으면 아래 단언이 getBy 에서 먼저 죽는다).
+    expect(
+      screen.getByTestId('itinerary-mustvisit-screen-map')
+    ).toBeOnTheScreen();
+    expect(screen.getByTestId('map-root').props.fitPins).toBe(true);
+  });
+});
+
+describe('🔴 TRIP-1093 A1 · 목록 얼굴 — 마지막 카드와 CTA 사이에 「꼭 갈 곳 추가」', () => {
+  it('버튼이 카드 뒤·CTA 앞에 있고 문구가 정확하며, 누르면 추가 콜백 1회·CTA 콜백 0회', () => {
+    // 준비
+    const onPressAdd = jest.fn();
+    const onProceed = jest.fn();
+    render(
+      <MustVisitPickerScreen
+        view={listed([FIXED_A, ANYTIME_B])}
+        pins={[PIN_1, PIN_2]}
+        onPressAdd={onPressAdd}
+        onProceed={onProceed}
+      />
+    );
+
+    // 단언 ① — 자리: 마지막 카드(poi-b) → 추가 버튼 → CTA.
+    const ids = orderedTestIds();
+    expect(ids).toContain('itinerary-mustvisit-poi-b'); // 앵커 — 카드가 떴다
+    expect(ids).toContain(LISTED_ADD);
+    expect(ids.indexOf('itinerary-mustvisit-poi-b')).toBeLessThan(
+      ids.indexOf(LISTED_ADD)
+    );
+    expect(ids.indexOf(LISTED_ADD)).toBeLessThan(
+      ids.indexOf('itinerary-mustvisit-screen-proceed')
+    );
+    // 추가 버튼은 카드로 세어지지 않는다(카드 2장 그대로).
+    expect(cardTestIds()).toHaveLength(2);
+
+    // 단언 ② — 문구(문자열 인자 = 정규화 후 완전 일치, 02a §5).
+    const add = screen.getByTestId(LISTED_ADD);
+    expect(add).toHaveTextContent(ADD_LABEL);
+
+    // 실행
+    fireEvent.press(add);
+
+    // 단언 ③ — 자기 콜백만 부른다.
+    expect(onPressAdd).toHaveBeenCalledTimes(1);
+    expect(onProceed).toHaveBeenCalledTimes(0);
+  });
+});
+
+describe('🔴 TRIP-1093 A2 · 0곳 얼굴 — 버튼이 점선 안내 밖, 안내와 CTA 사이', () => {
+  it('안내 안에는 없고 화면에 하나 있으며, 문구가 정확하고, 누르면 추가 콜백 1회·CTA 콜백 0회', () => {
+    // 준비
+    const onPressAdd = jest.fn();
+    const onProceed = jest.fn();
+    render(
+      <MustVisitPickerScreen
+        view={{ kind: 'empty' }}
+        onPressAdd={onPressAdd}
+        onProceed={onProceed}
+      />
+    );
+
+    // 단언 ① — 안내 블록 **밖**(Figma: 점선 박스 안에는 버튼·링크가 없다).
+    const empty = screen.getByTestId('itinerary-mustvisit-screen-empty');
+    expect(within(empty).queryAllByTestId(EMPTY_ADD).length).toBe(0);
+    expect(countTestId(EMPTY_ADD)).toBe(1);
+
+    // 단언 ② — 자리: 안내 → 추가 버튼 → CTA.
+    const ids = orderedTestIds();
+    expect(ids.indexOf('itinerary-mustvisit-screen-empty')).toBeLessThan(
+      ids.indexOf(EMPTY_ADD)
+    );
+    expect(ids.indexOf(EMPTY_ADD)).toBeLessThan(
+      ids.indexOf('itinerary-mustvisit-screen-proceed')
+    );
+
+    // 단언 ③ — 문구가 바뀌었다(옛 링크 문구는 어디에도 없다).
+    const add = screen.getByTestId(EMPTY_ADD);
+    expect(add).toHaveTextContent(ADD_LABEL);
+    expect(countText(OLD_LINK_LABEL)).toBe(0);
+
+    // 실행
+    fireEvent.press(add);
+
+    // 단언 ④
+    expect(onPressAdd).toHaveBeenCalledTimes(1);
+    expect(onProceed).toHaveBeenCalledTimes(0);
+  });
+});
+
+describe('TRIP-1093 A3 · 버튼이 없어야 하는 자리', () => {
+  it('콜백을 안 준 호출부(프리뷰 등)에서는 empty·listed 어디에도 버튼이 없다 (선제 green)', () => {
+    const { rerender } = render(
+      <MustVisitPickerScreen view={{ kind: 'empty' }} />
+    );
+    // 짝 — 빈 얼굴은 떴다(공허 통과 방지).
+    expect(
+      screen.getByTestId('itinerary-mustvisit-screen-empty')
+    ).toBeOnTheScreen();
+    expect(countTestId(EMPTY_ADD)).toBe(0);
+    expect(countTestId(LISTED_ADD)).toBe(0);
+
+    rerender(
+      <MustVisitPickerScreen
+        view={listed([FIXED_A, ANYTIME_B])}
+        pins={[PIN_1, PIN_2]}
+      />
+    );
+    expect(cardTestIds()).toHaveLength(2); // 짝 — listed 얼굴
+    expect(countTestId(EMPTY_ADD)).toBe(0);
+    expect(countTestId(LISTED_ADD)).toBe(0);
+  });
+
+  it('🔴 콜백을 주면 얼굴마다 자기 버튼 하나뿐이고, loading·failed 에는 없다', () => {
+    const onPressAdd = jest.fn();
+
+    const { rerender } = render(
+      <MustVisitPickerScreen
+        view={listed([FIXED_A, ANYTIME_B])}
+        pins={[PIN_1, PIN_2]}
+        onPressAdd={onPressAdd}
+      />
+    );
+    expect(cardTestIds()).toHaveLength(2); // 짝 — listed 얼굴
+    expect(countTestId(LISTED_ADD)).toBe(1);
+    expect(countTestId(EMPTY_ADD)).toBe(0);
+
+    rerender(
+      <MustVisitPickerScreen view={{ kind: 'empty' }} onPressAdd={onPressAdd} />
+    );
+    expect(countTestId(EMPTY_ADD)).toBe(1);
+    expect(countTestId(LISTED_ADD)).toBe(0);
+
+    rerender(
+      <MustVisitPickerScreen
+        view={{ kind: 'loading' }}
+        onPressAdd={onPressAdd}
+      />
+    );
+    expect(
+      screen.getByTestId('itinerary-mustvisit-screen-loading')
+    ).toBeOnTheScreen();
+    expect(countTestId(EMPTY_ADD)).toBe(0);
+    expect(countTestId(LISTED_ADD)).toBe(0);
+
+    rerender(
+      <MustVisitPickerScreen
+        view={{ kind: 'failed' }}
+        onPressAdd={onPressAdd}
+      />
+    );
+    expect(
+      screen.getByTestId('itinerary-mustvisit-screen-failed')
+    ).toBeOnTheScreen();
+    expect(countTestId(EMPTY_ADD)).toBe(0);
+    expect(countTestId(LISTED_ADD)).toBe(0);
+  });
+});

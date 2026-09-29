@@ -1,12 +1,9 @@
 import { type ReactElement, useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { useQueryClient } from '@tanstack/react-query';
 
 import type { BaseAssignment, SavedStay } from '@/shared/api/generated/schemas';
 import { useGetSavedStays } from '@/shared/api/generated/saved-stays/saved-stays';
 import {
-  getGetTripsTripIdBasesQueryKey,
-  useDeleteTripsTripIdBasesBaseAssignmentId,
   useGetTrips,
   useGetTripsTripIdBases,
 } from '@/shared/api/generated/trips/trips';
@@ -18,19 +15,20 @@ import {
   MyStaysScreen,
   type MyStayRowVM,
 } from '@/features/settings/ui/MyStaysScreen';
+import { isOtaSource } from '@/features/stay/config/affiliateNotice';
 
 /**
  * TRIP-605 · l04 페이지 배선 — 조회(`useGetSavedStays`·`useGetTrips`·N+1 bases)·역참조 조립
- * (`buildStayTripLink`)·행 VM 조립·해제 DELETE·탐색 push 를 진다. 화면엔 완성 VM만 내린다.
+ * (`buildStayTripLink`)·행 VM 조립·거점 화면 push·탐색 push 를 진다. 화면엔 완성 VM만 내린다.
  *
  * 연결 여행은 파생이다 — SavedStay 에 `tripId` 가 없어 여행마다 `GET /trips/{id}/bases` 를 한 번씩 더
  * 부른다(N+1: 목록 1회 + 여행 N회). 훅은 루프를 못 도니 여행 1건당 `TripBasesProbe` 를 렌더해 그 거점
  * 목록을 페이지 상태(`basesByTripId`)로 모은 뒤 `buildStayTripLink` 로 역참조 Map 을 만든다
  * (`TripCardContainer`(l03) N+1 골격 동형).
  *
- * 출발점 확정 콜백은 **연결된 숙소 해제(DELETE)** 만 배선한다 — 미등록 숙소의 지정(POST)은
- * `AssignBaseRequest{savedStayId,dateFrom,dateTo}` 가 여행·기간 컨텍스트를 요구하는데 이 화면에 그 정보가
- * 없어 이 티켓 범위 밖(F-2, 후속 티켓). 그래서 화면은 다이얼로그까지만 띄우고 확정은 no-op 로 둔다.
+ * 「출발점 변경」(TRIP-1076 결정 2(A))은 그 여행의 거점 화면(`/trips/[tripId]/bases`)으로 push 만 한다 —
+ * 이 페이지는 거점을 쓰지 않는다(옛 해제 DELETE 배선 제거). push 라서 거점 화면 CTA 의 `back()` 이 여기로
+ * 돌아온다(`ItineraryMethodPage` onPressRebase 선례).
  */
 
 /** 여행 1건의 거점 목록을 조회해 페이지로 올린다(N+1 훅-per-여행 — 훅이 루프를 못 도는 우회). */
@@ -48,15 +46,19 @@ function TripBasesProbe({
   return null;
 }
 
-/** 등록 출처 라벨 — 외부 OTA 출처가 있으면 예약, 없으면 앱 저장(BR-U6-20 등록 출처). */
+/**
+ * 등록 출처 라벨(BR-U6-20) — `externalSource` 는 예약처가 아니라 카탈로그 원천이다(LOCALDATA 등).
+ * 사전에 있는 OTA 코드만 예약, 그 밖의 원천은 탐색에서 저장, 없으면(null·필드 없음) 직접 등록.
+ */
 function sourceLabel(stay: SavedStay): string {
-  return stay.externalSource ? 'OTA 예약' : '앱 저장';
+  if (isOtaSource(stay.externalSource)) return 'OTA 예약';
+  return stay.externalSource ? '탐색에서 저장' : '직접 등록';
 }
 
 /** 메모(예약번호) 상태 칩 — OTA 예약인데 번호가 비어 있으면 안내, 그 외 없음. */
 function memoLabel(stay: SavedStay): string | null {
   const missingBookingNo =
-    stay.externalSource != null && (stay.memo == null || stay.memo === '');
+    isOtaSource(stay.externalSource) && (stay.memo == null || stay.memo === '');
   return missingBookingNo ? '예약번호 미입력' : null;
 }
 
@@ -93,10 +95,8 @@ function toRowVM(stay: SavedStay, link: StayTripLink | undefined): MyStayRowVM {
 
 export function MyStaysPage(): ReactElement {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const savedQuery = useGetSavedStays();
   const tripsQuery = useGetTrips();
-  const deleteBase = useDeleteTripsTripIdBasesBaseAssignmentId();
 
   const savedStays = savedQuery.data ?? [];
   const trips = tripsQuery.data ?? [];
@@ -122,26 +122,14 @@ export function MyStaysPage(): ReactElement {
 
   const isEmpty = !savedQuery.isPending && rows.length === 0;
 
-  const handleConfirmBaseToggle = (row: MyStayRowVM): void => {
-    // 연결된 숙소 해제만 배선 — 미등록 지정(POST)은 여행·기간 컨텍스트 부재로 이 티켓 밖(F-2).
-    if (
-      row.baseState === 'assigned' &&
-      row.tripId !== null &&
-      row.baseAssignmentId !== null
-    ) {
-      const tripId = row.tripId;
-      deleteBase.mutate(
-        { tripId, baseAssignmentId: row.baseAssignmentId },
-        {
-          // 성공 시 bases 조회 캐시를 낡음으로 표시 → 재조회로 행이 '연결된 여행 없음'으로 갱신된다.
-          onSuccess: () => {
-            void queryClient.invalidateQueries({
-              queryKey: getGetTripsTripIdBasesQueryKey(tripId),
-            });
-          },
-        }
-      );
-    }
+  const handleChangeBase = (row: MyStayRowVM): void => {
+    // 버튼은 등록 행에만 있고 등록 행은 tripId 가 있다 — null 은 방어만(갈 여행이 없으면 이동하지 않는다).
+    if (row.tripId === null) return;
+    router.push({
+      pathname: '/trips/[tripId]/bases',
+      // TRIP-1082 — 확정된 여행의 거점만 바꾸는 편집 얼굴로 연다(h04 입구는 mode 없이 위저드 얼굴).
+      params: { tripId: row.tripId, mode: 'edit' },
+    });
   };
 
   return (
@@ -156,7 +144,7 @@ export function MyStaysPage(): ReactElement {
       <MyStaysScreen
         rows={rows}
         isEmpty={isEmpty}
-        onConfirmBaseToggle={handleConfirmBaseToggle}
+        onPressChangeBase={handleChangeBase}
         onPressExplore={() => router.push('/stays')}
         onPressBack={() => router.back()}
       />

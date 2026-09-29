@@ -9,9 +9,14 @@ import { join, relative, resolve, sep } from 'node:path';
  * `isDateInRange`)의 `shared/date/monthGrid` 통합이 **이동이지 복제가 아니다**.
  *
  * 무엇을 보장하나:
- *  - **G1(AC-1)** 네 함수의 정의가 `shared/date/monthGrid.ts` 한 곳에만 있다 — stay·trip 사본 0.
- *  - **G2(AC-2·Q1)** 옛 자리(`stayDates.ts`·`tripDatePicker.ts`)는 도메인 함수를 그대로 갖고,
- *    네 함수를 재수출(shim)하지 않는다 — import 경로가 세 곳으로 남으면 다음 사람이 헷갈린다.
+ *  - **G1(AC-1)** 네 함수의 정의가 `shared/date/monthGrid.ts` 한 곳에만 있다 — trip 사본 0.
+ *  - **G2(AC-2·Q1)** 옛 자리(`tripDatePicker.ts`)는 도메인 함수를 그대로 갖고,
+ *    네 함수를 재수출(shim)하지 않는다 — import 경로가 두 곳으로 남으면 다음 사람이 헷갈린다.
+ *
+ * TRIP-1052 — 옛 stay 자리(`features/stay/model/stayDates.ts`)는 숙소 등록 날짜 입력과 함께 파일째
+ * 삭제됐다. 그 파일을 읽던 G1·G2의 stay 절을 걷고, 그 파일에 들어 있던 monthGrid 성질 테스트는
+ * `shared/date/monthGrid.property.test.ts`로 옮겼다(아래 CONSUMERS 한 행이 그 이관을 잠근다).
+ * 파일 부재 자체는 `stayDateRemovalStructure.test.ts`가 잰다.
  *  - **G3(Q1·AC-3)** `src` 어디에서도 네 함수를 옛 자리에서 가져오지 않고, 알려진 소비처(화면·페이지·
  *    기존 단위 테스트)는 `@/shared/date/monthGrid`에서 가져온다.
  *
@@ -23,7 +28,6 @@ import { join, relative, resolve, sep } from 'node:path';
 
 const SRC_ROOT = resolve(__dirname, '..');
 const GRID = join(SRC_ROOT, 'shared', 'date', 'monthGrid.ts');
-const STAY = join(SRC_ROOT, 'features', 'stay', 'model', 'stayDates.ts');
 const TRIP = join(SRC_ROOT, 'features', 'trip', 'model', 'tripDatePicker.ts');
 const GRID_IMPORT = '@/shared/date/monthGrid';
 
@@ -172,7 +176,7 @@ describe('G0 · 탐지기 자가검사 — 이게 통과해야 아래 단언들�
 });
 
 describe('🔴 G1 · 한 벌(AC-1) — 네 함수의 정의는 shared/date/monthGrid 에만 있다', () => {
-  it('monthGrid 가 네 함수를 export function 으로 정의하고, stayDates·tripDatePicker 에는 정의가 0건이다', () => {
+  it('monthGrid 가 네 함수를 export function 으로 정의하고, tripDatePicker 에는 정의가 0건이다', () => {
     const grid = read(GRID);
     // 긍정 — 통합 목적지에 본문이 실제로 있다.
     expect(
@@ -182,7 +186,7 @@ describe('🔴 G1 · 한 벌(AC-1) — 네 함수의 정의는 shared/date/month
     ).toEqual([]);
 
     // 부정 — 옛 자리에 사본(export 여부 무관)이 남지 않는다.
-    const leftovers = [STAY, TRIP].flatMap((file) => {
+    const leftovers = [TRIP].flatMap((file) => {
       const source = read(file);
       return FOUR.filter((name) => definesSymbol(source, name)).map(
         (name) => `${rel(file)}:${name}`
@@ -193,27 +197,13 @@ describe('🔴 G1 · 한 벌(AC-1) — 네 함수의 정의는 shared/date/month
 });
 
 describe('G2 · 옛 자리 존치(AC-2) + 재수출 shim 금지(Q1)', () => {
-  it('stayDates·tripDatePicker 는 도메인 함수를 그대로 갖고, 네 함수를 재수출하지 않는다', () => {
-    const stay = read(STAY);
+  it('tripDatePicker 는 도메인 함수를 그대로 갖고, 네 함수를 재수출하지 않는다', () => {
     const trip = read(TRIP);
 
-    // 긍정 — 숙소 판정·선택 전이·표기(stay)와 여행 선택 전이·셀 조립(trip)은 남는다.
+    // 긍정 — 여행 선택 전이·셀 조립(trip)은 남는다.
     const missing = [
-      ...[
-        'nightsBetween',
-        'isStayRangeValid',
-        'applyDatePick',
-        'commitDateRange',
-        'formatStayDateRange',
-      ]
-        .filter(
-          (name) => !new RegExp(`export\\s+function\\s+${name}\\b`).test(stay)
-        )
-        .map((name) => `stayDates:${name}`),
-      ...(/export\s+interface\s+StayDateRange\b/.test(stay)
-        ? []
-        : ['stayDates:StayDateRange']),
-      ...['applyRangePick', 'dateCell']
+      // TRIP-1027: `applyRangePick` 은 고아라 삭제됐다(01b O5 — 부재는 tripPeriodFromNightsStructure 가 잡는다).
+      ...['dateCell']
         .filter(
           (name) => !new RegExp(`export\\s+function\\s+${name}\\b`).test(trip)
         )
@@ -225,14 +215,13 @@ describe('G2 · 옛 자리 존치(AC-2) + 재수출 shim 금지(Q1)', () => {
     expect(missing).toEqual([]);
 
     // 부정 — 옛 자리를 거쳐 가는 두 번째 import 경로를 만들지 않는다.
-    const shims = [STAY, TRIP].flatMap((file) => {
+    const shims = [TRIP].flatMap((file) => {
       const source = read(file);
       return FOUR.filter((name) => reExportsSymbol(source, name)).map(
         (name) => `${rel(file)}:${name}`
       );
     });
     expect(shims).toEqual([]);
-    expect(STAR_REEXPORT.test(stay)).toBe(false);
     expect(STAR_REEXPORT.test(trip)).toBe(false);
   });
 });
@@ -240,28 +229,24 @@ describe('G2 · 옛 자리 존치(AC-2) + 재수출 shim 금지(Q1)', () => {
 /** 알려진 소비처 — 화면·페이지(Q1)와 기존 단위 테스트(AC-3, 단언은 그대로 두고 대상만 통합본). */
 const CONSUMERS: { file: string; names: string[] }[] = [
   {
-    file: 'features/stay/ui/StayRegisterScreen.tsx',
-    names: ['daysInMonth', 'firstWeekdayOfMonth', 'isDateInRange'],
-  },
-  {
     file: 'features/trip/ui/PeriodEditSheet.tsx',
     names: ['daysInMonth', 'firstWeekdayOfMonth', 'isDateInRange'],
-  },
-  {
-    file: 'pages/stay-register/ui/StayRegisterPage.tsx',
-    names: ['shiftMonth'],
   },
   {
     file: 'pages/trip-new-step1/ui/TripNewStep1Page.tsx',
     names: ['shiftMonth'],
   },
+  // TRIP-1052 — StayRegisterScreen·StayRegisterPage(달력 소멸)와 stayDates.test·stayCalendarMonth.test
+  // (파일 삭제) 네 행이 빠졌다. 그 두 테스트 파일에 있던 monthGrid 케이스는 아래 파일로 옮겼다 —
+  // 이 행이 "이관 파일이 실재하고 통합본에서 가져온다"를 잠근다(없으면 ENOENT red).
   {
-    file: 'features/stay/model/stayDates.test.ts',
-    names: ['daysInMonth', 'firstWeekdayOfMonth', 'isDateInRange'],
-  },
-  {
-    file: 'features/stay/model/stayCalendarMonth.test.ts',
-    names: ['daysInMonth', 'shiftMonth'],
+    file: 'shared/date/monthGrid.property.test.ts',
+    names: [
+      'daysInMonth',
+      'firstWeekdayOfMonth',
+      'isDateInRange',
+      'shiftMonth',
+    ],
   },
   {
     file: 'features/trip/model/tripDatePicker.test.ts',

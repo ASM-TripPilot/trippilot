@@ -99,16 +99,6 @@ export function StayPriceSheet({
             />
           ))}
         </View>
-        <Pressable
-          testID="stay-price-close"
-          accessibilityRole="button"
-          onPress={onClose}
-          className="mt-xs h-[52px] w-full items-center justify-center rounded-button bg-primary"
-        >
-          <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-            적용
-          </Text>
-        </Pressable>
       </BottomSheetView>
     </BottomSheet>
   );

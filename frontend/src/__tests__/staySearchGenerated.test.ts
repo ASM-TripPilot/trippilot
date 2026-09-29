@@ -295,13 +295,15 @@ const ENDPOINT_FILE_SHA256: Record<string, string> = {
   // TRIP-1024 에서 saved-stays·places·preferences 갱신: openapi `info.description` 한 단락(횡단 400
   // 규약) 추가로 생성 파일 헤더 주석만 바뀌었다 — 코드 줄 diff 0(git diff 로 확인).
   // TRIP-640 에서 갱신: GET /stays/{stayId}(StayDetail) 오퍼레이션 추가(정당한 계약 변경 — BE #659).
+  // TRIP-1081 에서 saved-stays 갱신 — 이 티켓이 아니라 밀린 codegen(POST /saved-stays 응답에 ErrorResponse
+  // 추가, 오류 타입 유니온 확장뿐 · 동작 코드 diff 0)을 후보 좌표 재생성이 함께 끌고 왔다.
   // TRIP-503 에서 갱신 — 다만 이 파일이 바뀐 이유는 **이 티켓이 아니다.** 역지오코딩
   // (GET /stays/reverse-geocode)이 openapi 에 머지됐는데 재생성이 안 돼 밀려 있었다.
   // 이 가드가 예고한 사고가 그대로 일어난 것이라, 여기서 함께 갚는다.
   'stays/stays.ts':
     'ac1a5bfd2a6fe0fb49579eaf9e0f830bd83cc7b4040000aadebdc9e1d19f2f5f',
   'saved-stays/saved-stays.ts':
-    'a2d4929164e981baf14239c87471dcbdcf57dcb70004a705cd1ae981660af3ca',
+    'df37c238be7daf048febdbd8dbfb8494f6b26ae0b79eea1b1e4c788cb53acb0c',
   // TRIP-294에서 places·preferences로 넓혔다(01b Seed 확정 6). 근거는 문제로그
   // `2026-08-02 TRIP-211이 openapi만 고치고 재생성 없이 머지됐다` — 밀린 코드젠 빚이
   // 무관한 티켓의 diff에 섞여 들어오는 사고가 실제로 있었다. 사정거리가 넓을수록 그

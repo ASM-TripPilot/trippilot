@@ -288,3 +288,44 @@ describe('🔴 AC-B6 · INV-3 — 어느 얼굴·상태에도 소요·대기 시
     expect(screen.queryByText(DURATION)).toBeNull();
   });
 });
+
+/**
+ * TRIP-1023 #094 (US-PLANB-10) — 수동 입력 안내가 실제 조작(중앙 고정 핀 + 지도 움직이기, TRIP-866)과
+ * 맞아야 한다. "길게 눌러"는 이 화면에 없는 동작이다. 문구는 리포 선례(e05 핀 탭)와 같게 둔다.
+ * 부재 단언은 이 화면 한정이다 — 일정 편집기의 "길게 눌러 순서를…"은 정당한 안내라 대상이 아니다.
+ */
+describe('🔴 TRIP-1023 #094 — manual 얼굴 지도 안내는 "움직여 맞춘다" (AC-A7 · AC-A8)', () => {
+  it('지도 아래 안내가 "지도를 움직여 핀을 원하는 위치에 맞춰 주세요"이고 "길게 눌러"는 없다', () => {
+    render(
+      <LiveLocationView state="manual" center={SEOUL} placeName="경복궁" />
+    );
+
+    expect(screen.getByTestId('live-location-manual')).toBeOnTheScreen();
+    expect(
+      screen.getByText('지도를 움직여 핀을 원하는 위치에 맞춰 주세요')
+    ).toBeOnTheScreen();
+    expect(screen.queryByText(/길게 눌러/)).toBeNull();
+  });
+});
+
+describe('TRIP-1023 #094 — permission-denied 얼굴 문구는 그대로다 (AC-A9 · Q3 · 선제 green)', () => {
+  it('일정 장소 기준 안내·추정 출발지 부가 줄이 글자 그대로 남는다', () => {
+    render(
+      <LiveLocationView
+        state="permission-denied"
+        center={SEOUL}
+        placeName="경복궁"
+      />
+    );
+
+    expect(
+      screen.getByText(
+        '현재 위치 대신 일정 속 장소를 기준으로 잡았어요. 핀을 옮겨 직접 지정할 수 있어요'
+      )
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByText('입력한 위치는 추정 출발지로 사용돼요')
+    ).toBeOnTheScreen();
+    expect(screen.queryByText(/길게 눌러/)).toBeNull();
+  });
+});

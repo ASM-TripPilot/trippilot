@@ -231,6 +231,7 @@ class ItineraryRevisionServiceTest : StringSpec({
         val restored = svc.restore(acc, tripId, revs.stored.single().revisionId)
 
         // 판정을 못 했다고 "깨끗하다"고 말하지 않는다 — 배지가 조용히 꺼지면 사용자는 문제를 못 본다.
+        // 시각이 그대로인 승계라 저장돼 있던 문구가 **그대로** 남는다(번역은 새 판정에만 붙는다).
         val s0 = restored.days.single().slots.single()
         s0.hasViolation shouldBe true
         s0.violationReason shouldBe "이동이 빠듯해요"
@@ -249,6 +250,6 @@ class ItineraryRevisionServiceTest : StringSpec({
 
         val s0 = restored.days.single().slots.single()
         s0.hasViolation shouldBe true
-        s0.violationReason shouldBe "이동이 빠듯해요"
+        s0.violationReason shouldBe "앞 장소에서 이동할 시간이 빠듯해요" // 타입 번역(TRIP-1030)
     }
 })

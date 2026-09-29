@@ -239,7 +239,7 @@ describe('AC-2 · 요약 카드 5행 (값 present + 순서)', () => {
     ]);
   });
 
-  it('값이 null 일 때 행별 카피 — 여행지·기간 신 카피, 나머지 "{라벨} 선택" (TRIP-671)', () => {
+  it('값이 null 일 때 행별 카피 — 여행지 신 카피, 나머지 "{라벨} 선택"(기간 포함, TRIP-671·TRIP-1045)', () => {
     render(<TripWizardStep1Screen {...props()} />);
 
     // 여행지 null → 신 카피 "어디로 갈까요?"(옛 "여행지 선택" 전역 대체, TRIP-671 D1).
@@ -247,9 +247,13 @@ describe('AC-2 · 요약 카드 5행 (값 present + 순서)', () => {
     expect(within(dest).getByText('어디로 갈까요?')).toBeOnTheScreen();
     expect(within(dest).queryByText('여행지 선택')).toBeNull();
 
-    // 기간 null → 값 줄 없음(옛 "기간 선택" 제거). 라벨 "기간"은 생존.
+    // 기간 null → muted "기간 선택"(TRIP-1045 QA #017 — 값 줄이 있어야 선택 전후 행 높이가 같다).
+    // 라벨 "기간"도 생존(getByText 완전 일치라 둘이 갈린다).
     const period = screen.getByTestId('trip-wizard-summary-period');
-    expect(within(period).queryByText('기간 선택')).toBeNull();
+    const periodPlaceholder = within(period).getByText('기간 선택');
+    expect(
+      String(periodPlaceholder.props.className ?? '').split(/\s+/)
+    ).toContain('text-muted');
     expect(within(period).getByText('기간')).toBeOnTheScreen();
 
     // 나머지 3행은 "{라벨} 선택" 유지 + muted(값이 채워지면 ink 로 바뀐다).
@@ -383,36 +387,5 @@ describe('AC-INV-3 · 소요 시간 미표시 (BR-U1-54)', () => {
 
     // 짝(긍정) — 스캔이 실제로 텍스트를 봤고, 위 정규식이 정상 표기(박·일)를 오탐하지 않는다.
     expect(root()).toHaveTextContent(/3박 4일/);
-  });
-});
-
-describe('TRIP-1010 · 박수·기간 불일치 안내 한 줄 — 화면은 완성 문자열만 받아 그린다 (01b Q2)', () => {
-  const NOTE_TEXT =
-    '여행지 박수(2박)가 기간(3박)보다 적어요 · 남은 1박은 경주로 잡아요';
-
-  it('nightsMismatchNote 가 있으면 그 문자열 그대로 한 줄을 기존 안내 톤(note 토큰)으로 그린다', () => {
-    render(
-      <TripWizardStep1Screen
-        {...filledProps({ nightsMismatchNote: NOTE_TEXT })}
-      />
-    );
-
-    // 완전 일치 — 화면이 조사·숫자를 덧붙이거나 바꾸지 않는다(조립은 페이지 몫).
-    expect(
-      screen.getByTestId('trip-wizard-nights-mismatch-note')
-    ).toHaveTextContent(NOTE_TEXT);
-    // 톤 — 여행지 시트 안내(`trip-wizard-destination-note`)와 같은 토큰.
-    const tokens = classes('trip-wizard-nights-mismatch-note');
-    expect(tokens).toContain('font-noto');
-    expect(tokens).toContain('text-label');
-    expect(tokens).toContain('text-muted');
-  });
-
-  it('nightsMismatchNote 가 없으면 그 줄이 없다', () => {
-    render(<TripWizardStep1Screen {...filledProps()} />);
-
-    // 짝 — 화면은 실제로 그려졌다(부재 단언의 공허 통과 차단).
-    expect(root()).toBeOnTheScreen();
-    expect(screen.queryByTestId('trip-wizard-nights-mismatch-note')).toBeNull();
   });
 });

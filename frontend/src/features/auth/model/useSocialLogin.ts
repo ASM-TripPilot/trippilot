@@ -35,7 +35,12 @@ export type AuthorizeResult =
   | { type: 'cancel' }
   | { type: 'dismiss' };
 
-export type Authorize = () => Promise<AuthorizeResult>;
+// TRIP-1035 — flow 는 "이번 인가가 어느 갈래로 갈지"를 인가 **전에** 알리는 표지다. makeAuthorize
+// 가 채우고, 없으면 token 으로 취급한다(사전 연령 시트 없음 · ageConfirmation 미탑재).
+export type Authorize = {
+  (): Promise<AuthorizeResult>;
+  readonly flow?: 'code' | 'token';
+};
 
 /** 서버로 나가기 직전까지 들고 있는 교환 요청 — 갈래별로 엔드포인트와 바디 모양이 다르므로
  * kind 로 태그해 exchange()가 어느 함수를 부를지 고른다. confirmAge() 재전송도 같은 갈래를
@@ -51,6 +56,13 @@ interface SocialLoginState {
   errorCode: string | null;
   conflictProvider: string | null;
   isNewUser: boolean;
+}
+
+function withAgeConfirmation(pending: PendingExchange): PendingExchange {
+  const ageConfirmation = { method: 'SELF_DECLARED' as const };
+  return pending.kind === 'code'
+    ? { ...pending, body: { ...pending.body, ageConfirmation } }
+    : { ...pending, body: { ...pending.body, ageConfirmation } };
 }
 
 // TRIP-172(결함 E) — authorize() 자체가 던지는 실패(예: 실 OAuth client 미설정, promptAsync
@@ -135,6 +147,70 @@ export function useSocialLogin(): SocialLoginState {
     [applyPhase]
   );
 
+  // TRIP-1035 — code 갈래의 사전 연령 시트가 붙잡고 있는 "아직 부르지 않은 인가". confirmAge 가
+  // 꺼내 소비(null)하므로 연타의 두 번째 확인은 할 일이 없다(AC-10).
+  const preAuthRef = useRef<{
+    provider: SocialProvider;
+    authorize: Authorize;
+  } | null>(null);
+
+  const authorizeAndExchange = useCallback(
+    async (
+      provider: SocialProvider,
+      authorize: Authorize,
+      ageConfirmed: boolean
+    ) => {
+      applyPhase('authorizing');
+      let result: AuthorizeResult;
+      try {
+        result = await authorize();
+      } catch {
+        // authorize() 자체의 예외는 사용자 취소가 아니라 시스템 실패다(INV-4 — 침묵 금지).
+        // 취소는 {type:'cancel'|'dismiss'} resolve 로 오므로 이 catch 에 걸리지 않는다.
+        setErrorCode(AUTHORIZE_FAILED_CODE);
+        applyPhase('error');
+        return;
+      }
+      if (result.type === 'cancel' || result.type === 'dismiss') {
+        applyPhase('cancelled');
+        return;
+      }
+      // D1 갈래 분기 — code(브라우저 OAuth)는 postSocialLogin, token(네이티브 SDK)은
+      // postSocialTokenLogin. 여기서 갈리면 반대 엔드포인트로 나가 실서버가 거부한다.
+      const pending: PendingExchange =
+        result.type === 'success-code'
+          ? {
+              kind: 'code',
+              provider,
+              body: {
+                authorizationCode: result.authorizationCode,
+                codeVerifier: result.codeVerifier,
+                redirectUri: result.redirectUri,
+              },
+            }
+          : {
+              kind: 'token',
+              provider,
+              // 키 자체를 조건부로 만든다 — undefined 값 키도 axios 가 직렬화 대상에 넣으므로
+              // 카카오·네이버 바디는 { accessToken } 그대로여야 한다.
+              body: result.authorizationCode
+                ? {
+                    accessToken: result.accessToken,
+                    authorizationCode: result.authorizationCode,
+                  }
+                : { accessToken: result.accessToken },
+            };
+      pendingRef.current = pending;
+      applyPhase('exchanging');
+      // 사용자가 시트에서 확인한 경우에만 싣는다 — 확인 없는 경로엔 키 자체가 없어야 한다(AC-6).
+      await exchange(
+        ageConfirmed ? withAgeConfirmation(pending) : pending,
+        ageConfirmed
+      );
+    },
+    [applyPhase, exchange]
+  );
+
   const signIn = useCallback(
     (provider: SocialProvider, authorize: Authorize) => {
       if (
@@ -147,68 +223,36 @@ export function useSocialLogin(): SocialLoginState {
       setErrorCode(null);
       setConflictProvider(null);
       setIsNewUser(false);
-      applyPhase('authorizing');
-      void (async () => {
-        let result: AuthorizeResult;
-        try {
-          result = await authorize();
-        } catch {
-          // authorize() 자체의 예외는 사용자 취소가 아니라 시스템 실패다(INV-4 — 침묵 금지).
-          // 취소는 {type:'cancel'|'dismiss'} resolve 로 오므로 이 catch 에 걸리지 않는다.
-          setErrorCode(AUTHORIZE_FAILED_CODE);
-          applyPhase('error');
-          return;
-        }
-        if (result.type === 'cancel' || result.type === 'dismiss') {
-          applyPhase('cancelled');
-          return;
-        }
-        // D1 갈래 분기 — code(브라우저 OAuth)는 postSocialLogin, token(네이티브 SDK)은
-        // postSocialTokenLogin. 여기서 갈리면 반대 엔드포인트로 나가 실서버가 거부한다.
-        const pending: PendingExchange =
-          result.type === 'success-code'
-            ? {
-                kind: 'code',
-                provider,
-                body: {
-                  authorizationCode: result.authorizationCode,
-                  codeVerifier: result.codeVerifier,
-                  redirectUri: result.redirectUri,
-                },
-              }
-            : {
-                kind: 'token',
-                provider,
-                // 키 자체를 조건부로 만든다 — undefined 값 키도 axios 가 직렬화 대상에 넣으므로
-                // 카카오·네이버 바디는 { accessToken } 그대로여야 한다.
-                body: result.authorizationCode
-                  ? {
-                      accessToken: result.accessToken,
-                      authorizationCode: result.authorizationCode,
-                    }
-                  : { accessToken: result.accessToken },
-              };
-        pendingRef.current = pending;
-        applyPhase('exchanging');
-        await exchange(pending, false);
-      })();
+      // 앞 시도의 찌꺼기(사전 시트의 인가 · token 400 의 교환 요청)를 버린다 — 다음 확인은
+      // 지금 이 시도의 것이어야 한다(AC-11 양방향).
+      preAuthRef.current = null;
+      pendingRef.current = null;
+      // TRIP-1035 — code 갈래의 인가코드는 1회용이라 400 뒤 재전송이 불가능하다. 그래서 인가
+      // 전에 연령 시트를 띄우고, 확인하면 첫 요청에 선언을 싣는다. flow 가 없으면 token 취급.
+      if (authorize.flow === 'code') {
+        preAuthRef.current = { provider, authorize };
+        applyPhase('needs-age');
+        return;
+      }
+      void authorizeAndExchange(provider, authorize, false);
     },
-    [applyPhase, exchange]
+    [applyPhase, authorizeAndExchange]
   );
 
   const confirmAge = useCallback(() => {
+    const preAuth = preAuthRef.current;
+    if (preAuth) {
+      preAuthRef.current = null;
+      void authorizeAndExchange(preAuth.provider, preAuth.authorize, true);
+      return;
+    }
     const pending = pendingRef.current;
     if (!pending) {
       return;
     }
     applyPhase('authorizing');
-    const ageConfirmation = { method: 'SELF_DECLARED' as const };
-    const resend: PendingExchange =
-      pending.kind === 'code'
-        ? { ...pending, body: { ...pending.body, ageConfirmation } }
-        : { ...pending, body: { ...pending.body, ageConfirmation } };
-    void exchange(resend, true);
-  }, [applyPhase, exchange]);
+    void exchange(withAgeConfirmation(pending), true);
+  }, [applyPhase, authorizeAndExchange, exchange]);
 
   return { signIn, confirmAge, phase, errorCode, conflictProvider, isNewUser };
 }

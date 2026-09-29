@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { SavedStayCardVM } from '@/entities/stay/model';
 import { SavedStayCard } from '@/entities/stay/ui/SavedStayCard';
+import { CollageEmptyState } from '@/shared/ui/CollageEmptyState';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
 import {
@@ -49,7 +50,7 @@ export interface SavedStayListScreenProps {
   isGuest?: boolean;
   /** 카드 press → 페이지가 합성·push. 화면은 id 만 올린다(합성이 stayKey 를 쓰므로 페이지 몫). */
   onPressCard?: (savedStayId: string) => void;
-  /** 하단 "다른 숙소를 거점으로 지정" → e05 등록. */
+  /** 하단 "숙소 직접 등록" → e05 등록. */
   onPressRegister?: () => void;
   /** empty CTA "숙소 둘러보기" → 숙소 탐색. */
   onPressBrowse?: () => void;
@@ -60,17 +61,6 @@ export interface SavedStayListScreenProps {
   /** 앱바 뒤로. */
   onBack?: () => void;
 }
-
-/** Figma 카드 그림자 `0 4 16 rgba(0,0,0,.08)` — className 으로 못 줘 style prop 으로 옮긴다.
- * shadowColor '#000000' 은 raw-hex 가드의 TOKENIZED_HEX 밖이라 무제재(HomeScreen softCardShadow
- * 선례). */
-const cardShadow = {
-  shadowColor: '#000000',
-  shadowOffset: { width: 0, height: 4 },
-  shadowOpacity: 0.08,
-  shadowRadius: 16,
-  elevation: 3,
-};
 
 type ScreenFace = 'guest' | 'loading' | 'error' | 'results' | 'empty';
 
@@ -159,51 +149,9 @@ function ResultsFace({
         >
           <MapPinGlyph size={19} tone="ink" />
           <Text className="font-noto-bold text-card-title font-bold text-ink">
-            다른 숙소를 거점으로 지정
+            숙소 직접 등록
           </Text>
         </Pressable>
-      </View>
-    </View>
-  );
-}
-
-// 중앙 하트 원 그림자(Figma 1702:1195, 0 6 18 /.1) — className 으로 못 줘 style prop. shadowColor
-// '#000000' 은 raw-hex 가드 사정거리 밖(cardShadow 선례).
-const emptyHeartShadow = {
-  shadowColor: '#000000',
-  shadowOffset: { width: 0, height: 6 },
-  shadowOpacity: 0.1,
-  shadowRadius: 18,
-  elevation: 6,
-};
-
-/** empty 콜라주(TRIP-729, Figma 1702:1191) — 사진 3장 겹침(중앙 상승·크게·앞, 양옆 낮게·뒤로) +
- * 흰 3px 테두리 + 중앙 하트 원. 실사진은 계약 공백이라 회색 자리(구조만, INV-1) — 겹침 기하는 절대
- * 좌표(rotate 없음, d02 는 rotate 였다). 중앙(photo-1)을 JSX 마지막에 그려 z 위(양옆 위로 겹침).
- * 겹침·z·높이 위계·그림자는 jest 사각(★4) — 6-b/TRIP-831 육안. */
-function EmptyCollage(): ReactElement {
-  return (
-    <View className="h-[170px] w-[320px]">
-      <View
-        testID="saved-stay-empty-photo-0"
-        className="absolute left-[6px] top-[26px] h-[138px] w-[120px] rounded-[12px] border-[3px] border-canvas bg-surface-strong"
-      />
-      <View
-        testID="saved-stay-empty-photo-2"
-        className="absolute left-[194px] top-[26px] h-[138px] w-[120px] rounded-[12px] border-[3px] border-canvas bg-surface-strong"
-      />
-      {/* 중앙 — 크게·상승·앞(마지막 렌더로 양옆 위에 겹친다). 중앙 하트 원 포함. */}
-      <View
-        testID="saved-stay-empty-photo-1"
-        className="absolute left-[96px] top-[4px] h-[158px] w-[128px] items-center justify-center rounded-[12px] border-[3px] border-canvas bg-surface-soft"
-      >
-        <View
-          testID="saved-stay-empty-heart"
-          style={emptyHeartShadow}
-          className="h-[52px] w-[52px] items-center justify-center rounded-pill bg-canvas"
-        >
-          <HeartFilledGlyph size={26} />
-        </View>
       </View>
     </View>
   );
@@ -214,32 +162,19 @@ function EmptyFace({
 }: {
   onPressBrowse?: () => void;
 }): ReactElement {
+  // TRIP-1050 — d02 와 같은 공통 틀. 이 화면 몫은 문구·흰 돋보기·testID 뿐이다.
   return (
-    <View
+    <CollageEmptyState
       testID="saved-stay-empty"
-      className="w-full flex-1 items-center px-[28px] pt-[96px]"
-    >
-      <EmptyCollage />
-      <Text className="mt-2xl text-center font-noto-bold text-[20px] font-bold text-ink">
-        마음에 드는 숙소를 저장해 보세요
-      </Text>
-      <Text className="mt-[10px] text-center font-noto text-label leading-[21px] text-muted">
-        인기 숙소를 둘러보고 ♥로 저장하면{'\n'}여기에 모아 바로 거점으로 쓸 수
-        있어요
-      </Text>
-      <Pressable
-        testID="saved-stay-browse"
-        accessibilityRole="button"
-        onPress={onPressBrowse}
-        style={cardShadow}
-        className="mt-2xl h-[52px] flex-row items-center justify-center gap-sm rounded-[12px] bg-primary px-[28px]"
-      >
-        <SearchGlyph size={19} />
-        <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-          숙소 둘러보기
-        </Text>
-      </Pressable>
-    </View>
+      title="마음에 드는 숙소를 저장해 보세요"
+      description={
+        '인기 숙소를 둘러보고 ♥로 저장하면\n여기에 모아 바로 거점으로 쓸 수 있어요'
+      }
+      ctaTestID="saved-stay-browse"
+      ctaLabel="숙소 둘러보기"
+      ctaIcon={<SearchGlyph size={19} />}
+      onPressCta={onPressBrowse}
+    />
   );
 }
 

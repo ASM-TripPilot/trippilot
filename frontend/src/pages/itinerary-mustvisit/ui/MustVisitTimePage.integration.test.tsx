@@ -19,6 +19,7 @@ import type {
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
 import { startTimeOptions } from '@/features/itinerary/model/mustVisitTimeForm';
+import { resetPressGuard } from '@/shared/press/pressGuard';
 
 import { MustVisitTimePage } from './MustVisitTimePage';
 
@@ -143,6 +144,7 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+  resetPressGuard(); // TRIP-1013 — 연타 가드 창(모듈 전역)이 앞 테스트에서 새지 않게 닫는다.
   observedHits = [];
   postBodies = [];
   postStatus = null;
@@ -205,9 +207,8 @@ function renderPage() {
 }
 
 /**
- * 토글을 원하는 상태로 만든다. **초기 상태를 못 박지 않는다** — 항목이 지금 `ANYTIME` 이라
- * 꺼진 채로 열리는 것도, Figma 프레임처럼 켜진 채로 열리는 것도 정본이 말하지 않았다.
- * 여기서 초기값을 단언하면 이 칸이 정하지 않은 것을 정하는 셈이 된다.
+ * 토글을 원하는 상태로 만든다(이미 그 상태면 누르지 않는다). 초기값 자체는 이 헬퍼가 아니라
+ * 아래 TRIP-1098 스위트가 단언한다(저장된 유형 — ANYTIME 이면 꺼짐, FIXED 면 켜짐).
  */
 function ensureFixed(on: boolean): void {
   const toggle = screen.getByTestId('itinerary-mustvisit-time-toggle');
@@ -470,12 +471,13 @@ describe('🔴 I13 · AC-a4 · BR-U1-48 — 토글 OFF 저장은 ANYTIME 본문�
   it('쓰기가 DELETE→POST 두 건이고 POST 본문이 {poiId, type:ANYTIME} 최소본이다', async () => {
     renderPage();
     await ready();
-    // 값은 안 채운다 — ANYTIME 은 날짜·시각을 안 싣는다. 초기 fixed:true 를 끄기만 한다.
+    // 값은 안 채운다 — ANYTIME 은 날짜·시각을 안 싣는다. TRIP-1098 뒤로는 ANYTIME 항목이 이미 꺼진 채
+    // 열리므로 ensureFixed(false) 는 누르지 않는다 — "손대지 않은 저장"도 같은 2단을 탄다.
     ensureFixed(false);
 
     submit();
 
-    // ★ 배열 완전 일치 — 개수·순서·경로. 현재 배선은 buildFixed 가 OFF 에서 null 이라 0 건 → red.
+    // ★ 배열 완전 일치 — 개수·순서·경로.
     await waitFor(() =>
       expect(mustVisitWrites()).toEqual([DELETE_HIT, POST_HIT])
     );
@@ -542,5 +544,125 @@ describe('🔴 W3 · 휠을 굴려 멈춘 값이 폼에 들어간다 (#049 · D2
     ).toHaveTextContent(/오후 12:00/);
     expect(screen.queryByText(START_MISSING_TEXT)).toBeNull();
     expect(screen.getByTestId('itinerary-mustvisit-time-submit')).toBeEnabled();
+  });
+});
+
+/**
+ * TRIP-1098 · 결정 1 — 「시각 고정」 스위치 초기값은 **저장된 유형**을 따른다(BR-U1-48 기본 ANYTIME).
+ *
+ * 무엇을 보장하나: 목록이 「아무 때나」라고 말하는 항목을 열면 상세도 꺼진 스위치·잠긴 컨트롤·「아무 때나로
+ * 두기」로 같은 말을 한다. FIXED 항목을 열면 저장된 날짜·시각·**체류**가 그대로 보인다(체류가 늘 「보통」으로
+ * 돌아가면 위반). 초기값만 바뀌었을 뿐 스위치를 누르면 켜짐 = 활성 규칙은 그대로다.
+ *
+ * 3동작: 준비 = must-visits GET 이 이 항목을 ANYTIME/FIXED 로 돌려줌 → 실행 = 화면을 열고(·스위치를 누르고)
+ * → 단언 = 스위치 checked · 세 묶음 disabled · CTA 글자 · 선택 표시.
+ */
+describe('🔴 TRIP-1098 · 스위치 초기값 = 저장된 유형', () => {
+  function toggleChecked(): boolean {
+    return Boolean(
+      screen.getByTestId('itinerary-mustvisit-time-toggle').props
+        .accessibilityState?.checked
+    );
+  }
+
+  /** 날짜 칩(첫 칩)·시각 트리거·체류 세그가 모두 같은 잠금 상태인지. */
+  function expectControlsLocked(locked: boolean): void {
+    const controls = [
+      screen.getByTestId('itinerary-mustvisit-time-date-2026-06-10'),
+      screen.getByTestId('itinerary-mustvisit-time-start-field'),
+      screen.getByTestId('itinerary-mustvisit-time-dwell-NORMAL'),
+    ];
+    for (const control of controls) {
+      if (locked) expect(control).toBeDisabled();
+      else expect(control).toBeEnabled();
+    }
+  }
+
+  it('T1 · ANYTIME 항목을 처음 열면 스위치 꺼짐 · 세 묶음 잠김 · CTA 「아무 때나로 두기」 · 차단 사유 없음', async () => {
+    renderPage();
+    await ready();
+
+    expect(toggleChecked()).toBe(false);
+    expectControlsLocked(true);
+    expect(
+      screen.getByTestId('itinerary-mustvisit-time-submit')
+    ).toHaveTextContent('아무 때나로 두기');
+    // 손대기 전에는 차단 사유가 뜨지 않는다(무회귀 — edited 가 곧 touched).
+    expect(screen.queryByTestId('itinerary-mustvisit-time-error')).toBeNull();
+  });
+
+  it.each([
+    [30, 'SHORT'],
+    [60, 'NORMAL'],
+    [120, 'LONG'],
+  ] as const)(
+    'T2 · FIXED 항목(체류 %i분)을 처음 열면 스위치 켜짐 · 저장된 날짜·시각 · 체류 %s 칸이 그대로다',
+    async (dwellMin, dwellKey) => {
+      const fixed: MustVisit[] = [
+        {
+          mustVisitId: MUST_VISIT_ID,
+          poiSnapshotId: 'snap-poi-a',
+          sourcePoiId: POI_ID,
+          type: 'FIXED',
+          fixedDate: '2026-06-11',
+          fixedStart: '13:00:00',
+          dwellMin,
+        },
+      ];
+      server.use(
+        http.get(`${BASE}/trips/:tripId/must-visits`, () =>
+          HttpResponse.json(fixed)
+        )
+      );
+
+      renderPage();
+      await ready();
+
+      await waitFor(() => expect(toggleChecked()).toBe(true));
+      expectControlsLocked(false);
+      expect(
+        screen.getByTestId('itinerary-mustvisit-time-submit')
+      ).toHaveTextContent('이 시각으로 고정');
+      expect(
+        screen.getByTestId('itinerary-mustvisit-time-date-2026-06-11')
+      ).toBeSelected();
+      expect(
+        screen.getByTestId('itinerary-mustvisit-time-start-field')
+      ).toHaveTextContent(/오후 1:00/);
+      // 체류가 저장값 칸이다 — 세 칸 중 그 칸만 선택(늘 「보통」으로 돌아가면 위반).
+      for (const key of ['SHORT', 'NORMAL', 'LONG'] as const) {
+        const segment = screen.getByTestId(
+          `itinerary-mustvisit-time-dwell-${key}`
+        );
+        if (key === dwellKey) expect(segment).toBeSelected();
+        else expect(segment).not.toBeSelected();
+      }
+    }
+  );
+
+  it('T4 · 등록 건이 없으면(목록에 이 장소 없음) 꺼진 채 열린다 — BR-U1-48 기본 ANYTIME', async () => {
+    server.use(
+      http.get(`${BASE}/trips/:tripId/must-visits`, () => HttpResponse.json([]))
+    );
+
+    renderPage();
+    await ready();
+
+    expect(toggleChecked()).toBe(false);
+    expectControlsLocked(true);
+    expect(
+      screen.getByTestId('itinerary-mustvisit-time-submit')
+    ).toHaveTextContent('아무 때나로 두기');
+  });
+
+  it('T3 · 어떤 초기 상태든 스위치를 누르면 checked 가 뒤집히고 잠금은 늘 !checked 다', async () => {
+    renderPage();
+    await ready();
+
+    for (const expected of [true, false, true]) {
+      fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-toggle'));
+      expect(toggleChecked()).toBe(expected);
+      expectControlsLocked(!expected);
+    }
   });
 });

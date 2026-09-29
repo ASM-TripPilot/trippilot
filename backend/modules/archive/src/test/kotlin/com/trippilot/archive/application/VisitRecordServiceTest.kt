@@ -91,6 +91,7 @@ class VisitRecordServiceTest : StringSpec({
 
     fun consents(optIn: Boolean) = object : LocationConsentFacade {
         override fun hasGpsRecordingOptIn(accountId: UUID) = optIn
+            override fun hasLocationLegalConsent(accountId: UUID) = false
     }
 
     /** 남긴 수집 사실을 들여다보는 대역 — 법정 로그는 auth 소유라 여기서는 경계 호출만 본다. */

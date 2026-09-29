@@ -78,6 +78,25 @@ class ItineraryReadFacadeTest : StringSpec({
     fun facade(stored: Itinerary? = itinerary, names: Map<UUID, String> = emptyMap()) =
         ItineraryReadFacade(trips, repo(stored), SlotSurfaceAssembler(surfaces(names)))
 
+    /**
+     * 계획 슬롯에 표면이 실린다(TRIP-1060 · BR-U3-09) — 재계획 비교(before 열)의 재료다.
+     * 합성은 일정 조회와 같은 [SlotSurfaceAssembler] 라, 확정 슬롯의 동결값 우선(INV-U1-03)이
+     * 두 응답에서 갈리지 않는다. 표면이 없으면 null — 이름을 지어내지 않는다.
+     */
+    "계획 슬롯에 POI 표면이 실린다 — 없으면 null" {
+        val slots = facade(names = mapOf(poiA to "성산일출봉")).findPlanSlots(acc, tripId)
+
+        val a = slots.single { it.poiId == poiA }
+        a.nameKo shouldBe "성산일출봉"
+        a.category shouldBe "명소"
+        a.lat shouldBe 33.0
+        a.lng shouldBe 126.0
+        // poiB 는 정본에 없다 — 항목은 남고 표면만 비운다
+        val b = slots.single { it.poiId == poiB }
+        b.nameKo shouldBe null
+        b.imageUrl shouldBe null
+    }
+
     "슬롯을 경계 키로 내보낸다 — 물리 키를 내보내면 재계획으로 행이 갈릴 때 참조가 끊긴다" {
         val ref = facade().findCurrent(acc, tripId)!!
 

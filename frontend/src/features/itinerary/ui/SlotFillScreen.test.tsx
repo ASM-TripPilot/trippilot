@@ -258,13 +258,17 @@ describe('🔴 SlotFillScreen (h10) — 진행줄·스텝퍼 슬롯(재사용)',
   it('T-PROG-1 · progress 주면 신규 namespace 진행줄(-slotfill-progress*)을 그린다', () => {
     renderScreen({ progress: PROGRESS });
 
-    // 단언: slotfill 접두 진행줄이 뜨고 슬롯 카운트가 보인다.
+    // 단언: slotfill 접두 진행줄이 뜨고 카운트가 `N번째 / M` 이다(TRIP-1043 — 「슬롯」 캡션 제거).
     expect(
       screen.getByTestId('itinerary-copick-slotfill-progress')
     ).toBeTruthy();
     expect(
       screen.getByTestId('itinerary-copick-slotfill-progress-count')
-    ).toHaveTextContent('2 / 4');
+    ).toHaveTextContent('2번째 / 4');
+    // 화면 어디에도 내부 용어 「슬롯」이 없다(QA #041).
+    expect(
+      screen.queryAllByText(/슬롯/).map((node) => node.props.children)
+    ).toEqual([]);
 
     // ★ 신규 namespace 다 — h09 의 `-concept-progress*` 를 공유·오염하지 않는다(D3).
     expect(
@@ -355,6 +359,18 @@ describe('🔴 SlotFillScreen (h10) — 반경 넓히기/좁히기 상시(결과
  * 선택과 무관하게 셋째 칸"을 굳혀 가운데 "1.1km" 옆에 "약 1.1km" 가 뜨는 버그의 계약이었다(교체).
  * 캡션(radiusUsedLabel)과 셋째 칸(maxRadiusLabel)을 무엇으로 채울지는 페이지가 정한다.
  */
+describe('🔴 SlotFillScreen (h10) — 넓힘 캡션은 사실 문장·muted 톤 (TRIP-1081 결정 1)', () => {
+  it('T-CAPTION-TONE · 캡션은 받은 문구를 그대로 그리고 색은 강조(primary-text)가 아니라 muted 다', () => {
+    const caption = '1.1km 안에 없어 약 12.0km까지 넓혔어요';
+    renderScreen({ radiusUsedLabel: caption });
+
+    const used = screen.getByTestId('itinerary-copick-radius-used');
+    expect(used).toHaveTextContent(caption);
+    expect(used.props.className).toContain('text-muted');
+    expect(used.props.className).not.toContain('text-primary-text');
+  });
+});
+
 describe('🔴 SlotFillScreen (h10) — 셋째 반경 세그 라벨(maxRadiusLabel ?? 최대)', () => {
   it('T-SEG3 · maxRadiusLabel 만 셋째 칸을 덮고, 캡션값(radiusUsedLabel)만 오면 셋째 칸은 "최대"', () => {
     // 최대로 조회한 결과 — 셋째 칸이 서버값(Figma 3850:2227 '약 11.3km').
@@ -465,6 +481,10 @@ describe('🔴 SlotFillScreen (h10) — 지도 카드 additive(prop 전달·degr
   it('T-MAP · mapView 주면 지도 카드(map-root)를 viewOnly+connectPins=false 로 소비한다', () => {
     renderScreen({ mapView: MAP_VIEW });
 
+    // TRIP-1043 — 지도는 카드 컨테이너(itinerary-copick-slotfill-map) 안에 있다(페이지 배선 관측 자리).
+    const card = screen.getByTestId('itinerary-copick-slotfill-map');
+    expect(within(card).getByTestId('map-root')).toBeTruthy();
+
     // 목이 props 를 host 로 노출한다 — 보여주기 전용(viewOnly) + 검증된 동선 아님(connectPins=false).
     const map = screen.getByTestId('map-root');
     expect(map.props.viewOnly).toBe(true);
@@ -473,9 +493,89 @@ describe('🔴 SlotFillScreen (h10) — 지도 카드 additive(prop 전달·degr
     expect(map.props.radiusCircle).toBeDefined();
   });
 
+  it('T-MAP-FIT · mapView.fitPins 를 주면 지도까지 흘러가고 반경 원도 함께 넘어간다(TRIP-1081 결정 2)', () => {
+    renderScreen({ mapView: { ...MAP_VIEW, fitPins: true } });
+
+    const map = screen.getByTestId('map-root');
+    expect(map.props.fitPins).toBe(true);
+    // 핀에 맞춰 열어도 원은 그대로 그린다(결정 2 (b)).
+    expect(map.props.radiusCircle).toEqual(MAP_VIEW.radiusCircle);
+
+    // 짝 — fitPins 없는 mapView 면 지도에도 없다(원 기준 카메라 유지).
+    screen.unmount();
+    renderScreen({ mapView: MAP_VIEW });
+    expect(screen.getByTestId('map-root').props.fitPins).toBeUndefined();
+  });
+
   it('T-MAP-DEGRADE · mapView 미주입이면 지도 카드가 없다(좌표 도착 전 정직 degrade)', () => {
     renderScreen({ mapView: undefined });
 
     expect(screen.queryByTestId('map-root')).toBeNull();
+    expect(screen.queryByTestId('itinerary-copick-slotfill-map')).toBeNull();
+  });
+});
+
+/**
+ * TRIP-1022 #071 — 후보 카드의 **본문**을 눌러도 선택된다(행 전체가 라디오).
+ *
+ * 무엇을 보장하나(01 AC-D1~D3, 선례 `SlotCandidateSheet` 행 Pressable):
+ *  - 🔴 T1·T2 이름·설명 텍스트를 누르면 그 후보가 선택된다(지금은 24px 원만 눌린다).
+ *  - 🔴 T3 `itinerary-candidate-radio-{poiId}` 는 후보마다 **정확히 1개**이고, 이름을 **품은** 행
+ *    요소에 붙는다 — role radio + accessibilityState.selected.
+ *  - 선택 전 확정 CTA 는 발화하지 않는다(AC-D3 — 기존 C2 와 짝).
+ *
+ * ★ testID 로 누르면 공허 통과다 — trailing 원이 그대로여도 그 testID 는 눌린다. 그래서 **텍스트**를
+ *   누른다. RNTL 13.3.3 `fireEvent.press` 는 위로 올라가며 onPress 를 찾고, 없으면 조용히 끝난다
+ *   (던지지 않음 — 02a §5 실측) → 지금은 spy 0회로 red.
+ */
+describe('🔴 SlotFillScreen (h10) — 후보 행 전체가 라디오 (TRIP-1022 #071)', () => {
+  const VIEWS = {
+    A1: { nameKo: '국립현대미술관 서울' },
+    B2: { nameKo: '서울공예박물관' },
+  };
+
+  it('T1 · AC-D1 후보 이름을 누르면 그 후보가 선택되고, 확정은 발화하지 않는다', () => {
+    const { onSelectRadio, onConfirm } = renderScreen({
+      candidateViews: VIEWS,
+      selectedPoiId: null,
+    });
+
+    fireEvent.press(screen.getByText('국립현대미술관 서울'));
+
+    expect(onSelectRadio).toHaveBeenCalledTimes(1);
+    expect(onSelectRadio).toHaveBeenCalledWith('A1');
+    expect(onConfirm).toHaveBeenCalledTimes(0);
+  });
+
+  it('T2 · AC-D1 후보 설명(rationale)을 눌러도 그 후보가 선택된다', () => {
+    const { onSelectRadio } = renderScreen({ candidateViews: VIEWS });
+
+    fireEvent.press(screen.getByText('전시+카페 한 번에'));
+
+    expect(onSelectRadio).toHaveBeenCalledTimes(1);
+    expect(onSelectRadio).toHaveBeenCalledWith('B2');
+  });
+
+  it('T3 · AC-D2 라디오 testID 는 후보마다 1개이고, 이름을 품은 행에 붙어 선택 상태를 낸다', () => {
+    renderScreen({ candidateViews: VIEWS, selectedPoiId: 'A1' });
+
+    // 개수 — 행과 trailing 원에 같은 testID 가 두 번 붙는 구현을 죽인다(숫자로 잰다).
+    expect(screen.queryAllByTestId('itinerary-candidate-radio-A1').length).toBe(
+      1
+    );
+    expect(screen.queryAllByTestId('itinerary-candidate-radio-B2').length).toBe(
+      1
+    );
+
+    // 행 — 라디오 요소 **안에** 후보 이름이 있다(24px 원이면 이름이 안 들어 있다).
+    const rowA = screen.getByTestId('itinerary-candidate-radio-A1');
+    const rowB = screen.getByTestId('itinerary-candidate-radio-B2');
+    expect(within(rowA).getByText('국립현대미술관 서울')).toBeOnTheScreen();
+    expect(within(rowB).getByText('서울공예박물관')).toBeOnTheScreen();
+
+    // 접근성 — 라디오 역할과 선택 상태는 행이 낸다.
+    expect(rowA.props.accessibilityRole).toBe('radio');
+    expect(rowA.props.accessibilityState?.selected).toBe(true);
+    expect(rowB.props.accessibilityState?.selected).toBe(false);
   });
 });

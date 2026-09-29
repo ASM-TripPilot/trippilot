@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import {
+  AccessibilityInfo,
   Animated,
   Easing,
   Pressable,
@@ -20,7 +21,7 @@ import {
 } from './ItineraryGlyphs';
 
 /**
- * h09 [완전AI] "AI가 일정 짜는 중" 화면 — Figma `1905:1083`. 프레젠테이션(props만, 재판정 금지).
+ * h07 [완전AI] "AI가 일정 짜는 중" 화면 — Figma `4294:8516`. 프레젠테이션(props만, 재판정 금지).
  *
  * 이 화면은 언제나 "생성 중"이다 — 진행 여부를 스스로 판정하지 않고(`generating` prop 없음) 진행
  * 표면을 상시 그린다. `failed` 일 때만 실패 표면으로 갈아 낀다(배선의 `isError`).
@@ -48,6 +49,14 @@ const STEPS = ['장소 수집', '동선 계산', '시간 배치'] as const;
 const FAILED_TITLE = '일정을 만들지 못했어요';
 const FAILED_NOTE = '네트워크를 확인하고 다시 시도해 주세요';
 const RETRY_LABEL = '다시 시도';
+// TRIP-1032 — 다른 여행 생성 중(409) 안내. Figma 프레임 없음(01b Q7 채택 문구 — 발명, 사용자 확인 대기).
+const BUSY_TITLE = '다른 여행의 일정을 만들고 있어요';
+const BUSY_NOTE =
+  '한 번에 하나만 만들 수 있어요. 기존 생성을 멈추고 이 여행을 만들까요?';
+const BUSY_UNCANCELABLE_NOTE =
+  '지금은 첫날을 만드는 중이라 취소할 수 없어요. 조금 뒤에 다시 시도해 주세요.';
+const BUSY_CANCEL_RETRY_LABEL = '취소하고 새로 만들기';
+const BUSY_WAIT_LABEL = '기다리기';
 
 // 카드 그림자(Figma `0px 2px 10px rgba(0,0,0,0.06)`). RN 은 box-shadow 가 없어 스타일
 // 프로퍼티로 옮긴다. `#000000` 은 raw-hex 가드의 브랜드 팔레트에 없어 그림자 색으로 정당하다
@@ -103,6 +112,51 @@ function IndeterminateBar(): ReactElement {
   );
 }
 
+/**
+ * 3단계 원의 순차 펄스(TRIP-1046 · QA #025) — 세 원이 같은 박자로 옅어졌다 돌아오되 시작만 300ms씩
+ * 어긋난다(stagger). 어느 단계가 끝났다고 주장하지 않으므로 세 원의 얼굴은 같다(⚑C). 박자·진폭은
+ * Figma 모션 정의가 없어 발명값(6-b 육안 조정). 기기 "동작 줄이기"면 시작하지 않아 정지 원으로 남는다.
+ */
+function useStepPulse(count: number): Animated.Value[] {
+  const [values] = useState(() =>
+    Array.from({ length: count }, () => new Animated.Value(1))
+  );
+
+  useEffect(() => {
+    let active = true;
+    const pulse = Animated.stagger(
+      300,
+      values.map((value) =>
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(value, {
+              toValue: 0.3,
+              duration: 600,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+            Animated.timing(value, {
+              toValue: 1,
+              duration: 600,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+          ])
+        )
+      )
+    );
+    void AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
+      if (active && !reduce) pulse.start();
+    });
+    return () => {
+      active = false;
+      pulse.stop();
+    };
+  }, [values]);
+
+  return values;
+}
+
 export interface GeneratingScreenProps {
   /** 앱바 뒤로 셰브론 press — 배선이 앞으로 이탈(여행/홈), 뮤테이션은 살아 있음(뒤로가기=백그라운드). */
   onBackground: () => void;
@@ -114,6 +168,12 @@ export interface GeneratingScreenProps {
   pins?: MapPin[];
   /** 지도 중심 — MapView 필수 prop. `pins`와 동반(둘 다 없으면 지도 생략). */
   center?: MapCenter;
+  /** TRIP-1032 — 다른 여행이 생성 중(409)이면 실패 표면 대신 안내. `cancelable=false` 면 [기다리기]만. */
+  busy?: {
+    cancelable: boolean;
+    onCancelAndRetry: () => void;
+    onWait: () => void;
+  } | null;
 }
 
 export function GeneratingScreen({
@@ -122,7 +182,9 @@ export function GeneratingScreen({
   failed = false,
   pins,
   center,
+  busy,
 }: GeneratingScreenProps): ReactElement {
+  const pulse = useStepPulse(STEPS.length);
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
       <View className="flex-1 bg-canvas">
@@ -146,7 +208,32 @@ export function GeneratingScreen({
         </View>
 
         <ScrollView contentContainerClassName="gap-lg px-lg pb-2xl pt-sm">
-          {failed ? (
+          {busy ? (
+            <StateNotice
+              testID="itinerary-generation-busy"
+              icon={<AlertCircleGlyph />}
+              title={BUSY_TITLE}
+              description={busy.cancelable ? BUSY_NOTE : BUSY_UNCANCELABLE_NOTE}
+              actions={[
+                ...(busy.cancelable
+                  ? [
+                      {
+                        testID: 'itinerary-generation-busy-cancel-retry',
+                        label: BUSY_CANCEL_RETRY_LABEL,
+                        variant: 'filled' as const,
+                        onPress: busy.onCancelAndRetry,
+                      },
+                    ]
+                  : []),
+                {
+                  testID: 'itinerary-generation-busy-wait',
+                  label: BUSY_WAIT_LABEL,
+                  variant: busy.cancelable ? 'outline' : 'filled',
+                  onPress: busy.onWait,
+                },
+              ]}
+            />
+          ) : failed ? (
             <StateNotice
               testID="itinerary-generating-failed"
               icon={<AlertCircleGlyph />}
@@ -206,7 +293,11 @@ export function GeneratingScreen({
                   >
                     {/* 균일한 진행 중 표식 — 단계별 완료/대기 차등을 두지 않는다(⚑C). */}
                     <View className="h-5 w-5 items-center justify-center">
-                      <View className="h-[13px] w-[13px] rounded-pill border-[1.5px] border-muted-soft" />
+                      <Animated.View
+                        testID={`itinerary-generating-pulse-${index + 1}`}
+                        style={{ opacity: pulse[index] }}
+                        className="h-[13px] w-[13px] rounded-pill border-[1.5px] border-muted-soft"
+                      />
                     </View>
                     <Text className="font-noto-bold text-[14.5px] font-bold text-ink">
                       {label}

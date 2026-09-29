@@ -48,6 +48,11 @@ const HEART_GLYPHS_REL = 'shared/ui/HeartGlyphs.tsx';
 // 면제 자기검사(`files.toContain`)가 ToastGlyphs 의 실재를 red→green 앵커로 겸한다.
 const TOAST_REL = 'shared/ui/Toast.tsx';
 const TOAST_GLYPHS_REL = 'shared/ui/ToastGlyphs.tsx';
+// TRIP-1050 — d02·e04 빈 상태 공통 컴포넌트. 소비처가 features 두 곳이라 widgets 는 층 방향상
+// 불가 → shared/ui. 도메인 문구는 전부 props 로 받는다(README §65).
+const COLLAGE_EMPTY_REL = 'shared/ui/CollageEmptyState.tsx';
+const SAVED_STAY_SCREEN_REL = 'features/stay/ui/SavedStayListScreen.tsx';
+const SAVED_PLACE_SCREEN_REL = 'features/explore/ui/SavedPlaceListScreen.tsx';
 const STAY_STATE_NOTICE = path.join(
   ROOT,
   'features',
@@ -249,5 +254,37 @@ describe('01b Seed Q1 ⓑ · 승격은 이동이지 복제가 아니다', () => 
     // 바꾸고 렌더를 지운 상태를 차단한다).
     expect(staySource).toContain('@/shared/ui/StateNotice');
     expect(staySource).toMatch(/<StateNotice\b/);
+  });
+});
+
+describe('🔴 TRIP-1050 · 콜라주 빈 상태는 shared/ui 한 벌이고 두 화면이 그것을 쓴다 (AC-6·AC-7)', () => {
+  it('CollageEmptyState 가 모집단에 있고, 코드에 도메인 문구(장소·숙소·부산)가 없다', () => {
+    const collage = sharedUiSources().find(
+      ({ file }) => file === COLLAGE_EMPTY_REL
+    );
+
+    // 긍정 — 모집단에 들어와야 위의 층·duration·URL·className·hex 스캔이 이 파일에도 걸린다.
+    expect(collage).toBeDefined();
+    expect(collage?.source).toMatch(/export function CollageEmptyState\b/);
+    // 부정 — 주석을 걷은 소스(문자열·식별자만 남음)에 도메인 문구가 있으면 원시 부품이 아니다.
+    expect(collage?.source).not.toMatch(/장소|숙소|부산/);
+  });
+
+  it('d02·e04 화면이 같은 shared 경로를 import 해 그리고, e04 에는 로컬 콜라주 사본이 없다', () => {
+    const read = (rel: string) =>
+      stripComments(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
+    const staySource = read(SAVED_STAY_SCREEN_REL);
+    const placeSource = read(SAVED_PLACE_SCREEN_REL);
+
+    // 긍정 — import 만 바꾸고 렌더를 지운 상태도 막으려 JSX 사용까지 함께 잰다.
+    [staySource, placeSource].forEach((source) => {
+      expect(source).toContain("'@/shared/ui/CollageEmptyState'");
+      expect(source).toMatch(/<CollageEmptyState\b/);
+    });
+
+    // 부정 — e04 에 옛 콜라주가 남으면 두 벌이다. d02 는 지역 0건 블록이 옛 콜라주를 계속 써서
+    // (TRIP-1042 몫) 이 금지를 걸지 않는다.
+    expect(staySource).not.toMatch(/\bEmptyCollage\b/);
+    expect(staySource).not.toContain('saved-stay-empty-photo-');
   });
 });

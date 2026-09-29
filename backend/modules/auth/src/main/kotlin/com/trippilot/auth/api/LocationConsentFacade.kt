@@ -18,4 +18,12 @@ interface LocationConsentFacade {
      * 미설정 계정은 `false` — 동의는 명시적으로만 생긴다.
      */
     fun hasGpsRecordingOptIn(accountId: UUID): Boolean
+
+    /**
+     * 위치기반서비스 법정 동의(L2, LOCATION_TERMS)에 현재 동의했는가 — 재계획 기준점 좌표
+     * 수용 판정의 근거(TRIP-992). L3(GPS 발자취)와 축이 다르다: 이쪽은 "위치를 서비스에 쓰는 것"
+     * 자체의 동의라, 단발 좌표(GPS·수동 핀) 저장은 이 값으로만 가른다. OS 권한(L1)은 섞지 않는다 —
+     * 수동 핀은 단말 권한과 무관하고, GPS 는 FE 가 이미 권한 없이는 못 보낸다.
+     */
+    fun hasLocationLegalConsent(accountId: UUID): Boolean
 }

@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 import { useRouter } from 'expo-router';
 
 import type { Trip } from '@/shared/api/generated/schemas';
@@ -11,6 +11,7 @@ import {
   resolveItineraryDestination,
 } from '@/features/itinerary/model/planState';
 import { deriveTripCardFace } from '@/features/itinerary/model/tripCardFace';
+import { isGenerationRunning } from '@/features/itinerary/model/useGenerationBusy';
 import {
   MyTripCard,
   type MyTripBadge,
@@ -34,6 +35,8 @@ import {
 
 export interface TripCardContainerProps {
   trip: Trip;
+  /** TRIP-1055 · 삭제 요청(다이얼로그 열기) — 페이지가 쥔다. 없으면 ⋯ 도 없다. */
+  onPressDelete?: () => void;
 }
 
 /** 날짜범위 `~` 조립 — 공용 `formatConfirmedDateRange`(en-dash `–`, h25 확정 배너 공용)는 미수정하고
@@ -44,9 +47,11 @@ function formatCardDateRange(startDate: string, endDate: string): string {
 
 export function TripCardContainer({
   trip,
+  onPressDelete,
 }: TripCardContainerProps): ReactElement {
   const router = useRouter();
   const itinerary = useGetTripsTripIdItinerary(trip.tripId);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // 미도착·404 아닌 조회 실패("모른다")면 배지·상태문·resume 전부 없는 degrade — 실패를 "일정 없음"
   // 으로 말하지 않는다(INV-4). 그 외(404 = "없다" 포함)는 얼굴을 순수 함수가 낸다(seam 포함).
@@ -62,7 +67,8 @@ export function TripCardContainer({
     const face = deriveTripCardFace(
       itinerary.data?.status,
       itinerary.data?.generationState,
-      notFound
+      notFound,
+      itinerary.data?.generationMode
     );
     badge = face.badge;
     extra = face.statusLine;
@@ -93,5 +99,28 @@ export function TripCardContainer({
     );
   };
 
-  return <MyTripCard vm={vm} onPress={onPress} />;
+  // TRIP-1055 · 삭제 진입점(UX 사본 — 판정 정본은 서버 BR-U1-57, 상태 가드 TRIP-1061 전까진 이게 유일한
+  // 방어). 보이는 배지가 '작성중'이고(Q3 — 날짜 지난 초안 포함) 진행 중 생성 세션이 없을 때만(Q1·Q2).
+  // 배지가 null 인 "모른다"(조회 중·404 아닌 실패)는 draft 가 아니라 닫힌 쪽으로 빠진다.
+  const deletable =
+    onPressDelete !== undefined &&
+    badge === 'draft' &&
+    !isGenerationRunning(itinerary.data);
+
+  return (
+    <MyTripCard
+      vm={vm}
+      onPress={onPress}
+      onPressDelete={
+        deletable
+          ? () => {
+              setMenuOpen(false);
+              onPressDelete();
+            }
+          : undefined
+      }
+      menuOpen={menuOpen}
+      onPressMenu={() => setMenuOpen((open) => !open)}
+    />
+  );
 }

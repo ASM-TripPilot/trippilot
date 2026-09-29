@@ -25,7 +25,8 @@ import { ItineraryPlanPage } from './ItineraryPlanPage';
  *  - 🔴 전 슬롯 검증 시각 칩 — 비고정 `HH:mm–HH:mm`(en-dash U+2013), 고정 숙소 단일 `21:00`(AC-2).
  *  - 🔴 INV-3 — 셸 얼굴 어디에도 소요시간(`분`·`시간`·`소요`)·`%` 0(AC-3).
  *  - 🔴 헤더 "부산 여행 · 1일차 · 6월 10일…" + meta `4곳 · 4.1km`(N=비고정 4, km=legDistance 합, AC-4).
- *  - 🔴 전 슬롯 distanceRange=null → 커넥터 "이동 거리 계산 중" + meta `4곳`(km 생략, AC-5).
+ *  - 🔴 전 슬롯 distanceRange=null → 커넥터는 글리프 줄만(문구 칸·"이동 거리 계산 중" 없음, TRIP-1054)
+ *    + meta `4곳`(km 생략, AC-5).
  *  - 🔴 고정 숙소 슬롯 부재 → 거점없음 안내 카드 + 링크 push / 숙소 있으면 카드 부재(AC-7).
  *  - narrow 경계 — CONFIRMED 는 기존 `TimelineScreen`, 404 는 기존 notFound 얼굴(셸 부재, AC-10).
  *
@@ -385,17 +386,22 @@ describe('🔴 T4 · AC-4 — 헤더 3세그 + meta "4곳 · 4.1km"(비고정 �
   });
 });
 
-describe('🔴 T5 · AC-5 — 거리 계산 중: 커넥터 "이동 거리 계산 중" + meta km 생략', () => {
-  it('전 슬롯 distanceRange=null 이면 커넥터가 계산 중이고 meta 는 곳 수만 그린다', async () => {
+describe('🔴 T5 · AC-5 — 거리 없음: 커넥터 글리프 줄만 + meta km 생략 (TRIP-1054 AC-7)', () => {
+  it('전 슬롯 distanceRange=null 이면 커넥터 줄은 남고 문구 칸·"계산 중"이 없으며 meta 는 곳 수만 그린다', async () => {
     useItinerary(() => HttpResponse.json(plannedPending()));
     renderPage();
     await screen.findByTestId('map-sheet-shell-root');
 
-    const connectors = screen.queryAllByTestId(/^sheet-connector-distance-/);
-    expect(connectors.length).toBeGreaterThan(0);
-    connectors.forEach((node) =>
-      expect(node).toHaveTextContent('이동 거리 계산 중')
+    // 줄은 남는다(T1 과 같은 줄 선택자 — 줄 testID 는 날짜로 시작).
+    expect(
+      screen.queryAllByTestId(/^sheet-connector-\d/).length
+    ).toBeGreaterThan(0);
+    // 문구 칸은 하나도 없다(값이 없으니 그릴 글자가 없다 — 결정 1b).
+    expect(screen.queryAllByTestId(/^sheet-connector-distance-/)).toHaveLength(
+      0
     );
+    // 옛 거짓 신호 "계산 중" 0(QA #038).
+    expect(screen.queryByText(/이동 거리 계산 중/)).toBeNull();
 
     // ★10 legDistance([null,…])→null → meta km 생략(곳 수만). "4곳 · X.Xkm" 이면 red.
     expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent('4곳');

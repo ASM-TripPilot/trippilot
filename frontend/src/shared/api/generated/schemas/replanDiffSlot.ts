@@ -19,6 +19,13 @@ export interface ReplanDiffSlot {
   endAt: string;
   /** 고정이라 손대지 않은 슬롯(BR-U4-18) */
   isFixed: boolean;
+  nameKo?: string | null;
+  /** 한글 정본(맛집·카페 …) — 일정 슬롯과 같은 값 */
+  category?: string | null;
+  /** NULL = 미확보. 대표 1장 */
+  imageUrl?: string | null;
+  lat?: number | null;
+  lng?: number | null;
   /** 자정 넘김(HC4). true 면 `endAt` 이 `startAt` 보다 이르다 — 익일 시각이라는 뜻이고, 복귀 시각 비교도 이 값을 반영해 계산한다. */
   endsNextDay: boolean;
 }

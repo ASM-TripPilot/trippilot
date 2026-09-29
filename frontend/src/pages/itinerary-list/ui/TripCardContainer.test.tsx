@@ -332,3 +332,79 @@ describe('🔴 1006 · 생성 중 카드 탭 — 생성 방식별 목적지 (D2)
     );
   });
 });
+
+// ── TRIP-1015 B · 카드 상태문은 생성 방식을 본다 (QA #082 · 사용자 결정 1) ─────────────────
+// 순수 함수(`tripCardFace.test.ts` 1015-B)만으론 컨테이너가 모드를 **안 넘겨도** 통과한다 — 컨테이너는
+// 이미 `generationMode` 를 목적지 판정에는 넘기지만 상태문 쪽엔 빠져 있었다. 그 이음매를 여기서 잠근다.
+describe('🔴 1015-B · 생성 방식별 카드 상태문 — 컨테이너가 모드를 얼굴 판정에 넘긴다', () => {
+  it('직접 짜기(MANUAL) 초안 카드는 "직접 짜는 중"이고, "추천안 준비 중"·"AI가…" 문구는 없다', () => {
+    // 준비 — 직접 짜기로 만든 빈 초안(COMPLETE + PLANNED).
+    mockUseItinerary.mockReturnValue(
+      itinOk({ ...itin('COMPLETE', 'PLANNED'), generationMode: 'MANUAL' })
+    );
+
+    // 실행
+    render(<TripCardContainer trip={trip()} />);
+
+    // 단언 — 상태문(완전 일치) · 배지는 그대로 '작성중' · resume 도 지금 규칙 그대로(초안이라 있음).
+    expect(screen.getByTestId('my-trip-extra-t1')).toHaveTextContent(
+      '직접 짜는 중'
+    );
+    expect(screen.getByTestId('my-trip-badge-t1')).toHaveTextContent('작성중');
+    expect(screen.getByTestId('my-trip-resume-t1')).toBeOnTheScreen();
+    // 금지 — AI 가 준비하는 것처럼 말하지 않는다(QA #082).
+    expect(screen.queryByText('추천안 준비 중')).toBeNull();
+    expect(screen.queryByText(/^AI가/)).toBeNull();
+  });
+
+  it('같이 짜기(CO_PLAN) 슬롯 채우는 중(PARTIAL) 카드는 "같이 짜는 중"이고 resume 은 없다', () => {
+    mockUseItinerary.mockReturnValue(itinOk(partialItin('CO_PLAN')));
+
+    render(<TripCardContainer trip={trip()} />);
+
+    expect(screen.getByTestId('my-trip-extra-t1')).toHaveTextContent(
+      '같이 짜는 중'
+    );
+    expect(screen.getByTestId('my-trip-badge-t1')).toHaveTextContent('작성중');
+    expect(screen.queryByTestId('my-trip-resume-t1')).toBeNull();
+    expect(screen.queryByText('AI가 일정을 짜는 중')).toBeNull();
+  });
+
+  it('완전 AI(FULLY_AI) 생성 중 카드는 지금처럼 "AI가 일정을 짜는 중"이다 (무회귀 앵커)', () => {
+    mockUseItinerary.mockReturnValue(itinOk(partialItin('FULLY_AI')));
+
+    render(<TripCardContainer trip={trip()} />);
+
+    expect(screen.getByTestId('my-trip-extra-t1')).toHaveTextContent(
+      'AI가 일정을 짜는 중'
+    );
+  });
+});
+
+describe('🔴 TRIP-1073 F4(내 여행 카드) · 같이 짜기 완성 카드 탭 → h17 내가 고른 완성 (#051)', () => {
+  it('폴백으로 완성된 같이 짜기 초안 카드를 누르면 draft 가 아니라 copick/complete 로 1회 간다', () => {
+    // 준비 — #051 실측 경로: CO_PLAN · COMPLETE · PLANNED · isFallback=true, 비고정 슬롯 a 가 남아 있다.
+    mockUseItinerary.mockReturnValue(
+      itinOk({
+        ...partialItin('CO_PLAN'),
+        generationState: 'COMPLETE',
+        isFallback: true,
+      })
+    );
+
+    // 실행
+    render(<TripCardContainer trip={trip()} />);
+    fireEvent.press(screen.getByTestId('my-trip-card-t1'));
+
+    // 단언 ① 목적지 — 완전 일치(02a ★F-2: 'copick' 오답이면 copick/2026-06-10%23a 로 간다).
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(String(mockPush.mock.calls[0][0])).toBe(
+      '/trips/t1/itinerary/copick/complete'
+    );
+    // 단언 ② 카드 얼굴은 이번에 안 바뀐다(무회귀 짝).
+    expect(screen.getByTestId('my-trip-badge-t1')).toHaveTextContent('작성중');
+    expect(screen.getByTestId('my-trip-extra-t1')).toHaveTextContent(
+      '같이 짜는 중'
+    );
+  });
+});

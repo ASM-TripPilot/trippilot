@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react-native';
 import { View } from 'react-native';
 
+import { PlusGlyph } from './RecordGlyphs';
 import { VisitRecordCard } from './VisitRecordCard';
 
 /**
@@ -57,6 +58,27 @@ describe('AC-6 · W2 — 슬롯 미주입 시 부재(후방호환, 선제 green)
 
     expect(screen.queryByTestId('record-trip-photo-add')).toBeNull();
     expect(screen.queryByTestId('record-trip-memo-input')).toBeNull();
+  });
+});
+
+/**
+ * TRIP-1069 · AC-13 · D3 — 슬롯을 안 주면 **아무것도 그리지 않는다**.
+ *
+ * 옛 카드는 슬롯이 없으면 눌러도 반응 없는 '+' 타일과 '메모를 남겨보세요' 글자를 정적으로 그렸다(INV-4
+ * 무반응 버튼). 그 폴백 자체를 지운다. '+' 타일엔 testID 가 없어 `PlusGlyph` 컴포넌트 개수로 센다.
+ * `queryByText` 는 Text 노드만 보므로 MemoInline 의 placeholder(TextInput 속성)와 섞이지 않는다.
+ */
+describe('AC-13 · W4 — 슬롯 미주입이면 정적 +·메모 글자가 없다', () => {
+  it.each([
+    ['IN_PROGRESS', { arrivedAt: '2026-08-31T05:20:00Z' }],
+    ['UPCOMING', { arrivedAt: null }],
+  ])('%s 카드 → 메모 안내 글자 0 · + 글리프 0', (_status, over) => {
+    render(<VisitRecordCard card={{ ...activeCard, ...over }} />);
+
+    // 앵커 — 카드는 그려졌다.
+    expect(screen.getByText('광안리')).toBeOnTheScreen();
+    expect(screen.queryByText('메모를 남겨보세요')).toBeNull();
+    expect(screen.UNSAFE_queryAllByType(PlusGlyph)).toHaveLength(0);
   });
 });
 

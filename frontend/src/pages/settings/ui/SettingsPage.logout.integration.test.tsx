@@ -22,6 +22,10 @@ import {
 } from '@testing-library/react-native';
 import { http, HttpResponse } from 'msw';
 
+import {
+  publishGateDestination,
+  resetGateDestination,
+} from '@/features/auth/model/gateDestination';
 import { server } from '@/mocks/server';
 import { useGetMe } from '@/shared/api/generated/account/account';
 import { useGetMeLocationConsent } from '@/shared/api/generated/location/location';
@@ -32,18 +36,24 @@ import {
   usePatchMeSettings,
 } from '@/shared/api/generated/profile/profile';
 import { useGetMePersonalization } from '@/shared/api/generated/reflection/reflection';
-import { getAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import {
+  getAccessToken,
+  setAccessToken,
+  subscribeAccessToken,
+} from '@/shared/api/tokenManager';
 import { clearTokens, getTokens, saveTokens } from '@/shared/storage';
 
 import { SettingsPage } from '..';
 
 /**
- * TRIP-938 — 설정 로그아웃 흐름(페이지 배선, MSW 통합).
+ * TRIP-938 — 설정 로그아웃 흐름(페이지 배선, MSW 통합). TRIP-1034 로 이동 계약이 바뀌었다.
  *
  * 무엇을 보장하나(사용자가 겪는 순서대로):
  *  - AC-1·AC-4·AC-5: [로그아웃] 행 → 확인 다이얼로그 [로그아웃] 을 누르면 서버에 refresh 토큰을 실은
  *    폐기 요청이 1번 나가고, 기기·메모리 토큰과 이전 계정의 서버 데이터 캐시가 지워진 **뒤에**
- *    `router.replace('/')` 로 게이트에 넘긴다(`push` 아님 — 뒤로가기로 설정에 못 돌아온다).
+ *    `router.replace('/login')` 로 간다(`push` 아님 — 뒤로가기로 설정에 못 돌아온다).
+ *  - TRIP-1034 AC-4: 그 이동은 게이트가 LOGIN 을 공개한 **뒤에만** 일어난다. 설정은 어느 가드에도 속하지
+ *    않아서, 게이트가 `(auth)` 를 열기 전에 이동하면 무시되고 설정에 갇힌다(옛 `replace('/')` 결함).
  *  - AC-2: 서버가 실패해도 똑같이 지우고 이동한다. 화면은 죽지 않는다.
  *  - AC-3: [취소] 를 누르면 요청 0번, 토큰·캐시 그대로, 이동 없음.
  *  - 01 Q4: 서버가 느려도 기다리지 않고 바로 이동한다.
@@ -57,7 +67,11 @@ import { SettingsPage } from '..';
  * ⚠️ jest 사각(6-b 실기 전용): 로그인 화면이 실제로 뜨는지(Stack.Protected 전환), 뒤로가기 제스처,
  *   다이얼로그 딤이 화면을 실제로 덮는지. 여기선 replace 인자·횟수와 호출 결과까지만 본다.
  *
- * 3동작 뼈대: 준비=로그인 상태(토큰·캐시)·MSW → 실행=행 press → 다이얼로그 버튼 press → 단언.
+ * ★ 가짜 게이트(TRIP-1034): 이 파일엔 SplashGate 가 없다. 토큰이 비면 LOGIN 을 공개하는 구독으로 게이트의
+ *   재조회를 흉내 낸다 — 기본은 '나중에'(실제 재조회처럼), G6 은 '대기 전에 이미'. 게이트가 **실제로**
+ *   공개하는지는 `useBootstrapGate.test.tsx` B1·B2 가 잠근다(02a ★1).
+ *
+ * 3동작 뼈대: 준비=로그인 상태(토큰·캐시·게이트 HOME)·MSW → 실행=행 press → 다이얼로그 버튼 press → 단언.
  *
  * *(개념)* `router.replace(경로)`: 지금 화면을 새 화면으로 **바꿔 끼운다**. `push` 는 위에 쌓아
  *  뒤로가기로 돌아올 수 있지만, replace 는 지금 화면이 기록에서 사라진다.
@@ -102,6 +116,19 @@ let started = 0;
 let ended = 0;
 let releaseGate: () => void = () => {};
 let queryClient: QueryClient;
+let stopFakeGate: () => void = () => {};
+
+/**
+ * 게이트의 재조회를 흉내 낸다 — 메모리 토큰이 비면 LOGIN 을 공개한다.
+ * 'after-wait': 한 턴 뒤(실제 재조회처럼 대기가 먼저 시작된다). 'before-wait': 즉시(대기 전에 이미 LOGIN).
+ */
+function startFakeGate(timing: 'after-wait' | 'before-wait' = 'after-wait') {
+  stopFakeGate = subscribeAccessToken((token) => {
+    if (token !== null) return;
+    if (timing === 'before-wait') publishGateDestination('LOGIN');
+    else setTimeout(() => publishGateDestination('LOGIN'), 0);
+  });
+}
 
 /** replace 가 불린 순간의 상태(02a ★4). */
 let atReplace: {
@@ -186,6 +213,8 @@ beforeEach(async () => {
   });
   mockUseGetMeProfile.mockReturnValue({ data: { nickname: '여행자123' } });
   primeL05Hooks();
+  // 로그인 상태의 게이트는 HOME 이다(출발점 고정 — 02a ★5).
+  publishGateDestination('HOME');
 
   mockReplace.mockImplementation(() => {
     atReplace = {
@@ -200,21 +229,27 @@ afterEach(() => {
   releaseGate();
   server.resetHandlers();
   queryClient.clear();
+  // 모듈 싱글턴 두 개(토큰 구독·게이트 목적지)를 파일 최상위에서 비운다(02a ★5·★6).
+  stopFakeGate();
+  resetGateDestination();
 });
 
 afterAll(() => server.close());
 
 describe('TRIP-938 · 로그아웃 확인 (AC-1 · AC-4 · AC-5)', () => {
-  it('G1 확인하면 refresh 토큰을 실은 폐기 요청 1번 → 토큰·캐시 삭제 → replace("/") 1번, push 0번', async () => {
+  it('G1 확인하면 refresh 토큰을 실은 폐기 요청 1번 → 토큰·캐시 삭제 → 게이트가 LOGIN 이 되면 replace("/login") 1번, push 0번', async () => {
     captureLogout(() => new HttpResponse(null, { status: 204 }));
+    startFakeGate();
     renderPage();
 
     // 실행
     confirmLogout();
 
-    // 단언: 게이트로 넘기는 이동이 정확히 1번, 인자는 '/'(02a ★3). 쌓는 이동은 없다(AC-4).
+    // 단언: 로그인 화면으로 바꿔 끼우는 이동이 정확히 1번(TRIP-1034). 닫힌 탭('/')으로는 안 간다.
+    // 쌓는 이동은 없다(AC-4).
     await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
-    expect(mockReplace).toHaveBeenCalledWith('/');
+    expect(mockReplace).toHaveBeenCalledWith('/login');
+    expect(mockReplace).not.toHaveBeenCalledWith('/');
     expect(mockPush).not.toHaveBeenCalled();
 
     // 단언(순서 · 02a ★4): 이동하는 순간 이미 메모리 토큰·캐시·저장소가 비어 있었다.
@@ -237,14 +272,15 @@ describe('TRIP-938 · 로그아웃 확인 (AC-1 · AC-4 · AC-5)', () => {
 });
 
 describe('TRIP-938 · 서버가 실패해도 로그아웃 (AC-2)', () => {
-  it('G2 서버 500 이어도 토큰을 지우고 replace("/") 로 이동하며, 화면이 죽지 않는다', async () => {
+  it('G2 서버 500 이어도 토큰을 지우고 replace("/login") 로 이동하며, 화면이 죽지 않는다', async () => {
     captureLogout(() => new HttpResponse(null, { status: 500 }));
+    startFakeGate();
     renderPage();
 
     confirmLogout();
 
     await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
-    expect(mockReplace).toHaveBeenCalledWith('/');
+    expect(mockReplace).toHaveBeenCalledWith('/login');
     // 요청이 끝날 때까지 기다린다 — 처리 안 된 실패가 있으면 jest 가 여기서 FAIL 시킨다(02a ★2).
     await settle();
 
@@ -259,6 +295,7 @@ describe('TRIP-938 · 서버가 실패해도 로그아웃 (AC-2)', () => {
 describe('TRIP-938 · 취소하면 아무 일도 없다 (AC-3)', () => {
   it('G3 [취소] 면 요청 0번 · 토큰·캐시 유지 · 이동 0번 · 다이얼로그 닫힘', async () => {
     captureLogout(() => new HttpResponse(null, { status: 204 }));
+    startFakeGate();
     renderPage();
 
     // 실행: 행 → 다이얼로그 → [취소].
@@ -286,7 +323,7 @@ describe('TRIP-938 · 취소하면 아무 일도 없다 (AC-3)', () => {
 });
 
 describe('TRIP-938 · 느린 서버를 기다리지 않는다 (01 Q4)', () => {
-  it('G4 서버가 응답하기 전에 토큰을 지우고 replace("/") 로 이동한다', async () => {
+  it('G4 서버가 응답하기 전에 토큰을 지우고 replace("/login") 로 이동한다', async () => {
     // 준비: 게이트를 풀기 전까지 응답을 보류하는 서버.
     let responded = false;
     const gate = new Promise<void>((resolve) => {
@@ -297,12 +334,13 @@ describe('TRIP-938 · 느린 서버를 기다리지 않는다 (01 Q4)', () => {
       responded = true;
       return new HttpResponse(null, { status: 204 });
     });
+    startFakeGate();
     renderPage();
 
     confirmLogout();
 
     // 단언(급소): 응답을 기다리는 구현이면 replace 가 안 불려 waitFor 가 타임아웃한다.
-    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/'));
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/login'));
     expect(responded).toBe(false);
     expect(getAccessToken()).toBeNull();
     await expect(getTokens()).resolves.toBeNull();
@@ -311,5 +349,50 @@ describe('TRIP-938 · 느린 서버를 기다리지 않는다 (01 Q4)', () => {
     releaseGate();
     await settle();
     expect(responded).toBe(true);
+  });
+});
+
+describe('TRIP-1034 · 게이트가 LOGIN 을 공개한 뒤에만 이동한다 (AC-4 · AC-3)', () => {
+  it('G5 로그아웃이 끝나도 게이트가 아직 HOME 이면 이동하지 않고, LOGIN 이 공개되면 그때 replace("/login") 1번', async () => {
+    // 준비: 가짜 게이트 없음 — 게이트 목적지는 HOME 에 머문다.
+    captureLogout(() => new HttpResponse(null, { status: 204 }));
+    renderPage();
+
+    // 실행 ①: 확인 → 로그아웃 요청이 끝나고 줄 선 처리를 흘려 보낸다(02a ★7).
+    confirmLogout();
+    await settle();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // 단언 ①(급소): 토큰은 이미 지워졌지만 게이트가 LOGIN 이 아니니 아무 데로도 가지 않았다.
+    expect(getAccessToken()).toBeNull();
+    expect(mockReplace).not.toHaveBeenCalled();
+    // 단언 ①(01b Q3): 캐시는 대기가 끝난 뒤에 비운다 — 아직 이전 계정 캐시가 있다.
+    expect(queryClient.getQueryData(CACHED_KEY)).toEqual({
+      nickname: '이전계정',
+    });
+
+    // 실행 ②: 게이트가 재조회를 마치고 LOGIN 을 공개한다.
+    publishGateDestination('LOGIN');
+
+    // 단언 ②: 그제야 로그인 화면으로 1번 이동하고, 그 순간 캐시는 비어 있다.
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+    expect(mockReplace).toHaveBeenCalledWith('/login');
+    expect(mockReplace).not.toHaveBeenCalledWith('/');
+    expect(atReplace?.cacheSize).toBe(0);
+  });
+
+  it('G6 대기를 시작하기 전에 게이트가 이미 LOGIN 을 공개했어도 replace("/login") 1번', async () => {
+    // 준비: 토큰이 비는 즉시 LOGIN 을 공개하는 게이트(재조회가 먼저 끝난 경우 — 02a ★2).
+    captureLogout(() => new HttpResponse(null, { status: 204 }));
+    startFakeGate('before-wait');
+    renderPage();
+
+    // 실행
+    confirmLogout();
+
+    // 단언: 이미 LOGIN 이라도 놓치지 않고 이동한다.
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+    expect(mockReplace).toHaveBeenCalledWith('/login');
+    await settle();
   });
 });

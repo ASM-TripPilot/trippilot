@@ -16,8 +16,26 @@ export type { MyTripBadge, MyTripCardVM };
 export interface MyTripCardProps {
   vm: MyTripCardVM;
   onPress: () => void;
+  onPressDelete?: () => void;
+  menuOpen?: boolean;
+  onPressMenu?: () => void;
 }
 
-export function MyTripCard({ vm, onPress }: MyTripCardProps): ReactElement {
-  return <TripCard vm={vm} onPress={onPress} testIDPrefix="my-trip" />;
+export function MyTripCard({
+  vm,
+  onPress,
+  onPressDelete,
+  menuOpen,
+  onPressMenu,
+}: MyTripCardProps): ReactElement {
+  return (
+    <TripCard
+      vm={vm}
+      onPress={onPress}
+      onPressDelete={onPressDelete}
+      menuOpen={menuOpen}
+      onPressMenu={onPressMenu}
+      testIDPrefix="my-trip"
+    />
+  );
 }

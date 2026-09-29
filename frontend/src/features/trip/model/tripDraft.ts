@@ -26,7 +26,7 @@ export type TripDraft = Pick<
 const MS_PER_DAY = 86_400_000;
 
 /** 'YYYY-MM-DD' → 에포크 일수(UTC 기준 정수). 로컬 타임존에 따라 하루가 밀리는 것을 막는다
- * (`Date.UTC`는 실행 기계의 타임존과 무관하다 — `stayDates.ts:6~7`과 같은 규칙).
+ * (`Date.UTC`는 실행 기계의 타임존과 무관하다).
  *
  * `nightsBetween`(`features/stay/model/stayDates.ts`)을 재사용하지 않는다 — 근거는 경계
  * 의미가 반대라는 것 하나다: 숙소는 같은 날/역전을 전부 `null`로 접지만, 여행은 0박이

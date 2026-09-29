@@ -1,9 +1,8 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { deriveVisitStatus } from '../model/visitStatus';
+import { deriveVisitStatus, isOptimisticVisit } from '../model/visitStatus';
 import {
-  PlusGlyph,
   RetryGlyph,
   VisitCheckActiveGlyph,
   VisitCheckDoneGlyph,
@@ -24,8 +23,11 @@ import {
  *  2. "도착 없는 슬롯은 완료 불가"(AC-3)를 disabled 에 기대지 않는다 — 완료를 발화하는 Pressable 이
  *     IN_PROGRESS 에만 존재해, UPCOMING press 는 발화할 핸들러 자체가 없어 **구조적으로** 0회다.
  *
- * 사진/메모는 정적 스캐폴딩(testID·배선·데이터 없음)이다 — US-REC-02 소관(범위 밖). 카드는 도착
- * 시각(arrivedLabel, 이미 HH:mm 포맷)만 표시하고 체류시간은 표시하지 않는다(INV-3).
+ * 사진/메모는 슬롯으로만 받는다 — 미주입이면 아무것도 그리지 않는다(TRIP-1069 D3: 눌러도 반응 없는 정적
+ * '+'·메모 글자는 INV-4 무반응 버튼이라 지웠다). 카드는 도착 시각(arrivedLabel, 이미 HH:mm 포맷)만
+ * 표시하고 체류시간은 표시하지 않는다(INV-3).
+ *
+ * TRIP-1069 — 동작 '건너뛰기'(동사·버튼)와 상태 '— 건너뜀'(건너뛴 카드의 라벨)을 문구·모양으로 가른다.
  */
 
 export interface VisitRecordCardVM {
@@ -47,7 +49,7 @@ export interface VisitRecordCardProps {
   /** TRIP-613 · 시각 수정 시트 진입(옵셔널 — 미제공 시 컨트롤 부재, 565 호출자 무영향). */
   onPressEditTime?: (visitCheckId: string) => void;
   /**
-   * TRIP-566 · 사진/메모 슬롯(옵셔널 — 미주입 시 정적 스캐폴딩 유지, 565 호출자·프리뷰 무영향).
+   * TRIP-566 · 사진/메모 슬롯(옵셔널 — 미주입 시 부재, TRIP-1069 D3).
    * 페이지가 PhotoThumbStrip·MemoInline 을 조립해 내려주면 정적 자리 대신 그것을 surface 한다.
    */
   photoSlot?: ReactNode;
@@ -77,6 +79,10 @@ function StatusCircle({
   visitCheckId: string;
   onPressComplete?: (visitCheckId: string) => void;
 }): ReactElement {
+  // TRIP-1069 D7 — 아직 서버에 없는 낙관 카드는 완료를 쏠 수 없다(404). 표식만 그린다.
+  if (status === 'IN_PROGRESS' && isOptimisticVisit(visitCheckId)) {
+    return <VisitCheckActiveGlyph size={22} />;
+  }
   const hit = { top: 8, bottom: 8, left: 8, right: 8 } as const;
 
   if (status === 'COMPLETED') {
@@ -128,21 +134,26 @@ export function VisitRecordCard({
   onPressManualCheck,
 }: VisitRecordCardProps): ReactElement {
   const status = deriveVisitStatus(card);
-  const canSkip = status === 'UPCOMING' || status === 'IN_PROGRESS';
+  const canSkip =
+    (status === 'UPCOMING' || status === 'IN_PROGRESS') &&
+    !isOptimisticVisit(card.visitCheckId);
 
   return (
     <View
       testID={`record-trip-visit-card-${card.visitCheckId}`}
       className="w-full gap-md rounded-card border border-hairline bg-canvas px-[15px] py-[14px]"
     >
-      <View className="w-full flex-row items-center justify-between">
-        <View className="flex-row items-center gap-sm">
+      <View className="w-full flex-row items-center justify-between gap-sm">
+        <View className="min-w-0 flex-1 flex-row items-center gap-sm">
           <StatusCircle
             status={status}
             visitCheckId={card.visitCheckId}
             onPressComplete={onPressComplete}
           />
-          <Text className="font-noto-bold text-card-title text-ink">
+          <Text
+            numberOfLines={1}
+            className="shrink font-noto-bold text-card-title text-ink"
+          >
             {card.nameKo}
           </Text>
         </View>
@@ -153,6 +164,7 @@ export function VisitRecordCard({
           {onPressEditTime != null ? (
             <Pressable
               testID={`record-trip-visit-time-edit-${card.visitCheckId}`}
+              accessibilityRole="button"
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               onPress={() => onPressEditTime(card.visitCheckId)}
             >
@@ -162,11 +174,22 @@ export function VisitRecordCard({
           {canSkip ? (
             <Pressable
               testID={`record-visit-skip-${card.visitCheckId}`}
+              accessibilityRole="button"
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               onPress={() => onPressSkip?.(card.visitCheckId)}
+              className="rounded-pill border border-hairline-strong bg-canvas px-md py-xs"
             >
-              <Text className="text-label text-muted-soft">건너뜀</Text>
+              <Text className="text-label text-ink">건너뛰기</Text>
             </Pressable>
+          ) : null}
+          {status === 'SKIPPED' ? (
+            <View
+              testID={`record-visit-skipped-label-${card.visitCheckId}`}
+              className="flex-row items-center gap-sm"
+            >
+              <Text className="text-label text-muted-soft">—</Text>
+              <Text className="text-label text-muted-soft">건너뜀</Text>
+            </View>
           ) : null}
         </View>
       </View>
@@ -193,22 +216,9 @@ export function VisitRecordCard({
         </View>
       ) : null}
 
-      {/* 사진 슬롯 — 주면 PhotoThumbStrip(페이지 배선), 안 주면 정적 스캐폴딩(후방호환). */}
-      {photoSlot != null ? (
-        photoSlot
-      ) : (
-        <View className="flex-row items-start gap-sm">
-          <View className="size-[66px] items-center justify-center rounded-[10px] border-[1.4px] border-dashed border-hairline-strong">
-            <PlusGlyph size={22} />
-          </View>
-        </View>
-      )}
-      {/* 메모 슬롯 — 주면 MemoInline, 안 주면 정적 placeholder. */}
-      {memoSlot != null ? (
-        memoSlot
-      ) : (
-        <Text className="text-label text-muted-soft">메모를 남겨보세요</Text>
-      )}
+      {/* 사진·메모 슬롯 — 페이지 배선(PhotoThumbStrip·MemoInline)만. 미주입이면 없다(D3). */}
+      {photoSlot}
+      {memoSlot}
 
       {/* TRIP-760 · 업로드 실패 재시도 — uploadRetry 주입 시에만. 풀폭 [↻ 다시 시도] + INV-4 안내
           (사진은 실패했어도 메모·방문 체크는 저장됐다). 미주입 시 이 블록 자체가 없다(무회귀 짝). */}

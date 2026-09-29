@@ -30,9 +30,22 @@ import { GeneratingPage } from './GeneratingPage';
 // jest.mock 팩토리는 파일 맨 위로 호이스팅된다 — 바깥 변수는 `mock` 으로 시작하는 이름만 볼 수 있다.
 let mockPhase: 'pending' | 'success' | 'error' = 'pending';
 
+// 훅 옵션 콜백은 라이브러리처럼 4번째 인자(`{ client, meta, mutationKey }`)까지 받는다 — TRIP-1015 A 가
+// 생성 성공을 훅 옵션 `onSuccess` 의 `context.client` 로 일정 캐시에 반영하기 때문이다(3인자만 주면 목이
+// 라이브러리와 달라져 옳은 구현이 `undefined.client` 로 죽는다).
 type MutationCallbacks = {
-  onSuccess?: (data: unknown, variables: unknown, context: unknown) => void;
-  onError?: (error: unknown, variables: unknown, context: unknown) => void;
+  onSuccess?: (
+    data: unknown,
+    variables: unknown,
+    onMutateResult: unknown,
+    context?: unknown
+  ) => void;
+  onError?: (
+    error: unknown,
+    variables: unknown,
+    onMutateResult: unknown,
+    context?: unknown
+  ) => void;
 };
 
 const mockReplace = jest.fn();
@@ -50,23 +63,41 @@ jest.mock('@/shared/api/generated/trips/trips', () => ({
     mutate: (variables: unknown, mutateOptions?: MutationCallbacks) => {
       // 생성 응답 = 생성된 일정. copick 은 days 로 첫 슬롯을 찾는다 — 빈 days 면 완성 확인으로 간다.
       const data = { days: [] };
+      // 라이브러리의 `MutationFunctionContext` 흉내 — 훅 옵션 콜백만 이 인자를 받는다.
+      const { QueryClient } = jest.requireActual('@tanstack/react-query');
+      const context = {
+        client: new QueryClient(),
+        meta: undefined,
+        mutationKey: ['postTripsTripIdItinerary'],
+      };
       if (mockPhase === 'success') {
-        hookOptions?.mutation?.onSuccess?.(data, variables, undefined);
+        hookOptions?.mutation?.onSuccess?.(data, variables, undefined, context);
         mutateOptions?.onSuccess?.(data, variables, undefined);
       } else if (mockPhase === 'error') {
         const error = new Error('500');
-        hookOptions?.mutation?.onError?.(error, variables, undefined);
+        hookOptions?.mutation?.onError?.(error, variables, undefined, context);
         mutateOptions?.onError?.(error, variables, undefined);
       }
     },
     isPending: mockPhase === 'pending',
     isError: mockPhase === 'error',
   }),
+  // TRIP-1032: 생성 화면이 다른 여행 생성 취소(409 안내)용 cancel 훅을 물 수 있다 — 형제 두 파일처럼
+  // 무해한 스텁을 둔다(없으면 페이지 최상위 호출이 `is not a function` 으로 이 파일 전체를 죽인다).
+  usePostTripsTripIdGenerationSessionsSessionIdCancel: () => ({
+    mutate: jest.fn(),
+    isPending: false,
+    isError: false,
+  }),
   useGetTripsTripIdMustVisits: () => ({
     data: [],
     isPending: false,
     isError: false,
   }),
+  // TRIP-1015 A: 생성 성공 콜백이 일정 캐시 키를 만든다 — 실물과 같은 모양(`[/trips/{id}/itinerary]`).
+  getGetTripsTripIdItineraryQueryKey: (tripId: string) => [
+    `/trips/${tripId}/itinerary`,
+  ],
 }));
 
 jest.mock('@/features/explore/model/savedPlaces', () => ({

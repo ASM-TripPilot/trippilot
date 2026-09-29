@@ -9,6 +9,7 @@ import {
 import type { BaseAssignment, SavedStay } from '@/shared/api/generated/schemas';
 import type { StayAddressState } from '@/features/trip/model/staySheetSections';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { resetPressGuard } from '@/shared/press/pressGuard';
 
 import { TripNewStep2Page } from './TripNewStep2Page';
 
@@ -178,11 +179,13 @@ function seedDraft(
 ): void {
   const store = useTripWizardStore.getState();
   store.reset();
-  store.setPeriod(undefined, startDate, endDate);
   store.setCreatedTripId(TRIP_ID);
   destinations.forEach(([region, nights]) =>
     store.addDestination(region, nights)
   );
+  // 기간은 여행지 **뒤에** 그대로 적는다 — TRIP-1027부터 시작이 있으면 담을 때마다 끝이 "시작 +
+  // 박수 합"으로 다시 계산되므로, 기간 > 박수 합(서버·옛 상태)을 만들려면 이 순서여야 한다.
+  store.setPeriod(undefined, startDate, endDate);
 }
 
 /**
@@ -226,6 +229,8 @@ function staysCalls(): unknown[][] {
 }
 
 beforeEach(() => {
+  // TRIP-1013 — 연타 가드의 400ms 창은 모듈 전역이라 앞 테스트의 "지정" 누름이 새지 않게 닫는다.
+  resetPressGuard();
   useTripWizardStore.getState().reset();
   useTripWizardStore.getState().setPeriod(undefined, TRIP_START, TRIP_END);
   useTripWizardStore.getState().setCreatedTripId(TRIP_ID);
@@ -373,6 +378,8 @@ describe('S9L · 지정 in-flight 잠금 (AC-S9-1·S9-2·S9-3)', () => {
 
     const assign = screen.getByTestId('trip-base-staysheet-assign');
     fireEvent.press(assign);
+    // TRIP-1013 — 연타 가드 창을 닫아, 둘째 press 를 막는 것이 ref 가드뿐인 상황을 유지한다.
+    resetPressGuard();
     fireEvent.press(assign);
 
     // ref 가드가 없으면 둘째 press 도 mutate 를 쏴 2회가 된다(잉여 POST).
@@ -389,6 +396,7 @@ describe('S9L · 지정 in-flight 잠금 (AC-S9-1·S9-2·S9-3)', () => {
 
     // 색만 흐린 가짜가 아니라 진짜 disabled 여야 재탭이 안 먹는다(disabled prop 3단).
     expect(screen.getByTestId('trip-base-staysheet-assign')).toBeDisabled();
+    resetPressGuard(); // TRIP-1013 — 막는 것이 disabled 뿐인 상황을 유지한다.
     fireEvent.press(screen.getByTestId('trip-base-staysheet-assign'));
     expect(mockAssignMutate).toHaveBeenCalledTimes(1);
   });
@@ -405,6 +413,8 @@ describe('S9L · 지정 in-flight 잠금 (AC-S9-1·S9-2·S9-3)', () => {
     });
     expect(screen.queryByTestId('trip-base-staysheet')).toBeNull();
 
+    // TRIP-1013 — 사람이 연타 가드 창(400ms) 밖에서 다시 누른 것과 같게 창을 닫는다.
+    resetPressGuard();
     // 다른 밤(밤3)에서 다시 지정 — 잠금 리셋을 빠뜨리면 여기서 mutate 가 안 나가 1회에 머문다.
     fireEvent.press(screen.getByTestId('trip-base-night-card-3'));
     fireEvent.press(screen.getByTestId('trip-base-staysheet-cand-stay-b'));
@@ -425,9 +435,94 @@ describe('S9L · 지정 in-flight 잠금 (AC-S9-1·S9-2·S9-3)', () => {
     });
     expect(screen.getByTestId('trip-base-staysheet')).toBeOnTheScreen();
 
+    // TRIP-1013 — 사람이 연타 가드 창(400ms) 밖에서 다시 누른 것과 같게 창을 닫는다.
+    resetPressGuard();
     // 재시도 — onError 에서 잠금을 안 풀면 영구 잠김이라 여기서 mutate 가 안 나간다.
     fireEvent.press(screen.getByTestId('trip-base-staysheet-assign'));
     expect(mockAssignMutate).toHaveBeenCalledTimes(2);
+  });
+});
+
+/** 가드 판정용으로 멈춰 둘 시각(값 자체는 의미 없다 — 흐르지 않는 것이 요점). */
+const FROZEN_NOW = 1_790_000_000_000;
+
+/**
+ * TRIP-1013 #038 — 거점 시트 '지정' 연타의 두 번째 탭이, 지정 성공으로 시트가 사라진 뒤 드러난
+ * '이 거점으로 일정 만들기'(`trip-base-generate`)를 누르지 않는다(실기에서는 2/4 를 확인 없이 지나갔다).
+ *
+ * 시트는 성공 콜백에서 조건부 렌더로 즉시 빠진다(닫힘 애니메이션·`onClose` 없음) — 그래서 기준점은
+ * 시트 닫힘 이벤트가 아니라 누름·성공 시각이다. "창 밖"은 `resetPressGuard()`로 만든다.
+ */
+describe('AC-038 · 지정 성공으로 시트가 사라진 직후, 창 안의 뒤 CTA 는 무시된다', () => {
+  // 시계를 멈춘다 — 화면을 그리고 응답을 기다리는 동안 실제 시간이 흘러 "창 안"이 400ms 를 넘기면
+  // 판정이 흔들린다(02a ★2). "창 밖"은 resetPressGuard() 로만 만든다.
+  let clock: jest.SpyInstance;
+  beforeEach(() => {
+    clock = jest.spyOn(Date, 'now').mockReturnValue(FROZEN_NOW);
+  });
+  afterEach(() => clock.mockRestore());
+
+  /** 방식 선택(h04)으로 가는 replace 만 센다. */
+  function methodReplaces(): unknown[] {
+    return routerMock.replace.mock.calls.filter(
+      (call: unknown[]) =>
+        (call[0] as { pathname?: string } | undefined)?.pathname ===
+        '/trips/[tripId]/itinerary/method'
+    );
+  }
+
+  /** 밤2 시트를 열고 후보를 고른 뒤 '지정'을 누른다(첫 탭). */
+  function assignNight2(): void {
+    render(<TripNewStep2Page />);
+    fireEvent.press(screen.getByTestId('trip-base-night-card-2'));
+    fireEvent.press(screen.getByTestId('trip-base-staysheet-cand-stay-a'));
+    fireEvent.press(screen.getByTestId('trip-base-staysheet-assign'));
+  }
+
+  /** 창이 닫힌 뒤(=사람이 다시 누름) 뒤 CTA 가 방식 선택으로 정확히 1회 replace 한다 — 앞의
+   * "0회"가 공짜 통과가 아니라는 긍정 앵커를 겸한다. */
+  function expectGenerateWorksAfterWindow(): void {
+    resetPressGuard();
+    fireEvent.press(screen.getByTestId('trip-base-generate'));
+
+    expect(methodReplaces()).toHaveLength(1);
+    expect(routerMock.replace).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/itinerary/method',
+      params: { tripId: TRIP_ID },
+    });
+  }
+
+  it('창 안의 "이 거점으로 일정 만들기"는 방식 선택 이동이 0회이고, 창이 지난 뒤 한 번 누르면 정확히 1회다', () => {
+    // 실행 ① — 첫 탭(지정). 기본 목은 즉시 성공 → 시트가 사라진다.
+    assignNight2();
+    // 앵커 — 첫 탭은 제 할 일을 했다(지정 1회, 시트 사라짐).
+    expect(mockAssignMutate).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('trip-base-staysheet')).toBeNull();
+
+    // 실행 ② — 드러난 뒤 CTA 에 떨어진 두 번째 탭.
+    fireEvent.press(screen.getByTestId('trip-base-generate'));
+
+    // 단언 — 무시된다.
+    expect(methodReplaces()).toHaveLength(0);
+    // 무회귀 — 창이 지난 뒤의 한 번은 정상 동작한다.
+    expectGenerateWorksAfterWindow();
+  });
+
+  it('01b Q2 · 지정 응답이 창(400ms)보다 늦어도, 시트가 사라지는 순간 창이 다시 열려 무시된다', async () => {
+    mockAssignDefer = 'silent';
+    assignNight2();
+    // 첫 탭의 창이 닫힐 만큼 응답이 늦었다(=400ms 이상 흐름).
+    resetPressGuard();
+
+    await act(async () => {
+      mockHeldAssigns[0].resolve();
+    });
+    expect(screen.queryByTestId('trip-base-staysheet')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('trip-base-generate'));
+
+    expect(methodReplaces()).toHaveLength(0);
+    expectGenerateWorksAfterWindow();
   });
 });
 
@@ -478,11 +573,11 @@ describe('TRIP-1011 AC-3 · 둘러보기에 그 밤 지역이 실린다 (부산 
 
 /**
  * 후보 카드 **루트**만 고르는 testID 패턴. `SavedStayCard`는 루트 밑에 `{루트}-photo`·`-photo-placeholder`·
- * `-base-badge` 하위 testID를 더 달아서, 접두만 보는 `/^trip-base-staysheet-cand-/`는 카드 한 장을 두 번
- * 센다(실측 3장 → 6). 개수를 셀 때는 이 패턴을 쓴다.
+ * `-base-badge`·`-meta`·`-price`(TRIP-1074) 하위 testID를 더 달아서, 접두만 보는 `/^trip-base-staysheet-cand-/`는
+ * 카드 한 장을 두 번 센다(실측 3장 → 6). 개수를 셀 때는 이 패턴을 쓴다.
  */
 const CARD_ROOT =
-  /^trip-base-staysheet-cand-(?!.*-(photo|photo-placeholder|base-badge)$)/;
+  /^trip-base-staysheet-cand-(?!.*-(photo|photo-placeholder|base-badge|meta|price)$)/;
 
 /**
  * TRIP-1011(#036 · D8 · 브리프 AC-4·AC-6 · 01b Q2·Q3·Q5) — 시트 섹션 분리 배선.
@@ -660,5 +755,172 @@ describe('TRIP-1011 AC-4 · 시트가 "그 밤 지역 숙소" / "다른 지역"�
     expect(
       within(other).getByTestId('trip-base-staysheet-cand-jw')
     ).toBeOnTheScreen();
+  });
+});
+
+/**
+ * TRIP-1074 — 카드 서브라인 앞에 동네 라벨(주소의 시군구 토큰)을 붙인다. 재료는 페이지가 섹션 판정용으로
+ * 이미 받은 주소(`useStayAddresses` — 이 파일에선 `mockAddressById` 목)라 새 요청이 없다(요청 수는 형제
+ * geocodeLazy P5 가 실물 훅으로 잰다).
+ *
+ * 준비: 서울특별시 1박 여행 + 저장 숙소(STAY_A 파생 = 날짜 6/10–6/13 · 3박) + 숙소별 주소 상태.
+ * 실행: 1박 카드를 눌러 시트를 연다. 단언: 카드 `-meta` 줄 전체(문자열 = 완전 일치).
+ */
+describe('🔴 TRIP-1074 · 시트 카드 서브라인 = 시군구 라벨 · 날짜', () => {
+  const DATES = '6/10–6/13 · 3박';
+
+  function saved(savedStayId: string, name: string, lat: number): SavedStay {
+    return { ...STAY_A, savedStayId, name, lat, lng: 127 };
+  }
+  function undated(savedStayId: string, name: string, lat: number): SavedStay {
+    return { ...saved(savedStayId, name, lat), checkIn: null, checkOut: null };
+  }
+  function known(address: string): StayAddressState {
+    return { status: 'known', address };
+  }
+  const SEOUL = known('서울특별시 종로구 청계천로 279');
+
+  function openSeoulNight(): void {
+    seedDraft('2026-09-26', '2026-09-27', [['서울특별시', 1]]);
+    render(<TripNewStep2Page />);
+    fireEvent.press(screen.getByTestId('trip-base-night-card-1'));
+  }
+
+  it('AC-2 · AC-4 섹션 경로 — "그 밤 지역"과 "다른 지역" 두 섹션 카드 모두 라벨로 시작한다', () => {
+    mockSavedStaysResult = loaded([
+      saved('jw', 'JW 메리어트 동대문', 37.57),
+      saved('denba', '덴바스타 구서점', 35.26),
+      saved('para-1', '파라다이스호텔', 35.16),
+    ]);
+    mockAddressById = {
+      jw: SEOUL,
+      denba: known('부산 금정구 구서동 1'),
+      'para-1': known('부산광역시 해운대구 해운대해변로 296'),
+    };
+    openSeoulNight();
+
+    const here = screen.getByTestId('trip-base-staysheet-section-here');
+    const other = screen.getByTestId('trip-base-staysheet-section-other');
+    expect(
+      within(here).getByTestId('trip-base-staysheet-cand-jw-meta')
+    ).toHaveTextContent(`종로구 · ${DATES}`);
+    expect(
+      within(other).getByTestId('trip-base-staysheet-cand-denba-meta')
+    ).toHaveTextContent(`금정구 · ${DATES}`);
+    expect(
+      within(other).getByTestId('trip-base-staysheet-cand-para-1-meta')
+    ).toHaveTextContent(`해운대구 · ${DATES}`);
+  });
+
+  it('AC-4 · AC-3 평면 경로(섹션 없음) — 라벨이 붙고, 날짜 없는 숙소는 라벨만(꼬리 · 없음)', () => {
+    mockSavedStaysResult = loaded([
+      saved('jw', 'JW 메리어트 동대문', 37.57),
+      undated('jw-nodate', '동대문 게스트하우스', 37.58),
+    ]);
+    mockAddressById = { jw: SEOUL, 'jw-nodate': SEOUL };
+    openSeoulNight();
+
+    // 전부 그 밤 지역이라 섹션이 없다 = 평면 경로를 탔다.
+    expect(
+      screen.queryAllByTestId(/^trip-base-staysheet-section-/)
+    ).toHaveLength(0);
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-jw-meta')
+    ).toHaveTextContent(`종로구 · ${DATES}`);
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-jw-nodate-meta')
+    ).toHaveTextContent('종로구');
+  });
+
+  it('AC-5 · 주소 모름·조회 중이면 라벨 자리가 빈다 — 날짜만 남거나 줄이 없다 (대체 문구 0)', () => {
+    mockSavedStaysResult = loaded([
+      saved('jw', 'JW 메리어트 동대문', 37.57),
+      undated('pending', '동대문 게스트하우스', 37.58),
+      saved('known', '청계천 호텔', 37.59),
+    ]);
+    mockAddressById = {
+      jw: { status: 'unknown' },
+      pending: { status: 'loading' },
+      known: SEOUL,
+    };
+    openSeoulNight();
+
+    // 짝 앵커 — 주소를 아는 카드엔 라벨이 붙었다.
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-known-meta')
+    ).toHaveTextContent(`종로구 · ${DATES}`);
+    // 모름 — 완전 일치라 좌표·'위치 확인 안 됨'·시도명이 끼면 red.
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-jw-meta')
+    ).toHaveTextContent(DATES);
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-jw')
+    ).not.toHaveTextContent(/위치 확인|주소|서울/);
+    // 조회 중 + 날짜 없음 — 줄 자체가 없다.
+    expect(
+      screen.queryByTestId('trip-base-staysheet-cand-pending-meta')
+    ).toBeNull();
+  });
+
+  it('01b Q2 · 시군구가 없는 주소(세종 도로명·시도 없는 주소)는 라벨을 만들지 않는다', () => {
+    mockSavedStaysResult = loaded([
+      saved('jw', 'JW 메리어트 동대문', 37.57),
+      saved('sejong', '정부청사 앞 숙소', 36.5),
+      undated('bare', '첨단 게스트하우스', 35.2),
+    ]);
+    mockAddressById = {
+      jw: SEOUL,
+      sejong: known('세종특별자치시 한누리대로 2130'),
+      bare: known('첨단로 242'),
+    };
+    openSeoulNight();
+
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-jw-meta')
+    ).toHaveTextContent(`종로구 · ${DATES}`);
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-sejong-meta')
+    ).toHaveTextContent(DATES);
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-sejong')
+    ).not.toHaveTextContent(/세종/);
+    expect(
+      screen.queryByTestId('trip-base-staysheet-cand-bare-meta')
+    ).toBeNull();
+  });
+
+  it('AC-1 Q1-A · AC-7 · AC-8 · AC-9 — "성남시 분당구"·"수원시 영통구"가 뜨고, 거리·가격·소요시간 문자열은 없다', () => {
+    mockSavedStaysResult = loaded([
+      saved('bundang', '정자역 호텔', 37.36),
+      saved('suwon', '광교 호수 호텔', 37.28),
+    ]);
+    mockAddressById = {
+      bundang: known('경기 성남시 분당구 정자동 178-1'),
+      suwon: known('경기도 수원시 영통구 광교중앙로 140'),
+    };
+    openSeoulNight();
+
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-bundang-meta')
+    ).toHaveTextContent(`성남시 분당구 · ${DATES}`);
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-suwon-meta')
+    ).toHaveTextContent(`수원시 영통구 · ${DATES}`);
+
+    for (const id of ['bundang', 'suwon']) {
+      const card = screen.getByTestId(`trip-base-staysheet-cand-${id}`);
+      // 숫자를 붙여 잰다 — 숫자 없는 /분|원/ 은 '분당구'·'수원시'에서 오탐한다.
+      expect(card).not.toHaveTextContent(/\d+\s*분|\d+\s*시간|소요/); // INV-3
+      expect(card).not.toHaveTextContent(/\d+\s*m\b|km/); // 거리(결정 1(a))
+      expect(card).not.toHaveTextContent(/\d[\d,]*\s*원|₩|가격 미확인/); // 가격(결정 4(a))
+    }
+    // 짝 앵커 — 위 정규식이 지명과 실제로 만났다('분'·'원'이 카드에 있다).
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-bundang')
+    ).toHaveTextContent(/분당구/);
+    expect(
+      screen.getByTestId('trip-base-staysheet-cand-suwon')
+    ).toHaveTextContent(/수원시/);
+    expect(screen.queryAllByTestId(/-price$/)).toHaveLength(0);
   });
 });

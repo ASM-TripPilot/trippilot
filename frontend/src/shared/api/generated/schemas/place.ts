@@ -18,6 +18,10 @@ export interface Place {
   lat: number;
   lng: number;
   region?: string | null;
+  /** 행정구역 코드(법정동코드 앞자리, TRIP-1042). 시군구를 알면 5자리(`28200`), 시도까지만 알면 2자리(`50`), 모르면 null — 서버가 지어내지 않는다. 표시용 `region`(`동구`)과 달리 **맞춰 볼 수 있는 키**라, 여행 목적지 `regionCode` 의 접두사 비교로 "이 여행 지역의 장소인가"를 가른다. 앞 2자리가 시도 코드다. */
+  regionCode?: string | null;
+  /** 지번·도로명 주소(TRIP-1062 · TRIP-824 의 address 몫). null = 미확보 — 기존 수집분은 다음 수집 배치가 채울 때까지 비어 있고 화면은 자리만 비운다(지어내지 않는다). 표기 규칙은 StayItem.address 와 동일(도로명 우선). */
+  address?: string | null;
   /** NULL=미확인 */
   openingHours?: string | null;
   /** 대표 사진. NULL=미확보 — 서버가 기본 이미지를 지어내지 않으므로 클라가 자리만 비운다(BR-U1-06 취지) */

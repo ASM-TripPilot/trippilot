@@ -5,7 +5,11 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
-import type { Itinerary, SlotCandidates } from '@/shared/api/generated/schemas';
+import type {
+  Itinerary,
+  SlotCandidates,
+  Trip,
+} from '@/shared/api/generated/schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 
 import { SlotFillPage } from './SlotFillPage';
@@ -43,6 +47,24 @@ jest.mock('expo-router', () => ({
 
 const BASE = 'http://localhost:8080/api/v1';
 const TRIP_ID = '22222222-2222-2222-2222-222222222222';
+
+// TRIP-1043 — 페이지가 진행 줄 여행지 접두를 위해 여행(`GET /trips/:tripId`)을 조회한다. 이 파일은 접두를
+// 재지 않으므로 여행지 없는 여행으로 답한다(접두 생략 degrade — 기존 `N일차` 단언이 그대로 유효). 핸들러를
+// 빼면 MSW 'error' 전략이 console.error 만 찍고 쿼리를 조용히 실패시켜 누락이 드러나지 않는다(02a ★1).
+const TRIP_NO_DESTINATIONS: Trip = {
+  tripId: TRIP_ID,
+  title: '테스트 여행',
+  startDate: '2026-06-10',
+  endDate: '2026-06-11',
+  party: 1,
+  preferenceSnapshot: {},
+  destinations: [],
+  status: 'PLANNED',
+  createdAt: '2026-06-01T00:00:00Z',
+  updatedAt: '2026-06-01T00:00:00Z',
+  baseCount: 0,
+  itineraryDayCount: 1,
+};
 const DAY1 = '2026-06-10';
 const SLOT_KEY = buildSlotKey(DAY1, 'a');
 
@@ -119,6 +141,9 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 beforeEach(() => {
   setAccessToken('valid-access');
   server.use(
+    http.get(`${BASE}/trips/:tripId`, () =>
+      HttpResponse.json(TRIP_NO_DESTINATIONS)
+    ),
     http.get(`${BASE}/trips/:tripId/itinerary`, () =>
       HttpResponse.json(itinerary())
     ),

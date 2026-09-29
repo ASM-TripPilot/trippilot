@@ -42,6 +42,8 @@ export interface WheelPickerProps {
   testIDForValue?: (value: string) => string;
   /** 휠 ScrollView 의 testID(스크롤 정지 이벤트를 쏠 손잡이). */
   testID?: string;
+  /** 닫힌 휠 — 스크롤·셀 press·정지 확정이 모두 꺼지고 선택 표시가 없다. 기본 false(TRIP-1080). */
+  disabled?: boolean;
 }
 
 export function WheelPicker({
@@ -51,6 +53,7 @@ export function WheelPicker({
   renderLabel,
   testIDForValue,
   testID,
+  disabled = false,
 }: WheelPickerProps): ReactElement {
   // 선택값을 가운데로 — 위 패딩이 PAD 라 인덱스*셀높이만큼 밀면 그 셀이 가운데 밴드에 온다(없으면
   // 맨 위). contentOffset 은 처음 한 번만이 아니라 **값이 바뀔 때마다** 네이티브가 그 위치로 옮긴다
@@ -63,6 +66,8 @@ export function WheelPicker({
   const handleSettle = (
     event: NativeSyntheticEvent<NativeScrollEvent>
   ): void => {
+    // 스크롤 이벤트는 scrollEnabled 와 무관하게 올 수 있어(jest 는 항상 쏜다) 핸들러에서 버린다.
+    if (disabled) return;
     const raw = Math.round(event.nativeEvent.contentOffset.y / CELL_HEIGHT);
     const index = Math.min(Math.max(raw, 0), values.length - 1);
     const value = values[index];
@@ -74,6 +79,7 @@ export function WheelPicker({
       <View className="relative w-full" style={{ height: COLUMN_HEIGHT }}>
         <ScrollView
           testID={testID}
+          scrollEnabled={!disabled}
           onMomentumScrollEnd={handleSettle}
           showsVerticalScrollIndicator={false}
           snapToInterval={CELL_HEIGHT}
@@ -82,13 +88,14 @@ export function WheelPicker({
           contentContainerStyle={{ paddingVertical: PAD }}
         >
           {values.map((value) => {
-            const isSelected = value === selected;
+            const isSelected = !disabled && value === selected;
             return (
               <Pressable
                 key={value}
                 testID={testIDForValue?.(value)}
                 accessibilityRole="button"
                 accessibilityState={{ selected: isSelected }}
+                disabled={disabled}
                 onPress={() => onSelect(value)}
                 style={{ height: CELL_HEIGHT }}
                 className="w-full items-center justify-center"

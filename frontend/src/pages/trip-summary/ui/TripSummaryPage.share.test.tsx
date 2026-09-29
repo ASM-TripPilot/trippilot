@@ -20,18 +20,19 @@ import { TripSummaryPage } from './TripSummaryPage';
  *  - AC-4(j04, 선제 green 회귀 앵커): ready:false → "요약 준비 중" 안내 렌더 + 요약 화면 자체 미렌더
  *    (공유 진입점 부재로 BR-U5-48 흡수).
  *
- * TRIP-939 AC-2b(Q2): 공유 카드의 저장·공유가 미장전(`captureShareImage().armed === false`)이면 j06 은
+ * TRIP-939 AC-2b(Q2): 공유 카드의 저장·공유가 미장전(`isShareCaptureArmed() === false`)이면 j06 은
  *   보기만 하는 막다른 화면이 된다 → 페이지가 `onShare` 를 **넘기지 않아** 요약 화면의 [공유]가 사라진다.
- *   armed 는 홀더 목으로 갈아끼운다(기본 false = 오늘의 운영 빌드, 개통 짝만 true).
+ *   armed 는 홀더 목으로 갈아끼운다(기본 false = 재빌드 전 빌드, 개통 짝만 true). TRIP-1071 로 판정이
+ *   `shareCapture` 모듈로 옮겨졌다 — 단언은 그대로다.
  *
  * (개념) `jest.fn(() => null)` 화면 목 → `mock.calls[0][0]` 이 전달 props · `toHaveBeenCalledWith(문자열)`
  *   = 인자 완전일치 · `toBeUndefined()` = 그 prop 을 안 넘겼다(또는 undefined 로 넘겼다).
  */
 
 const mockShareArmed = { value: false };
-jest.mock('@/features/reflection/model/shareCard', () => ({
-  ...jest.requireActual('@/features/reflection/model/shareCard'),
-  captureShareImage: () => ({ armed: mockShareArmed.value }),
+jest.mock('@/features/reflection/model/shareCapture', () => ({
+  ...jest.requireActual('@/features/reflection/model/shareCapture'),
+  isShareCaptureArmed: () => mockShareArmed.value,
 }));
 
 jest.mock('expo-router', () => ({

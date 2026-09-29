@@ -187,6 +187,7 @@ export function CompanionEditSheet({
                   key={option.code}
                   testID={`trip-wizard-companion-chip-${option.code}`}
                   accessibilityRole="button"
+                  accessibilityState={{ selected }}
                   onPress={() => onSelectCompanion(option.type)}
                   className={`flex-row items-center gap-[6px] rounded-pill py-[9px] pl-[14px] pr-[16px] ${
                     selected

@@ -10,7 +10,13 @@ import com.trippilot.savedaccommodation.domain.SavedStay
 import com.trippilot.savedaccommodation.domain.SavedStayRepository
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
+import io.kotest.property.Arb
+import io.kotest.property.arbitrary.int
+import io.kotest.property.arbitrary.list
+import io.kotest.property.arbitrary.pair
+import io.kotest.property.checkAll
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
@@ -28,6 +34,8 @@ private class FakeRepo : SavedStayRepository {
     override fun findById(savedStayId: UUID) = store[savedStayId]
     override fun findByAccount(accountId: UUID) = store.values.filter { it.accountId == accountId }
     override fun delete(stay: SavedStay) { store.remove(stay.savedStayId) }
+    override fun existsByAccountAndExternal(accountId: UUID, externalSource: String, externalId: String) =
+        store.values.any { it.accountId == accountId && it.externalSource == externalSource && it.externalId == externalId }
 }
 
 /** 거점 사용 중 숙소 id 집합만 흉내. */
@@ -37,6 +45,7 @@ private class StubBases(val inUse: MutableSet<UUID> = mutableSetOf()) : BaseAssi
     override fun findById(baseAssignmentId: UUID): BaseAssignment? = null
     override fun delete(base: BaseAssignment) {}
     override fun existsByStayId(savedStayId: UUID) = savedStayId in inUse
+    override fun deleteByStayId(savedStayId: UUID) { inUse.remove(savedStayId) }
 
     /** 이 대역은 '거점으로 쓰이는가'만 흉내 낸다 — 역참조는 이 테스트의 관심이 아니다. */
     override fun findTripIdsByStays(savedStayIds: Collection<UUID>) = emptyMap<UUID, List<UUID>>()
@@ -52,13 +61,79 @@ class SavedStayServiceTest : StringSpec({
         name: String = "제주 호텔",
         lat: Double? = 33.5, lng: Double? = 126.5, coordConfirmed: Boolean = true,
         checkIn: LocalDate? = null, checkOut: LocalDate? = null, route: RegisterRoute = RegisterRoute.PIN,
-    ) = RegisterStayCommand(name, lat, lng, coordConfirmed, checkIn, checkOut, null, null, route, null)
+        // 기본값 인자는 맨 뒤에 — 위치 인자 호출이 어긋나지 않게.
+        externalSource: String? = null, externalId: String? = null,
+    ) = RegisterStayCommand(name, lat, lng, coordConfirmed, checkIn, checkOut, externalSource, externalId, route, null)
 
     "등록 후 소유자 조회·목록" {
         val svc = SavedStayService(FakeRepo(), StubBases(), NoEvents, clock)
         val saved = svc.register(acc, cmd())
         svc.get(acc, saved.savedStayId).name shouldBe "제주 호텔"
         svc.list(acc).size shouldBe 1
+    }
+
+    // ─── 중복 등록 방지(TRIP-1059 · QA #012 — 연타로 같은 외부 숙소 30행) ───
+
+    "같은 외부 숙소 재등록은 409 — 행이 늘지 않고 알림 이벤트도 다시 안 나간다" {
+        val repo = FakeRepo()
+        val published = mutableListOf<com.trippilot.core.event.DomainEvent>()
+        val capturing = object : com.trippilot.core.event.DomainEventPublisher {
+            override fun publish(event: com.trippilot.core.event.DomainEvent) { published += event }
+        }
+        val svc = SavedStayService(repo, StubBases(), capturing, clock)
+        svc.register(acc, cmd(externalSource = "LOCALDATA", externalId = "3530000-201-2014-00006"))
+
+        shouldThrow<ConflictDetected> {
+            svc.register(acc, cmd(externalSource = "LOCALDATA", externalId = "3530000-201-2014-00006"))
+        }
+
+        repo.store.size shouldBe 1
+        published.size shouldBe 1 // 없는 새 숙소의 등록 알림이 가면 위반(TRIP-550)
+    }
+
+    "다른 계정은 같은 외부 숙소를 각자 저장한다 — 유니크 범위는 계정이다" {
+        val repo = FakeRepo()
+        val svc = SavedStayService(repo, StubBases(), NoEvents, clock)
+        svc.register(acc, cmd(externalSource = "LOCALDATA", externalId = "X"))
+        svc.register(other, cmd(externalSource = "LOCALDATA", externalId = "X"))
+        repo.store.size shouldBe 2
+    }
+
+    "외부 키 없는 등록(핀 지정)은 같은 이름도 막지 않는다 — 자연 키가 없다" {
+        val repo = FakeRepo()
+        val svc = SavedStayService(repo, StubBases(), NoEvents, clock)
+        svc.register(acc, cmd())
+        svc.register(acc, cmd())
+        repo.store.size shouldBe 2
+    }
+
+    /** 임의 등록 열 — 계정·외부 키당 행 수는 0 또는 1, 키 없는 요청은 요청 수만큼(TRIP-1059 AC-속성). */
+    "임의 등록 열에서 계정·외부키당 최대 1행이고 키 없는 등록은 전부 남는다" {
+        val accounts = listOf(acc, other, UUID.randomUUID())
+        checkAll(Arb.list(Arb.pair(Arb.int(0..2), Arb.int(0..7)), 0..40)) { reqs ->
+            val repo = FakeRepo()
+            val svc = SavedStayService(repo, StubBases(), NoEvents, clock)
+            var keyless = 0
+            for ((ai, r) in reqs) {
+                val a = accounts[ai]
+                try {
+                    if (r % 2 == 0) {
+                        svc.register(a, cmd(externalSource = "SRC", externalId = "K${r / 2}"))
+                    } else {
+                        keyless++
+                        svc.register(a, cmd())
+                    }
+                } catch (_: ConflictDetected) {
+                    // 중복 거절 — 행이 안 생겼어야 한다(아래 단언이 잡는다)
+                }
+            }
+            for (a in accounts) {
+                for (k in 0..3) {
+                    repo.store.values.count { it.accountId == a && it.externalId == "K$k" } shouldBeLessThanOrEqual 1
+                }
+            }
+            repo.store.values.count { it.externalId == null } shouldBe keyless
+        }
     }
 
     "타 계정 리소스는 404(존재 은닉)" {

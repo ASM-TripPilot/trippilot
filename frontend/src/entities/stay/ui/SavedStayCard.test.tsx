@@ -185,6 +185,14 @@ describe('SavedStayCard — g02 row optional 슬롯 (TRIP-741)', () => {
     expect(card).not.toHaveTextContent(/\d+\s*m\b|km/);
   });
 
+  it('TRIP-1052 5-b W-1 · region 만 있고 subtitle(날짜) 없음 → 구분자 `·` 를 남기지 않는다', () => {
+    // 준비 — 날짜 줄이 사라진 후보(동네만 있음). 실행 — 렌더. 단언 — 카드 전체 글자가 "이름+동네"뿐(꼬리 ' · ' 없음).
+    render(
+      <SavedStayCard testID={rootId} name="숙소 A" layout="row" region="감천" />
+    );
+    expect(screen.getByTestId(rootId)).toHaveTextContent('숙소 A감천');
+  });
+
   it('🔴 AC-6b · region·priceLabel 미지정 → 미렌더 (degrade)', () => {
     render(
       <SavedStayCard
@@ -415,5 +423,103 @@ describe('🔴 SavedStayCard — TRIP-991 vertical 카드 버튼 역할 (AC-1 ·
 
     fireEvent.press(screen.getByRole('button', { name: '해운대 오션뷰' }));
     expect(onPress).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * TRIP-1074 · AC-11 — row(g02) 서브라인·가격 줄에 testID 를 단다: `{root}-meta` · `{root}-price`.
+ *
+ * 무엇을 보장하나:
+ *  - 서브라인은 `{동네} · {날짜}` 한 줄이고, 한쪽만 있으면 그 한쪽만, 둘 다 없으면 **줄 자체가 없다**
+ *    (빈 Text 는 글자로 안 보여서 "줄 없음"은 testID 부재로만 잴 수 있다).
+ *  - 가격 줄은 값이 있을 때만 있다(결정 4(a) — 없으면 줄 생략).
+ *
+ * 서브라인은 바깥 Text 안에 동네 문자열과 날짜 Text 가 중첩된다 — 전체 줄은 바깥(`-meta`)에서
+ * `toHaveTextContent`(문자열 = 완전 일치)로 잰다. 완전 일치라 꼬리 ` · `가 남으면 red 다.
+ */
+describe('SavedStayCard — TRIP-1074 row 서브라인·가격 줄 testID', () => {
+  const rootId = 'trip-base-staysheet-cand-ss-1';
+  const dateLine = <Text>6/11–6/12 · 1박</Text>;
+
+  it('🔴 M1 · 동네 + 날짜 → -meta 가 "수영구 · 6/11–6/12 · 1박" 한 줄이다', () => {
+    render(
+      <SavedStayCard
+        testID={rootId}
+        name="숙소 A"
+        layout="row"
+        region="수영구"
+        subtitle={dateLine}
+      />
+    );
+
+    expect(screen.getByTestId(`${rootId}-meta`)).toHaveTextContent(
+      '수영구 · 6/11–6/12 · 1박'
+    );
+  });
+
+  it('🔴 M2 · 동네만 → -meta 가 "수영구" 뿐이다 (꼬리 · 없음)', () => {
+    render(
+      <SavedStayCard
+        testID={rootId}
+        name="숙소 A"
+        layout="row"
+        region="수영구"
+      />
+    );
+
+    expect(screen.getByTestId(`${rootId}-meta`)).toHaveTextContent('수영구');
+  });
+
+  it('🔴 M3 · 날짜만 → -meta 가 날짜 줄 그대로다', () => {
+    render(
+      <SavedStayCard
+        testID={rootId}
+        name="숙소 A"
+        layout="row"
+        subtitle={dateLine}
+      />
+    );
+
+    expect(screen.getByTestId(`${rootId}-meta`)).toHaveTextContent(
+      '6/11–6/12 · 1박'
+    );
+  });
+
+  it('M4 · 동네도 날짜도 없으면 -meta 줄을 그리지 않는다 (빈 줄 금지)', () => {
+    render(<SavedStayCard testID={rootId} name="숙소 A" layout="row" />);
+
+    // 짝 앵커 — 카드는 떠 있다(통째로 안 그려진 공짜 통과 차단).
+    expect(screen.getByText('숙소 A')).toBeOnTheScreen();
+    expect(screen.queryByTestId(`${rootId}-meta`)).toBeNull();
+  });
+
+  it('🔴 P1 · priceLabel 이 있으면 -price 줄에 그 값이 그대로 뜬다', () => {
+    render(
+      <SavedStayCard
+        testID={rootId}
+        name="숙소 A"
+        layout="row"
+        priceLabel="165,000원~"
+      />
+    );
+
+    expect(screen.getByTestId(`${rootId}-price`)).toHaveTextContent(
+      '165,000원~'
+    );
+  });
+
+  it('🔴 P2 · priceLabel 이 없으면 -price 줄이 없다 (결정 4(a) — 줄 생략)', () => {
+    render(
+      <SavedStayCard
+        testID={rootId}
+        name="숙소 A"
+        layout="row"
+        region="수영구"
+      />
+    );
+
+    // 짝 앵커 — 같은 카드의 서브라인은 있다.
+    expect(screen.getByTestId(`${rootId}-meta`)).toBeOnTheScreen();
+    expect(screen.queryByTestId(`${rootId}-price`)).toBeNull();
   });
 });

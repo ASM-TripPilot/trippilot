@@ -56,9 +56,6 @@ const IDLE_FLOW: StayRegisterFlow = {
   pinAddressStatus: 'idle',
   coordConfirmed: false,
   mapSheetState: 'closed',
-  checkIn: null,
-  checkOut: null,
-  dateSheetOpen: false,
   submitStatus: 'idle',
 };
 
@@ -96,22 +93,16 @@ function makeHandlers() {
     onOpenMapSheet: jest.fn(),
     onConfirmCoord: jest.fn(),
     onCloseMapSheet: jest.fn(),
-    onOpenDateSheet: jest.fn(),
-    onPickDate: jest.fn(),
-    onCloseDateSheet: jest.fn(),
     onSubmit: jest.fn(),
     onBack: jest.fn(),
   };
 }
 
-/** 기본 today 고정 — 화면이 실행 날짜에 흔들리지 않게 한다(프리즈 파일과 동형). */
-const TODAY = '2026-06-15';
-
 function renderScreen(
   flow: StayRegisterFlow,
   handlers: Handlers = makeHandlers()
 ): Handlers {
-  render(<StayRegisterScreen flow={flow} today={TODAY} {...handlers} />);
+  render(<StayRegisterScreen flow={flow} {...handlers} />);
   return handlers;
 }
 

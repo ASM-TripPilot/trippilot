@@ -173,13 +173,13 @@ describe('🔴 SC5 · AC-4 — 「처음부터 직접」·「직접 고르기」
 });
 
 describe('🔴 SC6 · AC-5 — reason 블록에 부제 1줄(정적)', () => {
-  it('listed(非생성중) 얼굴에 부제가 정확한 문구로 뜬다', () => {
+  it('listed(非생성중) 얼굴에 부제가 정확한 문구로 뜬다 (TRIP-1039 D3 — 「슬롯」 없는 문구)', () => {
     renderScreen();
 
     const subtitle = screen.getByTestId('itinerary-draft-reason-subtitle');
     // leaf 가 이 문장뿐이라 문자열 완전일치(RNTL toHaveTextContent 기본 exact, 02a §1-B 실측).
     expect(subtitle).toHaveTextContent(
-      '슬롯 하나만 다른 후보로 바꿔도 좋고 — 나머지는 그대로'
+      '장소 하나만 다른 후보로 바꿀 수도 있어요'
     );
   });
 });

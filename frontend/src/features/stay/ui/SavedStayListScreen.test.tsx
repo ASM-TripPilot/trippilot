@@ -1,9 +1,13 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import { processColor, StyleSheet } from 'react-native';
+
+import { HeartFilledGlyph as SharedHeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
 
 import {
   SavedStayListScreen,
   type SavedStayCardVM,
 } from './SavedStayListScreen';
+import { HeartFilledGlyph as StayHeartFilledGlyph } from './StayGlyphs';
 
 /**
  * TRIP-461 AC-2·3·4·6·7·8 — e04 저장한 숙소 **무상태 화면**의 렌더 계약.
@@ -135,8 +139,23 @@ describe('S3 · loading/error/guest 얼굴 — empty 위장 금지 (AC-4·★4·
   });
 });
 
+// TRIP-1019 #019 — 하단 버튼이 "다른 숙소를 거점으로 지정"이라 적혀 있었지만 실제로는 숙소 등록 화면
+// (/stays/register)으로 간다. 저장(♥)과 거점은 다른 개념이다(BR-U1-19). 라벨을 가는 곳의 이름으로
+// 바꾼다 — 같은 목적지로 가는 e02 버튼이 이미 쓰는 "숙소 직접 등록"(01b Q2).
+describe('S4b · 하단 버튼 이름 = 숙소 직접 등록 (TRIP-1019 #019 · BR-U1-19 · US-STAY-08)', () => {
+  it('하단 버튼 안에 "거점" 글자가 없고, 이름이 "숙소 직접 등록"인 버튼이다', () => {
+    render(<SavedStayListScreen savedStays={STAYS} face="results" />);
+
+    const button = screen.getByTestId('saved-stay-register');
+    // 금지: 저장 목록에서 거점을 지정하는 버튼처럼 읽히지 않는다(부분 포함 정규식).
+    expect(button).not.toHaveTextContent(/거점/);
+    // 정상: 스크린리더가 읽는 버튼 이름이 가는 곳과 같다(완전일치).
+    expect(screen.getByRole('button', { name: '숙소 직접 등록' })).toBe(button);
+  });
+});
+
 describe('S4 · 버튼 콜백 (AC-6·AC-7)', () => {
-  it('하단 "거점 지정" press → onPressRegister 가 불린다 (AC-6)', () => {
+  it('하단 "숙소 직접 등록" press → onPressRegister 가 불린다 (AC-6)', () => {
     const onPressRegister = jest.fn();
     render(
       <SavedStayListScreen
@@ -234,5 +253,78 @@ describe('S6 · empty 콜라주 — 3장 겹침 + 흰 3px 테두리 + 중앙 하
     const tokens = cls(screen.getByTestId('saved-stay-browse'));
     expect(tokens).toContain('rounded-[12px]');
     expect(tokens).not.toContain('rounded-[14px]');
+  });
+});
+
+/**
+ * ── TRIP-1050 · 공통 콜라주 빈 상태로 옮기며 Figma 쪽으로 정합 (AC-3 · 01b Seed Q1 ①②③) ─────
+ * e04 는 d02 와 같은 `@/shared/ui/CollageEmptyState` 로 그려진다. 문구·testID·onPress 는 그대로
+ * (S2·S4·S6 무수정 green + S7-1), 픽셀은 두 Figma 프레임 공통값으로 바뀐다(사진 그림자 · 공용
+ * 하트 · CTA 패딩 22/24). 그림자·하트 모양의 실제 렌더는 6-b 육안 몫이다.
+ */
+
+// SVG 색은 host 노드의 `stroke.payload`(processColor 결과 정수)로 남는다 — host 만 고른다.
+function strokePayloads(
+  node: ReturnType<typeof screen.getByTestId>
+): unknown[] {
+  return node
+    .findAll((n) => typeof n.type === 'string' && n.props.stroke != null)
+    .map((n) => n.props.stroke?.payload);
+}
+
+describe('S7 · TRIP-1050 공통 틀 이관 — 문구 무회귀 + Figma 정합 (AC-3 · Seed Q1)', () => {
+  it('본문·CTA 라벨 문구가 그대로다 (AC-3)', () => {
+    render(<SavedStayListScreen savedStays={[]} face="empty" />);
+
+    expect(
+      screen.getByText(
+        '인기 숙소를 둘러보고 ♥로 저장하면\n여기에 모아 바로 거점으로 쓸 수 있어요'
+      )
+    ).toBeOnTheScreen();
+    expect(screen.getByText('숙소 둘러보기')).toBeOnTheScreen();
+  });
+
+  it('🔴 사진 3장이 각각 작은 그림자(0/2/10 · .06)를 갖는다 (Seed Q1 ①)', () => {
+    render(<SavedStayListScreen savedStays={[]} face="empty" />);
+
+    const photos = screen.getAllByTestId(/^saved-stay-empty-photo-/);
+    expect(photos).toHaveLength(3);
+    photos.forEach((photo) => {
+      expect(StyleSheet.flatten(photo.props.style)).toMatchObject({
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 10,
+      });
+    });
+  });
+
+  it('🔴 하트 원 안의 하트가 shared/ui 공용 하트이고 StayGlyphs 하트가 아니다 (Seed Q1 ②)', () => {
+    render(<SavedStayListScreen savedStays={[]} face="empty" />);
+
+    const heart = screen.getByTestId('saved-stay-empty-heart');
+    // 이름이 같은 두 함수를 정체성으로 가른다 — 긍정(공용 1)과 부정(stay 0)을 함께 건다.
+    expect(heart.findAllByType(SharedHeartFilledGlyph)).toHaveLength(1);
+    expect(heart.findAllByType(StayHeartFilledGlyph)).toHaveLength(0);
+  });
+
+  it('🔴 CTA 좌우 패딩이 22/24 다 — px 28 이 아니다 (Seed Q1 ③)', () => {
+    render(<SavedStayListScreen savedStays={[]} face="empty" />);
+
+    const tokens = cls(screen.getByTestId('saved-stay-browse'));
+    expect(tokens).toContain('pl-[22px]');
+    expect(tokens).toContain('pr-2xl');
+    expect(tokens).not.toContain('px-[28px]');
+    // 높이·radius 는 그대로(AC-9 짝).
+    expect(tokens).toContain('h-[52px]');
+    expect(tokens).toContain('rounded-[12px]');
+  });
+
+  it('CTA 돋보기는 흰색이다 — 아이콘이 prop 으로 옮겨져도 색이 새지 않는다', () => {
+    render(<SavedStayListScreen savedStays={[]} face="empty" />);
+
+    const payloads = strokePayloads(screen.getByTestId('saved-stay-browse'));
+    // 긍정 짝 — stroke 노드가 없으면 아래 forEach 가 공허 통과한다.
+    expect(payloads.length).toBeGreaterThanOrEqual(1);
+    payloads.forEach((payload) => expect(payload).toBe(processColor('white')));
   });
 });

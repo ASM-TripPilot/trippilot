@@ -75,6 +75,14 @@ const SECURE_STORE_ALLOWED = [
   'faceIDPermission',
   'configureAndroidBackup',
 ] as const;
+// expo-media-library 18.2 plugin/build/withMediaLibrary.d.ts 의 옵션 키(TRIP-1071).
+const MEDIA_LIBRARY_ALLOWED = [
+  'photosPermission',
+  'savePhotosPermission',
+  'isAccessMediaLocationEnabled',
+  'preventAutomaticLimitedAccessAlert',
+  'granularPermissions',
+] as const;
 const SPLASH_ALLOWED = [
   'backgroundColor',
   'imageWidth',
@@ -88,6 +96,8 @@ const SPLASH_ALLOWED = [
 
 const WHEN_IN_USE_COPY =
   'TripPilot가 주변 여행지와 동선을 추천하기 위해 위치를 사용합니다.';
+const SAVE_PHOTOS_COPY =
+  'TripPilot가 여행 공유 카드를 사진 앨범에 저장하기 위해 사진 추가 권한을 사용합니다.';
 
 let infoPlist: Record<string, unknown> = {};
 let introspectedExtra: Record<string, unknown> = {};
@@ -178,6 +188,21 @@ describe('AC-3 안 쓰는 권한 문구 제거', () => {
   });
 });
 
+describe('TRIP-1071 AC-16 · 공유 카드 앨범 저장 권한 문구', () => {
+  it('해석된 Info.plist에 사진 "추가" 문구가 한국어로 있다', () => {
+    // 읽기 문구는 TRIP-1070(사진 첨부)이 쓴다 — 그쪽 AC-14 가 한국어·두 플러그인 동일을 못박는다.
+    expect(infoPlist.NSPhotoLibraryAddUsageDescription).toBe(SAVE_PHOTOS_COPY);
+  });
+
+  it('expo-media-library 옵션은 패키지가 아는 키만 쓰고, 저장 문구는 한국어 추가 문구다', () => {
+    const mediaLibrary = optionsOf('expo-media-library');
+
+    expect(mediaLibrary).toBeDefined();
+    expect(mediaLibrary?.savePhotosPermission).toBe(SAVE_PHOTOS_COPY);
+    expect(unknownKeys(mediaLibrary, MEDIA_LIBRARY_ALLOWED)).toEqual([]);
+  });
+});
+
 describe('AC-4 암호화 신고 · iPhone 전용', () => {
   it('해석된 Info.plist가 암호화 수출 신고 면제(ITSAppUsesNonExemptEncryption=false)를 선언한다', () => {
     expect(infoPlist.ITSAppUsesNonExemptEncryption).toBe(false);
@@ -262,5 +287,52 @@ describe('TRIP-935 AC-2 · expo-router 사이트맵 끔', () => {
 
     expect(router).toBeDefined();
     expect(router?.sitemap).toBe(false);
+  });
+});
+
+// TRIP-1070 AC-14 — 사진 앨범 권한 문구. 두 플러그인이 같은 Info.plist 키(NSPhotoLibraryUsageDescription)를
+// 쓰므로 문구가 다르면 나중 플러그인이 이긴다 — 같은 문자열이어야 어느 쪽이 이겨도 같다.
+// 옵션 키는 설치된 패키지 d.ts 실측(plugin/build/withImagePicker.d.ts · withMediaLibrary.d.ts).
+const IMAGE_PICKER_ALLOWED = [
+  'photosPermission',
+  'cameraPermission',
+  'microphonePermission',
+] as const;
+const HANGUL = /[가-힣]/;
+
+describe('🔴 TRIP-1070 AC-14 · 사진 앨범 권한 문구', () => {
+  it('expo-image-picker·expo-media-library 가 같은 한국어 사진 문구를 쓰고, 안 쓰는 문구는 불리언 false 로 지운다', () => {
+    const picker = optionsOf('expo-image-picker');
+    const library = optionsOf('expo-media-library');
+
+    // 두 플러그인이 튜플로 등록됐고 아는 키만 쓴다(오타 키는 조용히 무시된다).
+    expect(picker).toBeDefined();
+    expect(library).toBeDefined();
+    expect(unknownKeys(picker, IMAGE_PICKER_ALLOWED)).toEqual([]);
+    expect(unknownKeys(library, MEDIA_LIBRARY_ALLOWED)).toEqual([]);
+
+    // 사진 문구 — 한국어, 두 곳 같은 문자열.
+    const copy = picker?.photosPermission;
+    expect(typeof copy).toBe('string');
+    expect(HANGUL.test(String(copy))).toBe(true);
+    expect(library?.photosPermission).toBe(copy);
+
+    // 카메라·마이크는 쓰지 않는다(F3) · Android 사진 위치 권한도 켜지 않는다(F2).
+    // 사진 저장 문구는 TRIP-1071(공유 카드 앨범 저장)이 쓴다 — 그쪽 AC-16 이 못박는다.
+    expect(picker?.cameraPermission).toBe(false);
+    expect(picker?.microphonePermission).toBe(false);
+    expect(library?.isAccessMediaLocationEnabled).toBe(false);
+  });
+
+  it('해석된 Info.plist 의 사진 문구가 그 한국어 문구이고, 카메라·마이크 문구 키는 없다', () => {
+    const copy = optionsOf('expo-image-picker')?.photosPermission;
+    const keys = Object.keys(infoPlist);
+
+    expect(infoPlist.NSPhotoLibraryUsageDescription).toBe(copy);
+    expect(HANGUL.test(String(infoPlist.NSPhotoLibraryUsageDescription))).toBe(
+      true
+    );
+    expect(keys).not.toContain('NSCameraUsageDescription');
+    expect(keys).not.toContain('NSMicrophoneUsageDescription');
   });
 });

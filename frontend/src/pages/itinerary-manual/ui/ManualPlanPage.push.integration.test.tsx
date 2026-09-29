@@ -78,6 +78,25 @@ jest.mock('@/shared/api/generated/trips/trips', () => ({
   getGetTripsTripIdItineraryQueryKey: (tripId: string) => [
     `/trips/${tripId}/itinerary`,
   ],
+  // TRIP-1022 — 페이지가 빈 편집기 지도 중심용 거점 조회를 부른다(단언 무관 준비 — 없으면 전 케이스가
+  // "is not a function" 으로 죽는다, 02a ★1).
+  useGetTripsTripIdBases: () => ({
+    data: [],
+    isPending: false,
+    isError: false,
+  }),
+  // TRIP-1038 B — 「저장하고 확정하기」가 확정 POST 훅을 부른다(이 파일은 저장을 누르지 않는다 · 단언 무관 준비).
+  usePostTripsTripIdItineraryConfirm: () => ({
+    mutate: jest.fn(),
+    mutateAsync: jest.fn(),
+    isPending: false,
+    isError: false,
+  }),
+}));
+
+// TRIP-1022 — 거점 숙소 좌표 조회. 실물이 돌면 msw 없는 이 파일에서 실 axios 요청이 샌다(02a ★2).
+jest.mock('@/shared/api/generated/saved-stays/saved-stays', () => ({
+  useGetSavedStays: () => ({ data: [], isPending: false, isError: false }),
 }));
 
 jest.mock('expo-router', () => ({

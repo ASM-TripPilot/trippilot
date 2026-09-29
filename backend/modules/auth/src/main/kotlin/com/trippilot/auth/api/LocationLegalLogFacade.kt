@@ -44,6 +44,9 @@ interface LocationLegalLogFacade {
 enum class LocationPurgeScope {
     /** 사진에 딸려 저장됐던 EXIF 좌표(`visit_photo_meta.exif_lat/lng`). */
     PHOTO_EXIF,
+
+    /** 재계획 세션에 저장됐던 기준점 좌표(`replan_session.origin_lat/lng`, TRIP-992). */
+    REPLAN_ORIGIN,
 }
 
 /**
@@ -57,4 +60,7 @@ enum class LocationPurgeScope {
 enum class LocationCollectionSource {
     /** 사진에 박혀 온 EXIF 좌표(V2.33 `visit_photo_meta`). */
     PHOTO_EXIF,
+
+    /** 재계획 요청에 실려 온 기준점 좌표 — GPS·수동 핀(V2.17 `replan_session`, TRIP-992). */
+    REPLAN_ORIGIN,
 }

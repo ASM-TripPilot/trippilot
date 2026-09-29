@@ -15,6 +15,7 @@ import org.hibernate.type.SqlTypes
 import jakarta.persistence.LockModeType
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Lock
+import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.stereotype.Component
 import java.time.Instant
@@ -61,6 +62,17 @@ interface ReplanSessionJpaRepository : JpaRepository<ReplanSessionEntity, UUID> 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select s from ReplanSessionEntity s where s.sessionId = :sessionId")
     fun findForUpdate(sessionId: UUID): ReplanSessionEntity?
+
+    /**
+     * 위치 동의 철회 파기(TRIP-992). 좌표만 null 로 지우면 CHECK(GPS·MANUAL 은 좌표 필수)에 걸린다 —
+     * kind 를 PURGED 로 함께 바꿔 "파기됐다"는 사실을 값으로 남긴다(다른 실값으로 바꾸면 출처 조작이다).
+     */
+    @Modifying(clearAutomatically = true)
+    @Query(
+        "update ReplanSessionEntity s set s.originKind = 'PURGED', s.originLat = null, s.originLng = null " +
+            "where s.tripId in :tripIds and s.originKind in ('GPS', 'MANUAL')",
+    )
+    fun purgeOrigins(tripIds: List<UUID>): Int
 }
 
 @Component
@@ -91,6 +103,9 @@ class ReplanSessionPersistence(private val jpa: ReplanSessionJpaRepository) : Re
 
     override fun findOpenByTrip(tripId: UUID): ReplanSession? =
         jpa.findFirstByTripIdAndStatusIn(tripId, OPEN_STATUSES)?.toDomain()
+
+    override fun purgeOrigins(tripIds: List<UUID>): Int =
+        if (tripIds.isEmpty()) 0 else jpa.purgeOrigins(tripIds)
 
     private fun ReplanSessionEntity.toDomain() = ReplanSession(
         sessionId, tripId, itineraryId, triggerId,

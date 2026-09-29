@@ -16,6 +16,18 @@ data class PlaceResponse(
     val lat: Double,
     val lng: Double,
     val region: String?,
+    /**
+     * 행정구역 코드(TRIP-1042) — 시군구 5자리, 시군구를 모르면 시도 2자리, 모르면 null.
+     * 화면이 저장 장소를 여행 목적지 코드의 접두사로 맞추고 앞 2자리로 시도 이름을 붙인다.
+     * `sidoName` 은 싣지 않는다 — 코드 앞 2자리가 곧 시도 키라 같은 사실이 두 칸이 되고,
+     * 카탈로그의 공식명(`인천광역시`)은 화면 표기(`인천`)와도 달라 어차피 클라가 줄여야 한다.
+     */
+    val regionCode: String?,
+    /**
+     * 지번·도로명 주소(TRIP-1062 · 1003 F). null = 미확보 — 기존 수집분은 재수집이 채울 때까지
+     * 비어 있고, 화면은 자리만 비운다(지어내지 않는다).
+     */
+    val address: String?,
     val openingHours: String?,
     val imageUrl: String?,
     val tags: List<String>,
@@ -25,7 +37,7 @@ data class PlaceResponse(
     companion object {
         fun from(p: Poi) = PlaceResponse(
             poiId = p.poiId, nameKo = p.nameKo, category = p.category, lat = p.lat, lng = p.lng,
-            region = p.region, openingHours = p.openingHours, imageUrl = p.imageUrl, tags = p.tags,
+            region = p.region, regionCode = p.regionCode, address = p.address, openingHours = p.openingHours, imageUrl = p.imageUrl, tags = p.tags,
             savedCount = p.savedCount, dataStatus = p.dataStatus,
         )
     }

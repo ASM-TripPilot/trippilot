@@ -26,8 +26,10 @@ import { MyPage } from './MyPage';
  * TRIP-775 · l03 마이페이지 배선 ↔ Figma 1602:2388 — 실 MyPage 를 그려 조회→화면 결과를 본다.
  *
  * 무엇을 보장하나:
- *  - AC-1 프로필 태그는 **정식 분석** descriptors 만 쓴다(Seed Q4=A). 미달이면 온보딩 취향 미리보기
- *    (`preview.descriptors`)가 있어도 태그를 그리지 않는다(BR-U5-40 — 미리보기를 정식처럼 보이지 않는다).
+ *  - AC-1 프로필 태그 출처: 정식이면 `analysis.descriptors`, 미달이면 온보딩 취향 미리보기
+ *    (`preview.descriptors`)만 쓴다. **TRIP-1076 결정 1(A)로 TRIP-775 Seed Q4=A 를 뒤집었다** — Figma l03
+ *    style-insufficient(4533:2424)가 미달에도 태그를 보인다. '정식 아님'(BR-U5-40)은 스타일 카드가 계속
+ *    미달 얼굴(안내 한 줄, 칩·게이지 없음)로 말한다.
  *  - AC-4 페이지는 스타일 헤드라인을 주입하지 않는다(서버 필드 없음, 계약 공백).
  *  - AC-6 "지난 여행" 섹션은 예정 여행이 0건일 때만 보인다(§F-3 A안). 활성 탭이 '종료'면 접는다(기존).
  *  - AC-7 메뉴는 정확히 3행(등록 숙소·예약 기록 / 여행 스타일 분석 / 설정)이고, 첫 행 아이콘은
@@ -157,7 +159,7 @@ beforeEach(() => {
   );
 });
 
-describe('AC-1 · 프로필 태그 출처(Seed Q4=A)', () => {
+describe('AC-1 · 프로필 태그 출처(TRIP-1076 결정 1(A) — 미달이면 preview)', () => {
   it('정식 분석이면 analysis.descriptors 가 프로필 카드 안 태그로 순서대로 뜬다', () => {
     // 준비
     setStyle(officialEnvelope());
@@ -173,26 +175,59 @@ describe('AC-1 · 프로필 태그 출처(Seed Q4=A)', () => {
     expect(tags[1]).toHaveTextContent('#미식');
   });
 
-  it('미달이면 preview.descriptors 가 있어도 프로필 태그를 그리지 않는다(화면 어디에도 #바다 없음)', () => {
+  it('🔴 미달이면 preview.descriptors 가 프로필 태그로 뜨고, 스타일 카드는 여전히 미달 얼굴이다 (AC-5)', () => {
+    // 준비: 미달 — 정식 분석 없음, 온보딩 취향 미리보기 3개.
     setStyle(insufficientEnvelope());
 
+    // 실행
     render(<MyPage />);
 
-    expect(screen.queryAllByTestId('my-profile-tag')).toHaveLength(0);
-    expect(screen.queryByText('#바다')).toBeNull();
-    // 짝 앵커: 프로필 카드와 (미달 얼굴의) 스타일 카드는 그려졌다.
-    expect(screen.getByTestId('my-profile-card')).toBeOnTheScreen();
-    expect(screen.getByTestId('my-style-card')).toBeOnTheScreen();
+    // 단언 ①: 프로필 카드 안 태그 3개, 순서 그대로.
+    const profile = screen.getByTestId('my-profile-card');
+    const tags = within(profile).getAllByTestId('my-profile-tag');
+    expect(tags).toHaveLength(3);
+    expect(tags[0]).toHaveTextContent('#바다');
+    expect(tags[1]).toHaveTextContent('#미식');
+    expect(tags[2]).toHaveTextContent('#느긋');
+
+    // 단언 ②(금지 — BR-U5-40): 스타일 카드는 '정식 아님' 얼굴 그대로 — 안내 한 줄, 칩·게이지 없음.
+    const card = screen.getByTestId('my-style-card');
+    expect(
+      within(card).getByText('10곳 이상 쌓이면 분석을 제공합니다(현재 5곳)')
+    ).toBeOnTheScreen();
+    expect(within(card).queryAllByTestId('my-style-chip')).toHaveLength(0);
+    expect(within(card).queryAllByTestId('my-style-gauge')).toHaveLength(0);
   });
 
-  it('미달(official:false)이면 analysis.descriptors 가 차 있어도 프로필 태그를 그리지 않는다', () => {
+  it('🔴 미달(official:false)이면 analysis.descriptors 가 차 있어도 그 값은 안 쓰고 preview 만 쓴다', () => {
     // 준비: 계약상 official·analysis 는 서로 독립 nullable 이라 이 조합이 올 수 있다(BR-U5-40).
+    // analysis 쪽 글자를 preview 와 다르게 둬야 "어느 출처에서 왔나"가 갈린다(02a ★10).
+    const official = officialEnvelope();
     setStyle({
       ...insufficientEnvelope(),
-      analysis: officialEnvelope().analysis,
+      analysis: official.analysis
+        ? { ...official.analysis, descriptors: ['#도심', '#쇼핑'] }
+        : null,
     });
 
     // 실행
+    render(<MyPage />);
+
+    // 단언: 태그는 preview 3개(순서 그대로), analysis 글자는 화면 어디에도 없다.
+    const tags = within(screen.getByTestId('my-profile-card')).getAllByTestId(
+      'my-profile-tag'
+    );
+    expect(tags).toHaveLength(3);
+    expect(tags[0]).toHaveTextContent('#바다');
+    expect(tags[1]).toHaveTextContent('#미식');
+    expect(tags[2]).toHaveTextContent('#느긋');
+    expect(screen.queryByText('#도심')).toBeNull();
+    expect(screen.queryByText('#쇼핑')).toBeNull();
+  });
+
+  it('미달이고 preview 가 null 이면 태그 줄이 없다', () => {
+    setStyle({ ...insufficientEnvelope(), preview: null });
+
     render(<MyPage />);
 
     // 단언: 태그 0. 짝 앵커 = 프로필 카드는 그려졌다(카드째 사라져 공짜 통과하는 것을 막는다).

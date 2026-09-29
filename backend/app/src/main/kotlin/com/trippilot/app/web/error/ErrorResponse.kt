@@ -40,6 +40,14 @@ data class ErrorResponse(
         @get:JsonInclude(JsonInclude.Include.NON_NULL)
         val activeTripId: String? = null,
         /**
+         * GENERATION_SUPERSEDED 에만 존재(TRIP-1058) — 취소·대체된 생성 요청이 거절될 때
+         * **지금 진행 중인 새 세션**의 식별자. 화면이 이 값으로 폴링을 갈아탄다.
+         * 취소만 되고 새 요청이 없으면(cancel API 경로, QA #046) 싣지 않는다.
+         * `activeTripId` 와 같은 방식이다 — 코드별 타입 필드, null 이면 미직렬화.
+         */
+        @get:JsonInclude(JsonInclude.Include.NON_NULL)
+        val activeSessionId: String? = null,
+        /**
          * VISIT_ALREADY_RECORDED · VISIT_CONFLICT 에만 존재(TRIP-546 · BR-U5-20·21) —
          * 서버에 이미 있는 방문 기록의 식별자.
          *

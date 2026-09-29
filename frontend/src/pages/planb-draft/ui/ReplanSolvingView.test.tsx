@@ -237,3 +237,27 @@ describe('🔴 VS7 · AC-14 — INV-3', () => {
     expect(tree).not.toMatch(/\d+\s*분|\d+\s*시간|소요/);
   });
 });
+
+describe('🔴 VS8 · TRIP-1040 AC-9 — 칸 상한·접기가 들어와도 i05 는 2칸 그대로, 라벨만 한 줄', () => {
+  it('칸은 정확히 [완성, 진행 중] 2개이고 접기 칸이 없으며, 두 라벨 모두 한 줄 말줄임이다', () => {
+    renderView();
+
+    // 무회귀 — 재계획 카드는 칸 2개 고정이라 상한에 안 걸린다(접기 칸 0).
+    expect(
+      screen
+        .getAllByTestId(/^generation-gauge-cell-/)
+        .map((node) => node.props.testID)
+    ).toEqual([
+      'generation-gauge-cell-1-done',
+      'generation-gauge-cell-2-active',
+    ]);
+    expect(screen.queryByTestId('generation-gauge-cell-more')).toBeNull();
+
+    // 위젯의 라벨 한 줄 변경은 이 화면 라벨에도 그대로 걸린다(긴 "17시 이후 다시 짜는 중").
+    for (const label of ['방문한 곳 그대로', '17시 이후 다시 짜는 중']) {
+      const text = screen.getByText(label);
+      expect(text.props.numberOfLines).toBe(1);
+      expect(text.props.ellipsizeMode).toBe('tail');
+    }
+  });
+});

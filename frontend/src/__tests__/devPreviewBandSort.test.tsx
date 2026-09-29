@@ -84,10 +84,18 @@ const EXPECTED_H = [
   'dev-preview-state-h05-my-trips-done-bar', // h05 (신규 · 완료 도킹 배너)
   'dev-preview-state-h06-my-trips-loading', // h06 (구 my-trips-loading)
   'dev-preview-state-h06-my-trips-empty', // h06 (구 my-trips-empty)
+  // TRIP-1055: h06 작성중 여행 삭제 메뉴·삭제 확인 2키. 같은 h06 코드라 PREVIEW_STATES 배열에서
+  // h06-my-trips-empty **바로 뒤**에 이 순서(menu→delete-confirm)로 넣으면 안정 정렬이 그대로 낸다.
+  'dev-preview-state-h06-my-trips-menu', // h06 (TRIP-1055 · 삭제 메뉴)
+  'dev-preview-state-h06-my-trips-delete-confirm', // h06 (TRIP-1055 · 삭제 확인)
   // TRIP-790: 옛 h10 `itinerary-draft-generating`(만드는 중 · DraftScreen 인라인 게이지)을
   // h07 부분 결과(셸 얼굴)로 개명. 라벨 코드가 h07 이라 안정 정렬이 mustvisit-time 뒤에 붙는다
   // (개명 엔트리는 PREVIEW_STATES 배열상 draft 구역이라 mustvisit-time 보다 늦다 · 02a ★10).
   'dev-preview-state-h07-generating-partial', // h07
+  // TRIP-1040: h07 부분 결과 5일(뒤 접기)·7일(앞 접기) 2키. 같은 h07 코드라 PREVIEW_STATES 배열에서
+  // h07-generating-partial **바로 뒤**에 이 순서(5d→7d)로 넣으면 안정 정렬이 partial→5d→7d→loading 을 낸다.
+  'dev-preview-state-h07-generating-partial-5d', // h07 (TRIP-1040 · 5일 뒤 접기)
+  'dev-preview-state-h07-generating-partial-7d', // h07 (TRIP-1040 · 7일 앞 접기)
   // TRIP-789: 옛 h09 itinerary-generating(생성 중 loading · GeneratingScreen)을 h07-generating-loading
   // 으로 개명. 라벨 코드가 h07 이라 안정 정렬이 partial 바로 뒤에 붙는다 — PREVIEW_STATES 배열에서 이
   // 항목(구 itinerary-generating)이 h07-generating-partial 보다 뒤 위치라 안정 정렬이 partial→loading
@@ -99,12 +107,23 @@ const EXPECTED_H = [
   // 이 순서(loading → fallback → fallback-failed)를 낸다(배열 위치=정렬 위치, h08 collapsed/expanded 선례).
   'dev-preview-state-h07-generating-fallback', // h07 (TRIP-791 · 폴백 성공 인터스티셜)
   'dev-preview-state-h07-generating-fallback-failed', // h07 (TRIP-791 · 하드실패 인터스티셜)
+  // TRIP-1032: 다른 여행 생성 중(409) 안내 2키. 같은 h07 코드라 PREVIEW_STATES 배열에서
+  // fallback-failed **직후**에 이 순서(busy→uncancelable)로 넣으면 안정 정렬이 그대로 낸다.
+  'dev-preview-state-h07-generating-busy', // h07 (TRIP-1032 · 취소 가능)
+  'dev-preview-state-h07-generating-busy-uncancelable', // h07 (TRIP-1032 · 취소 불가)
   'dev-preview-state-h08-draft-collapsed', // h08 (TRIP-783 지도+시트 셸 접힘)
   // TRIP-792: h08 펼침(시트 상단 스냅 · TRIP-920 부터 initialIndex={2}) 신규. 코드가 h08 이라 안정 정렬이
   // collapsed 바로 뒤에 붙는다(PREVIEW_STATES 배열에서도 expanded 를 collapsed 직후에 삽입 —
   // 그래야 안정 정렬이 이 순서를 낸다). 동시에 옛 h11 DraftScreen 초안 5키(default·stale-failed·
   // loading·empty·nopins)는 삭제돼 이 배열에서도 빠진다(band h 소비처 이동, 폴백 3키는 유지).
   'dev-preview-state-h08-draft-expanded', // h08 (TRIP-792 지도+시트 셸 펼침)
+  // TRIP-1039: h08 셸 폴백·일부 실패 2키. 같은 h08 코드라 PREVIEW_STATES 배열에서 expanded **직후**에 이 순서
+  // (fallback→stale-failed)로 넣으면 안정 정렬이 그대로 낸다(배열 위치=정렬 위치). candidate-sheet 보다 앞이다.
+  'dev-preview-state-h08-draft-fallback', // h08 (TRIP-1039 셸 폴백)
+  'dev-preview-state-h08-draft-stale-failed', // h08 (TRIP-1039 셸 일부 실패)
+  // TRIP-1094: h08 셸 못 넣은 꼭 갈 곳 블록 1키. 같은 h08 코드라 PREVIEW_STATES 배열에서 stale-failed **바로 뒤**에
+  // 넣으면 안정 정렬이 그대로 낸다(배열 위치=정렬 위치). candidate-sheet 보다 앞이다.
+  'dev-preview-state-h08-draft-unplaced', // h08 (TRIP-1094 못 넣은 꼭 갈 곳)
   // TRIP-793: h08 "다른 후보 시트"(정상·0건). 코드가 h08 이라 안정 정렬이 draft-expanded 바로 뒤에
   // 붙는다 — PREVIEW_STATES 배열에서 이 2키를 옛 slot-candidate-panel 블록 자리(h11-copick 뒤)에 넣어도
   // 코드가 h08 이라 정렬이 draft-* 뒤로 끌어올린다. 같은 h08 코드 4키는 배열 삽입 순서(collapsed→
@@ -121,6 +140,9 @@ const EXPECTED_H = [
   // (default→wide)로 안정정렬되므로 구현자는 그 순서로 삽입한다(배열 위치=정렬 위치, h02·h14 선례).
   'dev-preview-state-h10-copick-candidates', // h10 (TRIP-795 default)
   'dev-preview-state-h10-copick-candidates-wide', // h10 (TRIP-795 반경 넓힘)
+  // TRIP-1081: 서버가 넓힌 반경(칩 1.1km 그대로 + 사실 캡션 + 후보 핀). 같은 h10 코드라 배열 삽입 순서로
+  // 안정 정렬 — 구현자는 PREVIEW_STATES 에서 -wide 바로 뒤에 넣는다.
+  'dev-preview-state-h10-copick-candidates-auto-wide', // h10 (TRIP-1081 서버 넓힘)
   // TRIP-789: 옛 h09 두 키(itinerary-generating·itinerary-generating-failed)가 이 자리에서 사라진다 —
   // 전자는 h07-generating-loading 으로 개명·이동(위 h07 그룹), 후자는 프리뷰 키 삭제(핸들링 유지).
   // (TRIP-794 로 h09 코드 항목이 다시 생겼다 — h09-copick-concept, 위 h08 뒤 줄 참조. 옛 h09 생성
@@ -154,6 +176,8 @@ const EXPECTED_H = [
   'dev-preview-state-h14-plan-distance-pending', // h14
   'dev-preview-state-h14-plan-map-fallback', // h14
   'dev-preview-state-h14-plan-no-base', // h14
+  // TRIP-1094: h14 완성 일정 못 넣은 꼭 갈 곳 블록 1키 — PREVIEW_STATES 에서 no-base **바로 뒤**(같은 h14 코드 안정 정렬).
+  'dev-preview-state-h14-plan-unplaced', // h14 (TRIP-1094)
   // TRIP-800: h15 동선 기준 숙소 추천(신규 1키). 라벨 코드 h15 라 h14 4키 뒤·h16 앞에 선다(배열 위치 무관 —
   // 같은 코드가 하나뿐이라 안정 정렬 순서도 없다).
   'dev-preview-state-h15-stay-recommend', // h15

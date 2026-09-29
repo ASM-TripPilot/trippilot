@@ -18,6 +18,7 @@ import { StateNotice } from '@/shared/ui/StateNotice';
 
 import type { PlaceListState } from '../model/placeListState';
 import type { PlaceSaveNotice } from '../model/placeSaveGuard';
+import { formatRegionChipLabel } from '../model/regionChipLabel';
 import {
   BackChevronGlyph,
   FilterSlidersGlyph,
@@ -64,6 +65,8 @@ export interface PlaceExploreScreenProps {
   /** 카드 본문 탭 → d06 상세. 미지정이면 카드는 눌러도 무동작(additive, 게이트① 재개봉 없음). */
   onPressCard?: (place: Place) => void;
   onPressCreateTrip: () => void;
+  /** true 면 ＋ FAB(여행 만들기)를 그리지 않는다 — 위저드에서 들어온 d04(TRIP-1026). 미지정 = false. */
+  hideCreateTrip?: boolean;
   /** ♥ FAB(우하단 위) → 담은 장소 d02. 미지정이면 무동작(옵셔널) — FAB 자체는 상시 렌더한다
    * (Figma 상시 노출, 콜백은 선택). 라우팅은 페이지가 `/explore/saved-places`로 배선. */
   onPressSavedPlaces?: () => void;
@@ -81,10 +84,15 @@ export interface PlaceExploreScreenProps {
   saveError?: PlaceSaveNotice | null;
   /** error 안내의 `다시 시도` — 실제 재조회에 배선한다(스텁 금지). */
   onRetry?: () => void;
-  /** empty 안내의 `다른 지역 보기`. */
+  /** empty 안내의 `다른 지역 보기`·상단 지역 칩(TRIP-1023 #026) 공용. */
   onPressChangeRegion?: () => void;
+  /** 지역 칩 라벨의 출처 — 페이지가 라우트 `region`을 배열로 편 것. 미지정 = [] = "전국". */
+  regionNames?: readonly string[];
   /** filter-zero 안내의 해제 버튼 — 지목한 하나만 해제한다(01b Seed Q3 ⓐ). */
   onClearFilter?: () => void;
+  /** filter-zero 안내의 "조건 모두 해제" — 검색어·카테고리가 둘 다 걸렸을 때만 보이는 두 번째
+   * 버튼(TRIP-1019 #027). 미지정 = 무동작. */
+  onClearAllFilters?: () => void;
   /** 배너 액션 버튼(재시도·로그인하기 공용) — 무엇을 하는지는 `saveError.action`이 정한다. */
   onPressSaveErrorAction?: () => void;
   /** 목록 끝에 닿으면 다음 장을 이어 받는다(TRIP-502 무한 스크롤). 미지정이면 무동작(additive). */
@@ -173,6 +181,30 @@ function SearchBar({
   );
 }
 
+/** 카테고리 칩 줄 바로 아래 지역 칩(TRIP-1023 #026, Seed Q4) — Figma 에 없는 새 표면이라
+ * 카테고리 미선택 칩 토큰을 그대로 빌린다. 라벨 Text 에는 라벨만 담는다(핀 글리프는 별 요소). */
+function RegionChip({
+  label,
+  onPress,
+}: {
+  label: string;
+  onPress?: () => void;
+}): ReactElement {
+  return (
+    <Pressable
+      testID="explore-places-region"
+      accessibilityRole="button"
+      onPress={onPress}
+      className="flex-row items-center gap-xs self-start rounded-pill border border-hairline-strong bg-canvas px-[15px] py-[9px]"
+    >
+      <MapPinGlyph size={14} tone="muted" />
+      <Text className="font-noto-bold text-label font-bold text-ink">
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 function CategoryChips({
   selected,
   onSelect,
@@ -214,40 +246,6 @@ function CategoryChips({
         );
       })}
     </ScrollView>
-  );
-}
-
-/** 정렬 칩 — 선택지가 아니라 **현재 정렬을 알리는 라벨**이다. 활성 "요즘 담긴 순"(연핑크
- * `bg-primary-pale`) 하나만 그린다: "지금 뜨는 순"은 `savedCount`가 계약의 유일한 정렬 재료라
- * 같은 순서가 되고, "가까운 순"은 좌표 파라미터가 없어 둘 다 숨긴다(TRIP-989 D15 · u1 F-2 미노출).
- * `Pressable`이 아니라 `View`다 — 누를 수 있는 것 목록(AC-1 개수 계약)에 걸리면 안 된다. */
-function SortChip({
-  testID,
-  label,
-}: {
-  testID: string;
-  label: string;
-}): ReactElement {
-  return (
-    <View
-      testID={testID}
-      className="rounded-pill bg-primary-pale px-[13px] py-[7px]"
-    >
-      <Text className="font-noto-bold text-[12.5px] font-bold text-primary">
-        {label}
-      </Text>
-    </View>
-  );
-}
-
-function SortRow(): ReactElement {
-  return (
-    <View className="flex-row items-center gap-sm">
-      <Text className="font-noto-bold text-caption font-bold text-muted-soft">
-        정렬
-      </Text>
-      <SortChip testID="explore-places-sort-saved" label="요즘 담긴 순" />
-    </View>
   );
 }
 
@@ -313,12 +311,14 @@ function ListEmptyBlock({
   selectedCategory,
   onPressChangeRegion,
   onClearFilter,
+  onClearAllFilters,
 }: {
   state: PlaceListState;
   searchText: string;
   selectedCategory: PoiCategory | null;
   onPressChangeRegion?: () => void;
   onClearFilter?: () => void;
+  onClearAllFilters?: () => void;
 }): ReactElement | null {
   if (state.kind === 'loading') {
     return <SkeletonGrid />;
@@ -369,6 +369,18 @@ function ListEmptyBlock({
               variant: 'outline',
               onPress: onClearFilter,
             },
+            // 풀 조건이 둘일 때만 한 번에 푸는 선택지를 더한다(TRIP-1019 #027). 공백 검색어는
+            // 페이지 판정(`trim`)과 같이 조건이 아니다.
+            ...(searchText.trim() !== '' && selectedCategory !== null
+              ? [
+                  {
+                    testID: 'explore-places-filterzero-clear-all',
+                    label: '조건 모두 해제',
+                    variant: 'link' as const,
+                    onPress: onClearAllFilters,
+                  },
+                ]
+              : []),
           ]}
         />
       </View>
@@ -459,6 +471,7 @@ export function PlaceExploreScreen({
   onToggleSave,
   onPressCard,
   onPressCreateTrip,
+  hideCreateTrip = false,
   onPressSavedPlaces,
   onPressFilter,
   onBack,
@@ -467,7 +480,9 @@ export function PlaceExploreScreen({
   saveError,
   onRetry,
   onPressChangeRegion,
+  regionNames = [],
   onClearFilter,
+  onClearAllFilters,
   onPressSaveErrorAction,
   onEndReached,
   isFetchingMore = false,
@@ -507,7 +522,10 @@ export function PlaceExploreScreen({
                 selected={selectedCategory}
                 onSelect={onSelectCategory}
               />
-              <SortRow />
+              <RegionChip
+                label={formatRegionChipLabel(regionNames)}
+                onPress={onPressChangeRegion}
+              />
               {state.kind === 'error' ? (
                 <ErrorNotice onRetry={onRetry} />
               ) : null}
@@ -521,6 +539,7 @@ export function PlaceExploreScreen({
               selectedCategory={selectedCategory}
               onPressChangeRegion={onPressChangeRegion}
               onClearFilter={onClearFilter}
+              onClearAllFilters={onClearAllFilters}
             />
           }
           renderItem={({ item }) => (
@@ -555,7 +574,8 @@ export function PlaceExploreScreen({
 
         {/* 우하단 세로 2단 FAB(TRIP-708, d01 703 FAB 구조 재사용): 위=♥ 담은 장소(흰 원)·
             아래=＋ 여행 만들기(핑크 원). CtaBar(담은 수>0 조건부)를 대체한다 — 담은 수·상태
-            얼굴과 무관하게 상시 노출한다(Figma). 콜백은 옵셔널(♥)이라 미전달이면 무동작. */}
+            얼굴과 무관하게 상시 노출한다(Figma). 콜백은 옵셔널(♥)이라 미전달이면 무동작.
+            단 `hideCreateTrip`(위저드 출처, TRIP-1026)이면 ＋만 빠지고 ♥가 그 자리로 내려앉는다. */}
         <View className="absolute bottom-[100px] right-lg items-end gap-md">
           <Pressable
             testID="explore-places-saved-fab"
@@ -567,16 +587,18 @@ export function PlaceExploreScreen({
           >
             <HeartFilledGlyph size={26} />
           </Pressable>
-          <Pressable
-            testID="explore-places-create-fab"
-            accessibilityRole="button"
-            accessibilityLabel="여행 만들기"
-            onPress={onPressCreateTrip}
-            style={FAB_SHADOW}
-            className="h-[56px] w-[56px] items-center justify-center rounded-full bg-primary"
-          >
-            <PlusGlyph size={24} />
-          </Pressable>
+          {hideCreateTrip ? null : (
+            <Pressable
+              testID="explore-places-create-fab"
+              accessibilityRole="button"
+              accessibilityLabel="여행 만들기"
+              onPress={onPressCreateTrip}
+              style={FAB_SHADOW}
+              className="h-[56px] w-[56px] items-center justify-center rounded-full bg-primary"
+            >
+              <PlusGlyph size={24} />
+            </Pressable>
+          )}
         </View>
       </View>
     </SafeAreaView>

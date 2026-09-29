@@ -6,11 +6,7 @@ import type { ReactElement } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import {
-  BackChevronGlyph,
-  PositiveCheckGlyph,
-  RegenerateGlyph,
-} from './OnboardingGlyphs';
+import { PositiveCheckGlyph, RegenerateGlyph } from './OnboardingGlyphs';
 
 /**
  * 오류 사유. TOO_SHORT/TOO_LONG 은 클라 형식 검증(UX 사본)에서,
@@ -62,7 +58,6 @@ export function NicknameScreen({
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
       <View testID="onboarding-nickname-root" className="flex-1 bg-canvas">
         <View className="h-[56px] flex-row items-center gap-sm border-b border-hairline px-lg">
-          <BackChevronGlyph />
           <Text className="font-noto-bold text-[16px] font-bold text-ink">
             닉네임 설정
           </Text>

@@ -88,13 +88,14 @@ class PoiQueryPagingTest : StringSpec({
     /** 커서가 리포지토리까지 **실제로 전달되는지** — 여기서 끊기면 매번 첫 장만 돌려준다. */
     "커서를 주면 그 지점을 리포지토리에 넘긴다" {
         val repo = Capturing()
-        val raw = "감천문화마을" + SEP + "11111111-1111-4111-8111-111111111111"
+        val raw = "2" + SEP + "감천문화마을" + SEP + "11111111-1111-4111-8111-111111111111"
         val encoded = Base64.getUrlEncoder().withoutPadding().encodeToString(raw.toByteArray())
 
         svc(repo).search(region = null, category = null, cursor = encoded)
 
         repo.after shouldNotBe null
-        repo.after!!.nameKo shouldBe "감천문화마을"
+        repo.after!!.rank shouldBe 2
+        repo.after!!.sortKey shouldBe "감천문화마을"
     }
 
     "커서가 없으면 지점도 없다 — 처음부터다" {

@@ -65,7 +65,7 @@ class GlobalExceptionHandler {
         val body = ErrorResponse(
             ErrorResponse.Body(
                 ex.errorCode.name, ex.message ?: "", traceId(), fields,
-                existingProvider(ex), activeTripId(ex),
+                existingProvider(ex), activeTripId(ex), activeSessionId(ex),
                 visitConflict(ex)?.visitCheckId?.toString(), visitConflict(ex)?.updatedAt?.toString(),
             ),
         )
@@ -193,6 +193,15 @@ class GlobalExceptionHandler {
      */
     private fun activeTripId(ex: DomainException): String? {
         if (ex !is ConflictDetected || ex.errorCode != ErrorCode.GENERATION_IN_PROGRESS) return null
+        return (ex.current as? UUID)?.toString()
+    }
+
+    /**
+     * 취소·대체된 생성 요청의 거절(409)에 한해 **진행 중인 새 세션**을 계약 필드로 꺼낸다(TRIP-1058).
+     * [activeTripId] 와 같은 방식 — 코드별 좁은 노출. 새 요청이 없으면(cancel 만 된 경우) null.
+     */
+    private fun activeSessionId(ex: DomainException): String? {
+        if (ex !is ConflictDetected || ex.errorCode != ErrorCode.GENERATION_SUPERSEDED) return null
         return (ex.current as? UUID)?.toString()
     }
 

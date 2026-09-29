@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { useEffect, useRef } from 'react';
 import { router } from 'expo-router';
 
 import { missingParts } from '@/features/reflection/model/missingParts';
@@ -13,6 +14,7 @@ import {
 import { useGetTripsTripId } from '@/shared/api/generated/trips/trips';
 import { seoulDate } from '@/shared/date/seoulDate';
 import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
+import { shellTabHref } from '@/shared/ui/BottomTabBar';
 
 /**
  * TRIP-571 · daily-reflection 페이지 — 조회·표시본 조립·배선의 단일 출처(FSD).
@@ -21,8 +23,14 @@ import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
  * `missingParts`(누락 표기)를 호출해 완성 VM 을 만들고 화면에 넘긴다. 화면(`DailyReflectionScreen`)은
  * 무상태 — draft/edited 필드명을 보지 않고 완성된 `narrative`·`editableText` 만 받는다.
  *
- * 얼굴 판정: error > (회고 없음)empty > (부분데이터)data-insufficient > default. 편집 시드는
+ * 얼굴 판정: 조회 error > 조회 중 pending > (레코드 0·0 ∧ 수정본 없음)empty > (부분데이터)data-insufficient
+ * > default, 레코드가 없으면 생성 error > (오늘 이하)pending > (미래)empty. 편집 시드는
  * 서버가 고른 표시 카드의 `card.subtitle`(클라가 edited/draft 를 다시 고르지 않는다, empty 는 '').
+ *
+ * TRIP-1068 · 레코드 없음 ≠ 활동 없음 — 그 날 레코드가 없고 날짜가 KST 오늘 이하면 마운트당 1회 POST 로
+ * 만든다(결정 1·2, 미래·레코드 있음·조회 실패는 0회). 목록 도착 ~ 발사 사이 렌더도 pending 이라 empty 가
+ * 비치지 않는다(INV-4). "활동 없음"은 서버 stats 0·0 으로만 말한다(결정 3) — 단 직접 쓴 수정본이 있으면
+ * 그 글을 보인다(저장 직후 글이 사라지지 않게). 생성 실패 뒤 자동 재발사 없음, "다시 시도"만 다시 쏜다.
  *
  * TRIP-762 · 일차 탭은 여행 기간(`Trip.startDate`~`endDate`, 실 계약 필드)에서 조립한다 — 회고 계약엔
  * 일차 소스가 없어 여행 조회로 얻는다(j01 TripRecordsPage 선례 동형, 단 거긴 itinerary.days, 여긴
@@ -95,20 +103,41 @@ export function DailyReflectionPage({
   const missing = missingParts(stats);
   const narrative = resolveDisplayNarrative(res);
   const editableText = res?.card?.subtitle ?? '';
+  // ISO 'YYYY-MM-DD' 는 사전순 = 시간순(monthGrid.isDateInRange 선례).
+  const notFuture = date <= today;
+
+  const shouldGenerate =
+    !daily.isPending && !daily.isError && !res && notFuture;
+  const firedRef = useRef(false);
+  const { create } = daily;
+  useEffect(() => {
+    if (!shouldGenerate || firedRef.current) return;
+    firedRef.current = true;
+    create();
+  }, [shouldGenerate, create]);
 
   const face: ReflectionFace = daily.isError
     ? 'error'
-    : !res
-      ? 'empty'
-      : missing.mapNotice !== null || missing.hidePhotoGrid
-        ? 'data-insufficient'
-        : 'default';
+    : daily.isPending
+      ? 'pending'
+      : res
+        ? stats.visitCount === 0 && stats.photoCount === 0 && !res.editedCard
+          ? 'empty'
+          : missing.mapNotice !== null || missing.hidePhotoGrid
+            ? 'data-insufficient'
+            : 'default'
+        : daily.isCreateError
+          ? 'error'
+          : notFuture
+            ? 'pending'
+            : 'empty';
 
   const handleConfirm = () => {
-    // error 얼굴의 "다시 시도" = 재조회, data 얼굴의 "저장/확인" = 닫기(mood/memo 비영속, narrative 는
-    // 수정 경로. 통합 저장은 계약 확장 티켓 TRIP-823).
+    // error 얼굴의 "다시 시도" = 생성 실패면 POST 1회 재발사(Seed Q1), 조회 실패면 재조회. data 얼굴의
+    // "저장/확인" = 닫기(mood/memo 비영속, narrative 는 수정 경로. 통합 저장은 계약 확장 티켓 TRIP-823).
     if (face === 'error') {
-      daily.refetch();
+      if (daily.isCreateError) daily.create();
+      else daily.refetch();
       return;
     }
     if (router.canGoBack()) router.back();
@@ -133,9 +162,7 @@ export function DailyReflectionPage({
           `/trips/${tripId}/records/reflection/${dateForDayNumber(startDate, day)}`
         );
       }}
-      onPressTab={(key: ShellTabKey) =>
-        router.replace(key === 'home' ? '/' : `/${key}`)
-      }
+      onPressTab={(key: ShellTabKey) => router.replace(shellTabHref(key))}
       onEnterEdit={() => {
         // 편집 열림은 화면이 로컬로 진다. 생성 없이 PUT 경로(BR-U5-36)라 여기서 별도 조치 없음.
       }}

@@ -8,6 +8,9 @@ interface SavedStayRepository {
     fun findById(savedStayId: UUID): SavedStay?
     fun findByAccount(accountId: UUID): List<SavedStay>
     fun delete(stay: SavedStay)
+
+    /** 같은 외부 숙소를 이미 저장했는가 — 중복 등록 선검사(TRIP-1059 · ux_saved_stay_external). */
+    fun existsByAccountAndExternal(accountId: UUID, externalSource: String, externalId: String): Boolean
 }
 
 /** 구간 거점 배정 영속 포트. 여행 소유 스코프 인가는 서비스가 TripFacade 로 판정. */
@@ -25,6 +28,9 @@ interface BaseAssignmentRepository {
 
     /** 숙소가 거점으로 사용 중인지 — 숙소 삭제·좌표 해제 차단(INV-U1-08). */
     fun existsByStayId(savedStayId: UUID): Boolean
+
+    /** 숙소의 배정 행 전부 삭제 — 숙소 삭제 직전 정리(TRIP-1061: 이 시점 잔존분은 전부 삭제된 여행 몫). */
+    fun deleteByStayId(savedStayId: UUID)
 }
 
 /**

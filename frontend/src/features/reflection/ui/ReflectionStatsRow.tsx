@@ -3,6 +3,8 @@ import { Text, View } from 'react-native';
 
 import type { ReflectionStats } from '@/shared/api/generated/schemas';
 
+import { formatKm } from '../model/formatKm';
+
 /**
  * TRIP-571 · 통계 3열(방문 · 이동 · 사진). testID `reflection-daily-stats`.
  *
@@ -43,7 +45,7 @@ export function ReflectionStatsRow({
     >
       <StatCell value={String(stats.visitCount)} label="방문" />
       <StatCell
-        value={distanceDash ? '—' : `${stats.distanceKm}km`}
+        value={distanceDash ? '—' : formatKm(stats.distanceKm)}
         label="이동"
       />
       <StatCell value={String(stats.photoCount)} label="사진" />

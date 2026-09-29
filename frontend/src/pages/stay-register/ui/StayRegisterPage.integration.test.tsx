@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react';
+import { Text, View } from 'react-native';
 import { http, HttpResponse } from 'msw';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -9,6 +11,7 @@ import {
   within,
 } from '@testing-library/react-native';
 
+import { useSavedStays } from '@/features/trip/model/useSavedStays';
 import { server } from '@/mocks/server';
 import { WithToastHost, resetToast } from '@/test-support/toastHarness';
 import { StayRegisterPage } from './StayRegisterPage';
@@ -212,9 +215,14 @@ describe('I-1 · 정상 등록 (AC-1 · §3-5)', () => {
   });
 });
 
-describe('I-2 · 날짜 없이도 등록된다 (AC-5)', () => {
-  it('체크인·체크아웃을 건드리지 않아도 등록이 성립하고 요청에 날짜가 실리지 않는다', async () => {
+describe('🔴 I-2 · 날짜 입력 없이 등록되고 요청 본문에 checkIn·checkOut 키가 없다 (TRIP-1052 AC-1·AC-2)', () => {
+  it('페이지에 날짜 입력 표면이 없고, 등록 요청 본문에 날짜 키 자체가 실리지 않는다', async () => {
     render(<StayRegisterPage />, { wrapper: createWrapper() });
+
+    // 준비 — 페이지 층에서도 날짜 입력 표면(필드·요약·오류·시트·칸)이 0개다. 짝으로 등록
+    // 버튼은 있다(화면이 통째로 비어서 참이 된 게 아니다).
+    expect(screen.queryAllByTestId(/^stay-register-date/)).toHaveLength(0);
+    expect(screen.getByTestId('stay-register-submit')).toBeOnTheScreen();
 
     searchFor('busan');
     await selectAndConfirm(0);
@@ -222,9 +230,10 @@ describe('I-2 · 날짜 없이도 등록된다 (AC-5)', () => {
 
     await waitFor(() => expect(postedBodies).toHaveLength(1));
 
-    // "전송되지 않거나 null" 둘 다 AC를 만족한다 — 두 형태를 함께 받아들인다.
-    expect(postedBodies[0].checkIn ?? null).toBeNull();
-    expect(postedBodies[0].checkOut ?? null).toBeNull();
+    // 개정 정본(US-STAY-08)은 "싣지 않는다"다 — 옛 `?? null` 단언은 `checkIn: null`을 실어도
+    // 통과했다. 키 부재로 잰다(toHaveProperty는 값이 null이어도 키가 있으면 "있다").
+    expect(postedBodies[0]).not.toHaveProperty('checkIn');
+    expect(postedBodies[0]).not.toHaveProperty('checkOut');
     // 날짜를 필수로 막으면 위반 — 등록 자체는 실제로 나갔다.
     expect(postHits()).toHaveLength(1);
   });
@@ -504,6 +513,155 @@ describe('🔴 S5 · 등록 성공 토스트 + 뒤로 (#036 · D22)', () => {
       await screen.findByTestId('stay-register-submitfail')
     ).toBeOnTheScreen();
     expect(screen.queryByTestId('stay-register-saved')).toBeNull();
+    expect(mockBack).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * TRIP-1023 #022 (US-STAY-09 · US-STAY-08 · INV-4 정신) — 등록하고 돌아왔는데 저장 목록에 없다.
+ *
+ * 무엇을 보장하나: e04 저장 숙소 목록(`SavedStayPage`)은 스택 아래 마운트된 채로 `GET /saved-stays`
+ * 결과를 기억하고 있다. 등록 `POST /saved-stays`가 **성공**하면 그 목록 캐시가 낡았다고 표시(무효화)돼
+ * 관찰자가 다시 받아야 한다 — 그래야 돌아간 목록에 방금 등록한 숙소가 있다. 실패면 다시 받지 않는다.
+ *
+ * 관찰자는 목이 아니라 e04 가 쓰는 **진짜 훅**(`useSavedStays`)과 **상태 있는 MSW**다(02a ★9) —
+ * 무효화 키가 틀리면 GET 이 다시 안 나가서 잡힌다. 제출 중 화면을 떠나도(언마운트) 성공했으면
+ * 갱신돼야 하므로, 호출별 `mutateAsync(vars, { onSuccess })` 콜백 자리는 R-A1u 가 잡는다(02a ★11).
+ *
+ * 3동작 뼈대: 준비=관찰자+등록 화면 렌더(GET 1회 확인) → 실행=검색·선택·등록 → 단언=GET 재발행·새 이름.
+ */
+describe('🔴 TRIP-1023 #022 · 등록 성공 뒤 저장 숙소 목록이 갱신된다 (AC-A1 · AC-A2)', () => {
+  let serverSaved: (typeof SAVED_STAY)[] = [];
+  let savedListGets = 0;
+
+  /** e04 가 스택 아래 살아 있는 상황의 대역 — 같은 조회 훅으로 이름만 그린다. */
+  function SavedListProbe() {
+    const query = useSavedStays();
+    return (
+      <View testID="saved-list-probe">
+        {(query.data ?? []).map((stay) => (
+          <Text key={stay.savedStayId}>{stay.name}</Text>
+        ))}
+      </View>
+    );
+  }
+
+  function Harness({ showRegister }: { showRegister: boolean }) {
+    return (
+      <>
+        <SavedListProbe />
+        {showRegister ? <StayRegisterPage /> : null}
+      </>
+    );
+  }
+
+  beforeEach(() => {
+    serverSaved = [];
+    savedListGets = 0;
+    server.use(
+      http.get(`${BASE}/saved-stays`, () => {
+        savedListGets += 1;
+        return HttpResponse.json(serverSaved);
+      }),
+      http.post(`${BASE}/saved-stays`, async ({ request }) => {
+        postedBodies.push((await request.json()) as Record<string, unknown>);
+        serverSaved = [SAVED_STAY];
+        return HttpResponse.json(SAVED_STAY, { status: 201 });
+      })
+    );
+  });
+
+  async function settle(): Promise<void> {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+  }
+
+  async function renderWithObserver(): Promise<void> {
+    render(<Harness showRegister />, { wrapper: createWrapper() });
+    // 관찰자가 살아 있다는 앵커 — 첫 조회 1회, 목록은 아직 비어 있다.
+    await waitFor(() => expect(savedListGets).toBe(1));
+    expect(
+      within(screen.getByTestId('saved-list-probe')).queryByText(
+        '해운대 그랜드 호텔'
+      )
+    ).toBeNull();
+  }
+
+  it('R-A1 · 등록이 성공하면 목록을 다시 받아 방금 등록한 숙소가 보인다', async () => {
+    await renderWithObserver();
+
+    searchFor('busan');
+    await selectAndConfirm(0);
+    fireEvent.press(screen.getByTestId('stay-register-submit'));
+
+    await waitFor(() => expect(savedListGets).toBeGreaterThanOrEqual(2));
+    expect(
+      await within(screen.getByTestId('saved-list-probe')).findByText(
+        '해운대 그랜드 호텔'
+      )
+    ).toBeOnTheScreen();
+    // 기존 복귀 순서(AC-A3)는 그대로다.
+    await waitFor(() => expect(mockBack).toHaveBeenCalledTimes(1));
+  });
+
+  it('R-A1u · 제출 중 화면을 떠나도 등록이 성공하면 목록이 갱신된다', async () => {
+    let releasePost: () => void = () => {};
+    const postGate = new Promise<void>((resolve) => {
+      releasePost = resolve;
+    });
+    server.use(
+      http.post(`${BASE}/saved-stays`, async ({ request }) => {
+        postedBodies.push((await request.json()) as Record<string, unknown>);
+        await postGate;
+        serverSaved = [SAVED_STAY];
+        return HttpResponse.json(SAVED_STAY, { status: 201 });
+      })
+    );
+    await renderWithObserver();
+
+    searchFor('busan');
+    await selectAndConfirm(0);
+    fireEvent.press(screen.getByTestId('stay-register-submit'));
+    // 요청이 서버에 닿은 뒤에 떠난다 — 탭 직후 떠나면 요청 자체가 안 나간다(02a ★10).
+    await waitFor(() => expect(postedBodies).toHaveLength(1));
+
+    screen.rerender(<Harness showRegister={false} />);
+    expect(screen.queryByTestId('stay-register-submit')).toBeNull();
+
+    await act(async () => {
+      releasePost();
+    });
+
+    await waitFor(() => expect(savedListGets).toBeGreaterThanOrEqual(2));
+    expect(
+      await within(screen.getByTestId('saved-list-probe')).findByText(
+        '해운대 그랜드 호텔'
+      )
+    ).toBeOnTheScreen();
+  });
+
+  it('R-A2 · 등록이 실패하면(400) 목록을 다시 받지 않는다 (선제 green)', async () => {
+    server.use(
+      http.post(`${BASE}/saved-stays`, () =>
+        HttpResponse.json(
+          { code: 'VALIDATION_ERROR', message: 'bad request' },
+          { status: 400 }
+        )
+      )
+    );
+    await renderWithObserver();
+
+    searchFor('busan');
+    await selectAndConfirm(0);
+    fireEvent.press(screen.getByTestId('stay-register-submit'));
+
+    expect(
+      await screen.findByTestId('stay-register-submitfail')
+    ).toBeOnTheScreen();
+    // 무효화가 catch/finally 에 있으면 이 사이에 GET 이 나간다(02a ★12).
+    await settle();
+    expect(savedListGets).toBe(1);
     expect(mockBack).not.toHaveBeenCalled();
   });
 });

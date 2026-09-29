@@ -23,20 +23,22 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { DraftPage } from './DraftPage';
 
 /**
- * TRIP-1008 · 폴백 목록 얼굴과 위반 표식을 **실 HTTP 로** 태우는 심판(B1~B5 · C1·C2 · 티켓 금지 조항).
+ * TRIP-1008 · 폴백 얼굴과 위반 표식을 **실 HTTP 로** 태우는 심판(B1~B5 · C1·C2 · 티켓 금지 조항).
+ * TRIP-1039 로 폴백·staleFailed 목록이 옛 `DraftScreen` 에서 **지도+시트 셸**로 옮겨 가 이 파일도 셸
+ * testID 로 뒤집었다(`itinerary-draft-slot-*`·`itinerary-draft-title` → `slot-stopcard-*`·`sheet-header-title`).
  *
  * 무엇을 보장하나:
- *  - 🔴 폴백 인터스티셜을 "기본 일정 보기"로 넘긴 목록(`DraftScreen`)이 폴백임을 드러낸다 — 제목·reason
- *    제목·배지가 "기본 일정" 결이고 "AI 추천"·"취향·거리로 채운" 은 0건이다(BR-U3-11 · D6). 폴백 3종
- *    (minimal·deterministic·demoted) 모두 같다(Q2).
- *  - 폴백이 아닌 staleFailed 목록은 그대로 "AI 추천" 이다(무회귀 짝 — 무조건 바꾼 구현을 죽인다).
- *  - 🔴 위반 슬롯에 표식이 h08 셸(깨끗한 COMPLETE)과 폴백 목록 **둘 다** 뜨고, 문구는 서버 사유와 무관한
+ *  - 🔴 폴백 인터스티셜을 "기본 일정 보기"로 넘긴 셸이 폴백임을 드러낸다 — 제목·안내 제목이 "기본 일정"
+ *    결이고 "AI 추천"·"취향·거리로 채운" 은 0건이다(BR-U3-11 · D6 · TRIP-1039 AC-3). 셸 카드엔 배지가
+ *    아예 없어 "배지가 AI 추천이 아니다"는 텍스트 0건으로 잰다. 폴백 3종(minimal·deterministic·demoted) 모두 같다.
+ *  - 폴백이 아닌 staleFailed 셸의 제목은 그대로 "AI 추천안" 이다(무회귀 짝 — 무조건 바꾼 구현을 죽인다).
+ *  - 🔴 위반 슬롯에 표식이 h08 셸(깨끗한 COMPLETE)과 폴백 셸 **둘 다** 뜨고, 문구는 서버 사유와 무관한
  *    고정 라벨이다(02c) — 사유 원문에 소요시간("이동 54분 필요")이 섞여 와 그리면 INV-3 위반이라서다.
  *    FE 는 원문을 파싱해 거르지 않는다(D5).
  *
  * 라우팅은 픽스처가 정한다(traps-itinerary) — 각 describe 가 어느 갈래를 태우는지 픽스처 옆에 적었다.
- *   인터스티셜 = fallbackNotice≠null · h08 셸 = listed·!PARTIAL·!staleFailed·fallbackNotice=null ·
- *   DraftScreen = 그 밖(폴백 dismiss 뒤, staleFailed).
+ *   인터스티셜 = fallbackNotice≠null(미해제) · h08 셸 = listed·!PARTIAL(폴백 dismiss 뒤·staleFailed 포함,
+ *   TRIP-1039) · DraftScreen = loading·failed·empty.
  *
  * 3동작 뼈대: 준비=가짜 서버 응답 → 실행=렌더(+기본 일정 보기 press) → 단언=testID 텍스트·0건 스캔.
  */
@@ -194,11 +196,16 @@ function renderPage() {
   return render(<DraftPage tripId={TRIP_ID} />, { wrapper: Wrapper });
 }
 
-/** 인터스티셜에서 "기본 일정 보기" → 폴백 목록(`DraftScreen`) 도착까지. */
-async function openFallbackList(): Promise<void> {
+/** 네트워크 응답을 기다리는 첫 조회 한도 — 로컬 기본 1000ms 의 CI 러너(약 4배 느림) 환산. */
+const WAIT = { timeout: 4000 };
+
+/** 인터스티셜에서 "기본 일정 보기" → 폴백 셸 도착까지(TRIP-1039 — 옛 목록 `DraftScreen` 아님). */
+async function openFallbackShell(): Promise<void> {
   renderPage();
-  fireEvent.press(await screen.findByTestId('itinerary-fallback-view-plan'));
-  await screen.findByTestId('itinerary-draft-scroll');
+  fireEvent.press(
+    await screen.findByTestId('itinerary-fallback-view-plan', {}, WAIT)
+  );
+  await screen.findByTestId('map-sheet-shell-root', {}, WAIT);
 }
 
 /** 폴백 3종 — 인터스티셜이 세 kind 모두에 "취향 반영 (건너뜀)" 이라 목록도 같이 말한다(Q2). */
@@ -218,48 +225,46 @@ const FALLBACK_ROWS: {
   },
 ];
 
-describe('🔴 B1~B3·B5 · 폴백 목록은 "기본 일정" 이다 — AI 추천·취향·거리 문구 0건 (BR-U3-11 · D6)', () => {
+describe('🔴 B1~B3·B5 · 폴백 셸은 "기본 일정" 이다 — AI 추천·취향·거리 문구 0건 (BR-U3-11 · D6 · TRIP-1039 AC-3)', () => {
   it.each(FALLBACK_ROWS)(
-    '$kind — 배지·제목·reason 제목이 기본 일정 결이다',
+    '$kind — 제목·안내 제목이 기본 일정 결이고 카드엔 AI 배지가 없다',
     async ({ solveMode, isFallback, summary }) => {
       itineraryScript = () =>
         itinerary({ solveMode, isFallback, candidatesSummary: summary });
 
-      await openFallbackList();
+      await openFallbackShell();
 
-      // 긍정 앵커 — 비고정 카드 2장이 목록에 떠 있다(빈 화면이 아래 0건을 공짜로 통과하지 못하게).
-      const cardA = screen.getByTestId(`itinerary-draft-slot-${k('poi-a')}`);
-      const cardB = screen.getByTestId(`itinerary-draft-slot-${k('poi-b')}`);
-
-      // B1 — 비고정 카드마다 배지가 **있고** 텍스트가 "기본 일정" 이다(배지를 지운 구현은 여기서 죽는다).
-      [cardA, cardB].forEach((card, i) => {
-        const key = k(i === 0 ? 'poi-a' : 'poi-b');
-        expect(
-          within(card).getByTestId(`itinerary-draft-slot-badge-${key}`)
-        ).toHaveTextContent('기본 일정');
-      });
+      // 긍정 앵커 — 비고정 카드 2장이 셸에 떠 있다(빈 화면이 아래 0건을 공짜로 통과하지 못하게).
       expect(
-        screen.queryAllByTestId(/^itinerary-draft-slot-badge-/).length
-      ).toBe(2);
+        screen.getByTestId(`slot-stopcard-${k('poi-a')}`)
+      ).toBeOnTheScreen();
+      expect(
+        screen.getByTestId(`slot-stopcard-${k('poi-b')}`)
+      ).toBeOnTheScreen();
 
-      // B3 — 폴백 표식 문구와 화면 제목.
+      // B1 — 셸 카드(SlotStopCard)엔 AI 배지 자체가 없다. 옛 목록 배지 testID 가 새지 않았다.
+      expect(screen.queryAllByTestId(/^itinerary-draft-slot-badge-/)).toEqual(
+        []
+      );
+
+      // B3 — 폴백 안내 제목과 시트 제목.
       expect(
         screen.getByTestId('itinerary-draft-reason-title')
       ).toHaveTextContent('취향 반영 없이 만든 기본 일정이에요');
-      expect(screen.getByTestId('itinerary-draft-title')).toHaveTextContent(
+      expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
         '기본 일정'
       );
 
-      // B2 — 사실과 다른 문구가 화면 어디에도 없다.
+      // B2 — 사실과 다른 문구가 화면 어디에도 없다(셸 헤더의 "AI 추천안" 포함 — 02a ★2).
       expect(screen.queryAllByText(/취향·거리로 채운/).length).toBe(0);
       expect(screen.queryAllByText(/AI 추천/).length).toBe(0);
     }
   );
 });
 
-describe('B4a · 폴백 아닌 staleFailed 목록의 배지는 그대로 "AI 추천" 이다 (선제 green · 무회귀 짝)', () => {
-  it('FULL_AI·FAILED·isFallback=false → 인터스티셜 없이 DraftScreen, 배지 AI 추천', async () => {
-    // 갈래: fallbackNotice=null 이라 인터스티셜 없음 · staleFailed 라 셸도 아님 → DraftScreen 직행(02a ★7).
+describe('B4 · 폴백 아닌 staleFailed 셸의 제목은 그대로 "AI 추천안" 이다 (무회귀 짝)', () => {
+  it('FULL_AI·FAILED·isFallback=false → 인터스티셜 없이 셸, 제목 AI 추천안, 폴백 안내 없음', async () => {
+    // 갈래: fallbackNotice=null 이라 인터스티셜 없음 · listed(staleFailed) → h08 셸(TRIP-1039).
     itineraryScript = () =>
       itinerary({
         solveMode: 'FULL_AI',
@@ -268,35 +273,13 @@ describe('B4a · 폴백 아닌 staleFailed 목록의 배지는 그대로 "AI 추
       });
 
     renderPage();
-    await screen.findByTestId('itinerary-draft-stale-failed');
+    await screen.findByTestId('itinerary-draft-stale-failed', {}, WAIT);
 
-    expect(
-      screen.getByTestId(`itinerary-draft-slot-badge-${k('poi-a')}`)
-    ).toHaveTextContent('AI 추천');
-    expect(
-      screen.getByTestId(`itinerary-draft-slot-badge-${k('poi-b')}`)
-    ).toHaveTextContent('AI 추천');
-  });
-});
-
-describe('🔴 B4b · 폴백 아닌 staleFailed 목록의 제목·reason 제목은 그대로다 (무회귀 짝 · 새 testID)', () => {
-  it('제목 "AI 추천안" · reason 제목 "취향·거리로 채운 추천안이에요"', async () => {
-    itineraryScript = () =>
-      itinerary({
-        solveMode: 'FULL_AI',
-        isFallback: false,
-        generationState: 'FAILED',
-      });
-
-    renderPage();
-    await screen.findByTestId('itinerary-draft-stale-failed');
-
-    expect(screen.getByTestId('itinerary-draft-title')).toHaveTextContent(
+    expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
+    expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
       'AI 추천안'
     );
-    expect(
-      screen.getByTestId('itinerary-draft-reason-title')
-    ).toHaveTextContent('취향·거리로 채운 추천안이에요');
+    expect(screen.queryByTestId('itinerary-draft-fallback-banner')).toBeNull();
   });
 });
 
@@ -323,25 +306,20 @@ describe('🔴 C1·C2 · h08 셸(깨끗한 COMPLETE) — 위반 슬롯 카드에
   });
 });
 
-describe('🔴 C1·C2 · 폴백 목록(DraftScreen) — 위반 슬롯 카드에만 고정 라벨 표식, 사유 원문·소요시간 0건 (INV-3)', () => {
-  it('인터스티셜을 넘긴 목록의 poi-a 카드 안에 표식, 전체 1개, 소요시간·사유 원문·원시 분 범위 0건', async () => {
-    // 갈래: MINIMAL+isFallback=true → 인터스티셜 → "기본 일정 보기" → DraftScreen.
+describe('🔴 C1·C2 · 폴백 셸 — 위반 슬롯 카드에만 고정 라벨 표식, 사유 원문·소요시간 0건 (INV-3)', () => {
+  it('인터스티셜을 넘긴 셸의 poi-a 카드 안에 표식, 전체 1개, 소요시간·사유 원문·원시 분 범위 0건', async () => {
+    // 갈래: MINIMAL+isFallback=true → 인터스티셜 → "기본 일정 보기" → h08 셸(TRIP-1039).
     itineraryScript = () =>
       itinerary({ solveMode: 'MINIMAL', isFallback: true });
 
-    await openFallbackList();
+    await openFallbackShell();
 
-    const cardA = screen.getByTestId(`itinerary-draft-slot-${k('poi-a')}`);
-    // testID 는 카드 접두(`itinerary-draft-slot-`) **밖** — 카드 세는 셀렉터 오계수 방지(02a ★1).
+    const cardA = screen.getByTestId(`slot-stopcard-${k('poi-a')}`);
     expect(
-      within(cardA).getByTestId(`itinerary-draft-violation-${k('poi-a')}`)
+      within(cardA).getByTestId(`slot-stopcard-violation-${k('poi-a')}`)
     ).toHaveTextContent(VIOLATION_LABEL);
-    expect(
-      screen.getByTestId(`itinerary-draft-slot-${k('poi-b')}`)
-    ).toBeOnTheScreen();
-    expect(screen.queryAllByTestId(/^itinerary-draft-violation-/).length).toBe(
-      1
-    );
+    expect(screen.getByTestId(`slot-stopcard-${k('poi-b')}`)).toBeOnTheScreen();
+    expect(screen.queryAllByTestId(/^slot-stopcard-violation-/).length).toBe(1);
     // INV-3 — 위 긍정 짝(표식이 카드 안에 있다)이 선 뒤라 이 0건은 빈 화면 공짜 통과가 아니다.
     expect(screen.queryAllByText(DURATION_TEXT).length).toBe(0);
     expect(screen.queryAllByText(/영업시간 밖/).length).toBe(0);

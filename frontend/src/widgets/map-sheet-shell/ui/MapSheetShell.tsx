@@ -1,12 +1,16 @@
 import type { ReactElement, ReactNode } from 'react';
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 import { View } from 'react-native';
 import type { ListRenderItem } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  SafeAreaInsetsContext,
+  SafeAreaView,
+} from 'react-native-safe-area-context';
 import BottomSheet, {
   BottomSheetFlatList,
   BottomSheetScrollView,
 } from '@gorhom/bottom-sheet';
+import type { SharedValue } from 'react-native-reanimated';
 
 import {
   MapView,
@@ -89,9 +93,9 @@ export interface MapSheetShellProps<T = unknown> {
    *  미전달이면 MapView 를 그리고, 그 MapView 가 로드 실패를 알리면 셸 기본 `MapFallbackBar` 로
    *  바꾼다(TRIP-919). */
   mapFallback?: ReactNode;
-  /** 지도 위 성공 배너 등 추가 카드(TRIP-801 D3·AC-1). 주면 day-chip 오버레이 **아래에** 추가로
+  /** 지도 위 추가 카드(TRIP-801 D3·AC-1). 주면 day-chip 오버레이 **아래에** 추가로
    *  렌더한다(`overlay` 교체와 달리 추가). 미전달=미렌더(후방호환). 타입 선언만 — 렌더 배선은
-   *  [구현] 몫(SH7b 가 red 로 강제). h16 확정 성공 배너가 이 슬롯을 쓴다. */
+   *  [구현] 몫(SH7b 가 red 로 강제). i01 트리거 알약(LiveHubView)이 이 슬롯을 쓴다. */
   mapCard?: ReactNode;
   /** 시트 body 리스트 슬롯(TRIP-798 묶음 C 가산) — 주면 body 를 `<BottomSheetFlatList>` 로 그려
    *  header·children 을 `ListHeaderComponent` 로 얹는다. 미전달=현행 `<BottomSheetScrollView>`
@@ -118,6 +122,13 @@ export interface MapSheetShellProps<T = unknown> {
   /** 반경 원(TRIP-800 가산, h15) — `<MapView radiusCircle>` 로 흘린다. 미전달=원 없음(기존 소비처
    *  무변경). */
   radiusCircle?: MapViewProps['radiusCircle'];
+  /** 핀 전부 맞추기(TRIP-1076 가산, h07·h08·h11·h14·h16 결과) — `<MapView fitPins>` 로 흘린다.
+   *  미전달=center 카메라(기존 소비처 무변경). 시트가 가리는 아래 영역은 맞춤에 반영하지 않는다. */
+  fitPins?: boolean;
+  /** 시트 윗변 위치 상자(TRIP-1083 가산) — `<BottomSheet animatedPosition>` 으로 그대로 흘린다. gorhom 이
+   *  매 프레임 셸 루트 위끝→시트 윗변 y(topInset 포함)를 써 넣는다. 값은 소비처(i01 허브)가 만들어 쥔다.
+   *  미전달=미부착. */
+  animatedPosition?: SharedValue<number>;
 }
 
 export function MapSheetShell<T = unknown>({
@@ -142,6 +153,8 @@ export function MapSheetShell<T = unknown>({
   onSheetScrollBeginDrag,
   onMapTap,
   radiusCircle,
+  fitPins,
+  animatedPosition,
 }: MapSheetShellProps<T>): ReactElement {
   // 지도 로드 실패(TRIP-919). 폴백 중엔 MapView 가 트리에서 빠지므로, 재시도로 이 값을 풀면 MapView 가
   // 새 인스턴스로 다시 마운트돼 실패 알림(notifiedRef)도 처음부터 다시 돈다 — 별도 key 가 필요 없다.
@@ -158,6 +171,9 @@ export function MapSheetShell<T = unknown>({
   const sheetClosed = snapPoints === undefined && snapIndex === 0;
   // 태그 밖 상수 — `<MapView>` 태그 안 viewOnly 앞에 `>` 가 들어가면 위 태그 정규식이 잘린다.
   const mapLocked = mapViewOnly ?? !sheetClosed;
+  // 시트 윗변 한계 = 상태바·다이내믹 아일랜드 아래(TRIP-1014 #076). useSafeAreaInsets() 는 Provider 가
+  // 없으면 throw 하므로(jest 전반) null 을 허용해 읽는다.
+  const topInset = useContext(SafeAreaInsetsContext)?.top ?? 0;
 
   return (
     <View testID="map-sheet-shell-root" className="flex-1 bg-canvas">
@@ -176,6 +192,7 @@ export function MapSheetShell<T = unknown>({
               currentLocation={currentLocation}
               onTapMap={onMapTap}
               radiusCircle={radiusCircle}
+              fitPins={fitPins}
               onLoadFailed={handleMapLoadFailed}
             />
           ))}
@@ -195,8 +212,8 @@ export function MapSheetShell<T = unknown>({
             onBack={onBack ?? (() => {})}
           />
         )}
-        {/* 성공 배너 등 추가 카드 — day-chip 오버레이 **아래에** 추가로 그린다(교체 아닌 추가 · D3).
-            미전달이면 아무것도 안 그린다(후방호환). h16 확정 성공 배너가 이 슬롯을 쓴다. */}
+        {/* 추가 카드 — day-chip 오버레이 **아래에** 추가로 그린다(교체 아닌 추가 · D3).
+            미전달이면 아무것도 안 그린다(후방호환). i01 트리거 알약이 이 슬롯을 쓴다. */}
         {mapCard}
       </SafeAreaView>
 
@@ -212,8 +229,12 @@ export function MapSheetShell<T = unknown>({
         enableDynamicSizing={false}
         // 라이브러리 기본값과 같지만 명시한다 — 시트 안 입력(h13 검색)의 키보드 회피 계약(TRIP-990 D9).
         keyboardBehavior="interactive"
+        // 키보드가 내려가면 키보드 전 칸으로 돌아온다(TRIP-1014 #076, 기본 'none' 은 올라간 채 남는다).
+        keyboardBlurBehavior="restore"
+        topInset={topInset}
         onChange={setSnapIndex}
         onAnimate={onSheetAnimate}
+        animatedPosition={animatedPosition}
       >
         {list ? (
           <BottomSheetFlatList

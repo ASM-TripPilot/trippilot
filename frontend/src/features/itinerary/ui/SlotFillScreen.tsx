@@ -19,7 +19,7 @@ import { SlotCandidateCard } from './SlotCandidateCard';
  *  - AC-2: 옛 헤드라인·부제 제거 + 진행 줄(신규 namespace `-slotfill-progress*`)·스텝퍼 슬롯(재사용) 추가.
  *    화면은 위젯을 import 하지 않는다(features→widgets 상향 금지) — pages 가 노드로 조립해 내린다.
  *  - AC-3: 지도 카드(`mapView` 주면 렌더, 미주입 degrade) — `viewOnly`+`connectPins={false}` 로 소비.
- *    좌표는 계약 밖이라 프로덕션은 미표시, 프리뷰 픽스처만 렌더(D6·D7).
+ *    TRIP-1043: 페이지가 현재 슬롯 좌표로 기준 핀·반경 원을 내린다(좌표 없으면 미주입).
  *  - AC-4: 후보 카드 이름·태그 픽스처(`candidateViews`) + 반경 밖 톤다운(`dimmed` 관통, 기본 off).
  *  - AC-5: 결과 얼굴 하단바에 `{배지}로 선택` + 반경 버튼 **상시**. canExpandRadius 면 `반경 넓히기`,
  *    마지막 단계면 `반경 좁히기`(신규 onShrinkRadius). 0건 얼굴은 기존 반경확대·컨셉변경 유지.
@@ -95,7 +95,8 @@ export interface SlotFillScreenProps {
     center: MapCenter;
     radiusCircle?: { center: MapCenter; radiusM: number };
     pins?: MapPin[];
-    currentLocation?: MapCenter;
+    /** 후보 핀까지 한 화면에 맞춘다(TRIP-1081 결정 2). 켤지는 페이지가 정한다. */
+    fitPins?: boolean;
   };
   onSelectRadius: (key: string) => void;
   onSelectRadio: (poiId: string) => void;
@@ -186,17 +187,12 @@ export function SlotFillScreen({
                 >
                   {progress.dayLabel}
                 </Text>
-                <View className="flex-row items-baseline gap-[4px]">
-                  <Text className="font-noto text-caption text-muted">
-                    슬롯
-                  </Text>
-                  <Text
-                    testID="itinerary-copick-slotfill-progress-count"
-                    className="font-noto-bold text-card-title font-bold text-ink"
-                  >
-                    {progress.slotCurrent} / {progress.slotTotal}
-                  </Text>
-                </View>
+                <Text
+                  testID="itinerary-copick-slotfill-progress-count"
+                  className="font-noto-bold text-card-title font-bold text-ink"
+                >
+                  {progress.slotCurrent}번째 / {progress.slotTotal}
+                </Text>
               </View>
               <View className="flex-row gap-[4px]">
                 {Array.from({ length: Math.max(0, progress.barFilled) }).map(
@@ -223,21 +219,6 @@ export function SlotFillScreen({
 
           {/* CoPickStepper 노드(pages 가 조립해 내림). 첫 슬롯이면 undefined → 미렌더. */}
           {stepperSlot}
-
-          {/* 지도 카드 — 반경 원·현재위치·후보 letter 핀. 보여주기 전용(viewOnly)·검증된 동선 아님
-              (connectPins=false). 좌표 없으면 mapView 미주입이라 이 블록 자체가 안 뜬다(정직 degrade). */}
-          {mapView === undefined ? null : (
-            <View className="h-[200px] w-full overflow-hidden rounded-card border border-hairline">
-              <MapView
-                center={mapView.center}
-                radiusCircle={mapView.radiusCircle}
-                pins={mapView.pins}
-                currentLocation={mapView.currentLocation}
-                viewOnly
-                connectPins={false}
-              />
-            </View>
-          )}
 
           {/* 반경 3단 세그먼트 — 선택은 accessibilityState.selected 로 관찰(색 아님). 셋째 세그 라벨은
               maxRadiusLabel(최대 조회의 서버 radiusMUsed 포맷)이 있으면 그 값, 없으면 step.label(=최대, D4). */}
@@ -281,12 +262,31 @@ export function SlotFillScreen({
             radiusUsedLabel === undefined ? null : (
               <Text
                 testID="itinerary-copick-radius-used"
-                className="font-noto text-caption text-primary-text"
+                className="font-noto text-caption text-muted"
               >
                 {radiusUsedLabel}
               </Text>
             )}
           </View>
+
+          {/* 지도 카드 — 기준 핀·반경 원(TRIP-1043)·후보 A/B/C 핀(TRIP-1081). Figma h10 순서대로 반경
+              세그 아래. 보여주기 전용(viewOnly)·검증된 동선 아님(connectPins=false). 좌표 없으면 mapView
+              미주입이라 이 블록 자체가 안 뜬다. */}
+          {mapView === undefined ? null : (
+            <View
+              testID="itinerary-copick-slotfill-map"
+              className="h-[200px] w-full overflow-hidden rounded-card border border-hairline"
+            >
+              <MapView
+                center={mapView.center}
+                radiusCircle={mapView.radiusCircle}
+                pins={mapView.pins}
+                fitPins={mapView.fitPins}
+                viewOnly
+                connectPins={false}
+              />
+            </View>
+          )}
 
           {candidateCountLabel === undefined || isEmpty ? null : (
             <Text className="font-noto text-caption text-muted">
@@ -366,39 +366,41 @@ export function SlotFillScreen({
               {candidates.map((candidate, index) => {
                 const isSelected = candidate.poiId === selectedPoiId;
                 const view = candidateViews?.[candidate.poiId];
+                // 행 전체가 라디오(TRIP-1022 #071, `SlotCandidateSheet` 선례) — 본문을 눌러도 고른다.
+                // trailing 원은 선택 상태를 보이는 그림일 뿐이라 Pressable 이 아니다(testID 두 겹 금지).
                 return (
-                  <SlotCandidateCard
+                  <Pressable
                     key={candidate.poiId}
-                    candidate={candidate}
-                    badge={coPickBadge(index)}
-                    selected={isSelected}
-                    nameKo={view?.nameKo}
-                    tags={view?.tags}
-                    imageUrl={view?.imageUrl}
-                    dimmed={view?.dimmed}
-                    trailing={
-                      <Pressable
-                        testID={`itinerary-candidate-radio-${candidate.poiId}`}
-                        accessibilityRole="radio"
-                        accessibilityState={{ selected: isSelected }}
-                        onPress={() => onSelectRadio(candidate.poiId)}
-                        hitSlop={6}
-                        className="h-[24px] w-[24px] items-center justify-center"
-                      >
-                        <View
-                          className={`h-[22px] w-[22px] items-center justify-center rounded-pill border-2 ${
-                            isSelected
-                              ? 'border-primary'
-                              : 'border-hairline-strong'
-                          }`}
-                        >
-                          {isSelected ? (
-                            <View className="h-[12px] w-[12px] rounded-pill bg-primary" />
-                          ) : null}
+                    testID={`itinerary-candidate-radio-${candidate.poiId}`}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: isSelected }}
+                    onPress={() => onSelectRadio(candidate.poiId)}
+                  >
+                    <SlotCandidateCard
+                      candidate={candidate}
+                      badge={coPickBadge(index)}
+                      selected={isSelected}
+                      nameKo={view?.nameKo}
+                      tags={view?.tags}
+                      imageUrl={view?.imageUrl}
+                      dimmed={view?.dimmed}
+                      trailing={
+                        <View className="h-[24px] w-[24px] items-center justify-center">
+                          <View
+                            className={`h-[22px] w-[22px] items-center justify-center rounded-pill border-2 ${
+                              isSelected
+                                ? 'border-primary'
+                                : 'border-hairline-strong'
+                            }`}
+                          >
+                            {isSelected ? (
+                              <View className="h-[12px] w-[12px] rounded-pill bg-primary" />
+                            ) : null}
+                          </View>
                         </View>
-                      </Pressable>
-                    }
-                  />
+                      }
+                    />
+                  </Pressable>
                 );
               })}
             </View>

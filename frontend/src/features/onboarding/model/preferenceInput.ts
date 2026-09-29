@@ -62,7 +62,8 @@ const COMPANION: Record<string, PreferenceInputCompanionTypesItem> = {
   // 'pet' 은 여기 없다 — petFlag 로 간다(위 특례).
 };
 
-const ACTIVITY: Record<string, PreferenceInputActivitiesItem> = {
+/** slug→한국어 활동 라벨 카탈로그 — `STYLE`과 같은 이유로 export(취향 시트 활동 칩, TRIP-1092). */
+export const ACTIVITY: Record<string, PreferenceInputActivitiesItem> = {
   nature: '자연',
   history: '역사문화',
   themepark: '테마파크',

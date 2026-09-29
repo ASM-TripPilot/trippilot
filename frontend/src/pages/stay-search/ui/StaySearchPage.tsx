@@ -11,6 +11,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 
 import type { StayItem } from '@/shared/api/generated/schemas';
 import { getAccessToken } from '@/shared/api/tokenManager';
+import { guardPress } from '@/shared/press/pressGuard';
+import { shellTabHref } from '@/shared/ui/BottomTabBar';
 
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 import {
@@ -163,17 +165,15 @@ export function StaySearchPage(): ReactElement {
         // 하단 탭바(TRIP-413) — /stays 는 (tabs) 밖 라우트라 진짜 탭바가 없어 화면이 복제본을
         // 그린다. 그 복제 탭바를 실 라우팅에 잇는다: 탭 key → 해당 탭 URL 로 replace(이 스택
         // 화면을 떠나 탭으로 간다). home 만 파일 규약상 index 라 '/' 다((tabs)/_layout 매핑과 동형).
-        onPressTab={(key) => router.replace(key === 'home' ? '/' : `/${key}`)}
+        onPressTab={(key) => router.replace(shellTabHref(key))}
         // 흰 원 하트 FAB(TRIP-725) — 담은 숙소 목록(e04)으로. 화면은 라우터를 모른다(구조 가드).
         // + FAB 는 아래 onPressRegister 를 재사용한다(같은 목적지 /stays/register).
         onPressSaved={() => router.push('/stays/saved')}
-        // 지역·필터 칩(TRIP-415) — 배지는 적용된 필터 개수(초안 아님). 가격대도 1로 센다(TRIP-989 Q1) —
-        // 이 값이 empty "필터 완화" 활성도 정해, 가격만으로 0곳이 됐을 때 완화가 꺼져 갇히지 않는다.
+        // 지역·필터 칩(TRIP-415) — 배지는 필터 시트에서 고른 개수(초안 아님). 가격대는 세지 않는다
+        // (TRIP-1019 #013 — 가격대 칩이 스스로 선택 얼굴을 낸다). 가격만으로 0곳이 됐을 때 "필터 완화"가
+        // 꺼져 갇히지 않게, 화면이 priceBucket 을 함께 보고 완화를 켠다(INV-4).
         onPressFilter={handlePressFilter}
-        activeFilterCount={
-          countActiveFilters(amenityList, stayTypeList) +
-          (priceBucket === 'all' ? 0 : 1)
-        }
+        activeFilterCount={countActiveFilters(amenityList, stayTypeList)}
         priceBucket={priceBucket}
         // 빈 상태 카드 CTA(TRIP-416) — 화면은 라우터를 모른다(구조 가드), 배선은 이 페이지 몫.
         // 지역 바꾸기는 필터 칩과 같은 목적지(/explore/region?purpose=stay, 여행지 선택)로 진입한다(TRIP-499).
@@ -203,12 +203,13 @@ export function StaySearchPage(): ReactElement {
         onToggleSave={(item) => void attemptToggle(item)}
         // 카드 탭(TRIP-457 AC-5) → 상세 라우트로 push(객체형·raw stayKey 만 — 상세가 스스로 조회,
         // TRIP-940. expo-router 자동 인코딩이라 수동 encode 안 함 ★F-3). 화면은 라우터를 모른다(구조 가드).
-        onPressCard={(item) =>
+        // TRIP-1013 #012 — 목적지 상세 '모두 보기'의 창 안이면 무시(연타 관통).
+        onPressCard={guardPress((item: StayItem) =>
           router.push({
             pathname: '/stays/[stayId]',
             params: { stayId: stayKey(item) },
           })
-        }
+        )}
         nameQuery={nameQuery}
         onChangeNameQuery={setNameQuery}
       />
@@ -229,7 +230,11 @@ export function StaySearchPage(): ReactElement {
       {priceSheetOpen ? (
         <StayPriceSheet
           selected={priceBucket}
-          onSelect={setPriceBucket}
+          // 고르면 즉시 적용하고 닫는다("적용" 버튼 없음, TRIP-1019 #013 · 01b Q1).
+          onSelect={(id) => {
+            setPriceBucket(id);
+            setPriceSheetOpen(false);
+          }}
           onClose={() => setPriceSheetOpen(false)}
         />
       ) : null}

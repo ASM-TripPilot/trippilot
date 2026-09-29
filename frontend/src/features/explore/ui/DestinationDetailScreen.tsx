@@ -2,16 +2,16 @@
  * d03 목적지 상세 — 순수 프레젠테이션(TRIP-183 "준비 중" 스텁을 실화면으로 교체, 2026-08-22).
  *
  * `RegionPickerScreen`(d1b, purpose='explore')에서 지역 카드를 고르면 오는 화면. Figma d05
- * "통합 검색 결과"(2176:2336) 골격 — 헤딩 `'{지역}' 검색 결과` + 검색바 + 세그먼트 3탭
- * (전체·숙소·장소) + 숙소·장소 레인 — 을 자유 검색어 대신 **고른 지역 하나로 고정**해
+ * "통합 검색 결과"(2176:2336 → 2열 격자안 4663:2540) 골격 — 헤딩 `'{지역}' 검색 결과` + 검색바 +
+ * 숙소 레인(가로) + 장소 격자(2열) — 을 자유 검색어 대신 **고른 지역 하나로 고정**해
  * 재사용한다. d05 자체(자유 검색어 화면, `/explore/search`)는 TRIP-499로 은퇴했으므로 이
  * 화면과는 별개다 — 검색바는 자유 입력을 받지 않는 **진입 버튼**이다
  * (`ExploreLandingScreen.onPressSearch`와 같은 성격, TRIP-412 선례) — 누르면 다른 지역을
  * 다시 고르러 d1b 여행지 선택으로 돌아간다(뒤로가기가 없는 이 화면에서 "다시 검색"의 유일한
  * 입구, 2026-08-22 요청).
  *
- * 세그먼트 3탭은 레인 필터다(TRIP-709 · G11): 전체=두 레인, 숙소/장소=해당 레인만. 활성 상태는
- * 화면 로컬 `useState`가 쥔다(페이지 prop 아님). 옛 "여행자 일정" 레인은 제거됐다(G11).
+ * 두 레인은 늘 함께 보인다 — TRIP-709 의 세그먼트 3탭(레인 필터)은 TRIP-1048 이 없앴다. 옛
+ * "여행자 일정" 레인은 제거됐다(G11).
  *
  * `(tabs)` 밖 라우트(`/explore/destination/{code}`)라 진짜 탭바가 없다 — `/stays`(e02)와
  * 같은 방식으로 `BottomTabBar`를 복제해 그린다. 단 이 화면은 뒤로가기 버튼을 두지 않는다
@@ -21,12 +21,14 @@
  * FAB)을 그대로 재사용한다.
  */
 import type { ReactElement } from 'react';
-import { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { PlaceCardVM } from '@/entities/place/model';
-import { PlaceRailCard } from '@/entities/place/ui/PlaceRailCard';
+import {
+  PlaceRailCard,
+  type PlaceRailCardSave,
+} from '@/entities/place/ui/PlaceRailCard';
 import { StaySearchCard } from '@/entities/stay/ui/StaySearchCard';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
@@ -66,9 +68,17 @@ export interface DestinationDetailScreenProps {
     onRetry: () => void;
     onSeeAll: () => void;
     onPressCard: (poiId: string) => void;
+    // 저장 하트(TRIP-1049) — 전부 additive·옵셔널. onToggleSave 가 있을 때만 하트를 그린다.
+    savedPoiIds?: string[];
+    pendingPoiIds?: string[];
+    onToggleSave?: (poiId: string) => void;
+    saveErrorMessage?: string | null;
+    onDismissSaveError?: () => void;
   };
   /** 하단 탭 press(뒤로가기 대체) — 목적지는 페이지가 정한다(`/stays` `onPressTab` 선례). */
   onPressTab: (key: ShellTabKey) => void;
+  /** 복제 탭바 활성 탭 — 진입 탭(홈 검색이면 home, TRIP-1015 E). 미지정이면 explore. */
+  activeTab?: ShellTabKey;
   /** ＋ 여행 만들기 FAB press — 미지정이면 no-op(d01 계약 복제). */
   onPressCreateTrip?: () => void;
   /** 담은 곳 하트 FAB(`ExploreLandingScreen.savedMenu`와 동일 계약). */
@@ -91,65 +101,6 @@ const FAB_SHADOW = {
   elevation: 6,
 } as const;
 
-// 세그먼트 활성 칩 그림자(Figma 0 2 10 /.06) — RN 은 box-shadow 가 없어 style prop 으로 옮긴다.
-// shadowColor '#000000' 은 토큰화 대상 밖(FAB_SHADOW·홈 fabShadow 선례).
-const SEGMENT_ACTIVE_SHADOW = {
-  shadowColor: '#000000',
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.06,
-  shadowRadius: 10,
-  elevation: 2,
-} as const;
-
-type SegmentKey = 'all' | 'stay' | 'place';
-
-const SEGMENTS: { key: SegmentKey; label: string }[] = [
-  { key: 'all', label: '전체' },
-  { key: 'stay', label: '숙소' },
-  { key: 'place', label: '장소' },
-];
-
-// 세그먼트 3탭(전체·숙소·장소) — 레인 필터. 활성 표식은 색 fill 이 아니라 흰 칩 배경 +
-// accessibilityState.selected(★5, 심판이 보는 신호)로 갈린다. 인라인 비-export 지역 함수.
-function SegmentTabs({
-  active,
-  onSelect,
-}: {
-  active: SegmentKey;
-  onSelect: (key: SegmentKey) => void;
-}): ReactElement {
-  return (
-    <View className="mt-lg flex-row rounded-[8px] bg-surface-strong p-1">
-      {SEGMENTS.map((seg) => {
-        const selected = active === seg.key;
-        return (
-          <Pressable
-            key={seg.key}
-            testID={`destination-detail-seg-${seg.key}`}
-            accessibilityRole="button"
-            accessibilityState={{ selected }}
-            onPress={() => onSelect(seg.key)}
-            style={selected ? SEGMENT_ACTIVE_SHADOW : undefined}
-            className={`flex-1 items-center rounded-[8px] py-sm ${
-              selected ? 'bg-canvas' : ''
-            }`}
-          >
-            <Text
-              className={
-                selected
-                  ? 'font-noto-bold text-body font-bold text-ink'
-                  : 'font-noto text-body text-muted'
-              }
-            >
-              {seg.label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
 // 숙소 담기 실패 배너(INV-4 — 침묵 금지) — d01 `StaySaveErrorBanner` 선례 그대로. 탭하면 닫힌다
 // (다음 하트 press 로도 소멸). 숙소 전용 일반 문구(장소 문구를 재사용하면 "장소"가 노출된다).
 function StaySaveErrorBanner({
@@ -168,6 +119,27 @@ function StaySaveErrorBanner({
       <Text className="flex-1 font-noto text-label text-muted">
         담기에 실패했어요. 잠시 후 다시 시도해 주세요.
       </Text>
+    </Pressable>
+  );
+}
+
+// 장소 담기 실패 배너(TRIP-1049, INV-4) — 문구는 페이지가 담기/해제 갈래로 골라 준다.
+function PlaceSaveErrorBanner({
+  message,
+  onDismiss,
+}: {
+  message: string;
+  onDismiss?: () => void;
+}): ReactElement {
+  return (
+    <Pressable
+      testID="destination-detail-place-save-error"
+      accessibilityRole="button"
+      onPress={onDismiss}
+      className="mb-md flex-row items-center gap-sm rounded-card bg-surface-soft px-lg py-md"
+    >
+      <WarningTriangleGlyph size={18} tone="primary" />
+      <Text className="flex-1 font-noto text-label text-muted">{message}</Text>
     </Pressable>
   );
 }
@@ -228,20 +200,64 @@ function LaneErrorBlock({
   );
 }
 
+// 장소 2열 격자(TRIP-1048, Figma 4663:2540) — 행마다 같은 폭(`flex-1`) 칸 2개. 홀수면 마지막 행
+// 오른쪽에 빈 칸을 둬 마지막 카드가 한 줄 전체로 늘어나지 않게 한다. 바깥이 세로 ScrollView 라
+// FlatList(numColumns)를 넣지 않는다(가상화 리스트 중첩 경고 · 최대 8장이라 이득도 없다).
+function PlaceGrid({
+  cards,
+  onPressCard,
+  saveFor,
+}: {
+  cards: PlaceCardVM[];
+  onPressCard: (poiId: string) => void;
+  saveFor: (poiId: string) => PlaceRailCardSave | undefined;
+}): ReactElement {
+  const rows = Array.from({ length: Math.ceil(cards.length / 2) }, (_, r) =>
+    cards.slice(r * 2, r * 2 + 2)
+  );
+  return (
+    // mr-[56px] = FAB 폭(TRIP-1076 AC-8) — 오른쪽 열 하트가 FAB 열(right-lg + 56)과 가로로 겹치지 않게
+    // 격자만 비운다(스크롤 패딩을 늘리면 숙소 레인까지 줄어든다). Figma d05 는 16/16 대칭이라 갈라진다.
+    <View testID="destination-detail-place-grid" className="mr-[56px] gap-md">
+      {rows.map((pair) => (
+        <View
+          key={pair[0].poiId}
+          testID="destination-detail-place-grid-row"
+          className="flex-row gap-md"
+        >
+          {[pair[0], pair[1]].map((card, i) => (
+            <View
+              key={i}
+              testID="destination-detail-place-grid-cell"
+              className="flex-1"
+            >
+              {card ? (
+                <PlaceRailCard
+                  card={card}
+                  onPress={onPressCard}
+                  testIDPrefix="destination-detail-place-card"
+                  variant="fill"
+                  save={saveFor(card.poiId)}
+                />
+              ) : null}
+            </View>
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+}
+
 export function DestinationDetailScreen({
   regionName,
   onPressSearch,
   stayLane,
   placeLane,
   onPressTab,
+  activeTab = 'explore',
   onPressCreateTrip,
   savedMenu,
 }: DestinationDetailScreenProps): ReactElement {
-  // D1 — 세그먼트 활성 상태를 화면이 로컬로 쥔다(페이지 prop 아님). 초기 'all'.
-  const [activeSegment, setActiveSegment] = useState<SegmentKey>('all');
-  const showStay = activeSegment === 'all' || activeSegment === 'stay';
-  const showPlace = activeSegment === 'all' || activeSegment === 'place';
-
   const {
     savedKeys = [],
     pendingKeys = [],
@@ -249,6 +265,23 @@ export function DestinationDetailScreen({
     saveError = false,
     onDismissSaveError,
   } = stayLane;
+  const {
+    savedPoiIds = [],
+    pendingPoiIds = [],
+    onToggleSave: onTogglePlaceSave,
+  } = placeLane;
+  // 저장 배선(onToggleSave)이 있을 때만 하트를 그린다(AC-8 무회귀).
+  const placeSaveFor = (poiId: string): PlaceRailCardSave | undefined =>
+    onTogglePlaceSave
+      ? {
+          saved: savedPoiIds.includes(poiId),
+          pending: pendingPoiIds.includes(poiId),
+          onToggle: () => onTogglePlaceSave(poiId),
+          testID: `destination-detail-place-save-${poiId}`,
+          filledTestID: `destination-detail-place-heart-filled-${poiId}`,
+          outlineTestID: `destination-detail-place-heart-outline-${poiId}`,
+        }
+      : undefined;
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
@@ -270,7 +303,7 @@ export function DestinationDetailScreen({
               &apos;{regionName}&apos; 검색 결과
             </Text>
             <Text className="mt-xs font-noto text-label text-muted">
-              여행지 · 장소 · 숙소에서 찾았어요
+              장소 · 숙소에서 찾았어요
             </Text>
           </View>
 
@@ -290,105 +323,97 @@ export function DestinationDetailScreen({
             <Text className="font-noto text-body text-muted-soft">›</Text>
           </Pressable>
 
-          {/* 세그먼트 3탭(전체·숙소·장소) — 레인 필터(D1 로컬 useState). */}
-          <SegmentTabs active={activeSegment} onSelect={setActiveSegment} />
-
-          {showStay ? (
-            <View testID="destination-detail-lane-stay" className="mt-2xl">
-              <LaneHeader
-                title="숙소"
-                onSeeAll={stayLane.onSeeAll}
-                seeAllTestID="destination-detail-stay-seeall"
+          <View testID="destination-detail-lane-stay" className="mt-2xl">
+            <LaneHeader
+              title="숙소"
+              onSeeAll={stayLane.onSeeAll}
+              seeAllTestID="destination-detail-stay-seeall"
+            />
+            {saveError ? (
+              <StaySaveErrorBanner onDismiss={onDismissSaveError} />
+            ) : null}
+            {stayLane.error ? (
+              <LaneErrorBlock
+                testID="destination-detail-stay-retry"
+                message="숙소를 불러오지 못했어요"
+                onRetry={stayLane.onRetry}
               />
-              {saveError ? (
-                <StaySaveErrorBanner onDismiss={onDismissSaveError} />
-              ) : null}
-              {stayLane.error ? (
-                <LaneErrorBlock
-                  testID="destination-detail-stay-retry"
-                  message="숙소를 불러오지 못했어요"
-                  onRetry={stayLane.onRetry}
-                />
-              ) : (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View className="flex-row gap-md">
-                    {stayLane.cards.map((card) => (
-                      // rail 카드 — 하트는 save 배선 시에만(미지정=하트 없음, AC-5d). 담김/미담김은
-                      // 색이 아니라 서로 다른 글리프 testID + selected 로 관측(★1). 사진은 회색
-                      // 자리(URL 계약 무·INV-1).
-                      <StaySearchCard
-                        key={card.key}
-                        testID={`destination-detail-stay-card-${card.key}`}
-                        name={card.name}
-                        region={card.region}
-                        priceText={card.priceText}
-                        variant="rail"
-                        save={
-                          onToggleSave
-                            ? {
-                                saved: savedKeys.includes(card.key),
-                                pending: pendingKeys.includes(card.key),
-                                onToggle: () => onToggleSave(card),
-                                testID: `destination-detail-stay-save-${card.key}`,
-                                filledTestID: `destination-detail-stay-heart-filled-${card.key}`,
-                                outlineTestID: `destination-detail-stay-heart-outline-${card.key}`,
-                              }
-                            : undefined
-                        }
-                        onPress={() => stayLane.onPressCard(card)}
-                      />
-                    ))}
-                  </View>
-                </ScrollView>
-              )}
-            </View>
-          ) : null}
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View className="flex-row gap-md">
+                  {stayLane.cards.map((card) => (
+                    // rail 카드 — 하트는 save 배선 시에만(미지정=하트 없음, AC-5d). 담김/미담김은
+                    // 색이 아니라 서로 다른 글리프 testID + selected 로 관측(★1). 사진은 회색
+                    // 자리(URL 계약 무·INV-1).
+                    <StaySearchCard
+                      key={card.key}
+                      testID={`destination-detail-stay-card-${card.key}`}
+                      name={card.name}
+                      region={card.region}
+                      priceText={card.priceText}
+                      variant="rail"
+                      save={
+                        onToggleSave
+                          ? {
+                              saved: savedKeys.includes(card.key),
+                              pending: pendingKeys.includes(card.key),
+                              onToggle: () => onToggleSave(card),
+                              testID: `destination-detail-stay-save-${card.key}`,
+                              filledTestID: `destination-detail-stay-heart-filled-${card.key}`,
+                              outlineTestID: `destination-detail-stay-heart-outline-${card.key}`,
+                            }
+                          : undefined
+                      }
+                      onPress={() => stayLane.onPressCard(card)}
+                    />
+                  ))}
+                </View>
+              </ScrollView>
+            )}
+          </View>
 
-          {showPlace ? (
-            <View testID="destination-detail-lane-place" className="mt-2xl">
-              <LaneHeader
-                title="장소"
-                onSeeAll={placeLane.onSeeAll}
-                seeAllTestID="destination-detail-place-seeall"
+          <View testID="destination-detail-lane-place" className="mt-2xl">
+            <LaneHeader
+              title="장소"
+              onSeeAll={placeLane.onSeeAll}
+              seeAllTestID="destination-detail-place-seeall"
+            />
+            {placeLane.saveErrorMessage ? (
+              <PlaceSaveErrorBanner
+                message={placeLane.saveErrorMessage}
+                onDismiss={placeLane.onDismissSaveError}
               />
-              {placeLane.error ? (
-                <LaneErrorBlock
-                  testID="destination-detail-place-retry"
-                  message="장소를 불러오지 못했어요"
-                  onRetry={placeLane.onRetry}
-                />
-              ) : placeLane.cards.length > 0 ? (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View className="flex-row gap-md">
-                    {placeLane.cards.map((card) => (
-                      <PlaceRailCard
-                        key={card.poiId}
-                        card={card}
-                        onPress={placeLane.onPressCard}
-                        testIDPrefix="destination-detail-place-card"
-                      />
-                    ))}
-                  </View>
-                </ScrollView>
-              ) : (
-                <Pressable
-                  testID="destination-detail-place-empty"
-                  accessibilityRole="button"
-                  onPress={placeLane.onSeeAll}
-                  className="flex-row items-center gap-sm rounded-card bg-surface-soft px-lg py-2xl"
-                >
-                  <SearchGlyph size={18} />
-                  <Text className="flex-1 font-noto text-label text-muted">
-                    가볼 만한 장소 둘러보기
-                  </Text>
-                  <Text className="font-noto text-label text-muted">›</Text>
-                </Pressable>
-              )}
-            </View>
-          ) : null}
+            ) : null}
+            {placeLane.error ? (
+              <LaneErrorBlock
+                testID="destination-detail-place-retry"
+                message="장소를 불러오지 못했어요"
+                onRetry={placeLane.onRetry}
+              />
+            ) : placeLane.cards.length > 0 ? (
+              <PlaceGrid
+                cards={placeLane.cards}
+                onPressCard={placeLane.onPressCard}
+                saveFor={placeSaveFor}
+              />
+            ) : (
+              <Pressable
+                testID="destination-detail-place-empty"
+                accessibilityRole="button"
+                onPress={placeLane.onSeeAll}
+                className="flex-row items-center gap-sm rounded-card bg-surface-soft px-lg py-2xl"
+              >
+                <SearchGlyph size={18} />
+                <Text className="flex-1 font-noto text-label text-muted">
+                  가볼 만한 장소 둘러보기
+                </Text>
+                <Text className="font-noto text-label text-muted">›</Text>
+              </Pressable>
+            )}
+          </View>
         </ScrollView>
 
-        <BottomTabBar activeKey="explore" onPressTab={onPressTab} />
+        <BottomTabBar activeKey={activeTab} onPressTab={onPressTab} />
 
         {/* 우하단 세로 2단 FAB(TRIP-709, d01 `ExploreLandingScreen` 패턴 복제): 위=담은 곳
             saved-menu 하트(펼치면 담은 장소→d02·저장한 숙소→e04 미니 FAB 이 왼쪽으로 나온다) ·
@@ -434,7 +459,7 @@ export function DestinationDetailScreen({
               accessibilityLabel={
                 savedMenu.open
                   ? '담은 곳 메뉴 닫기'
-                  : `담은 곳 ${savedMenu.savedCount}곳`
+                  : `담은 장소 ${savedMenu.savedCount}곳`
               }
               onPress={savedMenu.onToggle}
               style={FAB_SHADOW}

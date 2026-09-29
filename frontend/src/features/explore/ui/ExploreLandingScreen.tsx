@@ -22,7 +22,10 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { PlaceCardVM } from '@/entities/place/model';
-import { PlaceRailCard } from '@/entities/place/ui/PlaceRailCard';
+import {
+  PlaceRailCard,
+  type PlaceRailCardSave,
+} from '@/entities/place/ui/PlaceRailCard';
 import type { StayCardVM } from '@/entities/stay/model';
 import { StaySearchCard } from '@/entities/stay/ui/StaySearchCard';
 import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
@@ -55,6 +58,12 @@ export interface ExploreLandingScreenProps {
     cards: PlaceCardVM[];
     onRetry: () => void;
     onPressCard: (poiId: string) => void;
+    // 저장 하트(TRIP-1049) — 전부 additive·옵셔널. onToggleSave 가 있을 때만 하트를 그린다.
+    savedPoiIds?: string[];
+    pendingPoiIds?: string[];
+    onToggleSave?: (poiId: string) => void;
+    saveErrorMessage?: string | null;
+    onDismissSaveError?: () => void;
   };
   /** "가볼 곳" 진입점 탭 → d04 장소 목록(/explore/places, TRIP-453). **옵셔널** — 기존
    * 소비처(cardPress 테스트·_dev/preview·save-integration)가 이 prop 없이 렌더하므로 필수화하면
@@ -212,6 +221,27 @@ function StaySaveErrorBanner({
   );
 }
 
+// 장소 담기 실패 배너(TRIP-1049, INV-4) — 문구는 라우트가 담기/해제 갈래로 골라 준다.
+function PlaceSaveErrorBanner({
+  message,
+  onDismiss,
+}: {
+  message: string;
+  onDismiss?: () => void;
+}): ReactElement {
+  return (
+    <Pressable
+      testID="explore-place-save-error"
+      accessibilityRole="button"
+      onPress={onDismiss}
+      className="mb-md flex-row items-center gap-sm rounded-card bg-surface-soft px-lg py-md"
+    >
+      <WarningTriangleGlyph size={18} tone="primary" />
+      <Text className="flex-1 font-noto text-label text-muted">{message}</Text>
+    </Pressable>
+  );
+}
+
 export function ExploreLandingScreen({
   heading,
   onPressSearch,
@@ -230,6 +260,18 @@ export function ExploreLandingScreen({
     saveError = false,
     onDismissSaveError,
   } = stayLane;
+  // 장소 저장 하트(TRIP-1049) — onToggleSave 가 있을 때만 그린다(AC-8 무회귀).
+  const placeSaveFor = (poiId: string): PlaceRailCardSave | undefined =>
+    placeLane?.onToggleSave
+      ? {
+          saved: (placeLane.savedPoiIds ?? []).includes(poiId),
+          pending: (placeLane.pendingPoiIds ?? []).includes(poiId),
+          onToggle: () => placeLane.onToggleSave?.(poiId),
+          testID: `explore-place-save-${poiId}`,
+          filledTestID: `explore-place-heart-filled-${poiId}`,
+          outlineTestID: `explore-place-heart-outline-${poiId}`,
+        }
+      : undefined;
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
@@ -324,6 +366,12 @@ export function ExploreLandingScreen({
               onSeeAll={onPressPlaces}
               seeAllTestID="explore-lane-place-cta"
             />
+            {!isLoading && placeLane?.saveErrorMessage ? (
+              <PlaceSaveErrorBanner
+                message={placeLane.saveErrorMessage}
+                onDismiss={placeLane.onDismissSaveError}
+              />
+            ) : null}
             {isLoading ? (
               <SkeletonRail
                 testIDPrefix="explore-landing-skeleton-place"
@@ -351,6 +399,7 @@ export function ExploreLandingScreen({
                       key={card.poiId}
                       card={card}
                       onPress={placeLane.onPressCard}
+                      save={placeSaveFor(card.poiId)}
                     />
                   ))}
                 </View>
@@ -421,7 +470,7 @@ export function ExploreLandingScreen({
                 accessibilityLabel={
                   savedMenu.open
                     ? '담은 곳 메뉴 닫기'
-                    : `담은 곳 ${savedMenu.savedCount}곳`
+                    : `담은 장소 ${savedMenu.savedCount}곳`
                 }
                 onPress={savedMenu.onToggle}
                 style={FAB_SHADOW}

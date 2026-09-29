@@ -29,6 +29,7 @@ private class FakeBases : BaseAssignmentRepository {
     override fun findById(baseAssignmentId: UUID) = store[baseAssignmentId]
     override fun delete(base: BaseAssignment) { store.remove(base.baseAssignmentId) }
     override fun existsByStayId(savedStayId: UUID) = store.values.any { it.savedStayId == savedStayId }
+    override fun deleteByStayId(savedStayId: UUID) = error("이 테스트는 배정 정리를 쓰지 않는다")
     override fun findTripIdsByStays(savedStayIds: Collection<UUID>) =
         store.values.filter { it.savedStayId in savedStayIds }
             .groupBy { it.savedStayId }
@@ -41,6 +42,8 @@ private class FakeStays : SavedStayRepository {
     override fun findById(savedStayId: UUID) = store[savedStayId]
     override fun findByAccount(accountId: UUID) = store.values.filter { it.accountId == accountId }
     override fun delete(stay: SavedStay) { store.remove(stay.savedStayId) }
+    override fun existsByAccountAndExternal(accountId: UUID, externalSource: String, externalId: String) =
+        error("이 테스트는 중복 선검사를 쓰지 않는다")
 }
 
 /** (acc,tripId) → period 를 등록해두면 소유로 간주. 미등록은 null(404). */

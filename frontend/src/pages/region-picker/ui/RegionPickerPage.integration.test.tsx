@@ -25,7 +25,7 @@ const mockBack = jest.fn();
 const mockDismissTo = jest.fn();
 const mockRefetch = jest.fn();
 const mockAddDestination = jest.fn();
-let mockParams: { purpose?: string } = {};
+let mockParams: { purpose?: string; tab?: string } = {};
 let mockRegionsResult: {
   data: Region[] | undefined;
   isPending: boolean;
@@ -223,9 +223,10 @@ describe('AC-1 · 여행지 담기 재배선 (trip 분기 — TRIP-683)', () => 
     // 실행: '인천 전체' 행 press = trip 목적 지역 선택.
     fireEvent.press(screen.getByTestId('explore-region-28'));
 
-    // 단언: 지역 '이름'(코드 아님)으로 1박 담고(★5), 위저드로 복귀하며, d03(탐색)로 이탈하지 않는다.
+    // 단언: 지역 '이름'으로 1박 담고(★5 — 화면은 이름을 그린다), 코드도 함께 넘기며(TRIP-1042 AC-12 —
+    // 꼭 갈 곳 지역 판정·생성 요청이 코드를 쓴다), 위저드로 복귀하고, d03(탐색)로 이탈하지 않는다.
     expect(mockAddDestination).toHaveBeenCalledTimes(1);
-    expect(mockAddDestination).toHaveBeenCalledWith('인천광역시', 1);
+    expect(mockAddDestination).toHaveBeenCalledWith('인천광역시', 1, '28');
     expect(mockBack).toHaveBeenCalledTimes(1);
     expect(mockPush).not.toHaveBeenCalledWith(
       expect.stringContaining('/explore/destination')
@@ -357,7 +358,7 @@ describe('985 · 회귀 — 헬퍼 철자의 trip 도 위저드 담기 그대로
 
     fireEvent.press(screen.getByTestId('explore-region-26'));
 
-    expect(mockAddDestination.mock.calls).toEqual([['부산광역시', 1]]);
+    expect(mockAddDestination.mock.calls).toEqual([['부산광역시', 1, '26']]);
     expect(mockBack).toHaveBeenCalledTimes(1);
     expect(mockDismissTo).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
@@ -377,5 +378,70 @@ describe('985 · URL 신뢰 경계 — 헬퍼에 없는 철자는 stay 로 떨�
     fireEvent.press(screen.getByTestId('explore-region-26'));
 
     expect(mockAddDestination).not.toHaveBeenCalled();
+  });
+});
+
+// ── TRIP-1015 E · 진입 탭 신호를 결과 화면으로 되실어 보낸다 (결정 4 · Seed Q4) ────────────────
+// `dismissTo` 는 파라미터를 합치지 않고 통째로 바꾼다(traps-explore) — 피커가 받은 진입 탭을 결과 화면
+// 주소에 **다시 싣지 않으면** 결과 화면은 조용히 탐색 탭으로 돌아간다. 모양(문자열/객체)은 구현 몫이라
+// 아래 `destinationOf` 로 펴서 "경로 + tab" 만 본다. 파라미터는 공유 헬퍼 URL 에서 꺼낸다(철자 사슬).
+function paramsOf(href: string): { purpose?: string; tab?: string } {
+  const query = href.split('?')[1] ?? '';
+  const out: Record<string, string> = {};
+  for (const pair of query.split('&')) {
+    const [k, v] = pair.split('=');
+    if (k) out[k] = decodeURIComponent(v ?? '');
+  }
+  return out;
+}
+
+/** dismissTo 인자(문자열 또는 {pathname, params})를 "경로 + tab" 으로 편다. */
+function destinationOf(arg: unknown): {
+  path: string;
+  tab: string | undefined;
+} {
+  if (typeof arg === 'string') {
+    const [path, query = ''] = arg.split('?');
+    const tab = /(?:^|&)tab=([^&#]*)/.exec(query)?.[1];
+    return { path, tab };
+  }
+  const { pathname, params = {} } = arg as {
+    pathname: string;
+    params?: Record<string, unknown>;
+  };
+  const path = pathname.replace('[region]', String(params.region));
+  const tab = params.tab === undefined ? undefined : String(params.tab);
+  return { path, tab };
+}
+
+describe('🔴 1015-E · explore + 진입 탭 home → 결과 화면 주소에 tab=home 을 되싣는다', () => {
+  it('홈에서 온 피커에서 부산을 고르면 /explore/destination/26 으로 1회, tab=home 을 싣는다', () => {
+    // 준비 — 홈 검색이 만든 URL 그대로의 파라미터(purpose=explore, tab=home).
+    mockParams = paramsOf(regionPickerHref('explore', { tab: 'home' }));
+    // 앵커 — 헬퍼가 만든 URL 에 정말 tab=home 이 실렸다(안 실리면 여기서 먼저 red — 원인이 헬퍼 쪽).
+    expect(mockParams).toEqual({ purpose: 'explore', tab: 'home' });
+    render(<RegionPickerPage />);
+    fireEvent.changeText(screen.getByTestId('explore-region-search'), '부산');
+
+    // 실행
+    fireEvent.press(screen.getByTestId('explore-region-26'));
+
+    // 단언
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+    expect(destinationOf(mockDismissTo.mock.calls[0][0])).toEqual({
+      path: '/explore/destination/26',
+      tab: 'home',
+    });
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('진입 탭이 없으면(탐색 랜딩) 결과 주소에 tab 을 싣지 않는다 — 지금 그대로 (무회귀)', () => {
+    mockParams = paramsOf(regionPickerHref('explore'));
+    render(<RegionPickerPage />);
+    fireEvent.changeText(screen.getByTestId('explore-region-search'), '부산');
+
+    fireEvent.press(screen.getByTestId('explore-region-26'));
+
+    expect(mockDismissTo.mock.calls).toEqual([['/explore/destination/26']]);
   });
 });

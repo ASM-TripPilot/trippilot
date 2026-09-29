@@ -3,9 +3,6 @@ package com.trippilot.itinerarygeneration.application
 import com.trippilot.changelog.api.AppendChangeLog
 import com.trippilot.changelog.api.ChangeLogFacade
 import com.trippilot.changelog.api.ChangeSourceType
-import com.trippilot.changelog.api.DaySnapshotView
-import com.trippilot.changelog.api.ItinerarySnapshotView
-import com.trippilot.changelog.api.SlotSnapshotView
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.itinerarygeneration.api.ReplanCommand
@@ -29,6 +26,7 @@ import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
 import com.trippilot.itinerarygeneration.domain.PersonalizationPort
 import com.trippilot.itinerarygeneration.domain.ReplanCurrentSlot
 import com.trippilot.itinerarygeneration.domain.SavedPlaceRef
+import com.trippilot.placedata.api.PoiSnapshotFacade
 import com.trippilot.placedata.api.SavedPlaceLookupFacade
 import com.trippilot.profile.api.PreferenceFacade
 import com.trippilot.savedaccommodation.api.BaseAnchorFacade
@@ -60,6 +58,8 @@ class ReplanFacadeService(
     private val savedPlaces: SavedPlaceLookupFacade,
     private val regions: com.trippilot.placedata.api.RegionLookupFacade,
     private val rejectionStore: RejectionStore,
+    /** 확정 일정에 반영이 열리면서(TRIP-999) 새 슬롯 동결이 필요해졌다 — [ConfirmedSnapshots]. */
+    private val poiSnapshots: PoiSnapshotFacade,
     private val clock: Clock,
 ) : ReplanFacade {
 
@@ -198,9 +198,10 @@ class ReplanFacadeService(
             // 그 사이 재생성으로 일정이 교체됐다 — 낡은 초안을 덮어쓰면 방금 만든 일정이 사라진다.
             throw ConflictDetected(message = "그 사이 일정이 바뀌었습니다. 다시 재계획해 주세요.")
         }
-        if (current.status == ItineraryStatus.CONFIRMED) {
-            throw ConflictDetected(message = "확정된 일정은 재계획을 반영할 수 없습니다.")
-        }
+        // CONFIRMED 가드는 없다(TRIP-999 결정 (a), 2026-09-27) — 재계획 세션은 여행 기간 안에서만
+        // 열리므로 여기 오는 확정 일정은 전부 "여행 중"이고, 그때 확정 잠금(BR-U3-28)은 여행 시작 전
+        // 한정으로 개정됐다. 종전 가드는 산출(AI 20초)까지 다 하고 마지막에만 막아 여행 중 일정 변경
+        // 수단이 0 이었다(QA #063).
         revisions.ensureRestorePoint(current)
 
         // 초안의 날짜가 일정에 없으면 **아무 일도 일어나지 않는다** — 조용히 통과시키면 바뀐 것 없이
@@ -218,7 +219,9 @@ class ReplanFacadeService(
             createdAt = current.createdAt, updatedAt = clock.instant(),
             candidatesSummary = current.candidatesSummary, unplacedMustVisits = current.unplacedMustVisits,
         )
-        val saved = itineraries.replaceForTrip(tripId, next)
+        // 확정 일정이면 동결을 잇는다(INV-U1-03) — 유지 슬롯은 참조 승계, 새 슬롯은 지금 동결.
+        val frozen = ConfirmedSnapshots.carry(next, current) { poiId -> poiSnapshots.freeze(poiId)?.poiSnapshotId }
+        val saved = itineraries.replaceForTrip(tripId, frozen)
         revisions.record(saved, RevisionActor.AI, RevisionKind.EDIT, "여행 중 재계획 반영")
         // BR-U4-30 — 확정 시 이력 1행. **같은 트랜잭션**이라 일정만 바뀌고 이력이 빠지는 상태가 없다.
         // 리비전(되돌리기용 전체 스냅숏)과 역할이 다르다: 이쪽은 "무엇을 왜 바꿨나"를 사람이 읽는 기록이다.
@@ -228,21 +231,11 @@ class ReplanFacadeService(
                 actor = accountId.toString(),
                 sourceType = ChangeSourceType.PLAN_B,
                 reason = reason,
-                before = current.toSnapshotView(),
-                after = saved.toSnapshotView(),
+                before = current.toChangeLogSnapshot(),
+                after = saved.toChangeLogSnapshot(),
             ),
         )
     }
-
-    /** 일정 → 이력 스냅숏(시각·순서만, INV-3 소요시간 없음). */
-    private fun Itinerary.toSnapshotView() = ItinerarySnapshotView(
-        days.map { day ->
-            DaySnapshotView(
-                day.date,
-                day.slots.map { SlotSnapshotView(it.sourcePoiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay) },
-            )
-        },
-    )
 
     private fun List<ReplanSlot>.toSlots(): List<VisitSlot> = mapIndexed { i, s ->
         VisitSlot.of(

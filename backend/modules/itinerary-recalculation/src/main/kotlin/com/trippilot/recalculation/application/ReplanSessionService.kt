@@ -15,7 +15,13 @@ import com.trippilot.itinerarygeneration.api.ReplanFacade
 import com.trippilot.itinerarygeneration.api.ReplanProposal
 import com.trippilot.recalculation.api.event.ItineraryRecalculated
 import com.trippilot.recalculation.domain.ReplanStatus
+import com.trippilot.auth.api.LocationCollectionSource
+import com.trippilot.auth.api.LocationConsentFacade
+import com.trippilot.auth.api.LocationLegalLogFacade
+import com.trippilot.auth.api.LocationPurgeScope
+import com.trippilot.recalculation.domain.OriginKind
 import com.trippilot.trip.api.TripFacade
+import com.trippilot.trip.api.TripPurgeScopeFacade
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -57,6 +63,10 @@ class ReplanSessionService(
     private val poiSurfaces: PoiSurfaceFacade,
     private val solver: ReplanSolver,
     private val replans: ReplanFacade,
+    /** 위치 동의(L2)·법정 로그(TRIP-992) — 판정은 auth 정본에서 그때그때 읽는다(파생 복사 금지). */
+    private val locationConsents: LocationConsentFacade,
+    private val legalLogs: LocationLegalLogFacade,
+    private val purgeScope: TripPurgeScopeFacade,
     private val events: DomainEventPublisher,
     private val clock: Clock,
 ) {
@@ -76,6 +86,14 @@ class ReplanSessionService(
         val lastVisit = archive.findLastCompletedPoi(tripId)
             ?.let { poiSurfaces.findSurfaces(listOf(it))[it] }
 
+        // 위치 동의 게이트(TRIP-992) — FE 확인만 믿지 않는다. 동의 없이 온 좌표는 받는 순간
+        // 수집이라 **저장 전에** 버리고 서버 사다리로 강등한다. 버린 경우 수집 로그도 없다(그건 수집이 아니다).
+        val requestedOrigin = request.origin?.takeIf {
+            locationConsents.hasLocationLegalConsent(accountId).also { consented ->
+                if (!consented) log.info("위치 동의 없음 — 요청 좌표를 버리고 서버 사다리로 강등합니다. tripId={}", tripId)
+            }
+        }
+
         val now = clock.instant()
         // INV-U4-06 — 기존 열린 세션은 **닫고 시작한다**. 이전 시도의 draft 는 그 세션에 남아 이력이 된다.
         sessions.findOpenByTrip(tripId)?.let {
@@ -94,7 +112,7 @@ class ReplanSessionService(
                 // 사다리 3단(마지막 완료 방문지)이 방문 실적 도착으로 실제로 채워진다(BR-U4-19).
                 // 좌표는 POI 정본에서 얻는다 — 실적은 poiId 만 들고 있다.
                 origin = origins.resolve(
-                    tripId, period.startDate, period.endDate, today, request.origin,
+                    tripId, period.startDate, period.endDate, today, requestedOrigin,
                     lastVisitLat = lastVisit?.lat, lastVisitLng = lastVisit?.lng,
                 ),
                 reasons = request.reasons,
@@ -104,6 +122,13 @@ class ReplanSessionService(
                 at = now,
             ),
         )
+        // 위치정보를 **실제로 저장했을 때만** 수집 사실을 남긴다(TRIP-992 · INV-LL1). 판정은 저장
+        // **결과**의 kind 다 — 요청에 좌표가 있었는지가 아니다(동의 강등·사다리 폴백이 그 사이에 있다).
+        // 같은 트랜잭션이라 세션 저장이 롤백되면 로그도 없던 일이 된다(파사드 규약).
+        if (opened.origin.kind in COORD_COLLECTED) {
+            legalLogs.recordCollection(accountId, LocationCollectionSource.REPLAN_ORIGIN, opened.sessionId)
+        }
+
         // 시트를 제출하면 곧바로 산출로 넘어간다 — 여기서 시작하지 않으면 세션이 COLLECTING 에 멈춰
         // **영원히 로딩**이 된다. 산출은 비동기라 응답은 SOLVING 이고, 화면(i12)은 세션을 폴링해 로딩을 그린다.
         val solving = sessions.save(opened.solving())
@@ -111,6 +136,18 @@ class ReplanSessionService(
         // 조용히 아무것도 하지 않고, 세션은 SOLVING 에 영원히 멈춘다(실측: E2E 가 20초 폴링 끝에 잡았다).
         afterCommit { solver.solve(accountId, solving.sessionId) }
         return solving
+    }
+
+    /**
+     * 위치 동의(L2) 철회 파기(TRIP-992 · INV-L4) — 저장된 GPS·MANUAL 기준점 좌표를 지우고
+     * 파기 사실을 남긴다. 지울 것이 0건이면 로그도 없다 — 확인자료가 "지운 적 없는 파기"를 말하면 안 된다.
+     * 멱등: 두 번 배달돼도(at-least-once) 두 번째는 0건이라 기록이 부풀지 않는다.
+     */
+    @Transactional
+    fun purgeOriginCoordinates(accountId: UUID): Int {
+        val purged = sessions.purgeOrigins(purgeScope.findAllTripIdsOf(accountId))
+        if (purged > 0) legalLogs.recordPurge(accountId, LocationPurgeScope.REPLAN_ORIGIN, purged)
+        return purged
     }
 
     /**
@@ -178,6 +215,9 @@ class ReplanSessionService(
     }
 
     private companion object {
+        /** 저장 시 수집 로그 대상 — 사용자 유래 좌표만(서버 사다리 유도는 수집이 아니다). */
+        private val COORD_COLLECTED = setOf(OriginKind.GPS, OriginKind.MANUAL)
+
         private val log = LoggerFactory.getLogger(ReplanSessionService::class.java)
 
         /** 여행 "오늘"은 사용자가 있는 곳의 날짜지, 서버 UTC 날짜가 아니다. */

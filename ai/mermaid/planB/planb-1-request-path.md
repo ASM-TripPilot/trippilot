@@ -2,7 +2,7 @@
 
 > 코드 구조도 — FE 재계획 시트에서 AI `alternatives` 경계까지. 슬롯 교체 후보(h08)
 > 경로이며, AI 미도달 시 백엔드 로컬 후보풀 degraded 분기를 함께 그린다.
-> 기준: origin/develop (a9648b7e), 2026-09-26.
+> 기준: origin/develop (TRIP-960 ④ 반영), 2026-09-28.
 
 ```mermaid
 flowchart LR
@@ -13,7 +13,7 @@ flowchart LR
     SVC["SlotCandidateService<br/>예산 25s"] --> ADP["HttpScheduleAgentAdapter<br/>proposeSlotCandidates"]
   end
 
-  ADP -->|"POST /ai/v1/itinerary/alternatives"| RT
+  ADP -->|"POST /ai/v1/planb/alternatives"| RT
 
   subgraph AI["AI 서비스"]
     direction TB

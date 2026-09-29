@@ -17,7 +17,8 @@ import { StayDetailScreen } from './StayDetailScreen';
  *
  * 무엇을 보장하나: ready 얼굴은 조회 결과(StayDetail)로 (1) 가격줄 2톤+지역(AC-1), (2) 편의시설
  * 4칸 flex-1·값별 아이콘(AC-2·AC-3), (3) 실 MapView 미니맵(viewOnly·단일핀, AC-4), (4) 지도 아래
- * **주소·전화·객실** 줄(TRIP-940 AC-1·Q1), (5) CTA2 아이콘(AC-6)을 그린다. 결측은 "미확인"이되
+ * **주소·전화·객실** 줄(TRIP-940 AC-1·Q1)을 그린다. 하단 CTA 는 "외부에서 예약하기" 하나다 —
+ * "일정에 추가"·담기 안내는 지웠다(TRIP-1041 AC-1, S11). 결측은 "미확인"이되
  * 전화만은 줄째 비운다(TRIP-940 AC-2). ready 가 아닌 네 얼굴은 서로 다른 testID 를 갖고, 모두
  * 뒤로 버튼을 가지며, 재시도는 네트워크 오류 얼굴에만 있다(TRIP-940 AC-4~7·9, Q2).
  *
@@ -99,7 +100,6 @@ function baseProps() {
     saved: false,
     onToggleSave: noop,
     onPressBook: noop,
-    onPressAddToTrip: noop,
     onPressBack: noop,
     onPressPhone: noop,
     onRetry: noop,
@@ -247,26 +247,22 @@ describe('S3 · 저장 하트 정체성 (AC-8 회귀)', () => {
 });
 
 describe('S4·S5 · press 배선 (AC-8 회귀)', () => {
-  it('하트·예약하기·일정에추가 press 가 각 콜백을 한 번씩 부른다', () => {
+  it('하트·예약하기 press 가 각 콜백을 한 번씩 부른다', () => {
     const onToggleSave = jest.fn();
     const onPressBook = jest.fn();
-    const onPressAddToTrip = jest.fn();
     render(
       <StayDetailScreen
         {...baseProps()}
         onToggleSave={onToggleSave}
         onPressBook={onPressBook}
-        onPressAddToTrip={onPressAddToTrip}
       />
     );
 
     fireEvent.press(screen.getByTestId('stay-detail-save'));
     fireEvent.press(screen.getByTestId('stay-detail-book'));
-    fireEvent.press(screen.getByTestId('stay-detail-addtotrip'));
 
     expect(onToggleSave).toHaveBeenCalledTimes(1);
     expect(onPressBook).toHaveBeenCalledTimes(1);
-    expect(onPressAddToTrip).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -334,7 +330,7 @@ describe('S9 · 위치 지도 = 실 MapView (AC-4 · US-STAY-03 · INV-4)', () =
     expect(camera.latitude).toBe(DETAIL.lat);
     expect(camera.longitude).toBe(DETAIL.lng);
 
-    // 단일 핀(번호 1, d06 방식) 이 detail 좌표에 찍힌다(경로선 없음 — pins.length<2).
+    // 단일 핀이 detail 좌표에 찍힌다(경로선 없음 — pins.length<2). 모양은 아래 S9b 가 잰다.
     const markers = within(map).getAllByTestId('map-marker');
     expect(markers).toHaveLength(1);
     expect(markers[0].props.latitude).toBe(DETAIL.lat);
@@ -343,15 +339,43 @@ describe('S9 · 위치 지도 = 실 MapView (AC-4 · US-STAY-03 · INV-4)', () =
   });
 });
 
-describe('S11 · CTA2 "일정에 추가" 아이콘 (AC-6)', () => {
-  it('일정 추가 버튼이 아이콘 leaf 를 그린다(달력+ → +, 글리프 정체·tone 은 6-b)', () => {
+// TRIP-1019 #016 — 숙소 위치 핀에 번호 "1"이 찍혔다(d06 장소 상세의 번호 물방울을 그대로 썼다).
+// Figma e03(1700:1183) 위치 지도는 빨강 마커 + 흰 침대, 번호 없음 = MapView 의 `kind:'stay'` 마커다
+// (e05 R-19 선례). 여기선 실 MapView 를 그리므로 pins prop 대신 **그려진 결과**를 본다: 침대 마커
+// testID 가 있고, 번호 글자가 없다. 마커 그림(빨강·침대)은 SVG 라 6-b.
+describe('S9b · 위치 핀 = 번호 없는 숙소 마커 (TRIP-1019 #016 · US-STAY-03 · Figma e03)', () => {
+  it('지도 안 핀에 번호 "1" 글자가 없고, 침대 마커(map-marker-stay-1)로 그려진다', () => {
     render(<StayDetailScreen {...baseProps()} />);
 
+    const pin = within(screen.getByTestId('stay-detail-map')).getByTestId(
+      'map-marker-pin-1'
+    );
+
+    // 금지: 핀 안에 SVG 글자가 없다. 번호 물방울은 번호를 SVG 글자(RNSVGTSpan 의 content)로 그려
+    // `getByText` 로는 안 잡힌다(02a §5 실측) — 글자 노드의 content 를 모아 비어 있는지 본다.
+    const glyphs = pin
+      .findAll((node) => String(node.type) === 'RNSVGTSpan')
+      .map((node) => node.props.content as unknown);
+    expect(glyphs).toEqual([]);
+    // 정상: 숙소 마커 경로를 탔다(kind 미전달이면 번호 물방울로 폴백해 이 testID 가 없다).
+    expect(within(pin).getByTestId('map-marker-stay-1')).toBeOnTheScreen();
+  });
+});
+
+describe('S11 · "일정에 추가"·담기 안내 없음 (TRIP-1041 AC-1 · QA #011 — 구 CTA2 아이콘 폐기)', () => {
+  it('하단 액션은 제휴 고지 + 예약 버튼뿐이고, 일정에 추가 버튼·아이콘·담기 안내가 없다', () => {
+    render(<StayDetailScreen {...baseProps()} saved />);
+
+    // 짝 앵커 — 하단 액션은 실제로 그려졌다(빈 화면이라 없는 게 아니다).
+    expect(screen.getByTestId('stay-detail-book')).toBeOnTheScreen();
     expect(
-      within(screen.getByTestId('stay-detail-addtotrip')).getByTestId(
-        'stay-detail-addtotrip-icon'
-      )
+      screen.getByTestId('stay-detail-affiliate-notice')
     ).toBeOnTheScreen();
+    // 부정 — 지운 세 testID 와 그 글자가 없다(담김 상태에서도 안내가 새로 뜨지 않는다).
+    expect(screen.queryByTestId('stay-detail-addtotrip')).toBeNull();
+    expect(screen.queryByTestId('stay-detail-addtotrip-icon')).toBeNull();
+    expect(screen.queryByTestId('stay-detail-add-notice')).toBeNull();
+    expect(screen.queryByText('일정에 추가')).toBeNull();
   });
 });
 
@@ -457,11 +481,10 @@ describe('S15 · 비정상 네 얼굴 — 서로 다른 testID · 뒤로 탈출�
       FACE_IDS.filter((id) => id !== face).forEach((other) => {
         expect(screen.queryByTestId(other)).toBeNull();
       });
-      // 조회가 끝나기 전·실패 뒤엔 저장·예약·일정 추가가 일어날 수 없다(AC-4 · AC-11).
+      // 조회가 끝나기 전·실패 뒤엔 저장·예약이 일어날 수 없다(AC-4 · AC-11).
       expect(screen.queryByTestId('stay-detail-root')).toBeNull();
       expect(screen.queryByTestId('stay-detail-save')).toBeNull();
       expect(screen.queryByTestId('stay-detail-book')).toBeNull();
-      expect(screen.queryByTestId('stay-detail-addtotrip')).toBeNull();
     }
   );
 

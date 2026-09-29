@@ -36,6 +36,9 @@ const LOAD_ERROR_TITLE = '지금 거점 정보를 불러올 수 없어요';
 const LOAD_ERROR_DESCRIPTION = '잠시 후 다시 시도해 주세요';
 const RETRY_LABEL = '다시 시도';
 
+/** TRIP-1082 편집 얼굴 제목 — Figma `4700:2688` 은 아직 '어디서 묵을까요?'(01b Q1, Figma 레인 후속). */
+const EDIT_TITLE = '거점 숙소 바꾸기';
+
 /** 미배정 밤의 숙소칸 대체 문구 — 카드 탭으로 S9에서 고른다. */
 const UNASSIGNED_STAY_LABEL = '숙소 미정';
 
@@ -83,9 +86,18 @@ export interface TripWizardStep2ScreenProps {
   onRetryAll: () => void;
   /** notrip 얼굴 "처음부터". */
   onRestart: () => void;
+  /** TRIP-1082 — 있으면 **거점 편집 얼굴**(Figma `4700:2688`, l04 '출발점 변경' 입구): 진행바·위저드
+   *  문구·생성/숙소 없이 CTA 를 숨기고 하단 [완료] 하나. 누르면 일정이 안 만들어지는 라벨이라(INV-4). */
+  onDone?: () => void;
 }
 
-function Header({ onBack }: { onBack: () => void }): ReactElement {
+function Header({
+  onBack,
+  editing,
+}: {
+  onBack: () => void;
+  editing: boolean;
+}): ReactElement {
   return (
     <View className="w-full flex-row items-center gap-sm bg-canvas px-lg pb-[14px] pt-xl">
       <Pressable
@@ -101,20 +113,22 @@ function Header({ onBack }: { onBack: () => void }): ReactElement {
       </Text>
       <View className="flex-1" />
       {/* 진행바 4칸 — Figma가 네 칸 모두 같은 너비라 활성은 색으로만 갈린다(앞 2칸 primary). */}
-      <View className="flex-row items-center gap-xs">
-        {[1, 2, 3, 4].map((n) => (
-          <View
-            key={n}
-            testID={`trip-wizard-progress-seg-${n}`}
-            className={`h-1 w-[14px] rounded-[2px] ${
-              n <= 2 ? 'bg-primary' : 'bg-hairline-strong'
-            }`}
-          />
-        ))}
-        <Text className="ml-[2px] font-inter-bold text-caption text-muted">
-          {formatWizardStep(2)}
-        </Text>
-      </View>
+      {editing ? null : (
+        <View className="flex-row items-center gap-xs">
+          {[1, 2, 3, 4].map((n) => (
+            <View
+              key={n}
+              testID={`trip-wizard-progress-seg-${n}`}
+              className={`h-1 w-[14px] rounded-[2px] ${
+                n <= 2 ? 'bg-primary' : 'bg-hairline-strong'
+              }`}
+            />
+          ))}
+          <Text className="ml-[2px] font-inter-bold text-caption text-muted">
+            {formatWizardStep(2)}
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -239,14 +253,16 @@ export function TripWizardStep2Screen({
   onBack,
   onRetryAll,
   onRestart,
+  onDone,
 }: TripWizardStep2ScreenProps): ReactElement {
   const loading = variant === 'loading';
   const empty = variant === 'empty';
+  const editing = onDone !== undefined;
 
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
       <View testID="trip-base-step2-root" className="flex-1 bg-canvas">
-        <Header onBack={onBack} />
+        <Header onBack={onBack} editing={editing} />
 
         {variant === 'error' ? (
           <View className="flex-1 items-center justify-center px-lg">
@@ -262,12 +278,16 @@ export function TripWizardStep2Screen({
                   variant: 'filled',
                   onPress: onRetryAll,
                 },
-                {
-                  testID: 'trip-base-error-nostay',
-                  label: '숙소 없이 시작하기',
-                  variant: 'outline',
-                  onPress: onNoStayStart,
-                },
+                ...(editing
+                  ? []
+                  : [
+                      {
+                        testID: 'trip-base-error-nostay',
+                        label: '숙소 없이 시작하기',
+                        variant: 'outline' as const,
+                        onPress: onNoStayStart,
+                      },
+                    ]),
               ]}
             />
           </View>
@@ -303,7 +323,7 @@ export function TripWizardStep2Screen({
                     색 토큰이 갈린다: loading=muted-soft·empty=muted). */}
                 <View className="w-full gap-xs">
                   <Text className="font-noto-bold text-display font-bold text-ink">
-                    어디서 묵을까요?
+                    {editing ? EDIT_TITLE : '어디서 묵을까요?'}
                   </Text>
                   {loading ? (
                     <Text className="font-noto text-label text-muted-soft">
@@ -358,7 +378,7 @@ export function TripWizardStep2Screen({
                         ))}
                 </View>
 
-                <GuideRow />
+                {editing ? null : <GuideRow />}
               </View>
             </ScrollView>
 
@@ -367,7 +387,18 @@ export function TripWizardStep2Screen({
                 empty 는 주 CTA 가 "숙소 없이 계속"(generate 자리를 대신, testID 는 nostay-start 로
                 default 링크와 공유·같은 동작) + 보조 "숙소 둘러보기"(trip-base-browse)라 generate 가 없다. */}
             <View className="border-t border-hairline bg-canvas px-lg pb-[18px] pt-md gap-md">
-              {empty ? (
+              {onDone !== undefined ? (
+                <Pressable
+                  testID="trip-base-edit-done"
+                  accessibilityRole="button"
+                  onPress={onDone}
+                  className="w-full items-center justify-center rounded-button bg-primary p-lg"
+                >
+                  <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
+                    완료
+                  </Text>
+                </Pressable>
+              ) : empty ? (
                 <>
                   <Pressable
                     testID="trip-base-nostay-start"

@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
 
-import { captureShareImage } from '@/features/reflection/model/shareCard';
+import { isShareCaptureArmed } from '@/features/reflection/model/shareCapture';
 import { summaryStats } from '@/features/reflection/model/summaryStats';
 import {
   daySubtitle,
@@ -21,6 +21,7 @@ import { formatDayLabel } from '@/entities/trip/lib/formatDayLabel';
 import { useGetTripsTripId } from '@/shared/api/generated/trips/trips';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
+import { shellTabHref } from '@/shared/ui/BottomTabBar';
 
 /**
  * TRIP-572 · trip-summary 페이지 — j04 요약 조회·조립·배선의 단일 출처(FSD).
@@ -131,14 +132,12 @@ export function TripSummaryPage({
       shareEnabled={shareEnabled(envelope)}
       // TRIP-939 Q2: 공유 카드의 저장·공유가 미장전이면 진입점([공유])을 넘기지 않는다(막다른 화면 차단).
       onShare={
-        captureShareImage().armed
+        isShareCaptureArmed()
           ? () => router.push(`/trips/${tripId}/records/share`)
           : undefined
       }
       onBack={handleBack}
-      onPressTab={(key: ShellTabKey) =>
-        router.replace(key === 'home' ? '/' : `/${key}`)
-      }
+      onPressTab={(key: ShellTabKey) => router.replace(shellTabHref(key))}
       tripTitle={trip.data?.title}
       onPressRecords={openRecords}
       // 번호는 여행 기간 기준(1-기반, j03 탭과 같다) — `highlight.dayOrder` 는 기록 있는 날 순번이라 쓰지 않는다.

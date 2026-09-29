@@ -2,15 +2,12 @@
  * c06-terms 프레젠테이션 (US-ONB-02 · AC A1~A8 · C6 · Figma 1293:1208 정합 TRIP-162).
  * props 만 받고 네트워크를 모른다 — 서버 호출은 컨테이너/훅 몫이다.
  */
+import { useState } from 'react';
 import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import {
-  BackChevronGlyph,
-  CheckGlyph,
-  ViewChevronGlyph,
-} from './OnboardingGlyphs';
+import { CheckGlyph, ViewChevronGlyph } from './OnboardingGlyphs';
 
 export interface TermsItemView {
   termsType: string;
@@ -48,11 +45,22 @@ export function TermsScreen({
   onRetry,
   onViewTerms,
 }: TermsScreenProps): ReactElement {
+  // TRIP-1023 #002 — 미동의 안내는 '다음'을 한 번 시도한 뒤에만 보인다(첫 진입엔 숨김). 언제 보일지는
+  // 서버 규칙이 아니라 안내 시점이라 화면 로컬 상태다 — 미동의 목록 계산은 여전히 훅 몫이다.
+  const [triedNext, setTriedNext] = useState(false);
+
+  function handlePressNext(): void {
+    if (!canProceed) {
+      setTriedNext(true);
+      return;
+    }
+    onNext();
+  }
+
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
       <View testID="onboarding-terms-root" className="flex-1 bg-canvas">
         <View className="h-[56px] flex-row items-center gap-sm border-b border-hairline px-lg">
-          <BackChevronGlyph />
           <Text className="font-noto-bold text-[16px] font-bold text-ink">
             약관 동의
           </Text>
@@ -133,7 +141,7 @@ export function TermsScreen({
             ))}
           </View>
 
-          {missingRequiredLabels.length > 0 ? (
+          {triedNext && missingRequiredLabels.length > 0 ? (
             <View className="px-lg pt-md">
               <Text className="font-noto text-label text-muted">
                 아직 동의하지 않은 필수 항목이에요
@@ -172,8 +180,9 @@ export function TermsScreen({
         <View className="border-t border-hairline px-2xl pb-[30px] pt-md">
           <Pressable
             testID="onboarding-terms-next"
-            disabled={!canProceed}
-            onPress={onNext}
+            // disabled prop 은 탭을 삼킨다 — 비활성 탭이 안내를 켜야 하므로 접근성 상태로만 알린다.
+            accessibilityState={{ disabled: !canProceed }}
+            onPress={handlePressNext}
             className={`h-[52px] items-center justify-center rounded-button bg-primary ${
               canProceed ? '' : 'opacity-40'
             }`}

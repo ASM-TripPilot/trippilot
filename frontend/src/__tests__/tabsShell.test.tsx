@@ -37,6 +37,16 @@ jest.mock('@/shared/api/generated/trips/trips', () => ({
 jest.mock('@/features/explore/model/savedPlaces', () => ({
   useSavedPlaces: () => ({ savedPoiIds: [] }),
 }));
+// TRIP-1049 — 홈 라우트가 '지금 뜨는 장소' 실데이터로 `useGetPlaces` 를 문다. 빈 목록 무해 스텁
+// (0건 → 스팟 섹션 숨김, 이 파일 단언은 홈 루트 존재뿐이라 무영향).
+jest.mock('@/shared/api/generated/places/places', () => ({
+  useGetPlaces: () => ({
+    data: { items: [], nextCursor: null },
+    isPending: false,
+    isError: false,
+    refetch: () => {},
+  }),
+}));
 // TRIP-695 — (tabs)/index.tsx 가 useSavedStays().savedCount 를 물게 되면서 SC-1 이 QueryClient
 // 부재로 크래시한다 — 저장 숙소 0(배지 미표시)로 목킹해 무해 스텁만 둔다(위 useGetTrips·
 // useSavedPlaces 스텁과 동일 계열, 단언 무변경).

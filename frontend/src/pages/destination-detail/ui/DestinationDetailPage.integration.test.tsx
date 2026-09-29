@@ -1,9 +1,19 @@
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 
-import type { Region, StayItem } from '@/shared/api/generated/schemas';
+import type { Place, Region, StayItem } from '@/shared/api/generated/schemas';
 import { RegionLevel } from '@/shared/api/generated/schemas';
 import { stayKey } from '@/features/stay/model/stayKey';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
+import {
+  REMOVE_FAILURE_NOTICE,
+  SAVE_FAILURE_NOTICE,
+} from '@/features/explore/model/placeSaveGuard';
 
 import { DestinationDetailPage } from './DestinationDetailPage';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
@@ -35,7 +45,7 @@ import {
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
-let mockParams: { region?: string } = {};
+let mockParams: { region?: string; tab?: string } = {};
 
 // 두 데이터 훅이 받은 인자를 캡처하는 스파이 — 게이팅·역인덱스 증명의 핵심.
 const mockUseStaySearch = jest.fn();
@@ -60,8 +70,13 @@ jest.mock('@/shared/api/generated/places/places', () => ({
   useGetPlaces: (...args: unknown[]) => mockUseGetPlaces(...args),
 }));
 
+// TRIP-1049 — 고정 객체였던 목을 조종 가능한 스파이로 바꾼다(장소 하트가 save/remove 를 실제로
+// 부르는지 관측). 기본 반환은 기존과 같은 savedPoiIds 두 개 + save/remove/isSaved 스파이(02a ★14).
+const mockUseSavedPlaces = jest.fn();
+const mockSavePlace = jest.fn();
+const mockRemovePlace = jest.fn();
 jest.mock('@/features/explore/model/savedPlaces', () => ({
-  useSavedPlaces: () => ({ savedPoiIds: ['poi-1', 'poi-2'] }),
+  useSavedPlaces: (...args: unknown[]) => mockUseSavedPlaces(...args),
 }));
 
 // TRIP-709 AC-8 — 페이지가 새로 무는 숙소 담기 훅. 목이 없으면 P1~P3(QueryClientProvider 없는
@@ -129,7 +144,24 @@ beforeEach(() => {
     remove: mockRemove,
     savedKeys: [],
   });
+  // 장소 담기 훅 기본값(TRIP-1049): 기존 savedPoiIds 두 개 유지 + 성공 응답.
+  mockSavePlace.mockReset();
+  mockRemovePlace.mockReset();
+  mockSavePlace.mockResolvedValue({ kind: 'saved' });
+  mockRemovePlace.mockResolvedValue({ kind: 'removed' });
+  mockUseSavedPlaces.mockReset();
+  savedPlacesReturns(['poi-1', 'poi-2']);
 });
+
+/** 장소 담기 훅 목의 반환을 정한다 — 화면은 렌더 중 savedPoiIds 만 읽는다(02a ★6). */
+function savedPlacesReturns(savedPoiIds: string[]): void {
+  mockUseSavedPlaces.mockReturnValue({
+    savedPoiIds,
+    isSaved: (poiId: string) => savedPoiIds.includes(poiId),
+    save: mockSavePlace,
+    remove: mockRemovePlace,
+  });
+}
 
 describe('P1 · regionCode → 이름 역인덱스 + enabled 게이팅', () => {
   it('캐시에서 코드로 이름을 찾으면 두 조회에 그 이름을 싣고 enabled=true 로 켠다', () => {
@@ -429,5 +461,281 @@ describe('🔴 1012-B1 · d03 목적지 상세 ＋ 여행 만들기 FAB 는 직�
     expect(mockPush).toHaveBeenCalledTimes(1);
     expect(String(mockPush.mock.calls[0][0])).toBe('/trips/new/step1');
     expect(draftAtPush()).toEqual(freshWizardDraft());
+  });
+});
+
+// ── TRIP-1015 E · 진입 탭이 탭바 활성 탭을 정한다 (QA #008 · 결정 4 · US-SHELL-03/04) ────────────
+// 결과 화면은 `(tabs)` 밖이라 탭바를 복제해 그린다. 지금은 활성 탭이 "탐색"으로 박혀 있어, 홈 검색으로
+// 들어와도 탭바가 탐색을 가리킨다. 관측은 BottomTabBar 의 기존 방식(`accessibilityState.selected`) 그대로.
+// 뒤로 버튼은 새로 만들지 않는다(2026-08-22 결정 유지) — 복귀는 탭바·시스템 제스처(6-b).
+describe('🔴 1015-E · 진입 탭이 home 이면 복제 탭바의 활성 탭이 홈이다', () => {
+  it('E1 tab=home 으로 열리면 홈 탭이 선택되고 탐색 탭은 선택되지 않는다', () => {
+    mockParams = { region: '26', tab: 'home' };
+
+    render(<DestinationDetailPage />);
+
+    expect(screen.getByTestId('shell-tabbar-tab-home')).toBeSelected();
+    expect(screen.getByTestId('shell-tabbar-tab-explore')).not.toBeSelected();
+  });
+
+  it('E1 진입 탭이 없으면(탐색 랜딩에서 옴) 지금처럼 탐색 탭이 선택된다 (무회귀 앵커)', () => {
+    mockParams = { region: '26' };
+
+    render(<DestinationDetailPage />);
+
+    expect(screen.getByTestId('shell-tabbar-tab-explore')).toBeSelected();
+    expect(screen.getByTestId('shell-tabbar-tab-home')).not.toBeSelected();
+  });
+
+  it('E2 홈에서 온 결과 화면의 검색 → 지역 선택 URL 에 진입 탭 home 을 다시 싣는다(dismissTo 뒤에도 홈 유지)', () => {
+    mockParams = { region: '26', tab: 'home' };
+    render(<DestinationDetailPage />);
+
+    fireEvent.press(screen.getByTestId('destination-detail-search'));
+
+    expect(mockPush.mock.calls).toEqual([
+      [regionPickerHref('explore', { tab: 'home' })],
+    ]);
+    // 헬퍼가 두 번째 인자를 버려도 위 단언은 통과한다 — 글자로 한 번 더 못박는다.
+    expect(String(mockPush.mock.calls[0][0])).toContain('tab=home');
+  });
+
+  it('E3 홈에서 들어와도 결과 화면에 뒤로 버튼이 생기지 않는다(2026-08-22 결정)', () => {
+    mockParams = { region: '26', tab: 'home' };
+    const view = render(<DestinationDetailPage />);
+
+    // 앵커 — 트리에 testID 가 실재한다(빈 트리에서 아래 부정이 공짜로 통과하지 않게).
+    const ids = view.UNSAFE_root.findAll(
+      (node) => typeof node.props.testID === 'string'
+    ).map((node) => node.props.testID as string);
+    expect(ids).toContain('shell-tabbar-tab-home');
+
+    // 부정 — '…-back' testID 도, 이름이 "뒤로"인 버튼도 없다.
+    expect(ids.filter((id) => /-back$/.test(id))).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: '뒤로' })).toBeNull();
+  });
+});
+
+/**
+ * ── TRIP-1049 · d05 장소 격자 저장 하트 배선 ─────────────────────────────────────────────
+ * 위 케이스는 무수정, 아래만 추가한다.
+ *
+ * 무엇을 보장하나: 장소 하트가 **서버 담기 훅을 실제로 부른다**(로컬 useState 로 하트만 칠하는
+ * "저장됐다는 거짓말" 차단, 02a ★7). 담기는 카드 VM(좌표 없음)이 아니라 **조회 응답의 원본 Place**
+ * 로 나간다. 게스트는 요청 없이 로그인으로, 대기 중엔 하트가 잠기고 카드 이동으로 새지 않는다,
+ * 실패는 담기/해제 문구를 갈라 보인다, 지역을 바꾸면 이전 지역의 대기·배너가 남지 않는다.
+ */
+
+/** openapi `Place.required` 필드를 채운 조회 응답 원소 — 담기가 이 객체 그대로 실려야 한다. */
+function placeRow(poiId: string, nameKo: string): Place {
+  return {
+    poiId,
+    nameKo,
+    category: '명소',
+    lat: 35.0975,
+    lng: 129.0106,
+    region: '사하구',
+    openingHours: null,
+    imageUrl: null,
+    tags: [],
+    savedCount: 3,
+    dataStatus: 'ACTIVE',
+  };
+}
+
+const PLACE_X = placeRow('poi-x', '감천문화마을');
+const PLACE_Y = placeRow('poi-y', '광안리 해변');
+
+/** 장소 조회 응답에 두 곳을 싣는다(담김 여부는 savedPlacesReturns 로 따로 정한다). */
+function withPlaces(): void {
+  mockUseGetPlaces.mockReturnValue({
+    data: { items: [PLACE_X, PLACE_Y], nextCursor: null },
+    isError: false,
+    refetch: jest.fn(),
+  });
+}
+
+const heartX = `destination-detail-place-save-${PLACE_X.poiId}`;
+const heartY = `destination-detail-place-save-${PLACE_Y.poiId}`;
+
+describe('TRIP-1049 · d05 장소 하트 실배선', () => {
+  it('DP-1 · 로그인·안 담김 → 하트 press 가 조회 응답의 원본 Place 로 save 를 1회 부른다(remove 0)', () => {
+    mockToken = 'tkn';
+    savedPlacesReturns([]);
+    withPlaces();
+    render(<DestinationDetailPage />);
+
+    fireEvent.press(screen.getByTestId(heartX));
+
+    expect(mockSavePlace).toHaveBeenCalledTimes(1);
+    // 카드 VM(poiId·name·region·imageUrl)이 아니라 좌표를 가진 원본 객체 그대로다.
+    expect(mockSavePlace).toHaveBeenCalledWith(PLACE_X);
+    expect(mockRemovePlace).not.toHaveBeenCalled();
+  });
+
+  it('DP-2 · 로그인·담김 → 하트 press 가 remove(poiId) 를 1회 부른다(save 0)', () => {
+    mockToken = 'tkn';
+    savedPlacesReturns([PLACE_X.poiId]);
+    withPlaces();
+    render(<DestinationDetailPage />);
+
+    fireEvent.press(screen.getByTestId(heartX));
+
+    expect(mockRemovePlace).toHaveBeenCalledTimes(1);
+    expect(mockRemovePlace).toHaveBeenCalledWith(PLACE_X.poiId);
+    expect(mockSavePlace).not.toHaveBeenCalled();
+  });
+
+  it('DP-3 · 게스트 → 하트 press 는 /(auth)/login 으로 push 하고 담기·해제는 0건이다', () => {
+    mockToken = null;
+    savedPlacesReturns([]);
+    withPlaces();
+    render(<DestinationDetailPage />);
+
+    fireEvent.press(screen.getByTestId(heartX));
+
+    expect(mockPush).toHaveBeenCalledWith('/(auth)/login');
+    expect(mockSavePlace).not.toHaveBeenCalled();
+    expect(mockRemovePlace).not.toHaveBeenCalled();
+  });
+
+  it('DP-4 · 담기 대기 중엔 하트가 잠기고, 잠긴 하트를 다시 눌러도 상세로 새지 않는다', () => {
+    mockToken = 'tkn';
+    savedPlacesReturns([]);
+    mockSavePlace.mockReturnValue(new Promise(() => {}));
+    withPlaces();
+    render(<DestinationDetailPage />);
+
+    fireEvent.press(screen.getByTestId(heartX));
+    expect(screen.getByTestId(heartX)).toBeDisabled();
+
+    // 두 번째 press(따로) — 잠긴 하트 press 는 부모 카드로 샌다(02a ★2). 카드가 막아야 한다.
+    fireEvent.press(screen.getByTestId(heartX));
+
+    expect(mockSavePlace).toHaveBeenCalledTimes(1);
+    expect(mockPush).not.toHaveBeenCalledWith(
+      `/explore/places/${PLACE_X.poiId}`
+    );
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('DP-5 · 담기 실패(network) → 담기 실패 문구 배너', async () => {
+    mockToken = 'tkn';
+    savedPlacesReturns([]);
+    mockSavePlace.mockResolvedValue({ kind: 'failed', reason: 'network' });
+    withPlaces();
+    render(<DestinationDetailPage />);
+
+    fireEvent.press(screen.getByTestId(heartX));
+
+    const banner = await screen.findByTestId(
+      'destination-detail-place-save-error'
+    );
+    expect(
+      within(banner).getByText(SAVE_FAILURE_NOTICE.network.message)
+    ).toBeOnTheScreen();
+  });
+
+  it('DP-6 · 해제 실패(not-found) → 해제 실패 문구 배너("담기" 문구가 아니다)', async () => {
+    mockToken = 'tkn';
+    savedPlacesReturns([PLACE_X.poiId]);
+    mockRemovePlace.mockResolvedValue({ kind: 'failed', reason: 'not-found' });
+    withPlaces();
+    render(<DestinationDetailPage />);
+
+    fireEvent.press(screen.getByTestId(heartX));
+
+    const banner = await screen.findByTestId(
+      'destination-detail-place-save-error'
+    );
+    expect(
+      within(banner).getByText(REMOVE_FAILURE_NOTICE['not-found'].message)
+    ).toBeOnTheScreen();
+    expect(
+      within(banner).queryByText(SAVE_FAILURE_NOTICE['not-found'].message)
+    ).toBeNull();
+  });
+
+  it('DP-7 · 두 카드를 연달아 담고 먼저 끝난 쪽만 풀린다(뒤 요청이 앞 요청의 끝맺음을 덮지 않는다)', async () => {
+    // 준비 — 카드별로 따로 끝낼 수 있는 담기 요청(02a ★4: mutate 호출별 콜백은 마지막 호출만 불린다).
+    mockToken = 'tkn';
+    savedPlacesReturns([]);
+    const finish: Record<string, (v: { kind: 'saved' }) => void> = {};
+    mockSavePlace.mockImplementation(
+      (place: Place) =>
+        new Promise((resolve) => {
+          finish[place.poiId] = resolve;
+        })
+    );
+    withPlaces();
+    render(<DestinationDetailPage />);
+
+    // 실행 ① — X, Y 를 차례로 누른다(둘 다 대기).
+    fireEvent.press(screen.getByTestId(heartX));
+    fireEvent.press(screen.getByTestId(heartY));
+    expect(screen.getByTestId(heartX)).toBeDisabled();
+    expect(screen.getByTestId(heartY)).toBeDisabled();
+
+    // 실행 ② — 먼저 누른 X 의 요청만 끝난다.
+    await act(async () => {
+      finish[PLACE_X.poiId]({ kind: 'saved' });
+    });
+
+    // 단언 — X 는 풀렸고, Y 는 제 요청이 안 끝났으니 여전히 잠겨 있다.
+    expect(screen.getByTestId(heartX)).not.toBeDisabled();
+    expect(screen.getByTestId(heartY)).toBeDisabled();
+  });
+
+  it('DP-10 · 담은 곳 FAB 라벨의 수는 savedPoiIds 길이다(같은 캐시라 하트와 함께 움직인다, AC-3)', () => {
+    savedPlacesReturns(['a', 'b', 'c']);
+    render(<DestinationDetailPage />);
+
+    expect(
+      screen.getByTestId('destination-detail-saved-menu-toggle')
+    ).toHaveAccessibleName('담은 장소 3곳');
+  });
+});
+
+describe('TRIP-1049 AC-9 · 지역을 바꾸면 이전 지역의 장소 대기·실패 배너가 남지 않는다', () => {
+  beforeEach(() => {
+    mockRegionsResult = { data: [BUSAN, MICHUHOL] };
+    mockToken = 'tkn';
+    savedPlacesReturns([]);
+    withPlaces();
+  });
+
+  it('DP-8 · 부산에서 뜬 장소 담기 실패 배너는 미추홀구로 바뀐 뒤엔 없다', async () => {
+    mockSavePlace.mockResolvedValue({ kind: 'failed', reason: 'network' });
+    const { rerender } = render(<DestinationDetailPage />);
+
+    fireEvent.press(screen.getByTestId(heartX));
+    // 전제: 부산 화면에 배너가 떴다.
+    expect(
+      await screen.findByTestId('destination-detail-place-save-error')
+    ).toBeOnTheScreen();
+
+    switchRegionTo(MICHUHOL.regionCode, rerender);
+
+    expect(screen.getByTestId('destination-detail-heading')).toHaveTextContent(
+      /미추홀구/
+    );
+    expect(
+      screen.queryByTestId('destination-detail-place-save-error')
+    ).toBeNull();
+  });
+
+  it('DP-9 · 부산에서 대기 중이던 장소 하트 잠금이 미추홀구로 넘어오지 않는다', () => {
+    mockSavePlace.mockReturnValue(new Promise(() => {}));
+    const { rerender } = render(<DestinationDetailPage />);
+
+    fireEvent.press(screen.getByTestId(heartX));
+    expect(screen.getByTestId(heartX)).toBeDisabled();
+
+    switchRegionTo(MICHUHOL.regionCode, rerender);
+
+    expect(screen.getByTestId('destination-detail-heading')).toHaveTextContent(
+      /미추홀구/
+    );
+    expect(screen.getByTestId(heartX)).not.toBeDisabled();
   });
 });

@@ -198,6 +198,30 @@ export function SocialLoginScreen({
         </Text>
       </View>
 
+      <View className="gap-md">
+        {SOCIAL_BUTTONS.map(({ provider, label, Icon }) => (
+          <Fragment key={provider}>
+            <Pressable
+              testID={`auth-login-${provider}`}
+              onPress={() => onSignIn(provider)}
+              className="h-[52px] w-full flex-row items-center justify-center gap-[10px] rounded-button border border-ink bg-canvas"
+            >
+              <Icon size={20} testID={`auth-login-${provider}-icon`} />
+              <Text className="font-noto-bold text-card-title font-bold text-ink">
+                {label}
+              </Text>
+            </Pressable>
+            {provider === 'google' && AppleButton ? (
+              <View testID="auth-login-apple">
+                <AppleButton onPress={() => onSignIn('apple')} />
+              </View>
+            ) : null}
+          </Fragment>
+        ))}
+      </View>
+
+      {/* 안내·배너는 버튼 래퍼 뒤 루트 직계 형제다(TRIP-1056) — 버튼 위에 두면 상태가 바뀔 때 버튼을
+          아래로 밀고, 래퍼 안에 두면 버튼 간격(gap-md)이 안내에도 붙는다. */}
       {showCancelNotice ? (
         <View testID="auth-login-cancel-notice" className="items-center">
           <Text className="font-noto text-body text-muted">
@@ -216,35 +240,6 @@ export function SocialLoginScreen({
           </Text>
         </View>
       ) : null}
-
-      <View className="gap-md">
-        {SOCIAL_BUTTONS.map(({ provider, label, Icon }) => (
-          <Fragment key={provider}>
-            <Pressable
-              testID={`auth-login-${provider}`}
-              onPress={() => onSignIn(provider)}
-              className="h-[52px] w-full flex-row items-center justify-center gap-[10px] rounded-button border-[1.5px] border-hairline-strong bg-canvas"
-            >
-              <Icon size={20} testID={`auth-login-${provider}-icon`} />
-              <Text className="font-noto-bold text-card-title font-bold text-ink">
-                {label}
-              </Text>
-            </Pressable>
-            {provider === 'google' && AppleButton ? (
-              <View testID="auth-login-apple">
-                <AppleButton onPress={() => onSignIn('apple')} />
-              </View>
-            ) : null}
-          </Fragment>
-        ))}
-      </View>
-
-      <Text
-        testID="auth-login-terms"
-        className="font-noto text-center text-caption text-muted-soft"
-      >
-        로그인 시 약관에 동의합니다
-      </Text>
 
       {showConflictSheet ? (
         <Sheet testID="auth-login-conflict-sheet">

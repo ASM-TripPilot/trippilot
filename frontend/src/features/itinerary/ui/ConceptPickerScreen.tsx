@@ -21,13 +21,14 @@ import { BackChevronGlyph, ChevronRightGlyph } from './ItineraryGlyphs';
  * (testID·콜백·아이콘 틴트)은 TRIP-794 에서 한 글자도 안 바뀐다** — 프레젠테이션만 Figma 에 맞춘다.
  *
  * TRIP-794 로 붙은 표면(전부 additive):
- *  - 진행 줄(`progress?`) — 좌 일차/날짜 · 우 슬롯 N/M · 4분할 진행바. **화면은 Figma 그대로 그린다**:
- *    "슬롯 3/4" 인데 진행바 1칸인 모순은 안 고친다(브리프 §B, h14/h16 헤더 불일치 카피 선례와 동형).
- *    바 칸 수·채움 수는 `barTotal`/`barFilled` prop 그대로(진행바=일차 진행, 슬롯 N/M=슬롯 진행 — 서로 다른 축).
+ *  - 진행 줄(`progress?`) — 좌 일차/날짜 · 우 `N번째 / M` · 4분할 진행바. **화면은 Figma 그대로 그린다**:
+ *    "3번째 / 4" 인데 진행바 1칸인 모순은 안 고친다(브리프 §B, h14/h16 헤더 불일치 카피 선례와 동형).
+ *    바 칸 수·채움 수는 `barTotal`/`barFilled` prop 그대로(진행바=일차 진행, N/M=슬롯 진행 — 서로 다른 축).
+ *    TRIP-1043: 우측 「슬롯」 캡션 제거(내부 용어 비노출, QA #041).
  *  - `stepperSlot?` — CoPickStepper 위젯 노드. **화면은 위젯을 import 하지 않는다**(features→widgets 상향
  *    참조 금지) — pages(`SlotFillPage`)가 노드로 조립해 이 슬롯에 내린다.
- *  - 컨셉 카드 설명 — `CONCEPT_DESCRIPTIONS[key]`(config, D6). 첫 카드만 primary 테두리(정적 강조, 선택 상태
- *    미보유 — `selectedKey` prop 안 만듦). **배지·N곳은 렌더하지 않는다**(BE 계약 부재, BR-U3-24·INV-1 —
+ *  - 컨셉 카드 설명 — `CONCEPT_DESCRIPTIONS[key]`(config, D6). 다섯 카드 모두 hairline 테두리 — TRIP-1043 이
+ *    첫 카드 정적 강조를 걷었다(고르지 않았는데 고른 것처럼 보임, Figma F4). **배지·N곳은 렌더하지 않는다**(BE 계약 부재, BR-U3-24·INV-1 —
  *    컨셉별 후보 수·매칭 신호는 미리 조회를 돌려야 나오는데 계약에 그 필드가 없어 지어내면 "없는 데이터" 표시).
  *
  * `slotContextLabel`(어느 슬롯을 채우나 + 직전 슬롯 문맥)은 seed 가 제거를 승인하지 않아 **유지**한다(제거하면
@@ -57,7 +58,7 @@ const SKIP_LABEL = '테마 없이 건너뛰기 · AI가 알아서 추천';
 
 /** 진행 줄 데이터(전부 표시용 · 화면은 판정하지 않고 그대로 그린다). */
 export interface ConceptProgress {
-  /** 좌 라벨 — 예 '1일차 / 4 · 6월 10일(수)'(verbatim 렌더). */
+  /** 좌 라벨 — 예 '부산 · 1일차 / 4 · 6월 10일(수)'(여행지 모르면 접두 없음, verbatim 렌더). */
   dayLabel: string;
   /** 우 슬롯 진행 — 현재 슬롯 번호. */
   slotCurrent: number;
@@ -75,7 +76,7 @@ export interface ConceptPickerScreenProps {
   progress?: ConceptProgress;
   /** CoPickStepper 위젯 노드(pages 가 조립해 내림, 미주입이면 미렌더). */
   stepperSlot?: ReactNode;
-  /** "오후 슬롯 · △△ 미술관 다음" — 어느 슬롯을 채우는지 + 직전 슬롯(문맥, 표시만). */
+  /** "오후 일정 · △△ 미술관 다음" — 어느 슬롯을 채우는지 + 직전 슬롯(문맥, 표시만). */
   slotContextLabel?: string;
   onPickConcept: (label: string) => void;
   onSkip: () => void;
@@ -122,17 +123,12 @@ export function ConceptPickerScreen({
                 >
                   {progress.dayLabel}
                 </Text>
-                <View className="flex-row items-baseline gap-[4px]">
-                  <Text className="font-noto text-caption text-muted">
-                    슬롯
-                  </Text>
-                  <Text
-                    testID="itinerary-copick-concept-progress-count"
-                    className="font-noto-bold text-card-title font-bold text-ink"
-                  >
-                    {progress.slotCurrent} / {progress.slotTotal}
-                  </Text>
-                </View>
+                <Text
+                  testID="itinerary-copick-concept-progress-count"
+                  className="font-noto-bold text-card-title font-bold text-ink"
+                >
+                  {progress.slotCurrent}번째 / {progress.slotTotal}
+                </Text>
               </View>
               <View className="flex-row gap-[4px]">
                 {Array.from({ length: Math.max(0, progress.barFilled) }).map(
@@ -169,20 +165,16 @@ export function ConceptPickerScreen({
           )}
 
           <View className="w-full gap-sm">
-            {concepts.map(({ key, label }, index) => {
+            {concepts.map(({ key, label }) => {
               const { Icon, tintClass } =
                 CONCEPT_VISUALS[key] ?? FALLBACK_VISUAL;
-              const borderClass =
-                index === 0
-                  ? 'border-[1.5px] border-primary'
-                  : 'border border-hairline';
               return (
                 <Pressable
                   key={key}
                   testID={`itinerary-copick-concept-${key}`}
                   accessibilityRole="button"
                   onPress={() => onPickConcept(label)}
-                  className={`w-full flex-row items-center gap-md rounded-card bg-canvas px-md py-md ${borderClass}`}
+                  className="w-full flex-row items-center gap-md rounded-card border border-hairline bg-canvas px-md py-md"
                 >
                   <View
                     className={`h-[44px] w-[44px] items-center justify-center rounded-thumb ${tintClass}`}

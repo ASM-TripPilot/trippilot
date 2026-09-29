@@ -22,4 +22,6 @@ export type SlotCandidatesCandidatesItem = {
   tags?: string[];
   /** NULL = 미확보. 대표 1장 */
   imageUrl?: string | null;
+  lat?: number | null;
+  lng?: number | null;
 };

@@ -167,7 +167,8 @@ function bucketLabel(id: PriceBucketId): string {
   return label;
 }
 
-/** 가격대 칩 → 시트 → 버킷 선택. 시트는 고른 뒤에도 열려 있어 같은 라벨이 두 곳에 뜬다(★6). */
+/** 가격대 칩 → 시트 → 버킷 선택. 고르는 순간 시트가 닫힌다(TRIP-1019 Q1) — 칩 라벨은 `within(priceChip())`
+ * 로만 읽는다(시트가 열려 있던 시절엔 같은 라벨이 두 곳에 떴다, ★6). */
 function applyPrice(id: PriceBucketId): void {
   fireEvent.press(priceChip());
   fireEvent.press(screen.getByTestId(`stay-price-option-${id}`));
@@ -179,8 +180,13 @@ function expectPriceCleared(): void {
   expect(within(priceChip()).getByText('가격대')).toBeOnTheScreen();
 }
 
-describe('E-2 · 가격대도 적용 필터로 센다 (TRIP-989 · 01b Q1 · BR-U1-16)', () => {
-  it('가격대만 걸어도 "필터" 배지가 1이 되고, 0곳 카드의 "필터 완화"가 켜진다', async () => {
+// TRIP-1019 #013(결정 3) — "필터 N" 배지는 **필터 시트에서 고른 것**(편의시설·숙소 유형)만 센다. 가격대는
+// 자기 칩이 이미 버킷 이름·선택 얼굴로 드러나므로 배지에서 뺀다(TRIP-989 Q1 "가격도 1로 센다"를 뒤집는다).
+// ★ 짝(필수): 배지에서 가격을 빼도 empty 카드 "필터 완화"는 가격이 걸려 있으면 **켜져 있어야** 한다 —
+// 같은 숫자 하나로 두 일을 하던 자리라(브리프 맹점 ③), 배지 숫자만 줄이면 가격 때문에 0곳이 된 사용자가
+// 갇힌다(INV-4, E-3). 구 E-2("배지 1")를 지우지 않고 새 계약으로 옮겼다.
+describe('E-2 · 가격대는 "필터" 배지에 세지 않되, 0곳의 "필터 완화"는 켠다 (TRIP-1019 #013 · BR-U1-16 · INV-4)', () => {
+  it('가격대만 걸면 "필터" 배지에 숫자가 없고, 0곳 카드의 "필터 완화"는 켜져 있다', async () => {
     render(<StaySearchPage />, { wrapper: createWrapper() });
     await waitFor(() =>
       expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen()
@@ -192,12 +198,66 @@ describe('E-2 · 가격대도 적용 필터로 센다 (TRIP-989 · 01b Q1 · BR-
 
     applyPrice('100k-200k');
 
+    // 앵커: 가격이 실제로 걸려 0곳이 됐다(가격이 안 걸려서 배지가 비는 공허 통과 방지).
     expect(screen.getByTestId('stay-search-empty')).toBeOnTheScreen();
+    expect(priceChip()).toBeSelected();
+    expect(
+      within(priceChip()).getByText(bucketLabel('100k-200k'))
+    ).toBeOnTheScreen();
+    // 금지: 배지에 가격이 세지지 않는다.
+    expect(screen.getByTestId('stay-search-filter-more')).not.toHaveTextContent(
+      /\d/
+    );
+    // 짝: 탈출구는 켜져 있다.
+    expect(screen.getByTestId('stay-search-empty-filter')).not.toBeDisabled();
+  });
+
+  it('편의시설 1개 + 가격대를 걸면 배지는 1이다(가격은 세지 않는다)', async () => {
+    mockSearchParams = { region: '부산', amenity: '오션뷰' };
+    render(<StaySearchPage />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen()
+    );
+    // 준비 확인: 편의시설 하나만 걸린 배지는 1이다.
     expect(screen.getByTestId('stay-search-filter-more')).toHaveTextContent(
       /1/
     );
-    expect(screen.getByTestId('stay-search-empty-filter')).not.toBeDisabled();
+
+    applyPrice('over-200k');
+
+    // 앵커: 가격이 걸려 25만 카드만 남았다.
     expect(priceChip()).toBeSelected();
+    expect(screen.queryByTestId(`stay-card-${KEY_CHEAP}`)).toBeNull();
+    // 배지는 여전히 1 — 2 가 아니다.
+    expect(screen.getByTestId('stay-search-filter-more')).toHaveTextContent(
+      /1/
+    );
+    expect(screen.getByTestId('stay-search-filter-more')).not.toHaveTextContent(
+      /2/
+    );
+  });
+});
+
+// TRIP-1019 #013 · 01b Q1 — "적용" 버튼이 없어졌으니 옵션을 고르는 것이 곧 끝이다. 고르면 적용과 함께 시트가
+// 닫힌다. gorhom 목은 통과형이라 "시트가 화면에서 내려갔는가"는 못 본다 — 페이지가 시트를 **내렸는가**
+// (마운트 해제)까지만 잰다. 실제 슬라이드 닫힘은 6-b.
+describe('PF-close · 옵션을 고르면 적용과 함께 시트가 닫힌다 (TRIP-1019 #013 · 01b Q1)', () => {
+  it('over-200k 를 누르면 목록이 좁혀지고, 가격대 시트가 사라진다', async () => {
+    render(<StaySearchPage />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen()
+    );
+    fireEvent.press(priceChip());
+    // 앵커: 시트가 열렸다(처음부터 없어서 통과하는 부재 단언 방지).
+    expect(screen.getByTestId('stay-price-sheet')).toBeOnTheScreen();
+
+    fireEvent.press(screen.getByTestId('stay-price-option-over-200k'));
+
+    // 적용됐다.
+    expect(screen.queryByTestId(`stay-card-${KEY_CHEAP}`)).toBeNull();
+    expect(priceChip()).toBeSelected();
+    // 닫혔다.
+    expect(screen.queryByTestId('stay-price-sheet')).toBeNull();
   });
 });
 

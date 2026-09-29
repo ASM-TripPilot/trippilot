@@ -4,7 +4,7 @@
 `orchestrator_not_wired()` 를 올린다. 그 설계 자체는 옳다 — 빈 산출물로 위장하지
 않고 명시 실패한다(INV-4). **문제는 그 상태가 CI 를 통과한다는 것이다.**
 
-실측(2026-09-24): `/ai/v1/itinerary/replan` 이 실 배선에서 100% 503 인데
+실측(2026-09-24): `/ai/v1/planb/replan` 이 실 배선에서 100% 503 인데
 `tests/test_api_replan.py` 8건이 전부 초록이었다 — 8건 모두 `create_app()` +
 `get_orchestrator` 오버라이드 **스텁**을 쓰고, 그 파일에 `build_dev_app` 참조가
 0건이다. 계약(`docs/openapi.json`)에는 경로가 출하돼 있어 계약 게이트도 통과한다.

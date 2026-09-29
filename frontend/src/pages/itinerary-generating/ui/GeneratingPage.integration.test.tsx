@@ -52,7 +52,8 @@ const mockMutate = jest.fn(
     }
   }
 );
-/** 세션 cancel(서버 취소) — h09 는 안 써야 한다. 목에 심어 두고 "0 호출"을 잰다(02a ★8). */
+/** 세션 cancel(서버 취소) — 앱바 뒤로에선 안 써야 한다. 목에 심어 두고 "0 호출"을 잰다(02a ★8).
+ * (TRIP-1032 로 다른 여행 409 안내의 [취소하고 새로 만들기]만 cancel 을 쓴다 — 그쪽은 busy 파일 소관.) */
 const mockCancelMutate = jest.fn();
 
 const mockPush = jest.fn();

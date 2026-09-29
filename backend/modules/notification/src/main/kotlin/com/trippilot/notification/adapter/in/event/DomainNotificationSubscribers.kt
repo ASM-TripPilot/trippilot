@@ -43,7 +43,9 @@ class StayRegisteredSubscriber(
             accountId = accountId,
             kind = NotificationKind.STAY,
             title = "숙소가 등록됐어요",
-            body = "$name · ${payload.text("checkIn").orEmpty()} ~ ${payload.text("checkOut").orEmpty()}",
+            // 이름만 싣는다(BR-U6-01 개정 · TRIP-1066). 날짜는 FE 가 등록에 보내지 않게 되면서(TRIP-1052)
+            // "null ~ null" 로 나가던 자리다 — 없는 값을 본문에 채우지 않는다(BR-U6-03).
+            body = name,
             sourceEventId = envelope.eventId,
             // 같은 숙소를 다시 등록하는 일은 없지만(행이 새로 생긴다), 억제 판정의 재료는 남긴다.
             dedupKey = "STAY#${envelope.aggregateId}",

@@ -11,12 +11,13 @@ import { RegionPickerPage } from './RegionPickerPage';
  *
  * 무엇을 보장하나: 위저드(purpose=trip)에서 지역을 고르면 스토어 기간과 상관없이 1박으로 담긴다.
  * 한때(01b Q1 권고) "기간이 있고 첫 여행지면 박수 = 기간"으로 담았는데, 그러면 기간 → 서울 → 부산
- * 순서에서 합이 기간 + 1이 되어 '다음'이 막혔다(순서 의존 회귀, 03b 경고-1). 그래서 되돌렸다 —
- * 남은 밤은 2/4 채움과 1/4 안내 한 줄이 맡는다. (1/4 기간 시트 "적용"의 단일 여행지 동기화는 D7 본문이라 유지.)
+ * 순서에서 합이 기간 + 1이 되어 '다음'이 막혔다(순서 의존 회귀, 03b 경고-1). 그래서 되돌렸다.
+ * TRIP-1027부터는 반대로 **기간이 박수를 따라간다** — 시작 날짜가 있으면 담는 순간 끝 날짜가
+ * 1박만큼 늘어난다(스토어가 다시 계산, 아래 TRIP-1027 describe).
  *
  * 왜 실제 스토어인가: 형제 `RegionPickerPage.integration.test.tsx` 는 스토어를 목으로 갈아 끼워
  * `addDestination` 호출 인자만 본다. 여기서는 "담긴 결과"를 스토어에서 직접 읽는다.
- * 순서 사슬(기간 → 두 곳 → 1/4 안내·다음)은 페이지 두 개를 잇는 일이라
+ * 순서 사슬(담기·시작 고르기·박수 바꾸기 → 1/4 다음)은 페이지 두 개를 잇는 일이라
  * `src/__tests__/tripNightsPeriodOrder.test.tsx` 에 있다(pages 형제 import 금지).
  *
  * ⚠️ 모듈 싱글턴 스토어 — 리셋을 파일 최상위 beforeEach·afterEach 둘 다에 건다(02a ★9).
@@ -97,7 +98,7 @@ describe('TRIP-1010 · 지역 선택은 기간과 상관없이 1박으로 담는
     const [seoul] = store().destinations;
     expect(store().destinations).toHaveLength(1);
     expect(seoul.region).toBe('서울특별시');
-    // 기간(2박)을 따라가지 않는다 — 남은 1박은 1/4 안내·2/4 채움이 맡는다.
+    // 기간(2박)을 따라가지 않는다 — 박수는 늘 1박으로 담긴다.
     expect(seoul.nights).toBe(1);
     expect(mockBack).toHaveBeenCalledTimes(1);
   });
@@ -125,5 +126,37 @@ describe('TRIP-1010 · 지역 선택은 기간과 상관없이 1박으로 담는
 
     expect(store().destinations).toHaveLength(1);
     expect(store().destinations[0].nights).toBe(1);
+  });
+});
+
+describe('TRIP-1027 AC-3 · 시작 날짜가 있으면 담는 순간 끝 날짜가 늘어난다', () => {
+  it('당일(6/10–6/10) · 여행지 0곳에서 서울을 고르면 서울 1박으로 담기고 끝이 6/11 이 된다', () => {
+    // 준비 — 1/4 에서 여행지 없이 시작만 고른 상태(끝 = 시작). "아직 0곳" 앵커.
+    store().setPeriod(undefined, '2026-06-10', '2026-06-10');
+    expect(store().destinations).toHaveLength(0);
+    render(<RegionPickerPage />);
+
+    // 실행
+    pickSeoul();
+
+    // 단언 — 박수는 1박, 시작은 그대로, 끝은 시작 + 1.
+    expect(store().destinations).toHaveLength(1);
+    expect(store().destinations[0].nights).toBe(1);
+    expect(store().startDate).toBe('2026-06-10');
+    expect(store().endDate).toBe('2026-06-11');
+    expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('🔴 TRIP-1042 AC-12 · 지역 피커가 쥔 코드가 스토어 목적지에 담긴다 (맹점 ①)', () => {
+  it('서울(11)을 고르면 목적지에 이름과 함께 regionCode 11 이 담긴다', () => {
+    expect(store().destinations).toHaveLength(0);
+    render(<RegionPickerPage />);
+
+    pickSeoul();
+
+    const [seoul] = store().destinations;
+    expect(seoul.region).toBe('서울특별시');
+    expect(seoul.regionCode).toBe('11');
   });
 });

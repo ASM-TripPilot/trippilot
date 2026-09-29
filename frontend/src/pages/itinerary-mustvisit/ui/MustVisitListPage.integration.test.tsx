@@ -18,6 +18,7 @@ import type {
   SavedPlace,
 } from '@/shared/api/generated/schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { resetPressGuard } from '@/shared/press/pressGuard';
 
 import { MustVisitListPage } from './MustVisitListPage';
 
@@ -136,6 +137,7 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+  resetPressGuard(); // TRIP-1013 — 연타 가드 창(모듈 전역)이 앞 테스트에서 새지 않게 닫는다.
   observedHits = [];
   listStatus = null;
   releaseHeldResponse = null;
@@ -664,6 +666,54 @@ describe('🔴 TRIP-982 B3 · 0곳 → 생성 중 (D7)', () => {
         successRoute: '/trips/[tripId]/itinerary/copick/[slotKey]',
       },
     });
+    expect(hitsFor('POST', '/must-visits')).toBe(0);
+    expect(hitsFor('DELETE', '/must-visits')).toBe(0);
+  });
+});
+
+/**
+ * TRIP-1093 결정 3 — h02 의 「꼭 갈 곳 추가」 두 버튼은 d02 를 **select 모드 + 이 여행 id** 로 연다.
+ * (TRIP-1022 결정 2 "save 모드 문자열 push" 를 뒤집는다.)
+ *
+ * 무엇을 보장하나(01 AC-4):
+ *  - 0곳·목록 두 얼굴 어느 버튼이든 push 는 `{ pathname: '/explore/saved-places', params: { mode:
+ *    'select', tripId } }` **한 건**이다. `mock.calls` 전체를 완전 일치로 재므로 문자열 save 모드 push 가
+ *    섞이거나 두 번 불려도 red.
+ *  - 버튼은 이동만 한다 — 필수 방문지 POST·DELETE 는 0건(추가는 d02 완료가 한다).
+ */
+const SELECT_FOR_TRIP = {
+  pathname: '/explore/saved-places',
+  params: { mode: 'select', tripId: TRIP_ID },
+};
+
+describe('🔴 TRIP-1093 L4 · AC-4 — h02 추가 버튼 → d02 select tripId 모드, 요청 0건', () => {
+  it('0곳 얼굴의 버튼을 누르면 select+tripId 로 1회 이동하고 must-visits 요청이 0건이다', async () => {
+    // 준비 — 서버에 담은 필수 방문지가 0곳이다.
+    mustVisitStore = [];
+    renderPage();
+    await screen.findByTestId('itinerary-mustvisit-screen-empty');
+
+    // 실행 — 버튼은 점선 안내 밖에 있다(화면 전체에서 찾는다).
+    fireEvent.press(screen.getByTestId('itinerary-mustvisit-screen-empty-add'));
+
+    // 단언
+    await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+    expect(mockPush.mock.calls).toEqual([[SELECT_FOR_TRIP]]);
+    expect(hitsFor('POST', '/must-visits')).toBe(0);
+    expect(hitsFor('DELETE', '/must-visits')).toBe(0);
+  });
+
+  it('목록 얼굴의 버튼을 누르면 같은 곳으로 1회 이동하고 must-visits 요청이 0건이다', async () => {
+    // 준비 — beforeEach 기본 3곳(목록 얼굴).
+    renderPage();
+    await screen.findByTestId('itinerary-mustvisit-screen-add');
+
+    // 실행
+    fireEvent.press(screen.getByTestId('itinerary-mustvisit-screen-add'));
+
+    // 단언
+    await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+    expect(mockPush.mock.calls).toEqual([[SELECT_FOR_TRIP]]);
     expect(hitsFor('POST', '/must-visits')).toBe(0);
     expect(hitsFor('DELETE', '/must-visits')).toBe(0);
   });

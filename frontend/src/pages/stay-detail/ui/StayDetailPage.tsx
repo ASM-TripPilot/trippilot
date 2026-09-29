@@ -6,7 +6,7 @@
  * 않는다). 조회 결과를 화면의 `state` 로 번역한다: 응답 전=loading · 404=notFound · 400 또는 stayId
  * 없음=invalid · 그 밖(5xx·네트워크)=error(INV-4). 404·400 은 다시 해도 같으므로 자동 재시도를 끈다
  * (운영 QueryClient 기본 3회 → 약 7초 로딩 방지, AC-13). 재시도는 error 얼굴의 버튼이 맡는다.
- * 저장 하트·"일정에 추가"는 `useSavedStays`(TRIP-417 토글 훅) 하나가 소유하고, 미인증은 요청 없이
+ * 저장 하트는 `useSavedStays`(TRIP-417 토글 훅) 하나가 소유하고, 미인증은 요청 없이
  * 로그인으로 보낸다(BR-U1-03·55, 죽은 버튼 회피). "외부에서 예약하기"는 제휴 시트(BR-U1-30) →
  * [이동] 웹검색 폴백(`openStayOutbound`, BR-U1-31).
  *
@@ -39,7 +39,10 @@ import type {
 } from '@/shared/api/generated/schemas';
 
 import { useSavedStays } from '@/features/stay/model/savedStays';
-import { openStayOutbound } from '@/features/stay/model/stayOutbound';
+import {
+  openStayOutbound,
+  stayOutboundMode,
+} from '@/features/stay/model/stayOutbound';
 import { stayKey } from '@/features/stay/model/stayKey';
 import { OtaChoiceSheet } from '@/features/stay/ui/OtaChoiceSheet';
 import {
@@ -79,7 +82,7 @@ export function StayDetailPage(): ReactElement {
     query: { enabled: stayId !== '', retry: false },
   });
   const state = resolveDetailState(stayId, detailQuery);
-  // 저장·예약·일정 추가는 조회 결과(StayItem 상위집합)로만 한다 — 응답 전엔 null 이라 버튼도 없다.
+  // 저장·예약은 조회 결과(StayItem 상위집합)로만 한다 — 응답 전엔 null 이라 버튼도 없다.
   const item = state.kind === 'ready' ? state.detail : null;
 
   // isAuthed는 렌더 시점 1회 동기 판정(StaySearchPage·PlaceExplorePage 선례 — "판정 대기" 제3
@@ -88,7 +91,6 @@ export function StayDetailPage(): ReactElement {
   const { isSaved, save, remove } = useSavedStays({ isAuthed });
 
   const [pending, setPending] = useState(false);
-  const [addedNotice, setAddedNotice] = useState(false);
   const [otaOpen, setOtaOpen] = useState(false);
   const [outboundError, setOutboundError] = useState(false);
   const [dontShowAgain, setDontShowAgain] = useState(false);
@@ -140,23 +142,6 @@ export function StayDetailPage(): ReactElement {
     }
   }
 
-  // "일정에 추가" = 담기(거점 후보 편입) + 안내(AC-10). 미인증은 로그인 유도(죽은 버튼 아님).
-  async function handleAddToTrip(): Promise<void> {
-    if (item === null) {
-      return;
-    }
-    setPending(true);
-    const outcome = await save(item);
-    setPending(false);
-    if (outcome.kind === 'failed' && outcome.reason === 'unauthenticated') {
-      router.push('/(auth)/login');
-      return;
-    }
-    if (outcome.kind === 'saved') {
-      setAddedNotice(true);
-    }
-  }
-
   // 웹검색 폴백으로 연다(01b Q2). 성공하면 시트를 닫고, 실패하면 시트를 error 얼굴로 연다 — 생략
   // 경로(시트가 닫혀 있던 때)도 같다. 침묵 금지(BR-U1-55).
   async function runOutbound(): Promise<void> {
@@ -199,10 +184,8 @@ export function StayDetailPage(): ReactElement {
         state={state}
         saved={saved}
         pending={pending}
-        addedNotice={addedNotice}
         onToggleSave={() => void handleToggleSave()}
         onPressBook={handlePressBook}
-        onPressAddToTrip={() => void handleAddToTrip()}
         onPressBack={() => router.back()}
         // 전화 앱이 없으면(시뮬레이터 등) 열기가 실패한다 — 부가 동선이라 삼킨다(TRIP-940 Q5).
         onPressPhone={() => {
@@ -211,9 +194,15 @@ export function StayDetailPage(): ReactElement {
           }
         }}
         onRetry={() => void detailQuery.refetch()}
-        // 딥링크 URL 계약이 없어 이름만 나른다(장소 상세 선례, TRIP-989 Q5).
+        // 딥링크 URL 계약이 없어 링크는 안 붙인다(TRIP-989 Q5). 주소가 비어 있지 않을 때만 둘째 줄로 붙인다
+        // (TRIP-1019 #017) — null·키 없음·"" 은 이름만(`"undefined"`·빈 줄이 새지 않게 truthy 로 가른다).
         onPressShare={() => {
-          if (item !== null) void Share.share({ message: item.name });
+          if (item !== null)
+            void Share.share({
+              message: item.address
+                ? `${item.name}\n${item.address}`
+                : item.name,
+            });
         }}
       />
       {otaOpen && item !== null ? (
@@ -223,6 +212,8 @@ export function StayDetailPage(): ReactElement {
           dontShowAgain={dontShowAgain}
           onToggleDontShowAgain={() => setDontShowAgain((on) => !on)}
           showDontShowAgain={isAuthed}
+          // 이동 방식이 시트 얼굴(수수료 고지 유무)을 정한다 — 지금은 늘 웹검색(TRIP-1019 #018).
+          outbound={stayOutboundMode()}
           onCancel={handleCancelOutbound}
           onConfirm={handleConfirmOutbound}
           onRetry={() => void runOutbound()}

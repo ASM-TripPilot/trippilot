@@ -24,7 +24,6 @@ import {
   type SavedStayCardVM,
   type SavedStayFace,
 } from '@/features/stay/ui/SavedStayListScreen';
-import { formatStayDateRange } from '@/features/trip/model/stayDateImport';
 import { useSavedStays } from '@/features/trip/model/useSavedStays';
 
 export function SavedStayPage(): ReactElement {
@@ -48,11 +47,6 @@ export function SavedStayPage(): ReactElement {
   const cards: SavedStayCardVM[] = savedStays.map((stay) => ({
     savedStayId: stay.savedStayId,
     name: stay.name,
-    // 날짜라벨은 체크인/아웃 둘 다 있을 때만(INV-3 — 소요시간 아니라 날짜, d02 StayRowVM 동형).
-    dateLabel:
-      stay.checkIn && stay.checkOut
-        ? formatStayDateRange(stay.checkIn, stay.checkOut)
-        : undefined,
   }));
 
   function handlePressCard(savedStayId: string): void {
