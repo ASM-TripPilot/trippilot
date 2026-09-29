@@ -505,7 +505,7 @@ export function PlaceExploreScreen({
           columnWrapperStyle={{ justifyContent: 'space-between' }}
           contentContainerStyle={{
             paddingHorizontal: 16,
-            // FAB(absolute bottom-100+h-56=156)·페이지 복제 탭바(~96) 오버레이가 마지막 행을
+            // FAB(absolute bottom-84+h-56=140 — 여백 156 은 그 위 16 여유)·페이지 복제 탭바(~96) 오버레이가 마지막 행을
             // 가리지 않도록 스크롤 끝 여백 확보(DestinationDetail·ExploreLanding과 같은 값).
             paddingBottom: 156,
             flexGrow: 1,
@@ -576,7 +576,7 @@ export function PlaceExploreScreen({
             아래=＋ 여행 만들기(핑크 원). CtaBar(담은 수>0 조건부)를 대체한다 — 담은 수·상태
             얼굴과 무관하게 상시 노출한다(Figma). 콜백은 옵셔널(♥)이라 미전달이면 무동작.
             단 `hideCreateTrip`(위저드 출처, TRIP-1026)이면 ＋만 빠지고 ♥가 그 자리로 내려앉는다. */}
-        <View className="absolute bottom-[100px] right-lg items-end gap-md">
+        <View className="absolute bottom-[84px] right-lg items-end gap-md">
           <Pressable
             testID="explore-places-saved-fab"
             accessibilityRole="button"

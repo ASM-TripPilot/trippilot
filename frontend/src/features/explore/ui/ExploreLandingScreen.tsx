@@ -13,7 +13,7 @@
  *
  * 우하단 FAB 은 세로 2단이다(TRIP-703): 위=담은 곳 saved-menu 하트(TRIP-494 — 누르면 담은
  * 장소→d02 · 저장한 숙소→e04 두 미니 FAB 으로 펼쳐진다) · 아래=＋ 여행 만들기(→g01, 라우트가
- * onPressCreateTrip 을 배선). FAB 은 탭바(오버레이) 위에 뜨는 고정 요소다(bottom-[100px]).
+ * onPressCreateTrip 을 배선). FAB 은 탭바(오버레이) 위에 뜨는 고정 요소다(bottom-[84px]).
  * 스크롤 콘텐츠 하단 여백을 넉넉히 둬 마지막 항목이 안 가리게 한다. 탭바는 SafeArea 를 모르는
  * 순수 뷰다(repo-trap).
  */
@@ -438,7 +438,7 @@ export function ExploreLandingScreen({
             나온다) · 아래=＋ 여행 만들기. items-end 로 둘 다 오른쪽에 정렬한다. 로딩 중엔 조작
             대상이 없어 통째로 미렌더한다(TRIP-704). */}
         {isLoading ? null : (
-          <View className="absolute bottom-[100px] right-lg items-end gap-md">
+          <View className="absolute bottom-[84px] right-lg items-end gap-md">
             <View className="flex-row items-center gap-md">
               {savedMenu.open ? (
                 <>

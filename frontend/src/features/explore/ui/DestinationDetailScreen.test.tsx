@@ -993,3 +993,28 @@ describe('🔴 G-FAB · 격자 오른쪽 여백 ≥ FAB 폭 (TRIP-1076 AC-8)', (
     expect(rightInset(grid)).toBeGreaterThanOrEqual(FAB_WIDTH);
   });
 });
+
+// TRIP-1103 AC-1 — FAB 묶음 루트 View 에는 testID 가 없다. FAB 에서 조상으로 올라가 처음 만나는
+// `absolute` 노드가 묶음 루트다(02a ★1). 하트 토글은 flex-row 행 안에 한 겹 더 들어 있다.
+function fabBundleRoot(fabTestId: string) {
+  let node = screen.getByTestId(fabTestId).parent;
+  while (node) {
+    const tokens = String(node.props.className ?? '').split(/\s+/);
+    if (tokens.includes('absolute')) return node;
+    node = node.parent;
+  }
+  throw new Error(`${fabTestId} 위에 absolute 조상이 없다`);
+}
+
+describe('TRIP-1103 AC-1 · 목적지 상세 FAB 묶음 바닥 오프셋 84 (Figma d05 fabCollapsed 바닥 84)', () => {
+  it('♥·＋ FAB 묶음 루트가 bottom-[84px] 이고 bottom-[100px] 은 없다', () => {
+    render(<DestinationDetailScreen {...baseProps()} />);
+
+    const root = fabBundleRoot('destination-detail-create-trip-fab');
+    // 앵커 — 하트 토글(행 한 겹 안쪽)도 같은 묶음 루트에 닿는다.
+    expect(fabBundleRoot('destination-detail-saved-menu-toggle')).toBe(root);
+    const tokens = String(root.props.className ?? '').split(/\s+/);
+    expect(tokens).toContain('bottom-[84px]');
+    expect(tokens).not.toContain('bottom-[100px]');
+  });
+});

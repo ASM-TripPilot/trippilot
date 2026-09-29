@@ -289,7 +289,7 @@ export function DestinationDetailScreen({
         <ScrollView
           className="flex-1"
           showsVerticalScrollIndicator={false}
-          // FAB(absolute bottom-100+h-56=156)·복제 탭바(96) 오버레이가 마지막 레인을
+          // FAB(absolute bottom-84+h-56=140 — 여백 156 은 그 위 16 여유)·복제 탭바(96) 오버레이가 마지막 레인을
           // 가리지 않도록 스크롤 끝 여백을 156까지 확보한다(ExploreLandingScreen·
           // StaySearchScreen과 같은 값).
           contentContainerStyle={{
@@ -427,7 +427,7 @@ export function DestinationDetailScreen({
             className="absolute inset-0 bg-scrim/40"
           />
         ) : null}
-        <View className="absolute bottom-[100px] right-lg items-end gap-md">
+        <View className="absolute bottom-[84px] right-lg items-end gap-md">
           <View className="flex-row items-center gap-md">
             {savedMenu.open ? (
               <>

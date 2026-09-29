@@ -60,6 +60,7 @@
 - `src/__tests__/entitiesTripStructure.test.ts`  →  (export 없음)
 - `src/__tests__/executionDurationStructure.test.ts`  →  (export 없음)
 - `src/__tests__/exploreLandingAxisRemoval.test.ts`  →  (export 없음)
+- `src/__tests__/fabBottomOffsetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/fsdLayerStructure.test.ts`  →  (export 없음)
 - `src/__tests__/fsdStructure.test.ts`  →  (export 없음)
 - `src/__tests__/generatingRouteModePassthrough.test.tsx`  →  (export 없음)
@@ -1487,4 +1488,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 1039개 파일
+합계 1040개 파일

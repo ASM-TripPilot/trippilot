@@ -641,7 +641,7 @@ export function StaySearchScreen({
           accessibilityLabel="담은 숙소"
           onPress={onPressSaved}
           style={fabShadow}
-          className="absolute bottom-[152px] right-lg h-14 w-14 items-center justify-center rounded-pill border border-hairline bg-canvas"
+          className="absolute bottom-[152px] right-lg h-[56px] w-[56px] items-center justify-center rounded-pill border border-hairline bg-canvas"
         >
           <HeartFilledGlyph size={26} />
         </Pressable>
@@ -651,7 +651,7 @@ export function StaySearchScreen({
           accessibilityLabel="숙소 등록"
           onPress={onPressRegister}
           style={fabShadow}
-          className="absolute bottom-[84px] right-lg h-14 w-14 items-center justify-center rounded-pill bg-primary"
+          className="absolute bottom-[84px] right-lg h-[56px] w-[56px] items-center justify-center rounded-pill bg-primary"
         >
           <PlusGlyph size={24} tone="onPrimary" />
         </Pressable>
