@@ -21,6 +21,7 @@ import {
   budgetForTier,
   formatBudgetAmount,
   parseBudgetAmount,
+  tierForAmount,
   type BudgetTier,
 } from '@/features/trip/model/budgetAmount';
 import { buildCreateTripRequest } from '@/features/trip/model/createTripRequest';
@@ -111,6 +112,19 @@ function isPrefillableBudget(
   return typeof value === 'number' && Number.isInteger(value) && value >= 0;
 }
 
+/** 요약 행·시트 재오픈 칩의 등급(TRIP-1091) — 스토어에 커밋된 금액이 > 0 이면 그 금액의 역산 등급,
+ * 아니면(미적용·0·invalid) 프리필 tier. 프리필 금액은 역산하지 않는다 — 한 번도 안 건드린 여행은
+ * 온보딩 등급 그대로다(서버는 rawAmount·tier 정합을 검사하지 않는다). */
+function appliedBudgetTier(
+  storeText: string,
+  prefillTier: string | undefined
+): string | undefined {
+  const applied = parseBudgetAmount(storeText);
+  return applied.kind === 'amount' && applied.amount > 0
+    ? tierForAmount(applied.amount)
+    : prefillTier;
+}
+
 export interface TripNewStep1PageProps {
   /** 달력 기준 '오늘' 주입점('YYYY-MM-DD') — 기간 편집 시트(S3)의 과거 셀 비활성·이전 달 하한
    * 기준이다. 테스트가 이 값을 주입해 결정론이 된다. 미지정이면 실시계(`seoulDate`·KST)로 폴백한다
@@ -190,6 +204,7 @@ export function TripNewStep1Page({
       ? storeBudgetText
       : prefillBudgetText;
   const parsedBudget = parseBudgetAmount(effectiveBudgetText);
+  const budgetTierLabel = appliedBudgetTier(storeBudgetText, tierLabel);
 
   // 요약 5행 도출 — 미선택은 셀렉터가 `null` 을 낸다(화면이 플레이스홀더로 그린다).
   const summaryDestinationsValue = summaryDestinations(destinations);
@@ -210,7 +225,7 @@ export function TripNewStep1Page({
   //    표시=제출 대칭이 유지된다(budgetSheet AC-S6D-1 — 0 이면 요약도 "예산 선택", 제출도 미전송).
   const summaryBudgetValue =
     parsedBudget.kind === 'amount' && parsedBudget.amount > 0
-      ? summaryBudget(parsedBudget.amount, tierLabel)
+      ? summaryBudget(parsedBudget.amount, budgetTierLabel)
       : parsedBudget.kind === 'empty'
         ? summaryBudget(0, tierLabel)
         : null;
@@ -242,7 +257,7 @@ export function TripNewStep1Page({
   const [prefSheetOpen, setPrefSheetOpen] = useState(false);
   const [prefDraftStyles, setPrefDraftStyles] = useState<string[]>([]);
   // 예산 편집 시트(TRIP-670) — 시트가 무상태(D4)라 개폐·편집 드래프트를 배선이 소유한다.
-  // 열 때 effective 예산 문자열·프리필 tier 에서 초기화하고, 금액/tier press 는 이 드래프트만
+  // 열 때 effective 예산 문자열·`appliedBudgetTier`(커밋 금액 역산 ?? 프리필 tier)에서 초기화하고, 금액/tier press 는 이 드래프트만
   // 갱신한다(적용 전 store 불변) — "적용"에서만 `setBudgetText` 로 커밋한다(tier 는 커밋 안 함).
   const [budgetSheetOpen, setBudgetSheetOpen] = useState(false);
   const [draftAmountText, setDraftAmountText] = useState('');
@@ -418,8 +433,8 @@ export function TripNewStep1Page({
     );
   }
 
-  /** 예산 시트 열기 — 드래프트를 effective 예산 문자열(스토어 유효 ? 스토어 : 프리필)·프리필 tier 에서
-   * 초기화한다(D3). 스토어는 `getState()`로 여는 순간 값을 읽고(`openCompanionSheet` 선례), 프리필은
+  /** 예산 시트 열기 — 드래프트를 effective 예산 문자열(스토어 유효 ? 스토어 : 프리필)·등급(커밋 금액 > 0
+   * 이면 역산, 아니면 프리필 tier — TRIP-1091, 요약 행과 같은 출처)에서 초기화한다(D3). 스토어는 `getState()`로 여는 순간 값을 읽고(`openCompanionSheet` 선례), 프리필은
    * render 클로저값(react-query 라 store 를 안 타 클로저가 곧 최신값). */
   function openBudgetSheet(): void {
     // 프리필 미도착이면 열지 않는다(S6G) — 빈 드래프트로 열리는 것을 막아 취향 시트와 결을 맞춘다.
@@ -431,7 +446,7 @@ export function TripNewStep1Page({
         ? currentBudgetText
         : prefillBudgetText
     );
-    setDraftTier(tierLabel);
+    setDraftTier(appliedBudgetTier(currentBudgetText, tierLabel));
     setBudgetSheetOpen(true);
   }
 

@@ -37,7 +37,7 @@ import { SHEET_HANDLE_INDICATOR_STYLE } from '@/features/trip/lib/sheetHandle';
 export interface BudgetEditSheetProps {
   /** 드래프트 금액 원문(배선 소유) — TextInput 표시값(formatBudgetAmount 로 포맷된 콤마 문자열). */
   amountText: string;
-  /** 활성 tier(한국어 '저가'|'중간'|'고급'|'럭셔리', 프리필 파생) — 하이라이트. */
+  /** 활성 tier(한국어 '저가'|'중간'|'고급'|'럭셔리', 배선이 커밋 금액 역산 ?? 프리필로 도출) — 하이라이트. */
   tier?: string;
   /** 금액 오류 문구(파싱 실패·빈 금액, 배선이 도출) — 있으면 오류를 그린다. */
   budgetError?: string;

@@ -53,3 +53,13 @@ const BUDGET_TIER_AMOUNT: Record<BudgetTier, number> = {
 export function budgetForTier(tier: BudgetTier): number {
   return BUDGET_TIER_AMOUNT[tier];
 }
+
+/** 금액 → 등급 역산(TRIP-1091 결정 1) — 하한 포함·상한 제외. 경계는 온보딩 `BUDGET_OPTIONS` 라벨
+ * (~50만·50~150만·150~300만·300만+)의 사본이다 — 형제 feature 라 import 할 수 없어, 라벨이 바뀌어도
+ * 이 숫자는 안 따라간다. */
+export function tierForAmount(amount: number): BudgetTier {
+  if (amount < 500000) return '저가';
+  if (amount < 1500000) return '중간';
+  if (amount < 3000000) return '고급';
+  return '럭셔리';
+}
