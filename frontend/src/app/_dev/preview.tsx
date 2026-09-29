@@ -6625,6 +6625,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   // 제목·기간·박수, 실사진·통계 없음 — Q2 degrade)를 한 화면에서 육안 대조한다. 코랄 pill 색·정렬·회색 chevron
   // 픽셀은 jest 사각이라 이 키가 유일한 육안 그물(6-b). empty 얼굴은 화면 isEmpty 분기·RecordsCalendarScreen.test
   // 가 계속 잠그므로 별도 프리뷰 키를 두지 않는다(TRIP-767 로 records-calendar-empty 키 삭제).
+  // TRIP-1120 — Figma 4761:2930: 앱바 아래 진행 중 카드(부산 여행 2일차) + 부산 줄 `›`, 미래 제주 줄은 `›` 없음.
   {
     key: 'records-calendar-default',
     band: 'j',
@@ -6635,8 +6636,24 @@ export const PREVIEW_STATES: PreviewState[] = [
         monthLabel="2026년 6월"
         grid={buildMonthGrid('2026-06')}
         markedDays={['2026-06-10', '2026-06-11', '2026-06-12']}
+        ongoingTrip={{
+          tripId: 't-busan',
+          title: '부산 여행',
+          dateRangeLabel: '2026.6.10–6.12',
+          dayLabel: '2일차',
+        }}
+        onPressOngoingRecords={noop}
+        onPressOngoingHub={noop}
+        openableTripIds={new Set(['t-busan'])}
         monthLegends={{
           rows: [
+            {
+              kind: 'trip',
+              tripId: 't-jeju-future',
+              title: '제주 여행',
+              dateRangeLabel: '6.24–6.26',
+              nightsLabel: '2박 3일',
+            },
             {
               kind: 'trip',
               tripId: 't-busan',
@@ -6678,6 +6695,8 @@ export const PREVIEW_STATES: PreviewState[] = [
   // j07 legend 3줄 + 더 보기(TRIP-1084) — Figma 채택안 4699:2630(접힘)과 1:1. 같은 기간 묶음 2줄('외 5'·
   // '외 3', 후자는 서울 3 + 강진 1) + 개별 3줄 중 앞 3줄과 '더 보기 2'. 펼침(4699:2803)과 묶음 펼침은 이
   // 키에서 탭으로 본다. 줄 간격 32·들여쓰기 33·chevron 방향은 jest 사각이라 이 키가 육안 그물(6-b).
+  // TRIP-1120 — Figma 4761:3107(접힘)·4761:3301(펼침, 더 보기 탭): 서울특별시 여행 카드(9/29 가정 2일차,
+  // 제목만 — '외 N' 없음) + 9월 줄 전부 `›`(모두 시작 ≤ 오늘).
   {
     key: 'records-calendar-legend-more',
     band: 'j',
@@ -6693,6 +6712,23 @@ export const PREVIEW_STATES: PreviewState[] = [
           ...['28', '29', '30'],
         ].map((day) => `2026-09-${day}`)}
         monthLegends={RECORDS_CALENDAR_LEGEND_MORE}
+        ongoingTrip={{
+          tripId: 's1',
+          title: '서울특별시 여행',
+          dateRangeLabel: '2026.9.28–9.30',
+          dayLabel: '2일차',
+        }}
+        onPressOngoingRecords={noop}
+        onPressOngoingHub={noop}
+        openableTripIds={
+          new Set(
+            RECORDS_CALENDAR_LEGEND_MORE.rows.flatMap((row) =>
+              row.kind === 'group'
+                ? row.members.map((member) => member.tripId)
+                : [row.tripId]
+            )
+          )
+        }
         pastTrips={[
           {
             tripId: 'p-busan',

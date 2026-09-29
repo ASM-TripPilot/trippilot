@@ -1,10 +1,13 @@
-import type { Trip } from '@/shared/api/generated/schemas';
+import type { ItineraryStatus, Trip } from '@/shared/api/generated/schemas';
 import { buildMonthGrid, isDateInRange } from '@/shared/date/monthGrid';
+import { formatDayLabel } from '@/entities/trip/lib/formatDayLabel';
 import {
   formatLegendDateRange,
   formatTripDateRange,
 } from '@/entities/trip/lib/formatTripPeriod';
 import { nightsLabel } from '@/entities/trip/lib/formatNights';
+import { tripDayNumber } from '@/entities/trip/lib/tripDayNumber';
+import { isTripOngoing } from '@/entities/trip/lib/tripPhase';
 import type { PastTripCardVM } from '@/entities/trip/model';
 
 /**
@@ -188,4 +191,71 @@ export function recordsTripIdForDate(
     }
   }
   return picked?.tripId ?? null;
+}
+
+/**
+ * TRIP-1120 · legend `›` 를 달 여행 — 누르면 실제로 이동하는 여행(`canOpenTripRecords`)과 같은 집합.
+ * 페이지의 legend 누름 판정도 이 집합을 봐서 `›` 와 이동이 갈라지지 않는다.
+ */
+export function openableTripIds(
+  trips: readonly (Trip | null)[] | null | undefined,
+  today: string
+): ReadonlySet<string> {
+  return new Set(
+    safeList(trips)
+      .filter((trip) => canOpenTripRecords(trip, today))
+      .map((trip) => trip.tripId)
+  );
+}
+
+/**
+ * 페이지가 여행별 일정 조회를 접은 값 — 확정 여부(`'CONFIRMED'` 등) · 404 = `undefined`(일정 없음,
+ * 아는 값) · `'unknown'`(대기·404 아닌 실패 — 모름).
+ */
+export interface OngoingTripEntry {
+  trip: Trip;
+  itinerary: ItineraryStatus | undefined | 'unknown';
+}
+
+/** j07 진행 중 카드 한 장. */
+export interface OngoingTripCardVM {
+  tripId: string;
+  title: string;
+  dateRangeLabel: string | null;
+  /** 'N일차'(시작 당일 1) — 순번이지 소요시간이 아니다(INV-3). */
+  dayLabel: string;
+}
+
+/** a 가 b 보다 앞(시작일 최신 → 종료일 최신 → tripId 오름차순)인가. */
+function isAheadOf(a: Trip, b: Trip): boolean {
+  if (a.startDate !== b.startDate) return a.startDate > b.startDate;
+  if (a.endDate !== b.endDate) return a.endDate > b.endDate;
+  return a.tripId < b.tripId;
+}
+
+/**
+ * TRIP-1120 · 진행 중(일정 확정 × 오늘이 기간 안 — 서버 `Trip.status` 는 보지 않는다) 여행 한 장.
+ * 오늘이 기간 안인 여행 중 하나라도 일정을 모르면 `null` — 날짜만으로 먼저 그렸다가 뒤집지 않는다(INV-4).
+ * 기간 밖 여행을 모르는 것은 결과를 바꾸지 않는다. 입력을 바꾸지 않는다.
+ */
+export function pickOngoingTrip(
+  entries: readonly OngoingTripEntry[],
+  today: string
+): OngoingTripCardVM | null {
+  let picked: Trip | null = null;
+  for (const { trip, itinerary } of entries) {
+    if (itinerary === 'unknown') {
+      if (isDateInRange(today, trip.startDate, trip.endDate)) return null;
+      continue;
+    }
+    if (!isTripOngoing(trip, itinerary, today)) continue;
+    if (picked === null || isAheadOf(trip, picked)) picked = trip;
+  }
+  if (picked === null) return null;
+  return {
+    tripId: picked.tripId,
+    title: picked.title,
+    dateRangeLabel: formatTripDateRange(picked.startDate, picked.endDate),
+    dayLabel: formatDayLabel(tripDayNumber(picked.startDate, today)),
+  };
 }

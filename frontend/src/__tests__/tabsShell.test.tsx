@@ -3,6 +3,7 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { capturedTabsProps } from '@/test-support/expoRouterTabsMock';
+import { renderWithQueryClient } from '@/test-support/myPageItineraries';
 
 /**
  * AC-6~AC-8 · SC-1 · SC-4 · SC-5 — `(tabs)` 레이아웃·어댑터·라우트 래퍼.
@@ -31,8 +32,14 @@ jest.mock('expo-router', () => require('@/test-support/expoRouterTabsMock'));
 // (tabs)/index.tsx 가 TRIP-371 로 useGetTrips·useSavedPlaces 를 물면서, IndexRoute 를 직접
 // 렌더하는 아래 SC-1 이 QueryClient 부재로 크래시한다 — discovery(빈 목록·담김 0)로 목킹해
 // home-dashboard-root 만 뜨게 둔다. 목적지 왕복·얼굴 판정은 tabsHomeRoute.test.tsx 가 진다.
+// TRIP-1120 — 기록 탭 페이지가 여행별 일정을 `useQueries` 로 조회한다. 옵션 함수도 같은 목에
+// 둔다(일정은 영영 안 온다 — tabsRecordsRoute.test.tsx 기본 대본과 같다).
 jest.mock('@/shared/api/generated/trips/trips', () => ({
   useGetTrips: () => ({ data: [], isPending: false, isError: false }),
+  getGetTripsTripIdItineraryQueryOptions: (tripId: string) => ({
+    queryKey: [`/trips/${tripId}/itinerary`],
+    queryFn: () => new Promise(() => {}),
+  }),
 }));
 jest.mock('@/features/explore/model/savedPlaces', () => ({
   useSavedPlaces: () => ({ savedPoiIds: [] }),
@@ -175,8 +182,10 @@ describe('(tabs)/records — 기록 탭 허브 (AC-1 · 셸 교체)', () => {
   // 부재 크래시가 안 난다(TRIP-371 선례 — 새 목 추가 불필요).
   // 여기선 "자리표시자가 사라지고 허브가 뜬다"만 잠근다 — 마킹·목록·항법은 각각
   // recordsCalendar 모델·RecordsCalendarScreen·tabsRecordsRoute 가 잠근다.
+  // TRIP-1120 — 페이지가 `useQueries` 를 물어 여행 0건이어도 Provider 없으면 던진다 → 실
+  // QueryClient 아래에서 그린다(단언 무변경).
   it('기록 탭은 placeholder 가 아니라 여행 캘린더 허브(빈 상태)를 그린다', () => {
-    render(<RecordsRoute />);
+    renderWithQueryClient(<RecordsRoute />);
 
     expect(screen.queryByTestId('shell-tab-placeholder-records')).toBeNull();
     expect(screen.getByTestId('record-calendar-empty')).toBeOnTheScreen();

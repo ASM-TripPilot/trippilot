@@ -1399,8 +1399,9 @@ describe('🔴 TRIP-770 · j 밴드 최종 18키·라벨 완전 일치 (TRIP-106
     ],
     ['share-card-default', 'j06 · 공유 카드 default'],
     ['share-card-no-photo', 'j06 · 공유 카드 no-photo'],
+    // TRIP-1120 — Figma 4761:2930(진행 중 카드 + 미래 줄 `›` 없음) 과 1:1.
     ['records-calendar-default', 'j07 · 여행 캘린더 default'],
-    // TRIP-1084 — Figma 4699:2630(legend 3줄+더 보기) 과 1:1.
+    // TRIP-1084 — legend 3줄+더 보기. TRIP-1120 로 Figma 4761:3107(접힘)·4761:3301(펼침, 탭으로)과 1:1.
     ['records-calendar-legend-more', 'j07 · 여행 캘린더 legend-more'],
   ];
 
@@ -1451,6 +1452,70 @@ describe('🔴 TRIP-1084 · records-calendar-legend-more 프리뷰 = Figma 4699:
     expect(screen.getByTestId('record-calendar-legend-more')).toHaveTextContent(
       '더 보기 2'
     );
+  });
+});
+
+// TRIP-1120 · j07 두 프리뷰 키가 진행 중 카드 + legend `›` 를 그리는가(6-b 육안 대조의 전제).
+// 무엇을 보장하나: 새 키 없이 기존 2키가 Figma 4761:2930(default)·4761:3107/3301(legend 접힘/펼침) 의 얼굴을
+// 갖는다 — 카드·`›` 없이 키만 남으면 카드 반경·배지 칩·`›` 색을 눈으로 볼 자리가 없다. 총량·j 18키는 무변경.
+describe('🔴 TRIP-1120 · j07 프리뷰 — 진행 중 카드 + legend `›` (Figma 4761:2930·3107·3301)', () => {
+  const CARD = 'record-calendar-ongoing';
+  const ROW =
+    /^record-calendar-legend-(?!more)(?!group-count-)(?!chevron-)(?!group-chevron-)/;
+  const CHEVRON = /^record-calendar-legend-(group-)?chevron-/;
+
+  function renderKey(key: string): void {
+    const state = PREVIEW_STATES.find((s) => s.key === key);
+    expect(state?.band).toBe('j');
+    if (state === undefined) throw new Error(`${key} 키 없음`);
+    render(state.render());
+  }
+
+  it('records-calendar-default — 부산 여행 카드(2일차), 부산 줄에만 `›`, 미래 제주 줄은 `›` 없음', () => {
+    renderKey('records-calendar-default');
+
+    // 카드
+    const card = screen.getByTestId(CARD);
+    expect(within(card).getByText('부산 여행')).toBeOnTheScreen();
+    expect(within(card).getByText('여행 중')).toBeOnTheScreen();
+    expect(within(card).getByText('2026.6.10–6.12 · 2일차')).toBeOnTheScreen();
+
+    // legend — 2줄(부산 · 미래 제주) 중 `›` 는 부산 하나.
+    expect(screen.queryAllByTestId(ROW)).toHaveLength(2);
+    expect(
+      screen.getByText('제주 여행 · 6.24–6.26 · 2박 3일')
+    ).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId('record-calendar-legend-t-busan')).getByTestId(
+        'record-calendar-legend-chevron-t-busan'
+      )
+    ).toBeOnTheScreen();
+    expect(screen.queryAllByTestId(CHEVRON)).toHaveLength(1);
+  });
+
+  it('records-calendar-legend-more — 서울특별시 여행 카드("외 N" 없음), 두 묶음에 `›`, 더 보기로 5줄 모두 `›`', () => {
+    renderKey('records-calendar-legend-more');
+
+    // 카드 — 제목은 여행 하나(묶음 표기 금지, 01b).
+    const card = screen.getByTestId(CARD);
+    expect(within(card).getByText('서울특별시 여행')).toBeOnTheScreen();
+    expect(within(card).queryByText(/외 \d/)).toBeNull();
+    expect(within(card).getByText('2026.9.28–9.30 · 2일차')).toBeOnTheScreen();
+
+    // 접힘(4761:3107) — 묶음 두 줄 + 부산, 셋 다 `›`.
+    for (const key of ['2026-09-28_2026-09-30', '2026-09-28_2026-09-29']) {
+      expect(
+        within(
+          screen.getByTestId(`record-calendar-legend-group-${key}`)
+        ).getByTestId(`record-calendar-legend-group-chevron-${key}`)
+      ).toBeOnTheScreen();
+    }
+    expect(screen.queryAllByTestId(CHEVRON)).toHaveLength(3);
+
+    // 펼침(4761:3301) — 더 보기 뒤 5줄 모두 `›`(9월 여행은 전부 시작 ≤ 9/29).
+    fireEvent.press(screen.getByTestId('record-calendar-legend-more'));
+    expect(screen.queryAllByTestId(ROW)).toHaveLength(5);
+    expect(screen.queryAllByTestId(CHEVRON)).toHaveLength(5);
   });
 });
 

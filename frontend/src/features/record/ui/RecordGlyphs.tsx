@@ -214,6 +214,24 @@ export function ChevronRightGlyph({
 }
 
 /**
+ * › legend 줄 끝 chevron(TRIP-1120) — 누르면 이동하는 줄에만 붙는다. Figma 4761:3104: 14 슬롯 안에 24 박스
+ * 벡터(stroke 2)가 1:1 로 넘쳐 그려진다 → viewBox 를 가운데 14 로 잘라 같은 크기·굵기를 슬롯 안에 담는다.
+ */
+export function LegendChevronGlyph({ size = 14 }: GlyphProps): ReactElement {
+  return (
+    <Svg width={size} height={size} viewBox="5 5 14 14" fill="none">
+      <Path
+        d="M9 6L15 12L9 18"
+        stroke={MUTED_SOFT}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/**
  * ⌄ legend '더 보기' chevron(TRIP-1084). Figma 4699:2914 Icon — 16 박스 가운데 9.6 벡터(stroke 0.8)를
  * 16 좌표로 3.2 평행이동했다. '접기'는 호출부가 180° 돌린다(Figma Icon 세트에 up 이 없다).
  */

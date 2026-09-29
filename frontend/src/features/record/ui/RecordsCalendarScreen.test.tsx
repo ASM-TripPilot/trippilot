@@ -254,11 +254,14 @@ const MORE = 'record-calendar-legend-more';
 
 /**
  * 화면에 보이는 legend 줄(개별·묶음·펼친 구성원)의 testID 를 **트리 순서대로**.
- * 같은 접두를 쓰는 더 보기(`-more`, `-more-chevron`)와 묶음 개수(`-group-count-`)는 뺀다.
+ * 같은 접두를 쓰는 더 보기(`-more`, `-more-chevron`)·묶음 개수(`-group-count-`)·줄 끝 `›`
+ * (`-chevron-`, `-group-chevron-`, TRIP-1120)는 뺀다.
  */
 function legendRowIds(): string[] {
   return screen
-    .queryAllByTestId(/^record-calendar-legend-(?!more)(?!group-count-)/)
+    .queryAllByTestId(
+      /^record-calendar-legend-(?!more)(?!group-count-)(?!chevron-)(?!group-chevron-)/
+    )
     .map((el) => el.props.testID as string);
 }
 
