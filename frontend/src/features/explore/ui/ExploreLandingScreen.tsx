@@ -11,6 +11,10 @@
  * Figma 1672:1183 에 없음). 축 4탭·'지금 내 주변'도 복원하지 않는다 — 죽은 탭(TRIP-447)·삭제된
  * 인프라(TRIP-445) 결정 유지.
  *
+ * 지역 필터(TRIP-1105, Figma 4767:2957): `regionFilter` 가 있으면 검색바 안에 지역 칩 + ✕ 가 뜨고
+ * 레인 제목에 지역 이름이 붙는다. 옛 d05 목적지 상세(따로 있던 화면)를 이 한 화면에 합쳤다 — 조회를
+ * 그 지역으로 좁히는 일과 ✕ 해제는 라우트가 진다(화면은 라벨·콜백만 받는다).
+ *
  * 우하단 FAB 은 세로 2단이다(TRIP-703): 위=담은 곳 saved-menu 하트(TRIP-494 — 누르면 담은
  * 장소→d02 · 저장한 숙소→e04 두 미니 FAB 으로 펼쳐진다) · 아래=＋ 여행 만들기(→g01, 라우트가
  * onPressCreateTrip 을 배선). FAB 은 탭바(오버레이) 위에 뜨는 고정 요소다(bottom-[84px]).
@@ -41,7 +45,7 @@ import {
 } from '@/features/explore/ui/ExploreGlyphs';
 
 // 카드 뷰모델은 entities 로 이관됐다(StayCardVM=807 · PlaceCardVM=806) — 여기서 재수출해 기존
-// 소비처(DestinationDetailScreen·placePhoto 테스트·라우트)의 `./ExploreLandingScreen`·이 파일 경유
+// 소비처(placePhoto 테스트·라우트)의 `./ExploreLandingScreen`·이 파일 경유
 // import 를 그대로 살린다(★11 — 로컬 export interface 제거가 진짜 이동 증거).
 export type { PlaceCardVM, StayCardVM };
 
@@ -78,6 +82,9 @@ export interface ExploreLandingScreenProps {
    * 폴백·FAB 을 안 그린다. **옵셔널**(기본 false) — 미지정 시 기존 default 얼굴 그대로라 기존
    * 테스트가 무수정 green(무회귀). 배선은 라우트가 `stay.isPending || places.isPending` 로 내린다. */
   isLoading?: boolean;
+  /** 지역 필터(TRIP-1105) — 있으면 검색바 안에 칩(`label`) + ✕(`onClear`)를 그리고 레인 제목을
+   * `{label} 숙소`·`{label} 장소` 로 바꾼다. **옵셔널** — 미지정이면 지금 d01 그대로(무회귀). */
+  regionFilter?: { label: string; onClear: () => void };
   stayLane: {
     error: boolean;
     cards: StayCardVM[];
@@ -242,12 +249,45 @@ function PlaceSaveErrorBanner({
   );
 }
 
+// 검색바 안 지역 칩(TRIP-1105, Figma 4767:2957) — 연분홍 바탕·분홍 글자·r8(킷 §10 선택 칩, 반경
+// 토큰 없음). ✕ 는 칩 안의 중첩 Pressable 이라 누르면 해제만 하고 바깥 검색바(지역 선택)로 새지
+// 않는다. 보이는 크기 20 + hitSlop 12 = 손가락 44.
+function RegionChip({
+  label,
+  onClear,
+}: {
+  label: string;
+  onClear: () => void;
+}): ReactElement {
+  return (
+    <View
+      testID="explore-region-chip"
+      className="flex-row items-center gap-xs rounded-[8px] bg-primary-pale py-[6px] pl-md pr-sm"
+    >
+      <Text className="font-noto-bold text-label font-bold text-primary">
+        {label}
+      </Text>
+      <Pressable
+        testID="explore-region-chip-clear"
+        accessibilityRole="button"
+        accessibilityLabel="지역 필터 해제"
+        hitSlop={12}
+        onPress={onClear}
+        className="h-5 w-5 items-center justify-center"
+      >
+        <CloseGlyph size={12} tone="primary" />
+      </Pressable>
+    </View>
+  );
+}
+
 export function ExploreLandingScreen({
   heading,
   onPressSearch,
   onPressPlaces,
   onPressCreateTrip,
   isLoading = false,
+  regionFilter,
   placeLane,
   stayLane,
   savedMenu,
@@ -295,7 +335,8 @@ export function ExploreLandingScreen({
             </Text>
           </View>
 
-          {/* 검색 — 입력 불가 진입 버튼. 탭하면 통합검색 /explore/search 로 간다(TRIP-450). */}
+          {/* 검색 — 입력 불가 진입 버튼. 탭하면 지역 선택으로 간다(라우트 배선). 지역 필터 중엔
+              placeholder 대신 지역 칩 + ✕ 와 오른쪽 › 를 그린다(TRIP-1105, Figma 4767:2957). */}
           <Pressable
             testID="explore-landing-search"
             accessibilityRole="button"
@@ -303,15 +344,26 @@ export function ExploreLandingScreen({
             className="mt-lg h-[58px] flex-row items-center gap-sm rounded-pill border border-hairline-strong bg-canvas px-lg"
           >
             <SearchGlyph size={20} />
-            <Text className="flex-1 font-noto text-body text-muted-soft">
-              도시 · 장소 · 숙소 검색
-            </Text>
+            {regionFilter ? (
+              <>
+                <RegionChip
+                  label={regionFilter.label}
+                  onClear={regionFilter.onClear}
+                />
+                <View className="flex-1" />
+                <Text className="font-noto text-body text-muted-soft">›</Text>
+              </>
+            ) : (
+              <Text className="flex-1 font-noto text-body text-muted-soft">
+                도시 · 장소 · 숙소 검색
+              </Text>
+            )}
           </Pressable>
 
           {/* 숙소 가로 레인 */}
           <View testID="explore-lane-stay" className="mt-2xl">
             <LaneHeader
-              title="숙소"
+              title={regionFilter ? `${regionFilter.label} 숙소` : '숙소'}
               onSeeAll={stayLane.onSeeAll}
               seeAllTestID="explore-lane-stay-seeall"
             />
@@ -322,8 +374,8 @@ export function ExploreLandingScreen({
               <SkeletonRail
                 testIDPrefix="explore-landing-skeleton-stay"
                 count={2}
-                width={200}
-                height={190}
+                width={160}
+                height={182}
               />
             ) : stayLane.error ? (
               <StayLaneError onRetry={stayLane.onRetry} />
@@ -362,7 +414,7 @@ export function ExploreLandingScreen({
               삭제된 인프라 — TRIP-447/445 결정 유지). */}
           <View testID="explore-lane-place" className="mt-2xl">
             <LaneHeader
-              title="장소"
+              title={regionFilter ? `${regionFilter.label} 장소` : '장소'}
               onSeeAll={onPressPlaces}
               seeAllTestID="explore-lane-place-cta"
             />
@@ -376,8 +428,8 @@ export function ExploreLandingScreen({
               <SkeletonRail
                 testIDPrefix="explore-landing-skeleton-place"
                 count={3}
-                width={150}
-                height={150}
+                width={160}
+                height={165}
               />
             ) : placeLane?.error ? (
               <Pressable

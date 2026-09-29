@@ -44,8 +44,13 @@ export function SuitcaseGlyph({ size = 26, testID }: GlyphProps) {
   );
 }
 
-/** 담은 곳 saved-menu 닫기(X) — 펼친 FAB 위(분홍 원 위 흰 X). Figma a01 3012:1909. */
-export function CloseGlyph({ size = 24, testID }: GlyphProps) {
+/** 담은 곳 saved-menu 닫기(X) — 펼친 FAB 위(분홍 원 위 흰 X). Figma a01 3012:1909.
+ * `tone='primary'`는 d01 지역 칩(연분홍 바탕) 위 분홍 ✕(TRIP-1105, Figma 4767:2957). */
+export function CloseGlyph({
+  size = 24,
+  testID,
+  tone = 'on-primary',
+}: GlyphProps & { tone?: 'on-primary' | 'primary' }) {
   return (
     <Svg
       testID={testID}
@@ -56,7 +61,7 @@ export function CloseGlyph({ size = 24, testID }: GlyphProps) {
     >
       <Path
         d="M6 6l12 12M18 6L6 18"
-        stroke={ON_PRIMARY}
+        stroke={tone === 'primary' ? PRIMARY : ON_PRIMARY}
         strokeWidth={2}
         strokeLinecap="round"
       />

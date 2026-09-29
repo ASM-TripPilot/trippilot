@@ -23,6 +23,7 @@
 - `src/__tests__/deletionScopeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/design-tokens.test.ts`  →  (export 없음)
 - `src/__tests__/destinationEditSheetStructure.test.ts`  →  (export 없음)
+- `src/__tests__/destinationRedirectRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreview.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewAffiliateNotice.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewBandNav.test.tsx`  →  (export 없음)
@@ -60,6 +61,7 @@
 - `src/__tests__/entitiesTripStructure.test.ts`  →  (export 없음)
 - `src/__tests__/executionDurationStructure.test.ts`  →  (export 없음)
 - `src/__tests__/exploreLandingAxisRemoval.test.ts`  →  (export 없음)
+- `src/__tests__/exploreRegionFilterStructure.test.ts`  →  (export 없음)
 - `src/__tests__/fabBottomOffsetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/fsdLayerStructure.test.ts`  →  (export 없음)
 - `src/__tests__/fsdStructure.test.ts`  →  (export 없음)
@@ -179,6 +181,7 @@
 - `src/__tests__/tabsExploreRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/tabsExploreRouteCardNav.test.tsx`  →  (export 없음)
 - `src/__tests__/tabsExploreRoutePlaceSave.integration.test.tsx`  →  (export 없음)
+- `src/__tests__/tabsExploreRouteRegionFilter.test.tsx`  →  (export 없음)
 - `src/__tests__/tabsExploreRouteSave.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/tabsHomeItineraryCta.test.tsx`  →  (export 없음)
 - `src/__tests__/tabsHomeRoute.test.tsx`  →  (export 없음)
@@ -462,7 +465,7 @@
 - `src/features/explore/model/placeSaveGuard.ts`  →  PlaceSaveNotice · hasUsableCoords · SAVE_FAILURE_NOTICE · COORD_BLOCKED_NOTICE · REMOVE_FAILURE_NOTICE
 - `src/features/explore/model/placeSaveToggle.ts`  →  usePlaceSaveToggle
 - `src/features/explore/model/regionChipLabel.ts`  →  formatRegionChipLabel
-- `src/features/explore/model/regionPickerPurpose.ts`  →  RegionPickerPurpose · RegionPickerTab · regionPickerHref
+- `src/features/explore/model/regionPickerPurpose.ts`  →  RegionPickerPurpose · regionPickerHref
 - `src/features/explore/model/regions.ts`  →  useRegions · filterRegions · limitRegionsWhenEmpty · RegionGroup · groupRegionsBySido · regionTint
 - `src/features/explore/model/savedPlaceIndex.ts`  →  findSavedPlaceId · optimisticSavedPlaceId
 - `src/features/explore/model/savedPlaceList.ts`  →  orderSavedPlaces · SAVED_PLACE_BADGE
@@ -472,7 +475,6 @@
 - `src/features/explore/model/wizardOrigin.ts`  →  WizardOriginParams · wizardOriginParams · isWizardOrigin
 
 ## src/features/explore/ui/
-- `src/features/explore/ui/DestinationDetailScreen.tsx`  →  DestinationDetailScreenProps · DestinationDetailScreen
 - `src/features/explore/ui/ExploreGlyphs.tsx`  →  SuitcaseGlyph · CloseGlyph · PlusGlyph · BackChevronGlyph · ShareGlyph · SearchGlyph · MapPinGlyph · FilterSlidersGlyph · WarningTriangleGlyph · CheckCircleFilledGlyph · CheckCircleOutlineGlyph · CircleExclaimGlyph · InfoGlyph
 - `src/features/explore/ui/ExploreLandingScreen.tsx`  →  ExploreLandingScreenProps · ExploreLandingScreen
 - `src/features/explore/ui/MustVisitOutsideConfirmDialog.tsx`  →  MustVisitOutsideConfirmDialog
@@ -801,12 +803,6 @@
 
 ## src/pages/daily-reflection/ui/
 - `src/pages/daily-reflection/ui/DailyReflectionPage.tsx`  →  DailyReflectionPageProps · DailyReflectionPage
-
-## src/pages/destination-detail/
-- `src/pages/destination-detail/index.ts`  →  DestinationDetailPage
-
-## src/pages/destination-detail/ui/
-- `src/pages/destination-detail/ui/DestinationDetailPage.tsx`  →  DestinationDetailPage
 
 ## src/pages/itinerary-copick/
 - `src/pages/itinerary-copick/index.ts`  →  SlotFillPage · CoPickCompletePage

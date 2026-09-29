@@ -31,18 +31,20 @@ describe('regionPickerHref — purpose 별 지역 선택 URL', () => {
 });
 
 /**
- * TRIP-1015 E · 진입 탭 신호(결정 4 · Seed Q4). 홈 검색으로 들어온 여행지 결과 화면은 탭바가 "홈"을
- * 가리켜야 한다. 결과 화면은 `(tabs)` 밖이라 어느 탭에서 왔는지 모르므로, 지역 선택 URL 에 진입 탭을
- * 싣고 피커가 결과 화면으로 되실어 보낸다. 철자는 이 헬퍼 한 곳에서만 정한다(TRIP-985 규약).
+ * TRIP-1105 · 진입 탭 신호(TRIP-1015 E) 폐기. 탐색 결과가 진짜 탭바를 쓰는 탐색 탭 d01 로 가므로 탭바는
+ * 늘 '탐색'이다 — 지역 선택 URL 에 진입 탭을 실을 이유가 없다. 헬퍼는 purpose 하나만 받는다.
+ *
+ * ⚠️ 이중 심판(02a ★13): 두 번째 인자는 `pnpm tsc` 가 거부해야 하고(`@ts-expect-error` 가 쓰이지 않으면
+ * TS2578), 런타임에도 무시돼 기본 URL 이 나와야 한다(jest).
  */
-describe('🔴 1015-E · regionPickerHref — 진입 탭(tab) 선택 인자', () => {
-  it("('explore', { tab: 'home' }) → purpose 뒤에 &tab=home 이 붙는다", () => {
-    expect(regionPickerHref('explore', { tab: 'home' })).toBe(
-      '/explore/region?purpose=explore&tab=home'
+describe('🔴 1105 · regionPickerHref — 두 번째 인자(tab)는 없다', () => {
+  it("('explore', { tab: 'home' }) 를 넘겨도 타입이 거부하고, 결과는 tab 없는 기본 URL 이다", () => {
+    const href = regionPickerHref(
+      'explore',
+      // @ts-expect-error 진입 탭 인자는 TRIP-1105 로 폐기됐다 — 호출자가 다시 싣지 못하게 컴파일에서 막는다
+      { tab: 'home' }
     );
-  });
 
-  it('두 번째 인자가 없으면 지금 URL 그대로다(탐색 랜딩·결과 화면 기본 — 무회귀)', () => {
-    expect(regionPickerHref('explore')).toBe('/explore/region?purpose=explore');
+    expect(href).toBe('/explore/region?purpose=explore');
   });
 });

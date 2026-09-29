@@ -21,13 +21,13 @@ import path from 'path';
 
 const ROOT = path.resolve('src');
 
-/** 새 진입점 7곳(비움) + 위저드 안 2곳(보존). SavedPlacesPage 는 둘 다 가진다.
- * TRIP-1123 — 마이페이지 [새 여행 만들기]가 사라져 `pages/my-page/ui/MyPage.tsx` 항목을 뺐다(8→7). */
+/** 새 진입점 6곳(비움) + 위저드 안 2곳(보존). SavedPlacesPage 는 둘 다 가진다.
+ * TRIP-1123 — 마이페이지 [새 여행 만들기]가 사라져 `pages/my-page/ui/MyPage.tsx` 항목을 뺐다(8→7).
+ * TRIP-1105 — 목적지 상세(d03 FAB)는 d01 지역 필터로 합쳐져 `(tabs)/explore.tsx` 1곳에 들어갔다(두 칸 합산 8→6). */
 const EXPECTED: Record<string, number> = {
   'app/(tabs)/index.tsx': 1, // 홈 FAB — 새 진입
   'app/(tabs)/explore.tsx': 1, // 탐색 FAB — 새 진입
   'pages/place-explore/ui/PlaceExplorePage.tsx': 1, // d04 FAB — 새 진입
-  'pages/destination-detail/ui/DestinationDetailPage.tsx': 1, // d03 FAB — 새 진입
   'pages/itinerary-list/ui/MyTripsListPage.tsx': 1, // 내 여행 목록 — 새 진입
   'pages/records-calendar/ui/RecordsCalendarPage.tsx': 1, // 기록 빈 상태 — 새 진입
   // select 완료(위저드 안 — 보존) + '이 장소들로 여행 만들기'(새 진입 — 비운 뒤 시드)

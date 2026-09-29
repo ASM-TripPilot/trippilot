@@ -48,6 +48,7 @@ jest.mock('@/shared/storage', () => ({
 const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
+  useLocalSearchParams: () => ({}),
 }));
 
 jest.mock('@/features/stay/model/useStaySearch', () => ({

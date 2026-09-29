@@ -30,13 +30,13 @@ function sourceFiles(dir: string): string[] {
 describe('TRIP-1103 AC-4 · src 전체 bottom-[100px] 0건(주석 포함)', () => {
   it('프로덕션 소스 어디에도 bottom-[100px] 이 없다', () => {
     const files = sourceFiles(ROOT);
-    // 앵커 — 스캔이 실제로 FAB 세 화면을 읽었다(경로가 틀려 0파일이라 초록인 게 아니다).
+    // 앵커 — 스캔이 실제로 FAB 화면을 읽었다(경로가 틀려 0파일이라 초록인 게 아니다).
+    // TRIP-1105 — 목적지 상세 화면은 d01 지역 필터로 합쳐져 지워진다(앵커 3 → 2).
     const rel = files.map((f) => path.relative(ROOT, f));
     expect(rel).toEqual(
       expect.arrayContaining([
         path.join('features', 'explore', 'ui', 'ExploreLandingScreen.tsx'),
         path.join('features', 'explore', 'ui', 'PlaceExploreScreen.tsx'),
-        path.join('features', 'explore', 'ui', 'DestinationDetailScreen.tsx'),
       ])
     );
 

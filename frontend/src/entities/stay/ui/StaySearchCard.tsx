@@ -4,7 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
 
 /**
- * TRIP-807 · AC-3 — 숙소 검색 풀/레인 카드(e02 세로178 · d01·d05 레인200 공용). props-only.
+ * TRIP-807 · AC-3 — 숙소 검색 풀/레인 카드(e02 세로178 · d01 레인160 공용). props-only.
  *
  * 사진은 계약(StayItem)에 URL 필드가 없어 항상 회색 자리(bg-surface-strong) — URL 을 지어내지
  * 않는다(INV-1). 메타는 이름·지역·가격 텍스트뿐(거리·소요시간 없음 · INV-3).
@@ -33,14 +33,14 @@ export interface StaySearchCardSave {
 export interface StaySearchCardProps {
   /** 루트 Pressable testID(소비처 스킴 주입). */
   testID: string;
-  /** 사진 자리 testID — e02 만 지정(d01·d05 미지정 = 사진 View 무 testID). */
+  /** 사진 자리 testID — e02 만 지정(d01 미지정 = 사진 View 무 testID). */
   photoTestID?: string;
   name: string;
   region: string;
   priceText: string;
-  /** full=e02(w-full·사진178·border+shadow) · rail=d01/d05(w-200·사진130). */
+  /** full=e02(w-full·사진178·border+shadow) · rail=d01(w-160·사진120 — 장소 카드와 같은 폭, TRIP-1105 QA #7). */
   variant: 'full' | 'rail';
-  /** 저장 하트 — 지정 시에만 그린다(d05 는 미지정 = 하트 없음). */
+  /** 저장 하트 — 지정 시에만 그린다(미지정 = 하트 없음). */
   save?: StaySearchCardSave;
   /** 카드 탭(상세 진입) — 하트 press 가 삼키지 않는다. */
   onPress?: () => void;
@@ -146,11 +146,11 @@ export function StaySearchCard({
       testID={testID}
       accessibilityRole="button"
       onPress={onPress}
-      className="w-[200px]"
+      className="w-[160px]"
     >
       <View
         testID={photoTestID}
-        className="h-[130px] w-full rounded-card bg-surface-strong"
+        className="h-[120px] w-full rounded-card bg-surface-strong"
       >
         {save ? (
           <SaveButton

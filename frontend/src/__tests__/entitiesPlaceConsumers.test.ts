@@ -54,12 +54,8 @@ const ROWS: Row[] = [
     mustNot: ['export interface PlaceCardVM', 'function PlaceCard('],
     why: 'd01 레인 카드 + PlaceCardVM 를 entities 로 이관(★11 — PlaceCardVM export 잔존은 진짜 이동 아님)',
   },
-  {
-    file: 'features/explore/ui/DestinationDetailScreen.tsx',
-    must: '@/entities/place',
-    mustNot: ['function PlaceCard('],
-    why: 'd05 레인 카드 소비 + PlaceCardVM 를 ./ExploreLandingScreen 이 아니라 entities 에서(★11)',
-  },
+  // TRIP-1105 — DestinationDetailScreen 행 제거. 목적지 상세가 d01 지역 필터로 합쳐져 파일이 지워진다
+  // (여기 남기면 read() 가 ENOENT). d01 의 entities/place 소비는 위 ExploreLandingScreen 행이 진다.
   {
     file: 'features/explore/ui/PlaceExploreScreen.tsx',
     must: '@/entities/place',

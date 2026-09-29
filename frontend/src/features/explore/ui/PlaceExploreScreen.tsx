@@ -30,7 +30,7 @@ import {
 } from './ExploreGlyphs';
 import { PartialFailureBanner } from './PartialFailureBanner';
 
-// 우하단 FAB 그림자 — `DestinationDetailScreen`·`ExploreLandingScreen`의 FAB_SHADOW와 동형
+// 우하단 FAB 그림자 — `ExploreLandingScreen`의 FAB_SHADOW와 동형
 // (RN에 CSS box-shadow가 없어 style prop으로 옮긴다). `#000000`은 raw-hex 가드
 // 사정거리 밖(TOKENIZED_HEX 9색에 없음, 홈 fabShadow 선례).
 const FAB_SHADOW = {
@@ -506,7 +506,7 @@ export function PlaceExploreScreen({
           contentContainerStyle={{
             paddingHorizontal: 16,
             // FAB(absolute bottom-84+h-56=140 — 여백 156 은 그 위 16 여유)·페이지 복제 탭바(~96) 오버레이가 마지막 행을
-            // 가리지 않도록 스크롤 끝 여백 확보(DestinationDetail·ExploreLanding과 같은 값).
+            // 가리지 않도록 스크롤 끝 여백 확보(ExploreLanding과 같은 값).
             paddingBottom: 156,
             flexGrow: 1,
           }}

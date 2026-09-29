@@ -45,7 +45,6 @@ import { DailyReflectionScreen } from '@/features/reflection/ui/DailyReflectionS
 import { ShareCardScreen } from '@/features/reflection/ui/ShareCardScreen';
 import { TravelStyleScreen } from '@/features/reflection/ui/TravelStyleScreen';
 import { TripSummaryScreen } from '@/features/reflection/ui/TripSummaryScreen';
-import { DestinationDetailScreen } from '@/features/explore/ui/DestinationDetailScreen';
 import { MustVisitOutsideConfirmDialog } from '@/features/explore/ui/MustVisitOutsideConfirmDialog';
 import { MustVisitPickScreen } from '@/features/explore/ui/MustVisitPickScreen';
 import { PlaceDetailScreen as ExplorePlaceDetailScreen } from '@/features/explore/ui/PlaceDetailScreen';
@@ -402,16 +401,6 @@ const HOME_SPOTS_LANE: HomeSpotsLane = {
   savedPoiIds: ['spot-2'],
   onToggleSave: noop,
 };
-
-// d05 목적지 상세 장소 격자 전용 6장(Figma 4663:2540 과 같은 데이터, TRIP-1048).
-const DESTINATION_DETAIL_PLACES = [
-  { poiId: 'p1', name: '감천문화마을', region: '부산 사하구' },
-  { poiId: 'p2', name: '광안리 해변', region: '부산 수영구' },
-  { poiId: 'p3', name: '해운대', region: '부산 해운대구' },
-  { poiId: 'p4', name: '전포 카페거리', region: '부산 부산진구' },
-  { poiId: 'p5', name: '해동용궁사', region: '부산 기장군' },
-  { poiId: 'p6', name: '자갈치 시장', region: '부산 중구' },
-];
 
 const EXPLORE_LANDING_BASE = {
   heading: {
@@ -4107,50 +4096,35 @@ export const PREVIEW_STATES: PreviewState[] = [
       ),
   },
   {
-    // TRIP-709 — d05 목적지 상세 default. TRIP-1048 로 세그먼트가 사라지고 장소가 2열 격자가
-    // 됐다(Figma 4663:2540) — 장소는 Figma 와 같은 6장(이 키 전용 배열, d01 공용 픽스처 불변).
-    // 숙소 담김 1건(savedKeys 첫 카드)·FAB 2단(하트+＋)이 한 화면에 보이게. 화면이 자체
-    // BottomTabBar 를 그리므로 withShellTabBar 로 감싸지 않는다(props-only 직접 렌더). 격자 칸 폭·
-    // 간격·하트 분홍·FAB 위치·검색바 › 는 jest 사각이라 이 키가 6-b 육안 대조 자리.
-    key: 'destination-detail-default',
+    // TRIP-1105 — d01 지역 필터(Figma 4767:2957). 옛 d05 목적지 상세 키(destination-detail-default)를
+    // 1:1 교체했다 — 목적지 상세가 d01 한 화면의 필터 상태로 합쳐졌다. 검색바 안 칩(r8·연분홍)·분홍 ✕·
+    // `›`·레인 제목 접두·두 카드 같은 폭 160·탭바 탐색 활성은 jest 사각이라 이 키가 6-b 육안 대조 자리.
+    key: 'explore-landing-region-filter',
     band: 'd',
-    label: 'd05 · 통합 검색 결과 default',
+    label: 'd01 · 랜딩 지역 필터',
     login: null,
-    render: () => (
-      <DestinationDetailScreen
-        regionName="부산"
-        onPressSearch={noop}
-        stayLane={{
-          error: false,
-          cards: EXPLORE_STAY_CARDS,
-          onRetry: noop,
-          onSeeAll: noop,
-          onPressCard: noop,
-          savedKeys: ['yanolja:1'],
-          pendingKeys: [],
-          onToggleSave: noop,
-          saveError: false,
-          onDismissSaveError: noop,
-        }}
-        placeLane={{
-          error: false,
-          cards: DESTINATION_DETAIL_PLACES,
-          onRetry: noop,
-          onSeeAll: noop,
-          onPressCard: noop,
-          ...PLACE_SAVE_PREVIEW,
-        }}
-        onPressTab={noop}
-        onPressCreateTrip={noop}
-        savedMenu={{
-          open: false,
-          savedCount: 3,
-          onToggle: noop,
-          onPressSavedPlaces: noop,
-          onPressSavedStays: noop,
-        }}
-      />
-    ),
+    render: () =>
+      withShellTabBar(
+        <ExploreLandingScreen
+          {...EXPLORE_LANDING_BASE}
+          regionFilter={{ label: '부산광역시', onClear: noop }}
+          placeLane={{ ...EXPLORE_LANDING_PLACE_LANE, ...PLACE_SAVE_PREVIEW }}
+          stayLane={{
+            error: false,
+            cards: EXPLORE_STAY_CARDS,
+            onRetry: noop,
+            onSeeAll: noop,
+          }}
+          savedMenu={{
+            open: false,
+            savedCount: 3,
+            onToggle: noop,
+            onPressSavedPlaces: noop,
+            onPressSavedStays: noop,
+          }}
+        />,
+        'explore'
+      ),
   },
   {
     // TRIP-710 — d06 장소 상세 default(Figma 1907:1083). props-only 순수 뷰라 직접 렌더한다.
