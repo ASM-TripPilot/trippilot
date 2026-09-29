@@ -4508,6 +4508,7 @@ export const PREVIEW_STATES: PreviewState[] = [
           staleFailed: false,
         }}
         pins={MUST_VISIT_PREVIEW_PINS}
+        onPressAdd={noop}
       />
     ),
   },

@@ -40,6 +40,11 @@ export interface MustVisitPickScreenProps {
   locationLabels?: Readonly<Record<string, string>>;
   /** 지금 선택된 poiId 들 — 선택 여부는 색이 아니라 이 집합 + 글리프 컴포넌트 정체성으로 잰다. */
   selectedPoiIds: string[];
+  /** 이미 그 여행 필수 방문지인 poiId(TRIP-1093 여행 모드 · INV-U1-18) — 체크된 채 잠겨 눌러도 안 풀리고,
+   * 완료 활성은 이것을 뺀 **새로 고른 곳**으로만 센다. `selectedPoiIds` 에도 들어 있어야 부제 수와 맞는다. */
+  lockedPoiIds?: string[];
+  /** 완료 실패 안내(TRIP-1093 · INV-4) — 있으면 완료 버튼 위에 한 줄. 재시도는 완료를 다시 누르는 것이다. */
+  completeError?: string | null;
   onToggleSelect: (poiId: string) => void;
   onComplete: () => void;
   /** 리스트 하단 '+ 탐색에서 더 담기' → d04. */
@@ -90,6 +95,7 @@ function PickRow({
   saved,
   rank,
   selected,
+  locked,
   isLast,
   outside,
   location,
@@ -98,6 +104,8 @@ function PickRow({
   saved: SavedPlace;
   rank: number;
   selected: boolean;
+  /** 이미 등록 — 선택 상태로 잠근다(진짜 `disabled` 라 press 가 막힌다). */
+  locked: boolean;
   /** 마지막 행은 구분선을 안 그린다(Figma 2437:1500). */
   isLast: boolean;
   /** 지역 밖 — 흐리게(opacity 0.4) 그리고 체크 원을 아예 안 그린다(Figma 2437:1500). */
@@ -160,7 +168,8 @@ function PickRow({
           accessibilityRole="button"
           // 선택=selected. 빈/찬을 색이 아니라 이 접근성 상태 + 서로 다른 글리프 컴포넌트로 잰다
           // (repo-trap: SVG fill 은 렌더 트리에 안 남는다, 02a ★1 · save 하트와 같은 신호).
-          accessibilityState={{ selected }}
+          accessibilityState={{ selected, disabled: locked }}
+          disabled={locked}
           onPress={() => onToggleSelect(place.poiId)}
           className="h-[38px] w-[38px] items-center justify-center"
         >
@@ -184,14 +193,27 @@ function PickRow({
 function CompleteBar({
   onPress,
   disabled,
+  error,
 }: {
   onPress: () => void;
   disabled: boolean;
+  error?: string | null;
 }): ReactElement {
   // 0곳이면 진짜 `disabled` prop 을 건다 — accessibilityState.disabled 만으론 press 가 안 막힌다
   // (02a §5-4). 회색 비활성으로 자리를 지키되 눌러도 onComplete 가 안 나간다.
   return (
-    <View className="w-full border-t border-hairline bg-canvas px-lg pb-lg pt-md">
+    <View className="w-full gap-sm border-t border-hairline bg-canvas px-lg pb-lg pt-md">
+      {/* 실패 배너 — Figma 없음(01b Q3). 같은 feature `RemoveErrorBanner` 모양을 따른다. */}
+      {error ? (
+        <View
+          testID="mustvisit-pick-complete-error"
+          className="rounded-button bg-primary-pale p-md"
+        >
+          <Text className="font-noto text-label text-primary-text">
+            {error}
+          </Text>
+        </View>
+      ) : null}
       <Pressable
         testID="mustvisit-pick-complete"
         accessibilityRole="button"
@@ -251,6 +273,8 @@ function ResultsBody({
   regionEmptyLabel,
   locationLabels,
   selectedPoiIds,
+  lockedPoiIds,
+  completeError,
   onToggleSelect,
   onComplete,
   onPressAddMore,
@@ -260,6 +284,8 @@ function ResultsBody({
   regionEmptyLabel: string | undefined;
   locationLabels: Readonly<Record<string, string>> | undefined;
   selectedPoiIds: string[];
+  lockedPoiIds: string[];
+  completeError: string | null | undefined;
   onToggleSelect: (poiId: string) => void;
   onComplete: () => void;
   onPressAddMore: () => void;
@@ -293,6 +319,7 @@ function ResultsBody({
               saved={saved}
               rank={index + 1}
               selected={selectedPoiIds.includes(saved.place.poiId)}
+              locked={lockedPoiIds.includes(saved.place.poiId)}
               isLast={index === rows.length - 1}
               outside={index >= savedPlaces.length}
               location={
@@ -315,9 +342,11 @@ function ResultsBody({
           </Pressable>
         )}
       </ScrollView>
+      {/* 새로 고른 곳이 0이면 잠근다 — 잠긴(이미 등록) 체크만 있으면 보낼 것이 없다(TRIP-1093 AC-9). */}
       <CompleteBar
         onPress={onComplete}
-        disabled={selectedPoiIds.length === 0}
+        disabled={selectedPoiIds.every((id) => lockedPoiIds.includes(id))}
+        error={completeError}
       />
     </>
   );
@@ -453,6 +482,8 @@ export function MustVisitPickScreen({
   regionEmptyLabel,
   locationLabels,
   selectedPoiIds,
+  lockedPoiIds = [],
+  completeError,
   onToggleSelect,
   onComplete,
   onPressAddMore,
@@ -496,6 +527,8 @@ export function MustVisitPickScreen({
             regionEmptyLabel={regionEmptyLabel}
             locationLabels={locationLabels}
             selectedPoiIds={selectedPoiIds}
+            lockedPoiIds={lockedPoiIds}
+            completeError={completeError}
             onToggleSelect={onToggleSelect}
             onComplete={onComplete}
             onPressAddMore={onPressAddMore}

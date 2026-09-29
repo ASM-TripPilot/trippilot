@@ -17,7 +17,7 @@
  * 도시 추가 +는 `PlusGlyph`(16px, 아이콘은 primary·텍스트는 primary-text).
  *
  * ⚠️ 실제 개폐·딤·중앙정렬·터치차단은 `@gorhom/bottom-sheet` 통과형 목이라 jest가 원리적으로
- * 못 본다(repo-traps 바텀시트 함정) — 6-b 실기(`_dev/preview.tsx`) 몫. Figma `note`("담은 곳 N곳이
+ * 못 본다(repo-traps 바텀시트 함정) — 6-b 실기(`_dev/preview.tsx`) 몫. Figma `note`("꼭 갈 곳 N곳이
  * …")는 TRIP-736에서 additive `mustVisitCount?: number` prop으로 배선했다 — 페이지가
  * `mustVisits.length`를 내려주고, **0곳이면 안 그린다**(Figma 근거 없음 §F, 지어내지 않는다).
  */
@@ -53,7 +53,7 @@ export interface DestinationEditSheetProps {
   onApply: () => void;
   /** 딤 바깥 탭·아래로 스와이프 → 배선: 시트 닫기(배선의 open 상태를 false 로, TRIP-683 AC-2·AC-3). */
   onClose: () => void;
-  /** 담은 곳 수(배선 `mustVisits.length`) → "담은 곳 N곳…" 안내문. 0·미지정이면 안 그린다(TRIP-736). */
+  /** 꼭 갈 곳 수(배선 `mustVisits.length`) → "꼭 갈 곳 N곳…" 안내문. 0·미지정이면 안 그린다(TRIP-736). */
   mustVisitCount?: number;
 }
 
@@ -207,7 +207,7 @@ export function DestinationEditSheet({
               testID="trip-wizard-destination-note"
               className="font-noto text-label text-muted"
             >
-              {`담은 곳 ${mustVisitCount}곳이 여행지에 맞춰 정리돼요`}
+              {`꼭 갈 곳 ${mustVisitCount}곳이 여행지에 맞춰 정리돼요`}
             </Text>
           ) : null}
         </View>

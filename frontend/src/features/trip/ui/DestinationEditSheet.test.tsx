@@ -159,7 +159,8 @@ describe('AC-4/5 · 삭제× → onRemove(seq)', () => {
   });
 });
 
-describe('AC-6 · 담은 곳 안내문 (TRIP-736)', () => {
+// TRIP-1093 결정 1 — 안내문의 N 은 꼭 갈 곳 수다(`mustVisits.length`). 옛 문구 "담은 곳"은 오표기였다(Figma 3626:2085).
+describe('AC-6 · 꼭 갈 곳 안내문 (TRIP-736 · TRIP-1093 문구)', () => {
   // Arrange: mustVisitCount 를 명시해 다시 렌더하는 얇은 헬퍼(renderSheet 는 count 를 안 넘긴다).
   function renderWithCount(mustVisitCount?: number) {
     render(
@@ -182,7 +183,7 @@ describe('AC-6 · 담은 곳 안내문 (TRIP-736)', () => {
     const note = screen.getByTestId('trip-wizard-destination-note');
     expect(note).toBeOnTheScreen();
     expect(note).toHaveTextContent(
-      `담은 곳 ${count}곳이 여행지에 맞춰 정리돼요`
+      `꼭 갈 곳 ${count}곳이 여행지에 맞춰 정리돼요`
     );
   });
 
