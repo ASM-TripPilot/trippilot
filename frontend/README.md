@@ -30,16 +30,17 @@ React Native + Expo (TypeScript strict) 클라이언트.
 
 frontend/ 루트가 곧 Expo 프로젝트이며(모노레포 구조는 inception unit-of-work 정합), 앱 소스는 전부 `src/` 아래에 둔다(Expo Router가 `src/app`을 자동 인식). 루트에는 설정 파일과 인프라 스텁·문서만 남긴다.
 
+구조의 정본은 **공식 Feature-Sliced Design v2.1**(fsd.how)이다. 아래 규칙은 그 공식 규칙을 이 리포에 적용한 결정이며, 공식과 다르게 가는 곳은 이유와 함께 명시한다(TRIP-1138 · 결정 원문 TRIP-1139).
+
 ```text
 frontend/
   src/
-    app/          # Expo Router 라우트 — 얇은 래퍼만. 화면 구현은 하위 층에서 import
-    app-shell/    # src/app 밖의 루트 셸 조립 (SplashGate 등 — docs/structure.md 참조)
-    pages/        # 화면별 배선 — 라우트가 꽂는 컨테이너
-    widgets/      # 여러 화면이 쓰는 화면 조각 (목록·수 정본: src/widgets 디렉토리 · docs/structure.generated.md)
-    features/     # 도메인 기능 (목록·수 정본: src/features 디렉토리 · docs/structure.generated.md)
-    entities/     # 여러 feature가 쓰는 도메인 단위 (목록·수 정본: src/entities 디렉토리 · docs/structure.generated.md)
-    shared/       # 도메인 무관 공용 (세그먼트 정본: docs/structure.generated.md)
+    app/          # Expo Router 라우트 + 앱 전역(프로바이더·루트 셸·전역 폰트/스타일). 라우트 파일은 pages를 꽂는 얇은 래퍼
+    pages/        # 화면 — 라우트 하나가 꽂는 슬라이스. 그 화면만 쓰는 UI·상태·요청 조합을 전부 소유한다
+    widgets/      # 공식 비권장 — 새로 만드는 건 조건부(§층 규칙)
+    features/     # 여러 화면이 공유하는 사용자 행동 (목록·수 정본: src/features 디렉토리 · docs/structure.generated.md)
+    entities/     # 여러 화면이 공유하는 도메인 모델 (목록·수 정본: src/entities 디렉토리 · docs/structure.generated.md)
+    shared/       # 업무 규칙 없는 인프라 (세그먼트 정본: docs/structure.generated.md)
       api/        # 서버 클라이언트 단일 계층 — orval 생성물 + axios 인스턴스(토큰 회전)
                   # + 부트스트랩 + 모든 API 실패를 표준 오류 타입으로 정규화
       ui/         # 디자인 시스템·공용 탭바(5탭)·빈 상태/로딩/오류 표준 패턴·접근성 기준
@@ -47,23 +48,40 @@ frontend/
       location/   # 위치 권한·수집 단일 소유(동의 상태 관리·프리프롬프트·포그라운드 수집)
       validation/ # 경량 제약 검증기 — 서버 발행 규칙 명세 소비, 위반은 경고 배지(차단 아님)
       storage/    # 로컬 영속 단일 소유 — 오프라인 입력 큐·사진 업로드 대기 큐
-    assets/       # 아이콘·스플래시 등 (app.json에서 상대 경로 참조)
   package.json / app.json / eas.json / tailwind.config.js / tsconfig.json
   Dockerfile / nginx.conf / web/   # 통합 테스트 스텁 (앱 코드 아님)
-  docs/                            # 화면 IO 카탈로그
+  docs/                            # 개발로그·구조 지도
 ```
 
-슬라이스(feature·page) 내부 세그먼트는 `ui/ model/ lib/ config/` 넷뿐이다 — `ui/`=props를 받는 프레젠테이션 화면·컴포넌트 / `model/`=상태·도메인 타입·업무 규칙 / `lib/`=순수 헬퍼·포맷터·어댑터 팩토리(예: env 토글로 fake/real을 고르는 `makeAuthorize`) / `config/`=상수·라벨·환경값. **`api/` 세그먼트는 두지 않는다**(서버 통신은 orval 단일 계층 `shared/api`가 전담). 모든 세그먼트가 필수는 아니며 넣을 것이 생길 때 만든다. (옛 칸 `screens/ containers/ hooks/ store/`는 폐기 — 화면은 `ui/`, 접착 컨테이너는 `pages/` 층으로.)
+> **지금 코드와 다른 곳 (이주 중)**: 위 트리는 목표다. 현재 코드에는 공식에 없는 `src/app-shell/`(루트 셸 — `app/`로 흡수 예정)과 최상위 `src/assets/`(쓰는 슬라이스 옆으로 이동 예정)가 남아 있다 — TRIP-1161. `app/(tabs)/explore.tsx`(376줄)·`index.tsx`(223줄)는 얇은 래퍼가 아니라 컨테이너 역할을 한다 — TRIP-1142. features에 화면이 들어 있는 곳은 화면 묶음 단위로 pages로 옮긴다 — TRIP-1146~1154.
+
+### 층 규칙
+
+- **pages first**: 새 코드는 먼저 그 코드를 쓰는 `pages/<slice>`에 둔다. 페이지 사이의 중복은 그 자체로 추출 사유가 아니다. 아래 **세 조건을 모두** 만족할 때만 더 아래 층으로 뺀다.
+  1. **지금** 여러 곳이 쓴다(가정이 아니라 실제로).
+  2. 특정 소비처와 **독립된 변경 이유**가 있다.
+  3. 경계의 책임이 **좁다**.
+  
+  애매하면 pages에 둔다. 한 곳만 쓰는 feature·entity·widget은 그 소비처로 되돌린다.
+- **어느 층으로 빼는가**: 여러 화면이 공유하는 사용자 행동(행동 + 그 UI)은 `features`, 도메인 모델은 `entities`, 업무 규칙이 없는 부품·유틸·API 클라이언트는 `shared`, 앱 전역 설정·레이아웃은 `app`. 업무 규칙(제품이 자기 데이터에 거는 규칙)은 `shared`에 두지 않는다.
+- **widgets**: 공식이 비권장하는 층이다(적극 도입하지 말 것을 권하되, 기존 슬라이스는 유효). 새 widget은 기본적으로 만들지 않고, 먼저 pages·app에서 조립(Strategy C)하거나 features·shared로 보낸다. 그래도 아래를 **모두** 만족하면 만든다 — ① 추출 규칙 세 조건 ② 여러 feature를 엮는 UI 덩어리라 features·shared 어디에도 맞지 않는다 ③ page에서 조립하면 여러 화면에 같은 조립 코드가 반복된다. 만들 때는 그 이유를 슬라이스 안 주석으로 남긴다. 여러 화면이 쓰는 기존 두 슬라이스(`map-sheet-shell` · `time-sheet`)는 유지하고, 한 화면만 쓰는 슬라이스는 그 page로 되돌린다(TRIP-1143).
+- **entities**: 조심해서 쓴다 — 거의 모든 층이 보는 층이라 변경이 넓게 퍼진다. 순수 CRUD·전송 타입(DTO)은 entity가 아니라 `shared/api` 소관이다(점검은 TRIP-1155).
+- **슬라이스 그룹**: pages는 여정 단계로 묶는다 — `auth · onboarding · explore · stay · trip · itinerary · live · record · settings`(TRIP-1156). 그룹 폴더는 탐색용일 뿐이라 그 자체에 세그먼트·`index.ts`를 두지 않는다.
+- **자산**: 이미지·아이콘은 쓰는 코드 옆에 둔다(여러 곳이 쓰면 `shared`). 전역 폰트·스타일은 `app`. 최상위 `assets/` 세그먼트는 만들지 않는다. 예외: `app.json`/`app.config.ts`가 참조하는 앱 아이콘·스플래시.
+- **세그먼트**: 슬라이스 내부는 `ui`(화면·컴포넌트) / `model`(상태·도메인 타입·업무 규칙) / `api`(요청) / `lib`(슬라이스 내부 헬퍼) / `config`(상수·라벨·환경값). 필요할 때만 만든다. 파일 이름은 역할(`types.ts`·`utils.ts`)이 아니라 도메인으로 짓는다.
+- **`api` 세그먼트와 orval**: orval 생성물은 `shared/api` 한 곳에만 둔다(스펙 드리프트 차단). 한 페이지만 쓰는 요청 조합·응답 변환·쿼리 키 래퍼는 그 페이지의 `api/`에 둔다. 여러 슬라이스가 쓰게 되면 `shared/api`로 내린다.
 
 ### import 경계 규칙 (ESLint로 강제)
 
-- **6층 방향**: `app → pages → widgets → features → entities → shared`. **하위 층은 상위 층을 모른다** — 각 층은 자기보다 아래 층만 import한다. 즉 `shared`는 아무 상위 층도 못 보고, `entities`는 `shared`만, `features`는 `entities·shared`만(다른 feature는 못 봄), `widgets`는 `features` 이하, `pages`는 `widgets` 이하를 참조한다. `eslint.config.js`의 `import/no-restricted-paths` 층 zone이 강제하고, 13개 feature zone은 `src/features` 디렉토리를 읽어 생성한다(새 feature 자동 편입).
-- **같은 층 형제 슬라이스는 서로 모른다**: 층 방향(위/아래)만이 아니라 **같은 층 안의 형제 슬라이스끼리도** 직접 import하지 못한다 — features뿐 아니라 `pages`·`widgets`·`entities`도 슬라이스마다 격리 zone이 생긴다(`src/<층>` 디렉토리를 읽어 자동 편입). 공용이 생기면 형제에서 꺼내지 말고 더 아래 층으로 승격한다. **entities 교차는 `@x` 폴더로만**: 도메인끼리 꼭 참조해야 하면 제공자가 소비자에게만 내주는 `entities/<제공자>/@x/<소비자>/**` 창구를 통한다(예: place가 itinerary-slot에게 `entities/place/@x/itinerary-slot/`로 내준다). 그 외 형제 직접 import는 금지다.
-- **세그먼트**: 슬라이스(feature·page) 내부는 `ui`(프레젠테이션) / `model`(상태·도메인 타입·업무 규칙) / `lib`(순수 헬퍼·포맷터·어댑터 팩토리) / `config`(상수·라벨·환경값) 넷뿐이다. **`api` 세그먼트는 만들지 않는다** — 서버 통신은 orval 단일 계층 `shared/api`가 전담한다.
-- **배럴(index.ts) 미도입**: 팀 표준은 딥 임포트(`@/features/home/model/homeFixtures`)다. 재수출할 공개 API가 실제로 생겼을 때만 배럴을 만든다. 실제로 생긴 예: entities 4슬라이스(place·stay·trip·itinerary-slot)의 `model/index.ts`는 도메인 타입 재수출 창구로 허용되는 유일한 배럴이다 — 여러 파일을 모으는 배럴이 아니라 그 자체가 model 단일 파일(서버 계약 타입·뷰모델·배지 유니온을 한 곳에서 내주는 공개 API). `widgets/itinerary-edit/index.ts`(ui+model 재수출)는 TRIP-753으로 슬라이스째 삭제됐다 — 관측 종료(상세는 `.claude/rules/layer-widgets.md`).
-- **적용 시점**: 신규·재작성 파일부터. **빅뱅 이주는 없다**(TRIP-803) — 규칙을 세우되 기존 코드를 소급 이동하지 않는다.
-- **승격 규칙**: 두 곳 이상이 쓰게 된 것을 올린다 — 도메인 카드·타입은 `entities`로, 여러 화면이 쓰는 화면 조각(지도+시트 셸 등)은 `widgets`로, **도메인과 무관한 원시 부품만** `shared`로. (예: 일정 지도 뷰는 itinerary·execution이 함께 쓰므로 `shared/map` 소유.)
-- **전방 `app → features` 제한은 아직 두지 않는다** — 목표 방향은 `app`이 `pages·widgets·shared`만 보는 것이지만, 현재 `app`이 features를 직접 import하는 곳이 많아(라우트·프리뷰) 소급 이동 없이는 켤 수 없다. `pages` 이주가 진행돼 이 참조가 줄어든 뒤 별도 후속 티켓에서 켠다.
+- **층 방향**: `app → pages → widgets → features → entities → shared`. 각 층은 자기보다 **아래 층만** import한다. `eslint.config.js`의 `import/no-restricted-paths` 층 zone이 강제하고, 슬라이스별 zone은 `src/<층>` 디렉토리를 읽어 생성한다(새 슬라이스 자동 편입).
+- **같은 층 형제 슬라이스는 서로 모른다(엄격)**: 형제 직접 import는 lint error다. 공유가 필요하면 순서대로 푼다 — ① 늘 같이 바뀌면 두 슬라이스를 합친다 ② 공유 도메인 책임은 entity로 내린다 ③ 위 층(pages·app)이 두 슬라이스를 받아 조립한다(props·slot) ④ 그래도 불가피하면 상대 슬라이스의 **공개 API(`index.ts`)로만** 받고, 왜 ①~③이 안 되는지 코드 주석으로 남긴다.
+- **entities 교차는 `@x`로만**: 도메인끼리 꼭 참조해야 하면 제공자가 소비자에게만 내주는 `entities/<제공자>/@x/<소비자>/**` 창구를 쓴다(형식 예: `entities/place/@x/itinerary-slot/` — 지금 리포에 `@x` 폴더는 0개, entity 간 import도 0건). 먼저 두 entity를 합칠 수 없는지부터 본다 — `@x`는 마지막 수단이고 features·widgets에는 쓰지 않는다.
+- **공개 API(`index.ts`)**: 슬라이스 밖에서는 그 슬라이스의 `index.ts`로만 import한다. `shared`는 슬라이스가 없으므로 세그먼트(또는 컴포넌트 폴더)마다 `index.ts`를 둔다.
+  - **과도기(TRIP-1157까지)**: 이주 중에는 딥 임포트(`@/features/home/model/homeFixtures`)를 허용한다 — 옮기는 동안 `index.ts`를 두 번 고치지 않기 위해서다. TRIP-1157에서 `index.ts`를 일괄 정비하고 딥 임포트 금지 lint를 켠다. 그 뒤 딥 임포트는 위반이다.
+  - 현재: pages 51개 중 50개가 `index.ts`를 가진다(`magazine`만 없음). entities는 `model/index.ts`(place·stay·trip·itinerary-slot)로 도메인 타입을 내준다.
+- **이주 방식**: 화면 묶음 단위로 옮긴다(TRIP-1138 · 서브 1146~1154) — 테스트 정상화를 먼저 하고 그 화면의 이동을 뒤 커밋으로.
+- **린터**: 이주가 끝나면 공식 FSD 린터 Steiger(`insignificant-slice` · `excessive-slicing`)를 CI 게이트로 붙인다(TRIP-1157·1158). 그 전까지는 ESLint zone과 소스 스캔이 경계를 지킨다.
+- **전방 `app → features` 제한은 아직 두지 않는다** — 목표 방향은 `app`이 `pages·shared`만 보는 것이지만, 지금은 `app`이 features를 직접 import하는 곳이 많아(라우트·프리뷰) 켤 수 없다. pages 이주로 이 참조가 줄어든 뒤 켠다.
 - 절대 경로 별칭 `@/` = `src/` (tsconfig paths — `@/features/...`, `@/shared/...`).
 
 ### 상태 관리 규칙
@@ -75,7 +93,7 @@ frontend/
 ## API 계층
 
 - `shared/api`가 서버 통신의 단일 계층. orval이 `backend/docs/design/openapi.yaml`에서 axios 클라이언트·TanStack Query 훅·Zod 스키마를 생성한다.
-  - ⚠️ **Zod 스키마 생성은 아직 배선되지 않았다**(TRIP-179 기준 — `orval.config.ts`는 axios 클라이언트 + TanStack Query 훅까지만 생성한다). 아래 Zod 런타임 검증(§74~75)은 그 배선이 붙는 후속 티켓 범위다.
+  - ⚠️ **Zod 스키마 생성은 아직 배선되지 않았다**(TRIP-179 기준 — `orval.config.ts`는 axios 클라이언트 + TanStack Query 훅까지만 생성한다). 아래 Zod 런타임 검증(바로 아래 "Zod 응답 검증 적용 지점" 항목)은 그 배선이 붙는 후속 티켓 범위다.
 - **생성물은 커밋한다** (`shared/api/generated/`). 재생성은 `pnpm codegen` — 스펙 변경 PR과 생성물 갱신을 같은 커밋으로.
 - **코드젠이 보장하는 건 "클라이언트 ↔ 스펙 문서" 정합까지다.** 스펙 ↔ 실제 서버 구현의 정합은 서버 쪽 책임(계약 테스트 등)이며, 클라이언트는 이를 신뢰하되 Zod 런타임 검증으로 안전망을 둔다.
 - Zod 응답 검증 적용 지점: **개발 모드에서는 전 응답, 프로덕션에서는 핵심 API(부트스트랩·일정·인증)만** — 성능과 안전의 절충.
