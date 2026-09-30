@@ -28,14 +28,15 @@ React Native + Expo (TypeScript strict) 클라이언트.
 
 ## 디렉토리 구조
 
-frontend/ 루트가 곧 Expo 프로젝트이며(모노레포 구조는 inception unit-of-work 정합), 앱 소스는 전부 `src/` 아래에 둔다(Expo Router가 `src/app`을 자동 인식). 루트에는 설정 파일과 인프라 스텁·문서만 남긴다.
+frontend/ 루트가 곧 Expo 프로젝트이며(모노레포 구조는 inception unit-of-work 정합), 라우팅은 루트 `app/`(Expo Router), 앱 소스(FSD 층)는 전부 `src/` 아래에 둔다. 루트에는 그 밖에 설정 파일과 인프라 스텁·문서만 남긴다.
 
 구조의 정본은 **공식 Feature-Sliced Design v2.1**(fsd.how)이다. 아래 규칙은 그 공식 규칙을 이 리포에 적용한 결정이며, 공식과 다르게 가는 곳은 이유와 함께 명시한다(TRIP-1138 · 결정 원문 TRIP-1139).
 
 ```text
 frontend/
-  src/
-    app/          # Expo Router 라우트 + 앱 전역(프로바이더·루트 셸·전역 폰트/스타일). 라우트 파일은 pages를 꽂는 얇은 래퍼
+  app/            # Expo Router 라우트 전용 (FSD 층 아님) — 라우트 파일은 pages를 꽂는 얇은 래퍼
+  src/            # FSD 층만
+    app/          # FSD app 층 — 전역 프로바이더·루트 셸(스플래시 게이트)·전역 폰트/스타일. 슬라이스 없이 세그먼트로만
     pages/        # 화면 — 라우트 하나가 꽂는 슬라이스. 그 화면만 쓰는 UI·상태·요청 조합을 전부 소유한다
     widgets/      # 공식 비권장 — 새로 만드는 건 조건부(§층 규칙)
     features/     # 여러 화면이 공유하는 사용자 행동 (목록·수 정본: src/features 디렉토리 · docs/structure.generated.md)
@@ -53,7 +54,7 @@ frontend/
   docs/                            # 개발로그·구조 지도
 ```
 
-> **지금 코드와 다른 곳 (이주 중)**: 위 트리는 목표다. 현재 코드에는 공식에 없는 `src/app-shell/`(루트 셸 — `app/`로 흡수 예정)과 최상위 `src/assets/`(쓰는 슬라이스 옆으로 이동 예정)가 남아 있다 — TRIP-1161. `app/(tabs)/explore.tsx`(376줄)·`index.tsx`(223줄)는 얇은 래퍼가 아니라 컨테이너 역할을 한다 — TRIP-1142. features에 화면이 들어 있는 곳은 화면 묶음 단위로 pages로 옮긴다 — TRIP-1146~1154.
+> **지금 코드와 다른 곳 (이주 중)**: 위 트리는 목표다. 현재 코드는 Expo Router 라우트가 `src/app/`에 있고(루트 `app/`으로 올릴 예정), FSD app 층 역할은 공식에 없는 `src/app-shell/`이 맡으며(`src/app/`으로 옮길 예정), 최상위 `src/assets/`가 남아 있다(쓰는 슬라이스 옆으로) — TRIP-1161. `shared`는 15개 폴더로 트리보다 많고 일부는 `lib`로 모을 유틸이다 — TRIP-1162. `app/(tabs)/explore.tsx`(376줄)·`index.tsx`(223줄)는 얇은 래퍼가 아니라 컨테이너 역할을 한다 — TRIP-1142. features에 화면이 들어 있는 곳은 화면 묶음 단위로 pages로 옮긴다 — TRIP-1146~1154.
 
 ### 층 규칙
 
@@ -67,6 +68,7 @@ frontend/
 - **widgets**: 공식이 비권장하는 층이다(적극 도입하지 말 것을 권하되, 기존 슬라이스는 유효). 새 widget은 기본적으로 만들지 않고, 먼저 pages·app에서 조립(Strategy C)하거나 features·shared로 보낸다. 그래도 아래를 **모두** 만족하면 만든다 — ① 추출 규칙 세 조건 ② 여러 feature를 엮는 UI 덩어리라 features·shared 어디에도 맞지 않는다 ③ page에서 조립하면 여러 화면에 같은 조립 코드가 반복된다. 만들 때는 그 이유를 슬라이스 안 주석으로 남긴다. 여러 화면이 쓰는 기존 두 슬라이스(`map-sheet-shell` · `time-sheet`)는 유지하고, 한 화면만 쓰는 슬라이스는 그 page로 되돌린다(TRIP-1143).
 - **entities**: 조심해서 쓴다 — 거의 모든 층이 보는 층이라 변경이 넓게 퍼진다. 순수 CRUD·전송 타입(DTO)은 entity가 아니라 `shared/api` 소관이다(점검은 TRIP-1155).
 - **슬라이스 그룹**: pages는 여정 단계로 묶는다 — `auth · onboarding · explore · stay · trip · itinerary · live · record · settings`(TRIP-1156). 그룹 폴더는 탐색용일 뿐이라 그 자체에 세그먼트·`index.ts`를 두지 않는다.
+- **라우팅 폴더 ≠ FSD app 층**: Expo Router의 라우트 폴더(루트 `app/`)는 프레임워크 영역이고 FSD 층이 아니다. 라우트 파일에는 로직을 두지 않고 `src/pages`의 화면을 꽂기만 한다. FSD app 층(`src/app/`)과 `shared`는 슬라이스 없이 세그먼트로만 구성하며, 세그먼트 이름은 주제가 아니라 목적(`ui`·`api`·`lib`·`config`, 인프라 세그먼트 `map`·`location`·`push` 등)으로 짓는다 — 날짜·버전 비교 같은 유틸은 `shared/lib`.
 - **자산**: 이미지·아이콘은 쓰는 코드 옆에 둔다(여러 곳이 쓰면 `shared`). 전역 폰트·스타일은 `app`. 최상위 `assets/` 세그먼트는 만들지 않는다. 예외: `app.json`/`app.config.ts`가 참조하는 앱 아이콘·스플래시.
 - **세그먼트**: 슬라이스 내부는 `ui`(화면·컴포넌트) / `model`(상태·도메인 타입·업무 규칙) / `api`(요청) / `lib`(슬라이스 내부 헬퍼) / `config`(상수·라벨·환경값). 필요할 때만 만든다. 파일 이름은 역할(`types.ts`·`utils.ts`)이 아니라 도메인으로 짓는다.
 - **`api` 세그먼트와 orval**: orval 생성물은 `shared/api` 한 곳에만 둔다(스펙 드리프트 차단). 한 페이지만 쓰는 요청 조합·응답 변환·쿼리 키 래퍼는 그 페이지의 `api/`에 둔다. 여러 슬라이스가 쓰게 되면 `shared/api`로 내린다.
