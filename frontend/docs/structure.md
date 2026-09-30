@@ -58,7 +58,7 @@ frontend/
 
 TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개를 `git rm`으로 전부 삭제했다. 그중 8개(`archive`·`execution`·`itinerary`·`notification`·`planb`·`settings`·`stay`·`trip`)는 그 배럴이 디렉토리 안의 유일한 파일이라 **디렉토리째 사라졌다** — `stay`는 위 절대로 TRIP-179로 재등장(데이터 계층만), `itinerary`는 위 절대로 TRIP-295로 재등장(순수 함수만). 지금 `src/features/`에는 `auth`·`home`·`onboarding`·`stay`·`explore`·`trip`·`itinerary` 7개다.
 
-새 도메인을 시작할 때 빈 배럴부터 만들지 않는다 — **`auth`가 선례**다: 배럴 없이 딥 임포트로 시작하고, 재수출할 공개 API가 실제로 생기면 그때 배럴을 만든다. `export {};`만 있는 선점은 `fsdStructure.test.ts`의 AC-4(아래 테스트 인프라 절)가 기계로 막는다.
+새 코드는 **pages first**다 — 먼저 그 코드를 쓰는 `pages/<slice>`에 두고, 추출 규칙 세 조건(지금 여러 곳이 쓴다 · 독립 변경 이유 · 좁은 책임)을 모두 만족할 때만 features·entities로 뺀다(정본: `frontend/README.md` §층 규칙). 빈 배럴 선점(`export {};`만 있는 `index.ts`)은 여전히 금지이고 `fsdStructure.test.ts`의 AC-4가 기계로 막는다. 공개 API(`index.ts`)는 TRIP-1157에서 일괄 정비한다 — 그 전까지 딥 임포트는 과도기 허용이다.
 ## 재사용 공개 API
 
 **새 함수를 만들기 전에 여기부터 본다.** 있으면 다시 만들지 말고 가져다 쓴다.
