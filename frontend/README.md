@@ -121,17 +121,56 @@ frontend/
 
 ## 테스트 전략
 
-4층 피라미드. 모든 층에서 실제 외부 API 호출 0 — 서버 API는 목/fake만 사용.
+모든 층에서 실제 외부 API 호출 0 — 서버 API는 목/fake(MSW)만 사용한다. 이 절은 **어떤 테스트를 어디에 두고, 기존 테스트를 남길지·합칠지·지울지**를 가르는 기준이다(TRIP-1140 · 정리 작업은 TRIP-1138).
 
-| 층 | 대상 | 도구 | 비고 |
+### 무엇을 어디에
+
+| 대상 | 층 | 파일 | 도구 |
 |---|---|---|---|
-| 순수 함수 + PBT | `model/`·판정 함수(스플래시 분기·버전 비교·날짜 겹침 등) | Jest + fast-check | 판정 로직은 순수 함수로 분리해 PBT 대상으로 — 시드 로깅·shrinking으로 재현 가능 |
-| 훅 | `hooks/` TanStack Query 훅 | Jest `renderHook` + API 목 | QueryClient 래퍼로 격리 |
-| 컴포넌트/화면 | `screens/`·`components/` | React Native Testing Library | testID 규약 `{feature}-{screen}-{role}`(예: `execution-hub-timeline`) — testID 부여는 스펙의 일부 |
-| UI E2E | 핵심 해피패스 **1~2개만** | 미정 (Maestro/Detox — 여행 중 실행 기능 개발 시점에 결정) | 시나리오 검증 본체는 백엔드 API 레벨 E2E가 담당 |
+| 화면 — 렌더·탭·결과 | `pages/<slice>` (이주 중에는 화면이 있는 곳) | **단위 1** `XxxPage.test.tsx` + **통합 1** `XxxPage.integration.test.tsx` | React Native Testing Library · 통합은 MSW |
+| 판정 로직(순수 함수) | 로직이 있는 슬라이스의 `model/`·`lib/` | 옆에 `foo.test.ts` | Jest |
+| 판정 로직의 속성 | 위와 같음 | 함수(또는 함수 묶음)당 PBT 1파일 | fast-check |
+| 도구가 못 지키는 계약(INV-3 등) | feature 또는 page 그룹 | 묶음당 계약 스캔 1파일, 리포 전역 불변식은 전역 1파일 | 소스 스캔 |
+| 개발 도구(`_dev` 프리뷰) | `src/app/_dev` | 스모크 1파일 | RNTL |
+| UI E2E | 핵심 해피패스 **1~2개만** | — | 미정(Maestro/Detox). 시나리오 검증 본체는 백엔드 API E2E |
 
-- 테스트 파일은 소스 옆에 배치 (`foo.ts` ↔ `foo.test.ts`).
-- CI(`.github/workflows/frontend-ci.yml`, 경로 필터 `frontend/**`): `tsc` · ESLint · Jest+fast-check — 머지 게이트.
+- 테스트 파일은 소스 옆에 둔다(`foo.ts` ↔ `foo.test.ts`). jest 설정이 둘이라(`jest.config.js` node · `jest.integration.config.js` MSW) 통합 테스트는 `.integration.test`로 파일이 갈린다. 둘 다 돌리려면 `pnpm test`(한쪽만 부르면 다른 쪽이 0건인 채 green으로 보인다).
+- testID 규약 `{feature}-{screen}-{role}`(예: `execution-hub-timeline`) — testID 부여는 스펙의 일부다.
+- CI(`.github/workflows/frontend-ci.yml`, 경로 필터 `frontend/**`): `tsc` · ESLint · Jest(두 버킷)+fast-check — 머지 게이트.
+
+### 남김·합침·지움 판정
+
+테스트 파일 하나를 들고 오면 위에서부터 첫 번째로 맞는 줄을 따른다.
+
+1. **PBT** → property(`fc.assert`)는 **하나도 지우지 않는다**(루트 CLAUDE.md — PBT는 차단 게이트). 같은 함수를 보는 PBT가 여러 파일이면 한 파일로 **합친다**.
+2. **개발 도구(`_dev` 프리뷰) 테스트** → 모든 프리뷰 키가 throw 없이 렌더되는지 보는 **스모크 1파일만 남기고 지운다**. 프리뷰는 사람이 눈으로 보는 도구라 세부 동작 검사는 실제 화면 테스트의 몫이다.
+3. **소스 스캔**(파일을 텍스트로 읽고 렌더하지 않는 테스트)
+   - tsc·ESLint가 이미 지키는 것(타입 필드 수·층 경계·import 방향)을 다시 본다 → **지운다**. 단 지우기 전에 그 규칙을 실제로 지키는 tsc/ESLint 규칙이 있는지 확인한다 — 없으면 아래 줄로.
+   - 도구가 못 지키는 계약(INV-3 소요시간 비표시·지도 키 부재 표면 등) → **남기되** feature(또는 page 그룹)당 1파일로 **합친다**.
+   - **화면 소스 가드**(특정 화면 파일이 실재하고 금칙어가 없다 등) → 렌더 결과로 확인할 수 있는 것(텍스트·testID·요소 유무)이면 **화면 테스트로 옮기고 스캔은 지운다**. jest가 원리적으로 못 보는 것(바텀시트 제스처 prop·스타일 클래스 금칙어 등)만 스캔으로 남기되 화면 묶음 계약 파일로 **합친다**. 같은 금칙어를 반복 스캔한다면 ESLint `no-restricted-syntax`로 옮길 수 있는지 먼저 본다.
+   - **탐지기 자가검사**(주석은 걷고 코드는 잡는지 확인하는 블록)는 공용 스캔 헬퍼에서 한 번만 한다 — 스캔 파일마다 반복하지 않는다.
+   - 경로를 문자열로 박은 스캔은 FSD 이동에서 대량으로 깨진다 — 화면 칸에서는 **테스트 정리를 먼저, 그 화면의 이동을 뒤 커밋으로** 한다(지울 테스트를 고치는 헛수고 방지).
+4. **같은 화면을 여러 파일이 테스트**(`.select.`·`.errors.`·`.apple.` 같은 티켓·관점 접미사) → 화면 단위 1 + 통합 1로 **합친다**. 관점은 `describe` 블록으로 보존하고, 티켓 번호(`TRIP-####`)는 테스트 이름이 아니라 주석으로 옮긴다. 같은 동작을 보는 `it`은 하나만 남긴다.
+5. 그 밖(순수 함수 단위 테스트 등) → **남긴다**.
+
+### 합격선 — 정리해도 덜 잡지 않았는가
+
+줄 수 목표는 두지 않는다(필요한 테스트까지 지우는 압력이 된다). 대신 두 가지를 모두 지킨다.
+
+- **합산 근사 줄 커버리지 하락 2%p 이내** — 기준선 91.64%(2026-09-30 develop `5feef8b0`) → 89.64% 이상.
+- **착수 전 잡히던 뮤테이션을 전부 유지** — 정리하는 칸마다 착수 전에 심판이 잡는 뮤테이션을 심어 두고, 정리 뒤에도 전부 red인지 확인한다.
+
+측정은 누구나 같은 명령으로 한다(결과는 gitignore된 `_workspace/test-measure/`).
+
+```bash
+scripts/test-measure.sh <라벨>      # 두 버킷 + 커버리지 → 합산 근사 줄 커버리지·시간·케이스 수
+python3 scripts/test-classify.py    # 테스트 파일 칸 분류(행동·소스 스캔·PBT·단위·개발 도구) → classification.csv
+```
+
+### PBT 작성 규칙
+
+- **"생성기 적중" 단언(특정 사례가 최소 1회 나왔는가)을 확률에 맡기지 않는다** — 그 사례를 fast-check `examples` 파라미터로 반드시 박는다. 무작위에만 맡기면 코드가 맞아도 시드 운에 따라 CI가 떨어진다(실측: `recordsCalendarOngoing.test.ts` 동점 사례, CI 1회당 약 3~4% — 수정은 TRIP-1163).
+- 판정 로직은 순수 함수로 분리해 PBT 대상으로 둔다 — 시드 로깅·shrinking으로 재현 가능하게.
 
 ## 린트·포맷
 
