@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MapView, type MapCenter, type MapPin } from '@/shared/map';
+import { startUnlessReduceMotion } from '@/shared/motion/reduceMotion';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
 import {
@@ -88,8 +89,8 @@ function IndeterminateBar(): ReactElement {
         useNativeDriver: true,
       })
     );
-    loop.start();
-    return () => loop.stop();
+    // 동작 줄이기면 돌지 않고 세그먼트가 트랙 안에 완전히 보이는 자리(0.5)에 선다(01b Q2=(b), 위치 발명값).
+    return startUnlessReduceMotion(loop, () => progress.setValue(0.5));
   }, [progress]);
 
   const segmentWidth = trackWidth * 0.4;

@@ -3,6 +3,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { Skeleton } from '@/shared/ui/Skeleton';
 
 import type { MyTripsSortKey } from '../model/myTripsOrder';
 
@@ -76,10 +77,10 @@ function SkeletonCard({ index }: { index: number }): ReactElement {
       testID={`my-trip-skeleton-${index}`}
       className="w-full overflow-hidden rounded-card border border-hairline bg-canvas"
     >
-      <View className="h-[178px] w-full bg-surface-soft" />
+      <Skeleton className="h-[178px] w-full bg-surface-soft" />
       <View className="gap-sm px-[14px] pb-[14px] pt-[13px]">
-        <View className="h-[15px] w-2/3 rounded-input bg-surface-soft" />
-        <View className="h-[13px] w-1/2 rounded-input bg-surface-soft" />
+        <Skeleton className="h-[15px] w-2/3 rounded-input bg-surface-soft" />
+        <Skeleton className="h-[13px] w-1/2 rounded-input bg-surface-soft" />
       </View>
     </View>
   );

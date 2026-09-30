@@ -15,6 +15,7 @@ import type { Place } from '@/shared/api/generated/schemas';
 import { PoiCategory } from '@/shared/api/generated/schemas';
 import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { Skeleton } from '@/shared/ui/Skeleton';
 
 import type { PlaceListState } from '../model/placeListState';
 import type { PlaceSaveNotice } from '../model/placeSaveGuard';
@@ -258,9 +259,9 @@ function SkeletonCard({ index }: { index: number }): ReactElement {
       testID={`explore-places-skeleton-${index}`}
       className="w-[48%] gap-[7px]"
     >
-      <View className="h-[132px] w-full rounded-[14px] bg-surface-strong" />
-      <View className="h-[13px] w-2/3 rounded-[6px] bg-hairline" />
-      <View className="h-[11px] w-1/2 rounded-[6px] bg-surface-strong" />
+      <Skeleton className="h-[132px] w-full rounded-[14px] bg-surface-strong" />
+      <Skeleton className="h-[13px] w-2/3 rounded-[6px] bg-hairline" />
+      <Skeleton className="h-[11px] w-1/2 rounded-[6px] bg-surface-strong" />
     </View>
   );
 }

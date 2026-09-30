@@ -2,6 +2,8 @@ import type { ReactElement, ReactNode } from 'react';
 import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Skeleton } from '@/shared/ui/Skeleton';
+
 import type { MustVisitSeedItem } from '../model/mustVisitSeed';
 import { formatWizardStep } from '../model/tripSummary';
 import type { PreferenceSummary, SummaryLine } from '../model/tripSummary';
@@ -148,7 +150,7 @@ function SummaryRow({
         {isLoading ? (
           <View testID={skeletonTestID} className="flex-row gap-[6px]">
             {skeletonWidths.map((w, i) => (
-              <View
+              <Skeleton
                 key={i}
                 testID={`${skeletonTestID}-bar-${i}`}
                 className={`h-[12px] rounded-[10px] bg-hairline w-[${w}px]`}
@@ -303,7 +305,7 @@ function MustVisitSkeleton(): ReactElement {
         contentContainerStyle={{ gap: 8 }}
       >
         {[1, 2, 3, 4].map((n) => (
-          <View
+          <Skeleton
             key={n}
             testID={`trip-wizard-mustvisit-skeleton-${n}`}
             className="h-[64px] w-[64px] rounded-[10px] bg-hairline"

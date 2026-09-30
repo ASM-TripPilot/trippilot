@@ -1,5 +1,7 @@
-import type { ReactElement } from 'react';
-import { Pressable } from 'react-native';
+import { useEffect, useRef, type ReactElement } from 'react';
+import { Animated, Pressable } from 'react-native';
+
+import { startUnlessReduceMotion } from '@/shared/motion/reduceMotion';
 
 import { HeartFilledGlyph, HeartOutlineGlyph } from './HeartGlyphs';
 
@@ -11,6 +13,11 @@ import { HeartFilledGlyph, HeartOutlineGlyph } from './HeartGlyphs';
  * 담김/안 담김은 색이 아니라 `accessibilityState.selected` + 서로 다른 글리프 testID 로 갈린다
  * (SVG fill 은 jest 사각). `pending` 이면 disabled 다 — 단 disabled 하트 press 는 부모
  * Pressable 로 새므로(RNTL Probe C) 누를 수 있는 카드는 자기 onPress 에 `!pending` 가드를 둔다.
+ *
+ * TRIP-1125 — **이 하트를 누른 뒤** 안 담김 → 담김으로 바뀌는 순간만 글리프가 한 번 튄다. 누름 1회가
+ * 튐 자격 1개를 만들고, 누른 뒤 첫 `saved` 변화가 그 자격을 쓴다(담김이면 튀고, 취소면 소비만). 누르지
+ * 않은 변화(저장 목록 늦은 도착·로그인 뒤 도착)·처음부터 담김·동작 줄이기는 안 튄다. 튐은 루트가 아니라 글리프 감싸개에 건다 — 루트는 소비처 위치 className 과 판정
+ * 속성(testID·selected·disabled)을 그대로 가진다. 튐 크기·박자는 발명값(6-b 육안 조정).
  */
 export interface HeartButtonProps {
   saved: boolean;
@@ -31,6 +38,37 @@ export function HeartButton({
   outlineTestID,
   className = '',
 }: HeartButtonProps): ReactElement {
+  const scale = useRef(new Animated.Value(1)).current;
+  const wasSaved = useRef(saved);
+  const pressed = useRef(false);
+
+  useEffect(() => {
+    if (saved === wasSaved.current) return;
+    wasSaved.current = saved;
+    const justSaved = saved && pressed.current;
+    pressed.current = false;
+    if (!justSaved) return;
+    const stop = startUnlessReduceMotion(
+      Animated.sequence([
+        Animated.timing(scale, {
+          toValue: 1.25,
+          duration: 120,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scale, {
+          toValue: 1,
+          friction: 4,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    // 튐 도중 담기 취소·언마운트면 중간 크기에 남지 않게 되돌린다.
+    return () => {
+      stop();
+      scale.setValue(1);
+    };
+  }, [saved, scale]);
+
   return (
     <Pressable
       testID={testID}
@@ -38,14 +76,19 @@ export function HeartButton({
       accessibilityLabel="담기"
       accessibilityState={{ selected: saved }}
       disabled={pending}
-      onPress={onPress}
+      onPress={() => {
+        pressed.current = true;
+        onPress();
+      }}
       className={`${className} h-8 w-8 items-center justify-center rounded-pill bg-on-primary`}
     >
-      {saved ? (
-        <HeartFilledGlyph testID={filledTestID} size={18} />
-      ) : (
-        <HeartOutlineGlyph testID={outlineTestID} size={18} />
-      )}
+      <Animated.View style={{ transform: [{ scale }] }}>
+        {saved ? (
+          <HeartFilledGlyph testID={filledTestID} size={18} />
+        ) : (
+          <HeartOutlineGlyph testID={outlineTestID} size={18} />
+        )}
+      </Animated.View>
     </Pressable>
   );
 }

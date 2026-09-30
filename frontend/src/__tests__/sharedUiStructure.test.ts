@@ -30,6 +30,8 @@ import path from 'path';
  * **A. 영구 규칙 — 유지한다.** 잠그는 것이 층 규칙(README §59·§60·§61·§66)과 INV-3 이라
  * 컴포넌트가 늘어도 갱신이 필요 없다 — 모집단이 디렉토리 재귀라 새 파일이 자동 편입된다.
  * 갱신이 필요한 순간은 `HEX_EXEMPT` 를 늘려야 할 때뿐이고, 그때는 면제 사유를 여기 적는다.
+ * INV-3 `duration` 스캔은 `Animated.timing` 인라인 설정의 박자 키만 문맥으로 놓아준다(TRIP-1125 Q3,
+ * `maskAnimationTimingKeys`) — 파일 면제가 아니다.
  * **B 없음** — 이 파일에는 특정 디자인 값을 고정하는 단언이 하나도 없다(그 층은
  * `tabbarVisual.test.ts` 가 맡는다).
  */
@@ -102,6 +104,26 @@ function stripComments(source: string): string {
     .replace(/(^|[^:])\/\/.*$/gm, '$1');
 }
 
+/**
+ * INV-3 스캔 전처리(TRIP-1125 Q3) — `Animated.timing(값, { … })` **인라인 설정 객체 안의 `duration:` 키
+ * 이름만** 가린다. 애니메이션 박자는 사용자에게 보이는 소요시간이 아니다. 파일 면제가 아니라 문맥 면제라
+ * 같은 파일의 다른 `duration`(값 쪽 식·타입 필드·표시값·설정 밖 변수)은 그대로 잡힌다. 설정을 변수로
+ * 빼거나 설정 안에 중괄호가 중첩되면 가려지지 않아 red(거짓 green 이 아니라 거짓 red 쪽으로 틀린다).
+ * 반드시 `stripComments` **뒤에** 부른다 — 설정 안 주석의 `{` 가 매치를 끊는다.
+ */
+function maskAnimationTimingKeys(source: string): string {
+  return source.replace(
+    /Animated\.timing\(\s*[^,()]+,\s*\{[^{}]*\}/g,
+    // 키 자리(`{` 나 `,` 바로 뒤)만 — `a ? b.duration : c` 처럼 값 쪽 식에서 `:` 앞에 오는 duration 은
+    // 키가 아니다.
+    (block) => block.replace(/([{,]\s*)duration(?=\s*:)/g, '$1timingMs')
+  );
+}
+
+function hasDuration(source: string): boolean {
+  return /\bduration\b/i.test(maskAnimationTimingKeys(source));
+}
+
 function listSourceFiles(dir: string): string[] {
   if (!fs.existsSync(dir)) return [];
   return fs
@@ -156,6 +178,71 @@ describe('탐지기 자가검사 — 이게 통과해야 아래 단언이 의미
     expect(stripped).toContain('const t = setTimeout(fn, 100);');
     expect(stripComments('const d = { duration: 1 };')).toContain('duration');
   });
+
+  it('INV-3 탐지기는 Animated.timing 인라인 설정의 박자 키만 놓아주고, 표시·데이터 duration 은 잡는다 (TRIP-1125 Q3)', () => {
+    const scan = (code: string) => hasDuration(stripComments(code));
+
+    // 놓아준다 — 애니메이션 박자 키.
+    expect(
+      scan(
+        'Animated.timing(opacity, { toValue: 0.4, duration: 800, useNativeDriver: true })'
+      )
+    ).toBe(false);
+    expect(
+      scan(
+        [
+          'Animated.timing(values[index], {',
+          '  toValue: 1,',
+          '  duration: PULSE_MS,',
+          '  easing: Easing.inOut(Easing.ease),',
+          '  useNativeDriver: true,',
+          '})',
+        ].join('\n')
+      )
+    ).toBe(false);
+    // 전처리 × 마스킹 조합 — 설정 안 줄 주석의 `{` 를 먼저 걷어야 박자 키가 가려진다.
+    expect(
+      scan(
+        [
+          'Animated.timing(scale, {',
+          '  toValue: 1, // 박자 {발명값}',
+          '  duration: 600,',
+          '  useNativeDriver: true,',
+          '})',
+        ].join('\n')
+      )
+    ).toBe(false);
+
+    // 잡는다 — 값 쪽 식, 설정 밖 객체, 표시값, 타입 필드.
+    expect(
+      scan(
+        'Animated.timing(v, { toValue: 1, duration: trip.duration, useNativeDriver: true })'
+      )
+    ).toBe(true);
+    expect(
+      scan('const cfg = { duration: 800 }; Animated.timing(v, cfg).start();')
+    ).toBe(true);
+    expect(scan('<Text>{slot.duration}</Text>')).toBe(true);
+    expect(scan('type P = { duration: number };')).toBe(true);
+    // 값 쪽 삼항식 — `slot.duration` 바로 뒤에 `:` 가 와도 키가 아니다(5-b W5).
+    expect(
+      scan(
+        'Animated.timing(v, { toValue: 1, duration: slot ? slot.duration : 800, useNativeDriver: true })'
+      )
+    ).toBe(true);
+    expect(
+      scan(
+        [
+          'Animated.timing(v, {',
+          '  toValue: 1,',
+          '  duration: slot',
+          '    ? slot.duration',
+          '    : 800,',
+          '})',
+        ].join('\n')
+      )
+    ).toBe(true);
+  });
 });
 
 describe('AC-G2 · shared/ui 모집단 — 승격이 실제로 일어났는가', () => {
@@ -191,7 +278,7 @@ describe('AC-G2 · shared 는 features 를 모른다 (README §59·§61·§66 ·
     expect(offenders).toEqual([]);
 
     const durationOffenders = sources
-      .filter(({ source }) => /\bduration\b/i.test(source))
+      .filter(({ source }) => hasDuration(source))
       .map(({ file }) => file);
     expect(durationOffenders).toEqual([]);
 
@@ -286,5 +373,16 @@ describe('🔴 TRIP-1050 · 콜라주 빈 상태는 shared/ui 한 벌이고 두 
     // (TRIP-1042 몫) 이 금지를 걸지 않는다.
     expect(staySource).not.toMatch(/\bEmptyCollage\b/);
     expect(staySource).not.toContain('saved-stay-empty-photo-');
+  });
+});
+
+describe('🔴 TRIP-1125 AC-5 · 공용 스켈레톤이 shared/ui 가드 사정거리 안에 있다', () => {
+  it('Skeleton.tsx 가 모집단에 있어 층·duration·URL·className·hex 스캔을 함께 받는다', () => {
+    const skeleton = sharedUiSources().find(
+      ({ file }) => file === 'shared/ui/Skeleton.tsx'
+    );
+
+    expect(skeleton).toBeDefined();
+    expect(skeleton?.source).toMatch(/export function Skeleton\b/);
   });
 });

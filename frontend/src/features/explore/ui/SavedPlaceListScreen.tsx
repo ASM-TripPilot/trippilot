@@ -7,6 +7,7 @@ import type { SavedPlace } from '@/shared/api/generated/schemas';
 import { CollageEmptyState } from '@/shared/ui/CollageEmptyState';
 import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { Skeleton } from '@/shared/ui/Skeleton';
 
 import type { PlaceListState } from '../model/placeListState';
 import type { PlaceSaveNotice } from '../model/placeSaveGuard';
@@ -343,13 +344,13 @@ function LoadingBlock(): ReactElement {
           testID={`explore-saved-skeleton-${index}`}
           className="flex-row items-center gap-md border-b border-hairline px-lg py-md"
         >
-          <View className="h-[26px] w-[26px] rounded-pill bg-surface-strong" />
-          <View className="h-20 w-[104px] rounded-thumb bg-surface-strong" />
+          <Skeleton className="h-[26px] w-[26px] rounded-pill bg-surface-strong" />
+          <Skeleton className="h-20 w-[104px] rounded-thumb bg-surface-strong" />
           <View className="flex-1 gap-sm">
-            <View className="h-[15px] w-2/3 rounded-[6px] bg-hairline" />
-            <View className="h-[13px] w-1/2 rounded-[6px] bg-surface-strong" />
+            <Skeleton className="h-[15px] w-2/3 rounded-[6px] bg-hairline" />
+            <Skeleton className="h-[13px] w-1/2 rounded-[6px] bg-surface-strong" />
           </View>
-          <View className="h-[26px] w-[26px] rounded-pill bg-surface-strong" />
+          <Skeleton className="h-[26px] w-[26px] rounded-pill bg-surface-strong" />
         </View>
       ))}
     </View>

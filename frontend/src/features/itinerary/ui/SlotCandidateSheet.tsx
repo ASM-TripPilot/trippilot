@@ -3,6 +3,7 @@ import { Pressable, Text, View } from 'react-native';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 
 import { SlotCandidateCard } from '@/entities/place/ui/SlotCandidateCard';
+import { Skeleton } from '@/shared/ui/Skeleton';
 
 import {
   AlertCircleGlyph,
@@ -291,10 +292,10 @@ export function SlotCandidateSheet({
                     testID="itinerary-candidate-skeleton-row"
                     className="w-full flex-row items-center gap-md rounded-card border border-hairline bg-canvas p-md"
                   >
-                    <View className="h-[56px] w-[56px] rounded-thumb bg-surface-soft" />
+                    <Skeleton className="h-[56px] w-[56px] rounded-thumb bg-surface-soft" />
                     <View className="flex-1 gap-xs">
-                      <View className="h-[14px] w-1/2 rounded-pill bg-surface-soft" />
-                      <View className="h-[14px] w-1/3 rounded-pill bg-surface-soft" />
+                      <Skeleton className="h-[14px] w-1/2 rounded-pill bg-surface-soft" />
+                      <Skeleton className="h-[14px] w-1/3 rounded-pill bg-surface-soft" />
                     </View>
                   </View>
                 ))}
