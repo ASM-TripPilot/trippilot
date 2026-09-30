@@ -6,6 +6,8 @@ paths:
 
 조회·판정·라우팅을 화면(순수 뷰)에 잇는 배선판 층. 층 방향(`app → pages → widgets → features → entities → shared`)은 `eslint.config.js` 층 zone이 강제한다(`docs/structure.md` "FSD 층 방향 규칙") — pages는 app·app-shell과 **형제 pages 슬라이스**를 import할 수 없다. features는 widgets를 못 물으므로 `MapSheetShell` 등 위젯 조립은 pages가 맡고, 두 feature(execution·planb 등)를 함께 부르는 조합도 pages만 할 수 있다. 프리뷰가 네트워크 계층을 전이 로드하지 않도록 셸을 조립하는 순수 뷰는 컨테이너와 다른 파일(`*View.tsx`)에 둔다.
 
+**목표 모양(README §층 규칙)**: page가 그 화면의 UI·상태·요청 조합을 전부 소유한다(pages first). 지금의 "pages=배선판, 화면=features/ui의 순수 뷰" 분업은 옛 규칙의 산물이고 화면 묶음 이주(TRIP-1146~1154)로 걷힌다 — 새 화면은 옛 분업을 따라 features/ui에 만들지 않는다.
+
 배럴(`index.ts`)만 있는 행·테스트 파일 행은 적지 않는다 — 파일 존재는 `docs/structure.generated.md`가 자동으로 충당한다. 아래는 용도와, 파일을 읽어도 바로 안 보이는 계약·함정만 적는다.
 
 | 슬라이스 | 파일 | 역할 |
@@ -83,4 +85,4 @@ paths:
 | `reconsent` | `src/pages/reconsent/ui/ReconsentPage.tsx` | 약관 재동의 — 대상 = 부트스트랩 타입 ∩ `/terms` 현행판, **교집합이 비면 통과가 아니라 실패**(빈 목록은 "전부 체크됨"이 공짜로 참). 타입마다 단건 PATCH(채널 RECONSENT는 서버가 PATCH에서 추론 — 일괄 POST 금지), 전부 성공한 뒤에만 재평가 → `/`. 재시도는 아직 성공 안 한 것만(append-only 증적 중복 방지, BR-U0-12) |
 | `terms-viewer` | `src/pages/terms-viewer/ui/TermsViewerPage.tsx` | 약관 열람 — `GET /terms/{type}`, 자동 재시도 끔(버튼이 재시도), 실패는 오류+재시도(INV-4) |
 
-> **배럴 경유는 관행일 뿐 강제되지 않는다** — `fsdStructure.test.ts`의 단언이 부분 문자열(`toContain`)이라 라우트를 딥 임포트로 바꿔도 안 잡힌다.
+> **배럴 경유는 아직 강제되지 않는다** — `fsdStructure.test.ts`의 단언이 부분 문자열(`toContain`)이라 라우트를 딥 임포트로 바꿔도 안 잡힌다. 공식 FSD 공개 API 규칙(밖에서는 `index.ts`로만)은 TRIP-1157에서 lint로 켠다 — 그 전까지 딥 임포트는 과도기 허용(README §import 경계 규칙).
