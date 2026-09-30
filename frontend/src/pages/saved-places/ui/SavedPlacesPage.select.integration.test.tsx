@@ -156,8 +156,11 @@ async function renderSelectLoaded() {
   mockSearchParams.mode = 'select';
   setAccessToken('valid-access');
   renderPage();
-  await waitFor(() =>
-    expect(screen.getByTestId('mustvisit-pick-row-p1')).toBeOnTheScreen()
+  // 파일 첫 테스트가 냉시작(모듈 첫 로드)을 흡수해 CI 에서 기본 1000ms 경계를 넘는다 — develop 로컬
+  // --no-cache 도 751~879ms 선재 경계. 첫 목록 대기만 5000ms(TRIP-1125 04_qa-verifier_report_5 참조).
+  await waitFor(
+    () => expect(screen.getByTestId('mustvisit-pick-row-p1')).toBeOnTheScreen(),
+    { timeout: 5000 }
   );
 }
 
