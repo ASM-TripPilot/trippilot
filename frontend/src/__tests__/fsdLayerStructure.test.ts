@@ -32,11 +32,14 @@ const SRC_ALLOWLIST = [
   'widgets',
 ];
 
-// 슬라이스 세그먼트 허용목록(4) — 옛 칸(screens·components·containers·hooks·store) 부활 금지.
-const SEGMENT_ALLOWLIST = ['config', 'lib', 'model', 'ui'];
+// 슬라이스 세그먼트 허용목록(5) — 옛 칸(screens·components·containers·hooks·store) 부활 금지.
+// `api` 는 TRIP-1142 에서 허용했다 — README §층 규칙("한 페이지만 쓰는 요청 조합·응답 변환·쿼리 키
+// 래퍼는 그 페이지의 `api/`")과 공식 FSD(mutation·query 훅은 쓰는 곳 가까운 `api/` 세그먼트)가 권하는
+// 자리인데 이 목록만 막고 있었다. orval 생성물은 여전히 `shared/api` 한 곳이다(README §api 세그먼트).
+const SEGMENT_ALLOWLIST = ['api', 'config', 'lib', 'model', 'ui'];
 
 // entities 만 교차용 `@x` 창구 폴더를 세그먼트로 허용한다(TRIP-806, entities 한정 — features·
-// pages·widgets 는 위 4칸뿐). `entities/<제공자>/@x/<소비자>/**` 규약(layer-entities.md).
+// pages·widgets 는 위 5칸뿐). `entities/<제공자>/@x/<소비자>/**` 규약(layer-entities.md).
 const ENTITIES_DIR = path.join(ROOT, 'entities');
 const ENTITIES_SEGMENT_ALLOWLIST = [...SEGMENT_ALLOWLIST, '@x'];
 
@@ -131,7 +134,7 @@ describe('AC-4(a) · src 직계 디렉토리는 허용목록의 부분집합이�
   });
 });
 
-describe('AC-4(b) · features/pages/widgets 각 슬라이스 세그먼트는 {ui,model,lib,config} 뿐이다', () => {
+describe('AC-4(b) · features/pages/widgets 각 슬라이스 세그먼트는 {ui,api,model,lib,config} 뿐이다', () => {
   it('옛 칸 부활 0 (부정) + 슬라이스 수 앵커 (긍정 짝, widgets 편입 TRIP-805)', () => {
     const featureSlices = listDirNames(FEATURES_DIR);
     const pageSlices = listDirNames(PAGES_DIR);
@@ -195,7 +198,7 @@ describe('AC-5 · shared 층은 상위 층(features·entities·widgets·pages·a
   });
 });
 
-describe('AC-P0-5 · entities 슬라이스 세그먼트는 {ui,model,lib,config} + entities 한정 @x 뿐이다', () => {
+describe('AC-P0-5 · entities 슬라이스 세그먼트는 {ui,api,model,lib,config} + entities 한정 @x 뿐이다', () => {
   it('@x 는 entities 세그먼트에만 허용되고(features/pages/widgets 는 불허), entities/place 세그먼트는 목록 밖 0', () => {
     // (b) entities 한정 자기검사 — `@x` 는 entities 세그먼트 목록에만 있다. 이게 없으면 `@x` 를
     // 일반 세그먼트로 착각해 features·pages 에 `@x` 폴더가 생겨도 안 걸린다(entities 한정의 기계).
