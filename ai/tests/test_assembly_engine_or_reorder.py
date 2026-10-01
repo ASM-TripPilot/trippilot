@@ -23,15 +23,17 @@ from __future__ import annotations
 import logging
 from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
+from itertools import permutations
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from ortools.sat.python import cp_model
 
 from trippilot.assembly_engine import ortools_assembler
-from trippilot.assembly_engine.config import AssemblyConfig
+from trippilot.assembly_engine.config import AssemblyConfig, stay_for
 from trippilot.assembly_engine.constraints import check_all
 from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
 from trippilot.assembly_engine.travel import TravelEstimator
@@ -107,7 +109,8 @@ def _solve(cfg, problem, index, remaining_ms=3000):
     return OrToolsAssembler(index, _EST, cfg).solve(problem, remaining_ms=remaining_ms)
 
 
-# ① 지그재그 픽스처
+# ① 지그재그 픽스처 — 플랫폼과 무관한 성질만 단언한다. A 의 순서(=왕복 거리)는 결정론
+# 한도의 FEASIBLE 해라 같은 플랫폼 안에서만 같다(arm64 48.2km, CI amd64 42.9km 실측).
 def test_zigzag_fixture_reorder_cuts_km_keeps_set_and_score() -> None:
     problem, index = _busan()
     a = _solve(_CFG_A, problem, index)
@@ -116,10 +119,47 @@ def test_zigzag_fixture_reorder_cuts_km_keeps_set_and_score() -> None:
     assert {s.poi_id for s in b_slots} == {s.poi_id for s in a_slots}
     assert sorted(s.score for s in b_slots) == sorted(s.score for s in a_slots)
     km_a, km_b = _road_km(a_slots, index, problem), _road_km(b_slots, index, problem)
-    assert km_a > 45.0  # 픽스처 전제: A 가 실제로 왕복을 낸다
-    assert km_b < km_a * 0.95
+    assert km_b <= km_a + 1e-6
     assert check_all(b, problem, index, _EST) == []
     assert b.solve_mode is SolveMode.OR_TOOLS and b.is_fallback is False
+
+
+def _best_feasible_km(pids, index, problem) -> float:
+    """방문 집합의 모든 순서 중 실행가능한 최단 도로 km — B 의 최적값을 플랫폼과 무관하게 잰다.
+    영업정보 없음·핀 없음·식사 항 없음 픽스처 전용(시각 제약은 창·체류·이동뿐)."""
+    ws = problem.day_window.start.hour * 60
+    we = problem.day_window.end.hour * 60
+    best = float("inf")
+    for perm in permutations(pids):
+        t, prev, ok = ws, problem.anchor, True
+        for pid in perm:
+            poi = index[pid]
+            t += _EST.estimate(prev, poi.coord, problem.transport).internal_minutes
+            stay = stay_for(poi.category, problem.pace)
+            if t + stay > we:
+                ok = False
+                break
+            t, prev = t + stay, poi.coord
+        if ok:
+            pts = [problem.anchor, *(index[p].coord for p in perm), problem.anchor]
+            best = min(best, sum(_EST.estimate(x, y, problem.transport).distance_km_range[1]
+                                 for x, y in zip(pts, pts[1:])))
+    return best
+
+
+# ①′ B 는 그 집합의 최단 실행가능 순서를 낸다 — A 가 어떤 순서를 냈든(플랫폼 무관)
+def test_reorder_reaches_shortest_feasible_order() -> None:
+    sights = [(pid, lat, lng, PoiCategory.SIGHT, score)
+              for pid, lat, lng, _, score in _BUSAN if pid != "hwangnyeong"]
+    pois = [_poi(pid, lat, lng, cat) for pid, lat, lng, cat, _ in sights]
+    index = {p.poi_id: p for p in pois}
+    problem = _problem([ScoredPoi(PoiId(pid), score, True) for pid, *_, score in sights])
+    b = _solve(_CFG, problem, index)
+    slots = b.days[0].slots
+    assert len(slots) >= 3  # 픽스처 전제: 재정렬할 만큼 들어간다
+    best = _best_feasible_km([s.poi_id for s in slots], index, problem)
+    assert _road_km(slots, index, problem) == pytest.approx(best, abs=0.01)
+    assert check_all(b, problem, index, _EST) == []
 
 
 # ② 사전식 — 식사 창 FOOD 유지
