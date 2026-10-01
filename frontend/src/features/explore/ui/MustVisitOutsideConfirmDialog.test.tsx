@@ -12,7 +12,7 @@ import { MustVisitOutsideConfirmDialog } from './MustVisitOutsideConfirmDialog';
  *
  * 커버하지 않는 것: 딤 실제 덮임·중앙 정렬·터치 차단(조건부 렌더 오버레이의 jest 사각 — 6-b 프리뷰
  * `saved-places-select-outside-confirm`). 언제 뜨고 누른 뒤 무엇이 심기는지는
- * `SavedPlacesPage.select.integration.test.tsx` 의 TRIP-1106 절 몫.
+ * `SavedPlacesPage.integration.test.tsx` 의 `select › 위저드` TRIP-1106 절 몫.
  */
 
 const GATE = 'mustvisit-pick-outside-confirm';

@@ -6,6 +6,7 @@ import {
 } from '@testing-library/react-native';
 
 import { processColor } from 'react-native';
+import type { ReactTestInstance } from 'react-test-renderer';
 
 import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
 
@@ -29,6 +30,8 @@ import {
  *  - **T-12 (N-2)** 해제 실패 배너는 **목록이 남아 있어도** 보인다.
  *  - **T-13 (Seed Q7)** 게스트는 목록·빈 상태가 아니라 로그인 안내를 본다.
  *  - **T-14 (N-3 · INV-3)** 어떤 얼굴에서도 소요 시간 문자열이 나타나지 않는다.
+ *
+ * TRIP-1144 로 옛 `.appBar`(TRIP-1086)·`.rowtap`(TRIP-456) 두 파일을 맨 아래 `앱바`·`행 탭` describe 로 합쳤다.
  *
  * 왜 화면 단위인가: 여기서 재는 것은 "props 를 받았을 때 무엇을 그리는가"다. 실제로 나간
  * 요청·라우팅은 `pages/saved-places/ui/SavedPlacesPage.integration.test.tsx` 몫이다.
@@ -761,5 +764,127 @@ describe('T-18 · TRIP-1050 콜라주 빈 상태 공통 틀 (AC-1·AC-2·AC-8 ·
     ).toContain('w-[230px]');
     expect(screen.queryByTestId('explore-saved-empty')).toBeNull();
     expect(screen.queryByTestId('explore-saved-empty-photo-0')).toBeNull();
+  });
+});
+
+/**
+ * ── 앱바 ── 옛 `SavedPlaceListScreen.appBar.test.tsx`(TRIP-1086 · AC-10·AC-11).
+ * d02 앱바 위 여백을 e04 와 같은 8 로 맞춘다(결정 3(a)).
+ *  - 🔴 AC-10: 어느 얼굴이든 앱바 컨테이너에 위 여백 8 이 있다. 아래 8 · 왼쪽 10 · 오른쪽 16 · 뒤로-제목
+ *    간격 4 는 d02 Figma 그대로 유지(가로를 e04 로 옮기지 않는다).
+ *  - AC-11: 뒤로를 누르면 onBack 이 1회.
+ *
+ * 볼 수 없는 몫(6-b 육안): 실제 앱바 높이와 d02·e04 빈 상태 콜라주·제목의 y 가 같은지.
+ *
+ * (개념) 앱바에는 testID 가 없다 — 뒤로 버튼과 제목 '담은 장소' 를 함께 품는 가장 가까운 host 상자를 앱바로 본다.
+ */
+
+/** 위·아래 8 을 뜻하는 토큰(tailwind spacing sm = 8px). `py-*` 는 위아래를 함께 준다. */
+const TOP_8 = ['pt-sm', 'pt-[8px]', 'py-sm', 'py-[8px]'];
+const BOTTOM_8 = ['pb-sm', 'pb-[8px]', 'py-sm', 'py-[8px]'];
+
+function ancestorsOf(node: ReactTestInstance): ReactTestInstance[] {
+  const out: ReactTestInstance[] = [];
+  let cur = node.parent;
+  while (cur) {
+    out.push(cur);
+    cur = cur.parent;
+  }
+  return out;
+}
+
+function nearestCommonHost(
+  a: ReactTestInstance,
+  b: ReactTestInstance
+): ReactTestInstance {
+  const ofB = new Set(ancestorsOf(b));
+  const found = ancestorsOf(a).find(
+    (n) => typeof n.type === 'string' && ofB.has(n)
+  );
+  if (!found) throw new Error('공통 host 조상이 없다');
+  return found;
+}
+
+function appBar(): ReactTestInstance {
+  return nearestCommonHost(
+    screen.getByTestId('explore-saved-back'),
+    screen.getByText('담은 장소')
+  );
+}
+
+describe('앱바', () => {
+  describe('🔴 AC-10 · d02 앱바 위 여백 8 (얼굴 공통)', () => {
+    it.each<[string, Partial<SavedPlaceListScreenProps>]>([
+      ['empty', { state: { kind: 'empty' } }],
+      ['results', {}],
+      ['loading', { state: { kind: 'loading' } }],
+      ['error', { state: { kind: 'error' } }],
+      ['guest', { isGuest: true }],
+    ])('%s 얼굴', (_face, overrides) => {
+      renderScreen({ savedPlaces: [], ...overrides });
+
+      const bar = cls(appBar());
+      const vertical = (prefix: RegExp) => bar.filter((t) => prefix.test(t));
+
+      // 위 여백 — 8 계열 토큰이 있고, 다른 값의 위 여백 토큰은 섞이지 않는다.
+      const top = vertical(/^(pt|py|p)-/);
+      expect(top.length).toBeGreaterThan(0);
+      expect(top.filter((t) => !TOP_8.includes(t))).toEqual([]);
+      // 아래 여백 8 유지.
+      const bottom = vertical(/^(pb|py|p)-/);
+      expect(bottom.length).toBeGreaterThan(0);
+      expect(bottom.filter((t) => !BOTTOM_8.includes(t))).toEqual([]);
+      // 가로는 d02 Figma 그대로(e04 가로를 옮기지 않는다).
+      expect(bar).toEqual(
+        expect.arrayContaining(['pl-[10px]', 'pr-lg', 'gap-xs'])
+      );
+    });
+  });
+
+  describe('AC-11 · d02 뒤로 무회귀', () => {
+    it('뒤로를 누르면 onBack 이 1회 불린다', () => {
+      renderScreen({ savedPlaces: [], state: { kind: 'empty' } });
+
+      fireEvent.press(screen.getByTestId('explore-saved-back'));
+
+      expect(onBack).toHaveBeenCalledTimes(1);
+    });
+  });
+});
+
+/**
+ * ── 행 탭 ── 옛 `SavedPlaceListScreen.rowtap.test.tsx`(TRIP-456 · AC-3) — 행 press 버블링 갈림(화면 층).
+ * 행을 `Pressable`로 만들어 d06으로 배선하되, **하트(해제) press가 행으로 새지 않는다**. d02 하트는
+ * `disabled`가 없어 항상 활성이라, RNTL에서 활성 자식은 press를 잡아 부모로 안 샌다(Probe A) — d04와 달리
+ * 대기 누수(Probe C) 위험이 없다. 그래도 양·음 짝으로 "행 탭은 이동, 하트 탭은 해제"의 갈림을 잠근다.
+ * 최종 push 세그먼트(place.poiId)는 page 통합 `save › 행 탭` 몫이다.
+ */
+describe('행 탭', () => {
+  it('C4 행 본문을 누르면 onPressRow(saved)가 그 행의 saved로 불린다', () => {
+    // 준비 — 4행, onPressRow 스파이(행 키 sp-1 ≠ poiId p1).
+    const onPressRow = jest.fn();
+    renderScreen({ onPressRow });
+
+    // 실행 — 행 루트(savedPlaceId testID)를 누른다.
+    fireEvent.press(screen.getByTestId('explore-saved-item-sp-1'));
+
+    // 단언 — 그 행의 saved가 올라간다. 해제 콜백은 안 불린다.
+    expect(onPressRow).toHaveBeenCalledTimes(1);
+    expect(onPressRow.mock.calls[0][0].savedPlaceId).toBe('sp-1');
+    expect(onPressRemove).not.toHaveBeenCalled();
+  });
+
+  it('C5 활성 하트를 누르면 onPressRemove만 불리고 onPressRow로 안 샌다 (Probe A)', () => {
+    // 준비 — d02 하트는 disabled 없음(항상 활성).
+    const onPressRow = jest.fn();
+    renderScreen({ onPressRow });
+
+    // 실행 — 하트(해제)를 누른다.
+    fireEvent.press(screen.getByTestId('explore-saved-remove-sp-1'));
+
+    // 단언 — 해제만 반응, 행 이동으로 안 샌다.
+    expect(onPressRemove).toHaveBeenCalledTimes(1);
+    expect(onPressRemove.mock.calls[0][0].savedPlaceId).toBe('sp-1');
+    expect(onPressRow).not.toHaveBeenCalled();
   });
 });
