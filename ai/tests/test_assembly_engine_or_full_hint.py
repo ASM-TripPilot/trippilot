@@ -58,6 +58,7 @@ def _solves():
     """CpSolver.Solve 호출마다 모델 힌트·상태·목적값을 적는다.
 
     completion=True 는 경로 완성용 보조 풀이(가정 리터럴로 경로를 건 풀이)다.
+    reorder=True 는 A 해 뒤 재정렬 단계(TRIP-1178)의 풀이다 — 최소화 목적은 그것뿐이다.
     """
     log: list = []
 
@@ -66,6 +67,7 @@ def _solves():
         proto = model.Proto()
         log.append(SimpleNamespace(
             completion=len(proto.assumptions) > 0,
+            reorder=proto.objective.scaling_factor > 0,
             hint_vars=list(proto.solution_hint.vars),
             n_vars=len(proto.variables),
             invalid=model.Validate(),
@@ -110,8 +112,8 @@ def _problem(pois, *, days, fixed=(), anchor=None, end_hour=21, end_min=0, seed=
 
 
 def _main(log):
-    """주 탐색 풀이(보조 풀이 제외)만."""
-    return [r for r in log if not r.completion]
+    """주 탐색 풀이(보조 풀이·재정렬 제외)만."""
+    return [r for r in log if not r.completion and not r.reorder]
 
 
 # ── ① 완전 힌트 — 소프트 항 보조 변수까지 ──────────────────────
@@ -166,7 +168,7 @@ def test_inconsistent_greedy_order_falls_back_without_double_hint() -> None:
             _solves() as log:
         result = OrToolsAssembler(index, _EST, _CFG).solve(problem, remaining_ms=1500)
 
-    completions = [r for r in log if r.completion]
+    completions = [r for r in log if r.completion and not r.reorder]
     assert completions and all(r.status == cp_model.INFEASIBLE for r in completions)
     for r in _main(log):
         assert r.invalid == ""
@@ -384,7 +386,7 @@ def test_empty_greedy_order_leaves_the_main_search_unhinted() -> None:
     with _solves() as log:
         result = OrToolsAssembler(index, _EST, _CFG).solve(problem, remaining_ms=1500)
 
-    assert not [r for r in log if r.completion], "빈 순서로 경로 완성을 돌렸다"
+    assert not [r for r in log if r.completion and not r.reorder], "빈 순서로 경로 완성을 돌렸다"
     (main,) = _main(log)
     assert main.invalid == ""
     assert main.hint_vars == [], "빈 그리디 순서로 힌트를 걸었다"

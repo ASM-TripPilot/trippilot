@@ -115,6 +115,9 @@ class AssemblyConfig:
     # 2.0 근거(TRIP-1160 실 덤프 39건 × 2회 재생): 해 없음 0·HC 위반 0·반복 동일 39/39.
     # det 1.0 대비 5/39 건 점수가 높다(점수합 +0.08~1.29), 3.0 은 3/39 건만 더 오른다.
     or_tools_det_limit: float = 2.0
+    # 재정렬(B 단계, TRIP-1178)의 일자당 벽시계 백스톱 — 일자 몫의 남은 시간과 작은 쪽을 쓴다.
+    # 0 이면 B 를 돌리지 않는다(A 해 그대로). 실측: 실 덤프 39건 B 최대 36ms(중앙 32ms).
+    or_tools_reorder_ms: int = 1000
     or_tools_min_ms: int = 500          # 이보다 잔여가 적으면 OR-Tools 단계 스킵 (DL-2)
     llm_stage_timeout_ms: int = 2500    # LLM 2차 요구 시간 (DL-2)
     local_search_min_remaining_ms: int = 3000
@@ -166,8 +169,8 @@ class AssemblyConfig:
     category_excess_penalty: float = 0.3  # 초과 1개당 감점 (점수 축 [0,1])
 
     def __post_init__(self) -> None:
-        for name in ("or_tools_limit_ms", "or_tools_min_ms", "llm_stage_timeout_ms",
-                     "local_search_min_remaining_ms", "buffer_min"):
+        for name in ("or_tools_limit_ms", "or_tools_reorder_ms", "or_tools_min_ms",
+                     "llm_stage_timeout_ms", "local_search_min_remaining_ms", "buffer_min"):
             if getattr(self, name) < 0:
                 raise ValueError(f"{name} 음수 불가")
         if self.or_tools_det_limit <= 0:
