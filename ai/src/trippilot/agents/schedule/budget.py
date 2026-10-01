@@ -103,6 +103,13 @@ class OrchestratorConfig:
     # 아래 __post_init__ 이 그 관계를 강제한다 — 숫자를 베껴 적지 않는 이유다.
     rejection_demote_cap: float = 0.25
 
+    # 같은 장소 계열 강등 (TRIP-1181) — 판정 대상 = 점수 상위 몇 건. OR 프리필터(상위 60)와
+    # 같으면 구멍이다: 강등된 계열원 자리로 61위 밑이 판정 없이 올라온다(실측 '남산예장공원').
+    # 200 이면 판정 밖이 프리필터에 들려면 상위 200 중 141건 이상이 강등돼야 한다 — 실 풀
+    # (≤ 134건)은 통째로 덮고, 풀 상한(5,000)에서도 비교 횟수가 묶인다.
+    # 강등 폭은 ②′ 와 같은 한 단(`existence_demote_penalty`·`_factor`)을 쓴다.
+    family_demote_top_n: int = 200
+
     def __post_init__(self) -> None:
         if not 0.0 < self.c2_min_share < 1.0:
             raise ValueError("c2_min_share ∈ (0, 1)")
@@ -116,6 +123,8 @@ class OrchestratorConfig:
                 raise ValueError(f"{name} 음수 불가")
         if self.existence_verify_top_n <= 0:
             raise ValueError("existence_verify_top_n 양수 필요")
+        if self.family_demote_top_n <= 0:
+            raise ValueError("family_demote_top_n 양수 필요")
         if self.existence_deadline_ms <= 0:
             raise ValueError("existence_deadline_ms 양수 필요")
         if not 0.0 < self.existence_demote_factor <= 1.0:

@@ -8,6 +8,7 @@
 ```
 ScheduleTask → ⓪ 풀 밖 고정 블록 POI 조회           인덱스에만 합류 / 못 찾음·실패 → 블록 제외 + 강등 (TRIP-1177)
              → ② 게이트웨이 선호 점수 (전 일자 1회)  실패·스킵 → 규칙 점수 (BR-U4-09의 "호출측"이 여기다)
+             → ②‴′ (generate) 같은 장소 계열 강등     대표 외 계열원 점수 강등 / 조회 실패 → 그 축만 건너뜀 (TRIP-1181)
              → ②′ (선택) 점수 상위 지도 실재 검증     못 찾음 → 점수 강등 / 실패 → 강등 없이 진행 (TRIP-904)
              → ③ ItineraryProblem 조립               (후보는 풀에서 나온 것만)
              → ④ 어셈블리 solve                       (체인 폴백은 어셈블리 소유 — 여기서 이중 폴백 금지)
@@ -42,6 +43,7 @@ from datetime import date, datetime, timedelta
 from typing import Mapping, Protocol, Sequence
 
 from trippilot.agents.schedule.budget import DeadlineBudget, OrchestratorConfig
+from trippilot.agents.schedule.family import family_followers, related_to_any
 from trippilot.agents.schedule.outcome import (
     MAX_SLOT_ALTERNATIVES,
     CandidatesReport,
@@ -174,6 +176,10 @@ class GenerateItineraryRequest:
     # 비고정 방문 시작 하한 (TRIP-1182) — 재계획 `from_instant` 가 그 일자일 때만 배선이
     # 싣는다. generate 는 기본 None(무제한)이다. 의미는 `ItineraryProblem.not_before`.
     not_before: datetime | None = None
+    # 같은 장소 계열 강등 (TRIP-1181) — **generate 와이어 변환만 켠다.** 기본 off 라 replan·
+    # PlanB 경로의 점수는 종전과 바이트 동일하다(재계획은 기존 일정을 고치는 것이라 계열
+    # 판정의 기준이 다르다 — 지금 일정에 이미 있는 것을 대표로 볼지부터 정해야 한다).
+    family_demote: bool = False
 
     def __post_init__(self) -> None:
         if not self.days:
@@ -333,6 +339,21 @@ class ScheduleAgent:
                 f"/{len(penalties)}",
             )
 
+        # ②‴′ 같은 장소 계열 강등 (TRIP-1181) — generate 에만. **②′ 앞**이라야 지도 검증
+        #    상한 N 이 계열 복제본(산+전망대·같은 공원 안 명소)에 낭비되지 않는다. ②‴ 뒤라
+        #    거절로 깎인 점수 위에서 대표를 고른다.
+        family_anchors: tuple[Poi, ...] | None = None
+        if request.family_demote:
+            try:
+                candidates, family_anchors = self._demote_family(
+                    request, pool, candidates, fixed_blocks, fixed_pois, budget, t0,
+                    trace_id, now)
+            except Exception as e:  # noqa: BLE001
+                # 순수 계산이라 도달하지 않아야 하지만, 부가 단계가 생성을 깨면 안 된다(INV-4
+                # — ⑥ 차선책과 같은 규약). 강등 없이 종전 점수로 진행하고 관측한다.
+                self._observe(trace_id, now, "family", "family_demote", "(skipped)",
+                              f"family_error: {type(e).__name__}: {e}")
+
         # ②′ 지도 실재 검증 (TRIP-904) — **점수가 나온 뒤**라야 배치될 후보를 검증할 수
         #    있고, 결과가 **점수**에 실려야 어셈블리에 닿는다. 풀 단계에서 순서만 바꾸던
         #    종전(TRIP-898) 방식은 이후 누구도 풀 순서를 읽지 않아 일정에 효과가 0이었다.
@@ -403,7 +424,7 @@ class ScheduleAgent:
         # ⑥ 슬롯별 차선책 (TRIP-871) — 어셈블리가 뽑지 않은 차순위 후보. 결정론·LLM 0회,
         #    시한을 쓰지 않는다. 부가 정보라 실패해도 일정은 그대로 나간다(설명과 같은 취급).
         alternatives = self._slot_alternatives(
-            request, pool, candidates, solution, steps, trace_id, now
+            request, pool, candidates, solution, steps, trace_id, now, family_anchors
         )
         # ⑥′ 차선책 LLM 문장 (TRIP-887) — 설명(⑤)과 같은 진입 조건·예산 규칙. 실패하면
         #    ⑥의 템플릿 rationale 이 그대로 남는다.
@@ -639,10 +660,12 @@ class ScheduleAgent:
         steps: list[Degradation],
         trace_id: TraceId,
         now: datetime,
+        family_anchors: tuple[Poi, ...] | None = None,
     ) -> dict[str, tuple[SlotAlternative, ...]]:
         try:
             return pick_slot_alternatives(
-                solution, candidates, pool, excluded=request.excluded_poi_ids
+                solution, candidates, pool, excluded=request.excluded_poi_ids,
+                family_anchors=family_anchors,
             )
         except Exception as e:
             # 순수 계산이라 도달하지 않아야 하지만, 부가 정보가 생성을 깨면 안 된다(INV-4).
@@ -650,6 +673,102 @@ class ScheduleAgent:
             self._degrade(steps, trace_id, now, "alternatives", "rule_pick", "(none)",
                           f"alternatives_error: {type(e).__name__}: {e}")
             return {}
+
+    # ── ②‴′ 같은 장소 계열 강등 (TRIP-1181) ─────────────────────────
+
+    def _demote_family(
+        self,
+        request: GenerateItineraryRequest,
+        pool: CandidatePool,
+        candidates: tuple[ScoredPoi, ...],
+        fixed_blocks: tuple[FixedBlock, ...],
+        fixed_pois: Mapping[PoiId, Poi],
+        budget: DeadlineBudget,
+        t0: int,
+        trace_id: TraceId,
+        now: datetime,
+    ) -> tuple[tuple[ScoredPoi, ...], tuple[Poi, ...]]:
+        """(강등된 후보, 계열 앵커) — 대표가 아닌 계열원만 `demoted_score`. 배제가 아니다.
+
+        대표 우선순위: 고정 블록(필수방문) > 앞 일자 배치분(`excluded_poi_ids` — BE 2단계
+        생성이 1일차 배치를 id 로만 보낸다) > 점수 최고(동점 poi_id). 앞 일자 배치분이 풀
+        밖이면(그 요일 휴무 등) `poi_db` 로 좌표·이름을 얻는다 — 못 얻으면 **그 축만** 빼고
+        관측한다(강등 기록 아님 — 일정은 그대로 나가고 계열 억제만 약해진다).
+
+        대상은 점수 상위 `family_demote_top_n` — OR 프리필터(60)보다 넉넉해야 한다. 강등된
+        계열원 자리로 판정 밖 후보가 올라와 프리필터에 들기 때문이다(상한이 60 이면 61위
+        '남산예장공원'이 판정 없이 '남산공원'과 같은 날 들어갔다).
+
+        **합성**: 각 강등은 자기 단계 진입 점수에 한 번씩 적용된다 — ②‴ 거절(뺄셈) 뒤의
+        점수에 여기서 한 단, ②′ 지도 미검출이면 거기서 또 한 단. 곱셈 하한도 겹쳐
+        factor² × 원점수까지 내려가지만 > 0 이라 배제가 아니다. 거절로 0 이하가 된 점수는
+        `demoted_score` 가 건드리지 않는다(음수에 배율 = 승격).
+        """
+        index: dict[PoiId, Poi] = {**fixed_pois, **{p.poi_id: p for p in pool.pois}}
+        excluded = sorted(request.excluded_poi_ids, key=str)
+        missing = frozenset(pid for pid in excluded if pid not in index)
+        if missing:
+            index.update(self._lookup_family_anchors(missing, budget, t0, trace_id, now))
+            unresolved = sum(1 for pid in missing if pid not in index)
+            if unresolved:
+                self._observe(trace_id, now, "family", "anchor_lookup", "(skipped)",
+                              f"family_anchor_unresolved:{unresolved}")
+        anchor_ids = dict.fromkeys(
+            pid for pid in (*(b.poi_id for b in fixed_blocks), *excluded) if pid in index)
+        anchors = tuple(index[pid] for pid in anchor_ids)
+        ranked = tuple(
+            index[c.poi_id]
+            for c in sorted(candidates, key=lambda c: (-c.score, str(c.poi_id)))
+            if c.poi_id in pool.poi_ids and c.poi_id not in anchor_ids
+            and c.poi_id not in request.excluded_poi_ids
+        )[: self._cfg.family_demote_top_n]
+        followers = family_followers(anchors, ranked)
+        self._observe(
+            trace_id, now, "family", "family_demote", "family_demote",
+            f"family_demoted:{len(followers)}/families={len(set(followers.values()))}"
+            f"/anchors={len(anchors)}",
+        )
+        return tuple(
+            replace(c, score=demoted_score(c.score, factor=self._cfg.existence_demote_factor,
+                                           penalty=self._cfg.existence_demote_penalty))
+            if c.poi_id in followers else c
+            for c in candidates
+        ), anchors
+
+    def _lookup_family_anchors(
+        self,
+        ids: frozenset[PoiId],
+        budget: DeadlineBudget,
+        t0: int,
+        trace_id: TraceId,
+        now: datetime,
+    ) -> dict[PoiId, Poi]:
+        """풀 밖 앞 일자 배치분 조회 — 실패·시한 부족이면 빈 결과(관측만, ⓪ 과 같은 시한 규율).
+
+        포트는 시한을 받지 않는다 — 진입 전에 어셈블리 바닥을 보고, 호출이 남은 시한을
+        넘겼으면 `overrun` 으로 남긴다(찾은 값은 쓴다 — 이미 치른 비용이다).
+        """
+        if self._poi_db is None:
+            return {}
+        available = (budget.total_ms - (self._clock.monotonic_ms() - t0)
+                     - budget.c2_reserved_ms)
+        if available <= 0:
+            self._observe(trace_id, now, "family", "anchor_lookup", "(skipped)",
+                          f"deadline:available={available}ms")
+            return {}
+        called = self._clock.monotonic_ms()
+        try:  # 반환값 순회까지 try 안이다 (DL-5 — _resolve_fixed_pois 와 같은 규약)
+            found = {p.poi_id: p for p in self._poi_db.lookup_by_ids(ids).pois
+                     if p.poi_id in ids}
+        except Exception as e:  # noqa: BLE001
+            found = {}
+            self._observe(trace_id, now, "family", "anchor_lookup", "(skipped)",
+                          f"family_anchor_lookup_error: {type(e).__name__}: {e}")
+        spent = self._clock.monotonic_ms() - called
+        if spent > available:
+            self._observe(trace_id, now, "family", "anchor_lookup", "(kept)",
+                          f"overrun:spent={spent}ms>available={available}ms")
+        return found
 
     # ── ②′ 지도 실재 검증 (TRIP-904) ────────────────────────────────
 
@@ -1000,6 +1119,7 @@ def pick_slot_alternatives(
     *,
     excluded: frozenset[PoiId] = frozenset(),
     limit: int = MAX_SLOT_ALTERNATIVES,
+    family_anchors: Sequence[Poi] | None = None,
 ) -> dict[str, tuple[SlotAlternative, ...]]:
     """슬롯마다 "이 자리에 대신 넣을 만한" 후보 ≤ limit 건 — 키 `"{date}#{poi_id}"`(BR-U2-04).
 
@@ -1009,6 +1129,10 @@ def pick_slot_alternatives(
     그 요일 휴무는 뺀다(영업정보 없음 = 통과, HC1 과 같은 규칙) — 시각 단위 검증은 하지
     않으며 그래서 시각도 싣지 않는다(INV-2). 고정 블록 슬롯은 사용자 must-visit 이라
     제안 대상이 아니다. LLM 호출 0회. 차선책이 없는 슬롯은 키를 만들지 않는다.
+
+    `family_anchors` 가 주어지면(generate — TRIP-1181) 이 일정에 배치된 곳·앵커(고정 블록·
+    앞 일자 배치분)와 **같은 장소 계열**인 후보를 맨 뒤로 민다 — 남산공원 슬롯의 차선책으로
+    남산골한옥마을(0.6km)이 나오던 것. 빼지는 않는다(대체 후보가 모자라면 그래도 낸다).
     """
     index = {p.poi_id: p for p in pool.pois}
     placed = {s.poi_id for d in solution.days for s in d.slots}
@@ -1020,6 +1144,10 @@ def pick_slot_alternatives(
         and c.poi_id not in excluded and c.poi_id not in fixed
     }.values())
 
+    kin = (frozenset() if family_anchors is None else related_to_any(
+        spare, (*(index[pid] for pid in sorted(placed, key=str) if pid in index),
+                *family_anchors)))
+
     out: dict[str, tuple[SlotAlternative, ...]] = {}
     for day in solution.days:
         dow = day.date.weekday()
@@ -1029,6 +1157,7 @@ def pick_slot_alternatives(
             if here is None or slot.poi_id in fixed:
                 continue  # 풀 밖(고정 블록 유래)·고정 슬롯 — 제안 대상이 아니다
             ranked = sorted(open_today, key=lambda p, here=here: (
+                p.poi_id in kin,
                 p.category is not here.category,
                 -score[p.poi_id],
                 haversine_km(here.coord, p.coord),

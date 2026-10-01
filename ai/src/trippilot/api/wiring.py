@@ -402,6 +402,7 @@ def _domain_generate_request(
         rejections=_domain_rejections(request.rejections),
         include_explanations=request.include_explanations,
         persona=_inline_persona(request),
+        family_demote=True,  # 같은 장소 계열 강등은 generate 에만 (TRIP-1181)
     )
 
 
