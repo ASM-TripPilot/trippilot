@@ -72,6 +72,8 @@ data class CascadeSummary(
                 // U6 — 알림함·푸시 토큰·알림 설정·앱 설정·Plan-B 민감도
                 "NOTIFICATION", "NOTIFICATION_SCHEDULE", "NOTIFICATION_TOGGLE",
                 "PUSH_TOKEN", "ACCOUNT_SETTING", "PLAN_B_SENSITIVITY",
+                // C5 — 제휴 아웃바운드 클릭(V2.59, BR-U1-32 내부 지표도 개인정보다)
+                "AFFILIATE_CLICK",
             ),
             // 법정 보존(INV-D3) — 동의 증적·위치 법정 로그는 파기하지 않는다.
             legallyRetained = listOf("CONSENT_RECORD", "LOCATION_LEGAL_LOG"),

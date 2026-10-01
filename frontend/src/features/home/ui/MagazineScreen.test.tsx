@@ -22,7 +22,7 @@ import { MagazineScreen } from './MagazineScreen';
  *  - AC-3 카드: 매서너리 카드가 정확히 6장(7번째 없음), 각 카드에 타이틀·태그·하트가 있고
  *    카드 press 는 onPressCard 를 누른 카드로 발화한다.
  *  - AC-4 INV-3: 화면 어디에도 소요시간 문자열(분·시간·소요)이 렌더되지 않는다(거리·해시태그만).
- *  - 앱바 뒤로가기·돋보기 press → onBack·onSearch 발화. FAB 2종은 시각 전용(role 없음).
+ *  - 앱바 뒤로가기·돋보기 press → onBack·onSearch 발화. FAB 2종은 TRIP-1023 #095 로 제거됐다.
  *
  * 텍스트 중복 함정(02a §4-F1) — 같은 문자열이 여러 존에 산다: "전체"(칩0 + gridHead 전체보기),
  * "당일치기"(칩1 + 에디토리얼 칩). 그래서 모든 존별 단언은 `within(...)`로 서브트리를 좁혀
@@ -187,8 +187,8 @@ describe('🔴 MagazineScreen — INV-3 시간 미표시 (TRIP-700 AC-4)', () =>
     render(<MagazineScreen {...MAGAZINE_PROPS} />);
 
     // 필터 칩·해시태그·카피만 쓴다 — 거리도 소요시간도 없다. 정규식 부분매치라 리프 어디에 있어도
-    // 잡히고, queryAllByText 는 다중매치라도 [] 반환(throw 안 함). 소스 절반은 homeStructure D-2 가
-    // features/home 재귀 스캔으로 자동 편입해 잠근다(이 렌더 단언과 이중).
+    // 잡히고, queryAllByText 는 다중매치라도 [] 반환(throw 안 함). 소스 절반이던 homeStructure D-2
+    // 재귀 스캔은 TRIP-1145 로 지웠다 — 이 렌더 단언이 남은 그물.
     expect(screen.queryAllByText(/소요|\d+\s*분|\d+\s*시간/)).toHaveLength(0);
   });
 });
@@ -211,22 +211,35 @@ describe('🔴 MagazineScreen — 앱바 뒤로가기·돋보기 배선 (TRIP-70
   });
 });
 
-describe('🔴 MagazineScreen — FAB 2종은 시각 전용(role 없음) (TRIP-700 · 01b Q2)', () => {
-  it('+ FAB·하트 FAB 는 화면에 그려지지만 접근성 트리에서 버튼이 아니다(죽은 버튼 회피)', () => {
+/**
+ * TRIP-1023 #095 — 눌리지 않는 FAB 2종(♥·+)을 제거한다. 동작 없는 떠 있는 버튼은 "누를 수 있는 것처럼
+ * 보이는데 아무 일도 안 일어나는" 표면이라 겹쳐 보이는 문제까지 함께 없앤다. (TRIP-700 의 "시각 전용
+ * role 없음" 단언을 이 describe 가 대체한다 — 02a §7 축①.)
+ *
+ * testID 만 지우고 뷰를 남기는 구현을 잡으려고 FAB 전용 글리프(PlusGlyph·HeartFilledGlyph — 이 화면의
+ * 다른 곳에선 안 쓴다)도 이름으로 센다(02a ★5).
+ */
+describe('🔴 TRIP-1023 #095 — 매거진 FAB 2종이 없다 (AC-A15 · AC-A16)', () => {
+  it('앱바·카드는 그대로 있고, ♥·+ FAB 와 그 글리프는 화면에 없다', () => {
     render(<MagazineScreen {...MAGAZINE_PROPS} />);
 
-    // 시각으로는 존재한다(Figma 정합).
-    expect(screen.getByTestId('magazine-fab-create')).toBeOnTheScreen();
-    expect(screen.getByTestId('magazine-fab-saved')).toBeOnTheScreen();
-
-    // queryAllByRole('button')은 accessibilityRole='button' 요소만 돌려준다(HomeScreen.test §5
-    // 실검증). 항해 컨트롤(뒤로가기)은 버튼이라 집합이 비지 않는 앵커가 되고(비공허), FAB 2종은
-    // role 이 없어 그 집합에 들면 안 된다.
+    // 긍정 앵커 — 화면·앱바 뒤로(버튼)·카드가 그려졌다.
+    expect(screen.getByTestId('magazine-root')).toBeOnTheScreen();
     const buttonIds = screen
       .queryAllByRole('button')
       .map((node) => node.props.testID);
     expect(buttonIds).toContain('magazine-appbar-back');
-    expect(buttonIds).not.toContain('magazine-fab-create');
-    expect(buttonIds).not.toContain('magazine-fab-saved');
+    expect(screen.getByTestId('magazine-card-0')).toBeOnTheScreen();
+
+    expect(screen.queryByTestId('magazine-fab-saved')).toBeNull();
+    expect(screen.queryByTestId('magazine-fab-create')).toBeNull();
+    const fabGlyphs = screen.UNSAFE_root.findAll(
+      (node) =>
+        typeof node.type === 'function' &&
+        /^(PlusGlyph|HeartFilledGlyph)$/.test(
+          (node.type as { name?: string }).name ?? ''
+        )
+    );
+    expect(fabGlyphs.length).toBe(0);
   });
 });

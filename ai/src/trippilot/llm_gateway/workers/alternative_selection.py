@@ -31,7 +31,10 @@ class AlternativeSelectionInput:
 
     trigger_kind: str  # TriggerKind.value (예: "WEATHER")
     reason: str  # weather|closed|delay|canceled|fully_booked|fatigue|none
-    schedule_context: str  # KB-1 발췌 — 영향 슬롯·일정
+    # 원 일정 컨텍스트. **KB 발췌가 아니라 요청 봉투에서 온다**(TRIP-972) —
+    # `current_slots`(원 일정 순서) + `placement_reason`(슬롯별 원래 추천 이유).
+    # KB-1 벡터 검색은 걷어냈다(적재 0·작성자 0·질의가 기계값이라 구조적으로 0건).
+    schedule_context: str
     situation_context: str  # KB-3 발췌 — 상황 대응 지식
     persona_context: str  # KB-2 발췌 — 선호·저장 장소
     max_alternatives: int

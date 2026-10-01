@@ -125,12 +125,13 @@ const SHEETS: {
   },
 ];
 
-// TRIP-932 Q3 — 애플은 커스텀 아이콘·라벨이 아니라 SDK 공식 버튼이 로고·현지화 제목을 그린다.
-// 그래서 아래 아이콘(AC-VS-5)·라벨(AC-V1) 동결 계약은 커스텀으로 그리는 3종만 순회하고, 애플은
-// "커스텀 글리프·라벨이 없다"로 뒤집어 잠근다(AC-Q3 블록).
+// 이 화면이 직접 그리는 버튼은 3종이다. 애플 버튼은 컨테이너가 lazy 애플 모듈에서 받아 prop 으로
+// 꽂아 준다(TRIP-932 주입 경로). TRIP-1124 부터 그 버튼은 SDK 시스템 버튼이 아니라 직접 그린 HIG
+// 커스텀 버튼(로고 24 + "Apple로 계속하기")이지만, 여기서는 스텁이 꽂히므로 애플의 로고·제목·색은
+// LoginPage.apple.test.tsx(AC-Q3′)가 실물로 잠근다. 두 파일을 합쳐야 '4버튼 공통'이 된다.
 const CUSTOM_PROVIDERS = ['google', 'kakao', 'naver'] as const;
 
-// 컨테이너가 넘겨 주는 공식 버튼의 대역(화면 단위 테스트용).
+// 컨테이너가 넘겨 주는 애플 버튼의 대역(화면 단위 테스트용).
 function StubAppleButton({ onPress }: { onPress: () => void }) {
   return <Pressable testID="stub-apple-button" onPress={onPress} />;
 }
@@ -165,12 +166,12 @@ const FIGMA_LABELS: Record<(typeof CUSTOM_PROVIDERS)[number], string> = {
 };
 
 // ── 동결 계약: 라벨/배너 스타일 (AC-V1~V3) ───────────────────────────────────
-describe('AC-V1 · 소셜 버튼 라벨이 Figma Bold 조합을 쓴다 (렌더)', () => {
+describe('AC-V1 · 소셜 버튼 라벨이 Figma Bold 22 조합을 쓴다 (렌더 · TRIP-1124 15→22)', () => {
   it.each(CUSTOM_PROVIDERS)(
-    '%s 라벨이 font-noto-bold+font-bold 를 갖고, 옛 medium 조합은 없다',
+    '%s 라벨이 font-noto-bold+font-bold+text-hero(22/29) 를 갖고, 옛 medium 조합·옛 15(text-card-title)는 없다',
     (provider) => {
-      // ▸준비 — 무엇을 보장하나: 라벨이 Figma Bold 조합으로 렌더되고 옛 medium 조합으로
-      // 되돌아가지 않는다.
+      // ▸준비 — 무엇을 보장하나: 라벨이 Figma Bold 22 조합으로 렌더되고 옛 medium 조합이나
+      // 옛 15 크기로 되돌아가지 않는다(HIG 제목:높이 43% 비례를 4버튼이 함께 지킨다, 결정 2-d).
       renderDefault();
 
       // ▸실행 — within(노드) 는 '이 노드 안에서만 찾는다'는 스코프 도구다.
@@ -185,7 +186,8 @@ describe('AC-V1 · 소셜 버튼 라벨이 Figma Bold 조합을 쓴다 (렌더)'
         weight: tokens.includes('font-bold'),
         oldFamily: tokens.includes('font-noto-medium'),
         oldWeight: tokens.includes('font-medium'),
-        size: tokens.includes('text-card-title'),
+        size: tokens.includes('text-hero'),
+        oldSize: tokens.includes('text-card-title'),
         color: tokens.includes('text-ink'),
       }).toEqual({
         family: true,
@@ -193,7 +195,25 @@ describe('AC-V1 · 소셜 버튼 라벨이 Figma Bold 조합을 쓴다 (렌더)'
         oldFamily: false,
         oldWeight: false,
         size: true,
+        oldSize: false,
         color: true,
+      });
+    }
+  );
+});
+
+describe('AC-7 · 소셜 버튼 로고가 24×24 다 (렌더 · TRIP-1124 20→24)', () => {
+  it.each(CUSTOM_PROVIDERS)(
+    '%s 로고 SVG 가 width 24 · height 24 로 렌더된다',
+    (provider) => {
+      // ▸준비+실행 — 로고 크기는 Svg 의 width/height prop 으로 렌더 트리에 남는다(AC-L5 선례).
+      renderDefault();
+      const icon = screen.getByTestId(`auth-login-${provider}-icon`);
+
+      // ▸단언
+      expect({ width: icon.props.width, height: icon.props.height }).toEqual({
+        width: 24,
+        height: 24,
       });
     }
   );
@@ -218,8 +238,8 @@ describe('AC-V2 · 카카오 라벨 문구 — 한글이 뜨고 영문은 화면
   });
 });
 
-describe('AC-Q3 · 애플 자리는 공식 버튼만 — 커스텀 사과 아이콘·"애플로 계속하기" 라벨이 없다 (TRIP-932)', () => {
-  it('애플 버튼을 받으면 래퍼 안에는 넘겨받은 버튼만 있고, 커스텀 아이콘·라벨은 화면 어디에도 없다', () => {
+describe('AC-Q3 · 화면은 애플 버튼 표면을 직접 그리지 않고 넘겨받은 버튼만 꽂는다 (TRIP-932 주입 경로 · TRIP-1124 재서술)', () => {
+  it('애플 버튼을 받으면 래퍼 안에는 넘겨받은 버튼만 있고, 화면 자신은 애플 로고·"애플로 계속하기" 라벨을 그리지 않는다', () => {
     // ▸준비 + 실행 — iOS 모양.
     renderDefault({ AppleButton: StubAppleButton });
 
@@ -227,11 +247,46 @@ describe('AC-Q3 · 애플 자리는 공식 버튼만 — 커스텀 사과 아이
     const apple = screen.getByTestId('auth-login-apple');
     expect(within(apple).getByTestId('stub-apple-button')).toBeOnTheScreen();
 
-    // ▸단언 — 부재: HIG 위반 소지가 있던 커스텀 글리프·음차 라벨이 사라졌다.
+    // ▸단언 — 부재: 애플 로고·제목은 넘겨받은 버튼(appleAuthorize 소유)이 그린다. 화면이 자기
+    // 손으로 애플 글리프나 음차 라벨을 그리면 스텁 옆에 나타나 여기서 걸린다.
     expect(within(apple).queryByTestId('auth-login-apple-icon')).toBeNull();
     expect(screen.queryByTestId('auth-login-apple-icon')).toBeNull();
     expect(screen.queryByText('애플로 계속하기')).toBeNull();
   });
+});
+
+// ── TRIP-1053: 커스텀 3버튼 테두리를 애플 공식 버튼(검은 1px)에 맞춘다 (AC-1 · AC-2) ──
+describe('AC-1 · 구글·카카오·네이버 테두리가 ink 1px 이다 (TRIP-1053)', () => {
+  it.each(CUSTOM_PROVIDERS)(
+    '%s 버튼의 테두리 토큰이 정확히 border·border-ink 둘이다 — 옛 border-[1.5px]·border-hairline-strong 은 없다',
+    (provider) => {
+      // ▸준비+실행
+      renderDefault();
+      const tokens = classTokens(screen.getByTestId(`auth-login-${provider}`));
+      // 테두리 토큰만 거른다. 'border'(두께 1px)는 접두어 'border-' 로 안 잡혀 두 조건이 다 필요하다.
+      const borderTokens = tokens.filter(
+        (t) => t === 'border' || t.startsWith('border-')
+      );
+
+      // ▸단언 — 정렬 후 비교(className 안 순서는 계약이 아니다). 옛 토큰이 섞여 남으면 어느 쪽이
+      // 이길지 jest 가 모르므로 '정확히 이 둘'을 잠근다.
+      expect([...borderTokens].sort()).toEqual(['border', 'border-ink']);
+    }
+  );
+
+  it.each(CUSTOM_PROVIDERS)(
+    '%s 버튼이 높이 52·rounded-button·bg-canvas 를 유지한다 (AC-2 무회귀)',
+    (provider) => {
+      // ▸준비+실행
+      renderDefault();
+      const tokens = classTokens(screen.getByTestId(`auth-login-${provider}`));
+
+      // ▸단언 — arrayContaining 은 부분집합 검사(셋이 다 있으면 통과, 순서·여분 무관).
+      expect(tokens).toEqual(
+        expect.arrayContaining(['h-[52px]', 'rounded-button', 'bg-canvas'])
+      );
+    }
+  );
 });
 
 const ERROR_COPY = '로그인에 실패했어요. 잠시 후 다시 시도해 주세요';
@@ -292,7 +347,7 @@ describe('AC-V3 · 에러 배너가 카드·아이콘 없는 텍스트 인라인
   });
 });
 
-// ── 신규: 레이아웃 구조 (AC-L1/L2/L4) ────────────────────────────────────────
+// ── 신규: 레이아웃 구조 (AC-L1/L4 — L2 는 TRIP-1056 AC-6 으로 교체) ────────────────────────────────────────
 describe('AC-L1 · 루트는 상단정렬 컨테이너다 (렌더)', () => {
   it('루트 className 토큰에 justify-center·justify-between 이 없다 — 로고가 튀는 가운데 정렬 위반 차단', () => {
     // ▸준비+실행
@@ -307,28 +362,119 @@ describe('AC-L1 · 루트는 상단정렬 컨테이너다 (렌더)', () => {
   });
 });
 
-describe('AC-L2 · error 상태에서 로고가 배너보다 먼저 온다 (DOM 순서)', () => {
-  it('brand → errorBanner → 소셜버튼 → terms 순서다 — 배너 등장에도 로고 세로 이동 없음', () => {
-    // ▸준비 — SOCIAL_AUTH_FAILED 는 시트를 안 타는 평범한 에러라 배너가 뜬다.
+// ── TRIP-1056: 취소 안내·실패 배너가 버튼을 밀지 않는다 (AC-5 · AC-6) ─────────
+// 옛 AC-L2(brand → error-banner → google → terms)는 배너를 버튼 '위'에 굳히고 있었다 — 그 자리가
+// 버튼을 아래로 미는 원인이라 AC-6 으로 계약을 교체했다(terms 는 TRIP-1053 에서 삭제).
+// jest 사각: 좌표는 못 본다. AC-5 는 "버튼 위에 끼는 노드가 없다"는 대리 관측이라, 노드 없이
+// 조건부 여백(pt-*/mt-*)으로 버튼을 미는 회귀는 6-b 실기에서만 잡힌다.
+
+// 트리 순서에서 첫 소셜 버튼(google) '앞'에 오는 testID 만 자른다.
+function idsBeforeGoogle(): string[] {
+  const ids = testIdOrder();
+  // 앵커 — google 이 없으면 indexOf 가 -1 이고 slice(0, -1) 이 엉뚱한 배열을 준다.
+  expect(ids).toContain('auth-login-google');
+  return ids.slice(0, ids.indexOf('auth-login-google'));
+}
+
+// 루트(auth-login-root)의 직계 자식 노드들. testIdOrder 는 깊이를 무시하므로, "래퍼 밖 형제"는
+// 이것으로 따로 잰다.
+function rootChildren(): JsonNode[] {
+  const find = (n: JsonNode | string | null | undefined): JsonNode | null => {
+    if (!n || typeof n === 'string') return null;
+    if (n.props?.testID === 'auth-login-root') return n;
+    for (const c of n.children ?? []) {
+      const hit = find(c);
+      if (hit) return hit;
+    }
+    return null;
+  };
+  const tree = screen.toJSON() as unknown as JsonNode | JsonNode[] | null;
+  const root = Array.isArray(tree)
+    ? (tree.map(find).find(Boolean) ?? null)
+    : find(tree);
+  return (root?.children ?? []).filter(
+    (c): c is JsonNode => typeof c !== 'string'
+  );
+}
+
+describe('AC-5 · 취소·실패 상태에서도 버튼 위에 끼어드는 노드가 없다 (TRIP-1056)', () => {
+  it('idle·cancelled·error 세 상태에서 google 버튼 앞의 testID 목록과 루트 안 버튼 래퍼 자리가 같다', () => {
+    // testID 목록만 비교하면 testID 없는 노드(스페이서·맨 Text)가 버튼 위에 끼어도 green 이다
+    // (5-b 경고-1 M1·M2). 그래서 "루트의 몇 번째 자식이 버튼 래퍼인가"(구조 인덱스)도 함께 잰다.
+    const wrapperIndex = (): number => {
+      const idx = rootChildren().findIndex((k) =>
+        classTokens(k).includes('gap-md')
+      );
+      // 앵커 — 래퍼를 못 찾으면 -1 끼리 같아져 공허 통과한다.
+      expect(idx).toBeGreaterThanOrEqual(0);
+      return idx;
+    };
+
+    // ▸준비+실행 — 한 it 안에서 세 번 렌더한다. screen 은 늘 마지막 렌더를 가리킨다(02a ★6).
+    renderDefault();
+    const idle = { ids: idsBeforeGoogle(), wrapperAt: wrapperIndex() };
+    renderDefault({ phase: 'cancelled' });
+    const cancelled = { ids: idsBeforeGoogle(), wrapperAt: wrapperIndex() };
     renderDefault({ phase: 'error', errorCode: 'SOCIAL_AUTH_FAILED' });
+    const error = { ids: idsBeforeGoogle(), wrapperAt: wrapperIndex() };
 
-    // ▸실행 — 관심 4개 testID 만 등장 순서대로 뽑는다.
-    const WATCH = [
-      'auth-login-brand',
-      'auth-login-error-banner',
-      'auth-login-google',
-      'auth-login-terms',
-    ];
-    const order = testIdOrder().filter((t) => WATCH.includes(t));
-
-    // ▸단언 — 순서가 정확히 이것이어야 한다(로고가 배너 앞 = 위에 고정).
-    expect(order).toEqual([
-      'auth-login-brand',
-      'auth-login-error-banner',
-      'auth-login-google',
-      'auth-login-terms',
-    ]);
+    // ▸단언 — 버튼 위에 무엇이든(이름표 유무 무관) 끼면 그 상태의 목록 또는 래퍼 자리가 달라진다.
+    expect({ cancelled, error }).toEqual({ cancelled: idle, error: idle });
   });
+});
+
+describe('AC-6 · 취소 안내·실패 배너는 버튼 묶음 뒤 형제다 (TRIP-1056 · AC-L2 교체)', () => {
+  it.each([
+    {
+      name: 'cancelled',
+      override: { phase: 'cancelled' },
+      noticeId: 'auth-login-cancel-notice',
+    },
+    {
+      name: 'error',
+      override: { phase: 'error', errorCode: 'SOCIAL_AUTH_FAILED' },
+      noticeId: 'auth-login-error-banner',
+    },
+  ] as { name: string; override: Partial<Props>; noticeId: string }[])(
+    '$name: brand → 소셜 버튼 → $noticeId 순서이고, 안내는 버튼 래퍼 밖(루트 직계)에서 래퍼 뒤에 온다',
+    ({ override, noticeId }) => {
+      // ▸준비+실행
+      renderDefault(override);
+      const WATCH = [
+        'auth-login-brand',
+        'auth-login-google',
+        'auth-login-kakao',
+        'auth-login-naver',
+        noticeId,
+      ];
+      const order = testIdOrder().filter((t) => WATCH.includes(t));
+      const kids = rootChildren();
+      // 버튼 래퍼는 testID 가 없어 gap-md 토큰으로 잡는다(AC-L4 와 같은 앵커).
+      const wrapperIdx = kids.findIndex((k) =>
+        classTokens(k).includes('gap-md')
+      );
+      const noticeIdx = kids.findIndex((k) => k.props?.testID === noticeId);
+
+      // ▸단언 — 순서(로고 → 버튼 → 안내).
+      expect(order).toEqual([
+        'auth-login-brand',
+        'auth-login-google',
+        'auth-login-kakao',
+        'auth-login-naver',
+        noticeId,
+      ]);
+      // ▸단언 — 위치: 래퍼 안이면 루트 직계가 아니고, 래퍼 앞이면 인덱스가 작다.
+      expect({
+        wrapperFound: wrapperIdx >= 0,
+        noticeIsRootChild: noticeIdx >= 0,
+        noticeAfterWrapper: noticeIdx > wrapperIdx,
+      }).toEqual({
+        wrapperFound: true,
+        noticeIsRootChild: true,
+        noticeAfterWrapper: true,
+      });
+    }
+  );
 });
 
 describe('AC-L4 · 회귀 토큰 유지 (렌더)', () => {

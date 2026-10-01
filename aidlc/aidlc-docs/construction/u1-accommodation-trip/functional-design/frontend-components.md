@@ -92,12 +92,12 @@ src/app/
 | `StayDetail` | 사진 · 이름 · 라이브 정확가 · 편의시설 · 지도 · 제휴 고지 · CTA 2종 | — | ⚠️ 계약 미존재 (`/stays/{id}` · `/stays/{id}/live-price`) |
 | `OtaChoiceSheet` | OTA별 이름·가격 라디오 + 제휴 고지 + [이동](BR-U1-30·31) | props: options | ⚠️ 계약 미존재 (`/stays/{id}/outbound` → 딥링크) |
 | `AddToTripSheet` | `[일정에 추가]` — 여행 선택 → 거점 배정. 여행 없으면 생성으로(BR-U1-25) | — | `POST /trips/{tripId}/bases` |
-| `SavedStayList` | "저장한 숙소 N곳 · ♥로 담아둔 곳" · `거점` 배지(파생) · "다른 숙소를 거점으로 지정" | — | `GET /saved-stays` |
+| `SavedStayList` | "저장한 숙소 N곳 · ♥로 담아둔 곳" · `거점` 배지(파생) · "다른 숙소를 거점으로 지정". **[구현 결정 · 2026-09-28, TRIP-1052]** 숙소 날짜는 옛 데이터에 있으면 보이고 **없으면 줄 자체를 생략**한다 — '날짜 없음' 문구를 두지 않는다(저장 숙소 상세·등록 숙소 목록·거점 선택 시트 공통) | — | `GET /saved-stays` |
 | `StayRegisterTabs` | 3탭(지도 검색 · 링크 붙여넣기 · 핀 지정) 공용 셸(BR-U1-21) | Zustand: 탭·후보·좌표확정 | — |
 | ├ `MapSearchTab` | 검색 → 후보 다중 시 라디오 선택 → 지도 확인 | RHF+Zod | `GET /stays/geocode` |
 | ├ `LinkPasteTab` | OTA URL 파싱. 실패 시 원문 유지 + 타 탭 유도(BR-U1-24) | RHF+Zod: URL 형식 | ⚠️ 계약 미존재 (`/stays/parse-link`) |
 | ├ `PinTab` | 지도 롱프레스로 핀 지정 → 역지오코딩 | — | ⚠️ 계약 미존재 (`/stays/reverse-geocode`) |
-| └ `StayDateFields` | 체크인/아웃 · "N박 · 나중에 바꿀 수 있어요" | Zod: `checkOut > checkIn`(UX 사본) | `POST /saved-stays` |
+| └ ~~`StayDateFields`~~ | ⛔ **[폐기 · 2026-09-28, TRIP-1052]** ~~체크인/아웃 · "N박 · 나중에 바꿀 수 있어요"~~ — 숙소 등록에서 날짜 입력을 없앴다(사용자 결정, QA #013). `POST /saved-stays` 본문에 `checkIn`·`checkOut` 키를 싣지 않는다(계약상 nullable 선택 필드라 서버 변경 없음) | ~~Zod: `checkOut > checkIn`~~ | — |
 | `MapApiFallback` | 지도 API 실패 시 핀 지정 폴백 안내(BR-U1-23) | — | — |
 
 > **문구 소유자 — `filterZeroReasons` 코드→표시명 변환.** **[구현 결정 · TRIP-182, 2026-07-30]** 계약(`filterZeroReasons: string[]`)은 `stayType`·`amenity:오션뷰` 같은 기계 코드만 준다. 한글 표시명으로 바꾸는 책임은 **프론트가 소유**한다 — 근거: `frontend/src/features/stay/model/filterReasonLabel.ts`(축 이름 사전 2줄 + 모르는 축은 코드 그대로 폴백). 이 문서 승인 당시 이 변환의 소유자가 정해져 있지 않았다(공백). 서버가 표시명 필드를 새로 주는 것으로 이 소유권이 바뀌면 이 문단부터 갱신한다.
@@ -109,10 +109,10 @@ src/app/
 | `TripWizardLayout` | 2단계 진행 표시(1/2·2/2) · 뒤로가기 시 입력 보존 | Zustand: 위저드 드래프트 | — |
 | `DestinationChips` | 다중 도시 칩(`부산 · 2박 ×`) + "도시 추가"(BR-U1-34) | RHF: 배열 필드 | ⚠️ 계약 미존재 (`/regions`) |
 | `MustVisitSeedStrip` | 담은 곳에서 온 '꼭 갈 곳' 썸네일 · 개별 ×· "+N" · "더 담기"(BR-U1-37) | — | **[정정 2026-08-02]** `GET /saved-places`(시드 원본) · `/trips/{tripId}/must-visits` — 둘 다 실재한다. 이전 표기 "⚠️ 계약 미존재(`/me/saved-places`) — C 대기"는 해소 |
-| `PeriodPicker` | 프리셋 칩(이번 주말·다음 주말·1박2일·3박4일) + 날짜 범위. 프리셋은 자동 채움일 뿐 수정 가능(BR-U1-36) | Zod: `end ≥ start`(UX 사본) | — |
-| `PartyPicker` | 인원 스테퍼 + 동반 유형(혼자·친구·연인·가족)(BR-U1-39) | — | — |
+| `PeriodPicker` | 프리셋 칩(이번 주말·다음 주말·1박2일·3박4일) + 날짜 범위. 프리셋은 자동 채움일 뿐 수정 가능(BR-U1-36). **[구현 결정 · 2026-09-28, TRIP-1045 — 사용자 결정 QA #017]** 기간 미선택 상태의 placeholder는 `기간 선택` | Zod: `end ≥ start`(UX 사본) | — |
+| `PartyPicker` | 인원 스테퍼 + 동반 유형(혼자·친구·연인·가족)(BR-U1-39). **[구현 결정 · 2026-09-28, TRIP-1045 — 사용자 결정 QA #019]** 동반 유형 기본값은 `혼자`(인원 기본 1 그대로) — 이전엔 미선택(undefined)으로 시작했다 | — | — |
 | `PreferencePrefillCard` | "당신 취향으로 맞췄어요" + 칩 + [바꾸기] → 여행 단위 오버라이드(BR-U1-38) | — | `GET /me/preferences` |
-| `BudgetInputField` | **[구현 결정 · TRIP-207, 2026-08-02]** 예산 총액 입력(선택) — 온보딩 취향 러프값(`PreferenceView.budget.rawAmount`) 프리필 + "온보딩에서 고른 '{티어}({구간})' 범위로 채웠어요" 안내 문구, 비우면 `budgetTotal` 키 자체를 전송하지 않는다(BR-U1-38 덮어쓰기 허용). 이 문서 승인 당시 §4 표에 예산 컴포넌트 행이 없었다(공백) — TRIP-182의 `StateNotice`·`SkeletonList` 구현 결정 소급 기록 방식을 따른다. 근거: `_workspace/20260802-trip207-budget-block/01_spec-analyst_brief.md` §3·§7-④ | Zustand: `budgetText`·`touched.budget`(파생값, 프리필은 스토어에 쓰지 않음) | `GET /me/preferences`(프리필 출처, `PreferencePrefillCard`와 동일 조회 재사용) |
+| `BudgetInputField` | **[구현 결정 · TRIP-207, 2026-08-02]** 예산 총액 입력(선택) — 온보딩 취향 러프값(`PreferenceView.budget.rawAmount`) 프리필 + "온보딩에서 고른 '{티어}({구간})' 범위로 채웠어요" 안내 문구 **[폐기 · 2026-09-28, TRIP-1067 — 안내 문구 없음, 아래 맵 결정]**, 비우면 `budgetTotal` 키 자체를 전송하지 않는다(BR-U1-38 덮어쓰기 허용). 이 문서 승인 당시 §4 표에 예산 컴포넌트 행이 없었다(공백) — TRIP-182의 `StateNotice`·`SkeletonList` 구현 결정 소급 기록 방식을 따른다. 근거: `_workspace/20260802-trip207-budget-block/01_spec-analyst_brief.md` §3·§7-④. **[구현 결정 · 2026-09-28, TRIP-1045 — 사용자 결정 QA #020] tier→금액 맵**: tier 칩을 누르면 대표 금액을 금액 칸에 채운다(직접 수정 가능). 1인 1박 단가 = 저가 50,000 · 중간 100,000 · 고급 200,000 · 럭셔리 400,000원. **대표 금액 = 단가 × 박수**(1인 총액 — 앱 예산 표기가 전부 '1인 총액' 기준이라 인원은 곱하지 않는다). 박수 0 또는 기간 미정이면 1박 기준. **칩을 누를 때만 계산**하고 인원·기간이 바뀌어도 자동 재계산하지 않는다. 칩 옆 금액 range 안내 문구('50만 미만' 등)는 두지 않는다. 맵은 요구사항 원문이 아니라 사용자 확정 구현값이다. **[대체 · 2026-09-28, TRIP-1067 — 사용자 결정]** 위 TRIP-1045 맵(1인 1박 단가 × 박수)은 **온보딩 예산 범위 가운데값**으로 대체한다: 저가 300,000 · 중간 1,000,000 · 고급 2,000,000 · 럭셔리 4,000,000원(온보딩 범위 ~50만 · 50~150만 · 150~300만 · 300만+ 의 가운데값, 열린 끝은 30만·400만으로 둔다). 값은 **1인 여행 전체 금액**이고 **박수·인원과 무관**하다(단가 곱셈·0박 1박 기준 규칙은 함께 폐기). 칩 press 때만 채움 · 직접 수정 가능 · 재계산 없음 · range 안내 문구 없음은 **유지** | Zustand: `budgetText`·`touched.budget`(파생값, 프리필은 스토어에 쓰지 않음) | `GET /me/preferences`(프리필 출처, `PreferencePrefillCard`와 동일 조회 재사용) |
 | `BaseSectionList` | 구간별 거점("1–2박 6/10–6/12 부산 — {숙소} · 거점" + [변경]) | — | **[정정 · 2026-08-02]** 구간 행의 원본은 `GET /trips/{tripId}/bases`(BaseAssignment[])다. `GET /trips/{tripId}/coverage`는 **날짜별 판정·`blocked`**를 주는 별개 응답으로, 하단 CTA 차단에만 쓴다(BR-U1-44) · `DELETE /trips/{tripId}/bases/{baseAssignmentId}` |
 | `BaseCandidateList` | 숙소 후보 카드 · "거점으로 지정" · 지정 시 "✓ N박 · {지역}에 지정됨" | — | `POST /trips/{tripId}/bases` |
 | `CoverageResolveSheet` | **차단형 해소 시트** — 미해결 날짜별 선택(겹침: 후보 목록 / 공백: 직전 숙소·여행지 중심·숙소 지정)(BR-U1-44·45) | props: unresolvedDays | `GET /trips/{tripId}/coverage` → 해소는 `POST /trips/{tripId}/bases` 재배정 |
@@ -121,7 +121,7 @@ src/app/
 
 **[라이브 실측 · 2026-08-02] 밴드 g에 변형 프레임이 늘었다** — `g01 · no-saved-places`(`2226:1732`) · `g01 · error`(`2226:1929`) · `g01 · blocked-overseas (dialog)`(`2228:1738`) · **`g03 필수 방문지 관리 · default`(`2230:1732`)**. `g01 · default`는 `1675:1183`. 이 문서 승인(2026-07-23) 당시 g01은 default 하나뿐이었고 "담은 곳 0"의 화면이 없어 TRIP-209가 그것을 미결로 남겼는데, **이제 프레임이 있다**(no-saved-places). g03은 US-TRIP-08(필수 방문지 지정 — 지라 티켓 미존재)의 화면이다.
 
-**[라이브 실측 · 2026-08-02, TRIP-207 [기록] 반영] `g01 · default`(`1675:1183`) 내부 구성이 바뀌었다 — 프레임 개수는 안 변했고 내용이 변했다.** 위 문단이 다루는 것은 g01의 **새 변형 프레임**이고, 이건 그 default 프레임 **안쪽**에 자식 노드가 늘어난 것이라 별개다: 예산 블록 `sec_budget`(`2225:2375`, 구분선 `d3w` `2225:2373` 포함, TRIP-207 소관 — `BudgetInputField` 위 행 참고) · 등록 숙소 날짜 가져오기 행 `stayImportRow`(`2225:2362`, TRIP-208 소관 — **이 문서는 이 노드에 컴포넌트 행을 아직 안 둔다**, TRIP-208 [기록]에서 소급). 근거: `_workspace/20260802-trip207-budget-block/01_spec-analyst_brief.md` §7-④.
+**[라이브 실측 · 2026-08-02, TRIP-207 [기록] 반영] `g01 · default`(`1675:1183`) 내부 구성이 바뀌었다 — 프레임 개수는 안 변했고 내용이 변했다.** 위 문단이 다루는 것은 g01의 **새 변형 프레임**이고, 이건 그 default 프레임 **안쪽**에 자식 노드가 늘어난 것이라 별개다: 예산 블록 `sec_budget`(`2225:2375`, 구분선 `d3w` `2225:2373` 포함, TRIP-207 소관 — `BudgetInputField` 위 행 참고) · 등록 숙소 날짜 가져오기 행 `stayImportRow`(`2225:2362`, TRIP-208 소관 — **이 문서는 이 노드에 컴포넌트 행을 아직 안 둔다**, TRIP-208 [기록]에서 소급). **[폐기 · 2026-09-28, TRIP-1052]** 이 행은 US-TRIP-05·BR-U1-41 폐기로 소멸한다(화면 배선은 TRIP-663에서 이미 제거) — 소급할 행 없음. 근거: `_workspace/20260802-trip207-budget-block/01_spec-analyst_brief.md` §7-④.
 
 **[구현 결정 · TRIP-209, 2026-08-06] `MustVisitSeedStrip` 등록 실패 표면 + 제출 잠금 — 이 문서 승인 당시 없던 공백을 게이트에서 확정.** `01_spec-analyst_brief.md` §8-③이 "must-visit 등록 실패의 문구·자리·재시도 어포던스는 정본에 없어 발명 대상"으로 관측했고, 3-a에서 사용자가 "(가) 반영"을 선택했다(`01b_ouroboros_seed.md` §4). 아래는 전부 **요구사항 근거가 아니라 우리가 정한 구현 결정**이다 — 다음 사이클이 요구사항 근거로 인용하지 말 것.
 
@@ -132,11 +132,20 @@ src/app/
 - 조회 실패 부제 `담은 곳을 불러오지 못했어요`(0곳 얼굴과 반드시 구분 — 캡션은 그리지 않는다). 근거: 게이트①-1 사용자 결정.
 - **담은 목록 도착 전에는 `[다음]`을 잠근다(비회원은 예외 — 비회원은 조회 자체가 안 나가 "불러오는 중"이 영원히 참이므로, 그 값에 그대로 잠그면 비회원이 여행을 영영 못 만든다).** ⚠️ **정본 AC 문장 없음** — 이 결정의 근거는 브리프·Seed 어디에도 없고, 게이트①-1 승인 이후 code-critic 적대적 리뷰가 찾은 무방비 경로(담은 목록 미도착 상태에서 제출하면 꼭 갈 곳이 통째로 빠진 채 침묵 통과)를 메우며 사용자가 내린 **게이트①-2 결정**이다. 근거: 게이트①-2(`00_gates.md` 게이트①-2 절, 2026-08-06 13:22) — AC 코드를 날조하지 않고 "게이트 결정"으로 표기한다.
 
+**[구현 결정 · 2026-09-28, TRIP-1042 — 사용자 결정 QA #021·022] 꼭 갈 곳 고르기(담은 장소 select 모드 — `SavedPlaceList` d02를 위저드 `더 담기`/`전체 보기`로 연 상태)의 지역 매칭.** 규칙 정본은 BR-U1-58·INV-U1-21이고 아래는 화면 쪽 사본이다.
+
+- 매칭은 **행정구역 코드 접두사**(`Place.regionCode` ↔ `TripDestination.regionCode`, 시도 2자리·시군구 5자리). 이름 접두사 비교는 쓰지 않는다 — 시도 여행(`서울특별시`)과 시군구 이름(`종로구`)이 구조적으로 0건이 되던 원인이다. `regionCode` 노출은 BE 계약 소관(이 문서 범위 밖).
+- 지역 안 0건이면 **전체로 폴백하지 않는다**(TRIP-982 D6 폐기) → 빈 상태 `{여행지}에 담은 곳이 없어요` + CTA `탐색에서 {여행지} 장소 담기`(탐색 진입 시 여행 지역을 넘긴다). 다중 목적지 문구는 `서울·부산에 담은 곳이 없어요`. 담은 곳이 진짜 0개일 때의 기존 빈 상태는 그대로 둔다.
+- 여행 지역 밖 담은 장소는 `이 여행 지역 밖 N곳` 섹션에 **보이되 선택 불가(흐림)**(TRIP-1012 A4 '지역 밖도 선택 가능' 폐기 — 숨기지는 않으므로 침묵 제외 아님).
+- `regionCode`가 null인 장소는 숨기지 않는다(fail-open — 지역 안처럼 취급).
+- **[보완 · 2026-09-28, TRIP-1042 후속]** 접두사 매칭은 양방향(짧은 쪽 코드가 긴 쪽의 접두면 지역 안 — 시드 POI는 시도 2자리만 가짐) · 목적지 중 하나라도 코드가 없으면 판정 생략(전부 선택 가능). 정본 BR-U1-58·INV-U1-21.
+- 행 위치 표기는 `시도 짧은 이름 + 시군구`(예 `인천 남동구`) — 시군구 이름만으로는 도시가 모호했다.
+
 **[라이브 실측 · 2026-08-07, TRIP-225 [기록] 반영] g02 empty 변형(`1708:1183`)의 실제 구성 — 이 문서는 g02의 default(`1707:1183`)만 기술했고 empty는 공백이었다.** 제목 `숙소 없이 시작해도 돼요` + 주 CTA `숙소 없이 계속` + 보조 CTA `숙소 둘러보기`(→ `/stays`)의 2버튼 구성이다. default·empty 두 변형은 동시에 렌더되지 않으므로 `NoStayStartButton`은 두 변형에서 testID(`trip-base-nostay-start`)를 공유한다. 근거: `_workspace/20260807-trip225-base-screen/01b_ouroboros_seed.md` D3.
 
 **[구현 결정 · TRIP-225, 2026-08-07] g02 거점 배정 화면 5건 — 이 문서 승인 당시 없던 공백을 구현 단계에서 확정.** 아래는 전부 **요구사항 근거가 아니라 우리가 정한 구현 결정**이다 — 다음 사이클이 요구사항 근거로 인용하지 말 것.
 
-- 지정 시 보내는 `dateFrom`/`dateTo`는 `SavedStay.checkIn`/`checkOut` 값을 그대로 쓴다 — 별도 날짜 선택 UI는 신설하지 않는다. 근거: 게이트①③ 통합 승인(3-a 사용자 결정, D1).
+- 지정 시 보내는 `dateFrom`/`dateTo`는 `SavedStay.checkIn`/`checkOut` 값을 그대로 쓴다 — 별도 날짜 선택 UI는 신설하지 않는다. 근거: 게이트①③ 통합 승인(3-a 사용자 결정, D1). **[대체 · 2026-09-28, TRIP-1052]** 숙소 등록에 날짜 입력이 없어져 이 전제가 무너졌다 — 배정 구간은 **배정 자신의 날짜**이고 숙소 날짜에서 복사하지 않는다(INV-U1-15 개정). 배정 구간을 어느 표면에서 정하는지는 이 문서가 새로 정하지 않는다(구현 실측 기준으로 소급 기록).
 - 후보 카드의 사진·지역·거리·가격 4종은 계약 부재(`SavedStay`에 해당 필드 없음) — Figma 레이아웃대로 자리는 두되 값은 회색 플레이스홀더로 둔다(TRIP-224 D1 이연 승계). BE 계약 보강은 후속 티켓(사용자가 게이트②에서 지역·가격 보강 요청은 철회 — 사진은 미결로 남는다).
 - default 외 나머지 4변형 중 loading(`2454:1500`)·error(`2454:1639`)·blocked(`2454:1778`) 3얼굴을 신규 제작했다(empty는 위 라이브 실측 문단 참조).
 - `변경 >`은 DELETE로 배정만 해제하고 끝난다 — 후보 목록에서 다시 고른다. 별도 시트·스크롤 제어를 두지 않는다(TRIP-190 경계 비침범, D6).
@@ -148,7 +157,7 @@ src/app/
 
 | 폼 | 클라 검증(Zod) | 서버 정본 |
 |---|---|---|
-| 숙소 등록 | 숙소명 필수 · 체크아웃 > 체크인 · 좌표 확정 여부 | BR-U1-22·26 — **[정정 · 2026-08-02] 오류 코드는 400(ValidationError)·404다.** 이 자리에 적혀 있던 `409/422`는 `/saved-stays`·`/trips/{tripId}/bases` 계약에 존재하지 않는다 |
+| 숙소 등록 | 숙소명 필수 · ~~체크아웃 > 체크인~~(2026-09-28 폐기, TRIP-1052 — 날짜 입력 없음) · 좌표 확정 여부 | BR-U1-22·26 — **[정정 · 2026-08-02] 오류 코드는 400(ValidationError)·404다.** 이 자리에 적혀 있던 `409/422`는 `/saved-stays`·`/trips/{tripId}/bases` 계약에 존재하지 않는다 |
 | 링크 붙여넣기 | URL 형식 | BR-U1-24 (파싱 판정은 서버) |
 | 여행 생성 | 종료일 ≥ 시작일 · 도시별 박수 합 ≤ 기간 · 인원 ≥ 1 | BR-U1-34·36 · INV-U1-14 |
 | 필수 방문지 고정 | 날짜가 여행 기간 안 · 시각 형식 | BR-U1-49 |
@@ -163,7 +172,7 @@ src/app/
 **[구현 결정 · TRIP-182, 2026-07-30]** 위 `stay-search-partialfailure-retry` 외 나머지 4상태(loading·empty·filter-zero·error)의 testID — 이 문서 승인 당시 이 넷의 이름은 정해지지 않았다(§6 공백). 실제 구현이 확정한 값: `stay-search-loading` · `stay-search-skeleton-{i}`(i=0,1) · `stay-search-empty` · `stay-search-empty-region` · `stay-search-empty-filter` · `stay-search-register` · `stay-search-filterzero` · `stay-search-filterzero-clear` · `stay-search-filterzero-reset` · `stay-search-error` · `stay-search-error-retry` · `stay-search-error-register` · `stay-search-partialfailure`(배너 컨테이너 자체 — retry는 위와 동일). 근거: `frontend/src/features/stay/ui/StaySearchScreen.states.test.tsx`(게이트①-1 승인, TRIP-182).
 `trip-wizard-step{n}-next` · `trip-wizard-destination-add` · `trip-wizard-period-preset-{code}` · `trip-wizard-party-stepper` · `trip-wizard-pref-change` · `trip-base-assign-{stayId}` · `trip-base-coverage-day-{date}` · `trip-base-nostay-start`
 
-**[구현 결정 · TRIP-207, 2026-08-02]** 예산 testID 5종 — 이 문서 승인 당시 정해지지 않았다(공백). 게이트①에서 확정한 값: `trip-wizard-budget-block`(섹션 컨테이너) · `trip-wizard-budget-input`(총액 입력, 지라 티켓이 직접 지정) · `trip-wizard-budget-edit`(`수정` 어포던스) · `trip-wizard-budget-note`(프리필 안내 문구) · `trip-wizard-error-budget`(인라인 파싱 오류 — 위반 코드가 아니라 **블록 슬러그** 규약, 기존 `trip-wizard-error-destination`·`trip-wizard-error-period`와 동형). 근거: `_workspace/20260802-trip207-budget-block/02a_test-design_spec.md` §2-6.
+**[구현 결정 · TRIP-207, 2026-08-02]** 예산 testID 5종 — 이 문서 승인 당시 정해지지 않았다(공백). 게이트①에서 확정한 값: `trip-wizard-budget-block`(섹션 컨테이너) · `trip-wizard-budget-input`(총액 입력, 지라 티켓이 직접 지정) · `trip-wizard-budget-edit`(`수정` 어포던스) · `trip-wizard-budget-note`(프리필 안내 문구 — **[폐기 · 2026-09-28, TRIP-1067]** 안내 문구가 없어져 이 testID도 없다) · `trip-wizard-error-budget`(인라인 파싱 오류 — 위반 코드가 아니라 **블록 슬러그** 규약, 기존 `trip-wizard-error-destination`·`trip-wizard-error-period`와 동형). 근거: `_workspace/20260802-trip207-budget-block/02a_test-design_spec.md` §2-6.
 
 **[구현 결정 · TRIP-209, 2026-08-06]** 꼭 갈 곳 시드 testID 9종 — 이 문서 승인 당시 정해지지 않았다(공백). 티켓 고정 4종: `trip-wizard-mustvisit-{sourcePoiId}`(썸네일) · `trip-wizard-mustvisit-remove-{sourcePoiId}`(썸네일 `x`) · `trip-wizard-mustvisit-more`(점선 `더 담기`) · `trip-wizard-mustvisit-empty`(점선 `가고 싶은 곳 담기`, 0곳). 게이트①에서 확정한 신규 5종: `trip-wizard-mustvisit-block`(섹션 컨테이너) · `trip-wizard-mustvisit-image-{sourcePoiId}`(썸네일 사진, 있을 때만) · `trip-wizard-mustvisit-overflow`(`+N` 박스) · `trip-wizard-mustvisit-retry`(조회 실패 재시도 행) · `trip-wizard-mustvisit-banner`/`-banner-retry`(등록 실패 배너). 근거: `_workspace/20260805-trip209-mustvisit-seed/02a_test-design_spec.md` §2-4.
 

@@ -15,10 +15,10 @@
 | 일정 생성 (포워드) | `POST /ai/v1/itinerary/generate` | **확정** — 구 표기 `POST /ai/generate` 폐기 |
 | 일정 검증 (포워드) | `POST /ai/v1/itinerary/validate` | **확정** |
 | 일정 수리 (포워드) | `POST /ai/v1/itinerary/repair` | **확정** |
-| Plan-B 대안 제안 (포워드) | `POST /ai/v1/itinerary/alternatives` | **확정** — TRIP-428 |
+| Plan-B 대안 제안 (포워드) | `POST /ai/v1/planb/alternatives` | **확정** — TRIP-428.<br/>**경로 이동 완료(TRIP-960, 2026-09-28)** — 백엔드 #758 상수 교체·`CALLED_PATHS` 구 경로 0건 확인 후 구 경로 삭제. |
 | 슬롯별 설명 조회 (포워드) | `POST /ai/v1/itinerary/explanations` | **확정** — TRIP-479 |
 | 일정 편집 (포워드) | `POST /ai/v1/itinerary/edit` | **확정** — TRIP-431 |
-| 하루 재계획 (포워드) | `POST /ai/v1/itinerary/replan` | **계약 확정** — 재계획 연동 설계 A-4. 조립 미배선 시 503 |
+| 하루 재계획 (포워드) | `POST /ai/v1/planb/replan` | **배선됨**(#744 — PlanBAgent RAG → ScheduleAgent 점수 가산 → 어셈블리). 재계획 연동 설계 A-4.<br/>**경로 이동 완료(TRIP-960, 2026-09-28)** — 백엔드 #758 상수 교체·`CALLED_PATHS` 구 경로 0건 확인 후 구 경로 삭제. |
 | POI 정본 read — 반경 (리버스) | `GET /internal/pois?centerLat&centerLng&radiusKm` | **확정** — 백엔드 구현 기준 |
 | POI 정본 read — 배치 (리버스) | `POST /internal/pois/batch-get` (요청 필드 `poi_ids`) | **확정** — 계약 초안의 `:batchGet`·`ids` 표기 정정 |
 
@@ -162,7 +162,7 @@ stateDiagram-v2
 [Kotlin M10] start_replan(trigger_context)
     |
     v
-[API Layer] POST /ai/v1/itinerary/alternatives (Plan-B)  # 구 표기 /ai/replan 폐기.
+[API Layer] POST /ai/v1/planb/alternatives (Plan-B)  # 구 /ai/v1/itinerary/alternatives 는 TRIP-960 ④ 삭제.
     |                                            # 경로 확정 — §0 (TRIP-428)
     v
 [ReplanOrchestrator.generate_alternatives()]

@@ -11,8 +11,8 @@ import type { StayFilterOption } from '../model/stayFilterOptions';
 /**
  * e02 필터 시트(TRIP-415) — 편의시설·숙소유형 다중 선택.
  *
- * **완전 제어 컴포넌트다** — 선택 초안 상태를 자기 안에 두지 않는다(features/stay/ui 는 구조
- * 가드가 `useState` 를 0건 강제한다, `staySearchStructure.test.ts`). 초안 상태·적용은 페이지가
+ * **완전 제어 컴포넌트다** — 선택 초안 상태를 자기 안에 두지 않는다(features/stay/ui 는
+ * `useState` 를 두지 않는다). 초안 상태·적용은 페이지가
  * 지고, 여기선 옵션을 그리고 토글·적용·닫기 이벤트만 위로 넘긴다(순수 화면 규약).
  *
  * ponytail: 옵션 라벨은 서버 코드(`ocean`·`HOTEL` 등)를 그대로 쓴다 — 계약에 amenity/stayType

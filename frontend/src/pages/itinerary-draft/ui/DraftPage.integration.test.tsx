@@ -119,6 +119,7 @@ function daysUpTo(count: number): ItineraryDaysItem[] {
         isFixed: false,
         endsNextDay: false,
         hasViolation: false,
+        alternatives: [],
         tags: [],
         nameKo: `${date} 첫 장소`,
         lat: 33.458,
@@ -185,6 +186,17 @@ let itineraryGetCalls = 0;
 let itineraryScript: (call: number) => Itinerary;
 /** GET /trips/{id} 가 무엇을 돌려줄지 — 여행 기간을 케이스가 정한다(위 `itineraryScript` 와 동형). */
 let tripScript: () => Trip;
+
+/** 생성 화면(`/trips/[tripId]/itinerary/generating`)으로 간 라우터 호출 수 — replace·push 모두 센다(TRIP-1037). */
+function generatingMoves(): number {
+  return [...mockReplace.mock.calls, ...mockPush.mock.calls].filter(
+    ([arg]) =>
+      typeof arg === 'object' &&
+      arg !== null &&
+      (arg as { pathname?: string }).pathname ===
+        '/trips/[tripId]/itinerary/generating'
+  ).length;
+}
 
 function hitsFor(method: string, includes: string): number {
   return observedHits.filter(
@@ -304,7 +316,7 @@ describe('🔴 I1 · AC-4 · AC-9 — 2단계 생성을 폴링으로 잇고, 다
 });
 
 describe('🔴 I2 · AC-9 · AC-10 — 2차 실패해도 1차분은 살아남는다 (INV-4)', () => {
-  it('FAILED 응답에도 day1 카드가 남고 상단 배너가 곁에 붙는다', async () => {
+  it('FAILED 응답에도 day1 카드가 셸에 남고 시트 안 안내가 곁에 붙는다 (TRIP-1039 — 목록 → 셸)', async () => {
     // 준비 — openapi: "FAILED=2차 실패(**1차분은 유효**)". 받은 것까지 버리면 사용자는
     // 아무것도 없는 화면을 보고 다시 생성하는 수밖에 없다.
     itineraryScript = () =>
@@ -314,22 +326,25 @@ describe('🔴 I2 · AC-9 · AC-10 — 2차 실패해도 1차분은 살아남는
 
     // ① 실패가 삼켜지지 않았다.
     expect(
-      await screen.findByTestId('itinerary-draft-stale-failed')
+      await screen.findByTestId(
+        'itinerary-draft-stale-failed',
+        {},
+        { timeout: 4000 }
+      )
     ).toBeOnTheScreen();
 
-    // ② 목록이 지워지지 않았다 — 1일차 슬롯이 그대로 그려진다.
-    await waitFor(() =>
-      expect(
-        screen.queryAllByTestId(/^itinerary-draft-slot-/).length
-      ).toBeGreaterThan(0)
+    // ② 목록이 지워지지 않았다 — 1일차 슬롯이 셸 카드로 그려진다(TRIP-1039).
+    expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
+    expect(screen.queryAllByTestId(/^slot-stopcard-/).length).toBeGreaterThan(
+      0
     );
     // ③ 전면 실패 얼굴로 갈아 끼우지 않았다.
     expect(screen.queryAllByTestId('itinerary-draft-failed')).toEqual([]);
   });
 });
 
-describe('🔴 I3 · AC-11 — 다시 시도는 PLANNED 에서만 POST 를 낸다 (01b D8)', () => {
-  it('PLANNED 면 누를 때 재생성 POST 가 한 건 나간다', async () => {
+describe('🔴 I3 · AC-11 — 다시 시도는 PLANNED 에서만 생성 화면으로 보낸다 (01b D8 · TRIP-1037 플립)', () => {
+  it('PLANNED 면 누를 때 생성 화면으로 replace 1회 · 초안 화면 POST 0', async () => {
     itineraryScript = () =>
       itinerary({
         dayCount: 3,
@@ -342,12 +357,16 @@ describe('🔴 I3 · AC-11 — 다시 시도는 PLANNED 에서만 POST 를 낸�
     // TRIP-792 플립 — 깨끗한 COMPLETE·PLANNED → h08 셸. 재생성은 이제 셸의 '다시 짜기'(cta[0]).
     const retry = await screen.findByTestId('sheet-cta-button-0');
     expect(retry).toHaveTextContent('다시 짜기');
-    // 배선이 mount 시 POST 를 내든 안 내든 상관없게 **누르기 직전 값과의 차이**를 잰다.
-    const before = hitsFor('POST', '/itinerary');
-
     fireEvent.press(retry);
 
-    await waitFor(() => expect(hitsFor('POST', '/itinerary')).toBe(before + 1));
+    // TRIP-1037 — 재생성 POST 는 생성 화면이 마운트될 때 1회 보낸다. 초안 화면은 이동만 한다.
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/itinerary/generating',
+      params: { tripId: TRIP_ID, mode: 'FULLY_AI' },
+    });
+    await sleep(300);
+    expect(hitsFor('POST', '/itinerary')).toBe(0);
   });
 
   it('🔴 CONFIRMED 면 다시 짜기를 눌러도 재생성 POST 가 0건이다 — 확정이 풀리면 되돌릴 수 없다 (TRIP-792 플립)', async () => {
@@ -374,6 +393,9 @@ describe('🔴 I3 · AC-11 — 다시 시도는 PLANNED 에서만 POST 를 낸�
     await sleep(50);
 
     expect(hitsFor('POST', '/itinerary')).toBe(0);
+    // TRIP-1037 — 초안 화면은 이제 어떤 경우에도 POST 를 안 보내 위 단언만으론 공허하다. 확정 가드의
+    // 실체는 "생성 화면으로 보내지 않는다" 다(생성 화면이 마운트되면 POST 가 나가 확정이 풀린다).
+    expect(generatingMoves()).toBe(0);
   });
 });
 
@@ -470,8 +492,8 @@ describe('I5 · AC-10 F-7 이관 — MANUAL(MINIMAL·isFallback=false)은 인터
   });
 });
 
-describe('🔴 I6 · 01b D3 — "기본 일정 보기"는 로컬 dismiss 로 기존 초안 목록을 연다', () => {
-  it('인터스티셜에서 "기본 일정 보기"를 누르면 인터스티셜이 사라지고 초안 목록이 배너 없이 뜬다', async () => {
+describe('🔴 I6 · 01b D3 — "기본 일정 보기"는 로컬 dismiss 로 같은 데이터의 초안 셸을 연다', () => {
+  it('인터스티셜에서 "기본 일정 보기"를 누르면 인터스티셜이 사라지고 셸이 폴백 안내와 함께 뜬다 (TRIP-1039 플립)', async () => {
     itineraryScript = () =>
       itinerary({
         dayCount: 3,
@@ -483,18 +505,28 @@ describe('🔴 I6 · 01b D3 — "기본 일정 보기"는 로컬 dismiss 로 기
     renderPage();
 
     // 인터스티셜에서 주 CTA press.
-    fireEvent.press(await screen.findByTestId('itinerary-fallback-view-plan'));
+    fireEvent.press(
+      await screen.findByTestId(
+        'itinerary-fallback-view-plan',
+        {},
+        { timeout: 4000 }
+      )
+    );
 
-    // ① 인터스티셜이 감춰지고 초안 목록이 뜬다(같은 데이터 · route push 아님, 01b D3).
+    // ① 인터스티셜이 감춰지고 초안 셸이 뜬다(같은 데이터 · route push 아님, 01b D3).
     await waitFor(() =>
       expect(screen.queryAllByTestId(INTERSTITIAL)).toEqual([])
     );
-    expect(cardTestIds().length).toBeGreaterThan(0);
-
-    // ② 초안 목록엔 폴백 배너가 없다 — DraftScreen 은 목록만 남는다(배너 승격, 화면 어디에도 0건).
-    expect(screen.queryAllByTestId('itinerary-draft-fallback-banner')).toEqual(
-      []
+    expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
+    expect(screen.queryAllByTestId(/^slot-stopcard-/).length).toBeGreaterThan(
+      0
     );
+
+    // ② 셸 시트 안에 폴백 안내가 1개 붙는다 — 폴백 사실은 dismiss 뒤에도 계속 보인다(BR-U3-11 ·
+    //    INV-4 · TRIP-1039). 옛 계약(TRIP-791: dismiss 뒤 배너 0)을 뒤집었다.
+    expect(
+      screen.queryAllByTestId('itinerary-draft-fallback-banner')
+    ).toHaveLength(1);
 
     // ③ dismiss 는 라우팅이 아니다(route push 0 · 로컬 상태 토글).
     expect(mockPush).not.toHaveBeenCalled();
@@ -582,6 +614,9 @@ describe('🔴 I10 · TRIP-466 AC-a1 / TRIP-792 — CONFIRMED 도 h08 셸로 가
     await sleep(50);
 
     expect(hitsFor('POST', '/itinerary')).toBe(0);
+    // TRIP-1037 — 초안 화면은 이제 어떤 경우에도 POST 를 안 보내 위 단언만으론 공허하다. 확정 가드의
+    // 실체는 "생성 화면으로 보내지 않는다" 다(생성 화면이 마운트되면 POST 가 나가 확정이 풀린다).
+    expect(generatingMoves()).toBe(0);
   });
 });
 

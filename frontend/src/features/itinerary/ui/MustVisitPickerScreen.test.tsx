@@ -49,7 +49,7 @@ import { MustVisitPickerScreen } from './MustVisitPickerScreen';
 // 환경에서 무조건 `map-failure` 로 떨어져 `pins` 가 어디로도 흐르지 않는다 — 그래서 prop-기록형
 // 목(`map-root` 에 좌표·핀을 노출)으로 대체해 "핀이 손대지 않은 채 지도에 도달한다"를 관찰한다.
 // ⚠️ 구현이 `@/shared/map/MapView` 로 딥 임포트하면 이 목이 안 붙는다 —
-//    `itineraryMustVisitStructure.test.ts` C39 가 배럴(`@/shared/map`) 경유를 따로 잠근다.
+//    배럴(`@/shared/map`) 경유를 잠그던 `itineraryMustVisitStructure` C39 는 TRIP-1145 로 지웠다.
 // (구 주석의 `KakaoMapView`·`MustVisitPickerScreen.map.test.tsx` 는 낡았다 — 카카오는 네이버로
 //  전환됐고 그 별 지도 심판 파일은 리포에 실존한 적이 없다, repo-traps 참고.)
 // 인라인 팩토리로 두면 NativeWind babel 의 `_ReactNativeCSSInterop` 참조가 jest 호이스트 규칙을
@@ -756,8 +756,8 @@ describe('🔴 C-AC14 · AC-14 — 다시 시도는 빨강 아웃라인이고 �
     ).toBe(true);
 
     // 🔴 상단 원형 배지(StateNotice 의 `bg-primary-pale` 72px 원)가 없다 — 로컬 블록이라 배지 없음.
-    //    글리프(AlertCircleGlyph) 자체의 부재는 itineraryMustVisitStructure C41(소스)이 잠근다
-    //    (SVG 는 className/testID sink 라 렌더가 못 본다). 여기 배열은 문자열이라 toEqual 안전.
+    //    글리프(AlertCircleGlyph) 자체의 부재를 잠그던 itineraryMustVisitStructure C41(소스)은
+    //    TRIP-1145 로 지웠다(SVG 는 className/testID sink 라 렌더가 못 본다). 여기 배열은 문자열이라 toEqual 안전.
     const failed = screen.getByTestId('itinerary-mustvisit-screen-failed');
     expect(
       classNamesUnder(failed).filter((cls) => hasToken(cls, 'bg-primary-pale'))
@@ -871,5 +871,356 @@ describe('🔴 C-AC17 · AC-17 — 비활성 CTA 가 브랜드 주색으로 칠�
     expect(
       brandTokensIn(classNameOf(within(blocked).getByText(PROCEED_LABEL)))
     ).toEqual([]);
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * TRIP-988 C — 고정 시각 표기 `M.D · HH:mm` (D5 · INV-U1-17)
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * 무엇을 보장하나: FIXED 카드 보조행은 서버 원문 `12:00:00` 대신 `9.27 · 12:00` 으로 쓴다. 월·일은
+ * 0 을 안 채우고(`dayChipLabel` 관례), 시각은 앞 5글자(`HH:mm`)만 — 초가 붙어 오든(`HH:mm:ss`, openapi
+ * 계약 범위) 안 붙어 오든 같은 결과다. 가운뎃점은 U+00B7.
+ *
+ * 보조행 Text 에는 testID 가 없다(신규 금지) — 카드 루트 안에서 `getByText(문자열)` 완전일치로 잡는다.
+ * 완전일치라 앞뒤에 다른 글자(요일·끝 시각·초)가 붙으면 red 다.
+ */
+describe('🔴 TRIP-988 C · 고정 시각 보조행 (D5)', () => {
+  it.each([
+    ['2026-09-27', '12:00:00', '9.27 · 12:00'],
+    ['2026-09-27', '12:00', '9.27 · 12:00'],
+    ['2026-10-05', '08:30:00', '10.5 · 08:30'],
+  ])(
+    'C-1 fixedDate %s + fixedStart %s → "%s" (초는 안 보인다)',
+    (fixedDate, fixedStart, expected) => {
+      // 준비 — 날짜·시각이 정해진 FIXED 항목 하나.
+      const fixed = item({
+        sourcePoiId: 'poi-t',
+        type: 'FIXED',
+        fixedDate,
+        fixedStart,
+      });
+
+      // 실행
+      render(<MustVisitPickerScreen view={listed([fixed])} />);
+
+      // 단언 — 카드 안에 그 표기가 한 덩어리로 있고, 초 붙은 시각은 어디에도 없다.
+      const card = screen.getByTestId('itinerary-mustvisit-poi-t');
+      expect(within(card).getByText(expected)).toBeOnTheScreen();
+      expect(card).not.toHaveTextContent(/\d{1,2}:\d{2}:\d{2}/);
+    }
+  );
+
+  it('C-2 기존 픽스처(6월 11일 · 13:00)도 같은 서식이다', () => {
+    render(<MustVisitPickerScreen view={listed([FIXED_A, ANYTIME_B])} />);
+
+    const fixedCard = screen.getByTestId('itinerary-mustvisit-poi-a');
+    expect(within(fixedCard).getByText('6.11 · 13:00')).toBeOnTheScreen();
+  });
+
+  it('C-3 fixedDate 가 없으면 날짜를 지어내지 않고 시각만 쓴다 (01b Q3)', () => {
+    // 준비 — INV-U1-17 위반 데이터(FIXED 인데 날짜 없음). 계약 타입이 optional 이라 이 경로가 있다.
+    const noDate = item({
+      sourcePoiId: 'poi-t',
+      type: 'FIXED',
+      fixedStart: '12:00:00',
+    });
+
+    render(<MustVisitPickerScreen view={listed([noDate])} />);
+
+    // 단언 — 완전일치 '12:00' 이라 앞에 날짜·가운뎃점이 붙으면 red.
+    const card = screen.getByTestId('itinerary-mustvisit-poi-t');
+    expect(within(card).getByText('12:00')).toBeOnTheScreen();
+    expect(card).not.toHaveTextContent(/12:00:00/);
+  });
+
+  it('C-3b fixedStart 가 없으면 기존처럼 비워 둔다 — 날짜만 따로 그리지 않는다 (01b Q3)', () => {
+    const noStart = item({
+      sourcePoiId: 'poi-t',
+      type: 'FIXED',
+      fixedDate: '2026-09-27',
+    });
+
+    render(<MustVisitPickerScreen view={listed([noStart])} />);
+
+    const card = screen.getByTestId('itinerary-mustvisit-poi-t');
+    // 긍정 앵커 — 카드는 실제로 그려졌다(이름).
+    expect(card).toHaveTextContent(/감천문화마을/);
+    expect(card).not.toHaveTextContent(/\d{1,2}:\d{2}/);
+    expect(card).not.toHaveTextContent(/9\.27/);
+  });
+
+  it('INV-3 새 서식은 소요시간 표기를 만들지 않는다', () => {
+    const fixed = item({
+      sourcePoiId: 'poi-t',
+      type: 'FIXED',
+      fixedDate: '2026-09-27',
+      fixedStart: '12:00:00',
+    });
+
+    render(<MustVisitPickerScreen view={listed([fixed, ANYTIME_B])} />);
+
+    // 긍정 앵커 — 새 서식이 실제로 그려졌다(없으면 빈 화면이 공짜 통과).
+    expect(screen.getByText('9.27 · 12:00')).toBeOnTheScreen();
+    expect(renderedTexts().filter((text) => DURATION_TEXT.test(text))).toEqual(
+      []
+    );
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * TRIP-982 B — 필수 방문지 0곳이어도 일정 짜기로 갈 수 있다 (D7 · INV-4)
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * 무엇을 보장하나: empty 얼굴(0곳)의 `이 구성으로 일정 짜기` CTA 는 **눌리고, 눌리는 것처럼
+ * 보인다**. 잠금은 loading·failed 에만 남는다(기존 C-AC9·C-AC15·C-AC17 이 그쪽을 계속 잰다).
+ *
+ * ★ `toBeDisabled` 는 색을 안 본다(C-AC17 독주석) — B1 의 `not.toBeDisabled()` 만으로는 "회색인데
+ *   눌리는" 버튼이 통과한다. B2 가 className 토큰으로 색까지 잰다. 회색 토큰 부재는 `hasToken`
+ *   부정형이 아니라 토큰 배열의 정확 비교로 잰다(`hasToken` 독주석 — 부정형에서 심판을 푼다).
+ */
+describe('🔴 TRIP-982 B · empty CTA 활성 (D7)', () => {
+  it('B1 0곳이어도 CTA 가 비활성이 아니고, 누르면 onProceed 가 1회 불린다', () => {
+    const onProceed = jest.fn();
+    render(
+      <MustVisitPickerScreen view={{ kind: 'empty' }} onProceed={onProceed} />
+    );
+
+    const proceed = screen.getByTestId('itinerary-mustvisit-screen-proceed');
+    expect(proceed).not.toBeDisabled();
+
+    fireEvent.press(proceed);
+    expect(onProceed).toHaveBeenCalledTimes(1);
+  });
+
+  it('B2 활성 색 — 배경 bg-primary·라벨 text-on-primary 이고 회색 토큰이 남지 않는다', () => {
+    render(<MustVisitPickerScreen view={{ kind: 'empty' }} />);
+
+    const proceed = screen.getByTestId('itinerary-mustvisit-screen-proceed');
+    const label = within(proceed).getByText(PROCEED_LABEL);
+
+    expect(brandTokensIn(classNameOf(proceed))).toEqual(['bg-primary']);
+    expect(brandTokensIn(classNameOf(label))).toEqual(['text-on-primary']);
+    // "회색인데 눌리는" 우회 차단 — 비활성 표면 토큰이 활성 토큰과 함께 남아 있으면 red.
+    expect(classNameOf(proceed).split(/\s+/)).not.toContain(
+      'bg-hairline-strong'
+    );
+    expect(classNameOf(label).split(/\s+/)).not.toContain('text-muted');
+  });
+});
+
+describe('TRIP-982 B4·B5 · 무회귀 — empty 얼굴의 나머지는 그대로다', () => {
+  it('B4 empty 에는 건너뛰기가 없고 empty 안내는 남는다 (건너뛰기는 failed 전용)', () => {
+    render(<MustVisitPickerScreen view={{ kind: 'empty' }} />);
+
+    expect(
+      screen.getByTestId('itinerary-mustvisit-screen-empty')
+    ).toBeOnTheScreen();
+    expect(countTestId('itinerary-mustvisit-screen-skip')).toBe(0);
+  });
+
+  it('B5 empty 화면에도 소요시간 표기가 0건이다 (INV-3)', () => {
+    render(<MustVisitPickerScreen view={{ kind: 'empty' }} />);
+
+    const texts = renderedTexts();
+    expect(texts).toContain(PROCEED_LABEL); // 긍정 앵커
+    expect(texts.filter((text) => DURATION_TEXT.test(text))).toEqual([]);
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * TRIP-1022 — #040 지도 영역 맞춤
+ * TRIP-1093 결정 3 — 필수 방문지 「꼭 갈 곳 추가」 버튼(TRIP-1022 결정 2 "담은 장소 보기 링크" 뒤집기)
+ *
+ * 무엇을 보장하나:
+ *  - 🔴 S1 (AC-B5) 지도 카드가 `fitPins` 를 켠 채 MapView 를 쓴다 — viewOnly 지도라 사용자가 손으로
+ *    옮길 수 없어서, 첫 핀만 비추면 나머지 핀은 영영 못 본다(#040).
+ *  - 🔴 A1 (1093 AC-1) 목록 얼굴: 마지막 카드와 CTA **사이**에 `꼭 갈 곳 추가` 버튼(Figma 4723:2833).
+ *  - 🔴 A2 (1093 AC-2) 0곳 얼굴: 버튼이 점선 안내 **밖**, 안내와 CTA 사이(Figma 4724:2851).
+ *  - A3 (1093 AC-3) 콜백을 안 주면 두 버튼 모두 없고, 얼굴마다 자기 버튼 하나만 뜬다.
+ *
+ * 순서는 `queryAllByTestId(정규식)` 배열의 순서(트리 깊이 우선 = 화면 위→아래)로 잰다.
+ * 부재는 전부 `.length` 숫자로 잰다(노드 배열 직렬화 함정 — 위 `countTestId` 독주석).
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+const LISTED_ADD = 'itinerary-mustvisit-screen-add';
+const EMPTY_ADD = 'itinerary-mustvisit-screen-empty-add';
+const ADD_LABEL = '꼭 갈 곳 추가';
+/** 뒤집힌 옛 링크 문구 — 다시 나타나면 red. */
+const OLD_LINK_LABEL = '담은 장소 보기';
+
+/** 화면 위→아래 순서의 testID 목록(문자열 배열 — 직렬화 함정 무관). */
+function orderedTestIds(): string[] {
+  return screen
+    .queryAllByTestId(/^itinerary-mustvisit-/)
+    .map((node) => String(node.props.testID));
+}
+
+describe('🔴 TRIP-1022 S1 · AC-B5 — 지도 카드가 모든 핀에 맞춰 영역을 잡는다', () => {
+  it('listed + 핀 3개면 지도에 fitPins 가 켜져 넘어간다', () => {
+    render(
+      <MustVisitPickerScreen
+        view={listed([FIXED_A, ANYTIME_B, UNJOINED_Z])}
+        pins={[PIN_1, PIN_2, PIN_3]}
+      />
+    );
+
+    // 짝 — 지도 카드가 실제로 섰다(없으면 아래 단언이 getBy 에서 먼저 죽는다).
+    expect(
+      screen.getByTestId('itinerary-mustvisit-screen-map')
+    ).toBeOnTheScreen();
+    expect(screen.getByTestId('map-root').props.fitPins).toBe(true);
+  });
+});
+
+describe('🔴 TRIP-1093 A1 · 목록 얼굴 — 마지막 카드와 CTA 사이에 「꼭 갈 곳 추가」', () => {
+  it('버튼이 카드 뒤·CTA 앞에 있고 문구가 정확하며, 누르면 추가 콜백 1회·CTA 콜백 0회', () => {
+    // 준비
+    const onPressAdd = jest.fn();
+    const onProceed = jest.fn();
+    render(
+      <MustVisitPickerScreen
+        view={listed([FIXED_A, ANYTIME_B])}
+        pins={[PIN_1, PIN_2]}
+        onPressAdd={onPressAdd}
+        onProceed={onProceed}
+      />
+    );
+
+    // 단언 ① — 자리: 마지막 카드(poi-b) → 추가 버튼 → CTA.
+    const ids = orderedTestIds();
+    expect(ids).toContain('itinerary-mustvisit-poi-b'); // 앵커 — 카드가 떴다
+    expect(ids).toContain(LISTED_ADD);
+    expect(ids.indexOf('itinerary-mustvisit-poi-b')).toBeLessThan(
+      ids.indexOf(LISTED_ADD)
+    );
+    expect(ids.indexOf(LISTED_ADD)).toBeLessThan(
+      ids.indexOf('itinerary-mustvisit-screen-proceed')
+    );
+    // 추가 버튼은 카드로 세어지지 않는다(카드 2장 그대로).
+    expect(cardTestIds()).toHaveLength(2);
+
+    // 단언 ② — 문구(문자열 인자 = 정규화 후 완전 일치, 02a §5).
+    const add = screen.getByTestId(LISTED_ADD);
+    expect(add).toHaveTextContent(ADD_LABEL);
+
+    // 실행
+    fireEvent.press(add);
+
+    // 단언 ③ — 자기 콜백만 부른다.
+    expect(onPressAdd).toHaveBeenCalledTimes(1);
+    expect(onProceed).toHaveBeenCalledTimes(0);
+  });
+});
+
+describe('🔴 TRIP-1093 A2 · 0곳 얼굴 — 버튼이 점선 안내 밖, 안내와 CTA 사이', () => {
+  it('안내 안에는 없고 화면에 하나 있으며, 문구가 정확하고, 누르면 추가 콜백 1회·CTA 콜백 0회', () => {
+    // 준비
+    const onPressAdd = jest.fn();
+    const onProceed = jest.fn();
+    render(
+      <MustVisitPickerScreen
+        view={{ kind: 'empty' }}
+        onPressAdd={onPressAdd}
+        onProceed={onProceed}
+      />
+    );
+
+    // 단언 ① — 안내 블록 **밖**(Figma: 점선 박스 안에는 버튼·링크가 없다).
+    const empty = screen.getByTestId('itinerary-mustvisit-screen-empty');
+    expect(within(empty).queryAllByTestId(EMPTY_ADD).length).toBe(0);
+    expect(countTestId(EMPTY_ADD)).toBe(1);
+
+    // 단언 ② — 자리: 안내 → 추가 버튼 → CTA.
+    const ids = orderedTestIds();
+    expect(ids.indexOf('itinerary-mustvisit-screen-empty')).toBeLessThan(
+      ids.indexOf(EMPTY_ADD)
+    );
+    expect(ids.indexOf(EMPTY_ADD)).toBeLessThan(
+      ids.indexOf('itinerary-mustvisit-screen-proceed')
+    );
+
+    // 단언 ③ — 문구가 바뀌었다(옛 링크 문구는 어디에도 없다).
+    const add = screen.getByTestId(EMPTY_ADD);
+    expect(add).toHaveTextContent(ADD_LABEL);
+    expect(countText(OLD_LINK_LABEL)).toBe(0);
+
+    // 실행
+    fireEvent.press(add);
+
+    // 단언 ④
+    expect(onPressAdd).toHaveBeenCalledTimes(1);
+    expect(onProceed).toHaveBeenCalledTimes(0);
+  });
+});
+
+describe('TRIP-1093 A3 · 버튼이 없어야 하는 자리', () => {
+  it('콜백을 안 준 호출부(프리뷰 등)에서는 empty·listed 어디에도 버튼이 없다 (선제 green)', () => {
+    const { rerender } = render(
+      <MustVisitPickerScreen view={{ kind: 'empty' }} />
+    );
+    // 짝 — 빈 얼굴은 떴다(공허 통과 방지).
+    expect(
+      screen.getByTestId('itinerary-mustvisit-screen-empty')
+    ).toBeOnTheScreen();
+    expect(countTestId(EMPTY_ADD)).toBe(0);
+    expect(countTestId(LISTED_ADD)).toBe(0);
+
+    rerender(
+      <MustVisitPickerScreen
+        view={listed([FIXED_A, ANYTIME_B])}
+        pins={[PIN_1, PIN_2]}
+      />
+    );
+    expect(cardTestIds()).toHaveLength(2); // 짝 — listed 얼굴
+    expect(countTestId(EMPTY_ADD)).toBe(0);
+    expect(countTestId(LISTED_ADD)).toBe(0);
+  });
+
+  it('🔴 콜백을 주면 얼굴마다 자기 버튼 하나뿐이고, loading·failed 에는 없다', () => {
+    const onPressAdd = jest.fn();
+
+    const { rerender } = render(
+      <MustVisitPickerScreen
+        view={listed([FIXED_A, ANYTIME_B])}
+        pins={[PIN_1, PIN_2]}
+        onPressAdd={onPressAdd}
+      />
+    );
+    expect(cardTestIds()).toHaveLength(2); // 짝 — listed 얼굴
+    expect(countTestId(LISTED_ADD)).toBe(1);
+    expect(countTestId(EMPTY_ADD)).toBe(0);
+
+    rerender(
+      <MustVisitPickerScreen view={{ kind: 'empty' }} onPressAdd={onPressAdd} />
+    );
+    expect(countTestId(EMPTY_ADD)).toBe(1);
+    expect(countTestId(LISTED_ADD)).toBe(0);
+
+    rerender(
+      <MustVisitPickerScreen
+        view={{ kind: 'loading' }}
+        onPressAdd={onPressAdd}
+      />
+    );
+    expect(
+      screen.getByTestId('itinerary-mustvisit-screen-loading')
+    ).toBeOnTheScreen();
+    expect(countTestId(EMPTY_ADD)).toBe(0);
+    expect(countTestId(LISTED_ADD)).toBe(0);
+
+    rerender(
+      <MustVisitPickerScreen
+        view={{ kind: 'failed' }}
+        onPressAdd={onPressAdd}
+      />
+    );
+    expect(
+      screen.getByTestId('itinerary-mustvisit-screen-failed')
+    ).toBeOnTheScreen();
+    expect(countTestId(EMPTY_ADD)).toBe(0);
+    expect(countTestId(LISTED_ADD)).toBe(0);
   });
 });

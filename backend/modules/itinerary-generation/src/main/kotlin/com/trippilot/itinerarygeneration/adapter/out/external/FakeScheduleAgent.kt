@@ -5,6 +5,8 @@ import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.RepairResult
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
+import com.trippilot.itinerarygeneration.domain.ScoredCandidate
+import com.trippilot.itinerarygeneration.domain.ScoredCandidatePool
 import com.trippilot.itinerarygeneration.domain.SlotExplanations
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
 import com.trippilot.itinerarygeneration.domain.SlotCandidate
@@ -80,6 +82,13 @@ class FakeScheduleAgent(
             solveMode = SolveMode.DETERMINISTIC,
             isFallback = false,
             freshness = FreshnessMeta(clock.instant(), degraded = false),
+            // 점수 후보 풀(TRIP-969) — 실 AI 처럼 배치된 것 포함 전 후보에 점수를 실어 준다.
+            // 순서 기반 결정론 점수라 값 자체는 의미가 없다 — 즉답 경로가 기본 모드에서 실제로 돌게
+            // 하는 것이 목적이다(실 점수는 TRIP-970 개통 후 실 AI 가 준다).
+            scoredCandidates = ScoredCandidatePool(
+                radiusM = POOL_RADIUS_M,
+                candidates = candidates.mapIndexed { i, gp -> ScoredCandidate(gp.poiId, 1.0 - i * 0.001, gp.category) },
+            ).capped(),
         )
     }
 
@@ -159,6 +168,13 @@ class FakeScheduleAgent(
 
     companion object {
         private const val PICKS_PER_DAY = 2
+
+        /**
+         * 점수 풀의 명목 반경(TRIP-969). Fake 는 반경이 아니라 **지역 전체**에서 후보를 뽑으므로
+         * 요청 가능한 최대 반경(50km, `SlotCandidateService.MAX_RADIUS_M`)으로 적는다 —
+         * 더 작게 적으면 즉답 경로가 "풀이 요청 반경을 안 덮는다"며 매번 전개로 빠진다.
+         */
+        private const val POOL_RADIUS_M = 50_000
         private const val SLOT_GAP_HOURS = 3
         private const val DEFAULT_DWELL_MIN = 60
         /** 지금 당장이 아니라 조금 뒤부터 — 이동 시간을 아예 0 으로 두면 화면이 비현실적으로 보인다. */

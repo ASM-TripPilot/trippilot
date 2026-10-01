@@ -108,6 +108,7 @@ function daySlots(): ItineraryDaysItemSlotsItem[] {
       isFixed: false,
       endsNextDay: false,
       hasViolation: false,
+      alternatives: [],
       tags: ['바다', '산책'],
       nameKo: '광안리 해변',
       category: '자연',
@@ -123,6 +124,7 @@ function daySlots(): ItineraryDaysItemSlotsItem[] {
       isFixed: false,
       endsNextDay: false,
       hasViolation: false,
+      alternatives: [],
       tags: ['전망', '야경'],
       nameKo: '황령산 전망대',
       category: '자연',
@@ -138,6 +140,7 @@ function daySlots(): ItineraryDaysItemSlotsItem[] {
       isFixed: false,
       endsNextDay: false,
       hasViolation: false,
+      alternatives: [],
       tags: ['미술'],
       nameKo: '부산시립미술관',
       category: '전시',
@@ -153,6 +156,7 @@ function daySlots(): ItineraryDaysItemSlotsItem[] {
       isFixed: false,
       endsNextDay: false,
       hasViolation: false,
+      alternatives: [],
       tags: ['감성', '브런치'],
       nameKo: '웨이브온 카페',
       category: '카페',
@@ -168,6 +172,7 @@ function daySlots(): ItineraryDaysItemSlotsItem[] {
       isFixed: true,
       endsNextDay: false,
       hasViolation: false,
+      alternatives: [],
       tags: [],
       nameKo: '해운대 그랜드 호텔',
       category: '숙소',
@@ -418,5 +423,35 @@ describe('🔴 A9 · AC-1 보강 — 슬롯 사이 거리 커넥터가 셸에 �
     );
     // 서버 distanceRange '2.1km'(poi-b leg)를 verbatim — INV-3(거리만, 소요시간 아님).
     expect(screen.getByText('2.1km')).toBeOnTheScreen();
+  });
+});
+
+describe('🟢 TRIP-1073 F6 · 폴백으로 완성된 같이 짜기(isFallback=true)도 같은 셸 얼굴이다 (선제 green)', () => {
+  it('재진입 목적지가 여기로 바뀌어도 h17 은 무변경 — 셸이 뜨고 CTA 는 "확정하기" 하나뿐이다', async () => {
+    // 준비 — #051 실측 경로(폴백 완성). 이 페이지는 isFallback 을 보지 않는다(결정 3·01b 열린 질문 2 (a)).
+    itineraryHandler = () =>
+      HttpResponse.json({ ...itinerary(), isFallback: true });
+
+    // 실행
+    renderPage();
+
+    // 단언 — 셸 · 단일 CTA · 오류 얼굴 없음. 폴백 분기가 셸을 가리면 red.
+    expect(await screen.findByTestId('map-sheet-shell-root')).toBeOnTheScreen();
+    expect(screen.queryAllByTestId(/^sheet-cta-button-/)).toHaveLength(1);
+    expect(screen.getByTestId('sheet-cta-button-0')).toHaveTextContent(
+      '확정하기'
+    );
+    expect(screen.queryByTestId('itinerary-copick-complete-error')).toBeNull();
+  });
+});
+
+describe('🔴 TRIP-1076 AC-3 · h11 같이 짜기 결과 지도는 핀 전부에 맞춰 연다', () => {
+  it('셸 지도에 핀 2개 이상과 fitPins 가 함께 전달된다', async () => {
+    renderPage();
+    await screen.findByTestId('map-sheet-shell-root');
+
+    const map = screen.getByTestId('map-root');
+    expect((map.props.pins as unknown[]).length).toBeGreaterThanOrEqual(2);
+    expect(map.props.fitPins).toBe(true);
   });
 });

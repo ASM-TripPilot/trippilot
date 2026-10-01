@@ -14,8 +14,9 @@ import type { TripWizardStep1ScreenProps } from './TripWizardStep1Screen';
  * 위에 얹는다. 화면은 여전히 props-only 프레젠테이션이다(판정 0).
  *
  * 무엇을 보장하나:
- *  - **empty**(fresh 진입) — 여행지 null → 신 카피 "어디로 갈까요?" · 기간 null → 값 줄 없음(옛
- *    "기간 선택" 제거) · 나머지 행은 prefill 값 · 다음 비활성 · 꼭 갈 곳 0 = "+더 담기"만(카드 0).
+ *  - **empty**(fresh 진입) — 여행지 null → 신 카피 "어디로 갈까요?" · 기간 null → muted "기간 선택"
+ *    (TRIP-1045 복귀 — 값 줄이 없으면 선택 전후 행 높이가 달라진다) · 나머지 행은 prefill 값 · 다음
+ *    비활성 · 꼭 갈 곳 0 = "+더 담기"만(카드 0).
  *  - **loading**(`isLoading=true`) — 요약 5행 스켈레톤 + 꼭 갈 곳 스켈레톤 카드 4장 + 로딩 부제 +
  *    실값 부재(값을 줘도 안 뜸) + 다음 비활성(canProceed 가 참이라도). `isLoading` 미지정이면 default.
  *
@@ -136,12 +137,15 @@ describe('AC-1 · empty 얼굴 (fresh 진입 — 여행지·기간 null, 나머�
     expect(within(dest).queryByText('여행지 선택')).toBeNull();
   });
 
-  it('E2 · 기간 행은 값 줄이 없다 — 옛 "기간 선택" 부재, 라벨 "기간"은 생존', () => {
+  it('E2 · 기간 행은 muted "기간 선택"을 그린다 — 라벨 "기간"도 생존 (TRIP-1045 QA #017)', () => {
     render(<TripWizardStep1Screen {...emptyProps()} />);
 
     const period = row('trip-wizard-summary-period');
-    // getByText 완전 일치라 라벨 "기간" 과 옛 플레이스홀더 "기간 선택" 이 자동으로 갈린다.
-    expect(within(period).queryByText('기간 선택')).toBeNull();
+    // getByText 완전 일치라 라벨 "기간" 과 플레이스홀더 "기간 선택" 이 자동으로 갈린다.
+    const placeholder = within(period).getByText('기간 선택');
+    expect(String(placeholder.props.className ?? '').split(/\s+/)).toContain(
+      'text-muted'
+    );
     expect(within(period).getByText('기간')).toBeOnTheScreen();
   });
 

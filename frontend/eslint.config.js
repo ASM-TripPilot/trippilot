@@ -25,9 +25,8 @@ const expoConfig = require('eslint-config-expo/flat');
 // 아래 층으로 승격한다. entities 만 예외로, 제공자 Y 가 소비자 X 에게만 내주는 `entities/Y/@x/X/**` 창구를
 // except 에 추가로 넣어 통제된 교차를 허용한다(그 외 형제 직접 import 는 여전히 금지).
 //
-// 전방 app→features 제한은 이번엔 두지 않는다(Q1 옵션 A) — app·app-shell 을 target 으로 넣지
-// 않는다. app→features 실측 110건이 즉시 red 가 되고 TRIP-803 "소급 이동 없음"과 충돌하기
-// 때문. pages 이주로 app→features 가 자연 감소한 뒤 별도 티켓에서 켠다.
+// app·app-shell 은 target 에 넣지 않는다 — 공식 FSD v2.1 은 app 층이 아래 층 전부(features 포함)를
+// import 하는 것을 허용한다(TRIP-1142 결정). 라우트는 page 를 꽂는 얇은 래퍼로 둔다(권장, lint 강제 없음).
 
 const SRC = path.join(__dirname, 'src');
 // `layerGlob('features','auth')` → `<abs>/src/features/auth/**` (해당 층·슬라이스 아래 전부).
@@ -127,6 +126,114 @@ const layerZones = [
   },
 ];
 
+// ── 출시·보안 금지(TRIP-1145 — 소스 스캔에서 옮겨 왔다) ────────────────────────────────
+// ⚠️ flat config 는 같은 규칙을 거는 블록이 여럿이면 뒤 블록 옵션이 앞 블록을 **통째로 덮는다**(합쳐지지
+//    않는다). 그래서 예외 파일(StateNotice·캡처 어댑터) 블록은 아래 공통 목록을 펼쳐 다시 선언한다.
+// ⚠️ no-restricted-imports 는 정적 import·export-from 만 본다 — require()·import() 는 사각이다(받아들인
+//    잔여). 덕분에 shared/photo 의 호출 시점 require 와 shareCapture 의 동적 import() 는 그대로 허용된다.
+const TEST_IGNORES = [
+  'src/**/*.test.{ts,tsx}',
+  'src/**/__tests__/**',
+  'src/**/__mocks__/**',
+  'src/mocks/**',
+  'src/test-support/**',
+];
+// 모든 앱 파일 공통: msw·목(RN 부팅 크래시 + 테스트 전용), 개발 프리뷰의 가짜 데이터.
+const COMMON_BANNED_PATHS = [
+  { name: 'msw', message: 'msw 는 테스트 오라클 전용 — 앱 코드 import 금지.' },
+];
+const COMMON_BANNED_PATTERNS = [
+  {
+    // 상대경로(`../../mocks/server`)도 막는다 — `**/mocks` 는 경로 조각 단위라 `__mocks__` 와 안 겹친다.
+    group: ['msw/*', '@/mocks', '@/mocks/*', '**/mocks', '**/mocks/**'],
+    message: '목은 테스트 전용 — 앱 코드 import 금지.',
+  },
+  {
+    group: ['**/_dev', '**/_dev/**'],
+    message: '개발 프리뷰(가짜 데이터)를 앱 코드가 끌지 않는다.',
+  },
+];
+// 네이티브 모듈은 정적으로 끌면 모듈이 없는 빌드에서 부팅 크래시 — 입구는 호출 시점 require 뿐.
+// 루트 이름(`paths`)과 하위 경로(`<패키지>/*` 패턴)를 함께 막는다 — `paths` 는 글자가 정확히 같을 때만 문다.
+const NATIVE_MODULES = [
+  'expo-image-picker',
+  'expo-media-library',
+  'react-native-view-shot',
+  'expo-sharing',
+];
+const NATIVE_MESSAGE =
+  '네이티브 모듈 정적 import 금지 — 사진은 @/shared/photo 의 require 입구, 공유 캡처는 shareCaptureNative 로만.';
+const nativePaths = (names) =>
+  names.map((name) => ({ name, message: NATIVE_MESSAGE }));
+const nativeSubpaths = (names) =>
+  names.map((name) => ({ group: [`${name}/*`], message: NATIVE_MESSAGE }));
+const CAPTURE_ADAPTER_PATTERN = {
+  group: ['**/shareCaptureNative'],
+  message: '캡처 어댑터는 동적 import() 로만 — 정적으로 끌면 부팅 크래시.',
+};
+const STATE_NOTICE_PATHS = [
+  {
+    name: 'react',
+    importNames: ['useState', 'useReducer'],
+    message:
+      'StateNotice는 프레젠테이션 순수 컴포넌트다 — 로컬 상태는 호출부(feature) 몫.',
+  },
+  {
+    name: 'expo-router',
+    message:
+      'StateNotice는 라우팅을 모른다 — 이동은 호출부가 onPress로 넘긴다.',
+  },
+  {
+    name: '@tanstack/react-query',
+    message: 'StateNotice는 네트워크 상태를 모른다.',
+  },
+  { name: 'axios', message: 'StateNotice는 네트워크 상태를 모른다.' },
+];
+const restrictedImports = (paths, patterns = []) => [
+  'error',
+  {
+    paths: [...COMMON_BANNED_PATHS, ...paths],
+    patterns: [...COMMON_BANNED_PATTERNS, ...patterns],
+  },
+];
+
+// 계정 삭제는 1단계 확인부터(BR-U6-25) — initialStep 등 다른 prop·펼치기로 건너뛰지 못하게.
+const DELETE_DIALOG_GATE = [
+  {
+    selector:
+      "JSXOpeningElement[name.name='DeleteAccountDialog'] > JSXAttribute:not([name.name=/^(onCancel|onConfirmDeletion)$/])",
+    message:
+      '계정 삭제는 1단계부터(BR-U6-25) — onCancel·onConfirmDeletion 외 prop(initialStep 등) 금지.',
+  },
+  {
+    selector:
+      "JSXOpeningElement[name.name='DeleteAccountDialog'] > JSXSpreadAttribute",
+    message: '계정 삭제 다이얼로그에 props 펼치기 금지(숨은 initialStep 통로).',
+  },
+  {
+    // 다른 이름으로 들여오면 위 두 태그 검사를 통째로 비켜 간다.
+    selector:
+      "ImportSpecifier[imported.name='DeleteAccountDialog'][local.name!='DeleteAccountDialog']",
+    message:
+      '계정 삭제 다이얼로그는 원래 이름으로만 import 한다(별칭은 게이트 우회).',
+  },
+];
+// 아무것도 안 하는 핸들러 금지(앱 심사 2.1). 주석은 AST 노드가 아니라 주석뿐인 본문도 빈 본문으로 잡힌다.
+// 정당한 빈 핸들러는 그 줄에 `// eslint-disable-next-line no-restricted-syntax -- <사유>` 로 연다.
+const DEAD_HANDLER = [
+  {
+    selector:
+      "JSXAttribute[name.name=/^on[A-Z]/] > JSXExpressionContainer > ArrowFunctionExpression[body.type='BlockStatement'][body.body.length=0]",
+    message:
+      '아무것도 안 하는 핸들러 금지(심사 2.1) — 동작이 없으면 버튼을 숨기거나 disabled.',
+  },
+  {
+    selector:
+      "JSXAttribute[name.name=/^on[A-Z]/] > JSXExpressionContainer > Identifier[name='undefined']",
+    message: '핸들러에 undefined 를 명시 주입하지 않는다(심사 2.1).',
+  },
+];
+
 module.exports = defineConfig([
   expoConfig,
   {
@@ -143,37 +250,52 @@ module.exports = defineConfig([
     },
   },
   {
+    // 출시·보안 공통 금지 — 앱 프로덕션 파일 전부(테스트·목·test-support 제외).
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: TEST_IGNORES,
+    rules: {
+      'no-restricted-imports': restrictedImports(nativePaths(NATIVE_MODULES), [
+        ...nativeSubpaths(NATIVE_MODULES),
+        CAPTURE_ADAPTER_PATTERN,
+      ]),
+      'no-console': 'error',
+    },
+  },
+  {
+    // 캡처 어댑터만 캡처 3종을 정적으로 문다(사진 피커·공통 금지는 그대로).
+    files: ['src/features/reflection/model/shareCaptureNative.ts'],
+    rules: {
+      // 루트·하위 경로 모두 사진 피커만 다시 건다 — 캡처 3종의 하위 경로 패턴이 여기 실려 오면 안 된다.
+      'no-restricted-imports': restrictedImports(
+        nativePaths(['expo-image-picker']),
+        nativeSubpaths(['expo-image-picker'])
+      ),
+    },
+  },
+  {
     // shared/ui 전체를 상태·라우팅·네트워크 import 금지로 묶을 수는 없다(BottomTabBar처럼
     // shared/ui에 정당하게 상태를 가질 거주자가 있을 수 있다) — 그래서 "프레젠테이션 순수성"이
-    // 필요한 파일만 좁게 막는다. StateNotice.tsx는 features/stay/ui에서 승격되며 그 경계를 재던
-    // stay 쪽 소스 스캔(staySearchStructure.test.ts의 FORBIDDEN_IN_STAY_UI)의 사정거리 밖으로
-    // 나갔다(TRIP-222 03b W-3) — jest 스캔은 새로 못 만들어(sharedUiStructure.test.ts 동결)
-    // 여기서 대신 막는다.
+    // 필요한 파일만 좁게 막는다. StateNotice.tsx는 features/stay/ui에서 승격되며 stay 쪽 소스 스캔의
+    // 사정거리 밖으로 나갔다(TRIP-222 03b W-3) — 여기서 대신 막는다. 공통 목록을 펼쳐 함께 선언한다(위 ⚠️).
     files: ['src/shared/ui/StateNotice.tsx'],
     rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          paths: [
-            {
-              name: 'react',
-              importNames: ['useState', 'useReducer'],
-              message:
-                'StateNotice는 프레젠테이션 순수 컴포넌트다 — 로컬 상태는 호출부(feature) 몫.',
-            },
-            {
-              name: 'expo-router',
-              message:
-                'StateNotice는 라우팅을 모른다 — 이동은 호출부가 onPress로 넘긴다.',
-            },
-            {
-              name: '@tanstack/react-query',
-              message: 'StateNotice는 네트워크 상태를 모른다.',
-            },
-            { name: 'axios', message: 'StateNotice는 네트워크 상태를 모른다.' },
-          ],
-        },
-      ],
+      'no-restricted-imports': restrictedImports(
+        [...STATE_NOTICE_PATHS, ...nativePaths(NATIVE_MODULES)],
+        [...nativeSubpaths(NATIVE_MODULES), CAPTURE_ADAPTER_PATTERN]
+      ),
+    },
+  },
+  {
+    files: ['src/**/*.tsx'],
+    ignores: [...TEST_IGNORES, 'src/app/_dev/**'],
+    rules: { 'no-restricted-syntax': ['error', ...DELETE_DIALOG_GATE] },
+  },
+  {
+    // 빈 핸들러 금지는 pages·app 만(원 스캔 범위). 같은 규칙이라 삭제 게이트를 펼쳐 함께 선언한다(위 ⚠️).
+    files: ['src/pages/**/*.tsx', 'src/app/**/*.tsx'],
+    ignores: [...TEST_IGNORES, 'src/app/_dev/**'],
+    rules: {
+      'no-restricted-syntax': ['error', ...DELETE_DIALOG_GATE, ...DEAD_HANDLER],
     },
   },
   {

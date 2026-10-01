@@ -18,6 +18,7 @@ import type {
   SavedPlace,
 } from '@/shared/api/generated/schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { resetPressGuard } from '@/shared/press/pressGuard';
 
 import { MustVisitListPage } from './MustVisitListPage';
 
@@ -136,6 +137,7 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+  resetPressGuard(); // TRIP-1013 — 연타 가드 창(모듈 전역)이 앞 테스트에서 새지 않게 닫는다.
   observedHits = [];
   listStatus = null;
   releaseHeldResponse = null;
@@ -545,9 +547,12 @@ describe('🔴 I13 · TRIP-454·TRIP-785 — listed 는 CTA 활성·건너뛰기
     const flat = typeof dest === 'string' ? dest : JSON.stringify(dest);
     expect(flat).toContain('generating');
     expect(flat).toContain(TRIP_ID);
-    // ★ 완전AI 갈래(mode 미전달)는 copick 신호를 얻지 않는다(TRIP-504 AC-5 회귀).
+    // ★ 완전AI 갈래(h04 에서 mode 미전달)는 copick 신호를 얻지 않는다(TRIP-504 AC-5 회귀).
     expect(flat).not.toContain('CO_PLAN');
     expect(flat).not.toContain('copick');
+    // ★ TRIP-1006 A5 — 대신 FULLY_AI 를 **명시해** 싣는다. 생성 중 화면은 mode 가 없으면 관찰
+    //   모드(POST 0)로 뜨므로, 여기서 빠지면 완전 AI 생성 자체가 시작되지 않는다(A4 의 짝).
+    expect(flat).toContain('FULLY_AI');
 
     // ④ 전진은 요청을 만들지 않는다 — 생성 POST 는 h09 가 마운트 시 소유한다(무회귀).
     expect(hitsFor('POST', '/must-visits')).toBe(0);
@@ -571,12 +576,14 @@ describe('🔴 I13 · TRIP-454·TRIP-785 — listed 는 CTA 활성·건너뛰기
     const flat = typeof dest === 'string' ? dest : JSON.stringify(dest);
     expect(flat).toContain('generating');
     expect(flat).toContain(TRIP_ID);
+    // ★ TRIP-1006 A5 — 건너뛰기도 완전 AI 생성을 FULLY_AI 명시로 시작한다(위 I13 과 같은 이유).
+    expect(flat).toContain('FULLY_AI');
   });
 });
 
 describe('🔴 I16 · TRIP-504 AC-5 · TRIP-785 — copick 갈래는 CO_PLAN generating + 첫 슬롯 successRoute, 건너뛰기 부재', () => {
   /**
-   * 완전AI 갈래(I13)는 mode 없이 generating 으로만 간다. copick 갈래는 h04 에서 실려 온 `mode`
+   * 완전AI 갈래(I13)는 FULLY_AI 를 명시해 generating 으로 간다(TRIP-1006 A5). copick 갈래는 h04 에서 실려 온 `mode`
    * 신호를 받아 CTA 목적지를 **CO_PLAN generating + successRoute=첫 슬롯 경로**로 바꾼다(01b Q3).
    *
    * ★ 목적지 값이 급소다(462 gate②-2). h05 시점엔 slotKey 를 아직 모르므로 successRoute 는
@@ -606,6 +613,107 @@ describe('🔴 I16 · TRIP-504 AC-5 · TRIP-785 — copick 갈래는 CO_PLAN gen
     expect(countTestId('itinerary-mustvisit-screen-skip')).toBe(0);
 
     // ③ 전진은 요청을 만들지 않는다(생성 POST 는 h09 소유, 무회귀).
+    expect(hitsFor('POST', '/must-visits')).toBe(0);
+    expect(hitsFor('DELETE', '/must-visits')).toBe(0);
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * TRIP-982 B3 — 필수 방문지 0곳인 채로 생성 중(h09)으로 간다 (D7)
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * 무엇을 보장하나: must-visits 가 `[]` 여도 CTA 를 누르면 지금의 `goToGenerating` 목적지 그대로
+ * h09 로 간다 — 완전AI 는 `{tripId}` 만, copick 갈래는 CO_PLAN + 첫 슬롯 successRoute 가 유지된다.
+ * 페이지 배선은 안 바뀌므로 목적지를 **객체 완전일치**로 박는다(0곳 전용 목적지가 끼어들면 red).
+ *
+ * 0곳 생성의 실제 왕복(백엔드가 0건으로 초안을 만드는가)은 jest 사각 — 6-b 실기 몫.
+ */
+describe('🔴 TRIP-982 B3 · 0곳 → 생성 중 (D7)', () => {
+  async function openEmpty(
+    mode?: GenerateItineraryRequestGenerationMode
+  ): Promise<void> {
+    mustVisitStore = [];
+    renderPage({ mode });
+    await screen.findByTestId('itinerary-mustvisit-screen-empty');
+  }
+
+  it('완전AI — 누르면 generating 으로 {tripId, mode: FULLY_AI} 를 싣고 1회 이동하며 요청은 0건이다', async () => {
+    await openEmpty();
+
+    fireEvent.press(screen.getByTestId('itinerary-mustvisit-screen-proceed'));
+
+    await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/itinerary/generating',
+      params: { tripId: TRIP_ID, mode: 'FULLY_AI' }, // TRIP-1006: 모드 없으면 관찰 모드(POST 없음)라 명시 필수
+    });
+    expect(hitsFor('POST', '/must-visits')).toBe(0);
+    expect(hitsFor('DELETE', '/must-visits')).toBe(0);
+  });
+
+  it('copick 갈래 — 누르면 CO_PLAN + 첫 슬롯 successRoute 를 유지한 채 1회 이동한다', async () => {
+    await openEmpty('CO_PLAN');
+
+    fireEvent.press(screen.getByTestId('itinerary-mustvisit-screen-proceed'));
+
+    await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/itinerary/generating',
+      params: {
+        tripId: TRIP_ID,
+        mode: 'CO_PLAN',
+        successRoute: '/trips/[tripId]/itinerary/copick/[slotKey]',
+      },
+    });
+    expect(hitsFor('POST', '/must-visits')).toBe(0);
+    expect(hitsFor('DELETE', '/must-visits')).toBe(0);
+  });
+});
+
+/**
+ * TRIP-1093 결정 3 — h02 의 「꼭 갈 곳 추가」 두 버튼은 d02 를 **select 모드 + 이 여행 id** 로 연다.
+ * (TRIP-1022 결정 2 "save 모드 문자열 push" 를 뒤집는다.)
+ *
+ * 무엇을 보장하나(01 AC-4):
+ *  - 0곳·목록 두 얼굴 어느 버튼이든 push 는 `{ pathname: '/explore/saved-places', params: { mode:
+ *    'select', tripId } }` **한 건**이다. `mock.calls` 전체를 완전 일치로 재므로 문자열 save 모드 push 가
+ *    섞이거나 두 번 불려도 red.
+ *  - 버튼은 이동만 한다 — 필수 방문지 POST·DELETE 는 0건(추가는 d02 완료가 한다).
+ */
+const SELECT_FOR_TRIP = {
+  pathname: '/explore/saved-places',
+  params: { mode: 'select', tripId: TRIP_ID },
+};
+
+describe('🔴 TRIP-1093 L4 · AC-4 — h02 추가 버튼 → d02 select tripId 모드, 요청 0건', () => {
+  it('0곳 얼굴의 버튼을 누르면 select+tripId 로 1회 이동하고 must-visits 요청이 0건이다', async () => {
+    // 준비 — 서버에 담은 필수 방문지가 0곳이다.
+    mustVisitStore = [];
+    renderPage();
+    await screen.findByTestId('itinerary-mustvisit-screen-empty');
+
+    // 실행 — 버튼은 점선 안내 밖에 있다(화면 전체에서 찾는다).
+    fireEvent.press(screen.getByTestId('itinerary-mustvisit-screen-empty-add'));
+
+    // 단언
+    await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+    expect(mockPush.mock.calls).toEqual([[SELECT_FOR_TRIP]]);
+    expect(hitsFor('POST', '/must-visits')).toBe(0);
+    expect(hitsFor('DELETE', '/must-visits')).toBe(0);
+  });
+
+  it('목록 얼굴의 버튼을 누르면 같은 곳으로 1회 이동하고 must-visits 요청이 0건이다', async () => {
+    // 준비 — beforeEach 기본 3곳(목록 얼굴).
+    renderPage();
+    await screen.findByTestId('itinerary-mustvisit-screen-add');
+
+    // 실행
+    fireEvent.press(screen.getByTestId('itinerary-mustvisit-screen-add'));
+
+    // 단언
+    await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+    expect(mockPush.mock.calls).toEqual([[SELECT_FOR_TRIP]]);
     expect(hitsFor('POST', '/must-visits')).toBe(0);
     expect(hitsFor('DELETE', '/must-visits')).toBe(0);
   });

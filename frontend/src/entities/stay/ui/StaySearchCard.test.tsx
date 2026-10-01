@@ -172,11 +172,11 @@ describe('🔴 SC5 · 하트 press 와 카드 press 가 갈린다 (★F-4 계열
   });
 });
 
-describe('🔴 SC6 · rail variant (d05) — save 미지정 시 하트 없음', () => {
+describe('🔴 SC6 · rail variant (d01) — save 미지정 시 하트 없음', () => {
   it('save 미지정이면 저장 Pressable·글리프가 안 그려진다', () => {
     render(
       <StaySearchCard
-        testID="destination-detail-stay-card-NAVER:s1"
+        testID="explore-stay-card-NAVER:s1"
         name="해운대 오션뷰"
         region="부산 해운대구"
         priceText="120,000원~"
@@ -184,9 +184,7 @@ describe('🔴 SC6 · rail variant (d05) — save 미지정 시 하트 없음', 
       />
     );
 
-    expect(
-      screen.getByTestId('destination-detail-stay-card-NAVER:s1')
-    ).toBeOnTheScreen();
+    expect(screen.getByTestId('explore-stay-card-NAVER:s1')).toBeOnTheScreen();
     expect(screen.queryByTestId('stay-card-save-NAVER:s1')).toBeNull();
     expect(screen.queryByTestId('stay-card-save-NAVER:s1-outline')).toBeNull();
   });
@@ -269,5 +267,34 @@ describe('🔴 SC9 · full variant 저장 하트 — 흰 원형 배경 (AC-5)', 
     expect(classTokens(screen.getByTestId('stay-card-save-NAVER:s1'))).toEqual(
       expect.arrayContaining(['bg-on-primary', 'rounded-pill', 'absolute'])
     );
+  });
+});
+
+/**
+ * TRIP-1105 · QA #7 — d01 레인에서 숙소 카드와 장소 카드 폭이 달랐다(숙소 200 · 장소 160). rail 을
+ * 장소 카드와 같은 160 폭 · 사진 160×120 으로 맞춘다(Figma 채택본 4767:2957). rail 소비처는 d01 하나다.
+ * 사진 자리는 `photoTestID` 를 줘야 찾을 수 있다(d01 은 안 준다 — 그래서 카드 단위에서 잰다).
+ */
+describe('🔴 SC10 · rail variant 폭 160 · 사진 높이 120 (TRIP-1105)', () => {
+  it('rail 루트는 w-[160px](옛 200 아님)이고 사진 자리는 h-[120px](옛 130 아님)이다', () => {
+    render(
+      <StaySearchCard
+        testID="explore-stay-card-NAVER:s1"
+        photoTestID="explore-stay-card-photo-NAVER:s1"
+        name="해운대 오션뷰"
+        region="부산 해운대구"
+        priceText="120,000원~"
+        variant="rail"
+      />
+    );
+
+    const root = classTokens(screen.getByTestId('explore-stay-card-NAVER:s1'));
+    const photo = classTokens(
+      screen.getByTestId('explore-stay-card-photo-NAVER:s1')
+    );
+    expect(root).toContain('w-[160px]');
+    expect(root).not.toContain('w-[200px]');
+    expect(photo).toContain('h-[120px]');
+    expect(photo).not.toContain('h-[130px]');
   });
 });

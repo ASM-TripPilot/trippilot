@@ -41,6 +41,7 @@ function editorSlot(poiId: string, startAt: string | null): EditorSlot {
     isFixed: false,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     violationReason: null,
     nameKo: '어떤 장소',
     distanceRange: '약 1.2km · 도보 추정',

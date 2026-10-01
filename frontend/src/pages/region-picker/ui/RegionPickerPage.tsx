@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import type { Region } from '@/shared/api/generated/schemas';
 import { filterRegions, useRegions } from '@/features/explore/model/regions';
+import type { RegionPickerPurpose } from '@/features/explore/model/regionPickerPurpose';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
 import type { RegionPurpose } from '@/features/explore/ui/RegionPickerScreen';
@@ -20,8 +21,15 @@ import type { RegionPurpose } from '@/features/explore/ui/RegionPickerScreen';
 export function RegionPickerPage(): ReactElement {
   const router = useRouter();
   // URL은 신뢰 경계 — 아는 값이 아니면 전부 'stay'로 떨어뜨린다("부분적으로 해석"하지 않는다).
-  const { purpose: rawPurpose } = useLocalSearchParams<{ purpose?: string }>();
-  const purpose: RegionPurpose = rawPurpose === 'trip' ? 'trip' : 'stay';
+  const { purpose: rawPurpose } = useLocalSearchParams<{
+    purpose?: string;
+  }>();
+  const purpose: RegionPickerPurpose =
+    rawPurpose === 'trip' || rawPurpose === 'explore' || rawPurpose === 'places'
+      ? rawPurpose
+      : 'stay';
+  // 화면 카피는 둘뿐이다(BR-U1-07) — 숙소가 아니면 전부 여행지 선택 카피(라이브 1834:2283).
+  const copy: RegionPurpose = purpose === 'stay' ? 'stay' : 'trip';
 
   const [query, setQuery] = useState('');
   // TRIP-683 AC-1 — trip 분기가 이 orphan 액션을 다시 문다(g 밴드 이전 때 옛 인라인 시트의
@@ -35,20 +43,39 @@ export function RegionPickerPage(): ReactElement {
   function handleSelectRegion(region: Region): void {
     if (purpose === 'trip') {
       // TRIP-683 AC-1 — 여행지 편집 시트의 "도시 추가"에서 왔다. 그 지역을 1박으로 담고
-      // 위저드로 복귀한다(사용자 확정). 스토어는 코드가 아니라 한글 **이름**을 받는다(destinations
-      // 행이 이름을 그린다 — code 를 넘기면 화면에 코드가 뜬다). 옛 `/explore/destination/{code}`
-      // 이탈(d03)은 담기 배선을 잃은 결함이었다.
-      addDestination(region.name, 1);
+      // 위저드로 복귀한다(사용자 확정). 표시는 한글 **이름**이 진다(destinations 행이 이름을 그린다 —
+      // code 를 이름 자리에 넘기면 화면에 코드가 뜬다). 코드는 따로 싣는다(TRIP-1042 AC-12 — 꼭 갈 곳
+      // 지역 판정). 옛 `/explore/destination/{code}` 이탈(d03)은 담기 배선을 잃은 결함이었다.
+      addDestination(region.name, 1, region.regionCode);
       router.back();
       return;
     }
-    // 서버 `region`은 자유 문자열 계약이라 코드가 아니라 한글 이름을 보낸다.
-    router.push(`/stays?region=${encodeURIComponent(region.name)}`);
+    if (purpose === 'explore') {
+      // TRIP-985 · TRIP-1105 — 탐색 진입(랜딩·홈 검색). 결과는 탐색 탭 d01 의 지역 필터이고 **코드**를
+      // 싣는다(이름은 d01 이 캐시 역인덱스). dismissTo: 스택 밑의 (tabs) 로 돌아가 파라미터만 바꾼다 —
+      // "결과→피커→결과" 누적이 없다. 진짜 탭바라 진입 경로와 상관없이 '탐색'이 켜진다(tab 되싣기 폐기).
+      router.dismissTo({
+        pathname: '/explore',
+        params: { region: region.regionCode },
+      });
+      return;
+    }
+    if (purpose === 'places') {
+      // TRIP-985 — d04 "지역 바꾸기". d04 는 지역을 URL 로만 들고 있어 **이름**을 실어 돌아간다.
+      router.dismissTo({
+        pathname: '/explore/places',
+        params: { region: region.name },
+      });
+      return;
+    }
+    // 서버 `region`은 자유 문자열 계약이라 코드가 아니라 한글 이름을 보낸다. dismissTo 로 결과
+    // 화면에 돌아가 지역만 교체한다 — push 면 "결과→피커→결과"가 쌓였다(TRIP-989 D16).
+    router.dismissTo(`/stays?region=${encodeURIComponent(region.name)}`);
   }
 
   return (
     <RegionPickerScreen
-      purpose={purpose}
+      purpose={copy}
       query={query}
       regions={visible}
       isLoading={regions.isPending}

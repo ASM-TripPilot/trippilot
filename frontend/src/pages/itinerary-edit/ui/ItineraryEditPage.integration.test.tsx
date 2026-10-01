@@ -31,7 +31,8 @@ import { ItineraryEditPage } from './ItineraryEditPage';
  *    시트 헤더 곳수(`sheet-header-meta`)가 맞으며 첫 조회는 1건이다(R1 · AC1·AC5).
  *  - 🔴 저장은 편집 스토어 전체를 **5필드로 조립해 PUT**, 배열 순서(INV-U3-02)·전체 정밀도·
  *    endsNextDay 실어나르기가 실리고, 성공은 **재조회 0**(setQueryData) 이다(R2 · AC1·AC2·AC5).
- *  - 🔴 위반이 있어도 **곧장 저장**(비차단, BR-U3-13) 이다(R3 · AC3).
+ *  - 🔴 드래프트에 위반이 있어도 **곧장 저장**(PUT 전 차단 없음, BR-U3-12) 이다(R3 · AC3). 위반 응답 뒤의
+ *    요약 게이트는 PUT **다음**에 서고(TRIP-1095) `save-conflict` 스위트 몫이다.
  *  - 🔴 409 는 **재조회한 일정 상태**(신호 B)로 "확정" vs "만드는 중" 을 서로 다른 문구로 가른다
  *    (R4·R5 · AC6). 500·네트워크도 **인라인 안내**(INV-4 침묵 금지) 다(R6·R7 · AC7).
  *  - 🔴 다일자 칩(`itinerary-edit-day-2`) press 로 활성 일자가 바뀐다(R8 · AC4).
@@ -59,8 +60,15 @@ jest.mock('@/shared/storage', () => ({
 }));
 
 const mockBack = jest.fn();
+// TRIP-1009 C3 — replace 도 이름을 붙여 "편집 ‹ 는 여전히 back" 을 잰다(직접 짜기만 일정 탭 replace).
+const mockReplace = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), back: mockBack, replace: jest.fn() }),
+  useRouter: () => ({
+    push: jest.fn(),
+    back: mockBack,
+    replace: mockReplace,
+    canGoBack: () => true,
+  }),
 }));
 
 // EditorView 가 조립하는 MapSheetShell → MapView(네이버 네이티브)는 jest 에서 못 뜬다 — 관찰 목으로
@@ -109,6 +117,7 @@ function itinerary(): Itinerary {
           isFixed: false,
           endsNextDay: false,
           hasViolation: false,
+          alternatives: [],
           tags: [],
           nameKo: '성산일출봉',
         },
@@ -119,6 +128,7 @@ function itinerary(): Itinerary {
           isFixed: false,
           endsNextDay: false,
           hasViolation: false,
+          alternatives: [],
           tags: [],
           nameKo: '섭지코지',
         },
@@ -134,6 +144,7 @@ function itinerary(): Itinerary {
           isFixed: false,
           endsNextDay: true,
           hasViolation: false,
+          alternatives: [],
           tags: [],
           nameKo: '제주공항',
         },
@@ -197,6 +208,7 @@ beforeEach(() => {
   putCalls = 0;
   putBody = null;
   mockBack.mockClear();
+  mockReplace.mockClear();
   setAccessToken('valid-access');
   // 편집 스토어는 모듈 싱글턴 — 테스트 사이 값이 새므로 초기화(store 선례).
   useItineraryEditStore.getState().reset();
@@ -289,7 +301,7 @@ describe('🔴 R2 · AC1·AC2·AC5 — 저장: 편집 스토어 전체를 5필�
   });
 });
 
-describe('🔴 R3 · AC3 — 비차단: 위반 있어도 곧장 저장(저장 게이트 없음)', () => {
+describe('🔴 R3 · AC3 — 비차단: 위반 있어도 곧장 저장(PUT 전 차단 없음)', () => {
   it('드래프트에 위반이 있어도 저장 press → PUT 1건(차단하지 않는다)', async () => {
     getHandler = () => HttpResponse.json(withViolation());
 
@@ -298,7 +310,7 @@ describe('🔴 R3 · AC3 — 비차단: 위반 있어도 곧장 저장(저장 �
 
     fireEvent.press(screen.getByTestId(SAVE));
 
-    // 위반을 이유로 저장을 막지 않는다 — 시트도 없이 곧장 PUT.
+    // 위반을 이유로 저장을 막지 않는다 — PUT 전엔 아무것도 묻지 않고 곧장 보낸다.
     await waitFor(() => expect(putCalls).toBe(1));
   });
 });
@@ -438,5 +450,57 @@ describe('TRIP-926 · M — 지도 중심 (핀 0개면 서울 시청, 있으면 
     expect(screen.getByTestId('map-root')).toHaveTextContent(
       '33.4581,126.9425'
     );
+  });
+});
+
+/**
+ * TRIP-1009 · C3 — 공유 편집 뷰(`EditorView`)의 ‹ 목적지는 페이지 몫이다. 직접 짜기만 일정 탭으로 바뀌고,
+ * h12 일정 편집·i07 여행 중 편집의 ‹ 는 여전히 이전 화면(`router.back`)이다.
+ *
+ * 3동작 뼈대: 준비=기본 픽스처 → 실행=카드 도착 뒤 ‹ → 단언=back 1회·replace 0회.
+ */
+describe('TRIP-1009 · C3 — 일정 편집의 ‹ 는 여전히 이전 화면이다 (공유 뷰 무회귀 · 선제 green)', () => {
+  it('‹ 를 누르면 router.back 1회 · replace 0회', async () => {
+    renderPage();
+    await screen.findByTestId(cardId('poi-a'));
+
+    fireEvent.press(screen.getByTestId('itinerary-edit-back'));
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * TRIP-1038 B6 — 직접 짜기 편집기만 「저장하고 확정하기」로 바뀌었다. 같은 뷰(`EditorView`)를 쓰는 h12 일정 편집은
+ * 라벨 「일정 저장하기」와 동작(PUT 만 · 확정 POST 0)이 그대로다(공용 위젯 무회귀 · 선제 green).
+ * TRIP-1089 결정 1 로 "제자리" 는 뒤집혔다 — 위반 없는 저장 성공은 이전 화면(back)으로 돌아간다(상세는
+ * save-exit 스위트). 확정 POST 0 은 그대로 잠근다.
+ *
+ * 3동작 뼈대: 준비=기본 픽스처 + 확정 계수 핸들러 → 실행=저장 → 단언=라벨·PUT 1·확정 0·back 1.
+ */
+describe('TRIP-1038 · B6 — 일정 편집의 저장 CTA 는 라벨·동작이 그대로다 (공용 뷰 무회귀 · 선제 green)', () => {
+  it('CTA 글자 일정 저장하기(완전일치) · 저장하면 PUT 1 · 확정 POST 0 · back 1(TRIP-1089)', async () => {
+    let confirmCalls = 0;
+    server.use(
+      http.post(`${BASE}/trips/:tripId/itinerary/confirm`, () => {
+        confirmCalls += 1;
+        return HttpResponse.json({ ...itinerary(), status: 'CONFIRMED' });
+      })
+    );
+    renderPage();
+    await screen.findByTestId(cardId('poi-a'));
+
+    expect(screen.getByTestId(SAVE)).toHaveTextContent('일정 저장하기');
+    fireEvent.press(screen.getByTestId(SAVE));
+    await waitFor(() => expect(putCalls).toBe(1));
+    // 확정이 따라 나갔다면 여기까지 흘려 보낸 뒤 잡힌다(요청은 비동기).
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+
+    expect(confirmCalls).toBe(0);
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 });

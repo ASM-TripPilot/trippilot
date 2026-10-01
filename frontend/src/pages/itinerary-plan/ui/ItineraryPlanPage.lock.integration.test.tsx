@@ -16,6 +16,7 @@ import type {
   Trip,
 } from '@/shared/api/generated/schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { resetPressGuard } from '@/shared/press/pressGuard';
 
 import { ItineraryPlanPage } from './ItineraryPlanPage';
 
@@ -111,6 +112,7 @@ function itinerary(input: {
             isFixed: false,
             endsNextDay: false,
             hasViolation: false,
+            alternatives: [],
             tags: [],
             nameKo: '성산일출봉',
           },
@@ -130,6 +132,7 @@ let confirmHandler: () => Response;
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 
 beforeEach(() => {
+  resetPressGuard(); // TRIP-1013 — 연타 가드 창(모듈 전역)이 앞 테스트에서 새지 않게 닫는다.
   confirmPostCalls = 0;
   mockBack.mockClear();
   setAccessToken('valid-access');

@@ -2,8 +2,10 @@ import { useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 
+import { isGenerationRunning } from '@/features/itinerary/model/useGenerationBusy';
 import { MethodPickerScreen } from '@/features/itinerary/ui/MethodPickerScreen';
 import { useGetTripsTripIdItinerary } from '@/shared/api/generated/trips/trips';
+import { retryUnlessNotFound } from '@/shared/api/isNotFound';
 
 /**
  * h04 시작 방법 배선(TRIP-303 → TRIP-305 → TRIP-504). 방식을 고른다.
@@ -24,8 +26,20 @@ export function ItineraryMethodPage({
   tripId: string;
 }): ReactElement {
   const router = useRouter();
-  const itinerary = useGetTripsTripIdItinerary(tripId);
-  const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
+  // TRIP-986 #063 — 404("없다")는 다시 물어도 답이 같다. 기본 재시도(3회 백오프, 약 7초) 동안
+  // `isPending` 이 켜져 새 여행에도 아래 교체 확인이 떴다 → 404 만 재시도를 끈다(창 → 1 RTT).
+  // 그 밖의 실패(500·네트워크)는 기본과 같이 3회 재시도한다. 같은 캐시 키의 다른 관찰자(홈·카드)가
+  // 먼저 요청을 시작하면 그쪽 retry 가 적용되므로 앱 전역 기본값(`_layout`)도 같은 함수를 쓴다.
+  // 이 옵션은 전역 기본값이 없는 클라이언트에서도 이 화면 혼자 막도록 유지한다.
+  const itinerary = useGetTripsTripIdItinerary(tripId, {
+    query: { retry: retryUnlessNotFound },
+  });
+  // 확인 카드는 하나인데 여는 방식이 둘이다(TRIP-1032) — [계속]이 누른 방식대로 가도록 기억한다.
+  const [confirmFor, setConfirmFor] = useState<'fullAi' | 'coPick' | null>(
+    null
+  );
+  // TRIP-1032 B — 이 여행이 생성 중이면 완전 AI 도 확인부터(같이 짜기는 이미 확인이 있다 — 문구만 바뀐다).
+  const inProgress = isGenerationRunning(itinerary.data);
 
   // 덮어쓸 것이 있는가 = 이미 생성된 일정에 슬롯이 담긴 days 가 있는가(조회 부재·빈 일정은 없음).
   const hasExistingItinerary = (itinerary.data?.days.length ?? 0) > 0;
@@ -35,6 +49,13 @@ export function ItineraryMethodPage({
   // 덮어쓴다(BR-U3-18 위반). 그래서 로딩 창에선 "덮어쓸 수 있다"고 보고 확인을 여는 쪽으로 fail-safe
   // 한다. 404(일정 없음)는 `isPending=false`+`data undefined` 라 이 값이 false → 확인 없이 진행(AC-2).
   const mustConfirmRegenerate = itinerary.isPending || hasExistingItinerary;
+
+  function goToFullAiMustVisits(): void {
+    router.push({
+      pathname: '/trips/[tripId]/itinerary/must-visits',
+      params: { tripId },
+    });
+  }
 
   // copick 는 h05 로 `mode=CO_PLAN` 을 싣고 간다 — h05 가 그 신호로 CO_PLAN generating +
   // 첫 슬롯 successRoute 로 잇는다(AC-4/5). generating 직행이 아니다.
@@ -48,12 +69,15 @@ export function ItineraryMethodPage({
   return (
     <MethodPickerScreen
       onBack={() => router.back()}
-      onPressFullAi={() =>
-        router.push({
-          pathname: '/trips/[tripId]/itinerary/must-visits',
-          params: { tripId },
-        })
-      }
+      // TRIP-1032: 생성 중이거나 아직 모르면(로딩 — copick 와 같은 fail-safe) 확인부터. 그 밖엔 확인 없이
+      // 곧장 h05 — 완성 일정 덮어쓰기 확인은 원래 완전 AI 에 없다(브리프 맹점 7, 이번 범위 밖).
+      onPressFullAi={() => {
+        if (itinerary.isPending || inProgress) {
+          setConfirmFor('fullAi');
+          return;
+        }
+        goToFullAiMustVisits();
+      }}
       // TRIP-460: 직접 짜기 게이트 해제 — h19(빈 일정)로 navigate. 라우트·h19↔h20 배선은 이미 실재.
       onPressManual={() =>
         router.push({
@@ -65,17 +89,24 @@ export function ItineraryMethodPage({
       // 확인을 먼저 띄운다. 확실히 없을 때만 바로 h05 로(침묵 덮어쓰기 불가, BR-U3-18).
       onPressCoPick={() => {
         if (mustConfirmRegenerate) {
-          setShowRegenerateConfirm(true);
+          setConfirmFor('coPick');
           return;
         }
         goToCoPickMustVisits();
       }}
-      showRegenerateConfirm={showRegenerateConfirm}
+      showRegenerateConfirm={confirmFor !== null}
+      regenerateInProgress={inProgress}
       onRegenerateContinue={() => {
-        setShowRegenerateConfirm(false);
-        goToCoPickMustVisits();
+        setConfirmFor(null);
+        if (confirmFor === 'fullAi') goToFullAiMustVisits();
+        else goToCoPickMustVisits();
       }}
-      onRegenerateCancel={() => setShowRegenerateConfirm(false)}
+      onRegenerateCancel={() => setConfirmFor(null)}
+      // TRIP-1011 C — 2/4→3/4 가 replace 라 뒤로가기로는 거점에 못 돌아간다. push 로 쌓아야 거점
+      // 화면의 CTA 가 back() 으로 이 화면에 돌아온다.
+      onPressRebase={() =>
+        router.push({ pathname: '/trips/[tripId]/bases', params: { tripId } })
+      }
       // ponytail: 낙관적 스텁(TRIP-404). 서버 동시생성 판정면(선행 BE 칸)이 아직 없어 항상 미차단.
       // 필드 신설 시 여기서 그 판정면을 넘기고 onPressActiveGeneration 을 배선한다.
       activeGeneration={null}

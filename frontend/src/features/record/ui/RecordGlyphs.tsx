@@ -93,6 +93,30 @@ export function PlusGlyph({
   );
 }
 
+/** 문서(모서리 접힘 + 가로줄 2) — j01 「오늘의 회고」 FAB(Figma 4716:2946 `note`). 코랄 위라 기본 흰색. */
+export function NoteGlyph({
+  size = 20,
+  color = 'white',
+}: GlyphProps & { color?: string }): ReactElement {
+  const stroke = {
+    stroke: color,
+    strokeWidth: 1.66667 * (size / 20),
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+  } as const;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 20 20" fill="none">
+      <Path
+        d="M11.6667 2.5H5.83333C5.39131 2.5 4.96738 2.67559 4.65482 2.98816C4.34226 3.30072 4.16667 3.72464 4.16667 4.16667V15.8333C4.16667 16.2754 4.34226 16.6993 4.65482 17.0118C4.96738 17.3244 5.39131 17.5 5.83333 17.5H14.1667C14.6087 17.5 15.0326 17.3244 15.3452 17.0118C15.6577 16.6993 15.8333 16.2754 15.8333 15.8333V6.66667L11.6667 2.5Z"
+        {...stroke}
+      />
+      <Path d="M11.6667 2.5V6.66667H15.8333" {...stroke} />
+      <Path d="M7.5 10.8333H12.5" {...stroke} />
+      <Path d="M7.5 14.1667H10.8333" {...stroke} />
+    </Svg>
+  );
+}
+
 /**
  * ⚠ 업로드 실패 셀 아이콘(경고 삼각 + 느낌표) — muted-soft.
  * TRIP-760 · 색·정확한 벡터는 jest 사각(6-b 육안, Figma 1561:1790).
@@ -190,6 +214,45 @@ export function ChevronRightGlyph({
 }
 
 /**
+ * › legend 줄 끝 chevron(TRIP-1120) — 누르면 이동하는 줄에만 붙는다. Figma 4761:3104: 14 슬롯 안에 24 박스
+ * 벡터(stroke 2)가 1:1 로 넘쳐 그려진다 → viewBox 를 가운데 14 로 잘라 같은 크기·굵기를 슬롯 안에 담는다.
+ */
+export function LegendChevronGlyph({ size = 14 }: GlyphProps): ReactElement {
+  return (
+    <Svg width={size} height={size} viewBox="5 5 14 14" fill="none">
+      <Path
+        d="M9 6L15 12L9 18"
+        stroke={MUTED_SOFT}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/**
+ * ⌄ legend '더 보기' chevron(TRIP-1084). Figma 4699:2914 Icon — 16 박스 가운데 9.6 벡터(stroke 0.8)를
+ * 16 좌표로 3.2 평행이동했다. '접기'는 호출부가 180° 돌린다(Figma Icon 세트에 up 이 없다).
+ */
+export function ChevronDownGlyph({
+  size = 16,
+  color = MUTED,
+}: GlyphProps & { color?: string }): ReactElement {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      <Path
+        d="M5.6 6.8L8 9.2L10.4 6.8"
+        stroke={color}
+        strokeWidth={0.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/**
  * ⓘ 안내 아이콘(원 + i) — TRIP-761 · GPS 미동의 배너 좌측. muted.
  * 색·정확한 벡터는 jest 사각(글리프 함정, 6-b 육안, Figma 1562:1949).
  */
@@ -262,6 +325,17 @@ export function CalendarGlyph({ size = 32 }: GlyphProps): ReactElement {
         strokeWidth={2 * s}
         strokeLinecap="round"
       />
+    </Svg>
+  );
+}
+
+/** ✕ 닫기 — i01 허브 메모 시트 머리(Figma 4741:2993 · Icon close 1237:1058). ink 선이라 home·explore
+ *  ✕(흰·on-primary)를 못 쓰고, features 경계로 가져올 수도 없어 벡터만 옮겼다. */
+export function CloseGlyph({ size = 24 }: GlyphProps): ReactElement {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M6 6L18 18" stroke={INK} strokeWidth={2} strokeLinecap="round" />
+      <Path d="M18 6L6 18" stroke={INK} strokeWidth={2} strokeLinecap="round" />
     </Svg>
   );
 }

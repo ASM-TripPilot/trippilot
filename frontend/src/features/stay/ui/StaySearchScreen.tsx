@@ -5,8 +5,9 @@
  * StaySearchPage.tsx`가 진다). `state`는 옵셔널이고 기본값이 TRIP-181 default 얼굴이라
  * 기존 2-prop 호출은 한 글자도 바뀌지 않는다. 서버가 준 `items` 순서를 그대로 그리고
  * (BR-U1-15), 소요 시간은 어디에도 없다(INV-3 · BR-U1-54). 세 필터 칩은 화면 층에선 모두
- * 동일하게 `onPressFilter(axis)`로 배선된다(TRIP-415) — 가격대가 "스텁"인 것은 화면이 아니라
- * **페이지**가 'price' axis 를 무시해서 실현된다(계약에 가격대 파라미터가 없다 — 범위 밖).
+ * 동일하게 `onPressFilter(axis)`로 배선된다(TRIP-415) — 가격대 시트 열기·버킷 거르기는
+ * **페이지**가 한다(계약에 가격대 파라미터가 없어 클라 파생, TRIP-457). 화면은 고른 버킷을
+ * `priceBucket`으로 받아 칩 라벨만 바꾼다(TRIP-989).
  * 저장 하트는 옵셔널 prop 3개(`savedKeys`·`onToggleSave`·`pendingKeys`)로 채움/빈·누름·
  * 대기(disabled)를 그리되 저장/해제 판정·네트워크는 모른다(TRIP-417, 미지정=빈 하트 무회귀).
  * `다시 시도`는 `onRetry`(=`refetch`)에 실배선된다(Q8).
@@ -23,6 +24,7 @@ import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
 import { StateNotice, type StateNoticeAction } from '@/shared/ui/StateNotice';
 
 import { filterReasonLabel } from '../model/filterReasonLabel';
+import { PRICE_BUCKETS, type PriceBucketId } from '../model/priceRangeFilter';
 import type { StaySearchState } from '../model/staySearchState';
 import { stayKey } from '../model/stayKey';
 import { PartialFailureBanner } from './PartialFailureBanner';
@@ -60,8 +62,9 @@ export interface StaySearchScreenProps {
   /** 지역·필터 칩 콜백(TRIP-415). 누른 칩의 axis 가 온다 — 지역 재선택·필터 시트는 페이지 몫.
    * 미지정이면 정직한 스텁(가격대 칩은 페이지가 axis 를 무시해 스텁으로 남는다). */
   onPressFilter?: (axis: 'price' | 'region' | 'more') => void;
-  /** 적용된 필터 개수(TRIP-415) — '필터' 칩에 배지로 드러낸다(0이면 배지 없음). empty 카드의
-   * "필터 완화" 활성/비활성에도 쓰인다(TRIP-726 F-9, `=== 0`이면 disabled·미지정=활성). */
+  /** 적용된 필터 개수(TRIP-415) — '필터' 칩에 배지로 드러낸다(0이면 배지 없음, 가격대는 안 센다 —
+   * TRIP-1019). empty 카드의 "필터 완화" 활성/비활성에도 쓰인다(TRIP-726 F-9, `=== 0`이고
+   * `priceBucket`도 없으면 disabled·미지정=활성). */
   activeFilterCount?: number;
   /** empty 카드 "지역 바꾸기" 콜백(TRIP-416 AC-1). 목적지(/explore/region)는 페이지가 정한다.
    * 미지정이면 정직한 스텁. */
@@ -90,6 +93,9 @@ export interface StaySearchScreenProps {
   nameQuery?: string;
   /** 검색어 입력 콜백(TRIP-469) — 이 콜백이 있을 때만 검색창을 렌더한다(상태는 페이지 몫). */
   onChangeNameQuery?: (text: string) => void;
+  /** 적용된 가격대(TRIP-989 E) — `all`·미지정이 아니면 가격대 칩이 그 버킷 이름·선택됨·연핑크가
+   * 된다. 필터링 자체는 페이지 몫(화면은 받은 `items`를 그린다). */
+  priceBucket?: PriceBucketId;
 }
 
 /** 이름·지역 부분일치로 좁힌다 — 빈 검색어는 전체를 그대로(입력 없음 ≠ 일치 없음). */
@@ -165,12 +171,15 @@ function FilterChip({
   axis,
   label,
   count,
+  selected = false,
   onPress,
 }: {
   axis: 'price' | 'region' | 'more';
   label: string;
   /** '필터'(more) 칩 배지용 적용 개수 — >0일 때만 배지를 그린다. */
   count?: number;
+  /** 적용 중인 칩(가격대, TRIP-989) — 연핑크 + 선택 신호. Figma 에 없는 얼굴이라 d04 활성 정렬 칩 토큰을 빌린다. */
+  selected?: boolean;
   onPress?: () => void;
 }): ReactElement {
   const showBadge = axis === 'more' && (count ?? 0) > 0;
@@ -178,10 +187,23 @@ function FilterChip({
     <Pressable
       testID={`stay-search-filter-${axis}`}
       accessibilityRole="button"
+      accessibilityState={selected ? { selected } : undefined}
       onPress={onPress}
-      className="flex-row items-center gap-xs rounded-[8px] border border-hairline-strong bg-canvas px-md py-sm"
+      className={
+        selected
+          ? 'flex-row items-center gap-xs rounded-[8px] border border-primary bg-primary-pale px-md py-sm'
+          : 'flex-row items-center gap-xs rounded-[8px] border border-hairline-strong bg-canvas px-md py-sm'
+      }
     >
-      <Text className="font-noto text-body text-body">{label}</Text>
+      <Text
+        className={
+          selected
+            ? 'font-noto-bold text-body font-bold text-primary'
+            : 'font-noto text-body text-body'
+        }
+      >
+        {label}
+      </Text>
       {showBadge ? (
         <View className="h-[18px] min-w-[18px] items-center justify-center rounded-pill bg-primary px-[5px]">
           <Text className="font-noto-bold text-micro font-bold text-on-primary">
@@ -204,14 +226,21 @@ function ListHeader({
   count,
   showCount,
   activeFilterCount,
+  priceBucket,
   onPressFilter,
 }: {
   region: string;
   count: number;
   showCount: boolean;
   activeFilterCount?: number;
+  priceBucket?: PriceBucketId;
   onPressFilter?: (axis: 'price' | 'region' | 'more') => void;
 }): ReactElement {
+  // 가격대가 걸리면 칩 라벨을 시트와 같은 출처(PRICE_BUCKETS)의 버킷 이름으로 바꾼다(01b Q2).
+  const priceLabel =
+    priceBucket !== undefined && priceBucket !== 'all'
+      ? PRICE_BUCKETS.find((bucket) => bucket.id === priceBucket)?.label
+      : undefined;
   return (
     <View className="w-full gap-[14px] px-lg pb-xl pt-[6px]">
       <Text
@@ -225,8 +254,9 @@ function ListHeader({
           <FilterChip
             key={axis}
             axis={axis}
-            label={label}
+            label={axis === 'price' ? (priceLabel ?? label) : label}
             count={axis === 'more' ? activeFilterCount : undefined}
+            selected={axis === 'price' && priceLabel !== undefined}
             onPress={() => onPressFilter?.(axis)}
           />
         ))}
@@ -270,15 +300,18 @@ function RegisterPromptCard({
 /** empty(AC-2·AC-3) — 점선 안내 박스 + 구분선 + 수동 등록 카드(박스 밖 별도 형제).
  * "필터 완화"는 항상 렌더하되 적용 필터가 0이면 비활성으로 보여준다(TRIP-726 F-9 역전) —
  * 필터가 0이면 완화할 대상이 없지만, 숨겨서 죽은 버튼을 없애는 대신 정직한 비활성으로 남긴다.
- * `activeFilterCount === 0`일 때만 disabled 이고, 미지정(undefined)은 "0"이 아니라 활성이다
+ * `activeFilterCount === 0`이고 가격대도 없을 때만 disabled 이고, 미지정(undefined)은 "0"이 아니라 활성이다
  * (기존 2-prop 무회귀 — `?? 0` 폴백 금지). */
 function EmptyBlock({
   activeFilterCount,
+  priceFiltered,
   onPressChangeRegion,
   onRelaxFilters,
   onPressRegister,
 }: {
   activeFilterCount?: number;
+  /** 가격대가 걸려 있다 — 배지엔 안 세지만(TRIP-1019 #013) 완화할 대상이라 "필터 완화"를 켠다. */
+  priceFiltered?: boolean;
   onPressChangeRegion?: () => void;
   onRelaxFilters?: () => void;
   onPressRegister?: () => void;
@@ -295,7 +328,7 @@ function EmptyBlock({
       label: '필터 완화',
       variant: 'outline',
       onPress: onRelaxFilters,
-      disabled: activeFilterCount === 0,
+      disabled: activeFilterCount === 0 && !priceFiltered,
     },
   ];
 
@@ -413,6 +446,7 @@ function ListEmptyBlock({
   state,
   nameNoMatch,
   activeFilterCount,
+  priceFiltered,
   onRetry,
   onPressRegister,
   onPressChangeRegion,
@@ -423,6 +457,7 @@ function ListEmptyBlock({
   /** name 검색이 results 를 0건으로 좁혔을 때(TRIP-469) — 빈 body 대신 안내를 낸다. */
   nameNoMatch?: boolean;
   activeFilterCount?: number;
+  priceFiltered?: boolean;
   onRetry?: () => void;
   onPressRegister?: () => void;
   onPressChangeRegion?: () => void;
@@ -456,6 +491,7 @@ function ListEmptyBlock({
     ) : (
       <EmptyBlock
         activeFilterCount={activeFilterCount}
+        priceFiltered={priceFiltered}
         onPressChangeRegion={onPressChangeRegion}
         onRelaxFilters={onRelaxFilters}
         onPressRegister={onPressRegister}
@@ -487,6 +523,7 @@ export function StaySearchScreen({
   onPressCard,
   nameQuery,
   onChangeNameQuery,
+  priceBucket,
 }: StaySearchScreenProps): ReactElement {
   // loading·error엔 'degraded'가 없다 — `in` 좁히기로 판별 유니온을 안전하게 읽는다.
   const degraded = 'degraded' in state ? state.degraded : false;
@@ -535,6 +572,7 @@ export function StaySearchScreen({
                 count={visibleItems.length}
                 showCount={showCount}
                 activeFilterCount={activeFilterCount}
+                priceBucket={priceBucket}
                 onPressFilter={onPressFilter}
               />
               {degraded ? (
@@ -549,6 +587,7 @@ export function StaySearchScreen({
               state={state}
               nameNoMatch={nameNoMatch}
               activeFilterCount={activeFilterCount}
+              priceFiltered={priceBucket !== undefined && priceBucket !== 'all'}
               onRetry={onRetry}
               onPressRegister={onPressRegister}
               onPressChangeRegion={onPressChangeRegion}
@@ -602,7 +641,7 @@ export function StaySearchScreen({
           accessibilityLabel="담은 숙소"
           onPress={onPressSaved}
           style={fabShadow}
-          className="absolute bottom-[152px] right-lg h-14 w-14 items-center justify-center rounded-pill border border-hairline bg-canvas"
+          className="absolute bottom-[152px] right-lg h-[56px] w-[56px] items-center justify-center rounded-pill border border-hairline bg-canvas"
         >
           <HeartFilledGlyph size={26} />
         </Pressable>
@@ -612,7 +651,7 @@ export function StaySearchScreen({
           accessibilityLabel="숙소 등록"
           onPress={onPressRegister}
           style={fabShadow}
-          className="absolute bottom-[84px] right-lg h-14 w-14 items-center justify-center rounded-pill bg-primary"
+          className="absolute bottom-[84px] right-lg h-[56px] w-[56px] items-center justify-center rounded-pill bg-primary"
         >
           <PlusGlyph size={24} tone="onPrimary" />
         </Pressable>

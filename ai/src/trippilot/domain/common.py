@@ -106,3 +106,37 @@ PACE_TOKENS: dict[str, Pace] = {
     "균형있게": Pace.BALANCED, "보통": Pace.BALANCED, "BALANCED": Pace.BALANCED,
     "알차게": Pace.PACKED, "빡빡하게": Pace.PACKED, "PACKED": Pace.PACKED,
 }
+
+
+class RejectionKind(Enum):
+    """사용자가 그 장소를 밀어낸 **방식** — 크기가 아니라 종류만 경계로 온다.
+
+    크기(강등 폭)는 `OrchestratorConfig` 가 갖는다. 백엔드가 가중치를 실어 보내면
+    비율을 조정할 때마다 백엔드 재배포가 필요하고, 두 서비스가 같은 숫자를 각자
+    갖게 된다 — 조정은 AI 쪽 한 곳에서 한다(팀 결정 2026-09-26).
+    """
+
+    #: 슬롯 후보 패널에서 다른 곳으로 **교체**해 빠졌다. 그 자리를 보고 바꾼 것이라
+    #: 가장 명확한 거절 신호다 — 강등도 이쪽이 크다.
+    SWAPPED_OUT = "SWAPPED_OUT"
+    #: **재생성** 직전 일정에 배치돼 있었다. "이 장소가 싫다"보다 "이 구성이 싫다"에
+    #: 가까워 약하게 본다 — 맘에 들었던 곳까지 함께 걸리기 때문이다.
+    REGENERATED = "REGENERATED"
+
+
+@dataclass(frozen=True, slots=True)
+class Rejection:
+    """거절 이력 한 줄 (TRIP-964). 백엔드가 여행 단위로 누적해 요청에 싣는다.
+
+    `count` 가 필요한 이유 — **같은 곳을 또 거절하면 더 크게 내린다**(팀 결정). 집합만
+    받으면 "처음 밀어냄"과 "세 번째 밀어냄"이 구분되지 않는다. 수명은 여행이 끝날
+    때까지이고, 계정 전역으로 남기지 않는다.
+    """
+
+    poi_id: PoiId
+    kind: RejectionKind
+    count: int = 1
+
+    def __post_init__(self) -> None:
+        if self.count < 1:
+            raise ValueError(f"count ≥ 1 — 거절이 0 번이면 이력이 아니다: {self.count}")

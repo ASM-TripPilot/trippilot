@@ -11,7 +11,7 @@ import { dwellMinutes } from './dwellMinutes';
  *    역전(completedAt < arrivedAt, 시계 어긋남)은 `Math.max(0, ·)` 로 0(01b Q4).
  *  - **표시용이 아니다**(INV-U4-03) — DELAY 트리거 입력·U5 기록 재료로만. 값의 정확성만 잠근다.
  *
- * 제약(구조가드): 이 파일은 `features/execution/**` 라 `liveTimeStructure` 스캔 대상 —
+ * 제약: 이 파일은 `features/execution/**` 라 시각 무추정 규칙(BR-U4-34) 대상이다(옛 가드 `liveTimeStructure` 는 TRIP-1145 로 지웠다) —
  * `new Date`·`Date.parse`·`.getTime/.getHours/.getMinutes`·날짜라이브러리 금지. 그래서 구현은
  * `split(':')` 파싱으로만 분 차를 낸다(그 형태가 가드에 안 걸림을 02a §5 에서 실측).
  *

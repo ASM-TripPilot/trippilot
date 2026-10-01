@@ -25,7 +25,8 @@ import { ItineraryPlanPage } from './ItineraryPlanPage';
  *  - 🔴 전 슬롯 검증 시각 칩 — 비고정 `HH:mm–HH:mm`(en-dash U+2013), 고정 숙소 단일 `21:00`(AC-2).
  *  - 🔴 INV-3 — 셸 얼굴 어디에도 소요시간(`분`·`시간`·`소요`)·`%` 0(AC-3).
  *  - 🔴 헤더 "부산 여행 · 1일차 · 6월 10일…" + meta `4곳 · 4.1km`(N=비고정 4, km=legDistance 합, AC-4).
- *  - 🔴 전 슬롯 distanceRange=null → 커넥터 "이동 거리 계산 중" + meta `4곳`(km 생략, AC-5).
+ *  - 🔴 전 슬롯 distanceRange=null → 커넥터는 글리프 줄만(문구 칸·"이동 거리 계산 중" 없음, TRIP-1054)
+ *    + meta `4곳`(km 생략, AC-5).
  *  - 🔴 고정 숙소 슬롯 부재 → 거점없음 안내 카드 + 링크 push / 숙소 있으면 카드 부재(AC-7).
  *  - narrow 경계 — CONFIRMED 는 기존 `TimelineScreen`, 404 는 기존 notFound 얼굴(셸 부재, AC-10).
  *
@@ -109,6 +110,7 @@ function poi(
     isFixed: false,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     tags,
     nameKo,
     category: '자연',
@@ -128,6 +130,7 @@ function hotel(distanceRange: string | null): ItineraryDaysItemSlotsItem {
     isFixed: true,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     tags: [],
     nameKo: '해운대 그랜드 호텔',
     category: '숙소',
@@ -383,17 +386,22 @@ describe('🔴 T4 · AC-4 — 헤더 3세그 + meta "4곳 · 4.1km"(비고정 �
   });
 });
 
-describe('🔴 T5 · AC-5 — 거리 계산 중: 커넥터 "이동 거리 계산 중" + meta km 생략', () => {
-  it('전 슬롯 distanceRange=null 이면 커넥터가 계산 중이고 meta 는 곳 수만 그린다', async () => {
+describe('🔴 T5 · AC-5 — 거리 없음: 커넥터 글리프 줄만 + meta km 생략 (TRIP-1054 AC-7)', () => {
+  it('전 슬롯 distanceRange=null 이면 커넥터 줄은 남고 문구 칸·"계산 중"이 없으며 meta 는 곳 수만 그린다', async () => {
     useItinerary(() => HttpResponse.json(plannedPending()));
     renderPage();
     await screen.findByTestId('map-sheet-shell-root');
 
-    const connectors = screen.queryAllByTestId(/^sheet-connector-distance-/);
-    expect(connectors.length).toBeGreaterThan(0);
-    connectors.forEach((node) =>
-      expect(node).toHaveTextContent('이동 거리 계산 중')
+    // 줄은 남는다(T1 과 같은 줄 선택자 — 줄 testID 는 날짜로 시작).
+    expect(
+      screen.queryAllByTestId(/^sheet-connector-\d/).length
+    ).toBeGreaterThan(0);
+    // 문구 칸은 하나도 없다(값이 없으니 그릴 글자가 없다 — 결정 1b).
+    expect(screen.queryAllByTestId(/^sheet-connector-distance-/)).toHaveLength(
+      0
     );
+    // 옛 거짓 신호 "계산 중" 0(QA #038).
+    expect(screen.queryByText(/이동 거리 계산 중/)).toBeNull();
 
     // ★10 legDistance([null,…])→null → meta km 생략(곳 수만). "4곳 · X.Xkm" 이면 red.
     expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent('4곳');
@@ -453,5 +461,59 @@ describe('AC-10 · narrow 경계 — 도착·확정·404 얼굴 보존', () => {
 
     await screen.findByTestId('itinerary-view-notfound');
     expect(screen.queryByTestId('map-sheet-shell-root')).toBeNull();
+  });
+});
+
+describe('🔴 T5b · TRIP-1110 AC-4·AC-6 — 커넥터 구간(slice(1))에 null 이 섞이면 meta km 를 접는다', () => {
+  it('T5b-1 · 일부 구간만 null 이면 meta 는 정확히 "4곳"이고 null 커넥터는 글리프 줄만 남는다', async () => {
+    // 준비 — b→c·c→d 구간 null(교체 뒤), a→b 2.1km·d→숙소 0.6km. 옛 스킵 규약이면 "4곳 · 2.7km".
+    useItinerary(() =>
+      HttpResponse.json(
+        itineraryOf('PLANNED', [
+          ...fourPois([null, '2.1km', null, null]),
+          hotel('0.6km'),
+        ])
+      )
+    );
+    renderPage();
+    await screen.findByTestId('map-sheet-shell-root');
+
+    const meta = screen.getByTestId('sheet-header-meta');
+    expect(meta).toHaveTextContent('4곳'); // 문자열 인자 = 완전 일치(02a §5)
+    expect(meta).not.toHaveTextContent(/km|이동|분|시간|소요/);
+    // 커넥터는 무변경(결정 2=A): 값 구간은 문구 칸, null 구간은 줄만.
+    expect(
+      screen.getByTestId(`sheet-connector-distance-${DAY1}#poi-a`)
+    ).toHaveTextContent('2.1km');
+    expect(
+      screen.getByTestId(`sheet-connector-distance-${DAY1}#poi-d`)
+    ).toHaveTextContent('0.6km');
+    for (const poiId of ['poi-b', 'poi-c']) {
+      expect(
+        screen.getByTestId(`sheet-connector-${DAY1}#${poiId}`)
+      ).toBeOnTheScreen();
+      expect(
+        screen.queryByTestId(`sheet-connector-distance-${DAY1}#${poiId}`)
+      ).toBeNull();
+    }
+    expect(renderedText()).not.toMatch(/\d+\s*(분|시간)|소요/);
+  });
+
+  it('T5b-2 · 첫 슬롯(거점→첫 방문지) 거리는 헤더 합에 안 들어간다 — 커넥터 합 "4곳 · 4.1km" 그대로', async () => {
+    // 준비 — 첫 슬롯에 9.9km. slice(1) 을 버리고 전 슬롯을 더하면 14.0km 가 된다.
+    useItinerary(() =>
+      HttpResponse.json(
+        itineraryOf('PLANNED', [
+          ...fourPois(['9.9km', '2.1km', '0.8km', '0.6km']),
+          hotel('0.6km'),
+        ])
+      )
+    );
+    renderPage();
+    await screen.findByTestId('map-sheet-shell-root');
+
+    expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(
+      '4곳 · 4.1km'
+    );
   });
 });

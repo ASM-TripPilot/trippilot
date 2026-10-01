@@ -31,9 +31,11 @@ import { DraftPage } from './DraftPage';
  *  - 🔴 셸 얼굴이 뜬다 — 전면 지도(`map-root`) + 좌상단 day-chip 오버레이(`sheet-daychip-*`) +
  *    시트 헤더(`sheet-header-*`) + 슬롯 카드(`slot-stopcard-*`) + 하단 CTA 바(`sheet-cta-root`).
  *    옛 DraftScreen 앱바(`itinerary-draft-back`·`-retry`·`-complete`·일차 탭)는 사라진다(AC-1).
- *  - 🟢 **narrow 가 INV-4 를 지킨다** — staleFailed 응답은 셸이 아니라 DraftScreen(staleFailed 배너)으로,
- *    fallback 응답은 전용 인터스티셜로 간다(AC-1b · INV-4 · TRIP-791 — broad 로 회귀하면 셸이 삼켜 red).
- *  - 🔴 확정하기 → h14(index 라우트) push 완전일치 / 다시 짜기 → 재생성 POST 1건(AC-2).
+ *  - 🔴 **INV-4 는 셸 안에서 지킨다** — staleFailed 응답도 셸로 가고 셸 시트 안에 staleFailed 안내가 붙는다
+ *    (TRIP-1039 로 narrow 를 풀었다 — 옛 계약 "staleFailed → DraftScreen" 을 뒤집음). fallback 응답은 여전히
+ *    전용 인터스티셜이 먼저 잡는다(AC-1b · TRIP-791).
+ *  - 🔴 확정하기 → h14(index 라우트) push 완전일치 / 다시 짜기 → 생성 화면 replace 1회 · 초안 화면 POST 0
+ *    (AC-2 · TRIP-1037 플립 — POST 는 생성 화면이 마운트될 때 보낸다).
  *  - 🔴 전 슬롯 시각 칩(isFixed 무관, en-dash) · 제거요소 부재 · 헤더 "N곳 · X.Xkm" · INV-3 0 ·
  *    다른 후보 ›는 비고정만(AC-3~7).
  *
@@ -59,11 +61,13 @@ jest.mock('@/shared/storage', () => ({
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
+// TRIP-1037 — 다시 짜기가 생성 화면으로 replace 한다. 관찰하려고 익명 목을 이름 있는 목으로 승격한다.
+const mockReplace = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({
     push: mockPush,
     back: mockBack,
-    replace: jest.fn(),
+    replace: mockReplace,
     canGoBack: () => true,
   }),
 }));
@@ -101,8 +105,8 @@ function trip(): Trip {
 /**
  * 하루치 3슬롯 — AC-3·AC-5·AC-7 을 한 픽스처로 잰다.
  *  - poi-b 는 **isFixed=true**(고정)인데도 시각 칩이 떠야 한다(AC-3 핵심 · BR-U3-07 개정).
- *  - 첫 슬롯 distanceRange 를 **null** 로 둬 legDistance 가 `slice(1)` 이든 전량 합이든 합이 같은
- *    3.5km 다(2.1+1.4) — 구현 해석에 안 흔들리게 한다.
+ *  - 첫 슬롯 distanceRange 는 **null**(거점 없는 날)이다. 헤더 합은 커넥터 구간(`slice(1)`)만 더하므로
+ *    3.5km(2.1+1.4)다 — TRIP-1110 이후 전 슬롯을 넘기면 첫 null 에 접혀 A5 가 red 가 된다(A5b-2 짝).
  *  - lat/lng 를 실어 셸 지도(map-root)가 마운트되고 DraftPage 가 center 를 계산하게 한다.
  */
 function daySlots(date: string): ItineraryDaysItemSlotsItem[] {
@@ -114,6 +118,7 @@ function daySlots(date: string): ItineraryDaysItemSlotsItem[] {
       isFixed: false,
       endsNextDay: false,
       hasViolation: false,
+      alternatives: [],
       tags: ['바다', '산책'],
       nameKo: '광안리 해변',
       category: '자연',
@@ -129,6 +134,7 @@ function daySlots(date: string): ItineraryDaysItemSlotsItem[] {
       isFixed: true,
       endsNextDay: false,
       hasViolation: false,
+      alternatives: [],
       tags: ['호텔'],
       nameKo: `${date} 숙소`,
       category: '숙소',
@@ -144,6 +150,7 @@ function daySlots(date: string): ItineraryDaysItemSlotsItem[] {
       isFixed: false,
       endsNextDay: false,
       hasViolation: false,
+      alternatives: [],
       tags: ['카페'],
       nameKo: '흰여울 마을',
       category: '자연',
@@ -182,6 +189,21 @@ function itinerary(input: {
   };
 }
 
+/** 깨끗한 COMPLETE 3일에서 매일 슬롯 a·b·c 의 distanceRange 만 `ranges` 로 덮어쓴다(TRIP-1110 헤더 케이스). */
+function completeWithRanges(ranges: (string | null)[]): Itinerary {
+  const base = itinerary({ dayCount: 3, generationState: 'COMPLETE' });
+  return {
+    ...base,
+    days: base.days.map((day) => ({
+      ...day,
+      slots: day.slots.map((slot, index) => ({
+        ...slot,
+        distanceRange: ranges[index],
+      })),
+    })),
+  };
+}
+
 /** GET /itinerary 응답을 케이스가 정한다. 기본은 깨끗한 COMPLETE 3일(→ h08 셸). */
 let itineraryHandler: () => Response;
 /** 다시 짜기(재생성) POST 가 몇 번 나갔나. */
@@ -207,6 +229,7 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 beforeEach(() => {
   mockPush.mockClear();
   mockBack.mockClear();
+  mockReplace.mockClear();
   postCount = 0;
   setAccessToken('valid-access');
   itineraryHandler = () =>
@@ -271,22 +294,25 @@ describe('🔴 A1 · AC-1 — 깨끗한 COMPLETE 면 h08 셸 얼굴이 뜬다 (D
   });
 });
 
-describe('A1b · AC-1b — narrow 가 INV-4 를 지킨다 (staleFailed → DraftScreen · fallback → 인터스티셜)', () => {
-  it('staleFailed(FAILED+슬롯) 응답은 셸이 아니라 DraftScreen(staleFailed 배너)로 간다 (선제 green)', async () => {
-    // 준비 — FAILED+day1 슬롯 → resolveDraftView: listed + staleFailed. narrow 는 이걸 셸에서 뺀다.
-    // TRIP-791 무영향: FAILED 는 fallbackNotice=null(isFallback=false)이라 인터스티셜로 안 가고
-    // 목록 곁 staleFailed 배너를 유지한다(stale-failed 배너는 폴백 배너와 별개, 삭제 대상 아님).
+describe('A1b · AC-1b — INV-4 는 셸 안에서 지킨다 (staleFailed → 셸 + 안내 · fallback → 인터스티셜)', () => {
+  it('🔴 staleFailed(FAILED+슬롯) 응답은 셸로 가고 시트 안에 staleFailed 안내가 붙는다 (TRIP-1039 플립)', async () => {
+    // 준비 — FAILED+day1 슬롯 → resolveDraftView: listed + staleFailed. TRIP-1039 가 셸 조건에서
+    // `!staleFailed` 를 뺐다 — 안내는 셸 시트 안으로 옮겨 간다(INV-4 — 안내 소실 금지).
     itineraryHandler = () =>
       HttpResponse.json(itinerary({ dayCount: 1, generationState: 'FAILED' }));
 
     renderPage();
 
-    // DraftScreen staleFailed 배너가 그대로 뜬다(INV-4 — 목록 곁 배너 소실 금지).
     expect(
-      await screen.findByTestId('itinerary-draft-stale-failed')
+      await screen.findByTestId(
+        'itinerary-draft-stale-failed',
+        {},
+        { timeout: 4000 }
+      )
     ).toBeOnTheScreen();
-    // ★ 셸이 아니다 — broad 로 회귀하면(이 응답까지 셸로 보내면) 여기가 red 로 잡는다.
-    expect(screen.queryByTestId('map-sheet-shell-root')).toBeNull();
+    // ★ 셸이다 — 옛 목록(DraftScreen 스크롤)으로 새면 여기가 red 로 잡는다.
+    expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
+    expect(screen.queryByTestId('itinerary-draft-scroll')).toBeNull();
   });
 
   it('🔴 fallback(DETERMINISTIC+isFallback) 응답은 셸도 DraftScreen 도 아닌 인터스티셜로 간다 (TRIP-791)', async () => {
@@ -336,17 +362,23 @@ describe('🔴 A2 · AC-2 — CTA 두 갈래 배선 (혼동 방지)', () => {
     expect(dest.params?.tripId).toBe(TRIP_ID);
   });
 
-  it('다시 짜기 press → 재생성 POST 가 한 건 나간다', async () => {
+  it('다시 짜기 press → 생성 화면으로 replace 1회(mode=FULLY_AI) · 초안 화면 POST 0 (TRIP-1037 플립)', async () => {
     renderPage();
     await screen.findByTestId('sheet-cta-root');
 
     // 순서 계약 — cta[0]=다시 짜기(outline).
     const retry = screen.getByTestId('sheet-cta-button-0');
     expect(retry).toHaveTextContent('다시 짜기');
-    const before = postCount;
     fireEvent.press(retry);
 
-    await waitFor(() => expect(postCount).toBe(before + 1));
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/itinerary/generating',
+      params: { tripId: TRIP_ID, mode: 'FULLY_AI' },
+    });
+    // POST 는 생성 화면 몫 — 흘려 보낸 뒤에도 초안 화면이 보낸 것은 0이다.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(postCount).toBe(0);
   });
 });
 
@@ -417,5 +449,56 @@ describe('🔴 A7 · AC-7 — "다른 후보 ›"는 비고정 슬롯에만 뜬�
     ).toBeOnTheScreen();
     // 고정 슬롯엔 onPressAlt 미주입 → 링크 부재.
     expect(screen.queryByTestId(`slot-stopcard-alt-${DAY1}#poi-b`)).toBeNull();
+  });
+});
+
+describe('🔴 TRIP-1076 AC-3 · h08 결과 지도는 핀 전부에 맞춰 연다', () => {
+  it('셸 지도에 핀 2개 이상과 fitPins 가 함께 전달된다', async () => {
+    // 준비·실행 — 기본 COMPLETE 응답으로 셸 얼굴을 연다.
+    renderPage();
+    await screen.findByTestId('map-sheet-shell-root');
+
+    // 단언 — 관찰 목(map-root)은 셸이 MapView 에 넘긴 props 를 그대로 싣는다.
+    const map = screen.getByTestId('map-root');
+    expect((map.props.pins as unknown[]).length).toBeGreaterThanOrEqual(2);
+    expect(map.props.fitPins).toBe(true);
+  });
+});
+
+describe('🔴 A5b · TRIP-1110 AC-5·AC-6 — h08 헤더 meta 는 커넥터 구간(slice(1))만 보고, 하나라도 비면 km 를 접는다', () => {
+  it('A5b-1 · 커넥터 구간에 null 이 섞이면 meta 는 정확히 "3곳"이고 null 커넥터는 글리프 줄만 남는다', async () => {
+    // 준비 — a→b 구간 2.1km, b→c 구간 null(교체 뒤 재산출 전). 옛 스킵 규약이면 "3곳 · 2.1km"(부분합).
+    itineraryHandler = () =>
+      HttpResponse.json(completeWithRanges([null, '2.1km', null]));
+
+    renderPage();
+    await screen.findByTestId('map-sheet-shell-root');
+
+    const meta = screen.getByTestId('sheet-header-meta');
+    expect(meta).toHaveTextContent('3곳'); // 문자열 인자 = 완전 일치(02a §5)
+    expect(meta).not.toHaveTextContent(/km|이동|분|시간|소요/);
+    // 커넥터는 무변경(결정 2=A) — 값 있는 구간은 서버 문자열 그대로, null 구간은 줄만 있고 문구 칸이 없다.
+    expect(
+      screen.getByTestId(`sheet-connector-distance-${DAY1}#poi-a`)
+    ).toHaveTextContent('2.1km');
+    expect(
+      screen.getByTestId(`sheet-connector-${DAY1}#poi-b`)
+    ).toBeOnTheScreen();
+    expect(
+      screen.queryByTestId(`sheet-connector-distance-${DAY1}#poi-b`)
+    ).toBeNull();
+  });
+
+  it('A5b-2 · 첫 슬롯(거점→첫 방문지) 거리는 커넥터가 없으니 헤더 합에도 안 들어간다 — "3곳 · 3.5km"', async () => {
+    // 준비 — 거점 있는 날: 첫 슬롯에도 0.9km. 전 슬롯을 더하면 4.4km 가 된다(옛 Draft 모집단).
+    itineraryHandler = () =>
+      HttpResponse.json(completeWithRanges(['0.9km', '2.1km', '1.4km']));
+
+    renderPage();
+    await screen.findByTestId('map-sheet-shell-root');
+
+    expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(
+      '3곳 · 3.5km'
+    );
   });
 });

@@ -12,7 +12,7 @@ import { makeAuthorize } from './makeAuthorize';
  * **계약 변경(게이트①-2)**: 이전 판은 결과를 `@/mocks/scenarios` 의 활성 시나리오에서 읽었다.
  * 그 한 필드 때문에 207줄 목 모듈이 앱 정적 그래프에 실렸다(반려 사유). 이제 결과의 출처는
  * **env `EXPO_PUBLIC_AUTH_FAKE_OUTCOME`** 이며 이 파일은 `@/mocks/*` 를 전혀 참조하지 않는다.
- * 그 계약은 `src/__tests__/noMswInStaticGraph.test.ts` 가 기계적으로 강제한다.
+ * 그 계약은 eslint `no-restricted-imports`(TRIP-1145 · `importBoundaryLayers` 탐침)가 강제한다.
  *
  * 3동작: 준비(env 설정) → 실행(makeAuthorize(provider)() 호출) → 단언(AuthorizeResult).
  */

@@ -156,7 +156,7 @@ class HttpScheduleAgentAdapter(
     }
 
     /**
-     * 재계획 — **전용 경로**(`POST /ai/v1/itinerary/replan` · 연동 설계 §2).
+     * 재계획 — **전용 경로**(`POST /ai/v1/planb/replan` · 연동 설계 §2).
      *
      * 종전에는 잠금을 고정 블록으로 승격해 `generate` 를 재사용했다. 그 계약에는 자리가 없어
      * **사유·지시·자유입력·원 일정 슬롯·담은 장소가 전부 버려졌다** — 상대는 그것들을 RAG 컨텍스트와
@@ -165,9 +165,10 @@ class HttpScheduleAgentAdapter(
      * 이제 열 종을 다 싣는다. 창은 여전히 **하루 전체**이고 '지금 이후만' 은 잠금으로 표현한다
      * (정본 §3.1) — 창을 좁히면 오전에 잠긴 고정 블록이 창 밖이 되어 상대가 모순으로 거부한다(실측 409).
      *
-     * **앵커는 필수다.** 상대가 후보 풀을 좌표에 매단다 — 없으면 422 다(실측). 기준점은 현재 위치이고
-     * 없으면 호출측이 숙소 앵커로 채워 준다(BR-U4-19 사다리). 그래서 여기서 좌표가 비면 **부르기 전에**
-     * 실패로 올린다 — 빈 앵커로 부르면 상대의 422 가 "AI 가 이상하다"로 보인다.
+     * **앵커는 필수다.** 상대가 후보 풀을 좌표에 매단다 — 없으면 422 다(실측). 기준점은 호출측
+     * 사다리(현재 위치 → 숙소 앵커 → 목적지 중심, BR-U4-19 · TRIP-963)가 채워 준다. 그래서 여기서
+     * 좌표가 비면 **부르기 전에** 실패로 올린다 — 사다리를 다 태우고도 비었다는 뜻이고, 빈 앵커로
+     * 부르면 상대의 422 가 "AI 가 이상하다"로 보인다.
      */
     override fun replan(input: ReplanInput): ScheduleAgentOutput {
         val lat = input.originLat
@@ -203,6 +204,7 @@ class HttpScheduleAgentAdapter(
                 )
             },
             savedPlaces = input.savedPlaces.map { AiSavedPlace(it.poiId.toString(), it.name) },
+            rejections = input.rejections,
             excludedPoiIds = input.excludedPoiIds,
         )
 
@@ -250,7 +252,7 @@ class HttpScheduleAgentAdapter(
     }
 
     /**
-     * 슬롯 후보 — `POST /ai/v1/itinerary/alternatives` 실호출(TRIP-463 · 연동 설계 정본:
+     * 슬롯 후보 — `POST /ai/v1/planb/alternatives` 실호출(TRIP-463 · 연동 설계 정본:
      * `backend/docs/design/ai-backend-alternatives-연동-설계.md`).
      *
      * AI 가 더하는 것은 **순위와 이유**다(집합의 주인은 C7·INV-1). 응답에 없는 값 — 거리·반경·시각 —
@@ -356,8 +358,14 @@ class HttpScheduleAgentAdapter(
         internal const val VALIDATE_PATH = "/ai/v1/itinerary/validate"
         internal const val REPAIR_PATH = "/ai/v1/itinerary/repair"
         internal const val EXPLANATIONS_PATH = "/ai/v1/itinerary/explanations"
-        internal const val ALTERNATIVES_PATH = "/ai/v1/itinerary/alternatives"
-        internal const val REPLAN_PATH = "/ai/v1/itinerary/replan"
+        // **여행 중 변수 대응 둘은 `/planb` 접두사다**(TRIP-960 ② · AI #749 별칭 개통).
+        // 처리자가 PlanBAgent(RAG·상황 지식)라 경로 이름이 실제 배정을 말한다 — 접두사가
+        // `/itinerary` 하나뿐이던 시절, 그 혼동이 실제 배선 뒤바뀜으로 이어졌다(백지 생성
+        // 에이전트가 변수 대응 경로에 있었다 — AI #744 가 고쳤다).
+        // 구 경로(`/ai/v1/itinerary/{replan,alternatives}`)는 상대가 별칭과 함께 아직 열어 두고
+        // 있고, **이 상수에서 구 경로가 사라지는 것이 상대의 구 경로 삭제 조건**이다(TRIP-960 ④).
+        internal const val ALTERNATIVES_PATH = "/ai/v1/planb/alternatives"
+        internal const val REPLAN_PATH = "/ai/v1/planb/replan"
 
         /** 상대가 경로는 열었지만 배선 전일 때의 코드(`ai/src/trippilot/api/errors.py`). 한시 폴백의 유일한 방아쇠다. */
         private const val NOT_WIRED = "ORCHESTRATOR_NOT_WIRED"

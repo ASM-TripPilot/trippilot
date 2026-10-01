@@ -6,8 +6,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { formatDayLabel } from '@/entities/trip/lib/formatDayLabel';
 import { MapView, type MapCenter, type MapPin } from '@/shared/map';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
+import { StateNotice } from '@/shared/ui/StateNotice';
 import type { ReflectionStats } from '@/shared/api/generated/schemas';
 
+import type { MapNotice } from '../model/missingParts';
 import { ChangeSummaryRow } from './ChangeSummaryRow';
 import { NarrativeBlock } from './NarrativeBlock';
 import {
@@ -26,11 +28,12 @@ import { ReflectionStatsRow } from './ReflectionStatsRow';
  * import — 프리뷰 격리 렌더 안전, FSD 경계). 화면은 완성된 `narrative`·`editableText` 를 받고,
  * `draftNarrative`/`editedNarrative`/`resolveDisplayNarrative` 어느 것도 참조하지 않는다.
  *
- * 4얼굴(TRIP-763: 일차 탭·하단 탭바(기록)·헤더 "편집"은 전 얼굴 공통 크롬):
+ * 5얼굴(TRIP-763: 일차 탭·하단 탭바(기록)·헤더 "편집"은 전 얼굴 공통 크롬):
  *  - default            : stats · 풀폭 지도(좌표 있을 때만) · 서술 카드 · 사진 그리드 · "확인".
  *  - data-insufficient  : stats(거리 "—") + 지도 자리 사유(제목/본문 2줄) + 서술 + "사진 없음" 자리 · "확인".
  *  - empty              : 빈 원 일러스트 + "오늘 기록된 활동이 없습니다" · 하단 CTA "직접 회고 작성".
  *  - error              : stats 채움(BASIC 카드, INV-U5-07) + 에러 카드(다시 시도) · CTA "직접 회고 작성".
+ *  - pending            : (TRIP-1068) 조회·생성 중 안내 본문만 · 하단 CTA 없음(empty 로 접지 않는다, INV-4).
  *
  * ★ 신규 표면 prop(dayTabs·activeDay·onSelectDay·onPressTab)은 전부 **옵셔널** — 미주입 호출자(프리뷰·
  *   무회귀 테스트)가 그대로 컴파일된다. Figma 의 기분 3택·메모 입력은 그리지 않는다(TRIP-935 R7) —
@@ -47,7 +50,7 @@ import { ReflectionStatsRow } from './ReflectionStatsRow';
  */
 
 export type ReflectionFace =
-  'default' | 'data-insufficient' | 'empty' | 'error';
+  'default' | 'data-insufficient' | 'empty' | 'error' | 'pending';
 
 /** 일차 탭 VM(페이지가 여행 기간에서 조립). `day` 는 1-기반 일차 번호(record 의 date 문자열과 다름, G2). */
 export interface ReflectionDayTab {
@@ -63,7 +66,7 @@ export interface DailyReflectionScreenProps {
   editableText: string;
   stats: ReflectionStats;
   distanceDash: boolean;
-  mapNotice: { title: string; body: string } | null;
+  mapNotice: MapNotice | null;
   hidePhotoGrid: boolean;
   // photos 는 읽기만 하므로 readonly — 호출자가 `[] as const` 로 넘겨도 받는다(가변 배열도 그대로 할당됨).
   photos: readonly { uri: string }[];
@@ -78,9 +81,23 @@ export interface DailyReflectionScreenProps {
   onSelectDay?: (day: number) => void;
   /** TRIP-762(default) — 하단 탭바 라우팅. */
   onPressTab?: (key: ShellTabKey) => void;
+  /**
+   * TRIP-980 · 보고 있는 날이 KST 오늘인가(옵셔널, 미주입=오늘). 아니면 헤더 "하루 회고"·empty
+   * "이 날 기록된 활동이 없습니다"(사용자 확정 D2).
+   */
+  isToday?: boolean;
+  /**
+   * TRIP-1119 · 헤더 ‹ 뒤로가기(옵셔널, 미주입=‹ 는 그리되 눌러도 이동 없음). 편집 중 ‹ 는 화면이
+   * 먼저 가로채 편집만 닫는다(결정 2 b — 편집은 화면 안 하위 상태, onBack 0회).
+   */
+  onBack?: () => void;
   onEnterEdit: () => void;
   onConfirm: () => void;
-  onSaveEdit: (text: string) => void;
+  /**
+   * 저장. Promise 를 돌려주면 true(성공)일 때만 편집을 닫고, false 면 편집·입력을 그대로 둔 채 실패를
+   * 알린다(TRIP-980, INV-4). 결과를 안 돌려주는 호출자(프리뷰·화면 테스트)는 예전처럼 즉시 닫는다.
+   */
+  onSaveEdit: (text: string) => void | Promise<boolean>;
 }
 
 export function DailyReflectionScreen({
@@ -99,27 +116,46 @@ export function DailyReflectionScreen({
   activeDay,
   onSelectDay,
   onPressTab,
+  isToday = true,
+  onBack,
   onEnterEdit,
   onConfirm,
   onSaveEdit,
 }: DailyReflectionScreenProps): ReactElement {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(editableText);
+  const [saveFailed, setSaveFailed] = useState(false);
   const canSave = text.trim().length > 0;
   const isDataFace = face === 'default' || face === 'data-insufficient';
 
   const handleEnterEdit = () => {
     onEnterEdit();
     setText(editableText);
+    setSaveFailed(false);
     setEditing(true);
   };
   const handleCancel = () => {
     setEditing(false);
   };
+  const handleBack = () => {
+    if (editing) {
+      handleCancel();
+      return;
+    }
+    onBack?.();
+  };
   const handleSave = () => {
     if (!canSave) return;
-    onSaveEdit(text);
-    setEditing(false);
+    setSaveFailed(false);
+    const pending = onSaveEdit(text);
+    if (!(pending instanceof Promise)) {
+      setEditing(false);
+      return;
+    }
+    void pending.then((saved) => {
+      if (saved) setEditing(false);
+      else setSaveFailed(true);
+    });
   };
 
   const hasMap = mapCenter !== undefined && (mapPins?.length ?? 0) > 0;
@@ -142,7 +178,10 @@ export function DailyReflectionScreen({
           <Text className="text-center font-noto-bold text-body font-bold text-ink">
             {mapNotice.title}
           </Text>
-          <Text className="text-center font-noto text-label text-muted">
+          <Text
+            testID={`reflection-daily-map-notice-reason-${mapNotice.reason}`}
+            className="text-center font-noto text-label text-muted"
+          >
             {mapNotice.body}
           </Text>
         </>
@@ -158,11 +197,18 @@ export function DailyReflectionScreen({
     <SafeAreaView edges={['top']} style={{ flex: 1 }} className="bg-canvas">
       {/* 헤더 — 뒤로 · 제목 · (data 얼굴·비편집) 편집 링크. TRIP-762: 헤더 공유 제거(j03 공유 0). */}
       <View className="w-full flex-row items-center bg-canvas pb-[12px] pl-[12px] pr-lg pt-[4px]">
-        <View className="pr-[4px]">
+        <Pressable
+          testID="reflection-daily-back"
+          accessibilityRole="button"
+          accessibilityLabel="뒤로"
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          onPress={handleBack}
+          className="pr-[4px]"
+        >
           <BackArrowGlyph size={24} />
-        </View>
+        </Pressable>
         <Text className="font-noto-bold text-[18px] font-bold text-ink">
-          오늘의 회고
+          {isToday ? '오늘의 회고' : '하루 회고'}
         </Text>
         <View className="flex-1" />
         {!editing ? (
@@ -231,6 +277,11 @@ export function DailyReflectionScreen({
               placeholder="직접 회고를 작성해 보세요"
               className="min-h-[180px] rounded-card border border-hairline-strong bg-canvas p-lg font-noto text-body text-ink"
             />
+            {saveFailed ? (
+              <Text className="font-noto text-label text-primary-text">
+                저장하지 못했어요. 다시 시도해 주세요
+              </Text>
+            ) : null}
             <View className="flex-row gap-sm">
               <Pressable
                 testID="reflection-daily-edit-cancel"
@@ -260,6 +311,16 @@ export function DailyReflectionScreen({
               </Pressable>
             </View>
           </View>
+        ) : face === 'pending' ? (
+          <StateNotice
+            testID="reflection-daily-pending"
+            illustration={
+              <View className="h-[72px] w-[72px] rounded-full bg-surface-soft" />
+            }
+            title="회고를 준비하고 있어요"
+            description="잠시만 기다려 주세요"
+            actions={[]}
+          />
         ) : face === 'empty' ? (
           <View
             testID="reflection-daily-empty"
@@ -267,7 +328,9 @@ export function DailyReflectionScreen({
           >
             <EmptyCircleGlyph size={60} />
             <Text className="font-noto text-body text-muted">
-              오늘 기록된 활동이 없습니다
+              {isToday
+                ? '오늘 기록된 활동이 없습니다'
+                : '이 날 기록된 활동이 없습니다'}
             </Text>
           </View>
         ) : face === 'error' ? (
@@ -373,12 +436,12 @@ export function DailyReflectionScreen({
         )}
       </ScrollView>
 
-      {/* 하단 — 탭바(기록 활성)는 전 얼굴 공통 오버레이. 비-default 얼굴은 그 위에 CTA 를 함께 얹는다
+      {/* 하단 — 탭바(기록 활성)는 전 얼굴 공통 오버레이. default·pending 외 얼굴은 그 위에 CTA 를 함께 얹는다
           (data-insufficient: "확인" · empty/error: "직접 회고 작성"=편집 진입). CTA 는 탭바 높이(96)만큼
           아래 여백을 둬 탭바 위에 앉는다(세로 순서 자체는 6-b 육안). 편집 중엔 모두 숨김. */}
       {editing ? null : (
         <>
-          {face !== 'default' ? (
+          {face !== 'default' && face !== 'pending' ? (
             <View className="w-full bg-canvas px-lg pb-[104px] pt-[8px]">
               {isDataFace ? (
                 <Pressable

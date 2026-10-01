@@ -166,7 +166,7 @@ describe('🔴 S6 · AC-5 — 지도 카드는 pins 있을 때만 뜬다 (INV-2 
     );
 
     // 긍정 — 지도 카드 래퍼가 뜨고, 그 안이 placeholder 가 아니라 실 MapView(목 map-native)다.
-    // (viewOnly·connectPins={false}·연결선 0 은 소스층 `itineraryMapSurfaceStructure` S2·S8 이 잠근다.)
+    // (viewOnly·connectPins={false}·연결선 0 을 잠그던 소스층 `itineraryMapSurfaceStructure` 는 TRIP-1145 로 지웠다.)
     const map = screen.getByTestId('itinerary-generating-map');
     expect(within(map).getByTestId('map-native')).toBeTruthy();
   });

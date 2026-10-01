@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 
@@ -24,8 +25,12 @@ import type {
  * 성공 시 그 날 방문 기록을 무효화(재조회)하고, 실패 시엔 무효화하지 않는다 — 재요청이 롤백을
  * 덮으면 "되돌렸나"를 관측할 수 없다(savedPlaces 규율).
  *
- * ★ liveTimeStructure 가드(features/execution/**): `new Date` 류 금지. 낙관 레코드의 arrivedAt/
+ * ★ BR-U4-34(features/execution/**, 기계 강제 없음): `new Date` 류 금지. 낙관 레코드의 arrivedAt/
  * completedAt 은 서버 응답 도착 시 재조회로 대체되는 임시값이라, 시계 대신 `day` 기반 문자열을 쓴다.
+ *
+ * TRIP-1021 · 연타 가드 — 같은 슬롯(키 없으면 poi)의 도착 요청이 진행 중이면 두 번째 호출은 요청 없이
+ * `conflict` 로 끝난다. 캐시 갱신의 재렌더가 미뤄져 첫 press 직후에도 [도착]이 트리에 남기 때문이다.
+ * 두 낙관 레코드는 id(`optimistic:{poiId}`)가 같아 한쪽 롤백이 둘 다 지운다.
  */
 
 export type VisitCheckOutcome =
@@ -47,6 +52,7 @@ export function useVisitCheck(deps: { tripId: string; day: string }) {
   // 낙관 레코드의 시각 자리표시자 — 서버 재조회로 대체되는 임시값(정확한 시각이 아님).
   // `new Date` 를 못 쓰는 execution 가드 하에서 non-null 시각 자리를 채우는 최소값.
   const optimisticAt = `${deps.day}T00:00:00`;
+  const arriving = useRef(new Set<string>());
 
   /** 그 날 방문 기록 캐시를 갱신자 함수로 고친다(현재 캐시 기준 — 통짜 스냅숏 복원 금지). */
   function patchCache(update: (visits: VisitCheck[]) => VisitCheck[]): void {
@@ -60,6 +66,11 @@ export function useVisitCheck(deps: { tripId: string; day: string }) {
     poiId: string;
     source: ArriveRequestSource;
   }): Promise<VisitCheckOutcome> {
+    const inFlightKey = input.slotKey ?? input.poiId;
+    if (arriving.current.has(inFlightKey)) {
+      return { kind: 'failed', reason: 'conflict' };
+    }
+    arriving.current.add(inFlightKey);
     const optimisticId = `optimistic:${input.poiId}`;
     const optimistic: VisitCheck = {
       visitCheckId: optimisticId,
@@ -91,6 +102,8 @@ export function useVisitCheck(deps: { tripId: string; day: string }) {
         visits.filter((v) => v.visitCheckId !== optimisticId)
       );
       return { kind: 'failed', reason: classifyFailure(error) };
+    } finally {
+      arriving.current.delete(inFlightKey);
     }
   }
 

@@ -6,9 +6,8 @@ import { stayKey } from './stayKey';
  * 무엇을 보장하나: `stayKey`가 `${externalSource}:${externalId}` 형태로 문자열을 합성하고,
  * 공급자(externalSource)가 다르면 externalId가 같아도 키가 갈라진다(충돌 방지). React 리스트
  * key와 카드 testID가 이 함수 하나에서만 나온다는 단일 출처 계약은 렌더 층
- * (`StaySearchScreen.test.tsx` it 2-2가 이 함수의 반환값으로 기대 testID를 역산하는 방식)과
- * 소스 층(`staySearchStructure.test.ts` it 4-4가 화면 소스에 `externalId` 리터럴 조립이 없음을
- * 확인하는 방식)이 이어서 잠근다 — 이 파일은 그 출발점인 함수 자체만 본다.
+ * (`StaySearchScreen.test.tsx` it 2-2가 이 함수의 반환값으로 기대 testID를 역산하는 방식)이
+ * 잠근다(소스 층 짝이던 `staySearchStructure` it 4-4 는 TRIP-1145 로 지웠다) — 이 파일은 그 출발점인 함수 자체만 본다.
  *
  * PBT(fast-check) 미적용 — `frontend-components.md` §7의 PBT 대상 4건(resolveCoverage·
  * nightsSum·formatPrice·seedMustVisits)에 stayKey는 없다(02a §4 파일1 실측). 콜론 결합 한 줄에

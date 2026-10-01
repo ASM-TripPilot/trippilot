@@ -168,3 +168,27 @@ describe('AC-2 · 폴백 3단 우선순위 (BR-U5-32/35)', () => {
     expect(resolveDisplayNarrative(undefined).trim().length).toBeGreaterThan(0);
   });
 });
+
+describe('🔴 TRIP-1086 AC-3 · 폴백 ③ 문장의 이동 거리는 0.1 단위', () => {
+  it('세 카드가 전부 비면 BASIC 문장에 "이동 1.9km" 가 들어가고 날값은 없다', () => {
+    // 준비 — 표시본 후보가 전부 비어 ③(stats 조립)으로 떨어지는 응답.
+    const res = reflection({
+      card: card(''),
+      editedCard: card(''),
+      draftCard: card(''),
+      stats: {
+        visitCount: 4,
+        distanceKm: 1.9294588176597474,
+        distanceSource: 'VISIT_LINE',
+        photoCount: 6,
+      },
+    });
+
+    // 실행.
+    const display = resolveDisplayNarrative(res);
+
+    // 단언 — 반올림된 거리 + 날값 부재 짝.
+    expect(display).toContain('이동 1.9km');
+    expect(display).not.toContain('1.929');
+  });
+});

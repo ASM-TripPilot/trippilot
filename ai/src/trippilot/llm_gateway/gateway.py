@@ -12,6 +12,7 @@ C1Config.fallback_modes에서 읽는다 (TRIP-260 #4).
 
 from __future__ import annotations
 
+import time
 from collections.abc import Mapping
 from datetime import datetime
 from typing import Protocol
@@ -133,9 +134,10 @@ class GatewayFacade:
         # 4 호출 — SDK가 닿는 유일한 지점
         # 호출측 단계 예산 override (TRIP-376) — PREFERENCE_SCORING처럼 단계 상한이
         # 있는 호출이 넘긴다. 미지정이면 설정 기본.
-        response, reason = self._invoke(
+        response, reason, spent_ms = self._invoke(
             model_id, prompt, prompt_ref,
             self._cfg.timeout_sec if timeout_sec is None else timeout_sec, images,
+            self._cfg.max_tokens_for(feature),
         )
         retry_model = self._cfg.retry_models.get(feature)
         if (
@@ -146,20 +148,21 @@ class GatewayFacade:
             # 여기서 만드는 것은 여전히 LLM 답이지 대체 계산이 아니다(BR-U4-09).
             self._trace.emit(self._record(
                 feature, model_id, prompt_ref, trace_id, now, None, success=False,
-                consent_ref=consent_ref,
+                consent_ref=consent_ref, spent_ms=spent_ms,
             ))
             self._trace.emit(FallbackEvent(
                 trace_id=trace_id, occurred_at=now, component=_COMPONENT, stage="llm",
                 from_mode=f"llm:{model_id}", to_mode=f"llm:{retry_model}", reason=reason,
             ))
             model_id = retry_model
-            response, reason = self._invoke(
+            response, reason, spent_ms = self._invoke(
                 model_id, prompt, prompt_ref, retry_timeout_sec, images,
+                self._cfg.max_tokens_for(feature),
             )
         if response is None:
             return self._fallback(
                 feature, model_id, prompt_ref, trace_id, now, None, reason,
-                consent_ref=consent_ref,
+                consent_ref=consent_ref, spent_ms=spent_ms,
             )
         # 5·6 파서 + closed-set 게이트 (INV-1)
         outcome = self._gate.apply(
@@ -168,13 +171,18 @@ class GatewayFacade:
         if outcome.drop_event is not None:
             self._trace.emit(outcome.drop_event)
         if outcome.error is not None:
+            # 출력 상한에서 잘린 응답은 파싱 실패와 처방이 다르다(상한 조정) — 사유를 가른다.
+            # 잘린 JSON 은 부분 복구하지 않고 전량 폐기한다(현행 유지).
+            error = (
+                f"truncated: {outcome.error}" if response.truncated else outcome.error
+            )
             # "빈 결과가 실패인가"는 feature 의미론이라 게이트가 정한다 (TRIP-260 #5).
             # 여기서 `not outcome.value` 를 함께 보던 동안, 추출 계열이 내는
             # **성공·0건**(그 기간 그 지역에 행사가 없음)이 폴백으로 뒤집혔다.
             # 사유 라벨 2종(gate_dropped_all / llm_empty_result)은 게이트의
             # `empty_result_error` 가 그대로 유지한다 — 2026-08-25 사고의 산물이다.
             return self._fallback(
-                feature, model_id, prompt_ref, trace_id, now, response, outcome.error,
+                feature, model_id, prompt_ref, trace_id, now, response, error,
                 consent_ref=consent_ref,
             )
         # 7 성공 조립 + 계측 (BR-U4-03)
@@ -194,29 +202,42 @@ class GatewayFacade:
         prompt_ref: PromptRef,
         timeout_sec: float,
         images: tuple[LlmImagePart, ...],
-    ) -> tuple[LlmResponse, None] | tuple[None, str]:
-        """벤더 호출 1회 → (응답, None) 또는 (None, 폴백 사유). 예외를 위로 던지지 않는다."""
+        max_tokens: int,
+    ) -> tuple[LlmResponse | None, str | None, int]:
+        """벤더 호출 1회 → (응답, 폴백 사유, 경과 ms). 예외를 위로 던지지 않는다.
+
+        **경과는 성공·실패 모두 여기서 잰다.** 실패에는 응답 객체가 없어서 종전에는
+        `LlmCallRecord.latency_ms` 가 0 으로 남았고, 그래서 "벤더가 예산을 먹고 있다"가
+        관측에서 사라졌다 — 2026-09-29 실서비스 504(Bedrock 콜드스타트 재시도로 항목당
+        11.9초)가 로그에 0ms 로 찍힌 것이 그 결과다. 어댑터마다 싣게 하면 벤더별로
+        빠지므로 측정 지점을 여기 하나로 둔다.
+        """
+        started = time.monotonic()
+
+        def elapsed_ms() -> int:
+            return int((time.monotonic() - started) * 1000)
+
         try:
             response = self._llm.invoke(
                 LlmRequest(
                     model_id=model_id,
                     prompt=prompt,
                     prompt_ref=prompt_ref,
-                    max_tokens=self._cfg.max_tokens,
+                    max_tokens=max_tokens,
                     timeout_sec=timeout_sec,
                     images=images,
                 )
             )
         except LlmTimeoutError as e:
-            return None, f"timeout: {e}"
+            return None, f"timeout: {e}", elapsed_ms()
         except LlmUnsupportedError as e:
             # 타임아웃과 같은 자리 — 다만 사유를 가른다. 비지원은 재시도해도 같은 결과라
             # 호출측 처방이 "이번엔 실패"가 아니라 "이 경로를 포기하고 강등"이다
             # (BR-U6R-10 — 조용한 이미지 무시 금지, 강등은 명시 신호로).
-            return None, f"unsupported: {e}"
+            return None, f"unsupported: {e}", elapsed_ms()
         except Exception as e:  # 벤더 예외 포함 전부 폴백 신호로 (BR-U4-02)
-            return None, f"llm_error: {e}"
-        return response, None
+            return None, f"llm_error: {e}", elapsed_ms()
+        return response, None, elapsed_ms()
 
     def _fallback(
         self,
@@ -228,10 +249,11 @@ class GatewayFacade:
         response: LlmResponse | None,
         reason: str,
         consent_ref: str | None = None,
+        spent_ms: int = 0,
     ) -> TypedResult[tuple[ScoredPoi, ...]]:
         record = self._record(
             feature, model_id, prompt_ref, trace_id, now, response, success=False,
-            consent_ref=consent_ref,
+            consent_ref=consent_ref, spent_ms=spent_ms,
         )
         self._trace.emit(record)
         # 폴백 모드는 feature별 실체 — 매핑에 없으면 지어내지 않고 unmapped로 드러낸다
@@ -262,6 +284,7 @@ class GatewayFacade:
         *,
         success: bool,
         consent_ref: str | None = None,
+        spent_ms: int = 0,
     ) -> LlmCallRecord:
         return LlmCallRecord(
             trace_id=trace_id,
@@ -272,7 +295,9 @@ class GatewayFacade:
             prompt_ref=prompt_ref,
             input_tokens=response.input_tokens if response else 0,
             output_tokens=response.output_tokens if response else 0,
-            latency_ms=response.latency_ms if response else 0,
+            # 응답이 없으면(타임아웃·벤더 예외) 게이트웨이가 잰 경과를 쓴다 — 0 으로
+            # 적으면 벤더가 예산을 먹는 사실이 관측에서 사라진다(`_invoke` 독스트링).
+            latency_ms=response.latency_ms if response else spent_ms,
             success=success,
             agent=None,
             consent_ref=consent_ref,  # 이미지 호출의 동의 근거 (BR-U6R-09)

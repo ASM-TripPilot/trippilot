@@ -5,7 +5,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import type { Region } from '@/shared/api/generated/schemas';
+import { RegionLevel } from '@/shared/api/generated/schemas';
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { Skeleton } from '@/shared/ui/Skeleton';
 
 import { groupRegionsBySido, regionTint } from '../model/regions';
 import type { RegionGroup } from '../model/regions';
@@ -35,7 +37,7 @@ import {
  * 드릴다운 상태(`openSidoCode`)는 화면 로컬 뷰 상태다 — 프롭 시그니처는 그대로다.
  *
  * ⚠️ `@/shared/api`·쿼리 훅·`expo-location`을 **전이 의존으로라도** 물면 안 된다 —
- * dev 프리뷰가 이 화면을 정적으로 그리고 `devPreview.test.tsx`의 지뢰 목이 즉시 터진다.
+ * dev 프리뷰가 이 화면을 정적으로 그리고 프리뷰 스모크(`devPreviewReleaseGate.test.tsx`)의 지뢰 목이 즉시 터진다.
  * (그래서 `useRegions`가 아니라 `regionTint`만 model에서 가져온다 — 그 훅은 지연 로드된다.)
  */
 
@@ -105,9 +107,11 @@ const POPULAR_TAGLINE: Record<string, string> = {
 /** 선택 가능·후보풀 있음 지역 카드 — 누르면 선택된다. */
 function SelectableCard({
   region,
+  subtitle,
   onPress,
 }: {
   region: Region;
+  subtitle?: string;
   onPress(): void;
 }): ReactElement {
   const [from, to] = regionTint(region.regionCode);
@@ -127,6 +131,7 @@ function SelectableCard({
         <Text className="font-noto-bold text-card-title font-bold text-ink">
           {region.name}
         </Text>
+        <RegionSubtitle text={subtitle} />
       </View>
     </Pressable>
   );
@@ -134,7 +139,13 @@ function SelectableCard({
 
 /** poiCount===0 지역 카드 — 후보풀이 비어 "추천 장소 없음"(INV-1). 비-Pressable이라 눌러도 선택 안 됨.
  * "준비 중"은 미완성 기능으로 읽혀(심사 2.1) 데이터 상태 표현으로 바꿨다(TRIP-935 R9). */
-function ComingSoonCard({ region }: { region: Region }): ReactElement {
+function ComingSoonCard({
+  region,
+  subtitle,
+}: {
+  region: Region;
+  subtitle?: string;
+}): ReactElement {
   const [from, to] = regionTint(region.regionCode);
   return (
     <View
@@ -149,6 +160,7 @@ function ComingSoonCard({ region }: { region: Region }): ReactElement {
         <Text className="font-noto-bold text-card-title font-bold text-ink">
           {region.name}
         </Text>
+        <RegionSubtitle text={subtitle} />
         <Text className="mt-xs font-noto text-label text-muted">
           추천 장소 없음
         </Text>
@@ -158,7 +170,13 @@ function ComingSoonCard({ region }: { region: Region }): ReactElement {
 }
 
 /** selectable=false 묶음 행(도·행정구) — 목적지가 아니라 묶음 표시용. 보이되 선택 불가. */
-function GroupRow({ region }: { region: Region }): ReactElement {
+function GroupRow({
+  region,
+  subtitle,
+}: {
+  region: Region;
+  subtitle?: string;
+}): ReactElement {
   return (
     <View
       testID={`explore-region-${region.regionCode}`}
@@ -167,27 +185,42 @@ function GroupRow({ region }: { region: Region }): ReactElement {
       <Text className="font-noto-medium text-label text-muted">
         {region.name}
       </Text>
+      <RegionSubtitle text={subtitle} />
     </View>
+  );
+}
+
+/** 검색 결과 카드의 상위 시도명 부제(TRIP-1023 #007) — 동명 시군구("중구")를 가르는 유일한 단서. */
+function RegionSubtitle({ text }: { text?: string }): ReactElement | null {
+  if (text === undefined) return null;
+  return (
+    <Text className="mt-[2px] font-noto text-caption text-muted">{text}</Text>
   );
 }
 
 function RegionCard({
   region,
+  subtitle,
   onSelect,
 }: {
   region: Region;
+  /** 검색 결과 그리드만 넘긴다 — 2단 드릴다운은 이미 시도 제목 아래라 중복(AC-B4). */
+  subtitle?: string;
   onSelect(): void;
 }): ReactElement {
   if (region.selectable === false) {
-    return <GroupRow region={region} />;
+    return <GroupRow region={region} subtitle={subtitle} />;
   }
   if (region.poiCount === 0) {
-    return <ComingSoonCard region={region} />;
+    return <ComingSoonCard region={region} subtitle={subtitle} />;
   }
-  return <SelectableCard region={region} onPress={onSelect} />;
+  return (
+    <SelectableCard region={region} subtitle={subtitle} onPress={onSelect} />
+  );
 }
 
-/** 카드 그리드 — 검색 결과·드릴다운 상세가 공유한다(세 갈래 RegionCard 를 2열로). */
+/** 검색 결과 카드 그리드(세 갈래 RegionCard 를 2열로). 시군구에만 시도명 부제 — 시도 행은
+ * name 과 sidoName 이 같아 중복이다(AC-B4). 2단 드릴다운은 이 그리드가 아니라 RegionCard 를 직접 쓴다. */
 function RegionGrid({
   regions,
   onSelectRegion,
@@ -201,6 +234,9 @@ function RegionGrid({
         <RegionCard
           key={region.regionCode}
           region={region}
+          subtitle={
+            region.level === RegionLevel.SIGUNGU ? region.sidoName : undefined
+          }
           onSelect={() => onSelectRegion(region)}
         />
       ))}
@@ -284,8 +320,7 @@ function RegionDetail({
 }
 
 /** 인기 여행지 가로 스트립(TRIP-650) — 시/도(여행지) 단위를 가로 스크롤 카드로 보여준다. 집계·사진은
- *  계약 부재라 tint 그라디언트+이름만(SelectableCard 규율 계승). 서버 순서 그대로 앞 8개(정렬 금지 —
- *  `regionCatalogStructure` 가드). ★시/도 단위라 드릴다운 불변식("1단은 시/도만, 구/군 접힘")을 안 깬다.
+ *  계약 부재라 tint 그라디언트+이름만(SelectableCard 규율 계승). 서버 순서 그대로 앞 8개(정렬 금지). ★시/도 단위라 드릴다운 불변식("1단은 시/도만, 구/군 접힘")을 안 깬다.
  *  누르면 그 시/도로 드릴인(하단 목록의 SidoRow 와 동일 동작). 기본(1단·비검색·정상) 뷰 상단 전용. */
 function PopularStrip({
   groups,
@@ -375,7 +410,13 @@ export function RegionPickerScreen({
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-canvas">
       <View className="flex-row items-center gap-sm px-lg py-sm">
-        <Pressable testID="explore-region-back" onPress={onBack} hitSlop={8}>
+        <Pressable
+          testID="explore-region-back"
+          accessibilityRole="button"
+          accessibilityLabel="뒤로"
+          onPress={onBack}
+          hitSlop={8}
+        >
           <BackChevronGlyph />
         </Pressable>
         <Text className="font-noto-bold text-section font-bold text-ink">
@@ -417,7 +458,7 @@ export function RegionPickerScreen({
         ) : null}
 
         <Text className="mb-md mt-2xl font-noto-bold text-section font-bold text-ink">
-          {copy.section}
+          {isSearching ? '검색 결과' : copy.section}
         </Text>
 
         {isError ? (
@@ -441,7 +482,7 @@ export function RegionPickerScreen({
             className="flex-row flex-wrap justify-between"
           >
             {[0, 1, 2, 3].map((slot) => (
-              <View
+              <Skeleton
                 key={slot}
                 className="mb-md h-[152px] w-[48%] rounded-card bg-surface-soft"
               />

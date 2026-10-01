@@ -148,6 +148,29 @@ describe('AC-2 · 범위 3상태 표식 (시작/사이/종료 서로 다른 test
 
     expect(spies.onPickDate).toHaveBeenCalledWith('2026-06-10');
   });
+
+  // TRIP-1027 AC-2 — 여행지 0곳이면 배선이 {시작: D, 끝: D}(당일)를 넘긴다. 시작 표식이 먼저 걸려
+  // 끝 원·사이 표식 없이 시작 원 하나만 뜨고, 범위는 완성이라 적용은 열린다(02a ★16).
+  it('당일 범위(시작 = 끝)면 시작 표식 하나만 뜨고, 끝·사이 표식은 없으며 적용은 열린다', () => {
+    const spies = renderSheet({
+      range: { start: '2026-06-10', end: '2026-06-10' },
+    });
+
+    expect(
+      screen.getByTestId('trip-wizard-period-cell-start-2026-06-10')
+    ).toBeOnTheScreen();
+    expect(
+      screen.queryByTestId('trip-wizard-period-cell-end-2026-06-10')
+    ).toBeNull();
+    expect(
+      screen.queryAllByTestId(/^trip-wizard-period-cell-between-/)
+    ).toHaveLength(0);
+
+    const apply = screen.getByTestId('trip-wizard-period-apply');
+    expect(apply).toBeEnabled();
+    fireEvent.press(apply);
+    expect(spies.onApply).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('AC-3 · 선택 요약 (범위만, 실제 달력 요일)', () => {
@@ -255,5 +278,41 @@ describe('월 네비 chevron — prev/next 가 뒤바뀌지 않는다', () => {
     fireEvent.press(prev);
     expect(spies.onPrevMonth).toHaveBeenCalledTimes(1);
     expect(spies.onNextMonth).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * TRIP-1045 AC-B1(QA #018) — 범위 띠와 원을 px 고정 크기로 맞춘다. Tailwind 기본 눈금(`h-9`·`top-1`)은
+ * rem 이라 NativeWind 네이티브에서 1rem=14px 로 계산돼 원(31.5)과 띠(top 3.5)의 세로 중심이 어긋났다.
+ * Figma `3627:2068`: 셀 44 안에 띠 `h-[36px] top-[4px]`, 원 `36×36`(4+36+4=44).
+ * 실제 세로 중심이 맞는지는 픽셀이라 jest 사각 — 여기선 rem 유틸이 빠지고 px 값이 들어갔는지까지만 본다.
+ * 시작·끝 반쪽 띠는 testID 가 없어 jest 사각이다(맡던 소스 스캔 `periodEditSheetStructure` g5 는 TRIP-1145 로 지웠다).
+ */
+describe('AC-B1 · 띠·원은 rem 유틸 없이 36/4 px 고정 (TRIP-1045)', () => {
+  /** className 을 공백으로 쪼갠 토큰 — 부분 문자열 비교면 `h-9` 가 `h-90` 에도 걸린다. */
+  function tokens(testID: string): string[] {
+    return String(screen.getByTestId(testID).props.className ?? '').split(
+      /\s+/
+    );
+  }
+
+  it('원(날짜 버튼)은 h-[36px]·w-[36px] 이고 h-9·w-9 가 없다', () => {
+    renderSheet({ range: { start: '2026-06-10', end: '2026-06-13' } });
+
+    const circle = tokens('trip-wizard-period-cell-2026-06-10');
+    expect(circle).toEqual(expect.arrayContaining(['h-[36px]', 'w-[36px]']));
+    expect(circle).not.toContain('h-9');
+    expect(circle).not.toContain('w-9');
+  });
+
+  it('사이 띠는 h-[36px] + top 4px(top-[4px] 또는 top-xs) 이고 top-1·h-9 가 없다', () => {
+    renderSheet({ range: { start: '2026-06-10', end: '2026-06-13' } });
+
+    const band = tokens('trip-wizard-period-cell-between-2026-06-11');
+    expect(band).toContain('h-[36px]');
+    // `xs` 토큰은 tailwind.config 에서 '4px' 로 정의돼 있어(rem 아님) 둘 다 맞는 표기다.
+    expect(band.includes('top-[4px]') || band.includes('top-xs')).toBe(true);
+    expect(band).not.toContain('top-1');
+    expect(band).not.toContain('h-9');
   });
 });

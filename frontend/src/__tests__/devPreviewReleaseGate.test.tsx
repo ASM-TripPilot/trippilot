@@ -23,12 +23,19 @@ import { render, screen } from '@testing-library/react-native';
  * ⚠️ 목 팩토리는 파일 맨 위로 끌어올려져(호이스팅) `const mockNavigate = jest.fn()` 보다 먼저 돈다 →
  *   팩토리 안에선 `mockNavigate` 를 **화살표 안에서, 호출될 때만** 읽는다(★3). 같은 이유로 프리뷰는
  *   `import` 가 아니라 목 선언 **뒤의 `require`** 로 불러온다(devPreviewDeepLink 선례).
+ *
+ * TRIP-1145 — 지운 프리뷰 렌더 테스트 22개를 대신하는 스모크를 이 파일에 붙였다(화면당 단위 1).
+ *  - 개별 키 렌더는 하지 않는다: 키 장부 중복 0 · 딥링크 `?state=` 조준 · 없는 키/배열 값 splash 폴백만.
+ *  - 지뢰 목(로드 순간 throw)은 프리뷰 정적 그래프 전체에 걸린다 — 프리뷰가 네트워크·컨테이너를 싣지 않는다.
+ *  - `mockSearchParams` 는 모듈 스코프 객체라 리셋을 파일 최상위 `beforeEach` 에 건다.
  */
 
 const mockNavigate = jest.fn();
+// 딥링크 쿼리 흉내 — 목 팩토리는 호출될 때마다 이 객체를 새로 읽는다.
+const mockSearchParams: { state?: string | string[] } = {};
 
 jest.mock('expo-router', () => ({
-  useLocalSearchParams: () => ({}),
+  useLocalSearchParams: () => ({ ...mockSearchParams }),
   Redirect: ({ href }: { href: unknown }) => {
     mockNavigate('Redirect', href);
     return null;
@@ -46,8 +53,37 @@ jest.mock('expo-router', () => ({
 // @gorhom/bottom-sheet 은 reanimated/gesture 런타임 의존이라 통과 컴포넌트로 목킹한다(devPreview 선례).
 jest.mock('@gorhom/bottom-sheet');
 
+// 지뢰 목 — 프리뷰가 이 모듈을 값으로 로드하는 순간 스위트가 터진다(순수 뷰만 그린다는 계약).
+jest.mock('@/shared/api', () => {
+  throw new Error('프리뷰가 @/shared/api(네트워크 계층)를 런타임에 로드했다');
+});
+jest.mock('@/shared/api/generated/trips/trips', () => {
+  throw new Error(
+    '프리뷰가 trips 생성 클라이언트(네트워크)를 런타임에 로드했다'
+  );
+});
+jest.mock('@/pages/login/ui/LoginPage', () => {
+  throw new Error('프리뷰가 LoginPage(페이지)를 런타임에 로드했다');
+});
+jest.mock('@/features/auth/model/useSocialLogin', () => {
+  throw new Error('프리뷰가 useSocialLogin(훅)을 런타임에 로드했다');
+});
+jest.mock('@/app-shell/ui/SplashGate', () => {
+  throw new Error('프리뷰가 SplashGate(컨테이너)를 런타임에 로드했다');
+});
+jest.mock('@/shared/push/register', () => {
+  throw new Error('프리뷰가 푸시 권한 루틴(register)을 런타임에 로드했다');
+});
+jest.mock('@/shared/push/request', () => {
+  throw new Error('프리뷰가 푸시 권한 요청(request)을 런타임에 로드했다');
+});
+
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const DevPreview = require('@/app/_dev/preview').default as ComponentType;
+const previewModule = require('@/app/_dev/preview') as {
+  default: ComponentType;
+  PREVIEW_STATES: { key: string }[];
+};
+const DevPreview = previewModule.default;
 
 // jest 전역 `__DEV__` 손잡이 — RN 타입엔 읽기 전용 선언만 있어 쓰기용으로 좁혀 쓴다.
 const runtime = globalThis as unknown as { __DEV__: boolean };
@@ -57,6 +93,7 @@ let previousDev: boolean;
 beforeEach(() => {
   previousDev = runtime.__DEV__;
   mockNavigate.mockClear();
+  delete mockSearchParams.state;
 });
 
 afterEach(() => {
@@ -86,5 +123,52 @@ describe('🔴 TRIP-939 AC-10 · 운영 빌드에서 프리뷰 차단', () => {
     // 단언
     expect(screen.getByTestId('dev-preview-root')).toBeOnTheScreen();
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+});
+
+// TRIP-1145 · D-5 스모크
+describe('프리뷰 스모크 — 화면이 뜨고, 키 장부와 딥링크 폴백이 결정론적이다', () => {
+  it('키 장부에 이름 중복이 없고, 폴백 키 splash 가 들어 있다', () => {
+    // 준비: 장부의 키 목록.
+    const keys = previewModule.PREVIEW_STATES.map((state) => state.key);
+
+    // 실행: 앞에서 이미 나온 키를 모은다(겹친 키가 실패 메시지에 그대로 뜬다).
+    const duplicates = keys.filter((key, index) => keys.indexOf(key) !== index);
+
+    // 단언
+    expect(keys).toContain('splash');
+    expect(duplicates).toEqual([]);
+  });
+
+  it('?state=<장부에 있는 키> 로 열면 그 화면이 처음부터 그려진다(폴백이 아니다)', () => {
+    // 준비
+    mockSearchParams.state = 'login-idle';
+
+    // 실행
+    render(<DevPreview />);
+
+    // 단언: 프리뷰 본체 + 조준한 화면, splash 는 없다.
+    expect(screen.getByTestId('dev-preview-root')).toBeOnTheScreen();
+    expect(screen.getByTestId('auth-login-root')).toBeOnTheScreen();
+    expect(screen.queryByTestId('shell-splash-root')).toBeNull();
+  });
+
+  it.each([
+    ['장부에 없는 키', 'no-such-state'],
+    // 첫 원소를 유효 키로 둔다 — "배열이면 첫 원소" 고장이 나면 login 화면이 떠서 구분된다.
+    ['배열 값(중복 쿼리)', ['login-idle', 'splash']],
+    ['파라미터 없음', undefined],
+  ])('?state 가 %s 이면 에러 없이 splash 로 떨어진다', (_label, value) => {
+    // 준비
+    if (value !== undefined) {
+      mockSearchParams.state = value;
+    }
+
+    // 실행
+    render(<DevPreview />);
+
+    // 단언
+    expect(screen.getByTestId('shell-splash-root')).toBeOnTheScreen();
+    expect(screen.queryByTestId('auth-login-root')).toBeNull();
   });
 });

@@ -206,7 +206,7 @@ class ScheduleCoordinator:
             reason = (place.data.get("reason", place.status.value)
                       if place is not None else "place_provider_unregistered")
             return self._failed(budget, f"pool_unavailable: {reason}", trace_id, now)
-        persona = self._collected_persona(packets)
+        persona = request.persona or self._collected_persona(packets)
         summary = candidates_report(pool)  # 풀 실측 보고 (BR-U2-05 — 경계로 그대로 나간다)
         m7_elapsed = self._clock.monotonic_ms() - t0
         if budget.m7_ms and m7_elapsed > budget.m7_ms:

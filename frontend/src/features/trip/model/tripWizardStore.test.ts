@@ -47,7 +47,8 @@ describe('AC-7 · 초기 드래프트', () => {
       presetCode: undefined,
       // US-TRIP-01 · BR-U1-39 — 인원 기본 1.
       party: 1,
-      companionType: undefined,
+      // TRIP-1045(QA #019) — 동반 유형 기본값은 '혼자'(frontend-components `PartyPicker`).
+      companionType: '혼자',
       // AC-10c의 전제: 아직 아무것도 안 건드렸다.
       touched: [],
     });
@@ -208,5 +209,22 @@ describe('AC-11 · 입력 보존과 reset', () => {
       party: state.party,
       touched: state.touched,
     }).toEqual({ destinations: [], party: 1, touched: [] });
+  });
+
+  it('TRIP-1045 · reset()은 동행을 혼자로 되돌리고, 기본값은 companion 을 touched 에 켜지 않는다', () => {
+    // 준비 — 사용자가 가족을 골랐다(이때는 touched 에 companion 이 켜진다).
+    useTripWizardStore.getState().selectCompanion('가족');
+    expect(useTripWizardStore.getState().touched).toContain('companion');
+
+    // 실행 — 새 드래프트로 되돌린다.
+    useTripWizardStore.getState().reset();
+
+    // 단언 — 기본값 '혼자'는 사용자 입력이 아니다. touched 가 켜지면 "건드린 축"이 거짓이 된다.
+    const state = useTripWizardStore.getState();
+    expect({
+      companionType: state.companionType,
+      party: state.party,
+      touched: state.touched,
+    }).toEqual({ companionType: '혼자', party: 1, touched: [] });
   });
 });

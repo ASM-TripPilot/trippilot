@@ -293,6 +293,17 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         candidates.none { it in inItinerary } shouldBe true
         body["candidates"][0]["distanceRange"].isNull shouldBe false
         body["candidates"][0].has("duration") shouldBe false // INV-3
+
+        // POI 표면(TRIP-851)이 **실응답에** 실리는지 — 화면 "이름 준비 중" 재발 잠금(TRIP-1005 · QA #053 #070).
+        // 필드 존재만 보면 전부 null 이어도 초록이라, 정본(DB)과 값으로 대조한다.
+        val first = body["candidates"][0]
+        val dbRow = jdbc.queryForMap(
+            "SELECT name_ko, image_url, category FROM poi WHERE poi_id = ?", UUID.fromString(first["poiId"].asText()),
+        )
+        first["nameKo"].asText() shouldBe dbRow["name_ko"] as String
+        first["category"].asText() shouldBe dbRow["category"] as String // 한글 정본 그대로
+        (first["imageUrl"].isNull || first["imageUrl"].asText() == dbRow["image_url"]) shouldBe true // 있으면 정본 값
+        first["tags"].isArray shouldBe true // 미확보면 빈 배열 — null 로 지어내지 않는다
     }
 
     @Test
@@ -596,14 +607,26 @@ fun `차선책이 저장·조회·확정을 관통한다(TRIP-873)`() {
     }
 
     @Test
-    fun `확정된 일정 편집은 409`() {
+    fun `확정 일정 편집 — 여행 시작 전엔 409, 여행 중엔 200(TRIP-999)`() {
         val token = newToken()
-        val trip = newTrip(token)
+
+        // 여행 전 — 확정 잠금이 산다(BR-U3-28 개정 후에도 남는 절반).
+        val future = newFutureTrip(token)
+        call(HttpMethod.POST, "/api/v1/trips/$future/itinerary", token).first shouldBe 201
+        awaitComplete(future, token)
+        call(HttpMethod.POST, "/api/v1/trips/$future/itinerary/confirm", token).first shouldBe 200
+        val futureStart = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul")).plusDays(30)
+        call(HttpMethod.PUT, "/api/v1/trips/$future/itinerary", token, """{"days":[{"date":"$futureStart","slots":[]}]}""")
+            .first shouldBe 409
+
+        // 여행 중(시작일이 지났다) — 확정 일정도 편집이 열린다(QA #066 회귀 잠금).
+        val trip = newTrip(token) // 2026-08-01 시작 — 서버 실 시계 기준 이미 시작됨
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
         awaitComplete(trip, token)
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token).first shouldBe 200
-        val editBody = """{"days":[{"date":"2026-08-01","slots":[]}]}"""
-        call(HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token, editBody).first shouldBe 409
+        val (rc, body) = call(HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token, """{"days":[{"date":"2026-08-01","slots":[]}]}""")
+        rc shouldBe 200
+        body["status"].asText() shouldBe "CONFIRMED" // 편집이 확정을 풀지 않는다
     }
 
     @Test
@@ -630,9 +653,12 @@ fun `차선책이 저장·조회·확정을 관통한다(TRIP-873)`() {
 
         // 생성 중 확정은 409 — day1 만 동결된 채 잠기는 것 방지
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token).first shouldBe 409
-        // 생성 중 편집도 409 — 뒤이어 오는 2차 결과가 편집을 덮어써 유실되는 것 방지
-        val editBody = """{"days":[{"date":"2026-08-01","slots":[]}]}"""
-        call(HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token, editBody).first shouldBe 409
+        // 생성 중 편집 — **이미 만들어진 일자**는 허용(TRIP-1000: day1 조기 노출은 "보고 고칠 수 있다"),
+        // 아직 없는 일자를 싣는 편집만 409(2차와 누가 이길지 정의가 없다).
+        call(HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token, """{"days":[{"date":"2026-08-01","slots":[]}]}""")
+            .first shouldBe 200
+        call(HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token, """{"days":[{"date":"2026-08-02","slots":[]}]}""")
+            .first shouldBe 409
     }
 
     @Test

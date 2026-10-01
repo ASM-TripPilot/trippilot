@@ -28,6 +28,11 @@ module.exports = {
   // 동적 import 가 필요). MSW 통합테스트(.integration.test)는 그 flag 아래서 ESM 이 안 떠서
   // 여기서 제외하고, flag 없는 jest.integration.config.js 로 따로 돌린다.
   testPathIgnorePatterns: ['/node_modules/', '\\.integration\\.test\\.'],
+  // 프리셋 setupFiles(RN·expo 목 등록)를 보존하고 뒤에 덧붙인다 — 이유는 animatedPreload.cjs 머리 주석.
+  setupFiles: [
+    ...expoPreset.setupFiles,
+    '<rootDir>/src/test-support/animatedPreload.cjs',
+  ],
   transform: {
     // 프리셋의 babel transform 키(\.[jt]sx?$)는 .mjs 를 못 잡는다. MSW 의존 트리는
     // .mjs(ESM) 로 배포되므로 .mjs 도 babel 로 트랜스폼하도록 규칙을 더한다.

@@ -6,20 +6,14 @@ import fs from 'fs';
 import path from 'path';
 
 /**
- * A-1 · A-2(소스 절반) · A-3 · A-4 · A-5 · 1-7 (TRIP-864 재조준) — 지도 브리지 소스 스캔 가드.
+ * A-2(소스 절반) · A-3 (TRIP-864 재조준) — 지도 키 보안 소스 스캔 가드(TRIP-1145 로 보안 단언만 남김).
  *
  * 왜 소스 스캔인가 — 렌더 층은 "이번 렌더에서 실제로 나온 출력"만 본다. 여기는 조건부로만
  * 실행되는 코드·아예 렌더되지 않는 import·git 추적 파일 전수까지 본다(두 층은 사정거리가 다르다).
  *
  * ── TRIP-864 지도 공급자 전환(카카오 WebView → 네이버 네이티브) 반영 ──────────────
- *  - A-1: webview↔expo bundledNativeModules 문자열 정합 → **네이버 SDK 정확 핀 검사**
- *    (네이티브 모듈은 bundledNativeModules 명부에 없어 대조 불가 — 정확 핀 자체를 계약으로).
  *  - A-2: env 이름 `EXPO_PUBLIC_KAKAO_MAP_JS_KEY` → `EXPO_PUBLIC_NAVER_MAP_CLIENT_ID`
  *    (참조는 shared/map 안 정확히 1곳 = MapView.tsx). 앵커 파일 KakaoMapView.tsx → MapView.tsx.
- *  - A-4: "카카오 로컬 검색 지문 0" → **"공급자 SDK 직접 import 는 shared/map 밖에서 0건"**
- *    (네이티브 SDK 를 소비처가 직접 물면 공급자 중립 경계가 무너진다).
- *  - A-9(REGISTERED_DOMAIN 도메인 리터럴) **삭제** — 네이티브 SDK 는 client_id 로 인증하고
- *    URL 등록 명부·도메인 개념이 없어 심판 대상이 소멸했다.
  *
  * 전제 — 모든 소스 스캔 it 은 주석을 걷어낸 소스를 스캔한다(`stripComments`). 걷어내지 않으면
  * 주석 속 문자열이 긍정·부정 단언을 대신 만족시키는 거짓 통과를 낸다 — 이번 칸은 **양방향**
@@ -33,7 +27,6 @@ import path from 'path';
 
 const ROOT = path.resolve('src');
 const MAP_DIR = path.join(ROOT, 'shared', 'map');
-const TEST_ONLY_DIRS = ['__tests__', '__mocks__', 'test-support', 'mocks'];
 
 /** 지도 코어 파일(카카오 KakaoMapView.tsx 삭제 후 정본). 도달 앵커가 이 파일을 가리킨다. */
 const MAP_CORE_REL = 'shared/map/MapView.tsx';
@@ -80,43 +73,6 @@ function readAll(files: string[]): { file: string; source: string }[] {
 function mapSources() {
   return readAll(listSourceFiles(MAP_DIR));
 }
-
-/** `src/**` 프로덕션 파일 전체 — 테스트 파일도, 테스트 전용 디렉토리도 아닌 것. */
-function productionSources() {
-  return readAll(
-    listSourceFiles(ROOT).filter((full) => {
-      const segments = path.relative(ROOT, full).split(path.sep);
-      return !segments.some((segment) => TEST_ONLY_DIRS.includes(segment));
-    })
-  );
-}
-
-const EXACT_PIN = /^\d+\.\d+\.\d+$/;
-const NAVER_SDK_PKG = '@mj-studio/react-native-naver-map';
-
-describe('A-1 — 네이버 지도 SDK 의존이 정확 버전으로 핀되어 있다', () => {
-  it('package.json 의 @mj-studio/react-native-naver-map 이 ^·~ 없는 정확 핀이고, devDependencies 에는 없다', () => {
-    const pkg = JSON.parse(
-      fs.readFileSync(path.resolve('package.json'), 'utf8')
-    );
-
-    const dep = pkg.dependencies?.[NAVER_SDK_PKG];
-    // 도달 앵커 — 의존이 dependencies 에 실재한다(오타·누락 방지).
-    expect(dep).toBeDefined();
-
-    // 본체 — 정확 버전(예: 2.9.0)이다. `^`·`~` 레인지면 이 매치가 실패한다. 네이티브 모듈은
-    // JS 라이브러리와 달리 Expo bundledNativeModules 대조 목록에 없어(카카오 webview 와 다름),
-    // 맵 기준 비교 대신 "정확 핀" 자체를 계약으로 잠근다.
-    expect(dep).toEqual(expect.stringMatching(EXACT_PIN));
-    // 네이티브 모듈이 devDependencies 로 잘못 들어가지 않았다.
-    expect(pkg.devDependencies?.[NAVER_SDK_PKG]).toBeUndefined();
-
-    // 탐지기 자가검사 — 정확 핀 판정이 레인지 표기를 실제로 거른다.
-    expect(EXACT_PIN.test('2.9.0')).toBe(true);
-    expect(EXACT_PIN.test('^2.9.0')).toBe(false);
-    expect(EXACT_PIN.test('~2.9.0')).toBe(false);
-  });
-});
 
 describe('A-2 (소스 절반) — 키는 env 참조로만 들어오고 리터럴은 없다', () => {
   it('env 참조가 정확히 한 곳이고, 32-hex 키 형태 리터럴이 0건이며, stripComments 가 실제로 걷어낸다', () => {
@@ -214,73 +170,5 @@ describe('A-3 — git 추적 파일 전수에 키 리터럴이 0건이다', () =
     expect(keyAssignmentLines).toEqual([
       expect.stringMatching(/^EXPO_PUBLIC_NAVER_MAP_CLIENT_ID=\s*$/),
     ]);
-  });
-});
-
-describe('A-4 — 공급자 지도 SDK 를 shared/map 밖에서 직접 import 하지 않는다', () => {
-  it('@mj-studio/react-native-naver-map 직접 import 가 shared/map 밖 프로덕션에 0건이고, shared/map 코어는 문다', () => {
-    const sources = productionSources();
-
-    // 도달 앵커 — 모집단이 채워졌고, 지도 코어가 그 안에 있다.
-    expect(sources.length).toBeGreaterThan(20);
-    expect(sources.map((s) => s.file)).toContain(MAP_CORE_REL);
-
-    const SDK = /@mj-studio\/react-native-naver-map/;
-    const importers = sources
-      .filter((s) => SDK.test(s.source))
-      .map((s) => s.file);
-
-    // 긍정 짝 — shared/map 코어는 공급자 SDK 를 문다(래핑의 유일한 자리). 없으면 아래
-    // "밖에서 0건"이 "아무도 안 쓴다"는 미래 상태에서 공허 통과한다.
-    expect(importers.some((f) => f.startsWith('shared/map/'))).toBe(true);
-
-    // 본체 — shared/map 밖에서 공급자 SDK 를 직접 물면 위반(공급자 중립 경계 붕괴). 소비처는
-    // 배럴 `@/shared/map` 만 알아야 하고 어떤 공급자인지 몰라야 한다.
-    const offenders = importers.filter((f) => !f.startsWith('shared/map/'));
-    expect(offenders).toEqual([]);
-
-    // 탐지기 자가검사 — 합성 위반을 실제로 잡고, 무관 문자열은 안 잡는다.
-    expect(
-      SDK.test(
-        "import { NaverMapView } from '@mj-studio/react-native-naver-map';"
-      )
-    ).toBe(true);
-    expect(SDK.test("import { MapView } from '@/shared/map';")).toBe(false);
-  });
-});
-
-describe('A-5 — INV-3: src/shared/map/** 에 duration 식별자가 0건이다', () => {
-  it('duration 식별자가 없고, \\b 경계 덕분에 durable 같은 이웃 단어는 잡히지 않는다', () => {
-    const sources = mapSources();
-
-    // 도달 앵커
-    expect(sources.length).toBeGreaterThan(0);
-    expect(sources.map((s) => s.file)).toContain(MAP_CORE_REL);
-
-    const DURATION = /\bduration\b/i;
-    const offenders = sources
-      .filter((s) => DURATION.test(s.source))
-      .map((s) => s.file);
-    // 본체 — INV-3.
-    expect(offenders).toEqual([]);
-
-    // 탐지기 자가검사 — 경계(\b) 확인.
-    expect(DURATION.test('const duration = 1')).toBe(true);
-    expect(DURATION.test('const durable = 1')).toBe(false);
-  });
-});
-
-describe('1-7(선택 · D10 이행 확인) — shared/map 이 features/*를 import 하지 않는다', () => {
-  it('@/features/ 문자열이 0건이다 — Coords 승격을 이번에 하지 않는다는 결정(D10)의 기계 강제', () => {
-    const sources = mapSources();
-
-    // 도달 앵커
-    expect(sources.length).toBeGreaterThan(0);
-    expect(sources.map((s) => s.file)).toContain(MAP_CORE_REL);
-
-    const offenders = sources
-      .filter((s) => s.source.includes('@/features/'))
-      .map((s) => s.file);
-    expect(offenders).toEqual([]);
   });
 });

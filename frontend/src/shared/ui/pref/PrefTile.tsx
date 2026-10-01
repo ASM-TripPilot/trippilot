@@ -4,8 +4,8 @@
  * 온보딩 `PrefStep1Screen`(스타일)·`PrefStep2Screen`(동행)의 로컬 `StyleTile`·`IconTile` 이
  * 거의 같은 shell(아이콘 원형 + 라벨 + 선택 테두리 + 체크 배지)이라 여기로 합친다.
  *
- * ★ 글리프는 승격하지 않는다 — 옵션 아이콘·체크 마크는 raw hex SVG 라 `shared/ui` 재귀 스캔
- *   (`sharedUiStructure.test.ts`)의 raw-hex·className 규칙을 깬다. 그래서 둘 다 **prop 슬롯으로 주입**
+ * ★ 글리프는 승격하지 않는다 — 옵션 아이콘·체크 마크는 raw hex SVG 라 `shared/ui`
+ *   의 raw-hex·className 관례를 깬다. 그래서 둘 다 **prop 슬롯으로 주입**
  *   받는다(shell 소스에는 글리프가 없다). 호출자가 완성된 `testID` 문자열을 준다(타일이 조립 안 함).
  */
 import type { ComponentType, ReactElement } from 'react';

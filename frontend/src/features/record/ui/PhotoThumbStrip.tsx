@@ -14,7 +14,7 @@ import { PlusGlyph, WarningTriangleGlyph } from './RecordGlyphs';
  *    other-device·unavailable 셀은 Image 자체를 안 그려 "깨진 썸네일 0"(BR-U5-14/15·INV-4).
  *  - 타 기기·자산 실패는 정직한 문구로 표기("다른 기기에서 찍은 사진"·"사진을 불러올 수 없어요").
  *  - `+` 추가 타일(record-trip-photo-add)은 onPressAdd 주입 시에만 있고 press → onPressAdd
- *    (TRIP-939 — 사진 선택 미배선 동안 숨김). 스트립 루트는 `record-trip-photo-strip`.
+ *    (TRIP-1070 — j01 컨테이너가 앨범 선택을 넘긴다). 스트립 루트는 `record-trip-photo-strip`.
  *
  * availability 는 상위 페이지가 `photoAvailability` 로 선판정해 VM 으로 준다 — 스트립은 재판정하지 않는다
  * (VisitRecordCard 순수 프레젠테이션 규율 계승).
@@ -23,7 +23,7 @@ import { PlusGlyph, WarningTriangleGlyph } from './RecordGlyphs';
 export interface PhotoThumbVM {
   visitPhotoMetaId: string;
   availability: PhotoAvailability;
-  /** available + uri 있을 때만 실제 썸네일. 네이티브 미설치라 이 세션엔 대체로 null(placeholder). */
+  /** available + uri 있을 때만 실제 썸네일(이 기기 앨범 주소). 없으면 placeholder. */
   uri?: string | null;
 }
 

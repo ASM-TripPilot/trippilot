@@ -196,6 +196,22 @@ describe('I-1 · 정상 제출이 계약대로 나가고 step2 로 이동한다'
   });
 });
 
+describe('I-1c · TRIP-1045 동행을 안 건드리고 제출해도 companionType 혼자가 실린다', () => {
+  it('동행 시트를 한 번도 안 열고 [다음]을 누르면 바디에 companionType "혼자"·party 1 이 있다', async () => {
+    // 준비 — 여행지·기간만 채운다(동행은 기본값 그대로).
+    seedValidDraft();
+    renderPage();
+    await waitForPrefill();
+
+    // 실행
+    fireEvent.press(next());
+
+    // 단언 — CompanionType enum 계약값(혼자·친구·연인·가족)이 그대로 나간다.
+    await waitFor(() => expect(createHits()).toBe(1));
+    expect(postedBodies[0]).toMatchObject({ companionType: '혼자', party: 1 });
+  });
+});
+
 describe('I-4 · 국내 밖 400 은 다이얼로그로 뜨고 드래프트가 남는다', () => {
   it('국내 차단 안내가 뜨고 요약 여행지 행이 그대로 남으며 이동하지 않는다', async () => {
     // 'OVERSEAS_DESTINATION' 은 발명값(openapi enum 부재) — 상수 import 로 비교하면 동어반복이라 직접 박는다.

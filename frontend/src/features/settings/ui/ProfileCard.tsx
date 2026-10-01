@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
+import type { TripBucket } from '../model/tripBuckets';
 import { CARD_SHADOW } from './cardShadow';
 import { InfoChip } from './InfoChip';
 
@@ -26,27 +27,64 @@ export interface ProfileCardCounts {
 export interface ProfileCardProps {
   nickname: string | null;
   email: string | null;
-  counts: ProfileCardCounts;
+  /** null = 모름(일정 조회 대기·실패) — 세 칸 모두 `–`. */
+  counts: ProfileCardCounts | null;
+  /** 숫자 칸 누름(페이지가 탭 이동으로 주입). 미주입이면 칸은 누를 수 없고 `›` 도 없다. */
+  onPressCount?: (bucket: TripBucket) => void;
   /** 편집 진입 — 목적지 라우트(l02) 미존재라 미배선일 수 있다(Q6). */
   onPressEdit?: () => void;
   /** 프로필 태그(서버 문자열 그대로). 없거나 빈 배열이면 태그 줄을 그리지 않는다. */
   tags?: string[];
 }
 
-/** 카운트 한 칸(숫자 + 라벨) — 3칸이 같은 모양이라 한 번만 짠다. */
+/**
+ * 카운트 한 칸(숫자 + 라벨) — 3칸이 같은 모양이라 한 번만 짠다. `counts` null = 모름 → `–`(0 도 "안다"는
+ * 주장이라 그리지 않는다, INV-4). `onPressCount` 가 있으면 칸 전체가 버튼 + 라벨 뒤 회색 `›`(TRIP-1123, Figma 4755:2954).
+ * 칸 높이 42 라 hitSlop 으로 세로 44 이상을 채운다(QA L2).
+ */
 function StatCell({
-  count,
+  bucket,
   label,
+  counts,
+  onPressCount,
 }: {
-  count: number;
+  bucket: TripBucket;
   label: string;
+  counts: ProfileCardCounts | null;
+  onPressCount?: (bucket: TripBucket) => void;
 }): ReactElement {
-  return (
-    <View className="flex-1 items-center gap-xs">
-      <Text className="font-inter-bold text-[20px] font-bold text-ink">
-        {count}
+  const count = counts ? counts[bucket] : null;
+  const testID = `my-profile-count-${bucket}`;
+  const className = 'flex-1 items-center gap-xs';
+  const content = (
+    <>
+      <Text
+        testID={`${testID}-value`}
+        className={`font-inter-bold text-[20px] font-bold ${count === null ? 'text-muted-soft' : 'text-ink'}`}
+      >
+        {count === null ? '–' : count}
       </Text>
-      <Text className="font-noto text-caption text-muted">{label}</Text>
+      <View className="flex-row items-center gap-xs">
+        <Text className="font-noto text-caption text-muted">{label}</Text>
+        {onPressCount ? (
+          <Text className="font-noto text-body text-muted-soft">›</Text>
+        ) : null}
+      </View>
+    </>
+  );
+  return onPressCount ? (
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      hitSlop={{ top: 4, bottom: 4 }}
+      onPress={() => onPressCount(bucket)}
+      className={className}
+    >
+      {content}
+    </Pressable>
+  ) : (
+    <View testID={testID} className={className}>
+      {content}
     </View>
   );
 }
@@ -57,6 +95,7 @@ export function ProfileCard({
   counts,
   onPressEdit,
   tags,
+  onPressCount,
 }: ProfileCardProps): ReactElement {
   const initial = nickname ? Array.from(nickname)[0] : '';
 
@@ -119,17 +158,32 @@ export function ProfileCard({
 
       {/* 상태 카운트 3칸 — 칸 사이 세로선 */}
       <View className="flex-row items-center">
-        <StatCell count={counts.upcoming} label="예정" />
+        <StatCell
+          bucket="upcoming"
+          label="예정"
+          counts={counts}
+          onPressCount={onPressCount}
+        />
         <View
           testID="my-profile-count-divider"
           className="h-[30px] w-px bg-hairline"
         />
-        <StatCell count={counts.active} label="진행 중" />
+        <StatCell
+          bucket="active"
+          label="진행 중"
+          counts={counts}
+          onPressCount={onPressCount}
+        />
         <View
           testID="my-profile-count-divider"
           className="h-[30px] w-px bg-hairline"
         />
-        <StatCell count={counts.ended} label="종료" />
+        <StatCell
+          bucket="ended"
+          label="종료"
+          counts={counts}
+          onPressCount={onPressCount}
+        />
       </View>
     </View>
   );

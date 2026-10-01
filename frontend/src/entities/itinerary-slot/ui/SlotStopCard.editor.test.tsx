@@ -40,6 +40,7 @@ function makeSlot(
     isFixed: false,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     tags: ['바다', '산책'],
     nameKo: '광안리 해변',
     category: '자연',
@@ -277,6 +278,7 @@ describe('SlotStopCard 편집 · C5 (회귀앵커) — violation 없거나 null 
         <SlotStopCard
           slot={makeSlot({
             hasViolation: true,
+            alternatives: [],
             violationReason: '숙소 고정 충돌',
           })}
           date={DATE}

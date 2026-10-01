@@ -382,9 +382,12 @@ export function MustVisitTimeScreen({
           // 휠이 자기 스크롤을 쥐므로 시트 본문은 스크롤하지 않는다(BottomSheetView).
           // `enableContentPanningGesture={false}` 는 시트의 콘텐츠 pan 이 휠의 세로 스크롤을
           // 삼키는 것을 막는다(`TripBaseFixSheet` TRIP-455 함정과 동형 — jest 사각·6-b 실기).
+          // 딤 탭·핸들 끌기로 라이브러리가 닫아도 열림 상태를 풀어야 칸 재탭에 다시 뜬다(TRIP-1014 #041).
           <BottomSheet
             backdropComponent={renderSheetBackdrop}
             enableContentPanningGesture={false}
+            enablePanDownToClose
+            onClose={() => setStartSheetOpen(false)}
           >
             <BottomSheetView
               testID="itinerary-mustvisit-time-start-sheet"
@@ -405,13 +408,13 @@ export function MustVisitTimeScreen({
                   </Text>
                 </Pressable>
               </View>
+              {/* 탭·스크롤 정지 모두 값만 확정한다 — 정지에 시트를 닫으면 굴리다 멈추는 순간 닫힌다
+                  (TRIP-990 Q6). 시트는 "닫기"·딤 탭·핸들 끌기로 닫힌다. */}
               <WheelPicker
+                testID="itinerary-mustvisit-time-start-wheel"
                 values={startOptions}
                 selected={form.fixedStart}
-                onSelect={(value) => {
-                  onPickStart?.(value);
-                  setStartSheetOpen(false);
-                }}
+                onSelect={(value) => onPickStart?.(value)}
                 renderLabel={startTimeLabel}
                 testIDForValue={(value) =>
                   `itinerary-mustvisit-time-start-option-${value}`

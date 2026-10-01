@@ -641,3 +641,35 @@ def test_bedrock_route_without_base_url(monkeypatch) -> None:
     )
     route = main._local_route(main._feature_models_from_env())
     assert type(route[main._LOCAL_PREFIX]).__name__ == "BedrockAdapter"
+
+
+# ── Bedrock 클라이언트 예산 (2026-09-29 실서비스 504) ─────────────────────────
+
+
+def test_bedrock_client_disables_sdk_retries() -> None:
+    """기본 botocore 는 재시도를 여러 번 한다 — 콜드스타트 오류를 반복해 예산을 먹는다.
+
+    실측: 항목 하나가 11.9초(재시도 4회)를 쓰고 요청 예산 8초를 넘겨, 항목 둘 합 20초가
+    백스톱 13초보다 길어져 **강등 응답 대신 504** 가 나갔다. 리포 규약도 SDK 재시도 0 이다
+    (OpenAI 어댑터 `max_retries=0`).
+    """
+    assert main._bedrock_client_kwargs(4.0)["retries"] == {
+        "max_attempts": 1,
+        "mode": "standard",
+    }
+
+
+def test_bedrock_client_takes_the_per_item_budget_as_socket_timeout() -> None:
+    # botocore 는 호출 인자로 타임아웃을 못 받는다 — 클라이언트 설정이 유일한 자리다.
+    assert main._bedrock_client_kwargs(4.0)["read_timeout"] == 4.0
+
+
+def test_bedrock_client_without_a_budget_uses_the_gateway_default() -> None:
+    # 게이트웨이 기본(10초)보다 길게 열어 두면 게이트웨이가 포기한 뒤에도 벤더를 기다린다.
+    assert main._bedrock_client_kwargs(None)["read_timeout"] == 10.0
+
+
+def test_bedrock_connect_timeout_never_eats_the_whole_budget() -> None:
+    # 붙지도 않는데 예산을 다 쓰면 강등도 그만큼 늦는다.
+    assert main._bedrock_client_kwargs(1.0)["connect_timeout"] == 1.0
+    assert main._bedrock_client_kwargs(30.0)["connect_timeout"] == 3.0

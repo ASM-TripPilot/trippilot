@@ -4,9 +4,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MapView, type MapPin } from '@/shared/map';
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { Skeleton } from '@/shared/ui/Skeleton';
 
 import {
   MUST_VISIT_NAME_PLACEHOLDER,
+  fixedTimeLabel,
   type MustVisitListItem,
   type MustVisitListView,
 } from '../model/mustVisitList';
@@ -16,23 +18,23 @@ import {
   InfoCircleGlyph,
   LockGlyph,
   PencilGlyph,
+  PlusGlyph,
 } from './ItineraryGlyphs';
 
 /**
- * h05 필수 방문지 (선택) — Figma `1875:1083`.
+ * h02 필수 방문지 — Figma `3824:2173`(default) · `4294:8292`(error).
  *
  * 화면은 완성된 값만 받는다. 조회도 조인도 하지 않고 **핀 번호도 다시 매기지 않는다**(조합은
  * `pages` 층 몫 — `features` 간 직접 import 금지).
  *
- * **Figma 보다 짧다** — 검색 필 · `＋ 필수 방문지 추가` 타일(POST 대상을 고를 화면이 없다) ·
- * `지도에서 지정` 칩(좌표를 실을 계약 자체가 없다 · 01b D4) · `© Kakao` 표기와 축척 바
+ * **Figma 보다 짧다** — 검색 필 · `지도에서 지정` 칩(좌표를 실을 계약 자체가 없다 · 01b D4) · `© Kakao` 표기와 축척 바
  * (카카오 SDK 가 자체 렌더한다 · 01b D8)는 그리지 않는다. 눌러도 아무 일 없는 표면은 침묵
  * 실패의 다른 이름이다.
  *
  * **얼굴마다 크롬이 다르다** — 헤드라인 제목은 `listed` 에서 숨고(그때만 서브카피만 남는다),
- * 건너뛰기는 `failed` 에서만 뜬다(에러에서 빠져나갈 유일한 문). CTA 는 `listed` 가 아니면
- * 잠긴다(로딩·에러·빈 목록은 아직 갈 다음 단계가 없다) — 색도 함께 바뀌어 "빨간데 안 눌리는"
- * 상태를 남기지 않는다(문제로그 2026-08-08).
+ * 건너뛰기는 `failed` 에서만 뜬다(에러에서 빠져나갈 유일한 문). CTA 는 로딩·에러에서만
+ * 잠긴다 — 빈 목록(0곳)은 필수 방문지 없이 생성으로 간다(TRIP-982 D7, 막다른 길 금지). 색도
+ * 함께 바뀌어 "빨간데 안 눌리는"·"회색인데 눌리는" 상태를 남기지 않는다(문제로그 2026-08-08).
  */
 
 const SCREEN_TITLE = '필수 방문지';
@@ -56,6 +58,7 @@ const PROCEED_LABEL = '이 구성으로 일정 짜기';
 
 const EMPTY_TITLE = '아직 담은 필수 방문지가 없어요';
 const EMPTY_NOTE = '꼭 가고 싶은 곳을 담으면 AI가 알아서 배치해요';
+const ADD_LABEL = '꼭 갈 곳 추가';
 /** 조회 실패 부제는 0곳 얼굴과 반드시 구분한다(정본 `frontend-components` L132). */
 const FAILED_TITLE = '담은 곳을 불러오지 못했어요';
 const FAILED_NOTE = '네트워크를 확인하고 다시 시도해 주세요';
@@ -87,6 +90,8 @@ export interface MustVisitPickerScreenProps {
   onRetry?(): void;
   onProceed?(): void;
   onSkip?(): void;
+  /** `꼭 갈 곳 추가` 버튼(TRIP-1093 결정 3) — 0곳·목록 두 얼굴에 하나씩. 안 주면 안 그린다. */
+  onPressAdd?(): void;
 }
 
 function Chip({
@@ -245,7 +250,7 @@ function MustVisitCard({
           </Text>
         ) : (
           <Text numberOfLines={1} className="font-noto text-caption text-muted">
-            {fixed ? (item.fixedStart ?? '') : ANYTIME_NOTE}
+            {fixed ? fixedTimeLabel(item) : ANYTIME_NOTE}
           </Text>
         )}
         <View className="flex-row items-center gap-[6px]">
@@ -296,6 +301,29 @@ function MustVisitCard({
   );
 }
 
+/** 「꼭 갈 곳 추가」 전폭 아웃라인 버튼 — Figma `4723:2833`(목록) = `4724:2851`(0곳), 같은 모양. */
+function AddButton({
+  testID,
+  onPress,
+}: {
+  testID: string;
+  onPress(): void;
+}): ReactElement {
+  return (
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      onPress={onPress}
+      className="w-full flex-row items-center justify-center gap-sm rounded-button border-[1.4px] border-hairline-strong bg-canvas py-[14px]"
+    >
+      <PlusGlyph tone="primary" />
+      <Text className="font-noto-bold text-body font-bold text-ink">
+        {ADD_LABEL}
+      </Text>
+    </Pressable>
+  );
+}
+
 /**
  * 도착 전 자리표시. **글자를 넣지 않는다** — "담은 곳이 없어요" 를 미리 그리면 담아 둔
  * 사용자에게 한 순간 거짓말을 하게 된다(`MustVisitSection` 선례). 지도 자리와 카드 3장을
@@ -309,7 +337,7 @@ function LoadingFace(): ReactElement {
       className="w-full gap-lg"
       accessibilityLabel="목록을 불러오는 중"
     >
-      <View
+      <Skeleton
         testID="itinerary-mustvisit-screen-map-skeleton"
         className="h-[170px] w-full rounded-card bg-surface-soft"
       />
@@ -319,20 +347,20 @@ function LoadingFace(): ReactElement {
           testID="itinerary-mustvisit-screen-card-skeleton"
           className="w-full flex-row items-center gap-md rounded-card border border-hairline bg-canvas py-md pl-md pr-[14px]"
         >
-          <View
+          <Skeleton
             testID="itinerary-mustvisit-screen-skeleton-thumb"
             className="h-[26px] w-[26px] rounded-pill bg-surface-soft"
           />
-          <View
+          <Skeleton
             testID="itinerary-mustvisit-screen-skeleton-box"
             className="h-[78px] w-[78px] rounded-thumb bg-surface-soft"
           />
           <View className="flex-1 gap-xs">
-            <View
+            <Skeleton
               testID="itinerary-mustvisit-screen-skeleton-bar"
               className="h-[14px] w-1/3 rounded-pill bg-surface-soft"
             />
-            <View
+            <Skeleton
               testID="itinerary-mustvisit-screen-skeleton-bar"
               className="h-[14px] w-2/3 rounded-pill bg-surface-soft"
             />
@@ -385,13 +413,17 @@ export function MustVisitPickerScreen({
   onRetry,
   onProceed,
   onSkip,
+  onPressAdd,
 }: MustVisitPickerScreenProps): ReactElement {
   const pinNumbers = new Set((pins ?? []).map((pin) => pin.number));
   // 얼굴이 핀보다 세다 — 빈 목록·조회 실패 프레임에는 핀을 받아도 지도가 없다(Figma
   // `empty`·`error`). 항목은 있는데 좌표를 가진 것이 하나도 없을 때도 안 그린다(01b D9).
   const mapPins = view.kind === 'listed' ? (pins ?? []) : [];
-  // 다음 단계는 목록이 도착한 뒤에만 열린다 — 로딩·에러·빈 목록은 갈 곳이 없어 잠근다.
-  const blocked = view.kind !== 'listed' || proceedBlockedReason != null;
+  // 로딩·에러만 잠근다 — 0곳(empty)은 필수 방문지 없이 생성으로 간다(TRIP-982 D7).
+  const blocked =
+    view.kind === 'loading' ||
+    view.kind === 'failed' ||
+    proceedBlockedReason != null;
 
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
@@ -452,6 +484,7 @@ export function MustVisitPickerScreen({
                 pins={mapPins}
                 viewOnly
                 connectPins={false}
+                fitPins
               />
             </View>
           )}
@@ -469,6 +502,14 @@ export function MustVisitPickerScreen({
             />
           ) : null}
 
+          {/* 0곳 버튼은 점선 안내 **밖**(Figma 4724:2833 — 박스 안엔 버튼이 없다). */}
+          {view.kind === 'empty' && onPressAdd !== undefined ? (
+            <AddButton
+              testID="itinerary-mustvisit-screen-empty-add"
+              onPress={onPressAdd}
+            />
+          ) : null}
+
           {view.kind === 'failed' ? <FailedFace onRetry={onRetry} /> : null}
 
           {view.kind === 'listed'
@@ -483,6 +524,13 @@ export function MustVisitPickerScreen({
                 />
               ))
             : null}
+
+          {view.kind === 'listed' && onPressAdd !== undefined ? (
+            <AddButton
+              testID="itinerary-mustvisit-screen-add"
+              onPress={onPressAdd}
+            />
+          ) : null}
 
           {/* Figma `ctaPrimary` 는 `body` 의 마지막 자식이다 — 하단 고정 바가 아니라 스크롤
               흐름 안에 있다. 리포 표준 `CtaBar` 를 쓰면 자리가 달라진다. */}

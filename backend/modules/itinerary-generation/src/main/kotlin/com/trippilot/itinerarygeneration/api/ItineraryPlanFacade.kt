@@ -62,4 +62,15 @@ data class PlannedSlotView(
     val endAt: LocalTime,
     val isFixed: Boolean,
     val endsNextDay: Boolean,
+    /**
+     * POI 표면(TRIP-1060 · BR-U3-09) — 재계획 비교(before 열)가 장소를 그릴 재료다.
+     * "어느 이름이 이기는가"(확정 슬롯은 동결값, INV-U1-03)는 C8 이 소유하므로 **여기서 채워 내보낸다** —
+     * 호출측이 place-data 를 직접 물으면 그 규칙이 두 모듈로 갈린다.
+     * 정본·동결본 모두 없으면 전부 null(지어내지 않는다). [category] 는 한글 정본이다.
+     */
+    val nameKo: String? = null,
+    val category: String? = null,
+    val imageUrl: String? = null,
+    val lat: Double? = null,
+    val lng: Double? = null,
 )

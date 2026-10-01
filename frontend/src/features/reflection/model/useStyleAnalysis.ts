@@ -7,7 +7,7 @@ import { useGetMeStyle } from '@/shared/api/generated/reflection/reflection';
  * 조회 전용 — 저장/변형 mutation 을 만들지 않는다(BR-U5-41·INV-U5-09, 임시 미리보기 저장 금지).
  * 얼굴 판정(resolveStyleFace)·VM 조립은 페이지 몫이라 이 훅은 결과를 있는 그대로 낸다.
  *
- * ★ 재사용만 — `customInstance`/`axios`/mutation 훅을 새로 만들지 않는다(travelStyleStructure G5).
+ * ★ 재사용만 — `customInstance`/`axios`/mutation 훅을 새로 만들지 않는다(INV-U5-09).
  * `MyPage.tsx` 가 이미 `useGetMeStyle` 을 직접 소비하는 선례(같은 봉투를 요약카드용으로 씀).
  *
  * 반환 타입은 **추론에 맡긴다** — 명시 `ReturnType<typeof useGetMeStyle>` 은 오버로드 마지막 시그니처를

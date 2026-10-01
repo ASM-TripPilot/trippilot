@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 
-import { ChevronRightGlyph } from './TripGlyphs';
+import { ChevronRightGlyph, MoreDotsGlyph, TrashGlyph } from './TripGlyphs';
 import type { MyTripCardVM } from '../model';
 
 /**
@@ -24,22 +24,50 @@ export interface TripCardProps {
   onPress: () => void;
   onResume?: () => void;
   testIDPrefix: string;
+  /** TRIP-1055 · 주어지면 ⋯ 버튼을 그린다(삭제 가능 판정은 소비처 몫). */
+  onPressDelete?: () => void;
+  /** 메뉴 열림 — 카드는 상태를 갖지 않아 소비처가 쥔다. */
+  menuOpen?: boolean;
+  onPressMenu?: () => void;
 }
 
-const BADGE_LABEL: Record<'done' | 'draft', string> = {
+const BADGE_LABEL: Record<'done' | 'draft' | 'live', string> = {
   done: '완성',
   draft: '작성중',
+  live: '여행 중',
 };
 
 const RESUME_LABEL = '일정 이어서 짜기';
+const MENU_DELETE_LABEL = '삭제';
+
+/** Figma 4682:2573 — ⋯ 버튼 drop 0,2,10 · 6% / 메뉴 drop 0,4,16 · 8%. */
+const MORE_SHADOW = {
+  shadowColor: '#000000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.06,
+  shadowRadius: 10,
+  elevation: 2,
+} as const;
+const MENU_SHADOW = {
+  shadowColor: '#000000',
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.08,
+  shadowRadius: 16,
+  elevation: 4,
+} as const;
 
 export function TripCard({
   vm,
   onPress,
   onResume,
   testIDPrefix,
+  onPressDelete,
+  menuOpen = false,
+  onPressMenu,
 }: TripCardProps): ReactElement {
   const { tripId, title, metaLine, badge, extra, resume, imageUrl } = vm;
+  const showMore = onPressDelete !== undefined;
+  const showMenu = showMore && menuOpen;
 
   // TRIP-788 · resume 는 배지와 독립(AC-5 seam) — 명시 신호가 오면 그것, 없으면 기존 배지 파생 폴백.
   // 생성중(resume=false)이 draft 배지를 써도 이 게이트가 resume 누출을 막는다.
@@ -62,20 +90,59 @@ export function TripCard({
             className="h-[178px] w-full"
           />
         ) : null}
-        {badge !== null ? (
-          <View
-            testID={`${testIDPrefix}-badge-${tripId}`}
-            className={`absolute right-[14px] top-[14px] rounded-pill px-md py-[5px] ${
-              badge === 'done' ? 'bg-success-bg' : 'bg-primary-pale'
-            }`}
-          >
-            <Text
-              className={`font-noto-bold text-label font-bold ${
-                badge === 'done' ? 'text-success' : 'text-primary-text'
+        {/* 우상단 줄 — [배지][⋯](Figma topRight, gap 8). testID 없음(TC7 host testID 수 보호). */}
+        <View className="absolute right-[14px] top-[14px] flex-row items-center gap-sm">
+          {badge !== null ? (
+            <View
+              testID={`${testIDPrefix}-badge-${tripId}`}
+              className={`rounded-pill px-md py-[5px] ${
+                badge === 'done' ? 'bg-success-bg' : 'bg-primary-pale'
               }`}
             >
-              {BADGE_LABEL[badge]}
-            </Text>
+              <Text
+                className={`font-noto-bold text-label font-bold ${
+                  badge === 'done' ? 'text-success' : 'text-primary-text'
+                }`}
+              >
+                {BADGE_LABEL[badge]}
+              </Text>
+            </View>
+          ) : null}
+          {showMore ? (
+            <Pressable
+              testID={`${testIDPrefix}-menu-${tripId}`}
+              accessibilityRole="button"
+              accessibilityLabel="여행 메뉴"
+              onPress={onPressMenu}
+              hitSlop={4}
+              style={MORE_SHADOW}
+              className={`h-[36px] w-[36px] items-center justify-center rounded-pill ${
+                menuOpen ? 'bg-surface-strong' : 'bg-canvas'
+              }`}
+            >
+              <MoreDotsGlyph size={20} />
+            </Pressable>
+          ) : null}
+        </View>
+
+        {/* 팝오버 — ⋯ 아래 3px(14+36+3), 오른쪽 끝 맞춤. 사진 자리(178) 안에 들어가 카드 overflow 에 안 잘린다. */}
+        {showMenu ? (
+          <View
+            testID={`${testIDPrefix}-menu-panel-${tripId}`}
+            style={MENU_SHADOW}
+            className="absolute right-[14px] top-[53px] w-[160px] rounded-button border border-hairline bg-canvas py-xs"
+          >
+            <Pressable
+              testID={`${testIDPrefix}-menu-delete-${tripId}`}
+              accessibilityRole="button"
+              onPress={onPressDelete}
+              className="h-[44px] flex-row items-center gap-sm px-lg"
+            >
+              <TrashGlyph size={18} />
+              <Text className="font-noto text-body text-primary">
+                {MENU_DELETE_LABEL}
+              </Text>
+            </Pressable>
           </View>
         ) : null}
 

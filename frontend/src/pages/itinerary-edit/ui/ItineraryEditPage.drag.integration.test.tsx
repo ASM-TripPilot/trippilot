@@ -54,7 +54,12 @@ jest.mock('@/shared/storage', () => ({
 }));
 
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), back: jest.fn(), replace: jest.fn() }),
+  useRouter: () => ({
+    push: jest.fn(),
+    back: jest.fn(),
+    replace: jest.fn(),
+    canGoBack: () => true,
+  }),
 }));
 
 // 편집 뷰가 조립하는 MapSheetShell → MapView(네이버 네이티브)는 jest 에서 못 뜬다 — 관찰 목.
@@ -79,6 +84,7 @@ function slot(
     isFixed,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     tags: [],
     nameKo: `장소-${poiId}`,
   };

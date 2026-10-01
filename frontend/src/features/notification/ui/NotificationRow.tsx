@@ -12,11 +12,12 @@ import type { NotificationRowVM } from './NotificationInboxScreen';
  *    미읽음을 표현 — SVG fill 토글 금지, 맹점③). 읽음 행은 dot 컬럼이 빈다.
  *  - 아이콘 타일 40px(bg surface-strong) + kind 글리프 22px.
  *  - 제목 + 메타("라벨 · 상대시각") 단일 Text 노드씩(§5-A 완전일치 매칭 보존).
+ *  - 본문(TRIP-1075): 제목과 메타 사이, 서버 `body` 가공 없이 2줄 말줄임. 공백뿐이면 줄 자체를 안 그린다.
  *  - 인라인 액션(`inlineActionLabel`≠null = PLAN_B): `notification-inbox-action` press→onNavigate(route).
  *  - 행 자체 press: 인라인 액션이 없고 route≠null(=REFLECTION)일 때만 onNavigate(route).
  *    route=null(데이터없음 회고·딥링크 없는 kind)이면 press 무동작.
  *
- * testID: notification-inbox-row / -unread-dot / -action.
+ * testID: notification-inbox-row / -unread-dot / -body / -action.
  */
 
 export interface NotificationRowProps {
@@ -62,11 +63,20 @@ export function NotificationRow({
         <NotificationKindIcon icon={row.icon} />
       </View>
 
-      {/* 텍스트열 — 제목·메타·(선택)인라인 액션. */}
+      {/* 텍스트열 — 제목·(선택)본문·메타·(선택)인라인 액션. */}
       <View className="flex-1 gap-xs">
         <Text className="font-noto-bold text-body leading-[20px] text-ink">
           {row.title}
         </Text>
+        {row.body.trim() !== '' ? (
+          <Text
+            testID="notification-inbox-body"
+            numberOfLines={2}
+            className="font-noto text-label text-muted"
+          >
+            {row.body}
+          </Text>
+        ) : null}
         <Text className="font-noto text-caption text-muted">{row.meta}</Text>
         {inlineActionLabel != null && route != null ? (
           <Pressable

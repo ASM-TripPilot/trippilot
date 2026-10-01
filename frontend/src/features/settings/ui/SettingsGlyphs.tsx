@@ -16,7 +16,6 @@ const HAIRLINE_STRONG = '#DDDDDD';
 // l03 메뉴·헤더 아이콘(Figma 1602:2388 — #3F3F3F stroke 2, 메뉴 chevron #9AA1AB). 토큰 body·muted-soft 와 같은 값.
 const BODY = '#3F3F3F';
 export const MUTED_SOFT = '#9AA1AB';
-const ON_PRIMARY = '#FFFFFF';
 
 type GlyphProps = {
   size?: number;
@@ -346,7 +345,7 @@ export function DownloadGlyph({ size = 22, testID }: GlyphProps) {
   );
 }
 
-/** 여행 스타일 행 — 반쪽 채운 대비 원(Figma 반원). */
+/** 여행 취향 행 — 반쪽 채운 대비 원(Figma 반원). */
 export function ContrastGlyph({ size = 22, testID }: GlyphProps) {
   return (
     <Svg
@@ -358,188 +357,6 @@ export function ContrastGlyph({ size = 22, testID }: GlyphProps) {
     >
       <Circle cx={12} cy={12} r={8} stroke={INK} strokeWidth={1.7} />
       <Path d="M12 4A8 8 0 0 1 12 20Z" fill={INK} />
-    </Svg>
-  );
-}
-
-/** 예산 행 — 원화(₩) 획 + 두 가로선. */
-export function WonGlyph({ size = 22, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M5 7L8 17L12 9L16 17L19 7"
-        stroke={INK}
-        strokeWidth={1.7}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Line
-        x1={5}
-        y1={11}
-        x2={19}
-        y2={11}
-        stroke={INK}
-        strokeWidth={1.7}
-        strokeLinecap="round"
-      />
-      <Line
-        x1={5}
-        y1={14}
-        x2={19}
-        y2={14}
-        stroke={INK}
-        strokeWidth={1.7}
-        strokeLinecap="round"
-      />
-    </Svg>
-  );
-}
-
-/** 동행 유형 행 — 두 사람. */
-export function PeopleGlyph({ size = 22, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Circle cx={9} cy={8} r={3} stroke={INK} strokeWidth={1.7} />
-      <Path
-        d="M3 19C3 15.7 5.7 13.5 9 13.5C12.3 13.5 15 15.7 15 19"
-        stroke={INK}
-        strokeWidth={1.7}
-        strokeLinecap="round"
-      />
-      <Circle cx={17.5} cy={8.5} r={2.4} stroke={INK} strokeWidth={1.7} />
-      <Path
-        d="M16 13.8C18.8 13.9 21 15.9 21 19"
-        stroke={INK}
-        strokeWidth={1.7}
-        strokeLinecap="round"
-      />
-    </Svg>
-  );
-}
-
-/** 선호 활동 행 — 별. */
-export function StarGlyph({ size = 22, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M12 4L14.3 9.2L20 9.8L15.8 13.6L17 19.2L12 16.3L7 19.2L8.2 13.6L4 9.8L9.7 9.2Z"
-        stroke={INK}
-        strokeWidth={1.7}
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-/** 이동 방식 행 — 좌우 화살표(교환). */
-export function ArrowsSwapGlyph({ size = 22, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M4 9H19M19 9L16 6M19 9L16 12"
-        stroke={INK}
-        strokeWidth={1.7}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M20 15H5M5 15L8 12M5 15L8 18"
-        stroke={INK}
-        strokeWidth={1.7}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-/** 음식 취향 행 — 포크·나이프. */
-export function ForkKnifeGlyph({ size = 22, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M6 3V7C6 8.7 10 8.7 10 7V3"
-        stroke={INK}
-        strokeWidth={1.7}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Line
-        x1={8}
-        y1={3}
-        x2={8}
-        y2={21}
-        stroke={INK}
-        strokeWidth={1.7}
-        strokeLinecap="round"
-      />
-      <Path
-        d="M16 3C18 5 18 11 16 13V21"
-        stroke={INK}
-        strokeWidth={1.7}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-/** 일정 밀도·이동 선호 행 — 게이지(속도계). */
-export function GaugeGlyph({ size = 22, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M4 16A8 8 0 0 1 20 16"
-        stroke={INK}
-        strokeWidth={1.7}
-        strokeLinecap="round"
-      />
-      <Line
-        x1={12}
-        y1={16}
-        x2={15.5}
-        y2={10.5}
-        stroke={INK}
-        strokeWidth={1.7}
-        strokeLinecap="round"
-      />
-      <Circle cx={12} cy={16} r={1.4} fill={INK} />
     </Svg>
   );
 }
@@ -830,26 +647,6 @@ export function LogoutGlyph({ size = 22, testID }: GlyphProps) {
         strokeWidth={1.7}
         strokeLinecap="round"
         strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-/** 새 여행 CTA 플러스(Figma 1603:2414 — 20×20, 흰 두 선 stroke 2.6). */
-export function PlusGlyph({ size = 20, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 20 20"
-      fill="none"
-    >
-      <Path
-        d="M10 4V16M4 10H16"
-        stroke={ON_PRIMARY}
-        strokeWidth={2.6}
-        strokeLinecap="round"
       />
     </Svg>
   );

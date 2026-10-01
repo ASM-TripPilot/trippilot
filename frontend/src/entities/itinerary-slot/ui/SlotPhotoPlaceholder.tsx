@@ -16,7 +16,7 @@ import {
 /**
  * TRIP-465 · 사진 없는 일정 슬롯의 카테고리 플레이스홀더 — Figma `2989:1731`.
  *
- * `slot.imageUrl` 이 null 인 h25 카드에서 사진 leaf 자리에 그리는 78×78 대체 타일. 카테고리별 옅은
+ * `slot.imageUrl` 이 null 인 h25 카드에서 사진 leaf 자리에 그리는 72×72 대체 타일(카드 사진 자리와 같은 크기 — TRIP-1116). 카테고리별 옅은
  * 틴트 배경 + 중앙 테마 아이콘으로 "여기 원래 사진 자리인데 없음 · 이 종류의 장소"를 정직하게 알린다
  * (실사진 발명 아님 · INV-1 정신). 텍스트는 0 — 아이콘만 그려 INV-3 소요시간 오탐 소지를 없앤다.
  *
@@ -55,7 +55,7 @@ export function SlotPhotoPlaceholder({
   return (
     <View
       testID={testID}
-      className={`h-[78px] w-[78px] items-center justify-center rounded-thumb ${tintClass}`}
+      className={`h-[72px] w-[72px] items-center justify-center rounded-thumb ${tintClass}`}
     >
       <Icon size={30} />
     </View>

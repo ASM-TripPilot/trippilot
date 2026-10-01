@@ -490,3 +490,14 @@ describe('🔴 S13 · 02a D4 — 셸 기본 3스냅의 peek(45%)로 연다 (★1
     values.forEach((value) => expect(value).toBe('45%'));
   });
 });
+
+describe('TRIP-1076 AC-3 · h15 숙소 추천은 핀 맞추기를 켜지 않는다 (선제 green · TRIP-1043 무회귀)', () => {
+  it('반경 원은 그대로 가고 fitPins 는 넘기지 않는다', () => {
+    // 켜면 MapView 에서 핀 영역이 반경 원 맞춤보다 우선해 원이 잘린다.
+    render(ui(makeHandlers()));
+
+    const map = screen.getByTestId('map-root');
+    expect(map.props.radiusCircle).toBeDefined();
+    expect(map.props.fitPins).toBeUndefined();
+  });
+});

@@ -95,3 +95,51 @@ describe('🔴 CtaBar · CTA3 — disabled 버튼(TRIP-799 · AC-9)', () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 });
+
+describe('🔴 CtaBar · TRIP-991 — 버튼 역할(AC-1 · AC-5 짝)', () => {
+  it('각 CTA 가 VoiceOver 에 자기 라벨의 버튼으로 읽힌다', () => {
+    render(
+      <CtaBar
+        buttons={[
+          { label: '다시 짜기', variant: 'outline', onPress: jest.fn() },
+          { label: '확정하기', variant: 'primary', onPress: jest.fn() },
+        ]}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: '다시 짜기' })).toHaveProp(
+      'testID',
+      'sheet-cta-button-0'
+    );
+    expect(screen.getByRole('button', { name: '확정하기' })).toHaveProp(
+      'testID',
+      'sheet-cta-button-1'
+    );
+  });
+
+  it('비활성 CTA 는 "비활성 버튼"으로 읽히고 눌러도 onPress 가 안 나간다', () => {
+    const onSave = jest.fn();
+    render(
+      <CtaBar
+        buttons={[
+          {
+            label: '일정 저장하기',
+            variant: 'primary',
+            onPress: onSave,
+            disabled: true,
+          },
+        ]}
+      />
+    );
+
+    // disabled 상태는 RN 이 자동으로 붙인다 — 이 쿼리의 red 는 역할(button) 조건에서 나온다.
+    const cta = screen.getByRole('button', {
+      name: '일정 저장하기',
+      disabled: true,
+    });
+    expect(cta).toHaveProp('testID', 'sheet-cta-button-0');
+
+    fireEvent.press(cta);
+    expect(onSave).not.toHaveBeenCalled();
+  });
+});

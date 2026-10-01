@@ -84,7 +84,7 @@ data class ReplanInput(
     val freeText: String?,
     val excludedPoiIds: List<UUID>,
     /**
-     * 아래 다섯은 전용 재계획 경계(`/ai/v1/itinerary/replan`, 연동 설계 §2)의 입력이고
+     * 아래 다섯은 전용 재계획 경계(`/ai/v1/planb/replan`, 연동 설계 §2)의 입력이고
      * **지금은 전부 와이어에 실린다**(TRIP-854). 상대 계약이 열리기 전에는 generate 재사용이라
      * 조립만 해 두고 버렸었다 — 그 기간 동안 재계획은 NEUTRAL_PREFERENCES 로 취향을 덮고 있었다.
      * 기본값을 두지 않는다 — 조립 지점이 값을 말하지 않고 조용히 빠지는 것을 컴파일이 막는다.
@@ -98,6 +98,13 @@ data class ReplanInput(
     val currentSlots: List<ReplanCurrentSlot>,
     /** 담은 장소 — LLM 컨텍스트("저장한 장소 — …")용. 이름 포함, 시각·메모 없음(목적 최소화). */
     val savedPlaces: List<SavedPlaceRef>,
+    /**
+     * 거절 이력(TRIP-964) — generate 와 같은 뜻([ScheduleAgentInput.rejections]).
+     * **기본값을 두지 않는다** — 이 타입의 규약이다(조립 지점이 값을 말하지 않고 조용히 빠지는
+     * 것을 컴파일이 막는다). '다시 짜줘' 직후의 재계획이 정확히 이 이력의 소비처라 여기가 빠지면
+     * 기억한 것이 가장 필요한 순간에 안 쓰인다.
+     */
+    val rejections: List<RejectedPoi>,
     val requestMeta: RequestMeta,
 )
 
@@ -160,7 +167,39 @@ data class ScheduleAgentInput(
      * 맨 뒤 배치는 기본값 파라미터 규칙(anti-patterns) — 기존 호출 전부 무변경.
      */
     val includeExplanations: Boolean = true,
+    /**
+     * 거절 이력(TRIP-964) — 사용자가 밀어낸 POI 를 **배제가 아니라 강등**으로 반영한다.
+     * 하드 제외(`excludedPoiIds`)로 처리하면 두세 번 누를 때 후보가 말라 일정이 비고,
+     * 사용자가 마음을 바꿔도 되돌아갈 길이 없다.
+     *
+     * **지금은 항상 비어 있다** — 채우는 것(무엇을 거절로 볼지 판정·여행 단위 누적 저장)은
+     * TRIP-964 의 본체이고, 이 필드는 AI 계약(`GenerateItineraryRequest.rejections`)과
+     * 키를 맞추기 위해 먼저 난다. `AiBoundaryOpenApiTest` 가 요청 키 **정확 일치**를
+     * 요구하므로 한쪽만 늘면 그 게이트가 깨진다.
+     *
+     * 강등 폭은 보내지 않는다 — 크기는 AI 설정이 갖는다(팀 결정 2026-09-26). 비율 조정에
+     * 백엔드 재배포가 필요 없고, 두 서비스가 같은 숫자를 각자 갖지 않게 한다.
+     */
+    val rejections: List<RejectedPoi> = emptyList(),
 )
+
+/**
+ * 거절 이력 한 줄 (TRIP-964). `count` 는 **같은 곳을 또 거절했는가**다 — 집합만 보내면
+ * "처음"과 "세 번째"가 구분되지 않아 반복 강등이 불가능하다(AI 가 횟수로 계단을 오른다).
+ */
+data class RejectedPoi(
+    val poiId: UUID,
+    val kind: Kind,
+    val count: Int = 1,
+) {
+    enum class Kind {
+        /** 슬롯 후보 패널에서 다른 곳으로 교체해 빠졌다 — 가장 명확한 거절이라 강등이 크다. */
+        SWAPPED_OUT,
+
+        /** 재생성 직전 일정에 있었다 — "이 구성이 싫다"에 가까워 약하게 본다. */
+        REGENERATED,
+    }
+}
 
 data class TripContext(
     val destinations: List<String>,
@@ -175,7 +214,7 @@ data class DayAnchor(val date: LocalDate, val lat: Double, val lng: Double)
 
 data class TimeWindow(val date: LocalDate, val start: LocalTime, val end: LocalTime)
 
-/** 고정 블록(HC3). ANYTIME이면 date/start/dwellMin 은 null. */
+/** 고정 블록(HC3). ANYTIME이면 date/start/dwellMin 은 null. **와이어에 직결**이라 필드를 더하지 않는다(계약 게이트가 잡는다 — TRIP-1001 실측). */
 data class FixedBlock(val poiId: UUID, val date: LocalDate?, val start: LocalTime?, val dwellMin: Int?)
 
 /** 취향 7축(preference_snapshot). AI가 선호 점수·소프트 가중치에 사용. */
@@ -232,7 +271,30 @@ data class ScheduleAgentOutput(
      * 단위는 km 이고 **소요시간은 여기에도 없다**(INV-3).
      */
     val totalDistanceKm: Double? = null,
+    /**
+     * 생성 시점 점수 후보 풀(TRIP-969) — 슬롯 교체(/alternatives)를 LLM 없이 즉답하는 재료.
+     * **기본 null** — 이 값을 아직 주지 않는 경로(실 AI 는 TRIP-970 개통 대기)와 옛 응답이 같은 뜻이 되게.
+     */
+    val scoredCandidates: ScoredCandidatePool? = null,
 )
+
+/**
+ * 생성 시점 점수 후보 풀(TRIP-969) — "같은 카테고리 → 점수 내림"이라는 생성 때의 판단을
+ * 슬롯 교체 즉답에 그대로 재사용한다. 배치된 슬롯의 점수도 들어 있다(교체 대상의 카테고리를 여기서 찾는다).
+ *
+ * [radiusM] 은 저장 시점 탐색 반경 — 요청 반경이 이보다 크면 이 풀이 그 반경을 안 덮어 즉답할 수 없다.
+ */
+data class ScoredCandidatePool(val radiusM: Int, val candidates: List<ScoredCandidate>) {
+    /** 상위 [MAX_CANDIDATES]건만 남긴다 — 실측(거절 10번에 40% 슬롯 고갈)에 여유를 둔 상한, ~8KB. */
+    fun capped() = copy(candidates = candidates.sortedByDescending { it.score }.take(MAX_CANDIDATES))
+
+    companion object {
+        const val MAX_CANDIDATES = 200
+    }
+}
+
+/** [score] 는 AI 산출 그대로다 — 백엔드는 비교·정렬만 하고 재계산하지 않는다(INV-2 정신). */
+data class ScoredCandidate(val poiId: UUID, val score: Double, val category: String)
 
 /**
  * 넣지 못한 필수 방문지 1건.

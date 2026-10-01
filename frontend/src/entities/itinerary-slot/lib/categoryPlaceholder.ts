@@ -1,14 +1,14 @@
 /**
  * TRIP-465 · 사진 없는 일정 슬롯의 카테고리 플레이스홀더 — **틴트/아이콘 선택 순수 모듈**.
  *
- * `slot.imageUrl` 이 null 인 h25 카드에서 사진 자리에 그릴 78×78 대체 타일의 두 값을 고른다:
+ * `slot.imageUrl` 이 null 인 h25 카드에서 사진 자리에 그릴 72×72 대체 타일의 두 값을 고른다:
  * 카테고리 → 배경 틴트 tailwind 토큰 + 중앙 아이콘 키. 매핑 정본은 Figma 노드 2989:1731
  * (브리프 §토큰 스냅표, 01_brief:80~89). 알려진 7종 밖(액티비티·경계코드·미지·null·빈 문자열)은
  * 전부 폴백 한 규칙으로 접는다 — 빈 자리도 크래시도 아닌 정직한 기본 타일(INV-1 정신, 실사진 발명 아님).
  */
 
 export interface CategoryPlaceholder {
-  /** 78×78 플레이스홀더 배경 틴트 tailwind className (예: `'bg-primary-pale'`). */
+  /** 72×72 플레이스홀더 배경 틴트 tailwind className (예: `'bg-primary-pale'`). */
   tintClass: string;
   /** 중앙 카테고리 아이콘 선택 키. 카테고리마다 다른 아이콘을 고른다(틴트가 겹쳐도 아이콘은 별개). */
   iconKey: string;

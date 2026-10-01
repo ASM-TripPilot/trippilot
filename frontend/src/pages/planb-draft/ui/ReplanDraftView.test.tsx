@@ -214,19 +214,27 @@ describe('🔴 V3 · AC-4 — 커넥터는 행 N-1 개, 다음 행의 거리를 
     ]);
   });
 
-  it('다음 행 거리가 null 이면 그 커넥터는 "이동 거리 계산 중" 이다', () => {
+  it('다음 행 거리가 null 이면 그 커넥터는 줄만 남고 문구 칸이 없다(TRIP-1054)', () => {
     renderView({
       slots: SLOTS.map((slot) =>
         slot.slotKey === 's5' ? { ...slot, distanceRange: null } : slot
       ),
     });
 
+    // 거리 문구는 값이 있는 세 줄뿐.
     expect(textsOf(/^sheet-connector-distance-/)).toEqual([
       '1.4km',
       '3.2km',
       '600m',
-      '이동 거리 계산 중',
     ]);
+    // 줄 자체는 행 N-1 = 4개 그대로 — s5 줄도 남는다.
+    expect(
+      screen.queryAllByTestId(/^sheet-connector-(?!distance-)/)
+    ).toHaveLength(4);
+    expect(screen.getByTestId('sheet-connector-s5')).toBeOnTheScreen();
+    expect(screen.queryByTestId('sheet-connector-distance-s5')).toBeNull();
+    // 옛 거짓 신호 "계산 중" 0(QA #038).
+    expect(screen.queryByText(/이동 거리 계산 중/)).toBeNull();
   });
 });
 

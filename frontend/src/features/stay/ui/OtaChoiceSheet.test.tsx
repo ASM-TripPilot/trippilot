@@ -88,14 +88,16 @@ describe('T1 · l07 default 고지 문구 (TRIP-781 AC-1 · BR-U1-30)', () => {
   });
 });
 
-describe('T2 · 단일 OTA 행 (01b Q2 — 복수 이연 · TRIP-781 AC-5 유지)', () => {
-  it('externalSource 이름 + 최저가를 한 행으로 그린다', () => {
+describe('T2 · 단일 OTA 행 (01b Q2 — 복수 이연 · TRIP-781 AC-5 유지 · TRIP-988 B-2)', () => {
+  // TRIP-988 D4 — 옛 계약은 행에 코드 원문('NAVER')을 그렸다. 새 계약은 사전 표시명이다.
+  it('사전에 있는 코드(NAVER)는 표시명 "네이버" + 최저가를 한 행으로 그리고, 코드 원문은 없다', () => {
     render(<OtaChoiceSheet {...sheetProps()} />);
 
     const row = screen.getByTestId('stay-ota-option-NAVER');
     expect(row).toBeOnTheScreen();
-    expect(within(row).getByText('NAVER')).toBeOnTheScreen();
+    expect(within(row).getByText('네이버')).toBeOnTheScreen();
     expect(within(row).getByText(formatPrice(ITEM.price))).toBeOnTheScreen();
+    expect(within(row).queryAllByText(/NAVER/).length).toBe(0);
   });
 });
 
@@ -273,5 +275,120 @@ describe('T8 · "다시 보지 않기" 표시 여부 prop (TRIP-778 D9 — 게�
     render(<OtaChoiceSheet {...sheetProps()} />);
 
     expect(screen.getByTestId('stay-ota-dont-show')).toBeOnTheScreen();
+  });
+});
+
+/**
+ * TRIP-988 B(BR-U1-30 · BR-U1-31 · US-STAY-05 · D4) — 옵션 행에 내부 코드 대신 사용자가 읽을 이름.
+ *
+ * 무엇을 보장하나: 사전에 없는 코드(`LOCALDATA`·`STUB`·미등록)는 "외부 사이트"로 접히고, 코드 문자열은
+ * 시트 어디에도 **보이는 글자로** 남지 않는다. 행 자체와 가격은 남는다. testID
+ * `stay-ota-option-{코드}` 는 글자가 아니라 그대로 둔다(`queryAllByText` 는 testID 를 안 본다).
+ * `constructor` 는 사전이 객체 리터럴이면 프로토타입 멤버를 집어 오는 함정 입력이다.
+ */
+describe('T9 · OTA 행 표시명 (TRIP-988 B-1 · B-2)', () => {
+  it('AGODA 는 표시명 "아고다"로 그리고 코드 원문은 없다', () => {
+    render(
+      <OtaChoiceSheet
+        {...sheetProps({ item: { ...ITEM, externalSource: 'AGODA' } })}
+      />
+    );
+
+    const row = screen.getByTestId('stay-ota-option-AGODA');
+    expect(within(row).getByText('아고다')).toBeOnTheScreen();
+    expect(screen.queryAllByText(/AGODA/).length).toBe(0);
+  });
+
+  it.each(['LOCALDATA', 'STUB', 'KAKAO', 'constructor'])(
+    '사전에 없는 코드 %s 는 행에 "외부 사이트"로 그리고, 코드 글자는 시트 어디에도 없다',
+    (code) => {
+      // 준비 — 사전에 없는 코드를 가진 숙소.
+      const item: StayItem = { ...ITEM, externalSource: code };
+
+      // 실행
+      render(<OtaChoiceSheet {...sheetProps({ item })} />);
+
+      // 단언 — 행은 남고(testID 유지), 표시명은 폴백, 가격도 그대로다.
+      const row = screen.getByTestId(`stay-ota-option-${code}`);
+      expect(within(row).getByText('외부 사이트')).toBeOnTheScreen();
+      expect(within(row).getByText(formatPrice(ITEM.price))).toBeOnTheScreen();
+      // 단언 — 행만이 아니라 시트 전체에서 코드 글자가 0개다(제목·버튼으로 새는 것도 잡는다).
+      // 노드 배열을 matcher 에 그대로 넘기면 실패 메시지 직렬화가 순환 참조로 죽는다 — 개수만 비교한다.
+      expect(screen.queryAllByText(new RegExp(code)).length).toBe(0);
+    }
+  );
+});
+
+/**
+ * TRIP-1019 #018(결정 6 · BR-U1-30 · BR-U1-31) — 이동 방식 prop `outbound`('affiliate' | 'webSearch').
+ *
+ * 무엇을 보장하나: 지금 [이동]은 제휴 딥링크가 아니라 구글 웹검색(BR-U1-31 검색 우회)이다. 그 얼굴(webSearch)은
+ * 수수료 고지를 숨기고 버튼을 "검색 결과로 이동"으로 바꾸며, "다시 보지 않기"도 그리지 않는다(01b Q3 — 계정
+ * 단위 제휴 고지 억제 동의를 고지 없는 시트에서 받지 않는다, BR-U6-33). 본문·OTA 행은 그대로다(01b Q4).
+ *
+ * ★ 짝(법정 고지 보존): 제휴 모드(affiliate)는 **그대로** 수수료 고지 + "{OTA명}로 이동" + 체크박스다. 실 딥링크
+ * 계약이 생기면 돌아와야 할 BR-U1-30 경로라, 고지를 통째로 지워 폴백 테스트만 초록으로 만드는 구현을 막는다.
+ * prop 을 생략하면 제휴 얼굴이다(위 T1~T9 가 그 얼굴을 잠근다) — 호출부가 방식을 빠뜨리면 고지 쪽으로 넘친다.
+ */
+describe('W · 웹검색 폴백 얼굴과 제휴 얼굴 (TRIP-1019 #018 · 01b Q3·Q4)', () => {
+  it('webSearch: 수수료 안내 박스·문구가 없고, 버튼 이름이 "검색 결과로 이동"이다', () => {
+    const onConfirm = jest.fn();
+    render(
+      <OtaChoiceSheet {...sheetProps({ outbound: 'webSearch', onConfirm })} />
+    );
+
+    // 앵커: default 얼굴이 그려졌다 — 본문·OTA 행은 그대로(01b Q4).
+    expect(screen.getByText(TITLE)).toBeOnTheScreen();
+    expect(screen.getByText(BODY)).toBeOnTheScreen();
+    expect(screen.getByTestId('stay-ota-option-NAVER')).toBeOnTheScreen();
+    // 금지: 수수료 고지.
+    expect(screen.queryByTestId('stay-ota-notice-box')).toBeNull();
+    expect(screen.queryByText(NOTICE)).toBeNull();
+    expect(screen.queryByText(/제휴 수수료/)).toBeNull();
+    // 정상: 버튼 이름 = 가는 곳(완전일치), 옛 "네이버로 이동" 아님.
+    const confirm = screen.getByRole('button', { name: '검색 결과로 이동' });
+    expect(confirm.props.testID).toBe('stay-ota-confirm');
+    expect(screen.queryByText('네이버로 이동')).toBeNull();
+
+    fireEvent.press(confirm);
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it('webSearch: showDontShowAgain 이 true(로그인 사용자)여도 "다시 보지 않기"가 없다', () => {
+    render(
+      <OtaChoiceSheet
+        {...sheetProps({ outbound: 'webSearch', showDontShowAgain: true })}
+      />
+    );
+
+    expect(screen.getByText(BODY)).toBeOnTheScreen();
+    expect(screen.queryByTestId('stay-ota-dont-show')).toBeNull();
+    expect(screen.queryByText(DONT_SHOW)).toBeNull();
+  });
+
+  it('webSearch + error: error 얼굴은 그대로다(제목·[다시 시도], [이동] 없음)', () => {
+    const onRetry = jest.fn();
+    render(
+      <OtaChoiceSheet
+        {...sheetProps({ outbound: 'webSearch', variant: 'error', onRetry })}
+      />
+    );
+
+    expect(screen.getByText(ERROR_TITLE)).toBeOnTheScreen();
+    expect(screen.queryByTestId('stay-ota-confirm')).toBeNull();
+    fireEvent.press(screen.getByTestId('stay-ota-retry'));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('짝 — affiliate: 수수료 안내 박스·문구, "네이버로 이동", 체크박스가 그대로 있다', () => {
+    render(<OtaChoiceSheet {...sheetProps({ outbound: 'affiliate' })} />);
+
+    expect(screen.getByTestId('stay-ota-notice-box')).toBeOnTheScreen();
+    expect(screen.getByText(NOTICE)).toBeOnTheScreen();
+    expect(screen.getByTestId('stay-ota-confirm')).toHaveTextContent(
+      '네이버로 이동'
+    );
+    expect(screen.getByTestId('stay-ota-dont-show')).toBeOnTheScreen();
+    expect(screen.queryByText('검색 결과로 이동')).toBeNull();
   });
 });

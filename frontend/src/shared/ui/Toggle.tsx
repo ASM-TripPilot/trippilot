@@ -13,6 +13,9 @@ import { Pressable, View } from 'react-native';
  */
 export interface ToggleProps {
   testID: string;
+  /** VoiceOver 가 읽는 스위치 이름(TRIP-991, 필수 — 라벨 없는 소비처를 tsc 가 막는다). 행 제목을 넘기고
+   *  켜짐/꺼짐은 넣지 않는다(상태는 `accessibilityState.checked`). */
+  accessibilityLabel: string;
   checked: boolean;
   disabled?: boolean;
   onPress: () => void;
@@ -20,6 +23,7 @@ export interface ToggleProps {
 
 export function Toggle({
   testID,
+  accessibilityLabel,
   checked,
   disabled = false,
   onPress,
@@ -33,6 +37,7 @@ export function Toggle({
     <Pressable
       testID={testID}
       accessibilityRole="switch"
+      accessibilityLabel={accessibilityLabel}
       accessibilityState={{ checked, disabled }}
       disabled={disabled}
       onPress={onPress}

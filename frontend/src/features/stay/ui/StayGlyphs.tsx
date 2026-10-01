@@ -214,16 +214,14 @@ export function SearchGlyph({
 }
 
 // 플러스 — 수동 등록 유도 카드 배지(22, 분홍 PRIMARY, 연분홍 원 위, Figma 1341:1391) ·
-// e02 분홍 원 FAB(24, 흰색 ON_PRIMARY, Figma 4463:2113) · e03 CTA2 "일정에 추가"(19, 흰 버튼 위라
-// 먹색 INK, Figma 1700:1278) 겸용. 색만 tone prop 으로 뺀다(SearchGlyph tone 선례). 기본값
-// primary: 등록 카드가 먼저 이 색을 썼다(무prop 호출 무회귀).
+// e02 분홍 원 FAB(24, 흰색 ON_PRIMARY, Figma 4463:2113) 겸용. 색만 tone prop 으로 뺀다(SearchGlyph
+// tone 선례). 기본값 primary: 등록 카드가 먼저 이 색을 썼다(무prop 호출 무회귀).
 export function PlusGlyph({
   size = 22,
   tone = 'primary',
   testID,
-}: GlyphProps & { tone?: 'primary' | 'onPrimary' | 'ink' }) {
-  const stroke =
-    tone === 'onPrimary' ? ON_PRIMARY : tone === 'ink' ? INK : PRIMARY;
+}: GlyphProps & { tone?: 'primary' | 'onPrimary' }) {
+  const stroke = tone === 'onPrimary' ? ON_PRIMARY : PRIMARY;
   return (
     <Svg
       testID={testID}
@@ -436,42 +434,6 @@ export function CheckGlyph({ size = 20, testID }: GlyphProps) {
         d="M20 6L9 17L4 12"
         stroke={ON_PRIMARY}
         strokeWidth={2.2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-// e05 날짜 필드 달력 아이콘(TRIP-730) — 라벨 옆 muted 달력(옛 CalendarPlusGlyph 는 TRIP-727 로
-// 삭제됨, 이 화면 전용으로 새로 그린다). 상단 고리 2개 + 헤더 구분선.
-export function CalendarGlyph({ size = 16, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 20 20"
-      fill="none"
-    >
-      <Path
-        d="M4 4H16C16.5523 4 17 4.4477 17 5V16C17 16.5523 16.5523 17 16 17H4C3.4477 17 3 16.5523 3 16V5C3 4.4477 3.4477 4 4 4Z"
-        stroke={MUTED}
-        strokeWidth={1.5}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M3 8H17"
-        stroke={MUTED}
-        strokeWidth={1.5}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M7 2.5V5.5M13 2.5V5.5"
-        stroke={MUTED}
-        strokeWidth={1.5}
         strokeLinecap="round"
         strokeLinejoin="round"
       />

@@ -1,6 +1,6 @@
 /**
  * a01-home "발견·영감 피드" 프레젠테이션 화면 (TRIP-316 · 라이브 Figma 2091:1357 정합, 3상태).
- * props(hero·sections)만 받는다 — 네트워크·라우팅을 전혀 모른다(homeStructure D-1이 기계 강제).
+ * props(hero·sections)만 받는다 — 네트워크·라우팅을 전혀 모른다(기계 강제 없음).
  * 배선 CTA 3종(FAB·담은 곳·뜨는 장소 더보기)은 넘겨받은 콜백 prop만 발화하고(라우터 무지, D-1),
  * 목적지 없는 컨트롤은 accessibilityRole="button"을 떼 접근성 트리에서 버튼이 아니다(TRIP-370).
  *
@@ -39,6 +39,8 @@ import {
   SuitcaseGlyph,
 } from './HomeGlyphs';
 import { formatCountBadge } from '../lib/formatCountBadge';
+import { HeartButton } from '@/shared/ui/HeartButton';
+import { Skeleton } from '@/shared/ui/Skeleton';
 import type {
   HomeCollectionCard,
   HomeMagazineHero,
@@ -46,6 +48,7 @@ import type {
   HomeScreenProps,
   HomeSections,
   HomeSpotCard,
+  HomeSpotsLane,
   PastTrip,
   TripHeroData,
 } from '../model/homeTypes';
@@ -147,7 +150,7 @@ function GreetingHeader({
 // ── 검색바(가짜 — Pressable+Text, 실 TextInput 아님 · 02a §4-8) ──────────
 // TRIP-453: 검색바가 목적지(/explore/search)를 얻어 배선 컨트롤이 됐다 — role="button"은 콜백
 // 유무로 파생하지 않고 항상 붙인다(버튼-집합 테스트가 콜백 미주입으로 렌더, FAB 선례). 라우팅은
-// 라우트(`(tabs)/index.tsx`)가 지고 화면은 넘겨받은 onPress만 발화한다(homeStructure D-1).
+// 라우트(`(tabs)/index.tsx`)가 지고 화면은 넘겨받은 onPress만 발화한다.
 function SearchBarBlock({ onPress }: { onPress?: () => void }): ReactElement {
   return (
     <View className="w-full px-lg pb-[14px] pt-[4px]">
@@ -204,7 +207,7 @@ function MagazineHero({
         locations={SCRIM_LOCATIONS}
         style={ABSOLUTE_FILL}
       />
-      <View className="flex-1 justify-between px-lg pb-xl pt-xl">
+      <View className="flex-1 justify-between px-lg pb-[44px] pt-xl">
         {/* 상단: eyebrow pill(하트는 TRIP-694로 제거) */}
         <View className="w-full flex-row items-start justify-between">
           <View className="flex-row items-center gap-[6px] self-start rounded-pill bg-canvas px-md py-[5px]">
@@ -403,13 +406,19 @@ function CollectionCard({
 }
 
 // ── 스팟 카드(지금 뜨는 장소, 2×2 그리드 셀) ────────────────────────────
+// 하트는 poiId(실데이터)와 save 배선이 둘 다 있을 때만 — 픽스처엔 담을 대상이 없다(AC-14).
+// 카드 자체는 버튼이 아니라(상세 이동 없음) disabled 하트 press 가 새어도 받을 곳이 없다.
 function SpotCard({
   card,
   index,
+  lane,
 }: {
   card: HomeSpotCard;
   index: number;
+  lane?: HomeSpotsLane;
 }): ReactElement {
+  const { poiId } = card;
+  const onToggleSave = lane?.onToggleSave;
   return (
     <View
       testID={`home-spot-card-${index}`}
@@ -434,6 +443,17 @@ function SpotCard({
           {card.tag}
         </Text>
       </View>
+      {poiId && onToggleSave ? (
+        <HeartButton
+          saved={(lane.savedPoiIds ?? []).includes(poiId)}
+          pending={(lane.pendingPoiIds ?? []).includes(poiId)}
+          onPress={() => onToggleSave(poiId)}
+          testID={`home-spot-save-${poiId}`}
+          filledTestID={`home-spot-heart-filled-${poiId}`}
+          outlineTestID={`home-spot-heart-outline-${poiId}`}
+          className="absolute right-sm top-sm"
+        />
+      ) : null}
     </View>
   );
 }
@@ -445,8 +465,7 @@ function CollectionsSection({
 }: {
   sections: HomeSections;
   /** 컬렉션 헤더 카피. 미지정이면 기본 "요즘 사람들이 담는 곳"(discovery), planning 은 지역
-   *  카피("부산에서 담을 만한 곳")를 주입(TRIP-696 파라미터화 — 기본값 문자열은 homeStructure
-   *  긍정 앵커라 소스에 남는다). */
+   *  카피("부산에서 담을 만한 곳")를 주입(TRIP-696 파라미터화). */
   title?: string;
 }): ReactElement {
   return (
@@ -468,7 +487,7 @@ function CollectionsSection({
           className="mx-lg flex-row gap-md overflow-hidden"
         >
           {[0, 1].map((i) => (
-            <View
+            <Skeleton
               key={i}
               className="h-[300px] w-[230px] rounded-[18px] bg-surface-strong"
             />
@@ -480,13 +499,23 @@ function CollectionsSection({
 }
 
 // ── 섹션2: 지금 뜨는 장소(2×2 그리드 · 3상태) ───────────────────────────
+// TRIP-1049 — `spotsLane`(실데이터)이 오면 섹션이 자기 상태를 따로 갖는다: 대기=스켈레톤 ·
+// 실패=한 줄 재시도(INV-4) · 0장=섹션 통째 숨김. 없으면 지금처럼 `sections.spots`(픽스처).
+// `sections.kind==='loading'`(홈 전면 로딩)이면 spotsLane 과 무관하게 스켈레톤이다.
 function SpotsSection({
   sections,
   onMore,
+  lane,
 }: {
   sections: HomeSections;
   onMore?: () => void;
-}): ReactElement {
+  lane?: HomeSpotsLane;
+}): ReactElement | null {
+  const status =
+    sections.kind === 'loading' ? 'loading' : (lane?.status ?? 'ready');
+  const cards =
+    sections.kind === 'loading' ? [] : (lane?.cards ?? sections.spots);
+  if (lane && status === 'ready' && cards.length === 0) return null;
   return (
     <View className="w-full gap-md">
       <SectionHeader
@@ -495,12 +524,40 @@ function SpotsSection({
         onMore={onMore}
         asButton
       />
-      {sections.kind === 'ready' ? (
+      {lane?.saveErrorMessage ? (
+        <Pressable
+          testID="home-spot-save-error"
+          accessibilityRole="button"
+          onPress={lane.onDismissSaveError}
+          className="mx-lg rounded-card bg-surface-soft px-lg py-md"
+        >
+          <Text className="font-noto text-label text-muted">
+            {lane.saveErrorMessage}
+          </Text>
+        </Pressable>
+      ) : null}
+      {status === 'error' ? (
+        <Pressable
+          testID="home-spots-error"
+          accessibilityRole="button"
+          onPress={lane?.onRetry}
+          className="mx-lg rounded-card bg-surface-soft px-lg py-2xl"
+        >
+          <Text className="font-noto text-label text-muted">
+            장소를 불러오지 못했어요 · 다시 시도
+          </Text>
+        </Pressable>
+      ) : status === 'ready' ? (
         <View className="mx-lg gap-md">
           {[0, 1].map((row) => (
             <View key={row} className="flex-row gap-md">
-              {sections.spots.slice(row * 2, row * 2 + 2).map((card, i) => (
-                <SpotCard key={card.title} card={card} index={row * 2 + i} />
+              {cards.slice(row * 2, row * 2 + 2).map((card, i) => (
+                <SpotCard
+                  key={card.poiId ?? card.title}
+                  card={card}
+                  index={row * 2 + i}
+                  lane={lane}
+                />
               ))}
             </View>
           ))}
@@ -510,7 +567,7 @@ function SpotsSection({
           {[0, 1].map((row) => (
             <View key={row} className="flex-row gap-md">
               {[0, 1].map((c) => (
-                <View
+                <Skeleton
                   key={c}
                   className="h-[166px] flex-1 rounded-card bg-surface-strong"
                 />
@@ -764,7 +821,7 @@ function CountBadge({
 // 누르면 두 미니 FAB 으로 펼쳐진다: 담은 장소(위치핀→d02) · 저장한 숙소(가방→e04). 열리면
 // 하트가 X(닫기, 핑크)로 바뀐다. 각 미니 FAB 우상단엔 담긴 개수 배지(count≥1일 때만, TRIP-695).
 // 배후 backdrop 은 HomeScreen 레벨로 올라갔다(+ FAB 도 덮게, AC-3 z-order). 열림 상태·개수·목적지는
-// 라우트가 소유해 prop 으로 내린다(화면 useState 0건 — homeStructure 순수성, 탐색 랜딩과 동형).
+// 라우트가 소유해 prop 으로 내린다(화면 useState 0건 — 순수 화면, 탐색 랜딩과 동형).
 function SavedMenuFab({
   open,
   onToggle,
@@ -834,6 +891,7 @@ function SavedMenuFab({
 function DiscoveryBody({
   hero,
   sections,
+  spotsLane,
   onPressSpotsMore,
   onPressSearch,
   onPressMagazine,
@@ -841,6 +899,7 @@ function DiscoveryBody({
 }: {
   hero: readonly HomeMagazineHero[];
   sections: HomeSections;
+  spotsLane?: HomeSpotsLane;
   onPressSpotsMore?: () => void;
   onPressSearch?: () => void;
   onPressMagazine?: () => void;
@@ -856,7 +915,7 @@ function DiscoveryBody({
       <SearchBarBlock onPress={onPressSearch} />
       {/* TRIP-699 — 로딩이면 히어로는 캐러셀이 아니라 통짜 스켈레톤(390×470, Figma 2174:2307). */}
       {sections.kind === 'loading' ? (
-        <View
+        <Skeleton
           testID="home-hero-skeleton"
           className="h-[470px] w-full bg-surface-strong"
         />
@@ -868,7 +927,11 @@ function DiscoveryBody({
       )}
       <View className="w-full gap-[24px] pb-sm pt-[22px]">
         <CollectionsSection sections={sections} />
-        <SpotsSection sections={sections} onMore={onPressSpotsMore} />
+        <SpotsSection
+          sections={sections}
+          onMore={onPressSpotsMore}
+          lane={spotsLane}
+        />
       </View>
     </>
   );
@@ -946,6 +1009,7 @@ function PlanningBody({
   phase,
   hero,
   sections,
+  spotsLane,
   onPressSpotsMore,
   onPressTripHeroCta,
   onPressSearch,
@@ -954,6 +1018,7 @@ function PlanningBody({
   phase: Extract<HomePhase, { kind: 'planning' }>;
   hero: readonly HomeMagazineHero[];
   sections: HomeSections;
+  spotsLane?: HomeSpotsLane;
   onPressSpotsMore?: () => void;
   onPressTripHeroCta?: () => void;
   onPressSearch?: () => void;
@@ -979,7 +1044,11 @@ function PlanningBody({
           title={phase.collectionsTitle}
         />
         {phase.showSpots ? (
-          <SpotsSection sections={sections} onMore={onPressSpotsMore} />
+          <SpotsSection
+            sections={sections}
+            onMore={onPressSpotsMore}
+            lane={spotsLane}
+          />
         ) : null}
       </View>
     </>
@@ -1032,6 +1101,7 @@ function PostTripBody({
 function PhaseBody({
   hero,
   sections,
+  spotsLane,
   phase,
   onPressSpotsMore,
   onPressTripHeroCta,
@@ -1044,6 +1114,7 @@ function PhaseBody({
       <DiscoveryBody
         hero={hero}
         sections={sections}
+        spotsLane={spotsLane}
         onPressSpotsMore={onPressSpotsMore}
         onPressSearch={onPressSearch}
         onPressMagazine={onPressMagazine}
@@ -1058,6 +1129,7 @@ function PhaseBody({
           phase={phase}
           hero={hero}
           sections={sections}
+          spotsLane={spotsLane}
           onPressSpotsMore={onPressSpotsMore}
           onPressTripHeroCta={onPressTripHeroCta}
           onPressSearch={onPressSearch}
@@ -1080,6 +1152,7 @@ function PhaseBody({
 export function HomeScreen({
   hero,
   sections,
+  spotsLane,
   phase,
   onPressCreateTrip,
   onPressSavedPlaces,
@@ -1106,6 +1179,7 @@ export function HomeScreen({
           <PhaseBody
             hero={hero}
             sections={sections}
+            spotsLane={spotsLane}
             phase={phase}
             onPressSpotsMore={onPressSpotsMore}
             onPressTripHeroCta={onPressTripHeroCta}

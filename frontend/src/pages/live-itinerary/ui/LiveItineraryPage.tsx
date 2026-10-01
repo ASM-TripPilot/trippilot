@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { router } from 'expo-router';
 import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,6 +7,10 @@ import { resolveLiveState } from '@/features/execution/model/liveState';
 import { useLiveItinerary } from '@/features/execution/model/useLiveItinerary';
 import { projectSlotProgress } from '@/features/execution/model/slotProgress';
 import { useVisitCheck } from '@/features/execution/model/useVisitCheck';
+import { photoAttach } from '@/features/record/model/photoAttach';
+import { pickPhotoForVisit } from '@/features/record/model/pickPhotoForVisit';
+import { useVisitMemo } from '@/features/record/model/useVisitMemo';
+import { MemoSheet } from '@/features/record/ui/MemoSheet';
 import { deriveVisitProgress } from '@/features/execution/model/visitProgress';
 import { TriggerChip } from '@/features/execution/ui/TriggerChip';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
@@ -20,12 +24,14 @@ import { ReplanAppliedSheet } from '@/features/planb/ui/ReplanAppliedSheet';
 import { RiskDetailSheet } from '@/features/planb/ui/RiskDetailSheet';
 import type { Trigger } from '@/shared/api/generated/schemas';
 import {
+  postTripsTripIdVisitsVisitCheckIdPhotos,
   useGetTripsTripId,
   useGetTripsTripIdVisitsDaysDay,
 } from '@/shared/api/generated/trips/trips';
 import { isNotFound } from '@/shared/api/isNotFound';
 import { seoulDate } from '@/shared/date/seoulDate';
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { ArriveRequestSource } from '@/shared/api/generated/schemas';
 
 import { LiveHubView } from './LiveHubView';
 
@@ -53,6 +59,12 @@ const NEUTRAL_BADGE = (
   <View className="h-[72px] w-[72px] rounded-pill bg-surface-strong" />
 );
 
+/** 허브 [사진] 저장 실패 안내(INV-4) — 허브엔 사진 칸이 없어 실패 셀 대신 카드 아래 한 줄로. */
+const PHOTO_SAVE_FAILED = '사진을 기록하지 못했어요. 다시 시도해 주세요';
+
+/** 허브 메모 저장 실패 안내(INV-4) — j01 `VisitRecordCardContainer` 와 같은 문장(TRIP-1117). */
+const MEMO_SAVE_FAILED = '메모를 저장하지 못했어요. 다시 시도해 주세요.';
+
 /** 뒤로 갈 히스토리가 없을 때(딥링크·푸시 직행)의 폴백 — ItineraryPlanPage 관례(INV-4 침묵 금지). */
 const HOME_FALLBACK = '/(tabs)';
 
@@ -71,6 +83,8 @@ export function LiveItineraryPage({
   // 닫으며 applied 가 지워져도 펼친 허브를 도로 접지 않는다(Q5).
   const [revertNotice, setRevertNotice] = useState(false);
   const [initialSnapIndex] = useState(appliedSessionId ? 2 : undefined);
+  // 관람 중 카드 [사진] 안내 한 줄(TRIP-1070). 다음 [사진] 누름에 지운다.
+  const [photoNotice, setPhotoNotice] = useState<string | null>(null);
 
   const state = resolveLiveState({
     isLoading: query.isPending,
@@ -100,6 +114,34 @@ export function LiveItineraryPage({
     query: { enabled: state.kind === 'active' && liveDate !== '' },
   });
   const visitCheck = useVisitCheck({ tripId, day: liveDate });
+
+  // 방문 기록 → 진행 상태 도출(★도달성 — 빈 인자면 전 슬롯 upcoming 이라 active 카드가 프로덕션에 안 뜬다).
+  // 도출·판정은 여기 1회. TRIP-1117 — 메모 세션 캐시를 관람 중 방문 id 로 읽어야 해서(훅은 조기 반환 위에서만)
+  // 조기 반환 아래에 있던 도출을 여기로 올렸다. active 가 아니면 슬롯이 비어 관람 중이 없다.
+  const activeSlots =
+    state.kind === 'active'
+      ? (state.itinerary.days[liveDayIndex]?.slots ?? [])
+      : [];
+  const progress = deriveVisitProgress(
+    visits.data ?? { visits: [] },
+    liveDate,
+    activeSlots.map((slot) => slot.poiId)
+  );
+  const activeVisitCheckId =
+    progress.activePoiId !== null
+      ? (progress.visitCheckIdByPoiId[progress.activePoiId] ?? null)
+      : null;
+  // 메모 저장만 쓴다 — useVisitAttachments 는 사진 목록 GET 을 무조건 쏘므로 부르지 않는다(F6). 캐시 키는 j01 과 한 벌.
+  const visitMemo = useVisitMemo({
+    tripId,
+    visitCheckId: activeVisitCheckId ?? '',
+  });
+  // 메모 시트 열림 = "어느 방문으로 열었나"(AC-16) — 재조회로 관람 중 방문이 바뀌면 시트가 저절로 빠진다.
+  const [memoSheetFor, setMemoSheetFor] = useState<string | null>(null);
+  // 메모 저장 실패가 난 방문. 시트가 열려 있으면 시트 안, 닫혀 있으면 관람 중 카드 아래에 보인다(Q3).
+  const [memoFailedFor, setMemoFailedFor] = useState<string | null>(null);
+  // 늦게 온 옛 실패가 최신 시도를 덮지 않게 시도 번호를 센다(j01 onSubmitMemo 선례).
+  const memoAttempt = useRef(0);
 
   if (state.kind === 'loading') {
     return (
@@ -146,20 +188,68 @@ export function LiveItineraryPage({
 
   const { itinerary } = state;
   const activeDayIndex = liveDayIndex;
-  const activeDate = itinerary.days[activeDayIndex]?.date ?? '';
-  const activeSlots = itinerary.days[activeDayIndex]?.slots ?? [];
+  const activeDate = liveDate;
 
-  // 방문 기록 → 진행 상태 도출 → projectSlotProgress 인자로 실제 주입(★도달성 — 빈 인자면
-  // 전 슬롯 upcoming 이라 active 카드가 프로덕션에 안 뜬다). 도출·판정은 여기 1회.
-  const progress = deriveVisitProgress(visits.data ?? { visits: [] });
   const projected = projectSlotProgress(activeSlots, {
     completedPoiIds: progress.completedPoiIds,
     activePoiId: progress.activePoiId,
   });
-  const activeVisitCheckId =
-    progress.activePoiId !== null
-      ? (progress.visitCheckIdByPoiId[progress.activePoiId] ?? null)
-      : null;
+  // 결정 2 — 세션 저장본을 관람 중 카드의 메모 박스로 내린다(done 카드는 범위 밖, Q5).
+  const hubSlots = projected.map((entry) =>
+    entry.state === 'active' ? { ...entry, memo: visitMemo.savedMemo } : entry
+  );
+
+  // TRIP-1070 [사진] — 관람 중 방문에 메타만 POST 한다. 사진 목록은 조회하지 않는다(허브엔 사진 칸이
+  // 없다 — useVisitAttachments 는 GET 을 무조건 쏘므로 부르지 않는다, F6).
+  const attachActivePhoto = async (visitCheckId: string) => {
+    setPhotoNotice(null);
+    const picked = await pickPhotoForVisit();
+    if ('notice' in picked) {
+      setPhotoNotice(picked.notice);
+      return;
+    }
+    try {
+      await postTripsTripIdVisitsVisitCheckIdPhotos(
+        tripId,
+        visitCheckId,
+        photoAttach(picked.asset, picked.gpsConsent)
+      );
+    } catch {
+      setPhotoNotice(PHOTO_SAVE_FAILED);
+    }
+  };
+
+  // TRIP-1117 [메모] — 허브 위 메모 시트에서 저장한다(TRIP-1070 결정 1(c) 번복). 닫힘은 저장 성공 뒤(Q1).
+  const memoSheetOpen =
+    activeVisitCheckId !== null && memoSheetFor === activeVisitCheckId;
+  const submitMemo = (visitCheckId: string, text: string) => {
+    const attempt = ++memoAttempt.current;
+    setMemoFailedFor(null);
+    visitMemo.saveMemo(text).then(
+      () => {
+        if (attempt === memoAttempt.current)
+          setMemoSheetFor((open) => (open === visitCheckId ? null : open));
+      },
+      () => {
+        if (attempt === memoAttempt.current) setMemoFailedFor(visitCheckId);
+      }
+    );
+  };
+  const memoFailed =
+    activeVisitCheckId !== null && memoFailedFor === activeVisitCheckId;
+  const memoSheet =
+    memoSheetOpen && activeVisitCheckId !== null ? (
+      <MemoSheet
+        placeName={
+          activeSlots.find((slot) => slot.poiId === progress.activePoiId)
+            ?.nameKo ?? ''
+        }
+        text={visitMemo.savedMemo}
+        notice={memoFailed ? MEMO_SAVE_FAILED : null}
+        onSubmit={(text) => submitMemo(activeVisitCheckId, text)}
+        onClose={() => setMemoSheetFor(null)}
+      />
+    ) : null;
 
   // MANUAL 은 표시 표면에서 숨긴다(알약·배지는 WEATHER·DELAY·CLOSURE 3변형만). triggerLabel 은
   // 4종 매핑을 갖되(구조 완전성), 화면 표시 필터는 여기서 — 서로 다른 축이다(★8, BR-U4-01).
@@ -223,7 +313,7 @@ export function LiveItineraryPage({
         tripTitle={trip.data?.title ?? ''}
         days={itinerary.days}
         activeDayIndex={activeDayIndex}
-        slots={projected}
+        slots={hubSlots}
         onSelectDay={setSelectedDay}
         onBack={() => {
           if (router.canGoBack()) router.back();
@@ -239,12 +329,50 @@ export function LiveItineraryPage({
               }
             : undefined
         }
+        onPressPhoto={
+          activeVisitCheckId !== null
+            ? () => void attachActivePhoto(activeVisitCheckId)
+            : undefined
+        }
+        // [메모] — 허브 위 메모 시트를 연다(TRIP-1117). 카드 아래 실패 안내는 여기서 지운다.
+        onPressMemo={
+          activeVisitCheckId !== null
+            ? () => {
+                setMemoFailedFor(null);
+                setMemoSheetFor(activeVisitCheckId);
+              }
+            : undefined
+        }
+        photoNotice={photoNotice}
+        memoNotice={!memoSheetOpen && memoFailed ? MEMO_SAVE_FAILED : null}
+        fabHidden={memoSheetOpen}
         triggerChip={triggerChip}
         triggerPillKey={chipTrigger?.triggerId}
         slotBadgeLabel={slotBadgeLabel}
+        onPressSlotName={(poiId) =>
+          router.push(`/trips/${tripId}/live/place/${poiId}`)
+        }
+        // TRIP-1021 수동 [도착] — 보는 날짜가 실제 오늘일 때만(Q6, 날짜 문자열 비교 — todayIndex 는 여행
+        // 밖이면 첫날/마지막 날로 끼운 값이라 못 쓴다). 다른 날에 열면 그날 슬롯에 오늘 도착이 찍힌다.
+        // 방문 기록 데이터가 있을 때만 — 첫 로딩·첫 실패 중엔 전부 '예정'으로 보여 이미 도착한 곳에 409 가 난다.
+        // isSuccess 가 아니라 data 기준: 재조회 한 번 실패로 캐시 데이터가 있는데 버튼이 전부 사라지면 안 된다(03b 재리뷰 R1).
+        // 위치 권한은 보지 않는다(Q2 — 자동 도착 TRIP-1018 보류 중 유일한 도착 경로).
+        // 슬롯 키가 비면 서버가 즉석 방문으로 기록하므로 반드시 싣는다. 실패는 훅이 그 레코드만 롤백한다.
+        onPressArrive={
+          activeDate === today && visits.data !== undefined
+            ? (poiId) => {
+                void visitCheck.arrive({
+                  slotKey: buildSlotKey(activeDate, poiId),
+                  poiId,
+                  source: ArriveRequestSource.MANUAL,
+                });
+              }
+            : undefined
+        }
         initialSnapIndex={initialSnapIndex}
       />
       {riskSheet}
+      {memoSheet}
       {appliedSessionId ? (
         // i08 — 반영 직후 한 번 뜨는 알림. 닫기 = applied 쿼리 제거(값을 undefined 로 줘야 지워진다 —
         // setParams 는 병합이라 `{}` 는 무동작). 부제·배지·내역은 데이터 계약이 없어 안 넘긴다(E4).

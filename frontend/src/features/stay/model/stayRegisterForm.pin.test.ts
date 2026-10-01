@@ -50,9 +50,6 @@ const PIN_READY: StayRegisterFlow = {
   pinAddressStatus: 'ok',
   coordConfirmed: true,
   mapSheetState: 'closed',
-  checkIn: null,
-  checkOut: null,
-  dateSheetOpen: false,
   submitStatus: 'idle',
 };
 
@@ -165,7 +162,6 @@ describe('FP-3 · 좌표 게이트는 출처와 무관하다 (AC-6 · BR-U1-22 �
             StayRegisterFlow['pinAddressStatus']
           >('idle', 'loading', 'ok', 'error'),
           name: fc.string(),
-          hasDates: fc.boolean(),
         }),
         (input) => {
           expect(
@@ -176,8 +172,6 @@ describe('FP-3 · 좌표 게이트는 출처와 무관하다 (AC-6 · BR-U1-22 �
               pinAddressStatus: input.pinAddressStatus,
               name: input.name,
               coordConfirmed: false,
-              checkIn: input.hasDates ? '2026-06-10' : null,
-              checkOut: input.hasDates ? '2026-06-12' : null,
             })
           ).toBe(false);
         }

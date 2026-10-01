@@ -55,7 +55,12 @@ jest.mock('@/shared/storage', () => ({
 
 const mockBack = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), back: mockBack, replace: jest.fn() }),
+  useRouter: () => ({
+    push: jest.fn(),
+    back: mockBack,
+    replace: jest.fn(),
+    canGoBack: () => true,
+  }),
 }));
 
 // EditorView 가 조립하는 MapSheetShell → MapView 는 jest 에서 못 뜬다 — 관찰 목으로 대체.
@@ -107,6 +112,7 @@ function itinerary(): Itinerary {
           isFixed: true,
           endsNextDay: false,
           hasViolation: false,
+          alternatives: [],
           tags: [],
           nameKo: '해운대 OO호텔',
         },
@@ -117,6 +123,7 @@ function itinerary(): Itinerary {
           isFixed: false,
           endsNextDay: false,
           hasViolation: false,
+          alternatives: [],
           tags: ['바다'],
           nameKo: '광안리',
         },
@@ -127,6 +134,7 @@ function itinerary(): Itinerary {
           isFixed: false,
           endsNextDay: false,
           hasViolation: false,
+          alternatives: [],
           tags: [],
           nameKo: '해운대 블루라인파크',
           imageUrl: B_IMAGE,

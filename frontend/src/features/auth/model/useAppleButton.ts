@@ -3,7 +3,7 @@ import { useEffect, useState, type ComponentType } from 'react';
 type AppleButtonComponent = ComponentType<{ onPress: () => void }>;
 
 /**
- * 이 기기에서 애플 로그인을 쓸 수 있으면 공식 애플 버튼 컴포넌트를, 아니면 null 을 돌려준다
+ * 이 기기에서 애플 로그인을 쓸 수 있으면 애플 버튼 컴포넌트를, 아니면 null 을 돌려준다
  * (TRIP-932). 판정 전·false(Android)·판정 실패는 전부 null — 누르면 실패할 버튼을 보여 주지
  * 않는 fail-closed 선택이다(Q2). 그래서 catch 가 조용한 것은 INV-4 위반이 아니라 "버튼 없음"이
  * 그 실패의 표면이다.

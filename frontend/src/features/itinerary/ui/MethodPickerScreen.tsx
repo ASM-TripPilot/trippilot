@@ -98,12 +98,17 @@ export interface ActiveGeneration {
 const BLOCKED_REASON =
   '다른 여행의 일정을 만들고 있어요 — 한 번에 하나만 만들 수 있어요';
 const GOTO_ACTIVE_LABEL = '진행 중인 여행으로 가기';
+const REBASE_LABEL = '거점 숙소 다시 고르기';
 
 // TRIP-504 재생성 확인 — 문구는 일반형이다. "직접 바꾼 N곳이 사라져요"의 N 을 FE 가 셀 계약이
 // 없어(01b 맹점 5) 곳 수를 발명하지 않고 일반 문구로 낮춘다. 리비전 스냅숏은 서버(U3) 책임.
 const REGENERATE_TITLE = '기존 일정을 새로 만들어요';
 const REGENERATE_BODY =
   'AI와 같이 다시 짜면 지금 일정이 새 초안으로 바뀌어요. 계속할까요?';
+// TRIP-1032 B — 이 여행이 생성 중일 때의 같은 확인 카드 문구(01b Q7 채택 — Figma 없음, 발명).
+const IN_PROGRESS_TITLE = '지금 만들고 있는 일정이 있어요';
+const IN_PROGRESS_BODY =
+  '새로 만들면 진행 중인 생성을 멈추고 새 초안으로 바꿔요. 계속할까요?';
 const REGENERATE_CONTINUE_LABEL = '계속';
 const REGENERATE_CANCEL_LABEL = '취소';
 
@@ -126,6 +131,10 @@ export interface MethodPickerScreenProps {
   showRegenerateConfirm?: boolean;
   onRegenerateContinue?: () => void;
   onRegenerateCancel?: () => void;
+  /** TRIP-1032 — 참이면 같은 확인 카드를 "생성 중" 문구로 그린다. 미전달=기존 덮어쓰기 문구. */
+  regenerateInProgress?: boolean;
+  /** TRIP-1011 C — "거점 숙소 다시 고르기" 링크. 미전달이면 링크를 그리지 않는다. */
+  onPressRebase?: () => void;
 }
 
 export function MethodPickerScreen({
@@ -138,6 +147,8 @@ export function MethodPickerScreen({
   showRegenerateConfirm = false,
   onRegenerateContinue,
   onRegenerateCancel,
+  regenerateInProgress = false,
+  onPressRebase,
 }: MethodPickerScreenProps): ReactElement {
   const blocked = activeGeneration != null;
 
@@ -241,10 +252,10 @@ export function MethodPickerScreen({
               className="w-full gap-md rounded-card border border-primary bg-primary-pale px-lg py-lg"
             >
               <Text className="font-noto-bold text-[16px] font-bold text-ink">
-                {REGENERATE_TITLE}
+                {regenerateInProgress ? IN_PROGRESS_TITLE : REGENERATE_TITLE}
               </Text>
               <Text className="font-noto text-label text-body">
-                {REGENERATE_BODY}
+                {regenerateInProgress ? IN_PROGRESS_BODY : REGENERATE_BODY}
               </Text>
               <View className="flex-row items-center justify-end gap-sm">
                 <Pressable
@@ -285,6 +296,20 @@ export function MethodPickerScreen({
           <Text className="w-full text-center font-noto text-[12.5px] text-muted-soft">
             {METHOD_SWITCH_NOTE}
           </Text>
+
+          {onPressRebase ? (
+            <Pressable
+              testID="itinerary-method-rebase"
+              accessibilityRole="button"
+              onPress={onPressRebase}
+              className="self-center"
+              hitSlop={6}
+            >
+              <Text className="font-noto-bold text-label font-bold text-primary-text">
+                {REBASE_LABEL}
+              </Text>
+            </Pressable>
+          ) : null}
         </ScrollView>
       </View>
     </SafeAreaView>

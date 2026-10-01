@@ -1,4 +1,5 @@
 import type {
+  ItineraryGenerationMode,
   ItineraryGenerationState,
   ItineraryStatus,
 } from '@/shared/api/generated/schemas';
@@ -14,25 +15,55 @@ import type {
  */
 export interface TripCardFace {
   statusLine: string;
-  badge: 'done' | 'draft';
+  badge: 'done' | 'draft' | 'live';
   resume: boolean;
 }
 
 /**
- * 우선순위(결정론) — PARTIAL → CONFIRMED → 초안 순(`resolveItineraryDestination` 과 정렬).
+ * 우선순위(결정론) — 404 → PARTIAL → CONFIRMED → 초안 순(`resolveItineraryDestination` 과 정렬).
+ * - `notFound`(조회 404) → 일정 없음: '아직 일정이 없어요' · draft · resume 없음(TRIP-986 D2·Q3).
  * - `generationState==='PARTIAL'` → 생성중: 'AI가 일정을 짜는 중' · draft · resume 없음.
- * - `status==='CONFIRMED'` → 완성: '추천안이 준비됐어요' · done · resume 없음(구 '확정 장소 N곳' 대체).
- * - else(COMPLETE/FAILED+PLANNED · 404 undefined 포함) → 초안: '추천안 준비 중' · draft · resume 있음.
+ * - `status==='CONFIRMED'` → 완성: '일정 확정' · done · resume 없음(TRIP-986 D2).
+ * - else(COMPLETE/FAILED+PLANNED) → 초안: '추천안 준비 중' · draft · resume 있음.
+ * 404 가 아닌 조회 실패는 이 함수의 입력이 아니다 — 컨테이너가 로딩과 같은 degrade 로 접는다(INV-4).
+ * `generationMode` 가 MANUAL/CO_PLAN 이면 생성중·초안의 **상태문만** '직접/같이 짜는 중'으로 바꾼다 —
+ * 배지·resume 는 위 규칙 그대로(TRIP-1015 B · 결정 1 · Q2). MANUAL 은 AI 를 부르지 않는다(openapi).
+ * `ongoing`(TRIP-1121) 은 CONFIRMED 분기에서만 본다 — 여행 중이면 배지만 'live'. 생략하면 지금과 같다
+ * (doneBar 가 2인자로 불러 'done' 에 기댄다).
  */
 export function deriveTripCardFace(
   status?: ItineraryStatus,
-  generationState?: ItineraryGenerationState
+  generationState?: ItineraryGenerationState,
+  notFound = false,
+  generationMode?: ItineraryGenerationMode,
+  ongoing = false
 ): TripCardFace {
+  if (notFound) {
+    return { statusLine: '아직 일정이 없어요', badge: 'draft', resume: false };
+  }
+  const modeLine =
+    generationMode === 'MANUAL'
+      ? '직접 짜는 중'
+      : generationMode === 'CO_PLAN'
+        ? '같이 짜는 중'
+        : null;
   if (generationState === 'PARTIAL') {
-    return { statusLine: 'AI가 일정을 짜는 중', badge: 'draft', resume: false };
+    return {
+      statusLine: modeLine ?? 'AI가 일정을 짜는 중',
+      badge: 'draft',
+      resume: false,
+    };
   }
   if (status === 'CONFIRMED') {
-    return { statusLine: '추천안이 준비됐어요', badge: 'done', resume: false };
+    return {
+      statusLine: '일정 확정',
+      badge: ongoing ? 'live' : 'done',
+      resume: false,
+    };
   }
-  return { statusLine: '추천안 준비 중', badge: 'draft', resume: true };
+  return {
+    statusLine: modeLine ?? '추천안 준비 중',
+    badge: 'draft',
+    resume: true,
+  };
 }

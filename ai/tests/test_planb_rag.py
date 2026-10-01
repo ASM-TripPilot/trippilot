@@ -510,7 +510,8 @@ def test_pipeline_never_raises_on_store_failure() -> None:
         _request(_pool("p1"))
     )
     # retrieve는 KB별로 감싸져 있어 파이프라인 자체는 계속 진행한다
-    assert len([n for n in result.notes if n.startswith("retrieve_")]) == 3
+    # KB-1 은 검색하지 않는다(TRIP-972) — 실패 노트도 둘이다(SITUATION·PERSONA).
+    assert len([n for n in result.notes if n.startswith("retrieve_")]) == 2
     assert [str(p) for a in result.alternatives for p in a.poi_ids] == ["p1"]
 
 
@@ -1205,6 +1206,8 @@ def test_배치가_터져도_KB_검색을_잃지_않는다() -> None:
 
     result = PlanBAgent(spy, store).run(_request(_pool_with_refs("p1", "p2", "p3")))
 
-    assert spy.embed_calls == 4  # KB 셋 + KB-5 — 종전 경로 그대로
+    # 배치 1회(실패) + 단건 폴백 2회(SITUATION·PERSONA) + KB-5 1회.
+    # KB-1 을 검색하지 않으므로 종전 4회에서 하나 줄었다(TRIP-972).
+    assert spy.embed_calls == 3
     assert any("embed_batch_degraded" in n for n in result.notes)
     assert [a.label for a in result.alternatives] == ["A", "B", "C"]  # 결과는 온전하다

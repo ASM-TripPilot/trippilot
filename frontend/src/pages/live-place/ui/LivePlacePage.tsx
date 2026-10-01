@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { Share, View } from 'react-native';
+import { Pressable, Share, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
@@ -7,6 +7,7 @@ import {
   buildPlaceShareMessage,
 } from '@/features/execution/model/placeDetailView';
 import { usePlaceDetail } from '@/features/execution/model/usePlaceDetail';
+import { BackArrowGlyph } from '@/features/execution/ui/ExecutionGlyphs';
 import { PlaceDetailScreen } from '@/features/execution/ui/PlaceDetailScreen';
 import { isNotFound } from '@/shared/api/isNotFound';
 import { StateNotice } from '@/shared/ui/StateNotice';
@@ -17,7 +18,7 @@ import { StateNotice } from '@/shared/ui/StateNotice';
  * usePlaceDetail(tripId) 조회 → 오늘 슬롯에서 poiId 를 찾아 buildPlaceDetailView 로 뷰 1회 조립 →
  * PlaceDetailScreen. 시각·순서는 솔버 검증값이라 재계산하지 않는다(INV-2).
  *
- * TRIP-755(i10): 원형 뒤로는 히스토리가 있으면 back, 없으면(콜드 딥링크 — 앱 안 push 경로 0건)
+ * TRIP-755(i10): 원형 뒤로는 히스토리가 있으면 back, 없으면(콜드 딥링크 — 앱 안 진입은 i01 슬롯 이름, TRIP-987)
  * 여행 중 허브로 replace 해 갇히지 않는다(d06 handleBack 선례). 공유는 OS 공유 시트에 장소명
  * (+주소)만 나른다(계약에 딥링크 URL 없음). 하트는 화면이 스스로 "준비 중"만 띄운다 — 배선 없음.
  *
@@ -26,6 +27,9 @@ import { StateNotice } from '@/shared/ui/StateNotice';
  *
  * TRIP-952: 판정 순서 로딩 → 404(장소 없음) → 그 밖의 조회 실패(오류 얼굴 + 다시 시도) → 데이터
  * (형제 `resolveLiveState` 순서). 5xx·끊김은 "없다"가 아니라 "모른다"라 장소 없음으로 접지 않는다(INV-4).
+ *
+ * TRIP-1015 D: 장소 없음 얼굴도 앱바 뒤로(같은 `handleBack`)를 둔다 — 탭바 없는 화면에서 갇히지 않게
+ * (US-SHELL-04 예외 · INV-4). 안내(StateNotice)엔 행동 버튼을 두지 않는다(결정 3).
  */
 
 export interface LivePlacePageProps {
@@ -39,6 +43,14 @@ const NEUTRAL_BADGE = (
 
 export function LivePlacePage({ tripId, poiId }: LivePlacePageProps) {
   const query = usePlaceDetail(tripId);
+
+  function handleBack(): void {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace(`/trips/${tripId}/live`);
+    }
+  }
 
   if (query.isPending) {
     return (
@@ -86,25 +98,31 @@ export function LivePlacePage({ tripId, poiId }: LivePlacePageProps) {
   if (view === null) {
     return (
       <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
-        <View className="flex-1 items-center justify-center bg-canvas px-lg">
-          <StateNotice
-            testID="execution-place-notfound"
-            illustration={NEUTRAL_BADGE}
-            title="장소를 찾을 수 없어요"
-            description="이 장소는 일정에 없어요"
-            actions={[]}
-          />
+        <View className="flex-1 bg-canvas">
+          {/* 앱바 뒤로 — `ItineraryPlanPage` PlanAppBar 셰브론 패턴(StateNotice 밖) */}
+          <View className="w-full flex-row items-center bg-canvas pb-sm pl-md pr-lg pt-lg">
+            <Pressable
+              testID="execution-place-notfound-back"
+              accessibilityRole="button"
+              accessibilityLabel="뒤로"
+              onPress={handleBack}
+              hitSlop={8}
+            >
+              <BackArrowGlyph />
+            </Pressable>
+          </View>
+          <View className="flex-1 items-center justify-center px-lg">
+            <StateNotice
+              testID="execution-place-notfound"
+              illustration={NEUTRAL_BADGE}
+              title="장소를 찾을 수 없어요"
+              description="이 장소는 일정에 없어요"
+              actions={[]}
+            />
+          </View>
         </View>
       </SafeAreaView>
     );
-  }
-
-  function handleBack(): void {
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace(`/trips/${tripId}/live`);
-    }
   }
 
   return (

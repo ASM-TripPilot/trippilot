@@ -8,15 +8,15 @@ import type { SavedPlace } from '@/shared/api/generated/schemas';
  * 보내지 않는다), 입력 배열을 제자리에서 흔들지 않는다(TanStack Query 캐시가 준 배열이다).
  *
  * 왜 화면 밖인가: "언제 어느 얼굴인가"를 화면 안에 두면 조합마다 렌더해야 보이고, 화면은
- * 조회 상태를 알 수 없다(경계 가드 `tripWizardStep1Boundary.test.ts`). 화면은 완성된 얼굴만
+ * 조회 상태를 알 수 없다(props-only). 화면은 완성된 얼굴만
  * 받는다 — 판정도 문구도 여기와 컨테이너에서 끝난다.
  *
- * 이 모듈이 무는 것은 생성 스키마(순수 타입)뿐이다 — 화면이 여기서 타입을 가져와도 경계
- * 가드의 import 그래프가 깨끗하다.
+ * 이 모듈이 무는 것은 생성 스키마(순수 타입)뿐이다 — 화면이 여기서 타입을 가져와도 화면의
+ * import 그래프가 깨끗하다.
  */
 
-/** 시드 항목 — 서버 DTO가 아니라 이 화면이 쓸 최소 모양이다. 드래프트 스토어가 서버 응답을
- * 복사하면 `savedPlacesStructure.test.ts`가 red를 낸다(frontend/README.md §66). */
+/** 시드 항목 — 서버 DTO가 아니라 이 화면이 쓸 최소 모양이다. 드래프트 스토어에 서버 응답을
+ * 복사하지 않는다(frontend/README.md §상태 관리 규칙). */
 export interface MustVisitSeedItem {
   /** 등록 요청의 `poiId`이자 testID의 꼬리. */
   sourcePoiId: string;

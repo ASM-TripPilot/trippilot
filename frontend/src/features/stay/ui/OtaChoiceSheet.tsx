@@ -8,6 +8,10 @@
  * 결정문대로 유지, 6-b 알려진 차이). **완전 제어 컴포넌트**(useState 0) — 열림·체크·error 상태의 주인은
  * 페이지다(`features/stay/ui`는 구조 가드가 useState를 0건 강제한다). 저장소도 모른다(G6).
  *
+ * TRIP-1019 #018: `outbound`가 얼굴을 한 번 더 가른다. 'webSearch'(지금 앱의 실제 이동 = 웹검색 폴백,
+ * BR-U1-31)는 수수료 고지·"다시 보지 않기"를 그리지 않고 [검색 결과로 이동]이다. 생략 = 'affiliate'(고지
+ * 쪽으로 닫힌 실패 — 호출부가 방식을 빠뜨리면 법정 고지가 보인다, BR-U1-30).
+ *
  * 실제 시트 열림/딤/슬라이드는 gorhom 목이 통과 컴포넌트라 jest 무심판(6-b 실기).
  */
 import type { ReactElement } from 'react';
@@ -21,7 +25,8 @@ import BottomSheet, {
 import type { StayItem } from '@/shared/api/generated/schemas';
 
 import { formatPrice } from '@/entities/stay/lib/formatPrice';
-import { otaConfirmLabel } from '../config/affiliateNotice';
+import { otaConfirmLabel, otaDisplayName } from '../config/affiliateNotice';
+import type { StayOutboundMode } from '../model/stayOutbound';
 import {
   CheckGlyph,
   ChevronRightGlyph,
@@ -50,6 +55,8 @@ export interface OtaChoiceSheetProps {
   onToggleDontShowAgain: () => void;
   /** 생략 = true. false 면 "다시 보지 않기"를 그리지 않는다 — 게스트는 저장할 곳이 없다(TRIP-778 D9). */
   showDontShowAgain?: boolean;
+  /** 생략 = 'affiliate'. 'webSearch' 면 고지·"다시 보지 않기" 없이 [검색 결과로 이동](TRIP-1019 #018). */
+  outbound?: StayOutboundMode;
   onCancel: () => void;
   onConfirm: () => void;
   onRetry: () => void;
@@ -72,11 +79,13 @@ export function OtaChoiceSheet({
   dontShowAgain,
   onToggleDontShowAgain,
   showDontShowAgain = true,
+  outbound = 'affiliate',
   onCancel,
   onConfirm,
   onRetry,
 }: OtaChoiceSheetProps): ReactElement {
   const isError = variant === 'error';
+  const isAffiliate = outbound === 'affiliate';
   return (
     <BottomSheet
       index={0}
@@ -108,7 +117,7 @@ export function OtaChoiceSheet({
           </View>
         ) : (
           <>
-            {/* 단일 OTA 행 — externalSource 이름 + 최저가(복수 OTA·정확가는 이연, 01b Q2). */}
+            {/* 단일 OTA 행 — 표시명(코드 원문 금지, TRIP-988) + 최저가(복수 OTA·정확가는 이연, 01b Q2). */}
             <View
               testID={`stay-ota-option-${item.externalSource}`}
               className="w-full flex-row items-center gap-md rounded-[14px] border-[1.5px] border-primary bg-canvas py-md pl-lg pr-md"
@@ -128,7 +137,7 @@ export function OtaChoiceSheet({
               </View>
               <View className="flex-1 flex-row items-center gap-xs">
                 <Text className="font-inter-bold text-body font-bold text-ink">
-                  {item.externalSource}
+                  {otaDisplayName(item.externalSource)}
                 </Text>
                 <Text className="font-noto text-label text-muted-soft">·</Text>
                 <Text className="font-inter-bold text-body font-bold text-ink">
@@ -138,18 +147,21 @@ export function OtaChoiceSheet({
               <ChevronRightGlyph size={18} />
             </View>
 
-            <View
-              testID="stay-ota-notice-box"
-              className="w-full flex-row items-start gap-[10px] rounded-button bg-surface-soft p-[14px]"
-            >
-              <InfoGlyph size={18} />
-              <Text className="flex-1 font-noto text-caption leading-[18px] text-muted">
-                {NOTICE}
-              </Text>
-            </View>
+            {isAffiliate ? (
+              <View
+                testID="stay-ota-notice-box"
+                className="w-full flex-row items-start gap-[10px] rounded-button bg-surface-soft p-[14px]"
+              >
+                <InfoGlyph size={18} />
+                <Text className="flex-1 font-noto text-caption leading-[18px] text-muted">
+                  {NOTICE}
+                </Text>
+              </View>
+            ) : null}
 
-            {/* 체크 표시는 prop 으로만 — 누름은 콜백만 올린다(TermsScreen 체크박스 모양 선례). */}
-            {showDontShowAgain ? (
+            {/* 체크 표시는 prop 으로만 — 누름은 콜백만 올린다(TermsScreen 체크박스 모양 선례).
+                웹검색 얼굴은 고지가 없으니 고지 억제 동의도 받지 않는다(01b Q3). */}
+            {showDontShowAgain && isAffiliate ? (
               <Pressable
                 testID="stay-ota-dont-show"
                 accessibilityRole="checkbox"
@@ -193,7 +205,11 @@ export function OtaChoiceSheet({
             className="h-[50px] flex-1 items-center justify-center rounded-button bg-primary"
           >
             <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-              {isError ? '다시 시도' : otaConfirmLabel(item.externalSource)}
+              {isError
+                ? '다시 시도'
+                : isAffiliate
+                  ? otaConfirmLabel(item.externalSource)
+                  : '검색 결과로 이동'}
             </Text>
           </Pressable>
         </View>

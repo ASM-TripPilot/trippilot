@@ -1,5 +1,6 @@
 /**
- * TRIP-778 · l05 설정 취향 7행 값 — 서버 취향(`PreferenceView`)을 행 key 별 요약으로 바꾼다.
+ * TRIP-778 · l05 설정 취향 축별 요약 — 서버 취향(`PreferenceView`)을 축 key 별 요약으로 바꾼다.
+ * TRIP-1051 부터 설정 화면은 `kind` 로 설정된 축 수만 센다(`text` 는 화면에 안 나간다).
  *
  * 미설정 판정은 편집 화면과 같은 `initialSelection`(축 부재·`isNeutralDefault` → null)을 그대로 쓴다.
  * 값은 서버 enum 원문을 서버 순서대로 가운뎃점으로 잇는다(D5). 동행은 반려동물을 덧붙이고,

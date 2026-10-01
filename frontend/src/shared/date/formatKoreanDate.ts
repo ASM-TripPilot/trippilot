@@ -7,7 +7,7 @@
  *
  * TZ-safe: 로컬 타임존에 요일이 밀리지 않게 에포크 일수(UTC 정수)로만 계산한다
  * (`shared/date/monthGrid.ts` 관례). 이 파일은 execution 밖(shared)이라
- * `liveTimeStructure` 가드 사정거리 밖 — 날짜 산술 자유.
+ * features/execution 밖(BR-U4-34 대상 아님) — 날짜 산술 자유.
  */
 
 const MS_PER_DAY = 86_400_000;

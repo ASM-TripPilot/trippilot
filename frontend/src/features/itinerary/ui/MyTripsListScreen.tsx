@@ -1,8 +1,11 @@
 import type { ReactElement, ReactNode } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { Skeleton } from '@/shared/ui/Skeleton';
+
+import type { MyTripsSortKey } from '../model/myTripsOrder';
 
 import { CalendarGlyph, ChevronDownGlyph } from './ItineraryGlyphs';
 
@@ -10,7 +13,8 @@ import { CalendarGlyph, ChevronDownGlyph } from './ItineraryGlyphs';
  * TRIP-468 · h37 "내 여행" 목록 화면 — 순수 프레젠테이션(3얼굴: list·empty·loading).
  *
  * 판정(조회·정렬·empty/loading 가름)은 페이지(`MyTripsListPage`)가 진다 — 이 화면은 `mode` 와
- * 완성된 카드(`cards`)를 받아 앱바 "내 여행" + "최신순" 라벨 + 얼굴만 그린다.
+ * 완성된 카드(`cards`)를 받아 앱바 "내 여행" + 정렬 줄 + 얼굴만 그린다. TRIP-1122 · 정렬 줄은 현재 기준
+ * (`sortKey`) 라벨을 띄운 누름 대상이고, 누르면 `onPressSort` — 시트는 페이지가 연다.
  *
  * empty 는 공용 `StateNotice`(현행 탭 empty 가 이미 쓰던 계약)를 재사용해 testID
  * `itinerary-tab-empty`·`itinerary-tab-create-trip` 를 계승한다. TRIP-788 로 아이콘 슬롯을 `icon`
@@ -19,7 +23,11 @@ import { CalendarGlyph, ChevronDownGlyph } from './ItineraryGlyphs';
  */
 
 const APPBAR_TITLE = '내 여행';
-const SORT_LABEL = '최신순';
+const SORT_LABELS: Record<MyTripsSortKey, string> = {
+  recent: '최신순',
+  start: '출발일순',
+  title: '이름순',
+};
 const EMPTY_TITLE = '아직 만든 여행이 없어요';
 const EMPTY_DESCRIPTION =
   '여행을 만들면 완성·작성중 상태를\n여기서 한눈에 볼 수 있어요';
@@ -32,14 +40,32 @@ export interface MyTripsListScreenProps {
   /** list 모드에서 그릴 카드들(페이지가 TripCardContainer 배열로 조립해 내린다). */
   cards?: ReactNode;
   onPressCreateTrip: () => void;
+  /** 현재 정렬 기준(라벨). 기본 최신순. */
+  sortKey?: MyTripsSortKey;
+  onPressSort?: () => void;
 }
 
-/** 정렬 라벨 한 줄(우측 정렬) — 옵션 1개라 메뉴 없이 표시 라벨만(01b Q1). */
-function SortRow(): ReactElement {
+/** 정렬 줄(우측 정렬) — 누르면 정렬 시트(TRIP-1122 가 TRIP-468 01b Q1 "옵션 1개라 표시 라벨만"을 뒤집음). */
+function SortRow({
+  sortKey,
+  onPress,
+}: {
+  sortKey: MyTripsSortKey;
+  onPress?: () => void;
+}): ReactElement {
   return (
-    <View className="w-full flex-row items-center justify-end gap-[2px] px-lg pt-md">
-      <Text className="font-noto text-label text-muted">{SORT_LABEL}</Text>
-      <ChevronDownGlyph size={15} />
+    <View className="w-full flex-row justify-end px-lg pt-md">
+      <Pressable
+        testID="my-trips-sort"
+        accessibilityRole="button"
+        onPress={onPress}
+        className="flex-row items-center gap-[2px]"
+      >
+        <Text className="font-noto text-label text-muted">
+          {SORT_LABELS[sortKey]}
+        </Text>
+        <ChevronDownGlyph size={15} />
+      </Pressable>
     </View>
   );
 }
@@ -51,10 +77,10 @@ function SkeletonCard({ index }: { index: number }): ReactElement {
       testID={`my-trip-skeleton-${index}`}
       className="w-full overflow-hidden rounded-card border border-hairline bg-canvas"
     >
-      <View className="h-[178px] w-full bg-surface-soft" />
+      <Skeleton className="h-[178px] w-full bg-surface-soft" />
       <View className="gap-sm px-[14px] pb-[14px] pt-[13px]">
-        <View className="h-[15px] w-2/3 rounded-input bg-surface-soft" />
-        <View className="h-[13px] w-1/2 rounded-input bg-surface-soft" />
+        <Skeleton className="h-[15px] w-2/3 rounded-input bg-surface-soft" />
+        <Skeleton className="h-[13px] w-1/2 rounded-input bg-surface-soft" />
       </View>
     </View>
   );
@@ -64,6 +90,8 @@ export function MyTripsListScreen({
   mode,
   cards,
   onPressCreateTrip,
+  sortKey = 'recent',
+  onPressSort,
 }: MyTripsListScreenProps): ReactElement {
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
@@ -108,7 +136,7 @@ export function MyTripsListScreen({
           </ScrollView>
         ) : (
           <>
-            <SortRow />
+            <SortRow sortKey={sortKey} onPress={onPressSort} />
             <ScrollView contentContainerClassName="gap-lg px-lg pb-2xl pt-sm">
               {cards}
             </ScrollView>

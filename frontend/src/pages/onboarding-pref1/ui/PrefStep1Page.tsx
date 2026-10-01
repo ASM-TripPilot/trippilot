@@ -9,6 +9,7 @@ import { useRouter } from 'expo-router';
 
 import { usePreferenceStore } from '@/features/onboarding/model/preferenceStore';
 import { notifyBootstrapReeval } from '@/shared/bootstrap/bootstrapReeval';
+import { guardPress } from '@/shared/press/pressGuard';
 import { PrefStep1Screen } from '@/features/onboarding/ui/PrefStep1Screen';
 
 export function PrefStep1Page(): ReactElement {
@@ -20,9 +21,10 @@ export function PrefStep1Page(): ReactElement {
   const toggleStyle = usePreferenceStore((state) => state.toggleStyle);
   const togglePace = usePreferenceStore((state) => state.togglePace);
 
-  const handleNext = () => {
+  // TRIP-1013 #004 — 연타의 두 번째 탭이 2/2 '완료'를 관통하지 않게 창을 연다.
+  const handleNext = guardPress(() => {
     router.push('/(onboarding)/pref2');
-  };
+  });
 
   const handleSkipAll = () => {
     // 취향 1/2 탈출도 완료로 취급해 재평가 신호를 발화한다(ticket AC-A · US-ONB-11 —

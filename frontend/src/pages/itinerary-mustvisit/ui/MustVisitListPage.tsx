@@ -16,6 +16,7 @@ import {
   useGetTripsTripIdMustVisits,
 } from '@/shared/api/generated/trips/trips';
 import { getAccessToken } from '@/shared/api/tokenManager';
+import { guardPress } from '@/shared/press/pressGuard';
 
 /**
  * h05 배선 — 두 조회를 잇고, 좌표를 지도 핀으로 만들고, 해제를 보내고, h07·h09 로 보낸다.
@@ -90,7 +91,8 @@ export function MustVisitListPage({
   // 다음/건너뛰기는 둘 다 h09(생성 중)로 간다. copick 갈래(mode=CO_PLAN)면 h04 에서 실려 온 신호를
   // 그대로 h09 로 넘기고, successRoute 를 **첫 슬롯 경로 템플릿**으로 싣는다(01b Q3·AC-5). h05 시점엔
   // slotKey 를 아직 모르므로 `[slotKey]` 세그먼트가 든 템플릿이고, h09 가 생성 후 실 slotKey 를
-  // 채운다(GeneratingPage). 완전AI 갈래(mode 없음)는 기존 FULLY_AI generating 그대로다(무회귀).
+  // 채운다(GeneratingPage). 완전AI 갈래(h04 에서 mode 없음)는 FULLY_AI 를 **명시해** 싣는다 — h09 는
+  // mode 가 없으면 생성을 쏘지 않는 관찰 모드로 뜬다(TRIP-1006 A4·A5).
   function goToGenerating(): void {
     if (mode === 'CO_PLAN') {
       router.push({
@@ -105,7 +107,7 @@ export function MustVisitListPage({
     }
     router.push({
       pathname: '/trips/[tripId]/itinerary/generating',
-      params: { tripId },
+      params: { tripId, mode: 'FULLY_AI' },
     });
   }
 
@@ -121,14 +123,22 @@ export function MustVisitListPage({
       // CO_PLAN 신호+첫 슬롯 successRoute 를 싣는다(위 `goToGenerating`). 화면 계약은 무수정.
       onProceed={goToGenerating}
       onSkip={goToGenerating}
-      onPressItem={(sourcePoiId) =>
+      // TRIP-1013 #042 수신 — 시각 지정 '저장'의 창 안이면 무시(행·시각 칩·연필이 같은 콜백).
+      onPressItem={guardPress((sourcePoiId: string) =>
         router.push({
           pathname: '/trips/[tripId]/itinerary/must-visits/[poiId]',
           params: { tripId, poiId: sourcePoiId },
         })
-      }
+      )}
       onRemove={handleRemove}
       onRetry={handleRetry}
+      // 꼭 갈 곳 추가 → d02 select 여행 모드(TRIP-1093 결정 3 — TRIP-1022 결정 2 의 save 모드 링크를 뒤집었다).
+      onPressAdd={() =>
+        router.push({
+          pathname: '/explore/saved-places',
+          params: { mode: 'select', tripId },
+        })
+      }
     />
   );
 }

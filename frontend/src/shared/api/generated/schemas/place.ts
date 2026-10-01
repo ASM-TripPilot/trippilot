@@ -4,6 +4,8 @@
  * TripPilot U1 API (소셜 로그인 전용 MVP)
  * U1 기반·계정·온보딩 (M1 Auth · M2 Profile · C3 Moderation). 소셜 로그인 전용 — 이메일/비밀번호 로그인은 후속 이연. 정본 대조: docs/design/U1-API-설계.md, U1-DB스키마-설계.md, U1-내부아키텍처-설계.md
  *
+ * **횡단 규약 — 입력 형식 오류는 어느 엔드포인트에서든 400이다.** 경로변수·쿼리의 타입 변환 실패(UUID·숫자·enum)와 필수 쿼리 누락은 표준 에러 봉투 (`ErrorResponse`, code=`VALIDATION_ERROR`, `fields[].field`=문제 파라미터 이름)로 나간다. 경로별 `'400'` 선언은 **업무 검증**이 있는 곳에만 적는다 — 형식 오류까지 경로마다 중복 선언하면 무엇이 그 엔드포인트 고유의 검증인지 안 보인다. (2026-09-01 이전에는 이 갈래가 500 `INTERNAL` 로 나갔다 — UUID-PATH-400)
+ *
  * OpenAPI spec version: 0.1.0-draft
  */
 import type { PlaceDataStatus } from './placeDataStatus';
@@ -16,6 +18,10 @@ export interface Place {
   lat: number;
   lng: number;
   region?: string | null;
+  /** 행정구역 코드(법정동코드 앞자리, TRIP-1042). 시군구를 알면 5자리(`28200`), 시도까지만 알면 2자리(`50`), 모르면 null — 서버가 지어내지 않는다. 표시용 `region`(`동구`)과 달리 **맞춰 볼 수 있는 키**라, 여행 목적지 `regionCode` 의 접두사 비교로 "이 여행 지역의 장소인가"를 가른다. 앞 2자리가 시도 코드다. */
+  regionCode?: string | null;
+  /** 지번·도로명 주소(TRIP-1062 · TRIP-824 의 address 몫). null = 미확보 — 기존 수집분은 다음 수집 배치가 채울 때까지 비어 있고 화면은 자리만 비운다(지어내지 않는다). 표기 규칙은 StayItem.address 와 동일(도로명 우선). */
+  address?: string | null;
   /** NULL=미확인 */
   openingHours?: string | null;
   /** 대표 사진. NULL=미확보 — 서버가 기본 이미지를 지어내지 않으므로 클라가 자리만 비운다(BR-U1-06 취지) */

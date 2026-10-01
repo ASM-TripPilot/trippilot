@@ -7,6 +7,7 @@ import {
   within,
 } from '@testing-library/react-native';
 import { Text } from 'react-native';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
 import { MapSheetShell } from './MapSheetShell';
 
@@ -18,8 +19,8 @@ import { MapSheetShell } from './MapSheetShell';
  * ⚠️ **원리적 사각(02a ★2·★3·★4)** — `@gorhom/bottom-sheet` 목은 통과형이라 시트 실개폐·2스냅·
  *   딤·`enableContentPanningGesture` 는 못 본다(E6·E7 → 6-b 실기). TRIP-919 부터 셸은 지도 실패
  *   (env 키 없음 → `MapView.onLoadFailed`)를 받으면 지도 자리를 폴백 바로 바꾼다 → 지도를 단언하는
- *   케이스는 **키를 넣고** 돈다(`withMapKey`). viewOnly 실전달은 `itineraryMapSurfaceStructure` S2
- *   소스 스캔이 잠근다. 이 파일은 **children 렌더·prop 전달·testID 트리**만 잠근다.
+ *   케이스는 **키를 넣고** 돈다(`withMapKey`). viewOnly 실전달을 잠그던 `itineraryMapSurfaceStructure` S2
+ *   소스 스캔은 TRIP-1145 로 지웠다. 이 파일은 **children 렌더·prop 전달·testID 트리**만 잠근다.
  *
  * 3동작 뼈대: 준비=header/children/cta/days/pins 주입 렌더 → 실행=렌더/칩·back press → 단언=조립·콜백.
  */
@@ -947,5 +948,82 @@ describe('MapSheetShell · SH16 — list 슬롯이 빈 목록 안내를 통과�
     // 단언 — 아이템은 뜨고 안내는 없다(헤더·푸터 등 조건 없는 자리에 얹으면 red, 02a ★2).
     expect(screen.getByTestId('list-item-x1')).toBeOnTheScreen();
     expect(screen.queryByTestId('fake-empty')).toBeNull();
+  });
+});
+
+/* ──────────────── TRIP-1014 · C(#076) — 셸 시트 기본값: 안전 영역 top · 키보드 내린 뒤 복귀 ────────────────
+ * h13 장소 추가에서 검색하고 키보드를 내리면 시트가 상태바·다이내믹 아일랜드 위까지 올라간 채 남았다(#076).
+ * 셸 BottomSheet 한 곳에 두 기본값을 넣어 소비처 전부가 받게 한다(새 셸 prop 없음).
+ *   - `topInset` = 안전 영역 top — 시트 컨테이너 윗변을 상태바 아래로 내린다. **Provider 가 없으면 0**:
+ *     `useSafeAreaInsets()` 는 Provider 가 없으면 throw 하므로 컨텍스트를 null 허용으로 읽는다(01b Q1,
+ *     선례 `LiveHubView.tsx:194`). 이 리포 jest 에는 safe-area Provider·목이 없다(02a ★C1).
+ *   - `keyboardBlurBehavior="restore"` — 키보드가 내려가면 키보드가 뜨기 전 칸으로 돌아온다(01b Q3).
+ *
+ * 무엇을 보장하나:
+ *  - 🔴 SH17a 스크롤 경로·list 경로 둘 다 `restore` 를 받는다(#076 은 list 경로 h13 — 02a ★C7).
+ *  - 🔴 SH17b top 47 을 넣으면 47, 안 넣으면 throw 없이 0 — 두 값이 짝이어야 하드코딩(0 이든 47 이든)이
+ *    못 빠져나간다(02a ★C3).
+ *  - 🟢 SH17c 새 기본값을 넣어도 기존 시트 prop 이 그대로다(선제 green 회귀 앵커).
+ *
+ * 값 주입은 `SafeAreaProvider` 가 아니라 `SafeAreaInsetsContext.Provider` 로 한다 — `SafeAreaProvider` 는
+ * 네이티브에서 인셋을 받기 전까지 자식을 안 그린다(02a ★C2).
+ * ⚠️ 원리적 사각: 윗변이 실제로 내려오는지·퍼센트 스냅이 줄어드는지·키보드를 내리면 칸이 돌아오는지는
+ *   gorhom 런타임 몫이라 6-b 실기(`h13-place-add` — 02a ★C8). 여기선 prop 을 넘겼는지만 본다.
+ *
+ * 3동작 뼈대: 준비=(안전 영역 값을 넣어) 셸 렌더 → 실행=렌더 → 단언=시트 본체(host)가 받은 prop.
+ * ─────────────────────────────────────────────────────────────────────── */
+const SAFE_INSETS = { top: 47, bottom: 34, left: 0, right: 0 };
+
+function renderShellWithInsets(): ReturnType<typeof render> {
+  return render(
+    <SafeAreaInsetsContext.Provider value={SAFE_INSETS}>
+      <MapSheetShell
+        center={CENTER}
+        pins={PINS}
+        days={DAYS}
+        selectedDayIndex={0}
+        onSelectDay={jest.fn()}
+        onBack={jest.fn()}
+        header={<Text testID="fake-header">헤더</Text>}
+      >
+        <Text testID="fake-body">본문</Text>
+      </MapSheetShell>
+    </SafeAreaInsetsContext.Provider>
+  );
+}
+
+describe('🔴 MapSheetShell · SH17 — 셸 시트가 안전 영역 top 과 키보드 복귀를 받는다 (TRIP-1014 #076)', () => {
+  it.each<[string, () => void]>([
+    ['스크롤 경로(list 미전달)', () => renderShell()],
+    ['list 경로(h13 모양)', () => renderListShell([{ id: 'a' }])],
+  ])(
+    'SH17a · %s 에서 BottomSheet 가 keyboardBlurBehavior="restore" 를 받는다',
+    (_label, renderIt) => {
+      renderIt();
+
+      expect(sheetHost().props.keyboardBlurBehavior).toBe('restore');
+    }
+  );
+
+  it('SH17b · 안전 영역 top 47 이면 topInset 47, Provider 가 없으면 throw 없이 0 이다', () => {
+    // ① Provider 로 top 47 을 넣는다.
+    const first = renderShellWithInsets();
+    expect(sheetHost().props.topInset).toBe(47);
+    first.unmount();
+
+    // ② Provider 없이(이 리포 jest 의 기본 상태) — 렌더가 끝까지 되고 0 이다.
+    renderShell();
+    expect(screen.getByTestId('fake-header')).toBeOnTheScreen();
+    expect(sheetHost().props.topInset).toBe(0);
+  });
+
+  it('SH17c · 안전 영역을 넣어도 기존 시트 prop 이 그대로다 (선제 green 회귀 앵커)', () => {
+    renderShellWithInsets();
+
+    const host = sheetHost();
+    expect(host.props.keyboardBehavior).toBe('interactive');
+    expect(host.props.enableDynamicSizing).toBe(false);
+    expect(host.props.snapPoints).toEqual([28, '45%', '88%']);
+    expect(host.props.index).toBe(1);
   });
 });

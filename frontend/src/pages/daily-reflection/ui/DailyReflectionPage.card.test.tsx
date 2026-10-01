@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import {
@@ -130,8 +132,19 @@ function mockApi(items: Reflection[]) {
   });
 }
 
+/** 훅이 캐시를 고치려고 useQueryClient() 를 불러도 렌더가 죽지 않게 Provider 로 감싼다(TRIP-980). */
+function Wrapper({ children }: { children: ReactNode }) {
+  return (
+    <QueryClientProvider client={new QueryClient()}>
+      {children}
+    </QueryClientProvider>
+  );
+}
+
 function renderPage() {
-  render(<DailyReflectionPage tripId={TRIP_ID} date={DAY} />);
+  render(<DailyReflectionPage tripId={TRIP_ID} date={DAY} />, {
+    wrapper: Wrapper,
+  });
 }
 
 function saveEdit(text: string) {
@@ -183,9 +196,11 @@ describe('AC-3 · 편집 입력칸의 초기값', () => {
     ).toHaveDisplayValue(RULE_SUBTITLE);
   });
 
-  it('회고가 없으면 입력칸은 빈 칸으로 열린다', () => {
+  it('회고가 없는 지난 날은 생성 중(pending)에도 헤더 "편집"으로 빈 칸 입력을 연다 (TRIP-1068 Q2)', () => {
     mockApi([]);
     renderPage();
+    // 전제 앵커 — 레코드 없는 지난 날(실시계 기준 06-11)은 이제 empty 가 아니라 생성 중이다.
+    expect(screen.getByTestId('reflection-daily-pending')).toBeOnTheScreen();
 
     fireEvent.press(screen.getByTestId('reflection-daily-edit'));
 

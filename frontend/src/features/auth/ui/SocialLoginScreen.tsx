@@ -17,7 +17,7 @@ export interface SocialLoginScreenProps {
   onConflictCancel: () => void;
   onAgeConfirm: () => void;
   onAgeCancel: () => void;
-  // 애플 공식 버튼(TRIP-932). 컨테이너가 isAvailableAsync 로 판정해 iOS 에서만 넘긴다 — 없으면
+  // 애플 버튼(TRIP-932, TRIP-1124부터 HIG 커스텀). 컨테이너가 isAvailableAsync 로 판정해 iOS 에서만 넘긴다 — 없으면
   // (Android·판정 전·판정 실패) 애플 자리가 아예 없다. 화면이 SDK 를 직접 import 하지 않도록
   // 컴포넌트째 주입받는다(nativeSdkLazyBoundary 경계).
   AppleButton?: ComponentType<{ onPress: () => void }> | null;
@@ -30,7 +30,7 @@ type BrandIcon = ComponentType<{ size?: number; testID?: string }>;
 // (충돌 메시지)만 있다고 가정했기 때문이다. 그 단언은 이제 안내 메시지 testID
 // (auth-login-conflict-message) 스코프로 좁혀져 있어 더 이상 화면 전역 유일성을 요구하지
 // 않는다 — 버튼 라벨이 한글이어도 계약이 깨지지 않는다.
-// 애플은 이 표에 없다 — 커스텀 라벨·로고 대신 SDK 공식 버튼을 주입받아 구글 다음 자리에 그린다.
+// 애플은 이 표에 없다 — 애플 모듈(lib/appleAuthorize)이 그린 버튼을 주입받아 구글 다음 자리에 꽂는다.
 const SOCIAL_BUTTONS: {
   provider: SocialProvider;
   label: string;
@@ -89,8 +89,8 @@ function SheetBackdrop() {
 // handleComponent={null} 은 gorhom 이 기본으로 그리는 자체 핸들을 끈다(TRIP-713). 이걸 빼면
 // 아래 커스텀 grabber(Figma 회색 바 40×5) 위에 gorhom 기본 핸들이 겹쳐 바가 2개로 보인다.
 // jest 는 통과형 목이라 기본 핸들을 렌더하지 않아 이 이중 grabber 를 못 본다(바텀시트 실제
-// 열림이 자동 심판 없는 것과 동형 트랩) — 그래서 이 prop 의 존재는 authSheetHandleStructure
-// 소스 스캔이 잠근다. g 밴드 편집 시트(TRIP-735)와 같은 문제·다른 처방(그쪽은 features/trip 의
+// 열림이 자동 심판 없는 것과 동형 트랩) — 이 prop 의 존재를 지키는 심판은 없다
+// (소스 스캔은 TRIP-1145 에서 지웠다, 실기 스모크 몫). g 밴드 편집 시트(TRIP-735)와 같은 문제·다른 처방(그쪽은 features/trip 의
 // SHEET_HANDLE_INDICATOR_STYLE 을 handleIndicatorStyle 로 쓰지만, 그 상수를 features/auth 로
 // import 하면 형제 feature 경계를 넘는다 — 여기선 커스텀 바를 유지하고 기본 핸들만 끈다).
 function Sheet({ testID, children }: { testID: string; children: ReactNode }) {
@@ -198,6 +198,30 @@ export function SocialLoginScreen({
         </Text>
       </View>
 
+      <View className="gap-md">
+        {SOCIAL_BUTTONS.map(({ provider, label, Icon }) => (
+          <Fragment key={provider}>
+            <Pressable
+              testID={`auth-login-${provider}`}
+              onPress={() => onSignIn(provider)}
+              className="h-[52px] w-full flex-row items-center justify-center gap-[10px] rounded-button border border-ink bg-canvas"
+            >
+              <Icon size={24} testID={`auth-login-${provider}-icon`} />
+              <Text className="font-noto-bold text-hero font-bold text-ink">
+                {label}
+              </Text>
+            </Pressable>
+            {provider === 'google' && AppleButton ? (
+              <View testID="auth-login-apple">
+                <AppleButton onPress={() => onSignIn('apple')} />
+              </View>
+            ) : null}
+          </Fragment>
+        ))}
+      </View>
+
+      {/* 안내·배너는 버튼 래퍼 뒤 루트 직계 형제다(TRIP-1056) — 버튼 위에 두면 상태가 바뀔 때 버튼을
+          아래로 밀고, 래퍼 안에 두면 버튼 간격(gap-md)이 안내에도 붙는다. */}
       {showCancelNotice ? (
         <View testID="auth-login-cancel-notice" className="items-center">
           <Text className="font-noto text-body text-muted">
@@ -216,35 +240,6 @@ export function SocialLoginScreen({
           </Text>
         </View>
       ) : null}
-
-      <View className="gap-md">
-        {SOCIAL_BUTTONS.map(({ provider, label, Icon }) => (
-          <Fragment key={provider}>
-            <Pressable
-              testID={`auth-login-${provider}`}
-              onPress={() => onSignIn(provider)}
-              className="h-[52px] w-full flex-row items-center justify-center gap-[10px] rounded-button border-[1.5px] border-hairline-strong bg-canvas"
-            >
-              <Icon size={20} testID={`auth-login-${provider}-icon`} />
-              <Text className="font-noto-bold text-card-title font-bold text-ink">
-                {label}
-              </Text>
-            </Pressable>
-            {provider === 'google' && AppleButton ? (
-              <View testID="auth-login-apple">
-                <AppleButton onPress={() => onSignIn('apple')} />
-              </View>
-            ) : null}
-          </Fragment>
-        ))}
-      </View>
-
-      <Text
-        testID="auth-login-terms"
-        className="font-noto text-center text-caption text-muted-soft"
-      >
-        로그인 시 약관에 동의합니다
-      </Text>
 
       {showConflictSheet ? (
         <Sheet testID="auth-login-conflict-sheet">

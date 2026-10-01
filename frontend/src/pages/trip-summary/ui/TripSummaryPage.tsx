@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
 
-import { captureShareImage } from '@/features/reflection/model/shareCard';
+import { isShareCaptureArmed } from '@/features/reflection/model/shareCapture';
 import { summaryStats } from '@/features/reflection/model/summaryStats';
 import {
   daySubtitle,
@@ -16,9 +16,12 @@ import {
   TripSummaryScreen,
   type DayCardVM,
 } from '@/features/reflection/ui/TripSummaryScreen';
+import { tripDayChips } from '@/features/itinerary/model/mustVisitTimeForm';
 import { formatDayLabel } from '@/entities/trip/lib/formatDayLabel';
+import { useGetTripsTripId } from '@/shared/api/generated/trips/trips';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
+import { shellTabHref } from '@/shared/ui/BottomTabBar';
 
 /**
  * TRIP-572 · trip-summary 페이지 — j04 요약 조회·조립·배선의 단일 출처(FSD).
@@ -51,10 +54,15 @@ export function TripSummaryPage({
   const summary = useTripSummary(tripId);
   const envelope = summary.envelope;
   const data = summary.summary;
+  // TRIP-987 — 요약 계약엔 여행 이름·기간이 없어 여행을 따로 조회한다. 보조 조회라 로딩·실패면
+  // 이름·일차 회고만 빠지고 요약은 그대로 그린다(Seed Q3).
+  const trip = useGetTripsTripId(tripId);
+  const tripDays = trip.data ? tripDayChips(trip.data) : [];
 
   const handleBack = () => {
     if (router.canGoBack()) router.back();
   };
+  const openRecords = () => router.push(`/trips/${tripId}/records`);
 
   if (summary.isError) {
     return (
@@ -93,7 +101,15 @@ export function TripSummaryPage({
         illustration={PENDING_ILLUSTRATION}
         title="여행 요약을 준비하고 있어요"
         description="여행이 끝나면 자동으로 요약을 만들어 드려요"
-        actions={[]}
+        // TRIP-987 Q4 — 요약이 영영 안 오는 지난 여행도 기록으로는 갈 수 있다(막다른 화면 차단).
+        actions={[
+          {
+            testID: 'reflection-summary-pending-records',
+            label: '방문 기록 보기',
+            variant: 'outline',
+            onPress: openRecords,
+          },
+        ]}
       />
     );
   }
@@ -116,13 +132,23 @@ export function TripSummaryPage({
       shareEnabled={shareEnabled(envelope)}
       // TRIP-939 Q2: 공유 카드의 저장·공유가 미장전이면 진입점([공유])을 넘기지 않는다(막다른 화면 차단).
       onShare={
-        captureShareImage().armed
+        isShareCaptureArmed()
           ? () => router.push(`/trips/${tripId}/records/share`)
           : undefined
       }
       onBack={handleBack}
-      onPressTab={(key: ShellTabKey) =>
-        router.replace(key === 'home' ? '/' : `/${key}`)
+      onPressTab={(key: ShellTabKey) => router.replace(shellTabHref(key))}
+      tripTitle={trip.data?.title}
+      onPressRecords={openRecords}
+      // 번호는 여행 기간 기준(1-기반, j03 탭과 같다) — `highlight.dayOrder` 는 기록 있는 날 순번이라 쓰지 않는다.
+      dayReflections={tripDays.map((_, index) => ({
+        day: index + 1,
+        label: `${formatDayLabel(index + 1)} 회고`,
+      }))}
+      onPressDayReflection={(day) =>
+        router.push(
+          `/trips/${tripId}/records/reflection/${tripDays[day - 1].date}`
+        )
       }
     />
   );

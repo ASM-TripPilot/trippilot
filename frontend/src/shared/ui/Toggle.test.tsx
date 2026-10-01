@@ -23,7 +23,14 @@ function tokens(el: { props: { className?: unknown } }): string[] {
 
 function renderToggle(props: { checked: boolean; disabled?: boolean }) {
   const onPress = jest.fn();
-  render(<Toggle testID="t" onPress={onPress} {...props} />);
+  render(
+    <Toggle
+      testID="t"
+      accessibilityLabel="알림 받기"
+      onPress={onPress}
+      {...props}
+    />
+  );
   return {
     onPress,
     track: screen.getByTestId('t'),
@@ -148,4 +155,27 @@ describe('TRIP-780 · Toggle — 모양(AC-1 · Q2 46×28 · Q6 disabled 색)', 
       expect(tokens(thumb)).toContain('rounded-pill');
     }
   );
+});
+
+describe('🔴 TRIP-991 · Toggle — 스위치 이름(AC-3)', () => {
+  it.each([true, false])(
+    'checked=%s 여도 이름은 라벨 그대로("알림 받기")이고 상태는 checked 로만 전달된다',
+    (checked) => {
+      renderToggle({ checked });
+
+      const toggle = screen.getByRole('switch', { name: '알림 받기' });
+      expect(toggle).toHaveProp('testID', 't');
+      if (checked) expect(toggle).toBeChecked();
+      else expect(toggle).not.toBeChecked();
+    }
+  );
+
+  it('라벨 없이 쓰면 타입 오류다 — accessibilityLabel 은 필수 prop (심판은 pnpm tsc)', () => {
+    const withoutLabel = (
+      // @ts-expect-error accessibilityLabel 은 필수다 — 라벨 없는 스위치는 VoiceOver 에 이름 없이 읽힌다
+      <Toggle testID="t" checked={false} onPress={() => {}} />
+    );
+
+    expect(withoutLabel).toBeTruthy();
+  });
 });

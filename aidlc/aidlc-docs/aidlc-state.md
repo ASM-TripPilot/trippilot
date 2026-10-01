@@ -43,6 +43,8 @@
 ### INCEPTION Phase
 
 > **개정 이력**: **2026-07-23 — 사후 개정 1회 실시**(사용자 명시 승인, `workflow-changes.md` §4 Low-impact modify). U1 Functional Design의 라이브 Figma 대조에서 검출된 드리프트를 인셉션에 반영: `stories.md`(가격 표기 최저가 스냅숏 · US-SHELL-03 여행자 일정 1차 자리만 · **US-EXPL-01~04 신설** · US-TRIP-06 커버리지 차단형) · `requirements.md`(FR-STAY-03 등록 2→3경로) · `components.md`·`unit-of-work.md`·`unit-of-work-dependency.md`·`unit-of-work-story-map.md`(**C7 Place Data를 U3→U1 이관**, 스토리 119→**123**, 핵심 94→**98**, U1 21→**25**). 스테이지 승인 상태는 유지(재실행 아님).
+> **2026-09-28 — 사후 개정 2회차**(사용자 명시 지시 "ai dlc 폴더 규칙대로해서 문서 수정 ㄱㄱ", Low-impact modify): QA 3회차 제품 결정 반영 — `stories.md`(**US-TRIP-10 신설** 작성중 여행 삭제 · **US-TRIP-05 폐기** · US-STAY-06·07·08·09·US-TRIP-01·03·04·07·US-NOTIF-01 숙소 날짜 제거 개정, TRIP-1052·1055·1061) · `requirements.md`(FR-CORE-01·FR-STAY-03·FR-TRIP-01) · `components.md`(C4) · `unit-of-work.md`·`unit-of-work-story-map.md`(스토리 123→**124**, 유효 123 · 핵심 98→**99** · U1 25→**26**). CONSTRUCTION 쪽은 U1·U3·U6 functional-design 사후 정정(audit 2026-09-28 항목). 스테이지 승인 상태 유지(재실행 아님).
+> **2026-09-28 — 사후 개정 3회차**(사용자 명시 지시 "정본 바로 고침 — 예", Low-impact modify): 사용자 인터뷰 결정 반영 — `stories.md`(US-TRIP-01 **예산 = 인당(1인) 총액** 개정 · US-TRIP-10 구현 차이 3점 보류 주석, TRIP-1067·1055) · `components.md`(C6 예산 분배 개정 주석). 스토리 수 변동 없음. CONSTRUCTION 쪽은 U1 functional-design 사후 정정(예산 맵 대체 · 지역 코드 양방향 매칭 보완 · BR-U1-57 보류 주석 — audit 2026-09-28 3회차 항목). 스테이지 승인 상태 유지(재실행 아님).
 - [x] Workspace Detection — Greenfield 확정 (2026-07-11)
 - [x] Requirements Analysis (Comprehensive) — 승인 완료 (2026-07-12)
 - [x] User Stories — 승인 완료 (2026-07-12) · 산출물: docs/PRD/PRD-lean.md · user-stories/stories.md(94 상세 + J·K·L 헤더) · personas.md(4종) · 사진 저장 모델 결정 반영

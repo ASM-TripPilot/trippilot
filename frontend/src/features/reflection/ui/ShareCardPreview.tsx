@@ -1,7 +1,11 @@
-import type { ReactElement } from 'react';
+import type { ReactElement, Ref } from 'react';
 import { Text, View } from 'react-native';
 
-import { formatShareCardStats, type ShareCardVM } from '../model/shareCard';
+import {
+  formatShareCardStats,
+  SHARE_FORMATS,
+  type ShareCardVM,
+} from '../model/shareCard';
 import { WatermarkLogoGlyph } from './ShareCardGlyphs';
 
 /**
@@ -14,27 +18,38 @@ import { WatermarkLogoGlyph } from './ShareCardGlyphs';
  *
  * 종횡비 프레임(reflection-share-preview-frame)은 인라인 `style={{ aspectRatio }}` 로 노출한다 —
  * 화면이 선택 포맷의 aspectRatio 를 넘겨 9:16→1:1→4:5 전환이 관측된다(className 만으론 jest 가 못 읽음).
- * 높이 530 고정 + aspectRatio → 폭이 비율로 정해진다(feed 4:5 폭 초과는 6-b 실측 몫).
+ * TRIP-1016: 1:1·4:5 는 폭(가용 폭 100%)이 크기를 정하고, 9:16 만 높이 530 상한으로 묶는다 —
+ * 530 고정 + 비율이면 1:1·4:5 폭이 화면을 넘는다(캡처가 곧 이 프레임이라 넘친 이미지가 된다, BR-U5-46).
  */
+
+const STORY_MAX_HEIGHT = 530;
 
 export interface ShareCardPreviewProps {
   card: ShareCardVM;
   aspectRatio: number;
+  /** TRIP-1071 캡처 대상 — 프레임 View 자체에 단다(래퍼에 달면 테두리·비율이 다른 이미지가 떠진다). */
+  frameRef?: Ref<View>;
 }
 
 export function ShareCardPreview({
   card,
   aspectRatio,
+  frameRef,
 }: ShareCardPreviewProps): ReactElement {
   const statsText = formatShareCardStats(card.statsCells, card.mode);
+  const frameStyle =
+    aspectRatio === SHARE_FORMATS[0].aspectRatio
+      ? { aspectRatio, height: STORY_MAX_HEIGHT }
+      : { aspectRatio, width: '100%' as const };
   const captionLine = [card.regionText, card.periodText]
     .filter(Boolean)
     .join('  ·  ');
 
   return (
     <View
+      ref={frameRef}
       testID="reflection-share-preview-frame"
-      style={{ aspectRatio, height: 530 }}
+      style={frameStyle}
       className="self-center overflow-hidden rounded-card border border-hairline bg-canvas"
     >
       {/* 워터마크(좌상단, ink) */}
@@ -45,25 +60,33 @@ export function ShareCardPreview({
         </Text>
       </View>
 
-      {/* 지도 자리 — 좌표 계약 공백이라 가짜 지도 대신 placeholder(muted 박스)에 방문 순서를 얹는다. */}
-      <View className="mx-lg mt-md flex-1 justify-center gap-sm rounded-card bg-surface-soft p-md">
-        {card.orderedVisits.slice(0, 6).map((visit) => (
-          <View key={visit.order} className="flex-row items-center gap-sm">
-            <View className="h-[22px] w-[22px] items-center justify-center rounded-full bg-primary">
-              <Text className="font-inter-bold text-caption text-on-primary">
-                {visit.order}
+      {/* 지도 자리 — 좌표 계약 공백이라 가짜 지도 대신 placeholder(muted 박스)에 방문 순서를 얹는다.
+          방문 0곳이면 빈 회색 박스를 그리지 않고 자리만 비운다(TRIP-1016 D10). */}
+      {card.orderedVisits.length > 0 ? (
+        <View
+          testID="reflection-share-visit-order"
+          className="mx-lg mt-md flex-1 justify-center gap-sm rounded-card bg-surface-soft p-md"
+        >
+          {card.orderedVisits.slice(0, 6).map((visit) => (
+            <View key={visit.order} className="flex-row items-center gap-sm">
+              <View className="h-[22px] w-[22px] items-center justify-center rounded-full bg-primary">
+                <Text className="font-inter-bold text-caption text-on-primary">
+                  {visit.order}
+                </Text>
+              </View>
+              <Text className="text-label text-muted">{visit.dayLabel}</Text>
+              <Text
+                className="flex-1 font-noto text-body text-ink"
+                numberOfLines={1}
+              >
+                {visit.place}
               </Text>
             </View>
-            <Text className="text-label text-muted">{visit.dayLabel}</Text>
-            <Text
-              className="flex-1 font-noto text-body text-ink"
-              numberOfLines={1}
-            >
-              {visit.place}
-            </Text>
-          </View>
-        ))}
-      </View>
+          ))}
+        </View>
+      ) : (
+        <View className="flex-1" />
+      )}
 
       {/* 하단 텍스트 — 지역·기간 / 제목 / 코랄 밑줄 / 통계(얼굴별 포매터) */}
       <View className="gap-[6px] px-lg pb-lg pt-md">

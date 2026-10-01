@@ -7,6 +7,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
@@ -24,6 +25,7 @@ import {
   fireEditDragEnd,
   fireEditDropOnZone,
 } from '@/test-support/editDragList';
+import { WithToastHost, resetToast } from '@/test-support/toastHarness';
 
 import { ManualPlanPage } from './ManualPlanPage';
 
@@ -39,6 +41,7 @@ import { ManualPlanPage } from './ManualPlanPage';
  *  - 🔴 M4 ⌄ → 시각 시트(`itinerary-manual-time-*`) → 적용값이 PUT 에 실린다.
  *  - 🔴 M5·M6 저장 실패·미지정 제외를 침묵하지 않는다(INV-4) — 페이지 소유 안내 testID 2종.
  *  - 🔴 M7 장소 추가·카드 사이 +·뒤로가 라우터로 이어진다(옛 `itinerary-manual-add-place` 대체).
+ *    뒤로(‹)는 TRIP-1009 부터 `router.back` 이 아니라 일정 탭 `replace` 다(옛 C1b 는 TRIP-1038 로 삭제 — S1 주석).
  *
  * MANUAL 생성 POST 가드(G-a1~a3·I2)는 `ManualPlanPage.integration.test.tsx` 가 계속 잠근다 — 여기선
  * GET 이 기존 초안(days>0)을 돌려줘 POST 가 나가지 않는 경로만 쓴다.
@@ -91,6 +94,7 @@ function slot(
     isFixed: false,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     tags: [],
     nameKo: `장소-${poiId}`,
   };
@@ -138,6 +142,8 @@ let putCalls = 0;
 let putBody: unknown = null;
 let daySlots: ItineraryDaysItemSlotsItem[] = PLAIN;
 let putHandler: () => Response;
+/** TRIP-1038 B — 저장 성공 뒤 확정 POST 가 따라 나간다. 핸들러가 없으면 `onUnhandledRequest:'error'` 에 걸린다(02a ★3). */
+let confirmHandler: () => Response | Promise<Response>;
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 
@@ -149,23 +155,32 @@ beforeEach(() => {
   setAccessToken('valid-access');
   useItineraryEditStore.getState().reset();
   putHandler = () => HttpResponse.json(manualDraft(daySlots));
+  confirmHandler = () =>
+    HttpResponse.json({ ...manualDraft(daySlots), status: 'CONFIRMED' });
 
   server.use(
     http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
     http.get(`${BASE}/trips/:tripId/itinerary`, () =>
       HttpResponse.json(manualDraft(daySlots))
     ),
+    // TRIP-1022 — 페이지가 빈 편집기 지도 중심용 거점을 조회한다(단언 무관 준비). `/saved-stays` 는
+    // 기본 핸들러(`[]`)가 받는다. 없으면 `onUnhandledRequest:'error'` 에 걸린다(02a §3).
+    http.get(`${BASE}/trips/:tripId/bases`, () => HttpResponse.json([])),
     http.put(`${BASE}/trips/:tripId/itinerary`, async ({ request }) => {
       putCalls += 1;
       putBody = await request.json();
       return putHandler();
-    })
+    }),
+    http.post(`${BASE}/trips/:tripId/itinerary/confirm`, () => confirmHandler())
   );
 });
 
 afterEach(() => {
   server.resetHandlers();
   clearAccessToken();
+  // 토스트 스토어는 모듈 싱글턴이라 파일 안 테스트 사이로 샌다. S1 만이 아니라 **모든** 테스트 뒤에 비운다 —
+  // 앞선 V3 저장이 띄운 토스트가 S1 첫 테스트까지 남아 거짓 green 을 만든 실측(03b 차단-1).
+  resetToast();
 });
 
 afterAll(() => server.close());
@@ -343,14 +358,16 @@ describe('🟢 V3 · TRIP-590 AC1 · 5-b 경고-1 — 저장 응답의 서버 �
   it('위반 없는 초안을 저장하고 PUT 응답이 b 에 위반을 달면, 저장 뒤 b 에만 사유 배지가 뜬다', async () => {
     const REASON = '숙소 고정 충돌';
     // GET 은 위반 0(PLAIN), PUT 응답만 b 를 위반으로 재판정한다 — 배지의 출처가 PUT 응답뿐이게.
-    putHandler = () =>
-      HttpResponse.json(
-        manualDraft([
-          PLAIN[0],
-          { ...PLAIN[1], hasViolation: true, violationReason: REASON },
-          PLAIN[2],
-        ])
-      );
+    const judged = manualDraft([
+      PLAIN[0],
+      { ...PLAIN[1], hasViolation: true, violationReason: REASON },
+      PLAIN[2],
+    ]);
+    putHandler = () => HttpResponse.json(judged);
+    // TRIP-1095 — 위반 응답이면 확정 전 요약 게이트에서 멈춰 확정이 안 나간다(배지 출처는 PUT 캐시뿐).
+    // 아래 확정 핸들러는 게이트가 새어 확정이 나가더라도 배지를 지우지 않게 둔 옛 준비(TRIP-1038 B)다.
+    confirmHandler = () =>
+      HttpResponse.json({ ...judged, status: 'CONFIRMED' });
     renderPage();
     await ready();
     expect(screen.queryAllByTestId(/^slot-stopcard-violation-/)).toHaveLength(
@@ -369,7 +386,9 @@ describe('🟢 V3 · TRIP-590 AC1 · 5-b 경고-1 — 저장 응답의 서버 �
 });
 
 describe('🔴 M7 · AC-9 — 장소 추가·카드 사이 +·뒤로가 라우터로 이어진다', () => {
-  it('장소 추가는 h13 말미, 카드 사이 + 는 선행 index, 뒤로는 back 을 부른다', async () => {
+  // TRIP-1009 C(01b Q3) — ‹ 는 이전 화면(방식 선택)이 아니라 일정 탭으로 바꿔 간다. 편집기에 들어온 순간
+  // MANUAL 일정이 이미 있으므로 방식 선택으로 돌아가면 "일정이 없다"는 거짓 신호가 된다.
+  it('장소 추가는 h13 말미, 카드 사이 + 는 선행 index, 뒤로는 일정 탭으로 replace 한다 (back 0회)', async () => {
     renderPage();
     await ready();
 
@@ -379,14 +398,56 @@ describe('🔴 M7 · AC-9 — 장소 추가·카드 사이 +·뒤로가 라우�
       params: { tripId: TRIP_ID },
     });
 
+    // 카드 사이 + 는 보고 있는 날(date)도 싣는다(TRIP-1115 03b 차단-1). 말미 「장소 추가」는 위처럼 그대로.
     fireEvent.press(screen.getByTestId('itinerary-edit-insert-0'));
     expect(mockPush).toHaveBeenLastCalledWith({
       pathname: '/trips/[tripId]/itinerary/manual/add',
-      params: { tripId: TRIP_ID, insertAfter: '0' },
+      params: { tripId: TRIP_ID, insertAfter: '0', date: DAY },
     });
 
+    // 앵커 — ‹ 전엔 replace 0회(앞 동작이 부른 호출이 셈에 섞이지 않게).
+    expect(mockReplace).not.toHaveBeenCalled();
     fireEvent.press(screen.getByTestId('itinerary-edit-back'));
-    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith('/(tabs)/itinerary');
+    expect(mockBack).not.toHaveBeenCalled();
+  });
+
+  // 2일짜리라야 "항상 1일차 날짜"로 박는 구현과 갈린다.
+  it('2일차 칩으로 옮긴 뒤 카드 사이 + 는 2일차 date 를 싣는다 (TRIP-1115 03b 차단-1)', async () => {
+    const DAY2 = '2026-06-11';
+    const twoDays: Itinerary = {
+      ...manualDraft(PLAIN),
+      days: [
+        { date: DAY, slots: PLAIN },
+        {
+          date: DAY2,
+          slots: [
+            slot('d', '09:00:00', '10:00:00'),
+            slot('e', '11:00:00', '12:00:00'),
+          ],
+        },
+      ],
+    };
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        HttpResponse.json(twoDays)
+      )
+    );
+    renderPage();
+    await ready();
+
+    // 칩 testID 번호는 1부터다(day-2 = 2일차, EditorView 가 tab.dayIndex 를 쓴다).
+    fireEvent.press(screen.getByTestId('itinerary-edit-day-2'));
+    // 앵커 — 2일차 카드가 보인다.
+    await screen.findByTestId(`slot-stopcard-${buildSlotKey(DAY2, 'd')}`);
+    fireEvent.press(screen.getByTestId('itinerary-edit-insert-0'));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/itinerary/manual/add',
+      params: { tripId: TRIP_ID, insertAfter: '0', date: DAY2 },
+    });
   });
 });
 
@@ -426,5 +487,120 @@ describe('🔴 M8 · AC-9 · 5-b 경고-4 — 다른 여행의 남은 드래프�
       await new Promise((resolve) => setTimeout(resolve, 100));
     });
     expect(putCalls).toBe(0);
+  });
+});
+
+/**
+ * TRIP-990 · S1 (#043 · US-SCHED-08) → **TRIP-1038 B 로 뒤집음(D20 폐기)** — 직접 짜기 저장이 성공하면
+ * "일정을 저장했어요" 토스트는 그대로 뜨지만, 이제 제자리에 남지 않고 확정까지 이어 확정 화면(h16)으로
+ * 바꿔 간다(결정 1=(ii)). 토스트를 남기는 이유: 뒤이은 확정이 실패해도 저장은 됐다는 사실을 알린다(01 Q3).
+ * 확정 흐름 자체(순서·실패·연타·언마운트)는 `ManualPlanPage.confirm.integration.test.tsx` 가 잰다.
+ *
+ * 옛 C1b(TRIP-1009 — 저장 뒤 ‹)는 "저장해도 제자리"가 전제라 전제가 사라져 지웠다. ‹ → 일정 탭 replace
+ * 계약은 위 M7 이 계속 잠근다.
+ *
+ * 토스트 호스트는 실제 앱에서 루트에 있다 — 이 테스트는 페이지 옆에 호스트를 함께 그려 "보였다"를 잰다
+ * (`toastHarness`). 스토어가 모듈 싱글턴이라 파일 최상위 `afterEach` 가 테스트마다 비운다.
+ *
+ * 3동작 뼈대: 준비=PUT 200/500 → 실행=저장 → 단언=토스트 유무·라우터.
+ */
+describe('🔴 S1 · 저장 성공 토스트 + 확정 화면으로 이동 (#043 · TRIP-1038 B)', () => {
+  function renderPageWithToast() {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    return render(
+      <QueryClientProvider client={client}>
+        <WithToastHost>
+          <ManualPlanPage tripId={TRIP_ID} />
+        </WithToastHost>
+      </QueryClientProvider>
+    );
+  }
+
+  it('PUT 200 이면 "일정을 저장했어요" 토스트가 뜨고, 확정 뒤 h16 으로 replace 1회 · push/back 0', async () => {
+    // TRIP-1047 — 확정이 성공하면 저장 토스트는 곧바로 확정 토스트로 바뀐다. 확정 응답을 문으로 붙잡아
+    // "저장은 끝났고 확정은 아직"인 동안에 저장 토스트를 본다(안 붙잡으면 수 ms 만에 바뀌어 못 본다).
+    let openDoor = () => {};
+    const door = new Promise<void>((resolve) => {
+      openDoor = resolve;
+    });
+    confirmHandler = async () => {
+      await door;
+      return HttpResponse.json({
+        ...manualDraft(daySlots),
+        status: 'CONFIRMED',
+      });
+    };
+    renderPageWithToast();
+    await ready();
+    // 앵커: 저장 전엔 토스트가 없다 — 뒤에서 보이는 토스트가 이번 저장이 띄운 것임을 가른다.
+    expect(screen.queryByTestId('itinerary-manual-saved')).toBeNull();
+
+    await save();
+
+    // 앵커: 이번 저장 PUT 이 실제로 1회 나갔다(저장 동작을 지우면 여기서 red).
+    expect(putCalls).toBe(1);
+    const toast = await screen.findByTestId('itinerary-manual-saved');
+    expect(within(toast).getByText('일정을 저장했어요')).toBeOnTheScreen();
+    // 저장 토스트를 본 **뒤에** 확정 응답을 보낸다.
+    openDoor();
+    // 저장+확정 2왕복 — CI 러너(약 4배 느림) 기준 한도.
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1), {
+      timeout: 4000,
+    });
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/itinerary',
+      params: { tripId: TRIP_ID },
+    });
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('짝: PUT 500 이면 실패 안내만 뜨고 성공 토스트는 없다', async () => {
+    putHandler = () => new HttpResponse(null, { status: 500 });
+    renderPageWithToast();
+    await ready();
+
+    await save();
+
+    // 실패가 처리된 뒤에 센다 — 응답 전이면 어떤 구현이든 토스트가 없다.
+    expect(await screen.findByTestId(SAVE_ERROR)).toBeOnTheScreen();
+    expect(screen.queryByTestId('itinerary-manual-saved')).toBeNull();
+  });
+});
+
+/**
+ * TRIP-981 · MC (#057 같은 결함 · 브리프 후보5) — 직접 짜기 시각 시트도 딤으로 닫히면 페이지에 알린다.
+ *
+ * 기본 시각 시트가 딤 닫힘을 알리지 않으면 `editingSlotKey` 가 남아 시트가 마운트된 채 닫혀 있고, 시각
+ * 칩을 다시 눌러도 열리지 않는다. 게다가 마운트된 채 다른 슬롯으로 바뀌면 시트가 옛 시각(처음 연 슬롯)을
+ * 그대로 보여 준다. 테스트용 시트 목은 항상 열린 채라 `onClose` 를 불러 딤 닫힘을 흉내 낸다.
+ *
+ * 3동작 뼈대: 준비=c(13:00)·a(09:00) 초안 → 실행=c 칩 → close → a 칩 → 단언=시트 사라짐·재등장·a 시각 시드.
+ */
+describe('🔴 MC · TRIP-981 — 직접 짜기 시각 시트도 딤으로 닫히면 다시 열린다', () => {
+  it('MC1 · c 칩 시트를 딤으로 닫으면 트리에서 빠지고, a 칩을 누르면 a 의 09시로 새로 열린다', async () => {
+    renderPage();
+    await ready();
+
+    fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('c')}`));
+    const sheet = await screen.findByTestId(SHEET);
+    expect(
+      screen.getByTestId('itinerary-manual-time-start-h-13')
+    ).toBeSelected();
+
+    // 딤 탭 닫힘 대리 — 시트의 onClose 를 부른다(없으면 조용히 아무 일도 안 일어난다).
+    fireEvent(sheet, 'close');
+    await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
+
+    fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('a')}`));
+    expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('itinerary-manual-time-start-h-09')
+    ).toBeSelected();
+    expect(
+      screen.getByTestId('itinerary-manual-time-start-h-13')
+    ).not.toBeSelected();
   });
 });

@@ -46,5 +46,6 @@
     "deadline_ms" : 5000
   },
   "excluded_poi_ids" : [ "44444444-4444-4444-8444-444444444444" ],
-  "include_explanations" : true
+  "include_explanations" : true,
+  "rejections" : [ ]
 }

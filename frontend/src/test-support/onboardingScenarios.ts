@@ -7,7 +7,7 @@
  * (직전 사이클 `20260721-trip161-mock-removal` 의 "목을 앱에서 뺀다" 결정 위배).
  * `src/test-support/` 는 이미 테스트 전용 더블만 두는 자리이고 어떤 프로덕션 파일도 참조하지 않는다.
  * 이 모듈을 읽는 곳은 MSW 핸들러(`src/mocks/handlers.ts` — 테스트 오라클 전용)와 통합테스트뿐이다.
- * 그 계약은 `src/__tests__/noMswInStaticGraph.test.ts` 가 기계적으로 강제한다.
+ * 앱 코드가 `@/mocks`·`msw` 를 정적 import 하는 것은 eslint `no-restricted-imports` 가 막는다.
  *
  * 로그인 시나리오(`src/mocks/scenarios.ts` 10종)와 **독립된 상태**다 — 온보딩 통합테스트는
  * 로그인 시나리오를 건드리지 않고 온보딩 거동만 갈아끼운다.

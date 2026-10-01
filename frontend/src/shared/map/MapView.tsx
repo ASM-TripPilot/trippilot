@@ -17,6 +17,12 @@ import {
   NaverMapPathOverlay,
   NaverMapCircleOverlay,
 } from '@mj-studio/react-native-naver-map';
+import type {
+  NaverMapViewRef,
+  Region,
+} from '@mj-studio/react-native-naver-map';
+
+import { buildCircleRegion, buildFitRegion } from './fitRegion';
 
 /**
  * 공급자 중립 지도 래퍼(TRIP-863 S1). 카카오 WebView 브리지를 네이버 네이티브 지도로
@@ -110,6 +116,10 @@ export interface MapViewProps {
   /** 지도 빈 곳 탭(마커 아님, TRIP-748 — i01 허브 트리거 알약 로컬 숨김). `onCameraIdle` 과 같은
    * 옵트인 — 준 때만 NaverMapView 에 단다(미전달 시 콜백 부착 0). 좌표는 올리지 않는다. */
   onTapMap?: () => void;
+  /** 핀 전부가 한 화면에 들어오게 연다(TRIP-1022, h02). **옵트인** — 켜고 핀이 2개 이상일 때만
+   * `camera` 대신 `region` 을 넘긴다(SDK 는 camera 가 있으면 region 을 버린다). 핀 1개 이하·미전달이면
+   * 기존 center 카메라 그대로. */
+  fitPins?: boolean;
 }
 
 /** 네이버 초기 줌. ponytail: 카카오 기본 level 3 에 대응하는 대략값, 정확 캘리브레이션은 실기(6-b). */
@@ -441,6 +451,7 @@ export function MapView({
   showScaleBar,
   radiusCircle,
   onTapMap,
+  fitPins,
 }: MapViewProps): ReactElement {
   // 네이티브 SDK 는 런타임 키를 config plugin 에서 받으므로, 이 env 판정은 "설정 누락 표면"용이다
   // (키가 없으면 회색 빈 지도 대신 안내 화면을 띄운다). 참조는 이 한 곳뿐(A-2 계승).
@@ -467,6 +478,27 @@ export function MapView({
     () => ({ latitude: center.lat, longitude: center.lng, zoom: INITIAL_ZOOM }),
     [center.lat, center.lng]
   );
+  // region 도 같은 이유로 값 memo — 소비처가 렌더마다 새 핀 배열을 만들어도 값이 같으면 같은 객체다.
+  // 네 숫자를 문자열 키로 삼는다(JS 숫자 → JSON 은 정확히 왕복한다).
+  // 핀 맞춤이 없고 반경 원이 있으면 원 전체를 담는 영역으로 연다(TRIP-1043 — 줌 고정이면 원이 카드 밖).
+  const pinRegion = fitPins === true ? buildFitRegion(pins ?? []) : null;
+  const regionKey = JSON.stringify(
+    pinRegion ??
+      (radiusCircle
+        ? buildCircleRegion(radiusCircle.center, radiusCircle.radiusM)
+        : null)
+  );
+  const region = useMemo(
+    () => JSON.parse(regionKey) as Region | null,
+    [regionKey]
+  );
+  // SDK 는 region prop 을 받는 즉시(레이아웃 전 임시 프레임 기준) 맞춤 줌을 정하고, 같은 값이면 다시
+  // 맞추지 않는다 — 카드 높이가 잡힌 뒤 한 번 더 맞춰야 원·핀이 실제 카드 안에 든다(TRIP-1043 04b 실측).
+  const mapRef = useRef<NaverMapViewRef>(null);
+  const refitRegion = (): void => {
+    if (region !== null)
+      mapRef.current?.animateRegionTo({ ...region, easing: 'None' });
+  };
 
   if (!hasKey) {
     return (
@@ -497,8 +529,10 @@ export function MapView({
   return (
     <View testID="map-root" className="flex-1">
       <NaverMapView
+        ref={mapRef}
         style={{ flex: 1 }}
-        camera={camera}
+        onLayout={refitRegion}
+        {...(region !== null ? { region } : { camera })}
         isScrollGesturesEnabled={!viewOnly}
         isZoomGesturesEnabled={!viewOnly}
         isRotateGesturesEnabled={!viewOnly}

@@ -80,3 +80,21 @@ describe('e02 2단 원형 FAB 배선 (TRIP-725 · AC-7 · AC-9)', () => {
     ).not.toThrow();
   });
 });
+
+// TRIP-1103 AC-2 — NativeWind 의 rem 기준이 14px 이라 `h-14`(3.5rem)는 49px 로 렌더된다
+// (HomeScreen.tsx CreateTripFab 주석 실측). Figma 56px 는 브래킷 `h-[56px]` 로만 옮겨진다.
+describe('TRIP-1103 AC-2 · e02 두 FAB 지름 56px (h-14 rem 함정 제거)', () => {
+  it.each(['stay-search-fab-saved', 'stay-search-fab-register'])(
+    '%s 가 h-[56px] w-[56px] 이고 h-14·w-14 는 없다',
+    (testID) => {
+      render(<StaySearchScreen region="부산" items={[]} />);
+
+      const tokens = String(
+        screen.getByTestId(testID).props.className ?? ''
+      ).split(/\s+/);
+      expect(tokens).toEqual(expect.arrayContaining(['h-[56px]', 'w-[56px]']));
+      expect(tokens).not.toContain('h-14');
+      expect(tokens).not.toContain('w-14');
+    }
+  );
+});

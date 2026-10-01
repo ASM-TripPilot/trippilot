@@ -16,6 +16,7 @@ import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
 import com.trippilot.itinerarygeneration.domain.UnplacedMustVisit
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
+import com.trippilot.itinerarygeneration.domain.ScoredCandidatePoolStore
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Async
@@ -41,6 +42,8 @@ class SecondPhaseGenerator(
     private val itineraries: ItineraryRepository,
     private val revisions: ItineraryRevisionService,
     private val sessions: GenerationSessionService,
+    /** 생성 시점 점수 후보 풀(TRIP-969) — 2차 몫을 1차 풀에 합친다. */
+    private val scoredPools: ScoredCandidatePoolStore,
     transactionManager: PlatformTransactionManager,
     private val clock: Clock,
 ) {
@@ -66,6 +69,8 @@ class SecondPhaseGenerator(
         assemblyUnplaced: List<UnplacedMustVisit> = emptyList(),
         /** 진행 상태 세션(h09·h10). 사용자가 취소했으면 결과를 버린다(BR-U3-05). */
         sessionId: UUID? = null,
+        /** 시각을 우리가 고른(물질화) 블록 — 폴백의 isFixed 판정용(TRIP-1001). 와이어 직결 타입엔 못 싣는다. */
+        materializedPoiIds: Set<UUID> = emptySet(),
     ) {
         // INV-4: 2차 실패도 1차와 **대칭**으로 결정론 최소 폴백(must_visit 고정블록)으로 채운다.
         // 실패를 이유로 나머지 일자를 비워두지 않되, solveMode=MINIMAL·isFallback 으로 저하를 드러낸다.
@@ -74,7 +79,7 @@ class SecondPhaseGenerator(
                 scheduleAgent.generate(input)
             } catch (e: Exception) {
                 log.warn("2차 생성 실패 — 결정론 최소 폴백 적용(INV-4). tripId={}", tripId, e)
-                MinimalItineraryFallback.of(input, clock.instant())
+                MinimalItineraryFallback.of(input, clock.instant(), materializedPoiIds)
             }
         }
 
@@ -181,6 +186,9 @@ class SecondPhaseGenerator(
                 log.info("생성 마무리 폐기 — 쓰기 직전 일정이 바뀜. tripId={}", tripId)
                 return@execute null
             }
+            // 점수 후보 풀(TRIP-969) — 2차 몫을 1차 풀에 합친다. **반영이 확정된 뒤**여야 한다:
+            // 취소·교체로 버려진 2차의 풀이 남으면 즉답이 화면에 없는 일정의 판단으로 답한다.
+            output?.scoredCandidates?.let { pool -> scoredPools.merge(tripId, pool) }
             // 되돌리기 지점은 **전 일자가 담긴 최종 상태**로 남긴다 — 1차(day1)에서 남기면 복원 시 나머지가 잘린다.
             revisions.record(
                 updated, RevisionActor.AI,

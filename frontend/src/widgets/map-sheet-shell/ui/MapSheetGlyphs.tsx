@@ -1,7 +1,7 @@
 import Svg, { Circle, Path } from 'react-native-svg';
 
-// TRIP-783 · 지도+시트 셸 전용 인라인 SVG 글리프. widgets → `@/features` import 는 층 린트가 막아
-// (widgetsStructure F FAIL) `features/itinerary/ui/ItineraryGlyphs` 의 Back/Car/Walk 를 **바이트 복제**
+// TRIP-783 · 지도+시트 셸 전용 인라인 SVG 글리프. widgets 는 `@/features` 를 import 하지 않으므로
+// `features/itinerary/ui/ItineraryGlyphs` 의 Back/Car/Walk 를 **바이트 복제**
 // 한다(리포 글리프 로컬 복제 관례의 N번째 사본). 색은 이 파일에서만 raw hex 로 고정한다(SVG stroke/fill
 // 은 className 을 못 받고 `*Glyphs.tsx` 는 raw-hex 스캔 제외 관례 · docs/structure.md §지금 작업하려면).
 
@@ -80,8 +80,8 @@ export function WalkGlyph({ size = 16, testID }: GlyphProps) {
   );
 }
 
-// 커넥터 이동수단 · 차량(16) — CarGlyph(ItineraryGlyphs) 바이트 복제. `distanceRange` 에 `차량` 이
-// 있으면 이 글리프를 쓴다. 거리 글자와 같은 muted.
+// 커넥터 이동수단 · 차량(16) — CarGlyph(ItineraryGlyphs) 바이트 복제. `distanceRange` 에 `자가용` 이
+// 있으면 이 글리프를 쓴다(AI 수단 어휘, TRIP-1076). 거리 글자와 같은 muted.
 export function CarGlyph({ size = 16, testID }: GlyphProps) {
   return (
     <Svg

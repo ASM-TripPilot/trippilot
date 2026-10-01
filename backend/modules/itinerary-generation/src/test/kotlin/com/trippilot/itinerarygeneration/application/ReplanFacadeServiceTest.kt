@@ -1,7 +1,13 @@
 package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.changelog.api.ChangeSourceType
+import com.trippilot.itinerarygeneration.domain.ItineraryStatus
 import com.trippilot.core.error.ConflictDetected
+import com.trippilot.itinerarygeneration.domain.RejectedPoi
+import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
+import io.kotest.matchers.shouldNotBe
+import com.trippilot.placedata.api.RegionCenter
+import com.trippilot.placedata.api.RegionLookupFacade
 import com.trippilot.itinerarygeneration.api.ReplanCommand
 import com.trippilot.itinerarygeneration.api.ReplanProposal
 import com.trippilot.itinerarygeneration.api.ReplanSlot
@@ -132,6 +138,15 @@ class ReplanFacadeServiceTest : StringSpec({
         override fun findStayNightAnchors(tripId: UUID, startDate: LocalDate, endDate: LocalDate) = emptyList<DayAnchorView>()
     }
 
+    /** 목적지 중심 폴백(TRIP-963)용. 기본은 "제주" 중심을 안다 — 사다리 마지막 단이 실제로 잡히게. */
+    fun regionsWith(center: RegionCenter?) = object : RegionLookupFacade {
+        override fun codesOf(regionName: String) = emptyList<String>()
+        override fun isSelectableCode(regionCode: String) = false
+        override fun centerOf(regionName: String) = center
+        override fun centerOfCode(regionCode: String) = center
+    }
+    val jejuCenter = RegionCenter(33.4996, 126.5312)
+
     // 취향은 **중립이 아닌 값**으로 둔다 — "중립으로 덮지 않는다"(B-1)를 단정하려면 구분되는 값이 필요하다.
     val prefs = PreferenceSnapshot(
         styles = listOf("미식"), activities = listOf("야경"), foodTastes = listOf("한식"),
@@ -157,11 +172,17 @@ class ReplanFacadeServiceTest : StringSpec({
         val changeLogs: CapturingChangeLogs,
     )
 
-    fun fixture(agent: Agent, repo: ReplanItineraries = ReplanItineraries()): Fx {
+    fun fixture(
+        agent: Agent,
+        repo: ReplanItineraries = ReplanItineraries(),
+        rejections: FakeRejectionStore = FakeRejectionStore(),
+        regions: RegionLookupFacade = regionsWith(jejuCenter),
+        snapshots: FreezeAllSnapshots = FreezeAllSnapshots(),
+    ): Fx {
         repo.byTrip[trip] = itinerary()
         val revisions = genRevisions(repo, replanTrips, clock)
         val changeLogs = CapturingChangeLogs()
-        return Fx(ReplanFacadeService(replanTrips, repo, agent, noAnchors, revisions, changeLogs, preferences, noHints, savedStub, clock), repo, revisions, changeLogs)
+        return Fx(ReplanFacadeService(replanTrips, repo, agent, noAnchors, revisions, changeLogs, preferences, noHints, savedStub, regions, rejections, snapshots, clock), repo, revisions, changeLogs)
     }
 
     fun command(fullDay: Boolean = false, completed: List<String> = emptyList()) = ReplanCommand(
@@ -169,6 +190,67 @@ class ReplanFacadeServiceTest : StringSpec({
         completedSlotKeys = completed, originLat = 33.45, originLng = 126.56,
         reasons = listOf("비가 와요"), directives = listOf("실내로"), freeText = null, excludedPoiIds = emptyList(),
     )
+
+    /**
+     * **저장된 거절이 재계획 입력에 실린다**(TRIP-964). '다시 짜줘' 직후의 재계획이 이 이력의
+     * 소비처다 — 여기가 비면 방금 밀어낸 곳이 대안으로 다시 나온다.
+     */
+    "누적된 거절 이력이 재계획 입력에 실린다" {
+        val rejected = UUID.randomUUID()
+        val store = FakeRejectionStore().apply {
+            record(trip, listOf(rejected), RejectedPoi.Kind.SWAPPED_OUT)
+            record(trip, listOf(rejected), RejectedPoi.Kind.SWAPPED_OUT) // 반복 거절 = count 2
+        }
+        val agent = Agent(proposal(replacement))
+
+        fixture(agent, rejections = store).svc.propose(command())
+
+        agent.inputs.single().rejections shouldBe listOf(RejectedPoi(rejected, RejectedPoi.Kind.SWAPPED_OUT, 2))
+    }
+
+    // ───── 기준점 사다리 (TRIP-963) ─────────────────────────────────────────
+
+    /**
+     * **좌표도 숙소도 없는 사용자의 재계획이 산다.** 종전에는 AI 를 부르지도 않고 40ms 만에
+     * FAILED 였다(재현 세션 8e72c8e7) — BR-U4-19 "위치를 못 잡았다고 재계획을 막지 않으며"와
+     * 모순. 생성 경로의 목적지 중심 단(TRIP-384)을 사다리 맨 뒤에 붙였다.
+     */
+    "좌표·숙소가 없으면 목적지 중심으로 내려가 재계획이 산다" {
+        val agent = Agent(proposal(replacement))
+        val svc = fixture(agent).svc
+
+        val out = svc.propose(command().copy(originLat = null, originLng = null))
+
+        out shouldNotBe null
+        agent.inputs.single().originLat shouldBe jejuCenter.lat
+        agent.inputs.single().originLng shouldBe jejuCenter.lng
+    }
+
+    /**
+     * **목적지 중심조차 없으면 종전대로 실패다.** 지어낸 좌표를 AI 에 보내지 않는다(INV-4) —
+     * 생성 경로도 같은 판단이다(앵커 없이 간다). 이 단이 없으면 폴백이 "항상 성공"이 되어
+     * 수동 편집 전환 경로가 죽는다.
+     */
+    "목적지 좌표조차 없으면 기준점 실패로 올린다 — 지어내지 않는다" {
+        val agent = Agent(proposal(replacement))
+        val svc = fixture(agent, regions = regionsWith(null)).svc
+
+        shouldThrow<ScheduleAgentCallFailed> {
+            svc.propose(command().copy(originLat = null, originLng = null))
+        }
+        agent.inputs shouldBe emptyList()
+    }
+
+    /** **사다리 순서** — 현재 위치가 있으면 목적지 중심이 이기지 않는다. 도시 중심은 사용자와 멀 수 있다. */
+    "현재 위치가 있으면 목적지 중심으로 내려가지 않는다" {
+        val agent = Agent(proposal(replacement))
+        val svc = fixture(agent).svc
+
+        svc.propose(command())
+
+        agent.inputs.single().originLat shouldBe 33.45
+        agent.inputs.single().originLng shouldBe 126.56
+    }
 
     "지금 이후만 다시 짤 때 — 지나간 슬롯과 시각 고정이 잠긴다" {
         val agent = Agent(proposal(replacement))
@@ -277,10 +359,12 @@ class ReplanFacadeServiceTest : StringSpec({
     }
 
     "반영하지 않고 끝나면 이력도 남기지 않는다" {
+        // 거부 트리거 = 그 사이 일정 교체(다른 itineraryId). 종전에는 확정을 트리거로 썼는데,
+        // 확정 일정 반영이 열리면서(TRIP-999) 그쪽은 더 이상 거부 사유가 아니다.
         val agent = Agent(proposal(replacement))
         val f = fixture(agent)
         val proposal = f.svc.propose(command())!!
-        f.repo.byTrip[trip] = f.repo.byTrip.getValue(trip).confirm(now)
+        f.repo.byTrip[trip] = itinerary() // 재생성으로 새 itineraryId
 
         shouldThrow<ConflictDetected> { f.svc.apply(acc, trip, proposal, REASON) }
 
@@ -298,15 +382,24 @@ class ReplanFacadeServiceTest : StringSpec({
         shouldThrow<ConflictDetected> { svc.apply(acc, trip, proposal, REASON) }
     }
 
-    "확정된 일정에는 반영하지 않는다" {
+    "확정 일정에도 반영된다 — 동결은 이어지고 새 슬롯은 지금 동결된다(TRIP-999)" {
+        // 재계획 세션은 여행 기간 안에서만 열린다 — 여기 오는 확정 일정은 전부 여행 중이고,
+        // 여행 중 확정 잠금은 없다(결정 (a)). 종전에는 산출까지 다 하고 여기서만 409 였다(QA #063).
         val agent = Agent(proposal(replacement))
-        val f = fixture(agent)
-        val svc = f.svc
-        val repo = f.repo
-        val proposal = svc.propose(command())!!
-        repo.byTrip[trip] = repo.byTrip.getValue(trip).confirm(now)
+        val freezer = FreezeAllSnapshots()
+        val f = fixture(agent, snapshots = freezer)
+        val proposal = f.svc.propose(command())!!
+        val before = f.repo.byTrip.getValue(trip)
+        val frozenByPoi = before.days.flatMap { it.slots }.associate { it.sourcePoiId to UUID.randomUUID() }
+        f.repo.byTrip[trip] = before.confirm(frozenByPoi, now)
 
-        shouldThrow<ConflictDetected> { svc.apply(acc, trip, proposal, REASON) }
+        f.svc.apply(acc, trip, proposal, REASON)
+
+        val after = f.repo.byTrip.getValue(trip)
+        after.status shouldBe ItineraryStatus.CONFIRMED // 반영이 확정을 풀지 않는다
+        // 전 슬롯이 동결 참조를 가진다 — 남은 슬롯은 승계, 재계획이 새로 넣은 슬롯은 지금 동결(INV-U1-03).
+        after.days.flatMap { it.slots }.forEach { it.poiSnapshotId shouldNotBe null }
+        f.changeLogs.appended.single().sourceType shouldBe ChangeSourceType.PLAN_B // BR-U4-30 그대로
     }
 
     "초안 왕복이 항등이다 — 저장했다 돌아와도 값이 새지 않는다" {

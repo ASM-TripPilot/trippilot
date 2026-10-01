@@ -1,5 +1,8 @@
 import type { ComponentProps } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import type { ReactTestInstance } from 'react-test-renderer';
+
+import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
 
 import type { MustVisitTimeForm } from '../model/mustVisitTimeForm';
 import { MustVisitTimeScreen } from './MustVisitTimeScreen';
@@ -456,5 +459,139 @@ describe('🔴 C34 · AC-b1 · AC-b2 — 저장 실패 행이 안내 배너 아�
     // 앵커 — hairline 테두리 + r12(rounded-button=12px 실측). 실제 흰 렌더·픽셀은 6-b 대조.
     expect(className).toContain('border-hairline');
     expect(className).toContain('rounded-button');
+  });
+});
+
+/**
+ * TRIP-990 · W3 (D21 · 01b Q6) — h07 시작 시각 시트: 휠을 굴리다 멈추면 그 값이 확정되고, 시트는
+ * 휠 정지·셀 탭으로는 닫히지 않는다(딤·끌기 닫힘은 아래 A 가 잠근다 — TRIP-1014).
+ *
+ * 왜 닫힘을 떼는가: 휠이 스크롤 정지로도 값을 확정하게 되면, 예전처럼 "값이 넘어오면 시트를 닫는다"를
+ * 두면 굴리다 잠깐 멈추는 순간 시트가 닫혀 버린다. 그래서 탭이든 스크롤 정지든 값만 넘기고, 닫기는
+ * 사용자가 "닫기"를 눌러서만 한다.
+ *
+ * 무엇을 보장하나:
+ *  - 휠이 12:00 칸(48개 중 24번째)에서 멈추면 `onPickStart('12:00')` 가 1회 불리고 시트는 열린 채다.
+ *  - 셀을 탭해도 값만 넘어가고 시트는 열린 채다. "닫기"를 누르면 그때 닫힌다.
+ *
+ * 3동작 뼈대: 준비=시트를 연다 → 실행=휠 정지 / 셀 탭 / 닫기 → 단언=넘어간 값·시트 존재 여부.
+ */
+describe('🔴 W3 · 휠 정지 확정 + 휠 정지·셀 탭으로는 닫히지 않음 (D21 · Q6)', () => {
+  const SHEET = 'itinerary-mustvisit-time-start-sheet';
+  const WHEEL = 'itinerary-mustvisit-time-start-wheel';
+
+  function openSheet(onPickStart: jest.Mock): void {
+    renderScreen({ onPickStart });
+    fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-start-field'));
+  }
+
+  it('휠이 12:00 에서 멈추면 그 값이 넘어가고 시트는 열린 채다', () => {
+    const onPickStart = jest.fn();
+    openSheet(onPickStart);
+
+    fireEvent(screen.getByTestId(WHEEL), 'momentumScrollEnd', {
+      nativeEvent: {
+        contentOffset: {
+          x: 0,
+          y: START_OPTIONS.indexOf('12:00') * WHEEL_CELL_HEIGHT,
+        },
+      },
+    });
+
+    expect(onPickStart).toHaveBeenCalledWith('12:00');
+    expect(onPickStart).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId(SHEET)).toBeOnTheScreen();
+  });
+
+  it('셀을 탭해도 값만 넘어가고 시트는 열린 채이며, "닫기"를 눌러야 닫힌다', () => {
+    const onPickStart = jest.fn();
+    openSheet(onPickStart);
+
+    fireEvent.press(
+      screen.getByTestId('itinerary-mustvisit-time-start-option-13:00')
+    );
+
+    expect(onPickStart).toHaveBeenCalledWith('13:00');
+    expect(screen.getByTestId(SHEET)).toBeOnTheScreen();
+
+    fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-start-close'));
+
+    expect(screen.queryAllByTestId(SHEET)).toEqual([]);
+    expect(
+      screen.getByTestId('itinerary-mustvisit-time-start-field')
+    ).toBeOnTheScreen();
+  });
+});
+
+/**
+ * TRIP-1014 · A (#041 · 01b Q2) — h07 시작 시각 시트가 딤 탭·아래로 끌기로 닫혀도 다시 열린다.
+ *
+ * 왜: 라이브러리가 딤 탭으로 시트를 닫아도 화면의 "열림" 상태(`startSheetOpen`)가 그대로면, 칸을 다시
+ * 눌러도 이미 열린 상태라 아무 일도 안 일어난다. 시트의 `onClose` 가 그 상태를 풀어야 한다.
+ *
+ * 무엇을 보장하나:
+ *  - A1 닫힘 신호(`close`)를 받으면 시트가 트리에서 빠지고, 시작 시각 칸은 남는다.
+ *  - A2 그 뒤 칸을 다시 누르면 시트가 새로 뜬다. "닫힌 뒤 0개"를 먼저 본다 — 닫힘이 고장 나 시트가 계속
+ *    떠 있어도 "재탭 후 1개"는 참이라서(02a ★A5).
+ *  - A3 `onClose` 를 쥔 엘리먼트가 아래로 끌어 닫기를 켜고(`true`), 본문 끌기는 끈다(`false` — TRIP-599
+ *    휠 스크롤 보호). 같은 엘리먼트여야 한다 — 안쪽 `BottomSheetView` 에 `onClose` 를 달면 실기에선 딤이
+ *    안 먹는다(02a ★A2).
+ *
+ * ⚠️ `fireEvent(요소, 'close')` 는 딤 탭의 대역이다 — 부모를 타고 올라가 `onClose` 를 찾아 부르고, 못 찾으면
+ *   조용히 끝난다(02a ★A1). 실제 딤·핸들 끌기가 닫는지, 휠을 굴려도 안 끌리는지는 6-b 실기
+ *   (`h03-mustvisit-time-default`).
+ *
+ * 실패 메시지 주의: 요소 배열을 `toEqual([])`·`toHaveLength` 로 단언하면 **실패할 때** jest 가 요소 객체 전체를
+ *   문자열로 풀다가 메모리가 넘쳐 스위트가 통째로 죽는다(02a ★A6 실측). 그래서 부재는 `not.toBeOnTheScreen()`,
+ *   개수는 `.length` 숫자로 본다.
+ *
+ * 3동작 뼈대: 준비=시트를 연다 → 실행=닫힘 신호 / 다시 탭 → 단언=시트 개수·닫힘 엘리먼트의 prop.
+ */
+describe('🔴 A · S1 시트가 딤·끌기로 닫혀도 다시 열린다 (TRIP-1014 #041)', () => {
+  const SHEET = 'itinerary-mustvisit-time-start-sheet';
+  const FIELD = 'itinerary-mustvisit-time-start-field';
+
+  function openSheet(): void {
+    renderScreen();
+    fireEvent.press(screen.getByTestId(FIELD));
+    expect(screen.getByTestId(SHEET)).toBeOnTheScreen();
+  }
+
+  it('A1 · 닫힘 신호를 받으면 시트가 트리에서 빠지고 시작 시각 칸은 남는다', () => {
+    openSheet();
+
+    fireEvent(screen.getByTestId(SHEET), 'close');
+
+    expect(screen.queryByTestId(SHEET)).not.toBeOnTheScreen();
+    expect(screen.getByTestId(FIELD)).toBeOnTheScreen();
+  });
+
+  it('A2 · 닫힌 뒤 시작 시각 칸을 다시 누르면 시트가 새로 뜬다', () => {
+    openSheet();
+    fireEvent(screen.getByTestId(SHEET), 'close');
+    // 앵커 — 먼저 닫혔어야 "다시 열림"이 뜻을 가진다(02a ★A5).
+    expect(screen.queryByTestId(SHEET)).not.toBeOnTheScreen();
+
+    fireEvent.press(screen.getByTestId(FIELD));
+
+    expect(screen.getAllByTestId(SHEET).length).toBe(1);
+    expect(
+      screen.getByTestId('itinerary-mustvisit-time-start-option-13:00')
+    ).toBeOnTheScreen();
+  });
+
+  it('A3 · 닫힘을 쥔 엘리먼트가 아래로 끌어 닫기를 켜고 본문 끌기는 끈다', () => {
+    openSheet();
+
+    // onClose 를 가진 가장 가까운 조상 = 닫힘을 쥔 BottomSheet(TimeSheet H7 선례).
+    let owner: ReactTestInstance | null = screen.getByTestId(SHEET);
+    while (owner !== null && typeof owner.props.onClose !== 'function') {
+      owner = owner.parent;
+    }
+
+    expect(owner).not.toBeNull();
+    expect(owner?.props.enablePanDownToClose).toBe(true);
+    // not.toBe(true) 가 아니라 toBe(false) — prop 을 지우면(undefined) 라이브러리 기본값 true 로 돌아간다.
+    expect(owner?.props.enableContentPanningGesture).toBe(false);
   });
 });

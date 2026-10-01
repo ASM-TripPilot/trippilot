@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 
+import { useAccountBoundaryReset } from '@/app-shell/model/useAccountBoundaryReset';
 import { useBootstrapGate } from '@/features/auth/model/useBootstrapGate';
 import { SplashScreen } from '@/features/auth/ui/SplashScreen';
 import { registerPushIfGranted } from '@/shared/push';
@@ -35,7 +36,11 @@ export function SplashGate() {
     if (destination === 'HOME') void registerPushIfGranted();
   }, [destination]);
 
-  if (phase === 'loading' || destination === null || !floorElapsed) {
+  const drawn = phase !== 'loading' && destination !== null && floorElapsed;
+  // 훅이라 조기 반환 위에서 부른다(렌더마다 훅 개수가 같아야 한다).
+  useAccountBoundaryReset(drawn, destination);
+
+  if (!drawn) {
     return <SplashScreen />;
   }
 

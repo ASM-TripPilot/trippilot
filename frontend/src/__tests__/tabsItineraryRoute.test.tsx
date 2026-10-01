@@ -12,6 +12,14 @@ import {
   useGetTripsTripIdItinerary,
 } from '@/shared/api/generated/trips/trips';
 import ItineraryTab from '@/app/(tabs)/itinerary';
+import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import {
+  captureDraftAtNextCall,
+  freshWizardDraft,
+  leavePreviousTripDraft,
+  resetWizardDraft,
+  wizardDraftData,
+} from '@/test-support/wizardDraftFixture';
 
 /**
  * (tabs)/일정 진입 라우트 — TRIP-468로 "첫 여행 리다이렉트 문지기"를 **내 여행 목록 뷰**(h37)로
@@ -22,10 +30,12 @@ import ItineraryTab from '@/app/(tabs)/itinerary';
  *    영영 접근 불가였던 **핵심 결함**을 잠근다.
  *  - 🔴 **AC-2** 빈 배열이면 empty + [여행 만들기]→step1(리다이렉트 없음).
  *  - 🔴 **AC-3** trips.isPending 이면 스켈레톤 카드 2장(리다이렉트도 empty도 아님).
- *  - 🔴 **AC-5** 배지·상태문을 **카드별 itinerary GET**에서 파생(완성→"추천안이 준비됐어요"(TRIP-788
- *    Figma 정합, 구 "확정 장소 N곳" 슬롯 합계 **대체**) · 작성중→"추천안 준비 중" · 미도착→배지 미정 degrade).
- *  - 🔴 **AC-6** 카드 탭은 **눌린 카드의 tripId** 목적지로 간다(`[0]` 고정 검출) · 오늘이 구간이면 live ·
- *    확정(CONFIRMED)이면 날짜와 무관하게 live(2026-09-23 제품 규칙 변경).
+ *  - 🔴 **AC-5** 배지·상태문을 **카드별 itinerary GET**에서 파생(완성→"일정 확정" · 일정 없음(404)→
+ *    "아직 일정이 없어요" — TRIP-986 Seed D2 로 구 "추천안이 준비됐어요"·404 의 "추천안 준비 중" 교체 ·
+ *    미도착→배지 미정 degrade).
+ *  - 🔴 **AC-6** 카드 탭은 **눌린 카드의 tripId** 목적지로 간다(`[0]` 고정 검출) · 확정(CONFIRMED)이면
+ *    날짜와 무관하게 live(2026-09-23 제품 규칙 변경) · 여행 기간 중이어도 미확정 초안은 draft(TRIP-986
+ *    Seed D3 — 구 "오늘이 구간이면 무조건 live" 특례 제거).
  *  - 🔴 **AC-7** 최신순(updatedAt desc) 정렬 + "최신순" 라벨.
  *
  * 왜 이렇게 테스트하나: 라우트는 `pages/itinerary-list`(페이지→컨테이너→화면→카드)를 그리고
@@ -63,6 +73,18 @@ jest.mock('@/shared/api/generated/trips/trips', () => ({
   getGetTripsTripIdItineraryQueryOptions: (tripId: string) => ({
     queryKey: [`/trips/${tripId}/itinerary`],
     queryFn: () => new Promise(() => {}),
+  }),
+  // TRIP-1055 준비부 확장(단언 무변경) — 페이지가 여행 삭제 mutation 을 문다. 무해 스텁이 없으면
+  // `useDeleteTripsTripId is not a function` 으로 이 파일 전체가 죽는다(삭제 흐름은 MyTripsListPage.delete 소관).
+  getGetTripsQueryKey: () => ['/trips'],
+  deleteTripsTripId: () => new Promise(() => {}),
+  useDeleteTripsTripId: () => ({
+    mutate: () => {},
+    mutateAsync: () => new Promise(() => {}),
+    reset: () => {},
+    isPending: false,
+    isError: false,
+    error: null,
   }),
 }));
 jest.mock('expo-secure-store', () => ({
@@ -334,8 +356,8 @@ describe('🔴 AC-3 · 확정(CONFIRMED) 카드는 여행 전이어도 live 로'
   });
 });
 
-describe('🔴 AC-6b · 오늘이 여행 구간이면 live 로 (US-ONTRIP-01)', () => {
-  it('오늘이 [startDate,endDate] 안이면 미확정 초안이어도 카드 탭이 /trips/{id}/live 로 1회 간다', () => {
+describe('🔴 AC-6b · 여행 기간 중이어도 미확정 초안은 초안 화면으로 (TRIP-986 #058 · Seed D3)', () => {
+  it('오늘이 [startDate,endDate] 안이어도 미확정 초안 카드 탭은 /trips/{id}/itinerary/draft 로 1회 간다 — live 아님', () => {
     // 오늘을 항상 포함하도록 폭을 넓게(과거~미래) 둔다.
     mockUseGetTrips.mockReturnValue(
       tripsData([
@@ -346,7 +368,7 @@ describe('🔴 AC-6b · 오늘이 여행 구간이면 live 로 (US-ONTRIP-01)', 
         }),
       ])
     );
-    // 확정이 아닌 초안이어야 이 분기를 따로 잰다 — CONFIRMED 는 판정 함수가 이미 live 를 준다.
+    // 확정이 아닌 초안이어야 날짜 특례를 따로 잰다 — CONFIRMED 는 특례가 있든 없든 live 다.
     scriptItinerary({
       'trip-live': itinOk(itin('COMPLETE', 'PLANNED')),
     });
@@ -355,14 +377,16 @@ describe('🔴 AC-6b · 오늘이 여행 구간이면 live 로 (US-ONTRIP-01)', 
     fireEvent.press(screen.getByTestId('my-trip-card-trip-live'));
 
     expect(mockPush).toHaveBeenCalledTimes(1);
-    expect(String(mockPush.mock.calls[0][0])).toBe('/trips/trip-live/live');
+    expect(String(mockPush.mock.calls[0][0])).toBe(
+      '/trips/trip-live/itinerary/draft'
+    );
     expect(mockReplace).not.toHaveBeenCalled();
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 });
 
 describe('🔴 AC-5 · 배지·상태문은 카드별 itinerary 에서 파생된다 (로딩 degrade 포함)', () => {
-  it('완성→"추천안이 준비됐어요"(TRIP-788) · 작성중→"추천안 준비 중" · 미도착→배지 미정', () => {
+  it('완성→"일정 확정" · 일정 없음(404)→"작성중"+"아직 일정이 없어요" · 미도착→배지 미정 (TRIP-986 Seed D2)', () => {
     mockUseGetTrips.mockReturnValue(
       tripsData([
         trip({ tripId: 'trip-done' }),
@@ -379,20 +403,20 @@ describe('🔴 AC-5 · 배지·상태문은 카드별 itinerary 에서 파생된
 
     renderTab();
 
-    // 완성 — "완성" 배지 + "추천안이 준비됐어요"(★ TRIP-788: 구 "확정 장소 N곳" 슬롯 합계 대체, 상수).
+    // 완성 — "완성" 배지 + "일정 확정"(TRIP-986 Seed D2: 구 "추천안이 준비됐어요" 교체, 상수).
     expect(screen.getByTestId('my-trip-badge-trip-done')).toHaveTextContent(
       '완성'
     );
     expect(screen.getByTestId('my-trip-extra-trip-done')).toHaveTextContent(
-      '추천안이 준비됐어요'
+      '일정 확정'
     );
 
-    // 작성중 — "작성중" 배지 + "추천안 준비 중".
+    // 일정 없음(404) — "작성중" 배지(Q3) + "아직 일정이 없어요"(구 "추천안 준비 중" 교체, #017).
     expect(screen.getByTestId('my-trip-badge-trip-draft')).toHaveTextContent(
       '작성중'
     );
     expect(screen.getByTestId('my-trip-extra-trip-draft')).toHaveTextContent(
-      '추천안 준비 중'
+      '아직 일정이 없어요'
     );
 
     // 미도착(degrade) — 배지 미정(부재) + 짝: 카드 자체는 뜬다.
@@ -429,5 +453,30 @@ describe('🔴 AC-8 · empty 얼굴 — 캘린더 글리프(회색 원 72) + 부
     expect(subtitle.props.children).toBe(
       '여행을 만들면 완성·작성중 상태를\n여기서 한눈에 볼 수 있어요'
     );
+  });
+});
+
+// ── TRIP-1012 B1 · 새 진입점은 이동 직전 위저드 드래프트를 비운다 (#074 · D9) ─────────────
+// 직전 여행이 남긴 드래프트(여행지·기간·인원·동반·예산·취향·만든 여행 id·꼭 갈 곳)가 새 여행으로
+// 새지 않게, push 가 불리는 **그 순간** 드래프트가 새 여행의 얼굴(스토어 초기값)인지 잰다.
+// 위저드 안 왕복(더 담기 완료·2/4 '처음부터')은 비우지 않는다 — `tripWizardEntryCensus` 참고.
+afterEach(resetWizardDraft);
+
+describe('🔴 1012-B1 · 내 여행 목록 [여행 만들기] 는 직전 드래프트를 비우고 위저드로 간다', () => {
+  it('여행 0건 empty 에서 누르면 push 시점의 드래프트가 새 여행의 초기값이고, push 는 step1 로 1회다', () => {
+    leavePreviousTripDraft();
+    // 앵커 — 아직 안 비었다(픽스처가 조용히 망가지면 아래 단언이 공짜로 통과한다).
+    expect(wizardDraftData()).not.toEqual(freshWizardDraft());
+    expect(useTripWizardStore.getState().destinations).toHaveLength(1);
+    const draftAtPush = captureDraftAtNextCall(mockPush);
+
+    mockUseGetTrips.mockReturnValue(tripsData([]));
+    renderTab();
+
+    fireEvent.press(screen.getByTestId('itinerary-tab-create-trip'));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(String(mockPush.mock.calls[0][0])).toBe('/trips/new/step1');
+    expect(draftAtPush()).toEqual(freshWizardDraft());
   });
 });

@@ -195,8 +195,8 @@ data class ReplanDiffResponse(
             ready = v.ready,
             status = v.status.name,
             date = v.date,
-            before = v.before.map { ReplanDiffSlotResponse(it.slotKey, it.startAt, it.endAt, it.isFixed, it.endsNextDay) },
-            after = v.after.map { ReplanDiffSlotResponse(it.slotKey, it.startAt, it.endAt, it.isFixed, it.endsNextDay) },
+            before = v.before.map { it.toSlotResponse() },
+            after = v.after.map { it.toSlotResponse() },
             entries = v.result?.entries.orEmpty()
                 .map { ReplanDiffEntryResponse(it.slotKey, it.change.name, it.beforeStart, it.afterStart) },
             impact = v.result?.impact?.let {
@@ -212,6 +212,11 @@ data class ReplanDiffResponse(
     }
 }
 
+private fun com.trippilot.recalculation.domain.ReplanDiff.SlotView.toSlotResponse() = ReplanDiffSlotResponse(
+    slotKey, startAt, endAt, isFixed, endsNextDay,
+    nameKo = nameKo, category = category, imageUrl = imageUrl, lat = lat, lng = lng,
+)
+
 /**
  * 비교 대상 슬롯 한 칸. 짝은 **경계 키**로 맞춘다(BR-U2-04).
  *
@@ -224,6 +229,16 @@ data class ReplanDiffSlotResponse(
     val endAt: LocalTime,
     val isFixed: Boolean,
     val endsNextDay: Boolean,
+    /**
+     * POI 표면(TRIP-1060 · QA #045) — 이름·모양은 일정 슬롯·슬롯 후보와 같다. 재계획이 새로 넣은
+     * 장소는 현재 일정에 없어 FE lookup 이 원리적으로 실패하므로 응답이 직접 싣는다.
+     * 정본에 없으면 전부 null — 이름·사진을 지어내지 않는다(INV-1). [category] 는 한글 정본.
+     */
+    val nameKo: String? = null,
+    val category: String? = null,
+    val imageUrl: String? = null,
+    val lat: Double? = null,
+    val lng: Double? = null,
 )
 
 /**

@@ -21,8 +21,8 @@ import type { TripWizardStep1ScreenProps } from './TripWizardStep1Screen';
  * (편집 시트 본체는 S2~S6). 옛 인라인 컨트롤 잠금은 걷어내고(그 대응물이 신 default 에 없다), 신 계약으로
  * 다시 짠다(01b 재작성 전략).
  *
- * 화면은 여전히 props-only 다 — 쿼리 훅·라우터·타 feature import 0(그 제약은 렌더로 못 봐
- * `src/__tests__/tripWizardStep1Boundary.test.ts` 가 소스 층에서 잠근다, AC-7).
+ * 화면은 여전히 props-only 다 — 쿼리 훅·라우터·타 feature import 0(그 제약을 소스 층에서
+ * 잠그던 `tripWizardStep1Boundary` 는 TRIP-1145 로 지웠다, AC-7).
  *
  * 커버하지 않는 것: 편집 시트 본체(S2~S6) · 스트립 카드 상세(`…mustVisit.test.tsx`) · 실패 배너·overseas
  * (`…errors.test.tsx`) · 요약 문자열 **도출**(페이지 `tripSummary` 셀렉터 배선, `TripNewStep1Page.test.tsx`) ·
@@ -131,11 +131,57 @@ describe('AC-1 · 앱바 + 진행바 4칸 + "1 / 4"', () => {
     render(<TripWizardStep1Screen {...props({ onBack })} />);
 
     expect(screen.getByText('어디로 떠날까요?')).toBeOnTheScreen();
-    // 부제는 길고 미들닷이 섞여 부분 정규식으로 본다.
-    expect(root()).toHaveTextContent(/온보딩에서 고른 취향/);
+    // TRIP-984 D10: 요약이 전부 null 이면 온보딩 값이 없으므로 "온보딩에서 고른 취향" 을 말하지 않는다
+    // (TRIP-732 AC-6 의 "전부 null → default 부제" 경계를 뒤집음). 뒤쪽 절만 남는다.
+    expect(root()).not.toHaveTextContent(/온보딩에서 고른 취향/);
+    expect(screen.getByText('행을 누르면 바꿀 수 있어요')).toBeOnTheScreen();
 
     fireEvent.press(screen.getByTestId('trip-wizard-step1-back'));
     expect(onBack).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * TRIP-984 D10 · 부제 "온보딩에서 고른 취향을 그대로 반영했어요" 는 취향이 온보딩 상속
+ * (`summaryPreferences.onboarding === true`)일 때만. 아니면 뒤쪽 절 "행을 누르면 바꿀 수 있어요" 만.
+ */
+describe('AC-D1·D2 · 부제 "온보딩에서" 는 취향이 온보딩 상속일 때만', () => {
+  it('D1 · 여행지는 있고 동행·취향·예산이 비었으면 "온보딩에서" 없이 뒤쪽 절만 보인다', () => {
+    render(
+      <TripWizardStep1Screen
+        {...filledProps({
+          summaryCompanion: null,
+          summaryPreferences: null,
+          summaryBudget: null,
+        })}
+      />
+    );
+
+    expect(screen.getByText('행을 누르면 바꿀 수 있어요')).toBeOnTheScreen();
+    expect(root()).not.toHaveTextContent(/온보딩에서/);
+  });
+
+  it('D1 · 취향을 이 여행에서 바꿨으면(onboarding=false) "온보딩에서" 없이 뒤쪽 절만 보인다', () => {
+    render(
+      <TripWizardStep1Screen
+        {...filledProps({
+          summaryPreferences: { main: '휴양', onboarding: false },
+        })}
+      />
+    );
+
+    expect(screen.getByText('행을 누르면 바꿀 수 있어요')).toBeOnTheScreen();
+    expect(root()).not.toHaveTextContent(/온보딩에서/);
+  });
+
+  it('D2 · 취향이 온보딩 상속이면 기존 default 부제 그대로다', () => {
+    render(<TripWizardStep1Screen {...filledProps()} />);
+
+    expect(
+      screen.getByText(
+        '온보딩에서 고른 취향을 그대로 반영했어요 · 행을 누르면 바꿀 수 있어요'
+      )
+    ).toBeOnTheScreen();
   });
 });
 
@@ -193,7 +239,7 @@ describe('AC-2 · 요약 카드 5행 (값 present + 순서)', () => {
     ]);
   });
 
-  it('값이 null 일 때 행별 카피 — 여행지·기간 신 카피, 나머지 "{라벨} 선택" (TRIP-671)', () => {
+  it('값이 null 일 때 행별 카피 — 여행지 신 카피, 나머지 "{라벨} 선택"(기간 포함, TRIP-671·TRIP-1045)', () => {
     render(<TripWizardStep1Screen {...props()} />);
 
     // 여행지 null → 신 카피 "어디로 갈까요?"(옛 "여행지 선택" 전역 대체, TRIP-671 D1).
@@ -201,9 +247,13 @@ describe('AC-2 · 요약 카드 5행 (값 present + 순서)', () => {
     expect(within(dest).getByText('어디로 갈까요?')).toBeOnTheScreen();
     expect(within(dest).queryByText('여행지 선택')).toBeNull();
 
-    // 기간 null → 값 줄 없음(옛 "기간 선택" 제거). 라벨 "기간"은 생존.
+    // 기간 null → muted "기간 선택"(TRIP-1045 QA #017 — 값 줄이 있어야 선택 전후 행 높이가 같다).
+    // 라벨 "기간"도 생존(getByText 완전 일치라 둘이 갈린다).
     const period = screen.getByTestId('trip-wizard-summary-period');
-    expect(within(period).queryByText('기간 선택')).toBeNull();
+    const periodPlaceholder = within(period).getByText('기간 선택');
+    expect(
+      String(periodPlaceholder.props.className ?? '').split(/\s+/)
+    ).toContain('text-muted');
     expect(within(period).getByText('기간')).toBeOnTheScreen();
 
     // 나머지 3행은 "{라벨} 선택" 유지 + muted(값이 채워지면 ink 로 바뀐다).

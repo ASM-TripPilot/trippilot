@@ -11,35 +11,36 @@ import path from 'path';
  *  - `features/record` + `shared/photo` 그래프 어디에도 사진 바이너리/스토리지 업로드 심볼이 없다
  *    (storage_key·storageKey·multipart·FormData·base64·uploadForCommunity 호출부) — 서버로 가는 것은
  *    로컬 자산ID·기기ID·촬영시각·EXIF(동의 시)·연결 방문 **메타만**(AddPhotoRequest 가 계약으로 봉쇄).
- *  - ★네이티브 스텁 경계 — 미설치 네이티브(expo-image-picker·expo-media-library)를 이 그래프가
- *    import 하지 않는다(순수 유지 증거, 하면 tsc/jest 깨짐).
- *  - 긍정 짝 — `AddPhotoRequest`(메타만) 실참조 + 신규 6파일 실재(공허 통과 차단).
+ *  - TRIP-1070 — 허브 [사진] 배선이 사는 `pages/live-itinerary` 도 같은 금칙어로 훑는다(사정거리 확장 —
+ *    배선이 페이지에 생기면 features/record 스캔 밖이 된다).
+ *  - 네이티브 사진 모듈 단일 입구(옛 G3)는 TRIP-1145 로 eslint `no-restricted-imports` 로 옮겼다.
+ *  - 긍정 짝 — `AddPhotoRequest`(메타만) 실참조.
  *
  * 왜 소스 스캔인가: "코드가 새 업로드 경로를 짓지 않게" 를 잠그는 것은 실행이 아니라 그래프 부재 확인이다.
  * BR-U5-16(uploadForCommunity U7 미개통)의 호출부 금지는 기계 강제가 없어 이 스캔이 유일한 그물.
  *
  * ★ 조합 실검증(전처리×탐지기, 강제) — stripComments 가 주석 속 금칙어는 걷되 URL(`://`)은 살려두고,
  *   탐지기가 그 살아남은 것에 오검출/미검출을 안 내는지 **실제 문자열로 1회 태운다**(G0, 문제로그
- *   [[stripComments 가 URL 슬래시 오인]] 계열). 스캔 범위는 features/record+shared/photo 로 한정 —
- *   generated/trips/trips.ts 주석에 storage_key 가 실재하나 그 밖이라 사정거리 밖(범위 넓히면 거짓 red).
+ *   [[stripComments 가 URL 슬래시 오인]] 계열). 바이너리 스캔 범위는 features/record+shared/photo+
+ *   pages/live-itinerary 로 한정 — generated/trips/trips.ts 주석에 storage_key 가 실재하나 그 밖이라
+ *   사정거리 밖(src 전체로 넓히면 거짓 red). pages/trip-records 는 첨부 경로를 모른다(j01 배선은
+ *   features/record 컨테이너).
  */
 
 const ROOT = path.resolve('src');
 
-/** 스캔 대상 그래프 — 이 두 층만(shared 전체 아님, generated 주석 오탐 회피). */
-const SCAN_DIRS = ['features/record', 'shared/photo'];
+/** 바이너리 스캔 대상 — 사진 첨부 경로가 사는 곳만(shared 전체 아님, generated 주석 오탐 회피). */
+const SCAN_DIRS = ['features/record', 'shared/photo', 'pages/live-itinerary'];
 
-/** 신규 프로덕션 파일 — 편입 앵커(구현 전 red). */
-const NEW_FILES = [
+/** 사진이 기기를 떠나는 경로의 핵심 파일 — 폴더 밖으로 옮겨지면 스캔이 조용히 줄어든다(편입 앵커). */
+const UPLOAD_PATH_FILES = [
   'features/record/model/photoAttach.ts',
-  'features/record/model/photoAvailability.ts',
   'features/record/model/useVisitAttachments.ts',
-  'features/record/ui/PhotoThumbStrip.tsx',
-  'features/record/ui/MemoInline.tsx',
   'shared/photo/index.ts',
+  'pages/live-itinerary/ui/LiveItineraryPage.tsx',
 ];
 
-/** 사진 바이너리 업로드/네이티브 유출 금칙어. 라벨은 실패 메시지에 뜬다. */
+/** 사진 바이너리 업로드 금칙어. 라벨은 실패 메시지에 뜬다. `base64: false` 같은 옵션도 적지 않는다(기본값). */
 const FORBIDDEN: { label: string; re: RegExp }[] = [
   { label: 'storage_key', re: /storage_key/i },
   { label: 'storageKey', re: /storageKey/ },
@@ -47,8 +48,6 @@ const FORBIDDEN: { label: string; re: RegExp }[] = [
   { label: 'FormData', re: /FormData/ },
   { label: 'base64', re: /base64/i },
   { label: 'uploadForCommunity(호출부)', re: /uploadForCommunity/ },
-  { label: 'expo-image-picker', re: /expo-image-picker/ },
-  { label: 'expo-media-library', re: /expo-media-library/ },
 ];
 
 const firstForbidden = (source: string): string | null => {
@@ -112,21 +111,17 @@ describe('G0 · 탐지기 자가검사 — stripComments × 금칙어 탐지 조
   });
 });
 
-describe('🔴 G1 · 편입 앵커 — 신규 6파일이 정본 경로에 실재한다', () => {
-  it.each(NEW_FILES)('%s 가 존재한다', (rel) => {
-    expect({ file: rel, exists: fs.existsSync(path.join(ROOT, rel)) }).toEqual({
-      file: rel,
-      exists: true,
-    });
-  });
-});
-
-describe('🔴 G2 · 바이너리 업로드/네이티브 유출 심볼 0 + 메타 실참조', () => {
-  it('features/record+shared/photo 그래프에 금칙 8종 0건 + AddPhotoRequest 실참조', () => {
+describe('🔴 G2 · 바이너리 업로드 심볼 0 + 메타 실참조', () => {
+  it('features/record+shared/photo+pages/live-itinerary 에 바이너리 금칙 6종 0건 + AddPhotoRequest 실참조', () => {
     const sources = scanGraph();
 
     // 긍정 앵커 — 모집단이 비어있지 않다(구현 후 shared/photo 편입).
     expect(sources.length).toBeGreaterThan(0);
+    // 편입 앵커 — 업로드 경로 핵심 파일이 스캔 모집단에 있다(폴더 밖 이동 시 red).
+    const scanned = sources.map(({ file }) => file);
+    expect(UPLOAD_PATH_FILES.filter((rel) => !scanned.includes(rel))).toEqual(
+      []
+    );
 
     // 부정 — 금칙어를 문 파일 0건.
     const offenders = sources

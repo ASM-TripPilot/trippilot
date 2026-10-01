@@ -4,6 +4,7 @@ import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import { seedMustVisits } from '@/features/trip/model/mustVisitSeed';
+import { wizardOriginParams } from '@/features/explore/model/wizardOrigin';
 
 import { TripNewStep1Page } from './TripNewStep1Page';
 
@@ -14,7 +15,7 @@ import { TripNewStep1Page } from './TripNewStep1Page';
  *  - **canProceed 게이트**: 담은목록이 아직 도착 전이면 잠깐 막고(N4-8), 게스트는 절대 안 막으며(N4-9 —
  *    조회 자체가 안 나가 `isPending` 이 영원히 참이라 그대로 태우면 비회원이 영영 못 만든다), 조회가 실패해도
  *    제출은 열린다(N4-13, 잠금이 과하면 서버 아픈 동안 여행을 아예 못 만든다).
- *  - **더 담기 목적지 분기**: 담은 곳이 있으면 담은 장소 화면(d02), 없으면 탐색(d04)(TRIP-367).
+ *  - **더 담기 목적지**: 담은 곳이 몇 곳이든 d02 select 로 간다 — 전체 보기와 같은 인자(TRIP-1093 결정 2).
  *
  * 왜 재작성인가: 옛 테스트는 스트립의 4얼굴(empty/loading/failed 일러스트)을 봤다. 신 스트립은 얼굴을 안
  * 그리고(그건 S7) `mustVisits` 배열만 그린다 — 그래서 담은목록 조회 상태는 이제 **canProceed 게이트에만**
@@ -198,86 +199,85 @@ describe('canProceed 담은목록 게이트 (03b W-5 보존)', () => {
   });
 });
 
-describe('더 담기 목적지 분기 (TRIP-367 보존 · TRIP-689 d02 계약 플립)', () => {
-  it('담은 곳이 있으면 담은 장소 화면(d02)으로 가되, mode=select + 여행 지역을 함께 싣는다', () => {
-    // TRIP-706(AC-4 · D5): 위저드 축은 d02 로 갈 때 select 모드로 열도록 통일한다 — 더 담기 d02
-    // 갈래가 종전 { region } 만에서 **{ mode:'select', region }** 로 바뀐다(전체 보기와 동형).
-    // ⚠️ router.push 객체 인자는 재귀 완전 일치 비교라(02a §5-5) mode 누락·여분 키·region 순서까지 red.
-    const store = useTripWizardStore.getState();
-    store.addDestination('부산광역시', 2);
-    store.addDestination('경주시', 1);
-    mockSavedPlaces = loaded(THREE);
-    render(<TripNewStep1Page baseDate={BASE} />);
+/** 1/4 → d02 select 로 가는 push 인자 — 더 담기·전체 보기가 똑같이 이 모양이다(TRIP-1093 결정 2 · 01b Q1).
+ * 위저드 출처는 헬퍼 출력으로 싣는다('from' 을 손으로 적으면 생산자 철자가 틀려도 green). it 본문에서만 부른다. */
+function selectHref(region: string[]) {
+  return {
+    pathname: '/explore/saved-places',
+    params: { mode: 'select', region, ...wizardOriginParams() },
+  };
+}
 
-    fireEvent.press(screen.getByTestId('trip-wizard-mustvisit-more'));
+describe('🔴 1093 AC-1·AC-2 · 더 담기는 담은 곳 수와 무관하게 d02 select 로 간다', () => {
+  // 종전(TRIP-367)엔 담은 곳이 0곳이면 d04(장소 탐색)로 갔다 — 거기 ♥ 가 save 모드 d02 로 이어져
+  // 「이 장소들로 여행 만들기」의 reset 에 닿았다(QA A14). 이제 갈래가 없다: 몇 곳이든 d02 select.
+  // ⚠️ `calls` 전체를 toEqual 로 잰다 — "정확히 1번, 이 인자로"라 d04 push 가 덧붙어도 red(02a ★2).
+  // 3곳 케이스가 있어야 삼항을 뒤집기만 한 구현(3곳 → d04)이 걸린다(02a ★6).
+  it.each([
+    {
+      name: '담은 곳 0곳',
+      arrange: () => {
+        mockSavedPlaces = loaded([]);
+      },
+    },
+    {
+      name: '담은 곳 3곳',
+      arrange: () => {
+        mockSavedPlaces = loaded(THREE);
+      },
+    },
+    {
+      // 게스트는 조회가 안 나가 isPending 이 영원히 true 다(02a ★5).
+      name: '게스트',
+      arrange: () => {
+        clearAccessToken();
+        mockSavedPlaces = pending();
+      },
+    },
+  ])(
+    '$name — 여행 지역 순서 그대로 mode=select·위저드 출처를 실어 d02 로 간다',
+    ({ arrange }) => {
+      const store = useTripWizardStore.getState();
+      store.addDestination('부산광역시', 2);
+      store.addDestination('경주시', 1);
+      arrange();
+      render(<TripNewStep1Page baseDate={BASE} />);
 
-    expect(routerMock.push).toHaveBeenCalledWith({
-      pathname: '/explore/saved-places',
-      params: { mode: 'select', region: ['부산광역시', '경주시'] },
-    });
-    expect(routerMock.push).toHaveBeenCalledTimes(1);
-  });
+      fireEvent.press(screen.getByTestId('trip-wizard-mustvisit-more'));
 
-  it('담은 곳이 0곳이면 장소 탐색(d04)으로 간다 — 목적지 없으면 region 빈 배열(TRIP-687 AC-3)', () => {
-    // 이 테스트는 destinations 를 안 심는다(seedValidDraft 미호출) → 0지역 폴백 케이스다.
-    // TRIP-687 로 d04 push 가 평문 문자열 → 객체형(`{pathname, params:{region}}`)으로 바뀐다.
-    // 0지역이면 `destinations.map(d=>d.region)` 이 `[]` 라 region 파라미터가 비어 전국 전체가 뜬다(AC-3).
+      expect(routerMock.push.mock.calls).toEqual([
+        [selectHref(['부산광역시', '경주시'])],
+      ]);
+    }
+  );
+
+  it('목적지가 없으면 region 빈 배열로 간다(TRIP-687 AC-3 이관)', () => {
     mockSavedPlaces = loaded([]);
     render(<TripNewStep1Page baseDate={BASE} />);
 
     fireEvent.press(screen.getByTestId('trip-wizard-mustvisit-more'));
 
-    expect(routerMock.push).toHaveBeenCalledWith({
-      pathname: '/explore/places',
-      params: { region: [] },
-    });
-    expect(routerMock.push).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('더 담기 → d04 지역 필터 파라미터 (TRIP-687)', () => {
-  // 더 담기가 d04(전체 탐색)로 갈 때, 여행에 담은 지역들을 라우트 파라미터로 실어 보낸다(AC-5).
-  // d04 갈래는 담은 곳이 0곳일 때만 타므로(TRIP-367 삼항 보존) 아래는 전부 savedPlaces=[] 로 둔다.
-  // ⚠️ router.push 객체 인자는 재귀 완전 일치로 비교된다(expect spyMatchers isEqualCall = equals +
-  //    arity) — params 에 region 외 키가 붙거나 배열 순서가 다르면 red.
-
-  it('AC-5·AC-6 · 2지역이면 두 표준명이 순서대로 region 파라미터에 실린다(원문 무변형)', () => {
-    const store = useTripWizardStore.getState();
-    store.addDestination('부산광역시', 2);
-    store.addDestination('경주시', 1);
-    mockSavedPlaces = loaded([]);
-    render(<TripNewStep1Page baseDate={BASE} />);
-
-    fireEvent.press(screen.getByTestId('trip-wizard-mustvisit-more'));
-
-    expect(routerMock.push).toHaveBeenCalledWith({
-      pathname: '/explore/places',
-      params: { region: ['부산광역시', '경주시'] },
-    });
-    expect(routerMock.push).toHaveBeenCalledTimes(1);
+    expect(routerMock.push.mock.calls).toEqual([[selectHref([])]]);
   });
 
-  it('AC-4(배선) · 1지역이면 그 지역 하나만 region 파라미터에 실린다', () => {
+  it('1지역이면 그 지역 하나만 싣는다(TRIP-687 AC-4 이관)', () => {
     useTripWizardStore.getState().addDestination('부산광역시', 3);
     mockSavedPlaces = loaded([]);
     render(<TripNewStep1Page baseDate={BASE} />);
 
     fireEvent.press(screen.getByTestId('trip-wizard-mustvisit-more'));
 
-    expect(routerMock.push).toHaveBeenCalledWith({
-      pathname: '/explore/places',
-      params: { region: ['부산광역시'] },
-    });
-    expect(routerMock.push).toHaveBeenCalledTimes(1);
+    expect(routerMock.push.mock.calls).toEqual([[selectHref(['부산광역시'])]]);
   });
 });
 
-describe('전체 보기 재배선 (TRIP-743 → TRIP-706 · AC-4)', () => {
+describe('전체 보기 재배선 (TRIP-743 → TRIP-706 · AC-4 → TRIP-1093 AC-2)', () => {
   // TRIP-743 이 세운 목적지(/explore/saved-places, mode:select)를 TRIP-706 이 정합한다 — 위저드 축
   // 통일(D5)로 전체 보기 push 에 **region 이 함께** 실린다({ mode:'select' } → { mode:'select', region }).
   // 교체 전(현 구현은 region 없이 mode 만)엔 red 다(test-first).
+  // TRIP-1093(01b Q1): 더 담기와 동형으로 위저드 출처도 함께 싣는다 — 기대값은 위 selectHref 로 같다.
   //
-  // ⚠️ "더 담기"(-more)와 pathname·params 가 이제 같은 모양이다(둘 다 { mode:'select', region }). 가르는
+  // ⚠️ "더 담기"(-more)와 pathname·params 가 이제 같은 모양이다(둘 다 selectHref). 가르는
   //    축은 (1) see-all testID 만 press(more 안 누름 → push 정확히 1회) (2) 누른 testID. router.push 객체
   //    인자는 재귀 완전 일치 비교라(02a §5-5) mode 누락·region 순서·여분 키면 red.
   it('전체 보기 press → /explore/saved-places 로 mode:select + region 을 실어 간다(구 /trips/new/must-visits 아님)', () => {
@@ -295,11 +295,10 @@ describe('전체 보기 재배선 (TRIP-743 → TRIP-706 · AC-4)', () => {
 
     fireEvent.press(screen.getByTestId('trip-wizard-mustvisit-see-all'));
 
-    // 신 목적지 — mode:select + region 객체형(01b Q1 · D5). 재귀 완전 일치라 region 누락·문자열형이면 red.
-    expect(routerMock.push).toHaveBeenCalledWith({
-      pathname: '/explore/saved-places',
-      params: { mode: 'select', region: ['부산광역시', '경주시'] },
-    });
+    // 신 목적지 — mode:select + region + 위저드 출처. 재귀 완전 일치라 region 누락·문자열형이면 red.
+    expect(routerMock.push).toHaveBeenCalledWith(
+      selectHref(['부산광역시', '경주시'])
+    );
     // 구 목적지(삭제된 라우트)로는 절대 안 간다.
     expect(routerMock.push).not.toHaveBeenCalledWith('/trips/new/must-visits');
     // see-all 만 눌렀으니 push 정확히 1회(더 담기와 누른 testID·횟수로 구별).

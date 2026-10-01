@@ -5,7 +5,13 @@ import {
   screen,
   within,
 } from '@testing-library/react-native';
-import { Pressable, Text } from 'react-native';
+import { Dimensions, Pressable, Text } from 'react-native';
+import {
+  getAnimatedStyle,
+  isSharedValue,
+  type SharedValue,
+} from 'react-native-reanimated';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import type { ReactTestInstance } from 'react-test-renderer';
 
 import type { ItineraryDaysItemSlotsItem } from '@/entities/itinerary-slot/model';
@@ -22,10 +28,12 @@ import { LiveHubView, type LiveHubSlot } from './LiveHubView';
  *
  * 무엇을 보장하나:
  *  - 골격: 전면 지도(셸) 위 좌상단 뒤로가기 + 일자 칩, 시트 헤더 한 줄
- *    "부산 여행 · 2일차 · 6월 11일(목) · 5곳", 카드 5장, 우하단 연필 FAB(`execution-live-replan-fab`).
- *  - 부재: 탭바·세그먼트·방패 FAB·옛 헤더·지도 세그먼트·수동 [도착]·다음 길찾기·레일 시각 열.
- *  - 배선: 뒤로·칩·[방문 완료] 가 콜백으로 이어진다. [사진]/[메모]는 운영 화면에 없다(TRIP-939 AC-6 —
- *    눌러도 "준비 중"만 뜨던 버튼 제거, 심사 2.1).
+ *    "부산 여행 · 2일차 · 6월 11일(목) · 5곳", 카드 5장, 시트 윗변을 따라가는 연필 FAB
+ *    (`execution-live-replan-fab` — 자리 계약은 TRIP-1083 HF 절).
+ *  - 부재: 탭바·세그먼트·방패 FAB·옛 헤더·지도 세그먼트·다음 길찾기·레일 시각 열. 수동 [도착]은
+ *    `onPressArrive` 를 받고 진행 중 슬롯이 없을 때만 예정 카드에 선다(TRIP-1021 HV9).
+ *  - 배선: 뒤로·칩·[방문 완료] 가 콜백으로 이어진다. [사진]/[메모]는 페이지가 콜백을 줄 때만 관람 중
+ *    카드에 서고 각자 제 콜백을 부른다(TRIP-1070). 안 주면 없다(TRIP-939 AC-6).
  *  - TRIP-747 수정 알약: 연필 FAB 는 이동하지 않고 제자리 토글이다 — 열면 × 얼굴 + 흰 알약 2개
  *    (`AI에게 맡기기`·`직접 수정`), 알약을 누르면 메뉴가 닫히고 그 콜백만 1회 불린다(BR-U4-10 진입).
  *    딤이 없고 바깥 탭으로는 닫히지 않는다(Seed ③). 초기 열림은 `initialEditMenuOpen`(프리뷰 입구).
@@ -56,6 +64,7 @@ const mkSlot = (
   isFixed: false,
   endsNextDay: false,
   hasViolation: false,
+  alternatives: [],
   nameKo,
   distanceRange: '약 1.2km',
   openingHours,
@@ -184,7 +193,7 @@ describe('LiveHubView · HV1 골격 (AC-1)', () => {
 });
 
 describe('LiveHubView · HV2 부재 (AC-2)', () => {
-  it('탭바·세그먼트·방패 FAB·옛 헤더·지도 세그먼트·수동 [도착]·다음 길찾기·레일 시각이 없다', () => {
+  it('탭바·세그먼트·방패 FAB·옛 헤더·지도 세그먼트·수동 [도착](미주입)·다음 길찾기·레일 시각이 없다', () => {
     renderHub();
 
     // 짝 앵커 — 카드 5장이 실제로 있다(빈 렌더 공허 통과 차단, 02a ★5).
@@ -202,9 +211,10 @@ describe('LiveHubView · HV2 부재 (AC-2)', () => {
       'execution-arrive-next-distance',
     ];
     gone.forEach((testID) => expect(screen.queryByTestId(testID)).toBeNull());
-    expect(screen.queryAllByTestId(/^execution-arrive-manual-/)).toHaveLength(
-      0
-    );
+    // TRIP-1021 재조준 — 옛 `execution-arrive-manual-*` 는 사라진 이름이라 늘 0(공허). 새 [도착] 이름으로 센다.
+    expect(
+      screen.queryAllByTestId(/^execution-live-slot-arrive-/)
+    ).toHaveLength(0);
     expect(screen.queryAllByTestId(/^execution-live-segment-/)).toHaveLength(0);
     expect(
       screen.queryAllByTestId(/^execution-live-slot-distance-/)
@@ -242,16 +252,98 @@ describe('LiveHubView · HV3 배선 (AC-1·AC-4 · Seed Q2)', () => {
     expect(handlers.onPressComplete).toHaveBeenCalledTimes(1);
   });
 
-  it('TRIP-939 AC-6: 활성 카드에 [사진]·[메모]·"준비 중" 힌트가 없고 [방문 완료]는 있다', () => {
-    // 준비·실행: 허브를 그린다(허브는 카드에 사진·메모 진입을 넘기지 않는다).
+  it('TRIP-939 AC-6: 사진·메모 콜백을 안 주면 활성 카드에 [사진]·[메모]·"준비 중" 힌트가 없고 [방문 완료]는 있다', () => {
+    // 준비·실행: 사진·메모 콜백 없이 허브를 그린다.
     renderHub();
 
-    // 단언(부재): 누르면 "준비 중"만 뜨던 두 버튼과 힌트가 운영 화면에 없다.
+    // 단언(부재): 누를 곳 없는 두 버튼과 옛 힌트가 없다.
     expect(screen.queryByTestId('execution-arrive-photo')).toBeNull();
     expect(screen.queryByTestId('execution-arrive-memo')).toBeNull();
     expect(screen.queryByTestId('execution-arrive-soon-hint')).toBeNull();
     // 짝 앵커: [방문 완료]는 남는다.
     expect(screen.getByTestId('execution-arrive-complete')).toBeOnTheScreen();
+  });
+
+  it('TRIP-1070 AC-1: 사진·메모 콜백과 안내 문구를 주면 관람 중 카드에만 한 쌍이 서고, 각 버튼이 제 콜백만 부른다', () => {
+    // 준비 — 사진·메모 콜백 + 안내 문구.
+    const onPressPhoto = jest.fn();
+    const onPressMemo = jest.fn();
+    renderHub({
+      onPressPhoto,
+      onPressMemo,
+      photoNotice: '사진 접근 권한이 없어 사진을 불러올 수 없어요',
+    });
+
+    // 단언 — 5장 중 관람 중 카드 1장에만 선다.
+    expect(screen.getAllByTestId('execution-arrive-photo')).toHaveLength(1);
+    expect(screen.getAllByTestId('execution-arrive-memo')).toHaveLength(1);
+    expect(
+      screen.getByTestId('execution-arrive-photo-notice')
+    ).toHaveTextContent('사진 접근 권한이 없어 사진을 불러올 수 없어요');
+
+    // 실행·단언 — 각자 제 콜백만.
+    fireEvent.press(screen.getByTestId('execution-arrive-photo'));
+    expect(onPressPhoto).toHaveBeenCalledTimes(1);
+    expect(onPressMemo).not.toHaveBeenCalled();
+    fireEvent.press(screen.getByTestId('execution-arrive-memo'));
+    expect(onPressMemo).toHaveBeenCalledTimes(1);
+    expect(onPressPhoto).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('execution-arrive-soon-hint')).toBeNull();
+  });
+});
+
+// ── TRIP-987 A · 슬롯 이름 → i10 (US-ONTRIP-02 · TRIP-939) ─────────────────────
+// 뷰는 목적지를 모른다 — `onPressSlotName(poiId)` 를 받으면 카드마다 이름 진입을 열고, 안 받으면
+// 어느 카드에도 '›' 가 없다. 라우트 조립(`/trips/{id}/live/place/{poiId}`)은 페이지 몫(통합 I9).
+
+const SLOT_NAME = /^execution-live-slot-name-2026-06-11#/;
+const SLOT_CHEVRON = /^execution-live-slot-chevron-2026-06-11#/;
+
+function isTouchable(node: ReactTestInstance): boolean {
+  return (
+    typeof node.props.onStartShouldSetResponder === 'function' ||
+    typeof node.props.onClick === 'function'
+  );
+}
+
+describe('LiveHubView · HV8 슬롯 이름 진입 (TRIP-987 A-1·A-2·A-4)', () => {
+  it('HV8a 이름을 누르면 그 카드의 poiId 로 onPressSlotName 이 불린다 — done·active·upcoming 5장 전부', () => {
+    const onPressSlotName = jest.fn();
+    renderHub({ onPressSlotName });
+
+    expect(screen.getAllByTestId(SLOT_CHEVRON)).toHaveLength(5);
+    const pois = ['gamcheon', 'gwangalli', 'museum', 'jeonpo', 'haeundae'];
+    pois.forEach((poiId, index) => {
+      fireEvent.press(
+        screen.getByTestId(`execution-live-slot-name-${DATE}#${poiId}`)
+      );
+      expect(onPressSlotName).toHaveBeenCalledTimes(index + 1);
+      expect(onPressSlotName).toHaveBeenLastCalledWith(poiId);
+    });
+  });
+
+  it("HV8b onPressSlotName 을 안 넘기면 어느 카드에도 '›' 가 없고 이름은 누를 수 없다 (TRIP-939)", () => {
+    renderHub();
+
+    const names = screen.getAllByTestId(SLOT_NAME);
+    expect(names).toHaveLength(5);
+    names.forEach((name) => expect(isTouchable(name)).toBe(false));
+    expect(screen.queryAllByTestId(SLOT_CHEVRON)).toHaveLength(0);
+  });
+
+  it('HV8c [방문 완료]는 이름 진입을 부르지 않고, 이름 진입은 [방문 완료]를 부르지 않는다 (A-4)', () => {
+    const onPressSlotName = jest.fn();
+    const handlers = renderHub({ onPressSlotName });
+
+    fireEvent.press(screen.getByTestId('execution-arrive-complete'));
+    expect(handlers.onPressComplete).toHaveBeenCalledTimes(1);
+    expect(onPressSlotName).not.toHaveBeenCalled();
+
+    fireEvent.press(
+      screen.getByTestId(`execution-live-slot-name-${DATE}#museum`)
+    );
+    expect(onPressSlotName).toHaveBeenCalledWith('museum');
+    expect(handlers.onPressComplete).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -773,7 +865,7 @@ describe('LiveHubView · HT 트리거 알약·배지·로컬 숨김 (TRIP-748)',
     expect(screen.queryByTestId(TRIGGER_PILL)).toBeNull();
     expect(handlers.onSelectDay).toHaveBeenCalledWith(2);
     expect(handlers.onPressComplete).toHaveBeenCalledTimes(1);
-    // TRIP-939 AC-6 — [사진]은 운영 화면에 없다(구 "[사진] → 준비 중 힌트" 경로 제거).
+    // 사진 콜백을 안 줬으므로 [사진]은 없다(TRIP-939 AC-6 · TRIP-1070 주입 시에만).
     expect(screen.queryByTestId('execution-arrive-photo')).toBeNull();
   });
 
@@ -876,5 +968,364 @@ describe('LiveHubView · HT 트리거 알약·배지·로컬 숨김 (TRIP-748)',
     // 새 트리거가 오면 다시 보인다(useEffect 없이 키 비교로).
     rerender(<LiveHubView {...base} triggerPillKey="trg-2" />);
     expect(screen.getByTestId(TRIGGER_PILL)).toBeOnTheScreen();
+  });
+});
+
+describe('🔴 LiveHubView · TRIP-991 오버레이 접근성 (AC-1·AC-2·AC-4)', () => {
+  it('뒤로는 "뒤로" 버튼으로 읽히고, 누르면 onBack 이 1회 불린다', () => {
+    const handlers = renderHub();
+
+    const back = screen.getByRole('button', { name: '뒤로' });
+    expect(back).toHaveProp('testID', 'execution-live-back');
+
+    fireEvent.press(back);
+    expect(handlers.onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('일자 칩은 "N일차" 버튼으로 읽히고, 활성 일차(2일차)만 selected 다', () => {
+    renderHub();
+
+    expect(
+      screen.getByRole('button', { name: '2일차', selected: true })
+    ).toHaveProp('testID', 'execution-live-daychip-1');
+    expect(screen.getByRole('button', { name: '1일차' })).toHaveProp(
+      'testID',
+      'execution-live-daychip-0'
+    );
+    expect(screen.getByRole('button', { name: '1일차' })).not.toBeSelected();
+    expect(screen.getByRole('button', { name: '3일차' })).not.toBeSelected();
+  });
+});
+
+// ── TRIP-1021 #059 · 예정 카드 수동 [도착] (AC-1·AC-3 · Seed Q1) ────────────────
+//
+// 뷰는 "오늘인가"를 모른다(페이지가 오늘 탭일 때만 `onPressArrive` 를 넘긴다). 뷰가 정하는 것은 하나 —
+// 진행 중(active) 슬롯이 있으면 어느 카드에도 [도착]을 주지 않는다(deriveVisitProgress 가 active 를
+// 하나만 인정해, 두 번째 도착은 앞 슬롯을 '예정'으로 되돌려 보이게 만든다 — 브리프 Q1).
+
+const ARRIVE_ANY = /^execution-live-slot-arrive-/;
+const arriveId = (poiId: string) =>
+  `execution-live-slot-arrive-${DATE}#${poiId}`;
+/** 진행 중을 뺀 픽스처 — museum 을 예정으로 돌린다(done 2 · upcoming 3). */
+const NO_ACTIVE: LiveHubSlot[] = SLOTS.map((entry) =>
+  entry.state === 'active' ? { ...entry, state: 'upcoming' as const } : entry
+);
+
+describe('LiveHubView · HV9 수동 [도착] (TRIP-1021 AC-1·AC-3 · Q1)', () => {
+  it('HV9a 진행 중이 없으면 예정 카드마다 [도착]이 서고, 누르면 그 poiId 로 1회 불린다', () => {
+    const onPressArrive = jest.fn();
+    const handlers = renderHub({ slots: NO_ACTIVE, onPressArrive });
+
+    // 예정 3장(museum·jeonpo·haeundae)에만 — done 2장에는 없다.
+    for (const poiId of ['museum', 'jeonpo', 'haeundae']) {
+      expect(screen.getByTestId(arriveId(poiId))).toBeOnTheScreen();
+    }
+    for (const poiId of ['gamcheon', 'gwangalli']) {
+      expect(screen.queryByTestId(arriveId(poiId))).toBeNull();
+    }
+
+    fireEvent.press(screen.getByTestId(arriveId('jeonpo')));
+
+    expect(onPressArrive).toHaveBeenCalledTimes(1);
+    expect(onPressArrive).toHaveBeenCalledWith('jeonpo');
+    expect(handlers.onPressComplete).not.toHaveBeenCalled();
+  });
+
+  it('HV9b 진행 중 슬롯이 있으면 onPressArrive 를 받아도 어느 카드에도 [도착]이 없다', () => {
+    renderHub({ onPressArrive: jest.fn() });
+
+    // 짝 앵커 — 카드 5장이 있고, 예정 카드도 실제로 있다(부재가 빈 렌더에서 공허하게 통과하지 않게).
+    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(5);
+    expect(
+      screen.getByTestId(`execution-live-slot-status-${DATE}#jeonpo`)
+    ).toHaveTextContent('예정');
+    expect(screen.queryAllByTestId(ARRIVE_ANY)).toHaveLength(0);
+  });
+
+  it('HV9c onPressArrive 를 안 넘기면 진행 중이 없어도 [도착]이 없다', () => {
+    renderHub({ slots: NO_ACTIVE });
+
+    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(5);
+    expect(screen.queryAllByTestId(ARRIVE_ANY)).toHaveLength(0);
+  });
+});
+
+// ── TRIP-1083 · 수정 FAB 가 시트 윗변을 따라간다 ─────────────────────────────
+//
+// FAB 묶음 래퍼(`execution-live-fab-anchor`, reanimated Animated.View)의 윗변 y =
+//   max(오버레이 줄 하단 + 8, 시트 윗변 − 8 − 52)   (Figma 4702:2688·2833·2982·3131)
+// 시트 윗변은 셸이 gorhom 에 넘긴 SharedValue 상자(`animatedPosition`)다 — 통과형 목이 그 prop 을
+// host 에 그대로 남기므로 테스트가 `.value` 를 직접 써서 "시트가 움직였다"를 흉내 낸다(02a ★7).
+// ⚠️ 관측은 getAnimatedStyle + 가짜 타이머로만 — host `props.style` 은 첫 렌더 값에 굳는다(02a ★1·★2).
+// 실제 드래그 추종·마운트 첫 프레임·좁은 화면 넘침은 6-b(AC-V1~V4).
+
+const ANCHOR = 'execution-live-fab-anchor';
+const OVERLAY_ROW = 'execution-live-overlay-row';
+const FRAME_MS = 100;
+
+function sheetPosition(): SharedValue<number> {
+  const position = sheetHost().props.animatedPosition as unknown;
+  if (!isSharedValue(position)) {
+    throw new Error(
+      '시트(BottomSheet)에 animatedPosition 상자가 실려 있지 않다'
+    );
+  }
+  return position as SharedValue<number>;
+}
+
+/**
+ * 프레임을 흘린다 — reanimated 는 jest 에서 스타일 재계산을 타이머로 돌린다(02a ★2). 원인 동작과
+ * **다른 act** 로 부른다: 상태가 바뀌어 스타일이 다시 등록되는 것은 원인 act 가 끝날 때(리렌더·
+ * effect)라, 같은 act 안에서 흘리면 등록 전 타이머만 돈다(02a §5 실측).
+ */
+function flushFrames(): void {
+  act(() => {
+    jest.advanceTimersByTime(FRAME_MS);
+  });
+}
+
+/** 시트 윗변을 y 로 옮긴다(gorhom 이 매 프레임 하는 일). */
+function moveSheet(y: number): void {
+  const position = sheetPosition();
+  act(() => {
+    position.value = y;
+  });
+  flushFrames();
+}
+
+/** 오버레이 줄(뒤로+일자 칩)이 기기에서 잰 자리 — 하단 = y + height. */
+function layoutOverlay(y: number, height: number): void {
+  act(() => {
+    fireEvent(screen.getByTestId(OVERLAY_ROW), 'layout', {
+      nativeEvent: { layout: { x: 16, y, width: 280, height } },
+    });
+  });
+  flushFrames();
+}
+
+/** 앵커의 병합 style(static + animated) — 첫 렌더에 굳은 props.style 이 아니다. */
+function anchorStyle(): Record<string, unknown> {
+  return getAnimatedStyle(screen.getByTestId(ANCHOR)) as Record<
+    string,
+    unknown
+  >;
+}
+
+/** 앵커 윗변 y = top(없으면 0) + transform translateY 합. */
+function anchorTop(): number {
+  const style = anchorStyle();
+  const top = typeof style.top === 'number' ? style.top : 0;
+  const transform = Array.isArray(style.transform)
+    ? (style.transform as Record<string, unknown>[])
+    : [];
+  const shift = transform.reduce<number>(
+    (sum, step) =>
+      sum + (typeof step.translateY === 'number' ? step.translateY : 0),
+    0
+  );
+  return top + shift;
+}
+
+describe('LiveHubView · HF 수정 FAB 시트 윗변 앵커 (TRIP-1083)', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('HF1 허브는 시트 위치 상자(SharedValue)를 셸에 넘긴다 (AC-3)', () => {
+    renderHub({ initialSnapIndex: 1 });
+
+    expect(typeof sheetPosition().value).toBe('number');
+  });
+
+  it('HF2 시트 윗변이 380 → 816 → 500 으로 움직이면 FAB 윗변이 매번 8+52 위(320 → 756 → 440)로 따라간다 (AC-1)', () => {
+    renderHub({ initialSnapIndex: 1 });
+    layoutOverlay(15, 40);
+
+    moveSheet(380); // 중간 스냅(Figma 4702:2833)
+    expect(anchorTop()).toBe(320);
+
+    moveSheet(816); // 닫힘 스냅(Figma 4702:2688)
+    expect(anchorTop()).toBe(756);
+
+    moveSheet(500); // 끄는 중간 — 스냅이 아닌 값에서도 따라간다
+    expect(anchorTop()).toBe(440);
+  });
+
+  it('HF3 펼침(윗변 122)에서는 오버레이 줄 하단 55 + 8 = 63 에서 멈춘다 — 추종값 62 로 올라가지 않는다 (AC-2)', () => {
+    renderHub({ initialSnapIndex: 2 });
+    layoutOverlay(15, 40);
+
+    moveSheet(122); // 펼침 스냅(Figma 4702:2982)
+
+    expect(anchorTop()).toBe(63);
+  });
+
+  it('HF4 하한은 잰 오버레이 줄을 따른다 — 하단 99 면 107, 시트는 그대로 두고 하단 55 로 다시 재면 63 (AC-2)', () => {
+    renderHub({ initialSnapIndex: 2 });
+    layoutOverlay(59, 40);
+
+    moveSheet(122);
+    expect(anchorTop()).toBe(107);
+
+    layoutOverlay(15, 40);
+    expect(anchorTop()).toBe(63);
+  });
+
+  it('HF5 상태바가 있어도(safeTop 47) 시트 윗변 값을 그대로 쓴다 — 380 → 320, 펼침 122 → 오버레이 하단 95 + 8 = 103 (AC-1 · 브리프 맹점 4)', () => {
+    render(
+      <SafeAreaInsetsContext.Provider
+        value={{ top: 47, bottom: 34, left: 0, right: 0 }}
+      >
+        <LiveHubView
+          tripTitle="부산 여행"
+          days={DAYS}
+          activeDayIndex={1}
+          slots={SLOTS}
+          initialSnapIndex={1}
+          onBack={jest.fn()}
+          onSelectDay={jest.fn()}
+          onPressAiReplan={jest.fn()}
+          onPressManualEdit={jest.fn()}
+        />
+      </SafeAreaInsetsContext.Provider>
+    );
+    // 실기처럼 오버레이 줄은 safeTop 47 + 셸 pt-sm 8 = 55 에서 시작한다.
+    layoutOverlay(55, 40);
+
+    moveSheet(380);
+    expect(anchorTop()).toBe(320);
+
+    moveSheet(122);
+    expect(anchorTop()).toBe(103);
+  });
+
+  it('HF6 열면 알약 2개와 FAB 가 앵커 안 한 가로 줄(flex-row·items-center·gap-sm)에 AI → 직접 수정 → FAB 순으로 선다 (AC-4)', () => {
+    renderHub({ initialSnapIndex: 1 });
+
+    fireEvent.press(screen.getByTestId(FAB));
+
+    const anchor = screen.getByTestId(ANCHOR);
+    const ai = within(anchor).getByTestId(PILL_AI);
+    const manual = within(anchor).getByTestId(PILL_MANUAL);
+    const fab = within(anchor).getByTestId(FAB);
+    // 세 노드의 가장 가까운 공통 조상 = 가로 줄.
+    const aiUp = [ai, ...ancestorsOf(ai)];
+    const row = aiUp.find(
+      (node) =>
+        [manual, ...ancestorsOf(manual)].includes(node) &&
+        [fab, ...ancestorsOf(fab)].includes(node)
+    );
+    if (!row) throw new Error('알약과 FAB 의 공통 조상이 없다');
+    expect(typeof row.type).toBe('string');
+    expect(ancestorsOf(row)).toContain(anchor);
+    const tokens = String(row.props.className ?? '').split(/\s+/);
+    expect(tokens).toEqual(
+      expect.arrayContaining(['flex-row', 'items-center', 'gap-sm'])
+    );
+    // 트리 순서 = 왼쪽부터(Figma 4702:3131 — AI x52 · 직접 수정 x199 · FAB x322).
+    expect(
+      row
+        .findAll(
+          (node) => typeof node.type === 'string' && isEditControlNode(node)
+        )
+        .map((node) => node.props.testID)
+    ).toEqual([PILL_AI, PILL_MANUAL, FAB]);
+  });
+
+  it('HF7 앵커는 style 로만 자리 잡는다 — className 없음·absolute·오른쪽 16·bottom 없음·box-none, 옛 우하단(bottom-lg·right-lg) 컨테이너는 없다 (AC-4·AC-5 · Seed 4)', () => {
+    renderHub({ initialSnapIndex: 1 });
+
+    const anchor = screen.getByTestId(ANCHOR);
+    // reanimated Animated.View 의 className 은 기기에서 적용된다는 근거가 없다(02a ★6).
+    expect(anchor.props.className).toBeUndefined();
+    expect(anchor.props.pointerEvents).toBe('box-none');
+    const style = anchorStyle();
+    expect(style.position).toBe('absolute');
+    expect(style.right).toBe(16);
+    expect(style.bottom).toBeUndefined();
+
+    const fab = within(anchor).getByTestId(FAB);
+    const oldCorner = ancestorsOf(fab).filter((node) =>
+      /\b(bottom|right)-lg\b/.test(String(node.props.className ?? ''))
+    );
+    expect(oldCorner).toEqual([]);
+  });
+
+  it('HF8 앵커는 허브 루트(execution-live-screen)의 바로 아래에 있다 — 셸 안(mapCard 오버레이·시트 children)으로 옮기면 HF 좌표의 원점이 어긋난다 (AC-1 · 03b 경고-1)', () => {
+    renderHub({ initialSnapIndex: 1 });
+
+    const anchor = screen.getByTestId(ANCHOR);
+    // 조상 중 가장 가까운 host View = 실제로 앵커를 담는 부모(합성 Animated.View 껍질은 건너뛴다).
+    const hostParent = ancestorsOf(anchor).find(
+      (node) => typeof node.type === 'string'
+    );
+    expect(hostParent?.props.testID).toBe('execution-live-screen');
+    expect(ancestorsOf(anchor).map((node) => node.props.testID)).not.toContain(
+      'map-sheet-shell-root'
+    );
+  });
+
+  it('HF9 시트 위치가 한 번도 들어오기 전(첫 렌더)엔 FAB 가 화면 아래쪽 — 창 높이 − 8 − 52 에서 시작한다 (03b 참고-1)', () => {
+    renderHub({ initialSnapIndex: 1 });
+    flushFrames();
+
+    // moveSheet 를 부르지 않는다 — 초기값만으로 정해지는 첫 자리.
+    expect(anchorTop()).toBe(Dimensions.get('window').height - 8 - 52);
+  });
+});
+
+// ── TRIP-1117 · 허브 메모 시트의 뷰 쪽 배선 ─────────────────────────────────────────
+//
+// 뷰는 저장을 모른다 — 페이지가 준 값만 그린다. 관람 중 슬롯의 `memo`(세션 저장본)는 관람 중 카드 메모 박스로,
+// `memoNotice`(시트가 닫힌 뒤 도착한 저장 실패, Q3)는 관람 중 카드에만, `fabHidden`(메모 시트가 열림)은 수정
+// FAB 를 숨긴다(Figma 4741:2833 F5). FAB 를 숨기려고 앵커를 셸 안으로 옮기면 HF8 좌표 원점이 어긋난다.
+
+const MEMO_NOTICE = '메모를 저장하지 못했어요. 다시 시도해 주세요.';
+const ACTIVE_KEY = `${DATE}#museum`;
+
+describe('LiveHubView · HM 메모 시트 배선 (TRIP-1117)', () => {
+  it('🔴 HM1 결정 2: 관람 중 슬롯에 memo 가 있으면 관람 중 카드에 박스가 선다 — done 2개와 합쳐 3개', () => {
+    const slots = SLOTS.map((entry) =>
+      entry.state === 'active' ? { ...entry, memo: '바다가 예뻤다' } : entry
+    );
+
+    renderHub({ slots });
+
+    expect(
+      screen.getByTestId(`execution-live-slot-memo-${ACTIVE_KEY}`)
+    ).toHaveTextContent('바다가 예뻤다');
+    expect(screen.getAllByTestId(/^execution-live-slot-memo-/)).toHaveLength(3);
+  });
+
+  it('🔴 HM2 Q3: memoNotice 를 주면 안내 한 줄이 관람 중 카드에만 1개 선다', () => {
+    renderHub({ onPressMemo: jest.fn(), memoNotice: MEMO_NOTICE });
+
+    const notices = screen.getAllByTestId('execution-arrive-memo-notice');
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toHaveTextContent(MEMO_NOTICE);
+    expect(
+      within(
+        screen.getByTestId(`execution-live-slot-${ACTIVE_KEY}`)
+      ).getByTestId('execution-arrive-memo-notice')
+    ).toBeOnTheScreen();
+  });
+
+  it('🔴 HM3 AC-15: fabHidden 이면 수정 FAB 가 없고, 안 주면 FAB 가 있으며 앵커는 허브 루트 바로 아래다(HF8)', () => {
+    renderHub({ fabHidden: true });
+    // 짝 앵커 — 허브는 그려졌다.
+    expect(screen.getByTestId('execution-live-screen')).toBeOnTheScreen();
+    expect(screen.queryByTestId('execution-live-replan-fab')).toBeNull();
+
+    screen.unmount();
+    renderHub();
+
+    expect(screen.getByTestId('execution-live-replan-fab')).toBeOnTheScreen();
+    const hostParent = ancestorsOf(
+      screen.getByTestId('execution-live-fab-anchor')
+    ).find((node) => typeof node.type === 'string');
+    expect(hostParent?.props.testID).toBe('execution-live-screen');
   });
 });

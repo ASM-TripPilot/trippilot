@@ -1,26 +1,20 @@
 import type { ComponentProps } from 'react';
-import {
-  fireEvent,
-  render,
-  screen,
-  within,
-} from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { MyPageScreen } from './MyPageScreen';
 
 /**
- * TRIP-776 · l03 마이페이지 empty(Figma 1603:2414) — 순수 화면(props + 콜백)의 빈 상태·CTA·캘린더 링크.
+ * TRIP-776 · l03 마이페이지 empty — 순수 화면(props + 콜백)의 "지난 여행" 섹션·캘린더 링크.
+ * TRIP-1123 · Figma 4755:3123 로 교체 — 세그·여행 카드·빈 문구·[새 여행 만들기] CTA 가 사라졌다(결정 2(b)).
  *
  * 무엇을 보장하나:
- *  - AC-1 예정 탭이 비었으면 문구가 **한 조각** "예정된 여행이 없어요 · 새 여행을 만들어 보세요" 다.
- *    진행 중·종료 탭의 빈 문구는 그대로다.
- *  - AC-2 CTA 글자는 "새 여행 만들기" 하나뿐이다("+ " 글자 없음). 플러스는 글자가 아니라 버튼 안 글리프
- *    (`my-create-trip-plus`)다. 누르면 콜백이 정확히 1회.
- *  - AC-6(캘린더) "지난 여행" 섹션에 "캘린더" 링크(`my-past-calendar`)가 있고 누르면 콜백이 1회다.
+ *  - 🔴 1123 AC-2(화면) 예정이 0건이어도 빈 문구("예정된 여행이 없어요…")·CTA(`my-create-trip`)·세그
+ *    (`my-trip-segment*`)가 없다. 화면 props 에서도 세그·카드·CTA 자리가 빠졌다(타입 계약).
+ *  - 🔴 1123 AC-6(배선) 화면은 `onPressCount` 를 프로필 카드로 그대로 넘긴다 — 칸을 누르면 그 칸 이름으로 1회.
+ *    `counts` 가 null 이면 숫자 자리가 `–` 다(AC-5 표시).
+ *  - AC-6(캘린더, TRIP-776) "지난 여행" 섹션에 "캘린더" 링크(`my-past-calendar`)가 있고 누르면 콜백이 1회다.
  *    섹션이 없거나 콜백이 안 들어오면 링크도 없다(누르면 반응 없는 것 0 — TRIP-939). 종료 여행이 0건이어도
  *    링크는 남는다 — 캘린더는 회고 진입이 아니다(BR-U6-23 이 숨기는 것은 회고 진입뿐, US-REC-14).
- *
- * 문구 왼쪽 정렬·CTA 높이 50·반경 12 는 픽셀이라 [검증] 스크린샷 대조 몫이다.
  *
  * *(개념 — `ComponentProps<typeof X>`)* 컴포넌트 X 가 받는 props 의 타입을 그대로 꺼내 쓴다. 기본 props
  *  한 벌을 만들고 케이스마다 필요한 칸만 덮어쓴다(`{ ...base(), ...over }`).
@@ -37,11 +31,6 @@ function base(over: Partial<Props> = {}): Props {
     nickname: '여행자123',
     email: 'trippilot@email.com',
     counts: { upcoming: 0, active: 0, ended: 0 },
-    active: 'upcoming',
-    onChangeSegment: noop,
-    cards: null,
-    activeEmpty: true,
-    onPressCreateTrip: noop,
     showPast: true,
     pastCards: null,
     pastEmpty: true,
@@ -49,46 +38,43 @@ function base(over: Partial<Props> = {}): Props {
   };
 }
 
-describe('🔴 AC-1 · 빈 상태 문구', () => {
-  it('예정 탭이 비었으면 "예정된 여행이 없어요 · 새 여행을 만들어 보세요" 한 조각이 뜬다', () => {
-    // 준비·실행
-    render(<MyPageScreen {...base()} />);
+describe('🔴 1123 AC-2 · 목록·빈 문구·CTA 가 없다', () => {
+  it('예정 0건이어도 빈 문구·[새 여행 만들기]·세그가 없고, 프로필 카드와 지난 여행은 있다', () => {
+    // 준비·실행 — 옛 화면이면 이 조건에서 빈 문구와 CTA 가 떴다.
+    render(<MyPageScreen {...base({ onPressCalendar: noop })} />);
 
-    // 단언: 완전일치 한 조각(두 조각으로 쪼개면 red), 같은 문구가 두 번 뜨지도 않는다.
-    expect(
-      screen.getByText('예정된 여행이 없어요 · 새 여행을 만들어 보세요')
-    ).toBeOnTheScreen();
-    expect(screen.queryAllByText(/예정된 여행이 없어요/)).toHaveLength(1);
-  });
-
-  it.each([
-    ['active', '진행 중인 여행이 없어요'],
-    ['ended', '종료된 여행이 없어요'],
-  ] as const)('%s 탭 빈 문구는 그대로 "%s" 다', (active, text) => {
-    render(<MyPageScreen {...base({ active, showPast: false })} />);
-
-    expect(screen.getByText(text)).toBeOnTheScreen();
-    // CTA 는 예정 탭에만 있다(기존 규칙).
+    // 단언(부재)
+    expect(screen.queryAllByText(/예정된 여행이 없어요/)).toHaveLength(0);
     expect(screen.queryByTestId('my-create-trip')).toBeNull();
+    expect(screen.queryByTestId('my-create-trip-plus')).toBeNull();
+    expect(screen.queryByText('새 여행 만들기')).toBeNull();
+    expect(screen.queryAllByTestId(/^my-trip-segment/)).toHaveLength(0);
+    // 단언(존재 짝) — 화면이 통째로 안 그려져 공짜 통과하는 것을 막는다.
+    expect(screen.getByTestId('my-profile-card')).toBeOnTheScreen();
+    expect(screen.getByText('지난 여행')).toBeOnTheScreen();
+    expect(screen.getByText('아직 종료된 여행이 없습니다')).toBeOnTheScreen();
   });
 });
 
-describe('🔴 AC-2 · 새 여행 CTA', () => {
-  it('글자는 "새 여행 만들기" 하나, 플러스는 버튼 안 글리프이고, 누르면 콜백 1회', () => {
-    // 준비
-    const onPressCreateTrip = jest.fn();
-    render(<MyPageScreen {...base({ onPressCreateTrip })} />);
-    const cta = screen.getByTestId('my-create-trip');
+describe('🔴 1123 AC-6·AC-5 · 숫자 칸 배선(화면 → 프로필 카드)', () => {
+  it('onPressCount 를 받으면 종료 칸을 눌렀을 때 "ended" 로 1회 불린다', () => {
+    const onPressCount = jest.fn();
+    render(<MyPageScreen {...base({ onPressCount })} />);
 
-    // 단언(모양): 라벨 완전일치 · "+" 글자 0 · 플러스 글리프가 버튼 안에 있다.
-    expect(within(cta).getByText('새 여행 만들기')).toBeOnTheScreen();
-    expect(within(cta).queryAllByText(/\+/)).toHaveLength(0);
-    expect(within(cta).getByTestId('my-create-trip-plus')).toBeOnTheScreen();
-    expect(cta.props.accessibilityRole).toBe('button');
+    fireEvent.press(screen.getByTestId('my-profile-count-ended'));
 
-    // 실행 → 단언(동작)
-    fireEvent.press(cta);
-    expect(onPressCreateTrip).toHaveBeenCalledTimes(1);
+    expect(onPressCount).toHaveBeenCalledTimes(1);
+    expect(onPressCount).toHaveBeenCalledWith('ended');
+  });
+
+  it('counts 가 null 이면 세 칸 숫자 자리가 – 다', () => {
+    render(<MyPageScreen {...base({ counts: null, showPast: false })} />);
+
+    (['upcoming', 'active', 'ended'] as const).forEach((bucket) => {
+      expect(
+        screen.getByTestId(`my-profile-count-${bucket}-value`)
+      ).toHaveTextContent('\u2013');
+    });
   });
 });
 

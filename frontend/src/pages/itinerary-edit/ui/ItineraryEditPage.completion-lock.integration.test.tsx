@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
 import { useItineraryEditStore } from '@/features/itinerary/model/itineraryEditStore';
@@ -45,7 +45,12 @@ jest.mock('@/shared/storage', () => ({
 }));
 
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), back: jest.fn(), replace: jest.fn() }),
+  useRouter: () => ({
+    push: jest.fn(),
+    back: jest.fn(),
+    replace: jest.fn(),
+    canGoBack: () => true,
+  }),
 }));
 
 jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
@@ -87,6 +92,7 @@ function itinerary(): Itinerary {
           isFixed: false,
           endsNextDay: false,
           hasViolation: false,
+          alternatives: [],
           tags: [],
           nameKo: '성산일출봉',
         },
@@ -97,6 +103,7 @@ function itinerary(): Itinerary {
           isFixed: false,
           endsNextDay: false,
           hasViolation: false,
+          alternatives: [],
           tags: [],
           nameKo: '섭지코지',
         },
@@ -115,12 +122,16 @@ function itinerary(): Itinerary {
   };
 }
 
-/** 그 날 방문 기록 — poi-a 는 도착·완료(skippedAt null)라 `deriveVisitProgress` 가 완료로 잡는다. */
+/**
+ * 그 날 방문 기록 — poi-a 는 도착·완료(skippedAt null)라 `deriveVisitProgress` 가 완료로 잡는다.
+ * slotKey 는 필수다: 슬롯 키가 없으면 즉석 방문이라 잠금 판정에서 빠진다(TRIP-1079 결정 1).
+ */
 function visitsWithCompleted(): VisitCheckList {
   return {
     visits: [
       {
         visitCheckId: 'vc-a',
+        slotKey: lockedKey,
         poiId: 'poi-a',
         source: 'MANUAL',
         spontaneous: false,
@@ -184,5 +195,103 @@ describe('🔴 CL1 · AC-11 — 방문 완료 슬롯이 잠기고 미완료 슬�
       screen.getByTestId(`slot-stopcard-timechip-${openKey}`)
     ).toBeOnTheScreen();
     expect(screen.queryByTestId(`slot-stopcard-locked-${openKey}`)).toBeNull();
+  });
+});
+
+describe('🔴 CL2 · TRIP-1079 AC-5 — 즉석 방문 완료는 같은 poi 의 계획 슬롯을 잠그지 않는다', () => {
+  it('계획 완료 poi-a 는 잠기고, 즉석(slotKey null)으로만 완료된 poi-b 는 편집칩 present+잠금 부재', async () => {
+    const [plannedDone] = visitsWithCompleted().visits;
+    server.use(
+      http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
+        HttpResponse.json({
+          visits: [
+            plannedDone,
+            {
+              ...plannedDone,
+              visitCheckId: 'vc-b',
+              slotKey: null,
+              poiId: 'poi-b',
+              spontaneous: true,
+            },
+          ],
+        })
+      )
+    );
+
+    renderPage();
+
+    // 앵커 — 계획 완료 poi-a 가 잠겼다 = 방문 기록이 도착해 판정이 돌았다(공허 통과 방지).
+    await screen.findByTestId(`slot-stopcard-locked-${lockedKey}`);
+
+    // 즉석 완료 poi-b 는 잠기지 않는다.
+    expect(screen.queryByTestId(`slot-stopcard-locked-${openKey}`)).toBeNull();
+    expect(
+      screen.getByTestId(`slot-stopcard-timechip-${openKey}`)
+    ).toBeOnTheScreen();
+  });
+});
+
+describe('🔴 CL3 · TRIP-1079 5-c 경고-2 — 2일차 탭의 완료 슬롯은 2일차 날짜로 세어 잠긴다', () => {
+  it('2일차 탭으로 옮기면 2일차에 완료한 poi-c 는 잠기고, 같은 날 미완료 poi-d 는 편집 가능하다', async () => {
+    const DAY2 = '2026-06-11';
+    const day2LockedKey = buildSlotKey(DAY2, 'poi-c');
+    const day2OpenKey = buildSlotKey(DAY2, 'poi-d');
+    const base = itinerary();
+    const [day1] = base.days;
+    const [plannedDone] = visitsWithCompleted().visits;
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        HttpResponse.json({
+          ...base,
+          days: [
+            day1,
+            {
+              date: DAY2,
+              slots: day1.slots.map((s, i) => ({
+                ...s,
+                poiId: i === 0 ? 'poi-c' : 'poi-d',
+              })),
+            },
+          ],
+        })
+      ),
+      // 날짜마다 그 날의 기록만 준다 — 2일차 기록의 slotKey 는 2일차 날짜다.
+      http.get(`${BASE}/trips/:tripId/visits/days/:day`, ({ params }) =>
+        HttpResponse.json(
+          params.day === DAY2
+            ? {
+                visits: [
+                  {
+                    ...plannedDone,
+                    visitCheckId: 'vc-c',
+                    slotKey: day2LockedKey,
+                    poiId: 'poi-c',
+                  },
+                ],
+              }
+            : visitsWithCompleted()
+        )
+      )
+    );
+
+    renderPage();
+
+    // 앵커 — 1일차 탭의 poi-a 잠금 = 페이지·방문 기록이 다 떴다.
+    await screen.findByTestId(`slot-stopcard-locked-${lockedKey}`);
+
+    // 실행 — 2일차 탭.
+    fireEvent.press(screen.getByTestId('itinerary-edit-day-2'));
+
+    // 단언 — 2일차 완료 poi-c 가 잠기고, 짝인 미완료 poi-d 는 편집칩이 있고 잠금이 없다.
+    await screen.findByTestId(`slot-stopcard-locked-${day2LockedKey}`);
+    expect(
+      screen.queryByTestId(`slot-stopcard-timechip-${day2LockedKey}`)
+    ).toBeNull();
+    expect(
+      screen.getByTestId(`slot-stopcard-timechip-${day2OpenKey}`)
+    ).toBeOnTheScreen();
+    expect(
+      screen.queryByTestId(`slot-stopcard-locked-${day2OpenKey}`)
+    ).toBeNull();
   });
 });

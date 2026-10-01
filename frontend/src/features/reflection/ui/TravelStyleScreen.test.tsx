@@ -219,4 +219,21 @@ describe('🔴 TravelStyleScreen · insufficient 얼굴 (AC-3)', () => {
     expect(screen.queryByTestId('reflection-style-stat-dwell')).toBeNull();
     expect(screen.queryByTestId('reflection-style-evidence')).toBeNull();
   });
+
+  it('TRIP-1076 AC-7(보류) · 임시 얼굴엔 "분석에 사용된 여행 N회 · 마지막 갱신" 부제가 없다 (선제 green)', () => {
+    // 미달 envelope 에는 sampleTripCount·updatedAt 이 없다(StylePreview = descriptors 뿐) — 값을 지어내지
+    // 않는다. BE 계약이 바뀌기 전까지 이 부제는 정식 얼굴 전용이다.
+    render(
+      <TravelStyleScreen
+        face="insufficient"
+        progress={PROGRESS_INSUFFICIENT}
+        analysis={null}
+        preview={{ descriptors: ['느긋'] }}
+      />
+    );
+
+    // 짝 앵커 — 임시 얼굴이 실제로 그려졌다(진행 문구).
+    expect(screen.getByTestId('reflection-style-progress')).toBeOnTheScreen();
+    expect(screen.queryAllByText(/분석에 사용된 여행/)).toHaveLength(0);
+  });
 });

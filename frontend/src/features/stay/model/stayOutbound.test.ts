@@ -2,7 +2,11 @@ import * as Linking from 'expo-linking';
 
 import type { StayItem } from '@/shared/api/generated/schemas';
 
-import { buildStaySearchUrl, openStayOutbound } from './stayOutbound';
+import {
+  buildStaySearchUrl,
+  openStayOutbound,
+  stayOutboundMode,
+} from './stayOutbound';
 
 /**
  * TRIP-457 AC-9 · 01b Q2 — 제휴 시트 [이동] 딥링크 사다리(nextNav.ts 패턴 미러).
@@ -78,5 +82,15 @@ describe('O3 · openStayOutbound 실패 (침묵 금지)', () => {
 
     expect(result).toBe('failed');
     expect(fallback).toHaveBeenCalledTimes(1);
+  });
+});
+
+// TRIP-1019 #018 — [이동]이 제휴 딥링크인지 웹검색 폴백인지를 말해 주는 값. 지금은 딥링크 계약이 없어
+// **항상 웹검색**이다(위 O1~O3). 제휴 고지 시트는 이 값으로 얼굴을 고른다 — 값이 'affiliate' 로 새면 없는
+// 딥링크에 수수료 고지를 띄우고, 값 자체를 안 두고 고지를 지우면 딥링크가 생겼을 때 법정 고지(BR-U1-30)가
+// 사라진다. 그래서 값을 한 곳에 둔다(브리프 §6 신규 필요 · 맹점 ④).
+describe('O4 · stayOutboundMode — 지금 계약에서 이동은 웹검색 폴백 (TRIP-1019 #018 · BR-U1-31)', () => {
+  it("인자 없이 부르면 'webSearch' 를 돌려준다", () => {
+    expect(stayOutboundMode()).toBe('webSearch');
   });
 });

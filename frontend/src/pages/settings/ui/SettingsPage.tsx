@@ -3,8 +3,9 @@ import { isAxiosError } from 'axios';
 import Constants from 'expo-constants';
 import * as Linking from 'expo-linking';
 import { type ReactElement, useState } from 'react';
-import { Share } from 'react-native';
+import { Keyboard, Share } from 'react-native';
 
+import { waitForGateDestination } from '@/features/auth/model/gateDestination';
 import { usePreferenceStore } from '@/features/onboarding/model/preferenceStore';
 import { OSM_COPYRIGHT_URL } from '@/features/settings/model/dataAttribution';
 import { resolveExportSummary } from '@/features/settings/model/exportSummary';
@@ -23,6 +24,7 @@ import {
 import { useGetMeLocationConsent } from '@/shared/api/generated/location/location';
 import { useGetMePreferences } from '@/shared/api/generated/preferences/preferences';
 import {
+  getGetMeProfileQueryKey,
   getGetMeSettingsQueryKey,
   useGetMeProfile,
   useGetMeSettings,
@@ -38,7 +40,10 @@ import {
   registerPushIfGranted,
   unregisterStoredPushToken,
 } from '@/shared/push';
+import { showToast } from '@/shared/ui/Toast';
 import { validateNicknameFormat } from '@/shared/validation/nicknameFormat';
+
+const NICKNAME_SAVED_TOAST = '닉네임을 바꿨어요';
 
 /**
  * 라우팅 — `expo-router` 를 **정적 import 하지 않는다.** 정적 import 면 이 파일의 node-버킷 테스트
@@ -136,6 +141,16 @@ export function SettingsPage(): ReactElement {
         // 서버 응답 닉네임을 우선하되, 없으면 방금 보낸 값으로 요약을 갱신한다.
         setNicknameOverride(data?.nickname ?? variables.data.nickname);
         setNicknameError(null);
+        // 같은 프로필 캐시를 보는 마이 탭(이미 떠 있는)이 새 닉네임으로 다시 묻게 한다. 실패 땐 안 건드린다.
+        void queryClient.invalidateQueries({
+          queryKey: getGetMeProfileQueryKey(),
+        });
+        // 저장 뒤에도 입력칸이 포커스를 쥐어(persistTaps) 키보드가 토스트를 덮는다 — 성공 때만 내린다.
+        Keyboard.dismiss();
+        showToast({
+          message: NICKNAME_SAVED_TOAST,
+          testID: 'settings-nickname-saved',
+        });
       },
       onError: (error) => {
         setNicknameError(classifyNicknameError(error));
@@ -212,16 +227,19 @@ export function SettingsPage(): ReactElement {
     await Share.share({ message: parts.join('\n\n') });
   };
 
-  // 로그아웃(TRIP-938): 토큰 삭제 → 이전 계정 캐시 비우기 → 게이트('/')에 인계. replace 라 뒤로가기로
-  // 설정에 못 돌아온다. 로그인 경로로 직접 가지 않는 이유 — (auth) 는 게이트가 재조회를 마쳐야 열린다.
+  // 로그아웃(TRIP-938·1034): 토큰 삭제 → 게이트가 LOGIN 을 공개할 때까지 대기 → 이전 계정 캐시 비우기 →
+  // 로그인으로 replace(뒤로가기로 설정에 못 돌아온다). 설정은 가드 밖이라 가드 전환이 옮겨 주지 않는다 —
+  // (auth) 는 게이트가 재조회를 마쳐야 열리고, 그 전의 이동은 무시돼 설정에 갇힌다(TRIP-1034).
+  // 캐시는 대기 뒤에 비운다 — 대기 중에 비우면 설정이 토큰 없이 재조회한다.
   // 푸시 토큰 해제를 먼저 기다린다(TRIP-835 AC-5) — 인증이 살아 있을 때 DELETE 가 닿아야 한다.
   // 해제는 실패를 삼키고 3초에서 끊으므로 로그아웃을 막지 않는다.
   const runLogout = async (): Promise<void> => {
     await unregisterStoredPushToken();
     await logout();
+    await waitForGateDestination('LOGIN');
     queryClient.clear();
     usePreferenceStore.getState().reset();
-    loadRouter()?.replace('/');
+    loadRouter()?.replace('/login');
   };
 
   return (
@@ -231,7 +249,7 @@ export function SettingsPage(): ReactElement {
           nickname: currentNickname,
           email: account.data?.email ?? null,
           preferences: preferences.data,
-          locationConsent: locationConsent.data?.legalConsent,
+          locationConsent: locationConsent.data?.gpsRecordingOptIn,
           personalizationOn:
             personalizationReason === undefined
               ? undefined

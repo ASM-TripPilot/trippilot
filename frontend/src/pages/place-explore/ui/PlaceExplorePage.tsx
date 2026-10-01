@@ -31,7 +31,7 @@ import BottomSheet, {
 import type { Place } from '@/shared/api/generated/schemas';
 import { PoiCategory } from '@/shared/api/generated/schemas';
 import { getAccessToken } from '@/shared/api/tokenManager';
-import { BottomTabBar } from '@/shared/ui/BottomTabBar';
+import { BottomTabBar, shellTabHref } from '@/shared/ui/BottomTabBar';
 
 import { resolvePlaceListState } from '@/features/explore/model/placeListState';
 import {
@@ -43,7 +43,10 @@ import {
 import { usePlacesInfinite } from '@/features/explore/model/usePlacesInfinite';
 import { useMultiRegionPlaces } from '@/features/explore/model/useMultiRegionPlaces';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
+import { isWizardOrigin } from '@/features/explore/model/wizardOrigin';
 import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
+import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 
 /** 카테고리 시트(TRIP-708 AC-6) — **페이지가 소유**한다(@gorhom/bottom-sheet). 열림 상태는
  * 페이지 `useState`이고, 닫히면 트리에서 통째로 사라진다(조건부 마운트) — gorhom 목이 통과형
@@ -133,7 +136,10 @@ function CategorySheet({
 }
 
 export function PlaceExplorePage(): ReactElement {
-  const { region } = useLocalSearchParams<{ region?: string | string[] }>();
+  const params = useLocalSearchParams<{ region?: string | string[] }>();
+  const { region } = params;
+  // 위저드에서 들른 d04 는 ＋(새 여행 = reset)를 그리지 않는다 — 진행 중 입력 보존(TRIP-1026).
+  const fromWizard = isWizardOrigin(params);
   // '더 담기'가 여행 지역들을 배열로 실어 보낸다(TRIP-687, 같은 키 반복 → 배열). 0/1지역은 기존
   // 무한스크롤 경로를, 2+지역은 지역별 병렬 조회 후 병합 경로를 탄다(어느 쪽이 그려지는지는 6-b 실기).
   const regions = Array.isArray(region) ? region : region ? [region] : [];
@@ -241,6 +247,12 @@ export function PlaceExplorePage(): ReactElement {
     }
   }
 
+  function handleClearAllFilters(): void {
+    setSaveError(null);
+    setSearchText('');
+    setSelectedCategory(null);
+  }
+
   function handleRetry(): void {
     setSaveError(null);
     void refetch();
@@ -267,27 +279,39 @@ export function PlaceExplorePage(): ReactElement {
         onChangeSearchText={handleChangeSearchText}
         onToggleSave={handleToggleSave}
         onPressCard={(place) => router.push(`/explore/places/${place.poiId}`)}
-        onPressCreateTrip={() => router.push('/trips/new/step1')}
-        onPressSavedPlaces={() => router.push('/explore/saved-places')}
+        onPressCreateTrip={() => {
+          // 새 여행 진입 — 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074).
+          useTripWizardStore.getState().reset();
+          router.push('/trips/new/step1');
+        }}
+        hideCreateTrip={fromWizard}
+        onPressSavedPlaces={() =>
+          // 위저드 출처면 바로 아래가 d02 select 다 — save 모드를 새로 열면 그 CTA 가 드래프트를
+          // reset 한다. 한 칸 뒤로 가 고르던 체크를 이어 간다(TRIP-1093 결정 2). 이 전제를
+          // 지키는 심판은 없다(생산자 소스 스캔은 TRIP-1145 에서 지웠다).
+          fromWizard ? router.back() : router.push('/explore/saved-places')
+        }
         onPressFilter={() => setCategorySheetOpen(true)}
         onBack={() => router.back()}
         state={listState}
         pendingPoiIds={pendingPoiIds}
         saveError={saveError}
         onRetry={handleRetry}
-        onPressChangeRegion={() => router.push('/explore/region?purpose=trip')}
+        onPressChangeRegion={() => router.push(regionPickerHref('places'))}
+        regionNames={regions}
         onClearFilter={handleClearFilter}
+        onClearAllFilters={handleClearAllFilters}
         onPressSaveErrorAction={handlePressSaveErrorAction}
         onEndReached={handleEndReached}
         isFetchingMore={isFetchingNextPage}
         degraded={isMultiRegion && !isError ? multi.degraded : false}
       />
 
-      {/* (tabs) 밖 라우트라 진짜 탭바가 없다 — DestinationDetail 선례처럼 복제해 그리고,
+      {/* (tabs) 밖 라우트라 진짜 탭바가 없다 — 옛 목적지 상세(TRIP-1105 로 삭제) 선례처럼 복제해 그리고,
           onPressTab은 push가 아니라 replace로 항법한다(뒤로가기 스택을 안 쌓는다). */}
       <BottomTabBar
         activeKey="explore"
-        onPressTab={(key) => router.replace(key === 'home' ? '/' : `/${key}`)}
+        onPressTab={(key) => router.replace(shellTabHref(key))}
       />
 
       {/* 카테고리 시트 — 필터 버튼이 열고, 닫힘=트리 부재(조건부 마운트). */}

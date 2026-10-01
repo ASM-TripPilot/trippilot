@@ -4,7 +4,7 @@
  *
  * 별도 파일로 뺀 이유: `_dev/preview` 는 QueryClient 없이 렌더하는 계약이라 자족 컨테이너
  * `PreferencesEditScreen` 을 직접 못 태운다 — 컨테이너 모듈은 최상단 `usePreferences` import 로
- * `@/shared/api` 를 로드 시점에 끌어오는데, 프리뷰 지도 지뢰 목(`devPreviewMap.test.tsx`)이 그
+ * `@/shared/api` 를 로드 시점에 끌어오는데, 프리뷰 스모크 지뢰 목(`devPreviewReleaseGate.test.tsx`)이 그
  * 모듈 로드를 throw 로 터뜨린다. 뷰만 이 순수 파일에 두면 프리뷰가 픽스처+noop 으로 안전히 태운다.
  *
  * chrome 은 설정 문맥으로 재구성(온보딩 chrome 제외): 진행 dots·스킵·스텝 CTA·1/2 분할 없이 →
@@ -137,7 +137,13 @@ export function PreferencesEditView({
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
       <View testID="settings-pref-root" className="flex-1 bg-canvas">
         <View className="flex-row items-center gap-sm px-lg pb-sm pt-2xl">
-          <Pressable accessibilityRole="button" onPress={onBack} hitSlop={8}>
+          <Pressable
+            testID="settings-pref-back"
+            accessibilityRole="button"
+            accessibilityLabel="뒤로"
+            onPress={onBack}
+            hitSlop={8}
+          >
             <ChevronLeftGlyph />
           </Pressable>
           <Text className="font-noto-bold text-section font-bold text-ink">

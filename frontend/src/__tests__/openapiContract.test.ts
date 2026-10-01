@@ -300,7 +300,7 @@ describe('BR-U1-10 · BR-U1-15 · /stays/search 파라미터 이름 잠금 — �
     //
     // TRIP-202에서 lat·lng·radiusKm 3개가 붙었다('내 주변' 좌표 스코프 · US-STAY-01 · BR-U1-11).
     // 이 셋은 BR-U1-10/15와 충돌하지 않는다 — 날짜·인원이 아니고 정렬을 바꾸지도 않는다
-    // (금지 목록 FORBIDDEN_PARAM_NAMES는 staySearchGenerated 쪽에서 그대로 잠근다).
+    // (생성물 쪽 금지 목록 가드 staySearchGenerated 는 TRIP-1145 로 지웠다 — 이 완전일치가 남은 그물).
     expect(paramNames).toEqual([
       'region',
       'amenity',

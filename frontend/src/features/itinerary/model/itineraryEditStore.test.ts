@@ -40,6 +40,7 @@ function slot(poiId: string, over: Partial<Slot> = {}): Slot {
     isFixed: false,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     tags: [],
     ...over,
   };

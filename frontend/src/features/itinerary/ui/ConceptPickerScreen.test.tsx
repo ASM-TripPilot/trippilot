@@ -24,7 +24,7 @@ function renderScreen(overrides: Record<string, unknown> = {}) {
   render(
     <ConceptPickerScreen
       concepts={CONCEPTS}
-      slotContextLabel="오후 슬롯 · △△ 미술관 다음"
+      slotContextLabel="오후 일정 · △△ 미술관 다음"
       onPickConcept={onPickConcept}
       onSkip={onSkip}
       onBack={jest.fn()}

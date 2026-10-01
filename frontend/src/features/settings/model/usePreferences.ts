@@ -19,7 +19,8 @@ import {
 export interface UsePreferencesResult {
   view: ReturnType<typeof useGetMePreferences>['data'];
   isLoading: boolean;
-  save: (input: PreferenceInput) => void;
+  /** `onSaved` 는 PUT 성공 뒤에만 불린다(화면이 토스트·뒤로 가기를 건다). */
+  save: (input: PreferenceInput, onSaved?: () => void) => void;
   saveError: boolean;
 }
 
@@ -39,7 +40,8 @@ export function usePreferences(): UsePreferencesResult {
   return {
     view: query.data,
     isLoading: query.isPending,
-    save: (input) => mutation.mutate({ data: input }),
+    save: (input, onSaved) =>
+      mutation.mutate({ data: input }, { onSuccess: onSaved }),
     saveError: mutation.isError,
   };
 }

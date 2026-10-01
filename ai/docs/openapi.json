@@ -701,6 +701,13 @@
             ],
             "title": "Recommendation Strength"
           },
+          "rejections": {
+            "items": {
+              "$ref": "#/components/schemas/RejectionSchema"
+            },
+            "title": "Rejections",
+            "type": "array"
+          },
           "request_meta": {
             "$ref": "#/components/schemas/RequestMetaSchema"
           },
@@ -1084,6 +1091,37 @@
         "title": "ReflectionNudgeResponse",
         "type": "object"
       },
+      "RejectionSchema": {
+        "additionalProperties": false,
+        "description": "거절 이력 한 줄 (TRIP-964) — 백엔드가 여행 단위로 누적해 싣는다.\n\n**크기는 오지 않는다.** `kind` 만 받고 강등 폭은 AI 설정(`OrchestratorConfig`)이\n갖는다 — 비율 조정에 백엔드 재배포가 필요 없고, 두 서비스가 같은 숫자를 각자\n갖지 않게 한다(팀 결정 2026-09-26).\n\n`count` 는 **같은 곳을 또 거절했는가**다. 집합만 받으면 \"처음\"과 \"세 번째\"가\n구분되지 않아 반복 강등이 불가능하다.",
+        "properties": {
+          "count": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "SWAPPED_OUT",
+              "REGENERATED"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "poi_id": {
+            "minLength": 1,
+            "title": "Poi Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "poi_id",
+          "kind"
+        ],
+        "title": "RejectionSchema",
+        "type": "object"
+      },
       "ReminderCopyItemSchema": {
         "additionalProperties": false,
         "description": "예약 1건 = 문구 1건. schedule_key 는 백엔드 예약 행 식별자(불투명 문자열).\n\n**slots 는 순서가 있다** — 조립(assembly)이 검증한 방문 순서 그대로 담아야 한다\n(INV-2). 프롬프트가 이 순서를 그대로 나열해 문구에 실리므로, 정렬 없이(예: DB\n조회에 ORDER BY 누락) 채우면 조립이 확인한 적 없는 순서 주장이 사용자에게 노출된다.",
@@ -1318,7 +1356,7 @@
       },
       "ReplanRequest": {
         "additionalProperties": false,
-        "description": "POST /ai/v1/itinerary/replan — 하루를 다시 짠다 (i04 → i06).\n\n`generate` 와 **다른 것**: RAG(KB-3)를 탄다 · 재계획 의도를 받는다 ·\n원 일정을 컨텍스트이자 후보로 받는다.\n**같은 것**: 산출이 `ItineraryPayload` 다 — 백엔드 소비 코드가 그대로 돈다.",
+        "description": "POST /ai/v1/planb/replan — 하루를 다시 짠다 (i04 → i06). (구 itinerary 경로는 TRIP-960 ④ 에서 삭제)\n\n`generate` 와 **다른 것**: RAG(KB-3)를 탄다 · 재계획 의도를 받는다 ·\n원 일정을 컨텍스트이자 후보로 받는다.\n**같은 것**: 산출이 `ItineraryPayload` 다 — 백엔드 소비 코드가 그대로 돈다.",
         "properties": {
           "anchor": {
             "$ref": "#/components/schemas/CoordSchema"
@@ -1376,6 +1414,13 @@
               "type": "string"
             },
             "title": "Reasons",
+            "type": "array"
+          },
+          "rejections": {
+            "items": {
+              "$ref": "#/components/schemas/RejectionSchema"
+            },
+            "title": "Rejections",
             "type": "array"
           },
           "request_meta": {
@@ -1535,9 +1580,16 @@
         "description": "원 일정 슬롯 1개 — KB-1 컨텍스트이자 후보 풀 합류 대상.\n\n`VisitSlotDisplaySchema` 를 재사용하지 않는다: 그것은 **AI 산출물의 사영**이고\n이쪽은 **백엔드가 주는 입력**이다. 모양이 닮아도 방향이 반대라, 한쪽을 고치면\n다른 쪽이 끌려가는 결합을 만들지 않는다. `placement_reason` 은 산출물 쪽엔 없다.",
         "properties": {
           "end_at": {
-            "format": "time",
-            "title": "End At",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End At"
           },
           "ends_next_day": {
             "default": false,
@@ -1566,15 +1618,20 @@
             "type": "string"
           },
           "start_at": {
-            "format": "time",
-            "title": "Start At",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start At"
           }
         },
         "required": [
-          "poi_id",
-          "start_at",
-          "end_at"
+          "poi_id"
         ],
         "title": "ReplanSlotSchema",
         "type": "object"
@@ -2140,9 +2197,16 @@
             "title": "Distance Range"
           },
           "end_at": {
-            "format": "time",
-            "title": "End At",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End At"
           },
           "ends_next_day": {
             "default": false,
@@ -2159,15 +2223,20 @@
             "type": "string"
           },
           "start_at": {
-            "format": "time",
-            "title": "Start At",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start At"
           }
         },
         "required": [
-          "poi_id",
-          "start_at",
-          "end_at"
+          "poi_id"
         ],
         "title": "VisitSlotDisplaySchema",
         "type": "object"
@@ -2201,48 +2270,6 @@
           }
         },
         "summary": "Root"
-      }
-    },
-    "/ai/v1/itinerary/alternatives": {
-      "post": {
-        "description": "Plan-B 대안 제안 (TRIP-428) — KB 검색 + closed-set 교차 + LLM 선택(폴백: 규칙 랭킹).\n\n응답에 시각·순서·소요시간 없음(INV-2·3) — 선택된 대안의 배치 확정은 repair 몫.\n구형 조립(alternatives 미구현 오케스트레이터)은 503으로 명시 실패한다(INV-4).",
-        "operationId": "alternatives_ai_v1_itinerary_alternatives_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AlternativesRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AlternativesResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Alternatives",
-        "tags": [
-          "itinerary"
-        ]
       }
     },
     "/ai/v1/itinerary/edit": {
@@ -2413,48 +2440,6 @@
         ]
       }
     },
-    "/ai/v1/itinerary/replan": {
-      "post": {
-        "description": "하루 재계획 (i04 → i06) — `generate` 재사용을 그만둔 자리.\n\n정본: `backend/docs/design/ai-backend-replan-연동-설계.md`. `generate` 와 다른 것은\n셋이다 — RAG(KB-3)를 탄다 · 재계획 의도(사유·지시·자유입력)를 받는다 · 원 일정을\n컨텍스트이자 후보로 받는다. 산출은 `ItineraryPayload` 라 백엔드 소비 코드가 그대로 돈다.\n\n**조립이 아직 이 경계를 구현하지 않으면 503 으로 명시 실패한다**(INV-4 — 침묵 금지).\n하루 전체를 다시 짜려면 선호 점수 단계가 필요한데 그것은 ScheduleAgent 소유이고,\n오케스트레이터가 `REPLAN` 정보 요구표로 그 경로를 여는 작업이 따로 진행 중이다.\n빈 일정을 `empty_reason` 으로 위장해 200 을 내보내지 않는다 — \"후보가 없다\"와\n\"아직 배선이 없다\"는 다른 사실이고, 섞으면 백엔드가 폴백 여부를 잘못 판정한다.",
-        "operationId": "replan_ai_v1_itinerary_replan_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ReplanRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReplanResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Replan",
-        "tags": [
-          "itinerary"
-        ]
-      }
-    },
     "/ai/v1/itinerary/validate": {
       "post": {
         "description": "편집 재검증(HC1~4). 위반은 정상 응답 200 — 변경 차단 판단은 백엔드 몫이다.\n\n`unverified_slots`는 위반이 **아니다** — POI 정본을 못 찾아 HC1·HC2를 아예 못\n본 슬롯이다(TRIP-537). 위반 0 + 이 목록 비어 있음 = 진짜 통과.",
@@ -2536,6 +2521,90 @@
         "summary": "Notification Copies",
         "tags": [
           "notification"
+        ]
+      }
+    },
+    "/ai/v1/planb/alternatives": {
+      "post": {
+        "description": "Plan-B 대안 제안 (TRIP-428) — KB 검색 + closed-set 교차 + LLM 선택(폴백: 규칙 랭킹).\n\n응답에 시각·순서·소요시간 없음(INV-2·3) — 선택된 대안의 배치 확정은 repair 몫.\n구형 조립(alternatives 미구현 오케스트레이터)은 503으로 명시 실패한다(INV-4).",
+        "operationId": "planb_alternatives_ai_v1_planb_alternatives_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlternativesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlternativesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Planb Alternatives",
+        "tags": [
+          "planb"
+        ]
+      }
+    },
+    "/ai/v1/planb/replan": {
+      "post": {
+        "description": "하루 재계획 (i04 → i06) — `generate` 재사용을 그만둔 자리.\n\n정본: `backend/docs/design/ai-backend-replan-연동-설계.md`. `generate` 와 다른 것은\n셋이다 — RAG(KB-3)를 탄다 · 재계획 의도(사유·지시·자유입력)를 받는다 · 원 일정을\n컨텍스트이자 후보로 받는다. 산출은 `ItineraryPayload` 라 백엔드 소비 코드가 그대로 돈다.\n\n**조립이 아직 이 경계를 구현하지 않으면 503 으로 명시 실패한다**(INV-4 — 침묵 금지).\n하루 전체를 다시 짜려면 선호 점수 단계가 필요한데 그것은 ScheduleAgent 소유이고,\n오케스트레이터가 `REPLAN` 정보 요구표로 그 경로를 여는 작업이 따로 진행 중이다.\n빈 일정을 `empty_reason` 으로 위장해 200 을 내보내지 않는다 — \"후보가 없다\"와\n\"아직 배선이 없다\"는 다른 사실이고, 섞으면 백엔드가 폴백 여부를 잘못 판정한다.",
+        "operationId": "planb_replan_ai_v1_planb_replan_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplanResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Planb Replan",
+        "tags": [
+          "planb"
         ]
       }
     },

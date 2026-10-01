@@ -12,6 +12,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
 import { MapView } from '@/shared/map';
 import { PlaceSubtitle } from '@/entities/place/ui/PlaceSubtitle';
+import { normalizeOpeningHours } from '@/entities/itinerary-slot/lib/normalizeOpeningHours';
 import type { Place } from '@/shared/api/generated/schemas';
 
 import type { PlaceSaveNotice } from '../model/placeSaveGuard';
@@ -243,7 +244,7 @@ export function PlaceDetailScreen({
                   testID="explore-place-openhours"
                   className="font-noto text-label text-ink"
                 >
-                  {place.openingHours}
+                  {normalizeOpeningHours(place.openingHours)}
                 </Text>
               ) : (
                 <Text

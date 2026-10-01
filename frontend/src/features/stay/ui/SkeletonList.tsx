@@ -8,6 +8,8 @@
 import type { ReactElement } from 'react';
 import { Text, View } from 'react-native';
 
+import { Skeleton } from '@/shared/ui/Skeleton';
+
 // 카드 틀 소프트 그림자(Figma 0 2 10 rgba(0,0,0,0.06)) — className 으로 못 줘 style prop 으로
 // 옮긴다. shadowColor '#000000' 은 토큰화 대상 밖이라 raw-hex 가드(V1) 사정거리 밖(카드
 // cardShadow·searchShadow·fabShadow 선례). searchShadow(radius 8)와 달리 Figma 실측 radius 10.
@@ -26,11 +28,11 @@ function SkeletonCard({ index }: { index: number }): ReactElement {
       style={softCardShadow}
       className="w-full gap-sm rounded-card border border-hairline bg-canvas p-md"
     >
-      <View className="h-[178px] w-full rounded-card bg-surface-strong" />
+      <Skeleton className="h-[178px] w-full rounded-card bg-surface-strong" />
       <View className="gap-xs">
-        <View className="h-[14px] w-2/3 rounded-[6px] bg-hairline" />
-        <View className="h-[12px] w-1/2 rounded-[6px] bg-surface-strong" />
-        <View className="h-[16px] w-1/3 rounded-[6px] bg-surface-strong" />
+        <Skeleton className="h-[14px] w-2/3 rounded-[6px] bg-hairline" />
+        <Skeleton className="h-[12px] w-1/2 rounded-[6px] bg-surface-strong" />
+        <Skeleton className="h-[16px] w-1/3 rounded-[6px] bg-surface-strong" />
       </View>
     </View>
   );

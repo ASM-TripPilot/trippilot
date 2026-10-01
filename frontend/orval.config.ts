@@ -13,6 +13,7 @@ import { defineConfig } from 'orval';
 // 마이/설정/위치동의(밴드 l)·회고(j05) 화면의 계약 원본. push-tokens는 tags: [notifications]
 // 복수형이라 notification(단수)·notifications(복수) 둘 다 넣는다(낡은 tags로 돌린 codegen은
 // 에러 없이 성공하고 해당 태그 클라이언트만 조용히 안 생겨 뒤 칸이 계약을 이탈한다).
+// TRIP-1007: replan 추가 — GET /replan-sessions/{id}/diff 가 이 태그의 유일한 오퍼레이션이다(i06 초안 행).
 export default defineConfig({
   trippilot: {
     input: {
@@ -31,6 +32,7 @@ export default defineConfig({
           'notification',
           'notifications',
           'reflection',
+          'replan',
         ],
       },
     },

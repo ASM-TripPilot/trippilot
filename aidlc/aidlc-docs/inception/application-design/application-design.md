@@ -17,7 +17,7 @@
 ## 2. AI / 솔버 계약 (핵심) ★
 > 상세: `components.md §3`, `component-methods.md §1~3`, `component-dependency.md §3`.
 
-**불변식**: INV-1 closed-set(RAG) · INV-2 검증 시각만 노출 · INV-3 거리만(소요시간 미표시) · INV-4 결정론적 폴백.
+**불변식**: INV-1 closed-set(RAG) · INV-2 검증 시각만 노출 · INV-3 거리만(소요시간 **숫자** 미표시 — 정성 문구는 허용, TRIP-1030 개정 2026-09-27) · INV-4 결정론적 폴백.
 
 **포트 5종**:
 1. `SolverPort` — 일정 지능 엔진(generate/recalculate/validate/proposeSlotCandidates). **Phase 1 `DeterministicSolverAdapter` → 향후 `BedrockAgentSolverAdapter`**(어댑터 교체만).

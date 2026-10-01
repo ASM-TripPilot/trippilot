@@ -1,5 +1,6 @@
 import React from 'react';
-import { FlatList, View } from 'react-native';
+import { FlatList, TextInput, View } from 'react-native';
+import type { TextInputProps } from 'react-native';
 
 // @gorhom/bottom-sheet 수동 목(jest 규약: <rootDir>/__mocks__/<module>).
 // 실제 시트는 reanimated/gesture-handler 네이티브 런타임에 의존하므로 테스트에서는
@@ -51,6 +52,15 @@ export const BottomSheetScrollView = Passthrough;
 // onEndReached 를 전부 RN FlatList 로 렌더/노출한다(무한 스크롤 실동작은 6-b 기기 몫). 추가 export
 // 라 기존 목 소비 테스트는 무영향(회귀 0).
 export const BottomSheetFlatList = FlatList;
+// TRIP-984 — 시트 안 입력칸(실제는 포커스 시 시트에 키보드 target 을 알려 시트를 밀어 올린다). 키보드
+// 이동은 jest 사각(6-b)이라 RN TextInput 으로 그리되, `TextInput` 을 그대로 재수출하지 않고 **별 타입**
+// 으로 감싼다 — 그래야 `UNSAFE_getByType(BottomSheetTextInput)` 이 플레인 TextInput 과 구분된다(플레인
+// 으로 되돌리는 회귀를 잡는 유일한 표식). ref 는 그대로 넘겨 `focus()` 가 산다. 추가 export 라 기존 소비
+// 테스트는 무영향.
+export const BottomSheetTextInput = React.forwardRef<TextInput, TextInputProps>(
+  (props, ref) => <TextInput ref={ref} {...props} />
+);
+BottomSheetTextInput.displayName = 'MockBottomSheetTextInput';
 export const useBottomSheetModal = () => ({
   dismiss: () => {},
   dismissAll: () => {},

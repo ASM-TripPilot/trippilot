@@ -36,8 +36,8 @@ jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
  *    활성만 selected(코랄 pill 은 fill 아니라 `accessibilityState.selected` 로 잠금), 라벨 한글 N일차.
  *  - 🔴 AC-3(TRIP-935 로 뒤집힘 → 숨김): 기분 3택 단일선택 — 초기 무선택 → press 한 항목만 selected(fill 아닌 selected 로 잠금),
  *    다른 항목 press 시 이전 선택 해제(단일). 저장 콜백 없음(mood prop·콜백 부재로 구조적 차단).
- *  - 🔴 AC-4(거동): distanceDash 면 이동값 "—"(거리만, INV-3 — 소요시간 문자열 0). 값 22·구분선 제거는
- *    소스 가드(`reflectionDailyStructure.test.ts`)가 맡는다.
+ *  - 🔴 AC-4(거동): distanceDash 면 이동값 "—"(거리만, INV-3 — 소요시간 문자열 0). 값 22·구분선 제거를
+ *    맡던 소스 가드(`reflectionDailyStructure`)는 TRIP-1145 로 지웠다.
  *  - 🔴 AC-5(TRIP-935 로 좌표 없음 가지 뒤집힘 → 박스 없음): 좌표 없으면 `reflection-daily-map-notice`(실화면 늘 이 가지, 가짜 기본센터 금지) ·
  *    좌표 있으면 MapView(`map-root`) viewOnly(둘은 상호배타).
  *  - 🔴 AC-7: 서술 **카드**(헤드 "오늘의 기록" + "수정" 링크 + 본문) · "수정" press → 편집 진입

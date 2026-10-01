@@ -1,14 +1,16 @@
 import * as AppleAuthentication from 'expo-apple-authentication';
+import { Pressable, Text } from 'react-native';
 
 import type { AuthorizeResult } from '../model/useSocialLogin';
+import { AppleLogoGlyph } from '../ui/AuthGlyphs';
 
 /**
  * 애플 네이티브 로그인 어댑터(TRIP-932). 이 파일만 애플 SDK를 **정적** import한다 —
  * makeAuthorize.ts·LoginPage가 `await import`로 지연 로드해서만 닿는다(nativeSdkLazyBoundary
  * 경계, 카카오·네이버 어댑터와 같은 격리).
  *
- * 공식 버튼(AppleSignInButton)도 여기 둔다. 화면이 SDK 컴포넌트를 직접 import하면 경계가
- * 깨지므로, 컨테이너가 이 모듈을 늦게 불러와 버튼 컴포넌트를 화면에 prop으로 넘긴다.
+ * 애플 버튼(AppleSignInButton)도 여기 둔다. 컨테이너가 이 모듈을 늦게 불러와 버튼 컴포넌트를
+ * 화면에 prop으로 넘기므로, 가용성 판정(isAvailableAsync)이 참일 때만 버튼이 존재한다.
  */
 
 /**
@@ -46,20 +48,24 @@ export async function appleAuthorize(): Promise<AuthorizeResult> {
 export const isAppleSignInAvailable = AppleAuthentication.isAvailableAsync;
 
 /**
- * 공식 애플 버튼 — 로고·현지화 제목("Apple로 계속하기")을 시스템이 그린다(HIG · 심사 4.8).
- * 이웃 소셜 버튼(흰 배경 + 테두리)과 맞춰 WHITE_OUTLINE, 높이 52·반경 12도 같게 둔다.
- * 네이티브 뷰라 NativeWind className이 안 먹으므로 크기는 style로만 준다.
+ * 애플 버튼 — HIG 커스텀 버튼(TRIP-1124). 이웃 소셜 버튼과 같은 표면(흰 배경·ink 테두리·높이 52·
+ * 반경 12)에 로고 24 + "Apple로 계속하기"를 그린다. HIG는 버튼 안 로고·제목을 검정 또는 흰색만
+ * 허용하므로 제목은 text-ink(#222)가 아니라 text-black이다. testID 는 래퍼(auth-login-apple)가
+ * 화면 쪽에 이미 있어 표면에는 달지 않는다.
  */
 export function AppleSignInButton({ onPress }: { onPress: () => void }) {
   return (
-    <AppleAuthentication.AppleAuthenticationButton
-      buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
-      buttonStyle={
-        AppleAuthentication.AppleAuthenticationButtonStyle.WHITE_OUTLINE
-      }
-      cornerRadius={12}
-      style={{ width: '100%', height: 52 }}
+    <Pressable
       onPress={onPress}
-    />
+      className="h-[52px] w-full flex-row items-center justify-center gap-[10px] rounded-button border border-ink bg-canvas"
+    >
+      <AppleLogoGlyph size={24} testID="auth-login-apple-icon" />
+      <Text
+        testID="auth-login-apple-label"
+        className="font-noto-bold text-hero font-bold text-black"
+      >
+        Apple로 계속하기
+      </Text>
+    </Pressable>
   );
 }

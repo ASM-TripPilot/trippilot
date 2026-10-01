@@ -30,6 +30,7 @@ env 스위치 (TRIP-344):
 (docker-compose 헬스체크 의존).
 """
 
+import json
 import logging
 import pathlib
 import os
@@ -209,6 +210,66 @@ def _place_existence():
         max_calls=int(_env("EXISTENCE_MAX_CALLS") or "60"),
         monotonic_ms=lambda: int(time.monotonic() * 1000),
     )
+
+
+def _place_hours():
+    """`GOOGLE_MAPS_API_KEY` 설정 시 영업시간 보강 어댑터 조립. 미설정 = 미배선.
+
+    **돈이 나간다.** `regularOpeningHours` 는 Place Details Enterprise 티어다
+    ($20/1,000 · 월 1,000 무료). 팀 결정은 "무료 한도 안에서만"이라 상한이 기본값에
+    박혀 있다 — 켜는 것만으로 과금되지 않게.
+
+    ⚠️ **프로세스가 재시작하면 월 카운터는 0 이 된다.** 이 상한은 실수 방지용이고
+    과금 방어의 정본은 **GCP 콘솔 할당량**이다. 배포 전에 콘솔에서 Places API 일/월
+    상한을 걸어야 한다.
+
+    `place_ids` 표가 비면 물을 대상이 0 이라 어댑터가 있어도 조용히 안 돈다 —
+    둘 다 있어야 켜진다(`ScheduleAgent._enrich_hours`).
+    """
+    key = _env("GOOGLE_MAPS_API_KEY")
+    if key is None:
+        return None
+    import time
+
+    from trippilot.background.naver_search import UrllibHttpClient
+    from trippilot.poi_curation.adapters.google_places_hours import (
+        GooglePlacesHoursAdapter,
+    )
+
+    class _Http:
+        """헤더 규약이 달라 카카오 클라이언트를 그대로 못 쓴다(그쪽은 Authorization)."""
+
+        def __init__(self) -> None:
+            self._inner = UrllibHttpClient(timeout_sec=1.0)
+
+        def get_json(self, url, headers):
+            return self._inner.get_json(url, headers, {})
+
+    return GooglePlacesHoursAdapter(
+        _Http(), key,
+        # 생성 1회당 상한 — 보강 대상 상위 N(기본 20)보다 조금 넉넉히
+        max_calls=int(_env("HOURS_MAX_CALLS") or "25"),
+        # 월 누적 — 무료 한도(1,000)보다 낮게 둔다. `_env` 를 거치는 이유는 TRIP-882:
+        # compose 가 통로를 열어 둔 변수는 빈 문자열로 오고 `int("")` 가 기동을 막는다.
+        monthly_budget=int(_env("HOURS_MONTHLY_BUDGET") or "900"),
+        monotonic_ms=lambda: int(time.monotonic() * 1000),
+    )
+
+
+def _place_ids() -> dict[str, str]:
+    """`data/place_ids.json` → `{content_id: place_id}`. 없으면 빈 표(= 기능 꺼짐).
+
+    `place_id` 는 Google 약관의 **유일한 저장 예외**라 리포에 둘 수 있다.
+    """
+    path = pathlib.Path(_env("PLACE_IDS_PATH") or "data/place_ids.json")
+    if not path.exists():
+        return {}
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}   # 깨진 표 때문에 기동이 막히면 안 된다 — 없는 것과 같게 본다
+    ids = doc.get("place_ids")
+    return ids if isinstance(ids, dict) else {}
 
 
 def _backend_poi_db():
@@ -393,6 +454,24 @@ def _mixed_llm_and_model() -> tuple[object, str]:
 
 
 _LOCAL_PREFIX = "local"
+# 호출자가 예산을 안 줬을 때의 상한. 게이트웨이 기본 타임아웃(`C1Config.timeout_sec`, 10초)과
+# 같은 값이다 — 소켓을 그보다 길게 열어 두면 게이트웨이가 포기한 뒤에도 벤더를 기다린다.
+_BEDROCK_FALLBACK_TIMEOUT_SEC = 10.0
+
+
+def _bedrock_client_kwargs(timeout_sec: float | None) -> dict:
+    """botocore `Config` 인자 — **재시도 0 + 예산을 소켓 타임아웃으로.**
+
+    순수 함수로 떼어 둔 이유는 boto3·botocore 가 프로젝트 의존성이 아니라서다(Bedrock 을
+    켜는 환경만 설치). 이 규칙이 테스트 없이 남으면 다시 기본 재시도로 돌아간다 —
+    2026-09-29 실서비스 504 의 원인이 그 기본값이었다.
+    """
+    budget = timeout_sec or _BEDROCK_FALLBACK_TIMEOUT_SEC
+    return {
+        "retries": {"max_attempts": 1, "mode": "standard"},
+        "read_timeout": budget,
+        "connect_timeout": min(3.0, budget),
+    }
 
 
 def _local_route(feature_models: Mapping[LlmFeature, str]) -> dict[str, object]:
@@ -438,11 +517,31 @@ def _local_route(feature_models: Mapping[LlmFeature, str]) -> dict[str, object]:
 
         from trippilot.llm_gateway.adapters.bedrock_adapter import BedrockAdapter
 
-        client = boto3.client(
-            "bedrock-runtime",
-            region_name=_env("TRIPPILOT_BEDROCK_REGION") or "us-east-1",
-        )
-        return {_LOCAL_PREFIX: BedrockAdapter(client, model_arn)}
+        from botocore.config import Config
+
+        region = _env("TRIPPILOT_BEDROCK_REGION") or "us-east-1"
+
+        def _bedrock_client(timeout_sec: float | None):
+            """항목당 예산을 **클라이언트 설정으로** 내린다 — botocore 는 호출 인자로 못 받는다.
+
+            ## 재시도를 끈다 (2026-09-29 실서비스 504)
+
+            기본 botocore 는 재시도를 4회까지 한다. 유휴 후 첫 호출이 내는
+            `ModelNotReadyException`(콜드스타트)도 재시도 대상이라, 항목 하나가 **11.9초**를
+            쓰고 요청 예산(8초)을 넘겼다. 항목이 둘이라 합이 20초가 되어 백스톱 13초가
+            강등 응답보다 먼저 504 를 냈다 — 강등 경로는 맞게 돌았는데 응답을 만들 시간이
+            없었다. 리포 규약도 **SDK 재시도 0**이다(OpenAI 어댑터 `max_retries=0`).
+
+            콜드스타트는 재시도로 못 줄인다. 폴백 계단이 받아 상수 문구로 강등하는 것이
+            이 경계의 설계다(INV-4) — 그 강등이 **예산 안에서** 일어나야 의미가 있다.
+            """
+            return boto3.client(
+                "bedrock-runtime",
+                region_name=region,
+                config=Config(**_bedrock_client_kwargs(timeout_sec)),
+            )
+
+        return {_LOCAL_PREFIX: BedrockAdapter(_bedrock_client, model_arn)}
 
     base_url = _env("TRIPPILOT_LOCAL_LLM_BASE_URL")
     if not base_url:
@@ -499,12 +598,14 @@ def build_app_from_env() -> FastAPI:
     travel = _tmap_travel()
     events = _event_store()
     existence = _place_existence()
+    hours, place_ids = _place_hours(), _place_ids()
     vector_store, embedding = _vector_rag()
     provider = _env("TRIPPILOT_LLM_PROVIDER")
     if provider is None:
         return build_dev_app(weather=weather, poi_db=poi_db, events=events,
                              vector_store=vector_store, embedding=embedding,
-                             travel_port=travel, existence=existence)
+                             travel_port=travel, existence=existence,
+                             hours=hours, place_ids=place_ids)
     if provider == "openai":
         llm, model_id = _openai_llm_and_model()
     elif provider == "anthropic":
@@ -528,6 +629,7 @@ def build_app_from_env() -> FastAPI:
                          poi_db=poi_db, events=events,
                          vector_store=vector_store, embedding=embedding,
                          travel_port=travel, existence=existence,
+                         hours=hours, place_ids=place_ids,
                          feature_models=feature_models,
                          retry_models=_retry_models_from_env(),
                          directives=_replan_directives())

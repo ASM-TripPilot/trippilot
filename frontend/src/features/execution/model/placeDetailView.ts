@@ -1,3 +1,4 @@
+import { normalizeOpeningHours } from '@/entities/itinerary-slot/lib/normalizeOpeningHours';
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
 
 /**
@@ -41,8 +42,8 @@ export function buildPlaceDetailView(
   const slot = slots.find((candidate) => candidate.poiId === poiId);
   if (slot === undefined) return null;
 
-  const openingHoursMissing =
-    slot.openingHours === null || slot.openingHours === undefined;
+  const rawHours = slot.openingHours;
+  const openingHoursMissing = rawHours === null || rawHours === undefined;
 
   return {
     name: slot.nameKo ?? MISSING,
@@ -53,7 +54,9 @@ export function buildPlaceDetailView(
     photoTotal: null,
     pitchTitle: null,
     pitchBody: null,
-    openingHours: slot.openingHours ?? MISSING,
+    openingHours: openingHoursMissing
+      ? MISSING
+      : normalizeOpeningHours(rawHours),
     openingHoursMissing,
     hoursCaption: slot.openingHoursKnown === false ? '확인 필요' : null,
     address: null,

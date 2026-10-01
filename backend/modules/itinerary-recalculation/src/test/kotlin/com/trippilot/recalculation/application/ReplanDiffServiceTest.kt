@@ -4,6 +4,8 @@ import com.trippilot.itinerarygeneration.api.ItineraryPlanFacade
 import com.trippilot.itinerarygeneration.api.PlannedSlotView
 import com.trippilot.itinerarygeneration.api.ReplanProposal
 import com.trippilot.itinerarygeneration.api.ReplanSlot
+import com.trippilot.placedata.api.PoiSurfaceFacade
+import com.trippilot.placedata.api.PoiSurfaceView
 import com.trippilot.recalculation.adapter.`in`.web.ReplanDiffEntryResponse
 import com.trippilot.recalculation.adapter.`in`.web.ReplanDiffResponse
 import com.trippilot.recalculation.adapter.`in`.web.ReplanDiffSlotResponse
@@ -15,6 +17,12 @@ import com.trippilot.recalculation.domain.ReplanOrigin
 import com.trippilot.recalculation.domain.ReplanScope
 import com.trippilot.recalculation.domain.ReplanSession
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.property.Arb
+import io.kotest.property.arbitrary.boolean
+import io.kotest.property.arbitrary.int
+import io.kotest.property.arbitrary.list
+import io.kotest.property.arbitrary.pair
+import io.kotest.property.checkAll
 import io.mockk.every
 import io.mockk.mockk
 import io.kotest.matchers.collections.shouldBeEmpty
@@ -83,6 +91,23 @@ class ReplanDiffServiceTest : StringSpec({
             every { it.get(any(), any(), any()) } returns session(status, draft)
         }
 
+    /** 표면 대역 — 있는 poiId 만 돌려준다(정본에 없으면 표면 없음). 호출 횟수도 센다(N+1 금지 AC). */
+    class FakeSurfaces(private val known: Map<UUID, PoiSurfaceView> = emptyMap()) : PoiSurfaceFacade {
+        var calls = 0
+        override fun findSurfaces(poiIds: Collection<UUID>): Map<UUID, PoiSurfaceView> {
+            calls++
+            return poiIds.mapNotNull { id -> known[id]?.let { id to it } }.toMap()
+        }
+        override fun findFrozenSurfaces(snapshotIds: Collection<UUID>) =
+            error("초안 표면은 동결 조회 대상이 아니다(TRIP-1060)")
+    }
+
+    fun surface(id: UUID, name: String) = PoiSurfaceView(id, name, 34.64, 126.76, "명소", "SIGHT", null, "https://img/$name.jpg", emptyList())
+
+    /** 표면 대역은 기본 빈 것 — 표면을 보는 스펙만 명시로 넣는다. */
+    fun diffService(sessions: ReplanSessionService, plans: ItineraryPlanFacade, surfaces: PoiSurfaceFacade = FakeSurfaces()) =
+        ReplanDiffService(sessions, plans, surfaces)
+
     fun plansOf(vararg slots: PlannedSlotView) = object : ItineraryPlanFacade {
         override fun findPlanSlots(accountId: UUID, tripId: UUID) = slots.toList()
         // 이 스펙들은 계획 시각만 본다 — 문구 재료(TRIP-883)는 쓰지 않는다.
@@ -92,7 +117,7 @@ class ReplanDiffServiceTest : StringSpec({
 
     "초안이 나오기 전에는 비교가 없다 — 404 가 아니라 ready=false(INV-U4-05)" {
         listOf(ReplanStatus.COLLECTING, ReplanStatus.SOLVING).forEach { status ->
-            val view = ReplanDiffService(sessionsOf(status, null), plansOf()).diff(acc, tripId, UUID.randomUUID())
+            val view = diffService(sessionsOf(status, null), plansOf()).diff(acc, tripId, UUID.randomUUID())
 
             view.ready shouldBe false
             view.date shouldBe null
@@ -109,7 +134,7 @@ class ReplanDiffServiceTest : StringSpec({
         // 살아 있는 비교로 나간다 — APPLIED 는 이미 반영돼 before 와 같아 "바뀐 게 없다"는
         // 거짓 요약이 되고, CANCELED 는 사용자가 버린 안을 다시 들이민다.
         listOf(ReplanStatus.APPLIED, ReplanStatus.CANCELED).forEach { status ->
-            val view = ReplanDiffService(
+            val view = diffService(
                 sessionsOf(status, proposal.toMap()),
                 plansOf(planned(kept, "10:00", "11:00", 0)),
             ).diff(acc, tripId, UUID.randomUUID())
@@ -121,7 +146,7 @@ class ReplanDiffServiceTest : StringSpec({
     }
 
     "DRAFT 라도 초안이 비어 있으면 비교하지 않는다" {
-        val svc = ReplanDiffService(
+        val svc = diffService(
             sessionsOf(ReplanStatus.NO_SOLUTION, null),
             plansOf(planned(kept, "10:00", "11:00", 0)),
         )
@@ -138,7 +163,7 @@ class ReplanDiffServiceTest : StringSpec({
             itineraryId = UUID.randomUUID(), date = day,
             slots = listOf(draftSlot(kept, "10:00", "11:00"), draftSlot(added, "13:00", "14:00")),
         )
-        val svc = ReplanDiffService(
+        val svc = diffService(
             sessionsOf(ReplanStatus.DRAFT, proposal.toMap()),
             plansOf(planned(kept, "10:00", "11:00", 0), planned(dropped, "15:00", "16:00", 1)),
         )
@@ -156,7 +181,7 @@ class ReplanDiffServiceTest : StringSpec({
     "다른 날짜의 계획은 비교에 섞이지 않는다 — 지표가 여행 전체 값이 되면 과장된다" {
         val other = UUID.randomUUID()
         val proposal = ReplanProposal(UUID.randomUUID(), day, listOf(draftSlot(kept, "10:00", "11:00")))
-        val svc = ReplanDiffService(
+        val svc = diffService(
             sessionsOf(ReplanStatus.DRAFT, proposal.toMap()),
             plansOf(
                 planned(kept, "10:00", "11:00", 0),
@@ -173,7 +198,7 @@ class ReplanDiffServiceTest : StringSpec({
 
     "거리를 모르면 총 이동 변화는 null 이다 — 0 으로 채우지 않는다" {
         val proposal = ReplanProposal(UUID.randomUUID(), day, listOf(draftSlot(kept, "10:00", "11:00")))
-        val svc = ReplanDiffService(
+        val svc = diffService(
             sessionsOf(ReplanStatus.DRAFT, proposal.toMap()),
             plansOf(planned(kept, "10:00", "11:00", 0)),
         )
@@ -187,7 +212,7 @@ class ReplanDiffServiceTest : StringSpec({
 
     "거리를 아는 쪽이 생겨도 다른 쪽을 모르면 총합은 여전히 null 이다" {
         val proposal = ReplanProposal(UUID.randomUUID(), day, listOf(draftSlot(kept, "10:00", "11:00")))
-        val svc = ReplanDiffService(sessionsOf(ReplanStatus.DRAFT, proposal.toMap()), plansOf(planned(kept, "10:00", "11:00", 0)))
+        val svc = diffService(sessionsOf(ReplanStatus.DRAFT, proposal.toMap()), plansOf(planned(kept, "10:00", "11:00", 0)))
 
         val view = svc.diff(acc, tripId, UUID.randomUUID())
 
@@ -200,7 +225,7 @@ class ReplanDiffServiceTest : StringSpec({
 
     "원 일정의 고정 여부를 지어내지 않는다 — 계획이 아는 값을 그대로 싣는다" {
         val proposal = ReplanProposal(UUID.randomUUID(), day, listOf(draftSlot(kept, "10:00", "11:00")))
-        val svc = ReplanDiffService(
+        val svc = diffService(
             sessionsOf(ReplanStatus.DRAFT, proposal.toMap()),
             plansOf(planned(kept, "10:00", "11:00", 0, fixed = true)),
         )
@@ -214,7 +239,7 @@ class ReplanDiffServiceTest : StringSpec({
             UUID.randomUUID(), day,
             listOf(draftSlot(kept, "10:00", "19:00")),
         )
-        val svc = ReplanDiffService(
+        val svc = diffService(
             sessionsOf(ReplanStatus.DRAFT, proposal.toMap()),
             // 원 일정은 익일 00:30 에 끝난다 — 진짜로는 5시간 30분 당겨진다.
             plansOf(
@@ -240,7 +265,7 @@ class ReplanDiffServiceTest : StringSpec({
         val proposal = ReplanProposal(
             UUID.randomUUID(), day, listOf(draftSlot(kept, "10:00", "11:00")), totalDistanceKm = 6.9,
         )
-        val svc = ReplanDiffService(
+        val svc = diffService(
             sessionsOf(ReplanStatus.DRAFT, proposal.toMap()),
             plansOf(planned(kept, "10:00", "11:00", 0)),
         )
@@ -251,6 +276,85 @@ class ReplanDiffServiceTest : StringSpec({
         ReplanDiffResponse.from(view).impact!!.totalDistanceKm shouldBe 6.9
         // 원 일정에 미터가 없어 뺄셈이 성립하지 않는다 — 0 으로 채우면 거짓 요약이 된다.
         ReplanDiffResponse.from(view).impact!!.totalDistanceDeltaM shouldBe null
+    }
+
+    // ─── POI 표면(TRIP-1060 · QA #045 — 재계획이 새로 넣은 7곳 전부 "이름 준비 중") ───
+
+    "after 의 새 장소에 표면이 실린다 — 정본에 없는 것은 null, 조회는 한 번(N+1 금지)" {
+        val proposal = ReplanProposal(
+            UUID.randomUUID(), day,
+            slots = listOf(draftSlot(added, "10:00", "11:00"), draftSlot(kept, "13:00", "14:00")),
+        )
+        val surfaces = FakeSurfaces(mapOf(added to surface(added, "가우도 출렁다리"))) // kept 는 정본에서 사라졌다
+        val view = diffService(
+            sessionsOf(ReplanStatus.DRAFT, proposal.toMap()),
+            plansOf(),
+            surfaces,
+        ).diff(acc, tripId, UUID.randomUUID())
+
+        val byKey = view.after.associateBy { it.slotKey }
+        byKey.getValue(slotKey(added)).nameKo shouldBe "가우도 출렁다리"
+        byKey.getValue(slotKey(added)).imageUrl shouldBe "https://img/가우도 출렁다리.jpg"
+        byKey.getValue(slotKey(added)).category shouldBe "명소"
+        byKey.getValue(slotKey(added)).lat shouldBe 34.64
+        byKey.getValue(slotKey(added)).lng shouldBe 126.76
+        // 정본에서 사라진 장소 — 이름을 지어내지 않되 항목은 빠지지 않는다(INV-1 · BR-U4-25)
+        byKey.getValue(slotKey(kept)).nameKo shouldBe null
+        byKey.getValue(slotKey(kept)).imageUrl shouldBe null
+        surfaces.calls shouldBe 1
+    }
+
+    "before 의 표면은 C8 이 준 값 그대로다 — 동결 규칙이 두 응답에서 갈리지 않는다(INV-U1-03)" {
+        val proposal = ReplanProposal(UUID.randomUUID(), day, listOf(draftSlot(kept, "10:00", "11:00")))
+        val frozenNamed = planned(dropped, "15:00", "16:00", 1).copy(
+            nameKo = "동결된 옛 이름", category = "맛집", imageUrl = null, lat = 34.0, lng = 126.0,
+        )
+        val view = diffService(
+            sessionsOf(ReplanStatus.DRAFT, proposal.toMap()),
+            plansOf(frozenNamed),
+        ).diff(acc, tripId, UUID.randomUUID())
+
+        val b = view.before.single()
+        b.nameKo shouldBe "동결된 옛 이름"
+        b.category shouldBe "맛집"
+        b.lat shouldBe 34.0
+    }
+
+    "ready=false 면 표면 조회를 하지 않는다" {
+        val surfaces = FakeSurfaces()
+        diffService(sessionsOf(ReplanStatus.SOLVING, null), plansOf(), surfaces)
+            .diff(acc, tripId, UUID.randomUUID())
+
+        surfaces.calls shouldBe 0
+    }
+
+    /**
+     * 표면 부착은 **장식**이다(TRIP-1060 AC-속성) — 비교의 뼈대(길이·순서·slotKey)를 절대 바꾸지 않고,
+     * 표면이 붙는 항목은 정본에 있는 poiId 항목과 정확히 같다.
+     */
+    "임의 초안·계획에서 표면 부착이 길이·순서·slotKey 를 바꾸지 않고 부착 집합은 정본 집합과 같다" {
+        checkAll(Arb.list(Arb.pair(Arb.int(0..9), Arb.boolean()), 0..12), Arb.list(Arb.int(0..9), 0..8)) { draftPicks, planPicks ->
+            val pois = List(10) { UUID.randomUUID() }
+            val known = draftPicks.filter { it.second }.map { pois[it.first] }.toSet()
+            val slots = draftPicks.mapIndexed { i, (p, _) ->
+                draftSlot(pois[p], "%02d:00".format(9 + (i % 12)), "%02d:30".format(9 + (i % 12)))
+            }
+            val proposal = ReplanProposal(UUID.randomUUID(), day, slots)
+            val plannedSlots = planPicks.mapIndexed { i, p -> planned(pois[p], "%02d:00".format(9 + (i % 12)), "%02d:30".format(9 + (i % 12)), i) }
+
+            val view = diffService(
+                sessionsOf(ReplanStatus.DRAFT, proposal.toMap()),
+                plansOf(*plannedSlots.toTypedArray()),
+                FakeSurfaces(known.associateWith { surface(it, "n-$it") }),
+            ).diff(acc, tripId, UUID.randomUUID())
+
+            // (1) 뼈대 보존 — 길이·순서·slotKey
+            view.after.map { it.slotKey } shouldBe slots.map { slotKey(it.poiId) }
+            view.before.map { it.slotKey } shouldBe plannedSlots.map { it.slotKey }
+            // (2) 부착 집합 = 정본 존재 집합
+            view.after.filter { it.nameKo != null }.map { it.slotKey }.toSet() shouldBe
+                slots.filter { it.poiId in known }.map { slotKey(it.poiId) }.toSet()
+        }
     }
 
     "INV-3 응답 어디에도 소요시간 필드가 없다" {

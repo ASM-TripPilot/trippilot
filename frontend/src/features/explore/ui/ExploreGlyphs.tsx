@@ -44,8 +44,13 @@ export function SuitcaseGlyph({ size = 26, testID }: GlyphProps) {
   );
 }
 
-/** 담은 곳 saved-menu 닫기(X) — 펼친 FAB 위(분홍 원 위 흰 X). Figma a01 3012:1909. */
-export function CloseGlyph({ size = 24, testID }: GlyphProps) {
+/** 담은 곳 saved-menu 닫기(X) — 펼친 FAB 위(분홍 원 위 흰 X). Figma a01 3012:1909.
+ * `tone='primary'`는 d01 지역 칩(연분홍 바탕) 위 분홍 ✕(TRIP-1105, Figma 4767:2957). */
+export function CloseGlyph({
+  size = 24,
+  testID,
+  tone = 'on-primary',
+}: GlyphProps & { tone?: 'on-primary' | 'primary' }) {
   return (
     <Svg
       testID={testID}
@@ -56,7 +61,7 @@ export function CloseGlyph({ size = 24, testID }: GlyphProps) {
     >
       <Path
         d="M6 6l12 12M18 6L6 18"
-        stroke={ON_PRIMARY}
+        stroke={tone === 'primary' ? PRIMARY : ON_PRIMARY}
         strokeWidth={2}
         strokeLinecap="round"
       />
@@ -131,8 +136,13 @@ export function ShareGlyph({ size = 20, testID }: GlyphProps) {
   );
 }
 
-/** 검색 돋보기. */
-export function SearchGlyph({ size = 20, testID }: GlyphProps) {
+/** 검색 돋보기. `tone='on-primary'`는 분홍 버튼 위 흰 돋보기(TRIP-1050, d02 empty CTA). */
+export function SearchGlyph({
+  size = 20,
+  tone = 'muted-soft',
+  testID,
+}: GlyphProps & { tone?: 'muted-soft' | 'on-primary' }) {
+  const stroke = tone === 'on-primary' ? ON_PRIMARY : MUTED_SOFT;
   return (
     <Svg
       testID={testID}
@@ -141,10 +151,10 @@ export function SearchGlyph({ size = 20, testID }: GlyphProps) {
       viewBox="0 0 24 24"
       fill="none"
     >
-      <Circle cx={11} cy={11} r={6.5} stroke={MUTED_SOFT} strokeWidth={1.8} />
+      <Circle cx={11} cy={11} r={6.5} stroke={stroke} strokeWidth={1.8} />
       <Path
         d="M16 16l4.5 4.5"
-        stroke={MUTED_SOFT}
+        stroke={stroke}
         strokeWidth={1.8}
         strokeLinecap="round"
       />

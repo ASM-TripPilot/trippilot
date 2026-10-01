@@ -7,6 +7,7 @@ import com.trippilot.placedata.domain.Poi
 import com.trippilot.placedata.domain.PoiCategory
 import com.trippilot.placedata.domain.PoiCursor
 import com.trippilot.placedata.domain.PoiRepository
+import com.trippilot.placedata.domain.PoiSearchOrder
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.util.Base64
@@ -41,9 +42,13 @@ class PoiQueryService(
 
         // 상한보다 **하나 더** 물어본다 — 그 하나가 오면 뒤가 있다는 뜻이다.
         // 전체 개수를 세는 것보다 싸고, 개수는 어차피 화면이 쓰지 않는다.
-        val fetched = repo.findActive(codes, category, query?.trim().orEmpty(), decode(cursor), size + 1)
+        val q = query?.trim().orEmpty()
+        val fetched = repo.findActive(codes, category, q, decode(cursor), size + 1)
         val items = fetched.take(size)
-        val next = if (fetched.size > size) items.lastOrNull()?.let { encode(PoiCursor(it.nameKo, it.poiId)) } else null
+        // 커서 재료(관련도·정렬키)는 도메인 식으로 만든다 — DB 정렬식과 같아야 이어받기가 산다(PoiSearchOrder KDoc).
+        val next = if (fetched.size > size) {
+            items.lastOrNull()?.let { encode(PoiCursor(PoiSearchOrder.rank(q, it.nameKo), PoiSearchOrder.sortKey(it.nameKo), it.poiId)) }
+        } else null
         return PoiPage(items, next)
     }
 
@@ -85,15 +90,17 @@ class PoiQueryService(
      */
     private fun encode(c: PoiCursor): String =
         Base64.getUrlEncoder().withoutPadding()
-            .encodeToString("${c.nameKo}$SEP${c.poiId}".toByteArray())
+            .encodeToString("${c.rank}$SEP${c.sortKey}$SEP${c.poiId}".toByteArray())
 
     /** 망가진 커서는 **거절한다**. 처음부터로 되돌리면 사용자는 목록이 리셋된 이유를 알 수 없다. */
     private fun decode(cursor: String?): PoiCursor? {
         if (cursor.isNullOrBlank()) return null
         return runCatching {
             val raw = String(Base64.getUrlDecoder().decode(cursor))
-            val at = raw.lastIndexOf(SEP)
-            PoiCursor(raw.substring(0, at), UUID.fromString(raw.substring(at + 1)))
+            val first = raw.indexOf(SEP)
+            val last = raw.lastIndexOf(SEP)
+            require(first in 1 until last)
+            PoiCursor(raw.substring(0, first).toInt(), raw.substring(first + 1, last), UUID.fromString(raw.substring(last + 1)))
         }.getOrElse { throw ValidationFailed(listOf(FieldError("cursor", "커서 형식이 올바르지 않습니다."))) }
     }
 

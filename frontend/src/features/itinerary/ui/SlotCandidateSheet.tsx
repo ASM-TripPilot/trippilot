@@ -3,6 +3,7 @@ import { Pressable, Text, View } from 'react-native';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 
 import { SlotCandidateCard } from '@/entities/place/ui/SlotCandidateCard';
+import { Skeleton } from '@/shared/ui/Skeleton';
 
 import {
   AlertCircleGlyph,
@@ -28,6 +29,10 @@ import {
  *  - 라디오 2단계: 행 press → onSelectRadio(제어 상태만) / 선택 전 CTA 비활성·무발화 / 선택 후 1회 확정.
  *  - 0건: ◇ 아이콘 + 2줄 문구 + CTA "장소 검색"(h13). "장소 검색 ›" 링크도 h13.
  *  - PUT 실패는 인라인 오류(INV-4) — 시트는 안 닫힌다. degraded 전용 표면은 없다(응답 degraded 무표시).
+ *  - 후보 조회 상태(TRIP-1109): 응답 전엔 스켈레톤 3줄(loading), 10초 넘으면 그 안에 안내 줄 +
+ *    [다시 시도](slow), 실패면 0건과 같은 점선 카드에 경고 글리프 + 문구 + 하단 [다시 시도](error).
+ *    0건 얼굴은 응답이 도착해 비었을 때(ready)만 — 조회 실패를 "후보 없음"으로 접지 않는다(INV-4).
+ *    시트는 시간을 모른다 — `fetchState` 는 컨테이너가 정해 정적 prop 으로 내린다(프리뷰가 slow 를 그린다).
  *
  * ★ 바텀시트 목 통과형(repo-traps): scrim 실 딤 전면 커버·시트 실 열림/닫힘·후보 목록 자식의
  *   제스처는 **원리적 jest 사각**이다. 여기 심판은 scrim testID 존재·헤더/행 렌더·라디오 상태·scrim
@@ -42,8 +47,14 @@ const CONFIRM_LABEL = '교체하기';
 const PENDING_LABEL = '바꾸는 중이에요';
 const CURRENT_CHIP = '현재';
 const TITLE_NAME_FALLBACK = '이 장소';
+const SLOW_TEXT = '시간이 걸리고 있어요';
+const RETRY_LABEL = '다시 시도';
 
-/** 시트 한 행의 표시값 — candidates 응답엔 이름·태그가 아직 없어(BE 후속) 옵셔널이다. */
+/** 0건·조회 실패가 같은 시트 안에서 같은 모양이도록 점선 카드 클래스를 한 벌로 둔다(Q1). */
+const DASHED_CARD_CLASS =
+  'w-full items-center gap-sm rounded-card border-[1.5px] border-dashed border-hairline-strong px-lg py-2xl';
+
+/** 시트 한 행의 표시값 — 계약상 이름·태그·사진이 전부 선택 필드라 옵셔널이다. */
 export interface SlotCandidateSheetRow {
   poiId: string;
   /** 없으면 거리 leaf 가 빈 값(픽스처는 항상 채움). */
@@ -52,6 +63,8 @@ export interface SlotCandidateSheetRow {
   nameKo?: string | null;
   /** 미확보면 undefined → 태그줄 생략 · 있으면 첫 태그만 `#`. */
   tags?: string[];
+  /** 없거나 '' 면 회색 사진 자리(TRIP-1024). */
+  imageUrl?: string | null;
 }
 
 export interface SlotCandidateSheetProps {
@@ -75,6 +88,12 @@ export interface SlotCandidateSheetProps {
   onPressPlaceSearch: () => void;
   /** scrim press. */
   onClose: () => void;
+  /** 후보 조회 상태. 생략 = 'ready'(응답 도착) — 기존 호출·0건 얼굴은 그대로다. */
+  fetchState?: 'loading' | 'slow' | 'error' | 'ready';
+  /** fetchState==='error' 일 때 점선 카드에 그대로 보일 문구. */
+  fetchErrorMessage?: string | null;
+  /** [다시 시도] press — slow·error 공통. */
+  onRetryFetch?: () => void;
 }
 
 /** 시각·컨셉·안내를 한 줄 부제로 조립. 컨셉 부재 시 그 세그를 뺀다(정직 degrade · D5). */
@@ -110,9 +129,14 @@ export function SlotCandidateSheet({
   errorMessage,
   onPressPlaceSearch,
   onClose,
+  fetchState = 'ready',
+  fetchErrorMessage,
+  onRetryFetch,
 }: SlotCandidateSheetProps): ReactElement {
-  const isEmpty = candidates.length === 0;
-  const confirmDisabled = selectedPoiId === null || isPending;
+  const isLoading = fetchState === 'loading' || fetchState === 'slow';
+  const isFetchError = fetchState === 'error';
+  const isEmpty = fetchState === 'ready' && candidates.length === 0;
+  const confirmDisabled = selectedPoiId === null || isPending || isLoading;
   const title = `${current.nameKo ?? TITLE_NAME_FALLBACK} 대신`;
   const subtitle = buildSubtitle(startAt, endAt, category);
 
@@ -186,7 +210,7 @@ export function SlotCandidateSheet({
             {/* 0건 — 점선 카드 안 ◇ + 문구 2줄. */}
             <View
               testID="itinerary-candidate-empty"
-              className="w-full items-center gap-sm rounded-card border-[1.5px] border-dashed border-hairline-strong px-lg py-2xl"
+              className={DASHED_CARD_CLASS}
             >
               <DiamondGlyph size={24} testID="itinerary-candidate-empty-icon" />
               <Text className="text-center font-noto-bold text-card-title font-bold text-ink">
@@ -223,6 +247,7 @@ export function SlotCandidateSheet({
               nameKo={current.nameKo}
               tags={current.tags}
               showImage
+              imageUrl={current.imageUrl}
               showRationale={false}
               distanceTone="muted"
               trailing={
@@ -233,6 +258,66 @@ export function SlotCandidateSheet({
                 </View>
               }
             />
+
+            {/* 응답 전 — 후보 행 크기의 정적 스켈레톤 3줄(글자 없음). slow 면 그 위에 안내 줄 + [다시 시도]. */}
+            {isLoading ? (
+              <View
+                testID="itinerary-candidate-loading"
+                className="w-full gap-md"
+                accessibilityLabel="다른 후보를 불러오는 중"
+              >
+                {fetchState === 'slow' ? (
+                  <View
+                    testID="itinerary-candidate-slow"
+                    className="w-full flex-row items-center gap-sm"
+                  >
+                    <Text className="flex-1 font-noto text-label text-muted">
+                      {SLOW_TEXT}
+                    </Text>
+                    <Pressable
+                      testID="itinerary-candidate-fetch-retry"
+                      accessibilityRole="button"
+                      onPress={onRetryFetch}
+                      className="py-sm"
+                    >
+                      <Text className="font-noto-bold text-label font-bold text-primary-text">
+                        {RETRY_LABEL}
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+                {[0, 1, 2].map((row) => (
+                  <View
+                    key={row}
+                    testID="itinerary-candidate-skeleton-row"
+                    className="w-full flex-row items-center gap-md rounded-card border border-hairline bg-canvas p-md"
+                  >
+                    <Skeleton className="h-[56px] w-[56px] rounded-thumb bg-surface-soft" />
+                    <View className="flex-1 gap-xs">
+                      <Skeleton className="h-[14px] w-1/2 rounded-pill bg-surface-soft" />
+                      <Skeleton className="h-[14px] w-1/3 rounded-pill bg-surface-soft" />
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
+            {/* 조회 실패 — 0건과 같은 점선 카드에 경고 글리프 + 받은 문구 그대로(INV-4). */}
+            {isFetchError ? (
+              <View
+                testID="itinerary-candidate-fetch-error"
+                className={DASHED_CARD_CLASS}
+              >
+                <AlertCircleGlyph
+                  size={24}
+                  tone="primaryText"
+                  testID="itinerary-candidate-fetch-error-icon"
+                />
+                <Text className="text-center font-noto-bold text-card-title font-bold text-ink">
+                  {fetchErrorMessage}
+                </Text>
+              </View>
+            ) : null}
 
             {/* 후보 행(라디오 2단계) — 행 press 는 controlled 선택만, PUT 안 나감. */}
             {candidates.map((candidate) => {
@@ -255,6 +340,7 @@ export function SlotCandidateSheet({
                     nameKo={candidate.nameKo}
                     tags={candidate.tags}
                     showImage
+                    imageUrl={candidate.imageUrl}
                     showNameTestId
                     showRationale={false}
                     distanceTone="muted"
@@ -286,24 +372,38 @@ export function SlotCandidateSheet({
               <ChevronRightGlyph size={16} />
             </Pressable>
 
-            {/* CTA "교체하기"(고정 라벨) — 선택 전/pending 비활성. pending 라벨은 "바꾸는 중이에요". */}
-            <Pressable
-              testID="itinerary-candidate-confirm"
-              accessibilityRole="button"
-              disabled={confirmDisabled}
-              onPress={onConfirm}
-              className={`h-[52px] w-full items-center justify-center rounded-button ${
-                confirmDisabled ? 'bg-surface-strong' : 'bg-primary'
-              }`}
-            >
-              <Text
-                className={`font-noto-bold text-[16px] font-bold ${
-                  confirmDisabled ? 'text-muted' : 'text-on-primary'
+            {/* 조회 실패면 교체하기 자리를 [다시 시도]가 대신한다(0건에서 [장소 검색]이 대신하는 것과 같다).
+                아니면 CTA "교체하기"(고정 라벨) — 선택 전/pending/조회 중 비활성. pending 라벨은 "바꾸는 중이에요". */}
+            {isFetchError ? (
+              <Pressable
+                testID="itinerary-candidate-fetch-retry"
+                accessibilityRole="button"
+                onPress={onRetryFetch}
+                className="h-[52px] w-full items-center justify-center rounded-button bg-primary"
+              >
+                <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
+                  {RETRY_LABEL}
+                </Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                testID="itinerary-candidate-confirm"
+                accessibilityRole="button"
+                disabled={confirmDisabled}
+                onPress={onConfirm}
+                className={`h-[52px] w-full items-center justify-center rounded-button ${
+                  confirmDisabled ? 'bg-surface-strong' : 'bg-primary'
                 }`}
               >
-                {isPending ? PENDING_LABEL : CONFIRM_LABEL}
-              </Text>
-            </Pressable>
+                <Text
+                  className={`font-noto-bold text-[16px] font-bold ${
+                    confirmDisabled ? 'text-muted' : 'text-on-primary'
+                  }`}
+                >
+                  {isPending ? PENDING_LABEL : CONFIRM_LABEL}
+                </Text>
+              </Pressable>
+            )}
           </>
         )}
       </BottomSheetView>

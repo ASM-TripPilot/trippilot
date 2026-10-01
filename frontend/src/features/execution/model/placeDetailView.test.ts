@@ -30,6 +30,7 @@ const slot = (
   isFixed: false,
   endsNextDay: false,
   hasViolation: false,
+  alternatives: [],
   nameKo: '광안리 해수욕장',
   lat: 35.15,
   lng: 129.11,
@@ -147,6 +148,27 @@ describe('buildPlaceDetailView — 슬롯 POI → 표시용 뷰', () => {
     expect(withPhoto?.pitchBody).toBeNull();
     expect(withPhoto?.address).toBeNull();
     expect(withPhoto?.admissionFee).toBeNull();
+  });
+});
+
+describe('TRIP-988 A-1 · 영업시간 `<br>` → 줄바꿈 (i05/i10 · BR-U3-09)', () => {
+  it('V-10 슬롯 원문의 태그는 뷰에서 줄바꿈이 된다 — 화면은 뷰 값을 그대로 그린다', () => {
+    // 준비 — QA 재현 원문(#066 계열)을 가진 슬롯.
+    const slots = [
+      slot({
+        poiId: 'p1',
+        openingHours: '월요일~토요일 12:00~22:30<br>- 일요일 12:00~21:30',
+      }),
+    ];
+
+    // 실행
+    const view = buildPlaceDetailView(slots, 'p1');
+
+    // 단언 — 표시용 뷰가 이미 두 줄이다(정규화 자리는 model).
+    expect(view?.openingHours).toBe(
+      '월요일~토요일 12:00~22:30\n- 일요일 12:00~21:30'
+    );
+    expect(view?.openingHoursMissing).toBe(false);
   });
 });
 

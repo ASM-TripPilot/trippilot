@@ -20,8 +20,8 @@ import {
  *  - AC-5(화면 절반) ＋ press → `onPressCreateTrip` 콜백(라우팅은 라우트 몫)
  *  - AC-6 여행자 일정 레인 제거
  *
- * 무엇을 보장하나: 화면은 props-only 순수 컴포넌트다(`placeExploreStructure` 재귀 스캔이
- * 훅·라우터·`@/features/stay` 를 0건 강제). 그래서 목 없이
+ * 무엇을 보장하나: 화면은 props-only 순수 컴포넌트다(그것을 강제하던 `placeExploreStructure`
+ * 재귀 스캔은 TRIP-1145 로 지웠다). 그래서 목 없이
  * `render(<ExploreLandingScreen {...props} />)` 로 표면을 직접 잰다(cardPress·placePhoto 선례).
  * 라우터 실배선(`/trips/new/step1`)·검색바 그림자·FAB 픽셀 위치는 이 층 사정거리 밖이다
  * (각각 `tabsExploreRoute.test.tsx` 라우트 테스트 · 6-b 육안).
@@ -178,5 +178,84 @@ describe('AC-6 · 여행자 일정 레인 제거', () => {
     expect(screen.queryByTestId('explore-lane-itin')).toBeNull();
     expect(screen.queryByText('여행자 일정')).toBeNull();
     expect(screen.queryByText(/준비\s*중/)).toBeNull();
+  });
+});
+
+// TRIP-1019 #024(결정 1) — 닫힌 하트 토글의 음성 라벨이 세는 것은 **담은 장소 수**뿐이다
+// (`savedCount` = 라우트의 `savedPoiIds.length`, 저장 숙소는 안 센다). 그래서 "담은 곳 N곳" 은
+// 숙소만 저장한 사용자에게 "0곳" 이라는 거짓을 말한다 — 라벨을 "담은 장소 N곳" 으로 좁힌다.
+// 라벨은 음성(접근성) 전용이라 Figma 로 판정할 것이 없다(브리프 §5).
+// ★ `toHaveAccessibleName(문자열)` 은 **완전일치**다(RNTL 13.3.3 `matches.js` exact 기본 true,
+//   node_modules 실검증) — "담은 장소 2곳 더보기" 같은 군더더기도 red.
+describe('🔴 TRIP-1019 #024 · 닫힌 하트 토글 라벨 "담은 장소 N곳"', () => {
+  function renderWithSavedMenu(open: boolean, savedCount: number) {
+    render(
+      <ExploreLandingScreen
+        {...baseProps({
+          savedMenu: {
+            open,
+            savedCount,
+            onToggle: () => {},
+            onPressSavedPlaces: () => {},
+            onPressSavedStays: () => {},
+          },
+        })}
+      />
+    );
+  }
+
+  it('담은 장소 2개면 토글의 접근성 이름이 "담은 장소 2곳" 이고, "담은 곳 N곳" 라벨은 어디에도 없다', () => {
+    renderWithSavedMenu(false, 2);
+
+    const toggle = screen.getByTestId('explore-saved-menu-toggle');
+    expect(toggle).toHaveAccessibleName('담은 장소 2곳');
+    // 긍정 앵커는 바로 위 토글 — 옛 문구가 다른 요소로 새지 않았는지 화면 전체를 본다.
+    expect(screen.queryAllByLabelText(/담은 곳 \d+곳/)).toHaveLength(0);
+  });
+
+  it('담은 장소 0개(숙소만 저장한 사용자 포함)면 "담은 장소 0곳" 이다 — "담은 곳 0곳" 이 아니다', () => {
+    renderWithSavedMenu(false, 0);
+
+    const toggle = screen.getByTestId('explore-saved-menu-toggle');
+    expect(toggle).toHaveAccessibleName('담은 장소 0곳');
+    expect(screen.queryAllByLabelText('담은 곳 0곳')).toHaveLength(0);
+  });
+
+  it('열린 상태 라벨 "담은 곳 메뉴 닫기" 와 미니 FAB "담은 장소 N곳" 은 그대로다 (01b Q5 유지)', () => {
+    renderWithSavedMenu(true, 2);
+
+    // 열린 메뉴는 장소·숙소를 둘 다 담으므로 "담은 곳" 이 맞다(Q5) — 바꾸지 않는다.
+    expect(
+      screen.getByTestId('explore-saved-menu-toggle')
+    ).toHaveAccessibleName('담은 곳 메뉴 닫기');
+    expect(screen.getByTestId('explore-saved-places-fab')).toHaveAccessibleName(
+      '담은 장소 2곳'
+    );
+    expect(screen.getByTestId('explore-saved-stays-fab')).toHaveAccessibleName(
+      '저장한 숙소'
+    );
+  });
+});
+
+// TRIP-1103 AC-1 — FAB 묶음 루트 View 에는 testID 가 없다. FAB 에서 조상으로 올라가 처음 만나는
+// `absolute` 노드가 묶음 루트다(02a ★1) — 두 FAB 이 같은 노드에 닿는지로 "묶음" 임을 짝 확인한다.
+function fabBundleRoot(fabTestId: string) {
+  let node = screen.getByTestId(fabTestId).parent;
+  while (node) {
+    if (classTokens(node).includes('absolute')) return node;
+    node = node.parent;
+  }
+  throw new Error(`${fabTestId} 위에 absolute 조상이 없다`);
+}
+
+describe('TRIP-1103 AC-1 · d01 FAB 묶음 바닥 오프셋 84 (Figma d01 fabCollapsed 바닥 84)', () => {
+  it('♥·＋ FAB 묶음 루트가 bottom-[84px] 이고 bottom-[100px] 은 없다', () => {
+    render(<ExploreLandingScreen {...baseProps()} />);
+
+    const root = fabBundleRoot('explore-create-trip-fab');
+    // 앵커 — 하트 토글도 같은 묶음 루트에 닿는다(엉뚱한 absolute 노드가 아니다).
+    expect(fabBundleRoot('explore-saved-menu-toggle')).toBe(root);
+    expect(classTokens(root)).toContain('bottom-[84px]');
+    expect(classTokens(root)).not.toContain('bottom-[100px]');
   });
 });

@@ -1676,7 +1676,7 @@ export const usePostTripsTripIdItinerary = <
   );
 };
 /**
- * @summary 일정 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 확정·생성 중 일정은 409
+ * @summary 일정 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 여행 시작 전 확정·생성 중 일정은 409
  */
 export const putTripsTripIdItinerary = (
   tripId: string,
@@ -1736,7 +1736,7 @@ export type PutTripsTripIdItineraryMutationBody = EditItineraryRequest;
 export type PutTripsTripIdItineraryMutationError = void;
 
 /**
- * @summary 일정 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 확정·생성 중 일정은 409
+ * @summary 일정 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 여행 시작 전 확정·생성 중 일정은 409
  */
 export const usePutTripsTripIdItinerary = <TError = void, TContext = unknown>(
   options?: {

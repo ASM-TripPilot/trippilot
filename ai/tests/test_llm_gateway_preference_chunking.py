@@ -174,7 +174,7 @@ def _value_ids(result) -> list[str]:
     [(7, 1), (40, 2), (100, 5), (193, 10), (250, 10)],  # 250은 상한 10에 걸린다
 )
 def test_parallelism_policy(pool_size: int, expected_n: int) -> None:
-    chunks = plan_chunks(_pool(pool_size), 20, 10)
+    chunks = plan_chunks(_pool(pool_size), 20, 10, chunk_max=25)
 
     assert len(chunks) == expected_n
 
@@ -186,7 +186,7 @@ def test_chunks_are_balanced_partition_of_pool() -> None:
     """193건·N=10 → 20×3+19×7 (자투리 13짜리 청크 없음 — 최대 청크가 벽시계다)."""
     pool = _pool(193)
 
-    chunks = plan_chunks(pool, 20, 10)
+    chunks = plan_chunks(pool, 20, 10, chunk_max=25)
 
     sizes = sorted(len(c.pois) for c in chunks)
     assert sizes == [19] * 7 + [20] * 3
@@ -194,14 +194,14 @@ def test_chunks_are_balanced_partition_of_pool() -> None:
     ids_concat = [str(p.poi_id) for c in chunks for p in c.pois]
     assert ids_concat == sorted(str(p) for p in pool.poi_ids)  # 서로소 + 전원 포함
     # 상한 초과 풀(250 → N=10)도 균형 유지
-    over = plan_chunks(_pool(250), 20, 10)
+    over = plan_chunks(_pool(250), 20, 10, chunk_max=25)
     assert sorted(len(c.pois) for c in over) == [25] * 10
 
 
 def test_chunks_deterministic_regardless_of_pool_order() -> None:
     """같은 풀 = 항상 같은 청크 구성 — pois 튜플 순서와 무관 (poi_id 정렬 기준)."""
-    a = plan_chunks(_pool(45), 20, 10)
-    b = plan_chunks(_pool(45, reverse=True), 20, 10)
+    a = plan_chunks(_pool(45), 20, 10, chunk_max=25)
+    b = plan_chunks(_pool(45, reverse=True), 20, 10, chunk_max=25)
 
     assert [tuple(str(p.poi_id) for p in c.pois) for c in a] == [
         tuple(str(p.poi_id) for p in c.pois) for c in b

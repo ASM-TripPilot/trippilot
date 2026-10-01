@@ -330,4 +330,73 @@ describe('LiveItineraryPage', () => {
     ).toBeNull();
     expect(screen.queryByTestId(`execution-live-slot-memo-${key}`)).toBeNull();
   });
+
+  it('I9 슬롯 이름을 누르면 /trips/{tripId}/live/place/{poiId} 로 간다 — done·active·upcoming 모두 (TRIP-987 A-3 · US-ONTRIP-02)', async () => {
+    // 준비: 같은 날 세 곳 — p1 완료(done) · p2 도착·미완료(active) · p3 기록 없음(upcoming).
+    const threeSlots = http.get(`${BASE}/trips/:tripId/itinerary`, () => {
+      const base = itinerary();
+      const [p1] = base.days[0].slots;
+      return HttpResponse.json({
+        ...base,
+        days: [
+          {
+            date: TODAY,
+            slots: [
+              p1,
+              {
+                ...p1,
+                poiId: 'p2',
+                nameKo: '광안리 해변',
+                startAt: '12:00:00',
+              },
+              { ...p1, poiId: 'p3', nameKo: '해운대', startAt: '15:00:00' },
+            ],
+          },
+        ],
+      });
+    });
+    const activeVisit: VisitCheck = {
+      ...completedVisit(),
+      visitCheckId: 'v2',
+      poiId: 'p2',
+      slotKey: `${TODAY}#p2`,
+      arrivedAt: '2026-08-20T12:01:00',
+      completedAt: null,
+    };
+    server.use(
+      threeSlots,
+      tripHandler(),
+      visitsHandler([completedVisit(), activeVisit]),
+      http.get(`${BASE}/trips/:tripId/triggers`, () =>
+        HttpResponse.json({ triggers: [] })
+      )
+    );
+
+    await renderActive();
+    // 세 상태가 실제로 섰다 — done 우측 시각 · active [방문 완료] · upcoming 상태줄.
+    await waitFor(() =>
+      expect(
+        screen.getByTestId(`execution-live-slot-visit-time-${TODAY}#p1`)
+      ).toHaveTextContent('10:00')
+    );
+    expect(screen.getByTestId('execution-arrive-complete')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId(`execution-live-slot-time-${TODAY}#p3`)
+    ).toHaveTextContent('15:00 도착 예정');
+
+    // 실행: 세 카드의 이름을 차례로 누른다.
+    for (const poiId of ['p1', 'p2', 'p3']) {
+      fireEvent.press(
+        screen.getByTestId(`execution-live-slot-name-${TODAY}#${poiId}`)
+      );
+    }
+
+    // 단언: 정확히 그 문자열로 세 번, 다른 이동은 없다.
+    expect(mockPush.mock.calls).toEqual([
+      [`/trips/${TRIP_ID}/live/place/p1`],
+      [`/trips/${TRIP_ID}/live/place/p2`],
+      [`/trips/${TRIP_ID}/live/place/p3`],
+    ]);
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
 });

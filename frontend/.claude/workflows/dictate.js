@@ -113,19 +113,19 @@ async function runFigma(it, ws, P) {
   const built = await agent(
 `${auto}
 figma-build 스킬(${S}/figma-build/SKILL.md)의 빌드 단계. 모드: 새 밴드(정본 프레임 수정·삭제 금지). 역할: ${A}/figma-builder.md.${it.followUp ? ' **후속 수정**: ' + ws + '/figma-build.md 의 기존 node를 읽고 그 프레임만 지목 수정한다 — 새 밴드·새 프레임 금지.' : ''}
-먼저 Skill(figma-use)을 로드한다. 킷 ${S}/figma-build/references/design-kit.md. 작업공간(md만) ${ws}, PNG는 ${ws}-png/.
+먼저 Skill(figma:figma-use)을 로드한다. 킷 ${S}/figma-build/references/design-kit.md. 작업공간(md만) ${ws}, PNG는 ${ws}-png/.
 자매 node ${it.siblingNode}. 밴드 좌표: 라이브 top-level 프레임 max(y+height)+600 을 get_metadata로 구해 y로, x 원점 −122, 간격 450. 밴드 제목 "z. dictate ${DATE} · ${it.slug}".
 스펙 5줄: ${it.figmaSpec}
 반환: { newNodeId, questions }. 산출 ${ws}/figma-build.md.`,
     { agentType: 'figma-builder', schema: BUILD, label: `figma-build:${it.slug}`, phase: P })
   const qa = await agent(
-`figma-build 스킬의 QA 단계. 역할: ${A}/figma-qa.md — 먼저 Skill(figma-use)·Skill(frontend-design)을 로드한다.
+`figma-build 스킬의 QA 단계. 역할: ${A}/figma-qa.md — 먼저 Skill(figma:figma-use)·Skill(frontend-design)을 로드한다.
 체크리스트 ${S}/figma-build/references/qa-checklist.md, 킷 ${S}/figma-build/references/design-kit.md, 값 정본 ${FE}/tailwind.config.js.
 대상 ${built.newNodeId} · 자매 ${it.siblingNode} · 모드 새 밴드(자매·정본 프레임 무변경 단언, ${ws}-png/의 before PNG 대조). 산출 ${ws}/figma-qa.md. 반환 { high, slop, canonUnchanged }.`,
     { agentType: 'figma-qa', schema: FQA, label: `figma-qa:${it.slug}`, phase: P })
   let fixed = null
   if (qa.high.length) {
-    fixed = await agent(`${auto}\n재호출 1회: ${ws}/figma-qa.md 의 high 항목만 수정(node ${built.newNodeId}). 역할 ${A}/figma-builder.md, Skill(figma-use) 로드. 반환 { newNodeId, questions }.`,
+    fixed = await agent(`${auto}\n재호출 1회: ${ws}/figma-qa.md 의 high 항목만 수정(node ${built.newNodeId}). 역할 ${A}/figma-builder.md, Skill(figma:figma-use) 로드. 반환 { newNodeId, questions }.`,
       { agentType: 'figma-builder', schema: BUILD, label: `figma-fix:${it.slug}`, phase: P })
   }
   await writeResume(ws, `figma 새 밴드 ${built.newNodeId} · high ${qa.high.length}${fixed ? ' → 재호출 1회' : ''}`, P)

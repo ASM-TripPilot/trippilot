@@ -16,7 +16,7 @@ import { NavRow, PreparingRow, RowBody } from './SettingsRow';
 /**
  * l05 설정 화면(프레젠테이션 · props만) — 받은 그룹을 정본 순서로 그린다. 상호작용 행은 닉네임·
  * 내보내기·로그아웃(TRIP-938)·계정 삭제 + 위치·알림 네비 행(TRIP-618 진입 개통) + 앱 정보 약관 네비 행(TRIP-937)
- * + 취향 7행·개인화 네비 행과 제휴 안내 토글(TRIP-778)이다. switch 에 없는 key 는 "준비 중" 비활성으로
+ * + 취향 한 행(TRIP-1051)·개인화 네비 행과 제휴 안내 토글(TRIP-778)이다. switch 에 없는 key 는 "준비 중" 비활성으로
  * 떨어진다(INV-4 안전망). 삭제는 2단 다이얼로그를 거쳐야 최종 콜백이 나간다(AC-12).
  *
  * 상태는 전부 위(페이지)에서 온다 — 화면은 삭제 다이얼로그의 열림만 로컬로 쥔다(딤·모달 실제 덮임은
@@ -24,17 +24,6 @@ import { NavRow, PreparingRow, RowBody } from './SettingsRow';
  */
 /** 약관 행 rowKey 접두 — 접미가 termsType 이다(`settingsSections` 앱 정보 그룹). */
 const TERMS_ROW_PREFIX = 'terms-';
-
-/** 취향 7행 — 전부 같은 전체 편집 화면으로 간다(축 인자 없음, TRIP-778 브리프 화면·IO). */
-const PREFERENCE_ROW_KEYS = new Set([
-  'style',
-  'budget',
-  'companions',
-  'activities',
-  'transport',
-  'food',
-  'pace',
-]);
 
 export interface SettingsScreenProps {
   groups: SettingsGroupVM[];
@@ -65,7 +54,7 @@ export interface SettingsScreenProps {
   onPressOsmCopyright?: () => void;
   /** 하단 버전 줄에 쓸 앱 버전(TRIP-935). 없으면 줄을 그리지 않는다. preview 무파손 위해 optional. */
   appVersion?: string | null;
-  /** 취향 7행 진입(TRIP-778, 페이지가 /settings/preferences 로 주입). */
+  /** 취향 행 진입(TRIP-778·1051, 페이지가 /settings/preferences 로 주입). */
   onPressPreferences?: () => void;
   /** 개인화 행 진입(TRIP-778, 페이지가 /settings/personalization 으로 주입). */
   onPressPersonalization?: () => void;
@@ -120,18 +109,16 @@ export function SettingsScreen({
         />
       );
     }
-    if (PREFERENCE_ROW_KEYS.has(row.key)) {
-      return (
-        <NavRow
-          rowKey={row.key}
-          label={row.label}
-          value={row.value}
-          chip={row.chip}
-          onPress={onPressPreferences}
-        />
-      );
-    }
     switch (row.key) {
+      case 'preferences':
+        return (
+          <NavRow
+            rowKey="preferences"
+            label={row.label}
+            value={row.value}
+            onPress={onPressPreferences}
+          />
+        );
       case 'location-consent':
         return (
           <NavRow
@@ -159,6 +146,7 @@ export function SettingsScreen({
               right={
                 <Toggle
                   testID="settings-affiliate-toggle"
+                  accessibilityLabel={row.label}
                   checked={affiliateNoticeOn === true}
                   disabled={affiliateNoticeOn == null}
                   onPress={() => onToggleAffiliateNotice?.()}
@@ -261,7 +249,8 @@ export function SettingsScreen({
         <Text className="text-[18px] font-noto-bold text-ink">설정</Text>
       </View>
 
-      <ScrollView>
+      {/* 키보드가 떠 있을 때 닉네임 "저장" 첫 탭이 키보드 닫기에만 먹히지 않게(TRIP-990 D23). */}
+      <ScrollView keyboardShouldPersistTaps="handled">
         <View className="gap-[22px] px-lg pb-3xl pt-lg">
           {groups.map((group) => (
             <SettingsGroup key={group.key} label={group.label}>

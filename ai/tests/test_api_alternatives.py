@@ -1,4 +1,4 @@
-"""TRIP-428 — Plan-B 대안 제안 경계 (`POST /ai/v1/itinerary/alternatives`).
+"""TRIP-428 — Plan-B 대안 제안 경계 (`POST /ai/v1/planb/alternatives`).
 
 증명하는 것 (실 LLM·실 벡터·실 DB 0 — D37):
   ① 기본 조립(build_dev_app: UnwiredLlm·Unwired 벡터) — 데모 시드 앵커 요청이
@@ -51,7 +51,7 @@ def _request_body(**over: object) -> dict:
 
 
 def _post(client: TestClient, **over: object):
-    return client.post("/ai/v1/itinerary/alternatives", json=_request_body(**over))
+    return client.post("/ai/v1/planb/alternatives", json=_request_body(**over))
 
 
 # ── ①~④ 기본 조립 (Unwired 벡터·LLM — 규칙 랭킹 강등 경로) ──────────
@@ -253,7 +253,7 @@ def test_replan_collects_weather_and_carries_observed_rain() -> None:
     app = build_dev_app(weather=weather)
     seen = _rag_spy(app)
     with TestClient(app) as client:
-        res = client.post("/ai/v1/itinerary/alternatives", json=_request_body())
+        res = client.post("/ai/v1/planb/alternatives", json=_request_body())
 
     assert res.status_code == 200
     assert len(weather.calls) == 1                      # 날씨를 실제로 불렀다
@@ -308,7 +308,7 @@ def test_trip_id_enables_persona_collection_and_profile_line() -> None:
     seen = _rag_spy(app)
     with TestClient(app) as client:
         res = client.post(
-            "/ai/v1/itinerary/alternatives",
+            "/ai/v1/planb/alternatives",
             json=_request_body(trip_id="trip-428"),
         )
 
@@ -370,7 +370,7 @@ def test_replan_uses_remaining_hours_not_day_max() -> None:
     body = _request_body()
     body["request_meta"]["requested_at"] = "2026-09-01T14:00:00+09:00"
     with TestClient(app) as client:
-        res = client.post("/ai/v1/itinerary/alternatives", json=body)
+        res = client.post("/ai/v1/planb/alternatives", json=body)
 
     assert res.status_code == 200
     # 일 최댓값(80)이 아니라 남은 시간대 최댓값(10)이 간다
@@ -385,7 +385,7 @@ def test_day_level_port_still_works_unchanged() -> None:
     app = build_dev_app(weather=weather)
     seen = _rag_spy(app)
     with TestClient(app) as client:
-        res = client.post("/ai/v1/itinerary/alternatives", json=_request_body())
+        res = client.post("/ai/v1/planb/alternatives", json=_request_body())
 
     assert res.status_code == 200
     assert seen and seen[0].rain_prob_by_date == {date(2026, 9, 1): 80}

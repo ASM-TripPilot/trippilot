@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { Keyboard } from 'react-native';
 import {
   act,
   fireEvent,
@@ -55,6 +57,14 @@ import { PlaceAddPage } from './PlaceAddPage';
  * TRIP-926 추가 — 지도 중심 폴백(핀 0개면 null-island (0,0) 이 아니라 서울 시청):
  *  - 🔴 **M1** 일정 도착 후 담을 일자가 비었으면(핀 0개) center = 서울 시청.
  *  - 🟢선제 **M2** 핀이 있으면 center = 첫 핀 좌표(무회귀 — 상수로 박아 버리는 구현을 막는 짝).
+ *
+ * TRIP-1009 추가 — 시각 시트 기본값 = 앞 장소 종료 시각부터 1시간(자정 넘김·폴백 규칙):
+ *  - 🔴 **1009-B1·B2·B5** 앞 장소(insertAfter 있으면 그 슬롯, 없으면 마지막) 종료부터 1시간이 PUT 에 실린다.
+ *  - 🟢선제 **1009-B3·B4** 앞 장소 없음·자정 넘겨 끝남이면 10:00–11:00 (무회귀).
+ *
+ * TRIP-1115 추가 — 카드 사이 "+" 가 보고 있는 날(라우트 `date`)에 들어간다(5-b 차단-1):
+ *  - 🔴 **D1·D2** date 가 있으면 그 날 slots 에 splice·헤더 N일차·기본 시각 앞 장소도 그 날.
+ *  - 🟢선제 **D3·D4** date 미전달·일정에 없는 날이면 첫 날(후방호환·폴백).
  *
  * 왜 통합 버킷인가: 최종 직렬화된 URL·나간 PUT 바디·재요청 횟수·캐시 무효화는 msw/스파이만 본다.
  * 3동작 뼈대: 준비=핸들러/래퍼/params → 실행=렌더/입력/칩/add → 단언=나간 URL·PUT 바디·보이는 트리.
@@ -130,6 +140,7 @@ function makeSlot(poiId: string): ItineraryDaysItemSlotsItem {
     isFixed: false,
     endsNextDay: false,
     hasViolation: false,
+    alternatives: [],
     tags: [],
   };
 }
@@ -447,6 +458,123 @@ describe('🔴 A7 · TRIP-798 — 삽입 index 수신 (미전달=말미 append)'
   });
 });
 
+/**
+ * TRIP-1115 5-b 차단-1 — 카드 사이 "+" 는 **보고 있는 날**의 번호다. 그래서 라우트 `date` 가 오면 그 날에
+ * 끼워 넣는다. `date` 가 없거나 일정에 없는 날이면 지금처럼 첫 날(후방호환 — 말미 「장소 추가」는 `date` 를
+ * 안 싣는다). 헤더 "N일차"와 시각 시트 기본값(앞 장소 종료부터 1시간)도 같은 날을 본다.
+ *
+ * 두 날의 슬롯 시각을 일부러 다르게 둔다 — 앞 장소를 첫 날에서 잘못 고르면 기본 시각이 달라져 드러난다.
+ *
+ * 3동작 뼈대: 준비=2일 일정 + 라우트 params(date·insertAfter) → 실행=일정 도착 뒤 p1 추가·그대로 적용 →
+ * 단언=나간 PUT 의 날별 슬롯 순서·p1 시각, 헤더 문구.
+ */
+describe('🔴 D · TRIP-1115 — 라우트 date 가 있으면 그 날에 끼워 넣는다 (없거나 모르는 날이면 첫 날)', () => {
+  const DAY1 = '2026-06-10';
+  const DAY2 = '2026-06-11';
+
+  function timed(
+    poiId: string,
+    startAt: string,
+    endAt: string
+  ): ItineraryDaysItemSlotsItem {
+    return { ...makeSlot(poiId), startAt, endAt };
+  }
+
+  beforeEach(() => {
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        HttpResponse.json({
+          ...ITINERARY_ENVELOPE,
+          days: [
+            {
+              date: DAY1,
+              slots: [
+                timed('sA', '08:00:00', '09:30:00'),
+                timed('sB', '13:00:00', '14:00:00'),
+              ],
+            },
+            {
+              date: DAY2,
+              slots: [
+                timed('tA', '10:00:00', '11:00:00'),
+                timed('tB', '15:00:00', '16:00:00'),
+                timed('tC', '18:00:00', '19:00:00'),
+              ],
+            },
+          ],
+        })
+      )
+    );
+  });
+
+  /** 일정이 도착한 뒤 p1 을 담고 시트를 그대로 적용한다 → 나간 PUT 의 날별 poiId 와 p1 슬롯. */
+  async function addP1AfterItinerary() {
+    const client = makeClient();
+    renderPageWith(client);
+    // 일정 도착 전 "+ 추가"는 조용히 무시된다(W-2) — 캐시 성공 + 한 틱 뒤에 누른다(1009 선례).
+    await waitFor(() =>
+      expect(
+        client.getQueryState(getGetTripsTripIdItineraryQueryKey('t1'))?.status
+      ).toBe('success')
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    await addPlaceAndApply('p1');
+
+    await waitFor(() => expect(putBodies).toHaveLength(1));
+    const idsOf = (date: string) =>
+      putBodies[0].days
+        .find((d) => d.date === date)
+        ?.slots.map((slot) => slot.poiId);
+    const p1 = putBodies[0].days
+      .flatMap((d) => d.slots)
+      .find((slot) => slot.poiId === 'p1');
+    return { day1: idsOf(DAY1), day2: idsOf(DAY2), p1 };
+  }
+
+  it('🔴 D1 · date=2일차·insertAfter=1 → 2일차 [tA, tB, p1, tC] · 1일차 불변 · p1 은 tB 종료(16:00)부터 1시간', async () => {
+    mockParams = { tripId: 't1', date: DAY2, insertAfter: '1' };
+
+    const { day1, day2, p1 } = await addP1AfterItinerary();
+
+    expect(day2).toEqual(['tA', 'tB', 'p1', 'tC']);
+    expect(day1).toEqual(['sA', 'sB']);
+    // 1일차 index 1(sB, 14:00 종료)을 앞 장소로 잘못 고르면 14:00–15:00 이 된다.
+    expect({ startAt: p1?.startAt, endAt: p1?.endAt }).toEqual({
+      startAt: '16:00:00',
+      endAt: '17:00:00',
+    });
+  });
+
+  it('🔴 D2 · date=2일차면 시트 헤더가 "장소 추가 · 2일차"다', async () => {
+    mockParams = { tripId: 't1', date: DAY2 };
+    render(<PlaceAddPage tripId="t1" />, { wrapper: createWrapper() });
+
+    expect(await screen.findByText('장소 추가 · 2일차')).toBeOnTheScreen();
+  });
+
+  it('D3 · date 미전달이면 첫 날에 넣는다 — 1일차 [sA, p1, sB] · 2일차 불변 (후방호환 · 선제 green)', async () => {
+    mockParams = { tripId: 't1', insertAfter: '0' };
+
+    const { day1, day2 } = await addP1AfterItinerary();
+
+    expect(day1).toEqual(['sA', 'p1', 'sB']);
+    expect(day2).toEqual(['tA', 'tB', 'tC']);
+  });
+
+  it('D4 · date 가 일정에 없는 날이면 첫 날에 넣고 헤더도 1일차다 (폴백 · 선제 green)', async () => {
+    mockParams = { tripId: 't1', date: '2026-07-01', insertAfter: '0' };
+
+    const { day1, day2 } = await addP1AfterItinerary();
+
+    expect(day1).toEqual(['sA', 'p1', 'sB']);
+    expect(day2).toEqual(['tA', 'tB', 'tC']);
+    expect(screen.getByText('장소 추가 · 1일차')).toBeOnTheScreen();
+  });
+});
+
 describe('🔴 A2 · TRIP-798 — 칩 6종·순서 + 전시→문화 (라벨≠전송값)', () => {
   it('A2a · 칩이 전체/맛집/명소/카페/전시/야경 6종·이 순서로 렌더된다', async () => {
     await renderPage();
@@ -712,5 +840,537 @@ describe('TRIP-926 · M — 지도 중심 (핀 0개면 서울 시청, 있으면 
         '35.0979,129.0256'
       )
     );
+  });
+});
+
+/**
+ * TRIP-990 · S6 (#051 · D9 · US-SCHED-07) — 장소 추가 검색 입력이 키보드에 가리지 않도록 시트에 알린다.
+ *
+ * 검색 입력을 `BottomSheetTextInput` 으로 바꾸고, 이 화면 시트에 `keyboardBehavior="interactive"` 를
+ * 명시한다(값은 라이브러리 기본값과 같아 동작으로는 못 가르고, 적혀 있는지만 본다). 기존 검색 입력
+ * 테스트(P2 changeText)는 testID 가 그대로라 계속 통과해야 한다. 첫 결과가 키보드 위에 보이는지는 6-b.
+ *
+ * 3동작 뼈대: 준비=페이지 렌더(카드 도착까지) → 실행=해당 요소 찾기 → 단언=타입·prop.
+ */
+describe('🔴 S6 · 장소 추가 검색 키보드 처방 (#051 · D9)', () => {
+  it('검색 입력이 BottomSheetTextInput 이다 (플레인 TextInput 이면 red)', async () => {
+    await renderPage();
+
+    const ids = screen
+      .UNSAFE_getAllByType(BottomSheetTextInput)
+      .map((node) => node.props.testID);
+    expect(ids).toContain('itinerary-place-search');
+  });
+
+  it('시트가 keyboardBehavior="interactive" 를 명시한다', async () => {
+    await renderPage();
+
+    expect(
+      screen.UNSAFE_queryAllByProps({ keyboardBehavior: 'interactive' })
+    ).not.toHaveLength(0);
+  });
+});
+
+/**
+ * TRIP-981 · A (#057 · US-SCHED-10 · INV-4) — '+ 추가'를 한 번 누르면 시각 시트가 뜬다.
+ *
+ * 근본 원인(브리프 후보5): 기본 시각 시트는 딤으로 닫혀도 페이지에 알리지 않아 `pendingPlace` 가 남는다.
+ * 시트는 마운트된 채 닫혀 있고, 이후 어떤 행의 '+ 추가'도 다시 열지 못한다. 테스트용 시트 목은 시트를
+ * 항상 열린 채로 그려 "닫힌 상태"를 못 만들므로, 시트의 `onClose` 를 불러 딤 닫힘을 흉내 내고
+ * "시트가 트리에서 빠졌다 → 다른 행이 새로 연다"를 잰다(실제로 열리는지는 6-b).
+ *
+ * 함께: 검색 중 첫 탭이 키보드 내리기에 먹히지 않게 목록이 탭을 통과시키고(`keyboardShouldPersistTaps`),
+ * 시트가 키보드 밑에 깔리지 않게 '+ 추가'가 키보드를 내린다(`Keyboard.dismiss`).
+ *
+ * 3동작 뼈대: 준비=페이지 렌더(카드 도착) → 실행=add·close·칩 → 단언=시트 유무·PUT 바디·호출 수·prop.
+ */
+describe('TRIP-981 · A — 장소 추가 시트의 "+ 추가" 무반응', () => {
+  const SHEET = 'itinerary-edit-time-sheet';
+  const DURATION_TEXT = /(\d+\s*분|\d+\s*시간|소요)/;
+  let dismiss: jest.SpyInstance;
+
+  beforeEach(() => {
+    // 렌더 전에 건다 — onPress={Keyboard.dismiss} 처럼 참조를 렌더 때 잡는 구현도 스파이가 본다.
+    dismiss = jest.spyOn(Keyboard, 'dismiss').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    // 테스트가 중간에 실패해도 다음 테스트로 스파이가 새지 않게 여기서 푼다.
+    dismiss.mockRestore();
+  });
+
+  /** 화면에 그려진 문자열 전부 — 소요시간 부정 스캔의 모집단. */
+  function renderedTexts(): string[] {
+    const out: string[] = [];
+    screen.root
+      .findAll(() => true)
+      .forEach((node) => {
+        const children = node.props?.children as unknown;
+        const list = Array.isArray(children) ? children : [children];
+        list.forEach((child) => {
+          if (typeof child === 'string') out.push(child);
+        });
+      });
+    return out;
+  }
+
+  it('🔴 A2 · 시각 시트가 딤으로 닫히면 트리에서 빠지고, 다른 행 "+ 추가"가 시트를 새로 열어 그 장소를 담는다', async () => {
+    await renderPage();
+
+    fireEvent.press(screen.getByTestId('itinerary-place-add-p1'));
+    const sheet = await screen.findByTestId(SHEET);
+
+    // 딤 탭 닫힘 대리 — 시트의 onClose 를 부른다(없으면 조용히 아무 일도 안 일어난다).
+    fireEvent(sheet, 'close');
+    await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
+
+    fireEvent.press(screen.getByTestId('itinerary-place-add-p2'));
+    expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
+    fireEvent.press(screen.getByTestId('itinerary-edit-time-apply'));
+
+    await waitFor(() => expect(putBodies.length).toBeGreaterThanOrEqual(1));
+    const day = putBodies[putBodies.length - 1].days.find(
+      (d) => d.date === '2026-06-10'
+    );
+    const poiIds = day?.slots.map((slot) => slot.poiId) ?? [];
+    expect(poiIds).toContain('p2');
+    expect(poiIds).not.toContain('p1');
+  });
+
+  it('🔴 A3 · 검색 입력에 포커스가 있을 때 "+ 추가"를 누르면 키보드 내림을 요청한다 (시트가 키보드 밑에 안 깔리게)', async () => {
+    await renderPage();
+    fireEvent(screen.getByTestId('itinerary-place-search'), 'focus');
+    const before = dismiss.mock.calls.length;
+
+    fireEvent.press(screen.getByTestId('itinerary-place-add-p1'));
+
+    expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
+    expect(dismiss.mock.calls.length).toBeGreaterThan(before);
+  });
+
+  it('🔴 A4 · 후보 목록은 키보드가 떠 있어도 탭을 행에 넘긴다 (keyboardShouldPersistTaps="handled")', async () => {
+    await renderPage();
+
+    expect(
+      screen.getByTestId('itinerary-place-list').props.keyboardShouldPersistTaps
+    ).toBe('handled');
+  });
+
+  it('A5 · 칩을 바꿔 목록이 바뀐 뒤에도 새 행 "+ 추가"가 시트를 연다 (특성화 · 선제 green)', async () => {
+    await renderPage();
+
+    fireEvent.press(screen.getByTestId('itinerary-place-category-맛집'));
+    await waitFor(() =>
+      expect(screen.queryByTestId('itinerary-place-card-p1')).toBeNull()
+    );
+    fireEvent.press(await screen.findByTestId('itinerary-place-add-p5'));
+
+    expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
+  });
+
+  it('X1 · 후보 행과 시각 시트 어디에도 소요시간 표기가 없다 (INV-3 · 선제 green)', async () => {
+    await renderPage();
+    fireEvent.press(screen.getByTestId('itinerary-place-add-p1'));
+    await screen.findByTestId(SHEET);
+
+    const texts = renderedTexts();
+    // 모집단 긍정 짝 — 카드 이름과 시각 셀 숫자가 실제로 스캔 대상에 있다.
+    expect(texts).toContain('감천문화마을');
+    expect(texts).toContain('10');
+    expect(texts.filter((text) => DURATION_TEXT.test(text))).toEqual([]);
+  });
+});
+
+/**
+ * TRIP-981 · B (#041) — 후보 목록을 여행 목적지로 좁힌다(`GET /places?region=<이름>`).
+ *
+ * 목적지는 `GET /trips/{tripId}` 의 `destinations[].region` 이다. 여행 조회가 끝날 때까지 장소 조회를
+ * 미뤄 전국 목록이 먼저 보였다가 바뀌는 깜빡임을 막는다(01b Q2). 목적지가 2곳 이상이면 지역마다 조회해
+ * 합친다(`useMultiRegionPlaces`, 01b Q2·브리프 Q3). 여행 조회가 실패하거나 목적지가 없으면 region 없이
+ * 조회해 목록을 그린다(빈 화면·무한 로딩 금지).
+ *
+ * 칩·검색·무한 스크롤 무회귀(AC-B4)는 위 P1~P4·A2b·E1~E3 가 그대로 맡는다(기본 목적지 = 부산 1곳).
+ *
+ * 3동작 뼈대: 준비=여행 응답(목적지)·장소 핸들러 → 실행=렌더·칩·검색 → 단언=나간 /places 의 region·화면 카드.
+ */
+describe('TRIP-981 · B — 후보를 여행 목적지로 좁힌다 (region)', () => {
+  function tripJson(
+    destinations: { seq: number; region: string; nights: number }[]
+  ) {
+    return {
+      tripId: 't1',
+      title: '부산',
+      startDate: '2026-06-10',
+      endDate: '2026-06-12',
+      party: 2,
+      preferenceSnapshot: {},
+      destinations,
+      status: 'PLANNED',
+      createdAt: '2026-06-01T00:00:00Z',
+      updatedAt: '2026-06-01T00:00:00Z',
+    };
+  }
+
+  const TWO_REGIONS = [
+    { seq: 1, region: '부산', nights: 1 },
+    { seq: 2, region: '경주', nights: 1 },
+  ];
+
+  /** 부산 1곳 + 경주 2곳 — 지역마다 다른 장소가 와야 "합쳐졌다"를 잴 수 있다. */
+  const REGIONAL_PLACES: Place[] = [
+    makePlace('p1', '감천문화마을', '명소', 12),
+    { ...makePlace('g1', '불국사', '명소', 40), region: '경주' },
+    { ...makePlace('g2', '황리단길 카페', '카페', 9), region: '경주' },
+  ];
+
+  /** 서버처럼 region·category·q 로 거르는 장소 핸들러. */
+  function serveRegionalPlaces(): void {
+    server.use(
+      http.get(`${BASE}/places`, ({ request }) => {
+        const url = new URL(request.url);
+        const region = url.searchParams.get('region');
+        const category = url.searchParams.get('category');
+        const q = url.searchParams.get('q');
+        let result = REGIONAL_PLACES;
+        if (region !== null) {
+          result = result.filter((place) => place.region === region);
+        }
+        if (category !== null) {
+          result = result.filter((place) => place.category === category);
+        }
+        if (q) result = result.filter((place) => place.nameKo.includes(q));
+        return HttpResponse.json({ items: result, nextCursor: null });
+      })
+    );
+  }
+
+  function placeHits() {
+    return hitsOf('GET', '/api/v1/places');
+  }
+
+  /** 나간 /places 요청들의 region 값(없으면 null). */
+  function regionsOf(hits: { url: string }[]): (string | null)[] {
+    return hits.map((hit) => new URL(hit.url).searchParams.get('region'));
+  }
+
+  function uniqueSorted(values: (string | null)[]): (string | null)[] {
+    return [...new Set(values)].sort();
+  }
+
+  function tripHits() {
+    return hitsOf('GET', '/api/v1/trips/t1');
+  }
+
+  it('🔴 B1a · 여행 조회가 끝날 때까지 장소를 조회하지 않고, 첫 요청부터 region=부산 이 실린다', async () => {
+    // 준비 — 여행 응답을 손으로 풀 때까지 붙잡는다(목적지 부산).
+    let releaseTrip!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseTrip = resolve;
+    });
+    server.use(
+      http.get(`${BASE}/trips/:tripId`, async () => {
+        await gate;
+        return HttpResponse.json(
+          tripJson([{ seq: 1, region: '부산', nights: 2 }])
+        );
+      })
+    );
+
+    // 실행 — 렌더. 여행 요청이 나갔고(붙잡힘) 일정 요청도 나간 뒤 조금 더 흘린다.
+    render(<PlaceAddPage tripId="t1" />, { wrapper: createWrapper() });
+    await waitFor(() => expect(tripHits().length).toBeGreaterThanOrEqual(1));
+    await waitFor(() =>
+      expect(
+        hitsOf('GET', '/api/v1/trips/t1/itinerary').length
+      ).toBeGreaterThanOrEqual(1)
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    // 단언 ① — 여행을 모르는 동안엔 전국 목록을 부르지 않는다.
+    expect(placeHits()).toHaveLength(0);
+
+    // 실행 — 여행 응답을 푼다.
+    releaseTrip();
+    await waitFor(() =>
+      expect(screen.getByTestId('itinerary-place-card-p1')).toBeOnTheScreen()
+    );
+
+    // 단언 ② — 나간 장소 요청은 전부 region=부산 이다.
+    const regions = regionsOf(placeHits());
+    expect(regions.length).toBeGreaterThanOrEqual(1);
+    expect(regions).toEqual(regions.map(() => '부산'));
+  });
+
+  it('🔴 B1b · 목적지가 부산 1곳이면 나간 장소 요청이 전부 region=부산 이다', async () => {
+    await renderPage();
+
+    expect(tripHits().length).toBeGreaterThanOrEqual(1);
+    const regions = regionsOf(placeHits());
+    expect(regions.length).toBeGreaterThanOrEqual(1);
+    expect(regions).toEqual(regions.map(() => '부산'));
+  });
+
+  it('🔴 B2a · 목적지가 부산·경주 2곳이면 지역마다 조회해 두 지역 장소를 함께 그린다', async () => {
+    server.use(
+      http.get(`${BASE}/trips/:tripId`, () =>
+        HttpResponse.json(tripJson(TWO_REGIONS))
+      )
+    );
+    serveRegionalPlaces();
+
+    render(<PlaceAddPage tripId="t1" />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(screen.getByTestId('itinerary-place-card-g1')).toBeOnTheScreen()
+    );
+
+    const regions = regionsOf(placeHits());
+    expect(regions).not.toContain(null);
+    expect(uniqueSorted(regions)).toEqual(['경주', '부산']);
+    expect(screen.getByTestId('itinerary-place-card-p1')).toBeOnTheScreen();
+    expect(screen.getByTestId('itinerary-place-card-g2')).toBeOnTheScreen();
+  });
+
+  it('🔴 B2b · 다지역에서도 칩(category)·검색어(q)가 두 지역 요청 모두에 실린다', async () => {
+    server.use(
+      http.get(`${BASE}/trips/:tripId`, () =>
+        HttpResponse.json(tripJson(TWO_REGIONS))
+      )
+    );
+    serveRegionalPlaces();
+    render(<PlaceAddPage tripId="t1" />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(screen.getByTestId('itinerary-place-card-g1')).toBeOnTheScreen()
+    );
+
+    // 실행 ① — 카페 칩. 칩 뒤에 나간 요청만 본다.
+    const beforeChip = placeHits().length;
+    fireEvent.press(screen.getByTestId('itinerary-place-category-카페'));
+    await waitFor(() =>
+      expect(screen.queryByTestId('itinerary-place-card-p1')).toBeNull()
+    );
+    const chipHits = placeHits()
+      .slice(beforeChip)
+      .filter(
+        (hit) => new URL(hit.url).searchParams.get('category') === '카페'
+      );
+    expect(uniqueSorted(regionsOf(chipHits))).toEqual(['경주', '부산']);
+
+    // 실행 ② — 검색어 '황리'. 검색 뒤에 나간 요청만 본다.
+    const beforeSearch = placeHits().length;
+    fireEvent.changeText(screen.getByTestId('itinerary-place-search'), '황리');
+    await waitFor(() =>
+      expect(screen.queryByTestId('itinerary-place-card-g1')).toBeNull()
+    );
+    const searchHits = placeHits()
+      .slice(beforeSearch)
+      .filter((hit) => new URL(hit.url).searchParams.get('q') === '황리');
+    expect(uniqueSorted(regionsOf(searchHits))).toEqual(['경주', '부산']);
+    expect(screen.getByTestId('itinerary-place-card-g2')).toBeOnTheScreen();
+  });
+
+  it('🔴 B2c · 다지역 조회가 성공했는데 0건이면 "검색 결과가 없어요"가 뜬다 (INV-4)', async () => {
+    server.use(
+      http.get(`${BASE}/trips/:tripId`, () =>
+        HttpResponse.json(tripJson(TWO_REGIONS))
+      ),
+      http.get(`${BASE}/places`, () =>
+        HttpResponse.json({ items: [], nextCursor: null })
+      )
+    );
+
+    render(<PlaceAddPage tripId="t1" />, { wrapper: createWrapper() });
+
+    expect(
+      await screen.findByTestId('itinerary-place-empty')
+    ).toHaveTextContent('검색 결과가 없어요');
+    // 앵커 — 지역별 조회가 실제로 나갔다(단일 경로의 0건 안내와 구분).
+    expect(uniqueSorted(regionsOf(placeHits()))).toEqual(['경주', '부산']);
+  });
+
+  it('🔴 B3a · 여행 조회가 실패하면 region 없이 조회해 목록을 그린다 (폴백)', async () => {
+    server.use(
+      http.get(
+        `${BASE}/trips/:tripId`,
+        () => new HttpResponse(null, { status: 500 })
+      )
+    );
+
+    render(<PlaceAddPage tripId="t1" />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(screen.getByTestId('itinerary-place-card-p1')).toBeOnTheScreen()
+    );
+
+    // 앵커 — 여행을 읽으려 했다(원래 안 읽던 코드가 그대로 통과하지 않게).
+    expect(tripHits().length).toBeGreaterThanOrEqual(1);
+    const regions = regionsOf(placeHits());
+    expect(regions.length).toBeGreaterThanOrEqual(1);
+    expect(regions).toEqual(regions.map(() => null));
+  });
+
+  it('🔴 B3b · 목적지가 0곳이면 region 없이 조회해 목록을 그린다 (폴백)', async () => {
+    server.use(
+      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(tripJson([])))
+    );
+
+    render(<PlaceAddPage tripId="t1" />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(screen.getByTestId('itinerary-place-card-p1')).toBeOnTheScreen()
+    );
+
+    expect(tripHits().length).toBeGreaterThanOrEqual(1);
+    const regions = regionsOf(placeHits());
+    expect(regions.length).toBeGreaterThanOrEqual(1);
+    expect(regions).toEqual(regions.map(() => null));
+  });
+});
+
+/**
+ * TRIP-1009 · B (#080) — 새 장소 시각 시트의 기본값 = 앞 장소가 끝나는 시각(간격 0, 길이 1시간).
+ *
+ * 앞 장소는 `insertAfter` 가 있으면 그 index 슬롯, 없으면 담을 일자(`days[0]`)의 마지막 슬롯이다.
+ * 앞 장소가 없거나 자정을 넘겨 끝나면 옛 기본값 10:00–11:00 이다(01b Q2-a). 23시 이후 시작이면 종료가
+ * 자정을 넘기고, 그 `endsNextDay` 는 시트가 유도한다(01b Q2-b). 이 페이지는 직접 짜기·일정 편집·AI 추천안
+ * 장소 검색 세 입구가 같이 쓰므로 여기 한 곳이 세 입구를 덮는다.
+ *
+ * 기본값은 시트 셀이 아니라 **셀을 건드리지 않고 [적용]했을 때 나간 PUT 의 새 슬롯**으로 잰다.
+ * 한 테스트에 추가는 한 번 — 연속 추가는 재조회 경합이라 앞 장소를 픽스처에 미리 심는다.
+ *
+ * 3동작 뼈대: 준비=일정 GET 의 days[0].slots(+insertAfter) → 실행=일정 도착 뒤 p1 추가·그대로 적용 →
+ * 단언=PUT 의 p1 슬롯 startAt·endAt·endsNextDay.
+ */
+describe('TRIP-1009 · B — 새 장소 기본 시각은 앞 장소가 끝나는 시각부터 1시간', () => {
+  function timedSlot(
+    poiId: string,
+    startAt: string,
+    endAt: string,
+    endsNextDay = false
+  ): ItineraryDaysItemSlotsItem {
+    return { ...makeSlot(poiId), startAt, endAt, endsNextDay };
+  }
+
+  function serveDay(slots: ItineraryDaysItemSlotsItem[]): void {
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        HttpResponse.json({
+          ...ITINERARY_ENVELOPE,
+          days: [{ date: '2026-06-10', slots }],
+        })
+      )
+    );
+  }
+
+  /** 일정이 도착한 뒤 p1 을 담고 시트를 그대로 적용한다 → 나간 PUT 의 그 날 슬롯들과 p1 슬롯. */
+  async function addP1WithDefaultTime() {
+    const client = makeClient();
+    renderPageWith(client);
+    // 일정 도착 전 "+ 추가"는 조용히 무시된다(W-2) — 캐시 성공 + 한 틱 뒤에 누른다(M1 선례).
+    await waitFor(() =>
+      expect(
+        client.getQueryState(getGetTripsTripIdItineraryQueryKey('t1'))?.status
+      ).toBe('success')
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    await addPlaceAndApply('p1');
+
+    await waitFor(() => expect(putBodies).toHaveLength(1));
+    const day = putBodies[0].days.find((d) => d.date === '2026-06-10');
+    const added = day?.slots.find((slot) => slot.poiId === 'p1');
+    return {
+      slots: day?.slots ?? [],
+      time: {
+        startAt: added?.startAt,
+        endAt: added?.endAt,
+        endsNextDay: added?.endsNextDay,
+      },
+    };
+  }
+
+  it('🔴 1009-B1 · 앞 장소가 10:00–11:00 이면 새 장소는 11:00–12:00 이다 (겹치지 않는다)', async () => {
+    serveDay([timedSlot('sA', '10:00:00', '11:00:00')]);
+
+    const { time } = await addP1WithDefaultTime();
+
+    expect(time).toEqual({
+      startAt: '11:00:00',
+      endAt: '12:00:00',
+      endsNextDay: false,
+    });
+  });
+
+  it('🔴 1009-B2 · 카드 사이 + 면 마지막 장소가 아니라 바로 앞 장소(index 0, 09:30 종료)를 기준으로 삼는다', async () => {
+    mockParams = { tripId: 't1', insertAfter: '0' };
+    serveDay([
+      timedSlot('sA', '08:00:00', '09:30:00'),
+      timedSlot('sB', '13:00:00', '14:00:00'),
+    ]);
+
+    const { slots, time } = await addP1WithDefaultTime();
+
+    // 앵커 — 선행 index 0 다음 자리에 들어갔다(기준 슬롯이 sA 인 전제).
+    expect(slots[1]?.poiId).toBe('p1');
+    expect(time).toEqual({
+      startAt: '09:30:00',
+      endAt: '10:30:00',
+      endsNextDay: false,
+    });
+  });
+
+  it('1009-B6 · 말미 추가(insertAfter 없음)는 첫 장소가 아니라 마지막 장소(14:00 종료)를 기준으로 삼는다 (03b 경고-1)', async () => {
+    // 준비 — 슬롯이 2개라야 "첫 번째 = 마지막"이 갈린다(B1·B4·B5 는 1개, B3 은 0개).
+    serveDay([
+      timedSlot('sA', '08:00:00', '09:30:00'),
+      timedSlot('sB', '13:00:00', '14:00:00'),
+    ]);
+
+    const { slots, time } = await addP1WithDefaultTime();
+
+    // 앵커 — 말미에 붙었다.
+    expect(slots[slots.length - 1]?.poiId).toBe('p1');
+    expect(time).toEqual({
+      startAt: '14:00:00',
+      endAt: '15:00:00',
+      endsNextDay: false,
+    });
+  });
+
+  it('1009-B3 · 빈 일자의 첫 장소는 10:00–11:00 이다 (무회귀 · 선제 green)', async () => {
+    serveDay([]);
+
+    const { time } = await addP1WithDefaultTime();
+
+    expect(time).toEqual({
+      startAt: '10:00:00',
+      endAt: '11:00:00',
+      endsNextDay: false,
+    });
+  });
+
+  it('1009-B4 · 앞 장소가 자정을 넘겨(01:00 익일) 끝나면 10:00–11:00 으로 돌아간다 (폴백 · 선제 green)', async () => {
+    serveDay([timedSlot('sA', '23:00:00', '01:00:00', true)]);
+
+    const { time } = await addP1WithDefaultTime();
+
+    expect(time).toEqual({
+      startAt: '10:00:00',
+      endAt: '11:00:00',
+      endsNextDay: false,
+    });
+  });
+
+  it('🔴 1009-B5 · 앞 장소가 23:30 에 끝나면 23:30–00:30 이고 자정 넘김(endsNextDay)으로 저장된다', async () => {
+    serveDay([timedSlot('sA', '22:30:00', '23:30:00')]);
+
+    const { time } = await addP1WithDefaultTime();
+
+    expect(time).toEqual({
+      startAt: '23:30:00',
+      endAt: '00:30:00',
+      endsNextDay: true,
+    });
   });
 });

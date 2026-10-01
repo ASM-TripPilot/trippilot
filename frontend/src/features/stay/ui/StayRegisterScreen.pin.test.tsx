@@ -49,9 +49,6 @@ const IDLE_FLOW: StayRegisterFlow = {
   pinAddressStatus: 'idle',
   coordConfirmed: false,
   mapSheetState: 'closed',
-  checkIn: null,
-  checkOut: null,
-  dateSheetOpen: false,
   submitStatus: 'idle',
 };
 
@@ -90,20 +87,15 @@ function makeHandlers() {
     onOpenMapSheet: jest.fn(),
     onConfirmCoord: jest.fn(),
     onCloseMapSheet: jest.fn(),
-    onOpenDateSheet: jest.fn(),
-    onPickDate: jest.fn(),
-    onCloseDateSheet: jest.fn(),
     onSubmit: jest.fn(),
   };
 }
-
-const TODAY = '2026-06-15';
 
 function renderScreen(
   flow: StayRegisterFlow,
   handlers: Handlers = makeHandlers()
 ): Handlers {
-  render(<StayRegisterScreen flow={flow} today={TODAY} {...handlers} />);
+  render(<StayRegisterScreen flow={flow} {...handlers} />);
   return handlers;
 }
 

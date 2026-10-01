@@ -144,6 +144,23 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
     )
 
 
+def default_feature_max_tokens() -> Mapping[LlmFeature, int]:
+    """기능별 출력 상한 — 여기 없는 기능은 공용 `C1Config.max_tokens`(1024).
+
+    근거 문장 두 기능은 **확정 일정 전 슬롯을 한 번에** 받아 항목마다 한국어를 쓴다.
+    실측(라이브 로그, claude-sonnet-5·gpt-5.6-terra): EXPLANATION 이 매번
+    output_tokens=1024 에서 잘려 `parse_error: JSON 아님: Unterminated string` → 근거 0건.
+    ALTERNATIVE_EXPLANATION 은 슬롯당 차선책 ≤2건 × 1~2문장이라 같은 모양이다.
+    GPT-5 계열은 reasoning 토큰도 이 상한에서 빠진다.
+    """
+    return MappingProxyType(
+        {
+            LlmFeature.EXPLANATION: 4096,
+            LlmFeature.ALTERNATIVE_EXPLANATION: 4096,
+        }
+    )
+
+
 # 매핑에 없는 feature의 안전 기본 — KeyError로 죽지 않되 **그 사실이 이벤트에
 # 드러난다**. 조용히 그럴듯한 값을 찍으면 #4를 다시 만드는 셈이다.
 # enum이 늘면 테스트(전 feature 스윕)가 먼저 깨진다.
@@ -188,7 +205,11 @@ class C1Config:
     # 2.5 는 "폴백을 강제하는 값"이 됐다 — PlanB 가 컨테이너에서 100% 타임아웃했다.
     # 요청 단위 상한은 `TimeoutBackstopMiddleware`(deadline+margin → 504)가 따로 쥔다.
     timeout_sec: float = 10.0
+    # 출력 상한 — 공용 값 + 기능별 지정(`max_tokens_for`). 지정 없는 기능은 공용 값.
     max_tokens: int = 1024
+    feature_max_tokens: Mapping[LlmFeature, int] = field(
+        default_factory=default_feature_max_tokens
+    )
     # PREFERENCE_SCORING 병렬 청킹 (TRIP-378) — 청크 크기는 고정 상수가 아니라
     # 단계 예산에서 유도한다 (TRIP-380 적응형 공식, workers/preference.py
     # adaptive_chunk_size). 종전 score_chunk_size=20 상수는 공식이 대체 — 예산
@@ -221,3 +242,6 @@ class C1Config:
             raise ValueError("score_chunk_max ≥ score_chunk_min이어야 함")
         if self.score_max_parallel <= 0:
             raise ValueError("score_max_parallel은 양수여야 함")
+
+    def max_tokens_for(self, feature: LlmFeature) -> int:
+        return self.feature_max_tokens.get(feature, self.max_tokens)

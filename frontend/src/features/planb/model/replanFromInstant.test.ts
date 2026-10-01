@@ -9,8 +9,8 @@ import { readFromInstant } from './replanFromInstant';
  *  - UTC 로 전날이어도 KST 로 다음 날이면 다음 날이다(서버의 "오늘"도 Asia/Seoul 날짜다).
  *  - 오프셋 표기(`+09:00`)·소수 초·연도 넘김도 같은 순간으로 읽는다 — 문자열을 잘라 +9 하는 구현을 막는다.
  *
- * ⚠️ 이 기계는 KST 라 로컬 시계(`getHours`)로 구현해도 여기선 통과한다. 그 구멍은
- *    `planbSolvingStructure` G7 이 소스에서 막는다(02a ★6).
+ * ⚠️ 이 기계는 KST 라 로컬 시계(`getHours`)로 구현해도 여기선 통과한다. 그 구멍을
+ *    소스에서 막던 `planbSolvingStructure` G7 은 TRIP-1145 로 지웠다(02a ★6).
  */
 
 describe('🔴 readFromInstant — ISO 순간 → 여행지(KST) 날짜·시', () => {

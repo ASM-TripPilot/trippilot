@@ -9,7 +9,7 @@ import {
 } from './summaryView';
 
 /**
- * TRIP-574 · j06 공유 카드 — 순수 조립·온디바이스 검증·정직한 degrade 스텁.
+ * TRIP-574 · j06 공유 카드 — 순수 조립·온디바이스 검증.
  *
  * 무엇을 보장하나(계약):
  *  - AC-1(BR-U5-46): buildShareCard 가 Trip.title·기간·지역·통계·동선을 정확히 조립한다 —
@@ -21,9 +21,8 @@ import {
  *    (571·572 재발 방지 — 상위만 막지 않고 중첩 접근 전 방어). `??` 는 null/undefined 만 대체.
  *  - AC-8(INV-3): VM 어디에도 이동 시간 필드·문자열이 없다(거리만).
  *  - AC-7(§7): validateCaption/validateHashtags 는 순수(온디바이스만) — 상한 초과 시 invalid·트렁케이트.
- *  - INV-4: captureShareImage() = {armed:false} — 네이티브 캡처 미장전을 정직하게 알린다(가짜 성공 금지).
- *    실 캡처·기기 저장·OS 공유는 네이티브 리빌드 동반 후속(view-shot·media-library·sharing·file-system
- *    미설치) — 이 파일은 그 모듈들을 import 조차 안 한다(pickPhotoAsset·geofence degrade 선례 동형).
+ *  - 캡처·저장·공유는 `shareCapture.ts`(TRIP-1071) 몫 — 이 파일은 네이티브 모듈을 import 하지 않는다
+ *    (h16·j04·j06 이 모두 무는 파일이라, 여기 정적 import 한 줄이 재빌드 전 빌드의 부팅 크래시가 된다).
  */
 
 export interface ShareFormat {
@@ -143,13 +142,4 @@ export function validateHashtags(tags: string[]): {
     count: tags.length,
     truncated: tags.slice(0, HASHTAG_MAX_COUNT),
   };
-}
-
-/**
- * ponytail: 온디바이스 캡처 degrade 스텁 — 네이티브 모듈을 안 물고 항상 armed:false 를 돌려준다.
- *   실 캡처(View→PNG)·기기 저장·OS 공유는 네이티브 리빌드(prebuild/run) 동반 후속 티켓 몫
- *   (pickPhotoAsset·registerGeofences 선례 동형).
- */
-export function captureShareImage(): { armed: false } {
-  return { armed: false };
 }

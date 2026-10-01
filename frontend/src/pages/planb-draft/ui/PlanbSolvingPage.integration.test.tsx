@@ -15,7 +15,9 @@ import { PlanbSolvingPage } from './PlanbSolvingPage';
  *  - 짜는 중이면 진행 카드 캡션 `{KST 시}시 이후 다시 짜는 중`, 헤더 `N일차 · M월 D일(요일)` + `방문한 K곳 그대로`,
  *    그날 방문 완료 행(일정 순서)을 그린다. 그날은 fromInstant 의 **KST 날짜**다(Q5).
  *  - [취소] → cancel 1회. **성공한 뒤에만** 뒤로(또는 허브로 replace) 간다.
- *  - ‹ → back 만(세션은 살린다).
+ *  - ‹ → 이탈 확인부터(TRIP-1007 — 나간 뒤 다시 요청하면 이 결과가 버려진다, INV-U4-06). [나가기]여야
+ *    back 만(세션은 살린다, cancel 0), [계속 기다리기]면 아무 데도 안 간다.
+ *  - 범위가 FULL_DAY 면 캡션이 `{H}시 이후` 가 아니라 오늘 전체 문구다(TRIP-1007).
  *  - DRAFT·NO_SOLUTION·FAILED 면 `planb/draft` 로 replace 정확히 1회(push 아님 — 뒤로가기 무한 루프 방지).
  *  - itinerary 쓰기 훅은 0(INV-U4-05).
  *
@@ -34,6 +36,13 @@ const DAY = '2026-06-11';
 
 let mockStatus: string | null = 'SOLVING';
 let mockFromInstant = '2026-06-11T04:00:00Z';
+// TRIP-1007 — 세션 범위. 캐시 키에도 넣는다 — 안 넣으면 FULL_DAY 로 바꿔도 이전 PARTIAL 객체가 나온다(02a ★10).
+let mockScope: 'PARTIAL_SLOTS' | 'FULL_DAY' = 'PARTIAL_SLOTS';
+// TRIP-979 B — 세션 출발 좌표(nullable). 기본은 좌표가 있는 GPS 세션이고, B4 가 null 로 바꾼다.
+let mockOrigin: { lat: number | null; lng: number | null } = {
+  lat: 35.1667,
+  lng: 129.137,
+};
 const mockSessionCache = new Map<string, unknown>();
 
 jest.mock('@/features/planb/model/useReplanSession', () => ({
@@ -41,19 +50,19 @@ jest.mock('@/features/planb/model/useReplanSession', () => ({
     if (mockStatus === null) {
       return { data: undefined, isPending: true, isError: false };
     }
-    const key = `${mockStatus}|${mockFromInstant}`;
+    const key = `${mockStatus}|${mockScope}|${mockFromInstant}|${mockOrigin.lat}|${mockOrigin.lng}`;
     if (!mockSessionCache.has(key)) {
       mockSessionCache.set(key, {
         data: {
           sessionId: 's9',
           tripId: 't1',
           itineraryId: 'it1',
-          scope: 'PARTIAL_SLOTS',
+          scope: mockScope,
           fromInstant: mockFromInstant,
-          originKind: 'GPS',
-          originLat: 35.1667,
-          originLng: 129.137,
-          originEstimated: false,
+          originKind: mockOrigin.lat === null ? 'STAY_ANCHOR' : 'GPS',
+          originLat: mockOrigin.lat,
+          originLng: mockOrigin.lng,
+          originEstimated: mockOrigin.lat === null,
           status: mockStatus,
           createdAt: mockFromInstant,
         },
@@ -239,6 +248,8 @@ beforeEach(() => {
   mockVisitsState = 'ok';
   mockStatus = 'SOLVING';
   mockFromInstant = '2026-06-11T04:00:00Z';
+  mockScope = 'PARTIAL_SLOTS';
+  mockOrigin = { lat: 35.1667, lng: 129.137 };
   mockSessionCache.clear();
   mockVisitsCache.clear();
   mockVisitsByDay = { [DAY]: DAY_VISITS };
@@ -408,17 +419,71 @@ describe('🔴 P4~P6 · AC-6(b)·7 — [취소]는 cancel 1회, 이동은 성공
   });
 });
 
-describe('🔴 P7 · AC-6(c) — ‹ 는 세션을 살린 채 나간다', () => {
-  it('back 1회, cancel 0회, replace 0회', () => {
+// TRIP-1007 — 옛 P7("‹ → back 1회")은 확인 없이 바로 나가는 동작을 굳혀 두었다. 나간 뒤 다시 요청하면 새
+// POST 가 이 세션을 CANCELED 로 닫아 이미 나온 결과가 안내 없이 버려진다(QA #062, INV-U4-06). S1~S3 로 교체했다.
+// "세션은 살린다(cancel 0) · 앞으로 가지 않는다"는 S2 가 이어받는다.
+
+const LEAVE_CONFIRM = 'planb-solving-leave-confirm';
+
+describe('🔴 S1 · TRIP-1007 AC-8 · QA #062 — ‹ 는 바로 나가지 않고 이탈 확인부터 띄운다', () => {
+  it('누르기 전엔 확인이 없고, 누르면 "나가면 결과를 잃을 수 있어요" 확인이 뜨며 back·cancel·이동은 0이다', () => {
     renderPage();
+    // "아직 없다" 앵커 — 처음부터 떠 있는 구현을 가른다(02a ★9).
+    expect(screen.queryByTestId(LEAVE_CONFIRM)).toBeNull();
 
     fireEvent.press(screen.getByTestId('generation-progress-back'));
 
+    expect(screen.getByTestId(LEAVE_CONFIRM)).toBeOnTheScreen();
+    expect(screen.getByText('나가면 결과를 잃을 수 있어요')).toBeOnTheScreen();
+    expect(screen.getByTestId(`${LEAVE_CONFIRM}-stay`)).toHaveTextContent(
+      '계속 기다리기'
+    );
+    expect(screen.getByTestId(`${LEAVE_CONFIRM}-leave`)).toHaveTextContent(
+      '나가기'
+    );
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockCancel).not.toHaveBeenCalled();
+    expect(forwardDestinations()).toEqual([]);
+  });
+});
+
+describe('🔴 S2 · TRIP-1007 AC-8 · INV-U4-06 — [나가기]를 눌러야 나가고, 세션은 살린다', () => {
+  it('back 1회, cancel 0회, 앞으로 가는 이동 0', () => {
+    renderPage();
+    fireEvent.press(screen.getByTestId('generation-progress-back'));
+
+    fireEvent.press(screen.getByTestId(`${LEAVE_CONFIRM}-leave`));
+
     expect(mockBack).toHaveBeenCalledTimes(1);
     expect(mockCancel).not.toHaveBeenCalled();
-    expect(mockReplace).not.toHaveBeenCalled();
-    // 뒤로만 간다 — push·replace·navigate 어디로도 앞으로 가지 않는다(5-b 경고-1).
     expect(forwardDestinations()).toEqual([]);
+  });
+});
+
+describe('🔴 S3 · TRIP-1007 AC-8 — [계속 기다리기]는 확인만 닫는다', () => {
+  it('확인이 사라지고 진행 카드는 그대로, back·cancel·이동 0', () => {
+    renderPage();
+    fireEvent.press(screen.getByTestId('generation-progress-back'));
+
+    fireEvent.press(screen.getByTestId(`${LEAVE_CONFIRM}-stay`));
+
+    expect(screen.queryByTestId(LEAVE_CONFIRM)).toBeNull();
+    expect(screen.getByTestId('generation-progress-card')).toBeOnTheScreen();
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockCancel).not.toHaveBeenCalled();
+    expect(forwardDestinations()).toEqual([]);
+  });
+});
+
+describe('🔴 S4 · TRIP-1007 AC-7 · BR-U4-11 · DEC-U4-3 — FULL_DAY 캡션은 오늘 전체 범위 문구다', () => {
+  it('scope=FULL_DAY 면 칸 2 캡션이 정확히 "오늘 일정 다시 짜는 중"이다(시 이후 문구 아님)', () => {
+    mockScope = 'FULL_DAY';
+    renderPage();
+
+    // 완전 일치 — "13시 이후 다시 짜는 중"이면 여기서 red(PARTIAL 문구는 P1·P2 가 그대로 지킨다).
+    expect(
+      screen.getByTestId('generation-gauge-cell-2-active')
+    ).toHaveTextContent('오늘 일정 다시 짜는 중');
   });
 });
 
@@ -592,5 +657,92 @@ describe('🔴 P16 · 5-b 참고-1 — 지도 핀은 그날 슬롯 전부를 진
       { number: 4, ...P4, state: 'upcoming' },
       { number: 5, ...P5, state: 'upcoming' },
     ]);
+  });
+});
+
+describe('🔴 P17 · TRIP-1079 5-c 경고-1 · AC-6 — 도착 후보가 둘이면 일정 순서가 앞선 곳이 현재 핀이다', () => {
+  it('p3·p4 둘 다 도착·미완료이고 기록 목록이 p4 를 앞에 주어도 현재 핀은 p3, p4 는 예정이다', () => {
+    mockVisitsByDay = {
+      [DAY]: {
+        visits: [
+          visit('p4', { arrivedAt: '2026-06-11T04:30:00Z' }),
+          ...DAY_VISITS.visits,
+        ],
+      } as unknown as VisitCheckList,
+    };
+
+    renderPage();
+
+    expect(screen.getByTestId('map-root').props.pins).toEqual([
+      { number: 1, ...P1, state: 'done' },
+      { number: 2, ...P2, state: 'done' },
+      { number: 3, ...P3, state: 'current' },
+      { number: 4, ...P4, state: 'upcoming' },
+      { number: 5, ...P5, state: 'upcoming' },
+    ]);
+  });
+});
+
+// ── TRIP-979 B · AC-B4 — 세션 좌표가 없으면 지도 중심을 이 여행에서 고른다(부산 상수 제거) ──────────
+
+const SEOUL_SLOT = (
+  poiId: string,
+  nameKo: string,
+  coords: { lat: number; lng: number } | null
+) => slot(poiId, nameKo, '10:00:00', null, coords);
+const NAMSAN = { lat: 37.5512, lng: 126.9882 };
+const GYEONGBOK = { lat: 37.5796, lng: 126.977 };
+
+// 서울 일정 — fromInstant 날(6/11)의 첫 슬롯은 좌표가 없고 그 뒤가 경복궁. 일정 전체 첫 좌표는 남산(6/10).
+const SEOUL_ITINERARY = {
+  ...ITINERARY,
+  days: [
+    { date: '2026-06-10', slots: [SEOUL_SLOT('s0', '남산서울타워', NAMSAN)] },
+    {
+      date: DAY,
+      slots: [
+        SEOUL_SLOT('s1', '좌표 없는 곳', null),
+        SEOUL_SLOT('s2', '경복궁', GYEONGBOK),
+      ],
+    },
+  ],
+} as unknown as Itinerary;
+
+describe('🔴 B4 · AC-B4 · Q5 — 출발 좌표 없는 세션의 지도 중심은 여행에서 유도한다', () => {
+  beforeEach(() => {
+    mockOrigin = { lat: null, lng: null };
+    mockItinerary = { data: SEOUL_ITINERARY, isPending: false };
+    mockVisitsByDay = {};
+  });
+
+  it('fromInstant 날(KST 6/11)의 첫 좌표 슬롯 — 좌표 없는 앞 슬롯은 건너뛴다', () => {
+    renderPage();
+
+    expect(screen.getByTestId('map-root')).toHaveTextContent('37.5796,126.977');
+  });
+
+  it('그날이 일정에 없으면 일정 전체의 첫 좌표 슬롯', () => {
+    mockFromInstant = '2026-06-20T04:00:00Z';
+    renderPage();
+
+    expect(screen.getByTestId('map-root')).toHaveTextContent(
+      '37.5512,126.9882'
+    );
+  });
+
+  it('일정이 아직 안 왔으면 서울시청 상수(부산 아님)', () => {
+    mockItinerary = { data: undefined, isPending: true };
+    renderPage();
+
+    expect(screen.getByTestId('map-root')).toHaveTextContent('37.5665,126.978');
+  });
+
+  it('세션 좌표가 있으면 일정보다 세션 좌표가 먼저다(무회귀)', () => {
+    mockOrigin = { lat: 37.4979, lng: 127.0276 };
+    renderPage();
+
+    expect(screen.getByTestId('map-root')).toHaveTextContent(
+      '37.4979,127.0276'
+    );
   });
 });

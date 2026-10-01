@@ -19,9 +19,10 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react-native';
 import { AxiosError } from 'axios';
-import { Share } from 'react-native';
+import { Keyboard, Share } from 'react-native';
 
 import { DELETION_SCOPE } from '@/features/settings/model/deletionScope';
 import {
@@ -40,6 +41,7 @@ import {
   usePatchMeSettings,
 } from '@/shared/api/generated/profile/profile';
 import { useGetMePersonalization } from '@/shared/api/generated/reflection/reflection';
+import { WithToastHost, resetToast } from '@/test-support/toastHarness';
 
 import { SettingsPage } from '..';
 
@@ -193,6 +195,12 @@ beforeEach(() => {
       data: makeExport({ truncatedSections: [], sections: [] }),
     }),
   });
+});
+
+// 토스트 스토어는 모듈 싱글턴이라 파일 안 테스트 사이로 샌다. S3 만이 아니라 **모든** 테스트 뒤에 비운다 —
+// 앞선 AC-2 닉네임 저장이 띄운 토스트가 S3 첫 테스트까지 남아 거짓 green 을 만든 실측(03b 차단-1).
+afterEach(() => {
+  resetToast();
 });
 
 describe('TRIP-608 · 2단 삭제 게이트 (AC-12 · 법적)', () => {
@@ -513,5 +521,106 @@ describe('TRIP-608 · 내보내기 (AC-5 · INV-4)', () => {
     expect(screen.queryByTestId('settings-export-truncated')).toBeNull();
 
     shareSpy.mockRestore();
+  });
+});
+
+/**
+ * TRIP-990 · S3 (#027 · D23) — 닉네임을 바꾸는 데 성공하면 "닉네임을 바꿨어요" 토스트가 뜬다.
+ *
+ * 규칙을 어기거나(빈 값·길이) 서버가 거절하면(409) 기존처럼 인라인 오류만 뜨고 토스트는 없다
+ * (US-ONB-03 예외 — 인라인 오류). 저장 뒤 행 접기는 이번 범위 밖(01b Q7).
+ *
+ * 성공하면 키보드를 내린다(`Keyboard.dismiss`) — 닉네임 입력칸은 저장 뒤에도 포커스를 쥐고 있어서,
+ * 키보드가 남으면 화면 아래쪽 토스트를 덮는다(03b 경고-1, 오케 판정). 실패면 고쳐 쓰도록 입력을 유지한다.
+ *
+ * 뮤테이션 목이 onSuccess/onError 를 동기로 부르므로(위 `primeMutation`) 비동기 대기 없이 바로 잰다.
+ * "키보드가 떠 있을 때 첫 탭이 버튼에 닿는가"·"토스트가 키보드에 안 가리는가"는 jest 사각 — 6-b 실기.
+ *
+ * 3동작 뼈대: 준비=PATCH 성공/실패 목 → 실행=편집·입력·저장 → 단언=토스트·인라인 오류.
+ */
+describe('🔴 S3 · 닉네임 저장 성공 토스트 (#027)', () => {
+  function renderPageWithToast() {
+    return render(
+      <QueryClientProvider client={new QueryClient()}>
+        <WithToastHost>
+          <SettingsPage />
+        </WithToastHost>
+      </QueryClientProvider>
+    );
+  }
+
+  function submitNickname(value: string): void {
+    fireEvent.press(screen.getByTestId('settings-nickname-edit'));
+    fireEvent.changeText(screen.getByTestId('settings-nickname-input'), value);
+    fireEvent.press(screen.getByTestId('settings-nickname-save'));
+  }
+
+  // 렌더 전에 건다 — `onPress={Keyboard.dismiss}` 처럼 참조를 렌더 때 잡는 구현도 스파이가 본다.
+  let dismiss: jest.SpyInstance;
+  beforeEach(() => {
+    dismiss = jest.spyOn(Keyboard, 'dismiss').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    dismiss.mockRestore();
+  });
+
+  it('PATCH 200 이면 "닉네임을 바꿨어요" 토스트가 뜬다', () => {
+    const patchSpy = jest.fn();
+    primeMutation(mockUsePatchNickname, {
+      spy: patchSpy,
+      onSuccessData: { nickname: '새이름', nicknameUpdatedAt: 'x' },
+    });
+    renderPageWithToast();
+    // 앵커: 제출 전엔 토스트가 없다 — 뒤에서 보이는 토스트가 이번 제출이 띄운 것임을 가른다.
+    expect(screen.queryByTestId('settings-nickname-saved')).toBeNull();
+
+    submitNickname('새이름');
+
+    // 앵커: 이번 제출의 PATCH 가 실제로 1회 나갔다(제출을 지우면 여기서 red).
+    expect(patchSpy).toHaveBeenCalledTimes(1);
+    const toast = screen.getByTestId('settings-nickname-saved');
+    expect(within(toast).getByText('닉네임을 바꿨어요')).toBeOnTheScreen();
+  });
+
+  it('PATCH 200 이면 키보드를 내린다 — 성공 토스트가 키보드에 가리지 않게', () => {
+    const patchSpy = jest.fn();
+    primeMutation(mockUsePatchNickname, {
+      spy: patchSpy,
+      onSuccessData: { nickname: '새이름', nicknameUpdatedAt: 'x' },
+    });
+    renderPageWithToast();
+
+    submitNickname('새이름');
+
+    expect(patchSpy).toHaveBeenCalledTimes(1);
+    expect(dismiss).toHaveBeenCalled();
+  });
+
+  it('짝: 빈 값이면 인라인 오류만 뜨고 토스트는 없다', () => {
+    const patchSpy = jest.fn();
+    primeMutation(mockUsePatchNickname, { spy: patchSpy });
+    renderPageWithToast();
+
+    submitNickname('');
+
+    expect(patchSpy).not.toHaveBeenCalled();
+    expect(screen.getByTestId('settings-nickname-error')).toBeOnTheScreen();
+    expect(screen.queryByTestId('settings-nickname-saved')).toBeNull();
+    // 실패는 고쳐 써야 하므로 키보드를 내리지 않는다.
+    expect(dismiss).not.toHaveBeenCalled();
+  });
+
+  it('짝: 409 로 거절되면 인라인 오류만 뜨고 토스트는 없다', () => {
+    primeMutation(mockUsePatchNickname, {
+      spy: jest.fn(),
+      error: httpError(409),
+    });
+    renderPageWithToast();
+
+    submitNickname('중복이름');
+
+    expect(screen.getByTestId('settings-nickname-error')).toBeOnTheScreen();
+    expect(screen.queryByTestId('settings-nickname-saved')).toBeNull();
+    expect(dismiss).not.toHaveBeenCalled();
   });
 });

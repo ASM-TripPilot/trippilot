@@ -9,18 +9,21 @@ import {
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
-import type { PreferenceView } from '@/shared/api/generated/schemas';
+import type { PreferenceView, Trip } from '@/shared/api/generated/schemas';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 
 import { TripNewStep1Page } from './TripNewStep1Page';
 
 /**
- * TRIP-667 g01 기간 편집 시트 — **배선 승인 테스트**(요약 "기간" 행 → 시트 오픈 → 범위 전이 → 적용 → 스토어).
+ * TRIP-667 g01 기간 편집 시트 — **배선 승인 테스트**(요약 "기간" 행 → 시트 오픈 → 시작 탭 → 적용 → 스토어).
+ * TRIP-1027 로 시트는 **시작 날짜만** 고른다 — 끝 날짜는 시작 + 여행지 박수 합이다(01b D2).
  *
- * 무엇을 보장하나: S1 이 남긴 기간 행 오픈 콜백(현 `openEditSheet` 스텁)에 이 시트가 배선돼
- *  ① 기간 행 탭 → 시트 마운트(트리 존재) ② 셀 탭 → 배선이 `applyRangePick`으로 range 를 갱신해
- *  재렌더 → 범위 표식이 실제로 바뀐다(셀 탭→표식 변화, 무상태 시트라 이 전이는 여기서만 관측된다)
- *  ③ "적용" **누르기 전엔** 스토어 기간 불변, 누르면 `setPeriod(undefined, start, end)` 로 커밋 + 닫힘.
+ * 무엇을 보장하나:
+ *  ① 기간 행 탭 → 시트 마운트(트리 존재)
+ *  ② 날짜 탭 한 번 → 배선이 range 를 {시작, 시작 + Σ} 로 갱신해 재렌더 → 시작·사이·끝 표식이 실제로 바뀐다
+ *     (무상태 시트라 이 전이는 여기서만 관측된다). 두 번째 탭도 새 시작이다(끝을 고르지 않는다)
+ *  ③ "적용" **누르기 전엔** 스토어 기간 불변, 누르면 시작·파생 끝 커밋 + 닫힘
+ *  ④ 제출 바디의 endDate − startDate = 박수 합(AC-9)
  *
  * 왜 통합 버킷인가: 시트는 props-only 무상태라 "셀 탭→표식 변화"는 배선이 range 를 소유·갱신할 때만
  * 일어난다 — 스토어 실반영과 전이를 함께 관측해야 한다. 컴포넌트 단위(표식 렌더·콜백)는 별 파일이 잠근다.
@@ -28,10 +31,12 @@ import { TripNewStep1Page } from './TripNewStep1Page';
  * ⚠️ 게스트(토큰 미주입)로 돈다 — `useSavedPlaces`/`useSavedStays` 가 `enabled:false` 라 안 나가고
  * (01b 비회원 예외), 무조건 발화하는 `useGetMePreferences`(프리필)만 `/me/preferences` 핸들러로 받는다.
  * `/regions`·`/saved-stays`·`/saved-places` 핸들러는 **일부러 안 준다**(남기면 신 페이지가 그 훅을
- * 게스트에서 물었다는 증거로 `onUnhandledRequest:'error'` 크래시 red). 제출을 안 하므로 POST /trips 불필요.
+ * 게스트에서 물었다는 증거로 `onUnhandledRequest:'error'` 크래시 red). POST /trips 는 W-5 만 자기 안에서 준다.
  *
  * ⚠️ 바텀시트 통과형 목: 마운트하면 children 을 무조건 렌더한다 — 여기서 관측하는 "시트 오픈"은
  * **조건부 마운트 트리 존재/부재**뿐이다. 실제 슬라이드업·딤·범위 하이라이트 실렌더는 jest 사각(6-b 실기).
+ *
+ * ⚠️ 모듈 싱글턴 스토어 — 파일 최상위 beforeEach·afterEach 에서 reset 한다(02a ★11).
  */
 
 jest.mock('@/shared/storage', () => ({
@@ -78,6 +83,7 @@ beforeEach(() => {
 
 afterEach(() => {
   server.resetHandlers();
+  useTripWizardStore.getState().reset();
 });
 
 afterAll(() => server.close());
@@ -123,67 +129,170 @@ describe('W-1 · 기간 행 탭이 시트를 연다', () => {
   });
 });
 
-describe('W-2 · 셀 탭 → 배선의 applyRangePick 으로 범위 표식이 전이한다', () => {
-  it('시작 탭 → 시작 표식 / 뒤 셀 탭 → 완성(사이·종료) / 완성 뒤 탭 → 재시작', async () => {
+/** 시작 날짜만 고른다(TRIP-1027) — 끝 표식은 시작 + 박수 합에 뜬다. */
+function seedDestinations(nights: number[]): void {
+  const store = useTripWizardStore.getState();
+  const names = ['서울특별시', '부산광역시', '경주시'];
+  nights.forEach((n, i) => store.addDestination(names[i], n));
+}
+
+function mark(role: 'start' | 'between' | 'end', date: string) {
+  return screen.queryByTestId(`trip-wizard-period-cell-${role}-${date}`);
+}
+
+describe('W-2 · 날짜 탭 한 번 = 새 시작, 끝 표식은 시작 + 박수 합 (TRIP-1027 AC-5)', () => {
+  it('서울1·부산2(3박)에서 6/10 탭 → 6/10–6/13, 범위 안 6/12 탭 → 새 시작 6/12–6/15, 6/20 탭 → 6/20–6/23', async () => {
+    // 준비 — 박수 합 3.
+    seedDestinations([1, 2]);
     renderPage();
     await openSheet();
 
-    // 시작(10) 탭 → 시작 표식만.
+    // 실행 ① — 6/10 한 번. 끝(6/13)을 누르지 않아도 범위가 완성돼 그려진다.
     fireEvent.press(screen.getByTestId('trip-wizard-period-cell-2026-06-10'));
     expect(
       await screen.findByTestId('trip-wizard-period-cell-start-2026-06-10')
     ).toBeOnTheScreen();
-    expect(
-      screen.queryByTestId('trip-wizard-period-cell-end-2026-06-13')
-    ).toBeNull();
+    expect(mark('between', '2026-06-11')).toBeOnTheScreen();
+    expect(mark('between', '2026-06-12')).toBeOnTheScreen();
+    expect(mark('end', '2026-06-13')).toBeOnTheScreen();
+    expect(screen.getByTestId('trip-wizard-period-summary')).toHaveTextContent(
+      /6월 10일.*13일/
+    );
 
-    // 뒤 셀(13) 탭 → 완성(사이 11·12 + 종료 13).
-    fireEvent.press(screen.getByTestId('trip-wizard-period-cell-2026-06-13'));
+    // 실행 ② — 파생 범위 안쪽 뒤 날짜(6/12). 옛 2탭 규칙이면 "끝 = 6/12 완성"이었다(02a ★8).
+    fireEvent.press(screen.getByTestId('trip-wizard-period-cell-2026-06-12'));
     expect(
-      await screen.findByTestId('trip-wizard-period-cell-end-2026-06-13')
+      await screen.findByTestId('trip-wizard-period-cell-start-2026-06-12')
     ).toBeOnTheScreen();
-    expect(
-      screen.getByTestId('trip-wizard-period-cell-between-2026-06-11')
-    ).toBeOnTheScreen();
+    expect(mark('end', '2026-06-15')).toBeOnTheScreen();
+    expect(mark('end', '2026-06-12')).toBeNull();
+    expect(mark('end', '2026-06-13')).toBeNull();
+    expect(mark('start', '2026-06-10')).toBeNull();
 
-    // 완성 뒤 새 셀(20) 탭 → 재시작(옛 범위 표식 소멸, last-wins).
+    // 실행 ③ — 먼 날짜(6/20)도 새 시작.
     fireEvent.press(screen.getByTestId('trip-wizard-period-cell-2026-06-20'));
     expect(
       await screen.findByTestId('trip-wizard-period-cell-start-2026-06-20')
     ).toBeOnTheScreen();
-    await waitFor(() =>
-      expect(
-        screen.queryByTestId('trip-wizard-period-cell-end-2026-06-13')
-      ).toBeNull()
-    );
+    expect(mark('end', '2026-06-23')).toBeOnTheScreen();
+    await waitFor(() => expect(mark('end', '2026-06-15')).toBeNull());
   });
 });
 
-describe('W-3 · 적용 = setPeriod(undefined, start, end) 커밋 + 닫기 (01b D6·AC-4)', () => {
-  it('적용 전엔 스토어 기간 불변, 적용 후 커밋(presetCode=undefined) + 시트 닫힘', async () => {
+describe('W-3 · 한 번 탭하면 적용이 열리고, 적용 = 시작·파생 끝 커밋 + 닫기 (TRIP-1027 AC-5)', () => {
+  it('탭 전엔 적용이 닫혀 있고, 6/10 한 번 탭하면 열리며, 적용하면 6/10–6/13 이 커밋된다', async () => {
+    seedDestinations([1, 2]);
     renderPage();
     await openSheet();
+    const apply = () => screen.getByTestId('trip-wizard-period-apply');
+
+    // 앵커 — 아직 아무것도 안 골랐다(02a ★7).
+    expect(apply()).toBeDisabled();
 
     fireEvent.press(screen.getByTestId('trip-wizard-period-cell-2026-06-10'));
-    fireEvent.press(screen.getByTestId('trip-wizard-period-cell-2026-06-13'));
-    await screen.findByTestId('trip-wizard-period-cell-end-2026-06-13');
+    await screen.findByTestId('trip-wizard-period-cell-start-2026-06-10');
+    expect(apply()).toBeEnabled();
 
-    // 적용 전 — 아직 커밋 안 됨(즉시반영이 아니라 적용에서만 커밋).
+    // 적용 전 — 아직 커밋 안 됨.
     expect(useTripWizardStore.getState().startDate).toBeUndefined();
     expect(useTripWizardStore.getState().endDate).toBeUndefined();
 
-    fireEvent.press(screen.getByTestId('trip-wizard-period-apply'));
+    fireEvent.press(apply());
 
-    // 커밋 — 값·프리셋 undefined 동시 확인(프리셋 코드를 넘긴 뮤턴트가 presetCode 로 red).
     await waitFor(() =>
       expect(useTripWizardStore.getState().startDate).toBe('2026-06-10')
     );
     expect(useTripWizardStore.getState().endDate).toBe('2026-06-13');
     expect(useTripWizardStore.getState().presetCode).toBeUndefined();
-
-    // 닫힘(조건부 마운트 해제).
     await waitFor(() =>
       expect(screen.queryByTestId('trip-wizard-period-sheet')).toBeNull()
+    );
+  });
+});
+
+describe('W-4 · 여행지 0곳이면 당일 — 끝 원 없이 시작만, 적용하면 시작 = 끝 (TRIP-1027 AC-2)', () => {
+  it('6/10 탭 → 시작 표식만(끝·사이 없음) · 적용 열림 → 커밋 6/10–6/10', async () => {
+    expect(useTripWizardStore.getState().destinations).toHaveLength(0);
+    renderPage();
+    await openSheet();
+
+    fireEvent.press(screen.getByTestId('trip-wizard-period-cell-2026-06-10'));
+
+    expect(
+      await screen.findByTestId('trip-wizard-period-cell-start-2026-06-10')
+    ).toBeOnTheScreen();
+    expect(mark('end', '2026-06-10')).toBeNull();
+    expect(mark('between', '2026-06-11')).toBeNull();
+    expect(screen.getByTestId('trip-wizard-period-apply')).toBeEnabled();
+
+    fireEvent.press(screen.getByTestId('trip-wizard-period-apply'));
+
+    await waitFor(() =>
+      expect(useTripWizardStore.getState().startDate).toBe('2026-06-10')
+    );
+    expect(useTripWizardStore.getState().endDate).toBe('2026-06-10');
+  });
+});
+
+/** openapi `Trip.required` 필드를 채운 201 응답(제출 배선 형제 파일 선례). */
+const CREATED_TRIP: Trip = {
+  tripId: '11111111-1111-1111-1111-111111111111',
+  title: '서울 여행',
+  startDate: '2026-06-10',
+  endDate: '2026-06-13',
+  party: 1,
+  companionType: null,
+  budgetTotal: 800000,
+  preferenceSnapshot: {},
+  destinations: [
+    { seq: 1, region: '서울특별시', nights: 1 },
+    { seq: 2, region: '부산광역시', nights: 2 },
+  ],
+  status: 'PLANNED',
+  createdAt: '2026-08-02T00:00:00Z',
+  updatedAt: '2026-08-02T00:00:00Z',
+  baseCount: 0,
+  itineraryDayCount: 0,
+};
+
+describe('W-5 · 제출 바디의 기간은 시작 + 박수 합이다 (TRIP-1027 AC-9)', () => {
+  it('6/10 적용 → 부산 +1 → 다음: POST /trips 1회, startDate 6/10 · endDate 6/13 · 박수 [1, 2]', async () => {
+    // 준비 — 이 테스트만 제출 핸들러를 더한다.
+    const postedBodies: Record<string, unknown>[] = [];
+    server.use(
+      http.post(`${BASE}/trips`, async ({ request }) => {
+        postedBodies.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json(CREATED_TRIP, { status: 201 });
+      })
+    );
+    seedDestinations([1, 1]);
+    renderPage();
+    await openSheet();
+    fireEvent.press(screen.getByTestId('trip-wizard-period-cell-2026-06-10'));
+    fireEvent.press(screen.getByTestId('trip-wizard-period-apply'));
+    fireEvent.press(screen.getByTestId('trip-wizard-summary-destination'));
+    fireEvent.press(
+      await screen.findByTestId('trip-wizard-destination-nights-inc-2')
+    );
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-apply'));
+
+    // 실행 — 프리필 도착(로딩 해제) 뒤 다음.
+    const next = screen.getByTestId('trip-wizard-step1-next');
+    await waitFor(() => expect(next).toBeEnabled());
+    fireEvent.press(next);
+
+    // 단언 — 요청 모양은 그대로, 끝 날짜만 파생값이다.
+    await waitFor(() => expect(postedBodies).toHaveLength(1));
+    const body = postedBodies[0] as {
+      startDate: string;
+      endDate: string;
+      destinations: { seq: number; region: string; nights: number }[];
+    };
+    expect(body.startDate).toBe('2026-06-10');
+    expect(body.endDate).toBe('2026-06-13');
+    expect(body.destinations.map((one) => one.nights)).toEqual([1, 2]);
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith('/trips/new/step2')
     );
   });
 });

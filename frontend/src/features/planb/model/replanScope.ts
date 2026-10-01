@@ -5,7 +5,7 @@ import type { StartReplanRequestScope } from '@/shared/api/generated/schemas/sta
  * `config/replanChoices.ts` 에 옮겼다.
  *
  * 범위는 정확히 2종뿐이다(`PARTIAL_SLOTS`=지금 이후 · `FULL_DAY`=오늘 전체). '내일'·다일
- * 재계획은 계약상 존재하지 않는다 — `planbScopeStructure.test.ts` 가 이 파일을 잠근다.
+ * 재계획은 계약상 존재하지 않는다.
  *
  * `import type` 로만 스키마를 끌어와(런타임 erase) 이 파일은 RN 을 안 물어 node 환경 구조가드가
  * 그대로 import 할 수 있다.

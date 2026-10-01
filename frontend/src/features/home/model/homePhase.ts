@@ -4,9 +4,8 @@ import type { HomePhase } from './homeTypes';
  * TRIP-371 · 홈 실데이터 배선의 순수 판정 계층(화면 아님, 네트워크·시계 read 0).
  * `today` 는 인자로 주입받아 결정론적이다 — 시계를 직접 읽지 않는다(CI 타임존 무관).
  *
- * ★ 경계(02a §4-★1·★2): `features/home` 은 eslint zone·homeStructure D-1 대상이라 서버
- * 스키마(Trip 타입)나 타 feature(trip·itinerary) 를 import 할 수 없다 — 리터럴 금칙이라 이
- * 주석도 그 경로 문자열을 적으면 스캔에 걸린다(그래서 여기 안 적는다).
+ * ★ 경계(02a §4-★1·★2): `features/home` 은 eslint zone 대상이고 순수 슬라이스라 서버
+ * 스키마(Trip 타입)나 타 feature(trip·itinerary) 를 import 할 수 없다.
  *  - Trip 대신 **로컬 구조 타입** `HomeTripInput`(라우트가 넘기는 서버 목록이 구조적으로 대입됨).
  *  - meta 조립 포맷터는 라우트(app 층)가 `formatTripMeta` 로 **주입**한다 — 이 파일은 경계 안에 순수하게 남는다.
  */
@@ -122,7 +121,7 @@ export function resolveHomePhase(
   const traveling = isTraveling(dominant.startDate, dominant.endDate, today);
   const dday = formatDday(dominant.startDate, today);
   // TRIP-697 여행 중 N일차 = 오늘 − 시작일 + 1(시작 당일 = 1일차). features/home 경계 안에서
-  // 계산한다(homeStructure D-1). toEpochDay 는 formatDday·isTraveling 과 같은 UTC epoch-day
+  // 계산한다(순수 슬라이스). toEpochDay 는 formatDday·isTraveling 과 같은 UTC epoch-day
   // 산술이라 배지·타이틀·일차가 한 소스를 공유한다(계획 중일 땐 미사용).
   const dayNumber = toEpochDay(today) - toEpochDay(dominant.startDate) + 1;
 
@@ -155,5 +154,47 @@ export function resolveHomePhase(
       subtitle: '남은 자리에 넣어볼까요',
       ctaLabel: '일정에 추가',
     },
+  };
+}
+
+/** 일정 상태로 정한 목적지 토큰 — 라우트가 판정해 넘긴다(서버 스키마 미참조 로컬 리터럴, 경계 ★). */
+export type HomeItineraryTarget =
+  'method' | 'copick' | 'copickComplete' | 'generating' | 'draft' | 'live';
+
+type PlanningPhase = Extract<HomePhase, { kind: 'planning' }>;
+
+/**
+ * TRIP-986 D1 · 일정 응답이 정착한 뒤 CTA 라벨·부제를 **목적지와 같은 판정**으로 덮어쓴다.
+ * `resolveHomePhase` 의 라벨은 여행 상태(날짜 파생) 폴백일 뿐이다 — 서버는 여행 상태를 '확정'으로
+ * 올리지 않으므로, 확정 여부는 일정 쪽 판정(target)만 안다. 미정착이면 라우트가 이 함수를 안 불러
+ * 폴백 라벨이 남는다(Q2).
+ *  - live(확정) → 여행 중이면 '여행 일정 보기', 아니면 '확정 일정 보기' · 부제 없음.
+ *  - method(일정 없음) → '일정 만들기'(h04 제목 재사용, Q1) · 부제 없음.
+ *  - draft·generating·copick·copickComplete(초안·생성 중·같이 짜기 중·같이 짜기 완성 미확정) →
+ *    '일정 이어서 짜기' · 부제는 폴백 그대로.
+ * 여행 중 판정은 `showSpots`(resolveHomePhase 가 여행 중일 때만 채움)를 그대로 쓴다.
+ */
+export function applyItineraryTarget(
+  phase: PlanningPhase,
+  target: HomeItineraryTarget
+): PlanningPhase {
+  if (
+    target === 'draft' ||
+    target === 'generating' ||
+    target === 'copick' ||
+    target === 'copickComplete'
+  ) {
+    return { ...phase, trip: { ...phase.trip, ctaLabel: '일정 이어서 짜기' } };
+  }
+  const ctaLabel =
+    target === 'method'
+      ? '일정 만들기'
+      : phase.showSpots
+        ? '여행 일정 보기'
+        : '확정 일정 보기';
+  return {
+    ...phase,
+    greetSubtitle: undefined,
+    trip: { ...phase.trip, ctaLabel },
   };
 }

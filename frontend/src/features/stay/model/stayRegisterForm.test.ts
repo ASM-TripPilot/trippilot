@@ -11,9 +11,10 @@ import {
 /**
  * F-7 · F-8 (AC-1 · AC-3 · AC-4 · AC-5 · 01b Seed §3-5) — 등록 폼의 판정과 요청 조립.
  *
- * 무엇을 보장하나: "지금 등록해도 되는가"(`canSubmitStayRegister`)의 답이 좌표 확정 여부와
- * 날짜 유효성에서만 나오고, 서버로 보낼 본문(`buildStayRegisterRequest`)이 계약대로
- * 조립된다 — 특히 **날짜를 비웠으면 `checkIn`·`checkOut` 키 자체가 붙지 않는다**(AC-5).
+ * 무엇을 보장하나: "지금 등록해도 되는가"(`canSubmitStayRegister`)의 답이 좌표·후보·제출 중·
+ * 이름에서만 나오고(날짜 입력은 TRIP-1052에서 사라졌다), 서버로 보낼 본문
+ * (`buildStayRegisterRequest`)이 계약대로 조립된다 — 특히 **`checkIn`·`checkOut` 키가 절대
+ * 붙지 않는다**(TRIP-1052 AC-2 — 서버 계약에는 nullable로 남지만 앱은 싣지 않는다).
  *
  * 클라이언트 검증은 UX 사본이고 판정 정본은 서버지만(§5), **좌표 게이트만은 클라이언트가
  * 진짜로 막아야 한다**(AC-3 — 서버 400에 의존하면 위반). 그 무결성을 여기서 PBT로 잠근다.
@@ -42,9 +43,6 @@ const READY: StayRegisterFlow = {
   pinAddressStatus: 'idle',
   coordConfirmed: true,
   mapSheetState: 'closed',
-  checkIn: null,
-  checkOut: null,
-  dateSheetOpen: false,
   submitStatus: 'idle',
 };
 
@@ -61,24 +59,9 @@ describe('canSubmitStayRegister — 등록 가능 판정 (F-7)', () => {
       expected: false,
     },
     {
-      name: '좌표 확정 + 날짜 없음 → 가능 (AC-5 날짜 필수화는 위반)',
+      name: '좌표 확정 → 가능 (US-STAY-08 좌표만으로 등록 완료)',
       flow: READY,
       expected: true,
-    },
-    {
-      name: '정상 날짜 범위 → 가능',
-      flow: { ...READY, checkIn: '2026-06-10', checkOut: '2026-06-12' },
-      expected: true,
-    },
-    {
-      name: '체크아웃이 체크인보다 빠름 → 불가 (AC-4)',
-      flow: { ...READY, checkIn: '2026-06-12', checkOut: '2026-06-10' },
-      expected: false,
-    },
-    {
-      name: '체크인·체크아웃이 같은 날 → 불가 (INV-U1-09)',
-      flow: { ...READY, checkIn: '2026-06-10', checkOut: '2026-06-10' },
-      expected: false,
     },
     {
       name: '이미 제출 중 → 불가 (§3-5 중복 제출 차단)',
@@ -114,8 +97,6 @@ describe('canSubmitStayRegister — 등록 가능 판정 (F-7)', () => {
             'error'
           ),
           hasCandidate: fc.boolean(),
-          hasDates: fc.boolean(),
-          dateSheetOpen: fc.boolean(),
         }),
         (input) => {
           const flow: StayRegisterFlow = {
@@ -132,9 +113,6 @@ describe('canSubmitStayRegister — 등록 가능 판정 (F-7)', () => {
             selectedCandidate: input.hasCandidate ? CANDIDATE : null,
             coordConfirmed: false,
             mapSheetState: input.mapSheetState,
-            checkIn: input.hasDates ? '2026-06-10' : null,
-            checkOut: input.hasDates ? '2026-06-12' : null,
-            dateSheetOpen: input.dateSheetOpen,
             submitStatus: input.submitStatus,
           };
           expect(canSubmitStayRegister(flow)).toBe(false);
@@ -145,30 +123,21 @@ describe('canSubmitStayRegister — 등록 가능 판정 (F-7)', () => {
 
     // 가짜 통과 방지 짝 — "항상 false를 반환하는 구현"도 위 성질만으로는 통과하므로,
     // 같은 조합에서 coordConfirmed만 true로 뒤집으면 실제로 true가 나오는 것을 잠근다.
-    fc.assert(
-      fc.property(fc.boolean(), (hasDates) => {
-        expect(
-          canSubmitStayRegister({
-            ...READY,
-            coordConfirmed: true,
-            checkIn: hasDates ? '2026-06-10' : null,
-            checkOut: hasDates ? '2026-06-12' : null,
-          })
-        ).toBe(true);
-      }),
-      { numRuns: 500 }
+    // (TRIP-1052 — 예전엔 날짜 유무 축을 흔들었으나 그 축이 사라져 직접 단언 한 줄로 충분하다.)
+    expect(canSubmitStayRegister({ ...READY, coordConfirmed: true })).toBe(
+      true
     );
   });
 });
 
-describe('buildStayRegisterRequest — 요청 본문 조립 (F-8 · AC-1 · AC-5)', () => {
+describe('buildStayRegisterRequest — 요청 본문 조립 (F-8 · AC-1 · TRIP-1052 AC-2)', () => {
   it('고른 후보가 없으면 null을 돌려준다 (보낼 것이 없다)', () => {
     expect(
       buildStayRegisterRequest({ ...READY, selectedCandidate: null })
     ).toBeNull();
   });
 
-  it('날짜를 비우면 checkIn·checkOut 키 자체가 붙지 않는다 (AC-5)', () => {
+  it('🔴 요청 본문의 키는 정확히 다섯 개다 — checkIn·checkOut 키가 없다 (TRIP-1052 AC-2)', () => {
     const request = buildStayRegisterRequest(READY);
 
     expect(request).toEqual({
@@ -178,27 +147,15 @@ describe('buildStayRegisterRequest — 요청 본문 조립 (F-8 · AC-1 · AC-5
       lng: 129.1604,
       coordConfirmed: true,
     });
-    // toEqual은 값이 undefined인 키를 무시한다 — 키의 부재 자체를 따로 잠근다.
-    expect(request !== null && 'checkIn' in request).toBe(false);
-    expect(request !== null && 'checkOut' in request).toBe(false);
-  });
-
-  it('날짜가 있으면 그대로 실린다', () => {
-    expect(
-      buildStayRegisterRequest({
-        ...READY,
-        checkIn: '2026-06-10',
-        checkOut: '2026-06-12',
-      })
-    ).toEqual({
-      name: '해운대 그랜드 호텔',
-      registerRoute: 'MAP_SEARCH',
-      lat: 35.1587,
-      lng: 129.1604,
-      coordConfirmed: true,
-      checkIn: '2026-06-10',
-      checkOut: '2026-06-12',
-    });
+    // toEqual은 값이 undefined인 키를 무시한다 — 키 목록 자체를 완전일치로 잠근다.
+    // `checkIn: null`은 물론 `checkIn: undefined`로 키만 남는 것도 여기서 red다.
+    expect(Object.keys(request ?? {}).sort()).toEqual([
+      'coordConfirmed',
+      'lat',
+      'lng',
+      'name',
+      'registerRoute',
+    ]);
   });
 
   it('좌표 출처가 MAP_SEARCH이면 registerRoute도 MAP_SEARCH이고 좌표는 후보 값 그대로다', () => {

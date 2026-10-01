@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import { WheelPicker } from './WheelPicker';
+import { WHEEL_CELL_HEIGHT, WheelPicker } from './WheelPicker';
 
 /**
  * shared/ui 값-컬럼 휠 primitive 의 **계약**(TRIP-599 · AC-1·2).
@@ -93,5 +93,152 @@ describe('AC-2 · 선택 셀만 accessibilityState.selected (INV-2)', () => {
     VALUES.forEach((value) =>
       expect(screen.getByTestId(cellTestID(value))).not.toBeSelected()
     );
+  });
+});
+
+/**
+ * TRIP-990 · W1 (D21) — 스크롤이 멈추면 가운데 값을 자동으로 확정한다.
+ *
+ * *(개념)* `onMomentumScrollEnd` = 손을 뗀 뒤 관성으로 굴러가던 스크롤이 완전히 멈춘 순간 한 번 불리는
+ * 이벤트. `nativeEvent.contentOffset.y` 로 멈춘 위치를 알려 준다. 위 패딩 덕에 y 가 `k × 셀 높이` 이면
+ * k 번째 값이 가운데 밴드에 온다.
+ *
+ * 무엇을 보장하나: 멈춘 위치 → 가장 가까운 칸(반올림) → 양 끝을 넘으면 끝 값으로 자름(clamp) →
+ * `onSelect` **정확히 1회**. 1.6칸은 2칸이다(내림이면 1칸이라 여기서 갈린다).
+ *
+ * 커버하지 않는 것: 실제 관성·스냅·관성 없이 손을 뗄 때 이벤트가 안 오는 경우는 jest 가 이벤트를 직접
+ * 쏘므로 못 본다 — 6-b 실기(프리뷰 `itinerary-mustvisit-time-default`).
+ *
+ * 3동작 뼈대: 준비=값 5개 휠 → 실행=스크롤 정지 이벤트 → 단언=확정된 값과 횟수.
+ */
+describe('🔴 W1 · 스크롤 정지 → 가운데 값 자동 확정 (D21 · INV-2)', () => {
+  const FIVE = ['a', 'b', 'c', 'd', 'e'];
+
+  function renderWheel() {
+    const onSelect = jest.fn();
+    render(
+      <WheelPicker
+        testID="wheel-scroll"
+        values={FIVE}
+        selected={null}
+        onSelect={onSelect}
+        testIDForValue={cellTestID}
+      />
+    );
+    return onSelect;
+  }
+
+  function settleAt(y: number): void {
+    fireEvent(screen.getByTestId('wheel-scroll'), 'momentumScrollEnd', {
+      nativeEvent: { contentOffset: { x: 0, y } },
+    });
+  }
+
+  it('정확히 2칸에서 멈추면 세 번째 값으로 onSelect 가 1회 불린다', () => {
+    const onSelect = renderWheel();
+    expect(onSelect).not.toHaveBeenCalled();
+
+    settleAt(2 * WHEEL_CELL_HEIGHT);
+
+    expect(onSelect).toHaveBeenCalledWith('c');
+    expect(onSelect).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [1.4, 'b', '반올림 — 1.4칸은 1칸'],
+    [1.6, 'c', '반올림 — 1.6칸은 2칸(내림과 갈리는 자리)'],
+    [-1, 'a', '위로 넘치면 첫 값'],
+    [100, 'e', '아래로 넘치면 마지막 값'],
+  ])('%s칸에서 멈추면 %s (%s)', (cells, expected) => {
+    const onSelect = renderWheel();
+
+    settleAt(cells * WHEEL_CELL_HEIGHT);
+
+    expect(onSelect).toHaveBeenCalledWith(expected);
+    expect(onSelect).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * TRIP-1080 · D — 닫힌 휠(`disabled`). j01 방문 시각 시트의 완료 칸(원본 완료 없음, TRIP-1069 D1)이 첫 소비처다.
+ *
+ * 무엇을 보장하나: disabled 면 값을 **받지 않는다** — 셀을 눌러도, 스크롤이 멈춰도 `onSelect` 가 안 불리고,
+ * 선택 표시도 없고, 스크롤 자체가 꺼진다(`scrollEnabled` false). 기본값(미지정)은 지금과 같다.
+ *
+ * *(개념)* jest 의 스크롤 정지 이벤트는 `scrollEnabled={false}` 로 막히지 않는다(02a §5-②) — 그래서
+ *   "스크롤을 껐다"(D4)와 "이벤트가 와도 무시한다"(D3)를 따로 본다. 실기에선 손가락이 못 굴리고(D4),
+ *   코드 경로로는 값이 안 들어간다(D3).
+ *
+ * 3동작 뼈대: 준비=disabled 휠 렌더 → 실행=셀 press·스크롤 정지 → 단언=onSelect 횟수·선택 표식·prop.
+ */
+describe('🔴 D · disabled 휠은 값을 받지 않는다 (TRIP-1080 · TRIP-1069 D1 · INV-4)', () => {
+  const WHEEL = 'wheel-scroll';
+
+  function renderWheel(disabled: boolean | undefined) {
+    const onSelect = jest.fn();
+    render(
+      <WheelPicker
+        testID={WHEEL}
+        values={VALUES}
+        selected="09:30"
+        onSelect={onSelect}
+        testIDForValue={cellTestID}
+        {...(disabled === undefined ? {} : { disabled })}
+      />
+    );
+    return onSelect;
+  }
+
+  it('D1 · disabled 면 selected 가 있어도 어떤 셀도 선택 표시가 없다 — 짝: disabled={false} 면 09:30 이 선택', () => {
+    renderWheel(true);
+    VALUES.forEach((value) =>
+      expect(screen.getByTestId(cellTestID(value))).not.toBeSelected()
+    );
+
+    screen.unmount();
+    renderWheel(false);
+    expect(screen.getByTestId(cellTestID('09:30'))).toBeSelected();
+  });
+
+  it('D2 · disabled 면 셀을 눌러도 onSelect 가 불리지 않는다 — 짝: disabled={false} 면 1회', () => {
+    const onSelect = renderWheel(true);
+
+    fireEvent.press(screen.getByTestId(cellTestID('10:00')));
+
+    expect(onSelect).not.toHaveBeenCalled();
+
+    screen.unmount();
+    const enabled = renderWheel(false);
+    fireEvent.press(screen.getByTestId(cellTestID('10:00')));
+    expect(enabled).toHaveBeenCalledWith('10:00');
+    expect(enabled).toHaveBeenCalledTimes(1);
+  });
+
+  it('D3 · disabled 면 스크롤이 멈춰도 onSelect 가 불리지 않는다 — 짝: 미지정이면 가운데 값으로 1회', () => {
+    const settleAt2 = () =>
+      fireEvent(screen.getByTestId(WHEEL), 'momentumScrollEnd', {
+        nativeEvent: { contentOffset: { x: 0, y: 2 * WHEEL_CELL_HEIGHT } },
+      });
+    const onSelect = renderWheel(true);
+
+    settleAt2();
+
+    expect(onSelect).not.toHaveBeenCalled();
+
+    screen.unmount();
+    const enabled = renderWheel(undefined);
+    settleAt2();
+    expect(enabled).toHaveBeenCalledWith('10:00');
+    expect(enabled).toHaveBeenCalledTimes(1);
+  });
+
+  it('D4 · disabled 면 스크롤이 꺼진다(scrollEnabled false) — 짝: 미지정이면 꺼지지 않는다', () => {
+    renderWheel(true);
+    expect(screen.getByTestId(WHEEL).props.scrollEnabled).toBe(false);
+
+    screen.unmount();
+    renderWheel(undefined);
+    // 미지정은 undefined(=RN 기본 true)도 허용한다 — "꺼지지 않았다"만 본다(02a ★4).
+    expect(screen.getByTestId(WHEEL).props.scrollEnabled).not.toBe(false);
   });
 });

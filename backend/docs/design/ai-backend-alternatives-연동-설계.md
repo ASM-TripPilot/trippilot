@@ -1,5 +1,7 @@
 # TRIP-463 — 백엔드가 AI `/ai/v1/itinerary/alternatives` 를 호출한다 (설계 확정)
 
+> **정정(2026-09-27, TRIP-960 ②):** 본문의 경로 `/ai/v1/itinerary/alternatives` 는 `/ai/v1/planb/alternatives` 로 옮겨졌다(AI #749 별칭 → BE 상수 교체). 아래 본문은 설계 확정 시점 기록 그대로 둔다 — 현행 경로의 정본은 `HttpScheduleAgentAdapter.CALLED_PATHS` 다.
+
 > **TRIP-463** · 상태: 설계 확정, 구현 미착수 · 작성 2026-09-01
 > 근거는 전부 `origin/develop` 실측이다 — 이 문서 안의 파일·심볼·기본값은 작성 시점에 코드에서 확인한 것이고, 인셉션 문서에서 옮겨 적은 것이 아니다.
 > 범위: **백엔드 단독 PR**. `ai/` 변경 0, `ai/docs/openapi.json` 변경 0, FE 변경 0(공개 계약 스키마 무변경).

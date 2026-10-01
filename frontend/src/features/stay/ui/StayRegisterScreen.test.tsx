@@ -13,13 +13,13 @@ import { StayRegisterScreen } from './StayRegisterScreen';
 /**
  * R-1~R-15 (동결 AC-2·3·4·6·7 · 01b Seed §3-1~§3-6) — e05 등록 화면의 렌더 계약.
  *
- * 무엇을 보장하나: 화면이 `flow` prop 하나로 받은 6축 상태(검색·후보·좌표확정·지도시트·
- * 날짜·제출)를 각각의 얼굴로 그리고, **좌표가 확정되기 전에는 등록 콜백이 아예 불리지
+ * 무엇을 보장하나: 화면이 `flow` prop 하나로 받은 5축 상태(검색·후보·좌표확정·지도시트·
+ * 제출)를 각각의 얼굴로 그리고, **좌표가 확정되기 전에는 등록 콜백이 아예 불리지
  * 않는다**(AC-3 — 서버 400에 의존하면 위반). 화면은 무상태라 상태를 직접 주입할 수 있어,
- * 실제 조작으로는 도달하기 어려운 조합(역전 날짜)도 여기서 만든다.
+ * 실제 조작으로는 도달하기 어려운 조합도 여기서 만든다. 날짜 입력은 TRIP-1052에서 사라졌다(R-13).
  *
- * 렌더로 못 보는 소스 층(FSD 경계·raw hex·testID 존재)은 `stayRegisterStructure.test.ts`가
- * 맡는다 — 이 파일은 렌더 결과만 본다(선례 `StaySearchScreen.states.test.tsx` 계승).
+ * 렌더로 못 보는 소스 층(FSD 경계·raw hex·testID 존재)을 보던 `stayRegisterStructure`는
+ * TRIP-1145 로 지웠다 — 이 파일은 렌더 결과만 본다(선례 `StaySearchScreen.states.test.tsx` 계승).
  *
  * 지도는 목으로 바꾼다(02a ★5·★6): 실제 `KakaoMapView`는 jest 환경에 카카오 JS 키가 없어
  * 항상 실패 표면으로 떨어지므로 `center`가 어디로도 흐르지 않는다. 목이 좌표를 텍스트로
@@ -58,9 +58,6 @@ const IDLE_FLOW: StayRegisterFlow = {
   pinAddressStatus: 'idle',
   coordConfirmed: false,
   mapSheetState: 'closed',
-  checkIn: null,
-  checkOut: null,
-  dateSheetOpen: false,
   submitStatus: 'idle',
 };
 
@@ -88,22 +85,15 @@ function makeHandlers() {
     onOpenMapSheet: jest.fn(),
     onConfirmCoord: jest.fn(),
     onCloseMapSheet: jest.fn(),
-    onOpenDateSheet: jest.fn(),
-    onPickDate: jest.fn(),
-    onCloseDateSheet: jest.fn(),
     onSubmit: jest.fn(),
   };
 }
 
-/** 기본 today 고정 — 과거 날짜 비활성(§3-4)이 실행 날짜에 따라 흔들리지 않게 한다. */
-const TODAY = '2026-06-15';
-
 function renderScreen(
   flow: StayRegisterFlow,
-  handlers: Handlers = makeHandlers(),
-  today: string = TODAY
+  handlers: Handlers = makeHandlers()
 ) {
-  render(<StayRegisterScreen flow={flow} today={today} {...handlers} />);
+  render(<StayRegisterScreen flow={flow} {...handlers} />);
   return handlers;
 }
 
@@ -345,51 +335,6 @@ describe('R-7 · 검색 결과 0건 (§3-1)', () => {
   });
 });
 
-describe('R-8 · 날짜 역전은 인라인 오류로 막는다 (AC-4)', () => {
-  it('체크아웃이 체크인보다 빠르면 필드 안에 오류가 뜨고 저장이 막힌다', () => {
-    const handlers = renderScreen({
-      ...READY_FLOW,
-      checkIn: '2026-06-12',
-      checkOut: '2026-06-10',
-    });
-
-    // 오류가 **날짜 필드 안**에 있다 — 전역 토스트가 아니라 누락 항목 옆에 붙는다
-    // (US-STAY-06 예외 "누락 항목을 인라인 표시").
-    const field = screen.getByTestId('stay-register-date-field');
-    expect(
-      within(field).getByTestId('stay-register-date-error')
-    ).toBeOnTheScreen();
-
-    const submit = screen.getByTestId('stay-register-submit');
-    expect(submit).toBeDisabled();
-    fireEvent.press(submit);
-    expect(handlers.onSubmit).not.toHaveBeenCalled();
-  });
-
-  it('같은 날도 막는다 (INV-U1-09 — 체크아웃은 체크인보다 뒤여야 한다)', () => {
-    const handlers = renderScreen({
-      ...READY_FLOW,
-      checkIn: '2026-06-10',
-      checkOut: '2026-06-10',
-    });
-
-    expect(screen.getByTestId('stay-register-date-error')).toBeOnTheScreen();
-    fireEvent.press(screen.getByTestId('stay-register-submit'));
-    expect(handlers.onSubmit).not.toHaveBeenCalled();
-  });
-
-  it('짝: 정상 범위면 오류가 없고 저장이 열린다', () => {
-    renderScreen({
-      ...READY_FLOW,
-      checkIn: '2026-06-10',
-      checkOut: '2026-06-12',
-    });
-
-    expect(screen.queryAllByTestId('stay-register-date-error')).toHaveLength(0);
-    expect(screen.getByTestId('stay-register-submit')).toBeEnabled();
-  });
-});
-
 describe('R-9 · 지도 시트에서만 좌표가 확정된다 (§3-2)', () => {
   it('"이 위치로 확인"을 눌러야 확정 콜백이 불린다', () => {
     const handlers = renderScreen({
@@ -464,6 +409,48 @@ describe('R-11 · 인라인 지도는 항상 뜨고, 고른 후보의 좌표를 
   });
 });
 
+// TRIP-989 D — 지도가 좌표를 가운데로 옮기기만 하고 "여기"를 표시하지 않았다. Figma e05 미니맵
+// (1703:1201·4520:2350)은 분홍 침대 마커 1개다 → `kind:'stay'`(01b Q3). `number` 는 타입상 필수라 1.
+// 목은 pins 를 host prop 으로 통과시킬 뿐이라 "넘겼다"까지만 본다 — 실제 마커가 찍히는지는 6-b.
+describe('R-19 · 고른 후보 좌표에 침대 핀 1개 (TRIP-989 D · US-STAY-08 · BR-U1-21)', () => {
+  it('인라인 지도 미리보기에 고른 후보 좌표의 stay 핀 하나를 넘긴다', () => {
+    renderScreen({ ...READY_FLOW, selectedCandidate: CANDIDATE_B });
+
+    const preview = screen.getByTestId('stay-register-map-preview');
+    expect(within(preview).getByTestId('map-root').props.pins).toEqual([
+      { number: 1, lat: CANDIDATE_B.lat, lng: CANDIDATE_B.lng, kind: 'stay' },
+    ]);
+  });
+
+  it('지도 시트(open)의 지도에도 같은 후보 좌표의 stay 핀 하나를 넘긴다', () => {
+    renderScreen({
+      ...READY_FLOW,
+      coordConfirmed: false,
+      mapSheetState: 'open',
+    });
+
+    const sheet = screen.getByTestId('stay-register-mapsheet');
+    expect(within(sheet).getByTestId('map-root').props.pins).toEqual([
+      { number: 1, lat: CANDIDATE_A.lat, lng: CANDIDATE_A.lng, kind: 'stay' },
+    ]);
+  });
+
+  it('짝: 후보를 고르기 전에는 지도는 떠 있어도 핀이 없다', () => {
+    renderScreen({
+      ...IDLE_FLOW,
+      searchStatus: 'success',
+      candidates: [CANDIDATE_A, CANDIDATE_B],
+      selectedCandidate: null,
+    });
+
+    const map = within(
+      screen.getByTestId('stay-register-map-preview')
+    ).getByTestId('map-root');
+    // 핀을 안 넘기든(undefined) 빈 배열을 넘기든 "핀 없음"이다(02a ★12).
+    expect(map.props.pins ?? []).toHaveLength(0);
+  });
+});
+
 describe('R-12 · 시트 지도가 실패해도 막다른 길이 아니다 (§3-3 · INV-4)', () => {
   it('이름·주소를 대신 보여주고 "이 주소로 확인"으로 확정할 수 있다', () => {
     const handlers = renderScreen({
@@ -493,69 +480,23 @@ describe('R-12 · 시트 지도가 실패해도 막다른 길이 아니다 (§3-
   });
 });
 
-describe('R-13 · 날짜 필드와 달력 (§3-4)', () => {
-  it('날짜가 비어 있으면 N박 표기가 없고, 필드를 누르면 달력이 열린다', () => {
+describe('🔴 R-13 · 날짜 입력이 없다 — 좌표만 확정하면 등록된다 (TRIP-1052 AC-1 · US-STAY-08)', () => {
+  it('날짜 필드·요약·오류·달력 시트·날짜 칸이 하나도 없고 "체크인·체크아웃" 문구도 없으며, 등록이 열린다', () => {
+    // 준비 — 후보를 고르고 좌표까지 확정한 "등록 직전" 상태. 날짜 축은 flow에 아예 없다.
     const handlers = renderScreen(READY_FLOW);
 
-    expect(
-      screen.getByTestId('stay-register-date-summary')
-    ).not.toHaveTextContent(/박/);
+    // 단언 ① — 부재. 접두 정규식 하나가 -date-field·-date-summary·-date-error·-datesheet·
+    // -date-cell-* 다섯 갈래를 전부 덮는다(`^`가 있어 candidate 류는 안 걸린다).
+    expect(screen.queryAllByTestId(/^stay-register-date/)).toHaveLength(0);
+    expect(screen.queryByText(/체크인|체크아웃/)).toBeNull();
 
-    fireEvent.press(screen.getByTestId('stay-register-date-field'));
-    expect(handlers.onOpenDateSheet).toHaveBeenCalledTimes(1);
-  });
-
-  it('범위가 정해지면 요일 포맷 "6.10 (수) – 6.12 (금)"과 "2박"이 나온다 (TRIP-730)', () => {
-    renderScreen({
-      ...READY_FLOW,
-      checkIn: '2026-06-10',
-      checkOut: '2026-06-12',
-    });
-
-    // TRIP-730 — 옛 "2박 · 나중에 바꿀 수 있어요" 대신 요일 포맷(범위) + "2박" 배지(별 노드).
-    // ★ 요일은 날짜에서 **계산**한다 — 2026-06-10 은 실제로 수요일이라, Figma 목업 텍스트
-    //   "6.10 (화)"를 그대로 박으면 red다(02a §5-B). getByText(문자열)은 완전일치라 en-dash·
-    //   공백·요일까지 이 한 줄이 포맷 전체를 잠근다.
-    const field = screen.getByTestId('stay-register-date-field');
-    expect(within(field).getByText('6.10 (수) – 6.12 (금)')).toBeOnTheScreen();
-    expect(within(field).getByText('2박')).toBeOnTheScreen();
-
-    // 옛 문구는 사라진다(부분포함이라 regex).
-    expect(screen.queryByText(/나중에 바꿀/)).toBeNull();
-  });
-
-  it('달력에서 오늘 이전은 잠기고, 오늘 이후를 누르면 그 날짜가 올라간다', () => {
-    const handlers = renderScreen(
-      { ...READY_FLOW, dateSheetOpen: true },
-      makeHandlers(),
-      '2026-06-15'
-    );
-
-    const sheet = screen.getByTestId('stay-register-datesheet');
-    expect(sheet).toBeOnTheScreen();
-
-    // 과거는 회색 비활성(§3-4 사용자 결정) — 오늘은 포함이다.
-    expect(
-      screen.getByTestId('stay-register-date-cell-2026-06-14')
-    ).toBeDisabled();
-    expect(
-      screen.getByTestId('stay-register-date-cell-2026-06-15')
-    ).toBeEnabled();
-
-    const future = screen.getByTestId('stay-register-date-cell-2026-06-16');
-    expect(future).toBeEnabled();
-    fireEvent.press(future);
-    expect(handlers.onPickDate).toHaveBeenCalledTimes(1);
-    expect(handlers.onPickDate).toHaveBeenCalledWith('2026-06-16');
-  });
-
-  it('짝: 달력이 닫혀 있으면 날짜 칸이 하나도 없다', () => {
-    renderScreen(READY_FLOW);
-
-    expect(screen.queryAllByTestId('stay-register-datesheet')).toHaveLength(0);
-    expect(screen.queryAllByTestId(/^stay-register-date-cell-/)).toHaveLength(
-      0
-    );
+    // 단언 ② — 짝. 화면이 통째로 비어서 ①이 참이 된 게 아니다: 루트가 있고, 좌표 확정만으로
+    // 등록 버튼이 열려 실제로 제출된다(날짜를 요구하면 위반).
+    expect(screen.getByTestId('stay-register-root')).toBeOnTheScreen();
+    const submit = screen.getByTestId('stay-register-submit');
+    expect(submit).toBeEnabled();
+    fireEvent.press(submit);
+    expect(handlers.onSubmit).toHaveBeenCalledTimes(1);
   });
 });
 

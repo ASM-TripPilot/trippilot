@@ -56,6 +56,7 @@ export function ToggleRow({
             <View className="w-[46px] items-center">
               <Toggle
                 testID={`notification-settings-toggle-push-${kind}`}
+                accessibilityLabel={`${label} 푸시`}
                 checked={pushColumnAvailable && value.pushEnabled}
                 disabled={!pushColumnAvailable}
                 onPress={() => onToggle(kind, 'push', !value.pushEnabled)}
@@ -65,6 +66,7 @@ export function ToggleRow({
           <View className="w-[46px] items-center">
             <Toggle
               testID={`notification-settings-toggle-inapp-${kind}`}
+              accessibilityLabel={`${label} 인앱`}
               checked={value.inAppEnabled}
               onPress={() => onToggle(kind, 'inapp', !value.inAppEnabled)}
             />

@@ -7,10 +7,12 @@ export type {
   Trip,
   TripStatus,
   TripDestination,
+  ItineraryStatus,
 } from '@/shared/api/generated/schemas';
 
-/** h06 카드 배지 — 'done'=완성(itinerary CONFIRMED) · 'draft'=작성중 · null=itinerary 미도착(배지 미정). */
-export type MyTripBadge = 'done' | 'draft' | null;
+/** h06 카드 배지 — 'done'=완성(itinerary CONFIRMED) · 'draft'=작성중 · 'live'=여행 중(확정 + 오늘이 기간 안,
+ * TRIP-1121) · null=itinerary 미도착(배지 미정). */
+export type MyTripBadge = 'done' | 'draft' | 'live' | null;
 
 /**
  * h06 "내 여행" 카드 뷰모델 — 화면이 그대로 그릴 값(features/itinerary/ui/MyTripCard 로컬 정의에서 이관).
