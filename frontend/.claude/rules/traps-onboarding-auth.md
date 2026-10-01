@@ -2,7 +2,10 @@
 paths:
   - "src/features/auth/**"
   - "src/features/onboarding/**"
+  - "src/pages/login/**"
   - "src/pages/onboarding-*/**"
+  - "src/pages/reconsent/**"
+  - "src/pages/terms-viewer/**"
   - "src/app/(onboarding)/**"
 ---
 이 파일은 repo-traps.md에서 경로별로 쪼갠 함정이다 — 해당 경로 만질 때만 로드된다.
@@ -19,3 +22,4 @@ paths:
 - **푸시 카드 `계속` 뒤 OS 알림 창은 취향 1/2 화면 위에 뜬다** → `void promptAndRegisterPush()`를 기다리지 않고 `replace`하기 때문이다(권한 결과·토큰 등록 실패는 이 화면이 모른다, 실패는 `register.ts`가 삼키고 재등록은 다음 콜드 스타트 `SplashGate` HOME 진입뿐). 창이 실제로 취향 화면 위에 어색하지 않게 뜨는지·`(onboarding)/push` 실제 진입·동심원 링 픽셀(위치 카드 추정값)은 jest 사각이고 6-b 미검증이다. 카드 문구는 Figma 채택본 c08-push(`4774:2960`)이고 위치 카드 주 버튼 `위치 사용 허용`(Figma) vs `계속`(코드) 드리프트는 미결이다.
 - **`fireEvent.press`는 안쪽 노드에서 올라가다 조상 *컴포넌트*가 받은 `onPress` prop까지 직접 부른다 — `Pressable` 배선이 끊겨도 green** → 애플 버튼(`lib/appleAuthorize.tsx`의 `AppleSignInButton({ onPress })`)에서 실측됐다(TRIP-1124 5-b C1): `onPress={onPress}`를 `onLongPress={onPress}`로 바꿔도 245/245 green이었고 실기에선 짧은 탭이 무반응이다. 그래서 `LoginPage.apple.test.tsx`는 **이 리포 첫 `userEvent`**(`await userEvent.setup().press(...)`, responder 경로·실타이머 약 130ms)로 누르고, 누를 곳을 글자(A10~A12)와 로고(A13) 두 군데로 둔다 — 글자만 누르면 `Text`에만 `onPress`가 달린 구현도 통과한다. 로고 모양은 `FIGMA_APPLE_LOGO_D` 바이트 대조(A14). **이 파일에 `jest.useFakeTimers()`를 넣으면 누르기 4케이스가 5s 시간 초과로 죽는다**(`userEvent.setup()`에 `advanceTimers` 없음 — 시끄럽게 실패하는 방향이라 조용한 통과는 아님). 받은 prop이 `onPress`인 다른 커스텀 버튼(`SkipVisitDialog` 류)의 테스트도 같은 사각을 가질 수 있다 — 아직 훑지 않았다.
 - **`expo-apple-authentication` 목(`src/test-support/expoAppleAuthenticationMock.tsx`)에서 시스템 버튼 대역이 사라졌다** → `AppleAuthenticationButton`이 없어서 구현이 시스템 버튼을 되쓰면 렌더가 undefined 엘리먼트로 터진다(`LoginPage.apple` 9건 red — 목 제거가 그물이다). 다만 실패 메시지는 "시스템 버튼이 있다"가 아니라 `Unable to find node on an unmounted component`이고, 누가 목에 대역을 되살리면 혼합형(커스텀+시스템 버튼 병기)은 존재 단언만으로 못 잡는다. 애플 버튼 제목은 22px(`text-hero`)라 iOS "더 큰 텍스트" AX 크기(약 1.8배~)에서 고정 높이 52 안에 잘릴 수 있다 — 리포 전체에 `allowFontScaling`·`maxFontSizeMultiplier` 0건, jest 사각이고 6-b 미검증(4버튼 공통).
+- **`LoginPage.integration.test.tsx`의 token 갈래에서는 `mockAuthorizeCalls`가 늘 `[]`다** → `mockForceTokenFlow=true`일 때 가짜 인가가 기록 배열을 거치지 않는다. 그 describe에 "인가 호출 0회" 단언(`expect(mockAuthorizeCalls).toEqual([])`)을 복붙하면 인가가 몇 번 불렸든 통과하는 공허 단언이다(code 갈래에선 의미가 있어 그대로 옮기기 쉽다). token 갈래의 호출 여부는 `socialRequests`(`/kakao/token` 포함)로만 가른다.
