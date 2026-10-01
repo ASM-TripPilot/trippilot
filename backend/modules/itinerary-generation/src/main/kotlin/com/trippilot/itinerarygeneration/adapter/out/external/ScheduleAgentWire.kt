@@ -56,6 +56,14 @@ internal data class AiScheduleResponse(
      * (배포 순서가 어긋나도 역직렬화가 깨지지 않는다).
      */
     val unplacedMustVisits: List<AiUnplacedMustVisit> = emptyList(),
+    /**
+     * 취향 점수를 누가 매겼나 — `LLM`·`MIXED`(LLM + 규칙 보충)·`RULE`, 모르면 null. `solveMode` 는 조립기
+     * 이름이라 늘 OR_TOOLS 여서 LLM 실패를 가리지 못했다(FE "LLM 이 안 돈다" 오판). **기본값** — 옛 AI
+     * 응답도 같은 뜻. 저장·노출은 TRIP-1173 몫이고, 여기 필드는 계약 게이트(키 정확 일치) 때문에 먼저 실린다.
+     */
+    val scoringMode: String? = null,
+    /** 밟은 강등 계단 코드 `"{stage}:{사유 접두}"`(예 `llm:c1_fallback`) — 문장·시각 없음. */
+    val degradations: List<String> = emptyList(),
 )
 
 /** 미배치 보고 1건. `reason_code` 는 닫힌 집합이지만 **문자열로 받는다** — 아래 매핑 주석 참고. */
