@@ -122,6 +122,31 @@ def test_도시명_접두로는_묶이지_않는다() -> None:
         assert not same_family(_named("a", x), _named("b", y, north_m=200)), (x, y)
 
 
+def test_기관_범용_접두로는_묶이지_않는다() -> None:
+    """리뷰 probe — '국립'·'한국'·'중앙'·'조선' 은 단지가 아니라 운영 주체·수식어다."""
+    pairs = [("국립현대미술관 서울", "국립민속박물관", 350),
+             ("국립고궁박물관", "국립현대미술관", 509),
+             ("대전 중앙시장", "중앙로지하상가", 428),
+             ("한국은행 화폐박물관", "한국전통문화전당", 300),
+             ("조선왕릉 선릉", "조선호텔", 300)]
+    for x, y, m in pairs:
+        assert not same_family(_named("a", x), _named("b", y, north_m=m)), (x, y)
+    # 접두를 떼도 남는 공통부가 있으면 그대로 계열이다
+    assert same_family(_named("a", "국립중앙박물관"),
+                       _named("b", "국립중앙박물관 어린이박물관", north_m=100))
+    assert same_family(_named("a", "국립경주박물관"), _named("b", "국립경주박물관 월지관", north_m=50))
+
+
+def test_음식_골목은_맛집처럼_계열에서_뺀다() -> None:
+    """TourAPI 가 액티비티로 주는 먹자골목 — 실 덤프에서 '자갈치 크루즈'·DDP 를 눌렀다."""
+    alley = _named("a", "부산 자갈치 양곱창 골목", category=PoiCategory.ACTIVITY)
+    assert not same_family(alley, _named("b", "자갈치 크루즈", north_m=200))
+    chicken = _named("c", "서울 동대문 닭한마리 골목", category=PoiCategory.ACTIVITY)
+    assert not same_family(chicken, _named("d", "동대문디자인플라자(DDP)", north_m=400))
+    market = _named("e", "국제시장 먹자골목", category=PoiCategory.ACTIVITY)
+    assert not same_family(market, _named("f", "국제시장", north_m=50))
+
+
 def test_맛집_카페가_낀_쌍은_계열이_아니다() -> None:
     """식당 밀집은 정상 — 같은 건물(좌표 동일)이어도 묶지 않는다."""
     food = _named("a", "대전갈비집", category=PoiCategory.FOOD)
@@ -303,6 +328,45 @@ class _BrokenLookup(InMemoryPoi):
         raise TimeoutError("poi lookup timed out")
 
 
+class _SlowLookup(InMemoryPoi):
+    """조회 한 번에 30s — 전체 시한(20s)을 넘긴다. `clock` 은 에이전트 생성 뒤 꽂는다."""
+    clock: FakeClock
+
+    def lookup_by_ids(self, ids):  # noqa: ANN001
+        self.clock.advance(30_000)
+        return super().lookup_by_ids(ids)
+
+
+def test_조회가_시한을_넘기면_overrun_을_남긴다() -> None:
+    """⓪ 과 같은 시한 규율 — 찾은 값은 쓰되, 늦은 이유가 관측에 남아야 한다."""
+    pool = _pool(_HWANG, _D2)
+    slow = _SlowLookup(_HWANG)
+    agent, trace, sink = _agent(_HWANG_SCORES, poi_db=slow)
+    slow.clock = agent._clock
+    agent.run(_task(pool, request=_gen_request(_D2, excluded=frozenset({PoiId("hv")}))))
+
+    assert _fed(sink)["hm"] == demoted_score(0.95, factor=_F, penalty=_P)  # 찾은 값은 쓴다
+    reasons = [e.reason for e in trace.of_type(FallbackEvent) if e.stage == "family"]
+    assert any(r.startswith("overrun:spent=30000ms>available=") for r in reasons), reasons
+
+
+def test_계열_판정이_터져도_일정은_나간다(monkeypatch) -> None:
+    """부가 단계 격리 (INV-4) — ⑥ 차선책과 같은 규약: 강등 없이 진행하고 관측한다."""
+    import trippilot.agents.schedule.agent as agent_mod
+
+    def boom(*_a, **_k):
+        raise ValueError("boom")
+
+    monkeypatch.setattr(agent_mod, "family_followers", boom)
+    agent, trace, sink = _agent(_NAMSAN_SCORES)
+    outcome = agent.run(_task(_pool(_NAMSAN), request=_gen_request()))
+
+    assert outcome.solution is not None and outcome.degradations == ()
+    assert _fed(sink) == _NAMSAN_SCORES
+    reasons = [e.reason for e in trace.of_type(FallbackEvent) if e.stage == "family"]
+    assert reasons == ["family_error: ValueError: boom"]
+
+
 def test_조회_실패는_그_축만_건너뛰고_관측한다() -> None:
     outcome, trace, sink = _day2(_BrokenLookup(_HWANG))
 
@@ -440,8 +504,23 @@ def test_풀_순서를_섞어도_같은_강등() -> None:
     assert outs[0] == outs[1]
 
 
+def test_OR_프리필터_60위_밖_계열원도_판정한다() -> None:
+    """상한이 프리필터와 같으면(60) 강등된 자리로 61위 밑이 판정 없이 올라온다 — 리뷰 실측
+    '남산예장공원'(강등 전 61위)이 '남산공원'과 같은 날 들어갔다. 기본 상한은 그보다 넉넉하다.
+    """
+    fillers = tuple(_named(f"s{i:02d}", f"spot-{i:02d}", north_m=(i // 8) * 40,
+                           east_m=(i % 8) * 40 + 300) for i in range(62))
+    pool = _pool((_named("n1", "남산공원(서울)"), _named("n2", "남산골한옥마을", north_m=330),
+                  *fillers))
+    scores = {"n1": 0.95, "n2": 0.5, **{f"s{i:02d}": 0.8 for i in range(62)}}
+    agent, _, sink = _agent(scores)
+    agent.run(_task(pool, request=_gen_request()))
+
+    assert _fed(sink)["n2"] == demoted_score(0.5, factor=_F, penalty=_P)  # 강등 전 64위
+
+
 def test_점수_상위_N_밖은_판정하지_않는다() -> None:
-    """O(n²) 상한 — 상위 N 밖의 계열원은 건드리지 않는다."""
+    """상한의 의미 — 상위 N 밖의 계열원은 건드리지 않는다(풀 상한 5,000 에서 비교 횟수를 묶는다)."""
     pool = _pool(_NAMSAN)
     agent, _, sink = _agent(_NAMSAN_SCORES)
     agent._cfg = replace(_CFG, family_demote_top_n=2)  # n1, n2 만

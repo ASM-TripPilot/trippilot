@@ -344,9 +344,15 @@ class ScheduleAgent:
         #    거절로 깎인 점수 위에서 대표를 고른다.
         family_anchors: tuple[Poi, ...] | None = None
         if request.family_demote:
-            candidates, family_anchors = self._demote_family(
-                request, pool, candidates, fixed_blocks, fixed_pois, budget, t0,
-                trace_id, now)
+            try:
+                candidates, family_anchors = self._demote_family(
+                    request, pool, candidates, fixed_blocks, fixed_pois, budget, t0,
+                    trace_id, now)
+            except Exception as e:  # noqa: BLE001
+                # 순수 계산이라 도달하지 않아야 하지만, 부가 단계가 생성을 깨면 안 된다(INV-4
+                # — ⑥ 차선책과 같은 규약). 강등 없이 종전 점수로 진행하고 관측한다.
+                self._observe(trace_id, now, "family", "family_demote", "(skipped)",
+                              f"family_error: {type(e).__name__}: {e}")
 
         # ②′ 지도 실재 검증 (TRIP-904) — **점수가 나온 뒤**라야 배치될 후보를 검증할 수
         #    있고, 결과가 **점수**에 실려야 어셈블리에 닿는다. 풀 단계에서 순서만 바꾸던
@@ -689,8 +695,9 @@ class ScheduleAgent:
         밖이면(그 요일 휴무 등) `poi_db` 로 좌표·이름을 얻는다 — 못 얻으면 **그 축만** 빼고
         관측한다(강등 기록 아님 — 일정은 그대로 나가고 계열 억제만 약해진다).
 
-        대상은 점수 상위 `family_demote_top_n`(OR 프리필터 60 수준) — 판정이 쌍 비교라
-        O(n²) 를 묶는다. 그 밖은 어차피 배치 경쟁에 들지 않는다.
+        대상은 점수 상위 `family_demote_top_n` — OR 프리필터(60)보다 넉넉해야 한다. 강등된
+        계열원 자리로 판정 밖 후보가 올라와 프리필터에 들기 때문이다(상한이 60 이면 61위
+        '남산예장공원'이 판정 없이 '남산공원'과 같은 날 들어갔다).
 
         **합성**: 각 강등은 자기 단계 진입 점수에 한 번씩 적용된다 — ②‴ 거절(뺄셈) 뒤의
         점수에 여기서 한 단, ②′ 지도 미검출이면 거기서 또 한 단. 곱셈 하한도 겹쳐
@@ -736,7 +743,11 @@ class ScheduleAgent:
         trace_id: TraceId,
         now: datetime,
     ) -> dict[PoiId, Poi]:
-        """풀 밖 앞 일자 배치분 조회 — 실패·시한 부족이면 빈 결과(관측만, ⓪ 과 같은 시한 규율)."""
+        """풀 밖 앞 일자 배치분 조회 — 실패·시한 부족이면 빈 결과(관측만, ⓪ 과 같은 시한 규율).
+
+        포트는 시한을 받지 않는다 — 진입 전에 어셈블리 바닥을 보고, 호출이 남은 시한을
+        넘겼으면 `overrun` 으로 남긴다(찾은 값은 쓴다 — 이미 치른 비용이다).
+        """
         if self._poi_db is None:
             return {}
         available = (budget.total_ms - (self._clock.monotonic_ms() - t0)
@@ -745,13 +756,19 @@ class ScheduleAgent:
             self._observe(trace_id, now, "family", "anchor_lookup", "(skipped)",
                           f"deadline:available={available}ms")
             return {}
+        called = self._clock.monotonic_ms()
         try:  # 반환값 순회까지 try 안이다 (DL-5 — _resolve_fixed_pois 와 같은 규약)
-            return {p.poi_id: p for p in self._poi_db.lookup_by_ids(ids).pois
-                    if p.poi_id in ids}
+            found = {p.poi_id: p for p in self._poi_db.lookup_by_ids(ids).pois
+                     if p.poi_id in ids}
         except Exception as e:  # noqa: BLE001
+            found = {}
             self._observe(trace_id, now, "family", "anchor_lookup", "(skipped)",
                           f"family_anchor_lookup_error: {type(e).__name__}: {e}")
-            return {}
+        spent = self._clock.monotonic_ms() - called
+        if spent > available:
+            self._observe(trace_id, now, "family", "anchor_lookup", "(kept)",
+                          f"overrun:spent={spent}ms>available={available}ms")
+        return found
 
     # ── ②′ 지도 실재 검증 (TRIP-904) ────────────────────────────────
 

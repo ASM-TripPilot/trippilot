@@ -9,10 +9,12 @@ TourAPI 는 산과 그 전망대, 관광특구와 그 안 해수욕장, 한 공�
 
 **쌍 판정** (`same_family`) — 정규화 이름(괄호 접미·앞머리 시·도 토큰·공백·기호 제거) 기준:
   ① 좌표 ≤ 5m  ② 이름 포함관계 + ≤ 1.5km  ③ 한글 2자+ 공통 접두 + ≤ 700m
-  맛집·카페가 낀 쌍은 계열이 아니다 — 식당 밀집(같은 건물·먹자골목)은 정상이다.
+  맛집·카페(+ 이름이 음식 골목인 것)가 낀 쌍은 계열이 아니다 — 식당 밀집(같은 건물·먹자골목)은 정상이다.
   실측(ACTIVE 1,138곳, 수작업 판정 141쌍): 계열 정밀도 85.8%, 알려진 계열 138쌍 대비 재현율 87.7%.
   시·도 이름을 지우지 않으면 '서울 우정총국'↔'서울 운현궁'·'부산시립미술관'↔'부산영화촬영스튜디오'
-  같은 도시명 접두가 오탐의 대부분이었다. 남은 오탐은 구·동 이름 접두('구로'·'강화')다.
+  같은 도시명 접두가 오탐의 대부분이었다. '국립'·'한국'·'중앙' 같은 기관·범용 접두도 같은 이유로 뗀다.
+남은 오탐은 구·동·시 이름 접두('해운대'·'구로'·'강화'·'경주')다 — 떼면 '해운대해수욕장'↔'해운대
+관광특구' 같은 진짜 계열도 잃는다. 배제가 아니라 강등이라 감수한다.
 
 **묶음은 점수순 스타** (`family_followers`) — 대표마다 **직접** 맞는 것만 그 계열원이다.
 union-find 이행 폐포는 사슬로 번져('남산' 7곳·'강화' 5곳) 과강등했다: A~B, B~C 라고
@@ -44,6 +46,13 @@ _ADMIN = frozenset((
     "강원특별자치도", "강원도", "강원",
 ))
 _ADMIN_LONGEST_FIRST = tuple(sorted(_ADMIN, key=len, reverse=True))
+# 접두 규칙에서 시·도 이름 다음에 한 번 더 떼는 기관·범용 접두 — 같은 단지가 아니라 운영
+# 주체·수식어다('국립현대미술관'↔'국립민속박물관' 350m·'조선왕릉 선릉'↔'조선호텔' 오탐).
+_GENERIC_PREFIX = ("국립", "시립", "도립", "구립", "군립", "한국", "대한", "중앙", "시민", "조선")
+# 먹자골목·음식 골목은 TourAPI 가 액티비티로 주지만 실질은 식당 밀집이다 — 맛집·카페처럼
+# 계열에서 뺀다('자갈치 양곱창 골목'이 '자갈치 크루즈'를, '닭한마리 골목'이 DDP 를 눌렀다).
+# '해물탕거리' 같은 '…거리' 음식 거리는 아직 잡지 않는다(일반 '거리'와 이름으로 못 가른다).
+_EATERY_NAME = re.compile(r"골목$|먹자|먹거리|카페거리")
 _PAREN = re.compile(r"\([^)]*\)|\[[^\]]*\]")
 _PUNCT = re.compile(r"[\s&·,.\-_'\"!?/:]+")
 _EATERY = frozenset((PoiCategory.FOOD, PoiCategory.CAFE))
@@ -57,12 +66,16 @@ def normalize_name(name: str) -> str:
     return _PUNCT.sub("", "".join(tokens)).lower()
 
 
-def _bare(name: str) -> str:
-    """접두 비교용 — 붙여 쓴 시·도 이름까지 뗀다(남는 게 2자 미만이면 그대로)."""
-    for admin in _ADMIN_LONGEST_FIRST:
-        if name.startswith(admin) and len(name) - len(admin) >= 2:
-            return name[len(admin):]
+def _strip_one(name: str, prefixes: Sequence[str]) -> str:
+    for head in prefixes:
+        if name.startswith(head) and len(name) - len(head) >= 2:
+            return name[len(head):]
     return name
+
+
+def _bare(name: str) -> str:
+    """접두 비교용 — 붙여 쓴 시·도 이름, 이어서 기관·범용 접두를 뗀다(남는 게 2자 미만이면 그대로)."""
+    return _strip_one(_strip_one(name, _ADMIN_LONGEST_FIRST), _GENERIC_PREFIX)
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,11 +83,13 @@ class _Sig:
     poi: Poi
     name: str
     bare: str
+    eatery: bool
 
     @staticmethod
     def of(poi: Poi) -> "_Sig":
         name = normalize_name(poi.name)
-        return _Sig(poi, name, _bare(name))
+        return _Sig(poi, name, _bare(name),
+                    poi.category in _EATERY or _EATERY_NAME.search(name) is not None)
 
 
 def _hangul_prefix(a: str, b: str) -> int:
@@ -88,7 +103,7 @@ def _hangul_prefix(a: str, b: str) -> int:
 
 
 def _related(a: _Sig, b: _Sig) -> bool:
-    if a.poi.category in _EATERY or b.poi.category in _EATERY:
+    if a.eatery or b.eatery:
         return False
     km = haversine_km(a.poi.coord, b.poi.coord)
     if km <= _SAME_COORD_KM:
