@@ -25,7 +25,7 @@ export function useAppleButton(): AppleButtonComponent | null {
     let active = true;
     void (async () => {
       try {
-        const apple = await import('../lib/appleAuthorize');
+        const apple = await import('@/features/auth/lib/appleAuthorize');
         if ((await apple.isAppleSignInAvailable()) && active) {
           // 함수형 업데이트로 넘긴다 — 컴포넌트(함수)를 그대로 주면 React 가 updater 로 호출한다.
           setAppleButton(() => apple.AppleSignInButton);

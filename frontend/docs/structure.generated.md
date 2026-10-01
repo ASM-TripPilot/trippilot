@@ -288,13 +288,11 @@
 ## src/features/auth/model/
 - `src/features/auth/model/gateDestination.ts`  →  publishGateDestination · getGateDestination · waitForGateDestination · resetGateDestination
 - `src/features/auth/model/resolveBootstrapDestination.ts`  →  BootstrapDestination · resolveBootstrapDestination
-- `src/features/auth/model/useAppleButton.ts`  →  useAppleButton
 - `src/features/auth/model/useBootstrapGate.ts`  →  BOOTSTRAP_TIMEOUT_MS · useBootstrapGate
 - `src/features/auth/model/useSocialLogin.ts`  →  SocialLoginPhase · AuthorizeResult · Authorize · useSocialLogin
 
 ## src/features/auth/ui/
 - `src/features/auth/ui/AuthGlyphs.tsx`  →  AppIconGlyph · GoogleIcon · AppleLogoGlyph · KakaoIcon · NaverIcon · WarningTriangleGlyph
-- `src/features/auth/ui/SocialLoginScreen.tsx`  →  SocialLoginScreenProps · SocialLoginScreen
 - `src/features/auth/ui/SplashIllustration.tsx`  →  SplashIllustration
 - `src/features/auth/ui/SplashScreen.tsx`  →  SplashScreen
 
@@ -431,19 +429,11 @@
 - `src/features/onboarding/model/preferenceStore.ts`  →  PreferenceDraft · usePreferenceStore
 - `src/features/onboarding/model/resolveOnboardingStep.ts`  →  OnboardingStep · OnboardingProgress · resolveOnboardingStep
 - `src/features/onboarding/model/termsDocumentTitle.ts`  →  termsDocumentTitle
-- `src/features/onboarding/model/useNickname.ts`  →  UseNickname · useNickname
 - `src/features/onboarding/model/useOnboardingProgress.ts`  →  useOnboardingProgress
-- `src/features/onboarding/model/useTermsConsent.ts`  →  UseTermsConsent · useTermsConsent
 - `src/features/onboarding/model/validateNicknameFormat.ts`  →  validateNicknameFormat · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH · type NicknameFormatReason · type NicknameFormatResult
 
 ## src/features/onboarding/ui/
-- `src/features/onboarding/ui/NicknameScreen.tsx`  →  NicknameErrorReason · NicknameScreenProps · NicknameScreen
 - `src/features/onboarding/ui/OnboardingGlyphs.tsx`  →  BackChevronGlyph · CheckGlyph · ViewChevronGlyph · RegenerateGlyph · PositiveCheckGlyph · GlyphComponent · SunGlyph · ForkKnifeGlyph · MountainGlyph · ArtGlyph · ActivityGlyph · CameraGlyph · ShoppingBagGlyph · MoonGlyph · BalanceGlyph · LightningGlyph · SoloPersonGlyph · FriendsGlyph · HeartGlyph · FamilyGlyph · ParentsGlyph · PetGlyph · WalkGlyph · TransitGlyph · CarGlyph · TaxiGlyph · BikeGlyph · SkipChevronGlyph · InfoCircleGlyph
-- `src/features/onboarding/ui/PrefStep1Screen.tsx`  →  PrefStep1ScreenProps · PrefStep1Screen
-- `src/features/onboarding/ui/PrefStep2Screen.tsx`  →  PrefStep2ScreenProps · PrefStep2Screen
-- `src/features/onboarding/ui/ReconsentScreen.tsx`  →  ReconsentItemView · ReconsentScreenProps · ReconsentScreen
-- `src/features/onboarding/ui/TermsScreen.tsx`  →  TermsItemView · TermsScreenProps · TermsScreen
-- `src/features/onboarding/ui/TermsViewerScreen.tsx`  →  TermsViewerScreenProps · TermsViewerScreen
 
 ## src/features/planb/config/
 - `src/features/planb/config/replanChoices.ts`  →  ReplanChoice · REPLAN_REASONS · REPLAN_DIRECTIVES · TRIGGER_REASON_KEY
@@ -766,8 +756,12 @@
 ## src/pages/login/
 - `src/pages/login/index.ts`  →  LoginPage
 
+## src/pages/login/model/
+- `src/pages/login/model/useAppleButton.ts`  →  useAppleButton
+
 ## src/pages/login/ui/
 - `src/pages/login/ui/LoginPage.tsx`  →  LoginPage
+- `src/pages/login/ui/SocialLoginScreen.tsx`  →  SocialLoginScreenProps · SocialLoginScreen
 
 ## src/pages/magazine/ui/
 - `src/pages/magazine/ui/MagazinePage.tsx`  →  MagazinePage
@@ -799,20 +793,26 @@
 ## src/pages/onboarding-nickname/
 - `src/pages/onboarding-nickname/index.ts`  →  NicknamePage
 
+## src/pages/onboarding-nickname/model/
+- `src/pages/onboarding-nickname/model/useNickname.ts`  →  UseNickname · useNickname
+
 ## src/pages/onboarding-nickname/ui/
 - `src/pages/onboarding-nickname/ui/NicknamePage.tsx`  →  NicknamePage
+- `src/pages/onboarding-nickname/ui/NicknameScreen.tsx`  →  NicknameErrorReason · NicknameScreenProps · NicknameScreen
 
 ## src/pages/onboarding-pref1/
 - `src/pages/onboarding-pref1/index.ts`  →  PrefStep1Page
 
 ## src/pages/onboarding-pref1/ui/
 - `src/pages/onboarding-pref1/ui/PrefStep1Page.tsx`  →  PrefStep1Page
+- `src/pages/onboarding-pref1/ui/PrefStep1Screen.tsx`  →  PrefStep1ScreenProps · PrefStep1Screen
 
 ## src/pages/onboarding-pref2/
 - `src/pages/onboarding-pref2/index.ts`  →  PrefStep2Page
 
 ## src/pages/onboarding-pref2/ui/
 - `src/pages/onboarding-pref2/ui/PrefStep2Page.tsx`  →  PrefStep2Page
+- `src/pages/onboarding-pref2/ui/PrefStep2Screen.tsx`  →  PrefStep2ScreenProps · PrefStep2Screen
 
 ## src/pages/onboarding-push/
 - `src/pages/onboarding-push/index.ts`  →  PushPage
@@ -823,8 +823,12 @@
 ## src/pages/onboarding-terms/
 - `src/pages/onboarding-terms/index.ts`  →  TermsPage
 
+## src/pages/onboarding-terms/model/
+- `src/pages/onboarding-terms/model/useTermsConsent.ts`  →  UseTermsConsent · useTermsConsent
+
 ## src/pages/onboarding-terms/ui/
 - `src/pages/onboarding-terms/ui/TermsPage.tsx`  →  TermsPage
+- `src/pages/onboarding-terms/ui/TermsScreen.tsx`  →  TermsItemView · TermsScreenProps · TermsScreen
 
 ## src/pages/place-detail/
 - `src/pages/place-detail/index.ts`  →  PlaceDetailPage
@@ -865,6 +869,7 @@
 
 ## src/pages/reconsent/ui/
 - `src/pages/reconsent/ui/ReconsentPage.tsx`  →  ReconsentPage
+- `src/pages/reconsent/ui/ReconsentScreen.tsx`  →  ReconsentItemView · ReconsentScreenProps · ReconsentScreen
 
 ## src/pages/record-add-visit/
 - `src/pages/record-add-visit/index.ts`  →  RecordAddVisitPage
@@ -958,6 +963,7 @@
 
 ## src/pages/terms-viewer/ui/
 - `src/pages/terms-viewer/ui/TermsViewerPage.tsx`  →  TermsViewerPage
+- `src/pages/terms-viewer/ui/TermsViewerScreen.tsx`  →  TermsViewerScreenProps · TermsViewerScreen
 
 ## src/pages/travel-style/
 - `src/pages/travel-style/index.ts`  →  TravelStylePage

@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { BackChevronGlyph } from './OnboardingGlyphs';
+import { BackChevronGlyph } from '@/features/onboarding/ui/OnboardingGlyphs';
 
 export interface TermsViewerScreenProps {
   /** 헤더 제목 = 문서 이름(예: '개인정보 처리방침'). */

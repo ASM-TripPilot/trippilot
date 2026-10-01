@@ -10,7 +10,7 @@ import { useRouter } from 'expo-router';
 import { usePreferenceStore } from '@/features/onboarding/model/preferenceStore';
 import { notifyBootstrapReeval } from '@/shared/bootstrap/bootstrapReeval';
 import { guardPress } from '@/shared/press/pressGuard';
-import { PrefStep1Screen } from '@/features/onboarding/ui/PrefStep1Screen';
+import { PrefStep1Screen } from './PrefStep1Screen';
 
 export function PrefStep1Page(): ReactElement {
   const router = useRouter();

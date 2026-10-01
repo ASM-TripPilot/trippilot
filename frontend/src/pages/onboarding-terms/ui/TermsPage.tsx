@@ -5,8 +5,8 @@
 import type { ReactElement } from 'react';
 import { useRouter } from 'expo-router';
 
-import { useTermsConsent } from '@/features/onboarding/model/useTermsConsent';
-import { TermsScreen } from '@/features/onboarding/ui/TermsScreen';
+import { useTermsConsent } from '../model/useTermsConsent';
+import { TermsScreen } from './TermsScreen';
 
 export function TermsPage(): ReactElement {
   const router = useRouter();

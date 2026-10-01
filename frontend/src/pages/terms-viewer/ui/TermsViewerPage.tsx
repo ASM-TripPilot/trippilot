@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
 
 import { termsDocumentTitle } from '@/features/onboarding/model/termsDocumentTitle';
-import { TermsViewerScreen } from '@/features/onboarding/ui/TermsViewerScreen';
+import { TermsViewerScreen } from './TermsViewerScreen';
 import { fetchTermsByType } from '@/shared/api';
 
 /**

@@ -29,7 +29,7 @@ import {
   TransitGlyph,
   WalkGlyph,
   type GlyphComponent,
-} from './OnboardingGlyphs';
+} from '@/features/onboarding/ui/OnboardingGlyphs';
 
 export interface PrefStep2ScreenProps {
   selectedBudget: string | null;

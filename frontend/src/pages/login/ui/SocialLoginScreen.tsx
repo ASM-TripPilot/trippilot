@@ -4,9 +4,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 
 import type { SocialProvider } from '@/shared/api';
-import { AppIconGlyph, GoogleIcon, KakaoIcon, NaverIcon } from './AuthGlyphs';
-import { APP_ICON_COLORS } from '../config/gradients';
-import type { SocialLoginPhase } from '../model/useSocialLogin';
+import {
+  AppIconGlyph,
+  GoogleIcon,
+  KakaoIcon,
+  NaverIcon,
+} from '@/features/auth/ui/AuthGlyphs';
+import { APP_ICON_COLORS } from '@/features/auth/config/gradients';
+import type { SocialLoginPhase } from '@/features/auth/model/useSocialLogin';
 
 export interface SocialLoginScreenProps {
   phase: SocialLoginPhase;

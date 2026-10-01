@@ -5,12 +5,11 @@ paths:
 # `src/features/auth/` — 스플래시·소셜 로그인
 
 
-계층: `ui`(프레젠테이션) → `model`(상태·훅) → `lib`·`config`(순수 로직/설정). 배선은 `pages/login/ui/LoginPage.tsx`.
+계층: `ui`(프레젠테이션) → `model`(상태·훅) → `lib`·`config`(순수 로직/설정). 배선은 `pages/login/ui/LoginPage.tsx`. 로그인 화면 뷰 `SocialLoginScreen`·애플 버튼 훅 `useAppleButton`은 TRIP-1146으로 `pages/login/{ui,model}/`로 이사했다(소비처가 그 page 하나뿐).
 
 | 파일 | 역할 |
 |---|---|
 | `src/features/auth/ui/SplashScreen.tsx` | 스플래시 비주얼 (프레젠테이션 전용) |
-| `src/features/auth/ui/SocialLoginScreen.tsx` | 소셜 로그인 비주얼 (props 순수 컴포넌트, 에러 배너 블랙리스트) |
 | `src/features/auth/model/useBootstrapGate.ts` | 앱 시작 토큰 복원·잠정/확정 분기, 로그인 성공 구독 재조회 |
 | `src/features/auth/model/useSocialLogin.ts` | 소셜 로그인 흐름(PKCE·single-flight), code/token 엔드포인트 분기·신규가입 연령확인 분기 |
 | `src/features/auth/model/resolveBootstrapDestination.ts` | 순수 함수 — 부트스트랩 상태→목적지(onboardingCompleted 분기) |
@@ -19,7 +18,6 @@ paths:
 | `src/features/auth/lib/kakaoAuthorize.ts` | 카카오 SDK를 import하는 유일 파일, 취소는 message 매칭 |
 | `src/features/auth/lib/naverAuthorize.ts` | 네이버 SDK를 import하는 유일 파일 |
 | `src/features/auth/lib/appleAuthorize.tsx` | 애플 SDK를 정적 import하는 유일 파일(지연 로드로만 닿음) + `AppleSignInButton`. **버튼은 시스템 `AppleAuthenticationButton`이 아니라 직접 그리는 HIG 커스텀 `Pressable`**(TRIP-1124 — 이웃 구글 버튼과 표면 클래스 복사, 로고 24 `#000`, 제목 `text-hero text-black`: HIG가 버튼 안 로고·제목을 검정/흰색만 허용해 `text-ink`(#222) 불가). SDK를 하나도 안 쓰는 순수 UI인데 lib에 있다 — 가용성 판정 뒤에만 버튼을 건네는 주입 경로 때문. **`lib → ui`(`../ui/AuthGlyphs`의 `AppleLogoGlyph`) 역방향 import** — 위 계층 화살표의 반대라 가드가 없고(런타임 config→ui 선례는 `features/stay/config/amenityIcons.ts`), `AuthGlyphs`가 이 파일을 정적 import하는 날 순환 + SDK가 화면 그래프로 샌다 |
-| `src/features/auth/model/useAppleButton.ts` | 기기에서 애플 로그인이 가능하면 `AppleSignInButton` 컴포넌트를 state로 돌려주고 아니면 null(fail-closed, Android·판정 실패 포함) — `await import('../lib/appleAuthorize')`만으로 SDK에 닿음 |
 | `src/features/auth/lib/realAuthorize.ts` | expo-auth-session 참조 유일 프로덕션 파일 |
 | `src/features/auth/config/oauthConfig.ts` | provider별 OAuth config를 env에서 읽음, apple은 빈 슬롯(네이티브 SDK라 불필요) |
 | `src/features/auth/config/gradients.ts` | 그라디언트·앱아이콘 색 상수 |

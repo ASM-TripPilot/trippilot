@@ -5,8 +5,8 @@
 import type { ReactElement } from 'react';
 import { useRouter } from 'expo-router';
 
-import { useNickname } from '@/features/onboarding/model/useNickname';
-import { NicknameScreen } from '@/features/onboarding/ui/NicknameScreen';
+import { useNickname } from '../model/useNickname';
+import { NicknameScreen } from './NicknameScreen';
 
 export function NicknamePage(): ReactElement {
   const router = useRouter();
