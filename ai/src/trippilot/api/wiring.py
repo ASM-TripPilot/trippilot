@@ -57,13 +57,16 @@ import zlib
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import Callable, Mapping, Sequence
 
 from fastapi import FastAPI
 
 from trippilot.api import schemas
 from trippilot.api.app import create_app
 from trippilot.api.cost import CostLedger
+from trippilot.api.route_budget import (
+    LegRecorder, RouteReport, measure_within, post_assembly_budget_ms,
+)
 from trippilot.llm_gateway.adapters.backend_persona import _to_summary as _persona_to_summary
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.context import ContextResolver, ContextStore
@@ -162,6 +165,7 @@ from trippilot.ports.llm_port import LlmRequest, LlmResponse
 from trippilot.ports.embedding_port import EmbeddingPort
 from trippilot.ports.vector_store_port import VectorStorePort
 from trippilot.ports.trace_port import TracePort
+from trippilot.ports.travel_port import TravelPort
 from trippilot.domain.freshness import InfoPacket, ProviderKind, ProviderStatus
 from trippilot.orchestrator.info_collector import InfoCollector
 from trippilot.ports.weather_port import WeatherPort
@@ -1085,6 +1089,7 @@ class WiredItineraryOrchestrator:
     # Protocol: generate(request) — deadline·trace·now는 request_meta(IO-1)에서.
     def generate(self, request: schemas.GenerateItineraryRequest) -> WiredOutcome:
         meta = request.request_meta
+        entered_ms = self._clock.monotonic_ms()  # 조립 뒤 거리 시한의 원점 (TRIP-1179)
         outcome = self._orchestrator.generate(
             _domain_generate_request(request, self._tz),
             _deadline_budget(meta),
@@ -1097,13 +1102,19 @@ class WiredItineraryOrchestrator:
         solution = outcome.solution
         coords = self._coords_for(solution, outcome.slot_alternatives)
         scoring_mode, degradations = _scoring_signal(outcome)
+        (distance_ranges, slot_alternatives), _ = self._render_distances(
+            lambda port: (
+                self._distances_for(request, solution, coords, port),
+                self._alternatives_for(
+                    request, solution, outcome.slot_alternatives, coords, port),
+            ),
+            meta, entered_ms,
+        )
         return _envelope(
             solution,
             outcome.explanations,
-            distance_ranges=self._distances_for(request, solution, coords),
-            slot_alternatives=self._alternatives_for(
-                request, solution, outcome.slot_alternatives, coords
-            ),
+            distance_ranges=distance_ranges,
+            slot_alternatives=slot_alternatives,
             candidates_summary=outcome.candidates_summary,
             day1_ready_at=self._day1_ready_at(request, outcome),
             unplaced_must_visits=judge_unplaced_must_visits(
@@ -1131,12 +1142,49 @@ class WiredItineraryOrchestrator:
         request: schemas.GenerateItineraryRequest,
         solution: ItinerarySolution,
         coords: Mapping[PoiId, GeoPoint],
+        port: TravelPort,
     ) -> dict[str, str]:
         """배치 POI 좌표(`_coords_for` 재조회분)로 구간 거리를 렌더한다."""
         anchors = {a.date: GeoPoint(a.lat, a.lng) for a in request.anchors}
         return _distance_ranges(
-            solution, anchors, coords, self._estimator, _transport_from(request)
+            solution, anchors, coords, port, _transport_from(request)
         )
+
+    def _render_distances(
+        self, render: Callable[[TravelPort], tuple], meta: schemas.RequestMetaSchema,
+        started_ms: int,
+    ) -> tuple[tuple, RouteReport | None]:
+        """조립 뒤 거리 렌더를 **남은 시한 안에** 묶는다 (TRIP-1179).
+
+        실경로 체인이 아니면(`fallback` 없음 = TravelEstimator) 현행 그대로 한 번 렌더한다.
+        체인이면 `render` 를 두 번 부른다 — 1차는 구간만 받아 적고(외부 호출 0),
+        `min(1.5s, 잔여 − 여유)` 안에 병렬 실측한 뒤, 2차가 그 표로 렌더한다.
+        못 끝난 구간은 체인 폴백과 같은 하버사인 값이라 기존 '… 추정' 라벨이 붙는다(INV-3
+        거리만). 추정이 있으면 벤더 실패와 시한 초과를 나눠 FallbackEvent 로 남긴다(INV-4).
+        """
+        fallback = getattr(self._estimator, "fallback", None)
+        if fallback is None:
+            return render(self._estimator), None
+        recorder = LegRecorder(fallback)
+        render(recorder)
+        deadline_ms = _deadline_budget(meta)
+        budget_ms = post_assembly_budget_ms(
+            deadline_ms, self._clock.monotonic_ms() - started_ms)
+        table, report = measure_within(
+            recorder.legs, self._estimator, fallback, budget_ms=budget_ms, clock=self._clock)
+        if report.estimated:
+            n = report.total
+            self._trace.emit(FallbackEvent(
+                trace_id=TraceId(meta.request_id),
+                occurred_at=_tz_aware(meta.requested_at, self._tz),
+                component="api.wiring",
+                stage="distance",
+                from_mode="route_api",
+                to_mode="haversine_x_detour",
+                reason=(f"distance_estimated: budget={report.budget_estimated}/{n} "
+                        f"vendor={report.vendor_estimated}/{n} budget_ms={budget_ms}"),
+            ))
+        return render(table), report
 
     def _alternatives_for(
         self,
@@ -1144,6 +1192,7 @@ class WiredItineraryOrchestrator:
         solution: ItinerarySolution,
         picks: Mapping[str, tuple[core.SlotAlternative, ...]],
         coords: Mapping[PoiId, GeoPoint],
+        port: TravelPort,
     ) -> dict[str, tuple[WiredSlotAlternative, ...]]:
         """차선책에 **그 슬롯 POI 기준** 거리 문자열을 붙인다 — 좌표 미상이면 null(TRIP-871).
 
@@ -1169,7 +1218,7 @@ class WiredItineraryOrchestrator:
                         rationale=a.rationale,
                         distance_range=(
                             _render_distance(
-                                self._estimator.estimate(here, coords[a.poi_id], mode), mode
+                                port.estimate(here, coords[a.poi_id], mode), mode
                             )
                             if here is not None and a.poi_id in coords else None
                         ),
@@ -1466,7 +1515,7 @@ class WiredItineraryOrchestrator:
         ))
         return self._replan_projection(
             request, outcome, notes, resolved, unknown, retrieved=planb.retrieved,
-            planb_fallback=planb.is_fallback,
+            planb_fallback=planb.is_fallback, started_ms=t0,
         )
 
     def _replan_directives(
@@ -1583,6 +1632,7 @@ class WiredItineraryOrchestrator:
         *,
         retrieved: Mapping[str, int] | None = None,
         planb_fallback: bool = False,
+        started_ms: int,
     ) -> schemas.ReplanResponse:
         """`GenerationOutcome` → `ReplanResponse`. **예외로 올리지 않는다** (IO-7).
 
@@ -1607,16 +1657,26 @@ class WiredItineraryOrchestrator:
         transport = _token_or(
             _TRANSPORT_TOKENS, request.transport_mode, TransportMode.PUBLIC)
         llm_ok = outcome.scoring_mode is core.ScoringMode.LLM and not planb_fallback
+        # 두 순회 모두 1차 패스로 받아 적는다 — 좌표 미상 전파 규칙이 달라 구간 집합이
+        # 다르다(`_total_distance_km` 은 직전 유효점을 잇는다). 한 표를 같이 쓰면 같은
+        # 구간을 두 번 실측하지 않는다 (TRIP-1179).
+        (distance_ranges, total_km), report = self._render_distances(
+            lambda port: (
+                _distance_ranges(solution, anchors, coords, port, transport),
+                self._total_distance_km(solution, anchors, coords, transport, port),
+            ),
+            request.request_meta, started_ms,
+        )
+        if report is not None and report.estimated:
+            notes.append(f"distance_estimated:{report.estimated}/{report.total}")
         envelope = _envelope(
             solution,
-            distance_ranges=_distance_ranges(
-                solution, anchors, coords, self._estimator, transport),
+            distance_ranges=distance_ranges,
             candidates_summary=outcome.candidates_summary,
         )
         return schemas.ReplanResponse(
             itinerary=to_payload(envelope),
-            total_distance_km=self._total_distance_km(
-                solution, anchors, coords, transport),
+            total_distance_km=total_km,
             # 점수든 PlanB 랭킹이든 규칙으로 내려갔으면 폴백이다(`/planb/alternatives` 와
             # 같은 규칙) — 일정은 나왔으니 level 2 가 아니다.
             is_fallback=not llm_ok,
@@ -1634,6 +1694,7 @@ class WiredItineraryOrchestrator:
         anchors: Mapping[date, GeoPoint],
         coords: Mapping[PoiId, GeoPoint],
         transport: TransportMode,
+        port: TravelPort,
     ) -> float | None:
         """구간 거리 합. **생산자가 없어 여기서 만든다** (2026-09-24 실측: `src/` 에
         `total_distance_km` 생산 코드 0건 — 스키마 필드와 어댑터 내부값만 있었다).
@@ -1655,7 +1716,7 @@ class WiredItineraryOrchestrator:
                     previous = here or previous
                     continue
                 try:
-                    estimate = self._estimator.estimate(previous, here, transport)
+                    estimate = port.estimate(previous, here, transport)
                 except Exception:  # 추정 실패 — 그 구간만 빠진다
                     previous = here
                     continue

@@ -6,9 +6,15 @@
   ③ TravelPort Protocol 만족 — estimate 시그니처 정합
   ④ MeasuredTravel → TravelEstimate 변환 정합성 (distance_km, real_minutes)
   ⑤ 폴백도 실패하면 예외 상위 전파 (INV-4)
+  ⑥ 벤더 실패는 (수단·원인)별 첫 1회 WARNING — 403 상품 미구독이 운영 로그에 드러난다 (TRIP-1179)
+     첫 실패가 타임아웃이어도 뒤이은 403 은 따로 한 줄 남는다
+  ⑦ 폴백 추정기를 읽기 속성으로 연다 — 조립 뒤 거리 시한(api/route_budget)이 쓴다
 """
 
 from __future__ import annotations
+
+import logging
+import urllib.error
 
 import pytest
 
@@ -196,3 +202,77 @@ def test_both_fail_propagates_exception() -> None:
     )
     with pytest.raises(RuntimeError, match="Fallback also broken"):
         adapter.estimate(_JEJU_A, _JEJU_B, TransportMode.CAR)
+
+
+# ━━━ ⑥ 벤더 실패 관측 — 수단별 첫 1회 WARNING (TRIP-1179) ━━━━━━━━━━━━━━━━
+
+
+class Http403Tmap:
+    """TmapRouteAdapter 의 403 모양 — TravelTimeError 가 HTTPError 를 원인으로 품는다."""
+
+    def measure(
+        self, from_: GeoPoint, to: GeoPoint, mode: TransportMode
+    ) -> MeasuredTravel:
+        cause = urllib.error.HTTPError(
+            "https://example.invalid/transit/routes", 403, "Forbidden", None, None)  # type: ignore[arg-type]
+        try:
+            raise cause
+        except urllib.error.HTTPError as e:
+            # 메시지에 비밀이 섞여 와도 로그로 새면 안 된다 — 종류·상태만 남긴다
+            raise TravelTimeError("/transit/routes 호출 실패: appKey=SECRET-KEY") from e
+
+
+def test_vendor_failure_warns_once_per_mode(caplog: pytest.LogCaptureFixture) -> None:
+    adapter = ChainedTravelAdapter(primary=Http403Tmap(), fallback=FakeHaversine())
+    with caplog.at_level(logging.WARNING):
+        for _ in range(3):
+            assert adapter.estimate(_JEJU_A, _JEJU_B, TransportMode.PUBLIC).is_estimated
+        for _ in range(2):
+            adapter.estimate(_JEJU_A, _JEJU_B, TransportMode.WALK)
+
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 2, [r.getMessage() for r in warnings]
+    text = " ".join(r.getMessage() for r in warnings)
+    assert "PUBLIC" in text and "WALK" in text
+    assert "403" in text and "TravelTimeError" in text
+    assert "SECRET" not in text
+
+
+def test_fallback_is_exposed_read_only() -> None:
+    fallback = FakeHaversine()
+    adapter = ChainedTravelAdapter(primary=FakeTmap(), fallback=fallback)
+    assert adapter.fallback is fallback
+    with pytest.raises(AttributeError):
+        adapter.fallback = FakeHaversine()  # type: ignore[misc]
+
+
+class TimeoutThen403Tmap:
+    """첫 호출만 소켓 타임아웃, 이후 403 — 첫 원인이 403 을 가리면 미구독을 진단할 수 없다."""
+
+    def __init__(self) -> None:
+        self._calls = 0
+
+    def measure(
+        self, from_: GeoPoint, to: GeoPoint, mode: TransportMode
+    ) -> MeasuredTravel:
+        self._calls += 1
+        if self._calls == 1:
+            try:
+                raise TimeoutError("timed out")
+            except TimeoutError as e:
+                raise TravelTimeError("/transit/routes 호출 실패: timed out") from e
+        return Http403Tmap().measure(from_, to, mode)
+
+
+def test_vendor_failure_warns_again_when_the_cause_changes(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    adapter = ChainedTravelAdapter(primary=TimeoutThen403Tmap(), fallback=FakeHaversine())
+    with caplog.at_level(logging.WARNING):
+        for _ in range(6):
+            adapter.estimate(_JEJU_A, _JEJU_B, TransportMode.PUBLIC)
+
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 2, warnings
+    assert "TimeoutError" in warnings[0]
+    assert "status=403" in warnings[1]
