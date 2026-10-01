@@ -25,7 +25,7 @@ from trippilot.assembly_engine.config import (
     stay_for,
 )
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
-from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
+from trippilot.assembly_engine.ortools_assembler import SPARE_RETRY_CAP_MS, OrToolsAssembler
 from trippilot.assembly_engine.travel import TravelEstimator
 from trippilot.domain.common import (
     BudgetLevel,
@@ -255,3 +255,27 @@ def test_no_spare_retry_when_budget_is_already_spent() -> None:
     asm._solve_day = always_none
     assert asm.solve(problem, remaining_ms=_CFG.or_tools_limit_ms) is None
     assert len(calls) == 1, f"불필요한 재시도: {calls}"
+
+
+def test_spare_retry_is_capped_when_deadline_is_unbounded(caplog) -> None:
+    """deadline 미지정이면 잔여가 600초(UNBOUNDED_DEADLINE_MS)다 — 그걸 전부 몰아주면
+    해 없는 하루에 CP-SAT 가 ~590초를 쓴다(QA 실측: generate 601초, 화면 10분 정지).
+
+    재시도 상한은 고정 15초이고, 그 안에 못 풀면 체인 다음 단계로 내려가며 그 사실을
+    로그로 남긴다(퍼사드는 None 을 받아 FallbackEvent no_solution 을 낸다 — INV-4).
+    """
+    problem, index = _problem()
+    asm = OrToolsAssembler(index, _EST, _CFG)
+    caps: list = []
+
+    def always_none(prob, day, used, budget_ms, **kw):
+        caps.append(kw.get("cap_ms"))
+        return None
+
+    asm._solve_day = always_none
+    with caplog.at_level("WARNING", logger="trippilot.assembly_engine.ortools_assembler"):
+        assert asm.solve(problem, remaining_ms=600_000) is None, "상한 뒤엔 다음 단계로"
+    assert caps[0] is None, "첫 시도는 기본 상한이어야 한다(성공 경로 지연 불변)"
+    assert caps[-1] == SPARE_RETRY_CAP_MS, f"재시도 상한이 안 걸렸다: {caps}"
+    assert any("몰아 재시도" in r.message and "상한" in r.message
+               for r in caplog.records), "상한에 걸려 내려간 사실이 침묵됐다"
