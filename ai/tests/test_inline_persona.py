@@ -110,7 +110,9 @@ def test_프로필이_비면_종전_고정_요약_그대로() -> None:  # (c)
     with TestClient(build_dev_app(llm=llm, model_id="m")) as client:
         _generate(client, {})
     block = _persona_block(llm.scoring_prompts()[0])
-    assert "취향 태그: 미설정" in block and "동반자: SOLO" in block
+    # 동반자는 "미설정" — 고르지 않은 사람을 혼자 여행자로 단정하지 않는다(PersonaSummary).
+    # 종전 SOLO 고정이 취향 미입력 사용자 근거에 "#혼자여행" 을 붙였다(2026-10-02 실측).
+    assert "취향 태그: 미설정" in block and "동반자: 미설정" in block
 
 
 def test_replan_도_인라인_프로필을_싣는다() -> None:  # (d)

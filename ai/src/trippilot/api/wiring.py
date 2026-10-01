@@ -133,7 +133,7 @@ from trippilot.domain.itinerary import (
     VisitSlot,
 )
 from trippilot.domain.llm import CandidatePool, ModelTier, PoiExplanation
-from trippilot.domain.persona import CompanionType, PersonaSummary
+from trippilot.domain.persona import PersonaSummary
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.travel import TravelEstimate
 from trippilot.agents.edit.agent import EditAgent, EditOutcome, EditTask
@@ -2399,8 +2399,9 @@ def build_dev_app(
         llm=llm if llm is not None else UnwiredLlm(),
         poi_db=poi_db if poi_db is not None else StaticPoiDb(demo_poi_seed()),
         context_store=context_store if context_store is not None else StaticPersonaStore(
-            PersonaSummary(taste_tags=(), companion=CompanionType.SOLO,
-                           budget=BudgetLevel.MID)
+            # companion=None = 미설정 — SOLO 로 채우면 취향 미입력 사용자 근거에
+            # "#혼자여행" 이 붙는다(PersonaSummary docstring, 2026-10-02 실측).
+            PersonaSummary(taste_tags=(), companion=None, budget=BudgetLevel.MID)
         ),
         c1_config=C1Config(model_ids=model_ids,
                            feature_models=feature_models or {},
