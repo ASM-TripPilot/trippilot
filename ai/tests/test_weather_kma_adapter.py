@@ -12,9 +12,13 @@
 
 from __future__ import annotations
 
+import logging
+import urllib.error
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
+
+from trippilot.poi_curation.adapters import kma_weather
 
 from trippilot.poi_curation.adapters.kma_weather import (
     KmaWeatherAdapter,
@@ -139,8 +143,12 @@ def test_request_params_carry_grid_base_and_key() -> None:
     http = _FakeHttp(_body({"item": []}))
     _adapter(http).daily_forecast(_COORD, (_D1,))
     url, params = http.calls[0]
-    assert url.endswith("/getVilageFcst")
-    assert params["serviceKey"] == "test-key"
+    # 키는 기상청 API허브 키다 — 공공데이터포털(apis.data.go.kr·serviceKey)에선
+    # SERVICE_KEY_IS_NOT_REGISTERED_ERROR 로 거절된다(실측).
+    assert url == ("https://apihub.kma.go.kr/api/typ02/openApi/"
+                   "VilageFcstInfoService_2.0/getVilageFcst")
+    assert params["authKey"] == "test-key"
+    assert "serviceKey" not in params
     assert (int(params["nx"]), int(params["ny"])) \
         == latlon_to_grid(_COORD.lat, _COORD.lng)
     assert params["base_date"] == "20260805" and params["base_time"] == "0500"
@@ -184,3 +192,34 @@ def test_one_call_per_forecast_and_zero_for_empty_days() -> None:
     assert len(http.calls) == 1
     assert adapter.daily_forecast(_COORD, ()) == {}
     assert len(http.calls) == 1  # 빈 요청은 호출 없음
+
+
+# ── ⑥ 키·권한 오류(401/403)는 프로세스당 1회 WARN — 운영에서 보이게 ────────
+
+
+def _http_error(code: int) -> urllib.error.HTTPError:
+    return urllib.error.HTTPError(
+        "https://apihub.kma.go.kr/x", code, "Forbidden", hdrs=None, fp=None)
+
+
+def test_auth_error_warns_once_per_process(monkeypatch, caplog) -> None:
+    """403 이 매번 와도 WARN 은 첫 1회 — 동작(WeatherError → no_adjust)은 그대로."""
+    monkeypatch.setattr(kma_weather, "_auth_warned", False)
+    http = _FakeHttp(error=_http_error(403))
+    with caplog.at_level(logging.INFO, logger="trippilot"):
+        for _ in range(3):
+            with pytest.raises(WeatherError):
+                _adapter(http).daily_forecast(_COORD, (_D1,))
+    warns = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warns) == 1
+    assert "403" in warns[0].getMessage() and "활용신청" in warns[0].getMessage()
+    assert "test-key" not in caplog.text  # 키 값 출력 금지
+
+
+def test_non_auth_failure_does_not_warn(monkeypatch, caplog) -> None:
+    monkeypatch.setattr(kma_weather, "_auth_warned", False)
+    http = _FakeHttp(error=_http_error(500))
+    with caplog.at_level(logging.INFO, logger="trippilot"):
+        with pytest.raises(WeatherError):
+            _adapter(http).daily_forecast(_COORD, (_D1,))
+    assert not [r for r in caplog.records if r.levelno == logging.WARNING]

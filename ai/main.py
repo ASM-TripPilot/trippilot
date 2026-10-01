@@ -16,8 +16,8 @@ env 스위치 (TRIP-344):
   `OPENAI_MODEL`(기본 gpt-5.6-terra) · `OPENAI_API`(chat|responses, 기본 responses
   — 멘토 게이트웨이가 responses만 라우팅). 조립 불가(키 누락 등)는 **기동 실패**로
   드러낸다 — INV-4는 런타임 폴백이지 설정 오류 은폐가 아니다(silent fallback 금지).
-- `WEATHER_API`(TRIP-383) — 기상청 단기예보 서비스키(디코딩 키). 설정 시 날씨
-  소프트 보정용 KmaWeatherAdapter를 주입한다. 미설정 = 무보정(기존 그대로).
+- `WEATHER_API`(TRIP-383) — 기상청 **API허브** 인증키(authKey). 설정 시 날씨
+  소프트 보정용 KmaWeatherAdapter를 주입한다. 미설정 = 무보정(기동 시 WARN 1줄).
 - `TRIPPILOT_BACKEND_BASE_URL`(TRIP-408) — 백엔드 `/internal/pois` 실연동 주소
   (compose 네트워크 기준 `http://backend:8080`). 설정 시 BackendPoiDb 주입 —
   `TRIPPILOT_SERVICE_AUTH_TOKEN`(TRIP-393 공유 시크릿) 누락이면 **기동 실패**
@@ -155,7 +155,7 @@ def _anthropic_llm_and_model() -> tuple[object, str]:
 
 
 def _kma_weather():
-    """`WEATHER_API`(기상청 공공데이터포털 디코딩 키, TRIP-383) 설정 시 실 어댑터 조립.
+    """`WEATHER_API`(기상청 API허브 authKey, TRIP-383) 설정 시 실 어댑터 조립.
 
     미설정(빈 문자열 포함) = 미배선(None) — 날씨 보정 없이 기존 경로 그대로.
     실 응답 드리프트는 실키 실행에서 검증한다 (테스트·CI 실 호출 0, D37).
@@ -588,6 +588,22 @@ def _replan_directives() -> tuple:
         return ()
 
 
+def _warn_unwired(*, weather, embedding, feature_models: Mapping | None) -> None:
+    """기동은 되고 품질만 조용히 떨어지는 외부 배선 공백을 1회씩 WARN.
+
+    값을 지어내 채우지 않는다 — 알리기만 한다. `feature_models is None` 은 실 LLM
+    미배선(fake 조립)이라 모델 배정 자체가 무의미한 경우다.
+    """
+    log = logging.getLogger("trippilot.main")
+    if embedding is None:
+        log.warning("임베딩 미배선(TRIPPILOT_VECTOR_DB_URL 미설정) — Plan-B KB 검색 없이 "
+                    "규칙 랭킹으로 강등된다")
+    if feature_models is not None and not feature_models:
+        log.warning("TRIPPILOT_LLM_FEATURE_MODELS 비어 있음 — 전 기능이 단일 기본 모델로 동작")
+    if weather is None:
+        log.warning("WEATHER_API 미설정 — 날씨 보정 없이(no_adjust) 동작")
+
+
 def build_app_from_env() -> FastAPI:
     """env → 앱 조립 스위치. 미설정 경로는 기존과 동일(회귀 없음)."""
     configure_logging()  # 조립 로그부터 보이게 — 실패해도 기동 전에 드러난다 (TRIP-914)
@@ -602,6 +618,7 @@ def build_app_from_env() -> FastAPI:
     vector_store, embedding = _vector_rag()
     provider = _env("TRIPPILOT_LLM_PROVIDER")
     if provider is None:
+        _warn_unwired(weather=weather, embedding=embedding, feature_models=None)
         return build_dev_app(weather=weather, poi_db=poi_db, events=events,
                              vector_store=vector_store, embedding=embedding,
                              travel_port=travel, existence=existence,
@@ -618,6 +635,7 @@ def build_app_from_env() -> FastAPI:
             "미설정(fake 조립) 또는 openai|anthropic|mixed 만 지원"
         )
     feature_models = _feature_models_from_env()
+    _warn_unwired(weather=weather, embedding=embedding, feature_models=feature_models)
     local_routes = _local_route(feature_models)
     if local_routes:
         from trippilot.llm_gateway.adapters.routing import RoutingLlm
