@@ -320,7 +320,6 @@
 - `src/features/explore/model/placeListView.ts`  →  visiblePlaces
 - `src/features/explore/model/placeSaveGuard.ts`  →  PlaceSaveNotice · hasUsableCoords · SAVE_FAILURE_NOTICE · COORD_BLOCKED_NOTICE · REMOVE_FAILURE_NOTICE
 - `src/features/explore/model/placeSaveToggle.ts`  →  usePlaceSaveToggle
-- `src/features/explore/model/regionChipLabel.ts`  →  formatRegionChipLabel
 - `src/features/explore/model/regionPickerPurpose.ts`  →  RegionPickerPurpose · regionPickerHref
 - `src/features/explore/model/regions.ts`  →  useRegions · filterRegions · limitRegionsWhenEmpty · RegionGroup · groupRegionsBySido · regionTint
 - `src/features/explore/model/savedPlaceIndex.ts`  →  findSavedPlaceId · optimisticSavedPlaceId
@@ -333,10 +332,6 @@
 ## src/features/explore/ui/
 - `src/features/explore/ui/ExploreGlyphs.tsx`  →  SuitcaseGlyph · CloseGlyph · PlusGlyph · BackChevronGlyph · ShareGlyph · SearchGlyph · MapPinGlyph · FilterSlidersGlyph · WarningTriangleGlyph · CheckCircleFilledGlyph · CheckCircleOutlineGlyph · CircleExclaimGlyph · InfoGlyph
 - `src/features/explore/ui/ExploreLandingScreen.tsx`  →  ExploreLandingScreenProps · ExploreLandingScreen
-- `src/features/explore/ui/PartialFailureBanner.tsx`  →  PartialFailureBanner
-- `src/features/explore/ui/PlaceDetailScreen.tsx`  →  PlaceDetailScreenProps · PlaceDetailScreen
-- `src/features/explore/ui/PlaceExploreScreen.tsx`  →  PlaceExploreScreenProps · PlaceExploreScreen
-- `src/features/explore/ui/RegionPickerScreen.tsx`  →  RegionPurpose · RegionPickerScreenProps · RegionPickerScreen
 
 ## src/features/home/lib/
 - `src/features/home/lib/formatCountBadge.ts`  →  formatCountBadge
@@ -345,13 +340,10 @@
 - `src/features/home/model/homeFixtures.ts`  →  HOME_DEFAULT_PROPS · HOME_LOADING_PROPS · HOME_PLANNING_PROPS · HOME_TRAVELING_PROPS · HOME_POST_TRIP_PROPS
 - `src/features/home/model/homePhase.ts`  →  HomeTripInput · ResolveHomePhaseInput · formatDday · resolveHomePhase · HomeItineraryTarget · applyItineraryTarget
 - `src/features/home/model/homeTypes.ts`  →  HomeCollectionCard · HomeSpotCard · HomeSpotsLane · HomeItineraryCard · HomeMagazineHero · HomeSections · TripHeroData · PastTrip · HomeSoftNote · HomePhase · HomeScreenProps
-- `src/features/home/model/magazineFixtures.ts`  →  MAGAZINE_DEFAULT_PROPS
-- `src/features/home/model/magazineTypes.ts`  →  MagazineCard · MagazineEditorial · MagazineScreenProps
 
 ## src/features/home/ui/
 - `src/features/home/ui/HomeGlyphs.tsx`  →  BellGlyph · SearchGlyph · BackChevronGlyph · SparkleGlyph · LocationPinGlyph · HeartOutlineGlyph · HeartFilledGlyph · PlusGlyph · MapPinGlyph · SuitcaseGlyph · CloseGlyph
 - `src/features/home/ui/HomeScreen.tsx`  →  HomeScreen
-- `src/features/home/ui/MagazineScreen.tsx`  →  MagazineScreen
 
 ## src/features/itinerary/config/
 - `src/features/itinerary/config/conceptCards.ts`  →  CONCEPT_DESCRIPTIONS
@@ -763,8 +755,16 @@
 - `src/pages/login/ui/LoginPage.tsx`  →  LoginPage
 - `src/pages/login/ui/SocialLoginScreen.tsx`  →  SocialLoginScreenProps · SocialLoginScreen
 
+## src/pages/magazine/
+- `src/pages/magazine/index.ts`  →  MagazinePage
+
+## src/pages/magazine/model/
+- `src/pages/magazine/model/magazineFixtures.ts`  →  MAGAZINE_DEFAULT_PROPS
+- `src/pages/magazine/model/magazineTypes.ts`  →  MagazineCard · MagazineEditorial · MagazineScreenProps
+
 ## src/pages/magazine/ui/
 - `src/pages/magazine/ui/MagazinePage.tsx`  →  MagazinePage
+- `src/pages/magazine/ui/MagazineScreen.tsx`  →  MagazineScreen
 
 ## src/pages/my-page/
 - `src/pages/my-page/index.ts`  →  MyPage
@@ -835,12 +835,18 @@
 
 ## src/pages/place-detail/ui/
 - `src/pages/place-detail/ui/PlaceDetailPage.tsx`  →  PlaceDetailPage
+- `src/pages/place-detail/ui/PlaceDetailScreen.tsx`  →  PlaceDetailScreenProps · PlaceDetailScreen
 
 ## src/pages/place-explore/
 - `src/pages/place-explore/index.ts`  →  PlaceExplorePage
 
+## src/pages/place-explore/model/
+- `src/pages/place-explore/model/regionChipLabel.ts`  →  formatRegionChipLabel
+
 ## src/pages/place-explore/ui/
+- `src/pages/place-explore/ui/PartialFailureBanner.tsx`  →  PartialFailureBanner
 - `src/pages/place-explore/ui/PlaceExplorePage.tsx`  →  PlaceExplorePage
+- `src/pages/place-explore/ui/PlaceExploreScreen.tsx`  →  PlaceExploreScreenProps · PlaceExploreScreen
 
 ## src/pages/planb-diff/
 - `src/pages/planb-diff/index.ts`  →  PlanbDiffPage
@@ -888,6 +894,7 @@
 
 ## src/pages/region-picker/ui/
 - `src/pages/region-picker/ui/RegionPickerPage.tsx`  →  RegionPickerPage
+- `src/pages/region-picker/ui/RegionPickerScreen.tsx`  →  RegionPurpose · RegionPickerScreenProps · RegionPickerScreen
 
 ## src/pages/saved-places/
 - `src/pages/saved-places/index.ts`  →  SavedPlacesPage
@@ -1373,4 +1380,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 909개 파일
+합계 910개 파일

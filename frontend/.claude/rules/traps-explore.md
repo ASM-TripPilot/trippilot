@@ -13,7 +13,7 @@ paths:
 
 ## 지역 카탈로그 (explore/region)
 
-- **`TripNewStep1Page`·`RegionPickerScreen`을 렌더하는 node-버킷 테스트는 `useRegions`를 목해야 크래시 안 남** → 두 화면 모두 `useRegions()`(react-query)를 물어 `QueryClientProvider` 없는 node 버킷에서 렌더하면 `No QueryClient set` throw. 이 화면들을 렌더하는 새 테스트 파일을 추가할 때마다 같은 목이 필요하다는 사실을 기계가 강제하지 않는다(형제 테스트 누락 실측 1건).
+- **`TripNewStep1Page`·`RegionPickerPage`를 렌더하는 node-버킷 테스트는 `useRegions`를 목해야 크래시 안 남** → 두 page가 `useRegions()`(react-query)를 물어(`RegionPickerScreen`은 순수 — props만 받는다) `QueryClientProvider` 없는 node 버킷에서 렌더하면 `No QueryClient set` throw. 이 화면들을 렌더하는 새 테스트 파일을 추가할 때마다 같은 목이 필요하다는 사실을 기계가 강제하지 않는다(형제 테스트 누락 실측 1건).
 - **시/도→구/군 드릴다운의 레이아웃·'전체' 행 비주얼은 jest가 원리적으로 못 본다** → Figma에 이 상호작용 패턴 자체가 없어 픽셀 대조 대상이 없다. jest는 `explore-region-sido-{code}`·`explore-region-drilldown-back` 등 testID 존재/부재와 press→콜백 배선만 잠근다. 시/도 행이 실제로 눌러 들어가는지·'전체' 행이 구/군 카드와 시각적으로 구분되는지·문구 중복("인천광역시" 카드 vs "인천광역시 전체" 라벨)은 6-b 실기로만 확인된다.
 
 ## 탐색 랜딩 (explore/d01)

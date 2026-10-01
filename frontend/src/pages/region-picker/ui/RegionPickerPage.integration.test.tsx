@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { Region } from '@/shared/api/generated/schemas';
 import { RegionLevel } from '@/shared/api/generated/schemas';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
+import type * as TripWizardStoreModule from '@/features/trip/model/tripWizardStore';
 
 import { RegionPickerPage } from './RegionPickerPage';
 
@@ -18,6 +19,13 @@ import { RegionPickerPage } from './RegionPickerPage';
  * ⚠️ `jest.mock` 팩토리는 최상단으로 호이스팅된다 — 팩토리가 참조하는 바깥 변수는 이름이 `mock`으로
  * 시작해야 예외를 받는다(리포 확립 규칙). 이 이름을 바꾸지 마라(★9). `useRegions`만 갈아끼우고
  * `filterRegions`·`regionTint`·`groupRegionsBySido`는 requireActual 실물을 쓴다(순수라 안전, ★1).
+ *
+ * 한 파일로 합친 기록(TRIP-1147): 옛 `RegionPickerPage.nightsSync.test.tsx`(node 버킷, **실제** 위저드
+ * 스토어)를 아래 `실제 스토어에 담긴 결과` describe 로 옮겼다. 두 관점은 같은 스토어 모듈을 다르게 다룬다
+ * — 위쪽은 목으로 바꿔 `addDestination` 호출 **인자**를 보고, 아래쪽은 실물 스토어에 **담긴 결과**를
+ * 읽는다. `jest.mock` 은 파일 전체에 걸리므로(describe 마다 다르게 못 건다) 목 하나에 관점 스위치
+ * `mockUseRealWizardStore` 를 두고, 목이 **불릴 때** 그 값을 읽어 실물로 넘길지 정한다(1146 로그인 통합
+ * 선례). 스위치를 빼면 아래쪽 케이스가 전부 red 다(실측 — 목이 실물을 대신한 채 green 이 되지 않는다).
  */
 
 const mockPush = jest.fn();
@@ -26,6 +34,9 @@ const mockDismissTo = jest.fn();
 const mockRefetch = jest.fn();
 const mockAddDestination = jest.fn();
 let mockParams: { purpose?: string; tab?: string } = {};
+// 관점 스위치 — true 면 위저드 스토어 목이 실물로 넘긴다(`실제 스토어에 담긴 결과` describe 만 켠다).
+// 리셋은 파일 최상위 afterEach(모듈 싱글턴 규칙 — describe 안에서만 끄면 다음 관점으로 샌다).
+let mockUseRealWizardStore = false;
 let mockRegionsResult: {
   data: Region[] | undefined;
   isPending: boolean;
@@ -51,22 +62,40 @@ jest.mock('@/features/explore/model/regions', () => ({
 // 그대로 받아 스파이를 돌려준다(호출 관측). 변수명은 팩토리 호이스팅 예외라 `mock`으로 시작해야 한다(★9).
 // TRIP-1010(Q1): 첫 여행지를 담을 때 페이지가 기간·기존 여행지 수를 읽게 된다. 목 상태를 "여행지 0곳 ·
 // 기간 없음"(= 1박으로 담는 옛 동작)으로 넓혀, 셀렉터로 읽든 `getState()` 로 읽든 크래시 없이 돈다.
-// 이 파일의 단언(`('…', 1)`)은 그 상태에서 그대로 유효하다. 동기화 자체는 형제 `.nightsSync.test.tsx`.
+// 이 파일의 단언(`('…', 1)`)은 그 상태에서 그대로 유효하다. 담긴 결과(박수·끝 날짜·코드)는 아래
+// `실제 스토어에 담긴 결과` describe 가 스위치를 켜고 실물 스토어에서 읽는다.
 jest.mock('@/features/trip/model/tripWizardStore', () => {
+  const actual = jest.requireActual<typeof TripWizardStoreModule>(
+    '@/features/trip/model/tripWizardStore'
+  );
   const mockWizardState = () => ({
     addDestination: mockAddDestination,
     destinations: [],
     startDate: undefined,
     endDate: undefined,
   });
+  // 스위치는 렌더·getState 가 **불리는 순간** 읽는다 — 팩토리 실행 시점(파일 맨 위)에 읽으면 늘 false 다.
+  const useMockOrRealStore = (
+    selector: (s: ReturnType<typeof mockWizardState>) => unknown
+  ) =>
+    mockUseRealWizardStore
+      ? actual.useTripWizardStore(selector as never)
+      : selector(mockWizardState());
   return {
-    useTripWizardStore: Object.assign(
-      (selector: (s: ReturnType<typeof mockWizardState>) => unknown) =>
-        selector(mockWizardState()),
-      { getState: mockWizardState }
-    ),
+    ...actual,
+    useTripWizardStore: Object.assign(useMockOrRealStore, {
+      getState: () =>
+        mockUseRealWizardStore
+          ? actual.useTripWizardStore.getState()
+          : mockWizardState(),
+    }),
   };
 });
+
+/** 실물 스토어 — 목을 거치지 않고 직접 읽고 리셋한다(목 팩토리의 requireActual 과 같은 인스턴스). */
+const { useTripWizardStore: realWizardStore } = jest.requireActual<
+  typeof TripWizardStoreModule
+>('@/features/trip/model/tripWizardStore');
 
 /** 서버 `Region` 표본 도우미. */
 function region(
@@ -179,6 +208,11 @@ beforeEach(() => {
     isError: false,
     refetch: mockRefetch,
   };
+});
+
+afterEach(() => {
+  mockUseRealWizardStore = false;
+  realWizardStore.getState().reset();
 });
 
 describe('AC-1 · 페이지가 전체 카탈로그를 내리고 화면이 시/도로 접는다 (6-cap 아님)', () => {
@@ -442,5 +476,122 @@ describe('🔴 1105 · 옛 진입 탭(tab=home)이 들어와도 결과 주소에
       params: { region: '26' },
     });
     expect(mockPush).not.toHaveBeenCalled();
+  });
+});
+
+// ── 실제 스토어에 담긴 결과 (옛 `RegionPickerPage.nightsSync.test.tsx`, TRIP-1010 · TRIP-1027 · TRIP-1042) ──
+// 위저드(purpose=trip)에서 지역을 고르면 스토어 기간과 상관없이 늘 1박으로 담긴다 — 한때 "기간이 있고
+// 첫 여행지면 박수 = 기간"으로 담았다가 기간 → 서울 → 부산 순서에서 합이 기간 + 1 이 되어 '다음'이
+// 막혔다(03b 경고-1)라 되돌렸다. TRIP-1027 부터는 반대로 기간이 박수를 따라간다(시작 날짜가 있으면 끝이
+// 1박만큼 는다). 순서 사슬(담기·시작·박수 → 1/4 다음)은 `src/__tests__/tripNightsPeriodOrder.test.tsx`.
+// 3동작: 준비(스토어 선상태 + 카탈로그) → 실행(검색 '서울' → 카드 press) → 단언(스토어 destinations).
+// ⚠️ 모듈 싱글턴 — 리셋은 이 describe 의 beforeEach(선상태 비우기)와 파일 최상위 afterEach(스위치·스토어).
+describe('실제 스토어에 담긴 결과', () => {
+  const SEOUL: Region = {
+    regionCode: '11',
+    name: '서울특별시',
+    level: RegionLevel.SIDO,
+    sidoName: '서울특별시',
+    selectable: true,
+    poiCount: 120,
+  };
+
+  function store() {
+    return realWizardStore.getState();
+  }
+
+  /** 검색으로 좁혀 서울 카드를 누른다(검색 경로는 드릴다운 없이 평면 카드 — 위쪽 AC-6 선례). */
+  function pickSeoul(): void {
+    fireEvent.changeText(screen.getByTestId('explore-region-search'), '서울');
+    fireEvent.press(screen.getByTestId('explore-region-11'));
+  }
+
+  beforeEach(() => {
+    mockUseRealWizardStore = true;
+    store().reset();
+    mockParams = { purpose: 'trip' };
+    mockRegionsResult = {
+      data: [SEOUL],
+      isPending: false,
+      isError: false,
+      refetch: jest.fn(),
+    };
+  });
+
+  describe('TRIP-1010 · 지역 선택은 기간과 상관없이 1박으로 담는다 (Q1 동기화 철회)', () => {
+    it('기간 2박(6/10–6/12) · 여행지 0곳에서 서울을 고르면 서울 1박으로 담기고 위저드로 돌아간다', () => {
+      // 준비 — 기간 먼저. "아직 0곳" 앵커로 앞 테스트 누수가 아님을 확인한다.
+      store().setPeriod(undefined, '2026-06-10', '2026-06-12');
+      expect(store().destinations).toHaveLength(0);
+      render(<RegionPickerPage />);
+
+      // 실행
+      pickSeoul();
+
+      // 단언 — 필드를 하나씩(객체 통째 비교 금지, 02a ★4).
+      const [seoul] = store().destinations;
+      expect(store().destinations).toHaveLength(1);
+      expect(seoul.region).toBe('서울특별시');
+      // 기간(2박)을 따라가지 않는다 — 박수는 늘 1박으로 담긴다.
+      expect(seoul.nights).toBe(1);
+      expect(mockBack).toHaveBeenCalledTimes(1);
+    });
+
+    it('이미 여행지가 1곳 있으면 두 번째 여행지는 1박으로 담기고, 첫 여행지 박수도 그대로다', () => {
+      // 준비 — 부산 1박 + 기간 3박.
+      store().addDestination('부산', 1);
+      store().setPeriod(undefined, '2026-06-10', '2026-06-13');
+      render(<RegionPickerPage />);
+
+      pickSeoul();
+
+      expect(store().destinations).toHaveLength(2);
+      expect(store().destinations[0].region).toBe('부산');
+      expect(store().destinations[0].nights).toBe(1);
+      expect(store().destinations[1].region).toBe('서울특별시');
+      expect(store().destinations[1].nights).toBe(1);
+    });
+
+    it('기간이 아직 없으면 첫 여행지도 1박으로 담긴다 (옛 동작 유지)', () => {
+      expect(store().destinations).toHaveLength(0);
+      render(<RegionPickerPage />);
+
+      pickSeoul();
+
+      expect(store().destinations).toHaveLength(1);
+      expect(store().destinations[0].nights).toBe(1);
+    });
+  });
+
+  describe('TRIP-1027 AC-3 · 시작 날짜가 있으면 담는 순간 끝 날짜가 늘어난다', () => {
+    it('당일(6/10–6/10) · 여행지 0곳에서 서울을 고르면 서울 1박으로 담기고 끝이 6/11 이 된다', () => {
+      // 준비 — 1/4 에서 여행지 없이 시작만 고른 상태(끝 = 시작). "아직 0곳" 앵커.
+      store().setPeriod(undefined, '2026-06-10', '2026-06-10');
+      expect(store().destinations).toHaveLength(0);
+      render(<RegionPickerPage />);
+
+      // 실행
+      pickSeoul();
+
+      // 단언 — 박수는 1박, 시작은 그대로, 끝은 시작 + 1.
+      expect(store().destinations).toHaveLength(1);
+      expect(store().destinations[0].nights).toBe(1);
+      expect(store().startDate).toBe('2026-06-10');
+      expect(store().endDate).toBe('2026-06-11');
+      expect(mockBack).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('🔴 TRIP-1042 AC-12 · 지역 피커가 쥔 코드가 스토어 목적지에 담긴다 (맹점 ①)', () => {
+    it('서울(11)을 고르면 목적지에 이름과 함께 regionCode 11 이 담긴다', () => {
+      expect(store().destinations).toHaveLength(0);
+      render(<RegionPickerPage />);
+
+      pickSeoul();
+
+      const [seoul] = store().destinations;
+      expect(seoul.region).toBe('서울특별시');
+      expect(seoul.regionCode).toBe('11');
+    });
   });
 });

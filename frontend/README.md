@@ -80,7 +80,7 @@ frontend/
 - **entities 교차는 `@x`로만**: 도메인끼리 꼭 참조해야 하면 제공자가 소비자에게만 내주는 `entities/<제공자>/@x/<소비자>/**` 창구를 쓴다(형식 예: `entities/place/@x/itinerary-slot/` — 지금 리포에 `@x` 폴더는 0개, entity 간 import도 0건). 먼저 두 entity를 합칠 수 없는지부터 본다 — `@x`는 마지막 수단이고 features·widgets에는 쓰지 않는다.
 - **공개 API(`index.ts`)**: 슬라이스 밖에서는 그 슬라이스의 `index.ts`로만 import한다. `shared`는 슬라이스가 없으므로 세그먼트(또는 컴포넌트 폴더)마다 `index.ts`를 둔다.
   - **과도기(TRIP-1157까지)**: 이주 중에는 딥 임포트(`@/features/home/model/homeFixtures`)를 허용한다 — 옮기는 동안 `index.ts`를 두 번 고치지 않기 위해서다. TRIP-1157에서 `index.ts`를 일괄 정비하고 딥 임포트 금지 lint를 켠다. 그 뒤 딥 임포트는 위반이다.
-  - 현재: pages 53개 중 52개가 `index.ts`를 가진다(`magazine`만 없음). entities는 `model/index.ts`(place·stay·trip·itinerary-slot)로 도메인 타입을 내준다.
+  - 현재: pages 53개 전부가 `index.ts`를 가진다(마지막 `magazine`은 TRIP-1147로 추가). entities는 `model/index.ts`(place·stay·trip·itinerary-slot)로 도메인 타입을 내준다.
 - **이주 방식**: 화면 묶음 단위로 옮긴다(TRIP-1138 · 서브 1146~1154) — 테스트 정상화를 먼저 하고 그 화면의 이동을 뒤 커밋으로.
 - **린터**: 이주가 끝나면 공식 FSD 린터 Steiger(`insignificant-slice` · `excessive-slicing`)를 CI 게이트로 붙인다(TRIP-1157·1158). 그 전까지는 ESLint zone(층 방향·형제 격리)만 경계를 지킨다 — 구조 소스 스캔은 TRIP-1145에서 지웠다.
 - **`app → features` 제한은 두지 않는다** — 공식 FSD는 app 층이 아래 층 전부를 import하는 것을 허용한다. 라우트 파일은 page를 꽂는 얇은 래퍼로 두는 것을 권장한다(lint 강제 없음, TRIP-1142).

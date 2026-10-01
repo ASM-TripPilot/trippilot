@@ -6,8 +6,8 @@ import type { Region } from '@/shared/api/generated/schemas';
 import { filterRegions, useRegions } from '@/features/explore/model/regions';
 import type { RegionPickerPurpose } from '@/features/explore/model/regionPickerPurpose';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
-import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
-import type { RegionPurpose } from '@/features/explore/ui/RegionPickerScreen';
+import { RegionPickerScreen } from './RegionPickerScreen';
+import type { RegionPurpose } from './RegionPickerScreen';
 
 /**
  * e00·d1b 지역 선택 배선 (US-STAY-01 · US-EXPL-02 · BR-U1-07 · TRIP-445).

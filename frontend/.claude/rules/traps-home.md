@@ -3,6 +3,7 @@ paths:
   - "src/features/home/**"
   - "src/app/(tabs)/index.tsx"
   - "src/pages/home/**"
+  - "src/pages/magazine/**"
 ---
 이 파일은 repo-traps.md에서 경로별로 쪼갠 함정이다 — 해당 경로 만질 때만 로드된다.
 
@@ -15,4 +16,3 @@ paths:
 - **통합 히어로는 계획 중·여행 중이 부품을 공유하는 캐러셀이다 — page0만 트립, 나머지는 매거진** → `PlanningHeroCarousel`(`HomeScreen.tsx`)의 `home-hero-page-0`은 `IntegratedTripHero`(`heroes[0]?.imageUrl` 배경 재사용)를, `home-hero-page-1`~`-4`는 `MagazineHero`(`heroes.slice(0,4)`, 내부 testID `home-hero-slide-N`)를 감싼다. `kind: 'planning'` 하나가 계획 중·여행 중 둘 다를 가리키며, 본문 섹션 수(1 vs 2)는 `phase.showSpots?: boolean`이 가른다(`kind`가 아님) — 여행 중일 때만 `resolveHomePhase`가 이 필드를 채운다.
 - **라이브 CTA 문구는 픽스처(6-b 프리뷰)와 다르다 — jest는 이 갭을 원리적으로 못 본다** → `ctaLabelForStatus`(`homePhase.ts`, 라이브 생산자)는 `'일정 이어서 짜기'`·`'확정 일정 보기'`·`'여행 일정 보기'`(꺾쇠 › 없음, status 기반 — 여행 중은 Figma "오늘 일정 보기"와 문구 자체가 다름)를 반환하는데, `homeFixtures.ts`의 `HOME_PLANNING_PROPS`·`HOME_TRAVELING_PROPS`는 꺾쇠 포함 문구를 하드코딩한다. `homePhase.test.ts`는 라이브 값을, `HomeScreen.test.tsx`는 픽스처 값을 정답으로 못 박아 둘 다 green인 채로 라이브 카드 문구가 Figma와 어긋난다. CTA 문구를 만질 땐 `homeFixtures.ts`와 `ctaLabelForStatus`를 함께 확인한다.
 - **FAB 숨김 게이트(`sections.kind==='loading'`)는 `phase`를 안 본다 — "loading⟹phase없음"은 `HomePage`에만 있는 불변식** → `HomeScreen.tsx`가 로딩이면 `SavedMenuFab`·`CreateTripFab`을 무조건 미렌더하는데, 이 조건은 `phase` 축과 독립이다. phase 얼굴 + `sections={{kind:'loading'}}` 조합은 타입상 유효해 FAB만 사라진 어중간 화면을 만들 수 있다. 오늘은 page(`pages/home/ui/HomePage.tsx`)가 isPending일 때 phase 없이만 loading을 넘겨 실경로·프리뷰·테스트 어디서도 미발생. postTrip 얼굴이 라이브로 로딩 하위상태를 얻는 순간 재확인 대상.
-- **`features/home` 순수성 raw-스캔(D-1)은 본문뿐 아니라 주석 문자열도 검사한다** → `@/shared/api`·`axios`·`react-query`·`expo-router` 4문자열이 코드 본문이 아니라 **주석**에만 등장해도 이 소스 스캔 게이트가 red를 낸다(`magazineFixtures.ts` 최초 작성 시 "네트워크·라우팅 심볼" 설명 주석에 그 문자열을 그대로 적어 재현, `homePhase.ts` 선례와 동형). `features/home` 안에서 이 4단어를 설명할 땐 문자열 자체를 쓰지 말고 완곡하게("네트워크·쿼리·라우팅 계층 심볼") 표현할 것.
