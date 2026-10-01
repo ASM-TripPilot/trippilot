@@ -248,3 +248,69 @@ def test_ortools_fixed_blocks_mirror_placed_slots(setup) -> None:
         for fb in problem.fixed_blocks:  # 완전성
             if (fb.poi_id, fb.window.start, fb.window.end) in placed:
                 assert fb in day.fixed_blocks
+
+
+# ── ⑦ TRIP-1175 — 창 시작(09:00)에 핀된 고정 블록 + 앵커
+# BE 는 날짜·시각 미지정(ANYTIME) 필수방문을 그날 창 시작에 핀해 고정 블록으로 보낸다.
+# 깊이0 아크의 앵커 출발 제약(`start ≥ ws + 앵커 이동`)을 핀에도 걸면 앵커가 있는 한
+# 이 핀은 항상 INFEASIBLE 이라 필수방문이 있는 생성이 전부 규칙 폴백으로 떨어졌다.
+# 그리디·검증기와 같이, 핀은 블록 자신의 시각을 기준으로 삼는다.
+
+
+def _ws_pin_setup(anchor: GeoPoint, pin_offset_min: int, extra: int):
+    """핀 1개(창 시작 + offset) + 후보 extra 개 (영업정보 없음 → HC1 미적용)."""
+    d = date(2026, 8, 5)
+    pois = [
+        Poi(PoiId(f"wp{i}"), f"wp{i}", PoiCategory.SIGHT,
+            GeoPoint(37.55 + 0.004 * i, 126.98 + 0.003 * i), (),
+            None, None, DataQuality.FULL, PoiSource.SEED, None)
+        for i in range(extra + 1)
+    ]
+    index = {p.poi_id: p for p in pois}
+    start = datetime(2026, 8, 5, 9, 0, tzinfo=_KST) + timedelta(minutes=pin_offset_min)
+    fb = FixedBlock(poi_id=pois[0].poi_id,
+                    window=TimeWindow(start, start + timedelta(hours=1)),
+                    reason="must_visit")
+    problem = ItineraryProblem(
+        schedule_id=ScheduleId("s-1175"), days=(d,),
+        candidates=tuple(ScoredPoi(poi_id=p.poi_id, score=0.5, is_llm_score=False)
+                         for p in pois[1:]),
+        fixed_blocks=(fb,), budget=BudgetLevel.MID, transport=TransportMode.PUBLIC,
+        day_window=TimeWindow(datetime(2026, 8, 5, 9, 0, tzinfo=_KST),
+                              datetime(2026, 8, 5, 21, 0, tzinfo=_KST)),
+        seed=7, anchor=anchor,
+    )
+    return problem, index, fb
+
+
+def test_window_start_pin_with_remote_anchor_stays_on_ortools() -> None:
+    """회귀: 앵커 1.5km + 09:00 핀 → 종전엔 OR None → 규칙 폴백(isFallback)."""
+    problem, index, fb = _ws_pin_setup(GeoPoint(37.5635, 126.98), 0, extra=3)
+    result = OrToolsAssembler(index, _EST, _CFG).solve(problem, remaining_ms=1500)
+    assert result is not None
+    assert any(s.poi_id == fb.poi_id and s.start_at == fb.window.start
+               for s in result.days[0].slots)
+    assert check_all(result, problem, index, _EST) == []
+
+    chain = [OrToolsAssembler(index, _EST, _CFG),
+             RuleFallbackAssembler(index, _EST, _CFG)]
+    facade = HybridAssemblyFacade(chain, index, _EST, FakeClock(), InMemoryTrace())
+    solved = facade.solve(problem, deadline_ms=5000)
+    assert solved.solve_mode == SolveMode.OR_TOOLS  # 폴백 표시(isFallback)가 사라진다
+    assert solved.is_fallback is False
+
+
+@settings(max_examples=20, deadline=None)
+@given(dlat=st.floats(min_value=-0.05, max_value=0.05),
+       dlng=st.floats(min_value=-0.05, max_value=0.05),
+       pin_offset=st.integers(min_value=0, max_value=90),
+       extra=st.integers(min_value=0, max_value=4))
+def test_pin_near_window_start_is_always_solvable(dlat, dlng, pin_offset, extra) -> None:
+    """앵커가 어디든, 창 시작 근처 핀은 OR 이 해를 낸다 — 최소한 핀 하나만 가는 해가 있다."""
+    problem, index, fb = _ws_pin_setup(GeoPoint(37.55 + dlat, 126.98 + dlng),
+                                       pin_offset, extra)
+    result = OrToolsAssembler(index, _EST, _CFG).solve(problem, remaining_ms=1500)
+    assert result is not None
+    assert any(s.poi_id == fb.poi_id and s.start_at == fb.window.start
+               for s in result.days[0].slots)
+    assert check_all(result, problem, index, _EST) == []

@@ -269,7 +269,11 @@ class OrToolsAssembler:
                     continue
                 lit = m.NewBoolVar(f"a{i}_{j}")
                 arcs.append((i, j, lit))
-                if i == 0 and j >= 1:
+                # 핀(고정 블록)은 앵커 출발을 따지지 않는다 — 블록 자신의 시각이 기준이다.
+                # 그리디(시각 그대로 배치)·검증기(check_hc2 는 앵커→첫 슬롯을 안 본다)와
+                # 같은 규칙. 걸면 BE 가 창 시작에 핀한 필수방문이 앵커가 있는 한 항상
+                # INFEASIBLE → 그 호출 전체가 규칙 폴백으로 떨어졌다(TRIP-1175).
+                if i == 0 and j >= 1 and nodes[j - 1]["pin"] is None:
                     depart = ws
                     if anchor is not None:
                         depart += self._est.estimate(
