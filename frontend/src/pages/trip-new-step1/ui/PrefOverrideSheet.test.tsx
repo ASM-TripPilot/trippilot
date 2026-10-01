@@ -27,7 +27,7 @@ import { PrefOverrideSheet } from './PrefOverrideSheet';
  *
  * 왜 store 실반영을 여기서 안 잠그나: 시트는 props-only 라 store·toggleMulti·null→[] 매핑을 모른다.
  * "적용→setPrefStyleOverride·전해제→[] 저장"의 실반영은 배선 통합 테스트
- * (`TripNewStep1Page.preferenceSheet.integration`)가 store 상태로 증명한다 — 여기선 "칩 press→onToggle,
+ * (`TripNewStep1Page.integration` 「취향 편집 시트」)가 store 상태로 증명한다 — 여기선 "칩 press→onToggle,
  * 적용 press→onApply"(배선 신호)까지만 잠근다.
  *
  * TRIP-1092: 활동(ACTIVITY 8종) 칩 묶음이 「선호 활동」 소제목 아래 추가된다(TRIP-669 D5 뒤집기).

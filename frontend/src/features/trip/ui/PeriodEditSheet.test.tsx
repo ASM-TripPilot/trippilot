@@ -20,7 +20,7 @@ import { PeriodEditSheet } from './PeriodEditSheet';
  * children 무조건 렌더) 실제 개폐·딤 전면 커버·범위 하이라이트 실렌더·터치 차단은 jest 원리적 사각이다.
  *
  * 왜 `range`·`month`가 props 인가: 이 시트는 무상태라 "셀 탭 → 표식 변화"(전이)는 배선이 range 를
- * 갱신해 재렌더할 때 일어난다 — 그 전이는 통합 테스트(`TripNewStep1Page.period.integration`)가 잡고,
+ * 갱신해 재렌더할 때 일어난다 — 그 전이는 통합 테스트(`TripNewStep1Page.integration` 「기간 편집 시트」)가 잡고,
  * 여기선 "주어진 range 로 어떤 표식을 그리나"(렌더)와 "탭이 어떤 콜백을 부르나"(배선)까지만 잠근다.
  */
 
