@@ -68,11 +68,33 @@ class CachingEmbedding:
         return vector
 
     def embed_batch(self, texts: Sequence[str]) -> tuple[tuple[float, ...], ...]:
-        missing = [text for text in dict.fromkeys(texts) if self._get(text) is None]
+        """결과는 **이 호출 안에서 모은 것**으로 조립한다 — 캐시에서 되읽지 않는다.
+
+        되읽으면 두 경로로 `None` 이 섞인다. ① 한 배치의 고유 텍스트가 `maxsize` 를 넘으면
+        적재하는 동안 앞엣것이 밀려난다 ② 안쪽이 요청보다 적게 돌려주면 `zip` 이 조용히
+        멈춰 꼬리가 안 들어간다. 둘 다 길이는 맞으므로 호출측 개수 검사가 못 잡고,
+        벡터 자리의 `None` 은 한참 뒤에 터진다.
+        """
+        resolved: dict[str, tuple[float, ...]] = {}
+        missing: list[str] = []
+        for text in dict.fromkeys(texts):
+            hit = self._get(text)
+            if hit is None:
+                missing.append(text)
+            else:
+                resolved[text] = hit
         if missing:
-            for text, vector in zip(missing, self._inner.embed_batch(missing)):
+            vectors = self._inner.embed_batch(missing)
+            if len(vectors) != len(missing):
+                # 조용히 줄어든 응답은 설정·구현 버그다. 길이를 맞춰 주고 넘기면
+                # 빈 자리가 어디였는지도 잃는다.
+                raise RuntimeError(
+                    f"임베딩 응답 개수 불일치: 요청 {len(missing)} != 응답 {len(vectors)}"
+                )
+            for text, vector in zip(missing, vectors):
+                resolved[text] = vector
                 self._put(text, vector)
-        return tuple(self._get(text) for text in texts)  # type: ignore[misc]
+        return tuple(resolved[text] for text in texts)
 
     def _get(self, text: str) -> tuple[float, ...] | None:
         vector = self._entries.get(text)

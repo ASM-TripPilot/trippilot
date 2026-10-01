@@ -114,6 +114,46 @@ def test_cache_evicts_oldest_beyond_maxsize() -> None:
     assert inner.embed_calls == ["첫째", "둘째", "셋째", "첫째"]
 
 
+def test_batch_bigger_than_the_cache_still_returns_every_vector() -> None:
+    """한 배치의 고유 텍스트가 maxsize 를 넘으면 **적재 중에 앞엣것이 밀려난다.**
+
+    결과를 캐시에서 되읽는 구현이면 밀려난 자리가 `None` 으로 나가고, 호출측의 개수
+    검사는 그걸 못 잡는다(래퍼가 길이는 맞춰 주기 때문). 벡터 자리에 None 이 섞이면
+    터지는 곳은 한참 뒤다.
+    """
+    inner = _CountingEmbedding()
+    cache = CachingEmbedding(inner, maxsize=2)
+
+    vectors = cache.embed_batch(["가", "나", "다", "라"])
+
+    assert len(vectors) == 4
+    assert all(v is not None for v in vectors)
+    assert vectors == tuple(inner._vector(t) for t in ("가", "나", "다", "라"))
+
+
+def test_inner_returning_fewer_vectors_fails_loudly() -> None:
+    # zip 은 짧은 쪽에서 조용히 멈춘다 — 그러면 꼬리가 캐시에 안 들어가고 None 이 나간다.
+    class _Short(_CountingEmbedding):
+        def embed_batch(self, texts):
+            return super().embed_batch(texts)[:-1]
+
+    inner = _Short()
+    cache = CachingEmbedding(inner)
+
+    with pytest.raises(RuntimeError, match="개수"):
+        cache.embed_batch(["하나", "둘"])
+
+
+def test_duplicate_texts_in_one_batch_are_embedded_once() -> None:
+    inner = _CountingEmbedding()
+    cache = CachingEmbedding(inner)
+
+    vectors = cache.embed_batch(["같다", "같다", "다르다"])
+
+    assert inner.batch_calls == [("같다", "다르다")]
+    assert vectors == (inner._vector("같다"), inner._vector("같다"), inner._vector("다르다"))
+
+
 def test_inner_failure_is_not_cached() -> None:
     # 실패를 캐시하면 일시적 장애가 프로세스 수명 내내 굳는다.
     class _Flaky(_CountingEmbedding):
