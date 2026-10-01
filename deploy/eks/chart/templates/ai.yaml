@@ -47,7 +47,19 @@ spec:
               value: /tmp/cache
             - name: TRIPPILOT_BACKEND_BASE_URL
               value: http://backend:8080
+            {{- /* Two names, one secret value. The TRIPPILOT_-prefixed one is what the AI
+                   SENDS when calling the backend; the unprefixed one is what the inbound
+                   middleware CHECKS (ai/src/trippilot/api/middleware.py reads
+                   SERVICE_AUTH_TOKEN). Injecting only the prefixed one left the AI
+                   boundary unauthenticated inside the cluster while the backend was
+                   already sending the header. /health and / are exempt, so container
+                   probes and the deploy smoke are unaffected. */}}
             {{- include "trippilot.secretEnv" (dict "env" "TRIPPILOT_SERVICE_AUTH_TOKEN" "key" "SERVICE_AUTH_TOKEN" "secret" "trippilot-shared") | nindent 12 }}
+            {{- include "trippilot.secretEnv" (dict "env" "SERVICE_AUTH_TOKEN" "secret" "trippilot-shared") | nindent 12 }}
+            {{- /* Without this the app treats a missing token as "validation off" and
+                   starts open. With it, a missing token fails startup instead. */}}
+            - name: SERVICE_AUTH_REQUIRE_TOKEN
+              value: "true"
             - name: TRIPPILOT_LLM_PRICE_FILE
               value: /app/config/llm-prices.json
             - name: EVENTS_STORE
