@@ -326,6 +326,8 @@ private val samplePayload = AiScheduleResponse(
     isFallback = false,
     freshness = AiFreshness("kakao", Instant.parse("2026-08-01T00:00:00Z"), cacheHit = true, ttlSec = 600, stale = false),
     unplacedMustVisits = listOf(AiUnplacedMustVisit(UUID.randomUUID().toString(), "NO_FEASIBLE_SLOT")),
+    scoringMode = "MIXED",
+    degradations = listOf("llm:c1_fallback"),
 )
 
 /** 모든 필드를 채운다 — null·빈 값이면 그 키가 직렬화에서 빠져 비교가 헐거워진다. */

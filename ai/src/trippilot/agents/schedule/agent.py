@@ -279,6 +279,9 @@ class ScheduleAgent:
             request, pool, persona, budget, budget.total_ms - elapsed, steps,
             trace_id, now,
         )
+        # LLM 모드인데 규칙 점수가 섞인 수(rule_backfill) — 가산·강등 전에 센다.
+        backfilled = (sum(1 for c in candidates if not c.is_llm_score)
+                      if mode is ScoringMode.LLM else 0)
 
         # ②″ PlanB 상황 랭킹 가산 (/replan) — 점수 원점이 LLM 이든 규칙이든 같게 더한다.
         #    **②′ 보다 먼저**여야 한다: ②′ 는 상위 N 건만 지도에서 확인하므로, 가산을
@@ -402,6 +405,7 @@ class ScheduleAgent:
             candidates_summary=task.candidates_summary,
             solved_at=solved_at,
             slot_alternatives=alternatives,
+            rule_backfill_count=backfilled,
         )
 
     # ── ② 선호 점수 + 규칙 점수 폴백 ────────────────────────────────

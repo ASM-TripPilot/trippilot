@@ -94,6 +94,8 @@ class ItineraryOutcome(Protocol):
     - `unplaced_must_visits`: 요청 fixed_blocks 대비 해에 없는 필수방문의 사유 보고
       (TRIP-350 — 빈 시퀀스 = 전부 배치됨)
     - `slot_alternatives`: 슬롯별 차선책(TRIP-871), 키 규약 동일. 키 없음 = 차선책 없음
+    - `scoring_mode`·`degradations`: 취향 점수 출처(LLM|MIXED|RULE, 모르면 None)와
+      강등 사유 코드(`"{stage}:{접두}"`) — generate 경로만 실값
     """
 
     solution: ItinerarySolution
@@ -104,6 +106,8 @@ class ItineraryOutcome(Protocol):
     day1_ready_at: datetime | None
     unplaced_must_visits: Sequence[UnplacedMustVisitLike]
     slot_alternatives: Mapping[str, Sequence[SlotAlternativeLike]]
+    scoring_mode: str | None
+    degradations: Sequence[str]
 
 
 class RepairOutcome(Protocol):

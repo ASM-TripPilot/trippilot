@@ -2,7 +2,8 @@
 
 에이전트가 만들고, 오케스트레이터가 그대로 돌려주며, 경계(`api/wiring.py`)가 와이어로
 사영한다. 와이어로 나가는 것은 solution·explanations·candidates_summary·solved_at·
-slot_alternatives — degradations·scoring_mode 는 내부 관측용이다.
+slot_alternatives, 그리고 generate 경로에서 scoring_mode·degradations 의 **사유 코드**
+(`stage:접두` — 자유 문장·시한 값은 안 나간다).
 """
 
 from __future__ import annotations
@@ -169,6 +170,9 @@ class GenerationOutcome:
     candidates_summary: CandidatesReport | None
     solved_at: datetime | None
     slot_alternatives: Mapping[str, tuple[SlotAlternative, ...]]
+    # LLM 점수 모드에서 점수가 빠져 규칙 점수로 보충한 후보 수 — 와이어 MIXED 의 근거.
+    # 기본값 없음: 생성 지점이 잊으면 TypeError 로 드러난다(위 두 필드와 같은 이유).
+    rule_backfill_count: int
     error: str | None = None
 
     def __post_init__(self) -> None:
@@ -215,5 +219,6 @@ def failed_outcome(
         candidates_summary=candidates_summary,  # 풀 이전 실패면 None — 모름을 유지
         solved_at=None,  # 해가 없다 — 검증 시각을 지어내지 않는다
         slot_alternatives={},  # 슬롯이 없다 — 슬롯별 제안도 없다
+        rule_backfill_count=0,
         error=error,
     )

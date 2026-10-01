@@ -501,6 +501,9 @@ class WiredOutcome:
     slot_alternatives: Mapping[str, tuple["WiredSlotAlternative", ...]] = field(
         default_factory=dict
     )
+    # 취향 점수 출처·강등 사유 코드 — generate 경로만 실값. 기본 = 모름(None·빈).
+    scoring_mode: str | None = None
+    degradations: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -590,6 +593,8 @@ def _envelope(
     day1_ready_at: datetime | None = None,
     unplaced_must_visits: tuple[UnplacedMustVisit, ...] = (),
     slot_alternatives: Mapping[str, tuple[WiredSlotAlternative, ...]] | None = None,
+    scoring_mode: str | None = None,
+    degradations: tuple[str, ...] = (),
 ) -> WiredOutcome:
     """봉투 조립. 기본값(빈/None)은 산출 컨텍스트가 없는 경로(repair)의 정직한 값이다.
 
@@ -609,7 +614,23 @@ def _envelope(
         day1_ready_at=day1_ready_at,
         unplaced_must_visits=unplaced_must_visits,
         slot_alternatives=slot_alternatives if slot_alternatives is not None else {},
+        scoring_mode=scoring_mode,
+        degradations=degradations,
     )
+
+
+def _scoring_signal(outcome: core.GenerationOutcome) -> tuple[str, tuple[str, ...]]:
+    """내부 결과 → 와이어 LLM 신호 (새 상태 없음 — 이미 있는 값의 사영).
+
+    - scoring_mode: RULE 그대로, LLM 인데 규칙 보충이 있으면 MIXED.
+    - degradations: `"{stage}:{reason 의 첫 ':' 앞}"` — 사유 꼬리(예외 메시지·시한 ms·
+      게이트웨이 오류 문장)는 자르고, 순서 유지 중복 제거.
+    """
+    mode = outcome.scoring_mode.value
+    if outcome.scoring_mode is core.ScoringMode.LLM and outcome.rule_backfill_count:
+        mode = "MIXED"
+    codes = (f"{d.stage}:{d.reason.split(':', 1)[0].strip()}" for d in outcome.degradations)
+    return mode, tuple(dict.fromkeys(codes))
 
 
 # ── 거리 표시 문자열 (BR-U2-08 · INV-3: 거리만, 소요시간류 절대 금지) ──
@@ -1075,6 +1096,7 @@ class WiredItineraryOrchestrator:
         assert outcome.solution is not None  # GenerationOutcome 불변식(FAILED⇔None)
         solution = outcome.solution
         coords = self._coords_for(solution, outcome.slot_alternatives)
+        scoring_mode, degradations = _scoring_signal(outcome)
         return _envelope(
             solution,
             outcome.explanations,
@@ -1087,6 +1109,8 @@ class WiredItineraryOrchestrator:
             unplaced_must_visits=judge_unplaced_must_visits(
                 request, solution, self._tz
             ),
+            scoring_mode=scoring_mode,
+            degradations=degradations,
         )
 
     def _coords_for(
