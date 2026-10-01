@@ -82,7 +82,7 @@ frontend/
   - **과도기(TRIP-1157까지)**: 이주 중에는 딥 임포트(`@/features/home/model/homeFixtures`)를 허용한다 — 옮기는 동안 `index.ts`를 두 번 고치지 않기 위해서다. TRIP-1157에서 `index.ts`를 일괄 정비하고 딥 임포트 금지 lint를 켠다. 그 뒤 딥 임포트는 위반이다.
   - 현재: pages 53개 중 52개가 `index.ts`를 가진다(`magazine`만 없음). entities는 `model/index.ts`(place·stay·trip·itinerary-slot)로 도메인 타입을 내준다.
 - **이주 방식**: 화면 묶음 단위로 옮긴다(TRIP-1138 · 서브 1146~1154) — 테스트 정상화를 먼저 하고 그 화면의 이동을 뒤 커밋으로.
-- **린터**: 이주가 끝나면 공식 FSD 린터 Steiger(`insignificant-slice` · `excessive-slicing`)를 CI 게이트로 붙인다(TRIP-1157·1158). 그 전까지는 ESLint zone과 소스 스캔이 경계를 지킨다.
+- **린터**: 이주가 끝나면 공식 FSD 린터 Steiger(`insignificant-slice` · `excessive-slicing`)를 CI 게이트로 붙인다(TRIP-1157·1158). 그 전까지는 ESLint zone(층 방향·형제 격리)만 경계를 지킨다 — 구조 소스 스캔은 TRIP-1145에서 지웠다.
 - **`app → features` 제한은 두지 않는다** — 공식 FSD는 app 층이 아래 층 전부를 import하는 것을 허용한다. 라우트 파일은 page를 꽂는 얇은 래퍼로 두는 것을 권장한다(lint 강제 없음, TRIP-1142).
 - 절대 경로 별칭 `@/` = `src/` (tsconfig paths — `@/features/...`, `@/shared/...`).
 
@@ -130,8 +130,9 @@ frontend/
 | 화면 — 렌더·탭·결과 | `pages/<slice>` (이주 중에는 화면이 있는 곳) | **단위 1** + **통합 1** `XxxPage.integration.test.tsx`. 단위는 화면을 실제로 그리는 컴포넌트에 붙인다 — page가 직접 그리면 `XxxPage.test.tsx`, props만 받는 뷰에 맡기면 **뷰마다** `XxxScreen.test.tsx`(뷰가 하나여도 같다 — 이때 `XxxPage.test.tsx`는 두지 않는다). 뷰 테스트를 page 이름으로 바꿔 합치지 않는다 | React Native Testing Library · 통합은 MSW |
 | 판정 로직(순수 함수) | 로직이 있는 슬라이스의 `model/`·`lib/` | 옆에 `foo.test.ts` | Jest |
 | 판정 로직의 속성 | 위와 같음 | 함수(또는 함수 묶음)당 PBT 1파일 | fast-check |
-| 도구가 못 지키는 계약(INV-3 등) | feature 또는 page 그룹 | 묶음당 계약 스캔 1파일, 리포 전역 불변식은 전역 1파일 | 소스 스캔 |
-| 개발 도구(`_dev` 프리뷰) | `src/app/_dev` | 스모크 1파일 | RNTL |
+| 출시·보안 계약(ESLint로 표현 못 하는 것) | `src/__tests__` | 아래 판정 3의 남은 목록 | 소스 스캔 |
+| 출시·보안 금지(ESLint로 표현되는 것) | `eslint.config.js` | 규칙 발동 탐침은 `importBoundaryLayers.test.ts` | ESLint `lintText` |
+| 개발 도구(`_dev` 프리뷰) | `src/__tests__`(`src/app/_dev` 안은 라우트로 등록돼 못 둔다) | 스모크 1파일 `devPreviewReleaseGate.test.tsx` | RNTL |
 | UI E2E | 핵심 해피패스 **1~2개만** | — | 미정(Maestro/Detox). 시나리오 검증 본체는 백엔드 API E2E |
 
 - 테스트 파일은 소스 옆에 둔다(`foo.ts` ↔ `foo.test.ts`). jest 설정이 둘이라(`jest.config.js` node · `jest.integration.config.js` MSW) 통합 테스트는 `.integration.test`로 파일이 갈린다. 둘 다 돌리려면 `pnpm test`(한쪽만 부르면 다른 쪽이 0건인 채 green으로 보인다).
@@ -143,18 +144,17 @@ frontend/
 테스트 파일 하나를 들고 오면 위에서부터 첫 번째로 맞는 줄을 따른다.
 
 1. **PBT** → property(`fc.assert`)는 **하나도 지우지 않는다**(루트 CLAUDE.md — PBT는 차단 게이트). 같은 함수를 보는 PBT가 여러 파일이면 한 파일로 **합친다**.
-2. **개발 도구(`_dev` 프리뷰) 테스트** → 모든 프리뷰 키가 throw 없이 렌더되는지 보는 **스모크 1파일만 남기고 지운다**. 프리뷰는 사람이 눈으로 보는 도구라 세부 동작 검사는 실제 화면 테스트의 몫이다.
-3. **소스 스캔**(파일을 텍스트로 읽고 렌더하지 않는 테스트)
-   - tsc·ESLint가 이미 지키는 것(타입 필드 수·층 경계·import 방향)을 다시 본다 → **지운다**. 단 지우기 전에 그 규칙을 실제로 지키는 tsc/ESLint 규칙이 있는지 확인한다 — 없으면 아래 줄로.
-   - 도구가 못 지키는 계약(INV-3 소요시간 비표시·지도 키 부재 표면 등) → **남기되** feature(또는 page 그룹)당 1파일로 **합친다**.
-   - **화면 소스 가드**(특정 화면 파일이 실재하고 금칙어가 없다 등) → 렌더 결과로 확인할 수 있는 것(텍스트·testID·요소 유무)이면 **화면 테스트로 옮기고 스캔은 지운다**. jest가 원리적으로 못 보는 것(바텀시트 제스처 prop·스타일 클래스 금칙어 등)만 스캔으로 남기되 화면 묶음 계약 파일로 **합친다**. 같은 금칙어를 반복 스캔한다면 ESLint `no-restricted-syntax`로 옮길 수 있는지 먼저 본다.
-   - **탐지기 자가검사**(주석은 걷고 코드는 잡는지 확인하는 블록)는 공용 스캔 헬퍼에서 한 번만 한다 — 스캔 파일마다 반복하지 않는다.
-   - 경로를 문자열로 박은 스캔은 FSD 이동에서 대량으로 깨진다 — 화면 칸에서는 **테스트 정리를 먼저, 그 화면의 이동을 뒤 커밋으로** 한다(지울 테스트를 고치는 헛수고 방지).
+2. **개발 도구(`_dev` 프리뷰) 테스트** → **스모크 1파일만 남기고 지운다** — 프리뷰 화면이 뜨고, 키 장부에 중복이 없고, 없는 키는 splash로 떨어지는지만 본다(키별 렌더 없음). 운영 빌드에서 프리뷰를 막는 출시 계약도 같은 파일에 있다. 프리뷰는 사람이 눈으로 보는 도구라 세부 동작 검사는 실제 화면 테스트의 몫이다.
+3. **소스 스캔**(파일을 텍스트로 읽고 렌더하지 않는 테스트) — 기능이 구현·QA된 뒤의 회귀 감시는 스캔이 아니라 QA가 맡는다(TRIP-1145).
+   - **출시·보안 계약**(키·시크릿이 git에 안 들어감, 출시 빌드 설정, API 명세, 운영 빌드의 프리뷰 차단, 법정 동의·고지, 사진·공유 카드 서버 업로드 금지) → ESLint로 표현되면 **ESLint 규칙으로 옮기고** 규칙 발동을 `importBoundaryLayers.test.ts`의 `lintText` 탐침으로 지킨다. 표현 못 하면 **남긴다**. 지금 남은 스캔: `socialSdkSecrets`·`mapBridgeStructure`·`releaseBuildConfig`·`openapiContract`·`devPreviewReleaseGate`·`recordPhotoBinaryGuard`·`shareCardStructure`·`locationConsentPutBodyOwnership`·`deletionScopeStructure`·`importBoundaryLayers`(모두 `src/__tests__`).
+   - **구조 규칙**(층·슬라이스·세그먼트·props-only 시트 등) → 스캔을 두지 않는다. 층 방향은 ESLint zone, 나머지는 Steiger(TRIP-1158).
+   - **기능 회귀**(이미 지운 것의 재등장, 화면 금칙어·소요시간 글자, 바텀시트 prop 결합 등) → 스캔을 두지 않는다. QA가 보고, 자동화는 후속 Maestro 티켓.
+   - 새 스캔을 더하기 전에 같은 금지를 ESLint `no-restricted-imports`·`no-restricted-syntax`로 표현할 수 있는지 먼저 본다.
 4. **같은 화면을 여러 파일이 테스트**(`.select.`·`.errors.`·`.apple.` 같은 티켓·관점 접미사) → 화면 단위 1 + 통합 1로 **합친다**. 관점은 `describe` 블록으로 보존하고, 티켓 번호(`TRIP-####`)는 테스트 이름이 아니라 주석으로 옮긴다(합치며 새로 붙이는 바깥 `describe` 기준 — 옮겨 온 안쪽 `describe`·`it` 이름의 번호까지 고쳐 쓰지는 않는다). 같은 동작을 보는 `it`은 하나만 남긴다.
    - **"같은 동작"은 겉보기 포함이 아니라 뮤테이션으로 판정한다** — 지울 `it`이 잡는 뮤테이션을 남는 `it`에 심어 red일 때만 지운다. 입력·단언이 포함돼 보여도 실제로 잡는 결함이 다를 수 있다.
    - **같은 파일 안에서만** 지운다. 단위↔통합 사이 겹침은 둘 다 남긴다 — 단위는 행 수·문구·토큰 같은 세부를, 통합은 배선을 본다.
    - 옛 파일은 `git rm`으로 지운다(추적 파일 전수를 여는 스캔이 있어 작업트리에서만 지우면 ENOENT).
-   - **소요시간 비표시(INV-3) 렌더 테스트는 시간·거리 데이터를 그리는 화면(일정·경로)에만 둔다.** 받는 데이터에 시간·거리 재료가 없는 화면(담은 장소·고르기·확인 대화상자 등)의 "분·시간·소요 글자 0건" 테스트는 지운다 — 일어날 수 없는 일을 지키는 테스트이고, 코드 쪽 `duration` 금지는 층 소스 스캔이 따로 지킨다.
+   - **소요시간 비표시(INV-3) 렌더 테스트는 시간·거리 데이터를 그리는 화면(일정·경로)에만 둔다.** 받는 데이터에 시간·거리 재료가 없는 화면(담은 장소·고르기·확인 대화상자 등)의 "분·시간·소요 글자 0건" 테스트는 지운다 — 일어날 수 없는 일을 지키는 테스트이고, 코드 쪽 `duration` 금지는 서버 DTO(INV-3)와 QA 몫이다.
 5. 그 밖(순수 함수 단위 테스트 등) → **남긴다**.
 
 ### 합격선 — 정리해도 덜 잡지 않았는가

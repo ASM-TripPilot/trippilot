@@ -12,7 +12,6 @@ paths:
 
 ## 거점 숙소 단일 카드 (g02)
 
-- **g01 선례(`SUMMARY_CARD_SHADOW`의 `shadowColor: '#000000'`)를 그대로 베끼면 g02에선 raw-hex 가드가 깨진다** → `tripWizardStep2Structure.test.ts` AC-7이 `TripWizardStep2Screen.tsx` 소스를 `/#[0-9a-fA-F]{3,8}\b/`로 스캔한다(g01 화면엔 이 가드가 없어 `#000000` 인라인이 통과할 뿐). 그림자를 유지하려면 **`shadowColor: 'black'`**(RN에서 `#000000`과 동치인 색이름, 정규식 무매치) 같은 비-hex 리터럴을 쓰거나, 상수를 `.ts` 파일로 빼 hex 스캔 대상(`.tsx`) 밖으로 옮긴다. raw-hex 가드가 있는 화면에 g01류 그림자 상수를 베낄 때마다 재발한다 — 개념 [[소스 코드 문자열 스캔 가드 (needle)]] 참고.
 
 ## 숙소 선택 시트 후보 카드 (g02)
 

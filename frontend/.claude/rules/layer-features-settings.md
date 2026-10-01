@@ -4,7 +4,7 @@ paths:
 ---
 # `src/features/settings/` — 마이(l03)·등록 숙소(l04)·설정(l05)·위치/개인화 동의 표면
 
-**경계(G-U5-14)**: 다른 `features/*`를 import할 수 없다 — eslint 층 zone과 `src/__tests__/settingsBoundary.test.ts`(소스 재귀 스캔)가 이중으로 막는다. 조합·조회·포맷은 `pages/my-page`·`pages/my-stays`·`pages/settings` 같은 페이지 층이 진다. 다른 feature에 동명 글리프가 있어도 복제한다.
+**경계(G-U5-14)**: 다른 `features/*`를 import할 수 없다 — eslint 층 zone이 막는다. 조합·조회·포맷은 `pages/my-page`·`pages/my-stays`·`pages/settings` 같은 페이지 층이 진다. 다른 feature에 동명 글리프가 있어도 복제한다.
 
 **다이얼로그 패턴**: 리포에 Modal 선례가 없다 — 확인/삭제류는 로컬 `useState`로 열고 조건부 `absolute inset-0` 오버레이로 그린다. 비즈니스 콜백은 다이얼로그 확정에서만 부른다. 딤·중앙정렬·터치 차단은 jest 원리적 사각(`repo-traps.md` 바텀시트·오버레이 절) — 자동 심판은 testID 트리 존재 + 확정 전 콜백 0회까지.
 
@@ -19,7 +19,7 @@ paths:
 | `ui/ExportRow.tsx` | 내보내기 행 |
 | `ui/NicknameEditRow.tsx` | 닉네임 편집 행 |
 | `ui/RevokeConfirmDialog.tsx` | 위치 동의 철회 확인 다이얼로그(조건부 오버레이 패턴) |
-| `ui/DeleteAccountDialog.tsx` | 계정 삭제 2단 게이트 다이얼로그. `initialStep?`은 프리뷰 전용 — 프로덕션 호출부가 넘기지 않는지는 `src/__tests__/deleteAccountDialogGate.test.ts`가 소스 스캔으로 막는다. 목록 높이 상한은 임의값 `max-h-[Npx]` 표기여야 한다 — `DeleteAccountDialog.l05parity.test.tsx`의 탐지기가 모르는 토큰 표기에 throw한다(fail-closed) |
+| `ui/DeleteAccountDialog.tsx` | 계정 삭제 2단 게이트 다이얼로그. `initialStep?`은 프리뷰 전용 — 프로덕션 호출부가 넘기지 않는지는 ESLint `no-restricted-syntax`(`eslint.config.js` `DELETE_DIALOG_GATE`, TRIP-1145)가 막는다 — `import { DeleteAccountDialog as D }` 같은 다른 이름 import는 사각. 목록 높이 상한은 임의값 `max-h-[Npx]` 표기여야 한다 — `DeleteAccountDialog.l05parity.test.tsx`의 탐지기가 모르는 토큰 표기에 throw한다(fail-closed) |
 | `ui/LocationConsentScreen.tsx` | 위치 동의 철회 게이트 화면 — 로컬 `useState` 다이얼로그 게이트의 원형 |
 | `model/settingsSections.ts` | 설정 섹션 구성 순수 파생 — 취향은 머리글 없는 카드 한 행(`preferenceRow`, TRIP-1051): `view` 없으면 값 없이 줄만(D4, 미설정 칩 없음), 있으면 `summarizePreferences`의 `kind==='value'` 축 수 / `axes.length`로 `N/7 설정됨`. 분모는 `axes.length`에서 뽑지만 축이 실제로 7개인 동안은 리터럴 `7`로 바꿔도 테스트가 못 잡는다(심판 사각, [[뮤테이션 테스팅]])·동의 칩(`consentChip`, undefined면 칩 없음)·개인화·제휴 행. `SettingsGroupVM.label`은 `string \| null` — 취향 그룹만 `null`(머리글 미렌더). `location-consent` 행 라벨은 'GPS 이동경로 기록'이고 칩은 L3(`gpsRecordingOptIn`)인데, 그 행이 여는 l06 화면 토글은 L2(`legalConsent`)를 읽어 값이 갈릴 수 있다 |
 | `model/tripBuckets.ts` | l03 숫자 집계 — `phaseBucket`(단계→칸, `draft`→null)·`bucketTrips`(모름이 하나라도 있으면 null). 서버 `Trip.status`는 쓰지 않는다(날짜 파생이라 초안도 ACTIVE) |

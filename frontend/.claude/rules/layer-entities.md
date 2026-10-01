@@ -14,7 +14,7 @@ paths:
 - entities→features 역참조 금지라 features 글리프를 못 쓴다 — 필요한 글리프는 슬라이스 `*Glyphs.tsx`에 바이트 복제한다(리포 글리프 로컬 복제 관례).
 
 ## 세그먼트
-- `ui` / `model` / `lib` / `config` 넷 + **entities 한정 `@x`**(교차 창구). 옛 칸 `screens·containers·hooks·store` 부활 금지. `api` 세그먼트는 두지 않는다 — 서버 통신은 `shared/api` 단일 계층. `fsdLayerStructure.test.ts`가 이 세그먼트 목록을 잠근다.
+- `ui` / `model` / `lib` / `config` 넷 + **entities 한정 `@x`**(교차 창구). 옛 칸 `screens·containers·hooks·store` 부활 금지. `api` 세그먼트는 두지 않는다 — 서버 통신은 `shared/api` 단일 계층. 세그먼트 목록 검사는 Steiger(TRIP-1158) 몫이다.
 - 각 슬라이스 `model/index.ts`는 `@/shared/api/generated/schemas`의 서버 타입을 **얇게 재수출**하고(새 shape 아님 — 원본 변경을 자동 추종) 화면 전용 뷰모델을 둔다. **generated 직참조는 `model/index.ts`만 허용**(G2 스캔 예외) — `ui/`·`lib/`가 `@/shared/api/generated`를 직접 물면 경계 위반.
 
 ## `src/entities/place/`
@@ -27,7 +27,7 @@ paths:
 | `ui/PlaceRailCard.tsx` | 장소 카드 공용 — `variant?: 'rail' \| 'fill'`(기본 `'rail'`, 폭 `160px`) / `'fill'`은 `w-full`로 부모 칸 폭을 그대로 채운다(d05 검색 결과 2열 격자용, TRIP-1048). d01 `ExploreLandingScreen`은 `variant` 미지정으로 기존 `160px` 그대로. **`save?` 옵셔널 슬롯**(신규, TRIP-1049) — 있으면 사진 우상단에 `HeartButton` 렌더. 카드 루트 `onPress`는 `!save?.pending`일 때만 부른다(disabled 하트 press가 부모 카드로 새는 것을 막음, [[비활성 눌림과 조상 버블링]] Probe C). |
 | `ui/PlaceGridCard.tsx` | d04 탐색 그리드 카드. 하트 저장 testID·"담음" 배지·pending(연타 방지) 가드. |
 | `ui/PlaceRowCard.tsx` | 범용 행 카드(save?/trailing?/subtitle 옵셔널 슬롯). |
-| `ui/SlotCandidateCard.tsx` | itinerary(h08·h10)·planb(i14) 후보 시트 공용, `testIDPrefix`로 소비처 구조 차이를 흡수. `tags?`·`nameKo?`·`showRationale?`·`distanceLabel?`·`distanceTone?`·`dimmed?`는 전부 기본값이 기존 렌더 불변(`entitiesPlaceConsumers` 앵커). candidates 응답에 이름·사진·태그·"반경 밖" 필드가 없어 이 값들은 픽스처로만 채워진다(프로덕션 톤다운 0). planb 루트 정규식이 `image-`·`name-`를 감산하지 않으니 테스트에서 `queryByTestId`로 null을 확인한다. |
+| `ui/SlotCandidateCard.tsx` | itinerary(h08·h10)·planb(i14) 후보 시트 공용, `testIDPrefix`로 소비처 구조 차이를 흡수. `tags?`·`nameKo?`·`showRationale?`·`distanceLabel?`·`distanceTone?`·`dimmed?`는 전부 기본값이 기존 렌더 불변. candidates 응답에 이름·사진·태그·"반경 밖" 필드가 없어 이 값들은 픽스처로만 채워진다(프로덕션 톤다운 0). planb 루트 정규식이 `image-`·`name-`를 감산하지 않으니 테스트에서 `queryByTestId`로 null을 확인한다. |
 | `ui/PlaceSubtitle.tsx` | 부제 조각(`parts.join(' · ')`만). 기존 부제 공식들을 통일하지 않고 조각만 인자화했다. |
 
 ## `src/entities/stay/`
@@ -70,12 +70,12 @@ paths:
 | `lib/openingHoursLabel.ts` | 영업시간 원문→상태줄 라벨. `normalizeOpeningHours`로 먼저 정리 → `^HH:mm\s*[-–]\s*HH:mm$`면 `HH:mm–HH:mm 영업`, 빈 값이면 `null`, 그 밖은 정리된 원문. "24시간" 같은 리터럴은 소스에 두지 않는다(INV-3 스캔 오탐 회피). |
 | `lib/normalizeOpeningHours.ts` | `<br>` 계열 태그 변형(대소문자·태그 안 공백·뒤 줄바꿈 1개)을 `\n`으로 치환 후 trim. 소비: 탐색 상세·실행 상세 뷰 조립·`openingHoursLabel`. 모양이 깨진 태그(`<br<`·절단 태그)는 거르지 못한다. |
 | `ui/SlotGlyphs.tsx` | 카테고리 아이콘 8종 + `ChevronRightGlyph`(`tone`)·`LockGlyph`·`ClockGlyph`·`PhotoGlyph`·`MemoGlyph`·`CheckGlyph` + 색 상수. ⚠️ **`ICON_BY_KEY`(카테고리→글리프) 매핑은 jest 원리적 사각** — SVG `stroke`/`fill`이라 두 엔트리를 맞바꿔도 전 심판 green(`traps-itinerary` 참고). |
-| `ui/SlotProgressCard.tsx` | i01 허브 슬롯 카드 — 진행 상태 하나로 done/active/upcoming 세 모양 중 하나를 찍는 무상태 카드(`useState` 금지, `entitiesItinerarySlotStructure` G2). upcoming 아이콘은 `Pressable disabled`+`accessibilityState.disabled`. TRIP-1070부터 active 카드에 `onPressPhoto`·`onPressMemo`·`photoNotice` prop(옵셔널, 미주입이면 [사진]·[메모] 버튼 자체가 없음) — 구 `onPressSoon`/`soonHintVisible`/"준비 중" 힌트는 삭제됐다. |
+| `ui/SlotProgressCard.tsx` | i01 허브 슬롯 카드 — 진행 상태 하나로 done/active/upcoming 세 모양 중 하나를 찍는 무상태 카드(`useState` 금지). upcoming 아이콘은 `Pressable disabled`+`accessibilityState.disabled`. TRIP-1070부터 active 카드에 `onPressPhoto`·`onPressMemo`·`photoNotice` prop(옵셔널, 미주입이면 [사진]·[메모] 버튼 자체가 없음) — 구 `onPressSoon`/`soonHintVisible`/"준비 중" 힌트는 삭제됐다. |
 | `ui/SlotStopCard.tsx` | 결과 화면(h07·h08·h11·h14·h16)과 편집기(h12·i07 `EditorView`) 공용 슬롯 카드, `PoiSlotCard`와 **병존**(대체 아님). presentation-only — 옵셔널 prop(`warning`·`onPressTimeChip`·`unspecified`·`locked`·`numberOutside`·`violation`·`dragging`)은 전부 미전달=기존 leaf 그대로. `violation`은 카드가 `slot.hasViolation`을 스스로 읽지 않고 소비처가 문구를 내려준다(자가 판독하면 다른 화면이 조용히 배지를 얻는다). `locked`면 시각 알약 View 자체가 `slot-stopcard-locked-*`이고 `onPressTimeChip`을 무시한다(`editable = onPressTimeChip !== undefined && locked !== true`) — "잠김"과 "누를 수 없음"이 한 요소의 두 성질이라 press 단언까지 걸어야 잡힌다. `dragging`의 실제 강조는 목에서 `isActive`가 항상 false라 6-b 전용. |
 | `config/altLabel.ts` | `ALT_LABEL = '다른 후보 ›'`(공백+U+203A) 공용 상수. |
 | `ui/SlotPhotoPlaceholder.tsx` | `resolveCategoryPlaceholder` 소비 → 72×72(카드 사진 자리와 같음, TRIP-1116) 틴트+아이콘. 텍스트 0(INV-3). |
 | `ui/PoiSlotCard.tsx` | peek/list 겸용 POI 카드. |
-| `ui/ReplanSlotRow.tsx` | 재계획 초안 행. 번호 원 톤(`tone==='visited'`→`bg-success`)·사진/플레이스홀더·시간 알약·흐림(`opacity-45`, 카드 루트에만)·"다른 후보"(예정 행만). INV-3 가드는 `entitiesItinerarySlotStructure G3`. |
+| `ui/ReplanSlotRow.tsx` | 재계획 초안 행. 번호 원 톤(`tone==='visited'`→`bg-success`)·사진/플레이스홀더·시간 알약·흐림(`opacity-45`, 카드 루트에만)·"다른 후보"(예정 행만). |
 
 화면 고유 슬롯(`DraftScreen`·`ManualPlanScreen`·`ItineraryEditScreen`·widgets `ManualEditShell`)은 계약이 달라 이 슬라이스로 접지 않는다. execution의 `SlotState`는 서버 enum이 아니라 방문기록 파생 사영이라 이관하지 않는다.
 
