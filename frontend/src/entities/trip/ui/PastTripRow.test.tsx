@@ -17,7 +17,7 @@ import type { PastTripCardVM } from '../model';
  *  - 🔴 chevron 은 카드가 소유하지 않고 소비처가 **`trailing` 슬롯**으로 주입한다(807 SavedStayCard 동형 —
  *    j07 PastTripList 가 RecordGlyphs.ChevronRightGlyph 를 넣는다). shared 승격 없음(교차 0).
  *  - 🔴 testID 는 소비처가 **명시 full 문자열**(`record-calendar-past-trip-{id}`)로 주입한다 — 그래서 그
- *    리터럴이 PastTripList.tsx 에 잔존해 선재 `recordsCalendarStructure.test.ts` G3 앵커가 재조준 없이 산다.
+ *    리터럴이 PastTripList.tsx 에 남는다(그 리터럴을 앵커로 쓰던 `recordsCalendarStructure` G3 는 TRIP-1145 로 지웠다).
  *
  * *(개념 — trailing 슬롯)* 카드가 자식 요소를 통째로 받아 우측에 끼워 넣는 자리. 무엇을 그릴지는 소비처가
  *  정하고 카드는 위치만 준다(chevron 이든 무엇이든 카드는 모른다).

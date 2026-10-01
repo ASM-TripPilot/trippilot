@@ -7,8 +7,8 @@ import { LOCATION_ICON_COLORS } from './lib/locationColors';
 // 1:1 옮긴다(AuthGlyphs.tsx 와 같은 인라인 방식). onboarding 피처의 글리프(OnboardingGlyphs)와
 // 의도적으로 별도 파일이다 — shared/ 는 features/ 를 import 하면 안 되므로(경계 역방향)
 // LocationPreprompt 는 자기 로컬 글리프를 갖는다. 색은 locationColors 상수를 쓴다 — stroke/fill
-// 은 raw 값이 필요해 className 토큰을 못 받지만, 이 파일(.tsx)에 hex 리터럴을 직접 박으면
-// onboardingStructure.test.ts 의 토큰 우회 가드에 걸린다(값은 tailwind 토큰과 동일).
+// 은 raw 값이 필요해 className 토큰을 못 받지만, 이 파일(.tsx)에 hex 리터럴을 직접 박지 않는다
+// (값은 tailwind 토큰과 동일).
 
 type GlyphProps = {
   size?: number;
@@ -161,8 +161,8 @@ export function LocationInfoGlyph({
 }
 
 // l06 용도 3항목 아이콘(시계·좌우화살표·핀). 색은 호출자 주입(기본 ink) — permission-denied 는
-// 컨테이너 opacity 로 dimmed 하므로 색 상수는 하나로 족하다. hex 리터럴을 .tsx 에 직접 박으면
-// onboardingStructure.test.ts F2 가드에 걸리므로 반드시 LOCATION_ICON_COLORS 경유.
+// 컨테이너 opacity 로 dimmed 하므로 색 상수는 하나로 족하다. hex 리터럴을 .tsx 에 직접 박지 않고
+// 반드시 LOCATION_ICON_COLORS 경유.
 
 // (1) 이동 지연 감지 — 시계.
 export function LocationClockGlyph({

@@ -17,8 +17,8 @@ import {
  *
  * 왜 타입만으로는 부족한가: 생성물은 리포에 커밋돼 있어서 openapi가 조용히 뒤집혀도 재생성
  * 전까지 이 파일은 아무 말도 하지 않는다. 그래서 계약 **입력**은 `src/__tests__/
- * openapiContract.test.ts`(A-3)가, 도구가 뱉은 **출력 문자열**은 `src/__tests__/
- * staySearchGenerated.test.ts`(B-7·B-8)가 따로 본다 — 층이 셋인 이유다.
+ * openapiContract.test.ts`(A-3)가, 도구가 뱉은 **출력 문자열**을 보던 `staySearchGenerated`(B-7·B-8)는
+ * TRIP-1145 로 지웠다(openapiContract 와 같은 계약).
  *
  * ── 졸업 조건 (frontend/CLAUDE.md "장치 판정 규칙") ──────────────────────
  * **A. 영구 규칙 — 유지한다.** 잠그는 것이 서버 계약(필수 필드·enum 값)이라, 여행 도메인 코드가

@@ -19,8 +19,8 @@ import { MapSheetShell } from './MapSheetShell';
  * ⚠️ **원리적 사각(02a ★2·★3·★4)** — `@gorhom/bottom-sheet` 목은 통과형이라 시트 실개폐·2스냅·
  *   딤·`enableContentPanningGesture` 는 못 본다(E6·E7 → 6-b 실기). TRIP-919 부터 셸은 지도 실패
  *   (env 키 없음 → `MapView.onLoadFailed`)를 받으면 지도 자리를 폴백 바로 바꾼다 → 지도를 단언하는
- *   케이스는 **키를 넣고** 돈다(`withMapKey`). viewOnly 실전달은 `itineraryMapSurfaceStructure` S2
- *   소스 스캔이 잠근다. 이 파일은 **children 렌더·prop 전달·testID 트리**만 잠근다.
+ *   케이스는 **키를 넣고** 돈다(`withMapKey`). viewOnly 실전달을 잠그던 `itineraryMapSurfaceStructure` S2
+ *   소스 스캔은 TRIP-1145 로 지웠다. 이 파일은 **children 렌더·prop 전달·testID 트리**만 잠근다.
  *
  * 3동작 뼈대: 준비=header/children/cta/days/pins 주입 렌더 → 실행=렌더/칩·back press → 단언=조립·콜백.
  */

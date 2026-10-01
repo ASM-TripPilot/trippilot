@@ -12,7 +12,7 @@ import { StaySearchScreen } from './StaySearchScreen';
  * 무엇을 보장하나: `state` prop(판별 유니온)에 따라 화면이 상태별 문구·버튼·배지·스켈레톤을
  * 그리고(AC-1~7), 배너와 안내가 동시에 뜨는 겹침(AC-10)이 구조적으로 성립하며, `state`를
  * 생략한 2-prop 호출은 TRIP-181 default 화면을 한 글자도 바꾸지 않는다(AC-9). 렌더로 못 보는
- * 소스 층(FORBIDDEN 문자열 등)은 `staySearchStructure.test.ts`가 맡는다 — 이 파일은 렌더
+ * 소스 층(FORBIDDEN 문자열 등)을 보던 `staySearchStructure`는 TRIP-1145 로 지웠다 — 이 파일은 렌더
  * 결과만 본다.
  */
 

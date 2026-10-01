@@ -13,7 +13,7 @@ import { MapFallbackBar } from './MapFallbackBar';
  *
  * 문구·라벨은 `getByText` **완전일치**다 — 옛 프리뷰처럼 `⊘ `·`↻ ` 기호를 같은 Text 에 붙이면 red
  * (글리프는 `MapSheetGlyphs` 의 SVG 형제 노드여야 한다, 02a ★7). 재시도 상태는 셸이 쥐고 이 바는
- * `onRetry` 를 부르기만 한다(`widgetsStructure` F 가 useState 0 을 잠근다).
+ * `onRetry` 를 부르기만 한다(useState 0 을 잠그던 `widgetsStructure` F 는 TRIP-1145 로 지웠다).
  *
  * 3동작 뼈대: 준비=onRetry 스파이로 렌더 → 실행=다시 시도 press → 단언=문구·라벨·콜백 1회.
  */

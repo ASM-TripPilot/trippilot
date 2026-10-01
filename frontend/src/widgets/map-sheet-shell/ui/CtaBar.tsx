@@ -5,7 +5,7 @@ import { Pressable, Text, View } from 'react-native';
  * TRIP-783 · 하단 고정 CTA 바(widgets · presentation-only). 1~2버튼 변형을 `buttons` prop 으로 받는다
  * (h08=2버튼 `다시 짜기`(outline)+`확정하기`(primary) / h14=1버튼 `일정 저장하기`(primary full)).
  * 라벨·콜백은 소비처 주입. 변형 스타일(primary=채움 / outline=테두리)은 className 토큰으로 잠긴다 —
- * className 은 jest 렌더 트리에 평문 prop 으로 남아 심판이 읽는다(loginVisual 선례).
+ * className 은 jest 렌더 트리에 평문 prop 으로 남아 심판이 읽는다.
  */
 
 export interface CtaButton {

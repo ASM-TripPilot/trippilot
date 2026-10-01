@@ -1,8 +1,8 @@
 /**
  * d01 탐색 랜딩 화면 — 순수 프레젠테이션(US-EXPL-01 · BR-U1-05/09/12/14/15 · Figma d01/1672:1183).
  *
- * 이 파일은 `features/explore` 라 `placeExploreStructure.test.ts` 의 재귀 스캔에 자동 편입돼
- * `@/features/stay` import·훅·zustand·`duration`·URL 리터럴을 0건으로 강제받는다 — 그래서
+ * 이 파일은 순수 화면이라 `@/features/stay` import·훅·zustand·`duration`·URL 리터럴을 두지 않는다
+ * (기계 강제 없음 — TRIP-1145 에서 스캔 삭제) — 그래서
  * 조회·`formatPrice`/`stayKey` 조합은 이 화면이 아니라 라우트(`(tabs)/explore.tsx`)가 진다.
  * 화면은 뷰모델(prop)만 받는다.
  *

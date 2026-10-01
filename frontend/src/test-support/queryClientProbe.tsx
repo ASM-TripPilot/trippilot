@@ -14,9 +14,7 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
  * 이름으로 export하는 이유: `jest.mock('@/app-shell/ui/SplashGate', () => require(...))`가
  * 심볼명으로 대체하므로 이름이 같아야 배선이 성립한다(`splashGateMock.tsx`가 같은 규약).
  *
- * `src/test-support/`는 `noMswInStaticGraph.test.ts`의 `TEST_ONLY_DIRS`에 들어 있어
- * 프로덕션 정적 그래프 스캔에서 제외된다 — 이 모듈이 `@tanstack/react-query`를 import해도
- * 그 가드에 걸리지 않는다.
+ * `src/test-support/`는 eslint 출시·보안 금지 블록의 `TEST_IGNORES`에 들어 있다.
  */
 
 let observedQueryClient: QueryClient | null = null;

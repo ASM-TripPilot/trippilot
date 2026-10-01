@@ -1,6 +1,6 @@
 // a02 "여행지 둘러보기" 매거진 목록 화면의 prop 계약(TRIP-700 · 라이브 Figma 2091:1940).
 // MagazineScreen 은 이 타입만 알고 서버·라우팅을 모른다 — 네트워크·라우팅은 이 계약 밖
-// (homeStructure D-1 이 features/home 재귀 스캔으로 기계 강제, homeFixtures 선례). 칩 필터는
+// (homeFixtures 선례). 칩 필터는
 // 시각 전용 선택 표시일 뿐(서버 매거진 API 없음, 01b Q4) — 카드는 selected 와 무관하게 고정.
 //
 // ⚠️ 이 파일은 test-designer 가 [테스트] 단계에서 **컴파일용 prop 계약**으로 선작성했다

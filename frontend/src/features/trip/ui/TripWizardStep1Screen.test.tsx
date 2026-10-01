@@ -21,8 +21,8 @@ import type { TripWizardStep1ScreenProps } from './TripWizardStep1Screen';
  * (편집 시트 본체는 S2~S6). 옛 인라인 컨트롤 잠금은 걷어내고(그 대응물이 신 default 에 없다), 신 계약으로
  * 다시 짠다(01b 재작성 전략).
  *
- * 화면은 여전히 props-only 다 — 쿼리 훅·라우터·타 feature import 0(그 제약은 렌더로 못 봐
- * `src/__tests__/tripWizardStep1Boundary.test.ts` 가 소스 층에서 잠근다, AC-7).
+ * 화면은 여전히 props-only 다 — 쿼리 훅·라우터·타 feature import 0(그 제약을 소스 층에서
+ * 잠그던 `tripWizardStep1Boundary` 는 TRIP-1145 로 지웠다, AC-7).
  *
  * 커버하지 않는 것: 편집 시트 본체(S2~S6) · 스트립 카드 상세(`…mustVisit.test.tsx`) · 실패 배너·overseas
  * (`…errors.test.tsx`) · 요약 문자열 **도출**(페이지 `tripSummary` 셀렉터 배선, `TripNewStep1Page.test.tsx`) ·

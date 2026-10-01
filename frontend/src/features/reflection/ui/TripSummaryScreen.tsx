@@ -23,7 +23,7 @@ import type { OrderedVisit } from '../model/summaryView';
  *  - AC-3(BR-U5-43): distanceSource 라벨(근사/경로)이 거리 셀에 표기된다(거리 미측정이면 라벨 숨김).
  *  - AC-5(BR-U5-48): shareEnabled:false → 공유 버튼 비활성 + press 콜백 0회(종료·요약 전 공유 불가).
  *
- * 지도는 `shared/map/MapView`(viewOnly 글랜스, `itineraryMapSurfaceStructure` 옵트인 등재) —
+ * 지도는 `shared/map/MapView`(viewOnly 글랜스) —
  * 실 좌표(mapCenter+mapPins)가 있을 때만 렌더하고 없으면 그 자리를 비운다(가짜 기본 센터 지도
  * 금지, 571 경고-2 동형 · 자리표시 제거 TRIP-939). `DayHighlight` 계약에 좌표가 없어 런타임은 늘 빈 가지다 — AC-1 은
  * mapPins 를 주입해 MAP 경로만 검증하고, 실 좌표 배선은 계약 확장 후속 티켓. `mapCenter?`·`mapPins?`

@@ -24,8 +24,8 @@ import { SlotProgressCard } from './SlotProgressCard';
  *            거리 줄은 없다. 수동 [도착]은 `onPressArrive` 를 받을 때만 그린다(TRIP-1021 — TRIP-746 의
  *            "도착 자동 원칙" 삭제를 되돌림. 자동 도착(TRIP-1018)이 보류라 수동이 유일한 도착 경로다).
  *
- * 사진 안내 문구(`photoNotice`)의 표시 여부는 카드가 갖지 않는다 — entities ui 는 useState 금지
- * (`entitiesItinerarySlotStructure` G2). 부모가 문구를 주면 버튼 줄 아래에 그대로 그린다.
+ * 사진 안내 문구(`photoNotice`)의 표시 여부는 카드가 갖지 않는다 — entities ui 는 useState 를 두지 않는다
+ * (옛 가드 `entitiesItinerarySlotStructure` G2 는 TRIP-1145 로 지웠다). 부모가 문구를 주면 버튼 줄 아래에 그대로 그린다.
  *
  * 각 leaf 는 값 하나 — `toHaveTextContent(문자열)` 은 trim·공백 정규화 뒤 **완전 일치**다(02a ★3).
  * 3동작: 준비(슬롯·상태·사진/후기) → 실행(렌더·press) → 단언(leaf 문구·존재/부재·콜백 횟수).

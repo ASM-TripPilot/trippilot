@@ -287,8 +287,8 @@ export function PlaceExplorePage(): ReactElement {
         hideCreateTrip={fromWizard}
         onPressSavedPlaces={() =>
           // 위저드 출처면 바로 아래가 d02 select 다 — save 모드를 새로 열면 그 CTA 가 드래프트를
-          // reset 한다. 한 칸 뒤로 가 고르던 체크를 이어 간다(TRIP-1093 결정 2). 이 전제는
-          // 생산자 가드(`wizardOriginProducers`)가 지킨다.
+          // reset 한다. 한 칸 뒤로 가 고르던 체크를 이어 간다(TRIP-1093 결정 2). 이 전제를
+          // 지키는 심판은 없다(생산자 소스 스캔은 TRIP-1145 에서 지웠다).
           fromWizard ? router.back() : router.push('/explore/saved-places')
         }
         onPressFilter={() => setCategorySheetOpen(true)}

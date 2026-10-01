@@ -24,7 +24,7 @@ import { RegionLevel } from '@/shared/api/generated/schemas';
  * ⚠️ `useGetRegions` 를 정적 import 하지 않고 **호출 시점 require** 로 미룬다: 정적이면 이
  * 모듈이 네트워크 계층(`@/shared/api`)을 전이 의존으로 끌고, `regionTint` 를 import 하는
  * 프레젠테이션 화면(`RegionPickerScreen`)까지 그것을 물게 된다 — 그 화면을 정적으로 그리는
- * `devPreview` 계열 동결 테스트의 지뢰 목이 준비 단계에서 터진다. 이 훅은 배선 층(page)에서만
+ * 프리뷰 스모크(`devPreviewReleaseGate`)의 지뢰 목이 준비 단계에서 터진다. 이 훅은 배선 층(page)에서만
  * 불리고 프리뷰는 화면만 그리므로, 로드를 호출 시점까지 미루면 그 전이 경로가 끊긴다.
  */
 export function useRegions(params?: GetRegionsParams) {

@@ -9,7 +9,7 @@
  * 서버로 넘길 창구가 없어(POST /complete·VisitCheck 에 dwell 필드 0) **소비처가 없다**(데드코드
  * 위험, 03 notes 참조). AC-1 이 정확성을 요구해 순수 함수로 잠근다.
  *
- * ★ liveTimeStructure 가드(features/execution/**): `new Date`·`Date.parse`·`.getTime` 류 금지.
+ * ★ BR-U4-34(features/execution/**, 기계 강제 없음): `new Date`·`Date.parse`·`.getTime` 류 금지.
  * "HH:mm:ss" 를 split 으로 쪼개 **다른 이름의 분 변수**로 옮겨 뺀다(옛 placeDetailView.toMinutes 선례 — TRIP-755 후속으로 삭제됨).
  */
 

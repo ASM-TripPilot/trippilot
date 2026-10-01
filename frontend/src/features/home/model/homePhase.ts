@@ -4,9 +4,8 @@ import type { HomePhase } from './homeTypes';
  * TRIP-371 · 홈 실데이터 배선의 순수 판정 계층(화면 아님, 네트워크·시계 read 0).
  * `today` 는 인자로 주입받아 결정론적이다 — 시계를 직접 읽지 않는다(CI 타임존 무관).
  *
- * ★ 경계(02a §4-★1·★2): `features/home` 은 eslint zone·homeStructure D-1 대상이라 서버
- * 스키마(Trip 타입)나 타 feature(trip·itinerary) 를 import 할 수 없다 — 리터럴 금칙이라 이
- * 주석도 그 경로 문자열을 적으면 스캔에 걸린다(그래서 여기 안 적는다).
+ * ★ 경계(02a §4-★1·★2): `features/home` 은 eslint zone 대상이고 순수 슬라이스라 서버
+ * 스키마(Trip 타입)나 타 feature(trip·itinerary) 를 import 할 수 없다.
  *  - Trip 대신 **로컬 구조 타입** `HomeTripInput`(라우트가 넘기는 서버 목록이 구조적으로 대입됨).
  *  - meta 조립 포맷터는 라우트(app 층)가 `formatTripMeta` 로 **주입**한다 — 이 파일은 경계 안에 순수하게 남는다.
  */
@@ -122,7 +121,7 @@ export function resolveHomePhase(
   const traveling = isTraveling(dominant.startDate, dominant.endDate, today);
   const dday = formatDday(dominant.startDate, today);
   // TRIP-697 여행 중 N일차 = 오늘 − 시작일 + 1(시작 당일 = 1일차). features/home 경계 안에서
-  // 계산한다(homeStructure D-1). toEpochDay 는 formatDday·isTraveling 과 같은 UTC epoch-day
+  // 계산한다(순수 슬라이스). toEpochDay 는 formatDday·isTraveling 과 같은 UTC epoch-day
   // 산술이라 배지·타이틀·일차가 한 소스를 공유한다(계획 중일 땐 미사용).
   const dayNumber = toEpochDay(today) - toEpochDay(dominant.startDate) + 1;
 

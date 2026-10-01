@@ -27,8 +27,7 @@ import {
  * 는 이 page 를 꽂기만 한다(TRIP-1142).
  *
  * 왜 page 가 훅을 무는가: 랜딩 화면(`ExploreLandingScreen`)은 `features/explore` 라
- * `placeExploreStructure` 재귀 스캔이 `@/features/stay` import·훅·zustand 를 0건 강제하는
- * 순수 프레젠테이션이다. 그래서 조회 두 개(`useStaySearch`·`useSavedPlaces`)와
+ * `@/features/stay` import·훅·zustand 를 두지 않는 순수 프레젠테이션이다. 그래서 조회 두 개(`useStaySearch`·`useSavedPlaces`)와
  * `formatPrice`/`stayKey` 카드 매핑, 그리고 숙소 담기 하트(`useSavedStays`) 배선은 스캔 밖인
  * 이 page 가 진다 — `itinerary.tsx` 승격과 동형(브리프 §0-1).
  *

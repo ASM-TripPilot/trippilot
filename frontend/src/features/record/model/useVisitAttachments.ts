@@ -19,7 +19,7 @@ import { useVisitMemo } from './useVisitMemo';
  *  - `addPhoto` = `photoAttach`(동의 게이트) → POST photos → 성공 시 photos 쿼리 무효화(재조회로 목록 성장).
  *  - `saveMemo` = 공백만이면 **PUT 0회**(무의미 upsert 방지), 아니면 PUT memo(만들기/고치기 안 나눔).
  *
- * ★ 새 HTTP 함수를 만들지 않는다(recordsStructure G5) — 생성 클라이언트의 3함수만 재사용한다.
+ * ★ 새 HTTP 함수를 만들지 않는다 — 생성 클라이언트의 3함수만 재사용한다.
  *   동의 게이트는 순수 함수 `photoAttach` 가 지므로 이 훅은 gpsConsent 를 그대로 통과시킨다.
  *
  * TRIP-760 · 업로드 실패는 **이 훅**에 둔다(컨테이너 로컬 아님 — 훅이 이미 POST·무효화를 소유). 신설 3멤버:

@@ -19,8 +19,8 @@ import { SlotCandidateSheet } from './SlotCandidateSheet';
  *  - 🔴 바텀시트가 아니다(소스에 @gorhom/bottom-sheet 0) — 통과형 목의 개폐 사각을 인라인으로 닫는다.
  *
  * ★ 여유 숫자 두 얼굴: slackLabel 은 slackTime.ts(model)가 만든 문자열을 **주입**받아 `{slackLabel}` 변수로만
- *   렌더한다 — ui 소스엔 N시간/N분 리터럴 0(executionDurationStructure=AC-8 green). 아래 "여유 1시간 20분"
- *   문자열은 **테스트 파일**에 있고 ui 소스엔 없다(가드는 ui 소스만 스캔, .test. 제외).
+ *   렌더한다 — ui 소스엔 N시간/N분 리터럴 0(옛 가드 executionDurationStructure 는 TRIP-1145 로 지웠다). 아래 "여유 1시간 20분"
+ *   문자열은 **테스트 파일**에 있고 ui 소스엔 없다.
  * ★ slackLabel 은 시트 공통 1개(후보별 아님) — "다음 고정까지 여유"는 교체 슬롯 기준이라 후보 무관(BR-U4-24).
  * ★ RNTL 13.3.3 STRING 매처=완전일치(node_modules 실측): leaf 값은 자기 testID 로 떼 toHaveTextContent(값)
  *   EXACT 로, 안내 다중텍스트·감싼 라벨은 /…/ REGEX 부분포함으로 잰다.

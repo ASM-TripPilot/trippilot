@@ -31,8 +31,8 @@ import {
  * 내려온다 — 화면은 문자열을 조립하지 않는다(값이 `null`이면 미선택이라 플레이스홀더를 그린다).
  *
  * 왜 props만 받는가: 이 화면이 쿼리 훅·라우터·`expo-location`을 전이 의존으로라도 물면 dev
- * 프리뷰가 터지고 테스트가 네트워크에 묶인다 — 그 제약은 렌더로 관찰할 수 없어
- * `src/__tests__/tripWizardStep1Boundary.test.ts`가 소스 층에서 잠근다(AC-7). 진행 표시 "1 / 4"는
+ * 프리뷰가 터지고 테스트가 네트워크에 묶인다 — 그 제약은 렌더로 관찰할 수 없고
+ * 지금은 기계 강제가 없다(소스 스캔은 TRIP-1145 에서 지웠다). 진행 표시 "1 / 4"는
  * 화면이 `formatWizardStep(1)`을 직접 소비한다 — 이 import 가 boundary 전이 그래프에
  * `tripWizardStep1.ts`를 살려 두는 앵커이기도 하다(하드코딩·페이지 계산 prop 이면 boundary red).
  *

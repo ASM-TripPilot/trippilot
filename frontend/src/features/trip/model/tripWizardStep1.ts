@@ -8,7 +8,7 @@ import { dayOfWeek } from '@/entities/trip/lib/formatTripPeriod';
  * 프리셋·동반 유형 코드표(TRIP-205). 화면·스토어·서버를 모른다.
  *
  * ⚠️ 시계를 읽지 않는다 — 기준일은 전부 인자로 받는다(01b D5). `new Date(`·`Date.now(`을
- * 이 파일에 쓰면 `tripWizardStep1Boundary.test.ts`(AC-5)가 red를 낸다.
+ * 이 파일에 쓰지 않는다(기계 강제 없음).
  *
  * 프리셋 계산 규칙 자체는 정본에 없다(BR-U1-36은 "자동 채우되 수정 가능"만 말한다) — 아래
  * 규칙은 이 칸이 정한 것이고, 게이트①에서 뒤집히면 이 파일의 계산만 바꾸면 된다(02a §2.3).

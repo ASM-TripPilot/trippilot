@@ -13,7 +13,7 @@ import { BackChevronGlyph, CheckGlyph, FullAiGlyph } from './MapSheetGlyphs';
  *    상태를 스스로 도출하지 않고, 받은 status 로 트랙 톤을·받은 label 로 글자를 그릴 뿐이다
  *    ([[presentation-only 위젯 — 판단은 소비처로]]). 소비처(DraftPage)가 tabs 에서 도출해 넘긴다.
  *  - **3톤 트랙**: done=primary 채움 / active·waiting=회색(`bg-surface-strong`). 트랙 배경 톤은
- *    className 으로 jest 렌더 트리에 평문으로 남아 심판이 읽는다(loginVisual 선례).
+ *    className 으로 jest 렌더 트리에 평문으로 남아 심판이 읽는다.
  *  - **퍼센트·캡션 없음**(계약). `generationState` 는 3값 열거뿐이라 진행 수치가 없다 — Figma 에
  *    67% 가 있어도 그리지 않는다(INV 류 · 티켓 확정).
  *

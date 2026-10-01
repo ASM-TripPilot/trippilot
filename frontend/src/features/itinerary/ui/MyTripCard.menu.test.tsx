@@ -13,7 +13,7 @@ import type { MyTripCardVM } from './MyTripCard';
  *  - `menuOpen` 이면 메뉴 상자와 '삭제' 항목이 뜨고, 항목은 `onPressDelete` 만 올린다.
  *  - AC-10 구조: ⋯ 36 원형·열림 색·44 터치(hitSlop)·배지와 한 줄 / 메뉴 160·radius 12·hairline / '삭제' primary.
  *
- * 메뉴 열림을 prop 으로 받는 이유: `entitiesTripStructure` G0 가 entities 카드의 `useState` 를 막는다.
+ * 메뉴 열림을 prop 으로 받는 이유: entities 카드는 `useState` 를 두지 않는다(옛 가드 `entitiesTripStructure` G0 는 TRIP-1145 로 지웠다).
  * 열림 상태는 컨테이너가 쥔다(`TripCardContainer.delete.test.tsx` 가 그 배선을 잰다).
  *
  * 메뉴 위치(⋯ 바로 아래 오른쪽 맞춤)·그림자는 픽셀이라 jest 가 못 본다 — 6-b 몫.

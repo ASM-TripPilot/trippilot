@@ -4,12 +4,12 @@
  * 여행 기간 시트(trip)가 쓴다(숙소 날짜 시트는 TRIP-1052에서 제거).
  *
  * TRIP-575 때 이 수학이 `features/stay/model/stayDates.ts`·`features/trip/model/tripDatePicker.ts`에
- * 두 벌 있었고, record 가 그 둘을 직접 import 하면 경계(recordsStructure G2) 위반이라 여기 신설했다.
+ * 두 벌 있었고, record 가 그 둘을 직접 import 하면 경계(eslint 층 zone) 위반이라 여기 신설했다.
  * TRIP-639 에서 두 사본을 지우고 한 벌로 합쳤다 — 도메인 규칙(박수·선택 전이·표기)은 각 feature 에
- * 남는다. 옛 자리 재수출(shim)은 두지 않는다(`monthGridSharedPromotion.test.ts`).
+ * 남는다. 옛 자리 재수출(shim)은 두지 않는다.
  *
  * TZ-safe: 로컬 타임존에 요일·경계가 밀리지 않게 에포크 일수(UTC 정수)로만 계산한다
- * (`formatKoreanDate` 관례) — `new Date(...)` 생성자를 안 쓴다(`tripWizardStep1Boundary.test.ts` AC-5).
+ * (`formatKoreanDate` 관례) — `new Date(...)` 생성자를 안 쓴다.
  */
 
 const MS_PER_DAY = 86_400_000;

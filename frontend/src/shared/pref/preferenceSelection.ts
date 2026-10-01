@@ -3,11 +3,11 @@
  *
  * 승격 배경(TRIP-610): 원래 `features/onboarding/model/preferenceSelection.ts` 에 있던 것을
  * `shared/` 로 올렸다. `features/settings`(l05 취향 수정)가 같은 토글 규칙을 써야 하는데
- * `features` 간 직접 import 가 막혀 있어(settingsBoundary), 공용 재사용 경로는 `shared` 뿐이다.
+ * `features` 간 직접 import 가 막혀 있어(eslint 층 zone), 공용 재사용 경로는 `shared` 뿐이다.
  * 온보딩 파일은 이제 여기서 re-export 만 한다(단일 출처 유지 → 온보딩 회귀 0).
  *
- * ⚠ `shared/ui` 가 아니라 `shared/pref` 에 둔다 — `shared/ui` 재귀 스캔(`sharedUiStructure.test.ts`)이
- * 모든 파일에 `className=` 존재를 요구해서, 마크업 없는 순수 로직 파일은 그쪽에 못 산다.
+ * ⚠ `shared/ui` 가 아니라 `shared/pref` 에 둔다 — 마크업 없는 순수 로직 파일은
+ * 화면 부품 폴더(`shared/ui`)에 두지 않는다.
  *
  * `null` = 미설정(아직 안 고름), `[]` = "골랐다가 다 지웠다"와 섞이면 안 되는 별개 상태다
  * (US-ONB-14 — 서버가 미설정 축에 중립 기본값을 파생하려면 `null`과 `[]`를 구분해야 한다).

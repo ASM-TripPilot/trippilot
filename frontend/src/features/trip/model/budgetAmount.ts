@@ -12,7 +12,7 @@
  * `formatBudgetAmount`는 `formatPrice.ts`가 세운 천단위 구분 규칙을 그대로 쓴다.
  * `toLocaleString`/`Intl`을 쓰지 않는다 — 테스트는 node, 앱은 Hermes에서 돌아 로케일
  * 서식이 갈릴 수 있고, 그 갈림을 동작 테스트가 원리적으로 못 본다
- * (`src/__tests__/tripBudgetStructure.test.ts`가 소스 층에서 대신 잠근다).
+ * (기계 강제 없음 — 소스 스캔은 TRIP-1145 에서 지웠다).
  *
  * `budgetForTier`는 예산 tier 칩의 대표 금액이다(TRIP-1067, frontend-components `BudgetInputField`).
  * 온보딩 예산 범위(~50만·50~150만·150~300만·300만+)의 가운데값 — 1인 여행 전체 금액이라

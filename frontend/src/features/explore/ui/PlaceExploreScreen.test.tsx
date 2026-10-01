@@ -23,8 +23,8 @@ import {
  * 그대로 그리고(정렬·검색은 페이지가 끝내서 넘긴다), 담김 여부는 `savedPoiIds` 하나에서만
  * 파생하며, **계약에 판정 재료가 없는 컨트롤은 그리지 않는다**(01b Seed §2). BottomTabBar·
  * 카테고리 시트는 화면이 아니라 페이지가 그린다(화면 순수성 — `PlaceExplorePage.*.integration`).
- * 소스 층(INV-3 조건부 렌더 · 토큰 · 층 경계)은 `src/__tests__/placeExploreStructure.test.ts`
- * 가 맡는다 — 이 파일은 렌더 결과만 본다.
+ * 소스 층(INV-3 조건부 렌더 · 토큰 · 층 경계)을 보던 `placeExploreStructure`
+ * 는 TRIP-1145 로 지웠다 — 이 파일은 렌더 결과만 본다.
  *
  * ★ 카드 안 단언은 예외 없이 `within(card)` 로 스코프한다. 카테고리 칩 라벨('카페'·'명소'·
  *   '맛집')이 카드 부제와 **같은 문자열**이라, 전역 `getByText('카페')` 는 다중 매칭으로
@@ -195,7 +195,7 @@ describe('PlaceExploreScreen — 카드 내용 (AC-1)', () => {
 
     const withPhoto = screen.getByTestId('explore-places-card-p2');
     // 계약이 준 값 그대로여야 한다 — CDN 경로 조합·외부 도메인 발명은 INV-1 위반이다
-    // (소스 층은 placeExploreStructure 가 `https?://` 0건으로 막는다).
+    // (소스 층 `https?://` 0건 스캔 placeExploreStructure 는 TRIP-1145 로 지웠다).
     expect(within(withPhoto).UNSAFE_getByType(Image).props.source).toEqual({
       uri: 'https://cdn.example.com/gwangalli.jpg',
     });
