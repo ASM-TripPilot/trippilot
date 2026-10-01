@@ -181,14 +181,6 @@
 - `src/__tests__/staySelectSheetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/tabbarOverlay.test.ts`  →  (export 없음)
 - `src/__tests__/tabbarVisual.test.ts`  →  (export 없음)
-- `src/__tests__/tabsExploreRoute.test.tsx`  →  (export 없음)
-- `src/__tests__/tabsExploreRouteCardNav.test.tsx`  →  (export 없음)
-- `src/__tests__/tabsExploreRoutePlaceSave.integration.test.tsx`  →  (export 없음)
-- `src/__tests__/tabsExploreRouteRegionFilter.test.tsx`  →  (export 없음)
-- `src/__tests__/tabsExploreRouteSave.integration.test.tsx`  →  (export 없음)
-- `src/__tests__/tabsHomeItineraryCta.test.tsx`  →  (export 없음)
-- `src/__tests__/tabsHomeRoute.test.tsx`  →  (export 없음)
-- `src/__tests__/tabsHomeRouteSpots.test.tsx`  →  (export 없음)
 - `src/__tests__/tabsItineraryRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/tabsMyRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/tabsRecordsRoute.test.tsx`  →  (export 없음)
@@ -807,6 +799,18 @@
 
 ## src/pages/daily-reflection/ui/
 - `src/pages/daily-reflection/ui/DailyReflectionPage.tsx`  →  DailyReflectionPageProps · DailyReflectionPage
+
+## src/pages/explore-landing/
+- `src/pages/explore-landing/index.ts`  →  ExploreLandingPage
+
+## src/pages/explore-landing/ui/
+- `src/pages/explore-landing/ui/ExploreLandingPage.tsx`  →  ExploreLandingPage
+
+## src/pages/home/
+- `src/pages/home/index.ts`  →  HomePage
+
+## src/pages/home/ui/
+- `src/pages/home/ui/HomePage.tsx`  →  HomePage
 
 ## src/pages/itinerary-copick/
 - `src/pages/itinerary-copick/index.ts`  →  SlotFillPage · CoPickCompletePage
@@ -1505,4 +1509,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 1051개 파일
+합계 1047개 파일

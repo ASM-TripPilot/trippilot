@@ -13,7 +13,7 @@ paths:
 - **"없어야 한다" 부정 단언은 같은 `it` 안 긍정 짝과 함께 둔다** — 모집단이 비거나 파일이 사라져도 공허 통과하지 않도록 `existsSync`·대표 심볼 앵커를 건다. 탐지기 자체는 G0 자가검사로 실제 문자열에 태워 본다.
 - **폴더 재귀 스캔은 새 파일을 자동 편입한다** — 같은 축을 다른 가드가 이미 재귀로 잡으면 새 가드에 복제하지 말고 편입 앵커만 둔다.
 - **모듈 목은 인라인 `jest.mock(팩토리)` 대신 모듈 스코프 파일로** — NativeWind babel이 주입하는 `_ReactNativeCSSInterop` 참조가 팩토리 스코프 밖으로 걸린다. 팩토리가 필요하면 `require('@/test-support/…')`로 끌어온다.
-- **라우트를 통째 렌더하는 형제 테스트는 목을 공유하지 않는다** — 라우트가 새 훅을 물면 그 라우트를 렌더하는 파일 전수(`git grep 'render(<.*Route'`)에 무해 스텁을 추가해야 한다(홈 라우트: `tabsShell`·`tabsHomeRoute`·`tabsHomeItineraryCta`).
+- **page를 통째 렌더하는 형제 테스트는 목을 공유하지 않는다** — page가 새 훅을 물면 그 page를 렌더하는 파일 전수(`git grep 'render(<.*Page'`)에 무해 스텁을 추가해야 한다(홈 page: `HomePage.test`·`tabsShell` 홈 래퍼 / 탐색 page: `ExploreLandingPage.test`·`.integration.test`·`tabsShell` 탐색 래퍼). 라우트 파일 자체는 얇은 래퍼라 `tabsShell`만 렌더한다(TRIP-1142).
 - **모듈 싱글턴(zustand 스토어·토스트)을 쓰는 테스트는 리셋을 파일 최상위 `afterEach`에 건다** — describe 안에만 걸면 앞 테스트 상태가 새어 거짓 green이 된다.
 - **`@gorhom/bottom-sheet` 목은 통과형**이라 실개폐·스냅·딤·핸들 실렌더는 jest 사각이다(6-b 실기 전용).
 
@@ -52,12 +52,10 @@ paths:
 | `src/__tests__/onboardingPrefStructure.test.ts` | 취향 스토어·모델 구조 가드 — persist 금지·`@/shared/api` 미참조·`create(` 표기 |
 | `src/__tests__/homeStructure.test.ts` | 홈 소스 스캔 가드 — 픽스처 상수화·INV-3·raw hex·SafeArea·탭바 격리 + 단계 얼굴은 `HomeScreen.tsx` 한 파일(`ui/*Face.tsx` 분리 0) |
 | `src/__tests__/onboardingPrefRoutes.test.tsx` | 취향 1/2·2/2 라우트 존재·내비게이션 계약 가드 — push/replace/back 분기 |
-| `src/__tests__/tabsShell.test.tsx` | `(tabs)/_layout.tsx` 배선 가드 — 5탭 등록 순서·`tabBar` 렌더프롭·활성 매핑/press→navigate. 홈 라우트를 렌더하므로 홈이 무는 훅(`useGetTrips`·`useSavedPlaces`·`useSavedStays`)의 무해 스텁을 가진다 |
+| `src/__tests__/tabsShell.test.tsx` | `(tabs)/_layout.tsx` 배선 가드 — 5탭 등록 순서·`tabBar` 렌더프롭·활성 매핑/press→navigate. 홈·탐색 **라우트 래퍼**를 렌더하므로 두 page가 무는 훅(`useGetTrips`·`useSavedPlaces`·`useSavedStays`·`useGetPlaces`)의 무해 스텁을 가진다. 홈 래퍼 it = `PlanningHome` 조건부 자식의 유일한 심판(trips 목에 일정 훅 없음), 탐색 래퍼 it = 전국·게스트 갈래에 `shell-tabbar-root` 부재 + `/regions` 미호출을 **우연히** 지킨다(places 목에 `useGetRegions` 없음 — 스텁을 더하면 조용히 풀림) |
 | `src/__tests__/tabbarVisual.test.ts` | `BottomTabBar.tsx` 비주얼 소스 스캔(치수·아이콘 좌표계·색 토큰). `active` 변형·실제 겹침은 사정거리 밖 |
 | `src/__tests__/tabbarOverlay.test.ts` | 탭바 오버레이 소스 가드 — `BottomTabBar.tsx` 루트에 `absolute`+`bottom-0`+`h-[84px]` 동거 + 화면별 하단 패딩 ≥84(일정 빈 상태는 `MyTripsListScreen.tsx`). 실제 겹침·투명 밴드·터치 통과는 6-b 전용 |
-| `src/__tests__/tabsExploreRoute.test.tsx` | `(tabs)/explore.tsx` 라우트 배선 — 구획 렌더·검색 제출(`decodeURIComponent` 후 비교)·카드·부분 실패 생존(INV-4). `useStaySearch`·`useSavedPlaces`는 딥 경로로 목(다른 경로면 실 훅이 돌아 QueryClient 부재로 죽는다) |
 | `src/__tests__/exploreLandingAxisRemoval.test.ts` | d01 랜딩에서 축 세그먼트 금칙 토큰 0 + 앵커 3종 생존 소스 가드 |
-| `src/__tests__/tabsExploreRouteSave.integration.test.tsx` | d01 숙소 카드 저장 하트 통합(msw) — `useSavedStays`는 **실물**(낙관/롤백 관찰). 담김/미담김은 서로 다른 글리프 testID로 구분(fill 색 토글은 jest가 못 본다) |
 | `src/__tests__/loginVisual.test.ts` | `AuthGlyphs.tsx` `WarningTriangleGlyph` 소스 스캔 — 함수 블록 슬라이스로 같은 모듈 다른 글리프가 개수를 채우는 우회를 차단. 라벨·배너는 `SocialLoginScreen.visual.test.tsx`의 렌더 층(className은 렌더 트리에 prop으로 남는다) |
 | `src/__tests__/authSheetHandleStructure.test.ts` | c02 로그인 `Sheet`의 `<BottomSheet … handleComponent={null}>` **엘리먼트 결합** 정규식 가드 — prop이 그 태그에 있음까지만 증명(실렌더 핸들 수는 목 사각) |
 | `src/__tests__/devPreviewPref.test.tsx` | 프리뷰 `pref1`·`pref2` 상태 렌더 가드 — 빈 선택 상태로 직접 렌더, 가드 우회 아님 |
@@ -123,9 +121,7 @@ paths:
 | `src/__tests__/itineraryEditStructure.test.ts` | h24 편집 파일 정본 경로 실재 + 재귀 모집단 편입 앵커 + INV-3·raw hex |
 | `src/__tests__/itineraryEditSheetStructure.test.ts` | h24 편집 화면이 `@gorhom/bottom-sheet`·`useItineraryEditStore`를 직참조하지 않는지(화면 순수성) |
 | `src/__tests__/tabsItineraryRoute.test.tsx` | 일정 탭 "내 여행" 목록 — 카드 렌더·무리다이렉트(`Redirect` 목의 마커 부재가 트립와이어)·빈 상태·스켈레톤·최신순·**눌린 카드의** 목적지·카드별 itinerary GET 파생. 줄바꿈 부제는 `.props.children` 직단언(`toHaveTextContent`는 `\n`을 정규화) |
-| `src/__tests__/tabsHomeRoute.test.tsx` | `(tabs)/index.tsx` 홈 라우트 — FAB·더보기 push · 여행 유무별 얼굴 · 실 `Trip` 값 · 로딩/오류 · 장소/숙소 배지 교차배선(서로 다른 값으로 주입) |
 | `src/features/itinerary/model/itineraryDestination.test.ts` | `resolveItineraryDestination` 표 전수 `it.each`(404→method … CONFIRMED→live), 입력 타입은 함수 시그니처에 고정 |
-| `src/__tests__/tabsHomeItineraryCta.test.tsx` | 홈 여행 카드 CTA가 탭과 같은 목적지로 push · 로딩·비-404 오류 중 press는 미호출(INV-4) |
 | `src/features/itinerary/ui/MethodPickerScreen.test.tsx` | h04 방식 선택 — 차단 사유(BR-U3-01)·안내 액션·뒤로 무회귀 |
 | `src/pages/itinerary-plan/ui/ItineraryPlanPage.escape.integration.test.tsx` | h25 4얼굴 탈출구 — msw로 얼굴 강제(훅 목 금지) + `useRouter` 4메서드 목. 딥링크(`canGoBack()===false`)는 `replace('/(tabs)')` 완전일치(`/(tabs)/itinerary`는 리다이렉트 함정) |
 | `src/__tests__/itineraryManualStructure.test.ts` | h19·h20 소스 가드 — "이동 시간" 류 카피 0(INV-3) + 재귀 편입 |

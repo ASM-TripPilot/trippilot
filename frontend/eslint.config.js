@@ -25,9 +25,8 @@ const expoConfig = require('eslint-config-expo/flat');
 // 아래 층으로 승격한다. entities 만 예외로, 제공자 Y 가 소비자 X 에게만 내주는 `entities/Y/@x/X/**` 창구를
 // except 에 추가로 넣어 통제된 교차를 허용한다(그 외 형제 직접 import 는 여전히 금지).
 //
-// 전방 app→features 제한은 이번엔 두지 않는다(Q1 옵션 A) — app·app-shell 을 target 으로 넣지
-// 않는다. app→features 실측 110건이 즉시 red 가 되고 TRIP-803 "소급 이동 없음"과 충돌하기
-// 때문. pages 이주로 app→features 가 자연 감소한 뒤 별도 티켓에서 켠다.
+// app·app-shell 은 target 에 넣지 않는다 — 공식 FSD v2.1 은 app 층이 아래 층 전부(features 포함)를
+// import 하는 것을 허용한다(TRIP-1142 결정). 라우트는 page 를 꽂는 얇은 래퍼로 둔다(권장, lint 강제 없음).
 
 const SRC = path.join(__dirname, 'src');
 // `layerGlob('features','auth')` → `<abs>/src/features/auth/**` (해당 층·슬라이스 아래 전부).
