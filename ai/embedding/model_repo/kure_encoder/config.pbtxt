@@ -1,0 +1,48 @@
+# KURE-v1 인코더 — Triton ONNX Runtime 백엔드 (임베딩 서빙 A/B).
+#
+# 가중치(2.1GB)는 여기 없다. `export_onnx.py` 가 `<repo>/kure_encoder/1/model.onnx`
+# 로 내보내고, 이 파일을 그 옆(`<repo>/kure_encoder/`)에 복사해 모델 레포지토리를
+# 만든다. 재현 절차는 `ai/scripts/measure_triton_embedding.py` 머리말.
+#
+# ## 인코더만 돈다
+#
+# 출력이 `last_hidden_state` 인 것이 핵심이다 — CLS 풀링과 L2 정규화는
+# `app.py._embed_triton` 이 한다. 풀링을 그래프로 내리면 구현이 두 곳에 생기고,
+# KURE-v1 은 CLS 풀링이라(`1_Pooling/config.json`) mean 으로 잘못 넣어도
+# 차원이 1024 그대로라 **아무 검사도 안 걸린다**(실측 코사인 0.71).
+name: "kure_encoder"
+backend: "onnxruntime"
+
+# max_batch_size > 0 이면 Triton 이 첫 축을 배치로 잡는다 — 아래 dims 에 배치 축을
+# 다시 쓰지 않는다. 32 는 sentence-transformers 의 기본 encode 배치와 맞춘 값이다.
+max_batch_size: 32
+
+input [
+  { name: "input_ids",      data_type: TYPE_INT64, dims: [ -1 ] },
+  { name: "attention_mask", data_type: TYPE_INT64, dims: [ -1 ] }
+]
+output [
+  { name: "last_hidden_state", data_type: TYPE_FP32, dims: [ -1, 1024 ] }
+]
+
+# ## dynamic batching
+#
+# **순차 단일 클라이언트에서는 거의 안 걸린다** — 큐에 한 번에 하나뿐이라 모을 게
+# 없다. 이득은 동시 요청이 있을 때 나온다. 그리고 Triton 은 **비배치 축 모양이 같은
+# 요청끼리만** 묶으므로, 길이가 제각각인 요청은 패딩 길이가 같아야 합쳐진다.
+# max_queue_delay 를 키우면 합류율은 오르지만 그만큼 지연을 그냥 더한다.
+dynamic_batching {
+  preferred_batch_size: [ 8, 16, 32 ]
+  max_queue_delay_microseconds: 2000
+}
+
+# ## 스레드 — 기존 경로와 같은 4개로 고정
+#
+# 기준 하네스가 `torch.set_num_threads(4)` 다(measure_embedding_precision.py).
+# 여기를 안 맞추면 Triton 이 코어 18개를 다 쓰고 "4.5배 빨라졌다"가 나온다 —
+# 그건 백엔드 비교가 아니라 스레드 수 비교다.
+instance_group [ { count: 1, kind: KIND_CPU } ]
+parameters [
+  { key: "intra_op_thread_count", value: { string_value: "4" } },
+  { key: "inter_op_thread_count", value: { string_value: "1" } }
+]

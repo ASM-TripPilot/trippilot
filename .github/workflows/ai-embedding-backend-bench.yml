@@ -1,0 +1,61 @@
+# 임베딩 백엔드 A/B 를 **amd64 리눅스**에서 잰다 — 수동 실행 전용.
+#
+# 왜 CI 에 있나: 판정에 필요한 것은 배포 대상(amd64)의 숫자인데 개발 맥은 arm64 다.
+# 2026-09-22 측정에서 백엔드 우열이 **환경에 따라 뒤집혔다** — 네이티브 macOS 에서는
+# ORT 가 torch 보다 1.29배 빨랐고 컨테이너(arm64)에서는 1.60배 느렸다. 그래서 맥에서
+# 나온 숫자로는 채택을 결정할 수 없다. 여기가 amd64 를 공짜로 얻는 유일한 자리다.
+#
+# Triton 서버를 띄우지 않는 이유: 이미지가 20.7GB 라 러너 디스크에 안 들어간다.
+# 서버측 분해상 오버헤드가 소수점(queue 1.8ms)이고 차이는 전부 ORT 연산이라,
+# `ORT_DIRECT=1` 직접 호출이 같은 판정을 준다. 풀링·정렬은 서빙 코드를 그대로 탄다.
+#
+# 스케줄로 돌리지 않는다 — 모델 2.1GB 를 받는 측정이고, 답이 필요할 때만 부른다.
+name: ai-embedding-backend-bench
+
+# 트리거가 둘인 이유: `workflow_dispatch` 는 **기본 브랜치(main)에 있는 것만** 이름으로
+# 부를 수 있다. main 이 develop 보다 138커밋 뒤라 이 파일이 거기 닿기까지 시간이 걸리고,
+# 그 전에도 amd64 숫자가 필요하다. PR 에 `bench-embedding` 라벨을 붙이면 **그 PR 브랜치
+# 코드로** 돈다. 라벨을 떼었다 다시 붙이면 재실행이다.
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.label.name == 'bench-embedding'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: ai
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: 임시 의존성 (프로젝트 의존성 아님 — pyproject 를 고치지 않는다)
+        run: |
+          uv sync
+          uv pip install sentence-transformers onnx onnxruntime
+
+      - name: ONNX 내보내기 (풀링 모드 검사가 여기서 걸린다)
+        run: uv run python embedding/export_onnx.py /tmp/kure_onnx
+
+      - name: 측정 — 현행 vs ONNX Runtime, 같은 4스레드
+        env:
+          ORT_DIRECT: "1"
+          ONNX_DIR: /tmp/kure_onnx
+        run: |
+          {
+            echo "## 임베딩 백엔드 A/B — amd64 (\`${{ runner.arch }}\`, ubuntu-latest)"
+            echo
+            uv run python scripts/measure_triton_embedding.py
+          } | tee -a "$GITHUB_STEP_SUMMARY"

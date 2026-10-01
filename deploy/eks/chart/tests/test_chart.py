@@ -122,6 +122,44 @@ class ChartTests(unittest.TestCase):
                 self.assertEqual(len(sources), 1)
                 self.assertEqual(sources[0]["podSelector"]["matchLabels"]["app.kubernetes.io/component"], "ai")
 
+    def test_autoscaling_replaces_static_replicas_and_skips_embedding(self):
+        documents = render(embedding=True, overrides=[
+            "--set", "ai.autoscaling.enabled=true",
+            "--set", "ai.autoscaling.minReplicas=1",
+            "--set", "ai.autoscaling.maxReplicas=4",
+        ])
+        scalers = {item["metadata"]["name"]: item
+                   for item in documents if item["kind"] == "HorizontalPodAutoscaler"}
+        self.assertEqual(set(scalers), {"ai"})
+        target = scalers["ai"]["spec"]["scaleTargetRef"]
+        self.assertEqual((target["kind"], target["name"]), ("Deployment", "ai"))
+        self.assertEqual(scalers["ai"]["spec"]["maxReplicas"], 4)
+        deployments = {item["metadata"]["name"]: item
+                       for item in documents if item["kind"] == "Deployment"}
+        # HPA 가 소유하면 Deployment 는 replicas 를 싣지 않는다 — 둘 다 실으면
+        # 다음 helm upgrade 가 HPA 가 정한 수를 되돌린다.
+        self.assertNotIn("replicas", deployments["ai"]["spec"])
+        self.assertEqual(deployments["embedding"]["spec"]["replicas"], 1)
+
+    def test_autoscaling_is_off_by_default(self):
+        documents = render()
+        self.assertEqual(
+            [item for item in documents if item["kind"] == "HorizontalPodAutoscaler"], [])
+        deployments = {item["metadata"]["name"]: item
+                       for item in documents if item["kind"] == "Deployment"}
+        self.assertEqual(deployments["ai"]["spec"]["replicas"], 1)
+
+    def test_in_cluster_reminder_serving_was_withdrawn(self):
+        # GPU 파드로 리마인드 모델을 직접 서빙하는 구성은 접었다(2026-10-01) — 운영
+        # 경로는 Bedrock Custom Model Import 다. 값만 되살아나면 템플릿 없이 조용히
+        # 아무 일도 안 일어나므로 스키마가 거부해야 한다.
+        with self.assertRaises(subprocess.CalledProcessError):
+            render(overrides=["--set", "reminderLlm.enabled=true"])
+
+    def test_embedding_autoscaling_key_is_rejected(self):
+        # 임베딩은 파드당 4.2 GiB·모델 로드 수십 초라 늘려도 늦다. 스키마가 막는다.
+        with self.assertRaises(subprocess.CalledProcessError):
+            render(embedding=True, overrides=["--set", "embedding.autoscaling.enabled=true"])
     def test_ai_validates_the_inbound_service_token(self):
         """AI 경계도 X-Service-Token 을 **검사**해야 한다 — 보내는 것만으로는 안 열린다.
 

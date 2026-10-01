@@ -105,11 +105,16 @@ def test_flip_transport_changes_only_the_reminder_llm_line(tmp_path):
 
 
 def test_missing_switch_reads_as_bedrock_but_refuses_to_flip(tmp_path):
-    """#657 전의 차트 — 읽기는 기본값, 뒤집기는 실패(조용히 줄을 만들지 않는다)."""
+    """스위치 블록이 없는 차트 — 읽기는 기본값, 뒤집기는 실패(조용히 줄을 만들지 않는다).
+
+    2026-10-01 부터 **이것이 현재 상태**다: 인클러스터 서빙 매니페스트를 철회해
+    `reminderLlm` 블록이 차트에 없다. 판정기는 계속 돌아야 하고(표는 남는다) 뒤집기만
+    막혀야 한다 — 줄을 새로 만들면 스키마가 거부하는 값이 차트에 들어간다.
+    """
     values = tmp_path / "values.yaml"
     values.write_text("ai:\n  replicas: 1\n")
     assert sj.read_transport(values) == "bedrock"
-    with pytest.raises(ValueError, match="#657"):
+    with pytest.raises(ValueError, match="철회"):
         sj.flip_transport(values, "local")
 
 

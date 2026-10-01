@@ -192,6 +192,36 @@
             "requests",
             "limits"
           ]
+        },
+        "autoscaling": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "enabled",
+            "minReplicas",
+            "maxReplicas",
+            "targetCPUUtilizationPercentage"
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "minReplicas": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20
+            },
+            "maxReplicas": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20
+            },
+            "targetCPUUtilizationPercentage": {
+              "type": "integer",
+              "minimum": 10,
+              "maximum": 100
+            }
+          }
         }
       }
     },
@@ -239,6 +269,36 @@
             "requests",
             "limits"
           ]
+        },
+        "autoscaling": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "enabled",
+            "minReplicas",
+            "maxReplicas",
+            "targetCPUUtilizationPercentage"
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "minReplicas": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20
+            },
+            "maxReplicas": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20
+            },
+            "targetCPUUtilizationPercentage": {
+              "type": "integer",
+              "minimum": 10,
+              "maximum": 100
+            }
+          }
         },
         "certificateArn": {
           "type": "string",

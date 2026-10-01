@@ -50,6 +50,24 @@ RUN HF_HUB_OFFLINE=0 TRANSFORMERS_OFFLINE=0 \
     /app/.venv/bin/python bake_model.py "${EMBEDDING_MODEL}" "${EMBEDDING_REVISION}" /models/kure \
  && rm -rf /models/hf
 
+# ONNX 그래프를 굽는다 — `EMBEDDING_BACKEND=onnx` 가 프로세스 안에서 이걸 읽는다
+# (TRIP-965, amd64 실측 13~15% 단축). **기본 백엔드는 여전히 sentence-transformers** 라
+# 이 단계는 선택지를 이미지에 넣어 두는 것이지 동작을 바꾸지 않는다.
+#
+# 굽는 쪽을 빌드에 두는 이유는 bake_model 과 같다 — 런타임에 만들면 파드가 뜰 때마다
+# 수 분을 쓰고, 볼륨에 두면 표준 리셋 절차가 지운다.
+#
+# `onnxruntime` 은 런타임 의존이라 여기서 함께 깐다. `onnx` 는 **내보내기에만** 쓰이고
+# 런타임에는 필요 없다(같은 레이어에서 지운다 — 200MB 급이다).
+ARG EMBEDDING_BAKE_ONNX=1
+COPY export_onnx.py ./
+RUN if [ "${EMBEDDING_BAKE_ONNX}" = "1" ]; then \
+      uv pip install --no-cache "onnx>=1.17" "onnxruntime>=1.19" && \
+      /app/.venv/bin/python export_onnx.py /models/onnx && \
+      uv pip uninstall onnx ; \
+    fi
+ENV EMBEDDING_ONNX_DIR=/models/onnx
+
 COPY app.py ./
 
 EXPOSE 8100
