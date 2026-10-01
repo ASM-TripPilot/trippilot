@@ -118,6 +118,41 @@ def test_missing_switch_reads_as_bedrock_but_refuses_to_flip(tmp_path):
         sj.flip_transport(values, "local")
 
 
+def test_local_switch_records_the_row_without_dying_on_the_withdrawn_switch(tmp_path, monkeypatch):
+    """전환 권고가 2주 연속 나와도 판정기는 죽지 않고 원장 행을 남긴다.
+
+    인클러스터 서빙을 철회하면서(2026-10-01) 차트의 `reminderLlm.transport` 줄이
+    사라졌는데 `main()` 은 `open_pr` 이면 방향을 안 보고 `flip_transport` 를 불렀다.
+    그래서 **원장 행을 파일에 쓴 뒤** ValueError 로 죽었고, 워크플로의 PR 스텝은 판정
+    스텝이 실패하면 건너뛰므로 그 주 판정이 커밋되지 않고 사라졌다. 다음 주에도
+    원장에 1주차 행이 남아 streak 가 다시 2 가 되므로 같은 자리에서 또 죽는다 —
+    원장이 그 지점에서 영구히 멈춘다.
+
+    local 전환은 값 한 줄이 아니라 매니페스트 재작성이므로, PR 은 착수 제안이고
+    뒤집을 줄은 없는 것이 맞다.
+    """
+    import datetime as dt
+
+    ledger = tmp_path / "ledger.md"
+    # 게이트를 열고 1주차 SWITCH_TO_LOCAL 을 이미 받은 상태로 만든다 → 이번이 2주 연속.
+    text = LEDGER.replace("| gpu_quota | no |", "| gpu_quota | yes |") \
+                 .replace("| zero_billing_verified | no |", "| zero_billing_verified | yes |") \
+                 .replace("| eks_p95_ms | - |", "| eks_p95_ms | 3000 |")
+    assert "gpu_quota | yes" in text and "eks_p95_ms | 3000" in text, "원장 게이트 표 형식이 바뀌었다"
+    ledger.write_text(text.rstrip("\n") + "\n"
+                      + sj.ledger_row(dt.date(2026, 9, 24), measured(), "bedrock",
+                                      sj.Verdict(sj.SWITCH_TO_LOCAL, "none", ("1주차",))) + "\n")
+    values = tmp_path / "values.yaml"
+    values.write_text("ai:\n  replicas: 1\n")  # 철회 후의 차트 — reminderLlm 블록이 없다
+
+    monkeypatch.setattr(sj, "measure", lambda *a, **k: measured(bedrock_usd=10, eks_usd=5))
+
+    assert sj.main(["--ledger", str(ledger), "--values", str(values)]) == 0
+    verdicts = sj.read_previous_verdicts(ledger.read_text())
+    assert verdicts[-2:] == [sj.SWITCH_TO_LOCAL, sj.SWITCH_TO_LOCAL]
+    assert sj.read_transport(values) == "bedrock"  # 차트는 손대지 않았다
+
+
 def test_dry_run_appends_hold_row_and_never_flips(tmp_path):
     ledger = tmp_path / "ledger.md"; ledger.write_text(LEDGER)
     values = tmp_path / "values.yaml"; values.write_text(VALUES)

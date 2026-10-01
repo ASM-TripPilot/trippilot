@@ -652,11 +652,48 @@ def test_bedrock_client_disables_sdk_retries() -> None:
     실측: 항목 하나가 11.9초(재시도 4회)를 쓰고 요청 예산 8초를 넘겨, 항목 둘 합 20초가
     백스톱 13초보다 길어져 **강등 응답 대신 504** 가 나갔다. 리포 규약도 SDK 재시도 0 이다
     (OpenAI 어댑터 `max_retries=0`).
+
+    **0 이다, 1 이 아니다** — `max_attempts` 는 재시도 횟수이고 botocore 가 +1 해서
+    총 시도를 만든다. 아래 테스트가 실제 botocore 로 그 정규화를 센다.
     """
     assert main._bedrock_client_kwargs(4.0)["retries"] == {
-        "max_attempts": 1,
+        "max_attempts": 0,
         "mode": "standard",
     }
+
+
+def test_bedrock_config_really_sends_one_http_attempt() -> None:
+    """리터럴 비교로는 안 된다 — botocore 의 해석까지 세야 한다.
+
+    `max_attempts: 1` 을 "재시도 1회 = 시도 1회"로 읽어서 한 번 틀렸다(#836). botocore 는
+    그것을 **시도 2회**로 정규화하고, standard 모드의 재시도 대상에 `ReadTimeoutError` 와
+    `ModelNotReadyException` 이 둘 다 들어 있어 좁히려던 두 오류가 그대로 재시도됐다.
+    그래서 여기서는 숫자가 아니라 **나가는 HTTP 요청 수**를 센다.
+    """
+    boto3 = pytest.importorskip("boto3")
+    from botocore.config import Config
+    from botocore.exceptions import ReadTimeoutError
+
+    client = boto3.client(
+        "bedrock-runtime",
+        region_name="us-east-1",
+        aws_access_key_id="x",
+        aws_secret_access_key="y",
+        config=Config(**main._bedrock_client_kwargs(4.0)),
+    )
+    attempts: list[str] = []
+
+    def explode(request, **_):
+        attempts.append(request.url)
+        raise ReadTimeoutError(endpoint_url=request.url)
+
+    client.meta.events.register("before-send.bedrock-runtime.InvokeModel", explode)
+    with pytest.raises(ReadTimeoutError):
+        client.invoke_model(
+            modelId="arn:aws:bedrock:us-east-1:111122223333:imported-model/abc123",
+            body=b"{}",
+        )
+    assert len(attempts) == 1, f"HTTP 시도 {len(attempts)}회 — 예산이 그만큼 배가 된다"
 
 
 def test_bedrock_client_takes_the_per_item_budget_as_socket_timeout() -> None:

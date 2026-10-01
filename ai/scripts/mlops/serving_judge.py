@@ -305,8 +305,16 @@ def main(argv: list[str] | None = None) -> int:
 
     row = ledger_row(dt.date.today(), m, transport, v)
     args.ledger.write_text(text.rstrip("\n") + "\n" + row + "\n")
-    if v.action == "open_pr":
-        flip_transport(args.values, "local" if v.verdict == SWITCH_TO_LOCAL else "bedrock")
+    # 전환 방향에 따라 PR 의 성격이 다르다(2026-10-01 인클러스터 서빙 철회 이후).
+    #   bedrock 복귀 → 차트 값 한 줄. 여기서 뒤집어 PR 에 싣는다.
+    #   local 전환  → **값 한 줄이 아니다.** 매니페스트를 다시 써야 하므로 PR 은 착수
+    #                 제안이고, 뒤집을 줄이 애초에 없다. 예전 코드는 여기서도
+    #                 flip_transport 를 불러 ValueError 로 죽었고, 원장 행을 **파일에만
+    #                 쓴 뒤** 죽어서 그 주 판정이 커밋되지 않고 사라졌다(워크플로의 PR
+    #                 스텝은 판정 스텝이 실패하면 건너뛴다). 다음 주도 같은 자리에서
+    #                 죽으므로 원장이 영구히 멈춘다.
+    if v.action == "open_pr" and v.verdict == SWITCH_TO_BEDROCK:
+        flip_transport(args.values, "bedrock")
 
     out = {**asdict(v), "transport": transport, "measured": asdict(m), "row": row}
     print(json.dumps(out, ensure_ascii=False, indent=2))

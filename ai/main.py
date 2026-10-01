@@ -462,13 +462,21 @@ _BEDROCK_FALLBACK_TIMEOUT_SEC = 10.0
 def _bedrock_client_kwargs(timeout_sec: float | None) -> dict:
     """botocore `Config` 인자 — **재시도 0 + 예산을 소켓 타임아웃으로.**
 
-    순수 함수로 떼어 둔 이유는 boto3·botocore 가 프로젝트 의존성이 아니라서다(Bedrock 을
-    켜는 환경만 설치). 이 규칙이 테스트 없이 남으면 다시 기본 재시도로 돌아간다 —
-    2026-09-29 실서비스 504 의 원인이 그 기본값이었다.
+    `max_attempts` 는 **재시도 횟수**다(총 시도 횟수가 아니다). botocore 가
+    `total_max_attempts = max_attempts + 1` 로 정규화하므로 **0 이 "재시도 없음"이고
+    1 은 2회 시도**다. 실측(botocore 1.43.102, before-send 에서 ReadTimeoutError):
+    `max_attempts=1` → HTTP 2회 · `max_attempts=0` → 1회.
+
+    1 을 쓰면 항목당 실효 상한이 per_item 의 2배가 되어 2026-09-29 504 가 그대로
+    재현된다 — standard 모드의 재시도 대상에 ReadTimeoutError 와
+    ModelNotReadyException 이 둘 다 들어 있어서, 좁히려던 바로 그 두 오류가 재시도된다.
+
+    순수 함수로 떼어 둔 이유는 규칙을 botocore 없이도 검증하려는 것이고, 정규화 자체는
+    별도 테스트가 실제 botocore 로 센다.
     """
     budget = timeout_sec or _BEDROCK_FALLBACK_TIMEOUT_SEC
     return {
-        "retries": {"max_attempts": 1, "mode": "standard"},
+        "retries": {"max_attempts": 0, "mode": "standard"},
         "read_timeout": budget,
         "connect_timeout": min(3.0, budget),
     }
