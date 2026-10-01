@@ -38,9 +38,10 @@ generate 봉투 부가 필드 산출 규칙(TRIP-341 — 코드가 실제로 아
   (풀 생성 시각을 수집 시각인 척 싣지 않는다).
 - repair 봉투의 `distance_ranges`·`candidates_summary`·`day1_ready_at`: repair 와이어에는
   원 요청 컨텍스트(앵커·이동수단·풀)가 없다 → 기존대로 빈 값/null.
-- 와이어 `preference_profile`은 현 경로에서 미소비: 프롬프트 입력은 요청자 권한 하에
-  **재조회한 값만** 쓴다(D31) — 페르소나는 주입된 `ContextStore`가 공급한다. 와이어에
-  사용자 식별자가 없어 principal은 trip_id 파생 임시값이다(실 어댑터 시 백엔드 합의 필요).
+- 와이어 `preference_profile`(+ `trip_context.companion_type`)은 generate·replan 에서
+  그 요청의 페르소나다(AI-D09 — D31 "재조회한 값만"의 부분 개정). 전 축 미설정이면 종전대로
+  주입된 `ContextStore`가 공급한다. 와이어에 사용자 식별자가 없어 principal은 trip_id 파생
+  임시값이다(실 어댑터 시 백엔드 합의 필요).
 - validate/repair 와이어에는 원 문제 컨텍스트(이동수단·day window)가 없다 → 기본값
   (PUBLIC · 당일 00:00~23:59)으로 판정한다. HC4는 원 창을 모르므로 보수적이다.
 """
@@ -63,6 +64,7 @@ from fastapi import FastAPI
 from trippilot.api import schemas
 from trippilot.api.app import create_app
 from trippilot.api.cost import CostLedger
+from trippilot.llm_gateway.adapters.backend_persona import _to_summary as _persona_to_summary
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.context import ContextResolver, ContextStore
 from trippilot.llm_gateway.gates.explanation import ExplanationGate
@@ -131,7 +133,7 @@ from trippilot.domain.itinerary import (
     VisitSlot,
 )
 from trippilot.domain.llm import CandidatePool, ModelTier, PoiExplanation
-from trippilot.domain.persona import CompanionType, PersonaSummary, TasteTag
+from trippilot.domain.persona import CompanionType, PersonaSummary
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.travel import TravelEstimate
 from trippilot.agents.edit.agent import EditAgent, EditOutcome, EditTask
@@ -395,6 +397,7 @@ def _domain_generate_request(
         excluded_poi_ids=frozenset(PoiId(x) for x in request.excluded_poi_ids),
         rejections=_domain_rejections(request.rejections),
         include_explanations=request.include_explanations,
+        persona=_inline_persona(request),
     )
 
 
@@ -955,33 +958,25 @@ def _replan_fixed_blocks(
     return tuple(blocks)
 
 
-def _persona_of(request: schemas.ReplanRequest) -> PersonaSummary | None:
-    """인라인 `preference_profile` → 페르소나. **없는 축을 채우지 않는다**.
+def _inline_persona(
+    request: schemas.GenerateItineraryRequest | schemas.ReplanRequest,
+) -> PersonaSummary | None:
+    """요청에 실려 온 취향 → 페르소나 (AI-D09). 전 축 미설정이면 **None**(종전 경로).
 
-    `generate` 재사용이 기각된 이유 ⑵ 가 이것이다 — 백엔드 legacy 경로가
-    `NEUTRAL_PREFERENCES` 로 덮어써서 사용자가 방금 고른 취향이 사라졌다.
-
-    **모르는 값은 버린다.** 7축 프로필은 백엔드가 자유 문자열로 주고 도메인 열거는
-    7종(`TasteTag`)·6종(`CompanionType`)이라 안 맞는 것이 정상이다 — 예외를 올리면
-    프로필 한 항목이 재계획 전체를 죽인다. `companion` 은 미설정을 SOLO 로 단정하지
-    않는다(`PersonaSummary` docstring — 선택하지 않은 사람을 혼자 여행자로 만들지 말 것).
+    변환은 페르소나 재조회 어댑터와 **같은 함수**다 — 와이어 필드명이 백엔드 persona
+    응답과 같고(`styles`·`activities`·`food_tastes`·`companion_types`·`budget_tier`),
+    두 벌이면 한쪽만 고쳐져 조용히 갈라진다. 이번 여행의 동행(`trip_context.companion_type`)이
+    있으면 계정의 평소 동행보다 우선한다(백엔드 `PersonaInternalController` KDoc).
     """
     profile = request.preference_profile
-    tags = tuple(dict.fromkeys(
-        TasteTag[name] for name in profile.styles + profile.activities + profile.food_tastes
-        if name in TasteTag.__members__
-    ))
-    companion = next(
-        (CompanionType[c] for c in profile.companion_types if c in CompanionType.__members__),
-        None,
-    )
-    if not tags and companion is None and profile.budget_tier is None:
-        return None  # 전 축 미설정 — 없는 것과 같다 (패킷 페르소나가 있으면 그쪽을 쓴다)
-    return PersonaSummary(
-        taste_tags=tags,
-        companion=companion,
-        budget=_token_or(_BUDGET_TOKENS, profile.budget_tier, BudgetLevel.MID),
-    )
+    body = profile.model_dump()
+    if request.trip_context.companion_type:
+        body["companion_types"] = [request.trip_context.companion_type]
+    persona = _persona_to_summary(body)
+    if (not persona.taste_tags and persona.companion is None and not persona.activities
+            and not persona.cuisines and not profile.budget_tier):
+        return None
+    return persona
 
 
 class WiredItineraryOrchestrator:
@@ -1365,7 +1360,7 @@ class WiredItineraryOrchestrator:
         if not pool.pois:
             return self._replan_empty("NO_CANDIDATE", notes, resolved, unknown)
 
-        persona = self._persona_from(packets) or _persona_of(request)
+        persona = _inline_persona(request) or self._persona_from(packets)
         daily_rain = self._rain_from(packets, dates, now)
 
         # ── PlanBAgent (RAG) — 상황 지식으로 순서를 낸다 ─────────────

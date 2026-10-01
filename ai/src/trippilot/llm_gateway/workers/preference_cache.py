@@ -35,8 +35,11 @@ _DEFAULT_TTL_SEC = 900.0  # 생성 세션(1차→2차 사이 수 초~수 분)만
 _DEFAULT_MAX_ENTRIES = 4096  # POI 단위 — 풀 상한(수십)×동시 세션 수십이면 충분
 
 
-def _persona_fingerprint(persona: PersonaSummary) -> tuple:
-    return (persona.taste_tags, persona.companion, persona.budget)
+def _persona_fingerprint(persona: PersonaSummary) -> PersonaSummary:
+    # 요약 **전체**가 지문이다 — 필드를 골라 적으면 프롬프트에 실리는 축(activities·
+    # cuisines)이 빠져 취향이 다른 사용자가 같은 점수를 공유했다. 프롬프트에 실리는 것은
+    # 정확히 이 요약(G181)이고 frozen dataclass 라 그대로 해시된다.
+    return persona
 
 
 class CachingScoringWorker:

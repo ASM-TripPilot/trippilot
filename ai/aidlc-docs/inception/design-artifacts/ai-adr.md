@@ -444,6 +444,29 @@ LLM 문장 품질은 PR마다 평가할 수 없다 (비용·시간·비결정성
 
 ---
 
+## AI-D09: 요청 인라인 취향을 그 요청의 페르소나로 쓴다 — D31 부분 개정 (generate·replan)
+
+**상태**: 확정 (2026-10-01, 사용자 결정). **D31 을 부분 개정한다** — D31 본문은 손대지 않고(append-only) 이 항이 우선한다.
+
+**문제 (실측)**: 페르소나는 주입된 `ContextStore` 재조회만 공급했고 `main.py` 는 그것을 넘기지 않아, 운영의 페르소나가 **전원** `StaticPersonaStore` 고정 요약(취향 없음·SOLO·MID)이었다. 커플·미식 사용자 설명에 "#혼자여행 #혼밥가능"이 나왔다(QA 6회차 AI 칸 — 취향 반영 비일관). generate 요청의 `preference_profile`·`trip_context.companion_type` 은 버려졌고(예산만 점수·필터에 쓰임), replan 은 인라인 프로필이 있어도 상수 페르소나가 먼저 이겼다. 선호 점수 캐시 지문이 `(taste_tags, companion, budget)` 이라 상수 페르소나 아래에서 **모든 사용자가 한 캐시**를 썼고, 프롬프트에 실리는 `activities`·`cuisines` 는 지문에 아예 없었다.
+
+**결정**:
+1. generate·replan 은 요청에 인라인으로 온 `preference_profile`(+ `trip_context.companion_type`)을 `PersonaSummary` 로 만들어 **그 요청의 페르소나**로 쓴다. 수집(PERSONA 패킷)보다 우선한다.
+2. 변환은 재조회 어댑터와 같은 함수(`backend_persona._to_summary`)를 쓴다 — 와이어 필드명이 같다. 이번 여행의 동행이 있으면 계정의 평소 동행(`companion_types`)보다 우선한다.
+3. 전 축 미설정(태그·동행·활동·음식 없음 + 예산 미지정)이면 None — **종전 경로 그대로**(회귀 0).
+4. 캐시 지문 = `PersonaSummary` 전체. 프롬프트에 실리는 것이 정확히 이 요약이므로 취향이 다르면 캐시를 공유하지 않는다.
+5. 프롬프트에 싣는 범위는 기존 `PersonaSummary` 수준(태그·동행·활동·음식 라벨·예산) 그대로다. 새 자유 텍스트는 싣지 않는다.
+
+**이유**:
+- 재조회 저장소(`BackendPersonaStore`)는 `ref_id` 를 **accountId** 로 기대하는데 경계가 만드는 `persona_ref` 는 trip_id 파생이다. 백엔드는 형식이 맞는 없는 UUID 에 404 가 아니라 빈 스냅숏 200 을 주므로, 그대로 꽂으면 **예외도 경고도 없이 전원 '미설정'** 이 된다. 와이어에 사용자 식별자가 생기기 전에는 재조회로 고칠 수 없다.
+- 인라인 값은 백엔드가 요청자 권한 아래 자기 DB 에서 읽어 싣는 값이다 — 클라이언트 원본이 아니라 서버 간 봉투다. D31 이 막으려던 "타 계정 데이터 유출"은 이 값이 이미 그 요청자의 것이라 성립하지 않는다.
+
+**범위**: generate·replan 만. 같은 generate 안의 설명 단계(EXPLANATION·ALTERNATIVE_*)는 같은 `ScheduleTask.persona` 를 쓰므로 함께 반영된다.
+
+**후속**: `/explanations`·`/alternatives` 는 요청에 프로필 필드가 없어 여전히 고정 요약이다 — 백엔드 계약(프로필 필드 추가 또는 accountId 전달) 합의가 필요하다.
+
+---
+
 ## 미결 결정 사항
 
 | # | 결정 필요 항목 | 현재 상태 | 결정 시점 |
