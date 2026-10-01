@@ -416,6 +416,11 @@ class AlternativesRequest(BoundaryModel):
     # ② 규칙 랭킹이 실제로 쓰는 것은 poi_id 집합뿐이며
     # ③ 봉투는 AI 에 적재되지 않아 계정 파기 캐스케이드 부채를 만들지 않는다.
     saved_places: list[SavedPlaceSchema] = Field(default_factory=list)
+    # 후보 카테고리 제한 (TRIP-1065) — 같이 짜기 컨셉을 백엔드가 경계 코드
+    # (FOOD·CAFE·SIGHT·NIGHT_VIEW·NATURE·CULTURE·ACTIVITY·SHOPPING)로 바꿔 보낸다.
+    # 풀 단계에서 거르므로 LLM 선택·규칙 폴백 모두 그 안에서만 고른다. 비거나
+    # 아는 코드가 하나도 없으면 필터 없음(400 아님 — reason 과 같은 규칙).
+    categories: list[str] = Field(default_factory=list)
     request_meta: RequestMetaSchema
 
 

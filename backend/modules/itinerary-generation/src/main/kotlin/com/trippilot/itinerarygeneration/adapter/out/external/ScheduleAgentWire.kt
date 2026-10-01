@@ -447,6 +447,13 @@ internal data class AiAlternativesRequest(
     val excludedPoiIds: List<String>,
     val affectedReasons: Map<String, String>,
     val savedPlaces: List<AiSavedPlace>,
+    /**
+     * 후보 카테고리 제한(경계 코드 FOOD·CAFE·SIGHT·NIGHT_VIEW·NATURE·CULTURE·ACTIVITY·SHOPPING).
+     * AI 가 후보 풀 단계에서 거른다 — 비면 필터 없음. 지금은 항상 빈 목록이다: 같이 짜기 컨셉을
+     * 코드로 바꾸는 매핑·전송은 TRIP-1099 몫이고, 여기 필드는 계약 게이트(키 정확 일치) 때문에
+     * AI 계약 추가와 함께 먼저 실린다(#549 선례).
+     */
+    val categories: List<String> = emptyList(),
     val requestMeta: AiRequestMeta,
 )
 

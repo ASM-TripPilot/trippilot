@@ -822,6 +822,30 @@ def _categories_of(names: "tuple[str, ...]") -> set[PoiCategory]:
     return out
 
 
+def restrict_pool_to_categories(
+    pool: CandidatePool, codes: "list[str]"
+) -> tuple[CandidatePool, list[str]]:
+    """대안 요청 `categories`(TRIP-1065) → (축소된 풀, 무시한 코드). 넓히지 않는다(INV-1).
+
+    아는 경계 코드가 하나도 없으면(빈 목록·오타·STAY) 풀을 그대로 돌려준다 —
+    필터 없음이지 0건이 아니다. 걸러서 0건이면 빈 풀이고, 파이프라인이
+    `no_candidates` 로 정직하게 보고한다(다른 카테고리로 채우지 않는다).
+    무시한 코드는 호출측이 notes 로 내보낸다 — 매핑 오류를 백엔드가 보게(INV-4).
+    """
+    wanted = _categories_of(tuple(codes)) - {PoiCategory.STAY}
+    ignored = [c for c in codes if c not in {w.value for w in wanted}]
+    if not wanted:
+        return pool, ignored
+    kept = tuple(p for p in pool.pois if p.category in wanted)
+    return CandidatePool(
+        poi_ids=frozenset(p.poi_id for p in kept),
+        pois=kept,
+        generated_at=pool.generated_at,
+        anchor=pool.anchor,
+        radius_km=pool.radius_km,
+    ), ignored
+
+
 # 재계획 사유(AI 어휘) → 트리거 종류. 백엔드가 `trigger` 를 안 보내는 동안 이 표가
 # 대신 유도한다 — `/alternatives` 가 `kind="MANUAL"` 을 **지어내는** 것과 다르다:
 # 여기 입력(`reasons`)은 FE 칩에서 온 실값이다. 표에 없는 사유는 MANUAL 이고,
@@ -1245,7 +1269,8 @@ class WiredItineraryOrchestrator:
             params["persona_ref"] = ResourceRef(
                 kind="persona", ref_id=request.trip_id, owner_id=request.trip_id)
         packets = self._info.collect(Intent.REPLAN, params)
-        pool = self._pool_from(packets, now)
+        pool, ignored_categories = restrict_pool_to_categories(
+            self._pool_from(packets, now), request.categories)
         result = self._rag.run(
             PlanBRagRequest(
                 trigger=TriggerParams(
@@ -1287,7 +1312,9 @@ class WiredItineraryOrchestrator:
             ],
             is_fallback=result.is_fallback,
             fallback_level=result.fallback_level,
-            notes=list(result.notes),
+            notes=list(result.notes) + (
+                [f"categories_ignored:{','.join(ignored_categories)}"]
+                if ignored_categories else []),
             retrieved=dict(result.retrieved),
             dropped_out_of_pool=list(result.dropped_out_of_pool),
             empty_reason=result.empty_reason,
