@@ -1007,6 +1007,17 @@ def _replan_fixed_blocks(
     return tuple(blocks)
 
 
+def _replan_not_before(request: schemas.ReplanRequest, tz: timezone) -> datetime | None:
+    """`from_instant` → 비고정 방문 시작 하한 (TRIP-1182). 그 일자가 아니면 None.
+
+    창은 좁히지 않는다(정본 §1 · 안티패턴 '지금 이후만' → 잠금으로) — 지난 잠금이 창 밖이
+    되어 모순(409)이다. 다른 날(내일 하루를 오늘 다시 짜기)이면 하루 전체가 열려 있다.
+    현지 시각으로 옮겨서 판정한다 — UTC 로 온 값의 날짜를 그대로 보면 9시간 어긋난다.
+    """
+    instant = _tz_aware(request.from_instant, tz).astimezone(tz)
+    return instant if instant.date() == request.target_date else None
+
+
 def _inline_persona(
     request: schemas.GenerateItineraryRequest | schemas.ReplanRequest,
 ) -> PersonaSummary | None:
@@ -1488,13 +1499,18 @@ class WiredItineraryOrchestrator:
             persona_ref=ResourceRef(
                 kind="persona", ref_id=request.trip_id, owner_id=request.trip_id),
             principal=Principal(user_id=request.trip_id),
-            seed=abs(hash(meta.request_id)) % 10_000,
+            # generate 와 같은 키(trip_id crc32) — 종전 `abs(hash(request_id))` 는 파이썬 str
+            # 해시가 프로세스마다 솔트돼(PYTHONHASHSEED 미설정) 같은 요청도 파드·재시작마다
+            # 시드가 달랐다(TRIP-1182). request_id 를 키로 두지 않는 것은 재시도·재현 때문이다
+            # — 같은 입력이면 같은 해여야 덤프만으로 재현되고, 다양성은 거절 이력이 낸다.
+            seed=_seed_from(request.trip_id),
             fixed_blocks=_replan_fixed_blocks(request, self._tz),
             excluded_poi_ids=frozenset(PoiId(p) for p in request.excluded_poi_ids),
             rejections=_domain_rejections(request.rejections),
             include_explanations=False,  # 재계획 화면(i06)은 설명을 안 쓴다
             prefer_categories=prefer,
             avoid_categories=avoid,
+            not_before=_replan_not_before(request, self._tz),
         )
         outcome = self._schedule_agent.run(core.ScheduleTask(
             request=domain_request,
@@ -1609,6 +1625,7 @@ class WiredItineraryOrchestrator:
     def _replan_empty(
         self, code: str, notes: list[str], resolved: list[str], unknown: list[str],
         retrieved: Mapping[str, int] | None = None,
+        params: Mapping[str, str] | None = None,
     ) -> schemas.ReplanResponse:
         """못 만든 것을 **빈 일정으로 위장하지 않는다** (IO-7 — itinerary=null + 사유).
 
@@ -1618,7 +1635,7 @@ class WiredItineraryOrchestrator:
         return schemas.ReplanResponse(
             itinerary=None, total_distance_km=None, is_fallback=True, fallback_level=2,
             notes=notes, resolved_directives=resolved, unknown_directives=unknown,
-            empty_reason=schemas.ReplanEmptyReasonSchema(code=code),
+            empty_reason=schemas.ReplanEmptyReasonSchema(code=code, params=dict(params or {})),
             retrieved=dict(retrieved or {}),
         )
 
@@ -1643,26 +1660,36 @@ class WiredItineraryOrchestrator:
         from trippilot.api.routes import to_payload  # 순환 import 회피 (경계→배선 단방향)
 
         notes += [d.reason for d in outcome.degradations]
+        # 하한이 걸린 재계획의 빈 결과는 "언제부터"를 같이 싣는다 — FE 가 "18:37 이후엔
+        # 넣을 곳이 없어요"를 말할 재료다(계약 예시 `{"from": "17:00"}`, TRIP-1182).
+        not_before = _replan_not_before(request, self._tz)
+        params = {"from": f"{not_before:%H:%M}"} if not_before is not None else {}
         if outcome.status is core.GenerationStatus.FAILED:
             notes.append(outcome.error or "unknown_failure")
             return self._replan_empty(
-                "NO_FEASIBLE_SLOT", notes, resolved, unknown, retrieved)
+                "NO_FEASIBLE_SLOT", notes, resolved, unknown, retrieved, params)
         solution = outcome.solution
         if solution is None or not any(day.slots for day in solution.days):
             return self._replan_empty(
-                "NO_FEASIBLE_SLOT", notes, resolved, unknown, retrieved)
+                "NO_FEASIBLE_SLOT", notes, resolved, unknown, retrieved, params)
         # 잠금이 빠진 일정은 내지 않는다 (TRIP-1177). 에이전트는 좌표를 못 찾은 고정 블록을
         # 빼고 푼다 — generate 는 unplaced 로 보고하지만 재계획엔 그 칸이 없어, 내보내면
         # BE 가 잠금이 사라진 하루를 깨끗한 결과로 읽는다. 체인 HC3 가 나머지 블록을
         # 보장하므로 여기 걸리는 것은 그 제외뿐이다.
         placed = {(s.poi_id, s.start_at) for day in solution.days for s in day.slots}
-        lost = [str(b.poi_id) for b in _replan_fixed_blocks(request, self._tz)
-                if b.window.start.date() == request.target_date
-                and (b.poi_id, b.window.start) not in placed]
+        blocks = [b for b in _replan_fixed_blocks(request, self._tz)
+                  if b.window.start.date() == request.target_date]
+        lost = [str(b.poi_id) for b in blocks if (b.poi_id, b.window.start) not in placed]
         if lost:
             notes.append(f"locked_block_unplaced: {','.join(lost)}")
             return self._replan_empty(
                 "NO_FEASIBLE_SLOT", notes, resolved, unknown, retrieved)
+        # 하한 뒤에 새 방문이 0건이면 잠금만 든 하루다 — 그걸 재계획안으로 내면 BE 가
+        # 남은 슬롯을 전부 지운 하루로 읽는다. 남은 시간이 없다는 사실을 정직하게 낸다.
+        if not_before is not None and placed <= {(b.poi_id, b.window.start) for b in blocks}:
+            notes.append(f"no_slot_after_from_instant: {not_before:%H:%M}")
+            return self._replan_empty(
+                "NO_FEASIBLE_SLOT", notes, resolved, unknown, retrieved, params)
 
         coords = self._coords_for(solution, outcome.slot_alternatives)
         anchors = {request.target_date: GeoPoint(request.anchor.lat, request.anchor.lng)}

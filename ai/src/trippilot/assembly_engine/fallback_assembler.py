@@ -24,6 +24,7 @@ from trippilot.assembly_engine.config import (
     stay_for,
     AssemblyConfig,
 )
+from trippilot.assembly_engine.constraints import anchor_minutes, not_before_floor
 from trippilot.domain.common import PoiId
 from trippilot.domain.itinerary import (
     DaySolution,
@@ -106,6 +107,8 @@ class RuleFallbackAssembler:
 
         used: set[PoiId] = set()
         days: list[DaySolution] = []
+        # 비고정 방문 시작 하한 (TRIP-1182) — 고정 블록(①)은 면제, 자유 삽입(②)만 미룬다
+        not_before = not_before_floor(problem)
         for day in problem.days:
             slots: list[VisitSlot] = []
             # 일별 카테고리 배치 수 (TRIP-531) — 고정 블록 포함
@@ -155,6 +158,8 @@ class RuleFallbackAssembler:
                 last = slots[-1] if slots else None
                 ref = last.end_at if last is not None \
                     else _at(day, problem.day_window.start)
+                if not_before is not None and ref < not_before:
+                    ref = not_before  # 식사 창 판정도 실제로 놓일 수 있는 시각 기준
                 ref_mod = ref.hour * 60 + ref.minute
                 last_poi = self._pois.get(last.poi_id) if last is not None else None
                 if last is not None and last_poi is None:
@@ -201,6 +206,10 @@ class RuleFallbackAssembler:
                             last_poi.coord, poi.coord, problem.transport
                         ).internal_minutes
                     start = depart + timedelta(minutes=travel_min)
+                    if not_before is not None:
+                        # 하한 시각에 지금 위치(앵커)에서 출발 (OR 노드 lo 와 같은 규칙)
+                        start = max(start, not_before + timedelta(
+                            minutes=anchor_minutes(problem, poi, self._est)))
                     end = start + timedelta(minutes=stay)
                     if end > day_end:
                         continue  # day window 초과 (HC4)

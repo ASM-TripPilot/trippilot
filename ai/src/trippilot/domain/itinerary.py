@@ -203,6 +203,14 @@ class ItineraryProblem:
     기본 None = 무보정(기존 생성자 호출 전부 무영향). 부분 매핑이다 — 예보 지평 밖
     날짜는 키 없음(정보 없음을 0%로 지어내지 않는다). 하드 제약이 아니라 어셈블리
     목적함수의 소프트 항에만 쓰인다 — 비가 와도 실외 배치는 가능하다.
+
+    not_before: **고정 블록이 아닌** 방문의 시작 하한 (TRIP-1182 — 재계획 `from_instant`).
+    기본 None = 무제한(generate 무영향). 창을 좁히지 않고 하한으로 두는 이유: 창을 현재
+    시각부터로 좁히면 이미 지난 잠금이 창 밖이 되어 모순(409)이다(안티패턴 '지금 이후만'
+    → 잠금으로). 고정 블록은 면제 — 지난 잠금이 하한 앞에 있는 것이 정상이다. 절대 시각
+    비교라 그보다 앞 날짜는 자유 방문 0, 뒤 날짜는 무제한이다. 앵커가 있으면 하한에
+    앵커(=사용자의 지금 위치)에서의 이동을 더한다 — 지난 잠금 뒤 방문도 그 잠금 장소가
+    아니라 지금 위치에서 출발한다(`constraints.anchor_minutes`).
     """
 
     schedule_id: ScheduleId
@@ -218,6 +226,7 @@ class ItineraryProblem:
     daily_rain_prob: Mapping[date, int] | None = None  # 날짜별 POP% (TRIP-383)
     event_bonus: Mapping[PoiId, float] | None = None  # 행사 근접 보너스 [0,1] (TRIP-421)
     pace: Pace | None = None  # 여행 속도 — 체류시간 배율 (TRIP-906)
+    not_before: datetime | None = None  # 비고정 방문 시작 하한 (TRIP-1182)
 
     def __post_init__(self) -> None:
         if not self.days:
@@ -245,6 +254,7 @@ class ItineraryProblem:
             # frozenset은 JSON 원시 타입이 아니다 → 정렬된 list (결정론적 직렬화)
             "excluded_poi_ids": sorted(str(p) for p in self.excluded_poi_ids),
             "pace": self.pace.value if self.pace else None,
+            "not_before": to_iso(self.not_before) if self.not_before else None,
             # date 키는 JSON 원시 타입이 아니다 → 정렬된 ISO 키 (결정론적 직렬화)
             "daily_rain_prob": (
                 {d.isoformat(): self.daily_rain_prob[d]
@@ -291,6 +301,7 @@ class ItineraryProblem:
             ),
             # `d.get` — 키가 없는 기존 직렬화본을 그대로 읽는다(하위호환)
             pace=Pace(d["pace"]) if d.get("pace") else None,
+            not_before=from_iso(d["not_before"]) if d.get("not_before") else None,
         )
 
 

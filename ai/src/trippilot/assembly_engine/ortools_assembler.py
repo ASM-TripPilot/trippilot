@@ -33,6 +33,7 @@ from trippilot.assembly_engine.config import (
     stay_for,
     AssemblyConfig,
 )
+from trippilot.assembly_engine.constraints import anchor_minutes, not_before_floor
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler, placed_fixed_blocks
 from trippilot.domain.common import PoiId
 from trippilot.domain.itinerary import (
@@ -112,6 +113,22 @@ def _log_prefilter_cut(day, before, kept, pois) -> None:
 
 def _mod(dt: datetime) -> int:
     return dt.hour * 60 + dt.minute
+
+
+def _not_before_min(problem: ItineraryProblem, day) -> int | None:
+    """그 일자 비고정 노드의 시작 하한(분) — 그리디(`not_before_floor` 절대 시각)와 같은 규칙.
+
+    하한이 뒷날이면 그날 자유 방문은 없다(어떤 노드 hi 보다도 큰 값), 앞날이면 무제한(None).
+    """
+    nb = not_before_floor(problem)
+    if nb is None:
+        return None
+    tz = problem.day_window.start.tzinfo
+    if tz is not None:
+        nb = nb.astimezone(tz)
+    if nb.date() > day:
+        return 1440 * 2 + 1
+    return _mod(nb) if nb.date() == day else None
 
 
 class OrToolsAssembler:
@@ -246,6 +263,10 @@ class OrToolsAssembler:
         # 해 품질은 노드 **순서**에 의존한다 — 증명 없이 결정론 한도에서 FEASIBLE 로 끝나서,
         # 같은 집합이라도 순서가 바뀌면 다른(더 나쁠 수 있는) 해가 나온다(부산 실측 −13%).
         nodes = []
+        # 비고정 방문 시작 하한 (TRIP-1182). 정의역만 좁힌다. 후보이자 고정인 노드엔 걸지
+        # 않는다 — 아래에서 lo=hi=pin 으로 덮이는데, 하한이 그 hi 를 넘어 여기서 빠지면 고정
+        # 루프가 점수 0 노드로 다시 만들어 슬롯 점수가 바뀐다(재계획은 잠금 POI 가 후보에 합류).
+        floor = _not_before_min(problem, day)
         for c in cands:
             poi = self._pois[c.poi_id]
             stay = stay_for(poi.category, problem.pace)
@@ -253,6 +274,9 @@ class OrToolsAssembler:
             if win is None:
                 continue  # 휴무 — 모델에서 제외
             lo = max(win[0], ws)
+            if floor is not None and c.poi_id not in fixed_ids:
+                # 하한 시각에 지금 위치(앵커)에서 출발 — 정의역만 좁힌다(용량 컷 유효)
+                lo = max(lo, floor + anchor_minutes(problem, poi, self._est))
             hi = min(win[1], we) - stay
             if lo > hi:
                 continue  # 시간창 불가 — 제외
@@ -513,6 +537,10 @@ class OrToolsAssembler:
 
         왜 필요한가: 이 식이 없으면 LP 상계가 '전 후보 점수 합'이라(실 덤프 41,880 vs
         실제 해 4,000~5,500) 탐색이 하루에 안 들어가는 '많이 방문' 가지로 간다.
+
+        시작 하한(`not_before`, TRIP-1182)이 있어도 그대로 유효하다 — 하한은 비고정 노드의
+        정의역을 좁히기만 해서 그 모델의 해는 하한 없는 모델의 해이기도 하고, 이 식은 그
+        모든 해에 성립한다. origin 을 하한으로 당기지 않는 것은 하한 앞의 핀도 세기 때문이다.
         """
         pins = [n for n in nodes if n["pin"] is not None]
         origin = min([ws] + [n["pin"] for n in pins])

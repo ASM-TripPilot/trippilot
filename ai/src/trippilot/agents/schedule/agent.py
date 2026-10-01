@@ -171,6 +171,9 @@ class GenerateItineraryRequest:
     # 요청에 실려 온 취향 (AI-D09) — 있으면 PERSONA 수집분보다 우선한다. None 이면 종전대로
     # 수집분을 쓴다. 비어 있음의 판정은 경계(배선)가 한다.
     persona: PersonaSummary | None = None
+    # 비고정 방문 시작 하한 (TRIP-1182) — 재계획 `from_instant` 가 그 일자일 때만 배선이
+    # 싣는다. generate 는 기본 None(무제한)이다. 의미는 `ItineraryProblem.not_before`.
+    not_before: datetime | None = None
 
     def __post_init__(self) -> None:
         if not self.days:
@@ -360,6 +363,7 @@ class ScheduleAgent:
             daily_rain_prob=task.daily_rain,
             event_bonus=task.event_bonus,
             pace=request.pace,
+            not_before=request.not_before,
         )
 
         # ④ 어셈블리 solve — 잔여 **전부**를 받는다 (고정 슬라이스 아님, TRIP-376).
