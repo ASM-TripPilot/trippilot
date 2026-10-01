@@ -14,9 +14,9 @@ const GUARD_FILE = path.join(ROOT, 'shared/press/pressGuard.ts');
 
 /** 가드를 import 해도 되는 배선 페이지 — 5쌍의 송신·수신 콜백이 사는 곳(src 기준 상대경로). */
 const EXPECTED = [
-  // TRIP-1105 — #012 송신 자리였던 목적지 상세가 d01 지역 필터로 합쳐졌다. d01 은 배선을 app 층
-  // 라우트가 진다(placeExploreStructure 재귀 스캔 때문 — 페이지 층이 없다). 그래서 이 한 곳만 app 층이다.
-  'app/(tabs)/explore.tsx', // #012 송신(필터·전국 숙소 모두 보기)
+  // TRIP-1105 — #012 송신 자리였던 목적지 상세가 d01 지역 필터로 합쳐졌다. TRIP-1142 로 d01 배선이
+  // 라우트에서 page 로 옮겨졌다.
+  'pages/explore-landing/ui/ExploreLandingPage.tsx', // #012 송신(필터·전국 숙소 모두 보기)
   'pages/itinerary-mustvisit/ui/MustVisitListPage.tsx', // #042 수신
   'pages/itinerary-mustvisit/ui/MustVisitTimePage.tsx', // #042 송신
   'pages/itinerary-plan/ui/ItineraryPlanPage.tsx', // #057 송신·수신
