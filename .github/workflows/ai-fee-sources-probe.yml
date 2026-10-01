@@ -1,3 +1,6 @@
+# [main 등록용 사본] GitHub은 schedule(cron)·workflow_dispatch를 기본 브랜치의
+# 워크플로만 등록한다. main의 ai/ 는 구버전이므로 checkout을 develop으로 고정 —
+# 이 파일(트리거 등록)은 main, 실행 코드는 항상 develop. develop 쪽 원본 갱신 시 이 사본도 동기화할 것.
 # 요금 값이 어디에 있는지 훑는다 — 엔드포인트·필드 전수 스캔 (탐색용 1회성).
 #
 # `usefee` 실측에서 나온 것: 타입 14 에만 있고 후보풀 전체로는 0.9%. 나머지
@@ -46,6 +49,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: develop   # 실측 대상 스크립트는 develop (main의 ai/는 구버전)
 
       - uses: astral-sh/setup-uv@v5
         with:
@@ -58,8 +63,6 @@ jobs:
           TOUR_API_KEY2: ${{ secrets.TOUR_API_KEY2 }}
           TOUR_API_KEY3: ${{ secrets.TOUR_API_KEY3 }}
         run: |
-          # `| tee` 가 파이프 앞 종료 코드를 삼킨다 — 프로브가 실패해도 스텝이 초록이 된다(실측).
-          set -o pipefail
           args=(--from-doc "${{ inputs.from_doc }}"
                 --kinds "${{ inputs.kinds }}"
                 --per-kind "${{ inputs.per_kind }}"

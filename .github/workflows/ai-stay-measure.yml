@@ -1,3 +1,6 @@
+# [main 등록용 사본] GitHub은 schedule(cron)·workflow_dispatch를 기본 브랜치의
+# 워크플로만 등록한다. main의 ai/ 는 구버전이므로 checkout을 develop으로 고정 —
+# 이 파일(트리거 등록)은 main, 실행 코드는 항상 develop. develop 쪽 원본 갱신 시 이 사본도 동기화할 것.
 # 숙소 콘텐츠 커버리지 측정 (숙소콘텐츠-수집-설계.md 칸 0)
 #
 # TourAPI 숙박(contentTypeId=32)이 우리 정본 12,782곳 중 몇 칸을 실제로 채울 수 있는지 잰다.
@@ -56,6 +59,8 @@ jobs:
         working-directory: ai
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: develop   # 측정 스크립트·숙소 시드는 develop (main 의 ai/·backend/ 는 구버전)
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true

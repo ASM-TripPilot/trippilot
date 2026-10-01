@@ -1,3 +1,6 @@
+# [main 등록용 사본] GitHub은 schedule(cron)·workflow_dispatch를 기본 브랜치의
+# 워크플로만 등록한다. main의 ai/ 는 구버전이므로 checkout을 develop으로 고정 —
+# 이 파일(트리거 등록)은 main, 실행 코드는 항상 develop. develop 쪽 원본 갱신 시 이 사본도 동기화할 것.
 # 실재 검증 오탐률 실측 (TRIP-683)
 #
 # 지도 검색에 안 나오는 POI 를 후보에서 **배제**하려면 먼저 "멀쩡한 가게가 얼마나
@@ -34,6 +37,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: develop   # 실측 대상 데이터·스크립트는 develop (main의 ai/는 구버전)
 
       - uses: astral-sh/setup-uv@v5
         with:

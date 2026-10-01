@@ -1,3 +1,6 @@
+# [main 등록용 사본] GitHub은 schedule(cron)·workflow_dispatch를 기본 브랜치의
+# 워크플로만 등록한다. main의 ai/ 는 구버전이므로 checkout을 develop으로 고정 —
+# 이 파일(트리거 등록)은 main, 실행 코드는 항상 develop. develop 쪽 원본 갱신 시 이 사본도 동기화할 것.
 # 행사 웹소싱 일일 배치 (TRIP-421)
 #
 # ai-ci와 완전히 분리 — push/PR 트리거 없음 (CI 실 호출 0, D37). 실 호출은
@@ -45,7 +48,9 @@ jobs:
       run:
         working-directory: ai
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
+        with:
+          ref: develop   # 실행 코드는 develop (main의 ai/는 구버전)
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
@@ -122,7 +127,7 @@ jobs:
           ) || echo "::warning::행사 저장소 push 실패 — 내일 재수집으로 자연 복구 (수집 자체는 성공)"
       - name: 산출물 artifact 보존 (30일)
         if: steps.collect.outputs.skipped != 'true'
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v4
         with:
           name: collected-events
           path: |
