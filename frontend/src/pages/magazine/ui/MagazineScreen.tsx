@@ -25,7 +25,11 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { BackChevronGlyph, HeartOutlineGlyph, SearchGlyph } from './HomeGlyphs';
+import {
+  BackChevronGlyph,
+  HeartOutlineGlyph,
+  SearchGlyph,
+} from '@/features/home/ui/HomeGlyphs';
 import type { MagazineCard, MagazineScreenProps } from '../model/magazineTypes';
 
 const ABSOLUTE_FILL = StyleSheet.absoluteFillObject;

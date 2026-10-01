@@ -47,17 +47,17 @@ import { TravelStyleScreen } from '@/features/reflection/ui/TravelStyleScreen';
 import { TripSummaryScreen } from '@/features/reflection/ui/TripSummaryScreen';
 import { MustVisitOutsideConfirmDialog } from '@/pages/saved-places/ui/MustVisitOutsideConfirmDialog';
 import { MustVisitPickScreen } from '@/pages/saved-places/ui/MustVisitPickScreen';
-import { PlaceDetailScreen as ExplorePlaceDetailScreen } from '@/features/explore/ui/PlaceDetailScreen';
-import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
-import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
+import { PlaceDetailScreen as ExplorePlaceDetailScreen } from '@/pages/place-detail/ui/PlaceDetailScreen';
+import { PlaceExploreScreen } from '@/pages/place-explore/ui/PlaceExploreScreen';
+import { RegionPickerScreen } from '@/pages/region-picker/ui/RegionPickerScreen';
 import { SavedPlaceListScreen } from '@/pages/saved-places/ui/SavedPlaceListScreen';
 import {
   ExploreLandingScreen,
   type StayCardVM,
 } from '@/features/explore/ui/ExploreLandingScreen';
 import { HomeScreen } from '@/features/home/ui/HomeScreen';
-import { MAGAZINE_DEFAULT_PROPS } from '@/features/home/model/magazineFixtures';
-import { MagazineScreen } from '@/features/home/ui/MagazineScreen';
+import { MAGAZINE_DEFAULT_PROPS } from '@/pages/magazine/model/magazineFixtures';
+import { MagazineScreen } from '@/pages/magazine/ui/MagazineScreen';
 import {
   buildDraftPins,
   buildGenerationGauge,

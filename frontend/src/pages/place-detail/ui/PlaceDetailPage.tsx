@@ -37,7 +37,7 @@ import {
 } from '@/features/explore/model/placeSaveGuard';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import { BackChevronGlyph } from '@/features/explore/ui/ExploreGlyphs';
-import { PlaceDetailScreen } from '@/features/explore/ui/PlaceDetailScreen';
+import { PlaceDetailScreen } from './PlaceDetailScreen';
 
 // 딥링크로 이 화면에 직접 떨어지면(explore/** 는 (tabs) 밖) 뒤로 갈 히스토리가 없다 — 홈으로
 // replace 해 탈출구를 준다(개념 [[router.canGoBack() — 딥링크 히스토리 없음 폴백]]).

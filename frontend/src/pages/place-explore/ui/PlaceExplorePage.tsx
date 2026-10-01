@@ -45,7 +45,7 @@ import { useMultiRegionPlaces } from '@/features/explore/model/useMultiRegionPla
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 import { isWizardOrigin } from '@/features/explore/model/wizardOrigin';
-import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
+import { PlaceExploreScreen } from './PlaceExploreScreen';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 
 /** 카테고리 시트(TRIP-708 AC-6) — **페이지가 소유**한다(@gorhom/bottom-sheet). 열림 상태는

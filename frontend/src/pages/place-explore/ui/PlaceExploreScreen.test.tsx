@@ -9,8 +9,8 @@ import {
 
 import type { Place } from '@/shared/api/generated/schemas';
 
-import type { PlaceListState } from '../model/placeListState';
-import type { PlaceSaveNotice } from '../model/placeSaveGuard';
+import type { PlaceListState } from '@/features/explore/model/placeListState';
+import type { PlaceSaveNotice } from '@/features/explore/model/placeSaveGuard';
 import {
   PlaceExploreScreen,
   type PlaceExploreScreenProps,

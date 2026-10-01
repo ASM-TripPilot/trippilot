@@ -17,8 +17,8 @@ import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
-import type { PlaceListState } from '../model/placeListState';
-import type { PlaceSaveNotice } from '../model/placeSaveGuard';
+import type { PlaceListState } from '@/features/explore/model/placeListState';
+import type { PlaceSaveNotice } from '@/features/explore/model/placeSaveGuard';
 import { formatRegionChipLabel } from '../model/regionChipLabel';
 import {
   BackChevronGlyph,
@@ -28,7 +28,7 @@ import {
   PlusGlyph,
   SearchGlyph,
   WarningTriangleGlyph,
-} from './ExploreGlyphs';
+} from '@/features/explore/ui/ExploreGlyphs';
 import { PartialFailureBanner } from './PartialFailureBanner';
 
 // 우하단 FAB 그림자 — `ExploreLandingScreen`의 FAB_SHADOW와 동형
