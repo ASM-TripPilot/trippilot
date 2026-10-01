@@ -20,7 +20,7 @@ import { StyleSummaryCard } from './StyleSummaryCard';
  *  - 🔴 AC-S2(BR-U6-24 핵심) 축 값 N → **채운 dot 정확히 N개**(나머지 empty). 채운/빈 dot 별도 testID 카운트.
  *  - 🔴 AC-S3(BR-U6-24) 미달 VM → 안내 한 줄만. 게이지·칩·상세 미렌더.
  *  - 🔴 AC-S4(INV-U5-09) preview.descriptors 가 온 envelope 라도 모델이 걸러 화면은 미달 얼굴(칩 0).
- *  - AC-S5(INV-3) 렌더에 소요시간 문자열 0(선제 green 회귀 앵커 — 진짜 그물은 myStaysStructure G2 소스 스캔).
+ *  - AC-S5(INV-3) 렌더에 소요시간 문자열 0(소스 스캔 `myStaysStructure` G2 는 TRIP-1145 로 지웠다 — 이 렌더 단언이 남은 그물).
  *  - 🔴 AC-S6(INV-4) 상세 어포던스는 보이되 real disabled(라우트 미존재 정직 degrade).
  *
  * 왜 이렇게 테스트하나(02a ★2):

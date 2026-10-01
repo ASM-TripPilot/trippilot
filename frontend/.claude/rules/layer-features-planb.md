@@ -8,7 +8,7 @@ paths:
 
 | 파일 | 역할 |
 |---|---|
-| `src/features/planb/model/replanScope.ts` | 범위 카탈로그 — `REPLAN_SCOPES`(`PARTIAL_SLOTS`·`FULL_DAY`)·`DEFAULT_REPLAN_SCOPE`. 와이어값은 ASCII key, 한글은 라벨. `planbScopeStructure.test.ts`(node)가 소스를 스캔하므로 **RN을 런타임 import하지 않는다**(`import type`만) |
+| `src/features/planb/model/replanScope.ts` | 범위 카탈로그 — `REPLAN_SCOPES`(`PARTIAL_SLOTS`·`FULL_DAY`)·`DEFAULT_REPLAN_SCOPE`. 와이어값은 ASCII key, 한글은 라벨. |
 | `src/features/planb/config/replanChoices.ts` | 사유·방향 카탈로그(node-safe) — `REPLAN_REASONS`·`REPLAN_DIRECTIVES`·`ReplanChoice`·`TRIGGER_REASON_KEY: Record<WatchKind, string>`(kind가 늘면 tsc가 누락을 잡는다). ⚠️ `AVOID_OUTDOOR`는 ai 지시 사전에 없어 `unknown_directives`로 조용히 무시되고, 일부 방향은 ai 사전엔 있으나 solver 미배선이라 무효과 |
 | `src/features/planb/model/replanMapCenter.ts` | `deriveReplanMapAnchor({sessionOrigin?, days?, preferredDate?})` — 사다리 `세션 origin(lat·lng 둘 다) ?? 기준 날짜 첫 좌표 슬롯 ?? 일정 첫 좌표 슬롯 ?? REPLAN_MAP_FALLBACK_CENTER`. 슬롯에서 골랐으면 `placeName`도 돌려준다("{장소} 인근(추정)" 라벨 재료). `PlanbSolvingPage`·`PlanbDraftPage`·`LiveLocationPage` 공용(G3 소스 가드가 호출을 강제) |
 | `src/features/planb/model/replanRequest.ts` | `buildStartReplanRequest(values, origin?)` — 폼 값을 `StartReplanRequest` 7키로. 위치 미입력이어도 **`originKind: null`을 반드시 명시**(codegen required·nullable). `origin`이 없으면 `originLat/originLng` **키 자체가 없다**(값 null과 다름), 있으면 9키([[후방호환 옵셔널 파라미터 (additive prop)]]) |
@@ -30,8 +30,8 @@ paths:
 | `src/features/planb/ui/ReplanAppliedSheet.tsx` | i08 변경 반영 시트 — 허브 위 조건부 마운트(`?applied` 쿼리). 스크림은 `backdropComponent`(본문 밖), 끌어 닫기 = 확인. 요약 배지·내역 행은 빈 값이면 컨테이너째 안 그린다. `[되돌리기]`는 서버 호출 없이 안내만(되돌리기 API 없음, [[계약이 못 받치면 안 그린다]]) |
 | `src/features/planb/model/appliedSummary.ts` | `appliedSummaryBadges(...)` — 거리 부호는 U+2212/`+`, `\|Δ\|<10`이면 `이동 0m`, `distanceDeltaM===null`이면 배지를 뺀다. 타입에 `duration`이 없어 INV-3 원리적 보장 |
 | `src/features/planb/model/reorderKeepingLocked.ts` | `reorderKeepingLocked(original, reordered, lockedPoiIds)` — 잠긴 칸(`isFixed \|\| lockedPoiIds`)은 원래 index에 두고 빈 칸을 나머지 순서로 채운다(입력 불변). `itineraryEditStore`의 `reorderKeepingFixed`와 같은 알고리즘의 사촌(형제 feature import 금지). 소비처는 `ItineraryEditPage.onReorder` |
-| `src/features/planb/model/triggerLabel.ts` | `TRIGGER_LABELS`·`triggerLabel(kind)` — `TriggerKind` 4종 → `{label, iconKey}` 정적 요지(상세 사유는 서버 `reason`, 섞지 않는다). node-safe. `planbTriggerKindStructure.test.ts`가 매핑·금칙어를, `RiskDetailSheet.labelSource.test.ts`가 표 도출을 강제(리터럴만 잡아 import 우회는 못 본다). ⚠️ execution 전용 INV-3 가드 밖 |
-| `src/features/planb/model/triggerPillCopy.ts` | i02 지도 위 알약 카피 — WEATHER `{슬롯명} {H}시`·DELAY `{슬롯명} 방면`·CLOSURE `{슬롯명} 주변 시설`, 매칭 슬롯이 없으면 `triggerLabel(kind).label`. `startAt` 옆 산술 없음(`liveTimeStructure`) |
+| `src/features/planb/model/triggerLabel.ts` | `TRIGGER_LABELS`·`triggerLabel(kind)` — `TriggerKind` 4종 → `{label, iconKey}` 정적 요지(상세 사유는 서버 `reason`, 섞지 않는다). node-safe. `RiskDetailSheet.labelSource.test.ts`가 표 도출을 강제(리터럴만 잡아 import 우회는 못 본다) |
+| `src/features/planb/model/triggerPillCopy.ts` | i02 지도 위 알약 카피 — WEATHER `{슬롯명} {H}시`·DELAY `{슬롯명} 방면`·CLOSURE `{슬롯명} 주변 시설`, 매칭 슬롯이 없으면 `triggerLabel(kind).label`. `startAt` 옆 산술 없음(BR-U4-34) |
 | `src/features/planb/model/useActiveTriggers.ts` | codegen triggers GET 래퍼(로직 0) — `enabled`로 active 얼굴에서만 조회. 서버가 발화 중인 것만 반환(INV-U4-01), MANUAL 제외는 페이지 몫. 서버 억제(BR-U4-15)를 만드는 경로는 앱에 없다(× 끄기는 로컬 숨김) |
 | `src/features/planb/model/triggerWatchlist.ts` | `triggerWatchlist(triggers)` — 같은 발화 목록을 i03 시트 배지 3행(`{activeBanner, rows[3]}`)으로 **다르게 접는다**([[사영 (projection) — 같은 데이터 다른 접기]]). MANUAL 제외 후 `[0]`이 배너, 행은 `WEATHER·DELAY·CLOSURE` 고정 순서. 행 이름은 `config/watchLabels.ts`의 카테고리명(활성 트리거 제목과 다른 표면) |
 | `src/features/planb/config/watchLabels.ts` | `WATCH_CATEGORY_LABEL`(날씨·이동·영업)·`WATCH_STATUS_LABEL`·`WatchKind`. kind 3리터럴을 model 타입과 두 벌로 가진다(순환 회피) — 어긋나면 tsc가 `Record` 키로 잡는다 |
@@ -39,4 +39,4 @@ paths:
 | `src/features/planb/model/foldScope.ts` | `foldScope(scope)` — `FULL_DAY`만 통과, 나머지(null 포함)는 `PARTIAL_SLOTS` |
 | `src/features/planb/ui/RiskDetailSheet.tsx` | i03 위험 상세 순수 시트 — eyebrow + 빨강 경고 + 서버 `reason` 제목 + 영향 상자(있을 때만) + 배지 3개 + `[대안 보기]`. 조건부 마운트로 열고([[조건부 마운트로 시트 열기]]) 페이지가 허브의 **형제**로 그려 딤이 허브 전체를 덮는다([[z-order = 렌더 순서 (RN absolute 형제는 나중 렌더가 위)]]). `backgroundComponent={null}`이라 위로 끌면 여분 패딩이 투명해지는 gap이 생길 수 있다(6-b 확인 대기, [[gorhom 배경 끄기와 over-drag 여분 패딩]]) |
 
-⚠️ `features/planb/ui/**`는 `executionDurationStructure.test.ts`(INV-3 재귀 스캔)에 자동 편입된다 — 소요시간 표기 0건. `model/`은 편입 밖이다. `<MapView>`를 새로 렌더하면 전역 `itineraryMapSurfaceStructure.test.ts`의 `LOCKED_CALLERS`(소진 단언 — 미등재면 자동 FAIL)에 등재해야 한다([[소스 스캔 가드의 폴더 전수와 자동 편입]]). 단일 파일을 지정해 읽는 가드(`planbReplanDraftStructure` G3 등)는 파일이 이사하면 재조준 없이 즉시 red다([[선재 가드 재조준 (코드 이동 추적)]]).
+⚠️ `features/planb/ui/**`의 소요시간 표기 0건(INV-3)·`<MapView>` 호출부 명부는 기계 강제 없음 — TRIP-1145에서 스캔 삭제, 회귀는 QA.

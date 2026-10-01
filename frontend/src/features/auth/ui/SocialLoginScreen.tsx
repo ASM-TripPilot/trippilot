@@ -89,8 +89,8 @@ function SheetBackdrop() {
 // handleComponent={null} 은 gorhom 이 기본으로 그리는 자체 핸들을 끈다(TRIP-713). 이걸 빼면
 // 아래 커스텀 grabber(Figma 회색 바 40×5) 위에 gorhom 기본 핸들이 겹쳐 바가 2개로 보인다.
 // jest 는 통과형 목이라 기본 핸들을 렌더하지 않아 이 이중 grabber 를 못 본다(바텀시트 실제
-// 열림이 자동 심판 없는 것과 동형 트랩) — 그래서 이 prop 의 존재는 authSheetHandleStructure
-// 소스 스캔이 잠근다. g 밴드 편집 시트(TRIP-735)와 같은 문제·다른 처방(그쪽은 features/trip 의
+// 열림이 자동 심판 없는 것과 동형 트랩) — 이 prop 의 존재를 지키는 심판은 없다
+// (소스 스캔은 TRIP-1145 에서 지웠다, 실기 스모크 몫). g 밴드 편집 시트(TRIP-735)와 같은 문제·다른 처방(그쪽은 features/trip 의
 // SHEET_HANDLE_INDICATOR_STYLE 을 handleIndicatorStyle 로 쓰지만, 그 상수를 features/auth 로
 // import 하면 형제 feature 경계를 넘는다 — 여기선 커스텀 바를 유지하고 기본 핸들만 끈다).
 function Sheet({ testID, children }: { testID: string; children: ReactNode }) {

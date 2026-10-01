@@ -37,7 +37,7 @@ import {
  * 드릴다운 상태(`openSidoCode`)는 화면 로컬 뷰 상태다 — 프롭 시그니처는 그대로다.
  *
  * ⚠️ `@/shared/api`·쿼리 훅·`expo-location`을 **전이 의존으로라도** 물면 안 된다 —
- * dev 프리뷰가 이 화면을 정적으로 그리고 `devPreview.test.tsx`의 지뢰 목이 즉시 터진다.
+ * dev 프리뷰가 이 화면을 정적으로 그리고 프리뷰 스모크(`devPreviewReleaseGate.test.tsx`)의 지뢰 목이 즉시 터진다.
  * (그래서 `useRegions`가 아니라 `regionTint`만 model에서 가져온다 — 그 훅은 지연 로드된다.)
  */
 
@@ -320,8 +320,7 @@ function RegionDetail({
 }
 
 /** 인기 여행지 가로 스트립(TRIP-650) — 시/도(여행지) 단위를 가로 스크롤 카드로 보여준다. 집계·사진은
- *  계약 부재라 tint 그라디언트+이름만(SelectableCard 규율 계승). 서버 순서 그대로 앞 8개(정렬 금지 —
- *  `regionCatalogStructure` 가드). ★시/도 단위라 드릴다운 불변식("1단은 시/도만, 구/군 접힘")을 안 깬다.
+ *  계약 부재라 tint 그라디언트+이름만(SelectableCard 규율 계승). 서버 순서 그대로 앞 8개(정렬 금지). ★시/도 단위라 드릴다운 불변식("1단은 시/도만, 구/군 접힘")을 안 깬다.
  *  누르면 그 시/도로 드릴인(하단 목록의 SidoRow 와 동일 동작). 기본(1단·비검색·정상) 뷰 상단 전용. */
 function PopularStrip({
   groups,

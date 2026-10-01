@@ -4,8 +4,8 @@ import { formatKoreanDate } from './formatKoreanDate';
  * TRIP-395 · formatKoreanDate — 'YYYY-MM-DD' → "M월 D일 요일".
  *
  * *(개념)* 여행 중 일정(i01) 헤더 부제("6월 11일 목요일 · 오늘 일정")의 날짜 부분을 만드는
- * 순수 함수다. `features/execution` 안에서 날짜를 포맷하면 시각-무추정 구조가드
- * (`liveTimeStructure`)에 걸리므로, 포맷은 execution **밖**(여기 shared)에서 하고 완성
+ * 순수 함수다. `features/execution` 안에서 날짜를 포맷하면 시각-무추정 규칙
+ * (BR-U4-34 — 옛 가드 `liveTimeStructure` 는 TRIP-1145 로 지웠다)을 어기므로, 포맷은 execution **밖**(여기 shared)에서 하고 완성
  * 문자열을 화면에 prop 으로 내려보낸다(01b Seed 맹점 상환 ①).
  *
  * 3동작 뼈대: 준비=ISO 날짜 문자열 → 실행=formatKoreanDate → 단언=정확 문자열(`.toBe`).

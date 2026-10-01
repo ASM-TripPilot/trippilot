@@ -231,7 +231,7 @@ function WizardMustVisitPick(props: PickWrapperProps): ReactElement {
   // 선택된 밖 행이 있을 때 완료가 멈춰 선 자리(TRIP-1106 AC-6) — 있으면 확인 다이얼로그가 뜬다.
   const [pending, setPending] = useState<WizardCompletion | null>(null);
   // 다이얼로그 버튼 잠금 — 상태가 아니라 ref 라 같은 틱 두 번째 누름도 이미 켜진 값을 읽는다(AC-11,
-  // TRIP-1114 `lockedRef` 선례). 공용 `guardPress` 는 `pressGuardStructure` 가 소비처를 잠가 못 쓴다.
+  // TRIP-1114 `lockedRef` 선례).
   const lockedRef = useRef(false);
 
   // 시드 → 재진입 표식 → 1/4 이동. 두 버튼·곧장 완료가 모두 이 한 곳을 지난다(step1 리터럴 하나).

@@ -111,7 +111,7 @@ export function EditorView({
   completedSlotKeys,
   inTrip,
 }: EditorViewProps): ReactElement {
-  // 끌기 진행 중(onDragBegin ~ onDragEnd) — 뷰 국소 일시 상태(widgetsStructure STATE_EXEMPT 1).
+  // 끌기 진행 중(onDragBegin ~ onDragEnd) — 뷰 국소 일시 상태.
   const [dragging, setDragging] = useState(false);
   const dragFace = isDragging === true || dragging;
   // CTA 바가 하단 안전 영역 위에 얹히므로 여백에 그 높이를 더한다. Provider 없으면(jest) 0 — 셸과 같은 읽기.

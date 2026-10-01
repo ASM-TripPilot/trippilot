@@ -40,7 +40,7 @@ import { DraftScreen } from './DraftScreen';
 // `map-failure` 로 떨어져 `pins` 가 어디로도 흐르지 않는다(그 컴포넌트 머리말). 목은 남는 props 를
 // 그대로 통과시키므로 `map-root` 의 props 에서 읽는다.
 // ⚠️ 구현이 `@/shared/map/KakaoMapView` 로 딥 임포트하면 이 목이 안 붙는다 —
-//    `itineraryDraftStructure.test.ts` G5 가 배럴 경유를 따로 잠근다(02a ★9).
+//    배럴 경유를 잠그던 `itineraryDraftStructure` G5 는 TRIP-1145 로 지웠다(02a ★9).
 // 인라인 팩토리로 두면 NativeWind babel 의 `_ReactNativeCSSInterop` 참조가 jest 호이스트 규칙을
 // 위반한다 — 그래서 모듈 스코프 파일을 require 한다(리포 선례와 동형).
 // eslint-disable-next-line @typescript-eslint/no-require-imports

@@ -64,7 +64,7 @@ describe('🔴 TRIP-935 Q7 · 삭제 고지는 30일 유예와 맞는다', () =>
 
 // TRIP-772 · 맹점 ② — 2단 프리뷰 키가 생겨도 게이트의 기본 얼굴은 1단이다.
 // 무엇을 보장하나: 필수 두 prop 만 주면 삭제 범위 고지(1단)부터 열리고, 최종 확인(2단)은 없다.
-// 프로덕션이 두 prop 만 넘긴다는 사용처 잠금은 `deleteAccountDialogGate.test.ts`.
+// 프로덕션이 두 prop 만 넘긴다는 사용처 잠금은 eslint `no-restricted-syntax`(TRIP-1145 · `importBoundaryLayers` 탐침).
 describe('TRIP-772 · 기본 렌더는 1단부터', () => {
   it('필수 prop 만 주면 1단 [계속]이 있고 2단 [계정 삭제]는 없다', () => {
     // 준비·실행: 필수 prop 두 개만으로 렌더.

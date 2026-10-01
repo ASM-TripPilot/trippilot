@@ -14,8 +14,8 @@ import { HeartFilledGlyph as StayHeartFilledGlyph } from './StayGlyphs';
  *
  * 무엇을 보장하나: `SavedStayListScreen` 은 페이지가 완성해 내려준 값(`savedStays` VM 목록 ·
  * `face` 문자열 · `isGuest`)만으로 목록/empty/loading/error/guest 다섯 얼굴을 그리고, 버튼
- * press 를 콜백으로 올린다. 조회·라우팅·합성·판정은 전부 페이지 몫(화면은 콜백만) — 구조
- * 가드(`savedStaysStructure.test.ts`)가 `useState`·라우터·query·타 feature import 0 을 잠근다.
+ * press 를 콜백으로 올린다. 조회·라우팅·합성·판정은 전부 페이지 몫(화면은 콜백만) — 그것을 잠그던
+ * 구조 가드(`savedStaysStructure`)는 TRIP-1145 로 지웠다(타 feature import 는 eslint 층 규칙이 막는다).
  *
  * *(초심자용 개념)*
  *  - `render(<컴포넌트/>)` 로 그린 뒤 `screen.getByTestId('x')` 로 특정 노드를 집는다.

@@ -5,7 +5,7 @@ paths:
 # `src/features/stay/` — 숙소 탐색(e02)·상세(e03)·저장(e04)·등록(e05)
 
 
-판정은 순수 함수(`model/`), 화면은 무상태 프레젠테이션(`ui/`) — `features/stay/ui`는 구조 가드(`staySearchStructure.test.ts`)가 `useState` 0건을 강제하므로 시트 개폐·선택 초안 같은 상태는 페이지가 쥔다(개념 [[상태 끌어올리기 (lifting state up)]]). 다른 feature 글리프·훅은 import하지 않고 재작성한다.
+판정은 순수 함수(`model/`), 화면은 무상태 프레젠테이션(`ui/`) — `features/stay/ui`는 `useState`를 두지 않으므로(기계 강제 없음) 시트 개폐·선택 초안 같은 상태는 페이지가 쥔다(개념 [[상태 끌어올리기 (lifting state up)]]). 다른 feature 글리프·훅은 import하지 않고 재작성한다.
 
 | 파일 | 역할 |
 |---|---|

@@ -3,7 +3,7 @@
 // 구동되는 프레젠테이션 화면이다 — 런타임 목(msw 등) 금지. 칩 라벨·에디토리얼 카피·6카드
 // 상수를 여기(model)에 둔다(home 슬라이스는 config 세그먼트가 없다 — 01b 드리프트 확정).
 //
-// D-1 순수성(homeStructure): 네트워크·쿼리·라우팅 계층 심볼을 import 하지 않는다 — 라우팅은
+// 순수성: 네트워크·쿼리·라우팅 계층 심볼을 import 하지 않는다 — 라우팅은
 // 라우트/페이지가 진다. `Image` 만 홈 픽스처(homeFixtures)와 같은 방식으로 쓴다(에셋 uri 변환).
 
 import { Image } from 'react-native';

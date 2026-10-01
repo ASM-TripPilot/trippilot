@@ -286,7 +286,7 @@ describe('월 네비 chevron — prev/next 가 뒤바뀌지 않는다', () => {
  * rem 이라 NativeWind 네이티브에서 1rem=14px 로 계산돼 원(31.5)과 띠(top 3.5)의 세로 중심이 어긋났다.
  * Figma `3627:2068`: 셀 44 안에 띠 `h-[36px] top-[4px]`, 원 `36×36`(4+36+4=44).
  * 실제 세로 중심이 맞는지는 픽셀이라 jest 사각 — 여기선 rem 유틸이 빠지고 px 값이 들어갔는지까지만 본다.
- * 시작·끝 반쪽 띠는 testID 가 없어 `periodEditSheetStructure` g5(소스 스캔)가 맡는다.
+ * 시작·끝 반쪽 띠는 testID 가 없어 jest 사각이다(맡던 소스 스캔 `periodEditSheetStructure` g5 는 TRIP-1145 로 지웠다).
  */
 describe('AC-B1 · 띠·원은 rem 유틸 없이 36/4 px 고정 (TRIP-1045)', () => {
   /** className 을 공백으로 쪼갠 토큰 — 부분 문자열 비교면 `h-9` 가 `h-90` 에도 걸린다. */

@@ -25,7 +25,7 @@ import type {
  * 성공 시 그 날 방문 기록을 무효화(재조회)하고, 실패 시엔 무효화하지 않는다 — 재요청이 롤백을
  * 덮으면 "되돌렸나"를 관측할 수 없다(savedPlaces 규율).
  *
- * ★ liveTimeStructure 가드(features/execution/**): `new Date` 류 금지. 낙관 레코드의 arrivedAt/
+ * ★ BR-U4-34(features/execution/**, 기계 강제 없음): `new Date` 류 금지. 낙관 레코드의 arrivedAt/
  * completedAt 은 서버 응답 도착 시 재조회로 대체되는 임시값이라, 시계 대신 `day` 기반 문자열을 쓴다.
  *
  * TRIP-1021 · 연타 가드 — 같은 슬롯(키 없으면 poi)의 도착 요청이 진행 중이면 두 번째 호출은 요청 없이

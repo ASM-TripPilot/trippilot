@@ -15,8 +15,8 @@ import {
  *    (AC-2), 후자만 오류 표시 + 전송 금지다(AC-4).
  *  - 천단위 구분을 **직접 삽입한 정규식**으로 찍는다. `toLocaleString`/`Intl`은 쓰지 않는다
  *    — 테스트는 node, 앱은 Hermes에서 돌아 로케일 서식이 갈릴 수 있고 **그 갈림을 테스트가
- *    원리적으로 못 본다**(`formatPrice.ts` 선례 · 01b D5). 그 금지는 렌더로 관찰할 수 없어
- *    `src/__tests__/tripBudgetStructure.test.ts`가 소스 층에서 따로 잠근다.
+ *    원리적으로 못 본다**(`formatPrice.ts` 선례 · 01b D5). 그 금지는 렌더로 관찰할 수 없고,
+ *    소스 층에서 잠그던 `tripBudgetStructure` 는 TRIP-1145 로 지웠다(QA 몫).
  *
  * > *(개념)* **판별 유니온(discriminated union)** — `kind`라는 공통 꼬리표 하나로 갈래를
  * > 구분하는 타입. `null`을 돌려주고 "없음인지 오류인지"를 호출부가 다시 추측하게 하는 대신,

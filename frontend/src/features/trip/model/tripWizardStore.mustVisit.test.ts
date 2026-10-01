@@ -18,8 +18,8 @@ import { useTripWizardStore } from './tripWizardStore';
  * 불변식은 **순수 함수 하나에만** 걸려 있고 이 setter 는 누구나 부를 수 있다.
  *
  * ⚠️ 이 스토어 파일에 서버 DTO 이름(`SavedPlace`·`savedPlaceId`·`savedAt`·`savedCount`·
- * `dataStatus`)이 들어가면 `src/__tests__/savedPlacesStructure.test.ts` 가 즉시 red 를 낸다 —
- * 그 가드는 `tripWizardStore.ts` 를 **이름째** 감시한다(frontend/README.md §66). 그래서 시드
+ * `dataStatus`)이 들어가면 frontend/README.md §66(서버 DTO 를 스토어에 복사하지 않는다) 위반이다 —
+ * 이를 잡던 `savedPlacesStructure` 는 TRIP-1145 로 지웠다. 그래서 시드
  * 항목은 서버 응답이 아니라 `MustVisitSeedItem`(자체 뷰모델)이다.
  *
  * 3동작 뼈대: 준비=스토어 상태 만들기 → 실행=액션 호출 → 단언=`getState()` 값.

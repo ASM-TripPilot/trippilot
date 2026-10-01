@@ -187,8 +187,8 @@ describe('🔴 MagazineScreen — INV-3 시간 미표시 (TRIP-700 AC-4)', () =>
     render(<MagazineScreen {...MAGAZINE_PROPS} />);
 
     // 필터 칩·해시태그·카피만 쓴다 — 거리도 소요시간도 없다. 정규식 부분매치라 리프 어디에 있어도
-    // 잡히고, queryAllByText 는 다중매치라도 [] 반환(throw 안 함). 소스 절반은 homeStructure D-2 가
-    // features/home 재귀 스캔으로 자동 편입해 잠근다(이 렌더 단언과 이중).
+    // 잡히고, queryAllByText 는 다중매치라도 [] 반환(throw 안 함). 소스 절반이던 homeStructure D-2
+    // 재귀 스캔은 TRIP-1145 로 지웠다 — 이 렌더 단언이 남은 그물.
     expect(screen.queryAllByText(/소요|\d+\s*분|\d+\s*시간/)).toHaveLength(0);
   });
 });

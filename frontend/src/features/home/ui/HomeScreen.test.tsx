@@ -211,7 +211,7 @@ describe('🔴 HomeScreen — 생성 사진 배선 (TRIP-694 AC-5)', () => {
   it('히어로·컬렉션·스팟 카드가 Image 로 렌더된다(플레이스홀더 View 대체)', () => {
     // 테스트는 에셋을 require 하지 않는다 — Image 엘리먼트 렌더 자체만 잠근다(source uri 가
     // jest 에서 null 이어도 Image 노드는 그려짐, h11 선례). 에셋 부재라도 red 는 "Image 미렌더"
-    // 라는 정상 red 다(★F-6). 크래시 안전망은 기존 devPreviewHome.test.tsx 가 겸한다.
+    // 라는 정상 red 다(★F-6). (옛 크래시 안전망 devPreviewHome 은 TRIP-1145 로 지웠다.)
     render(<HomeScreen {...HOME_DEFAULT_PROPS} />);
 
     // red-first — 현재 히어로/카드는 bg-surface-strong View 만 있어 Image 0개.
@@ -238,7 +238,7 @@ describe('🔴 HomeScreen — 여행자 일정 섹션 default 제거 (TRIP-694 A
 
     // 부정(red-first) — 여행자 일정 섹션 흔적 3종이 discovery 에서 사라진다. 현재 DiscoveryBody
     // 가 ItinerariesSection 을 렌더(HomeScreen L814)해 셋 다 present → red. ItinerariesSection
-    // 컴포넌트 정의·타입·planning/collecting 얼굴은 유지되므로 homeStructure 소스 스캔은 green.
+    // 컴포넌트 정의·타입·planning/collecting 얼굴은 유지된다.
     expect(screen.queryByText('여행자 일정')).toBeNull();
     expect(screen.queryByTestId('home-itineraries-more')).toBeNull();
     expect(screen.queryByTestId('home-itinerary-card-0')).toBeNull();

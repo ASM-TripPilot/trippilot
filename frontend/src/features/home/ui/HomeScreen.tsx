@@ -1,6 +1,6 @@
 /**
  * a01-home "발견·영감 피드" 프레젠테이션 화면 (TRIP-316 · 라이브 Figma 2091:1357 정합, 3상태).
- * props(hero·sections)만 받는다 — 네트워크·라우팅을 전혀 모른다(homeStructure D-1이 기계 강제).
+ * props(hero·sections)만 받는다 — 네트워크·라우팅을 전혀 모른다(기계 강제 없음).
  * 배선 CTA 3종(FAB·담은 곳·뜨는 장소 더보기)은 넘겨받은 콜백 prop만 발화하고(라우터 무지, D-1),
  * 목적지 없는 컨트롤은 accessibilityRole="button"을 떼 접근성 트리에서 버튼이 아니다(TRIP-370).
  *
@@ -150,7 +150,7 @@ function GreetingHeader({
 // ── 검색바(가짜 — Pressable+Text, 실 TextInput 아님 · 02a §4-8) ──────────
 // TRIP-453: 검색바가 목적지(/explore/search)를 얻어 배선 컨트롤이 됐다 — role="button"은 콜백
 // 유무로 파생하지 않고 항상 붙인다(버튼-집합 테스트가 콜백 미주입으로 렌더, FAB 선례). 라우팅은
-// 라우트(`(tabs)/index.tsx`)가 지고 화면은 넘겨받은 onPress만 발화한다(homeStructure D-1).
+// 라우트(`(tabs)/index.tsx`)가 지고 화면은 넘겨받은 onPress만 발화한다.
 function SearchBarBlock({ onPress }: { onPress?: () => void }): ReactElement {
   return (
     <View className="w-full px-lg pb-[14px] pt-[4px]">
@@ -465,8 +465,7 @@ function CollectionsSection({
 }: {
   sections: HomeSections;
   /** 컬렉션 헤더 카피. 미지정이면 기본 "요즘 사람들이 담는 곳"(discovery), planning 은 지역
-   *  카피("부산에서 담을 만한 곳")를 주입(TRIP-696 파라미터화 — 기본값 문자열은 homeStructure
-   *  긍정 앵커라 소스에 남는다). */
+   *  카피("부산에서 담을 만한 곳")를 주입(TRIP-696 파라미터화). */
   title?: string;
 }): ReactElement {
   return (
@@ -822,7 +821,7 @@ function CountBadge({
 // 누르면 두 미니 FAB 으로 펼쳐진다: 담은 장소(위치핀→d02) · 저장한 숙소(가방→e04). 열리면
 // 하트가 X(닫기, 핑크)로 바뀐다. 각 미니 FAB 우상단엔 담긴 개수 배지(count≥1일 때만, TRIP-695).
 // 배후 backdrop 은 HomeScreen 레벨로 올라갔다(+ FAB 도 덮게, AC-3 z-order). 열림 상태·개수·목적지는
-// 라우트가 소유해 prop 으로 내린다(화면 useState 0건 — homeStructure 순수성, 탐색 랜딩과 동형).
+// 라우트가 소유해 prop 으로 내린다(화면 useState 0건 — 순수 화면, 탐색 랜딩과 동형).
 function SavedMenuFab({
   open,
   onToggle,

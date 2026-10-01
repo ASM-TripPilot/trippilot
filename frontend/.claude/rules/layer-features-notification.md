@@ -4,7 +4,7 @@ paths:
 ---
 # `src/features/notification/` — l02 알림 설정 + l01 알림함 표면
 
-**경계**: 이 폴더는 다른 `features/*`를 import할 수 없다 — eslint 층 zone(전 feature 강제)과 `notificationStructure.test.ts`(`features/notification/**` 재귀 소스 스캔)가 이중으로 막는다. 새 파일은 자동으로 스캔 대상이 된다.
+**경계**: 이 폴더는 다른 `features/*`를 import할 수 없다 — eslint 층 zone(전 feature 강제)이 막는다. `require()` 문자열은 zone 밖이다.
 
 | 파일 | 역할 |
 |---|---|

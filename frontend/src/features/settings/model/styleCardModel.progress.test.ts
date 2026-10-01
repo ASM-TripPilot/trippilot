@@ -18,8 +18,8 @@ import { buildStyleCardModel } from './styleCardModel';
  *  - 🔴 **고정 예제**: progress 가 없는 미달 envelope 하나로 두 쪽이 모두 "현재 0곳"임을 눈으로 보인다.
  *
  * 왜 이 모양인가: j05 페이지는 jest 로 렌더하지 않는다(훅·라우터 배선). 그래서 "페이지는 공유 함수를
- * 부르고 progress 를 직접 읽지 않는다"는 구조 가드(`entitiesStyleAnalysisStructure` G8)가 모양을 잠그고,
- * 이 파일은 "요약카드 결과 = 공유 함수 결과"를 행동으로 잠근다. 둘이 겹쳐야 대칭이 된다.
+ * 부르고 progress 를 직접 읽지 않는다"를 잠그던 구조 가드(`entitiesStyleAnalysisStructure` G8)는 TRIP-1145 로 지웠다.
+ * 이 파일은 "요약카드 결과 = 공유 함수 결과"를 행동으로 잠근다.
  *
  * 커버하지 않는 것: 판정(kind) 동치는 `styleCardModel.face.test.ts`, 폴백 값 자체(0/10)는
  * `entities/style-analysis/lib/styleProgress.test.ts`, envelope 자체 null 은 범위 밖.

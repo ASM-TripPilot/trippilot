@@ -20,8 +20,8 @@ import {
  *  - AC-5(화면 절반) ＋ press → `onPressCreateTrip` 콜백(라우팅은 라우트 몫)
  *  - AC-6 여행자 일정 레인 제거
  *
- * 무엇을 보장하나: 화면은 props-only 순수 컴포넌트다(`placeExploreStructure` 재귀 스캔이
- * 훅·라우터·`@/features/stay` 를 0건 강제). 그래서 목 없이
+ * 무엇을 보장하나: 화면은 props-only 순수 컴포넌트다(그것을 강제하던 `placeExploreStructure`
+ * 재귀 스캔은 TRIP-1145 로 지웠다). 그래서 목 없이
  * `render(<ExploreLandingScreen {...props} />)` 로 표면을 직접 잰다(cardPress·placePhoto 선례).
  * 라우터 실배선(`/trips/new/step1`)·검색바 그림자·FAB 픽셀 위치는 이 층 사정거리 밖이다
  * (각각 `tabsExploreRoute.test.tsx` 라우트 테스트 · 6-b 육안).

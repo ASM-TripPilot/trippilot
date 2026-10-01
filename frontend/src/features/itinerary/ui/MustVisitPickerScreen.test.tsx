@@ -49,7 +49,7 @@ import { MustVisitPickerScreen } from './MustVisitPickerScreen';
 // 환경에서 무조건 `map-failure` 로 떨어져 `pins` 가 어디로도 흐르지 않는다 — 그래서 prop-기록형
 // 목(`map-root` 에 좌표·핀을 노출)으로 대체해 "핀이 손대지 않은 채 지도에 도달한다"를 관찰한다.
 // ⚠️ 구현이 `@/shared/map/MapView` 로 딥 임포트하면 이 목이 안 붙는다 —
-//    `itineraryMustVisitStructure.test.ts` C39 가 배럴(`@/shared/map`) 경유를 따로 잠근다.
+//    배럴(`@/shared/map`) 경유를 잠그던 `itineraryMustVisitStructure` C39 는 TRIP-1145 로 지웠다.
 // (구 주석의 `KakaoMapView`·`MustVisitPickerScreen.map.test.tsx` 는 낡았다 — 카카오는 네이버로
 //  전환됐고 그 별 지도 심판 파일은 리포에 실존한 적이 없다, repo-traps 참고.)
 // 인라인 팩토리로 두면 NativeWind babel 의 `_ReactNativeCSSInterop` 참조가 jest 호이스트 규칙을
@@ -756,8 +756,8 @@ describe('🔴 C-AC14 · AC-14 — 다시 시도는 빨강 아웃라인이고 �
     ).toBe(true);
 
     // 🔴 상단 원형 배지(StateNotice 의 `bg-primary-pale` 72px 원)가 없다 — 로컬 블록이라 배지 없음.
-    //    글리프(AlertCircleGlyph) 자체의 부재는 itineraryMustVisitStructure C41(소스)이 잠근다
-    //    (SVG 는 className/testID sink 라 렌더가 못 본다). 여기 배열은 문자열이라 toEqual 안전.
+    //    글리프(AlertCircleGlyph) 자체의 부재를 잠그던 itineraryMustVisitStructure C41(소스)은
+    //    TRIP-1145 로 지웠다(SVG 는 className/testID sink 라 렌더가 못 본다). 여기 배열은 문자열이라 toEqual 안전.
     const failed = screen.getByTestId('itinerary-mustvisit-screen-failed');
     expect(
       classNamesUnder(failed).filter((cls) => hasToken(cls, 'bg-primary-pale'))

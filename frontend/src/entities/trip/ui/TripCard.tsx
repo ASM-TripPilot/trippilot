@@ -26,7 +26,7 @@ export interface TripCardProps {
   testIDPrefix: string;
   /** TRIP-1055 · 주어지면 ⋯ 버튼을 그린다(삭제 가능 판정은 소비처 몫). */
   onPressDelete?: () => void;
-  /** 메뉴 열림 — 카드는 상태를 못 가져(entitiesTripStructure G0) 소비처가 쥔다. */
+  /** 메뉴 열림 — 카드는 상태를 갖지 않아 소비처가 쥔다. */
   menuOpen?: boolean;
   onPressMenu?: () => void;
 }

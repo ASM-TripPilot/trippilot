@@ -19,7 +19,7 @@ import { ReplanRequestSheet } from './ReplanRequestSheet';
  *  - 방향 11종(key·라벨·순서), 입력 1줄, 스크림·끌어 닫기 → onClose.
  *  - 삭제된 배너·범위 밖 안내·[직접 고르기]의 testID 가 트리에 없다.
  *
- * 삭제 testID 는 조립한다 — 리터럴이면 `planbRequestSheetStructure` R3 가 이 파일을 잡는다(02a ★3).
+ * 삭제 testID 는 조립한다 — 옛 소스 스캔 `planbRequestSheetStructure` R3 를 피하려던 것이다(TRIP-1145 로 지움, 02a ★3).
  * 통과형 바텀시트 목이라 실제 딤 커버·끌어 닫기는 jest 사각(02a ★1, AC-V2 실기).
  */
 

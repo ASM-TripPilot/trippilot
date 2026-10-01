@@ -18,8 +18,8 @@ import { StayRegisterScreen } from './StayRegisterScreen';
  * 않는다**(AC-3 — 서버 400에 의존하면 위반). 화면은 무상태라 상태를 직접 주입할 수 있어,
  * 실제 조작으로는 도달하기 어려운 조합도 여기서 만든다. 날짜 입력은 TRIP-1052에서 사라졌다(R-13).
  *
- * 렌더로 못 보는 소스 층(FSD 경계·raw hex·testID 존재)은 `stayRegisterStructure.test.ts`가
- * 맡는다 — 이 파일은 렌더 결과만 본다(선례 `StaySearchScreen.states.test.tsx` 계승).
+ * 렌더로 못 보는 소스 층(FSD 경계·raw hex·testID 존재)을 보던 `stayRegisterStructure`는
+ * TRIP-1145 로 지웠다 — 이 파일은 렌더 결과만 본다(선례 `StaySearchScreen.states.test.tsx` 계승).
  *
  * 지도는 목으로 바꾼다(02a ★5·★6): 실제 `KakaoMapView`는 jest 환경에 카카오 JS 키가 없어
  * 항상 실패 표면으로 떨어지므로 `center`가 어디로도 흐르지 않는다. 목이 좌표를 텍스트로

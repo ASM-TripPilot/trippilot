@@ -97,7 +97,7 @@ function PlanningHome({
 }
 
 // 홈 page — CTA 라우팅(TRIP-370)에 더해 GET /trips 실데이터로 여행 유무를 판정한다(TRIP-371).
-// HomeScreen 은 서버·라우터를 모르는 순수 화면(homeStructure D-1)이라, 조회·판정·라우팅은 이
+// HomeScreen 은 서버·라우터를 모르는 순수 화면이라, 조회·판정·라우팅은 이
 // page 만 물고 화면엔 phase/콜백만 내린다(ExploreLandingPage 선례). 라우트 `(tabs)/index.tsx` 는
 // 이 page 를 꽂기만 한다(TRIP-1142).
 //

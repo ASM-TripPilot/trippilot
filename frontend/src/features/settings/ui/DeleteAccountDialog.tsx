@@ -31,7 +31,7 @@ export function DeleteAccountDialog({
 }: {
   onCancel: () => void;
   onConfirmDeletion: () => void;
-  /** `_dev/preview` 전용(2단 얼굴 키). 프로덕션은 넘기지 않는다 — `deleteAccountDialogGate.test.ts` 가 잠근다. */
+  /** `_dev/preview` 전용(2단 얼굴 키). 프로덕션은 넘기지 않는다 — eslint `no-restricted-syntax`(`DELETE_DIALOG_GATE`, .tsx 의 별칭 import 포함)가 막는다. 사각: createElement · .ts 파일의 별칭 import · 별칭 재수출 · 네임스페이스 태그(`<S.DeleteAccountDialog>`). */
   initialStep?: 'confirm1' | 'confirm2';
 }): ReactElement {
   const [step, setStep] = useState<'confirm1' | 'confirm2'>(initialStep);

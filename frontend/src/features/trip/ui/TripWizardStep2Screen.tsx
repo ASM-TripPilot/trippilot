@@ -44,9 +44,8 @@ const EDIT_TITLE = '거점 숙소 바꾸기';
 const UNASSIGNED_STAY_LABEL = '숙소 미정';
 
 /** 단일 거점 카드 그림자(Figma `0 2 10 rgba(0,0,0,.06)`, g01 `SUMMARY_CARD_SHADOW` 동값 로컬 사본).
- * `shadowColor` 는 `#000000` 이 아니라 동값 색 이름 `'black'` — 이 화면 `.tsx` 는 raw-hex 가드
- * (tripWizardStep2Structure AC-7) 사정거리라 `#…` 리터럴이 들어오면 RED 다(g01 은 그 가드가 없어
- * hex 인라인이 통과할 뿐이다). */
+ * `shadowColor` 는 `#000000` 이 아니라 동값 색 이름 `'black'` — 옛 raw-hex 소스 스캔을
+ * 피하려던 선택이다(스캔은 TRIP-1145 에서 지웠다). */
 const BASE_CARD_SHADOW = {
   shadowColor: 'black',
   shadowOffset: { width: 0, height: 2 },

@@ -6,7 +6,7 @@ import { MagazineScreen } from '@/features/home/ui/MagazineScreen';
 
 /**
  * a02 매거진 목록 컨테이너(TRIP-700). 순수 화면 MagazineScreen 은 서버·라우터를 모르므로
- * (homeStructure D-1) 선택 상태·항법은 이 페이지가 진다:
+ * 선택 상태·항법은 이 페이지가 진다:
  *  - selectedChip 을 useState 로 소유해 칩 press 로 하이라이트를 옮긴다(시각 전용 선택 — 카드는
  *    거르지 않는다, 01b Q4). 순수 화면만으론 "onSelectChip 발화"까지고, 선택이 눈에 보이게
  *    이동하는지는 이 컨테이너가 상태를 소유해야 성립한다(magazineRoute 라운드트립이 잠근다).

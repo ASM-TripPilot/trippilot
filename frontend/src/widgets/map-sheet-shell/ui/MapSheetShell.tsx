@@ -30,14 +30,13 @@ export type { ItineraryDaysItemSlotsItem } from '@/entities/itinerary-slot/model
 /**
  * TRIP-783 · h공통 지도+시트 셸(widgets) — h·i 밴드 지도 결과 화면들이 공유하는 골격. 전면 지도(`<MapView viewOnly>`, 시트 뒤 형제) + 좌상단 일차 칩 오버레이 +
  * 3스냅 바텀시트(닫힘·peek·펼침, `header`·`children`) + 하단 고정 CTA 바를 **조립만** 한다. 시각·합산 같은
- * 판단은 전부 소비처로 밀어냈다(셸은 받은 ReactNode·문자열·콜백만 배치한다). 예외 둘 — 셸이 상태를 쥔다
- * (widgetsStructure F 예외 등재): ① 지도 로드 실패(TRIP-919) — 소비처 배선 없이 폴백을 얻게 하려고.
+ * 판단은 전부 소비처로 밀어냈다(셸은 받은 ReactNode·문자열·콜백만 배치한다). 예외 둘 — 셸이 상태를 쥔다: ① 지도 로드 실패(TRIP-919) — 소비처 배선 없이 폴백을 얻게 하려고.
  * ② 시트가 멈춘 칸(TRIP-920) — 기본 배열의 닫힘(0번)에서만 지도 잠금을 풀고 CTA 바를 뺀다.
  *
  * ⚠️ 원리적 사각(6-b 실기 전용): 스냅 실개폐·딤·`enableContentPanningGesture`(E6) 는 `@gorhom/
  * bottom-sheet` 통과형 목이, 지도 제스처·타일은 네이버 목이 못 본다. 지도는 시트 **뒤 형제**로 두어
  * (시트 콘텐츠 안에 넣지 않아) 제스처 삼킴을 구조로 피한다(E7). jest 는 `map-root`·children·testID
- * 트리만 관측하고, `viewOnly` 실전달은 `itineraryMapSurfaceStructure` S2 소스 스캔이 잠근다.
+ * 트리만 관측하고, `viewOnly` 실전달은 심판이 없다(소스 스캔은 TRIP-1145 에서 지웠다).
  */
 
 // 기본 3스냅(닫힘 28 / peek ≈ 45% / expanded ≈ 88%) — 라이브러리 규칙상 낮은 높이부터 오름차순.
@@ -105,8 +104,7 @@ export interface MapSheetShellProps<T = unknown> {
    *  기본 3스냅 `SNAP_POINTS`. 직접 주면 "0번 = 닫힘" 규칙(지도 풀림·CTA 숨김)이 적용되지 않는다. */
   snapPoints?: (string | number)[];
   /** 지도 잠금 여부(TRIP-746 가산) — 미전달이면 기본 잠금, 기본 배열의 닫힘 칸에서만 풀림(TRIP-920). i01 허브만
-   *  `false` 로 열어 여행 중 자유 탐색을 유지한다(TRIP-397 결정 계승, `itineraryMapSurfaceStructure`
-   *  S2b 가 소비처를 잠근다). */
+   *  `false` 로 열어 여행 중 자유 탐색을 유지한다(TRIP-397 결정 계승). */
   mapViewOnly?: boolean;
   /** 현재위치 점(TRIP-746 가산) — `<MapView currentLocation>` 으로 흘린다(TRIP-745 계약). 미전달이면
    *  점 없음. */
@@ -169,8 +167,7 @@ export function MapSheetShell<T = unknown>({
   // 지도 로드 실패(TRIP-919). 폴백 중엔 MapView 가 트리에서 빠지므로, 재시도로 이 값을 풀면 MapView 가
   // 새 인스턴스로 다시 마운트돼 실패 알림(notifiedRef)도 처음부터 다시 돈다 — 별도 key 가 필요 없다.
   const [mapFailed, setMapFailed] = useState(false);
-  // 이름 붙인 핸들러 — `<MapView>` 태그 안에 `=>` 를 두면 itineraryMapSurfaceStructure 의 태그
-  // 정규식이 첫 `>` 에서 잘려 viewOnly 를 못 본다.
+  // 이름 붙인 핸들러 — `<MapView>` 태그를 짧게 유지한다(옛 소스 스캔 정규식 대응의 흔적).
   const handleMapLoadFailed = () => setMapFailed(true);
   const handleMapRetry = () => setMapFailed(false);
   // 진입 칸 — 기본 진입값(peek)은 기본 배열에만. 직접 준 배열(i05)로 새면 그 소비처가 펼침으로 열린다.

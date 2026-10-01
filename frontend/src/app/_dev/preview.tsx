@@ -222,13 +222,13 @@ import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
  * 끌고 온다. 이 리포의 node 버킷은 `--experimental-vm-modules` 로 도는데, 그 아래에서 CJS
  * `require()` 로 "type":"module" 패키지를 불러오면 Node 가 `ERR_REQUIRE_ESM` 을 던진다 —
  * 정적 import 로 쓰면 이 throw 가 모듈 로드 자체를 깨뜨려 잡을 수 없다.
- * 동결 devPreview.test.tsx 는 expo-router 를 목 없이 렌더하므로 이 경로를 그대로 밟는다.
+ * expo-router 를 목 없이 렌더하는 테스트는 이 경로를 그대로 밟는다.
  *
  * 그래서 require 를 함수 호출로 명시적으로 늦춰 try/catch 로 감싼다 — 이건 **모듈 로드
  * 시점**(컴포넌트 렌더 밖)에서 딱 한 번만 실행되므로 Hooks 규칙(매 렌더 동일 순서)과
  * 무관하다: 컴포넌트 안에서는 아래 변수를 **항상** 호출하기만 한다.
  *  - 목이 있으면(딥링크 테스트) require 가 목 객체를 돌려주므로 실제 훅을 그대로 쓴다.
- *  - 목이 없고 실패하면(동결 devPreview.test) 파라미터 없음과 동일한 더미로 폴백한다
+ *  - 목이 없고 실패하면 파라미터 없음과 동일한 더미로 폴백한다
  *    — 크래시 없이 splash 로 떨어지는 함정 #3 계약의 근거.
  */
 let useDevPreviewSearchParams: () => { state?: string | string[] };
@@ -261,7 +261,7 @@ try {
  * (frontend/README.md L54). 네트워크를 타는 것은 컨테이너·훅이고, 프리뷰는 그것을 건너뛴다.
  *
  * 제약: `@/shared/api`·컨테이너·훅을 값으로 import 하면 안 된다 — 그 순간 프리뷰가
- * 네트워크 계층을 그래프로 끌고 온다(devPreview.test.tsx 의 지뢰 목이 즉시 터진다).
+ * 네트워크 계층을 그래프로 끌고 온다(프리뷰 스모크 `devPreviewReleaseGate.test.tsx` 의 지뢰 목이 즉시 터진다).
  */
 
 // 프리뷰는 보기 전용이라 화면이 요구하는 콜백을 전부 빈 함수로 채운다.
@@ -2350,7 +2350,7 @@ const NOTIFICATION_INBOX_PREVIEW_SECTIONS: NotificationSection[] = [
   },
 ];
 
-// AC-6 데이터 무결성 테스트(devPreviewBandNav)가 이 배열을 순수 데이터로 import 한다 → named export.
+// 프리뷰 스모크(devPreviewReleaseGate)가 이 배열을 순수 데이터로 import 한다(키 중복 0) → named export.
 export const PREVIEW_STATES: PreviewState[] = [
   { key: 'splash', band: 'c', label: 'c01 · 기본', login: null },
   {
@@ -4567,7 +4567,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     },
   },
   // h02 꼭 갈 곳 (TRIP-785) — Figma 대조용 격리 렌더. default→loading→error 순으로 삽입해
-  // (안정 정렬 = 배열 위치) devPreviewBandSort EXPECTED_H 의 h02 3키 순서를 맞춘다.
+  // (안정 정렬 = 배열 위치) h02 3키 순서를 맞춘다.
   {
     key: 'h02-mustvisit-default',
     band: 'h',
@@ -4749,7 +4749,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   // h08 지도+시트 셸 펼침(TRIP-792) — Figma `4224:2448` 대조용. 접힘 조립을 그대로 복제하고
   // `initialIndex={2}` 만 더해 시트가 상단 스냅까지 열린 얼굴을 낸다(스냅 실개폐는 통과형 목
   // 사각이라 6-b 실기가 유일한 개폐 그물). 배열에서 collapsed 바로 뒤에 둬 안정 정렬이
-  // collapsed→expanded 순서를 내게 한다(devPreviewBandSort EXPECTED_H).
+  // collapsed→expanded 순서를 내게 한다.
   {
     key: 'h08-draft-expanded',
     band: 'h',
@@ -4871,8 +4871,8 @@ export const PREVIEW_STATES: PreviewState[] = [
   // h11 같이 결과(CoPick 완료, TRIP-796) — Figma `4257:2148` 대조용. 공용 지도+시트 셸에 CoPick 5슬롯
   // (비고정 4 + 고정 숙소 1)을 얹는다. 고정 숙소는 단일 시각 `21:00`+부제+고정 배지, 비고정은 시각
   // 범위 칩만(다른 후보 링크 없음 · h08 과 차이). meta 는 비고정 4 → `4/4 골랐어요`. 배열에서 fallback
-  // 3키 **직전**(h11 그룹 첫 자리)에 둬 안정 정렬이 copick→fallback 순서를 내게 한다(devPreviewBandSort
-  // EXPECTED_H · 02a ★13). 3스냅 실개폐·딤은 통과형 목 사각이라 6-b 실기가 유일한 개폐 그물.
+  // 3키 **직전**(h11 그룹 첫 자리)에 둬 안정 정렬이 copick→fallback 순서를 내게 한다
+  // (02a ★13). 3스냅 실개폐·딤은 통과형 목 사각이라 6-b 실기가 유일한 개폐 그물.
   {
     key: 'h11-copick-complete',
     band: 'h',
@@ -4994,7 +4994,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   // 동선)+메시지 카드+체크리스트 4행(3행만 대시·회색)+안내바+CTA 2개. props-only 순수 화면이라
   // 픽스처+noop 콜백 한 벌로 충분. 초록 체크·회색 대시의 **색**은 jest 사각(글리프 raw-hex 제외)
   // 이라 이 키가 유일한 육안 그물. 배열에서 h07-generating-loading 직후에 둬 안정 정렬이
-  // loading→fallback→fallback-failed 순서를 내게 한다(devPreviewBandSort EXPECTED_H). 지도 핀은
+  // loading→fallback→fallback-failed 순서를 내게 한다. 지도 핀은
   // 배선(DraftPage)과 같은 `buildDraftPins` 로 얻는다 — 손으로 적으면 프리뷰와 실기가 갈린다.
   {
     key: 'h07-generating-fallback',
@@ -5063,7 +5063,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   // h14 완성 일정(PLANNED, TRIP-799) — 옛 h25 TimelineScreen PLANNED 프리뷰 4키를 지도+시트 셸 4얼굴로
   // 교체(D7). PLANNED 는 이제 셸이라 실화면 딥링크로도 이 얼굴을 보려면 백엔드 응답이 필요해, 여기가
   // 4얼굴을 정적으로 대조하는 자리다. 4얼굴은 별 화면이 아니라 같은 셸의 데이터 분기다.
-  // 배열 삽입 순서(default→distance-pending→map-fallback→no-base)가 devPreviewBandSort EXPECTED_H 의
+  // 배열 삽입 순서(default→distance-pending→map-fallback→no-base)가
   // h14 안정 정렬 순서를 정한다(같은 h14 코드라 배열 위치=정렬 위치, 02a ★14).
   {
     key: 'h14-plan-default',
@@ -5142,7 +5142,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   // 내 여행 목록 · h05/h06(TRIP-788) — 배열 순서 background→done-bar→loading→empty(안정 정렬 =
-  // devPreviewBandSort EXPECTED_H 위치). background 는 완성(사진)·생성중·초안·미도착 4카드 + "최신순"
+  // 배열 위치). background 는 완성(사진)·생성중·초안·미도착 4카드 + "최신순"
   // 라벨, done-bar 는 그 목록 위에 완료 도킹 배너를 얹는다. 배지 pill·resume 오버레이·사진 자리·배너
   // 절대배치·체크 색은 jest 사각(6-b 전용).
   {
@@ -6796,7 +6796,7 @@ export default function DevPreviewScreen() {
 
 function DevPreviewBody() {
   // useLocalSearchParams: expo-router 훅 — 현재 화면 URL 의 쿼리 문자열을 객체로 돌려준다.
-  // 라우터 컨텍스트가 없어도(동결 devPreview.test) 빈 객체를 돌려주도록 expo-router 가
+  // 라우터 컨텍스트가 없어도(expo-router 목 없는 테스트) 빈 객체를 돌려주도록 expo-router 가
   // 보장한다 — 그래서 목 없이 렌더해도 크래시 없이 기존 초기 상태(splash)로 떨어진다.
   const { state: rawState } = useDevPreviewSearchParams();
   // 지연 초기화자(() => ...)는 최초 렌더에서 딱 한 번만 실행된다 — 그래서 딥링크는

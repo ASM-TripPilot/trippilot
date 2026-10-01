@@ -14,7 +14,7 @@ import { GeneratingPage } from './GeneratingPage';
  * 역사: TRIP-835 는 "일정이 처음 생긴 순간" 권한을 묻게 했다(이 파일의 G1·G2·G5 가 1회를 단언했다).
  * QA 5회차에서 생성 화면 위로 설명 없는 OS 창이 튀어나와, TRIP-1108 이 묻는 자리를 온보딩 사전 안내
  * 카드(location → push → pref1)로 옮겼다. 이 파일은 지우지 않고 단언을 **0회로 뒤집어** 금지 그물로 남긴다
- * (지우면 "생성 중엔 묻지 않는다"를 지키는 행위 심판이 사라진다 — 소스 스캔 onboardingPushStructure 와 이중 그물).
+ * (지우면 "생성 중엔 묻지 않는다"를 지키는 행위 심판이 사라진다 — 짝이던 소스 스캔 onboardingPushStructure 는 TRIP-1145 로 지워 이 파일이 남은 그물).
  *
  * 무엇을 보장하나:
  *  - 생성 POST 가 성공해도 `promptAndRegisterPush()` 0회(FULLY_AI·CO_PLAN 공통), 마이크로태스크를 흘린 뒤에도 0회.

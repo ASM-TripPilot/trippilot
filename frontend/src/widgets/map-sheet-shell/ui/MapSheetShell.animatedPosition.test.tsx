@@ -8,7 +8,7 @@ import { MapSheetShell } from './MapSheetShell';
 /**
  * TRIP-1083 · AC-3 — 셸이 시트 위치 상자(`animatedPosition`, reanimated SharedValue)를 gorhom
  * `<BottomSheet animatedPosition>` 로 그대로 흘린다(옵셔널 additive). 값은 소비처(i01 허브)가 만들어
- * 쥐고, 셸은 상태·계산 없이 통과만 한다(Seed 1 — 셸 useState 수는 widgetsStructure 가 잠근다).
+ * 쥐고, 셸은 상태·계산 없이 통과만 한다(Seed 1 — 셸 useState 수를 잠그던 widgetsStructure 는 TRIP-1145 로 지웠다).
  *
  * 무엇을 보장하나:
  *  - 🔴 SA1 주면 시트가 **같은 상자**를 받는다(gorhom 이 매 프레임 시트 윗변 y 를 이 상자에 쓴다).

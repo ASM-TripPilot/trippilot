@@ -15,9 +15,9 @@ import { StaySearchScreen } from './StaySearchScreen';
  * 무엇을 보장하나: `StaySearchScreen`은 `region`·`items` 2개 prop만 받아(네트워크·라우팅 없음)
  * 헤더·카드 목록·필터 칩·저장 하트·탭바·FAB·상단 앱바를 그리는 순수 화면이다. 서버 순서를
  * 그대로 그리고(AC-4), 소요 시간 문자열을 어디에도 내지 않으며(AC-5 · INV-3), 필터 칩과 저장
- * 하트는 눌러도 아무것도 바뀌지 않는 정직한 스텁이다(AC-7). 소스 스캔 절반은
- * `staySearchStructure.test.ts`가 맡는다(INV-3 조건부 렌더·useState 금지 등 렌더로는 못 보는
- * 층) — 이 파일은 렌더 결과만 본다.
+ * 하트는 눌러도 아무것도 바뀌지 않는 정직한 스텁이다(AC-7). 소스 스캔 절반이던
+ * `staySearchStructure`(INV-3 조건부 렌더·useState 금지 등 렌더로는 못 보는
+ * 층)는 TRIP-1145 로 지웠다 — 이 파일은 렌더 결과만 본다.
  *
  * 픽스처 `ITEMS`의 배열 순서(30,000 → 10,000 → 20,000)는 우연이 아니다 — 가격 오름차순·이름
  * 코드포인트순·externalId순 셋 모두와 다르게 골라, AC-4가 "정렬해도 우연히 통과"하지 않게 한다
@@ -242,8 +242,8 @@ describe('StaySearchScreen — 스텁의 정직성 (AC-7)', () => {
 
     // 지문 비교 — className 변경·자식 글리프 교체 둘 다 검출한다(F-11 실측). "존재만
     // 확인"으로는 나중에 누가 useState 토글을 붙여도 못 잡는다. 사정거리 한계: 처음부터
-    // 채워진 하트로 그리는 구현은 이 렌더 단언으로는 못 잡는다 — 소스 절반
-    // (staySearchStructure.test.ts it 4-3의 useState 금지)이 다른 각도에서 막는다.
+    // 채워진 하트로 그리는 구현은 이 렌더 단언으로는 못 잡는다 — 그 각도를
+    // 막던 소스 스캔(staySearchStructure it 4-3)은 TRIP-1145 로 지웠다(QA 몫).
     expect(cardFingerprint(firstCardId)).toBe(before);
 
     expect(screen.getByTestId('stay-search-filter-price')).toBeOnTheScreen();

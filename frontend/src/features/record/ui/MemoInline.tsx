@@ -16,7 +16,7 @@ import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
  *
  * TRIP-1085 · 입력은 `BottomSheetTextInput` — 카드가 j01 셸 바텀시트 안에 있어 포커스 때 시트가 키보드 위로
  *   올라가야 한다(플레인 TextInput 이면 입력칸이 키보드에 가린다). ⚠️ 이 입력은 시트 밖에서 그리면 실기에서
- *   throw 한다(`useBottomSheetInternal`) — j01 셸 시트 안에서만 쓴다(프리뷰 포함, recordsStructure G8).
+ *   throw 한다(`useBottomSheetInternal`) — j01 셸 시트 안에서만 쓴다(프리뷰 포함 — 기계 강제 없음, 실기 스모크 몫).
  *
  * ★ maxLength 2000 은 서버 권위(`PutMemoRequest.text` 1~2000)의 **클라 UX 사본**(과입력 방지)일 뿐 —
  *   룰 판정 권위는 서버다. 공백만 무저장도 UX(무의미 PUT 방지)지 비즈니스 판정이 아니다.

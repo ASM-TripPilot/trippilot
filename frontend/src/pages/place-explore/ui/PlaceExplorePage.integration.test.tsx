@@ -822,7 +822,7 @@ describe('🔴 1026 AC-4 · 위저드 출처 d04 에서 무엇을 눌러도 진�
 });
 
 // ── TRIP-1093 결정 2 · 위저드 출처 d04 에서 위저드 진행분이 지워지는 길을 없앤다 ─────────────────
-// 위저드 출처 d04 를 여는 곳은 이제 d02 select 하나뿐이다(wizardOriginProducers 가드) — 그래서 ♥ 는
+// 위저드 출처 d04 를 여는 곳은 이제 d02 select 하나뿐이다(옛 가드 wizardOriginProducers 는 TRIP-1145 로 지웠다) — 그래서 ♥ 는
 // 새 d02(save 모드 → 「이 장소들로 여행 만들기」 = reset)를 여는 대신 한 칸 뒤(d02 select)로 돌아간다(01b Q2 A3).
 // 비위저드 ♥ 는 P-12 그대로 push 다(짝). 실제 스택이 d02 select 로 돌아가는지는 jest 가 못 본다(6-b).
 // 드래프트 리셋은 위 파일 최상위 `afterEach(resetWizardDraft)` 가 맡는다.
