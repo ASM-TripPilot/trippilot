@@ -16,6 +16,12 @@ CI·로컬 테스트 실 호출 0 — D37). 알려진 변주는 반영: 빈 목�
 객체가 아니라 빈 문자열 ""로 오는 것(tourapi와 동일 변주), fcstValue가 문자열로
 오는 것.
 
+**엔드포인트는 공공데이터포털(apis.data.go.kr, `serviceKey`)이다** — 키 종류와 짝이다.
+기상청 API허브 키(apihub.kma.go.kr, `authKey`)를 넣으면 포털은 SERVICE_KEY_IS_NOT_REGISTERED
+(HTTP 403)로 거절한다(2026-10-01 실측 — 이 사고로 날씨 보정이 매 생성 꺼져 있었다).
+팀 결정(2026-10-02): 백엔드 weather-context 와 같은 포털 키 하나로 통일. 응답 JSON 계층
+(`response.header/body.items.item[]`)은 두 엔드포인트가 같다(2026-10-02 실호출 대조).
+
 격자 변환(`latlon_to_grid`)은 기상청 LCC(Lambert Conformal Conic) 공식의 결정론
 구현 — 활용가이드 C 코드의 파라미터(지구반경 6371.00877km · 격자 5km ·
 표준위도 30°/60° · 기준점 (38°N, 126°E)=(43, 136))를 그대로 옮겼다.
@@ -24,6 +30,7 @@ CI·로컬 테스트 실 호출 0 — D37). 알려진 변주는 반영: 빈 목�
 
 from __future__ import annotations
 
+import logging
 import math
 from collections.abc import Callable, Mapping, Sequence
 from datetime import date, datetime, timedelta, timezone
@@ -41,6 +48,12 @@ _PROVIDE_LAG_MIN = 10
 # 단기예보 1개 발표분 ≈ 카테고리 12종 × 시간별 슬롯(+3일 일부) ≤ ~900건.
 # 1페이지로 전부 받는다 (호출 1건 계약) — 상한 초과분은 지평 밖으로 취급.
 _NUM_OF_ROWS = 1500
+
+_log = logging.getLogger(__name__)
+# 키·권한 오류(401/403)는 요청마다 반복되는데 폴백 로그는 INFO 라 운영에서 안 보인다 —
+# 프로세스당 첫 1회만 WARN 으로 올리고 이후는 억제한다(로그 홍수 방지).
+_AUTH_CODES = (401, 403)
+_auth_warned = False
 
 # ── 위경도 → 기상청 격자 (LCC 정격 변환, 결정론) ─────────────────────
 
@@ -95,8 +108,19 @@ def base_datetime_for(now: datetime) -> tuple[str, str]:
     return base_day.strftime("%Y%m%d"), f"{hour:02d}00"
 
 
+def _warn_auth_once(code: int) -> None:
+    global _auth_warned
+    if _auth_warned:
+        return
+    _auth_warned = True
+    _log.warning(
+        "기상청 단기예보 키·권한 오류 HTTP %s — WEATHER_API 가 공공데이터포털 "
+        "디코딩 키인지(API허브 키 아님)·활용신청 상태를 확인할 것. 날씨 보정 없이(no_adjust) 계속한다 "
+        "(이후 같은 오류는 이 프로세스에서 다시 경고하지 않음)", code)
+
+
 class KmaWeatherAdapter:
-    """WeatherPort 구현. service_key는 **디코딩 키** (urlencode는 HTTP 클라이언트 1회).
+    """WeatherPort 구현. service_key는 **공공데이터포털 디코딩 키** (urlencode는 HTTP 클라이언트 1회).
 
     `now_fn` 주입은 base_date/base_time 선택의 결정론 격리용 — 테스트는 고정 시각을
     꽂는다. 기본은 KST 현재 시각 (어댑터는 I/O 경계라 DL-3 대상 밖).
@@ -151,6 +175,9 @@ class KmaWeatherAdapter:
                 },
             )
         except Exception as e:
+            code = getattr(e, "code", None)  # urllib HTTPError
+            if code in _AUTH_CODES:
+                _warn_auth_once(code)
             raise WeatherError(f"단기예보 호출 실패: {e}") from e
 
     def hourly_forecast(
