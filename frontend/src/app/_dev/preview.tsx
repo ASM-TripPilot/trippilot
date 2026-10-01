@@ -10,11 +10,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { useAppleButton } from '@/features/auth/model/useAppleButton';
+import { useAppleButton } from '@/pages/login/model/useAppleButton';
 import {
   SocialLoginScreen,
   type SocialLoginScreenProps,
-} from '@/features/auth/ui/SocialLoginScreen';
+} from '@/pages/login/ui/SocialLoginScreen';
 import { SplashScreen } from '@/features/auth/ui/SplashScreen';
 import {
   HOME_DEFAULT_PROPS,
@@ -148,7 +148,7 @@ import { TripRecordsView } from '@/pages/trip-records/ui/TripRecordsView';
 import { ReplanSolvingView } from '@/pages/planb-draft/ui/ReplanSolvingView';
 import { SlotCandidateSheet } from '@/features/planb/ui/SlotCandidateSheet';
 import { RiskDetailSheet } from '@/features/planb/ui/RiskDetailSheet';
-import { NicknameScreen } from '@/features/onboarding/ui/NicknameScreen';
+import { NicknameScreen } from '@/pages/onboarding-nickname/ui/NicknameScreen';
 import {
   StayRegisterScreen,
   type StayRegisterScreenProps,
@@ -190,9 +190,9 @@ import {
 } from '@/features/trip/ui/TripWizardStep2Screen';
 import { BaseRegenerateDialog } from '@/features/trip/ui/BaseRegenerateDialog';
 import { TripWizardLeaveDialog } from '@/features/trip/ui/TripWizardLeaveDialog';
-import { PrefStep1Screen } from '@/features/onboarding/ui/PrefStep1Screen';
-import { PrefStep2Screen } from '@/features/onboarding/ui/PrefStep2Screen';
-import { TermsScreen } from '@/features/onboarding/ui/TermsScreen';
+import { PrefStep1Screen } from '@/pages/onboarding-pref1/ui/PrefStep1Screen';
+import { PrefStep2Screen } from '@/pages/onboarding-pref2/ui/PrefStep2Screen';
+import { TermsScreen } from '@/pages/onboarding-terms/ui/TermsScreen';
 import type { PreferenceSelection } from '@/features/settings/model/preferenceDraft';
 import { PreferencesEditView } from '@/features/settings/ui/PreferencesEditView';
 import type {

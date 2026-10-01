@@ -173,3 +173,77 @@ describe('🔴 TRIP-1023 #005 — 닉네임 머리에 뒤로 글리프가 없다
     expect(screen.queryAllByTestId(/back/).length).toBe(0);
   });
 });
+
+/**
+ * 비주얼 구조 가드 — 옛 NicknameScreen.visual.test.tsx (c07-nickname Figma 정합 1295:1208 · TRIP-162).
+ *
+ * 픽셀(타이포 크기·아이콘 tint)은 [검증] 스크린샷 대조 몫 — 여기서는 존재/부재만 본다.
+ * 긍정 상태의 권한 경계(US-ONB-03): availabilityConfirmed 는 컨테이너가 "현재 입력값 === 서버가 준/검증한 값"
+ * 으로 파생해 내려주는 값이다 — 화면은 판정하지 않고 표시만 한다(Seed 확정 4).
+ */
+describe('비주얼 구조', () => {
+  describe('NicknameScreen — 내비바·부제·필드 라벨 (AC-N4 · AC-N1)', () => {
+    it('부제 "2~20자로 입력할 수 있어요" 와 필드 라벨 "닉네임" 을 렌더한다', () => {
+      render(<NicknameScreen {...makeProps()} />);
+
+      expect(screen.getByText('2~20자로 입력할 수 있어요')).toBeOnTheScreen();
+      // 정확 일치 조회 — 내비바 "닉네임 설정" 과 겹치지 않는다.
+      expect(screen.getByText('닉네임')).toBeOnTheScreen();
+    });
+  });
+
+  describe('NicknameScreen — 사용 가능 긍정 상태 (AC-N3)', () => {
+    it('availabilityConfirmed 이면 "사용 가능한 닉네임이에요" 를 보여준다', () => {
+      render(<NicknameScreen {...makeProps()} availabilityConfirmed />);
+
+      expect(
+        screen.getByTestId('onboarding-nickname-available')
+      ).toHaveTextContent('사용 가능한 닉네임이에요');
+    });
+
+    // 부재 단언은 빈 화면도 통과시키므로 루트 존재와 짝짓는다(위 탈출구 없음 it 과 같은 방어).
+    it.each([
+      ['미전달', undefined],
+      ['false', false],
+    ])(
+      'availabilityConfirmed 가 %s 이면 긍정 메시지를 그리지 않는다',
+      (_label, value) => {
+        render(
+          <NicknameScreen {...makeProps()} availabilityConfirmed={value} />
+        );
+
+        expect(
+          screen.getByTestId('onboarding-nickname-root')
+        ).toBeOnTheScreen();
+        expect(
+          screen.queryByTestId('onboarding-nickname-available')
+        ).toBeNull();
+      }
+    );
+
+    it('오류가 있으면 긍정 메시지를 그리지 않는다 — 오류 우선', () => {
+      render(
+        <NicknameScreen
+          {...makeProps({ errorReason: 'TAKEN', canProceed: false })}
+          availabilityConfirmed
+        />
+      );
+
+      // 컨테이너 파생이 정상이면 이 조합은 오지 않지만, 화면은 방어적으로 오류를 우선한다.
+      expect(screen.getByTestId('onboarding-nickname-error')).toBeOnTheScreen();
+      expect(screen.queryByTestId('onboarding-nickname-available')).toBeNull();
+    });
+
+    it('긍정 메시지와 기존 helper "나중에 설정에서 바꿀 수 있어요" 는 공존한다 (AC-INV2)', () => {
+      render(<NicknameScreen {...makeProps()} availabilityConfirmed />);
+
+      expect(
+        screen.getByTestId('onboarding-nickname-available')
+      ).toBeOnTheScreen();
+      // US-ONB-03 필수 문구 — 긍정 상태가 helper 를 밀어내면 안 된다(Seed 확정 4 공존).
+      expect(
+        screen.getByTestId('onboarding-nickname-helper')
+      ).toHaveTextContent('나중에 설정에서 바꿀 수 있어요');
+    });
+  });
+});

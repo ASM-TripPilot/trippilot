@@ -13,10 +13,18 @@ paths:
 | 슬라이스 | 파일 | 역할 |
 |---|---|---|
 | `login` | `src/pages/login/ui/LoginPage.tsx` | 로그인 훅 ↔ 화면 배선 |
+| `login` | `src/pages/login/ui/SocialLoginScreen.tsx` | (TRIP-1146으로 features/auth에서 이사) 소셜 로그인 비주얼(props 순수 컴포넌트, 에러 배너 블랙리스트). 글리프·그라디언트·`SocialLoginPhase` 타입은 `features/auth`에서 절대경로로 읽는다 |
+| `login` | `src/pages/login/model/useAppleButton.ts` | (TRIP-1146으로 features/auth에서 이사) 기기에서 애플 로그인이 가능하면 `AppleSignInButton` 컴포넌트를 state로 돌려주고 아니면 null(fail-closed, Android·판정 실패 포함) — `await import('@/features/auth/lib/appleAuthorize')`만으로 SDK에 닿음(SDK 정적 import는 여전히 `features/auth/lib/` 안) |
 | `onboarding-terms` | `src/pages/onboarding-terms/ui/TermsPage.tsx` | 약관 훅 ↔ 화면 배선 |
+| `onboarding-terms` | `src/pages/onboarding-terms/ui/TermsScreen.tsx` | (TRIP-1146 이사) 약관 화면(프레젠테이션 · props만) |
+| `onboarding-terms` | `src/pages/onboarding-terms/model/useTermsConsent.ts` | (TRIP-1146 이사) 약관 3종 로드·토글·`POST /me/consents` **1회** 제출. 실패 시 이동 안 함 |
 | `onboarding-nickname` | `src/pages/onboarding-nickname/ui/NicknamePage.tsx` | 닉네임 훅 ↔ 화면 배선 |
+| `onboarding-nickname` | `src/pages/onboarding-nickname/ui/NicknameScreen.tsx` | (TRIP-1146 이사) 닉네임 화면(오류·대체칩 표시만). 칩은 값(인덱스 아님)을 올림 |
+| `onboarding-nickname` | `src/pages/onboarding-nickname/model/useNickname.ts` | (TRIP-1146 이사) 닉네임 프리필 + **순서 저장**(형식→check→PATCH→complete). 각 단계 실패 시 다음 미호출. 형식 검사는 `features/onboarding/model/validateNicknameFormat` |
 | `onboarding-pref1` | `src/pages/onboarding-pref1/ui/PrefStep1Page.tsx` | 취향 1/2 배선 |
+| `onboarding-pref1` | `src/pages/onboarding-pref1/ui/PrefStep1Screen.tsx` | (TRIP-1146 이사) 취향 1/2 화면 — 스타일 그리드(복수)+페이스(단일). props만, 스토어·네트워크 모름 |
 | `onboarding-pref2` | `src/pages/onboarding-pref2/ui/PrefStep2Page.tsx` | 취향 2/2 배선. 완료 시 `usePutMePreferences().mutate(...)`를 fire-and-forget(응답·에러가 완료 흐름을 막지 않음, INV-4) — 온보딩 취향 서버 PUT은 리포에서 이 파일 한 곳뿐 |
+| `onboarding-pref2` | `src/pages/onboarding-pref2/ui/PrefStep2Screen.tsx` | (TRIP-1146 이사) 취향 2/2 화면 — 예산(단일)+동행·음식·이동(복수) + back chevron(2/2 전용) |
 | `onboarding-location` | `src/pages/onboarding-location/ui/LocationPage.tsx` | c08 위치 권한 프리프롬프트 배선 — `requestForegroundPermissionsAsync` 1회, 마운트 시 `getForegroundPermissionsAsync`로 기존 denied 감지, denied면 `Linking.openSettings()`. 어느 경로든 **push(푸시 안내 카드)로** 무중단 진행(TRIP-1108) — 즉시 이동하는 두 핸들러(나중에 하기·거부 프레임 계속)는 `guardPress`로 감싸고, 권한이 이미 허용돼 OS 창 없이 곧장 granted가 돌아오는 분기는 `openPressGuardWindow()`를 이동 직전에 연다(안 열면 위치 `계속` 연타의 두 번째 탭이 푸시 카드 `계속`을 관통) |
 | `onboarding-push` | `src/pages/onboarding-push/ui/PushPage.tsx` | 온보딩 푸시 알림 사전 안내 배선(TRIP-1108) — `계속`은 `void promptAndRegisterPush()` 다음 줄에서 결과를 기다리지 않고 `replace(pref1)`, `나중에 하기`는 루틴 없이 replace. 두 핸들러 모두 `guardPress`. 도착만으로는 권한 조회·요청 0회. 루틴은 배럴 `@/shared/push`, 카드는 딥 경로 `@/shared/push/PushPreprompt` |
 | `stay-search` | `src/pages/stay-search/ui/StaySearchPage.tsx` | 숙소 검색 배선. URL `region`(빈 값이면 `'부산'`)·`amenity`·`stayType`을 정규화해 조회하고, **판정은 `resolveStaySearchState` 한 곳에서만**(화면 재판정 금지, 구조 가드). 필터 적용·0건 완화는 `router.setParams`로 재조회를 트리거(merge라 `region` 키를 넣으면 지역이 흔들린다). 저장 하트는 `useSavedStays` + `pendingKeys`, 미로그인은 로그인 push. 정적 `router` 싱글턴을 쓴다(통합테스트 목 형태 때문) |

@@ -6,7 +6,10 @@ import type { ReactElement } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { PositiveCheckGlyph, RegenerateGlyph } from './OnboardingGlyphs';
+import {
+  PositiveCheckGlyph,
+  RegenerateGlyph,
+} from '@/features/onboarding/ui/OnboardingGlyphs';
 
 /**
  * 오류 사유. TOO_SHORT/TOO_LONG 은 클라 형식 검증(UX 사본)에서,

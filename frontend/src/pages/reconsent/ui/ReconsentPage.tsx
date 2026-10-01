@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { type ReactElement, useRef, useState } from 'react';
 
 import { termsDocumentTitle } from '@/features/onboarding/model/termsDocumentTitle';
-import { ReconsentScreen } from '@/features/onboarding/ui/ReconsentScreen';
+import { ReconsentScreen } from './ReconsentScreen';
 import { fetchBootstrap, fetchTerms, patchConsent } from '@/shared/api';
 import { notifyBootstrapReeval } from '@/shared/bootstrap/bootstrapReeval';
 

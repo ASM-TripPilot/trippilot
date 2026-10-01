@@ -12,7 +12,7 @@ import { toPreferenceInput } from '@/features/onboarding/model/preferenceInput';
 import { notifyBootstrapReeval } from '@/shared/bootstrap/bootstrapReeval';
 import { guardPress } from '@/shared/press/pressGuard';
 import { usePutMePreferences } from '@/shared/api/generated/preferences/preferences';
-import { PrefStep2Screen } from '@/features/onboarding/ui/PrefStep2Screen';
+import { PrefStep2Screen } from './PrefStep2Screen';
 
 export function PrefStep2Page(): ReactElement {
   const router = useRouter();

@@ -3,10 +3,10 @@ import { router } from 'expo-router';
 
 import type { SocialProvider } from '@/shared/api';
 
-import { useAppleButton } from '@/features/auth/model/useAppleButton';
+import { useAppleButton } from '../model/useAppleButton';
 import { useSocialLogin } from '@/features/auth/model/useSocialLogin';
 import { makeAuthorize } from '@/features/auth/lib/makeAuthorize';
-import { SocialLoginScreen } from '@/features/auth/ui/SocialLoginScreen';
+import { SocialLoginScreen } from './SocialLoginScreen';
 
 /**
  * 소셜 로그인 페이지((auth)/login 이 렌더). useSocialLogin 상태를 SocialLoginScreen props 로
