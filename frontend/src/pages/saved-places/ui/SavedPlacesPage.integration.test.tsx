@@ -325,7 +325,11 @@ describe('save', () => {
   async function renderLoaded() {
     setAccessToken('valid-access');
     const result = renderPage();
-    await waitFor(() => expect(itemTestIds().length).toBeGreaterThan(0));
+    // 합친 뒤 이 묶음의 첫 테스트가 파일 첫 테스트라 냉시작(모듈 첫 로드)을 흡수한다 — CI 에서 기본
+    // 1000ms 를 넘겨 S-1 만 red(TRIP-1144 PR CI 2회). `select › 위저드` 첫 목록 대기와 같은 5000ms.
+    await waitFor(() => expect(itemTestIds().length).toBeGreaterThan(0), {
+      timeout: 5000,
+    });
     return result;
   }
 
