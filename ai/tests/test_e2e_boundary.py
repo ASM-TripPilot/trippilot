@@ -28,6 +28,7 @@ from datetime import date
 
 from fastapi.testclient import TestClient
 
+from trippilot.agents.schedule.budget import OrchestratorConfig
 from trippilot.api.app import create_app
 from trippilot.api.wiring import build_dev_app, build_orchestrator, DEMO_ANCHOR
 from trippilot.llm_gateway.config import C1Config
@@ -121,6 +122,7 @@ def make_client(
     llm: object | None = None,
     pois: tuple[Poi, ...] = _POIS,
     assembly_config: AssemblyConfig | None = None,
+    orchestrator_config: OrchestratorConfig | None = None,
 ) -> TestClient:
     """실 조립(build_orchestrator) + fake 어댑터 — 테스트 공용 진입점."""
     ids = tuple(str(p.poi_id) for p in pois)
@@ -131,6 +133,7 @@ def make_client(
         context_store=_PersonaStore(),
         c1_config=_C1CFG,
         assembly_config=assembly_config,
+        orchestrator_config=orchestrator_config,
         clock=FakeClock(),
         trace=InMemoryTrace(),
     )
