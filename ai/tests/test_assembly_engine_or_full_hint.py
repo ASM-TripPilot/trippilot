@@ -13,6 +13,9 @@
   ③ 실 덤프(첫 3초 해 없음 인스턴스): 첫 시도에 해·HC 위반 0·같은 입력 2회 동일 해
   ④ 용량 컷은 중복 제약이다 — 소형 인스턴스(핀 포함 변형)에서 최적값을 바꾸지 않는다
   ⑤ 창 시작에 핀된 첫 방문(TRIP-1175 앵커 면제)을 컷이 잘라내지 않는다
+  ⑥ 몰아 재시도(TRIP-907)의 결정론 한도는 1차 한도의 고정 배수다(벽시계 상한과 무관)
+  ⑦ 그리디가 빈 날이면 힌트를 걸지 않는다 — 전-0 힌트는 모델과 모순이고 불완전하다
+  ⑧ 벽시계 백스톱이 결정론 한도보다 먼저 탐색을 끊으면 경고로 남긴다(결정론 위반 관측)
 """
 
 from __future__ import annotations
@@ -47,6 +50,7 @@ _EST = TravelEstimator(_CFG)
 _FIXTURES = Path(__file__).parent / "fixtures" / "or_full_hint"
 _OK = (cp_model.OPTIMAL, cp_model.FEASIBLE)
 _REAL_SOLVE = cp_model.CpSolver.Solve
+_LOGGER = "trippilot.assembly_engine.ortools_assembler"
 
 
 @contextmanager
@@ -198,7 +202,7 @@ def _load_fixture(name: str):
 
 
 @pytest.mark.parametrize("name", ["seoul_a", "seoul_b", "busan_a"])
-def test_real_dump_solves_on_first_attempt_deterministically(name) -> None:
+def test_real_dump_solves_on_first_attempt_deterministically(name, caplog) -> None:
     """종전: 셋 다 첫 3초 해 없음(서울 둘은 15초 몰아 재시도까지 가서 18초).
 
     벽시계 상한은 넉넉히 둔다 — 멈춤은 결정론 시간 한도가 정하게 해서, CI 부하에서도
@@ -209,8 +213,10 @@ def test_real_dump_solves_on_first_attempt_deterministically(name) -> None:
     est = TravelEstimator(cfg)
     asm = OrToolsAssembler(index, est, cfg)
 
-    with _solves() as log:
+    with _solves() as log, caplog.at_level("WARNING", logger=_LOGGER):
         first = asm.solve(problem, remaining_ms=60_000)
+    assert not [r for r in caplog.records if "백스톱" in r.message], (
+        "멈춘 것이 결정론 한도가 아니다 — 아래 '2회 동일' 단언이 벽시계에 기대게 된다")
     mains = _main(log)
     assert len(mains) == len(problem.days), "첫 시도에 못 풀어 재시도로 갔다"
     for r in mains:
@@ -321,7 +327,11 @@ def test_window_start_pin_first_visit_is_not_cut_off() -> None:
 
 
 def test_det_limit_is_a_validated_config_field() -> None:
-    assert AssemblyConfig().or_tools_det_limit == 2.0
+    cfg = AssemblyConfig()
+    assert cfg.or_tools_det_limit == 2.0
+    # 벽시계 백스톱은 운영 CPU 몫(requests 0.5)에서도 결정론 한도보다 늦게 걸려야 한다 —
+    # 실측 wall/det 최대 2.92초(amd64·0.5 CPU) → 여유 포함 det 1당 3.5초.
+    assert cfg.or_tools_limit_ms >= cfg.or_tools_det_limit * 3500
     with pytest.raises(ValueError):
         AssemblyConfig(or_tools_det_limit=0.0)
 
@@ -332,13 +342,14 @@ def test_det_limit_is_a_validated_config_field() -> None:
 def test_spare_retry_runs_with_a_larger_deterministic_limit() -> None:
     """결정론 한도가 탐색을 멈추므로, 같은 한도로 재시도하면 1차와 **똑같은 탐색**을 다시 돌아
     같은 None 이 나온다(측정: 실 덤프 39건 힌트 없음·det 0.1 — 같은 한도 재시도 구제 0/39,
-    ×5 한도 재시도 36/39). 그래서 재시도는 한도를 상한 비율(15초 ÷ 일자 상한)만큼 키운다.
+    ×5 한도 재시도 36/39). 그래서 재시도는 한도를 고정 배수(×5)로 키운다 — 벽시계 상한
+    비율로 정하면 백스톱(`or_tools_limit_ms`)을 올릴 때 재시도 탐색량이 조용히 준다.
 
     1차 실패를 만들려고 힌트를 끄고 한도를 아주 작게 둔다 — 운영에서 1차가 실패하는 것은
     완전 힌트가 깨지는 드문 경우(경로 완성 실패)뿐이고, 이 재시도가 그 안전장치다.
     """
     problem, index = _load_fixture("seoul_a")
-    cfg = AssemblyConfig(or_tools_det_limit=0.1)
+    cfg = AssemblyConfig(or_tools_limit_ms=7000, or_tools_det_limit=0.1)
     asm = OrToolsAssembler(index, TravelEstimator(cfg), cfg)
 
     with patch.object(OrToolsAssembler, "_hint_path", lambda *a, **k: None), \
@@ -347,6 +358,57 @@ def test_spare_retry_runs_with_a_larger_deterministic_limit() -> None:
 
     mains = _main(log)
     assert [r.status in _OK for r in mains] == [False, True]
-    assert mains[1].det == pytest.approx(0.1 * 15_000 / cfg.or_tools_limit_ms)
+    assert mains[1].det == pytest.approx(0.1 * 5)
     assert result is not None and result.solve_mode is SolveMode.OR_TOOLS
     assert check_all(result, problem, index, TravelEstimator(cfg)) == []
+
+
+# ── ⑦ 그리디가 빈 날 — 힌트 없음 ────────────────────────────────
+
+
+def test_empty_greedy_order_leaves_the_main_search_unhinted() -> None:
+    """그리디는 영업 시작을 기다리지 않는다 — 09:00 에 닫혀 있는 두 곳(10:00~18:00)을 다
+    버려 빈 날이 된다. OR 모델은 start ≥ lo 로 기다릴 수 있어 둘 다 넣는다.
+
+    빈 순서의 경로 완성은 반드시 INFEASIBLE 이다(AddCircuit 은 깊이0 자기루프가 없어 빈
+    회로를 허용하지 않는다). 그걸 부분 힌트로 내리면 '전 visit=0·전 아크=0' — 모델과
+    모순이고 불완전한 힌트("The solution hint is incomplete")가 남는다. 힌트를 안 거는
+    편이 낫다.
+    """
+    hours = tuple(OpenHour(d, 10 * 60, 18 * 60) for d in range(7))
+    pois = [_poi(f"late{i}", PoiCategory.SIGHT, 37.56 + 0.01 * i, 126.98, hours)
+            for i in range(2)]
+    index = {p.poi_id: p for p in pois}
+    problem = _problem(pois, days=(date(2026, 8, 3),))
+
+    with _solves() as log:
+        result = OrToolsAssembler(index, _EST, _CFG).solve(problem, remaining_ms=1500)
+
+    assert not [r for r in log if r.completion], "빈 순서로 경로 완성을 돌렸다"
+    (main,) = _main(log)
+    assert main.invalid == ""
+    assert main.hint_vars == [], "빈 그리디 순서로 힌트를 걸었다"
+    assert result is not None and result.solve_mode is SolveMode.OR_TOOLS
+    assert {s.poi_id for s in result.days[0].slots} == {p.poi_id for p in pois}
+    assert check_all(result, problem, index, _EST) == []
+
+
+# ── ⑧ 벽시계 백스톱이 먼저 끊으면 경고 ──────────────────────────
+
+
+def test_wall_backstop_cutting_before_det_limit_is_logged(caplog) -> None:
+    """결정론 한도가 멈춤을 정해야 '같은 입력 → 같은 해' 다. 벽시계가 먼저 끊으면(운영 CPU
+    0.5 몫·동시 요청) 해가 부하에 따라 갈린다 — 조용히 넘기면 그 빈도를 모른다.
+
+    상한(300ms)을 결정론 한도(50)보다 훨씬 짧게 둬 벽시계가 반드시 먼저 끊게 한다. 잔여도
+    상한과 같게 둬 몰아 재시도는 돌지 않는다.
+    """
+    problem, index = _load_fixture("seoul_a")
+    cfg = AssemblyConfig(or_tools_limit_ms=300, or_tools_min_ms=50, or_tools_det_limit=50.0)
+    asm = OrToolsAssembler(index, TravelEstimator(cfg), cfg)
+
+    with caplog.at_level("WARNING", logger=_LOGGER):
+        asm.solve(problem, remaining_ms=300)
+
+    assert any("백스톱" in r.message and "결정론" in r.message for r in caplog.records), (
+        "벽시계가 결정론 한도 전에 끊었는데 침묵했다")

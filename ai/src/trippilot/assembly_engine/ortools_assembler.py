@@ -50,10 +50,15 @@ _MIN_DAY_MS = 100
 # 실패한 일자에 몰아주는 재시도(TRIP-907)의 상한. 잔여 **전부**를 넘기면 deadline 미지정
 # 요청(wiring UNBOUNDED_DEADLINE_MS=600초)에서 해 없는 하루가 CP-SAT 에 ~590초를 쓴다
 # (QA 실측: generate 601초). 이 값은 재시도의 **벽시계 백스톱**이고, 재시도의 탐색량은
-# 결정론 한도 × (이 상한 ÷ 일자 상한) 이다(`_retry_det_limit`, 기본 2.0×5 = 10).
-# 이 안에 못 풀면 체인 다음 단계(그리디)로 내려간다. (종전 근거 "12초면 0/3 해없음 → 시간
-# 문제" 는 틀린 진단이었다 — 원인은 불완전 힌트·무의미한 상계, TRIP-1176.)
+# 결정론 한도 × `_RETRY_DET_FACTOR`(기본 2.0×5 = 10)다. 이 안에 못 풀면 체인 다음 단계
+# (그리디)로 내려간다. (종전 근거 "12초면 0/3 해없음 → 시간 문제" 는 틀린 진단이었다 —
+# 원인은 불완전 힌트·무의미한 상계, TRIP-1176.)
 SPARE_RETRY_CAP_MS = 15_000
+# 재시도 탐색량 배수. 벽시계 상한의 비율로 정하지 않는다 — 그러면 백스톱
+# (`or_tools_limit_ms`)을 올릴 때 재시도 탐색량이 조용히 준다(3000 → 7000 이면 ×5 → ×2.1).
+# 결정론인 것은 det×5 의 벽시계 소요가 재시도 상한 안에 들 때뿐이다: 한 코어에서 det 10 ≈
+# 8.4초로 들지만, CPU 0.5 몫에선 14~27초(wall/det 1.4~2.75)라 백스톱이 먼저 끊는다.
+_RETRY_DET_FACTOR = 5
 
 
 def prefilter_cut(
@@ -133,7 +138,8 @@ class OrToolsAssembler:
                 # 체류 배율은 CP-SAT 인스턴스의 난이도를 바꾼다. 실측(후보 60곳·3초 한도):
                 # 무보정은 6/6 성공인데 ×0.9 는 6/6 실패였고, 후보 45곳에서는 반대로
                 # ×0.95 가 6/6 실패·×0.9 는 6/6 성공이었다. 즉 "체류가 짧을수록 어렵다"가
-                # 아니라 **조합마다 어려운 인스턴스가 따로 있다**(같은 조합은 재현된다).
+                # 아니라 **조합마다 어려운 인스턴스가 따로 있다**(같은 조합은 대부분
+                # 재현됐다 — 벽시계 한도라 일부는 None↔해가 뒤집혔다).
                 # (이 불안정 자체는 pace 와 무관하게 존재했다 — 무보정 기준선도 후보
                 #  50곳에서 8/8 해없음이었다. 원인은 불완전 힌트·무의미한 상계였고
                 #  TRIP-1176 에서 고쳤다 — 위 수치는 그 전 실측이다. 같은 하네스로
@@ -151,8 +157,8 @@ class OrToolsAssembler:
                 # **안 쓴 예산을 실패한 일자에 몰아준다 (TRIP-907).**
                 #
                 # 퍼사드는 이 단계에 잔여 **전부**를 넘기는데(TRIP-376), `_solve_day`
-                # 는 일자당 상한(기본 3초)으로 스스로 자른다. 그래서 하루짜리 요청은
-                # 15초를 받아 3초만 쓰고 그리디로 내려간다 — 12초가 그냥 남는다.
+                # 는 일자당 상한(당시 기본 3초)으로 스스로 자른다. 그래서 하루짜리 요청은
+                # 15초를 받아 3초만 쓰고 그리디로 내려갔다 — 12초가 그냥 남았다.
                 #
                 # 종전 근거("후보 50곳: 3·6초 해없음, 12초 0/3 → 시간이 모자란 것")는
                 # 틀린 진단이었다. 원인은 불완전 힌트·무의미한 상계였고(TRIP-1176), 그걸
@@ -162,8 +168,11 @@ class OrToolsAssembler:
                 # 탐색을 멈추는 것이 결정론 한도라서, **같은 한도로 다시 돌면 1차와
                 # 똑같은 탐색을 반복해 같은 None 이 나온다**(측정: 실 덤프 39건을 힌트
                 # 없이 det 0.1 로 1차 실패시켰을 때 같은 한도 재시도 구제 0/39, ×5 한도
-                # 36/39). 그래서 한도를 상한 비율만큼 키운다 — 고정 비율이라 재시도도
-                # 결정론이다(남은 예산 비율로 키우면 벽시계가 다시 결과를 정한다).
+                # 36/39). 그래서 한도를 고정 배수(`_RETRY_DET_FACTOR`)로 키운다 — 남은
+                # 예산 비율로 키우면 벽시계가 다시 결과를 정한다. 재시도도 결정론인 것은
+                # 그 탐색량의 벽시계 소요가 재시도 상한 안에 들 때뿐이다(한 코어 기준).
+                # 아래 문턱(잔여 ≥ 일자 상한 ×2, 기본 14초)이 그 소요(한 코어 det 10 ≈
+                # 8.4초)를 덮는다 — 잔여 6~8초에서 돌아 백스톱에 끊기는 재시도를 막는다.
                 # 1차 한도를 올리지 않는 이유: 한도는 성공 경로에서도 끝까지 쓰인다(실
                 # 덤프 78회 OPTIMAL 증명 0) — 올리면 잘 풀리던 요청까지 전부 느려진다.
                 # 기준은 `per_day_ms` 가 아니라 **실제로 쓰인 상한**이다 — 하루짜리
@@ -198,9 +207,8 @@ class OrToolsAssembler:
         )
 
     def _retry_det_limit(self) -> float:
-        """몰아 재시도(TRIP-907)의 결정론 한도 = 1차 한도 × (재시도 상한 ÷ 일자 상한)."""
-        return (self._cfg.or_tools_det_limit * SPARE_RETRY_CAP_MS
-                / max(1, self._cfg.or_tools_limit_ms))
+        """몰아 재시도(TRIP-907)의 결정론 한도 = 1차 한도 × 고정 배수."""
+        return self._cfg.or_tools_det_limit * _RETRY_DET_FACTOR
 
     # ── 일자 단위 CP-SAT ──────────────────────────────────────
     def _solve_day(self, problem, day, used: set[PoiId],
@@ -229,6 +237,8 @@ class OrToolsAssembler:
             cands = kept
 
         # 노드 구성: 각 노드의 (poi, stay, lo, hi, score, pinned_start)
+        # 해 품질은 노드 **순서**에 의존한다 — 증명 없이 결정론 한도에서 FEASIBLE 로 끝나서,
+        # 같은 집합이라도 순서가 바뀌면 다른(더 나쁠 수 있는) 해가 나온다(부산 실측 −13%).
         nodes = []
         for c in cands:
             poi = self._pois[c.poi_id]
@@ -322,11 +332,14 @@ class OrToolsAssembler:
         cap = self._cfg.or_tools_limit_ms if cap_ms is None else cap_ms
         cp_solver = cp_model.CpSolver()
         # 탐색을 멈추는 것은 **결정론 시간 한도**다(TRIP-1176) — 벽시계는 부하에 따라
-        # 같은 입력에서 다른 해·None 을 냈다(실측 반복 동일 28/30). 벽시계(일자당
-        # 상한, 기본 3초)는 지연을 묶는 백스톱으로만 남는다 — 여기 걸리면 결정론이 깨진다.
-        cp_solver.parameters.max_deterministic_time = (
-            self._cfg.or_tools_det_limit if det_limit is None else det_limit)
-        cp_solver.parameters.max_time_in_seconds = min(cap, budget_ms) / 1000.0
+        # 같은 입력에서 다른 해·None 을 냈다(실측 반복 동일 28/30). 벽시계(일자당 상한)는
+        # 지연을 묶는 백스톱으로만 남는다. **결정론은 벽시계 몫 ≥ det 소요일 때만**이다 —
+        # 일자 몫(잔여 ÷ 일수)이 작거나 CPU 가 모자라 백스톱이 먼저 걸리면 깨지고, 아래
+        # 경고가 그걸 남긴다(config `or_tools_limit_ms` 주석의 실측).
+        det_cap = self._cfg.or_tools_det_limit if det_limit is None else det_limit
+        wall_cap_s = min(cap, budget_ms) / 1000.0
+        cp_solver.parameters.max_deterministic_time = det_cap
+        cp_solver.parameters.max_time_in_seconds = wall_cap_s
         cp_solver.parameters.random_seed = problem.seed % (2**31)
         cp_solver.parameters.num_search_workers = 1  # 결정론 (FD §4)
 
@@ -338,6 +351,14 @@ class OrToolsAssembler:
                  if pid in id_to_idx]
         self._hint_path(m, order, visit, arcs, cp_solver)
         status = cp_solver.Solve(m)
+        resp = cp_solver.ResponseProto()
+        if (status in (cp_model.FEASIBLE, cp_model.UNKNOWN)
+                and resp.deterministic_time < det_cap):
+            # 증명도 결정론 한도도 아닌데 멈췄다 = 벽시계 백스톱. 운영 CPU 0.5 몫·동시
+            # 요청에서 생긴다 — 잦으면 det 를 내리지 말고 requests.cpu 를 올린다.
+            _log.warning("결정론 한도 전에 벽시계 백스톱으로 끊김 — 같은 입력도 부하에 따라"
+                         " 다른 해가 된다 (day=%s, det %.2f/%.2f, 벽시계 %.2fs/%.2fs)",
+                         day, resp.deterministic_time, det_cap, resp.wall_time, wall_cap_s)
         if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             return None
 
@@ -370,15 +391,22 @@ class OrToolsAssembler:
 
         그래서 경로(방문·아크 리터럴)를 가정으로 걸고 한 번 풀어 시각·보조 변수까지 채운
         해를 통째로 힌트한다 — 경로가 고정되면 남는 건 시각 전파와 소수의 보조 불리언이라
-        수 ms 다. 보조 변수를 손으로 계산하지 않으므로 소프트 항이 늘어도 힌트가 다시
-        불완전해지지 않는다. 이 힌트가 주는 것은 "그 순서의 최적 완성에서 출발" 까지다 —
+        수 ms 다. 보조 변수를 손으로 계산하지 않으므로 소프트 항이 늘어도 완성이 성공하는 한
+        힌트가 다시 불완전해지지 않는다. 이 힌트가 주는 것은 "그 순서의 최적 완성에서 출발" 까지다 —
         최종 해가 그리디 이상이라는 **보장은 아니다**(노드에 투영한 순서라 프리필터로 빠진
         POI 몫이 없고, 완성이 실패하면 아래 부분 힌트로 내려가며, 백스톱에 걸리면 탐색이
         중간에 끊긴다).
 
         경로가 모델과 어긋나면(예: 다중 영업창 — 모델은 최장 창만 쓰는데 그리디는 다른 창에
         놓았을 수 있다) 완성이 INFEASIBLE 이다. 그때는 경로 리터럴만 힌트한다(부분 힌트 — 탐색 방향만).
+
+        빈 순서면 힌트를 걸지 않는다. 그리디는 영업 시작을 기다리지 않아(도착 시 닫혀 있으면
+        버린다) 모델은 가해인데 그리디는 빈 날이 생긴다. 그 경로 완성은 반드시 INFEASIBLE 이고
+        (AddCircuit 은 깊이0 자기루프가 없어 빈 회로 불가), 부분 힌트는 '전부 0' — 모델과
+        모순이고 불완전하다. 힌트가 없는 편이 낫다(실 덤프는 용량 컷만으로도 풀린다).
         """
+        if not order:
+            return
         k = len(visit)
         on = set(order)
         path = [0, *(i + 1 for i in order), 0]
