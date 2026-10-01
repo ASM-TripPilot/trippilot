@@ -70,7 +70,7 @@ const ROWS: Row[] = [
     why: 'd01 검색 레인 카드 + StayCardVM 이관(★11 — export 잔존은 진짜 이동 아님)',
   },
   // TRIP-1105 — DestinationDetailScreen·DestinationDetailPage 두 행 제거. 목적지 상세가 d01 지역 필터로
-  // 합쳐져 두 파일이 지워진다(남기면 read() 가 ENOENT). d01 소비는 ExploreLandingScreen·(tabs)/explore 행이 진다.
+  // 합쳐져 두 파일이 지워진다(남기면 read() 가 ENOENT). d01 소비는 ExploreLandingScreen·ExploreLandingPage 행이 진다.
   {
     file: 'features/trip/ui/StaySelectSheet.tsx',
     must: ['@/entities/stay/ui'],
@@ -88,9 +88,9 @@ const ROWS: Row[] = [
     why: 'formatPrice 소비 전환',
   },
   {
-    file: 'app/(tabs)/explore.tsx',
+    file: 'pages/explore-landing/ui/ExploreLandingPage.tsx',
     must: ['@/entities/stay/lib'],
-    why: 'd01 라우트 formatPrice 조립(★15 — src/app 이라 6-b 발동)',
+    why: 'd01 page formatPrice 조립(TRIP-1142 로 (tabs)/explore.tsx 에서 이동)',
   },
   {
     file: 'features/explore/ui/SavedPlaceListScreen.tsx',

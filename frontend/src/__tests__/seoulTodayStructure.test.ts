@@ -30,7 +30,7 @@ import path from 'path';
 const SRC = path.resolve('src');
 
 const A_CALL_SITES = [
-  'app/(tabs)/index.tsx',
+  'pages/home/ui/HomePage.tsx',
   'pages/live-itinerary/ui/LiveItineraryPage.tsx',
   'pages/my-page/ui/MyPage.tsx',
   'pages/records-calendar/ui/RecordsCalendarPage.tsx',

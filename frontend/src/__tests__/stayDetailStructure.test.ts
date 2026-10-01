@@ -180,7 +180,10 @@ describe('G6 · "다시 보지 않기"는 서버 설정을 문다 — 기기 저
 });
 
 // ── TRIP-940 · item param 폐기 — 진입 3곳 · 고아 정리 · 전화 열기 자리 ──────────────
-// TRIP-1105 — 목적지 상세 진입은 d01 지역 필터(`(tabs)/explore.tsx`)로 합쳐져 4곳 → 3곳.
+// TRIP-1105 — 목적지 상세 진입은 d01 지역 필터로 합쳐져 4곳 → 3곳. TRIP-1142 — 탐색 d01 행은 뺐다:
+// `ExploreLandingPage.test.tsx` 가 전국·필터 두 경로의 상세 push 인자를 렌더로 완전 비교한다
+// (params 에 item 이 붙으면 red — 뮤테이션 실측). 남은 2곳은 렌더 심판이 인자를 완전 비교하는지
+// 확인하지 않았으므로 스캔을 유지한다.
 
 /** 상세 라우트로 가는 객체형 push 의 `params: { … }` 본문을 모두 뽑는다. */
 const DETAIL_PUSH =
@@ -191,12 +194,11 @@ function detailPushParams(source: string): string[] {
 }
 
 const ENTRY_RELS = [
-  'app/(tabs)/explore.tsx',
   'pages/stay-saved/ui/SavedStayPage.tsx',
   'pages/stay-search/ui/StaySearchPage.tsx',
 ];
 
-describe('G7 · 진입 3곳은 stayId 만 싣는다 (TRIP-940 AC-10)', () => {
+describe('G7 · 페이지 진입 2곳은 stayId 만 싣는다 (TRIP-940 AC-10 — 탐색 d01 은 렌더 테스트)', () => {
   it('자가검사 — 탐지기가 주석 제거 뒤에도 item 을 실은 push 와 stayId 만 실은 push 를 가른다', () => {
     const sample = stripComments(
       [

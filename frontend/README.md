@@ -54,7 +54,7 @@ frontend/
   docs/                            # 개발로그·구조 지도
 ```
 
-> **지금 코드와 다른 곳 (이주 중)**: 위 트리는 목표다. 현재 코드는 Expo Router 라우트가 `src/app/`에 있고(루트 `app/`으로 올릴 예정), FSD app 층 역할은 공식에 없는 `src/app-shell/`이 맡으며(`src/app/`으로 옮길 예정), 최상위 `src/assets/`가 남아 있다(쓰는 슬라이스 옆으로) — TRIP-1161. `shared`는 15개 폴더로 트리보다 많고 일부는 `lib`로 모을 유틸이다 — TRIP-1162. `app/(tabs)/explore.tsx`(376줄)·`index.tsx`(223줄)는 얇은 래퍼가 아니라 컨테이너 역할을 한다 — TRIP-1142. features에 화면이 들어 있는 곳은 화면 묶음 단위로 pages로 옮긴다 — TRIP-1146~1154.
+> **지금 코드와 다른 곳 (이주 중)**: 위 트리는 목표다. 현재 코드는 Expo Router 라우트가 `src/app/`에 있고(루트 `app/`으로 올릴 예정), FSD app 층 역할은 공식에 없는 `src/app-shell/`이 맡으며(`src/app/`으로 옮길 예정), 최상위 `src/assets/`가 남아 있다(쓰는 슬라이스 옆으로) — TRIP-1161. `shared`는 15개 폴더로 트리보다 많고 일부는 `lib`로 모을 유틸이다 — TRIP-1162. features에 화면이 들어 있는 곳은 화면 묶음 단위로 pages로 옮긴다 — TRIP-1146~1154.
 
 ### 층 규칙
 
@@ -80,10 +80,10 @@ frontend/
 - **entities 교차는 `@x`로만**: 도메인끼리 꼭 참조해야 하면 제공자가 소비자에게만 내주는 `entities/<제공자>/@x/<소비자>/**` 창구를 쓴다(형식 예: `entities/place/@x/itinerary-slot/` — 지금 리포에 `@x` 폴더는 0개, entity 간 import도 0건). 먼저 두 entity를 합칠 수 없는지부터 본다 — `@x`는 마지막 수단이고 features·widgets에는 쓰지 않는다.
 - **공개 API(`index.ts`)**: 슬라이스 밖에서는 그 슬라이스의 `index.ts`로만 import한다. `shared`는 슬라이스가 없으므로 세그먼트(또는 컴포넌트 폴더)마다 `index.ts`를 둔다.
   - **과도기(TRIP-1157까지)**: 이주 중에는 딥 임포트(`@/features/home/model/homeFixtures`)를 허용한다 — 옮기는 동안 `index.ts`를 두 번 고치지 않기 위해서다. TRIP-1157에서 `index.ts`를 일괄 정비하고 딥 임포트 금지 lint를 켠다. 그 뒤 딥 임포트는 위반이다.
-  - 현재: pages 51개 중 50개가 `index.ts`를 가진다(`magazine`만 없음). entities는 `model/index.ts`(place·stay·trip·itinerary-slot)로 도메인 타입을 내준다.
+  - 현재: pages 53개 중 52개가 `index.ts`를 가진다(`magazine`만 없음). entities는 `model/index.ts`(place·stay·trip·itinerary-slot)로 도메인 타입을 내준다.
 - **이주 방식**: 화면 묶음 단위로 옮긴다(TRIP-1138 · 서브 1146~1154) — 테스트 정상화를 먼저 하고 그 화면의 이동을 뒤 커밋으로.
 - **린터**: 이주가 끝나면 공식 FSD 린터 Steiger(`insignificant-slice` · `excessive-slicing`)를 CI 게이트로 붙인다(TRIP-1157·1158). 그 전까지는 ESLint zone과 소스 스캔이 경계를 지킨다.
-- **전방 `app → features` 제한은 아직 두지 않는다** — 목표 방향은 `app`이 `pages·shared`만 보는 것이지만, 지금은 `app`이 features를 직접 import하는 곳이 많아(라우트·프리뷰) 켤 수 없다. pages 이주로 이 참조가 줄어든 뒤 켠다.
+- **`app → features` 제한은 두지 않는다** — 공식 FSD는 app 층이 아래 층 전부를 import하는 것을 허용한다. 라우트 파일은 page를 꽂는 얇은 래퍼로 두는 것을 권장한다(lint 강제 없음, TRIP-1142).
 - 절대 경로 별칭 `@/` = `src/` (tsconfig paths — `@/features/...`, `@/shared/...`).
 
 ### 상태 관리 규칙
