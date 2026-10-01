@@ -40,10 +40,7 @@ import {
   usePostTripsTripIdItinerarySlotCandidates,
   usePutTripsTripIdItinerary,
 } from '@/shared/api/generated/trips/trips';
-import {
-  CoPickStepper,
-  type CoPickStep,
-} from '@/widgets/copick-stepper/ui/CoPickStepper';
+import { CoPickStepper, type CoPickStep } from './CoPickStepper';
 
 /**
  * TRIP-335 슬라이스2 · h13→h14/h15 슬롯 채우기 배선 — 슬라이스1 코어(POST 후보 → `swapSlotPoi`

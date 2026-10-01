@@ -4,12 +4,12 @@ import { Pressable, Text, View } from 'react-native';
 import { DoneCheckGlyph } from './GenerationDoneBarGlyphs';
 
 /**
- * TRIP-788 · AC-7 — 완료 도킹 배너(widgets 신규, prop-driven). BottomTab 위에 뜨는 흰 카드로
+ * TRIP-788 · AC-7 — 완료 도킹 배너(prop-driven, 소비처가 이 page 하나라 TRIP-1143 에 widgets 에서 이동). BottomTab 위에 뜨는 흰 카드로
  * "{여행명} 일정이 완성됐어요 · 보기"를 그린다. **표시 조건(마지막 확인 이후 완성된 여행 =
  * last-seen 영속)은 범위 밖** — 이 위젯은 여행명 + onPressView 만 받고, 실배선은 후속(이번 소비처는
  * 프리뷰 h05-my-trips-done-bar 뿐).
  *
- * presentation-only(useState 0, widgetsStructure F 규약) · 그림자 없음 border 만(Figma 실측 —
+ * presentation-only(useState 0) · 그림자 없음 border 만(Figma 실측 —
  * 티켓 "그림자"는 어긋남). 체크 색(success)·절대배치·화면 덮음은 jest 사각(6-b 육안).
  */
 

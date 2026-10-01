@@ -4,7 +4,7 @@ paths:
 ---
 # `src/widgets/` — FSD widgets 층
 
-여러 화면이 쓰는 **화면 조각**(지도+시트 셸 같은 조립 단위)을 두는 층. 담은 곳 FAB 스택(a01·d01·d03)은 소비처가 전부 features 층 화면이라 넣지 않았다 — features→widgets 상향 참조가 된다.
+여러 화면이 쓰는 **화면 조각**(지도+시트 셸 같은 조립 단위)을 두는 층. 담은 곳 FAB 스택(a01·d01·d03)은 소비처가 전부 features 층 화면이라 넣지 않았다 — features→widgets 상향 참조가 된다. **소비처가 한 page뿐인 부품은 위젯이 아니라 그 page 안에 둔다**(공식 FSD — TRIP-1143으로 `CoPickStepper`·`GenerationDoneBar`가 `pages/itinerary-copick`·`pages/itinerary-list`로 들어갔다). 지금 이 층은 `map-sheet-shell`·`time-sheet` 둘뿐이다.
 
 ## import 방향
 - widgets → entities · shared 만 참조한다. 층 린트는 widgets→features를 막지 않지만, 소스 스캔 `widgetsStructure`(위젯 UI 소스에 `@/features/` 0)·`editorWidgetStructure`(`widgets/map-sheet-shell` 재귀)가 막는다. 그래서 위젯은 features의 판단·글리프를 못 물고 로컬 복제하거나 소비처가 문자열로 넘긴다(`MapSheetGlyphs`·`EditorGlyphs`·`EditorView`의 `dateLabel`).
@@ -40,19 +40,3 @@ paths:
 | 파일 | 역할 |
 |---|---|
 | `src/widgets/time-sheet/ui/TimeSheet.tsx` | 공용 시각 시트 — props는 **`mode`로 가르는 판별 유니온**. 기본 모드: `onApply({startAt,endAt,endsNextDay})`, 시·분 셀-press 피커(`ScrollView`+map), 분 셀은 bare 숫자(INV-3), `<BottomSheet onClose={onCancel}>`로 딤 탭 닫힘도 소비처에 알린다. 열의 `contentOffset`은 `useRef(...).current`로 첫 렌더 값에 고정 — New Arch는 값이 바뀔 때마다 재적용해 셀 탭마다 열이 튄다. `mode:'h04'`: 장소 요약 행 + 시작/종료 세그(`shared/ui/SegmentedControl`) + 12시간 휠(`shared/ui/WheelPicker`) + 단일 '적용', `onApply`가 종료 미설정 갈래(`endAt:null`, `endsNextDay` 키 없음)를 가질 수 있다. `endsNextDay` 유도는 `entities/itinerary-slot/lib/endsNextDay.ts`의 `deriveEndsNextDay`만 쓴다 — `TimeSheet.h04.source.test.ts`가 `<=` 개수로 재구현을 막는다. h04 시트에는 `enablePanDownToClose`·`enableContentPanningGesture={false}`(휠 스크롤이 시트 끌기로 새지 않게) — jest 통과형 목의 사각이라 6-b 전용. 선택 셀 `useState`는 `widgetsStructure` 예외 |
-
-## `src/widgets/generation-done-bar/` — 완료 도킹 배너
-
-| 파일 | 역할 |
-|---|---|
-| `src/widgets/generation-done-bar/ui/GenerationDoneBar.tsx` | `{tripName, onPressView}` — 체크 + `{tripName} 일정이 완성됐어요`(완전일치) + `보기`. border만·그림자 없음(Figma 우선). presentation-only — 표시 판정은 소비처 `MyTripsListPage`(last-seen은 `shared/storage/idSet.ts`). docstring의 "소비처는 프리뷰뿐"은 낡았다 |
-| `src/widgets/generation-done-bar/ui/GenerationDoneBarGlyphs.tsx` | `DoneCheckGlyph` 로컬 복제(widgets→features 금지) |
-
-## `src/widgets/copick-stepper/` — 공용 3단 스텝퍼(h09·h10)
-
-**prop 계약이 소비 화면 둘을 구속한다**(개념 [[공용 위젯 prop 계약]]).
-
-| 파일 | 역할 |
-|---|---|
-| `src/widgets/copick-stepper/ui/CoPickStepper.tsx` | `{prev?, current, next?}`(각 `{title, status, iconKey?, done?}`) — 3열, 현재만 `text-primary`. presentation-only. `iconKey`는 미배선(항상 `StepperSunGlyph`). **INV-3 그물은 이 파일의 렌더 단언뿐**(위젯 층은 소스 스캔 모집단 밖, [[가드의 사정거리]]) |
-| `src/widgets/copick-stepper/ui/CoPickStepperGlyphs.tsx` | `StepperSunGlyph`·`StepperCheckBadge` 로컬 복제. raw-hex 스캔 제외 |

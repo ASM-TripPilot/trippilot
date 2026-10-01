@@ -817,6 +817,8 @@
 
 ## src/pages/itinerary-copick/ui/
 - `src/pages/itinerary-copick/ui/CoPickCompletePage.tsx`  →  CoPickCompletePageProps · CoPickCompletePage
+- `src/pages/itinerary-copick/ui/CoPickStepper.tsx`  →  CoPickStep · CoPickStepperProps · CoPickStepper
+- `src/pages/itinerary-copick/ui/CoPickStepperGlyphs.tsx`  →  StepperSunGlyph · StepperCheckBadge
 - `src/pages/itinerary-copick/ui/SlotFillPage.tsx`  →  SlotFillPageProps · SlotFillPage
 
 ## src/pages/itinerary-draft/
@@ -843,6 +845,8 @@
 - `src/pages/itinerary-list/index.ts`  →  MyTripsListPage
 
 ## src/pages/itinerary-list/ui/
+- `src/pages/itinerary-list/ui/GenerationDoneBar.tsx`  →  GenerationDoneBarProps · GenerationDoneBar
+- `src/pages/itinerary-list/ui/GenerationDoneBarGlyphs.tsx`  →  DoneCheckGlyph
 - `src/pages/itinerary-list/ui/MyTripsListPage.tsx`  →  MyTripsListPage
 - `src/pages/itinerary-list/ui/TripCardContainer.tsx`  →  TripCardContainerProps · TripCardContainer
 
@@ -1484,14 +1488,6 @@
 - `src/test-support/toastHarness.tsx`  →  WithToastHost · resetToast
 - `src/test-support/tripRecordsTrip.ts`  →  tripRecordsTrip
 - `src/test-support/wizardDraftFixture.ts`  →  WizardDraftData · wizardDraftData · freshWizardDraft · withoutSeedFields · leavePreviousTripDraft · captureDraftAtNextCall · resetWizardDraft
-
-## src/widgets/copick-stepper/ui/
-- `src/widgets/copick-stepper/ui/CoPickStepper.tsx`  →  CoPickStep · CoPickStepperProps · CoPickStepper
-- `src/widgets/copick-stepper/ui/CoPickStepperGlyphs.tsx`  →  StepperSunGlyph · StepperCheckBadge
-
-## src/widgets/generation-done-bar/ui/
-- `src/widgets/generation-done-bar/ui/GenerationDoneBar.tsx`  →  GenerationDoneBarProps · GenerationDoneBar
-- `src/widgets/generation-done-bar/ui/GenerationDoneBarGlyphs.tsx`  →  DoneCheckGlyph
 
 ## src/widgets/map-sheet-shell/ui/
 - `src/widgets/map-sheet-shell/ui/CtaBar.tsx`  →  CtaButton · CtaBarProps · CtaBar

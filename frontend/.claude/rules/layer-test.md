@@ -42,7 +42,7 @@ paths:
 | `src/__tests__/importBoundary.test.ts` | import 경계 가드 — ESLint 룰 ID(`import/no-restricted-paths` 포함·`import/no-unresolved` 불포함)로 "경계 위반"과 "해석 실패"를 구분. **단독 실행 시 `NODE_OPTIONS=--experimental-vm-modules` 필요**(`pnpm test:node` 스크립트가 넣어 준다 — `pnpm exec jest` 단독이면 실패) |
 | `src/__tests__/importBoundaryLayers.test.ts` | `ESLint.lintText`+가짜 filePath로 FSD 6층 방향과 feature 격리(`src/features` 전 슬라이스 `it.each`)를 탐침한다. 빈 층 대상 허용 프로브는 실파일이 없어 `no-unresolved`가 뜨므로 "경계 룰 미발화"까지만 단언. 단독 실행 함정은 위와 같다 |
 | `src/__tests__/fsdLayerStructure.test.ts` | FSD 층 구조 fs 스캔 — src 직계 디렉토리 허용목록 · features·pages·widgets 슬라이스 세그먼트 ⊆ {ui,model,lib,config} · shared 층의 상위층 import 0 |
-| `src/__tests__/widgetsStructure.test.ts` | widgets 층 구조 가드 — 위젯 UI에 expo-router·`@/features`·`@/pages`·raw hex·`useState` 0(`TimeSheet.tsx`의 선택 셀 상태만 예외) · `fab-stack`·`time-sheet` 소비 앵커 |
+| `src/__tests__/widgetsStructure.test.ts` | widgets 층 구조 가드 — 위젯 UI(지금은 `map-sheet-shell`·`time-sheet`)에 expo-router·`@/features`·`@/pages`·raw hex·`useState` 0(`TimeSheet.tsx`의 선택 셀 상태만 예외) · `time-sheet` 소비 앵커(옛 `fab-stack` 앵커는 위젯 부재로 이미 없음) |
 | `src/widgets/time-sheet/ui/TimeSheet.test.tsx` | 공용 시각 시트 렌더 — testID 트리·셀 선택·`endsNextDay` 시·분 두 축·분 셀 bare 숫자(INV-3) |
 | `src/__tests__/fsdStructure.test.ts` | FSD 폴더 배치(대표 파일 존재·pages 배럴·`app-shell` 위치)와 빈 배럴(`export {};`) 0 — **폴더 배치만 본다**(import 방향·내용은 안 봄). "슬라이스가 정확히 N개" 단언은 디렉토리 이름만 보므로 테스트 파일을 최종 위치에 쓰기만 해도 조기 green이 될 수 있다 |
 | `src/__tests__/staySearchStructure.test.ts` | e01 숙소 검색 소스 가드 — INV-3 · raw hex(`features/stay/ui` 동적 스캔, `*Glyphs.tsx` 제외) · 프레젠테이션 순수성 · SafeArea · `resolveStaySearchState`는 페이지만 호출 |
@@ -100,7 +100,7 @@ paths:
 | `src/__tests__/regionCatalogStructure.test.ts` | 지역 카탈로그 서버 연동 — 소비처에 `REGIONS`·`RegionCode` 0 + `useRegions` 참조 · '내 주변' 배선 완전 부재 · 화면 `.sort(` 0. `regionTint` 팔레트 hex는 어느 스캔에도 안 걸린다 |
 | `src/__tests__/sharedUiStructure.test.ts` | `shared/ui` 재귀 — 상위층·zustand import 0 · INV-3 · URL 리터럴 0 · raw hex. `useState`·router·query·axios는 이 파일 밖(`eslint.config.js` 파일 단위 블록이 잡는다) |
 | `src/__tests__/placeExploreStateStructure.test.ts` | d04 상태 판정 단일 출처·새 prop 옵셔널·타이머 금지(`shared/ui/Toast.tsx`만 면제). `features/explore/ui`가 `showToast`로 우회하는 것은 못 잡는다 |
-| `src/__tests__/pagesLayerStructure.test.ts` | `src/pages` 층 전수 재귀 — INV-3·zustand·`https?://`·타이머·raw hex 0 + 긍정 짝. 새 페이지 슬라이스는 자동 편입 |
+| `src/__tests__/pagesLayerStructure.test.ts` | `src/pages` 층 전수 재귀 — INV-3·zustand·`https?://`·타이머·raw hex 0 + 긍정 짝. 새 페이지 슬라이스는 자동 편입. **글리프 hex 면제는 이름 패턴이 아니라 명시 목록 `HEX_EXEMPT_GLYPHS`**(TRIP-1143, `ELAPSED_FLAG_ALLOWED`와 같은 보이는 면제) — 새 page 글리프 파일은 목록에 추가해야 하고 `*Glyphs.tsx`로 이름만 지으면 red. `TOKENIZED_HEX` 11색(widgets 목록과 맞춤). `useState` 0 검사는 없다 |
 | `src/__tests__/devPreviewMap.test.tsx` | 프리뷰 `map-default`가 지도 컴포넌트를 렌더하는지 — env 미설정이라 **항상 키 없음 분기(`map-failure`)만** 밟는다 |
 | `src/__tests__/socialSdkSecrets.test.ts` | 소셜 SDK 키·시크릿 소스 스캔 — `.env` 미추적 · git 추적 전 파일에 `VAR=<값>` 대입 0(공백 클래스는 `[^\S\n]` — `\s`는 개행을 건너 다음 줄을 값으로 오판) · `app.config.ts` env 참조 |
 | `src/__tests__/socialSdkConfigPlugin.test.ts` | `app.config.ts` kakao·naver config plugin 등록 — 옵션 키 허용목록·값 출처·**provider 간 값 교차 없음**(`[string, any]`라 tsc가 못 잡는 자리) |

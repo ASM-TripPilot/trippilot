@@ -37,7 +37,7 @@ import { MyTripsListScreen } from '@/features/itinerary/ui/MyTripsListScreen';
 import { MyTripsSortSheet } from '@/features/itinerary/ui/MyTripsSortSheet';
 import { TripDeleteDialog } from '@/features/itinerary/ui/TripDeleteDialog';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
-import { GenerationDoneBar } from '@/widgets/generation-done-bar/ui/GenerationDoneBar';
+import { GenerationDoneBar } from './GenerationDoneBar';
 
 import { TripCardContainer } from './TripCardContainer';
 
