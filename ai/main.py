@@ -309,8 +309,9 @@ def _tmap_travel():
     from trippilot.assembly_engine.config import AssemblyConfig
     from trippilot.assembly_engine.travel import TravelEstimator
 
-    # 호출당 2s — 조립 뒤 거리는 시한(≤1.5s) 안에 끝난 구간만 쓰고 늦은 스레드는 버린다.
-    # 그 스레드 수명을 묶는 값이다(TRIP-1179). 조립 앞 TransitProvider 도 이 travel 을 쓴다.
+    # 소켓 작업(접속·수신 한 번)당 2s — 멈춘 연결을 끊는 값이지 호출 총시간 상한은 아니다
+    # (느리게 흘러오는 응답·DNS 는 넘긴다). 조립 뒤 거리는 시한(≤1.5s) 안에 끝난 구간만 쓰고
+    # 늦은 호출은 결과를 버린다(TRIP-1179). 조립 앞 TransitProvider 도 이 travel 을 쓴다.
     tmap = TmapRouteAdapter(UrllibHttpClient(timeout_sec=2.0), app_key)
     fallback = TravelEstimator(AssemblyConfig())
     return ChainedTravelAdapter(primary=tmap, fallback=fallback)

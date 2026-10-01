@@ -13,9 +13,10 @@ TravelPort Protocol 만족 — 어셈블리·TransitProvider 모두 이 어댑�
 3. 실패(TravelTimeError 또는 기타 예외) 시 TravelPort 폴백으로 전환
 4. 폴백도 실패하면 예외 그대로 상위 전파 (INV-4: 침묵 실패 금지)
 
-벤더 실패는 수단별 **첫 1회만** WARNING 으로 남긴다(TRIP-1179) — 대중교통 상품 미구독
-403 이 매 호출 조용히 추정으로 바뀌어 운영자가 볼 수단이 없었다. 키는 헤더라 로그에
-안 싣고, 메시지도 싣지 않는다(종류·HTTP 상태만).
+벤더 실패는 (수단, 예외 종류, 원인 종류, HTTP 상태)별 **첫 1회만** WARNING 으로 남긴다
+(TRIP-1179) — 대중교통 상품 미구독 403 이 매 호출 조용히 추정으로 바뀌어 운영자가 볼
+수단이 없었다. 수단만 키로 삼으면 첫 실패가 타임아웃일 때 뒤이은 403 이 끝까지 안
+보인다. 키는 헤더라 로그에 안 싣고, 메시지도 싣지 않는다(종류·HTTP 상태만).
 """
 
 from __future__ import annotations
@@ -44,7 +45,7 @@ class ChainedTravelAdapter:
     ) -> None:
         self._primary = primary
         self._fallback = fallback
-        self._warned: set[TransportMode] = set()
+        self._warned: set[tuple] = set()   # (수단, 예외, 원인, 상태) — 조합 수가 작다
         self._lock = threading.Lock()  # 조립 뒤 거리는 스레드풀에서 부른다
 
     @property
@@ -59,7 +60,7 @@ class ChainedTravelAdapter:
         try:
             measured = self._primary.measure(from_, to, mode)
         except Exception as e:
-            # TMAP 실패 → 폴백 (INV-4: 폴백이 있으니 여기선 삼키되 수단별 첫 1회는 남긴다)
+            # TMAP 실패 → 폴백 (INV-4: 폴백이 있으니 여기선 삼키되 원인별 첫 1회는 남긴다)
             self._warn_once(mode, e)
             return self._fallback.estimate(from_, to, mode)
 
@@ -74,15 +75,16 @@ class ChainedTravelAdapter:
         )
 
     def _warn_once(self, mode: TransportMode, error: Exception) -> None:
-        with self._lock:
-            if mode in self._warned:
-                return
-            self._warned.add(mode)
         cause = error.__cause__
         status = getattr(cause, "code", None) or getattr(error, "code", None)
+        key = (mode, type(error).__name__,
+               type(cause).__name__ if cause is not None else None, status)
+        with self._lock:
+            if key in self._warned:
+                return
+            self._warned.add(key)
         _log.warning(
             "travel_primary_failed mode=%s error=%s cause=%s status=%s "
-            "— 하버사인 추정으로 대체, 이 수단의 이후 실패는 로그 생략",
-            mode.name, type(error).__name__,
-            type(cause).__name__ if cause is not None else None, status,
+            "— 하버사인 추정으로 대체, 같은 원인의 이후 실패는 로그 생략",
+            mode.name, *key[1:],
         )

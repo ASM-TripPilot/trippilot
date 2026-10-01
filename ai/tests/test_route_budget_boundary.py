@@ -11,6 +11,10 @@
   ④ 벤더 실패(403)는 시한 초과와 따로 센다 — 사유에 vendor=n/n
   ⑤ travel_port 미주입(TravelEstimator)이면 현행 경로 그대로 — 이벤트 0·구간당 1호출·응답 동일
   ⑥ /replan: 같은 구간은 한 번만 실측하고 total_distance_km 이 같은 표를 쓴다
+  ⑦ 예산은 요청 진입 이후 **경과를 뺀다** — generate·replan 모두 같은 시계 원점
+
+①③④ 는 창을 09–12 로 좁힌다 — 기본 09–21 창은 6곳이 다 슬롯이 돼 차선책이 0건이고,
+그러면 차선책 거리(한 단계 실경로 호출의 대부분)가 표를 우회해도 테스트가 못 잡는다.
 """
 
 from __future__ import annotations
@@ -21,22 +25,29 @@ from collections import Counter
 
 from fastapi.testclient import TestClient
 
-from trippilot.api.wiring import build_dev_app
+from trippilot.api.app import create_app
+from trippilot.api.wiring import build_dev_app, build_orchestrator, demo_poi_seed
 from trippilot.assembly_engine.adapters.chained_travel import ChainedTravelAdapter
 from trippilot.assembly_engine.config import AssemblyConfig
 from trippilot.assembly_engine.travel import TravelEstimator
 from trippilot.domain.observability import FallbackEvent
 from trippilot.ports.travel_time_port import MeasuredTravel, TravelTimeError
 
+from tests.fakes.fake_clock import FakeClock
 from tests.fakes.in_memory_poi import InMemoryPoi
 from tests.fakes.in_memory_trace import InMemoryTrace
 from tests.test_api_replan_wired import _DIRECTIVES, _body
-from tests.test_e2e_boundary import _BANNED_TOKENS, _POIS, _request
+from tests.test_e2e_boundary import (
+    _BANNED_TOKENS, _C1CFG, _POIS, RoutingLlm, _explanations_json, _PersonaStore,
+    _request, _scores_json,
+)
 
 _GENERATE = "/ai/v1/itinerary/generate"
 _REPLAN = "/ai/v1/planb/replan"
 _CAP_S = 1.5
 _EPS_S = 1.0   # CI 호스트 흔들림 여유 — 막힌 구간은 10s 라 구분에는 충분하다
+_NARROW = ("09:00", "12:00")   # 슬롯 2 + 차선책 4 — 차선책 거리 경로를 태운다
+_REPLAN_POIS = demo_poi_seed()  # /replan 본문 앵커(제주)에 맞는 시드
 
 
 class SlowTmap:
@@ -97,10 +108,15 @@ def _distance_events(trace: InMemoryTrace) -> list[FallbackEvent]:
     return [e for e in trace.of_type(FallbackEvent) if e.stage == "distance"]
 
 
+def _alternative_distances(body: dict) -> list[str]:
+    return [a["distance_range"] for day in body["days"] for slot in day["slots"]
+            for a in slot.get("alternatives") or [] if a["distance_range"]]
+
+
 def _base_seconds() -> float:
     """늦은 구간 없는 같은 조립의 벽시계 — '조립' 몫의 기준선."""
     port = SlowTmap()
-    _, dt, _ = _generate(_chain(port))
+    _, dt, _ = _generate(_chain(port), _request(window=_NARROW))
     return dt
 
 
@@ -109,14 +125,15 @@ def _base_seconds() -> float:
 
 def test_late_legs_only_are_estimated_and_response_is_bounded() -> None:
     base = _base_seconds()
-    fast_response, _, _ = _generate(_chain(SlowTmap()))
+    fast_response, _, _ = _generate(_chain(SlowTmap()), _request(window=_NARROW))
     port = SlowTmap(block_every=3)
     try:
-        response, dt, trace = _generate(_chain(port))
+        response, dt, trace = _generate(_chain(port), _request(window=_NARROW))
     finally:
         port.release.set()
 
     assert response.status_code == 200, response.text
+    assert _alternative_distances(response.json())   # 전제: 차선책 거리 경로를 탔다
     assert sum(port.legs.values()) >= 3, port.legs   # 막힌 구간이 실제로 있었다
     strings = _distances(response.json())
     assert any(s.endswith("추정") for s in strings), strings
@@ -145,7 +162,7 @@ def test_all_measured_emits_no_distance_event() -> None:
 
 def test_unsent_deadline_is_capped_at_the_boundary() -> None:
     base = _base_seconds()
-    req = _request()
+    req = _request(window=_NARROW)
     req["request_meta"].pop("deadline_ms")
     port = SlowTmap(block_every=1)
     try:
@@ -153,6 +170,7 @@ def test_unsent_deadline_is_capped_at_the_boundary() -> None:
     finally:
         port.release.set()
     assert response.status_code == 200, response.text
+    assert _alternative_distances(response.json())
     strings = _distances(response.json())
     assert strings and all(s.endswith("추정") for s in strings)
     assert dt <= base + _CAP_S + _EPS_S, (dt, base)
@@ -163,9 +181,12 @@ def test_unsent_deadline_is_capped_at_the_boundary() -> None:
 
 
 def test_vendor_403_is_counted_apart_from_budget() -> None:
-    response, _, trace = _generate(_chain(SlowTmap(fail=True)))
+    port = SlowTmap(fail=True)
+    response, _, trace = _generate(_chain(port), _request(window=_NARROW))
     assert response.status_code == 200, response.text
+    assert _alternative_distances(response.json())
     n = len(_distances(response.json()))
+    assert sum(port.legs.values()) == n   # 차선책 구간도 표를 거쳐 한 번씩만 불렸다
     (event,) = _distance_events(trace)
     assert f"vendor={n}/{n}" in event.reason and f"budget=0/{n}" in event.reason, event.reason
 
@@ -231,3 +252,62 @@ def test_replan_notes_estimated_legs() -> None:
     n = len(_distances(body["itinerary"]))
     assert f"distance_estimated:{n}/{n}" in body["notes"], body["notes"]
     assert len(_distance_events(trace)) == 1
+
+
+# ── ⑦ 경과를 뺀다 ────────────────────────────────────────────────────
+
+
+class _SlowPoi(InMemoryPoi):
+    """지정한 조회에서 주입 시계를 민다 — 그 시간이 조립 뒤 예산에서 빠져야 한다."""
+
+    def __init__(self, pois, clock: FakeClock, *, on: str) -> None:  # noqa: ANN001
+        super().__init__(pois)
+        self._clock, self._on = clock, on
+
+    def find_by_ids(self, ids):  # noqa: ANN001
+        if self._on == "find_by_ids":
+            self._clock.advance(4_900)
+        return super().find_by_ids(ids)
+
+    def find_by_radius(self, center, radius_km):  # noqa: ANN001
+        if self._on == "find_by_radius":
+            self._clock.advance(4_900)
+        return super().find_by_radius(center, radius_km)
+
+
+def _clocked_app(on: str, port: SlowTmap, trace: InMemoryTrace, pois=_POIS, **kw):  # noqa: ANN001
+    clock = FakeClock()
+    ids = tuple(str(p.poi_id) for p in pois)
+    return create_app(build_orchestrator(
+        llm=RoutingLlm(_scores_json(*ids), _explanations_json(*ids)),
+        poi_db=_SlowPoi(pois, clock, on=on), context_store=_PersonaStore(),
+        c1_config=_C1CFG, clock=clock, trace=trace, travel_port=_chain(port), **kw))
+
+
+def test_generate_budget_subtracts_elapsed_since_entry() -> None:
+    """조립 뒤 좌표 재조회가 4.9s 를 쓰면(시한 5s) 남은 예산 0 → 실경로 호출 0."""
+    port, trace = SlowTmap(), InMemoryTrace()
+    req = _request(window=_NARROW, deadline_ms=5_000)
+    with TestClient(_clocked_app("find_by_ids", port, trace),
+                    raise_server_exceptions=False) as client:
+        response = client.post(_GENERATE, json=req)
+    assert response.status_code == 200, response.text
+    assert sum(port.legs.values()) == 0, port.legs
+    (event,) = _distance_events(trace)
+    assert "budget_ms=0" in event.reason, event.reason
+
+
+def test_replan_budget_shares_the_origin_before_planb() -> None:
+    """후보 수집(PlanB·조립 이전)이 4.9s 를 써도 경과에 든다 — 원점을 다시 잡으면 1.5s 가 된다."""
+    port, trace = SlowTmap(), InMemoryTrace()
+    body = _body()
+    body["request_meta"]["deadline_ms"] = 5_000
+    with TestClient(_clocked_app("find_by_radius", port, trace, pois=_REPLAN_POIS,
+                                 directives=_DIRECTIVES),
+                    raise_server_exceptions=False) as client:
+        response = client.post(_REPLAN, json=body)
+    assert response.status_code == 200, response.text
+    assert response.json()["itinerary"] is not None, response.json()
+    assert sum(port.legs.values()) == 0, port.legs
+    (event,) = _distance_events(trace)
+    assert "budget_ms=0" in event.reason, event.reason

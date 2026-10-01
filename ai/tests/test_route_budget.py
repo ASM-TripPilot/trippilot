@@ -10,6 +10,7 @@
   ④ 시한 미전송(600,000)에서도 1.5s 상한
   ⑤ 벤더 실패(예외·체인 폴백 is_estimated)는 vendor, 시한 초과는 budget 으로 따로 센다
   ⑥ 1차 패스(LegRecorder)는 외부 호출 0·중복 제거, 2차 패스가 실 `_distance_ranges` 로 렌더
+  ⑧ 동시 요청이 몰려도 실경로 동시 호출은 프로세스 전체에서 ROUTE_WORKERS 이하
   ⑦ (속성) 임의 지연·예산에서 measured+vendor+budget == total, 추정값 == TravelEstimator,
      렌더 문자열에 소요시간 토큰 0 (INV-3)
 """
@@ -25,6 +26,7 @@ from hypothesis import strategies as st
 
 from trippilot.api.route_budget import (
     POST_ASSEMBLY_CAP_MS,
+    ROUTE_WORKERS,
     LegRecorder,
     measure_within,
     post_assembly_budget_ms,
@@ -58,11 +60,21 @@ class FakeRoute:
         self.slow, self.delay_s, self.fail, self.raise_ = slow, delay_s, fail, raise_
         self.release = threading.Event()
         self.calls = 0
+        self.in_flight = self.peak = 0
         self._lock = threading.Lock()
 
     def estimate(self, a, b, mode):
         with self._lock:
             self.calls += 1
+            self.in_flight += 1
+            self.peak = max(self.peak, self.in_flight)
+        try:
+            return self._estimate(a, b, mode)
+        finally:
+            with self._lock:
+                self.in_flight -= 1
+
+    def _estimate(self, a, b, mode):
         leg = (a, b, mode)
         if leg in self.slow:
             self.release.wait(5)
@@ -115,7 +127,7 @@ def test_parallel_beats_sequential() -> None:
     ls = legs(16)
     port = FakeRoute(delay_s=0.1)
     t = time.perf_counter()
-    _, rep = measure_within(ls, port, EST, budget_ms=1_500, clock=CLOCK, workers=8)
+    _, rep = measure_within(ls, port, EST, budget_ms=1_500, clock=CLOCK)
     wall = time.perf_counter() - t
     assert rep.measured == 16
     assert wall < 16 * 0.1 / 2          # 순차 1.6s 의 절반 미만 (이론 0.2s)
@@ -151,6 +163,34 @@ def test_vendor_failure_counted_separately_from_budget() -> None:
     # 체인 폴백(is_estimated)·포트 예외 = vendor, 막힌 구간 = budget
     assert (rep.measured, rep.vendor_estimated, rep.budget_estimated) == (1, 2, 1)
     assert table.estimate(*ls[1]) == EST.estimate(*ls[1])   # 예외 구간도 추정으로 채운다
+
+
+# ── ⑧ 프로세스 전체 동시성 상한 ──────────────────────────────────────
+
+
+def test_concurrent_requests_share_one_worker_cap() -> None:
+    """요청마다 풀을 새로 만들면 동시 요청 N 개가 N×8 호출을 한꺼번에 낸다(리뷰 실측 80).
+
+    공유 풀이면 늦은 호출이 워커를 쥐고 있어도 동시 호출은 ROUTE_WORKERS 를 못 넘는다.
+    """
+    port = FakeRoute(slow=frozenset(
+        (pt(100 * r + i), pt(100 * r + i + 1), P) for r in range(4) for i in range(10)))
+    reports = []
+
+    def one(r: int) -> None:
+        ls = [(pt(100 * r + i), pt(100 * r + i + 1), P) for i in range(10)]
+        reports.append(measure_within(ls, port, EST, budget_ms=200, clock=CLOCK)[1])
+
+    threads = [threading.Thread(target=one, args=(r,)) for r in range(4)]
+    try:
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(5)
+    finally:
+        port.release.set()
+    assert len(reports) == 4 and all(r.budget_estimated == 10 for r in reports)
+    assert 0 < port.peak <= ROUTE_WORKERS, port.peak
 
 
 # ── ⑥ 두 패스 ────────────────────────────────────────────────────────
