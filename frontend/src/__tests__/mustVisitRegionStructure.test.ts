@@ -21,7 +21,7 @@ import path from 'node:path';
 
 const ROOT = path.resolve('src');
 const PAGE_REL = 'pages/saved-places/ui/SavedPlacesPage.tsx';
-const SCREEN_REL = 'features/explore/ui/MustVisitPickScreen.tsx';
+const SCREEN_REL = 'pages/saved-places/ui/MustVisitPickScreen.tsx';
 
 function read(rel: string): string {
   return fs.readFileSync(path.join(ROOT, rel), 'utf8');

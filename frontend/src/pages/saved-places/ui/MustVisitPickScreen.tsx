@@ -14,7 +14,7 @@ import {
   CircleExclaimGlyph,
   MapPinGlyph,
   SearchGlyph,
-} from './ExploreGlyphs';
+} from '@/features/explore/ui/ExploreGlyphs';
 
 /**
  * d02 select 모드 화면 — 담은 곳 중 '꼭 갈 곳'을 고른다(TRIP-706 D1·D2, props-only 순수 뷰).

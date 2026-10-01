@@ -54,7 +54,7 @@ const TOAST_GLYPHS_REL = 'shared/ui/ToastGlyphs.tsx';
 // 불가 → shared/ui. 도메인 문구는 전부 props 로 받는다(README §65).
 const COLLAGE_EMPTY_REL = 'shared/ui/CollageEmptyState.tsx';
 const SAVED_STAY_SCREEN_REL = 'features/stay/ui/SavedStayListScreen.tsx';
-const SAVED_PLACE_SCREEN_REL = 'features/explore/ui/SavedPlaceListScreen.tsx';
+const SAVED_PLACE_SCREEN_REL = 'pages/saved-places/ui/SavedPlaceListScreen.tsx';
 const STAY_STATE_NOTICE = path.join(
   ROOT,
   'features',

@@ -1,6 +1,7 @@
 ---
 paths:
   - "src/features/explore/**"
+  - "src/pages/saved-places/**"
   - "src/pages/place-*/**"
   - "src/pages/region-picker/**"
   - "src/app/(tabs)/explore.tsx"

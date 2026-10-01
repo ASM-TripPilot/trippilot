@@ -70,7 +70,7 @@ const REPLACED: Record<string, { skeletons: string[]; keep: string[] }> = {
     ],
     keep: [],
   },
-  'features/explore/ui/MustVisitPickScreen.tsx': {
+  'pages/saved-places/ui/MustVisitPickScreen.tsx': {
     skeletons: [PICK_CIRCLE, PICK_CIRCLE, ROW_THUMB, PICK_TITLE, PICK_SUB],
     keep: [EMPTY_COLLAGE, EMPTY_COLLAGE],
   },
@@ -78,9 +78,9 @@ const REPLACED: Record<string, { skeletons: string[]; keep: string[] }> = {
     skeletons: ['rounded-card bg-surface-soft'],
     keep: [],
   },
-  'features/explore/ui/SavedPlaceListScreen.tsx': {
+  'pages/saved-places/ui/SavedPlaceListScreen.tsx': {
     skeletons: [PICK_CIRCLE, PICK_CIRCLE, ROW_THUMB, PICK_TITLE, PICK_SUB],
-    keep: [EMPTY_COLLAGE, EMPTY_COLLAGE, ROW_THUMB],
+    keep: [EMPTY_COLLAGE, EMPTY_COLLAGE],
   },
   'features/trip/ui/TripWizardStep1Screen.tsx': {
     skeletons: [

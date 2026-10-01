@@ -45,12 +45,12 @@ import { DailyReflectionScreen } from '@/features/reflection/ui/DailyReflectionS
 import { ShareCardScreen } from '@/features/reflection/ui/ShareCardScreen';
 import { TravelStyleScreen } from '@/features/reflection/ui/TravelStyleScreen';
 import { TripSummaryScreen } from '@/features/reflection/ui/TripSummaryScreen';
-import { MustVisitOutsideConfirmDialog } from '@/features/explore/ui/MustVisitOutsideConfirmDialog';
-import { MustVisitPickScreen } from '@/features/explore/ui/MustVisitPickScreen';
+import { MustVisitOutsideConfirmDialog } from '@/pages/saved-places/ui/MustVisitOutsideConfirmDialog';
+import { MustVisitPickScreen } from '@/pages/saved-places/ui/MustVisitPickScreen';
 import { PlaceDetailScreen as ExplorePlaceDetailScreen } from '@/features/explore/ui/PlaceDetailScreen';
 import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
 import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
-import { SavedPlaceListScreen } from '@/features/explore/ui/SavedPlaceListScreen';
+import { SavedPlaceListScreen } from '@/pages/saved-places/ui/SavedPlaceListScreen';
 import {
   ExploreLandingScreen,
   type StayCardVM,

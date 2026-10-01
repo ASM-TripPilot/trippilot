@@ -52,9 +52,9 @@ import {
 import { orderSavedPlaces } from '@/features/explore/model/savedPlaceList';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import { wizardOriginParams } from '@/features/explore/model/wizardOrigin';
-import { MustVisitOutsideConfirmDialog } from '@/features/explore/ui/MustVisitOutsideConfirmDialog';
-import { MustVisitPickScreen } from '@/features/explore/ui/MustVisitPickScreen';
-import { SavedPlaceListScreen } from '@/features/explore/ui/SavedPlaceListScreen';
+import { MustVisitOutsideConfirmDialog } from './MustVisitOutsideConfirmDialog';
+import { MustVisitPickScreen } from './MustVisitPickScreen';
+import { SavedPlaceListScreen } from './SavedPlaceListScreen';
 import { buildAnytimeMustVisitRequest } from '@/features/itinerary/model/mustVisitTimeForm';
 import {
   mustVisitFailureNotice,
