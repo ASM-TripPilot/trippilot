@@ -192,6 +192,7 @@ export function DailyReflectionPage({
         );
       }}
       onPressTab={(key: ShellTabKey) => router.replace(shellTabHref(key))}
+      // eslint-disable-next-line no-restricted-syntax -- 편집 진입은 화면이 로컬로 연다(BR-U5-36) — 페이지가 할 일이 없는 알림 콜백
       onEnterEdit={() => {
         // 편집 열림은 화면이 로컬로 진다. 생성 없이 PUT 경로(BR-U5-36)라 여기서 별도 조치 없음.
       }}

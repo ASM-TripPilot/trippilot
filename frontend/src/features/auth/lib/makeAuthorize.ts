@@ -7,7 +7,7 @@ import { getOAuthConfig } from '../config/oauthConfig';
  * dev fake OAuth provider 팩토리(DI 씨앗). `signIn(provider, makeAuthorize(provider))` 로 주입되어,
  * env 토글 EXPO_PUBLIC_AUTH_FAKE 가 켜진 dev 경로에서만 env EXPO_PUBLIC_AUTH_FAKE_OUTCOME 대로 가짜
  * 인가 결과를 낸다(cancel|dismiss, 그 외/미지정은 success-code). 결과 출처를 목 모듈이 아니라 env 로 둔
- * 이유는 `@/mocks/*` 를 앱 정적 그래프에서 끊기 위함이다(noMswInStaticGraph 가드 · 게이트①-2 계약).
+ * 이유는 `@/mocks/*` 를 앱 정적 그래프에서 끊기 위함이다(eslint `no-restricted-imports` 가 `@/mocks`·상대경로 `mocks`·`msw` 정적 import 를 막는다 · 게이트①-2 계약).
  * 성공 결과에는 PKCE codeVerifier 만 담고 시크릿은 담지 않는다(SEC-AUTH).
  *
  * 토글이 꺼진 실 빌드에서는 provider 별로 실 경로가 갈린다(TRIP-210):
