@@ -23,6 +23,7 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 
+from trippilot.agents.schedule.budget import OrchestratorConfig
 from trippilot.api.app import create_app
 from trippilot.api.wiring import build_orchestrator
 from trippilot.assembly_engine.config import AssemblyConfig
@@ -83,7 +84,8 @@ class _RaisingLookup(InMemoryPoi):
         raise TimeoutError("poi lookup timed out")
 
 
-def _client(poi_db: InMemoryPoi | None = None) -> TestClient:
+def _client(poi_db: InMemoryPoi | None = None,
+            orchestrator_config: OrchestratorConfig | None = None) -> TestClient:
     orchestrator = build_orchestrator(
         llm=FailingLlm(),  # 규칙 점수 — 이 파일은 점수가 아니라 이동 검증을 본다
         poi_db=poi_db if poi_db is not None else InMemoryPoi(_ALL),
@@ -91,6 +93,7 @@ def _client(poi_db: InMemoryPoi | None = None) -> TestClient:
         c1_config=_C1CFG,
         clock=FakeClock(),
         trace=InMemoryTrace(),
+        orchestrator_config=orchestrator_config,
     )
     return TestClient(create_app(orchestrator), raise_server_exceptions=False)
 

@@ -10,7 +10,7 @@ ScheduleTask → ⓪ 풀 밖 고정 블록 POI 조회           인덱스에만 
              → ② 게이트웨이 선호 점수 (전 일자 1회)  실패·스킵 → 규칙 점수 (BR-U4-09의 "호출측"이 여기다)
              → ②‴′ (generate) 같은 장소 계열 강등     대표 외 계열원 점수 강등 / 조회 실패 → 그 축만 건너뜀 (TRIP-1181)
              → ②′ (선택) 점수 상위 지도 실재 검증     못 찾음 → 점수 강등 / 실패 → 강등 없이 진행 (TRIP-904)
-             → ③ ItineraryProblem 조립               (후보는 풀에서 나온 것만)
+             → ③ ItineraryProblem 조립               (후보는 풀에서 나온 것만 · generate 는 점수에 결정론 지터, TRIP-1180)
              → ④ 어셈블리 solve                       (체인 폴백은 어셈블리 소유 — 여기서 이중 폴백 금지)
              → ⑤ (선택) 설명 부착                      실패 → 설명 없이 진행
              → ⑥ 슬롯별 차선책 (결정론, LLM 0회)       실패 → 차선책 없이 진행 (TRIP-871)
@@ -38,6 +38,7 @@ LLM 경로는 게이트 통과분을 **한 번 더** `pool.contains`로 교차�
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from typing import Mapping, Protocol, Sequence
@@ -180,10 +181,17 @@ class GenerateItineraryRequest:
     # PlanB 경로의 점수는 종전과 바이트 동일하다(재계획은 기존 일정을 고치는 것이라 계열
     # 판정의 기준이 다르다 — 지금 일정에 이미 있는 것을 대표로 볼지부터 정해야 한다).
     family_demote: bool = False
+    # 약한 결정론 지터 폭 ε (TRIP-1180) — **generate 와이어 변환만** 설정값으로 채운다
+    # (`OrchestratorConfig.diversity_jitter`, 상한 관계도 거기서 강제). 기본 0 이라 replan·
+    # PlanB 경로의 점수는 종전과 바이트 동일하다 — 재계획은 시드를 하한 결정론에 쓰고(TRIP-1182),
+    # PlanB 가산 서열을 흔들 이유가 없다.
+    diversity_jitter: float = 0.0
 
     def __post_init__(self) -> None:
         if not self.days:
             raise ValueError("days는 최소 1일")
+        if self.diversity_jitter < 0.0:
+            raise ValueError("diversity_jitter 음수 불가")
 
 
 @dataclass(frozen=True, slots=True)
@@ -370,10 +378,16 @@ class ScheduleAgent:
         # ③ ItineraryProblem 조립 — 후보는 풀에서 나온 것만 (INV-1).
         #    날씨(TRIP-383)·행사 보너스(TRIP-421)는 오케스트레이터가 패킷을 소화해
         #    넘긴 값 — 어셈블리 소프트 항으로만 들어간다 (None = 무보정).
+        #    약한 결정론 지터(TRIP-1180)는 **어셈블리 입력에만** 얹는다 — 점수 단계가 다 끝난
+        #    뒤라 ②′·②⁗ 의 상위 N 선정과 ⑥ 차선책은 원점수를 본다(사용자에게 '이유'가 되는
+        #    서열을 흔들지 않는다). 노드 순서 '점수 내림차순 + poi_id' 는 지터 뒤 점수를 따른다
+        #    — 동률·근소차의 순서가 여행마다 갈리는 것이 다양성의 실체다.
         problem = ItineraryProblem(
             schedule_id=request.schedule_id,
             days=request.days,
-            candidates=candidates,
+            candidates=diversity_jittered(
+                candidates, seed=request.seed, rejections=request.rejections,
+                epsilon=request.diversity_jitter),
             fixed_blocks=fixed_blocks,
             budget=request.budget,
             transport=request.transport,
@@ -1259,6 +1273,42 @@ def rejection_penalty(
         table = swapped if kind is RejectionKind.SWAPPED_OUT else regenerated
         out[poi_id] = out.get(poi_id, 0.0) + step(table, count)
     return {poi_id: min(v, cap) for poi_id, v in out.items()}
+
+
+def diversity_jittered(
+    candidates: tuple[ScoredPoi, ...],
+    *,
+    seed: int,
+    rejections: Sequence[Rejection],
+    epsilon: float,
+) -> tuple[ScoredPoi, ...]:
+    """점수에 ε·(u − ½) 를 더한다 — u ∈ [0, 1) 는 (시드, 거절 이력, poi_id) 의 해시 (TRIP-1180).
+
+    **결정론이다** — 같은 여행·같은 이력이면 같은 값(무작위 금지 원칙). 여행이 바뀌면(시드)
+    또 '다시 짜기'로 거절 이력이 늘면 키가 바뀌어 동률·근소차 후보의 순서가 갈린다.
+
+    **대칭형인 이유**: OR-Tools 목적함수는 방문마다 int(점수·1000) 을 더하고 이동 비용 항이
+    없다. 한쪽(+ε·u)으로만 올리면 방문 1건당 평균 +ε/2 가 붙어 '더 많이 넣기'로 기운다 —
+    속도(pace)와 식사·카테고리 소프트 항의 저울이 함께 움직인다. 대칭형은 평균 0 이라 그
+    저울을 건드리지 않고, 순서를 흔드는 힘(두 후보의 차 < ε)은 같다. 품질 지표
+    (preference_fit)도 기대값이 안 움직인다.
+
+    blake2b 인 이유: crc32 는 선형이라 같은 길이 키에서 두 POI 의 차가 시드와 무관해지고,
+    여행이 바뀌어도 일부 쌍의 순서가 끝내 안 갈린다(실측 24%). ε 0 이면 입력을 그대로
+    돌려준다 — replan 이 바이트 동일한 근거. 후보 집합·순서·개수는 그대로다 (INV-1).
+    """
+    if epsilon <= 0.0:
+        return candidates
+    digest = hashlib.blake2b(
+        "\n".join(sorted({f"{r.poi_id}\t{r.kind.value}\t{r.count}" for r in rejections})
+                  ).encode(), digest_size=8).hexdigest()
+
+    def unit(poi_id: PoiId) -> float:
+        h = hashlib.blake2b(f"{seed}|{digest}:{poi_id}".encode(), digest_size=8)
+        return int.from_bytes(h.digest(), "big") / 2**64
+
+    return tuple(replace(c, score=c.score + epsilon * (unit(c.poi_id) - 0.5))
+                 for c in candidates)
 
 
 def demote_rejected(
