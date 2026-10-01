@@ -2280,6 +2280,8 @@ def build_orchestrator(
         # 그때 점수는 종전과 **완전히 같다**(전 POI '모름' → 중립). 즉 데이터가
         # 배포되기 전에도 이 배선이 동작을 안 바꾼다.
         fees=load_fee_table(),
+        # 풀 밖 고정 블록 POI 조회 (TRIP-1177) — 없으면 이동을 0분으로 놓은 해가 나갔다.
+        poi_db=poi_db,
     )
     # 수집기는 하나를 공유한다 — 코디네이터(generate)와 경계(replan·edit)가 같은
     # 요구표·같은 Provider 를 쓴다. 경로마다 따로 만들면 표가 갈라진다.

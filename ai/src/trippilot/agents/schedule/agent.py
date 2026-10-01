@@ -6,7 +6,8 @@
 `solve()` 를 부를 뿐 안으로 들어가지 않는다.
 
 ```
-ScheduleTask → ② 게이트웨이 선호 점수 (전 일자 1회)  실패·스킵 → 규칙 점수 (BR-U4-09의 "호출측"이 여기다)
+ScheduleTask → ⓪ 풀 밖 고정 블록 POI 조회           인덱스에만 합류 / 못 찾음·실패 → 블록 제외 + 강등 (TRIP-1177)
+             → ② 게이트웨이 선호 점수 (전 일자 1회)  실패·스킵 → 규칙 점수 (BR-U4-09의 "호출측"이 여기다)
              → ②′ (선택) 점수 상위 지도 실재 검증     못 찾음 → 점수 강등 / 실패 → 강등 없이 진행 (TRIP-904)
              → ③ ItineraryProblem 조립               (후보는 풀에서 나온 것만)
              → ④ 어셈블리 solve                       (체인 폴백은 어셈블리 소유 — 여기서 이중 폴백 금지)
@@ -89,6 +90,7 @@ from trippilot.ports.place_existence_port import (
     ExistenceVerdict,
     PlaceExistencePort,
 )
+from trippilot.ports.poi_db_port import PoiDbPort
 from trippilot.ports.trace_port import TracePort
 
 _COMPONENT = "agents.schedule"
@@ -117,9 +119,9 @@ class AssemblyFacade(Protocol):
 class AssemblyProvider(Protocol):
     """후보 풀이 요청마다 다르므로 `poi_index`도 요청 스코프 — 퍼사드를 풀에 맞춰 조립한다.
 
-    고정 블록 POI가 풀 밖(반경·예산 필터에서 탈락)일 수 있다. 그 경우 인덱스에 없어
-    HC1·HC2가 미적용되는데, 이는 "정보 없음은 막지 않는다"는 어셈블리 규칙과 같은 처리다.
-    인덱스를 보강하고 싶으면 이 provider 구현에서 하면 된다(조립은 관여하지 않는다).
+    고정 블록 POI가 풀 밖(반경·예산 필터에서 탈락)일 수 있다. 에이전트가 ⓪에서 그 POI 를
+    조회해 **인덱스에만** 합류시킨다(TRIP-1177) — 후보가 아니므로 INV-1 과 무관하다.
+    인덱스에 없으면 이동을 검증할 수 없어 체인이 그 인접 쌍을 위반으로 본다.
     """
 
     def for_pool(self, poi_index: Mapping[PoiId, Poi]) -> AssemblyFacade: ...
@@ -230,6 +232,7 @@ class ScheduleAgent:
         fees: FeeTable | None = None,
         hours: PlaceHoursPort | None = None,
         place_ids: Mapping[str, str] | None = None,
+        poi_db: PoiDbPort | None = None,
     ) -> None:
         self._scoring = scoring_worker
         self._assembly_provider = assembly_provider
@@ -248,6 +251,9 @@ class ScheduleAgent:
         # 미주입이면 ②⁗ 를 통째로 건너뛴다 (기능 부재, 강등 아님).
         self._hours = hours
         self._place_ids = place_ids or {}
+        # 풀 밖 고정 블록 POI 조회 (TRIP-1177). 미주입이면 ⓪ 을 건너뛰고, 풀 밖 블록은
+        # 인덱스에 없어 체인이 그 인접 이동을 위반으로 본다(0분 배치가 나가지 않는다).
+        self._poi_db = poi_db
 
     # ── 공개 API ────────────────────────────────────────────────────
 
@@ -272,6 +278,11 @@ class ScheduleAgent:
         request, pool, persona, budget = task.request, task.pool, task.persona, task.budget
         t0, trace_id, now = task.started_ms, task.trace_id, task.now
         steps: list[Degradation] = list(task.prior_degradations)
+
+        # ⓪ 풀 밖 고정 블록 POI — 점수 **앞**에서 묻는다. 어셈블리 직전이면 점수 단계가
+        #    상한을 다 쓴 날 시한이 바닥나 필수방문이 시한 탓에 빠진다. 합류는 ④ 의 인덱스.
+        fixed_blocks, fixed_pois = self._resolve_fixed_pois(
+            request, pool, budget, t0, steps, trace_id, now)
 
         # ② 게이트웨이 선호 점수 (전 일자 공용 1회) — 실패·스킵이면 규칙 점수 (INV-4)
         elapsed = self._clock.monotonic_ms() - t0
@@ -339,7 +350,7 @@ class ScheduleAgent:
             schedule_id=request.schedule_id,
             days=request.days,
             candidates=candidates,
-            fixed_blocks=request.fixed_blocks,
+            fixed_blocks=fixed_blocks,
             budget=request.budget,
             transport=request.transport,
             day_window=request.day_window,
@@ -360,7 +371,9 @@ class ScheduleAgent:
         c2_ms = max(
             budget.c2_reserved_ms, budget.total_ms - (self._clock.monotonic_ms() - t0)
         )
-        assembly = self._assembly_provider.for_pool({p.poi_id: p for p in pool.pois})
+        # 고정 블록 POI 는 **인덱스에만** 합류 — 후보·풀 보고는 그대로다 (INV-1).
+        assembly = self._assembly_provider.for_pool(
+            {**fixed_pois, **{p.poi_id: p for p in pool.pois}})
         try:
             solution = assembly.solve(problem, c2_ms, trace_id)
         except AssemblyConflictError as e:
@@ -782,6 +795,57 @@ class ScheduleAgent:
             replace(p, open_hours=filled[p.poi_id]) if p.poi_id in filled else p
             for p in pool.pois
         ))
+
+    # ── ⓪ 풀 밖 고정 블록 POI 조회 (TRIP-1177) ─────────────────────
+
+    def _resolve_fixed_pois(
+        self,
+        request: GenerateItineraryRequest,
+        pool: CandidatePool,
+        budget: DeadlineBudget,
+        t0: int,
+        steps: list[Degradation],
+        trace_id: TraceId,
+        now: datetime,
+    ) -> tuple[tuple[FixedBlock, ...], dict[PoiId, Poi]]:
+        """(남길 고정 블록, 인덱스에 합류할 POI). 못 찾은 블록은 **빼고 강등을 남긴다.**
+
+        좌표를 모르는 블록을 남기면 OR 은 해 없음, 그리디는 그 뒤 이동을 모르고, 체인은
+        그 인접 쌍을 위반으로 본다 — 결국 409 거나 블록만 덩그러니 남는다. 빼면 나머지
+        일정이 나가고 generate 는 `unplaced_must_visits`(NO_FEASIBLE_SLOT), replan 은
+        notes 로 그 블록을 보고한다(침묵 드롭 아님).
+
+        포트는 시한을 받지 않는다 — 진입 전에 어셈블리 바닥을 침범하지 않는지만 본다
+        (_enrich_hours 와 같은 규율). 호출 자체의 상한은 어댑터의 HTTP 타임아웃이다.
+        """
+        want = frozenset(b.poi_id for b in request.fixed_blocks) - pool.poi_ids
+        if self._poi_db is None or not want:
+            return request.fixed_blocks, {}
+        found: dict[PoiId, Poi] = {}
+        available = (budget.total_ms - (self._clock.monotonic_ms() - t0)
+                     - budget.c2_reserved_ms)
+        if available <= 0:
+            self._degrade(steps, trace_id, now, "fixed_poi", "lookup", "(dropped)",
+                          f"deadline:available={available}ms")
+        else:
+            try:  # 반환값 순회까지 try 안이다 (DL-5 — _enrich_hours 와 같은 규약)
+                lookup = self._poi_db.lookup_by_ids(want)
+                found = {p.poi_id: p for p in lookup.pois if p.poi_id in want}
+                why = {m.poi_id: m.reason for m in lookup.misses}
+            except Exception as e:  # noqa: BLE001
+                found = {}
+                self._degrade(steps, trace_id, now, "fixed_poi", "lookup", "(dropped)",
+                              f"fixed_poi_lookup_error: {type(e).__name__}: {e}")
+            else:
+                lost = sorted(want - found.keys(), key=str)
+                if lost:
+                    self._degrade(
+                        steps, trace_id, now, "fixed_poi", "lookup", "(dropped)",
+                        "fixed_poi_unresolved: " + ",".join(
+                            f"{pid}({why.get(pid, 'not_found')})" for pid in lost))
+        kept = tuple(b for b in request.fixed_blocks
+                     if b.poi_id not in want or b.poi_id in found)
+        return kept, found
 
     # ── ⑥′ 차선책 LLM 문장 (TRIP-887) ──────────────────────────────
 

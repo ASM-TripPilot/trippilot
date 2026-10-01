@@ -60,6 +60,22 @@ def check_hc2(solution: ItinerarySolution, poi_index: Mapping[PoiId, Poi],
     return out
 
 
+def check_hc2_coords_known(solution: ItinerarySolution,
+                           poi_index: Mapping[PoiId, Poi]) -> list[Violation]:
+    """체인 내부 전용 (TRIP-1177) — 인접 쌍 한쪽이 인덱스에 없으면 이동 검증 불가 = 위반.
+
+    `check_hc2` 의 "정보 없음은 막지 않는다"는 이미 저장된 일정을 다시 보는 경로
+    (validate·repair·edit)의 규칙이라 그대로 둔다. solve 는 시각을 **만드는** 경로라,
+    모르는 이동을 0분으로 놓은 해가 위반 0 으로 화면에 나갔다(INV-2).
+    """
+    out: list[Violation] = []
+    for day in solution.days:
+        for prev, nxt in zip(day.slots, day.slots[1:]):
+            if prev.poi_id not in poi_index or nxt.poi_id not in poi_index:
+                out.append(Violation("HC2", nxt.poi_id, "좌표 미상 — 이동 검증 불가"))
+    return out
+
+
 def check_hc3(solution: ItinerarySolution, problem: ItineraryProblem) -> list[Violation]:
     """고정 블록 시각 불변: 해당 일자에 정확한 시각의 슬롯이 존재해야 함."""
     out: list[Violation] = []

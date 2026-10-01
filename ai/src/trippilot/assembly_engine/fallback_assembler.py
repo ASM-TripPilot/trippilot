@@ -157,6 +157,8 @@ class RuleFallbackAssembler:
                     else _at(day, problem.day_window.start)
                 ref_mod = ref.hour * 60 + ref.minute
                 last_poi = self._pois.get(last.poi_id) if last is not None else None
+                if last is not None and last_poi is None:
+                    break  # 좌표 미상 뒤 이동을 모른다 — 0분으로 놓지 않는다 (TRIP-1177)
                 last_is_food = (last_poi is not None
                                 and last_poi.category is PoiCategory.FOOD)
                 food_first = not last_is_food and any(
@@ -197,7 +199,7 @@ class RuleFallbackAssembler:
                         depart = last.end_at
                         travel_min = self._est.estimate(
                             last_poi.coord, poi.coord, problem.transport
-                        ).internal_minutes if last_poi else 0
+                        ).internal_minutes
                     start = depart + timedelta(minutes=travel_min)
                     end = start + timedelta(minutes=stay)
                     if end > day_end:
