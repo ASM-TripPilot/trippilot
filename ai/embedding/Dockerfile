@@ -71,5 +71,9 @@ ENV EMBEDDING_ONNX_DIR=/models/onnx
 COPY app.py ./
 
 EXPOSE 8100
-# 워커 1개 — 모델이 프로세스마다 1.1GB 를 잡는다. 늘리려면 메모리부터 계산할 것.
+# 워커 1개 — 모델이 **프로세스마다 4.2 GiB** 를 잡는다(워밍 직후 4.29 · 배치 정점 4.37,
+# `ai/docs/임베딩-사이징-근거.md` §2). 위의 1.1GB 는 이미지에 저장된 fp16 가중치 크기이고
+# 런타임 상주가 아니다 — app.py 가 `.float()` 로 fp32 로 되올린다. 저장 크기로 계산하면
+# 2워커가 2.2GB 로 보여 한도(limits 6Gi · compose mem_limit 5g) 안에 들어오는 것처럼
+# 되는데, 실제로는 8.4GiB 라 OOMKilled 다. 늘리려면 한도부터 같이 올릴 것.
 CMD ["/app/.venv/bin/uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8100", "--workers", "1"]
