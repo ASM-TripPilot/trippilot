@@ -67,6 +67,17 @@ const TOKENIZED_HEX = [
   '#ff385c',
   '#f7f7f7',
   '#ffe4e9',
+  // widgets 목록과 맞춘다 — TRIP-1143 에 widgets 부품이 page 로 들어오며 이 둘의 검사를 잃었다.
+  '#c13515',
+  '#3f3f3f',
+];
+
+/** raw hex 스캔 면제 — SVG `stroke`/`fill` 은 className 을 못 받아 hex 가 유일한 수단인 글리프 파일.
+ * 이름 패턴(`Glyphs.tsx$`)이 아니라 **명시 목록**이다 — 패턴이면 이름만 붙여 토큰 색을 우회할 수 있다
+ * (TRIP-1143 03b 경고 1, `ELAPSED_FLAG_ALLOWED` 와 같은 "보이는 면제"). 정렬 순서로 적는다. */
+const HEX_EXEMPT_GLYPHS = [
+  'pages/itinerary-copick/ui/CoPickStepperGlyphs.tsx',
+  'pages/itinerary-list/ui/GenerationDoneBarGlyphs.tsx',
 ];
 
 /** `shared/time` 의 경과 플래그 훅 — 안에서 `setTimeout` 을 쓴다. 아래 타이머 스캔은 글자만 보므로
@@ -225,11 +236,14 @@ describe('G-3·G-4 · pages 층 전수 — 층 규칙과 불변식', () => {
     );
     expect(timerOffenders).toEqual([]);
 
-    const hexOffenders = sources.flatMap(({ file, source }) =>
-      TOKENIZED_HEX.filter((hex) => source.toLowerCase().includes(hex)).map(
-        (hex) => `${file}: ${hex}`
-      )
-    );
+    // 글리프 파일은 명시 목록으로만 면제한다(위 `HEX_EXEMPT_GLYPHS`).
+    const hexOffenders = sources
+      .filter(({ file }) => !HEX_EXEMPT_GLYPHS.includes(file))
+      .flatMap(({ file, source }) =>
+        TOKENIZED_HEX.filter((hex) => source.toLowerCase().includes(hex)).map(
+          (hex) => `${file}: ${hex}`
+        )
+      );
     expect(hexOffenders).toEqual([]);
   });
 

@@ -1,7 +1,7 @@
 import Svg, { Path } from 'react-native-svg';
 
-// GenerationDoneBar 전용 인라인 SVG 글리프. widgets→`@/features` import 금지라 `ItineraryGlyphs` 의
-// 체크를 못 가져다 쓴다(MapSheetGlyphs 로컬 복제 선례). 색은 이 파일에서만 raw hex 로 고정한다 —
+// GenerationDoneBar 전용 인라인 SVG 글리프. widgets 시절 `@/features` import 금지로 `ItineraryGlyphs` 의
+// 체크를 복제했다(TRIP-1143 에 page 안으로 이동 — 동작 보존으로 유지). 색은 이 파일에서만 raw hex 로 고정한다 —
 // SVG `stroke` 는 className 을 못 받고, `*Glyphs.tsx` 는 raw-hex 스캔 가드 제외 관례다.
 
 const SUCCESS = '#0E9384';

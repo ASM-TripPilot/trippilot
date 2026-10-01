@@ -4,7 +4,7 @@ import { Text, View } from 'react-native';
 import { StepperCheckBadge, StepperSunGlyph } from './CoPickStepperGlyphs';
 
 /**
- * TRIP-794 · CoPickStepper — 같이 고르기(co-pick) 위저드 3단 스텝퍼(h09·h10 공유 widget).
+ * TRIP-794 · CoPickStepper — 같이 고르기(co-pick) 위저드 3단 스텝퍼(h09·h10 공유). 소비처가 이 page 하나라 TRIP-1143 에 widgets 에서 옮겨 왔다.
  *
  * 이전(고름) → 현재(지금 고르는 중) → 다음(비어 있음) 흐름을 role 고정 3슬롯으로 그린다. current 는
  * 필수, prev/next 는 첫·마지막 슬롯에서 optional 이라 미주입이면 그 열을 안 그린다(부재). **현재 단만
@@ -13,8 +13,8 @@ import { StepperCheckBadge, StepperSunGlyph } from './CoPickStepperGlyphs';
  * 이 인터페이스(`{prev?, current, next?}` 각 `{title,status,iconKey?,done?}`)는 seed D2 로 확정됐고
  * **h10(TRIP-795) 재사용을 구속한다** — steps 배열이 아니라 role 고정 3슬롯이라 795 도 이 shape 그대로 받는다.
  *
- * presentation-only(`useState` 0 — `widgetsStructure` F 규약). 원 안 마커·완료 배지는 위젯 로컬 글리프
- * (`CoPickStepperGlyphs.tsx`, D4 — widgets→features import 금지라 로컬 복제). 원·연결선·완료 배지의 실제
+ * presentation-only(`useState` 0). 원 안 마커·완료 배지는 로컬 글리프(`CoPickStepperGlyphs.tsx`) —
+ * widgets 시절 features import 금지로 복제했고, page 안으로 온 뒤에도 동작 보존으로 그대로 둔다. 원·연결선·완료 배지의 실제
  * 색/모양/좌표는 jest 사각(글리프 raw-hex 제외)이라 6-b 육안 전용. INV-3 — 소요시간 문자열은 어디에도
  * 없다("오후"는 시간대 라벨이라 허용, `CoPickStepper.test.tsx` T5 가 렌더 텍스트 전수로 잠근다).
  */
@@ -42,7 +42,7 @@ export interface CoPickStepperProps {
 type Role = 'prev' | 'current' | 'next';
 
 // 한 열(역할 라벨 + 원 마커 + 제목 + 상태). 연결선은 좌/우 이웃이 있을 때만 원 뒤로 그린다(원이 위에
-// 덮음). 훅 없는 순수 함수라 위젯 presentation-only 규약(useState 0)을 안 깬다.
+// 덮음). 훅 없는 순수 함수다(presentation-only, useState 0).
 function StepColumn({
   role,
   label,

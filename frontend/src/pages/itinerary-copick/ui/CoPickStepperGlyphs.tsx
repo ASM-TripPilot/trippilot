@@ -1,9 +1,9 @@
 import Svg, { Circle, Path } from 'react-native-svg';
 
-// CoPickStepper 전용 인라인 SVG 글리프. widgets→`@/features` import 금지라 `ItineraryGlyphs` 의
-// 마커를 못 가져다 쓴다(MapSheetGlyphs·GenerationDoneBarGlyphs 로컬 복제 선례). 색은 이 파일에서만
+// CoPickStepper 전용 인라인 SVG 글리프. widgets 시절 `@/features` import 금지로 `ItineraryGlyphs` 의
+// 마커를 복제했다(TRIP-1143 에 page 안으로 이동 — 동작 보존으로 유지). 색은 이 파일에서만
 // raw hex 로 고정한다 — SVG `stroke`/`fill` 은 className 을 못 받고 `*Glyphs.tsx` 는 raw-hex 스캔
-// 제외 관례다(그래서 `widgetsStructure` F 가 이 파일은 안 훑는다).
+// 제외 관례다.
 
 const SUCCESS = '#0E9384'; // 완료 체크 배지 초록.
 const WHITE = '#FFFFFF'; // 현재 단(빨강 원) 위 마커.
