@@ -24,7 +24,7 @@ import { guardPress, openPressGuardWindow } from '@/shared/press/pressGuard';
 import {
   TripWizardStep2Screen,
   type Step2Variant,
-} from '@/features/trip/ui/TripWizardStep2Screen';
+} from './TripWizardStep2Screen';
 
 /**
  * g02 거점 숙소 2/4 배선(TRIP-672 재작성) — 두 조회 · 스토어 · 라우터를 잇는다. 화면은 이 중

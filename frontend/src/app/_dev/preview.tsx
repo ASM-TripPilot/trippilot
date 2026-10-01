@@ -165,7 +165,7 @@ import { StayFilterSheet } from '@/features/stay/ui/StayFilterSheet';
 import {
   TripWizardStep1Screen,
   type TripWizardStep1ScreenProps,
-} from '@/features/trip/ui/TripWizardStep1Screen';
+} from '@/pages/trip-new-step1/ui/TripWizardStep1Screen';
 import { CompanionEditSheet } from '@/features/trip/ui/CompanionEditSheet';
 import { DestinationEditSheet } from '@/features/trip/ui/DestinationEditSheet';
 import { PeriodEditSheet } from '@/features/trip/ui/PeriodEditSheet';
@@ -187,7 +187,7 @@ import { PrefOverrideSheet } from '@/pages/trip-new-step1/ui/PrefOverrideSheet';
 import {
   TripWizardStep2Screen,
   type TripWizardStep2ScreenProps,
-} from '@/features/trip/ui/TripWizardStep2Screen';
+} from '@/pages/trip-new-step2/ui/TripWizardStep2Screen';
 import { BaseRegenerateDialog } from '@/features/trip/ui/BaseRegenerateDialog';
 import { TripWizardLeaveDialog } from '@/features/trip/ui/TripWizardLeaveDialog';
 import { PrefStep1Screen } from '@/pages/onboarding-pref1/ui/PrefStep1Screen';

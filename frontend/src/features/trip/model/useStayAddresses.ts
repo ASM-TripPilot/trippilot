@@ -15,7 +15,7 @@ import type { StayAddressState } from './staySheetSections';
  * TRIP-1028 — `enabled: false` 면 묻지 않는다(좌표 있는 숙소는 `loading`, 없는 숙소는 `unknown`).
  * 받은 주소는 앱 세션 동안 남긴다(`gcTime: Infinity` — 이 조회에만, 전역 기본값은 그대로).
  * 기존 2/4 페이지 테스트 일부는 이 모듈을 목으로 바꿔 끼우고(QueryClientProvider 없음),
- * `TripNewStep2Page.geocodeLazy` 테스트는 실물로 돌려 요청 수를 잰다.
+ * `TripNewStep2Page.integration` 테스트는 실물로 돌려 요청 수를 잰다.
  */
 export function useStayAddresses(
   stays: SavedStay[],

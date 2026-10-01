@@ -6,7 +6,7 @@ import {
   act,
 } from '@testing-library/react-native';
 
-import type { TripWizardStep1ScreenProps } from '@/features/trip/ui/TripWizardStep1Screen';
+import type { TripWizardStep1ScreenProps } from '@/pages/trip-new-step1/ui/TripWizardStep1Screen';
 import type {
   SavedPlace,
   PreferenceView,
@@ -94,8 +94,10 @@ jest.mock('@/features/explore/model/savedPlaces', () => ({
 let mockStubScreen = false;
 const mockScreenProps: { props?: { isLoading?: boolean } } = {};
 
-jest.mock('@/features/trip/ui/TripWizardStep1Screen', () => {
-  const actual = jest.requireActual('@/features/trip/ui/TripWizardStep1Screen');
+jest.mock('@/pages/trip-new-step1/ui/TripWizardStep1Screen', () => {
+  const actual = jest.requireActual(
+    '@/pages/trip-new-step1/ui/TripWizardStep1Screen'
+  );
   return {
     ...actual,
     // 실물은 상태 훅 없는 함수 컴포넌트라 그대로 불러 그린다(팩토리 안 JSX·createElement 는 NativeWind

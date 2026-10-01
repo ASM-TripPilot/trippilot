@@ -62,7 +62,7 @@ import { CompanionEditSheet } from '@/features/trip/ui/CompanionEditSheet';
 import { DestinationEditSheet } from '@/features/trip/ui/DestinationEditSheet';
 import { PeriodEditSheet } from '@/features/trip/ui/PeriodEditSheet';
 import { TripWizardLeaveDialog } from '@/features/trip/ui/TripWizardLeaveDialog';
-import { TripWizardStep1Screen } from '@/features/trip/ui/TripWizardStep1Screen';
+import { TripWizardStep1Screen } from './TripWizardStep1Screen';
 
 import { BudgetEditSheet } from './BudgetEditSheet';
 import { PrefOverrideSheet } from './PrefOverrideSheet';
