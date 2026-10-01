@@ -441,13 +441,27 @@ class ScheduleAgent:
                           "persona_unavailable")
             return self._rule_scores(request, pool), ScoringMode.RULE
 
+        llm_pool = pool
+        capacity = self._scoring.capacity
+        if len(pool.pois) > capacity:
+            # 워커가 한 번에 실을 수 있는 건수(병렬 상한 × 청크 상한)를 넘는 풀 — 청크를
+            # 키우면 출력 상한에서 잘려 전량 폐기된다(풀 515 → 청크 ~52건, 0/10 성공).
+            # LLM 엔 규칙 점수 상위만 보내고, 나머지는 아래 rule_backfill 이 채운다.
+            top = sorted(self._rule_scores(request, pool),
+                         key=lambda sp: (-sp.score, str(sp.poi_id)))[:capacity]
+            keep = frozenset(sp.poi_id for sp in top)
+            pois = tuple(p for p in pool.pois if p.poi_id in keep)
+            llm_pool = replace(pool, poi_ids=keep, pois=pois)
+            self._observe(trace_id, now, "llm", "llm_score", "llm_score",
+                          f"llm_pool_capped:{len(pool.pois)}->{capacity}")
+
         try:
             # 단계 상한이 게이트웨이 호출 타임아웃까지 **관통**한다 (TRIP-376) —
             # 상한만 늘리고 호출 시한이 고정 2.5s로 남으면 실호출(바닥 ~3s,
             # TRIP-373 실측)이 먼저 잘려 상향이 무의미하다. 어셈블리 llm_assembler와
             # 같은 min(상한, 잔여) 패턴.
             result = self._scoring.score(
-                pool, persona, trace_id, now,
+                llm_pool, persona, trace_id, now,
                 timeout_sec=min(budget.c1_ms, remaining_ms) / 1000.0,
             )
         except Exception as e:

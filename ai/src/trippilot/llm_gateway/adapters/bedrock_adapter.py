@@ -101,4 +101,5 @@ class BedrockAdapter:
             output_tokens=int(usage.get("completion_tokens", 0)),
             latency_ms=int((time.monotonic() - started) * 1000),
             model_id=request.model_id,
+            truncated=bool(choices) and choices[0].get("finish_reason") == "length",
         )

@@ -80,6 +80,10 @@ class OpenAIAdapter:
                 raw_text = resp.output_text or ""
                 input_tokens = resp.usage.input_tokens
                 output_tokens = resp.usage.output_tokens
+                details = getattr(resp, "incomplete_details", None)
+                truncated = getattr(resp, "status", None) == "incomplete" and (
+                    getattr(details, "reason", None) == "max_output_tokens"
+                )
             else:
                 resp = self._client.chat.completions.create(
                     model=request.model_id,
@@ -93,6 +97,7 @@ class OpenAIAdapter:
                 raw_text = content if content is not None else ""
                 input_tokens = resp.usage.prompt_tokens
                 output_tokens = resp.usage.completion_tokens
+                truncated = getattr(resp.choices[0], "finish_reason", None) == "length"
         except openai.APITimeoutError as e:
             raise LlmTimeoutError(f"timeout > {request.timeout_sec}s: {e}") from e
         latency_ms = int((time.monotonic() - started) * 1000)
@@ -102,4 +107,5 @@ class OpenAIAdapter:
             output_tokens=output_tokens,
             latency_ms=latency_ms,
             model_id=resp.model,
+            truncated=truncated,
         )
