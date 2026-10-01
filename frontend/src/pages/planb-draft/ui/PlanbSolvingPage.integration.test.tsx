@@ -1,5 +1,3 @@
-import fs from 'fs';
-import path from 'path';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 
 import type { Itinerary, VisitCheckList } from '@/shared/api/generated/schemas';
@@ -19,7 +17,8 @@ import { PlanbSolvingPage } from './PlanbSolvingPage';
  *    back 만(세션은 살린다, cancel 0), [계속 기다리기]면 아무 데도 안 간다.
  *  - 범위가 FULL_DAY 면 캡션이 `{H}시 이후` 가 아니라 오늘 전체 문구다(TRIP-1007).
  *  - DRAFT·NO_SOLUTION·FAILED 면 `planb/draft` 로 replace 정확히 1회(push 아님 — 뒤로가기 무한 루프 방지).
- *  - itinerary 쓰기 훅은 0(INV-U4-05).
+ *  - itinerary 쓰기 훅은 0(INV-U4-05) — 아래 trips 목 팩토리가 cancel·visits 두 훅만 내주므로 페이지가 PUT 훅을
+ *    부르면 전 케이스가 TypeError 로 red 다(TRIP-1152 에서 소스 스캔 P8 을 지운 뒤 남는 그물).
  *
  *  - (5-b 후속) 취소 요청 중엔 [취소]가 잠긴다 · 원 일정에서 이웃하지 않는 두 완료 행 사이엔 커넥터가 없다 ·
  *    방문 기록을 모르면(로딩·실패) 곳 수를 비운다 · 지도 핀은 그날 슬롯 전부를 진행 상태별로 넘긴다.
@@ -484,18 +483,6 @@ describe('🔴 S4 · TRIP-1007 AC-7 · BR-U4-11 · DEC-U4-3 — FULL_DAY 캡션�
     expect(
       screen.getByTestId('generation-gauge-cell-2-active')
     ).toHaveTextContent('오늘 일정 다시 짜는 중');
-  });
-});
-
-describe('P8 · AC-6(d) · INV-U4-05 — 원 일정은 건드리지 않는다(소스)', () => {
-  it('★구조 — 페이지 소스에 itinerary 쓰기 훅이 0건이고 cancel 훅은 있다', () => {
-    const source = fs.readFileSync(
-      path.resolve('src/pages/planb-draft/ui/PlanbSolvingPage.tsx'),
-      'utf8'
-    );
-    expect(source).not.toContain('usePutTripsTripIdItinerary');
-    expect(source).not.toContain('putTripsTripIdItinerary');
-    expect(source).toContain('usePostTripsTripIdReplanSessionsSessionIdCancel');
   });
 });
 
