@@ -102,6 +102,54 @@ class BootstrapSecurityTests(unittest.TestCase):
         tag = read["Condition"]["StringEquals"]["secretsmanager:ResourceTag/aws:rds:primaryDBInstanceArn"]
         self.assertTrue(tag["Fn::Sub"].endswith(":db:trippilot-${Environment}"))
 
+    def test_bootstrap_principal_may_create_everything_the_stack_declares(self):
+        """부트스트랩 역할의 권한 예제가 템플릿이 만드는 IAM 리소스를 전부 덮는지.
+
+        여기가 어긋나면 스택이 403 으로 롤백되고, 터미널에서는 "Resource creation
+        cancelled" 만 보여 원인이 지워진다. 실제로 두 번 그랬다 — #742 가 AiPodRole 을,
+        #753 이 DeploymentExtraPolicy 를 넣고 권한 예제를 안 고쳐서 dev 부트스트랩이
+        2026-09-25·10-01 두 번 실패했다(iam:CreatePolicy 거부).
+
+        권한 예제는 사람이 손으로 인라인 정책에 등록하는 **문서**다(docs/guides/
+        aws-bootstrap.md). 문서가 틀리면 계정에 붙은 정책도 틀린다.
+        """
+        example = json.loads((BOOTSTRAP / "bootstrap-policy.example.json").read_text())
+
+        def allowed(action, arn):
+            for item in example["Statement"]:
+                actions = item["Action"]
+                actions = [actions] if isinstance(actions, str) else actions
+                resources = item["Resource"]
+                resources = [resources] if isinstance(resources, str) else resources
+                if action in actions and arn in resources:
+                    return True
+            return False
+
+        def arn(service, kind, name):
+            # 템플릿은 Fn::Sub, 권한 예제는 <PLACEHOLDER> 로 같은 값을 쓴다.
+            rendered = name["Fn::Sub"].replace("${Environment}", "<ENVIRONMENT>")
+            return f"arn:aws:{service}::<AWS_ACCOUNT_ID>:{kind}/{rendered}"
+
+        for name, resource in self.resources.items():
+            properties = resource["Properties"]
+            if resource["Type"] == "AWS::IAM::Role":
+                target = arn("iam", "role", properties["RoleName"])
+                self.assertTrue(allowed("iam:CreateRole", target),
+                                f"{name}: 권한 예제에 iam:CreateRole {target} 이 없다")
+                if properties.get("Policies"):
+                    self.assertTrue(allowed("iam:PutRolePolicy", target),
+                                    f"{name}: 인라인 정책이 있는데 iam:PutRolePolicy 가 없다")
+            elif resource["Type"] == "AWS::IAM::ManagedPolicy":
+                target = arn("iam", "policy", properties["ManagedPolicyName"])
+                self.assertTrue(allowed("iam:CreatePolicy", target),
+                                f"{name}: 권한 예제에 iam:CreatePolicy {target} 이 없다")
+                # 만들기만 하면 역할에 붙지 않는다 — 붙이는 권한도 같이 있어야 한다.
+                for role in properties["Roles"]:
+                    holder = arn("iam", "role",
+                                 self.resources[role["Ref"]]["Properties"]["RoleName"])
+                    self.assertTrue(allowed("iam:AttachRolePolicy", holder),
+                                    f"{name}: {holder} 에 붙일 iam:AttachRolePolicy 가 없다")
+
     def test_role_inline_policy_stays_below_aws_character_limit(self):
         size = sum(len(json.dumps(item["PolicyDocument"], separators=(",", ":"))) for item in self.role["Policies"])
         self.assertLess(size, 10240)

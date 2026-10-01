@@ -11,6 +11,16 @@ TripPilot 배포는 GitHub Actions의 수동 `workflow_dispatch`로 실행한다
 1. IAM의 기존 GitHub OIDC provider를 확인한다. 없으면 IAM 콘솔에서 provider URL `https://token.actions.githubusercontent.com`, audience `sts.amazonaws.com`으로 등록한다. 계정에 이미 있는 provider를 중복 생성하지 않는다.
 2. 환경별 `trippilot-dev-github-bootstrap`, `trippilot-prd-github-bootstrap` IAM Role을 준비한다. [신뢰 정책 예시](../../infra/bootstrap/bootstrap-trust.example.json)의 `<AWS_ACCOUNT_ID>`, `<ENVIRONMENT>`를 실제 값으로 바꾸고, [권한 정책 예시](../../infra/bootstrap/bootstrap-policy.example.json)의 `<AWS_REGION>`도 바꿔 인라인 정책으로 등록한다. 환경은 소문자 `dev` 또는 `prd`이다. 역할의 최대 세션 시간은 기본 1시간 이상으로 두며, workflow는 30분 세션을 요청한다.
 
+> **템플릿의 IAM 리소스를 늘리면 이 정책도 같이 갱신해야 한다.** 예제 파일만 고치고 계정에 붙은 인라인 정책을 그대로 두면 부트스트랩이 `AccessDenied`로 롤백되고, 터미널에는 연쇄 취소 메시지만 남아 원인이 보이지 않는다(2026-09-25·10-01 dev 실제 사례: `iam:CreatePolicy` 누락). 치환한 파일로 다시 등록한다.
+>
+> ```bash
+> aws iam put-role-policy --role-name trippilot-dev-github-bootstrap \
+>   --policy-name "$(aws iam list-role-policies --role-name trippilot-dev-github-bootstrap --query 'PolicyNames[0]' --output text)" \
+>   --policy-document file://bootstrap-policy-dev.json
+> ```
+>
+> 리포 쪽 드리프트는 `infra/bootstrap/tests` 의 `test_bootstrap_principal_may_create_everything_the_stack_declares` 가 막는다 — 계정 쪽은 막을 수 없으니 이 절차가 남는다.
+
 초기 Role은 해당 환경의 CloudFormation stack, 상태 bucket 설정, 배포 Role과 EKS 서비스 Role 생성/수정을 담당한다. 상태 객체 읽기/삭제, 자신의 권한 수정, 일반 애플리케이션 리소스 생성 권한은 없다. 다만 배포 Role의 인라인 정책을 작성하는 권한 자체는 권한 위임에 해당하므로, **bootstrap Role을 일반 배포 Role과 같은 수준으로 취급하면 안 된다**. 조직에서 IAM permissions boundary 또는 SCP를 사용한다면 관리자 정책으로 별도 적용하고, 허용 범위를 이 예시보다 넓히지 않는다. 초기 구성이 끝난 뒤 `AWS_BOOTSTRAP_ROLE_ARN` 변수를 제거하거나 bootstrap Role 신뢰를 비활성화할 수 있으며, 권한 정책 갱신 시에만 다시 활성화한다.
 
 GitHub OIDC의 environment 기반 `sub`는 repository와 environment를 제한한다. workflow 파일 이름이나 `workflow_dispatch` 여부까지 증명하는 것은 아니다. 수동 실행 제한은 커밋된 workflow 트리거가 담당하므로 `.github/workflows/` 변경에 대한 branch protection과 코드 리뷰가 필요하다. [AWS OIDC 신뢰 정책 설명](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-idp_oidc.html)을 참고한다.
