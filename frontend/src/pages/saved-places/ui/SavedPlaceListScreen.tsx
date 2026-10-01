@@ -8,15 +8,15 @@ import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
-import type { PlaceListState } from '../model/placeListState';
-import type { PlaceSaveNotice } from '../model/placeSaveGuard';
-import { SAVED_PLACE_BADGE } from '../model/savedPlaceList';
+import type { PlaceListState } from '@/features/explore/model/placeListState';
+import type { PlaceSaveNotice } from '@/features/explore/model/placeSaveGuard';
+import { SAVED_PLACE_BADGE } from '@/features/explore/model/savedPlaceList';
 import {
   BackChevronGlyph,
   MapPinGlyph,
   SearchGlyph,
   WarningTriangleGlyph,
-} from './ExploreGlyphs';
+} from '@/features/explore/ui/ExploreGlyphs';
 
 /**
  * d02 담은 장소(Figma `1693:1183`·`1695:1183`) — **프레젠테이션 화면**. props만 받는다.

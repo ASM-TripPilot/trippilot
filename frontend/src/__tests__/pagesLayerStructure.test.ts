@@ -50,7 +50,7 @@ const PAGES_DIR = path.join(ROOT, 'pages');
 
 const SAVED_PAGE_REL = 'pages/saved-places/ui/SavedPlacesPage.tsx';
 const EXPLORE_PAGE_REL = 'pages/place-explore/ui/PlaceExplorePage.tsx';
-const SAVED_SCREEN_REL = 'features/explore/ui/SavedPlaceListScreen.tsx';
+const SAVED_SCREEN_REL = 'pages/saved-places/ui/SavedPlaceListScreen.tsx';
 const SAVED_ROUTE_REL = 'app/explore/saved-places.tsx';
 const SAVED_BARREL_REL = 'pages/saved-places/index.ts';
 const HOOK_REL = 'features/explore/model/savedPlaces.ts';
