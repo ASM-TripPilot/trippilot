@@ -124,6 +124,8 @@ trippilot:
     tripcom:
       alliance-id: ${TRIPCOM_ALLIANCE_ID:}
       sid: ${TRIPCOM_SID:}
+      # 생성기 등록 링크의 Ad ID — trip_sub3 로 관통한다. 이것 없이는 클릭이 계정에 귀속되지 않는다(실측).
+      ad-id: ${TRIPCOM_AD_ID:}
 
 # 통합 테스트용 — AI 서비스 위치(compose 에서 AI_URL 주입). 미설정이면 integration 이 degrade.
 ai:

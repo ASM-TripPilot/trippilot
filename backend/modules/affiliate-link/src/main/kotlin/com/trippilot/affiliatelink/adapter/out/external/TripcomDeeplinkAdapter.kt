@@ -32,13 +32,19 @@ import java.util.UUID
 class TripcomDeeplinkAdapter(
     @param:Value("\${trippilot.affiliate.tripcom.alliance-id:}") private val allianceId: String,
     @param:Value("\${trippilot.affiliate.tripcom.sid:}") private val sid: String,
+    /**
+     * 생성기에 등록된 링크의 Ad ID(trip_sub3 자리) — **이것이 귀속의 열쇠다**(2026-10-01 실측).
+     * alliance·sid·sub1 만 실은 조립 URL 의 probe 클릭은 전부 미귀속이었고, 같은 URL 에
+     * 이 값이 실린 클릭(probe4gen)만 대시보드에 잡혔다. 비면 수수료가 조용히 새므로 함께 필수다.
+     */
+    @param:Value("\${trippilot.affiliate.tripcom.ad-id:}") private val adId: String,
 ) : OtaDeeplinkPort {
     init {
         // tripcom 인데 트래킹 ID 가 비면 기동을 막는다(WEATHER kma 선례) — 조용히 뜨면
         // 모든 이동이 수수료 없는 트립닷컴 직행이 되어, 켠 의도와 정반대로 돈다.
-        require(allianceId.isNotBlank() && sid.isNotBlank()) {
-            "trippilot.affiliate.mode=tripcom 인데 alliance-id/sid 가 비었습니다 — " +
-                "TRIPCOM_ALLIANCE_ID·TRIPCOM_SID 를 넣거나 mode 를 fallback 으로 두세요."
+        require(allianceId.isNotBlank() && sid.isNotBlank() && adId.isNotBlank()) {
+            "trippilot.affiliate.mode=tripcom 인데 alliance-id/sid/ad-id 가 비었습니다 — " +
+                "TRIPCOM_ALLIANCE_ID·TRIPCOM_SID·TRIPCOM_AD_ID 를 넣거나 mode 를 fallback 으로 두세요."
         }
     }
 
@@ -48,7 +54,8 @@ class TripcomDeeplinkAdapter(
                 "?keyword=" + URLEncoder.encode(stay.name, StandardCharsets.UTF_8) +
                 "&allianceid=" + allianceId +
                 "&sid=" + sid +
-                "&trip_sub1=" + clickId,
+                "&trip_sub1=" + clickId +
+                "&trip_sub3=" + adId,
             vendor = VENDOR,
         )
 

@@ -23,6 +23,7 @@ class AffiliateModeSwitchTest : StringSpec({
         "trippilot.affiliate.mode=\${AFFILIATE_MODE:fallback}",
         "trippilot.affiliate.tripcom.alliance-id=\${TRIPCOM_ALLIANCE_ID:}",
         "trippilot.affiliate.tripcom.sid=\${TRIPCOM_SID:}",
+        "trippilot.affiliate.tripcom.ad-id=\${TRIPCOM_AD_ID:}",
     )
 
     fun runner() = ApplicationContextRunner()
@@ -43,6 +44,7 @@ class AffiliateModeSwitchTest : StringSpec({
                 "AFFILIATE_MODE=tripcom",
                 "TRIPCOM_ALLIANCE_ID=10768080",
                 "TRIPCOM_SID=332381302",
+                "TRIPCOM_AD_ID=D20021458",
             )
             .run { ctx ->
                 ctx.getBean(OtaDeeplinkPort::class.java).shouldBeInstanceOf<TripcomDeeplinkAdapter>()
