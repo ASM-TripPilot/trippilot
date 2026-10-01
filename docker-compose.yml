@@ -103,6 +103,13 @@ services:
       KAKAO_CLIENT_SECRET: ${KAKAO_CLIENT_SECRET:-}
       NAVER_CLIENT_ID: ${NAVER_CLIENT_ID:-}
       NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET:-}
+      # 제휴 아웃바운드(C5) — fallback = 웹검색(수수료 없음) · tripcom = 트립닷컴 딥링크(수수료 추적).
+      # tripcom 은 세 값이 전부 있어야 기동한다. trip_sub3(AD_ID)가 **귀속의 열쇠**다(probe 실측
+      # 2026-10-01) — 빠지면 사용자는 정상 이동하는데 수수료만 조용히 사라진다.
+      AFFILIATE_MODE: ${AFFILIATE_MODE:-fallback}
+      TRIPCOM_ALLIANCE_ID: ${TRIPCOM_ALLIANCE_ID:-}
+      TRIPCOM_SID: ${TRIPCOM_SID:-}
+      TRIPCOM_AD_ID: ${TRIPCOM_AD_ID:-}
       # Apple 은 시크릿이 없다 — id_token 서명을 JWKS 로 검증할 뿐이라 iOS 번들 ID 하나뿐이다(TRIP-858).
       # 이 값이 없으면 애플 로그인은 401 이 아니라 501(미지원)로 나간다.
       APPLE_CLIENT_ID: ${APPLE_CLIENT_ID:-}
