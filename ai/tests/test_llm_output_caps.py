@@ -99,8 +99,12 @@ def test_max_tokens_per_feature_reaches_vendor(feature: LlmFeature) -> None:
     except ValueError:
         pytest.skip(f"{feature.value} 라우팅 미설정 — 상한과 무관")
 
-    expected = 4096 if feature in (
-        LlmFeature.EXPLANATION, LlmFeature.ALTERNATIVE_EXPLANATION) else 1024
+    expected = {
+        LlmFeature.EXPLANATION: 4096,
+        LlmFeature.ALTERNATIVE_EXPLANATION: 4096,
+        # 실측 출력 950~1016 토큰 — 1024 에 붙어 잘림 1회가 재시도 → 504 로 번졌다
+        LlmFeature.REFLECTION_TEMPLATE: 2048,
+    }.get(feature, 1024)
     assert [r.max_tokens for r in llm.requests] == [expected]
 
 

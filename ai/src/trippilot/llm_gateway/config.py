@@ -152,11 +152,15 @@ def default_feature_max_tokens() -> Mapping[LlmFeature, int]:
     output_tokens=1024 에서 잘려 `parse_error: JSON 아님: Unterminated string` → 근거 0건.
     ALTERNATIVE_EXPLANATION 은 슬롯당 차선책 ≤2건 × 1~2문장이라 같은 모양이다.
     GPT-5 계열은 reasoning 토큰도 이 상한에서 빠진다.
+
+    REFLECTION_TEMPLATE 은 실측 출력이 950~1016 토큰이라 1024 에 붙어 있다 — 3방문
+    짧은 입력도 잘림 1회가 재시도를 부르고, 재시도가 요청 예산을 넘겨 504 가 났다.
     """
     return MappingProxyType(
         {
             LlmFeature.EXPLANATION: 4096,
             LlmFeature.ALTERNATIVE_EXPLANATION: 4096,
+            LlmFeature.REFLECTION_TEMPLATE: 2048,
         }
     )
 

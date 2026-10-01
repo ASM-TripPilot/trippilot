@@ -1413,7 +1413,8 @@ class WiredItineraryOrchestrator:
             planb_rank=planb_rank,
         ))
         return self._replan_projection(
-            request, outcome, notes, resolved, unknown, retrieved=planb.retrieved
+            request, outcome, notes, resolved, unknown, retrieved=planb.retrieved,
+            planb_fallback=planb.is_fallback,
         )
 
     def _replan_directives(
@@ -1529,6 +1530,7 @@ class WiredItineraryOrchestrator:
         unknown: list[str],
         *,
         retrieved: Mapping[str, int] | None = None,
+        planb_fallback: bool = False,
     ) -> schemas.ReplanResponse:
         """`GenerationOutcome` → `ReplanResponse`. **예외로 올리지 않는다** (IO-7).
 
@@ -1552,6 +1554,7 @@ class WiredItineraryOrchestrator:
         anchors = {request.target_date: GeoPoint(request.anchor.lat, request.anchor.lng)}
         transport = _token_or(
             _TRANSPORT_TOKENS, request.transport_mode, TransportMode.PUBLIC)
+        llm_ok = outcome.scoring_mode is core.ScoringMode.LLM and not planb_fallback
         envelope = _envelope(
             solution,
             distance_ranges=_distance_ranges(
@@ -1562,9 +1565,10 @@ class WiredItineraryOrchestrator:
             itinerary=to_payload(envelope),
             total_distance_km=self._total_distance_km(
                 solution, anchors, coords, transport),
-            # 점수가 규칙으로 내려갔으면 폴백이다 — 일정은 나왔으니 level 2 가 아니다.
-            is_fallback=outcome.scoring_mode is not core.ScoringMode.LLM,
-            fallback_level=0 if outcome.scoring_mode is core.ScoringMode.LLM else 1,
+            # 점수든 PlanB 랭킹이든 규칙으로 내려갔으면 폴백이다(`/planb/alternatives` 와
+            # 같은 규칙) — 일정은 나왔으니 level 2 가 아니다.
+            is_fallback=not llm_ok,
+            fallback_level=0 if llm_ok else 1,
             notes=notes,
             resolved_directives=resolved,
             unknown_directives=unknown,

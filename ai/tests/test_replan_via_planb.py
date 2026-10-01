@@ -552,3 +552,61 @@ def test_current_slots_reach_planb_as_the_itinerary_context() -> None:
         excluded_poi_ids=["p2"],
     )
     assert [str(p) for p in out.current_slot_ids] == ["p1", "p2"]
+
+
+# ── ⑩ 폴백 표기 — PlanB 가 규칙으로 내려가면 응답도 폴백이다 ─────────────
+#
+# 실측 R03(reason=closed): ALTERNATIVE_SELECTION 이 `llm_empty_result` 로 규칙 랭킹에
+# 내려갔는데 응답은 `is_fallback=false, fallback_level=0`(사유는 notes 에만) —
+# 사영이 점수 모드만 보고 PlanB 결과를 버렸다. `/planb/alternatives` 와 같은 규칙으로 낸다.
+
+import dataclasses  # noqa: E402
+
+from trippilot.orchestrator import schedule_coordinator as _core  # noqa: E402
+
+
+class _LlmScoredScheduleAgent:
+    """점수 단계는 LLM 으로 성공한 것처럼 — dev 앱엔 실 LLM 이 없어 항상 규칙이다."""
+
+    def __init__(self, inner) -> None:
+        self._inner = inner
+
+    def run(self, task):
+        return dataclasses.replace(
+            self._inner.run(task), scoring_mode=_core.ScoringMode.LLM)
+
+
+def _empty_selection_rag() -> PlanBAgent:
+    """ALTERNATIVE_SELECTION 이 빈 선택을 낸다 → 게이트 `llm_empty_result` → 규칙 랭킹."""
+    return PlanBAgent(
+        FakeEmbedding(dim=_SMALL), InMemoryVectorStore(),
+        alternative_worker=AlternativeSelectionWorker(_select_gw()),
+    )
+
+
+def _post_replan(rag):
+    app = build_dev_app(directives=_DIRECTIVES)
+    orch = app.state.orchestrator
+    orch._schedule_agent = _LlmScoredScheduleAgent(orch._schedule_agent)
+    if rag is not None:
+        orch._rag = rag
+    with TestClient(app, raise_server_exceptions=False) as client:
+        return client.post("/ai/v1/planb/replan", json=_body())
+
+
+def test_planb_rule_fallback_marks_replan_as_fallback() -> None:
+    res = _post_replan(_empty_selection_rag())
+    assert res.status_code == 200
+    body = res.json()
+    assert body["itinerary"] is not None, body["notes"]
+    assert any("alternative_empty" in n for n in body["notes"]), body["notes"]  # llm_empty_result 의 PlanB 라벨
+    assert body["is_fallback"] is True
+    assert body["fallback_level"] == 1
+
+
+def test_planb_llm_and_llm_scoring_is_not_fallback() -> None:
+    """대조군 — 둘 다 LLM 이면 level 0 (폴백 표기를 무조건 켜서 통과하는 것을 막는다)."""
+    in_pool = "e0000000-0000-4000-8000-000000000002"
+    body = _post_replan(_StubRag((in_pool,))).json()
+    assert body["is_fallback"] is False
+    assert body["fallback_level"] == 0
