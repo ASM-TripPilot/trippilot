@@ -8,19 +8,19 @@
 
 HTTP 클라이언트는 생성자 주입 — 테스트는 fake, 실행 조립은 UrllibHttpClient
 (tourapi와 동형). **daily_forecast 1회 = HTTP 호출 정확히 1건**, 재시도 없음
-(일일 호출 한도 아끼기 — poi_sourcing_port와 같은 호출 예산 계약).
+(공공데이터포털 일일 한도 아끼기 — poi_sourcing_port와 같은 호출 예산 계약).
 
 응답 형태는 기상청 「단기예보 조회서비스 2.0」 문서 기준으로 고정했다 —
-**실 응답과의 드리프트는 실키 실행에서 검증**한다 (authKey=env `WEATHER_API`,
+**실 응답과의 드리프트는 실키 실행에서 검증**한다 (serviceKey=env `WEATHER_API`,
 CI·로컬 테스트 실 호출 0 — D37). 알려진 변주는 반영: 빈 목록에서 `items`가
 객체가 아니라 빈 문자열 ""로 오는 것(tourapi와 동일 변주), fcstValue가 문자열로
 오는 것.
 
-**엔드포인트는 기상청 API허브(apihub.kma.go.kr, `authKey`)다** — 우리 키는 API허브
-키라 공공데이터포털(apis.data.go.kr, `serviceKey`)은 SERVICE_KEY_IS_NOT_REGISTERED
-로 거절한다(2026-10-01 실측). API허브는 상품별 **활용신청**이 따로 있어, 신청 전엔
-키를 인식하고도 HTTP 403 을 낸다. 요청 파라미터·출력 필드명은 API허브 문서와 포털이
-같다(JSON 계층 `response.header/body` 는 문서 미명시 — 첫 200 응답에서 확인).
+**엔드포인트는 공공데이터포털(apis.data.go.kr, `serviceKey`)이다** — 키 종류와 짝이다.
+기상청 API허브 키(apihub.kma.go.kr, `authKey`)를 넣으면 포털은 SERVICE_KEY_IS_NOT_REGISTERED
+(HTTP 403)로 거절한다(2026-10-01 실측 — 이 사고로 날씨 보정이 매 생성 꺼져 있었다).
+팀 결정(2026-10-02): 백엔드 weather-context 와 같은 포털 키 하나로 통일. 응답 JSON 계층
+(`response.header/body.items.item[]`)은 두 엔드포인트가 같다(2026-10-02 실호출 대조).
 
 격자 변환(`latlon_to_grid`)은 기상청 LCC(Lambert Conformal Conic) 공식의 결정론
 구현 — 활용가이드 C 코드의 파라미터(지구반경 6371.00877km · 격자 5km ·
@@ -40,7 +40,7 @@ from trippilot.poi_curation.sourcing.tourapi import HttpGetJson
 from trippilot.ports.weather_port import WeatherError
 
 _KST = timezone(timedelta(hours=9))
-_BASE = "https://apihub.kma.go.kr/api/typ02/openApi/VilageFcstInfoService_2.0"
+_BASE = "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0"
 _OK_CODE = "00"  # NORMAL_SERVICE
 # 발표시각(base_time) 8회 고정 + API 제공은 발표 후 ~10분 (활용가이드)
 _BASE_HOURS = (2, 5, 8, 11, 14, 17, 20, 23)
@@ -114,13 +114,13 @@ def _warn_auth_once(code: int) -> None:
         return
     _auth_warned = True
     _log.warning(
-        "기상청 API허브 키·권한 오류 HTTP %s — WEATHER_API 키 또는 단기예보 "
-        "활용신청 상태를 확인할 것. 날씨 보정 없이(no_adjust) 계속한다 "
+        "기상청 단기예보 키·권한 오류 HTTP %s — WEATHER_API 가 공공데이터포털 "
+        "디코딩 키인지(API허브 키 아님)·활용신청 상태를 확인할 것. 날씨 보정 없이(no_adjust) 계속한다 "
         "(이후 같은 오류는 이 프로세스에서 다시 경고하지 않음)", code)
 
 
 class KmaWeatherAdapter:
-    """WeatherPort 구현. service_key는 **기상청 API허브 authKey** (urlencode는 HTTP 클라이언트 1회).
+    """WeatherPort 구현. service_key는 **공공데이터포털 디코딩 키** (urlencode는 HTTP 클라이언트 1회).
 
     `now_fn` 주입은 base_date/base_time 선택의 결정론 격리용 — 테스트는 고정 시각을
     꽂는다. 기본은 KST 현재 시각 (어댑터는 I/O 경계라 DL-3 대상 밖).
@@ -164,7 +164,7 @@ class KmaWeatherAdapter:
             return self._http.get_json(
                 f"{_BASE}/getVilageFcst",
                 {
-                    "authKey": self._key,
+                    "serviceKey": self._key,
                     "dataType": "JSON",
                     "pageNo": "1",
                     "numOfRows": str(_NUM_OF_ROWS),

@@ -16,7 +16,7 @@ env 스위치 (TRIP-344):
   `OPENAI_MODEL`(기본 gpt-5.6-terra) · `OPENAI_API`(chat|responses, 기본 responses
   — 멘토 게이트웨이가 responses만 라우팅). 조립 불가(키 누락 등)는 **기동 실패**로
   드러낸다 — INV-4는 런타임 폴백이지 설정 오류 은폐가 아니다(silent fallback 금지).
-- `WEATHER_API`(TRIP-383) — 기상청 **API허브** 인증키(authKey). 설정 시 날씨
+- `WEATHER_API`(TRIP-383) — 기상청 단기예보 서비스키(공공데이터포털 디코딩 키). 설정 시 날씨
   소프트 보정용 KmaWeatherAdapter를 주입한다. 미설정 = 무보정(기동 시 WARN 1줄).
 - `TRIPPILOT_BACKEND_BASE_URL`(TRIP-408) — 백엔드 `/internal/pois` 실연동 주소
   (compose 네트워크 기준 `http://backend:8080`). 설정 시 BackendPoiDb 주입 —
@@ -155,7 +155,7 @@ def _anthropic_llm_and_model() -> tuple[object, str]:
 
 
 def _kma_weather():
-    """`WEATHER_API`(기상청 API허브 authKey, TRIP-383) 설정 시 실 어댑터 조립.
+    """`WEATHER_API`(기상청 공공데이터포털 디코딩 키, TRIP-383) 설정 시 실 어댑터 조립.
 
     미설정(빈 문자열 포함) = 미배선(None) — 날씨 보정 없이 기존 경로 그대로.
     실 응답 드리프트는 실키 실행에서 검증한다 (테스트·CI 실 호출 0, D37).

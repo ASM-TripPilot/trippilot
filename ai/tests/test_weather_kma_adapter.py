@@ -143,12 +143,11 @@ def test_request_params_carry_grid_base_and_key() -> None:
     http = _FakeHttp(_body({"item": []}))
     _adapter(http).daily_forecast(_COORD, (_D1,))
     url, params = http.calls[0]
-    # 키는 기상청 API허브 키다 — 공공데이터포털(apis.data.go.kr·serviceKey)에선
-    # SERVICE_KEY_IS_NOT_REGISTERED_ERROR 로 거절된다(실측).
-    assert url == ("https://apihub.kma.go.kr/api/typ02/openApi/"
+    # 공공데이터포털 엔드포인트·serviceKey (팀 결정 2026-10-02 — 백엔드와 같은 포털 키 하나).
+    assert url == ("https://apis.data.go.kr/1360000/"
                    "VilageFcstInfoService_2.0/getVilageFcst")
-    assert params["authKey"] == "test-key"
-    assert "serviceKey" not in params
+    assert params["serviceKey"] == "test-key"
+    assert "authKey" not in params
     assert (int(params["nx"]), int(params["ny"])) \
         == latlon_to_grid(_COORD.lat, _COORD.lng)
     assert params["base_date"] == "20260805" and params["base_time"] == "0500"
@@ -199,7 +198,7 @@ def test_one_call_per_forecast_and_zero_for_empty_days() -> None:
 
 def _http_error(code: int) -> urllib.error.HTTPError:
     return urllib.error.HTTPError(
-        "https://apihub.kma.go.kr/x", code, "Forbidden", hdrs=None, fp=None)
+        "https://apis.data.go.kr/x", code, "Forbidden", hdrs=None, fp=None)
 
 
 def test_auth_error_warns_once_per_process(monkeypatch, caplog) -> None:
