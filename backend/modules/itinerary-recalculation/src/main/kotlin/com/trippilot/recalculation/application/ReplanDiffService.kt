@@ -1,6 +1,7 @@
 package com.trippilot.recalculation.application
 
 import com.trippilot.itinerarygeneration.api.ItineraryPlanFacade
+import com.trippilot.placedata.api.PoiSurfaceFacade
 import com.trippilot.itinerarygeneration.api.ReplanProposal
 import com.trippilot.recalculation.domain.ReplanDiff
 import com.trippilot.recalculation.domain.ReplanSession
@@ -31,6 +32,7 @@ import java.util.UUID
 class ReplanDiffService(
     private val sessions: ReplanSessionService,
     private val plans: ItineraryPlanFacade,
+    private val poiSurfaces: PoiSurfaceFacade,
 ) {
     @Transactional(readOnly = true)
     fun diff(accountId: UUID, tripId: UUID, sessionId: UUID): ReplanDiffView {
@@ -40,7 +42,11 @@ class ReplanDiffService(
             ?: return ReplanDiffView.notReady(session)
 
         val proposal = ReplanProposal.fromMap(draft)
+        // 초안(재계획이 새로 넣은 장소 포함)의 표면 — **한 번에** 묻는다(N+1 금지, TRIP-1060).
+        // 초안 장소는 동결된 적이 없으므로 정본 조회만 대상이다(findFrozenSurfaces 아님).
+        val afterSurfaces = poiSurfaces.findSurfaces(proposal.slots.map { it.poiId }.distinct())
         val after = proposal.slots.map {
+            val s = afterSurfaces[it.poiId]
             ReplanDiff.SlotView(
                 slotKey = slotKey(proposal.date, it.poiId),
                 startAt = it.startAt,
@@ -52,10 +58,16 @@ class ReplanDiffService(
                 // 초안은 거리를 **구간 문구**로만 들고 있다(`distanceRange`) — 미터를 모른다.
                 // 0 으로 채우면 "거리가 줄었다"는 거짓 요약이 나오므로 모른다고 둔다(ReplanDiff 규약).
                 distanceM = null,
+                nameKo = s?.nameKo,
+                category = s?.category,
+                imageUrl = s?.imageUrl,
+                lat = s?.lat,
+                lng = s?.lng,
             )
         }
         // 비교 대상은 **그 날짜**뿐이다. 재계획은 하루를 다시 짜므로 다른 날을 섞으면
         // 지표(방문 수·복귀 시각)가 여행 전체 값이 되어 화면이 과장된 변화를 보인다.
+        // before 의 표면은 C8 이 채워 보낸다(확정 슬롯 동결값 규칙의 소유자 — TRIP-1060 결정 1).
         val before = plans.findPlanSlots(accountId, tripId)
             .filter { it.date == proposal.date }
             .map {
@@ -66,6 +78,11 @@ class ReplanDiffService(
                     isFixed = it.isFixed,
                     endsNextDay = it.endsNextDay,
                     distanceM = null,
+                    nameKo = it.nameKo,
+                    category = it.category,
+                    imageUrl = it.imageUrl,
+                    lat = it.lat,
+                    lng = it.lng,
                 )
             }
 
@@ -76,6 +93,10 @@ class ReplanDiffService(
             before = before,
             after = after,
             result = ReplanDiff.of(before, after),
+            // 재계획안의 이동 총거리(km). **변화량이 아니라 절대값**이다 — 비교하려면 원 일정의
+            // 거리도 있어야 하는데 `visit_slot` 에는 미터가 없다(있는 것은 표시 문자열뿐).
+            // 그래서 `totalDistanceDeltaM` 은 여전히 null 이고, 화면은 "이동 6.9km" 로만 쓴다.
+            totalDistanceKm = proposal.totalDistanceKm,
         )
     }
 
@@ -94,6 +115,8 @@ data class ReplanDiffView(
     val before: List<ReplanDiff.SlotView>,
     val after: List<ReplanDiff.SlotView>,
     val result: ReplanDiff.Result?,
+    /** 재계획안의 이동 총거리(km). 상대가 푼 값이고 **모르면 null** 이다(옛 초안·대역). */
+    val totalDistanceKm: Double? = null,
 ) {
     companion object {
         fun notReady(session: ReplanSession) = ReplanDiffView(

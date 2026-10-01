@@ -25,10 +25,11 @@ const REAL_APP_SHELL = '@/app-shell';
 // entities 는 여전히 빈 층이라 실대상이 없다 — import 대상으로 쓰면 no-unresolved 가 뜬다(아래 허용 프로브).
 const EMPTY_ENTITIES = '@/entities/__probe__/model/x';
 
-// widgets 는 이 사이클에 처음 채워진다(TRIP-805 · D9 승격) — itinerary-edit 슬라이스가 실파일이라
-// 이 딥 경로가 해석된다. 배럴(@/widgets/itinerary-edit)이 아니라 딥 파일을 쓰는 이유는 importBoundary
-// 선례(배럴 해석 회피)와 같다 — no-unresolved 를 확실히 끊어 "경계 위반 vs 해석 실패"를 가른다(02a ★9).
-const REAL_WIDGET = '@/widgets/itinerary-edit/ui/ManualEditShell';
+// widgets 는 TRIP-805 로 처음 채워졌다(D9 승격) — 대상이 실파일이어야 이 딥 경로가 해석된다. 배럴이
+// 아니라 딥 파일을 쓰는 이유는 importBoundary 선례(배럴 해석 회피)와 같다 — no-unresolved 를 확실히
+// 끊어 "경계 위반 vs 해석 실패"를 가른다(02a ★9). TRIP-753: 옛 대상(itinerary-edit/ManualEditShell)이
+// 슬라이스째 삭제돼 실재 위젯 파일(map-sheet-shell/SheetHeader)로 옮겼다.
+const REAL_WIDGET = '@/widgets/map-sheet-shell/ui/SheetHeader';
 
 const BOUNDARY_RULE = 'import/no-restricted-paths';
 const UNRESOLVED_RULE = 'import/no-unresolved';
@@ -258,7 +259,7 @@ describe('AC-P0-3 · 같은 층 형제 슬라이스는 서로 import 하지 못�
   });
 
   // 🔴 widgets 슬라이스 간 직접 import → 경계 위반(실파일).
-  it('widgets/time-sheet → 형제 widgets/itinerary-edit import 는 경계 위반', async () => {
+  it('widgets/time-sheet → 형제 widgets/map-sheet-shell import 는 경계 위반', async () => {
     const ruleIds = await lint(
       `import '${REAL_WIDGET}';\n`,
       'src/widgets/time-sheet/__slice_probe__.ts'

@@ -1,105 +1,111 @@
-import type { ReactElement } from 'react';
+import type { ReactElement, Ref } from 'react';
 import { Text, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 
-import type { ShareCardVM } from '../model/shareCard';
+import {
+  formatShareCardStats,
+  SHARE_FORMATS,
+  type ShareCardVM,
+} from '../model/shareCard';
 import { WatermarkLogoGlyph } from './ShareCardGlyphs';
 
 /**
  * TRIP-574 · j06 카드 프리뷰 — 온디바이스 렌더 카드의 표면(캡처 대상 View).
+ * TRIP-766: 다크 골격 폐기 → 라이트 카드(ink 텍스트·로고 배지). 통계 라인은 얼굴별 포매터로.
  *
- * ★ 지도 degrade: 라이브 지도를 넣지 않는다 — TripSummary/DayHighlight 계약에 좌표가 없어
- *   애초에 못 그린다(맹점④). (TRIP-866 으로 지도가 네이버 네이티브가 돼 view-shot 캡처는 이제
- *   가능해졌다 — 옛 WebView 캡처 불가 제약은 해소됐고, 좌표 계약이 생기면 히어로 지도 재개가
- *   후속 후보다.) 그래서 카드는 지도 없이 워터마크·동선 순서 목록·하단 그라디언트 텍스트
- *   오버레이(지역·기간·제목·통계)로 조립한다. 픽셀 충실도는 [검증] 6-b 스크린샷 대조 전용.
+ * ★ 지도 degrade(INV-4): 라이브 지도를 넣지 않는다 — TripSummary/DayHighlight 계약에 좌표가 없어
+ *   애초에 못 그린다(맹점④). 가짜 지도 대신 placeholder(muted 박스) 위에 방문 순서를 얹어 정직하게
+ *   접는다. raster 정적 지도·좌표는 TRIP-634 후속. 픽셀 충실도는 [검증] 6-b 스크린샷 대조 전용.
  *
  * 종횡비 프레임(reflection-share-preview-frame)은 인라인 `style={{ aspectRatio }}` 로 노출한다 —
  * 화면이 선택 포맷의 aspectRatio 를 넘겨 9:16→1:1→4:5 전환이 관측된다(className 만으론 jest 가 못 읽음).
+ * TRIP-1016: 1:1·4:5 는 폭(가용 폭 100%)이 크기를 정하고, 9:16 만 높이 530 상한으로 묶는다 —
+ * 530 고정 + 비율이면 1:1·4:5 폭이 화면을 넘는다(캡처가 곧 이 프레임이라 넘친 이미지가 된다, BR-U5-46).
  */
+
+const STORY_MAX_HEIGHT = 530;
 
 export interface ShareCardPreviewProps {
   card: ShareCardVM;
   aspectRatio: number;
+  /** TRIP-1071 캡처 대상 — 프레임 View 자체에 단다(래퍼에 달면 테두리·비율이 다른 이미지가 떠진다). */
+  frameRef?: Ref<View>;
 }
 
 export function ShareCardPreview({
   card,
   aspectRatio,
+  frameRef,
 }: ShareCardPreviewProps): ReactElement {
-  const statsText = `방문 ${card.statsCells.totalVisits} · 이동 ${card.statsCells.distanceText} · 사진 ${card.statsCells.totalPhotos}`;
+  const statsText = formatShareCardStats(card.statsCells, card.mode);
+  const frameStyle =
+    aspectRatio === SHARE_FORMATS[0].aspectRatio
+      ? { aspectRatio, height: STORY_MAX_HEIGHT }
+      : { aspectRatio, width: '100%' as const };
   const captionLine = [card.regionText, card.periodText]
     .filter(Boolean)
     .join('  ·  ');
 
   return (
     <View
+      ref={frameRef}
       testID="reflection-share-preview-frame"
-      style={{ aspectRatio }}
-      className="w-full overflow-hidden rounded-card bg-ink"
+      style={frameStyle}
+      className="self-center overflow-hidden rounded-card border border-hairline bg-canvas"
     >
-      <LinearGradient
-        colors={['rgba(38,42,51,1)', 'rgba(17,18,22,1)']}
-        style={{ flex: 1 }}
-      >
-        <View className="flex-1 p-lg">
-          {/* 워터마크(좌상단) */}
-          <View className="flex-row items-center gap-sm">
-            <WatermarkLogoGlyph size={22} />
-            <Text className="font-inter-bold text-card-title text-on-primary">
-              {card.watermark}
-            </Text>
-          </View>
+      {/* 워터마크(좌상단, ink) */}
+      <View className="flex-row items-center gap-sm px-lg pt-lg">
+        <WatermarkLogoGlyph size={22} />
+        <Text className="font-inter-bold text-card-title text-ink">
+          {card.watermark}
+        </Text>
+      </View>
 
-          {/* 동선 순서 목록 — 지도 대신 방문 순서를 번호로 보여준다(계약 공백 degrade). */}
-          <View className="mt-lg flex-1 gap-sm">
-            {card.orderedVisits.slice(0, 6).map((visit) => (
-              <View key={visit.order} className="flex-row items-center gap-sm">
-                <View className="h-[22px] w-[22px] items-center justify-center rounded-full bg-primary">
-                  <Text className="font-inter-bold text-caption text-on-primary">
-                    {visit.order}
-                  </Text>
-                </View>
-                <Text className="text-label text-on-primary opacity-80">
-                  {visit.dayLabel}
-                </Text>
-                <Text
-                  className="flex-1 font-noto text-body text-on-primary"
-                  numberOfLines={1}
-                >
-                  {visit.place}
+      {/* 지도 자리 — 좌표 계약 공백이라 가짜 지도 대신 placeholder(muted 박스)에 방문 순서를 얹는다.
+          방문 0곳이면 빈 회색 박스를 그리지 않고 자리만 비운다(TRIP-1016 D10). */}
+      {card.orderedVisits.length > 0 ? (
+        <View
+          testID="reflection-share-visit-order"
+          className="mx-lg mt-md flex-1 justify-center gap-sm rounded-card bg-surface-soft p-md"
+        >
+          {card.orderedVisits.slice(0, 6).map((visit) => (
+            <View key={visit.order} className="flex-row items-center gap-sm">
+              <View className="h-[22px] w-[22px] items-center justify-center rounded-full bg-primary">
+                <Text className="font-inter-bold text-caption text-on-primary">
+                  {visit.order}
                 </Text>
               </View>
-            ))}
-          </View>
-        </View>
-
-        {/* 하단 그라디언트 + 텍스트 오버레이(지역·기간·제목·코랄 밑줄·통계) */}
-        <LinearGradient
-          colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.82)']}
-          style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}
-        >
-          <View className="gap-[6px] px-lg pb-lg pt-3xl">
-            {captionLine ? (
-              <Text className="font-noto text-caption text-on-primary opacity-85">
-                {captionLine}
-              </Text>
-            ) : null}
-            {card.title ? (
+              <Text className="text-label text-muted">{visit.dayLabel}</Text>
               <Text
-                className="font-noto-bold text-[30px] text-on-primary"
-                numberOfLines={2}
+                className="flex-1 font-noto text-body text-ink"
+                numberOfLines={1}
               >
-                {card.title}
+                {visit.place}
               </Text>
-            ) : null}
-            <View className="h-[3px] w-[42px] rounded-[2px] bg-primary" />
-            <Text className="font-noto text-label text-on-primary opacity-95">
-              {statsText}
-            </Text>
-          </View>
-        </LinearGradient>
-      </LinearGradient>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <View className="flex-1" />
+      )}
+
+      {/* 하단 텍스트 — 지역·기간 / 제목 / 코랄 밑줄 / 통계(얼굴별 포매터) */}
+      <View className="gap-[6px] px-lg pb-lg pt-md">
+        {captionLine ? (
+          <Text className="font-noto text-caption text-muted">
+            {captionLine}
+          </Text>
+        ) : null}
+        {card.title ? (
+          <Text
+            className="font-noto-bold text-[30px] text-ink"
+            numberOfLines={2}
+          >
+            {card.title}
+          </Text>
+        ) : null}
+        <View className="h-[3px] w-[42px] rounded-[2px] bg-primary" />
+        <Text className="font-noto text-label text-ink">{statsText}</Text>
+      </View>
     </View>
   );
 }

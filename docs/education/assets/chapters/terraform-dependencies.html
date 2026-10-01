@@ -1,0 +1,23 @@
+<div class="code-block"><p class="code-label">현재 코드 핵심 발췌 · network.tf / registry-secrets.tf</p><pre><code class="language-hcl">resource "aws_subnet" "private" {
+  count = var.availability_zone_count
+
+  vpc_id                  = aws_vpc.this.id
+  availability_zone       = local.azs[count.index]
+  cidr_block              = cidrsubnet(var.vpc_cidr, 4, count.index + 1)
+  map_public_ip_on_launch = false
+  # 태그는 원본 파일 참고
+}
+
+resource "aws_ecr_repository" "app" {
+  for_each = toset(["backend", "ai", "embedding"])
+
+  name                 = "${local.name}/${each.value}"
+  image_tag_mutability = "IMMUTABLE"
+  force_delete         = false
+  # 검사·암호화 설정은 원본 파일 참고
+}</code></pre></div>
+<p><code>count</code>는 정수만큼 인스턴스를 만들며 주소는 <code>aws_subnet.private[0]</code>, <code>[1]</code>처럼 숫자로 구분된다. <code>count.index</code>는 0부터 시작한다. 예제는 각 인덱스에 AZ와 CIDR을 연결한다. 서울 DEV의 <code>10.40.0.0/16</code>에 <code>cidrsubnet(..., 4, 1)</code>을 적용하면 추가 4비트로 나눈 /20 중 <code>10.40.16.0/20</code>을 얻는다. public·data 서브넷은 별도의 범위를 사용한다.</p>
+<p><code>for_each</code>는 map 또는 문자열 set의 키마다 인스턴스를 만든다. ECR 주소는 <code>aws_ecr_repository.app["backend"]</code>처럼 의미 있는 키로 구분된다. map에서는 <code>each.key</code>와 <code>each.value</code>가 각각 키와 값이며 문자열 set에서는 둘이 같은 문자열이다. 기존 목록 중간에 원소가 추가될 때 숫자 인덱스가 밀릴 수 있다는 점 때문에, 이름이 고유한 대상에는 <code>for_each</code>가 이해하기 쉽다. 키는 계획 시점에 알 수 있어야 하며 민감한 값을 키로 삼지 않는다. <a href="https://developer.hashicorp.com/terraform/language/meta-arguments/for_each">for_each 공식 문서</a></p>
+<p>서브넷의 <code>vpc_id = aws_vpc.this.id</code>는 단순한 값 대입 이상의 의미가 있다. VPC가 먼저 필요하다는 <strong>암시적 의존성</strong>을 만든다. Terraform은 이 연결로 그래프를 구성하고 서로 의존하지 않는 리소스는 병렬로 처리할 수 있다. <code>aws_subnet.private[*].id</code>는 모든 private subnet ID를 모으는 splat 표현식이며 EKS의 서브넷 목록 입력에 사용한다.</p>
+<p>값 참조만으로 표현되지 않는 선행 조건에는 <code>depends_on</code>을 쓴다. 현재 NAT Gateway는 Internet Gateway에, EKS는 CloudWatch 로그 그룹과 NAT route에 명시적으로 의존한다. 불안하다는 이유로 모든 리소스에 depends_on을 넣으면 그래프를 불필요하게 직렬화한다. 실제 선행 관계가 있을 때만 추가하고 이미 참조로 드러난 관계는 중복 작성하지 않는 편이 읽기 쉽다.</p>
+<div class="exercise"><strong>값 추적:</strong> <code>single_nat_gateway = true</code>, <code>availability_zone_count = 2</code>일 때 NAT 개수는? PRD의 값인 <code>false</code>, <code>3</code>이면?<details class="answer"><summary>해설 보기</summary><p><code>local.nat_count = var.single_nat_gateway ? 1 : var.availability_zone_count</code>이므로 각각 1개와 3개다. DEV private route는 모두 NAT 인덱스 0을, PRD private route는 자기 AZ 인덱스에 해당하는 NAT를 참조한다.</p></details></div>

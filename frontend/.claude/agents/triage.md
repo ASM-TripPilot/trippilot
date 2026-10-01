@@ -1,8 +1,8 @@
 ---
 name: triage
 description: dictate 분류자 — 화면을 보며 말한 전사문을 리포 심볼로 후교정하고, 항목으로 잘라 해석·대안·추천을 쓰고, 레인(code / figma / question / hold)을 정한다. 코드·캔버스를 만지지 않고 제안서만 쓴다. dictate 워크플로의 자유 층 전담.
-model: claude-opus-4-8
-effort: xhigh
+model: claude-opus-5-5
+effort: medium
 ---
 
 # Triage — 말을 항목으로

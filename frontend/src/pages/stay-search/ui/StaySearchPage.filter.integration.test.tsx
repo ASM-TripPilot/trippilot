@@ -9,6 +9,7 @@ import {
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
+import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 import { StaySearchPage } from './StaySearchPage';
 
 /**
@@ -105,8 +106,8 @@ describe('StaySearchPage — 지역 칩 (TRIP-499 · AC-3)', () => {
 
     fireEvent.press(screen.getByTestId('stay-search-filter-region'));
 
-    // 지금 소스는 옛 목적지(/explore/search)로 push → red. stay↔trip 오타는 완전 일치가 잡는다.
-    expect(mockPush).toHaveBeenCalledWith('/explore/region?purpose=stay');
+    // 철자는 공유 헬퍼 출력으로 잠근다(TRIP-989 F — 985 철자 사슬의 stay 고리). 완전 일치라 stay↔trip 오타도 잡는다.
+    expect(mockPush).toHaveBeenCalledWith(regionPickerHref('stay'));
   });
 });
 

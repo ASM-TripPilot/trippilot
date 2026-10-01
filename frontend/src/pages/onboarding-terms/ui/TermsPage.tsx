@@ -42,6 +42,7 @@ export function TermsPage(): ReactElement {
       onToggleAll={toggleAll}
       onNext={handleNext}
       onRetry={handleNext}
+      onViewTerms={(termsType) => router.push(`/terms/${termsType}`)}
     />
   );
 }

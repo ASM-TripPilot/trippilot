@@ -1,3 +1,5 @@
+import { Keyboard } from 'react-native';
+import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { BudgetEditSheet } from './BudgetEditSheet';
@@ -6,18 +8,19 @@ import { BudgetEditSheet } from './BudgetEditSheet';
  * TRIP-670 g01 예산 편집 바텀시트 — **props-only 무상태 프레젠테이션**(01b D4).
  *
  * 무엇을 보장하나: 시트가 넘겨받은 `amountText`·`tier`(드래프트, 배선 소유)로 ① tier 세그 4칩·금액
- * 필드(₩·input·원)·수정·안내·적용을 그리고 ② 선택 tier 칩만 **서로 다른 활성 표식 testID**로 구분하며
- * ③ 안내 range 를 활성 tier 에서 도출해 갱신하고 ④ **tier 선택은 금액을 안 건드리며**(★ tier=순수 표시)
- * ⑤ 금액 입력·수정·적용 press 를 콜백으로 정확히 올린다. 이 시트는 **상태를 안 가진다** — 드래프트는
- * 배선(TripNewStep1Page)이 소유하고, 시트는 완성형 props 를 받아 그릴 뿐이다.
+ * 필드(input·원)·수정·적용을 그리고 ② 선택 tier 칩만 **서로 다른 활성 표식 testID**로 구분하며
+ * ③ 칩 press 는 `onSelectTier(라벨)`만 올리고 ④ 금액 입력·수정·적용 press 를 콜백으로 정확히 올린다.
+ * 이 시트는 **상태를 안 가진다** — 드래프트는 배선(TripNewStep1Page)이 소유하고, 시트는 완성형 props 를
+ * 받아 그릴 뿐이다.
  *
  * 왜 활성 표식을 색 fill 이 아니라 서로 다른 testID 로 잠그나: 칩 배경색 변화는 jest 렌더 트리에
  * 관찰되지 않는다(repo-traps "글리프/칩 fill 무심판"). 선택 칩만 `-tier-active-{code}` 마커를 렌더해야
  * 뒤바뀜·교차가 red 로 잡힌다(S4 companion `-chip-active-` 선례).
  *
- * ★ tier=순수 표시 계약: tier 칩 press 는 `onSelectTier` 만 부르고 `onChangeAmount` 를 **안 부른다**
- * (tier 가 금액을 안 건드림 — 대표값 발명 금지, 01b D1). 안내 range 는 활성 tier 를 따라 갱신된다
- * (Figma 가 "50~150만"만 명시했으므로 그것을 tier 무관 하드코딩하면 '고급' 케이스에서 red, 01b D2).
+ * TRIP-1045(QA #020): 칩을 누르면 대표 금액(단가 × 박수)이 금액 칸에 채워진다. 그 **계산은 배선 몫**이다
+ * — 시트는 박수를 모르고, 칩 press 는 여전히 `onSelectTier` 만 부른다(AC-2c). 채워지는 동작 자체는
+ * `TripNewStep1Page.budgetSheet.integration.test.tsx` 의 D 블록이 잠근다. 안내 노트·range 문자열은 없어졌고
+ * (AC-D7), 금액 칸은 Figma `3647:2068` 대로 `₩` 접두 없이 `text-section`(17) 글자다.
  *
  * 무엇을 **못** 보나(6-b 실기 전용): `__mocks__/@gorhom/bottom-sheet.tsx`가 통과형 목이라(마운트하면
  * children 무조건 렌더) 실제 개폐·딤 전면 커버·중앙정렬·활성 칩 분홍/흰 글자 실렌더는 jest 원리적
@@ -34,6 +37,7 @@ interface SheetPropsForTest {
   onPressEdit: () => void;
   onApply: () => void;
   onClose: () => void;
+  applyDisabled: boolean;
 }
 
 function renderSheet(overrides: Partial<SheetPropsForTest> = {}) {
@@ -48,6 +52,7 @@ function renderSheet(overrides: Partial<SheetPropsForTest> = {}) {
   const props: SheetPropsForTest = {
     amountText: '800,000',
     tier: '중간',
+    applyDisabled: false,
     ...spies,
     ...overrides,
   };
@@ -55,8 +60,8 @@ function renderSheet(overrides: Partial<SheetPropsForTest> = {}) {
   return spies;
 }
 
-describe('AC-1 · tier 세그 4·금액 필드(₩·input·원)·수정·안내·적용 렌더', () => {
-  it('시트 컨테이너·tier 칩 4종·금액 입력·₩·원·수정·안내·적용을 그린다', () => {
+describe('AC-1 · tier 세그 4·금액 필드(input·원)·수정·적용 렌더', () => {
+  it('시트 컨테이너·tier 칩 4종·금액 입력·원·수정·적용을 그리고, ₩ 접두는 없다', () => {
     renderSheet();
 
     expect(screen.getByTestId('trip-wizard-budget-sheet')).toBeOnTheScreen();
@@ -68,15 +73,24 @@ describe('AC-1 · tier 세그 4·금액 필드(₩·input·원)·수정·안내�
       ).toBeOnTheScreen();
     }
 
-    // 금액 필드 — ₩ 접두 + 입력 + 원 접미
+    // 금액 필드 — 입력 + 원 접미. ₩ 접두는 Figma `3647:2068`("300,000 원")에 없다(TRIP-1045, 01b Q3).
     expect(screen.getByTestId('trip-wizard-budget-input')).toBeOnTheScreen();
-    expect(screen.getByText('₩')).toBeOnTheScreen();
     expect(screen.getByText('원')).toBeOnTheScreen();
+    expect(screen.queryByText('₩')).toBeNull();
 
-    // 수정 · 안내 · 적용
+    // 수정 · 적용
     expect(screen.getByTestId('trip-wizard-budget-edit')).toBeOnTheScreen();
-    expect(screen.getByTestId('trip-wizard-budget-note')).toBeOnTheScreen();
     expect(screen.getByTestId('trip-wizard-budget-apply')).toBeOnTheScreen();
+  });
+
+  it('TRIP-1045 · 금액 입력 글자는 text-section(17) 이다 (Figma 금액 17 Bold, 옛 card-title 15 아님)', () => {
+    renderSheet();
+
+    const classes = String(
+      screen.getByTestId('trip-wizard-budget-input').props.className ?? ''
+    ).split(/\s+/);
+    expect(classes).toContain('text-section');
+    expect(classes).not.toContain('text-card-title');
   });
 });
 
@@ -111,42 +125,42 @@ describe('AC-2 · ★ tier 단일 선택 — 선택 칩만 활성 표식(교차)
   });
 });
 
-describe('AC-2b · 안내 range 가 활성 tier 를 따라 갱신된다 (하드코딩 red)', () => {
-  it('중간 → "50~150만", 고급 → "150~300만"(중간 range 부재)', () => {
-    renderSheet({ tier: '중간' });
-    // TRIP-739: 굽은 작은따옴표(‘ ’, U+2018/U+2019)로 감싼 전체 문구를 완전일치로 잠근다 — 직선 '(U+0027)로
-    // 되돌리면 red(Figma 3647:2068 정합). getByText 완전일치라 따옴표 종류 회귀를 문자 단위로 잡는다.
-    expect(
-      screen.getByText('온보딩에서 고른 ‘중간(50~150만)’ 범위로 채웠어요')
-    ).toBeOnTheScreen();
+/**
+ * TRIP-1045 AC-D7 · 안내 노트("온보딩에서 고른 …(범위) 범위로 채웠어요")와 칩 range 문자열("50만 미만" 등)은
+ * 없다 — Figma `3647:2068` 에 노트가 없고, 정본(c2bda113)이 "range 안내 문구는 두지 않는다"로 정했다.
+ * ⚠️ 이 단위 테스트는 선제 green 앵커다(prop 이 없으면 옛 코드도 노트를 안 그린다). 노트가 실제로 사라졌는지
+ * 가르는 red 는 통합 D7(온보딩 tier·금액이 채워진 얼굴)이 맡는다.
+ */
+describe('AC-D7 · 노트·range 문자열 없음 (tier 무관)', () => {
+  const RANGE_TEXT = /50만 미만|50~150만|150~300만|300만 이상/;
 
-    // 다른 렌더로 tier 를 고급으로 — range 가 갱신되고 중간 range 는 안 품는다.
-    screen.rerender(
-      <BudgetEditSheet
-        amountText="800,000"
-        tier="고급"
-        onChangeAmount={jest.fn()}
-        onBlurAmount={jest.fn()}
-        onSelectTier={jest.fn()}
-        onPressEdit={jest.fn()}
-        onApply={jest.fn()}
-        onClose={jest.fn()}
-      />
-    );
-    const note = screen.getByTestId('trip-wizard-budget-note');
-    expect(note).toHaveTextContent(/150~300만/);
-    expect(note).not.toHaveTextContent(/50~150만/);
-  });
+  it.each(['저가', '중간', '고급', '럭셔리'])(
+    '활성 tier 가 %s 여도 노트 testID·range 문자열·"범위로 채웠어요"가 0건',
+    (tier) => {
+      renderSheet({ tier });
+
+      // 짝(긍정) — 시트와 그 tier 의 활성 표식은 실제로 그려졌다(공허 통과 차단).
+      expect(screen.getByTestId('trip-wizard-budget-sheet')).toBeOnTheScreen();
+      expect(
+        screen.getAllByTestId(/^trip-wizard-budget-tier-active-/)
+      ).toHaveLength(1);
+
+      expect(screen.queryByTestId('trip-wizard-budget-note')).toBeNull();
+      expect(screen.queryAllByText(RANGE_TEXT)).toHaveLength(0);
+      expect(screen.queryAllByText(/범위로 채웠어요/)).toHaveLength(0);
+    }
+  );
 });
 
-describe('AC-2c · ★ tier press 는 금액을 안 건드린다 (대표값 발명 금지)', () => {
-  it('럭셔리 칩을 눌러도 onSelectTier 만 부르고 onChangeAmount 는 0회', () => {
+describe('AC-2c · ★ 칩 press 는 onSelectTier(라벨)만 올린다 — 대표 금액 계산은 배선 몫', () => {
+  it('럭셔리 칩을 누르면 onSelectTier("럭셔리")만 부르고 onChangeAmount 는 0회', () => {
     const spies = renderSheet({ amountText: '800,000', tier: '중간' });
 
     fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-luxury'));
 
     expect(spies.onSelectTier).toHaveBeenCalledWith('럭셔리');
-    // tier 가 금액을 자동으로 채우는 뮤턴트면 여기서 red.
+    // TRIP-1045: 칩이 금액을 채우는 것은 맞지만, 시트는 박수를 모른다 — 배선이 onSelectTier 를 받아
+    // budgetForTier(tier, nightsSum) 로 계산해 amountText 를 내려준다. 시트가 스스로 금액을 올리면 red.
     expect(spies.onChangeAmount).not.toHaveBeenCalled();
   });
 });
@@ -200,5 +214,81 @@ describe('AC-S6E-1(슬롯) · budgetError prop 을 받으면 오류 노드를 �
     renderSheet();
 
     expect(screen.queryByTestId('trip-wizard-error-budget')).toBeNull();
+  });
+});
+
+/**
+ * TRIP-984 D8 · 적용 비활성 표면(PeriodEditSheet 선례). 판정은 배선이 `applyDisabled` 로 내린다(D4 무상태).
+ * `toBeDisabled` 는 accessibilityState 만 읽으므로 press 결과(onApply 0회)와 짝으로 둔다.
+ */
+describe('AC-A · applyDisabled → 진짜 disabled + opacity-40', () => {
+  it('applyDisabled=true 면 적용이 비활성이고, 눌러도 onApply 가 불리지 않는다', () => {
+    const spies = renderSheet({ amountText: '', applyDisabled: true });
+
+    const apply = screen.getByTestId('trip-wizard-budget-apply');
+    expect(apply).toBeDisabled();
+    expect(String(apply.props.className).split(/\s+/)).toContain('opacity-40');
+
+    fireEvent.press(apply);
+    expect(spies.onApply).not.toHaveBeenCalled();
+  });
+
+  it('applyDisabled=false 면 활성이고(opacity-40 없음) press → onApply 1회 (짝)', () => {
+    const spies = renderSheet({ applyDisabled: false });
+
+    const apply = screen.getByTestId('trip-wizard-budget-apply');
+    expect(apply).not.toBeDisabled();
+    expect(String(apply.props.className).split(/\s+/)).not.toContain(
+      'opacity-40'
+    );
+
+    fireEvent.press(apply);
+    expect(spies.onApply).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * TRIP-984 D9 · 키보드 처방. 실제로 시트가 키보드만큼 올라가는지는 통과형 목이라 jest 사각(6-b) —
+ * 여기선 "BottomSheetTextInput 을 썼다 · keyboardBehavior 를 적었다 · 본문 탭이 Keyboard.dismiss 를
+ * 부른다"까지만 잠근다. 목의 BottomSheetTextInput 은 TextInput 과 다른 타입이라 플레인 회귀가 구분된다.
+ */
+describe('AC-B · 키보드 처방 (BottomSheetTextInput · keyboardBehavior · 본문 탭 dismiss)', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('B1 · 금액 입력칸은 BottomSheetTextInput 이다 (플레인 TextInput 이면 red)', () => {
+    renderSheet();
+
+    expect(screen.UNSAFE_getByType(BottomSheetTextInput).props.testID).toBe(
+      'trip-wizard-budget-input'
+    );
+  });
+
+  it('B2 · 시트가 keyboardBehavior="interactive" 를 명시한다', () => {
+    renderSheet();
+
+    expect(
+      screen.UNSAFE_queryAllByProps({ keyboardBehavior: 'interactive' })
+    ).not.toHaveLength(0);
+  });
+
+  it('B3 · 칩·수정은 제 콜백만 부르고, 본문 빈 곳(부제 글자) 탭은 Keyboard.dismiss 를 부른다', () => {
+    // 렌더 전에 건다 — onPress={Keyboard.dismiss} 처럼 참조를 렌더 때 잡는 구현도 스파이가 본다.
+    const dismiss = jest
+      .spyOn(Keyboard, 'dismiss')
+      .mockImplementation(() => {});
+    const spies = renderSheet();
+
+    fireEvent.press(screen.getByTestId('trip-wizard-budget-tier-mid'));
+    expect(spies.onSelectTier).toHaveBeenCalledWith('중간');
+    expect(dismiss).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('trip-wizard-budget-edit'));
+    expect(spies.onPressEdit).toHaveBeenCalledTimes(1);
+    expect(dismiss).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByText('1인 총액 기준이에요'));
+    expect(dismiss).toHaveBeenCalledTimes(1);
   });
 });

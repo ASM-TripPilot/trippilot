@@ -3,6 +3,7 @@ package com.trippilot.notification.adapter.out.external
 import com.sun.net.httpserver.HttpServer
 import com.trippilot.notification.domain.NotificationKind
 import com.trippilot.notification.domain.ReminderCopyRequest
+import com.trippilot.notification.domain.ReminderSlot
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.maps.shouldBeEmpty
 import io.kotest.matchers.shouldBe
@@ -31,8 +32,8 @@ class HttpReminderCopyAdapterTest : StringSpec({
 
     // **재료(slots)가 있어야 묻는다** — 빈 재료로 물으면 상대가 "일정 없음"을 지어낸다(아래 스펙).
     val items = listOf(
-        ReminderCopyRequest("키-1", NotificationKind.TRIP_DAY, LocalDate.parse("2026-08-10"), listOf("성산일출봉")),
-        ReminderCopyRequest("키-2", NotificationKind.TRIP_PRE, LocalDate.parse("2026-08-09"), listOf("한라산")),
+        ReminderCopyRequest("키-1", NotificationKind.TRIP_DAY, LocalDate.parse("2026-08-10"), listOf(ReminderSlot("성산일출봉", "SIGHT"))),
+        ReminderCopyRequest("키-2", NotificationKind.TRIP_PRE, LocalDate.parse("2026-08-09"), listOf(ReminderSlot("한라산"))),
     )
 
     "정상 응답의 문구를 키로 맞춰 돌려준다" {
@@ -130,7 +131,10 @@ class HttpReminderCopyAdapterTest : StringSpec({
         withCapturingServer(body()) { url, sent ->
             adapterAt(url).copiesFor(null, items)
 
-            sent.single() shouldContain "\"slots\":[{\"name\":\"성산일출봉\"}]"
+            // 카테고리가 있으면 함께 실린다(경계 코드 — 한글은 상대 사전에 없어 조용히 무시된다).
+            sent.single() shouldContain "\"slots\":[{\"name\":\"성산일출봉\",\"category\":\"SIGHT\"}]"
+            // 모르면 키 자체가 빠진다 — `null` 을 실으면 상대가 "카테고리가 비었다"로 읽는다.
+            sent.single() shouldContain "\"slots\":[{\"name\":\"한라산\"}]"
         }
     }
 
@@ -151,7 +155,7 @@ class HttpReminderCopyAdapterTest : StringSpec({
 
     /** 계약 enum 은 둘뿐이다 — 다른 종류가 한 건 섞이면 **요청 전체가** 422 다. */
     "계약 enum 밖 종류는 보내지 않는다" {
-        val mixed = items + ReminderCopyRequest("키-3", NotificationKind.PLAN_B, LocalDate.parse("2026-08-11"), listOf("우도"))
+        val mixed = items + ReminderCopyRequest("키-3", NotificationKind.PLAN_B, LocalDate.parse("2026-08-11"), listOf(ReminderSlot("우도")))
         withCapturingServer(body()) { url, sent ->
             adapterAt(url).copiesFor(null, mixed)
 
@@ -163,7 +167,7 @@ class HttpReminderCopyAdapterTest : StringSpec({
     /** 계약 `maxItems: 30` — 넘기면 한 건도 못 받는다. 나눠 보내고 합친다. */
     "30건을 넘기면 나눠 보낸다" {
         val many = (1..31).map {
-            ReminderCopyRequest("키-$it", NotificationKind.TRIP_DAY, LocalDate.parse("2026-08-10"), listOf("곳-$it"))
+            ReminderCopyRequest("키-$it", NotificationKind.TRIP_DAY, LocalDate.parse("2026-08-10"), listOf(ReminderSlot("곳-$it")))
         }
         withCapturingServer(body()) { url, sent ->
             adapterAt(url).copiesFor(null, many)

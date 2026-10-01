@@ -30,6 +30,8 @@ import path from 'path';
  * **A. 영구 규칙 — 유지한다.** 잠그는 것이 층 규칙(README §59·§60·§61·§66)과 INV-3 이라
  * 컴포넌트가 늘어도 갱신이 필요 없다 — 모집단이 디렉토리 재귀라 새 파일이 자동 편입된다.
  * 갱신이 필요한 순간은 `HEX_EXEMPT` 를 늘려야 할 때뿐이고, 그때는 면제 사유를 여기 적는다.
+ * INV-3 `duration` 스캔은 `Animated.timing` 인라인 설정의 박자 키만 문맥으로 놓아준다(TRIP-1125 Q3,
+ * `maskAnimationTimingKeys`) — 파일 면제가 아니다.
  * **B 없음** — 이 파일에는 특정 디자인 값을 고정하는 단언이 하나도 없다(그 층은
  * `tabbarVisual.test.ts` 가 맡는다).
  */
@@ -43,6 +45,16 @@ const TABBAR_REL = 'shared/ui/BottomTabBar.tsx';
 // (place 카드·stay 검색 카드가 공유 = entities 교차 0). SVG stroke/fill 색 상수(#ff385c·#222222·
 // #ffffff)를 갖는 `*Glyphs.tsx` 라 raw-hex 면제(BottomTabBar 선례와 동일 근거).
 const HEART_GLYPHS_REL = 'shared/ui/HeartGlyphs.tsx';
+// TRIP-990 — 공용 토스트(스토어+호스트)와 그 성공 체크 글리프. 글리프는 SVG stroke 색(#0E9384 success)을
+// 상수로 갖는 `*Glyphs.tsx` 라 className 을 못 채운다 → raw-hex·className 면제(HeartGlyphs 선례와 동일 근거).
+// 면제 자기검사(`files.toContain`)가 ToastGlyphs 의 실재를 red→green 앵커로 겸한다.
+const TOAST_REL = 'shared/ui/Toast.tsx';
+const TOAST_GLYPHS_REL = 'shared/ui/ToastGlyphs.tsx';
+// TRIP-1050 — d02·e04 빈 상태 공통 컴포넌트. 소비처가 features 두 곳이라 widgets 는 층 방향상
+// 불가 → shared/ui. 도메인 문구는 전부 props 로 받는다(README §65).
+const COLLAGE_EMPTY_REL = 'shared/ui/CollageEmptyState.tsx';
+const SAVED_STAY_SCREEN_REL = 'features/stay/ui/SavedStayListScreen.tsx';
+const SAVED_PLACE_SCREEN_REL = 'pages/saved-places/ui/SavedPlaceListScreen.tsx';
 const STAY_STATE_NOTICE = path.join(
   ROOT,
   'features',
@@ -66,7 +78,7 @@ const STAY_SCREEN = path.join(
  * `HeartGlyphs.tsx`(TRIP-807 이동)도 같은 `*Glyphs.tsx` 근거로 면제한다 — 아래 `files.toContain`
  * 자기검사가 이 파일의 shared/ui 이동 완료(존재)를 red→green 앵커로 겸한다(★6).
  */
-const HEX_EXEMPT = [TABBAR_REL, HEART_GLYPHS_REL];
+const HEX_EXEMPT = [TABBAR_REL, HEART_GLYPHS_REL, TOAST_GLYPHS_REL];
 
 /** 토큰으로 이미 존재하는 9색 — raw hex 로 적으면 토큰 우회다(`placeExploreStructure` 와 동일). */
 const TOKENIZED_HEX = [
@@ -90,6 +102,26 @@ function stripComments(source: string): string {
   return source
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/(^|[^:])\/\/.*$/gm, '$1');
+}
+
+/**
+ * INV-3 스캔 전처리(TRIP-1125 Q3) — `Animated.timing(값, { … })` **인라인 설정 객체 안의 `duration:` 키
+ * 이름만** 가린다. 애니메이션 박자는 사용자에게 보이는 소요시간이 아니다. 파일 면제가 아니라 문맥 면제라
+ * 같은 파일의 다른 `duration`(값 쪽 식·타입 필드·표시값·설정 밖 변수)은 그대로 잡힌다. 설정을 변수로
+ * 빼거나 설정 안에 중괄호가 중첩되면 가려지지 않아 red(거짓 green 이 아니라 거짓 red 쪽으로 틀린다).
+ * 반드시 `stripComments` **뒤에** 부른다 — 설정 안 주석의 `{` 가 매치를 끊는다.
+ */
+function maskAnimationTimingKeys(source: string): string {
+  return source.replace(
+    /Animated\.timing\(\s*[^,()]+,\s*\{[^{}]*\}/g,
+    // 키 자리(`{` 나 `,` 바로 뒤)만 — `a ? b.duration : c` 처럼 값 쪽 식에서 `:` 앞에 오는 duration 은
+    // 키가 아니다.
+    (block) => block.replace(/([{,]\s*)duration(?=\s*:)/g, '$1timingMs')
+  );
+}
+
+function hasDuration(source: string): boolean {
+  return /\bduration\b/i.test(maskAnimationTimingKeys(source));
 }
 
 function listSourceFiles(dir: string): string[] {
@@ -146,6 +178,71 @@ describe('탐지기 자가검사 — 이게 통과해야 아래 단언이 의미
     expect(stripped).toContain('const t = setTimeout(fn, 100);');
     expect(stripComments('const d = { duration: 1 };')).toContain('duration');
   });
+
+  it('INV-3 탐지기는 Animated.timing 인라인 설정의 박자 키만 놓아주고, 표시·데이터 duration 은 잡는다 (TRIP-1125 Q3)', () => {
+    const scan = (code: string) => hasDuration(stripComments(code));
+
+    // 놓아준다 — 애니메이션 박자 키.
+    expect(
+      scan(
+        'Animated.timing(opacity, { toValue: 0.4, duration: 800, useNativeDriver: true })'
+      )
+    ).toBe(false);
+    expect(
+      scan(
+        [
+          'Animated.timing(values[index], {',
+          '  toValue: 1,',
+          '  duration: PULSE_MS,',
+          '  easing: Easing.inOut(Easing.ease),',
+          '  useNativeDriver: true,',
+          '})',
+        ].join('\n')
+      )
+    ).toBe(false);
+    // 전처리 × 마스킹 조합 — 설정 안 줄 주석의 `{` 를 먼저 걷어야 박자 키가 가려진다.
+    expect(
+      scan(
+        [
+          'Animated.timing(scale, {',
+          '  toValue: 1, // 박자 {발명값}',
+          '  duration: 600,',
+          '  useNativeDriver: true,',
+          '})',
+        ].join('\n')
+      )
+    ).toBe(false);
+
+    // 잡는다 — 값 쪽 식, 설정 밖 객체, 표시값, 타입 필드.
+    expect(
+      scan(
+        'Animated.timing(v, { toValue: 1, duration: trip.duration, useNativeDriver: true })'
+      )
+    ).toBe(true);
+    expect(
+      scan('const cfg = { duration: 800 }; Animated.timing(v, cfg).start();')
+    ).toBe(true);
+    expect(scan('<Text>{slot.duration}</Text>')).toBe(true);
+    expect(scan('type P = { duration: number };')).toBe(true);
+    // 값 쪽 삼항식 — `slot.duration` 바로 뒤에 `:` 가 와도 키가 아니다(5-b W5).
+    expect(
+      scan(
+        'Animated.timing(v, { toValue: 1, duration: slot ? slot.duration : 800, useNativeDriver: true })'
+      )
+    ).toBe(true);
+    expect(
+      scan(
+        [
+          'Animated.timing(v, {',
+          '  toValue: 1,',
+          '  duration: slot',
+          '    ? slot.duration',
+          '    : 800,',
+          '})',
+        ].join('\n')
+      )
+    ).toBe(true);
+  });
 });
 
 describe('AC-G2 · shared/ui 모집단 — 승격이 실제로 일어났는가', () => {
@@ -181,7 +278,7 @@ describe('AC-G2 · shared 는 features 를 모른다 (README §59·§61·§66 ·
     expect(offenders).toEqual([]);
 
     const durationOffenders = sources
-      .filter(({ source }) => /\bduration\b/i.test(source))
+      .filter(({ source }) => hasDuration(source))
       .map(({ file }) => file);
     expect(durationOffenders).toEqual([]);
 
@@ -221,6 +318,19 @@ describe('AC-G2 · 토큰 우회 금지 — shared/ui', () => {
   });
 });
 
+describe('🔴 TRIP-990 T5 · 토스트 스토어가 shared/ui 가드 사정거리 안에 있다 (01b Q1)', () => {
+  it('Toast.tsx 가 모집단에 있고, React 내장 useSyncExternalStore 로 구독하며 호출 함수·호스트를 내보낸다', () => {
+    const toast = sharedUiSources().find(({ file }) => file === TOAST_REL);
+
+    // 긍정 — 모집단에 들어와야 위의 zustand·duration·URL·className·hex 부정 스캔이 이 파일에도 걸린다.
+    expect(toast).toBeDefined();
+    // 01b Q1: 라이브러리 0 — 상태는 React 내장 훅으로 구독한다(zustand 금지는 위 it 가 이미 잰다).
+    expect(toast?.source).toMatch(/\buseSyncExternalStore\b/);
+    expect(toast?.source).toMatch(/export (function|const) showToast\b/);
+    expect(toast?.source).toMatch(/export (function|const) ToastHost\b/);
+  });
+});
+
 describe('01b Seed Q1 ⓑ · 승격은 이동이지 복제가 아니다', () => {
   it('features/stay 에서 StateNotice 가 사라지고, 숙소 화면이 shared 경로로 부른다', () => {
     // 부정 — 두 벌이 남으면 다음 사람이 어느 쪽을 고쳐야 할지 알 수 없다.
@@ -231,5 +341,48 @@ describe('01b Seed Q1 ⓑ · 승격은 이동이지 복제가 아니다', () => 
     // 바꾸고 렌더를 지운 상태를 차단한다).
     expect(staySource).toContain('@/shared/ui/StateNotice');
     expect(staySource).toMatch(/<StateNotice\b/);
+  });
+});
+
+describe('🔴 TRIP-1050 · 콜라주 빈 상태는 shared/ui 한 벌이고 두 화면이 그것을 쓴다 (AC-6·AC-7)', () => {
+  it('CollageEmptyState 가 모집단에 있고, 코드에 도메인 문구(장소·숙소·부산)가 없다', () => {
+    const collage = sharedUiSources().find(
+      ({ file }) => file === COLLAGE_EMPTY_REL
+    );
+
+    // 긍정 — 모집단에 들어와야 위의 층·duration·URL·className·hex 스캔이 이 파일에도 걸린다.
+    expect(collage).toBeDefined();
+    expect(collage?.source).toMatch(/export function CollageEmptyState\b/);
+    // 부정 — 주석을 걷은 소스(문자열·식별자만 남음)에 도메인 문구가 있으면 원시 부품이 아니다.
+    expect(collage?.source).not.toMatch(/장소|숙소|부산/);
+  });
+
+  it('d02·e04 화면이 같은 shared 경로를 import 해 그리고, e04 에는 로컬 콜라주 사본이 없다', () => {
+    const read = (rel: string) =>
+      stripComments(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
+    const staySource = read(SAVED_STAY_SCREEN_REL);
+    const placeSource = read(SAVED_PLACE_SCREEN_REL);
+
+    // 긍정 — import 만 바꾸고 렌더를 지운 상태도 막으려 JSX 사용까지 함께 잰다.
+    [staySource, placeSource].forEach((source) => {
+      expect(source).toContain("'@/shared/ui/CollageEmptyState'");
+      expect(source).toMatch(/<CollageEmptyState\b/);
+    });
+
+    // 부정 — e04 에 옛 콜라주가 남으면 두 벌이다. d02 는 지역 0건 블록이 옛 콜라주를 계속 써서
+    // (TRIP-1042 몫) 이 금지를 걸지 않는다.
+    expect(staySource).not.toMatch(/\bEmptyCollage\b/);
+    expect(staySource).not.toContain('saved-stay-empty-photo-');
+  });
+});
+
+describe('🔴 TRIP-1125 AC-5 · 공용 스켈레톤이 shared/ui 가드 사정거리 안에 있다', () => {
+  it('Skeleton.tsx 가 모집단에 있어 층·duration·URL·className·hex 스캔을 함께 받는다', () => {
+    const skeleton = sharedUiSources().find(
+      ({ file }) => file === 'shared/ui/Skeleton.tsx'
+    );
+
+    expect(skeleton).toBeDefined();
+    expect(skeleton?.source).toMatch(/export function Skeleton\b/);
   });
 });

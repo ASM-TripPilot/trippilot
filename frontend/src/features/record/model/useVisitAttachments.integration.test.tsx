@@ -10,7 +10,9 @@ import type {
   VisitPhoto,
 } from '@/shared/api/generated/schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { flushNotifications } from '@/test-support/flushNotifications';
 
+import type { PhotoAssetMeta } from './photoAttach';
 import { useVisitAttachments } from './useVisitAttachments';
 
 /**
@@ -203,5 +205,186 @@ describe('AC-5 · saveMemo — upsert 1회 · 공백만이면 0회', () => {
     });
 
     expect(hitCount(`PUT /api/v1/trips/${TRIP}/visits/${VC}/memo`)).toBe(0);
+  });
+});
+
+/**
+ * 🔴 TRIP-760 · AC-4 · BR-U5-11/12 · INV-4 — 업로드(POST) 실패 노출 + 재시도 재호출.
+ *
+ * 무엇을 보장하나(승인 계약 · 훅 경계에서 관측):
+ *  - **실패 노출**: attachPhoto 가 POST 실패(500)를 잡아 실패 자산을 `failedUploads` 로 드러낸다(reject 아님 —
+ *    컨테이너의 fire-and-forget `void attachPhoto(...)` 가 unhandled rejection 을 안 낸다). 화면은 이 상태로
+ *    upload-failed 셀을 그린다.
+ *  - **재시도 재호출**: retryUpload 가 같은 자산으로 POST 를 다시 부른다 → `POST …/photos` **2회**(첫 실패 1 +
+ *    재시도 1). 재시도도 `photoAttach` 동의 게이트를 지나 gpsConsent=false 면 exif 가 빠진다(BR-U5-12 무회귀).
+ *  - **재실패=재노출**(01b 결정 2): 재시도가 또 500 이어도 `failedUploads.length` 는 **여전히 1**(같은 자산
+ *    재노출, 별도 "재시도 중/재실패" 얼굴 없음 · 중복 push 금지).
+ *
+ * ★ seam 확정(02a §2-d): 실패 상태는 **훅**에 둔다(컨테이너 로컬 아님) — 훅이 POST·무효화를 이미 소유. 신설은
+ *   attachPhoto·failedUploads·retryUpload 3멤버뿐이고 기존 `addPhoto`(reject-on-fail) 계약·위 AC-5 테스트는
+ *   literally 무변경(additive 무회귀).
+ * ★ 조합 실검증(02a §5-B): msw 500 → customInstance(authedClient) → 인터셉터가 401 만 리프레시·그 외는
+ *   Promise.reject → 훅 catch → failedUploads. 500 이 reject 로 살아 도달함을 mutator·인터셉터 소스로 확인.
+ *
+ * (개념) `renderHook`=훅만 마운트 · `result.current`=현재 반환값(매 접근 재조회) · `waitFor`=비동기 상태 대기 ·
+ *   msw `HttpResponse.json(body,{status:500})`=서버 500 흉내 · `not.toHaveProperty('exifLat')`=키 부재 단언.
+ *   신규 멤버는 아직 없어 `result.current as unknown as UploadFailureApi` 로 계약 타입을 씌운다(구현 전엔
+ *   undefined-호출로 red).
+ */
+interface UploadFailureApi {
+  failedUploads: { localAssetId: string }[];
+  attachPhoto: (asset: PhotoAssetMeta, gpsConsent: boolean) => Promise<void>;
+  retryUpload: (localAssetId: string) => Promise<void>;
+}
+
+describe('🔴 AC-4 · 업로드 실패 노출 + 재시도 재호출(POST 2회 · 동의 게이트)', () => {
+  it('POST 500 → 실패 노출 → retryUpload → POST 2회 + 재시도도 exif 게이트 + 재노출', async () => {
+    const bodies: AddPhotoRequest[] = [];
+    const { result } = await renderReady([]);
+    const api = () => result.current as unknown as UploadFailureApi;
+
+    // POST 는 항상 500(재실패=재노출) — 나가는 바디를 캡처해 동의 게이트를 검증한다.
+    server.use(
+      http.post(
+        `${BASE}/trips/:tripId/visits/:visitCheckId/photos`,
+        async ({ request }) => {
+          bodies.push((await request.json()) as AddPhotoRequest);
+          return HttpResponse.json({ error: 'upload failed' }, { status: 500 });
+        }
+      )
+    );
+
+    // 실행 ① — 동의 없음 + exif 있는 자산을 attach(POST 500 → 실패로 노출).
+    await act(async () => {
+      await api().attachPhoto(
+        {
+          localAssetId: 'local-b',
+          deviceId: 'dev-1',
+          exifLat: 35.15,
+          exifLng: 129.11,
+        },
+        false
+      );
+    });
+
+    // 단언 ① — POST 1회 + 실패가 상태로 노출된다.
+    expect(hitCount(`POST /api/v1/trips/${TRIP}/visits/${VC}/photos`)).toBe(1);
+    await waitFor(() => expect(api().failedUploads.length).toBe(1));
+
+    // 실행 ② — 같은 자산으로 재시도(POST 재발화).
+    await act(async () => {
+      await api().retryUpload('local-b');
+    });
+
+    // 단언 ② — POST 2회(첫 실패 1 + 재시도 1).
+    expect(hitCount(`POST /api/v1/trips/${TRIP}/visits/${VC}/photos`)).toBe(2);
+    // 단언 ③ — 재시도 바디도 photoAttach 동의 게이트 경유(exif 없음, localAssetId 유지).
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1]).not.toHaveProperty('exifLat');
+    expect(bodies[1]).not.toHaveProperty('exifLng');
+    expect(bodies[1].localAssetId).toBe('local-b');
+    // 단언 ④ — 재실패=재노출(같은 자산 하나로 유지, 중복 push 없음).
+    expect(api().failedUploads.length).toBe(1);
+  });
+});
+
+/**
+ * 🔴 TRIP-1078 · AC-4·AC-5·AC-6 — 메모 성공값 캐시(`savedMemo`) + 같은 값 재저장 차단.
+ *
+ * 무엇을 보장하나(훅 경계):
+ *  - PUT 성공 → `savedMemo` = trim 값(세션 캐시, 카드 재마운트 시드의 원천).
+ *  - 마지막 **성공** 텍스트와 같으면(trim 비교) PUT 0회. 다른 텍스트는 다시 나간다.
+ *  - 실패는 reject 유지(컨테이너가 안내로 바꾼다) · `savedMemo` 는 그대로 · 같은 텍스트 재시도는 PUT 이 나간다.
+ *
+ * ★ 같은 saveMemo 참조로 한 act 안에서 연속 호출한다 — 렌더값(클로저)으로 비교하면 재렌더 전 두 번째 호출이
+ *   여전히 null 을 봐서 PUT 이 또 나간다. 성공을 아는 곳(캐시·ref)에서 판정해야 통과한다.
+ * ★ "0회" 는 시간 대기 대신 바디 목록 전체 `toEqual` 로 본다 — 중복 PUT 이 있으면 다음 바디 앞에 끼어 있다.
+ * ★ 롤백성 단언(`savedMemo` 가 여전히 null) 앞 flushNotifications 는 지워도 green 으로 남는 줄이다(traps-record).
+ */
+interface MemoCacheApi {
+  savedMemo: string | null;
+  saveMemo: (text: string) => Promise<void>;
+}
+
+describe('🔴 TRIP-1078 · saveMemo 성공값 캐시 + 같은 값 PUT 0', () => {
+  let memoStatus: 200 | 404 = 200;
+  let memoBodies: PutMemoRequest[] = [];
+
+  beforeEach(() => {
+    memoStatus = 200;
+    memoBodies = [];
+  });
+
+  async function renderWithMemo() {
+    const rendered = await renderReady([]);
+    server.use(
+      http.put(
+        `${BASE}/trips/:tripId/visits/:visitCheckId/memo`,
+        async ({ request }) => {
+          const body = (await request.json()) as PutMemoRequest;
+          memoBodies.push(body);
+          if (memoStatus === 404) {
+            return HttpResponse.json({ error: 'not found' }, { status: 404 });
+          }
+          return HttpResponse.json({
+            text: body.text,
+            updatedAt: '2026-09-29T10:00:00Z',
+          });
+        }
+      )
+    );
+    return {
+      ...rendered,
+      api: () => rendered.result.current as unknown as MemoCacheApi,
+    };
+  }
+
+  it('H1: 저장 전 savedMemo 는 null, PUT 성공 뒤엔 trim 된 텍스트다', async () => {
+    const { api } = await renderWithMemo();
+    expect(api().savedMemo).toBeNull();
+
+    await act(async () => {
+      await api().saveMemo('  노을  ');
+    });
+
+    await flushNotifications();
+    await waitFor(() => expect(api().savedMemo).toBe('노을'));
+  });
+
+  it('H2: 마지막 성공값과 같은 텍스트(공백만 다른 것 포함)는 PUT 0회, 다른 텍스트는 나간다', async () => {
+    const { api } = await renderWithMemo();
+
+    await act(async () => {
+      const save = api().saveMemo;
+      await save('바다');
+      await save('바다');
+      await save('  바다  ');
+    });
+    await flushNotifications();
+    await act(async () => {
+      await api().saveMemo('산');
+    });
+
+    expect(memoBodies).toEqual([{ text: '바다' }, { text: '산' }]);
+  });
+
+  it('H3: PUT 404 는 reject·savedMemo 그대로, 같은 텍스트 재시도는 PUT 이 다시 나간다', async () => {
+    const { api } = await renderWithMemo();
+    memoStatus = 404;
+
+    await act(async () => {
+      await expect(api().saveMemo('노을')).rejects.toBeDefined();
+    });
+    await flushNotifications();
+    expect(api().savedMemo).toBeNull();
+
+    memoStatus = 200;
+    await act(async () => {
+      await api().saveMemo('노을');
+    });
+
+    expect(memoBodies).toEqual([{ text: '노을' }, { text: '노을' }]);
+    await flushNotifications();
+    await waitFor(() => expect(api().savedMemo).toBe('노을'));
   });
 });

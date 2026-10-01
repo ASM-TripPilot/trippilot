@@ -6,7 +6,8 @@ import type {
 } from '@/shared/api/generated/schemas';
 
 import { mergeMustVisitSeeds, type MustVisitSeedItem } from './mustVisitSeed';
-import type { PeriodPresetCode } from './tripWizardStep1';
+import { nightsSum } from './tripDraft';
+import { deriveEndDate, type PeriodPresetCode } from './tripWizardStep1';
 
 /**
  * 위저드 1/2 드래프트 — 화면 밖에 사는 세션 메모리 상자(TRIP-205, 01b §10.1 · D3).
@@ -46,6 +47,9 @@ export interface TripWizardDraft {
    * (null-vs-empty — 배선이 `toggleMulti`의 `null`을 `[]`로 매핑). 계정 취향은 안 건드린다
    * (BR-U1-38 — 여기 담는 건 여행 로컬 값이다). */
   prefStyleOverride?: string[];
+  /** 활동 축 오버라이드(TRIP-1092) — `prefStyleOverride`와 같은 규약이고 서로 독립이다(자연·쇼핑이
+   * 두 축에 같은 라벨로 있어 한 필드로 합치면 "활동 자연만 끔"을 못 담는다). */
+  prefActivityOverride?: string[];
   /** 아직 소비자가 없다(문구를 안 그리므로) — TRIP-206이 이 값을 읽어 오류 문구를 건다. */
   touched: TripWizardField[];
   /** 제출 성공 응답이 준 `tripId`(01b D7). 라우트(`/trips/new/step2`)가 id를 안 나르므로
@@ -65,7 +69,13 @@ export interface TripWizardDraft {
    * 마운트 시 이 값을 보고 `resetMustVisits()`를 건너뛴다(그 뒤 스스로 끈다). 그 외 진입은
    * 항상 `false`라 평소대로 비워진다. */
   preserveMustVisitsOnce: boolean;
-  addDestination(regionName: string, nights: number): void;
+  /** 꼭 갈 곳 고르기 완료(위저드 **안** 재진입)가 켜는 1회성 표시(TRIP-1113 결정 2) — 셸이 마운트 시
+   * 이 값을 보면 `createdTripId`를 비우지 않고 스스로 끈다. 그래야 돌아온 step1이 여행을 또 만들지
+   * 않고 고친다(PATCH). `INITIAL_DRAFT`에 있어 새 진입의 `reset()`이 함께 끈다. */
+  preserveCreatedTripIdOnce: boolean;
+  /** `regionCode` — 지역 피커가 쥔 행정구역 코드(TRIP-1042 AC-12). 꼭 갈 곳 고르기가 이 코드로 지역을
+   * 가르고, 생성 요청에도 그대로 실린다. 안 주면 비어 있다(서버가 이름으로 찾는다). */
+  addDestination(regionName: string, nights: number, regionCode?: string): void;
   removeDestination(seq: number): void;
   /** 해당 seq destination 의 nights 를 교체(하한 1 클램프). seq 미일치면 no-op. add/remove 는
    * 무변경 재사용(TRIP-666 여행지 편집 시트). */
@@ -79,6 +89,9 @@ export interface TripWizardDraft {
     startDate: string,
     endDate: string
   ): void;
+  /** 시작 날짜만 고른다(TRIP-1027) — 끝은 `시작 + Σnights`로 파생된다. 여행지가 0곳이면 끝 =
+   * 시작(당일). 프리셋 출처가 아니므로 `presetCode`는 비운다. */
+  setStartDate(startDate: string): void;
   /** 1 미만은 1로 접는다(BR-U1-39 하한) — 화면의 `−` 비활성과 별개로 여기서도 방어한다. */
   setParty(next: number): void;
   selectCompanion(type: CompanionType): void;
@@ -88,7 +101,12 @@ export interface TripWizardDraft {
   /** 여행 단위 취향 오버라이드 커밋(TRIP-669) — 빈 배열도 그대로 저장한다(최소 0 허용).
    * `undefined`(오버라이드 없음)와 `[]`(전해제한 오버라이드)를 서로 다른 상태로 남긴다. */
   setPrefStyleOverride(styles: string[]): void;
+  /** 활동 축 오버라이드 커밋(TRIP-1092) — 규약은 `setPrefStyleOverride`와 같다. */
+  setPrefActivityOverride(activities: string[]): void;
   setCreatedTripId(tripId: string): void;
+  /** `preserveCreatedTripIdOnce`만 켠다 — 켜는 곳은 꼭 갈 곳 고르기 완료 한 곳이다(d02 새 진입의
+   * `seedMustVisitsFromD02`에 합치면 새 여행이 옛 id를 물고 간다 — TRIP-601 가드 c). */
+  keepCreatedTripIdOnce(): void;
   /** **첫 호출만** 반영한다 — 재조회·리렌더마다 다시 채우면 사용자가 x로 뺀 항목이
    * 되살아나고, 자기가 뺀 곳이 여행에 등록되는 것을 보게 된다. */
   initMustVisits(items: MustVisitSeedItem[]): void;
@@ -105,8 +123,8 @@ export interface TripWizardDraft {
    * 범위다: 위저드에 새로 들어오는 것은 "새 여행을 시작한다"지 "지금까지 친 것을 버린다"가
    * 아니라, 사용자가 손으로 채운 축(여행지·기간·인원·동반·예산·`touched`)은 재진입에도
    * 남아야 한다(BR-U1-33 · AC-1은 초기화 대상으로 시드 3개만 열거한다).
-   * `createdTripId`도 남긴다 — 정본이 수명을 정하지 않았고, step1의 두 소비자가 화면 지역
-   * 상태(`pendingMustVisits`)와 짝이라 새 마운트에서는 발화하지 않는다(02a §9-2). */
+   * `createdTripId`도 남긴다 — 정본이 수명을 정하지 않았다. 비우는 것은 셸 마운트(TRIP-601 가드 c)와
+   * `reset()`이고, 남아 있으면 step1은 그 여행을 새로 만들지 않고 고친다(TRIP-1113). */
   resetMustVisits(): void;
   /** d02 "이 장소들로 여행 만들기" 전용 시드 문 — 사용자 결정으로 신설(자동 재시드 폐지 뒤,
    * 이 명시적 액션만은 살린다). `preserveMustVisitsOnce`를 함께 켠다 — 이 CTA는 늘 새 위저드
@@ -122,16 +140,19 @@ const INITIAL_DRAFT = {
   endDate: undefined as string | undefined,
   presetCode: undefined as PeriodPresetCode | undefined,
   party: 1,
-  companionType: undefined as CompanionType | undefined,
+  // 동반 기본값 '혼자'(TRIP-1045, `PartyPicker`) — 기본값이라 `touched`는 켜지 않는다.
+  companionType: '혼자' as CompanionType | undefined,
   budgetText: '',
   // `undefined`=오버라이드 없음. `INITIAL_DRAFT`에 이 키를 둬야 병합형 `reset()`이 지운다(SO-4).
   prefStyleOverride: undefined as string[] | undefined,
+  prefActivityOverride: undefined as string[] | undefined,
   touched: [] as TripWizardField[],
   createdTripId: undefined as string | undefined,
   mustVisits: [] as MustVisitSeedItem[],
   mustVisitsInitialized: false,
   excludedMustVisitPoiIds: [] as string[],
   preserveMustVisitsOnce: false,
+  preserveCreatedTripIdOnce: false,
 };
 
 /** 이미 켜져 있으면 그대로 둔다 — 집합이지 로그가 아니다(같은 축을 여러 번 건드려도
@@ -141,6 +162,17 @@ function withTouched(
   field: TripWizardField
 ): TripWizardField[] {
   return touched.includes(field) ? touched : [...touched, field];
+}
+
+/** 여행지 목록이 바뀐 뒤의 끝 날짜(TRIP-1027) — 시작이 있으면 `시작 + Σnights`로 다시 계산하고,
+ * 없으면 끝을 건드리지 않는다(시작 없이 끝만 생기는 상태를 만들지 않는다). */
+function endAfter(
+  state: TripWizardDraft,
+  destinations: TripDestination[]
+): string | undefined {
+  return state.startDate
+    ? deriveEndDate(state.startDate, nightsSum(destinations))
+    : state.endDate;
 }
 
 /** 목록 순서대로 1..N을 다시 매긴다 — 제거 뒤에도 `seq`에 구멍이 나면 서버가 방문 순서를
@@ -154,41 +186,57 @@ function renumberSeq(destinations: TripDestination[]): TripDestination[] {
 
 const createTripWizardDraft: StateCreator<TripWizardDraft> = (set) => ({
   ...INITIAL_DRAFT,
-  addDestination: (regionName, nights) =>
-    set((state) => ({
-      destinations: renumberSeq([
+  addDestination: (regionName, nights, regionCode) =>
+    set((state) => {
+      const destinations = renumberSeq([
         ...state.destinations,
-        { seq: 0, region: regionName, nights },
-      ]),
-      touched: withTouched(state.touched, 'destinations'),
-    })),
+        { seq: 0, region: regionName, nights, regionCode },
+      ]);
+      return {
+        destinations,
+        endDate: endAfter(state, destinations),
+        touched: withTouched(state.touched, 'destinations'),
+      };
+    }),
   removeDestination: (seq) =>
-    set((state) => ({
+    set((state) => {
       // `seq`로 지운다(TRIP-364) — 이름과 달리 목록 안에서 유일하다(renumberSeq가 1..N을
       // 매긴다). 같은 지역을 두 번 담아도 사용자가 누른 *그* 칩을 정확히 짚는다. 이름으로
       // 지우던 옛 구현은 첫 일치만 지워 "누른 것을 지우지 못하던" 뿌리였고(더 전에는 `filter`로
       // 전부 지워 "부산 하나를 지우려다 부산 전부를 잃던" 버그였다), 코드/seq 식별로 그 뿌리를
       // 없앤다. 못 찾는 seq는 조용히 무동작(filter가 아무것도 안 지움).
-      destinations: renumberSeq(
+      const destinations = renumberSeq(
         state.destinations.filter((one) => one.seq !== seq)
-      ),
-      touched: withTouched(state.touched, 'destinations'),
-    })),
+      );
+      return {
+        destinations,
+        endDate: endAfter(state, destinations),
+        touched: withTouched(state.touched, 'destinations'),
+      };
+    }),
   setNights: (seq, nights) =>
-    set((state) => ({
+    set((state) => {
       // 해당 seq의 nights만 갈아 끼운다 — `map`이 seq 미일치 항목은 원본 그대로 되돌려주므로
       // 못 찾는 seq는 저절로 no-op이다(seq 재번호는 nights만 바뀌어 필요 없다). 하한 1은
       // `Math.max(1, …)` 하나로 접는다 — 상한은 없다(도시=최소 1박, 01b D1). renumberSeq는
       // 여기서 안 부른다: 목록 길이·순서가 그대로라 seq도 그대로다.
-      destinations: state.destinations.map((one) =>
+      const destinations = state.destinations.map((one) =>
         one.seq === seq ? { ...one, nights: Math.max(1, nights) } : one
-      ),
-    })),
+      );
+      return { destinations, endDate: endAfter(state, destinations) };
+    }),
   setPeriod: (presetCode, startDate, endDate) =>
     set((state) => ({
       presetCode,
       startDate,
       endDate,
+      touched: withTouched(state.touched, 'period'),
+    })),
+  setStartDate: (startDate) =>
+    set((state) => ({
+      presetCode: undefined,
+      startDate,
+      endDate: deriveEndDate(startDate, nightsSum(state.destinations)),
       touched: withTouched(state.touched, 'period'),
     })),
   setParty: (next) =>
@@ -207,7 +255,10 @@ const createTripWizardDraft: StateCreator<TripWizardDraft> = (set) => ({
       touched: withTouched(state.touched, 'budget'),
     })),
   setPrefStyleOverride: (styles) => set({ prefStyleOverride: styles }),
+  setPrefActivityOverride: (activities) =>
+    set({ prefActivityOverride: activities }),
   setCreatedTripId: (tripId) => set({ createdTripId: tripId }),
+  keepCreatedTripIdOnce: () => set({ preserveCreatedTripIdOnce: true }),
   initMustVisits: (items) =>
     set((state) =>
       state.mustVisitsInitialized

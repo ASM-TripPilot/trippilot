@@ -71,6 +71,52 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
         body["refreshToken"].asText().shouldNotBeBlank()
     }
 
+    /**
+     * TRIP-858 — apple 이 토큰 경로의 계약 enum 에 들어왔다(종전 `[kakao, naver, google]`).
+     *
+     * **이 테스트가 재는 범위는 좁다.** `FakeProviderConfig` 가 `SocialAuthPort` 를 통째로 갈아끼우므로
+     * `AppleOAuthClient` 는 생성도 호출도 되지 않고, `Provider.APPLE` 은 이번 변경 이전부터 있었다 —
+     * 즉 **변경 이전 커밋에서도 초록이다**(적대적 리뷰 지적). 남는 값은 "provider=apple 이 컨트롤러·
+     * 유스케이스·영속을 지나 APPLE 계정으로 떨어진다"는 회귀 심판뿐이다.
+     *
+     * 서명·aud·iss·exp 검증은 `AppleOAuthClientTest`, 설정 통로는 `AppleClientIdWiringTest` 가 각각 잰다.
+     */
+    @Test
+    fun `애플 identityToken 로그인은 200 + APPLE 계정을 만든다`() {
+        val (status, body) = post(
+            "/api/v1/auth/social/apple/token",
+            """{"accessToken":"apple-identity-token","ageConfirmation":{"method":"SELF_DECLARED"}}""",
+        )
+
+        status shouldBe 200
+        body["isNewUser"].asBoolean() shouldBe true
+        body["accessToken"].asText().shouldNotBeBlank()
+        body["account"]["socialProviders"].map { it.asText() } shouldBe listOf("APPLE")
+    }
+
+    /**
+     * TRIP-933 — 애플은 `authorizationCode` 를 선택으로 더 싣는다(revoke 용 refresh_token 교환).
+     * 이 환경은 Team ID·Key ID·p8 이 비어 있어 교환을 건너뛴다 — 재는 것은 **그래도 로그인이 된다**는 것,
+     * 즉 새 필드가 계약에 들어와도 역직렬화·검증에서 막히지 않고 revoke 설정 부재가 로그인을 막지 않는다는 것.
+     */
+    @Test
+    fun `애플 로그인에 authorizationCode 가 붙어도 200 — revoke 설정이 없어도 로그인은 막히지 않는다`() {
+        val (status, body) = post(
+            "/api/v1/auth/social/apple/token",
+            """{"accessToken":"apple-identity-token","authorizationCode":"apple-code","ageConfirmation":{"method":"SELF_DECLARED"}}""",
+        )
+
+        status shouldBe 200
+        body["account"]["socialProviders"].map { it.asText() } shouldBe listOf("APPLE")
+    }
+
+    /** 요청 스키마도 계약과 맞는다 — 코드에 필드를 넣고 openapi 에 안 넣으면 프론트 orval 이 모른다. */
+    @Test
+    fun `SocialTokenLoginRequest 계약이 authorizationCode 를 선언한다`() {
+        schemaProperties("SocialTokenLoginRequest") shouldBe
+            setOf("accessToken", "ageConfirmation", "deviceId", "authorizationCode")
+    }
+
     @Test
     fun `신규 가입인데 연령확인 누락이면 400 VALIDATION_ERROR`() {
         val (status, body) = post(

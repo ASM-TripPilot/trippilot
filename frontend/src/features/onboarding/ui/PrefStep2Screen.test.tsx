@@ -80,7 +80,6 @@ function makeProps(
     onToggleFood: jest.fn(),
     onToggleTransport: jest.fn(),
     onToggleActivity: jest.fn(),
-    onBack: jest.fn(),
     onDone: jest.fn(),
     onSkipAll: jest.fn(),
     ...overrides,
@@ -243,25 +242,46 @@ describe('PrefStep2Screen — 활동 8종 신설 (AC-4 · US-ONB-08 · 4-5)', ()
   });
 });
 
-describe('PrefStep2Screen — 크롬(back·skip) (AC-6 · US-ONB-11 · Q4 · 4-6)', () => {
-  it('2/2 전용 back chevron이 존재하고 상·하단 skip과 함께 콜백을 부른다', () => {
-    // 준비 — 콜백 관찰(back·skipAll).
-    const onBack = jest.fn();
+describe('PrefStep2Screen — 크롬(back·skip) (AC-6 · US-ONB-11 · TRIP-719 · 4-6)', () => {
+  it('back chevron은 없고 상단 skip만 탈출구로 존재하며 onSkipAll을 부른다 (하단 링크 제거)', () => {
+    // 준비 — onSkipAll 관찰.
     const onSkipAll = jest.fn();
-    render(<PrefStep2Screen {...makeProps({ onBack, onSkipAll })} />);
+    render(<PrefStep2Screen {...makeProps({ onSkipAll })} />);
 
-    // 실행 — back 탭.
-    fireEvent.press(screen.getByTestId('onboarding-pref2-back'));
-    // 단언 — 1/2와 대비되게 2/2에는 back이 존재하고 onBack이 불린다(Q4).
-    expect(onBack).toHaveBeenCalled();
+    // 단언(긍정) — 루트가 실제로 그려진다(부재 단언과 짝 — §7-5, 가짜 통과 방지).
+    expect(screen.getByTestId('onboarding-pref2-root')).toBeOnTheScreen();
 
-    // 실행 — 상·하단 skip 탭.
+    // 단언(부정) — TRIP-719 Q4 번복: back chevron은 만들지 않는다(pref1과 대칭).
+    expect(screen.queryByTestId('onboarding-pref2-back')).toBeNull();
+
+    // 단언 — 상단 skip만 존재, 하단은 Figma 1774:2258 부재라 제거(pref1 선례 동형).
+    expect(screen.getByTestId('onboarding-pref2-skip-top')).toBeOnTheScreen();
+    expect(screen.queryByTestId('onboarding-pref2-skip-bottom')).toBeNull();
+
+    // 실행 — 상단 skip 탭.
     fireEvent.press(screen.getByTestId('onboarding-pref2-skip-top'));
-    fireEvent.press(screen.getByTestId('onboarding-pref2-skip-bottom'));
 
-    // 단언 — 상·하단이 같은 동작을 2회 호출.
-    expect(onSkipAll).toHaveBeenCalledTimes(2);
-    expect(screen.getAllByText('나중에 설정하고 시작')).toHaveLength(2);
+    // 단언 — onSkipAll 1회 + '나중에 설정하고 시작'은 상단 1곳에만 나온다.
+    expect(onSkipAll).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByText('나중에 설정하고 시작')).toHaveLength(1);
+  });
+});
+
+describe('PrefStep2Screen — 진행점 색 (TRIP-719 · Figma 1774:2258)', () => {
+  // className 은 NativeWind 가 소비 전이라 jest 렌더 트리에 평문 prop 으로 남는다 — 공백으로
+  // 쪼갠 '토큰 배열'로 비교한다(부분 문자열 오탐 차단). pref1 진행점 심판과 동형이나 2/2 라
+  // 두 점 모두 채움(primary)이다.
+  const tokens = (testID: string): string[] =>
+    String(screen.getByTestId(testID).props.className)
+      .split(/\s+/)
+      .filter(Boolean);
+
+  it('두 진행점이 모두 bg-primary 다 (2/2 완료 — bg-hairline-strong·bg-ink 회귀 금지)', () => {
+    render(<PrefStep2Screen {...makeProps()} />);
+
+    // 2/2 라 첫 점(구 bg-hairline-strong)·둘째 점(구 bg-ink) 모두 primary 로 바뀐다.
+    expect(tokens('onboarding-pref2-progress-1')).toContain('bg-primary');
+    expect(tokens('onboarding-pref2-progress-2')).toContain('bg-primary');
   });
 });
 
@@ -273,7 +293,7 @@ describe('PrefStep2Screen — 완료 항상 활성 + 문구 (AC-6 · 인터뷰4 
 
     // 단언 — 핵심 문구·스텝번호·info.
     expect(screen.getByText('조금만 더 알려주세요')).toBeOnTheScreen();
-    expect(screen.getByText('2/2')).toBeOnTheScreen();
+    expect(screen.getByText('2 / 2')).toBeOnTheScreen();
     expect(screen.getByTestId('onboarding-pref2-info')).toBeOnTheScreen();
 
     // 단언 — CTA 활성(인터뷰4: 0개 선택에도 항상 활성).

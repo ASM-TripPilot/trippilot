@@ -8,7 +8,7 @@ import {
 
 import { HOME_DEFAULT_PROPS, HOME_LOADING_PROPS } from '../model/homeFixtures';
 import type { HomePhase } from '../model/homeTypes';
-import { HeartOutlineGlyph } from './HomeGlyphs';
+import { HeartFilledGlyph, HeartOutlineGlyph } from './HomeGlyphs';
 import { HomeScreen } from './HomeScreen';
 
 /**
@@ -27,6 +27,9 @@ import { HomeScreen } from './HomeScreen';
  * 배선된 3 CTA 와 정확히 같다(370-AC-4). 구 "CTA 전부 no-op(316-AC-8)" 락은 배선 CTA 를 빼고
  * "비배선 컨트롤은 콜백 0·크래시 0"으로 갱신한다(370-AC-5). 라우터 왕복은 화면이 아니라
  * `(tabs)/index.tsx` seam 이 지므로 `tabsHomeRoute.test.tsx`(370-AC-1)가 별도로 잰다.
+ *
+ * TRIP-939(심사 2.1) — 벨은 알림함으로 배선돼 버튼 집합에 들고(빨간점 하드코딩 제거, AC-9·Q3), 목적지
+ * 없는 컬렉션 "더 보기"는 role 만 떼던 것에서 **아예 그리지 않는 것**으로 뒤집었다(B-5).
  *
  * 텍스트 중복 함정(02a §4-2): 신 화면 중복 리프 — `2박 3일`(일정 0·1), `1박 2일`(컬렉션
  * badge 1 + 일정 2), `당일치기`(컬렉션 badge 0) vs hero chip `당일치기로 충분`, hero chip
@@ -64,19 +67,20 @@ const WIRED_CTA_TEST_IDS = [
   // 대체(장소→d02·숙소→e04)해 중복이라 discovery 버튼셋에서 빠진다(370-AC-4 재동결).
   'home-spots-more',
   'home-search-bar',
-  // TRIP-700 — discovery 캐러셀 page0(home-magazine-hero)이 a02 매거진 목록으로 가는 배선 CTA 가
-  // 되며 role="button" 을 얻는다(구조로 굳힘 — 콜백 미주입 렌더에도 버튼, FAB·검색바 선례). page1~4
-  // 슬라이드(home-hero-slide-N)는 여전히 비버튼이라 이 집합 동치가 "page0 만 버튼"을 강제한다
-  // (슬라이드까지 버튼으로 만들면 집합 초과로 red). 계획/여행/완료 page0 은 트립 히어로라 무영향.
-  'home-magazine-hero',
-] as const;
-
-// TRIP-694 — 여행자 일정 섹션이 discovery에서 제거되며 `home-itineraries-more`도 사라진다
-// (비배선 컨트롤 목록에서 함께 빠진다). 남는 비배선 컨트롤은 컬렉션 더보기·벨 2종.
-const UNWIRED_CONTROL_TEST_IDS = [
-  'home-collections-more',
+  // TRIP-935 AC-1(R1) — 매거진 히어로(home-magazine-hero)는 이 집합에서 빠졌다. TRIP-700 은 page0 을
+  // "구조로 버튼"(콜백 없어도 role=button)으로 굳혔지만, 심사 2.1 대응으로 매거진 진입을 막으면서
+  // **onPressMagazine 이 있을 때만 버튼**으로 바꿨다(이 집합 테스트는 콜백 없이 렌더한다). 벨·검색바·
+  // FAB 는 여전히 구조로 버튼이라 남는다 — 한 상수에 두 규칙이 공존한다(02a ★4). 콜백을 줬을 때
+  // page0 만 버튼이 되는지는 파일 아래 TRIP-935 AC-1 짝 describe 가 잰다.
+  // TRIP-939 AC-9 — 종이 알림함(/notifications)으로 배선돼 버튼 집합에 든다. role 은 콜백 유무가 아니라
+  // 구조로 굳힌다(이 집합 테스트는 콜백 없이 렌더 — 검색바·FAB 선례, 02a ★D4).
   'home-dashboard-bell',
 ] as const;
+
+// TRIP-694 — 여행자 일정 섹션이 discovery에서 제거되며 `home-itineraries-more`도 사라진다.
+// TRIP-939 B-5 — 남던 비배선 컨트롤 2종 중 벨은 배선(WIRED 로 이동), 컬렉션 더보기는 목적지가 없어
+// 운영 화면에서 **숨긴다** → "버튼 표식만 뗀 비배선 컨트롤"이 아니라 "아예 없는 컨트롤" 목록이 됐다.
+const HIDDEN_CONTROL_TEST_IDS = ['home-collections-more'] as const;
 
 describe('HomeScreen — 정상 렌더 존재 (AC-1)', () => {
   it('인사·검색바·영감 hero·섹션 3종 헤더·섹션당 카드·온램프가 한 화면에 존재한다', () => {
@@ -105,11 +109,11 @@ describe('HomeScreen — 정상 렌더 존재 (AC-1)', () => {
     expect(within(hero).getByText('당일치기로 충분')).toBeOnTheScreen();
     expect(within(hero).getByText('야경 명소')).toBeOnTheScreen();
 
-    // 발견 섹션 2종 헤더 + 더보기 2(각 헤더 1개씩) — 여행자 일정은 TRIP-694로 discovery에서
-    // 제거(전용 describe가 부재를 잠근다).
+    // 발견 섹션 2종 헤더 + 더보기 1(뜨는 장소만) — 여행자 일정은 TRIP-694로 discovery에서
+    // 제거(전용 describe가 부재를 잠근다). TRIP-939 B-5: 컬렉션 "더 보기"는 목적지가 없어 숨긴다.
     expect(screen.getByText('요즘 사람들이 담는 곳')).toBeOnTheScreen();
     expect(screen.getByText('지금 뜨는 장소')).toBeOnTheScreen();
-    expect(screen.getAllByText('더 보기')).toHaveLength(2);
+    expect(screen.getAllByText('더 보기')).toHaveLength(1);
 
     // 섹션당 카드 ≥1.
     expect(screen.getByTestId('home-collection-card-0')).toBeOnTheScreen();
@@ -176,7 +180,7 @@ describe('🔴 HomeScreen — 실 5페이지 캐러셀 + 5도트 (TRIP-694 AC-2)
 });
 
 describe('🔴 HomeScreen — 벨 흰 원형 버튼 + 그림자 (TRIP-694 AC-3)', () => {
-  it('home-dashboard-bell 이 bg-canvas+rounded-full+그림자이고 빨간점 배지를 유지한다', () => {
+  it('home-dashboard-bell 이 bg-canvas+rounded-full+그림자이고 빨간점 배지는 없다(TRIP-939 Q3)', () => {
     render(<HomeScreen {...HOME_DEFAULT_PROPS} />);
 
     const bell = screen.getByTestId('home-dashboard-bell');
@@ -193,13 +197,13 @@ describe('🔴 HomeScreen — 벨 흰 원형 버튼 + 그림자 (TRIP-694 AC-3)'
     };
     expect(bellStyle.shadowColor).toBeDefined();
 
-    // 앵커 — 빨간점 배지(bg-primary View)가 벨 서브트리에 남아 있다(벨 리팩터에 배지가
-    // 딸려 사라지지 않게). within(bell)의 UNSAFE_queryAllByType(View)는 자식 View 만 돌려준다
-    // (Pressable 호스트 자신은 미포함, 02a §2 실측). px(7→8)·원 크기·그림자 농도는 6-b.
+    // TRIP-939 AC-9(Q3) — 빨간점 배지(bg-primary View)는 하드코딩이라 읽을 알림이 없어도 항상 켜져
+    // 있었다(읽음 처리 미배선) → 제거한다. within(bell)의 UNSAFE_queryAllByType(View)는 자식 View 만
+    // 돌려준다(Pressable 호스트 자신은 미포함, 02a §2 실측). 원 크기·그림자 농도는 6-b.
     const badge = within(bell)
       .UNSAFE_queryAllByType(View)
       .find((node) => String(node.props.className).includes('bg-primary'));
-    expect(badge).toBeDefined();
+    expect(badge).toBeUndefined();
   });
 });
 
@@ -549,31 +553,30 @@ describe('HomeScreen — saved-menu z-order 회귀 앵커 (TRIP-695 AC-3)', () =
   });
 });
 
-describe('HomeScreen — 비배선 컨트롤은 버튼 역할이 아니다 (370-AC-3 · 부정)', () => {
-  it('목적지 없는 컨트롤(검색바·비배선 더보기·벨)은 accessibilityRole="button"으로 노출되지 않는다', () => {
+describe('HomeScreen — 목적지 없는 컨트롤은 화면에 없다 (370-AC-3 → TRIP-939 B-5 · 부정)', () => {
+  it('목적지 없는 컨트롤(컬렉션 더보기)은 버튼 표식만 떼는 것이 아니라 아예 그려지지 않는다', () => {
+    // 준비·실행
     render(<HomeScreen {...HOME_DEFAULT_PROPS} />);
 
-    // queryAllByRole('button')은 accessibilityRole/role 이 'button'인 접근성 요소만 돌려준다
-    // (RNTL 13.3.3 role.js 실검증, 02a §5). onPress 유무가 아니라 role 이 소속을 정한다 —
-    // 목적지 없는 컨트롤은 role 을 떼야 접근성 트리에서 버튼으로 안 읽힌다.
-    const buttonIds = screen
-      .queryAllByRole('button')
-      .map((node) => node.props.testID);
-
-    UNWIRED_CONTROL_TEST_IDS.forEach((id) => {
-      expect(buttonIds).not.toContain(id);
+    // 단언: 눌러도 반응 없는 "더 보기"가 트리에 0개(구 370-AC-3 은 role 만 떼었다 — 심사 2.1 은
+    // 보이는 어포던스 자체를 문제 삼으므로 부재로 뒤집는다).
+    HIDDEN_CONTROL_TEST_IDS.forEach((id) => {
+      expect(screen.queryAllByTestId(id)).toHaveLength(0);
     });
+    // 짝 앵커: 섹션 제목·카드는 그대로다(섹션째 사라진 것이 아니다).
+    expect(screen.getByText('요즘 사람들이 담는 곳')).toBeOnTheScreen();
+    expect(screen.getByTestId('home-collection-card-0')).toBeOnTheScreen();
   });
 });
 
 describe('HomeScreen — 버튼 역할 집합 == 배선된 CTA 집합 (370-AC-4 · 회귀)', () => {
-  it('discovery 접근성 트리에서 버튼으로 읽히는 것은 배선된 CTA 집합(매거진 히어로 포함)뿐이다', () => {
+  it('discovery 접근성 트리에서 버튼으로 읽히는 것은 배선된 CTA 집합뿐이다(콜백 없는 매거진 히어로는 제외)', () => {
     render(<HomeScreen {...HOME_DEFAULT_PROPS} />);
 
     // 실제 onPress 목적지가 있는 요소만 버튼이어야 한다 — 집합 동치라 (a)비배선이 안 벗겨짐
     // (b)배선 CTA 가 벗겨짐 (c)공유 SectionHeader 를 전부 벗겨 spots-more 도 사라짐 (d)새 버튼
-    // 유입, 넷 다 red 로 잡힌다. TRIP-700 — page0 매거진 히어로가 집합에 들고(구조 role), page1~4
-    // 슬라이드는 안 든다(슬라이드까지 버튼화하면 (d)로 red). 현행은 page0 이 비버튼이라 red-first.
+    // 유입, 넷 다 red 로 잡힌다. TRIP-935 — 콜백 없는 렌더라 매거진 히어로(page0)도 슬라이드도
+    // 버튼이 아니다(콜백이 없는데 버튼이면 (d)로 red).
     const buttonIds = screen
       .queryAllByRole('button')
       .map((node) => node.props.testID)
@@ -616,8 +619,27 @@ describe('🔴 HomeScreen — 매거진 히어로 진입 배선 (TRIP-700 AC-10 
   });
 });
 
+// TRIP-935 AC-1(R1) 짝 — 매거진 히어로는 콜백이 **주입됐을 때만** 버튼이다. 라우트는 이제 콜백을
+// 넘기지 않아 운영 홈에서는 버튼이 아니고(tabsHomeRoute), 화면의 배선 능력 자체는 남는다(숨김은
+// 조건부 — 화면·라우트 파일 삭제 아님). 콜백을 줘도 page1~4 슬라이드는 버튼이 아니다(02a ★5).
+describe('TRIP-935 AC-1 · 매거진 히어로는 onPressMagazine 이 있을 때만 버튼 (짝)', () => {
+  it('콜백을 주면 page0 은 버튼이고 page1~4 슬라이드는 여전히 버튼이 아니다', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} onPressMagazine={jest.fn()} />);
+
+    const buttonIds = screen
+      .queryAllByRole('button')
+      .map((node) => node.props.testID);
+
+    expect(buttonIds).toContain('home-magazine-hero');
+    [1, 2, 3, 4].forEach((i) => {
+      expect(screen.getByTestId(`home-hero-slide-${i}`)).toBeOnTheScreen();
+      expect(buttonIds).not.toContain(`home-hero-slide-${i}`);
+    });
+  });
+});
+
 describe('HomeScreen — 비배선 컨트롤은 콜백 0·크래시 0 (370-AC-5 · 구 316-AC-8 갱신)', () => {
-  it('벨·검색바·비배선 더보기·카드를 눌러도 배선 콜백이 0회이고 루트가 유지된다', () => {
+  it('검색바·카드를 눌러도 배선 콜백(여행 생성·담은 곳·뜨는 장소)이 0회이고 루트가 유지된다', () => {
     // 구 AC-8 은 FAB·담은 곳을 "눌러도 아무 일 없음(no-op)"으로 단언해 배선(370-AC-1/2)과
     // 충돌했다 → 배선 CTA 는 이 목록에서 빠지고 발화는 위 370-AC-2 가 잰다. 여기 남는 것은
     // 목적지 없는 컨트롤뿐 — 배선 콜백 3종을 전부 주입한 채 눌러 (a)이들이 실수로 배선 콜백을
@@ -634,9 +656,8 @@ describe('HomeScreen — 비배선 컨트롤은 콜백 0·크래시 0 (370-AC-5 
       />
     );
 
-    fireEvent.press(screen.getByTestId('home-dashboard-bell'));
+    // TRIP-939: 벨은 배선(→ onPressBell, 파일 끝 describe 가 잰다)·컬렉션 더보기는 숨김이라 목록에서 빠진다.
     fireEvent.press(screen.getByTestId('home-search-bar'));
-    fireEvent.press(screen.getByTestId('home-collections-more'));
     // home-itineraries-more 는 TRIP-694로 discovery에서 제거돼 여기서 누를 대상이 아니다(★F-1).
     fireEvent.press(screen.getByTestId('home-collection-card-0'));
 
@@ -1052,6 +1073,7 @@ const PLANNING_WIRED_CTA_TEST_IDS = [
   'home-trip-hero-cta',
   'home-search-bar',
   'home-trip-hero',
+  'home-dashboard-bell', // TRIP-939 AC-9 — 모든 얼굴 공용 인사 헤더의 종(구조 role)
   // TRIP-696 — home-spots-more 제거: 계획 중 본문이 컬렉션 1섹션이라 스팟 섹션(및 그 더보기 버튼)이
   // 사라진다. 현 planning 은 아직 6버튼(spots-more 포함)이라 이 5집합과 불일치 → red.
 ] as const;
@@ -1175,5 +1197,91 @@ describe('🔴 HomeScreen — 여행 중 본문 2섹션 + INV-3 (TRIP-697 AC-697
     // INV-3 — 여행 중 얼굴 어디에도 소요시간 문자열 없음(선제 green 회귀 앵커, DURATION_RENDER 0매치
     // 실검증 완료). '· 1 일차'·'1일차예요'의 '일차'는 duration 키워드 아님(02a §5-c 조합 확인).
     expect(screen.queryAllByText(DURATION_RENDER)).toHaveLength(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRIP-939 AC-9 · B-5 — 홈 종은 알림함으로 가고(화면은 콜백만 발화), 목적지 없는 컬렉션 "더 보기"와
+// 하드코딩 빨간점은 어느 얼굴에도 없다. 파일 끝에 두는 이유: it.each 표가 수집 시점에 위쪽
+// PLANNING_PHASE 등 const 를 읽으므로, 그 선언보다 앞에 두면 TDZ 로 깨진다(02a ★12).
+
+describe('🔴 TRIP-939 AC-9 · 종 press 는 onPressBell 만 1회 발화한다', () => {
+  it('종을 누르면 onPressBell 이 1회, 다른 배선 콜백은 0회', () => {
+    // 준비
+    const onPressBell = jest.fn();
+    const onPressCreateTrip = jest.fn();
+    const onPressSearch = jest.fn();
+    render(
+      <HomeScreen
+        {...HOME_DEFAULT_PROPS}
+        onPressBell={onPressBell}
+        onPressCreateTrip={onPressCreateTrip}
+        onPressSearch={onPressSearch}
+      />
+    );
+
+    // 실행
+    fireEvent.press(screen.getByTestId('home-dashboard-bell'));
+
+    // 단언
+    expect(onPressBell).toHaveBeenCalledTimes(1);
+    expect(onPressCreateTrip).not.toHaveBeenCalled();
+    expect(onPressSearch).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 TRIP-939 AC-9 · B-5 · 모든 얼굴에서 종은 버튼, 빨간점·컬렉션 더보기는 없다', () => {
+  it.each([
+    ['discovery', undefined],
+    ['planning', PLANNING_PHASE],
+    ['traveling', TRAVELING_PHASE],
+    ['postTrip', POST_TRIP_PHASE],
+  ] as const)('%s 얼굴', (_face, phase) => {
+    // 준비·실행: 콜백 없이 그린다(role 이 구조로 굳었는지 보려고).
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={phase} />);
+
+    // 단언: 종은 있고(앵커) 버튼 역할이다.
+    const bell = screen.getByTestId('home-dashboard-bell');
+    const buttonIds = screen
+      .queryAllByRole('button')
+      .map((node) => node.props.testID);
+    expect(buttonIds).toContain('home-dashboard-bell');
+    // 빨간점(bg-primary View) 없음.
+    expect(
+      within(bell)
+        .UNSAFE_queryAllByType(View)
+        .filter((node) => String(node.props.className).includes('bg-primary'))
+    ).toHaveLength(0);
+    // 컬렉션 "더 보기" 없음.
+    expect(screen.queryAllByTestId('home-collections-more')).toHaveLength(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRIP-935 AC-5(R6) — 홈 카드 위 장식 하트 제거(심사 2.1). "요즘 사람들이 담는 곳"·"지금 뜨는 장소"·
+// 추천 카드의 하트는 눌러도 아무 일이 없는 "저장" 어포던스였다. 카드를 그리는 모든 얼굴에서 잰다.
+// 화면 전체의 HeartOutlineGlyph 는 0 이어야 하고(카드 외 사용처 없음), HeartFilledGlyph 는 하트 FAB
+// 토글이 정당하게 쓰므로 카드 서브트리 안으로 좁혀 센다 — 채운 하트로 바꿔 끼운 구현을 막는다(02a ★14).
+describe('🔴 TRIP-935 AC-5 · 홈 카드에 하트가 없다(모든 얼굴)', () => {
+  it.each([
+    ['discovery', undefined],
+    ['planning', PLANNING_PHASE],
+    ['postTrip', POST_TRIP_PHASE],
+  ] as const)('%s: 카드는 그려지고 하트 글리프는 0개다', (_face, phase) => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={phase} />);
+
+    const cards = [
+      ...screen.queryAllByTestId(/^home-collection-card-\d+$/),
+      ...screen.queryAllByTestId(/^home-spot-card-\d+$/),
+    ];
+    // 앵커 — 이 얼굴에 카드가 실제로 있다(공허 통과 차단).
+    expect(cards.length).toBeGreaterThan(0);
+
+    expect(screen.UNSAFE_queryAllByType(HeartOutlineGlyph)).toHaveLength(0);
+    for (const card of cards) {
+      expect(within(card).UNSAFE_queryAllByType(HeartFilledGlyph)).toHaveLength(
+        0
+      );
+    }
   });
 });

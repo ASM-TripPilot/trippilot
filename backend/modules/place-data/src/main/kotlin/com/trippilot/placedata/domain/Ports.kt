@@ -28,6 +28,11 @@ data class NormalizedPlace(
      * **맨 뒤에 둔다** — 가운데에 끼우면 위치 인자로 조립하는 어댑터가 조용히 어긋난다(실제로 깨졌다).
      */
     val regionCode: String? = null,
+    /**
+     * 지번·도로명 주소(TRIP-1062 · 1003 F). 종전에는 지역 코드 해석에만 쓰고 버렸는데,
+     * 화면(d06 상세·탐색 목록)이 주소를 보여야 해서 승격분에도 싣는다. 미확보면 null.
+     */
+    val address: String? = null,
 )
 
 /** 조회 지역 범위. 반경/bounding-box 프리필터는 후보풀(CandidatePoolPort, TRIP-213)에서. */
@@ -86,4 +91,4 @@ interface MapPlacePort {
  * 같은 장소가 두 번 나오거나 통째로 건너뛰는데, 사용자에게는 그냥 "목록이 이상하다"로 보인다.
  * 지점 기준(keyset)은 삽입과 무관하다 — "이 이름 다음"은 언제 물어도 같은 뜻이다.
  */
-data class PoiCursor(val nameKo: String, val poiId: java.util.UUID)
+data class PoiCursor(val rank: Int, val sortKey: String, val poiId: java.util.UUID)

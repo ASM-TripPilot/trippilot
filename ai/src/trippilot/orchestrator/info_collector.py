@@ -23,13 +23,21 @@ from datetime import datetime, timezone
 from trippilot.domain.common import GeoPoint, TransportMode
 from trippilot.domain.context import PermissionDeniedError
 from trippilot.domain.freshness import InfoPacket, ProviderKind, ProviderStatus
+from trippilot.domain.intent import Intent
 from trippilot.domain.llm import CandidatePool
 from trippilot.domain.transit import TransitPurpose, TransitRequest
 from trippilot.providers.base import Provider
 
 # 정보 요구표 (agent-structure-v2 §3) — intent → 수집할 Provider 목록.
-INFO_REQUIREMENTS: Mapping[str, tuple[ProviderKind, ...]] = {
-    "GENERATE_SCHEDULE": (
+#
+# **키는 `Intent` 다 — 문자열이 아니다.** 전에는 `str` 이라 표와 호출자가 둘 다
+# 수기 문자열이었고, 우연히 맞아 있었을 뿐이다: 표에는 `"EDIT"`·`"REFLECT"` 가
+# 있었는데 라벨 정본은 `EDIT_SCHEDULE`·`GENERATE_REFLECTION` 이다. `collect()` 가
+# 모르는 키에 **조용히 빈 묶음**을 돌려주므로, 라우터가 라벨로 디스패치를 끄는
+# 순간 그 두 의도가 Provider 를 하나도 안 거치고 통과했을 것이다 — 예외도 경고도
+# 없이 후보 0건으로만 보인다.
+INFO_REQUIREMENTS: Mapping[Intent, tuple[ProviderKind, ...]] = {
+    Intent.GENERATE_SCHEDULE: (
         ProviderKind.PLACE,
         ProviderKind.WEATHER,
         ProviderKind.PERSONA,
@@ -58,7 +66,7 @@ INFO_REQUIREMENTS: Mapping[str, tuple[ProviderKind, ...]] = {
     #       계산한다"가 남는다.
     # 재계획은 이미 벌어진 지연에 대응하는 경로라 실 도로 사정이 결과를 바꿀
     # 여지가 가장 크다는 점이 (1) 쪽 근거다. 결론 전까지 호출측이 안 채운다.
-    "REPLAN": (
+    Intent.REPLAN: (
         ProviderKind.WEATHER,
         ProviderKind.TRANSIT,
         ProviderKind.PERSONA,
@@ -66,11 +74,68 @@ INFO_REQUIREMENTS: Mapping[str, tuple[ProviderKind, ...]] = {
     ),
     # v2 §3 요구표 "EDIT | Place(추가/교체 의도 시)" — 2026-09-16 실체화.
     # 편집은 후보 자격 검증(INV-1)에 풀이 필요하고 그 외 수집은 없다.
-    "EDIT": (ProviderKind.PLACE,),
+    Intent.EDIT_SCHEDULE: (ProviderKind.PLACE,),
     # v2 §3 "REFLECT | (없음)" — 회고는 백엔드가 방문 이력을 봉투에 실어 보낸다.
     # 빈 튜플을 **명시**한다: 키가 없으면 "아직 안 정한 것"과 구분되지 않는다.
-    "REFLECT": (),
+    Intent.GENERATE_REFLECTION: (),
+    # REGENERATE 는 "제외·고정을 얹은 생성"이다 — 같은 ScheduleAgent 이고 요청 타입도
+    # 같다(인자표: exclude → excluded_poi_ids · keep → fixed_blocks). 재료가 다를
+    # 이유가 없어 GENERATE_SCHEDULE 과 같은 행이다.
+    Intent.REGENERATE: (
+        ProviderKind.PLACE,
+        ProviderKind.WEATHER,
+        ProviderKind.PERSONA,
+        ProviderKind.EVENT,
+    ),
+    # SUGGEST_ALTERNATIVE 는 REPLAN 과 같은 행이다 — `wiring.alternatives()` 가
+    # **이미** `collect(Intent.REPLAN, ...)` 를 부르고 같은 PlanBAgent·같은 RAG 다.
+    # 행이 없으면 라우터가 이 라벨로 끄는 순간 예외가 난다.
+    Intent.SUGGEST_ALTERNATIVE: (
+        ProviderKind.WEATHER,
+        ProviderKind.TRANSIT,
+        ProviderKind.PERSONA,
+        ProviderKind.PLACE,
+    ),
+    # 회고 두 종류(DAILY·TRIP_SUMMARY)는 같은 ReflectAgent 이고, 방문·행사·페르소나를
+    # 백엔드가 조립해 봉투에 싣는다(AI stateless). 빈 튜플이 그 사실의 기록이다.
+    Intent.TRIP_SUMMARY: (),
+    # 아래 둘은 백엔드 DB 조회다 — 라우팅 표 註와 인자표의 BACKEND_PENDING 이 같은 말.
+    Intent.GET_NEXT_SLOT: (),
+    Intent.SHOW_SCHEDULE: (),
+    Intent.GET_WEATHER: (ProviderKind.WEATHER,),
+    # 거리만 쓴다(INV-3 — 소요시간 미표시).
+    #
+    # **호출측이 `purpose=INFO_DISPLAY` 를 반드시 넘긴다.** 안 넘기면 조립기가
+    # `delay_check` 로 떨어뜨리는데(`_build_transit_request` 기본값), 그건 지연
+    # 트리거 판정용이라 목적이 다르다 — 적어도 관측에 그렇게 찍히고,
+    # `expected_minutes` 가 "없으면 미판정"인 것도 delay_check 전제다. 쓰이지 않던
+    # enum 값(`INFO_DISPLAY`)이 하나 있었다는 게 이 경로를 아직 아무도 안 밟았다는
+    # 증거다.
+    #
+    # **`mode` 는 조립기가 필수로 읽는데 발화에 거의 없다** — 뱅크 seed+증강 +
+    # 평가셋 26발화에서 추출되는 건 2건(7.7%)뿐이다("걸어갈 만한 거리야?" 류).
+    # 그대로 두면 이 기능의 92%가 영구 UNAVAILABLE 이다. 기본값은 **호출측**이
+    # 채운다 — 조립기를 느슨하게 하면 `delay_check` 경로까지 같이 느슨해지는데
+    # 거기서는 수단 누락이 진짜 결함이라 UNAVAILABLE 이 맞다. 그리고 기본값은
+    # 결정이라 보이는 자리에 있어야 한다.
+    #
+    # 주의: "어차피 거리만 내보내니 수단 가정은 싸다"는 **실 어댑터에서는 약하다.**
+    # 폴백 추정기는 수단 무관이지만(`travel.py` — 직선×우회계수, 수단은 분(分)에만
+    # 영향하고 그건 INV-3 로 안 나간다) 실 Tmap 어댑터는 수단별로 **다른 경로**를
+    # 친다(`/tmap/routes` · `/routes/pedestrian` · `/transit/routes`). 수단을 잘못
+    # 가정하면 거리 자체가 달라진다.
+    Intent.GET_DISTANCE: (ProviderKind.TRANSIT,),
 }
+
+
+class UnknownIntentError(KeyError):
+    """요구표에 행이 없는 의도 — 미정과 '필요 없음'을 가른다."""
+
+    def __init__(self, intent: Intent) -> None:
+        super().__init__(
+            f"정보 요구표에 행이 없다: {intent.value} — Provider 가 필요 없으면 "
+            f"빈 튜플을 명시할 것(미정과 구분)")
+        self.intent = intent
 
 
 def _build_transit_request(params: dict) -> TransitRequest:
@@ -117,10 +182,20 @@ class InfoCollector:
     def __init__(self, providers: Mapping[ProviderKind, Provider]) -> None:
         self._providers = dict(providers)
 
-    def collect(self, intent: str, params: dict) -> dict[ProviderKind, InfoPacket]:
-        """요구표의 등록 Provider들을 호출 — 패킷 묶음 반환 (요구표 밖 intent는 빈 묶음)."""
+    def collect(self, intent: Intent, params: dict) -> dict[ProviderKind, InfoPacket]:
+        """요구표의 등록 Provider들을 호출 — 패킷 묶음 반환.
+
+        **표에 없는 의도는 빈 묶음이 아니라 예외다.** 조용한 빈 묶음은 "Provider 가
+        필요 없다"와 "아직 안 정했다"를 구분하지 못하고, 후자가 후보 0건으로만
+        드러나 원인까지 3단을 거슬러야 한다(INV-4 침묵 금지). 필요 없는 의도는
+        **빈 튜플을 명시**해 그 사실을 기록한다.
+        """
+        try:
+            kinds = INFO_REQUIREMENTS[intent]
+        except KeyError:
+            raise UnknownIntentError(intent) from None
         packets: dict[ProviderKind, InfoPacket] = {}
-        for kind in INFO_REQUIREMENTS.get(intent, ()):
+        for kind in kinds:
             provider = self._providers.get(kind)
             if provider is None:  # 미등록 = 기능 부재 — 패킷 자체를 만들지 않는다
                 continue

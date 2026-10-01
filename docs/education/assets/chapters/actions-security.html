@@ -1,0 +1,26 @@
+<div class="table-wrap"><table>
+<thead><tr><th>구성 요소</th><th>용도</th><th>현재 코드에서 찾을 곳</th></tr></thead>
+<tbody>
+<tr><td><code>GITHUB_TOKEN</code></td><td>GitHub 저장소·Packages API 등을 사용하는 job 토큰</td><td>CI의 <code>packages: write</code>와 GHCR 로그인</td></tr>
+<tr><td>OIDC 토큰</td><td>이 실행의 저장소·환경 등 신원을 외부 서비스에 증명</td><td>deploy job의 <code>id-token: write</code></td></tr>
+<tr><td>AWS IAM Role</td><td>신뢰할 주체와 허용할 AWS API 작업을 정의</td><td><code>AWS_ROLE_ARN</code>, bootstrap 신뢰·권한 정책</td></tr>
+<tr><td>AWS 임시 자격 증명</td><td>Role을 맡은 세션이 Terraform·AWS CLI를 실행할 때 사용</td><td><code>configure-aws-credentials</code> 성공 후 runner 환경</td></tr>
+</tbody>
+</table></div>
+<p><code>GITHUB_TOKEN</code>은 각 job을 위해 GitHub가 제공하는 토큰이며 workflow의 <code>permissions</code>로 필요한 범위를 지정한다. 해당 image job이 GitHub Packages 쓰기 권한을 요청하므로 기존 CI가 GHCR에 push할 수 있다. GitHub Packages 쓰기 권한만으로 AWS ECR이나 EKS에 접근할 수는 없다. <a href="https://docs.github.com/en/actions/concepts/security/github_token">GITHUB_TOKEN 공식 설명</a></p>
+<div class="code-block"><div class="code-label">실제 발췌 · AWS 자격 증명 요청</div><pre><code class="language-yaml">permissions:
+  contents: read
+  id-token: write
+
+# deploy job의 steps 일부
+- uses: aws-actions/configure-aws-credentials@v5
+  with:
+    role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+    aws-region: ${{ env.AWS_REGION }}
+    allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+    role-session-name: trippilot-${{ github.run_id }}
+    role-duration-seconds: 7200</code></pre></div>
+<p><code>id-token: write</code>는 OIDC 토큰을 요청할 수 있다는 뜻이다. AWS 리소스를 변경하는 권한 그 자체가 아니다. AWS는 토큰을 신뢰 정책과 비교한 뒤 Role의 임시 세션을 발급하며 실제 API 허용 범위는 Role의 권한 정책 등이 결정한다. <code>allowed-account-ids</code>는 예상 계정과 다른 인증 결과를 거부하도록 한다. <a href="https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-aws">GitHub Actions의 AWS OIDC 설정</a></p>
+<p>이 저장소의 <a href="../../infra/bootstrap/template.json">bootstrap 템플릿</a>은 <code>aud=sts.amazonaws.com</code>, <code>sub=repo:ASM-TripPilot/trippilot:environment:dev</code> 또는 <code>...:prd</code>를 기대한다. 이 환경 기반 subject에는 브랜치 조건이 들어 있지 않다. GitHub Environment의 deployment branch 규칙도 DEV는 <code>develop</code>, PRD는 <code>main</code>으로 제한한다. 코드의 브랜치 검사는 잘못된 입력을 빨리 잡고 Environment 보호는 그 환경을 사용할 수 있는 실행을 제한한다.</p>
+<p>이 신뢰 정책은 workflow 파일 이름이나 수동 이벤트만을 증명하지 않는다. 같은 저장소·환경을 사용하는 다른 workflow도 정책 조건에 들어올 수 있으므로 workflow 변경을 코드 리뷰와 브랜치 보호 대상으로 다룬다. 비밀값이 아닌 계정 ID·Role ARN·호스트 이름은 <code>vars</code>에, 애플리케이션 비밀값은 현재 설계에 맞춰 AWS Secrets Manager에 둔다.</p>
+<details class="answer"><summary>2026년 문서 주의: 새 저장소에 복제할 때 OIDC subject 형식</summary><p>이 브랜치 코드는 이름 기반 <code>repo:ORG/REPO:environment:ENV</code> 형식을 가정한다. GitHub 공식 문서는 2026년 7월 15일 이후 생성된 저장소 또는 immutable subject claims에 참여한 저장소에서 owner·repository ID를 포함하는 형식을 설명한다. 개인 실습 저장소에 코드를 복사해 클라우드 연동을 준비할 때는 실제 저장소의 subject 설정과 신뢰 정책을 맞춰야 한다. wildcard로 신뢰 범위를 넓혀 해결하지 않는다. <a href="https://docs.github.com/en/actions/reference/security/oidc">OIDC subject claims 공식 기준</a></p></details>

@@ -67,3 +67,79 @@ describe('🔴 CtaBar · CTA2 — 1버튼 변형(AC-6)', () => {
     expect(onSave).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('🔴 CtaBar · CTA3 — disabled 버튼(TRIP-799 · AC-9)', () => {
+  it('disabled:true 면 버튼이 비활성이고 press 해도 onPress 를 안 부른다', () => {
+    // ★5 `toBeDisabled()` 단독은 accessibilityState 만으로 통과하는 함정 — press→onPress 0 과 짝지어야
+    //    심판이 된다. h14 PARTIAL 잠금(isConfirmLocked)이 이 disabled 를 쓴다.
+    const onSave = jest.fn();
+    render(
+      <CtaBar
+        buttons={[
+          {
+            label: '일정 저장하기',
+            variant: 'primary',
+            onPress: onSave,
+            disabled: true,
+          },
+        ]}
+      />
+    );
+
+    const cta = screen.getByTestId('sheet-cta-button-0');
+    // 비활성 — **red 성격**: 현행 CtaBar 는 disabled 를 Pressable 에 안 실어 활성이라 이 단언이 red.
+    expect(cta).toBeDisabled();
+
+    // 눌러도 콜백이 안 나간다(disabled Pressable 은 onPress 미발화). 활성 짝은 CTA2 가 지킨다.
+    fireEvent.press(cta);
+    expect(onSave).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 CtaBar · TRIP-991 — 버튼 역할(AC-1 · AC-5 짝)', () => {
+  it('각 CTA 가 VoiceOver 에 자기 라벨의 버튼으로 읽힌다', () => {
+    render(
+      <CtaBar
+        buttons={[
+          { label: '다시 짜기', variant: 'outline', onPress: jest.fn() },
+          { label: '확정하기', variant: 'primary', onPress: jest.fn() },
+        ]}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: '다시 짜기' })).toHaveProp(
+      'testID',
+      'sheet-cta-button-0'
+    );
+    expect(screen.getByRole('button', { name: '확정하기' })).toHaveProp(
+      'testID',
+      'sheet-cta-button-1'
+    );
+  });
+
+  it('비활성 CTA 는 "비활성 버튼"으로 읽히고 눌러도 onPress 가 안 나간다', () => {
+    const onSave = jest.fn();
+    render(
+      <CtaBar
+        buttons={[
+          {
+            label: '일정 저장하기',
+            variant: 'primary',
+            onPress: onSave,
+            disabled: true,
+          },
+        ]}
+      />
+    );
+
+    // disabled 상태는 RN 이 자동으로 붙인다 — 이 쿼리의 red 는 역할(button) 조건에서 나온다.
+    const cta = screen.getByRole('button', {
+      name: '일정 저장하기',
+      disabled: true,
+    });
+    expect(cta).toHaveProp('testID', 'sheet-cta-button-0');
+
+    fireEvent.press(cta);
+    expect(onSave).not.toHaveBeenCalled();
+  });
+});

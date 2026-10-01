@@ -89,6 +89,9 @@ class TripRecordServiceTest : StringSpec({
 
     fun plans(vararg slots: PlannedSlotView) = object : ItineraryPlanFacade {
         override fun findPlanSlots(accountId: UUID, tripId: UUID) = slots.toList()
+        // 이 스펙들은 계획 시각만 본다 — 문구 재료(TRIP-883)는 쓰지 않는다.
+        override fun findPlannedPlaces(accountId: UUID, tripId: UUID) =
+            emptyMap<java.time.LocalDate, List<com.trippilot.itinerarygeneration.api.PlannedPlaceView>>()
     }
 
     fun bases(vararg days: DayBaseStayView) = object : TripBaseStayFacade {

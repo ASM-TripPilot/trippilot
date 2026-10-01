@@ -126,19 +126,20 @@ describe('C-2 · ★ 드래프트 계약 — 적용 전 store 불변, 적용에�
     renderPage();
     await openSheet();
 
-    // 인원 + → 드래프트 값 전이("2명"). store 는 아직 party 1.
-    fireEvent.press(screen.getByTestId('trip-wizard-companion-party-inc'));
-    expect(await screen.findByText('2명')).toBeOnTheScreen();
-
-    // 친구 칩 → 활성 표식 전이. store companionType 은 아직 undefined.
+    // 친구 칩 먼저 → 활성 표식 전이. store companionType 은 아직 기본값 '혼자'.
+    // (TRIP-1045: 드래프트가 '혼자'로 열려 스테퍼가 잠겨 있으므로 칩을 먼저 바꿔야 + 가 먹는다.)
     fireEvent.press(screen.getByTestId('trip-wizard-companion-chip-friend'));
     expect(
       await screen.findByTestId('trip-wizard-companion-chip-active-friend')
     ).toBeOnTheScreen();
 
+    // 인원 + → 드래프트 값 전이("2명"). store 는 아직 party 1.
+    fireEvent.press(screen.getByTestId('trip-wizard-companion-party-inc'));
+    expect(await screen.findByText('2명')).toBeOnTheScreen();
+
     // 적용 전 — 즉시반영이 아니라 드래프트다(즉시커밋 뮤턴트가 이 둘로 red).
     expect(useTripWizardStore.getState().party).toBe(1);
-    expect(useTripWizardStore.getState().companionType).toBeUndefined();
+    expect(useTripWizardStore.getState().companionType).toBe('혼자');
 
     // 적용 → 커밋(각 1회 반영) + 닫힘.
     fireEvent.press(screen.getByTestId('trip-wizard-companion-apply'));
@@ -156,7 +157,8 @@ describe('C-3 · ★ 혼자 → 배선이 draftParty 1 고정 + 커밋', () => {
     renderPage();
     await openSheet();
 
-    // 초기 store party 1 → + 두 번 → 드래프트 "3명".
+    // 기본 '혼자'로 열려 스테퍼가 잠겨 있다(TRIP-1045) — 친구로 풀고 + 두 번 → 드래프트 "3명".
+    fireEvent.press(screen.getByTestId('trip-wizard-companion-chip-friend'));
     fireEvent.press(screen.getByTestId('trip-wizard-companion-party-inc'));
     fireEvent.press(screen.getByTestId('trip-wizard-companion-party-inc'));
     expect(await screen.findByText('3명')).toBeOnTheScreen();
@@ -193,5 +195,31 @@ describe('C-4 · D3 프리필 — 시트를 열면 드래프트가 store 현재�
     expect(
       screen.getByTestId('trip-wizard-companion-chip-active-family')
     ).toBeOnTheScreen();
+  });
+});
+
+describe('C-5 · TRIP-1045 기본 혼자 — 빈 드래프트로 열면 혼자 활성 + 스테퍼 잠김', () => {
+  it('아무것도 안 고른 채 시트를 열면 혼자 칩이 켜져 있고, 인원은 1명에서 안 움직인다', async () => {
+    // 준비 — beforeEach reset() = 새 드래프트.
+    renderPage();
+
+    // 실행
+    await openSheet();
+
+    // 단언 — 기본값이 시트 드래프트(D3 프리필)까지 흐른다.
+    expect(
+      screen.getByTestId('trip-wizard-companion-chip-active-alone')
+    ).toBeOnTheScreen();
+    expect(screen.getByText('1명')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('trip-wizard-companion-party-dec')
+    ).toBeDisabled();
+    expect(
+      screen.getByTestId('trip-wizard-companion-party-inc')
+    ).toBeDisabled();
+    // toBeDisabled 는 accessibilityState 만 본다 — press 가 실제로 안 먹는지 짝으로 확인.
+    fireEvent.press(screen.getByTestId('trip-wizard-companion-party-inc'));
+    expect(screen.getByText('1명')).toBeOnTheScreen();
+    expect(screen.queryByText('2명')).toBeNull();
   });
 });

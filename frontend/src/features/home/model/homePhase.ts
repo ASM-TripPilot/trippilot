@@ -126,26 +126,19 @@ export function resolveHomePhase(
   // 산술이라 배지·타이틀·일차가 한 소스를 공유한다(계획 중일 땐 미사용).
   const dayNumber = toEpochDay(today) - toEpochDay(dominant.startDate) + 1;
 
-  // 지역 컬렉션 헤더('부산 여행'→'부산에서 담을 만한 곳'). 후행 "여행"만 떼는 간단 추출이라
-  // 앞머리 '여행자' 등은 보존한다(/\s*여행$/ 앵커, homePhase.test '여행자 모임' 경계 케이스).
-  // ponytail: 후행 "여행" strip 휴리스틱 — trip.region 필드로 라이브 동적화하는 것은 후속 티켓.
-  const region = dominant.title.replace(/\s*여행$/, '');
-
   return {
     kind: 'planning',
     // TRIP-697 — 여행 중이면 "${title} N일차예요"(N 뒤 공백 X), 계획 중이면 기존 "${title} ${dday}".
     greetTitle: traveling
       ? `${dominant.title} ${dayNumber}일차예요`
       : `${dominant.title} ${dday}`,
-    // 계획 중 전용 카피 — 인사 2줄 서브카피(고정)와 지역 컬렉션 헤더. 여행 중 인사는 이름↑+타이틀↓
-    // (서브카피 없음)이고 라이브엔 이름 소스가 없어 타이틀만 뜬다(맹점③). 컬렉션 헤더도 여행 중엔
-    // 미지정→기본 "요즘 사람들이 담는 곳"(01b OQ-3). greetName 은 어느 쪽도 안 채운다(픽스처 전용).
+    // 계획 중 전용 카피 — 인사 2줄 서브카피(고정). 여행 중 인사는 이름↑+타이틀↓(서브카피 없음)이고
+    // 라이브엔 이름 소스가 없어 타이틀만 뜬다(맹점③). greetName 은 어느 쪽도 안 채운다(픽스처 전용).
+    // 지역 컬렉션 헤더(collectionsTitle)는 채우지 않는다(TRIP-935 R6) — 카드가 부산 고정 픽스처라
+    // "서울에서 담을 만한 곳" 아래 부산 카드가 뜨는 거짓 표기가 된다. 미지정→기본 "요즘 사람들이 담는 곳".
     ...(traveling
       ? { showSpots: true }
-      : {
-          greetSubtitle: '일정을 이어서 짜볼까요',
-          collectionsTitle: `${region}에서 담을 만한 곳`,
-        }),
+      : { greetSubtitle: '일정을 이어서 짜볼까요' }),
     dominantTripId: dominant.tripId,
     trip: {
       // 오늘이 [startDate, endDate] 안이면 '여행 중', 아니면 '계획 중'(TRIP-472, 날짜 기반).
@@ -162,5 +155,47 @@ export function resolveHomePhase(
       subtitle: '남은 자리에 넣어볼까요',
       ctaLabel: '일정에 추가',
     },
+  };
+}
+
+/** 일정 상태로 정한 목적지 토큰 — 라우트가 판정해 넘긴다(서버 스키마 미참조 로컬 리터럴, 경계 ★). */
+export type HomeItineraryTarget =
+  'method' | 'copick' | 'copickComplete' | 'generating' | 'draft' | 'live';
+
+type PlanningPhase = Extract<HomePhase, { kind: 'planning' }>;
+
+/**
+ * TRIP-986 D1 · 일정 응답이 정착한 뒤 CTA 라벨·부제를 **목적지와 같은 판정**으로 덮어쓴다.
+ * `resolveHomePhase` 의 라벨은 여행 상태(날짜 파생) 폴백일 뿐이다 — 서버는 여행 상태를 '확정'으로
+ * 올리지 않으므로, 확정 여부는 일정 쪽 판정(target)만 안다. 미정착이면 라우트가 이 함수를 안 불러
+ * 폴백 라벨이 남는다(Q2).
+ *  - live(확정) → 여행 중이면 '여행 일정 보기', 아니면 '확정 일정 보기' · 부제 없음.
+ *  - method(일정 없음) → '일정 만들기'(h04 제목 재사용, Q1) · 부제 없음.
+ *  - draft·generating·copick·copickComplete(초안·생성 중·같이 짜기 중·같이 짜기 완성 미확정) →
+ *    '일정 이어서 짜기' · 부제는 폴백 그대로.
+ * 여행 중 판정은 `showSpots`(resolveHomePhase 가 여행 중일 때만 채움)를 그대로 쓴다.
+ */
+export function applyItineraryTarget(
+  phase: PlanningPhase,
+  target: HomeItineraryTarget
+): PlanningPhase {
+  if (
+    target === 'draft' ||
+    target === 'generating' ||
+    target === 'copick' ||
+    target === 'copickComplete'
+  ) {
+    return { ...phase, trip: { ...phase.trip, ctaLabel: '일정 이어서 짜기' } };
+  }
+  const ctaLabel =
+    target === 'method'
+      ? '일정 만들기'
+      : phase.showSpots
+        ? '여행 일정 보기'
+        : '확정 일정 보기';
+  return {
+    ...phase,
+    greetSubtitle: undefined,
+    trip: { ...phase.trip, ctaLabel },
   };
 }

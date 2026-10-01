@@ -66,7 +66,8 @@ export function GoogleIcon({ size = 20, testID }: GlyphProps) {
   );
 }
 
-export function AppleIcon({ size = 20, testID }: GlyphProps) {
+// Apple 로고 — Figma c02 1285:1091 보관본(viewBox 20). HIG 규칙상 버튼 안 요소는 검정 아니면 흰색뿐이다.
+export function AppleLogoGlyph({ size = 20, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}

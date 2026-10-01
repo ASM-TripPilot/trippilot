@@ -13,6 +13,10 @@ export interface StateNoticeAction {
   variant: 'outline' | 'filled' | 'link';
   /** 미지정 = 정직한 스텁(Q7) — 목적지 라우트가 없는 버튼은 onPress를 아예 안 준다. */
   onPress?: () => void;
+  /** 미지정=활성(TRIP-726 F-9). 완화할 대상이 없는 등 눌러도 무의미한 버튼을 숨기지 않고
+   * 비활성으로 보여줄 때 true — Pressable `disabled`(=`accessibilityState.disabled`)에 전달하고
+   * opacity-40 으로 흐리게 그린다. explore 소비처는 미지정이라 무회귀. */
+  disabled?: boolean;
 }
 
 /** `icon`·`illustration` 중 정확히 하나 — 판별 유니온으로 강제한다(TRIP-223 03b W-1). 두
@@ -31,13 +35,17 @@ export type StateNoticeProps = StateNoticeVisual & {
 };
 
 function ActionButton({ action }: { action: StateNoticeAction }): ReactElement {
+  // disabled 는 룩(opacity-40, 01b)과 실제 비활성(Pressable disabled → accessibilityState) 둘 다 —
+  // className 만 흐리게 하고 disabled 를 빼면 toBeDisabled() 가 red(02a §5 뮤테이션 C).
+  const dimmed = action.disabled ? ' opacity-40' : '';
   if (action.variant === 'link') {
     return (
       <Pressable
         testID={action.testID}
         accessibilityRole="button"
         onPress={action.onPress}
-        className="items-center justify-center py-xs"
+        disabled={action.disabled}
+        className={`items-center justify-center py-xs${dimmed}`}
       >
         <Text className="font-noto-bold text-label font-bold text-primary">
           {action.label}
@@ -51,9 +59,10 @@ function ActionButton({ action }: { action: StateNoticeAction }): ReactElement {
       testID={action.testID}
       accessibilityRole="button"
       onPress={action.onPress}
+      disabled={action.disabled}
       className={`h-12 w-[200px] items-center justify-center rounded-button ${
         filled ? 'bg-primary' : 'border border-hairline-strong bg-canvas'
-      }`}
+      }${dimmed}`}
     >
       <Text
         className={`font-noto-bold text-card-title font-bold ${

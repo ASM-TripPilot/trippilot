@@ -55,7 +55,7 @@ ItineraryGenerated → 예약 재적재(plan/reload)
   "trip_title": "...",
   "items": [
     {"schedule_key": "...", "kind": "TRIP_DAY", "date": "2026-09-10",
-     "slots": [{"name": "성산일출봉", "category": "관광지"}, ...]}
+     "slots": [{"name": "성산일출봉", "category": "SIGHT"}, ...]}
   ]
 }
 ```

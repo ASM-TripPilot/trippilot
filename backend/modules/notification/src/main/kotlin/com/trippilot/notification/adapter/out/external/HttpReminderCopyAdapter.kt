@@ -59,7 +59,7 @@ class HttpReminderCopyAdapter(
                     scheduleKey = it.scheduleKey,
                     kind = it.kind.name,
                     date = it.date.toString(),
-                    slots = it.slots.map { name -> AiReminderSlot(name) },
+                    slots = it.slots.map { s -> AiReminderSlot(s.name, s.category) },
                 )
             },
             tripTitle = tripTitle,

@@ -9,7 +9,12 @@ import java.time.Instant
  * (framework-free, R2 순수 — 시각/순서는 입력 고정 블록 그대로이므로 솔버 검증 불필요.)
  */
 object MinimalItineraryFallback {
-    fun of(input: ScheduleAgentInput, at: Instant): ScheduleAgentOutput {
+    /**
+     * @param materializedPoiIds 시각을 **우리가 고른**(ANYTIME 물질화) 블록의 poiId(TRIP-1001).
+     *   "변경 불가"(isFixed) 표시는 사용자 고정에만 붙는다 — 이 집합은 와이어 직결인
+     *   `ScheduleAgentInput`/`FixedBlock` 에 실을 수 없어(계약 키 정확일치 게이트) 옆자리로 받는다.
+     */
+    fun of(input: ScheduleAgentInput, at: Instant, materializedPoiIds: Set<java.util.UUID> = emptySet()): ScheduleAgentOutput {
         val fixedByDate = input.fixedBlocks.filter { it.date != null && it.start != null }.groupBy { it.date }
         // 날짜 미지정(ANYTIME) must_visit — 버리면 폴백 일정에서 통째로 사라져 HC3 가 깨진다(포함이 요건).
         // 어느 날에 놓이는지는 폴백에서 따지지 않는다. 다만 한 날에 무한정 쌓으면 LocalTime 이 자정을 넘어 감겨
@@ -24,7 +29,9 @@ object MinimalItineraryFallback {
                     endAt = start.plusMinutes((fb.dwellMin ?: DEFAULT_DWELL_MIN).toLong()),
                     endsNextDay = false,
                     distanceRange = null, // 거리 추정 없음(폴백)
-                    isFixed = true,
+                    // "변경 불가" 표시는 사용자가 고정한 블록만(TRIP-1001) — 물질화된 ANYTIME 을
+                    // 고정으로 보이면 사용자가 옮길 수 있는 것을 못 옮긴다고 믿는다(QA #049).
+                    isFixed = fb.poiId !in materializedPoiIds,
                 )
             }
             val anytime = mutableListOf<VisitSlotDisplay>()
@@ -33,7 +40,7 @@ object MinimalItineraryFallback {
                 val fb = undated.first()
                 val end = cursor.plusMinutes((fb.dwellMin ?: DEFAULT_DWELL_MIN).toLong())
                 if (end > tw.end || end <= cursor) break // 창 초과 또는 자정 감김 → 이 날은 여기까지
-                anytime += VisitSlotDisplay(fb.poiId, cursor, end, endsNextDay = false, distanceRange = null, isFixed = true)
+                anytime += VisitSlotDisplay(fb.poiId, cursor, end, endsNextDay = false, distanceRange = null, isFixed = false) // 날짜조차 미지정 — 고정 아님(TRIP-1001)
                 cursor = end
                 undated.removeFirst()
             }

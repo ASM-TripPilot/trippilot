@@ -10,6 +10,8 @@ import { buildStyleCardModel } from './styleCardModel';
  *  - 🔴 AC-M1(BR-U6-24) official=true → descriptors·3축 값·sampleTripCount·updatedAt 이 **응답 값 그대로**(재계산 0).
  *  - 🔴 AC-M2(INV-U5-09) official=false → kind:'insufficient'+current 만. preview.descriptors 있어도 VM 에 안 실림.
  *  - 🔴 AC-M3(BR-U6-24) traitGauges 임의 조합(0/5 경계) → VM 게이지 값 = 입력값(클라 재계산 금지).
+ *  - 🔴 AC-1(TRIP-956, INV-4) progress 결측(생략·undefined·null·{}) → 던지지 않고 insufficient+current 0
+ *    (j05 폴백과 같은 값). 정상 current 4 무회귀는 AC-M2 가 맡는다.
  *
  * 왜 이렇게 테스트하나(02a ★1·★7):
  *  - Envelope 두 얼굴(official→analysis / false→preview, 하나만 참)을 kind 로 접어 화면 재판정을 없앤다.
@@ -131,5 +133,53 @@ describe('🔴 AC-M3 · 값 무변형(0~5 경계 전수, BR-U6-24)', () => {
     const vm = buildStyleCardModel(env);
     if (vm.kind !== 'official') throw new Error('official 이어야 한다');
     expect(vm.gauges.map((g) => g.value)).toEqual([...expected]);
+  });
+});
+
+describe('🔴 AC-1 · progress 결측 방어(TRIP-956, INV-4)', () => {
+  // progress 는 계약상 필수라 결측 입력은 캐스팅으로만 만든다(서버가 계약을 어긴 경우).
+  it.each([
+    ['progress 키 없음', {}],
+    ['progress undefined', { progress: undefined }],
+    ['progress null', { progress: null }],
+    ['progress {} (current 없음)', { progress: {} }],
+  ])(
+    'official=false 이고 %s 이면 던지지 않고 insufficient · current 0',
+    (_label, part) => {
+      // 준비: 미달 envelope 에서 progress 만 망가뜨린다.
+      const env = {
+        official: false,
+        analysis: null,
+        preview: { descriptors: ['#바다'] },
+        ...part,
+      } as unknown as StyleAnalysisEnvelope;
+
+      // 실행: 마이페이지가 부르는 그대로 부른다.
+      let vm: ReturnType<typeof buildStyleCardModel> | undefined;
+      expect(() => {
+        vm = buildStyleCardModel(env);
+      }).not.toThrow();
+
+      // 단언: 화면이 죽지 않고 "현재 0곳" 미달 카드가 된다.
+      expect(vm).toEqual({ kind: 'insufficient', current: 0 });
+    }
+  );
+
+  it('official=true 여도 analysis·progress 가 둘 다 없으면 insufficient · current 0', () => {
+    // 준비: 정식이라 해 놓고 그릴 본문도 진행도도 없다 — 판정상 임시.
+    const env = {
+      official: true,
+      analysis: null,
+      preview: null,
+    } as unknown as StyleAnalysisEnvelope;
+
+    // 실행
+    let vm: ReturnType<typeof buildStyleCardModel> | undefined;
+    expect(() => {
+      vm = buildStyleCardModel(env);
+    }).not.toThrow();
+
+    // 단언
+    expect(vm).toEqual({ kind: 'insufficient', current: 0 });
   });
 });

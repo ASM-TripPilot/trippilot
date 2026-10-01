@@ -1,71 +1,51 @@
-import type { ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import {
-  ChevronRightGlyph,
-  CloseGlyph,
-  WarningTriangleGlyph,
-} from './ExecutionGlyphs';
+import { WarningFilledGlyph } from './ExecutionGlyphs';
 
 /**
- * TRIP-561 · TriggerChip(i08) — 여행 중 화면 상단 상주 트리거 스트립.
+ * TRIP-561 → TRIP-748 · TriggerChip(i02) — 지도 위 일자 칩 아래에 뜨는 흰 트리거 알약 한 줄
+ * `[빨강 경고삼각] {카피} ›`. 알약 전체가 한 버튼이다(→ 재계획 진입).
  *
- * `[아이콘][제목+부제 열][chevron=대안 보기][×=끄기]`. **순수 프레젠테이션**이다 — props 만
- * 받아 그리고, 재판정·데이터 조회를 하지 않는다(발화 판정·문구 조립은 페이지 소관). 시각을
- * 만들거나 계산하지 않는다(문구는 서버 reason 을 페이지가 넘긴 완성값, BR-U4-35 · liveTimeStructure).
- *
- * chevron/× press 는 콜백으로만 나간다(실제 라우팅·억제는 페이지·6-b 실기 소관). 색은 raw hex 가
- * 아니라 토큰(`bg-primary-pale`·`text-primary-text`) — 아이콘 색은 글리프가 raw 로 진다(SVG 는
- * className 을 못 받는 리포 관례).
+ * **순수 프레젠테이션** — 카피는 페이지가 조립한 완성값(`triggerPillCopy`)을 그대로 그린다. 시각을
+ * 만들거나 계산하지 않는다(liveTimeStructure). 부제·×(끄기)는 없다(D3 — 숨김은 허브의 로컬 상태).
+ * `›` 앞 간격은 공백 글자가 아니라 `gap` 이다 — 글자 전체가 정확히 `{카피}›` 여야 한다.
  */
 
+// 그림자 색은 토큰이 없다 — 허브 뒤로가기(BACK_SHADOW)와 같은 값(Figma 0 2 10 rgba(0,0,0,.06)).
+const PILL_SHADOW = {
+  shadowColor: '#000000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.06,
+  shadowRadius: 10,
+  elevation: 3,
+} as const;
+
 export interface TriggerChipProps {
-  title: string;
-  subtitle: string;
+  /** 알약 카피 `{라벨} · {대상}` — 페이지가 조립한 완성 문구. 길면 한 줄 말줄임. */
+  label: string;
   onPressAlternative: () => void;
-  onDismiss: () => void;
-  /** kind 별 leading 아이콘(페이지가 iconKey 로 매핑해 주입). 없으면 경고삼각형 폴백. */
-  icon?: ReactNode;
 }
 
-export function TriggerChip({
-  title,
-  subtitle,
-  onPressAlternative,
-  onDismiss,
-  icon,
-}: TriggerChipProps) {
+export function TriggerChip({ label, onPressAlternative }: TriggerChipProps) {
   return (
-    <View
-      testID="execution-live-trigger-chip"
-      className="mx-lg flex-row items-center gap-[10px] rounded-button bg-primary-pale px-md py-md"
-    >
-      {icon ?? <WarningTriangleGlyph size={24} />}
-      <View className="flex-1 gap-[2px]">
-        <Text className="font-noto-bold text-label font-bold text-primary-text">
-          {title}
-        </Text>
-        <Text className="font-noto text-micro text-primary-text">
-          {subtitle}
-        </Text>
-      </View>
+    <View testID="execution-live-trigger-chip" className="mt-md self-start">
       <Pressable
         testID="execution-live-trigger-alternative"
         onPress={onPressAlternative}
-        hitSlop={8}
         accessibilityRole="button"
-        accessibilityLabel="대안 보기"
+        accessibilityLabel={`${label}, 대안 보기`}
+        style={PILL_SHADOW}
+        className="flex-row items-center gap-[6px] rounded-pill border border-hairline bg-canvas py-[7px] pl-[10px] pr-sm"
       >
-        <ChevronRightGlyph size={22} />
-      </Pressable>
-      <Pressable
-        testID="execution-live-trigger-dismiss"
-        onPress={onDismiss}
-        hitSlop={8}
-        accessibilityRole="button"
-        accessibilityLabel="끄기"
-      >
-        <CloseGlyph size={18} />
+        <WarningFilledGlyph size={12} testID="execution-live-trigger-warning" />
+        <Text
+          testID="execution-live-trigger-label"
+          numberOfLines={1}
+          className="shrink font-noto-bold text-caption font-bold text-ink"
+        >
+          {label}
+        </Text>
+        <Text className="font-noto-bold text-label font-bold text-ink">›</Text>
       </Pressable>
     </View>
   );

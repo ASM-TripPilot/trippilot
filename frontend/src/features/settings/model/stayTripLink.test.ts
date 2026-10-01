@@ -27,6 +27,7 @@ function stay(savedStayId: string): SavedStay {
     savedStayId,
     name: `숙소 ${savedStayId}`,
     coordConfirmed: true,
+    linkedTripIds: [],
     registerRoute: 'MAP_SEARCH',
     createdAt: '2026-08-01T00:00:00.000Z',
     updatedAt: '2026-08-01T00:00:00.000Z',
@@ -46,6 +47,8 @@ function trip(tripId: string, title: string): Trip {
     status: 'PLANNED',
     createdAt: '2026-08-01T00:00:00.000Z',
     updatedAt: '2026-08-01T00:00:00.000Z',
+    baseCount: 0,
+    itineraryDayCount: 0,
   };
 }
 

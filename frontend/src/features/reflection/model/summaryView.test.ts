@@ -94,7 +94,8 @@ describe('AC-2 · resolveSummaryView — hasLocationData 가 유일 신호 (BR-U
 });
 
 describe('toOrderedVisitList — 일자 넘어 전역 번호로 평탄화', () => {
-  it('error 프레임 실측: Day 경계를 넘어 ①②③④ 로 이어진다', () => {
+  // TRIP-764 AC-1: dayLabel 을 영문 `Day1` → 한국어 `1일차`(formatDayLabel 재사용)로 개명.
+  it('error 프레임 실측: 일자 경계를 넘어 ①②③④ 로 이어지고 라벨은 `N일차`', () => {
     const highlights = [
       day(1, ['광안리 해변', '감천문화마을']),
       day(2, ['해운대 해변']),
@@ -102,10 +103,10 @@ describe('toOrderedVisitList — 일자 넘어 전역 번호로 평탄화', () =
     ];
 
     expect(toOrderedVisitList(highlights)).toEqual([
-      { order: 1, dayLabel: 'Day1', place: '광안리 해변' },
-      { order: 2, dayLabel: 'Day1', place: '감천문화마을' },
-      { order: 3, dayLabel: 'Day2', place: '해운대 해변' },
-      { order: 4, dayLabel: 'Day3', place: '전포 카페거리' },
+      { order: 1, dayLabel: '1일차', place: '광안리 해변' },
+      { order: 2, dayLabel: '1일차', place: '감천문화마을' },
+      { order: 3, dayLabel: '2일차', place: '해운대 해변' },
+      { order: 4, dayLabel: '3일차', place: '전포 카페거리' },
     ]);
   });
 
@@ -113,7 +114,7 @@ describe('toOrderedVisitList — 일자 넘어 전역 번호로 평탄화', () =
     expect(toOrderedVisitList([])).toEqual([]);
   });
 
-  it('PBT: 어떤 하이라이트 배열에도 place 순서가 보존되고 번호가 1..N 연속이다', () => {
+  it('PBT: 어떤 하이라이트 배열에도 place 순서 보존·번호 1..N 연속·`N일차` 라벨이 성립한다', () => {
     const dayArb = fc.record({
       dayOrder: fc.integer({ min: 1, max: 9 }),
       visitCount: fc.nat({ max: 9 }),
@@ -129,10 +130,17 @@ describe('toOrderedVisitList — 일자 넘어 전역 번호로 평탄화', () =
         const flatPlaces = highlights.flatMap((h) => h.places);
         expect(out.map((v) => v.place)).toEqual(flatPlaces);
 
-        // ② 번호 1..N 연속(빠짐·중복·역전 없음).
+        // ② 번호 1..N 연속(빠짐·중복·역전 없음). 라벨 개명(③)이 이 두 성질을 안 깨뜨림을 함께 확인.
         expect(out.map((v) => v.order)).toEqual(
           flatPlaces.map((_, i) => i + 1)
         );
+
+        // ③ (TRIP-764 AC-1) dayLabel 은 각 place 소속 일자의 `${dayOrder}일차` — 개명을 성질로 잠근다
+        //    (현 모델은 `Day${n}` 이라 이 property 가 red-first).
+        const flatLabels = highlights.flatMap((h) =>
+          h.places.map(() => `${h.dayOrder}일차`)
+        );
+        expect(out.map((v) => v.dayLabel)).toEqual(flatLabels);
       })
     );
   });

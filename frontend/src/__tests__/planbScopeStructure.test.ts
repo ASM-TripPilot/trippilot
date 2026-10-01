@@ -5,9 +5,12 @@ import fs from 'fs';
 import path from 'path';
 
 import {
-  DEFAULT_REPLAN_SCOPE,
   REPLAN_DIRECTIVES,
   REPLAN_REASONS,
+} from '@/features/planb/config/replanChoices';
+import * as replanScopeModule from '@/features/planb/model/replanScope';
+import {
+  DEFAULT_REPLAN_SCOPE,
   REPLAN_SCOPES,
 } from '@/features/planb/model/replanScope';
 
@@ -17,7 +20,8 @@ import {
  * 무엇을 보장하나:
  *  - 🔴 범위는 **정확히 2종**(`PARTIAL_SLOTS`=지금 이후 · `FULL_DAY`=오늘 전체) — 다일 재계획 없음.
  *  - 🔴 소스 어디에도 `내일` 문자열 0건 — '내일' 재계획은 계약상 존재하지 않는다(DEC-U4-3).
- *  - 🔴 사유 6 key · 방향 7 key(testID·와이어값)가 카탈로그에 실재(긍정 앵커, D2).
+ *  - 🔴 사유 6종 · 방향 11종(key=testID·와이어값, 라벨)이 `config/replanChoices` 에 실재하고,
+ *    `model/replanScope` 에는 범위만 남는다(TRIP-750 AC-3 — 카탈로그 이관, 두 벌 금지).
  *
  * 왜 런타임 import + 소스 스캔 이중인가(★6): "정확히 2종"은 실물 배열을 import 해 재는 것이
  * 소스 정규식보다 강하다. "내일 0건"은 헬퍼·주석 어디에 숨어도 잡으려면 소스 스캔이라야 한다.
@@ -77,25 +81,37 @@ describe('🔴 G2 · 범위 정확히 2종 (런타임 · 긍정 앵커)', () => 
   });
 });
 
-describe('🔴 G3 · 사유·방향 카탈로그 key (D2 · testID·와이어값)', () => {
-  it('사유 6 key·방향 7 key 가 정확히 그 집합이다', () => {
-    expect(REPLAN_REASONS.map((r) => r.key)).toEqual([
-      'TEMP_CLOSED',
-      'SLOW_MOVE',
-      'LOW_ENERGY',
-      'FULLY_BOOKED',
-      'WEATHER',
-      'JUST_CHANGE',
+describe('🔴 G3 · 사유·방향 카탈로그 (TRIP-750 AC-2·3 · Q1 · D5)', () => {
+  it('사유 6종·방향 11종이 key·라벨·순서 그대로다', () => {
+    expect(REPLAN_REASONS.map((r) => [r.key, r.label])).toEqual([
+      ['TEMP_CLOSED', '임시 휴무'],
+      ['SLOW_MOVE', '이동 지연'],
+      ['LOW_ENERGY', '체력 저하'],
+      ['FULLY_BOOKED', '예약 마감'],
+      ['WEATHER', '날씨'],
+      ['JUST_CHANGE', '그냥 바꾸고 싶어요'],
     ]);
-    expect(REPLAN_DIRECTIVES.map((d) => d.key)).toEqual([
-      'RELAX',
-      'FILL_MORE',
-      'INDOOR',
-      'NEARBY',
-      'ADD_FOOD',
-      'NIGHT_VIEW',
-      'LESS_MOVE',
+    expect(REPLAN_DIRECTIVES.map((d) => [d.key, d.label])).toEqual([
+      ['RELAX', '여유 있게'],
+      ['FILL_MORE', '더 채워서'],
+      ['INDOOR', '실내로'],
+      ['EARLIER', '시간만 당기기'],
+      ['NEARBY', '가까운 곳으로'],
+      ['ADD_FOOD', '맛집 추가'],
+      ['END_NEAR_STAY', '숙소 근처에서 끝내기'],
+      ['LESS_MOVE', '이동 짧게'],
+      ['KEEP_BUDGET', '예산 유지'],
+      ['KEEP_DINNER', '저녁은 그대로'],
+      ['AVOID_OUTDOOR', '야외 피하기'],
     ]);
+  });
+});
+
+describe('🔴 G5 · 카탈로그는 config 한 곳뿐 (TRIP-750 AC-3)', () => {
+  it('model/replanScope 는 사유·방향 배열을 export 하지 않는다(범위 2종은 남는다)', () => {
+    expect(Object.keys(replanScopeModule)).not.toContain('REPLAN_REASONS');
+    expect(Object.keys(replanScopeModule)).not.toContain('REPLAN_DIRECTIVES');
+    expect(Object.keys(replanScopeModule)).toContain('REPLAN_SCOPES');
   });
 });
 

@@ -1,4 +1,5 @@
 import type { ComponentProps } from 'react';
+import { Pressable } from 'react-native';
 import fc from 'fast-check';
 import {
   cleanupAsync,
@@ -42,6 +43,21 @@ jest.mock('@gorhom/bottom-sheet');
 
 type Props = ComponentProps<typeof SocialLoginScreen>;
 
+// TRIP-932 — 애플 버튼은 화면이 직접 그리지 않고 컨테이너가 넘겨 준다(`AppleButton` prop). 실물은
+// SDK 의 공식 AppleAuthenticationButton 이라 lazy 경계 뒤에 있다. 화면 단위 테스트에서는 이 스텁을
+// 넘겨 "받은 버튼을 둘째 자리 래퍼(auth-login-apple) 안에 그리고, 누르면 onSignIn('apple')" 만 본다.
+function StubAppleButton({ onPress }: { onPress: () => void }) {
+  return <Pressable testID="stub-apple-button" onPress={onPress} />;
+}
+
+// 보이는 소셜 버튼 testID 를 화면 순서대로 뽑는다. `^…$` 앵커가 없으면 `-icon` 노드가 섞인다
+// (02a ★9 — host 노드만, 트리 순서로 한 번씩 나온다는 것을 실측).
+function socialButtonOrder(): string[] {
+  return screen
+    .getAllByTestId(/^auth-login-(google|apple|kakao|naver)$/)
+    .map((node) => node.props.testID as string);
+}
+
 function renderScreen(overrides: Partial<Props> = {}) {
   const props: Props = {
     phase: 'idle',
@@ -59,15 +75,51 @@ function renderScreen(overrides: Partial<Props> = {}) {
 }
 
 describe('c02-social-login — 기본 화면 (AC-ONB-01-12 · §10 이메일 버튼 숨김)', () => {
-  it('브랜드와 소셜 4버튼(구글·애플·카카오·네이버)·약관 안내를 렌더한다', () => {
+  it('애플 버튼을 받지 않으면(Android·판정 전) 브랜드와 소셜 3버튼(구글·카카오·네이버)만 렌더한다 (TRIP-932 AC-10·AC-12)', () => {
+    // 준비 + 실행 — AppleButton 없음.
     renderScreen();
+
+    // 단언 — 3버튼이 이 순서로만 있고 애플 자리는 비어 있다(빈 래퍼도 없다).
     expect(screen.getByTestId('auth-login-root')).toBeOnTheScreen();
     expect(screen.getByTestId('auth-login-brand')).toBeOnTheScreen();
-    expect(screen.getByTestId('auth-login-google')).toBeOnTheScreen();
-    expect(screen.getByTestId('auth-login-apple')).toBeOnTheScreen();
-    expect(screen.getByTestId('auth-login-kakao')).toBeOnTheScreen();
-    expect(screen.getByTestId('auth-login-naver')).toBeOnTheScreen();
-    expect(screen.getByTestId('auth-login-terms')).toBeOnTheScreen();
+    expect(socialButtonOrder()).toEqual([
+      'auth-login-google',
+      'auth-login-kakao',
+      'auth-login-naver',
+    ]);
+    expect(screen.queryByTestId('auth-login-apple')).toBeNull();
+    // TRIP-1053 — 약관 안내 줄은 지웠다(동의는 약관 화면에서만 받는다, BR-U0-10).
+    expect(screen.queryByTestId('auth-login-terms')).toBeNull();
+  });
+
+  it('애플 버튼을 받으면(iOS) 둘째 자리 래퍼 auth-login-apple 안에 그려 4버튼(구글·애플·카카오·네이버)이 된다 (TRIP-932 AC-11)', () => {
+    // 준비 + 실행
+    renderScreen({ AppleButton: StubAppleButton });
+
+    // 단언 — 순서 4개, 그리고 래퍼 안에 넘겨받은 버튼이 실제로 있다.
+    expect(socialButtonOrder()).toEqual([
+      'auth-login-google',
+      'auth-login-apple',
+      'auth-login-kakao',
+      'auth-login-naver',
+    ]);
+    expect(
+      within(screen.getByTestId('auth-login-apple')).getByTestId(
+        'stub-apple-button'
+      )
+    ).toBeOnTheScreen();
+  });
+
+  it('넘겨받은 애플 버튼을 누르면 onSignIn("apple") 이 한 번 호출된다 (TRIP-932 AC-11)', () => {
+    // 준비
+    const props = renderScreen({ AppleButton: StubAppleButton });
+
+    // 실행 — 래퍼가 아니라 안쪽 버튼을 누른다(press 는 부모 방향으로만 핸들러를 찾는다, ★8).
+    fireEvent.press(screen.getByTestId('stub-apple-button'));
+
+    // 단언
+    expect(props.onSignIn).toHaveBeenCalledWith('apple');
+    expect(props.onSignIn).toHaveBeenCalledTimes(1);
   });
 
   it('이메일 회원가입 버튼·디바이더는 렌더하지 않는다 (§10 결정: 숨김)', () => {
@@ -77,7 +129,8 @@ describe('c02-social-login — 기본 화면 (AC-ONB-01-12 · §10 이메일 버
   });
 
   it('소셜 버튼 testID 는 {feature}-{screen}-{role} 규약을 따른다 (AC-ONB-01-12)', () => {
-    renderScreen();
+    // iOS 모양(애플 포함 4종)으로 렌더해 보이는 버튼 전부를 순회한다.
+    renderScreen({ AppleButton: StubAppleButton });
     ['google', 'apple', 'kakao', 'naver'].forEach((role) => {
       const node = screen.getByTestId(`auth-login-${role}`);
       expect(node.props.testID).toMatch(/^auth-login-[a-z]+$/);
@@ -111,8 +164,34 @@ describe('c02-social-login — 취소 안내 (AC-ONB-01-4)', () => {
     renderScreen({ phase: 'cancelled' });
     const notice = screen.getByTestId('auth-login-cancel-notice');
     expect(notice).toBeOnTheScreen();
-    expect(screen.getByText('로그인이 취소되었습니다')).toBeOnTheScreen();
+    // 문구는 안내 노드 '안'에서 찾는다 — 화면 전역으로 찾으면 문구만 버튼 위로 빠지고 빈 testID
+    // 껍데기가 남는 회귀(5-b 경고-1 M1)를 놓친다(에러 배너 AC-V3 의 within 과 대칭).
+    expect(
+      within(notice).getByText('로그인이 취소되었습니다')
+    ).toBeOnTheScreen();
   });
+});
+
+describe('c02-social-login — 약관 문구 없음 (TRIP-1053 AC-3 · BR-U0-10)', () => {
+  it.each([
+    { name: 'idle', override: {} },
+    { name: 'cancelled', override: { phase: 'cancelled' } },
+    {
+      name: 'error',
+      override: { phase: 'error', errorCode: 'SOCIAL_AUTH_FAILED' },
+    },
+  ] as { name: string; override: Partial<Props> }[])(
+    '$name 상태에서 "약관에 동의" 문구와 auth-login-terms 가 화면 어디에도 없다',
+    ({ override }) => {
+      // 준비 + 실행
+      renderScreen(override);
+
+      // 단언 — 루트 앵커(공허한 통과 방지) + testID 부재 + 문구 부재(정규식 = 부분 일치).
+      expect(screen.getByTestId('auth-login-root')).toBeOnTheScreen();
+      expect(screen.queryByTestId('auth-login-terms')).toBeNull();
+      expect(screen.queryByText(/약관에 동의/)).toBeNull();
+    }
+  );
 });
 
 describe('c02-social-login — 에러 배너 (AC-ONB-01-5)', () => {
@@ -304,18 +383,24 @@ describe('c02-social-login — 서버 에러코드 7종 배너 (AC-S6 · 결함 
 
 describe('c02-social-login — 배너가 떠도 재입력 가능 (AC-S6 · 케이스 27)', () => {
   it('에러 배너 상태에서도 소셜 4버튼이 모두 렌더되고 눌린다', () => {
-    // 준비 + 실행
+    // 준비 + 실행 — iOS 모양(애플 버튼 주입).
     const props = renderScreen({
       phase: 'error',
       errorCode: 'SOCIAL_AUTH_FAILED',
+      AppleButton: StubAppleButton,
     });
 
     // 단언 — 배너 유무와 무관하게 버튼은 항상 렌더되고 탭이 그대로 전달된다.
-    (['google', 'apple', 'kakao', 'naver'] as const).forEach((provider) => {
-      expect(screen.getByTestId(`auth-login-${provider}`)).toBeOnTheScreen();
-    });
+    expect(socialButtonOrder()).toEqual([
+      'auth-login-google',
+      'auth-login-apple',
+      'auth-login-kakao',
+      'auth-login-naver',
+    ]);
     fireEvent.press(screen.getByTestId('auth-login-google'));
     expect(props.onSignIn).toHaveBeenCalledWith('google');
+    fireEvent.press(screen.getByTestId('stub-apple-button'));
+    expect(props.onSignIn).toHaveBeenCalledWith('apple');
   });
 });
 

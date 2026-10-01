@@ -2,6 +2,8 @@ import type { ReactElement, ReactNode } from 'react';
 import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Skeleton } from '@/shared/ui/Skeleton';
+
 import type { MustVisitSeedItem } from '../model/mustVisitSeed';
 import { formatWizardStep } from '../model/tripSummary';
 import type { PreferenceSummary, SummaryLine } from '../model/tripSummary';
@@ -103,8 +105,8 @@ const SUMMARY_CARD_SHADOW = {
  * `text-muted`)을 그린다. sub 가 없는 행(동행)은 caption 요소 자체를 안 만든다. 취향 행은 sub 대신
  * `trailing`(스파클+온보딩 배지)을 main 뒤에 얹는다.
  *
- * 플레이스홀더는 **행별**이다(TRIP-671 D1): 여행지 null → "어디로 갈까요?"(진한 값 톤), 기간 null →
- * 값 줄 자체 없음(`placeholder=null`), 나머지 → muted "{라벨} 선택". `isLoading` 이면 값 자리를 회색
+ * 플레이스홀더는 **행별**이다(TRIP-671 D1): 여행지 null → "어디로 갈까요?"(진한 값 톤), 나머지 → muted
+ * "{라벨} 선택"(기간도 — 값 줄이 있어야 선택 전후 행 높이가 같다, TRIP-1045). `isLoading` 이면 값 자리를 회색
  * 스켈레톤 바로 갈아 실값·플레이스홀더를 가린다(loading 얼굴).
  */
 function SummaryRow({
@@ -123,8 +125,8 @@ function SummaryRow({
   label: string;
   /** 2톤 값(`{main; sub?}`). `null` 이면 미선택(플레이스홀더). */
   value: SummaryLine | null;
-  /** value 가 null 일 때 그릴 카피. `null` 이면 값 줄 자체를 안 그린다(기간 행). */
-  placeholder: string | null;
+  /** value 가 null 일 때 그릴 카피. */
+  placeholder: string;
   /** 플레이스홀더 색 톤 — 여행지만 'ink'(Figma empty 진한 값 톤), 나머지는 'muted'. */
   placeholderTone: 'ink' | 'muted';
   onPress(): void;
@@ -148,7 +150,7 @@ function SummaryRow({
         {isLoading ? (
           <View testID={skeletonTestID} className="flex-row gap-[6px]">
             {skeletonWidths.map((w, i) => (
-              <View
+              <Skeleton
                 key={i}
                 testID={`${skeletonTestID}-bar-${i}`}
                 className={`h-[12px] rounded-[10px] bg-hairline w-[${w}px]`}
@@ -156,17 +158,15 @@ function SummaryRow({
             ))}
           </View>
         ) : value === null ? (
-          placeholder === null ? null : (
-            <Text
-              className={
-                placeholderTone === 'ink'
-                  ? 'font-noto-bold text-card-title font-bold text-ink'
-                  : 'font-noto text-card-title text-muted'
-              }
-            >
-              {placeholder}
-            </Text>
-          )
+          <Text
+            className={
+              placeholderTone === 'ink'
+                ? 'font-noto-bold text-card-title font-bold text-ink'
+                : 'font-noto text-card-title text-muted'
+            }
+          >
+            {placeholder}
+          </Text>
         ) : (
           <View className="flex-row items-center gap-[6px]">
             <Text className="font-noto-bold text-card-title font-bold text-ink">
@@ -305,7 +305,7 @@ function MustVisitSkeleton(): ReactElement {
         contentContainerStyle={{ gap: 8 }}
       >
         {[1, 2, 3, 4].map((n) => (
-          <View
+          <Skeleton
             key={n}
             testID={`trip-wizard-mustvisit-skeleton-${n}`}
             className="h-[64px] w-[64px] rounded-[10px] bg-hairline"
@@ -398,13 +398,16 @@ export function TripWizardStep1Screen({
                 어디로 떠날까요?
               </Text>
               {/* 부제 3분기(TRIP-732 AC-6, 우선순위 loading > empty > default): 로딩 중이면 로딩
-                  문구, 아니면 empty 얼굴이면 empty 문구, 그 외 default(온보딩 반영). */}
+                  문구, 아니면 empty 얼굴이면 empty 문구, 그 외 default. default 의 "온보딩에서" 절은
+                  취향이 온보딩 상속일 때만(TRIP-984 D10). */}
               <Text className="font-noto text-label text-muted">
                 {isLoading
                   ? '여행 정보를 불러오는 중이에요'
                   : isEmptyFace
                     ? '여행지와 기간만 정하면 나머지는 채워둘게요 · 행을 누르면 바꿀 수 있어요'
-                    : '온보딩에서 고른 취향을 그대로 반영했어요 · 행을 누르면 바꿀 수 있어요'}
+                    : summaryPreferences?.onboarding === true
+                      ? '온보딩에서 고른 취향을 그대로 반영했어요 · 행을 누르면 바꿀 수 있어요'
+                      : '행을 누르면 바꿀 수 있어요'}
               </Text>
             </View>
 
@@ -429,7 +432,7 @@ export function TripWizardStep1Screen({
                 testID="trip-wizard-summary-period"
                 label="기간"
                 value={summaryPeriod}
-                placeholder={null}
+                placeholder="기간 선택"
                 placeholderTone="muted"
                 onPress={onPressSummaryPeriod}
                 isLoading={isLoading}
@@ -592,9 +595,6 @@ export function TripWizardStep1Screen({
                 지금은 국내 여행만 지원해요
               </Text>
               <View className="items-center">
-                <Text className="text-center font-noto text-label text-muted">
-                  해외 여행지는 준비 중이에요.
-                </Text>
                 <Text className="text-center font-noto text-label text-muted">
                   국내 도시로 만들어볼까요?
                 </Text>

@@ -115,9 +115,9 @@ const ROWS: Row[] = [
     why: 'formatDateRangeWithDow 를 entities 로 export 승격·이관. summaryPeriod 는 존치하되 entities 에서 import(출력 무변경)',
   },
   {
-    file: 'app/(tabs)/index.tsx',
+    file: 'pages/home/ui/HomePage.tsx',
     must: ['@/entities/trip/lib'],
-    why: '홈 라우트 formatTripMeta 조립이 formatTripRange·formatNightsLabel 을 entities 에서 직접 import(★ src/app 이라 6-b 발동, 01b 결정 #3). 이 스캔은 파일을 읽기만 한다(렌더·수정 아님)',
+    why: '홈 page formatTripMeta 조립이 formatTripRange·formatNightsLabel 을 entities 에서 직접 import(TRIP-1142 로 (tabs)/index.tsx 에서 이동). 이 스캔은 파일을 읽기만 한다(렌더·수정 아님)',
   },
 ];
 

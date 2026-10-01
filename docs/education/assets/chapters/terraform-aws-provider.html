@@ -1,0 +1,28 @@
+<div class="code-block"><p class="code-label">현재 코드 발췌 · versions.tf</p><pre><code class="language-hcl">terraform {
+  required_version = "&gt;= 1.11.0, &lt; 2.0.0"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~&gt; 6.38"
+    }
+  }
+}
+
+provider "aws" {
+  region              = var.aws_region
+  allowed_account_ids = [var.aws_account_id]
+
+  default_tags {
+    tags = {
+      Project     = "trippilot"
+      Environment = var.environment
+      ManagedBy   = "terraform"
+    }
+  }
+}</code></pre></div>
+<p><code>required_providers</code>는 어떤 플러그인을 어느 범위의 버전으로 설치할지 선언한다. <code>provider "aws"</code>는 설치한 플러그인에 리전·계정 제한·공통 태그 같은 실행 설정을 제공한다. <code>required_version</code>은 Terraform CLI 버전 조건이다. CLI 버전과 AWS provider 버전은 서로 다른 번호 체계이며 함께 기록해야 재현할 수 있다.</p>
+<div class="callout"><strong>이 브랜치의 정확한 기준:</strong> workflow는 Terraform CLI <code>1.13.5</code>를 설치한다. AWS provider 선언 <code>~&gt; 6.38</code>은 <code>&gt;= 6.38.0, &lt; 7.0.0</code>을 허용하며 현재 <a href="../../infra/terraform/stack/.terraform.lock.hcl">.terraform.lock.hcl</a>에 선택된 버전은 <strong>6.64.0</strong>이다. AWS provider 6.38 고정으로 해석하면 틀린다. <code>~&gt; 6.38.0</code>은 반대로 6.39 미만으로 범위가 좁아진다. <a href="https://developer.hashicorp.com/terraform/language/expressions/version-constraints">버전 제약의 의미</a></div>
+<p><code>allowed_account_ids</code>는 잘못된 AWS 계정 자격증명으로 실행하는 실수를 막는 검증이다. 계정 ID는 12자리 문자열로 받는다. 이 설정이 권한을 부여하지는 않는다. 무엇을 만들 수 있는지는 IAM 정책이 정하고 실제 실행 계정이 허용된 계정인지 provider가 추가 확인한다. <code>default_tags</code>는 지원되는 리소스에 공통 태그를 붙여 프로젝트와 환경을 식별하게 한다. 이 브랜치의 bootstrap 정책도 환경별 이름과 태그를 권한 범위에 활용한다.</p>
+<p>이 설정에 <code>access_key</code>나 <code>secret_key</code>가 없는 이유는 인증 정보를 다른 경로에서 제공하기 때문이다. GitHub Actions는 OIDC로 AWS 역할을 Assume하고 짧은 수명의 자격증명을 실행 환경에 설정한다. Terraform의 AWS provider와 S3 backend가 그 인증 환경을 사용한다. 로컬에서 실제 AWS 조회가 필요하다면 조직의 SSO/profile 같은 승인된 인증 경로를 사용한다. 본 수업의 기본 실습은 mock provider를 사용하므로 AWS 자격증명이 필요 없다. <a href="https://github.com/hashicorp/terraform-provider-aws/blob/v6.64.0/website/docs/index.html.markdown">AWS Provider 6.64.0 인증·설정 문서</a></p>
+<p>실행 순서는 보통 <code>init</code>에서 provider 다운로드와 backend 초기화, <code>validate</code>에서 스키마 확인, <code>plan</code>에서 AWS 조회와 차이 계산, <code>apply</code>에서 AWS 변경이다. provider 업데이트는 <code>init -upgrade</code>로 할 수 있지만 수업의 복제 환경에서는 사용하지 않는다. 프로젝트는 lock file을 검토한 버전으로 유지하며 workflow가 <code>-lockfile=readonly</code>로 의도하지 않은 변경을 막는다.</p>

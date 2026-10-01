@@ -6,6 +6,8 @@ import { useRouter } from 'expo-router';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import {
   DEFAULT_DWELL_KEY,
+  DWELL_OPTIONS,
+  buildAnytimeMustVisitRequest,
   buildFixedMustVisitRequest,
   mustVisitTimeBlockReason,
   startTimeOptions,
@@ -23,6 +25,7 @@ import {
   useGetTripsTripIdMustVisits,
 } from '@/shared/api/generated/trips/trips';
 import { getAccessToken } from '@/shared/api/tokenManager';
+import { guardPress, openPressGuardWindow } from '@/shared/press/pressGuard';
 
 /**
  * h07 배선(TRIP-296) — `ANYTIME` 항목을 시각 고정 블록으로 **승격**한다.
@@ -102,12 +105,16 @@ export function MustVisitTimePage({
     : [];
 
   // 사용자가 손대기 전에는 서버가 아는 값이 폼이다(연필로 들어온 `FIXED` 항목의 값 보존).
-  // 토글 초기값은 Figma default 프레임대로 켜짐 — 이 화면에 온 목적이 시각 지정이다.
+  // 토글 초기값은 **저장된 유형**을 따른다(TRIP-1098 결정 1 · BR-U1-48 기본 ANYTIME) — 목록이 「아무 때나」인
+  // 항목을 켜진 채 열면 두 화면이 다른 말을 한다. 진입 문(행·「시간 정해두기」 세그·연필)과 무관하다.
+  // 체류도 저장값(dwellMin)을 칸으로 되돌린다 — 없거나 모르는 값이면 기본 「보통」.
   const form: MustVisitTimeForm = edited ?? {
-    fixed: true,
+    fixed: registered?.type === 'FIXED',
     fixedDate: registered?.fixedDate ?? null,
     fixedStart: toHourMinute(registered?.fixedStart),
-    dwellKey: DEFAULT_DWELL_KEY,
+    dwellKey:
+      DWELL_OPTIONS.find((option) => option.dwellMin === registered?.dwellMin)
+        ?.key ?? DEFAULT_DWELL_KEY,
   };
 
   function patchForm(next: Partial<MustVisitTimeForm>): void {
@@ -138,6 +145,8 @@ export function MustVisitTimePage({
     // 409 는 여기서 멈춘다(게이트①-3 · AC-7) — 안내를 세운 직후 떠나면 그 안내가 실기에서
     // 한 프레임도 보이지 않아 침묵과 같아진다. 나가는 것은 사용자가 뒤로 눌러서 한다.
     if (duplicated) return;
+    // TRIP-1013 #042 — 목록으로 돌아가는 순간 창을 다시 연다(응답이 400ms보다 늦어도 관통 차단).
+    openPressGuardWindow();
     router.back();
   }
 
@@ -145,8 +154,10 @@ export function MustVisitTimePage({
     if (!ready || submitLockedRef.current) return;
     // 화면의 `disabled` 는 접근성 상태만으로도 매처를 통과할 수 있으므로 배선도 스스로 문을
     // 잠근다. 여기서는 그 이상이다 — **되돌릴 수 없는 DELETE 를 검증 전에 보내지 않는 것**이
-    // 이 한 줄의 실질이다.
-    const request = buildFixedMustVisitRequest({ poiId: sourcePoiId, form });
+    // 이 한 줄의 실질이다. OFF 는 ANYTIME 최소본, FIXED 는 완성 시에만 본문이 만들어진다(null=중단).
+    const request = form.fixed
+      ? buildFixedMustVisitRequest({ poiId: sourcePoiId, form })
+      : buildAnytimeMustVisitRequest({ poiId: sourcePoiId });
     if (request === null) return;
 
     submitLockedRef.current = true;
@@ -206,7 +217,8 @@ export function MustVisitTimePage({
       onPickDate={(date) => patchForm({ fixedDate: date })}
       onPickStart={(start) => patchForm({ fixedStart: start })}
       onPickDwell={(dwellKey) => patchForm({ dwellKey })}
-      onSubmit={() => void submit()}
+      // TRIP-1013 #042 송신 — 연타의 두 번째 탭이 돌아간 목록의 행을 관통하지 않게 창을 연다.
+      onSubmit={guardPress(() => void submit())}
       onRetry={failure?.kind === 'lost' ? retry : undefined}
     />
   );

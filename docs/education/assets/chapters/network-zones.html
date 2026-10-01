@@ -1,0 +1,3 @@
+<p class="lede"><strong>VPC</strong>는 서비스 전용 네트워크, <strong>서브넷</strong>은 그 안을 나눈 작은 구역입니다.</p>
+<div class="table-wrap"><table><thead><tr><th>구역</th><th>배치하는 것</th><th>인터넷과의 관계</th></tr></thead><tbody><tr><td>Public</td><td>NAT, 앱 배포 후 NLB</td><td>Internet Gateway로 나가는 경로</td></tr><tr><td>Private compute</td><td>EKS 노드와 앱 Pod</td><td>외부 통신은 NAT를 통해 나감</td></tr><tr><td>Isolated data</td><td>RDS PostgreSQL, Redis</td><td>인터넷/NAT 기본 경로 없음</td></tr></tbody></table></div>
+<p class="takeaway">NAT는 내부 앱이 밖으로 요청을 보낼 때 쓰는 출구입니다.</p>

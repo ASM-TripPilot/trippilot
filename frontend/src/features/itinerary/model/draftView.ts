@@ -101,6 +101,37 @@ export function buildGenerationGauge(
   });
 }
 
+/** 진행 카드의 `…` 접기 칸 — 숫자·남은 개수 통로가 없도록 필드는 `kind` 하나뿐이다(BR-U3-05). */
+export interface GenerationGaugeFold {
+  kind: 'more';
+}
+
+export type FoldedGenerationGaugeCell =
+  GenerationGaugeCell | GenerationGaugeFold;
+
+/**
+ * 게이지 칸을 `max` 칸 안으로 접는다(TRIP-1040). 일수가 `max` 이하면 그대로 둔다.
+ * 넘치면 기준 칸(첫 `active`, 없으면 마지막 일차)이 항상 보이도록 `max - 1` 칸 창을 고르고
+ * 나머지를 `…` 한 칸으로 접는다 — 기준이 앞쪽이면 뒤를, 창 밖으로 밀리면 앞을 접어 기준이 창 끝에 선다.
+ * 고르기만 하므로 남은 칸의 상태·일차는 입력과 같다. 전제: `max ≥ 2`.
+ */
+export function foldGenerationGauge(
+  cells: GenerationGaugeCell[],
+  max: number
+): FoldedGenerationGaugeCell[] {
+  if (cells.length <= max) return cells;
+  const windowSize = max - 1;
+  const activeIndex = cells.findIndex((cell) => cell.state === 'active');
+  const anchor = activeIndex === -1 ? cells.length - 1 : activeIndex;
+  if (anchor < windowSize) {
+    return [...cells.slice(0, windowSize), { kind: 'more' }];
+  }
+  return [
+    { kind: 'more' },
+    ...cells.slice(anchor - windowSize + 1, anchor + 1),
+  ];
+}
+
 /** `'2026-06-10'` → `'6월 10일 · 수'`. 요일은 달력에서 계산한다(Figma 목업의 요일은 틀렸다). */
 export function formatDraftDayHeader(date: string): string {
   const time = utcDayTime(date);
@@ -109,6 +140,20 @@ export function formatDraftDayHeader(date: string): string {
   const at = new Date(time);
   const weekday = WEEKDAY_LABELS[at.getUTCDay()];
   return `${at.getUTCMonth() + 1}월 ${at.getUTCDate()}일 · ${weekday}`;
+}
+
+/**
+ * `'2026-06-10'` → `'6월 10일(수)'`. h09 co-pick 진행 줄용 — 요일을 괄호로 감싼다(Figma 3845:2227).
+ * `formatDraftDayHeader`(중점 `· 수`)와 날짜 파싱(`utcDayTime`)·요일 배열을 공유하고 구분자만 다르다
+ * (형제 포매터 — 새 Date 파싱을 만들지 않는다).
+ */
+export function formatCoPickDayHeader(date: string): string {
+  const time = utcDayTime(date);
+  if (Number.isNaN(time)) return '';
+
+  const at = new Date(time);
+  const weekday = WEEKDAY_LABELS[at.getUTCDay()];
+  return `${at.getUTCMonth() + 1}월 ${at.getUTCDate()}일(${weekday})`;
 }
 
 export interface DraftPin {
@@ -155,8 +200,6 @@ export type DraftView =
   | { kind: 'loading' }
   | { kind: 'failed' }
   | { kind: 'empty' }
-  /** 만들기는 했는데 넣을 후보가 없었다(h35). 조건 목록은 서버 문자열 그대로 실려 나간다. */
-  | { kind: 'zero'; shortfallCategories: string[] }
   | {
       kind: 'listed';
       days: ItineraryDaysItem[];
@@ -226,21 +269,18 @@ export function resolveFallbackNotice(input: {
  * (openapi: `FAILED` = 2차 실패, 1차분은 유효) 실패가 목록을 덮지 않고 `staleFailed` 라는
  * 별도 축으로 같은 값 안에 실려 나간다. 목록도 살고 실패도 삼켜지지 않는다(INV-4).
  *
- * 세는 단위가 **일자가 아니라 슬롯**인 것이 후보 0건(h35)의 급소다 — 서버는 빈 일자를 담아
- * 보낼 수 있고, `days.length` 로만 보면 그 응답이 목록으로 새어 h35 가 영영 안 뜬다. 반대로
- * 일부 날짜만 비었으면 합계가 0이 아니므로 목록이 그대로 유지된다(01b D5·D6).
+ * 세는 단위가 **일자가 아니라 슬롯**이다 — 서버는 빈 일자를 담아 보낼 수 있고, `days.length`
+ * 로만 보면 안이 빈 응답이 목록으로 샌다. 반대로 일부 날짜만 비었으면 합계가 0이 아니므로
+ * 목록이 그대로 유지된다(01b D5·D6).
  *
- * 0건 판정에 `level`·`poolSize` 어휘를 쓰지 않는 것도 같은 이유다 — 어휘가 얼굴을 정하면
- * 서버가 말을 바꾸는 날 화면이 통째로 달라진다. 요약이 **객체로 도착했다**는 사실만 쓴다.
- *
- * 겹치는 조합의 순서(슬롯 > loading > failed > zero > empty)는 AC 가 정하지 않은 축이라
- * 이 사이클의 구현 판단이다 — 근거는 03 리포트. `failed > zero` 만 심판이 잠갔다.
+ * 겹치는 조합의 순서(슬롯 > loading > failed > empty)는 AC 가 정하지 않은 축이라 이 사이클의
+ * 구현 판단이다 — 근거는 03 리포트. (후보 0건 전용 `zero` 얼굴은 TRIP-791 로 화면이 삭제되고
+ * 이 정리로 kind 까지 제거됐다 — 안이 빈 응답은 이제 `empty` 로 접힌다.)
  */
 export function resolveDraftView(input: {
   days: ItineraryDaysItem[];
   loading: boolean;
   failed: boolean;
-  candidatesSummary?: ItineraryCandidatesSummary;
 }): DraftView {
   const slotCount = input.days.reduce((sum, day) => sum + day.slots.length, 0);
   if (slotCount > 0) {
@@ -248,16 +288,6 @@ export function resolveDraftView(input: {
   }
   if (input.loading) return { kind: 'loading' };
   if (input.failed) return { kind: 'failed' };
-
-  const summary = input.candidatesSummary;
-  if (summary !== undefined && summary !== null) {
-    // 키가 없는 것과 빈 배열을 여기서 하나로 만든다 — 화면이 "없음"과 "빈 배열"을 각각
-    // 다루면 같은 규칙이 두 층에 흩어진다(01b D8).
-    return {
-      kind: 'zero',
-      shortfallCategories: summary.shortfallCategories ?? [],
-    };
-  }
 
   return { kind: 'empty' };
 }

@@ -16,7 +16,7 @@ import { slackTime } from './slackTime';
  *   `executionDurationStructure`) **어디에도 안 걸린다** → 이 PBT + wall-clock 소스 스캔이 유일한 그물이다
  *   (리포 CI 차단 게이트). "여유 N시간 M분"은 두 고정 시각의 간격이라 INV-3(소요시간) 위반이 아니다.
  *
- * ★ from/toFixed 는 "HH:mm" 또는 "HH:mm:ss". **초는 버리고 시·분만** 쓴다(resolveSlackLabel 선례, D1) —
+ * ★ from/toFixed 는 "HH:mm" 또는 "HH:mm:ss". **초는 버리고 시·분만** 쓴다(옛 resolveSlackLabel 선례 — 삭제됨, D1) —
  *   `toMin` 을 테스트가 독립 재유도(초 무시)해 성질을 판정한다(함수 재구현 아님 — 출력의 숫자를 되파싱).
  *
  * *(개념)* PBT(fast-check) = 임의 입력 수백 개를 던져 성질을 반증하려 든다. `fc.assert(fc.property(arb, fn))`.

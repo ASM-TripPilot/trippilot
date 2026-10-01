@@ -1,8 +1,15 @@
 package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.core.error.ConflictDetected
+import com.trippilot.core.error.DomainException
 import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.ResourceNotFound
+import io.kotest.matchers.ints.shouldBeLessThanOrEqual
+import io.kotest.property.Arb
+import io.kotest.property.arbitrary.int
+import io.kotest.property.arbitrary.list
+import io.kotest.property.arbitrary.pair
+import io.kotest.property.checkAll
 import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.GenerationStatus
 import com.trippilot.trip.api.TripFacade
@@ -64,6 +71,40 @@ class GenerationSessionServiceTest : StringSpec({
 
         repo.rows[first.sessionId]!!.status shouldBe GenerationStatus.CANCELED
         repo.findRunningByTrip(trip)!!.sessionId shouldBe second.sessionId
+    }
+
+    /**
+     * **어떤 전이 순서열에서도 비도메인 예외가 새지 않는다**(TRIP-1058 AC-속성).
+     *
+     * QA #029·#046 의 500 은 "닫힌 세션 + 뒤늦은 day1" 이라는 순서열 하나였다. 여기서는 전이
+     * (start·day1Ready·completed·failed·cancel)를 임의 순서열로 적용해, 결과가 항상
+     * (정상 전이 | 도메인 예외 = 409·404 | 조용한 무시) 중 하나이고 **진행 중(RUNNING·DAY1_READY)
+     * 세션이 여행당 최대 1개**임을 잠근다.
+     */
+    "임의 전이 순서열에서 비도메인 예외는 없고 진행 중 세션은 여행당 최대 1개다" {
+        checkAll(Arb.list(Arb.pair(Arb.int(0..4), Arb.int(0..7)), 1..25)) { ops ->
+            val repo = FakeGenerationSessions()
+            val service = svc(repo)
+            for ((op, pick) in ops) {
+                val t = if (pick % 2 == 0) trip else other
+                val ids = repo.rows.keys.toList()
+                val sid = if (ids.isEmpty()) UUID.randomUUID() else ids[pick % ids.size]
+                try {
+                    when (op) {
+                        0 -> service.start(acc, t, GenerationMode.FULLY_AI)
+                        1 -> service.day1Ready(sid, UUID.randomUUID(), isFallback = false, candidatesLevel = null)
+                        2 -> service.completed(sid, isFallback = false, candidatesLevel = null)
+                        3 -> service.failed(sid)
+                        else -> service.cancel(acc, t, sid)
+                    }
+                } catch (_: DomainException) {
+                    // 409·404 로 표면화되는 갈래 — 사용자에게 500 이 아니다. 그 외 예외는 그대로 터져 실패한다.
+                }
+                listOf(trip, other).forEach { tp ->
+                    repo.rows.values.count { it.tripId == tp && it.isRunning } shouldBeLessThanOrEqual 1
+                }
+            }
+        }
     }
 
     /**

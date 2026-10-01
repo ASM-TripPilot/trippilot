@@ -35,6 +35,7 @@ function richSlot(
     isFixed: false,
     endsNextDay: false,
     hasViolation: true,
+    alternatives: [],
     violationReason: '시간이 겹쳐요',
     distanceRange: '약 1.2km · 도보 추정',
     placementReason: '바다 뷰',

@@ -27,6 +27,11 @@ jest.mock('@/features/auth/model/useBootstrapGate', () => ({
   useBootstrapGate: jest.fn(),
 }));
 
+// 계정 경계 정리(TRIP-1077)는 SplashGate.accountBoundary.test 가 본다 — 여기선 Provider·router 목이 없어 끈다.
+jest.mock('@/app-shell/model/useAccountBoundaryReset', () => ({
+  useAccountBoundaryReset: jest.fn(),
+}));
+
 // expo-router Stack 계열을 관찰 가능한 마커로 대체(마커 목 본체는 별도 모듈 — 상단 주해 참조).
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 jest.mock('expo-router', () => require('@/test-support/expoRouterStackMock'));

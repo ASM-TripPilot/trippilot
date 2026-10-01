@@ -46,3 +46,7 @@ terraform.rc
 .coverage
 htmlcov/
 **/__pycache__/
+
+# AWS 자격 파일은 리포 어디에도 두지 않는다 — 표준 위치 ~/.aws/credentials. 리포 안에 실수로 만들어도 안 올라가게.
+.aws/
+**/.aws/

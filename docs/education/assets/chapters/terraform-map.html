@@ -1,0 +1,15 @@
+<div class="table-wrap"><table><thead><tr><th>파일 또는 디렉터리</th><th>담당하는 질문</th></tr></thead><tbody>
+<tr><td><a href="../../infra/terraform/stack/versions.tf">stack/versions.tf</a></td><td>어떤 CLI·provider를 쓰며 인증과 backend를 어떻게 설정하는가?</td></tr>
+<tr><td><a href="../../infra/terraform/stack/variables.tf">stack/variables.tf</a></td><td>환경에 따라 바꿀 수 있는 입력과 허용 범위는 무엇인가?</td></tr>
+<tr><td><a href="../../infra/terraform/stack/network.tf">stack/network.tf</a></td><td>VPC·세 종류의 서브넷·NAT·라우팅을 어떻게 연결하는가?</td></tr>
+<tr><td><a href="../../infra/terraform/stack/eks.tf">stack/eks.tf</a></td><td>EKS Auto Mode와 배포 역할의 클러스터 접근을 어떻게 정의하는가?</td></tr>
+<tr><td><a href="../../infra/terraform/stack/data.tf">stack/data.tf</a></td><td>RDS PostgreSQL과 Redis의 네트워크·암호화·백업은 무엇인가?</td></tr>
+<tr><td><a href="../../infra/terraform/stack/registry-secrets.tf">stack/registry-secrets.tf</a></td><td>ECR 저장소와 Secrets Manager 저장소를 어떻게 반복 생성하는가?</td></tr>
+<tr><td><a href="../../infra/terraform/stack/outputs.tf">stack/outputs.tf</a></td><td>다음 배포 단계에 어떤 이름·주소·ARN을 넘기는가?</td></tr>
+<tr><td><a href="../../infra/terraform/environments/dev.tfvars">environments/dev.tfvars</a>, <a href="../../infra/terraform/environments/prd.tfvars">prd.tfvars</a></td><td>동일한 구성을 DEV와 PRD에 어떤 값으로 적용하는가?</td></tr>
+<tr><td><a href="../../infra/terraform/stack/tests/environments.tftest.hcl">stack/tests/environments.tftest.hcl</a></td><td>실제 AWS 없이 지켜야 할 설계 조건을 검증하는가?</td></tr>
+<tr><td><a href="../../infra/bootstrap/template.json">bootstrap/template.json</a></td><td>Terraform 실행 전에 필요한 S3 state와 IAM 역할을 누가 만드는가?</td></tr>
+</tbody></table></div>
+<p>Terraform은 같은 디렉터리의 <code>.tf</code> 파일들을 함께 읽는다. <code>network.tf</code>를 먼저 읽고 <code>eks.tf</code>를 나중에 실행하는 방식이 아니다. 파일 이름은 사람의 탐색을 돕는 분류이며 생성 순서는 리소스 간 참조로 결정된다. 실제로 이 브랜치의 <code>data.tf</code>는 데이터 소스만 모은 파일이 아니라 데이터베이스와 캐시 리소스 파일이다. 이름보다 내부 블록을 확인한다.</p>
+<p><code>stack/</code>은 이 실행의 <strong>root module</strong>이다. Terraform에서 module은 함께 평가되는 구성의 묶음이며 재사용 가능한 하위 디렉터리를 <code>module</code> 블록으로 호출할 수 있다. 현재 브랜치는 VPC 등을 외부 모듈로 감싸지 않고 직접 정의한다. 수업에서는 리소스 연결을 그대로 따라갈 수 있다.</p>
+<div class="callout warning"><strong>현재 구현 범위:</strong> 이 브랜치에는 Cloudflare provider, DNS 레코드 리소스, ACM 인증서 생성 리소스가 없다. 뒤에서 소개하는 Cloudflare 코드는 확장 학습용이며 현재 workflow에 복사하면 곧바로 동작하는 완성 기능이 아니다.</div>

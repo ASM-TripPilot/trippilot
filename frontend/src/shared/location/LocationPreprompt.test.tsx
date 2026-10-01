@@ -124,3 +124,44 @@ describe('LocationPreprompt — 권한 거부 상태 (AC D3)', () => {
     expect(onProceed).toHaveBeenCalled();
   });
 });
+
+/**
+ * TRIP-1023 #005 (결정1 · Q2) — 온보딩 위치 단계도 앞으로만. 두 얼굴 모두 머리의 뒤로 셰브론을 뺀다
+ * (56px 머리 바 자체는 남긴다 — 바 존치는 6-b 육안). 글리프는 이름으로 찾는다(02a ★5).
+ */
+function backChevronCount(): number {
+  return screen.UNSAFE_root.findAll(
+    (node) =>
+      typeof node.type === 'function' &&
+      /BackChevron/.test((node.type as { name?: string }).name ?? '')
+  ).length;
+}
+
+describe('🔴 TRIP-1023 #005 — 위치 프리프롬프트 머리에 뒤로 글리프가 없다 (AC-A4)', () => {
+  it.each([
+    { state: 'default' as const, anchor: 'onboarding-location-hero' },
+    {
+      state: 'permission-denied' as const,
+      anchor: 'onboarding-location-denied-notice',
+    },
+  ])(
+    '$state 얼굴: 본문은 그려지고, 뒤로 셰브론과 뒤로 역할 요소는 없다',
+    ({ state, anchor }) => {
+      render(
+        <LocationPreprompt
+          purposeContext={PURPOSE}
+          state={state}
+          onProceed={jest.fn()}
+          onDefer={jest.fn()}
+          onOpenSettings={jest.fn()}
+        />
+      );
+
+      expect(screen.getByTestId('onboarding-location-root')).toBeOnTheScreen();
+      expect(screen.getByTestId(anchor)).toBeOnTheScreen();
+
+      expect(backChevronCount()).toBe(0);
+      expect(screen.queryAllByTestId(/back/).length).toBe(0);
+    }
+  );
+});

@@ -38,6 +38,10 @@ class SecurityConfig {
                 // 앱 기동 분기(인증 선택 — 무토큰=GUEST, 유효토큰=AUTHENTICATED). 단, 만료·무효 토큰을 보내면
                 // 리소스서버가 401(GUEST 폴백 아님) — 클라는 부트스트랩 전 토큰 갱신/제거 권장(관대한 처리는 후속).
                 it.requestMatchers(HttpMethod.GET, "/api/v1/bootstrap").permitAll()
+                // 아웃바운드 302(인증 선택) — 브라우저·커스텀탭이 열므로 Authorization 을 실을 수 없다
+                // (칸 3 어트리뷰션 표준이 Custom Tab/SFSafariVC 다). 토큰이 오면 계정이 클릭에 남고,
+                // 없으면 익명 클릭 — 익명도 "운영 중인 매체" 증거는 된다.
+                it.requestMatchers(HttpMethod.GET, "/api/v1/stays/*/outbound").permitAll()
                 it.requestMatchers("/actuator/health", "/actuator/health/**").permitAll() // compose·k8s 헬스체크
                 it.requestMatchers(HttpMethod.GET, "/api/health", "/api/integration").permitAll() // 통합 프로브
                 // API 문서(Swagger UI·스펙·정적 자산) — 로컬/개발 열람용(프로덕션은 프로파일로 차단 권장)

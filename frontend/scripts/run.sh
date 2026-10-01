@@ -35,7 +35,7 @@ list_states() {
   ' "$PREVIEW_SRC"
 }
 
-is_valid_state() { list_states | awk '{print $1}' | grep -qx "$1"; }
+is_valid_state() { list_states | awk '{print $1}' | grep -x "$1" >/dev/null; }  # -q 금지 — pipefail SIGPIPE 오판(TRIP-957)
 
 open_url() {
   local url="$1"
@@ -44,7 +44,7 @@ open_url() {
       && echo "→ android 딥링크: $url" \
       || { echo "✗ adb 실패 — 에뮬레이터/기기·앱 설치 확인 (먼저 'run.sh build --android')"; exit 1; }
   else
-    if ! xcrun simctl list devices | grep -q Booted; then
+    if ! xcrun simctl list devices | grep Booted >/dev/null; then
       echo "✗ 부팅된 시뮬레이터 없음 — 먼저 'run.sh build' 로 앱을 띄워라"; exit 1
     fi
     xcrun simctl openurl booted "$url" >/dev/null && echo "→ ios 딥링크: $url"

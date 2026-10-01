@@ -1,6 +1,6 @@
 import type { SocialProvider } from '@/shared/api';
 
-import type { Authorize } from '../model/useSocialLogin';
+import type { Authorize, AuthorizeResult } from '../model/useSocialLogin';
 import { getOAuthConfig } from '../config/oauthConfig';
 
 /**
@@ -11,6 +11,8 @@ import { getOAuthConfig } from '../config/oauthConfig';
  * 성공 결과에는 PKCE codeVerifier 만 담고 시크릿은 담지 않는다(SEC-AUTH).
  *
  * 토글이 꺼진 실 빌드에서는 provider 별로 실 경로가 갈린다(TRIP-210):
+ *  - apple — 항상 네이티브 SDK 어댑터(appleAuthorize, TRIP-932). env 게이트가 없다 — 버튼 노출을
+ *    컨테이너가 isAvailableAsync 로 이미 거른다(Android 는 버튼 자체가 없다).
  *  - kakao — EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY 가 있으면 네이티브 SDK 어댑터(kakaoAuthorize)로.
  *  - naver — EXPO_PUBLIC_NAVER_URL_SCHEME 이 있으면 네이티브 SDK 어댑터(naverAuthorize)로.
  *    (naver SDK 필수 파라미터인 consumerSecret 자체는 naverAuthorize.ts 안에서만 env 로 읽는다
@@ -19,46 +21,73 @@ import { getOAuthConfig } from '../config/oauthConfig';
  *  - 그 외(google, 또는 위 SDK 전용 env 가 비어 아직 미설정인 kakao·naver) — 기존
  *    getOAuthConfig(provider).clientId 가 있어야 브라우저 OAuth(realAuthorize)로 위임하고,
  *    없으면 빈 값으로 몰래 시도하지 않고 throw 한다(INV-4).
- * 두 SDK 모두 `await import` 로 지연 로드해서만 닿으므로 이 파일의 정적 그래프에 실리지
+ * 세 SDK 모두 `await import` 로 지연 로드해서만 닿으므로 이 파일의 정적 그래프에 실리지
  * 않는다(AC-11 · Hermes 부팅 격리 — expo-auth-session 을 감싼 realAuthorize 와 같은 경계).
  */
 export function makeAuthorize(provider: SocialProvider): Authorize {
-  return async () => {
-    if (!isFakeAuthEnabled()) {
-      if (
-        provider === 'kakao' &&
-        process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY
-      ) {
+  // TRIP-1035 — 갈래를 **여기서 한 번** 정하고, flow 표지와 실제 분기가 같은 값을 쓴다(단일 출처).
+  // 호출 시점 env 를 읽는다 — 모듈 최상위에서 계산하면 import 시점 env 에 묶인다.
+  const route = resolveRoute(provider);
+  const authorize = async (): Promise<AuthorizeResult> => {
+    switch (route) {
+      case 'apple': {
+        const { appleAuthorize } = await import('./appleAuthorize');
+        return appleAuthorize();
+      }
+      case 'kakao-sdk': {
         const { kakaoAuthorize } = await import('./kakaoAuthorize');
         return kakaoAuthorize();
       }
-      if (provider === 'naver' && process.env.EXPO_PUBLIC_NAVER_URL_SCHEME) {
+      case 'naver-sdk': {
         const { naverAuthorize } = await import('./naverAuthorize');
         return naverAuthorize();
       }
-      const config = getOAuthConfig(provider);
-      if (!config.clientId) {
-        throw new Error(
-          `실 OAuth client 미설정: ${provider} clientId 가 비어 있어 인가할 수 없습니다.`
-        );
+      case 'browser': {
+        const config = getOAuthConfig(provider);
+        if (!config.clientId) {
+          throw new Error(
+            `실 OAuth client 미설정: ${provider} clientId 가 비어 있어 인가할 수 없습니다.`
+          );
+        }
+        const { realAuthorize } = await import('./realAuthorize');
+        return realAuthorize(provider, config);
       }
-      const { realAuthorize } = await import('./realAuthorize');
-      return realAuthorize(provider, config);
-    }
-    switch (process.env.EXPO_PUBLIC_AUTH_FAKE_OUTCOME) {
-      case 'cancel':
-        return { type: 'cancel' };
-      case 'dismiss':
-        return { type: 'dismiss' };
-      default:
-        return {
-          type: 'success-code',
-          authorizationCode: 'fake-code',
-          codeVerifier: 'fake-verifier',
-          redirectUri: `trippilot://oauth/${provider}`,
-        };
+      case 'fake':
+        switch (process.env.EXPO_PUBLIC_AUTH_FAKE_OUTCOME) {
+          case 'cancel':
+            return { type: 'cancel' };
+          case 'dismiss':
+            return { type: 'dismiss' };
+          default:
+            return {
+              type: 'success-code',
+              authorizationCode: 'fake-code',
+              codeVerifier: 'fake-verifier',
+              redirectUri: `trippilot://oauth/${provider}`,
+            };
+        }
     }
   };
+  const flow = route === 'browser' || route === 'fake' ? 'code' : 'token';
+  return Object.assign(authorize, { flow } as const);
+}
+
+type Route = 'fake' | 'apple' | 'kakao-sdk' | 'naver-sdk' | 'browser';
+
+function resolveRoute(provider: SocialProvider): Route {
+  if (isFakeAuthEnabled()) {
+    return 'fake';
+  }
+  if (provider === 'apple') {
+    return 'apple';
+  }
+  if (provider === 'kakao' && process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY) {
+    return 'kakao-sdk';
+  }
+  if (provider === 'naver' && process.env.EXPO_PUBLIC_NAVER_URL_SCHEME) {
+    return 'naver-sdk';
+  }
+  return 'browser';
 }
 
 function isFakeAuthEnabled(): boolean {

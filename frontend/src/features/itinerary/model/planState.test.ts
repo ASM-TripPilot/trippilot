@@ -27,6 +27,7 @@ function day(date: string, slotCount: number): ItineraryDaysItem {
       isFixed: false,
       endsNextDay: false,
       hasViolation: false,
+      alternatives: [],
       tags: [],
     })),
   };

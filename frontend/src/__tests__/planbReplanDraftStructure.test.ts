@@ -5,28 +5,30 @@ import fs from 'fs';
 import path from 'path';
 
 /**
- * TRIP-563 · AC-5·AC-8 — i13/i16 재계획안 골격 소스 층 가드(앱을 안 돌리고 소스를 글자로 읽는다).
+ * TRIP-751 · AC-1·5·6·8·11·12·13 — i06 재계획안 소스 층 가드(앱을 안 돌리고 소스를 글자로 읽는다).
+ * (TRIP-563 i13/i16 골격 가드를 재조준 — 두 features 화면이 pages 순수 뷰 하나로 합쳐졌다.)
  *
  * 무엇을 보장하나:
- *  - 🔴 G2 — 신규 4파일(화면 2·페이지·라우트)이 정본 경로에 실재하고, features/planb/ui 재귀 스캔이
- *    신규 2화면을 자동 편입한다(개념 [[소스 스캔 가드의 폴더 전수와 자동 편입]]). 구현 전 → red.
- *  - 🔴 G3 — 신규 2화면에 소요시간 표기(N분·N시간·소요) 0(INV-3·AC-5). 광역 그물은 기존
- *    executionDurationStructure.test.ts(features/{execution,planb}/ui/** 재귀)가 유지 — 이 G3 는
- *    이 사이클 전용 명시 + 파일존재 red 앵커.
- *  - 🔴 G4 — PlanbDraftPage + 신규 2화면이 useApplyReplan·itinerary PUT·codegen apply 훅을 import
- *    하지 않는다(AC-8·INV-U4-05 무쓰기). 광역 봉인은 기존 planbApplyStructure.test.ts G2 가 유지.
- *  - 🔴 G5 — 신규 2화면이 resolveReplanState·useReplanSession·expo-router·react-query 를 모른다
- *    (화면 순수성 = 판정 1회, 화면 재판정 없음).
- *  - 🔴 G6 — draft 라우트가 @/pages/planb-draft·PlanbDraftPage·useLocalSearchParams 로 얇게 위임.
+ *  - G2 새 뷰(`pages/planb-draft/ui/ReplanDraftView.tsx`)·페이지·라우트가 있고, features 옛 두 화면과
+ *    그 테스트는 없다(Seed Q1 — features 는 widgets 셸을 import 할 수 없어 뷰가 pages 로 왔다).
+ *  - G3 뷰·행에 소요시간 표기 0(INV-3).
+ *  - G4 쓰기 경계: **뷰는 쓰기 훅을 모르고, 페이지는 확정 seam(`useApplyReplan`)만 안다**(E1 — 확정
+ *    지점이 i06 페이지로 옮겨졌다. INV-U4-05 가 허용한 유일한 쓰기 지점의 이동이지 봉인 파기가 아니다).
+ *    codegen apply·itinerary PUT 직접 호출은 여전히 0.
+ *  - G5 뷰 순수성: 판정·조회·확정·라우팅·쿼리·네트워크 계층을 모르고 셸 부품을 조립한다.
+ *  - G6 draft 라우트는 페이지로 얇게 위임한다.
+ *  - G7 사라진 표면(옛 근거·이월 안내·배지·3옵션·옛 CTA·230px 지도)의 문자열이 뷰·행·페이지에 0.
+ *  - G8 옛 두 화면을 무는 import·jest.mock·require 0 + 프리뷰는 뷰를 **파일 경로**로 import 한다(배럴
+ *    `@/pages/planb-draft` 는 페이지 → 훅 → shared/api 를 끌고 온다, TRIP-610).
  *
- * 전처리×탐지기 조합(★): 탐지기·전처리를 신규 발명하지 않고 executionDurationStructure·
- * planbApplyStructure 의 **검증된 것 그대로** 재사용한다. 부정 단언은 반드시 stripComments 후 소스에
- * 건다 — implementer 가 "// i13 은 useApplyReplan import 안 함" 같은 주석을 달면 원문엔 그 심볼이 있어
- * 거짓 red 가 나기 때문(G1 이 이 조합을 자가검사, 문제로그 [[2026-07-31 stripComments가 URL의 슬래시를
- * 주석으로 오인]] 계열).
+ * 전처리×탐지기 조합(★): 부정 단언은 전부 stripComments(콜론 예외로 URL 보존) 뒤 소스에 건다 — 구현자가
+ * "옛 휴식 모드 버튼은 지웠다" 같은 주석을 달아도 거짓 red 가 나지 않게. G1 이 그 조합을 실제 문자열로
+ * 잠근다(문제로그 [[2026-07-31 stripComments가 URL의 슬래시를 주석으로 오인]] 계열).
+ * census 는 `from` 절(·jest.mock·require)을 먼저 뽑고 그 경로의 끝 조각을 판정한다(하네스 규칙).
  */
 
 const ROOT = path.resolve('src');
+const SELF = '__tests__/planbReplanDraftStructure.test.ts';
 
 /** 소요시간 **표기** 탐지기(executionDurationStructure 와 동일). HH:mm(09:30)은 숫자 뒤가 `:`라 안 걸림. */
 const DURATION_TEXT = /(\d+\s*분|\d+\s*시간|소요)/;
@@ -38,18 +40,22 @@ function stripComments(source: string): string {
     .replace(/(^|[^:])\/\/.*$/gm, '$1');
 }
 
-/** 소스 파일 재귀 수집(테스트·Glyphs 제외 — executionDurationStructure 관례). 없으면 빈 배열. */
-function listSourceFiles(dir: string): string[] {
+/** 없는 파일은 '' — ENOENT 로 죽으면 assertion diff 가 안 남는다(planbApplyStructure readOne 선례). */
+function readOne(rel: string): string {
+  const full = path.join(ROOT, rel);
+  if (!fs.existsSync(full)) return '';
+  return stripComments(fs.readFileSync(full, 'utf8'));
+}
+
+/** 테스트 포함 src 전수(G8 census — 옛 경로를 무는 목·import 가 남지 않게). */
+function listAllSources(dir: string): string[] {
   if (!fs.existsSync(dir)) return [];
   return fs
     .readdirSync(dir, { withFileTypes: true })
     .flatMap((entry) => {
       const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) return listSourceFiles(full);
-      if (!/\.tsx?$/.test(entry.name)) return [];
-      if (/\.test\.tsx?$/.test(entry.name)) return [];
-      if (/Glyphs\.tsx$/.test(entry.name)) return [];
-      return [full];
+      if (entry.isDirectory()) return listAllSources(full);
+      return /\.tsx?$/.test(entry.name) ? [full] : [];
     })
     .sort();
 }
@@ -58,125 +64,174 @@ function relOf(full: string): string {
   return path.relative(ROOT, full).split(path.sep).join('/');
 }
 
-/** 없는 파일은 '' — ENOENT 로 죽으면 assertion diff 가 안 남는다(planbApplyStructure readOne 선례). */
-function readOne(rel: string): string {
-  const full = path.join(ROOT, rel);
-  if (!fs.existsSync(full)) return '';
-  return stripComments(fs.readFileSync(full, 'utf8'));
+/** ① `from '…'`·`jest.mock('…'`·`require('…')` 의 모듈 경로를 먼저 뽑는다. */
+const IMPORT_SPEC =
+  /(?:\bfrom\s+|\bjest\.mock\(\s*|\brequire\(\s*)['"]([^'"]+)['"]/g;
+
+function importSpecs(source: string): string[] {
+  return [...stripComments(source).matchAll(IMPORT_SPEC)].map((m) => m[1]);
 }
 
-const UI_DIR = 'features/planb/ui';
-// TRIP-810 재조준 — ReplanSlotRow 는 이번 사이클에 features/planb/ui 에서 **삭제**되고 정본은
-// entities/itinerary-slot/ui 로 이관됐다(809 이사, 810 shim 삭제). NEW_SCREENS/NEW_FILES 에서 빼지
-// 않으면 G2 의 existsSync·재귀 편입 단언이 삭제 후 stale red 가 된다(폴더 재귀 모집단이 삭제로
-// 실제로 줄어드는 809 함정, 02a ★4). ReplanSlotRow 의 INV-3 그물은 entitiesItinerarySlotStructure G3
-// 가 지고, "shim 부활 금지"는 entitiesItinerarySlotConsumers 파일 부재 describe 가 진다.
-const NEW_SCREENS = [
-  'features/planb/ui/ReplanDraftScreen.tsx',
-  'features/planb/ui/NoAlternativeScreen.tsx',
-];
+const DELETED_MODULES = ['ReplanDraftScreen', 'NoAlternativeScreen'];
+
+/** ② 그 경로의 마지막 조각이 삭제 모듈 이름과 **정확히** 같은가. */
+function isDeletedModule(spec: string): boolean {
+  return DELETED_MODULES.includes(spec.split('/').pop() ?? '');
+}
+
+const VIEW_REL = 'pages/planb-draft/ui/ReplanDraftView.tsx';
+const ROW_REL = 'entities/itinerary-slot/ui/ReplanSlotRow.tsx';
 const PAGE_REL = 'pages/planb-draft/ui/PlanbDraftPage.tsx';
 const ROUTE_REL = 'app/trips/[tripId]/planb/draft.tsx';
-const NEW_FILES = [...NEW_SCREENS, PAGE_REL, ROUTE_REL];
+const PREVIEW_REL = 'app/_dev/preview.tsx';
+const DELETED_FILES = [
+  'features/planb/ui/ReplanDraftScreen.tsx',
+  'features/planb/ui/ReplanDraftScreen.test.tsx',
+  'features/planb/ui/NoAlternativeScreen.tsx',
+  'features/planb/ui/NoAlternativeScreen.test.tsx',
+];
 
-const WRITE_HOOKS = [
-  'useApplyReplan',
+const CODEGEN_WRITES = [
   'usePutTripsTripIdItinerary',
   'usePostTripsTripIdReplanSessionsSessionIdApply',
 ];
+const APPLY_SEAM = 'useApplyReplan';
+
+/** 사라진 표면 — i13 근거·이월·배지·옛 CTA·230px 지도, i16 3옵션(AC-5·AC-6·AC-8). */
+const REMOVED_SURFACE = [
+  '이대로 적용',
+  '직접 고르기',
+  'planb-draft-reason',
+  'planb-draft-carryover',
+  '다음으로 미룬',
+  '방문함',
+  '변경됨',
+  'h-[230px]',
+  'planb-noalt-skip',
+  'planb-noalt-rest',
+  '휴식 모드',
+  '건너뛰기',
+];
 
 describe('G1 · 전처리×탐지기 자가검사 (★ 조합)', () => {
-  it('주석 속 소요시간·금칙심볼은 걷히고, 코드 시각·URL·실배선 심볼은 살아남는다', () => {
+  it('주석(줄·JSX 블록) 속 삭제 표면·금칙 심볼은 걷히고, 코드 className·URL·라벨·실배선은 살아남는다', () => {
     const sample = [
-      '// INV-3 · 소요시간 30분 표기 안 함.',
-      '// i13 은 useApplyReplan 을 import 하지 않는다.',
-      "const url = 'https://figma.com/design/2288:2367';",
-      "const meta = '09:30–10:50 · 도보 1.3km';",
-      'const s = useReplanSession(tripId, sessionId);',
+      '// 옛 i16 의 휴식 모드·건너뛰기 버튼은 지웠다. 소요시간 30분 표기 안 함.',
+      '// 뷰는 useApplyReplan 을 import 하지 않는다.',
+      '{/* 옛 planb-draft-carryover 자리 */}',
+      '<View className="h-[230px] w-full" />',
+      "const url = 'https://x.dev/a';",
+      "const label = '조건 바꿔 다시 짜기';",
+      "const time = '15:00–16:30';",
+      'const apply = useApplyReplan();',
     ].join('\n');
     const stripped = stripComments(sample);
 
-    // 주석 걷힘(카운트 부풀림·거짓 red 방지).
+    expect(stripped).not.toContain('휴식 모드');
+    expect(stripped).not.toContain('건너뛰기');
+    expect(stripped).not.toContain('planb-draft-carryover');
     expect(stripped).not.toContain('30분');
-    expect(stripped).not.toContain('useApplyReplan');
-    // URL·시각·실배선 심볼 보존(거짓 통과·거짓 red 방지).
-    expect(stripped).toContain('https://figma.com/design/2288:2367');
-    expect(stripped).toContain('09:30–10:50');
-    expect(stripped).toContain('useReplanSession');
-    // 탐지기 방향.
+    expect(stripped).not.toContain('import 하지 않는다');
+    expect(stripped).toContain('h-[230px]');
+    expect(stripped).toContain('https://x.dev/a');
+    expect(stripped).toContain('조건 바꿔 다시 짜기');
+    expect(stripped).toContain('const apply = useApplyReplan();');
     expect(DURATION_TEXT.test(stripped)).toBe(false);
     expect(DURATION_TEXT.test('여유 1시간 20분')).toBe(true);
+    // Figma 대안 없음 부제의 앞 절은 소요시간 표기가 아니다(★15).
+    expect(DURATION_TEXT.test('17시 이후 실내 후보가 근처에 없어요')).toBe(
+      false
+    );
+  });
+
+  it('census — 주석 속 import 는 걷히고, 실제 import·jest.mock 은 잡히며, 이름이 비슷한 모듈은 판정되지 않는다', () => {
+    const sample = [
+      "// import { ReplanDraftScreen } from '@/features/planb/ui/ReplanDraftScreen';",
+      "const url = 'https://x.dev/NoAlternativeScreen';",
+      "import { ReplanDraftScreen } from './ReplanDraftScreen';",
+      "jest.mock('@/features/planb/ui/NoAlternativeScreen', () => ({}));",
+      "import { ReplanDraftView } from '@/pages/planb-draft/ui/ReplanDraftView';",
+      "import { Like } from './ReplanDraftScreenLike';",
+    ].join('\n');
+
+    const specs = importSpecs(sample);
+    expect(specs).not.toContain('@/features/planb/ui/ReplanDraftScreen');
+    expect(stripComments(sample)).toContain(
+      'https://x.dev/NoAlternativeScreen'
+    );
+    expect(specs.filter(isDeletedModule)).toEqual([
+      './ReplanDraftScreen',
+      '@/features/planb/ui/NoAlternativeScreen',
+    ]);
+    expect(specs).toContain('@/pages/planb-draft/ui/ReplanDraftView');
+    expect(isDeletedModule('./ReplanDraftScreenLike')).toBe(false);
   });
 });
 
-describe('🔴 G2 · 신규 파일 실재 + features/planb/ui 재귀 편입', () => {
-  it('신규 4파일이 정본 경로에 있다', () => {
-    for (const rel of NEW_FILES) {
+describe('🔴 G2 · AC-1 — 새 뷰가 pages 에 있고 features 옛 두 화면은 없다', () => {
+  it('뷰·행·페이지·라우트 실재 + 옛 두 화면과 그 테스트 4파일 부재', () => {
+    for (const rel of [VIEW_REL, ROW_REL, PAGE_REL, ROUTE_REL]) {
       expect(fs.existsSync(path.join(ROOT, rel))).toBe(true);
     }
-  });
-
-  it('features/planb/ui 재귀 스캔이 신규 2화면을 포함한다(자동 편입)', () => {
-    const scanned = listSourceFiles(path.join(ROOT, UI_DIR)).map(relOf);
-    for (const rel of NEW_SCREENS) {
-      expect(scanned).toContain(rel);
-    }
+    const remaining = DELETED_FILES.filter((rel) =>
+      fs.existsSync(path.join(ROOT, rel))
+    );
+    expect(remaining).toEqual([]);
   });
 });
 
-describe('🔴 G3 · AC-5 — 신규 2화면에 소요시간 표기 0 (INV-3)', () => {
-  it('두 화면(주석 제외)에 분·시간·소요 표기가 없다 + 긍정 짝(파일 실제로 읽음)', () => {
-    const offenders = NEW_SCREENS.filter((rel) =>
-      DURATION_TEXT.test(readOne(rel))
-    );
-    expect(offenders).toEqual([]);
-    // 긍정 짝 — ReplanSlotRow 가 슬롯 표면을 그린다(빈 파일 공허 통과 방지). 정본은 entities
-    // (809 바이트 이사). TRIP-810 에서 옛 자리 재수출 shim(features/planb/ui/ReplanSlotRow.tsx)이
-    // 삭제됐으므로 NEW_SCREENS 에서도 뺐다(위 재조준 주석·02a ★4) — 이 긍정 짝은 entities 정본을 계속
-    // 겨눠 슬롯 표면 실재를 증명한다(808 「선재 가드 재조준(코드 이동 추적)」).
-    expect(readOne('entities/itinerary-slot/ui/ReplanSlotRow.tsx')).toContain(
-      'planb-draft-slot'
-    );
+describe('🔴 G3 · AC-13 — 뷰·행에 소요시간 표기 0 (INV-3)', () => {
+  it('두 파일(주석 제외)에 분·시간·소요 표기가 없다 + 짝(파일을 실제로 읽음)', () => {
+    const view = readOne(VIEW_REL);
+    const row = readOne(ROW_REL);
+    expect(view).toContain('MapSheetShell');
+    expect(row).toContain('planb-draft-slot');
+
+    expect(DURATION_TEXT.test(view)).toBe(false);
+    expect(DURATION_TEXT.test(row)).toBe(false);
   });
 });
 
-describe('🔴 G4 · AC-8 — 무쓰기(useApplyReplan·itinerary PUT·codegen apply 0)', () => {
-  it('PlanbDraftPage + 신규 2화면이 쓰기 훅을 import 하지 않는다 + 긍정 짝', () => {
-    const targets = [PAGE_REL, ...NEW_SCREENS];
-    for (const rel of targets) {
-      const source = readOne(rel);
-      for (const hook of WRITE_HOOKS) {
-        expect(source).not.toContain(hook);
-      }
-    }
-    // 긍정 짝 — 페이지는 실제로 세션 조회·판정을 배선한다(파일 읽음·공허 통과 방지).
+describe('🔴 G4 · E1 · BR-U4-28 — 뷰는 쓰기를 모르고, 페이지는 확정 seam 만 안다', () => {
+  it('뷰에 seam·codegen 쓰기 0, 페이지에 seam 있음·codegen 쓰기 0 + 조회·판정 배선', () => {
+    const view = readOne(VIEW_REL);
     const page = readOne(PAGE_REL);
+    expect(view).toContain('MapSheetShell');
+
+    for (const hook of [APPLY_SEAM, ...CODEGEN_WRITES]) {
+      expect(view).not.toContain(hook);
+    }
+    expect(page).toContain(APPLY_SEAM);
+    for (const hook of CODEGEN_WRITES) {
+      expect(page).not.toContain(hook);
+    }
     expect(page).toContain('useReplanSession');
     expect(page).toContain('resolveReplanState');
   });
 });
 
-describe('🔴 G5 · 화면 순수성 + 판정 1회', () => {
-  it('신규 2화면이 판정·조회·라우팅을 모른다(재판정 없음) + 긍정 짝(자기 testID 보유)', () => {
+describe('🔴 G5 · AC-1 — 뷰 순수성(판정·조회·확정·라우팅·네트워크 0) + 셸 조립', () => {
+  it('뷰가 금칙 심볼을 모르고, 셸·헤더·커넥터·행을 조립한다', () => {
+    const view = readOne(VIEW_REL);
     const FORBIDDEN = [
       'resolveReplanState',
       'useReplanSession',
+      'useApplyReplan',
       'expo-router',
       '@tanstack/react-query',
+      '@/shared/api',
     ];
-    for (const rel of NEW_SCREENS) {
-      const source = readOne(rel);
-      for (const token of FORBIDDEN) {
-        expect(source).not.toContain(token);
-      }
+    for (const token of FORBIDDEN) {
+      expect(view).not.toContain(token);
     }
-    // 긍정 짝 — 각 화면이 자기 표면을 그린다.
-    expect(readOne('features/planb/ui/ReplanDraftScreen.tsx')).toContain(
-      'planb-draft'
-    );
-    expect(readOne('features/planb/ui/NoAlternativeScreen.tsx')).toContain(
-      'planb-noalt'
-    );
+    for (const part of [
+      '<MapSheetShell',
+      'SheetHeader',
+      'DistanceConnector',
+      'ReplanSlotRow',
+    ]) {
+      expect(view).toContain(part);
+    }
   });
 });
 
@@ -186,5 +241,52 @@ describe('🔴 G6 · 라우트 골격(얇은 위임)', () => {
     expect(route).toContain('@/pages/planb-draft');
     expect(route).toContain('PlanbDraftPage');
     expect(route).toContain('useLocalSearchParams');
+  });
+});
+
+describe('🔴 G7 · AC-5·AC-6·AC-8 — 사라진 표면의 문자열이 뷰·행·페이지에 0', () => {
+  it('세 파일(주석 제외)에 삭제 표면 12종이 없다 + 짝(각 파일이 자기 표면을 그린다)', () => {
+    const sources = {
+      [VIEW_REL]: readOne(VIEW_REL),
+      [ROW_REL]: readOne(ROW_REL),
+      [PAGE_REL]: readOne(PAGE_REL),
+    };
+    expect(sources[VIEW_REL]).toContain('planb-draft-notice');
+    expect(sources[ROW_REL]).toContain('planb-draft-slot');
+    expect(sources[PAGE_REL]).toContain('ReplanDraftView');
+
+    const offenders = Object.entries(sources).flatMap(([rel, source]) =>
+      REMOVED_SURFACE.filter((needle) => source.includes(needle)).map(
+        (needle) => `${rel} ⊃ ${needle}`
+      )
+    );
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe('🔴 G8 · AC-1·AC-12 — 옛 두 화면 census + 프리뷰는 뷰를 파일 경로로 import', () => {
+  it('src 전수(테스트 포함, 이 파일 제외)에서 옛 두 화면을 무는 import·jest.mock·require 가 0건이다', () => {
+    const files = listAllSources(ROOT);
+    expect(files.length).toBeGreaterThan(100);
+    expect(
+      importSpecs(fs.readFileSync(path.join(ROOT, PAGE_REL), 'utf8')).length
+    ).toBeGreaterThan(0);
+
+    const offenders = files
+      .filter((full) => relOf(full) !== SELF)
+      .flatMap((full) =>
+        importSpecs(fs.readFileSync(full, 'utf8'))
+          .filter(isDeletedModule)
+          .map((spec) => `${relOf(full)} → ${spec}`)
+      );
+    expect(offenders).toEqual([]);
+  });
+
+  it('preview.tsx 는 @/pages/planb-draft/ui/ReplanDraftView 를 import 하고 배럴 @/pages/planb-draft 는 import 하지 않는다', () => {
+    const specs = importSpecs(
+      fs.readFileSync(path.join(ROOT, PREVIEW_REL), 'utf8')
+    );
+    expect(specs).toContain('@/pages/planb-draft/ui/ReplanDraftView');
+    expect(specs).not.toContain('@/pages/planb-draft');
   });
 });

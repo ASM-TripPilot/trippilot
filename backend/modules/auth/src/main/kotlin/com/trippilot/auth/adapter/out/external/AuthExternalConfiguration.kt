@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.http.client.SimpleClientHttpRequestFactory
 import org.springframework.web.client.RestClient
+import org.springframework.web.client.RestTemplate
 import java.time.Duration
 
 /** 외부 어댑터 설정 — 소셜 제공자·리프레시 토큰 프로퍼티 바인딩 + OAuth 클라이언트용 RestClient.Builder. */
@@ -37,6 +38,25 @@ class AuthExternalConfiguration {
                     setReadTimeout(readTimeout)
                 },
             )
+
+    /**
+     * Apple JWKS 조회 전용(TRIP-858). `NimbusJwtDecoder` 는 `RestOperations` 만 받으므로 위 빌더를 못 쓴다.
+     *
+     * **여기에도 타임아웃이 붙어 있다.** 기본 `RestTemplate` 은 타임아웃이 없어서 Apple 이 죽지 않고
+     * 느려지기만 해도 애플 로그인 스레드가 무한히 물린다 — 위 빌더와 같은 이유, 같은 상수다.
+     */
+    @Bean
+    @ConditionalOnMissingBean(name = ["appleJwksRestTemplate"])
+    fun appleJwksRestTemplate(): RestTemplate = appleJwksRestTemplate(CONNECT_TIMEOUT, READ_TIMEOUT)
+
+    /** 생성 경로 — `@Bean` 은 운영 상수로, 테스트는 짧은 값으로 **같은 코드**를 태운다. */
+    internal fun appleJwksRestTemplate(connectTimeout: Duration, readTimeout: Duration): RestTemplate =
+        RestTemplate().apply {
+            requestFactory = SimpleClientHttpRequestFactory().apply {
+                setConnectTimeout(connectTimeout)
+                setReadTimeout(readTimeout)
+            }
+        }
 
     companion object {
         /** 연결까지 3초 — 붙지 않는 IdP 는 빨리 포기한다. */

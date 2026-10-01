@@ -4,7 +4,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { SavedStayCardVM } from '@/entities/stay/model';
 import { SavedStayCard } from '@/entities/stay/ui/SavedStayCard';
+import { CollageEmptyState } from '@/shared/ui/CollageEmptyState';
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { Skeleton } from '@/shared/ui/Skeleton';
 
 import {
   BackChevronGlyph,
@@ -49,7 +51,7 @@ export interface SavedStayListScreenProps {
   isGuest?: boolean;
   /** 카드 press → 페이지가 합성·push. 화면은 id 만 올린다(합성이 stayKey 를 쓰므로 페이지 몫). */
   onPressCard?: (savedStayId: string) => void;
-  /** 하단 "다른 숙소를 거점으로 지정" → e05 등록. */
+  /** 하단 "숙소 직접 등록" → e05 등록. */
   onPressRegister?: () => void;
   /** empty CTA "숙소 둘러보기" → 숙소 탐색. */
   onPressBrowse?: () => void;
@@ -60,17 +62,6 @@ export interface SavedStayListScreenProps {
   /** 앱바 뒤로. */
   onBack?: () => void;
 }
-
-/** Figma 카드 그림자 `0 4 16 rgba(0,0,0,.08)` — className 으로 못 줘 style prop 으로 옮긴다.
- * shadowColor '#000000' 은 raw-hex 가드의 TOKENIZED_HEX 밖이라 무제재(HomeScreen softCardShadow
- * 선례). */
-const cardShadow = {
-  shadowColor: '#000000',
-  shadowOffset: { width: 0, height: 4 },
-  shadowOpacity: 0.08,
-  shadowRadius: 16,
-  elevation: 3,
-};
 
 type ScreenFace = 'guest' | 'loading' | 'error' | 'results' | 'empty';
 
@@ -128,23 +119,17 @@ function ResultsFace({
         {savedStays.map((vm) => (
           // 저장 목록이라 항상 담김(selected 고정). 담김 하트는 표시용이라 카드가 소유하지 않고
           // trailing 으로 주입한다(카드는 하트 불가지) — 담김은 색이 아니라 accessibilityState +
-          // 별도 글리프 testID 로 잰다(★4·★5). 사진·지역·가격은 계약 무라 카드가 그리지 않는다.
+          // 별도 글리프 testID 로 잰다(★4·★5). 거점·지역·가격은 계약 공백이라 VM 값 그대로 흘리고
+          // (실앱은 미설정 → 카드가 이름만), 날짜라벨은 e04 에서 뗀다(F-10 — subtitle 미전달).
           <SavedStayCard
             key={vm.savedStayId}
             testID={`saved-stay-card-${vm.savedStayId}`}
             name={vm.name}
             layout="vertical"
             selected
-            subtitle={
-              vm.dateLabel ? (
-                <Text
-                  testID={`saved-stay-date-${vm.savedStayId}`}
-                  className="font-noto text-label text-muted"
-                >
-                  {vm.dateLabel}
-                </Text>
-              ) : undefined
-            }
+            isBase={vm.isBase}
+            region={vm.region}
+            priceLabel={vm.priceLabel}
             trailing={
               <HeartFilledGlyph
                 size={27}
@@ -156,7 +141,7 @@ function ResultsFace({
         ))}
       </ScrollView>
 
-      <View className="w-full border-t border-hairline bg-canvas px-lg pb-lg pt-md">
+      <View className="w-full bg-canvas px-lg pb-lg pt-md">
         <Pressable
           testID="saved-stay-register"
           accessibilityRole="button"
@@ -165,26 +150,10 @@ function ResultsFace({
         >
           <MapPinGlyph size={19} tone="ink" />
           <Text className="font-noto-bold text-card-title font-bold text-ink">
-            다른 숙소를 거점으로 지정
+            숙소 직접 등록
           </Text>
         </Pressable>
       </View>
-    </View>
-  );
-}
-
-/** empty 삽화(01b Q5 단순화 SVG) — Figma 의 사진 3장 겹침 콜라주를 라운드 사각 3개 + 하트 원으로
- * 재현한다. 실사진은 자산 라이선스 미정이라 벡터로 대체(INV-1 정신). */
-function EmptyCluster(): ReactElement {
-  return (
-    <View className="h-[162px] w-[220px] flex-row items-center justify-center gap-xs">
-      <View className="h-[118px] w-[70px] rounded-card bg-surface-strong" />
-      <View className="h-[162px] w-[92px] items-center justify-center rounded-card border-[3px] border-canvas bg-surface-soft">
-        <View className="h-[52px] w-[52px] items-center justify-center rounded-pill bg-canvas">
-          <HeartFilledGlyph size={26} />
-        </View>
-      </View>
-      <View className="h-[118px] w-[70px] rounded-card bg-surface-strong" />
     </View>
   );
 }
@@ -194,32 +163,19 @@ function EmptyFace({
 }: {
   onPressBrowse?: () => void;
 }): ReactElement {
+  // TRIP-1050 — d02 와 같은 공통 틀. 이 화면 몫은 문구·흰 돋보기·testID 뿐이다.
   return (
-    <View
+    <CollageEmptyState
       testID="saved-stay-empty"
-      className="w-full flex-1 items-center justify-center px-[28px]"
-    >
-      <EmptyCluster />
-      <Text className="mt-2xl text-center font-noto-bold text-[20px] font-bold text-ink">
-        마음에 드는 숙소를 저장해 보세요
-      </Text>
-      <Text className="mt-[10px] text-center font-noto text-label leading-[21px] text-muted">
-        인기 숙소를 둘러보고 ♥로 저장하면{'\n'}여기에 모아 바로 거점으로 쓸 수
-        있어요
-      </Text>
-      <Pressable
-        testID="saved-stay-browse"
-        accessibilityRole="button"
-        onPress={onPressBrowse}
-        style={cardShadow}
-        className="mt-2xl h-[52px] flex-row items-center justify-center gap-sm rounded-[14px] bg-primary px-[28px]"
-      >
-        <SearchGlyph size={19} />
-        <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-          숙소 둘러보기
-        </Text>
-      </Pressable>
-    </View>
+      title="마음에 드는 숙소를 저장해 보세요"
+      description={
+        '인기 숙소를 둘러보고 ♥로 저장하면\n여기에 모아 바로 거점으로 쓸 수 있어요'
+      }
+      ctaTestID="saved-stay-browse"
+      ctaLabel="숙소 둘러보기"
+      ctaIcon={<SearchGlyph size={19} />}
+      onPressCta={onPressBrowse}
+    />
   );
 }
 
@@ -231,8 +187,8 @@ function LoadingFace(): ReactElement {
       </Text>
       {[0, 1].map((index) => (
         <View key={index} className="gap-md">
-          <View className="h-[178px] w-full rounded-card bg-surface-strong" />
-          <View className="h-[15px] w-2/3 rounded-thumb bg-hairline" />
+          <Skeleton className="h-[178px] w-full rounded-card bg-surface-strong" />
+          <Skeleton className="h-[15px] w-2/3 rounded-thumb bg-hairline" />
         </View>
       ))}
     </View>

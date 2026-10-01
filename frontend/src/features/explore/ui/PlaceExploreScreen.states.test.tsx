@@ -21,8 +21,9 @@ import {
  * 무엇을 보장하나: `state` 판별 유니온 하나로 화면이 loading·empty·filter-zero·error·results 를
  * 그리고(판정은 페이지가 끝낸다 — 화면은 다시 판정하지 않는다), 0건을 만든 조건을 **문구에
  * 지목**하며(BR-U1-16 취지), 담기 실패가 화면에 드러나고(INV-4), 응답 대기 중인 하트는 눌리지
- * 않는다(01b Seed Q7 ⓑ). 그리고 **새 prop 을 하나도 안 넘긴 렌더가 TRIP-221 default 화면
- * 그대로**여야 한다(AC-G7).
+ * 않는다(01b Seed Q7 ⓑ). 그리고 **TRIP-708 새 default 렌더**(CtaBar 제거 → 우하단 FAB 2단 +
+ * 필터 버튼 + 정렬 칩 3개)에서 누를 수 있는 것이 정확히 **17개**(TRIP-1020 카드 버튼화 뒤 22개, TRIP-1023 지역 칩 뒤 23개)여야
+ * 하고, FAB 는 상태와 무관하게 상시 뜬다.
  *
  * 왜 파일을 새로 쓰나: `PlaceExploreScreen.test.tsx` 는 게이트① 해시가 동결된 TRIP-221
  * 산출물이라 한 글자도 못 고친다(`StaySearchScreen.test.tsx` → `.states.test.tsx` 선례).
@@ -68,6 +69,19 @@ const PLACES: Place[] = [
 ];
 
 const SAVED = ['p1', 'p5'];
+
+/** 카테고리 칩 code(전체 + PoiCategory 7종 선언 순) — 누를 수 있는 것 완전일치 목록의 재료.
+ * `PlaceExploreScreen.tsx`의 `CATEGORY_CODES`/`CATEGORY_CHIPS`와 같은 값이라 8개가 안 바뀐다. */
+const CATEGORY_CODES = [
+  'all',
+  'attraction',
+  'food',
+  'cafe',
+  'nightview',
+  'nature',
+  'shopping',
+  'culture',
+];
 
 /** 동결 파일의 렌더 헬퍼와 **완전히 같은 8개 prop** 만 넘긴다 — 새 prop 은 하나도 안 준다.
  * AC-G7("37케이스 무회귀")의 재현 장치라 이 목록을 늘리면 안 된다. */
@@ -256,6 +270,111 @@ describe('PlaceExploreScreen — filter-zero (AC-6 · BR-U1-16 취지 · 01b See
   });
 });
 
+/** filter-zero 안내 안에서 누를 수 있는 것의 testID(정렬) — "이 얼굴의 버튼은 정확히 이것뿐"을
+ * 완전일치로 잰다. 안내 서브트리로 좁혀 FAB·칩·필터 버튼이 섞이지 않게 한다. */
+function filterZeroButtonIds(): string[] {
+  return within(screen.getByTestId('explore-places-filterzero'))
+    .getAllByRole('button')
+    .map((node) => String(node.props.testID))
+    .sort();
+}
+
+// TRIP-1019 #027 — 검색어와 카테고리가 **둘 다** 걸려 0건이면, 지목한 하나만 푸는 기존 버튼 옆에
+// 두 조건을 한 번에 푸는 두 번째 버튼(`-clear-all`, "조건 모두 해제", e02 의 link 선례)을 준다.
+// 제목은 지금처럼 검색어 하나를 지목한다(01b Q6 ⓐ — 기존 filter-zero 테스트 무변경).
+// 판정 재료는 화면이 이미 받는 `searchText`·`selectedCategory` 두 prop 이다(상태 유니온 무변경).
+describe('🔴 TRIP-1019 #027 · filter-zero 에서 두 조건 모두 해제 (BR-U1-16 취지 · 01b Q6)', () => {
+  it('검색어·카테고리가 둘 다 걸려 있으면 "조건 모두 해제" 가 지목 해제 버튼 옆에 생기고, 누르면 onClearAllFilters 만 오른다', () => {
+    const onClearAllFilters = jest.fn();
+    const handlers = renderState(
+      { kind: 'filter-zero', blame: 'search' },
+      { searchText: '경복궁', selectedCategory: '카페', onClearAllFilters }
+    );
+
+    const notice = screen.getByTestId('explore-places-filterzero');
+    // 제목은 그대로 검색어 하나를 지목한다(Q6 ⓐ).
+    expect(
+      within(notice).getByText('‘경복궁’ 때문에 0건이에요')
+    ).toBeOnTheScreen();
+
+    // 이 얼굴의 버튼은 정확히 두 개 — 지목 해제(기존) + 모두 해제(신규).
+    expect(filterZeroButtonIds()).toEqual([
+      'explore-places-filterzero-clear',
+      'explore-places-filterzero-clear-all',
+    ]);
+    expect(
+      within(screen.getByTestId('explore-places-filterzero-clear')).getByText(
+        '검색어 지우기'
+      )
+    ).toBeOnTheScreen();
+
+    const clearAll = screen.getByTestId('explore-places-filterzero-clear-all');
+    const label = within(clearAll).getByText('조건 모두 해제');
+    // e02 선례의 두 번째 버튼 위계(link — 테두리 없는 primary 글자). outline 이면 글자가 text-ink 다.
+    expect(String(label.props.className).split(/\s+/)).toContain(
+      'text-primary'
+    );
+
+    fireEvent.press(clearAll);
+    // 두 콜백이 섞이면 "하나만 풀기"와 "둘 다 풀기"가 같은 일을 하게 된다.
+    expect(onClearAllFilters).toHaveBeenCalledTimes(1);
+    expect(handlers.onClearFilter).not.toHaveBeenCalled();
+  });
+
+  it('검색어만 걸려 0건이면 풀 것이 하나라 "조건 모두 해제" 는 없다', () => {
+    renderState(
+      { kind: 'filter-zero', blame: 'search' },
+      {
+        searchText: '경복궁',
+        selectedCategory: null,
+        onClearAllFilters: jest.fn(),
+      }
+    );
+
+    // 긍정 앵커 — 안내와 지목 해제 버튼은 떠 있다(부재 단언이 빈 화면으로 통과하지 않게).
+    expect(filterZeroButtonIds()).toEqual(['explore-places-filterzero-clear']);
+    expect(
+      screen.queryByTestId('explore-places-filterzero-clear-all')
+    ).toBeNull();
+    expect(screen.queryAllByText('조건 모두 해제')).toHaveLength(0);
+  });
+
+  it('카테고리만 걸려 0건이면 "조건 모두 해제" 는 없다', () => {
+    renderState(
+      { kind: 'filter-zero', blame: 'category' },
+      { searchText: '', selectedCategory: '카페', onClearAllFilters: jest.fn() }
+    );
+
+    expect(filterZeroButtonIds()).toEqual(['explore-places-filterzero-clear']);
+    expect(
+      within(screen.getByTestId('explore-places-filterzero-clear')).getByText(
+        '‘카페’ 필터 해제'
+      )
+    ).toBeOnTheScreen();
+    expect(
+      screen.queryByTestId('explore-places-filterzero-clear-all')
+    ).toBeNull();
+  });
+
+  it('검색어가 공백뿐이면 조건이 아니다 — 카테고리 하나만 걸린 것으로 보고 "조건 모두 해제" 를 두지 않는다', () => {
+    // 페이지는 `searchText.trim()` 으로 hasQuery 를 판정한다(공백 검색어 = 검색 조건 없음 → blame
+    // category). 화면이 trim 없이 `searchText !== ''` 로 보면 여기서 버튼이 하나 더 생겨 red.
+    renderState(
+      { kind: 'filter-zero', blame: 'category' },
+      {
+        searchText: '   ',
+        selectedCategory: '카페',
+        onClearAllFilters: jest.fn(),
+      }
+    );
+
+    expect(filterZeroButtonIds()).toEqual(['explore-places-filterzero-clear']);
+    expect(
+      screen.queryByTestId('explore-places-filterzero-clear-all')
+    ).toBeNull();
+  });
+});
+
 describe('PlaceExploreScreen — error (AC-7 · INV-4)', () => {
   it('에러 안내와 재시도를 그리고, 빈 목록으로 위장하지 않는다', () => {
     const handlers = renderState({ kind: 'error' });
@@ -290,8 +409,8 @@ describe('PlaceExploreScreen — error (AC-7 · INV-4)', () => {
   });
 });
 
-describe('PlaceExploreScreen — results 무회귀 (AC-8 · AC-G7)', () => {
-  it('새 prop 을 하나도 안 넘기면 TRIP-221 default 화면 그대로다', () => {
+describe('PlaceExploreScreen — 새 default 렌더 · 누를 수 있는 것 23개 (AC-1 · AC-2 · AC-3 · TRIP-1020 AC-B4 · TRIP-1023 AC-B5)', () => {
+  it('새 콜백을 하나도 안 넘겨도 FAB 2개·필터·지역 칩이 뜨고, 누를 수 있는 것은 정확히 23개다', () => {
     renderAsFrozenHelper();
 
     // ① 카드는 그대로 5장이고, ② 상태 안내·배너는 하나도 안 나온다.
@@ -299,14 +418,38 @@ describe('PlaceExploreScreen — results 무회귀 (AC-8 · AC-G7)', () => {
     expect(visibleNotices()).toEqual([]);
     expect(screen.queryByTestId('explore-places-saveerror')).toBeNull();
 
-    // ③ 누를 수 있는 것의 개수가 15 그대로다(뒤로 1 + 칩 8 + 하트 5 + CTA 1).
-    //    동결 테스트가 이 목록을 **완전일치**로 비교하므로, 새 컨트롤이 default 렌더에
-    //    하나라도 새면 거기서 즉시 red 다. 이 단언은 그 사고를 이 파일에서 먼저 잡는다.
-    expect(screen.getAllByRole('button')).toHaveLength(15);
+    // ③ 누를 수 있는 것 = 뒤로(1) + 칩 8 + 카드 5 + 하트 5 + ♥FAB + ＋FAB + 필터 + 지역 칩 = 23
+    //    (TRIP-1020 이전 17 — 카드 루트가 role=button 이 되어 5장이 더해졌다. TRIP-1023 칸 B 가
+    //    상시 지역 칩을 더했다 — 이 헬퍼는 regionNames 를 안 넘기므로 칩은 "전국" 으로 뜬다).
+    //    renderAsFrozenHelper 는 onPressSavedPlaces·onPressFilter 를 **안 넘긴다** — 그래도
+    //    두 FAB·필터가 떠야 한다(콜백 옵셔널·무동작 허용, Figma 상시 노출). 이 완전일치 목록은
+    //    FAB 하나라도 빠지면(뮤테이션) 어긋나 red 다 — 현 15 에서 CTA(-1)·FAB(+2)·필터(+1)로
+    //    직접 델타를 세어 확정. BottomTabBar 는 페이지가 그려 여기 개수에 안 든다.
+    expect(
+      screen
+        .getAllByRole('button')
+        .map((node) => String(node.props.testID))
+        .sort()
+    ).toEqual(
+      [
+        'explore-places-back',
+        ...CATEGORY_CODES.map((code) => `explore-places-category-${code}`),
+        ...['p1', 'p2', 'p3', 'p4', 'p5'].map(
+          (id) => `explore-places-card-${id}`
+        ),
+        ...['p1', 'p2', 'p3', 'p4', 'p5'].map(
+          (id) => `explore-places-save-${id}`
+        ),
+        'explore-places-saved-fab',
+        'explore-places-create-fab',
+        'explore-places-filter',
+        'explore-places-region',
+      ].sort()
+    );
   });
 });
 
-describe('PlaceExploreScreen — 상태와 무관하게 CTA 를 유지한다 (01b Seed Q10 · BR-U1-09)', () => {
+describe('PlaceExploreScreen — 상태와 무관하게 FAB 2단을 유지한다 (01b Seed 3-a)', () => {
   const STATES: { name: string; state: PlaceListState; noticeId: string }[] = [
     {
       name: 'loading',
@@ -326,18 +469,65 @@ describe('PlaceExploreScreen — 상태와 무관하게 CTA 를 유지한다 (01
   ];
 
   it.each(STATES)(
-    '$name 안내와 담은 개수 CTA 가 함께 보인다',
+    '$name 안내와 함께 ♥·＋ FAB 가 남는다',
     ({ state, noticeId }) => {
       renderState(state);
 
-      // 짝을 같은 it 에 둔다 — 안내가 실제로 그려진 화면에서 CTA 가 남아야 의미가 있다.
-      // 안내만 보고 CTA 를 안 보면 "둘이 같이 설 수 있는가"를 아무도 안 잰다.
+      // 짝을 같은 it 에 둔다 — 안내가 실제로 그려진 화면에서 FAB 가 남아야 의미가 있다.
       expect(screen.getByTestId(noticeId)).toBeOnTheScreen();
 
-      // BR-U1-09 는 "담은 곳 ≥ 1 이면 탐색 계열 **모든 화면** 하단에 CTA" 다. 담은 개수는
-      // 목록 조회 실패와 무관하므로 조회가 실패해도 사라지면 안 된다(01b Seed Q10 ⓐ).
-      const cta = screen.getByTestId('explore-places-createtrip');
-      expect(within(cta).getByText('2')).toBeOnTheScreen();
+      // FAB 를 결과 얼굴 안(state==='results')에만 그리면 로딩·빈·에러에서 사라진다 —
+      // 그 회귀를 잡는다. FAB 는 얼굴과 무관하게 항상 우하단에 떠야 한다(CtaBar 와 달리 상시).
+      expect(screen.getByTestId('explore-places-saved-fab')).toBeOnTheScreen();
+      expect(screen.getByTestId('explore-places-create-fab')).toBeOnTheScreen();
+    }
+  );
+});
+
+// ── TRIP-1026 · 위저드에서 들어온 d04 는 ＋ FAB 를 그리지 않는다 (결정 1 = 숨김) ─────────────
+// 숨김 입력은 **새 옵셔널 prop `hideCreateTrip`** 이다. "onPressCreateTrip 미지정 = 숨김"으로 얹지
+// 않는다 — 형제 d05(`DestinationDetailScreen`)는 미지정을 "그리되 no-op"으로 잠가 두었다(AC-5).
+// 미지정(= false) 경로는 위 두 describe(23개·상태 무관 ＋ 상시)가 그대로 지킨다.
+describe('🔴 1026 · hideCreateTrip 이면 ＋ FAB 만 빠진다 (AC-1 · AC-5)', () => {
+  it('누를 수 있는 것은 23개에서 ＋ 하나만 빠진 22개다 — ♥·필터·칩·카드·하트·지역 칩은 그대로', () => {
+    renderScreen({ hideCreateTrip: true });
+
+    // 앵커 — 목록 얼굴이 실제로 그려졌다(카드 5장).
+    expect(cardTestIds()).toHaveLength(5);
+
+    // 완전일치 목록 — ＋ 가 남아도, ♥ 가 딸려 사라져도 어긋난다.
+    expect(
+      screen
+        .getAllByRole('button')
+        .map((node) => String(node.props.testID))
+        .sort()
+    ).toEqual(
+      [
+        'explore-places-back',
+        ...CATEGORY_CODES.map((code) => `explore-places-category-${code}`),
+        ...['p1', 'p2', 'p3', 'p4', 'p5'].map(
+          (id) => `explore-places-card-${id}`
+        ),
+        ...['p1', 'p2', 'p3', 'p4', 'p5'].map(
+          (id) => `explore-places-save-${id}`
+        ),
+        'explore-places-saved-fab',
+        'explore-places-filter',
+        // TRIP-1023 칸 B — 위저드 출처여도 지역 칩은 남는다(Seed Q6 · 상시).
+        'explore-places-region',
+      ].sort()
+    );
+  });
+
+  it.each(['loading', 'empty', 'error'] as const)(
+    '%s 얼굴에서도 ♥ 는 남고 ＋ 는 없다',
+    (kind) => {
+      renderState({ kind }, { hideCreateTrip: true });
+
+      // 짝 — 안내가 실제로 그려진 화면이어야 "없다"가 의미를 갖는다.
+      expect(screen.getByTestId(`explore-places-${kind}`)).toBeOnTheScreen();
+      expect(screen.getByTestId('explore-places-saved-fab')).toBeOnTheScreen();
+      expect(screen.queryByTestId('explore-places-create-fab')).toBeNull();
     }
   );
 });

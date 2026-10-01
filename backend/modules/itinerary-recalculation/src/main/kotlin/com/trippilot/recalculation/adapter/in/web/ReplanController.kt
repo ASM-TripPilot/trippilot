@@ -195,8 +195,8 @@ data class ReplanDiffResponse(
             ready = v.ready,
             status = v.status.name,
             date = v.date,
-            before = v.before.map { ReplanDiffSlotResponse(it.slotKey, it.startAt, it.endAt, it.isFixed, it.endsNextDay) },
-            after = v.after.map { ReplanDiffSlotResponse(it.slotKey, it.startAt, it.endAt, it.isFixed, it.endsNextDay) },
+            before = v.before.map { it.toSlotResponse() },
+            after = v.after.map { it.toSlotResponse() },
             entries = v.result?.entries.orEmpty()
                 .map { ReplanDiffEntryResponse(it.slotKey, it.change.name, it.beforeStart, it.afterStart) },
             impact = v.result?.impact?.let {
@@ -205,11 +205,17 @@ data class ReplanDiffResponse(
                     // 분으로 낸다 — 화면이 "30분 늦어져요"로 그린다. null 은 비교할 슬롯이 없다는 뜻이다.
                     returnTimeDeltaMinutes = it.returnTimeDelta?.toMinutes(),
                     totalDistanceDeltaM = it.totalDistanceDeltaM,
+                    totalDistanceKm = v.totalDistanceKm,
                 )
             },
         )
     }
 }
+
+private fun com.trippilot.recalculation.domain.ReplanDiff.SlotView.toSlotResponse() = ReplanDiffSlotResponse(
+    slotKey, startAt, endAt, isFixed, endsNextDay,
+    nameKo = nameKo, category = category, imageUrl = imageUrl, lat = lat, lng = lng,
+)
 
 /**
  * 비교 대상 슬롯 한 칸. 짝은 **경계 키**로 맞춘다(BR-U2-04).
@@ -223,6 +229,16 @@ data class ReplanDiffSlotResponse(
     val endAt: LocalTime,
     val isFixed: Boolean,
     val endsNextDay: Boolean,
+    /**
+     * POI 표면(TRIP-1060 · QA #045) — 이름·모양은 일정 슬롯·슬롯 후보와 같다. 재계획이 새로 넣은
+     * 장소는 현재 일정에 없어 FE lookup 이 원리적으로 실패하므로 응답이 직접 싣는다.
+     * 정본에 없으면 전부 null — 이름·사진을 지어내지 않는다(INV-1). [category] 는 한글 정본.
+     */
+    val nameKo: String? = null,
+    val category: String? = null,
+    val imageUrl: String? = null,
+    val lat: Double? = null,
+    val lng: Double? = null,
 )
 
 /**
@@ -236,13 +252,17 @@ data class ReplanDiffEntryResponse(
 )
 
 /**
- * 영향 지표 3종(BR-U4-29).
+ * 영향 지표(BR-U4-29).
  *
  * @property totalDistanceDeltaM **어느 한쪽이라도 거리를 모르면 null** 이다. 0 으로 채우면
- *   "거리가 줄었다"는 거짓 요약이 된다.
+ *   "거리가 줄었다"는 거짓 요약이 된다. 원 일정에 미터 값이 없어 **지금은 항상 null** 이다.
+ * @property totalDistanceKm 재계획안의 이동 총거리(km) — **변화량이 아니라 절대값**이다.
+ *   상대(AI)가 푼 값을 그대로 나른다(INV-2 — 우리가 다시 재지 않는다). 소요시간은 없다(INV-3).
+ *   위 델타가 나올 수 없는 동안 화면이 쓸 수 있는 유일한 이동 지표다.
  */
 data class ReplanImpactResponse(
     val visitCountDelta: Int,
     val returnTimeDeltaMinutes: Long?,
     val totalDistanceDeltaM: Int?,
+    val totalDistanceKm: Double?,
 )

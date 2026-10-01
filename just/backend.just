@@ -6,7 +6,20 @@
 
 # Homebrew 로 깐 JDK 25 는 Gradle 자동탐지 경로에 없어서 그냥 두면
 # "Cannot find a Java installation ... languageVersion=25" 로 죽는다.
-jdk25 := env_var_or_default('TRIPPILOT_JDK25', '/opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home')
+#
+# 경로가 OS·설치 방식마다 다르므로 차례로 찾는다. 못 찾으면 아래 gradle_flags 가 빈 문자열이
+# 되어 **오류 없이 다른 JDK 로 빌드**되므로(조용한 성능·호환성 사고), 새 환경을 추가할 때는
+# 여기에 경로를 넣거나 TRIPPILOT_JDK25 로 직접 지정한다.
+#   macOS   Homebrew  /opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home
+#   Linux   apt       /usr/lib/jvm/java-25-openjdk-{amd64,arm64}
+jdk25_brew := '/opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home'
+jdk25_apt  := if path_exists('/usr/lib/jvm/java-25-openjdk-amd64') == "true" {
+    '/usr/lib/jvm/java-25-openjdk-amd64'
+} else {
+    '/usr/lib/jvm/java-25-openjdk-arm64'
+}
+jdk25_found := if path_exists(jdk25_brew) == "true" { jdk25_brew } else { jdk25_apt }
+jdk25 := env_var_or_default('TRIPPILOT_JDK25', jdk25_found)
 gradle_flags := if path_exists(jdk25) == "true" { "-Porg.gradle.java.installations.paths=" + jdk25 } else { "" }
 
 # 실행 가능 부트 jar 생성 후 Bazel 이 집어갈 자리로 복사

@@ -27,6 +27,7 @@ jest.mock('expo-router', () => {
   };
 });
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   fireEvent,
   render,
@@ -103,15 +104,37 @@ function primeMutation(
       };
     }) => ({
       isPending: false,
-      mutate: (vars?: unknown) => {
+      // 둘째 인자 = mutate 호출별 콜백(TRIP-778 D11 — 무효화를 어느 쪽에 걸든 발화하게 둘 다 부른다).
+      mutate: (
+        vars?: unknown,
+        callOpts?: {
+          onSuccess?: (data: unknown, vars: unknown, ctx: unknown) => void;
+          onError?: (error: unknown, vars: unknown, ctx: unknown) => void;
+        }
+      ) => {
         opts.spy?.(vars);
         if (opts.error) {
           options?.mutation?.onError?.(opts.error, vars, undefined);
+          callOpts?.onError?.(opts.error, vars, undefined);
         } else {
           options?.mutation?.onSuccess?.(opts.onSuccessData, vars, undefined);
+          callOpts?.onSuccess?.(opts.onSuccessData, vars, undefined);
         }
       },
     })
+  );
+}
+
+/**
+ * TRIP-778 D11 준비 — 위치 동의 훅이 저장 뒤 조회를 무효화하려고 `useQueryClient()` 를 부를 수 있으므로
+ * QueryClientProvider 안에서 그린다(없으면 "No QueryClient set" 으로 렌더가 죽는다, 02a ★3). 조회 훅은
+ * 위에서 목하므로 이 클라이언트는 실제로 아무것도 가져오지 않는다.
+ */
+function renderPage() {
+  return render(
+    <QueryClientProvider client={new QueryClient()}>
+      <LocationConsentPage />
+    </QueryClientProvider>
   );
 }
 
@@ -138,7 +161,7 @@ beforeEach(() => {
 describe('TRIP-609 · 철회 게이트(AC-1)', () => {
   it('동의 ON 에서 토글 OFF → PUT 미발화 · [동의 철회] 뒤에만 둘 동시 false 로 1회', async () => {
     primeConsent({ osPermissionMirror: 'GRANTED', legalConsent: true });
-    render(<LocationConsentPage />);
+    renderPage();
     // 마운트 미러 보고가 정착하도록 기다린다(뒤늦은 상태 갱신 방지).
     await waitFor(() => expect(patchSpy).toHaveBeenCalledTimes(1));
 
@@ -165,7 +188,7 @@ describe('TRIP-609 · 철회 게이트(AC-1)', () => {
 
   it('짝(승낙): 동의 OFF 에서 토글 ON → 다이얼로그 없이 둘 동시 true 로 1회', async () => {
     primeConsent({ osPermissionMirror: 'GRANTED', legalConsent: false });
-    render(<LocationConsentPage />);
+    renderPage();
     await waitFor(() => expect(patchSpy).toHaveBeenCalledTimes(1));
 
     fireEvent.press(screen.getByTestId('settings-location-toggle'));
@@ -183,7 +206,7 @@ describe('TRIP-609 · OS 권한 DENIED(AC-3)', () => {
   it('DENIED 면 토글 real disabled(눌러도 PUT·다이얼로그 무변화) + [설정 이동]→openSettings', async () => {
     primeConsent({ osPermissionMirror: 'DENIED', legalConsent: false });
     mockGetForeground.mockResolvedValue(DENIED);
-    render(<LocationConsentPage />);
+    renderPage();
 
     // 미러 정착 후 토글이 비활성으로 그려진다.
     await waitFor(() =>
@@ -206,7 +229,7 @@ describe('TRIP-609 · OS 권한 DENIED(AC-3)', () => {
     mockGetForeground.mockResolvedValue(GRANTED);
 
     // 실행
-    render(<LocationConsentPage />);
+    renderPage();
 
     // 단언(급소): 마운트 effect(async)가 단말 granted 를 읽어 deviceStatus 를 세팅하면 토글이 풀린다.
     // 초기 렌더는 deviceStatus=null 이라 잠시 비활성일 수 있으므로 정착을 waitFor 로 기다린다.
@@ -225,7 +248,7 @@ describe('TRIP-609 · OS 권한 DENIED(AC-3)', () => {
   it('짝: 허용이면 토글이 비활성이 아니다', async () => {
     primeConsent({ osPermissionMirror: 'GRANTED', legalConsent: true });
     mockGetForeground.mockResolvedValue(GRANTED);
-    render(<LocationConsentPage />);
+    renderPage();
     await waitFor(() => expect(patchSpy).toHaveBeenCalledTimes(1));
 
     expect(screen.getByTestId('settings-location-toggle')).not.toBeDisabled();
@@ -235,7 +258,7 @@ describe('TRIP-609 · OS 권한 DENIED(AC-3)', () => {
 describe('TRIP-609 · 진입 미러 보고(AC-4)', () => {
   it('진입 시 getForegroundPermissionsAsync 1회 → GRANTED 로 PATCH 1회', async () => {
     mockGetForeground.mockResolvedValue(GRANTED);
-    render(<LocationConsentPage />);
+    renderPage();
 
     await waitFor(() => expect(mockGetForeground).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(patchSpy).toHaveBeenCalledTimes(1));
@@ -248,9 +271,71 @@ describe('TRIP-609 · 진입 미러 보고(AC-4)', () => {
   it('device 가 denied 면 DENIED 로 미러한다(매핑)', async () => {
     primeConsent({ osPermissionMirror: 'DENIED', legalConsent: false });
     mockGetForeground.mockResolvedValue(DENIED);
-    render(<LocationConsentPage />);
+    renderPage();
 
     await waitFor(() => expect(patchSpy).toHaveBeenCalledTimes(1));
     expect(patchSpy).toHaveBeenCalledWith({ data: { osPermission: 'DENIED' } });
+  });
+});
+
+/**
+ * TRIP-778 D11 — 위치 동의를 저장(PUT)하면 `/me/location-consent` 조회를 무효화한다.
+ *
+ * 왜: 설정 화면(l05)의 `동의`/`미동의` 칩은 같은 조회를 읽는다. 설정은 스택에 남은 채 이 화면을 push 하므로
+ * 무효화가 없으면 돌아와도 옛 칩이 보인다(01 맹점 ④).
+ *
+ * ★ 스파이는 프로토타입에 건다(02a ★3) — Provider 의 클라이언트든 다른 인스턴스든 잡힌다. 마운트 때 미러
+ *   보고(PATCH)가 따로 무효화를 걸어도 되도록, **PUT 직전과 직후의 호출 수 차이**만 센다.
+ */
+describe('TRIP-778 · 저장 뒤 위치 동의 조회 무효화 (D11)', () => {
+  const LOCATION_KEY = ['/me/location-consent'];
+  let invalidateSpy: jest.SpyInstance;
+
+  /** 지금까지 위치 동의 키로 무효화한 횟수. */
+  const locationInvalidations = () =>
+    invalidateSpy.mock.calls.filter(
+      ([filters]) =>
+        JSON.stringify((filters as { queryKey?: unknown })?.queryKey) ===
+        JSON.stringify(LOCATION_KEY)
+    ).length;
+
+  beforeEach(() => {
+    invalidateSpy = jest.spyOn(QueryClient.prototype, 'invalidateQueries');
+  });
+
+  afterEach(() => {
+    invalidateSpy.mockRestore();
+  });
+
+  it('승낙 PUT 이 성공하면 위치 동의 조회를 무효화한다', async () => {
+    // 준비 — 동의 OFF, 마운트 미러 보고가 끝날 때까지 기다린 뒤의 호출 수를 기준선으로.
+    primeConsent({ osPermissionMirror: 'GRANTED', legalConsent: false });
+    renderPage();
+    await waitFor(() => expect(patchSpy).toHaveBeenCalledTimes(1));
+    const before = locationInvalidations();
+
+    // 실행 — 토글 ON(승낙은 게이트 없이 곧장 PUT).
+    fireEvent.press(screen.getByTestId('settings-location-toggle'));
+
+    // 앵커 — PUT 이 실제로 나갔다.
+    expect(putSpy).toHaveBeenCalledTimes(1);
+    // 단언 — PUT 성공 뒤 위치 동의 키 무효화가 늘었다.
+    await waitFor(() =>
+      expect(locationInvalidations()).toBeGreaterThan(before)
+    );
+  });
+
+  it('짝: PUT 이 실패하면 무효화하지 않는다(실패를 성공처럼 갱신하지 않음)', async () => {
+    primeConsent({ osPermissionMirror: 'GRANTED', legalConsent: false });
+    primeMutation(mockUsePut, { spy: putSpy, error: new Error('500') });
+    renderPage();
+    await waitFor(() => expect(patchSpy).toHaveBeenCalledTimes(1));
+    const before = locationInvalidations();
+
+    fireEvent.press(screen.getByTestId('settings-location-toggle'));
+    expect(putSpy).toHaveBeenCalledTimes(1);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(locationInvalidations()).toBe(before);
   });
 });

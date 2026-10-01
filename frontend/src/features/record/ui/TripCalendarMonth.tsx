@@ -16,12 +16,17 @@ import type { MonthCell } from '@/shared/date/monthGrid';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
+/** 월 네비 chevron 회색(muted-soft) — Figma 1570:1998 의 얇은 회색. 정확한 값·두께는 6-b(글리프 fill 사각). */
+const CHEVRON_GRAY = '#9AA1AB';
+
 export interface TripCalendarMonthProps {
   monthLabel: string;
   grid: (MonthCell | null)[];
   markedDays: string[];
   onPressPrev: () => void;
   onPressNext: () => void;
+  /** 날짜 셀 탭(TRIP-1015 C). 어느 여행으로 갈지(또는 무시)는 페이지가 판정한다. */
+  onPressDay?: (date: string) => void;
 }
 
 export function TripCalendarMonth({
@@ -30,6 +35,7 @@ export function TripCalendarMonth({
   markedDays,
   onPressPrev,
   onPressNext,
+  onPressDay,
 }: TripCalendarMonthProps): ReactElement {
   const markedSet = new Set(markedDays);
   const weeks: (MonthCell | null)[][] = [];
@@ -45,7 +51,7 @@ export function TripCalendarMonth({
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           onPress={onPressPrev}
         >
-          <BackArrowGlyph size={22} />
+          <BackArrowGlyph size={16} color={CHEVRON_GRAY} />
         </Pressable>
         <Text
           testID="record-calendar-month-label"
@@ -60,7 +66,7 @@ export function TripCalendarMonth({
           onPress={onPressNext}
         >
           <View style={{ transform: [{ scaleX: -1 }] }}>
-            <BackArrowGlyph size={22} />
+            <BackArrowGlyph size={16} color={CHEVRON_GRAY} />
           </View>
         </Pressable>
       </View>
@@ -93,11 +99,13 @@ export function TripCalendarMonth({
                   isMarked && (di === 0 || !prev || !markedSet.has(prev.date));
                 const roundRight =
                   isMarked && (di === 6 || !next || !markedSet.has(next.date));
+                // testID 와 selected 는 같은 요소에 둔다 — `toBeSelected()` 가 이 요소를 본다.
                 return (
-                  <View
+                  <Pressable
                     key={di}
                     testID={`record-calendar-day-${cell.date}`}
                     accessibilityState={{ selected: isMarked }}
+                    onPress={onPressDay && (() => onPressDay(cell.date))}
                     className={`flex-1 items-center justify-center py-[9px] ${
                       isMarked ? 'bg-primary-pale' : ''
                     } ${roundLeft ? 'rounded-l-[9px]' : ''} ${
@@ -113,7 +121,7 @@ export function TripCalendarMonth({
                     >
                       {cell.day}
                     </Text>
-                  </View>
+                  </Pressable>
                 );
               })}
             </View>

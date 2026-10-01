@@ -16,6 +16,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 
+# 제3자 문자열(웹 수집 상호명·위키 발췌·네이버 스니펫)은 줄에 넣기 전에 한 줄로 누른다 —
+# 줄바꿈이 남으면 우리 프롬프트 골격을 위조한다 (inline() docstring 에 실측).
+from trippilot.llm_gateway.prompts import inline
 from trippilot.llm_gateway.gates.edit_translation import EditTranslationContext
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import PoiId, TraceId
@@ -53,13 +56,13 @@ def build_edit_translation_vars(
     for order, pid in enumerate(inp.current_slots, start=1):
         poi = by_id.get(pid)
         slot_lines.append(
-            f"{order}. {pid} | {poi.category.value} | {poi.name}"
+            f"{order}. {pid} | {poi.category.value} | {inline(poi.name)}"
             if poi is not None
             else f"{order}. {pid} | (정보 없음)"
         )
     in_use = set(inp.current_slots)
     candidate_lines = [
-        f"- {p.poi_id} | {p.category.value} | {p.name}"
+        f"- {p.poi_id} | {p.category.value} | {inline(p.name)}"
         for p in sorted(pool.pois, key=lambda p: str(p.poi_id))
         if p.poi_id not in in_use
     ]

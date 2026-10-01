@@ -118,46 +118,121 @@ ArgumentKind (Enum):
   ENUM          # 자체 closed-set 을 갖는 인자 — EditOp(진짜 enum) · PlanB reason(아직 주석 어휘, §2.1 †)
   FREE_TEXT     # 규칙으로 못 뽑는 자유 서술 — 사고 사유·취향 설명
 
-ArgumentSpec (frozen): name: str · kind: ArgumentKind · required: bool · description: str
-                       · choices: tuple[str, ...] = ()     # kind=ENUM 일 때만 비어있지 않다
+ArgumentSpec (frozen):
+  name: str
+  kinds: tuple[ArgumentKind, ...]      # **한 개가 아니다** — §2.0 ①
+  required: bool
+  description: str
+  choices: tuple[str, ...] = ()        # ENUM 일 때만. 빈 값이면 아직 타입이 아니라는 뜻 (§2.0 ④)
+  multiple: bool = False               # 처리자가 목록으로 받는가 — §2.0 ③
+  requires_group: str | None = None    # 같은 이름을 가진 인자들끼리 **하나만 차면 된다** — §2.0 ②
+  lands_in: str | None = None          # 이 값이 실제로 들어가는 코드 필드. None = 받을 칸이 없다 (§2.0 ⑤)
+
 ARGUMENT_TABLE: dict[Intent, tuple[ArgumentSpec, ...]]      # 13종 전수 (OUT_OF_SCOPE 제외)
 ```
 
-### 2.1 표 (초안 — 값이 리뷰 대상이다)
+### 2.0 초안을 코드에 대 보고 바꾼 것 (2026-09-19 실측)
 
-`mode`·`처리자` 는 `ROUTING_TABLE`(실재 코드) 그대로다. 인자는 **초안**이고, 필수 판정의 기준은 하나다 —
-**그 값이 없으면 처리자가 일을 시작조차 못 하는가.** `context_refs` 재조회나 Provider 수집으로 메울 수 있으면 선택이다.
+§2.1 표는 처음에 `agent-io-contracts.md` 를 근거로 썼다. 의도 13종을 **실제 핸들러·DTO·Provider
+코드에 하나씩 대조**한 결과 **13행이 전부 초안과 달랐다.** 계약 문서와 코드가 갈라져 있었고,
+표는 계약 쪽만 보고 있었다.
 
-| 의도 | mode · 처리자 | 필수 인자 | 선택 인자 |
+바뀐 것은 값만이 아니다. `ArgumentSpec` 자체가 실측 결과를 담지 못했다 — 다섯 가지를 고친다.
+
+**① `kind` 하나로는 안 된다 → `kinds` 튜플.**
+`EDIT_SCHEDULE.target`·`GET_DISTANCE.origin/destination` 은 `SLOT_REF`("다음 목적지까지")와
+`PLACE_REF`("{장소}까지")가 **둘 다 실제로 나온다**(뱅크 551·567·568행). 초안은 표에
+`SLOT_REF | PLACE_REF` 라고 적었지만 타입은 한 칸이라, 추출기 선택(§3 표)과 도구 스키마 파생
+(`tool_specs`)이 서로 다른 답을 내게 된다. 추출기는 `kinds` 를 **순서대로 시도하고 먼저 걸리는 것**을 쓴다.
+
+**② `required: bool` 로는 못 적는 조건이 있다 → `requires_group`.**
+`EDIT_SCHEDULE` 은 **"`day` 가 있거나, `target` 이 현재 일정에서 한 날짜로 해소되거나"** 중
+하나면 착수한다(`entity_resolver.fuzzy_match` AUTO). 둘 다 `required: True` 로 적으면 멀쩡한
+발화를 막고, 둘 다 `False` 로 적으면 `EditTask.target_date`(기본값 없는 필수)가 빈다.
+같은 그룹의 인자는 **하나만 차면 그룹이 충족된 것**으로 본다.
+
+**③ 같은 이름이 어떤 의도에선 단수, 어떤 의도에선 복수다 → `multiple`.**
+`REPLAN` 의 와이어는 `reasons: list[str]`(`schemas.py:464`, 화면 e10 이 다중 선택)이고
+`SUGGEST_ALTERNATIVE` 는 `reason: str`(`schemas.py:374`) 단수다. 표에 같은 칸을 복사하면
+**복수 사유가 조용히 잘린다.**
+
+**④ †각주("ENUM 인자는 아직 타입이 아니다")가 틀렸다.**
+실재 enum 이 넷이다 — `EditOp`(`domain/edit.py`) · `ReplanScope`(`domain/trigger.py:19`) ·
+`CompanionType`(`domain/persona.py:37`) · `BudgetLevel`(`domain/common.py:39`).
+주석 어휘뿐인 것은 **PlanB `reason` 하나**다. `choices` 가 비어 있으면 "아직 타입이 아니다"로 읽는다.
+
+**⑤ 뽑아도 갈 곳이 없는 인자가 있다 → `lands_in`.**
+초안이 넣은 `GENERATE_SCHEDULE.region` 은 와이어에 `trip_context.destinations` 칸이 있지만
+**소비자가 0건**이다(`grep -rn destinations ai/src` → 정의 1줄). `GENERATE_REFLECTION.tone` 은
+필드 자체가 없고, `TRIP_SUMMARY.day_date` 는 `ai/` 전체에 0건, `REPLAN.from_slot` 도 착지 필드가 없다.
+**받을 칸 없는 인자를 필수로 박으면 되묻기가 발생하고, 채워도 버려진다.** `lands_in=None` 인 인자는
+`required` 가 될 수 없다(post-init 강제).
+
+### 2.0.1 가장 큰 정정 — 필수 인자는 거의 없다
+
+초안은 필수 인자를 6개 의도에 뒀다. **실측은 4개다.**
+
+| | 초안 | 실측 |
+|---|---|---|
+| 필수 인자가 있는 의도 | 6종 | **4종** (`SUGGEST_ALTERNATIVE`·`EDIT_SCHEDULE`·`GET_DISTANCE`·`GET_POI_INFO`) |
+| `GENERATE_SCHEDULE` 필수 | `region`·`period` | **없음** |
+
+이유는 하나다 — **도우미는 여행 화면에서 호출된다.** 제품 계약이 입력을 "현재 화면 컨텍스트
+(현재 여행·등록 숙소·현재 일정 상태·진행 단계·직전 추천)"로 규정한다(에픽 J). 지역·기간·예산·
+동행은 전부 그 여행 기록에서 온다. 처리자가 실제로 거부하는 유일한 조건은 **앵커 좌표 부재**이지
+목적지 이름이 아니다(`api/wiring.py:326`).
+
+초안대로였다면 뱅크의 가장 전형적인 문장 **"일정 만들어줘"**(seed 첫 문장)가 **항상 되묻기**로
+빠졌다. 사용자는 이미 그 여행 화면에 있는데 "어디로 가세요?"를 듣게 된다.
+
+초안이 자기모순이기도 했다: `period`(DATE_RANGE)는 "3박 4일"처럼 **기점 없는 기간**을 포함하므로,
+필수를 다 채워도 `days` 를 만들지 못하는 조합이 남는다 — "없으면 착수 불가"라는 판정 기준을
+필수 집합 자신이 어긴다. 한 쌍으로 묶으면 되묻기가 2회 필요해져 BR-DLG-33(요청당 1회)과 충돌한다.
+
+### 2.1 표 (2026-09-19 코드 실측본 — 초안 13행을 전부 대체한다)
+
+`mode`·`처리자` 는 `ROUTING_TABLE`(실재 코드) 그대로다. **다만 "처리자" 이름을 믿지 마라** —
+`WeatherAgent`·`TransitAgent`·`PlaceScoutAgent` 는 `ROUTING_TABLE` 의 문자열일 뿐 `ai/src` 에
+그런 클래스가 없다(에이전트는 schedule·planb·reflect·edit 4종뿐). 실제 계산 주체는 Provider 다.
+
+판정 기준은 그대로다 — **그 값이 없으면 처리자가 일을 시작조차 못 하는가.** 달라진 것은 그 기준을
+계약 문서가 아니라 **코드에** 댔다는 점이다.
+
+| 의도 | 핸들러 실재 | 필수 | 선택 |
 |---|---|---|---|
-| `GENERATE_SCHEDULE` | Delegate · ScheduleAgent | `region`(REGION) · `period`(DATE_RANGE) | `start_date`(DATE) · `companions`(FREE_TEXT) |
-| `REGENERATE` | Delegate · ScheduleAgent | — (대상 일정은 `context_refs`) | `reason`(FREE_TEXT) · `keep`(SLOT_REF) |
-| `REPLAN` | Delegate · PlanBAgent | — | `reason`(ENUM† `weather`·`closed`·`delay`·`canceled`·`fully_booked`·`fatigue`·`none`) · `from_slot`(SLOT_REF) |
-| `SUGGEST_ALTERNATIVE` | Delegate · PlanBAgent | `target`(SLOT_REF \| PLACE_REF) | `reason`(ENUM† 위와 같음) · `count`(COUNT) |
-| `GENERATE_REFLECTION` | Delegate · ReflectAgent | `date`(DATE) | `tone`(FREE_TEXT) |
-| `TRIP_SUMMARY` | Delegate · ReflectAgent | — | `day_date`(DATE — 없으면 전체 요약) |
-| `STYLE_ANALYSIS` | Delegate · ReflectAgent | — | — |
-| `EDIT_SCHEDULE` | Delegate · EditAgent | `op`(ENUM: `EditOp` 7종) · `target`(SLOT_REF \| PLACE_REF) | `replacement`(PLACE_REF) · `day`(ORDINAL) · `position`(SLOT_REF) |
-| `GET_NEXT_SLOT` | Fast Path · (DB) | — | `from_time`(DATE) |
-| `SHOW_SCHEDULE` | Fast Path · (DB) | — | `day`(ORDINAL) · `date`(DATE) |
-| `GET_WEATHER` | Fast Path · WeatherAgent | — | `date`(DATE) · `region`(REGION) |
-| `GET_DISTANCE` | Fast Path · TransitAgent | `origin`(PLACE_REF \| SLOT_REF) · `destination`(PLACE_REF \| SLOT_REF) | — |
-| `GET_POI_INFO` | Fast Path · PlaceScoutAgent | `place`(PLACE_REF) | `aspect`(FREE_TEXT — 영업시간·입장료·휴무·주차) |
+| `GENERATE_SCHEDULE` | ScheduleAgent ✔ | **—** | `region`(REGION, ⌀) · `date_range`(DATE_RANGE) · `start_date`(DATE) · `companions`(ENUM ✔6종) · `budget_level`(ENUM ✔3종) |
+| `REGENERATE` | ScheduleAgent ✔ | **—** | `exclude`(PLACE_REF) · `keep`(SLOT_REF\|PLACE_REF) · `reason`(FREE_TEXT, ⌀) |
+| `REPLAN` | PlanBAgent ✔ | **—** | `reason`(ENUM †, **복수**) · `target_date`(DATE) · `scope`(ENUM ✔2종) · `from_slot`(SLOT_REF, ⌀) · `free_text`(FREE_TEXT) |
+| `SUGGEST_ALTERNATIVE` | PlanBAgent ✔ | `target`(SLOT_REF\|PLACE_REF) | `reason`(ENUM †) · `count`(COUNT, ⌀) · `constraint`(FREE_TEXT, ⌀) |
+| `GENERATE_REFLECTION` | ReflectAgent ✔ | **—** | `date`(DATE) |
+| `TRIP_SUMMARY` | ReflectAgent ✔ | **—** | `region`(REGION) · `period`(DATE_RANGE) |
+| `STYLE_ANALYSIS` | **없음** | — | `focus_axis`(ENUM, ⌀) |
+| `EDIT_SCHEDULE` | EditAgent ✔ | `day`(DATE\|ORDINAL) ‡ | `op`(ENUM ✔7종) · `target`(SLOT_REF\|PLACE_REF) ‡ · `replacement`(PLACE_REF) · `position`(SLOT_REF) |
+| `GET_NEXT_SLOT` | **없음** (백엔드) | — | `aspect`(FREE_TEXT) |
+| `SHOW_SCHEDULE` | **없음** (백엔드) | — | `day`(ORDINAL) · `date`(DATE) · `scope`(ENUM, ⌀) |
+| `GET_WEATHER` | WeatherProvider | **—** | `date`(DATE) · `region`(REGION) · `aspect`(FREE_TEXT) · `period`(DATE_RANGE) |
+| `GET_DISTANCE` | TransitProvider | `destination`(PLACE_REF\|SLOT_REF) | `origin`(PLACE_REF\|SLOT_REF) · `mode`(ENUM ✔3종) |
+| `GET_POI_INFO` | **없음** (백엔드 M7) | `place`(PLACE_REF) | `aspect`(FREE_TEXT) · `date`(DATE) |
 
-† **아직 타입이 아니다** — 주석으로만 적힌 어휘다(아래 2번).
+표기 — **✔n종**: 코드에 실재하는 enum(`choices` 를 채운다) · **†**: 주석뿐인 어휘, 아직 타입이 아니다
+(PlanB `reason` 하나뿐) · **⌀**: `lands_in=None`, 뽑아도 **받을 칸이 없다** · **‡**: 같은
+`requires_group` — 둘 중 하나만 차면 된다.
 
-표가 말해 주는 것 넷.
+표가 말해 주는 것 다섯.
 
-1. **필수 인자가 하나도 없는 의도가 6종**(`REGENERATE`·`REPLAN`·`TRIP_SUMMARY`·`STYLE_ANALYSIS`·`GET_NEXT_SLOT`·
-   `SHOW_SCHEDULE`)이다 — 의도만 맞히면 되고 **되묻기가 아예 필요 없다.** ⑤의 실제 적용 범위는 나머지 7종이다.
-2. `ENUM` 인자는 **새 어휘를 만들지 않고 이미 있는 것을 가리킨다** — `EDIT_TRANSLATION` 프롬프트가
-   서버 주입 `$edit_ops` 로 하는 것과 같은 방식이다. 다만 둘의 **강도가 다르다**:
-   `EditOp` 는 진짜 enum(`domain/edit.py`)이고, PlanB `reason` 은 **`str` 필드에 주석으로만 적힌 어휘**다
-   (`agents/planb/rag.py:167` · `api/schemas.py:358` — 둘 다 `weather|closed|…|none` 이 주석이다).
-   표가 `choices` 를 가지려면 그 어휘가 타입이 되어야 한다 — 개정 목록(business-rules §4)에 올린다.
-3. `GET_DISTANCE` 만 필수 인자가 **2개**다. 되묻기 설계의 최악 사례는 여기다.
-4. `TRIP_SUMMARY.day_date` · `STYLE_ANALYSIS` 는 `agent-io-contracts.md:176-196` 에 있으나 `domain/reflection.py` 에
-   **필드가 없다** — 표가 계약 쪽 정본을 따르고 코드 쪽 갭은 business-rules §5 미결로 올린다.
+1. **필수 인자는 4개 의도에만 있다.** 도우미가 여행 화면에서 호출되기 때문이다(§2.0.1).
+   ⑤ 멀티턴 되묻기의 실제 적용 범위는 초안이 말한 7종이 아니라 **4종**이다.
+2. **핸들러가 아예 없는 의도가 4종**(`STYLE_ANALYSIS`·`GET_NEXT_SLOT`·`SHOW_SCHEDULE`·`GET_POI_INFO`)이고,
+   2종은 Provider 가 대신한다. 이 표는 그 6종에 대해 **"AI 가 처리한다"가 아니라 "라우터가 백엔드에
+   넘길 봉투"** 로 읽어야 한다.
+3. **`⌀` 가 7칸이다.** 뽑아도 갈 곳이 없다 — 지금 이 인자들을 도구 스키마에 넣으면 모델이 채우고
+   우리가 버린다. 개정 목록(business-rules §4)에 "칸을 만들든지 인자를 빼든지" 로 올린다.
+4. **`GET_DISTANCE.origin` 은 필수가 아니다.** 현재 위치는 `inline_context` 가 싣고(휘발 데이터
+   — 위치·클라 시각), 없으면 현재/직전 슬롯으로 메워진다. 판정 기준 두 조항에 모두 걸린다.
+5. **`EDIT_SCHEDULE.op` 은 필수가 아니다.** 워커가 그 날 슬롯 목록과 후보 풀을 손에 들고 정한다
+   — 라우터가 정하면 **더 적은 정보로 더 이른 자리에서** 같은 판단을 하는 것이다(§2.1.1 과 같은 논리).
+   반대로 `day` 는 필수로 올라간다: `EditTask.target_date` 가 기본값 없는 필드이고 워커에 넘길 슬롯
+   목록·게이트 대조 집합·해 변형 대상이 **전부 그 하루로 잘린다**.
 
 ### 2.1.1 왜 `op` 를 **인자**로 두고 의도로 올리지 않나 (실측, 2026-09-15)
 
@@ -210,15 +285,88 @@ Extractor = Callable[[str], str | None]      # 발화 → 값(원문 조각) 또
 EXTRACTORS: dict[ArgumentKind, Extractor]
 ```
 
+### 3.1 실측 — 9종 전부 "부분만 된다" (2026-09-19)
+
+종류마다 설계안을 세우고 **렌즈 셋(오탐·누락·경계)으로 반증**했다. 반증자는 정규식을 실제로
+파이썬에 옮겨 돌렸고, 반례는 저장소의 실측 말뭉치(뱅크 485 + 평가셋 87)에서 골랐다.
+
+| 종류 | 설계 판정 | 정규식 | 반례 |
+|---|---|---:|---:|
+| `DATE` | rules_partial | 8 | 30 |
+| `DATE_RANGE` | rules_partial | 8 | 29 |
+| `REGION` | rules_partial | 5 | 25 |
+| `PLACE_REF` | rules_partial | 8 | 25 |
+| `SLOT_REF` | rules_partial | 12 | 29 |
+| `ORDINAL` | rules_partial | 7 | 32 |
+| `COUNT` | rules_partial | 6 | 32 |
+| `ENUM` | rules_partial | 13 | 37 |
+| `FREE_TEXT` | rules_partial | — | — |
+
+**`rules_only` 가 하나도 없다.** 초안은 `DATE`·`DATE_RANGE`·`ORDINAL`·`COUNT`·`ENUM` 다섯을
+"정규식 · 0회 · 결정론" 으로 적었지만, 셋 다 실측에서 깨졌다. 한국어의 조사 결합·띄어쓰기 변이·
+한자어/고유어 수사 이중화·축약이 규칙 하나로 수렴하지 않는다.
+
+### 3.2 그래서 정밀도를 택한다 — 애매하면 뽑지 않는다
+
+실측이 정책을 바꾼다. **필수 인자가 4개 의도에만 있으므로**(§2.0.1) 추출기의 일은 대부분
+**선택 인자**를 채우는 것이고, 선택 인자에서는 두 실패의 대가가 전혀 다르다.
+
+| | 결과 |
+|---|---|
+| 못 뽑음(`None`) | 선택 인자면 그냥 빈다 — BR-DLG-33 이 "비운다"고 이미 정했다. 손해 없음 |
+| **잘못 뽑음** | 처리자가 **틀린 값으로 일한다.** 사용자는 자기가 말하지 않은 조건이 걸린 결과를 받는다 |
+
+그래서 규약을 하나 더 둔다 — **애매하면 `None` 을 낸다.** 재현율을 위해 패턴을 넓히지 않는다.
+경계가 불확실한 매치(같은 종류가 한 문장에 둘, 숫자가 연달아 붙는 자리)는 뽑지 않는다.
+반례 목록은 **그대로 테스트로 옮긴다** — 통과해야 하는 것과 `None` 이어야 하는 것 양쪽으로.
+
 | 종류 | 방법 | LLM |
 |---|---|---|
-| `DATE` · `DATE_RANGE` · `ORDINAL` · `COUNT` | 정규식 + 한국어 수사 표 | 0회 · 결정론 |
-| `ENUM` | `choices` 어휘 표면형 대조 | 0회 · 결정론 |
+| `DATE` · `DATE_RANGE` · `ORDINAL` · `COUNT` · `ENUM` | 정규식 + 수사·어휘 표. **고정밀·저재현** | 0회 · 결정론 |
 | `REGION` | 지역명 사전 최장일치 (사전 정본은 place-data 소유 — 여기서는 참조만) | 0회 |
 | `PLACE_REF` · `SLOT_REF` | 규칙으로는 **부분만** — 못 뽑으면 3차 승격 | 조건부 |
 | `FREE_TEXT` | **규칙 불가** — 항상 3차 승격 | 1회 |
 
 추출 실패가 라우팅을 죽이지 않는다 — 의도는 이미 정해졌고 인자만 빈다(`_extract_slots` 의 현행 방침 유지).
+
+### 3.4 실제로 만든 것 (2026-09-19)
+
+`orchestrator/arguments.py` · 테스트 `tests/test_arguments.py`.
+
+| 종류 | 구현 | 비고 |
+|---|---|---|
+| `DATE` · `DATE_RANGE` · `ORDINAL` · `COUNT` | 정규식 | 아래 좁힌 자리 참조 |
+| `ENUM` | 표면형 → **정규 값** | 다른 종류와 반환 규약이 다르다 |
+| `REGION` · `PLACE_REF` · `SLOT_REF` · `FREE_TEXT` | **안 만든다** | 3차 승격. 억지 정규식은 오탐을 만들어 더 나쁘다 |
+
+**구조로 강제한 규칙 하나** — 서로 겹치지 않는 후보가 둘 이상이면 `None`(`_one_span`).
+"9월 20일부터 22일까지" 처럼 한 문장에 같은 종류가 두 번 나오면 어느 쪽이 인자인지 발화만으로는
+모른다. 이 한 줄이 반증의 경계(`wrong_span`) 반례 대부분을 없앴다.
+
+**정밀도를 위해 일부러 좁힌 자리** — 전부 재현율을 잃는 대신 오탐을 0으로 만든 것이다.
+
+| 무엇 | 왜 |
+|---|---|
+| `DATE` 에서 맨 `N일` 제외 | "3일 가는데"(기간)·"1일에 만원"(단가)·"3일에 한 번"(주기)·"연차가 3일까지"(상한)가 전부 같은 모양이다 |
+| `DATE_RANGE` 에서 `하루` 제외 | "오늘 하루 여행했던 내용을 돌아보는 글"(회고)과 겹치고 '동안' 이 붙어도 안 갈린다 |
+| `ORDINAL` 순서 수사에 **뒤 명사 요구** | 없으면 "둘째는 어디 갈까"(사람)·"두 번째 출구"(위치)·"둘째 주"(달력)를 전부 잡는다 |
+| `COUNT` 단위를 `곳`·`군데` 로 한정 | `개` 는 "별점 4개 이상"·"캐리어 두 개" 쪽이 더 흔하다 |
+| `COUNT` 고유어에서 `한`·`열` 제외 | "볼 만 **한** 곳"(하다의 관형형)·"문 **열** 곳"(열다)과 완전히 겹친다. 붙여 쓴 `한곳` 만 남겼다 |
+| `ENUM` 이 둘 이상에 걸리면 `None` | "순서를 바꿔줘" 는 `REORDER_DAY`('순서')와 `REPLACE_SLOT`('바꿔')에 함께 걸린다 |
+
+**실측** — 반증 반례를 테스트로 옮겼다: 뽑혀야 하고 뽑히는 것 55 · **뽑히면 안 되는 것 144(오탐 0)** ·
+포기한 재현율 27. 마지막 묶음은 `None` 으로 고정해 뒀다 — 되기 시작하면 테스트가 알려준다.
+
+평가셋 87건 재생 실측: 1·2차로 확정된 52건 중 **인자가 채워진 것 13건**(종전 0건 — 뱅크에
+`slot_pattern` 데이터가 0이라 항상 `{}` 였다). 두 번 돌려 같은 값(결정론 확인).
+
+### 3.3 소비 지점이 제약이다
+
+`_extract_slots` 는 `re.search(...).group(0)` 로 **슬롯당 문자열 하나**를 만든다
+(`intent_router.py`). 한 문장에 같은 종류가 두 번 나오면 첫 매치만 남는다 — 반증에서
+`wrong_span` 반례가 종류마다 나온 근본 원인이다. `multiple=True` 인 인자(REPLAN `reason`)는
+이 인터페이스로 표현되지 않으므로, 추출기 계약을 `str | None` 에서 넓히든지 그 인자를 3차에 맡긴다.
+**둘 중 무엇인지 정하기 전에는 `multiple` 인자를 규칙으로 뽑지 않는다.**
 
 ---
 

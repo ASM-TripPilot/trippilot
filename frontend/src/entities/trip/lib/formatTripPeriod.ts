@@ -122,6 +122,20 @@ export function formatTripDateRange(
   return `${head}${EN_DASH}${em}.${ed}`;
 }
 
+/** '6.10–6.12'(연도 생략·점·무공백 en dash). j07 legend 전용 — legend 는 이번 달 축이라 연도가 군더더기다.
+ *  연도만 접는 formatTripDateRange 와 달리 **양쪽 월을 항상 표기**하고(같은 달도 둘째 월 안 접음) 연도만 뺀다.
+ *  한쪽이라도 null 이면 못 만들어 null(가짜 날짜 금지). formatTripDateRange(연도 포함)는 무변경 — 규칙이
+ *  갈리니 별개 sibling 함수다(옵션 파라미터로 기존 함수를 흔들지 않는다). */
+export function formatLegendDateRange(
+  start: string | null,
+  end: string | null
+): string | null {
+  if (start === null || end === null) return null;
+  const [, sm, sd] = start.split('-').map(Number);
+  const [, em, ed] = end.split('-').map(Number);
+  return `${sm}.${sd}${EN_DASH}${em}.${ed}`;
+}
+
 /** '6월 10일(수) – 13일(토)'(요일 삽입·공백 en dash·같은 달 생략). 요일은 dayOfWeek(에포크 산술)로
  *  구해 시계를 안 읽는다. summaryPeriod 가 여기에 ' · N박 M일'을 이어 붙인다. */
 export function formatDateRangeWithDow(
@@ -143,13 +157,13 @@ export function formatDateRangeWithDow(
 
 /** '6/11–6/12 · 1박' — g02 거점 선택 후보 카드 날짜 서브라인(TRIP-741). 범위는 formatSectionRange
  *  (이미 en dash·0패딩 제거)를 재사용하고 ' · N박'을 잇는다. N은 일수(=박수, INV-3 소요시간 아님).
- *  한쪽이라도 날짜가 없으면 "날짜 없음"(가짜 날짜 금지). 옛 formatStayDateRange(ASCII '~')와 구분자가
- *  달라 재사용 금지 — 여기 예제 문자열엔 진짜 en dash(U+2013)·미들닷(U+00B7)이 박혀 있다. */
+ *  한쪽이라도 날짜가 없으면 null — 소비처가 그 줄을 생략한다(가짜 날짜·'날짜 없음' 문구 금지,
+ *  TRIP-1052 · US-STAY-09). 여기 예제 문자열엔 진짜 en dash(U+2013)·미들닷(U+00B7)이 박혀 있다. */
 export function formatBaseNightRange(
   checkIn: string | null | undefined,
   checkOut: string | null | undefined
-): string {
-  if (!checkIn || !checkOut) return '날짜 없음';
+): string | null {
+  if (!checkIn || !checkOut) return null;
   const nights = toEpochDay(checkOut) - toEpochDay(checkIn);
   return `${formatSectionRange(checkIn, checkOut)} ${MIDDOT} ${nights}박`;
 }

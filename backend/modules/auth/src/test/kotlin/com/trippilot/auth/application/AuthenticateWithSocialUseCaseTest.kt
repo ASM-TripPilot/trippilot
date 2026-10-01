@@ -12,6 +12,9 @@ import com.trippilot.auth.domain.SocialIdentity
 import com.trippilot.auth.domain.SocialProfile
 import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.auth.domain.port.IssuedAccessToken
+import com.trippilot.auth.domain.port.PendingRevocation
+import com.trippilot.auth.domain.port.ProviderRevocationTokenRepository
+import com.trippilot.auth.domain.port.ProviderTokenRevocationPort
 import com.trippilot.auth.domain.port.SocialAuthPort
 import com.trippilot.auth.domain.port.SocialIdentityRepository
 import com.trippilot.auth.domain.port.TokenIssuer
@@ -53,6 +56,23 @@ private class FakeSocialAuthPort(private val profile: SocialProfile) : SocialAut
     override fun authenticateWithAccessToken(provider: Provider, accessToken: String) = profile
 }
 
+/** 교환 결과를 고정으로 돌려주고, 불린 횟수를 센다. */
+private class FakeTokenRevocation(private val result: String? = null) : ProviderTokenRevocationPort {
+    val exchanges = mutableListOf<Triple<Provider, String, String>>()
+    override fun exchangeRevocationToken(provider: Provider, authorizationCode: String, expectedSub: String): String? {
+        exchanges += Triple(provider, authorizationCode, expectedSub)
+        return result
+    }
+    override fun revoke(provider: Provider, token: String) = error("로그인에서 revoke 를 부르면 안 된다")
+}
+
+private class FakeRevocationTokens : ProviderRevocationTokenRepository {
+    val stored = mutableMapOf<Pair<Provider, String>, String>()
+    override fun store(provider: Provider, providerSub: String, token: String) { stored[provider to providerSub] = token }
+    override fun findDueForRevocation(now: Instant, limit: Int) = emptyList<PendingRevocation>()
+    override fun clear(socialIdentityId: java.util.UUID) = Unit
+}
+
 private class FakeTokenIssuer(private val clock: Clock) : TokenIssuer {
     override fun issue(accountId: AccountId) =
         IssuedAccessToken(value = "access-${accountId.value}", expiresAt = clock.instant().plus(TTL))
@@ -83,6 +103,7 @@ class AuthenticateWithSocialUseCaseTest : StringSpec({
         )
         val useCase = AuthenticateWithSocialUseCase(
             FakeSocialAuthPort(profile), accounts, identities, FakeTokenIssuer(clock), refreshTokenService, events, clock,
+            FakeTokenRevocation(), FakeRevocationTokens(),
         )
         return Triple(useCase, identities, events)
     }
@@ -158,6 +179,7 @@ class AuthenticateWithSocialUseCaseTest : StringSpec({
         )
         fun ucFor(p: SocialProfile) = AuthenticateWithSocialUseCase(
             FakeSocialAuthPort(p), accounts, identities, FakeTokenIssuer(clock), refresh, CapturingEventPublisher(), clock,
+            FakeTokenRevocation(), FakeRevocationTokens(),
         )
         // 카카오로 먼저 가입(email dup@example.com)
         ucFor(SocialProfile(Provider.KAKAO, "kakao-sub", "dup@example.com")).authenticate(command)
@@ -184,12 +206,67 @@ class AuthenticateWithSocialUseCaseTest : StringSpec({
         val useCase = AuthenticateWithSocialUseCase(
             FakeSocialAuthPort(profile), accounts, FakeSocialIdentityRepository(), FakeTokenIssuer(clock),
             RefreshTokenService(FakeRefreshSessionRepository(), accounts, FakeRefreshTokenGenerator(), RefreshTokenProperties(), clock),
-            CapturingEventPublisher(), clock,
+            CapturingEventPublisher(), clock, FakeTokenRevocation(), FakeRevocationTokens(),
         )
         useCase.authenticate(command) // 최초 가입 → ACTIVE
         val stored = accounts.stored.values.first()
         accounts.save(stored.applySanction(SanctionStatus.FULLY_SUSPENDED)) // 전면 정지
 
         shouldThrow<AuthenticationRequired> { useCase.authenticate(command) }
+    }
+
+    // ── 애플 revoke 용 토큰(TRIP-933) ─────────────────────────────────────────────
+
+    val appleProfile = SocialProfile(Provider.APPLE, "apple-sub-1", null)
+    val appleCommand = SocialTokenLoginCommand(
+        Provider.APPLE, "identity-token", AgeMethod.SELF_DECLARED, null, "device-1", authorizationCode = "apple-code",
+    )
+
+    fun appleFixture(exchangeResult: String?): Triple<AuthenticateWithSocialUseCase, FakeTokenRevocation, FakeRevocationTokens> {
+        val accounts = FakeAccountRepository()
+        val revocation = FakeTokenRevocation(exchangeResult)
+        val tokens = FakeRevocationTokens()
+        val useCase = AuthenticateWithSocialUseCase(
+            FakeSocialAuthPort(appleProfile), accounts, FakeSocialIdentityRepository(), FakeTokenIssuer(clock),
+            RefreshTokenService(FakeRefreshSessionRepository(), accounts, FakeRefreshTokenGenerator(), RefreshTokenProperties(), clock),
+            CapturingEventPublisher(), clock, revocation, tokens,
+        )
+        return Triple(useCase, revocation, tokens)
+    }
+
+    "애플 로그인에 authorizationCode 가 오면 교환해 revoke 토큰을 그 연결에 보관한다" {
+        val (useCase, revocation, tokens) = appleFixture(exchangeResult = "apple-refresh")
+
+        useCase.authenticateWithAccessToken(appleCommand)
+
+        // 교환은 로그인한 사람의 sub 로 대조된다 — 남의 code 를 붙여 보내도 우리 연결에 걸리지 않게.
+        revocation.exchanges shouldBe listOf(Triple(Provider.APPLE, "apple-code", "apple-sub-1"))
+        tokens.stored shouldBe mapOf((Provider.APPLE to "apple-sub-1") to "apple-refresh")
+    }
+
+    "교환이 실패해도 로그인은 성공한다 — Apple 토큰 엔드포인트 장애가 애플 로그인 장애가 되지 않는다" {
+        val (useCase, _, tokens) = appleFixture(exchangeResult = null)
+
+        val result = useCase.authenticateWithAccessToken(appleCommand)
+
+        result.isNewUser shouldBe true
+        result.accessToken shouldContain "access-"
+        tokens.stored shouldBe emptyMap()
+    }
+
+    "authorizationCode 가 없으면 교환하지 않는다 — 종전 애플·카카오 로그인은 그대로다" {
+        val (useCase, revocation, _) = appleFixture(exchangeResult = "apple-refresh")
+
+        useCase.authenticateWithAccessToken(appleCommand.copy(authorizationCode = null))
+
+        revocation.exchanges.shouldBeEmpty()
+    }
+
+    "로그인이 무산되면(연령확인 누락 400) 일회용 code 를 태우지 않는다" {
+        val (useCase, revocation, _) = appleFixture(exchangeResult = "apple-refresh")
+
+        shouldThrow<ValidationFailed> { useCase.authenticateWithAccessToken(appleCommand.copy(ageMethod = null)) }
+
+        revocation.exchanges.shouldBeEmpty()
     }
 })

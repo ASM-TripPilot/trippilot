@@ -6,6 +6,7 @@ import {
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
+import { resetPressGuard } from '@/shared/press/pressGuard';
 import { LocationPage } from './LocationPage';
 
 /**
@@ -13,11 +14,13 @@ import { LocationPage } from './LocationPage';
  *
  * 무엇을 보장하나: 화면(LocationPreprompt, 동결)을 재사용해
  *  (1) default 로 렌더하고 Figma 온보딩 목적 문구를 주입한다(AC-3),
- *  (2) "허용" 을 누르면 OS 권한 요청이 **딱 1회** 발화되고 granted 면 pref1 로 넘어간다(AC-4),
- *  (3) OS 가 denied 로 답하면 denied 프레임으로 **전환**하되 "계속" 으로 pref1 에 도달한다(AC-5),
- *  (4) "나중에 하기" 는 OS 를 **안 부르고** pref1 로 진행한다(AC-6),
+ *  (2) "허용" 을 누르면 OS 권한 요청이 **딱 1회** 발화되고 granted 면 다음 단계로 넘어간다(AC-4),
+ *  (3) OS 가 denied 로 답하면 denied 프레임으로 **전환**하되 "계속" 으로 다음 단계에 도달한다(AC-5),
+ *  (4) "나중에 하기" 는 OS 를 **안 부르고** 다음 단계로 진행한다(AC-6),
  *  (5) denied 에서 "위치 설정 열기" 는 앱 설정을 연다(AC-7),
  *  (6) c08 은 서버 진행 플래그를 **만들지 않는다** — 전 플로우에 서버 호출 0(AC-8).
+ *  다음 단계는 TRIP-1108 부터 취향 1/2(pref1)가 아니라 **푸시 알림 안내 카드(push)** 다
+ *  (온보딩 location → push → pref1). 즉시 넘어가는 두 버튼(나중에 하기·거부 프레임 계속)은 연타해도 1회다(R6).
  *
  * ⚠️ 방향 주의: 동결 LocationPreprompt.test.tsx 는 컴포넌트가 OS 를 **안 부르는** 것을 잰다.
  *    여기(배선 층)는 정반대 — 페이지가 OS 를 **부르는** 것을 관찰한다. 같은 expo-location 목,
@@ -66,9 +69,15 @@ const routerMock = require('expo-router').router as {
 /** c08 이 주입해야 하는 Figma 온보딩 목적 문구(브리프 §화면·IO · 1296:1208). 프리뷰의
  * placeholder "내 주변 숙소 탐색" 이 아니라 **화면 정본 문구**여야 한다. toHaveTextContent 는
  * 문자열이면 완전 일치이므로(RNTL matches exact:true 기본), 이 상수 전체가 곧 계약이다. */
+// TRIP-717: Figma 1296:1208 2줄 고정 개행 반영(같은 어구, 중간에 \n). toHaveTextContent 는
+// 공백을 정규화하므로 \n 유무와 무관하게 매치하지만, 앱 문자열과 자구를 일치시켜 계약을 명시한다.
 const ONBOARDING_PURPOSE =
-  '내 주변을 알면 더 잘 맞는 곳을 추천하고 길 안내도 막힘없이 이어져요';
+  '내 주변을 알면 더 잘 맞는 곳을 추천하고\n길 안내도 막힘없이 이어져요';
 const PREF1_ROUTE = '/(onboarding)/pref1';
+/** TRIP-1108 — 위치 카드 다음 단계. 모든 출구(granted·나중에·거부 계속)가 여기로 간다. */
+const PUSH_ROUTE = '/(onboarding)/push';
+/** 연타 판정용으로 멈춰 둘 시각(값은 의미 없다 — 흐르지 않는 것이 요점). */
+const FROZEN_NOW = 1_790_000_000_000;
 
 /** requestForegroundPermissionsAsync 응답(LocationPermissionResponse 부분집합). status·granted 를
  * 일관되게 채워 구현이 어느 필드를 읽어도 통과하게 한다. */
@@ -94,6 +103,8 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+  // 연타 가드 창(400ms)은 모듈 싱글턴 — 앞 케이스의 누름이 다음 케이스의 첫 누름을 먹지 않게 닫는다.
+  resetPressGuard();
   mockRequestForeground.mockReset();
   mockGetForeground.mockReset();
   // 마운트 denied 감지(Q2-②)를 구현이 하든 말든 무해하도록 기본은 미결정 상태로 답한다.
@@ -109,7 +120,10 @@ beforeEach(() => {
   requestLog.length = 0;
 });
 
-afterEach(() => server.resetHandlers());
+afterEach(() => {
+  server.resetHandlers();
+  resetPressGuard();
+});
 
 afterAll(() => {
   server.events.removeAllListeners();
@@ -124,6 +138,8 @@ async function reachDenied() {
   await waitFor(() =>
     expect(screen.getByTestId('onboarding-location-continue')).toBeOnTheScreen()
   );
+  // 사람은 OS 창에 답하느라 400ms 이상 쓴다 — 주 버튼을 가드로 감쌌든 아니든 이후 누름은 창 밖이다.
+  resetPressGuard();
 }
 
 describe('LocationPage — default 렌더 + 목적 주입 (AC-3)', () => {
@@ -141,7 +157,7 @@ describe('LocationPage — default 렌더 + 목적 주입 (AC-3)', () => {
 });
 
 describe('LocationPage — 허용 → OS 권한 요청 (AC-4)', () => {
-  it('"위치 사용 허용" 을 누르면 OS 권한 요청이 1회 발화되고 granted 면 pref1 로 replace 한다', async () => {
+  it('주 버튼 "계속" 을 누르면 OS 권한 요청이 1회 발화되고 granted 면 푸시 카드로 replace 한다', async () => {
     mockRequestForeground.mockResolvedValue(GRANTED);
     render(<LocationPage />);
 
@@ -149,20 +165,22 @@ describe('LocationPage — 허용 → OS 권한 요청 (AC-4)', () => {
 
     await waitFor(() => expect(mockRequestForeground).toHaveBeenCalledTimes(1));
     await waitFor(() =>
-      expect(routerMock.replace).toHaveBeenCalledWith(PREF1_ROUTE)
+      expect(routerMock.replace).toHaveBeenCalledWith(PUSH_ROUTE)
     );
   });
 });
 
 describe('LocationPage — 나중에 하기 (AC-6)', () => {
-  it('"나중에 하기" 를 누르면 OS 권한 요청 없이 pref1 로 진행한다', async () => {
+  it('"나중에 하기" 를 누르면 OS 권한 요청 없이 푸시 카드로 진행한다(취향 1/2 로 건너뛰지 않는다)', async () => {
     render(<LocationPage />);
 
     fireEvent.press(screen.getByTestId('onboarding-location-later'));
 
     await waitFor(() =>
-      expect(routerMock.replace).toHaveBeenCalledWith(PREF1_ROUTE)
+      expect(routerMock.replace).toHaveBeenCalledWith(PUSH_ROUTE)
     );
+    // TRIP-1108 — 예전 목적지(pref1)로 곧장 가면 푸시 카드를 건너뛴다.
+    expect(routerMock.replace).not.toHaveBeenCalledWith(PREF1_ROUTE);
     // 나중에는 OS 다이얼로그를 띄우지 않는다 — 프리프롬프트의 존재 이유(발화 시점 사용자 선택).
     expect(mockRequestForeground).not.toHaveBeenCalled();
   });
@@ -179,13 +197,13 @@ describe('LocationPage — 거부해도 온보딩 무중단 (AC-5 · BR-U0-30)',
     expect(screen.queryByTestId('onboarding-location-allow')).toBeNull();
   });
 
-  it('denied 프레임에서 "계속" 을 누르면 pref1 로 도달한다(거부가 온보딩을 막지 않는다)', async () => {
+  it('denied 프레임에서 "계속" 을 누르면 푸시 카드로 도달한다(거부가 온보딩을 막지 않는다)', async () => {
     await reachDenied();
 
     fireEvent.press(screen.getByTestId('onboarding-location-continue'));
 
     await waitFor(() =>
-      expect(routerMock.replace).toHaveBeenCalledWith(PREF1_ROUTE)
+      expect(routerMock.replace).toHaveBeenCalledWith(PUSH_ROUTE)
     );
   });
 });
@@ -200,44 +218,58 @@ describe('LocationPage — 설정 열기 (AC-7)', () => {
   });
 });
 
-describe('LocationPage — 안내 줄 닫기 1회성 (AC-③-3 소비처 배선, TRIP-592)', () => {
-  it('denied 에서 닫기(×)를 누르면 안내 줄만 사라지고(1회성) denied 프레임은 유지된다', async () => {
-    // ▸준비 — 허용→OS denied→denied 프레임까지 몰아간다.
-    await reachDenied();
-
-    // ▸준비 확인 — 닫기 전엔 안내 앵커가 떠 있다.
-    expect(
-      screen.getByTestId('onboarding-location-denied-notice')
-    ).toBeOnTheScreen();
-
-    // ▸실행 — × 를 누르면 부모(LocationPage)가 소유한 로컬 상태가 안내 줄을 숨긴다(영속 없음 = 화면 표시 1회).
-    fireEvent.press(screen.getByTestId('onboarding-location-notice-dismiss'));
-
-    // ▸단언 — 안내 줄은 사라지되(1회성) denied 프레임 자체는 남아 진행 수단이 유지된다.
-    // '프레임 통째로 숨김'으로 가짜 통과하는 것을 continue 존재 단언이 막는다.
-    await waitFor(() =>
-      expect(
-        screen.queryByTestId('onboarding-location-denied-notice')
-      ).toBeNull()
-    );
-    expect(
-      screen.getByTestId('onboarding-location-continue')
-    ).toBeOnTheScreen();
-  });
-});
+// TRIP-717: 안내 줄 닫기(×)·1회성 숨김(onDismissNotice/noticeDismissed)은 Figma 정본에 없어
+// 폐기했다 — denied 안내는 카드로 항상 떠 있다(닫기 없음). 관련 dismiss 테스트는 삭제한다.
 
 describe('LocationPage — 서버 진행 플래그 미생성 (AC-8)', () => {
-  it('허용→granted→pref1 전 플로우 동안 서버로 아무 요청도 보내지 않는다', async () => {
+  it('허용→granted→푸시 카드 전 플로우 동안 서버로 아무 요청도 보내지 않는다', async () => {
     mockRequestForeground.mockResolvedValue(GRANTED);
     render(<LocationPage />);
 
     fireEvent.press(screen.getByTestId('onboarding-location-allow'));
     await waitFor(() =>
-      expect(routerMock.replace).toHaveBeenCalledWith(PREF1_ROUTE)
+      expect(routerMock.replace).toHaveBeenCalledWith(PUSH_ROUTE)
     );
 
     // c08 은 전이 화면이라 진행 플래그를 만들지 않는다(resolveOnboardingStep 은 terms/nickname/done
     // 만 판정). 여기에 onboarding/complete 류가 새로 생기면 requestLog 가 잡는다.
     expect(requestLog).toEqual([]);
+  });
+});
+
+describe('🔴 TRIP-1108 R6 · 즉시 넘어가는 두 버튼은 연타해도 1회', () => {
+  // 시계를 멈춘다 — 두 누름 사이가 400ms 창 안이라는 것을 실시간에 맡기지 않는다.
+  // (reachDenied 의 waitFor 가 끝난 뒤에 멈춘다 — waitFor 앞에서 멈추면 실패 시 무한 대기.)
+  function freezeClock(): jest.SpyInstance {
+    return jest.spyOn(Date, 'now').mockReturnValue(FROZEN_NOW);
+  }
+
+  it('"나중에 하기"를 빠르게 두 번 눌러도 푸시 카드로의 replace 는 1회', () => {
+    const clock = freezeClock();
+    try {
+      render(<LocationPage />);
+
+      fireEvent.press(screen.getByTestId('onboarding-location-later'));
+      fireEvent.press(screen.getByTestId('onboarding-location-later'));
+
+      expect(routerMock.replace).toHaveBeenCalledTimes(1);
+      expect(routerMock.replace).toHaveBeenCalledWith(PUSH_ROUTE);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it('denied 프레임 "계속"을 빠르게 두 번 눌러도 푸시 카드로의 replace 는 1회', async () => {
+    await reachDenied();
+    const clock = freezeClock();
+    try {
+      fireEvent.press(screen.getByTestId('onboarding-location-continue'));
+      fireEvent.press(screen.getByTestId('onboarding-location-continue'));
+
+      expect(routerMock.replace).toHaveBeenCalledTimes(1);
+      expect(routerMock.replace).toHaveBeenCalledWith(PUSH_ROUTE);
+    } finally {
+      clock.mockRestore();
+    }
   });
 });

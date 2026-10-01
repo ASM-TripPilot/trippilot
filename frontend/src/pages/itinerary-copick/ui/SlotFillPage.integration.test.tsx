@@ -16,6 +16,7 @@ import type {
   Itinerary,
   ItineraryDaysItem,
   SlotCandidatesRequest,
+  Trip,
 } from '@/shared/api/generated/schemas';
 import { getGetTripsTripIdItineraryQueryKey } from '@/shared/api/generated/trips/trips';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
@@ -58,6 +59,24 @@ jest.mock('expo-router', () => ({
 
 const BASE = 'http://localhost:8080/api/v1';
 const TRIP_ID = '22222222-2222-2222-2222-222222222222';
+
+// TRIP-1043 — 페이지가 진행 줄 여행지 접두를 위해 여행(`GET /trips/:tripId`)을 조회한다. 이 파일은 접두를
+// 재지 않으므로 여행지 없는 여행으로 답한다(접두 생략 degrade — 기존 `N일차` 단언이 그대로 유효). 핸들러를
+// 빼면 MSW 'error' 전략이 console.error 만 찍고 쿼리를 조용히 실패시켜 누락이 드러나지 않는다(02a ★1).
+const TRIP_NO_DESTINATIONS: Trip = {
+  tripId: TRIP_ID,
+  title: '테스트 여행',
+  startDate: '2026-06-10',
+  endDate: '2026-06-11',
+  party: 1,
+  preferenceSnapshot: {},
+  destinations: [],
+  status: 'PLANNED',
+  createdAt: '2026-06-01T00:00:00Z',
+  updatedAt: '2026-06-01T00:00:00Z',
+  baseCount: 0,
+  itineraryDayCount: 1,
+};
 const DAY1 = '2026-06-10';
 const SLOT_KEY = buildSlotKey(DAY1, 'a');
 
@@ -74,6 +93,7 @@ function itinerary(): Itinerary {
           isFixed: false,
           endsNextDay: false,
           hasViolation: false,
+          alternatives: [],
           tags: [],
         },
         {
@@ -83,6 +103,7 @@ function itinerary(): Itinerary {
           isFixed: false,
           endsNextDay: false,
           hasViolation: false,
+          alternatives: [],
           tags: [],
         },
       ],
@@ -130,6 +151,9 @@ beforeEach(() => {
   setAccessToken('valid-access');
 
   server.use(
+    http.get(`${BASE}/trips/:tripId`, () =>
+      HttpResponse.json(TRIP_NO_DESTINATIONS)
+    ),
     http.get(`${BASE}/trips/:tripId/itinerary`, () =>
       HttpResponse.json(itinerary())
     ),
@@ -158,7 +182,10 @@ afterAll(() => server.close());
 
 function renderPage(slotKey: string = SLOT_KEY) {
   const client = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    defaultOptions: {
+      queries: { retry: false, gcTime: 0 },
+      mutations: { gcTime: 0 },
+    },
   });
   function Wrapper({ children }: { children: ReactNode }) {
     return (
@@ -276,12 +303,13 @@ describe('🔴 SlotFillPage (h13→h14/h15) 배선', () => {
     expect(postBody?.radiusM).toBeNull(); // 3단째 = 명시적 null
   });
 
-  it('C7 · AC-4 서버 radiusMUsed(11300) → 화면 "약 11.3km" 표시', async () => {
+  it('C7 · AC-4 서버 radiusMUsed(11300) → 캡션이 "약 11.3km"를 넣어 넓힌 사실을 말한다', async () => {
     renderPage();
     await pickConcept('culture');
 
+    // TRIP-1081 결정 1 — 문자열 매처는 완전 일치다(02a §5-1).
     const used = await screen.findByTestId('itinerary-copick-radius-used');
-    expect(used).toHaveTextContent('약 11.3km');
+    expect(used).toHaveTextContent('1.1km 안에 없어 약 11.3km까지 넓혔어요');
   });
 
   it('C8 · AC-5 후보 0건 → 반경확대(재조회)·컨셉변경(h13 복귀) 배선', async () => {
@@ -427,6 +455,7 @@ describe('🔴 SlotFillPage (h13→h14/h15) 배선', () => {
     const client = new QueryClient({
       defaultOptions: {
         queries: { retry: false, staleTime: Infinity, gcTime: Infinity },
+        mutations: { gcTime: 0 },
       },
     });
     function Wrapper({ children }: { children: ReactNode }) {
@@ -479,10 +508,11 @@ describe('🔴 SlotFillPage (h13→h14/h15) 배선', () => {
 });
 
 /**
- * U3 소급 백필(20260824) · h13 문맥 줄 도출 회귀 심판.
+ * U3 소급 백필(20260824) · h13 문맥 줄 도출 회귀 심판. TRIP-1043(QA #041)로 문구가 "{시간대} 일정 ·
+ * {직전 이름} 다음"이 됐다 — 내부 용어 「슬롯」을 화면에서 뺀다(결정 1b).
  *
- * 무엇을 보장하나: 커밋 7cda1f5(발표용 domo, 사이클 없이 들어옴)가 문맥 줄 "{시간대} 슬롯 ·
- * {직전 이름} 다음"을 prop 이 아니라 SlotFillPage 안 `slotContextLabel()` 로 **도출**하도록 바꿨는데
+ * 무엇을 보장하나: 커밋 7cda1f5(발표용 domo, 사이클 없이 들어옴)가 문맥 줄을
+ * prop 이 아니라 SlotFillPage 안 `slotContextLabel()` 로 **도출**하도록 바꿨는데
  * 심판이 0이었다. 이 도출은 채울 슬롯의 `startAt`(→timeBandLabel)과 그 **직전** 슬롯 이름을
  * itinerary GET 캐시(위 fixture)에서 읽는다. 직전 슬롯이 없으면(첫 슬롯) "· 다음" 구간을 접는다.
  *
@@ -490,18 +520,220 @@ describe('🔴 SlotFillPage (h13→h14/h15) 배선', () => {
  * 05:00·11:00·14:00·17:00(동결).
  */
 describe('U3 · h13 문맥 줄 도출 (slotContextLabel)', () => {
-  it('첫 슬롯(a·09:30·직전 없음) → "오전 슬롯"만이고 "…다음"은 없다', async () => {
+  it('첫 슬롯(a·09:30·직전 없음) → "오전 일정"만이고 "…다음"은 없다', async () => {
     renderPage(SLOT_KEY); // slot a — index 0, 직전 없음
 
     // itinerary GET 도착 후 문맥 줄이 뜬다(async).
-    expect(await screen.findByText('오전 슬롯')).toBeTruthy();
+    expect(await screen.findByText('오전 일정')).toBeTruthy();
     // 직전이 없으므로 "…다음" 꼬리는 붙지 않는다.
     expect(screen.queryByText(/다음$/)).toBeNull();
   });
 
-  it('둘째 슬롯(b·13:00·직전 경복궁) → "점심 슬롯 · 경복궁 다음"', async () => {
+  it('둘째 슬롯(b·13:00·직전 경복궁) → "점심 일정 · 경복궁 다음"', async () => {
     renderPage(buildSlotKey(DAY1, 'b')); // slot b — index 1, 직전 = a(경복궁)
 
-    expect(await screen.findByText('점심 슬롯 · 경복궁 다음')).toBeTruthy();
+    expect(await screen.findByText('점심 일정 · 경복궁 다음')).toBeTruthy();
+  });
+});
+
+/**
+ * TRIP-795 · h10 후보 선택 배선 — 진행줄·스텝퍼(h09 헬퍼 재사용)를 후보 얼굴(SlotFillScreen)에도
+ * 내리고, 반경 좁히기(신규 onShrinkRadius)를 잇고, 좌표 없는 프로덕션에선 지도를 안 그린다(degrade).
+ *
+ * fixture: day1 비고정 [a 경복궁, b]. slot a = index 0(스텝퍼 없음), slot b = index 1(스텝퍼 있음).
+ */
+describe('🔴 TRIP-795 · h10 진행줄·스텝퍼·반경 좁히기·좌표 degrade 배선', () => {
+  it('I-PROG · 후보 얼굴에 진행줄(신규 namespace)이 뜨고 카운트가 1번째 / 2', async () => {
+    renderPage(SLOT_KEY); // slot a — index 0, nonFixed [a,b]
+    await pickConcept('culture');
+
+    expect(
+      await screen.findByTestId('itinerary-copick-slotfill-progress')
+    ).toBeTruthy();
+    expect(
+      screen.getByTestId('itinerary-copick-slotfill-progress-count')
+    ).toHaveTextContent('1번째 / 2');
+  });
+
+  it('I-STEP · 둘째 슬롯(index 1)엔 스텝퍼가 뜨고, 첫 슬롯(index 0)엔 안 뜬다', async () => {
+    // 둘째 슬롯 — 이전(경복궁 고름)이 있어 스텝퍼를 그린다(conceptStepper 재사용).
+    renderPage(buildSlotKey(DAY1, 'b'));
+    await pickConcept('culture');
+    expect(await screen.findByTestId('copick-stepper')).toBeTruthy();
+
+    // 첫 슬롯 — 이전이 없어 conceptStepper()가 undefined → 스텝퍼 미렌더(h09 승계).
+    screen.unmount();
+    renderPage(SLOT_KEY);
+    await pickConcept('culture');
+    await screen.findByTestId('itinerary-candidate-radio-X'); // 후보 얼굴 도착
+    expect(screen.queryByTestId('copick-stepper')).toBeNull();
+  });
+
+  it('I-SHRINK · 마지막 단계에서 반경 좁히기 → 한 단계 뒤(mid·1100m)로 재조회', async () => {
+    renderPage();
+    await pickConcept('culture');
+    await waitFor(() => expect(postCalls).toBe(1));
+
+    // 반경 max 로 올린다(radiusM=null) → 마지막 단계라 결과 얼굴에 "반경 좁히기" 상시 노출.
+    fireEvent.press(screen.getByTestId('itinerary-copick-radius-seg-max'));
+    await waitFor(() => expect(postCalls).toBe(2));
+    expect(postBody?.radiusM).toBeNull();
+
+    const radiusBtn = screen.getByTestId('itinerary-copick-slotfill-radius');
+    expect(radiusBtn).toHaveTextContent('반경 좁히기');
+
+    // 좁히기 → 한 단계 뒤(mid) 반경으로 재조회.
+    fireEvent.press(radiusBtn);
+    await waitFor(() => expect(postCalls).toBe(3));
+    expect(postBody?.radiusM).toBe(1100);
+  });
+
+  it('I-DEGRADE · 현재 슬롯에 좌표가 없으면 지도 카드를 안 그린다(선제 green)', async () => {
+    renderPage();
+    await pickConcept('culture');
+    await screen.findByTestId('itinerary-candidate-radio-X');
+
+    // TRIP-1043 — 지도 기준점은 현재 슬롯 좌표다. 이 픽스처 슬롯엔 lat/lng 가 없어 지도를 안 그린다
+    // (0,0·서울 폴백 금지). 좌표가 있을 때의 지도는 SlotFillPage.context.integration.test.tsx B1~B4.
+    expect(screen.queryByTestId('map-root')).toBeNull();
+  });
+});
+
+/**
+ * TRIP-978 · 반경 라벨 — 셋째 칸과 캡션을 무엇으로 채울지는 **요청 radiusM × 응답 radiusMUsed** 로
+ * 페이지가 가른다(BR-U3-25 · Seed Q3·Q6).
+ *
+ * 무엇을 보장하나:
+ *  - AC-8: mid 조회에 서버가 1100 을 그대로 썼으면 셋째 칸은 '최대', 캡션 없음 — "1.1km" 는 가운데 칸 하나뿐.
+ *  - AC-9: 최대(radiusM=null) 조회면 셋째 칸이 서버값, 캡션 없음. 좁히기로 돌아오면 다시 '최대'(Q6).
+ *  - AC-10: mid 조회를 서버가 넓혔으면(radiusMUsed > radiusM) 셋째 칸은 '최대', 넓힌 사실은 캡션이 말한다.
+ */
+describe('🔴 TRIP-978 · 반경 셋째 칸·캡션 라벨', () => {
+  it('R-MID · AC-8 기본 반경(1.1km)을 서버가 그대로 썼으면 셋째 칸은 "최대"이고 "1.1km" 는 한 번만 보인다', async () => {
+    // 기본 후보 Y 의 거리 '1.1km' 가 세기를 흐리지 않게 거리를 바꾼다.
+    candidatesResponse = {
+      candidates: [
+        {
+          poiId: 'X',
+          distanceRange: '420m',
+          rationale: '가장 가까운 실내 전시',
+        },
+        { poiId: 'Y', distanceRange: '770m', rationale: '조용한 카페' },
+      ],
+      radiusMUsed: 1100,
+    };
+    renderPage();
+    await pickConcept('culture');
+    await screen.findByTestId('itinerary-candidate-radio-X');
+
+    expect(
+      screen.getByTestId('itinerary-copick-radius-seg-max')
+    ).toHaveTextContent('최대');
+    expect(screen.queryByTestId('itinerary-copick-radius-used')).toBeNull();
+    expect(screen.queryAllByText(/1\.1km/)).toHaveLength(1);
+  });
+
+  it('R-MAX · AC-9 "최대"로 조회하면 셋째 칸이 서버값이고 캡션은 없다 → 좁히기로 돌아오면 다시 "최대"', async () => {
+    // 요청 radiusM 에 따라 서버가 쓴 반경을 돌려준다 — null(최대)=11300·후보 W, 숫자=그 값·후보 X·Y.
+    // 응답마다 후보를 달리해, 그 응답이 화면에 반영된 뒤에 라벨을 읽는다(조회 중 라벨로 판정 금지).
+    server.use(
+      http.post(
+        `${BASE}/trips/:tripId/itinerary/slot-candidates`,
+        async ({ request }) => {
+          postCalls += 1;
+          postBody = (await request.json()) as SlotCandidatesRequest;
+          const radiusM = postBody.radiusM ?? null;
+          return HttpResponse.json(
+            radiusM === null
+              ? {
+                  candidates: [
+                    {
+                      poiId: 'W',
+                      distanceRange: '2.4km',
+                      rationale: '넓힌 곳',
+                    },
+                  ],
+                  radiusMUsed: 11300,
+                }
+              : {
+                  candidates: candidatesResponse.candidates,
+                  radiusMUsed: radiusM,
+                }
+          );
+        }
+      )
+    );
+    renderPage();
+    await pickConcept('culture');
+    await screen.findByTestId('itinerary-candidate-radio-X');
+
+    fireEvent.press(screen.getByTestId('itinerary-copick-radius-seg-max'));
+    await screen.findByTestId('itinerary-candidate-radio-W');
+    expect(postBody?.radiusM).toBeNull();
+    expect(
+      screen.getByTestId('itinerary-copick-radius-seg-max')
+    ).toHaveTextContent('약 11.3km');
+    expect(screen.queryByTestId('itinerary-copick-radius-used')).toBeNull();
+
+    // 좁히기 → mid(1100) 재조회 → 셋째 칸은 다시 '최대'(마지막 최대값을 기억하지 않는다, Q6).
+    fireEvent.press(screen.getByTestId('itinerary-copick-slotfill-radius'));
+    await screen.findByTestId('itinerary-candidate-radio-X');
+    expect(postCalls).toBe(3);
+    expect(postBody?.radiusM).toBe(1100);
+    expect(
+      screen.getByTestId('itinerary-copick-radius-seg-max')
+    ).toHaveTextContent('최대');
+  });
+
+  it('R-AUTO · AC-10 mid 조회를 서버가 11.3km 로 넓혔으면 셋째 칸은 "최대"이고 캡션이 넓힌 사실을 말한다', async () => {
+    // 기본 candidatesResponse.radiusMUsed = 11300 — mid(1100) 요청보다 크다(서버 자동 확대).
+    renderPage();
+    await pickConcept('culture');
+
+    const used = await screen.findByTestId('itinerary-copick-radius-used');
+    expect(used).toHaveTextContent('1.1km 안에 없어 약 11.3km까지 넓혔어요');
+    expect(
+      screen.getByTestId('itinerary-copick-radius-seg-max')
+    ).toHaveTextContent('최대');
+  });
+});
+
+/**
+ * TRIP-1081 결정 1(a) · QA #067 — 서버가 요청 반경을 넓혔을 때 칩은 사용자가 고른 그대로 두고, 캡션이
+ * "요청 반경 안에 없어 서버 반경까지 넓혔다"는 사실을 말한다(BR-U3-25 · INV-2 서버 값 그대로).
+ */
+describe('🔴 TRIP-1081 · 서버가 넓힌 반경 캡션 문구', () => {
+  it('R-WIDEN12 · 1.1km 요청을 12km 로 넓혔으면 가운데 칩은 선택 그대로, 캡션은 사실 문장', async () => {
+    candidatesResponse = { ...candidatesResponse, radiusMUsed: 12000 };
+    renderPage();
+    await pickConcept('culture');
+
+    const used = await screen.findByTestId('itinerary-copick-radius-used');
+    expect(used).toHaveTextContent('1.1km 안에 없어 약 12.0km까지 넓혔어요');
+    // 칩이 서버 반경 쪽으로 옮겨가지 않는다 — 사용자가 고른 1.1km 가 선택 상태.
+    expect(
+      screen.getByTestId('itinerary-copick-radius-seg-mid').props
+        .accessibilityState?.selected
+    ).toBe(true);
+    expect(
+      screen.getByTestId('itinerary-copick-radius-seg-max')
+    ).toHaveTextContent('최대');
+  });
+
+  it('R-WIDEN-NEAR · 700m 요청을 1.5km 로 넓혔으면 캡션 앞머리도 요청 반경 "700m" 다', async () => {
+    candidatesResponse = { ...candidatesResponse, radiusMUsed: 1500 };
+    renderPage();
+    await pickConcept('culture');
+    await screen.findByTestId('itinerary-copick-radius-used');
+
+    fireEvent.press(screen.getByTestId('itinerary-copick-radius-seg-near'));
+
+    // 요청 반경 쪽도 포맷한다 — '1.1km' 를 박아 둔 구현이면 red(02a ★10).
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('itinerary-copick-radius-used')
+      ).toHaveTextContent('700m 안에 없어 약 1.5km까지 넓혔어요')
+    );
+    expect(postBody?.radiusM).toBe(700);
   });
 });

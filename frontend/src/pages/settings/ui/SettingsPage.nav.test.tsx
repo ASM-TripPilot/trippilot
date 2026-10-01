@@ -1,6 +1,19 @@
 jest.mock('@/shared/api/generated/account/account');
-jest.mock('@/shared/api/generated/profile/profile');
+// TRIP-778: profile 은 팩토리 목 — codegen(D1) 전엔 `useGetMeSettings`·`usePatchMeSettings` 가 생성물에
+// 없어 자동 목이 이름을 모른다. 기존 export 는 자동 목 그대로 두고 두 이름만 목 함수로 채운다(02a ★2).
+jest.mock('@/shared/api/generated/profile/profile', () => ({
+  ...jest.createMockFromModule<Record<string, unknown>>(
+    '@/shared/api/generated/profile/profile'
+  ),
+  useGetMeSettings: jest.fn(),
+  usePatchMeSettings: jest.fn(),
+}));
+// TRIP-778: 페이지가 새로 읽는 조회 3종(취향·위치 동의·개인화) — 실 훅이 네트워크로 나가지 않게 자동 목.
+jest.mock('@/shared/api/generated/preferences/preferences');
+jest.mock('@/shared/api/generated/location/location');
+jest.mock('@/shared/api/generated/reflection/reflection');
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   fireEvent,
   render,
@@ -9,7 +22,14 @@ import {
 } from '@testing-library/react-native';
 
 import { useGetMe } from '@/shared/api/generated/account/account';
-import { useGetMeProfile } from '@/shared/api/generated/profile/profile';
+import { useGetMeLocationConsent } from '@/shared/api/generated/location/location';
+import { useGetMePreferences } from '@/shared/api/generated/preferences/preferences';
+import {
+  useGetMeProfile,
+  useGetMeSettings,
+  usePatchMeSettings,
+} from '@/shared/api/generated/profile/profile';
+import { useGetMePersonalization } from '@/shared/api/generated/reflection/reflection';
 
 import { SettingsPage } from '..';
 
@@ -33,8 +53,21 @@ import { SettingsPage } from '..';
  *   push 인자·횟수만 관측한다(02a ★8).
  *
  * (개념) 문자열 인자 매처는 완전일치 — `toHaveBeenCalledWith('/settings/location')`는 라우트를
- *  글자 그대로 잠근다(02a §5-A). `fireEvent.press`는 onPress 핸들러가 있어야 발화하고, 준비중 행은
- *  핸들러가 없어 깨끗한 no-op 이다(02a §5-B).
+ *  글자 그대로 잠근다(02a §5-A).
+ *
+ * TRIP-939 AC-1 · TRIP-778 AC-3(재작성): 페이지는 여전히 `filterReadySettingsSections` 로 준비중 행을
+ *  거르지만, 취향 7·제휴·개인화가 ready:true 로 열려 운영 화면에 7그룹이 모두 보이고 "준비 중"은 없다
+ *  (구 "여행 취향·제휴 그룹째 부재"는 01b 사용자 결정으로 뒤집혔다).
+ *
+ * TRIP-778 AC-8 · TRIP-1051 AC-4: 취향 한 행은 `/settings/preferences`(전체 편집 화면 하나 — 축 인자 없음)로,
+ *  개인화 행은 `/settings/personalization` 으로 push 한다. 라우트 문자열은 페이지가 쥐므로 여기서 잠근다.
+ *
+ * TRIP-1051 AC-3(페이지): 취향 조회가 아직 없으면(`data: undefined`) 페이지가 그걸 그대로 넘겨 값이 비어야
+ *  한다. 화면 테스트는 VM 을 직접 넣으므로 "페이지가 `data ?? {}` 로 넘겨 0/7 을 만든다"는 여기서만 잡힌다
+ *  (02a ★7).
+ *
+ * TRIP-937 AC-3: 앱 정보 그룹의 약관 3행을 누르면 열람 라우트 `/terms/{termsType}` 로 push 한다(심사
+ *  가이드라인 5.1.1(i) — 개인정보처리방침 앱 내 접근). 라우트 문자열은 페이지가 쥐므로 여기서 잠근다.
  */
 
 const mockPush = jest.fn();
@@ -42,6 +75,19 @@ const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
   router: { push: mockPush, back: jest.fn() },
 }));
+
+/**
+ * TRIP-938 준비 단계 — 페이지가 로그아웃 때 캐시를 비우려고 `useQueryClient()` 를 부르므로
+ * QueryClientProvider 안에서 그린다(없으면 "No QueryClient set" 으로 렌더가 죽는다, 02a ★5).
+ * 조회 훅은 위에서 목하므로 이 클라이언트는 실제로 아무것도 가져오지 않는다.
+ */
+function renderPage() {
+  return render(
+    <QueryClientProvider client={new QueryClient()}>
+      <SettingsPage />
+    </QueryClientProvider>
+  );
+}
 
 const mockUseGetMe = useGetMe as jest.Mock;
 const mockUseGetMeProfile = useGetMeProfile as jest.Mock;
@@ -53,11 +99,20 @@ beforeEach(() => {
     data: { accountId: 'acc-1', status: 'ACTIVE', email: 'a@b.com' },
   });
   mockUseGetMeProfile.mockReturnValue({ data: { nickname: '여행자123' } });
+  // TRIP-778 새 조회·변경 훅 — 응답 전 모양. 이 파일은 라우트만 본다(값·토글은 l05parity.integration).
+  (useGetMePreferences as jest.Mock).mockReturnValue({ data: undefined });
+  (useGetMeLocationConsent as jest.Mock).mockReturnValue({ data: undefined });
+  (useGetMePersonalization as jest.Mock).mockReturnValue({ data: undefined });
+  (useGetMeSettings as jest.Mock).mockReturnValue({ data: undefined });
+  (usePatchMeSettings as jest.Mock).mockReturnValue({
+    mutate: jest.fn(),
+    isPending: false,
+  });
 });
 
 describe('TRIP-618 · SettingsPage 진입 배선', () => {
   it('AC-2: 위치 네비 행 press → router.push("/settings/location") 정확히 1회', () => {
-    render(<SettingsPage />);
+    renderPage();
 
     // 실행: 위치정보 네비 행을 누른다.
     fireEvent.press(screen.getByTestId('settings-nav-location-consent'));
@@ -68,7 +123,7 @@ describe('TRIP-618 · SettingsPage 진입 배선', () => {
   });
 
   it('AC-3: 알림 네비 행 press → router.push("/settings/notifications") 정확히 1회', () => {
-    render(<SettingsPage />);
+    renderPage();
 
     fireEvent.press(screen.getByTestId('settings-nav-notifications'));
 
@@ -76,17 +131,79 @@ describe('TRIP-618 · SettingsPage 진입 배선', () => {
     expect(mockPush).toHaveBeenCalledWith('/settings/notifications');
   });
 
-  it('AC-4(선제green): 제휴 준비중 행을 눌러도 push 0(무배선 유지, 회귀 앵커)', () => {
-    render(<SettingsPage />);
+  it('TRIP-939 AC-1 · TRIP-778 AC-3(재작성): 운영 화면에 7그룹이 모두 보이고 "준비 중"은 없다', () => {
+    // 준비·실행: 실 페이지를 그린다(페이지가 ready 필터를 거쳐 화면에 넘긴다).
+    renderPage();
 
-    // 제휴 안내 그룹의 준비중 행(onPress 없음)을 누른다.
+    const labels = [
+      '계정',
+      null, // TRIP-1051 — 여행 취향 그룹은 머리글 없음(행으로 확인)
+      '위치정보',
+      '알림',
+      '제휴 안내',
+      '앱 정보',
+      '위험 영역',
+    ];
+    // 단언: 7그룹이 정본 순서로 있다(i번째 그룹 안에 i번째 라벨, 완전일치).
     const groups = screen.getAllByTestId('settings-group');
-    const affiliate = groups.find(
-      (g) => within(g).queryByText('제휴 안내') !== null
-    )!;
-    fireEvent.press(within(affiliate).getByTestId('settings-row'));
-
-    // 단언: 목적지 라우트가 없는 행은 아무 데도 가지 않는다(INV-4).
-    expect(mockPush).not.toHaveBeenCalled();
+    expect(groups).toHaveLength(7);
+    labels.forEach((label, i) => {
+      if (label === null) {
+        // 머리글 없는 칸: 그 자리에 취향 행이 있고, '여행 취향' 글자는 행 라벨 1개뿐이다.
+        expect(
+          within(groups[i]).getByTestId('settings-nav-preferences')
+        ).toBeOnTheScreen();
+        expect(within(groups[i]).getAllByText('여행 취향')).toHaveLength(1);
+      } else {
+        expect(within(groups[i]).getByText(label)).toBeOnTheScreen();
+      }
+    });
+    // 단언(부분포함): 준비 중 표기는 어디에도 없다(TRIP-939 — 심사 2.1).
+    expect(screen.queryByText(/준비 중/)).toBeNull();
   });
+
+  it('TRIP-1051 AC-4: 취향 한 행 press → router.push("/settings/preferences") 정확히 1회', () => {
+    renderPage();
+
+    // 실행
+    fireEvent.press(screen.getByTestId('settings-nav-preferences'));
+
+    // 단언: 전체 편집 화면 하나로(축을 URL 에 싣지 않는다), 정확히 한 번.
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith('/settings/preferences');
+  });
+
+  it('TRIP-1051 AC-3(페이지): 취향 응답이 없으면 행은 있지만 "N/7"을 지어내지 않는다', () => {
+    // 준비: beforeEach 가 useGetMePreferences → { data: undefined }(응답 전·실패 모양)로 둔다.
+    renderPage();
+
+    // 긍정 앵커: 행은 있다.
+    const row = screen.getByTestId('settings-nav-preferences');
+    // 단언(부분포함): 어떤 숫자든 "/7" 이 없다 — 페이지가 {} 로 채워 넘기면 "0/7 설정됨"이 떠서 red.
+    expect(within(row).queryByText(/\/7/)).toBeNull();
+  });
+
+  it('TRIP-778 AC-8: 개인화 행 press → router.push("/settings/personalization") 정확히 1회', () => {
+    renderPage();
+
+    fireEvent.press(screen.getByTestId('settings-nav-personalization'));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith('/settings/personalization');
+  });
+
+  it.each([['TERMS_OF_SERVICE'], ['PRIVACY_POLICY'], ['LOCATION_TERMS']])(
+    'TRIP-937 AC-3: 약관 행(%s) press → router.push("/terms/<termsType>") 정확히 1회',
+    (termsType) => {
+      // 준비: 실 페이지(필터 통과한 운영 목록).
+      renderPage();
+
+      // 실행: 앱 정보 그룹의 약관 행을 누른다.
+      fireEvent.press(screen.getByTestId(`settings-nav-terms-${termsType}`));
+
+      // 단언: 열람 라우트(동적 세그먼트)로, 문자열 그대로 정확히 한 번.
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(mockPush).toHaveBeenCalledWith(`/terms/${termsType}`);
+    }
+  );
 });

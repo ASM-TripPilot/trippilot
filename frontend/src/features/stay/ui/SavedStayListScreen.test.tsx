@@ -1,9 +1,13 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import { processColor, StyleSheet } from 'react-native';
+
+import { HeartFilledGlyph as SharedHeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
 
 import {
   SavedStayListScreen,
   type SavedStayCardVM,
 } from './SavedStayListScreen';
+import { HeartFilledGlyph as StayHeartFilledGlyph } from './StayGlyphs';
 
 /**
  * TRIP-461 AC-2·3·4·6·7·8 — e04 저장한 숙소 **무상태 화면**의 렌더 계약.
@@ -24,11 +28,24 @@ import {
  *    안 남는다. 대신 **다른 testID**(`-filled`) + `toBeSelected()` 두 신호로 잰다(★3, e03 선례).
  */
 
-// 저장 숙소 카드 뷰모델 2건 — 이름과 (있으면)날짜라벨만 나른다(계약에 지역·거리·가격 없음, ★7).
+// 저장 숙소 카드 뷰모델 2건. ss-1 은 Figma 풀샷(거점·지역·2톤 가격 + dateLabel), ss-2 는 degrade
+// (이름만) — 두 얼굴을 한 results 렌더에서 동시에 잰다(TRIP-729). dateLabel 은 F-10 잠금용으로 남긴다.
 const STAYS: SavedStayCardVM[] = [
-  { savedStayId: 'ss-1', name: '해운대 오션뷰 호텔', dateLabel: '6.10~6.13' },
+  {
+    savedStayId: 'ss-1',
+    name: '해운대 오션뷰 호텔',
+    dateLabel: '6.10~6.13',
+    isBase: true,
+    region: '해운대',
+    priceLabel: '145,000원~',
+  },
   { savedStayId: 'ss-2', name: '제주 돌담 게스트하우스' },
 ];
+
+// className 토큰 배열 — 부분포함(`toContain`)으로 재려 오탐 차단(카드 테스트 헬퍼 동형).
+function cls(el: { props: { className?: unknown } }): string[] {
+  return String(el.props.className ?? '').split(/\s+/);
+}
 
 function noop(): void {}
 
@@ -122,8 +139,23 @@ describe('S3 · loading/error/guest 얼굴 — empty 위장 금지 (AC-4·★4·
   });
 });
 
+// TRIP-1019 #019 — 하단 버튼이 "다른 숙소를 거점으로 지정"이라 적혀 있었지만 실제로는 숙소 등록 화면
+// (/stays/register)으로 간다. 저장(♥)과 거점은 다른 개념이다(BR-U1-19). 라벨을 가는 곳의 이름으로
+// 바꾼다 — 같은 목적지로 가는 e02 버튼이 이미 쓰는 "숙소 직접 등록"(01b Q2).
+describe('S4b · 하단 버튼 이름 = 숙소 직접 등록 (TRIP-1019 #019 · BR-U1-19 · US-STAY-08)', () => {
+  it('하단 버튼 안에 "거점" 글자가 없고, 이름이 "숙소 직접 등록"인 버튼이다', () => {
+    render(<SavedStayListScreen savedStays={STAYS} face="results" />);
+
+    const button = screen.getByTestId('saved-stay-register');
+    // 금지: 저장 목록에서 거점을 지정하는 버튼처럼 읽히지 않는다(부분 포함 정규식).
+    expect(button).not.toHaveTextContent(/거점/);
+    // 정상: 스크린리더가 읽는 버튼 이름이 가는 곳과 같다(완전일치).
+    expect(screen.getByRole('button', { name: '숙소 직접 등록' })).toBe(button);
+  });
+});
+
 describe('S4 · 버튼 콜백 (AC-6·AC-7)', () => {
-  it('하단 "거점 지정" press → onPressRegister 가 불린다 (AC-6)', () => {
+  it('하단 "숙소 직접 등록" press → onPressRegister 가 불린다 (AC-6)', () => {
     const onPressRegister = jest.fn();
     render(
       <SavedStayListScreen
@@ -167,5 +199,132 @@ describe('S4 · 버튼 콜백 (AC-6·AC-7)', () => {
     fireEvent.press(screen.getByTestId('saved-stay-browse'));
 
     expect(onPressBrowse).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('S5 · results 카드 Figma 정합 — 거점 배지·지역·2톤 가격 전달 (TRIP-729 AC-6)', () => {
+  it('🔴 isBase/region/priceLabel 있는 카드는 배지·지역·2톤 가격을, 없는 카드는 이름만 그린다', () => {
+    render(<SavedStayListScreen savedStays={STAYS} face="results" />);
+
+    // ss-1(풀샷) — 거점 배지(testID) + 지역 + 2톤 가격(금액·"~" 각각).
+    expect(
+      screen.getByTestId('saved-stay-card-ss-1-base-badge')
+    ).toBeOnTheScreen();
+    expect(screen.getByText('해운대')).toBeOnTheScreen();
+    expect(screen.getByText('145,000원')).toBeOnTheScreen();
+    expect(screen.getByText('~')).toBeOnTheScreen();
+
+    // ss-2(degrade) — 배지 없음, 이름만(카드 자체는 떠 있다 = 공허 통과 방지 짝).
+    expect(screen.queryByTestId('saved-stay-card-ss-2-base-badge')).toBeNull();
+    expect(screen.getByText('제주 돌담 게스트하우스')).toBeOnTheScreen();
+  });
+
+  it('🔴 F-10 · 날짜라벨 행은 VM 에 dateLabel 이 있어도 미렌더 (화면이 subtitle 미전달)', () => {
+    // ss-1 은 dateLabel 을 가졌지만 e04 는 날짜 행을 뗐다(F-10) — 화면이 카드에 날짜를 안 넘긴다.
+    render(<SavedStayListScreen savedStays={STAYS} face="results" />);
+
+    // testID 부재만으로는 약하다 — 카드의 subtitle 슬롯이 g02용으로 아직 살아 있어, 누가
+    // `subtitle={<Text>{vm.dateLabel}</Text>}`(testID 없이)로 재배선하면 날짜 텍스트가 다시 떠도
+    // testID 단언은 green이다(5-c 강화, code-critic 경고-1). 그래서 실제 날짜 문자열 부재로도 잠근다.
+    expect(screen.queryByTestId('saved-stay-date-ss-1')).toBeNull();
+    expect(screen.queryByText('6.10~6.13')).toBeNull();
+  });
+});
+
+describe('S6 · empty 콜라주 — 3장 겹침 + 흰 3px 테두리 + 중앙 하트 원 (TRIP-729 AC-8)', () => {
+  it('🔴 empty 면 콜라주 사진 3장(각 흰 3px 테두리)과 중앙 하트 원을 그린다', () => {
+    render(<SavedStayListScreen savedStays={[]} face="empty" />);
+
+    // 콜라주 사진 3장 — 겹침·기울기·z·크기 위계는 jest 사각(6-b/TRIP-831), 3장 존재까지만.
+    const photos = screen.getAllByTestId(/^saved-stay-empty-photo-/);
+    expect(photos).toHaveLength(3);
+    // 셋 다 흰 3px 테두리(Figma 정합) — 구 EmptyCluster 는 양옆 카드에 테두리가 없었다.
+    photos.forEach((photo) => {
+      expect(cls(photo)).toContain('border-[3px]');
+      expect(cls(photo)).toContain('border-canvas');
+    });
+    // 중앙 하트 원.
+    expect(screen.getByTestId('saved-stay-empty-heart')).toBeOnTheScreen();
+  });
+
+  it('🔴 AC-9 · empty CTA "숙소 둘러보기" radius rounded-[12px] (rounded-[14px] 아님)', () => {
+    render(<SavedStayListScreen savedStays={[]} face="empty" />);
+
+    const tokens = cls(screen.getByTestId('saved-stay-browse'));
+    expect(tokens).toContain('rounded-[12px]');
+    expect(tokens).not.toContain('rounded-[14px]');
+  });
+});
+
+/**
+ * ── TRIP-1050 · 공통 콜라주 빈 상태로 옮기며 Figma 쪽으로 정합 (AC-3 · 01b Seed Q1 ①②③) ─────
+ * e04 는 d02 와 같은 `@/shared/ui/CollageEmptyState` 로 그려진다. 문구·testID·onPress 는 그대로
+ * (S2·S4·S6 무수정 green + S7-1), 픽셀은 두 Figma 프레임 공통값으로 바뀐다(사진 그림자 · 공용
+ * 하트 · CTA 패딩 22/24). 그림자·하트 모양의 실제 렌더는 6-b 육안 몫이다.
+ */
+
+// SVG 색은 host 노드의 `stroke.payload`(processColor 결과 정수)로 남는다 — host 만 고른다.
+function strokePayloads(
+  node: ReturnType<typeof screen.getByTestId>
+): unknown[] {
+  return node
+    .findAll((n) => typeof n.type === 'string' && n.props.stroke != null)
+    .map((n) => n.props.stroke?.payload);
+}
+
+describe('S7 · TRIP-1050 공통 틀 이관 — 문구 무회귀 + Figma 정합 (AC-3 · Seed Q1)', () => {
+  it('본문·CTA 라벨 문구가 그대로다 (AC-3)', () => {
+    render(<SavedStayListScreen savedStays={[]} face="empty" />);
+
+    expect(
+      screen.getByText(
+        '인기 숙소를 둘러보고 ♥로 저장하면\n여기에 모아 바로 거점으로 쓸 수 있어요'
+      )
+    ).toBeOnTheScreen();
+    expect(screen.getByText('숙소 둘러보기')).toBeOnTheScreen();
+  });
+
+  it('🔴 사진 3장이 각각 작은 그림자(0/2/10 · .06)를 갖는다 (Seed Q1 ①)', () => {
+    render(<SavedStayListScreen savedStays={[]} face="empty" />);
+
+    const photos = screen.getAllByTestId(/^saved-stay-empty-photo-/);
+    expect(photos).toHaveLength(3);
+    photos.forEach((photo) => {
+      expect(StyleSheet.flatten(photo.props.style)).toMatchObject({
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 10,
+      });
+    });
+  });
+
+  it('🔴 하트 원 안의 하트가 shared/ui 공용 하트이고 StayGlyphs 하트가 아니다 (Seed Q1 ②)', () => {
+    render(<SavedStayListScreen savedStays={[]} face="empty" />);
+
+    const heart = screen.getByTestId('saved-stay-empty-heart');
+    // 이름이 같은 두 함수를 정체성으로 가른다 — 긍정(공용 1)과 부정(stay 0)을 함께 건다.
+    expect(heart.findAllByType(SharedHeartFilledGlyph)).toHaveLength(1);
+    expect(heart.findAllByType(StayHeartFilledGlyph)).toHaveLength(0);
+  });
+
+  it('🔴 CTA 좌우 패딩이 22/24 다 — px 28 이 아니다 (Seed Q1 ③)', () => {
+    render(<SavedStayListScreen savedStays={[]} face="empty" />);
+
+    const tokens = cls(screen.getByTestId('saved-stay-browse'));
+    expect(tokens).toContain('pl-[22px]');
+    expect(tokens).toContain('pr-2xl');
+    expect(tokens).not.toContain('px-[28px]');
+    // 높이·radius 는 그대로(AC-9 짝).
+    expect(tokens).toContain('h-[52px]');
+    expect(tokens).toContain('rounded-[12px]');
+  });
+
+  it('CTA 돋보기는 흰색이다 — 아이콘이 prop 으로 옮겨져도 색이 새지 않는다', () => {
+    render(<SavedStayListScreen savedStays={[]} face="empty" />);
+
+    const payloads = strokePayloads(screen.getByTestId('saved-stay-browse'));
+    // 긍정 짝 — stroke 노드가 없으면 아래 forEach 가 공허 통과한다.
+    expect(payloads.length).toBeGreaterThanOrEqual(1);
+    payloads.forEach((payload) => expect(payload).toBe(processColor('white')));
   });
 });

@@ -1,0 +1,31 @@
+digraph architecture { graph [layout=neato, overlap=true, splines=polyline, outputorder=edgesfirst, bgcolor="#ffffff", pad=0.18, fontname="Apple SD Gothic Neo", fontsize=18];
+node [shape=box, fontname="Apple SD Gothic Neo", fontsize=16, penwidth=1.5, margin="0.12,0.10", fixedsize=false];
+edge [fontname="Apple SD Gothic Neo", fontsize=13, color="#73889a", penwidth=1.4, arrowsize=0.7];
+actions [label="GitHub Actions\nOIDC 인증 · 배포 실행", pos="120,570!", width=2.5, height=0.8, fillcolor="#ffffff", color="#6b7280", style="rounded,dashed,filled"];
+bootstrap [label="CloudFormation 초기 준비\nIAM 역할 + S3 상태 파일 / 잠금\n기존 GitHub OIDC provider 사용", pos="460,570!", width=3.8, height=1.0, fillcolor="#f1edff", color="#8b6abf", style="rounded,dashed,filled"];
+ecr [label="ECR 이미지 저장소\nbackend / ai / embedding", pos="810,570!", width=3.2, height=0.8, fillcolor="#edf4ff", color="#3e6ed9", style="rounded,filled"];
+secrets [label="Secrets Manager\n4개 앱 비밀 보관함 + RDS 비밀", pos="1150,570!", width=3.7, height=0.8, fillcolor="#edf4ff", color="#3e6ed9", style="rounded,filled"];
+users [label="사용자\nHTTPS :443", pos="120,255!", width=2.2, height=0.8, fillcolor="#ffffff", color="#6b7280", style="rounded,filled"];
+preexisting [label="DNS + ACM 인증서\n배포 전에 별도 사전 준비", pos="120,365!", width=3.0, height=0.8, fillcolor="#ffffff", color="#8b6abf", style="rounded,dashed,filled"];
+subgraph cluster_vpc { label="AWS ap-northeast-2  /  DEV VPC 10.40.0.0/16  /  가용 영역 2개"; bb="285,5,1375,430"; lp="830,27"; labelloc=b; fontsize=21; fontcolor="#17324d"; style="rounded"; color="#3e6ed9"; penwidth=2; margin=24;
+subgraph cluster_public { label="퍼블릭 서브넷\nAZ 1: 10.40.0.0/24\nAZ 2: 10.40.1.0/24"; bb="305,65,615,420"; lp="460,376"; fontsize=16; fontcolor="#23415a"; color="#bad0e4"; fillcolor="#f6faff"; style="rounded,filled"; margin=18; nat [label="NAT Gateway x1 + EIP\nAZ 1의 출구를 함께 사용", pos="460,305!", width=3.6, height=0.8, fillcolor="#edf4ff", color="#3e6ed9", style="rounded,filled"];
+nlb [label="NLB :443 + ACM TLS\nHelm / Auto Mode가 생성", pos="460,205!", width=3.6, height=0.8, fillcolor="#fff2e5", color="#d2903d", style="rounded,dashed,filled"];
+igw [label="Internet Gateway\n퍼블릭 서브넷의 인터넷 경로", pos="460,115!", width=3.6, height=0.8, fillcolor="#edf4ff", color="#3e6ed9", style="rounded,filled"]; }
+subgraph cluster_compute { label="앱용 프라이빗 서브넷\nAZ 1: 10.40.16.0/20\nAZ 2: 10.40.32.0/20"; bb="650,65,970,420"; lp="810,376"; fontsize=16; fontcolor="#23415a"; color="#bad0e4"; fillcolor="#f6faff"; style="rounded,filled"; margin=18; nodes [label="EKS Auto Mode 실행 노드\ngeneral-purpose + system 풀", pos="810,305!", width=3.9, height=0.8, fillcolor="#edf4ff", color="#3e6ed9", style="rounded,filled"];
+pods [label="Helm으로 앱 실행\ngateway → backend → AI\nembedding은 선택 사항", pos="810,190!", width=3.9, height=1.1, fillcolor="#fff2e5", color="#d2903d", style="rounded,dashed,filled"]; }
+subgraph cluster_data { label="데이터 전용 서브넷\nAZ 1: 10.40.64.0/24\nAZ 2: 10.40.65.0/24"; bb="1005,65,1355,420"; lp="1180,376"; fontsize=16; fontcolor="#23415a"; color="#bad0e4"; fillcolor="#f6faff"; style="rounded,filled"; margin=18; rds [label="RDS PostgreSQL 16\nSingle-AZ · 배치 AZ는 생성 시 선택\n내부 접속 · TLS :5432", pos="1180,305!", width=4.4, height=1.0, fillcolor="#edf4ff", color="#3e6ed9", style="rounded,filled"];
+redis [label="ElastiCache Redis 7.1 x1\nTLS :6379 · 앱은 아직 미연결", pos="1180,190!", width=4.4, height=0.8, fillcolor="#edf4ff", color="#3e6ed9", style="rounded,filled"];
+isolated [label="Internet / NAT 기본 경로 없음", pos="1180,105!", width=4.4, height=0.45, fillcolor="#f6faff", color="#bad0e4", style="rounded,filled"]; }
+}
+eks [label="EKS 제어 영역 1.35 · AWS 관리\n공개 + 내부 API · IAM 인증", pos="810,485!", width=3.9, height=0.8, fillcolor="#edf4ff", color="#3e6ed9", style="rounded,filled"];
+logs [label="CloudWatch Logs\nEKS 제어 영역 로그", pos="1180,485!", width=3.8, height=0.8, fillcolor="#edf4ff", color="#3e6ed9", style="rounded,filled"];
+legend [label="파랑: Terraform 관리    보라 점선: 사전 준비 / bootstrap    주황 점선: 앱 배포 단계\nAZ 1 / 2 / 3은 설명용 이름입니다. 주황 화살표: 사용자 요청 흐름 · 그 외: 접근 / 의존 관계", pos="725,-55!", width=17.8, height=0.8, fillcolor="#ffffff", color="#ffffff", style="rounded,filled"];
+actions -> bootstrap [style=dashed]; actions -> ecr [style=dashed];
+bootstrap -> eks [style=dashed];
+ecr -> nodes [style=dashed, pos="e,950,305 925,570 985,570 985,305 960,305"];
+eks -> nodes [style=dashed, pos="e,669,305 669,485 630,485 630,305 659,305"];
+eks -> logs [style=dashed, color="#3e6ed9", penwidth=2];
+users -> nlb [color="#d2903d", penwidth=2.5]; nlb -> pods [color="#d2903d", penwidth=2.5]; pods -> rds [color="#d2903d", penwidth=2.5];
+nodes -> nat [color="#54869e"]; nat -> igw [color="#54869e"];
+preexisting -> nlb [style=dashed, color="#8b6abf"];
+}

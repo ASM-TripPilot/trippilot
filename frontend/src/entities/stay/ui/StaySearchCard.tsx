@@ -4,7 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
 
 /**
- * TRIP-807 · AC-3 — 숙소 검색 풀/레인 카드(e02 세로178 · d01·d05 레인200 공용). props-only.
+ * TRIP-807 · AC-3 — 숙소 검색 풀/레인 카드(e02 세로178 · d01 레인160 공용). props-only.
  *
  * 사진은 계약(StayItem)에 URL 필드가 없어 항상 회색 자리(bg-surface-strong) — URL 을 지어내지
  * 않는다(INV-1). 메타는 이름·지역·가격 텍스트뿐(거리·소요시간 없음 · INV-3).
@@ -33,14 +33,14 @@ export interface StaySearchCardSave {
 export interface StaySearchCardProps {
   /** 루트 Pressable testID(소비처 스킴 주입). */
   testID: string;
-  /** 사진 자리 testID — e02 만 지정(d01·d05 미지정 = 사진 View 무 testID). */
+  /** 사진 자리 testID — e02 만 지정(d01 미지정 = 사진 View 무 testID). */
   photoTestID?: string;
   name: string;
   region: string;
   priceText: string;
-  /** full=e02(w-full·사진178·border+shadow) · rail=d01/d05(w-200·사진130). */
+  /** full=e02(w-full·사진178·border+shadow) · rail=d01(w-160·사진120 — 장소 카드와 같은 폭, TRIP-1105 QA #7). */
   variant: 'full' | 'rail';
-  /** 저장 하트 — 지정 시에만 그린다(d05 는 미지정 = 하트 없음). */
+  /** 저장 하트 — 지정 시에만 그린다(미지정 = 하트 없음). */
   save?: StaySearchCardSave;
   /** 카드 탭(상세 진입) — 하트 press 가 삼키지 않는다. */
   onPress?: () => void;
@@ -113,7 +113,7 @@ export function StaySearchCard({
             <SaveButton
               save={save}
               size={22}
-              className="absolute right-[32px] top-[14px] h-[28px] w-[30px] items-center justify-center"
+              className="absolute right-[32px] top-[14px] h-8 w-8 items-center justify-center rounded-pill bg-on-primary"
             />
           ) : null}
         </View>
@@ -122,9 +122,20 @@ export function StaySearchCard({
             {name}
           </Text>
           <Text className="font-noto text-label text-muted">{region}</Text>
-          <Text className="font-inter-bold text-[16px] font-bold text-ink">
-            {priceText}
-          </Text>
+          {/* 가격 2톤 — formatPrice 반환("120,000원~")을 카드가 "원"에서 갈라 두 형제
+           * Text 로 그린다: bold "{천단위}원" + muted "~"(BR-U1-12 "부터"의 시각 표기).
+           * 바깥은 반드시 View(Text 아님) — 두 Text 가 View 형제라야 결합 노드로 집계되지
+           * 않는다. 결측("가격 미확인", "~" 없음)은 muted regular 단일 노드로 접는다. */}
+          {priceText.endsWith('~') ? (
+            <View className="flex-row items-baseline">
+              <Text className="font-inter-bold text-[16px] font-bold text-ink">
+                {priceText.slice(0, -1)}
+              </Text>
+              <Text className="font-noto text-caption text-muted">~</Text>
+            </View>
+          ) : (
+            <Text className="font-noto text-body text-muted">{priceText}</Text>
+          )}
         </View>
       </Pressable>
     );
@@ -135,11 +146,11 @@ export function StaySearchCard({
       testID={testID}
       accessibilityRole="button"
       onPress={onPress}
-      className="w-[200px]"
+      className="w-[160px]"
     >
       <View
         testID={photoTestID}
-        className="h-[130px] w-full rounded-card bg-surface-strong"
+        className="h-[120px] w-full rounded-card bg-surface-strong"
       >
         {save ? (
           <SaveButton

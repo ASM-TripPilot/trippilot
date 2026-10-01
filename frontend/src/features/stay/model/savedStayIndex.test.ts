@@ -29,6 +29,7 @@ function makeSaved(
     savedStayId,
     name: `숙소-${savedStayId}`,
     coordConfirmed: false,
+    linkedTripIds: [],
     registerRoute: 'MAP_SEARCH',
     externalSource,
     externalId,

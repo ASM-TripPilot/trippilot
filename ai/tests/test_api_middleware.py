@@ -307,3 +307,80 @@ def test_settings_from_env_parses_and_exposes_bad_values() -> None:
     assert settings.timeout_default_deadline_ms == 600000  # 행 방지 안전망 기본 (TRIP-473)
     with pytest.raises(ValueError):  # 파싱 불가 → 기동 실패로 드러난다(은폐 금지)
         MiddlewareSettings.from_env({"TRIPPILOT_RATE_LIMIT_BURST": "many"})
+
+
+# ── 인바운드 서비스 토큰 (TRIP-878) ──────────────────────────────────
+
+_TOKEN = "s3cret-service-token"
+_AUTHED = MiddlewareSettings(service_auth_token=_TOKEN)
+
+
+def test_no_token_configured_means_no_verification() -> None:
+    """토큰 미설정이 기본이고, 그때는 미들웨어가 아예 안 낀다.
+
+    이 기본값이 관대해야 기존 테스트 1,900여 건과 로컬 실행이 안 깨진다. 운영은
+    `SERVICE_AUTH_TOKEN` 을 주고, 그러면 자동으로 강제된다.
+    """
+    res = client(settings=MiddlewareSettings()).post(GENERATE, json=BACKEND_REQUEST)
+
+    assert res.status_code != 401
+
+
+def test_missing_and_wrong_token_are_indistinguishable() -> None:
+    """헤더가 없는 것과 값이 틀린 것이 **같은 401 · 같은 본문**이어야 한다.
+
+    다르게 답하면 공격자가 "헤더 이름은 맞았다"를 응답 차이로 알아낸다. 거부 사유는
+    로그에만 남긴다(백엔드 요구: 거부 사유를 본문에 싣지 않음).
+    """
+    c = client(settings=_AUTHED)
+
+    missing = c.post(GENERATE, json=BACKEND_REQUEST)
+    wrong = c.post(GENERATE, json=BACKEND_REQUEST, headers={"X-Service-Token": "nope"})
+
+    assert missing.status_code == wrong.status_code == 401
+    assert missing.json() == wrong.json()
+    assert missing.json()["error_code"] == "UNAUTHORIZED"
+    # 사유가 새지 않는다 — "missing"·"mismatch" 어느 쪽도 본문에 없다
+    assert "missing" not in missing.text and "mismatch" not in wrong.text
+
+
+def test_correct_token_passes_through() -> None:
+    """올바른 토큰은 통과한다 — 401 이 아니면 라우트까지 갔다는 뜻이다."""
+    res = client(settings=_AUTHED).post(
+        GENERATE, json=BACKEND_REQUEST, headers={"X-Service-Token": _TOKEN}
+    )
+
+    assert res.status_code != 401
+
+
+def test_health_stays_open_so_the_container_does_not_go_unhealthy() -> None:
+    """`/health`·`/` 는 토큰이 켜져도 면제다.
+
+    compose·k8s 헬스체크는 토큰을 들고 다니지 않는다. 면제하지 않으면 **컨테이너가
+    통째로 unhealthy** 가 되어 배포가 롤백된다 — `RateLimitMiddleware` 가 같은 이유로
+    같은 경로를 면제한다.
+    """
+    c = client(settings=_AUTHED)
+
+    assert c.get("/health").status_code == 200
+    assert c.get("/").status_code == 200
+
+
+def test_requiring_auth_without_a_token_fails_at_startup() -> None:
+    """fail-open 을 **명시적으로** 만든다 — 운영에 토큰 없이 올라가면 기동이 죽는다.
+
+    "배포했는데 토큰을 안 넣어서 조용히 열린" 상태가 이 검사의 존재 이유다.
+    검증 없이 돌리려면 `require_service_auth=False` 를 **적어야** 한다.
+    """
+    with pytest.raises(ValueError, match="require_service_auth"):
+        MiddlewareSettings(require_service_auth=True)
+
+
+def test_whitespace_only_token_fails_at_startup() -> None:
+    """공백뿐인 토큰은 `"   " == "   "` 로 **통과해 버린다** — 기동을 죽인다.
+
+    `.env` 에 `SERVICE_AUTH_TOKEN= ` 처럼 꼬리 공백이 남는 건 흔하고, 그게 인증을
+    무력화한 채 200 을 내보내면 아무도 못 찾는다.
+    """
+    with pytest.raises(ValueError, match="공백"):
+        MiddlewareSettings(service_auth_token="   ")

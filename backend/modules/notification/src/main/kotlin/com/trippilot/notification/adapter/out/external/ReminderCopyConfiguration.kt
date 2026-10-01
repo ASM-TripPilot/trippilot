@@ -95,13 +95,7 @@ class ReminderCopyConfiguration {
      */
     @Bean
     @ConditionalOnMissingBean(ReminderCopyPort::class)
-    fun unwiredReminderCopy(): ReminderCopyPort = object : ReminderCopyPort {
-        override val enabled = false
-        override fun copiesFor(tripTitle: String?, items: List<ReminderCopyRequest>): Map<String, ReminderCopy> {
-            log.debug("리마인드 문구 경계 미배선 — 상수 문구로 갑니다. 요청 {}건", items.size)
-            return emptyMap()
-        }
-    }
+    fun unwiredReminderCopy(): ReminderCopyPort = UnwiredReminderCopy()
 
     companion object {
         /** 발신 서비스 자격증명 헤더(TRIP-856) — 일정·회고 경계와 같은 이름·같은 시크릿. */

@@ -16,6 +16,9 @@ dependencies {
     implementation(libs.spring.boot.starter.web)        // adapter/in/web 컨트롤러
     implementation(libs.spring.boot.starter.validation) // 요청 @Valid
     implementation(libs.jackson.module.kotlin)          // 외부 응답 JsonNode 파싱
+    // Apple id_token JWKS 검증(TRIP-858). :common:security 가 이미 쓰지만 거기선 implementation 이라
+    // Nimbus·JwtDecoder 가 전이되지 않는다 — 새 의존성이 아니라 컴파일 경로 노출이다.
+    implementation(libs.spring.boot.starter.oauth2.resource.server)
     implementation(libs.kotlin.reflect)
 
     testImplementation(project(":common:test-support"))

@@ -13,7 +13,7 @@ import { Image, View } from 'react-native';
  */
 
 export interface ReflectionPhotoGridProps {
-  photos: { uri: string }[];
+  photos: readonly { uri: string }[];
 }
 
 export function ReflectionPhotoGrid({

@@ -158,6 +158,21 @@ describe('S-3 · 국내 차단 다이얼로그 (보존, D6)', () => {
     expect(onCloseOverseasDialog).toHaveBeenCalledTimes(1);
   });
 
+  it('TRIP-939 B-9: 다이얼로그에 "준비 중" 문구가 없다(제목·국내 안내는 그대로)', () => {
+    // 준비·실행: 해외 차단 다이얼로그를 띄운다.
+    render(<TripWizardStep1Screen {...props({ overseasBlocked: true })} />);
+    const dialog = screen.getByTestId('trip-wizard-overseas-dialog');
+
+    // 단언: 미완성 기능 예고("해외 여행지는 준비 중이에요.") 부재 + 짝 앵커(제목·국내 유도 문구).
+    expect(within(dialog).queryByText(/준비 중/)).toBeNull();
+    expect(
+      within(dialog).getByText('지금은 국내 여행만 지원해요')
+    ).toBeOnTheScreen();
+    expect(
+      within(dialog).getByText('국내 도시로 만들어볼까요?')
+    ).toBeOnTheScreen();
+  });
+
   it('짝 — overseasBlocked 가 아니면 다이얼로그가 없다', () => {
     render(<TripWizardStep1Screen {...props()} />);
     expect(screen.queryByTestId('trip-wizard-overseas-dialog')).toBeNull();

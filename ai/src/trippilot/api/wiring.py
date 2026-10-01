@@ -49,6 +49,7 @@ from __future__ import annotations
 
 import json
 import logging
+import pathlib
 import os
 import time
 import zlib
@@ -104,15 +105,21 @@ from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
 from trippilot.assembly_engine.repair import RepairChange
 from trippilot.assembly_engine.travel import TravelEstimator, haversine_km
 from trippilot.domain.common import (
+    BUDGET_TOKENS,
+    PACE_TOKENS,
     BudgetLevel,
     GeoPoint,
+    Pace,
     PoiId,
     ScheduleId,
     TraceId,
     TransportMode,
+    Rejection,
+    RejectionKind,
 )
 from trippilot.domain.context import PermissionDeniedError, Principal, ResourceRef
 from trippilot.domain.freshness import FreshnessMeta
+from trippilot.domain.intent import Intent
 from trippilot.domain.itinerary import (
     DaySolution,
     FixedBlock,
@@ -124,13 +131,19 @@ from trippilot.domain.itinerary import (
     VisitSlot,
 )
 from trippilot.domain.llm import CandidatePool, ModelTier, PoiExplanation
-from trippilot.domain.persona import CompanionType, PersonaSummary
+from trippilot.domain.persona import CompanionType, PersonaSummary, TasteTag
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.travel import TravelEstimate
 from trippilot.agents.edit.agent import EditAgent, EditOutcome, EditTask
 from trippilot.agents.edit.commands import EditStatus
 from trippilot.agents.planb.rag import PlanBAgent, PlanBRagRequest, SavedPlace
 from trippilot.agents.schedule.agent import ScheduleAgent
+from trippilot.agents.planb.directives import (
+    DirectiveSpec,
+    load_directive_file,
+    match_free_text,
+    resolve_chips,
+)
 from trippilot.domain.edit import EditCommand, EditOp
 from trippilot.llm_gateway.gates.edit_translation import EditTranslationGate
 from trippilot.llm_gateway.workers.edit_translation import EditTranslationWorker
@@ -139,9 +152,13 @@ from trippilot.domain.trigger import TriggerKind, TriggerParams
 from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate
 from trippilot.llm_gateway.workers.preference_cache import CachingScoringWorker
 from trippilot.poi_curation.config import M7Config
+from trippilot.poi_curation.place_fees import load_fee_table
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder
 from trippilot.orchestrator import schedule_coordinator as core
-from trippilot.ports.llm_port import LlmPort, LlmRequest, LlmResponse
+from trippilot.ports.llm_port import LlmPort
+from trippilot.ports.llm_port import LlmRequest, LlmResponse
+from trippilot.ports.embedding_port import EmbeddingPort
+from trippilot.ports.vector_store_port import VectorStorePort
 from trippilot.ports.trace_port import TracePort
 from trippilot.domain.freshness import InfoPacket, ProviderKind, ProviderStatus
 from trippilot.orchestrator.info_collector import InfoCollector
@@ -160,26 +177,11 @@ KST = timezone(timedelta(hours=9))
 
 _PROMPTS_ROOT = Path(__file__).resolve().parents[3] / "prompts"
 
-# 경계 어휘 → 도메인 enum 번역표 (결정론 — 소프트 입력이라 미인식은 기본값 폴백).
-#
-# 백엔드 `preference_set.budget_tier` 의 정본 어휘는 **저가·중간·고급·럭셔리 4종**이고
-# (`V1.5__profile.sql` CHECK), 접지 않고 그대로 와이어에 실린다
-# (`ReplanFacadeService`: `budgetLevel = prefs.budgetTier`). 그러니 넷이 전부 여기
-# 있어야 한다 — 빠진 값은 거절되는 것이 아니라 **조용히 MID** 가 된다(아래 폴백).
-_BUDGET_TOKENS: Mapping[str, BudgetLevel] = {
-    "LOW": BudgetLevel.LOW, "저렴": BudgetLevel.LOW, "낮음": BudgetLevel.LOW,
-    "저가": BudgetLevel.LOW,
-    "MID": BudgetLevel.MID, "MIDDLE": BudgetLevel.MID,
-    "중간": BudgetLevel.MID, "보통": BudgetLevel.MID,
-    "HIGH": BudgetLevel.HIGH, "높음": BudgetLevel.HIGH,
-    "고급": BudgetLevel.HIGH, "프리미엄": BudgetLevel.HIGH,
-    # 럭셔리는 **임시로** HIGH 다 — 접는 것이 옳아서가 아니라 MID 로 떨어지는 것보다
-    # 나아서다. 정식 값은 TRIP-434 에서 온다(결정: 등급을 구간으로 — 상한만이 아니라
-    # 하한을 도입한다). `M7Config.budget_limit` 의 HIGH 가 지금 `None`(상한 없음)이라
-    # 그 위에 값을 그냥 얹으면 둘 다 무제한이라 구분이 안 되기 때문이고, 임계표를
-    # 같이 고치는 것이 그 작업의 본체다. 여기 한 줄은 그때까지의 지혈이다.
-    "럭셔리": BudgetLevel.HIGH,
-}
+# 예산 어휘표는 domain/common 로 옮겼다 — 페르소나 어댑터(BackendPersonaStore)도
+# 같은 표를 쓴다. 두 벌이면 한쪽만 고쳐 어긋난다.
+_BUDGET_TOKENS = BUDGET_TOKENS
+
+_PACE_TOKENS = PACE_TOKENS
 _TRANSPORT_TOKENS: Mapping[str, TransportMode] = {
     "WALK": TransportMode.WALK, "도보": TransportMode.WALK,
     "PUBLIC": TransportMode.PUBLIC, "대중교통": TransportMode.PUBLIC,
@@ -294,6 +296,20 @@ def _budget_from(request: schemas.GenerateItineraryRequest) -> BudgetLevel:
     return BudgetLevel.MID  # 소프트 제약 — 미인식은 중간 예산 (배제 아님)
 
 
+def _pace_from(request: schemas.GenerateItineraryRequest) -> Pace | None:
+    """와이어 `preference_profile.pace` → 도메인 Pace. 미지정·미인식은 **None**.
+
+    예산(`_budget_from`)이 미인식을 MID 로 떨어뜨리는 것과 다르다 — 그쪽은
+    `BudgetLevel` 에 '미설정'이 없어 어쩔 수 없는 예외고, 속도는 None 이 표현
+    가능하다. 여기서 BALANCED 로 채우면 **고르지 않은 사용자와 균형을 고른
+    사용자가 구분되지 않는다**(백엔드도 null 을 그대로 낸다).
+    """
+    text = request.preference_profile.pace
+    if not text:
+        return None
+    return _PACE_TOKENS.get(text.strip().upper())
+
+
 def _transport_from(request: schemas.GenerateItineraryRequest) -> TransportMode:
     for text in request.preference_profile.transport_modes:
         mode = _TRANSPORT_TOKENS.get(text.strip().upper())
@@ -334,6 +350,20 @@ def _fixed_block(block: schemas.FixedBlockSchema, tz: timezone) -> FixedBlock:
     )
 
 
+def _domain_rejections(
+    rows: Sequence[schemas.RejectionSchema],
+) -> tuple[Rejection, ...]:
+    """경계 거절 이력 → 도메인 (TRIP-964). 순서 보존, 값 변환만 한다.
+
+    `kind` 는 스키마가 Literal 로 닫아 두었으므로 여기서 다시 검사하지 않는다 —
+    미지 값은 422 로 먼저 걸린다(경계에서 거르고 도메인은 신뢰하는 관례).
+    """
+    return tuple(
+        Rejection(poi_id=PoiId(r.poi_id), kind=RejectionKind(r.kind), count=r.count)
+        for r in rows
+    )
+
+
 def _domain_generate_request(
     request: schemas.GenerateItineraryRequest, tz: timezone
 ) -> core.GenerateItineraryRequest:
@@ -357,11 +387,13 @@ def _domain_generate_request(
         day_window=day_window,
         budget=_budget_from(request),
         transport=_transport_from(request),
+        pace=_pace_from(request),
         persona_ref=ResourceRef(kind="persona", ref_id=request.trip_id, owner_id=owner),
         principal=Principal(user_id=owner),
         seed=_seed_from(request.trip_id),
         fixed_blocks=tuple(_fixed_block(b, tz) for b in request.fixed_blocks),
         excluded_poi_ids=frozenset(PoiId(x) for x in request.excluded_poi_ids),
+        rejections=_domain_rejections(request.rejections),
         include_explanations=request.include_explanations,
     )
 
@@ -647,14 +679,39 @@ def _render_change(change: RepairChange) -> str:
 
 
 def _solution_from_payload(
-    payload: schemas.ItineraryPayload, schedule_id: ScheduleId, tz: timezone
+    payload: schemas.ItineraryPayload, schedule_id: ScheduleId, tz: timezone,
+    *, untimed: str,
 ) -> ItinerarySolution:
-    """ItineraryPayload → 도메인 해. 도메인 불변식 위반(역순 슬롯 등)은 ValueError→422."""
+    """ItineraryPayload → 도메인 해. 도메인 불변식 위반(역순 슬롯 등)은 ValueError→422.
+
+    `untimed` — **시간 미정 슬롯**(start_at·end_at 둘 다 null, TRIP-827) 정책.
+    기본값이 없는 것은 의도다: 새 호출자는 자기 정책을 말해야 한다.
+    - "skip":   무배치로 취급해 도메인 해에서 뺀다. 시각 주장이 없으니 시간
+                검증(HC)의 대상이 아니다 — validate·explanations 용.
+    - "reject": 명시 422. **산출을 되돌려주는 경계**(repair·edit)용 — 여기서
+                건너뛰면 응답 일정에서 사용자 저장 슬롯이 조용히 사라진다.
+                시간 미정 슬롯의 배치는 별건이다(미지원을 숨기지 않는다).
+    반쪽 시각(둘 중 하나만 null)은 정책과 무관하게 기형이라 항상 422 다.
+    """
     days: list[DaySolution] = []
     for day_schema in payload.days:
         slots: list[VisitSlot] = []
         day_fixed: list[FixedBlock] = []
         for slot_schema in day_schema.slots:
+            if (slot_schema.start_at is None) != (slot_schema.end_at is None):
+                raise ValueError(
+                    f"반쪽 시각 슬롯: {slot_schema.poi_id} — start_at·end_at 은 "
+                    "둘 다 있거나 둘 다 null 이어야 한다")
+            if slot_schema.start_at is None:
+                if slot_schema.is_fixed:
+                    raise ValueError(
+                        f"시각 없는 고정 슬롯: {slot_schema.poi_id} — "
+                        "시간 미정은 고정(HC3)으로 표현 불가")
+                if untimed == "reject":
+                    raise ValueError(
+                        f"시간 미정 슬롯: {slot_schema.poi_id} — 이 경계는 배치된 "
+                        "슬롯만 받는다(배치는 미지원). 빼고 보내라")
+                continue  # skip — 무배치. 시각 주장이 없으니 검증 대상이 아니다
             start = datetime.combine(day_schema.date, slot_schema.start_at, tzinfo=tz)
             end_date = (day_schema.date + timedelta(days=1)
                         if slot_schema.ends_next_day else day_schema.date)
@@ -709,6 +766,11 @@ def _problem_for(solution: ItinerarySolution, tz: timezone) -> ItineraryProblem:
         ),
         seed=0,
         anchor=None,
+        # 와이어에 원 요청의 pace 가 없다 — 명시적으로 None(무보정)을 적는다.
+        # 이 함수는 필드를 **열거해 재구성**하므로, 안 적으면 다음에 필드가 늘 때
+        # validate·repair 에서만 조용히 사라진다(TRIP-292 excluded_poi_ids 전례).
+        # 체류 배율이 빠져도 HC 판정은 배치된 시각 그대로를 보므로 판정은 옳다.
+        pace=None,
     )
 
 
@@ -741,6 +803,187 @@ class ChainAssemblyProvider:
 # ── 경계 어댑터 (api/protocols.ItineraryOrchestrator 충족) ───────────
 
 
+def _categories_of(names: "tuple[str, ...]") -> set[PoiCategory]:
+    """지시 사전의 카테고리 문자열 → 도메인 열거. **모르는 이름은 조용히 버린다**.
+
+    사전(`data/replan_directives.yaml`)은 데이터라 코드보다 먼저 바뀔 수 있다 —
+    새 카테고리 이름이 오면 그 지시의 그 축만 무효가 되고 나머지는 산다. 예외를
+    올리면 사전 한 줄 오타가 재계획 전체를 죽인다.
+    """
+    out: set[PoiCategory] = set()
+    for name in names:
+        try:
+            out.add(PoiCategory[name])
+        except KeyError:
+            continue
+    return out
+
+
+# 재계획 사유(AI 어휘) → 트리거 종류. 백엔드가 `trigger` 를 안 보내는 동안 이 표가
+# 대신 유도한다 — `/alternatives` 가 `kind="MANUAL"` 을 **지어내는** 것과 다르다:
+# 여기 입력(`reasons`)은 FE 칩에서 온 실값이다. 표에 없는 사유는 MANUAL 이고,
+# 그건 "사용자가 직접 바꿔 달라고 했다"라서 지어낸 값이 아니라 맞는 값이다.
+_REASON_TO_TRIGGER: Mapping[str, TriggerKind] = {
+    "weather": TriggerKind.WEATHER,
+    "closed": TriggerKind.CLOSURE,
+    "fully_booked": TriggerKind.CLOSURE,  # 둘 다 "그 장소에 못 들어간다"
+    "delay": TriggerKind.DELAY,
+    "canceled": TriggerKind.DELAY,
+    # fatigue·none → MANUAL (사용자 사정)
+}
+
+# 요청 예산 중 PlanB(RAG + LLM 선택)에 줄 몫. 나머지가 페르소나 점수 + 어셈블리 몫이다.
+#
+# 0.5 인 이유: 25초 예산에서 12.5초다. PlanB 안에서 다시 `llm_budget_share=0.5` ·
+# `llm_retry_share=0.35` 로 갈리므로 1차 6.2초 · 재시도 4.4초 — 실측 중앙값
+# (gpt-5.6-sol 5.0초)에 1차가 들어가고 꼬리는 재시도가 받는다. 남는 12.5초에서
+# 어셈블리 바닥 5초를 떼면 점수 상한이 7.5초로, 실호출 바닥 ~3초에 여유가 있다.
+# PlanB 가 예산을 다 태우면 `c1_min_ms` 진입 임계가 점수를 규칙으로 내린다 —
+# 일정은 나오고 강등만 기록된다 (INV-4).
+_REPLAN_PLANB_BUDGET_SHARE = 0.5
+
+
+def _replan_rag_request(
+    request: schemas.ReplanRequest,
+    pool: CandidatePool,
+    persona: PersonaSummary | None,
+    daily_rain: Mapping[date, int],
+    trace_id: TraceId,
+    now: datetime,
+    *,
+    notes: list[str],
+    deadline_ms: int,
+) -> PlanBRagRequest:
+    """`ReplanRequest` → `PlanBRagRequest`. **재료가 전부 실값이다** — 이 경로가
+    `/alternatives` 와 갈리는 지점이다.
+
+    `/alternatives` 는 트리거를 지어내고(`ScheduleAgentWire.kt` 의 `kind="MANUAL"`)
+    예산·이동수단·저장 장소가 비어 온다. 여기는 사유·기존 일정·슬롯별 추천 이유·
+    저장 장소·취향 확정값이 다 온다 — PlanBAgent 가 원래 받도록 설계된 재료다.
+    """
+    reasons = [r for r in request.reasons if r]
+    if len(reasons) > 1:
+        # PlanB 는 사유를 하나만 받는다. 버리는 것을 **밝힌다** — 조용히 첫 번째만
+        # 쓰면 FE 가 칩 두 개를 눌렀는데 하나만 먹은 것을 알 방법이 없다.
+        notes.append(f"planb_reason_truncated: {reasons[0]} 사용 / {len(reasons)}건 수신")
+    reason = reasons[0] if reasons else "none"
+
+    if request.trigger is not None:
+        trigger = TriggerParams(
+            kind=TriggerKind(request.trigger.kind),
+            schedule_id=ScheduleId(request.trigger.schedule_id),
+            affected_date=request.trigger.affected_date,
+            payload=request.trigger.payload,
+        )
+    else:
+        trigger = TriggerParams(
+            kind=_REASON_TO_TRIGGER.get(reason, TriggerKind.MANUAL),
+            schedule_id=ScheduleId(request.trip_id),
+            affected_date=request.target_date,
+            payload={},
+        )
+
+    return PlanBRagRequest(
+        trigger=trigger,
+        reason=reason,
+        # 원 일정이 이미 합류한 풀이다 (`_with_current_slots`) — 원 슬롯도 후보로
+        # 경쟁해야 "원래 자리보다 나은 것만 바꾼다"가 성립한다.
+        pool=pool,
+        trace_id=trace_id,
+        now=now,
+        excluded_poi_ids=frozenset(PoiId(p) for p in request.excluded_poi_ids),
+        # 원 일정 순서 — KB-1 이 하려던 그 일을 검색이 아니라 봉투로 한다(TRIP-972).
+        # 제외된 것은 빼지 않는다: "지금 이렇게 짜여 있다"가 컨텍스트이고, 후보 자격은
+        # `closed_set_filter` 소유다(INV-1). 풀에 없는 id 는 렌더에서 건너뛴다.
+        current_slot_ids=tuple(PoiId(s.poi_id) for s in request.current_slots),
+        # `ReplanSlotSchema.placement_reason` 이 이 필드를 위해 있다 — 계약 독스트링이
+        # "visit_slot.placement_reason" 이라고 적어 둔 그 값이고, PlanB 가 "원래 취지를
+        # 잇는 대안"을 고르는 컨텍스트다. 종전 배선에서는 아무도 읽지 않았다.
+        affected_reasons={
+            s.poi_id: s.placement_reason
+            for s in request.current_slots
+            if s.placement_reason
+        },
+        saved_places=tuple(
+            SavedPlace(poi_id=sp.poi_id, name=sp.name) for sp in request.saved_places
+        ),
+        deadline_ms=int(deadline_ms * _REPLAN_PLANB_BUDGET_SHARE),
+        rain_prob_by_date=daily_rain,
+        persona=persona,
+    )
+
+
+def _replan_fixed_blocks(
+    request: schemas.ReplanRequest, tz: timezone
+) -> tuple[FixedBlock, ...]:
+    """`locked_blocks` + `current_slots[is_fixed]` → HC3 고정 블록.
+
+    둘을 합치는 이유: 백엔드는 예약 있는 곳을 `locked_blocks` 로도 보내고 원 일정
+    슬롯의 `is_fixed` 로도 표시한다. 한쪽만 읽으면 **고정한 곳이 움직인다**.
+    같은 POI 가 양쪽에 있으면 한 번만 넣는다(HC3 는 POI당 한 창을 기대한다).
+    """
+    date = request.target_date
+    blocks: list[FixedBlock] = []
+    seen: set[str] = set()
+    for block in request.locked_blocks:
+        if block.poi_id in seen:
+            continue
+        seen.add(block.poi_id)
+        # generate 와 같은 변환기를 쓴다. `FixedBlockSchema` 는 start·dwell_min 이지
+        # start_at·end_at 이 아니다 — 손으로 다시 쓰면 그 차이를 밟는다. 실제로
+        # #744 가 여기서 `block.start_at` 을 읽어 **잠금 슬롯이 한 건이라도 실리면
+        # AttributeError 500** 이었다(백엔드 실왕복 실측, 2026-09-28). 스텁 계약
+        # 테스트가 locked_blocks: [] 만 보내 못 잡았다.
+        blocks.append(_fixed_block(block, tz))
+    for slot in request.current_slots:
+        if not slot.is_fixed or slot.poi_id in seen:
+            continue
+        if slot.start_at is None or slot.end_at is None:
+            # 시각 없는 고정은 HC3 로 표현 불가 — ANYTIME 백스톱과 같은 규칙(422).
+            # 조용히 비고정 취급하면 사용자가 고정한 곳이 움직인다(INV-4).
+            raise ValueError(
+                f"시각 없는 고정 슬롯: {slot.poi_id} — 시간 미정은 고정으로 표현 불가")
+        seen.add(slot.poi_id)
+        blocks.append(FixedBlock(
+            poi_id=PoiId(slot.poi_id),
+            window=TimeWindow(
+                start=datetime.combine(date, slot.start_at, tzinfo=tz),
+                end=datetime.combine(date, slot.end_at, tzinfo=tz),
+            ),
+            reason="current_slot_fixed",
+        ))
+    return tuple(blocks)
+
+
+def _persona_of(request: schemas.ReplanRequest) -> PersonaSummary | None:
+    """인라인 `preference_profile` → 페르소나. **없는 축을 채우지 않는다**.
+
+    `generate` 재사용이 기각된 이유 ⑵ 가 이것이다 — 백엔드 legacy 경로가
+    `NEUTRAL_PREFERENCES` 로 덮어써서 사용자가 방금 고른 취향이 사라졌다.
+
+    **모르는 값은 버린다.** 7축 프로필은 백엔드가 자유 문자열로 주고 도메인 열거는
+    7종(`TasteTag`)·6종(`CompanionType`)이라 안 맞는 것이 정상이다 — 예외를 올리면
+    프로필 한 항목이 재계획 전체를 죽인다. `companion` 은 미설정을 SOLO 로 단정하지
+    않는다(`PersonaSummary` docstring — 선택하지 않은 사람을 혼자 여행자로 만들지 말 것).
+    """
+    profile = request.preference_profile
+    tags = tuple(dict.fromkeys(
+        TasteTag[name] for name in profile.styles + profile.activities + profile.food_tastes
+        if name in TasteTag.__members__
+    ))
+    companion = next(
+        (CompanionType[c] for c in profile.companion_types if c in CompanionType.__members__),
+        None,
+    )
+    if not tags and companion is None and profile.budget_tier is None:
+        return None  # 전 축 미설정 — 없는 것과 같다 (패킷 페르소나가 있으면 그쪽을 쓴다)
+    return PersonaSummary(
+        taste_tags=tags,
+        companion=companion,
+        budget=_token_or(_BUDGET_TOKENS, profile.budget_tier, BudgetLevel.MID),
+    )
+
+
 class WiredItineraryOrchestrator:
     """실 오케스트레이터·C2 퍼사드를 API Protocol 모양으로 감싸는 경계 어댑터."""
 
@@ -765,6 +1008,10 @@ class WiredItineraryOrchestrator:
         reminder_copy_worker: ReminderCopyWorker,
         share_card_worker: "ShareCardCopyWorker",
         trace: TracePort,
+        schedule_agent: "ScheduleAgent",
+        directives: tuple[DirectiveSpec, ...] = (),
+        embedding: EmbeddingPort | None = None,
+        vector_store: VectorStorePort | None = None,
     ) -> None:
         self._orchestrator = orchestrator
         self._assembly_provider = assembly_provider
@@ -785,6 +1032,15 @@ class WiredItineraryOrchestrator:
         self._reminder_copy_worker = reminder_copy_worker
         self._share_card_worker = share_card_worker
         self._trace = trace
+        # 재계획(/replan) — 점수·solve 를 **복제하지 않고** 이 에이전트를 재사용한다.
+        # 커밋 524bf03f 가 이 경계를 미룬 이유가 정확히 "배선 층에서 점수 단계 복제"였다.
+        # `build_orchestrator` 가 만든 그 인스턴스를 그대로 받는다 — 새로 만들면
+        # ②′ 지도 실재 검증(TRIP-904)·차선책 문장(TRIP-887) 배선이 빠진다.
+        self._schedule_agent = schedule_agent
+        # KB-4 지시 사전. 비어 있으면 칩·자유입력이 해석되지 않고 그 사실이 노트로 나간다.
+        self._directives = directives
+        self._embedding = embedding
+        self._vector_store = vector_store
 
     # Protocol: generate(request) — deadline·trace·now는 request_meta(IO-1)에서.
     def generate(self, request: schemas.GenerateItineraryRequest) -> WiredOutcome:
@@ -900,7 +1156,8 @@ class WiredItineraryOrchestrator:
         self, request: schemas.ValidateItineraryRequest
     ) -> WiredValidateOutcome:
         solution, problem, poi_index, unverified = self._reconstruct(
-            request.itinerary, request.request_meta
+            request.itinerary, request.request_meta,
+            untimed="skip",  # 미정 슬롯은 시각 주장이 없다 — 배치분만 검증
         )
         facade = self._assembly_provider.for_pool(poi_index)
         return WiredValidateOutcome(
@@ -913,7 +1170,8 @@ class WiredItineraryOrchestrator:
 
     def repair(self, request: schemas.RepairItineraryRequest) -> WiredRepairOutcome:
         solution, problem, poi_index, unverified = self._reconstruct(
-            request.itinerary, request.request_meta
+            request.itinerary, request.request_meta,
+            untimed="reject",  # 수리 결과가 곧 응답 일정 — 건너뛰면 저장 슬롯 소실
         )
         facade = self._assembly_provider.for_pool(poi_index)
         result = facade.repair(
@@ -927,12 +1185,14 @@ class WiredItineraryOrchestrator:
         )
 
     def _reconstruct(
-        self, payload: schemas.ItineraryPayload, meta: schemas.RequestMetaSchema
+        self, payload: schemas.ItineraryPayload, meta: schemas.RequestMetaSchema,
+        *, untimed: str,
     ) -> tuple[
         ItinerarySolution, ItineraryProblem, dict[PoiId, Poi],
         tuple[WiredUnverifiedSlot, ...],
     ]:
-        solution = _solution_from_payload(payload, ScheduleId(meta.request_id), self._tz)
+        solution = _solution_from_payload(
+            payload, ScheduleId(meta.request_id), self._tz, untimed=untimed)
         problem = _problem_for(solution, self._tz)
         ids = frozenset(s.poi_id for day in solution.days for s in day.slots)
         # 미등록 POI는 인덱스에 없다 → HC1·HC2 미적용("정보 없음은 막지 않는다", c2 규칙).
@@ -989,7 +1249,7 @@ class WiredItineraryOrchestrator:
             params["principal"] = Principal(user_id=request.trip_id)
             params["persona_ref"] = ResourceRef(
                 kind="persona", ref_id=request.trip_id, owner_id=request.trip_id)
-        packets = self._info.collect("REPLAN", params)
+        packets = self._info.collect(Intent.REPLAN, params)
         pool = self._pool_from(packets, now)
         result = self._rag.run(
             PlanBRagRequest(
@@ -1038,6 +1298,320 @@ class WiredItineraryOrchestrator:
             empty_reason=result.empty_reason,
             pool_size=len(pool.poi_ids),
         )
+
+    # ── 재계획 (/replan) — 계약만 있던 자리를 배선한다 ─────────────────
+    def replan(self, request: schemas.ReplanRequest) -> schemas.ReplanResponse:
+        """하루 재계획 (i04 → i06). 예외를 안 던진다 — 실패도 200 + 사유 (INV-4).
+
+        **점수·solve 를 복제하지 않는다.** 커밋 524bf03f 가 이 경계를 미룬 이유가
+        정확히 "배선 층에서 점수 단계를 복제하면 REPLAN 요구표 작업이 곧 지운다"
+        였고, 그 요구표가 채워진 뒤(`INFO_REQUIREMENTS[Intent.REPLAN]`)라 이제
+        `ScheduleAgent` 를 그대로 재사용하면 복제가 없다.
+
+        `generate` 재사용(백엔드가 GENERATE_PATH 로 보내기)이 기각된 세 이유
+        **셋 다** 이 경로가 되찾는다 — ⑵ 인라인 `preference_profile` 이 NEUTRAL 로
+        덮이지 않고 ⑶ 사유·지시·자유입력·원 일정이 실릴 자리가 있고, ⑴ **RAG 도
+        탄다**.
+
+        ⑴ 은 종전에 남겨 둔 구멍이었다(2026-09-24 PR #714: "RAG 미탑승은 남는다").
+        그게 틀린 절충이었다는 증거가 계약 자체에 있었다 — `ReplanRequest` 독스트링이
+        "`generate` 와 다른 것: **RAG(KB-3)를 탄다**"라고 적고 `ReplanResponse` 에
+        `retrieved`(KB 히트 수) 필드가 있는데, ScheduleAgent 만 붙여 놨으니 그 필드가
+        **항상 빈 dict** 였다. 정본(`planb-rag-design.md`)의 배정도 반대였다:
+        PlanBAgent = "여행 중 변수 발생 시 기존 일정 + 페르소나 기반 대안", ScheduleAgent
+        = "백지·여행 전". 여행 중 변수 대응 경로가 바로 여기다.
+
+        **두 판단을 합성한다** (하나를 버리지 않는다):
+        - PlanBAgent(RAG) — "이 상황에 뭐가 맞나". KB-3 상황·KB-5 장소 지식 검색 →
+          LLM 이 고른 **순서**. 시각·순서는 내지 않는다 (INV-2 — 애초에 필드가 없다).
+        - ScheduleAgent — "이 사람이 뭘 좋아하나"(페르소나 점수) + 어셈블리 배치.
+          PlanB 순서는 `planb_rank` 로 실어 **점수 가산**으로만 들어간다.
+
+        예산이 모자라면 기존 진입 임계(`c1_min_ms`)가 점수 단계를 규칙으로 내린다 —
+        여기서 따로 분기하지 않는다. PlanB 가 LLM 을 못 썼으면(`is_fallback`) 랭킹을
+        **넘기지 않는다**: 그때 `ranked_poi_ids` 는 규칙 랭킹이고, 그건 `build_rule_score`
+        가 이미 보는 신호(우천·거리·저장 장소)를 두 번 세는 것이라 얻는 것이 없다.
+        """
+        meta = request.request_meta
+        now = _tz_aware(meta.requested_at, self._tz)
+        trace_id = TraceId(meta.request_id)
+        notes: list[str] = []
+        # PlanB·점수·어셈블리가 **한 시계 원점을 공유한다** — PlanB 가 쓴 시간이
+        # ScheduleAgent 의 잔여에서 저절로 빠져야 두 LLM 호출이 예산을 겹쳐 쓰지 않는다.
+        t0 = self._clock.monotonic_ms()
+
+        resolved, unknown, prefer, avoid = self._replan_directives(request, notes)
+
+        transport = _token_or(
+            _TRANSPORT_TOKENS, request.transport_mode, TransportMode.PUBLIC)
+        anchor = GeoPoint(request.anchor.lat, request.anchor.lng)
+        dates = (request.target_date,)
+        budget_level = _token_or(
+            _BUDGET_TOKENS, request.preference_profile.budget_tier, BudgetLevel.MID)
+        params: dict = {
+            "pool_request": CandidatePoolRequest(
+                anchor=anchor, dates=dates, budget=budget_level, transport=transport),
+            "anchor": anchor,
+            "days": dates,
+            "now": now,
+        }
+        if request.trip_id:
+            params["principal"] = Principal(user_id=request.trip_id)
+            params["persona_ref"] = ResourceRef(
+                kind="persona", ref_id=request.trip_id, owner_id=request.trip_id)
+        packets = self._info.collect(Intent.REPLAN, params)
+        pool = self._pool_from(packets, now)
+        pool = self._with_current_slots(pool, request, now, notes)
+        if not pool.pois:
+            return self._replan_empty("NO_CANDIDATE", notes, resolved, unknown)
+
+        persona = self._persona_from(packets) or _persona_of(request)
+        daily_rain = self._rain_from(packets, dates, now)
+
+        # ── PlanBAgent (RAG) — 상황 지식으로 순서를 낸다 ─────────────
+        planb = self._rag.run(_replan_rag_request(
+            request, pool, persona, daily_rain, trace_id, now,
+            notes=notes, deadline_ms=_deadline_budget(meta),
+        ))
+        notes += [f"planb: {n}" for n in planb.notes]
+        # 랭킹은 **LLM 경로일 때만** 넘긴다 (독스트링 마지막 단락).
+        planb_rank = () if planb.is_fallback else planb.ranked_poi_ids
+        if planb.is_fallback:
+            notes.append(f"planb_rank_skipped: fallback_level={planb.fallback_level}")
+
+        window = request.time_window
+        domain_request = core.GenerateItineraryRequest(
+            schedule_id=ScheduleId(request.trip_id),
+            anchor=anchor,
+            days=dates,
+            day_window=TimeWindow(
+                start=datetime.combine(window.date, window.start, tzinfo=self._tz),
+                end=datetime.combine(window.date, window.end, tzinfo=self._tz),
+            ),
+            budget=budget_level,
+            transport=transport,
+            persona_ref=ResourceRef(
+                kind="persona", ref_id=request.trip_id, owner_id=request.trip_id),
+            principal=Principal(user_id=request.trip_id),
+            seed=abs(hash(meta.request_id)) % 10_000,
+            fixed_blocks=_replan_fixed_blocks(request, self._tz),
+            excluded_poi_ids=frozenset(PoiId(p) for p in request.excluded_poi_ids),
+            rejections=_domain_rejections(request.rejections),
+            include_explanations=False,  # 재계획 화면(i06)은 설명을 안 쓴다
+            prefer_categories=prefer,
+            avoid_categories=avoid,
+        )
+        outcome = self._schedule_agent.run(core.ScheduleTask(
+            request=domain_request,
+            pool=pool,
+            persona=persona,
+            daily_rain=daily_rain,
+            event_bonus=None,
+            candidates_summary=core.candidates_report(pool),
+            budget=core.allocate(_deadline_budget(meta), core.OrchestratorConfig()),
+            # PlanB 가 쓴 시간이 잔여에서 빠지도록 **PlanB 이전** 원점을 넘긴다.
+            # 여기서 시계를 다시 읽으면 PlanB 가 공짜가 되고, 두 LLM 호출 합이
+            # 예산을 넘겨 백스톱(504)에 걸린다.
+            started_ms=t0,
+            trace_id=trace_id,
+            now=now,
+            planb_rank=planb_rank,
+        ))
+        return self._replan_projection(
+            request, outcome, notes, resolved, unknown, retrieved=planb.retrieved
+        )
+
+    def _replan_directives(
+        self, request: schemas.ReplanRequest, notes: list[str]
+    ) -> tuple[list[str], list[str], frozenset[PoiCategory], frozenset[PoiCategory]]:
+        """칩 + 자유입력 → (해석분, 미지분, 선호 카테고리, 회피 카테고리).
+
+        **`prefer`/`avoid` 를 실제로 쓰는 첫 자리다** — 2026-09-24 실측으로 사전 20종의
+        `enforced_by`·`prefer_categories`·`avoid_categories` 를 읽는 코드가 `src/`
+        전체에 0건이었다(사전이 인식만 하고 효과가 없었다).
+
+        미배선(`unwired`) 지시는 **해석분에 넣되 노트로 무효를 밝힌다** — 해석 못 한
+        것(`unknown`)과 해석했지만 안 듣는 것은 다른 사실이고, 섞으면 FE 가 "사전을
+        늘려야 하나"와 "솔버를 열어야 하나"를 못 가른다.
+        """
+        if not self._directives:
+            if request.directives or request.free_text:
+                notes.append("directive_dictionary_absent")
+            return [], list(request.directives), frozenset(), frozenset()
+
+        known, unknown = resolve_chips(request.directives, self._directives)
+        specs = list(known)
+        if request.free_text and self._embedding is not None and self._vector_store is not None:
+            try:
+                matched = match_free_text(
+                    request.free_text, self._directives,
+                    self._embedding, self._vector_store)
+            except Exception as e:  # 검색 장애 — 칩만으로 진행한다
+                notes.append(f"free_text_match_degraded: {type(e).__name__}")
+                matched = ()
+            seen = {s.key for s in specs}
+            specs += [s for s in matched if s.key not in seen]
+        elif request.free_text:
+            notes.append("free_text_match_unavailable")  # 벡터 미주입
+
+        prefer: set[PoiCategory] = set()
+        avoid: set[PoiCategory] = set()
+        ineffective: list[str] = []
+        for spec in specs:
+            if spec.unwired:
+                ineffective.append(spec.key)
+                continue
+            prefer |= _categories_of(spec.prefer_categories)
+            avoid |= _categories_of(spec.avoid_categories)
+        if ineffective:
+            notes.append(f"directives_unwired: {','.join(sorted(ineffective))}")
+        both = prefer & avoid
+        if both:  # 반대인 칩을 같이 눌렀다 — 상쇄되고 그 사실을 남긴다
+            notes.append(
+                f"directives_conflict: {','.join(sorted(c.value for c in both))}")
+        return [s.key for s in specs], list(unknown), frozenset(prefer), frozenset(avoid)
+
+    def _with_current_slots(
+        self,
+        pool: CandidatePool,
+        request: schemas.ReplanRequest,
+        now: datetime,
+        notes: list[str],
+    ) -> CandidatePool:
+        """원 일정 POI 를 풀에 합집합으로 넣는다.
+
+        설계 §4 — 원 일정 POI 가 **같은 점수 호출**에 들어가야 대안과 같은 척도로
+        비교된다. 안 넣으면 "바꿀 이유 없는 곳까지 바뀐다"가 된다(legacy 경로의
+        증상이 정확히 그것이다).
+
+        제외 목록에 있는 것은 넣지 않는다 — 사용자가 이미 거절한 곳이다.
+        """
+        refs = [
+            PoiId(s.poi_id) for s in request.current_slots
+            if s.poi_id not in set(request.excluded_poi_ids)
+        ]
+        missing = [r for r in refs if r not in pool.poi_ids]
+        if not missing:
+            return pool
+        try:
+            found = tuple(self._poi_db.find_by_ids(frozenset(missing)))
+        except Exception as e:  # POI 조회 실패 — 원 일정 없이도 재계획은 된다
+            notes.append(f"current_slots_lookup_degraded: {type(e).__name__}")
+            return pool
+        if len(found) < len(missing):
+            notes.append(f"current_slots_unregistered: {len(missing) - len(found)}")
+        if not found:
+            return pool
+        pois = pool.pois + found
+        return CandidatePool(
+            poi_ids=frozenset(p.poi_id for p in pois), pois=pois,
+            generated_at=pool.generated_at, anchor=pool.anchor,
+            radius_km=pool.radius_km,
+        )
+
+    def _replan_empty(
+        self, code: str, notes: list[str], resolved: list[str], unknown: list[str],
+        retrieved: Mapping[str, int] | None = None,
+    ) -> schemas.ReplanResponse:
+        """못 만든 것을 **빈 일정으로 위장하지 않는다** (IO-7 — itinerary=null + 사유).
+
+        `retrieved` 는 실패해도 싣는다 — 검색은 됐는데 배치가 안 된 것과 검색부터
+        안 된 것은 다른 사실이고, 그 구분이 있어야 어디를 고칠지 안다.
+        """
+        return schemas.ReplanResponse(
+            itinerary=None, total_distance_km=None, is_fallback=True, fallback_level=2,
+            notes=notes, resolved_directives=resolved, unknown_directives=unknown,
+            empty_reason=schemas.ReplanEmptyReasonSchema(code=code),
+            retrieved=dict(retrieved or {}),
+        )
+
+    def _replan_projection(
+        self,
+        request: schemas.ReplanRequest,
+        outcome: core.GenerationOutcome,
+        notes: list[str],
+        resolved: list[str],
+        unknown: list[str],
+        *,
+        retrieved: Mapping[str, int] | None = None,
+    ) -> schemas.ReplanResponse:
+        """`GenerationOutcome` → `ReplanResponse`. **예외로 올리지 않는다** (IO-7).
+
+        `generate` 는 FAILED 를 HTTP 오류로 올리지만(`_failure_exception`) 재계획은
+        200 + `empty_reason` 이다 — 백엔드가 폴백 여부를 상태값으로 읽는 계약이고,
+        같은 실패를 한쪽은 예외 한쪽은 상태로 내면 소비 코드가 갈린다.
+        """
+        from trippilot.api.routes import to_payload  # 순환 import 회피 (경계→배선 단방향)
+
+        notes += [d.reason for d in outcome.degradations]
+        if outcome.status is core.GenerationStatus.FAILED:
+            notes.append(outcome.error or "unknown_failure")
+            return self._replan_empty(
+                "NO_FEASIBLE_SLOT", notes, resolved, unknown, retrieved)
+        solution = outcome.solution
+        if solution is None or not any(day.slots for day in solution.days):
+            return self._replan_empty(
+                "NO_FEASIBLE_SLOT", notes, resolved, unknown, retrieved)
+
+        coords = self._coords_for(solution, outcome.slot_alternatives)
+        anchors = {request.target_date: GeoPoint(request.anchor.lat, request.anchor.lng)}
+        transport = _token_or(
+            _TRANSPORT_TOKENS, request.transport_mode, TransportMode.PUBLIC)
+        envelope = _envelope(
+            solution,
+            distance_ranges=_distance_ranges(
+                solution, anchors, coords, self._estimator, transport),
+            candidates_summary=outcome.candidates_summary,
+        )
+        return schemas.ReplanResponse(
+            itinerary=to_payload(envelope),
+            total_distance_km=self._total_distance_km(
+                solution, anchors, coords, transport),
+            # 점수가 규칙으로 내려갔으면 폴백이다 — 일정은 나왔으니 level 2 가 아니다.
+            is_fallback=outcome.scoring_mode is not core.ScoringMode.LLM,
+            fallback_level=0 if outcome.scoring_mode is core.ScoringMode.LLM else 1,
+            notes=notes,
+            resolved_directives=resolved,
+            unknown_directives=unknown,
+            # 계약이 "KB 히트 수"라고 적어 둔 그 필드 — 배선 전에는 항상 빈 dict 였다.
+            retrieved=dict(retrieved or {}),
+        )
+
+    def _total_distance_km(
+        self,
+        solution: ItinerarySolution,
+        anchors: Mapping[date, GeoPoint],
+        coords: Mapping[PoiId, GeoPoint],
+        transport: TransportMode,
+    ) -> float | None:
+        """구간 거리 합. **생산자가 없어 여기서 만든다** (2026-09-24 실측: `src/` 에
+        `total_distance_km` 생산 코드 0건 — 스키마 필드와 어댑터 내부값만 있었다).
+
+        `TravelEstimate.distance_km_range` 의 **상한**을 더한다 — 하한을 쓰면 실제보다
+        짧게 보여 "생각보다 멀다"가 되고, 범위를 그대로 노출하면 `i08` 의 "이동 −6.9km"
+        비교가 불가능하다(백엔드 `ReplanDiffService` 가 스칼라를 기대한다).
+
+        **시간은 절대 싣지 않는다** (INV-3) — `TravelEstimate` 에 소요시간이 같이
+        있으므로 여기서 거리만 꺼내는 것이 그 불변식의 실행 지점이다.
+        """
+        total = 0.0
+        seen_any = False
+        for day in solution.days:
+            previous = anchors.get(day.date)
+            for slot in day.slots:
+                here = coords.get(slot.poi_id)
+                if previous is None or here is None:
+                    previous = here or previous
+                    continue
+                try:
+                    estimate = self._estimator.estimate(previous, here, transport)
+                except Exception:  # 추정 실패 — 그 구간만 빠진다
+                    previous = here
+                    continue
+                total += estimate.distance_km_range[1]
+                seen_any = True
+                previous = here
+        return round(total, 1) if seen_any else None
 
     def _pool_from(
         self, packets: dict[ProviderKind, InfoPacket], now: datetime
@@ -1119,7 +1693,8 @@ class WiredItineraryOrchestrator:
         now = _tz_aware(meta.requested_at, self._tz)
         trace_id = TraceId(meta.request_id)
         solution = _solution_from_payload(
-            request.itinerary, ScheduleId(request.trip_id), self._tz)
+            request.itinerary, ScheduleId(request.trip_id), self._tz,
+            untimed="skip")  # 설명은 배치분 대상 — 미정 슬롯은 설명할 배치가 없다
         ids = frozenset(s.poi_id for day in solution.days for s in day.slots)
         # 차선책(TRIP-887) — payload 의 슬롯별 alternatives 를 (날짜, 슬롯 POI, 선택지 POI)로.
         # 좌표·풀 조립은 배치 POI 와 한 번의 재조회로 합친다.
@@ -1229,14 +1804,17 @@ class WiredItineraryOrchestrator:
         meta = request.request_meta
         now = _tz_aware(meta.requested_at, self._tz)
         # 편집은 확인 게이트·재타이밍이 따로 있어 미검증 목록을 소비하지 않는다
-        solution, _, poi_index, _ = self._reconstruct(request.itinerary, meta)
+        solution, _, poi_index, _ = self._reconstruct(
+            request.itinerary, meta,
+            untimed="reject",  # 편집 결과가 곧 응답 일정 — 건너뛰면 저장 슬롯 소실
+        )
         transport = _token_or(
             _TRANSPORT_TOKENS, request.transport_mode, TransportMode.PUBLIC)
         # 수집은 요구표 경유 (2026-09-16) — EDIT 행은 Place 하나뿐이지만, 풀 빌더
         # 직행 대신 PlaceProvider 를 거치면서 FreshnessMeta·ProviderStatus 가 붙는다.
         # 조회 실패가 예외로 튀지 않고 상태값으로 수렴한다(INV-4).
         packets = self._info.collect(
-            "EDIT",
+            Intent.EDIT_SCHEDULE,
             {
                 "pool_request": CandidatePoolRequest(
                     anchor=GeoPoint(request.anchor.lat, request.anchor.lng),
@@ -1478,10 +2056,13 @@ def build_orchestrator(
     weather: WeatherPort | None = None,
     travel_port: object | None = None,  # 실경로 어댑터 (TRIP-432) — None이면 하버사인
     existence: object | None = None,    # 지도 실재 검증 (TRIP-683) — None이면 강등 없음
+    hours: object | None = None,        # 영업시간 보강 (Google) — None이면 보강 없음
+    place_ids: dict | None = None,      # content_id→place_id. 비면 물을 대상 0
     events: "EventPort | None" = None,  # 행사 저장소 (TRIP-421) — None이면 무보정
     vector_store: object | None = None,
     embedding: object | None = None,
     tz: timezone = KST,
+    directives: tuple[DirectiveSpec, ...] = (),
 ) -> WiredItineraryOrchestrator:
     """실 구성요소 조립 → `create_app(orchestrator=...)`에 꽂을 어댑터.
 
@@ -1502,10 +2083,8 @@ def build_orchestrator(
     provider = ChainAssemblyProvider(estimator, clock, trace, acfg)
     # 수집 계층 (TRIP-406·407) — 풀·페르소나 상시, 날씨는 포트 주입 시에만 등록.
     # 페르소나 재조회도 같은 resolver — 보안 규칙의 권위 1곳 (TRIP-333·BR-U4-07).
-    # existence 미주입이면 강등 없이 기존과 동일 (TRIP-683 — 근거 없으면 판정 안 함)
     pool_builder = CandidatePoolBuilder(
-        poi_db, m7_config if m7_config is not None else M7Config(),
-        existence=existence)
+        poi_db, m7_config if m7_config is not None else M7Config())
     providers: dict[ProviderKind, object] = {
         ProviderKind.PLACE: PlaceProvider(pool_builder),
         ProviderKind.PERSONA: PersonaProvider(resolver),
@@ -1576,7 +2155,19 @@ def build_orchestrator(
         trace,
         explanation_worker=explainer,
         alternative_explanation_worker=alt_explainer,
+        # 지도 실재 검증(TRIP-898) — 점수 뒤·어셈블리 앞에서 점수를 깎는다(TRIP-904).
+        # 미주입이면 강등 없이 기존과 동일(근거 없으면 판정 안 함).
+        existence=existence,
+        # 영업시간 런타임 보강 — **둘 다 있어야 돈다.** 포트만 있고 place_id 표가
+        # 비면 물을 대상이 0 이라 조용히 꺼진 것과 같다. 돈이 나가는 경로라
+        # "켜기"가 두 조건인 것이 안전장치다.
+        hours=hours,
+        place_ids=place_ids,
         config=orchestrator_config,
+        # 입장료 파생 지식 (2026-09-24 결정 — AI 소유). 파일이 없으면 빈 표이고
+        # 그때 점수는 종전과 **완전히 같다**(전 POI '모름' → 중립). 즉 데이터가
+        # 배포되기 전에도 이 배선이 동작을 안 바꾼다.
+        fees=load_fee_table(),
     )
     # 수집기는 하나를 공유한다 — 코디네이터(generate)와 경계(replan·edit)가 같은
     # 요구표·같은 Provider 를 쓴다. 경로마다 따로 만들면 표가 갈라진다.
@@ -1603,6 +2194,18 @@ def build_orchestrator(
 
         share_card_worker=share_card_worker,
         trace=trace,
+        # 재계획 — 위에서 만든 그 에이전트를 그대로 넘긴다(새로 만들면 ②′ 실재 검증·
+        # 차선책 문장 배선이 빠진다). 지시 사전은 파일에서 읽고, 없으면 빈 튜플이라
+        # 칩·자유입력이 해석되지 않고 그 사실이 응답 노트로 나간다.
+        schedule_agent=schedule_agent,
+        # 사전은 **주입받는다** — yaml 파서 의존이 `llm_gateway/prompts.py` 전용이라는
+        # 아키텍처 규칙(`test_yaml_only_imported_in_llm_gateway_prompts`) 때문이다.
+        # `load_directive_file(path, parse)` 가 파서를 인자로 받게 설계된 이유가 이것이고
+        # 읽는 쪽은 `src/` 밖이다(main.py·테스트). 비어 있으면 칩·자유입력이 해석되지
+        # 않고 그 사실이 응답 노트(`directive_dictionary_absent`)로 나간다.
+        directives=directives,
+        embedding=embedding,
+        vector_store=vector_store,
     )
 
 
@@ -1730,6 +2333,13 @@ def demo_poi_seed() -> tuple[Poi, ...]:
             quality=DataQuality.FULL,
             source=PoiSource.SEED,
             confidence=None,
+            # KB-5 조인 키 — **데모용 값이다**(백엔드 시드에 없다). 실 경로에서는
+            # `BackendPoiDb` 가 `PoiReadResponse.sourceRef` 를 옮긴다.
+            # 이걸 안 채우면 `place_knowledge._pool_refs` 가 빈 집합을 내서
+            # **개발·스모크 앱에서 KB-5 가 켜지지 않는다** — 그러면 장소 지식이
+            # 조용히 사라져도 어느 스모크도 안 걸린다(2026-09-19 실측: 실제로
+            # 경계 테스트가 한 건도 없었다).
+            source_ref=f"demo-{poi_id[-1]}",
         )
         for poi_id, name, category, lat, lng in _BACKEND_SEED_ROWS
     )
@@ -1743,12 +2353,16 @@ def build_dev_app(
     poi_db: object | None = None,
     travel_port: object | None = None,
     existence: object | None = None,   # PlaceExistencePort (TRIP-683)
+    hours: object | None = None,       # PlaceHoursPort (Google Places)
+    place_ids: dict | None = None,     # content_id→place_id
     feature_models: dict | None = None,  # 기능별 모델 오버라이드 (TRIP-513)
     retry_models: dict | None = None,  # 타임아웃 재시도 모델 (TRIP-522 2단 폴백)
     events: EventPort | None = None,
     vector_store: object | None = None,
     embedding: object | None = None,
     trace: TracePort | None = None,
+    context_store: object | None = None,
+    directives: tuple[DirectiveSpec, ...] = (),
 ) -> FastAPI:
     """스모크·로컬 개발용 앱 — 기본은 in-memory fake 조립(실 LLM·실 DB 0, D37).
 
@@ -1763,6 +2377,9 @@ def build_dev_app(
     StaticPoiDb(제주 시드 4곳) 그대로(하위호환: 백엔드 없는 로컬 스모크).
     `travel_port`는 선택 주입(TRIP-432, ChainedTravelAdapter) — 기본 None 이면
     기존 TravelEstimator(하버사인) 그대로.
+    `context_store`는 선택 주입(TRIP-434, BackendPersonaStore 실연동) — 기본 None
+    이면 StaticPersonaStore(고정 요약) 그대로. 실 어댑터를 넣으면 페르소나가
+    매 요청 백엔드 재조회로 온다(BR-U4-07).
     `trace`는 선택 주입(관측 스파이용, 예: InMemoryTrace) — 기본 None 이면
     build_orchestrator 기본값(LoggingTrace) 그대로.
     """
@@ -1778,9 +2395,11 @@ def build_dev_app(
         }
     orchestrator = build_orchestrator(
         existence=existence,
+        hours=hours,
+        place_ids=place_ids,
         llm=llm if llm is not None else UnwiredLlm(),
         poi_db=poi_db if poi_db is not None else StaticPoiDb(demo_poi_seed()),
-        context_store=StaticPersonaStore(
+        context_store=context_store if context_store is not None else StaticPersonaStore(
             PersonaSummary(taste_tags=(), companion=CompanionType.SOLO,
                            budget=BudgetLevel.MID)
         ),
@@ -1793,5 +2412,6 @@ def build_dev_app(
         vector_store=vector_store,
         embedding=embedding,
         trace=trace,
+        directives=directives,
     )
     return create_app(orchestrator)

@@ -37,6 +37,71 @@ class OrchestratorConfig:
     c1_max_ms: int = 14_000
     c1_min_ms: int = 800          # 이보다 적게 배분되면 LLM 호출 자체를 스킵 (DL-2)
     explanation_min_ms: int = 1_500  # 설명 부착(선택 단계) 진입 하한
+    # ── 지도 실재 검증 ②′ (TRIP-898 → TRIP-904 에서 풀 빌더로부터 이동) ──
+    # 점수 상위 몇 건을 지도에서 확인할 것인가. 마감이 실질 제한이라 이 값은 상한일
+    # 뿐이다 — 3일 여행이 슬롯 15개 안팎이라 50 이면 배치될 후보를 넉넉히 덮는다.
+    existence_verify_top_n: int = 50
+    # 검증에 줄 시간 상한. 어셈블리 바닥(c2_reserved_ms)을 침범하지 않는 만큼만 쓴다.
+    existence_deadline_ms: int = 1_500
+    # 지도에서 못 찾은 후보의 강등 = max(점수 − penalty, 점수 × factor) (점수 > 0 일 때).
+    # penalty 0.3 = 소프트 항 "한 단" — 다른 소프트 감점(비 오는 날 실외 −0.2·식사창
+    # 밖 FOOD −0.2 등)과 같은 축이라, 겹쳐도 같은 조정 점수의 일반 후보와 똑같이
+    # 취급된다. 곱셈만 쓰던 첫 안(×0.2)은 비 오는 날 실외 후보의 방문 이득을 음수로
+    # 만들어 **대체 후보가 없어도 빠지는**(사실상 배제) 것이 리뷰 실측으로 드러났다
+    # (실외만 4곳·비 80%·전량 미검출: 배치 3→1, 이 산식은 3→3).
+    # 근거: 지도 미검출이 실제 폐업일 확률 ≈ 102/(102+305) ≈ 25% (ai-existence-probe) —
+    # 기대 효용 ≈ 점수 × 0.75 로, 흔한 점수대(0.6~0.9)에서 한 단(0.3) 감점과 비슷하다.
+    existence_demote_penalty: float = 0.3
+    # 강등 하한 배율 — 저점수(< penalty/(1−factor))가 음수로 떨어지지 않게 원점수의 이만큼은
+    # 남긴다. **0 초과**여야 강등이다(0 이면 OR-Tools 방문 이득 0 = 사실상 배제, 9/12 결정 위반).
+    existence_demote_factor: float = 0.2
+    # ── 영업시간 런타임 보강 ②⁗ (Google Places) ──────────────────
+    # **영업시간이 없는 후보에만** 묻는다(사용자 결정 2026-09-26). 이미 값이 있는
+    # 47.3% 를 덮으면 우리 파서 값과 벤더 값이 섞여 출처를 못 가린다.
+    #
+    # 돈이 나간다 — Place Details **Enterprise** 티어($20/1,000 · 월 1,000 무료).
+    # 팀 결정은 "무료 한도 안에서만"이라 이 상한이 기능의 일부다. 50 이 아니라 20 인
+    # 이유: 실재 검증은 공짜라 넉넉히 덮어도 되지만 여기는 한 건이 곧 비용이고,
+    # 3일 여행 슬롯이 15개 안팎이라 20 이면 **배치될 후보**는 덮는다.
+    hours_enrich_top_n: int = 20
+    # 보강에 줄 시간 상한. 어셈블리 바닥을 침범하지 않는 만큼만 쓴다(DL-2).
+    # 실재 검증(1.5s)보다 짧다 — 이건 없어도 일정이 나오는 곁가지다.
+    hours_enrich_deadline_ms: int = 1_000
+
+    # ── PlanB 상황 랭킹 가산 (/replan 경로에서만) ──────────────────
+    # PlanBAgent(RAG)가 상황 지식으로 고른 순서를 점수에 **더한다**. 1위가 이 값
+    # 전부, 이후 순위는 `1 − 순위/개수` 로 선형 감소.
+    #
+    # 0.3 = 다른 소프트 항과 같은 "한 단"(`existence_demote_penalty` 주석의 그 축 —
+    # 비 오는 날 실외 −0.2·식사창 밖 FOOD −0.2·지시 ±0.3). 같은 축을 쓰면 겹쳤을 때
+    # 결과가 예측 가능하다: PlanB 1위이면서 지도 미검출이면 +0.3 −0.3 = 상쇄다.
+    #
+    # **곱셈이 아니라 덧셈인 이유**: 점수 원점이 둘이다 — LLM 점수는 게이트가
+    # 0.0~1.0 으로 클램프하고(`gates/scoring.py`) 규칙 점수는 원거리에서 음수까지
+    # 간다. 배율은 두 원점에서 다른 뜻이 되고, 음수에 곱하면 **더 내려간다**
+    # (`demoted_score` 가 0 이하를 건드리지 않는 이유와 같은 함정의 반대편).
+    # 덧셈은 양쪽에서 같은 뜻이고 음수 점수도 끌어올린다 — 멀지만 상황에 딱 맞는
+    # 곳을 PlanB 가 되살릴 수 있다는 뜻이고, 그게 이 항의 목적이다.
+    #
+    # **이 항은 가산항으로 유지한다** (팀 결정 2026-09-26). 곧 같은 자리에 거절 이력
+    # 강등이 음수로 더해지고, 결정은 "상쇄시키되 PlanB 가 조금 더 이기게"다 — 거절
+    # 강등을 이 값보다 한 칸 작게(예 0.25) 두면 겹쳤을 때 순증이 남는다. 곱셈이나
+    # 배제로 바꾸면 그 합성이 불가능해진다. 근거: 거절이 항상 이기면 사용자가
+    # "다시 짜줘"를 두세 번 누를 때 풀이 말라 막다른 길이 된다.
+    planb_rank_lift: float = 0.3
+
+    # 거절 이력 강등 (TRIP-964) — **반복할수록 커지는 계단**이다. n 번째 거절이면
+    # 아래 표의 n 번째 값을 쓰고, 표보다 많이 거절했으면 마지막 값에서 멈춘다.
+    # 종류별로 크기가 다른 것은 신호의 세기가 다르기 때문이다(팀 결정 2026-09-26):
+    # 슬롯 교체는 그 자리를 보고 바꾼 것이라 강하고, 재생성은 "이 구성이 싫다"에
+    # 가까워 약하다 — 맘에 들었던 곳까지 함께 걸린다.
+    rejection_demote_swapped: tuple[float, ...] = (0.15, 0.22, 0.25)
+    rejection_demote_regenerated: tuple[float, ...] = (0.10, 0.15, 0.18)
+    # 한 POI 의 총 강등 상한. **`planb_rank_lift` 보다 작아야 한다** — 그래야 결정
+    # "겹치면 PlanB 가 조금 더 이긴다"가 **반복 횟수와 무관하게** 성립한다. 상한이
+    # 없으면 두세 번 거절한 곳이 랭킹 가산을 넘어서고, 그때부터 그 결정은 거짓이 된다.
+    # 아래 __post_init__ 이 그 관계를 강제한다 — 숫자를 베껴 적지 않는 이유다.
+    rejection_demote_cap: float = 0.25
 
     def __post_init__(self) -> None:
         if not 0.0 < self.c2_min_share < 1.0:
@@ -49,6 +114,31 @@ class OrchestratorConfig:
                      "explanation_min_ms"):
             if getattr(self, name) < 0:
                 raise ValueError(f"{name} 음수 불가")
+        if self.existence_verify_top_n <= 0:
+            raise ValueError("existence_verify_top_n 양수 필요")
+        if self.existence_deadline_ms <= 0:
+            raise ValueError("existence_deadline_ms 양수 필요")
+        if not 0.0 < self.existence_demote_factor <= 1.0:
+            raise ValueError("existence_demote_factor ∈ (0, 1] — 0 은 배제다")
+        if not 0.0 <= self.existence_demote_penalty < float("inf"):
+            raise ValueError("existence_demote_penalty ∈ [0, ∞)")
+        if not 0.0 <= self.planb_rank_lift < float("inf"):
+            raise ValueError("planb_rank_lift ∈ [0, ∞) — 음수면 가산이 아니라 강등이다")
+        for name in ("rejection_demote_swapped", "rejection_demote_regenerated"):
+            steps = getattr(self, name)
+            if not steps:
+                raise ValueError(f"{name} 는 최소 1단계 — 빈 표는 강등 없음을 뜻하지 않는다")
+            if any(s < 0.0 for s in steps):
+                raise ValueError(f"{name} 의 각 단계 ≥ 0 — 음수면 강등이 아니라 가산이다")
+            if list(steps) != sorted(steps):
+                raise ValueError(f"{name} 는 비감소여야 한다 — 또 거절했는데 덜 내려가면 규칙이 뒤집힌다")
+            if steps[-1] > self.rejection_demote_cap:
+                raise ValueError(f"{name} 의 마지막 단계가 상한을 넘는다")
+        if not 0.0 <= self.rejection_demote_cap < self.planb_rank_lift:
+            raise ValueError(
+                "rejection_demote_cap ∈ [0, planb_rank_lift) — 상한이 랭크 가산 이상이면 "
+                "'겹치면 PlanB 가 조금 더 이긴다'(팀 결정)가 깨진다"
+            )
 
 
 @dataclass(frozen=True, slots=True)

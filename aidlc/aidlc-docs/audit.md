@@ -1399,3 +1399,64 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **미반영으로 남긴 것**: `business-rules.md`의 BR-U3-26("교체 후 시각은 재검증 전에는 노출하지 않는다. 초안 단계는 시간대 라벨만이므로(BR-U3-07) 자연히 지켜진다")·PBT-U3-2("시간대 라벨 사영(BR-U3-07)")와 `business-logic-model.md:158("초안 단계라 시간대 라벨만 보이므로(DEC-U3-3) 자연히 지켜진다")는 옛 BR-U3-07/DEC-U3-3 문면을 그대로 인용하고 있어 이번 개정과 어긋나지만, 오케스트레이터 3-a 선택 목록이 BR-U3-07·DEC-U3-3·INV-U3-07 3건으로 한정돼 손대지 않았다 — 후속 정정 필요(TRIP-783 [기록] 개발로그에 새 관측으로 남긴다).
 
 **Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. TRIP-442·TRIP-443·U5(2026-09-01) 선례(Post-Design Correction)와 같은 절차. 정정 실행 주체: TRIP-783 사이클 [기록](scribe) 단계. 실측 근거는 `_workspace/20260916-trip783-map-sheet-shell/01_spec-analyst_brief.md`(§열린 질문 1·§맹점 후보)·`01b_ouroboros_seed.md`(§확정 결정)·`03_implementer_notes.md`(§1 SlotStopCard `timeLabel` 정책). 이 항목이 손댄 `aidlc/` 파일은 `construction/u3-ai-itinerary/functional-design/{business-rules.md,business-logic-model.md,domain-entities.md}`와 이 `audit.md` append뿐이다. 코드 변경 0.
+
+---
+
+## Change Request — INCEPTION·CONSTRUCTION 산출물 사후 개정 (QA 3회차 제품 결정 5건 · TRIP-1052·1055·1061·1045·1042·1043)
+**Timestamp**: 2026-09-28T06:50:21Z
+**User Input**: "ai dlc 폴더 규칙대로해서 문서 수정 ㄱㄱ"
+**Current State**: CONSTRUCTION 설계 문서 단계(SCOPE.md 2026-07-17 개정). INCEPTION은 2026-07-13 승인 완료, U0~U6 설계 종료.
+**Impact Assessment**: 2026-07-23 선례와 같은 `workflow-changes.md` §4 **Low impact → Modify and update dependents**(전면 재실행 아님). 사용자 입력 자체를 명시 승인으로 받는다(오케스트레이터 전달: "이 지시 자체가 승인"). 결정 원문은 2026-09-28 사용자 동행 QA 3회차에서 사용자가 확정한 것으로, 각 Jira 티켓 본문에 기록돼 있다(TRIP-1052 #013 · TRIP-1055/1061 #024 · TRIP-1045 #017·019·020 · TRIP-1042 #021·022 · TRIP-1043 #041·043·044).
+**User Confirmation**: 명시 승인 수령("ai dlc 폴더 규칙대로해서 문서 수정 ㄱㄱ").
+**Action Taken**:
+- **결정 1 — TRIP-1052 숙소 등록 날짜 제거**: 숙소 등록에서 체크인·체크아웃 입력을 없앤다. 날짜별 거점·커버리지는 `base_assignment` 자기 날짜로 판정. 서버 계약 `checkIn`·`checkOut`(nullable)은 **필드 삭제 없이 유지**. 저장 숙소 날짜 표시는 옛 데이터에 있으면 보이고 없으면 줄 생략('날짜 없음' 문구 없음).
+  - `stories.md` — 에픽 D 머리 개정 주석 신설 · US-STAY-06·07·08·09 · US-TRIP-01(등록 숙소 연계 줄 폐기)·03·04·07 · US-NOTIF-01에 `[개정 · 2026-09-28, TRIP-1052]` 줄 추가(원문 보존) · **US-TRIP-05 ⛔ 폐기**(번호 재사용 안 함, 본문 역사 보존).
+  - `requirements.md` — FR-CORE-01(Case B)·FR-STAY-03·FR-TRIP-01 개정 주석. `components.md` C4 목적 개정 주석.
+  - U1 `business-rules.md` — **BR-U1-26·27 개정**(원문은 표 아래 블록쿼트 보존) · **BR-U1-41 폐기**(US-TRIP-05 연동). U1 `domain-entities.md` — `SavedStay.checkIn·checkOut` 비고 · **INV-U1-09 개정**(원문 보존) · INV-U1-15에 "배정 구간은 배정 자신의 날짜" 개정 줄. U1 `business-logic-model.md` F-3 흐름 개정 줄. U1 `frontend-components.md` — `StayDateFields` 폐기 · `SavedStayList` 날짜 표시 규칙 · TRIP-225 D1("배정 날짜 = 숙소 날짜 복사") 대체 표기 · `stayImportRow` 소멸 · §5 폼 검증의 날짜 순서 검사 폐기.
+  - U6 `business-rules.md` — BR-U6-01 개정(등록 알림 본문 = 숙소 이름만, TRIP-1052 본문의 사용자 결정) · **BR-U6-02 폐기** · BR-U6-20 날짜 표시 규칙.
+- **결정 2 — TRIP-1055/1061 작성중 여행 삭제**: `stories.md`에 **US-TRIP-10 신설**(카드 ⋯ → 확인 다이얼로그 → 소프트 삭제 · 생성 중 불가 · 확정/여행 중/종료는 진입점 없음 · 실패 시 카드 유지+안내). U1 `business-rules.md`에 **BR-U1-57 신설**(작성중만 허용, 서버 상태 가드는 BE 몫 TRIP-1061, 딸린 데이터 정리 범위 **미결 — TRIP-1061**) + BR-U1-42에 포인터. U1 `domain-entities.md`에 **INV-U1-20 신설**. `unit-of-work-story-map.md` U1 매핑 추가(US-TRIP-01~10) · 수 갱신(핵심 98→99, 합계 123→124, U1 25→26 — 폐기 US-TRIP-05 포함, 유효 123) · `unit-of-work.md` §4 · `stories.md` 커버리지 표 동기화.
+- **결정 3 — TRIP-1045 예산 tier→금액 맵**: U1 `frontend-components.md` `BudgetInputField` 행에 [구현 결정] — 칩 누르면 대표 금액 프리필(직접 수정 가능) · 1인 1박 단가 저가 50,000/중간 100,000/고급 200,000/럭셔리 400,000원 · **대표 금액 = 단가 × 박수(1인 총액)** · 0박/기간 미정은 1박 · 칩 누를 때만 계산 · range 안내 문구 없음. `PeriodPicker` placeholder `기간 선택` · `PartyPicker` 동행 기본 `혼자`(party 1).
+  - **정정 근거(같은 항목 내)**: 처음 전달된 산식은 "단가 × 박수 × 인원"이었으나 오케스트레이터가 정정 — 앱 예산 표기가 전부 "1인 총액"(BudgetEditSheet 부제 '1인 총액 기준이에요'·요약 '1인 총액')이고 사용자 원문 결정 문면도 "1인 1박 단가 × 박수"라 인원을 곱하지 않는다.
+- **결정 4 — TRIP-1042 꼭 갈 곳 고르기 지역 매칭**: U1 `business-rules.md`에 **BR-U1-58 신설**(행정구역 코드 접두사 매칭 · 0건 시 폴백 없이 `{여행지}에 담은 곳이 없어요` + `탐색에서 {여행지} 장소 담기` · 다중 목적지 `서울·부산에…` · 지역 밖은 `이 여행 지역 밖 N곳` 섹션에 흐림·선택 불가 · region null fail-open · 행 표기 `인천 남동구`) — **TRIP-982 D6·TRIP-1012 A4를 뒤집는다**. BR-U1-37 포인터 · 섹션 머리 `(BR-U1-48~51 · 58)`. U1 `domain-entities.md` — `Poi.regionCode`·`TripDestination.regionCode` ⚠ 개정 필드 + **INV-U1-21 신설**. U1 `frontend-components.md` §4에 [구현 결정] 블록. 백엔드 openapi는 범위 밖(다른 에이전트).
+- **결정 5 — TRIP-1043 같이 짜기**: U3 `frontend-components.md` §4 `ConceptPickerScreen`·`SlotFillScreen` 행(옛 코드 h13~h17 = 라이브 재번호 h09·h10)에 포인터 + [구현 결정] 블록(진행 줄 그날 목적지 · '슬롯' 비노출 · 중립 컨셉 문구 · 후보 화면 상단 지도 기준 핀+반경 원, 후보 핀은 좌표 계약 뒤 · 태그 한 줄 말줄임·거리 전문 유지 INV-3). 이 문서의 h09·h10 행(`GeneratingScreen`)은 옛 코드상 다른 화면이라 손대지 않았다.
+- `aidlc-state.md` INCEPTION 개정 이력에 2회차 항목 추가.
+- 미수정(의도적): `inception/plans/*`(역사) · 에픽 E·F의 "등록 숙소 체크인/아웃" 문면(US-SCHED-01·에픽 F 헤더·US-PLANB-03 · U4 BR-U4-18)은 에픽 D 머리 주석의 읽기 규칙("거점 배정 구간으로 읽는다")으로 갈음 · 리포 루트 `CLAUDE.md`의 "(123 stories)"는 aidlc/ 밖이라 미수정(오케스트레이터에 보고).
+**Artifacts Affected**: `inception/user-stories/stories.md` · `inception/requirements/requirements.md` · `inception/application-design/{components,unit-of-work,unit-of-work-story-map}.md` · `construction/u1-accommodation-trip/functional-design/{business-rules,domain-entities,business-logic-model,frontend-components}.md` · `construction/u3-ai-itinerary/functional-design/frontend-components.md` · `construction/u6-notification-settings/functional-design/business-rules.md` · `aidlc-state.md` · 이 `audit.md` append
+**Context**: INCEPTION·CONSTRUCTION 스테이지 승인 상태는 **유지**(재실행 아님, 국소 수정). 코드 변경 0 — 구현은 각 Jira 티켓에서 팀이 `frontend/`·`backend/`에서 수행.
+
+---
+
+## Change Request — INCEPTION·CONSTRUCTION 산출물 사후 개정 3회차 (사용자 인터뷰 결정 · 예산 인당 총액·예산 맵 대체·지역 코드 보완·여행 삭제 보류 · TRIP-1067·1042·1055)
+**Timestamp**: 2026-09-28T12:48:48Z
+**User Input**: "정본 바로 고침 — 예"
+**Current State**: CONSTRUCTION 설계 문서 단계(SCOPE.md 2026-07-17 개정). INCEPTION은 2026-07-13 승인 완료, U0~U6 설계 종료. 같은 날 2회차 개정(위 항목) 직후.
+**Impact Assessment**: 2회차와 같은 `workflow-changes.md` §4 **Low impact → Modify and update dependents**(전면 재실행 아님). 결정 원문은 2026-09-28 사용자 인터뷰에서 확정한 것으로, 사용자 입력 자체를 명시 승인으로 받는다(오케스트레이터 전달).
+**User Confirmation**: 명시 승인 수령("정본 바로 고침 — 예").
+**Action Taken**:
+- **결정 1 — 예산 = 인당(1인) 총액 (TRIP-1067)**: `stories.md` US-TRIP-01 정상 AC 아래 `[개정 · 2026-09-28, TRIP-1067]` 줄 추가(원문 보존) — 예산은 인당 여행 전체 총액이고 인원이 바뀌어도 값은 그대로, "일수·인원으로 분배"는 일수 기준으로 읽는다. `components.md` C6 책임의 "예산 분배"에 같은 개정 주석. U1 `domain-entities.md` `budgetTotal` 비고의 "입력 화면은 현재 없음"을 **정정**(원문 보존 — 입력 화면 `BudgetInputField` 있음, 인당 총액). U1 `business-logic-model.md` **G-U1-09 해소** 기록. `requirements.md`는 같은 문구가 없어(grep 실측 — FR-TRIP-01에 예산 서술 없음) 손대지 않았다.
+- **결정 2 — 예산 tier→금액 맵 대체 (TRIP-1067, TRIP-1045 대체)**: U1 `frontend-components.md` `BudgetInputField` 행에 `[대체 · 2026-09-28, TRIP-1067]` — **온보딩 예산 범위 가운데값** 저가 300,000 · 중간 1,000,000 · 고급 2,000,000 · 럭셔리 4,000,000원(범위 ~50만·50~150만·150~300만·300만+, 열린 끝 30만·400만), 1인 여행 전체 금액, 박수·인원 무관. 칩 press 때만 채움·직접 수정 가능·재계산 없음·range 안내 문구 없음은 유지. 이전 TRIP-1045 결정(1인 1박 단가 × 박수)은 지우지 않고 대체 표기로 남겼다. 같은 행의 TRIP-207 안내 문구("온보딩에서 고른 '{티어}({구간})' 범위로 채웠어요")와 testID 목록의 `trip-wizard-budget-note`에 **폐기 표기**.
+- **결정 3 — 지역 코드 문서 보완 (TRIP-1042 후속)**: U1 `domain-entities.md` **INV-U1-21**에 `[보완]` — 접두사 매칭은 **양방향**(짧은 쪽 코드가 긴 쪽의 접두면 지역 안 — 시드 POI는 시도 2자리 코드만 가짐), 목적지 중 하나라도 코드가 없으면 **판정 생략**, 시도 코드 카탈로그 실측 16개(`12` 전남광주통합특별시, `29`·`46` 없음). `Poi.regionCode` 비고를 "시군구 5자리 또는 시도 2자리, 없으면 null"로 보완. U1 `business-rules.md` **BR-U1-58** 셀 끝에 같은 취지 `[보완]`. U1 `frontend-components.md` §4 지역 매칭 사본에 한 줄 보완(정본 포인터). 시도 개수를 17로 적은 곳은 aidlc/ 안에 없었다(grep 실측) — 16은 보완 문구에만 적었다.
+- **결정 4 — 여행 삭제 구현 차이 보류 기록 (개정 아님, TRIP-1055)**: `stories.md` US-TRIP-10 아래와 U1 `business-rules.md` BR-U1-57 표 아래에 **"미결 — 사용자 판단 보류(2026-09-28)"** 주석 — ① 생성 중 카드는 사유 안내 대신 ⋯ 숨김 ② 날짜 지난 미확정 초안(카드 '작성중')도 삭제 허용 ③ `DELETE` 404는 "이미 없음"으로 목록 재조회. **규칙 문면은 바꾸지 않았다**(INV-U1-20도 무변경).
+- `aidlc-state.md` INCEPTION 개정 이력에 3회차 항목 추가. 스토리 수 변동 없음(124, 유효 123).
+- 미수정(의도적): `stories.md` 온보딩 예산 스토리(러프값 4구간 또는 총액)는 온보딩 범위 정의라 그대로 · `inception/plans/*`(역사).
+**Artifacts Affected**: `inception/user-stories/stories.md` · `inception/application-design/components.md` · `construction/u1-accommodation-trip/functional-design/{business-rules,domain-entities,business-logic-model,frontend-components}.md` · `aidlc-state.md` · 이 `audit.md` append
+**Context**: INCEPTION·CONSTRUCTION 스테이지 승인 상태는 **유지**(재실행 아님, 국소 수정). 코드 변경 0 — 구현은 각 Jira 티켓에서 팀이 `frontend/`·`backend/`에서 수행.
+
+---
+
+## Change Request — INCEPTION·CONSTRUCTION 산출물 사후 개정 4회차 (마이페이지 여행 목록 제거·숫자 3칸 집계 · TRIP-1123)
+**Timestamp**: 2026-09-30T00:00:00+09:00 (사이클 [기록] 시점, 초 단위 미측정)
+**User Input**: 사용자 결정 원문(QA-2026-09-29 동행 QA, `_workspace/20260929-qa-r5-tickets/00_context.md`에 기록된 그대로) — "#28 마이페이지: 새 여행 만들기 버튼 제거 + 예정/진행/종료 목록 제거, 숫자 카드만 남기고 탭하면 일정 탭" · "29. l 마이페이지 집계 — "진행 중 4" = 확정 1 + 작성중 초안 3(날짜가 오늘에 걸림). 초안 제외 필요". 정본 반영 대상(US-NOTIF-07·BR-U6-22·BR-U6-23)은 사용자 레인 지시로 사전 확정된 선택이며, 그 지시 원문은 이 항목 작성자(scribe)에게 전달되지 않아 옮겨 적지 못했다.
+**Current State**: CONSTRUCTION 설계 문서 단계(SCOPE.md 2026-07-17 개정). INCEPTION은 2026-07-13 승인 완료, U0~U6 설계 종료. 2·3회차 개정(2026-09-28) 이후.
+**Impact Assessment**: 2·3회차와 같은 `workflow-changes.md` §4 **Low impact → Modify and update dependents**(전면 재실행 아님). 스테이지 승인 상태는 유지한다.
+**User Confirmation**: 사용자 레인 지시로 3건(US-NOTIF-07·BR-U6-22·BR-U6-23) 사전 선택됨. 명시 승인 문구 원문은 없다 — 아침에 사용자 확인 필요.
+**Action Taken**:
+- **`stories.md` US-NOTIF-07** — 정상·예외 원문 보존, 아래에 `[개정 · 2026-09-29, TRIP-1123 …]` 블록 추가: 마이페이지 여행 목록·세그·새 여행 만들기·카드 대표 정보 폐기, 숫자 3칸만 유지 · 집계는 일정 확정 × 서울 오늘, 초안은 어느 칸에도 미집계, 서버 `Trip.status` 미사용, 모르면 `–` · 지난 여행 섹션·회고 진입·캘린더 › 유지(결정 2 (b)).
+- **U6 `business-rules.md` BR-U6-22·23** — 원문 표 보존, 표 아래 개정 블록쿼트 추가: BR-U6-22 "3분류" → 숫자 집계(`숙소 미등록` 칩 폐기) · BR-U6-23에 "지난 여행 = 확정 && 종료"와 노출 조건 "예정 0건일 때만"(TRIP-775 §F-3 A안, 지금까지 정본 공백) 보완.
+- **사용자 결정 원문과 다른 점(명기)**: 사용자 결정 #28 원문은 "탭하면 일정 탭"(세 칸 모두)이나, 레인 조정자가 **종료 칸은 기록 탭**으로 정했다(예정·진행 중은 일정 탭). 이는 사용자 확인 전의 조정자 결정이다 — 아침 판단 대상. 두 문서 모두 개정 줄에 같은 사실을 적었다. 또한 조정자 정정으로 결정 필요 2는 (b)(지난 여행 유지)이며, 이는 Figma 채택본 4755:2930·4755:3123과 F21 결정 절과 일치한다.
+- **구현 결정 표기**: 종료 → 기록 탭 · 지난 여행 = 확정 && 종료 · 모름 시 `–`는 **TRIP-1123 구현 결정**이며 다음 사이클이 요구사항 근거로 인용하면 안 된다.
+- 미수정(의도적, 선택 밖): `u6/…/frontend-components.md`(4행 "26줄 마이 준비 중 셸" 낡음 · 67행 ui 목록의 `TripStatusSegment`·`TripCard` · §4 `model/` 표에 `tripBuckets.ts` 없음) · `u6/…/business-logic-model.md` §6 "07 여행 목록 분류" 행 이름 · `inception/application-design/unit-of-work-story-map.md` 24행 "여행 목록" 문구 · `aidlc-state.md`(INCEPTION 개정 이력 항목 미추가 — 선례와 달리 이번엔 선택 밖) — 개발로그에 드리프트 관측으로만 남김.
+**Artifacts Affected**: `inception/user-stories/stories.md` · `construction/u6-notification-settings/functional-design/business-rules.md` · 이 `audit.md` append
+**Context**: INCEPTION·CONSTRUCTION 스테이지 승인 상태는 **유지**(국소 수정). 코드 변경은 같은 사이클(`20260929-trip1123-mypage-counts`)에서 `frontend/`에 별도 수행.
+
+---

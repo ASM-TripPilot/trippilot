@@ -263,16 +263,19 @@ def saved_places(pool: CandidatePool) -> list:
 
 
 def kb_documents(pool: CandidatePool) -> list[KbDocument]:
-    """KB 3종 중 **벡터에 넣는 것만** — 일정(KB-1)·상황(KB-3).
+    """벡터에 넣는 것 — **상황(KB-3) 하나뿐이다**.
 
-    KB-2(저장 장소)는 더 이상 여기서 지어내지 않는다 (TRIP-512). 프로덕션에서 저장 장소는
+    KB-2(저장 장소)는 여기서 지어내지 않는다 (TRIP-512). 프로덕션에서 저장 장소는
     백엔드가 **요청 봉투**(`AlternativesRequest.saved_places`)로 실어 보내므로, 리허설도
     같은 경로를 타야 한다 — 픽스처로 벡터를 채우면 프로덕션의 "데이터 0건"을 초록으로
     가린다(anti-patterns 테스트 절).
+
+    KB-1(일정)도 **같은 이유로 뺐다** (TRIP-972). 파이프라인이 더 이상 검색하지 않고,
+    일정 컨텍스트는 요청 봉투(`current_slots`·`placement_reason`)로 온다. 여기 합성
+    문서를 남겨 두면 리허설만 "일정 지식이 있다"로 초록이 되고 프로덕션은 아니다 —
+    정확히 KB-2 에서 한 번 데인 그 모양이다.
     """
     return [
-        KbDocument(KbKind.SCHEDULE, f"{DOC_PREFIX}-sched-1",
-                   "오후 야외 산책 슬롯 (고정 아님, 대체 가능)", None, {}),
         KbDocument(KbKind.SITUATION, f"{DOC_PREFIX}-situ-1",
                    "오후 강수확률 80%, 강풍주의보 — 실외 활동 부적합", None, {}),
     ]

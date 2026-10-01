@@ -1,14 +1,15 @@
 import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'expo-router';
 
 import { buildEditItineraryRequest } from '@/features/itinerary/model/buildEditItineraryRequest';
 import { isConfirmLocked } from '@/features/itinerary/model/planState';
 import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { resolveSlotSwapError } from '@/features/itinerary/model/slotSwapError';
 import { swapSlotPoi } from '@/features/itinerary/model/swapSlotPoi';
-import { timeBandLabel } from '@/features/itinerary/model/timeBandLabel';
-import { SlotCandidatePanel } from '@/features/itinerary/ui/SlotCandidatePanel';
+import { SlotCandidateSheet } from '@/features/itinerary/ui/SlotCandidateSheet';
+import { useElapsedFlag } from '@/shared/time/useElapsedFlag';
 import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripIdItinerary,
@@ -17,17 +18,29 @@ import {
 } from '@/shared/api/generated/trips/trips';
 
 /**
- * TRIP-483 · h12 완전 AI 슬롯 교체 배선(h12=초안 아래 인라인 패널이라 draft 슬라이스). 세 조각을
- * 잇는다 — 프레젠테이션이 바텀시트→인라인 패널로 바뀌었어도 로직은 TRIP-335 재사용이다:
+ * TRIP-793 · h08 슬롯 교체 배선(초안 아래·h08 셸 둘 다 마운트하는 컨테이너, 이름 유지). 세 조각을
+ * 잇는다 — 프레젠테이션이 인라인 패널→바텀시트로, 확정이 즉시확정 1단계→라디오 2단계로 바뀌었어도
+ * 배선 로직은 재사용이다(조회·치환·PUT·firedRef·콜드캐시):
  *  1. **조회** — 마운트 시 `slot-candidates` POST 1회(`slotKey` 만, 제외목록 없음 · BR-U3-24).
- *  2. **치환** — 후보 "선택" 탭 → GET 캐시의 현 `days` 에서 `swapSlotPoi` 로 대상 슬롯 poiId 만 갈고
- *     `buildEditItineraryRequest` 로 조립(진실은 편집 스토어가 아니라 조회 캐시 — h12 는 초안 위 패널).
- *  3. **확정** — 전체 교체 PUT. 성공 → 조회 **무효화 재조회**(DraftScreen 갱신) + `onClose`.
+ *  2. **선택** — 후보 행 press → `selectedPoiId` controlled 상태만 바꾼다(PUT 안 나감).
+ *  3. **확정** — "교체하기" press → GET 캐시의 현 `days` 에서 `swapSlotPoi` 로 대상 슬롯 poiId 만 갈고
+ *     `buildEditItineraryRequest` 로 조립해 전체 교체 PUT. 성공 → 조회 무효화 재조회 + `onClose`.
  *     실패 → 이동/닫힘 없이 `resolveSlotSwapError` 문구를 인라인으로 세운다(INV-4).
  *
- * 화면은 이 중 어느 것도 모른다 — 순수 패널에 완성된 값·콜백만 내린다. 헤더 시간대(현 슬롯
- * `timeBandLabel`)와 강등 고지(응답 `degraded`)도 여기서 관통시킨다(패널은 문자열·불린만 받는다).
+ * ★ PARTIAL 게이트가 `handleConfirm` 으로 이전됐다(TRIP-793) — 라디오 2단계라 확정이 여기로 옮겨왔고,
+ *   가드를 함께 옮겨야 2차 생성 중 day1-only 전체교체 PUT 이 뒷날을 덮어쓰지 않는다(traps-itinerary
+ *   TRIP-467/483 잔여). 콜드캐시(GET 미도착)·PARTIAL·중복발사(firedRef) 셋을 handleConfirm 이 진다.
+ *
+ * 조회 상태(TRIP-1109)도 여기가 정한다 — 응답 전(idle 포함)=loading, 10초 넘으면 slow, 실패=error,
+ * 도착=ready. 시트는 시간을 모르므로 10초 판정(`useElapsedFlag`)·[다시 시도] 잠금은 이 컨테이너가 진다. 요청은 끊지
+ * 않는다(abort·시한 없음) — slow 뒤에 응답이 오면 그대로 후보로 바뀐다.
+ *
+ * 헤더 시각범위·컨셉(현 슬롯 startAt/endAt/category)도 여기서 관통시킨다 — 시트는 문자열만 받는다
+ * (옛 timeBand 대체 · D5). degraded 는 시트에 안 넘긴다(강등 전용 표면 제거 · AC-6).
  */
+
+/** 이 시간이 지나도 후보 응답이 없으면 로딩 얼굴 안에 지연 안내 + [다시 시도](결정 2 — 끊지 않음). */
+const SLOW_AFTER_MS = 10_000;
 
 export interface SlotCandidatePanelContainerProps {
   tripId: string;
@@ -40,33 +53,70 @@ export function SlotCandidatePanelContainer({
   slotKey,
   onClose,
 }: SlotCandidatePanelContainerProps): ReactElement {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const itinerary = useGetTripsTripIdItinerary(tripId);
-  const { mutate: fetchCandidates, data: candidatesData } =
-    usePostTripsTripIdItinerarySlotCandidates();
+  const {
+    mutate: fetchCandidates,
+    data: candidatesData,
+    isSuccess: candidatesArrived,
+    isError: candidatesFailed,
+    error: candidatesError,
+  } = usePostTripsTripIdItinerarySlotCandidates();
   const { mutate: putItinerary, isPending } =
     usePutTripsTripIdItinerary<unknown>();
 
+  const [selectedPoiId, setSelectedPoiId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   // useState 잠금은 같은 틱의 둘째 탭이 옛 값을 읽어 못 막는다 — useRef 는 즉시 읽혀 펜딩 전파 전
   // 이중발사를 막는다(리포 함정 h09 firedRef · TripNewStep1 submitLockedRef 선례).
   const firedRef = useRef(false);
+  // [다시 시도] 한 틱 연타 잠금 — 같은 이유로 ref. isPending 으로 막으면 slow(=pending 중) 재시도가
+  // 죽는다. 잠금은 [다시 시도]가 다시 보일 때(error 재등장·slow 재등장) 푼다 — 응답(settle) 때만 풀면
+  // 두 번째 요청이 또 10초를 넘겨 뜬 버튼이 눌러도 아무 일 없는 침묵 실패가 된다.
+  const retryLockRef = useRef(false);
+  // attempt 는 [다시 시도]마다 바뀌어 10초를 새 요청 기준으로 다시 재게 한다.
+  const [attempt, setAttempt] = useState(0);
 
-  // 마운트(=패널 열림)에 후보 조회 POST 를 딱 1회. `mutate` 는 referentially stable 이라 deps 가
+  // 마운트(=시트 열림)에 후보 조회 POST 를 딱 1회. `mutate` 는 referentially stable 이라 deps 가
   // 안정적이면 한 번만 돈다. 요청 바디는 `slotKey` 하나뿐이다(radiusM·concept·제외목록 없음).
   useEffect(() => {
     fetchCandidates({ tripId, data: { slotKey } });
   }, [fetchCandidates, tripId, slotKey]);
 
+  // idle(마운트 직후 mutate 전 한 렌더)도 "아직 응답 없음"이다 — 여기서 0건 얼굴이 새지 않게 한다.
+  const waiting = !candidatesArrived && !candidatesFailed;
+  const isSlow = useElapsedFlag(waiting, SLOW_AFTER_MS, attempt);
+  const fetchState = candidatesFailed
+    ? 'error'
+    : candidatesArrived
+      ? 'ready'
+      : isSlow
+        ? 'slow'
+        : 'loading';
+
+  useEffect(() => {
+    if (fetchState === 'error' || fetchState === 'slow')
+      retryLockRef.current = false;
+  }, [fetchState]);
+
+  function handleRetryFetch(): void {
+    if (retryLockRef.current) return;
+    retryLockRef.current = true;
+    setAttempt((count) => count + 1);
+    fetchCandidates({ tripId, data: { slotKey } });
+  }
+
   const parsed = parseSlotKey(slotKey);
 
-  function handleSelect(candidatePoiId: string): void {
+  function handleConfirm(): void {
     // itinerary GET 미도착(data undefined)이면 조기 반환 — swapSlotPoi([]) 로 빈 days 전체교체 PUT
     // 이 나가 일정이 소실되는 것을 막는다(candidates POST 와 GET 은 순서 보장이 없다).
-    // generationState==='PARTIAL'(2단계 생성 중)이면 선택도 잠근다 — day1-only 전체교체 PUT 이 뒷날을
-    // 덮어쓰기 전에 막는다(TRIP-601 가드 b · copick SlotFillPage 와 동형, 서버 409 의 클라 사본).
+    // generationState==='PARTIAL'(2단계 생성 중)이면 확정을 잠근다 — day1-only 전체교체 PUT 이 뒷날을
+    // 덮어쓰기 전에 막는다(서버 409 의 클라 사본 · handleConfirm 으로 이전된 가드).
     if (
       firedRef.current ||
+      selectedPoiId === null ||
       parsed.kind !== 'ok' ||
       itinerary.data === undefined ||
       isConfirmLocked(itinerary.data.generationState)
@@ -75,15 +125,15 @@ export function SlotCandidatePanelContainer({
     firedRef.current = true;
     setErrorMessage(null);
     const nextDays = swapSlotPoi(
-      itinerary.data?.days ?? [],
+      itinerary.data.days,
       { date: parsed.date, poiId: parsed.poiId },
-      candidatePoiId
+      selectedPoiId
     );
     putItinerary(
       { tripId, data: buildEditItineraryRequest(nextDays) },
       {
         onSuccess: () => {
-          // 성공만 닫는다 — 조회 무효화로 DraftScreen 이 갱신 재조회(GET 1→2)하고 패널을 닫는다.
+          // 성공만 닫는다 — 조회 무효화로 갱신 재조회(GET 1→2)하고 시트를 닫는다.
           void queryClient.invalidateQueries({
             queryKey: getGetTripsTripIdItineraryQueryKey(tripId),
           });
@@ -98,8 +148,8 @@ export function SlotCandidatePanelContainer({
     );
   }
 
-  // 현 슬롯 실이름·시간대는 후보와 달리 이미 손에 있다 — GET 캐시 슬롯의 nameKo·startAt 을 내려
-  // "이름 준비 중" 플레이스홀더 대신 실이름을, 헤더에 시간대를 보인다(후보 이름·사진은 여전히 BE 후속).
+  // 현 슬롯 실이름·시각·컨셉은 후보와 달리 이미 손에 있다 — GET 캐시 슬롯의 nameKo·startAt·endAt·
+  // category·imageUrl 을 내려 헤더 제목·부제·현재 행 사진을 세운다.
   const currentSlot =
     parsed.kind === 'ok'
       ? itinerary.data?.days
@@ -108,20 +158,42 @@ export function SlotCandidatePanelContainer({
       : undefined;
 
   return (
-    <SlotCandidatePanel
-      candidates={candidatesData?.candidates ?? []}
-      currentPoiId={parsed.kind === 'ok' ? parsed.poiId : ''}
-      currentName={currentSlot?.nameKo}
-      timeBand={
-        currentSlot === undefined
-          ? undefined
-          : timeBandLabel(currentSlot.startAt)
-      }
+    <SlotCandidateSheet
+      current={{
+        poiId: parsed.kind === 'ok' ? parsed.poiId : '',
+        nameKo: currentSlot?.nameKo,
+        tags: currentSlot?.tags,
+        imageUrl: currentSlot?.imageUrl,
+        distanceRange: currentSlot?.distanceRange,
+      }}
+      // 후보 응답의 이름·태그·사진을 그대로 내린다(TRIP-1024, QA #053 "이름 준비 중"·회색 사진).
+      candidates={(candidatesData?.candidates ?? []).map((candidate) => ({
+        poiId: candidate.poiId,
+        distanceRange: candidate.distanceRange,
+        nameKo: candidate.nameKo,
+        tags: candidate.tags,
+        imageUrl: candidate.imageUrl,
+      }))}
+      startAt={currentSlot?.startAt}
+      endAt={currentSlot?.endAt}
+      category={currentSlot?.category ?? undefined}
+      selectedPoiId={selectedPoiId}
+      onSelectRadio={setSelectedPoiId}
+      onConfirm={handleConfirm}
       isPending={isPending}
       errorMessage={errorMessage}
-      degraded={candidatesData?.degraded}
-      onSelectCandidate={handleSelect}
+      onPressPlaceSearch={() =>
+        router.push({
+          pathname: '/trips/[tripId]/itinerary/manual/add',
+          params: { tripId },
+        })
+      }
       onClose={onClose}
+      fetchState={fetchState}
+      fetchErrorMessage={
+        candidatesFailed ? resolveSlotSwapError(candidatesError).message : null
+      }
+      onRetryFetch={handleRetryFetch}
     />
   );
 }

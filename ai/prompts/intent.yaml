@@ -1,7 +1,21 @@
-# Intent 프롬프트 v0.1.0 — 정본: ai-prompt-design.md §2.4(가드레일 원문 유지),
+# Intent 프롬프트 v0.2.0 — 정본: ai-prompt-design.md §2.4(가드레일 원문 유지),
 # intent-matching-design.md §2 [3차. LLM 직접 분류] · §4 `llm.parse_intent`.
 # semver는 반드시 따옴표. 의도 라벨 목록은 서버가 주입($intents) — 프롬프트에 박지 않는다
 # (라우팅 테이블이 정본, 드리프트 차단).
+#
+# v0.2.0 (assistant-dialogue FD §7): $intents 가 **라벨 나열에서 의도별 인자 스키마로** 바뀌었다.
+# 종전에는 의도와 무관한 3칸(date·category·constraint)을 받았는데, 그 이름들은 인자표
+# (`domain/dialogue.ARGUMENT_TABLE`) 어디에도 없어서 **하류에서 전부 버려졌다** — 1·2차가
+# 규칙 추출기로 표에 맞는 인자를 내는 동안 3차만 다른 모양을 내고 있었다. 스키마는
+# `tool_specs()` 가 표에서 생성한다(손으로 적은 사본 없음). 도구 호출을 채택하지 않아도
+# 의도별 인자 스키마의 이득은 여기서 얻는다 — FD §7 "③의 핵심은 도구 호출이 아니라 표다".
+#
+# 규칙 두 줄은 **실측으로 추가됐다**(2026-09-22 평가셋 87건, 1회차 79/87):
+# - "required 인자를 못 채워도 의도는 고르세요" — required 를 광고하자 모델이 그 인자를
+#   못 채울 때 {"intent": null} 로 답했다("그 식당은 뭐가 유명해?" → GET_POI_INFO.place 가
+#   대명사라 not_classifiable). 못 채운 필수 인자는 되묻기로 가는 것이 설계다(FD §3).
+# - "배열인 인자는 값 하나여도 배열로" — REPLAN.reason 은 `multiple=True`(→ ReplanRequest.reasons)
+#   라 스키마가 배열로 광고한다. 게이트도 같은 표를 보고 목록을 받는다.
 #
 # 정본 §2.4 OutputSchema와의 차이(의도적):
 # - editCommand·applyMode는 EDIT_TRANSLATION feature(prompts/edit_translation.yaml)가 소유한다.
@@ -12,14 +26,18 @@
 # 입력 컨텍스트도 발화 1건으로 좁혔다 — 대화 히스토리·일정 요약 주입은 라우터 배선 확장이 선행
 # (IntentRouter가 현재 utterance·intents만 넘긴다). 후속 티켓.
 feature: INTENT
-version: "0.1.0"
+version: "0.2.0"
 template: |
   당신은 여행 앱 사용자의 자연어 요청을 정해진 의도 라벨 하나로 분류하는 라우터입니다.
 
   규칙:
-  - intent는 아래 [가능한 의도 목록] 안에서만 고르세요 (목록 밖 라벨 생성 금지)
+  - intent는 아래 [의도와 인자] 의 name 중에서만 고르세요 (목록 밖 라벨 생성 금지)
   - 어느 의도에도 해당하지 않거나 확신할 수 없으면 억지로 고르지 말고 {"intent": null}로 응답하세요 (지어내기 금지)
+  - slots는 **고른 의도의 parameters 에 있는 이름만** 사용하세요 — 목록 밖 이름은 버려집니다
   - slots는 발화에 실제로 등장한 표현만 담으세요 — 없으면 비운 객체({})로 두고, 값을 추측해 채우지 마세요
+  - **required 인자를 못 채워도 의도는 고르세요** — 못 채운 인자는 코드가 따로 되물으므로, 그것 때문에 {"intent": null}로 답하지 마세요
+  - enum이 있는 인자는 그 목록 안의 값만 쓰세요 (발화 표현을 그대로 옮기지 말고 해당 값으로 고르세요)
+  - parameters 가 배열(type: array)인 인자는 값 하나여도 배열로 담으세요
   - 시각·이동시간 수치를 직접 생성하지 마세요 (어셈블리 검증값만 인용)
   - 일정을 단독으로 확정·저장하지 마세요 (반영은 어셈블리 검증 경유)
   - 지역·POI명을 임의로 교정·확정하지 마세요 — 코드가 fuzzy match로 해소합니다
@@ -30,9 +48,9 @@ template: |
   [사용자 발화]
   $utterance
 
-  [가능한 의도 목록]
+  [의도와 인자]
   $intents
 
   [출력 JSON 스키마]
-  {"intent": "string(위 의도 목록 중 하나)", "slots": {"date": "string(선택)", "category": "string(선택)", "constraint": "string(선택)"}, "confidence": "number(0.0~1.0)"}
+  {"intent": "string(위 name 중 하나)", "slots": {"고른 의도의 parameters 이름": "발화에 등장한 값"}, "confidence": "number(0.0~1.0)"}
   분류 불가 시: {"intent": null}

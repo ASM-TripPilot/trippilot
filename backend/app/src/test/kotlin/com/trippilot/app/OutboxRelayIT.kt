@@ -11,7 +11,9 @@ import io.kotest.assertions.withClue
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.ints.shouldBeGreaterThan
+import io.kotest.matchers.doubles.shouldBeGreaterThan
 import io.kotest.matchers.shouldBe
+import org.slf4j.LoggerFactory
 import io.kotest.matchers.string.shouldContain
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
@@ -222,8 +224,16 @@ class OutboxRelayIT : AbstractPostgresIntegrationTest() {
 
         // 증가분을 정확히 1 로 못박지 않는다 — 같은 레지스트리를 공유하므로 다른 IT 의 배달도 함께
         // 센다. 여기서 봐야 하는 것은 "배달이 타이머를 올리는가"이지 그 절대 수가 아니다.
-        val after = registry.find("trippilot.outbox.relay.latency").timer()!!.count()
-        (after > before) shouldBe true
+        val timer = registry.find("trippilot.outbox.relay.latency").timer()!!
+        (timer.count() > before) shouldBe true
+
+        // **이 줄이 진짜 결함을 잡는다.** 종전에는 경과를 DB `now() - occurred_at` 으로 쟀는데
+        // `occurred_at` 은 앱이 찍은 값이라 시작·끝이 **다른 시계**였다. 둘이 수십 ms 만 어긋나면
+        // 값이 음수가 되고 Micrometer 는 음수를 **조용히 버린다** — count 가 안 오른다.
+        // 실측(2026-09-20): 로컬 컨테이너에서 −8~−29ms 가 나와 이 테스트가 4회 연속 깨졌고,
+        // CI(같은 커널을 쓰는 서비스 컨테이너)는 통과해 "로컬만 이상하다"로 보였다.
+        // 총합이 0 이면 "샘플은 세는데 값이 전부 0"이라는 뜻이라 그것도 함께 막는다.
+        timer.totalTime(java.util.concurrent.TimeUnit.NANOSECONDS) shouldBeGreaterThan 0.0
 
         // **분위수를 낼 수 있는 모양인지는 여기서 못 본다.** 이 컨텍스트의 레지스트리는
         // `SimpleMeterRegistry` 이고 그쪽은 aggregable 히스토그램을 지원하지 않아 설정과 무관하게
@@ -231,6 +241,38 @@ class OutboxRelayIT : AbstractPostgresIntegrationTest() {
     }
 
     /** 백오프를 앞당겨 "시간이 지났다"를 만든다 — 실 시간을 기다리지 않기 위해. */
+    /**
+     * **조용히 버리지 않는다**(INV-4). 이 결함의 본체는 음수 지연이 아니라 **Micrometer 가 음수를
+     * 예외도 로그도 없이 무시한다**는 것이었다 — 그래서 "지표가 0"과 "계측이 안 붙었다"가 같은
+     * 모습이 됐고, 로컬에서 4회 연속 깨지는 동안 원인을 못 짚었다.
+     *
+     * 적재 시각을 미래로 만들어 시계 역행을 흉내 낸다. 배달은 되고 표본만 빠지되, **경고가 남는다.**
+     */
+    @Test
+    fun `적재 시각이 미래면 표본을 버리되 경고를 남긴다`() {
+        val logger = LoggerFactory.getLogger(OutboxRelay::class.java) as ch.qos.logback.classic.Logger
+        val captured = ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>()
+        captured.start()
+        logger.addAppender(captured)
+        try {
+            val before = registry.find("trippilot.outbox.relay.latency").timer()?.count() ?: 0L
+            tx.execute { publisher.publish(Probe("미래")) }
+            jdbc.update("UPDATE outbox_event SET occurred_at = now() + interval '1 hour' WHERE aggregate_id = ?", "미래")
+
+            repeat(RELAY_TRIES) { if (unpublished("미래") > 0) relay.relay() }
+
+            // 배달 자체는 막지 않는다 — 계측 때문에 이벤트가 안 가면 그게 훨씬 나쁘다.
+            unpublished("미래") shouldBe 0
+            subscriber.received.map { it.aggregateId } shouldContain "미래"
+            // 표본은 빠진다(음수라 어차피 Micrometer 가 버린다).
+            (registry.find("trippilot.outbox.relay.latency").timer()?.count() ?: 0L) shouldBe before
+            // **그리고 그 사실이 보인다.**
+            captured.list.any { it.formattedMessage.contains("시계가 뒤로") } shouldBe true
+        } finally {
+            logger.detachAppender(captured)
+        }
+    }
+
     private fun dueNow(note: String) =
         jdbc.update("UPDATE outbox_event SET next_attempt_at = now() - interval '1 second' WHERE aggregate_id = ?", note)
 

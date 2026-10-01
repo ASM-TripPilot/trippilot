@@ -42,6 +42,8 @@ describe('🔴 AC-1 · entities/trip/model 재수출 + 카드 뷰모델', () => 
       status,
       createdAt: '2026-09-13T00:00:00Z',
       updatedAt: '2026-09-13T00:00:00Z',
+      baseCount: 0,
+      itineraryDayCount: 0,
     };
 
     expect(trip).toHaveProperty('tripId', 't1');

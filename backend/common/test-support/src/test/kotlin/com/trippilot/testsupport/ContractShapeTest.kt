@@ -34,9 +34,12 @@ class ContractShapeTest : StringSpec({
             "title":  {"type":"string"},
             "count":  {"type":"integer"},
             "ratio":  {"type":"number"},
-            "note":   {"anyOf":[{"type":"string"},{"type":"null"}]}
+            "note":   {"anyOf":[{"type":"string"},{"type":"null"}]},
+            "reason": {"anyOf":[{"${'$'}ref":"#/components/schemas/Reason"},{"type":"null"}]},
+            "either": {"anyOf":[{"${'$'}ref":"#/components/schemas/Reason"},{"type":"string"}]}
          }},
-         "Slot": {"properties": {"name": {"type":"string"}}}}
+         "Slot": {"properties": {"name": {"type":"string"}}},
+         "Reason": {"properties": {"code": {"type":"string"}, "params": {"type":"object"}}}}
         """.trimIndent(),
     )
 
@@ -93,5 +96,27 @@ class ContractShapeTest : StringSpec({
     "어긋남이 여럿이면 전부 보고한다" {
         check(mapOf("title" to 1, "count" to "셋")).map { it.substringBefore(":") }
             .shouldContainExactly(listOf("title", "count"))
+    }
+
+    /**
+     * **nullable 객체 안쪽까지 내려간다.** `anyOf: [T, null]` 을 안 벗기면 `properties` 를 못 찾아
+     * 그 아래가 통째로 무검사가 된다 — 실측(2026-09-20)으로 재계획 경계의 `empty_reason` 이
+     * 그렇게 게이트 밖에 있었다. 계약을 흔들어 봤는데 아무 스펙도 안 깨져서 알았다.
+     */
+    "nullable 객체 안쪽이 어긋나도 잡는다" {
+        check(mapOf("reason" to mapOf("code" to "NO_CANDIDATE", "params" to "문자열")))
+            .map { it.substringBefore(":") }.shouldContainExactly(listOf("reason.params"))
+    }
+
+    "성한 nullable 객체에는 헛경보가 없다" {
+        check(mapOf("reason" to mapOf("code" to "NO_CANDIDATE", "params" to mapOf("from" to "17:00")))).shouldBeEmpty()
+    }
+
+    /**
+     * 갈래가 둘 이상이면 **어느 쪽인지 우리가 정할 수 없다** — 벗기지 않고 주장도 하지 않는다.
+     * 여기서 한쪽을 골라 내려가면 다른 갈래를 쓴 성한 값이 빨개진다.
+     */
+    "진짜 갈래가 여럿인 anyOf 는 안쪽을 주장하지 않는다" {
+        check(mapOf("either" to mapOf("code" to 1))).shouldBeEmpty()
     }
 })

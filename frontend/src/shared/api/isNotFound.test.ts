@@ -1,6 +1,6 @@
 import { AxiosError } from 'axios';
 
-import { isNotFound } from './isNotFound';
+import { isNotFound, retryUnlessNotFound } from './isNotFound';
 
 /**
  * 404 판정 — **"없다"와 "모른다"를 가르는 관문**(TRIP-297 · 01b D8).
@@ -67,5 +67,43 @@ describe('404 만 "아직 없다" 로 읽는다 (TRIP-297)', () => {
     expect(isNotFound(null)).toBe(false);
     // 모양만 흉내 낸 평범한 객체가 통과하면 판정이 타입 검사가 아니라 오리 검사가 된다.
     expect(isNotFound({ response: { status: 404 } })).toBe(false);
+  });
+});
+
+/**
+ * TRIP-986 5-c(03b 경고-1) — 404 는 다시 물어도 답이 같다. 이 함수가 TanStack Query `retry` 자리에
+ * 들어가 **앱 전역 기본값**(`app/_layout.tsx`)과 방식 선택(h04)이 함께 쓴다.
+ *
+ * *(개념)* `retry(failureCount, error)` — 요청이 실패할 때마다 TanStack 이 부르는 함수다.
+ *   `failureCount` 는 "이미 몇 번 다시 물었나"(첫 실패 뒤엔 0), true 를 내면 한 번 더 묻는다.
+ *   TanStack 기본값은 3회(`failureCount < 3`)라, 404 만 빼고 기본과 똑같아야 한다.
+ */
+describe('retryUnlessNotFound — 404 만 다시 묻지 않고, 나머지는 기본(3회)과 같다 (TRIP-986)', () => {
+  it('🔴 404 는 첫 실패(0회차)부터 다시 묻지 않는다', () => {
+    // 준비 — 서버가 "없다"고 분명히 답한 오류.
+    const notFound = httpError(404);
+
+    // 실행·단언 — 몇 회차든 false. 0회차가 핵심이다(여기서 true 면 1초 뒤 한 번 더 묻는다).
+    expect(retryUnlessNotFound(0, notFound)).toBe(false);
+    expect(retryUnlessNotFound(1, notFound)).toBe(false);
+    expect(retryUnlessNotFound(2, notFound)).toBe(false);
+  });
+
+  it('🔴 500 은 기본처럼 0·1·2회차엔 다시 묻고 3회차에 멈춘다 (retry:false 오답 차단)', () => {
+    const serverError = httpError(500);
+
+    expect(retryUnlessNotFound(0, serverError)).toBe(true);
+    expect(retryUnlessNotFound(1, serverError)).toBe(true);
+    expect(retryUnlessNotFound(2, serverError)).toBe(true);
+    // 경계 — 3회 다 물었으면 멈춘다(무한 재시도 오답 차단).
+    expect(retryUnlessNotFound(3, serverError)).toBe(false);
+  });
+
+  it('🔴 응답 없는 네트워크 오류도 기본처럼 3회까지 다시 묻는다 — "모른다"는 "없다"가 아니다', () => {
+    const network = transportError('ERR_NETWORK');
+
+    expect(retryUnlessNotFound(0, network)).toBe(true);
+    expect(retryUnlessNotFound(2, network)).toBe(true);
+    expect(retryUnlessNotFound(3, network)).toBe(false);
   });
 });

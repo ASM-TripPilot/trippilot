@@ -1,0 +1,111 @@
+{
+  "view": "source configuration; not live AWS inventory or a plan",
+  "models": {
+    "dev": {
+      "environment": "dev",
+      "region": "ap-northeast-2",
+      "vpc": "10.40.0.0/16",
+      "az_count": 2,
+      "subnets": {
+        "public": [
+          "10.40.0.0/24",
+          "10.40.1.0/24"
+        ],
+        "private": [
+          "10.40.16.0/20",
+          "10.40.32.0/20"
+        ],
+        "data": [
+          "10.40.64.0/24",
+          "10.40.65.0/24"
+        ]
+      },
+      "nat_count": 1,
+      "eks_version": "1.35",
+      "eks_pools": [
+        "general-purpose",
+        "system"
+      ],
+      "rds_multi_az": false,
+      "rds_engine": "16",
+      "redis_nodes": 1,
+      "redis_engine": "7.1",
+      "secret_keys": [
+        "ai",
+        "backend",
+        "database",
+        "shared"
+      ]
+    },
+    "prd": {
+      "environment": "prd",
+      "region": "ap-northeast-2",
+      "vpc": "10.50.0.0/16",
+      "az_count": 3,
+      "subnets": {
+        "public": [
+          "10.50.0.0/24",
+          "10.50.1.0/24",
+          "10.50.2.0/24"
+        ],
+        "private": [
+          "10.50.16.0/20",
+          "10.50.32.0/20",
+          "10.50.48.0/20"
+        ],
+        "data": [
+          "10.50.64.0/24",
+          "10.50.65.0/24",
+          "10.50.66.0/24"
+        ]
+      },
+      "nat_count": 3,
+      "eks_version": "1.35",
+      "eks_pools": [
+        "general-purpose",
+        "system"
+      ],
+      "rds_multi_az": true,
+      "rds_engine": "16",
+      "redis_nodes": 3,
+      "redis_engine": "7.1",
+      "secret_keys": [
+        "ai",
+        "backend",
+        "database",
+        "shared"
+      ]
+    }
+  },
+  "overview_source_sha256": {
+    "infra/terraform/stack/data.tf": "d5ebcdacac6e903851426bbe19f063362cef815769545632ee7ac0f2fdc722a9",
+    "infra/terraform/stack/eks.tf": "b7d2df8764f5cd783acbff873308a534c0cda43ec8b697768b1468344d6da8de",
+    "infra/terraform/stack/network.tf": "e56b389bc854b168341dd93a7ba3b9ac40f7323b8128992e9517821cfb88b609",
+    "infra/terraform/stack/outputs.tf": "b8109d3b648818393ba64664f76deba923a50082ac574cc71a3297f3d40a49cc",
+    "infra/terraform/stack/registry-secrets.tf": "141b5019c26606a666d97e8f5d45fc1ccb6d0b01199c133f9d5e86e051412143",
+    "infra/terraform/stack/variables.tf": "4c05339dca8fc5ecf60d907ee790df971383748b11ce495691aadde76b2147da",
+    "infra/terraform/stack/versions.tf": "0c77b9488da4afbcdd1208d5679cf1662c718a3b1bb90643b69ffa7842bcd464",
+    "infra/terraform/environments/dev.tfvars": "756e78d55e667dc9722859592e67b12527fd48c1730672e23035fd850916010c",
+    "infra/terraform/environments/prd.tfvars": "b2f58781eea43da225e1cb89d019180c9ff1a881dd231d40156f21392749c2e2",
+    "infra/terraform/stack/.terraform.lock.hcl": "951cd3f88d441fd09a7dd699f81ef188ade750e16317e832954fcc958087b7fd",
+    "infra/bootstrap/template.json": "8901aecbdecc79f28096e2ea2eb57a1048d4b8f8bf9f91eecbfe8fcadfb899d2",
+    "deploy/eks/chart/templates/services.yaml": "9b6651aa71ad2f288ff8599dcfb74c61f48e758e70e3b8a745abe136ffc938e6"
+  },
+  "dependency_graph": {
+    "source_sha256": {
+      "infra/terraform/stack/data.tf": "d5ebcdacac6e903851426bbe19f063362cef815769545632ee7ac0f2fdc722a9",
+      "infra/terraform/stack/eks.tf": "b7d2df8764f5cd783acbff873308a534c0cda43ec8b697768b1468344d6da8de",
+      "infra/terraform/stack/network.tf": "e56b389bc854b168341dd93a7ba3b9ac40f7323b8128992e9517821cfb88b609",
+      "infra/terraform/stack/outputs.tf": "b8109d3b648818393ba64664f76deba923a50082ac574cc71a3297f3d40a49cc",
+      "infra/terraform/stack/registry-secrets.tf": "141b5019c26606a666d97e8f5d45fc1ccb6d0b01199c133f9d5e86e051412143",
+      "infra/terraform/stack/variables.tf": "4c05339dca8fc5ecf60d907ee790df971383748b11ce495691aadde76b2147da",
+      "infra/terraform/stack/versions.tf": "0c77b9488da4afbcdd1208d5679cf1662c718a3b1bb90643b69ffa7842bcd464",
+      "infra/terraform/environments/dev.tfvars": "756e78d55e667dc9722859592e67b12527fd48c1730672e23035fd850916010c",
+      "infra/terraform/environments/prd.tfvars": "b2f58781eea43da225e1cb89d019180c9ff1a881dd231d40156f21392749c2e2",
+      "infra/terraform/stack/.terraform.lock.hcl": "951cd3f88d441fd09a7dd699f81ef188ade750e16317e832954fcc958087b7fd",
+      "infra/bootstrap/template.json": "8901aecbdecc79f28096e2ea2eb57a1048d4b8f8bf9f91eecbfe8fcadfb899d2",
+      "deploy/eks/chart/templates/services.yaml": "9b6651aa71ad2f288ff8599dcfb74c61f48e758e70e3b8a745abe136ffc938e6"
+    },
+    "regenerated_this_run": true
+  }
+}

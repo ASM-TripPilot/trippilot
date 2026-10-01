@@ -7,6 +7,7 @@ feature별 게이트는 gates/<feature>.py 신규 파일로 추가한다 ("추�
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -91,3 +92,30 @@ def _load_json_object(raw_text: str, root_key: str) -> object:
     if not isinstance(data, dict) or root_key not in data:
         raise ValueError(f'최상위가 {{"{root_key}": ...}} 형태가 아님')
     return data[root_key]
+
+# 사용자에게 **그대로 보이는 자유 텍스트**에서 거르는 것 — 링크·도메인·이메일·전화번호 꼴.
+#
+# 왜 필요한가: 프롬프트에 실리는 문자열 중 우리가 쓰지 않은 것이 있다(웹 수집 POI 상호명,
+# 위키백과 발췌, 네이버 스니펫, 우리 자신의 앞선 LLM 출력이 백엔드를 거쳐 되돌아오는 값).
+# 그 안에 지시문을 심으면 모델이 따를 수 있고, 결과는 **앱이 자기 목소리로 남의 문장을 말하는 것**
+# 이다. 실측 감사(2026-09-19)에서 확인된 피해는 거기까지다 — 코드 실행도 유출도 일정 조작도
+# 아니다(LLM 에 도구·셸·파일이 없고 POI id 는 전부 닫힌 집합 교차를 통과해야 한다).
+#
+# 그래서 막을 지점은 실행 격리가 아니라 **출구 게이트의 문자열 검사**다. 앱 안에서 신뢰도가
+# 높은 자리(추천 이유·대안 이유)에 낯선 도메인이 뜨는 것만 끊어도 실질 피해가 사라진다.
+#
+# 넓게 잡지 않는다 — 걸리면 **문장만 버리고 후보·슬롯은 살리므로**(호출측이 결정론 문구로 대체)
+# 과잉 차단의 대가가 "이유 한 줄이 빈다" 뿐이다. 반대로 놓치면 사용자가 낯선 주소를 받아 적는다.
+_CONTACTISH = re.compile(
+    r"https?://"                       # 명시적 URL
+    r"|\bwww\.[\w-]"                    # www.…
+    r"|[\w-]+\.(?:com|net|org|kr|io|co|me|xyz|link|shop|app)\b"  # 맨 도메인
+    r"|[\w.+-]+@[\w-]+\.[\w.]+"        # 이메일
+    r"|\b0\d{1,2}[-\s]?\d{3,4}[-\s]?\d{4}\b",  # 국내 전화번호
+    re.IGNORECASE,
+)
+
+
+def has_contact_like(text: str) -> bool:
+    """사용자 노출 문장에 링크·연락처 꼴이 섞였는가 (프롬프트 인젝션 산출물 방어)."""
+    return bool(_CONTACTISH.search(text))

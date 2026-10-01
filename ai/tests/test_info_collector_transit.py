@@ -11,13 +11,13 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from tests.fakes.fake_travel import FakeTravel
 from trippilot.domain.common import GeoPoint, TransportMode
 from trippilot.domain.freshness import InfoPacket, ProviderKind, ProviderStatus
+from trippilot.domain.intent import Intent
 from trippilot.domain.transit import TransitInfo, TransitRequest
 from trippilot.orchestrator.info_collector import InfoCollector
 from trippilot.providers.transit import TransitProvider
-
-from tests.fakes.fake_travel import FakeTravel
 
 _ORIGIN = GeoPoint(33.5, 126.5)
 _DEST = GeoPoint(33.6, 126.6)
@@ -39,7 +39,7 @@ def test_replan_collects_transit_provider() -> None:
     transit = TransitProvider(port=FakeTravel(), ttl_sec=600)
     collector = InfoCollector({ProviderKind.TRANSIT: transit})
 
-    packets = collector.collect("REPLAN", _REPLAN_PARAMS)
+    packets = collector.collect(Intent.REPLAN, _REPLAN_PARAMS)
     assert ProviderKind.TRANSIT in packets
     assert packets[ProviderKind.TRANSIT].status is ProviderStatus.OK
 
@@ -52,7 +52,7 @@ def test_replan_transit_uses_typed_call() -> None:
     transit = TransitProvider(port=FakeTravel(), ttl_sec=600)
     collector = InfoCollector({ProviderKind.TRANSIT: transit})
 
-    packets = collector.collect("REPLAN", _REPLAN_PARAMS)
+    packets = collector.collect(Intent.REPLAN, _REPLAN_PARAMS)
     packet = packets[ProviderKind.TRANSIT]
 
     # TransitInfo로 역직렬화 가능해야 한다
@@ -86,7 +86,7 @@ def test_non_transit_provider_uses_fetch_dict() -> None:
         ProviderKind.TRANSIT: TransitProvider(port=FakeTravel()),
     })
 
-    packets = collector.collect("REPLAN", _REPLAN_PARAMS)
+    packets = collector.collect(Intent.REPLAN, _REPLAN_PARAMS)
     assert packets[ProviderKind.WEATHER].status is ProviderStatus.OK
     assert packets[ProviderKind.TRANSIT].status is ProviderStatus.OK
 
@@ -104,7 +104,7 @@ def test_transit_failure_returns_unavailable() -> None:
     transit = TransitProvider(port=BrokenPort(), ttl_sec=600)  # type: ignore[arg-type]
     collector = InfoCollector({ProviderKind.TRANSIT: transit})
 
-    packets = collector.collect("REPLAN", _REPLAN_PARAMS)
+    packets = collector.collect(Intent.REPLAN, _REPLAN_PARAMS)
     assert packets[ProviderKind.TRANSIT].status is ProviderStatus.UNAVAILABLE
 
 
@@ -121,7 +121,7 @@ def test_transit_auto_injects_now_if_missing() -> None:
         "destination": _DEST,
         "mode": TransportMode.CAR,
     }
-    packets = collector.collect("REPLAN", params_no_now)
+    packets = collector.collect(Intent.REPLAN, params_no_now)
     assert packets[ProviderKind.TRANSIT].status is ProviderStatus.OK
 
 
@@ -132,5 +132,5 @@ def test_generate_schedule_does_not_collect_transit() -> None:
     transit = TransitProvider(port=FakeTravel(), ttl_sec=600)
     collector = InfoCollector({ProviderKind.TRANSIT: transit})
 
-    packets = collector.collect("GENERATE_SCHEDULE", _REPLAN_PARAMS)
+    packets = collector.collect(Intent.GENERATE_SCHEDULE, _REPLAN_PARAMS)
     assert ProviderKind.TRANSIT not in packets

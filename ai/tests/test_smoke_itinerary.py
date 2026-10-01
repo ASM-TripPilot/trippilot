@@ -8,6 +8,7 @@
   ④ 기록 JSON 스키마 — 계약 키 전량 + 슬롯 이름 매핑
   ⑤ 생성 관통 1건 — LLM 미주입(UnwiredLlm 경로: 규칙 점수 폴백)으로 200 + INV-1
   ⑥ 인접 슬롯 실경로 검증 (TRIP-382) — 쌍 구성·오차 계산·키 부재 생략·legs 스키마
+  ⑦ LLM 비용 집계 (TRIP-869 후속) — 단가 미설정=None(모름), 미지 모델=하한 표시
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 from smoke_itinerary import (  # noqa: E402
     RehearsalError,
+    cost_of,
     _check_baseline,
     _request_body,
     Selection,
@@ -192,7 +194,7 @@ def test_rehearsal_passthrough_and_result_schema():
     assert set(result) == {
         "date", "days", "region", "anchor", "poi_names", "slots",
         "solve_mode", "is_fallback", "llm_used", "llm_calls", "llm_ok_calls",
-        "weather", "latency_ms", "quality",
+        "weather", "latency_ms", "quality", "cost",
     }
     # 품질 부기 (TRIP-524) — 규칙 강등 경로에서도 solve 성공이면 점수가 실린다
     assert set(result["quality"]) == {
@@ -595,22 +597,40 @@ def test_전부_선택_불가면_실패한다():
 # ── ⑧ 일일 델타 0건 → 팀 공유본 폴백 (TRIP-642) ──────────────────
 
 
-def test_fallback_to_shared_file_when_daily_delta_is_empty(tmp_path):
-    """전국 수집 완주로 일일 산출물이 0건이면(정상 상태) 공유본으로 소리 내서 전환 —
-    수집이 안정될수록 리허설이 죽는 결함의 수습."""
+def test_shared_doc_is_the_base_and_delta_overlays(tmp_path):
+    """공유본이 기본 입력, 델타는 같은 poi_id 를 덮는다 — 커버리지는 늘 누적본에서."""
     shared = tmp_path / "collected_pois.json"
     shared.write_text(json.dumps(_doc(list(_TWO_REGIONS))), encoding="utf-8")
 
     entries, note = entries_with_fallback(_doc([]), shared)
     assert len(entries) == len(_TWO_REGIONS)
-    assert note and "팀 공유본 폴백" in note and str(shared) in note
+    assert note and "팀 공유본" in note and str(shared) in note
 
 
-def test_no_fallback_when_daily_output_is_usable(tmp_path):
-    """일일 산출물에 region 제안이 있으면 그대로 쓴다 — 공유본을 읽지도 않는다."""
-    shared = tmp_path / "no-such.json"  # 존재하지 않아도 접근 안 하므로 무해
-    entries, note = entries_with_fallback(_doc(list(_TWO_REGIONS)), shared)
-    assert len(entries) == len(_TWO_REGIONS) and note is None
+def test_trip_896_single_region_delta_does_not_starve_sampler(tmp_path):
+    """**TRIP-896 재현** — 델타가 0건이 아니라 **1지역**이면 옛 폴백이 안 켜져
+    지역 3곳을 뽑는 샘플러가 죽었다. 합치면 공유본 지역이 그대로 남는다."""
+    shared = tmp_path / "collected_pois.json"
+    shared.write_text(json.dumps(_doc(list(_TWO_REGIONS))), encoding="utf-8")
+    only_jecheon = [dict(_TWO_REGIONS[0], region="제천시")]
+
+    entries, note = entries_with_fallback(_doc(only_jecheon), shared)
+    regions = {r for _, r in entries if r}
+    assert "제천시" in regions                     # 델타는 실린다
+    assert len(regions) >= 2                        # 공유본 지역도 남는다
+    assert note and "델타 1건" in note
+
+
+def test_delta_wins_over_shared_doc_for_same_poi(tmp_path):
+    """같은 poi_id 면 그날 델타가 이긴다 — 신규·변경분이 리허설에 실려야 한다."""
+    shared = tmp_path / "collected_pois.json"
+    shared.write_text(json.dumps(_doc(list(_TWO_REGIONS))), encoding="utf-8")
+    fresh = dict(_TWO_REGIONS[0], region="갱신된지역")
+
+    entries, _ = entries_with_fallback(_doc([fresh]), shared)
+    by_id = {str(p.poi_id): r for p, r in entries}
+    assert by_id[str(fresh["poi"]["poi_id"])] == "갱신된지역"
+    assert len(entries) == len(_TWO_REGIONS)         # 중복 없이 덮였다
 
 
 def test_fallback_unusable_keeps_original_and_explicit_fail_path(tmp_path):
@@ -626,3 +646,58 @@ def test_fallback_unusable_keeps_original_and_explicit_fail_path(tmp_path):
 
     with pytest.raises(SelectionError):
         select_rehearsal_pois(entries2, "2026-08-14")
+
+
+# ── ⑦ LLM 비용 집계 (TRIP-869 후속) ─────────────────────────────────
+
+
+def _call(model_id: str, input_tokens: int, output_tokens: int):
+    """리허설이 트레이스로 받는 것과 같은 모양의 LlmCallRecord."""
+    from datetime import datetime, timezone
+
+    from trippilot.domain.common import TraceId
+    from trippilot.domain.observability import LlmCallRecord
+    from trippilot.domain.prompt import PromptRef
+
+    return LlmCallRecord(
+        trace_id=TraceId("t-1"),
+        occurred_at=datetime(2026, 9, 16, tzinfo=timezone.utc),
+        component="c1.gateway",
+        feature="PREFERENCE_SCORING",
+        model_id=model_id,
+        prompt_ref=PromptRef(prompt_id="p.yaml", version="1.0.0", feature="f"),
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        latency_ms=1,
+        success=True,
+        agent=None,
+    )
+
+
+def _prices(**models):
+    from trippilot.api.cost import parse_prices
+
+    return parse_prices({"currency": "USD", "models": models or {"m": {"input": 1.0, "output": 2.0}}})
+
+
+def test_cost_is_none_without_price_table(monkeypatch):
+    """단가 미설정이면 None — "비용 0" 으로 위장하지 않는다."""
+    monkeypatch.delenv("TRIPPILOT_LLM_PRICE_FILE", raising=False)
+    monkeypatch.delenv("TRIPPILOT_LLM_PRICES", raising=False)
+    assert cost_of([_call("m", 1_000_000, 0)]) is None
+
+
+def test_cost_sums_only_llm_records():
+    """LlmCallRecord 만 센다 — 트레이스에는 어셈블리·게이트 이벤트도 섞여 온다."""
+    records = [_call("m", 1_000_000, 500_000), "어셈블리 레코드 자리", _call("m", 0, 0)]
+    cost = cost_of(records, _prices(m={"input": 1.0, "output": 2.0}))
+    assert cost == {"currency": "USD", "total": pytest.approx(2.0),
+                    "calls": 2, "unpriced_calls": 0}
+
+
+def test_unknown_model_is_lower_bound_not_zero():
+    """단가표 밖 모델은 0 을 더하지 않고 unpriced_calls 로 드러난다 — total 은 하한."""
+    records = [_call("claude-x", 1_000_000, 0), _call("gpt-5.6-terra", 1_000_000, 0)]
+    cost = cost_of(records, _prices(**{"claude-x": {"input": 3.0, "output": 9.0}}))
+    assert cost["total"] == pytest.approx(3.0)  # gpt 몫은 우리가 지불하지 않는다
+    assert cost["calls"] == 2 and cost["unpriced_calls"] == 1

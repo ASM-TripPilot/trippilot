@@ -8,14 +8,14 @@ import path from 'path';
  * TRIP-571 · AC-8 (frontend-components §6 신설 가드) — 표시본 결정은 `reflectionFallback.ts` 한 곳에서만.
  *
  * 무엇을 보장하나:
- *  - 표시본(narrative → edited??draft → BASIC) 재조립이 **`reflectionFallback.ts` 단일 지점**에만 산다.
- *  - **화면(features/reflection/ui/**)이 자체 폴백을 만들지 못한다** — `draftNarrative`·`editedNarrative`
+ *  - 표시본(card → editedCard??draftCard → BASIC, TRIP-945 카드 계약) 재조립이 **`reflectionFallback.ts` 단일 지점**에만 산다.
+ *  - **화면(features/reflection/ui/**)이 자체 폴백을 만들지 못한다** — `draftCard`·`editedCard`
  *    를 만져 표시본을 조립하는 코드가 화면에 0건(화면은 완성된 `narrative`·`editableText` prop 만 받는다).
  *  - `resolveDisplayNarrative` 는 reflectionFallback.ts 안에서만 정의·언급되고, features/reflection 의
  *    다른 파일은 그것을 호출하지 않는다(유일 호출자는 pages 층 — 이 스캔 밖).
  *
  * 왜 소스 스캔인가: "표시본을 두 곳에서 재판정하면 조회 화면과 목록 화면이 서로 다르게 고르는 날이
- * 온다"(openapi `Reflection.narrative` 주석)는 런타임으로 안 잡힌다 — 코드 배치를 소스로 강제한다.
+ * 온다"(openapi `Reflection.card` 주석)는 런타임으로 안 잡힌다 — 코드 배치를 소스로 강제한다.
  *
  * **전제**: 주석을 걷은 소스를 본다(`stripComments`, 콜론 예외로 URL·경로 `//` 보존).
  */
@@ -67,10 +67,10 @@ describe('G1 · 탐지기 자가검사 — 전처리 × 탐지 대상 조합', (
   it('주석 속 토큰은 걷히고, 코드 속 토큰·URL 슬래시는 살아남는다', () => {
     const sample = [
       '/**',
-      ' * resolveDisplayNarrative 는 draftNarrative·editedNarrative 를 조립한다(산문).',
+      ' * resolveDisplayNarrative 는 draftCard·editedCard 를 조립한다(산문).',
       ' */',
       "const url = 'https://example.com/reflection'; // resolveDisplayNarrative 는 여기 없다",
-      'const x = res.editedNarrative ?? res.draftNarrative;',
+      'const x = res.editedCard?.subtitle ?? res.draftCard?.subtitle;',
     ].join('\n');
 
     const stripped = stripComments(sample);
@@ -80,9 +80,11 @@ describe('G1 · 탐지기 자가검사 — 전처리 × 탐지 대상 조합', (
     // ② URL 의 // 는 주석으로 오인되지 않아(콜론 예외) 코드 줄이 통째로 사라지지 않는다(거짓 green 방지).
     expect(stripped).toContain('https://example.com/reflection');
     // ③ 코드 속 draft/edited 조립은 살아남는다.
-    expect(stripped).toContain('res.editedNarrative ?? res.draftNarrative');
-    // ④ 코드 속 draftNarrative 는 잡히고, 주석에만 있던 resolveDisplayNarrative 는 안 잡힌다.
-    expect(stripped.includes('draftNarrative')).toBe(true);
+    expect(stripped).toContain(
+      'res.editedCard?.subtitle ?? res.draftCard?.subtitle'
+    );
+    // ④ 코드 속 draftCard 는 잡히고, 주석에만 있던 resolveDisplayNarrative 는 안 잡힌다.
+    expect(stripped.includes('draftCard')).toBe(true);
     expect(stripped.includes('resolveDisplayNarrative')).toBe(false);
   });
 });
@@ -92,8 +94,8 @@ describe('🔴 AC-8 · 표시본 결정 단일 출처(reflectionFallback.ts)', (
     const fallback = readOne(FALLBACK_REL);
     // 긍정 — 정의·폴백 조립이 여기 실재(빈/부재 파일 공허 통과 차단).
     expect(fallback).toContain('resolveDisplayNarrative');
-    expect(fallback).toContain('draftNarrative');
-    expect(fallback).toContain('editedNarrative');
+    expect(fallback).toContain('draftCard');
+    expect(fallback).toContain('editedCard');
   });
 
   it('features/reflection 의 다른 파일은 resolveDisplayNarrative 를 호출하지 않는다(유일 호출자=pages)', () => {
@@ -115,8 +117,8 @@ describe('🔴 AC-8 · 표시본 결정 단일 출처(reflectionFallback.ts)', (
     const offenders = ui
       .filter(
         (s) =>
-          s.source.includes('draftNarrative') ||
-          s.source.includes('editedNarrative') ||
+          s.source.includes('draftCard') ||
+          s.source.includes('editedCard') ||
           s.source.includes('resolveDisplayNarrative')
       )
       .map((s) => s.file);

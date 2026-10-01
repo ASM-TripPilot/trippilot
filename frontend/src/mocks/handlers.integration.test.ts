@@ -2,6 +2,9 @@ import axios from 'axios';
 
 import {
   fetchBootstrap,
+  fetchTerms,
+  fetchTermsByType,
+  patchConsent,
   postSocialLogin,
   postSocialTokenLogin,
 } from '@/shared/api';
@@ -269,5 +272,74 @@ describe('MSW /auth/token/refresh 핸들러 (D5 — mock 만, 실배선은 겹2)
       accessToken: expect.any(String),
       refreshToken: expect.any(String),
     });
+  });
+});
+
+describe('TRIP-937 AC-9 · 재동의 목 정합 + 약관 단건·동의 PATCH 핸들러', () => {
+  /**
+   * 무엇을 보장하나: 재동의 흐름이 타는 가짜 서버가 openapi 모양 그대로 답한다.
+   *  - 부트스트랩 `reconsent` 시나리오의 대상 약관은 openapi `TermsType` enum 값이다. 예전 값
+   *    `['TOS','PRIVACY']` 는 enum 밖이라 재동의 화면이 `/terms` 목록과 교집합을 못 만들어 빈 목록이 됐다.
+   *  - 단건 `GET /terms/{termsType}` 는 목록 `GET /terms` 와 **같은 원천**에서 답한다(두 핸들러가 갈라지면
+   *    열람 화면과 동의 화면이 서로 다른 버전을 본다). 없는 타입은 404.
+   *  - `PATCH /me/consents/{termsType}` 는 openapi 대로 200 을 준다(구버전 400 은 openapi 에 없어
+   *    목에서 발명하지 않는다 — 페이지 테스트가 reject 목으로 따로 덮는다).
+   *
+   * (개념) `resolves`/`rejects` — Promise 가 성공/실패로 끝난 값에 매처를 건다. `await expect(p).rejects…`
+   */
+
+  /** openapi `TermsType` enum(components.schemas.TermsType) 그대로 — 재타이핑 금지 대상. */
+  const TERMS_TYPE_ENUM = [
+    'TERMS_OF_SERVICE',
+    'PRIVACY_POLICY',
+    'LOCATION_TERMS',
+    'MARKETING',
+    'GPS_RECORDING',
+    'PERSONALIZATION',
+  ];
+
+  it('reconsent 시나리오의 대상 약관은 비어 있지 않고, 전부 TermsType enum 값이며, GET /terms 목록에 실재한다', async () => {
+    // 준비
+    setScenario('bootstrap-reconsent');
+
+    // 실행
+    const bootstrap = await fetchBootstrap();
+    const terms = await fetchTerms();
+
+    // 단언 — 앵커(비어 있으면 아래 "전부 enum" 이 공허하게 통과한다).
+    const targets = bootstrap.reconsent.termsTypes;
+    expect(targets.length).toBeGreaterThan(0);
+    // 단언 — enum 밖 값이 없다(위반 시 그 값이 diff 에 찍힌다).
+    expect(targets.filter((t) => !TERMS_TYPE_ENUM.includes(t))).toEqual([]);
+    // 단언 — 목록에 없는 대상이 없다(교집합이 대상 전부를 덮는다).
+    const listed = terms.map((term) => term.termsType);
+    expect(targets.filter((t) => !listed.includes(t))).toEqual([]);
+  });
+
+  it('GET /terms/{termsType} 는 목록의 같은 약관과 똑같은 TermsVersion 한 건을 준다 (fetchTermsByType)', async () => {
+    // 준비 — 목록에서 정답 한 건을 뽑는다.
+    const listed = (await fetchTerms()).find(
+      (term) => term.termsType === 'PRIVACY_POLICY'
+    );
+    expect(listed).toBeDefined();
+
+    // 실행 — 새 단건 함수(무인증 baseClient → GET /terms/PRIVACY_POLICY).
+    const one = await fetchTermsByType('PRIVACY_POLICY');
+
+    // 단언 — 한 원천: 버전·본문까지 목록 항목과 깊은 동등.
+    expect(one).toEqual(listed);
+  });
+
+  it('GET /terms/{없는 타입} 은 404 로 답한다', async () => {
+    // 프론트 함수를 거치지 않고 가짜 서버를 직접 두드린다 — 여기서 보는 것은 목의 모양 하나뿐이다.
+    await expect(
+      axios.get('http://localhost:8080/api/v1/terms/NOT_A_TYPE')
+    ).rejects.toMatchObject({ response: { status: 404 } });
+  });
+
+  it('PATCH /me/consents/{termsType} 는 200 으로 답해 patchConsent 가 오류 없이 끝난다', async () => {
+    await expect(
+      patchConsent('PRIVACY_POLICY', '2.1', 'GRANT')
+    ).resolves.toBeUndefined();
   });
 });

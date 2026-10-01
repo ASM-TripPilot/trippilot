@@ -219,7 +219,7 @@ def test_prompt_renders_deterministically_without_coordinates() -> None:
     p1, ref = reg.render(_FEAT, build_alternative_selection_vars(pool, _input()))
     p2, _ = reg.render(_FEAT, build_alternative_selection_vars(pool, _input()))
     assert p1 == p2  # 결정론
-    assert ref.prompt_id == "prompts/alternative_selection.yaml" and ref.version == "0.1.0"
+    assert ref.prompt_id == "prompts/alternative_selection.yaml" and ref.version == "0.2.0"  # KB-5 장소 설명 칸 추가
     assert ref.feature == "ALTERNATIVE_SELECTION"
     for poi in pool.pois:
         assert str(poi.poi_id) in p1 and poi.name in p1
@@ -520,3 +520,29 @@ def test_candidate_line_is_unchanged_without_tags() -> None:
     lines = _candidate_lines((_tagged("p1", "을지로 카페", PoiCategory.CAFE, ()),))
 
     assert lines == ["- p1 | CAFE | 을지로 카페"]
+
+
+# ── INV-3 — reason 의 시간 표현 (KB-5 장소 문서가 붙은 뒤로 새 경로) ──────────
+
+
+def test_시간표현이_든_이유는_비우고_후보는_살린다() -> None:
+    """문서 원문의 "관람 약 40분" 류가 이유로 새면 화면에 소요시간이 뜬다 (INV-3).
+
+    후보 자체는 멀쩡하므로 버리지 않는다 — 버리면 대안 개수가 줄어 사용자만 손해다.
+    빈 이유는 호출측(`rag._rationale`)의 결정론 문구가 대신 채운다.
+    """
+    outcome = _apply(_raw(("p1", "실내라 비를 피할 수 있고 관람 약 40분이면 됩니다"),
+                          ("p2", "실내 전시라 우천에 적합합니다")))
+    assert outcome.error is None
+    picks = outcome.value
+    assert [str(p.poi_id) for p in picks] == ["p1", "p2"]  # 후보는 둘 다 살아 있다
+    assert picks[0].reason == ""  # 이유만 비었다
+    assert picks[1].reason == "실내 전시라 우천에 적합합니다"
+
+
+def test_시간표현_판정은_reflection_template_것과_같다() -> None:
+    """판정을 두 벌 쓰면 한쪽만 고쳐져 조용히 갈라진다 — 같은 정규식인지 고정한다."""
+    from trippilot.llm_gateway.gates.alternative_selection import _TIME_EXPR as here
+    from trippilot.llm_gateway.gates.reflection_template import _TIME_EXPR as canon
+
+    assert here is canon

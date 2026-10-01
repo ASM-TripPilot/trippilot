@@ -6,14 +6,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useApplyReplan } from '@/features/planb/model/useApplyReplan';
 import { useCancelReplan } from '@/features/planb/model/useCancelReplan';
 import { AppliedAlertGlyph } from '@/features/planb/ui/PlanbGlyphs';
-import { ReplanAppliedScreen } from '@/features/planb/ui/ReplanAppliedScreen';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
 /**
  * TRIP-441 · AC-1·2·3·4 — planb-diff 배선(확정·취소·성공전이·실패·pending 을 잇는 유일한 자리).
  *
- * 세 얼굴을 조건부로 그린다:
- *  - apply 성공 → i19 `ReplanAppliedScreen`([여행 계속하기]→live).
+ * 두 얼굴을 조건부로 그린다. apply 성공은 얼굴이 아니라 이동이다 — `mutate` 의 onSuccess 에서 허브로
+ * `replace(...applied=sessionId)`, 허브가 그 신호로 i08 반영 시트를 띄운다(TRIP-754, i06 [적용하기]와 같은 모양).
  *  - apply·cancel 실패 → 공용 `StateNotice`(error) — "원래 일정은 그대로"를 정직하게 알리고
  *    [다시 시도]로 회복 가능(BR-U4-32 부분 반영 금지 · INV-4 침묵 금지).
  *  - 그 외(pre-apply) → 정직한 한 줄 안내 + [확정]/[취소]. 지표·전후 배지는 draft 부재로 이번에
@@ -45,13 +44,17 @@ export function PlanbDiffPage({
 
   const vars = { tripId, sessionId };
   const goToLive = () => router.push(`/trips/${tripId}/live`);
+  // 확정 성공 → 허브로 replace(뒤로가기로 이미 반영된 diff 에 돌아오지 않게). 재시도도 같은 콜백.
+  const apply = () =>
+    applyMutation.mutate(vars, {
+      onSuccess: () =>
+        router.replace({
+          pathname: '/trips/[tripId]/live',
+          params: { tripId, applied: sessionId },
+        }),
+    });
 
-  // 확정 성공 → i19. 세션이 반영돼 되돌아갈 diff 가 없으므로 뒤로·계속하기 둘 다 live 로 나간다.
-  if (applyMutation.isSuccess) {
-    return <ReplanAppliedScreen onBack={goToLive} onContinue={goToLive} />;
-  }
-
-  // 확정·취소 실패 → 공용 오류 표면. i19 로 넘어가지 않는다(부분 반영 금지).
+  // 확정·취소 실패 → 공용 오류 표면. 허브로 넘어가지 않는다(부분 반영 금지).
   // [다시 시도]는 **실패한 mutation 에 맞춰 분기**한다 — apply 실패면 apply 재발화, 아니면(cancel
   // 실패면) cancel 재발화(성공 시 live 복귀 콜백 유지). 항상 apply 를 부르면 폐기하려던 사용자가
   // 재시도 시 반대로 일정을 쓰게 된다(경고-1 봉합).
@@ -71,7 +74,7 @@ export function PlanbDiffPage({
                 variant: 'filled',
                 onPress: () =>
                   applyMutation.isError
-                    ? applyMutation.mutate(vars)
+                    ? apply()
                     : cancelMutation.mutate(vars, { onSuccess: goToLive }),
               },
             ]}
@@ -103,7 +106,7 @@ export function PlanbDiffPage({
             testID="planb-diff-confirm"
             accessibilityRole="button"
             disabled={busy}
-            onPress={() => applyMutation.mutate(vars)}
+            onPress={apply}
             className={`items-center justify-center rounded-button py-[15px] ${
               busy ? 'bg-surface-strong' : 'bg-primary'
             }`}

@@ -51,6 +51,7 @@ const slot = (
   isFixed: false,
   endsNextDay: false,
   hasViolation: false,
+  alternatives: [],
   nameKo: '광안리',
   distanceRange: '약 1.2km · 도보 추정',
   lat: 35.1,

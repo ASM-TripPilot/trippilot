@@ -11,6 +11,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import date, datetime
 
+# 제3자 문자열(웹 수집 상호명·위키 발췌·네이버 스니펫)은 줄에 넣기 전에 한 줄로 누른다 —
+# 줄바꿈이 남으면 우리 프롬프트 골격을 위조한다 (inline() docstring 에 실측).
+from trippilot.llm_gateway.prompts import inline
 from trippilot.llm_gateway.gates.event_extraction import EventExtractionContext
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import TraceId
@@ -29,7 +32,7 @@ def build_event_extraction_vars(
     좌표는 프롬프트에 싣지 않는다 (place_extraction G181 가드 동형).
     """
     lines = sorted(
-        f"- {title.strip()} | {summary.strip()}" for title, summary in snippets
+        f"- {inline(title)} | {inline(summary)}" for title, summary in snippets
     )
     return {
         "region": region or "미지정",

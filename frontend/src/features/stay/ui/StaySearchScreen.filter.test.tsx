@@ -1,5 +1,11 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 
+import { PRICE_BUCKETS, type PriceBucketId } from '../model/priceRangeFilter';
 import { StaySearchScreen } from './StaySearchScreen';
 
 /**
@@ -55,4 +61,44 @@ describe('e02 필터 칩 배선 (TRIP-415)', () => {
       fireEvent.press(screen.getByTestId('stay-search-filter-more'));
     }).not.toThrow();
   });
+});
+
+/** 칩 라벨은 가격대 시트와 같은 출처(PRICE_BUCKETS)에서 온다 — 시트에서 고른 이름이 칩에 그대로 뜬다. */
+function bucketLabel(id: PriceBucketId): string {
+  const label = PRICE_BUCKETS.find((bucket) => bucket.id === id)?.label;
+  if (!label) throw new Error(`PRICE_BUCKETS 에 ${id} 가 없다`);
+  return label;
+}
+
+/**
+ * TRIP-989 E-1 — 가격대를 골라도 칩이 그대로라 "적용됐는지" 알 수 없었다(Figma e02 에도 이 얼굴이
+ * 없다 — 01b Q2 로 새로 정함). 적용되면 라벨이 고른 가격대 이름으로 바뀌고, 선택 신호
+ * (`accessibilityState.selected`)와 기존 활성 색(`primary-pale`, d04 정렬 칩과 같은 토큰)을 갖는다.
+ */
+describe('e02 가격대 칩 활성 얼굴 (TRIP-989 E-1 · US-STAY-02)', () => {
+  it('가격대가 적용되면 칩이 그 가격대 이름을 보이고 선택됨·연핑크가 된다', () => {
+    render(
+      <StaySearchScreen region="부산" items={[]} priceBucket="under-100k" />
+    );
+
+    const chip = screen.getByTestId('stay-search-filter-price');
+    expect(chip).toBeSelected();
+    expect(within(chip).getByText(bucketLabel('under-100k'))).toBeOnTheScreen();
+    expect(within(chip).queryByText('가격대')).toBeNull();
+    expect(String(chip.props.className)).toContain('primary-pale');
+  });
+
+  it.each([['all' as const], [undefined]])(
+    '짝: 가격대가 %s 이면 칩은 "가격대" 그대로이고 선택되지 않았다',
+    (priceBucket) => {
+      render(
+        <StaySearchScreen region="부산" items={[]} priceBucket={priceBucket} />
+      );
+
+      const chip = screen.getByTestId('stay-search-filter-price');
+      expect(chip).not.toBeSelected();
+      expect(within(chip).getByText('가격대')).toBeOnTheScreen();
+      expect(String(chip.props.className)).not.toContain('primary-pale');
+    }
+  );
 });

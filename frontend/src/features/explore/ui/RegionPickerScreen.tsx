@@ -5,7 +5,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import type { Region } from '@/shared/api/generated/schemas';
+import { RegionLevel } from '@/shared/api/generated/schemas';
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { Skeleton } from '@/shared/ui/Skeleton';
 
 import { groupRegionsBySido, regionTint } from '../model/regions';
 import type { RegionGroup } from '../model/regions';
@@ -23,7 +25,7 @@ import {
  *
  * 서버 카탈로그(`Region`)를 그린다 — 카드는 세 갈래다:
  *  · `selectable && poiCount>0` → 누르면 선택되는 카드.
- *  · `selectable && poiCount===0` → "준비 중"(후보풀 빔, INV-1) — 보이되 선택 불가.
+ *  · `selectable && poiCount===0` → "추천 장소 없음"(후보풀 빔, INV-1) — 보이되 선택 불가.
  *  · `selectable === false` → 도(道)·행정구 묶음 행 — 보이되 선택 불가.
  * 조회 실패(`isError`)는 빈 목록으로 뭉개지 않고 실패 얼굴로 그린다(INV-4).
  *
@@ -86,12 +88,30 @@ const COPY: Record<
   },
 };
 
+/**
+ * 인기 여행지 태그라인 로컬 카탈로그(TRIP-707) — 시/도 코드(법정동 앞 2자리)별 한 줄 소개.
+ * 서버 `Region` 계약엔 태그라인 필드가 없어(INV-1 — 발명 금지) 로컬 config 로 얹는다. 서버가
+ * 새 시/도를 줘도 매핑이 없으면 태그라인은 그냥 안 보인다(폴백 안전). 사진·"도시 단위(경주·강릉)"
+ * 카탈로그는 서버 backing·press 정책·에셋이 미정이라 후속(6-b·데이터 정책) — 여기선 시/도 백업
+ * 스트립에 태그라인·인기 배지만 얹어 Figma 비주얼을 근사한다.
+ */
+const POPULAR_TAGLINE: Record<string, string> = {
+  '11': '도심 · 감성',
+  '26': '바다 · 야경',
+  '28': '항구 · 근대',
+  '50': '섬 · 자연',
+  '51': '산 · 휴식',
+  '43': '내륙 · 힐링',
+};
+
 /** 선택 가능·후보풀 있음 지역 카드 — 누르면 선택된다. */
 function SelectableCard({
   region,
+  subtitle,
   onPress,
 }: {
   region: Region;
+  subtitle?: string;
   onPress(): void;
 }): ReactElement {
   const [from, to] = regionTint(region.regionCode);
@@ -111,13 +131,21 @@ function SelectableCard({
         <Text className="font-noto-bold text-card-title font-bold text-ink">
           {region.name}
         </Text>
+        <RegionSubtitle text={subtitle} />
       </View>
     </Pressable>
   );
 }
 
-/** poiCount===0 지역 카드 — 후보풀이 비어 "준비 중"(INV-1). 비-Pressable이라 눌러도 선택 안 됨. */
-function ComingSoonCard({ region }: { region: Region }): ReactElement {
+/** poiCount===0 지역 카드 — 후보풀이 비어 "추천 장소 없음"(INV-1). 비-Pressable이라 눌러도 선택 안 됨.
+ * "준비 중"은 미완성 기능으로 읽혀(심사 2.1) 데이터 상태 표현으로 바꿨다(TRIP-935 R9). */
+function ComingSoonCard({
+  region,
+  subtitle,
+}: {
+  region: Region;
+  subtitle?: string;
+}): ReactElement {
   const [from, to] = regionTint(region.regionCode);
   return (
     <View
@@ -132,14 +160,23 @@ function ComingSoonCard({ region }: { region: Region }): ReactElement {
         <Text className="font-noto-bold text-card-title font-bold text-ink">
           {region.name}
         </Text>
-        <Text className="mt-xs font-noto text-label text-muted">준비 중</Text>
+        <RegionSubtitle text={subtitle} />
+        <Text className="mt-xs font-noto text-label text-muted">
+          추천 장소 없음
+        </Text>
       </View>
     </View>
   );
 }
 
 /** selectable=false 묶음 행(도·행정구) — 목적지가 아니라 묶음 표시용. 보이되 선택 불가. */
-function GroupRow({ region }: { region: Region }): ReactElement {
+function GroupRow({
+  region,
+  subtitle,
+}: {
+  region: Region;
+  subtitle?: string;
+}): ReactElement {
   return (
     <View
       testID={`explore-region-${region.regionCode}`}
@@ -148,27 +185,42 @@ function GroupRow({ region }: { region: Region }): ReactElement {
       <Text className="font-noto-medium text-label text-muted">
         {region.name}
       </Text>
+      <RegionSubtitle text={subtitle} />
     </View>
+  );
+}
+
+/** 검색 결과 카드의 상위 시도명 부제(TRIP-1023 #007) — 동명 시군구("중구")를 가르는 유일한 단서. */
+function RegionSubtitle({ text }: { text?: string }): ReactElement | null {
+  if (text === undefined) return null;
+  return (
+    <Text className="mt-[2px] font-noto text-caption text-muted">{text}</Text>
   );
 }
 
 function RegionCard({
   region,
+  subtitle,
   onSelect,
 }: {
   region: Region;
+  /** 검색 결과 그리드만 넘긴다 — 2단 드릴다운은 이미 시도 제목 아래라 중복(AC-B4). */
+  subtitle?: string;
   onSelect(): void;
 }): ReactElement {
   if (region.selectable === false) {
-    return <GroupRow region={region} />;
+    return <GroupRow region={region} subtitle={subtitle} />;
   }
   if (region.poiCount === 0) {
-    return <ComingSoonCard region={region} />;
+    return <ComingSoonCard region={region} subtitle={subtitle} />;
   }
-  return <SelectableCard region={region} onPress={onSelect} />;
+  return (
+    <SelectableCard region={region} subtitle={subtitle} onPress={onSelect} />
+  );
 }
 
-/** 카드 그리드 — 검색 결과·드릴다운 상세가 공유한다(세 갈래 RegionCard 를 2열로). */
+/** 검색 결과 카드 그리드(세 갈래 RegionCard 를 2열로). 시군구에만 시도명 부제 — 시도 행은
+ * name 과 sidoName 이 같아 중복이다(AC-B4). 2단 드릴다운은 이 그리드가 아니라 RegionCard 를 직접 쓴다. */
 function RegionGrid({
   regions,
   onSelectRegion,
@@ -182,6 +234,9 @@ function RegionGrid({
         <RegionCard
           key={region.regionCode}
           region={region}
+          subtitle={
+            region.level === RegionLevel.SIGUNGU ? region.sidoName : undefined
+          }
           onSelect={() => onSelectRegion(region)}
         />
       ))}
@@ -204,7 +259,7 @@ function SidoRow({
     <Pressable
       testID={`explore-region-sido-${group.sidoCode}`}
       onPress={onOpen}
-      className="mb-sm flex-row items-center justify-between rounded-card border border-hairline-strong bg-canvas px-md py-3"
+      className="mb-sm h-[48px] flex-row items-center justify-between rounded-card bg-surface-soft px-md"
     >
       <Text className="font-noto-bold text-card-title font-bold text-ink">
         {group.sidoName}
@@ -286,23 +341,42 @@ function PopularStrip({
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={{ gap: 12, paddingRight: 8 }}
     >
-      {popular.map((group) => {
+      {popular.map((group, index) => {
         const [from, to] = regionTint(group.sidoCode);
+        const tagline = POPULAR_TAGLINE[group.sidoCode];
         return (
           <Pressable
             key={group.sidoCode}
             testID={`explore-region-popular-${group.sidoCode}`}
             onPress={() => onOpenSido(group.sidoCode)}
-            className="w-[140px] overflow-hidden rounded-card bg-canvas"
+            className="w-[150px] overflow-hidden rounded-card bg-canvas"
           >
-            <LinearGradient
-              colors={[from, to]}
-              style={{ height: 100, width: '100%' }}
-            />
-            <View className="px-sm py-sm">
+            <View>
+              <LinearGradient
+                colors={[from, to]}
+                style={{ height: 120, width: '100%' }}
+              />
+              {/* 첫 카드에만 인기 배지(Figma) — 연배경 칩(primary-pale + primary). */}
+              {index === 0 ? (
+                <View
+                  testID="explore-region-popular-badge"
+                  className="absolute left-sm top-sm rounded-[12px] bg-primary-pale px-sm py-[2px]"
+                >
+                  <Text className="font-noto-bold text-micro font-bold text-primary">
+                    인기
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            <View className="gap-[2px] px-sm py-sm">
               <Text className="font-noto-bold text-card-title font-bold text-ink">
                 {group.sidoName}
               </Text>
+              {tagline ? (
+                <Text className="font-noto text-caption text-muted">
+                  {tagline}
+                </Text>
+              ) : null}
             </View>
           </Pressable>
         );
@@ -337,7 +411,13 @@ export function RegionPickerScreen({
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-canvas">
       <View className="flex-row items-center gap-sm px-lg py-sm">
-        <Pressable testID="explore-region-back" onPress={onBack} hitSlop={8}>
+        <Pressable
+          testID="explore-region-back"
+          accessibilityRole="button"
+          accessibilityLabel="뒤로"
+          onPress={onBack}
+          hitSlop={8}
+        >
           <BackChevronGlyph />
         </Pressable>
         <Text className="font-noto-bold text-section font-bold text-ink">
@@ -356,7 +436,7 @@ export function RegionPickerScreen({
           {copy.subtitle}
         </Text>
 
-        <View className="mt-lg flex-row items-center gap-sm rounded-pill border border-hairline-strong px-md py-3">
+        <View className="mt-lg h-[58px] flex-row items-center gap-sm rounded-input border border-hairline-strong px-md">
           <SearchGlyph />
           <TextInput
             testID="explore-region-search"
@@ -379,7 +459,7 @@ export function RegionPickerScreen({
         ) : null}
 
         <Text className="mb-md mt-2xl font-noto-bold text-section font-bold text-ink">
-          {copy.section}
+          {isSearching ? '검색 결과' : copy.section}
         </Text>
 
         {isError ? (
@@ -403,7 +483,7 @@ export function RegionPickerScreen({
             className="flex-row flex-wrap justify-between"
           >
             {[0, 1, 2, 3].map((slot) => (
-              <View
+              <Skeleton
                 key={slot}
                 className="mb-md h-[152px] w-[48%] rounded-card bg-surface-soft"
               />

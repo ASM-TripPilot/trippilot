@@ -141,3 +141,41 @@ describe('config plugin 등록 — 두 SDK 가 옵션과 함께 plugins 에 있�
     expect(Object.values(naverOptions)).not.toContain(KAKAO_KEY_MARKER);
   });
 });
+
+/**
+ * TRIP-932 AC-17 (Q5) — 애플 로그인 entitlement 경로.
+ *
+ * *(개념)* **entitlement**: 앱 서명에 박히는 권한 목록이다. `com.apple.developer.applesignin` 이
+ * 없으면 애플 로그인 창 자체가 뜨지 않는다. `expo-apple-authentication` 플러그인이 prebuild 때
+ * 이 항목을 넣는다. 설치만 해도 레거시 자동 적용이 될 가능성이 있지만 암묵적이라, plugins 에
+ * **명시**했는지를 여기서 잠근다. 같은 일을 하는 `ios.usesAppleSignIn` 은 중복이라 쓰지 않는다.
+ * 실제 entitlements 파일은 prebuild 뒤 실측(6-b/명령 검증) 몫이다.
+ */
+describe('config plugin 등록 — 애플 로그인 (TRIP-932 AC-17)', () => {
+  it('plugins 에 expo-apple-authentication 이 있고, ios.usesAppleSignIn 중복 선언은 없으며, scheme 은 trippilot 그대로다', () => {
+    // 준비 + 실행 — 설정 전체를 새로 로드한다.
+    let config: {
+      scheme?: unknown;
+      ios?: { usesAppleSignIn?: unknown };
+      plugins?: PluginEntry[];
+    } = {};
+    jest.isolateModules(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      config = require('../../app.config').default;
+    });
+    const plugins = config.plugins ?? [];
+
+    // 도달 앵커
+    expect(plugins.length).toBeGreaterThan(0);
+
+    // 본체 — 문자열 단독이든 튜플 머리든 이름으로 등록돼 있다.
+    const names = plugins.map((item) => (Array.isArray(item) ? item[0] : item));
+    expect(names).toContain('expo-apple-authentication');
+
+    // Q5 — 같은 entitlement 를 두 경로로 선언하지 않는다.
+    expect(config.ios?.usesAppleSignIn).not.toBe(true);
+
+    // 티켓 "건드리지 않는 것" — 딥링크 scheme 불변.
+    expect(config.scheme).toBe('trippilot');
+  });
+});

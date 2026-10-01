@@ -170,3 +170,14 @@ describe('AC-V3 · 화면 raw hex 0 (`*Glyphs.tsx` 제외 — 이 화면은 글�
     expect(offenders).toEqual([]);
   });
 });
+
+describe('AC-7 · 하단 "거점 지정" 버튼 위 border-t 제거 (TRIP-729)', () => {
+  it('SavedStayListScreen 소스에 border-t 가 없고, 하단 버튼(saved-stay-register)은 유지된다', () => {
+    const screenSource = readOne(SCREEN_REL);
+
+    // 긍정 짝 — 하단 버튼은 그대로 있다(고정 푸터 유지, 최소안). 빈 문자열 공허 통과 차단.
+    expect(screenSource).toContain('saved-stay-register');
+    // 부정 — 래퍼의 divider(border-t)를 뗐다. testID 없는 래퍼라 render 그립이 없어 소스로 잠근다.
+    expect(screenSource).not.toContain('border-t');
+  });
+});

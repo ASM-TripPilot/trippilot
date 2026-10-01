@@ -294,18 +294,16 @@ describe('TRIP-248 AC-4·5·6 · 그 밖의 400 은 error 로 남는다', () => 
   });
 });
 
-describe('TRIP-248 AC-13 · code 갈래(구글)의 같은 400 은 error 로 남는다 (D3)', () => {
+describe('TRIP-1035 AC-6·7 · 갈래 판정 없이 온 code 결과는 선언을 싣지 않고, 400 이면 error 다 (구 TRIP-248 AC-13)', () => {
   /**
-   * ⚠️ **나중에 뒤집어야 할 심판이다 — 영구 규칙이 아니다.**
+   * TRIP-248 때 "나중에 뒤집을 심판"으로 남긴 자리다. 뒤집힌 쪽 — code 갈래(flow='code')는 인가
+   * **전에** 묻고 첫 요청에 선언을 싣는다 — 은 useSocialLogin.codeAgeFirst.test.tsx 로 갔다.
    *
-   * 왜 지금은 error 인가: code 갈래(브라우저 OAuth)의 인가코드는 1회용이라, 서버가 첫 요청에서
-   * 이미 소진했다. 연령확인을 받아 재전송하려면 인가를 **다시** 받아야 하는데(재인가), 이 칸은
-   * 카카오(token 갈래)만 다루므로 재인가를 만들지 않았다(D0). 재인가 없이 시트를 띄우면
-   * 사용자는 "네, 확인했어요"를 누른 **뒤에** 401 을 받는다 — 지금(즉시 배너)보다 나쁘다.
-   *
-   * code 갈래 재인가(BR-U0-02 잔여)를 붙이는 칸에서는 이 기대값이 needs-age 로 바뀐다.
+   * 여기 남은 것은 authorize 에 갈래 표지(flow)가 **없는** 경로다. 표지가 없으면 token 으로 취급해
+   * 묻지 않고 인가하므로, 결과가 code 로 와도 사용자는 선언한 적이 없다 → body 에 선언이 없어야 하고
+   * (AC-6), 인가코드는 첫 요청에서 이미 소진됐으니 400 을 받아도 시트로 가지 않고 error 다(D3 승계).
    */
-  it('code 갈래는 연령확인 누락 400 을 받아도 needs-age 가 아니라 error 다', async () => {
+  it('표지 없는 authorize 가 success-code 를 주면 선언 없이 보내고, 연령확인 누락 400 은 needs-age 가 아니라 error 다', async () => {
     // 준비 — AC-1 과 **똑같은** 에러를 준다. 갈래만 다르다.
     mockPostSocialLogin.mockRejectedValue(ageConfirmationRequired());
     const { result } = renderSocialLogin();
@@ -319,6 +317,11 @@ describe('TRIP-248 AC-13 · code 갈래(구글)의 같은 400 은 error 로 남�
     await waitFor(() => expect(result.current.phase).toBe('error'));
     expect(mockPostSocialTokenLogin).not.toHaveBeenCalled();
     expect(mockSaveTokens).not.toHaveBeenCalled();
+    // AC-6 — 키 **부재**를 본다(toBeUndefined 는 { ageConfirmation: undefined } 를 통과시킨다).
+    expect(mockPostSocialLogin).toHaveBeenCalledTimes(1);
+    expect(Object.keys(mockPostSocialLogin.mock.calls[0][1])).not.toContain(
+      'ageConfirmation'
+    );
   });
 });
 

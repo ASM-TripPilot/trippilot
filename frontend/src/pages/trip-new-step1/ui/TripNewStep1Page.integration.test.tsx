@@ -81,6 +81,8 @@ const TRIP: Trip = {
   status: 'PLANNED',
   createdAt: '2026-08-02T00:00:00Z',
   updatedAt: '2026-08-02T00:00:00Z',
+  baseCount: 0,
+  itineraryDayCount: 0,
 };
 
 let observedHits: string[] = [];
@@ -191,6 +193,22 @@ describe('I-1 · 정상 제출이 계약대로 나가고 step2 로 이동한다'
       expect(mockPush).toHaveBeenCalledWith('/trips/new/step2')
     );
     expect(mockPush).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('I-1c · TRIP-1045 동행을 안 건드리고 제출해도 companionType 혼자가 실린다', () => {
+  it('동행 시트를 한 번도 안 열고 [다음]을 누르면 바디에 companionType "혼자"·party 1 이 있다', async () => {
+    // 준비 — 여행지·기간만 채운다(동행은 기본값 그대로).
+    seedValidDraft();
+    renderPage();
+    await waitForPrefill();
+
+    // 실행
+    fireEvent.press(next());
+
+    // 단언 — CompanionType enum 계약값(혼자·친구·연인·가족)이 그대로 나간다.
+    await waitFor(() => expect(createHits()).toBe(1));
+    expect(postedBodies[0]).toMatchObject({ companionType: '혼자', party: 1 });
   });
 });
 

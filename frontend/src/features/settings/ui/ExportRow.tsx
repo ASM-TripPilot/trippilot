@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { ChevronRightGlyph } from './SettingsGlyphs';
+import { ChevronRightGlyph, MUTED_SOFT } from './SettingsGlyphs';
 import { RowBody } from './SettingsRow';
 
 /**
@@ -27,7 +27,7 @@ export function ExportRow({
         <RowBody
           rowKey="export"
           label="데이터 내보내기"
-          right={<ChevronRightGlyph />}
+          right={<ChevronRightGlyph color={MUTED_SOFT} />}
         />
       </Pressable>
       {truncatedLabel ? (

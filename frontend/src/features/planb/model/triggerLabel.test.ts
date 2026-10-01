@@ -10,7 +10,8 @@ import { TRIGGER_LABELS, triggerLabel } from './triggerLabel';
  *    ("비 예보 70%")는 서버 `reason` 런타임 값이라 이 순수 함수가 모른다 — 정적 축만 잰다(★2).
  *  - 종류 집합은 정확히 4종(WEATHER·CLOSURE·DELAY·MANUAL) — 5번째 kind 를 매핑하지 않는다(BR-U4-01).
  *  - 라벨 문자열 리터럴은 정본에 없어 **발명하지 않는다** — "비어있지 않음 + 4종 전부 + iconKey
- *    정의됨" 구조만 잰다(categoryPlaceholder.test.ts ★6 선례).
+ *    정의됨" 구조만 잰다(categoryPlaceholder.test.ts ★6 선례). 단 표시 3종(WEATHER·DELAY·CLOSURE)
+ *    값은 TRIP-748 이 Figma i02 배지 문구로 확정했다 — T4 가 그 값만 잠근다(MANUAL 은 미표시라 제외).
  *
  * 개념: **순수 함수** — 같은 입력이면 같은 출력, 바깥 상태를 안 읽는다. 그래서 kind→라벨 매핑을
  * 표(`TRIGGER_LABELS`)로 두고 열거해 4종을 검사할 수 있다.
@@ -41,6 +42,13 @@ describe('triggerLabel — kind→{label, iconKey} 정적 매핑', () => {
     for (const kind of KINDS) {
       expect(triggerLabel(kind)).toEqual(TRIGGER_LABELS[kind]);
     }
+  });
+
+  it('T4 표시 라벨 3종은 Figma i02 배지 문구다 — 비 예보 · 이동 지연 · 휴무 (TRIP-748 AC-9)', () => {
+    // 알약 카피 앞부분이자 영향 카드 배지 글자다(Figma 4041:2427 · 4078:2477 · 4081:2502).
+    expect(TRIGGER_LABELS.WEATHER.label).toBe('비 예보');
+    expect(TRIGGER_LABELS.DELAY.label).toBe('이동 지연');
+    expect(TRIGGER_LABELS.CLOSURE.label).toBe('휴무');
   });
 
   it('T3 매핑 값 어디에도 발명 금칙어(교통·체류 초과)가 없다', () => {

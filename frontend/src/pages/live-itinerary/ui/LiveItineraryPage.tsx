@@ -1,83 +1,90 @@
-import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { router } from 'expo-router';
 import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { resolveActualRoute } from '@/features/execution/model/actualDistance';
 import { resolveLiveState } from '@/features/execution/model/liveState';
 import { useLiveItinerary } from '@/features/execution/model/useLiveItinerary';
-import {
-  useLiveViewStore,
-  type LivePlanToggle,
-  type LiveSegment,
-} from '@/features/execution/model/liveViewStore';
 import { projectSlotProgress } from '@/features/execution/model/slotProgress';
-import { useActualRoute } from '@/features/execution/model/useActualRoute';
 import { useVisitCheck } from '@/features/execution/model/useVisitCheck';
+import { photoAttach } from '@/features/record/model/photoAttach';
+import { pickPhotoForVisit } from '@/features/record/model/pickPhotoForVisit';
+import { useVisitMemo } from '@/features/record/model/useVisitMemo';
+import { MemoSheet } from '@/features/record/ui/MemoSheet';
 import { deriveVisitProgress } from '@/features/execution/model/visitProgress';
-import {
-  WarningTriangleGlyph,
-  WeatherCloudGlyph,
-} from '@/features/execution/ui/ExecutionGlyphs';
-import { LiveItineraryScreen } from '@/features/execution/ui/LiveItineraryScreen';
-import { TriggerBanner } from '@/features/execution/ui/TriggerBanner';
 import { TriggerChip } from '@/features/execution/ui/TriggerChip';
+import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { foldScope } from '@/features/planb/model/foldScope';
+import { riskAffectedRow } from '@/features/planb/model/riskAffectedRow';
 import { triggerLabel } from '@/features/planb/model/triggerLabel';
+import { triggerPillCopy } from '@/features/planb/model/triggerPillCopy';
+import { triggerWatchlist } from '@/features/planb/model/triggerWatchlist';
 import { useActiveTriggers } from '@/features/planb/model/useActiveTriggers';
-import { useSuppressTrigger } from '@/features/planb/model/useSuppressTrigger';
+import { ReplanAppliedSheet } from '@/features/planb/ui/ReplanAppliedSheet';
+import { RiskDetailSheet } from '@/features/planb/ui/RiskDetailSheet';
 import type { Trigger } from '@/shared/api/generated/schemas';
 import {
+  postTripsTripIdVisitsVisitCheckIdPhotos,
   useGetTripsTripId,
   useGetTripsTripIdVisitsDaysDay,
 } from '@/shared/api/generated/trips/trips';
 import { isNotFound } from '@/shared/api/isNotFound';
-import { formatKoreanDate } from '@/shared/date/formatKoreanDate';
+import { seoulDate } from '@/shared/date/seoulDate';
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { ArriveRequestSource } from '@/shared/api/generated/schemas';
+
+import { LiveHubView } from './LiveHubView';
 
 /**
  * TRIP-395 · live-itinerary 페이지 — 조회·판정·조립의 단일 출처.
  *
  * useLiveItinerary(tripId) + 오늘 날짜 → resolveLiveState 판정 1회 → 상태별 렌더. 시각·순서는
  * 솔버 검증값이라 재계산하지 않는다(INV-2). trip 은 헤더 제목(trip.title)만을 위해 따로 조회하고
- * 판정에는 넣지 않는다 — trip 로딩이 일정 얼굴을 막지 않는다. 부제 날짜는 여기(execution 밖)에서
- * formatKoreanDate 로 만들어 완성 문자열로 화면에 내린다(구조가드 경계).
+ * 판정에는 넣지 않는다 — trip 로딩이 일정 얼굴을 막지 않는다. active 얼굴은 i01 허브 순수 뷰
+ * (`LiveHubView`, TRIP-746)가 그린다. 사진·후기는 조회 계약이 없어 넘기지 않는다(G6 — 칸 생략).
  *
- * `today` 는 테스트 주입 seam 이다(기본 = 오늘 UTC). 순수 판정 함수 resolveLiveState 에 날짜를
+ * `today` 는 테스트 주입 seam 이다(기본 = 오늘 KST). 순수 판정 함수 resolveLiveState 에 날짜를
  * 넘겨 주는 자리라 여기 `new Date()` 가 있고, features/execution 안에는 없다.
  */
 
 export interface LiveItineraryPageProps {
   tripId: string;
-  /** 'YYYY-MM-DD' — 테스트 주입용. 기본 = 오늘(UTC). */
+  /** 'YYYY-MM-DD' — 테스트 주입용. 기본 = 오늘(KST). */
   today?: string;
+  /** TRIP-754 — i06 적용 성공 신호(`?applied=sessionId`). 있으면 i08 반영 시트를 허브 위에 띄운다. */
+  appliedSessionId?: string;
 }
 
 const NEUTRAL_BADGE = (
   <View className="h-[72px] w-[72px] rounded-pill bg-surface-strong" />
 );
 
-/** iconKey(triggerLabel) → 칩 leading 글리프. WEATHER 만 전용, 나머지는 경고삼각형 폴백(seed 미결). */
-function chipIcon(iconKey: string): ReactNode {
-  if (iconKey === 'weather') return <WeatherCloudGlyph size={24} />;
-  return <WarningTriangleGlyph size={24} />;
-}
+/** 허브 [사진] 저장 실패 안내(INV-4) — 허브엔 사진 칸이 없어 실패 셀 대신 카드 아래 한 줄로. */
+const PHOTO_SAVE_FAILED = '사진을 기록하지 못했어요. 다시 시도해 주세요';
+
+/** 허브 메모 저장 실패 안내(INV-4) — j01 `VisitRecordCardContainer` 와 같은 문장(TRIP-1117). */
+const MEMO_SAVE_FAILED = '메모를 저장하지 못했어요. 다시 시도해 주세요.';
+
+/** 뒤로 갈 히스토리가 없을 때(딥링크·푸시 직행)의 폴백 — ItineraryPlanPage 관례(INV-4 침묵 금지). */
+const HOME_FALLBACK = '/(tabs)';
 
 export function LiveItineraryPage({
   tripId,
-  today = new Date().toISOString().slice(0, 10),
+  today = seoulDate(new Date()),
+  appliedSessionId,
 }: LiveItineraryPageProps) {
   const query = useLiveItinerary(tripId);
   const trip = useGetTripsTripId(tripId);
-  const segment = useLiveViewStore((store) => store.segment);
-  const setSegment = useLiveViewStore((store) => store.setSegment);
-  const toggle = useLiveViewStore((store) => store.toggle);
-  const setToggle = useLiveViewStore((store) => store.setToggle);
-  // 실제 경로 점열·위치 동의 → 레이어 판정(동의 없으면 비활성·거리 0, PBT-U4-F3).
-  const actualRoute = resolveActualRoute(useActualRoute());
   // 사용자가 고른 날(없으면 오늘). 훅 규칙상 조기 반환보다 위에서 무조건 선언한다.
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  // i03 위험 상세 시트 열림 = 그 트리거 id(TRIP-749). 재조회로 트리거가 사라지면 시트도 사라진다.
+  const [riskTriggerId, setRiskTriggerId] = useState<string | null>(null);
+  // i08 [되돌리기] 안내(E2 — 서버 호출 없이 안내만). 허브 초기 스냅은 마운트 때 한 번만 정한다 —
+  // 닫으며 applied 가 지워져도 펼친 허브를 도로 접지 않는다(Q5).
+  const [revertNotice, setRevertNotice] = useState(false);
+  const [initialSnapIndex] = useState(appliedSessionId ? 2 : undefined);
+  // 관람 중 카드 [사진] 안내 한 줄(TRIP-1070). 다음 [사진] 누름에 지운다.
+  const [photoNotice, setPhotoNotice] = useState<string | null>(null);
 
   const state = resolveLiveState({
     isLoading: query.isPending,
@@ -90,11 +97,10 @@ export function LiveItineraryPage({
 
   // 발화 중 트리거 조회는 active 얼굴에서만(게이팅) — 훅 규칙상 조기 반환 위에서 무조건 선언한다.
   // 표시 게이트는 MANUAL 필터 뒤의 목록으로 아래에서 판정한다(hasActiveTrigger 는 MANUAL 을 못
-  // 걸러 이 티켓의 3변형 필터엔 못 쓴다). 억제(dismiss) 뮤테이션도 여기서 선언한다.
+  // 걸러 이 티켓의 3변형 필터엔 못 쓴다). 알약 숨김은 허브 로컬 상태라 서버 억제 호출이 없다(D3).
   const triggers = useActiveTriggers(tripId, {
     enabled: state.kind === 'active',
   });
-  const suppress = useSuppressTrigger(tripId);
 
   // 방문 기록 조회·판정은 page 1회(FSD·구조가드). 훅 규칙상 조기 반환 위에서 무조건 선언한다 —
   // active 날짜(방문 기록 조회 키)를 미리 구하되, active 가 아니면 '' 로 두어 쿼리를 끈다.
@@ -108,6 +114,34 @@ export function LiveItineraryPage({
     query: { enabled: state.kind === 'active' && liveDate !== '' },
   });
   const visitCheck = useVisitCheck({ tripId, day: liveDate });
+
+  // 방문 기록 → 진행 상태 도출(★도달성 — 빈 인자면 전 슬롯 upcoming 이라 active 카드가 프로덕션에 안 뜬다).
+  // 도출·판정은 여기 1회. TRIP-1117 — 메모 세션 캐시를 관람 중 방문 id 로 읽어야 해서(훅은 조기 반환 위에서만)
+  // 조기 반환 아래에 있던 도출을 여기로 올렸다. active 가 아니면 슬롯이 비어 관람 중이 없다.
+  const activeSlots =
+    state.kind === 'active'
+      ? (state.itinerary.days[liveDayIndex]?.slots ?? [])
+      : [];
+  const progress = deriveVisitProgress(
+    visits.data ?? { visits: [] },
+    liveDate,
+    activeSlots.map((slot) => slot.poiId)
+  );
+  const activeVisitCheckId =
+    progress.activePoiId !== null
+      ? (progress.visitCheckIdByPoiId[progress.activePoiId] ?? null)
+      : null;
+  // 메모 저장만 쓴다 — useVisitAttachments 는 사진 목록 GET 을 무조건 쏘므로 부르지 않는다(F6). 캐시 키는 j01 과 한 벌.
+  const visitMemo = useVisitMemo({
+    tripId,
+    visitCheckId: activeVisitCheckId ?? '',
+  });
+  // 메모 시트 열림 = "어느 방문으로 열었나"(AC-16) — 재조회로 관람 중 방문이 바뀌면 시트가 저절로 빠진다.
+  const [memoSheetFor, setMemoSheetFor] = useState<string | null>(null);
+  // 메모 저장 실패가 난 방문. 시트가 열려 있으면 시트 안, 닫혀 있으면 관람 중 카드 아래에 보인다(Q3).
+  const [memoFailedFor, setMemoFailedFor] = useState<string | null>(null);
+  // 늦게 온 옛 실패가 최신 시도를 덮지 않게 시도 번호를 센다(j01 onSubmitMemo 선례).
+  const memoAttempt = useRef(0);
 
   if (state.kind === 'loading') {
     return (
@@ -152,49 +186,77 @@ export function LiveItineraryPage({
     );
   }
 
-  if (state.kind === 'outsideToday') {
-    return (
-      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
-        <View className="flex-1 items-center justify-center bg-canvas px-lg">
-          <StateNotice
-            testID="execution-live-outside"
-            illustration={NEUTRAL_BADGE}
-            title="오늘은 여행 중이 아니에요"
-            description="여행 기간에 들어오면 오늘 일정을 보여드려요"
-            actions={[]}
-          />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
   const { itinerary } = state;
   const activeDayIndex = liveDayIndex;
   const activeDate = liveDate;
-  const activeSlots = itinerary.days[activeDayIndex]?.slots ?? [];
 
-  // 방문 기록 → 진행 상태 도출 → projectSlotProgress 인자로 실제 주입(★도달성 — 빈 인자면
-  // 전 슬롯 upcoming 이라 active 카드가 프로덕션에 안 뜬다). 도출·판정은 여기 1회.
-  const progress = deriveVisitProgress(visits.data ?? { visits: [] });
   const projected = projectSlotProgress(activeSlots, {
     completedPoiIds: progress.completedPoiIds,
     activePoiId: progress.activePoiId,
   });
-  const activeVisitCheckId =
-    progress.activePoiId !== null
-      ? (progress.visitCheckIdByPoiId[progress.activePoiId] ?? null)
-      : null;
+  // 결정 2 — 세션 저장본을 관람 중 카드의 메모 박스로 내린다(done 카드는 범위 밖, Q5).
+  const hubSlots = projected.map((entry) =>
+    entry.state === 'active' ? { ...entry, memo: visitMemo.savedMemo } : entry
+  );
 
-  const subtitle = activeDate
-    ? `${formatKoreanDate(activeDate)} · 오늘 일정`
-    : '오늘 일정';
+  // TRIP-1070 [사진] — 관람 중 방문에 메타만 POST 한다. 사진 목록은 조회하지 않는다(허브엔 사진 칸이
+  // 없다 — useVisitAttachments 는 GET 을 무조건 쏘므로 부르지 않는다, F6).
+  const attachActivePhoto = async (visitCheckId: string) => {
+    setPhotoNotice(null);
+    const picked = await pickPhotoForVisit();
+    if ('notice' in picked) {
+      setPhotoNotice(picked.notice);
+      return;
+    }
+    try {
+      await postTripsTripIdVisitsVisitCheckIdPhotos(
+        tripId,
+        visitCheckId,
+        photoAttach(picked.asset, picked.gpsConsent)
+      );
+    } catch {
+      setPhotoNotice(PHOTO_SAVE_FAILED);
+    }
+  };
 
-  // MANUAL 은 표시 표면에서 숨긴다(칩·배너는 WEATHER·DELAY·CLOSURE 3변형만). triggerLabel 은
+  // TRIP-1117 [메모] — 허브 위 메모 시트에서 저장한다(TRIP-1070 결정 1(c) 번복). 닫힘은 저장 성공 뒤(Q1).
+  const memoSheetOpen =
+    activeVisitCheckId !== null && memoSheetFor === activeVisitCheckId;
+  const submitMemo = (visitCheckId: string, text: string) => {
+    const attempt = ++memoAttempt.current;
+    setMemoFailedFor(null);
+    visitMemo.saveMemo(text).then(
+      () => {
+        if (attempt === memoAttempt.current)
+          setMemoSheetFor((open) => (open === visitCheckId ? null : open));
+      },
+      () => {
+        if (attempt === memoAttempt.current) setMemoFailedFor(visitCheckId);
+      }
+    );
+  };
+  const memoFailed =
+    activeVisitCheckId !== null && memoFailedFor === activeVisitCheckId;
+  const memoSheet =
+    memoSheetOpen && activeVisitCheckId !== null ? (
+      <MemoSheet
+        placeName={
+          activeSlots.find((slot) => slot.poiId === progress.activePoiId)
+            ?.nameKo ?? ''
+        }
+        text={visitMemo.savedMemo}
+        notice={memoFailed ? MEMO_SAVE_FAILED : null}
+        onSubmit={(text) => submitMemo(activeVisitCheckId, text)}
+        onClose={() => setMemoSheetFor(null)}
+      />
+    ) : null;
+
+  // MANUAL 은 표시 표면에서 숨긴다(알약·배지는 WEATHER·DELAY·CLOSURE 3변형만). triggerLabel 은
   // 4종 매핑을 갖되(구조 완전성), 화면 표시 필터는 여기서 — 서로 다른 축이다(★8, BR-U4-01).
   const displayTriggers = (triggers.data?.triggers ?? []).filter(
     (trigger) => trigger.kind !== 'MANUAL'
   );
-  // 칩은 발화 중이면 상단 상주(전체-날짜 케이스 대행) — 첫 트리거를 대표로 싣는다.
+  // 알약은 발화 중이면 지도 위 상주(전체-날짜 케이스 대행) — 첫 트리거를 대표로 싣는다.
   const chipTrigger = displayTriggers[0];
 
   const openReplan = (trigger: Trigger) => {
@@ -204,66 +266,122 @@ export function LiveItineraryPage({
     );
   };
 
+  // 알약 카피의 대상 = 이 날 슬롯 중 트리거 slotKey 와 같은 것(없으면 라벨만, D2 폴백).
+  const pillSlot = chipTrigger
+    ? activeSlots.find(
+        (slot) => buildSlotKey(activeDate, slot.poiId) === chipTrigger.slotKey
+      )
+    : undefined;
   const triggerChip = chipTrigger ? (
     <TriggerChip
-      // 칩 제목은 kind 요지(정적 라벨) — 상세 사유(reason)는 슬롯 배너가 진다. 요지가 칩과
-      // 배너에 둘 다 서도, 상세 reason 은 배너 한 곳에만 흘러 표면 중복이 없다(정적×동적 경계).
-      title={triggerLabel(chipTrigger.kind).label}
-      subtitle="탭하여 대안 보기"
-      icon={chipIcon(triggerLabel(chipTrigger.kind).iconKey)}
-      onPressAlternative={() => openReplan(chipTrigger)}
-      onDismiss={() =>
-        suppress.mutate({ tripId, triggerId: chipTrigger.triggerId })
-      }
+      label={triggerPillCopy(chipTrigger.kind, pillSlot)}
+      onPressAlternative={() => setRiskTriggerId(chipTrigger.triggerId)}
     />
   ) : undefined;
 
-  // 배너는 slotKey 매칭 슬롯에만 — 요지(label)에 서버 reason 을 이어 완성 문구로 조립한다
-  // (정적 라벨 × 동적 reason 경계). 매칭 없으면 null(칩=상시·배너=slotKey 매칭 구분, ★9).
-  const renderSlotBanner = (slotKey: string): ReactNode => {
+  // 영향 배지 = slotKey 가 맞는 트리거의 라벨(서버 reason 은 허브에 안 흘린다).
+  const slotBadgeLabel = (slotKey: string): string | null => {
     const match = displayTriggers.find(
       (trigger) => trigger.slotKey === slotKey
     );
-    if (!match) return null;
-    return (
-      <TriggerBanner
-        text={`${triggerLabel(match.kind).label} · ${match.reason}`}
-      />
-    );
+    return match ? triggerLabel(match.kind).label : null;
   };
 
+  // 시트는 허브의 형제로 조건부 마운트한다 — 딤이 FAB·알약까지 전면을 덮고, 닫힘 = 트리에서 사라짐.
+  const riskTrigger = displayTriggers.find(
+    (trigger) => trigger.triggerId === riskTriggerId
+  );
+  const riskSheet =
+    riskTrigger && riskTrigger.kind !== 'MANUAL' ? (
+      <RiskDetailSheet
+        kind={riskTrigger.kind}
+        title={riskTrigger.reason}
+        affected={riskAffectedRow(itinerary.days, riskTrigger.slotKey)}
+        watchRows={triggerWatchlist(displayTriggers).rows}
+        onPressAlternative={() => {
+          // i04 는 허브 위에 겹쳐 뜬다(D1) — 시트를 닫고 가야 뒤에 비치지 않는다.
+          setRiskTriggerId(null);
+          openReplan(riskTrigger);
+        }}
+        onClose={() => setRiskTriggerId(null)}
+      />
+    ) : null;
+
   return (
-    <LiveItineraryScreen
-      days={itinerary.days}
-      activeDayIndex={activeDayIndex}
-      slots={projected}
-      segment={segment}
-      onSelectDay={setSelectedDay}
-      onSelectSegment={(next: LiveSegment) => setSegment(next)}
-      toggle={toggle}
-      onToggle={(next: LivePlanToggle) => setToggle(next)}
-      actualRoute={actualRoute}
-      tripTitle={trip.data?.title ?? ''}
-      subtitle={subtitle}
-      onPressTab={(key) => router.replace(key === 'home' ? '/' : `/${key}`)}
-      onPressComplete={
-        activeVisitCheckId !== null
-          ? () => {
-              void visitCheck.complete(activeVisitCheckId);
-            }
-          : undefined
-      }
-      onManualArrive={(poiId) => {
-        void visitCheck.arrive({
-          slotKey: `${activeDate}#${poiId}`,
-          poiId,
-          source: 'MANUAL',
-        });
-      }}
-      triggerChip={triggerChip}
-      renderSlotBanner={renderSlotBanner}
-      // i09 감시 목록 진입 — 라우팅으로만(execution→planb 직접 import 없이, ★6).
-      onPressWatchlist={() => router.push(`/trips/${tripId}/planb/triggers`)}
-    />
+    <>
+      <LiveHubView
+        tripTitle={trip.data?.title ?? ''}
+        days={itinerary.days}
+        activeDayIndex={activeDayIndex}
+        slots={hubSlots}
+        onSelectDay={setSelectedDay}
+        onBack={() => {
+          if (router.canGoBack()) router.back();
+          else router.replace(HOME_FALLBACK);
+        }}
+        // 수동 재계획 세션 진입(BR-U4-10) — 라우팅으로만(execution→planb 직접 import 없이).
+        onPressAiReplan={() => router.push(`/trips/${tripId}/planb`)}
+        onPressManualEdit={() => router.push(`/trips/${tripId}/planb/manual`)}
+        onPressComplete={
+          activeVisitCheckId !== null
+            ? () => {
+                void visitCheck.complete(activeVisitCheckId);
+              }
+            : undefined
+        }
+        onPressPhoto={
+          activeVisitCheckId !== null
+            ? () => void attachActivePhoto(activeVisitCheckId)
+            : undefined
+        }
+        // [메모] — 허브 위 메모 시트를 연다(TRIP-1117). 카드 아래 실패 안내는 여기서 지운다.
+        onPressMemo={
+          activeVisitCheckId !== null
+            ? () => {
+                setMemoFailedFor(null);
+                setMemoSheetFor(activeVisitCheckId);
+              }
+            : undefined
+        }
+        photoNotice={photoNotice}
+        memoNotice={!memoSheetOpen && memoFailed ? MEMO_SAVE_FAILED : null}
+        fabHidden={memoSheetOpen}
+        triggerChip={triggerChip}
+        triggerPillKey={chipTrigger?.triggerId}
+        slotBadgeLabel={slotBadgeLabel}
+        onPressSlotName={(poiId) =>
+          router.push(`/trips/${tripId}/live/place/${poiId}`)
+        }
+        // TRIP-1021 수동 [도착] — 보는 날짜가 실제 오늘일 때만(Q6, 날짜 문자열 비교 — todayIndex 는 여행
+        // 밖이면 첫날/마지막 날로 끼운 값이라 못 쓴다). 다른 날에 열면 그날 슬롯에 오늘 도착이 찍힌다.
+        // 방문 기록 데이터가 있을 때만 — 첫 로딩·첫 실패 중엔 전부 '예정'으로 보여 이미 도착한 곳에 409 가 난다.
+        // isSuccess 가 아니라 data 기준: 재조회 한 번 실패로 캐시 데이터가 있는데 버튼이 전부 사라지면 안 된다(03b 재리뷰 R1).
+        // 위치 권한은 보지 않는다(Q2 — 자동 도착 TRIP-1018 보류 중 유일한 도착 경로).
+        // 슬롯 키가 비면 서버가 즉석 방문으로 기록하므로 반드시 싣는다. 실패는 훅이 그 레코드만 롤백한다.
+        onPressArrive={
+          activeDate === today && visits.data !== undefined
+            ? (poiId) => {
+                void visitCheck.arrive({
+                  slotKey: buildSlotKey(activeDate, poiId),
+                  poiId,
+                  source: ArriveRequestSource.MANUAL,
+                });
+              }
+            : undefined
+        }
+        initialSnapIndex={initialSnapIndex}
+      />
+      {riskSheet}
+      {memoSheet}
+      {appliedSessionId ? (
+        // i08 — 반영 직후 한 번 뜨는 알림. 닫기 = applied 쿼리 제거(값을 undefined 로 줘야 지워진다 —
+        // setParams 는 병합이라 `{}` 는 무동작). 부제·배지·내역은 데이터 계약이 없어 안 넘긴다(E4).
+        <ReplanAppliedSheet
+          showRevertNotice={revertNotice}
+          onConfirm={() => router.setParams({ applied: undefined })}
+          onRevert={() => setRevertNotice(true)}
+        />
+      ) : null}
+    </>
   );
 }

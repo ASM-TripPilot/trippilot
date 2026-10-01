@@ -134,3 +134,126 @@ describe('🔴 SlotCandidateCard — 불변식(INV-3·INV-1)', () => {
     expect(card.queryByText(/hidden-poi/)).toBeNull();
   });
 });
+
+/**
+ * TRIP-795 · AC-4(D8) — 반경 밖 후보 톤다운(additive `dimmed?`, 기본 off). 회색 배지·글자.
+ *
+ * className 은 렌더 트리에 평문 prop 으로 남는다(리포 관례: tabsItineraryRoute AC-8·homeGlyphColor
+ * 등이 className 문자열을 관측). 그래서 톤다운은 색을 "글자·배지 className 이 muted/non-primary 로
+ * 바뀌는지"로 잰다 — SVG fill 사각과 다르다(className 은 관측된다). 정확한 회색 토큰은 6-b 육안이고
+ * 여기선 ink↔muted·primary↔non-primary 전환만 잠근다(뮤테이션 실측: dimmed 무시하면 ink/primary
+ * 그대로 → red).
+ *
+ * dimmed 기본 off 는 무회귀 앵커 — planb i14·h08 시트·features 래퍼(미전달)가 기존 렌더 불변.
+ */
+describe('🔴 SlotCandidateCard — 톤다운 additive(dimmed)', () => {
+  const NAME = '감천문화마을';
+
+  it('CC5 · dimmed 미전달(기본 off) = 이름 잉크·배지 primary(무회귀 선제 green)', () => {
+    render(
+      <SlotCandidateCard
+        candidate={CAND}
+        testIDPrefix="itinerary-candidate"
+        distanceLabel="이동"
+        showNameTestId
+        showImage
+        badge="D"
+        nameKo={NAME}
+      />
+    );
+
+    // 이름 글자는 잉크, 배지는 primary — 톤다운 아님.
+    expect(
+      screen.getByTestId('itinerary-candidate-name-p1').props.className
+    ).toContain('text-ink');
+    // 배지 letter Text 는 이중 Text 래핑이라 배지 View(bg-primary)는 조부모다(.parent.parent —
+    // node_modules 실측 확인, 02a §5).
+    expect(screen.getByText('D').parent?.parent?.props.className).toContain(
+      'bg-primary'
+    );
+  });
+
+  it('CC6 · dimmed = 이름 글자 muted + 배지 non-primary(회색)', () => {
+    render(
+      <SlotCandidateCard
+        candidate={CAND}
+        testIDPrefix="itinerary-candidate"
+        distanceLabel="이동"
+        showNameTestId
+        showImage
+        badge="D"
+        nameKo={NAME}
+        dimmed
+      />
+    );
+
+    // 이름 글자가 muted 로 톤다운(text-ink 아님). `text-muted` 는 `text-muted-soft` 도 포함하는
+    // substring 이라 정확 토큰을 과잉 고정하지 않는다.
+    const name = screen.getByTestId('itinerary-candidate-name-p1');
+    expect(name.props.className).not.toContain('text-ink');
+    expect(name.props.className).toContain('text-muted');
+
+    // 배지도 회색(primary 아님) — dimmed 를 무시하면 여전히 bg-primary 라 red. 배지 View 는 배지
+    // letter Text 의 조부모다(.parent.parent, 위 CC5 실측 근거).
+    const badge = screen.getByText('D').parent?.parent;
+    expect(badge?.props.className).not.toContain('bg-primary');
+  });
+});
+
+/**
+ * TRIP-1043 · QA #043 — h10 후보 카드의 태그가 길어도 **거리는 잘리지 않고 끝까지** 보인다(BR-U3-08 ·
+ * INV-3: 구간 정보는 거리만이라 거리 leaf 를 자르거나 숨기면 안 된다).
+ *
+ * jest 는 레이아웃을 계산하지 않으므로 실제 말줄임·넘침은 못 본다(6-b 실기). 여기서는 그 결과를 만드는
+ * **구조**만 잠근다 — 태그는 한 줄 말줄임(`numberOfLines={1}`)에 먼저 줄어들 수 있고, 거리는 줄 수
+ * 제한이 없고 줄어들지 않는다.
+ *
+ * *(개념)* `numberOfLines={1}` — 한 줄을 넘는 글자를 `…`로 자르는 RN Text prop. flex-shrink — 가로
+ * 줄에서 자리가 모자랄 때 그 요소가 먼저 줄어들게 하는 속성(`shrink`=1, `shrink-0`=안 줄어듦).
+ * className 은 공백으로 쪼갠 **정확 토큰**으로 본다 — 부분 문자열로 보면 `shrink-0` 이 `shrink` 로 걸린다.
+ */
+describe('🔴 SlotCandidateCard — 태그 한 줄 말줄임 · 거리 전문 (TRIP-1043 #043)', () => {
+  const LONG: SlotCandidatesCandidatesItem = {
+    poiId: 'p1',
+    distanceRange: '약 12.4km · 차량 추정',
+    rationale: '비 예보에도 실내라 그대로 갈 수 있어요',
+  };
+  const SHRINKS = ['shrink', 'flex-shrink', 'flex-1'];
+  const NO_SHRINK = ['shrink-0', 'flex-shrink-0'];
+
+  function tokens(testID: string): string[] {
+    return String(screen.getByTestId(testID).props.className ?? '').split(
+      /\s+/
+    );
+  }
+
+  it('CC7 · 태그 leaf 는 한 줄 말줄임·줄어듦, 거리 leaf 는 줄 수 제한 없음·안 줄어듦·전문', () => {
+    render(
+      <SlotCandidateCard
+        candidate={LONG}
+        testIDPrefix="itinerary-candidate"
+        distanceLabel="이동"
+        showNameTestId
+        showImage
+        badge="A"
+        tags={['미술', '실내', '취향매칭', '야경', '포토스팟']}
+        trailing={<Text testID="cc-trail">선택</Text>}
+      />
+    );
+
+    // 태그 — 한 줄로 자르고, 자리가 모자라면 먼저 줄어든다.
+    const tags = screen.getByTestId('itinerary-candidate-tags-p1');
+    expect(tags.props.numberOfLines).toBe(1);
+    expect(
+      tokens('itinerary-candidate-tags-p1').some((t) => SHRINKS.includes(t))
+    ).toBe(true);
+
+    // 거리 — 줄 수 제한이 없고, 줄어들지 않으며, 서버 문자열 전문을 담는다.
+    const distance = screen.getByTestId('itinerary-candidate-distance-p1');
+    expect(distance.props.numberOfLines).toBeUndefined();
+    const distanceTokens = tokens('itinerary-candidate-distance-p1');
+    expect(distanceTokens.some((t) => NO_SHRINK.includes(t))).toBe(true);
+    expect(distanceTokens.filter((t) => SHRINKS.includes(t))).toEqual([]);
+    expect(distance).toHaveTextContent('약 12.4km · 차량 추정');
+  });
+});

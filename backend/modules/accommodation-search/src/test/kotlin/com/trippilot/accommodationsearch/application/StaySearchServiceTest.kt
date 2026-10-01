@@ -13,6 +13,8 @@ import io.kotest.matchers.shouldBe
 private class FakeContent(val stays: List<Stay>, val degraded: Boolean = false) : AccommodationContentPort {
     override fun search(region: String?) =
         ContentResult(if (region == null) stays else stays.filter { it.region == region }, degraded)
+
+    override fun findOne(key: StayKey) = stays.firstOrNull { it.key() == key }
 }
 
 private class FakePrices(val map: Map<StayKey, Money>) : StayPriceQueryPort {

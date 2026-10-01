@@ -51,8 +51,12 @@ def list_item(
     }
 
 
-def intro_item(content_id: str, kind: str, hours: str, rest: str) -> dict:
-    """detailIntro2 항목 — 영업시간 필드명은 contentTypeId마다 다르다."""
+def intro_item(content_id: str, kind: str, hours: str, rest: str, **extra: str) -> dict:
+    """detailIntro2 항목 — 영업시간 필드명은 contentTypeId마다 다르다.
+
+    `extra` 는 같은 응답에 실리는 그 밖의 필드(firstmenu·usefee·spendtime …)를
+    실물처럼 섞기 위한 것 — 어댑터가 무엇을 싣고 무엇을 버리는지 시험한다.
+    """
     fields = {
         "12": ("usetime", "restdate"),
         "14": ("usetimeculture", "restdateculture"),
@@ -60,7 +64,7 @@ def intro_item(content_id: str, kind: str, hours: str, rest: str) -> dict:
         "38": ("opentime", "restdateshopping"),
         "39": ("opentimefood", "restdatefood"),
     }[kind]
-    return {"contentid": content_id, fields[0]: hours, fields[1]: rest}
+    return {"contentid": content_id, fields[0]: hours, fields[1]: rest, **extra}
 
 
 class HttpStatusError(Exception):

@@ -272,7 +272,7 @@ def kakao_documents(n: int) -> dict:
     }
 
 
-# ── §4 지도 미검출 강등 재료 (TRIP-683 · pool_builder ⑤) ─────────────
+# ── §4 지도 미검출 강등 재료 (TRIP-898 · ScheduleAgent ②′ — TRIP-904) ──
 # 필터(①~④)를 **전부 통과하도록 고정한** POI 다 — 좌표는 앵커, 예산 미확인(None),
 # 품질 FULL·PARTIAL, 영업요일은 있으면 전 요일. 흔드는 것은 ⑤ 정렬 키 4종
 # (영업시간 보유·saved_count·rating·poi_id)뿐이다.

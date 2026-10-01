@@ -27,6 +27,18 @@ NOT_OURS = {"external", "deferred"}
 # 왜 그렇게 갈랐는지가 함께 사라진다. 간선의 선행이 충족됐는지 판정에도 필요하다.
 DONE = {"done"}
 
+# 안 하기로 한 것. **`done` 도 `external`·`deferred` 도 아니다** — 끝낸 것이 아니고 남의 몫도 아니다.
+# 셋 중 아무 데나 넣으면 표시가 거짓말을 한다. 따로 두는 실익은 `ours` 에서 빠지는 것이다:
+# 안 그러면 접은 노드가 **남은 작업 수에 계속 잡히고**, 쓰지도 않을 Flyway 번호로 경합 경고까지 만든다
+# (실측: STAY-CONTENT-TOURAPI 를 접었는데 "남은 우리 몫"과 번호 경합 목록에 그대로 남았다).
+# 되살릴 조건은 노드 note 가 갖는다 — 그래서 지우지 않고 아래에서 따로 보여 준다.
+DROPPED = {"dropped"}
+
+# 우리가 지금 할 수 있는/해야 하는 것. 위 셋에 안 들어가는 나머지가 여기다.
+OURS_STATUS = {"todo", "blocked"}
+
+KNOWN_STATUS = NOT_OURS | DONE | DROPPED | OURS_STATUS
+
 
 def load():
     data = tomllib.loads(GRAPH.read_text(encoding="utf-8"))
@@ -88,7 +100,14 @@ def main():
             print(f'  {f} -->|{e["kind"]}| {t}')
         return
 
-    ours = [i for i, n in nodes.items() if n.get("status") not in NOT_OURS | DONE]
+    # 모르는 status 를 조용히 "남은 작업"으로 세지 않는다. 아래 `not in` 은 **모르는 값을 전부
+    # 우리 몫으로 흘려 보내므로**, 오타든 새 어휘든 티가 안 난다 — 실제로 `dropped` 가 그렇게
+    # 들어와 접은 노드가 남은 작업 수와 Flyway 경합 목록에 계속 잡혔다. 여기서 크게 실패시킨다.
+    unknown = sorted({n.get("status") for n in nodes.values()} - (KNOWN_STATUS))
+    if unknown:
+        sys.exit(f"work-graph.toml: 모르는 status {unknown} — 어휘를 늘렸으면 이 스크립트에도 뜻을 정해라.")
+
+    ours = [i for i, n in nodes.items() if n.get("status") not in NOT_OURS | DONE | DROPPED]
     done = sorted(i for i, n in nodes.items() if n.get("status") in DONE)
     print(f"노드 {len(nodes)} (남은 우리 몫 {len(ours)} · 완료 {len(done)}) · 간선 {len(edges)}")
     if done:
@@ -117,6 +136,15 @@ def main():
             print(f"      {len(who)}개가 함께 만진다: {', '.join(who)}")
         if len(mig) > 1:
             print(f"  ⚠ Flyway 번호 경합: {', '.join(mig)} — 동시에 열려면 번호를 먼저 못 박는다")
+        print()
+
+    dropped = sorted(i for i, n in nodes.items() if n.get("status") in DROPPED)
+    if dropped:
+        # 지우지 않고 보여 주는 이유 — 같은 조사를 다음 사람이 처음부터 다시 하지 않게.
+        print("── 접은 것(되살릴 조건은 노드 note) ──")
+        for i in dropped:
+            n = nodes[i]
+            print(f"  {i:<22} {n.get('owner', '?'):<5} {n['title'][:62]}")
         print()
 
     blocked = sorted(i for i, n in nodes.items() if n.get("status") in NOT_OURS)

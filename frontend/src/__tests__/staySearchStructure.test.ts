@@ -358,9 +358,11 @@ describe('탭바 배선(TRIP-413): 죽은 빈 함수가 남지 않는다', () =>
   });
 });
 
-// ── TRIP-414 확장 — FAB 배선. 위 describe 들의 it 본문은 한 글자도 바뀌지 않았다.
-describe('FAB 배선(TRIP-414): 죽은 undefined onPress 가 남지 않는다', () => {
-  it('stay-search-fab 이 onPress 콜백을 잇고, onPress={undefined} 스텁이 없다', () => {
+// ── TRIP-725 재작성 — FAB 알약 → 2단 원형. 알약(stay-search-fab·onPressCreateTrip·"여행
+// 만들기")이 소멸하고 원형 FAB 2개(담은 숙소·숙소 등록)로 갈린다. 위 describe 들의 it 본문은
+// 한 글자도 바뀌지 않았다.
+describe('FAB 배선(TRIP-725): 알약 FAB 소멸 · 2단 원형 FAB 배선', () => {
+  it('원형 FAB 2개가 onPressSaved·onPressRegister 를 잇고, 옛 알약 FAB 소스가 사라진다', () => {
     const screenPath = path.join(
       ROOT,
       'features',
@@ -370,15 +372,15 @@ describe('FAB 배선(TRIP-414): 죽은 undefined onPress 가 남지 않는다', 
     );
     const source = stripComments(fs.readFileSync(screenPath, 'utf8'));
 
-    // 긍정 짝 — FAB 이 실재하고 콜백 prop 을 잇는다.
-    expect(source).toContain('stay-search-fab');
-    expect(source).toContain('onPressCreateTrip');
+    // 긍정 짝 — 원형 FAB 2개가 실재하고 각자 콜백 prop 을 잇는다.
+    expect(source).toContain('stay-search-fab-saved');
+    expect(source).toContain('stay-search-fab-register');
+    expect(source).toContain('onPressSaved');
+    expect(source).toContain('onPressRegister');
 
-    // 부정 — FAB 블록에 onPress={undefined} 죽은 스텁이 남지 않는다(금지 AC). FAB Pressable
-    // 여는 태그부터 닫는 태그까지 잘라 그 안만 본다(저장 하트의 onPress={undefined}는 범위 밖).
-    const fabStart = source.indexOf('stay-search-fab');
-    const fabBlock = source.slice(fabStart, fabStart + 400);
-    expect(fabBlock).not.toMatch(/onPress=\{undefined\}/);
+    // 부정 — 알약 FAB 의 잔재(prop·라벨)가 완전히 사라진다(개명 아닌 교체 소스 앵커).
+    expect(source).not.toContain('onPressCreateTrip');
+    expect(source).not.toContain('여행 만들기');
   });
 });
 

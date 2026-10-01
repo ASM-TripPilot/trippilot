@@ -1,0 +1,40 @@
+<p>GitHub Actions가 AWS에 아무 권한도 없다면 첫 IAM Role을 스스로 만들 수 없다. AWS 계정 관리자가 최초 OIDC provider와 bootstrap Role을 준비한 뒤, bootstrap workflow가 환경별 state 버킷과 일반 배포 Role을 만든다. 이후의 배포는 수명이 짧은 OIDC 자격증명을 사용한다. 저장소에 장기 AWS 액세스 키를 넣는 절차가 아니다. <a href="https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-aws">GitHub Actions의 AWS OIDC 인증</a>.</p>
+<div aria-label="초기 인증 및 상태 저장소 생성 순서" class="flow">
+<div class="flow-step"><strong>AWS 관리자</strong><br/>GitHub OIDC provider<br/>환경별 bootstrap Role</div>
+<div class="flow-step"><strong>Bootstrap Actions</strong><br/>CloudFormation<br/>S3 state·배포 Role·EKS Role</div>
+<div class="flow-step"><strong>환경 설정</strong><br/>AWS_ROLE_ARN 등록<br/>branch·reviewer 보호</div>
+<div class="flow-step"><strong>배포 Actions</strong><br/>OIDC 배포 Role<br/>Terraform plan / apply</div>
+</div>
+<p>CloudFormation을 먼저 사용하는 이유는 Terraform이 사용할 원격 backend 자체가 아직 없기 때문이다. bootstrap stack과 앱 Terraform state를 따로 두면 앱 인프라 변경과 state 보관소의 수명도 분리된다. 현재 state 버킷은 versioning·암호화·TLS·public 차단을 적용하고 <code>terraform.tfstate.tflock</code>을 이용해 동시 수정을 막는다.</p>
+<div class="lab">
+<p><strong>강사 사전 준비 순서</strong></p>
+<ol>
+<li>계정에 <code>token.actions.githubusercontent.com</code> OIDC provider가 있는지 확인한다. audience는 <code>sts.amazonaws.com</code>이며 기존 provider를 중복 생성하지 않는다.</li>
+<li><a href="../../infra/bootstrap/bootstrap-trust.example.json">bootstrap trust 예제</a>와 <a href="../../infra/bootstrap/bootstrap-policy.example.json">권한 예제</a>를 실제 계정·리전·환경에 맞춰 검토한다. 저장소는 현재 <code>ASM-TripPilot/trippilot</code>을 기준으로 검증하므로 포크 실습은 관련 trust와 저장소 검사도 일관되게 바꿔야 한다.</li>
+<li>GitHub Settings → Environments에서 <code>dev</code>, <code>prd</code>를 명시적으로 만든다. DEV는 <code>develop</code>, PRD는 <code>main</code> branch만 허용하도록 설정한다.</li>
+<li>아래 표의 bootstrap 변수를 등록하고 <strong>AWS bootstrap (manual)</strong> workflow를 환경별로 실행한다. workflow 파일은 GitHub 저장소의 기본 branch에도 존재해야 Run workflow 버튼을 사용할 수 있다.</li>
+<li>Summary의 <code>DeploymentRoleArn</code>을 같은 Environment의 <code>AWS_ROLE_ARN</code>에 등록한다. state 버킷과 Role이 환경과 계정에 맞는지 확인한다.</li>
+<li>ACM에서 API 도메인 인증서를 요청하고 DNS 검증을 끝낸다. EKS/NLB와 같은 AWS 계정·리전의 인증서 ARN과 API hostname을 등록한다.</li>
+</ol>
+</div>
+<div class="table-wrap"><table>
+<caption>GitHub Environment 변수 점검표</caption>
+<thead><tr><th>변수</th><th>예시·의미</th><th>필요 시점</th></tr></thead>
+<tbody>
+<tr><td><code>AWS_ACCOUNT_ID</code></td><td>실습 계정의 12자리 ID</td><td>bootstrap부터</td></tr>
+<tr><td><code>AWS_REGION</code></td><td>기본 <code>ap-northeast-2</code></td><td>bootstrap부터</td></tr>
+<tr><td><code>AWS_BOOTSTRAP_ROLE_ARN</code></td><td>관리자가 준비한 환경별 bootstrap Role</td><td>bootstrap</td></tr>
+<tr><td><code>AWS_GITHUB_OIDC_PROVIDER_ARN</code></td><td>선택. 같은 계정의 기존 GitHub provider</td><td>bootstrap</td></tr>
+<tr><td><code>AWS_ROLE_ARN</code></td><td>bootstrap 출력의 <code>trippilot-dev-github-deploy</code> 또는 PRD Role</td><td>일반 plan/apply</td></tr>
+<tr><td><code>DEPLOY_BRANCH</code></td><td>기본 DEV develop / PRD main. 바꿀 때 보호 규칙도 변경</td><td>branch 기본값 변경 시</td></tr>
+<tr><td><code>ACM_CERTIFICATE_ARN</code></td><td>검증 완료, 상태 <code>ISSUED</code>인 인증서</td><td>앱 배포</td></tr>
+<tr><td><code>API_HOSTNAME</code></td><td><code>api-dev.example.com</code>, <code>api.example.com</code></td><td>앱 배포</td></tr>
+</tbody>
+</table></div>
+<p>일반 Role ARN이나 도메인은 비밀값이 아니므로 Environment Variables에 넣는다. 외부 서비스 API 키는 이후 Secrets Manager에 넣는다. PRD에는 사용 가능한 GitHub 요금제·저장소 공개 범위에서 required reviewers와 self-review 방지를 설정한다. 해당 보호 기능의 제공 범위는 계정 플랜에 따라 다르므로 실제 Settings에서 확인한다. <a href="https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments">GitHub Environment 보호 규칙과 제공 범위</a>.</p>
+<div class="callout warning">
+<strong>승인이 검사하는 지점</strong>
+<p>현재 <code>deploy</code> job 전체가 Environment를 참조하므로 reviewer 승인은 그 job이 시작하기 전이다. 그 job 안에서 Terraform plan과 apply가 연속 실행된다. 이 승인은 방금 만들어진 plan 파일을 읽고 누른 승인이 아니다. 운영에서는 별도 plan 실행의 결과와 대상 SHA를 먼저 검토하고 apply 실행을 승인하되, apply 실행은 새 plan을 만든다는 점까지 확인해야 한다. 정확히 검토한 plan을 승인 후 적용하려면 job 분리, 동일 SHA 고정, 제한된 plan 저장·전달과 만료 정책을 추가 설계해야 한다.</p>
+</div>
+<p>OIDC subject가 <code>repo:ASM-TripPilot/trippilot:environment:prd</code> 형태이면 environment는 제한하지만 branch나 workflow 파일명까지 증명하지는 않는다. Environment branch 보호와 workflow 코드 리뷰를 함께 적용한다. bootstrap Role은 배포 Role의 권한을 만들 수 있으므로 초기 준비가 끝난 뒤 접근을 제한한다. DEV·PRD를 같은 계정에 두어도 이름·state·VPC 분리만으로 완전한 계정 수준 격리가 생기지 않는다.</p>
+<p class="source-note">상세 절차: <a href="../../docs/guides/aws-bootstrap.md">AWS 초기 설정 가이드</a>, <a href="../../.github/workflows/aws-bootstrap.yml">bootstrap workflow</a>, <a href="../../infra/bootstrap/template.json">CloudFormation 템플릿</a>.</p>

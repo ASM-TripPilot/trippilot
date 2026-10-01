@@ -1,6 +1,11 @@
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  defaultScheduler,
+  notifyManager,
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
@@ -11,7 +16,9 @@ import {
   useGetSavedPlaces,
 } from '@/shared/api/generated/places/places';
 import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
+import { flushNotifications } from '@/test-support/flushNotifications';
 
+import { optimisticSavedPlaceId } from './savedPlaceIndex';
 import { useSavedPlaces, type SavedPlacesOutcome } from './savedPlaces';
 
 /**
@@ -41,6 +48,13 @@ import { useSavedPlaces, type SavedPlacesOutcome } from './savedPlaces';
  * ── 졸업 조건 (frontend/CLAUDE.md "장치 판정 규칙") ──────────────────────
  * **A. 영구 규칙 — 유지한다.** 무효화 대상 두 쿼리와 실패 사유 4갈래가 바뀌지 않는 한 유효하다.
  * d04·d02 화면(TRIP-221~223)이 붙어도 이 단언들은 red를 내지 않는다 — 화면을 렌더하지 않는다.
+ *
+ * 화면 읽기 규율(TRIP-884·953): react-query 는 캐시 변경 알림을 스케줄러로 미뤄 보낸다. 이 파일은
+ * 그 알림을 일부러 5ms 늦춰(beforeAll) "알림을 안 기다리고 result.current 를 읽는" 단언을 드러낸다.
+ * ⚠️ 항상 red 는 아니다 — 기대값이 호출 전 값과 같은 단언(롤백 후 false 등)은 flush 를 빼먹어도
+ * 옛 화면을 읽고 통과한다. 그러니 화면을 읽기 전엔 예외 없이 `flushNotifications()` 를 거친다.
+ * 요청 도착(hitCount·captured*)은 알림과 무관한 비동기라 `waitFor` 로 기다리고, "0건·아직 1건" 같은
+ * 부정 단언은 즉시 단언으로 둔다(waitFor 로 감싸면 첫 시도에 통과해 공허해진다).
  */
 
 // authedClient(생성 클라이언트가 타는 mutator의 인증 계층)가 @/shared/storage 를 정적으로
@@ -114,6 +128,7 @@ function hitCount(needle: string): number {
 }
 
 beforeAll(() => {
+  notifyManager.setScheduler((cb) => setTimeout(cb, 5));
   server.listen({ onUnhandledRequest: 'error' });
   server.events.on('request:start', ({ request }) => {
     observedHits.push(`${request.method} ${new URL(request.url).pathname}`);
@@ -139,7 +154,10 @@ afterEach(() => {
   server.resetHandlers();
 });
 
-afterAll(() => server.close());
+afterAll(() => {
+  notifyManager.setScheduler(defaultScheduler);
+  server.close();
+});
 
 function createWrapper() {
   const client = new QueryClient({
@@ -230,12 +248,13 @@ describe('AC-4 · 담기 — 응답 전 반영 + 두 쿼리만 무효화 (I-1)',
     await act(async () => {
       pending = result.current.saved.save(PLACE_A);
     });
+    await flushNotifications();
 
     // 단언 ① — **서버가 아직 답하지 않았는데** 이미 담김이다(US-EXPL-04 "즉시 반영").
     expect(result.current.saved.isSaved(POI_A)).toBe(true);
     // 단언 ② — 요청은 실제로 나갔고(낙관만 하고 안 보내는 구현이 아니다), 이 시점에 무효화는
     // 아직 없다(담은 목록 재요청 0건).
-    expect(hitCount('POST /api/v1/saved-places')).toBe(1);
+    await waitFor(() => expect(hitCount('POST /api/v1/saved-places')).toBe(1));
     expect(hitCount('GET /api/v1/saved-places')).toBe(1);
 
     // 실행 ② — 문을 열어 서버가 답하게 한다.
@@ -279,12 +298,15 @@ describe('AC-5 · 해제 — poiId 가 아니라 savedPlaceId 로 나간다 (I-2
     await act(async () => {
       pending = result.current.saved.remove(POI_B);
     });
+    await flushNotifications();
 
     // 단언 ① — 서버가 답하기 전에 이미 빠졌다(BR-U1-04 "해제 시 즉시 목록에서 빠진다").
     expect(result.current.saved.isSaved(POI_B)).toBe(false);
 
     // 단언 ② — 나간 경로가 담기 기록 id 다.
-    expect(hitCount(`DELETE /api/v1/saved-places/${SAVED_ID_B}`)).toBe(1);
+    await waitFor(() =>
+      expect(hitCount(`DELETE /api/v1/saved-places/${SAVED_ID_B}`)).toBe(1)
+    );
 
     // 단언 ③ (부정 짝) — poiId 를 그대로 경로에 넣지 않았다. 이 짝이 없으면 poiId 구현이
     // 서버 404 를 받고, 그 실패가 AC-7 의 롤백에 흡수되어 **"동작은 하는데 아무것도 안 되는"**
@@ -343,6 +365,7 @@ describe('AC-6 · 409(이미 담음)는 실패가 아니라 담김으로 수렴�
     await act(async () => {
       outcome = await result.current.saved.save(PLACE_A);
     });
+    await flushNotifications();
 
     // 단언 ① — 실패 갈래가 아니다.
     expect(outcome).toEqual({ kind: 'saved' });
@@ -380,6 +403,7 @@ describe('AC-7 · INV-4 — 실패는 되돌리고 사유를 올린다 (I-4)', (
     await act(async () => {
       outcome = await result.current.saved.save(PLACE_A);
     });
+    await flushNotifications();
 
     // 단언 ① — 사유가 호출자에게 도달한다. 조용히 삼키면 위반이다(INV-4).
     // 404 의 두 갈래(담기: POI 없음/비-ACTIVE · 해제: 없음/타 계정)는 나누지 않는다 —
@@ -406,6 +430,7 @@ describe('AC-7 · INV-4 — 실패는 되돌리고 사유를 올린다 (I-4)', (
     await act(async () => {
       outcome = await result.current.saved.remove(POI_B);
     });
+    await flushNotifications();
 
     expect(outcome).toEqual({ kind: 'failed', reason: 'not-found' });
     // 되돌아왔다 = 다시 담김으로 보인다.
@@ -424,6 +449,7 @@ describe('AC-7 · INV-4 — 실패는 되돌리고 사유를 올린다 (I-4)', (
     await act(async () => {
       outcome = await result.current.saved.save(PLACE_A);
     });
+    await flushNotifications();
 
     expect(outcome).toEqual({ kind: 'failed', reason: 'network' });
     expect(result.current.saved.isSaved(POI_A)).toBe(false);
@@ -547,6 +573,326 @@ describe('Q2 · 담은 목록이 아직 안 왔으면 해제를 보내지 않는
       await waitFor(() =>
         expect(result.current.savedList.isSuccess).toBe(true)
       );
+    });
+  });
+});
+
+/**
+ * ── TRIP-1049 · 담기 3단 가드(인증 → 진행 중 잠금 → 캐시 멱등) ─────────────────────────
+ * 숙소 훅(TRIP-1041 `savedStays.integration` I8~I13)과 같은 계약을 장소 훅에 건다. 위 케이스는
+ * 무수정, 아래만 추가한다.
+ *
+ * 왜 필요한가: 화면의 대기 표식(pendingPoiIds, useState)은 **다음 렌더 전까지 반영되지 않는다.**
+ * 같은 순간 두 번 누르면 두 번째 탭이 첫 탭의 반영 전에 들어와 담기 요청이 두 번 나간다(02a ★1).
+ * 그 구멍은 훅 층에서만 닫힌다.
+ */
+
+/** 네트워크 도착을 기다리는 한도 — 로컬 기본 1000ms 의 CI 러너(약 4배 느림) 환산(02a ★9). */
+const WAIT = { timeout: 4000 };
+
+/** 캐시의 담은 목록에서 그 장소 행이 몇 줄인지. */
+function rowsFor(list: SavedPlace[] | undefined, poiId: string): number {
+  return (list ?? []).filter((entry) => entry.place.poiId === poiId).length;
+}
+
+/** 담기 POST 를 문 뒤에 세운다(= "첫 요청이 아직 날아가는 중"). */
+function holdSavePost() {
+  const gate = createGate();
+  server.use(
+    http.post(`${BASE}/saved-places`, async () => {
+      await gate.opened;
+      return HttpResponse.json(
+        {
+          savedPlaceId: NEW_SAVED_ID,
+          savedAt: '2026-09-28T00:00:00Z',
+          place: PLACE_A,
+        },
+        { status: 201 }
+      );
+    })
+  );
+  return gate;
+}
+
+describe('TRIP-1049 AC-10 · 이미 담긴 장소 다시 담기 = 아무 일도 없음 (I-7)', () => {
+  it('요청 0건 · 목록 캐시 그대로(같은 참조) · 결과는 담김', async () => {
+    // 준비 — B 는 서버 목록에 이미 있다. POST 는 성공(201)으로 열어 둔다: 막아 두면 요청이 에러로
+    // 롤백돼 "캐시 그대로"가 롤백 덕에 공허하게 통과한다(02a ★3).
+    setAccessToken('valid-access');
+    server.use(
+      http.post(`${BASE}/saved-places`, () =>
+        HttpResponse.json(
+          {
+            savedPlaceId: NEW_SAVED_ID,
+            savedAt: '2026-09-28T00:00:00Z',
+            place: PLACE_B,
+          },
+          { status: 201 }
+        )
+      )
+    );
+    const { result } = await renderProbeReady();
+    // 앵커 — 시작 상태: B 는 담김이고 목록에 1줄이다.
+    expect(result.current.saved.isSaved(POI_B)).toBe(true);
+    const before = result.current.savedList.data;
+    expect(rowsFor(before, POI_B)).toBe(1);
+
+    // 실행
+    let outcome!: SavedPlacesOutcome;
+    await act(async () => {
+      outcome = await result.current.saved.save(PLACE_B);
+    });
+    await flushNotifications();
+
+    // 단언 ① — 원하던 상태에 이미 있으니 실패가 아니라 담김이다.
+    expect(outcome).toEqual({ kind: 'saved' });
+    // 단언 ② — 담기 요청이 나가지 않았다.
+    expect(hitCount('POST /api/v1/saved-places')).toBe(0);
+    // 단언 ③ — 캐시를 새 배열로 갈아 끼우지 않았다(같은 참조).
+    expect(result.current.savedList.data).toBe(before);
+    // 단언 ④ — 다시 받아오지도 않았다.
+    expect(hitCount('GET /api/v1/saved-places')).toBe(1);
+  });
+});
+
+describe('TRIP-1049 AC-6·AC-10 · 응답 전에 한 번 더 담기 = 흡수 (I-8)', () => {
+  it('한 act 안에서 두 번 불러도 POST 1건 · 캐시의 그 장소 행 1개 · 두 결과 모두 담김', async () => {
+    // 준비 — 첫 담기 응답을 문 뒤에 세운다.
+    setAccessToken('valid-access');
+    const gate = holdSavePost();
+    const { result } = await renderProbeReady();
+    expect(result.current.saved.isSaved(POI_A)).toBe(false);
+
+    // 실행 ① — 같은 렌더(같은 사본)에서 기다리지 않고 두 번 부른다 = 같은 순간 두 탭(02a ★1).
+    let first!: Promise<SavedPlacesOutcome>;
+    let second!: Promise<SavedPlacesOutcome>;
+    await act(async () => {
+      first = result.current.saved.save(PLACE_A);
+      second = result.current.saved.save(PLACE_A);
+    });
+    await waitFor(
+      () =>
+        expect(hitCount('POST /api/v1/saved-places')).toBeGreaterThanOrEqual(1),
+      WAIT
+    );
+    await flushNotifications();
+
+    // 단언 ① — 대기 중 캐시에 A 는 한 줄뿐이다(임시 행이 두 개 쌓이지 않는다).
+    expect(rowsFor(result.current.savedList.data, POI_A)).toBe(1);
+
+    // 실행 ② — 응답을 풀어 둘 다 끝낸다.
+    gate.release();
+    let outcomes!: SavedPlacesOutcome[];
+    await act(async () => {
+      outcomes = await Promise.all([first, second]);
+    });
+
+    // 단언 ② — 담기 요청은 한 번만 나갔다(둘 다 끝난 뒤라 "아직 안 나감"이 아니다).
+    expect(hitCount('POST /api/v1/saved-places')).toBe(1);
+    // 단언 ③ — 두 번째 호출도 실패가 아니라 담김이다.
+    expect(outcomes).toEqual([{ kind: 'saved' }, { kind: 'saved' }]);
+  });
+});
+
+describe('TRIP-1049 · 두 번째 담기는 첫 요청보다 먼저 끝나지 않는다 (I-9)', () => {
+  /**
+   * 화면은 `await save()` 가 끝나면 대기 표식을 푼다. 두 번째 호출이 "이미 담김"이라며 즉시 끝나면
+   * 첫 요청이 날아가는 중에 하트가 다시 눌리고, 그 누름은 임시 행을 보고 해제로 가서
+   * saved-id-unknown 실패 배너가 뜬다(TRIP-1041 맹점 4와 같은 이유).
+   */
+  it('첫 요청이 대기 중이면 두 번째 호출도 끝나지 않고, 첫 요청이 끝나면 함께 담김으로 끝난다', async () => {
+    setAccessToken('valid-access');
+    const gate = holdSavePost();
+    const { result } = await renderProbeReady();
+    let secondSettled = false;
+
+    // 실행 ① — 같은 순간 두 번 부르고, 두 번째가 언제 끝나는지 표시를 단다.
+    let first!: Promise<SavedPlacesOutcome>;
+    let second!: Promise<SavedPlacesOutcome>;
+    await act(async () => {
+      first = result.current.saved.save(PLACE_A);
+      second = result.current.saved.save(PLACE_A);
+      void second.then(() => {
+        secondSettled = true;
+      });
+    });
+    await waitFor(
+      () =>
+        expect(hitCount('POST /api/v1/saved-places')).toBeGreaterThanOrEqual(1),
+      WAIT
+    );
+    await flushNotifications();
+
+    // 단언 ① — 첫 요청이 문 뒤에 있는 동안 두 번째 호출은 아직 끝나지 않았다.
+    expect(secondSettled).toBe(false);
+
+    // 실행 ② — 응답을 푼다.
+    gate.release();
+    let outcomes!: SavedPlacesOutcome[];
+    await act(async () => {
+      outcomes = await Promise.all([first, second]);
+    });
+
+    // 단언 ② — 둘 다 담김이고, 요청은 한 번뿐이다(두 번째가 제 요청을 따로 보낸 게 아니다).
+    expect(secondSettled).toBe(true);
+    expect(outcomes).toEqual([{ kind: 'saved' }, { kind: 'saved' }]);
+    expect(hitCount('POST /api/v1/saved-places')).toBe(1);
+  });
+});
+
+describe('TRIP-1049 AC-10 · 캐시가 남은 게스트 — 인증 판정이 멱등보다 먼저 (I-10)', () => {
+  it('캐시에 B 담김 행이 있어도 게스트의 B 담기는 요청 0건 + unauthenticated 다', async () => {
+    // 준비 — probe 의 목록 조회가 B 를 캐시에 채운다(= 이전 계정이 남긴 캐시). 훅은 게스트로 띄운다.
+    const { result } = await renderProbeReady(false);
+    // 앵커 — 캐시에는 정말 B 행이 있다(멱등 판정이 "담김"으로 볼 재료가 있다).
+    expect(rowsFor(result.current.savedList.data, POI_B)).toBe(1);
+
+    // 실행
+    let outcome!: SavedPlacesOutcome;
+    await act(async () => {
+      outcome = await result.current.saved.save(PLACE_B);
+    });
+
+    // 단언 — 담김(saved)이 새지 않고 로그인 유도 사유가 돌아온다. 요청도 없다.
+    expect(outcome).toEqual({ kind: 'failed', reason: 'unauthenticated' });
+    expect(hitCount('POST /api/v1/saved-places')).toBe(0);
+  });
+});
+
+describe('TRIP-1049 · 끝난 담기는 잠금을 풀어 다시 담을 수 있다 (I-11)', () => {
+  /**
+   * 진행 중 잠금은 요청이 **끝나면** 풀려야 한다. 안 풀리면 재시도가 옛 실패 결과만 되풀이하고
+   * 요청이 영영 다시 안 나간다 — 조용한 무반응(INV-4 성격).
+   */
+  it('첫 담기가 네트워크 실패로 끝난 뒤 다시 담으면 POST 가 한 번 더 나가고 이번엔 담김이다', async () => {
+    setAccessToken('valid-access');
+    let posts = 0;
+    server.use(
+      http.post(`${BASE}/saved-places`, () => {
+        posts += 1;
+        return posts === 1
+          ? HttpResponse.error()
+          : HttpResponse.json(
+              {
+                savedPlaceId: NEW_SAVED_ID,
+                savedAt: '2026-09-28T00:00:00Z',
+                place: PLACE_A,
+              },
+              { status: 201 }
+            );
+      })
+    );
+    const { result } = await renderProbeReady();
+
+    // 실행 ① — 첫 담기(실패)를 끝까지 기다린다.
+    let firstOutcome!: SavedPlacesOutcome;
+    await act(async () => {
+      firstOutcome = await result.current.saved.save(PLACE_A);
+    });
+    await flushNotifications();
+    // 앵커 — 첫 담기는 정말 실패했고 되돌려졌다(캐시 멱등이 흡수할 행이 없다).
+    expect(firstOutcome).toEqual({ kind: 'failed', reason: 'network' });
+    expect(result.current.saved.isSaved(POI_A)).toBe(false);
+    expect(hitCount('POST /api/v1/saved-places')).toBe(1);
+
+    // 실행 ② — 다시 담는다.
+    let secondOutcome!: SavedPlacesOutcome;
+    await act(async () => {
+      secondOutcome = await result.current.saved.save(PLACE_A);
+    });
+
+    // 단언 — 요청이 다시 나갔고(옛 결과 재사용 아님), 결과는 새 요청의 담김이다.
+    expect(hitCount('POST /api/v1/saved-places')).toBe(2);
+    expect(secondOutcome).toEqual({ kind: 'saved' });
+  });
+});
+
+describe('TRIP-1049 · 다른 훅 인스턴스의 임시 행도 담김이다 (I-12)', () => {
+  /**
+   * 진행 중 잠금은 훅 인스턴스(화면)마다 따로다. 홈과 탐색처럼 두 화면이 같은 장소를 담으면 둘째
+   * 화면의 잠금은 비어 있고, 막아 주는 것은 캐시 판정뿐이다 — 이때 캐시엔 첫 화면이 넣은 **임시 행**
+   * (`optimistic:`)만 있다. 임시 행을 "모름"으로 치면 POST 가 두 번 나간다.
+   */
+  it('첫 인스턴스의 담기가 대기 중일 때 둘째 인스턴스의 담기는 POST 없이 담김이다', async () => {
+    setAccessToken('valid-access');
+    const gate = holdSavePost();
+    const { result } = renderHook(
+      () => ({
+        savedList: useGetSavedPlaces(),
+        first: useSavedPlaces({ isAuthed: true }),
+        second: useSavedPlaces({ isAuthed: true }),
+      }),
+      { wrapper: createWrapper() }
+    );
+    await waitFor(
+      () => expect(result.current.savedList.isSuccess).toBe(true),
+      WAIT
+    );
+
+    // 실행 ① — 첫 인스턴스가 담기를 보내고 응답을 기다린다.
+    let firstPending!: Promise<SavedPlacesOutcome>;
+    await act(async () => {
+      firstPending = result.current.first.save(PLACE_A);
+    });
+    await waitFor(
+      () =>
+        expect(hitCount('POST /api/v1/saved-places')).toBeGreaterThanOrEqual(1),
+      WAIT
+    );
+    await flushNotifications();
+    // 앵커 — 캐시의 A 행은 서버 id 가 아니라 임시 표식 행 하나뿐이다(이 판정 갈래에 정말 닿는다).
+    const rowsA = (result.current.savedList.data ?? []).filter(
+      (entry) => entry.place.poiId === POI_A
+    );
+    expect(rowsA.map((entry) => entry.savedPlaceId)).toEqual([
+      optimisticSavedPlaceId(POI_A),
+    ]);
+
+    // 실행 ② — 둘째 인스턴스가 같은 장소를 담는다(기다리지 않는다 — 막히지 않으면 문 뒤에 매달린다).
+    let secondPending!: Promise<SavedPlacesOutcome>;
+    await act(async () => {
+      secondPending = result.current.second.save(PLACE_A);
+    });
+    await flushNotifications();
+
+    // 단언 ① — 둘째 담기는 요청을 만들지 않았다.
+    expect(hitCount('POST /api/v1/saved-places')).toBe(1);
+
+    // 실행 ③ — 문을 열어 둘 다 끝낸다.
+    gate.release();
+    let outcomes!: SavedPlacesOutcome[];
+    await act(async () => {
+      outcomes = await Promise.all([firstPending, secondPending]);
+    });
+
+    // 단언 ② — 둘 다 담김이고, 끝난 뒤에도 POST 는 한 번뿐이다.
+    expect(outcomes).toEqual([{ kind: 'saved' }, { kind: 'saved' }]);
+    expect(hitCount('POST /api/v1/saved-places')).toBe(1);
+  });
+});
+
+describe('TRIP-1049 AC-3 · 담은 곳 FAB 수의 재료(savedPoiIds)가 응답 전에 는다 (I-13)', () => {
+  it('담기를 누르면 서버가 답하기 전에 savedPoiIds 에 그 장소가 붙는다', async () => {
+    // d01·d05 FAB 라벨 "담은 장소 N곳"의 N 은 이 배열의 길이다 — 같은 캐시라 하트와 함께 움직인다.
+    setAccessToken('valid-access');
+    const gate = holdSavePost();
+    const { result } = await renderProbeReady();
+    // 앵커 — 시작은 B 하나.
+    expect(result.current.saved.savedPoiIds).toEqual([POI_B]);
+
+    let pending!: Promise<SavedPlacesOutcome>;
+    await act(async () => {
+      pending = result.current.saved.save(PLACE_A);
+    });
+    await flushNotifications();
+
+    // 단언 — 응답 전인데 이미 두 곳이다.
+    expect(result.current.saved.savedPoiIds).toEqual([POI_B, POI_A]);
+
+    // 정리
+    gate.release();
+    await act(async () => {
+      await pending;
     });
   });
 });

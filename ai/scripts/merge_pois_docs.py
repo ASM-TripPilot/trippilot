@@ -25,7 +25,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from trippilot.poi_curation.sourcing.mapping import parse_open_hours  # noqa: E402
+from trippilot.poi_curation.sourcing.mapping import (  # noqa: E402
+    non_travel_reason,
+    parse_open_hours,
+)
 
 
 def merge(docs: list[dict]) -> dict:
@@ -88,6 +91,33 @@ def reparse_open_hours(proposals: list[dict]) -> int:
     return n
 
 
+def drop_non_travel(proposals: list[dict]) -> dict[str, int]:
+    """관광 무관으로 **지금 판정되는** 제안을 뺀다. 사유별 건수를 돌려준다.
+
+    수집 게이트 5단이 이미 같은 판정을 하지만 **수집 시점에만** 한다. 규칙을 고쳐도
+    이미 수집된 것에는 소급되지 않고, 병합은 게이트를 타지 않는다 — 실측(2026-09-26):
+    공유본 18,607건에 현재 규칙으로 걸리는 것이 2건 남아 있었다(`이마트24 강릉여고점`).
+    규칙이 09-16 에 들어왔는데 공유본은 09-13 수집분이라 그렇다.
+
+    영업시간 재파싱(`reparse_open_hours`)과 **같은 자리·같은 이유**다: 판정 규칙을
+    고치면 다음 병합에서 기존 수집분에 소급된다. 외부 호출 0.
+
+    ⚠️ 이 검사는 **이름만** 본다(`_NON_TRAVEL` — 오탐 0 을 실데이터로 확인한 좁은
+    규칙). 카테고리 화이트리스트는 벤더 원 분류가 필요해 제안 문서에 없으므로 여기서
+    못 한다 — 그건 수집 게이트의 몫이고, Overture·OSM 이 합류할 때 거기서 걸린다.
+    """
+    kept: list[dict] = []
+    dropped: dict[str, int] = {}
+    for p in proposals:
+        name = (p.get("poi") or {}).get("name") or ""
+        if (reason := non_travel_reason(name)) is not None:
+            dropped[reason] = dropped.get(reason, 0) + 1
+            continue
+        kept.append(p)
+    proposals[:] = kept
+    return dropped
+
+
 def _self_check() -> None:
     """덮어쓰기 방향 — 나중 수집분이 이긴다."""
     def doc(at, name):
@@ -128,6 +158,15 @@ def main(argv: list[str]) -> int:
     if recovered:
         print(f"[merge] 영업시간 재파싱 — {recovered}건 살림 (원문은 있었는데 파싱이 비어 있던 것)",
               file=sys.stderr)
+    # 관광 무관 소급 제거 — 규칙이 수집 뒤에 들어왔거나 고쳐졌으면 여기서 걸린다.
+    if (dropped := drop_non_travel(out["proposals"])):
+        detail = " · ".join(f"{k} {v}" for k, v in sorted(dropped.items()))
+        print(f"[merge] 관광 무관 제거 — {sum(dropped.values())}건 ({detail})", file=sys.stderr)
+        out["stats"]["unique_proposals"] = len(out["proposals"])
+        # **축소 가드가 이걸 사고로 오인하지 않게 stats 에 남긴다.** 배치는
+        # "합본 < 공유본이면 실패"로 조용한 유실을 막는데, 의도한 제거도 수를
+        # 줄이므로 그 값을 빼고 비교해야 한다. 안 남기면 내일 배치가 빨개진다.
+        out["stats"]["non_travel_dropped"] = sum(dropped.values())
     text = json.dumps(out, ensure_ascii=False, indent=2)
     if args.output:
         Path(args.output).write_text(text, encoding="utf-8")

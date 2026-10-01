@@ -4,6 +4,8 @@
  * TripPilot U1 API (소셜 로그인 전용 MVP)
  * U1 기반·계정·온보딩 (M1 Auth · M2 Profile · C3 Moderation). 소셜 로그인 전용 — 이메일/비밀번호 로그인은 후속 이연. 정본 대조: docs/design/U1-API-설계.md, U1-DB스키마-설계.md, U1-내부아키텍처-설계.md
  *
+ * **횡단 규약 — 입력 형식 오류는 어느 엔드포인트에서든 400이다.** 경로변수·쿼리의 타입 변환 실패(UUID·숫자·enum)와 필수 쿼리 누락은 표준 에러 봉투 (`ErrorResponse`, code=`VALIDATION_ERROR`, `fields[].field`=문제 파라미터 이름)로 나간다. 경로별 `'400'` 선언은 **업무 검증**이 있는 곳에만 적는다 — 형식 오류까지 경로마다 중복 선언하면 무엇이 그 엔드포인트 고유의 검증인지 안 보인다. (2026-09-01 이전에는 이 갈래가 500 `INTERNAL` 로 나갔다 — UUID-PATH-400)
+ *
  * OpenAPI spec version: 0.1.0-draft
  */
 import type { CompanionType } from './companionType';
@@ -25,4 +27,18 @@ export interface Trip {
   status: TripStatus;
   createdAt: string;
   updatedAt: string;
+  /**
+   * 등록 숙소 **수**(BR-U6-22). 배정 구간 수가 아니라 서로 다른 숙소의 수라 한 숙소가 사흘을 덮어도 1이다. 0 이면 화면이 `숙소 미등록` 칩을 그린다.
+   *
+   * 조회 시 집계하는 **파생값**이다 — 저장하지 않는다. 숙소를 지우면 그 순간 줄어야 한다.
+   */
+  baseCount: number;
+  /** 일정이 **있는 일수**. 0 = 아직 생성되지 않음. ⚠ 개수이지 시간이 아니다 — 소요시간은 어디에도 싣지 않는다(INV-3). */
+  itineraryDayCount: number;
+  /**
+   * 여행이 끝난 **시점**(TRIP-826). 안 끝났으면 null.
+   * **분기는 `status` 로, 표시는 이 값으로.** 둘은 만들어지는 방식이 다르다 — `status` 의 `ENDED` 는 날짜에서 **즉시 파생**되고, 이 값은 종료 스윕이 **10분 주기로** 채운다. 여행이 막 끝난 직후에는 `status=ENDED` 인데 이 값이 아직 null 인 창이 있다.
+   * 이 값의 null 로 "안 끝났다"를 판정하면 **그 창에서 끝난 여행을 진행 중으로 본다.** 끝났는지는 `status`, 언제 끝났는지(상대 표기·정렬)는 이 값이다.
+   */
+  endedAt?: string | null;
 }

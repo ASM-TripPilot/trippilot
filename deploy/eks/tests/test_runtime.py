@@ -1,6 +1,7 @@
 """Deployment boundary tests: no cloud account or cluster required."""
 import copy
 import json
+import os
 from pathlib import Path
 import sys
 import unittest
@@ -54,6 +55,20 @@ class SecretTests(unittest.TestCase):
             with self.subTest(changed=changed), self.assertRaises(ValueError):
                 runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, **changed})
 
+    def test_google_client_secret_must_stay_empty(self):
+        """공개(iOS) 클라이언트에 시크릿을 보내면 Google 이 invalid_client 로 거절한다(2026-09-23 실측).
+
+        부재·빈 값은 정상이어야 한다 — 그래야 이미 그 키가 들어 있는 시크릿의 배포 전체가
+        검증에서 죽지 않고, 값을 채운 경우에만 이유와 함께 막힌다.
+        """
+        base = {name: {} for name in runtime_secrets.GROUP_KEYS}
+        for ok in ({}, {"GOOGLE_CLIENT_SECRET": ""}, {"GOOGLE_CLIENT_SECRET": "   "}):
+            with self.subTest(ok=ok):
+                runtime_secrets.validate_groups({**base, "backend": ok})
+        with self.assertRaises(ValueError) as caught:
+            runtime_secrets.validate_groups({**base, "backend": {"GOOGLE_CLIENT_SECRET": "GOCSPX-무언가"}})
+        self.assertIn("invalid_client", str(caught.exception))
+
     def test_rejects_unknown_keys_and_nonstring_secret_values(self):
         for bad in ({"AI_LLM_PROVIDER": "openai"}, {"OPENAI_API_KEY": 123}, {"OPENAI_API_KEY": "a\x00b"}):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
@@ -76,12 +91,20 @@ class SecretTests(unittest.TestCase):
         manifests = runtime_secrets.runtime_manifests(groups, outputs(), "trippilot", False)
         self.assertNotIn("TRIPPILOT_VECTOR_DB_URL", manifests[1]["stringData"])
 
-    def test_aws_put_passes_secret_only_over_stdin(self):
-        shell = Mock(return_value="{}")
+    def test_aws_put_keeps_secret_out_of_argv_and_removes_payload_file(self):
+        observed = {}
+
+        def shell(argv, payload=None):
+            self.assertIsNone(payload)
+            self.assertNotIn("private-value", " ".join(argv))
+            observed["path"] = next(a for a in argv if a.startswith("file://"))[len("file://"):]
+            with open(observed["path"], encoding="utf-8") as stream:
+                self.assertIn("private-value", stream.read())
+            self.assertEqual(os.stat(observed["path"]).st_mode & 0o777, 0o600)
+            return "{}"
+
         runtime_secrets.put_secret(shell, "ap-northeast-2", "arn-example", {"DB_PASSWORD": "private-value"})
-        argv, payload = shell.call_args.args
-        self.assertNotIn("private-value", " ".join(argv))
-        self.assertIn("private-value", payload)
+        self.assertFalse(os.path.exists(observed["path"]))
 
     def test_aws_empty_container_can_be_seeded_but_access_denied_fails(self):
         shell = Mock(side_effect=runtime.CommandError("aws", "ResourceNotFoundException"))
@@ -208,7 +231,10 @@ class RuntimeIntegrationTests(unittest.TestCase):
                 arn = argv[argv.index("--secret-id") + 1]
                 return json.dumps({"SecretString": json.dumps(saved[arn])})
             if "put-secret-value" in argv:
-                request = json.loads(payload)
+                # put_secret 은 값을 argv 도 stdin 도 아닌 0600 임시파일로 넘긴다.
+                path = next(a for a in argv if a.startswith("file://"))[len("file://"):]
+                with open(path, encoding="utf-8") as stream:
+                    request = json.load(stream)
                 saved[request["SecretId"]] = json.loads(request["SecretString"])
                 writes.append(request["SecretId"])
                 return "{}"

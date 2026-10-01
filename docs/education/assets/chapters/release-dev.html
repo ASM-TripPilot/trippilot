@@ -1,0 +1,43 @@
+<p><strong>수업 실습에서는 강사가 준비한 실행 로그를 읽는 것으로 대체할 수 있다.</strong> 실제 실행자는 배포할 <code>develop</code>의 commit SHA, 해당 코드의 앱 CI 결과, GitHub Environment 변수, AWS 계정과 리전을 먼저 기록한다. AWS deploy workflow의 검증 job은 인프라·배포 도구·Helm 검사와 backend 종료 설정의 일부 테스트를 수행한다. backend·AI·frontend 전체 테스트 성공을 자동으로 종합 확인하는 release gate는 현재 별도로 구현되어 있지 않다.</p>
+<p>기존 앱 CI가 GHCR로 이미지를 발행했더라도 AWS workflow가 그 이미지를 가져와 배포하지는 않는다. 앱 CI 통과는 코드 품질의 증거이고 AWS workflow는 해당 실행에서 ECR용 이미지를 다시 만든다. branch가 이미 다음 commit으로 이동했다면 이전 CI의 초록색 표시를 새 commit의 검증으로 간주하면 안 된다.</p>
+<div class="table-wrap"><table>
+<caption>현재 workflow에서 가능한 DEV 실행 순서</caption>
+<thead><tr><th>실행</th><th>Run workflow 입력</th><th>관찰할 결과</th></tr></thead>
+<tbody>
+<tr><td>① 변경 미리보기</td><td>branch develop<br/>environment dev<br/>mode plan<br/>deploy_application false</td><td>기존 state로 plan을 생성. 앱 빌드·Helm 실행 없음</td></tr>
+<tr><td>② 인프라 준비</td><td>develop / dev / apply<br/>deploy_application false</td><td>VPC·EKS·ECR·RDS·Redis·비밀값 저장소 생성. 앱 Pod는 아직 없음</td></tr>
+<tr><td>③ 운영 설정</td><td>Secrets Manager와 ACM/DNS 확인</td><td>필요한 외부 API 키·인증 설정 준비</td></tr>
+<tr><td>④ 앱 배포</td><td>develop / dev / apply<br/>deploy_application true<br/>embedding_enabled false</td><td>plan/apply → 새 이미지 → Secret·DB 초기화 → Helm → smoke</td></tr>
+<tr><td>⑤ 외부 검증</td><td>API DNS를 NLB로 연결</td><td>TLS·health·허용 경로·업무 API 확인</td></tr>
+</tbody>
+</table></div>
+<p>UI 경로는 Actions → <strong>AWS / Terraform and EKS deploy</strong> → Run workflow이다. <code>mode=plan</code>이면 <code>deploy_application=true</code>를 선택했더라도 앱 배포는 실행하지 않는다. 반대로 앱만 바꿔 배포하는 경우에도 현재 workflow는 인프라 plan/apply를 먼저 수행한다. 앱 전용 승격 입력은 아직 없다.</p>
+<div class="code-block"><p class="code-label">실제 workflow가 적용하는 계획 · 읽기 예제</p><pre><code>terraform plan -lock-timeout=5m \
+  -var-file="../environments/$DEPLOY_ENVIRONMENT.tfvars" \
+  -out="$RUNNER_TEMP/trippilot.tfplan"
+
+# mode=apply일 때만 실행
+terraform apply -lock-timeout=5m "$RUNNER_TEMP/trippilot.tfplan"</code></pre></div>
+<p>같은 workflow 실행 안에서는 저장한 plan 파일을 apply한다. 별도 plan 실행에서 나온 파일을 나중의 apply 실행이 재사용하는 것은 아니다. S3 state를 가리키는 계정·리전·환경을 바꾸면 전혀 다른 인프라를 대상으로 계획할 수 있으므로 Summary의 state 버킷 이름도 확인한다.</p>
+<p>인프라 생성 뒤 Secrets Manager에는 backend·ai·database·shared 저장소가 생긴다. Terraform은 저장소를 만들고 앱 비밀값은 배포 도구가 처리한다. 비어 있으면 DB용 암호, backend/AI 공통 서비스 토큰, RSA JWT 서명키를 생성하고 기존 값은 유지한다. 외부 LLM·OAuth·기상 API 키를 자동으로 발급하지는 않는다. 필요한 키 이름은 <a href="../../deploy/eks/runtime_secrets.py">runtime_secrets.py</a>의 허용 목록을 따라 Secrets Manager에서 입력하며 값 자체를 수업 제출물·로그·Helm values에 복사하지 않는다.</p>
+<div class="table-wrap"><table>
+<caption>앱 배포 job에서 실제로 일어나는 일</caption>
+<thead><tr><th>단계</th><th>입력 → 출력</th><th>왜 이 순서인가</th></tr></thead>
+<tbody>
+<tr><td>Terraform output 읽기</td><td>ECR URL·EKS 이름·DB 주소·Secret ARN</td><td>환경 주소를 workflow에 중복 하드코딩하지 않음</td></tr>
+<tr><td>Buildx·ECR push</td><td>Dockerfile → immutable ECR tag</td><td>Pod가 실행할 앱 이미지를 먼저 준비</td></tr>
+<tr><td>EKS 연결</td><td>배포 IAM Role → kubeconfig</td><td>환경별 Access Entry로 Kubernetes 접근</td></tr>
+<tr><td>sync-secrets·render-values</td><td>Secrets Manager → Kubernetes Secret<br/>output·tag·인증서 → 비밀값 없는 values</td><td>앱 시작 전 자격증명과 환경 설정 준비</td></tr>
+<tr><td>bootstrap-db</td><td>임시 관리자 Job → DB 역할·스키마·AI DB</td><td>Flyway와 앱 사용자가 접근할 기반 준비</td></tr>
+<tr><td>Helm</td><td>앞서 생성한 values와 chart → Pod</td><td>환경 설정과 앱 실행 정의 결합</td></tr>
+<tr><td>smoke·cleanup</td><td>내부 연결 검사 → 실행 Summary</td><td>연결 확인, 임시 관리자 자격증명·파일 제거</td></tr>
+</tbody>
+</table></div>
+<p>DB 초기화 Job만 임시로 RDS 관리자 자격증명을 사용한다. backend 런타임 SQL은 <code>app_user</code>, Flyway는 <code>app_migrate</code>를 사용하며 앱 Pod에 관리자 암호를 넘기지 않는다. DB 초기화는 역할과 스키마를 준비하는 반복 가능한 작업이고 애플리케이션 Flyway migration과 DB 백업 복구는 서로 다른 작업이다. Secret을 수정했으면 수동 앱 배포를 다시 실행해 동기화와 Pod 교체가 일어나게 한다.</p>
+<div class="code-block"><p class="code-label">현재 Helm 배포 명령 · workflow 내부 발췌</p><pre><code>helm upgrade --install trippilot deploy/eks/chart --namespace trippilot \
+  -f "deploy/eks/chart/values-$DEPLOY_ENVIRONMENT.yaml" \
+  -f "$RUNNER_TEMP/trippilot-values.json" \
+  --set-string "rolloutNonce=$DEPLOY_RUN_ID" \
+  --atomic --wait --timeout 20m --history-max 10</code></pre></div>
+<p>첫 <code>-f</code>는 replica 수·PDB 같은 환경 정책, 다음 <code>-f</code>는 이번 Terraform output과 이미지 tag를 사용한다. 뒤에 지정한 values가 앞의 값을 덮어쓰며 <code>--set-string</code>은 마지막으로 적용된다. <code>rolloutNonce</code>가 바뀌면 같은 이미지 tag라도 Pod template이 달라져 Secret 변경을 반영할 새 Pod를 만든다. <code>--atomic</code>은 Helm upgrade 자체가 실패하면 변경을 되돌리고 <code>--wait</code>도 활성화한다. <a href="https://helm.sh/docs/v3/helm/helm_upgrade/">Helm 3 upgrade 옵션</a>.</p>
+<p class="source-note">실제 실행 정의: <a href="../../.github/workflows/aws-deploy.yml">aws-deploy.yml</a>, <a href="../../infra/scripts/workflow_config.py">환경·branch 검증</a>, <a href="../../deploy/eks/runtime.py">배포 도구</a>, <a href="../../deploy/eks/runtime_db.py">DB 초기화 도구</a>.</p>

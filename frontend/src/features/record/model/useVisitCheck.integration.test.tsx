@@ -1,12 +1,18 @@
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  defaultScheduler,
+  notifyManager,
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
 import { useGetTripsTripIdVisitsDaysDay } from '@/shared/api/generated/trips/trips';
 import type { ArriveRequest, VisitCheck } from '@/shared/api/generated/schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { flushNotifications } from '@/test-support/flushNotifications';
 
 import { deriveVisitStatus } from './visitStatus';
 import { useVisitCheck, type VisitCheckOutcome } from './useVisitCheck';
@@ -26,6 +32,11 @@ import { useVisitCheck, type VisitCheckOutcome } from './useVisitCheck';
  *
  * 왜 통합 버킷인가: 심판 대상이 "실제로 나간 요청·바디"와 "응답 전/롤백 후 캐시 상태"다 — msw + 실
  * QueryClient 로만 관측 가능(execution `useVisitCheck.integration.test.tsx` 와 같은 자리·장치).
+ *
+ * 화면 읽기 규율(TRIP-884): react-query 는 캐시 변경 알림을 스케줄러로 미뤄 보낸다. 이 파일은
+ * 그 알림을 일부러 5ms 늦춰(beforeAll) "알림을 안 기다리고 result.current 를 읽는" 단언을 드러낸다.
+ * ⚠️ 항상 red 는 아니다 — 기대값이 호출 전 값과 같은 단언(롤백 후 false 등)은 flush 를 빼먹어도
+ * 옛 화면을 읽고 통과한다. 그러니 화면을 읽기 전엔 예외 없이 `flushNotifications()` 를 거친다.
  */
 
 // authedClient(mutator 인증 계층)가 @/shared/storage 를 정적으로 문다.
@@ -73,6 +84,7 @@ const hitCount = (needle: string) =>
   observedHits.filter((hit) => hit === needle).length;
 
 beforeAll(() => {
+  notifyManager.setScheduler((cb) => setTimeout(cb, 5));
   server.listen({ onUnhandledRequest: 'error' });
   server.events.on('request:start', ({ request }) => {
     observedHits.push(`${request.method} ${new URL(request.url).pathname}`);
@@ -90,7 +102,10 @@ afterEach(() => {
   clearAccessToken();
 });
 
-afterAll(() => server.close());
+afterAll(() => {
+  notifyManager.setScheduler(defaultScheduler);
+  server.close();
+});
 
 function createWrapper() {
   const client = new QueryClient({
@@ -180,11 +195,14 @@ describe('AC-1 · BR-U5-01 — 완료는 실적에만 적재, plan 미접촉', (
     await act(async () => {
       pending = result.current.vc.complete('v1');
     });
+    await flushNotifications();
 
     // 단언 ① — 서버가 답하기 전에 이미 완료(낙관).
     expect(cacheStatus(result.current.visits, 'v1')).toBe('COMPLETED');
     // 단언 ② — 완료 요청이 그 visitCheckId 로 나갔다.
-    expect(hitCount(`POST /api/v1/trips/${TRIP}/visits/v1/complete`)).toBe(1);
+    await waitFor(() =>
+      expect(hitCount(`POST /api/v1/trips/${TRIP}/visits/v1/complete`)).toBe(1)
+    );
     // 단언 ③ — plan(visit_slot=itinerary) 은 어떤 요청도 안 나갔다(BR-U5-01).
     expect(observedHits.filter((h) => /\/itinerary/.test(h))).toEqual([]);
 
@@ -226,6 +244,7 @@ describe('AC-2 · BR-U5-02 — 재체크 409 롤백, 파생 상태 불변', () =
     await act(async () => {
       pending = result.current.vc.complete('v1');
     });
+    await flushNotifications();
     // 단언 mid — 낙관이 실제로 일어났다(이게 없으면 no-op 훅이 공허 통과).
     expect(cacheStatus(result.current.visits, 'v1')).toBe('COMPLETED');
 
@@ -235,6 +254,7 @@ describe('AC-2 · BR-U5-02 — 재체크 409 롤백, 파생 상태 불변', () =
     await act(async () => {
       outcome = await pending;
     });
+    await flushNotifications();
 
     // 단언 ① — 사유가 호출자에게 도달(조용히 삼키면 INV-4 위반).
     expect(outcome).toEqual({ kind: 'failed', reason: 'conflict' });
@@ -279,6 +299,7 @@ describe('AC-5 · BR-U5-03 — 즉석 방문 여러 건 append', () => {
         source: 'MANUAL',
       });
     });
+    await flushNotifications();
 
     // 단언 ① — 각 호출 바디가 slotKey=null · source MANUAL(즉석 방문).
     expect(capturedBodies).toEqual([
@@ -313,10 +334,13 @@ describe('skip 배선(라이트) — 건너뜀은 낙관 + POST skip 1회', () =
     await act(async () => {
       pending = result.current.vc.skip('v1');
     });
+    await flushNotifications();
     // 단언 ① — 응답 전 건너뜀으로 낙관 반영.
     expect(cacheStatus(result.current.visits, 'v1')).toBe('SKIPPED');
     // 단언 ② — skip 요청이 그 visitCheckId 로 나갔다.
-    expect(hitCount(`POST /api/v1/trips/${TRIP}/visits/v1/skip`)).toBe(1);
+    await waitFor(() =>
+      expect(hitCount(`POST /api/v1/trips/${TRIP}/visits/v1/skip`)).toBe(1)
+    );
 
     gate.release();
     let outcome!: VisitCheckOutcome;
@@ -367,6 +391,7 @@ describe('★W-2 — 동시 두 도착 중 한쪽 실패가 다른 쪽을 지우
       });
       await pA; // A 404 즉시 실패 → 롤백이 여기서 돈다. B 는 문에 걸려 pending.
     });
+    await flushNotifications();
 
     // 단언 — A 롤백 후에도 B 의 낙관이 살아남는다(통짜 스냅숏 롤백이면 B 가 지워져 red).
     expect(cacheHasPoi(result.current.visits, 'b')).toBe(true);

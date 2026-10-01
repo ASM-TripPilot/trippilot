@@ -1,3 +1,5 @@
+import fc from 'fast-check';
+
 import type { Itinerary } from '@/shared/api/generated/schemas';
 
 import { resolveLiveState } from './liveState';
@@ -47,18 +49,60 @@ describe('resolveLiveState — 상태 판정', () => {
     expect(state).toEqual({ kind: 'error' });
   });
 
-  it('A1-4 오늘이 여행 구간 밖이면 outsideToday다', () => {
-    const state = resolveLiveState({ ...base, todayDate: '2026-09-01' });
-    expect(state).toEqual({ kind: 'outsideToday' });
+  it('A1-4a 여행 전이면 막지 않고 active + 첫날(todayIndex 0)이다', () => {
+    const state = resolveLiveState({ ...base, todayDate: '2026-08-01' });
+    expect(state).toEqual({
+      kind: 'active',
+      itinerary: base.itinerary,
+      todayIndex: 0,
+      hasActiveTrigger: false,
+    });
   });
 
-  it('A1-5 오늘이 구간 안이면 active + todayIndex를 준다', () => {
-    const state = resolveLiveState({ ...base, todayDate: '2026-08-21' });
-    expect(state.kind).toBe('active');
-    if (state.kind === 'active') {
-      expect(state.todayIndex).toBe(1);
-      expect(state.hasActiveTrigger).toBe(false);
-    }
+  it('A1-4b 여행 후면 막지 않고 active + 마지막 날(todayIndex 1)이다', () => {
+    const state = resolveLiveState({ ...base, todayDate: '2026-09-01' });
+    expect(state).toEqual({
+      kind: 'active',
+      itinerary: base.itinerary,
+      todayIndex: 1,
+      hasActiveTrigger: false,
+    });
+  });
+
+  it('A1-4c 어떤 날짜가 와도 active 이고 todayIndex 는 days 범위 안이다', () => {
+    const DAY_MS = 86_400_000;
+    const anyDate = fc
+      .integer({ min: 0, max: 36_500 })
+      .map((n) =>
+        new Date(Date.UTC(2000, 0, 1) + n * DAY_MS).toISOString().slice(0, 10)
+      );
+
+    fc.assert(
+      fc.property(anyDate, (todayDate) => {
+        const state = resolveLiveState({ ...base, todayDate });
+        expect(state.kind).toBe('active');
+        if (state.kind === 'active') {
+          expect(state.todayIndex).toBeGreaterThanOrEqual(0);
+          expect(state.todayIndex).toBeLessThan(base.itinerary.days.length);
+        }
+      })
+    );
+  });
+
+  it('A1-5 오늘이 구간 안(3일 중 가운데 날)이면 active + 그 날 todayIndex를 준다', () => {
+    // 가운데 날은 여행 전(0)·여행 후(마지막) 어느 쪽 폴백으로도 나오지 않는 답이다.
+    const threeDays = itinerary(['2026-08-20', '2026-08-21', '2026-08-22']);
+    const state = resolveLiveState({
+      ...base,
+      itinerary: threeDays,
+      todayDate: '2026-08-21',
+    });
+    expect(state).toEqual({
+      kind: 'active',
+      itinerary: threeDays,
+      todayIndex: 1,
+      hasActiveTrigger: false,
+    });
   });
 
   it('A1-6 활성 트리거가 있으면 active에서 hasActiveTrigger=true다', () => {
@@ -84,7 +128,7 @@ describe('resolveLiveState — 상태 판정', () => {
  * *(개념)* 404 는 react-query 에서 `isError=true` 이기도 하다. 그래서 page 가 `isNotFound(error)`
  * (응답 status===404)로 계산해 **`isNotFound` 를 따로 주입**하고, 이 함수가 error 보다 **먼저**
  * notFound 를 낸다. 네트워크 오류(응답 없음)는 page 가 `isNotFound=false`(모름=안전측)를 주므로
- * error 로 남는다. 우선순위: loading > notFound > error > outsideToday > active(겹침 없음).
+ * error 로 남는다. 우선순위: loading > notFound > error > active(겹침 없음).
  *
  * `isNotFound` 는 **옵셔널**(기본 false)이라 위 A1 케이스·기존 소비자를 안 깬다(additive).
  */

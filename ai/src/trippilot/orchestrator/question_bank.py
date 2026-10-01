@@ -33,6 +33,7 @@ BANK_COLLECTION = "intent_bank"  # 벡터 스토어 collection 3종 중 하나 (
 _YAML_MODE: dict[str, RoutingMode] = {
     "Delegate": RoutingMode.DELEGATE,
     "FastPath": RoutingMode.FAST_PATH,
+    "Fallback": RoutingMode.FALLBACK,  # 거부 앵커 전용 (OUT_OF_SCOPE)
 }
 
 
@@ -57,7 +58,6 @@ class BankEntry:
     reviewed: bool
     origin: str
     bank_version: str
-    slot_pattern: dict  # {슬롯명: "regex:..."} — seed에는 아직 없음(빈 dict)
 
     def payload(self) -> dict:
         """벡터 스토어 payload — 라우터가 매칭 결과를 해석하는 데 필요한 것만."""
@@ -67,7 +67,6 @@ class BankEntry:
             "reviewed": self.reviewed,
             "origin": self.origin,
             "bank_version": self.bank_version,
-            "slot_pattern": dict(self.slot_pattern),
         }
 
 
@@ -108,7 +107,6 @@ def load_bank(data: object) -> tuple[BankEntry, ...]:
         if not isinstance(reviewed, bool):
             raise BankLoadError(f"{intent.value}: reviewed는 bool이어야 함")
         origin = group.get("origin", default_origin)
-        slot_pattern = _parse_slot_pattern(group.get("slot_pattern"), intent)
         questions = group.get("questions")
         if not isinstance(questions, Sequence) or isinstance(questions, (str, bytes)) or not questions:
             raise BankLoadError(f"{intent.value}: questions는 비어있지 않은 목록이어야 함")
@@ -136,7 +134,6 @@ def load_bank(data: object) -> tuple[BankEntry, ...]:
                     reviewed=reviewed,
                     origin=item_origin,
                     bank_version=version,
-                    slot_pattern=slot_pattern,
                 )
             )
     return tuple(entries)
@@ -147,7 +144,10 @@ def _parse_intent(label: object, where: str) -> Intent:
         intent = Intent(label)
     except ValueError:
         raise BankLoadError(f"{where}: closed-set 밖 의도 라벨 {label!r}") from None
-    if intent not in ROUTABLE_INTENTS:
+    # OUT_OF_SCOPE 는 위임 대상이 아니지만 **거부 앵커**로는 실린다 — "우리 일이 아니다" 를 가리키는
+    # 문장이 뱅크에 없으면 딴소리도 13종 중 가장 덜 먼 곳에 붙는다(실측: 범위 밖 9건이 전부 엉뚱한
+    # 의도에 top1). 그 밖의 비위임 라벨은 여전히 금지다.
+    if intent not in ROUTABLE_INTENTS and intent is not Intent.OUT_OF_SCOPE:
         raise BankLoadError(f"{where}: 위임 대상이 아닌 라벨은 뱅크에 실을 수 없음 {intent.value}")
     return intent
 
@@ -172,16 +172,6 @@ def _check_routing(intent: Intent, group: Mapping) -> None:
             f"{intent.value}: mode가 라우팅 테이블과 불일치 "
             f"(yaml={mode.value}, 정본={entry.mode.value})"
         )
-
-
-def _parse_slot_pattern(value: object, intent: Intent) -> dict:
-    if value is None:
-        return {}
-    pattern = _require_mapping(value, f"{intent.value}.slot_pattern")
-    for name, rule in pattern.items():
-        if not isinstance(name, str) or not isinstance(rule, str):
-            raise BankLoadError(f"{intent.value}.slot_pattern: 키·값 모두 문자열이어야 함")
-    return dict(pattern)
 
 
 def load_bank_file(path: Path, parse: Callable[[str], object]) -> tuple[BankEntry, ...]:

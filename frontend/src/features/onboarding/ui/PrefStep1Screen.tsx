@@ -121,10 +121,16 @@ export function PrefStep1Screen({
         <View className="flex-row items-center justify-between px-lg pb-sm pt-2xl">
           <View className="flex-row items-center gap-sm">
             <View className="flex-row items-center gap-xs">
-              <View className="h-[6px] w-[6px] rounded-pill bg-ink" />
-              <View className="h-[6px] w-[6px] rounded-pill bg-hairline-strong" />
+              <View
+                testID="onboarding-pref1-progress-active"
+                className="h-[6px] w-[6px] rounded-pill bg-primary"
+              />
+              <View
+                testID="onboarding-pref1-progress-empty"
+                className="h-[6px] w-[6px] rounded-pill bg-hairline"
+              />
             </View>
-            <Text className="font-noto text-caption text-muted">1/2</Text>
+            <Text className="font-noto text-caption text-muted">1 / 2</Text>
           </View>
           <Pressable
             testID="onboarding-pref1-skip-top"
@@ -200,14 +206,9 @@ export function PrefStep1Screen({
               className="flex-row gap-[10px] rounded-button bg-surface-soft p-md"
             >
               <InfoCircleGlyph size={16} />
-              <View className="flex-1 gap-xs">
-                <Text className="font-noto text-label text-muted">
-                  관심사와 여행 페이스만 먼저 확인해요
-                </Text>
-                <Text className="font-noto text-label text-muted">
-                  예산·동행·음식·이동은 다음 단계에서 물어볼게요
-                </Text>
-              </View>
+              <Text className="flex-1 font-noto text-label text-muted">
+                지금 안 정해도 앱을 쓰며 자연스럽게 맞춰가요
+              </Text>
             </View>
           </View>
         </ScrollView>
@@ -222,16 +223,6 @@ export function PrefStep1Screen({
           >
             <Text className="font-noto-bold text-section font-bold text-on-primary">
               다음
-            </Text>
-          </Pressable>
-          <Pressable
-            testID="onboarding-pref1-skip-bottom"
-            accessibilityRole="button"
-            onPress={onSkipAll}
-            className="items-center pb-[2px] pt-[14px]"
-          >
-            <Text className="font-noto text-center text-label text-muted underline">
-              나중에 설정하고 시작
             </Text>
           </Pressable>
         </View>

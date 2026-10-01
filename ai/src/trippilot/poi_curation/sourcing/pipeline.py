@@ -24,7 +24,7 @@ from datetime import datetime
 
 from trippilot.ports.poi_sourcing_port import (
     PoiSourcingPort,
-    SourcedHours,
+    SourcedDetail,
     SourcedPlaceRecord,
     SourcingError,
 )
@@ -52,7 +52,7 @@ SCHEMA_VERSION = 1
 # 실제 피드는 TourAPI 4.0 KorService2.
 SOURCE_NAME = "TOURAPI"
 _OPENING_HOURS_MAX = 200  # backend poi.opening_hours varchar(200)
-_NO_HOURS = SourcedHours(hours_raw=None, rest_raw=None)
+_NO_DETAIL = SourcedDetail(hours_raw=None, rest_raw=None)
 
 # TourAPI(KorService2) areaCode ↔ 광역 지자체 이름 — 17개 전부 (기본 순회 대상).
 # 1 서울 · 2 인천 · 3 대전 · 4 대구 · 5 광주 · 6 부산 · 7 울산 · 8 세종 ·
@@ -179,7 +179,7 @@ def collect(
     prior = state if state is not None else empty_state()
     budget = _CallBudget(max_calls)
     listed: list[SourcedPlaceRecord] = []
-    hours_by_ref: dict[str, SourcedHours] = {}
+    hours_by_ref: dict[str, SourcedDetail] = {}
     page_failures = 0
     detail_failures = 0
     skipped_unchanged = 0
@@ -234,7 +234,7 @@ def collect(
                 if not kind_budget.take():
                     continue  # 남은 항목은 영업시간 없이 산출 ("정보 없음 ≠ 배제")
                 try:
-                    hours_by_ref[record.source_ref] = source.fetch_hours(
+                    hours_by_ref[record.source_ref] = source.fetch_detail(
                         record.source_ref, record.kind)
                 except SourcingError as e:
                     detail_failures += 1
@@ -266,7 +266,7 @@ def collect(
             # backend-ci를 적색으로 만듦. 드롭+카운트 (침묵 금지).
             address_missing += 1
             continue
-        hours = hours_by_ref.get(record.source_ref, _NO_HOURS)
+        hours = hours_by_ref.get(record.source_ref, _NO_DETAIL)
         candidates.append(SourcingCandidate(
             source_ref=record.source_ref,
             kind=record.kind,
@@ -280,6 +280,7 @@ def collect(
             hours_raw=hours.hours_raw,
             image_url=record.image_url,
             modified_at=record.modified_at,
+            detail_raw=hours.detail_raw,
         ))
 
     report = (gate or CollectionGate()).apply(candidates)
@@ -348,6 +349,8 @@ def to_output_document(
     - opening_hours_raw: usetime 원문 200자 절단 (poi.opening_hours varchar(200)
       — 백엔드는 원문 문자열을 저장하므로 파싱본만 주면 원문이 소실된다)
     - source: 백엔드 CHECK 허용값 어휘 "TOURAPI"
+    - provenance.detail: 상세 응답의 표시용 원문(벤더 필드명 그대로, 비파싱). 하나도
+      없으면 **키 자체가 없다** — 소비처는 `.get("detail") or {}` 로 읽는다.
     """
     return {
         "schema_version": SCHEMA_VERSION,
@@ -364,17 +367,24 @@ def to_output_document(
                 "tags": list(category_tags(p.candidate.category_codes)),
                 "region": extract_region(p.candidate.address),
                 "opening_hours_raw": _truncate(p.candidate.hours_raw, _OPENING_HOURS_MAX),
-                "provenance": {
-                    "content_id": p.candidate.source_ref,
-                    "content_type_id": p.candidate.kind,
-                    "address": p.candidate.address,
-                    "image_url": p.candidate.image_url,
-                    "modified_time": p.candidate.modified_at,
-                },
+                "provenance": _provenance(p.candidate),
             }
             for p in result.report.passed
         ],
     }
+
+
+def _provenance(c: SourcingCandidate) -> dict:
+    prov: dict = {
+        "content_id": c.source_ref,
+        "content_type_id": c.kind,
+        "address": c.address,
+        "image_url": c.image_url,
+        "modified_time": c.modified_at,
+    }
+    if c.detail_raw:
+        prov["detail"] = dict(c.detail_raw)
+    return prov
 
 
 def _truncate(text: str | None, limit: int) -> str | None:

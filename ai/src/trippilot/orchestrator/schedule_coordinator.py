@@ -65,6 +65,7 @@ from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.context import PermissionDeniedError, Principal, ResourceRef
 from trippilot.domain.event import EventInfo
 from trippilot.domain.freshness import InfoPacket, ProviderKind, ProviderStatus
+from trippilot.domain.intent import Intent
 from trippilot.domain.llm import CandidatePool
 from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.persona import PersonaSummary
@@ -183,7 +184,7 @@ class ScheduleCoordinator:
         #    풀(PLACE→poi_curation)은 closed-set의 유일한 출처(INV-1)이자 필수 — 요구표
         #    "풀 없으면 즉시 실패". 날씨·페르소나·행사는 없어도 일정은 나간다.
         packets = self._info.collect(
-            "GENERATE_SCHEDULE",
+            Intent.GENERATE_SCHEDULE,
             {
                 "pool_request": CandidatePoolRequest(
                     anchor=request.anchor,

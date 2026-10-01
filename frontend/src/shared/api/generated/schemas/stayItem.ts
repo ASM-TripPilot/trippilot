@@ -4,6 +4,8 @@
  * TripPilot U1 API (소셜 로그인 전용 MVP)
  * U1 기반·계정·온보딩 (M1 Auth · M2 Profile · C3 Moderation). 소셜 로그인 전용 — 이메일/비밀번호 로그인은 후속 이연. 정본 대조: docs/design/U1-API-설계.md, U1-DB스키마-설계.md, U1-내부아키텍처-설계.md
  *
+ * **횡단 규약 — 입력 형식 오류는 어느 엔드포인트에서든 400이다.** 경로변수·쿼리의 타입 변환 실패(UUID·숫자·enum)와 필수 쿼리 누락은 표준 에러 봉투 (`ErrorResponse`, code=`VALIDATION_ERROR`, `fields[].field`=문제 파라미터 이름)로 나간다. 경로별 `'400'` 선언은 **업무 검증**이 있는 곳에만 적는다 — 형식 오류까지 경로마다 중복 선언하면 무엇이 그 엔드포인트 고유의 검증인지 안 보인다. (2026-09-01 이전에는 이 갈래가 500 `INTERNAL` 로 나갔다 — UUID-PATH-400)
+ *
  * OpenAPI spec version: 0.1.0-draft
  */
 import type { StayPrice } from './stayPrice';
@@ -19,4 +21,10 @@ export interface StayItem {
   stayType: string;
   /** 최저가 스냅숏('부터 가격'). null=가격 미확인(BR-U1-14) */
   price?: StayPrice | null;
+  /** 도로명 우선, 없으면 지번. **null = 모름**(정본 채움률 100%) */
+  address?: string | null;
+  /** 표시형 전화번호 — 그대로 `tel:` 에 실을 수 있다. **null = 모름이지 "전화 없는 숙소"가 아니다**(정본 채움률 54.8%). */
+  phone?: string | null;
+  /** 객실 수(양실+한실). **null = 모름**(정본 채움률 99.5%). 0 은 내려가지 않는다 */
+  rooms?: number | null;
 }

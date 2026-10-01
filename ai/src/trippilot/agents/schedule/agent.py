@@ -7,6 +7,7 @@
 
 ```
 ScheduleTask → ② 게이트웨이 선호 점수 (전 일자 1회)  실패·스킵 → 규칙 점수 (BR-U4-09의 "호출측"이 여기다)
+             → ②′ (선택) 점수 상위 지도 실재 검증     못 찾음 → 점수 강등 / 실패 → 강등 없이 진행 (TRIP-904)
              → ③ ItineraryProblem 조립               (후보는 풀에서 나온 것만)
              → ④ 어셈블리 solve                       (체인 폴백은 어셈블리 소유 — 여기서 이중 폴백 금지)
              → ⑤ (선택) 설명 부착                      실패 → 설명 없이 진행
@@ -52,14 +53,18 @@ from trippilot.agents.schedule.outcome import (
 )
 from trippilot.assembly_engine.facade import AssemblyConflictError
 from trippilot.assembly_engine.scorer import build_rule_score
+from trippilot.poi_curation.place_fees import EMPTY as FEES_EMPTY, FeeTable
 from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import (
     BudgetLevel,
     GeoPoint,
+    Pace,
     PoiId,
     ScheduleId,
     TraceId,
     TransportMode,
+    Rejection,
+    RejectionKind,
 )
 from trippilot.domain.context import PermissionDeniedError, Principal, ResourceRef
 from trippilot.domain.itinerary import (
@@ -77,6 +82,13 @@ from trippilot.llm_gateway.workers.alternative_explanation import (
 )
 from trippilot.llm_gateway.workers.explanation import ExplanationWorker
 from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
+from trippilot.ports.place_hours_port import HoursQuery, HoursVerdict, PlaceHoursPort
+from trippilot.ports.place_existence_port import (
+    ExistenceQuery,
+    ExistenceStatus,
+    ExistenceVerdict,
+    PlaceExistencePort,
+)
 from trippilot.ports.trace_port import TracePort
 
 _COMPONENT = "agents.schedule"
@@ -142,6 +154,18 @@ class GenerateItineraryRequest:
     # 설명 생략 요청 (TRIP-479) — 백엔드가 설명을 별도 경계로 병렬 조회할 때 false.
     include_explanations: bool = True
     radius_override_km: float | None = None
+    # 여행 속도 (TRIP-906) — Provider 수집물이 아니라 **요청에 실려 오는 값**이라
+    # 봉투(ScheduleTask)가 아니라 여기 있다. budget·transport 와 같은 길이다.
+    pace: Pace | None = None
+    # 재계획 지시가 고른 방향 (KB-4 → `DirectiveSpec.prefer/avoid_categories`).
+    # `pace` 와 같은 길이다 — Provider 수집물이 아니라 **요청에 실려 오는 값**이라
+    # 봉투가 아니라 여기 있다. generate 경로는 기본값(빈 집합)이라 무영향이다.
+    prefer_categories: frozenset[PoiCategory] = frozenset()
+    avoid_categories: frozenset[PoiCategory] = frozenset()
+    # 거절 이력 (TRIP-964) — 백엔드가 여행 단위로 누적해 싣는다. `pace`·지시와 같은 길이다
+    # (Provider 수집물이 아니라 요청에 실려 오는 값). generate·replan 양쪽에 실린다 —
+    # 다시 짜는 경로가 replan 이고, 처음부터 다시 만드는 경로가 generate 이기 때문이다.
+    rejections: tuple[Rejection, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.days:
@@ -174,6 +198,18 @@ class ScheduleTask:
     trace_id: TraceId
     now: datetime
     prior_degradations: tuple[Degradation, ...] = ()
+    # PlanBAgent(RAG)가 상황 지식으로 고른 순서 — **/replan 경로만** 채운다.
+    # 빈 튜플 = 무보정이라 generate 경로는 동작이 바뀌지 않는다.
+    #
+    # 봉투에 있는 이유: Provider 수집물처럼 **오케스트레이터가 앞 단계에서 얻어온
+    # 재료**다(`daily_rain`·`event_bonus` 와 같은 자리). 요청에 실려 오는 값이 아니다.
+    #
+    # 왜 점수 단계를 대체하지 않고 **가산**인가 — 둘은 다른 판단이다. PlanB 는
+    # "이 상황에 뭐가 맞나"(KB-3 상황·KB-5 장소 지식)를, 게이트웨이 점수는 "이 사람이
+    # 뭘 좋아하나"(페르소나)를 본다. 둘 중 하나를 버릴 이유가 없고, 예산이 모자라면
+    # 기존 진입 임계(`c1_min_ms`)가 저절로 점수 단계를 규칙으로 내린다 — 여기서
+    # 따로 분기하지 않는다.
+    planb_rank: tuple[PoiId, ...] = ()
 
 
 class ScheduleAgent:
@@ -186,7 +222,11 @@ class ScheduleAgent:
         *,
         explanation_worker: ExplanationWorker | None = None,
         alternative_explanation_worker: AlternativeExplanationWorker | None = None,
+        existence: PlaceExistencePort | None = None,
         config: OrchestratorConfig | None = None,
+        fees: FeeTable | None = None,
+        hours: PlaceHoursPort | None = None,
+        place_ids: Mapping[str, str] | None = None,
     ) -> None:
         self._scoring = scoring_worker
         self._assembly_provider = assembly_provider
@@ -194,7 +234,17 @@ class ScheduleAgent:
         self._trace = trace
         self._explainer = explanation_worker  # 미주입이면 설명 단계를 통째로 건너뛴다
         self._alt_explainer = alternative_explanation_worker  # 미주입이면 템플릿 rationale 그대로
-        self._cfg = config or OrchestratorConfig()  # c1_min_ms·explanation_min_ms 만 읽는다
+        # 지도 실재 검증 (TRIP-904) — 미주입이면 ②′ 를 통째로 건너뛴다(기능 부재, 강등 아님)
+        self._existence = existence
+        self._cfg = config or OrchestratorConfig()  # 단계 임계·②′ 설정만 읽는다
+        # 입장료 파생 지식 (2026-09-24 결정 — AI 소유). 미주입이면 빈 표라 전 POI 가
+        # '모름'이고 점수가 종전과 같다 — 켜지기 전에 동작이 안 바뀌는 것이 조건이다.
+        self._fees = fees if fees is not None else FEES_EMPTY
+        # 영업시간 런타임 보강 — **둘 다 있어야 돈다.** 포트만 있고 place_id 표가
+        # 비면 물을 대상이 0 이라 조용히 꺼진 것과 같다(빈 표가 기본인 이유).
+        # 미주입이면 ②⁗ 를 통째로 건너뛴다 (기능 부재, 강등 아님).
+        self._hours = hours
+        self._place_ids = place_ids or {}
 
     # ── 공개 API ────────────────────────────────────────────────────
 
@@ -227,6 +277,55 @@ class ScheduleAgent:
             trace_id, now,
         )
 
+        # ②″ PlanB 상황 랭킹 가산 (/replan) — 점수 원점이 LLM 이든 규칙이든 같게 더한다.
+        #    **②′ 보다 먼저**여야 한다: ②′ 는 상위 N 건만 지도에서 확인하므로, 가산을
+        #    먼저 해야 실제로 배치될 후보가 검증 대상에 들어간다. 그리고 가산을 나중에
+        #    하면 지도 미검출 강등을 되돌려 버린다(사용자 눈에 없는 곳이 되살아난다).
+        if task.planb_rank:
+            candidates = lift_planb_ranked(
+                candidates, task.planb_rank, self._cfg.planb_rank_lift
+            )
+            # 몇 건이 실제로 올라갔는지 남긴다 — 랭킹이 풀 밖 참조뿐이면 0 건이고,
+            # 그러면 RAG 를 태운 것이 일정에 아무 효과가 없었다는 뜻이다(침묵 금지).
+            self._observe(
+                trace_id, now, "planb", "planb_rank", "planb_rank",
+                f"planb_rank_lifted:{sum(1 for c in candidates if c.poi_id in set(task.planb_rank))}"
+                f"/{len(task.planb_rank)}",
+            )
+
+        # ②‴ 거절 이력 강등 (TRIP-964) — 가산과 **같은 자리**라 자동으로 합성된다.
+        #    점수 원점이 LLM 이든 규칙이든 같게 빠지므로 경로마다 따로 실을 필요가 없다.
+        #    ②″ 뒤여야 한다: 랭크 가산이 먼저 오르고 그 위에서 거절이 깎여야, 설정이
+        #    강제하는 "상한 < 랭크 가산" 이 실제 점수에서도 순증으로 드러난다.
+        if request.rejections:
+            penalties = rejection_penalty(
+                request.rejections,
+                swapped=self._cfg.rejection_demote_swapped,
+                regenerated=self._cfg.rejection_demote_regenerated,
+                cap=self._cfg.rejection_demote_cap,
+            )
+            candidates = demote_rejected(candidates, penalties)
+            # 몇 건이 실제로 깎였는지 남긴다 — 이력이 전부 풀 밖 POI 면 0 건이고,
+            # 그러면 거절을 기억한 것이 일정에 아무 효과가 없었다는 뜻이다(침묵 금지).
+            self._observe(
+                trace_id, now, "rejection", "rejections", "rejections",
+                f"rejection_demoted:{sum(1 for c in candidates if c.poi_id in penalties)}"
+                f"/{len(penalties)}",
+            )
+
+        # ②′ 지도 실재 검증 (TRIP-904) — **점수가 나온 뒤**라야 배치될 후보를 검증할 수
+        #    있고, 결과가 **점수**에 실려야 어셈블리에 닿는다. 풀 단계에서 순서만 바꾸던
+        #    종전(TRIP-898) 방식은 이후 누구도 풀 순서를 읽지 않아 일정에 효과가 0이었다.
+        candidates = self._verify_on_map(
+            request, pool, candidates, budget, t0, steps, trace_id, now
+        )
+
+        # ②⁗ 영업시간 런타임 보강 — **후보가 아니라 풀을 간다.** `ScoredPoi` 에는
+        #    `Poi` 본체가 없어(poi_id·score·is_llm_score) 영업시간을 담을 자리가 없고,
+        #    HC1 이 읽는 것은 바로 아래 `for_pool(pool.pois)` 이다. 이 교체가 그보다
+        #    아래면 조립은 옛 POI 를 본다 — 이 리포가 같은 모양으로 네 번 당했다.
+        pool = self._enrich_hours(pool, candidates, budget, t0, steps, trace_id, now)
+
         # ③ ItineraryProblem 조립 — 후보는 풀에서 나온 것만 (INV-1).
         #    날씨(TRIP-383)·행사 보너스(TRIP-421)는 오케스트레이터가 패킷을 소화해
         #    넘긴 값 — 어셈블리 소프트 항으로만 들어간다 (None = 무보정).
@@ -243,6 +342,7 @@ class ScheduleAgent:
             excluded_poi_ids=request.excluded_poi_ids,  # 2단계 생성 그대로 통과
             daily_rain_prob=task.daily_rain,
             event_bonus=task.event_bonus,
+            pace=request.pace,
         )
 
         # ④ 어셈블리 solve — 잔여 **전부**를 받는다 (고정 슬라이스 아님, TRIP-376).
@@ -406,7 +506,12 @@ class ScheduleAgent:
             ScoredPoi(
                 poi_id=poi.poi_id,
                 score=build_rule_score(
-                    poi, request.budget, request.anchor, request.seed
+                    poi, request.budget, request.anchor, request.seed,
+                    prefer=request.prefer_categories,
+                    avoid=request.avoid_categories,
+                    # 조인 키는 `source_ref` — KB-5 장소 설명과 같은 길이다.
+                    # 없으면 None 이고 그건 '모름'이라 중립이다.
+                    fee_won=self._fees.of(poi.source_ref),
                 ),
                 is_llm_score=False,
             )
@@ -507,6 +612,155 @@ class ScheduleAgent:
             self._degrade(steps, trace_id, now, "alternatives", "rule_pick", "(none)",
                           f"alternatives_error: {type(e).__name__}: {e}")
             return {}
+
+    # ── ②′ 지도 실재 검증 (TRIP-904) ────────────────────────────────
+
+    def _verify_on_map(
+        self,
+        request: GenerateItineraryRequest,
+        pool: CandidatePool,
+        candidates: tuple[ScoredPoi, ...],
+        budget: DeadlineBudget,
+        t0: int,
+        steps: list[Degradation],
+        trace_id: TraceId,
+        now: datetime,
+    ) -> tuple[ScoredPoi, ...]:
+        """점수 상위 N 을 지도에서 확인하고 **못 찾은 것만** 점수를 깎는다 — 배제가 아니다.
+
+        실측(`ai-existence-probe`, 반경 300m, 무리별 200건)이 배제를 기각했다: 영업 중의
+        4.0% 가 안 나오고(오탐) 폐업의 48.5% 만 걸린다 — 7,837건 환산 시 잡는 폐업 ≈102건
+        vs 잘못 버리는 영업 중 ≈305건. 그래서 점수를 소프트 항 한 단만큼 깎아
+        (`demoted_score`) 두 어셈블러가 정상 후보 뒤로 미루게 한다. UNVERIFIED(장애·
+        시한·예산)는 강등하지 않는다 — 벤더가 죽는 날 후보 순서가 통째로 뒤집히면 안 된다.
+
+        시간은 어셈블리 바닥을 침범하지 않는 만큼만 포트에 준다(DL-2). 못 주면 건너뛰고,
+        포트 예외·빈 응답·전량 확인 실패와 함께 강등으로 남긴다(침묵 금지, INV-4).
+        ponytail: 카카오 어댑터는 마감을 **호출 사이**에서만 보므로 진행 중인 호출 1건만큼
+        (HTTP 타임아웃, main.py 에서 1s) 넘칠 수 있다 — 호출별 잔여 타임아웃 관통은
+        HttpGetJson 포트 확장이 필요해 두었다.
+        """
+        if self._existence is None or not candidates:
+            return candidates  # 미주입 = 기능 부재 (강등 아님)
+        index = {p.poi_id: p for p in pool.pois}
+        skip = request.excluded_poi_ids | {b.poi_id for b in request.fixed_blocks}
+        targets = tuple(
+            c.poi_id for c in sorted(candidates, key=lambda c: (-c.score, str(c.poi_id)))
+            if c.poi_id not in skip and c.poi_id in index
+        )[: self._cfg.existence_verify_top_n]
+        if not targets:
+            return candidates
+        available = (budget.total_ms - (self._clock.monotonic_ms() - t0)
+                     - budget.c2_reserved_ms)
+        deadline = min(self._cfg.existence_deadline_ms, available)
+        if deadline <= 0:
+            self._degrade(steps, trace_id, now, "existence", "map_verify", "(none)",
+                          f"deadline:available={available}ms")
+            return candidates
+        asked = set(targets)
+        try:
+            # 반환값 순회까지 try 안이다 — None·잘못된 원소·지연 예외를 내는 포트가
+            # 순위 곁가지 하나 때문에 생성 전체를 FAILED 로 만들면 안 된다 (DL-5 방어).
+            answered = [
+                v for v in self._existence.verify(
+                    tuple(ExistenceQuery(poi_id=pid, name=index[pid].name,
+                                         coord=index[pid].coord) for pid in targets),
+                    deadline_ms=deadline,
+                )
+                if isinstance(v, ExistenceVerdict) and v.poi_id in asked
+            ]
+        except Exception as e:
+            self._degrade(steps, trace_id, now, "existence", "map_verify", "(none)",
+                          f"existence_error: {type(e).__name__}: {e}")
+            return candidates
+        if not answered:
+            # 물었는데 판정이 한 건도 안 왔다 — 개수 보존 계약 위반. 강등 없이, 조용히는 아니게.
+            self._degrade(steps, trace_id, now, "existence", "map_verify", "(none)",
+                          "existence_empty_response")
+            return candidates
+        if all(v.status is ExistenceStatus.UNVERIFIED for v in answered):
+            # 한 건도 확인 못 함 = 검증 자체가 실패했다 (벤더 장애·키 오류 등)
+            self._degrade(steps, trace_id, now, "existence", "map_verify", "(none)",
+                          f"existence_unverified: {answered[0].reason}")
+            return candidates
+        return demote_missing_on_map(
+            candidates, answered,
+            self._cfg.existence_demote_factor, self._cfg.existence_demote_penalty)
+
+    def _enrich_hours(
+        self,
+        pool: CandidatePool,
+        candidates: tuple[ScoredPoi, ...],
+        budget: DeadlineBudget,
+        t0: int,
+        steps: list[Degradation],
+        trace_id: TraceId,
+        now: datetime,
+    ) -> CandidatePool:
+        """영업시간이 **없는** 상위 후보만 벤더에서 빌려 풀에 채운다. 저장하지 않는다.
+
+        수집본 보유는 47.3% 고, 나머지는 TourAPI 가 원문 자체를 안 준 것이라 파싱으로는
+        못 메운다. HC1 은 빈 값을 "정보 없음"으로 보고 **통과시키므로**(constraints.py
+        §영업시간 판정) 지금 그 절반은 닫힌 시간에도 배치될 수 있다.
+
+        **보강은 자유도를 줄이기만 한다.** 채운 결과 "그 요일 휴무"로 밝혀지면 배치가
+        불가능해진다 — 일정 수가 줄 수 있고 그것이 옳은 방향이다. 늘리는 기능이 아니다.
+
+        **이미 값이 있는 후보는 건드리지 않는다**(사용자 결정 2026-09-26): 덮으면 우리
+        파서 값과 벤더 값이 섞여 출처를 못 가린다. 돈이 나가는 것도 이유다 — Place
+        Details Enterprise 는 한 건이 곧 비용이라 물을 대상을 좁히는 것이 설계의 일부다.
+
+        받은 값은 `Poi.open_hours` 를 채워 **이 요청 안에서만** 산다. 벤더 약관이
+        `place_id` 외 저장을 금지하므로 어디에도 적재하지 않는다(포트 docstring 참조).
+        실패·시간부족은 강등 없이 통과하고 `Degradation` 으로만 남긴다 (INV-4).
+        """
+        if self._hours is None or not candidates:
+            return pool  # 미주입 = 기능 부재 (강등 아님)
+        index = {p.poi_id: p for p in pool.pois}
+        place_ids = self._place_ids or {}
+        # 영업시간이 **없고** place_id 가 해결된 것만. 점수 순이라 배치될 후보부터 채운다.
+        targets = tuple(
+            c.poi_id for c in sorted(candidates, key=lambda c: (-c.score, str(c.poi_id)))
+            if (poi := index.get(c.poi_id)) is not None
+            and not poi.open_hours
+            and str(c.poi_id) in place_ids
+        )[: self._cfg.hours_enrich_top_n]
+        if not targets:
+            return pool
+        available = (budget.total_ms - (self._clock.monotonic_ms() - t0)
+                     - budget.c2_reserved_ms)
+        deadline = min(self._cfg.hours_enrich_deadline_ms, available)
+        if deadline <= 0:
+            self._degrade(steps, trace_id, now, "hours", "enrich", "(none)",
+                          f"deadline:available={available}ms")
+            return pool
+        try:
+            # 반환값 순회까지 try 안이다 — 곁가지 하나가 생성 전체를 FAILED 로 만들면
+            # 안 된다 (DL-5 방어, _verify_on_map 과 같은 규약).
+            answered = [
+                v for v in self._hours.fetch(
+                    tuple(HoursQuery(poi_id=pid, place_id=place_ids[str(pid)])
+                          for pid in targets),
+                    deadline_ms=deadline,
+                )
+                if isinstance(v, HoursVerdict) and v.hours
+            ]
+        except Exception as e:  # noqa: BLE001
+            self._degrade(steps, trace_id, now, "hours", "enrich", "(none)",
+                          f"hours_error: {type(e).__name__}: {e}")
+            return pool
+        if not answered:
+            # 물었는데 한 건도 못 받았다 — 예산 소진·벤더 장애. 조용히는 아니게.
+            self._degrade(steps, trace_id, now, "hours", "enrich", "(none)",
+                          f"hours_empty:asked={len(targets)}")
+            return pool
+        filled = {v.poi_id: v.hours for v in answered}
+        self._observe(trace_id, now, "hours", "enrich", "enrich",
+                      f"hours_filled:{len(filled)}/{len(targets)}")
+        return replace(pool, pois=tuple(
+            replace(p, open_hours=filled[p.poi_id]) if p.poi_id in filled else p
+            for p in pool.pois
+        ))
 
     # ── ⑥′ 차선책 LLM 문장 (TRIP-887) ──────────────────────────────
 
@@ -692,6 +946,137 @@ def pick_slot_alternatives(
                     for p in picks
                 )
     return out
+
+
+def demoted_score(score: float, *, factor: float, penalty: float) -> float:
+    """지도 미검출 강등값 = max(점수 − penalty, 점수 × factor). 0 이하 점수는 그대로.
+
+    뺄셈이 본체다 — 다른 소프트 감점과 같은 축이라 겹쳐도 "같은 조정 점수의 일반 후보"와
+    똑같이 취급되고, 곱셈 하한이 저점수를 음수로 떨어뜨리지 않는다(> 0 유지 = 배제 아님).
+    두 항 모두 점수에 대해 증가함수라 강등된 후보끼리의 순위는 뒤집히지 않는다.
+    0 이하는 건드리지 않는다 — 음수에 배율을 곱하면 0 쪽으로 **올라가** 승격이 된다
+    (규칙 점수는 원거리에서 음수가 될 수 있다). 이미 방문 이득이 없는 값이다.
+    """
+    if score <= 0:
+        return score
+    return max(score - penalty, score * factor)
+
+
+def planb_lifted_score(score: float, rank: int, ranked: int, *, lift: float) -> float:
+    """PlanB 랭킹 가산 = 점수 + lift × (1 − 순위/개수). 1위가 lift 전부.
+
+    `rank` 는 0-base. `ranked` 는 랭킹 전체 길이 — 마지막 순위도 `lift/ranked` 만큼은
+    받는다(랭킹에 든 것과 안 든 것은 다른 사실이라 0 으로 만들지 않는다).
+
+    **덧셈이다** — `demoted_score` 의 곱셈 하한이 없다. 이유는 `planb_rank_lift`
+    주석에 있다(점수 원점이 LLM 0~1 과 규칙 음수허용 둘이라 배율은 뜻이 갈린다).
+    음수 점수도 그대로 끌어올린다 — 멀지만 상황에 맞는 곳을 되살리는 것이 목적이다.
+
+    순위에 대해 단조 감소하고 점수에 대해 단조 증가한다 — 같은 순위끼리의 순서도,
+    랭킹 안에서의 순서도 뒤집히지 않는다.
+    """
+    if ranked <= 0 or not 0 <= rank < ranked:
+        return score
+    return score + lift * (1.0 - rank / ranked)
+
+
+def lift_planb_ranked(
+    candidates: tuple[ScoredPoi, ...],
+    ranked: Sequence[PoiId],
+    lift: float,
+) -> tuple[ScoredPoi, ...]:
+    """PlanB 랭킹에 든 후보만 가산 — 순서·개수·후보 집합은 그대로 (INV-1).
+
+    랭킹을 **순위표로만** 읽는다: 중복·풀 밖 참조가 섞여 와도 후보가 늘거나 사라지거나
+    두 번 가산되지 않는다. 첫 등장 위치가 그 POI 의 순위다(중복은 뒤쪽을 무시).
+    `demote_missing_on_map` 이 판정을 집합으로만 읽는 것과 같은 규율.
+    """
+    order: dict[PoiId, int] = {}
+    for i, poi_id in enumerate(ranked):
+        order.setdefault(poi_id, i)
+    total = len(order)
+    return tuple(
+        replace(c, score=planb_lifted_score(c.score, order[c.poi_id], total, lift=lift))
+        if c.poi_id in order else c
+        for c in candidates
+    )
+
+
+def rejection_penalty(
+    rejections: Sequence[Rejection],
+    *,
+    swapped: Sequence[float],
+    regenerated: Sequence[float],
+    cap: float,
+) -> dict[PoiId, float]:
+    """POI 별 총 강등 폭 — 종류별 계단을 더하고 `cap` 에서 자른다 (TRIP-964).
+
+    **계단은 횟수로 오른다**: n 번째 거절이면 그 표의 n 번째 값, 표보다 많이 거절했으면
+    마지막 값에서 멈춘다. 한 POI 가 두 종류에 다 걸리면(교체했다가 재생성에도 남아
+    있었다) 더한 뒤 자른다.
+
+    `cap` 이 `planb_rank_lift` 보다 작다는 것은 설정이 강제한다 — 여기서 다시 세지 않는다.
+    그 덕에 "겹치면 PlanB 가 조금 더 이긴다"가 반복 횟수와 무관하게 성립한다.
+
+    같은 (poi, kind) 가 여러 줄로 와도 **가장 큰 count 하나만** 읽는다. 백엔드가 집계해
+    보내는 것이 계약이지만, 경계가 중복을 흘려도 강등이 두 배가 되지는 않게 한다
+    (`lift_planb_ranked` 가 중복 랭킹을 순위표로만 읽는 것과 같은 규율).
+    """
+    def step(table: Sequence[float], count: int) -> float:
+        return table[min(count, len(table)) - 1] if table and count >= 1 else 0.0
+
+    counts: dict[tuple[PoiId, RejectionKind], int] = {}
+    for r in rejections:
+        key = (r.poi_id, r.kind)
+        counts[key] = max(counts.get(key, 0), r.count)
+
+    out: dict[PoiId, float] = {}
+    for (poi_id, kind), count in counts.items():
+        table = swapped if kind is RejectionKind.SWAPPED_OUT else regenerated
+        out[poi_id] = out.get(poi_id, 0.0) + step(table, count)
+    return {poi_id: min(v, cap) for poi_id, v in out.items()}
+
+
+def demote_rejected(
+    candidates: tuple[ScoredPoi, ...],
+    penalties: Mapping[PoiId, float],
+) -> tuple[ScoredPoi, ...]:
+    """거절한 후보의 점수를 **뺀다** — 후보 집합·개수는 그대로 (INV-1).
+
+    **배제가 아니라 강등이다.** 하드 제외로 처리하면 두세 번 누를 때 풀이 말라 일정이
+    비고, 사용자가 마음을 바꿔도 되돌아갈 길이 없다(`excluded_poi_ids` 를 쓰지 않은
+    이유). 점수는 0 아래로 내려갈 수 있다 — 자르면 여러 번 거절한 곳과 한 번 거절한
+    곳이 같아지고, 어셈블리 목적함수는 음수를 그대로 다룬다.
+    """
+    return tuple(
+        replace(c, score=c.score - penalties[c.poi_id]) if c.poi_id in penalties else c
+        for c in candidates
+    )
+
+
+def demote_missing_on_map(
+    candidates: tuple[ScoredPoi, ...],
+    verdicts: Sequence[ExistenceVerdict],
+    factor: float,
+    penalty: float,
+) -> tuple[ScoredPoi, ...]:
+    """NOT_FOUND 판정을 받은 후보만 `demoted_score` — 순서·개수·후보 집합은 그대로 (TRIP-904).
+
+    판정은 **집합으로만** 읽는다 — 포트가 계약을 어겨 결손·중복·뒤섞임·유령 id 를
+    돌려줘도 후보가 사라지거나 늘거나 두 번 깎이지 않는다(INV-1: 후보는 입력 그대로).
+
+    ponytail: 강등된 점수가 슬롯 `score`·품질 지표(preference_fit)에 그대로 실린다 —
+    와이어엔 없어(IO-3) 사용자 노출은 없고 관측만 약간 낮게 읽힌다. 원점수 복원은
+    어셈블리 퍼사드가 품질을 solve 안에서 계산해 에이전트에서 못 한다.
+    OR-Tools 목적함수가 `int(score·1000)` 이라 원점수 0.005 미만은 하한 배율을 곱하면
+    이득 0 으로 떨어진다 — 원래도 거의 안 뽑히는 값이라 두었다.
+    """
+    missing = {v.poi_id for v in verdicts if v.status is ExistenceStatus.NOT_FOUND}
+    return tuple(
+        replace(c, score=demoted_score(c.score, factor=factor, penalty=penalty))
+        if c.poi_id in missing else c
+        for c in candidates
+    )
 
 
 def alternative_pairs(

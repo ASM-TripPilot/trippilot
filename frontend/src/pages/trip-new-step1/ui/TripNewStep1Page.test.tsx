@@ -1,4 +1,9 @@
-import { render, screen, within } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 
 import type { PreferenceView } from '@/shared/api/generated/schemas';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
@@ -98,8 +103,12 @@ beforeEach(() => {
   };
 });
 
+afterEach(() => {
+  useTripWizardStore.getState().reset();
+});
+
 describe('진입 직후 — 빈 스토어면 플레이스홀더 + 게이트 닫힘 (맹점①)', () => {
-  it('빈 스토어 = empty 얼굴 — 여행지 신 카피 · 기간 값 줄 없음 · [다음] 비활성 (TRIP-671)', () => {
+  it('빈 스토어 = empty 얼굴 — 여행지 신 카피 · 기간 "기간 선택" · [다음] 비활성 (TRIP-671·TRIP-1045)', () => {
     render(<TripNewStep1Page baseDate={BASE} />);
 
     // 여행지 null → 신 카피 "어디로 갈까요?"(옛 "여행지 선택" 대체, TRIP-671 D1).
@@ -108,12 +117,24 @@ describe('진입 직후 — 빈 스토어면 플레이스홀더 + 게이트 닫�
         '어디로 갈까요?'
       )
     ).toBeOnTheScreen();
-    // 기간 null → 값 줄 없음(옛 "기간 선택" 제거), 라벨은 생존.
+    // 기간 null → "기간 선택"(TRIP-1045 QA #017), 라벨도 생존.
     const period = screen.getByTestId('trip-wizard-summary-period');
-    expect(within(period).queryByText('기간 선택')).toBeNull();
+    expect(within(period).getByText('기간 선택')).toBeOnTheScreen();
     expect(within(period).getByText('기간')).toBeOnTheScreen();
     // 편집 시트가 S2~S6 스텁이라 빈 진입에선 게이트가 절대 안 열린다("다음 비활성"은 결함 아님).
     expect(next()).toBeDisabled();
+  });
+
+  it('TRIP-1045 · 빈 스토어의 동행 행은 "혼자"다 ("동행 선택"·"혼자 1명" 아님)', () => {
+    // 준비 — beforeEach 의 reset() 이 새 드래프트를 만든다(동행을 아무도 안 골랐다).
+    // 실행
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    // 단언 — 기본값 '혼자'가 요약까지 흐른다. 혼자는 인원을 붙이지 않는다(summaryCompanion 규칙).
+    const companion = screen.getByTestId('trip-wizard-summary-companion');
+    expect(within(companion).getByText('혼자')).toBeOnTheScreen();
+    expect(within(companion).queryByText('동행 선택')).toBeNull();
+    expect(within(companion).queryByText('혼자 1명')).toBeNull();
   });
 
   it('배선을 통과한 화면에도 위반 코드·오류 문구가 새지 않는다', () => {
@@ -214,6 +235,117 @@ describe('재진입 보존 (BR-U1-33)', () => {
         '어디로 갈까요?'
       )
     ).toBeOnTheScreen();
+    expect(next()).toBeDisabled();
+  });
+});
+
+// ── TRIP-1027 · 기간 = 시작 날짜 + 여행지 박수 합 ────────────────────────────────────────
+//
+// 사용자는 시작 날짜만 고르고, 끝 날짜는 시작 + 박수 합(Σnights)으로 계산된다. 박수를 바꾸면
+// 끝도 따라 움직인다. 그래서 박수와 기간이 어긋나는 상태가 UI 로는 생기지 않고, TRIP-1010 의
+// 불일치 안내 한 줄·"적용 시 단일 여행지 박수 동기화"는 사라졌다(01b D1~D3).
+// 기간 행은 main + sub 가 이어 붙으므로 정규식으로 잰다(02a ★10).
+
+const NOTE = 'trip-wizard-nights-mismatch-note';
+
+/** 기간 요약 행 → 시트 → 날짜 셀 **한 번** → 적용. BASE(6/10)가 오늘이라 6/11부터 누른다(02a ★9). */
+function pickStartViaSheet(start: string): void {
+  fireEvent.press(screen.getByTestId('trip-wizard-summary-period'));
+  fireEvent.press(screen.getByTestId(`trip-wizard-period-cell-${start}`));
+  fireEvent.press(screen.getByTestId('trip-wizard-period-apply'));
+}
+
+function storeDates(): [string | undefined, string | undefined] {
+  const { startDate, endDate } = useTripWizardStore.getState();
+  return [startDate, endDate];
+}
+
+function periodRow() {
+  return screen.getByTestId('trip-wizard-summary-period');
+}
+
+describe('TRIP-1027 · 시작 날짜만 고르면 끝 날짜가 박수 합으로 정해진다', () => {
+  it('서울 1박·부산 1박에서 6/11 을 고르고 적용하면 기간 6/11–6/13(2박 3일), 다음이 열린다 (AC-1)', () => {
+    // 준비
+    const store = useTripWizardStore.getState();
+    store.addDestination('서울특별시', 1);
+    store.addDestination('부산광역시', 1);
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    // 실행 — 끝 날짜는 누르지 않는다.
+    pickStartViaSheet('2026-06-11');
+
+    // 단언 — 스토어·요약·게이트. 박수는 건드리지 않는다(1010 동기화 제거).
+    expect(storeDates()).toEqual(['2026-06-11', '2026-06-13']);
+    expect(periodRow()).toHaveTextContent(/2박 3일/);
+    expect(
+      useTripWizardStore.getState().destinations.map((one) => one.nights)
+    ).toEqual([1, 1]);
+    expect(next()).toBeEnabled();
+    expect(root()).toBeOnTheScreen();
+    expect(screen.queryByTestId(NOTE)).toBeNull();
+  });
+
+  it('여행지가 0곳이면 끝 = 시작(당일)이고, 여행지가 없어 다음은 닫혀 있다 (AC-2)', () => {
+    expect(useTripWizardStore.getState().destinations).toHaveLength(0);
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    pickStartViaSheet('2026-06-11');
+
+    expect(storeDates()).toEqual(['2026-06-11', '2026-06-11']);
+    expect(next()).toBeDisabled();
+  });
+
+  it('여행지 시트에서 부산 +1 → 끝 +1, −1 → 되돌아옴, 서울 삭제 → 하루 줄어든다 (AC-4)', () => {
+    // 준비 — 서울(seq 1)·부산(seq 2) 1박씩, 시작 6/11 적용 → 6/11–6/13.
+    const store = useTripWizardStore.getState();
+    store.addDestination('서울특별시', 1);
+    store.addDestination('부산광역시', 1);
+    render(<TripNewStep1Page baseDate={BASE} />);
+    pickStartViaSheet('2026-06-11');
+    expect(storeDates()).toEqual(['2026-06-11', '2026-06-13']);
+    fireEvent.press(screen.getByTestId('trip-wizard-summary-destination'));
+
+    // 실행 ① — 부산 +1
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-nights-inc-2'));
+    expect(storeDates()).toEqual(['2026-06-11', '2026-06-14']);
+    expect(periodRow()).toHaveTextContent(/3박 4일/);
+    expect(next()).toBeEnabled();
+
+    // 실행 ② — 부산 −1
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-nights-dec-2'));
+    expect(storeDates()).toEqual(['2026-06-11', '2026-06-13']);
+    expect(periodRow()).toHaveTextContent(/2박 3일/);
+
+    // 실행 ③ — 서울 삭제(부산 1박만 남는다)
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-remove-1'));
+    expect(storeDates()).toEqual(['2026-06-11', '2026-06-12']);
+    expect(periodRow()).toHaveTextContent(/1박 2일/);
+    expect(next()).toBeEnabled();
+  });
+});
+
+describe('TRIP-1027 · 불일치 안내 한 줄은 없다 (AC-7, TRIP-1010 표면 제거)', () => {
+  it('스토어에 직접 박수 < 기간을 적어 둬도 안내 한 줄이 뜨지 않는다', () => {
+    // 준비 — 여행지 먼저, 그다음 기간을 그대로 적는다(setPeriod 는 파생 안 함, 02a ★4).
+    const store = useTripWizardStore.getState();
+    store.addDestination('서울특별시', 1);
+    store.setPeriod(undefined, '2026-06-10', '2026-06-12');
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    // 짝 — 화면은 실제로 그려졌다.
+    expect(root()).toBeOnTheScreen();
+    expect(screen.queryByTestId(NOTE)).toBeNull();
+  });
+
+  it('스토어에 직접 박수 > 기간을 적어 두면 안내 없이 다음만 닫혀 있다 (방어 유지)', () => {
+    const store = useTripWizardStore.getState();
+    store.addDestination('부산광역시', 5);
+    store.setPeriod('3n4d', '2026-06-10', '2026-06-13');
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    expect(root()).toBeOnTheScreen();
+    expect(screen.queryByTestId(NOTE)).toBeNull();
     expect(next()).toBeDisabled();
   });
 });

@@ -12,7 +12,7 @@ model: sonnet
 ## 작업 원칙
 - verify-gates의 사전 점검을 건너뛰지 않는다 — 도구·설정 부재는 "실행 불가"이지 FAIL이 아니다(비대화형 npx는 미설치 패키지를 자동 설치·실행하므로, npx를 돌리기 전에 판정해야 한다). 예외 1개(verify-gates `## 0. 사전 점검`): 부재 원인이 이번 사이클 AC면 FAIL.
 - **변경 집합 대조가 최우선 점검이다.** 절차 정본은 `<리포 루트>/frontend/.claude/skills/verify-gates/SKILL.md`의 `## 변경 집합 대조 + 경계면 QA` — **그 절을 읽고 단계를 빠짐없이 실행한다**. 요약할 수 없는 원칙: 변경 파일 목록은 `git diff --name-only`로 **스스로 도출**해 implementer 신고 목록과 대조(미신고 변경 = FAIL, 테스트 인프라 미신고 = 즉시 에스컬레이션) — 전달받은 목록을 변경 집합으로 신뢰하지 않는다.
-- 경계면 교차 비교: `backend/docs/design/openapi.yaml` ↔ 프론트 타입/훅 shape, INV-3 시간 계열 grep(패턴은 verify-gates `## 심판 보호 + 경계면 QA`), `git status <리포 루트>/aidlc` 변경 검사(cwd 상대경로 금지).
+- 경계면 교차 비교: `backend/docs/design/openapi.yaml` ↔ 프론트 타입/훅 shape, INV-3 시간 계열 grep(패턴은 verify-gates `## 변경 집합 대조 + 경계면 QA`), `git status <리포 루트>/aidlc` 변경 검사(cwd 상대경로 금지).
   - **aidlc 변경은 이 시점에 0건이어야 한다** — 정본 반영은 [기록](7)의 scribe 몫이고 너는 [검증](6)에서 돈다. 즉 여기서 잡히는 변경은 **[인지]~[구현] 중 누군가가 건드린 것**이므로 **FAIL + 에스컬레이션**이다. 파일별로 나열한다.
   - ⚠️ **경로 기반 deny가 없다** — `settings.json`의 aidlc deny는 scribe 반영 배선 때문에 제거됐고(상세는 하네스 변경이력), 그 결과 **이 검사가 유일한 기계 장치**다. 프롬프트 금지 조항은 규칙이지 강제가 아니다. 건너뛰지 마라.
   - 재검증([기록] 이후)으로 호출됐다면 판정이 뒤집힌다 — 그때는 변경이 있는 것이 정상이므로, **오케스트레이터가 전달한 3-a 정본 반영 선택 목록과 대조**해 목록 밖 변경만 FAIL로 잡는다.

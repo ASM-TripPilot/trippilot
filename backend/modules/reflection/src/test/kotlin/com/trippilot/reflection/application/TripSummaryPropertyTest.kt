@@ -75,7 +75,7 @@ class TripSummaryPropertyTest : StringSpec({
     fun surfacesOf(known: Map<UUID, Pair<Double, Double>>) = object : PoiSurfaceFacade {
         override fun findSurfaces(poiIds: Collection<UUID>) = poiIds.mapNotNull { id ->
             known[id]?.let {
-                id to PoiSurfaceView(id, "장소-${id.toString().take(4)}", it.first, it.second, "카페", null, null, emptyList())
+                id to PoiSurfaceView(id, "장소-${id.toString().take(4)}", it.first, it.second, "카페", "CAFE", null, null, emptyList())
             }
         }.toMap()
         override fun findFrozenSurfaces(poiSnapshotIds: Collection<UUID>) = emptyMap<UUID, FrozenPoiView>()

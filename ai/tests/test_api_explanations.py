@@ -145,6 +145,32 @@ def test_generate_default_still_calls_explainer(spy: SpyExplainer) -> None:
     assert response.json()["explanations"]  # 스파이 설명이 실렸다
 
 
+def test_generate_default_still_calls_alternative_explainer(
+    spy: SpyExplainer, alt_spy: SpyAltExplainer
+) -> None:
+    """generate 경로 ⑥′ 의 **배선 가드** — 합성 루트가 차선책 문장 워커를 에이전트에 넘기는가.
+
+    /explanations 경계(③~⑤)는 같은 워커를 덮지만 **다른 주입 자리**다. 실측: 합성 루트에서
+    `ScheduleAgent(alternative_explanation_worker=...)` 를 `None` 으로 끊어도 스위트 전체가
+    초록이었다 — TRIP-904·#668 과 같은 부류(배선은 있는데 아무도 안 본다). 사용자 눈에
+    보이는 효과(차선책 rationale 이 템플릿 → 워커 문장)로 못 박는다.
+
+    창을 09–12 로 좁히는 것이 전제다 — 데모 시드 4건은 종일 창이면 전부 배치돼 여분이
+    없고, 여분이 없으면 차선책도 ⑥′ 도 없다(빈 단언은 아무것도 증명하지 않는다).
+    """
+    body = _generate_body(include=None)
+    body["time_windows"] = [{"date": _DAY, "start": "09:00", "end": "12:00"}]
+    with TestClient(build_dev_app(), raise_server_exceptions=False) as client:
+        response = client.post("/ai/v1/itinerary/generate", json=body)
+
+    assert response.status_code == 200, response.text
+    rationales = [alt["rationale"] for day in response.json()["days"]
+                  for slot in day["slots"] for alt in slot["alternatives"]]
+    assert rationales, "전제: 차선책이 실려야 ⑥′ 가 돈다 (TRIP-871)"
+    assert alt_spy.calls == 1
+    assert all("대신 골라도 좋은 이유" in r for r in rationales), rationales
+
+
 # ── ③~⑤ /explanations 경계 ──────────────────────────────────────────
 
 

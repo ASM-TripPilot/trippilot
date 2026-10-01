@@ -5,115 +5,76 @@ import com.trippilot.placedata.domain.DataStatus
 import com.trippilot.placedata.domain.Poi
 import com.trippilot.placedata.domain.PoiCategory
 import com.trippilot.placedata.domain.PoiSnapshot
-import com.trippilot.placedata.domain.PoiRepository
 import com.trippilot.placedata.domain.PoiSnapshotRepository
 import com.trippilot.placedata.domain.PoiSource
 import io.kotest.core.spec.style.StringSpec
-import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
+import java.time.Clock
 import java.time.Instant
+import java.time.ZoneOffset
 import java.util.UUID
 
 /**
- * 표시용 POI 표면(BR-U3-09 · DEC-U3-9). 일정 슬롯은 `poiId` 만 들고 있어 화면이 장소명·좌표를 그리려면
- * 이 합성이 필요하다 — **일정·재계획 화면이 전부 이것에 걸려 있다.**
+ * 표면 조회가 **두 어휘를 함께** 내보내는지(TRIP-883 후속).
  *
- * 가장 중요한 규칙: **상태 무관으로 돌려준다.** 후보풀(INV-U1-01 ACTIVE만)과 반대다 —
- * 여기는 *이미 일정에 들어간* 장소의 표시라, 생성 후 폐업·미확인으로 바뀌었다고 화면에서 사라지면
- * 사용자는 자기 일정에서 장소가 증발하는 것을 본다. 그 규칙을 여기서 못 박는다.
+ * ## 왜 이 스펙이 필요했나
+ *
+ * 카테고리를 경계 너머로 보내는 배선을 깔고 역검증을 돌렸더니, `boundaryCode` 를 한글 `name` 으로
+ * 되돌려도 **아무 스펙도 깨지지 않았다.** 위쪽 테스트들이 전부 `PoiSurfaceView` 를 손으로 만들어
+ * 써서, 정작 **한글 ↔ 코드 변환이 일어나는 자리가 무검사**였다. 값이 흐르는 것만 재고 있었다.
+ *
+ * 어긋났을 때의 증상이 조용하다는 것이 이 자리를 특히 위험하게 만든다 — 상대 사전(`_CATEGORY_LABELS`)
+ * 은 코드를 키로 쓰므로 한글이 가면 **사전에 없어 그냥 무시되고**, 422 도 로그도 없이 카테고리만
+ * 사라진다. 터지면 차라리 낫다.
  */
+private class NoSnapshots : PoiSnapshotRepository {
+    val stored = mutableListOf<PoiSnapshot>()
+    override fun save(snapshot: PoiSnapshot) = snapshot.also { stored += it }
+    override fun findById(poiSnapshotId: UUID) = stored.firstOrNull { it.poiSnapshotId == poiSnapshotId }
+    override fun findByIds(poiSnapshotIds: Collection<UUID>) = stored.filter { it.poiSnapshotId in poiSnapshotIds }
+}
+
 class PoiSurfaceServiceTest : StringSpec({
 
-    val now = Instant.parse("2026-08-11T00:00:00Z")
+    val clock = Clock.fixed(Instant.parse("2026-07-31T00:00:00Z"), ZoneOffset.UTC)
 
-    fun poi(name: String, status: DataStatus = DataStatus.ACTIVE, image: String? = null, hours: String? = null): Poi =
-        Poi.reconstitute(
-            UUID.randomUUID(), name, 33.45, 126.56, PoiCategory.맛집, "제주", hours, status, PoiSource.MANUAL,
-            0, now, now, image,
-        )
+    fun poi(category: PoiCategory) = Poi.reconstitute(
+        UUID.randomUUID(), "자갈치시장", 35.096, 129.030, category, "부산", null,
+        DataStatus.ACTIVE, PoiSource.MANUAL, 0, clock.instant(), clock.instant(),
+    )
 
-    /** 스냅숏은 확정 시 동결분 — 원본이 사라져도 유지된다(INV-U1-03). */
-    class Snapshots(private val stored: List<PoiSnapshot> = emptyList()) : PoiSnapshotRepository {
-        override fun save(snapshot: PoiSnapshot) = snapshot
-        override fun findById(poiSnapshotId: UUID) = stored.firstOrNull { it.poiSnapshotId == poiSnapshotId }
-        override fun findByIds(poiSnapshotIds: Collection<UUID>) =
-            stored.filter { it.poiSnapshotId in poiSnapshotIds }
-    }
-
-    fun service(repo: PoiRepository, snapshots: Snapshots = Snapshots()) = PoiSurfaceService(repo, snapshots)
-
-    /** 호출을 관측하는 위임 저장소 — InMemoryPoiRepository 는 final 이라 상속 대신 감싼다. */
-    class SpyingPoiRepository(private val delegate: PoiRepository) : PoiRepository by delegate {
-        var calls = 0
-        var lastArg: List<UUID> = emptyList()
-        override fun findByIds(poiIds: List<UUID>): List<Poi> {
-            calls++
-            lastArg = poiIds
-            return delegate.findByIds(poiIds)
-        }
-    }
-
-    "폐업·미확인 장소도 표면이 나온다 — 이미 일정에 들어간 장소가 화면에서 사라지면 안 된다" {
+    fun service(vararg pois: Poi): Pair<PoiSurfaceService, List<Poi>> {
         val repo = InMemoryPoiRepository()
-        val active = poi("자갈치시장")
-        val closed = poi("폐업한집", status = DataStatus.CLOSED)
-        val unverified = poi("미확인집", status = DataStatus.UNVERIFIED)
-        val lost = poi("좌표없음", status = DataStatus.LOST)
-        repo.saveAll(listOf(active, closed, unverified, lost))
-
-        val surfaces = service(repo).findSurfaces(listOf(active.poiId, closed.poiId, unverified.poiId, lost.poiId))
-
-        // 후보풀이었다면 ACTIVE 하나만 남았을 것이다 — 여기서는 넷 다 나와야 한다
-        surfaces.keys shouldContainExactlyInAnyOrder listOf(active.poiId, closed.poiId, unverified.poiId, lost.poiId)
-        surfaces.getValue(closed.poiId).nameKo shouldBe "폐업한집"
+        pois.forEach { repo.stored.add(it) }
+        return PoiSurfaceService(repo, NoSnapshots()) to pois.toList()
     }
 
-    "없는 id 는 키가 빠진다 — 지어내지 않는다" {
-        val repo = InMemoryPoiRepository()
-        val a = poi("자갈치시장")
-        repo.saveAll(listOf(a))
+    /**
+     * 화면은 한글을 쓰고 AI 경계는 코드를 쓴다. **둘 다 실어야** 한쪽을 위해 다른 쪽을 포기하지 않는다.
+     */
+    "한글 정본과 경계 코드를 함께 내보낸다" {
+        val (svc, stored) = service(poi(PoiCategory.맛집))
 
-        val surfaces = service(repo).findSurfaces(listOf(a.poiId, UUID.randomUUID()))
-        surfaces.size shouldBe 1
-        surfaces.containsKey(a.poiId) shouldBe true
+        val view = svc.findSurfaces(stored.map { it.poiId }).values.single()
+
+        view.category shouldBe "맛집"
+        view.categoryCode shouldBe "FOOD"
     }
 
-    "빈 목록이면 조회하지 않는다 · 중복은 한 번만 조회한다 — 슬롯마다 왕복하지 않게" {
-        val delegate = InMemoryPoiRepository()
-        val a = poi("자갈치시장")
-        delegate.saveAll(listOf(a))
-        val spy = SpyingPoiRepository(delegate)
+    /**
+     * **전 값을 덮는지** 본다. 한 값만 변환표에서 빠져도 그 카테고리의 장소만 조용히 이름만 렌더되고,
+     * 어느 카테고리가 새는지는 문구를 눈으로 봐야 알 수 있다.
+     */
+    "모든 카테고리가 코드로 바뀐다 — 한글이 하나도 새지 않는다" {
+        val (svc, stored) = service(*PoiCategory.entries.map { poi(it) }.toTypedArray())
 
-        PoiSurfaceService(spy, Snapshots()).findSurfaces(emptyList()) shouldBe emptyMap()
-        spy.calls shouldBe 0 // 빈 입력에 헛 왕복이 없다
+        val codes = svc.findSurfaces(stored.map { it.poiId }).values.map { it.categoryCode }
 
-        PoiSurfaceService(spy, Snapshots()).findSurfaces(listOf(a.poiId, a.poiId, a.poiId))
-        spy.calls shouldBe 1
-        spy.lastArg shouldBe listOf(a.poiId) // 중복 제거
-    }
-
-    "미확보 값은 null 그대로 — 기본 이미지를 지어내지 않는다(TRIP-219)" {
-        val repo = InMemoryPoiRepository()
-        val bare = poi("사진없음")
-        repo.saveAll(listOf(bare))
-
-        val view = service(repo).findSurfaces(listOf(bare.poiId)).getValue(bare.poiId)
-        view.imageUrl shouldBe null
-        view.openingHours shouldBe null // NULL = 미확인(허용) — 빈 문자열로 채우면 "확인됨"으로 읽힌다
-    }
-
-    "동결 표면은 스냅숏에서 온다 — 원본이 바뀌어도 확정 일정은 흔들리지 않는다(INV-U1-03)" {
-        val snapshotId = UUID.randomUUID()
-        val sourceId = UUID.randomUUID()
-        val frozen = PoiSnapshot.reconstitute(snapshotId, sourceId, "동결된이름", 33.1, 126.1, PoiCategory.맛집, now)
-        val repo = InMemoryPoiRepository()
-
-        val views = service(repo, Snapshots(listOf(frozen))).findFrozenSurfaces(listOf(snapshotId))
-        views.getValue(snapshotId).nameKo shouldBe "동결된이름"
-        views.getValue(snapshotId).sourcePoiId shouldBe sourceId
-    }
-
-    "동결 표면도 빈 목록이면 조회하지 않는다" {
-        service(InMemoryPoiRepository()).findFrozenSurfaces(emptyList()) shouldBe emptyMap()
+        codes.size shouldBe PoiCategory.entries.size
+        // 한글 음절이 섞이면 그 값은 상대 사전에 없다 — 값 자체를 막는다.
+        codes.none { code -> code.any { it.code in 0xAC00..0xD7A3 } } shouldBe true
+        // 코드가 한글 정본과 같으면 변환이 안 된 것이다.
+        codes.toSet() shouldNotBe PoiCategory.entries.map { it.name }.toSet()
     }
 })

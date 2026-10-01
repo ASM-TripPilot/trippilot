@@ -69,12 +69,8 @@ const ROWS: Row[] = [
     mustNot: ['function StayCard(', 'export interface StayCardVM'],
     why: 'd01 검색 레인 카드 + StayCardVM 이관(★11 — export 잔존은 진짜 이동 아님)',
   },
-  {
-    file: 'features/explore/ui/DestinationDetailScreen.tsx',
-    must: ['@/entities/stay/ui'],
-    mustNot: ['function StayCard('],
-    why: 'd05 레인 카드 소비(StayCardVM 은 ./ExploreLandingScreen 재수출 경유, ★11)',
-  },
+  // TRIP-1105 — DestinationDetailScreen·DestinationDetailPage 두 행 제거. 목적지 상세가 d01 지역 필터로
+  // 합쳐져 두 파일이 지워진다(남기면 read() 가 ENOENT). d01 소비는 ExploreLandingScreen·ExploreLandingPage 행이 진다.
   {
     file: 'features/trip/ui/StaySelectSheet.tsx',
     must: ['@/entities/stay/ui'],
@@ -92,21 +88,12 @@ const ROWS: Row[] = [
     why: 'formatPrice 소비 전환',
   },
   {
-    file: 'app/(tabs)/explore.tsx',
+    file: 'pages/explore-landing/ui/ExploreLandingPage.tsx',
     must: ['@/entities/stay/lib'],
-    why: 'd01 라우트 formatPrice 조립(★15 — src/app 이라 6-b 발동)',
+    why: 'd01 page formatPrice 조립(TRIP-1142 로 (tabs)/explore.tsx 에서 이동)',
   },
-  {
-    file: 'pages/destination-detail/ui/DestinationDetailPage.tsx',
-    must: ['@/entities/stay/lib'],
-    why: 'd05 페이지 priceText 조립(formatPrice)',
-  },
-  {
-    file: 'features/explore/ui/SavedPlaceListScreen.tsx',
-    must: ['@/entities/stay/model'],
-    mustNot: ['export interface StayRowVM'],
-    why: 'd02 StayRowVM(SavedStayCardVM 과 동일 shape) → entities 타입 재수출(타입만, 화면 재구성 없음)',
-  },
+  // TRIP-1144 — SavedPlaceListScreen 행 제거. d02 의 죽은 숙소 축(StayRowVM 재수출 포함)을 지워
+  // entities/stay 소비가 0 이 됐다(남기면 stale red).
 ];
 
 describe('🔴 소비처가 entities/stay 를 소비한다(긍정) + 확실한 중복 지문 제거(부정)', () => {

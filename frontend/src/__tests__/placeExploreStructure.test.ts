@@ -276,11 +276,17 @@ describe('AC-G5 · 화면 프레젠테이션 순수성 · AC-G6 · feature 경�
       '@/features/auth',
       '@/features/onboarding',
     ];
-    const offenders = sources.flatMap(({ file, source }) =>
-      OTHER_FEATURES.filter((needle) => source.includes(needle)).map(
+    // TRIP-1012 — pages 층은 features 를 조립하는 자리라(FSD, eslint 층 zone 이 이미 강제) d04
+    // 페이지가 FAB 진입 직전 위저드 드래프트를 비우려고 `tripWizardStore` 하나만 무는 것은 허용한다.
+    // 그 한 경로만 걷어내고 나머지는 그대로 잡는다 — features/explore·라우트는 예외 없음.
+    const PAGE_ALLOWED = '@/features/trip/model/tripWizardStore';
+    const offenders = sources.flatMap(({ file, source }) => {
+      const scanned =
+        file === PAGE_REL ? source.split(PAGE_ALLOWED).join('') : source;
+      return OTHER_FEATURES.filter((needle) => scanned.includes(needle)).map(
         (needle) => `${file}: ${needle}`
-      )
-    );
+      );
+    });
     // StateNotice·SkeletonList 가 `features/stay/ui` 에 있지만 이 칸은 쓰지 않는다 —
     // 정답은 "explore 가 stay 를 import" 가 아니라 `shared/ui` 승격이고, 그 결정은 TRIP-222 다.
     expect(offenders).toEqual([]);
@@ -354,9 +360,20 @@ describe('층 책임 분리 — 라우트 · 배선 · 화면', () => {
     expect(pageSource).not.toContain('visiblePlaces');
     expect(pageSource).not.toContain('FlatList');
 
+    // TRIP-708 AC-6 · 3-a — 카테고리 시트는 **페이지**가 소유(@gorhom/bottom-sheet, testID
+    // `explore-places-category-sheet`)하고, (tabs) 밖 라우트라 BottomTabBar 도 페이지가 복제해
+    // 그린다(onPressTab replace). 시트 열림 상태·탭바는 화면에 두면 순수성이 깨진다.
+    expect(pageSource).toContain('@gorhom/bottom-sheet');
+    expect(pageSource).toContain('explore-places-category-sheet');
+    expect(pageSource).toContain('BottomTabBar');
+
     const screenSource = stripComments(fs.readFileSync(screenPath, 'utf8'));
     // 화면이 검색·정렬을 다시 하면 진실이 두 곳에 생긴다(단일 출처 — 서버).
     expect(screenSource).not.toContain('visiblePlaces');
     expect(screenSource).not.toContain('usePlacesInfinite');
+    // 시트·탭바는 화면 소관이 아니다 — 화면 순수성(useState 0)과 짝. 화면에 들이면 시트
+    // 열림 상태가 화면 useState 로 새어 AC-G5(순수성)와 이 계약이 함께 깨진다.
+    expect(screenSource).not.toContain('@gorhom/bottom-sheet');
+    expect(screenSource).not.toContain('BottomTabBar');
   });
 });

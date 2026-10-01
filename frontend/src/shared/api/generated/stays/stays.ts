@@ -4,6 +4,8 @@
  * TripPilot U1 API (소셜 로그인 전용 MVP)
  * U1 기반·계정·온보딩 (M1 Auth · M2 Profile · C3 Moderation). 소셜 로그인 전용 — 이메일/비밀번호 로그인은 후속 이연. 정본 대조: docs/design/U1-API-설계.md, U1-DB스키마-설계.md, U1-내부아키텍처-설계.md
  *
+ * **횡단 규약 — 입력 형식 오류는 어느 엔드포인트에서든 400이다.** 경로변수·쿼리의 타입 변환 실패(UUID·숫자·enum)와 필수 쿼리 누락은 표준 에러 봉투 (`ErrorResponse`, code=`VALIDATION_ERROR`, `fields[].field`=문제 파라미터 이름)로 나간다. 경로별 `'400'` 선언은 **업무 검증**이 있는 곳에만 적는다 — 형식 오류까지 경로마다 중복 선언하면 무엇이 그 엔드포인트 고유의 검증인지 안 보인다. (2026-09-01 이전에는 이 갈래가 500 `INTERNAL` 로 나갔다 — UUID-PATH-400)
+ *
  * OpenAPI spec version: 0.1.0-draft
  */
 import { useQuery } from '@tanstack/react-query';
@@ -20,12 +22,14 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  ErrorResponse,
   GeocodeCandidate,
   GetStaysGeocodeParams,
   GetStaysReverseGeocodeParams,
   GetStaysSearchParams,
   PlaceSearchUnavailableResponse,
   ReverseGeocodeResult,
+  StayDetail,
   StaySearchResponse,
   ValidationErrorResponse,
 } from '../schemas';
@@ -178,6 +182,148 @@ export function useGetStaysSearch<
   queryKey: DataTag<QueryKey, TData, TError>;
 } {
   const queryOptions = getGetStaysSearchQueryOptions(params, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * 정적 콘텐츠 + 최저가 스냅숏. **리뷰·평점은 담지 않는다** — 외부 OTA 딥링크로 위임한다 (US-STAY-03 · BR-U1-18). **정확 1박가도 여기 없다**(INV-U1-05 — 캐싱 금지라 표시 시점에 따로 부른다). 소요시간 미표시(INV-3).
+ *
+ * 누락 항목은 빈칸이 아니라 화면이 "미확인"으로 그린다(US-STAY-03 예외). 특히 가격은 정본(LOCALDATA) 전량에 스냅숏이 없어 **null 이 기본값**이다 — 상세를 막는 사유가 아니다 (BR-U1-14).
+ *
+ * `stayId` 는 `"{출처}:{식별자}"` 합성 문자열이다. `stay` 의 PK 가 복합키라 경로에 그대로 싣지 못해서이고, 목록 응답이 `externalSource`·`externalId` 를 따로 실으므로 클라이언트가 조립할 수 있다(상세 응답은 조립된 값을 `stayId` 로 되돌려 준다).
+ * @summary 숙소 상세(US-STAY-03)
+ */
+export const getStaysStayId = (stayId: string, signal?: AbortSignal) => {
+  return customInstance<StayDetail>({
+    url: `/stays/${stayId}`,
+    method: 'GET',
+    signal,
+  });
+};
+
+export const getGetStaysStayIdQueryKey = (stayId: string) => {
+  return [`/stays/${stayId}`] as const;
+};
+
+export const getGetStaysStayIdQueryOptions = <
+  TData = Awaited<ReturnType<typeof getStaysStayId>>,
+  TError = ValidationErrorResponse | ErrorResponse,
+>(
+  stayId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getStaysStayId>>, TError, TData>
+    >;
+  }
+) => {
+  const { query: queryOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetStaysStayIdQueryKey(stayId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getStaysStayId>>> = ({
+    signal,
+  }) => getStaysStayId(stayId, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: stayId !== null && stayId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getStaysStayId>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetStaysStayIdQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getStaysStayId>>
+>;
+export type GetStaysStayIdQueryError = ValidationErrorResponse | ErrorResponse;
+
+export function useGetStaysStayId<
+  TData = Awaited<ReturnType<typeof getStaysStayId>>,
+  TError = ValidationErrorResponse | ErrorResponse,
+>(
+  stayId: string,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getStaysStayId>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getStaysStayId>>,
+          TError,
+          Awaited<ReturnType<typeof getStaysStayId>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetStaysStayId<
+  TData = Awaited<ReturnType<typeof getStaysStayId>>,
+  TError = ValidationErrorResponse | ErrorResponse,
+>(
+  stayId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getStaysStayId>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getStaysStayId>>,
+          TError,
+          Awaited<ReturnType<typeof getStaysStayId>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetStaysStayId<
+  TData = Awaited<ReturnType<typeof getStaysStayId>>,
+  TError = ValidationErrorResponse | ErrorResponse,
+>(
+  stayId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getStaysStayId>>, TError, TData>
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary 숙소 상세(US-STAY-03)
+ */
+
+export function useGetStaysStayId<
+  TData = Awaited<ReturnType<typeof getStaysStayId>>,
+  TError = ValidationErrorResponse | ErrorResponse,
+>(
+  stayId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getStaysStayId>>, TError, TData>
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getGetStaysStayIdQueryOptions(stayId, options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<
     TData,

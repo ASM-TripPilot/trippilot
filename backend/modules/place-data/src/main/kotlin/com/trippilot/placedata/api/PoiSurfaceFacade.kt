@@ -29,7 +29,15 @@ data class PoiSurfaceView(
     val nameKo: String,
     val lat: Double,
     val lng: Double,
+    /** **한글 정본**(`맛집`·`카페`). 화면이 그대로 쓴다 — 바꾸면 FE 표시가 깨진다. */
     val category: String,
+    /**
+     * 같은 값의 **경계 코드**(`FOOD`·`CAFE`). 한글을 경계 너머로 보내면 상대 사전에 없어
+     * **조용히 무시된다** — 터지지 않고 효과만 사라지는 종류라 가장 안 보인다(실측: 리마인드
+     * 문구가 카테고리를 못 읽었다). 변환은 `PoiCategory.boundaryCode` 가 소유한다 —
+     * 호출측이 표를 다시 만들면 값이 늘 때 한쪽만 고쳐진다.
+     */
+    val categoryCode: String,
     val openingHours: String?,
     val imageUrl: String?,
     val tags: List<String>,
@@ -42,5 +50,8 @@ data class FrozenPoiView(
     val nameKo: String,
     val lat: Double,
     val lng: Double,
+    /** 한글 정본. 확정 시점의 값이라 원본이 바뀌어도 그대로다(INV-U1-03). */
     val category: String,
+    /** 같은 값의 경계 코드 — [PoiSurfaceView.categoryCode] 와 같은 이유로 둘 다 든다. */
+    val categoryCode: String,
 )

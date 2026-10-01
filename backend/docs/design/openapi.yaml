@@ -74,16 +74,23 @@ paths:
   /auth/social/{provider}/token:
     post:
       tags: [auth]
-      summary: 소셜 로그인/가입 (네이티브 SDK access token)
+      summary: 소셜 로그인/가입 (네이티브 SDK 토큰)
       description: >
-        카카오·네이버 등 네이티브 SDK가 발급한 access token 을 전달(서버 code 교환 없음, redirect 불필요).
-        서버는 토큰으로 userinfo 만 호출. 이후 계정 upsert·토큰 발급은 code 흐름과 동일. (Apple 미지원.)
+        네이티브 SDK가 발급한 토큰을 전달(서버 code 교환 없음, redirect 불필요).
+        이후 계정 upsert·토큰 발급은 code 흐름과 동일.
+
+
+        **제공자별로 싣는 토큰이 다르다.** 카카오·네이버·구글은 access token 이고 서버가 그것으로
+        userinfo 를 호출한다. **애플은 `identityToken`(id_token)** 이다 — Apple 은 userinfo 엔드포인트가
+        없어 되물을 곳이 없고, 서버가 Apple JWKS 로 **서명·aud·iss·exp 를 직접 검증**한다.
+        필드명이 `accessToken` 인 것은 계약이 3사 기준으로 먼저 굳었기 때문이며, 와이어를 바꾸면
+        얻는 것이 이름뿐이라 유지한다(TRIP-858).
       security: []
       parameters:
         - name: provider
           in: path
           required: true
-          schema: { type: string, enum: [kakao, naver, google] }
+          schema: { type: string, enum: [kakao, naver, google, apple] }
       requestBody:
         required: true
         content:
@@ -518,6 +525,93 @@ paths:
               schema: { $ref: '#/components/schemas/StaySearchResponse' }
         '400': { $ref: '#/components/responses/ValidationError' }
 
+  /stays/{stayId}:
+    get:
+      tags: [stays]
+      summary: 숙소 상세(US-STAY-03)
+      description: >
+        정적 콘텐츠 + 최저가 스냅숏. **리뷰·평점은 담지 않는다** — 외부 OTA 딥링크로 위임한다
+        (US-STAY-03 · BR-U1-18). **정확 1박가도 여기 없다**(INV-U1-05 — 캐싱 금지라 표시 시점에
+        따로 부른다). 소요시간 미표시(INV-3).
+
+
+        누락 항목은 빈칸이 아니라 화면이 "미확인"으로 그린다(US-STAY-03 예외). 특히 가격은
+        정본(LOCALDATA) 전량에 스냅숏이 없어 **null 이 기본값**이다 — 상세를 막는 사유가 아니다
+        (BR-U1-14).
+
+
+        `stayId` 는 `"{출처}:{식별자}"` 합성 문자열이다. `stay` 의 PK 가 복합키라 경로에 그대로
+        싣지 못해서이고, 목록 응답이 `externalSource`·`externalId` 를 따로 실으므로 클라이언트가
+        조립할 수 있다(상세 응답은 조립된 값을 `stayId` 로 되돌려 준다).
+      parameters:
+        - name: stayId
+          in: path
+          required: true
+          schema: { type: string }
+          example: 'LOCALDATA:3000000-201-1965-00264'
+          description: '"{출처}:{식별자}" — 첫 콜론으로만 가른다'
+      responses:
+        '200':
+          description: 숙소 상세
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StayDetail' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          description: >
+            그런 숙소가 없다. **형식 오류(400)와 구분한다** — 둘을 같은 응답으로 접으면
+            클라이언트가 식별자를 잘못 조립하고 있어도 드러나지 않는다.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /stays/{stayId}/outbound:
+    get:
+      tags: [stays]
+      summary: 예약 아웃바운드 302(C5 칸 1 · BR-U1-29~32)
+      description: >
+        클릭을 기록하고 예약 목적지로 302 리다이렉트한다. 클라이언트가 OTA URL 을 직접 조립하지
+        않는다 — 목적지 교체(웹검색 폴백 → OTA 딥링크)가 앱 배포 없이 서버 변경만으로 된다.
+
+
+        OTA 계약 전에는 웹검색 폴백(`"{숙소명} 예약"`, BR-U1-31 이 명시 허용하는 우회)으로 보낸다.
+        날짜·인원은 지금 목적지에 실리지 않지만 클릭에 남는다 — 계약 협상 근거 데이터다.
+
+
+        응답 본문은 없다. 클릭·전환 지표는 내부 전용이라 사용자 대면 응답에 싣지 않는다(BR-U1-32).
+
+
+        Bearer 선택(bootstrap 선례) — 브라우저·커스텀탭이 열어 Authorization 을 실을 수 없다.
+        토큰이 오면 계정이 클릭에 남고, 없으면 익명 클릭이다.
+      security:
+        - bearerAuth: []
+        - {}
+      parameters:
+        - name: stayId
+          in: path
+          required: true
+          schema: { type: string }
+          example: 'LOCALDATA:3000000-201-1965-00264'
+          description: '"{출처}:{식별자}" — 상세와 같은 합성 규약'
+        - { name: checkin, in: query, required: false, schema: { type: string, format: date } }
+        - { name: checkout, in: query, required: false, schema: { type: string, format: date } }
+        - { name: adults, in: query, required: false, schema: { type: integer } }
+      responses:
+        '302':
+          description: 목적지로 이동. 본문 없음 — Location 이 전부다.
+          headers:
+            Location:
+              schema: { type: string }
+              description: 예약 목적지 URL(현재 웹검색 폴백, 계약 후 OTA 딥링크)
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          description: 그런 숙소가 없다 — 이름 없이는 폴백 URL 조차 만들 수 없다.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
   /stays/geocode:
     get:
       tags: [stays]
@@ -601,6 +695,8 @@ paths:
           description: >
             이름 부분일치(대소문자 무시). **서버가 검색한다** — 클라가 받은 장 안에서만 거르면
             뒷장에 있는 것이 "없다"로 보인다. LIKE 메타문자(`%`·`_`)는 글자 그대로 취급한다.
+            결과는 **관련도순**이다(TRIP-1003): 정확 일치 > 접두 일치 > 부분 일치, 동률은
+            법인 접두("(주)"·"(사)" 등)를 뗀 이름의 가나다순. q 가 없으면 그 가나다순만 적용된다.
         - name: limit
           in: query
           required: false
@@ -663,6 +759,14 @@ paths:
       responses:
         '201': { description: 등록됨, content: { application/json: { schema: { $ref: '#/components/schemas/SavedStay' } } } }
         '400': { $ref: '#/components/responses/ValidationError' }
+        '409':
+          description: >
+            같은 외부 숙소(externalSource·externalId)를 이미 저장함(TRIP-1059 — 계정당 1건).
+            연타·재시도는 이 응답을 '이미 저장됨 = 성공'으로 읽으면 된다. 외부 키 없는 등록(핀 지정)은
+            자연 키가 없어 이 제한에 걸리지 않는다.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
     get:
       tags: [saved-stays]
       summary: 내 저장 숙소 목록
@@ -877,22 +981,26 @@ paths:
         '404': { description: 여행 없음/타 계정 }
         '409':
           description: >
-            다른 여행의 생성이 진행 중(TRIP-403). `error.code` = `GENERATION_IN_PROGRESS`,
-            `error.activeTripId` = 지금 생성 중인 여행 — 어느 여행을 기다려야 하는지 화면이 안내할 수 있어야 한다.
+            둘 중 하나. (1) 다른 여행의 생성이 진행 중(TRIP-403) — `error.code` = `GENERATION_IN_PROGRESS`,
+            `error.activeTripId` = 지금 생성 중인 여행. 어느 여행을 기다려야 하는지 화면이 안내할 수 있어야 한다.
             같은 여행의 재생성은 이 제한에 걸리지 않는다.
+            (2) 이 요청의 세션이 1일차 도착 전에 취소·대체됨(TRIP-1058 — 재생성 연타·cancel API) —
+            `error.code` = `GENERATION_SUPERSEDED`, `error.activeSessionId` = 진행 중인 새 세션(새 요청이
+            있을 때만). 이 요청의 1일차는 반영되지 않았다(낡은 결과가 새 요청의 일정을 덮지 않는다).
+            화면은 실패가 아니라 "새 요청이 이어받았다"로 읽고 그 세션을 폴링한다.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
     put:
       tags: [trips]
-      summary: 일정 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 확정·생성 중 일정은 409
+      summary: 일정 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 여행 시작 전 확정·생성 중 일정은 409
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/EditItineraryRequest' } } }
       responses:
         '200': { description: 편집됨, content: { application/json: { schema: { $ref: '#/components/schemas/Itinerary' } } } }
         '404': { description: 여행 없음/타 계정/생성된 일정 없음 }
-        '409': { description: 확정된 일정은 수정 불가 · 생성 진행 중(generationState=PARTIAL)은 수정 불가 }
+        '409': { description: 여행 시작 전 확정 일정은 수정 불가(여행 중에는 허용 — TRIP-999) · 생성 진행 중에는 아직 없는 일자를 싣는 편집만 불가(이미 만들어진 일자는 허용 — TRIP-1000) }
   /trips/{tripId}/generation-sessions/{sessionId}:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -942,7 +1050,7 @@ paths:
         '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/SlotCandidates' } } } }
         '400': { description: 슬롯 키 형식 오류 }
         '404': { description: 여행 없음/타 계정/생성된 일정 없음/해당 슬롯 없음/장소 좌표 없음 }
-        '409': { description: 확정된 일정 · 생성 진행 중 · 같은 날 같은 장소가 둘이라 슬롯 특정 불가 }
+        '409': { description: 확정된 일정 · 아직 생성 중인 일자(이미 만들어진 일자는 허용 — TRIP-1000) · 같은 날 같은 장소가 둘이라 슬롯 특정 불가 }
   /trips/{tripId}/visits:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -998,6 +1106,27 @@ paths:
         '200': { description: 완료됨, content: { application/json: { schema: { $ref: '#/components/schemas/VisitCheck' } } } }
         '404': { description: 여행 없음/타 계정/기록 없음 }
         '409': { description: '도착 없이 완료 · 이미 결과가 있다(같은 결과면 `VISIT_ALREADY_RECORDED`, 다른 결과면 `VISIT_CONFLICT`)' }
+  /trips/{tripId}/visits/skip-planned:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      operationId: skipPlannedVisit
+      summary: 도착 전 건너뛰기 — 실적이 없는 계획 슬롯을 접는다(TRIP-1029). 좌표를 받지 않는다(위치 법정 로그 무관)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slotKey, poiId]
+              properties:
+                slotKey: { type: string, description: "계획 슬롯 키 {date}#{poiId} — 즉석 방문에는 '안 간 계획'이 없어 필수" }
+                poiId: { type: string, format: uuid }
+      responses:
+        '201':
+          description: SKIPPED 실적 생성 — 허브·기록은 skippedAt 로 건너뜀을 판정한다(상태는 timestamp 파생, INV-U5-01)
+          content: { application/json: { schema: { $ref: '#/components/schemas/VisitCheck' } } }
+        '409': { description: 그 슬롯에 이미 실적이 있음 — 같은 건너뜀 재전송은 VISIT_ALREADY_RECORDED, 다른 기록은 VISIT_CONFLICT(도착분은 기존 skip 경로로) }
   /trips/{tripId}/visits/{visitCheckId}/skip:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1389,7 +1518,7 @@ paths:
       responses:
         '200': { description: 반영됨, content: { application/json: { schema: { $ref: '#/components/schemas/ReplanSession' } } } }
         '404': { description: 여행 없음/타 계정/세션 없음 }
-        '409': { description: 초안 없음(산출 중·대안 없음·이미 끝남) · 그 사이 일정이 교체됨 · 확정된 일정 }
+        '409': { description: 초안 없음(산출 중·대안 없음·이미 끝남) · 그 사이 일정이 교체됨 — 확정 일정은 막지 않는다(여행 중 반영 허용, TRIP-999) }
   /trips/{tripId}/replan-sessions/{sessionId}/diff:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1717,6 +1846,22 @@ components:
         lat: { type: number, format: double }
         lng: { type: number, format: double }
         region: { type: string, nullable: true }
+        regionCode:
+          type: string
+          nullable: true
+          description: >
+            행정구역 코드(법정동코드 앞자리, TRIP-1042). 시군구를 알면 5자리(`28200`), 시도까지만 알면 2자리(`50`),
+            모르면 null — 서버가 지어내지 않는다. 표시용 `region`(`동구`)과 달리 **맞춰 볼 수 있는 키**라,
+            여행 목적지 `regionCode` 의 접두사 비교로 "이 여행 지역의 장소인가"를 가른다. 앞 2자리가 시도 코드다.
+          example: '28200'
+        address:
+          type: string
+          nullable: true
+          description: >
+            지번·도로명 주소(TRIP-1062 · TRIP-824 의 address 몫). null = 미확보 — 기존 수집분은
+            다음 수집 배치가 채울 때까지 비어 있고 화면은 자리만 비운다(지어내지 않는다).
+            표기 규칙은 StayItem.address 와 동일(도로명 우선).
+          example: 서울특별시 종로구 사직로 161
         openingHours: { type: string, nullable: true, description: NULL=미확인 }
         imageUrl:
           type: string
@@ -1754,6 +1899,50 @@ components:
         degraded: { type: boolean, description: 일부 공급자 실패 시 true(부분 결과·재시도 안내) }
         filterZeroReasons: { type: array, items: { type: string }, description: '필터로 0건일 때 완화 후보(예: stayType, amenity:오션뷰)' }
 
+    StayDetail:
+      type: object
+      required: [stayId, externalSource, externalId, name, lat, lng, region, amenities, stayType]
+      description: >
+        숙소 상세. StayItem 에 `stayId`(합성 식별자) 하나를 더한 모양이다 — 상세가 목록보다
+        풍부해지는 것은 사진·편의시설이 채워진 뒤이고(숙소콘텐츠-수집-설계.md), 지금 없는 값의
+        자리만 만들어 두면 화면이 "준비 중"을 그릴 근거를 잃는다.
+      properties:
+        stayId: { type: string, description: '"{출처}:{식별자}" — 경로에 그대로 쓴다', example: 'STUB:jeju-001' }
+        externalSource: { type: string }
+        externalId: { type: string }
+        name: { type: string }
+        lat: { type: number, format: double }
+        lng: { type: number, format: double }
+        region: { type: string, description: 표시용 지역명 }
+        amenities:
+          type: array
+          items: { type: string }
+          description: >
+            **빈 배열이 "없음"이 아닐 수 있다.** 정본(LOCALDATA)은 편의시설을 주지 않아 전량이
+            비어 있다 — 목록 응답의 `amenitiesKnown` 이 그 사실을 알린다.
+        stayType: { type: string }
+        price:
+          allOf: [{ $ref: '#/components/schemas/StayPrice' }]
+          nullable: true
+          description: 최저가 스냅숏. **null = 가격 미확인**(BR-U1-14) — 정본 전량이 현재 null 이다
+        address:
+          type: string
+          nullable: true
+          description: 도로명 우선, 없으면 지번. **null = 모름**(정본 채움률 100%)
+          example: 서울특별시 종로구 수표로 89-8 (관수동)
+        phone:
+          type: string
+          nullable: true
+          description: >
+            표시형 전화번호 — 그대로 `tel:` 에 실을 수 있다. **null = 모름이지 "전화 없는 숙소"가
+            아니다**(정본 채움률 54.8%). 화면은 null 이면 그 줄을 비운다.
+          example: 02-2267-7474
+        rooms:
+          type: integer
+          nullable: true
+          description: 객실 수(양실+한실). **null = 모름**(정본 채움률 99.5%). 0 은 내려가지 않는다
+          example: 81
+
     StayItem:
       type: object
       required: [externalSource, externalId, name, lat, lng, region, amenities, stayType]
@@ -1770,6 +1959,20 @@ components:
           allOf: [{ $ref: '#/components/schemas/StayPrice' }]
           nullable: true
           description: 최저가 스냅숏('부터 가격'). null=가격 미확인(BR-U1-14)
+        address:
+          type: string
+          nullable: true
+          description: 도로명 우선, 없으면 지번. **null = 모름**(정본 채움률 100%)
+        phone:
+          type: string
+          nullable: true
+          description: >
+            표시형 전화번호 — 그대로 `tel:` 에 실을 수 있다. **null = 모름이지 "전화 없는 숙소"가
+            아니다**(정본 채움률 54.8%).
+        rooms:
+          type: integer
+          nullable: true
+          description: 객실 수(양실+한실). **null = 모름**(정본 채움률 99.5%). 0 은 내려가지 않는다
 
     StayPrice:
       type: object
@@ -2288,6 +2491,15 @@ components:
         startAt: { type: string, example: '10:00' }
         endAt: { type: string, example: '11:00' }
         isFixed: { type: boolean, description: 고정이라 손대지 않은 슬롯(BR-U4-18) }
+        # POI 표면(TRIP-1060 · QA #045) — 재계획이 새로 넣은 장소는 현재 일정 캐시에 없어
+        # FE lookup 이 원리적으로 실패한다. 일정 슬롯(BR-U3-09)·슬롯 후보(TRIP-851)와 같은 모양으로
+        # 응답이 직접 싣는다. before 는 일정 조회와 같은 합성(확정 슬롯 동결값 우선, INV-U1-03) —
+        # 두 응답의 이름이 갈리지 않는다. 정본에 없으면 전부 null(지어내지 않는다).
+        nameKo: { type: string, nullable: true }
+        category: { type: string, nullable: true, description: 한글 정본(맛집·카페 …) — 일정 슬롯과 같은 값 }
+        imageUrl: { type: string, nullable: true, description: NULL = 미확보. 대표 1장 }
+        lat: { type: number, format: double, nullable: true }
+        lng: { type: number, format: double, nullable: true }
         endsNextDay:
           type: boolean
           description: >
@@ -2325,6 +2537,15 @@ components:
           description: >
             총 이동 거리 변화(m). **어느 한쪽이라도 거리를 모르면 null** 이다 —
             0 으로 채우면 "거리가 줄었다"는 거짓 요약이 된다.
+            원 일정에는 미터 값이 없어(표시 문자열뿐) **현재 항상 null** 이다.
+        totalDistanceKm:
+          type: number
+          format: double
+          nullable: true
+          description: >
+            재계획안의 이동 총거리(km). **변화량이 아니라 절대값**이다 — 위 델타가 나올 수 없는
+            동안 화면이 쓸 수 있는 유일한 이동 지표다. AI 가 푼 값을 그대로 나른다(INV-2).
+            소요시간은 주지 않는다(INV-3). 옛 초안에는 없어 null 일 수 있다.
 
     ReplanSession:
       type: object
@@ -2399,6 +2620,10 @@ components:
               category: { type: string, nullable: true, description: 경계 코드(SIGHT/FOOD/…) }
               tags: { type: array, items: { type: string }, description: 미확보 시 빈 배열 }
               imageUrl: { type: string, nullable: true, description: NULL = 미확보. 대표 1장 }
+              # 후보 핀 좌표(TRIP-1063 · QA #044) — '후보 고르기' 지도에 A/B/C 핀을 찍는 값.
+              # 표면과 같은 정본 조회에서 온다. 표면이 없으면 null — 지어내지 않는다(BR-U1-06).
+              lat: { type: number, format: double, nullable: true }
+              lng: { type: number, format: double, nullable: true }
         radiusMUsed:
           type: integer
           description: 실제 사용 반경. 후보가 0건이면 서버가 한 번 넓혀 다시 보므로 그대로 표시한다
@@ -2663,11 +2888,23 @@ components:
       type: object
       required: [accessToken]
       properties:
-        accessToken: { type: string, description: 네이티브 SDK가 발급한 제공자 access token }
+        accessToken:
+          type: string
+          description: >
+            네이티브 SDK가 발급한 제공자 토큰. 카카오·네이버·구글은 access token,
+            **애플은 `identityToken`(id_token)** 이다 — 경로 설명 참고(TRIP-858).
         ageConfirmation:
           allOf: [{ $ref: '#/components/schemas/AgeConfirmation' }]
           description: 신규 가입 시 필수, 기존 로그인 시 무시
         deviceId: { type: string, nullable: true, description: 미제공 시 서버가 임의 부여(기기별 세션) }
+        authorizationCode:
+          type: string
+          nullable: true
+          description: >
+            선택. **애플만 쓴다**(TRIP-933) — `expo-apple-authentication` 이 identityToken 과 함께 주는
+            `authorizationCode`. 로그인은 `accessToken`(identityToken)으로 끝나고, 이 값은 계정 파기 때
+            Apple 토큰을 revoke 하기 위한 refresh_token 교환에만 쓴다(App Store 5.1.1(v)).
+            교환이 실패해도 로그인은 성공한다(응답 무변화). 다른 제공자는 무시한다.
 
     RefreshedTokenPair:
       type: object
@@ -2860,6 +3097,14 @@ components:
                 GENERATION_IN_PROGRESS 에만 존재(TRIP-403). 지금 일정을 생성 중인 여행.
                 거절 사유만 주면 사용자는 무엇이 끝나기를 기다려야 하는지 모른다 — 화면이 이 값으로
                 그 여행으로 이동시킨다. `existingProvider` 와 같은 방식으로 다른 에러 코드의 응답에는
+                나타나지 않는다(직렬화 생략).
+            activeSessionId:
+              type: string
+              format: uuid
+              description: >
+                GENERATION_SUPERSEDED 에만 존재(TRIP-1058). 취소·대체된 생성 요청이 거절될 때
+                지금 진행 중인 **새 세션** — 화면이 이 값으로 폴링을 갈아탄다. 취소만 되고
+                새 요청이 없으면(cancel API 경로) 싣지 않는다. 다른 에러 코드의 응답에는
                 나타나지 않는다(직렬화 생략).
             visitCheckId:
               type: string

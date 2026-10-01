@@ -23,6 +23,20 @@ export interface HomeSpotCard {
   tag: string;
   /** 카드 배경 사진 URI(TRIP-694). jest·웹에선 null(사진 자리 토큰 tint). */
   imageUrl?: string | null;
+  /** 실데이터 장소 id(TRIP-1049) — 있을 때만 저장 하트를 그린다. 픽스처엔 없다. */
+  poiId?: string;
+}
+
+/** "지금 뜨는 장소" 실데이터 섹션(TRIP-1049) — 섹션 독립 상태 + 저장 하트 배선. */
+export interface HomeSpotsLane {
+  status: 'loading' | 'error' | 'ready';
+  cards: readonly HomeSpotCard[];
+  onRetry: () => void;
+  savedPoiIds?: readonly string[];
+  pendingPoiIds?: readonly string[];
+  onToggleSave?: (poiId: string) => void;
+  saveErrorMessage?: string | null;
+  onDismissSaveError?: () => void;
 }
 
 /** 섹션3 "여행자 일정" 카드 1장 — 사진 + 타이틀·박수 라벨. */
@@ -175,6 +189,8 @@ export interface HomeScreenProps {
   hero: readonly HomeMagazineHero[];
   /** 3섹션 데이터셋(판별 유니온) */
   sections: HomeSections;
+  /** "지금 뜨는 장소" 실데이터(TRIP-1049, 옵셔널) — 있으면 sections.spots 대신 이것을 그린다. */
+  spotsLane?: HomeSpotsLane;
   /** 여행 단계 판별값(TRIP-317) — 미전달/discovery면 316 얼굴, 그 외 kind면 단계 얼굴 */
   phase?: HomePhase;
   /**
@@ -211,4 +227,6 @@ export interface HomeScreenProps {
    * (`_dev/preview.tsx`·버튼-집합 테스트)도 깨지지 않는다. 라우팅은 `(tabs)/index.tsx` 가 진다.
    */
   onPressMagazine?: () => void;
+  /** 인사 헤더 종 press → 알림함(TRIP-939). 라우팅은 `(tabs)/index.tsx` 가 진다. */
+  onPressBell?: () => void;
 }

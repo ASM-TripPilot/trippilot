@@ -7,8 +7,8 @@
  * jest 렌더 트리에서 관찰되지 않아 셋이 뒤바뀌어도 심판이 못 본다(repo-traps "글리프 fill 무심판").
  *
  * 이 시트는 **상태를 안 가진다**(무상태 D5) — 보는 달·고른 범위·개폐는 전부 배선(`TripNewStep1Page`)이
- * `applyRangePick`/`shiftMonth`로 소유·갱신하고, 시트는 완성형 props 를 받아 그린 뒤 press 를 콜백으로
- * 그대로 올린다. 그래서 "셀 탭 → 표식 변화"(전이)는 이 컴포넌트가 아니라 배선이 재렌더할 때 일어난다
+ * 소유·갱신하고(TRIP-1027부터 셀 탭 = 새 시작, 끝 = 시작 + Σnights 파생), 시트는 완성형 props 를
+ * 받아 그린 뒤 press 를 콜백으로 그대로 올린다. 그래서 "셀 탭 → 표식 변화"(전이)는 이 컴포넌트가 아니라 배선이 재렌더할 때 일어난다
  * (통합 테스트가 잡는다). 옛 `TripDateSheet`(로컬 `selected`/`month`)와 다른 결정이다.
  *
  * `today`는 주입받는다 — 시트가 시계를 읽으면 테스트가 실행일에 흔들린다. 과거 날짜 셀·미완성 범위의
@@ -32,15 +32,15 @@ import BottomSheet, {
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 
-import { SHEET_HANDLE_INDICATOR_STYLE } from '../lib/sheetHandle';
-
 import {
-  dateCell,
   daysInMonth,
   firstWeekdayOfMonth,
   isDateInRange,
-  type TripDateRange,
-} from '../model/tripDatePicker';
+} from '@/shared/date/monthGrid';
+
+import { SHEET_HANDLE_INDICATOR_STYLE } from '../lib/sheetHandle';
+
+import { dateCell, type TripDateRange } from '../model/tripDatePicker';
 import { summaryPeriod } from '../model/tripSummary';
 
 import { BackChevronGlyph, ChevronRightGlyph } from './TripGlyphs';
@@ -52,14 +52,14 @@ export interface PeriodEditSheetProps {
   today: string;
   /** 'YYYY-MM' — 보고 있는 달(배선 소유). */
   month: string;
-  /** 지금까지 고른 범위(배선이 `applyRangePick`으로 갱신). */
+  /** 지금 범위(배선이 고른 시작과 파생 끝으로 만든다). */
   range: TripDateRange;
-  /** 날짜 셀 탭 → 배선이 `applyRangePick(range, date)`로 다음 range 를 만든다. */
+  /** 날짜 셀 탭 → 배선이 그 날짜를 새 시작으로 삼는다. */
   onPickDate: (date: string) => void;
   /** 월 네비 → 배선이 `shiftMonth(month, ∓1)`. */
   onPrevMonth: () => void;
   onNextMonth: () => void;
-  /** "적용" → 배선이 `setPeriod(undefined, start, end)` + 닫기(값은 배선이 자기 state 에서 읽음). */
+  /** "적용" → 배선이 `setStartDate(start)` + 닫기(값은 배선이 자기 state 에서 읽음). */
   onApply: () => void;
   /** 딤 바깥 탭·아래로 스와이프 → 배선: 시트 닫기(TRIP-683 AC-2·AC-3). */
   onClose: () => void;
@@ -111,25 +111,26 @@ function DateCell({
 }): ReactElement {
   return (
     <View className="h-[44px] w-[14.28%] items-center justify-center">
-      {/* 사이 칸은 셀 폭을 채우는 연한 배경, 시작/종료는 원 뒤로 이어지는 반쪽 연장 배경(6-b 시각). */}
+      {/* 사이 칸은 셀 폭을 채우는 연한 배경, 시작/종료는 원 뒤로 이어지는 반쪽 연장 배경(6-b 시각).
+          띠·원은 px 고정(4 + 36 + 4 = 셀 44) — rem 유틸(top-1·h-9)은 네이티브 1rem=14px 라 띠가 원보다 떠 보인다(TRIP-1045). */}
       {role === 'between' ? (
         <View
           testID={`trip-wizard-period-cell-between-${date}`}
-          className="absolute inset-x-0 top-1 h-9 bg-primary-pale"
+          className="absolute inset-x-0 top-xs h-[36px] bg-primary-pale"
         />
       ) : null}
       {role === 'start' && (
-        <View className="absolute right-0 top-1 h-9 w-1/2 bg-primary-pale" />
+        <View className="absolute right-0 top-xs h-[36px] w-1/2 bg-primary-pale" />
       )}
       {role === 'end' && (
-        <View className="absolute left-0 top-1 h-9 w-1/2 bg-primary-pale" />
+        <View className="absolute left-0 top-xs h-[36px] w-1/2 bg-primary-pale" />
       )}
       <Pressable
         testID={`trip-wizard-period-cell-${date}`}
         accessibilityRole="button"
         disabled={past}
         onPress={() => onPickDate(date)}
-        className="h-9 w-9 items-center justify-center rounded-full"
+        className="h-[36px] w-[36px] items-center justify-center rounded-full"
       >
         {role === 'start' ? (
           <View

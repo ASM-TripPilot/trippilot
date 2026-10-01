@@ -1,7 +1,7 @@
 /**
  * TRIP-440 · AC-7 · PBT-U4-F2 — slackTime: 여유는 **두 확정 시각의 차**(BR-U4-24)다.
  *
- * from·toFixed 는 "HH:mm" 또는 "HH:mm:ss". 초는 버리고 시·분만 쓴다(`resolveSlackLabel` 선례).
+ * from·toFixed 는 "HH:mm" 또는 "HH:mm:ss". 초는 버리고 시·분만 쓴다(옛 `resolveSlackLabel` 선례 — 삭제됨).
  * `.split(':')`로 쪼개 분 단위로 환산한 뒤 그 차를 세 포맷으로 낸다(D2):
  *  - diff >= 60 → `여유 N시간 M분`  (60 경계는 `여유 1시간 0분` — 0분도 항상 표기)
  *  - 0 < diff < 60 → `여유 N분`

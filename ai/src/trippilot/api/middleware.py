@@ -31,6 +31,7 @@ Redis류는 측정된 필요가 생길 때까지 이연, anti-patterns.md "스�
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
 import logging
 import math
@@ -57,6 +58,7 @@ _request_logger = logging.getLogger("trippilot.api.request")
 # 오류 코드 — errors.py의 코드 계열과 같은 결(문자열 안정성 유지). 429/504는
 # 라우트 밖(미들웨어)에서만 나가므로 여기서 소유한다(errors.py는 계약 동결).
 CODE_RATE_LIMITED = "RATE_LIMITED"
+CODE_UNAUTHORIZED = "UNAUTHORIZED"
 CODE_TIMEOUT_BACKSTOP = "TIMEOUT_BACKSTOP"
 
 _META_SCOPE_KEY = "trippilot.request_meta"
@@ -69,6 +71,20 @@ _TRACE_UNSAFE = re.compile(r"[^0-9A-Za-z._\-]")
 # ───────────────────────── 설정 ─────────────────────────
 
 
+def _parse_bool(raw: str) -> bool:
+    """`from_env` 의 파싱 불가 = 기동 실패 방침을 불리언에도 적용한다.
+
+    `"0"`·`"no"` 를 True 로 읽는 실수가 **인증을 조용히 켜거나 끈다** — 모르는 값은
+    통과시키지 않고 예외로 드러낸다.
+    """
+    lowered = raw.strip().lower()
+    if lowered in {"1", "true", "yes", "on"}:
+        return True
+    if lowered in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"불리언으로 읽을 수 없다: {raw!r}")
+
+
 @dataclass(frozen=True)
 class MiddlewareSettings:
     """미들웨어 파라미터. 기본값은 관대하다 — 테스트·로컬을 방해하지 않는 수준."""
@@ -77,6 +93,16 @@ class MiddlewareSettings:
     rate_limit_burst: int = 1000
     timeout_margin_ms: int = 5000
     timeout_default_deadline_ms: int = 600000  # 행 방지 안전망 (TRIP-473 — 시간제약 아님)
+    # 인바운드 서비스 토큰 (TRIP-878). 백엔드가 `X-Service-Token` 으로 보내는 공유 시크릿.
+    # **기본 None = 검증 안 함** — 테스트·로컬을 막지 않는다(이 클래스의 다른 기본값과 같은 방침).
+    # 운영은 `SERVICE_AUTH_TOKEN` 을 주고, 그러면 자동으로 강제된다.
+    service_auth_token: str | None = None
+    # **fail-open 을 명시적으로 만든다.** True 인데 토큰이 없으면 기동이 실패한다 —
+    # "운영에 배포했는데 토큰을 안 넣어서 조용히 열린" 상태를 만들 수 없게 한다.
+    # env 이름은 백엔드와 **공용**(`SERVICE_AUTH_REQUIRE_TOKEN`) — 토큰 자체가 양방향
+    # 공용이라 "그 토큰이 반드시 있어야 한다"는 요구도 하나다. 이름을 갈라 두면 한쪽만
+    # 켜진 절반 설정이 생기고, compose·EKS 차트가 이미 이 이름으로 백엔드에 넣고 있다.
+    require_service_auth: bool = False
 
     def __post_init__(self) -> None:
         if self.timeout_margin_ms <= 0:
@@ -91,6 +117,15 @@ class MiddlewareSettings:
             )
         if self.rate_limit_burst < 1:
             raise ValueError(f"rate_limit_burst는 1 이상이어야 한다(got {self.rate_limit_burst})")
+        if self.service_auth_token is not None and not self.service_auth_token.strip():
+            # 공백만 있는 토큰은 `"   " == "   "` 로 **통과해 버린다** — 미설정으로 보고
+            # 조용히 여는 대신 기동을 죽인다(설정 오류를 은폐하지 않는다).
+            raise ValueError("service_auth_token이 공백뿐이다 — 미설정이면 값을 비워라")
+        if self.require_service_auth and self.service_auth_token is None:
+            raise ValueError(
+                "require_service_auth=True인데 SERVICE_AUTH_TOKEN이 없다 — "
+                "검증 없이 기동하려면 require_service_auth=False로 명시하라"
+            )
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "MiddlewareSettings":
@@ -109,6 +144,10 @@ class MiddlewareSettings:
             timeout_margin_ms=_read("TRIPPILOT_TIMEOUT_MARGIN_MS", int, cls.timeout_margin_ms),
             timeout_default_deadline_ms=_read(
                 "TRIPPILOT_TIMEOUT_DEFAULT_MS", int, cls.timeout_default_deadline_ms
+            ),
+            service_auth_token=_read("SERVICE_AUTH_TOKEN", str, None),
+            require_service_auth=_read(
+                "SERVICE_AUTH_REQUIRE_TOKEN", _parse_bool, cls.require_service_auth
             ),
         )
 
@@ -279,6 +318,53 @@ def _sanitize_trace_id(raw: str | None) -> str | None:
 # ───────────────────── 2) rate-limit(토큰버킷) ─────────────────────
 
 
+class ServiceAuthMiddleware:
+    """인바운드 서비스 토큰 검증 (TRIP-878) — `X-Service-Token` 불일치는 401.
+
+    백엔드는 이미 이 헤더를 보내고 있었는데 **받는 쪽이 없어 경계가 무인증으로 열려 있었다.**
+
+    `/health`·`/`는 면제 — `RateLimitMiddleware` 와 같은 이유다. compose·k8s 헬스체크가
+    토큰을 들고 다니지 않으므로, 면제하지 않으면 **컨테이너가 통째로 unhealthy** 가 된다.
+
+    **거부 사유를 본문에 싣지 않는다.** 헤더가 없는 것과 값이 틀린 것이 같은 응답이다 —
+    다르게 답하면 공격자가 "헤더 이름은 맞았다"를 알아낸다. 사유는 로그에만 남긴다.
+    """
+
+    EXEMPT_PATHS = frozenset({"/health", "/"})
+    HEADER = b"x-service-token"
+
+    def __init__(self, app: _AsgiApp, token: str) -> None:
+        self.app = app
+        self._token = token
+
+    async def __call__(self, scope: _Scope, receive: _Receive, send: _Send) -> None:
+        if scope["type"] != "http" or scope.get("path") in self.EXEMPT_PATHS:
+            await self.app(scope, receive, send)
+            return
+
+        presented = _header_value(scope, self.HEADER)
+        # 상수 시간 비교 — 토큰은 시크릿이라 길이·접두사가 타이밍으로 새면 안 된다.
+        if presented is not None and hmac.compare_digest(presented, self._token):
+            await self.app(scope, receive, send)
+            return
+
+        _logger.warning(json.dumps({  # INV-4 — 발동을 로그로 드러낸다 (토큰 값은 안 남긴다)
+            "event": "service_auth_rejected",
+            "trace_id": scope.get(_TRACE_SCOPE_KEY),
+            "path": scope.get("path"),
+            "reason": "missing" if presented is None else "mismatch",
+        }, ensure_ascii=False))
+        await _send_error(send, 401, CODE_UNAUTHORIZED, "인증에 실패했습니다.")
+
+
+def _header_value(scope: _Scope, name: bytes) -> str | None:
+    """ASGI 헤더에서 값 하나. 헤더 이름은 소문자로 온다(ASGI 규약)."""
+    for key, value in scope.get("headers", ()):
+        if key == name:
+            return value.decode("latin-1")
+    return None
+
+
 class RateLimitMiddleware:
     """클라이언트(IP)별 in-memory 토큰버킷. 초과 시 429 + 계약 오류 바디.
 
@@ -439,7 +525,8 @@ def _log_abandoned_task(task: "asyncio.Task[None]") -> None:
 
 def install_middlewares(app: FastAPI, settings: MiddlewareSettings | None = None) -> None:
     """미들웨어 3종 등록. add_middleware는 마지막 것이 최외곽 —
-    실행 순서: Trace(최외곽, 모든 응답 로그) → RateLimit → TimeoutBackstop → 라우트.
+    실행 순서: Trace(최외곽, 모든 응답 로그) → RateLimit → [ServiceAuth] → TimeoutBackstop → 라우트.
+    ServiceAuth 는 토큰이 설정됐을 때만 낀다(미설정 = 검증 없음, TRIP-878).
     """
     if settings is None:
         settings = MiddlewareSettings.from_env()
@@ -448,6 +535,11 @@ def install_middlewares(app: FastAPI, settings: MiddlewareSettings | None = None
         margin_ms=settings.timeout_margin_ms,
         default_deadline_ms=settings.timeout_default_deadline_ms,
     )
+    if settings.service_auth_token is not None:
+        # 순서: RateLimit **안쪽**, TimeoutBackstop **바깥쪽**.
+        # 유량 제한이 먼저여야 미인증 폭주가 인증 비용을 태우지 않고,
+        # 거부할 요청에 마감 타이머를 걸 이유도 없다.
+        app.add_middleware(ServiceAuthMiddleware, token=settings.service_auth_token)
     app.add_middleware(
         RateLimitMiddleware,
         rps=settings.rate_limit_rps,

@@ -1,0 +1,14 @@
+<p><code>aws-deploy.yml</code>에는 <code>validate</code>와 <code>deploy</code> 두 job이 있다. 앞 job에는 OIDC 토큰 요청 권한이 없고 뒤 job은 <code>needs: validate</code>로 연결된다. 먼저 무엇을 테스트하는지, 무엇까지 보장하지 않는지 읽는다.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>validate 순서</th><th>실제 명령 / 설정</th><th>확인하는 내용</th></tr></thead>
+<tbody>
+<tr><td>1. 실행 도구</td><td>checkout, Python 3.13, Terraform 1.13.5, Helm 3.19.0</td><td>CI에서 사용할 도구 버전 준비</td></tr>
+<tr><td>2. 배포 계약</td><td>infra 및 deploy/eks Python 테스트, coverage 합산</td><td>입력 검증, workflow 계약, 비밀값·렌더링 로직 회귀</td></tr>
+<tr><td>3. 정책·chart</td><td>bootstrap 테스트, chart 테스트, DEV/PRD <code>helm lint --strict</code></td><td>권한·리소스 구조와 chart 렌더링 규칙</td></tr>
+<tr><td>4. 조건부 backend</td><td>apply + 앱 배포일 때 Java 25 준비, <code>AsyncConfigTest</code></td><td>backend 종료 설정의 제한된 회귀 검증</td></tr>
+<tr><td>5. Terraform</td><td><code>fmt -check</code>, <code>init -backend=false</code>, <code>validate</code>, <code>test</code></td><td>형식·구문과 mock provider 기반 DEV/PRD 구조</td></tr>
+</tbody>
+</table></div>
+<p><code>infra/.coveragerc</code>는 <code>infra/scripts</code>와 <code>deploy/eks</code>를 측정하며 <code>fail_under = 80</code>을 둔다. 첫 coverage 실행 후 두 번째 실행에 <code>--append</code>를 붙여 결과를 합친다. 이 80%는 지정한 Python 배포 코드 범위의 기준이다. Java·AI·frontend 전체 테스트 커버리지가 80%라는 뜻은 아니다.</p>
+<p><code>helm lint</code>의 이미지·DB 주소·인증서 ARN에는 예시값을 넣는다. 템플릿이 요구하는 필드를 갖췄는지 점검할 수 있지만 실제 DB나 인증서의 존재는 확인하지 않는다. Terraform 테스트도 <a href="../../infra/terraform/stack/tests/environments.tftest.hcl"><code>mock_provider "aws"</code></a>를 사용하므로 AWS에 EKS를 만드는 검사가 아니다. <code>init -backend=false</code>는 원격 state 연결을 생략하며 provider 패키지 다운로드에는 인터넷이 필요할 수 있다.</p>
+<div class="warning"><strong>검증 범위 해석:</strong> 이 job의 성공이 backend·AI·frontend 전체 CI 완료를 자동으로 보장하지 않는다. backend 검사는 <code>AsyncConfigTest</code>로 한정되고 AWS workflow가 다른 CI workflow의 성공 상태를 조회하거나 <code>needs</code>로 연결하지 않는다. 실제 배포 전에는 대상 commit의 기존 CI 결과를 확인해야 한다. CI가 경로 필터로 생략된 경우도 성공과 구분해 판단한다.</div>

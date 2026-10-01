@@ -2,11 +2,11 @@ import type { ComponentType } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 /**
- * dev 정적 프리뷰(`src/app/_dev/preview.tsx`) — 눈으로 확인해야 하는 13개 시각 상태를
- * 네트워크·훅·컨테이너를 거치지 않고 그린다(로그인·스플래시 7 + 온보딩 6, TRIP-162).
+ * dev 정적 프리뷰(`src/app/_dev/preview.tsx`) — 눈으로 확인해야 하는 12개 시각 상태를
+ * 네트워크·훅·컨테이너를 거치지 않고 그린다(로그인·스플래시 7 + 온보딩 5, TRIP-162 · TRIP-722 · TRIP-1108).
  *
  * 무엇을 보장하나:
- *  (1) 13개 상태 토글이 모두 있고, 각 토글이 해당 화면 상태를 실제로 그린다,
+ *  (1) 12개 상태 토글이 모두 있고, 각 토글이 해당 화면 상태를 실제로 그린다,
  *  (2) 그리는 대상이 **실물 화면 컴포넌트**다 — 단언하는 testID 가 전부
  *      SocialLoginScreen·SplashScreen·TermsScreen·NicknameScreen·LocationPreprompt
  *      자신의 것이라, 프리뷰가 화면을 흉내 낸 별도 마크업을 세우면 통과하지 못한다,
@@ -42,6 +42,15 @@ jest.mock('@/features/auth/model/useSocialLogin', () => {
   throw new Error('프리뷰가 useSocialLogin(훅)을 런타임에 로드했다');
 });
 
+// TRIP-1108 — 푸시 카드는 딥 경로(`@/shared/push/PushPreprompt`)로만 싣는다. 배럴(`@/shared/push`)로 끌면
+// 배럴이 권한 루틴(register·request → expo-notifications)까지 실어 여기서 터진다.
+jest.mock('@/shared/push/register', () => {
+  throw new Error('프리뷰가 푸시 권한 루틴(register)을 런타임에 로드했다');
+});
+jest.mock('@/shared/push/request', () => {
+  throw new Error('프리뷰가 푸시 권한 요청(request)을 런타임에 로드했다');
+});
+
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const DevPreview = require('@/app/_dev/preview').default as ComponentType;
 
@@ -55,16 +64,17 @@ const CASES = [
   { key: 'login-conflict-sheet', marker: 'auth-login-conflict-sheet' },
   { key: 'login-age-sheet', marker: 'auth-age-sheet' },
   { key: 'login-age-restriction', marker: 'auth-age-restriction' },
-  // 온보딩 (TRIP-162)
-  { key: 'onboarding-terms-default', marker: 'onboarding-terms-missing' },
-  { key: 'onboarding-terms-agreed', marker: 'onboarding-terms-root' },
+  // 온보딩 (TRIP-162) — TRIP-722: terms-agreed·nickname-taken 프리뷰 키 삭제(Figma 부재)
+  // TRIP-1023 #002: 결정2 뒤 c06 기본 얼굴엔 미동의 안내가 없다 → 마커를 그 키에서만 그려지는 루트로 교체.
+  { key: 'onboarding-terms-default', marker: 'onboarding-terms-root' },
   { key: 'onboarding-nickname-default', marker: 'onboarding-nickname-helper' },
-  { key: 'onboarding-nickname-taken', marker: 'onboarding-nickname-error' },
   { key: 'onboarding-location-default', marker: 'onboarding-location-purpose' },
   {
     key: 'onboarding-location-denied',
     marker: 'onboarding-location-denied-notice',
   },
+  // TRIP-1108 — c08-push 푸시 알림 사전 안내 카드(Figma 4774:2960). 목적 문단은 이 카드에만 있다.
+  { key: 'onboarding-push-default', marker: 'onboarding-push-purpose' },
 ] as const;
 
 // idle 은 "조건부 UI 가 하나도 없는 상태"라는 뜻이라, 나머지 6개의 부재로 정의된다.
@@ -80,8 +90,8 @@ function selectState(key: string) {
   fireEvent.press(screen.getByTestId(`dev-preview-state-${key}`));
 }
 
-describe('dev 정적 프리뷰 — 13개 시각 상태', () => {
-  it('마운트 즉시 프리뷰 루트와 13개 상태 토글을 그린다', () => {
+describe('dev 정적 프리뷰 — 12개 시각 상태', () => {
+  it('마운트 즉시 프리뷰 루트와 12개 상태 토글을 그린다', () => {
     render(<DevPreview />);
 
     expect(screen.getByTestId('dev-preview-root')).toBeOnTheScreen();
@@ -135,5 +145,21 @@ describe('dev 정적 프리뷰 — 13개 시각 상태', () => {
     CONDITIONAL_MARKERS.forEach((marker) => {
       expect(screen.queryByTestId(marker)).toBeNull();
     });
+  });
+});
+
+/**
+ * TRIP-1023 #002 (결정2) — 6-b 육안이 보는 "c06 · 기본"은 첫 진입 얼굴이어야 한다. 미동의 안내는
+ * '다음'을 탭했을 때만 뜨므로 기본 프리뷰에 안내가 그려져 있으면 결정과 다른 화면을 확인하게 된다.
+ * 안내가 뜬 얼굴은 같은 프리뷰에서 '다음'을 탭해 본다(새 프리뷰 키 없음 — 총량 가드 무관).
+ */
+describe('🔴 TRIP-1023 #002 — c06 기본 프리뷰는 미동의 안내가 없는 첫 진입 얼굴이다 (AC-A10)', () => {
+  it('onboarding-terms-default 를 고르면 약관 화면은 그려지고 미동의 안내는 없다', () => {
+    render(<DevPreview />);
+
+    selectState('onboarding-terms-default');
+
+    expect(screen.getByTestId('onboarding-terms-root')).toBeOnTheScreen();
+    expect(screen.queryByTestId('onboarding-terms-missing')).toBeNull();
   });
 });

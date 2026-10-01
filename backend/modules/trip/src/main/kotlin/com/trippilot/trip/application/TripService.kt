@@ -3,6 +3,9 @@ package com.trippilot.trip.application
 import com.trippilot.core.error.FieldError
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.ValidationFailed
+import com.trippilot.core.event.DomainEventPublisher
+import com.trippilot.trip.api.event.TripDeleted
+import org.springframework.transaction.annotation.Transactional
 import com.trippilot.placedata.api.DestinationCheck
 import com.trippilot.placedata.api.DestinationFacade
 import com.trippilot.placedata.api.RegionLookupFacade
@@ -44,6 +47,7 @@ class TripService(
     private val repo: TripRepository,
     private val destinations: DestinationFacade,
     private val regions: RegionLookupFacade,
+    private val events: DomainEventPublisher,
     private val clock: Clock,
 ) {
     fun create(accountId: UUID, cmd: CreateTripCommand): Trip {
@@ -121,8 +125,17 @@ class TripService(
         )
     }
 
+    /**
+     * 소프트 삭제 + 사건 발행(TRIP-1061). 소프트 삭제는 행이 남아 FK CASCADE 가 닿지 않는다 —
+     * 알림 예약 같은 파생물은 [TripDeleted] 를 구독해 스스로 정리한다(안 하면 삭제한 여행의
+     * 알림이 계속 울린다, QA #024 계열). 발행은 **저장과 같은 트랜잭션**(아웃박스) — 밖에서 내면
+     * 롤백된 삭제의 정리가 나간다.
+     */
+    @Transactional
     fun delete(accountId: UUID, tripId: UUID) {
-        repo.save(ownedOrNotFound(accountId, tripId).softDelete(clock.instant()))
+        val now = clock.instant()
+        repo.save(ownedOrNotFound(accountId, tripId).softDelete(now))
+        events.publish(TripDeleted(tripId.toString(), tripId.toString(), now.toString()))
     }
 
     /** 없거나 삭제됐거나 타 계정 소유면 404(존재 은닉). */

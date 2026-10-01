@@ -5,13 +5,18 @@ name: backend-ci
 # `ai/docs/openapi.json` 도 트리거에 넣는다 — 백엔드가 그 파일을 계약 정본으로 읽어 드리프트를 막는데
 # (`AiBoundaryOpenApiTest`, TRIP-334), backend/ 만 보면 **AI 가 계약을 바꾼 순간에는 이 게이트가 안 돈다**.
 # 그러면 다음 백엔드 PR 이 남의 변경 때문에 빨개지고, 그 사이 배포된 백엔드는 이미 어긋나 있다.
+#
+# `docker-compose.yml`·`.env.example`·`deploy/**` 도 같은 이유다(TRIP-858) — `AppleClientIdWiringTest` 가
+# **env 가 앱까지 도달하는 통로**를 그 네 파일에서 읽어 검사한다. backend/ 만 보면 통로를 끊는 변경이
+# 게이트를 한 번도 안 거치고 머지된다. 실측으로 그 상태가 이미 한 번 있었다: `APPLE_CLIENT_ID` 가
+# compose·Helm·시크릿동기화 어디에도 없어 배포해도 애플 로그인이 501 이었는데 전 CI 가 초록이었다.
 on:
   push:
     branches: [develop]
-    paths: ['backend/**', 'ai/docs/openapi.json', 'ai/data/collected_pois.json', '.github/workflows/backend-ci.yml']
+    paths: ['backend/**', 'ai/docs/openapi.json', 'ai/data/collected_pois.json', '.github/workflows/backend-ci.yml', 'docker-compose.yml', '.env.example', 'deploy/**']
   pull_request:
     branches: [develop, main]
-    paths: ['backend/**', 'ai/docs/openapi.json', 'ai/data/collected_pois.json', '.github/workflows/backend-ci.yml']
+    paths: ['backend/**', 'ai/docs/openapi.json', 'ai/data/collected_pois.json', '.github/workflows/backend-ci.yml', 'docker-compose.yml', '.env.example', 'deploy/**']
   workflow_dispatch:
 
 env:

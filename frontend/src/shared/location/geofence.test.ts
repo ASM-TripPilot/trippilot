@@ -43,6 +43,7 @@ const slot = (
   isFixed: false,
   endsNextDay: false,
   hasViolation: false,
+  alternatives: [],
   nameKo: null,
   lat: 35.1,
   lng: 129.1,

@@ -67,7 +67,7 @@ class StayRecommendationServiceTest : StringSpec({
     fun surfaces(vararg known: Pair<UUID, Pair<Double, Double>>) = object : PoiSurfaceFacade {
         private val map = known.toMap()
         override fun findSurfaces(poiIds: Collection<UUID>) = poiIds.mapNotNull { id ->
-            map[id]?.let { (la, ln) -> id to PoiSurfaceView(id, "장소", la, ln, "맛집", null, null, emptyList()) }
+            map[id]?.let { (la, ln) -> id to PoiSurfaceView(id, "장소", la, ln, "맛집", "FOOD", null, null, emptyList()) }
         }.toMap()
         override fun findFrozenSurfaces(poiSnapshotIds: Collection<UUID>) = emptyMap<UUID, FrozenPoiView>()
     }

@@ -153,3 +153,13 @@ describe('TRIP-612 · PersonalizationScreen — 토글·뒤로 배선', () => {
     expect(props.onPressBack).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('🔴 TRIP-991 · 개인화 스위치 이름 (AC-3)', () => {
+  it('토글은 "지난 기록으로 추천 맞춤" 스위치로 읽힌다', () => {
+    renderScreen({ consentOn: true });
+
+    expect(
+      screen.getByRole('switch', { name: '지난 기록으로 추천 맞춤' })
+    ).toHaveProp('testID', 'settings-personalization-toggle');
+  });
+});

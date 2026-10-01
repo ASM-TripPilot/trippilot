@@ -1,0 +1,10 @@
+<p>GitHub Environment는 <code>dev</code>나 <code>prd</code>라는 이름 아래 환경 변수·비밀값·배포 보호 규칙을 묶는 설정이다. Kubernetes namespace 또는 Terraform workspace를 만든다는 뜻은 아니다. 현재 workflow는 <code>deploy.environment: ${{ inputs.environment }}</code>로 이 설정을 선택한다. Required reviewers 등 보호 기능의 사용 가능 범위는 저장소 공개 여부와 GitHub 플랜에 따라 확인해야 한다. <a href="https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments">Environment와 보호 규칙</a></p>
+<div aria-label="현재 Environment 승인 시점" class="flow">
+<div class="flow-step"><strong>validate</strong><br/>오프라인 검사</div>
+<div class="flow-step"><strong>Environment 보호</strong><br/>리뷰어 승인 설정 시 대기</div>
+<div class="flow-step"><strong>deploy 시작</strong><br/>사전 검증·OIDC</div>
+<div class="flow-step"><strong>plan → apply</strong><br/>같은 job 안에서 실행</div>
+</div>
+<div class="warning"><strong>현재 승인 화면은 생성된 plan의 승인 화면이 아니다.</strong> Required reviewer를 설정했더라도 deploy job 시작 전에 승인한다. Terraform plan은 그 뒤에 생성되고 apply 모드면 이어서 적용된다. 코드에 <code>environment:</code>를 적었다고 required reviewer가 자동 설정되는 것도 아니다.</div>
+<p>별도 plan 실행을 먼저 검토한 후 apply를 누르는 운영은 가능하다. 다만 두 실행 사이에 코드·외부 리소스가 바뀔 수 있으므로 apply 실행의 새 plan은 달라질 수 있다. 정확히 검토한 plan만 승인 후 적용하도록 요구한다면 plan 생성과 적용을 별도 job으로 나누고 plan·commit의 무결성 및 민감 파일의 보관·접근·만료를 함께 설계해야 한다. 검토한 plan만 승인 후 적용하는 설계는 현재 브랜치에 구현된 기능이 아니라 확장 과제다.</p>
+<p>수동 실행 UI는 workflow 파일이 기본 브랜치에 있고 <code>workflow_dispatch</code>를 선언해야 사용할 수 있다. Run workflow에서 선택한 브랜치가 실행 기준이 되며 배포 스크립트의 기본 허용 브랜치는 DEV <code>develop</code>, PRD <code>main</code>이다. <code>DEPLOY_BRANCH</code>를 변경한다면 Environment의 branch 규칙도 같은 의도로 맞춘다. <a href="https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow">수동 workflow 실행 공식 절차</a></p>

@@ -1,0 +1,66 @@
+<div class="lab">
+<h4>준비와 실행 범위</h4>
+<p>실습에는 저장소 checkout, Terraform CLI <code>1.13.5</code>, provider 다운로드가 가능한 인터넷 연결이 필요하다. 저장소 root에서 아래 명령을 실행한다. 명령은 Bash와 PowerShell에서 같은 형태로 사용할 수 있다. 이미 운영 backend로 초기화한 작업 폴더가 있다면, 수업용 새 checkout에서 수행해 이전 backend 설정과 섞이지 않게 한다.</p>
+<div class="code-block"><p class="code-label">학생 실행 · AWS 자격증명 불필요 · init은 플러그인 다운로드를 위해 네트워크 사용</p><pre><code class="language-bash">terraform version
+terraform fmt -check -recursive infra/terraform
+terraform -chdir=infra/terraform/stack init -backend=false -lockfile=readonly
+terraform -chdir=infra/terraform/stack validate
+terraform -chdir=infra/terraform/stack test</code></pre></div>
+<div class="table-wrap"><table><thead><tr><th>명령</th><th>하는 일</th><th>기대 결과와 해석</th></tr></thead><tbody>
+<tr><td><code>version</code></td><td>CLI 설치 버전 확인</td><td><code>Terraform v1.13.5</code> 확인. 다른 버전이면 수업 기준과 차이 기록</td></tr>
+<tr><td><code>fmt -check</code></td><td>표준 서식 검사</td><td>정상이면 종료 코드 0. 파일 경로가 출력되면 서식 검토가 필요한 파일</td></tr>
+<tr><td><code>init -backend=false</code></td><td>S3 backend를 연결하지 않고 provider 초기화</td><td>lock에 기록된 AWS provider 설치. 운영 state에 접근하지 않음</td></tr>
+<tr><td><code>validate</code></td><td>구문과 참조, provider 스키마 검사</td><td><code>Success! The configuration is valid.</code></td></tr>
+<tr><td><code>test</code></td><td>이 저장소의 mock provider 테스트 실행</td><td>DEV·PRD 설계 검증과 잘못된 입력 거부까지 4개 run 통과 기대</td></tr>
+</tbody></table></div>
+<p>workflow가 이 단계를 “offline”이라고 부르는 것은 AWS API를 호출하지 않는다는 의미다. 최초 provider 다운로드까지 인터넷이 필요 없다는 뜻은 아니다. 또한 <code>terraform test</code>라는 명령 자체가 항상 안전한 모의 실행인 것도 아니다. 실제 provider와 <code>command = apply</code>로 작성된 테스트는 리소스를 만들 수 있다. 이 저장소는 <code>mock_provider "aws"</code>를 사용하고 각 run을 <code>command = plan</code>으로 정의했기 때문에 AWS 변경 없이 검증할 수 있다. <a href="https://developer.hashicorp.com/terraform/language/tests/mocking">Terraform provider mocking</a></p>
+<div class="code-block"><p class="code-label">현재 테스트 발췌 · environments.tftest.hcl</p><pre><code class="language-hcl">mock_provider "aws" {
+  mock_data "aws_availability_zones" {
+    defaults = {
+      names = ["ap-northeast-2a", "ap-northeast-2b", "ap-northeast-2c"]
+    }
+  }
+  # IAM 조회의 mock 값도 원본에 정의되어 있다.
+}
+
+run "reject_unknown_environment" {
+  command = plan
+  variables {
+    environment = "production"
+  }
+  expect_failures = [var.environment]
+}</code></pre></div>
+<p>마지막 run은 실패를 기대하는 <strong>실패 입력 테스트(negative test)</strong>다. <code>environment = "production"</code>은 변수 검증에 맞지 않으므로 거부되어야 한다. <code>expect_failures</code>가 그 거부를 정상 결과로 기록한다. 테스트 성공은 잘못된 환경 이름이 허용된다는 뜻이 아니라 금지된 입력을 정확히 막았다는 뜻이다.</p>
+<h4>확장 실습 · 60분 과정에서 5분 추가</h4>
+<p>수업용 복사본에서 다음 run을 테스트 파일에 추가하고 다시 <code>terraform test</code>를 실행한다. PRD에서 비용을 줄이려고 NAT를 하나로 바꾸는 입력을 정책이 거부하는지 확인한다. 이 실습은 실제 <code>prd.tfvars</code>를 바꾸지 않는다.</p>
+<div class="code-block"><p class="code-label">학생 작성 · mock 테스트 파일에만 추가</p><pre><code class="language-hcl">run "reject_shared_nat_in_prd" {
+  command = plan
+  variables {
+    environment             = "prd"
+    availability_zone_count = 3
+    single_nat_gateway      = true
+  }
+  expect_failures = [var.single_nat_gateway]
+}</code></pre></div>
+<p><strong>기대 결과:</strong> 기존 4개 run에 추가한 1개 run까지 통과한다. 통과 이유를 NAT 하나로도 운영 가능해서가 아니라 PRD에서 NAT 하나를 공유하는 입력이 거부되었기 때문이라고 설명할 수 있어야 한다. 이 테스트는 AWS quota, 서비스 가용 리전, 조직 SCP, 실제 네트워크 연결, 비용을 검증하지는 않는다.</p>
+</div>
+<h4>실제 plan과 apply는 어떻게 다른가?</h4>
+<p class="code-label">Plan 읽기 예제 · 실제 실행 결과가 아님</p>
+<pre><code>+ aws_vpc.this
+~ aws_db_instance.postgres
+-/+ aws_subnet.private[0]
+
+Plan: 2 to add,
+      1 to change,
+      1 to destroy.</code></pre>
+<p>위 예제의 생성 2건은 VPC 신규 생성과 서브넷 교체에 따른 생성을 포함한다. 교체는 삭제 후 생성(<code>-/+</code>) 또는 생성 후 삭제(<code>+/-</code>)로 표시될 수 있다. 변경 기호뿐 아니라 리소스 이름과 변경 속성을 함께 읽는다.</p>
+<p>실제 원격 <code>plan</code>은 이미 준비된 backend와 AWS 자격증명을 사용해 state와 AWS API를 읽는다. 인프라 변경은 적용하지 않지만 잠금 객체 생성·삭제와 같은 backend 작업은 일어날 수 있다. 그래서 원격 plan은 자격증명도 필요 없는 오프라인 검사와 구분해야 한다. 저장된 plan에는 민감 정보가 포함될 수 있으며 외부 공유용 결과물로 취급하지 않는다. <a href="https://developer.hashicorp.com/terraform/cli/commands/plan">terraform plan 공식 동작</a></p>
+<div class="code-block"><p class="code-label">강사 설명용 · aws-deploy.yml 내부의 실행 방식 · 학생 실행 대상 아님</p><pre><code class="language-bash"># 앞 단계에서 환경별 backend와 AWS 인증을 준비한 상태
+terraform plan -lock-timeout=5m \
+  -var-file="../environments/$DEPLOY_ENVIRONMENT.tfvars" \
+  -out="$RUNNER_TEMP/trippilot.tfplan"
+
+# 수동 workflow의 mode=apply일 때만 실행
+terraform apply -lock-timeout=5m "$RUNNER_TEMP/trippilot.tfplan"</code></pre></div>
+<p>계획의 <code>+</code>는 생성, <code>~</code>는 제자리 수정, <code>-</code>는 삭제, <code>-/+</code>는 교체를 뜻한다. 특히 DB·서브넷 같은 리소스의 삭제와 교체가 의도된 것인지 먼저 확인한다. 저장된 plan을 apply하는 방식은 그 실행에서 만든 구체적인 계획을 적용한다. 단, 별도 <code>mode=plan</code> 실행의 결과 파일을 다음 실행이 승계하는 구조는 아니다. 현재 workflow에서 <code>mode=apply</code>를 선택하면 그 실행 안에서 새 plan을 만든 뒤 적용한다.</p>
+<p>최초 init 실패는 provider 다운로드나 lock 호환 문제인지, validate 실패는 문법·스키마 문제인지, 원격 plan 실패는 자격증명·backend·조회 권한 문제인지 단계를 구분해 읽는다. lock 오류를 피하려고 무조건 <code>-lock=false</code>를 추가하거나 state를 지우는 대응은 하지 않는다. 오류 메시지가 가리키는 계층부터 해결한다.</p>

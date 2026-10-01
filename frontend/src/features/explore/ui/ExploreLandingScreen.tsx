@@ -6,21 +6,30 @@
  * 조회·`formatPrice`/`stayKey` 조합은 이 화면이 아니라 라우트(`(tabs)/explore.tsx`)가 진다.
  * 화면은 뷰모델(prop)만 받는다.
  *
- * 6구획(위→아래): 헤딩 · 검색 · 숙소 가로 레인(카드 우상단 저장 하트) · 가볼 곳 가로 레인
- * (장소 카드, TRIP-470 복원) · 여행자 일정 자리(준비 중) · 우하단 담은 곳 saved-menu FAB
- * (TRIP-494 — 하트 FAB 을 누르면 담은 장소→d02 · 저장한 숙소→e04 두 미니 FAB 으로 펼쳐진다).
- * 여행자 일정은 1차엔 자리만(BR-U1-05). 축 4탭(전체·숙소·장소·여행자)·'지금 내 주변'은
- * 복원하지 않는다 — 죽은 탭(TRIP-447)·삭제된 인프라(TRIP-445) 결정 유지.
+ * 5구획(위→아래): 헤딩 · 검색 · 숙소 가로 레인(카드 우상단 저장 하트) · 장소 가로 레인
+ * (TRIP-470 복원) · 우하단 세로 2단 FAB. 여행자 일정 레인은 TRIP-703 으로 제거했다(라이브
+ * Figma 1672:1183 에 없음). 축 4탭·'지금 내 주변'도 복원하지 않는다 — 죽은 탭(TRIP-447)·삭제된
+ * 인프라(TRIP-445) 결정 유지.
  *
- * FAB 은 탭바(오버레이) 위에 뜨는 고정 요소다(bottom-[100px]). 스크롤 콘텐츠 하단 여백을
- * 넉넉히 둬 마지막 항목이 안 가리게 한다. 탭바는 SafeArea 를 모르는 순수 뷰다(repo-trap).
+ * 지역 필터(TRIP-1105, Figma 4767:2957): `regionFilter` 가 있으면 검색바 안에 지역 칩 + ✕ 가 뜨고
+ * 레인 제목에 지역 이름이 붙는다. 옛 d05 목적지 상세(따로 있던 화면)를 이 한 화면에 합쳤다 — 조회를
+ * 그 지역으로 좁히는 일과 ✕ 해제는 라우트가 진다(화면은 라벨·콜백만 받는다).
+ *
+ * 우하단 FAB 은 세로 2단이다(TRIP-703): 위=담은 곳 saved-menu 하트(TRIP-494 — 누르면 담은
+ * 장소→d02 · 저장한 숙소→e04 두 미니 FAB 으로 펼쳐진다) · 아래=＋ 여행 만들기(→g01, 라우트가
+ * onPressCreateTrip 을 배선). FAB 은 탭바(오버레이) 위에 뜨는 고정 요소다(bottom-[84px]).
+ * 스크롤 콘텐츠 하단 여백을 넉넉히 둬 마지막 항목이 안 가리게 한다. 탭바는 SafeArea 를 모르는
+ * 순수 뷰다(repo-trap).
  */
 import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { PlaceCardVM } from '@/entities/place/model';
-import { PlaceRailCard } from '@/entities/place/ui/PlaceRailCard';
+import {
+  PlaceRailCard,
+  type PlaceRailCardSave,
+} from '@/entities/place/ui/PlaceRailCard';
 import type { StayCardVM } from '@/entities/stay/model';
 import { StaySearchCard } from '@/entities/stay/ui/StaySearchCard';
 import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
@@ -29,13 +38,15 @@ import {
   CloseGlyph,
   InfoGlyph,
   MapPinGlyph,
+  PlusGlyph,
   SearchGlyph,
   SuitcaseGlyph,
   WarningTriangleGlyph,
 } from '@/features/explore/ui/ExploreGlyphs';
+import { Skeleton } from '@/shared/ui/Skeleton';
 
 // 카드 뷰모델은 entities 로 이관됐다(StayCardVM=807 · PlaceCardVM=806) — 여기서 재수출해 기존
-// 소비처(DestinationDetailScreen·placePhoto 테스트·라우트)의 `./ExploreLandingScreen`·이 파일 경유
+// 소비처(placePhoto 테스트·라우트)의 `./ExploreLandingScreen`·이 파일 경유
 // import 를 그대로 살린다(★11 — 로컬 export interface 제거가 진짜 이동 증거).
 export type { PlaceCardVM, StayCardVM };
 
@@ -52,11 +63,29 @@ export interface ExploreLandingScreenProps {
     cards: PlaceCardVM[];
     onRetry: () => void;
     onPressCard: (poiId: string) => void;
+    // 저장 하트(TRIP-1049) — 전부 additive·옵셔널. onToggleSave 가 있을 때만 하트를 그린다.
+    savedPoiIds?: string[];
+    pendingPoiIds?: string[];
+    onToggleSave?: (poiId: string) => void;
+    saveErrorMessage?: string | null;
+    onDismissSaveError?: () => void;
   };
   /** "가볼 곳" 진입점 탭 → d04 장소 목록(/explore/places, TRIP-453). **옵셔널** — 기존
    * 소비처(cardPress 테스트·_dev/preview·save-integration)가 이 prop 없이 렌더하므로 필수화하면
    * tsc 가 그 세 곳에서 깨진다. 미지정 시 CTA 는 렌더되되 무동작(무회귀). 라우팅은 라우트가 진다. */
   onPressPlaces?: () => void;
+  /** ＋ 여행 만들기 FAB(우하단, 담은 곳 하트 아래) → g01 위저드(/trips/new/step1, TRIP-703).
+   * **옵셔널** — cardPress·placePhoto 테스트·_dev/preview 가 이 prop 없이 렌더하므로 필수화하면
+   * 그 세 곳에서 tsc 가 깨진다. FAB 은 항상 렌더하되 press 는 `onPressCreateTrip?.()` 로 가드
+   * (미지정 시 no-op·무회귀). 목적지 배선은 라우터를 아는 라우트가 진다(화면은 순수 뷰). */
+  onPressCreateTrip?: () => void;
+  /** 조회 대기 얼굴(TRIP-704, Figma 3612:2006) — 켜지면 숙소 2·장소 3 스켈레톤만 그리고 실카드·
+   * 폴백·FAB 을 안 그린다. **옵셔널**(기본 false) — 미지정 시 기존 default 얼굴 그대로라 기존
+   * 테스트가 무수정 green(무회귀). 배선은 라우트가 `stay.isPending || places.isPending` 로 내린다. */
+  isLoading?: boolean;
+  /** 지역 필터(TRIP-1105) — 있으면 검색바 안에 칩(`label`) + ✕(`onClear`)를 그리고 레인 제목을
+   * `{label} 숙소`·`{label} 장소` 로 바꾼다. **옵셔널** — 미지정이면 지금 d01 그대로(무회귀). */
+  regionFilter?: { label: string; onClear: () => void };
   stayLane: {
     error: boolean;
     cards: StayCardVM[];
@@ -149,6 +178,35 @@ function StayLaneError({ onRetry }: { onRetry: () => void }): ReactElement {
   );
 }
 
+function SkeletonRail({
+  testIDPrefix,
+  count,
+  width,
+  height,
+}: {
+  testIDPrefix: string;
+  count: number;
+  width: number;
+  height: number;
+}): ReactElement {
+  // 조회 대기 자리표시 — 회색 라운드 박스를 가로로 나열한다(TRIP-704). 카드 자리 크기를 그대로
+  // 잡아 도착 시 레이아웃이 안 튄다. testID 로 개수를 세어 잠근다(스켈레톤은 텍스트가 없다).
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+      <View className="flex-row gap-md">
+        {Array.from({ length: count }).map((_, i) => (
+          <Skeleton
+            key={i}
+            testID={`${testIDPrefix}-${i}`}
+            className="rounded-card bg-surface-soft"
+            style={{ width, height }}
+          />
+        ))}
+      </View>
+    </ScrollView>
+  );
+}
+
 function StaySaveErrorBanner({
   onDismiss,
 }: {
@@ -171,10 +229,66 @@ function StaySaveErrorBanner({
   );
 }
 
+// 장소 담기 실패 배너(TRIP-1049, INV-4) — 문구는 라우트가 담기/해제 갈래로 골라 준다.
+function PlaceSaveErrorBanner({
+  message,
+  onDismiss,
+}: {
+  message: string;
+  onDismiss?: () => void;
+}): ReactElement {
+  return (
+    <Pressable
+      testID="explore-place-save-error"
+      accessibilityRole="button"
+      onPress={onDismiss}
+      className="mb-md flex-row items-center gap-sm rounded-card bg-surface-soft px-lg py-md"
+    >
+      <WarningTriangleGlyph size={18} tone="primary" />
+      <Text className="flex-1 font-noto text-label text-muted">{message}</Text>
+    </Pressable>
+  );
+}
+
+// 검색바 안 지역 칩(TRIP-1105, Figma 4767:2957) — 연분홍 바탕·분홍 글자·r8(킷 §10 선택 칩, 반경
+// 토큰 없음). ✕ 는 칩 안의 중첩 Pressable 이라 누르면 해제만 하고 바깥 검색바(지역 선택)로 새지
+// 않는다. 보이는 크기 20 + hitSlop 12 = 손가락 44.
+function RegionChip({
+  label,
+  onClear,
+}: {
+  label: string;
+  onClear: () => void;
+}): ReactElement {
+  return (
+    <View
+      testID="explore-region-chip"
+      className="flex-row items-center gap-xs rounded-[8px] bg-primary-pale py-[6px] pl-md pr-sm"
+    >
+      <Text className="font-noto-bold text-label font-bold text-primary">
+        {label}
+      </Text>
+      <Pressable
+        testID="explore-region-chip-clear"
+        accessibilityRole="button"
+        accessibilityLabel="지역 필터 해제"
+        hitSlop={12}
+        onPress={onClear}
+        className="h-5 w-5 items-center justify-center"
+      >
+        <CloseGlyph size={12} tone="primary" />
+      </Pressable>
+    </View>
+  );
+}
+
 export function ExploreLandingScreen({
   heading,
   onPressSearch,
   onPressPlaces,
+  onPressCreateTrip,
+  isLoading = false,
+  regionFilter,
   placeLane,
   stayLane,
   savedMenu,
@@ -187,6 +301,18 @@ export function ExploreLandingScreen({
     saveError = false,
     onDismissSaveError,
   } = stayLane;
+  // 장소 저장 하트(TRIP-1049) — onToggleSave 가 있을 때만 그린다(AC-8 무회귀).
+  const placeSaveFor = (poiId: string): PlaceRailCardSave | undefined =>
+    placeLane?.onToggleSave
+      ? {
+          saved: (placeLane.savedPoiIds ?? []).includes(poiId),
+          pending: (placeLane.pendingPoiIds ?? []).includes(poiId),
+          onToggle: () => placeLane.onToggleSave?.(poiId),
+          testID: `explore-place-save-${poiId}`,
+          filledTestID: `explore-place-heart-filled-${poiId}`,
+          outlineTestID: `explore-place-heart-outline-${poiId}`,
+        }
+      : undefined;
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
@@ -210,30 +336,49 @@ export function ExploreLandingScreen({
             </Text>
           </View>
 
-          {/* 검색 — 입력 불가 진입 버튼. 탭하면 통합검색 /explore/search 로 간다(TRIP-450). */}
+          {/* 검색 — 입력 불가 진입 버튼. 탭하면 지역 선택으로 간다(라우트 배선). 지역 필터 중엔
+              placeholder 대신 지역 칩 + ✕ 와 오른쪽 › 를 그린다(TRIP-1105, Figma 4767:2957). */}
           <Pressable
             testID="explore-landing-search"
             accessibilityRole="button"
             onPress={onPressSearch}
-            className="mt-lg h-[52px] flex-row items-center gap-sm rounded-pill border border-hairline-strong bg-canvas px-lg"
+            className="mt-lg h-[58px] flex-row items-center gap-sm rounded-pill border border-hairline-strong bg-canvas px-lg"
           >
             <SearchGlyph size={20} />
-            <Text className="flex-1 font-noto text-body text-muted-soft">
-              도시 · 장소 · 숙소 검색
-            </Text>
+            {regionFilter ? (
+              <>
+                <RegionChip
+                  label={regionFilter.label}
+                  onClear={regionFilter.onClear}
+                />
+                <View className="flex-1" />
+                <Text className="font-noto text-body text-muted-soft">›</Text>
+              </>
+            ) : (
+              <Text className="flex-1 font-noto text-body text-muted-soft">
+                도시 · 장소 · 숙소 검색
+              </Text>
+            )}
           </Pressable>
 
           {/* 숙소 가로 레인 */}
           <View testID="explore-lane-stay" className="mt-2xl">
             <LaneHeader
-              title="숙소"
+              title={regionFilter ? `${regionFilter.label} 숙소` : '숙소'}
               onSeeAll={stayLane.onSeeAll}
               seeAllTestID="explore-lane-stay-seeall"
             />
-            {saveError ? (
+            {!isLoading && saveError ? (
               <StaySaveErrorBanner onDismiss={onDismissSaveError} />
             ) : null}
-            {stayLane.error ? (
+            {isLoading ? (
+              <SkeletonRail
+                testIDPrefix="explore-landing-skeleton-stay"
+                count={2}
+                width={160}
+                height={182}
+              />
+            ) : stayLane.error ? (
               <StayLaneError onRetry={stayLane.onRetry} />
             ) : (
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -270,11 +415,24 @@ export function ExploreLandingScreen({
               삭제된 인프라 — TRIP-447/445 결정 유지). */}
           <View testID="explore-lane-place" className="mt-2xl">
             <LaneHeader
-              title="가볼 곳"
+              title={regionFilter ? `${regionFilter.label} 장소` : '장소'}
               onSeeAll={onPressPlaces}
               seeAllTestID="explore-lane-place-cta"
             />
-            {placeLane?.error ? (
+            {!isLoading && placeLane?.saveErrorMessage ? (
+              <PlaceSaveErrorBanner
+                message={placeLane.saveErrorMessage}
+                onDismiss={placeLane.onDismissSaveError}
+              />
+            ) : null}
+            {isLoading ? (
+              <SkeletonRail
+                testIDPrefix="explore-landing-skeleton-place"
+                count={3}
+                width={160}
+                height={165}
+              />
+            ) : placeLane?.error ? (
               <Pressable
                 testID="explore-lane-place-retry"
                 accessibilityRole="button"
@@ -294,6 +452,7 @@ export function ExploreLandingScreen({
                       key={card.poiId}
                       card={card}
                       onPress={placeLane.onPressCard}
+                      save={placeSaveFor(card.poiId)}
                     />
                   ))}
                 </View>
@@ -313,24 +472,13 @@ export function ExploreLandingScreen({
               </Pressable>
             )}
           </View>
-
-          {/* 여행자 일정 — 자리만(BR-U1-05) */}
-          <View testID="explore-lane-itin" className="mt-2xl">
-            <LaneHeader title="여행자 일정" />
-            <View className="flex-row items-center gap-sm rounded-card bg-surface-soft px-lg py-2xl">
-              <InfoGlyph size={18} />
-              <Text className="font-noto text-label text-muted">
-                여행자들의 일정을 준비 중이에요
-              </Text>
-            </View>
-          </View>
         </ScrollView>
 
         {/* 담은 곳 saved-menu FAB — 우하단 하트 FAB 을 누르면 두 미니 FAB 으로 펼쳐진다(Figma
             a01 3012:1731). 왼→오: 담은 장소(위치핀→d02) · 저장한 숙소(가방→e04) · 하트/닫기.
             열리면 배후 backdrop 이 뜨고, 바깥 탭으로 닫힌다. 풀폭 핑크 CTA 바에서 교체(TRIP-494).
             열림 상태는 라우트 소유(화면 useState 0건 구조 가드). */}
-        {savedMenu.open ? (
+        {!isLoading && savedMenu.open ? (
           <Pressable
             testID="explore-saved-menu-backdrop"
             accessibilityRole="button"
@@ -339,52 +487,70 @@ export function ExploreLandingScreen({
             className="absolute inset-0 bg-scrim/40"
           />
         ) : null}
-        <View className="absolute bottom-[100px] right-lg flex-row items-center gap-md">
-          {savedMenu.open ? (
-            <>
+        {/* 우하단 세로 2단 FAB(TRIP-703): 위 행=하트 saved-menu(펼치면 미니 FAB 이 왼쪽으로
+            나온다) · 아래=＋ 여행 만들기. items-end 로 둘 다 오른쪽에 정렬한다. 로딩 중엔 조작
+            대상이 없어 통째로 미렌더한다(TRIP-704). */}
+        {isLoading ? null : (
+          <View className="absolute bottom-[84px] right-lg items-end gap-md">
+            <View className="flex-row items-center gap-md">
+              {savedMenu.open ? (
+                <>
+                  <Pressable
+                    testID="explore-saved-places-fab"
+                    accessibilityRole="button"
+                    accessibilityLabel={`담은 장소 ${savedMenu.savedCount}곳`}
+                    onPress={savedMenu.onPressSavedPlaces}
+                    style={FAB_SHADOW}
+                    className="h-[56px] w-[56px] items-center justify-center rounded-full bg-canvas"
+                  >
+                    <MapPinGlyph size={26} tone="primary" />
+                  </Pressable>
+                  <Pressable
+                    testID="explore-saved-stays-fab"
+                    accessibilityRole="button"
+                    accessibilityLabel="저장한 숙소"
+                    onPress={savedMenu.onPressSavedStays}
+                    style={FAB_SHADOW}
+                    className="h-[56px] w-[56px] items-center justify-center rounded-full bg-canvas"
+                  >
+                    <SuitcaseGlyph size={26} />
+                  </Pressable>
+                </>
+              ) : null}
               <Pressable
-                testID="explore-saved-places-fab"
+                testID="explore-saved-menu-toggle"
                 accessibilityRole="button"
-                accessibilityLabel={`담은 장소 ${savedMenu.savedCount}곳`}
-                onPress={savedMenu.onPressSavedPlaces}
+                accessibilityLabel={
+                  savedMenu.open
+                    ? '담은 곳 메뉴 닫기'
+                    : `담은 장소 ${savedMenu.savedCount}곳`
+                }
+                onPress={savedMenu.onToggle}
                 style={FAB_SHADOW}
-                className="h-[56px] w-[56px] items-center justify-center rounded-full bg-canvas"
+                className={`h-[56px] w-[56px] items-center justify-center rounded-full ${
+                  savedMenu.open ? 'bg-primary' : 'bg-canvas'
+                }`}
               >
-                <MapPinGlyph size={26} tone="primary" />
+                {savedMenu.open ? (
+                  <CloseGlyph size={24} />
+                ) : (
+                  <HeartFilledGlyph size={26} />
+                )}
               </Pressable>
-              <Pressable
-                testID="explore-saved-stays-fab"
-                accessibilityRole="button"
-                accessibilityLabel="저장한 숙소"
-                onPress={savedMenu.onPressSavedStays}
-                style={FAB_SHADOW}
-                className="h-[56px] w-[56px] items-center justify-center rounded-full bg-canvas"
-              >
-                <SuitcaseGlyph size={26} />
-              </Pressable>
-            </>
-          ) : null}
-          <Pressable
-            testID="explore-saved-menu-toggle"
-            accessibilityRole="button"
-            accessibilityLabel={
-              savedMenu.open
-                ? '담은 곳 메뉴 닫기'
-                : `담은 곳 ${savedMenu.savedCount}곳`
-            }
-            onPress={savedMenu.onToggle}
-            style={FAB_SHADOW}
-            className={`h-[56px] w-[56px] items-center justify-center rounded-full ${
-              savedMenu.open ? 'bg-primary' : 'bg-canvas'
-            }`}
-          >
-            {savedMenu.open ? (
-              <CloseGlyph size={24} />
-            ) : (
-              <HeartFilledGlyph size={26} />
-            )}
-          </Pressable>
-        </View>
+            </View>
+            {/* ＋ 여행 만들기 — 하트 아래(핑크 원·흰 ＋). press 는 옵셔널 가드(미지정 no-op). */}
+            <Pressable
+              testID="explore-create-trip-fab"
+              accessibilityRole="button"
+              accessibilityLabel="여행 만들기"
+              onPress={() => onPressCreateTrip?.()}
+              style={FAB_SHADOW}
+              className="h-[56px] w-[56px] items-center justify-center rounded-full bg-primary"
+            >
+              <PlusGlyph size={26} />
+            </Pressable>
+          </View>
+        )}
       </View>
     </SafeAreaView>
   );

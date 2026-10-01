@@ -60,7 +60,7 @@ def test_preference_scoring_yaml_loads_with_semver() -> None:
         LlmFeature.PREFERENCE_SCORING, build_prompt_vars_empty()
     )
     assert ref.prompt_id == "prompts/preference_scoring.yaml"
-    assert ref.version == "0.2.0" and ref.feature == "PREFERENCE_SCORING"
+    assert ref.version == "0.3.0" and ref.feature == "PREFERENCE_SCORING"
     assert "poiId" in prompt  # 출력 스키마 안내 포함
     # TRIP-374: 출력 스키마에 reason 없음 — 프롬프트는 reason 미출력을 지시
     assert '"reason"' not in prompt
@@ -71,6 +71,8 @@ def build_prompt_vars_empty() -> dict[str, str]:
     return {
         "taste_tags": "미설정",
         "companion": "SOLO",
+        "activities": "미설정",
+        "cuisines": "미설정",
         "budget": "LOW",
         "candidates": "(후보 없음)",
     }

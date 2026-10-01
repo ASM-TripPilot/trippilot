@@ -3,7 +3,7 @@ import type { Itinerary } from '@/shared/api/generated/schemas';
 /**
  * TRIP-395 · resolveLiveState — 여행 중 화면의 상태 판정 1회(frontend-components.md §3).
  *
- * 조회 상태(로딩·오류·데이터) + "오늘이 여행 구간 안인가" + "활성 트리거가 있나"를 하나의
+ * 조회 상태(로딩·오류·데이터) + "오늘은 몇 번째 날인가" + "활성 트리거가 있나"를 하나의
  * 판정으로 접는다. **순수 함수** — 오늘 날짜를 함수 안에서 만들지 않고 `todayDate`로 받는다
  * (`new Date()`를 두면 재현 불가·구조가드 위반). 활성 트리거 목록은 유무만 보므로 타입을
  * 강제하지 않는다(TriggerBanner 배선은 후속 칸 — 여기선 개수만).
@@ -13,11 +13,13 @@ export type LiveState =
   | { kind: 'loading' }
   | { kind: 'notFound' }
   | { kind: 'error' }
-  | { kind: 'outsideToday' }
   | {
       kind: 'active';
       itinerary: Itinerary;
-      /** `days` 배열에서 오늘에 해당하는 인덱스. */
+      /**
+       * 처음 보여 줄 날 인덱스 — 오늘이 일정 안이면 그날, 여행 전이면 0, 여행 후면 마지막 날.
+       * 확정 일정은 날짜와 상관없이 허브로 연다(2026-09-23 사용자 결정 — 옛 outsideToday 막힘 폐기).
+       */
       todayIndex: number;
       hasActiveTrigger: boolean;
     };
@@ -44,10 +46,15 @@ export function resolveLiveState(input: ResolveLiveStateInput): LiveState {
   if (input.isNotFound) return { kind: 'notFound' };
   if (input.isError || !input.itinerary) return { kind: 'error' };
 
-  const todayIndex = input.itinerary.days.findIndex(
-    (day) => day.date === input.todayDate
-  );
-  if (todayIndex === -1) return { kind: 'outsideToday' };
+  const { days } = input.itinerary;
+  const found = days.findIndex((day) => day.date === input.todayDate);
+  // 'YYYY-MM-DD' 는 사전순 = 연대순이라 첫날과 문자열로 비교해 여행 전/후를 가른다.
+  const todayIndex =
+    found !== -1
+      ? found
+      : input.todayDate < (days[0]?.date ?? '')
+        ? 0
+        : Math.max(days.length - 1, 0);
 
   const hasActiveTrigger = (input.activeTriggers?.length ?? 0) > 0;
   return {

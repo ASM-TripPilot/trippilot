@@ -1,5 +1,6 @@
 import { http, HttpResponse } from 'msw';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -254,5 +255,150 @@ describe('TermsPage — 저장 실패 (AC A8 · INV-4)', () => {
     // 조용한 실패 금지 — 오류를 보여줄 뿐 아니라 다음 단계로 새어 나가지 않아야 한다.
     expect(navigationTargets().some((t) => /nickname/.test(t))).toBe(false);
     expect(screen.getByTestId('onboarding-terms-retry')).toBeOnTheScreen();
+  });
+});
+
+describe('TermsPage — 약관 "보기" → 열람 라우트 (TRIP-937 AC-1 · U0 FC §2 본문 열람 링크)', () => {
+  /**
+   * 무엇을 보장하나: 행의 "보기"를 누르면 그 약관의 열람 라우트 `/terms/{termsType}` 로 **push**(뒤로 돌아와
+   * 동의를 이어 가야 하므로 replace 아님)가 정확히 한 번 나가고, 그 행의 체크는 바뀌지 않는다(AC-1b 짝).
+   *
+   * ⚠️ jest 사각(02a ★12): "보기"는 체크 행 Pressable 안에 중첩돼 있고 `fireEvent.press` 는 가장 안쪽
+   *  onPress 하나만 부른다 — 체크 불변 짝은 핸들러가 명시적으로 토글을 부르는 구현만 잡는다. 실기에서
+   *  부모 토글이 함께 도는지는 6-b 확인 항목이다.
+   */
+  it.each([['TERMS_OF_SERVICE'], ['PRIVACY_POLICY'], ['LOCATION_TERMS']])(
+    '%s 행의 보기 → push("/terms/<termsType>") 1회, replace 0, 체크 불변',
+    async (termsType) => {
+      // 준비: 서버 약관 목록이 도착해 행이 그려진다.
+      await renderLoaded();
+
+      // 실행: 그 행의 "보기"를 누른다.
+      fireEvent.press(screen.getByTestId(`onboarding-terms-view-${termsType}`));
+
+      // 단언: 열람 라우트로 문자열 그대로 정확히 한 번, 온보딩 흐름 이동(replace)은 없다.
+      expect(routerMock.push).toHaveBeenCalledTimes(1);
+      expect(routerMock.push).toHaveBeenCalledWith(`/terms/${termsType}`);
+      expect(routerMock.replace).not.toHaveBeenCalled();
+      // 단언(짝): 보기는 동의가 아니다 — 행 체크가 켜지지 않는다.
+      expect(
+        screen.getByTestId(`onboarding-terms-${termsType}`)
+      ).not.toBeChecked();
+    }
+  );
+});
+
+/**
+ * TRIP-1023 #002 (결정2 · US-ONB-02 예외 · BR-U0-10) — 실제 훅·실제 GET /terms 로 미동의 안내 시점을 잰다.
+ *
+ * 무엇을 보장하나: 서버 약관이 도착한 첫 화면엔 안내가 없고(A10), 비활성으로 보이는 '다음'을 누르면
+ * 그때 안내가 뜨되 서버 저장·이동은 0회다(A11). 한 번 뜬 안내는 체크에 따라 목록만 줄고, 전부 체크면
+ * 사라지며, 다시 풀면 곧바로 돌아온다(A12 · Q7). '다음'을 안 누르면 체크·해제를 해도 끝까지 안 뜬다(A13).
+ *
+ * "안 일어났다"(POST 0회)는 안내가 뜬 **뒤** 시간을 흘려서 센다(02a ★12).
+ */
+describe('🔴 TRIP-1023 #002 — 미동의 안내는 다음을 시도했을 때만 (AC-A10~A13)', () => {
+  const MISSING_NOTICE = '아직 동의하지 않은 필수 항목이에요';
+  let consentPosts = 0;
+
+  beforeEach(() => {
+    consentPosts = 0;
+    server.use(
+      http.post(`${BASE}/me/consents`, () => {
+        consentPosts += 1;
+        return new HttpResponse(null, { status: 200 });
+      })
+    );
+  });
+
+  async function settle(): Promise<void> {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+  }
+
+  it('A10 · 약관이 도착한 첫 화면엔 안내가 없고 다음은 접근성상 비활성이다', async () => {
+    await renderLoaded();
+
+    expect(screen.getByTestId(ROW.privacy)).toBeOnTheScreen();
+    expect(screen.getByTestId(ROW.location)).toBeOnTheScreen();
+
+    expect(screen.queryByTestId('onboarding-terms-missing')).toBeNull();
+    expect(screen.queryByText(MISSING_NOTICE)).toBeNull();
+    expect(screen.getByTestId('onboarding-terms-next')).toBeDisabled();
+  });
+
+  it('A11 · 비활성으로 보이는 다음을 탭하면 안내와 세 이름이 뜨고, 저장 요청·이동은 없다', async () => {
+    await renderLoaded();
+    expect(screen.queryByTestId('onboarding-terms-missing')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('onboarding-terms-next'));
+
+    const missing = await screen.findByTestId('onboarding-terms-missing');
+    expect(missing).toHaveTextContent(/서비스 이용약관/);
+    expect(missing).toHaveTextContent(/개인정보 수집·이용/);
+    expect(missing).toHaveTextContent(/위치기반서비스/);
+    expect(screen.getByText(MISSING_NOTICE)).toBeOnTheScreen();
+
+    await settle();
+    expect(consentPosts).toBe(0);
+    expect(navigationTargets()).toHaveLength(0);
+  });
+
+  it('A12 · 뜬 안내는 체크할수록 줄고, 전부 체크면 사라지며, 하나를 풀면 다음 없이도 돌아온다', async () => {
+    await renderLoaded();
+    expect(screen.queryByTestId('onboarding-terms-missing')).toBeNull();
+    fireEvent.press(screen.getByTestId('onboarding-terms-next'));
+    await screen.findByTestId('onboarding-terms-missing');
+
+    fireEvent.press(screen.getByTestId(ROW.service));
+    await waitFor(() => expect(screen.getByTestId(ROW.service)).toBeChecked());
+    expect(
+      screen.getByTestId('onboarding-terms-missing')
+    ).not.toHaveTextContent(/서비스 이용약관/);
+    expect(screen.getByTestId('onboarding-terms-missing')).toHaveTextContent(
+      /개인정보 수집·이용/
+    );
+
+    fireEvent.press(screen.getByTestId(ROW.privacy));
+    fireEvent.press(screen.getByTestId(ROW.location));
+    await waitFor(() =>
+      expect(screen.getByTestId('onboarding-terms-next')).toBeEnabled()
+    );
+    expect(screen.queryByTestId('onboarding-terms-missing')).toBeNull();
+
+    fireEvent.press(screen.getByTestId(ROW.location));
+    await waitFor(() =>
+      expect(screen.getByTestId(ROW.location)).not.toBeChecked()
+    );
+    expect(screen.getByTestId('onboarding-terms-missing')).toHaveTextContent(
+      /위치기반서비스/
+    );
+  });
+
+  it('A13 · 다음을 누르지 않고 체크·해제만 하면 안내는 끝까지 뜨지 않는다', async () => {
+    await renderLoaded();
+
+    fireEvent.press(screen.getByTestId(ROW.service));
+    await waitFor(() => expect(screen.getByTestId(ROW.service)).toBeChecked());
+    expect(screen.queryByTestId('onboarding-terms-missing')).toBeNull();
+
+    fireEvent.press(screen.getByTestId(ROW.service));
+    await waitFor(() =>
+      expect(screen.getByTestId(ROW.service)).not.toBeChecked()
+    );
+    expect(screen.queryByTestId('onboarding-terms-missing')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('onboarding-terms-agreeall'));
+    await waitFor(() =>
+      expect(screen.getByTestId('onboarding-terms-agreeall')).toBeChecked()
+    );
+    fireEvent.press(screen.getByTestId('onboarding-terms-agreeall'));
+    await waitFor(() =>
+      expect(screen.getByTestId('onboarding-terms-agreeall')).not.toBeChecked()
+    );
+
+    expect(screen.queryByTestId('onboarding-terms-missing')).toBeNull();
+    expect(screen.queryByText(MISSING_NOTICE)).toBeNull();
   });
 });

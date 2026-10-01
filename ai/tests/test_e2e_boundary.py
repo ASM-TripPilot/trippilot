@@ -86,7 +86,7 @@ def _scores_json(*ids: str) -> str:
 
 def _explanations_json(*ids: str) -> str:
     return json.dumps(
-        {"explanations": [{"poiId": i, "text": "취향에 맞는 조용한 곳이라"} for i in ids]}
+        {"explanations": [{"poiId": i, "tags": ["#조용한", "#취향저격", "#여유", "#산책", "#힐링"]} for i in ids]}
     )
 
 

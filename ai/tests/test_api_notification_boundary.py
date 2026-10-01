@@ -31,7 +31,7 @@ REQUEST = {
             "schedule_key": "k1",
             "kind": "TRIP_DAY",
             "date": "2026-09-13",
-            "slots": [{"name": "성산일출봉", "category": "관광지"}],
+            "slots": [{"name": "성산일출봉", "category": "SIGHT"}],
         }
     ],
 }
@@ -80,13 +80,13 @@ TWO_ITEM_REQUEST = {
             "schedule_key": "k1",
             "kind": "TRIP_DAY",
             "date": "2026-09-13",
-            "slots": [{"name": "성산일출봉", "category": "관광지"}],
+            "slots": [{"name": "성산일출봉", "category": "SIGHT"}],
         },
         {
             "schedule_key": "k2",
             "kind": "TRIP_DAY",
             "date": "2026-09-14",
-            "slots": [{"name": "우도", "category": "관광지"}],
+            "slots": [{"name": "우도", "category": "SIGHT"}],
         },
     ],
 }

@@ -154,3 +154,20 @@ describe('🔴 G3 · 생성 선행조건 게이트는 h04 에 없다 (g02 소유
     expect(screen).not.toMatch(/\buseQuery\b|\buseMutation\b/);
   });
 });
+
+describe('🔴 G4 · TRIP-1011 C — "거점 숙소 다시 고르기" 링크는 하단 안내(caption) 뒤에 온다 (01b Q3)', () => {
+  it('화면 소스에서 링크 testID 가 {METHOD_SWITCH_NOTE} 렌더 뒤에 있다', () => {
+    // 렌더 단언은 전부 testID 로 조회해 위치를 안 잰다 — 순서는 소스로만 막는다(TRIP-493 선례).
+    const screen = readOne(SCREEN_REL);
+
+    // import 줄의 `METHOD_SWITCH_NOTE` 가 아니라 JSX 렌더 자리(`{METHOD_SWITCH_NOTE}`)를 잡는다.
+    const captionIndex = screen.indexOf('{METHOD_SWITCH_NOTE}');
+    const linkIndex = screen.indexOf('itinerary-method-rebase');
+
+    // 긍정 짝 — 둘 다 실재한다(없으면 -1 비교가 공짜로 통과한다).
+    expect(captionIndex).toBeGreaterThan(-1);
+    expect(linkIndex).toBeGreaterThan(-1);
+
+    expect(linkIndex).toBeGreaterThan(captionIndex);
+  });
+});

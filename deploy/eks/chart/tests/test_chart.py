@@ -82,6 +82,14 @@ class ChartTests(unittest.TestCase):
                 self.assertTrue(container["securityContext"]["readOnlyRootFilesystem"])
                 self.assertFalse(container["securityContext"]["allowPrivilegeEscalation"])
                 self.assertNotIn("envFrom", container)
+            # Only the AI pods carry the named account that Pod Identity binds to Bedrock;
+            # the others stay on default with no token mounted.
+            accounts = {item["metadata"]["name"]: item["spec"]["template"]["spec"].get("serviceAccountName") for item in deployments}
+            self.assertEqual(accounts.pop("ai"), "ai")
+            self.assertTrue(all(account is None for account in accounts.values()))
+            service_account = next(item for item in documents if item["kind"] == "ServiceAccount")
+            self.assertEqual(service_account["metadata"]["name"], "ai")
+            self.assertFalse(service_account["automountServiceAccountToken"])
             backend = next(item for item in deployments if item["metadata"]["name"] == "backend")
             env = {item["name"]: item for item in backend["spec"]["template"]["spec"]["containers"][0]["env"]}
             self.assertIn("sslmode=require", env["DB_URL"]["value"])

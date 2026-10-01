@@ -37,10 +37,10 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from types import MappingProxyType
 
+from trippilot.agents.planb.place_knowledge import fetch_place_knowledge
 from trippilot.agents.planb.kb_retrieval import (
     DEFAULT_TOP_K,
     retrieve_persona,
-    retrieve_schedule,
     retrieve_situation,
 )
 from trippilot.llm_gateway.workers.alternative_selection import (
@@ -59,6 +59,11 @@ from trippilot.assembly_engine.config import RAIN_OUTDOOR
 from trippilot.assembly_engine.travel import haversine_km
 
 _ALTERNATIVE_LABELS = ("A", "B", "C", "D", "E")
+
+# `PlanBRagResult.ranked_poi_ids` 길이 상한. 하루 슬롯이 5~8개이고 어셈블리
+# 프리필터가 상위 60을 보므로(`ortools_assembler._PREFILTER_TOP_K`) 20이면
+# 배치될 후보를 넉넉히 덮는다. 상한이 필요한 이유는 필드 주석에 있다.
+MAX_RANKED = 20
 
 # 규칙 폴백의 reason → 후순위 카테고리 (TRIP-532). 배정을 바꾸려면 여기만 고친다.
 # 분기 키는 TriggerKind 가 아니라 **reason** — MANUAL 트리거도 사유("비 와서")를 따라간다.
@@ -170,6 +175,18 @@ class PlanBRagRequest:
     trace_id: TraceId
     now: datetime
     excluded_poi_ids: frozenset[PoiId] = frozenset()  # 이미 방문·거절한 POI
+    # 원 일정 순서 (TRIP-972 — /replan 의 `current_slots`). **KB-1 이 하려던 그 일**을
+    # 검색이 아니라 봉투로 한다: 정본 §2 KB-1 표의 "현재 일정 (슬롯 + POI)" 항목이다.
+    # 비어 있으면(=/alternatives 경로) 일정 컨텍스트가 원래 추천 이유만으로 구성된다.
+    # **시각은 담지 않는다.** 대안 선택에 필요한 것은 "지금 어떤 곳들로 짜여 있나"다.
+    #
+    # 이유가 "게이트가 잡아 준다"가 **아니다** — 반대다. 근거 문장을 비우는 게이트
+    # (`reflection_template._TIME_EXPR`)는 `\d+분`·`\d+시간`·`오전/오후 \d+시`만 잡고
+    # **`09:00` 같은 콜론 형식은 통과시킨다**(2026-09-26 실측). 그래서 원 일정 시각을
+    # 프롬프트에 흘리면 LLM 이 근거에 그대로 옮겨 적어도 **아무도 못 막고**, 그 값은
+    # 이 대안에 대해 어셈블리가 검증한 시각이 아니라 **다른 슬롯의 시각**이다(INV-2 위반).
+    # 재료 쪽에서 막는 것이 유일한 방어다.
+    current_slot_ids: tuple[PoiId, ...] = ()
     # 대체 대상 슬롯의 원래 추천 이유 (TRIP-516 — 백엔드 visit_slot.placement_reason).
     # **참조 텍스트**다: 후보 자격과 무관(INV-1은 closed_set_filter 소유), LLM이
     # "원래 취지를 잇는 대안"을 고르게 하는 컨텍스트로만 쓰인다. 키는 평문 poi_id 문자열.
@@ -227,6 +244,13 @@ class PlanBRagResult:
     retrieved: dict  # {KB 라벨: 검색 건수}
     dropped_out_of_pool: tuple[str, ...]  # closed-set 밖이라 버려진 참조 (INV-1 가시화)
     empty_reason: str | None = None  # 대안 0개 사유 (e16 문구 근거)
+    # closed-set 검증을 통과한 **잘리기 전** 랭킹 (상한 `MAX_RANKED`).
+    # `alternatives` 는 `max_alternatives` 로 잘린 화면용이고, 이쪽은 재계획이
+    # 점수 가산에 쓰는 순서다 — /replan 이 이 순서를 `ScheduleTask.planb_rank` 로
+    # 넘기면 어셈블리가 그 가산이 실린 점수로 배치한다 (INV-2 는 그대로: 시각·순서는
+    # 어셈블리 것이고 우리는 점수만 민다).
+    # `to_dict` 에 싣지 않는다 — /alternatives 와이어에는 없는 필드다.
+    ranked_poi_ids: tuple[PoiId, ...] = ()
 
     def __post_init__(self) -> None:
         if self.fallback_level < 0:
@@ -252,14 +276,18 @@ class PlanBRagResult:
 class RagContext:
     """Retrieve 단계 산출물 — Augment에 들어갈 검색 컨텍스트."""
 
-    schedule: tuple[KbHit, ...] = ()
     persona: tuple[KbHit, ...] = ()
     situation: tuple[KbHit, ...] = ()
     notes: tuple[str, ...] = ()
+    # KB-5 장소 지식 — {source_ref: 문서}. 앞 셋과 달리 **풀 전원**을 가져온다
+    # (일부에게만 설명이 붙으면 임베딩 유사도가 랭커가 되어 규칙 랭킹을 덮는다 —
+    #  `place_knowledge` 모듈 docstring).
+    place_knowledge: Mapping[str, str] = field(default_factory=dict)
 
     def counts(self) -> dict:
+        # SCHEDULE 키가 없다 — 검색하지 않으므로 0 을 싣는 것도 거짓이다(TRIP-972).
+        # 0 은 "찾았는데 없었다"로 읽히고, 사실은 "찾지 않는다"다.
         return {
-            KbKind.SCHEDULE.value: len(self.schedule),
             KbKind.PERSONA.value: len(self.persona),
             KbKind.SITUATION.value: len(self.situation),
         }
@@ -346,7 +374,9 @@ class PlanBAgent:
             )
 
         # [3] Generate
-        ranked_refs, reasons, used_llm, why = self._select(request, context, available)
+        ranked_refs, reasons, used_llm, why, rule_ranked = self._select(
+            request, context, available
+        )
         if why:
             notes.append(why)
 
@@ -355,9 +385,21 @@ class PlanBAgent:
         if dropped:
             notes.append(f"out_of_pool_dropped: {len(dropped)}")
         if not kept:  # 전량 드롭 → 규칙 랭킹으로 되돌린다 (LLM만 믿지 않는다)
-            kept = available
+            # **풀 순서가 아니라 규칙 랭킹이다.** 종전에는 `available`(풀 순서)을 그대로
+            # 썼는데 주석은 "규칙 랭킹"이라 적혀 있었다 — 코드가 주석을 안 지켰다.
+            # 우천 강등(⓪)·저장 장소(①)·앵커 거리(②)가 이 경로에서만 통째로 빠져서,
+            # 비 오는 날 전량 드롭되면 야외가 앞에 올 수 있었다.
+            kept = tuple(PoiId(r) for r in rule_ranked)
             used_llm = False
             notes.append("all_selected_dropped → rule_ranking")
+
+        # 게이트가 INV-3 위반 이유를 비워 보낸다 — 몇 건인지는 여기서만 셀 수 있다.
+        # 세지 않으면 결정론 문구로 조용히 바뀐 것이 LLM 이 원래 그렇게 쓴 것과
+        # 구별이 안 된다(INV-4 — 폴백은 해도 침묵은 안 한다).
+        shown = kept[: self._cfg.max_alternatives]  # 화면에 뜨는 것만 센다
+        blanked = sum(1 for r in shown if str(r) in reasons and not reasons[str(r)])
+        if blanked:
+            notes.append(f"reason_time_expr_blanked: {blanked}건")
 
         alternatives = tuple(
             Alternative(
@@ -366,7 +408,7 @@ class PlanBAgent:
                 # LLM이 낸 근거(사용자 표시 1문장)가 있으면 그대로, 없으면 출처 표기
                 rationale=reasons.get(str(poi_id)) or self._rationale(request, used_llm),
             )
-            for i, poi_id in enumerate(kept[: self._cfg.max_alternatives])
+            for i, poi_id in enumerate(shown)
         )
         fallback_level = 0 if used_llm else 1
         return PlanBRagResult(
@@ -377,33 +419,67 @@ class PlanBAgent:
             retrieved=context.counts(),
             dropped_out_of_pool=dropped,
             empty_reason=None,
+            # 상한을 두는 이유: 규칙 랭킹 경로의 `kept` 는 **풀 전체**라 길이가 풀
+            # 크기와 같다. 이 튜플이 `ScheduleTask` 봉투를 타고 다니므로 상한이
+            # 없으면 봉투가 풀만큼 커진다. 호출측이 LLM 경로에서만 쓰지만
+            # (`is_fallback` 확인), 상한은 그 규율과 무관하게 여기서 건다.
+            ranked_poi_ids=kept[:MAX_RANKED],
         )
 
-    # [1] Retrieve — KB 3종. 한 KB가 실패해도 나머지로 진행한다 (부분 성공 허용)
+    # [1] Retrieve — KB 4종. 한 KB가 실패해도 나머지로 진행한다 (부분 성공 허용)
     def retrieve(self, request: PlanBRagRequest) -> RagContext:
         notes: list[str] = []
-        schedule, note = self._safe_retrieve(
-            retrieve_schedule, _schedule_query(request), KbKind.SCHEDULE
-        )
-        if note:
-            notes.append(note)
+        # 질의 셋을 **한 번에** 임베딩한다. 단건 168ms 실측이고 종전에는 KB 마다 한 번씩
+        # 총 네 번 불렀다(KB-5 는 상황 질의를 그대로 다시 임베딩했다) — 0.67초가 Plan-B
+        # 예산에서 그냥 나갔다. 배치가 터지면 `None` 셋으로 두어 종전 경로로 되돌아간다
+        # (KB 검색을 통째로 잃는 것보다 낫다 — INV-4).
+        # **KB-1(SCHEDULE) 은 여기서 검색하지 않는다** (TRIP-972). 정본 §9 개정 ③ 이
+        # "KB-1 은 구조화 DB 조회, 1단계만 VectorStorePort 동형"이라고 적어 뒀고,
+        # 그 1단계가 끝났다(/replan 배선 완료 — #744). 검색은 **구조적으로 항상 0건**
+        # 이었다: 적재 문서 0건 · 쓰는 코드 0건 · 질의가 `"{uuid} {날짜} {enum} 영향 슬롯"`
+        # 이라 한국어 문서와 임베딩 공간에서 붙지 못한다(KB-3 에서 reason 을 한국어로
+        # 치환한 이유와 같은 함정의 더 나쁜 판).
+        #
+        # 일정 컨텍스트는 **요청 봉투가 들고 온다** — `current_slots`(원 일정)·
+        # `affected_reasons`(슬롯별 원래 추천 이유). 검색할 대상이 아니라 받는 값이다.
+        situ_q, persona_q = _situation_query(request), _persona_query(request)
+        try:
+            situ_v, persona_v = self._embedding.embed_batch((situ_q, persona_q))
+        except Exception as e:
+            situ_v = persona_v = None
+            notes.append(f"embed_batch_degraded: {type(e).__name__}: {e}")
+
         situation, note = self._safe_retrieve(
-            retrieve_situation, _situation_query(request), KbKind.SITUATION
+            retrieve_situation, situ_q, KbKind.SITUATION, situ_v
         )
         if note:
             notes.append(note)
         persona, note = self._safe_retrieve(
-            retrieve_persona, _persona_query(request), KbKind.PERSONA
+            retrieve_persona, persona_q, KbKind.PERSONA, persona_v
+        )
+        if note:
+            notes.append(note)
+        # KB-5 — 앞 셋과 다르다: 상황에 맞는 몇 건이 아니라 **풀 전원의 문서**다.
+        # 실패해도 예외를 안 올린다(문서 없이 도는 것이 정상 동작이지 실패가 아니다).
+        knowledge, note = fetch_place_knowledge(
+            request.pool.pois, situ_q, self._embedding, self._store, vector=situ_v
         )
         if note:
             notes.append(note)
         return RagContext(
-            schedule=schedule, persona=persona, situation=situation, notes=tuple(notes)
+            persona=persona,
+            situation=situation,
+            notes=tuple(notes),
+            place_knowledge=knowledge,
         )
 
-    def _safe_retrieve(self, fn, query: str, kb: KbKind) -> tuple[tuple[KbHit, ...], str]:
+    def _safe_retrieve(
+        self, fn, query: str, kb: KbKind, vector: Sequence[float] | None = None
+    ) -> tuple[tuple[KbHit, ...], str]:
         try:
-            hits = fn(query, self._embedding, self._store, top_k=self._cfg.top_k)
+            hits = fn(
+                query, self._embedding, self._store, top_k=self._cfg.top_k, vector=vector
+            )
         except Exception as e:
             return (), f"retrieve_{kb.value.lower()}_error: {type(e).__name__}: {e}"
         return self._cut(hits, kb)
@@ -442,8 +518,13 @@ class PlanBAgent:
         request: PlanBRagRequest,
         context: RagContext,
         available: tuple[PoiId, ...],
-    ) -> tuple[tuple[str, ...], Mapping[str, str], bool, str]:
-        """반환: (참조 순열, {참조: LLM 근거}, LLM 사용 여부, 폴백 사유)."""
+    ) -> tuple[tuple[str, ...], Mapping[str, str], bool, str, tuple[str, ...]]:
+        """반환: (참조 순열, {참조: LLM 근거}, LLM 사용 여부, 폴백 사유, 규칙 랭킹).
+
+        마지막 항목을 따로 돌려주는 이유: closed-set 재검증에서 **전량 드롭**되면
+        호출측이 되돌아갈 곳이 필요한데, 그때 풀 순서로 떨어지면 우천 강등·저장 장소
+        우선이 통째로 빠진다. 규칙 랭킹은 이미 계산돼 있으니 버리지 않고 넘긴다.
+        """
         saved_refs = _saved_refs(request.saved_places, context.persona)
         rule_ranked, rule_note = _rule_ranking(
             saved_refs, request.pool, available, request.reason
@@ -453,7 +534,7 @@ class PlanBAgent:
             return f"{cause} · {rule_note}" if rule_note else cause
 
         if self._worker is None:
-            return rule_ranked, {}, False, _why("alternative_worker_absent")
+            return rule_ranked, {}, False, _why("alternative_worker_absent"), rule_ranked
         try:
             result = self._worker.select(
                 request.pool,
@@ -461,13 +542,14 @@ class PlanBAgent:
                     trigger_kind=request.trigger.kind.value,
                     reason=request.reason,
                     schedule_context=_with_reasons(
-                        _join(context.schedule), request.affected_reasons),
+                        _current_itinerary(request), request.affected_reasons),
                     situation_context=_with_observed_rain(
                         _join(context.situation), request),
                     persona_context=_join_persona(
                         context.persona, request.saved_places, request.persona),
                     max_alternatives=self._cfg.max_alternatives,
                     excluded_poi_ids=request.excluded_poi_ids,
+                    place_knowledge=context.place_knowledge,
                 ),
                 request.trace_id,
                 request.now,
@@ -475,16 +557,16 @@ class PlanBAgent:
                 retry_timeout_sec=self._llm_timeout(request, self._cfg.llm_retry_share),
             )
         except Exception as e:  # 설정 버그(프롬프트 미등록 등)도 Plan-B를 죽이지 않는다
-            return rule_ranked, {}, False, _why(f"alternative_error: {type(e).__name__}: {e}")
+            return rule_ranked, {}, False, _why(f"alternative_error: {type(e).__name__}: {e}"), rule_ranked
         if result.is_fallback:
-            return rule_ranked, {}, False, _why(f"alternative_fallback: {result.error}")
+            return rule_ranked, {}, False, _why(f"alternative_fallback: {result.error}"), rule_ranked
         picked = _as_refs(result.value)
         if picked is None:
-            return rule_ranked, {}, False, _why("alternative_bad_shape")
+            return rule_ranked, {}, False, _why("alternative_bad_shape"), rule_ranked
         selected, reasons = picked
         if not selected:
-            return rule_ranked, {}, False, _why("alternative_empty")
-        return selected, reasons, True, ""
+            return rule_ranked, {}, False, _why("alternative_empty"), rule_ranked
+        return selected, reasons, True, "", rule_ranked
 
     def _llm_timeout(
         self, request: PlanBRagRequest, share: float | None = None
@@ -508,13 +590,6 @@ class PlanBAgent:
 
 
 # ── 질의 조립 (Augment 재료) ────────────────────────────────────────────
-
-
-def _schedule_query(request: PlanBRagRequest) -> str:
-    return (
-        f"{request.trigger.schedule_id} {request.trigger.affected_date.isoformat()} "
-        f"{request.trigger.kind.value} 영향 슬롯"
-    )
 
 
 # reason 은 영문 enum 값이라 한국어 KB 문서와 임베딩 공간에서 잘 붙지 않는다. 특히
@@ -640,6 +715,25 @@ def _join_profile(profile: "PersonaSummary | None") -> str:
 
 def _join(hits: Sequence[KbHit]) -> str:
     return "\n".join(f"- {h.text}" for h in hits)
+
+
+def _current_itinerary(request: "PlanBRagRequest") -> str:
+    """원 일정을 "1. 성산일출봉 2. 흑돼지거리" 로 — 이름은 **풀에서** 가져온다.
+
+    봉투는 poi_id 만 들고 오고 이름은 풀이 갖고 있다. 풀에 없는 id 는 **건너뛴다**:
+    그 슬롯은 후보 자격도 없고(INV-1), 이름 없는 id 를 프롬프트에 흘리면 모델이
+    그것을 장소로 읽는다.
+
+    시각·소요시간 없음(INV-3) — 필드 주석에 이유가 있다.
+    """
+    if not request.current_slot_ids:
+        return ""
+    name = {p.poi_id: p.name for p in request.pool.pois}
+    places = [name[pid] for pid in request.current_slot_ids if pid in name]
+    if not places:
+        return ""
+    line = " ".join(f"{i}. {n}" for i, n in enumerate(places, 1))
+    return f"[현재 일정]\n{line}"
 
 
 def _with_reasons(schedule_context: str, reasons: Mapping[str, str]) -> str:

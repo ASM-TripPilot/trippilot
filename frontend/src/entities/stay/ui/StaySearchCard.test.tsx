@@ -57,8 +57,25 @@ describe('🔴 SC1 · full variant 렌더 (이름·지역·가격·사진 자리
 
     const card = screen.getByTestId('stay-card-NAVER:s1');
     expect(within(card).getByText('해운대 오션뷰')).toBeOnTheScreen();
+    // AC-4 — 지역 단독(거리 계약 공백, StayItem 에 distanceM 없음). "지역·거리" 구조는 허용하되
+    // 값이 없으니 지역만 그린다 = 현행. 선제 green 회귀 앵커.
     expect(within(card).getByText('부산 해운대구')).toBeOnTheScreen();
-    expect(within(card).getByText('120,000원~')).toBeOnTheScreen();
+
+    // AC-2 — 가격 2톤: bold "{천단위}원"(ink16) + muted "~"(muted12) **두 형제 노드**.
+    // formatPrice 반환("120,000원~")은 불변, 분할은 카드 몫. (개념) getByText 는 기본 완전일치라
+    // 단일 결합 노드 "120,000원~"은 두 형제로 쪼개지면 매칭되지 않는다(§5 실검증).
+    const boldPrice = within(card).getByText('120,000원');
+    expect(boldPrice).toBeOnTheScreen();
+    expect(classTokens(boldPrice)).toEqual(
+      expect.arrayContaining(['text-ink', 'font-bold', 'text-[16px]'])
+    );
+    const mutedTilde = within(card).getByText('~');
+    expect(classTokens(mutedTilde)).toEqual(
+      expect.arrayContaining(['text-muted', 'text-caption'])
+    );
+    expect(classTokens(mutedTilde)).not.toContain('font-bold');
+    // 반증 — 단일 결합 노드가 아니다(두 Text 가 View 형제라 경계에서 집계 안 됨, ★F-1).
+    expect(within(card).queryByText('120,000원~')).toBeNull();
 
     const photo = within(card).getByTestId('stay-card-photo-NAVER:s1');
     expect(classTokens(photo)).toEqual(
@@ -155,11 +172,11 @@ describe('🔴 SC5 · 하트 press 와 카드 press 가 갈린다 (★F-4 계열
   });
 });
 
-describe('🔴 SC6 · rail variant (d05) — save 미지정 시 하트 없음', () => {
+describe('🔴 SC6 · rail variant (d01) — save 미지정 시 하트 없음', () => {
   it('save 미지정이면 저장 Pressable·글리프가 안 그려진다', () => {
     render(
       <StaySearchCard
-        testID="destination-detail-stay-card-NAVER:s1"
+        testID="explore-stay-card-NAVER:s1"
         name="해운대 오션뷰"
         region="부산 해운대구"
         priceText="120,000원~"
@@ -167,9 +184,7 @@ describe('🔴 SC6 · rail variant (d05) — save 미지정 시 하트 없음', 
       />
     );
 
-    expect(
-      screen.getByTestId('destination-detail-stay-card-NAVER:s1')
-    ).toBeOnTheScreen();
+    expect(screen.getByTestId('explore-stay-card-NAVER:s1')).toBeOnTheScreen();
     expect(screen.queryByTestId('stay-card-save-NAVER:s1')).toBeNull();
     expect(screen.queryByTestId('stay-card-save-NAVER:s1-outline')).toBeNull();
   });
@@ -205,5 +220,81 @@ describe('🔴 SC7 · 여분 testID 0 (프로즌 카드 카운트 정규식 보�
         'stay-card-save-NAVER:s1-outline',
       ].sort()
     );
+  });
+});
+
+describe('🔴 SC8 · full variant 결측 가격 — "가격 미확인" muted regular (AC-3)', () => {
+  it('단일 노드로 muted·regular·14 로 그린다(현행 bold ink 16 → muted 14)', () => {
+    render(
+      <StaySearchCard
+        testID="stay-card-NAVER:s1"
+        name="해운대 오션뷰"
+        region="부산 해운대구"
+        priceText="가격 미확인"
+        variant="full"
+        save={E02_SAVE}
+      />
+    );
+
+    const card = screen.getByTestId('stay-card-NAVER:s1');
+    const missing = within(card).getByText('가격 미확인');
+    // muted·14(text-body)·regular — bold ink 아님.
+    expect(classTokens(missing)).toEqual(
+      expect.arrayContaining(['text-muted', 'text-body'])
+    );
+    expect(classTokens(missing)).not.toContain('font-bold');
+    expect(classTokens(missing)).not.toContain('text-ink');
+    // 결측 카드엔 "~"(2톤 접미)가 없다 — 2톤 분기로 새지 않는다.
+    expect(within(card).queryByText('~')).toBeNull();
+  });
+});
+
+describe('🔴 SC9 · full variant 저장 하트 — 흰 원형 배경 (AC-5)', () => {
+  it('저장 Pressable 이 흰 원(on-primary bg + rounded-pill) 위에 얹힌다', () => {
+    render(
+      <StaySearchCard
+        testID="stay-card-NAVER:s1"
+        name="해운대 오션뷰"
+        region="부산 해운대구"
+        priceText="120,000원~"
+        variant="full"
+        save={E02_SAVE}
+      />
+    );
+
+    // 흰 원 배경 = className 으로 잠근다(fill 색이 아니라 — 흰 원 지름·우32/상14 위치는 픽셀,
+    // ★F-4 6-b 몫). rail(d05)엔 이미 있던 토큰이라 full 분기 추가가 이 사이클의 실질(★F-3).
+    expect(classTokens(screen.getByTestId('stay-card-save-NAVER:s1'))).toEqual(
+      expect.arrayContaining(['bg-on-primary', 'rounded-pill', 'absolute'])
+    );
+  });
+});
+
+/**
+ * TRIP-1105 · QA #7 — d01 레인에서 숙소 카드와 장소 카드 폭이 달랐다(숙소 200 · 장소 160). rail 을
+ * 장소 카드와 같은 160 폭 · 사진 160×120 으로 맞춘다(Figma 채택본 4767:2957). rail 소비처는 d01 하나다.
+ * 사진 자리는 `photoTestID` 를 줘야 찾을 수 있다(d01 은 안 준다 — 그래서 카드 단위에서 잰다).
+ */
+describe('🔴 SC10 · rail variant 폭 160 · 사진 높이 120 (TRIP-1105)', () => {
+  it('rail 루트는 w-[160px](옛 200 아님)이고 사진 자리는 h-[120px](옛 130 아님)이다', () => {
+    render(
+      <StaySearchCard
+        testID="explore-stay-card-NAVER:s1"
+        photoTestID="explore-stay-card-photo-NAVER:s1"
+        name="해운대 오션뷰"
+        region="부산 해운대구"
+        priceText="120,000원~"
+        variant="rail"
+      />
+    );
+
+    const root = classTokens(screen.getByTestId('explore-stay-card-NAVER:s1'));
+    const photo = classTokens(
+      screen.getByTestId('explore-stay-card-photo-NAVER:s1')
+    );
+    expect(root).toContain('w-[160px]');
+    expect(root).not.toContain('w-[200px]');
+    expect(photo).toContain('h-[120px]');
+    expect(photo).not.toContain('h-[130px]');
   });
 });

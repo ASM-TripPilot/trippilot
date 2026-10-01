@@ -175,21 +175,87 @@ MLX LoRA 산출물(어댑터)은 그대로 vLLM 에 안 올라간다 — `fuse` 
 소모품이다. Mac 학습 결과를 버려도 되는 이유는 이것 하나다. (이 명령도 §2 와 같은
 이유로 이 런북 작성 시점에 실행 검증하지 못했다.)
 
-## 4. 서빙 (Modal 서버리스)
+## 4. 서빙 (AWS Bedrock Custom Model Import)
 
-**AWS 가 아니라 Modal** — 개인 계정 서버리스로 띄운다. AWS 는 검토 후 기각했다: 새
-계정 GPU 쿼터가 0 이라 확보에 며칠이 걸리고, EC2 GPU 인스턴스를 켜 두면 그 자체로
-과금되며, AI 서비스는 이미 외부 LLM 을 HTTPS 로 부르고 있어 같은 리전 배치가 오늘
-당장 얻는 이득이 없다. 실운영 전환·팀 상시 운영 시점에는 재검토 대상이다(서빙 주소가
-env 변수 하나라 전환 비용은 실질적으로 0).
+**팀 결정 2026-09-24: AWS 로 간다.** 앞서 AWS 를 기각했던 근거 두 개(신규 계정 GPU
+쿼터 0 · EC2 GPU 상시 과금)는 **Bedrock Custom Model Import 에는 해당하지 않는다** —
+서버리스라 GPU 를 우리가 안 잡고 무요청 시 0원이다.
 
-**아래 `vllm serve` 명령은 서버를 직접 띄우는 경우다** — 로컬 Mac, 아니면 GPU 가
-있는 아무 호스트든 이 명령 그대로 돈다. **Modal 서버리스에 그대로 얹을 수는
-없다** — Modal 은 이 명령을 쉘에서 실행하는 게 아니라 별도의 Modal 앱(컨테이너
-이미지·GPU 타입·엔드포인트를 선언하는 Python 파일, `modal deploy` 로 배포)이
-필요하고, **그 앱은 아직 작성되지 않았다.** 즉 서빙 전 남은 일이 하나 더 있다:
-이 vLLM 서빙을 감싸는 Modal 앱을 새로 쓰는 것 — 이번 런북 작업 범위 밖이라 여기
-없다. 그때까지는 아래 명령으로 로컬/직접 관리 호스트에서 검증한다.
+현 EKS 클러스터로는 **못 올린다**(확인 2026-09-24): 차트 전체에 GPU 노드가 없고
+(`nvidia`/`gpu` 언급 0건), 임베딩은 CPU 서비스다. 4B 모델을 2 vCPU 로 돌리면 문구
+1건에 30초 이상 걸려 **항목당 상한 ~10초**(`C1Config.timeout_sec`, env 로 못 바꿈)를
+매번 넘긴다.
+
+**리전 제약**: Custom Model Import 는 `us-east-1`·`us-east-2`·`us-west-2`·`eu-central-1`
+에만 있다. **서울(ap-northeast-2)에 없다.** 이 경계는 발송 몇 시간~며칠 전에 도는
+배치라(§2) 교차 리전 지연은 무관하다.
+
+`merged/`(§3 산출물)가 이미 Bedrock 이 요구하는 형식이다 — safetensors + `config.json`
++ `tokenizer.json` + `tokenizer_config.json`. LoRA 어댑터는 **병합된 상태여야** 하는데
+§3 의 `fuse` 가 그 일을 한다.
+
+> Modal 경로(`scripts/finetune_reminder/modal_app.py`)는 지우지 않고 남겨 둔다 —
+> GPU 호스트에 직접 띄울 때와, Bedrock 리전을 못 쓰는 상황의 대안이다.
+
+### ⚠️ `fuse` 산출물은 그대로 올리면 임포트가 실패한다 — 토크나이저 3건
+
+`mlx_lm.fuse` 는 HF 표준 토크나이저 구성을 **완전히 재현하지 않는다.** 실측
+(2026-09-24)으로 임포트가 이 메시지로 떨어졌다:
+
+> Amazon Bedrock could not load the tokenizer. Make sure that you can load the
+> tokenizer with the Huggingface method.
+
+빠진 것과 처방(원본 HF 스냅샷에서 가져온다 — `~/.cache/huggingface/hub/models--Qwen--*/snapshots/*/`):
+
+| 빠진 것 | 처방 |
+|---|---|
+| `vocab.json` | 스냅샷에서 복사 |
+| `merges.txt` | 스냅샷에서 복사 |
+| `chat_template` | `fuse` 가 `chat_template.jinja` 로 **빼 놓는다**. **원본 `tokenizer_config.json` 을 그대로 덮어쓰고 `chat_template.jinja` 를 지운다** |
+
+> ⚠️ **둘 다 두면 안 된다.** AWS 문서가 명시한다 — 채팅 템플릿은 `chat_template.jinja`
+> **또는** `tokenizer_config.json` 의 `chat_template` 필드, **둘 중 하나만** 둔다
+> ("Choose one approach"). 실측(2026-09-24)으로 둘 다 넣은 2차 임포트도 같은
+> 토크나이저 오류로 실패했다. 통과한 구성은 **원본 HF 레이아웃 그대로**(가중치만
+> 융합본)였다 — `chat_template.jinja` 없음, `tokenizer_config.json` 에 필드 포함.
+
+올리기 전에 **HF 로더로 직접 읽어 본다**(실패를 30분 뒤가 아니라 그 자리에서 안다):
+
+```bash
+uv run --with transformers python -c "
+from transformers import AutoTokenizer
+t = AutoTokenizer.from_pretrained('./merged')
+print(t.apply_chat_template([{'role':'user','content':'안녕'}], tokenize=False, add_generation_prompt=True))
+"
+```
+
+`<|im_start|>user ...` 가 나오면 통과다. 여기서 막히면 Bedrock 에서도 막힌다.
+
+```bash
+# 1) 모델을 S3 로 (Bedrock 이 지원하는 리전의 버킷이어야 한다)
+aws s3 sync ./merged s3://<버킷>/reminder-copy-v1/ --region us-east-1
+
+# 2) 임포트 작업 — 10~30분 걸린다
+aws bedrock create-model-import-job \
+  --job-name reminder-copy-v1 \
+  --imported-model-name reminder-copy-qwen3-4b-v1 \
+  --role-arn arn:aws:iam::<계정>:role/<BedrockImportRole> \
+  --model-data-source s3DataSource={s3Uri=s3://<버킷>/reminder-copy-v1/} \
+  --region us-east-1
+
+# 3) 끝났는지 확인 → 나온 ARN 이 다음 절의 값이다
+aws bedrock list-imported-models --region us-east-1
+```
+
+IAM 역할은 그 S3 경로 읽기 권한 + Bedrock 신뢰관계가 필요하다(AWS 문서의
+`custom-model-import-code-samples` 참고). 호출 측 자격에는 `bedrock:InvokeModel` 이
+그 모델 ARN 범위로 있어야 한다.
+
+임포트가 끝나면 `arn:aws:bedrock:us-east-1:<계정>:imported-model/<id>` 형태의 ARN 이
+나온다 — 이것이 `AI_BEDROCK_MODEL_ARN` 값이다.
+
+**GPU 가 있는 호스트에서 직접 띄우려면** 같은 모델을 vLLM 으로 그대로 올리면 된다
+(Modal 앱이 컨테이너 안에서 실행하는 것과 같은 명령이다):
 
 ```bash
 vllm serve ./merged --served-model-name local-reminder-qwen3-4b-v1
@@ -201,8 +267,8 @@ vllm serve ./merged --served-model-name local-reminder-qwen3-4b-v1
 `--served-model-name` 과 정확히 일치해야 한다. 이름이 다르면 서버가 모델을 못
 찾았다며 요청을 거부한다.
 
-배포 후 (docker-compose 로 `ai` 컨테이너를 띄운다면) 저장소 루트 `.env` 에서
-`AI_LOCAL_LLM_BASE_URL` 을 채우고, **`AI_LLM_FEATURE_MODELS` 는 새 줄로 추가하지
+임포트 후 (docker-compose 로 `ai` 컨테이너를 띄운다면) 저장소 루트 `.env` 에서
+`AI_BEDROCK_MODEL_ARN` 을 채우고, **`AI_LLM_FEATURE_MODELS` 는 새 줄로 추가하지
 말고 기존 값 끝에 콤마로 이어 붙인다.** 그 키는 이미 PARAPHRASE·EXPLANATION·
 REFLECTION_TEMPLATE 등 살아 있는 배정을 한 줄에 콤마로 이어 붙인 **단일 값**이고
 (`.env.example` 참고, `ai-llm-smoke` 워크플로가 이 줄을 그대로 읽는 정본이다) —
@@ -213,11 +279,12 @@ PARAPHRASE·EXPLANATION 등 이미 돌던 기능이 전부 기본 모델로 폴�
 
 ```
 # 변경 전 (실제 .env 에 이미 배정이 있는 경우의 예)
-AI_LOCAL_LLM_BASE_URL=
+AI_BEDROCK_MODEL_ARN=
 AI_LLM_FEATURE_MODELS=PARAPHRASE=claude-haiku-4-5,ALTERNATIVE_SELECTION=gpt-5.6-sol,EXPLANATION=claude-sonnet-5
 
 # 변경 후 — 같은 줄 끝에 이어 붙인다
-AI_LOCAL_LLM_BASE_URL=https://<modal-앱>.modal.run/v1
+AI_BEDROCK_MODEL_ARN=arn:aws:bedrock:us-east-1:<계정>:imported-model/<id>
+AI_BEDROCK_REGION=us-east-1
 AI_LLM_FEATURE_MODELS=PARAPHRASE=claude-haiku-4-5,ALTERNATIVE_SELECTION=gpt-5.6-sol,EXPLANATION=claude-sonnet-5,REMINDER_COPY=local-reminder-qwen3-4b-v1
 ```
 
@@ -225,11 +292,12 @@ AI_LLM_FEATURE_MODELS=PARAPHRASE=claude-haiku-4-5,ALTERNATIVE_SELECTION=gpt-5.6-
 하나도 없는 경우만) 새로 한 줄 추가해도 된다:
 `AI_LLM_FEATURE_MODELS=REMINDER_COPY=local-reminder-qwen3-4b-v1`.
 
-이 두 `AI_*` 변수는 `docker-compose.yml` 이 각각 `TRIPPILOT_LOCAL_LLM_BASE_URL` ·
-`TRIPPILOT_LLM_FEATURE_MODELS` 로 컨테이너에 넘긴다 — 앱 코드 자신은 `AI_*` 를 모르고
+이 `AI_*` 변수들은 `docker-compose.yml` 이 `TRIPPILOT_*` 로 컨테이너에 넘긴다
+(`AI_BEDROCK_MODEL_ARN` → `TRIPPILOT_BEDROCK_MODEL_ARN`,
+`AI_LLM_FEATURE_MODELS` → `TRIPPILOT_LLM_FEATURE_MODELS`) — 앱 코드 자신은 `AI_*` 를 모르고
 `TRIPPILOT_*` 만 읽는다. docker-compose 없이 `ai/` 를 직접 띄운다면 `TRIPPILOT_*` 쪽을
 바로 export 한다(이때도 같은 규칙 — 기존 `TRIPPILOT_LLM_FEATURE_MODELS` 값이 있으면
-새 값을 이어 붙인다). **배정은 됐는데 주소가 비어 있으면 기동이 실패한다** — 조용히
+새 값을 이어 붙인다). **배정은 됐는데 ARN·주소가 둘 다 비어 있으면 기동이 실패한다** — 조용히
 Anthropic/OpenAI 기본 벤더로 새는 것을 막으려는 의도된 fail-fast 다
 (`main.py::_local_route`).
 
@@ -240,6 +308,24 @@ fail-fast 자체가 발동하지 않고, 로컬 라우트가 붙었는지 아닌
 조용히 안 붙는다. `AI_LLM_PROVIDER` 를 `openai`·`anthropic`·`mixed` 중 하나로 채워야
 이 절의 나머지가 의미를 가진다.
 
+### ⚠️ 배포 직후 제일 먼저 — 파인튜닝이 실제로 붙었는지 대조한다
+
+**베이스 모델이 서빙돼도 그럴듯한 답이 나와서 겉으로는 정상으로 보인다.** 실제로
+로컬 검증 때 mlx 서버가 어댑터를 조용히 무시해 **하루치 측정이 통째로 무효**가 됐다
+(2026-09-19, `docs/conventions/anti-patterns.md` 등록). 스모크는 이걸 못 잡는다 —
+문구가 나오기만 하면 통과하기 때문이다.
+
+판정은 문체로 한다. 학습된 모델은 **한 문장**으로 짧게 쓰고 `places` 에 슬롯명을
+**괄호까지 그대로** 싣는다. 베이스는 두 문장으로 장황하고 괄호를 뗀다:
+
+| | 예시 |
+|---|---|
+| 학습됨 | `"원통사에서 시작해 도봉산양고기와 원당샘공원을 둘러보세요."` · `places: ["원통사(서울)", ...]` |
+| 베이스 ⚠ | `"원통사에서 명소를 즐기고, 도봉산양고기 맛집에서 특별한 음식을 먹어보세요. 원당샘공원에서 자연을 감상해보세요."` · `places: ["원통사", ...]` |
+
+오른쪽이 나오면 **배포를 되돌리고 볼륨의 모델부터 다시 본다** — `merged/` 가 아니라
+베이스가 올라갔거나, `MODEL_DIR` 이 빈 디렉토리를 가리킨 것이다.
+
 배포 직후, 프롬프트·게이트까지 실제로 통과하는지 실스택 스모크로 확인한다.
 **단, 아래 스모크가 통과해도 배포된 앱 자체가 로컬 라우트로 붙었다는 증명은
 아니다** — `smoke_reminder_copy.py` 는 앱을 거치지 않고 자체 `OpenAIAdapter` 를
@@ -248,7 +334,8 @@ fail-fast 자체가 발동하지 않고, 로컬 라우트가 붙었는지 아닌
 경로(`/ai/v1/notification/copies`)로 별도 확인한다.
 
 ```bash
-export TRIPPILOT_LOCAL_LLM_BASE_URL=https://<modal-앱>.modal.run/v1
+# 스모크는 OpenAI 호환 경로 전용이다 — Bedrock 은 앱 경계로 확인한다(아래).
+export TRIPPILOT_LOCAL_LLM_BASE_URL=<OpenAI 호환 서버 주소>/v1
 export TRIPPILOT_LOCAL_LLM_MODEL=local-reminder-qwen3-4b-v1
 cd ai
 uv run python scripts/smoke_reminder_copy.py
@@ -287,131 +374,27 @@ llama.cpp)로 띄우고 같은 env 로 `smoke_reminder_copy.py` 를 돌리면 �
 
 ### 5.1 평가 입력 파일 만들기 (student/teacher/baseline.jsonl)
 
-아래는 전부 `ai/` 안에서 실행한다. 1단계 학습 데이터에 쓰지 않은 홀드아웃
-`scenarios_eval.json` 을 하나 골라 둔다(20~30건 — 아래 사람 눈검수 표본과 같은
-크기면 된다, 형식은 1단계 `scenarios.json` 과 동일). 세 파일 모두 이 시나리오
-순서를 그대로 따른다.
-
-**baseline.jsonl** — 지금 발화 중인 하드코딩 상수를 그대로 채운다(개인화 없음, 그게
-비교의 요점이다). 정본:
-`backend/modules/notification/src/main/kotlin/com/trippilot/notification/domain/NotificationSchedule.kt`
-의 `title()`/`body()`.
-
 ```bash
 cd ai
-uv run python -c '
-import json
-from pathlib import Path
-scenarios = json.loads(Path("scenarios_eval.json").read_text())
-BASELINE = {
-    "TRIP_DAY": "오늘 어디를 가는지 확인해 보세요.",
-    "TRIP_PRE": "출발 전에 일정을 한 번 확인해 보세요.",
-}
-with open("baseline.jsonl", "w") as out:
-    for s in scenarios:
-        out.write(json.dumps(
-            {"body": BASELINE[s["kind"]], "slot_names": s["slot_names"]}, ensure_ascii=False
-        ) + "\n")
-'
-```
-
-**teacher.jsonl** — `scenarios_eval.json` 을 1단계와 같은 방식으로 `--per-scenario 1`
-돌려 얻는다. 그 출력은 학습용 채팅 포맷(`{"messages": [...]}`)이라 그대로는 못 쓴다
-— 평평한 형식으로 한 번 더 접는다:
-
-```bash
-cd ai
-uv run python scripts/finetune_reminder/build_dataset.py \
-    --scenarios scenarios_eval.json --out teacher_raw.jsonl --per-scenario 1
-
-uv run python -c '
-import json
-from pathlib import Path
-scenarios = json.loads(Path("scenarios_eval.json").read_text())
-lines = Path("teacher_raw.jsonl").read_text().splitlines()
-assert len(lines) == len(scenarios), (
-    f"{len(lines)} != {len(scenarios)} — 시나리오가 하나 이상 게이트탈락/API실패로 "
-    "스킵됐다. scenarios_eval.json 에서 그 시나리오를 빼고 baseline·student 쪽도 "
-    "같이 맞춰야 순서가 어긋나지 않는다"
-)
-with open("teacher.jsonl", "w") as out:
-    for scenario, line in zip(scenarios, lines):
-        rec = json.loads(line)
-        body = json.loads(rec["messages"][1]["content"])["body"]
-        out.write(json.dumps(
-            {"body": body, "slot_names": scenario["slot_names"]}, ensure_ascii=False
-        ) + "\n")
-'
-```
-
-**student.jsonl** — 배포된(또는 로컬 서빙 중인) 학생 모델에 같은 시나리오를 그대로
-태운다. `smoke_reminder_copy.py` 와 같은 호출 패턴이라 1회성 스크립트로 붙여 쓴다
-(저장할 필요 없음 — `/tmp` 등에 두고 한 번 돌리고 버린다):
-
-```bash
-cd ai
-export TRIPPILOT_LOCAL_LLM_BASE_URL=https://<modal-앱>.modal.run/v1
+export OPENROUTER_API_KEY=sk-or-v1-...            # 교사
+export TRIPPILOT_LOCAL_LLM_BASE_URL=<서빙 주소>    # 학생 (§4 에서 띄운 것)
 export TRIPPILOT_LOCAL_LLM_MODEL=local-reminder-qwen3-4b-v1
-cat > /tmp/gen_student.py <<'PY'
-import json, os, sys
-from datetime import UTC, datetime
-from pathlib import Path
 
-sys.path.insert(0, str(Path("src").resolve()))
-import openai
-
-from trippilot.domain.common import TraceId
-from trippilot.domain.llm import LlmFeature
-from trippilot.llm_gateway.adapters.openai_adapter import OpenAIAdapter
-from trippilot.llm_gateway.gates.reminder_copy import ReminderCopyContext, ReminderCopyGate
-from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.llm_gateway.workers.reminder_copy import ReminderCopyItem, build_reminder_copy_vars
-from trippilot.ports.llm_port import LlmRequest
-
-base_url = os.environ["TRIPPILOT_LOCAL_LLM_BASE_URL"]
-model_id = os.environ["TRIPPILOT_LOCAL_LLM_MODEL"]
-adapter = OpenAIAdapter(
-    openai.OpenAI(api_key="local", base_url=base_url, max_retries=0), api="chat"
-)
-registry = PromptRegistry(Path("prompts"))
-gate = ReminderCopyGate()
-scenarios = json.loads(Path(sys.argv[1]).read_text())
-
-with open(sys.argv[2], "w") as out:
-    for s in scenarios:
-        item = ReminderCopyItem(
-            schedule_key=s["schedule_key"], kind=s["kind"], date_label=s["date"],
-            slot_names=tuple(s["slot_names"]),
-            slot_categories=tuple(s.get("slot_categories", ())),
-        )
-        prompt, ref = registry.render(
-            LlmFeature.REMINDER_COPY, build_reminder_copy_vars(item, s.get("trip_title", ""))
-        )
-        resp = adapter.invoke(LlmRequest(
-            model_id=model_id, prompt=prompt, prompt_ref=ref,
-            max_tokens=300, temperature=0.0, timeout_sec=60.0,
-        ))
-        outcome = gate.apply(
-            resp.raw_text,
-            ReminderCopyContext(
-                allowed=tuple(s["slot_names"]), forbidden=tuple(s.get("other_names", ()))
-            ),
-            feature=LlmFeature.REMINDER_COPY, trace_id=TraceId("eval-student"),
-            now=datetime.now(UTC),
-        )
-        if outcome.value is None:
-            print(f"skip {s['schedule_key']}: {outcome.error}", file=sys.stderr)
-            continue
-        out.write(json.dumps(
-            {"body": outcome.value.body, "slot_names": list(s["slot_names"])}, ensure_ascii=False
-        ) + "\n")
-PY
-uv run python /tmp/gen_student.py scenarios_eval.json student.jsonl
+uv run python scripts/finetune_reminder/make_scenarios.py \
+    --out scenarios_eval.json --trips 40 --seed 7        # 학습과 다른 시드로
+uv run python scripts/finetune_reminder/make_eval_inputs.py \
+    --scenarios scenarios_eval.json --out-dir eval/
 ```
 
-이 스크립트도 게이트를 통과 못 하면 그 시나리오를 건너뛴다 — teacher.jsonl 과 마찬가지로
-줄 수가 `scenarios_eval.json` 보다 적어지면 세 파일 모두 같은 시나리오 집합으로
-다시 맞춘다.
+세 파일이 **행 단위로 정렬돼서** 나온다 — `evaluate.py` 는 n번째 줄을 같은
+시나리오의 세 후보로 보고 채점하므로, 한 줄이라도 어긋나면 심판이 엉뚱한 짝을
+비교하고 **그 결과는 틀렸다는 티도 안 난다**(숫자는 나오는데 의미가 없다).
+스크립트는 교사·학생이 **둘 다 성공하고 둘 다 게이트를 통과한** 시나리오만
+내보내 그 정렬을 코드로 보장한다. 스킵 건수는 실행 끝에 찍힌다.
+
+`baseline` 은 지금 발화 중인 하드코딩 상수다(개인화 없음 — 그게 비교의 요점이다).
+학생 출력은 서빙과 같은 게이트를 통과한 것만 올라간다. 즉 **사용자가 실제로 받을
+문구끼리** 비교한다.
 
 ### 5.2 평가 실행
 
@@ -434,3 +417,32 @@ uv run python scripts/finetune_reminder/evaluate.py \
 블라인드 비교 채점에 **사람 표본 20~30건 눈검수를 병행한다** — 심판 한 글자 답변은
 이유가 없어 착시(예: 짧은 문장을 무조건 선호)를 못 걸러낸다. 결과 수치는 발표
 자료용이며, **학습 데이터 선별에도 재학습 루프에도 되먹이지 않는다.**
+
+---
+
+## 언제 데이터를 다시 뽑아야 하나
+
+학생 모델은 **프롬프트 입력 형식을 통째로 외운다.** 학습에서 못 본 모양이 서빙에
+들어오면 조용히 퇴화한다 — 예외도 실패 로그도 없고, 문구가 어색해지거나 게이트에
+걸려 기본 문구로 떨어질 뿐이라 원인 추적이 어렵다.
+
+**재생성 신호는 하나뿐이다: 프롬프트에 실리는 문자열의 모양이 바뀌는 것.**
+
+다시 뽑아야 하는 경우:
+
+| 변화 | 왜 |
+|---|---|
+| 카테고리 체계 변경(값 추가·세분류·이름 변경) | 슬롯 줄의 `이름 · 카테고리` 어휘가 달라진다 |
+| 슬롯 속성이 프롬프트에 추가됨(실내/실외·예약 여부 등) | 줄 구조 자체가 달라진다 |
+| POI 이름 표기 규칙 변경(괄호 부기 유지/제거 등) | 게이트가 이름을 문자열로 대조하고 학습도 그 표기를 배운다 |
+| 프롬프트 템플릿 자체 수정(`prompts/reminder_copy.yaml`) | 말할 것도 없다 — `version` 을 올리고 다시 뽑는다 |
+
+**신호가 아닌 것**: POI 건수 증가, 실재 검증으로 일부 제외·강등, 좌표·영업시간처럼
+프롬프트에 안 실리는 필드 변경. 데이터가 쌓이고 정확해지는 것 자체는 재생성 사유가
+아니다.
+
+비용은 1회 $0.3·2시간 수준이다(2026-09-16 실측: 874 시나리오 × 3회). **모르고
+지나가는 쪽이 훨씬 비싸므로 의심스러우면 다시 뽑는다.**
+
+2026-09-16 기준으로 관련 세션(스케줄 에이전트·PlanB·봉투 수렴·운영/데이터)에
+"위 변화가 생기면 알려달라"고 요청해 두었다.

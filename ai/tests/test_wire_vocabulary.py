@@ -13,7 +13,8 @@ from __future__ import annotations
 
 import pytest
 
-from trippilot.api.wiring import _BUDGET_TOKENS, _TRANSPORT_TOKENS
+from trippilot.api.wiring import _TRANSPORT_TOKENS
+from trippilot.domain.common import BUDGET_TOKENS as _BUDGET_TOKENS
 from trippilot.domain.common import BudgetLevel, TransportMode
 
 # 백엔드 `preference_set.budget_tier` CHECK (V1.5__profile.sql) — 접지 않고 와이어에 실린다.

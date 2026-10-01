@@ -1,4 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 
 import { VisitRecordCard } from './VisitRecordCard';
 
@@ -11,7 +16,7 @@ import { VisitRecordCard } from './VisitRecordCard';
  *  - 🔴 AC-1(UI) active(도착·미완료) 카드 → 완료 체크서클이 활성이고, 누르면 onPressComplete(id) 가 1회.
  *  - 🔴 AC-3(BR-U5-05) upcoming(3 timestamp null) 카드 → 완료 컨트롤 비활성 + 완료 발화 0회.
  *  - 🔴 ★fill 함정 — 상태별로 **서로 다른 testID** 의 체크서클을 렌더(fill 색 의존 금지, repo-traps 글리프).
- *  - skip(라이트) [건너뜀] press → onPressSkip(id).
+ *  - skip [건너뛰기](TRIP-1069 — 동작 버튼) press → onPressSkip(id). 건너뛴 카드엔 [건너뜀] 상태 라벨.
  *
  * 왜 이렇게 테스트하나(02a §4-★1·★2):
  *  - **체크서클 fill 은 jest 사각** — 완료↔미완료를 fill 색만 바꾸면 심판이 전부 green 인 채 거짓말이 통과한다.
@@ -133,8 +138,17 @@ describe('🔴 ★fill 함정 — 상태별 distinct testID', () => {
   );
 });
 
-describe('skip(라이트) — [건너뜀] 발화', () => {
-  it('IN_PROGRESS 카드 [건너뜀] press → onPressSkip(id) 1회', () => {
+/**
+ * TRIP-1069 · AC-16 · AC-14 · D4 — "건너뛰기"(동작)와 "건너뜀"(상태)을 가른다.
+ *
+ * 옛 카드는 동작 버튼에 상태 낱말 `건너뜀`을 맨 글자로 달아, 눌러야 하는 것인지 이미 그렇다는 것인지
+ * 구분이 안 됐다. 동작은 동사 `건너뛰기` + 버튼 역할, 상태는 건너뛴 카드에만 붙는 라벨이다.
+ * 누르면 카드는 onPressSkip(id) 만 올린다 — 확인 다이얼로그는 페이지 몫(페이지 통합이 본다).
+ * 상태 라벨은 `—` 와 `건너뜀` 두 글자 노드라 `toHaveTextContent`(완전 일치·이어붙임) 대신
+ * `within(라벨).getByText('건너뜀')` 으로 본다.
+ */
+describe('AC-16 · 건너뛰기 = 동작 버튼', () => {
+  it('IN_PROGRESS 카드 → 버튼 역할 + "건너뛰기" 글자, press 시 onPressSkip(id) 1회', () => {
     const onPressSkip = jest.fn();
     render(
       <VisitRecordCard
@@ -143,10 +157,45 @@ describe('skip(라이트) — [건너뜀] 발화', () => {
       />
     );
 
-    fireEvent.press(screen.getByTestId('record-visit-skip-v1'));
+    const skip = screen.getByTestId('record-visit-skip-v1');
+    expect(skip.props.accessibilityRole).toBe('button');
+    expect(skip).toHaveTextContent('건너뛰기');
+
+    fireEvent.press(skip);
 
     expect(onPressSkip).toHaveBeenCalledTimes(1);
     expect(onPressSkip).toHaveBeenCalledWith('v1');
+  });
+});
+
+describe('AC-14 · D4 · 건너뜀 = 상태 라벨', () => {
+  it('SKIPPED 카드 → 건너뜀 라벨이 있고, 건너뛰기 버튼은 없다', () => {
+    render(
+      <VisitRecordCard
+        card={baseCard({
+          visitCheckId: 'c1',
+          poiId: 'p1',
+          arrivedAt: T,
+          skippedAt: T,
+        })}
+        onPressSkip={jest.fn()}
+      />
+    );
+
+    const label = screen.getByTestId('record-visit-skipped-label-c1');
+    expect(within(label).getByText('건너뜀')).toBeOnTheScreen();
+    expect(screen.queryByTestId('record-visit-skip-c1')).toBeNull();
+  });
+
+  it('IN_PROGRESS 카드엔 건너뜀 라벨이 없다(짝)', () => {
+    render(
+      <VisitRecordCard
+        card={baseCard({ visitCheckId: 'v1', poiId: 'p1', arrivedAt: T })}
+      />
+    );
+
+    expect(screen.queryByTestId('record-visit-skipped-label-v1')).toBeNull();
+    expect(screen.queryByText('건너뜀')).toBeNull();
   });
 });
 
@@ -167,7 +216,11 @@ describe('🔴 AC-8 · [시각 수정] 진입', () => {
       />
     );
 
-    fireEvent.press(screen.getByTestId('record-trip-visit-time-edit-v1'));
+    const edit = screen.getByTestId('record-trip-visit-time-edit-v1');
+    // TRIP-1069 AC-4 — 진입은 버튼 역할이다(스크린리더가 누를 수 있는 것으로 읽는다).
+    expect(edit.props.accessibilityRole).toBe('button');
+
+    fireEvent.press(edit);
 
     expect(onPressEditTime).toHaveBeenCalledTimes(1);
     expect(onPressEditTime).toHaveBeenCalledWith('v1');
@@ -204,5 +257,48 @@ describe('🔴 AC-8 · [시각 수정] 진입', () => {
 
     fireEvent.press(complete);
     expect(onPressComplete).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * 🔴 TRIP-760 · AC-3 — 업로드 실패 카드의 [↻ 다시 시도] 버튼 + 보조 안내(additive prop, 무회귀).
+ *
+ * 카드에 옵셔널 `uploadRetry?: { onPress }` 를 additive 로 더한다(565 `onPressComplete?`·613
+ * `onPressEditTime?` 동형 후방호환). 주입 시에만 카드 하단(메모 슬롯 뒤)에 풀폭 재시도 버튼 +
+ * "메모와 방문 체크는 저장되었어요"(사진은 실패했어도 메모·방문 체크는 저장됐다는 INV-4 안내)를 그린다.
+ * 위 565/613 describe 가 **무변경 존치**하는 것이 "기존 계약 무회귀"의 증거 — 여기선 재시도만 잠근다.
+ *
+ * (개념) `getByText('다시 시도')` = 완전일치 텍스트 조회(↻ 는 SVG 글리프라 텍스트 아님, 02a §5-A) ·
+ *   `queryByTestId(...)` = 없으면 null(미주입 부재 단언) · `toHaveBeenCalledTimes(1)` = 콜백 1회 발화.
+ * 재시도 testID 는 카드 다중이라 `-{visitCheckId}` 접미(recordsStructure G4 "소스=접두 / 렌더=접미").
+ */
+describe('🔴 TRIP-760 · AC-3 · 업로드 재시도 버튼 + 보조 안내', () => {
+  it('A3a · uploadRetry 주입 → 버튼·안내 present + press 시 onPress 1회', () => {
+    const onPress = jest.fn();
+    render(
+      <VisitRecordCard
+        card={baseCard({ visitCheckId: 'v1', poiId: 'p1', arrivedAt: T })}
+        uploadRetry={{ onPress }}
+      />
+    );
+
+    expect(screen.getByTestId('record-trip-upload-retry-v1')).toBeTruthy();
+    expect(screen.getByText('다시 시도')).toBeTruthy();
+    expect(screen.getByText('메모와 방문 체크는 저장되었어요')).toBeTruthy();
+
+    fireEvent.press(screen.getByTestId('record-trip-upload-retry-v1'));
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+
+  it('A3b · uploadRetry 미주입 → 버튼·안내 부재(기존 호출자·프리뷰 무영향, 무회귀 짝)', () => {
+    render(
+      <VisitRecordCard
+        card={baseCard({ visitCheckId: 'v1', poiId: 'p1', arrivedAt: T })}
+      />
+    );
+
+    expect(screen.queryByTestId('record-trip-upload-retry-v1')).toBeNull();
+    expect(screen.queryByText('다시 시도')).toBeNull();
+    expect(screen.queryByText('메모와 방문 체크는 저장되었어요')).toBeNull();
   });
 });

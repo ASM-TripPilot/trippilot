@@ -118,6 +118,22 @@ class PreferenceProfileSchema(BoundaryModel):
     budget_tier: str | None = None
 
 
+class RejectionSchema(BoundaryModel):
+    """거절 이력 한 줄 (TRIP-964) — 백엔드가 여행 단위로 누적해 싣는다.
+
+    **크기는 오지 않는다.** `kind` 만 받고 강등 폭은 AI 설정(`OrchestratorConfig`)이
+    갖는다 — 비율 조정에 백엔드 재배포가 필요 없고, 두 서비스가 같은 숫자를 각자
+    갖지 않게 한다(팀 결정 2026-09-26).
+
+    `count` 는 **같은 곳을 또 거절했는가**다. 집합만 받으면 "처음"과 "세 번째"가
+    구분되지 않아 반복 강등이 불가능하다.
+    """
+
+    poi_id: str = Field(min_length=1)
+    kind: Literal["SWAPPED_OUT", "REGENERATED"]
+    count: int = Field(default=1, ge=1)
+
+
 class GenerateItineraryRequest(BoundaryModel):
     """`POST /ai/v1/itinerary/generate` 요청 = 백엔드 `ScheduleAgentInput`.
 
@@ -135,6 +151,8 @@ class GenerateItineraryRequest(BoundaryModel):
     recommendation_strength: str | None = None
     request_meta: RequestMetaSchema
     excluded_poi_ids: list[str] = Field(default_factory=list)
+    # 거절 이력 (TRIP-964) — additive optional. 옛 백엔드는 안 보내고 그때는 빈 목록이다.
+    rejections: list[RejectionSchema] = Field(default_factory=list)
     # 설명 생략 (TRIP-479) — 설명은 POST /ai/v1/itinerary/explanations로 별도 조회
     include_explanations: bool = True
 
@@ -169,8 +187,13 @@ class VisitSlotDisplaySchema(BoundaryModel):
     """
 
     poi_id: str
-    start_at: dt.time
-    end_at: dt.time
+    # 시각 nullable (TRIP-827) — **null = 시간 미정(무배치)**. FE 가 "시간대 설정"
+    # 칩으로 그리는 그 슬롯이다: 백엔드가 저장은 하는데 이 스키마가 required 라
+    # 검증·편집 왕복에서 422 였다. 반쪽(둘 중 하나만 null)은 미정이 아니라 기형이라
+    # 경계에서 거절한다. **산출 쪽은 항상 채워진다**(INV-2 — 어셈블리 검증값만
+    # 사영되며, 테스트가 산출 null 을 잠근다).
+    start_at: dt.time | None = None
+    end_at: dt.time | None = None
     ends_next_day: bool = False
     distance_range: str | None = None
     is_fixed: bool = False
@@ -430,15 +453,19 @@ class ReplanSlotSchema(BoundaryModel):
     """
 
     poi_id: str = Field(min_length=1)
-    start_at: dt.time
-    end_at: dt.time
+    # 시각 nullable (TRIP-827) — 시간 미정 슬롯도 원 일정의 일부다. 재계획에서
+    # 비고정 슬롯의 시각은 아무도 읽지 않으므로(후보 합류는 poi_id, 컨텍스트는
+    # placement_reason) null 이 자연스럽다. **is_fixed 인데 시각이 없으면 422** —
+    # 시각 없는 고정은 HC3 로 표현 불가다(ANYTIME 백스톱과 같은 규칙).
+    start_at: dt.time | None = None
+    end_at: dt.time | None = None
     is_fixed: bool = False
     ends_next_day: bool = False
     placement_reason: str | None = None  # visit_slot.placement_reason
 
 
 class ReplanRequest(BoundaryModel):
-    """POST /ai/v1/itinerary/replan — 하루를 다시 짠다 (i04 → i06).
+    """POST /ai/v1/planb/replan — 하루를 다시 짠다 (i04 → i06). (구 itinerary 경로는 TRIP-960 ④ 에서 삭제)
 
     `generate` 와 **다른 것**: RAG(KB-3)를 탄다 · 재계획 의도를 받는다 ·
     원 일정을 컨텍스트이자 후보로 받는다.
@@ -463,6 +490,8 @@ class ReplanRequest(BoundaryModel):
 
     reasons: list[str] = Field(default_factory=list)  # AI 어휘 (백엔드가 번역)
     directives: list[str] = Field(default_factory=list)  # FE 키 그대로 — 번역하지 않는다
+    # 거절 이력 (TRIP-964) — generate 와 같은 모양. '다시 짜줘'가 실제로 도는 경로가 여기다.
+    rejections: list[RejectionSchema] = Field(default_factory=list)
     # 상한 500 은 `replan_session.free_text varchar(500)` 과 같은 값이다.
     # 계약이 DB 보다 좁으면 저장된 값이 경계에서 잘린다.
     free_text: str | None = Field(default=None, max_length=500)
@@ -535,7 +564,8 @@ class ExplanationsRequest(BoundaryModel):
 
 
 class ExplanationsResponse(BoundaryModel):
-    """slot_key(BR-U2-04: "날짜#poi_id") → 설명 1문장. 실패는 빈 맵 + 사유(침묵 금지).
+    """slot_key(BR-U2-04: "날짜#poi_id") → 추천 이유 해시태그(공백 구분, 최대 5개 — 예 `"#뷰맛집 #혼자여행"`).
+    실패는 빈 맵 + 사유(침묵 금지).
 
     `alternative_explanations`(TRIP-887, additive): 요청 payload 의 슬롯별 차선책
     (`slots[].alternatives[]`)에 대한 "이 자리 대신 골라도 좋은 이유" 1문장 — 키는
@@ -581,7 +611,9 @@ class EditItineraryRequest(BoundaryModel):
     budget_level: str | None = None
     transport_mode: str | None = None
     command: EditCommandSchema | None = None
-    utterance: str | None = Field(default=None, min_length=1)
+    # 상한 500 — 심층 방어다. 라우터도 같은 값으로 거절하지만(IntentRouterConfig), 경계에서
+    # 먼저 막으면 임베딩·LLM 을 쓰기 전에 422 로 끊긴다. 값의 근거는 그쪽 주석 참조.
+    utterance: str | None = Field(default=None, min_length=1, max_length=500)
     confirm: bool = False
     request_meta: RequestMetaSchema
 
@@ -712,7 +744,14 @@ class ShareCardCopyResponse(BoundaryModel):
 
 
 class ReminderSlotSchema(BoundaryModel):
-    """그날 일정의 장소 1건 — 문구가 말해도 되는 대상. 좌표·시각은 싣지 않는다."""
+    """그날 일정의 장소 1건 — 문구가 말해도 되는 대상. 좌표·시각은 싣지 않는다.
+
+    `category` 는 **경계 카테고리 코드**다(`FOOD`·`CAFE`·`SIGHT`·`NIGHT_VIEW`·
+    `NATURE`·`CULTURE`·`ACTIVITY`·`SHOPPING`) — 백엔드가 다른 경계에서 이미
+    내보내는 그 값 그대로 보내면 된다. 새 어휘를 만들지 않는다. 모르는 값·빈
+    문자열은 카테고리 없이 이름만 쓴 것과 같게 처리되므로 안전하다(문구 품질만
+    조금 떨어진다).
+    """
 
     name: str = Field(min_length=1)
     category: str = ""

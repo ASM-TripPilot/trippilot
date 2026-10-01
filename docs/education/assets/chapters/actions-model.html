@@ -1,0 +1,21 @@
+<p>예를 들어 <code>backend/</code>의 코드를 고쳐 <code>develop</code>에 push하면, 이 저장소의 <code>backend-ci.yml</code>은 Java를 준비하고 Gradle 빌드·테스트를 수행한다. 성공하면 다음 job이 컨테이너 이미지를 만들어 GHCR에 올린다. 개발자가 명령을 기억해 실행하는 절차를 저장소가 실행할 수 있는 파일로 옮긴 것이다.</p>
+<div aria-label="GitHub Actions 실행 구조" class="flow">
+<div class="flow-step"><strong>Event</strong><br/>push / PR / 수동 실행</div>
+<div class="flow-step"><strong>Workflow</strong><br/>YAML에 정의한 자동화</div>
+<div class="flow-step"><strong>Job</strong><br/>runner에서 실행할 작업 묶음</div>
+<div class="flow-step"><strong>Step</strong><br/>명령 또는 재사용 action</div>
+</div>
+<p><strong>Runner</strong>는 명령을 실제로 실행하는 컴퓨터다. 이 브랜치는 주로 <code>ubuntu-latest</code> GitHub 호스팅 runner를 쓴다. <strong>Job</strong>은 기본적으로 독립 실행할 수 있는 단위이며 <code>needs</code>로 선행 작업을 지정한다. 하나의 job 안에 있는 일반적인 step은 작성한 순서대로 진행한다. <strong>Action</strong>은 checkout, Java 설치, Docker 빌드처럼 반복되는 작업을 재사용하도록 포장한 구성 요소다. 서비스의 이름은 GitHub Actions이고 <code>actions/checkout</code>은 그 안에서 사용하는 개별 action이다. <a href="https://docs.github.com/en/actions/get-started/understand-github-actions">공식 개념 설명</a></p>
+<p>CI(Continuous Integration)는 변경을 자주 통합하면서 빌드와 테스트로 오류를 찾는 과정이다. 배포 자동화는 검증한 변경을 실행 환경에 반영하는 과정이다. 사람이 마지막 실행을 결정해도 배포의 나머지 단계는 자동화할 수 있다. 이 저장소가 바로 그 구조다.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>현재 workflow</th><th>실행 계기</th><th>주요 결과</th></tr></thead>
+<tbody>
+<tr><td><a href="../../.github/workflows/backend-ci.yml">backend-ci.yml</a></td><td><code>develop</code> push·대상 PR + 경로 필터, 수동 실행</td><td>Gradle 빌드·테스트. push일 때 GHCR 이미지 발행</td></tr>
+<tr><td><a href="../../.github/workflows/ai-ci.yml">ai-ci.yml</a></td><td><code>develop</code> push·대상 PR + AI 경로 필터, 수동 실행</td><td>pytest, 이미지 빌드, 컨테이너·생성 API smoke. push일 때 GHCR 발행</td></tr>
+<tr><td><a href="../../.github/workflows/frontend-ci.yml">frontend-ci.yml</a></td><td>push·PR + frontend 경로 필터, 수동 실행</td><td>lint·타입·구조·테스트. <code>develop</code> push에서만 GHCR 발행</td></tr>
+<tr><td><a href="../../.github/workflows/aws-bootstrap.yml">aws-bootstrap.yml</a></td><td><strong>수동 workflow_dispatch만</strong></td><td>CloudFormation으로 state 버킷·배포 및 EKS 서비스 Role 준비</td></tr>
+<tr><td><a href="../../.github/workflows/aws-deploy.yml">aws-deploy.yml</a></td><td><strong>수동 workflow_dispatch만</strong></td><td>Terraform plan/apply, 선택적으로 ECR 빌드·EKS 배포</td></tr>
+</tbody>
+</table></div>
+<p>backend·AI의 PR 브랜치 필터는 PR이 <em>향하는 대상 브랜치</em>를 뜻한다. 경로 필터도 함께 있으면 브랜치와 파일 조건을 둘 다 만족해야 한다. frontend는 이벤트의 브랜치 범위와 이미지 발행 job의 브랜치 조건을 따로 설정했다. push가 있었다는 사실만 보고 이미지가 올라갔거나 AWS가 배포되었다고 판단하면 안 된다.</p>
+<div class="callout"><strong>이 브랜치의 경계:</strong> 기존 CI의 GHCR 발행이 AWS workflow를 시작시키지 않는다. AWS 배포에는 <code>push</code>, <code>pull_request</code>, <code>schedule</code>, <code>workflow_run</code> 트리거가 없고 운영자가 수동으로 대상 환경과 모드를 선택한다.</div>

@@ -17,6 +17,9 @@ import type {
   Trip,
 } from '@/shared/api/generated/schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
+import { startTimeOptions } from '@/features/itinerary/model/mustVisitTimeForm';
+import { resetPressGuard } from '@/shared/press/pressGuard';
 
 import { MustVisitTimePage } from './MustVisitTimePage';
 
@@ -83,6 +86,8 @@ const TRIP: Trip = {
   status: 'PLANNED',
   createdAt: '2026-08-02T00:00:00Z',
   updatedAt: '2026-08-02T00:00:00Z',
+  baseCount: 0,
+  itineraryDayCount: 0,
 };
 
 function makePlace(poiId: string, nameKo: string): Place {
@@ -139,6 +144,7 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+  resetPressGuard(); // TRIP-1013 — 연타 가드 창(모듈 전역)이 앞 테스트에서 새지 않게 닫는다.
   observedHits = [];
   postBodies = [];
   postStatus = null;
@@ -201,9 +207,8 @@ function renderPage() {
 }
 
 /**
- * 토글을 원하는 상태로 만든다. **초기 상태를 못 박지 않는다** — 항목이 지금 `ANYTIME` 이라
- * 꺼진 채로 열리는 것도, Figma 프레임처럼 켜진 채로 열리는 것도 정본이 말하지 않았다.
- * 여기서 초기값을 단언하면 이 칸이 정하지 않은 것을 정하는 셈이 된다.
+ * 토글을 원하는 상태로 만든다(이미 그 상태면 누르지 않는다). 초기값 자체는 이 헬퍼가 아니라
+ * 아래 TRIP-1098 스위트가 단언한다(저장된 유형 — ANYTIME 이면 꺼짐, FIXED 면 켜짐).
  */
 function ensureFixed(on: boolean): void {
   const toggle = screen.getByTestId('itinerary-mustvisit-time-toggle');
@@ -429,26 +434,235 @@ describe('I11 · AC-7 · D5(개정) · INV-U1-18 — 409 는 실패로 세지 �
   });
 });
 
-describe('I12 · D8 — 토글을 끄면 저장이 나가지 않는다', () => {
-  it('CTA 가 잠기고 눌러도 쓰기 요청이 0건이다', async () => {
+describe('I12 · AC-a4 · BR-U1-48 — 채운 폼을 OFF 로 끄면 FIXED 값이 버려지고 ANYTIME 최소본만 나간다', () => {
+  it('CTA 가 열리고 DELETE→POST 로 {poiId, type:ANYTIME} 최소본만 나간다', async () => {
     renderPage();
     await ready();
     ensureFixed(true);
     pickDateAndStart();
 
-    // 값을 다 채운 **뒤에** 끈다 — "값이 없어서 안 나간 것" 과 구별되는 자리다.
+    // 값을 다 채운 **뒤에** 끈다 — 채워진 FIXED 값(날짜·시각)이 OFF 에서 버려지고 ANYTIME
+    // 최소본만 나가는가. I13 은 값을 안 채워 이 축을 못 본다(고유 커버리지).
     ensureFixed(false);
 
-    expect(
-      screen.getByTestId('itinerary-mustvisit-time-submit')
-    ).toBeDisabled();
+    expect(screen.getByTestId('itinerary-mustvisit-time-submit')).toBeEnabled();
     submit();
 
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    });
+    await waitFor(() =>
+      expect(mustVisitWrites()).toEqual([DELETE_HIT, POST_HIT])
+    );
 
-    expect(mustVisitWrites()).toEqual([]);
-    expect(mockBack).not.toHaveBeenCalled();
+    // ★ 고유 커버리지 — 채운 fixedDate·fixedStart·dwellMin 이 한 키도 안 샌다.
+    expect(postBodies).toHaveLength(1);
+    expect(postBodies[0]).toEqual({ poiId: POI_ID, type: 'ANYTIME' });
+    expect(Object.keys(postBodies[0]).sort()).toEqual(['poiId', 'type']);
+
+    // 성공하면 목록으로 되돌아간다(I13 미러).
+    await waitFor(() => expect(mockBack).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe('🔴 I13 · AC-a4 · BR-U1-48 — 토글 OFF 저장은 ANYTIME 본문을 DELETE 뒤에 POST 한다', () => {
+  /**
+   * TRIP-786 — OFF=ANYTIME 제출 허용. 등록 항목(REGISTERED=poi-a ANYTIME)이 있으므로 승격 경로와
+   * 같은 **DELETE → POST 2단**을 재사용한다(INV-U1-18·19). 본문은 **최소본** `{poiId, type:ANYTIME}`
+   * 으로 FIXED 필드(fixedDate·fixedStart·dwellMin)가 실리지 않는다.
+   */
+  it('쓰기가 DELETE→POST 두 건이고 POST 본문이 {poiId, type:ANYTIME} 최소본이다', async () => {
+    renderPage();
+    await ready();
+    // 값은 안 채운다 — ANYTIME 은 날짜·시각을 안 싣는다. TRIP-1098 뒤로는 ANYTIME 항목이 이미 꺼진 채
+    // 열리므로 ensureFixed(false) 는 누르지 않는다 — "손대지 않은 저장"도 같은 2단을 탄다.
+    ensureFixed(false);
+
+    submit();
+
+    // ★ 배열 완전 일치 — 개수·순서·경로.
+    await waitFor(() =>
+      expect(mustVisitWrites()).toEqual([DELETE_HIT, POST_HIT])
+    );
+
+    // 본문 — FIXED 필드 없는 최소본. `toEqual` + `Object.keys` 로 여분 키까지 잠근다.
+    expect(postBodies).toHaveLength(1);
+    expect(postBodies[0]).toEqual({ poiId: POI_ID, type: 'ANYTIME' });
+    expect(Object.keys(postBodies[0]).sort()).toEqual(['poiId', 'type']);
+
+    // 성공하면 목록으로 되돌아간다(I7 미러).
+    await waitFor(() => expect(mockBack).toHaveBeenCalledTimes(1));
+    expect(screen.queryAllByTestId('itinerary-mustvisit-time-error')).toEqual(
+      []
+    );
+  });
+});
+
+/**
+ * TRIP-990 · W3 배선 (D21 · INV-2) — 휠을 굴려 멈춘 값이 말없이 버려지지 않는다(#049).
+ *
+ * 증상: 시작 시각 휠을 12:00 까지 굴리고 "닫기"를 누르면 필드가 비어 있고 "시작 시각을 골라 주세요"가
+ * 남았다 — 화면 가운데 보인 값과 저장될 값이 어긋났다(INV-2). 이제 스크롤이 멈추면 그 값이 폼에
+ * 들어간다.
+ *
+ * 무엇을 보장하나: 휠 정지 → 닫기 뒤에 필드가 12:00 을 보이고, 시작 시각 누락 안내가 사라지고, 저장
+ * 버튼이 열린다. 짝으로, 정지 전에는 누락 안내가 실제로 떠 있었다(날짜를 만져 touched 상태).
+ *
+ * 3동작 뼈대: 준비=날짜 고르고 시트 열기 → 실행=휠 12:00 정지 → "닫기" → 단언=필드·안내·저장 버튼.
+ */
+describe('🔴 W3 · 휠을 굴려 멈춘 값이 폼에 들어간다 (#049 · D21)', () => {
+  const START_MISSING_TEXT = '시작 시각을 골라 주세요';
+
+  it('12:00 에서 멈추고 닫으면 필드가 12:00 이고, 누락 안내가 없고, 저장이 열린다', async () => {
+    renderPage();
+    await ready();
+    ensureFixed(true);
+    fireEvent.press(
+      screen.getByTestId('itinerary-mustvisit-time-date-2026-06-11')
+    );
+    fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-start-field'));
+
+    // 짝 — 정지 전에는 누락 안내가 떠 있다(여기가 비면 아래 "사라졌다"가 공허해진다).
+    expect(screen.getByText(START_MISSING_TEXT)).toBeOnTheScreen();
+
+    fireEvent(
+      screen.getByTestId('itinerary-mustvisit-time-start-wheel'),
+      'momentumScrollEnd',
+      {
+        nativeEvent: {
+          contentOffset: {
+            x: 0,
+            y: startTimeOptions().indexOf('12:00') * WHEEL_CELL_HEIGHT,
+          },
+        },
+      }
+    );
+    fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-start-close'));
+
+    expect(
+      screen.queryAllByTestId('itinerary-mustvisit-time-start-sheet')
+    ).toEqual([]);
+    expect(
+      screen.getByTestId('itinerary-mustvisit-time-start-field')
+    ).toHaveTextContent(/오후 12:00/);
+    expect(screen.queryByText(START_MISSING_TEXT)).toBeNull();
+    expect(screen.getByTestId('itinerary-mustvisit-time-submit')).toBeEnabled();
+  });
+});
+
+/**
+ * TRIP-1098 · 결정 1 — 「시각 고정」 스위치 초기값은 **저장된 유형**을 따른다(BR-U1-48 기본 ANYTIME).
+ *
+ * 무엇을 보장하나: 목록이 「아무 때나」라고 말하는 항목을 열면 상세도 꺼진 스위치·잠긴 컨트롤·「아무 때나로
+ * 두기」로 같은 말을 한다. FIXED 항목을 열면 저장된 날짜·시각·**체류**가 그대로 보인다(체류가 늘 「보통」으로
+ * 돌아가면 위반). 초기값만 바뀌었을 뿐 스위치를 누르면 켜짐 = 활성 규칙은 그대로다.
+ *
+ * 3동작: 준비 = must-visits GET 이 이 항목을 ANYTIME/FIXED 로 돌려줌 → 실행 = 화면을 열고(·스위치를 누르고)
+ * → 단언 = 스위치 checked · 세 묶음 disabled · CTA 글자 · 선택 표시.
+ */
+describe('🔴 TRIP-1098 · 스위치 초기값 = 저장된 유형', () => {
+  function toggleChecked(): boolean {
+    return Boolean(
+      screen.getByTestId('itinerary-mustvisit-time-toggle').props
+        .accessibilityState?.checked
+    );
+  }
+
+  /** 날짜 칩(첫 칩)·시각 트리거·체류 세그가 모두 같은 잠금 상태인지. */
+  function expectControlsLocked(locked: boolean): void {
+    const controls = [
+      screen.getByTestId('itinerary-mustvisit-time-date-2026-06-10'),
+      screen.getByTestId('itinerary-mustvisit-time-start-field'),
+      screen.getByTestId('itinerary-mustvisit-time-dwell-NORMAL'),
+    ];
+    for (const control of controls) {
+      if (locked) expect(control).toBeDisabled();
+      else expect(control).toBeEnabled();
+    }
+  }
+
+  it('T1 · ANYTIME 항목을 처음 열면 스위치 꺼짐 · 세 묶음 잠김 · CTA 「아무 때나로 두기」 · 차단 사유 없음', async () => {
+    renderPage();
+    await ready();
+
+    expect(toggleChecked()).toBe(false);
+    expectControlsLocked(true);
+    expect(
+      screen.getByTestId('itinerary-mustvisit-time-submit')
+    ).toHaveTextContent('아무 때나로 두기');
+    // 손대기 전에는 차단 사유가 뜨지 않는다(무회귀 — edited 가 곧 touched).
+    expect(screen.queryByTestId('itinerary-mustvisit-time-error')).toBeNull();
+  });
+
+  it.each([
+    [30, 'SHORT'],
+    [60, 'NORMAL'],
+    [120, 'LONG'],
+  ] as const)(
+    'T2 · FIXED 항목(체류 %i분)을 처음 열면 스위치 켜짐 · 저장된 날짜·시각 · 체류 %s 칸이 그대로다',
+    async (dwellMin, dwellKey) => {
+      const fixed: MustVisit[] = [
+        {
+          mustVisitId: MUST_VISIT_ID,
+          poiSnapshotId: 'snap-poi-a',
+          sourcePoiId: POI_ID,
+          type: 'FIXED',
+          fixedDate: '2026-06-11',
+          fixedStart: '13:00:00',
+          dwellMin,
+        },
+      ];
+      server.use(
+        http.get(`${BASE}/trips/:tripId/must-visits`, () =>
+          HttpResponse.json(fixed)
+        )
+      );
+
+      renderPage();
+      await ready();
+
+      await waitFor(() => expect(toggleChecked()).toBe(true));
+      expectControlsLocked(false);
+      expect(
+        screen.getByTestId('itinerary-mustvisit-time-submit')
+      ).toHaveTextContent('이 시각으로 고정');
+      expect(
+        screen.getByTestId('itinerary-mustvisit-time-date-2026-06-11')
+      ).toBeSelected();
+      expect(
+        screen.getByTestId('itinerary-mustvisit-time-start-field')
+      ).toHaveTextContent(/오후 1:00/);
+      // 체류가 저장값 칸이다 — 세 칸 중 그 칸만 선택(늘 「보통」으로 돌아가면 위반).
+      for (const key of ['SHORT', 'NORMAL', 'LONG'] as const) {
+        const segment = screen.getByTestId(
+          `itinerary-mustvisit-time-dwell-${key}`
+        );
+        if (key === dwellKey) expect(segment).toBeSelected();
+        else expect(segment).not.toBeSelected();
+      }
+    }
+  );
+
+  it('T4 · 등록 건이 없으면(목록에 이 장소 없음) 꺼진 채 열린다 — BR-U1-48 기본 ANYTIME', async () => {
+    server.use(
+      http.get(`${BASE}/trips/:tripId/must-visits`, () => HttpResponse.json([]))
+    );
+
+    renderPage();
+    await ready();
+
+    expect(toggleChecked()).toBe(false);
+    expectControlsLocked(true);
+    expect(
+      screen.getByTestId('itinerary-mustvisit-time-submit')
+    ).toHaveTextContent('아무 때나로 두기');
+  });
+
+  it('T3 · 어떤 초기 상태든 스위치를 누르면 checked 가 뒤집히고 잠금은 늘 !checked 다', async () => {
+    renderPage();
+    await ready();
+
+    for (const expected of [true, false, true]) {
+      fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-toggle'));
+      expect(toggleChecked()).toBe(expected);
+      expectControlsLocked(!expected);
+    }
   });
 });

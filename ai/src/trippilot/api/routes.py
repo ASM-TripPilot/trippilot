@@ -1,4 +1,5 @@
-"""경계 라우트 — `POST /ai/v1/itinerary/{generate,validate,repair,alternatives,explanations,edit,replan}`
+"""경계 라우트 — `POST /ai/v1/itinerary/{generate,validate,repair,explanations,edit}`
++ `POST /ai/v1/planb/{replan,alternatives}` (TRIP-960 — 여행 중 변수 대응은 planb 묶음)
 + `POST /ai/v1/reflection/{generate,nudge,share-card}`
 + `POST /ai/v1/notification/copies`.
 
@@ -267,7 +268,6 @@ def repair(
     return _guarded(run)
 
 
-@router.post("/alternatives", response_model=AlternativesResponse)
 def alternatives(
     request: AlternativesRequest,
     orchestrator: ItineraryOrchestrator = Depends(get_orchestrator),
@@ -283,7 +283,6 @@ def alternatives(
     return _guarded(lambda: handler(request))
 
 
-@router.post("/replan", response_model=ReplanResponse)
 def replan(
     request: ReplanRequest,
     orchestrator: ItineraryOrchestrator = Depends(get_orchestrator),
@@ -391,6 +390,30 @@ def reflection_share_card(
     if handler is None:
         raise orchestrator_not_wired()
     return _guarded(lambda: handler(request))
+
+
+# ───────────── Plan-B 경계 (/ai/v1/planb — TRIP-960) ─────────────
+#
+# **여행 전 생성**(`/ai/v1/itinerary/…`)과 **여행 중 변수 대응**(여기)을 경로로
+# 가른다. 한 이름 아래 있던 혼동이 실제 배선 오류로 이어졌었다(PlanBAgent 가 변수
+# 대응 경로에 없고 백지 생성 에이전트가 거기 있었다 — #744 가 고쳤다).
+#
+# 구 경로(`/ai/v1/itinerary/{replan,alternatives}`)는 **2026-09-28 에 지웠다** —
+# TRIP-960 4단계. 별칭 기간을 거쳐 백엔드 #758 이 상수를 옮겼고
+# `HttpScheduleAgentAdapter.CALLED_PATHS` 에 구 경로 0건을 확인한 뒤다.
+# 여기 등록이 이 두 경계의 유일한 등록이다 — 사본을 만들지 않는다.
+planb_router = APIRouter(prefix="/ai/v1/planb", tags=["planb"])
+
+# `add_api_route` 로 함수 객체를 단다 — 데코레이터를 함수 정의에 붙이면 이 파일
+# 상단(여행 전 묶음)에 정의된 함수가 어느 묶음 소속인지 정의 위치가 거짓말을 한다.
+planb_router.add_api_route(
+    "/replan", replan, methods=["POST"],
+    response_model=ReplanResponse, name="planb_replan",
+)
+planb_router.add_api_route(
+    "/alternatives", alternatives, methods=["POST"],
+    response_model=AlternativesResponse, name="planb_alternatives",
+)
 
 
 # ───────────── 리마인드 알림 문구 경계 (TRIP-836 — /ai/v1/notification) ─────────────

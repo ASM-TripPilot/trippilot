@@ -8,17 +8,19 @@ import type { ReplanOrigin } from './replanOrigin';
  * 무엇을 보장하나(이 사이클의 헤드라인 = 드리프트⑤):
  *  - 위치 입력이 없어도 `originKind: null` 을 **생략이 아니라 명시**로 싣는다(codegen
  *    `required:[scope, originKind]`, 값 nullable). "생략(undefined)"이면 tsc·계약 위반이다.
- *  - `triggerId: null`(수동 진입)·`excludedPoiIds: []`('건너뛰기'가 채우는 필드, i10 아님)를 항상 싣는다.
+ *  - `triggerId` 는 트리거로 들어왔으면 그 id, 아니면 `null`(수동 진입)을 명시로 싣는다(TRIP-750 · BR-U4-31).
+ *    `excludedPoiIds: []`('건너뛰기'가 채우는 필드, i10 아님)는 항상 싣는다.
  *  - 사유·방향을 하나도 안 골라도 조립된다(빈 배열이 막지 않음, BR-U4-12).
  *  - 빈 자유텍스트 `''` 는 `null` 로 접고, 내용이 있으면 그대로 싣는다(트림 안 함 — 과잉 명세 회피).
  */
 
-/** 빌더의 입력 — 폼(스토어)이 든 값 4개. */
+/** 빌더의 입력 — 폼(스토어)이 든 값 4개 + 근거 트리거(생략 = 수동 진입). */
 export interface ReplanFormValues {
   scope: StartReplanRequestScope;
   reasons: string[];
   directives: string[];
   freeText: string;
+  triggerId?: string | null;
 }
 
 export function buildStartReplanRequest(
@@ -37,8 +39,8 @@ export function buildStartReplanRequest(
     freeText: form.freeText === '' ? null : form.freeText,
     // '건너뛰기'가 채우는 필드 — i10 은 항상 빈 배열.
     excludedPoiIds: [],
-    // 수동 진입이라 근거 트리거가 없다.
-    triggerId: null,
+    // 트리거로 들어왔으면 그 id(변경 이력 reason 의 재료, BR-U4-31). 생략·수동 진입은 명시 null.
+    triggerId: form.triggerId ?? null,
   };
   // origin 미제공 = 기존 7키 그대로(좌표 키를 붙이지 않는다 — codegen originLat?/originLng? 는
   // "값 null"이 아니라 "키 부재"가 정본이라, 여기서 키를 안 만드는 것이 additive 불변이다).

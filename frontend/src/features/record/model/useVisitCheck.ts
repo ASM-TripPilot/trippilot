@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
@@ -13,6 +14,8 @@ import type {
   VisitCheck,
   VisitCheckList,
 } from '@/shared/api/generated/schemas';
+
+import { OPTIMISTIC_VISIT_ID_PREFIX } from './visitStatus';
 
 /**
  * TRIP-565 · AC-1·AC-2·AC-5·skip — record 소관 방문 체크 훅의 낙관적 갱신 + 레코드 단위 롤백.
@@ -31,6 +34,9 @@ import type {
  * 목록을 게이트 없이 관측하는데, 무효화하면 재조회가 낙관 삽입을 덮어 즉석 2건이 사라진다 —
  * arrive 는 이미 권위 있는 생성 레코드(실 id·spontaneous 배지)를 응답으로 받으므로 그걸 심는다.
  * 실패 경로는 셋 다 무효화하지 않는다(재요청이 롤백을 덮으면 "되돌렸나"를 관측 못 함).
+ *
+ * TRIP-1021 · 연타 가드 — 같은 슬롯(키 없으면 poi)의 도착 요청이 진행 중이면 두 번째 호출은 요청 없이
+ * `conflict` 로 끝난다. 두 번 나가면 같은 낙관 id 두 개가 한 응답으로 함께 교체돼 같은 카드가 둘 선다.
  */
 
 export type VisitCheckOutcome =
@@ -59,6 +65,7 @@ export function useVisitCheck(deps: { tripId: string; day: string }) {
   const key = getGetTripsTripIdVisitsDaysDayQueryKey(deps.tripId, deps.day);
   // 낙관 레코드의 시각 자리표시자 — 서버 재조회/응답으로 대체되는 임시값(정확한 시각이 아님).
   const optimisticAt = `${deps.day}T00:00:00`;
+  const arriving = useRef(new Set<string>());
 
   /** 그 날 방문 기록 캐시를 갱신자 함수로 고친다(현재 캐시 기준 — 통짜 스냅숏 복원 금지). */
   function patchCache(update: (visits: VisitCheck[]) => VisitCheck[]): void {
@@ -72,7 +79,12 @@ export function useVisitCheck(deps: { tripId: string; day: string }) {
     poiId: string;
     source: ArriveRequestSource;
   }): Promise<VisitCheckOutcome> {
-    const optimisticId = `optimistic:${input.poiId}`;
+    const inFlightKey = input.slotKey ?? input.poiId;
+    if (arriving.current.has(inFlightKey)) {
+      return { kind: 'failed', reason: 'conflict' };
+    }
+    arriving.current.add(inFlightKey);
+    const optimisticId = `${OPTIMISTIC_VISIT_ID_PREFIX}${input.poiId}`;
     const optimistic: VisitCheck = {
       visitCheckId: optimisticId,
       slotKey: input.slotKey ?? null,
@@ -107,6 +119,8 @@ export function useVisitCheck(deps: { tripId: string; day: string }) {
       );
       await settleRollback();
       return { kind: 'failed', reason: classifyFailure(error) };
+    } finally {
+      arriving.current.delete(inFlightKey);
     }
   }
 

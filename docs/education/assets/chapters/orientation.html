@@ -1,0 +1,44 @@
+<p>수업의 대상은 여행 서비스 TripPilot이다. 백엔드는 API를 제공하고 AI 서비스와 통신한다. 로컬에서는 kind 클러스터 안에 애플리케이션과 데이터베이스를 함께 띄운다. AWS에서는 EKS에 애플리케이션을, RDS에 PostgreSQL을 배치한다. 여기서는 어떤 명령을 실행하는지에 더해 어떤 도구가 무엇을 소유하며 어떤 결과를 다음 단계에 넘기는지 살펴본다.</p>
+<div aria-labelledby="pathway-title" class="pathway" role="group">
+<h3 id="pathway-title">이 브랜치의 배포 경로</h3>
+<ol>
+<li><b>01 / LOCAL</b><strong>코드·테스트</strong>kind에서 서비스 동작 확인</li>
+<li><b>02 / ONCE</b><strong>초기 기반 준비</strong>OIDC 신뢰 · CloudFormation · state</li>
+<li><b>03 / PLAN &amp; APPLY</b><strong>인프라 구성</strong>Terraform → AWS API</li>
+<li><b>04 / DEV</b><strong>이미지·앱 배포</strong>Docker build → ECR → Helm</li>
+<li><b>05 / PRD</b><strong>운영 배포·검증</strong>운영 브랜치와 환경으로 수동 실행</li>
+</ol>
+<p>DEV와 PRD는 각각 별도의 state와 AWS 리소스를 사용한다. 현재 코드는 환경마다 이미지를 다시 빌드한다. 동일 이미지 digest를 승격하는 방식은 3강의 확장 설계에서 다룬다.</p>
+</div>
+<div class="table-wrap"><table>
+<caption>구현 상태를 먼저 구분하면 예제를 그대로 복사해도 되는지 판단할 수 있다.</caption>
+<thead><tr><th scope="col">주제</th><th scope="col">이 브랜치의 현재 상태</th><th scope="col">교재에서 다루는 범위</th></tr></thead>
+<tbody>
+<tr><td>Terraform AWS</td><td>VPC · EKS Auto Mode · RDS · Redis · ECR · Secret 저장소</td><td><span class="badge">구현</span>실제 HCL과 환경별 차이 읽기</td></tr>
+<tr><td>Cloudflare</td><td>Provider 및 DNS 자동화가 포함되지 않음</td><td><span class="badge extension">확장 예제</span>v5 Provider와 DNS CNAME 구성</td></tr>
+<tr><td>GitHub Actions</td><td>AWS는 수동 실행. 기존 애플리케이션 CI는 별도</td><td><span class="badge">구현</span>YAML과 실제 Step의 입출력 해설</td></tr>
+<tr><td>이미지 배포</td><td>AWS 실행에서 Dockerfile로 빌드하고 ECR에 발행</td><td><span class="badge">구현</span>DEV·PRD 수동 배포 절차</td></tr>
+<tr><td>동일 이미지 승격</td><td>DEV digest를 PRD에 그대로 전달하는 기능은 없음</td><td><span class="badge extension">확장 설계</span>빌드와 배포 분리 · digest 검증</td></tr>
+</tbody>
+</table></div>
+<h3 id="orientation-schedule">수업 시간과 진행 방식</h3>
+<p>기본 수업은 <strong>각 50분, 총 150분</strong>이다. 두 번의 10분 휴식까지 포함하면 170분이다. 각 강의의 시간표는 설명과 코드 읽기, 짝 토론, 실습 결과 확인을 포함한다. 30분 수업에서는 핵심 경로와 대표 예제에 집중하고 60분 수업에서는 확장 실습까지 진행한다.</p>
+<div class="table-wrap"><table>
+<thead><tr><th scope="col">운영안</th><th scope="col">강의별 시간</th><th scope="col">강사의 준비</th></tr></thead>
+<tbody>
+<tr><td>압축</td><td>30분 × 3강 = 90분</td><td>예제 파일을 미리 열고 실습은 결과 읽기로 대체한다.</td></tr>
+<tr><td>기본</td><td>50분 × 3강 = 150분</td><td>도구 설치를 사전 과제로 내고 코드 읽기와 로컬 검증을 함께 진행한다.</td></tr>
+<tr><td>확장</td><td>60분 × 3강 = 180분</td><td>Cloudflare 추가 설계, workflow 작성, 이미지 승격 설계 토론을 추가한다.</td></tr>
+</tbody>
+</table></div>
+<div class="callout"><strong>클라우드 계정 없이도 학습할 수 있다.</strong><p>본문 읽기와 설계 문제에는 AWS 계정이 필요 없다. Terraform의 backend를 비활성화한 초기화와 mock provider 테스트는 AWS 리소스를 만들지 않지만 Provider 다운로드에는 네트워크가 필요하다. 실제 <code>plan</code>은 AWS 조회 권한이 필요하며 state 잠금을 사용할 수 있다. <code>apply</code>와 bootstrap은 실제 리소스를 변경하므로 강사가 지정한 실습 환경에서 진행한다.</p></div>
+<p>강사는 3강 전에 예제 DEV 환경과 배포 로그를 준비하는 편이 좋다. EKS·RDS·NAT 생성과 이미지 빌드는 수업 시간보다 오래 걸릴 수 있고 생성한 리소스에는 비용이 발생한다. 50분 수업의 완료 기준은 배포의 선행 조건과 검증 결과를 설명하고 준비된 환경에서 절차를 따라갈 수 있는지다. 모든 학생이 새 AWS 계정을 처음부터 운영 상태로 만드는 것까지 요구하지는 않는다.</p>
+<h3 id="orientation-reading">읽는 방법과 준비물</h3>
+<ul>
+<li><strong>기초 지식:</strong> Git 브랜치·커밋, 환경변수, HTTP, 컨테이너 이미지와 실행 프로세스의 차이. Kubernetes의 Pod·Service·Deployment는 3강에서 다시 짚는다.</li>
+<li><strong>코드 읽기:</strong> 이 저장소의 해당 브랜치와 텍스트 편집기. 본문의 파일 링크는 저장소 안에서 HTML을 열었을 때 연결된다.</li>
+<li><strong>명령 환경:</strong> 예제 명령은 Bash 기준이다. Windows에서는 WSL2의 Linux 작업 환경을 사용한다. PowerShell에 Bash의 <code>export</code>, 줄 끝 <code>\</code>, 명령 치환을 그대로 붙여 넣지 않는다.</li>
+<li><strong>로컬 실습:</strong> Python, Terraform CLI 1.13.5. Kubernetes 실습에는 Docker·kind·kubectl·Helm·just·Bazel 및 프로젝트 언어 도구가 추가로 필요하다. 상세 설치는 <a href="../../deploy/README.md">로컬 배포 README</a>에서 확인한다.</li>
+<li><strong>교재 기능:</strong> 목차 이동, 접힌 정답 열기, 브라우저 인쇄/PDF를 사용할 수 있다. 발표 자료에는 강사 노트·읽기 모드·키보드 탐색 기능이 있다. HTML 하나에 스타일과 스크립트를 포함하므로 본문을 읽는 데 인터넷이나 웹 서버가 필요 없다.</li>
+</ul>
+<p class="source-note">작성 기준: 2026-09-19 · <code>feature/aws-eks-dev-prd</code> · 커밋 <code>9e438d88</code>. Terraform 실행 버전은 1.13.5, AWS Provider 허용 범위는 <code>~&gt; 6.38</code>, 저장소 lock 파일의 선택 버전은 <code>6.64.0</code>이다. 교재의 브랜치 기준 버전과 공식 문서의 최신 예제 버전은 다를 수 있다. 실제 기준은 <a href="../../infra/terraform/stack/versions.tf">versions.tf</a>, <a href="../../infra/terraform/stack/.terraform.lock.hcl">lock 파일</a>, <a href="../../.github/workflows/aws-deploy.yml">배포 workflow</a>에서 확인한다.</p>

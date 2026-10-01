@@ -4,10 +4,11 @@
  *
  * INV-3: duration 절대 미표시·미저장. 거리·이동수단만.
  *
- * 화면 호출부: `legDistance(slots.map((s) => s.distanceRange))`.
+ * 화면 호출부: `legDistance(slots.slice(1).map((s) => s.distanceRange))` — 커넥터가 그리는 구간만
+ * (첫 슬롯 값 = 거점→첫 방문지 구간은 커넥터가 없어 합에서 뺀다, TRIP-1110).
  *
  * 반올림·형식 코어는 `entities/place/lib` 의 `formatDistance`(공용)를 쓴다 — 여기 로직은 서버 문자열
- * 파싱·미터 합산·null/broken/스킵 판정(formatDistance 밖의 legDistance 고유 계약)만 남는다.
+ * 파싱·미터 합산·null/broken 접기 판정(formatDistance 밖의 legDistance 고유 계약)만 남는다.
  */
 import { formatDistance } from '@/entities/place/lib/formatDistance';
 
@@ -22,7 +23,7 @@ const DISTANCE_UNIT = /(\d+(?:\.\d+)?)\s*(km|m)/;
 
 /**
  * 한 거리 문자열을 미터로 환산한다. **반환 규약이 셋으로 갈린다:**
- *  - `null`/`undefined`/`''` (스킵 대상) → 여기 오기 전에 걸러지므로 다루지 않는다.
+ *  - `null`/`undefined`/`''` (값 없음) → 여기 오기 전에 호출부가 접으므로 다루지 않는다.
  *  - 숫자+단위를 **못 뽑음**(present-but-broken) → `null`.
  *  - 뽑음 → 미터 값(number). km 는 ×1000.
  */
@@ -37,10 +38,11 @@ function parseMeters(range: string): number | null {
  * 슬롯들의 `distanceRange` 배열을 합산해 "이동 X" 라벨 또는 `null` 을 만든다.
  *
  * 무엇을 보장하나:
- *  - **스킵**: `null`·`undefined`·`''` 슬롯은 조용히 건너뛴다(실패 아님).
- *  - **broken → 그날 줄 접기**: 값이 있으나 숫자+단위를 못 뽑는 슬롯이 **하나라도** 있으면 `null`
+ *  - **값 없음 → 접기**: `null`·`undefined`·`''` 구간이 **하나라도** 있으면 `null`(TRIP-1110 · INV-4 —
+ *    아는 구간만 더한 부분합은 실제보다 작은 틀린 총거리다).
+ *  - **broken → 접기**: 값이 있으나 숫자+단위를 못 뽑는 구간이 **하나라도** 있으면 `null`
  *    (실제보다 적은 틀린 숫자보다 침묵이 낫다).
- *  - **합계 0 → null**: 전부 스킵됐거나 합이 0이면 헤더에 아무 것도 안 그린다("{N}곳"만).
+ *  - **합계 0 → null**: 빈 배열이거나 합이 0이면 헤더에 아무 것도 안 그린다("{N}곳"만).
  *  - **표시 형식**: `<1000m` → 가장 가까운 10m("이동 820m") / `≥1000m` → 소수 1자리("이동 3.2km").
  *    반올림은 `Math.round`(round-half-up) — 825m→830m, 3280m→3.3km.
  *
@@ -51,9 +53,9 @@ export function legDistance(
 ): string | null {
   let totalMeters = 0;
   for (const range of distanceRanges) {
-    if (range === null || range === undefined || range === '') continue;
+    if (range === null || range === undefined || range === '') return null; // 모르는 구간 → 접기
     const meters = parseMeters(range);
-    if (meters === null) return null; // present-but-broken → 그날 줄 접기
+    if (meters === null) return null; // present-but-broken → 접기
     totalMeters += meters;
   }
 

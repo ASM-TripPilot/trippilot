@@ -2,8 +2,8 @@
 
 EXPLANATION 워커와 형제이지만 feature·프롬프트가 다르다: 그쪽은 "확정된 일정의 각 장소"를
 설명하고, 여기는 "이 자리 대신 넣을 수 있는 선택지"를 설명한다 — 같은 프롬프트에 섞으면
-모델에게 확정되지 않은 장소를 확정된 것처럼 말하게 된다. 출력 JSON 모양은 같아서 출구
-게이트는 `ExplanationGate` 를 그대로 쓴다(closed-set 교차, INV-1).
+모델에게 확정되지 않은 장소를 확정된 것처럼 말하게 된다. 출구 게이트는 `ExplanationGate` 를
+쓰되 feature 로 갈라 본다 — EXPLANATION 은 tags(해시태그), 이쪽은 text 문장 그대로(closed-set 교차, INV-1).
 
 문장은 **선택지 POI 당 1개**다(취향 기준 근거라 어느 슬롯의 선택지든 같다). 같은 POI 가
 여러 슬롯의 선택지면 첫 쌍의 확정 장소만 컨텍스트에 싣는다. 실패 시 폴백 TypedResult
@@ -15,6 +15,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Sequence
 
+# 제3자 문자열(웹 수집 상호명·위키 발췌·네이버 스니펫)은 줄에 넣기 전에 한 줄로 누른다 —
+# 줄바꿈이 남으면 우리 프롬프트 골격을 위조한다 (inline() docstring 에 실측).
+from trippilot.llm_gateway.prompts import inline
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.llm import CandidatePool, LlmFeature, TypedResult
 from trippilot.domain.persona import PersonaSummary
@@ -46,8 +49,8 @@ def build_alternative_explanation_vars(
         slot = by_id.get(slot_id)
         seen.add(alt_id)
         lines.append(
-            f"{len(lines) + 1}. {alt.poi_id} | {alt.category.value} | {alt.name}"
-            f" | 대신: {slot.name if slot is not None else '(미등록 장소)'}"
+            f"{len(lines) + 1}. {alt.poi_id} | {alt.category.value} | {inline(alt.name)}"
+            f" | 대신: {inline(slot.name) if slot is not None else '(미등록 장소)'}"
         )
     return {
         "taste_tags": ", ".join(t.value for t in persona.taste_tags) or "미설정",

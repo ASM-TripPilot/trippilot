@@ -18,7 +18,7 @@ from hypothesis import strategies as st
 # scripts/ 는 패키지가 아니다 — 스크립트와 같은 방식(동일 디렉토리 경로)으로 import
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
-from merge_pois_docs import merge, reparse_open_hours  # noqa: E402
+from merge_pois_docs import drop_non_travel, merge, reparse_open_hours  # noqa: E402
 
 
 def _prop(cid: str, raw: str | None, hours: list | None = None, name: str = "곳") -> dict:
@@ -89,3 +89,38 @@ def test_later_collection_wins_on_same_content_id() -> None:
     out = merge([newer, older])   # 입력 순서와 무관하게 수집 시각이 이긴다
     assert out["proposals"][0]["poi"]["name"] == "새것"
     assert out["stats"] == {"merged_runs": 2, "unique_proposals": 1}
+
+
+# ── 관광 무관 소급 제거 (2026-09-26) ────────────────────────────
+
+def test_수집_뒤에_들어온_규칙이_기존_제안에_소급된다() -> None:
+    """실측 모양 — 공유본(09-13 수집)에 09-16 규칙으로 걸리는 편의점 2건이 남아 있었다."""
+    props = [_prop("1", None, name="이마트24 강릉여고점"),
+             _prop("2", None, name="성산일출봉"),
+             _prop("3", None, name="꽃사슴복권마트(슈퍼맨편의점)")]
+    assert drop_non_travel(props) == {"convenience_store": 2}
+    assert [p["poi"]["name"] for p in props] == ["성산일출봉"]
+
+
+def test_관광지는_한_건도_지우지_않는다() -> None:
+    """**오탐이 곧 관광지 삭제다** — 규칙이 좁아야 하는 이유."""
+    names = ["성산일출봉", "국립중앙박물관", "광장시장", "남산서울타워",
+             "제주 올레시장", "부산 감천문화마을", "경복궁", "한라산국립공원",
+             "일반음식점 대성집", "대구 서문시장"]
+    props = [_prop(str(i), None, name=n) for i, n in enumerate(names)]
+    assert drop_non_travel(props) == {}
+    assert len(props) == len(names)
+
+
+def test_제거하면_유니크_수를_다시_센다() -> None:
+    """`stats.unique_proposals` 가 실제 제안 수와 어긋나면 읽는 쪽이 커버리지를 잘못 잰다."""
+    props = [_prop("1", None, name="CU 강릉점"), _prop("2", None, name="성산일출봉")]
+    dropped = drop_non_travel(props)
+    assert sum(dropped.values()) == 1 and len(props) == 1
+
+
+def test_걸릴_것이_없으면_아무것도_안_바꾼다() -> None:
+    props = [_prop("1", None, name="성산일출봉")]
+    before = list(props)
+    assert drop_non_travel(props) == {}
+    assert props == before

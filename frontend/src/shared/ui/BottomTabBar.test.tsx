@@ -1,4 +1,10 @@
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import { BlurView } from 'expo-blur';
+import type { ReactTestInstance } from 'react-test-renderer';
+import { Path } from 'react-native-svg';
 
 import { BottomTabBar } from './BottomTabBar';
 
@@ -84,5 +90,113 @@ describe('BottomTabBar — press 콜백 (AC-8)', () => {
 
     expect(onPressTab).toHaveBeenNthCalledWith(1, 'explore');
     expect(onPressTab).toHaveBeenNthCalledWith(2, 'my');
+  });
+});
+
+/**
+ * TRIP-1104 — 사진 위 가독성: 알약 블러를 올리고(24 → 70) 아이콘·라벨 색은 그대로 둔다.
+ * 블러의 실제 세기는 jest 가 못 본다(BlurView prop 까지만) — 눈으로 보는 확인은 6-b 몫.
+ */
+
+// 아이콘 안 SVG Path 들의 stroke·fill 색을 대문자로 모아 중복 없이 돌려준다.
+function iconColors(icon: ReactTestInstance): string[] {
+  const colors = icon
+    .findAllByType(Path)
+    .flatMap((p) => [p.props.stroke, p.props.fill])
+    .filter((c): c is string => typeof c === 'string')
+    .map((c) => c.toUpperCase());
+  return [...new Set(colors)];
+}
+
+describe('BottomTabBar — 알약 블러 세기 (TRIP-1104 AC-1)', () => {
+  it('알약 BlurView 는 하나이고 intensity 70 · tint light 로 렌더된다', () => {
+    render(<BottomTabBar activeKey="home" onPressTab={jest.fn()} />);
+
+    const blurs = screen.UNSAFE_getAllByType(BlurView);
+    expect(blurs).toHaveLength(1);
+    expect({
+      intensity: blurs[0].props.intensity,
+      tint: blurs[0].props.tint,
+    }).toEqual({ intensity: 70, tint: 'light' });
+  });
+});
+
+describe('BottomTabBar — 비활성 색 유지 (TRIP-1104 AC-2 · 흰색안 기각)', () => {
+  it('비활성 4탭의 아이콘은 MUTED(#6A6A6A)만 쓰고 라벨은 text-muted 이며 흰색이 없다', () => {
+    render(<BottomTabBar activeKey="home" onPressTab={jest.fn()} />);
+
+    TAB_KEYS.filter((key) => key !== 'home').forEach((key) => {
+      const icon = screen.getByTestId(`shell-tabbar-icon-${key}-inactive`);
+      // 앵커 — Path 를 못 찾으면 아래 "흰색 없음"이 빈 배열로 거짓 통과한다.
+      expect(icon.findAllByType(Path).length).toBeGreaterThan(0);
+      expect(iconColors(icon)).toEqual(['#6A6A6A']);
+
+      const classes = String(
+        screen.getByText(TAB_LABELS[key]).props.className
+      ).split(/\s+/);
+      expect({
+        muted: classes.includes('text-muted'),
+        onPrimary: classes.includes('text-on-primary'),
+        white: classes.includes('text-white'),
+      }).toEqual({ muted: true, onPrimary: false, white: false });
+    });
+  });
+});
+
+describe('BottomTabBar — 활성 무회귀 (TRIP-1104 AC-3)', () => {
+  it('어느 탭이 활성이든 아이콘은 primary(#FF385C)로 채워지고 라벨은 text-primary 다', () => {
+    const { rerender } = render(
+      <BottomTabBar activeKey="home" onPressTab={jest.fn()} />
+    );
+
+    TAB_KEYS.forEach((key) => {
+      rerender(<BottomTabBar activeKey={key} onPressTab={jest.fn()} />);
+
+      const icon = screen.getByTestId(`shell-tabbar-icon-${key}-active`);
+      expect(iconColors(icon)).toContain('#FF385C');
+      expect(iconColors(icon)).not.toContain('#6A6A6A');
+
+      const classes = String(
+        screen.getByText(TAB_LABELS[key]).props.className
+      ).split(/\s+/);
+      expect(classes).toContain('text-primary');
+    });
+  });
+});
+
+describe('BottomTabBar.tsx 주석 — 확정값 표기 (TRIP-1104 AC-4 · 소스 스캔)', () => {
+  const SOURCE = readFileSync(join(__dirname, 'BottomTabBar.tsx'), 'utf8');
+
+  // `<BlurView` 줄과 `intensity=` 줄 사이의 `//` 주석 줄만 꺼낸다(없으면 null).
+  function blurComment(source: string): string | null {
+    const lines = source.split('\n');
+    const start = lines.findIndex((l) => l.trim().startsWith('<BlurView'));
+    const end = lines.findIndex(
+      (l, i) => i > start && /^\s*intensity=/.test(l)
+    );
+    if (start < 0 || end < 0) return null;
+    return lines
+      .slice(start + 1, end)
+      .filter((l) => l.trim().startsWith('//'))
+      .join('\n');
+  }
+
+  it('"캘리브레이션 노브" 표기가 사라지고, intensity 바로 위 주석이 확정값과 근거(60~80 범위·기기)를 적는다', () => {
+    const comment = blurComment(SOURCE);
+
+    expect(comment).not.toBeNull();
+    expect({
+      calibrationKnob: SOURCE.includes('캘리브레이션 노브'),
+      confirmed: comment?.includes('확정'),
+      range: comment?.includes('60~80'),
+      device: comment?.includes('기기'),
+      ponytailMarker: comment?.includes('ponytail:'),
+    }).toEqual({
+      calibrationKnob: false,
+      confirmed: true,
+      range: true,
+      device: true,
+      ponytailMarker: false,
+    });
   });
 });

@@ -1,0 +1,110 @@
+# 서빙 전환 판정기 — 리마인드 학생 모델을 Bedrock 에 둘지 EKS GPU 로 옮길지 (AI-D08, TRIP-973)
+#
+# 주 1회 `ai/scripts/mlops/serving_judge.py` 를 돌려 실측(CloudWatch·Cost Explorer)을
+# `ai/docs/mlops/serving-ledger.md` 에 한 행 붙이고 PR 로 올린다. 전환 조건이 2주 연속
+# 성립하면 같은 PR 에 `deploy/eks/chart/values.yaml` 의 `reminderLlm.transport` 한 줄이
+# 함께 들어간다. **머지가 승인이다** — auto-merge 를 걸지 않는다(수집 PR 과 다르다: 그쪽은
+# 데이터고 여기는 실서비스 경로다).
+#
+# 두 잡인 이유: schedule 은 기본 브랜치(main)에서 돌고, AWS 역할은 GitHub 환경 `dev`
+# 에 묶여 있으며 그 환경은 develop 만 허용한다. 그래서 schedule 잡은 develop 을 가리켜
+# 자기 자신을 dispatch 만 하고(poi-collect 의 재기동 선례), 실제 판정은 dispatch 잡이 한다.
+#
+# ⚠️ 이 봇 PR 에는 CI 가 안 붙는다(GITHUB_TOKEN push 는 워크플로를 트리거하지 않는다).
+#    원장 행만 든 주간 PR 은 그래도 되고, 전환 줄이 든 PR 은 머지 전에 빈 커밋을 하나
+#    얹거나 닫았다 열어 CI 를 태운다 — 차트 테스트가 enum 을 본다.
+name: ai-serving-judge
+
+on:
+  schedule:
+    - cron: '0 22 * * 1'   # UTC 월 22시 = KST 화 아침 7시, 주 1회
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 측정 창(일)
+        default: '14'
+        type: string
+
+concurrency:
+  group: ai-serving-judge
+  cancel-in-progress: false
+
+jobs:
+  # main 에서 도는 schedule 은 develop 을 가리켜 자기 자신을 띄우기만 한다.
+  kick:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run ai-serving-judge.yml -R "${{ github.repository }}" --ref develop -f days=14
+
+  judge:
+    if: github.event_name == 'workflow_dispatch'
+    environment: dev
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write        # 원장 브랜치 push
+      pull-requests: write   # 주간 PR
+      id-token: write        # AWS 역할 (읽기 2종: CloudWatch·Cost Explorer)
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+          role-session-name: trippilot-serving-judge-${{ github.run_id }}
+      - uses: astral-sh/setup-uv@v6
+      - name: 판정
+        id: judge
+        working-directory: ai
+        run: |
+          uv sync --locked --no-dev
+          uv run --no-dev python scripts/mlops/serving_judge.py \
+            --ledger docs/mlops/serving-ledger.md \
+            --values ../deploy/eks/chart/values.yaml \
+            --days "${{ inputs.days || '14' }}" \
+            --json "$RUNNER_TEMP/verdict.json"
+          {
+            echo "verdict=$(jq -r .verdict "$RUNNER_TEMP/verdict.json")"
+            echo "action=$(jq -r .action "$RUNNER_TEMP/verdict.json")"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "## 서빙 판정 — $(jq -r .verdict "$RUNNER_TEMP/verdict.json") / $(jq -r .action "$RUNNER_TEMP/verdict.json")"
+            echo
+            echo '```'
+            jq -r .row "$RUNNER_TEMP/verdict.json"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: 원장 PR (전환이면 values.yaml 한 줄 포함)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERDICT: ${{ steps.judge.outputs.verdict }}
+          ACTION: ${{ steps.judge.outputs.action }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B chore/serving-judge
+          git add ai/docs/mlops/serving-ledger.md deploy/eks/chart/values.yaml
+          if [ "$ACTION" = "open_pr" ]; then
+            TITLE="chore(ai): 리마인드 서빙 전환 — $VERDICT (판정기 2주 연속)"
+          else
+            TITLE="chore(ai): 서빙 원장 주간 행 — $VERDICT"
+          fi
+          git commit -m "$TITLE"
+          git push -f origin chore/serving-judge
+          if [ "$(gh pr list --head chore/serving-judge --state open --json number --jq length)" = "0" ]; then
+            gh pr create --base develop --head chore/serving-judge --title "$TITLE" \
+              --body "ai-serving-judge 자동 PR. 근거는 원장 행의 비고 열. 전환 줄(\`reminderLlm.transport\`)이 들어 있으면 **머지가 곧 실서비스 경로 전환**이다 — 머지 전에 빈 커밋으로 CI 를 태운다(봇 push 는 CI 를 안 깨운다). 규칙·게이트: \`ai/docs/mlops/serving-ledger.md\`, 결정: ADR AI-D08."
+          else
+            gh pr edit chore/serving-judge --title "$TITLE"
+          fi

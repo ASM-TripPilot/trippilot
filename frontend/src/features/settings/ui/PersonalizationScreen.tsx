@@ -7,6 +7,7 @@ import type {
   PersonalizationItem,
 } from '@/shared/api/generated/schemas';
 import { LocationBackChevronGlyph } from '@/shared/location/LocationGlyphs';
+import { Toggle } from '@/shared/ui/Toggle';
 
 import { personalizationCopy } from '../model/personalizationCopy';
 
@@ -24,6 +25,9 @@ import { personalizationCopy } from '../model/personalizationCopy';
  *
  * 픽셀·글리프 SVG 색/모양은 l06 준용 발명값이라 6-b 실기 몫(Figma 프레임 부재, repo-traps).
  */
+/** 토글 카드 제목 — 스위치 이름(accessibilityLabel)도 이 값을 쓴다(카피 수정 시 둘이 어긋나지 않게). */
+const TOGGLE_TITLE = '지난 기록으로 추천 맞춤';
+
 export interface PersonalizationScreenProps {
   consentOn: boolean;
   reason: PersonalizationInfoReason;
@@ -64,25 +68,18 @@ export function PersonalizationScreen({
         <View className="flex-row items-center gap-md rounded-[20px] bg-canvas px-lg py-lg">
           <View className="flex-1">
             <Text className="font-noto-bold text-card-title text-ink">
-              지난 기록으로 추천 맞춤
+              {TOGGLE_TITLE}
             </Text>
             <Text className="mt-xs font-noto text-label text-muted">
               {subtitle}
             </Text>
           </View>
-          <Pressable
+          <Toggle
             testID="settings-personalization-toggle"
-            accessibilityRole="switch"
-            accessibilityState={{ checked: consentOn }}
+            accessibilityLabel={TOGGLE_TITLE}
+            checked={consentOn}
             onPress={onToggle}
-            className={`h-[30px] w-[52px] justify-center rounded-pill px-[3px] ${
-              consentOn
-                ? 'items-end bg-primary'
-                : 'items-start bg-hairline-strong'
-            }`}
-          >
-            <View className="h-6 w-6 rounded-pill bg-canvas" />
-          </Pressable>
+          />
         </View>
 
         {/* 안내 문구 — reason 에 따라 있을 때만. APPLIED 는 null 이라 그리지 않는다(목록이 대신 말함). */}

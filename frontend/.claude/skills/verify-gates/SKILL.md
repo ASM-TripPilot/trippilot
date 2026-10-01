@@ -50,15 +50,15 @@ description: "TripPilot frontend 검증 게이트 실행 순서와 명령. '검�
 ## 변경 집합 대조 + 경계면 QA (검사 4 통과 후)
 
 - **변경 파일 목록 자체 도출**: `git status`/`git diff --name-only`로 실제 변경 집합을 스스로 도출하고, implementer 신고 목록과 대조 — **목록에 없는 변경 파일 발견 = FAIL**. 특히 테스트 인프라(jest 설정·setup·`__mocks__/`·공유 픽스처·tsconfig)의 미신고 변경은 즉시 에스컬레이션(테스트 파일을 안 건드리고 테스트를 죽이는 표준 경로다). `git status <리포 루트>/aidlc` 변경 여부도 함께 확인한다(리포 루트는 `git rev-parse --show-toplevel` — cwd 상대경로는 실행 위치에 따라 조용히 빈 결과를 낸다).
-- **구조 생성물 최신성 (CI 하드 게이트 — 반드시 돌린다)**: `node <리포 루트>/frontend/.claude/skills/trippilot-dev-cycle/scripts/structure-index.cjs --write` 로 `docs/structure.generated.md`를 재생성한 뒤 `git diff --exit-code docs/structure.generated.md` — **diff가 있으면 FAIL(기계적, implementer가 재생성분을 커밋)**. CI `frontend-ci.yml`의 `structure map drift gate`가 강제하는 검사다(export 추가·파일 이동 후 `--write` 미실행 = 드리프트). **아래 `--check`와 다른 검사다** — 이건 *생성 문서 자체의 최신성*이고 하드 FAIL이며, `--check`는 죽은 심볼 참조(유령) 검사다. 이 `--write` diff를 안 돌리면 '로컬 PASS·CI 실패'가 난다(실측 TRIP-592 #393 — 새 export `LocationCloseGlyph` 추가 후 미재생성, 상세는 하네스 변경이력). CI는 볼트 없어 개념 유령을 건너뛰므로, 로컬 `--check`의 개념 유령 불일치는 이 하드 게이트와 무관하다.
-- **구조 지도 대조**: `node <리포 루트>/frontend/.claude/skills/trippilot-dev-cycle/scripts/structure-index.cjs --check` — `docs/structure.md`의 행 ↔ 실제 파일. 이번 사이클이 파일을 추가·삭제·이동했는데 지도가 안 따라왔으면 여기서 잡힌다. **불일치는 FAIL이 아니라 리포트에 기재 + [기록]의 scribe 작업 목록으로 넘긴다**(지도는 [기록] 산출물이라 검증 시점엔 아직 안 고쳐졌을 수 있다). 단 [기록] 이후 재검증에서도 불일치면 FAIL.
+- **구조 생성물 최신성 (CI 하드 게이트 — 반드시 돌린다)**: `node <리포 루트>/frontend/.claude/skills/trippilot-dev-cycle/scripts/structure-index.cjs --write` 로 `docs/structure.generated.md`를 재생성한다 — **판정은 "재생성 전 작업 트리 파일 ↔ 재생성 후"를 비교한다**(`--write` 전에 `cp`로 떠 두고 `--write` 후 `cmp`). **추가 diff가 있으면 FAIL(기계적, implementer가 재실행)**. ⚠️ **HEAD 대비 diff로 판정하지 마라** — 커밋 전 사이클은 새 export를 반영한 생성물이 HEAD와 다른 게 정상이고, 그걸 FAIL로 읽으면 정당한 변경을 반려하는 오판이 된다(실측 오판 FAIL 2회, 상세는 하네스 변경이력). CI `frontend-ci.yml`의 `structure map drift gate`가 강제하는 검사다(export 추가·파일 이동 후 `--write` 미실행 = 드리프트). **아래 `--check`와 다른 검사다** — 이건 *생성 문서 자체의 최신성*이고 하드 FAIL이며, `--check`는 죽은 심볼 참조(유령) 검사다. 이 `--write` diff를 안 돌리면 '로컬 PASS·CI 실패'가 난다(실측 1건, 상세는 하네스 변경이력). CI는 볼트 없어 개념 유령을 건너뛰므로, 로컬 `--check`의 개념 유령 불일치는 이 하드 게이트와 무관하다.
+- **구조 지도 대조**: `node <리포 루트>/frontend/.claude/skills/trippilot-dev-cycle/scripts/structure-index.cjs --check` — `docs/structure.md`·`.claude/rules/layer-*.md`·`structure.generated.md`의 행 ↔ 실제 파일(+ 개념 유령). 이번 사이클이 파일을 추가·삭제·이동했는데 지도가 안 따라왔으면 여기서 잡힌다. **불일치는 FAIL이 아니라 리포트에 기재 + [기록]의 scribe 작업 목록으로 넘긴다**(지도는 [기록] 산출물이라 검증 시점엔 아직 안 고쳐졌을 수 있다). 단 [기록] 이후 재검증에서도 불일치면 FAIL.
 - `backend/docs/design/openapi.yaml` 응답 스키마 ↔ 프론트 타입/훅 shape 교차 비교.
 - INV-3 점검: duration 단일 키워드가 아니라 시간 표시 계열을 grep한다 — `duration|minutes?|\bmin\b|eta|소요` (DTO·타입) + 화면 코드의 시간 단위 표시 문자열(`"분"`, `"min"`). 명칭 변경·파생 계산 표시를 잡기 위함이다.
 - 불일치는 FAIL로 취급하고 리포트에 양쪽 정의를 병기한다(권위는 서버 계약).
 
 ## 실기 스모크 (조건부 · 2026-07-21 신설)
 
-**왜 있나**: jest는 픽셀·레이아웃·Metro/Hermes·딥링크를 **원리적으로 못 본다.** 그리고 12사이클에서 발견된 **유일한 실제 동작 결함**이 정확히 그 층에서 나왔다 — `20260720-trip161-mock-seam`은 jest 121 green · 타입 0 · 린트 0을 **전부 통과한 뒤** 시뮬레이터에서 레드박스가 떴고(`Property 'MessageEvent' doesn't exist`), 목이 안 걸려 `localhost:8080` 커넥션이 20회 나갔다. 위 검사 4개는 그걸 볼 방법이 없다.
+**왜 있나**: jest는 픽셀·레이아웃·Metro/Hermes·딥링크를 **원리적으로 못 본다** — 위 검사 4개가 전부 green인 채로 런타임 전역 부재 레드박스와 목 미적용 실서버 호출이 시뮬레이터에서만 드러났다(실측 1건, 상세는 하네스 변경이력).
 
 ### 발동 조건 — diff로 기계 판정
 
@@ -78,7 +78,7 @@ description: "TripPilot frontend 검증 게이트 실행 순서와 명령. '검�
 
 ```bash
 xcrun simctl list devices booted | grep -q Booted            # 시뮬레이터 부팅 상태
-xcrun simctl listapps booted | grep -q com.trippilot.app     # dev build 설치 상태
+xcrun simctl listapps booted | grep -q com.trippilot.travel     # dev build 설치 상태
 curl -s --max-time 3 http://localhost:8081/status \
   | grep -q packager-status:running                          # Metro 기동 상태
 ```
@@ -93,8 +93,8 @@ curl -s --max-time 3 http://localhost:8081/status \
 
 ```bash
 # 1. 깨끗한 재기동 (launch가 PID를 반환하면 프로세스는 떴다)
-xcrun simctl terminate booted com.trippilot.app 2>/dev/null
-xcrun simctl launch booted com.trippilot.app
+xcrun simctl terminate booted com.trippilot.travel 2>/dev/null
+xcrun simctl launch booted com.trippilot.travel
 
 # 2. 이번 사이클이 만진 화면으로 진입 (프리뷰 딥링크는 동작 확인됨)
 xcrun simctl openurl booted trippilot://_dev/preview
@@ -105,18 +105,28 @@ xcrun simctl io booted screenshot <스크래치패드>/smoke-{n}.png
 # 4. 예상 밖 네트워크 — mock-seam을 잡은 바로 그 검사
 xcrun simctl spawn booted log show --last 2m --style compact \
   --predicate 'subsystem == "com.apple.network"' | grep -i "localhost:8080\|CFNetwork"
+
+# 5. 상호작용 — agent-device로 이번 사이클이 만든 동작을 실제로 누른다
+agent-device open com.trippilot.travel --platform ios --udid <UDID>   # 첫 open은 XCTest 러너 빌드로 느리다
+agent-device snapshot -i                                             # 접근성 트리에서 대상 testID 확인
+agent-device press 'id="<testID>"' --settle                         # 변경 diff로 반응 판정
+agent-device fill 'id="<입력 testID>"' "한글 입력"                    # 텍스트 입력이 있는 화면만
 ```
 
-### 판정 4항목 — 하나라도 실패면 FAIL → implementer 수정 루프
+셀렉터·조작 함정(testID는 `id="…"`로만, `label=`은 조용히 무시 · `find`는 탭까지 한다 · 키보드가 떠 있으면 첫 탭은 키보드만 닫는다 등)의 정본은 사용자 스킬 `trippilot-sim-qa` §2다 — 스모크 전에 그 절을 읽는다.
+
+### 판정 5항목 — 하나라도 실패면 FAIL → implementer 수정 루프
 
 1. 프로세스 부팅 (`launch`가 PID 반환)
 2. **레드박스 없음** — 스크린샷을 Read로 열어 확인. "로그에 없으니 없겠지"로 넘기지 마라
 3. 예상 밖 네트워크 0건 (목 ON인데 실서버로 나가는 등)
 4. 대상 화면 도달
+5. **이번 사이클이 만든 주요 상호작용 1개 이상이 기대대로 반응** — agent-device `--settle` diff 또는 스냅샷으로 판정한다. 상호작용이 없는 변경(순수 표시)이면 N/A로 적는다.
 
 ### 한계 — 넘겨짚지 마라
 
-- **탭·스와이프 자동화는 이 환경에서 불가**(접근성 권한 부재). 스모크는 **진입까지**만 본다. 상호작용 확인은 사용자 몫이고, 그 사실을 04b에 적는다.
+- **탭·텍스트 입력(한글 포함)은 agent-device로 자동화한다. 스와이프·드래그·엣지 스와이프 뒤로가기는 아니다** — `agent-device swipe`·`back --system`은 엣지 스와이프가 아니다. 제스처가 핵심인 변경(드래그 재정렬·시트 끌기)은 내장 시뮬레이터 MCP의 swipe/touch 경로로 시도하고, 안 되면 사용자 몫으로 04b에 적는다.
+- **지도 화면은 접근성 캡처가 워치독 타임아웃으로 실패한다** → 스크린샷 + 좌표 탭으로 대신한다(좌표계 402×874 포인트).
 - 스모크 PASS ≠ 비주얼 정합. 픽셀 충실도는 `figma-screen-impl` 5단계(스크린샷 대조)의 몫이다.
 
 ### 산출
@@ -130,8 +140,8 @@ xcrun simctl spawn booted log show --last 2m --style compact \
 **발동**: 자율 세션 + 화면 표면(픽셀·레이아웃)을 만진 사이클. 대상 키는 이번 사이클이 만진 프리뷰 키(`layer-app.md` `_dev/preview.tsx` 행에서 확정).
 
 **절차**:
-1. `scripts/dev-preview-capture.sh <키>…` — 키마다 fresh 재기동→진입→7s→캡처→상단 오버레이 크롭. 출력 `_workspace/preview-capture/<키>.png`. 사전 점검(시뮬·앱·Metro) 실패 시 exit 3 = 실행 불가(FAIL 아님, §0 정신).
-2. 대응 Figma 프레임 id 를 `get_screenshot(nodeId, fileKey=1MTF3dtptIrbg8gld5IdO2, maxDimension 1600)` 로 내려 `_workspace/figma-cache/<id>.png` 에 캐시(curl). 프레임 id 는 티켓 본문 "■ Figma 프레임".
+1. `scripts/dev-preview-capture.sh <키>…` — 키마다 fresh 재기동→진입→7s→캡처→상단 오버레이 크롭. 출력 `<리포 루트>/_workspace/preview-capture/<키>.png`. 사전 점검(시뮬·앱·Metro) 실패 시 exit 3 = 실행 불가(FAIL 아님, §0 정신).
+2. 대응 Figma 프레임 id 를 `get_screenshot(nodeId, fileKey=1MTF3dtptIrbg8gld5IdO2, maxDimension 1600)` 로 내려 `<리포 루트>/_workspace/figma-cache/<id>.png` 에 캐시(curl). 프레임 id 는 티켓 본문 "■ Figma 프레임".
 3. **비전 가능 서브에이전트**에 두 이미지 + 티켓 완료 조건을 주고 PASS/FAIL·차이 목록(요소·카피·색·간격)을 리포트로 쓰게 한다. 산출 `04b_smoke_{n}_{PASS|FAIL}.md`(실기 스모크와 같은 채번·자리).
 4. **FAIL → implementer 수정 루프 최대 2회.** 그래도 FAIL 이면 판단성 이상으로 새 티켓(전진 전용, 되돌리지 않음).
 
@@ -140,7 +150,6 @@ xcrun simctl spawn booted log show --last 2m --style compact \
 - **dev 오버레이가 상단 ~156pt 를 덮어** 그 뒤 콘텐츠(예: 홈 인사 헤더)도 크롭에 함께 잘린다 — 헤더대는 이 경로로 대조 불가(오버레이를 지우면 헤더도 지워진다).
 - 정적 캡처는 **뷰포트 1화면**만 담는다 — "스크롤 전 구간"은 못 본다.
 
-시범 1회: TRIP-694 `home-default` vs `2091:1357` → FAIL 리포트(`_workspace/trip831-visual-gate-trial/`, 구현 전이라 갭 6항 정상 검출).
 
 *유지 판정: 이 게이트가 잡은 결함 수를 10사이클 세어 **0이면 격하**(정적 대조가 실기·구조 테스트가 이미 잡는 것만 재확인한다는 뜻). 실적은 scribe 가 개발로그에 남긴다. 판정 단위는 이 게이트 하나.*
 

@@ -88,6 +88,26 @@ class VisitCheckService(
         checks.save(owned(accountId, tripId, visitCheckId).skip(clock.instant()))
 
     /**
+     * **도착 전 건너뛰기**(TRIP-1029) — 실적이 아직 없는 계획 슬롯을 접는다. 같은 슬롯에 실적이
+     * 있으면 도착 경로와 같은 규칙으로 409 를 가른다 — 이미 도착한 슬롯은 기존 skip 경로가 맞는 길이고,
+     * 같은 건너뜀의 재전송(오프라인 재생)은 수렴하면 되는 상태라 코드로 구분해 준다(BR-U5-20).
+     * 좌표를 받지 않는다 — 위치 법정 로그와 무관한 경로다.
+     */
+    @Transactional
+    fun skipPlanned(accountId: UUID, tripId: UUID, slotKey: String, poiId: UUID): VisitCheck {
+        trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
+        checks.findBySlot(tripId, slotKey)?.let { existing ->
+            val sameState = existing.poiId == poiId && existing.skippedAt != null
+            throw ConflictDetected(
+                current = VisitConflictState(existing.visitCheckId, existing.updatedAt),
+                message = if (sameState) "이미 건너뛴 방문지입니다." else "그 슬롯에는 이미 방문 기록이 있습니다.",
+                errorCode = if (sameState) ErrorCode.VISIT_ALREADY_RECORDED else ErrorCode.VISIT_CONFLICT,
+            )
+        }
+        return checks.save(VisitCheck.skipPlanned(tripId, slotKey, poiId, clock.instant()))
+    }
+
+    /**
      * 실제 시각 보정(TRIP-118 — 자동 기록하되 수정 가능).
      * 기기 시각이 어긋났거나 체크를 늦게 눌렀을 때 바로잡는 경로다.
      */

@@ -15,3 +15,14 @@ import { isAxiosError } from 'axios';
 export function isNotFound(error: unknown): boolean {
   return isAxiosError(error) && error.response?.status === 404;
 }
+
+/**
+ * TanStack `retry` 옵션 — 404 는 다시 물어도 답이 같으니 재시도하지 않고, 그 밖의 실패
+ * (500·네트워크)는 라이브러리 기본과 같이 3회까지 다시 묻는다(TRIP-986 #063).
+ */
+export function retryUnlessNotFound(
+  failureCount: number,
+  error: unknown
+): boolean {
+  return failureCount < 3 && !isNotFound(error);
+}

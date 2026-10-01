@@ -2,18 +2,13 @@
  * 숙소 등록 폼의 판정·조립(01b Seed §3-5 · F-7 · F-8 · AC-1 · AC-3 · AC-4 · AC-5).
  *
  * 판정 정본은 서버지만(§5), 좌표 게이트만은 클라이언트가 진짜로 막아야 한다(AC-3 — 서버
- * 400에 의존하면 위반). 그래서 `canSubmitStayRegister`는 zod를 거치지 않고 `coordConfirmed`·
- * `selectedCandidate`·`submitStatus`를 직접 본다. 날짜 순서(BR-U1-26 · INV-U1-09)는 서버도
- * 검증하는 UX 사본이라 zod 스키마로 표현한다(§3-5 "폼 = zod + useState").
+ * 400에 의존하면 위반). 그래서 `canSubmitStayRegister`는 `coordConfirmed`·`selectedCandidate`·
+ * `submitStatus`를 직접 본다. 등록은 날짜를 받지 않는다(TRIP-1052 · US-STAY-08 · BR-U1-26 개정).
  */
-import { z } from 'zod';
-
 import type {
   GeocodeCandidate,
   RegisterSavedStayRequest,
 } from '@/shared/api/generated/schemas';
-
-import { isStayRangeValid } from './stayDates';
 
 /** 3탭 셸의 탭 식별자(TRIP-199). `linkpaste`는 여전히 잠겨 있다(D6·범위 밖). */
 export type StayRegisterTab = 'mapsearch' | 'linkpaste' | 'pin';
@@ -37,23 +32,8 @@ export interface StayRegisterFlow {
   pinAddressStatus: 'idle' | 'loading' | 'ok' | 'error';
   coordConfirmed: boolean;
   mapSheetState: 'closed' | 'open' | 'open-map-failed';
-  checkIn: string | null;
-  checkOut: string | null;
-  dateSheetOpen: boolean;
   submitStatus: 'idle' | 'submitting' | 'error';
 }
-
-/** 날짜 유효성의 UX 사본(BR-U1-26 · INV-U1-09). 판정 정본은 서버다 — 여기서 막아도 서버가
- * 다시 판정한다. */
-export const stayRegisterSchema = z
-  .object({
-    checkIn: z.string().nullable(),
-    checkOut: z.string().nullable(),
-  })
-  .refine((value) => isStayRangeValid(value.checkIn, value.checkOut), {
-    message: '체크아웃은 체크인 이후 날짜여야 해요',
-    path: ['checkOut'],
-  });
 
 /** 서버로 나갈 이름 — 사용자가 친 값이 있으면 그것, 비었으면 후보/건물명으로 떨어진다
  * (D2·★11). 게이트(canSubmitStayRegister)와 조립(buildStayRegisterRequest)이 같은 식을
@@ -90,16 +70,11 @@ export function canSubmitStayRegister(flow: StayRegisterFlow): boolean {
   if (flow.selectedCandidate === null) return false;
   if (!flow.coordConfirmed) return false;
   if (flow.submitStatus === 'submitting') return false;
-  if (resolveName(flow.name, flow.selectedCandidate.name).trim() === '')
-    return false;
-  return stayRegisterSchema.safeParse({
-    checkIn: flow.checkIn,
-    checkOut: flow.checkOut,
-  }).success;
+  return resolveName(flow.name, flow.selectedCandidate.name).trim() !== '';
 }
 
-/** 서버로 보낼 본문 조립. 후보가 없으면 null(보낼 것이 없다). 날짜를 비웠으면 checkIn·
- * checkOut 키 자체를 붙이지 않는다(AC-5). 등록 경로는 좌표의 출처가 정한다(D4·AC-7) — 탭이
+/** 서버로 보낼 본문 조립. 후보가 없으면 null(보낼 것이 없다). checkIn·checkOut 키는 싣지
+ * 않는다 — 계약상 nullable로 남아 있지만 앱은 보내지 않는다(TRIP-1052 · US-STAY-08). 등록 경로는 좌표의 출처가 정한다(D4·AC-7) — 탭이
  * 아니다. 숙소명은 사용자가 친 값이 이기고, 비었을 때만 후보/건물명으로 떨어진다(D2·★11). */
 export function buildStayRegisterRequest(
   flow: StayRegisterFlow
@@ -113,8 +88,5 @@ export function buildStayRegisterRequest(
     lat: candidate.lat,
     lng: candidate.lng,
     coordConfirmed: flow.coordConfirmed,
-    ...(flow.checkIn !== null && flow.checkOut !== null
-      ? { checkIn: flow.checkIn, checkOut: flow.checkOut }
-      : {}),
   };
 }

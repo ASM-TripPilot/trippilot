@@ -36,4 +36,6 @@ class JpaLocationLegalLogRepository(
             ),
         )
     }
+
+    override fun purgeExpired(): Int = jpa.purgeExpired()
 }

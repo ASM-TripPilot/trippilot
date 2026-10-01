@@ -17,6 +17,8 @@ import com.trippilot.itinerarygeneration.domain.RevisionActor
 import com.trippilot.itinerarygeneration.domain.RevisionKind
 import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.itinerarygeneration.domain.RequestMeta
+import com.trippilot.itinerarygeneration.domain.RejectedPoi
+import com.trippilot.itinerarygeneration.domain.RejectionStore
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
 import com.trippilot.itinerarygeneration.domain.UnplacedMustVisit
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
@@ -27,6 +29,7 @@ import com.trippilot.itinerarygeneration.domain.TripContext
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.itinerarygeneration.domain.PersonalizationHints
 import com.trippilot.itinerarygeneration.domain.PersonalizationPort
+import com.trippilot.itinerarygeneration.domain.ScoredCandidatePoolStore
 import com.trippilot.profile.api.PreferenceFacade
 import com.trippilot.profile.api.PreferenceSnapshot
 import com.trippilot.savedaccommodation.api.BaseAnchorFacade
@@ -63,6 +66,9 @@ class GenerateItineraryService(
     private val revisions: ItineraryRevisionService,
     /** 숙소 없는 날의 앵커(TRIP-384) — 지역 대표 좌표. place-data.api 만 참조(R1). */
     private val regions: RegionLookupFacade,
+    private val rejectionStore: RejectionStore,
+    /** 생성 시점 점수 후보 풀(TRIP-969) — 슬롯 교체 즉답의 재료. 새 생성이 통째로 갈아끼운다. */
+    private val scoredPools: ScoredCandidatePoolStore,
     /** 기록 기반 개인화(TRIP-556). **포트다** — 구현은 app 이 조립한다(순환 회피, 아래 주석). */
     private val personalization: PersonalizationPort,
     transactionManager: PlatformTransactionManager,
@@ -88,7 +94,16 @@ class GenerateItineraryService(
 
         // 직접 만들기는 AI 를 아예 부르지 않는다 — 빈 일자만 깔고 사용자가 편집으로 채운다(US-SCHED-09).
         // 상대 enum 에 MANUAL 이 없어 경계로 나가면 422 이므로, 여기서 갈라 아예 호출 경로에 들어가지 않게 한다.
-        if (mode == GenerationMode.MANUAL) return createEmpty(tripId, ctx, planDates, previousOf(tripId))
+        if (mode == GenerationMode.MANUAL) {
+            val prev = previousOf(tripId)
+            // 기존 일정을 두고 직접 만들기로 갈아타는 것도 재생성이다(TRIP-964) — "이 구성이 싫다"는
+            // 신호는 어느 방식으로 다시 만들든 같다. 이 갈래는 조기 반환이라 아래 기록 지점을 안 지나서,
+            // 여기 없으면 직접 만들기 경로만 조용히 기억에서 빠진다(검수에서 실제로 빠뜨렸던 자리다).
+            prev?.let {
+                rejectionStore.record(tripId, it.days.flatMap { d -> d.slots.map { s -> s.sourcePoiId } }, RejectedPoi.Kind.REGENERATED)
+            }
+            return createEmpty(tripId, ctx, planDates, prev)
+        }
 
         // day1 조기 노출(TRIP-267 · PR #104 합의): 1차는 첫날만 짧은 시한으로 풀어 즉시 반환하고,
         // 나머지 일자는 배정된 POI 를 제외 목록으로 넘겨 백그라운드 2차 호출로 채운다(AI 는 동기 REST 유지).
@@ -112,6 +127,13 @@ class GenerateItineraryService(
         // 재생성이라면 **직전 상태로 돌아갈 지점**이 반드시 있어야 한다(INV-U3-08 · BR-U3-19).
         val previous = previousOf(tripId)
 
+        // 재생성 = 직전 배치 전부에 대한 약한 거절이다(TRIP-964 — "이 구성이 싫다").
+        // **AI 호출 전에 기록한다** — 바로 이번 생성이 이 이력의 첫 소비처여야 하기 때문이다.
+        // 이후 생성이 실패해도 기록은 남는다: 신호는 "다시 만들어 줘"라는 행위이지 그 결과가 아니다.
+        previous?.let {
+            rejectionStore.record(tripId, it.days.flatMap { d -> d.slots.map { s -> s.sourcePoiId } }, RejectedPoi.Kind.REGENERATED)
+        }
+
         // 1차가 터지면 세션을 닫는다 — 안 닫으면 사용자는 500 을 받고도 화면에서 영원히 "생성 중"을 본다(INV-4 침묵 금지).
         val saved = try {
             val firstAssembly = assembleInput(
@@ -129,7 +151,7 @@ class GenerateItineraryService(
                 scheduleAgent.generate(firstInput)
             } catch (e: Exception) {
                 log.warn("ScheduleAgent 실패 — 결정론 최소 폴백 적용(INV-4). tripId={}", tripId, e)
-                MinimalItineraryFallback.of(firstInput, clock.instant())
+                MinimalItineraryFallback.of(firstInput, clock.instant(), firstAssembly.materializedPoiIds)
             }
             // **하루 여행도 PARTIAL 이다**(TRIP-511). 추천 근거가 생성에서 떨어져 나와 뒤따라오므로,
             // 여기서 COMPLETE 로 닫으면 화면이 폴링을 멈춰 근거를 영영 못 본다.
@@ -139,6 +161,11 @@ class GenerateItineraryService(
             // 영속 + 생성이벤트(TRIP-230)를 한 트랜잭션으로 — confirm()과 대칭(향후 아웃박스 relay 원자성). 발행은 인프로세스.
             tx.execute {
                 previous?.let { revisions.ensureRestorePoint(it) }
+                // 점수 후보 풀(TRIP-969)은 **이번 생성의 파생물**이다 — 새 일정과 함께 갈아끼우고,
+                // 풀 없이 온 생성(http 미개통·폴백)은 **지운다**. 이전 생성의 풀을 남겨 두면
+                // 슬롯 교체 즉답이 지금 일정과 무관한 판단으로 답한다.
+                output.scoredCandidates?.let { pool -> scoredPools.replace(tripId, pool) }
+                    ?: scoredPools.delete(tripId)
                 val it = itineraries.replaceForTrip(tripId, output.toItinerary(tripId, mode, state, firstDates, firstAssembly.unplaced))
                 events.publish(ItineraryGenerated(it.itineraryId.toString(), tripId.toString(), it.isFallback))
                 // day1 이 나왔다 — 폴백 여부·후보 등급을 함께 실어 배너가 **첫 노출부터** 사실을 말하게 한다(BR-U3-11).
@@ -181,6 +208,7 @@ class GenerateItineraryService(
                 isRegeneration = previous != null,
                 assemblyUnplaced = secondAssembly.unplaced,
                 sessionId = session.sessionId,
+                materializedPoiIds = secondAssembly.materializedPoiIds,
             )
         }
         return saved
@@ -199,6 +227,8 @@ class GenerateItineraryService(
         previous: Itinerary?,
     ): Itinerary = tx.execute {
         previous?.let { revisions.ensureRestorePoint(it) } // 전환 전 상태를 남긴다 — 진행분이 사라지지 않게
+        // 직접 만들기엔 점수 풀이 없다(TRIP-969) — 이전 생성의 풀이 남으면 그 판단으로 즉답하게 된다.
+        scoredPools.delete(tripId)
         val empty = Itinerary.create(
             tripId, SolveMode.MINIMAL, GenerationMode.MANUAL, isFallback = false,
             days = dates.mapIndexed { i, d -> ItineraryDay.of(d, i, emptyList()) },
@@ -218,7 +248,27 @@ class GenerateItineraryService(
      * 조립 결과 — 요청과 **넣을 자리가 없어 보내지 못한 필수 방문지**를 함께 돌려준다.
      * 로그로만 남기면 사용자는 자기가 넣은 곳이 왜 없는지 끝내 알 수 없다(M2 채널로 이어붙인다).
      */
-    private data class Assembled(val input: ScheduleAgentInput, val unplaced: List<UnplacedMustVisit>)
+    private data class Assembled(val input: ScheduleAgentInput, val unplaced: List<UnplacedMustVisit>, val materializedPoiIds: Set<UUID>)
+
+    /**
+     * 그 날의 일과 창 — 고정 블록이 기본 창(09:00~21:00)을 넘으면 **그 블록을 포함하도록** 넓힌다
+     * (TRIP-1001 결정 (c)). 블록을 거절하지도(사용자 입력 보존, BR-U1-51), 창 밖인 채 보내
+     * 조립을 죽이지도(HC4) 않는다.
+     *
+     * 블록이 자정을 넘으면(23:30+60분) 창 끝은 23:59 에 멈춘다 — TimeWindow 는 하루 안 표현이라
+     * 감긴 시각(00:30)을 끝으로 적으면 end < start 가 되어 그 자체가 모순 입력이 된다.
+     */
+    private fun expandedWindow(date: LocalDate, blocks: List<FixedBlock>): TimeWindow {
+        val onDay = blocks.filter { it.date == date && it.start != null }
+        val start = (onDay.map { it.start!! } + DEFAULT_START).min()
+        val end = (
+            onDay.map { b ->
+                val e = b.start!!.plusMinutes((b.dwellMin ?: 60).toLong())
+                if (e <= b.start) LocalTime.of(23, 59) else e // 자정 감김 — 하루 끝에서 멈춘다
+            } + DEFAULT_END
+            ).max()
+        return TimeWindow(date, start, end)
+    }
 
     /** 최초 생성이면 기준 버전(BASELINE), 재생성이면 GENERATE. */
 
@@ -258,13 +308,18 @@ class GenerateItineraryService(
             )
         }
         return Assembled(
-            ScheduleAgentInput(
+            materializedPoiIds = materialized.materializedPoiIds,
+            input = ScheduleAgentInput(
             tripId = tripId,
             generationMode = mode,
             // budgetLevel(등급) = preference_set.budget_tier (경계 계약; trip.budget_total 아님)
             tripContext = TripContext(ctx.destinations, ctx.startDate, ctx.endDate, ctx.companionType, prefs.budgetTier),
             anchors = dayAnchors(ctx.startDate, ctx.endDate, stayAnchors, ctx.destinationRefs).filter { it.date in dates },          // 이 호출이 맡은 일자의 거점 좌표
-            timeWindows = dates.map { TimeWindow(it, DEFAULT_START, DEFAULT_END) },
+            // 창 밖 사용자 고정 블록이 있는 날은 **그 날만** 일과 창을 블록에 맞춰 넓힌다(TRIP-1001
+            // 결정 (c), 2026-09-27). 안 넓히면 21:00 고정 하나가 HC4(day window)를 깨 그 날 전체가
+            // "해 없음" → 409 → 2차 통째 최소 폴백이 된다(QA #045 실측). 물질화된 ANYTIME 은
+            // 기본 창 안에만 놓이므로 이 계산에 영향이 없다.
+            timeWindows = dates.map { d -> expandedWindow(d, materialized.fixedBlocks) },
             // must_visit → 고정 블록(HC3). 이 호출이 맡은 일자분만.
             // 날짜 미지정(ANYTIME)·여행 기간 밖 날짜는 **일자가 많은 쪽**(2차; 2차가 없으면 1차)에 싣는다 —
             // 하루짜리 1차에 전부 몰면 배치 공간이 없어 HC3 가 깨질 수 있고, 양쪽에 실으면 중복 배치된다.
@@ -279,8 +334,11 @@ class GenerateItineraryService(
             requestMeta = RequestMeta(UUID.randomUUID().toString(), clock.instant(), deadlineMs),
                 excludedPoiIds = excluded,
                 includeExplanations = includeExplanations,
+                // 거절 이력(TRIP-964) — 조립마다 저장소를 읽는다. 1차·2차가 같은 스냅숏을 공유하려고
+                // 인자로 끌고 다니면 시그니처만 늘고, 그 사이에 이력이 늘어도 반영 못 한다.
+                rejections = rejectionStore.findByTrip(tripId),
             ),
-            materialized.unplaced,
+            unplaced = materialized.unplaced,
         )
     }
 

@@ -24,7 +24,7 @@ export function SpontaneousVisitButton({
       className="w-full flex-row items-center justify-center gap-sm rounded-button border-[1.4px] border-hairline-strong bg-canvas py-[14px]"
     >
       <PlusGlyph size={18} />
-      <Text className="font-noto-bold text-body text-ink">즉석 방문 추가</Text>
+      <Text className="font-noto-bold text-body text-ink">방문 추가</Text>
     </Pressable>
   );
 }

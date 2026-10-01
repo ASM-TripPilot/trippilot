@@ -56,6 +56,7 @@ private class FakeSessions : RefreshSessionRepository {
 private class FakeLegalLog : LocationLegalLogRepository {
     val events = mutableListOf<LocationLegalEvent>()
     override fun append(event: LocationLegalEvent) { events.add(event) }
+    override fun purgeExpired(): Int = 0 // 보존기간 파기는 DB 함수 소관(V2.49) — 단위 대역에선 지울 것이 없다
 }
 
 private class FakeStateRepo : LocationConsentStateRepository {

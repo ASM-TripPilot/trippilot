@@ -1,5 +1,5 @@
+import { formatShareCardPeriod } from '@/entities/trip/lib/formatShareCardPeriod';
 import type { Trip, TripSummary } from '@/shared/api/generated/schemas';
-import { formatKoreanDate } from '@/shared/date/formatKoreanDate';
 
 import { summaryStats, type SummaryStatCells } from './summaryStats';
 import {
@@ -9,21 +9,20 @@ import {
 } from './summaryView';
 
 /**
- * TRIP-574 · j06 공유 카드 — 순수 조립·온디바이스 검증·정직한 degrade 스텁.
+ * TRIP-574 · j06 공유 카드 — 순수 조립·온디바이스 검증.
  *
  * 무엇을 보장하나(계약):
  *  - AC-1(BR-U5-46): buildShareCard 가 Trip.title·기간·지역·통계·동선을 정확히 조립한다 —
- *    summaryStats·toOrderedVisitList·distanceSourceLabel(j04 재사용)·formatKoreanDate(기간) 재사용,
- *    새 룰을 발명하지 않는다.
+ *    summaryStats·toOrderedVisitList·distanceSourceLabel(j04 재사용)·formatShareCardPeriod(기간·얼굴별),
+ *    새 룰을 발명하지 않는다. TRIP-766: 기간은 YYYY.MM.DD 얼굴별, 지역은 단일 primary.
  *  - AC-2(BR-U5-47): mode = totalPhotos===0 ? 'no-photo' : 'default'(결측이면 0 취급 → no-photo).
  *  - AC-3(US-REC-13): format 이 aspectRatio 를 정한다(9:16·1:1·4:5) — 내용은 format 무관 불변.
  *  - ★ 반쪽 방어: summary null·stats/highlights 중첩 결측·trip null 계약 위반에도 크래시 0
  *    (571·572 재발 방지 — 상위만 막지 않고 중첩 접근 전 방어). `??` 는 null/undefined 만 대체.
  *  - AC-8(INV-3): VM 어디에도 이동 시간 필드·문자열이 없다(거리만).
  *  - AC-7(§7): validateCaption/validateHashtags 는 순수(온디바이스만) — 상한 초과 시 invalid·트렁케이트.
- *  - INV-4: captureShareImage() = {armed:false} — 네이티브 캡처 미장전을 정직하게 알린다(가짜 성공 금지).
- *    실 캡처·기기 저장·OS 공유는 네이티브 리빌드 동반 후속(view-shot·media-library·sharing·file-system
- *    미설치) — 이 파일은 그 모듈들을 import 조차 안 한다(pickPhotoAsset·geofence degrade 선례 동형).
+ *  - 캡처·저장·공유는 `shareCapture.ts`(TRIP-1071) 몫 — 이 파일은 네이티브 모듈을 import 하지 않는다
+ *    (h16·j04·j06 이 모두 무는 파일이라, 여기 정적 import 한 줄이 재빌드 전 빌드의 부팅 크래시가 된다).
  */
 
 export interface ShareFormat {
@@ -70,25 +69,47 @@ export function buildShareCard({
 }: BuildShareCardInput): ShareCardVM {
   const stats = summary?.stats;
   const totalPhotos = stats?.totalPhotos ?? 0;
+  const mode: ShareCardMode = totalPhotos === 0 ? 'no-photo' : 'default';
 
   return {
     title: trip?.title ?? '',
+    // TRIP-766: 얼굴별 YYYY.MM.DD 포맷 — no-photo 는 en dash·`N박 M일` 접두, default 는 물결표(통일 금지).
     periodText:
       trip?.startDate && trip?.endDate
-        ? `${formatKoreanDate(trip.startDate)} ~ ${formatKoreanDate(trip.endDate)}`
+        ? formatShareCardPeriod(
+            trip.startDate,
+            trip.endDate,
+            mode === 'no-photo'
+              ? { separator: '–', nights: true }
+              : { separator: '~' }
+          )
         : '',
-    regionText: (trip?.destinations ?? [])
-      .map((dest) => dest.region)
-      .join(' · '),
+    // TRIP-766: 단일 primary 지역(구 다중 목적지 join '부산 · 경주' 폐기, Seed 3-a D).
+    regionText: trip?.destinations?.[0]?.region ?? '',
     statsCells: summaryStats(stats),
     distanceSourceLabel: distanceSourceLabel(
       stats?.distanceSource ?? 'VISIT_LINE'
     ),
     orderedVisits: toOrderedVisitList(summary?.highlights ?? []),
-    mode: totalPhotos === 0 ? 'no-photo' : 'default',
+    mode,
     watermark: 'TripPilot',
     aspectRatio: format.aspectRatio,
   };
+}
+
+/**
+ * TRIP-766: 통계 라인 얼굴별 포맷(A/B) — 값 인터폴레이션(다른 셀이면 문자열도 바뀐다).
+ *  - default(A): `N곳 · Nkm · 사진 N장`
+ *  - no-photo(B): `방문 N · 이동 Nkm · 사진 N`
+ * distanceText 는 summaryStats 산출값 그대로(재계산 안 함, INV-3 — 소요시간 0).
+ */
+export function formatShareCardStats(
+  cells: SummaryStatCells,
+  mode: ShareCardMode
+): string {
+  return mode === 'no-photo'
+    ? `방문 ${cells.totalVisits} · 이동 ${cells.distanceText} · 사진 ${cells.totalPhotos}`
+    : `${cells.totalVisits}곳 · ${cells.distanceText} · 사진 ${cells.totalPhotos}장`;
 }
 
 /** 캡션 최대 글자수 — 온디바이스 검증 상한(서버 저장 없음, §7). */
@@ -121,13 +142,4 @@ export function validateHashtags(tags: string[]): {
     count: tags.length,
     truncated: tags.slice(0, HASHTAG_MAX_COUNT),
   };
-}
-
-/**
- * ponytail: 온디바이스 캡처 degrade 스텁 — 네이티브 모듈을 안 물고 항상 armed:false 를 돌려준다.
- *   실 캡처(View→PNG)·기기 저장·OS 공유는 네이티브 리빌드(prebuild/run) 동반 후속 티켓 몫
- *   (pickPhotoAsset·registerGeofences 선례 동형).
- */
-export function captureShareImage(): { armed: false } {
-  return { armed: false };
 }

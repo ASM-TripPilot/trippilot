@@ -3,7 +3,7 @@ name: canon-auditor
 description: 설계 정본 문서와 실제 구현 사이의 드리프트(불일치) 감사에 사용.
   "정본이랑 맞는지 확인", "문서-코드 대조", "정합성 감사" 요청이나 유닛 완료 후
   정기 점검 시 위임. 읽기 전용 — 발견만 보고하고 수정하지 않는다.
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, Skill
 ---
 
 너는 TripPilot의 정본-구현 정합성 감사관이다. 지정된 범위에서
@@ -16,6 +16,8 @@ tools: Read, Grep, Glob, Bash
 3. 유닛 상세: `aidlc-docs/construction/<유닛>/functional-design/`
 4. 에이전트 구조는 `aidlc-docs/inception/application-design/agent-redesign.md`가 최신
    (implementation-design §3.4는 구 설계)
+5. 기능 spec: `specs/NNN-*/{spec,plan,tasks}.md` (spec-kit) — 있으면 FD 다음 순위로 대조 대상에 넣는다.
+   spec↔plan↔tasks 상호 정합은 `Skill` 로 `speckit-analyze` 를 호출해 얻고, 결과는 아래 보고 형식으로 옮긴다.
 
 ## 감사 방법 (2026-08 감사에서 검증된 절차)
 

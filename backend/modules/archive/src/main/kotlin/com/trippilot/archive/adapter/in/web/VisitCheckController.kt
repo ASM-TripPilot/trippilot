@@ -61,6 +61,20 @@ class VisitCheckController(private val service: VisitCheckService) {
         @PathVariable visitCheckId: UUID,
     ): VisitCheckResponse = VisitCheckResponse.from(service.complete(principal.accountId(), tripId, visitCheckId))
 
+    /**
+     * **도착 전 건너뛰기**(TRIP-1029) — 아직 실적이 없는 계획 슬롯을 접는다.
+     * 도착으로 생긴 레코드를 접는 것은 아래 `/{visitCheckId}/skip` — 진입 조건이 다를 뿐 결과 상태는 같다.
+     */
+    @PostMapping("/skip-planned")
+    @ResponseStatus(HttpStatus.CREATED)
+    fun skipPlanned(
+        principal: Principal,
+        @PathVariable tripId: UUID,
+        @Valid @RequestBody request: SkipPlannedRequest,
+    ): VisitCheckResponse = VisitCheckResponse.from(
+        service.skipPlanned(principal.accountId(), tripId, request.slotKey!!, request.poiId!!),
+    )
+
     /** 건너뜀(취소). 안 갔으므로 재계획에서 잠그지 않는다. */
     @PostMapping("/{visitCheckId}/skip")
     fun skip(
@@ -88,6 +102,12 @@ class VisitCheckController(private val service: VisitCheckService) {
  * 도착 체크 요청.
  * [slotKey] 를 비우면 **즉석 방문**이다 — 계획에 없던 곳을 그 자리에서 남기는 경로(US-REC-01).
  */
+/** 도착 전 건너뛰기(TRIP-1029) — 계획 슬롯 전용이라 slotKey 도 필수다(즉석 방문에는 "안 간 계획"이 없다). */
+data class SkipPlannedRequest(
+    @field:NotNull(message = "슬롯 키는 필수입니다.") val slotKey: String?,
+    @field:NotNull(message = "장소는 필수입니다.") val poiId: UUID?,
+)
+
 data class ArriveRequest(
     val slotKey: String? = null,
     @field:NotNull(message = "장소는 필수입니다.") val poiId: UUID?,

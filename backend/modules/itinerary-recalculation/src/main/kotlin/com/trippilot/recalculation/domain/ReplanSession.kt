@@ -121,10 +121,17 @@ data class ReplanOrigin(val kind: OriginKind, val lat: Double?, val lng: Double?
     }
 }
 
-enum class OriginKind { GPS, MANUAL, LAST_VISIT, STAY_ANCHOR }
+/** [PURGED] = 위치 동의 철회로 좌표가 파기됨(TRIP-992) — 원래 GPS/MANUAL 이었다는 사실만 남는다. */
+enum class OriginKind { GPS, MANUAL, LAST_VISIT, STAY_ANCHOR, PURGED }
 
 interface ReplanSessionRepository {
     fun save(session: ReplanSession): ReplanSession
+
+    /**
+     * 위치 동의 철회 파기(TRIP-992 · INV-L4) — 저장된 GPS·MANUAL 기준점 좌표를 지우고
+     * kind 를 PURGED 로 바꾼다. 지운 행 수를 돌려준다(파기 로그의 건수가 된다).
+     */
+    fun purgeOrigins(tripIds: List<UUID>): Int
 
     fun findById(sessionId: UUID): ReplanSession?
 

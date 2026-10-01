@@ -1,6 +1,7 @@
 import {
   DEFAULT_DWELL_KEY,
   DWELL_OPTIONS,
+  buildAnytimeMustVisitRequest,
   buildFixedMustVisitRequest,
   canSubmitMustVisitTime,
   mustVisitTimeBlockReason,
@@ -120,18 +121,52 @@ describe('C10 · AC-5 — FIXED 인데 날짜·시각이 비면 사유가 나온
   });
 });
 
-describe('C11 · D8 — 토글 OFF 면 고정할 값이 없으므로 저장할 수 없다', () => {
-  it('값이 다 채워져 있어도 토글이 꺼져 있으면 false 다', () => {
-    // ★ "값이 없어서 false" 와 구별되는 자리다 — 완전한 값을 넣고도 false 여야 한다.
-    expect(canSubmitMustVisitTime({ ...COMPLETE, fixed: false })).toBe(false);
-    // 짝(긍정) — 켜져 있고 값이 차면 저장할 수 있다.
+describe('🔴 C11 · AC-a1 · BR-U1-48 — 토글 OFF 는 ANYTIME 이라 값 없이도 저장할 수 있다', () => {
+  it('토글이 꺼져 있으면 값이 있든 없든 저장할 수 있다 (OFF=ANYTIME)', () => {
+    // ★ 계약 반전(TRIP-786) — 종전엔 "완전한 값을 넣고도 OFF 면 false"였다(구 D8). 이제 OFF 는
+    //    시각을 정하지 않겠다는 선택(ANYTIME)이라 **언제나** 저장 가능하다. BR-U1-48 이 정본이다.
+    expect(canSubmitMustVisitTime({ ...COMPLETE, fixed: false })).toBe(true);
+    // 값이 하나도 없어도 OFF 면 true — ANYTIME 은 날짜·시각을 안 싣는다.
+    expect(
+      canSubmitMustVisitTime({
+        fixed: false,
+        fixedDate: null,
+        fixedStart: null,
+        dwellKey: 'NORMAL',
+      })
+    ).toBe(true);
+    // 짝(긍정) — 켜져 있고 값이 차면 저장할 수 있다(FIXED 갈래 불변).
     expect(canSubmitMustVisitTime(COMPLETE)).toBe(true);
   });
 
-  it('C11-b 켜져 있어도 값이 비면 저장할 수 없다', () => {
+  it('C11-b 켜져 있는데 값이 비면 여전히 저장할 수 없다 (FIXED 갈래 불변)', () => {
+    // OFF 만 열렸을 뿐, 토글을 켠 FIXED 갈래의 필수 검증은 그대로다.
     expect(canSubmitMustVisitTime({ ...COMPLETE, fixedStart: null })).toBe(
       false
     );
+    expect(canSubmitMustVisitTime({ ...COMPLETE, fixedDate: null })).toBe(
+      false
+    );
+  });
+});
+
+describe('🔴 C15 · AC-a2 · BR-U1-48 — ANYTIME 요청은 최소본이다 (날짜·시각·체류 없음)', () => {
+  it('buildAnytimeMustVisitRequest 는 {poiId, type:ANYTIME} 만 만든다 (여분 키 0)', () => {
+    const request = buildAnytimeMustVisitRequest({ poiId: 'poi-a' });
+
+    // 값 완전 일치 — fixedDate·fixedStart·dwellMin 은 안 싣는다(OFF=시각 미지정).
+    expect(request).toEqual({ poiId: 'poi-a', type: 'ANYTIME' });
+
+    // ★ Object.keys 완전 일치 — `toEqual` 은 값이 undefined 인 여분 키(`dwellMin:undefined`)를
+    //    놓치므로 키 개수를 따로 잠근다(`itineraryEditStore.addSlot` M2 선례).
+    expect(Object.keys(request).sort()).toEqual(['poiId', 'type']);
+  });
+
+  it('C15-b poiId 를 그대로 싣는다 (하드코딩 아님)', () => {
+    expect(buildAnytimeMustVisitRequest({ poiId: 'poi-z' })).toEqual({
+      poiId: 'poi-z',
+      type: 'ANYTIME',
+    });
   });
 });
 

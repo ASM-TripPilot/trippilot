@@ -127,8 +127,9 @@ DTO 에 tags·source_ref 노출"). AI 쪽 수신부는 완료(`Poi.tags` · 캐�
 **하필 밥집·카페가 하루에 가장 많고 가장 자주 교체되는 슬롯이다.** 그래서 2층이 필요하다.
 
 **서술형을 어디서 가져오나 — 새로 받지 않는다.** 수집기가 항목마다 `detailIntro2` 를 **이미
-부르고 있고 응답에서 영업시간·휴무일 2필드만 읽은 뒤 나머지를 버린다**(`sourcing/tourapi.py`
-`fetch_hours`). 같은 응답을 더 읽으면 **HTTP 추가 0건**이다. 포트 계약("메서드 1회 = HTTP 정확히
+부르고 있고 응답에서 영업시간·휴무일 2필드만 읽은 뒤 나머지를 버렸다**(`sourcing/tourapi.py`
+`fetch_detail` — TRIP-683 2단계부터 채택 목록 `_DETAIL_FIELDS` 를 `provenance.detail` 로 더 싣는다).
+같은 응답을 더 읽으면 **HTTP 추가 0건**이다. 포트 계약("메서드 1회 = HTTP 정확히
 1건")도 안 깨진다.
 
 `detailCommon`(overview 산문)은 **기각이 아니라 보류**다 — 항목당 콜이 2배가 되어 전량이면 키

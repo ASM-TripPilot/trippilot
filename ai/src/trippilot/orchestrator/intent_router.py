@@ -68,6 +68,8 @@ except ImportError:  # 운영 이미지(uv sync --no-dev)에는 langsmith 가 �
 
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import TraceId
+from trippilot.orchestrator.arguments import extract_arguments  # noqa: I001
+from trippilot.domain.dialogue import specs_of, tool_specs_json
 from trippilot.domain.intent import (
     ROUTABLE_INTENTS,
     Intent,
@@ -82,9 +84,13 @@ from trippilot.ports.vector_store_port import VectorStorePort
 
 # 전처리에서 제거하는 유니코드 카테고리: 이모지·기호변형자·서식제어·제어문자 (§2 [0. 전처리])
 _STRIP_CATEGORIES = frozenset({"So", "Sk", "Cf", "Cc", "Cs", "Co"})
-_REGEX_PREFIX = "regex:"
-# 3차 프롬프트에 실을 closed-set 라벨 목록 (INV-1 — 모델이 고를 수 있는 값 자체를 한정)
-_CLOSED_SET_LABELS = ", ".join(sorted(i.value for i in ROUTABLE_INTENTS))
+# 3차 프롬프트에 실을 closed-set — **라벨 + 그 의도의 인자 스키마** (INV-1: 모델이 고를 수
+# 있는 값 자체를 한정). 인자표에서 생성하므로(`tool_specs`) 손으로 적은 사본이 없다.
+#
+# 종전에는 라벨만 나열하고 슬롯은 의도 무관 3칸(date·category·constraint)을 받았다. 그 이름들은
+# 인자표 어디에도 없어 **하류에서 전부 버려졌다** — 1·2차가 `extract_arguments` 로 표에 맞는
+# 인자를 내는 동안 3차만 다른 모양을 내고 있었다 (FD §7 · prompts/intent.yaml v0.2.0).
+_CLOSED_SET_LABELS = tool_specs_json()
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,6 +113,13 @@ class IntentRouterConfig:
     vote_ratio: float = 0.80
     collection: str = BANK_COLLECTION
     llm_direct_confidence: float = 0.5  # 3차 산출물에 confidence가 없을 때의 값
+    # 전처리 후 받아들이는 발화 길이 상한. **없으면 임의 길이가 그대로 프롬프트에 실린다** —
+    # 2·3차가 발화를 재질의·분류 프롬프트에 넣으므로 비용·지연이 입력에 비례하고, 긴 입력은
+    # 지시문을 숨길 자리를 준다(프롬프트 인젝션). 실측: 뱅크 485 + 평가셋 87 문장의 최대가
+    # 48자, p99 42자다. 500 은 그 열 배이고 백엔드 `replan_session.free_text`(varchar(500))와
+    # 같은 값이라 경계 양쪽이 같은 상한을 쓴다. 초과는 **자르지 않고 거절**한다 —
+    # 잘라 내면 뜻이 바뀐 발화를 사용자 것인 양 처리하게 된다(INV-4: 조용한 변형 금지).
+    max_utterance_chars: int = 500
 
     def __post_init__(self) -> None:
         if self.top_k < 1:
@@ -121,6 +134,8 @@ class IntentRouterConfig:
             raise ValueError("vote_ratio ∈ (0, 1]")
         if not 0.0 <= self.llm_direct_confidence <= 1.0:
             raise ValueError("llm_direct_confidence ∈ [0, 1]")
+        if self.max_utterance_chars < 1:
+            raise ValueError("max_utterance_chars ≥ 1")
 
 
 def normalize(utterance: str) -> str:
@@ -140,7 +155,6 @@ class _Hit:
     intent: Intent
     score: float
     entry_id: str
-    slot_pattern: Mapping
 
 
 def _fallback(reason: str) -> IntentMatch:
@@ -196,6 +210,12 @@ class IntentRouter:
         text = normalize(utterance)
         if not text:
             return _fallback("empty_utterance")
+        # 길이 상한 — 전처리 **뒤에** 잰다. 공백·제어문자를 잔뜩 섞어 상한을 우회하는 입력이
+        # 정규화로 줄어든 뒤의 실제 길이로 판정되게 한다.
+        if len(text) > self._cfg.max_utterance_chars:
+            return _fallback(
+                f"utterance_too_long({len(text)} > {self._cfg.max_utterance_chars})"
+            )
 
         hits = self._match_bank(text)
         if not hits:
@@ -203,9 +223,13 @@ class IntentRouter:
 
         top = hits[0]
         if top.score >= self._cfg.t_high and _separated(hits, self._cfg.intent_margin):
+            # 거부 앵커가 이겼다 = "우리 일이 아니다" 를 1차에서 확정한 것 — LLM 0회로 거절한다.
+            # 문턱은 CONFIDENT 와 **같은 값**을 쓴다. 규칙을 하나 더 두면 둘이 따로 논다.
+            if top.intent is Intent.OUT_OF_SCOPE:
+                return _fallback(f"out_of_scope_anchor({top.entry_id}, {top.score:.3f})")
             return IntentMatch(
                 intent=top.intent,
-                slots=_extract_slots(text, top.slot_pattern),
+                slots=extract_arguments(text, specs_of(top.intent)),
                 confidence=_clamp(top.score),
                 match_route=MatchRoute.CONFIDENT,
             )
@@ -227,15 +251,7 @@ class IntentRouter:
             intent = _payload_intent(payload)
             if intent is None:  # 뱅크 오염 방어 (INV-1) — closed-set 밖 라벨은 매칭 대상 아님
                 continue
-            pattern = payload.get("slot_pattern")
-            hits.append(
-                _Hit(
-                    intent=intent,
-                    score=hit.score,
-                    entry_id=hit.item_id,
-                    slot_pattern=pattern if isinstance(pattern, Mapping) else {},
-                )
-            )
+            hits.append(_Hit(intent=intent, score=hit.score, entry_id=hit.item_id))
         return tuple(hits)
 
     # 2차 — 유사질문 생성 + 재매칭 가중 투표 (AMBIGUOUS 전용)
@@ -265,10 +281,17 @@ class IntentRouter:
         ratio = weight / total
         if ratio < self._cfg.vote_ratio:
             return None, f"vote_ratio({ratio:.3f})"
+        # 앵커를 뱅크에 실은 순간 **2차도 앵커를 뽑을 수 있게 됐다.** 투표가 "우리 일이 아니다" 로
+        # 수렴한 것이니 거절이 맞다 — 그런데 VOTED 로 감싸면 IntentMatch 불변식
+        # ("FALLBACK 경로 ⇔ OUT_OF_SCOPE 라벨")을 위반해 ValueError 가 난다.
+        # 라우터가 그 예외를 잡아 폴백으로 바꾸므로 **결과는 우연히 맞고 사유만 router_error** 가 된다
+        # — 거절 표지가 없어 채점에서 '비거절 폴백'(= 인프라 실패)으로 잡히는 조용한 오염이었다.
+        if winner is Intent.OUT_OF_SCOPE:
+            return _fallback(f"out_of_scope_anchor(vote {ratio:.3f}, {best[winner].entry_id})"), ""
         return (
             IntentMatch(
                 intent=winner,
-                slots=_extract_slots(text, best[winner].slot_pattern),
+                slots=extract_arguments(text, specs_of(winner)),
                 confidence=_clamp(ratio),
                 match_route=MatchRoute.VOTED,
             ),
@@ -316,7 +339,11 @@ class IntentRouter:
         )
         return IntentMatch(
             intent=draft.intent,
-            slots=dict(draft.slots),  # 3차는 슬롯을 함께 추출한다 (§2 [슬롯 추출])
+            # 3차는 슬롯을 함께 추출한다 (§2 [슬롯 추출]). 1·2차는 규칙 추출기를 쓰지만
+            # 여기는 **이미 LLM 을 부르고 있으므로** 같은 호출에서 받는다 — 비용이 같고,
+            # 규칙이 못 뽑는 종류(REGION·PLACE_REF·SLOT_REF·FREE_TEXT)까지 닿는다 (FD §3).
+            # 이름·어휘는 게이트가 인자표로 검사해 세 경로의 산출이 같은 모양이 된다.
+            slots=dict(draft.slots),
             confidence=_clamp(confidence),
             match_route=MatchRoute.LLM_DIRECT,
             reason=f"escalated: {escalated_from}",
@@ -370,29 +397,8 @@ def _payload_intent(payload: Mapping) -> Intent | None:
         intent = Intent(label)
     except ValueError:
         return None
-    return intent if intent in ROUTABLE_INTENTS else None
-
-
-def _extract_slots(text: str, slot_pattern: Mapping) -> dict:
-    """매칭된 대표 질문의 슬롯 패턴으로 규칙 추출 (§2 [슬롯 추출], §3.1 slot_pattern).
-
-    지원 형식은 `"regex:<정규식>"` 1종. 형식이 다르거나 정규식이 깨졌으면 그 슬롯만 건너뛴다 —
-    슬롯 추출 실패가 라우팅 자체를 죽이면 안 된다(의도는 이미 확정됐다).
-    seed 뱅크에는 아직 slot_pattern이 없어 현재는 대부분 빈 dict가 나온다.
-    """
-    slots: dict = {}
-    for name, rule in sorted(slot_pattern.items(), key=lambda kv: str(kv[0])):
-        if not isinstance(name, str) or not isinstance(rule, str):
-            continue
-        if not rule.startswith(_REGEX_PREFIX):
-            continue
-        try:
-            found = re.search(rule[len(_REGEX_PREFIX) :], text)
-        except re.error:
-            continue
-        if found is not None:
-            slots[name] = found.group(0)
-    return slots
+    # 거부 앵커(OUT_OF_SCOPE)도 매칭 대상이다 — 그것이 앵커의 존재 이유다.
+    return intent if (intent in ROUTABLE_INTENTS or intent is Intent.OUT_OF_SCOPE) else None
 
 
 def _clamp(value: float) -> float:

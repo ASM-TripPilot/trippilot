@@ -18,6 +18,9 @@ import {
  *
  * 가짜 통과 방지(리포 관례): 모든 "없어야 한다" 단언은 "있어야 한다" 짝과 같은 it 에 둔다 — 화면이
  * 통째로 비어도(빈 스캔) 6종 존재 단언이 함께 red 를 낸다.
+ *
+ * TRIP-939 AC-11: 푸시 열이 운영 화면에서 사라져(TRIP-835 미배선) 존재 앵커를 **인앱** testID 로 옮기고,
+ * 푸시 testID 는 6종·COMMUNITY·SYSTEM 모두 부재로 잰다.
  */
 
 const pushId = (kind: string) => `notification-settings-toggle-push-${kind}`;
@@ -58,8 +61,8 @@ describe('TRIP-607 · notificationKindGuard — SYSTEM·COMMUNITY 렌더 트리 
         'REFLECTION',
       ] as const
     ).forEach((kind) => {
-      expect(screen.getByTestId(pushId(kind))).toBeOnTheScreen();
       expect(screen.getByTestId(inAppId(kind))).toBeOnTheScreen();
+      expect(screen.queryByTestId(pushId(kind))).toBeNull();
     });
 
     // 없어야 한다 — COMMUNITY 는 숨김.
@@ -78,7 +81,7 @@ describe('TRIP-607 · notificationKindGuard — SYSTEM·COMMUNITY 렌더 트리 
     );
 
     // 있어야 한다 — 대표 STAY 행(빈 렌더면 이 줄이 red).
-    expect(screen.getByTestId(pushId('STAY'))).toBeOnTheScreen();
+    expect(screen.getByTestId(inAppId('STAY'))).toBeOnTheScreen();
     // 없어야 한다 — SYSTEM 은 토글 목록에 없다.
     expect(screen.queryByTestId(pushId('SYSTEM'))).toBeNull();
     expect(screen.queryByTestId(inAppId('SYSTEM'))).toBeNull();

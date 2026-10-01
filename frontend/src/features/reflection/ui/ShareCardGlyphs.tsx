@@ -57,7 +57,7 @@ export function ShareGlyph({
   );
 }
 
-/** 워터마크 — 코랄 라운드 아이콘 + 흰 물방울 마커(TripPilot 로고 대체 벡터). */
+/** 워터마크 — 코랄 라운드 배지 + 흰 종이비행기(TripPilot 로고 대체 벡터, TRIP-766 물방울 폐기). */
 export function WatermarkLogoGlyph({
   size = 22,
   color = CORAL,
@@ -65,11 +65,17 @@ export function WatermarkLogoGlyph({
   return (
     <Svg width={size} height={size} viewBox="0 0 22 22" fill="none">
       <Rect x={1} y={1} width={20} height={20} rx={6} fill={color} />
+      {/* 종이비행기 — 코랄 배지 위 흰 삼각 본체 + 접힘 그림자. 색·픽셀 충실도는 6-b. */}
       <Path
-        d="M11 5.5C8.5 5.5 6.8 7.3 6.8 9.5C6.8 12.4 11 16.5 11 16.5C11 16.5 15.2 12.4 15.2 9.5C15.2 7.3 13.5 5.5 11 5.5Z"
+        testID="share-card-logo-plane"
+        d="M16.5 6L5.5 10.4L9.7 12.3L14.2 8.6L11.1 13L15 15L16.5 6Z"
         fill={WHITE}
       />
-      <Circle cx={11} cy={9.4} r={1.6} fill={color} />
+      <Path
+        d="M9.7 12.3L9.7 15.5L11.5 13.7L9.7 12.3Z"
+        fill={WHITE}
+        fillOpacity={0.7}
+      />
     </Svg>
   );
 }

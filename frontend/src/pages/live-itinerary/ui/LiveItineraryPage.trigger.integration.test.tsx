@@ -2,38 +2,45 @@ import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
+  act,
   fireEvent,
   render,
   screen,
   waitFor,
 } from '@testing-library/react-native';
 
+import { WeatherCloudGlyph } from '@/features/execution/ui/ExecutionGlyphs';
 import { server } from '@/mocks/server';
 import type {
   Itinerary,
   Trigger,
   TriggerList,
 } from '@/shared/api/generated/schemas';
+import { getGetTripsTripIdTriggersQueryKey } from '@/shared/api/generated/trips/trips';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 
 import { LiveItineraryPage } from './LiveItineraryPage';
 
 /**
- * TRIP-561 · AC-1·2·3·4·6 — i08 트리거 칩 + i01 변수감지 배너의 **페이지 배선**을 실 HTTP로 태운다.
+ * TRIP-561 → TRIP-748 · i02 트리거 표면의 **페이지 배선**을 실 HTTP로 태운다.
  *
  * 무엇을 보장하나:
- *  - 서버가 발화 중 트리거를 주면 칩(+대안 보기 어포던스)이 뜨고, 영향 슬롯(`slotKey` 매칭)에
- *    배너가 뜨며 서버 `reason` 이 배너 문구에 흐른다(AC-1). 슬롯 시각은 계획값 그대로(AC-3).
- *  - 빈 목록이면 칩·배너 둘 다 미노출(AC-2). MANUAL 만 실린 응답도 미노출(AC-6b 필터).
- *  - chevron press → `/trips/{id}/planb` 로 router.push + scope 전달(NONE/null→PARTIAL_SLOTS, AC-4).
- *  - × press → dismiss POST(triggerId) + GET /triggers 무효화(refetch)(AC-6a).
+ *  - 서버가 발화 중 트리거를 주면 지도 위 알약이 `{라벨} · {대상}` 카피로 뜨고(D2 — 대상은 slotKey
+ *    매칭 슬롯의 이름·도착시), 그 슬롯 카드의 "예정" 자리에 라벨 배지가 선다(AC-2·AC-5).
+ *  - 카드 아래 배너 문장·×(끄기)·구름 아이콘은 없다. 서버 reason("비 예보 70%")도 허브에 안 보인다(AC-6).
+ *  - 매칭 실패(slotKey null·다른 날)면 알약은 라벨만, 배지는 "예정" 그대로(AC-2 폴백).
+ *  - 빈 목록·MANUAL 만이면 알약 없음(AC-6b 필터). 슬롯 시각은 계획값 그대로(BR-U4-35).
+ *  - (TRIP-749 계약 플립) 알약 press 는 더 이상 바로 planb 로 가지 않고 i03 위험 상세 시트를 연다.
+ *    scope 전달(NONE/null→PARTIAL_SLOTS) 검사는 시트 [대안 보기] 경로로
+ *    `LiveItineraryPage.riskSheet.integration.test.tsx` R-I5a/b 에 옮겼다(옛 I-T4a/b).
+ *  - 숨김 경로(일자 칩·FAB·시트 스크롤)를 눌러도 dismiss POST 는 0회다 — 로컬 숨김일 뿐(D3 · AC-7).
  *
  * 왜 통합 버킷인가(기존 LiveItineraryPage.integration.test.tsx 철학 계승): 표시 게이트·MANUAL
- * 필터·라우팅·억제가 실 조회 상태와 라우터/뮤테이션의 조합에서 갈린다 — 훅을 목킹하면 그 조합이
+ * 필터·slotKey 매칭·라우팅이 실 조회 상태와 라우터의 조합에서 갈린다 — 훅을 목킹하면 그 조합이
  * 테스트의 가정이 되어 버린다. 그래서 msw 로 트리거 목록을 서빙해 전 경로를 태운다.
  *
- * ⚠️ 통과형 목 사각(★3): router.push/dismiss POST 는 "불렸다·이 인자로 나갔다"까지만 잰다 —
- * 실제 네비게이션·서버 부작용은 6-b 실기(`live-itinerary` 프리뷰) 소관.
+ * ⚠️ 통과형 목 사각: router.push 는 "불렸다·이 인자로 나갔다"까지만 잰다 — 실제 네비게이션·실제
+ * 스크롤 제스처는 6-b 실기(`live-trigger-*` 프리뷰) 소관.
  */
 
 // authedClient(생성 클라이언트 인증 계층)가 @/shared/storage 를 정적으로 문다.
@@ -46,7 +53,7 @@ jest.mock('@/shared/storage', () => ({
   hasStoredToken: jest.fn().mockResolvedValue(true),
 }));
 
-// chevron press → router.push(planb), 탭바 → router.replace. 정적 싱글턴 목(useRouter 훅 아님).
+// 알약 press → router.push(planb). 정적 싱글턴 목(useRouter 훅 아님) — 렌더 중엔 부르지 않는다(02a ★14).
 const mockReplace = jest.fn();
 const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
@@ -144,19 +151,6 @@ const baseHandlers = (list: TriggerList) => [
   triggersHandler(list),
 ];
 
-/** router.push 인자를 문자열로 정규화 — 문자열/객체 두 형태를 모두 받아 경로·쿼리만 잰다(★3). */
-function hrefString(arg: unknown): string {
-  if (typeof arg === 'string') return arg;
-  const obj = (arg ?? {}) as {
-    pathname?: string;
-    params?: Record<string, unknown>;
-  };
-  const qs = Object.entries(obj.params ?? {})
-    .map(([k, v]) => `${k}=${String(v)}`)
-    .join('&');
-  return qs ? `${obj.pathname ?? ''}?${qs}` : (obj.pathname ?? '');
-}
-
 let observedHits: string[] = [];
 const hitCount = (needle: string) =>
   observedHits.filter((hit) => hit === needle).length;
@@ -189,35 +183,70 @@ function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
-describe('LiveItineraryPage · 트리거 표면', () => {
-  it('I-T1 발화 중(매칭 slotKey)이면 칩+대안보기 어포던스와 슬롯 배너(reason)를 그린다 (AC-1)', async () => {
-    server.use(...baseHandlers({ triggers: [mkTrigger({ kind: 'WEATHER' })] }));
+const CHIP = 'execution-live-trigger-chip';
+const LABEL = 'execution-live-trigger-label';
+const STATUS = `execution-live-slot-status-${SLOT_KEY}`;
+const DISMISS_PATH = `POST /api/v1/trips/${TRIP_ID}/triggers/trg-1/dismiss`;
 
-    render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
-
-    await waitFor(() =>
-      expect(screen.getByTestId('execution-live-trigger-chip')).toBeTruthy()
-    );
-    // 대안 보기 어포던스(chevron)가 존재.
-    expect(
-      screen.getByTestId('execution-live-trigger-alternative')
-    ).toBeTruthy();
-    // 영향 슬롯에 배너가 뜨고 서버 reason 이 문구에 흐른다(동적 축, regex 부분일치).
-    expect(screen.getByTestId('execution-live-trigger-banner')).toBeTruthy();
-    expect(screen.getByText(/비 예보 70%/)).toBeTruthy();
+/** 음성 단언("안 나갔다") 전에 요청이 나갈 틈을 준다(02a ★10). */
+const settle = () =>
+  act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50));
   });
 
-  it('I-T2 발화 없음(빈 목록)이면 칩·배너 둘 다 미노출이다 (AC-2)', async () => {
+/** 시트 본문 스크롤 시작 — 통과형 목에 실린 prop 을 직접 부른다(02a ★3). */
+function fireSheetScrollBeginDrag(): void {
+  const nodes = screen.root.findAll(
+    (node) => typeof node.props?.onScrollBeginDrag === 'function'
+  );
+  if (nodes.length === 0) {
+    throw new Error(
+      '시트 본문 스크롤 뷰에 onScrollBeginDrag 가 달려 있지 않다'
+    );
+  }
+  act(() => {
+    (nodes[nodes.length - 1].props.onScrollBeginDrag as (e: unknown) => void)({
+      nativeEvent: {},
+    });
+  });
+}
+
+describe('LiveItineraryPage · i02 트리거 표면 (TRIP-748)', () => {
+  it.each([
+    ['WEATHER', '비 예보 · 해운대 해변 10시', '비 예보'],
+    ['DELAY', '이동 지연 · 해운대 해변 방면', '이동 지연'],
+    ['CLOSURE', '휴무 · 해운대 해변 주변 시설', '휴무'],
+  ] as const)(
+    'I-T1 %s(매칭 slotKey) → 알약 카피 "%s" + 슬롯 배지 "%s", 배너·×·reason·구름 아이콘은 없다 (AC-2·5·6)',
+    async (kind, copy, badge) => {
+      server.use(...baseHandlers({ triggers: [mkTrigger({ kind })] }));
+
+      render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+        wrapper,
+      });
+
+      await waitFor(() => expect(screen.getByTestId(CHIP)).toBeTruthy());
+      expect(screen.getByTestId(LABEL)).toHaveTextContent(copy);
+      expect(screen.getByTestId(STATUS)).toHaveTextContent(badge);
+
+      expect(screen.queryByTestId('execution-live-trigger-banner')).toBeNull();
+      expect(screen.queryByTestId('execution-live-trigger-dismiss')).toBeNull();
+      expect(screen.queryByText(/70%/)).toBeNull();
+      expect(screen.UNSAFE_queryAllByType(WeatherCloudGlyph)).toHaveLength(0);
+    }
+  );
+
+  it('I-T2 발화 없음(빈 목록)이면 알약이 없고 배지는 "예정" 이다 (AC-2)', async () => {
     server.use(...baseHandlers({ triggers: [] }));
 
     render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
 
-    // 화면(타임라인)은 뜨되 트리거 표면은 없다.
     await waitFor(() =>
       expect(screen.getByTestId('execution-live-screen')).toBeTruthy()
     );
-    expect(screen.queryByTestId('execution-live-trigger-chip')).toBeNull();
+    expect(screen.queryByTestId(CHIP)).toBeNull();
     expect(screen.queryByTestId('execution-live-trigger-banner')).toBeNull();
+    expect(screen.getByTestId(STATUS)).toHaveTextContent('예정');
   });
 
   it('I-T3 어떤 트리거가 떠도 슬롯 시각 텍스트는 계획값 그대로다 (AC-3 · BR-U4-35)', async () => {
@@ -225,82 +254,88 @@ describe('LiveItineraryPage · 트리거 표면', () => {
 
     render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
 
-    await waitFor(() =>
-      expect(screen.getByTestId('execution-live-trigger-chip')).toBeTruthy()
-    );
+    await waitFor(() => expect(screen.getByTestId(CHIP)).toBeTruthy());
     // 계획 시각 10:00 그대로("도착 예정") — 지연 반영 재추정 0. 문자열=완전일치(RNTL).
     expect(
       screen.getByTestId(`execution-live-slot-time-${SLOT_KEY}`)
     ).toHaveTextContent('10:00 도착 예정');
   });
 
-  it('I-T4a [대안 보기]는 그 scope(FULL_DAY)로 planb 세션을 연다 (AC-4 pass-through)', async () => {
-    server.use(
-      ...baseHandlers({ triggers: [mkTrigger({ scope: 'FULL_DAY' })] })
-    );
-
-    render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
-    await waitFor(() =>
-      expect(
-        screen.getByTestId('execution-live-trigger-alternative')
-      ).toBeTruthy()
-    );
-
-    fireEvent.press(screen.getByTestId('execution-live-trigger-alternative'));
-
-    expect(mockPush).toHaveBeenCalledTimes(1);
-    const href = hrefString(mockPush.mock.calls[0][0]);
-    expect(href).toContain(`/trips/${TRIP_ID}/planb`);
-    expect(href).toContain('scope=FULL_DAY');
-    expect(href).toContain('triggerId=trg-1');
-  });
-
-  it('I-T4b scope=NONE 이면 기본값 PARTIAL_SLOTS 로 세션을 연다 (AC-4 기본값)', async () => {
-    server.use(...baseHandlers({ triggers: [mkTrigger({ scope: 'NONE' })] }));
-
-    render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
-    await waitFor(() =>
-      expect(
-        screen.getByTestId('execution-live-trigger-alternative')
-      ).toBeTruthy()
-    );
-
-    fireEvent.press(screen.getByTestId('execution-live-trigger-alternative'));
-
-    expect(mockPush).toHaveBeenCalledTimes(1);
-    const href = hrefString(mockPush.mock.calls[0][0]);
-    expect(href).toContain(`/trips/${TRIP_ID}/planb`);
-    expect(href).toContain('scope=PARTIAL_SLOTS');
-  });
-
-  it('I-T5 ×(끄기)를 누르면 dismiss(triggerId) POST + GET /triggers 무효화가 나간다 (AC-6a)', async () => {
+  it('I-T5 숨김 경로(일자 칩·FAB·시트 스크롤)는 알약만 숨기고 dismiss POST 는 0회다 (D3 · AC-7)', async () => {
     server.use(
       ...baseHandlers({ triggers: [mkTrigger({ kind: 'WEATHER' })] }),
+      // 등록은 해 둔다 — 만약 나가면 unhandled 오류가 아니라 카운트로 잡히게(02a ★10).
       dismissHandler()
     );
 
     render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
-    await waitFor(() =>
-      expect(screen.getByTestId('execution-live-trigger-dismiss')).toBeTruthy()
-    );
+    await waitFor(() => expect(screen.getByTestId(CHIP)).toBeTruthy());
+    // 짝 앵커 — 요청 관측 배선이 살아 있다(GET /triggers 가 잡혔다).
+    expect(
+      hitCount(`GET /api/v1/trips/${TRIP_ID}/triggers`)
+    ).toBeGreaterThanOrEqual(1);
 
-    fireEvent.press(screen.getByTestId('execution-live-trigger-dismiss'));
+    fireEvent.press(screen.getByTestId('execution-live-daychip-0'));
+    expect(screen.queryByTestId(CHIP)).toBeNull();
+    fireEvent.press(screen.getByTestId('execution-live-replan-fab'));
+    fireSheetScrollBeginDrag();
+    await settle();
 
-    // dismiss 가 triggerId 를 실어 나간다(경로에 trg-1 포함).
-    await waitFor(() =>
-      expect(
-        hitCount(`POST /api/v1/trips/${TRIP_ID}/triggers/trg-1/dismiss`)
-      ).toBe(1)
-    );
-    // 억제 성공 → GET /triggers 무효화 → refetch(최초 1 + 재조회 → ≥2).
-    await waitFor(() =>
-      expect(
-        hitCount(`GET /api/v1/trips/${TRIP_ID}/triggers`)
-      ).toBeGreaterThanOrEqual(2)
-    );
+    expect(screen.queryByTestId(CHIP)).toBeNull();
+    expect(hitCount(DISMISS_PATH)).toBe(0);
+    expect(mockPush).not.toHaveBeenCalled();
   });
 
-  it('I-T6 MANUAL 만 실린 응답이면 칩·배너 미노출이다 (AC-6b 필터)', async () => {
+  it('I-T8 숨긴 뒤 같은 트리거로 재조회되면 숨긴 채, 다른 triggerId(trg-2)가 오면 알약이 다시 뜬다 (D3 · 5-b 경고-1)', async () => {
+    server.use(...baseHandlers({ triggers: [mkTrigger()] }));
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, gcTime: 0 },
+        mutations: { gcTime: 0 },
+      },
+    });
+    const refetchTriggers = () =>
+      act(() =>
+        client.invalidateQueries({
+          queryKey: getGetTripsTripIdTriggersQueryKey(TRIP_ID),
+        })
+      );
+    const TRIGGERS_GET = `GET /api/v1/trips/${TRIP_ID}/triggers`;
+
+    render(
+      <QueryClientProvider client={client}>
+        <LiveItineraryPage tripId={TRIP_ID} today={TODAY} />
+      </QueryClientProvider>
+    );
+    await waitFor(() => expect(screen.getByTestId(CHIP)).toBeTruthy());
+    expect(screen.getByTestId(LABEL)).toHaveTextContent(
+      '비 예보 · 해운대 해변 10시'
+    );
+
+    fireEvent.press(screen.getByTestId('execution-live-daychip-0'));
+    expect(screen.queryByTestId(CHIP)).toBeNull();
+
+    // ① 같은 트리거(trg-1)로 재조회 — 숨긴 채다(재조회마다 다시 뜨면 "숨김"이 무의미).
+    const before = hitCount(TRIGGERS_GET);
+    await refetchTriggers();
+    await waitFor(() => expect(hitCount(TRIGGERS_GET)).toBe(before + 1));
+    await settle();
+    expect(screen.queryByTestId(CHIP)).toBeNull();
+
+    // ② 같은 kind(WEATHER)·다른 triggerId — kind 로 키를 잡으면 여기서 안 뜬다.
+    //    slotKey=null 이라 카피가 라벨만으로 바뀌어, 새 트리거의 알약임이 글자로도 구분된다.
+    server.use(
+      triggersHandler({
+        triggers: [mkTrigger({ triggerId: 'trg-2', slotKey: null })],
+      })
+    );
+    await refetchTriggers();
+
+    await waitFor(() => expect(screen.getByTestId(CHIP)).toBeTruthy());
+    expect(screen.getByTestId(LABEL)).toHaveTextContent('비 예보');
+  });
+
+  it('I-T6 MANUAL 만 실린 응답이면 알약이 없고 배지는 "예정" 이다 (AC-6b 필터)', async () => {
     server.use(...baseHandlers({ triggers: [mkTrigger({ kind: 'MANUAL' })] }));
 
     render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
@@ -308,19 +343,25 @@ describe('LiveItineraryPage · 트리거 표면', () => {
     await waitFor(() =>
       expect(screen.getByTestId('execution-live-screen')).toBeTruthy()
     );
-    expect(screen.queryByTestId('execution-live-trigger-chip')).toBeNull();
-    expect(screen.queryByTestId('execution-live-trigger-banner')).toBeNull();
+    expect(screen.queryByTestId(CHIP)).toBeNull();
+    expect(screen.getByTestId(STATUS)).toHaveTextContent('예정');
   });
 
-  it('I-T7 slotKey=null(날짜 전체) 트리거는 칩만 뜨고 슬롯 배너는 없다 (AC-1 경계 · 칩=상시/배너=슬롯)', async () => {
-    server.use(...baseHandlers({ triggers: [mkTrigger({ slotKey: null })] }));
+  it.each([
+    ['slotKey=null(날짜 전체)', null],
+    ['slotKey 가 다른 날', '2026-08-21#p1'],
+  ])(
+    'I-T7 %s 이면 알약은 라벨만("비 예보"), 배지는 "예정" 그대로다 (AC-2 폴백)',
+    async (_name, slotKey) => {
+      server.use(...baseHandlers({ triggers: [mkTrigger({ slotKey })] }));
 
-    render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
+      render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+        wrapper,
+      });
 
-    await waitFor(() =>
-      expect(screen.getByTestId('execution-live-trigger-chip')).toBeTruthy()
-    );
-    // 매칭 슬롯이 없으므로 슬롯 배너는 안 뜬다(칩이 전체-날짜 케이스를 대행).
-    expect(screen.queryByTestId('execution-live-trigger-banner')).toBeNull();
-  });
+      await waitFor(() => expect(screen.getByTestId(CHIP)).toBeTruthy());
+      expect(screen.getByTestId(LABEL)).toHaveTextContent('비 예보');
+      expect(screen.getByTestId(STATUS)).toHaveTextContent('예정');
+    }
+  );
 });

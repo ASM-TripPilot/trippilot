@@ -8,8 +8,12 @@
  *    깨진 썸네일 대신 정직한 사유를 표기하기 위한 판별값).
  *
  * 판별 유니온이라 반환은 정해진 세 문자열 중 하나 — 상위 페이지가 이 값으로 상태별 distinct 셀을 그린다.
+ *
+ * `'upload-failed'`(서버 POST 실패)는 **별 축**이다 — 이 함수가 만들지 않고 배선 계층
+ * (useVisitAttachments)이 실패 자산에 주입한다(진리표 무변경). 그래서 타입엔 있으나 반환엔 없다.
  */
-export type PhotoAvailability = 'available' | 'other-device' | 'unavailable';
+export type PhotoAvailability =
+  'available' | 'other-device' | 'unavailable' | 'upload-failed';
 
 export function photoAvailability(
   photo: { deviceId: string },

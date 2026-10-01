@@ -185,6 +185,14 @@ describe('SavedStayCard — g02 row optional 슬롯 (TRIP-741)', () => {
     expect(card).not.toHaveTextContent(/\d+\s*m\b|km/);
   });
 
+  it('TRIP-1052 5-b W-1 · region 만 있고 subtitle(날짜) 없음 → 구분자 `·` 를 남기지 않는다', () => {
+    // 준비 — 날짜 줄이 사라진 후보(동네만 있음). 실행 — 렌더. 단언 — 카드 전체 글자가 "이름+동네"뿐(꼬리 ' · ' 없음).
+    render(
+      <SavedStayCard testID={rootId} name="숙소 A" layout="row" region="감천" />
+    );
+    expect(screen.getByTestId(rootId)).toHaveTextContent('숙소 A감천');
+  });
+
   it('🔴 AC-6b · region·priceLabel 미지정 → 미렌더 (degrade)', () => {
     render(
       <SavedStayCard
@@ -261,5 +269,257 @@ describe('SavedStayCard — g02 row optional 슬롯 (TRIP-741)', () => {
 
     // vertical 은 자체 178px 회색 자리만 — row 사진 슬롯 testID 를 안 낸다.
     expect(screen.queryByTestId('saved-stay-card-ss-1-photo')).toBeNull();
+  });
+});
+
+/**
+ * TRIP-729 · AC-1·2·3·5 — e04 vertical 카드 Figma 정합(거점 배지·지역줄·2톤 가격·radius).
+ *
+ * 무엇을 보장하나(**degrade = 계약이 채우는 값만 정직하게 그린다**):
+ *  - 🔴 AC-2 `isBase===true` 면 사진 좌상단 `거점` 배지(`{root}-base-badge` testID + "거점" 텍스트),
+ *    false/미지정이면 미렌더. **배지 존재는 testID 로만 잰다** — 핀 SVG fill·모양·분홍 배지색은
+ *    `*Glyphs.tsx` fill 무심판이라 어느 심판도 못 본다(★1, 6-b/TRIP-831). 이 배지는 **vertical 전용** —
+ *    row(g02)는 isBase 를 무시한다(imageUrl scope 잠금 선례 동형).
+ *  - 🔴 AC-3 `region` 지정 시 이름 아래 muted 지역줄(거리 미표시), `priceLabel` 지정 시 **2톤 가격줄**
+ *    (금액 bold ink + "~" muted = **View 형제 두 Text**). 미지정이면 각각 미렌더(degrade).
+ *  - 🔴 AC-1 vertical 카드 radius `rounded-[12px]`(Figma 12, 현행 `rounded-card`=16 에서).
+ *  - 🔴 AC-5 이름만 준 vertical 은 거점·지역·가격 문자열 0(발명 0 · INV-1).
+ *
+ * *(개념 — 2톤 split · [[getByText 집계 경계]])* `getByText` 는 **완전일치·host Text 노드 단위**다.
+ *  중첩 Text 는 합쳐 재지만 **View 형제는 각 노드로 갈린다**. 그래서 2톤을 `<View><Text>145,000원</Text>
+ *  <Text>~</Text></View>` 로 그리면 `getByText('145,000원')`·`getByText('~')` 가 **각각** 매치된다 —
+ *  단일 `'145,000원~'` 나 중첩이면 `getByText('145,000원')` 이 탈락(부분 아님·완전일치). 이 두 단언이
+ *  곧 "2톤으로 갈렸다"를 강제한다(색 tone 은 className 토큰으로 덧잠금 — jest 렌더 트리에 평문으로 남음).
+ */
+describe('SavedStayCard — e04 vertical Figma 정합 (TRIP-729)', () => {
+  const rootId = 'saved-stay-card-ss-1';
+
+  it('🔴 AC-1 · vertical 카드 radius rounded-[12px] (rounded-card 아님)', () => {
+    render(<SavedStayCard testID={rootId} name="숙소 A" layout="vertical" />);
+
+    const tokens = cls(screen.getByTestId(rootId));
+    expect(tokens).toContain('rounded-[12px]');
+    expect(tokens).not.toContain('rounded-card');
+  });
+
+  it('🔴 AC-2 · isBase=true → 거점 배지(testID + "거점") 렌더', () => {
+    render(
+      <SavedStayCard testID={rootId} name="숙소 A" layout="vertical" isBase />
+    );
+
+    expect(screen.getByTestId(`${rootId}-base-badge`)).toBeOnTheScreen();
+    expect(screen.getByText('거점')).toBeOnTheScreen();
+  });
+
+  it('🔴 AC-2 · isBase 미지정 → 배지 미렌더 (degrade)', () => {
+    render(<SavedStayCard testID={rootId} name="숙소 A" layout="vertical" />);
+
+    expect(screen.queryByTestId(`${rootId}-base-badge`)).toBeNull();
+    expect(screen.queryByText('거점')).toBeNull();
+  });
+
+  it('🔴 AC-2 · isBase 는 vertical 전용 — row(g02)는 배지를 안 낸다 (scope 잠금)', () => {
+    render(
+      <SavedStayCard
+        testID="trip-base-staysheet-cand-ss-1"
+        name="숙소 A"
+        layout="row"
+        isBase
+      />
+    );
+
+    expect(
+      screen.queryByTestId('trip-base-staysheet-cand-ss-1-base-badge')
+    ).toBeNull();
+  });
+
+  it('🔴 AC-3 · region 지정 → muted 지역줄 렌더 + 거리 미표시', () => {
+    // 이름은 지역어를 안 담는다("숙소 A") — region 단언이 이름과 겹쳐 오탐 나지 않게.
+    render(
+      <SavedStayCard
+        testID={rootId}
+        name="숙소 A"
+        layout="vertical"
+        region="해운대"
+      />
+    );
+
+    expect(screen.getByText('해운대')).toBeOnTheScreen();
+    expect(cls(screen.getByText('해운대'))).toContain('text-muted');
+    // 거리(제품 결정으로 미표시)는 region 을 줘도 안 뜬다.
+    expect(screen.getByTestId(rootId)).not.toHaveTextContent(/\d+\s*m\b|km/);
+  });
+
+  it('🔴 AC-3 · region 미지정 → 지역줄 미렌더 (degrade)', () => {
+    render(<SavedStayCard testID={rootId} name="숙소 A" layout="vertical" />);
+
+    expect(screen.queryByText('해운대')).toBeNull();
+  });
+
+  it('🔴 AC-3 · priceLabel 지정 → 2톤 가격줄(금액 bold ink + "~" muted, View 형제)', () => {
+    render(
+      <SavedStayCard
+        testID={rootId}
+        name="숙소 A"
+        layout="vertical"
+        priceLabel="145,000원~"
+      />
+    );
+
+    // 두 노드가 각각 존재해야 통과 = 2톤으로 갈렸다(단일/중첩 Text 면 '145,000원' 탈락).
+    expect(screen.getByText('145,000원')).toBeOnTheScreen();
+    expect(screen.getByText('~')).toBeOnTheScreen();
+    // tone — 금액은 ink, "~" 는 muted(색은 className 토큰으로 관측).
+    expect(cls(screen.getByText('145,000원'))).toContain('text-ink');
+    expect(cls(screen.getByText('~'))).toContain('text-muted');
+  });
+
+  it('🔴 AC-3 · priceLabel 미지정 → 가격줄 미렌더 (degrade)', () => {
+    render(<SavedStayCard testID={rootId} name="숙소 A" layout="vertical" />);
+
+    expect(screen.queryByText('~')).toBeNull();
+    expect(screen.getByTestId(rootId)).not.toHaveTextContent(/원~|₩/);
+  });
+
+  it('🔴 AC-5 · 발명 0 — 이름만 준 vertical 은 거점·지역·가격 문자열 0 (INV-1)', () => {
+    render(
+      <SavedStayCard testID={rootId} name="해운대 오션뷰" layout="vertical" />
+    );
+
+    const card = screen.getByTestId(rootId);
+    expect(screen.queryByTestId(`${rootId}-base-badge`)).toBeNull();
+    expect(card).not.toHaveTextContent(/원~|₩|km|\d+\s*m\b/);
+    // 가짜통과 방지 짝 — 카드·이름은 떠 있다.
+    expect(screen.getByText('해운대 오션뷰')).toBeOnTheScreen();
+  });
+});
+
+describe('🔴 SavedStayCard — TRIP-991 vertical 카드 버튼 역할 (AC-1 · AC-4)', () => {
+  it('vertical 카드는 숙소 이름의 버튼으로 읽히고, 선택 상태가 그대로 유지된다', () => {
+    render(
+      <SavedStayCard
+        testID="saved-stay-card-ss-1"
+        name="해운대 오션뷰"
+        layout="vertical"
+        selected
+      />
+    );
+
+    expect(
+      screen.getByRole('button', { name: '해운대 오션뷰', selected: true })
+    ).toHaveProp('testID', 'saved-stay-card-ss-1');
+  });
+
+  it('vertical 카드 버튼을 누르면 onPress 가 1회 불린다', () => {
+    const onPress = jest.fn();
+    render(
+      <SavedStayCard
+        testID="saved-stay-card-ss-1"
+        name="해운대 오션뷰"
+        layout="vertical"
+        onPress={onPress}
+      />
+    );
+
+    fireEvent.press(screen.getByRole('button', { name: '해운대 오션뷰' }));
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * TRIP-1074 · AC-11 — row(g02) 서브라인·가격 줄에 testID 를 단다: `{root}-meta` · `{root}-price`.
+ *
+ * 무엇을 보장하나:
+ *  - 서브라인은 `{동네} · {날짜}` 한 줄이고, 한쪽만 있으면 그 한쪽만, 둘 다 없으면 **줄 자체가 없다**
+ *    (빈 Text 는 글자로 안 보여서 "줄 없음"은 testID 부재로만 잴 수 있다).
+ *  - 가격 줄은 값이 있을 때만 있다(결정 4(a) — 없으면 줄 생략).
+ *
+ * 서브라인은 바깥 Text 안에 동네 문자열과 날짜 Text 가 중첩된다 — 전체 줄은 바깥(`-meta`)에서
+ * `toHaveTextContent`(문자열 = 완전 일치)로 잰다. 완전 일치라 꼬리 ` · `가 남으면 red 다.
+ */
+describe('SavedStayCard — TRIP-1074 row 서브라인·가격 줄 testID', () => {
+  const rootId = 'trip-base-staysheet-cand-ss-1';
+  const dateLine = <Text>6/11–6/12 · 1박</Text>;
+
+  it('🔴 M1 · 동네 + 날짜 → -meta 가 "수영구 · 6/11–6/12 · 1박" 한 줄이다', () => {
+    render(
+      <SavedStayCard
+        testID={rootId}
+        name="숙소 A"
+        layout="row"
+        region="수영구"
+        subtitle={dateLine}
+      />
+    );
+
+    expect(screen.getByTestId(`${rootId}-meta`)).toHaveTextContent(
+      '수영구 · 6/11–6/12 · 1박'
+    );
+  });
+
+  it('🔴 M2 · 동네만 → -meta 가 "수영구" 뿐이다 (꼬리 · 없음)', () => {
+    render(
+      <SavedStayCard
+        testID={rootId}
+        name="숙소 A"
+        layout="row"
+        region="수영구"
+      />
+    );
+
+    expect(screen.getByTestId(`${rootId}-meta`)).toHaveTextContent('수영구');
+  });
+
+  it('🔴 M3 · 날짜만 → -meta 가 날짜 줄 그대로다', () => {
+    render(
+      <SavedStayCard
+        testID={rootId}
+        name="숙소 A"
+        layout="row"
+        subtitle={dateLine}
+      />
+    );
+
+    expect(screen.getByTestId(`${rootId}-meta`)).toHaveTextContent(
+      '6/11–6/12 · 1박'
+    );
+  });
+
+  it('M4 · 동네도 날짜도 없으면 -meta 줄을 그리지 않는다 (빈 줄 금지)', () => {
+    render(<SavedStayCard testID={rootId} name="숙소 A" layout="row" />);
+
+    // 짝 앵커 — 카드는 떠 있다(통째로 안 그려진 공짜 통과 차단).
+    expect(screen.getByText('숙소 A')).toBeOnTheScreen();
+    expect(screen.queryByTestId(`${rootId}-meta`)).toBeNull();
+  });
+
+  it('🔴 P1 · priceLabel 이 있으면 -price 줄에 그 값이 그대로 뜬다', () => {
+    render(
+      <SavedStayCard
+        testID={rootId}
+        name="숙소 A"
+        layout="row"
+        priceLabel="165,000원~"
+      />
+    );
+
+    expect(screen.getByTestId(`${rootId}-price`)).toHaveTextContent(
+      '165,000원~'
+    );
+  });
+
+  it('🔴 P2 · priceLabel 이 없으면 -price 줄이 없다 (결정 4(a) — 줄 생략)', () => {
+    render(
+      <SavedStayCard
+        testID={rootId}
+        name="숙소 A"
+        layout="row"
+        region="수영구"
+      />
+    );
+
+    // 짝 앵커 — 같은 카드의 서브라인은 있다.
+    expect(screen.getByTestId(`${rootId}-meta`)).toBeOnTheScreen();
+    expect(screen.queryByTestId(`${rootId}-price`)).toBeNull();
   });
 });

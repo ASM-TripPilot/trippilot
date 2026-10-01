@@ -39,6 +39,9 @@ class SlotSurfaceAssembler(private val poiSurfaces: PoiSurfaceFacade) {
                 lat = f?.lat ?: l!!.lat,
                 lng = f?.lng ?: l!!.lng,
                 category = f?.category ?: l!!.category,
+                // 한글과 코드는 **같은 출처에서 함께** 가져온다 — 한쪽만 동결본에서 집으면
+                // 확정 슬롯에서 둘이 다른 카테고리를 가리킨다.
+                categoryCode = f?.categoryCode ?: l!!.categoryCode,
                 openingHours = l?.openingHours,   // 동결 대상 아님
                 imageUrl = l?.imageUrl,           // 동결 대상 아님. NULL=미확보(지어내지 않는다)
                 tags = l?.tags.orEmpty(),
@@ -57,7 +60,10 @@ data class SlotSurface(
     val nameKo: String,
     val lat: Double,
     val lng: Double,
+    /** 한글 정본 — 화면이 쓴다. */
     val category: String,
+    /** 경계 코드 — AI 경계로 나가는 값이다(한글을 보내면 상대가 조용히 무시한다). */
+    val categoryCode: String,
     val openingHours: String?,
     val imageUrl: String?,
     val tags: List<String>,

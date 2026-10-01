@@ -114,8 +114,10 @@ export function mustVisitTimeBlockReason(
   return undefined;
 }
 
+/** OFF(토글 꺼짐)는 ANYTIME 이라 값 없이도 저장 가능하다(BR-U1-48 — 시각을 안 정하는 선택).
+ * 토글을 켠 FIXED 갈래만 날짜·시각 완성을 요구한다. */
 export function canSubmitMustVisitTime(form: MustVisitTimeForm): boolean {
-  return isCompleteFixedForm(form);
+  return !form.fixed || isCompleteFixedForm(form);
 }
 
 /** 만들 수 없는 요청은 나갈 수도 없다 — 되돌릴 수 없는 DELETE 를 검증 전에 보내지 않는 것이
@@ -133,4 +135,12 @@ export function buildFixedMustVisitRequest(input: {
     fixedStart: form.fixedStart,
     dwellMin: DWELL_MINUTES[form.dwellKey],
   };
+}
+
+/** ANYTIME 은 시각을 안 정하는 선택이라 요청도 **최소본**이다 — 날짜·시각·체류를 싣지 않는다
+ * (AI 가 영업시간·동선으로 자동 배치, BR-U1-48). 여분 키를 넣으면 그게 곧 솔버 힌트가 된다. */
+export function buildAnytimeMustVisitRequest(input: {
+  poiId: string;
+}): AddMustVisitRequest {
+  return { poiId: input.poiId, type: 'ANYTIME' };
 }

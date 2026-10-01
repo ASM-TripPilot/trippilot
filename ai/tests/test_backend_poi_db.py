@@ -150,12 +150,29 @@ def test_opening_hours_raw_string_parsed_to_week() -> None:
     assert all((oh.open_min, oh.close_min) == (540, 1080) for oh in poi.open_hours)
 
 
-@pytest.mark.parametrize("raw", [None, "", "야간개장 상이", "09:00~13:00, 14:00~18:00"])
+@pytest.mark.parametrize("raw", [None, "", "야간개장 상이"])
 def test_unparseable_opening_hours_become_empty_not_invented(raw) -> None:
     """미보유·파싱 불가 → () — 지어내지 않는다 (풀 빌더가 통과+하위 정렬)."""
     db, _ = _db([_row(opening_hours=raw)])
     (poi,) = db.find_by_radius(GeoPoint(37.5, 127.0), 5.0)
     assert poi.open_hours == ()
+
+
+def test_분리_영업은_앞_창만_쓴다() -> None:
+    """`09:00~13:00, 14:00~18:00`(점심 쉬는 가게)은 **앞 창만** 읽는다.
+
+    종전에는 통째로 포기했다(시각 4회 → 확정 불가). 이제 첫 창을 쓴다 —
+    지어낸 값이 아니라 원문에 있는 실제 영업창이고, 오후를 빠뜨리는 쪽이라
+    **닫힌 시간에 일정을 넣지 않는다**(HC1 기준 안전한 방향).
+
+    도메인은 하루 다중 창을 지원하고 어셈블러도 요일별 목록을 받는다. 그런데
+    실 수집분 18,605건에서 이 모양은 **5건뿐**이라 다중 창 파싱을 짓지 않았다 —
+    얻는 것보다 코드가 크다.
+    """
+    db, _ = _db([_row(opening_hours="09:00~13:00, 14:00~18:00")])
+    (poi,) = db.find_by_radius(GeoPoint(37.5, 127.0), 5.0)
+    assert len(poi.open_hours) == 7
+    assert all((oh.open_min, oh.close_min) == (540, 780) for oh in poi.open_hours)
 
 
 def test_manual_source_maps_to_seed() -> None:

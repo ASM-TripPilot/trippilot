@@ -4,6 +4,8 @@
  * TripPilot U1 API (소셜 로그인 전용 MVP)
  * U1 기반·계정·온보딩 (M1 Auth · M2 Profile · C3 Moderation). 소셜 로그인 전용 — 이메일/비밀번호 로그인은 후속 이연. 정본 대조: docs/design/U1-API-설계.md, U1-DB스키마-설계.md, U1-내부아키텍처-설계.md
  *
+ * **횡단 규약 — 입력 형식 오류는 어느 엔드포인트에서든 400이다.** 경로변수·쿼리의 타입 변환 실패(UUID·숫자·enum)와 필수 쿼리 누락은 표준 에러 봉투 (`ErrorResponse`, code=`VALIDATION_ERROR`, `fields[].field`=문제 파라미터 이름)로 나간다. 경로별 `'400'` 선언은 **업무 검증**이 있는 곳에만 적는다 — 형식 오류까지 경로마다 중복 선언하면 무엇이 그 엔드포인트 고유의 검증인지 안 보인다. (2026-09-01 이전에는 이 갈래가 500 `INTERNAL` 로 나갔다 — UUID-PATH-400)
+ *
  * OpenAPI spec version: 0.1.0-draft
  */
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -663,9 +665,9 @@ export function useGetTripsTripIdReflections<
 /**
  * **입력이 무엇이든 결과가 비어 있지 않다**(PBT-U5-1 · 블로킹 게이트). 방문 0곳·사진 0장이어도 `stats` 를 채운 기본 카드가 나온다 — 폴백 3단(AI → 규칙 → 기본) 중 어느 단에서 멈춰도 빈 화면을 그리지 않는다(BR-U5-32).
  *
- * 하루 한 장이라 다시 부르면 **덮어쓴다**(BR-U5-35). 사용자가 고친 문장(`editedNarrative`)은 재생성해도 남는다 — 초안만 갈린다.
+ * 하루 한 장이라 다시 부르면 **덮어쓴다**(BR-U5-35). 사용자가 고친 카드(`editedCard`)는 재생성해도 남는다 — 초안만 갈린다.
  *
- * ⚠ 현재 `source` 는 `RULE` 또는 `BASIC` 이다. `AI` 단은 미개통(O-U5-6) — `ai/` 에 회고 경계가 없고 backend 에 LLM 게이트웨이도 없다. 규칙 문장으로 먼저 열고 `source` 로 품질을 관측한다.
+ * ⚠ 현재 `source` 는 `RULE` 또는 `BASIC` 이다. `AI` 단은 아직 배선 전이다 — 상대 경계는 실재하고(`POST /ai/v1/reflection/generate`) O-U5-6 이 `http` 로 확정됐다. 규칙 카드로 먼저 열고 `source` 로 품질을 관측한 뒤 켠다(BR-U5-33).
  * @summary 하루 회고 생성·재생성
  */
 export const postTripsTripIdReflectionsDayDate = (
@@ -751,12 +753,14 @@ export const usePostTripsTripIdReflectionsDayDate = <
   );
 };
 /**
- * 생성된 초안을 덮지 않고 `editedNarrative` 에 따로 쌓는다(INV-U5-06). 화면이 "생성된 것"과 "내가 고친 것"을 2열로 그리기 때문이다 — 하나로 합치면 그 비교가 사라진다.
+ * 생성된 초안을 덮지 않고 `editedCard` 에 따로 쌓는다(INV-U5-06). 화면이 "생성된 것"과 "내가 고친 것"을 2열로 그리기 때문이다 — 하나로 합치면 그 비교가 사라진다.
+ *
+ * 수정 단위는 **카드 통째**다(BR-U5-35). 장면·캡션 단위 편집은 화면이 정해진 뒤에 정한다.
  *
  * **회고가 아직 없어도 쓸 수 있다**(BR-U5-36) — 근거 수치만으로 된 기본 카드를 만들어 그 위에 얹는다. 404 로 막으면 화면은 "쓰려면 먼저 생성 버튼을 누르세요"가 되는데, 생성이 실패해서 여기 온 사용자에게 그건 답이 아니다.
  *
  * 여행 기간 밖 날짜는 400 이다 — 그 날에는 근거 데이터가 없다.
- * @summary 회고 문장 수정 — 초안은 남는다
+ * @summary 회고 카드 수정 — 초안은 남는다
  */
 export const putTripsTripIdReflectionsDayDate = (
   tripId: string,
@@ -818,7 +822,7 @@ export type PutTripsTripIdReflectionsDayDateMutationBody =
 export type PutTripsTripIdReflectionsDayDateMutationError = void;
 
 /**
- * @summary 회고 문장 수정 — 초안은 남는다
+ * @summary 회고 카드 수정 — 초안은 남는다
  */
 export const usePutTripsTripIdReflectionsDayDate = <
   TError = void,

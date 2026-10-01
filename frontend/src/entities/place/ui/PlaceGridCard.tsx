@@ -39,11 +39,15 @@ export function PlaceGridCard({
     : [place.category];
 
   return (
-    // bare Pressable(accessibilityRole 없음) — role 을 붙이면 d04 `states.test.tsx` 의
-    // role=button 개수 동결(정확히 15)이 깨진다(★1). `!pending` 가드: 대기(disabled) 하트 press 는
-    // 부모 Pressable 로 새는데(RNTL Probe C), pending 이면 카드 이동을 무효화해 그 누수를 막는다.
+    // 카드 루트 = 버튼(TRIP-1020). 라벨은 카드에 보이는 이름·부제 + 담겼으면 ", 담음" — 명시 라벨이
+    // 안쪽 글자 읽기를 대체하므로 빼면 VoiceOver 가 담김 여부를 못 듣는다(5-b 경고-1).
+    // d04 role=button 완전일치 목록(`PlaceExploreScreen{,.states}.test.tsx`)이 카드 5장을 센다.
+    // `!pending` 가드: 대기(disabled) 하트 press 는 부모 Pressable 로 새는데(RNTL Probe C),
+    // pending 이면 카드 이동을 무효화해 그 누수를 막는다.
     <Pressable
       testID={`explore-places-card-${place.poiId}`}
+      accessibilityRole="button"
+      accessibilityLabel={`${place.nameKo}, ${subtitleParts.join(' · ')}${saved ? ', 담음' : ''}`}
       onPress={() => {
         if (!pending) onPressCard?.(place);
       }}
@@ -80,12 +84,12 @@ export function PlaceGridCard({
           )}
         </Pressable>
       </View>
-      <Text className="font-noto-bold text-[13.5px] font-bold text-ink">
+      <Text className="font-noto-bold text-[14px] font-bold text-ink">
         {place.nameKo}
       </Text>
       <PlaceSubtitle
         parts={subtitleParts}
-        className="font-noto text-[11.5px] text-muted"
+        className="font-noto text-[12px] text-muted"
       />
     </Pressable>
   );

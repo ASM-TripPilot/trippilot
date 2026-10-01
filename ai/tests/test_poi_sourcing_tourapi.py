@@ -84,20 +84,50 @@ def test_상시_개방이라도_읽히는_휴무는_존중한다() -> None:
 
 
 @pytest.mark.parametrize("kind", ["12", "14", "39"])
-def test_fetch_hours_reads_type_specific_fields(kind: str) -> None:
+def test_fetch_detail_reads_type_specific_fields(kind: str) -> None:
     http = FakeTourApiHttp(intros={
         "7": envelope([intro_item("7", kind, "10:00~18:00", "매주 월요일")], 1)})
-    hours = _adapter(http).fetch_hours("7", kind)
+    hours = _adapter(http).fetch_detail("7", kind)
     assert hours.hours_raw == "10:00~18:00"
     assert hours.rest_raw == "매주 월요일"
 
 
-def test_fetch_hours_unknown_kind_returns_empty_without_call() -> None:
+def test_fetch_detail_unknown_kind_returns_empty_without_call() -> None:
     """필드 매핑 없는 타입은 지어내지 않고 빈 원문 — HTTP 호출도 하지 않는다."""
     http = FakeTourApiHttp()
-    hours = _adapter(http).fetch_hours("7", "25")
+    hours = _adapter(http).fetch_detail("7", "25")
     assert hours.hours_raw is None and hours.rest_raw is None
     assert http.calls == []
+
+
+# ── 상세 표시용 원문 (TRIP-683 2단계) — 같은 응답, HTTP 추가 0 ─────────
+
+def test_fetch_detail_carries_whitelisted_display_fields_raw() -> None:
+    """채택 목록의 필드만, 벤더 필드명 그대로, 비어 있으면 키 없음."""
+    http = FakeTourApiHttp(intros={"7": envelope([intro_item(
+        "7", "39", "11:00~21:00", "매주 월요일",
+        firstmenu="고기국수", treatmenu="고기국수, 비빔국수", packing="",
+        chkpet="불가")], 1)})
+    d = _adapter(http).fetch_detail("7", "39")
+    assert d.detail_raw == {"firstmenu": "고기국수", "treatmenu": "고기국수, 비빔국수"}
+    assert len(http.calls) == 1
+
+
+@pytest.mark.parametrize("kind", ["12", "14", "38", "39"])
+def test_fetch_detail_never_carries_spendtime(kind: str) -> None:
+    """소요시간은 채워져 와도 싣지 않는다 — INV-3(소요시간 미표시)의 수집 단 방어."""
+    http = FakeTourApiHttp(intros={"7": envelope([intro_item(
+        "7", kind, "09:00~18:00", "연중무휴",
+        spendtime="약 2시간", spendtimeresting="1시간", usefee="무료", parking="가능")], 1)})
+    d = _adapter(http).fetch_detail("7", kind)
+    assert "spendtime" not in d.detail_raw and "spendtimeresting" not in d.detail_raw
+
+
+def test_fetch_detail_kind_28_carries_nothing() -> None:
+    """레포츠는 실측에서 상세가 비어 왔다 — 목록이 없으니 무엇이 와도 싣지 않는다."""
+    http = FakeTourApiHttp(intros={"7": envelope([intro_item(
+        "7", "28", "09:00~18:00", "", parkingleports="가능")], 1)})
+    assert _adapter(http).fetch_detail("7", "28").detail_raw == {}
 
 
 # ── 카테고리 매핑표 (8종 중 NIGHT_VIEW 제외 7종 도달 + 불가 드롭) ──
@@ -153,3 +183,55 @@ def test_parse_open_hours_past_midnight() -> None:
 )
 def test_parse_open_hours_unparseable_is_empty_not_fabricated(hours_raw, rest_raw) -> None:
     assert parse_open_hours(hours_raw, rest_raw) == ()
+
+
+# ── 시각 3회 이상 — 종전엔 통째로 포기하던 것 (2026-09-26) ──────────────
+# 실측: 공유본 결측 13,367건 중 4,764건이 원문에 시각을 갖고 있었다.
+# 아래는 전부 **실 수집분에서 뽑은 원문**이다 — 지어낸 입력이 아니다.
+
+@pytest.mark.parametrize("raw,want", [
+    # 부가 안내가 뒤에 붙는 가장 흔한 모양 — 첫 범위가 답이다
+    ("09:00~17:50 (입장 마감 17:00)", (9 * 60, 17 * 60 + 50)),
+    ("- 09:00~17:00<br>- 휴게시간 12:00~13:00<br>- 입장 마감 16:30", (9 * 60, 17 * 60)),
+    ("11:00~17:00 (마지막 주문 16:00)", (11 * 60, 17 * 60)),
+    # 요일별 — 첫 범위(평일)를 쓴다
+    ("- 평일 12:00~20:00<br>- 주말 12:00~21:00", (12 * 60, 20 * 60)),
+    # 계절별 — 같은 개점의 **이른 폐점**을 쓴다 (넓게 잡으면 닫힌 시간에 배치된다)
+    ("- 하절기 08:40~18:00<br>- 동절기 08:40~17:30", (8 * 60 + 40, 17 * 60 + 30)),
+])
+def test_시각_3회_이상도_읽는다(raw: str, want: tuple[int, int]) -> None:
+    hours = parse_open_hours(raw, None)
+    assert hours, f"못 읽음: {raw!r}"
+    assert (hours[0].open_min, hours[0].close_min) == want
+
+
+def test_준비시간을_영업시간으로_읽지_않는다() -> None:
+    """**실데이터 라벨 1위가 `준비시간`(1,100건)이다.** 감으로 만든 목록에서 빠져
+    `10:00~18:00 (준비시간 12:00~13:00)` 이 12~13시로 읽혔다."""
+    hours = parse_open_hours("10:00~18:00 (준비시간 12:00~13:00)", None)
+    assert (hours[0].open_min, hours[0].close_min) == (10 * 60, 18 * 60)
+    # 띄어쓰기 변형도 같아야 한다 — 실물에 둘 다 있다
+    hours = parse_open_hours("11:30~23:00 (준비 시간 15:00~17:00)", None)
+    assert (hours[0].open_min, hours[0].close_min) == (11 * 60 + 30, 23 * 60)
+
+
+@pytest.mark.parametrize("raw", [
+    # 구역이 여럿 — 어느 것이 장소 전체인지 모른다
+    "[사우나] 06:00~21:00<br>[아쿠아나]<br>- 실내 10:00~18:00<br>- 야외 12:00~17:00",
+    # 회차 — 영업시간이 아니라 출발 시각이다
+    "- 1회 10:00~11:30<br>- 2회 13:00~14:30<br>- 3회 14:30~16:00",
+    # 교육 세션 — 창이 너무 좁으면 영업시간이 아니다
+    "[교육시간]<br>- 평일 10:00~12:00 / 14:00~16:00",
+])
+def test_확신할_수_없으면_지어내지_않는다(raw: str) -> None:
+    assert parse_open_hours(raw, None) == ()
+
+
+def test_무관한_시설과_겹쳐_좁아지지_않는다() -> None:
+    """교집합 규칙이 실패하던 실물 — 야시장(18~22시)과 겹쳐 18~19시로 좁아졌다.
+
+    두 규칙을 실데이터 4,764건으로 비교해 첫 범위를 골랐다(의심 120건 → 4건).
+    """
+    raw = "09:00~19:00(입장 마감 18:00)<br>※ 수목원야시장, LED공원 18:00~22:00"
+    hours = parse_open_hours(raw, None)
+    assert (hours[0].open_min, hours[0].close_min) == (9 * 60, 19 * 60)

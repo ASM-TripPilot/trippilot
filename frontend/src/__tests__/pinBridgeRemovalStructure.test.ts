@@ -59,6 +59,15 @@ const LIVE_FILE = path.join(
   'ui',
   'LiveLocationPage.tsx'
 );
+// TRIP-979 B — 위치 입력 화면이 컨테이너(LiveLocationPage)와 순수 뷰(LiveLocationView)로 갈라졌다.
+// 지도(CenterPinPicker)는 뷰가 그린다.
+const LIVE_VIEW_FILE = path.join(
+  ROOT,
+  'pages',
+  'live-location',
+  'ui',
+  'LiveLocationView.tsx'
+);
 
 /** 주석 제거. `(^|[^:])` 로 `https://` 의 `//` 를 주석으로 오인하지 않는다(URL 이 스캔 전에
  * 사라지면 탐지기가 조용히 눈이 먼다 — 리포 실측, itineraryMapSurfaceStructure 선례). */
@@ -121,6 +130,7 @@ describe('G-1 · 옛 WebView 브리지 지문이 소비 표면에서 0건이다 
     expect(files).toContain('features/stay/ui/StayRegisterScreen.tsx');
     expect(files).toContain('pages/stay-register/ui/StayRegisterPage.tsx');
     expect(files).toContain('pages/live-location/ui/LiveLocationPage.tsx');
+    expect(files).toContain('pages/live-location/ui/LiveLocationView.tsx');
 
     const offenders = sources.flatMap(({ file, source }) =>
       FORBIDDEN.filter((token) => source.includes(token)).map(
@@ -149,9 +159,10 @@ describe('G-2 · 신 단일 경로가 실제로 배선됐다 (긍정 짝 — 공
   });
 
   it('LiveLocation 은 CenterPinPicker 를 쓰되 역지오코딩은 안 쓴다 (좌표만 · AC-9)', () => {
-    const live = readOne(LIVE_FILE);
-    expect(live).toContain('CenterPinPicker');
-    // 위치 화면은 주소를 안 쓴다 — 역지오코딩이 소스에 새 들어오면 안 된다(단일 경로 구분).
-    expect(live).not.toContain('useGetStaysReverseGeocode');
+    // 지도는 뷰가 그린다(TRIP-979 B 컨테이너/뷰 분리).
+    expect(readOne(LIVE_VIEW_FILE)).toContain('CenterPinPicker');
+    // 위치 화면은 주소를 안 쓴다 — 뷰·컨테이너 어느 쪽에도 역지오코딩이 새 들어오면 안 된다.
+    expect(readOne(LIVE_VIEW_FILE)).not.toContain('useGetStaysReverseGeocode');
+    expect(readOne(LIVE_FILE)).not.toContain('useGetStaysReverseGeocode');
   });
 });

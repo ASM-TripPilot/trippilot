@@ -9,12 +9,21 @@ import path from 'path';
  * `itineraryEditStructure.test.ts` 패턴 — 탐지기를 복제하지 않고 (a) 신규 파일 실재 (b) 기존 재귀
  * 스캔 자동 편입 (c) INV-3 타겟 가드만 얹는다.
  *
+ * **TRIP-797 묶음 C**: 편집기가 h12(지도+시트) 로 통일되며 `ManualPlanPage` 소비 화면이 pages 층 순수
+ * 뷰 `EditorView` 로 재조립됐다. 그 결과 옛 화면 `ManualPlanScreen.tsx` 는 소비처를 잃어 **제거된다**
+ * (삭제도 계약). 아래 `NEW_UI_FILES` 에서 뺐고 `REMOVED_SCREEN` 부재 앵커로 화면 제거를 확정한다 —
+ * implementer 가 실제 `git rm` 하기 전까지 RED. `ManualPlanPage`(pages, 재조립) 경로는 유지.
+ *
+ * **TRIP-798 묶음 C(시트화)**: `PlaceAddScreen` 이 `PlaceRowCard` 채택으로 갈아타 옛 로컬 카드
+ * `PlaceAddCard.tsx` 는 런타임 소비처 0(고아)이 됐다 — `NEW_UI_FILES` 에서 뺐고 `REMOVED_CARD` 부재
+ * 앵커로 카드 제거를 확정한다(git rm 전 RED, `REMOVED_SCREEN` 선례 동형, 02a-C ★C6). h13 의
+ * entities 소비 증거는 `PlaceAddPage.integration` C2 가 지므로 이 앵커 제거는 vacuous 걷기다.
+ *
  * 무엇을 보장하나:
  *  - **G1** 전처리(stripComments)×탐지기가 서로를 지우지 않는다(조합 자가검사).
- *  - **G2** 신규 화면 3파일이 `features/itinerary/ui` **재귀 모집단**에 실제로 든다 — 이게 곧 기존
- *    `itineraryTimeStructure.test.ts` G2(소요시간 표기 0건 전수)의 사정거리 편입 증명.
- *  - **G3** 신규 파일(화면 2·카드 1·페이지 2·배럴 1·라우트 2)이 정본 경로에 실재.
- *  - **G4** 신규 ui 파일에 소요시간 표기 0건 **+ "이동시간" 0건**(디짓 갭 봉합, 아래 참조).
+ *  - **G2** 남는 화면·카드가 `features/itinerary/ui` **재귀 모집단**에 들고, 제거 화면은 빠진다.
+ *  - **G3** 남는 파일(카드 1·페이지 2·배럴 1·라우트 2)이 정본 경로에 실재, 제거 화면은 부재.
+ *  - **G4** 남는 ui 파일에 소요시간 표기 0건 **+ "이동시간" 0건**(디짓 갭 봉합, 아래 참조).
  *
  * ── 왜 타겟 가드 `TRAVEL_TIME` 을 새로 두나 (디짓 게이트 함정) ───────────────
  * 기존 스캔의 `DURATION_TEXT=/(\d+\s*분|\d+\s*시간|소요)/` 은 **숫자 앞자리를 요구**해 `'3시간'`은
@@ -35,12 +44,15 @@ const ROOT = path.resolve('src');
 
 const UI_DIR_REL = 'features/itinerary/ui';
 
-/** 이 칸이 새로 그리는 화면/카드(재귀 스캔 자동 편입 + INV-3 타겟 가드 대상). */
-const NEW_UI_FILES = [
-  'features/itinerary/ui/ManualPlanScreen.tsx',
-  'features/itinerary/ui/PlaceAddScreen.tsx',
-  'features/itinerary/ui/PlaceAddCard.tsx',
-];
+/** 이 칸이 그리는(남는) 화면/카드(재귀 스캔 자동 편입 + INV-3 타겟 가드 대상). TRIP-797 로
+ *  ManualPlanScreen, TRIP-798 로 PlaceAddCard 가 여기서 빠졌다(각각 REMOVED_SCREEN·REMOVED_CARD). */
+const NEW_UI_FILES = ['features/itinerary/ui/PlaceAddScreen.tsx'];
+
+/** TRIP-797 묶음 C — h12 통일로 소비처를 잃어 제거되는 화면(삭제도 계약, git rm 전 RED). */
+const REMOVED_SCREEN = 'features/itinerary/ui/ManualPlanScreen.tsx';
+
+/** TRIP-798 묶음 C — h13 이 PlaceRowCard 채택으로 소비처를 잃은 고아 카드(삭제도 계약, git rm 전 RED). */
+const REMOVED_CARD = 'features/itinerary/ui/PlaceAddCard.tsx';
 
 /** 이 칸이 새로 만드는 전 파일(경로 계약 스냅숏). */
 const NEW_PATHS = [
@@ -138,25 +150,42 @@ describe('G1 · 조합 자가검사 — 전처리와 탐지기가 서로를 지�
   });
 });
 
-describe('🔴 G2 · 편입 앵커 — 신규 화면 3파일이 features/itinerary/ui 재귀 스캔에 든다', () => {
-  it('세 화면 경로가 재귀 모집단에 실제로 있다 (기존 소요시간 전수의 사정거리 편입)', () => {
+describe('🔴 G2 · 편입 앵커 — 남는 화면은 재귀 스캔에 들고, 제거 화면·카드는 빠진다', () => {
+  it('PlaceAddScreen 은 재귀 모집단에 있고 ManualPlanScreen·PlaceAddCard 는 부재다 (제거 확정)', () => {
     const population = listSourceFiles(path.join(ROOT, UI_DIR_REL)).map(relOf);
 
     // 긍정 앵커 — 모집단이 비어 있지 않다.
     expect(population.length).toBeGreaterThan(0);
 
-    // 세 화면이 그 안에 있다 — 이게 곧 기존 DURATION 전수 스캔이 이들을 자동으로 잡는다는 증명.
+    // 남는 파일이 그 안에 있다 — 기존 DURATION 전수 스캔이 이들을 자동으로 잡는다는 증명.
     NEW_UI_FILES.forEach((rel) => expect(population).toContain(rel));
+
+    // ★삭제도 계약 — 통일 편집기가 pages(EditorView) 로 옮겨가 이 화면은 사라진다(git rm 전 RED).
+    expect(population).not.toContain(REMOVED_SCREEN);
+    // ★삭제도 계약 — h13 이 PlaceRowCard 채택으로 이 카드를 버린다(git rm 전 RED, TRIP-798 묶음 C).
+    expect(population).not.toContain(REMOVED_CARD);
   });
 });
 
-describe('🔴 G3 · 경로 계약 — 신규 파일이 정본 경로에 실재한다', () => {
-  it('화면 2·카드 1·페이지 2·배럴 1·라우트 2 가 실재하고 배럴이 두 페이지를 재수출한다', () => {
+describe('🔴 G3 · 경로 계약 — 남는 파일은 실재, 제거 화면·카드는 부재', () => {
+  it('화면 1·페이지 2·배럴 1·라우트 2 가 실재하고, ManualPlanScreen·PlaceAddCard 는 부재다', () => {
     NEW_PATHS.forEach((rel) =>
       expect(existsPair(rel)).toEqual({ file: rel, exists: true })
     );
 
-    // 배럴이 빈 스텁이 아니라 실제로 두 페이지를 재수출한다.
+    // ★삭제도 계약 — 화면 제거 확정(implementer git rm 전 RED).
+    expect(existsPair(REMOVED_SCREEN)).toEqual({
+      file: REMOVED_SCREEN,
+      exists: false,
+    });
+
+    // ★삭제도 계약 — 고아 카드 제거 확정(implementer git rm 전 RED, TRIP-798 묶음 C).
+    expect(existsPair(REMOVED_CARD)).toEqual({
+      file: REMOVED_CARD,
+      exists: false,
+    });
+
+    // 배럴이 빈 스텁이 아니라 실제로 두 페이지를 재수출한다(ManualPlanPage 는 재조립 후에도 남는다).
     const barrel = readOne('pages/itinerary-manual/index.ts');
     expect(barrel).toContain('ManualPlanPage');
     expect(barrel).toContain('PlaceAddPage');
@@ -164,7 +193,7 @@ describe('🔴 G3 · 경로 계약 — 신규 파일이 정본 경로에 실재�
 });
 
 describe('🔴 G4 · AC-7 — 신규 ui 파일에 소요시간·이동시간 표기가 0건이다 (INV-3)', () => {
-  it('세 화면 각각 실재하고(짝) 주석 제외 소스에 소요시간·이동시간 문자열이 없다', () => {
+  it('남는 ui 파일이 실재하고(짝) 주석 제외 소스에 소요시간·이동시간 문자열이 없다', () => {
     NEW_UI_FILES.forEach((rel) => {
       // 긍정 짝 — 파일이 실재해야 아래 부정이 의미를 갖는다(없으면 여기서 red).
       expect(existsPair(rel)).toEqual({ file: rel, exists: true });
