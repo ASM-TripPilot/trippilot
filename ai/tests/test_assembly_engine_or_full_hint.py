@@ -263,7 +263,10 @@ def _day1_objective(problem, index, *, cut: bool):
     mains = _main(log)
     if not mains:
         return "empty"  # 노드 없음 — 모델을 안 만든다
-    return mains[-1].status, mains[-1].objective
+    # ObjectiveValue 는 double 이다 — 같은 최적해도 모델(컷 유무)에 따라 929.0 과
+    # 928.9999999999999 로 갈린 반례가 있었다. 정수 목적이라 반올림해 비교한다.
+    obj = mains[-1].objective
+    return mains[-1].status, None if obj is None else round(obj, 6)
 
 
 @settings(max_examples=25, deadline=None)
