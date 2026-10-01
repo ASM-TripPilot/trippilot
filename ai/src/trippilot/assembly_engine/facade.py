@@ -21,7 +21,11 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Mapping, Protocol, Sequence
 
-from trippilot.assembly_engine.constraints import check_all, check_hc2_coords_known
+from trippilot.assembly_engine.constraints import (
+    check_all,
+    check_hc2_coords_known,
+    check_not_before,
+)
 from trippilot.assembly_engine.quality import compute_quality
 from trippilot.assembly_engine.repair import MinimalChangePolicy, RepairResult
 from trippilot.assembly_engine.repair import repair as _repair_engine
@@ -157,9 +161,11 @@ class HybridAssemblyFacade:
             # 체인 내부 검증은 check_all 직접 호출 — 단계별 시한 회계(DL-2)는 위에서
             # 이미 하므로 public validate()의 시한 관측을 중복 발행하지 않는다.
             # 좌표 미상 인접 쌍은 여기서만 위반이다(fail-closed, TRIP-1177) — 공용
-            # validate 는 "정보 없음은 막지 않는다"를 유지한다.
+            # validate 는 "정보 없음은 막지 않는다"를 유지한다. 비고정 슬롯의 시작 하한
+            # (재계획 from_instant, TRIP-1182)도 같은 이유로 여기서만 본다.
             violations = (check_all(result, problem, self._pois, self._est)
-                          + check_hc2_coords_known(result, self._pois))
+                          + check_hc2_coords_known(result, self._pois)
+                          + check_not_before(result, problem))
             if violations:  # 유효하지 않은 해는 반환 금지 (INV-2)
                 self._emit_fallback(tid, stage.name, next_name,
                                     f"invalid:{len(violations)}")

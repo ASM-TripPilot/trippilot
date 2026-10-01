@@ -64,6 +64,19 @@ def placed_fixed_blocks(
     )
 
 
+def not_before_floor(problem: ItineraryProblem) -> datetime | None:
+    """비고정 방문 시작 하한을 분 단위로 **올린다** (TRIP-1182). 없으면 None.
+
+    슬롯은 분 해상도다 — 14:10:05 를 내리면 14:10 시작 슬롯이 하한 이전이 된다.
+    두 어셈블러가 같은 값을 쓴다(OR 은 이 값의 분, 그리디는 이 값 그대로).
+    """
+    nb = problem.not_before
+    if nb is None:
+        return None
+    floor = nb.replace(second=0, microsecond=0)
+    return floor if floor == nb else floor + timedelta(minutes=1)
+
+
 def _open_ok(poi: Poi, start: datetime, end: datetime) -> bool:
     if not poi.open_hours:
         return True  # 정보 없음 → 막지 않음 (constraints.py와 동일 규칙)
@@ -106,6 +119,8 @@ class RuleFallbackAssembler:
 
         used: set[PoiId] = set()
         days: list[DaySolution] = []
+        # 비고정 방문 시작 하한 (TRIP-1182) — 고정 블록(①)은 면제, 자유 삽입(②)만 미룬다
+        not_before = not_before_floor(problem)
         for day in problem.days:
             slots: list[VisitSlot] = []
             # 일별 카테고리 배치 수 (TRIP-531) — 고정 블록 포함
@@ -155,6 +170,8 @@ class RuleFallbackAssembler:
                 last = slots[-1] if slots else None
                 ref = last.end_at if last is not None \
                     else _at(day, problem.day_window.start)
+                if not_before is not None and ref < not_before:
+                    ref = not_before  # 식사 창 판정도 실제로 놓일 수 있는 시각 기준
                 ref_mod = ref.hour * 60 + ref.minute
                 last_poi = self._pois.get(last.poi_id) if last is not None else None
                 if last is not None and last_poi is None:
@@ -201,6 +218,8 @@ class RuleFallbackAssembler:
                             last_poi.coord, poi.coord, problem.transport
                         ).internal_minutes
                     start = depart + timedelta(minutes=travel_min)
+                    if not_before is not None and start < not_before:
+                        start = not_before  # 하한까지 기다린다 (OR 노드 lo 와 같은 규칙)
                     end = start + timedelta(minutes=stay)
                     if end > day_end:
                         continue  # day window 초과 (HC4)

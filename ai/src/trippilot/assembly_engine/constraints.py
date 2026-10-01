@@ -76,6 +76,27 @@ def check_hc2_coords_known(solution: ItinerarySolution,
     return out
 
 
+def check_not_before(solution: ItinerarySolution,
+                     problem: ItineraryProblem) -> list[Violation]:
+    """체인 내부 전용 (TRIP-1182) — 고정 블록이 아닌 슬롯이 `not_before` 이전에 시작하면 위반.
+
+    solve 는 시각을 **만드는** 경로라, 이미 지난 시각에 새 방문을 놓은 해가 검증 도장과
+    함께 나가면 INV-2 위반이다. 공용 validate·repair 에는 넣지 않는다 — 저장된 일정을
+    다시 보는 경로라 시간이 흐르면 지난 슬롯이 전부 위반이 되고, 그 문제엔 하한도 없다.
+    고정 블록은 HC3 과 같은 기준(poi·시각 정확 일치)으로 면제한다.
+    """
+    nb = problem.not_before
+    if nb is None:
+        return []
+    pinned = {(fb.poi_id, fb.window.start, fb.window.end) for fb in problem.fixed_blocks}
+    return [
+        Violation("HC4", slot.poi_id, f"시작 하한({nb.isoformat()}) 이전: "
+                                      f"{slot.start_at.isoformat()}")
+        for day in solution.days for slot in day.slots
+        if (slot.poi_id, slot.start_at, slot.end_at) not in pinned and slot.start_at < nb
+    ]
+
+
 def check_hc3(solution: ItinerarySolution, problem: ItineraryProblem) -> list[Violation]:
     """고정 블록 시각 불변: 해당 일자에 정확한 시각의 슬롯이 존재해야 함."""
     out: list[Violation] = []
