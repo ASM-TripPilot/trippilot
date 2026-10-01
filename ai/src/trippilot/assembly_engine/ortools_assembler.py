@@ -367,9 +367,16 @@ class OrToolsAssembler:
                          day, resp.deterministic_time, det_cap, resp.wall_time, wall_cap_s)
         if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             return None
-        left_ms = budget_ms - int((time.monotonic() - day_started) * 1000)
+        # B 의 벽시계 백스톱은 고정이다 — A 가 결정론으로 끝났는데 일자 몫이 남았는지로 B 를
+        # 가르면 같은 입력이 부하에 따라 다른 순서가 된다(리뷰 실측: A 밖 소요 41~51ms 라 몫
+        # 경계 ±수십 ms 에서 채택이 뒤집혔다). A 가 이미 백스톱에 끊겼으면(부하 의존·위 경고)
+        # 그때만 일자 몫이 남은 만큼 쓴다.
+        reorder_ms = self._cfg.or_tools_reorder_ms
+        if status == cp_model.FEASIBLE and resp.deterministic_time < det_cap:
+            left_ms = budget_ms - int((time.monotonic() - day_started) * 1000)
+            reorder_ms = min(reorder_ms, left_ms)
         cp_solver = self._reorder(m, cp_solver, problem, visit, start, arcs,
-                                  obj_terms, coords, left_ms)
+                                  obj_terms, coords, reorder_ms)
 
         slots = []
         base = datetime(day.year, day.month, day.day, tzinfo=tz)
@@ -389,7 +396,7 @@ class OrToolsAssembler:
         return slots
 
     def _reorder(self, m: cp_model.CpModel, a_solver: cp_model.CpSolver, problem,
-                 visit, start, arcs, obj_terms, coords, left_ms: int) -> cp_model.CpSolver:
+                 visit, start, arcs, obj_terms, coords, wall_ms: int) -> cp_model.CpSolver:
         """B 단계 — A 해의 방문 집합을 고정하고 이동 거리만 줄인다 (TRIP-1178).
 
         목적함수에 이동 비용이 없어(이동은 HC2 시각 제약뿐) 같은 집합 안의 순서가 탐색 경로로
@@ -400,11 +407,15 @@ class OrToolsAssembler:
         −44.8%, 늘어난 날 0), 집합·점수 손실 0, HC 0, 39/39 OPTIMAL, B 최대 36ms. 합성 풀
         (LLM 유사 점수)에서도 서울 −19.9%·부산 −14.3%.
 
+        거리만 최소화하면 시각은 여유 안에서 아무 값이나 돼 대기가 끼었다(실 덤프 39일 대기
+        18 → 514분, 하루 최대 80분 — 전부 09시 영업이라 강제된 대기가 아니다). 그래서 Σ시작
+        시각을 사전식 타이브레이크로 둔다: 거리 1m 가 Σ시작의 최대치보다 무거워(W) km 최적은
+        그대로고, 같은 km 안에서 이른 시각을 고른다(측정: km 동일, 대기 514 → 35분).
+
         **OPTIMAL 일 때만 채택한다** — 결정론 한도·벽시계에 끊긴 FEASIBLE 은 부하에 따라
-        달라질 수 있어서다. 못 쓰면 A 해 그대로(강등 아님 — OR_TOOLS 그대로). 시간은 일자
-        몫에서 쓴다(`left_ms`) — 남은 몫이 없으면 돌리지 않는다.
+        달라질 수 있어서다. 못 쓰면 A 해 그대로(강등 아님 — OR_TOOLS 그대로) + WARNING.
+        `wall_ms` ≤ 0 이면 돌리지 않는다(설정 0, 또는 A 가 백스톱에 끊기고 일자 몫도 없음).
         """
-        wall_ms = min(self._cfg.or_tools_reorder_ms, left_ms)
         vals = [a_solver.Value(v) for v in visit]
         if wall_ms <= 0 or sum(vals) < 2:
             return a_solver
@@ -422,7 +433,8 @@ class OrToolsAssembler:
                 continue
             road_km = self._est.estimate(a, b, problem.transport).distance_km_range[1]
             meters.append(int(round(road_km * 1000)) * lit)
-        m.Minimize(sum(meters))
+        w = 24 * 60 * len(order) + 1  # > Σ시작 최대(분) — 시각은 거리 동률일 때만 가른다
+        m.Minimize(w * sum(meters) + sum(start[i] for i in order))
         solver = cp_model.CpSolver()
         solver.parameters.max_deterministic_time = _REORDER_DET_LIMIT
         solver.parameters.max_time_in_seconds = wall_ms / 1000.0
@@ -432,8 +444,11 @@ class OrToolsAssembler:
         self._hint_path(m, order, visit, arcs, solver)  # 변수 추가 없음 — A 순서가 완전 힌트
         if solver.Solve(m) == cp_model.OPTIMAL:
             return solver
-        _log.info("재정렬 미채택 — OPTIMAL 아님, A 순서 그대로 (det %.3f/%.1f, 벽시계 %dms)",
-                  solver.ResponseProto().deterministic_time, _REORDER_DET_LIMIT, wall_ms)
+        # det 가 한도 전이면 벽시계 백스톱이 끊은 것이다 — A 의 백스톱 경고와 같은 처지.
+        _log.warning("재정렬 미채택 — OPTIMAL 아님, A 순서 그대로. det 가 한도 전이면 벽시계"
+                     " 백스톱 — 같은 입력도 부하에 따라 다른 해가 된다 (det %.3f/%.1f, 벽시계"
+                     " %dms)", solver.ResponseProto().deterministic_time, _REORDER_DET_LIMIT,
+                     wall_ms)
         return a_solver
 
     @staticmethod

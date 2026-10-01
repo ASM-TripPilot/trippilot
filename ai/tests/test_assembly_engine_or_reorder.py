@@ -13,12 +13,17 @@ B = A 의 visit 고정 + A 목적식 ≥ A 목적값(사전식) 아래에서 도
   ④ B 시한 0 이면 B 를 돌리지 않는다 — A 해 그대로
   ⑤ B 가 OPTIMAL 을 증명 못 하면 A 해 그대로(FEASIBLE 은 채택하지 않는다)
   ⑥ PBT: 임의 좌표·영업시간 풀에서 집합 동일·점수 합 동일·거리 비증가·HC 0
+  ⑦ A 가 결정론으로 끝났으면 일자 몫(벽시계)이 다 써졌어도 B 를 돌린다 — 부하가 순서를 정하지 않게
+  ⑧ B 미채택은 WARNING 으로 남는다(침묵 금지)
+  ⑨ B 는 시각에 대기를 끼워 넣지 않는다 — 거리 동률이면 이른 시각(Σstart 타이브레이크)
 """
 
 from __future__ import annotations
 
+import logging
 from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from hypothesis import given, settings
@@ -163,6 +168,50 @@ def test_reorder_not_optimal_keeps_a() -> None:
     with patch.object(ortools_assembler, "_REORDER_DET_LIMIT", 1e-9):
         b = _solve(_CFG, problem, index)
     assert b == a
+
+
+# ⑦ 일자 몫이 벽시계로 다 써졌어도 A 가 결정론으로 끝났으면 B 를 돌린다
+def test_reorder_runs_even_when_day_wall_share_is_spent() -> None:
+    problem, index = _busan()
+    want = _solve(_CFG, problem, index)
+    clock = iter(range(0, 10**9, 100))  # 호출마다 100초씩 흐르는 시계 — 일자 몫은 늘 초과
+
+    with patch.object(ortools_assembler, "time", SimpleNamespace(monotonic=lambda: next(clock))):
+        got = _solve(_CFG, problem, index)
+    assert got == want
+
+
+# ⑧ B 미채택은 WARNING
+def test_reorder_not_adopted_logs_warning(caplog) -> None:
+    problem, index = _busan()
+    with patch.object(ortools_assembler, "_REORDER_DET_LIMIT", 1e-9), \
+            caplog.at_level(logging.WARNING, logger=ortools_assembler.__name__):
+        _solve(_CFG, problem, index)
+    assert any("재정렬 미채택" in r.getMessage() and r.levelno == logging.WARNING
+               for r in caplog.records)
+
+
+# ⑨ 대기 없음 — 영업시간 제약·식당이 없는 날은 B 해의 슬롯 사이 대기가 0 이다
+def _idle_min(slots, index, problem) -> int:
+    idle = 0
+    for p, q in zip(slots, slots[1:]):
+        t = _EST.estimate(index[p.poi_id].coord, index[q.poi_id].coord,
+                          problem.transport).internal_minutes
+        idle += int((q.start_at - p.end_at).total_seconds() // 60) - t
+    return idle
+
+
+def test_reorder_adds_no_idle_wait() -> None:
+    keep = {"dongbaek", "hwangnyeong", "haeundae", "gwangalli"}  # 식당 없음 → 식사 항 없음
+    pois = [_poi(pid, lat, lng, cat) for pid, lat, lng, cat, _ in _BUSAN if pid in keep]
+    index = {p.poi_id: p for p in pois}
+    problem = _problem([ScoredPoi(PoiId(pid), score, True)
+                        for pid, *_, score in _BUSAN if pid in keep])
+    a = _solve(_CFG_A, problem, index)
+    b = _solve(_CFG, problem, index)
+    assert [s.poi_id for s in b.days[0].slots] != [s.poi_id for s in a.days[0].slots]  # 전제
+    assert _idle_min(a.days[0].slots, index, problem) == 0  # 전제: A 는 대기 없이 붙는다
+    assert _idle_min(b.days[0].slots, index, problem) == 0
 
 
 # ⑥ PBT — 임의 좌표·영업시간 풀
