@@ -44,6 +44,16 @@ import { PlaceExplorePage } from './PlaceExplorePage';
  *  - **P-12 (AC-1)** ♥ FAB 는 담은 장소(d02, `/explore/saved-places`)로 push.
  *  - **P-13 (AC-1)** 복제 BottomTabBar 는 push 가 아니라 replace 로 항법한다.
  *  - **P-14 (AC-2·AC-6)** 필터 버튼이 카테고리 시트를 마운트한다(실개폐·딤은 6-b).
+ *  - **S-1~S-12 (상태·예외)** 첫 조회 스켈레톤 · 0건 안내 · 검색어 지목과 해제 · 조회 실패의 실제
+ *    재조회(INV-4) · 미로그인 담기 무요청 · 404 롤백 · 409 수렴 · 네트워크 실패 재시도 · 연타 1회 ·
+ *    배너는 다음 조작 시 소멸 · 좌표 방어 · 두 조건 모두 해제(아래 `상태·예외 배선` describe).
+ *  - **카드 → d06** 카드를 누르면 **그 카드의 poiId 로** `/explore/places/{poiId}` 에 push 한다
+ *    (아래 `카드 → 상세 push` describe).
+ *
+ * 한 파일로 합친 기록(TRIP-1147): 옛 `PlaceExplorePage.states.integration.test.tsx`(S-*) ·
+ * `.cardtap.integration.test.tsx`(TRIP-456 AC-1)를 각자의 바깥 describe 로 옮겼다. 두 관점은 기본
+ * 핸들러·픽스처가 이 파일 위쪽 것과 달라서, 바깥 describe 의 `beforeEach` 가 옛 파일의 값을 그대로
+ * 다시 건다(msw `server.use` 는 나중에 건 것이 먼저 답한다).
  *
  * 왜 통합 버킷인가: 심판 대상이 "**실제로 나간 요청**"이다. 직렬화가 끝난 최종 URL·재요청
  * 횟수·나간 경로의 id 는 msw 만 관찰할 수 있다(`savedPlaces.integration.test.tsx` 계승).
@@ -52,6 +62,8 @@ import { PlaceExplorePage } from './PlaceExplorePage';
  *   ① `POST`/`DELETE` 를 **문(gate) 뒤**에 세운다 — "서버 응답 전"이 시간이 아니라 신호가 된다.
  *   ② 목을 **상태 있는 배열**로 만든다 — 무효화 재조회가 언제 도착하든 답이 낙관 반영과 같다.
  *   단언은 `waitFor` 로 감싼다: TanStack Query 의 통지는 항상 매크로태스크를 한 칸 거친다.
+ * ★ 실패 경로는 무효화하지 않는다(TRIP-220 동결 계약) — 그래서 `GET /saved-places` 히트수가
+ *   "롤백이냐 재조회냐"를 가르는 신호가 된다. 반대로 409 는 성공 수렴이라 무효화한다.
  */
 
 // authedClient(생성 클라이언트가 타는 mutator 의 인증 계층)가 @/shared/storage 를 정적으로
@@ -152,6 +164,9 @@ function createGate() {
 /** 서버가 실제로 들고 있는 담은 목록 — POST/DELETE 가 이 배열을 고친다(★ 겹②). */
 let savedRows: SavedPlace[] = [];
 let gate = createGate();
+// 상태·예외 관점(S-*) 전용 문 둘 — `/places` 응답과 `POST` 를 따로 세운다(아래 그 describe 의 beforeEach).
+let placesGate = createGate();
+let saveGate = createGate();
 let observed: { method: string; url: string }[] = [];
 
 function hitsOf(method: string, pathname: string) {
@@ -954,5 +969,534 @@ describe('🔴 1023-B #026 · 칩을 누르면 어디서 왔든 지역 선택(pl
     expect(mockPush.mock.calls).toEqual([[regionPickerHref('places')]]);
     expect(mockReplace).not.toHaveBeenCalled();
     expect(mockBack).not.toHaveBeenCalled();
+  });
+});
+
+// ── 상태·예외 배선 S-1~S-12 (옛 `PlaceExplorePage.states.integration.test.tsx`) ───────────────────
+// 옛 파일의 기본 핸들러를 그대로 다시 건다 — `/places` 는 `placesGate` 뒤에 서고 `q` 만 거른다
+// (위 기본 핸들러는 category 도 거르고 문이 없다. S-1 스켈레톤이 이 문에 기댄다). `POST` 는 `saveGate`
+// 뒤에 선다(S-9). 옛 `renderLoaded`(카드가 뜰 때까지 기다림)는 위 `renderPage` 와 몸통이 같아 그것을
+// 쓰고, 옛 `renderPage`(그리기만)는 `renderNow` 로 이름을 갈랐다.
+describe('상태·예외 배선 (S-1~S-12)', () => {
+  beforeEach(() => {
+    // 두 문 다 기본은 열려 있다 — "응답 전"을 재는 케이스만 닫힌 문으로 갈아 끼운다.
+    placesGate = createGate();
+    placesGate.release();
+    saveGate = createGate();
+    saveGate.release();
+
+    server.use(
+      http.get(`${BASE}/places`, async ({ request }) => {
+        await placesGate.opened;
+        // 서버가 q(이름 부분일치)로 거른다(TRIP-502) — 검색은 서버 몫이라 이 스텁도 q 를 반영한다.
+        const q = new URL(request.url).searchParams.get('q');
+        const result = q ? PLACES.filter((p) => p.nameKo.includes(q)) : PLACES;
+        return HttpResponse.json({ items: result, nextCursor: null });
+      }),
+      http.post(`${BASE}/saved-places`, async ({ request }) => {
+        await saveGate.opened;
+        const body = (await request.json()) as { poiId: string };
+        const row = savedRowOf(body.poiId);
+        savedRows = [...savedRows, row];
+        return HttpResponse.json(row, { status: 201 });
+      })
+    );
+  });
+
+  // 상태·예외 케이스는 어느 것도 화면을 떠나지 않는다 — 실패·재시도·로그인 안내는 이 화면 안의
+  // 얼굴·배너로 끝나고, 나가는 길은 push 뿐이다(S-2·S-5 가 그 push 를 따로 단언한다). 옛 파일은
+  // 라우터 목에 push 만 있어 back·replace 를 부르면 TypeError 로 red 였다. 합치며 본 파일 목
+  // (push·replace·back)을 물려받아 그 그물이 사라져, 같은 성질을 여기서 명시로 건다.
+  afterEach(() => {
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  /** 그리기만 한다 — 첫 조회가 문 뒤에 서 있는 동안을 재는 케이스(S-1·S-2·S-4)용. */
+  function renderNow() {
+    render(<PlaceExplorePage />, { wrapper: createWrapper() });
+  }
+
+  /** 카드가 하나도 없을 때 빈 배열을 돌려준다(위 `cardTestIds` 는 0장이면 throw). */
+  function cardTestIdsOrNone(): string[] {
+    return screen
+      .queryAllByTestId(/^explore-places-card-/)
+      .map((node) => String(node.props.testID));
+  }
+
+  describe('S-1 · 첫 조회 중에는 스켈레톤이 뜬다 (AC-4)', () => {
+    it('응답 전에는 스켈레톤 4장이고, 응답이 오면 카드로 바뀐다', async () => {
+      setAccessToken('valid-access');
+      placesGate = createGate(); // 이 시점부터 GET /places 는 문 뒤에 선다
+
+      renderNow();
+
+      await waitFor(() =>
+        expect(screen.getByTestId('explore-places-loading')).toBeOnTheScreen()
+      );
+      expect(screen.getAllByTestId(/^explore-places-skeleton-/)).toHaveLength(
+        4
+      );
+      expect(cardTestIdsOrNone()).toEqual([]);
+
+      placesGate.release();
+
+      await waitFor(() => expect(cardTestIdsOrNone()).toHaveLength(5));
+      // 스켈레톤이 카드와 함께 남아 있으면 화면이 두 얼굴을 동시에 보인다.
+      expect(screen.queryByTestId('explore-places-loading')).toBeNull();
+    });
+  });
+
+  describe('S-2 · 0건이면 다른 지역으로 보낸다 (AC-5 · 01b Seed Q4)', () => {
+    it('안내가 뜨고 "다른 지역 보기"가 d04 지역 교체용 지역 선택(purpose=places)으로 보낸다', async () => {
+      setAccessToken('valid-access');
+      server.use(
+        http.get(`${BASE}/places`, () =>
+          HttpResponse.json({ items: [], nextCursor: null })
+        )
+      );
+
+      renderNow();
+
+      await waitFor(() =>
+        expect(screen.getByTestId('explore-places-empty')).toBeOnTheScreen()
+      );
+
+      fireEvent.press(screen.getByTestId('explore-places-empty-region'));
+
+      // d04 는 여행지 맥락이다(01b Seed Q4 ⓐ). TRIP-985: 고른 지역은 위저드가 아니라 이 d04 의 지역을
+      // 바꿔야 하므로 위저드 전용 trip 이 아니라 places 로 간다.
+      expect(mockPush.mock.calls).toEqual([[regionPickerHref('places')]]);
+    });
+  });
+
+  describe('S-3 · 검색어가 0건을 만들면 그 검색어를 지목한다 (AC-6 · BR-U1-16 취지)', () => {
+    it('검색어를 문구에 박고, 해제하면 목록이 되돌아온다 (검색은 서버가 한다 — TRIP-502)', async () => {
+      setAccessToken('valid-access');
+
+      await renderPage();
+
+      fireEvent.changeText(
+        screen.getByTestId('explore-places-search'),
+        '없는이름'
+      );
+
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('explore-places-filterzero')
+        ).toBeOnTheScreen()
+      );
+      expect(
+        within(screen.getByTestId('explore-places-filterzero')).getByText(
+          '‘없는이름’ 때문에 0건이에요'
+        )
+      ).toBeOnTheScreen();
+
+      fireEvent.press(screen.getByTestId('explore-places-filterzero-clear'));
+
+      // 해제 수단이 실제로 조건을 지운다 — 문구만 있고 버튼이 아무 일도 안 하면 no-op 컨트롤이다.
+      await waitFor(() => expect(cardTestIdsOrNone()).toHaveLength(5));
+      // 검색·해제는 서버가 한다(q) — 각각 새 요청이 나간다(초기 + 검색 + 해제, 로드된 페이지 한정 아님).
+      expect(hitsOf('GET', '/api/v1/places').length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  // TRIP-1019 #027 — 두 조건이 다 걸려 0건일 때 "조건 모두 해제" 가 **실제로 두 상태를 다** 푼다.
+  // 한쪽만 풀면 남은 조건 때문에 목록이 5장으로 돌아오지 않는다(검색어만 풀면 카페 1장, 카테고리만
+  // 풀면 '해변' 1장) — 그래서 "5장 복귀" 하나가 "둘 다 풀었다"의 심판이 된다.
+  describe('🔴 S-12 · TRIP-1019 #027 · 조건 모두 해제는 검색어와 카테고리를 함께 푼다 (BR-U1-16 취지)', () => {
+    it('카페 + "해변" 으로 0건일 때 누르면 검색어가 비고 "전체" 로 돌아가 목록 5장이 온다', async () => {
+      setAccessToken('valid-access');
+      // 이 케이스만 카테고리도 서버가 거른다(기본 스텁은 q 만 본다) — 카테고리 해제 여부가 결과에
+      // 드러나야 "하나만 풀기" 구현이 red 가 된다.
+      server.use(
+        http.get(`${BASE}/places`, ({ request }) => {
+          const params = new URL(request.url).searchParams;
+          const q = params.get('q');
+          const category = params.get('category');
+          const result = PLACES.filter(
+            (p) =>
+              (!q || p.nameKo.includes(q)) &&
+              (!category || p.category === category)
+          );
+          return HttpResponse.json({ items: result, nextCursor: null });
+        })
+      );
+
+      await renderPage();
+
+      // 조건 ① 카테고리 '카페' → 전포 카페거리 1장.
+      fireEvent.press(screen.getByTestId('explore-places-category-cafe'));
+      await waitFor(() =>
+        expect(cardTestIdsOrNone()).toEqual(['explore-places-card-p3'])
+      );
+
+      // 조건 ② 검색어 '해변' → 카페 중엔 없어 0건(filter-zero, 두 조건 모두 걸림).
+      fireEvent.changeText(screen.getByTestId('explore-places-search'), '해변');
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('explore-places-filterzero')
+        ).toBeOnTheScreen()
+      );
+
+      fireEvent.press(
+        screen.getByTestId('explore-places-filterzero-clear-all')
+      );
+
+      // 두 조건이 모두 풀려야 5장이 돌아온다.
+      await waitFor(() => expect(cardTestIdsOrNone()).toHaveLength(5));
+      expect(screen.getByTestId('explore-places-search').props.value).toBe('');
+      expect(screen.getByTestId('explore-places-category-all')).toBeSelected();
+      expect(
+        screen.getByTestId('explore-places-category-cafe')
+      ).not.toBeSelected();
+
+      // 마지막으로 나간 조회에 q·category 가 둘 다 없다(서버 기준으로도 조건이 풀렸다).
+      const placeHits = hitsOf('GET', '/api/v1/places');
+      const last = new URL(placeHits[placeHits.length - 1].url).searchParams;
+      expect({ q: last.get('q'), category: last.get('category') }).toEqual({
+        q: null,
+        category: null,
+      });
+    });
+  });
+
+  describe('S-4 · 조회 실패의 재시도가 실제로 서버를 다시 부른다 (AC-7 · INV-4)', () => {
+    it('에러 안내가 뜨고, 다시 시도를 누르면 재조회해 목록이 온다', async () => {
+      setAccessToken('valid-access');
+      let attempts = 0;
+      server.use(
+        http.get(`${BASE}/places`, () => {
+          attempts += 1;
+          return attempts === 1
+            ? new HttpResponse(null, { status: 500 })
+            : HttpResponse.json({ items: PLACES, nextCursor: null });
+        })
+      );
+
+      renderNow();
+
+      await waitFor(() =>
+        expect(screen.getByTestId('explore-places-error')).toBeOnTheScreen()
+      );
+      // 빈 목록으로 위장하면 위반이다(INV-4).
+      expect(cardTestIdsOrNone()).toEqual([]);
+
+      fireEvent.press(screen.getByTestId('explore-places-error-retry'));
+
+      await waitFor(() =>
+        expect(hitsOf('GET', '/api/v1/places')).toHaveLength(2)
+      );
+      // 재조회 결과가 화면에 닿았다 — 히트수만 보면 "부르고 버리는" 구현도 통과한다.
+      await waitFor(() => expect(cardTestIdsOrNone()).toHaveLength(5));
+      expect(screen.queryByTestId('explore-places-error')).toBeNull();
+    });
+  });
+
+  describe('S-5 · 미로그인 담기 (AC-9 · BR-U1-03)', () => {
+    it('요청을 보내지 않고, 로그인 유도 배너로 로그인 화면에 보낸다', async () => {
+      // 토큰 없음 — 목록 열람은 미로그인도 가능한 화면이다.
+      await renderPage();
+
+      fireEvent.press(screen.getByTestId('explore-places-save-p2'));
+
+      await waitFor(() =>
+        expect(screen.getByTestId('explore-places-saveerror')).toBeOnTheScreen()
+      );
+      expect(
+        within(screen.getByTestId('explore-places-saveerror')).getByText(
+          '로그인하면 마음에 든 장소를 담을 수 있어요'
+        )
+      ).toBeOnTheScreen();
+
+      // 규칙의 본체 — 요청 자체가 나가지 않는다. 낙관 반영도 하지 않는다.
+      expect(hitsOf('POST', '/api/v1/saved-places')).toHaveLength(0);
+      expect(
+        within(screen.getByTestId('explore-places-card-p2')).queryAllByText(
+          '담음'
+        )
+      ).toHaveLength(0);
+      expect(screen.getByTestId('explore-places-save-p2')).not.toBeSelected();
+
+      fireEvent.press(screen.getByTestId('explore-places-saveerror-login'));
+
+      // 01b Seed Q6 ⓒ — 배너만 두면 목적지 없는 안내가 된다(관통 원칙: no-op 컨트롤 금지).
+      expect(mockPush.mock.calls).toEqual([['/(auth)/login']]);
+    });
+  });
+
+  describe('S-6 · 404 는 롤백하고 사유를 알린다 (AC-10 · INV-4)', () => {
+    it('낙관 반영이 되돌려지고 배너가 뜨며, 실패 경로에서 재조회하지 않는다', async () => {
+      setAccessToken('valid-access');
+      server.use(
+        http.post(
+          `${BASE}/saved-places`,
+          () => new HttpResponse(null, { status: 404 })
+        )
+      );
+
+      await renderPage();
+      expect(hitsOf('GET', '/api/v1/saved-places')).toHaveLength(1);
+
+      fireEvent.press(screen.getByTestId('explore-places-save-p2'));
+
+      await waitFor(() =>
+        expect(screen.getByTestId('explore-places-saveerror')).toBeOnTheScreen()
+      );
+      expect(
+        within(screen.getByTestId('explore-places-saveerror')).getByText(
+          '지금은 담을 수 없는 장소예요'
+        )
+      ).toBeOnTheScreen();
+
+      // 롤백 — 티켓의 "카드 상태 갱신"은 재조회가 아니라 되돌리기다.
+      expect(
+        within(screen.getByTestId('explore-places-card-p2')).queryAllByText(
+          '담음'
+        )
+      ).toHaveLength(0);
+      expect(screen.getByTestId('explore-places-save-p2')).not.toBeSelected();
+
+      // 실패 경로에서 무효화하면 되돌린 것이 롤백 때문인지 재조회 때문인지 구별할 수 없어진다.
+      expect(hitsOf('GET', '/api/v1/saved-places')).toHaveLength(1);
+      expect(hitsOf('POST', '/api/v1/saved-places')).toHaveLength(1);
+
+      // 다시 눌러도 결과가 같은 실패다 — 재시도 버튼을 달면 no-op 컨트롤이 된다.
+      expect(screen.queryByTestId('explore-places-saveerror-retry')).toBeNull();
+      expect(screen.queryByTestId('explore-places-saveerror-login')).toBeNull();
+    });
+  });
+
+  describe('S-7 · 409 는 오류를 발명하지 않는다 (AC-11)', () => {
+    it('배너 없이 담김을 유지하고, 서버 진실로 한 번 맞춰 본다', async () => {
+      setAccessToken('valid-access');
+      server.use(
+        http.post(`${BASE}/saved-places`, async ({ request }) => {
+          // 이미 담겨 있던 상태(클라 캐시가 낡았을 때 나는 갈래) — 서버 쪽 진실을 채워 둔다.
+          const body = (await request.json()) as { poiId: string };
+          savedRows = [savedRowOf(body.poiId)];
+          return new HttpResponse(null, { status: 409 });
+        })
+      );
+
+      await renderPage();
+
+      fireEvent.press(screen.getByTestId('explore-places-save-p2'));
+
+      // 목표 상태와 결과 상태가 같다(INV-U1-04) — 실패가 아니라 담김으로 수렴한다.
+      await waitFor(() =>
+        expect(hitsOf('GET', '/api/v1/saved-places')).toHaveLength(2)
+      );
+      expect(screen.queryByTestId('explore-places-saveerror')).toBeNull();
+      expect(
+        within(screen.getByTestId('explore-places-card-p2')).getByText('담음')
+      ).toBeOnTheScreen();
+      expect(screen.getByTestId('explore-places-save-p2')).toBeSelected();
+    });
+  });
+
+  describe('S-8 · 네트워크 실패는 롤백 + 재시도다 (AC-12)', () => {
+    it('사유와 재시도를 주고, 재시도가 같은 담기를 다시 보낸다', async () => {
+      setAccessToken('valid-access');
+      let attempts = 0;
+      server.use(
+        http.post(`${BASE}/saved-places`, async ({ request }) => {
+          attempts += 1;
+          if (attempts === 1) return HttpResponse.error();
+          const body = (await request.json()) as { poiId: string };
+          const row = savedRowOf(body.poiId);
+          savedRows = [...savedRows, row];
+          return HttpResponse.json(row, { status: 201 });
+        })
+      );
+
+      await renderPage();
+
+      fireEvent.press(screen.getByTestId('explore-places-save-p2'));
+
+      await waitFor(() =>
+        expect(screen.getByTestId('explore-places-saveerror')).toBeOnTheScreen()
+      );
+      expect(
+        within(screen.getByTestId('explore-places-saveerror')).getByText(
+          '연결이 불안정해 담지 못했어요'
+        )
+      ).toBeOnTheScreen();
+      expect(screen.getByTestId('explore-places-save-p2')).not.toBeSelected();
+
+      fireEvent.press(screen.getByTestId('explore-places-saveerror-retry'));
+
+      await waitFor(() =>
+        expect(hitsOf('POST', '/api/v1/saved-places')).toHaveLength(2)
+      );
+      await waitFor(() =>
+        expect(screen.getByTestId('explore-places-save-p2')).toBeSelected()
+      );
+      // 성공했으면 실패 배너가 남아 있으면 안 된다(다음 조작 시 사라진다 — 01b Seed Q5).
+      expect(screen.queryByTestId('explore-places-saveerror')).toBeNull();
+    });
+  });
+
+  describe('S-9 · 응답 대기 중 연타 (AC-13 · 01b Seed Q7 ⓑ)', () => {
+    it('두 번째 누름이 유실되지 않고, 담기가 정확히 한 번만 나간다', async () => {
+      setAccessToken('valid-access');
+      saveGate = createGate(); // POST 를 문 뒤에 세운다
+
+      await renderPage();
+
+      fireEvent.press(screen.getByTestId('explore-places-save-p2'));
+
+      await waitFor(() =>
+        expect(screen.getByTestId('explore-places-save-p2')).toBeDisabled()
+      );
+
+      // 응답 전 두 번째 누름 — 예전에는 여기서 해제 경로로 새어 조작이 조용히 사라졌다
+      // (TRIP-221 03b W-2). 눌리지 않게 만들어 그 자리 자체를 없앤다.
+      fireEvent.press(screen.getByTestId('explore-places-save-p2'));
+      expect(hitsOf('POST', '/api/v1/saved-places')).toHaveLength(1);
+
+      saveGate.release();
+
+      await waitFor(() =>
+        expect(screen.getByTestId('explore-places-save-p2')).not.toBeDisabled()
+      );
+      expect(screen.getByTestId('explore-places-save-p2')).toBeSelected();
+      expect(hitsOf('POST', '/api/v1/saved-places')).toHaveLength(1);
+      // 유실도 없고 침묵도 없다 — 알릴 실패가 없으므로 배너도 없다.
+      expect(screen.queryByTestId('explore-places-saveerror')).toBeNull();
+    });
+  });
+
+  describe('S-10 · 배너는 다음 조작 시 사라진다 (01b Seed Q5 — 타이머 금지)', () => {
+    it('실패 배너가 뜬 뒤 검색어를 바꾸면 배너가 사라진다', async () => {
+      setAccessToken('valid-access');
+      server.use(
+        http.post(
+          `${BASE}/saved-places`,
+          () => new HttpResponse(null, { status: 404 })
+        )
+      );
+
+      await renderPage();
+      fireEvent.press(screen.getByTestId('explore-places-save-p2'));
+      await waitFor(() =>
+        expect(screen.getByTestId('explore-places-saveerror')).toBeOnTheScreen()
+      );
+
+      fireEvent.changeText(screen.getByTestId('explore-places-search'), '광안');
+
+      // 가짜 타이머를 들이면 이 칸의 상태 판정 전체가 타이밍 의존이 된다 — 조작이 지운다.
+      await waitFor(() =>
+        expect(screen.queryByTestId('explore-places-saveerror')).toBeNull()
+      );
+      // 긍정 짝 — 화면이 통째로 죽어서 "없음"이 된 게 아니다. 검색은 서버가 하므로(q=광안, TRIP-502)
+      // 새 조회가 해소되면 p2 만 남는다(클라 즉시 필터 아님 — waitFor 로 서버 응답을 기다린다).
+      await waitFor(() =>
+        expect(cardTestIdsOrNone()).toEqual(['explore-places-card-p2'])
+      );
+    });
+  });
+
+  describe('S-11 · 좌표 방어 배선 (01b Seed Q12 · BR-U1-02 · US-EXPL-04 예외)', () => {
+    it('좌표를 확인할 수 없는 장소는 담기를 막고 사유를 표시한다', async () => {
+      setAccessToken('valid-access');
+
+      // ⚠️ 이 응답은 **계약상 존재할 수 없다** — `openapi.yaml` 의 `Place` 는 `lat`·`lng` 가
+      // required 이고 nullable 이 아니며 `GET /places` 는 ACTIVE POI 만 준다. 캐스팅을 해야
+      // 만들어진다는 사실 자체가 "US-EXPL-04 예외 AC 는 현재 계약에서 재현 불가"의 증거다
+      // (미충족으로 기록한다). 그럼에도 방어 코드는 두고, 이 케이스가 그 배선의 심판이다.
+      const noCoords = {
+        ...PLACES[1],
+        lat: null,
+        lng: null,
+      } as unknown as Place;
+      server.use(
+        http.get(`${BASE}/places`, () =>
+          HttpResponse.json({ items: [noCoords], nextCursor: null })
+        )
+      );
+
+      await renderPage();
+
+      fireEvent.press(screen.getByTestId('explore-places-save-p2'));
+
+      await waitFor(() =>
+        expect(screen.getByTestId('explore-places-saveerror')).toBeOnTheScreen()
+      );
+      expect(
+        within(screen.getByTestId('explore-places-saveerror')).getByText(
+          '위치를 확인할 수 없어 담을 수 없어요'
+        )
+      ).toBeOnTheScreen();
+
+      // 서버 판정을 기다리지 않고 클라가 먼저 막는다(BR-U1-02 는 UX 사본이고 정본은 서버다).
+      expect(hitsOf('POST', '/api/v1/saved-places')).toHaveLength(0);
+      expect(
+        within(screen.getByTestId('explore-places-card-p2')).queryAllByText(
+          '담음'
+        )
+      ).toHaveLength(0);
+    });
+  });
+});
+
+// ── 카드 → 상세 push (옛 `PlaceExplorePage.cardtap.integration.test.tsx`, TRIP-456 AC-1) ──────────
+// 심판 대상은 "실제로 조립된 push 문자열"이다 — 화면이 올린 place 로 페이지가 URL 을 만드는 마지막
+// 조립을 라우터 목으로만 관찰할 수 있다. 첫·둘째 카드가 서로 다른 세그먼트를 만들어 poiId 하드코딩을
+// 가른다. 픽스처는 옛 파일 값 그대로(카드 2장)다.
+describe('카드 → 상세 push', () => {
+  function makeCardtapPlace(
+    poiId: string,
+    nameKo: string,
+    savedCount: number
+  ): Place {
+    return {
+      poiId,
+      nameKo,
+      category: '문화',
+      lat: 35.1,
+      lng: 129.1,
+      region: '부산',
+      openingHours: null,
+      imageUrl: null,
+      tags: [],
+      savedCount,
+      dataStatus: 'ACTIVE',
+    };
+  }
+
+  const CARDTAP_PLACES: Place[] = [
+    makeCardtapPlace('p1', '감천문화마을', 30),
+    makeCardtapPlace('p2', '광안리 해변', 10),
+  ];
+
+  beforeEach(() => {
+    setAccessToken('valid-access');
+    server.use(
+      http.get(`${BASE}/places`, () =>
+        HttpResponse.json({ items: CARDTAP_PLACES, nextCursor: null })
+      )
+    );
+  });
+
+  describe('AC-1 · d04 카드 → d06 push', () => {
+    it('카드를 누르면 그 카드의 poiId로 /explore/places/{poiId} 로 이동한다 (첫·둘째 각자)', async () => {
+      // 준비 — 카드가 도착할 때까지.
+      render(<PlaceExplorePage />, { wrapper: createWrapper() });
+      await waitFor(() =>
+        expect(screen.getByTestId('explore-places-card-p2')).toBeOnTheScreen()
+      );
+
+      // 실행·단언 — 둘째 카드.
+      fireEvent.press(screen.getByTestId('explore-places-card-p2'));
+      expect(mockPush.mock.calls).toEqual([['/explore/places/p2']]);
+
+      // 첫 카드 — poiId를 하드코딩하면 여기서 갈린다.
+      fireEvent.press(screen.getByTestId('explore-places-card-p1'));
+      expect(mockPush.mock.calls).toEqual([
+        ['/explore/places/p2'],
+        ['/explore/places/p1'],
+      ]);
+    });
   });
 });

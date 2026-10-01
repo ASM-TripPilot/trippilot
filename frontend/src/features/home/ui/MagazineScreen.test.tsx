@@ -21,7 +21,8 @@ import { MagazineScreen } from './MagazineScreen';
  *    칩 press 는 onSelectChip 을 누른 칩 값으로 발화한다.
  *  - AC-3 카드: 매서너리 카드가 정확히 6장(7번째 없음), 각 카드에 타이틀·태그·하트가 있고
  *    카드 press 는 onPressCard 를 누른 카드로 발화한다.
- *  - AC-4 INV-3: 화면 어디에도 소요시간 문자열(분·시간·소요)이 렌더되지 않는다(거리·해시태그만).
+ *  - AC-4 INV-3: 소요시간 글자 0건 렌더 테스트는 TRIP-1147 에서 지웠다 — 픽스처에 시간·거리 재료가
+ *    없는 화면이라 README 판정 4 하위 규칙에 해당한다(INV-3 은 서버 DTO·QA 몫).
  *  - 앱바 뒤로가기·돋보기 press → onBack·onSearch 발화. FAB 2종은 TRIP-1023 #095 로 제거됐다.
  *
  * 텍스트 중복 함정(02a §4-F1) — 같은 문자열이 여러 존에 산다: "전체"(칩0 + gridHead 전체보기),
@@ -179,17 +180,6 @@ describe('🔴 MagazineScreen — 매서너리 카드 6장 + onPressCard (TRIP-7
     fireEvent.press(screen.getByTestId('magazine-card-0'));
     expect(onPressCard).toHaveBeenCalledTimes(1);
     expect(onPressCard).toHaveBeenCalledWith(CARDS[0]);
-  });
-});
-
-describe('🔴 MagazineScreen — INV-3 시간 미표시 (TRIP-700 AC-4)', () => {
-  it('화면 어디에도 소요시간 문자열(분·시간·소요)이 렌더되지 않는다', () => {
-    render(<MagazineScreen {...MAGAZINE_PROPS} />);
-
-    // 필터 칩·해시태그·카피만 쓴다 — 거리도 소요시간도 없다. 정규식 부분매치라 리프 어디에 있어도
-    // 잡히고, queryAllByText 는 다중매치라도 [] 반환(throw 안 함). 소스 절반이던 homeStructure D-2
-    // 재귀 스캔은 TRIP-1145 로 지웠다 — 이 렌더 단언이 남은 그물.
-    expect(screen.queryAllByText(/소요|\d+\s*분|\d+\s*시간/)).toHaveLength(0);
   });
 });
 

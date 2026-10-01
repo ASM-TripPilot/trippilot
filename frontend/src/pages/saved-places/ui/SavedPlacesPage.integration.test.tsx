@@ -192,7 +192,7 @@ afterAll(() => server.close());
  *  - **S-11 (N-4 · AC-9)** 이 칸은 필수 방문지(must-visits)를 만들지도 지우지도 않는다.
  *
  * 왜 통합 버킷인가: 심판 대상이 "**실제로 나간 요청**"이다. 나간 경로(어느 id 를 실었나) ·
- * 요청 유무 · 재조회 횟수는 msw 만 관찰할 수 있다(d04 `PlaceExplorePage.states` 계승).
+ * 요청 유무 · 재조회 횟수는 msw 만 관찰할 수 있다(d04 `PlaceExplorePage.integration` 의 상태·예외 배선 계승).
  *
  * ★ 빈/찬 하트는 색이 아니라 `accessibilityState.selected`(=`toBeSelected()`)와
  *   `explore-saved-heart-{outline,filled}-*` 컴포넌트 testID 로 잰다(repo-trap 회피, 02a ★1).
