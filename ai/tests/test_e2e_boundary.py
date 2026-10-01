@@ -214,6 +214,7 @@ def test_generate_pierces_http_to_assembly() -> None:
         assert set(body) == {
             "days", "day1_ready_at", "explanations", "solve_mode",
             "is_fallback", "freshness", "candidates_summary", "unplaced_must_visits",
+            "scoring_mode", "degradations",
         }
         assert body["solve_mode"] == "OR_TOOLS"     # 1차 단계가 실제로 해를 냈다
         assert body["is_fallback"] is False

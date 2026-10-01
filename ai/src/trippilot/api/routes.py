@@ -170,6 +170,8 @@ def to_payload(outcome: ItineraryOutcome) -> ItineraryPayload:
             )
             for item in outcome.unplaced_must_visits
         ],
+        scoring_mode=outcome.scoring_mode,
+        degradations=list(outcome.degradations),
     )
 
 

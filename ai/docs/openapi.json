@@ -770,7 +770,7 @@
       },
       "ItineraryPayload": {
         "additionalProperties": false,
-        "description": "일정 산출물 — generate 응답이자 validate/repair 요청 본문(같은 형태를 왕복한다).\n\n`solve_mode`는 AI 4값(OR_TOOLS|LLM|RULE_FALLBACK|MINIMAL)을 그대로 보낸다.\n백엔드 3값(FULL_AI|DETERMINISTIC|MINIMAL)으로의 축약은 어댑터가 소유한다(ScheduleAgentWire).\n`explanations` 키 규약 = `\"{date}#{poi_id}\"` (BR-U2-04), 문구는 시각·소요시간을 언급하지 않는다.\n`unplaced_must_visits`는 additive(기본 빈 리스트 = 전부 배치됨) — generate 응답의\n부분 성공(200) 보고 채널이다. 해소 불가 모순의 409 경로는 그대로다(약화 금지).\nvalidate/repair 요청으로 왕복될 때는 판정 컨텍스트가 없으므로 소비하지 않는다.",
+        "description": "일정 산출물 — generate 응답이자 validate/repair 요청 본문(같은 형태를 왕복한다).\n\n`solve_mode`는 AI 4값(OR_TOOLS|LLM|RULE_FALLBACK|MINIMAL)을 그대로 보낸다.\n백엔드 3값(FULL_AI|DETERMINISTIC|MINIMAL)으로의 축약은 어댑터가 소유한다(ScheduleAgentWire).\n`explanations` 키 규약 = `\"{date}#{poi_id}\"` (BR-U2-04), 문구는 시각·소요시간을 언급하지 않는다.\n`unplaced_must_visits`는 additive(기본 빈 리스트 = 전부 배치됨) — generate 응답의\n부분 성공(200) 보고 채널이다. 해소 불가 모순의 409 경로는 그대로다(약화 금지).\nvalidate/repair 요청으로 왕복될 때는 판정 컨텍스트가 없으므로 소비하지 않는다.\n`scoring_mode`·`degradations`는 additive(generate 경로만 실값) — 취향 점수의 출처와\n밟은 강등 계단. `solve_mode`는 어셈블리 단계라 LLM 점수 여부를 말하지 않는다.\n`scoring_mode`: LLM(전 후보 LLM 점수) · MIXED(LLM 점수 + 빠진 후보 규칙 보충) ·\nRULE(규칙 점수만) · null(모름 — repair·replan·왕복 본문). `degradations`: 기계 판독용\n`\"{stage}:{사유 접두}\"` 코드(예: `llm:c1_fallback`, `weather:weather_error`) —\n자유 문장·시각·시한 값은 싣지 않는다. 빈 목록 = 강등 없음(또는 모름).",
         "properties": {
           "candidates_summary": {
             "anyOf": [
@@ -801,6 +801,13 @@
             "title": "Days",
             "type": "array"
           },
+          "degradations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Degradations",
+            "type": "array"
+          },
           "explanations": {
             "additionalProperties": {
               "type": "string"
@@ -822,6 +829,22 @@
             "default": false,
             "title": "Is Fallback",
             "type": "boolean"
+          },
+          "scoring_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "LLM",
+                  "MIXED",
+                  "RULE"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scoring Mode"
           },
           "solve_mode": {
             "title": "Solve Mode",

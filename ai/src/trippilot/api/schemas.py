@@ -253,6 +253,12 @@ class ItineraryPayload(BoundaryModel):
     `unplaced_must_visits`는 additive(기본 빈 리스트 = 전부 배치됨) — generate 응답의
     부분 성공(200) 보고 채널이다. 해소 불가 모순의 409 경로는 그대로다(약화 금지).
     validate/repair 요청으로 왕복될 때는 판정 컨텍스트가 없으므로 소비하지 않는다.
+    `scoring_mode`·`degradations`는 additive(generate 경로만 실값) — 취향 점수의 출처와
+    밟은 강등 계단. `solve_mode`는 어셈블리 단계라 LLM 점수 여부를 말하지 않는다.
+    `scoring_mode`: LLM(전 후보 LLM 점수) · MIXED(LLM 점수 + 빠진 후보 규칙 보충) ·
+    RULE(규칙 점수만) · null(모름 — repair·replan·왕복 본문). `degradations`: 기계 판독용
+    `"{stage}:{사유 접두}"` 코드(예: `llm:c1_fallback`, `weather:weather_error`) —
+    자유 문장·시각·시한 값은 싣지 않는다. 빈 목록 = 강등 없음(또는 모름).
     """
 
     days: list[DayScheduleSchema] = Field(default_factory=list)
@@ -263,6 +269,8 @@ class ItineraryPayload(BoundaryModel):
     freshness: FreshnessMetaSchema | None = None
     candidates_summary: CandidatesSummarySchema | None = None
     unplaced_must_visits: list[UnplacedMustVisitSchema] = Field(default_factory=list)
+    scoring_mode: Literal["LLM", "MIXED", "RULE"] | None = None
+    degradations: list[str] = Field(default_factory=list)
 
 
 # ───────────────────────── 검증 / 수리 ─────────────────────────
