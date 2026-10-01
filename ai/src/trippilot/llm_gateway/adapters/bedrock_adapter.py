@@ -47,8 +47,30 @@ class BedrockAdapter:
     """LlmPort Protocol 만족. `client` 는 boto3 `bedrock-runtime` 호환."""
 
     def __init__(self, client, model_arn: str) -> None:
-        self._client = client
+        """`client` 는 bedrock-runtime 클라이언트, **또는** `timeout_sec → 클라이언트` 팩토리.
+
+        ## 왜 팩토리를 받나 (2026-09-29 실서비스 504)
+
+        botocore 는 **호출 인자로 타임아웃을 못 받는다** — 클라이언트 설정에만 있다. 그래서
+        클라이언트 하나를 들고 있으면 워커가 나눈 항목당 예산(`timeout_sec`)이 어디에도
+        전달되지 않는다. 실제로 그래서 항목 하나가 요청 예산 전체를 먹고(재시도 4회로
+        11.9초), 강등 응답을 만들기 전에 백스톱 13초가 504 를 냈다.
+
+        팩토리를 받으면 예산별 클라이언트를 만들어 쓸 수 있다. 타임아웃 값으로 캐시하므로
+        서비스 모델 로딩은 예산 종류마다 한 번이다. 클라이언트를 직접 주는 기존 방식도
+        그대로 받는다(테스트·스크립트).
+        """
+        self._factory = client if callable(client) else None
+        self._client = None if self._factory else client
+        self._by_timeout: dict[float | None, object] = {}
         self._model_arn = model_arn
+
+    def _client_for(self, timeout_sec: float | None):
+        if self._factory is None:
+            return self._client
+        if timeout_sec not in self._by_timeout:
+            self._by_timeout[timeout_sec] = self._factory(timeout_sec)
+        return self._by_timeout[timeout_sec]
 
     def invoke(self, request: LlmRequest) -> LlmResponse:
         if request.images:
@@ -67,7 +89,7 @@ class BedrockAdapter:
 
         started = time.monotonic()
         try:
-            response = self._client.invoke_model(
+            response = self._client_for(request.timeout_sec).invoke_model(
                 modelId=self._model_arn,
                 body=body,
                 accept="application/json",

@@ -443,6 +443,24 @@ def _mixed_llm_and_model() -> tuple[object, str]:
 
 
 _LOCAL_PREFIX = "local"
+# 호출자가 예산을 안 줬을 때의 상한. 게이트웨이 기본 타임아웃(`C1Config.timeout_sec`, 10초)과
+# 같은 값이다 — 소켓을 그보다 길게 열어 두면 게이트웨이가 포기한 뒤에도 벤더를 기다린다.
+_BEDROCK_FALLBACK_TIMEOUT_SEC = 10.0
+
+
+def _bedrock_client_kwargs(timeout_sec: float | None) -> dict:
+    """botocore `Config` 인자 — **재시도 0 + 예산을 소켓 타임아웃으로.**
+
+    순수 함수로 떼어 둔 이유는 boto3·botocore 가 프로젝트 의존성이 아니라서다(Bedrock 을
+    켜는 환경만 설치). 이 규칙이 테스트 없이 남으면 다시 기본 재시도로 돌아간다 —
+    2026-09-29 실서비스 504 의 원인이 그 기본값이었다.
+    """
+    budget = timeout_sec or _BEDROCK_FALLBACK_TIMEOUT_SEC
+    return {
+        "retries": {"max_attempts": 1, "mode": "standard"},
+        "read_timeout": budget,
+        "connect_timeout": min(3.0, budget),
+    }
 
 
 def _local_route(feature_models: Mapping[LlmFeature, str]) -> dict[str, object]:
@@ -471,11 +489,31 @@ def _local_route(feature_models: Mapping[LlmFeature, str]) -> dict[str, object]:
 
         from trippilot.llm_gateway.adapters.bedrock_adapter import BedrockAdapter
 
-        client = boto3.client(
-            "bedrock-runtime",
-            region_name=_env("TRIPPILOT_BEDROCK_REGION") or "us-east-1",
-        )
-        return {_LOCAL_PREFIX: BedrockAdapter(client, model_arn)}
+        from botocore.config import Config
+
+        region = _env("TRIPPILOT_BEDROCK_REGION") or "us-east-1"
+
+        def _bedrock_client(timeout_sec: float | None):
+            """항목당 예산을 **클라이언트 설정으로** 내린다 — botocore 는 호출 인자로 못 받는다.
+
+            ## 재시도를 끈다 (2026-09-29 실서비스 504)
+
+            기본 botocore 는 재시도를 4회까지 한다. 유휴 후 첫 호출이 내는
+            `ModelNotReadyException`(콜드스타트)도 재시도 대상이라, 항목 하나가 **11.9초**를
+            쓰고 요청 예산(8초)을 넘겼다. 항목이 둘이라 합이 20초가 되어 백스톱 13초가
+            강등 응답보다 먼저 504 를 냈다 — 강등 경로는 맞게 돌았는데 응답을 만들 시간이
+            없었다. 리포 규약도 **SDK 재시도 0**이다(OpenAI 어댑터 `max_retries=0`).
+
+            콜드스타트는 재시도로 못 줄인다. 폴백 계단이 받아 상수 문구로 강등하는 것이
+            이 경계의 설계다(INV-4) — 그 강등이 **예산 안에서** 일어나야 의미가 있다.
+            """
+            return boto3.client(
+                "bedrock-runtime",
+                region_name=region,
+                config=Config(**_bedrock_client_kwargs(timeout_sec)),
+            )
+
+        return {_LOCAL_PREFIX: BedrockAdapter(_bedrock_client, model_arn)}
 
     base_url = _env("TRIPPILOT_LOCAL_LLM_BASE_URL")
     if not base_url:
