@@ -596,7 +596,8 @@ def _wire_day2(excluded: list[str]) -> list[str]:
     body = _wire_request((_W2,), [])
     body["excluded_poi_ids"] = excluded
     body["time_windows"] = [{"date": _W2.isoformat(), "start": "09:00", "end": "12:00"}]
-    with _client(InMemoryPoi(_WIRE_POIS)) as client:
+    # 지터 0 — 규칙 점수가 근소차라 결정론 지터(TRIP-1180)가 전제('hm' 최고점 배치)를 흔든다
+    with _client(InMemoryPoi(_WIRE_POIS), OrchestratorConfig(diversity_jitter=0.0)) as client:
         response = client.post("/ai/v1/itinerary/generate", json=body)
     assert response.status_code == 200, response.text
     return [s["poi_id"] for d in response.json()["days"] for s in d["slots"]]

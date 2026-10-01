@@ -371,7 +371,7 @@ def _domain_rejections(
 
 
 def _domain_generate_request(
-    request: schemas.GenerateItineraryRequest, tz: timezone
+    request: schemas.GenerateItineraryRequest, tz: timezone, *, diversity_jitter: float = 0.0
 ) -> core.GenerateItineraryRequest:
     if not request.anchors:
         raise ValueError("anchors 최소 1개 필요 — 후보 풀 기준점(숙소 앵커) 없음")
@@ -403,6 +403,7 @@ def _domain_generate_request(
         include_explanations=request.include_explanations,
         persona=_inline_persona(request),
         family_demote=True,  # 같은 장소 계열 강등은 generate 에만 (TRIP-1181)
+        diversity_jitter=diversity_jitter,  # 결정론 지터도 generate 에만 (TRIP-1180)
     )
 
 
@@ -1068,8 +1069,11 @@ class WiredItineraryOrchestrator:
         directives: tuple[DirectiveSpec, ...] = (),
         embedding: EmbeddingPort | None = None,
         vector_store: VectorStorePort | None = None,
+        diversity_jitter: float = 0.0,
     ) -> None:
         self._orchestrator = orchestrator
+        # generate 와이어 변환에만 싣는 지터 폭 (TRIP-1180) — 설정의 상한 관계를 통과한 값.
+        self._diversity_jitter = diversity_jitter
         self._assembly_provider = assembly_provider
         self._poi_db = poi_db
         self._estimator = estimator
@@ -1103,7 +1107,8 @@ class WiredItineraryOrchestrator:
         meta = request.request_meta
         entered_ms = self._clock.monotonic_ms()  # 조립 뒤 거리 시한의 원점 (TRIP-1179)
         outcome = self._orchestrator.generate(
-            _domain_generate_request(request, self._tz),
+            _domain_generate_request(request, self._tz,
+                                     diversity_jitter=self._diversity_jitter),
             _deadline_budget(meta),
             TraceId(meta.request_id),
             _tz_aware(meta.requested_at, self._tz),
@@ -2337,6 +2342,7 @@ def build_orchestrator(
     )
     return WiredItineraryOrchestrator(
         orchestrator, provider, poi_db, travel, tz=tz,
+        diversity_jitter=(orchestrator_config or core.OrchestratorConfig()).diversity_jitter,
         info=info,
         pool_builder=pool_builder, rag=rag,
         explainer=explainer, alternative_explainer=alt_explainer, clock=clock,

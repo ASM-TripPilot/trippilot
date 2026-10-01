@@ -110,6 +110,19 @@ class OrchestratorConfig:
     # 강등 폭은 ②′ 와 같은 한 단(`existence_demote_penalty`·`_factor`)을 쓴다.
     family_demote_top_n: int = 200
 
+    # 약한 결정론 지터 (TRIP-1180) — **generate 경로만**, 어셈블리 입력 점수에 ±ε/2 를 얹는다.
+    # 같은 목적지·같은 취향의 '다른 여행'이 같은 일정을 받던 것(부산 64%·서울 92% 겹침)을
+    # 시드로 갈라 놓는다. 동률·근소차 후보의 순서만 흔드는 크기여야 한다 — 아래
+    # __post_init__ 이 상한을 **관계로** 강제한다(거절 1단·'PlanB 가 조금 더 이긴다'를 지터가
+    # 못 뒤집게). 숫자를 베껴 적지 않는 이유는 `rejection_demote_cap` 과 같다.
+    # 기본 0.01 인 이유(실측 39건 × 여행 6): 그 상한(기본 0.05)은 서열만 지킬 뿐 슬롯 손실은
+    # 못 막는다. 규칙 점수(LLM 실패 경로)는 거리 감점이 0.02/km 라 지터가 ±ε/0.02 km 의 거리
+    # 잡음처럼 작동해 점수순 탐욕 힌트가 무너지고, det 한도 안의 CP-SAT 이 잃은 슬롯을 못 찾는다
+    # — 규칙 모드 순 슬롯 증감 ε 0.01: 0 · 0.02: −9 · 0.03: −25 · 0.05: −97. 한편 LLM 모드
+    # Jaccard 는 ε 0: 0.740 · 0.01: 0.578 · 0.02: 0.568 로 0.01 이 다양성을 거의 다 낸다
+    # (LLM 점수는 0.01 격자라 동률이 깨지는 것이 대부분이다). 올리려면 규칙 모드 슬롯부터 재라.
+    diversity_jitter: float = 0.01
+
     def __post_init__(self) -> None:
         if not 0.0 < self.c2_min_share < 1.0:
             raise ValueError("c2_min_share ∈ (0, 1)")
@@ -147,6 +160,22 @@ class OrchestratorConfig:
             raise ValueError(
                 "rejection_demote_cap ∈ [0, planb_rank_lift) — 상한이 랭크 가산 이상이면 "
                 "'겹치면 PlanB 가 조금 더 이긴다'(팀 결정)가 깨진다"
+            )
+        # 두 후보의 지터 차는 ε 미만이다(폭 ε 대칭형). 그러니 ε 가 아래 간격 중 가장 작은 것보다
+        # 작으면 같은 원점수끼리 그 간격이 만든 서열을 지터가 뒤집지 못한다 — 거절 1회 POI 는
+        # 여전히 비거절보다 낮고, 랭크 1위+최대 거절은 여전히 조금 더 이긴다.
+        # 지도 미검출·계열 강등(한 단)은 여기 넣지 않는다 — 폭이 min(penalty, (1 − factor)·s) 라
+        # 점수에 달려 있어 설정값만으로는 어떤 상한도 보장이 안 된다. 기본값(0.3·0.2, ε 0.01)이면
+        # s ≥ ε/(1 − factor) = 0.0125 에서 강등이 이기고, 그 아래는 방문 이득 int(s·1000) < 13 이라
+        # 원래 거의 안 뽑히는 값이다(실 LLM 점수 5,010건 중 0.025 이하 0건).
+        # 0 은 언제나 허용한다(끈 상태) — 간격 하나가 0 인 설정에서도 지터 없이는 기동해야 한다.
+        jitter_bound = min(self.rejection_demote_swapped[0],
+                           self.rejection_demote_regenerated[0],
+                           self.planb_rank_lift - self.rejection_demote_cap)
+        if not (self.diversity_jitter == 0.0 or 0.0 < self.diversity_jitter < jitter_bound):
+            raise ValueError(
+                "diversity_jitter ∈ [0, min(거절 1단, planb_rank_lift − rejection_demote_cap)) = "
+                f"[0, {jitter_bound}) — 넘으면 지터가 거절·PlanB 서열을 뒤집는다"
             )
 
 

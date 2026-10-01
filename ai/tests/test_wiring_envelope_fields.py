@@ -20,6 +20,7 @@ from __future__ import annotations
 import re
 from datetime import date, datetime, timedelta, timezone
 
+from trippilot.agents.schedule.budget import OrchestratorConfig
 from trippilot.api.wiring import _distance_ranges
 from trippilot.assembly_engine.config import AssemblyConfig
 from trippilot.assembly_engine.travel import TravelEstimator
@@ -240,8 +241,9 @@ def test_generate_slot_alternatives_from_pool_only_with_slot_based_distance() ->
     차선책은 풀 안 미배치 POI 뿐이고 동률 점수라 **슬롯 POI 에 가까운 순**(p3, p4). 거리 문자열은
     **슬롯 POI 기준**이다 — p2 의 p3 은 "약 0.9km"(앵커·직전 슬롯 p1 기준이면 "약 1.8km"라 갈린다).
     (기본 창 09–21 이면 6건이 전부 배치돼 차선책이 0건 — 그 상태의 단언은 아무것도 증명하지 않는다.)
+    지터 0 — 동률 전제라 결정론 지터(TRIP-1180)가 켜지면 배치가 해시 값에 달린다.
     """
-    with make_client() as client:
+    with make_client(orchestrator_config=OrchestratorConfig(diversity_jitter=0.0)) as client:
         response = client.post(
             "/ai/v1/itinerary/generate", json=_request(window=("09:00", "12:00")))
 
