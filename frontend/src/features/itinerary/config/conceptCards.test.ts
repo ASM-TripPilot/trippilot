@@ -6,24 +6,10 @@
 // 무엇을 보장하나:
 //  - G1: CONCEPT_DESCRIPTIONS 5키 = TRIP-1043 중립 문구(완전일치, QA #041 결정 1a).
 //  - G2: 설명 문구에 INV-3 소요시간(분/시간/소요) 0 + 탐지기 자가검사.
-//  - G3: ConceptPickerScreen.tsx 가 config 를 import(긍정) ∧ 설명 문자열을 인라인 리터럴로 0건(부정)
-//        — "화면 하드코딩 금지"를 소스로 기계 강제(값이 화면에 직접 박히면 red).
+//  - (TRIP-1150) 옛 G3 "화면 소스에 설명 리터럴 0" 스캔은 지웠다 — 회귀 감시 소스 스캔은 두지 않는다
+//    (README 판정 3 · TRIP-1145). 설명 문구가 화면에 실제로 뜨는지는 `ConceptPickerScreen.test.tsx` AC-4 가 렌더로 본다.
 //  - G4: 설명 문구가 개인화를 주장하지 않는다('취향'·'잘 맞아요' 0) — 받칠 데이터가 없다(INV-1 취지).
-import fs from 'fs';
-import path from 'path';
-
 import { CONCEPT_DESCRIPTIONS } from './conceptCards';
-
-const SCREEN = path.resolve(
-  'src/features/itinerary/ui/ConceptPickerScreen.tsx'
-);
-
-// 주석을 걷는다(블록 먼저). 줄 주석 바로 앞이 ':' 이면 URL 슬래시라 주석으로 안 본다(리포 규약).
-function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(^|[^:])\/\/.*$/gm, '$1');
-}
 
 const DURATION_TEXT = /(\d+\s*분|\d+\s*시간|소요)/;
 
@@ -49,21 +35,6 @@ describe('🔴 G2 · INV-3 — 설명 문구에 소요시간 0', () => {
       .filter(([, value]) => DURATION_TEXT.test(value))
       .map(([key]) => key);
     expect(offenders).toEqual([]);
-  });
-});
-
-describe('🔴 G3 · 화면 하드코딩 금지 — 설명은 config 에서만 온다', () => {
-  it('ConceptPickerScreen 이 config 를 import(긍정) ∧ 설명 문자열 인라인 0(부정)', () => {
-    const source = stripComments(fs.readFileSync(SCREEN, 'utf8'));
-
-    // 긍정 짝 — 화면이 config/conceptCards 를 실제로 문다(빈 파일·미배선 공허 통과 방지).
-    expect(source).toContain('config/conceptCards');
-
-    // 부정 — 설명 5문구가 화면 소스에 리터럴로 박혀 있으면 안 된다(하드코딩 금지).
-    const inlined = Object.values(CONCEPT_DESCRIPTIONS).filter((value) =>
-      source.includes(value)
-    );
-    expect(inlined).toEqual([]);
   });
 });
 

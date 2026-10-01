@@ -19,7 +19,7 @@ import { ManualPlanPage } from './ManualPlanPage';
  *    그 콜백이 하는 재조회(`invalidateQueries`)다.
  *  - POST 실패·기존 초안으로 건너뜀·조회 로딩 중 보류에도 0회(원래부터).
  *
- * `GeneratingPage.push.integration.test.tsx` 와 대칭이다(같은 루틴, 같은 뮤테이션 목 모양).
+ * `GeneratingPage.hookMock.test.tsx` 「생성 중 알림 권한을 묻지 않는다」 와 대칭이다(같은 루틴, 같은 뮤테이션 목 모양).
  *
  * 3동작 뼈대: 준비=GET 상태·POST 결과 → 실행=페이지 렌더 → 단언=루틴 호출 횟수.
  */

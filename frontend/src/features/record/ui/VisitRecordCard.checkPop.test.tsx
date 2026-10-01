@@ -8,7 +8,7 @@ import { VisitRecordCard } from './VisitRecordCard';
  * TRIP-1125 · j01 방문 완료 체크 등장(AC-14·AC-15) — 같은 `visitCheckId` 카드가 진행 중 → 완료로
  * **바뀌는 순간만** 체크가 한 번 나타난다. 리스트 key 가 visitCheckId 라 완료 때 카드는 재마운트되지
  * 않는다(낙관 완료) — 그래서 재렌더로 전이를 흉내 낸다.
- * 측정 기법은 `features/itinerary/ui/GeneratingScreen.pulse.test.tsx` 와 같다(JS 드라이버 강제 + 가짜 타이머).
+ * 측정 기법은 `GeneratingScreen.test.tsx` 「단계 펄스」 describe 와 같다(JS 드라이버 강제 + 가짜 타이머).
  *
  * 하트와 달리 "누른 뒤에만"을 묻지 않는다 — 진행 중 → 완료로 가는 길은 사용자의 [완료] 하나뿐이다.
  */

@@ -10,10 +10,15 @@ import type {
   ItineraryDaysItem,
   ItineraryDaysItemSlotsItem,
 } from '@/shared/api/generated/schemas';
-
-import type { DraftDayTab, DraftPin, DraftView } from '../model/draftView';
+import type {
+  DraftDayTab,
+  DraftPin,
+  DraftView,
+} from '@/features/itinerary/model/draftView';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
-import { timeBandLabel } from '../model/timeBandLabel';
+import { timeBandLabel } from '@/features/itinerary/model/timeBandLabel';
+import { CheckCircleGlyph } from '@/features/itinerary/ui/ItineraryGlyphs';
+
 import { DraftScreen } from './DraftScreen';
 
 /**
@@ -34,6 +39,9 @@ import { DraftScreen } from './DraftScreen';
  * "그 요소"를 정확히 집어 오는 손잡이다.
  *
  * 3동작 뼈대: 준비=`view`·`tabs`·`pins` 를 만들어 렌더 → 실행=누른다 → 단언=보이는 것·불린 콜백.
+ *
+ * 한 파일로 합친 기록(TRIP-1150): 옛 `.candidate`(슬롯 교체 표면)·`.headerAndIcon`(남는 얼굴 헤더)을
+ * 바깥 describe 로 붙였다. 지도 목은 셋 다 같은 관찰 마커라 최상위 하나다.
  */
 
 // 지도를 관찰 마커로 바꾼다. 실물 `KakaoMapView` 는 JS 키가 없는 jest 환경에서 무조건
@@ -673,5 +681,295 @@ describe('🔴 C18 · TRIP-466 AC-a1 — canRetry=false(CONFIRMED) 면 완성 CT
 
     fireEvent.press(screen.getByTestId('itinerary-draft-complete'));
     expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+});
+
+// TRIP-467·TRIP-483 · 옛 DraftScreen.candidate.test.tsx
+describe('슬롯 교체 표면', () => {
+  /**
+   * h11 초안 화면의 **슬롯 교체 표면 계약**.
+   *  - SC1~3(TRIP-467, 계승): 비고정 슬롯 "다른 후보 ›" 트리거 → `onPressSlot(slotKey)`.
+   *  - SC5~6(TRIP-483): 하단 manual 어포던스 2개 · reason 부제.
+   *  - (SC4 삭제 · TRIP-983) "패널은 expandedSlotKey 와 일치하는 카드 아래"는 인라인 시절 계약이다.
+   *    교체 시트는 이제 `DraftPage` 가 화면 루트 형제로 마운트하고(스크롤 밖·목록 뒤 — 심판은
+   *    `DraftPage.integration.test.tsx` 「다른 후보 시트 배선」 F1·F2), 이 화면은 트리거 콜백만 부른다.
+   *
+   * (TRIP-1150 전엔 별도 additive 파일이었다 — 지금은 이 describe.)
+   *
+   * 무엇을 보장하나(TRIP-483):
+   *  - 🔴 **하단 「처음부터 직접」·우상단 「직접 고르기」 → onManualPlan**(AC-4). 미배선이면 둘 다 부재
+   *    (gated 짝 — 死버튼 회피).
+   *  - 🔴 **reason 부제 1줄**(AC-5).
+   *
+   * 3동작 뼈대: 준비=view/prop 을 만들어 렌더 → 실행=press/렌더 → 단언=콜백·요소.
+   */
+
+  const DAY1 = '2026-06-10';
+
+  function slot(
+    over: Partial<ItineraryDaysItemSlotsItem> & { poiId: string }
+  ): ItineraryDaysItemSlotsItem {
+    return {
+      startAt: '09:30:00',
+      endAt: '11:00:00',
+      isFixed: false,
+      endsNextDay: false,
+      hasViolation: false,
+      alternatives: [],
+      tags: [],
+      ...over,
+    };
+  }
+
+  /** 고정 블록(숙소 앵커) — 트리거가 없어야 하는 슬롯. */
+  const FIXED = slot({
+    poiId: 'poi-fixed',
+    startAt: '21:00:00',
+    isFixed: true,
+    nameKo: '제주 신라스테이',
+  });
+  /** 비고정 두 장 — 둘 다 트리거가 있어야 한다. 둘째(poi-b)를 눌러 slotKey 가 첫 슬롯으로
+   * 하드코딩되지 않았는지 잰다(★B). */
+  const NONFIXED_A = slot({
+    poiId: 'poi-a',
+    nameKo: '성산일출봉',
+    tags: ['바다'],
+  });
+  const NONFIXED_B = slot({
+    poiId: 'poi-b',
+    startAt: '12:30:00',
+    nameKo: '광안리',
+  });
+
+  const DAYS: ItineraryDaysItem[] = [
+    { date: DAY1, slots: [FIXED, NONFIXED_A, NONFIXED_B] },
+  ];
+  const TABS: DraftDayTab[] = [{ date: DAY1, dayNumber: 1, hasData: true }];
+
+  const onPressSlot = jest.fn();
+
+  function altId(poiId: string): string {
+    return `itinerary-draft-alt-${buildSlotKey(DAY1, poiId)}`;
+  }
+  function cardId(poiId: string): string {
+    return `itinerary-draft-slot-${buildSlotKey(DAY1, poiId)}`;
+  }
+
+  type Over = {
+    onPressSlot?: (slotKey: string) => void;
+    onManualPlan?: () => void;
+  };
+
+  function renderScreen(over: Over = { onPressSlot }) {
+    const view: DraftView = { kind: 'listed', days: DAYS, staleFailed: false };
+    return render(
+      <DraftScreen
+        view={view}
+        tabs={TABS}
+        selectedDate={DAY1}
+        pins={[]}
+        dayHeader="6월 10일 · 수"
+        canRetry
+        onSelectDay={jest.fn()}
+        onRetry={jest.fn()}
+        onBack={jest.fn()}
+        onComplete={jest.fn()}
+        onPressSlot={over.onPressSlot}
+        onManualPlan={over.onManualPlan}
+      />
+    );
+  }
+
+  beforeEach(() => {
+    onPressSlot.mockClear();
+  });
+
+  describe('🔴 SC1 · AC-1 — 비고정 카드 트리거를 누르면 그 slotKey 로 onPressSlot 이 불린다', () => {
+    it('비고정 두 장에 "다른 후보 ›" 가 뜨고, 둘째를 누르면 poi-b 의 slotKey 로 한 번 불린다', () => {
+      renderScreen();
+
+      expect(screen.getByTestId(altId('poi-a'))).toBeOnTheScreen();
+      expect(screen.getByTestId(altId('poi-b'))).toBeOnTheScreen();
+      expect(screen.getAllByText('다른 후보 ›')).toHaveLength(2);
+
+      fireEvent.press(screen.getByTestId(altId('poi-b')));
+
+      expect(onPressSlot).toHaveBeenCalledTimes(1);
+      expect(onPressSlot).toHaveBeenCalledWith(buildSlotKey(DAY1, 'poi-b'));
+    });
+  });
+
+  describe('🔴 SC2 · AC-2 — 고정 슬롯에는 트리거가 없다 (회귀 트립와이어)', () => {
+    it('고정 카드엔 "다른 후보" 트리거가 부재하고, 비고정 카드엔 존재한다', () => {
+      renderScreen();
+
+      expect(screen.queryByTestId(altId('poi-fixed'))).toBeNull();
+      expect(screen.getByTestId(altId('poi-a'))).toBeOnTheScreen();
+    });
+  });
+
+  describe('SC3 · AC-후방호환 — onPressSlot 미배선이면 트리거가 아예 없다 (안전판 · 선제 green)', () => {
+    it('onPressSlot 없이 렌더하면 어느 카드에도 트리거가 없다 (카드는 그대로)', () => {
+      renderScreen({ onPressSlot: undefined });
+
+      expect(screen.queryByTestId(altId('poi-a'))).toBeNull();
+      expect(screen.queryByTestId(altId('poi-b'))).toBeNull();
+      expect(screen.getByTestId(cardId('poi-a'))).toBeOnTheScreen();
+    });
+  });
+
+  describe('🔴 SC5 · AC-4 — 「처음부터 직접」·「직접 고르기」 → onManualPlan (gated)', () => {
+    it('두 어포던스가 뜨고 각각 누르면 onManualPlan 이 불린다', () => {
+      const onManualPlan = jest.fn();
+      renderScreen({ onPressSlot, onManualPlan });
+
+      const bottom = screen.getByTestId('itinerary-draft-manual');
+      const topLink = screen.getByTestId('itinerary-draft-pick-manual');
+      expect(bottom).toBeOnTheScreen();
+      expect(topLink).toBeOnTheScreen();
+      expect(screen.getByText('처음부터 직접')).toBeOnTheScreen();
+      expect(screen.getByText('직접 고르기')).toBeOnTheScreen();
+
+      fireEvent.press(bottom);
+      fireEvent.press(topLink);
+      expect(onManualPlan).toHaveBeenCalledTimes(2);
+    });
+
+    it('onManualPlan 미배선이면 두 어포던스가 아예 없다 (gated 짝 · 死버튼 회피)', () => {
+      renderScreen({ onPressSlot, onManualPlan: undefined });
+
+      expect(screen.queryByTestId('itinerary-draft-manual')).toBeNull();
+      expect(screen.queryByTestId('itinerary-draft-pick-manual')).toBeNull();
+    });
+  });
+
+  describe('🔴 SC6 · AC-5 — reason 블록에 부제 1줄(정적)', () => {
+    it('listed(非생성중) 얼굴에 부제가 정확한 문구로 뜬다 (TRIP-1039 D3 — 「슬롯」 없는 문구)', () => {
+      renderScreen();
+
+      const subtitle = screen.getByTestId('itinerary-draft-reason-subtitle');
+      // leaf 가 이 문장뿐이라 문자열 완전일치(RNTL toHaveTextContent 기본 exact, 02a §1-B 실측).
+      expect(subtitle).toHaveTextContent(
+        '장소 하나만 다른 후보로 바꿀 수도 있어요'
+      );
+    });
+  });
+});
+
+// TRIP-1039 · 옛 DraftScreen.headerAndIcon.test.tsx
+describe('남는 얼굴 헤더·안내 아이콘', () => {
+  /**
+   * TRIP-1039 · 셸로 옮긴 뒤 DraftScreen 에 **남는 얼굴**(loading·failed·empty)의 정리(QA #033).
+   *
+   * 무엇을 보장하나:
+   *  - 🔴 헤더 우상단 「직접 고르기」와 「다시 만들기」 사이에 구분자가 있어 두 버튼으로 읽힌다(AC-9).
+   *    「직접 고르기」가 없으면 구분자도 없다(짝).
+   *  - 🔴 폴백 목록의 안내 아이콘이 ✓(CheckCircleGlyph)가 아니다(AC-7).
+   *
+   * 구분자가 실제로 "둘로 읽히게" 보이는지는 6-b 육안 몫이다 — 여기선 트리 순서만 잰다.
+   *
+   * 3동작 뼈대: 준비=얼굴(view)·콜백을 골라 렌더 → 실행=렌더 → 단언=testID 순서·글리프 개수.
+   */
+
+  const DAY1 = '2026-06-10';
+  const TABS: DraftDayTab[] = [{ date: DAY1, dayNumber: 1, hasData: true }];
+  const DAYS: ItineraryDaysItem[] = [
+    {
+      date: DAY1,
+      slots: [
+        {
+          poiId: 'poi-a',
+          startAt: '09:30:00',
+          endAt: '11:00:00',
+          isFixed: false,
+          endsNextDay: false,
+          hasViolation: false,
+          alternatives: [],
+          tags: [],
+          nameKo: '성산일출봉',
+        },
+      ],
+    },
+  ];
+
+  function renderScreen(over: {
+    view: DraftView;
+    onManualPlan?: () => void;
+    fallback?: boolean;
+  }) {
+    return render(
+      <DraftScreen
+        view={over.view}
+        tabs={TABS}
+        selectedDate={DAY1}
+        pins={[]}
+        dayHeader="6월 10일 · 수"
+        canRetry
+        onSelectDay={jest.fn()}
+        onRetry={jest.fn()}
+        onBack={jest.fn()}
+        onComplete={jest.fn()}
+        onManualPlan={over.onManualPlan}
+        fallback={over.fallback}
+      />
+    );
+  }
+
+  const REMAINING_FACES: { name: string; view: DraftView }[] = [
+    { name: 'loading', view: { kind: 'loading' } as DraftView },
+    { name: 'failed', view: { kind: 'failed' } as DraftView },
+    { name: 'empty', view: { kind: 'empty' } as DraftView },
+  ];
+
+  describe('🔴 H1 · AC-9 — 헤더 두 텍스트 버튼 사이에 구분자가 있다 (QA #033)', () => {
+    it.each(REMAINING_FACES)(
+      '$name 얼굴 — 직접 고르기 · 구분자 · 다시 만들기 순서다',
+      ({ view }) => {
+        renderScreen({ view, onManualPlan: jest.fn() });
+
+        // getAllByTestId 는 트리 전위 순서로 돌려준다(02a §5 실측) — 구분자가 둘 **사이**에 있어야 한다.
+        const order = screen
+          .getAllByTestId(
+            /^itinerary-draft-(pick-manual|header-divider|retry)$/
+          )
+          .map((node) => String(node.props.testID));
+
+        expect(order).toEqual([
+          'itinerary-draft-pick-manual',
+          'itinerary-draft-header-divider',
+          'itinerary-draft-retry',
+        ]);
+      }
+    );
+  });
+
+  describe('H2 · AC-9 짝 — 「직접 고르기」가 없으면 구분자도 없다 (선제 green · 무조건 구분자 구현 차단)', () => {
+    it('onManualPlan 미배선이면 다시 만들기만 있고 구분자는 없다', () => {
+      renderScreen({ view: { kind: 'empty' } as DraftView });
+
+      expect(screen.getByTestId('itinerary-draft-retry')).toBeOnTheScreen();
+      expect(screen.queryByTestId('itinerary-draft-header-divider')).toBeNull();
+    });
+  });
+
+  describe('🔴 I1 · AC-7 — 폴백 안내 아이콘은 ✓ 가 아니다 (QA #033)', () => {
+    it.each([
+      ...REMAINING_FACES.filter((face) => face.name !== 'loading'),
+      {
+        name: 'listed',
+        view: { kind: 'listed', days: DAYS, staleFailed: false } as DraftView,
+      },
+    ])(
+      '$name 얼굴 + fallback — 안내 제목은 기본 일정 결이고 CheckCircleGlyph 는 0개다',
+      ({ view }) => {
+        renderScreen({ view, fallback: true });
+
+        // 긍정 앵커 — 폴백 안내가 실제로 그려졌다(빈 화면 공허 통과 방지).
+        expect(
+          screen.getByTestId('itinerary-draft-reason-title')
+        ).toHaveTextContent('취향 반영 없이 만든 기본 일정이에요');
+        expect(screen.UNSAFE_queryAllByType(CheckCircleGlyph)).toHaveLength(0);
+      }
+    );
   });
 });

@@ -1,314 +1,284 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { useState, type ReactNode } from 'react';
+import { delay, http, HttpResponse } from 'msw';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react-native';
 
-import type { Itinerary } from '@/shared/api/generated/schemas';
+import { server } from '@/mocks/server';
+import { useGetTripsTripIdItinerary } from '@/shared/api/generated/trips/trips';
+import { retryUnlessNotFound } from '@/shared/api/isNotFound';
+import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 
 import { ItineraryMethodPage } from './ItineraryMethodPage';
 
 /**
- * TRIP-303 → **TRIP-305 재작성**(게이트① 동결분 개봉 — 새 사이클이라 정당, `[[배선 이음매]]`).
- *
- * 무엇이 바뀌었나: 생성 POST 소유가 **h04→h09 로 이동**했다(TRIP-305 AC-7·⚑B). h04 는 완전AI 를
- * 고르면 **navigate 만** 하고 생성 POST·draft 라우팅은 h09 가 소유한다 — 그래서 옛 "완전AI→
- * POST+draft" · "POST 실패/중복제출" describe 는 삭제돼 h09 의 `GeneratingPage.integration.test.tsx`
- * (AC-6)로 이관됐다. **TRIP-454 로 그 navigate 목적지가 h09 직행 → h05(필수 방문지) 편입으로
- * 바뀌었다**(h05 CTA 가 h09 로 잇는다 · 아래 첫 describe).
+ * TRIP-986 #063 · BR-U3-18 — 일정이 없는 새 여행(GET itinerary 404)에서 "AI와 같이 짜기"를 눌러도
+ * 교체 경고("기존 일정을 새로 만들어요")가 뜨지 않는다.
  *
  * 무엇을 보장하나:
- *  - 3방식 카드가 Figma 문구 그대로 뜬다(TRIP-784: 서브카피·하단안내 교체 + 추천 배지 제거).
- *  - 🔴 완전AI 를 누르면 **h05(필수 방문지)로 navigate 하고 h04 에서는 POST 가 한 건도 안 나간다**
- *    (TRIP-454 로 h09 직행 → h05 편입 재작성 · 생성 POST 는 여전히 h09 가 소유).
- *  - 🔴 직접 짜기(manual)를 누르면 **h19(빈 일정)로 navigate 하고 POST 는 h04 에서 0**이다(TRIP-460
- *    개통 — MANUAL POST 는 h19 소유). 준비 중 게이트는 더는 안 뜬다.
- *  - 🔴 copick(AI와 같이 짜기)을 누르면 **CO_PLAN 씨앗(생성 중 화면)으로 navigate 하고 준비 중이 안
- *    뜨며 POST 는 h04 에서 0**이다(TRIP-462 개통 — 씨앗은 h09 GeneratingPage 를 CO_PLAN 으로 재사용,
- *    생성 POST 는 씨앗 화면이 소유. 구 "준비 중만 낸다"에서 재작성, 새 사이클이라 정당).
+ *  - 🔴 D1a 첫 404 응답이 온 직후 copick 를 누르면 확인 없이 필수 방문지(CO_PLAN)로 간다.
+ *  - 🔴 D1b 404 는 다시 묻지 않는다 — 요청은 1회로 끝난다(재시도 동안의 '모름' 창이 없다).
+ *  - 🟢 D2a 첫 응답 전(요청 진행 중)엔 여전히 확인이 뜬다(TRIP-504 경고-2 fail-safe 유지).
+ *  - 🟢 D2b 404 가 아닌 오류(500)는 기본 재시도 3회를 그대로 한다("404 만" 끈다).
  *
- * 3동작 뼈대: 준비=POST·라우터 목 → 실행=렌더하거나 카드를 누른다 → 단언=보이는 것·나간 요청·이동.
+ * 왜 이렇게 테스트하나: 이 결함은 react-query 의 **기본 재시도** 위에서만 생긴다. 404 를 재시도하는
+ * 동안(1초·2초·4초 대기) `isPending` 이 true 로 남아 "아직 모르니 경고"가 7초간 켜진다. 리포 통합
+ * 테스트 관례(`retry:false`)나 훅 목(`ItineraryMethodPage.hookMock.test.tsx`)은 404 를 즉시 오류로
+ * 떨어뜨려 이 창을 원리적으로 못 만든다. 그래서 실 훅 + MSW + 운영과 같은 재시도 기본값을 쓴다.
+ *
+ * *(개념)* react-query 는 `retry` 를 안 주면 브라우저·앱 환경(`window` 있음)에서 3회, 서버 환경에서
+ *   0회 재시도한다. jest-expo 에는 `window` 가 있어 운영과 같은 3회가 된다(02a §5 실측).
+ *
+ * (TRIP-1150) 옛 이름 `ItineraryMethodPage.retry404.integration.test.tsx` — 내용은 그대로, 이 page 의 실 훅 + MSW
+ * 통합 파일 이름을 받았다(훅 목 관점은 node 버킷 `ItineraryMethodPage.hookMock.test.tsx`).
  */
 
-// jest.mock 팩토리는 파일 최상단으로 호이스팅돼 바깥 변수를 못 본다 — 이름이 `mock` 으로 시작하는
-// 변수만 예외다(리포 확립 규칙). 이 이름을 바꾸지 마라.
-// `mockMutate` 는 이제 **"h04 에서 POST 가 안 나간다"를 잰다** — h04 가 POST 를 되살리면 red.
-const mockMutate = jest.fn();
-const mockPush = jest.fn();
-// h04 는 이제 기존 일정 유무를 조회한다(TRIP-504) — 이 변수로 "있음/없음"을 통제한다.
-// undefined = 기존 일정 없음(조회 404). days 있는 값 = 기존 일정 있음(재생성 경고 대상).
-// `mock` 접두라 호이스팅된 팩토리가 참조할 수 있다(호출 시점에 클로저로 현재 값을 읽는다).
-let mockItineraryData: Itinerary | undefined;
-// h04 가 이제 조회 로딩 상태도 본다(TRIP-504 경고-2) — 이 변수로 "GET 인플라이트"를 통제한다.
-// true = 아직 로딩 중(data 미도착, isPending). 기본 false 라 기존 케이스 거동은 그대로다.
-let mockItineraryPending = false;
-
-jest.mock('@/shared/api/generated/trips/trips', () => ({
-  usePostTripsTripIdItinerary: () => ({
-    mutate: mockMutate,
-    isPending: false,
-    isError: false,
+jest.mock('@/shared/storage', () => ({
+  saveTokens: jest.fn().mockResolvedValue(undefined),
+  getTokens: jest.fn().mockResolvedValue({
+    accessToken: 'old-access',
+    refreshToken: 'old-refresh',
   }),
-  useGetTripsTripIdItinerary: () => ({
-    data: mockItineraryData,
-    isPending: mockItineraryPending,
-    // 로딩 중(pending)엔 오류가 아니다 — pending 이 아닐 때만 data 부재를 404 오류로 본다.
-    // mockItineraryPending 기본 false 라 기존 케이스는 `mockItineraryData === undefined` 그대로.
-    isError: !mockItineraryPending && mockItineraryData === undefined,
-  }),
+  clearTokens: jest.fn().mockResolvedValue(undefined),
+  hasStoredToken: jest.fn().mockResolvedValue(true),
 }));
+
+const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, back: jest.fn(), replace: jest.fn() }),
-  router: { push: mockPush, back: jest.fn(), replace: jest.fn() },
 }));
 
-const TRIP_ID = 't1';
+const BASE = 'http://localhost:8080/api/v1';
+const TRIP_ID = '22222222-2222-2222-2222-222222222222';
 
-/** 기존 일정(days 있음)을 세팅한다 — 재생성 경고가 떠야 하는 조건(AC-1). */
-function withExistingItinerary(): void {
-  mockItineraryData = {
-    itineraryId: 'itin-x',
-    tripId: TRIP_ID,
-    status: 'PLANNED',
-    solveMode: 'FULL_AI',
-    generationMode: 'FULLY_AI',
-    generationState: 'COMPLETE',
-    isFallback: false,
-    days: [
-      {
-        date: '2026-06-10',
-        slots: [
-          {
-            poiId: 'a',
-            startAt: '09:00:00',
-            endAt: '10:00:00',
-            isFixed: false,
-            endsNextDay: false,
-            hasViolation: false,
-            alternatives: [],
-            tags: [],
-          },
-        ],
-      },
-    ],
-  };
+/** GET itinerary 요청 횟수 — 재시도 여부를 요청 수로 본다. */
+let hits = 0;
+
+let client: QueryClient;
+let unmount: (() => void) | undefined;
+
+/**
+ * 라이브러리 기본 재시도(3회) 클라이언트. `retry` 를 적지 않는다(★D-1) — D1·D2 는 **페이지 자신의**
+ * 404 무재시도를 잰다(전역 기본값이 없어도 페이지 혼자 막는가). 앱 전역 기본값은 D3 의 `appLikeClient`.
+ * `gcTime: 0` — 기본 5분 타이머가 테스트 뒤에도 프로세스를 붙잡지 않게(쿼리·뮤테이션 둘 다, ★D-5).
+ */
+function productionLikeClient(extra: { retryDelay?: number } = {}) {
+  return new QueryClient({
+    defaultOptions: {
+      queries: { gcTime: 0, ...extra },
+      mutations: { gcTime: 0 },
+    },
+  });
 }
+
+function renderPage(queryClient: QueryClient) {
+  client = queryClient;
+  function Wrapper({ children }: { children: ReactNode }) {
+    return (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+  }
+  const view = render(<ItineraryMethodPage tripId={TRIP_ID} />, {
+    wrapper: Wrapper,
+  });
+  unmount = view.unmount;
+}
+
+function respondItinerary(status: 404 | 500 | 'never') {
+  server.use(
+    http.get(`${BASE}/trips/:tripId/itinerary`, async () => {
+      hits += 1;
+      if (status === 'never') await delay('infinite');
+      return new HttpResponse(null, {
+        status: status === 'never' ? 200 : status,
+      });
+    })
+  );
+}
+
+/** 실시계로 ms 만큼 흘린다 — 그 사이 react-query 알림(setTimeout 0)이 커밋된다(★D-3). */
+async function elapse(ms: number): Promise<void> {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  });
+}
+
+beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 
 beforeEach(() => {
-  mockMutate.mockClear();
+  hits = 0;
   mockPush.mockClear();
-  mockItineraryData = undefined; // 기본 = 기존 일정 없음.
-  mockItineraryPending = false; // 기본 = 조회 로딩 아님(도착 완료).
+  setAccessToken('valid-access');
 });
 
-function renderPage() {
-  return render(<ItineraryMethodPage tripId={TRIP_ID} />);
+afterEach(() => {
+  unmount?.();
+  unmount = undefined;
+  client.clear();
+  server.resetHandlers();
+  clearAccessToken();
+});
+
+afterAll(() => server.close());
+
+describe('🔴 D1 · 새 여행(GET itinerary 404) — 교체 경고가 뜨지 않는다 (#063 · BR-U3-18)', () => {
+  it('D1a 첫 404 응답 직후 "AI와 같이 짜기"를 누르면 확인 없이 필수 방문지(CO_PLAN)로 1회 간다', async () => {
+    // 준비 — 일정 조회는 404(일정 없음), 재시도 기본값 그대로.
+    respondItinerary(404);
+    renderPage(productionLikeClient());
+    await waitFor(() => expect(hits).toBe(1));
+    // 첫 재시도 대기(1초)보다 한참 짧게 흘린다 — 재시도 중이면 아직 '모름' 창 안이다.
+    await elapse(200);
+
+    // 실행
+    fireEvent.press(screen.getByTestId('itinerary-method-copick'));
+
+    // 단언 — 확인 없음 + 짝: 실제로 다음 화면으로 갔다(버튼이 안 눌린 공허 통과 차단, ★D-4).
+    expect(
+      screen.queryByTestId('itinerary-method-regenerate-confirm')
+    ).toBeNull();
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/itinerary/must-visits',
+      params: { tripId: TRIP_ID, mode: 'CO_PLAN' },
+    });
+  });
+
+  it('D1b 404 는 다시 묻지 않는다 — 첫 재시도 시각(1초)이 지나도 요청은 1회', async () => {
+    respondItinerary(404);
+    renderPage(productionLikeClient());
+    await waitFor(() => expect(hits).toBe(1));
+
+    await elapse(1300);
+
+    expect(hits).toBe(1);
+  });
+});
+
+describe('🟢 D2 · fail-safe 와 "404 만" 경계 (회귀 앵커)', () => {
+  it('D2a 첫 응답이 오기 전(요청 진행 중)에 누르면 확인이 뜨고 이동하지 않는다 (TRIP-504 경고-2)', async () => {
+    respondItinerary('never');
+    renderPage(productionLikeClient());
+    await waitFor(() => expect(hits).toBe(1));
+
+    fireEvent.press(screen.getByTestId('itinerary-method-copick'));
+
+    expect(
+      screen.getByTestId('itinerary-method-regenerate-confirm')
+    ).toBeOnTheScreen();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('D2b 404 가 아닌 오류(500)는 기본 재시도 3회를 그대로 한다 — 요청 4회 (★D-6)', async () => {
+    // 대기만 20ms 로 줄인다 — 여기선 "몇 번 묻는가"만 본다(★D-2: D1 에선 대기를 줄이면 안 된다).
+    respondItinerary(500);
+    renderPage(productionLikeClient({ retryDelay: 20 }));
+
+    await waitFor(() => expect(hits).toBe(4));
+    await elapse(100);
+
+    expect(hits).toBe(4);
+  });
+});
+
+// ── D3 · 같은 일정을 기본 옵션으로 조회하는 다른 화면이 함께 있을 때 (TRIP-986 5-c · 03b 경고-1) ──
+//
+// *(개념)* 관찰자(observer) — `useQuery` 를 부르는 컴포넌트 하나하나. 같은 키의 관찰자들은 요청 하나를
+//   공유하고, 재시도 규칙은 **그 요청을 시작한 관찰자**의 것이 박힌다. 그래서 방식 선택에만 404 무재시도를
+//   걸면, 홈·카드(기본 옵션)가 먼저 요청을 시작하거나(R1) 나중에 붙어 다시 요청하면(R2) 404 를 3번 다시
+//   물어 약 7초 동안 교체 경고가 뜬다. 처방은 앱 전역 기본값 — 아래 클라이언트가 그 앱 설정을 흉내 낸다.
+
+/** 앱(`app/_layout.tsx`)과 같은 전역 기본값 — 404 무재시도(`retryUnlessNotFound`). 대기는 기본(★D-2). */
+function appLikeClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: { gcTime: 0, retry: retryUnlessNotFound },
+      mutations: { gcTime: 0 },
+    },
+  });
 }
 
-describe('🔴 3방식 카드 렌더 + Figma 문구', () => {
-  it('세 카드가 각 제목·설명과 함께 뜨고 상·하단 안내가 있다', () => {
-    renderPage();
+/** 홈 `PlanningHome`·일정 탭 `TripCardContainer` 와 같은 모양의 관찰자 — 옵션 없이 같은 키를 조회한다. */
+function DefaultObserver() {
+  useGetTripsTripIdItinerary(TRIP_ID);
+  return null;
+}
 
-    // 카드 세 장 — testID 는 Pressable 루트에 있다.
-    expect(screen.getByTestId('itinerary-method-fullai')).toBeOnTheScreen();
-    expect(screen.getByTestId('itinerary-method-copick')).toBeOnTheScreen();
-    expect(screen.getByTestId('itinerary-method-manual')).toBeOnTheScreen();
+let mountObserver: () => void = () => {};
 
-    // 문구는 Figma 정본 — getByText 는 정확 전체 일치(각 문구가 독립 Text 노드).
-    expect(screen.getByText('완전 AI가 짜기')).toBeOnTheScreen();
-    expect(screen.getByText('취향·동선 맞춰 자동으로 완성')).toBeOnTheScreen();
-    expect(screen.getByText('AI와 같이 짜기')).toBeOnTheScreen();
-    expect(screen.getByText('AI 추천 위에서 골라가며 완성')).toBeOnTheScreen();
-    expect(screen.getByText('직접 짜기')).toBeOnTheScreen();
-    expect(
-      screen.getByText('빈 일정에 원하는 장소를 직접 추가')
-    ).toBeOnTheScreen();
+function WithOtherObserver({ observerFirst }: { observerFirst: boolean }) {
+  const [shown, setShown] = useState(observerFirst);
+  mountObserver = () => setShown(true);
+  return (
+    <>
+      {shown ? <DefaultObserver /> : null}
+      <ItineraryMethodPage tripId={TRIP_ID} />
+    </>
+  );
+}
 
-    // 상단 부제 + 하단 안내 — TRIP-784 Figma 문구로 교체(옛 문구는 부재 = 교체이지 병기 아님).
-    expect(screen.getByText('마음에 드는 방식을 골라주세요')).toBeOnTheScreen();
-    expect(
-      screen.queryByText('설정한 취향·거리는 세 방법 모두에 적용돼요')
-    ).toBeNull();
-    expect(
-      screen.getByText('어떤 방식이든 마지막엔 직접 고칠 수 있어요')
-    ).toBeOnTheScreen();
-    expect(
-      screen.queryByText('세 방법은 언제든 서로 전환할 수 있어요')
-    ).toBeNull();
-  });
-});
-
-// TRIP-784: '추천 배지는 copick 에만' describe 삭제 — Figma 에 없는 장식이라 배지 제거.
-// 배지 0개(testID·'추천' 텍스트 부재)의 회귀 심판은 co-located `MethodPickerScreen.test.tsx`
-// AC-4 로 이관됐다(같은 컴포넌트 트리를 직접 렌더).
-
-describe('🔴 완전AI → h05(필수 방문지)로 navigate, h04 POST 0 (TRIP-454 AC-1)', () => {
-  it('완전AI 를 누르면 must-visits 라우트로 이동하고(tripId 실림) POST 는 h04 에서 안 나간다', () => {
-    renderPage();
-
-    fireEvent.press(screen.getByTestId('itinerary-method-fullai'));
-
-    // 이동이 한 번 — 목적지 형태(문자열/객체)를 강요하지 않고 직렬화해 "어디로 갔나"만 잰다.
-    // 완전AI 는 이제 h05 로 가고, 거기서 CTA 가 h09 로 잇는다(브리프 part 1 · 02a AC-1).
-    expect(mockPush).toHaveBeenCalledTimes(1);
-    const destination = mockPush.mock.calls[0][0] as unknown;
-    const asText =
-      typeof destination === 'string'
-        ? destination
-        : JSON.stringify(destination);
-    expect(asText).toContain('must-visits');
-    expect(asText).toContain(TRIP_ID);
-    // ★ 완전AI 는 copick 신호(CO_PLAN)를 얻지 않는다 — copick 갈래와 가른다(TRIP-504).
-    expect(asText).not.toContain('CO_PLAN');
-
-    // ★ POST 는 h04 에서 한 건도 안 나간다 — 생성 발화는 여전히 h09 가 마운트 시 소유한다(무회귀).
-    expect(mockMutate).not.toHaveBeenCalled();
-  });
-});
-
-/* ── TRIP-504: copick 흐름 재배선(안 (가)) ────────────────────────────────────────
- *
- * 무엇이 바뀌었나(462 → 504): copick 은 이제 h09 생성으로 **직행하지 않는다** — h05(필수 방문지)로
- * `mode=CO_PLAN` 을 실어 navigate 하고(AC-4), 거기서 CTA 가 CO_PLAN generating 으로 잇는다(AC-5,
- * MustVisitListPage.integration). 그리고 h04 가 **기존 일정 유무를 조회**해, 있으면 재생성 확인을
- * 먼저 띄운다(AC-1/2/3, BR-U3-06/18 — 확인 없이 편집분을 덮어쓰지 않는다).
- *
- * 확인 표면은 **인라인**(트리 렌더, testID 잠금 가능)이어야 심판된다 — 바텀시트로 만들면 통과형
- * 목이라 jest 원리적 사각(repo-traps). testID: `itinerary-method-regenerate-confirm`
- * (+`-continue`/`-cancel`).
- * ──────────────────────────────────────────────────────────────────────────── */
-
-describe('🔴 M-R2 · AC-2·AC-4 — 기존 일정 없으면 확인 없이 copick 가 h05(mode=CO_PLAN)로', () => {
-  it('copick 을 누르면 재생성 확인 없이 must-visits 로 가고(CO_PLAN·tripId 실림, generating 직행 아님) POST 는 0', () => {
-    mockItineraryData = undefined; // 기존 일정 없음(조회 404).
-    renderPage();
-
-    fireEvent.press(screen.getByTestId('itinerary-method-copick'));
-
-    // ★ 확인 표면이 안 뜬다(기존 일정이 없어 덮어쓸 것이 없다).
-    expect(
-      screen.queryByTestId('itinerary-method-regenerate-confirm')
-    ).toBeNull();
-
-    // 이동 한 번 → h05. 목적지 형태를 강요하지 않고 직렬화해 값째 잰다.
-    expect(mockPush).toHaveBeenCalledTimes(1);
-    const destination = mockPush.mock.calls[0][0] as unknown;
-    const asText =
-      typeof destination === 'string'
-        ? destination
-        : JSON.stringify(destination);
-    expect(asText).toContain('must-visits');
-    // ★ mode=CO_PLAN 이 실려야 h05 가 copick 갈래로 이어간다(완전AI 와 가르는 신호, AC-4·AC-5 의존).
-    expect(asText).toContain('CO_PLAN');
-    // ★ h09 생성으로 직행하지 않는다 — generating 으로 보내면 h05 를 건너뛰어 흐름이 깨진다(AC-4).
-    expect(asText).not.toContain('generating');
-    expect(asText).toContain(TRIP_ID);
-
-    // 생성 POST 는 h04 에서 0(생성은 h09 소유).
-    expect(mockMutate).not.toHaveBeenCalled();
-  });
-});
-
-describe('🔴 M-R1 · AC-1 — 기존 일정 있으면 재생성 확인이 먼저 뜨고 진행이 0이다', () => {
-  it('copick 을 누르면 확인 표면이 등장하고 h05 push·생성 POST 가 둘 다 0이다(침묵 덮어쓰기 금지)', () => {
-    withExistingItinerary(); // days 있는 일정.
-    renderPage();
-
-    fireEvent.press(screen.getByTestId('itinerary-method-copick'));
-
-    // ★ 확인 표면 등장 — 인라인이라 렌더 트리에서 관찰된다.
-    expect(
-      screen.getByTestId('itinerary-method-regenerate-confirm')
-    ).toBeOnTheScreen();
-
-    // ★ 확인 전엔 아무 진행도 없다 — h05 push 0 · 생성 POST 0(BR-U3-18).
-    expect(mockPush).not.toHaveBeenCalled();
-    expect(mockMutate).not.toHaveBeenCalled();
-  });
-});
-
-describe('🔴 M-R3 · AC-3 — 확인 계속/취소', () => {
-  it('a · 확인의 "계속"을 눌러야 비로소 h05(CO_PLAN)로 간다', () => {
-    withExistingItinerary();
-    renderPage();
-
-    fireEvent.press(screen.getByTestId('itinerary-method-copick'));
-    // 아직 안 갔다.
-    expect(mockPush).not.toHaveBeenCalled();
-
-    fireEvent.press(
-      screen.getByTestId('itinerary-method-regenerate-confirm-continue')
+function renderWithOtherObserver(observerFirst: boolean): void {
+  client = appLikeClient();
+  const queryClient = client;
+  function Wrapper({ children }: { children: ReactNode }) {
+    return (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
-
-    // 그제야 h05 로, CO_PLAN 을 실어.
-    expect(mockPush).toHaveBeenCalledTimes(1);
-    const destination = mockPush.mock.calls[0][0] as unknown;
-    const asText =
-      typeof destination === 'string'
-        ? destination
-        : JSON.stringify(destination);
-    expect(asText).toContain('must-visits');
-    expect(asText).toContain('CO_PLAN');
-    expect(asText).toContain(TRIP_ID);
-    // 생성 POST 는 여전히 h04 에서 0(생성은 h09 소유).
-    expect(mockMutate).not.toHaveBeenCalled();
+  }
+  const view = render(<WithOtherObserver observerFirst={observerFirst} />, {
+    wrapper: Wrapper,
   });
+  unmount = view.unmount;
+}
 
-  it('b · 확인의 "취소"를 누르면 아무 데도 안 가고 확인이 닫힌다', () => {
-    withExistingItinerary();
-    renderPage();
-
-    fireEvent.press(screen.getByTestId('itinerary-method-copick'));
-    fireEvent.press(
-      screen.getByTestId('itinerary-method-regenerate-confirm-cancel')
-    );
-
-    // 머무름 — 이동 0 · 확인 표면 닫힘.
-    expect(mockPush).not.toHaveBeenCalled();
-    expect(
-      screen.queryByTestId('itinerary-method-regenerate-confirm')
-    ).toBeNull();
-    expect(mockMutate).not.toHaveBeenCalled();
+function expectCoPickWentThrough(): void {
+  expect(
+    screen.queryByTestId('itinerary-method-regenerate-confirm')
+  ).toBeNull();
+  expect(mockPush).toHaveBeenCalledTimes(1);
+  expect(mockPush).toHaveBeenCalledWith({
+    pathname: '/trips/[tripId]/itinerary/must-visits',
+    params: { tripId: TRIP_ID, mode: 'CO_PLAN' },
   });
-});
+}
 
-describe('🔴 직접 짜기 → h19(빈 일정)로 navigate, POST 0 (TRIP-460 개통)', () => {
-  it('manual 을 누르면 manual 라우트로 이동하고(tripId 실림) POST 는 h04 에서 안 나가며 준비 중이 안 뜬다', () => {
-    renderPage();
+describe('🔴 D3 · 앱 기본값 클라이언트 — 다른 화면이 같은 일정을 조회해도 404 뒤 교체 경고 없음 (03b 경고-1)', () => {
+  it('D3a (R1) 기본 옵션 관찰자가 먼저 요청을 시작해도, 첫 404 직후 copick 은 확인 없이 간다 · 404 재요청 없음', async () => {
+    // 준비 — 홈처럼 기본 옵션 관찰자를 방식 선택보다 먼저 둔다(요청을 시작하는 쪽이 그 관찰자).
+    respondItinerary(404);
+    renderWithOtherObserver(true);
+    await waitFor(() => expect(hits).toBe(1));
+    await elapse(200);
 
-    fireEvent.press(screen.getByTestId('itinerary-method-manual'));
-
-    // 이동이 한 번 — 목적지 형태를 강요하지 않고 직렬화해 "어디로 갔나"만 잰다(완전AI 케이스 동형).
-    // h19(빈 일정) manual 라우트로 갔고 tripId 를 실었다.
-    expect(mockPush).toHaveBeenCalledTimes(1);
-    const destination = mockPush.mock.calls[0][0] as unknown;
-    const asText =
-      typeof destination === 'string'
-        ? destination
-        : JSON.stringify(destination);
-    expect(asText).toContain('manual');
-    // ★ 형제 라우트 `manual/add`(h20)와 가른다 — h19(빈 일정)로 가야 MANUAL POST(빈 일정 생성)를
-    // 소유한다. `.../manual/add` 로 오배선하면 이 단언이 red(code-critic 경고-1 봉합).
-    expect(asText).not.toContain('add');
-    expect(asText).toContain(TRIP_ID);
-
-    // ★ 준비 중 게이트가 더는 안 뜬다(게이트 해제) + 생성 POST 는 h04 에서 0(MANUAL POST 는 h19 소유).
-    expect(screen.queryByTestId('itinerary-method-soon')).toBeNull();
-    expect(mockMutate).not.toHaveBeenCalled();
-  });
-});
-
-describe('🔴 M-R4 · 경고-2 — 일정 GET 로딩 중 copick press 는 침묵 진행하지 않는다 (BR-U3-18)', () => {
-  it('GET 인플라이트(isPending·data 미도착) 중 copick 을 누르면 확인 표면을 띄우고 push·POST 는 0이다', () => {
-    // 느린 망: h04 마운트 GET 이 아직 안 왔다 — 기존 일정 유무를 모른다.
-    mockItineraryPending = true;
-    mockItineraryData = undefined;
-    renderPage();
-
+    // 실행
     fireEvent.press(screen.getByTestId('itinerary-method-copick'));
 
-    // ★ fail-safe: 유무를 모르니 "덮어쓸 수 있다"고 보고 확인을 먼저 띄운다(로딩 창에서 접히면 안 된다).
-    expect(
-      screen.getByTestId('itinerary-method-regenerate-confirm')
-    ).toBeOnTheScreen();
-    // ★ 침묵 진행 0 — 확인 없이 h05 push 도, 생성 POST 도 안 나간다(로딩 창 침묵 덮어쓰기 봉합).
-    expect(mockPush).not.toHaveBeenCalled();
-    expect(mockMutate).not.toHaveBeenCalled();
+    // 단언 — 확인 없음 + 실제 이동(★D-4 짝).
+    expectCoPickWentThrough();
+    // 단언 — 첫 재시도 시각(1초)이 지나도 404 를 다시 묻지 않았다.
+    await elapse(1300);
+    expect(hits).toBe(1);
+  });
+
+  it('D3b (R2) 404 로 정착한 뒤 기본 옵션 관찰자가 새로 붙어 다시 조회해도, 그 직후 copick 은 확인 없이 간다', async () => {
+    // 준비 — 방식 선택 혼자 404 로 정착 → 다른 화면(기본 옵션) 마운트 → 그 화면이 다시 조회(2회째).
+    respondItinerary(404);
+    renderWithOtherObserver(false);
+    await waitFor(() => expect(hits).toBe(1));
+    await elapse(200);
+    act(() => mountObserver());
+    await waitFor(() => expect(hits).toBe(2));
+    await elapse(200);
+
+    // 실행
+    fireEvent.press(screen.getByTestId('itinerary-method-copick'));
+
+    // 단언
+    expectCoPickWentThrough();
   });
 });

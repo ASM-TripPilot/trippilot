@@ -7,7 +7,7 @@ import { HeartButton } from './HeartButton';
 /**
  * TRIP-1125 · 하트 담기 튐(AC-11~AC-13) — **이 버튼을 누른 뒤** 안 담김 → 담김으로 바뀌는 순간만 한 번
  * 튄다. 누름 1회가 튐 1회분이고, 누른 뒤 첫 `saved` 변화가 그 몫을 쓴다(담김이면 튐, 안 담김이면 소멸).
- * 측정 기법은 `features/itinerary/ui/GeneratingScreen.pulse.test.tsx` 와 같다(JS 드라이버 강제 + 가짜 타이머).
+ * 측정 기법은 `GeneratingScreen.test.tsx` 「단계 펄스」 describe 와 같다(JS 드라이버 강제 + 가짜 타이머).
  *
  * 처음부터 담긴 채 마운트·담기 취소(true→false)·동작 줄이기 켬·**누르지 않았는데 저장 목록이 늦게 도착**
  * (false→true)은 튀지 않는다 — 없으면 목록이 도착할 때마다 담긴 하트가 전부 튄다(5-b W3).

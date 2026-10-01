@@ -6,7 +6,8 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import type { DraftPin } from '../model/draftView';
+import type { DraftPin } from '@/features/itinerary/model/draftView';
+
 import { GenerationFallbackScreen } from './GenerationFallbackScreen';
 
 /**
@@ -16,7 +17,8 @@ import { GenerationFallbackScreen } from './GenerationFallbackScreen';
  *  - 🔴 성공(폴백) 변형: 앱바·진행표시·메시지 카피·체크리스트 4행·N·CTA 2개(AC-1~6). 메시지 본문은
  *    원인을 특정하지 않고 알림 약속 안내바는 없다(TRIP-1008 A1~A3 — 옛 AC-2 본문·AC-5 안내바 플립).
  *  - 🔴 실패(하드) 변형: 체크리스트 대신 실패 히어로 + CTA 갈림(AC-7). 성공/실패 상호배타(AC-8).
- *  - 🔴 화면 전체에 소요시간 표기 0건(AC-9 · INV-3).
+ *  - (TRIP-1150) 옛 AC-9 "소요시간 표기 0건" 렌더 스캔은 지웠다 — 이 화면엔 시간·거리 재료가 없다
+ *    (README 판정 4 INV-3 하위 규칙). S0 의 소요시간 탐지기 자가검사도 짝이라 함께 걷었다.
  *  - 초록 체크·회색 대시 마커의 **색은 심판하지 않는다**(글리프 raw-hex 사각 · 02a ★4) — 마커
  *    testID 존재·개수·회색 행 텍스트까지만. 색 회귀는 6-b 프리뷰 육안 전용.
  *
@@ -27,10 +29,6 @@ import { GenerationFallbackScreen } from './GenerationFallbackScreen';
 // 인라인 팩토리는 NativeWind babel 호이스트 규칙에 걸리므로 모듈을 require 한다(리포 선례와 동형).
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
-
-/** 소요시간 표기 탐지기(297 C7 계열). `HH:mm` 은 뒤가 `:` 라 안 걸리고, `N곳`·`4 / 4` 는 뒤가
- * 분/시간/소요가 아니라 안 걸린다 — S0 이 실 문자열로 그 조합을 태운다(02a §5). */
-const DURATION_TEXT = /(\d+\s*분|\d+\s*시간|소요)/;
 
 /** 좌표 있는 핀 2개 — 성공 변형 지도 카드가 뜨는 조건(pins.length>0). */
 const PINS: DraftPin[] = [
@@ -63,21 +61,6 @@ function renderScreen(over: Overrides = {}) {
   );
 }
 
-/** 렌더된 텍스트 전부. 부정 스캔(INV-3)의 모집단이다 — 소스가 아니라 **보이는 글자**를 훑는다. */
-function renderedTexts(): string[] {
-  const out: string[] = [];
-  screen.root
-    .findAll(() => true)
-    .forEach((node) => {
-      const children = node.props?.children as unknown;
-      const list = Array.isArray(children) ? children : [children];
-      list.forEach((child) => {
-        if (typeof child === 'string') out.push(child);
-      });
-    });
-  return out;
-}
-
 beforeEach(() => {
   onViewPlan.mockClear();
   onManualPlan.mockClear();
@@ -85,19 +68,13 @@ beforeEach(() => {
   onBack.mockClear();
 });
 
-describe('S0 · 자가검사 — 이게 통과해야 아래 카피·INV-3 단언이 의미를 갖는다', () => {
-  it('문자열 인자는 완전일치이고, 소요시간 탐지기는 "N곳"·"4 / 4" 를 오검출하지 않는다', () => {
+describe('S0 · 자가검사 — 이게 통과해야 아래 카피 단언이 의미를 갖는다', () => {
+  it('문자열 인자는 완전일치다', () => {
     render(
       <View>
         <View testID="probe-copy">
           <Text>AI 추천은 </Text>
           <Text>잠시 쉬어요</Text>
-        </View>
-        <View testID="probe-count">
-          <Text>꼭 갈 곳 3곳 배치</Text>
-        </View>
-        <View testID="probe-dur">
-          <Text>예상 30분 소요</Text>
         </View>
       </View>
     );
@@ -111,15 +88,6 @@ describe('S0 · 자가검사 — 이게 통과해야 아래 카피·INV-3 단언
     expect(screen.getByTestId('probe-copy')).not.toHaveTextContent('AI 추천은');
     // 부분포함이 필요하면 정규식이다(matcher.test = substring).
     expect(screen.getByTestId('probe-copy')).toHaveTextContent(/추천은/);
-
-    // ② ★ 조합(전처리×탐지기) — 렌더 문자열에 탐지 대상이 살아남는지 실 문자열로 태운다.
-    //    `3곳`·`4 / 4` 는 소요시간이 아니고, `30분 소요` 는 소요시간이다. 오검출하면 어떤 올바른
-    //    구현도 통과 불가가 된다(02a §5).
-    expect(DURATION_TEXT.test('꼭 갈 곳 3곳 배치')).toBe(false);
-    expect(DURATION_TEXT.test('4 / 4')).toBe(false);
-    expect(DURATION_TEXT.test('예상 30분 소요')).toBe(true);
-    // 렌더 텍스트 수집기가 실제로 leaf 문자열을 모은다(모집단이 비면 아래 AC-9 가 공허하다).
-    expect(renderedTexts()).toContain('꼭 갈 곳 3곳 배치');
   });
 });
 
@@ -279,20 +247,6 @@ describe('🔴 AC-8 · 성공/실패 상호배타', () => {
     );
     // 짝 — 실패 히어로는 있다(전부 안 그리는 구현을 죽인다).
     expect(screen.getByTestId('itinerary-fallback-failed')).toBeOnTheScreen();
-  });
-});
-
-describe('🔴 AC-9 · INV-3 — 화면 어디에도 소요시간 표기가 없다', () => {
-  it.each([false, true])('failed=%s 렌더 텍스트에 소요시간 0건', (failed) => {
-    renderScreen({ failed });
-
-    // 긍정 앵커 — 아무것도 안 그리는 화면이 아래 부정 단언을 공짜로 통과하지 못하게.
-    expect(screen.getByTestId('itinerary-fallback-root')).toBeOnTheScreen();
-
-    // 소요시간(`소요`·`N분`·`N시간`)은 화면 어디에도 없다 — 렌더 텍스트 전수 스캔(S0 이 탐지기 검증).
-    expect(renderedTexts().filter((text) => DURATION_TEXT.test(text))).toEqual(
-      []
-    );
   });
 });
 

@@ -17,7 +17,7 @@ import type {
 
 /**
  * TRIP-338 · h19 배선 + TRIP-601 가드 a → TRIP-797 묶음 C 재조립 — 페이지→화면을 실제로 태우는 심판.
- * `GeneratingPage.integration.test.tsx`(FULLY_AI) 와 **대칭**이다.
+ * `GeneratingPage.hookMock.test.tsx`(FULLY_AI) 와 **대칭**이다.
  *
  * TRIP-797: 소비 화면만 옛 `ManualPlanScreen` → 순수 뷰 `EditorView` 로 바뀐다(h12 편집기 통일). MANUAL
  * POST 가드(firedRef·`days.length>0` 보존·로딩 보류)는 **배선 계약이라 그대로**고, 셸 루트만
