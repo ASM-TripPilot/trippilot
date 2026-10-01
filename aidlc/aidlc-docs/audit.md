@@ -1475,3 +1475,17 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: INCEPTION·CONSTRUCTION 승인 상태 **유지**(국소 추가). 코드 변경 0 — 구현은 PR #791 에서 이미 수행됐다.
 
 ---
+## Change Request — CONSTRUCTION 산출물 사후 개정 6회차 (여행 삭제 허용 범위 전 상태 확정 · US-TRIP-10 · TRIP-1061)
+**Timestamp**: 2026-10-01T23:30:00+09:00 (작업 시점, 초 단위 미측정)
+**User Input**: 사용자 결정 원문(2026-10-01 인터뷰) — 삭제 범위 질문에 "전 상태 허용 (현행 유지)" 선택, 복구 질문에 "없음 — 확인 다이얼로그만" 선택. 이후 기존 정본(2026-09-28 "작성중만")과의 충돌을 보고하고 A(9/28 정본 유지)·B(오늘 답대로 개정) 비교를 제시하자 — "B로 ㄱㄱ".
+**Current State**: CONSTRUCTION 설계 문서 단계(SCOPE.md 2026-07-17 개정). 2~5회차 사후 개정 이후. 서버 구현은 이미 전 상태 소프트 삭제(상태 가드 없음)이고, FE(TRIP-1055)는 작성중 카드에만 진입점을 노출한다.
+**Impact Assessment**: `workflow-changes.md` §4 **Low impact → Modify and update dependents**(전면 재실행 아님). 규칙의 층위를 재규정한다 — 서버 규칙(허용 범위=전 상태)과 FE 노출 정책(작성중 한정)을 분리. 코드 변경 0 — 현행 서버·FE 동작이 이미 개정 후 정본과 일치하므로 TRIP-1061 의 "상태 가드 추가" 작업이 소멸한다.
+**User Confirmation**: 명시 승인 — "B로 ㄱㄱ"(충돌 보고·비교 제시 후).
+**Action Taken**:
+- **`stories.md` US-TRIP-10** — 원문 보존, `[개정 · 2026-10-01]` 블록 추가: 허용 범위=전 상태(서버 규칙), 예외(생성 중·확정 이후) 문면은 화면 노출 정책으로 재해석, 복구 없음·확인 다이얼로그 유지, 9/28 미결 3점 해소(① ⋯ 숨김 채택 ② 전 상태 허용으로 자동 해소 ③ 404=이미 없음 채택), 딸린 데이터 정리는 PR #798(TripDeleted→알림 예약 비움·거점 live-trip 판정)로 해소.
+- **U1 `business-rules.md` BR-U1-57** — 원문 표 보존, 표 아래 개정 블록쿼트 추가(같은 취지 + "상태 가드·409 를 만들지 않는다" 명시). 직후의 9/28 미결 보류 블록은 원문대로 남긴다 — 개정 블록이 해소를 선언한다.
+- **U1 `domain-entities.md` INV-U1-20** — "작성중 여행에만 설정될 수 있다" → "어느 상태에서든 설정될 수 있다"로 개정(신설·개정 일자 병기, 개정 전 문면 인용 보존).
+**Artifacts Affected**: `inception/user-stories/stories.md` · `construction/u1-accommodation-trip/functional-design/business-rules.md` · `construction/u1-accommodation-trip/functional-design/domain-entities.md` · 이 `audit.md` append
+**Context**: INCEPTION·CONSTRUCTION 승인 상태 **유지**(국소 개정). TRIP-1061 은 이 개정으로 종결 — 서버 가드 신설 없이 현행 동작이 정본이 된다.
+
+---
