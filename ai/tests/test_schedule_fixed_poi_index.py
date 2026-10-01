@@ -209,7 +209,8 @@ def test_고정_블록_조회가_죽으면_강등을_남기고_블록을_보고�
     assert _travel_gaps_ok(body["days"]) == []
 
 
-def test_시한이_없으면_조회하지_않고_강등을_남긴다() -> None:
+def _run_agent(clock: FakeClock, poi_db: InMemoryPoi):
+    """실 ScheduleAgent + 기록 퍼사드 — C2 에 넘어간 문제를 본다. (outcome, sink, pool)."""
     from trippilot.agents.schedule.agent import ScheduleAgent, ScheduleTask
     from trippilot.agents.schedule.budget import OrchestratorConfig, allocate
     from trippilot.agents.schedule.outcome import candidates_report
@@ -222,21 +223,14 @@ def test_시한이_없으면_조회하지_않고_강등을_남긴다() -> None:
         _request as req,
     )
 
-    calls: list = []
-
-    class _Spy(InMemoryPoi):
-        def lookup_by_ids(self, ids):  # noqa: ANN001
-            calls.append(ids)
-            return super().lookup_by_ids(ids)
-
     trace, sink = InMemoryTrace(), _Sink()
     agent = ScheduleAgent(
         PreferenceScoringWorker(GatewayFacade(
             FailingLlm(), _Renderer(), ClosedSetGate(), _C1CFG, trace)),
         _AssemblyProvider(trace, sink, primary=True),
-        FakeClock(start_ms=19_000),  # 20s 중 19s 경과 — 남은 1s 는 어셈블리 바닥 몫
+        clock,
         trace,
-        poi_db=_Spy(_ALL),
+        poi_db=poi_db,
     )
     start = datetime(_DAY1.year, _DAY1.month, _DAY1.day, 9, 0, tzinfo=KST)
     request = req(fixed_blocks=(FixedBlock(
@@ -248,12 +242,63 @@ def test_시한이_없으면_조회하지_않고_강등을_남긴다() -> None:
         budget=allocate(20_000, OrchestratorConfig()), started_ms=0,
         trace_id=_TRACE_ID, now=_NOW,
     ))
+    return outcome, sink, pool
 
-    assert calls == []  # 어셈블리 바닥을 침범해 묻지 않는다
+
+class _SpyPoi(InMemoryPoi):
+    """id 조회를 기록하고, 원하면 조회 동안 시계를 태운다."""
+
+    def __init__(self, pois, clock: FakeClock | None = None, burn_ms: int = 0) -> None:
+        super().__init__(pois)
+        self.calls: list = []
+        self._clock, self._burn = clock, burn_ms
+
+    def lookup_by_ids(self, ids):  # noqa: ANN001
+        self.calls.append(ids)
+        if self._clock is not None:
+            self._clock.advance(self._burn)
+        return super().lookup_by_ids(ids)
+
+
+def test_시한이_없으면_조회하지_않고_강등을_남긴다() -> None:
+    spy = _SpyPoi(_ALL)
+    # 20s 중 19s 경과 — 남은 1s 는 어셈블리 바닥 몫
+    outcome, sink, _ = _run_agent(FakeClock(start_ms=19_000), spy)
+
+    assert spy.calls == []  # 어셈블리 바닥을 침범해 묻지 않는다
     assert any(d.stage == "fixed_poi" and d.reason.startswith("deadline")
                for d in outcome.degradations)
     assert outcome.solution is not None
     assert sink.problems[0].fixed_blocks == ()  # 모르는 블록을 0분 이동으로 끼우지 않는다
+
+
+def test_조회한_고정_POI_는_인덱스에만_들고_후보가_되지_않는다() -> None:
+    """INV-1 — 합류는 `poi_index` 뿐이다. 풀·후보에 넣으면 점수 대상이 되어 일정 순서가
+    바뀐다(리뷰 변이: 후보에 합류시켜도 기존 테스트가 전부 통과했다)."""
+    spy = _SpyPoi(_ALL)
+    outcome, sink, pool = _run_agent(FakeClock(), spy)
+
+    assert spy.calls  # 실제로 조회했다
+    problem = sink.problems[0]
+    assert [b.poi_id for b in problem.fixed_blocks] == [PoiId("far-lotte")]
+    candidate_ids = {c.poi_id for c in problem.candidates}
+    assert PoiId("far-lotte") not in candidate_ids
+    assert candidate_ids <= pool.poi_ids  # 후보는 풀에서 나온 것만
+    assert outcome.solution is not None
+    assert any(s.poi_id == PoiId("far-lotte")
+               for d in outcome.solution.days for s in d.slots)
+
+
+def test_조회가_남은_시한을_넘기면_결과는_쓰되_초과를_남긴다() -> None:
+    """포트는 시한을 받지 않는다 — 넘긴 사실을 관측으로 남긴다(침묵 금지, INV-4).
+    찾은 값은 정본에서 온 참값이라 버리지 않는다(버리면 필수방문이 빠진다)."""
+    clock = FakeClock()
+    spy = _SpyPoi(_ALL, clock=clock, burn_ms=19_900)
+    outcome, sink, _ = _run_agent(clock, spy)
+
+    assert any(d.stage == "fixed_poi" and d.reason.startswith("overrun")
+               for d in outcome.degradations), outcome.degradations
+    assert [b.poi_id for b in sink.problems[0].fixed_blocks] == [PoiId("far-lotte")]
 
 
 # ── ④ replan 잠금 블록이 풀 밖 ──────────────────────────────────────────
@@ -283,6 +328,67 @@ def test_replan_풀_밖_잠금_블록도_이동이_검증된다() -> None:
                              TransportMode.PUBLIC).internal_minutes
         gap = _minutes(nxt["start_at"]) - _minutes(prev["end_at"])
         assert gap >= need, (prev["poi_id"], nxt["poi_id"], need, gap)
+
+
+class _RaisingStatic:
+    """데모 시드 DB 인데 id 조회만 죽는다 — replan 잠금 블록 조회 실패 경로."""
+
+    def __new__(cls, seed):  # noqa: ANN001, ANN204
+        from trippilot.api.wiring import StaticPoiDb
+
+        class _Db(StaticPoiDb):
+            def lookup_by_ids(self, ids):  # noqa: ANN001
+                raise TimeoutError("poi lookup timed out")
+        return _Db(seed)
+
+
+@pytest.mark.parametrize("case", ["unregistered", "lookup_error"])
+def test_replan_잠금_블록을_못_찾으면_잠금_빠진_일정을_내지_않는다(case) -> None:
+    """잠금은 '못 건드리는 것' — 조회 miss 로 블록을 뺀 일정이 empty_reason 없이 나가면
+    BE 는 잠금이 사라진 하루를 깨끗한 결과로 읽는다. IO-7 대로 itinerary=null + 사유
+    (`_replan_fixed_blocks` 가 시각 없는 고정을 422 로 막는 것과 같은 이유, INV-4)."""
+    from tests.test_api_replan_wired import _DIRECTIVES, _post
+    from trippilot.api.wiring import build_dev_app, demo_poi_seed
+
+    seed = demo_poi_seed()
+    far = next(p for p in seed if p.name == "성산일출봉")
+    if case == "unregistered":
+        app, pid = build_dev_app(directives=_DIRECTIVES), "ghost-lock"
+    else:
+        app, pid = build_dev_app(directives=_DIRECTIVES,
+                                 poi_db=_RaisingStatic(seed)), str(far.poi_id)
+
+    response = _post(app, locked_blocks=[{
+        "poi_id": pid, "date": "2026-09-21", "start": "12:00", "dwell_min": 60}])
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["itinerary"] is None, body["notes"]
+    assert body["empty_reason"]["code"] == "NO_FEASIBLE_SLOT"
+    assert body["is_fallback"] is True
+    assert any(n.startswith("locked_block_unplaced:") and pid in n
+               for n in body["notes"]), body["notes"]
+
+
+# ── ④′ 풀 밖 고정 POI 에도 HC1 이 걸린다 — 풀 안과 같은 규칙 ─────────────
+
+
+@pytest.mark.parametrize("pid", ["far-lotte", "n1"])
+def test_영업시간_밖에_핀된_고정_블록은_풀_안팎_모두_409(pid) -> None:
+    """합류로 인덱스에 들어오면 HC1 도 본다. 풀 안 고정 블록(S6 남산케이블카)은 이미
+    409 였다 — 풀 밖만 영업시간을 지우면 반경에 따라 규칙이 갈린다. 핀 시각을 개장
+    이후로 미는 것은 BE 핀 수정 몫이다(mv_probe 'S')."""
+    from trippilot.domain.poi import OpenHour
+
+    hours = tuple(OpenHour(d, 10 * 60, 22 * 60) for d in range(7))
+    pois = tuple(replace(p, open_hours=hours) if str(p.poi_id) == pid else p
+                 for p in _ALL)
+    with _client(InMemoryPoi(pois)) as client:
+        response = client.post("/ai/v1/itinerary/generate",
+                               json=_request((_D1,), [_block(pid, _D1, "09:00")]))
+
+    assert response.status_code == 409, response.text
+    assert response.json()["error_code"] == "ASSEMBLY_CONFLICT"
 
 
 # ── ⑤ 체인 내부 검증 — 좌표 미상 인접 쌍은 위반 ───────────────────────

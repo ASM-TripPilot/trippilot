@@ -815,8 +815,9 @@ class ScheduleAgent:
         일정이 나가고 generate 는 `unplaced_must_visits`(NO_FEASIBLE_SLOT), replan 은
         notes 로 그 블록을 보고한다(침묵 드롭 아님).
 
-        포트는 시한을 받지 않는다 — 진입 전에 어셈블리 바닥을 침범하지 않는지만 본다
-        (_enrich_hours 와 같은 규율). 호출 자체의 상한은 어댑터의 HTTP 타임아웃이다.
+        포트는 시한을 받지 않는다 — 진입 전에 어셈블리 바닥을 침범하지 않는지 보고, 호출이
+        남은 시한을 넘겼으면 `overrun` 으로 남긴다(찾은 값은 정본이라 쓴다 — 버리면
+        필수방문이 빠진다). 호출 자체의 상한은 어댑터의 HTTP 타임아웃이다.
         """
         want = frozenset(b.poi_id for b in request.fixed_blocks) - pool.poi_ids
         if self._poi_db is None or not want:
@@ -828,6 +829,7 @@ class ScheduleAgent:
             self._degrade(steps, trace_id, now, "fixed_poi", "lookup", "(dropped)",
                           f"deadline:available={available}ms")
         else:
+            called = self._clock.monotonic_ms()
             try:  # 반환값 순회까지 try 안이다 (DL-5 — _enrich_hours 와 같은 규약)
                 lookup = self._poi_db.lookup_by_ids(want)
                 found = {p.poi_id: p for p in lookup.pois if p.poi_id in want}
@@ -843,6 +845,10 @@ class ScheduleAgent:
                         steps, trace_id, now, "fixed_poi", "lookup", "(dropped)",
                         "fixed_poi_unresolved: " + ",".join(
                             f"{pid}({why.get(pid, 'not_found')})" for pid in lost))
+            spent = self._clock.monotonic_ms() - called
+            if spent > available:
+                self._degrade(steps, trace_id, now, "fixed_poi", "lookup", "(kept)",
+                              f"overrun:spent={spent}ms>available={available}ms")
         kept = tuple(b for b in request.fixed_blocks
                      if b.poi_id not in want or b.poi_id in found)
         return kept, found
