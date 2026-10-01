@@ -813,7 +813,10 @@ _BOUNDARY_CATEGORIES = tuple(c for c in PoiCategory if c is not PoiCategory.STAY
 
 
 def test_candidates_summary_reports_pool_facts_low_level() -> None:
-    """풀 3건 전부 SIGHT → LOW + 나머지 7개 카테고리가 부족 목록에 실린다."""
+    """풀 3건 전부 SIGHT → LOW + 나머지 7개 카테고리가 부족 목록에 실린다.
+
+    LOW 근거(BR-U2-05 개정 2026-10-02): 3건 < 1일×5(풀 과소)이고 취향 NATURE 도 0건.
+    """
     orchestrator, _, _ = _build()
 
     outcome = orchestrator.generate(_request(), 20_000, _TRACE_ID, _NOW)

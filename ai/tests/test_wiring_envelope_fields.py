@@ -47,7 +47,12 @@ _DISTANCE_PATTERN = re.compile(r"^약 \d+\.\dkm · 대중교통 추정$")
 
 
 def test_generate_candidates_summary_reflects_pool_facts() -> None:
-    """e2e 풀 = p1..p6 전부 SIGHT → LOW · pool_size=6 · 나머지 7개 카테고리 부족."""
+    """e2e 풀 = p1..p6 전부 SIGHT · 취향 styles=["자연"] → NATURE 0건이라 LOW.
+
+    BR-U2-05 개정(2026-10-02): LOW 는 "취향 카테고리 0건 또는 풀 과소"일 때만이다 —
+    6건 ≥ 1일×5 라 과소는 아니고, 취향(자연)이 요구하는 NATURE 가 없어서 LOW 다.
+    shortfall 은 종전대로 풀에 없는 경계 카테고리 전부.
+    """
     with make_client() as client:
         response = client.post("/ai/v1/itinerary/generate", json=_request())
 

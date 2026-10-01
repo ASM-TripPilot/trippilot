@@ -82,6 +82,13 @@ CandidatesSummary { level: HIGH | MEDIUM | LOW, poolSize: Int, shortfallCategori
 
 > **소급 주석 (2026-08-11 · TRIP-298 [기록] · 근거: `backend/docs/design/openapi.yaml:1183-1195` 실측)**: 실제 구현 계약(`Itinerary.candidatesSummary.level`)은 위 `HIGH | MEDIUM | LOW` 열거로 **고정돼 있지 않다** — `openapi.yaml`은 `level: { type: string }`으로 열어 두고, "백엔드가 AI 값을 그대로 통과시키므로 `OK`·`LOW`·`NO_CANDIDATES` 같은 AI 어휘가 그대로 온다"고 명시한다. 루트 CLAUDE.md 정본 규칙상 구현 계약(`openapi.yaml`)이 이 문서의 열거 선언보다 우선한다. 프론트(`isCandidatesDemoted`, `src/features/itinerary/model/draftView.ts`)는 이 값을 enum으로 좁히지 않고 "조용할 값의 화이트리스트"(`['OK','HIGH']`)로 비교해, 이 문서가 열거하지 않은 미래 어휘도 자동으로 안전한 쪽(안내 노출)에 떨어지게 짜여 있다. 이 문서의 원 결정(BR-U2-05)이 틀렸다는 뜻은 아니다 — 구현 시점에 계약이 벌어졌다는 사실 기록이다.
 
+> **개정 주석 (2026-10-02 · 사용자 결정 · 근거: FE 오표기 실측)**: `LOW` 판정을 좁힌다. 종전 AI 구현(`ai/src/trippilot/agents/schedule/outcome.py` `candidates_report`)은 경계 카테고리 8종 중 **하나라도 풀에 0건이면 `LOW`** 였다. 실데이터 풀은 쇼핑·야경처럼 얇은 카테고리가 흔히 비어 거의 매 생성이 `LOW` 가 됐고, 프론트(`isCandidatesDemoted` → `resolveFallbackNotice`)는 이를 "AI 추천은 잠시 쉬어요 / 취향 반영(건너뜀)"으로 띄웠다 — LLM 점수가 정상 성공한 생성에서도. 개정 규칙:
+> - `NO_CANDIDATES`: 풀 0건 (불변)
+> - `LOW`: ① 요청 페르소나의 취향(`taste_tags`·`activities`·`cuisines`)을 경계 카테고리로 사상한 집합 중 풀에 0건인 것이 있거나, ② 풀 크기 < `일수 × 5`(하루 최소 슬롯 — U3 NFR "하루 5~10슬롯" 하한). 페르소나가 없거나 취향이 비면 ①은 판정하지 않는다
+> - `OK`: 그 밖. 취향과 무관한 카테고리 공백은 `shortfallCategories` 에만 남는다(필드 의미 불변 — 풀에 0건인 경계 카테고리 전부)
+>
+> 와이어 계약(`level` 어휘·`shortfallCategories` 필드)은 바뀌지 않는다. 취향→카테고리 사상표는 `outcome.py` 한 곳에 있다(코드베이스에 기존 사상이 없어 신설).
+
 ### BR-U2-06 · `FreshnessMeta` 스키마 (N5 종결)
 
 **결정**: 경계는 **집계형** `{ generatedAt, degraded }` — backend 실장 유지. AI의 per-source `{source, fetched_at, cache_hit, ttl_sec, stale}`는 **AI 내부 관측용**이며 경계로 올리지 않는다.
