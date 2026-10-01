@@ -35,7 +35,7 @@ import {
   type StayRegisterFlow,
   type StayRegisterTab,
 } from '@/features/stay/model/stayRegisterForm';
-import { StayRegisterScreen } from '@/features/stay/ui/StayRegisterScreen';
+import { StayRegisterScreen } from './StayRegisterScreen';
 import { showToast } from '@/shared/ui/Toast';
 
 const STAY_SAVED_TOAST = '숙소를 등록했어요';

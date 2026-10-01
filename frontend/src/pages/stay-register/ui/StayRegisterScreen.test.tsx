@@ -5,7 +5,7 @@ import {
   within,
 } from '@testing-library/react-native';
 import type { GeocodeCandidate } from '@/shared/api/generated/schemas';
-import type { StayRegisterFlow } from '../model/stayRegisterForm';
+import type { StayRegisterFlow } from '@/features/stay/model/stayRegisterForm';
 import { StayRegisterScreen } from './StayRegisterScreen';
 import type { MapCenter } from '@/shared/map';
 

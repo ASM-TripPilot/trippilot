@@ -36,7 +36,7 @@ import {
   InfoGlyph,
   MapPinGlyph,
   ShareGlyph,
-} from './StayGlyphs';
+} from '@/features/stay/ui/StayGlyphs';
 
 /** 조회 결과 — `kind` 하나로 얼굴을 고른다. notFound=404 · invalid=400/stayId 없음 · error=5xx/네트워크. */
 export type StayDetailState =

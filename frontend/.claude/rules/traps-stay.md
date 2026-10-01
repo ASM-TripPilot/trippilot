@@ -12,7 +12,7 @@ paths:
 
 - **`useStaySearch` 기본 파라미터·오류 정규화** → **없다**(D6 이연). params를 그대로 넘기기만 한다.
 - **숙소 목록 무한 스크롤** → `/stays/search`에 **페이지네이션 파라미터가 없다**. `onEndReached`류를 붙이면 같은 1페이지를 반복 요청하는 함정인데, 그 "없음"을 잠그는 단언이 **어느 심판에도 없다**.
-- **이름·지역 검색은 통합 회귀 심판이 0이다** → `StaySearchScreen.tsx`의 `nameQuery`/`onChangeNameQuery`(필터링)와 `StaySearchPage.tsx`의 `nameQuery` state(소유)를 잇는 흐름을 누르는 `StaySearchPage.*.integration.test.tsx`가 없다(`StaySearchScreen.nameSearch.test.tsx`는 화면 단위뿐). `filterByNameQuery`를 지우거나 페이지가 다른 prop 이름으로 넘겨도 통합 스위트 전부 green이다.
+- **이름·지역 검색은 통합 회귀 심판이 0이다** → `StaySearchScreen.tsx`의 `nameQuery`/`onChangeNameQuery`(필터링)와 `StaySearchPage.tsx`의 `nameQuery` state(소유)를 잇는 흐름을 누르는 테스트가 `StaySearchPage.integration.test.tsx`에 없다(`StaySearchScreen.test.tsx`의 「이름·지역 검색」 describe는 화면 단위뿐). `filterByNameQuery`를 지우거나 페이지가 다른 prop 이름으로 넘겨도 통합 스위트 전부 green이다.
 
 ## stay 등록
 
@@ -20,7 +20,7 @@ paths:
 
 ## stay 담기 (coordConfirmed)
 
-- **`buildSaveStayRequest`의 출력값을 잠그는 심판이 단위·통합 두 층에 나뉘어 있고, 서로를 갱신시키는 기계가 없다** → `buildSaveStayRequest.test.ts`(단위, 함수 반환값)와 `src/pages/stay-search/ui/StaySearchPage.save.integration.test.tsx`(배선층, `EXPECTED_POST_A` 리터럴)가 같은 `coordConfirmed` 값을 각자 리터럴로 굳힌다. 단위 테스트만 갱신하고 통합 테스트를 빠뜨려도 lint·tsc·`pnpm test:node`는 green이다 — `pnpm test:integration`(또는 `pnpm test` 전체)을 돌려야만 드러난다(실측 2건). 이 함수의 반환 필드를 바꿀 때는 두 파일을 함께 grep한다.
+- **`buildSaveStayRequest`의 출력값을 잠그는 심판이 단위·통합 두 층에 나뉘어 있고, 서로를 갱신시키는 기계가 없다** → `buildSaveStayRequest.test.ts`(단위, 함수 반환값)와 `src/pages/stay-search/ui/StaySearchPage.integration.test.tsx` 「저장 하트」 describe(배선층, `EXPECTED_POST_A` 리터럴)가 같은 `coordConfirmed` 값을 각자 리터럴로 굳힌다. 단위 테스트만 갱신하고 통합 테스트를 빠뜨려도 lint·tsc·`pnpm test:node`는 green이다 — `pnpm test:integration`(또는 `pnpm test` 전체)을 돌려야만 드러난다(실측 2건). 이 함수의 반환 필드를 바꿀 때는 두 파일을 함께 grep한다.
 
 ## e03 숙소 상세 GET
 

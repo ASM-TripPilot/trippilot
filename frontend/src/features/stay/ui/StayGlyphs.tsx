@@ -528,7 +528,7 @@ export function AmenityGlyph({ size = 24, testID }: GlyphProps) {
 
 // e03 편의시설 아이콘 4종(TRIP-727) — 서버 코드가 아는 값(주차·조식·와이파이·오션뷰)일 때만
 // 코드별 그림을 그린다(모르는 값은 `resolveAmenityIcon`이 AmenityGlyph 폴백으로 접는다, INV-1).
-// 매핑표는 `features/stay/config/amenityIcons.ts`. 색은 6-b 실기 몫(글리프 fill/stroke jest 무심판).
+// 매핑표는 `pages/stay-detail/config/amenityIcons.ts`. 색은 6-b 실기 몫(글리프 fill/stroke jest 무심판).
 
 // 주차 — 자동차 실루엣.
 export function ParkingGlyph({ size = 24, testID }: GlyphProps) {

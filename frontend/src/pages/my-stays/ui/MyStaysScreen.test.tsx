@@ -11,7 +11,7 @@ import {
 } from './MyStaysScreen';
 import type { ReactTestInstance } from 'react-test-renderer';
 import tailwindConfig from '../../../../tailwind.config.js';
-import { MUTED_SOFT } from './SettingsGlyphs';
+import { MUTED_SOFT } from '@/features/settings/ui/SettingsGlyphs';
 
 /**
  * l04 등록 숙소 — MyStaysScreen(props 만 받는 뷰) 단위 테스트.

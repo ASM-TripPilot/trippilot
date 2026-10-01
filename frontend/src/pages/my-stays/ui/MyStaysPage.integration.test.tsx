@@ -17,10 +17,7 @@ import type {
 } from '@/shared/api/generated/schemas';
 import { useGetSavedStays } from '@/shared/api/generated/saved-stays/saved-stays';
 import { useGetTrips } from '@/shared/api/generated/trips/trips';
-import type {
-  MyStayRowVM,
-  MyStaysScreen,
-} from '@/features/settings/ui/MyStaysScreen';
+import type { MyStayRowVM, MyStaysScreen } from './MyStaysScreen';
 import { MyStaysPage } from './MyStaysPage';
 import { http, HttpResponse } from 'msw';
 import { server } from '@/mocks/server';
@@ -78,9 +75,9 @@ const mockScreenProps: { current: MyStaysScreenPropsShape | null } = {
 const mockStubSavedStays = jest.fn();
 const mockStubTrips = jest.fn();
 
-jest.mock('@/features/settings/ui/MyStaysScreen', () => {
+jest.mock('./MyStaysScreen', () => {
   const actual = jest.requireActual<{ MyStaysScreen: typeof MyStaysScreen }>(
-    '@/features/settings/ui/MyStaysScreen'
+    './MyStaysScreen'
   );
   const { createElement } = jest.requireActual<typeof ReactModule>('react');
   return {

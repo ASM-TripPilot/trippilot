@@ -129,7 +129,7 @@ import { PersonalizationScreen } from '@/features/settings/ui/PersonalizationScr
 import {
   MyStaysScreen,
   type MyStayRowVM,
-} from '@/features/settings/ui/MyStaysScreen';
+} from '@/pages/my-stays/ui/MyStaysScreen';
 import { StyleSummaryCard } from '@/features/settings/ui/StyleSummaryCard';
 import { RevokeConfirmDialog } from '@/features/settings/ui/RevokeConfirmDialog';
 import { SettingsScreen } from '@/features/settings/ui/SettingsScreen';
@@ -152,13 +152,13 @@ import { NicknameScreen } from '@/pages/onboarding-nickname/ui/NicknameScreen';
 import {
   StayRegisterScreen,
   type StayRegisterScreenProps,
-} from '@/features/stay/ui/StayRegisterScreen';
-import { StaySearchScreen } from '@/features/stay/ui/StaySearchScreen';
-import { StayDetailScreen } from '@/features/stay/ui/StayDetailScreen';
+} from '@/pages/stay-register/ui/StayRegisterScreen';
+import { StaySearchScreen } from '@/pages/stay-search/ui/StaySearchScreen';
+import { StayDetailScreen } from '@/pages/stay-detail/ui/StayDetailScreen';
 import {
   SavedStayListScreen,
   type SavedStayCardVM,
-} from '@/features/stay/ui/SavedStayListScreen';
+} from '@/pages/stay-saved/ui/SavedStayListScreen';
 import { OtaChoiceSheet } from '@/features/stay/ui/OtaChoiceSheet';
 import { StayPriceSheet } from '@/features/stay/ui/StayPriceSheet';
 import { StayFilterSheet } from '@/features/stay/ui/StayFilterSheet';
