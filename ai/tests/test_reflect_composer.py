@@ -547,3 +547,103 @@ def test_trip558_safe_caption_follows_replaced_visit() -> None:
     assert scene.photo_slot.visit_ref == _REF2          # 미사용 방문으로 교체
     assert scene.caption == safe_caption(SceneLayout.PHOTO_CAPTION, 1)
     assert "{poi:1.name}" in scene.caption              # 사진과 같은 방문을 부른다
+
+
+# ── 재시도 예산 — 시도들이 **남은** 예산 안에서 돈다 ────────────────────
+#
+# 실측(라이브 2026-09-29): opus 1회 14~15s × 3회, 매 시도에 요청 예산 전체(15s)를
+# timeout 으로 줘서 백스톱(deadline+5s) 504. 가짜 시계로 지연을 흉내 낸다 — 실 sleep 0.
+
+from trippilot.agents.reflect.agent import MIN_ATTEMPT_SEC  # noqa: E402
+from trippilot.ports.llm_port import LlmTimeoutError  # noqa: E402
+
+
+class _FakeClock:
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+class _TimedLlm:
+    """호출마다 `latency` 초가 흐른다. timeout 보다 길면 timeout 만큼 흐르고 타임아웃."""
+
+    def __init__(self, clock: _FakeClock, latency: float, text: str) -> None:
+        self._clock, self._latency, self._text = clock, latency, text
+        self.timeouts: list[float] = []
+        self.remaining_at_call: list[float] = []
+        self.budget = 0.0
+
+    def invoke(self, request: LlmRequest) -> LlmResponse:
+        self.timeouts.append(request.timeout_sec)
+        self.remaining_at_call.append(self.budget - self._clock.now)
+        if self._latency > request.timeout_sec:
+            self._clock.now += request.timeout_sec
+            raise LlmTimeoutError(f"timeout > {request.timeout_sec}s (fake)")
+        self._clock.now += self._latency
+        return LlmResponse(raw_text=self._text, input_tokens=1, output_tokens=1,
+                           latency_ms=int(self._latency * 1000), model_id=request.model_id)
+
+
+def _timed_run(latency: float, text: str, budget: float = 15.0):
+    clock = _FakeClock()
+    llm = _TimedLlm(clock, latency, text)
+    llm.budget = budget
+    worker, trace = _compose_env(llm)
+    template = ReflectAgent(worker, trace, clock=clock).run(
+        ReflectTask(_REQUEST, _TID, _NOW, timeout_sec=budget))
+    return template, llm, clock, trace
+
+
+def _budget_events(trace) -> list[FallbackEvent]:
+    return [e for e in trace.of_type(FallbackEvent)
+            if e.component == "agents.reflect" and e.stage == "budget"]
+
+
+def test_truncated_slow_output_stops_retrying_and_falls_back_within_budget() -> None:
+    """라이브 재현 — 14.5s 걸려 잘린 응답(파싱 실패). 잔여 0.5s 로는 재시도하지 않는다."""
+    template, llm, clock, trace = _timed_run(14.5, '{"template": {"cover": ')
+    assert len(llm.timeouts) == 1
+    assert clock.now <= 15.0                    # 백스톱 전에 끝난다
+    assert template.is_fallback is True         # 경계는 이걸 200 + is_fallback 으로 낸다
+    assert len(_budget_events(trace)) == 1      # 포기 사실을 남긴다 (INV-4)
+    assert "attempts=1" in _budget_events(trace)[0].reason
+
+
+def test_vendor_timeout_on_first_attempt_does_not_retry() -> None:
+    template, llm, clock, trace = _timed_run(30.0, _raw(_CLEAN_BODY))
+    assert llm.timeouts == [15.0]               # 첫 시도는 예산 전체 (종전 그대로)
+    assert clock.now <= 15.0
+    assert template.is_fallback is True
+    assert _budget_events(trace)
+
+
+def test_retry_timeout_is_capped_by_remaining_budget() -> None:
+    """6s 위반 응답: 2차는 남은 9s − 여유로, 3차는 잔여 3s < 최소치라 건너뛴다."""
+    template, llm, clock, trace = _timed_run(6.0, _raw(_VIOLATING_BODY))
+    assert len(llm.timeouts) == 2
+    assert llm.timeouts[1] < 9.0                # 남은 예산을 넘지 않는다
+    assert clock.now <= 15.0
+    assert template.is_fallback is False        # 위반 후보는 결정론 교체로 채택 (기존 경로)
+    assert _hard(_regate_violations(_REQUEST, template)) == []
+    assert len(_budget_events(trace)) == 1
+
+
+def test_fast_attempts_still_use_all_retries() -> None:
+    _, llm, clock, trace = _timed_run(1.0, _raw(_VIOLATING_BODY))
+    assert len(llm.timeouts) == MAX_ATTEMPTS
+    assert _budget_events(trace) == []
+
+
+@given(latency=st.floats(min_value=0.1, max_value=40.0),
+       budget=st.floats(min_value=1.0, max_value=40.0),
+       clean=st.booleans())
+@settings(max_examples=80, deadline=None)
+def test_total_elapsed_never_exceeds_budget(latency: float, budget: float, clean: bool) -> None:
+    body = _CLEAN_BODY if clean else _VIOLATING_BODY
+    _, llm, clock, _ = _timed_run(latency, _raw(body), budget)
+    assert clock.now <= budget + 1e-9
+    # 재시도의 timeout 은 그 시점 잔여를 넘지 않고, 최소치 밑으로 내려가지 않는다
+    for timeout, remaining in list(zip(llm.timeouts, llm.remaining_at_call))[1:]:
+        assert MIN_ATTEMPT_SEC <= timeout <= remaining

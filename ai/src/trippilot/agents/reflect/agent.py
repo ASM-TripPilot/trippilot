@@ -19,7 +19,8 @@ ReflectTask ─▶ ⓐ 대표 사진 선별 (vision 요청 시 1회)  실패 →
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import time
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 
@@ -40,6 +41,14 @@ from trippilot.llm_gateway.workers.reflection_template import ReflectionTemplate
 from trippilot.ports.trace_port import TracePort
 
 _COMPONENT = "agents.reflect"
+
+# 재시도 예산 — 시도들이 요청 예산을 **나눠** 쓴다. 종전엔 매 시도에 예산 전체를
+# timeout 으로 줘서 opus 1회 14~15s × 3회가 백스톱(deadline+5s) 504 로 끝났다
+# (라이브 2026-09-29, deadline 15s). 첫 호출은 예산 전체(종전 그대로), 이후 호출은
+# `잔여 − 여유` 이고, 그게 최소치 밑이면 부르지 않고 지금까지의 후보로 마무리한다.
+SAFETY_MARGIN_SEC = 0.5  # finalize·직렬화 몫
+# ponytail: 고정 바닥 — 실측 출력 ~1000토큰이 이보다 빨리 끝난 적이 없다. 모델별로 갈리면 config 로
+MIN_ATTEMPT_SEC = 5.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,9 +77,11 @@ class ReflectAgent:
         trace: TracePort,
         *,
         highlight_worker: PhotoHighlightWorker | None = None,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._worker = template_worker
         self._trace = trace
+        self._clock = clock  # 경과 측정 전용 (단조 시계 — wall-clock 아님)
         # 미주입 = Phase 2 기능 부재 (실패가 아니다) — vision 요청도 텍스트로 처리
         self._highlight = highlight_worker
 
@@ -86,10 +97,16 @@ class ReflectAgent:
 
     def _compose_text(self, task: ReflectTask) -> ReflectionTemplate:
         """③~⑥ — 위반 0 후보가 나오면 조기 종료."""
+        deadline = self._deadline(task)
         candidates: list[TemplateCandidate] = []
         for attempt in range(1, MAX_ATTEMPTS + 1):
+            timeout_sec = task.timeout_sec
+            if attempt > 1:
+                timeout_sec = self._retry_timeout(task, deadline, attempt)
+                if timeout_sec is False:
+                    break
             result = self._worker.generate(
-                task.request, task.trace_id, task.now, timeout_sec=task.timeout_sec)
+                task.request, task.trace_id, task.now, timeout_sec=timeout_sec)
             if result.value is not None:
                 candidate = replace(result.value, attempt=attempt)
                 candidates.append(candidate)
@@ -114,6 +131,7 @@ class ReflectAgent:
         """
         assert self._highlight is not None  # run() 이 이미 걸렀다
         trace_id, now, timeout_sec = task.trace_id, task.now, task.timeout_sec
+        deadline = self._deadline(task)
 
         # ⓐ 대표 사진 — LLM 1회, 실패 시 결정론 규칙 (모드 쌍은 config 폴백 대장과 동일)
         highlight_result = self._highlight.select(
@@ -138,6 +156,10 @@ class ReflectAgent:
         candidates: list[TemplateCandidate] = []
         vision_alive = True
         for attempt in range(1, MAX_ATTEMPTS + 1):
+            # 하이라이트가 첫 호출이다 — 생성 시도는 전부 잔여 예산 안에서
+            timeout_sec = self._retry_timeout(task, deadline, attempt)
+            if timeout_sec is False:
+                break
             if vision_alive:
                 result = self._worker.generate_vision(
                     task.request, vision, task.images, highlight_ids, trace_id, now,
@@ -165,3 +187,30 @@ class ReflectAgent:
                 if not candidate.violations:
                     break
         return finalize(candidates, task.request, trace_id, now, self._trace)
+
+    # ── 예산 ────────────────────────────────────────────────────────
+
+    def _deadline(self, task: ReflectTask) -> float | None:
+        return None if task.timeout_sec is None else self._clock() + task.timeout_sec
+
+    def _retry_timeout(
+        self, task: ReflectTask, deadline: float | None, attempt: int
+    ) -> float | None | bool:
+        """이번 호출의 timeout. 예산이 없으면 종전 그대로(게이트웨이 기본),
+        잔여가 최소치 밑이면 False — 부르지 않는다(포기 사실은 FallbackEvent 로)."""
+        if deadline is None:
+            return task.timeout_sec
+        timeout = deadline - self._clock() - SAFETY_MARGIN_SEC
+        if timeout >= MIN_ATTEMPT_SEC:
+            return timeout
+        self._trace.emit(FallbackEvent(
+            trace_id=task.trace_id,
+            occurred_at=task.now,
+            component=_COMPONENT,
+            stage="budget",
+            from_mode="llm_retry",
+            to_mode="no_retry",
+            reason=(f"reflection_budget_exhausted:attempts={attempt - 1},"
+                    f"remaining_ms={int(max(timeout + SAFETY_MARGIN_SEC, 0) * 1000)}"),
+        ))
+        return False
