@@ -85,6 +85,30 @@ jobs:
             --stack-name "trippilot-${DEPLOY_ENVIRONMENT}-bootstrap" \
             --enable-termination-protection > /dev/null
 
+      # 2026-09-25 실행(run 36197896721)이 여기서 죽었는데 **로그에 이유가 없었다** —
+      # `aws cloudformation deploy` 는 "describe-stack-events 를 직접 돌려 보라"는 안내만
+      # 남기고 끝난다. 그 한 줄이 없어서 "역할이 왜 안 만들어졌나"를 콘솔 없이는 알 수
+      # 없었고, 그 역할은 `infra/terraform/stack/eks.tf` 의 `data aws_iam_role.ai_pod` 가
+      # **조건 없이** 참조하므로 다음 배포가 터라폼에서 멈춘다. 실패 원인을 잡에 남긴다.
+      - name: 실패 원인 — 스택 이벤트와 현재 상태
+        if: failure()
+        shell: bash
+        run: |
+          set -uo pipefail
+          stack="trippilot-${DEPLOY_ENVIRONMENT}-bootstrap"
+          echo "::group::스택 상태"
+          aws cloudformation describe-stacks --stack-name "$stack" \
+            --query 'Stacks[0].{Status:StackStatus,Reason:StackStatusReason}' \
+            --output table || echo "스택 조회 실패 — 아직 만들어지지 않았을 수 있다"
+          echo "::endgroup::"
+          echo "::group::실패 이벤트 (최근 40건 중 FAILED 만)"
+          aws cloudformation describe-stack-events --stack-name "$stack" \
+            --max-items 40 \
+            --query 'StackEvents[?contains(ResourceStatus, `FAILED`)].{Time:Timestamp,Resource:LogicalResourceId,Status:ResourceStatus,Reason:ResourceStatusReason}' \
+            --output table || echo "이벤트 조회 실패"
+          echo "::endgroup::"
+          echo "::notice::UPDATE_ROLLBACK_FAILED 면 continue-update-rollback 이 먼저다."
+
       - name: Report non-secret setup outputs
         shell: bash
         run: |

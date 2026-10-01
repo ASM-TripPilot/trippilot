@@ -20,7 +20,12 @@ from trippilot.domain.prompt import PromptRef
 
 
 class LlmTimeoutError(Exception):
-    """타임아웃 초과. 소비 측이 잡아서 FallbackEvent 발행."""
+    """타임아웃 초과. 소비 측이 잡아서 FallbackEvent 발행.
+
+    경과 시간은 이 예외가 아니라 **게이트웨이가 직접 잰다** — 어댑터마다 싣게 하면
+    벤더별로 빠지고, 실패 호출의 지연이 0 으로 기록되는 사고가 다시 난다
+    (2026-09-29 실서비스 504 가 11.9초를 0ms 로 보이게 했다).
+    """
 
 
 class LlmUnsupportedError(Exception):

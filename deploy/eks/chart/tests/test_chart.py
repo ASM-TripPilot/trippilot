@@ -122,6 +122,31 @@ class ChartTests(unittest.TestCase):
                 self.assertEqual(len(sources), 1)
                 self.assertEqual(sources[0]["podSelector"]["matchLabels"]["app.kubernetes.io/component"], "ai")
 
+    def test_ai_validates_the_inbound_service_token(self):
+        """AI 경계도 X-Service-Token 을 **검사**해야 한다 — 보내는 것만으로는 안 열린다.
+
+        AI 는 두 env 를 쓴다. `TRIPPILOT_SERVICE_AUTH_TOKEN`(접두어 있음)은 백엔드를 부를 때
+        싣는 **발신용**이고, 인바운드 검증 미들웨어는 접두어 없는 `SERVICE_AUTH_TOKEN` 을
+        읽는다(`ai/src/trippilot/api/middleware.py`). 차트가 발신용만 주던 동안 AI 경계는
+        클러스터 안에서 무인증으로 열려 있었다 — 백엔드는 이미 헤더를 보내고 있었다.
+
+        `/health`·`/` 는 미들웨어가 면제하므로 배포 스모크와 컨테이너 헬스체크는 안 깨진다.
+        """
+        for environment in ("dev", "prd"):
+            documents = render(environment)
+            ai = next(item for item in documents
+                      if item["kind"] == "Deployment" and item["metadata"]["name"] == "ai")
+            env = {item["name"]: item
+                   for item in ai["spec"]["template"]["spec"]["containers"][0]["env"]}
+            inbound = env["SERVICE_AUTH_TOKEN"]["valueFrom"]["secretKeyRef"]
+            outbound = env["TRIPPILOT_SERVICE_AUTH_TOKEN"]["valueFrom"]["secretKeyRef"]
+            # 같은 공유 시크릿의 같은 키 — 값이 갈리면 백엔드 호출이 전부 401 이 된다.
+            self.assertEqual(inbound["name"], "trippilot-shared")
+            self.assertEqual(inbound["key"], "SERVICE_AUTH_TOKEN")
+            self.assertEqual(inbound, outbound)
+            # fail-open 금지: 토큰이 없으면 조용히 열리는 대신 기동이 실패한다.
+            self.assertEqual(env["SERVICE_AUTH_REQUIRE_TOKEN"]["value"], "true")
+
 
 if __name__ == "__main__":
     unittest.main()
