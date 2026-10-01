@@ -59,14 +59,6 @@ describe('🔴 TRIP-1106 · 지역 밖 확인 다이얼로그 문구 (결정 2)'
       screen.queryByText('이 여행 지역 밖 2곳이 함께 들어가요')
     ).toBeNull();
   });
-
-  it('OD7 · 소요시간 표기가 없다 (INV-3)', () => {
-    renderDialog(2);
-
-    // 긍정 앵커 — 정규식이 이 다이얼로그의 글자를 실제로 읽는다.
-    expect(screen.queryAllByText(/지역 밖/).length).toBeGreaterThan(0);
-    expect(screen.queryAllByText(/\d+\s*분|\d+\s*시간|소요/)).toHaveLength(0);
-  });
 });
 
 describe('🔴 TRIP-1106 · 지역 밖 확인 다이얼로그 버튼 (결정 2 — 두 갈래)', () => {

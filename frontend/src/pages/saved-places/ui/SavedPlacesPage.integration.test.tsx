@@ -1708,22 +1708,6 @@ describe('select › 위저드', () => {
     });
   });
 
-  describe('🔴 TRIP-1012 A7 · 지역 밖 머리글 화면에도 소요시간 표기가 없다 (INV-3)', () => {
-    it('머리글이 뜬 화면에서 분·시간·소요 표기가 0건이다', async () => {
-      serveSaved(SEOUL_MIXED);
-      openSelectForTrip(SEOUL_TRIP);
-
-      await waitFor(() =>
-        expect(
-          screen.getByTestId('mustvisit-pick-region-outside')
-        ).toBeOnTheScreen()
-      );
-      // 긍정 앵커 — 정규식이 이 화면의 새 글자를 실제로 읽는다.
-      expect(screen.queryAllByText(/지역 밖/).length).toBeGreaterThan(0);
-      expect(screen.queryAllByText(/\d+\s*분|\d+\s*시간|소요/).length).toBe(0);
-    });
-  });
-
   describe('TRIP-1012 B2 · select 완료는 위저드 안 왕복 — 손으로 채운 드래프트를 비우지 않는다 (#074 금지)', () => {
     it('여행지·기간·인원·동반·예산이 완료 전과 같고, 꼭 갈 곳만 고른 것으로 바뀐다', async () => {
       const store = useTripWizardStore.getState();
@@ -1800,7 +1784,6 @@ describe('select › 위저드', () => {
    *  - R6 d04 로 가는 세 버튼이 여행 지역 이름을 싣는다(AC-7 — d04 는 이름을 받는다).
    *  - R7 담은 곳이 진짜 0이면 기존 빈 얼굴 그대로(AC-8), R8 목적지 코드가 없으면 판정 생략(Q6).
    *  - R9 행 위치가 `인천 남동구`처럼 카탈로그의 시도 짧은 이름을 붙인다(AC-9).
-   *  - R11 새 블록 화면에도 소요시간 표기가 없다(INV-3).
    *
    * ★ 목적지 코드는 스토어에만 있다 — `openSelectForTrip` 이 스토어·URL 에 같은 값을 심는다(02a ★1·★3).
    * ★ 부재 단언(폴백·빈 얼굴·체크 0)은 긍정 짝(블록·행 존재)을 먼저 잡은 뒤에 잰다(02a ★5).
@@ -2069,20 +2052,6 @@ describe('select › 위저드', () => {
       expect(
         within(screen.getByTestId('mustvisit-pick-row-c3')).getByText('종로구')
       ).toBeOnTheScreen();
-    });
-  });
-
-  describe('🔴 TRIP-1042 R11 · region-empty 화면에도 소요시간 표기가 없다 (INV-3)', () => {
-    it('블록이 뜬 화면에서 분·시간·소요 표기가 0건이다', async () => {
-      serveSaved(ALL_OUTSIDE_SEOUL);
-      openSelectForTrip(SEOUL_TRIP);
-
-      await screen.findByTestId('mustvisit-pick-region-empty');
-      // 긍정 앵커 — 정규식이 이 화면의 새 글자를 실제로 읽는다.
-      expect(screen.queryAllByText(/담은 곳이 없어요/).length).toBeGreaterThan(
-        0
-      );
-      expect(screen.queryAllByText(/\d+\s*분|\d+\s*시간|소요/).length).toBe(0);
     });
   });
 

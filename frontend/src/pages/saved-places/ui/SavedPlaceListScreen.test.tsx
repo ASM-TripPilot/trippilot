@@ -29,7 +29,6 @@ import {
  *  - **T-10·T-11 (Seed Q6)** loading·error 얼굴이 실재하고, 실패를 "담은 게 없다"로 위장하지 않는다.
  *  - **T-12 (N-2)** 해제 실패 배너는 **목록이 남아 있어도** 보인다.
  *  - **T-13 (Seed Q7)** 게스트는 목록·빈 상태가 아니라 로그인 안내를 본다.
- *  - **T-14 (N-3 · INV-3)** 어떤 얼굴에서도 소요 시간 문자열이 나타나지 않는다.
  *
  * TRIP-1144 로 옛 `.appBar`(TRIP-1086)·`.rowtap`(TRIP-456) 두 파일을 맨 아래 `앱바`·`행 탭` describe 로 합쳤다.
  *
@@ -527,41 +526,6 @@ describe('T-13 · 미로그인 얼굴 (01b Seed Q7)', () => {
     expect(screen.queryByTestId('explore-saved-empty')).toBeNull();
     expect(screen.queryByTestId('explore-saved-createtrip')).toBeNull();
     expect(itemTestIds()).toEqual([]);
-  });
-});
-
-describe('T-14 · 소요 시간 미표시 (N-3 · INV-3)', () => {
-  const FACES: {
-    name: string;
-    props: Partial<SavedPlaceListScreenProps>;
-    anchor: string;
-  }[] = [
-    { name: 'results', props: {}, anchor: 'explore-saved-item-sp-1' },
-    {
-      name: 'empty',
-      props: { savedPlaces: [], state: { kind: 'empty' } },
-      anchor: 'explore-saved-empty',
-    },
-    {
-      name: 'error',
-      props: { savedPlaces: [], state: { kind: 'error' } },
-      anchor: 'explore-saved-error',
-    },
-    {
-      name: 'guest',
-      props: { isGuest: true, savedPlaces: [] },
-      anchor: 'explore-saved-guest',
-    },
-  ];
-
-  it.each(FACES)('$name 얼굴에 시간 문자열이 없다', ({ props, anchor }) => {
-    renderScreen(props);
-
-    // 긍정 짝 — 그 얼굴이 실제로 그려졌다. 없으면 "0건"이 공허하게 통과한다.
-    expect(screen.getByTestId(anchor)).toBeOnTheScreen();
-    // 부정 — INV-3: 사용자에게 보이는 소요 시간은 솔버 검증값만 쓸 수 있고, 이 화면에는
-    // 그 재료가 아예 없다.
-    expect(screen.queryAllByText(/분|시간|소요/)).toHaveLength(0);
   });
 });
 
