@@ -2,7 +2,9 @@
 paths:
   - "src/features/record/**"
 ---
-# `src/features/record/` — j01 방문 기록·j07 여행 캘린더
+# `src/features/record/` — j01 방문 기록 · j07 캘린더 model
+
+j07 화면 뷰(`RecordsCalendarScreen`·`TripCalendarMonth`·`PastTripList`)는 TRIP-1153으로 `pages/records-calendar/ui`로 이사했다(`layer-pages.md`). 여기 남은 j07 몫은 page와 화면이 함께 쓰는 `model/recordsCalendar`·page 전용 `model/useRecordsCalendar`·공용 `ui/RecordGlyphs`다.
 
 `features/execution`과 목적이 겹쳐 보이지만(둘 다 `visit_check` 실적) shape가 다르다 — execution의 `deriveVisitProgress`는 poi 단위 **집계**, 이쪽은 per-record 4상태다. 그래서 재사용하지 않는다.
 
@@ -51,9 +53,6 @@ paths:
 | `ui/MemoInline.tsx` | **`BottomSheetTextInput`**(TRIP-1085 — j01이 셸 시트 안으로 들어가 키보드가 시트를 밀어 올려야 해서 교체. ⚠️ **시트 밖에서 그리면 실기 throw** — jest 목은 시트 문맥을 요구하지 않아 못 잡는다 — 실기 스모크가 유일한 그물) `maxLength=2000`(서버 권위의 UX 사본 — `fireEvent.changeText`는 maxLength를 우회하므로 prop 값으로 잠금). 공백이면 무발화. **저장 경로는 `onBlur` 하나**(`submitBehavior="blurAndSubmit"` — return=키보드 내림→blur→1회; `onSubmitEditing` 저장 금지, 병행하면 이중 저장). jest는 이 연쇄를 흉내 못 내 return 실기는 6-b. ⚠️ **seed-once 파생 상태**(`useState(text ?? '')`) — 리스트에서 `key` 없이 재활용되면 다른 카드 메모가 잔류한다([[seed-once 파생 상태]]) |
 | `ui/MemoInline.test.tsx` | maxLength 잠금·공백 게이트·blur 저장·submitEditing 0회(M5)·submitEditing+blur 1회(M6) |
 | `__tests__/recordPhotoBinaryGuard.test.ts` | `src/__tests__/` 소재(`layer-test.md`) — INV-U5-03(사진 바이너리 서버 미전송)은 계약이 구조적으로 만족하고, 이 가드는 새 업로드 경로를 짓지 않게 소스 그래프를 잠근다([[계약이 구조적으로 막는다]]) |
-| `ui/RecordsCalendarScreen.tsx` | j07 props-only 허브 — `isEmpty`면 `StateNotice`(`record-calendar-empty`), 아니면 `TripCalendarMonth`+legend+`PastTripList`. 네트워크·라우팅을 모른다(지역 상태는 legend 더 보기 `showAll`·묶음 펼침 `openGroups` 둘뿐). **TRIP-1120**: ScrollView 맨 위 캘린더 앞에 지역 컴포넌트 `OngoingTripCard`(prop `ongoingTrip`, 제목 1줄 + 배지 `여행 중` + `기간 · N일차` + 버튼 [오늘 기록 보기]/[일정 허브로]) — 월이 바뀌어도 카드는 그대로(카드는 오늘 기준, legend는 보는 달 기준). legend 줄 끝 `›`(`openableTripIds` prop에 든 여행만, 묶음 줄은 구성원 중 하나라도)는 줄 Pressable **안**에 있다. 카드 반경은 토큰 `card`(16)가 아니라 임의값 12(Figma 4761:3065, 킷 동기화 대기). 세로 hitSlop 없음(줄 32라 이웃 줄을 덮는다) |
-| `ui/TripCalendarMonth.tsx` | 월 그리드(`record-calendar-month`, prev/next chevron). 마킹은 fill이 아니라 `accessibilityState={{selected}}`로 관찰 가능하게 그린다(`toBeSelected()`). 코랄 pill은 연속 구간 양 끝만 둥글린다 |
-| `ui/PastTripList.tsx` | `record-calendar-past-trip-{tripId}` 카드 = 제목+날짜범위(+박수)만 — 사진·통계는 `Trip` 계약에 필드가 없어 안 그린다. 날짜범위·박수는 별개 `<Text>` leaf(완전일치 매치) |
 
 ## 관련
 

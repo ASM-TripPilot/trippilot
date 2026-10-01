@@ -12,10 +12,7 @@ import {
   toOrderedVisitList,
 } from '@/features/reflection/model/summaryView';
 import { useTripSummary } from '@/features/reflection/model/useTripSummary';
-import {
-  TripSummaryScreen,
-  type DayCardVM,
-} from '@/features/reflection/ui/TripSummaryScreen';
+import { TripSummaryScreen, type DayCardVM } from './TripSummaryScreen';
 import { tripDayChips } from '@/features/itinerary/model/mustVisitTimeForm';
 import { formatDayLabel } from '@/entities/trip/lib/formatDayLabel';
 import { useGetTripsTripId } from '@/shared/api/generated/trips/trips';

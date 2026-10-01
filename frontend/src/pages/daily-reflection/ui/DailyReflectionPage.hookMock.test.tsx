@@ -11,7 +11,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { router } from 'expo-router';
 
 import { useDailyReflection } from '@/features/reflection/model/useDailyReflection';
-import { DailyReflectionScreen } from '@/features/reflection/ui/DailyReflectionScreen';
+import { DailyReflectionScreen } from './DailyReflectionScreen';
 import {
   useGetTripsTripIdReflections,
   usePostTripsTripIdReflectionsDayDate,
@@ -76,10 +76,10 @@ jest.mock('expo-location', () => ({
 
 // 화면은 실물 — jest.fn 한 겹은 페이지가 넘긴 props 를 mock.calls 로 읽으려는 것뿐이다(공유 묶음).
 // 팩토리 안에서 JSX 를 쓰면 babel 이 바깥 변수(_jsx)를 참조해 호이스팅 검사에 걸린다 → createElement.
-jest.mock('@/features/reflection/ui/DailyReflectionScreen', () => {
-  const actual = jest.requireActual<
-    typeof import('@/features/reflection/ui/DailyReflectionScreen')
-  >('@/features/reflection/ui/DailyReflectionScreen');
+jest.mock('./DailyReflectionScreen', () => {
+  const actual = jest.requireActual<typeof import('./DailyReflectionScreen')>(
+    './DailyReflectionScreen'
+  );
   return {
     ...actual,
     DailyReflectionScreen: jest.fn((props: object) =>

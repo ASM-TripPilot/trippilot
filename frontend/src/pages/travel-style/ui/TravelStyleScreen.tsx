@@ -10,7 +10,7 @@ import type {
 import type { StyleFace } from '@/entities/style-analysis/lib/styleFace';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 
-import { BackArrowGlyph } from './ReflectionGlyphs';
+import { BackArrowGlyph } from '@/features/reflection/ui/ReflectionGlyphs';
 import { CategoryBarList } from './CategoryBarList';
 import { StatTile } from './StatTile';
 

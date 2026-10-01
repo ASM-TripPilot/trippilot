@@ -9,7 +9,7 @@ import { router } from 'expo-router';
 import type { Trip, TripSummary } from '@/shared/api/generated/schemas';
 
 import { useTripSummary } from '@/features/reflection/model/useTripSummary';
-import { ShareCardScreen } from '@/features/reflection/ui/ShareCardScreen';
+import { ShareCardScreen } from './ShareCardScreen';
 import { useGetTripsTripId } from '@/shared/api/generated/trips/trips';
 import { ShareCardPage } from './ShareCardPage';
 
@@ -39,7 +39,7 @@ jest.mock('@/shared/api/generated/trips/trips', () => ({
   useGetTripsTripId: jest.fn(),
 }));
 
-jest.mock('@/features/reflection/ui/ShareCardScreen', () => ({
+jest.mock('./ShareCardScreen', () => ({
   ShareCardScreen: jest.fn(() => null),
 }));
 

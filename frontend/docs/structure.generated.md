@@ -468,13 +468,10 @@
 ## src/features/record/ui/
 - `src/features/record/ui/MemoInline.tsx`  →  MemoInlineProps · MemoInline
 - `src/features/record/ui/MemoSheet.tsx`  →  MemoSheetProps · MemoSheet
-- `src/features/record/ui/PastTripList.tsx`  →  PastTripListProps · PastTripList
 - `src/features/record/ui/PhotoThumbStrip.tsx`  →  PhotoThumbVM · PhotoThumbStripProps · PhotoThumbStrip
 - `src/features/record/ui/RecordGlyphs.tsx`  →  VisitCheckDoneGlyph · VisitCheckActiveGlyph · VisitCheckUpcomingGlyph · VisitCheckSkippedGlyph · PlusGlyph · NoteGlyph · WarningTriangleGlyph · RetryGlyph · BackArrowGlyph · ChevronRightGlyph · LegendChevronGlyph · ChevronDownGlyph · InfoCircleGlyph · GpsOffGlyph · CalendarGlyph · CloseGlyph
-- `src/features/record/ui/RecordsCalendarScreen.tsx`  →  RecordsCalendarScreenProps · RecordsCalendarScreen
 - `src/features/record/ui/SkipVisitDialog.tsx`  →  SkipVisitDialog
 - `src/features/record/ui/SpontaneousVisitButton.tsx`  →  SpontaneousVisitButtonProps · SpontaneousVisitButton
-- `src/features/record/ui/TripCalendarMonth.tsx`  →  TripCalendarMonthProps · TripCalendarMonth
 - `src/features/record/ui/VisitRecordCard.tsx`  →  VisitRecordCardVM · VisitRecordCardProps · VisitRecordCard
 - `src/features/record/ui/VisitRecordCardContainer.tsx`  →  VisitRecordCardContainerProps · VisitRecordCardContainer
 - `src/features/record/ui/VisitTimeSheet.tsx`  →  VisitTimeSheetProps · VisitTimeSheet
@@ -488,7 +485,6 @@
 - `src/features/reflection/model/shareCaptureNative.ts`  →  captureRef · requestPermissionsAsync · saveToLibraryAsync · shareAsync
 - `src/features/reflection/model/shareCard.ts`  →  ShareFormat · SHARE_FORMATS · ShareCardMode · ShareCardVM · BuildShareCardInput · buildShareCard · formatShareCardStats · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · validateCaption · validateHashtags
 - `src/features/reflection/model/statsCard.ts`  →  statsCard
-- `src/features/reflection/model/styleThreshold.ts`  →  categoryLabel
 - `src/features/reflection/model/summaryStats.ts`  →  SummaryStatCells · summaryStats
 - `src/features/reflection/model/summaryView.ts`  →  OrderedVisit · shareEnabled · resolveSummaryView · toOrderedVisitList · distanceSourceLabel · daySubtitle
 - `src/features/reflection/model/useDailyReflection.ts`  →  UseDailyReflectionResult · useDailyReflection
@@ -496,21 +492,7 @@
 - `src/features/reflection/model/useTripSummary.ts`  →  UseTripSummaryResult · useTripSummary
 
 ## src/features/reflection/ui/
-- `src/features/reflection/ui/CategoryBarList.tsx`  →  CategoryBarListProps · CategoryBarList
-- `src/features/reflection/ui/ChangeSummaryRow.tsx`  →  ChangeSummaryRowProps · ChangeSummaryRow
-- `src/features/reflection/ui/DailyReflectionScreen.tsx`  →  ReflectionFace · ReflectionDayTab · DailyReflectionScreenProps · DailyReflectionScreen
-- `src/features/reflection/ui/DayHighlightCard.tsx`  →  DayHighlightCardProps · DayHighlightCard
-- `src/features/reflection/ui/FormatSegment.tsx`  →  FormatSegmentProps · FormatSegment
-- `src/features/reflection/ui/NarrativeBlock.tsx`  →  NarrativeBlockProps · NarrativeBlock
 - `src/features/reflection/ui/ReflectionGlyphs.tsx`  →  BackArrowGlyph · LocationOffGlyph · PhotoOffGlyph · EmptyCircleGlyph · RetryGlyph · MoodSadGlyph · MoodSosoGlyph · MoodGoodGlyph
-- `src/features/reflection/ui/ReflectionPhotoGrid.tsx`  →  ReflectionPhotoGridProps · ReflectionPhotoGrid
-- `src/features/reflection/ui/ReflectionStatsRow.tsx`  →  ReflectionStatsRowProps · ReflectionStatsRow
-- `src/features/reflection/ui/ShareCardGlyphs.tsx`  →  DownloadGlyph · ShareGlyph · WatermarkLogoGlyph
-- `src/features/reflection/ui/ShareCardPreview.tsx`  →  ShareCardPreviewProps · ShareCardPreview
-- `src/features/reflection/ui/ShareCardScreen.tsx`  →  ShareCardScreenProps · ShareCardScreen
-- `src/features/reflection/ui/StatTile.tsx`  →  StatTileProps · StatTile
-- `src/features/reflection/ui/TravelStyleScreen.tsx`  →  TravelStyleScreenProps · TravelStyleScreen
-- `src/features/reflection/ui/TripSummaryScreen.tsx`  →  SummaryViewMode · DayReflectionVM · DayCardVM · TripSummaryScreenProps · TripSummaryScreen
 
 ## src/features/settings/model/
 - `src/features/settings/model/dataAttribution.ts`  →  OSM_COPYRIGHT_URL
@@ -612,7 +594,12 @@
 - `src/pages/daily-reflection/index.ts`  →  DailyReflectionPage
 
 ## src/pages/daily-reflection/ui/
+- `src/pages/daily-reflection/ui/ChangeSummaryRow.tsx`  →  ChangeSummaryRowProps · ChangeSummaryRow
 - `src/pages/daily-reflection/ui/DailyReflectionPage.tsx`  →  DailyReflectionPageProps · DailyReflectionPage
+- `src/pages/daily-reflection/ui/DailyReflectionScreen.tsx`  →  ReflectionFace · ReflectionDayTab · DailyReflectionScreenProps · DailyReflectionScreen
+- `src/pages/daily-reflection/ui/NarrativeBlock.tsx`  →  NarrativeBlockProps · NarrativeBlock
+- `src/pages/daily-reflection/ui/ReflectionPhotoGrid.tsx`  →  ReflectionPhotoGridProps · ReflectionPhotoGrid
+- `src/pages/daily-reflection/ui/ReflectionStatsRow.tsx`  →  ReflectionStatsRowProps · ReflectionStatsRow
 
 ## src/pages/explore-landing/
 - `src/pages/explore-landing/index.ts`  →  ExploreLandingPage
@@ -884,7 +871,10 @@
 - `src/pages/records-calendar/index.ts`  →  RecordsCalendarPage
 
 ## src/pages/records-calendar/ui/
+- `src/pages/records-calendar/ui/PastTripList.tsx`  →  PastTripListProps · PastTripList
 - `src/pages/records-calendar/ui/RecordsCalendarPage.tsx`  →  RecordsCalendarPage
+- `src/pages/records-calendar/ui/RecordsCalendarScreen.tsx`  →  RecordsCalendarScreenProps · RecordsCalendarScreen
+- `src/pages/records-calendar/ui/TripCalendarMonth.tsx`  →  TripCalendarMonthProps · TripCalendarMonth
 
 ## src/pages/region-picker/
 - `src/pages/region-picker/index.ts`  →  RegionPickerPage
@@ -936,7 +926,11 @@
 - `src/pages/share-card/index.ts`  →  ShareCardPage
 
 ## src/pages/share-card/ui/
+- `src/pages/share-card/ui/FormatSegment.tsx`  →  FormatSegmentProps · FormatSegment
+- `src/pages/share-card/ui/ShareCardGlyphs.tsx`  →  DownloadGlyph · ShareGlyph · WatermarkLogoGlyph
 - `src/pages/share-card/ui/ShareCardPage.tsx`  →  ShareCardPageProps · ShareCardPage
+- `src/pages/share-card/ui/ShareCardPreview.tsx`  →  ShareCardPreviewProps · ShareCardPreview
+- `src/pages/share-card/ui/ShareCardScreen.tsx`  →  ShareCardScreenProps · ShareCardScreen
 
 ## src/pages/stay-detail/config/
 - `src/pages/stay-detail/config/amenityIcons.ts`  →  resolveAmenityIcon
@@ -984,8 +978,14 @@
 ## src/pages/travel-style/
 - `src/pages/travel-style/index.ts`  →  TravelStylePage
 
+## src/pages/travel-style/model/
+- `src/pages/travel-style/model/styleThreshold.ts`  →  categoryLabel
+
 ## src/pages/travel-style/ui/
+- `src/pages/travel-style/ui/CategoryBarList.tsx`  →  CategoryBarListProps · CategoryBarList
+- `src/pages/travel-style/ui/StatTile.tsx`  →  StatTileProps · StatTile
 - `src/pages/travel-style/ui/TravelStylePage.tsx`  →  TravelStylePage
+- `src/pages/travel-style/ui/TravelStyleScreen.tsx`  →  TravelStyleScreenProps · TravelStyleScreen
 
 ## src/pages/trip-new-step1/
 - `src/pages/trip-new-step1/index.ts`  →  TripNewStep1Page
@@ -1015,7 +1015,9 @@
 - `src/pages/trip-summary/index.ts`  →  TripSummaryPage
 
 ## src/pages/trip-summary/ui/
+- `src/pages/trip-summary/ui/DayHighlightCard.tsx`  →  DayHighlightCardProps · DayHighlightCard
 - `src/pages/trip-summary/ui/TripSummaryPage.tsx`  →  TripSummaryPageProps · TripSummaryPage
+- `src/pages/trip-summary/ui/TripSummaryScreen.tsx`  →  SummaryViewMode · DayReflectionVM · DayCardVM · TripSummaryScreenProps · TripSummaryScreen
 
 ## src/shared/api/generated/account/
 - `src/shared/api/generated/account/account.ts`  →  getMe · getGetMeQueryKey · getGetMeQueryOptions · GetMeQueryResult · GetMeQueryError · useGetMe · postMeDeletion · getPostMeDeletionMutationOptions · PostMeDeletionMutationResult · PostMeDeletionMutationError · usePostMeDeletion · deleteMeDeletion · getDeleteMeDeletionMutationOptions · DeleteMeDeletionMutationResult · DeleteMeDeletionMutationError · useDeleteMeDeletion · getMeExport · getGetMeExportQueryKey · getGetMeExportQueryOptions · GetMeExportQueryResult · GetMeExportQueryError · useGetMeExport

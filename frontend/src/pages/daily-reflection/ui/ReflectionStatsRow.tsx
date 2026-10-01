@@ -3,7 +3,7 @@ import { Text, View } from 'react-native';
 
 import type { ReflectionStats } from '@/shared/api/generated/schemas';
 
-import { formatKm } from '../model/formatKm';
+import { formatKm } from '@/features/reflection/model/formatKm';
 
 /**
  * TRIP-571 · 통계 3열(방문 · 이동 · 사진). testID `reflection-daily-stats`.

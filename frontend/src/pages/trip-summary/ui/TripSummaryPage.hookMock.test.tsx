@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import type { TripSummary } from '@/shared/api/generated/schemas';
 
 import { useTripSummary } from '@/features/reflection/model/useTripSummary';
-import { TripSummaryScreen } from '@/features/reflection/ui/TripSummaryScreen';
+import { TripSummaryScreen } from './TripSummaryScreen';
 import { TripSummaryPage } from './TripSummaryPage';
 
 /**
@@ -53,7 +53,7 @@ jest.mock('@/shared/api/generated/trips/trips', () => ({
   })),
 }));
 
-jest.mock('@/features/reflection/ui/TripSummaryScreen', () => ({
+jest.mock('./TripSummaryScreen', () => ({
   TripSummaryScreen: jest.fn(() => null),
 }));
 

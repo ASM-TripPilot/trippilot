@@ -18,7 +18,7 @@ import {
   recordsTripIdForDate,
 } from '@/features/record/model/recordsCalendar';
 import { useRecordsCalendar } from '@/features/record/model/useRecordsCalendar';
-import { RecordsCalendarScreen } from '@/features/record/ui/RecordsCalendarScreen';
+import { RecordsCalendarScreen } from './RecordsCalendarScreen';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import { buildMonthGrid, shiftMonth } from '@/shared/date/monthGrid';
 import { seoulDate } from '@/shared/date/seoulDate';
