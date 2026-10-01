@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-from dataclasses import fields
+from dataclasses import fields, replace
 from datetime import date, datetime, timedelta, timezone
 from unittest.mock import patch
 
@@ -314,3 +314,32 @@ def test_pin_near_window_start_is_always_solvable(dlat, dlng, pin_offset, extra)
     assert any(s.poi_id == fb.poi_id and s.start_at == fb.window.start
                for s in result.days[0].slots)
     assert check_all(result, problem, index, _EST) == []
+    _assert_free_first_slot_departs_from_anchor(result, problem, index)
+
+
+def _assert_free_first_slot_departs_from_anchor(result, problem, index) -> None:
+    """면제는 핀에만 — 핀이 아닌 첫 방문은 여전히 숙소(앵커)에서 출발해 닿는 시각이다.
+    check_all 은 앵커를 보지 않으므로 이 단언이 없으면 면제가 넓어져도 아무것도 안 운다."""
+    pinned = {fb.poi_id for fb in problem.fixed_blocks}
+    for day in result.days:
+        if not day.slots or day.slots[0].poi_id in pinned:
+            continue
+        first = day.slots[0]
+        travel = _EST.estimate(problem.anchor, index[first.poi_id].coord,
+                               problem.transport).internal_minutes
+        assert first.start_at >= problem.day_window.start + timedelta(minutes=travel)
+
+
+def test_free_first_slot_still_departs_from_anchor() -> None:
+    """핀 없이 앵커만 멀고(약 5km) 하루가 빠듯하면, 앵커 이동을 무시해야 한 곳을 더
+    넣을 수 있다 — 그래도 첫 방문은 창 시작 + 앵커 이동 이후여야 한다(목적함수가 면제를
+    원하는 상황에서 지켜지는지를 본다. 넉넉한 하루에선 그리디 힌트가 우연히 지켜 준다)."""
+    problem, index, _ = _ws_pin_setup(GeoPoint(37.595, 126.98), 0, extra=3)
+    problem = replace(
+        problem, fixed_blocks=(),
+        candidates=tuple(ScoredPoi(poi_id=p, score=0.5, is_llm_score=False) for p in index),
+        day_window=TimeWindow(datetime(2026, 8, 5, 9, 0, tzinfo=_KST),
+                              datetime(2026, 8, 5, 12, 0, tzinfo=_KST)))
+    result = OrToolsAssembler(index, _EST, _CFG).solve(problem, remaining_ms=1500)
+    assert result is not None and result.days[0].slots
+    _assert_free_first_slot_departs_from_anchor(result, problem, index)
