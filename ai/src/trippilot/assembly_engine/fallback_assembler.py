@@ -24,6 +24,7 @@ from trippilot.assembly_engine.config import (
     stay_for,
     AssemblyConfig,
 )
+from trippilot.assembly_engine.constraints import anchor_minutes, not_before_floor
 from trippilot.domain.common import PoiId
 from trippilot.domain.itinerary import (
     DaySolution,
@@ -62,19 +63,6 @@ def placed_fixed_blocks(
             for s in slots
         )
     )
-
-
-def not_before_floor(problem: ItineraryProblem) -> datetime | None:
-    """비고정 방문 시작 하한을 분 단위로 **올린다** (TRIP-1182). 없으면 None.
-
-    슬롯은 분 해상도다 — 14:10:05 를 내리면 14:10 시작 슬롯이 하한 이전이 된다.
-    두 어셈블러가 같은 값을 쓴다(OR 은 이 값의 분, 그리디는 이 값 그대로).
-    """
-    nb = problem.not_before
-    if nb is None:
-        return None
-    floor = nb.replace(second=0, microsecond=0)
-    return floor if floor == nb else floor + timedelta(minutes=1)
 
 
 def _open_ok(poi: Poi, start: datetime, end: datetime) -> bool:
@@ -218,8 +206,10 @@ class RuleFallbackAssembler:
                             last_poi.coord, poi.coord, problem.transport
                         ).internal_minutes
                     start = depart + timedelta(minutes=travel_min)
-                    if not_before is not None and start < not_before:
-                        start = not_before  # 하한까지 기다린다 (OR 노드 lo 와 같은 규칙)
+                    if not_before is not None:
+                        # 하한 시각에 지금 위치(앵커)에서 출발 (OR 노드 lo 와 같은 규칙)
+                        start = max(start, not_before + timedelta(
+                            minutes=anchor_minutes(problem, poi, self._est)))
                     end = start + timedelta(minutes=stay)
                     if end > day_end:
                         continue  # day window 초과 (HC4)

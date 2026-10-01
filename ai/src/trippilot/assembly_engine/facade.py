@@ -165,7 +165,7 @@ class HybridAssemblyFacade:
             # (재계획 from_instant, TRIP-1182)도 같은 이유로 여기서만 본다.
             violations = (check_all(result, problem, self._pois, self._est)
                           + check_hc2_coords_known(result, self._pois)
-                          + check_not_before(result, problem))
+                          + check_not_before(result, problem, self._pois, self._est))
             if violations:  # 유효하지 않은 해는 반환 금지 (INV-2)
                 self._emit_fallback(tid, stage.name, next_name,
                                     f"invalid:{len(violations)}")

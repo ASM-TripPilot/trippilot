@@ -33,11 +33,8 @@ from trippilot.assembly_engine.config import (
     stay_for,
     AssemblyConfig,
 )
-from trippilot.assembly_engine.fallback_assembler import (
-    RuleFallbackAssembler,
-    not_before_floor,
-    placed_fixed_blocks,
-)
+from trippilot.assembly_engine.constraints import anchor_minutes, not_before_floor
+from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler, placed_fixed_blocks
 from trippilot.domain.common import PoiId
 from trippilot.domain.itinerary import (
     DaySolution,
@@ -278,7 +275,8 @@ class OrToolsAssembler:
                 continue  # 휴무 — 모델에서 제외
             lo = max(win[0], ws)
             if floor is not None and c.poi_id not in fixed_ids:
-                lo = max(lo, floor)
+                # 하한 시각에 지금 위치(앵커)에서 출발 — 정의역만 좁힌다(용량 컷 유효)
+                lo = max(lo, floor + anchor_minutes(problem, poi, self._est))
             hi = min(win[1], we) - stay
             if lo > hi:
                 continue  # 시간창 불가 — 제외

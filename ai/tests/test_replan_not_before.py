@@ -10,6 +10,8 @@
 
 증명하는 것 (실 LLM·실 API 0):
   ① 실측 시나리오 두 건 — OR·폴백 모두 새 방문 전부 ≥ from_instant, 잠금 유지, HC 0
+  ①′ 하한 시각의 출발점은 앵커(지금 위치) — 새 방문은 ≥ from_instant + 앵커 이동 (리뷰 지적:
+     하한이 앵커 이동을 지워 갈 수 없는 시각이 체인을 통과했다)
   ② PBT — 임의 잠금·from_instant 에서 같은 성질 + OR 이 해를 낸다(용량 컷이 해를 안 자른다)
   ③ 하한이 무의미한 값(None·창 시작 이전·다른 날)이면 해가 바이트 동일 (generate 무변경)
   ④ 체인 검증이 하한 위반 해를 거부한다 / 잠금이 창 앞쪽이어도 모순(409)이 아니다
@@ -104,13 +106,27 @@ def _is_pinned(slot: VisitSlot, problem: ItineraryProblem) -> bool:
                and slot.end_at == fb.window.end for fb in problem.fixed_blocks)
 
 
+def _earliest(slot: VisitSlot, problem, index) -> datetime:
+    """비고정 슬롯이 시작할 수 있는 가장 이른 시각 — 하한 + 현재 위치(앵커)에서의 이동.
+
+    재계획 앵커는 사용자의 지금 위치다(BE: GPS → 마지막 완료 방문 → 숙소). 하한 시각에
+    거기 있는 사람이 이동 없이 새 장소에 도착할 수 없다. 하한이 창 시작 이하면 자르는 게
+    없다 — 창 시작 출발 아크가 앵커 이동을 이미 센다(시험 대상 규칙과 같은 판정)."""
+    nb = problem.not_before
+    if problem.anchor is None or nb <= problem.day_window.start:
+        return nb
+    return nb + timedelta(minutes=_EST.estimate(
+        problem.anchor, index[slot.poi_id].coord, problem.transport).internal_minutes)
+
+
 def _assert_respects_not_before(result: ItinerarySolution, problem, index) -> None:
     assert check_all(result, problem, index, _EST) == []        # HC 0 (HC3 = 잠금 유지)
     for day in result.days:
         for slot in day.slots:
             if not _is_pinned(slot, problem):
-                assert slot.start_at >= problem.not_before, (
-                    f"{slot.poi_id} {slot.start_at:%H:%M} < 하한 {problem.not_before:%H:%M}")
+                lo = _earliest(slot, problem, index)
+                assert slot.start_at >= lo, (
+                    f"{slot.poi_id} {slot.start_at:%H:%M} < 하한+앵커 이동 {lo:%H:%M}")
 
 
 def _both(index):
@@ -211,6 +227,76 @@ def test_후보이기도_한_잠금은_하한에_걸리지_않고_점수를_유�
     assert all(scores[pid] == 0.77 for pid in locked), scores
 
 
+# ── ①′ 하한 시각의 출발점은 지금 위치(앵커)다 — 리뷰 지적 ───────────────────
+
+# 후보 격자에서 ~15km 떨어진 현재 위치 — 대중교통 ~100분 (리뷰 실측 96·100분)
+_FAR = GeoPoint(_ANCHOR.lat + 0.13, _ANCHOR.lng)
+
+
+@pytest.mark.parametrize("assembler", [0, 1], ids=["or", "fallback"])
+def test_먼_곳에_있으면_하한에서_이동만큼_뒤에_시작한다(assembler) -> None:
+    """종전: 하한이 앵커 이동을 지워 14:10 에 바로 시작(OR nb7 14:10, 폴백 nb0 14:10) —
+    갈 수 없는 시각에 검증 도장이 찍혔다(INV-2). 하한 없는 같은 문제는 09:00+96분을 지킨다."""
+    pois = _pois(12)
+    index = {p.poi_id: p for p in pois}
+    problem = _problem(pois, (), _at(14, 10), anchor=_FAR)
+    result = _both(index)[assembler].solve(problem, 3000)
+
+    assert result is not None
+    assert result.days[0].slots, "14:10+이동 뒤에도 하루가 남는데 새 방문이 0건이다"
+    _assert_respects_not_before(result, problem, index)
+    assert min(s.start_at for s in result.days[0].slots) >= _at(15, 30)
+
+
+@pytest.mark.parametrize("assembler", [0, 1], ids=["or", "fallback"])
+def test_지난_잠금_뒤에도_지금_위치에서_출발한다(assembler) -> None:
+    """잠금이 하한 앞에 있으면 종전엔 그 잠금 장소에서 이동을 셌다(13:45 + 몇 분 → 14:10).
+    사용자는 이미 그곳을 떠나 지금 위치(앵커)에 있다."""
+    pois = _pois(10)
+    index = {p.poi_id: p for p in pois}
+    problem = _problem(pois, (_lock(pois[0], _at(12, 45)),), _at(14, 10), anchor=_FAR)
+    result = _both(index)[assembler].solve(problem, 3000)
+
+    assert result is not None
+    _assert_respects_not_before(result, problem, index)
+    free = [s for s in result.days[0].slots if not _is_pinned(s, problem)]
+    assert free and min(s.start_at for s in free) >= _at(15, 30)
+
+
+class _NoTravelStage:
+    """하한 시각에 바로 시작하는 단계 — 앵커 이동을 무시한 해가 체인을 통과하면 INV-2 위반."""
+
+    name = "no_travel"
+    required_ms = 0
+
+    def __init__(self, poi: Poi) -> None:
+        self._poi = poi
+
+    def solve(self, problem, remaining_ms):
+        slot = VisitSlot(poi_id=self._poi.poi_id, start_at=_at(14, 10), end_at=_at(15, 10),
+                         stay_min=60, score=0.5, is_llm_score=False)
+        return ItinerarySolution(
+            schedule_id=problem.schedule_id,
+            days=(DaySolution(date=_DAY, slots=(slot,), fixed_blocks=()),),
+            is_fallback=False, solve_mode=SolveMode.OR_TOOLS, assembly_run=None)
+
+
+def test_체인이_앵커_이동을_무시한_하한_해를_거부한다() -> None:
+    pois = _pois(8)
+    index = {p.poi_id: p for p in pois}
+    problem = _problem(pois, (), _at(14, 10), anchor=_FAR)
+    trace = InMemoryTrace()
+    facade = HybridAssemblyFacade(
+        [_NoTravelStage(pois[0]), RuleFallbackAssembler(index, _EST, _CFG)],
+        index, _EST, FakeClock(), trace)
+
+    solved = facade.solve(problem, deadline_ms=5000)
+
+    assert solved.solve_mode is not SolveMode.OR_TOOLS, "갈 수 없는 시각이 체인을 통과했다"
+    assert any(getattr(e, "reason", "").startswith("invalid:") for e in trace.events)
+    _assert_respects_not_before(solved, problem, index)
+
+
 # ── ② PBT — 임의 잠금·하한 ──────────────────────────────────────────────
 
 # 잠금 후보 시각 — 서로 2시간 이상 떨어져 잠금끼리는 항상 이동 가능(≤ ~1.5km)
@@ -227,7 +313,7 @@ def _locked_setups(draw):
     locks = tuple(_lock(pois[i], _at(h, m)) for i, (h, m) in enumerate(starts))
     nb_min = draw(st.integers(min_value=8 * 60, max_value=21 * 60 + 30))
     not_before = _at(0) + timedelta(minutes=nb_min)
-    anchor = draw(st.one_of(st.none(), st.just(_ANCHOR)))
+    anchor = draw(st.one_of(st.none(), st.just(_ANCHOR), st.just(_FAR)))
     seed = draw(st.integers(min_value=0, max_value=2**31))
     problem = _problem(pois, locks, not_before, anchor=anchor, seed=seed)
     return problem, {p.poi_id: p for p in pois}

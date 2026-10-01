@@ -11,6 +11,7 @@ I/O 없음 — (solution, problem, poi_index, estimator)만으로 판정. oracle
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from typing import Mapping
 
 from trippilot.domain.common import PoiId
@@ -76,25 +77,64 @@ def check_hc2_coords_known(solution: ItinerarySolution,
     return out
 
 
-def check_not_before(solution: ItinerarySolution,
-                     problem: ItineraryProblem) -> list[Violation]:
-    """체인 내부 전용 (TRIP-1182) — 고정 블록이 아닌 슬롯이 `not_before` 이전에 시작하면 위반.
+def not_before_floor(problem: ItineraryProblem) -> datetime | None:
+    """비고정 방문 시작 하한을 분 단위로 **올린다** (TRIP-1182). 자르는 게 없으면 None.
 
-    solve 는 시각을 **만드는** 경로라, 이미 지난 시각에 새 방문을 놓은 해가 검증 도장과
-    함께 나가면 INV-2 위반이다. 공용 validate·repair 에는 넣지 않는다 — 저장된 일정을
-    다시 보는 경로라 시간이 흐르면 지난 슬롯이 전부 위반이 되고, 그 문제엔 하한도 없다.
-    고정 블록은 HC3 과 같은 기준(poi·시각 정확 일치)으로 면제한다.
+    슬롯은 분 해상도다 — 14:10:05 를 내리면 14:10 시작 슬롯이 하한 이전이 된다. 하한이
+    그 일자 창 시작 이하면 None 이다 — 아무것도 자르지 않고, 앵커 이동도 창 시작 출발이
+    이미 센다(generate 와 같은 모델 그대로). 두 어셈블러·체인 검증이 같은 값을 쓴다.
     """
     nb = problem.not_before
     if nb is None:
+        return None
+    floor = nb.replace(second=0, microsecond=0)
+    if floor != nb:
+        floor += timedelta(minutes=1)
+    ws = problem.day_window.start
+    local = floor.astimezone(ws.tzinfo) if ws.tzinfo is not None else floor
+    return floor if local.time() > ws.time() else None
+
+
+def anchor_minutes(problem: ItineraryProblem, poi: Poi, estimator) -> int:
+    """하한 시각의 출발점(앵커 = 사용자의 지금 위치)에서 그 장소까지 이동(분). 앵커 없으면 0.
+
+    재계획 앵커는 BE 가 GPS → 마지막 완료 방문 → 숙소 순으로 고른 현재 위치다. 하한에
+    이걸 더하지 않으면 먼 곳에 있는 사람이 하한 시각에 바로 도착한 해가 나간다(INV-2).
+    지난 잠금 뒤 방문도 그 잠금 장소가 아니라 여기서 센다 — 사용자는 이미 떠났다.
+    """
+    if problem.anchor is None:
+        return 0
+    return estimator.estimate(problem.anchor, poi.coord, problem.transport).internal_minutes
+
+
+def check_not_before(solution: ItinerarySolution, problem: ItineraryProblem,
+                     poi_index: Mapping[PoiId, Poi], estimator) -> list[Violation]:
+    """체인 내부 전용 (TRIP-1182) — 고정 블록이 아닌 슬롯이 `하한 + 앵커 이동` 이전에
+    시작하면 위반.
+
+    solve 는 시각을 **만드는** 경로라, 이미 지난 시각이나 지금 위치에서 갈 수 없는 시각에
+    새 방문을 놓은 해가 검증 도장과 함께 나가면 INV-2 위반이다. 공용 validate·repair 에는
+    넣지 않는다 — 저장된 일정을 다시 보는 경로라 시간이 흐르면 지난 슬롯이 전부 위반이
+    되고, 그 문제엔 하한도 없다. 고정 블록은 HC3 과 같은 기준(poi·시각 정확 일치)으로
+    면제한다. 좌표 미상 POI 는 하한만 본다(이동은 `check_hc2_coords_known` 몫).
+    """
+    floor = not_before_floor(problem)
+    if floor is None:
         return []
     pinned = {(fb.poi_id, fb.window.start, fb.window.end) for fb in problem.fixed_blocks}
-    return [
-        Violation("HC4", slot.poi_id, f"시작 하한({nb.isoformat()}) 이전: "
-                                      f"{slot.start_at.isoformat()}")
-        for day in solution.days for slot in day.slots
-        if (slot.poi_id, slot.start_at, slot.end_at) not in pinned and slot.start_at < nb
-    ]
+    out: list[Violation] = []
+    for day in solution.days:
+        for slot in day.slots:
+            if (slot.poi_id, slot.start_at, slot.end_at) in pinned:
+                continue
+            poi = poi_index.get(slot.poi_id)
+            lo = floor + timedelta(
+                minutes=anchor_minutes(problem, poi, estimator) if poi else 0)
+            if slot.start_at < lo:
+                out.append(Violation("HC4", slot.poi_id,
+                                     f"시작 하한({lo.isoformat()}) 이전: "
+                                     f"{slot.start_at.isoformat()}"))
+    return out
 
 
 def check_hc3(solution: ItinerarySolution, problem: ItineraryProblem) -> list[Violation]:
