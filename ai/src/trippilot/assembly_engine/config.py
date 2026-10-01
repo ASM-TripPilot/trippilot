@@ -101,6 +101,11 @@ RAIN_INDOOR: frozenset[PoiCategory] = frozenset(
 @dataclass(frozen=True, slots=True)
 class AssemblyConfig:
     or_tools_limit_ms: int = 3000
+    # CP-SAT max_deterministic_time(결정론 작업량 단위 — 초가 아니다). 일자당 탐색을 **이것**이
+    # 멈추게 해서 같은 입력이 부하와 무관하게 같은 해를 낸다(TRIP-1176). 위 벽시계 한도는
+    # 백스톱으로만 남는다. 2.0 근거(TRIP-1160 실 덤프 39건 × 2회 재생): 해 없음 0·HC 위반 0·
+    # 반복 동일 39/39·일자당 중앙 1.2s·최대 1.5s(개발 머신 — 운영 CPU 에선 따로 재야 한다).
+    or_tools_det_limit: float = 2.0
     or_tools_min_ms: int = 500          # 이보다 잔여가 적으면 OR-Tools 단계 스킵 (DL-2)
     llm_stage_timeout_ms: int = 2500    # LLM 2차 요구 시간 (DL-2)
     local_search_min_remaining_ms: int = 3000
@@ -156,6 +161,8 @@ class AssemblyConfig:
                      "local_search_min_remaining_ms", "buffer_min"):
             if getattr(self, name) < 0:
                 raise ValueError(f"{name} 음수 불가")
+        if self.or_tools_det_limit <= 0:
+            raise ValueError("or_tools_det_limit 양수 필요")
         if self.detour_factor <= 0:
             raise ValueError("detour_factor 양수 필요")
         if self.public_walk_max_km < 0:
