@@ -44,6 +44,11 @@ _log = logging.getLogger(__name__)
 
 _PREFILTER_TOP_K = 60
 _MIN_DAY_MS = 100
+# 실패한 일자에 몰아주는 재시도(TRIP-907)의 상한. 잔여 **전부**를 넘기면 deadline 미지정
+# 요청(wiring UNBOUNDED_DEADLINE_MS=600초)에서 해 없는 하루가 CP-SAT 에 ~590초를 쓴다
+# (QA 실측: generate 601초). 근거: 후보 50곳·1일 실측 3초·6초 3/3 해없음, 12초 0/3 해없음
+# → 12초에 여유를 얹은 15초. 이 안에 못 풀면 체인 다음 단계(그리디)로 내려간다.
+SPARE_RETRY_CAP_MS = 15_000
 
 
 def prefilter_cut(
@@ -153,10 +158,14 @@ class OrToolsAssembler:
                 used_cap_ms = min(self._cfg.or_tools_limit_ms, per_day_ms)
                 spare_ms = remaining_ms - int((time.monotonic() - started) * 1000)
                 if spare_ms >= used_cap_ms * 2:
-                    _log.info("해 없음 — 남은 예산 %dms 를 몰아 재시도 (day=%s)",
-                              spare_ms, day)
+                    retry_ms = min(spare_ms, SPARE_RETRY_CAP_MS)
+                    _log.info("해 없음 — 남은 예산 %dms 중 %dms 를 몰아 재시도 (day=%s)",
+                              spare_ms, retry_ms, day)
                     slots = self._solve_day(replace(problem, pace=None), day, used,
-                                            spare_ms, log_cut=False, cap_ms=spare_ms)
+                                            retry_ms, log_cut=False, cap_ms=retry_ms)
+                    if slots is None:  # 침묵 금지(INV-4) — 퍼사드 no_solution 과 짝
+                        _log.warning("몰아 재시도도 상한 %dms 안에 해 없음 — 다음 단계로 "
+                                     "(day=%s, 남은 예산 %dms)", retry_ms, day, spare_ms)
             if slots is None:
                 return None  # 해 확보 실패 → 체인 다음 단계
             used.update(s.poi_id for s in slots)
