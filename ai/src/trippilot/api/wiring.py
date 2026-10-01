@@ -1651,6 +1651,18 @@ class WiredItineraryOrchestrator:
         if solution is None or not any(day.slots for day in solution.days):
             return self._replan_empty(
                 "NO_FEASIBLE_SLOT", notes, resolved, unknown, retrieved)
+        # 잠금이 빠진 일정은 내지 않는다 (TRIP-1177). 에이전트는 좌표를 못 찾은 고정 블록을
+        # 빼고 푼다 — generate 는 unplaced 로 보고하지만 재계획엔 그 칸이 없어, 내보내면
+        # BE 가 잠금이 사라진 하루를 깨끗한 결과로 읽는다. 체인 HC3 가 나머지 블록을
+        # 보장하므로 여기 걸리는 것은 그 제외뿐이다.
+        placed = {(s.poi_id, s.start_at) for day in solution.days for s in day.slots}
+        lost = [str(b.poi_id) for b in _replan_fixed_blocks(request, self._tz)
+                if b.window.start.date() == request.target_date
+                and (b.poi_id, b.window.start) not in placed]
+        if lost:
+            notes.append(f"locked_block_unplaced: {','.join(lost)}")
+            return self._replan_empty(
+                "NO_FEASIBLE_SLOT", notes, resolved, unknown, retrieved)
 
         coords = self._coords_for(solution, outcome.slot_alternatives)
         anchors = {request.target_date: GeoPoint(request.anchor.lat, request.anchor.lng)}
@@ -2280,6 +2292,8 @@ def build_orchestrator(
         # 그때 점수는 종전과 **완전히 같다**(전 POI '모름' → 중립). 즉 데이터가
         # 배포되기 전에도 이 배선이 동작을 안 바꾼다.
         fees=load_fee_table(),
+        # 풀 밖 고정 블록 POI 조회 (TRIP-1177) — 없으면 이동을 0분으로 놓은 해가 나갔다.
+        poi_db=poi_db,
     )
     # 수집기는 하나를 공유한다 — 코디네이터(generate)와 경계(replan·edit)가 같은
     # 요구표·같은 Provider 를 쓴다. 경로마다 따로 만들면 표가 갈라진다.
