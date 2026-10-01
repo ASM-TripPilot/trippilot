@@ -166,6 +166,9 @@ class GenerateItineraryRequest:
     # (Provider 수집물이 아니라 요청에 실려 오는 값). generate·replan 양쪽에 실린다 —
     # 다시 짜는 경로가 replan 이고, 처음부터 다시 만드는 경로가 generate 이기 때문이다.
     rejections: tuple[Rejection, ...] = ()
+    # 요청에 실려 온 취향 (AI-D09) — 있으면 PERSONA 수집분보다 우선한다. None 이면 종전대로
+    # 수집분을 쓴다. 비어 있음의 판정은 경계(배선)가 한다.
+    persona: PersonaSummary | None = None
 
     def __post_init__(self) -> None:
         if not self.days:
