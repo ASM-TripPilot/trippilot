@@ -96,7 +96,7 @@ function getCardTestIds(): string[] {
     .map((node) => String(node.props.testID));
 }
 
-/** `SocialLoginScreen.visual.test.tsx:46`에서 그대로 가져온다(리포 관례 — 공용화하지 않고
+/** `SocialLoginScreen.test.tsx` `비주얼 구조`의 classTokens에서 그대로 가져온다(리포 관례 — 공용화하지 않고
  * 파일마다 복사). 문자열 `includes`는 `'border-hairline-strong'.includes('border-hairline')`가
  * true인 부분포함 오탐을 낸다 — 토큰 배열 원소 일치만 오탐을 구조적으로 막는다. */
 function classTokens(node: { props: { className?: string } }): string[] {
