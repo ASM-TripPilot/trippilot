@@ -442,6 +442,10 @@ LLM 문장 품질은 PR마다 평가할 수 없다 (비용·시간·비결정성
 - `_local_route` 의 "ARN 이 있으면 Bedrock 이 이긴다" 는 그대로 두되, 전환을 PR 로 만들려면 시크릿이 아닌 **값 스위치**(`TRIPPILOT_REMINDER_TRANSPORT`)가 필요하다 — TRIP-973 선행 코드.
 - 안티패턴에 이미 있는 것: 베이스 모델이 조용히 서빙돼도 그럴듯한 답이 나온다 → 배포 직후 문체 대조 필수(`docs/conventions/anti-patterns.md`).
 
+**추기 (2026-10-01) — §2 의 매니페스트를 철회한다**: 위 §2 는 인클러스터 서빙을 "기본 꺼짐 측정 실험"으로 리포에 남겨 두기로 했으나, 그 매니페스트(`deploy/eks/chart/templates/reminder-llm.yaml` + `reminderLlm` 값·스키마)를 **지웠다**. 감사에서 결함 4건이 나왔다 — ① Triton 이 `/v1` OpenAI 프런트엔드를 안 띄우는데 앱은 `/v1` 로 부른다(파드 Ready·호출 404) ② `trippilot.podSpec`·`containerSecurity` 미적용 ③ 모델 PVC 없음 ④ KEDA 트리거가 없는 메트릭을 봐 스케일이 영구 0. **"기본 꺼짐"이 "켜면 된다"를 뜻하지 않는 상태**였고, 넷을 고쳐도 Bedrock 과 같은 일을 하는 두 번째 운영 경로가 남는다.
+
+§1(Bedrock 이 실서비스)·§3(판정기)·§4(Modal 기각)는 그대로다. 바뀌는 것은 **전환 비용의 크기**다 — 종전 서술의 "env 한 줄"은 매니페스트가 리포에 있다는 전제였다. 이제 전환은 매니페스트를 **처음부터 다시 쓰는 일**이고(이 커밋을 revert 하지 않는다), 그 전까지 `reminderLlm` 값은 차트 스키마가 거부한다(`test_in_cluster_reminder_serving_was_withdrawn`). `TRIPPILOT_REMINDER_TRANSPORT` 값 스위치는 코드에 남아 있으므로 OpenAI 호환 엔드포인트가 다시 생기면 앱 쪽 조작은 여전히 한 줄이다. 근거는 `ai/docs/mlops/서빙-의사결정-기록.md` §10.
+
 ---
 
 ## AI-D09: 요청 인라인 취향을 그 요청의 페르소나로 쓴다 — D31 부분 개정 (generate·replan)

@@ -29,7 +29,6 @@ ai/
   main.py::_local_route           M-2 전송로 선택 (TRIPPILOT_REMINDER_TRANSPORT > ARN)
 deploy/eks/chart/templates/
   hpa.yaml                        ai·gateway HPA (기본 꺼짐)
-  reminder-llm.yaml               M-2 인클러스터 Triton + KEDA 0↔1 (기본 꺼짐)
   embedding.yaml                  M-1 파드 (기존 · replicas 1 고정)
 .github/workflows/
   ai-embedding-backend-bench.yml  amd64 A/B — 라벨 또는 수동 실행
@@ -91,11 +90,13 @@ deploy/eks/chart/templates/
 > ⚠️ **같은 날 반대 방향의 기록이 하나 더 있다 — 확인 전까지 이 절을 근거로 삼지 마라.**
 > 서빙 트랙 세션이 PR [#750](https://github.com/ASM-TripPilot/trippilot/pull/750)(ADR AI-D08,
 > 열림)에 **"실서비스 = Bedrock, EKS GPU 는 측정 실험이고 더 싸면 전환"** 으로 적었다.
-> 두 기록은 **목표와 실험의 이름표가 반대**다. 사용자 확인을 요청해 둔 상태이고, 그 답에
-> 따라 이 절의 한 줄만 바뀐다.
 >
-> **아래 절차와 코드는 어느 쪽이든 그대로다** — 전송로를 값으로 고르는 구조라, 어느 쪽을
-> "목표"로 부르든 조작은 같고 되돌리기도 같다. 이름표가 정해지기 전에도 실험은 돌릴 수 있다.
+> **해소(2026-10-01)**: ADR 쪽이 맞다. 이름표가 반대였던 것은 이 세션이다 — PR #750 은
+> 이미 머지됐고(AI-D08 확정), 사용자는 판단을 위임했다. **실서비스는 Bedrock Custom
+> Model Import 이고 인클러스터 GPU 서빙은 전환 판정기가 비용 우위를 수치로 낼 때 여는
+> 선택지다.** 그래서 매니페스트를 지웠다(AI-D08 추기 · `ai/docs/mlops/서빙-의사결정-기록.md`
+> §10). 아래 ①~⑧ 은 **그때 다시 쓸 때의 순서 기록**으로만 읽는다 — ④~⑥ 의
+> `reminderLlm.*` 값은 지금 차트 스키마가 거부한다.
 
 전환은 파드를 띄우는 일이 아니다. **전송로를 고르는 일**이다 — 우선순위 규칙상 ARN 이 살아
 있으면 파드를 켜도 트래픽이 안 간다. `reminderLlm.transport`(→ `TRIPPILOT_REMINDER_TRANSPORT`)
@@ -123,7 +124,7 @@ deploy/eks/chart/templates/
 |---|---|---|
 | `ai`·`gateway` | HPA, CPU 기준 · 기본 꺼짐 | 상태 없는 CPU 바운드, 기동 빠름 |
 | `embedding` | **HPA 를 두지 않는다** | 파드 5Gi · 모델 로드 수십 초 · 프로세스당 4.2 GiB |
-| `reminder-llm` | KEDA 0↔1 | 비동기 배치라 0 으로 내려가도 됨 |
+| ~~`reminder-llm`~~ | **철회(2026-10-01)** | 운영 경로는 Bedrock 하나다 — 근거는 `ai/docs/mlops/서빙-의사결정-기록.md` §10 |
 
 **HPA 가 기본 꺼짐인 것은 보수가 아니라 선행 조건 부재다.** `metrics-server` 가 클러스터에
 없어서, 켜면 목표치가 `<unknown>` 인 채 **replica 소유권만 가져간다**(Deployment 가

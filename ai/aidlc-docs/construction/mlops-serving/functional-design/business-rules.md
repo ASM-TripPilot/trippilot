@@ -117,9 +117,12 @@ collection 이름 규칙(TRIP-519)도 이걸 못 잡는다.
 목표치가 `<unknown>` 인 채 replica 소유권만 가져가 **늘지도 줄지도 않으면서 수동 조절을
 막는다.**
 
-### BR-MLO-17 — GPU 한도는 values 가 아니라 템플릿에 박는다
+### BR-MLO-17 — ~~GPU 한도는 values 가 아니라 템플릿에 박는다~~ (철회 2026-10-01)
 
-빠지면 파드가 CPU 노드에 스케줄되고, 기동 실패가 아니라 **런타임 실패**로 늦게 드러난다.
+인클러스터 GPU 서빙 자체를 접었으므로(`ai/docs/mlops/서빙-의사결정-기록.md` §10) 이 규칙이
+지킬 대상이 없다. **다시 열 때 규칙도 같이 되살린다** — 빠지면 파드가 CPU 노드에
+스케줄되고, 기동 실패가 아니라 런타임 실패로 늦게 드러나기 때문이다. 그 전까지
+`reminderLlm` 값은 스키마가 거부한다(아래 게이트).
 
 ---
 
@@ -163,8 +166,7 @@ KEDA 0 스케일·Karpenter 노드 반납은 매니페스트의 주장이다. �
 
 | 게이트 | 무엇을 막나 | 어디 |
 |---|---|---|
-| 차트 렌더 — 모델명 | BR-MLO-01 | `deploy/eks/chart/tests/test_chart.py` |
-| 차트 렌더 — GPU 한도·nodeSelector·KEDA 0 | BR-MLO-17 | 같은 파일 |
+| 차트 렌더 — `reminderLlm` 값을 스키마가 거부 | BR-MLO-17(철회 상태 고정) | `deploy/eks/chart/tests/test_chart.py` |
 | 차트 렌더 — `embedding.autoscaling` 거부 | BR-MLO-14 | 같은 파일 |
 | 차트 렌더 — HPA 켜면 `replicas` 없음 | BR-MLO-15 | 같은 파일 |
 | 배선 — 임베딩이 캐시로 감싸짐 · `.inner` 로 provider 확인 | BR-MLO-10 | `tests/test_wiring_env.py` |
