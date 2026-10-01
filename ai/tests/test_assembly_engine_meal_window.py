@@ -7,8 +7,8 @@
 증명하는 것:
   ① 재현 A(식당 점수 우위 풀): 창 밖 FOOD·FOOD 연속 배치가 무보정 대비 억제되고
      점심·저녁 창에 FOOD가 배치된다
-  ② 재현 B(자연 점수 우위 풀): 무보정은 점심 창 FOOD 0개(아침 배치) — 보정 후
-     점심 창에 FOOD 1개 포함
+  ② 재현 B(자연 점수 우위 풀): 보정 후 점심 창에 FOOD 1개 포함 (무보정 대조는
+     TRIP-1176 완전 힌트 이후 성립하지 않아 뺐다 — 본문 주석)
   ③ 식당 0개 풀: 일정 정상 생성(실패 조건화 금지) + 보정 항이 완전 무영향
   ④ 폴백 경로 동일 규칙 (결정론 버전)
   ⑤ PBT: 임의 풀·점수·과장 가중에서도 보정이 HC1~4 위반을 만들지 않고(검증기
@@ -140,9 +140,12 @@ def test_case_b_nature_heavy_pool_gets_lunch_food() -> None:
     off = OrToolsAssembler(index, TravelEstimator(_CFG_OFF), _CFG_OFF).solve(problem, 3000)
     assert on is not None and off is not None
     assert check_all(on, problem, index, _EST) == []
-    # 무보정 재현: 점심 창 FOOD 0 (실측 — FOOD가 09:00 아침에 배치됨)
-    assert not any(_fully_in(s, _CFG.lunch_window_min)
-                   for s in _food_slots(off, index))
+    assert check_all(off, problem, index, _EST) == []
+    # 종전엔 "무보정이면 점심 창 FOOD 0(09:00 아침 배치)" 을 재현 전제로 단언했다. TRIP-1176
+    # 부터 OR 은 그리디 해의 완전 힌트에서 출발하고, 그리디의 FOOD 우선 시도는 보정 가중과
+    # 무관하게 돈다(보정을 꺼도 f1 이 12:40 점심 창) — 무보정 OR 해는 그 출발점을 그대로 둔다.
+    # 즉 무보정 해의 식사 배치는 탐색 출발점의 우연이라 대조군이 못 된다. 보정 효과는 아래
+    # 단언과 ① 재현 A(무보정 대비 엄격 감소)가 맡는다.
     # 보정 후: 점심 창에 FOOD 1개 포함
     assert any(_fully_in(s, _CFG.lunch_window_min) for s in _food_slots(on, index))
 

@@ -1,8 +1,11 @@
 """OrToolsAssembler — 체인 1차 단계 (CP-SAT, 미결 #3 확정 · 벤치마크 모델의 정식판).
 
-벤치마크에서 실증된 구성 그대로:
-- 그리디(RuleFallbackAssembler) 해를 웜스타트 힌트로 → 단일 워커에서도 즉시 가능해
-- 단일 워커 + 시드 고정 = 결정론 (다중 워커는 결정론 붕괴 — audit 2026-07-29 교훈)
+구성:
+- 그리디(RuleFallbackAssembler) 해의 방문 순서를 **완전** 힌트로(`_hint_path`) + 하루
+  용량 컷(`_capacity_cut`) → 첫 해가 힌트에서 바로 나온다 (TRIP-1176). 종전처럼
+  visit·start 만 힌트하면 CP-SAT 이 ~20ms 만에 힌트를 버려 이 문장이 성립하지 않았다
+- 단일 워커 + 시드 고정 + 결정론 시간 한도 = 결정론 (다중 워커는 결정론 붕괴 — audit
+  2026-07-29 교훈. 벽시계 한도는 부하에 따라 멈추는 지점이 달라 백스톱으로만 쓴다)
 - 후보 > 60은 점수 상위 60 프리필터 (이동행렬 O(N²) 방지)
 
 일자별 순차 해결: 잔여 시간을 일자 수로 분할, 앞 일자에서 쓴 POI는 제외.
@@ -46,9 +49,16 @@ _PREFILTER_TOP_K = 60
 _MIN_DAY_MS = 100
 # 실패한 일자에 몰아주는 재시도(TRIP-907)의 상한. 잔여 **전부**를 넘기면 deadline 미지정
 # 요청(wiring UNBOUNDED_DEADLINE_MS=600초)에서 해 없는 하루가 CP-SAT 에 ~590초를 쓴다
-# (QA 실측: generate 601초). 근거: 후보 50곳·1일 실측 3초·6초 3/3 해없음, 12초 0/3 해없음
-# → 12초에 여유를 얹은 15초. 이 안에 못 풀면 체인 다음 단계(그리디)로 내려간다.
+# (QA 실측: generate 601초). 이 값은 재시도의 **벽시계 백스톱**이고, 재시도의 탐색량은
+# 결정론 한도 × `_RETRY_DET_FACTOR`(기본 2.0×5 = 10)다. 이 안에 못 풀면 체인 다음 단계
+# (그리디)로 내려간다. (종전 근거 "12초면 0/3 해없음 → 시간 문제" 는 틀린 진단이었다 —
+# 원인은 불완전 힌트·무의미한 상계, TRIP-1176.)
 SPARE_RETRY_CAP_MS = 15_000
+# 재시도 탐색량 배수. 벽시계 상한의 비율로 정하지 않는다 — 그러면 백스톱
+# (`or_tools_limit_ms`)을 올릴 때 재시도 탐색량이 조용히 준다(3000 → 7000 이면 ×5 → ×2.1).
+# 결정론인 것은 det×5 의 벽시계 소요가 재시도 상한 안에 들 때뿐이다: 한 코어에서 det 10 ≈
+# 8.4초로 들지만, CPU 0.5 몫에선 14~27초(wall/det 1.4~2.75)라 백스톱이 먼저 끊는다.
+_RETRY_DET_FACTOR = 5
 
 
 def prefilter_cut(
@@ -128,10 +138,12 @@ class OrToolsAssembler:
                 # 체류 배율은 CP-SAT 인스턴스의 난이도를 바꾼다. 실측(후보 60곳·3초 한도):
                 # 무보정은 6/6 성공인데 ×0.9 는 6/6 실패였고, 후보 45곳에서는 반대로
                 # ×0.95 가 6/6 실패·×0.9 는 6/6 성공이었다. 즉 "체류가 짧을수록 어렵다"가
-                # 아니라 **조합마다 어려운 인스턴스가 따로 있다**(같은 조합은 재현된다).
-                # (이 불안정 자체는 pace 와 무관하게 존재한다 — 무보정 기준선도 후보
-                #  50곳에서 8/8 해없음이다. 별건으로 재서 정한다: OR 단계가 큰
-                #  후보풀에서 해를 못 낸다.)
+                # 아니라 **조합마다 어려운 인스턴스가 따로 있다**(같은 조합은 대부분
+                # 재현됐다 — 벽시계 한도라 일부는 None↔해가 뒤집혔다).
+                # (이 불안정 자체는 pace 와 무관하게 존재했다 — 무보정 기준선도 후보
+                #  50곳에서 8/8 해없음이었다. 원인은 불완전 힌트·무의미한 상계였고
+                #  TRIP-1176 에서 고쳤다 — 위 수치는 그 전 실측이다. 같은 하네스로
+                #  재면 후보 45·50·60곳 × pace 3값 모두 해없음 0 이다.)
                 # 그래서 안전한 배율을 고르는 것으로는 못 막고, 못 냈을 때 무보정으로
                 # 한 번 더 보는 쪽이 맞다 — 이 재시도는 정의상 기준선과 같으므로
                 # **pace 를 켜서 기준선보다 나빠지는 경우가 없다.**
@@ -145,13 +157,24 @@ class OrToolsAssembler:
                 # **안 쓴 예산을 실패한 일자에 몰아준다 (TRIP-907).**
                 #
                 # 퍼사드는 이 단계에 잔여 **전부**를 넘기는데(TRIP-376), `_solve_day`
-                # 는 일자당 상한(기본 3초)으로 스스로 자른다. 그래서 하루짜리 요청은
-                # 15초를 받아 3초만 쓰고 그리디로 내려간다 — 12초가 그냥 남는다.
+                # 는 일자당 상한(당시 기본 3초)으로 스스로 자른다. 그래서 하루짜리 요청은
+                # 15초를 받아 3초만 쓰고 그리디로 내려갔다 — 12초가 그냥 남았다.
                 #
-                # 실측(후보 50곳·1일): 3초·6초는 3/3 해없음, **12초는 0/3** 이다.
-                # 즉 못 푸는 게 아니라 시간이 모자란 것이고, 그 시간은 이미 있다.
-                # 상한 자체를 올리지 않는 이유는 위 `_solve_day` 주석에 있다 —
-                # 잘 풀리던 요청까지 전부 느려진다.
+                # 종전 근거("후보 50곳: 3·6초 해없음, 12초 0/3 → 시간이 모자란 것")는
+                # 틀린 진단이었다. 원인은 불완전 힌트·무의미한 상계였고(TRIP-1176), 그걸
+                # 고친 뒤 실 덤프 39건에서 1차 실패는 0 이다. 그래서 지금 이 재시도는
+                # 드문 실패(경로 완성 실패로 부분 힌트가 된 경우 등)의 **안전장치**다.
+                #
+                # 탐색을 멈추는 것이 결정론 한도라서, **같은 한도로 다시 돌면 1차와
+                # 똑같은 탐색을 반복해 같은 None 이 나온다**(측정: 실 덤프 39건을 힌트
+                # 없이 det 0.1 로 1차 실패시켰을 때 같은 한도 재시도 구제 0/39, ×5 한도
+                # 36/39). 그래서 한도를 고정 배수(`_RETRY_DET_FACTOR`)로 키운다 — 남은
+                # 예산 비율로 키우면 벽시계가 다시 결과를 정한다. 재시도도 결정론인 것은
+                # 그 탐색량의 벽시계 소요가 재시도 상한 안에 들 때뿐이다(한 코어 기준).
+                # 아래 문턱(잔여 ≥ 일자 상한 ×2, 기본 14초)이 그 소요(한 코어 det 10 ≈
+                # 8.4초)를 덮는다 — 잔여 6~8초에서 돌아 백스톱에 끊기는 재시도를 막는다.
+                # 1차 한도를 올리지 않는 이유: 한도는 성공 경로에서도 끝까지 쓰인다(실
+                # 덤프 78회 OPTIMAL 증명 0) — 올리면 잘 풀리던 요청까지 전부 느려진다.
                 # 기준은 `per_day_ms` 가 아니라 **실제로 쓰인 상한**이다 — 하루짜리
                 # 요청은 per_day_ms 가 잔여 전부(15초)라 그걸로 비교하면 영원히
                 # 거짓이 된다. 실제 CP-SAT 에 들어간 값은 min(상한, per_day) 다.
@@ -162,10 +185,12 @@ class OrToolsAssembler:
                     _log.info("해 없음 — 남은 예산 %dms 중 %dms 를 몰아 재시도 (day=%s)",
                               spare_ms, retry_ms, day)
                     slots = self._solve_day(replace(problem, pace=None), day, used,
-                                            retry_ms, log_cut=False, cap_ms=retry_ms)
+                                            retry_ms, log_cut=False, cap_ms=retry_ms,
+                                            det_limit=self._retry_det_limit())
                     if slots is None:  # 침묵 금지(INV-4) — 퍼사드 no_solution 과 짝
-                        _log.warning("몰아 재시도도 상한 %dms 안에 해 없음 — 다음 단계로 "
-                                     "(day=%s, 남은 예산 %dms)", retry_ms, day, spare_ms)
+                        _log.warning("몰아 재시도도 상한 %dms·결정론 한도 %.1f 안에 해 없음"
+                                     " — 다음 단계로 (day=%s, 남은 예산 %dms)",
+                                     retry_ms, self._retry_det_limit(), day, spare_ms)
             if slots is None:
                 return None  # 해 확보 실패 → 체인 다음 단계
             used.update(s.poi_id for s in slots)
@@ -181,10 +206,15 @@ class OrToolsAssembler:
             assembly_run=None,
         )
 
+    def _retry_det_limit(self) -> float:
+        """몰아 재시도(TRIP-907)의 결정론 한도 = 1차 한도 × 고정 배수."""
+        return self._cfg.or_tools_det_limit * _RETRY_DET_FACTOR
+
     # ── 일자 단위 CP-SAT ──────────────────────────────────────
     def _solve_day(self, problem, day, used: set[PoiId],
                    budget_ms: int, *, log_cut: bool = True,
-                   cap_ms: int | None = None) -> list[VisitSlot] | None:
+                   cap_ms: int | None = None,
+                   det_limit: float | None = None) -> list[VisitSlot] | None:
         tz = problem.day_window.start.tzinfo
         ws, we = _mod(problem.day_window.start), _mod(problem.day_window.end)
         fixed = [fb for fb in problem.fixed_blocks if fb.window.start.date() == day]
@@ -207,6 +237,8 @@ class OrToolsAssembler:
             cands = kept
 
         # 노드 구성: 각 노드의 (poi, stay, lo, hi, score, pinned_start)
+        # 해 품질은 노드 **순서**에 의존한다 — 증명 없이 결정론 한도에서 FEASIBLE 로 끝나서,
+        # 같은 집합이라도 순서가 바뀌면 다른(더 나쁠 수 있는) 해가 나온다(부산 실측 −13%).
         nodes = []
         for c in cands:
             poi = self._pois[c.poi_id]
@@ -251,6 +283,13 @@ class OrToolsAssembler:
             return self._est.estimate(coords[i], coords[j],
                                       problem.transport).internal_minutes
 
+        # 앵커 → 노드 이동. 핀은 앵커 출발을 따지지 않으므로 0 (아래 깊이0 아크 주석).
+        from_anchor = [0 if anchor is None or n["pin"] is not None
+                       else self._est.estimate(anchor, coords[j],
+                                               problem.transport).internal_minutes
+                       for j, n in enumerate(nodes)]
+        inc = list(from_anchor)  # 들어오는 이동 하한(용량 컷) — 아크를 만들며 줄인다
+
         m = cp_model.CpModel()
         visit = [m.NewBoolVar(f"v{i}") for i in range(k)]
         start = [m.NewIntVar(n["lo"], max(n["lo"], n["hi"]), f"s{i}")
@@ -274,15 +313,14 @@ class OrToolsAssembler:
                 # 같은 규칙. 걸면 BE 가 창 시작에 핀한 필수방문이 앵커가 있는 한 항상
                 # INFEASIBLE → 그 호출 전체가 규칙 폴백으로 떨어졌다(TRIP-1175).
                 if i == 0 and j >= 1 and nodes[j - 1]["pin"] is None:
-                    depart = ws
-                    if anchor is not None:
-                        depart += self._est.estimate(
-                            anchor, coords[j - 1], problem.transport).internal_minutes
-                    m.Add(start[j - 1] >= depart).OnlyEnforceIf(lit)
+                    m.Add(start[j - 1] >= ws + from_anchor[j - 1]).OnlyEnforceIf(lit)
                 elif i >= 1 and j >= 1:
+                    t = travel(i - 1, j - 1)
+                    inc[j - 1] = min(inc[j - 1], t)
                     m.Add(start[j - 1] >= start[i - 1] + nodes[i - 1]["stay"]
-                          + travel(i - 1, j - 1)).OnlyEnforceIf(lit)
+                          + t).OnlyEnforceIf(lit)
         m.AddCircuit(arcs)
+        self._capacity_cut(m, nodes, visit, inc, ws, we)
         obj_terms: list = [int(n["score"] * 1000) * visit[i]
                            for i, n in enumerate(nodes)]
         obj_terms += self._meal_soft_terms(m, nodes, visit, start, arcs)
@@ -291,26 +329,36 @@ class OrToolsAssembler:
         obj_terms += self._category_soft_terms(problem, day, m, nodes, visit)
         m.Maximize(sum(obj_terms))
 
-        # 웜스타트 힌트 = 규칙해 (벤치마크 실증 구성)
-        hint = self._greedy_hint(problem, day, used)
-        id_to_idx = {n["poi"].poi_id: i for i, n in enumerate(nodes)}
-        for pid, start_min in hint.items():
-            i = id_to_idx.get(pid)
-            if i is not None:
-                m.AddHint(visit[i], 1)
-                m.AddHint(start[i], min(max(start_min, nodes[i]["lo"]),
-                                        max(nodes[i]["lo"], nodes[i]["hi"])))
-
-        cp_solver = cp_model.CpSolver()
-        # 일자당 상한. **기본값(3초)은 성공 경로의 지연을 묶는 장치다** — CP-SAT 은
-        # 준 시간을 거의 항상 끝까지 쓰므로(후보 20곳에서도 3,003ms 실측) 상한을
-        # 올리면 잘 풀리던 요청까지 전부 느려진다. 그래서 상한은 그대로 두고,
-        # **해를 못 냈을 때만** 호출측이 `cap_ms` 로 남은 예산을 몰아준다.
         cap = self._cfg.or_tools_limit_ms if cap_ms is None else cap_ms
-        cp_solver.parameters.max_time_in_seconds = min(cap, budget_ms) / 1000.0
+        cp_solver = cp_model.CpSolver()
+        # 탐색을 멈추는 것은 **결정론 시간 한도**다(TRIP-1176) — 벽시계는 부하에 따라
+        # 같은 입력에서 다른 해·None 을 냈다(실측 반복 동일 28/30). 벽시계(일자당 상한)는
+        # 지연을 묶는 백스톱으로만 남는다. **결정론은 벽시계 몫 ≥ det 소요일 때만**이다 —
+        # 일자 몫(잔여 ÷ 일수)이 작거나 CPU 가 모자라 백스톱이 먼저 걸리면 깨지고, 아래
+        # 경고가 그걸 남긴다(config `or_tools_limit_ms` 주석의 실측).
+        det_cap = self._cfg.or_tools_det_limit if det_limit is None else det_limit
+        wall_cap_s = min(cap, budget_ms) / 1000.0
+        cp_solver.parameters.max_deterministic_time = det_cap
+        cp_solver.parameters.max_time_in_seconds = wall_cap_s
         cp_solver.parameters.random_seed = problem.seed % (2**31)
         cp_solver.parameters.num_search_workers = 1  # 결정론 (FD §4)
+
+        # 웜스타트 = 그리디 해의 방문 **순서**를 완전 힌트로 (TRIP-1176)
+        hint = self._greedy_hint(problem, day, used)
+        id_to_idx = {n["poi"].poi_id: i for i, n in enumerate(nodes)}
+        order = [id_to_idx[pid] for pid, _ in sorted(hint.items(),
+                                                       key=lambda kv: (kv[1], str(kv[0])))
+                 if pid in id_to_idx]
+        self._hint_path(m, order, visit, arcs, cp_solver)
         status = cp_solver.Solve(m)
+        resp = cp_solver.ResponseProto()
+        if (status in (cp_model.FEASIBLE, cp_model.UNKNOWN)
+                and resp.deterministic_time < det_cap):
+            # 증명도 결정론 한도도 아닌데 멈췄다 = 벽시계 백스톱. 운영 CPU 0.5 몫·동시
+            # 요청에서 생긴다 — 잦으면 det 를 내리지 말고 requests.cpu 를 올린다.
+            _log.warning("결정론 한도 전에 벽시계 백스톱으로 끊김 — 같은 입력도 부하에 따라"
+                         " 다른 해가 된다 (day=%s, det %.2f/%.2f, 벽시계 %.2fs/%.2fs)",
+                         day, resp.deterministic_time, det_cap, resp.wall_time, wall_cap_s)
         if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             return None
 
@@ -330,6 +378,75 @@ class OrToolsAssembler:
             ))
         slots.sort(key=lambda s: s.start_at)
         return slots
+
+    @staticmethod
+    def _hint_path(m: cp_model.CpModel, order: list[int], visit, arcs,
+                   solver: cp_model.CpSolver) -> None:
+        """노드 방문 순서 → **완전** 힌트 (TRIP-1176).
+
+        종전엔 그리디 해의 visit=1·start 만 힌트했다(실 덤프 3,658 변수 중 10개). CP-SAT 은
+        나머지(비방문 visit·아크 ~k²·소프트 항 보조 변수)를 hint_conflict_limit 안에 못
+        채우고 ~20ms 만에 힌트를 버렸다("The solution hint is incomplete") — 그 뒤는
+        힌트 없는 탐색이라 실행가능한 그리디 해가 있어도 3초 안에 해 0개였다.
+
+        그래서 경로(방문·아크 리터럴)를 가정으로 걸고 한 번 풀어 시각·보조 변수까지 채운
+        해를 통째로 힌트한다 — 경로가 고정되면 남는 건 시각 전파와 소수의 보조 불리언이라
+        수 ms 다. 보조 변수를 손으로 계산하지 않으므로 소프트 항이 늘어도 완성이 성공하는 한
+        힌트가 다시 불완전해지지 않는다. 이 힌트가 주는 것은 "그 순서의 최적 완성에서 출발" 까지다 —
+        최종 해가 그리디 이상이라는 **보장은 아니다**(노드에 투영한 순서라 프리필터로 빠진
+        POI 몫이 없고, 완성이 실패하면 아래 부분 힌트로 내려가며, 백스톱에 걸리면 탐색이
+        중간에 끊긴다).
+
+        경로가 모델과 어긋나면(예: 다중 영업창 — 모델은 최장 창만 쓰는데 그리디는 다른 창에
+        놓았을 수 있다) 완성이 INFEASIBLE 이다. 그때는 경로 리터럴만 힌트한다(부분 힌트 — 탐색 방향만).
+
+        빈 순서면 힌트를 걸지 않는다. 그리디는 영업 시작을 기다리지 않아(도착 시 닫혀 있으면
+        버린다) 모델은 가해인데 그리디는 빈 날이 생긴다. 그 경로 완성은 반드시 INFEASIBLE 이고
+        (AddCircuit 은 깊이0 자기루프가 없어 빈 회로 불가), 부분 힌트는 '전부 0' — 모델과
+        모순이고 불완전하다. 힌트가 없는 편이 낫다(실 덤프는 용량 컷만으로도 풀린다).
+        """
+        if not order:
+            return
+        k = len(visit)
+        on = set(order)
+        path = [0, *(i + 1 for i in order), 0]
+        succ = set(zip(path, path[1:]))
+        # arcs[:k] 는 자기루프 (i+1, i+1, ¬visit[i]) — visit 와 같은 변수라 아크로 다시
+        # 힌트하면 이중 힌트(MODEL_INVALID). visit 로 한 번, 아크는 arcs[k:] 만.
+        lits = [visit[i] if i in on else visit[i].Not() for i in range(k)]
+        lits += [lit if (a, b) in succ else lit.Not() for a, b, lit in arcs[k:]]
+        m.AddAssumptions(lits)
+        status = solver.Solve(m)
+        m.ClearAssumptions()
+        if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            for idx, value in enumerate(solver.ResponseProto().solution):
+                m.AddHint(m.GetIntVarFromProtoIndex(idx), value)
+            return
+        for i in range(k):
+            m.AddHint(visit[i], i in on)
+        for a, b, lit in arcs[k:]:
+            m.AddHint(lit, (a, b) in succ)
+
+    @staticmethod
+    def _capacity_cut(m: cp_model.CpModel, nodes, visit, inc: list[int],
+                      ws: int, we: int) -> None:
+        """하루 용량 컷 (TRIP-1176 — **중복 제약**: 모델의 실행가능 해 집합 불변).
+
+        방문 순서 j1..jn 에서 첫 노드는 origin + inc 이후, 다음 노드는 앞 노드 끝 + 이동
+        (≥ inc) 이후 시작하고 마지막 노드는 horizon 안에 끝난다 → Σ(체류 + inc)·visit ≤
+        horizon − origin. inc_j = min(앵커 몫, 다른 노드에서 오는 이동 최소)이고 **핀의
+        앵커 몫은 0** 이다 — 핀은 앵커 출발을 면제받는다(TRIP-1175). 여기에 앵커 이동을
+        얹으면 창 시작에 핀된 첫 방문이 있는 하루에서 실행가능한 해를 잘라낸다.
+        origin·horizon 은 핀이 창 밖에 걸칠 때 그 끝까지 넓힌다.
+
+        왜 필요한가: 이 식이 없으면 LP 상계가 '전 후보 점수 합'이라(실 덤프 41,880 vs
+        실제 해 4,000~5,500) 탐색이 하루에 안 들어가는 '많이 방문' 가지로 간다.
+        """
+        pins = [n for n in nodes if n["pin"] is not None]
+        origin = min([ws] + [n["pin"] for n in pins])
+        horizon = max([we] + [n["pin"] + n["stay"] for n in pins])
+        m.Add(sum((n["stay"] + inc[j]) * visit[j] for j, n in enumerate(nodes))
+              <= horizon - origin)
 
     def _category_soft_terms(self, problem, day, m: cp_model.CpModel,
                              nodes, visit) -> list:

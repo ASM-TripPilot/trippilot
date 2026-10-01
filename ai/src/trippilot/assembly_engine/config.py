@@ -61,7 +61,8 @@ STAY_DEFAULT_MIN: dict[PoiCategory, int] = {
 # 3초 벽시계 안에 첫 해를 못 찾는 구간이 생긴다 — 후보 40곳에서 ×0.75 는 3/3 해없음
 # 이었고, 그러면 규칙 폴백으로 강등돼 **알차게를 고른 사용자가 오히려 품질 낮은
 # 그리디 일정을 받는다.** ×0.90 은 후보 25·40곳에서 3/3 정상이었다. 더 공격적인 값은
-# 벽시계 여유(`or_tools_limit_ms`)를 같이 올리지 않는 한 손해다.
+# 벽시계 여유(`or_tools_limit_ms`)를 같이 올리지 않는 한 손해다. (TRIP-1176 전 실측 —
+# 해없음의 원인은 불완전 힌트·무의미한 상계였다. 배율을 더 밀려면 다시 잰다.)
 PACE_STAY_RATIO: dict[Pace, tuple[int, int]] = {
     Pace.SLOW: (7, 5),        # ×1.4
     Pace.BALANCED: (1, 1),    # 무보정 — 현행과 동일
@@ -100,7 +101,20 @@ RAIN_INDOOR: frozenset[PoiCategory] = frozenset(
 
 @dataclass(frozen=True, slots=True)
 class AssemblyConfig:
-    or_tools_limit_ms: int = 3000
+    # 일자당 **벽시계 백스톱**(TRIP-1176). 탐색을 멈추는 것은 아래 결정론 한도이고, 이것이
+    # 먼저 걸리면 결정론이 깨진다. 규칙: or_tools_limit_ms ≥ det × 3.5초 — 운영 파드의 보장
+    # CPU(requests 500m)에서 잰 wall/det 최대가 2.75(arm)·2.92(amd64 에뮬)였다. 실측(실 덤프
+    # 39건 × 2회): CPU 0.5 몫·det 2.0 에서 3000ms 는 50/78 회를 벽시계가 끊었고 1/39 건이 두
+    # 실행 결과가 달랐다. 7000ms 는 끊김 0/78·한 코어 결과와 78/78 동일(일자당 중앙 2.9s·
+    # 최대 3.9s, amd64 에뮬 중앙 3.9s·최대 5.2s). 한 코어(--cpus 2)면 지연은 그대로 det 가
+    # 정한다(중앙 1.7s·p95 2.2s). 동시 요청 둘이 0.5 CPU 를 나누면(wall/det 최대 5.2) 어떤
+    # det 로도 못 지킨다 — `_solve_day` 의 백스톱 경고로 빈도를 보고 requests.cpu 를 올린다.
+    or_tools_limit_ms: int = 7000
+    # CP-SAT max_deterministic_time(결정론 작업량 단위 — 초가 아니다). 일자당 탐색을 **이것**이
+    # 멈추게 해서 같은 입력이 부하와 무관하게 같은 해를 낸다(위 백스톱이 안 걸리는 한).
+    # 2.0 근거(TRIP-1160 실 덤프 39건 × 2회 재생): 해 없음 0·HC 위반 0·반복 동일 39/39.
+    # det 1.0 대비 5/39 건 점수가 높다(점수합 +0.08~1.29), 3.0 은 3/39 건만 더 오른다.
+    or_tools_det_limit: float = 2.0
     or_tools_min_ms: int = 500          # 이보다 잔여가 적으면 OR-Tools 단계 스킵 (DL-2)
     llm_stage_timeout_ms: int = 2500    # LLM 2차 요구 시간 (DL-2)
     local_search_min_remaining_ms: int = 3000
@@ -156,6 +170,8 @@ class AssemblyConfig:
                      "local_search_min_remaining_ms", "buffer_min"):
             if getattr(self, name) < 0:
                 raise ValueError(f"{name} 음수 불가")
+        if self.or_tools_det_limit <= 0:
+            raise ValueError("or_tools_det_limit 양수 필요")
         if self.detour_factor <= 0:
             raise ValueError("detour_factor 양수 필요")
         if self.public_walk_max_km < 0:
