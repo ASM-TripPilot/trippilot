@@ -1460,3 +1460,18 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: INCEPTION·CONSTRUCTION 스테이지 승인 상태는 **유지**(국소 수정). 코드 변경은 같은 사이클(`20260929-trip1123-mypage-counts`)에서 `frontend/`에 별도 수행.
 
 ---
+
+## Change Request — CONSTRUCTION 산출물 사후 보완 5회차 (저장 숙소 중복 방지 규칙 · TRIP-1059)
+**Timestamp**: 2026-10-01T22:30:00+09:00 (사이클 [기록] 시점, 초 단위 미측정)
+**User Input**: 사용자 결정 원문 — "1059 정본 한 줄" 반영 위임(2026-10-01 인터뷰, 선택지 "전부 위임"). 규칙 내용의 근거는 QA-2026-09-28 #012 실측(같은 외부 숙소가 한 계정에 30행 누적)과 그 처방 PR #791.
+**Current State**: CONSTRUCTION 설계 문서 단계(SCOPE.md 2026-07-17 개정). INCEPTION 2026-07-13 승인 완료. 2~4회차 사후 개정(2026-09-28·09-30) 이후.
+**Impact Assessment**: `workflow-changes.md` §4 **Low impact → Modify and update dependents**(전면 재실행 아님). 기존 규칙을 바꾸지 않고 **신설 1건**만 추가한다.
+**User Confirmation**: 명시 위임 수령("전부 위임" — Jira 전환·1064 닫기·1059 정본 한 줄).
+**Action Taken**:
+- **U1 `business-rules.md` BR-U1-59 신설** — 같은 외부 숙소(`externalSource`+`externalId`)는 **계정당 1건**, 재요청은 409. **외부 키 없는 등록(핀 지정)은 대상 밖**(자연 키 부재). 판정 정본은 서버(부분 유니크 `ux_saved_stay_external` + 선검사·경합 번역 이중 가드), 클라 가드는 UX 사본. 중복 거절 시 `StayRegistered` 미발행. 절 제목을 `(BR-U1-19~28 · 59)` 로 갱신.
+- 구현은 이미 배송돼 있다(PR #791 — V2.57 유니크 + 기존 중복 정리 + 409 번역). 이 항목은 **정본이 구현보다 늦은 것을 메우는 기록**이다.
+- 미수정(의도적): `domain-entities.md` SavedStay 비고(외부 키 설명은 이미 "직접 등록이면 null" 로 충분) · `stories.md` US-STAY-04(스토리 문면은 중복 정책을 말하지 않는다 — 규칙 층위).
+**Artifacts Affected**: `construction/u1-accommodation-trip/functional-design/business-rules.md` · 이 `audit.md` append
+**Context**: INCEPTION·CONSTRUCTION 승인 상태 **유지**(국소 추가). 코드 변경 0 — 구현은 PR #791 에서 이미 수행됐다.
+
+---

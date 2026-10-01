@@ -1116,7 +1116,7 @@ FE 의 TRIP-323 은 **여전히 보류다** — 계약 3종 중 하나만 풀렸
 id = "AFFILIATE-LINK"
 ticket = ""
 title = "제휴 링크(C5) — U1 1차 컴포넌트 중 유일한 미구현"
-status = "blocked"
+status = "todo"
 owner = "숙소"
 migration = true
 touches = [
@@ -1142,7 +1142,18 @@ C5 는 U1 **1차 컴포넌트인데 유일하게 안 만들어졌다.** 설계�
 `GET /stays/{stayId}/outbound` 가 클릭(`affiliate_click`, V2.54)을 적고 302 로 웹검색 폴백에 보낸다.
 숙소 이름은 accommodation-search 의 신설 `StayLookupFacade`(api) 로 가져온다. `AffiliateLinkFacade` 는
 소비자 0이라 안 만들었다(칸 2·3 에서 연다). FE 몫(orval 재생성 → `stayOutbound.ts` 교체)은 남아 있다.
-남은 것은 칸 2·3 — 여전히 계약(OTA) 선행이라 status 는 blocked 유지.
+**진행(2026-10-01) — 칸 3 축소판까지 배송·가동. 계약도 끝났다.**
+트립닷컴 어필리에이트 승인(2026-09-29, Allianceid 10768080 · SID 332381302)으로 "계약 선행" 전제가
+해소됐다. `TripcomDeeplinkAdapter`(#767)가 키워드 검색결과 딥링크를 만들고, **#824 가 `trip_sub3`
+(등록 링크 Ad ID)를 추가**했다 — probe 실험(9/29~10/1)에서 이 값이 없는 클릭은 대시보드에 전혀
+안 잡히고 있는 클릭만 집계됐다. 귀속의 열쇠다. #826 이 컴포즈 통로를 뚫어 `.env` 로 켤 수 있다.
+로컬 스택은 `AFFILIATE_MODE=tripcom` 으로 **켜져 있고**, 302 Location·`affiliate_click` 적재·
+시뮬레이터 착지까지 실측했다(숙소트랙-인계.md §8.7).
+
+**그래서 status 는 blocked → todo.** 남은 것은 둘뿐이다:
+- **칸 2(포스트백 수신)** — 전환 리포트가 `trip_sub1`(clickId)을 되돌려 주는 방식 확인 후. 여전히 상대 의존.
+- **FE 배선(TRIP-1167)** — `stayOutbound.ts` 가 아직 구글 검색 URL 을 **클라에서 조립**한다.
+  이게 붙기 전까지 실사용 수수료는 여전히 0 이다(서버는 준비 완료).
 
 가격(`LivePricePort`)도 여기 딸려 온다 — TourAPI 는 가격을 주지 않는다. 다만 BR-U1-14·15 가
 **가격 없이도 성립하도록** 설계해 두어(가격 부재는 카드 제외 사유가 아니다 · 실시간 가격순 미제공)
