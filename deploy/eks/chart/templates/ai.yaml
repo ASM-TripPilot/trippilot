@@ -5,9 +5,7 @@ metadata:
   labels:
     {{- include "trippilot.labels" . | nindent 4 }}
 spec:
-  {{- if not (and .Values.ai.autoscaling .Values.ai.autoscaling.enabled) }}
   replicas: {{ .Values.ai.replicas }}
-  {{- end }}
   revisionHistoryLimit: 3
   progressDeadlineSeconds: 900
   strategy:
@@ -23,6 +21,11 @@ spec:
       annotations:
         trippilot.io/rollout-nonce: {{ .Values.rolloutNonce | quote }}
     spec:
+      # Named account so Terraform's Pod Identity association (namespace trippilot,
+      # service account ai) binds the Bedrock role to these pods and nothing else.
+      # The Pod Identity webhook mounts its own projected token, so the pod-level
+      # automountServiceAccountToken: false stays.
+      serviceAccountName: ai
       {{- include "trippilot.podSpec" (dict "root" . "component" "ai" "uid" 10001) | nindent 6 }}
       containers:
         - name: ai
@@ -49,29 +52,8 @@ spec:
               value: /app/config/llm-prices.json
             - name: EVENTS_STORE
               value: /app/data/collected_events.json
-            {{- $secretEnv := list "TRIPPILOT_LLM_PROVIDER" "OPENAI_API_KEY" "OPENAI_BASE_URL" "OPENAI_MODEL" "OPENAI_API" "ANTHROPIC_API_KEY" "ANTHROPIC_MODEL" "TRIPPILOT_LLM_FEATURE_MODELS" "TRIPPILOT_LLM_RETRY_MODELS" "TRIPPILOT_LOCAL_LLM_BASE_URL" "TRIPPILOT_LOCAL_LLM_API_KEY" "WEATHER_API" "KAKAO_REST_API_KEY" "EXISTENCE_MAX_CALLS" "TMAP_API_KEY" "TRIPPILOT_EMBEDDING_MODEL" "TRIPPILOT_EMBEDDING_TIMEOUT_SEC" }}
-            {{- /* In-cluster serving owns the address; leaving the secret copy in
-                   would put the same key in env twice and hide which one wins. */}}
-            {{- if .Values.reminderLlm.enabled }}
-            {{- $secretEnv = without $secretEnv "TRIPPILOT_LOCAL_LLM_BASE_URL" }}
-            {{- end }}
-            {{- range $secretEnv }}
+            {{- range list "TRIPPILOT_LLM_PROVIDER" "OPENAI_API_KEY" "OPENAI_BASE_URL" "OPENAI_MODEL" "OPENAI_API" "ANTHROPIC_API_KEY" "ANTHROPIC_MODEL" "TRIPPILOT_LLM_FEATURE_MODELS" "TRIPPILOT_LLM_RETRY_MODELS" "TRIPPILOT_LOCAL_LLM_BASE_URL" "TRIPPILOT_LOCAL_LLM_API_KEY" "TRIPPILOT_BEDROCK_MODEL_ARN" "TRIPPILOT_BEDROCK_REGION" "WEATHER_API" "KAKAO_REST_API_KEY" "EXISTENCE_MAX_CALLS" "TMAP_API_KEY" "TRIPPILOT_EMBEDDING_MODEL" "TRIPPILOT_EMBEDDING_TIMEOUT_SEC" }}
             {{- include "trippilot.secretEnv" (dict "env" . "secret" "trippilot-ai" "optional" true) | nindent 12 }}
-            {{- end }}
-            {{- if .Values.reminderLlm.enabled }}
-            - name: TRIPPILOT_LOCAL_LLM_BASE_URL
-              value: http://reminder-llm:8000/v1
-            {{- /* Address alone is not enough: while a Bedrock ARN is present it wins,
-                   so the in-cluster pod would sit idle with no error at all. This value
-                   picks the transport without deleting the ARN — rollback is a value
-                   change, not a secret restore.
-
-                   Enabling the pod defaults to sending it traffic, because a pod nobody
-                   calls is the trap above. Set transport=bedrock to run it warm without
-                   traffic (shadow); the app then requires the ARN and fails startup if
-                   it is missing, which is the explicit error we want. */}}
-            - name: TRIPPILOT_REMINDER_TRANSPORT
-              value: {{ .Values.reminderLlm.transport | default "local" | quote }}
             {{- end }}
             {{- if .Values.embedding.enabled }}
             {{- include "trippilot.secretEnv" (dict "env" "TRIPPILOT_VECTOR_DB_URL" "secret" "trippilot-ai") | nindent 12 }}
@@ -100,3 +82,11 @@ spec:
       volumes:
         - name: tmp
           emptyDir: { sizeLimit: 256Mi }
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ai
+  labels:
+    {{- include "trippilot.labels" . | nindent 4 }}
+automountServiceAccountToken: false
