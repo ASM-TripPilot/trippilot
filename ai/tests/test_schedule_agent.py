@@ -79,13 +79,15 @@ def _agent(*, provider=None, clock=None, trace=None, alt_explainer=None):
 
 
 def _task(pool, *, persona=_PERSONA, started_ms=0, total_ms=20_000, prior=(), request=None):
+    request = request if request is not None else _request()
     return ScheduleTask(
-        request=request if request is not None else _request(),
+        request=request,
         pool=pool,
         persona=persona,
         daily_rain=None,
         event_bonus=None,
-        candidates_summary=candidates_report(pool),
+        candidates_summary=candidates_report(
+            pool, days=len(request.days), persona=persona),
         budget=allocate(total_ms, OrchestratorConfig()),
         started_ms=started_ms,
         trace_id=_TRACE_ID,

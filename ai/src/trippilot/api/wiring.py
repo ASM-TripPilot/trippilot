@@ -1402,7 +1402,8 @@ class WiredItineraryOrchestrator:
             persona=persona,
             daily_rain=daily_rain,
             event_bonus=None,
-            candidates_summary=core.candidates_report(pool),
+            candidates_summary=core.candidates_report(
+                pool, days=len(dates), persona=persona),
             budget=core.allocate(_deadline_budget(meta), core.OrchestratorConfig()),
             # PlanB 가 쓴 시간이 잔여에서 빠지도록 **PlanB 이전** 원점을 넘긴다.
             # 여기서 시계를 다시 읽으면 PlanB 가 공짜가 되고, 두 LLM 호출 합이

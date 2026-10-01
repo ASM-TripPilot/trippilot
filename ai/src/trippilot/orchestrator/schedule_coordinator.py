@@ -207,7 +207,8 @@ class ScheduleCoordinator:
                       if place is not None else "place_provider_unregistered")
             return self._failed(budget, f"pool_unavailable: {reason}", trace_id, now)
         persona = request.persona or self._collected_persona(packets)
-        summary = candidates_report(pool)  # 풀 실측 보고 (BR-U2-05 — 경계로 그대로 나간다)
+        # 풀 실측 보고 (BR-U2-05 — 경계로 그대로 나간다)
+        summary = candidates_report(pool, days=len(request.days), persona=persona)
         m7_elapsed = self._clock.monotonic_ms() - t0
         if budget.m7_ms and m7_elapsed > budget.m7_ms:
             # 풀 없이는 일정이 없으므로 풀 단계는 스킵 대상이 아니다 — 초과는 관측만 하고,
