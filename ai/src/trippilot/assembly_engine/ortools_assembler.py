@@ -6,7 +6,8 @@
   visit·start 만 힌트하면 CP-SAT 이 ~20ms 만에 힌트를 버려 이 문장이 성립하지 않았다
 - 단일 워커 + 시드 고정 + 결정론 시간 한도 = 결정론 (다중 워커는 결정론 붕괴 — audit
   2026-07-29 교훈. 벽시계 한도는 부하에 따라 멈추는 지점이 달라 백스톱으로만 쓴다)
-- 후보 > 60은 점수 상위 60 프리필터 (이동행렬 O(N²) 방지)
+- 후보 > 60은 60 프리필터 (이동행렬 O(N²) 방지) — 고정 블록 → FOOD 예약석(아직 닿는 식사창
+  수) → 점수순, 남긴 집합은 점수순+poi_id 로 재정렬 (`_prefilter`, TRIP-1183)
 - 해(A) 뒤 재정렬(B, `_reorder`): 방문 집합·A 목적값을 고정하고 도로 거리만 최소화 —
   같은 집합 안의 왕복·튐 제거 (TRIP-1178)
 
@@ -76,7 +77,9 @@ def prefilter_cut(
     "식당이 있었는데 상위 N 에서 전부 잘림"(랭킹·상한 문제)은 둘 다 밥 슬롯이 빈 같은
     결과로 수렴하는데, 조치가 정반대다. 전자는 FOOD 가 `before` 에 없어 여기 안 나오고,
     후자만 나온다. `meal_bonus` 는 프리필터 **뒤** 목적함수라 FOOD 후보가 안 남으면 줄
-    대상이 없다 — 그래서 총 건수가 아니라 카테고리별 잔존 0 을 본다.
+    대상이 없다 — 그래서 총 건수가 아니라 카테고리별 잔존 0 을 본다. 식사창 예약석
+    (TRIP-1183) 뒤로 FOOD 가 잔존 0 이 되는 것은 식사창에 놓일 영업 FOOD 가 없거나, 재계획
+    하한이 식사창을 다 지났거나, 보정 off 일 때뿐이다.
 
     **프리필터 잔존 기준이다 — 실제 노드 기준이 아니다.** 남은 FOOD 가 전부 휴무·창
     밖이라 노드에서 빠져도 여기엔 안 나오고, 후보 밖 FOOD 고정 블록(식당 예약)이 있어도
@@ -91,7 +94,7 @@ def prefilter_cut(
 
 
 def _log_prefilter_cut(day, before, kept, pois) -> None:
-    """관측만 한다 — 프리필터 동작은 바꾸지 않는다(카테고리 인지 프리필터는 별건).
+    """관측만 한다 — 프리필터 동작은 바꾸지 않는다(FOOD 예약석은 `_prefilter`).
 
     ponytail: 로그로만 남긴다. 응답·`AssemblyRunRecord` 로 내려면 단계 → 퍼사드 통로가
     필요하다(단계는 trace 포트를 모른다) — 로그로 빈도를 본 뒤 필요하면 올린다.
@@ -250,11 +253,11 @@ class OrToolsAssembler:
         cands = [c for c in problem.candidates
                  if c.poi_id not in used and c.poi_id not in reserved
                  and c.poi_id in self._pois]
+        floor = _not_before_min(problem, day)
         if len(cands) > _PREFILTER_TOP_K:
-            cands.sort(key=lambda c: (-c.score, str(c.poi_id)))
-            keep = [c for c in cands if c.poi_id in fixed_ids]
-            keep += [c for c in cands if c.poi_id not in fixed_ids]
-            kept = keep[:_PREFILTER_TOP_K]
+            food_stay = stay_for(PoiCategory.FOOD, problem.pace)
+            kept = self._prefilter(cands, fixed_ids, day,
+                                   self._meal_slots(ws, we, floor, food_stay), food_stay)
             if log_cut:
                 _log_prefilter_cut(day, cands, kept, self._pois)
             cands = kept
@@ -266,7 +269,6 @@ class OrToolsAssembler:
         # 비고정 방문 시작 하한 (TRIP-1182). 정의역만 좁힌다. 후보이자 고정인 노드엔 걸지
         # 않는다 — 아래에서 lo=hi=pin 으로 덮이는데, 하한이 그 hi 를 넘어 여기서 빠지면 고정
         # 루프가 점수 0 노드로 다시 만들어 슬롯 점수가 바뀐다(재계획은 잠금 POI 가 후보에 합류).
-        floor = _not_before_min(problem, day)
         for c in cands:
             poi = self._pois[c.poi_id]
             stay = stay_for(poi.category, problem.pace)
@@ -685,6 +687,49 @@ class OrToolsAssembler:
             if value:
                 terms.append(int(value * scale * 1000) * visit[i])
         return terms
+
+    def _meal_slots(self, ws: int, we: int, floor: int | None,
+                    food_stay: int) -> list[tuple[int, int]]:
+        """예약석이 노릴 식사창 — 하루 창·재계획 하한(`floor`)으로 잘라 FOOD 체류가 아직 들어가는
+        창만. 하한이 두 창을 다 지나면 빈 목록(폴백도 그 구간에선 food-first 를 끈다).
+        `meal_bonus == 0`(식사 보정 off)이면 빈 목록 — 보상이 없으면 점수 높은 후보를 밀어낼
+        이유가 없다(폴백의 food-first 는 가중과 무관하게 돌지만, 그 구성은 운영값이 아니다)."""
+        if self._cfg.meal_bonus <= 0:
+            return []
+        start = ws if floor is None else max(ws, floor)
+        slots = [(max(lo, start), min(hi, we))
+                 for lo, hi in (self._cfg.lunch_window_min, self._cfg.dinner_window_min)]
+        return [(lo, hi) for lo, hi in slots if hi - lo >= food_stay]
+
+    def _prefilter(self, cands: list[ScoredPoi], fixed_ids, day,
+                   meal_slots: list[tuple[int, int]], food_stay: int) -> list[ScoredPoi]:
+        """후보 > 60 일 때 노드로 남길 60 — 고정 블록 → 식사창 FOOD 예약석 → 점수순 (TRIP-1183).
+
+        예약석: `meal_slots`(`_meal_slots`) 중 어느 창에든 영업창 안에서 체류가 들어가는 FOOD
+        점수 상위 k건(k = 그 창 수). 점수만 보면 규칙 점수 모드에서 FOOD 가 86~108위라 전부
+        잘려 OR 해는 식당 0, 같은 입력의 폴백(식사창 food-first)은 식당 4 로 갈렸다 —
+        `meal_bonus` 는 프리필터 뒤 목적함수라 노드가 없으면 줄 대상이 없다. 자리만 남기고
+        배치는 목적함수가 정한다(하드 제약 아님). 하한 뒤 앵커 이동분은 보지 않는다 — 노드
+        단계에서 빠지면 그 석은 비지만 INV 와 무관한 풀 손실뿐이다.
+
+        남긴 집합은 다시 점수 내림차순 + poi_id 로 정렬한다 — 해 품질이 노드 순서에 의존해서
+        (예약석을 앞에 둔 채로 두면 부산 gourmet −13% 실측), 순서는 선정 규칙과 무관해야 한다.
+        """
+        rank = lambda c: (-c.score, str(c.poi_id))  # noqa: E731
+        ranked = sorted(cands, key=rank)
+
+        def seat_ok(c: ScoredPoi) -> bool:
+            poi = self._pois[c.poi_id]
+            if c.poi_id in fixed_ids or poi.category is not PoiCategory.FOOD:
+                return False
+            win = self._day_open_window(poi, day)
+            return win is not None and any(
+                max(lo, win[0]) + food_stay <= min(hi, win[1]) for lo, hi in meal_slots)
+
+        seats = {c.poi_id for c in list(filter(seat_ok, ranked))[:len(meal_slots)]}
+        # 안정 정렬 — 고정 먼저, 다음 예약석, 그 안에서는 점수순
+        head = sorted(ranked, key=lambda c: (c.poi_id not in fixed_ids, c.poi_id not in seats))
+        return sorted(head[:_PREFILTER_TOP_K], key=rank)
 
     def _day_open_window(self, poi: Poi, day) -> tuple[int, int] | None:
         """해당 요일 영업창 (없음=종일, 요일 미포함=휴무). 다중 창은 최장 창 채택
