@@ -80,7 +80,7 @@ const REPLACED: Record<string, { skeletons: string[]; keep: string[] }> = {
   },
   'features/explore/ui/SavedPlaceListScreen.tsx': {
     skeletons: [PICK_CIRCLE, PICK_CIRCLE, ROW_THUMB, PICK_TITLE, PICK_SUB],
-    keep: [EMPTY_COLLAGE, EMPTY_COLLAGE, ROW_THUMB],
+    keep: [EMPTY_COLLAGE, EMPTY_COLLAGE],
   },
   'features/trip/ui/TripWizardStep1Screen.tsx': {
     skeletons: [

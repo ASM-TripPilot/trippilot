@@ -92,12 +92,8 @@ const ROWS: Row[] = [
     must: ['@/entities/stay/lib'],
     why: 'd01 page formatPrice 조립(TRIP-1142 로 (tabs)/explore.tsx 에서 이동)',
   },
-  {
-    file: 'features/explore/ui/SavedPlaceListScreen.tsx',
-    must: ['@/entities/stay/model'],
-    mustNot: ['export interface StayRowVM'],
-    why: 'd02 StayRowVM(SavedStayCardVM 과 동일 shape) → entities 타입 재수출(타입만, 화면 재구성 없음)',
-  },
+  // TRIP-1144 — SavedPlaceListScreen 행 제거. d02 의 죽은 숙소 축(StayRowVM 재수출 포함)을 지워
+  // entities/stay 소비가 0 이 됐다(남기면 stale red).
 ];
 
 describe('🔴 소비처가 entities/stay 를 소비한다(긍정) + 확실한 중복 지문 제거(부정)', () => {
