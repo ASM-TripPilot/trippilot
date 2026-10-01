@@ -38,6 +38,23 @@ from trippilot.llm_gateway.config import C1Config
 
 _COMPONENT = "c1.worker.preference"
 
+# 점수 1건의 출력 토큰 추정 — 출력 스키마 `{"scores":[{"poiId":"<uuid>","score":0.0}]}`
+# 의 항목 하나: uuid 36자(hex·하이픈이라 BPE 가 잘게 쪼갠다) ≈ 22 + 키·따옴표·구두점·
+# 점수 ≈ 12 → ≈ 34. 실측(출력 상한 1024): 29건 청크 출력 960~1023 = 건당 33~35.3,
+# 32건부터 잘림(1/10 성공). GPT-5 계열은 reasoning 토큰도 같은 상한에서 빠지므로
+# 실측 상단에 여유를 얹어 40 으로 잡는다 → 상한 1024 에서 청크 상한 25.
+SCORE_TOKENS_PER_ITEM = 40
+
+
+def score_chunk_cap(cfg: C1Config) -> int:
+    """청크 크기 절대 상한 — `score_chunk_max` 와 출력 상한 역산 중 작은 쪽.
+
+    청크 기대 출력(건수 × SCORE_TOKENS_PER_ITEM)이 PREFERENCE_SCORING 출력 상한을
+    넘으면 JSON 이 잘려 청크 전체가 폐기된다. 상한이 바뀌면 자동 추종한다.
+    """
+    by_tokens = cfg.max_tokens_for(LlmFeature.PREFERENCE_SCORING) // SCORE_TOKENS_PER_ITEM
+    return max(1, min(cfg.score_chunk_max, by_tokens))
+
 
 def adaptive_chunk_size(stage_budget_ms: float, cfg: C1Config) -> int:
     """단계 예산 → 청크 크기 c* (TRIP-380 적응형 공식). 예산이 바뀌면 자동 추종.
@@ -54,7 +71,8 @@ def adaptive_chunk_size(stage_budget_ms: float, cfg: C1Config) -> int:
     """
     t_target_ms = stage_budget_ms / cfg.score_safety
     c = math.floor((t_target_ms - cfg.score_base_ms) / cfg.score_per_item_ms)
-    return max(cfg.score_chunk_min, min(cfg.score_chunk_max, c))
+    # 출력 상한 역산 캡이 chunk_min 보다 우선한다 — 잘리는 청크는 작은 청크보다 나쁘다
+    return min(score_chunk_cap(cfg), max(cfg.score_chunk_min, c))
 
 
 def build_prompt_vars(pool: CandidatePool, persona: PersonaSummary) -> dict[str, str]:
@@ -81,15 +99,21 @@ def build_prompt_vars(pool: CandidatePool, persona: PersonaSummary) -> dict[str,
 
 
 def plan_chunks(
-    pool: CandidatePool, chunk_size: int, max_parallel: int
+    pool: CandidatePool, chunk_size: int, max_parallel: int, *, chunk_max: int
 ) -> tuple[CandidatePool, ...]:
     """poi_id 정렬 후 균등 분할 — 같은 풀이면 항상 같은 청크 구성 (결정론, TRIP-378).
 
     병렬수 N = ⌈풀 ÷ chunk_size⌉, 상한 max_parallel. 청크 크기 차는 최대 1 —
     가장 느린 청크가 벽시계를 정하므로 고정 크기 자투리(193건 → 20×9+13)가 아니라
     균형 분할(20×3+19×7)로 최대 청크를 키우지 않는다.
+
+    병렬 상한에 걸려도 청크는 chunk_max 를 넘지 않는다 — 넘치는 몫(max_parallel ×
+    chunk_max 초과분)은 싣지 않는다. 종전엔 청크를 키웠고(풀 515 → ~52건) 출력 상한에서
+    잘려 전량 폐기됐다. 정상 경로에선 호출측(ScheduleAgent)이 규칙 점수 상위
+    `capacity` 건으로 미리 줄여 보내므로, 여기 자르기는 안전망이다. 빠진 POI 는
+    호출측 rule_backfill 이 채운다.
     """
-    pois = tuple(sorted(pool.pois, key=lambda p: str(p.poi_id)))
+    pois = tuple(sorted(pool.pois, key=lambda p: str(p.poi_id)))[: max_parallel * chunk_max]
     if not pois:
         return ()
     n = min(max_parallel, math.ceil(len(pois) / chunk_size))
@@ -115,6 +139,12 @@ def plan_chunks(
 class PreferenceScoringWorker:
     def __init__(self, gateway: GatewayFacade) -> None:
         self._gateway = gateway
+
+    @property
+    def capacity(self) -> int:
+        """한 번의 score() 가 LLM 에 실을 수 있는 최대 건수 — 병렬 상한 × 청크 상한."""
+        cfg = self._gateway.config
+        return cfg.score_max_parallel * score_chunk_cap(cfg)
 
     def score(
         self,
@@ -189,7 +219,9 @@ class PreferenceScoringWorker:
         - 전 청크 실패 = 단일 호출의 기존 폴백 신호와 동일 (INV-4 경로 불변).
         """
         cfg = self._gateway.config
-        chunks = plan_chunks(pool, chunk_size, cfg.score_max_parallel)
+        chunks = plan_chunks(
+            pool, chunk_size, cfg.score_max_parallel, chunk_max=score_chunk_cap(cfg)
+        )
 
         def _call(chunk: CandidatePool) -> TypedResult[tuple[ScoredPoi, ...]]:
             return self._gateway.call(

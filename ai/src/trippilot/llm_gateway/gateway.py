@@ -136,6 +136,7 @@ class GatewayFacade:
         response, reason = self._invoke(
             model_id, prompt, prompt_ref,
             self._cfg.timeout_sec if timeout_sec is None else timeout_sec, images,
+            self._cfg.max_tokens_for(feature),
         )
         retry_model = self._cfg.retry_models.get(feature)
         if (
@@ -155,6 +156,7 @@ class GatewayFacade:
             model_id = retry_model
             response, reason = self._invoke(
                 model_id, prompt, prompt_ref, retry_timeout_sec, images,
+                self._cfg.max_tokens_for(feature),
             )
         if response is None:
             return self._fallback(
@@ -168,13 +170,18 @@ class GatewayFacade:
         if outcome.drop_event is not None:
             self._trace.emit(outcome.drop_event)
         if outcome.error is not None:
+            # 출력 상한에서 잘린 응답은 파싱 실패와 처방이 다르다(상한 조정) — 사유를 가른다.
+            # 잘린 JSON 은 부분 복구하지 않고 전량 폐기한다(현행 유지).
+            error = (
+                f"truncated: {outcome.error}" if response.truncated else outcome.error
+            )
             # "빈 결과가 실패인가"는 feature 의미론이라 게이트가 정한다 (TRIP-260 #5).
             # 여기서 `not outcome.value` 를 함께 보던 동안, 추출 계열이 내는
             # **성공·0건**(그 기간 그 지역에 행사가 없음)이 폴백으로 뒤집혔다.
             # 사유 라벨 2종(gate_dropped_all / llm_empty_result)은 게이트의
             # `empty_result_error` 가 그대로 유지한다 — 2026-08-25 사고의 산물이다.
             return self._fallback(
-                feature, model_id, prompt_ref, trace_id, now, response, outcome.error,
+                feature, model_id, prompt_ref, trace_id, now, response, error,
                 consent_ref=consent_ref,
             )
         # 7 성공 조립 + 계측 (BR-U4-03)
@@ -194,6 +201,7 @@ class GatewayFacade:
         prompt_ref: PromptRef,
         timeout_sec: float,
         images: tuple[LlmImagePart, ...],
+        max_tokens: int,
     ) -> tuple[LlmResponse, None] | tuple[None, str]:
         """벤더 호출 1회 → (응답, None) 또는 (None, 폴백 사유). 예외를 위로 던지지 않는다."""
         try:
@@ -202,7 +210,7 @@ class GatewayFacade:
                     model_id=model_id,
                     prompt=prompt,
                     prompt_ref=prompt_ref,
-                    max_tokens=self._cfg.max_tokens,
+                    max_tokens=max_tokens,
                     timeout_sec=timeout_sec,
                     images=images,
                 )

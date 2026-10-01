@@ -187,7 +187,7 @@ def _value_ids(result) -> list[str]:
         (10_000, 10),   # (10000/2 − 3000) ÷ 200
         (8_000, 5),     # (8000/2 − 3000) ÷ 200 = 5 — 딱 chunk_min 경계
         (4_000, 5),     # 음수 → chunk_min 클램프
-        (100_000, 40),  # 대예산 → chunk_max 클램프
+        (100_000, 25),  # 대예산 → 출력 상한 역산 캡(1024 ÷ 40) — chunk_max 40 보다 작다
     ],
 )
 def test_adaptive_chunk_size_formula(budget_ms: int, expected_c: int) -> None:

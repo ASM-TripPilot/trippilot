@@ -61,6 +61,10 @@ class CachingScoringWorker:
         # key → (score, 적재 시각). OrderedDict = LRU (히트 시 뒤로 보낸다).
         self._store: OrderedDict[tuple, tuple[float, float]] = OrderedDict()
 
+    @property
+    def capacity(self) -> int:
+        return self._inner.capacity
+
     def score(
         self,
         pool: CandidatePool,

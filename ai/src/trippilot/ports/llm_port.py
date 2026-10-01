@@ -78,6 +78,9 @@ class LlmResponse:
     output_tokens: int
     latency_ms: int
     model_id: str
+    # 벤더 종료 사유가 "출력 상한 도달"인가 — 잘린 JSON 을 parse_error 와 갈라 보이게 한다.
+    # 후미 기본값이라 종료 사유를 모르는 어댑터·fake 는 무영향.
+    truncated: bool = False
 
 
 class LlmPort(Protocol):

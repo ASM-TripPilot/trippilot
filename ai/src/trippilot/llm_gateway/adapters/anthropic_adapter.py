@@ -84,4 +84,5 @@ class AnthropicAdapter:
             output_tokens=resp.usage.output_tokens,
             latency_ms=latency_ms,
             model_id=resp.model,
+            truncated=getattr(resp, "stop_reason", None) == "max_tokens",
         )
