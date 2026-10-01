@@ -311,7 +311,7 @@ CHAPTERS = (
         'source': 'deploy/eks/runtime.py',
         'aliases': ('troubleshooting', 'rollback'),
         'summary': ('처음 실패한 step과 올바른 계정·클러스터·배포 revision을 확인합니다.', 'Helm --atomic은 Helm 명령 실패를 다룹니다. 이후 smoke 실패는 별도 판단합니다.', 'Terraform 변경·DB migration·데이터 복구에는 각각 복구 계획이 필요합니다.'),
-        'notes': '로그를 공유할 때 비밀값을 포함하지 않습니다. EKS Pod 조회는 올바른 계정·리전·클러스터 컨텍스트인지 먼저 확인합니다. 상태 잠금이 남아 있다고 곧바로 강제 해제하지 말고 같은 환경에서 실행 중인 배포가 있는지 확인합니다.',
+        'notes': '환경 정리는 AWS 수동 삭제 런북을 따라 service 계획·삭제 뒤 bootstrap을 별도로 실행합니다. 기본값은 스냅샷·state 보존이며 Redis·ECR과 이미 삭제한 자원은 코드 revert로 복구되지 않습니다. 로그를 공유할 때 비밀값을 포함하지 않습니다. EKS Pod 조회는 올바른 계정·리전·클러스터 컨텍스트인지 먼저 확인합니다. 상태 잠금이 남아 있다고 곧바로 강제 해제하지 말고 같은 환경에서 실행 중인 배포가 있는지 확인합니다.',
     },
     {
         'id': 'release-review',

@@ -11,7 +11,7 @@ TripPilot 배포는 GitHub Actions의 수동 `workflow_dispatch`로 실행한다
 1. IAM의 기존 GitHub OIDC provider를 확인한다. 없으면 IAM 콘솔에서 provider URL `https://token.actions.githubusercontent.com`, audience `sts.amazonaws.com`으로 등록한다. 계정에 이미 있는 provider를 중복 생성하지 않는다.
 2. 환경별 `trippilot-dev-github-bootstrap`, `trippilot-prd-github-bootstrap` IAM Role을 준비한다. [신뢰 정책 예시](../../infra/bootstrap/bootstrap-trust.example.json)의 `<AWS_ACCOUNT_ID>`, `<ENVIRONMENT>`를 실제 값으로 바꾸고, [권한 정책 예시](../../infra/bootstrap/bootstrap-policy.example.json)의 `<AWS_REGION>`도 바꿔 인라인 정책으로 등록한다. 환경은 소문자 `dev` 또는 `prd`이다. 역할의 최대 세션 시간은 기본 1시간 이상으로 두며, workflow는 30분 세션을 요청한다.
 
-초기 Role은 해당 환경의 CloudFormation stack, 상태 bucket 설정, 배포 Role과 EKS 서비스 Role 생성/수정을 담당한다. 상태 객체 읽기/삭제, 자신의 권한 수정, 일반 애플리케이션 리소스 생성 권한은 없다. 다만 배포 Role의 인라인 정책을 작성하는 권한 자체는 권한 위임에 해당하므로, **bootstrap Role을 일반 배포 Role과 같은 수준으로 취급하면 안 된다**. 조직에서 IAM permissions boundary 또는 SCP를 사용한다면 관리자 정책으로 별도 적용하고, 허용 범위를 이 예시보다 넓히지 않는다. 초기 구성이 끝난 뒤 `AWS_BOOTSTRAP_ROLE_ARN` 변수를 제거하거나 bootstrap Role 신뢰를 비활성화할 수 있으며, 권한 정책 갱신 시에만 다시 활성화한다.
+초기 Role은 해당 환경의 CloudFormation stack, 상태 bucket 설정, 배포 Role과 EKS 서비스 Role 생성/수정을 담당한다. 정리 workflow를 위해 해당 환경 state 읽기·잠금 조회·선택적 버전 삭제와 서비스 잔존 조회 권한도 포함한다. 자신의 권한 수정과 일반 애플리케이션 리소스 생성 권한은 없다. 다만 배포 Role의 인라인 정책을 작성하는 권한 자체는 권한 위임에 해당하므로, **bootstrap Role을 일반 배포 Role과 같은 수준으로 취급하면 안 된다**. 조직에서 IAM permissions boundary 또는 SCP를 사용한다면 관리자 정책으로 별도 적용하고, 허용 범위를 이 예시보다 넓히지 않는다. 초기 구성이 끝난 뒤 `AWS_BOOTSTRAP_ROLE_ARN` 변수를 제거하거나 bootstrap Role 신뢰를 비활성화할 수 있으며, 권한 정책 갱신 시에만 다시 활성화한다.
 
 GitHub OIDC의 environment 기반 `sub`는 repository와 environment를 제한한다. workflow 파일 이름이나 `workflow_dispatch` 여부까지 증명하는 것은 아니다. 수동 실행 제한은 커밋된 workflow 트리거가 담당하므로 `.github/workflows/` 변경에 대한 branch protection과 코드 리뷰가 필요하다. [AWS OIDC 신뢰 정책 설명](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-idp_oidc.html)을 참고한다.
 
@@ -66,3 +66,7 @@ actionlint .github/workflows/aws-bootstrap.yml
 ```
 
 실제 AWS 리소스 생성/변경은 GitHub Actions의 수동 workflow 실행에서만 수행한다. 제공된 테스트는 정책·템플릿의 회귀 검증이며 실제 계정의 SCP, 서비스 quota, 조직 permissions boundary를 검증하는 AWS 통합 테스트는 아니다.
+
+## 환경 정리
+
+서비스 삭제가 끝난 뒤 외부 bootstrap 역할로 스택을 정리할 수 있다. 기본값은 plan과 state 보존이며, 실행 조건·추가 권한·복구 제약은 [AWS 수동 삭제 가이드](aws-teardown.md)를 따른다.
