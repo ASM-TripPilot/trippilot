@@ -331,7 +331,13 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
       // 단언 ① — PARTIAL 이면 셸 얼굴이 뜨고, 진행 카드 게이지는 **3셀**이다(여행 기간 3에서
       //          도출). `days.length`(=1) 로 셌다면 cell-3 이 없다(01b D7 의 급소 — 옛 "탭 3개
       //          disabled" 심판을 셸 게이지 3셀로 이관, TRIP-790). 셸이라 일차 칩은 없다(★2).
-      await screen.findByTestId('generation-progress-card');
+      // I1 이 합친 파일의 첫 테스트라 냉시작(모듈 첫 로드)을 흡수한다 — CI 에서 기본 1000ms 를 넘겨
+      // I1 만 red(PR #862 CI 2회). TRIP-1144 `SavedPlacesPage` 첫 목록 대기와 같은 5000ms.
+      await screen.findByTestId(
+        'generation-progress-card',
+        {},
+        { timeout: 5000 }
+      );
       expect(
         screen.getByTestId('generation-gauge-cell-3-waiting')
       ).toBeOnTheScreen();
