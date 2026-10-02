@@ -15,6 +15,7 @@ JWT_SIGNING_KEY GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET KAKAO_CLIENT_ID
 KAKAO_CLIENT_SECRET NAVER_CLIENT_ID NAVER_CLIENT_SECRET APPLE_CLIENT_ID WEATHER_API
 APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY SOCIAL_TOKEN_ENCRYPTION_KEY
 PUSH_EXPO_ACCESS_TOKEN PLACE_GEOCODE_MODE WEATHER_MODE PUSH_MODE AI_REMINDER_COPY_MODE
+AFFILIATE_MODE TRIPCOM_ALLIANCE_ID TRIPCOM_SID TRIPCOM_AD_ID
 """.split())
 AI_KEYS = frozenset("""
 TRIPPILOT_LLM_PROVIDER OPENAI_API_KEY OPENAI_BASE_URL OPENAI_MODEL OPENAI_API
@@ -31,6 +32,7 @@ GROUP_KEYS = {
 BACKEND_DEFAULTS = {
     "PLACE_GEOCODE_MODE": "stub", "WEATHER_MODE": "fake",
     "PUSH_MODE": "off", "AI_REMINDER_COPY_MODE": "http",
+    "AFFILIATE_MODE": "fallback",
 }
 
 
@@ -131,7 +133,8 @@ def validate_groups(groups):
             raise ValueError(f"{group} secret values must be strings without NUL")
     backend, ai = groups["backend"], groups["ai"]
     modes = {"PLACE_GEOCODE_MODE": {"stub", "kakao"}, "WEATHER_MODE": {"fake", "kma"},
-             "PUSH_MODE": {"off", "expo"}, "AI_REMINDER_COPY_MODE": {"off", "http"}}
+             "PUSH_MODE": {"off", "expo"}, "AI_REMINDER_COPY_MODE": {"off", "http"},
+             "AFFILIATE_MODE": {"fallback", "tripcom"}}
     for key, allowed in modes.items():
         if key in backend and backend[key] not in allowed:
             raise ValueError(f"Unsupported {key} in backend secret")
@@ -149,6 +152,10 @@ def validate_groups(groups):
         require(backend, ("KAKAO_CLIENT_ID",), "kakao geocoding")
     if backend.get("WEATHER_MODE") == "kma":
         require(backend, ("WEATHER_API",), "kma weather")
+    if backend.get("AFFILIATE_MODE") == "tripcom":
+        # trip_sub3(AD_ID)가 귀속의 열쇠다(probe 실측 2026-10-01) — 셋 중 하나라도 비면
+        # 파드가 기동 실패로 뒤늦게 죽거나, 뜨더라도 수수료만 조용히 샌다. 배포 전에 막는다.
+        require(backend, ("TRIPCOM_ALLIANCE_ID", "TRIPCOM_SID", "TRIPCOM_AD_ID"), "tripcom affiliate")
     provider = ai.get("TRIPPILOT_LLM_PROVIDER", "")
     if provider not in ("", "openai", "anthropic", "mixed"):
         raise ValueError("Unsupported TRIPPILOT_LLM_PROVIDER in ai secret")
