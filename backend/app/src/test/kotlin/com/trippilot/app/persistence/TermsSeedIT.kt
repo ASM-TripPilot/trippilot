@@ -47,7 +47,6 @@ class TermsSeedIT : AbstractPostgresIntegrationTest() {
      */
     @Test
     fun `시드 발효본은 md 정본의 표 행을 전부 담는다 - 한쪽만 고치면 깨진다`() {
-        val legalDir = java.nio.file.Paths.get("..", "docs", "legal")
         val files = mapOf(
             "privacy-policy.md" to "PRIVACY_POLICY",
             "location-terms.md" to "LOCATION_TERMS",
@@ -61,7 +60,7 @@ class TermsSeedIT : AbstractPostgresIntegrationTest() {
         ).associate { it["terms_type"] as String to it["body"] as String }
 
         files.forEach { (file, type) ->
-            val md = java.nio.file.Files.readString(legalDir.resolve(file))
+            val md = repoFile("backend/docs/legal/$file").readText()
                 .substringBefore("[초안 검토용") // 대조표 절은 시드에 싣지 않는 것이 변환 규칙이다
             val tableRows = md.lines()
                 .map(String::trim)
@@ -75,6 +74,21 @@ class TermsSeedIT : AbstractPostgresIntegrationTest() {
                 }
             }
         }
+    }
+
+    /**
+     * 리포 안 파일 — 실행 cwd 에 매이지 않게 위로 올라가며 찾는다.
+     * `Paths.get("..", …)` 상대경로는 cwd 가정이 깨지는 순간 조용히 깨진다 —
+     * 선례(`SeedDemoScriptIT.repoFile` · `StalePoiMigrationTest.repoRoot`)와 같은 형태로 맞췄다.
+     */
+    private fun repoFile(relative: String): java.io.File {
+        var dir: java.io.File? = java.io.File(System.getProperty("user.dir"))
+        while (dir != null) {
+            val candidate = java.io.File(dir, relative)
+            if (candidate.isFile) return candidate
+            dir = dir.parentFile
+        }
+        error("파일을 찾지 못했습니다: $relative")
     }
 
     private fun withClue(clue: String, block: () -> Unit) = io.kotest.assertions.withClue(clue, block)
