@@ -15,7 +15,7 @@
 
 > **`docs/structure.generated.md`는 기계 담당 절반이다** — `--write`가 전 소스의 파일 목록·export를 뽑아 덮어쓴다. 손으로 고치지 마라(다음 `--write`가 덮는다). `--check`는 이 파일 + `layer-*.md` + structure.md 를 합쳐 실제 파일과 대조하므로, 새 파일은 `--write` 한 번으로 '누락'이 사라진다. 사람이 쓰는 것은 **왜 있나(용도·함정·재사용 근거)**뿐 — 기계가 주는 **무엇이 있나**를 손으로 옮겨 적지 마라.
 
-- **경로는 리포 상대 전체 경로를 백틱으로 적는다** (`src/features/auth/lib/makeAuthorize.ts`). 대조 검사가 이 형태만 인식한다.
+- **경로는 리포 상대 전체 경로를 백틱으로 적는다** (`src/pages/login/lib/makeAuthorize.ts`). 대조 검사가 이 형태만 인식한다.
 - 갱신은 **이번 사이클이 만진 행만**(해당 층 규칙 파일에서). 전면 재작성 금지.
 - 대조: `node .claude/skills/trippilot-dev-cycle/scripts/structure-index.cjs --check` — DOC + `.claude/rules/layer-*.md`를 함께 읽어 실제 파일과 대조한다.
   - *파일은 있는데 행이 없다* → 새 파일 누락(해당 층 규칙에 추가) · *행은 있는데 파일이 없다* → 삭제·이동 미반영

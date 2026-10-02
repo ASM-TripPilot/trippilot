@@ -29,7 +29,7 @@ import path from 'path';
  */
 
 const ROOT = path.resolve('src');
-const AUTH_LIB_DIR = path.join(ROOT, 'features', 'auth', 'lib');
+const AUTH_LIB_DIR = path.join(ROOT, 'pages', 'login', 'lib');
 
 /** D2 가 확정한 env 변수 4종. 값은 `.env` 에만, 이름은 `.env.example` 에만 있어야 한다. */
 const SOCIAL_ENV_VARS = [

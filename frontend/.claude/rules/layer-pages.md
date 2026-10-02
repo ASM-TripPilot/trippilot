@@ -15,12 +15,20 @@ paths:
 | `login` | `src/pages/login/ui/LoginPage.tsx` | 로그인 훅 ↔ 화면 배선 |
 | `login` | `src/pages/login/ui/SocialLoginScreen.tsx` | (TRIP-1146으로 features/auth에서 이사) 소셜 로그인 비주얼(props 순수 컴포넌트, 에러 배너 블랙리스트). 글리프·그라디언트·`SocialLoginPhase` 타입은 `features/auth`에서 절대경로로 읽는다 |
 | `login` | `src/pages/login/model/useAppleButton.ts` | (TRIP-1146으로 features/auth에서 이사) 기기에서 애플 로그인이 가능하면 `AppleSignInButton` 컴포넌트를 state로 돌려주고 아니면 null(fail-closed, Android·판정 실패 포함) — `await import('@/features/auth/lib/appleAuthorize')`만으로 SDK에 닿음(SDK 정적 import는 여전히 `features/auth/lib/` 안) |
+| | `src/pages/login/model/useSocialLogin.ts` | (TRIP-1155로 features/auth에서 이사) 소셜 로그인 흐름(PKCE·single-flight), code/token 엔드포인트 분기·신규가입 연령확인 분기 |
+| | `src/pages/login/lib/makeAuthorize.ts` | (TRIP-1155로 features/auth에서 이사) authorize 팩토리(DI 주입점) — apple은 네이티브 SDK, kakao·naver는 env가 있으면 네이티브 SDK, 그 외는 expo-auth-session/fake. SDK 어댑터는 동적 import |
+| | `src/pages/login/lib/kakaoAuthorize.ts` | (TRIP-1155로 features/auth에서 이사) 카카오 SDK를 import하는 유일 파일, 취소는 message 매칭 |
+| | `src/pages/login/lib/naverAuthorize.ts` | (TRIP-1155로 features/auth에서 이사) 네이버 SDK를 import하는 유일 파일 |
+| | `src/pages/login/lib/appleAuthorize.tsx` | (TRIP-1155로 features/auth에서 이사) 애플 SDK를 정적 import하는 유일 파일(지연 로드로만 닿음) + `AppleSignInButton`. **버튼은 시스템 `AppleAuthenticationButton`이 아니라 직접 그리는 HIG 커스텀 `Pressable`**(TRIP-1124 — 이웃 구글 버튼과 표면 클래스 복사, 로고 24 `#000`, 제목 `text-hero text-black`: HIG가 버튼 안 로고·제목을 검정/흰색만 허용해 `text-ink`(#222) 불가). SDK를 하나도 안 쓰는 순수 UI인데 lib에 있다 — 가용성 판정 뒤에만 버튼을 건네는 주입 경로 때문. **`lib → ui`(`../ui/AuthGlyphs`의 `AppleLogoGlyph`) 역방향 import** — 위 계층 화살표의 반대라 가드가 없고(옛 슬라이스 안 config→ui 선례였던 `amenityIcons`는 TRIP-1148로 `pages/stay-detail/config`에 이사해 이제 pages→features 정방향 층간 import다 — 슬라이스 안 역방향 선례는 남아 있지 않다), `AuthGlyphs`가 이 파일을 정적 import하는 날 순환 + SDK가 화면 그래프로 샌다 |
+| | `src/pages/login/lib/realAuthorize.ts` | (TRIP-1155로 features/auth에서 이사) expo-auth-session 참조 유일 프로덕션 파일 |
+| | `src/pages/login/config/oauthConfig.ts` | (TRIP-1155로 features/auth에서 이사) provider별 OAuth config를 env에서 읽음, apple은 빈 슬롯(네이티브 SDK라 불필요) |
 | `onboarding-terms` | `src/pages/onboarding-terms/ui/TermsPage.tsx` | 약관 훅 ↔ 화면 배선 |
 | `onboarding-terms` | `src/pages/onboarding-terms/ui/TermsScreen.tsx` | (TRIP-1146 이사) 약관 화면(프레젠테이션 · props만) |
 | `onboarding-terms` | `src/pages/onboarding-terms/model/useTermsConsent.ts` | (TRIP-1146 이사) 약관 3종 로드·토글·`POST /me/consents` **1회** 제출. 실패 시 이동 안 함 |
 | `onboarding-nickname` | `src/pages/onboarding-nickname/ui/NicknamePage.tsx` | 닉네임 훅 ↔ 화면 배선 |
 | `onboarding-nickname` | `src/pages/onboarding-nickname/ui/NicknameScreen.tsx` | (TRIP-1146 이사) 닉네임 화면(오류·대체칩 표시만). 칩은 값(인덱스 아님)을 올림 |
 | `onboarding-nickname` | `src/pages/onboarding-nickname/model/useNickname.ts` | (TRIP-1146 이사) 닉네임 프리필 + **순서 저장**(형식→check→PATCH→complete). 각 단계 실패 시 다음 미호출. 형식 검사는 `features/onboarding/model/validateNicknameFormat` |
+| | `src/pages/onboarding-nickname/model/validateNicknameFormat.ts` | (TRIP-1155로 features/onboarding에서 이사) **순수 함수** — 닉네임 길이(코드포인트 2~20)만. 내용 판정은 서버 권한 |
 | `onboarding-pref1` | `src/pages/onboarding-pref1/ui/PrefStep1Page.tsx` | 취향 1/2 배선 |
 | `onboarding-pref1` | `src/pages/onboarding-pref1/ui/PrefStep1Screen.tsx` | (TRIP-1146 이사) 취향 1/2 화면 — 스타일 그리드(복수)+페이스(단일). props만, 스토어·네트워크 모름 |
 | `onboarding-pref2` | `src/pages/onboarding-pref2/ui/PrefStep2Page.tsx` | 취향 2/2 배선. 완료 시 `usePutMePreferences().mutate(...)`를 fire-and-forget(응답·에러가 완료 흐름을 막지 않음, INV-4) — 온보딩 취향 서버 PUT은 리포에서 이 파일 한 곳뿐 |

@@ -11,7 +11,7 @@ import {
   NaverIcon,
 } from '@/features/auth/ui/AuthGlyphs';
 import { APP_ICON_COLORS } from '@/features/auth/config/gradients';
-import type { SocialLoginPhase } from '@/features/auth/model/useSocialLogin';
+import type { SocialLoginPhase } from '../model/useSocialLogin';
 
 export interface SocialLoginScreenProps {
   phase: SocialLoginPhase;

@@ -4,8 +4,8 @@ import { router } from 'expo-router';
 import type { SocialProvider } from '@/shared/api';
 
 import { useAppleButton } from '../model/useAppleButton';
-import { useSocialLogin } from '@/features/auth/model/useSocialLogin';
-import { makeAuthorize } from '@/features/auth/lib/makeAuthorize';
+import { useSocialLogin } from '../model/useSocialLogin';
+import { makeAuthorize } from '../lib/makeAuthorize';
 import { SocialLoginScreen } from './SocialLoginScreen';
 
 /**

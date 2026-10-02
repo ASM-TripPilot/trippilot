@@ -280,20 +280,11 @@
 
 ## src/features/auth/config/
 - `src/features/auth/config/gradients.ts`  →  SPLASH_BACKGROUND_COLORS · SPLASH_BACKGROUND_LOCATIONS · APP_ICON_COLORS · AUTH_ICON_COLORS
-- `src/features/auth/config/oauthConfig.ts`  →  OAuthDiscovery · OAuthProviderConfig · getOAuthConfig
-
-## src/features/auth/lib/
-- `src/features/auth/lib/appleAuthorize.tsx`  →  appleAuthorize · isAppleSignInAvailable · AppleSignInButton
-- `src/features/auth/lib/kakaoAuthorize.ts`  →  kakaoAuthorize
-- `src/features/auth/lib/makeAuthorize.ts`  →  makeAuthorize
-- `src/features/auth/lib/naverAuthorize.ts`  →  naverAuthorize
-- `src/features/auth/lib/realAuthorize.ts`  →  realAuthorize
 
 ## src/features/auth/model/
 - `src/features/auth/model/gateDestination.ts`  →  publishGateDestination · getGateDestination · waitForGateDestination · resetGateDestination
 - `src/features/auth/model/resolveBootstrapDestination.ts`  →  BootstrapDestination · resolveBootstrapDestination
 - `src/features/auth/model/useBootstrapGate.ts`  →  BOOTSTRAP_TIMEOUT_MS · useBootstrapGate
-- `src/features/auth/model/useSocialLogin.ts`  →  SocialLoginPhase · AuthorizeResult · Authorize · useSocialLogin
 
 ## src/features/auth/ui/
 - `src/features/auth/ui/AuthGlyphs.tsx`  →  AppIconGlyph · GoogleIcon · AppleLogoGlyph · KakaoIcon · NaverIcon · WarningTriangleGlyph
@@ -401,7 +392,6 @@
 - `src/features/onboarding/model/resolveOnboardingStep.ts`  →  OnboardingStep · OnboardingProgress · resolveOnboardingStep
 - `src/features/onboarding/model/termsDocumentTitle.ts`  →  termsDocumentTitle
 - `src/features/onboarding/model/useOnboardingProgress.ts`  →  useOnboardingProgress
-- `src/features/onboarding/model/validateNicknameFormat.ts`  →  validateNicknameFormat · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH · type NicknameFormatReason · type NicknameFormatResult
 
 ## src/features/onboarding/ui/
 - `src/features/onboarding/ui/OnboardingGlyphs.tsx`  →  BackChevronGlyph · CheckGlyph · ViewChevronGlyph · RegenerateGlyph · PositiveCheckGlyph · GlyphComponent · SunGlyph · ForkKnifeGlyph · MountainGlyph · ArtGlyph · ActivityGlyph · CameraGlyph · ShoppingBagGlyph · MoonGlyph · BalanceGlyph · LightningGlyph · SoloPersonGlyph · FriendsGlyph · HeartGlyph · FamilyGlyph · ParentsGlyph · PetGlyph · WalkGlyph · TransitGlyph · CarGlyph · TaxiGlyph · BikeGlyph · SkipChevronGlyph · InfoCircleGlyph
@@ -703,11 +693,22 @@
 - `src/pages/live-place/ui/LivePlacePage.tsx`  →  LivePlacePageProps · LivePlacePage
 - `src/pages/live-place/ui/PlaceDetailScreen.tsx`  →  PlaceDetailScreenProps · PlaceDetailScreen
 
+## src/pages/login/config/
+- `src/pages/login/config/oauthConfig.ts`  →  OAuthDiscovery · OAuthProviderConfig · getOAuthConfig
+
 ## src/pages/login/
 - `src/pages/login/index.ts`  →  LoginPage
 
+## src/pages/login/lib/
+- `src/pages/login/lib/appleAuthorize.tsx`  →  appleAuthorize · isAppleSignInAvailable · AppleSignInButton
+- `src/pages/login/lib/kakaoAuthorize.ts`  →  kakaoAuthorize
+- `src/pages/login/lib/makeAuthorize.ts`  →  makeAuthorize
+- `src/pages/login/lib/naverAuthorize.ts`  →  naverAuthorize
+- `src/pages/login/lib/realAuthorize.ts`  →  realAuthorize
+
 ## src/pages/login/model/
 - `src/pages/login/model/useAppleButton.ts`  →  useAppleButton
+- `src/pages/login/model/useSocialLogin.ts`  →  SocialLoginPhase · AuthorizeResult · Authorize · useSocialLogin
 
 ## src/pages/login/ui/
 - `src/pages/login/ui/LoginPage.tsx`  →  LoginPage
@@ -759,6 +760,7 @@
 
 ## src/pages/onboarding-nickname/model/
 - `src/pages/onboarding-nickname/model/useNickname.ts`  →  UseNickname · useNickname
+- `src/pages/onboarding-nickname/model/validateNicknameFormat.ts`  →  validateNicknameFormat · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH · type NicknameFormatReason · type NicknameFormatResult
 
 ## src/pages/onboarding-nickname/ui/
 - `src/pages/onboarding-nickname/ui/NicknamePage.tsx`  →  NicknamePage
