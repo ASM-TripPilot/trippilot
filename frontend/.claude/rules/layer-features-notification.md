@@ -4,7 +4,7 @@ paths:
 ---
 # `src/features/notification/` — l02 알림 설정 + l01 알림함 표면
 
-두 화면 뷰와 전용 부품(`ToggleRow`·`PermissionBanner`·`NotificationRow`·`NotificationInboxGlyphs`)은 **TRIP-1154로 `pages/settings-notifications`·`pages/notification-inbox` 이사** — 행은 `layer-pages.md`. 여기엔 page가 쓰는 model과 두 page가 함께 쓰는 `NotificationGlyphs`만 남았다.
+두 화면 뷰와 전용 부품(`ToggleRow`·`PermissionBanner`·`NotificationRow`·`NotificationInboxGlyphs`)은 **TRIP-1154로 `pages/settings-notifications`·`pages/notification-inbox` 이사** — 행은 `layer-pages.md`. 여기엔 page가 쓰는 model과 두 page가 함께 쓰는 `NotificationGlyphs`만 남았다. TRIP-1155로 그 model 6개도 `pages/notification-inbox`·`pages/settings-notifications`로 이사해 `NotificationGlyphs`만 남았다.
 
 **경계**: 이 폴더는 다른 `features/*`를 import할 수 없다 — eslint 층 zone(전 feature 강제)이 막는다. `require()` 문자열은 zone 밖이다.
 

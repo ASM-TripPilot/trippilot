@@ -5,7 +5,7 @@ paths:
 # `src/features/home/` — 홈 발견·영감 피드(a01)
 
 
-계층: `lib`(순수 함수) → `model`(타입·상수·판정) → `ui`(화면+전용 글리프). **컨테이너·훅 없음** — 프레젠테이션 전용 슬라이스(props/상수 구동, 네트워크·라우팅 0 — 기계 강제 없음 — TRIP-1145에서 스캔 삭제). 라우팅·데이터 배선은 `pages/home`. a02 매거진 뷰·모델은 TRIP-1147로 `pages/magazine/`로 이사했다(행은 `layer-pages.md`).
+계층: `lib`(순수 함수) → `model`(타입·상수·판정) → `ui`(화면+전용 글리프). **컨테이너·훅 없음** — 프레젠테이션 전용 슬라이스(props/상수 구동, 네트워크·라우팅 0 — 기계 강제 없음 — TRIP-1145에서 스캔 삭제). 라우팅·데이터 배선은 `pages/home`. a02 매거진 뷰·모델은 TRIP-1147로 `pages/magazine/`로 이사했다(행은 `layer-pages.md`). TRIP-1155로 a01 화면 뷰·모델·`formatCountBadge`도 `pages/home/`으로 이사해 여기엔 `ui/HomeGlyphs`만 남았다.
 
 | 파일 | 역할 |
 |---|---|

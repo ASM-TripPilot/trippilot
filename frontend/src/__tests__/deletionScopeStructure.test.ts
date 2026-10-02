@@ -16,7 +16,7 @@ import { join, relative, resolve, sep } from 'node:path';
  * 왜 소스 스캔인가: "목록이 한 곳에만 있다"는 런타임 동작이 아니라 코드 배치의 성질이다 —
  * 렌더 테스트로는 표현할 수 없고 소스 층에서만 잡힌다.
  *
- * 왜 **설정 표면 스코프**(features/settings·pages/settings·app/settings·pages/my-page·pages/my-stays·pages/settings-personalization)인가, whole-repo 가 아니라:
+ * 왜 **설정 표면 스코프**(features/settings·pages/settings·app/settings·pages/my-page·pages/my-stays·pages/settings-personalization·features/edit-preferences)인가, whole-repo 가 아니라:
  * `회고`·`요약` 같은 삭제 대상 어휘는 `features/reflection` 등에 **정당하게** 등장한다 —
  * 전 리포 스캔은 그걸 위반으로 오탐한다. AC-13 의 실제 표적은 "삭제 고지 목록이 다이얼로그에
  * 인라인 중복되는 것"이고, 그 중복이 생길 곳은 설정 표면뿐이다.

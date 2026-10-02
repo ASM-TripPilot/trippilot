@@ -5,7 +5,7 @@ paths:
 # `src/features/auth/` — 스플래시·소셜 로그인
 
 
-계층: `ui`(프레젠테이션) → `model`(상태·훅) → `lib`·`config`(순수 로직/설정). 배선은 `pages/login/ui/LoginPage.tsx`. 로그인 화면 뷰 `SocialLoginScreen`·애플 버튼 훅 `useAppleButton`은 TRIP-1146으로 `pages/login/{ui,model}/`로 이사했다(소비처가 그 page 하나뿐).
+계층: `ui`(프레젠테이션) → `model`(상태·훅) → `lib`·`config`(순수 로직/설정). 배선은 `pages/login/ui/LoginPage.tsx`. 로그인 화면 뷰 `SocialLoginScreen`·애플 버튼 훅 `useAppleButton`은 TRIP-1146으로 `pages/login/{ui,model}/`로 이사했다(소비처가 그 page 하나뿐). 소셜 로그인 훅(`useSocialLogin`)·authorize 어댑터(`lib/` 전부)·`oauthConfig`는 TRIP-1155로 `pages/login/{model,lib,config}/`로 이사했다(`layer-pages.md`).
 
 | 파일 | 역할 |
 |---|---|

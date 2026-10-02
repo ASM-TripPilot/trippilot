@@ -5,7 +5,7 @@ paths:
 # `src/features/stay/` — 숙소 탐색(e02)·상세(e03)·저장(e04)·등록(e05)
 
 
-판정은 순수 함수(`model/`), 화면은 무상태 프레젠테이션(`ui/`) — `features/stay/ui`는 `useState`를 두지 않으므로(기계 강제 없음) 시트 개폐·선택 초안 같은 상태는 페이지가 쥔다(개념 [[상태 끌어올리기 (lifting state up)]]). 다른 feature 글리프·훅은 import하지 않고 재작성한다. 화면 뷰 4개(e02·e03·e04·e05)와 그 전용 부품(`PartialFailureBanner`·`SkeletonList`·`filterReasonLabel`·`amenityIcons`)은 TRIP-1148로 `pages/stay-*`로 이사했다(`layer-pages.md`) — 여기엔 판정 model·시트 3종·글리프·`affiliateNotice`만 남는다.
+판정은 순수 함수(`model/`), 화면은 무상태 프레젠테이션(`ui/`) — `features/stay/ui`는 `useState`를 두지 않으므로(기계 강제 없음) 시트 개폐·선택 초안 같은 상태는 페이지가 쥔다(개념 [[상태 끌어올리기 (lifting state up)]]). 다른 feature 글리프·훅은 import하지 않고 재작성한다. 화면 뷰 4개(e02·e03·e04·e05)와 그 전용 부품(`PartialFailureBanner`·`SkeletonList`·`filterReasonLabel`·`amenityIcons`)은 TRIP-1148로 `pages/stay-*`로 이사했다(`layer-pages.md`) — 여기엔 판정 model·시트 3종·글리프·`affiliateNotice`만 남는다. TRIP-1155로 저장 4개는 `features/save-stay`, `affiliateNotice`는 `entities/stay/config/`, 판정 model·시트는 `pages/stay-{search,detail,register}`로 이사해 `model/useStaySearch`·`ui/StayGlyphs`만 남았다.
 
 | 파일 | 역할 |
 |---|---|

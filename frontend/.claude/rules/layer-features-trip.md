@@ -4,7 +4,7 @@ paths:
 ---
 # `src/features/trip/` — 여행 생성 위저드(g01·g02)의 계약·판정·시트
 
-서버 계약(orval `trips`·`preferences`·`bases`)을 도메인 이름으로 감싸는 얇은 훅, 위저드 드래프트 상태(Zustand), 순수 판정·파생, 무상태 편집 시트·확인 다이얼로그. 판정과 렌더를 파일로 가른다 — 순수 계산(`tripWizardStep1.ts`·`tripSummary.ts` 등)·상태 상자(`tripWizardStore.ts`)·시트·다이얼로그. 위저드 화면 뷰 두 개(`TripWizardStep1Screen`·`TripWizardStep2Screen`)는 TRIP-1149로 각 page 슬라이스(`pages/trip-new-step1`·`pages/trip-new-step2`)로 이사했다 — 행은 `layer-pages.md`. `validateTripDraft`를 부르는 곳은 배선 층(`pages/trip-new-step1/`) 하나뿐이고, 시트·다이얼로그는 서버 훅을 직접 물지 않는다. 날짜 산술은 epoch-day 방식이고 `new Date(` 생성자를 쓰지 않는다(기계 강제 없음 — TRIP-1145에서 스캔 삭제). 편집 시트는 전부 `@gorhom/bottom-sheet` 기반 props-only 무상태이고, 개폐·드래프트는 배선이 소유하며 시트는 화면의 형제로 마운트된다 — 실개폐·딤·터치차단은 통과형 목이라 jest 사각(6-b 전용).
+서버 계약(orval `trips`·`preferences`·`bases`)을 도메인 이름으로 감싸는 얇은 훅, 위저드 드래프트 상태(Zustand), 순수 판정·파생, 무상태 편집 시트·확인 다이얼로그. 판정과 렌더를 파일로 가른다 — 순수 계산(`tripWizardStep1.ts`·`tripSummary.ts` 등)·상태 상자(`tripWizardStore.ts`)·시트·다이얼로그. 위저드 화면 뷰 두 개(`TripWizardStep1Screen`·`TripWizardStep2Screen`)는 TRIP-1149로 각 page 슬라이스(`pages/trip-new-step1`·`pages/trip-new-step2`)로 이사했다 — 행은 `layer-pages.md`. `validateTripDraft`를 부르는 곳은 배선 층(`pages/trip-new-step1/`) 하나뿐이고, 시트·다이얼로그는 서버 훅을 직접 물지 않는다. 날짜 산술은 epoch-day 방식이고 `new Date(` 생성자를 쓰지 않는다(기계 강제 없음 — TRIP-1145에서 스캔 삭제). 편집 시트는 전부 `@gorhom/bottom-sheet` 기반 props-only 무상태이고, 개폐·드래프트는 배선이 소유하며 시트는 화면의 형제로 마운트된다 — 실개폐·딤·터치차단은 통과형 목이라 jest 사각(6-b 전용). TRIP-1155로 위저드 상태·판정 5개는 `features/create-trip`, 거점 배정 2개는 `features/assign-trip-base`, 시트·다이얼로그와 page 전용 model은 `pages/trip-new-step1`·`pages/trip-new-step2`로 이사해 `lib/sheetHandle`·`model/{baseScreen,regionMatch,useSavedStays}`·`ui/TripGlyphs`만 남았다.
 
 | 파일 | 역할 |
 |---|---|

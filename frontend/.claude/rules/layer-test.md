@@ -51,7 +51,7 @@ paths:
 | `src/__tests__/rootLayoutQueryProvider.test.tsx` | 앱 루트를 실제 렌더해 `SplashGate` 자리(`queryClientProbe` 목) 안쪽에서 진짜 `QueryClient`가 잡히는지 |
 | `src/__tests__/rootLayoutToastHost.test.tsx` | `<ToastHost/>`가 `SplashGate` **바깥**(형제)에 한 번만 배치됐는지 배선 가드 |
 | `src/shared/ui/Toast.test.tsx` | `showToast`/`hideToast` 가짜 타이머 테스트 — `TOAST_VISIBLE_MS` 뒤 사라짐 · hide가 타이머 정리 · 연속 show는 앞 타이머 취소. 페이드 애니메이션을 안 넣은 이유도 같다(타이머 카운트를 흐림) |
-| `src/__tests__/recordPhotoBinaryGuard.test.ts` | `features/record`+`shared/photo` 재귀 — 사진 바이너리·`storage_key` 금칙어 0 + `AddPhotoRequest` 실참조(INV-U5-03). 네이티브 사진 모듈 정적 import 금지는 ESLint로 옮겼다(TRIP-1145). 범위를 `shared` 전체로 넓히면 생성 코드 주석의 `storage_key`로 거짓 red |
+| `src/__tests__/recordPhotoBinaryGuard.test.ts` | `features/{record,check-visit,attach-visit-media}`+`shared/photo`+`pages/{live-itinerary,trip-records,records-calendar}` 재귀 — 사진 바이너리·`storage_key` 금칙어 0 + `AddPhotoRequest` 실참조(INV-U5-03). 네이티브 사진 모듈 정적 import 금지는 ESLint로 옮겼다(TRIP-1145). 범위를 `shared` 전체로 넓히면 생성 코드 주석의 `storage_key`로 거짓 red |
 | `src/__tests__/shareCardStructure.test.ts` | j06 공유 카드 — 서버 이미지 생성·저장·업로드 금칙 8종 0(BR-U5-46) + 온디바이스 앵커(`buildShareCard`·`isShareCaptureArmed`·`saveShareCardImage`). 스캔 대상에 캡처 어댑터를 "캡처 패키지를 정적 import 하는 파일"로 편입한다(그 탐지기 자가검사 G5a). 캡처 어댑터 정적 import 금지는 ESLint로 옮겼다(TRIP-1145) |
 | `src/__tests__/tabsRecordsRoute.test.tsx` | `(tabs)/records.tsx` 라우트 렌더 — 카드→기록 push · 빈 상태→새 여행 push · 월 이동 |
 | `src/__tests__/mapBridgeStructure.test.ts` | 지도 키 소스 스캔 — 키는 env 참조로만, git 추적 전수에 키 리터럴 0. **git 추적 전수는 `git ls-files`로 인덱스를 열거한다** — 테스트 파일을 `rm`만 하고 스테이지하지 않으면 없는 경로를 열어 ENOENT로 FAIL한다(`git rm`/`git add`로 스테이지) |
