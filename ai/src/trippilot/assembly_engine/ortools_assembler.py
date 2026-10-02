@@ -45,7 +45,7 @@ from trippilot.domain.itinerary import (
     VisitSlot,
 )
 from trippilot.domain.llm import ScoredPoi
-from trippilot.domain.poi import Poi, PoiCategory
+from trippilot.domain.poi import Poi, PoiCategory, counts_as_food
 
 _log = logging.getLogger(__name__)
 
@@ -359,6 +359,7 @@ class OrToolsAssembler:
         obj_terms += self._rain_soft_terms(problem, day, nodes, visit)
         obj_terms += self._event_soft_terms(problem, nodes, visit)
         obj_terms += self._category_soft_terms(problem, day, m, nodes, visit)
+        obj_terms += self._food_cap_terms(m, nodes, visit)
         m.Maximize(sum(obj_terms))
 
         cap = self._cfg.or_tools_limit_ms if cap_ms is None else cap_ms
@@ -582,6 +583,21 @@ class OrToolsAssembler:
             m.Add(excess >= sum(visit[i] for i in idxs) - free)
             terms.append(-penalty * excess)
         return terms
+
+    def _food_cap_terms(self, m: cp_model.CpModel, nodes, visit) -> list:
+        """FOOD 하루 상한 — 초과 1곳당 -food_excess_penalty (목적함수만, config 주석).
+
+        위 카테고리 항과 같은 꼴이되 허용치에 공정 몫 바닥이 없다 — days=1 일자별 호출에서도
+        켜져 있어야 해서다. 핀(고정 블록) 노드도 센다(카테고리 항의 len(idxs) 와 같은 기준).
+        """
+        penalty = int(self._cfg.food_excess_penalty * 1000)
+        cap = self._cfg.food_daily_max
+        idxs = [i for i, n in enumerate(nodes) if counts_as_food(n["poi"])]
+        if penalty == 0 or len(idxs) <= cap:
+            return []
+        excess = m.NewIntVar(0, len(idxs) - cap, "foodx")
+        m.Add(excess >= sum(visit[i] for i in idxs) - cap)
+        return [-penalty * excess]
 
     def _meal_soft_terms(self, m: cp_model.CpModel, nodes, visit, start,
                          arcs) -> list:

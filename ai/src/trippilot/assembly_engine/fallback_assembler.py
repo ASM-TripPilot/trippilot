@@ -34,7 +34,7 @@ from trippilot.domain.itinerary import (
     SolveMode,
     VisitSlot,
 )
-from trippilot.domain.poi import Poi, PoiCategory
+from trippilot.domain.poi import Poi, PoiCategory, counts_as_food
 
 
 def _at(day, template: datetime) -> datetime:
@@ -113,6 +113,7 @@ class RuleFallbackAssembler:
             slots: list[VisitSlot] = []
             # 일별 카테고리 배치 수 (TRIP-531) — 고정 블록 포함
             cat_count: Counter = Counter()
+            food_count = 0  # FOOD 하루 상한 — 고정 블록 포함 (OR 항의 핀 노드와 같은 기준)
             # ① 고정 블록 — 시각 그대로 (HC3)
             for fb in sorted(fixed_by_day.get(day, []), key=lambda f: f.window.start):
                 if fb.poi_id in used:
@@ -129,6 +130,7 @@ class RuleFallbackAssembler:
                 fb_poi = self._pois.get(fb.poi_id)
                 if fb_poi is not None:
                     cat_count[fb_poi.category] += 1
+                    food_count += counts_as_food(fb_poi)
             # ② 점수순 말단 삽입 + 식사 시간대 보정 (TRIP-379 — OR-Tools 소프트 항의
             #    결정론 버전, HC 위반 후보는 스킵, 삽입 불가 시 비워둠).
             #    규칙: 현재 말단 시각이 아직 식사가 없는 식사 창 안이고 직전 슬롯이
@@ -183,9 +185,18 @@ class RuleFallbackAssembler:
                             >= quota.get(p.category,
                                          self._cfg.category_free_count))
 
-                # 안정 정렬 — 쿼터 내 먼저, 그 안에서 선호 클래스, 그 안에서 ranked 순서
+                # FOOD 하루 상한 (config 주석) — 다 찼으면 FOOD 는 맨 뒤. 배제가 아니라
+                # 순서만이라 FOOD 만 남으면 그대로 배치된다. 첫 키인 것은 OR 감점(1.0)이
+                # 카테고리 감점(0.3)·식사 선호보다 커서다.
+                food_full = food_count >= self._cfg.food_daily_max
+
+                def _food_over(c) -> bool:
+                    p = self._pois.get(c.poi_id)
+                    return food_full and p is not None and counts_as_food(p)
+
+                # 안정 정렬 — FOOD 상한 → 쿼터 내 먼저 → 선호 클래스 → ranked 순서
                 order = sorted(remaining, key=lambda c: (
-                    _over_quota(c), _is_food(c) != food_first))
+                    _food_over(c), _over_quota(c), _is_food(c) != food_first))
                 placed = False
                 for cand in order:
                     remaining.remove(cand)  # 실패든 성공이든 그 일자 재시도 없음
@@ -227,6 +238,7 @@ class RuleFallbackAssembler:
                     ))
                     used.add(cand.poi_id)
                     cat_count[poi.category] += 1  # TRIP-531
+                    food_count += counts_as_food(poi)
                     slots.sort(key=lambda s: s.start_at)
                     if poi.category is PoiCategory.FOOD:
                         s_mod = start.hour * 60 + start.minute

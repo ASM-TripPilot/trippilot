@@ -29,7 +29,7 @@ from typing import Sequence
 
 from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import PoiId
-from trippilot.domain.poi import Poi, PoiCategory
+from trippilot.domain.poi import EATERY_NAME, Poi, PoiCategory
 
 _SAME_COORD_KM = 0.005
 _CONTAIN_KM = 1.5
@@ -49,10 +49,8 @@ _ADMIN_LONGEST_FIRST = tuple(sorted(_ADMIN, key=len, reverse=True))
 # 접두 규칙에서 시·도 이름 다음에 한 번 더 떼는 기관·범용 접두 — 같은 단지가 아니라 운영
 # 주체·수식어다('국립현대미술관'↔'국립민속박물관' 350m·'조선왕릉 선릉'↔'조선호텔' 오탐).
 _GENERIC_PREFIX = ("국립", "시립", "도립", "구립", "군립", "한국", "대한", "중앙", "시민", "조선")
-# 먹자골목·음식 골목은 TourAPI 가 액티비티로 주지만 실질은 식당 밀집이다 — 맛집·카페처럼
-# 계열에서 뺀다('자갈치 양곱창 골목'이 '자갈치 크루즈'를, '닭한마리 골목'이 DDP 를 눌렀다).
-# '해물탕거리' 같은 '…거리' 음식 거리는 아직 잡지 않는다(일반 '거리'와 이름으로 못 가른다).
-_EATERY_NAME = re.compile(r"골목$|먹자|먹거리|카페거리")
+# 먹자골목·음식 골목(EATERY_NAME — domain/poi.py)은 맛집·카페처럼 계열에서 뺀다
+# ('자갈치 양곱창 골목'이 '자갈치 크루즈'를, '닭한마리 골목'이 DDP 를 눌렀다).
 _PAREN = re.compile(r"\([^)]*\)|\[[^\]]*\]")
 _PUNCT = re.compile(r"[\s&·,.\-_'\"!?/:]+")
 _EATERY = frozenset((PoiCategory.FOOD, PoiCategory.CAFE))
@@ -89,7 +87,7 @@ class _Sig:
     def of(poi: Poi) -> "_Sig":
         name = normalize_name(poi.name)
         return _Sig(poi, name, _bare(name),
-                    poi.category in _EATERY or _EATERY_NAME.search(name) is not None)
+                    poi.category in _EATERY or EATERY_NAME.search(name) is not None)
 
 
 def _hangul_prefix(a: str, b: str) -> int:
