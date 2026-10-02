@@ -19,7 +19,7 @@ import { StayRecommendView } from './StayRecommendView';
  *
  * 왜 pages 층인가(02a D12 · ★21): 이 뷰는 지도+시트 셸(`widgets/map-sheet-shell`)을 조립한다. 층 방향이
  *   app → pages → widgets → features 라 features 는 widgets 를 못 문다(eslint 층 zone). 셸 조립은 리포 전례대로
- *   pages 순수 뷰가 진다(`pages/planb-draft/ui/ReplanDraftView.tsx`). 뷰는 api·라우터를 모른다 — 프리뷰가 이
+ *   pages 순수 뷰가 진다(`pages/live/planb-draft/ui/ReplanDraftView.tsx`). 뷰는 api·라우터를 모른다 — 프리뷰가 이
  *   파일을 경로로 직접 import 한다(페이지 배럴을 거치면 useAssignBase 가 딸려 온다).
  *
  * 무엇을 보장하나(화면은 props 만 받는다 — 요청·라우터·선택 state 는 페이지 몫):

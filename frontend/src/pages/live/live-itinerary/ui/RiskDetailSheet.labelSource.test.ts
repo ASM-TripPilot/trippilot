@@ -29,6 +29,7 @@ import { TRIGGER_LABELS } from '@/features/planb/model/triggerLabel';
 const SHEET = path.resolve(
   'src',
   'pages',
+  'live',
   'live-itinerary',
   'ui',
   'RiskDetailSheet.tsx'

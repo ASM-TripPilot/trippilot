@@ -703,41 +703,79 @@
 - `src/pages/itinerary/itinerary-stay-recommend/ui/StayRecommendPage.tsx`  →  StayRecommendPageProps · StayRecommendPage
 - `src/pages/itinerary/itinerary-stay-recommend/ui/StayRecommendView.tsx`  →  StayRecommendViewProps · StayRecommendView
 
-## src/pages/live-itinerary/
-- `src/pages/live-itinerary/index.ts`  →  LiveItineraryPage
+## src/pages/live/live-itinerary/
+- `src/pages/live/live-itinerary/index.ts`  →  LiveItineraryPage
 
-## src/pages/live-itinerary/model/
-- `src/pages/live-itinerary/model/foldScope.ts`  →  foldScope
-- `src/pages/live-itinerary/model/liveState.ts`  →  LiveState · ResolveLiveStateInput · resolveLiveState
-- `src/pages/live-itinerary/model/riskAffectedRow.ts`  →  RiskAffectedRow · riskAffectedRow
-- `src/pages/live-itinerary/model/triggerWatchlist.ts`  →  TriggerWatchlistRow · triggerWatchlist
-- `src/pages/live-itinerary/model/useVisitCheck.ts`  →  VisitCheckOutcome · useVisitCheck
+## src/pages/live/live-itinerary/model/
+- `src/pages/live/live-itinerary/model/foldScope.ts`  →  foldScope
+- `src/pages/live/live-itinerary/model/liveState.ts`  →  LiveState · ResolveLiveStateInput · resolveLiveState
+- `src/pages/live/live-itinerary/model/riskAffectedRow.ts`  →  RiskAffectedRow · riskAffectedRow
+- `src/pages/live/live-itinerary/model/triggerWatchlist.ts`  →  TriggerWatchlistRow · triggerWatchlist
+- `src/pages/live/live-itinerary/model/useVisitCheck.ts`  →  VisitCheckOutcome · useVisitCheck
 
-## src/pages/live-itinerary/ui/
-- `src/pages/live-itinerary/ui/LiveHubView.tsx`  →  LiveHubSlot · LiveHubViewProps · LiveHubView
-- `src/pages/live-itinerary/ui/LiveItineraryPage.tsx`  →  LiveItineraryPageProps · LiveItineraryPage
-- `src/pages/live-itinerary/ui/MemoSheet.tsx`  →  MemoSheetProps · MemoSheet
-- `src/pages/live-itinerary/ui/ReplanAppliedSheet.tsx`  →  AppliedDiffKind · AppliedDiffRow · ReplanAppliedSheetProps · ReplanAppliedSheet
-- `src/pages/live-itinerary/ui/RiskDetailSheet.tsx`  →  RiskDetailSheetProps · RiskDetailSheet
-- `src/pages/live-itinerary/ui/TriggerChip.tsx`  →  TriggerChipProps · TriggerChip
+## src/pages/live/live-itinerary/ui/
+- `src/pages/live/live-itinerary/ui/LiveHubView.tsx`  →  LiveHubSlot · LiveHubViewProps · LiveHubView
+- `src/pages/live/live-itinerary/ui/LiveItineraryPage.tsx`  →  LiveItineraryPageProps · LiveItineraryPage
+- `src/pages/live/live-itinerary/ui/MemoSheet.tsx`  →  MemoSheetProps · MemoSheet
+- `src/pages/live/live-itinerary/ui/ReplanAppliedSheet.tsx`  →  AppliedDiffKind · AppliedDiffRow · ReplanAppliedSheetProps · ReplanAppliedSheet
+- `src/pages/live/live-itinerary/ui/RiskDetailSheet.tsx`  →  RiskDetailSheetProps · RiskDetailSheet
+- `src/pages/live/live-itinerary/ui/TriggerChip.tsx`  →  TriggerChipProps · TriggerChip
 
-## src/pages/live-location/
-- `src/pages/live-location/index.ts`  →  LiveLocationPage
+## src/pages/live/live-location/
+- `src/pages/live/live-location/index.ts`  →  LiveLocationPage
 
-## src/pages/live-location/ui/
-- `src/pages/live-location/ui/LiveLocationPage.tsx`  →  LiveLocationPageProps · LiveLocationPage
-- `src/pages/live-location/ui/LiveLocationView.tsx`  →  LiveLocationState · LiveLocationViewProps · LiveLocationView
+## src/pages/live/live-location/ui/
+- `src/pages/live/live-location/ui/LiveLocationPage.tsx`  →  LiveLocationPageProps · LiveLocationPage
+- `src/pages/live/live-location/ui/LiveLocationView.tsx`  →  LiveLocationState · LiveLocationViewProps · LiveLocationView
 
-## src/pages/live-place/
-- `src/pages/live-place/index.ts`  →  LivePlacePage
+## src/pages/live/live-place/
+- `src/pages/live/live-place/index.ts`  →  LivePlacePage
 
-## src/pages/live-place/model/
-- `src/pages/live-place/model/placeDetailView.ts`  →  PlaceDetailView · buildPlaceDetailView · buildPlaceShareMessage
-- `src/pages/live-place/model/usePlaceDetail.ts`  →  usePlaceDetail
+## src/pages/live/live-place/model/
+- `src/pages/live/live-place/model/placeDetailView.ts`  →  PlaceDetailView · buildPlaceDetailView · buildPlaceShareMessage
+- `src/pages/live/live-place/model/usePlaceDetail.ts`  →  usePlaceDetail
 
-## src/pages/live-place/ui/
-- `src/pages/live-place/ui/LivePlacePage.tsx`  →  LivePlacePageProps · LivePlacePage
-- `src/pages/live-place/ui/PlaceDetailScreen.tsx`  →  PlaceDetailScreenProps · PlaceDetailScreen
+## src/pages/live/live-place/ui/
+- `src/pages/live/live-place/ui/LivePlacePage.tsx`  →  LivePlacePageProps · LivePlacePage
+- `src/pages/live/live-place/ui/PlaceDetailScreen.tsx`  →  PlaceDetailScreenProps · PlaceDetailScreen
+
+## src/pages/live/planb-diff/
+- `src/pages/live/planb-diff/index.ts`  →  PlanbDiffPage
+
+## src/pages/live/planb-diff/model/
+- `src/pages/live/planb-diff/model/useCancelReplan.ts`  →  useCancelReplan
+
+## src/pages/live/planb-diff/ui/
+- `src/pages/live/planb-diff/ui/PlanbDiffPage.tsx`  →  PlanbDiffPageProps · PlanbDiffPage
+
+## src/pages/live/planb-draft/
+- `src/pages/live/planb-draft/index.ts`  →  PlanbSolvingPage · PlanbDraftPage
+
+## src/pages/live/planb-draft/model/
+- `src/pages/live/planb-draft/model/replanFromInstant.ts`  →  readFromInstant
+- `src/pages/live/planb-draft/model/replanState.ts`  →  ReplanState · resolveReplanState
+- `src/pages/live/planb-draft/model/useReplanDiff.ts`  →  useReplanDiff
+- `src/pages/live/planb-draft/model/useReplanSession.ts`  →  useReplanSession
+
+## src/pages/live/planb-draft/ui/
+- `src/pages/live/planb-draft/ui/PlanbDraftPage.tsx`  →  PlanbDraftPageProps · PlanbDraftPage
+- `src/pages/live/planb-draft/ui/PlanbSolvingPage.tsx`  →  PlanbSolvingPageProps · PlanbSolvingPage
+- `src/pages/live/planb-draft/ui/ReplanDraftView.tsx`  →  ReplanRemovedVM · ReplanDraftViewProps · ReplanDraftView
+- `src/pages/live/planb-draft/ui/ReplanLeaveDialog.tsx`  →  ReplanLeaveDialog
+- `src/pages/live/planb-draft/ui/ReplanSolvingView.tsx`  →  ReplanSolvingViewProps · ReplanSolvingView
+
+## src/pages/live/planb-request/config/
+- `src/pages/live/planb-request/config/replanChoices.ts`  →  ReplanChoice · REPLAN_REASONS · REPLAN_DIRECTIVES · TRIGGER_REASON_KEY
+
+## src/pages/live/planb-request/
+- `src/pages/live/planb-request/index.ts`  →  PlanbRequestPage
+
+## src/pages/live/planb-request/model/
+- `src/pages/live/planb-request/model/useReplanGpsOrigin.ts`  →  ReadReplanGpsOrigin · useReplanGpsOrigin
+
+## src/pages/live/planb-request/ui/
+- `src/pages/live/planb-request/ui/PlanbRequestPage.tsx`  →  PlanbRequestPageProps · PlanbRequestPage
+- `src/pages/live/planb-request/ui/ReplanRequestSheet.tsx`  →  ReplanDetectedChip · ReplanRequestSheetProps · ReplanRequestSheet
 
 ## src/pages/magazine/
 - `src/pages/magazine/index.ts`  →  MagazinePage
@@ -825,44 +863,6 @@
 ## src/pages/onboarding/onboarding-terms/ui/
 - `src/pages/onboarding/onboarding-terms/ui/TermsPage.tsx`  →  TermsPage
 - `src/pages/onboarding/onboarding-terms/ui/TermsScreen.tsx`  →  TermsItemView · TermsScreenProps · TermsScreen
-
-## src/pages/planb-diff/
-- `src/pages/planb-diff/index.ts`  →  PlanbDiffPage
-
-## src/pages/planb-diff/model/
-- `src/pages/planb-diff/model/useCancelReplan.ts`  →  useCancelReplan
-
-## src/pages/planb-diff/ui/
-- `src/pages/planb-diff/ui/PlanbDiffPage.tsx`  →  PlanbDiffPageProps · PlanbDiffPage
-
-## src/pages/planb-draft/
-- `src/pages/planb-draft/index.ts`  →  PlanbSolvingPage · PlanbDraftPage
-
-## src/pages/planb-draft/model/
-- `src/pages/planb-draft/model/replanFromInstant.ts`  →  readFromInstant
-- `src/pages/planb-draft/model/replanState.ts`  →  ReplanState · resolveReplanState
-- `src/pages/planb-draft/model/useReplanDiff.ts`  →  useReplanDiff
-- `src/pages/planb-draft/model/useReplanSession.ts`  →  useReplanSession
-
-## src/pages/planb-draft/ui/
-- `src/pages/planb-draft/ui/PlanbDraftPage.tsx`  →  PlanbDraftPageProps · PlanbDraftPage
-- `src/pages/planb-draft/ui/PlanbSolvingPage.tsx`  →  PlanbSolvingPageProps · PlanbSolvingPage
-- `src/pages/planb-draft/ui/ReplanDraftView.tsx`  →  ReplanRemovedVM · ReplanDraftViewProps · ReplanDraftView
-- `src/pages/planb-draft/ui/ReplanLeaveDialog.tsx`  →  ReplanLeaveDialog
-- `src/pages/planb-draft/ui/ReplanSolvingView.tsx`  →  ReplanSolvingViewProps · ReplanSolvingView
-
-## src/pages/planb-request/config/
-- `src/pages/planb-request/config/replanChoices.ts`  →  ReplanChoice · REPLAN_REASONS · REPLAN_DIRECTIVES · TRIGGER_REASON_KEY
-
-## src/pages/planb-request/
-- `src/pages/planb-request/index.ts`  →  PlanbRequestPage
-
-## src/pages/planb-request/model/
-- `src/pages/planb-request/model/useReplanGpsOrigin.ts`  →  ReadReplanGpsOrigin · useReplanGpsOrigin
-
-## src/pages/planb-request/ui/
-- `src/pages/planb-request/ui/PlanbRequestPage.tsx`  →  PlanbRequestPageProps · PlanbRequestPage
-- `src/pages/planb-request/ui/ReplanRequestSheet.tsx`  →  ReplanDetectedChip · ReplanRequestSheetProps · ReplanRequestSheet
 
 ## src/pages/record-add-visit/
 - `src/pages/record-add-visit/index.ts`  →  RecordAddVisitPage

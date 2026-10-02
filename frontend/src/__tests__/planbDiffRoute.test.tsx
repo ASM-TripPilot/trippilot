@@ -9,9 +9,9 @@ import PlanbDiffRoute from '@/app/trips/[tripId]/planb/diff';
  * `PlanbDiffPage` 에 넘기는 얇은 위임**이다. 조회·배선·판정은 라우트가 직접 지지 않는다(페이지 몫).
  * 진입 배선(어디서 이 라우트로 오는가)은 후속 — 여기선 딥링크·프리뷰 도달만 전제하고 위임만 잰다.
  *
- * ★ `@/pages/planb-diff` 를 스파이 컴포넌트로 치환한다 — 실 페이지를 렌더하면 seam 훅이 얽혀
+ * ★ `@/pages/live/planb-diff` 를 스파이 컴포넌트로 치환한다 — 실 페이지를 렌더하면 seam 훅이 얽혀
  *   위임 관찰이 흐려진다. 라우트가 실배선을 물지 않는다는 것(위임)이 이 목으로 증명된다.
- * ⚠️ 구현 전에는 `@/app/.../diff` · `@/pages/planb-diff` 모듈이 없어 jest.mock/ import 가 경로를
+ * ⚠️ 구현 전에는 `@/app/.../diff` · `@/pages/live/planb-diff` 모듈이 없어 jest.mock/ import 가 경로를
  *   해석하지 못해 이 suite 는 **모듈 미해석 red** 다(placeDetailStubRoute 와 같은 신규-모듈 red).
  */
 
@@ -23,7 +23,7 @@ const mockCaptured: {
   rendered: boolean;
 } = { rendered: false };
 
-jest.mock('@/pages/planb-diff', () => ({
+jest.mock('@/pages/live/planb-diff', () => ({
   PlanbDiffPage: (props: { tripId?: string; sessionId?: string }) => {
     mockCaptured.tripId = props.tripId;
     mockCaptured.sessionId = props.sessionId;

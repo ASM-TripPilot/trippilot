@@ -26,7 +26,7 @@ import {
 /**
  * d06 장소 상세(Figma `1907:1083`) — **무상태 프레젠테이션 화면**. props만 받는다. 조회·라우팅·
  * 저장 토글 판정은 `pages/explore/place-detail/ui/PlaceDetailPage.tsx` 몫이고, 이 화면은 완성된 `Place`
- * 하나와 저장 여부만 보고 그린다(`pages/live-place`의 i10 `PlaceDetailScreen`과 같은 관계 —
+ * 하나와 저장 여부만 보고 그린다(`pages/live/live-place`의 i10 `PlaceDetailScreen`과 같은 관계 —
  * 다른 슬라이스라 미러).
  *
  * ⚠️ **가진 것만 그린다(INV-1)**: `Place` 스키마엔 소개 본문·입장료·42장 갤러리·관련사진의

@@ -30,9 +30,9 @@ import {
   PREVIEW_SAVED_PLACES,
   PREVIEW_SAVED_POI_IDS,
 } from '@/pages/explore/explore-landing/model/exploreFixtures';
-import { TriggerChip } from '@/pages/live-itinerary/ui/TriggerChip';
+import { TriggerChip } from '@/pages/live/live-itinerary/ui/TriggerChip';
 import { MemoInline } from '@/features/attach-visit-media/ui/MemoInline';
-import { MemoSheet } from '@/pages/live-itinerary/ui/MemoSheet';
+import { MemoSheet } from '@/pages/live/live-itinerary/ui/MemoSheet';
 import { PhotoThumbStrip } from '@/pages/trip-records/ui/PhotoThumbStrip';
 import { RecordsCalendarScreen } from '@/pages/records-calendar/ui/RecordsCalendarScreen';
 import { VisitRecordCard } from '@/pages/trip-records/ui/VisitRecordCard';
@@ -46,8 +46,8 @@ import { TripSummaryScreen } from '@/pages/trip-summary/ui/TripSummaryScreen';
 import { MustVisitOutsideConfirmDialog } from '@/pages/explore/saved-places/ui/MustVisitOutsideConfirmDialog';
 import { MustVisitPickScreen } from '@/pages/explore/saved-places/ui/MustVisitPickScreen';
 import { PlaceDetailScreen as ExplorePlaceDetailScreen } from '@/pages/explore/place-detail/ui/PlaceDetailScreen';
-import type { PlaceDetailView } from '@/pages/live-place/model/placeDetailView';
-import { PlaceDetailScreen } from '@/pages/live-place/ui/PlaceDetailScreen';
+import type { PlaceDetailView } from '@/pages/live/live-place/model/placeDetailView';
+import { PlaceDetailScreen } from '@/pages/live/live-place/ui/PlaceDetailScreen';
 import { PlaceExploreScreen } from '@/pages/explore/place-explore/ui/PlaceExploreScreen';
 import { RegionPickerScreen } from '@/pages/explore/region-picker/ui/RegionPickerScreen';
 import { SavedPlaceListScreen } from '@/pages/explore/saved-places/ui/SavedPlaceListScreen';
@@ -135,19 +135,19 @@ import { RevokeConfirmDialog } from '@/pages/settings-location/ui/RevokeConfirmD
 import { SettingsScreen } from '@/pages/settings/ui/SettingsScreen';
 import { triggerLabel } from '@/features/planb/model/triggerLabel';
 import { triggerPillCopy } from '@/features/planb/model/triggerPillCopy';
-import { riskAffectedRow } from '@/pages/live-itinerary/model/riskAffectedRow';
-import { triggerWatchlist } from '@/pages/live-itinerary/model/triggerWatchlist';
-import { ReplanRequestSheet } from '@/pages/planb-request/ui/ReplanRequestSheet';
+import { riskAffectedRow } from '@/pages/live/live-itinerary/model/riskAffectedRow';
+import { triggerWatchlist } from '@/pages/live/live-itinerary/model/triggerWatchlist';
+import { ReplanRequestSheet } from '@/pages/live/planb-request/ui/ReplanRequestSheet';
 import { appliedSummaryBadges } from '@/features/planb/model/appliedSummary';
-import { ReplanAppliedSheet } from '@/pages/live-itinerary/ui/ReplanAppliedSheet';
+import { ReplanAppliedSheet } from '@/pages/live/live-itinerary/ui/ReplanAppliedSheet';
 import type { ReplanSlotVM } from '@/entities/itinerary-slot/model';
-import { ReplanDraftView } from '@/pages/planb-draft/ui/ReplanDraftView';
+import { ReplanDraftView } from '@/pages/live/planb-draft/ui/ReplanDraftView';
 // 뷰 파일 경로로 직접 — 페이지 배럴은 useAssignBase(요청 모듈)를 끌어와 프리뷰 네트워크 지뢰가 터진다.
 import { StayRecommendView } from '@/pages/itinerary/itinerary-stay-recommend/ui/StayRecommendView';
 import { TripRecordsView } from '@/pages/trip-records/ui/TripRecordsView';
-import { ReplanSolvingView } from '@/pages/planb-draft/ui/ReplanSolvingView';
+import { ReplanSolvingView } from '@/pages/live/planb-draft/ui/ReplanSolvingView';
 import { SlotCandidateSheet } from '@/features/planb/ui/SlotCandidateSheet';
-import { RiskDetailSheet } from '@/pages/live-itinerary/ui/RiskDetailSheet';
+import { RiskDetailSheet } from '@/pages/live/live-itinerary/ui/RiskDetailSheet';
 import { NicknameScreen } from '@/pages/onboarding/onboarding-nickname/ui/NicknameScreen';
 import {
   StayRegisterScreen,
@@ -173,7 +173,7 @@ import {
   StaySelectSheet,
   type StaySelectCandidate,
 } from '@/pages/trip/trip-new-step2/ui/StaySelectSheet';
-import { LiveLocationView } from '@/pages/live-location/ui/LiveLocationView';
+import { LiveLocationView } from '@/pages/live/live-location/ui/LiveLocationView';
 import { NoBaseNoticeCard } from '@/pages/itinerary/itinerary-plan/ui/NoBaseNoticeCard';
 import { DraftFallbackBanner } from '@/pages/itinerary/itinerary-draft/ui/DraftFallbackBanner';
 import { EditorView } from '@/widgets/map-sheet-shell/ui/EditorView';
@@ -181,7 +181,7 @@ import {
   LiveHubView,
   type LiveHubSlot,
   type LiveHubViewProps,
-} from '@/pages/live-itinerary/ui/LiveHubView';
+} from '@/pages/live/live-itinerary/ui/LiveHubView';
 import { BudgetEditSheet } from '@/pages/trip/trip-new-step1/ui/BudgetEditSheet';
 import { PrefOverrideSheet } from '@/pages/trip/trip-new-step1/ui/PrefOverrideSheet';
 import {

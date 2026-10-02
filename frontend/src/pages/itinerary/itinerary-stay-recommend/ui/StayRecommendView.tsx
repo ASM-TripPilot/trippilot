@@ -15,7 +15,7 @@ import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
  * 추천 카드 · `다른 숙소 둘러보기` 링크 · 거점 지정 CTA 를 얹는다. 선택·요청·라우터는 페이지 몫이라
  * 이 화면은 `selectedId` 를 받아 그리고 누름을 콜백으로 올리기만 한다(프리뷰가 이 파일만 태울 수 있게
  * 네트워크 계층을 모른다). 셸(widgets)을 조립하므로 features 가 아니라 pages 층에 산다(features → widgets
- * import 는 층 규칙 위반) — `pages/planb-draft/ui/ReplanDraftView` 선례.
+ * import 는 층 규칙 위반) — `pages/live/planb-draft/ui/ReplanDraftView` 선례.
  *
  * 후보 순서는 받은 그대로다 — 서버 순서가 곧 "이동 합계가 짧은 순"이고, `추천` 배지도 입력 첫 카드에
  * 붙는다(재정렬·재판정 금지, INV-2 결). 거리만 보인다(INV-3).

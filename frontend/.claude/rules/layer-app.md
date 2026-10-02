@@ -52,11 +52,11 @@ paths:
 | `src/app/trips/[tripId]/itinerary/edit.tsx` | 일정 편집 — `@/pages/itinerary/itinerary-edit` 얇은 래퍼 |
 | `src/app/trips/[tripId]/itinerary/manual/index.tsx` | 직접 짜기 — `@/pages/itinerary/itinerary-manual` 얇은 래퍼. **`fresh` 쿼리 파라미터를 읽어 `startFresh={fresh === '1'}`로 내린다**(TRIP-1038, 값은 항상 문자열). `fresh`는 URL에 남아 재마운트(딥링크·상태 복원) 시 다시 비운다 — `firedRef`는 마운트 단위라 막지 못한다 |
 | `src/app/trips/[tripId]/itinerary/manual/add.tsx` | 장소 추가 — 같은 배럴 얇은 래퍼 |
-| `src/app/trips/[tripId]/live/index.tsx` | 여행 중 허브(i01) — `tripId`만 읽어 `@/pages/live-itinerary` 얇은 래퍼 |
-| `src/app/trips/[tripId]/live/place/[poiId].tsx` | 여행 중 장소 상세 — `tripId`·`poiId`만 읽어 `@/pages/live-place` 얇은 래퍼 |
+| `src/app/trips/[tripId]/live/index.tsx` | 여행 중 허브(i01) — `tripId`만 읽어 `@/pages/live/live-itinerary` 얇은 래퍼 |
+| `src/app/trips/[tripId]/live/place/[poiId].tsx` | 여행 중 장소 상세 — `tripId`·`poiId`만 읽어 `@/pages/live/live-place` 얇은 래퍼 |
 | `src/app/trips/[tripId]/planb/index.tsx` | 재계획 요청 — `tripId`·`scope`·`triggerId` params를 그대로 `PlanbRequestPage`에 내린다(scope 시드는 페이지 소관). 이 라우트의 `Stack.Screen`은 `SplashGate`에서 `presentation:'transparentModal'`로 선언돼 허브 위에 겹친다(실제 겹침은 6-b 몫) |
-| `src/app/trips/[tripId]/planb/solving.tsx` | 재계획 로딩 — `tripId`·`sessionId`만 읽어 `@/pages/planb-draft` 얇은 래퍼 |
-| `src/app/trips/[tripId]/planb/diff.tsx` | 재계획 확정/취소 — `tripId`·`sessionId`만 읽어 `@/pages/planb-diff` 얇은 래퍼 |
+| `src/app/trips/[tripId]/planb/solving.tsx` | 재계획 로딩 — `tripId`·`sessionId`만 읽어 `@/pages/live/planb-draft` 얇은 래퍼 |
+| `src/app/trips/[tripId]/planb/diff.tsx` | 재계획 확정/취소 — `tripId`·`sessionId`만 읽어 `@/pages/live/planb-diff` 얇은 래퍼 |
 | `src/app/trips/[tripId]/planb/manual.tsx` | 여행 중 일정 편집 — `tripId`만 꺼내 `ItineraryEditPage`에 리터럴 `inTrip={true}`로 위임(params를 통째로 펼치지 않는다 — `planbManualRoute.test.tsx` RT1) |
 | `src/app/trips/[tripId]/records/index.tsx` | j01 방문 기록 — `tripId`·`day`만 읽어 `@/pages/trip-records` 얇은 래퍼 |
 | `src/app/trips/[tripId]/records/add-visit.tsx` | j01 즉석 방문 장소 피커(TRIP-1072) — `tripId`·`day`만 읽어 `@/pages/record-add-visit` 얇은 래퍼(RT1) |
@@ -64,7 +64,7 @@ paths:
 | `src/app/trips/[tripId]/records/summary.tsx` | j04 여행 요약 — `tripId`만 읽어 `@/pages/trip-summary` 얇은 래퍼 |
 | `src/app/trips/[tripId]/records/share.tsx` | j06 공유 카드(전체화면, 탭바 없음) — `tripId`만 읽어 `@/pages/share-card` 얇은 래퍼. j04·j03에서 push |
 | `src/app/records/style.tsx` | j05 여행 스타일 — **계정 단위**라 `[tripId]` 밖(INV-U5-08). params 없이 `@/pages/travel-style` 위임. `app/records/index.tsx`는 두지 않는다 — `(tabs)/records.tsx`의 `/records`와 충돌 |
-| `src/app/trips/[tripId]/planb/draft.tsx` | 재계획 초안 — `tripId`·`sessionId`만 읽어 `@/pages/planb-draft` 얇은 래퍼 |
+| `src/app/trips/[tripId]/planb/draft.tsx` | 재계획 초안 — `tripId`·`sessionId`만 읽어 `@/pages/live/planb-draft` 얇은 래퍼 |
 | `src/app/trips/[tripId]/live/location.tsx` | 위치 폴백(수동 입력·권한 거부) — `tripId`·`state`를 `LiveLocationPage`에 위임(`?state=`로 얼굴 선택) |
 | `src/app/settings/preferences.tsx` | l05 취향 전체 수정 — `@/pages/settings-preferences` 얇은 래퍼. 설정 화면에서 진입 |
 | `src/app/settings/personalization.tsx` | l05 개인화 동의 — `@/pages/settings-personalization` 얇은 래퍼. 설정 화면에서 진입 |

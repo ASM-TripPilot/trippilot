@@ -9,7 +9,7 @@ import {
   REPLAN_DIRECTIVES,
   REPLAN_REASONS,
   type ReplanChoice,
-} from '@/pages/planb-request/config/replanChoices';
+} from '@/pages/live/planb-request/config/replanChoices';
 import { REPLAN_SCOPES } from '@/features/request-replan/model/replanScope';
 import type { StartReplanRequestScope } from '@/shared/api/generated/schemas/startReplanRequestScope';
 

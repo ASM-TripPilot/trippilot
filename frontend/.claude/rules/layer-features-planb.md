@@ -4,7 +4,7 @@ paths:
 ---
 # `src/features/planb/` — 재계획(Plan-B) 도메인: 요청·진행·반영·트리거 표면
 
-바텀시트 목이 열림/닫힘·딤을 원리적으로 못 보므로(`repo-traps.md` 바텀시트 절), 이 도메인은 **관측 가능한 계약**(제출 시 이 body로 POST가 나간다 / 이 라우트로 push한다)으로 심판을 세운다 — 순수 조립·폼 상태·순수 시트를 배선(pages 층)과 엄격히 분리한다. `MapSheetShell`이 widgets 층이라 지도+시트 화면(i05 진행·i06 재계획안)은 features가 아니라 `pages/planb-draft`의 뷰에 있다. TRIP-1155로 파일 21개가 `features/{request-replan,apply-replan}`·`pages/{live-itinerary,planb-draft,planb-request,planb-diff,itinerary-edit}`로 이사했다(행은 각 층 문서).
+바텀시트 목이 열림/닫힘·딤을 원리적으로 못 보므로(`repo-traps.md` 바텀시트 절), 이 도메인은 **관측 가능한 계약**(제출 시 이 body로 POST가 나간다 / 이 라우트로 push한다)으로 심판을 세운다 — 순수 조립·폼 상태·순수 시트를 배선(pages 층)과 엄격히 분리한다. `MapSheetShell`이 widgets 층이라 지도+시트 화면(i05 진행·i06 재계획안)은 features가 아니라 `pages/live/planb-draft`의 뷰에 있다. TRIP-1155로 파일 21개가 `features/{request-replan,apply-replan}`·`pages/{live-itinerary,planb-draft,planb-request,planb-diff,itinerary-edit}`로 이사했다(행은 각 층 문서).
 
 | 파일 | 역할 |
 |---|---|

@@ -9,7 +9,7 @@ import LiveLocationRoute from '@/app/trips/[tripId]/live/location';
  * `LiveLocationPage` 에 넘기는 얇은 위임이다(조회·마크업 없음). `state` 를 흘려야 딥링크/프리뷰가
  * i20/i21 얼굴을 고를 수 있다(Seed: 진입 배선 딥링크·프리뷰 전용).
  *
- * ★ `@/pages/live-location` 을 스파이 컴포넌트로 치환 — 실 페이지 렌더를 차단하고 위임만 관찰
+ * ★ `@/pages/live/live-location` 을 스파이 컴포넌트로 치환 — 실 페이지 렌더를 차단하고 위임만 관찰
  *   (placeDetailStubRoute 선례). 구현 전에는 라우트 파일·페이지 모듈이 없어 **모듈 미해석 red** 다.
  *
  * 3동작: 준비(params 목 + 페이지 스파이) → 실행(라우트 렌더) → 단언(위임된 props).
@@ -23,7 +23,7 @@ const mockCaptured: {
   rendered: boolean;
 } = { rendered: false };
 
-jest.mock('@/pages/live-location', () => ({
+jest.mock('@/pages/live/live-location', () => ({
   LiveLocationPage: (props: { tripId?: string; state?: string }) => {
     mockCaptured.tripId = props.tripId;
     mockCaptured.state = props.state;
