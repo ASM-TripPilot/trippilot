@@ -1,9 +1,9 @@
-import type { Place, Region, SavedPlace } from '@/shared/api/generated/schemas';
+import type { Place, Region, SavedPlace } from '@/shared/api/index.schemas';
 import {
   PlaceDataStatus,
   PoiCategory,
   RegionLevel,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 /**
  * dev 프리뷰(`_dev/preview`) 전용 픽스처 — `homeFixtures.ts` 선례와 같은 자리.

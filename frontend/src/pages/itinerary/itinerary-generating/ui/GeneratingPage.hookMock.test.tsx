@@ -8,7 +8,7 @@ import {
 } from '@testing-library/react-native';
 import { type ReactElement, StrictMode, cloneElement } from 'react';
 
-import type { Itinerary } from '@/shared/api/generated/schemas';
+import type { Itinerary } from '@/shared/api/index.schemas';
 import * as ToastModule from '@/shared/ui/Toast';
 import { WithToastHost, resetToast } from '@/test-support/toastHarness';
 import {

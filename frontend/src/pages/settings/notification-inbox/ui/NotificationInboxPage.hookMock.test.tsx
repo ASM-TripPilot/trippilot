@@ -14,8 +14,8 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import { useGetMeNotifications } from '@/shared/api/generated/notification/notification';
-import type { Notification } from '@/shared/api/generated/schemas';
+import { useGetMeNotifications } from '@/shared/api/index.hooks';
+import type { Notification } from '@/shared/api/index.schemas';
 
 import { NotificationInboxPage } from './NotificationInboxPage';
 

@@ -12,7 +12,7 @@ import { Text } from 'react-native';
 
 import { server } from '@/mocks/server';
 import type * as TripsModule from '@/shared/api/generated/trips/trips';
-import { useGetTripsTripIdItinerary } from '@/shared/api/generated/trips/trips';
+import { useGetTripsTripIdItinerary } from '@/shared/api/index.hooks';
 import type {
   GenerateItineraryRequestGenerationMode,
   GenerationSession,
@@ -21,10 +21,10 @@ import type {
   Place,
   SavedPlace,
   ItineraryGenerationState,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { resolveItineraryDestination } from '@/features/itinerary';
-import { isNotFound } from '@/shared/api/isNotFound';
+import { isNotFound } from '@/shared/api';
 
 import { GeneratingPage } from './GeneratingPage';
 

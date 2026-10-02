@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
-import type { ReplanDiff } from '@/shared/api/generated/schemas';
+import type { ReplanDiff } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 
 import { useReplanDiff } from './useReplanDiff';

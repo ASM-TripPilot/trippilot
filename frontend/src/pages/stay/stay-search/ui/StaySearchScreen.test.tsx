@@ -4,7 +4,7 @@ import {
   screen,
   within,
 } from '@testing-library/react-native';
-import type { StayItem } from '@/shared/api/generated/schemas';
+import type { StayItem } from '@/shared/api/index.schemas';
 import { stayKey } from '@/features/save-stay/index.view';
 import { StaySearchScreen } from './StaySearchScreen';
 import type { StaySearchState } from '../model/staySearchState';

@@ -1,19 +1,19 @@
 import { useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
-import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
-import { isNotFound } from '@/shared/api/isNotFound';
+import { isAlreadyRegistered } from '@/shared/api';
+import { isNotFound } from '@/shared/api';
 import {
   getGetTripsTripIdVisitsDaysDayQueryKey,
   postTripsTripIdVisits,
   postTripsTripIdVisitsVisitCheckIdComplete,
   postTripsTripIdVisitsVisitCheckIdSkip,
-} from '@/shared/api/generated/trips/trips';
+} from '@/shared/api/index.hooks';
 import type {
   ArriveRequestSource,
   VisitCheck,
   VisitCheckList,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 import { OPTIMISTIC_VISIT_ID_PREFIX } from './visitStatus';
 

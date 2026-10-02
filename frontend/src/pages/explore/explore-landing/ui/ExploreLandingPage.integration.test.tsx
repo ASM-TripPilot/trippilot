@@ -17,7 +17,7 @@ import type {
   SavedPlace,
   SavedStay,
   StayItem,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import { stayKey } from '@/features/save-stay';
 import { useStaySearch } from '@/features/stay';
 import { SAVE_FAILURE_NOTICE } from '@/features/save-place';

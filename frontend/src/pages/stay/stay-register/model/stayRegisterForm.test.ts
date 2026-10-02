@@ -1,5 +1,5 @@
 import fc from 'fast-check';
-import type { GeocodeCandidate } from '@/shared/api/generated/schemas';
+import type { GeocodeCandidate } from '@/shared/api/index.schemas';
 import {
   buildStayRegisterRequest,
   canSubmitStayRegister,

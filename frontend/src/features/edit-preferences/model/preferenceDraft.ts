@@ -14,7 +14,7 @@ import type {
   PrefScalarAxis,
   PreferenceInput,
   PreferenceView,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 export interface PreferenceSelection {
   styles: string[] | null;

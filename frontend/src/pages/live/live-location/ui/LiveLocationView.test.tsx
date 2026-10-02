@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 
-import { useGetStaysReverseGeocode } from '@/shared/api/generated/stays/stays';
+import { useGetStaysReverseGeocode } from '@/shared/api/index.hooks';
 import type { MapCenter } from '@/shared/map';
 
 import { LiveLocationView } from './LiveLocationView';

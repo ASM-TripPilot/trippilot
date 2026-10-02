@@ -1,7 +1,7 @@
 import type {
   AssignBaseRequest,
   BaseAssignment,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 /**
  * TRIP-1011 C — 거점 지정을 "교체"로 바꾸는 계획(순수 함수). 서버 `POST /bases` 는 기존 배정을

@@ -15,16 +15,16 @@ import {
   type MustVisitTimeForm,
 } from '@/features/add-must-visit';
 import { MustVisitTimeScreen } from './MustVisitTimeScreen';
-import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
-import type { AddMustVisitRequest } from '@/shared/api/generated/schemas';
+import { isAlreadyRegistered } from '@/shared/api';
+import type { AddMustVisitRequest } from '@/shared/api/index.schemas';
 import {
   deleteTripsTripIdMustVisitsMustVisitId,
   getGetTripsTripIdMustVisitsQueryKey,
   postTripsTripIdMustVisits,
   useGetTripsTripId,
   useGetTripsTripIdMustVisits,
-} from '@/shared/api/generated/trips/trips';
-import { getAccessToken } from '@/shared/api/tokenManager';
+} from '@/shared/api/index.hooks';
+import { getAccessToken } from '@/shared/api';
 import { guardPress, openPressGuardWindow } from '@/shared/press';
 
 /**

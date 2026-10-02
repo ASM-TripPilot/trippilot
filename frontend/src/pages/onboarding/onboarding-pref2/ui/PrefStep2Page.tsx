@@ -11,7 +11,7 @@ import { usePreferenceStore } from '@/features/edit-preferences';
 import { toPreferenceInput } from '@/features/edit-preferences';
 import { notifyBootstrapReeval } from '@/shared/bootstrap';
 import { guardPress } from '@/shared/press';
-import { usePutMePreferences } from '@/shared/api/generated/preferences/preferences';
+import { usePutMePreferences } from '@/shared/api/index.hooks';
 import { PrefStep2Screen } from './PrefStep2Screen';
 
 export function PrefStep2Page(): ReactElement {

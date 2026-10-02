@@ -197,8 +197,8 @@ import type {
   StayItem,
   Trigger,
   TriggerKind,
-} from '@/shared/api/generated/schemas';
-import { PersonalizationInfoReason } from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
+import { PersonalizationInfoReason } from '@/shared/api/index.schemas';
 import { buildMonthGrid } from '@/shared/date';
 import { LocationPreprompt } from '@/shared/location/index.view';
 // 딥 경로 — 배럴(`@/shared/push`)로 끌면 권한 루틴(expo-notifications)까지 실린다(TRIP-1108 R10).

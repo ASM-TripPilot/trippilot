@@ -11,7 +11,7 @@ import {
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
-import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
+import type { Place, SavedPlace } from '@/shared/api/index.schemas';
 import { regionPickerHref } from '@/features/explore';
 import { wizardOriginParams } from '@/features/create-trip';
 import { useTripWizardStore } from '@/features/create-trip';

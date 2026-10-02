@@ -1,4 +1,4 @@
-import { getMeLocationConsent } from '@/shared/api/generated/location/location';
+import { getMeLocationConsent } from '@/shared/api/index.hooks';
 import { pickPhotoAsset, type PhotoAssetMeta } from '@/shared/photo';
 
 /**

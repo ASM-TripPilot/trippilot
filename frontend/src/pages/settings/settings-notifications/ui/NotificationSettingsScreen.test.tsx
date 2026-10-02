@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import type { NotificationToggleKind } from '@/shared/api/generated/schemas';
+import type { NotificationToggleKind } from '@/shared/api/index.schemas';
 import {
   NotificationSettingsScreen,
   type NotificationSettingsScreenProps,

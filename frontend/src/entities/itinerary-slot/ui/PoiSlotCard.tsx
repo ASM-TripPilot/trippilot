@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { Image, Text, View } from 'react-native';
 
-import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
+import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 
 import { buildSlotKey } from '../lib/slotKey';
 

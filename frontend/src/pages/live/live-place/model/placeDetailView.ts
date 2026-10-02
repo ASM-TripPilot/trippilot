@@ -1,5 +1,5 @@
 import { normalizeOpeningHours } from '@/entities/itinerary-slot';
-import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
+import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-398 · i05 현재 장소 상세 — 순수 도출. 슬롯 POI 합성 필드에서 화면 표시용 뷰를 만든다.

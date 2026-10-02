@@ -26,12 +26,12 @@ import type {
   GenerationSession,
   ItineraryUnplacedMustVisitsItem,
   SavedPlace,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripIdItinerary,
-} from '@/shared/api/generated/trips/trips';
+} from '@/shared/api/index.hooks';
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import { AlertCircleGlyph, CheckCircleGlyph } from '@/features/itinerary';
 

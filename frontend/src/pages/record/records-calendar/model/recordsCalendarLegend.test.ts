@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 
-import type { Trip } from '@/shared/api/generated/schemas';
+import type { Trip } from '@/shared/api/index.schemas';
 
 import {
   buildMonthLegends,

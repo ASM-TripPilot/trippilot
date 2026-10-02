@@ -31,10 +31,10 @@ import {
   useGetTripsTripId,
   useGetTripsTripIdItinerary,
   usePostTripsTripIdItineraryConfirm,
-} from '@/shared/api/generated/trips/trips';
-import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
-import { isNotFound } from '@/shared/api/isNotFound';
-import { getAccessToken } from '@/shared/api/tokenManager';
+} from '@/shared/api/index.hooks';
+import { isAlreadyRegistered } from '@/shared/api';
+import { isNotFound } from '@/shared/api';
+import { getAccessToken } from '@/shared/api';
 import { guardPress, openPressGuardWindow } from '@/shared/press';
 import { StateNotice, type StateNoticeAction } from '@/shared/ui/StateNotice';
 import { showToast } from '@/shared/ui/Toast';

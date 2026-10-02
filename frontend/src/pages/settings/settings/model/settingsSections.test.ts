@@ -9,7 +9,7 @@ import {
   PreferenceInputStylesItem,
   PreferenceInputTransportModesItem,
   type PreferenceView,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 import { buildSettingsSections } from './settingsSections';
 

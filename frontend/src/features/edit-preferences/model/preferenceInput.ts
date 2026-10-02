@@ -1,11 +1,11 @@
-import type { PreferenceInput } from '@/shared/api/generated/schemas/preferenceInput';
-import type { PreferenceInputActivitiesItem } from '@/shared/api/generated/schemas/preferenceInputActivitiesItem';
-import type { PreferenceInputBudgetTier } from '@/shared/api/generated/schemas/preferenceInputBudgetTier';
-import type { PreferenceInputCompanionTypesItem } from '@/shared/api/generated/schemas/preferenceInputCompanionTypesItem';
-import type { PreferenceInputFoodTastesItem } from '@/shared/api/generated/schemas/preferenceInputFoodTastesItem';
-import type { PreferenceInputPace } from '@/shared/api/generated/schemas/preferenceInputPace';
-import type { PreferenceInputStylesItem } from '@/shared/api/generated/schemas/preferenceInputStylesItem';
-import type { PreferenceInputTransportModesItem } from '@/shared/api/generated/schemas/preferenceInputTransportModesItem';
+import type { PreferenceInput } from '@/shared/api/index.schemas';
+import type { PreferenceInputActivitiesItem } from '@/shared/api/index.schemas';
+import type { PreferenceInputBudgetTier } from '@/shared/api/index.schemas';
+import type { PreferenceInputCompanionTypesItem } from '@/shared/api/index.schemas';
+import type { PreferenceInputFoodTastesItem } from '@/shared/api/index.schemas';
+import type { PreferenceInputPace } from '@/shared/api/index.schemas';
+import type { PreferenceInputStylesItem } from '@/shared/api/index.schemas';
+import type { PreferenceInputTransportModesItem } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-471 · 온보딩 취향 스토어(세션 메모리)의 **slug** 를 서버 `PreferenceInput`(한국어 enum

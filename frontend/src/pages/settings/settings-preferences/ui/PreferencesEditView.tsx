@@ -26,7 +26,7 @@ import {
   PreferenceInputPace,
   PreferenceInputStylesItem,
   PreferenceInputTransportModesItem,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 import { type PreferenceSelection } from '@/features/edit-preferences';
 import { ChevronLeftGlyph } from '@/features/settings';

@@ -36,7 +36,7 @@ import BottomSheet, {
 
 import { SHEET_HANDLE_INDICATOR_STYLE } from '@/features/trip/index.view';
 
-import type { CompanionType } from '@/shared/api/generated/schemas';
+import type { CompanionType } from '@/shared/api/index.schemas';
 
 import { COMPANION_OPTIONS, type CompanionCode } from '@/features/create-trip';
 

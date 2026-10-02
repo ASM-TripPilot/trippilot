@@ -18,7 +18,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
-import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
+import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 import type { MapCenter } from '@/shared/map';
 import { MapSheetShell } from '@/widgets/map-sheet-shell';
 import { BackChevronGlyph, FullAiGlyph } from '@/widgets/map-sheet-shell';

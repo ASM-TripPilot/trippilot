@@ -16,7 +16,7 @@ import type {
   ItineraryDaysItem,
   ItineraryDaysItemSlotsItem,
   ReplanDiff,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 import { ReplanDraftView, type ReplanRemovedVM } from './ReplanDraftView';
 

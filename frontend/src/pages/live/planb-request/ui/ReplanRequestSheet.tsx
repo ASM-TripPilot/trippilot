@@ -11,7 +11,7 @@ import {
   type ReplanChoice,
 } from '@/pages/live/planb-request/config/replanChoices';
 import { REPLAN_SCOPES } from '@/features/request-replan/index.view';
-import type { StartReplanRequestScope } from '@/shared/api/generated/schemas/startReplanRequestScope';
+import type { StartReplanRequestScope } from '@/shared/api/index.schemas';
 
 import { RiskWarningGlyph } from '@/features/planb/index.view';
 

@@ -11,17 +11,17 @@ import type {
   TripRecordList,
   TripRecordSummary,
   StyleAnalysisEnvelope,
-} from '@/shared/api/generated/schemas';
-import { useGetMe } from '@/shared/api/generated/account/account';
-import { useGetMeProfile } from '@/shared/api/generated/profile/profile';
-import { useGetMeStyle } from '@/shared/api/generated/reflection/reflection';
+} from '@/shared/api/index.schemas';
+import { useGetMe } from '@/shared/api/index.hooks';
+import { useGetMeProfile } from '@/shared/api/index.hooks';
+import { useGetMeStyle } from '@/shared/api/index.hooks';
 import {
   getGetTripsTripIdItineraryQueryOptions,
   useGetMeRecords,
   useGetTrips,
   useGetTripsTripIdBases,
   useGetTripsTripIdItinerary,
-} from '@/shared/api/generated/trips/trips';
+} from '@/shared/api/index.hooks';
 import {
   CONFIRMED,
   DURING,

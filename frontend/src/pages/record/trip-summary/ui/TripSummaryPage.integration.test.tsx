@@ -14,7 +14,7 @@ import { server } from '@/mocks/server';
 import type {
   TripSummary,
   TripSummaryEnvelope,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 
 import { TripSummaryPage } from './TripSummaryPage';

@@ -1,4 +1,4 @@
-import type { SavedStay, StayItem } from '@/shared/api/generated/schemas';
+import type { SavedStay, StayItem } from '@/shared/api/index.schemas';
 
 import { findSavedStayId, optimisticSavedStayId } from './savedStayIndex';
 

@@ -1,4 +1,4 @@
-import type { NotificationToggle } from '@/shared/api/generated/schemas';
+import type { NotificationToggle } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-607 · l02 알림 설정 — OS 푸시 권한 × 토글 조합 → 푸시 열 가용성 순수 판정.

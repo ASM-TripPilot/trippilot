@@ -28,15 +28,15 @@ import { View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 
-import type { SavedPlace } from '@/shared/api/generated/schemas';
+import type { SavedPlace } from '@/shared/api/index.schemas';
 import {
   getGetTripsTripIdMustVisitsQueryKey,
   postTripsTripIdMustVisits,
   useGetTripsTripId,
   useGetTripsTripIdMustVisits,
-} from '@/shared/api/generated/trips/trips';
-import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
-import { getAccessToken } from '@/shared/api/tokenManager';
+} from '@/shared/api/index.hooks';
+import { isAlreadyRegistered } from '@/shared/api';
+import { getAccessToken } from '@/shared/api';
 
 import { filterSavedPlacesByTripRegions } from '../model/filterSavedPlacesByTripRegions';
 import { resolvePlaceListState, type PlaceListState } from '@/features/explore';

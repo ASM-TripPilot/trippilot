@@ -4,7 +4,7 @@ import {
   screen,
   within,
 } from '@testing-library/react-native';
-import type { StayDetail } from '@/shared/api/generated/schemas';
+import type { StayDetail } from '@/shared/api/index.schemas';
 import { formatPrice } from '@/entities/stay';
 import { StayDetailScreen } from './StayDetailScreen';
 import { StyleSheet } from 'react-native';

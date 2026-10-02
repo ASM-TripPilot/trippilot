@@ -1,4 +1,4 @@
-import type { ItineraryDaysItem } from '@/shared/api/generated/schemas';
+import type { ItineraryDaysItem } from '@/shared/api/index.schemas';
 
 import { buildSlotKey } from '@/entities/itinerary-slot';
 

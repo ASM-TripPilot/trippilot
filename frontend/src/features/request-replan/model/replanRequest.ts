@@ -1,5 +1,5 @@
-import type { StartReplanRequest } from '@/shared/api/generated/schemas/startReplanRequest';
-import type { StartReplanRequestScope } from '@/shared/api/generated/schemas/startReplanRequestScope';
+import type { StartReplanRequest } from '@/shared/api/index.schemas';
+import type { StartReplanRequestScope } from '@/shared/api/index.schemas';
 import type { ReplanOrigin } from './replanOrigin';
 
 /**

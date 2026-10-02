@@ -1,4 +1,4 @@
-import type { SavedPlace } from '@/shared/api/generated/schemas';
+import type { SavedPlace } from '@/shared/api/index.schemas';
 
 /**
  * 담은 장소 목록을 여행 지역으로 거른다(TRIP-689 · US-EXPL-04 · d02 후속).

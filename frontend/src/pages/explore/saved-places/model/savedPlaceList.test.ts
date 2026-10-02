@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 
-import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
-import { PlaceDataStatus } from '@/shared/api/generated/schemas';
+import type { Place, SavedPlace } from '@/shared/api/index.schemas';
+import { PlaceDataStatus } from '@/shared/api/index.schemas';
 
 import { REMOVE_FAILURE_NOTICE } from '@/features/save-place/index.view';
 import { optimisticSavedPlaceId } from '@/features/save-place/index.view';

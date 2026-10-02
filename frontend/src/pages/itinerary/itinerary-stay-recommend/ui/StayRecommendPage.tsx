@@ -6,7 +6,7 @@ import { useRouter } from 'expo-router';
 import type { StayRecommendView as StayRecommendViewModel } from '../model/stayRecommend';
 import { LocationOffGlyph } from '@/features/itinerary';
 import { useAssignBase } from '@/features/assign-trip-base';
-import { useGetTripsTripId } from '@/shared/api/generated/trips/trips';
+import { useGetTripsTripId } from '@/shared/api/index.hooks';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
 import { StayRecommendView } from './StayRecommendView';

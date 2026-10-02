@@ -3,7 +3,7 @@ import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { PlaceListState } from '@/features/explore/index.view';
-import type { SavedPlace } from '@/shared/api/generated/schemas';
+import type { SavedPlace } from '@/shared/api/index.schemas';
 import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
 import { Skeleton } from '@/shared/ui/Skeleton';
 

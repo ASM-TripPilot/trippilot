@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 
-import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
+import type { Place, SavedPlace } from '@/shared/api/index.schemas';
 
 import {
   MUST_VISIT_THUMBNAIL_LIMIT,

@@ -1,4 +1,4 @@
-import { PersonalizationInfoReason } from '@/shared/api/generated/schemas';
+import { PersonalizationInfoReason } from '@/shared/api/index.schemas';
 
 /**
  * l05 개인화 — reason 한 값 → 안내 문구(없으면 null). 문구의 **단일 출처**(BR-U5-44).

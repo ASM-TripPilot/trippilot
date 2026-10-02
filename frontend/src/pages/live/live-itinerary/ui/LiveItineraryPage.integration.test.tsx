@@ -19,11 +19,11 @@ import type {
   TriggerList,
   VisitCheck,
   VisitCheckList,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import {
   getGetTripsTripIdTriggersQueryKey,
   getGetTripsTripIdVisitsDaysDayQueryKey,
-} from '@/shared/api/generated/trips/trips';
+} from '@/shared/api/index.hooks';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 
 import { LiveItineraryPage } from './LiveItineraryPage';

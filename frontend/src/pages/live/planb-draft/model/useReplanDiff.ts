@@ -1,4 +1,4 @@
-import { useGetTripsTripIdReplanSessionsSessionIdDiff } from '@/shared/api/generated/replan/replan';
+import { useGetTripsTripIdReplanSessionsSessionIdDiff } from '@/shared/api/index.hooks';
 
 /**
  * TRIP-1007 · 재계획안 초안 조회(GET /trips/{tripId}/replan-sessions/{sessionId}/diff) 얇은 래퍼

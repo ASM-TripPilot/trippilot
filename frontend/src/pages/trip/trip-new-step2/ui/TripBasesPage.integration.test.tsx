@@ -17,10 +17,10 @@ import type {
   SavedStay,
   Trip,
   TripStatus,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import { useTripWizardStore } from '@/features/create-trip';
 import { resetPressGuard } from '@/shared/press/pressGuard';
-import { getGetTripsTripIdBasesQueryKey } from '@/shared/api/generated/trips/trips';
+import { getGetTripsTripIdBasesQueryKey } from '@/shared/api/index.hooks';
 
 import { TripBasesPage } from './TripBasesPage';
 import { TripNewStep2Page } from './TripNewStep2Page';

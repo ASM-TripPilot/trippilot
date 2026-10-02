@@ -32,14 +32,14 @@ import { SlotFillScreen } from './SlotFillScreen';
 import type {
   ItineraryDaysItemSlotsItem,
   SlotCandidatesRequest,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripId,
   useGetTripsTripIdItinerary,
   usePostTripsTripIdItinerarySlotCandidates,
   usePutTripsTripIdItinerary,
-} from '@/shared/api/generated/trips/trips';
+} from '@/shared/api/index.hooks';
 import { CoPickStepper, type CoPickStep } from './CoPickStepper';
 
 /**

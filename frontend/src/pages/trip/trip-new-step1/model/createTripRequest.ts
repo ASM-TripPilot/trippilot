@@ -1,4 +1,4 @@
-import type { CreateTripRequest } from '@/shared/api/generated/schemas';
+import type { CreateTripRequest } from '@/shared/api/index.schemas';
 
 /**
  * 여행 생성 폼이 채우는 입력 — 생성 계약(`CreateTripRequest`)에서 `preferenceSnapshot`만 뺀

@@ -23,11 +23,11 @@ import type {
   SlotCandidatesCandidatesItem,
   TripDestination,
   ItineraryGenerationState,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import {
   getGetTripsTripIdItineraryQueryKey,
   getGetTripsTripIdQueryKey,
-} from '@/shared/api/generated/trips/trips';
+} from '@/shared/api/index.hooks';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { DRAFT_POLL_INTERVAL_MS } from '@/features/itinerary';
 

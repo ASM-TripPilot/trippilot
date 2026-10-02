@@ -10,8 +10,8 @@ import {
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
-import { useGetTripsTripIdItinerary } from '@/shared/api/generated/trips/trips';
-import { retryUnlessNotFound } from '@/shared/api/isNotFound';
+import { useGetTripsTripIdItinerary } from '@/shared/api/index.hooks';
+import { retryUnlessNotFound } from '@/shared/api';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 
 import { ItineraryMethodPage } from './ItineraryMethodPage';

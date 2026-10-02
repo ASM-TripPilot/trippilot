@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   getGetTripsTripIdItineraryQueryKey,
   usePostTripsTripIdReplanSessionsSessionIdApply,
-} from '@/shared/api/generated/trips/trips';
+} from '@/shared/api/index.hooks';
 
 /**
  * TRIP-441 · AC-3 · BR-U4-28 · INV-U4-05 — 재계획 **확정(apply)** 배선의 얇은 래퍼.

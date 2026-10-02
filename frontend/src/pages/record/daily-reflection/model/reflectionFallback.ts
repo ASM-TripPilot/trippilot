@@ -1,7 +1,4 @@
-import type {
-  Reflection,
-  ReflectionStats,
-} from '@/shared/api/generated/schemas';
+import type { Reflection, ReflectionStats } from '@/shared/api/index.schemas';
 
 import { formatKm } from '@/features/reflection/index.view';
 import { statsCard } from './statsCard';

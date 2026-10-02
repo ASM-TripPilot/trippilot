@@ -8,7 +8,7 @@ export type {
   TripStatus,
   TripDestination,
   ItineraryStatus,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 /** h06 카드 배지 — 'done'=완성(itinerary CONFIRMED) · 'draft'=작성중 · 'live'=여행 중(확정 + 오늘이 기간 안,
  * TRIP-1121) · null=itinerary 미도착(배지 미정). */

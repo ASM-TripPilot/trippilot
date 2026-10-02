@@ -22,16 +22,16 @@ import { triggerWatchlist } from '../model/triggerWatchlist';
 import { useActiveTriggers } from '@/features/planb';
 import { ReplanAppliedSheet } from './ReplanAppliedSheet';
 import { RiskDetailSheet } from './RiskDetailSheet';
-import type { Trigger } from '@/shared/api/generated/schemas';
+import type { Trigger } from '@/shared/api/index.schemas';
 import {
   postTripsTripIdVisitsVisitCheckIdPhotos,
   useGetTripsTripId,
   useGetTripsTripIdVisitsDaysDay,
-} from '@/shared/api/generated/trips/trips';
-import { isNotFound } from '@/shared/api/isNotFound';
+} from '@/shared/api/index.hooks';
+import { isNotFound } from '@/shared/api';
 import { seoulDate } from '@/shared/date';
 import { StateNotice } from '@/shared/ui/StateNotice';
-import { ArriveRequestSource } from '@/shared/api/generated/schemas';
+import { ArriveRequestSource } from '@/shared/api/index.schemas';
 
 import { LiveHubView } from './LiveHubView';
 

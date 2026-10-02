@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { Text, View } from 'react-native';
 
 import { SlotCandidateCard } from '@/entities/place';
-import type { SlotCandidatesCandidatesItem } from '@/shared/api/generated/schemas';
+import type { SlotCandidatesCandidatesItem } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-440 · AC-5·6·6b — i14 슬롯 후보 시트(순수 인라인 패널, 바텀시트 아님, 배지 없음).

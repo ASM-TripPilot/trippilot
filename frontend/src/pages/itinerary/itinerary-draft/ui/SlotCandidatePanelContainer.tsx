@@ -15,7 +15,7 @@ import {
   useGetTripsTripIdItinerary,
   usePostTripsTripIdItinerarySlotCandidates,
   usePutTripsTripIdItinerary,
-} from '@/shared/api/generated/trips/trips';
+} from '@/shared/api/index.hooks';
 
 /**
  * TRIP-793 · h08 슬롯 교체 배선(초안 아래·h08 셸 둘 다 마운트하는 컨테이너, 이름 유지). 세 조각을

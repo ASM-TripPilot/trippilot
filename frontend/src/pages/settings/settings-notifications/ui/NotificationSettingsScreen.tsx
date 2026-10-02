@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import type { NotificationToggleKind } from '@/shared/api/generated/schemas';
+import type { NotificationToggleKind } from '@/shared/api/index.schemas';
 
 import { NotifBackChevronGlyph, NotifInfoGlyph } from '@/features/notification';
 import { PermissionBanner } from './PermissionBanner';

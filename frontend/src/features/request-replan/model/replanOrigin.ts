@@ -1,4 +1,4 @@
-import type { StartReplanRequestOriginKind } from '@/shared/api/generated/schemas/startReplanRequestOriginKind';
+import type { StartReplanRequestOriginKind } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-442 · 순수 origin 조각 — `buildStartReplanRequest` 에 **additive** 로 실린다.

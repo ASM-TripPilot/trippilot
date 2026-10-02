@@ -5,7 +5,7 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import type { SavedStay } from '@/shared/api/generated/schemas';
+import type { SavedStay } from '@/shared/api/index.schemas';
 
 import { StaySelectSheet } from './StaySelectSheet';
 import { CheckGlyph } from '@/features/trip/index.view';

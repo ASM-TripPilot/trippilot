@@ -6,7 +6,7 @@ import { SHARE_FORMATS, buildShareCard } from '@/features/reflection';
 import { shareEnabled } from '@/features/reflection';
 import { useTripSummary } from '@/features/reflection';
 import { ShareCardScreen } from './ShareCardScreen';
-import { useGetTripsTripId } from '@/shared/api/generated/trips/trips';
+import { useGetTripsTripId } from '@/shared/api/index.hooks';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
 /**

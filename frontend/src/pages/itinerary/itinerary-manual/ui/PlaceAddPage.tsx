@@ -18,8 +18,8 @@ import {
   useGetTripsTripId,
   useGetTripsTripIdItinerary,
   usePutTripsTripIdItinerary,
-} from '@/shared/api/generated/trips/trips';
-import type { Place, PoiCategory } from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.hooks';
+import type { Place, PoiCategory } from '@/shared/api/index.schemas';
 
 // 핀이 없을 때 지도 중심 — 서울 시청(LiveHubView 선례). {0,0} 은 기니만 바다(null-island)라 무의미하다.
 const FALLBACK_CENTER = { lat: 37.5665, lng: 126.978 };

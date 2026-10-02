@@ -6,11 +6,11 @@ import {
 } from '@testing-library/react-native';
 import { router } from 'expo-router';
 
-import type { Trip, TripSummary } from '@/shared/api/generated/schemas';
+import type { Trip, TripSummary } from '@/shared/api/index.schemas';
 
 import { useTripSummary } from '@/features/reflection';
 import { ShareCardScreen } from './ShareCardScreen';
-import { useGetTripsTripId } from '@/shared/api/generated/trips/trips';
+import { useGetTripsTripId } from '@/shared/api/index.hooks';
 import { ShareCardPage } from './ShareCardPage';
 
 /**

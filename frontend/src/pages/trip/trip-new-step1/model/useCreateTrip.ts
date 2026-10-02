@@ -1,9 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 
-import {
-  getGetTripsQueryKey,
-  usePostTrips,
-} from '@/shared/api/generated/trips/trips';
+import { getGetTripsQueryKey, usePostTrips } from '@/shared/api/index.hooks';
 
 /**
  * 생성 훅(`usePostTrips`)을 도메인 이름으로 감싼다(TRIP-203 AC-2, `useStaySearch` 선례와

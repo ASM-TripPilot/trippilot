@@ -1,4 +1,4 @@
-import type { Trigger } from '@/shared/api/generated/schemas';
+import type { Trigger } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-562 · scope 접기 — `LiveItineraryPage` 로컬 함수를 features/planb/model 로 승격(i09·라이브

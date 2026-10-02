@@ -5,7 +5,7 @@ import type {
   RegisterRoute,
   SavedStay,
   VisitCheck,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 import { deriveStayAttribution, type DayAttribution } from './stayAttribution';
 

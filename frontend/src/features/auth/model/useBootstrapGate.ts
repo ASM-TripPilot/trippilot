@@ -3,11 +3,7 @@ import NetInfo from '@react-native-community/netinfo';
 
 import { fetchBootstrap } from '@/shared/api';
 import { getTokens, hasStoredToken } from '@/shared/storage';
-import {
-  getAccessToken,
-  hydrate,
-  subscribeAccessToken,
-} from '@/shared/api/tokenManager';
+import { getAccessToken, hydrate, subscribeAccessToken } from '@/shared/api';
 import { subscribeBootstrapReeval } from '@/shared/bootstrap';
 import { publishGateDestination } from './gateDestination';
 import {

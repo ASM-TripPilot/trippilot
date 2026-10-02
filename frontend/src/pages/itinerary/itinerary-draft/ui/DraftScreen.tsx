@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
+import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 import { MapView } from '@/shared/map';
 import { StateNotice } from '@/shared/ui/StateNotice';
 

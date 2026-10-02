@@ -5,7 +5,7 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import type { TripDestination } from '@/shared/api/generated/schemas';
+import type { TripDestination } from '@/shared/api/index.schemas';
 
 import { DestinationEditSheet } from './DestinationEditSheet';
 

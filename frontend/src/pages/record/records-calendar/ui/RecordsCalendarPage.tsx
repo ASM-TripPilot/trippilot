@@ -3,8 +3,8 @@ import { ActivityIndicator, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQueries } from '@tanstack/react-query';
 
-import { getGetTripsTripIdItineraryQueryOptions } from '@/shared/api/generated/trips/trips';
-import { isNotFound } from '@/shared/api/isNotFound';
+import { getGetTripsTripIdItineraryQueryOptions } from '@/shared/api/index.hooks';
+import { isNotFound } from '@/shared/api';
 import {
   itineraryDestinationHref,
   resolveItineraryDestination,

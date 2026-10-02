@@ -15,7 +15,7 @@ import { useTripSummary } from '@/features/reflection';
 import { TripSummaryScreen, type DayCardVM } from './TripSummaryScreen';
 import { tripDayChips } from '@/features/add-must-visit';
 import { formatDayLabel } from '@/entities/trip';
-import { useGetTripsTripId } from '@/shared/api/generated/trips/trips';
+import { useGetTripsTripId } from '@/shared/api/index.hooks';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';

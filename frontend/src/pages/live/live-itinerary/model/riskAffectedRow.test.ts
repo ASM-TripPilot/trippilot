@@ -1,7 +1,7 @@
 /**
  * @jest-environment node
  */
-import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
+import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 
 import { riskAffectedRow } from './riskAffectedRow';
 

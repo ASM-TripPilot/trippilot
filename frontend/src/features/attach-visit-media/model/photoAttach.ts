@@ -1,4 +1,4 @@
-import type { AddPhotoRequest } from '@/shared/api/generated/schemas';
+import type { AddPhotoRequest } from '@/shared/api/index.schemas';
 import type { PhotoAssetMeta } from '@/shared/photo';
 
 export type { PhotoAssetMeta };

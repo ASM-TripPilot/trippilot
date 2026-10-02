@@ -13,7 +13,7 @@ import {
 
 import { useDailyReflection } from '../model/useDailyReflection';
 import { server } from '@/mocks/server';
-import { getGetTripsTripIdReflectionsQueryKey } from '@/shared/api/generated/reflection/reflection';
+import { getGetTripsTripIdReflectionsQueryKey } from '@/shared/api/index.hooks';
 import type {
   EditReflectionRequest,
   ErrorResponse,
@@ -21,7 +21,7 @@ import type {
   ReflectionCard,
   ReflectionList,
   Trip,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 
 import { DailyReflectionPage } from './DailyReflectionPage';

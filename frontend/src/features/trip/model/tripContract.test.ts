@@ -1,7 +1,7 @@
 import {
   CompanionType,
   type CreateTripRequest,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 /**
  * TRIP-203 AC-3 · AC-4 — 여행 생성 계약을 **타입으로** 잠근다.

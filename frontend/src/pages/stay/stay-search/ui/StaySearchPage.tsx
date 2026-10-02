@@ -9,8 +9,8 @@ import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 
-import type { StayItem } from '@/shared/api/generated/schemas';
-import { getAccessToken } from '@/shared/api/tokenManager';
+import type { StayItem } from '@/shared/api/index.schemas';
+import { getAccessToken } from '@/shared/api';
 import { guardPress } from '@/shared/press';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
 

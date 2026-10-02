@@ -1,4 +1,4 @@
-import type { ReplanSessionStatus } from '@/shared/api/generated/schemas';
+import type { ReplanSessionStatus } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-440 · AC-4 — resolveReplanState: 재계획 세션 status(서버 7값)를 화면 판정 1회로 접는다.

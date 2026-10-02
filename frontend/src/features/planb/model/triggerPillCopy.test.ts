@@ -1,4 +1,4 @@
-import type { TriggerKind } from '@/shared/api/generated/schemas';
+import type { TriggerKind } from '@/shared/api/index.schemas';
 
 import { triggerPillCopy } from './triggerPillCopy';
 

@@ -4,8 +4,8 @@ import { useState } from 'react';
 
 import { isGenerationRunning } from '@/features/itinerary';
 import { MethodPickerScreen } from './MethodPickerScreen';
-import { useGetTripsTripIdItinerary } from '@/shared/api/generated/trips/trips';
-import { retryUnlessNotFound } from '@/shared/api/isNotFound';
+import { useGetTripsTripIdItinerary } from '@/shared/api/index.hooks';
+import { retryUnlessNotFound } from '@/shared/api';
 
 /**
  * h04 시작 방법 배선(TRIP-303 → TRIP-305 → TRIP-504). 방식을 고른다.

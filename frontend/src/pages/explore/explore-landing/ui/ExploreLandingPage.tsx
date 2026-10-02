@@ -2,8 +2,8 @@ import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
-import type { Place, StayItem } from '@/shared/api/generated/schemas';
-import { getAccessToken } from '@/shared/api/tokenManager';
+import type { Place, StayItem } from '@/shared/api/index.schemas';
+import { getAccessToken } from '@/shared/api';
 import { guardPress } from '@/shared/press';
 import { formatPrice } from '@/entities/stay';
 import { stayKey } from '@/features/save-stay';
@@ -13,7 +13,7 @@ import { usePlaceSaveToggle } from '@/features/save-place';
 import { useRegions } from '@/features/explore';
 import { useSavedPlaces } from '@/features/save-place';
 import { regionPickerHref } from '@/features/explore';
-import { useGetPlaces } from '@/shared/api/generated/places/places';
+import { useGetPlaces } from '@/shared/api/index.hooks';
 import { useTripWizardStore } from '@/features/create-trip';
 import {
   ExploreLandingScreen,

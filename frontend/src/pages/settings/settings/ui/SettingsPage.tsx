@@ -20,9 +20,9 @@ import {
   useGetMe,
   useGetMeExport,
   usePostMeDeletion,
-} from '@/shared/api/generated/account/account';
-import { useGetMeLocationConsent } from '@/shared/api/generated/location/location';
-import { useGetMePreferences } from '@/shared/api/generated/preferences/preferences';
+} from '@/shared/api/index.hooks';
+import { useGetMeLocationConsent } from '@/shared/api/index.hooks';
+import { useGetMePreferences } from '@/shared/api/index.hooks';
 import {
   getGetMeProfileQueryKey,
   getGetMeSettingsQueryKey,
@@ -30,12 +30,12 @@ import {
   useGetMeSettings,
   usePatchMeProfileNickname,
   usePatchMeSettings,
-} from '@/shared/api/generated/profile/profile';
-import { useGetMePersonalization } from '@/shared/api/generated/reflection/reflection';
+} from '@/shared/api/index.hooks';
+import { useGetMePersonalization } from '@/shared/api/index.hooks';
 import {
   type AccountSettings,
   PersonalizationInfoReason,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import {
   registerPushIfGranted,
   unregisterStoredPushToken,

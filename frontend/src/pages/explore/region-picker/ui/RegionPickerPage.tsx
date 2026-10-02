@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
-import type { Region } from '@/shared/api/generated/schemas';
+import type { Region } from '@/shared/api/index.schemas';
 import { filterRegions, useRegions } from '@/features/explore/index.view';
 import type { RegionPickerPurpose } from '@/features/explore/index.view';
 import { useTripWizardStore } from '@/features/create-trip';

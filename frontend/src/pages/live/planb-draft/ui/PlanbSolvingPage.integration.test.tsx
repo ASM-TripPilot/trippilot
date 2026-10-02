@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 
-import type { Itinerary, VisitCheckList } from '@/shared/api/generated/schemas';
+import type { Itinerary, VisitCheckList } from '@/shared/api/index.schemas';
 
 import { PlanbSolvingPage } from './PlanbSolvingPage';
 

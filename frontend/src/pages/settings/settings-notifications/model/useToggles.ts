@@ -4,13 +4,13 @@ import {
   getGetMeNotificationSettingsQueryKey,
   patchMeNotificationSettingsKind,
   useGetMeNotificationSettings,
-} from '@/shared/api/generated/notification/notification';
+} from '@/shared/api/index.hooks';
 import type {
   NotificationToggle,
   NotificationToggleKind,
   NotificationToggleList,
   UpdateToggleRequest,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 /**
  * TRIP-607 · l02 알림 설정 — 7행 조회(useGetMeNotificationSettings) + kind×채널 낙관 갱신 훅.

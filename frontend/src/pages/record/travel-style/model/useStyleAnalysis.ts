@@ -1,4 +1,4 @@
-import { useGetMeStyle } from '@/shared/api/generated/reflection/reflection';
+import { useGetMeStyle } from '@/shared/api/index.hooks';
 
 /**
  * TRIP-573 · useStyleAnalysis — j05 스타일 조회를 잇는 얇은 래퍼(재사용 1훅만, 새 HTTP 0).

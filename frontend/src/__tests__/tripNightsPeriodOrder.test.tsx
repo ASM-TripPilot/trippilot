@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import type { PreferenceView, Region } from '@/shared/api/generated/schemas';
-import { RegionLevel } from '@/shared/api/generated/schemas';
+import type { PreferenceView, Region } from '@/shared/api/index.schemas';
+import { RegionLevel } from '@/shared/api/index.schemas';
 import { useTripWizardStore } from '@/features/create-trip';
 import { RegionPickerPage } from '@/pages/explore/region-picker';
 import { TripNewStep1Page } from '@/pages/trip/trip-new-step1';

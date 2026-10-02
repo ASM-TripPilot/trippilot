@@ -1,7 +1,7 @@
 import type {
   ItineraryDaysItem,
   ItineraryDaysItemSlotsItem,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 /**
  * TRIP-979 B · AC-B1 · Seed Q5 — 재계획 지도(진행·결과·위치 입력) 중심을 "이 여행"에서 고른다.

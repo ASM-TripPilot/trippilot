@@ -1,4 +1,4 @@
-import { useGetTripsTripIdReplanSessionsSessionId } from '@/shared/api/generated/trips/trips';
+import { useGetTripsTripIdReplanSessionsSessionId } from '@/shared/api/index.hooks';
 
 /**
  * TRIP-440 · i12 재계획 세션 조회 폴링 — `useGetTripsTripIdReplanSessionsSessionId` 얇은 래퍼.

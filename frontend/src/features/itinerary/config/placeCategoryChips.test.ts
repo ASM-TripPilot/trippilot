@@ -14,7 +14,7 @@
  * (RN 노드 배열이 아니라 785 SIGABRT 함정 밖).
  */
 
-import { PoiCategory } from '@/shared/api/generated/schemas';
+import { PoiCategory } from '@/shared/api/index.schemas';
 
 import { PLACE_CATEGORY_CHIPS } from './placeCategoryChips';
 

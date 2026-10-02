@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { getPlaces } from '@/shared/api/generated/places/places';
-import type { PoiCategory } from '@/shared/api/generated/schemas';
+import { getPlaces } from '@/shared/api/index.hooks';
+import type { PoiCategory } from '@/shared/api/index.schemas';
 
 import { mergePlacesByPoiId } from './mergePlaces';
 

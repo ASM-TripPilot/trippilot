@@ -6,7 +6,7 @@ import type {
   StyleAnalysisBody,
   StylePreview,
   StyleProgress,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import type { StyleFace } from '@/entities/style-analysis';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 

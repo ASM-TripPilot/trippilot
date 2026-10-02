@@ -1,8 +1,4 @@
-import type {
-  MustVisit,
-  Place,
-  SavedPlace,
-} from '@/shared/api/generated/schemas';
+import type { MustVisit, Place, SavedPlace } from '@/shared/api/index.schemas';
 
 import {
   MUST_VISIT_NAME_PLACEHOLDER,

@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 
-import type { ReflectionStats } from '@/shared/api/generated/schemas';
+import type { ReflectionStats } from '@/shared/api/index.schemas';
 
 import { missingParts } from './missingParts';
 

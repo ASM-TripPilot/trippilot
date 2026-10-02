@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { putTripsTripIdVisitsVisitCheckIdMemo } from '@/shared/api/generated/trips/trips';
+import { putTripsTripIdVisitsVisitCheckIdMemo } from '@/shared/api/index.hooks';
 
 /**
  * TRIP-1078 · 메모 세션 캐시(결정 2(b)) — 메모를 읽는 GET 이 없어서, PUT 에 성공한 텍스트를 Query 캐시

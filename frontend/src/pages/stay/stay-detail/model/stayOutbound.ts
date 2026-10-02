@@ -1,6 +1,6 @@
 import * as Linking from 'expo-linking';
 
-import type { StayItem } from '@/shared/api/generated/schemas';
+import type { StayItem } from '@/shared/api/index.schemas';
 
 /**
  * 제휴 시트 [이동] 딥링크 사다리(TRIP-457 AC-9 · 01b Q2 — nextNav.ts 패턴 미러).

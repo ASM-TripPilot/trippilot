@@ -1,4 +1,4 @@
-import type { CompanionType } from '@/shared/api/generated/schemas';
+import type { CompanionType } from '@/shared/api/index.schemas';
 
 // dayOfWeek 는 아래 daysUntilSaturday(presetRange)가 쓴다 — 본체는 entities/trip/lib 로 이관됐다(TRIP-808).
 import { dayOfWeek } from '@/entities/trip';

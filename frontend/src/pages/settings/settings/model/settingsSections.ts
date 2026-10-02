@@ -10,7 +10,7 @@
  * · 위치 동의 칩 · 개인화 `사용 중`. 입력이 없으면(응답 전·실패) 값도 칩도 두지 않는다 — 모를 때
  * `미설정`/`미동의` 라고 말하면 거짓 표면이다(D4).
  */
-import type { PreferenceView } from '@/shared/api/generated/schemas';
+import type { PreferenceView } from '@/shared/api/index.schemas';
 
 import { summarizePreferences } from './preferenceSummary';
 

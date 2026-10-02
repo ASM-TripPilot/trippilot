@@ -1,6 +1,6 @@
 import * as Linking from 'expo-linking';
 
-import type { StayItem } from '@/shared/api/generated/schemas';
+import type { StayItem } from '@/shared/api/index.schemas';
 
 import {
   buildStaySearchUrl,

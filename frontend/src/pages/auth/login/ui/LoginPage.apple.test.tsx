@@ -46,7 +46,9 @@ jest.mock(
       .expoAppleAuthenticationModule
 );
 jest.mock('@gorhom/bottom-sheet');
+// TRIP-1157: 훅이 tokenManager 를 @/shared/api(배럴)로 문다 — 통째로 갈아끼우면 토큰 함수가 지워지므로 실물 tokenManager 를 펼친다.
 jest.mock('@/shared/api', () => ({
+  ...jest.requireActual('@/shared/api/tokenManager'),
   postSocialLogin: jest.fn(),
   postSocialTokenLogin: jest.fn(),
 }));

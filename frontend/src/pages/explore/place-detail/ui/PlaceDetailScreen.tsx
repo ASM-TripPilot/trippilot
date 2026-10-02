@@ -13,7 +13,7 @@ import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
 import { MapView } from '@/shared/map';
 import { PlaceSubtitle } from '@/entities/place';
 import { normalizeOpeningHours } from '@/entities/itinerary-slot';
-import type { Place } from '@/shared/api/generated/schemas';
+import type { Place } from '@/shared/api/index.schemas';
 
 import type { PlaceSaveNotice } from '@/features/save-place/index.view';
 import {

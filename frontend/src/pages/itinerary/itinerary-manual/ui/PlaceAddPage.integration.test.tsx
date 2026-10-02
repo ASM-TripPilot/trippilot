@@ -14,12 +14,12 @@ import {
 
 import { server } from '@/mocks/server';
 import { setAccessToken, clearAccessToken } from '@/shared/api/tokenManager';
-import { getGetTripsTripIdItineraryQueryKey } from '@/shared/api/generated/trips/trips';
+import { getGetTripsTripIdItineraryQueryKey } from '@/shared/api/index.hooks';
 import type {
   EditItineraryRequest,
   ItineraryDaysItemSlotsItem,
   Place,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 import { PlaceAddPage } from './PlaceAddPage';
 

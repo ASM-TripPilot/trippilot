@@ -1,4 +1,4 @@
-import type { Trip } from '@/shared/api/generated/schemas';
+import type { Trip } from '@/shared/api/index.schemas';
 import { isTripOngoing } from '@/entities/trip';
 
 import type { DoneBarEntry } from './doneBar';

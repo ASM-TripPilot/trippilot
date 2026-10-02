@@ -5,7 +5,7 @@ import { resolveStyleProgress } from '@/entities/style-analysis';
 import type {
   StyleAnalysisBody,
   StyleAnalysisEnvelope,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 import { buildStyleCardModel } from './styleCardModel';
 

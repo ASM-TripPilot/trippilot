@@ -5,7 +5,7 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import type { StayItem } from '@/shared/api/generated/schemas';
+import type { StayItem } from '@/shared/api/index.schemas';
 import { formatPrice } from '@/entities/stay';
 import { OtaChoiceSheet, type OtaChoiceSheetProps } from './OtaChoiceSheet';
 

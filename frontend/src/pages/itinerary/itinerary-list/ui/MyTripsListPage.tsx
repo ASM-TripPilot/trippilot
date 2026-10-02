@@ -3,14 +3,14 @@ import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 
-import type { Trip } from '@/shared/api/generated/schemas';
+import type { Trip } from '@/shared/api/index.schemas';
 import {
   getGetTripsQueryKey,
   getGetTripsTripIdItineraryQueryOptions,
   useDeleteTripsTripId,
   useGetTrips,
-} from '@/shared/api/generated/trips/trips';
-import { isNotFound } from '@/shared/api/isNotFound';
+} from '@/shared/api/index.hooks';
+import { isNotFound } from '@/shared/api';
 import { seoulDate } from '@/shared/date';
 import { readIdSet, writeIdSet } from '@/shared/storage';
 import { readStringValue, writeStringValue } from '@/shared/storage';

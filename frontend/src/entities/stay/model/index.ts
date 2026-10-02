@@ -7,7 +7,7 @@ export type {
   StayItem,
   SavedStay,
   StayPrice,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 /**
  * 검색 풀/레인 카드 뷰모델 — 화면이 아는 최소 필드(ExploreLandingScreen 로컬 정의에서 이관).

@@ -4,7 +4,7 @@ import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 
 import { PlaceRowCard } from '@/entities/place';
 import { PlaceSubtitle } from '@/entities/place';
-import type { Place, PoiCategory } from '@/shared/api/generated/schemas';
+import type { Place, PoiCategory } from '@/shared/api/index.schemas';
 
 import { PlusGlyph, SearchGlyph } from './ItineraryGlyphs';
 import { PLACE_CATEGORY_CHIPS } from '../config/placeCategoryChips';

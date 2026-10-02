@@ -1,4 +1,4 @@
-import type { ReflectionStats } from '@/shared/api/generated/schemas';
+import type { ReflectionStats } from '@/shared/api/index.schemas';
 
 import { statsCard } from './statsCard';
 

@@ -1,4 +1,4 @@
-import type { CategoryShare } from '@/shared/api/generated/schemas';
+import type { CategoryShare } from '@/shared/api/index.schemas';
 
 /** poi.category 코드 → 화면 표시 라벨(O-U5-7). 유일한 불일치는 `맛집→미식`. */
 const CATEGORY_LABEL: Record<string, string> = { 맛집: '미식' };

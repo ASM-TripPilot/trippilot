@@ -1,9 +1,9 @@
 import { useState, type ReactElement } from 'react';
 import { useRouter } from 'expo-router';
 
-import type { Trip } from '@/shared/api/generated/schemas';
-import { useGetTripsTripIdItinerary } from '@/shared/api/generated/trips/trips';
-import { isNotFound } from '@/shared/api/isNotFound';
+import type { Trip } from '@/shared/api/index.schemas';
+import { useGetTripsTripIdItinerary } from '@/shared/api/index.hooks';
+import { isNotFound } from '@/shared/api';
 import { formatNightsLabel } from '@/entities/trip';
 import { formatConfirmedDateRange } from '@/entities/trip';
 import { isTripOngoing } from '@/entities/trip';

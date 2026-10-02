@@ -12,7 +12,7 @@ import type {
   BaseAssignment,
   Itinerary,
   SavedStay,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import { promptAndRegisterPush } from '@/shared/push';
 
 import { ManualPlanPage } from './ManualPlanPage';

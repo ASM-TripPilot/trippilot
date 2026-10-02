@@ -10,7 +10,7 @@ import {
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
-import type { SavedStay } from '@/shared/api/generated/schemas';
+import type { SavedStay } from '@/shared/api/index.schemas';
 
 import { SavedStayPage } from './SavedStayPage';
 

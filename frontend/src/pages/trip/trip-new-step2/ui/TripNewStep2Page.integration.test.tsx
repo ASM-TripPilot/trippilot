@@ -11,7 +11,7 @@ import {
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
-import type { BaseAssignment, SavedStay } from '@/shared/api/generated/schemas';
+import type { BaseAssignment, SavedStay } from '@/shared/api/index.schemas';
 import { useTripWizardStore } from '@/features/create-trip';
 import { resetPressGuard } from '@/shared/press/pressGuard';
 

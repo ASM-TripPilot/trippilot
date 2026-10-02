@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 
-import type { AccountExport } from '@/shared/api/generated/schemas';
+import type { AccountExport } from '@/shared/api/index.schemas';
 import { resolveExportSummary } from './exportSummary';
 
 /**

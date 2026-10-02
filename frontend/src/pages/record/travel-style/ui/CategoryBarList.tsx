@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { Text, View } from 'react-native';
 
-import type { CategoryShare } from '@/shared/api/generated/schemas';
+import type { CategoryShare } from '@/shared/api/index.schemas';
 
 import { categoryLabel } from '../model/styleThreshold';
 

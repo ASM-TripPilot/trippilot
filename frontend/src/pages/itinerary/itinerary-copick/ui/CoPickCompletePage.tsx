@@ -16,7 +16,7 @@ import { SlotStopCard } from '@/entities/itinerary-slot';
 import {
   useGetTripsTripId,
   useGetTripsTripIdItinerary,
-} from '@/shared/api/generated/trips/trips';
+} from '@/shared/api/index.hooks';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { DistanceConnector } from '@/widgets/map-sheet-shell';
 import { MapSheetShell } from '@/widgets/map-sheet-shell';

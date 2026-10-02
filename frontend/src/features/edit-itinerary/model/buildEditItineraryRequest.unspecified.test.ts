@@ -2,7 +2,7 @@ import { buildEditItineraryRequest } from './buildEditItineraryRequest';
 import type {
   ItineraryDaysItem,
   ItineraryDaysItemSlotsItem,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 /**
  * TRIP-797 · AC-6 (INV-4 · INV-U3-02) — 로컬 "미지정(시간대 설정)" 슬롯의 **저장 조립 필터**.

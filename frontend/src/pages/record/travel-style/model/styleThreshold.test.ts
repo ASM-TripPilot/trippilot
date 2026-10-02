@@ -1,4 +1,4 @@
-import type { CategoryShare } from '@/shared/api/generated/schemas';
+import type { CategoryShare } from '@/shared/api/index.schemas';
 
 import { categoryLabel } from './styleThreshold';
 

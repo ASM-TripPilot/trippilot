@@ -1,7 +1,4 @@
-import type {
-  PlaceDataStatus,
-  SavedPlace,
-} from '@/shared/api/generated/schemas';
+import type { PlaceDataStatus, SavedPlace } from '@/shared/api/index.schemas';
 
 import { optimisticSavedPlaceId } from '@/features/save-place/index.view';
 

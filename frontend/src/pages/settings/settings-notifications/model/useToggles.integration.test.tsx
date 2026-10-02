@@ -9,12 +9,12 @@ import {
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
-import { useGetMeNotificationSettings } from '@/shared/api/generated/notification/notification';
+import { useGetMeNotificationSettings } from '@/shared/api/index.hooks';
 import type {
   NotificationToggle,
   NotificationToggleKind,
   UpdateToggleRequest,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { flushNotifications } from '@/test-support/flushNotifications';
 

@@ -5,8 +5,8 @@ import {
   getGetTripsTripIdVisitsVisitCheckIdPhotosQueryKey,
   postTripsTripIdVisitsVisitCheckIdPhotos,
   useGetTripsTripIdVisitsVisitCheckIdPhotos,
-} from '@/shared/api/generated/trips/trips';
-import type { VisitPhoto } from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.hooks';
+import type { VisitPhoto } from '@/shared/api/index.schemas';
 
 import {
   photoAttach,

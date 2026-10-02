@@ -26,9 +26,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { InfiniteData } from '@tanstack/react-query';
 import { useQueryClient } from '@tanstack/react-query';
 
-import { getGetPlacesQueryKey } from '@/shared/api/generated/places/places';
-import type { Place, PlaceList } from '@/shared/api/generated/schemas';
-import { getAccessToken } from '@/shared/api/tokenManager';
+import { getGetPlacesQueryKey } from '@/shared/api/index.hooks';
+import type { Place, PlaceList } from '@/shared/api/index.schemas';
+import { getAccessToken } from '@/shared/api';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
 import {

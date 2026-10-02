@@ -1,7 +1,7 @@
 import type {
   RegisterSavedStayRequest,
   StayItem,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 /**
  * 검색결과 `StayItem` → `POST /saved-stays` 요청 본문 조립(TRIP-417 AC-1 · 01b Seed Q2·Q3).

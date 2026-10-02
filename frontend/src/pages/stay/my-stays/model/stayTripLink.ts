@@ -2,7 +2,7 @@ import type {
   BaseAssignment,
   SavedStay,
   Trip,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 /**
  * TRIP-605 · l04 — SavedStay ↔ 여행 역참조 파생(연결 여행). **순수 함수**(조회·부수효과 없음).

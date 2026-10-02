@@ -1,4 +1,4 @@
-import type { Trip } from '@/shared/api/generated/schemas';
+import type { Trip } from '@/shared/api/index.schemas';
 
 /**
  * `GET /trips/{tripId}` 응답 픽스처(Trip 스키마 필수 필드 전부) — j01 방문 기록 통합 테스트 공용.

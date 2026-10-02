@@ -9,7 +9,7 @@ import {
 } from 'react-native-draggable-flatlist';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
-import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
+import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 import type { MapCenter, MapPin } from '@/shared/map';
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import { violationLabel } from '@/entities/itinerary-slot';

@@ -3,7 +3,7 @@ import path from 'path';
 
 import * as Linking from 'expo-linking';
 
-import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
+import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 
 import type {
   ProjectedSlot,

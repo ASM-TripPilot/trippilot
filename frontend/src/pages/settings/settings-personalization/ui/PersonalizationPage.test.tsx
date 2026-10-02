@@ -28,8 +28,8 @@ import {
 
 import { patchConsent, fetchTerms } from '@/shared/api';
 import type { TermsVersion } from '@/shared/api';
-import { useGetMePersonalization } from '@/shared/api/generated/reflection/reflection';
-import type { PersonalizationInfo } from '@/shared/api/generated/schemas';
+import { useGetMePersonalization } from '@/shared/api/index.hooks';
+import type { PersonalizationInfo } from '@/shared/api/index.schemas';
 
 import { PersonalizationPage } from '..';
 

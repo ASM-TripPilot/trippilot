@@ -3,7 +3,7 @@ import { create, type StateCreator } from 'zustand';
 import type {
   ItineraryDaysItem,
   ItineraryDaysItemSlotsItem,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 /**
  * TRIP-302 · h24 편집 드래프트 상자(슬라이스1). 편집 중 `days`를 화면 밖에서 든다 — 서버 상태의

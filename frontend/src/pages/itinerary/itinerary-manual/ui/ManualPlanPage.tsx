@@ -17,16 +17,16 @@ import { useTripWizardStore } from '@/features/create-trip';
 import { useSavedStays } from '@/features/trip';
 import { useTripBases } from '@/features/assign-trip-base';
 import { parseSlotKey } from '@/entities/itinerary-slot';
-import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
+import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripIdItinerary,
   usePostTripsTripIdItinerary,
   usePostTripsTripIdItineraryConfirm,
   usePutTripsTripIdItinerary,
-} from '@/shared/api/generated/trips/trips';
-import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
-import { isNotFound } from '@/shared/api/isNotFound';
+} from '@/shared/api/index.hooks';
+import { isAlreadyRegistered } from '@/shared/api';
+import { isNotFound } from '@/shared/api';
 import { showToast } from '@/shared/ui/Toast';
 import { EditorView } from '@/widgets/map-sheet-shell';
 import { TimeSheet } from '@/widgets/time-sheet';

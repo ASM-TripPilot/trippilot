@@ -1,4 +1,4 @@
-import type { ItineraryDaysItem } from '@/shared/api/generated/schemas';
+import type { ItineraryDaysItem } from '@/shared/api/index.schemas';
 
 /**
  * AC1 (BR-U3-23 · BR-U2-04) 코어 — 일정 `days` 전체에서 대상 슬롯의 poiId 하나만 갈아 끼운다.

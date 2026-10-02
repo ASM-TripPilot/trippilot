@@ -1,4 +1,4 @@
-import type { PreferenceView } from '@/shared/api/generated/schemas';
+import type { PreferenceView } from '@/shared/api/index.schemas';
 
 import {
   buildPreferenceInput,

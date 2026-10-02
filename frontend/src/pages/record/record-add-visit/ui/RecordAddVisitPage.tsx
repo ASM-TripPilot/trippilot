@@ -12,9 +12,9 @@ import { PlaceAddHeader } from '@/features/itinerary';
 import { rememberSpontaneousName } from '@/features/check-visit';
 import { useVisitCheck } from '@/features/check-visit';
 import { MapSheetShell } from '@/widgets/map-sheet-shell';
-import { useGetTripsTripId } from '@/shared/api/generated/trips/trips';
-import { ArriveRequestSource } from '@/shared/api/generated/schemas';
-import type { Place, PoiCategory } from '@/shared/api/generated/schemas';
+import { useGetTripsTripId } from '@/shared/api/index.hooks';
+import { ArriveRequestSource } from '@/shared/api/index.schemas';
+import type { Place, PoiCategory } from '@/shared/api/index.schemas';
 
 // 후보가 없을 때 지도 중심 — 서울 시청(PlaceAddPage 선례).
 const FALLBACK_CENTER = { lat: 37.5665, lng: 126.978 };

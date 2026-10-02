@@ -1,4 +1,4 @@
-import type { StartReplanRequestScope } from '@/shared/api/generated/schemas/startReplanRequestScope';
+import type { StartReplanRequestScope } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-439 · BR-U4-11 · DEC-U4-3 — i04 재계획 요청의 **범위 카탈로그**. 사유·방향 칩은 TRIP-750 으로

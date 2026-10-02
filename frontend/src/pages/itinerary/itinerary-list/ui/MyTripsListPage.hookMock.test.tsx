@@ -9,12 +9,12 @@ import {
 } from '@testing-library/react-native';
 import * as SecureStore from 'expo-secure-store';
 
-import type { Itinerary, Trip } from '@/shared/api/generated/schemas';
+import type { Itinerary, Trip } from '@/shared/api/index.schemas';
 import {
   getGetTripsTripIdItineraryQueryOptions,
   useGetTrips,
   useGetTripsTripIdItinerary,
-} from '@/shared/api/generated/trips/trips';
+} from '@/shared/api/index.hooks';
 import { readIdSet, writeIdSet } from '@/shared/storage';
 import { MyTripsListPage } from '@/pages/itinerary/itinerary-list';
 

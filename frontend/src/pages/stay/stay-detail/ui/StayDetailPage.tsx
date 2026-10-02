@@ -25,18 +25,15 @@ import * as Linking from 'expo-linking';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Share } from 'react-native';
 
-import { isNotFound } from '@/shared/api/isNotFound';
-import { getAccessToken } from '@/shared/api/tokenManager';
+import { isNotFound } from '@/shared/api';
+import { getAccessToken } from '@/shared/api';
 import {
   getGetMeSettingsQueryKey,
   useGetMeSettings,
   usePatchMeSettings,
-} from '@/shared/api/generated/profile/profile';
-import { useGetStaysStayId } from '@/shared/api/generated/stays/stays';
-import type {
-  AccountSettings,
-  StayDetail,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.hooks';
+import { useGetStaysStayId } from '@/shared/api/index.hooks';
+import type { AccountSettings, StayDetail } from '@/shared/api/index.schemas';
 
 import { useSavedStays } from '@/features/save-stay';
 import { openStayOutbound, stayOutboundMode } from '../model/stayOutbound';

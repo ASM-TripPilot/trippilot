@@ -12,7 +12,7 @@ import { useActiveTriggers } from '@/features/planb';
 import { useReplanGpsOrigin } from '../model/useReplanGpsOrigin';
 import { useStartReplan } from '@/features/request-replan';
 import { ReplanRequestSheet } from './ReplanRequestSheet';
-import type { ItineraryDaysItem } from '@/shared/api/generated/schemas';
+import type { ItineraryDaysItem } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-750 · i04 배선판. 진입 초기화 → 감지 트리거 시드 → 폼 스토어 ↔ 시트 → 빌더 → POST → 라우터.

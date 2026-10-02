@@ -2,16 +2,16 @@ import type { ReactElement } from 'react';
 import { useRouter, type Href } from 'expo-router';
 import { useQueries, type UseQueryResult } from '@tanstack/react-query';
 
-import type { Itinerary, Trip } from '@/shared/api/generated/schemas';
-import { useGetMe } from '@/shared/api/generated/account/account';
-import { useGetMeProfile } from '@/shared/api/generated/profile/profile';
-import { useGetMeStyle } from '@/shared/api/generated/reflection/reflection';
+import type { Itinerary, Trip } from '@/shared/api/index.schemas';
+import { useGetMe } from '@/shared/api/index.hooks';
+import { useGetMeProfile } from '@/shared/api/index.hooks';
+import { useGetMeStyle } from '@/shared/api/index.hooks';
 import {
   getGetTripsTripIdItineraryQueryOptions,
   useGetMeRecords,
   useGetTrips,
-} from '@/shared/api/generated/trips/trips';
-import { isNotFound } from '@/shared/api/isNotFound';
+} from '@/shared/api/index.hooks';
+import { isNotFound } from '@/shared/api';
 import { seoulDate } from '@/shared/date';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
 import { formatTripDateRange } from '@/entities/trip';

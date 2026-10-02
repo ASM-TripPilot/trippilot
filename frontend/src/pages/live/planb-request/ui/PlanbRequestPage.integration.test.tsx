@@ -12,7 +12,7 @@ import type {
   Itinerary,
   Trigger,
   TriggerList,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 import { PlanbRequestPage } from './PlanbRequestPage';
 

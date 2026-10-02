@@ -11,8 +11,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PlaceGridCard } from '@/entities/place';
-import type { Place } from '@/shared/api/generated/schemas';
-import { PoiCategory } from '@/shared/api/generated/schemas';
+import type { Place } from '@/shared/api/index.schemas';
+import { PoiCategory } from '@/shared/api/index.schemas';
 import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { Skeleton } from '@/shared/ui/Skeleton';

@@ -1,4 +1,4 @@
-import { PersonalizationInfoReason } from '@/shared/api/generated/schemas';
+import { PersonalizationInfoReason } from '@/shared/api/index.schemas';
 
 import { personalizationCopy } from './personalizationCopy';
 

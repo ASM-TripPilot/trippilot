@@ -1,4 +1,4 @@
-import { usePostTripsTripIdReplanSessions } from '@/shared/api/generated/trips/trips';
+import { usePostTripsTripIdReplanSessions } from '@/shared/api/index.hooks';
 
 /**
  * TRIP-439 · AC-1 — 재계획 세션을 여는 POST(`/trips/{tripId}/replan-sessions`)의 얇은 래퍼.

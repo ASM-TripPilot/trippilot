@@ -1,7 +1,7 @@
 import { useLocalSearchParams } from 'expo-router';
 
 import { MustVisitListPage } from '@/pages/itinerary/itinerary-mustvisit';
-import type { GenerateItineraryRequestGenerationMode } from '@/shared/api/generated/schemas';
+import type { GenerateItineraryRequestGenerationMode } from '@/shared/api/index.schemas';
 
 /** h05 필수 방문지 (선택) — 얇은 라우트, 배선은 `pages/itinerary/itinerary-mustvisit`가 진다
  * (`trips/new/step1.tsx` 선례). params 는 여기서만 읽어 prop 으로 내린다. 완전AI 는 mode 없이

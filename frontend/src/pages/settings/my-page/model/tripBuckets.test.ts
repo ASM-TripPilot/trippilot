@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 
 import type { TripPhase } from '@/entities/trip';
-import type { Trip, TripStatus } from '@/shared/api/generated/schemas';
+import type { Trip, TripStatus } from '@/shared/api/index.schemas';
 
 import * as tripBucketsModule from './tripBuckets';
 import { bucketTrips, phaseBucket, type TripBucket } from './tripBuckets';

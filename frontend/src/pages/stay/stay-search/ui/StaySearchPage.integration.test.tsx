@@ -10,7 +10,7 @@ import {
 } from '@testing-library/react-native';
 import { server } from '@/mocks/server';
 import { StaySearchPage } from './StaySearchPage';
-import type { StayItem, SavedStay } from '@/shared/api/generated/schemas';
+import type { StayItem, SavedStay } from '@/shared/api/index.schemas';
 import { resetPressGuard } from '@/shared/press/pressGuard';
 import { regionPickerHref } from '@/features/explore';
 import {

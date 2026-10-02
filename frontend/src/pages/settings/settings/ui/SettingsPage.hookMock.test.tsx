@@ -16,17 +16,17 @@ import {
   useGetMe,
   useGetMeExport,
   usePostMeDeletion,
-} from '@/shared/api/generated/account/account';
-import { useGetMeLocationConsent } from '@/shared/api/generated/location/location';
-import { useGetMePreferences } from '@/shared/api/generated/preferences/preferences';
-import type { AccountExport } from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.hooks';
+import { useGetMeLocationConsent } from '@/shared/api/index.hooks';
+import { useGetMePreferences } from '@/shared/api/index.hooks';
+import type { AccountExport } from '@/shared/api/index.schemas';
 import {
   useGetMeProfile,
   useGetMeSettings,
   usePatchMeProfileNickname,
   usePatchMeSettings,
-} from '@/shared/api/generated/profile/profile';
-import { useGetMePersonalization } from '@/shared/api/generated/reflection/reflection';
+} from '@/shared/api/index.hooks';
+import { useGetMePersonalization } from '@/shared/api/index.hooks';
 import { WithToastHost, resetToast } from '@/test-support/toastHarness';
 import { SettingsPage } from '..';
 import {

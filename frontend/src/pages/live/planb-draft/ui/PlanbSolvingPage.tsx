@@ -17,7 +17,7 @@ import { useReplanSession } from '../model/useReplanSession';
 import {
   useGetTripsTripIdVisitsDaysDay,
   usePostTripsTripIdReplanSessionsSessionIdCancel,
-} from '@/shared/api/generated/trips/trips';
+} from '@/shared/api/index.hooks';
 
 import { ReplanLeaveDialog } from './ReplanLeaveDialog';
 import { ReplanSolvingView } from './ReplanSolvingView';

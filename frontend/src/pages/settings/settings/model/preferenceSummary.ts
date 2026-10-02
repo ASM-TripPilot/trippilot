@@ -6,7 +6,7 @@
  * 값은 서버 enum 원문을 서버 순서대로 가운뎃점으로 잇는다(D5). 동행은 반려동물을 덧붙이고,
  * 예산은 등급만 쓴다(`rawAmount` 무시, D6).
  */
-import type { PreferenceView } from '@/shared/api/generated/schemas';
+import type { PreferenceView } from '@/shared/api/index.schemas';
 
 import { initialSelection } from '@/features/edit-preferences';
 

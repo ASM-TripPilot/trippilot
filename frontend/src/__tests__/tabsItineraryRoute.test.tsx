@@ -6,11 +6,11 @@ import type {
   Itinerary,
   ItineraryDaysItemSlotsItem,
   Trip,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import {
   useGetTrips,
   useGetTripsTripIdItinerary,
-} from '@/shared/api/generated/trips/trips';
+} from '@/shared/api/index.hooks';
 import ItineraryTab from '@/app/(tabs)/itinerary';
 import { useTripWizardStore } from '@/features/create-trip';
 import {

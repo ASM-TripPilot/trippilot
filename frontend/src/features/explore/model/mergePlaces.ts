@@ -1,4 +1,4 @@
-import type { Place } from '@/shared/api/generated/schemas';
+import type { Place } from '@/shared/api/index.schemas';
 
 /**
  * 지역별로 따로 받아온 여러 `Place[]` 목록을 하나로 합친다(다지역 '꼭 갈 곳 더 담기', TRIP-687).

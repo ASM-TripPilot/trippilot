@@ -4,7 +4,7 @@ import type {
   ItineraryDaysItemSlotsItem,
   ItineraryGenerationState,
   ItinerarySolveMode,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 /**
  * TRIP-297 · h11 초안 화면의 순수 판정 5종 + 폴링 상수 2종.

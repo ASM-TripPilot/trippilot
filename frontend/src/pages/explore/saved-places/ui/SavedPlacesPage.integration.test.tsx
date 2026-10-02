@@ -19,9 +19,9 @@ import type {
   Region,
   SavedPlace,
   Trip,
-} from '@/shared/api/generated/schemas';
-import { RegionLevel } from '@/shared/api/generated/schemas';
-import { useGetTripsTripIdMustVisits } from '@/shared/api/generated/trips/trips';
+} from '@/shared/api/index.schemas';
+import { RegionLevel } from '@/shared/api/index.schemas';
+import { useGetTripsTripIdMustVisits } from '@/shared/api/index.hooks';
 import { optimisticSavedPlaceId } from '@/features/save-place';
 import { wizardOriginParams } from '@/features/create-trip';
 import type { MustVisitSeedItem } from '@/features/create-trip';

@@ -9,13 +9,13 @@ import {
   resolveMustVisitListView,
 } from '@/features/itinerary';
 import { MustVisitPickerScreen } from './MustVisitPickerScreen';
-import type { GenerateItineraryRequestGenerationMode } from '@/shared/api/generated/schemas';
+import type { GenerateItineraryRequestGenerationMode } from '@/shared/api/index.schemas';
 import {
   getGetTripsTripIdMustVisitsQueryKey,
   useDeleteTripsTripIdMustVisitsMustVisitId,
   useGetTripsTripIdMustVisits,
-} from '@/shared/api/generated/trips/trips';
-import { getAccessToken } from '@/shared/api/tokenManager';
+} from '@/shared/api/index.hooks';
+import { getAccessToken } from '@/shared/api';
 import { guardPress } from '@/shared/press';
 
 /**

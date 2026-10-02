@@ -4,10 +4,10 @@ import { useRouter } from 'expo-router';
 import {
   useGetTrips,
   useGetTripsTripIdItinerary,
-} from '@/shared/api/generated/trips/trips';
-import { useGetPlaces } from '@/shared/api/generated/places/places';
-import { getAccessToken } from '@/shared/api/tokenManager';
-import { isNotFound } from '@/shared/api/isNotFound';
+} from '@/shared/api/index.hooks';
+import { useGetPlaces } from '@/shared/api/index.hooks';
+import { getAccessToken } from '@/shared/api';
+import { isNotFound } from '@/shared/api';
 import { seoulDate } from '@/shared/date';
 import { formatNightsLabel } from '@/entities/trip';
 import { formatTripRange } from '@/entities/trip';

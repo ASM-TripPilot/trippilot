@@ -37,7 +37,7 @@ import { SHEET_HANDLE_INDICATOR_STYLE } from '@/features/trip/index.view';
 
 import { SavedStayCard } from '@/entities/stay';
 import { formatBaseNightRange } from '@/entities/trip';
-import type { SavedStay } from '@/shared/api/generated/schemas';
+import type { SavedStay } from '@/shared/api/index.schemas';
 
 import { CheckGlyph, SearchGlyph } from '@/features/trip/index.view';
 

@@ -1,4 +1,4 @@
-import type { StayItem } from '@/shared/api/generated/schemas';
+import type { StayItem } from '@/shared/api/index.schemas';
 
 /**
  * 숙소 항목의 단일 식별 출처(AC-6 · 01b Seed Q1). `StayItem`에 계약상 `stayId`가 없어

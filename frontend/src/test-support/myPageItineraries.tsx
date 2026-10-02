@@ -2,7 +2,7 @@ import type { ReactElement, ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render } from '@testing-library/react-native';
 
-import type { Itinerary, Trip } from '@/shared/api/generated/schemas';
+import type { Itinerary, Trip } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-1123 · l03 마이페이지 테스트 공용 — 페이지가 여행마다 부르는 일정 조회(`useQueries` +

@@ -8,8 +8,8 @@ import {
   postSocialLogin,
   postSocialTokenLogin,
 } from '@/shared/api';
-import { getMePreferences } from '@/shared/api/generated/preferences/preferences';
-import { postTrips } from '@/shared/api/generated/trips/trips';
+import { getMePreferences } from '@/shared/api/index.hooks';
+import { postTrips } from '@/shared/api/index.hooks';
 import { server } from './server';
 import { resetScenario, setScenario } from './scenarios';
 

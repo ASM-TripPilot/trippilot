@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 
-import type { BaseAssignment } from '@/shared/api/generated/schemas';
+import type { BaseAssignment } from '@/shared/api/index.schemas';
 
 import { basesChanged } from './basesChanged';
 

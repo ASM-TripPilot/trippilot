@@ -7,7 +7,7 @@ import { formatDayLabel } from '@/entities/trip';
 import { MapView, type MapCenter, type MapPin } from '@/shared/map';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 import { StateNotice } from '@/shared/ui/StateNotice';
-import type { ReflectionStats } from '@/shared/api/generated/schemas';
+import type { ReflectionStats } from '@/shared/api/index.schemas';
 
 import type { MapNotice } from '../model/missingParts';
 import { ChangeSummaryRow } from './ChangeSummaryRow';

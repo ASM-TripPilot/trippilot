@@ -22,15 +22,15 @@ import {
   publishGateDestination,
   resetGateDestination,
 } from '@/features/auth/model/gateDestination';
-import { useGetMe } from '@/shared/api/generated/account/account';
-import { useGetMeLocationConsent } from '@/shared/api/generated/location/location';
-import { useGetMePreferences } from '@/shared/api/generated/preferences/preferences';
+import { useGetMe } from '@/shared/api/index.hooks';
+import { useGetMeLocationConsent } from '@/shared/api/index.hooks';
+import { useGetMePreferences } from '@/shared/api/index.hooks';
 import {
   useGetMeProfile,
   useGetMeSettings,
   usePatchMeSettings,
-} from '@/shared/api/generated/profile/profile';
-import { useGetMePersonalization } from '@/shared/api/generated/reflection/reflection';
+} from '@/shared/api/index.hooks';
+import { useGetMePersonalization } from '@/shared/api/index.hooks';
 import { clearTokens, getTokens, saveTokens } from '@/shared/storage';
 import { registerPushToken } from '@/shared/push';
 import { primeExpoToken, primeOsPermission } from '@/test-support/pushOsFake';

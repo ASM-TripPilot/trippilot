@@ -39,8 +39,8 @@ import {
   useGetMeLocationConsent,
   usePatchMeLocationConsentOsPermission,
   usePutMeLocationConsent,
-} from '@/shared/api/generated/location/location';
-import type { LocationConsent } from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.hooks';
+import type { LocationConsent } from '@/shared/api/index.schemas';
 
 import { LocationConsentPage } from '..';
 

@@ -3,7 +3,7 @@ import { create, type StateCreator } from 'zustand';
 import type {
   CompanionType,
   TripDestination,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 import { mergeMustVisitSeeds, type MustVisitSeedItem } from './mustVisitSeed';
 import { nightsSum } from './tripDraft';

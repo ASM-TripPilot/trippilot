@@ -1,6 +1,6 @@
 import { create, type StateCreator } from 'zustand';
 
-import type { StartReplanRequestScope } from '@/shared/api/generated/schemas/startReplanRequestScope';
+import type { StartReplanRequestScope } from '@/shared/api/index.schemas';
 
 import { DEFAULT_REPLAN_SCOPE } from './replanScope';
 

@@ -2,7 +2,7 @@ import type {
   BaseAssignment,
   SavedStay,
   VisitCheck,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 /**
  * TRIP-569 · US-REC-05 · BR-U5-25·26·27 — 방문 기록을 등록 숙소·날짜에 귀속하되 **저장하지

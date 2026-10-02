@@ -28,9 +28,9 @@ import BottomSheet, {
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 
-import type { Place } from '@/shared/api/generated/schemas';
-import { PoiCategory } from '@/shared/api/generated/schemas';
-import { getAccessToken } from '@/shared/api/tokenManager';
+import type { Place } from '@/shared/api/index.schemas';
+import { PoiCategory } from '@/shared/api/index.schemas';
+import { getAccessToken } from '@/shared/api';
 import { BottomTabBar, shellTabHref } from '@/shared/ui/BottomTabBar';
 
 import { resolvePlaceListState } from '@/features/explore';

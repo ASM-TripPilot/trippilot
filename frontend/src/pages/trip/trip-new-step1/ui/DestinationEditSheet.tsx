@@ -31,7 +31,7 @@ import BottomSheet, {
 
 import { SHEET_HANDLE_INDICATOR_STYLE } from '@/features/trip/index.view';
 
-import type { TripDestination } from '@/shared/api/generated/schemas';
+import type { TripDestination } from '@/shared/api/index.schemas';
 
 import {
   PlusGlyph,

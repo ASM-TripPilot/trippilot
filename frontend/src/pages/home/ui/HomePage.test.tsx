@@ -6,11 +6,11 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import type { Place, Trip } from '@/shared/api/generated/schemas';
+import type { Place, Trip } from '@/shared/api/index.schemas';
 import {
   ItineraryGenerationState,
   ItineraryStatus,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import { seoulDate } from '@/shared/date';
 import { SAVE_FAILURE_NOTICE } from '@/features/save-place';
 import { regionPickerHref } from '@/features/explore';

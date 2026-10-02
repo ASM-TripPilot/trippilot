@@ -10,15 +10,15 @@ import { GeneratingScreen } from './GeneratingScreen';
 import type {
   GenerateItineraryRequestGenerationMode,
   Itinerary,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripIdItinerary,
   useGetTripsTripIdMustVisits,
   usePostTripsTripIdItinerary,
-} from '@/shared/api/generated/trips/trips';
-import { isNotFound } from '@/shared/api/isNotFound';
-import { getAccessToken } from '@/shared/api/tokenManager';
+} from '@/shared/api/index.hooks';
+import { isNotFound } from '@/shared/api';
+import { getAccessToken } from '@/shared/api';
 import type { MapCenter, MapPin } from '@/shared/map';
 import { showToast } from '@/shared/ui/Toast';
 

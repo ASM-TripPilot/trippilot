@@ -4,7 +4,7 @@ import { renderRouter, screen } from 'expo-router/testing-library';
 
 import { buildSlotKey, parseSlotKey } from '@/entities/itinerary-slot';
 import { itineraryDestinationHref } from '@/features/itinerary/index.view';
-import type { ItineraryDaysItem } from '@/shared/api/generated/schemas';
+import type { ItineraryDaysItem } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-1006 A2 · 같이 짜기 재진입 목적지가 **문자열 경로**로 슬롯 채우기 화면을 가리킨다 — 그 경로가

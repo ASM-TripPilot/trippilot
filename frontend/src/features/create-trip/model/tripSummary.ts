@@ -1,7 +1,7 @@
 import type {
   CompanionType,
   TripDestination,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import { formatDateRangeWithDow } from '@/entities/trip';
 import { nightsCountLabel } from '@/entities/trip';
 

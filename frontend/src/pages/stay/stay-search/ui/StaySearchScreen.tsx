@@ -18,7 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { formatPrice } from '@/entities/stay';
 import { StaySearchCard } from '@/entities/stay';
-import type { StayItem } from '@/shared/api/generated/schemas';
+import type { StayItem } from '@/shared/api/index.schemas';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
 import { StateNotice, type StateNoticeAction } from '@/shared/ui/StateNotice';

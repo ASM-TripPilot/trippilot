@@ -23,7 +23,7 @@ import {
   View,
 } from 'react-native';
 
-import type { StayDetail } from '@/shared/api/generated/schemas';
+import type { StayDetail } from '@/shared/api/index.schemas';
 
 import { formatPrice } from '@/entities/stay';
 import { MapView } from '@/shared/map';

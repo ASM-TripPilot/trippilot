@@ -1,7 +1,7 @@
 /**
  * @jest-environment node
  */
-import type { Trigger } from '@/shared/api/generated/schemas';
+import type { Trigger } from '@/shared/api/index.schemas';
 
 import { triggerWatchlist } from './triggerWatchlist';
 

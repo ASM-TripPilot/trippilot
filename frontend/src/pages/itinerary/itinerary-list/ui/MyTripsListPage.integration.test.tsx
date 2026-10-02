@@ -14,7 +14,7 @@ import {
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
-import type { Itinerary, Trip } from '@/shared/api/generated/schemas';
+import type { Itinerary, Trip } from '@/shared/api/index.schemas';
 import { MyTripsListPage } from '@/pages/itinerary/itinerary-list';
 
 /**

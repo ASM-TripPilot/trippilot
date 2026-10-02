@@ -1,12 +1,9 @@
 import { type ReactElement, useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 
-import type { BaseAssignment, SavedStay } from '@/shared/api/generated/schemas';
-import { useGetSavedStays } from '@/shared/api/generated/saved-stays/saved-stays';
-import {
-  useGetTrips,
-  useGetTripsTripIdBases,
-} from '@/shared/api/generated/trips/trips';
+import type { BaseAssignment, SavedStay } from '@/shared/api/index.schemas';
+import { useGetSavedStays } from '@/shared/api/index.hooks';
+import { useGetTrips, useGetTripsTripIdBases } from '@/shared/api/index.hooks';
 import { buildStayTripLink, type StayTripLink } from '../model/stayTripLink';
 import { MyStaysScreen, type MyStayRowVM } from './MyStaysScreen';
 import { isOtaSource } from '@/entities/stay';

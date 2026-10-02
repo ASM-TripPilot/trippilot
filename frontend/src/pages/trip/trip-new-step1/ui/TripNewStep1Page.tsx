@@ -14,15 +14,15 @@ import {
   getTripsTripIdMustVisits,
   patchTripsTripId,
   postTripsTripIdMustVisits,
-} from '@/shared/api/generated/trips/trips';
+} from '@/shared/api/index.hooks';
 import type {
   CompanionType,
   CreateTripRequest,
   MustVisit,
-} from '@/shared/api/generated/schemas';
-import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
-import { isNotFound } from '@/shared/api/isNotFound';
-import { getAccessToken } from '@/shared/api/tokenManager';
+} from '@/shared/api/index.schemas';
+import { isAlreadyRegistered } from '@/shared/api';
+import { isNotFound } from '@/shared/api';
+import { getAccessToken } from '@/shared/api';
 import { seoulDate } from '@/shared/date';
 import { shiftMonth } from '@/shared/date';
 import { toggleMulti } from '@/shared/pref';

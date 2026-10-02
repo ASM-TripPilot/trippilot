@@ -22,7 +22,7 @@ import BottomSheet, {
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 
-import type { StayItem } from '@/shared/api/generated/schemas';
+import type { StayItem } from '@/shared/api/index.schemas';
 
 import { formatPrice } from '@/entities/stay';
 import { otaConfirmLabel, otaDisplayName } from '@/entities/stay';

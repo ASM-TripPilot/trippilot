@@ -12,7 +12,7 @@ import {
   type NotificationSection,
 } from './NotificationInboxScreen';
 import { formatRelativeTime } from '@/shared/date';
-import type { Notification } from '@/shared/api/generated/schemas';
+import type { Notification } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-576 · l01 알림함 페이지(d02 배선 층) — 조회 → groupByDay·VM 조립 → 화면 → router.push.

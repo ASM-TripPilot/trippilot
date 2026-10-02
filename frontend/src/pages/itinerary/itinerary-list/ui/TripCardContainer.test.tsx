@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import type { Itinerary, Trip } from '@/shared/api/generated/schemas';
-import { useGetTripsTripIdItinerary } from '@/shared/api/generated/trips/trips';
+import type { Itinerary, Trip } from '@/shared/api/index.schemas';
+import { useGetTripsTripIdItinerary } from '@/shared/api/index.hooks';
 
 import { TripCardContainer } from './TripCardContainer';
 

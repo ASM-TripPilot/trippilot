@@ -1,7 +1,7 @@
 import { useLocalSearchParams } from 'expo-router';
 
 import { GeneratingPage } from '@/pages/itinerary/itinerary-generating';
-import type { GenerateItineraryRequestGenerationMode } from '@/shared/api/generated/schemas';
+import type { GenerateItineraryRequestGenerationMode } from '@/shared/api/index.schemas';
 
 /** h09 AI 일정 생성 중 — 얇은 라우트, 배선은 `pages/itinerary/itinerary-generating`가 진다
  * (`draft.tsx` 선례). params 는 여기서만 읽어 prop 으로 내린다. 완전AI 는 h02 가 `mode=FULLY_AI` 를

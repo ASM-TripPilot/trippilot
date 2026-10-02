@@ -15,7 +15,7 @@
 import type { ReactElement } from 'react';
 import { router } from 'expo-router';
 
-import { getAccessToken } from '@/shared/api/tokenManager';
+import { getAccessToken } from '@/shared/api';
 
 import { resolvePlaceListState } from '@/features/explore';
 import { stayKey } from '@/features/save-stay';

@@ -10,7 +10,7 @@ import { useSavedStays } from '@/features/trip';
 import { useStayAddresses } from '../model/useStayAddresses';
 import { useAssignBase, useTripBases } from '@/features/assign-trip-base';
 import { StaySelectSheet, type StaySelectCandidate } from './StaySelectSheet';
-import type { TripDestination } from '@/shared/api/generated/schemas';
+import type { TripDestination } from '@/shared/api/index.schemas';
 import { guardPress, openPressGuardWindow } from '@/shared/press';
 import {
   TripWizardStep2Screen,

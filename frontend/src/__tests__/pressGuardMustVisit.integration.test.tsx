@@ -13,7 +13,7 @@ import type {
   Place,
   SavedPlace,
   Trip,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { resetPressGuard } from '@/shared/press/pressGuard';
 import {

@@ -8,7 +8,7 @@
 import type {
   GeocodeCandidate,
   RegisterSavedStayRequest,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 /** 3탭 셸의 탭 식별자(TRIP-199). `linkpaste`는 여전히 잠겨 있다(D6·범위 밖). */
 export type StayRegisterTab = 'mapsearch' | 'linkpaste' | 'pin';

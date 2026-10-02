@@ -1,6 +1,6 @@
 import { formatNightsLabel } from '@/entities/trip';
 import { formatConfirmedDateRange } from '@/entities/trip';
-import type { ItineraryDaysItem } from '@/shared/api/generated/schemas';
+import type { ItineraryDaysItem } from '@/shared/api/index.schemas';
 
 import { buildPlanDayTabs, resolvePlanState } from './planState';
 

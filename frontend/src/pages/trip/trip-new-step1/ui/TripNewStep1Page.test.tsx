@@ -11,7 +11,7 @@ import type {
   SavedPlace,
   PreferenceView,
   Place,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import {
   clearAccessToken,
   getAccessToken,

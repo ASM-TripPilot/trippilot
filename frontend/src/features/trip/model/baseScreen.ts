@@ -1,4 +1,4 @@
-import type { DayCoverage } from '@/shared/api/generated/schemas';
+import type { DayCoverage } from '@/shared/api/index.schemas';
 
 /**
  * g02 거점 숙소 화면이 그릴 **문자열**을 만드는 순수 함수들(TRIP-225). 네트워크·시계를

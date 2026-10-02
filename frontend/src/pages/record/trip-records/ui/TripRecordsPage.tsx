@@ -25,8 +25,8 @@ import { VisitTimeSheet } from './VisitTimeSheet';
 import {
   useGetTripsTripId,
   useGetTripsTripIdItinerary,
-} from '@/shared/api/generated/trips/trips';
-import { ArriveRequestSource } from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.hooks';
+import { ArriveRequestSource } from '@/shared/api/index.schemas';
 import type { MapCenter } from '@/shared/map';
 import { seoulDate, seoulTime } from '@/shared/date';
 import { guardPress } from '@/shared/press';

@@ -1,4 +1,4 @@
-import type { Trigger } from '@/shared/api/generated/schemas';
+import type { Trigger } from '@/shared/api/index.schemas';
 
 import { WATCH_CATEGORY_LABEL } from '@/features/planb/index.view';
 

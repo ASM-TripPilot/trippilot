@@ -2,7 +2,7 @@ import {
   formatSectionRange,
   formatTripRange,
 } from '@/entities/trip/lib/formatTripPeriod';
-import type { DayCoverage } from '@/shared/api/generated/schemas';
+import type { DayCoverage } from '@/shared/api/index.schemas';
 
 import { unresolvedDaysView } from './baseScreen';
 

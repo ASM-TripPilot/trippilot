@@ -1,4 +1,4 @@
-import type { MustVisit } from '@/shared/api/generated/schemas';
+import type { MustVisit } from '@/shared/api/index.schemas';
 
 export interface MustVisitSyncPlan {
   /** 새로 등록할 poiId — 시드 순서, 중복 없음. */

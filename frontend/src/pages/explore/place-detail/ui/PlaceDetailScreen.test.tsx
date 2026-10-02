@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react-native';
 
-import type { Place } from '@/shared/api/generated/schemas';
+import type { Place } from '@/shared/api/index.schemas';
 
 import { PlaceDetailScreen } from './PlaceDetailScreen';
 
