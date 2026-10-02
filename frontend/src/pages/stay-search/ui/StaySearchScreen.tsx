@@ -26,7 +26,7 @@ import { StateNotice, type StateNoticeAction } from '@/shared/ui/StateNotice';
 import { filterReasonLabel } from '../model/filterReasonLabel';
 import { PRICE_BUCKETS, type PriceBucketId } from '../model/priceRangeFilter';
 import type { StaySearchState } from '../model/staySearchState';
-import { stayKey } from '@/features/stay/model/stayKey';
+import { stayKey } from '@/features/save-stay/model/stayKey';
 import { PartialFailureBanner } from './PartialFailureBanner';
 import { SkeletonList } from './SkeletonList';
 import {

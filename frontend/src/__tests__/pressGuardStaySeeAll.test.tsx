@@ -69,7 +69,7 @@ jest.mock('@/features/stay/model/useStaySearch', () => ({
   }),
 }));
 
-jest.mock('@/features/stay/model/savedStays', () => ({
+jest.mock('@/features/save-stay/model/savedStays', () => ({
   useSavedStays: () => ({
     isSaved: () => false,
     save: jest.fn(),

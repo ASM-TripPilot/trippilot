@@ -15,7 +15,7 @@ import { pickTrendingPlaces } from '@/entities/place/lib/trendingPlaces';
 import { usePlaceSaveToggle } from '@/features/save-place/model/placeSaveToggle';
 import { useSavedPlaces } from '@/features/save-place/model/savedPlaces';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
-import { useSavedStays } from '@/features/stay/model/savedStays';
+import { useSavedStays } from '@/features/save-stay/model/savedStays';
 import {
   itineraryDestinationHref,
   resolveItineraryDestination,

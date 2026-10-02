@@ -5,7 +5,7 @@ import {
   within,
 } from '@testing-library/react-native';
 import type { StayItem } from '@/shared/api/generated/schemas';
-import { stayKey } from '@/features/stay/model/stayKey';
+import { stayKey } from '@/features/save-stay/model/stayKey';
 import { StaySearchScreen } from './StaySearchScreen';
 import type { StaySearchState } from '../model/staySearchState';
 import { PRICE_BUCKETS, type PriceBucketId } from '../model/priceRangeFilter';

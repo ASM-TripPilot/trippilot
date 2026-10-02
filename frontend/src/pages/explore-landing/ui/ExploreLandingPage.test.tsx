@@ -16,7 +16,7 @@ import type {
 import { RegionLevel } from '@/shared/api/generated/schemas';
 import { resetPressGuard } from '@/shared/press/pressGuard';
 import { formatPrice } from '@/entities/stay/lib/formatPrice';
-import { stayKey } from '@/features/stay/model/stayKey';
+import { stayKey } from '@/features/save-stay/model/stayKey';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import {
@@ -75,7 +75,7 @@ jest.mock('@/features/save-place/model/savedPlaces', () => ({
 }));
 
 const mockUseSavedStays = jest.fn();
-jest.mock('@/features/stay/model/savedStays', () => ({
+jest.mock('@/features/save-stay/model/savedStays', () => ({
   useSavedStays: (...args: unknown[]) => mockUseSavedStays(...args),
 }));
 

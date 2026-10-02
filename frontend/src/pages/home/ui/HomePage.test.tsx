@@ -68,7 +68,7 @@ jest.mock('@/features/save-place/model/savedPlaces', () => ({
 
 // 딥 경로로 목한다 — features/trip 의 동명 훅이 아니다(QueryClient 없이 실훅이 돌면 크래시).
 const mockUseSavedStays = jest.fn();
-jest.mock('@/features/stay/model/savedStays', () => ({
+jest.mock('@/features/save-stay/model/savedStays', () => ({
   useSavedStays: (...args: unknown[]) => mockUseSavedStays(...args),
 }));
 

@@ -18,7 +18,7 @@ import { router } from 'expo-router';
 import { getAccessToken } from '@/shared/api/tokenManager';
 
 import { resolvePlaceListState } from '@/features/explore/model/placeListState';
-import { stayKey } from '@/features/stay/model/stayKey';
+import { stayKey } from '@/features/save-stay/model/stayKey';
 import {
   SavedStayListScreen,
   type SavedStayCardVM,

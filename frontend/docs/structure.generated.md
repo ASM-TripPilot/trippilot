@@ -404,6 +404,12 @@
 - `src/features/save-place/model/savedPlaceIndex.ts`  →  findSavedPlaceId · optimisticSavedPlaceId
 - `src/features/save-place/model/savedPlaces.ts`  →  SavedPlacesFailureReason · SavedPlacesOutcome · useSavedPlaces
 
+## src/features/save-stay/model/
+- `src/features/save-stay/model/buildSaveStayRequest.ts`  →  buildSaveStayRequest
+- `src/features/save-stay/model/savedStayIndex.ts`  →  findSavedStayId · optimisticSavedStayId
+- `src/features/save-stay/model/savedStays.ts`  →  SavedStaysFailureReason · SavedStaysOutcome · useSavedStays
+- `src/features/save-stay/model/stayKey.ts`  →  stayKey
+
 ## src/features/settings/model/
 - `src/features/settings/model/preferenceDraft.ts`  →  PreferenceSelection · initialSelection · buildPreferenceInput
 
@@ -413,10 +419,6 @@
 - `src/features/settings/ui/cardShadow.ts`  →  CARD_SHADOW
 
 ## src/features/stay/model/
-- `src/features/stay/model/buildSaveStayRequest.ts`  →  buildSaveStayRequest
-- `src/features/stay/model/savedStayIndex.ts`  →  findSavedStayId · optimisticSavedStayId
-- `src/features/stay/model/savedStays.ts`  →  SavedStaysFailureReason · SavedStaysOutcome · useSavedStays
-- `src/features/stay/model/stayKey.ts`  →  stayKey
 - `src/features/stay/model/useStaySearch.ts`  →  useStaySearch
 
 ## src/features/stay/ui/
