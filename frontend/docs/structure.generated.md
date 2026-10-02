@@ -341,14 +341,6 @@
 - `src/features/itinerary/ui/SaveConflictDialog.tsx`  →  SaveConflictDialog
 - `src/features/itinerary/ui/UnplacedMustVisitNotice.tsx`  →  UnplacedMustVisitNotice
 
-## src/features/notification/model/
-- `src/features/notification/model/channelAvailability.ts`  →  PushPermission · PushColumnState · resolvePushColumn
-- `src/features/notification/model/groupByDay.ts`  →  NotificationGroups · groupByDay
-- `src/features/notification/model/notificationAction.ts`  →  notificationAction
-- `src/features/notification/model/notificationKind.ts`  →  NotificationIconKind · NotificationKindMeta · notificationKind
-- `src/features/notification/model/useNotificationInbox.ts`  →  UseNotificationInboxResult · useNotificationInbox
-- `src/features/notification/model/useToggles.ts`  →  ToggleChannel · ToggleOutcome · UseTogglesResult · useToggles
-
 ## src/features/notification/ui/
 - `src/features/notification/ui/NotificationGlyphs.tsx`  →  NotifBackChevronGlyph · NotifInfoGlyph · NotifWarningGlyph
 
@@ -411,21 +403,11 @@
 - `src/features/reflection/ui/ReflectionGlyphs.tsx`  →  BackArrowGlyph · LocationOffGlyph · PhotoOffGlyph · EmptyCircleGlyph · RetryGlyph · MoodSadGlyph · MoodSosoGlyph · MoodGoodGlyph
 
 ## src/features/settings/model/
-- `src/features/settings/model/dataAttribution.ts`  →  OSM_COPYRIGHT_URL
-- `src/features/settings/model/exportSummary.ts`  →  ExportSummary · resolveExportSummary
 - `src/features/settings/model/preferenceDraft.ts`  →  PreferenceSelection · initialSelection · buildPreferenceInput
-- `src/features/settings/model/preferenceSummary.ts`  →  PreferenceRowKey · PreferenceSummary · summarizePreferences
-- `src/features/settings/model/settingsSections.ts`  →  SettingsInput · SettingsRowChip · SettingsRowVM · SettingsGroupVM · buildSettingsSections · filterReadySettingsSections
-- `src/features/settings/model/stayTripLink.ts`  →  StayTripLink · buildStayTripLink
-- `src/features/settings/model/styleCardModel.ts`  →  StyleGauge · StyleCardVM · buildStyleCardModel
-- `src/features/settings/model/tripBuckets.ts`  →  TripBucket · phaseBucket · bucketTrips
-- `src/features/settings/model/usePersonalization.ts`  →  UsePersonalizationResult · usePersonalization
 
 ## src/features/settings/ui/
 - `src/features/settings/ui/BaseToggleDialog.tsx`  →  BaseToggleDialog
-- `src/features/settings/ui/InfoChip.tsx`  →  InfoChip
 - `src/features/settings/ui/SettingsGlyphs.tsx`  →  MUTED · MUTED_SOFT · ChevronRightGlyph · BookmarkGlyph · BarChartGlyph · ShareNodesGlyph · ListGlyph · EyeOffGlyph · GearGlyph · PencilGlyph · HeartGlyph · ChevronLeftGlyph · PersonGlyph · DownloadGlyph · ContrastGlyph · PinGlyph · BellGlyph · SparkleGlyph · ExternalLinkGlyph · BedGlyph · MenuBedGlyph · TrashGlyph · DocumentGlyph · LogoutGlyph
-- `src/features/settings/ui/StyleSummaryCard.tsx`  →  StyleSummaryCardProps · StyleSummaryCard
 - `src/features/settings/ui/cardShadow.ts`  →  CARD_SHADOW
 
 ## src/features/stay/model/
@@ -693,13 +675,22 @@
 ## src/pages/my-page/
 - `src/pages/my-page/index.ts`  →  MyPage
 
+## src/pages/my-page/model/
+- `src/pages/my-page/model/styleCardModel.ts`  →  StyleGauge · StyleCardVM · buildStyleCardModel
+- `src/pages/my-page/model/tripBuckets.ts`  →  TripBucket · phaseBucket · bucketTrips
+
 ## src/pages/my-page/ui/
+- `src/pages/my-page/ui/InfoChip.tsx`  →  InfoChip
 - `src/pages/my-page/ui/MyPage.tsx`  →  MyPage
 - `src/pages/my-page/ui/MyPageScreen.tsx`  →  MyPageScreenProps · MyPageScreen
 - `src/pages/my-page/ui/ProfileCard.tsx`  →  ProfileCardCounts · ProfileCardProps · ProfileCard
+- `src/pages/my-page/ui/StyleSummaryCard.tsx`  →  StyleSummaryCardProps · StyleSummaryCard
 
 ## src/pages/my-stays/
 - `src/pages/my-stays/index.ts`  →  MyStaysPage
+
+## src/pages/my-stays/model/
+- `src/pages/my-stays/model/stayTripLink.ts`  →  StayTripLink · buildStayTripLink
 
 ## src/pages/my-stays/ui/
 - `src/pages/my-stays/ui/MyStaysPage.tsx`  →  MyStaysPage
@@ -707,6 +698,12 @@
 
 ## src/pages/notification-inbox/
 - `src/pages/notification-inbox/index.ts`  →  NotificationInboxPage
+
+## src/pages/notification-inbox/model/
+- `src/pages/notification-inbox/model/groupByDay.ts`  →  NotificationGroups · groupByDay
+- `src/pages/notification-inbox/model/notificationAction.ts`  →  notificationAction
+- `src/pages/notification-inbox/model/notificationKind.ts`  →  NotificationIconKind · NotificationKindMeta · notificationKind
+- `src/pages/notification-inbox/model/useNotificationInbox.ts`  →  UseNotificationInboxResult · useNotificationInbox
 
 ## src/pages/notification-inbox/ui/
 - `src/pages/notification-inbox/ui/NotificationInboxGlyphs.tsx`  →  NotificationKindIcon · NotifBellGlyph
@@ -874,6 +871,10 @@
 ## src/pages/settings-notifications/
 - `src/pages/settings-notifications/index.ts`  →  NotificationSettingsPage
 
+## src/pages/settings-notifications/model/
+- `src/pages/settings-notifications/model/channelAvailability.ts`  →  PushPermission · PushColumnState · resolvePushColumn
+- `src/pages/settings-notifications/model/useToggles.ts`  →  ToggleChannel · ToggleOutcome · UseTogglesResult · useToggles
+
 ## src/pages/settings-notifications/ui/
 - `src/pages/settings-notifications/ui/NotificationSettingsPage.tsx`  →  NotificationSettingsPage
 - `src/pages/settings-notifications/ui/NotificationSettingsScreen.tsx`  →  ToggleValueMap · NotificationSettingsScreenProps · NotificationSettingsScreen
@@ -885,6 +886,7 @@
 
 ## src/pages/settings-personalization/model/
 - `src/pages/settings-personalization/model/personalizationCopy.ts`  →  personalizationCopy
+- `src/pages/settings-personalization/model/usePersonalization.ts`  →  UsePersonalizationResult · usePersonalization
 
 ## src/pages/settings-personalization/ui/
 - `src/pages/settings-personalization/ui/PersonalizationPage.tsx`  →  PersonalizationPage
@@ -905,7 +907,11 @@
 - `src/pages/settings/index.ts`  →  SettingsPage
 
 ## src/pages/settings/model/
+- `src/pages/settings/model/dataAttribution.ts`  →  OSM_COPYRIGHT_URL
 - `src/pages/settings/model/deletionScope.ts`  →  DELETION_SCOPE
+- `src/pages/settings/model/exportSummary.ts`  →  ExportSummary · resolveExportSummary
+- `src/pages/settings/model/preferenceSummary.ts`  →  PreferenceRowKey · PreferenceSummary · summarizePreferences
+- `src/pages/settings/model/settingsSections.ts`  →  SettingsInput · SettingsRowChip · SettingsRowVM · SettingsGroupVM · buildSettingsSections · filterReadySettingsSections
 
 ## src/pages/settings/ui/
 - `src/pages/settings/ui/DeleteAccountDialog.tsx`  →  DeleteAccountDialog

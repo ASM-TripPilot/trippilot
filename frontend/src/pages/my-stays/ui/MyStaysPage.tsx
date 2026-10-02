@@ -7,10 +7,7 @@ import {
   useGetTrips,
   useGetTripsTripIdBases,
 } from '@/shared/api/generated/trips/trips';
-import {
-  buildStayTripLink,
-  type StayTripLink,
-} from '@/features/settings/model/stayTripLink';
+import { buildStayTripLink, type StayTripLink } from '../model/stayTripLink';
 import { MyStaysScreen, type MyStayRowVM } from './MyStaysScreen';
 import { isOtaSource } from '@/entities/stay/config/affiliateNotice';
 

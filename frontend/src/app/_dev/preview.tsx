@@ -119,18 +119,18 @@ import {
 import {
   buildSettingsSections,
   filterReadySettingsSections,
-} from '@/features/settings/model/settingsSections';
+} from '@/pages/settings/model/settingsSections';
 import { BaseToggleDialog } from '@/features/settings/ui/BaseToggleDialog';
 import { DeleteAccountDialog } from '@/pages/settings/ui/DeleteAccountDialog';
 import { LocationConsentScreen } from '@/pages/settings-location/ui/LocationConsentScreen';
-import type { StyleCardVM } from '@/features/settings/model/styleCardModel';
+import type { StyleCardVM } from '@/pages/my-page/model/styleCardModel';
 import { MyPageScreen } from '@/pages/my-page/ui/MyPageScreen';
 import { PersonalizationScreen } from '@/pages/settings-personalization/ui/PersonalizationScreen';
 import {
   MyStaysScreen,
   type MyStayRowVM,
 } from '@/pages/my-stays/ui/MyStaysScreen';
-import { StyleSummaryCard } from '@/features/settings/ui/StyleSummaryCard';
+import { StyleSummaryCard } from '@/pages/my-page/ui/StyleSummaryCard';
 import { RevokeConfirmDialog } from '@/pages/settings-location/ui/RevokeConfirmDialog';
 import { SettingsScreen } from '@/pages/settings/ui/SettingsScreen';
 import { triggerLabel } from '@/features/planb/model/triggerLabel';

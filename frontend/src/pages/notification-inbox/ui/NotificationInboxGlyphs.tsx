@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import Svg, { Path } from 'react-native-svg';
 
-import type { NotificationIconKind } from '@/features/notification/model/notificationKind';
+import type { NotificationIconKind } from '../model/notificationKind';
 
 // l01 알림함 kind 아이콘 5종(home·swap·list·document·sun) — Figma 1598:2389 벡터를 인라인 SVG 로.
 // features 간 import 금지라 shared·타 feature 글리프를 재사용하지 못하고 feature-로컬로 그린다(리포 관례).

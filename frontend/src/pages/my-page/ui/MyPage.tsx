@@ -21,13 +21,10 @@ import {
 } from '@/entities/trip/lib/tripPhase';
 import { ChevronRightGlyph } from '@/entities/trip/ui/TripGlyphs';
 import { PastTripRow } from '@/entities/trip/ui/PastTripRow';
-import { buildStyleCardModel } from '@/features/settings/model/styleCardModel';
-import {
-  bucketTrips,
-  type TripBucket,
-} from '@/features/settings/model/tripBuckets';
+import { buildStyleCardModel } from '../model/styleCardModel';
+import { bucketTrips, type TripBucket } from '../model/tripBuckets';
 import { MyPageScreen } from './MyPageScreen';
-import { StyleSummaryCard } from '@/features/settings/ui/StyleSummaryCard';
+import { StyleSummaryCard } from './StyleSummaryCard';
 
 /**
  * TRIP-604 · l03 마이페이지 배선 — 프로필·계정·여행 목록을 조회해 분류(`bucketTrips`)·정렬한 뒤

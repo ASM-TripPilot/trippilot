@@ -4,10 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Toggle } from '@/shared/ui/Toggle';
 
-import type {
-  SettingsGroupVM,
-  SettingsRowVM,
-} from '@/features/settings/model/settingsSections';
+import type { SettingsGroupVM, SettingsRowVM } from '../model/settingsSections';
 import { DeleteAccountDialog } from './DeleteAccountDialog';
 import { ExportRow } from './ExportRow';
 import { LogoutConfirmDialog } from './LogoutConfirmDialog';

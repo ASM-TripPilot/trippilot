@@ -1,7 +1,7 @@
 import { type ReactElement } from 'react';
 import { useRouter } from 'expo-router';
 
-import { usePersonalization } from '@/features/settings/model/usePersonalization';
+import { usePersonalization } from '../model/usePersonalization';
 import { PersonalizationScreen } from './PersonalizationScreen';
 
 /**

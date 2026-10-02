@@ -9,7 +9,7 @@ import type { ReactTestInstance } from 'react-test-renderer';
 import {
   buildSettingsSections,
   type SettingsInput,
-} from '@/features/settings/model/settingsSections';
+} from '../model/settingsSections';
 import { SettingsScreen } from './SettingsScreen';
 import { ContrastGlyph } from '@/features/settings/ui/SettingsGlyphs';
 

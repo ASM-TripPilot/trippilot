@@ -5,8 +5,8 @@ import { useRouter } from 'expo-router';
 import {
   type PushPermission,
   resolvePushColumn,
-} from '@/features/notification/model/channelAvailability';
-import { useToggles } from '@/features/notification/model/useToggles';
+} from '../model/channelAvailability';
+import { useToggles } from '../model/useToggles';
 import {
   NotificationSettingsScreen,
   type ToggleValueMap,

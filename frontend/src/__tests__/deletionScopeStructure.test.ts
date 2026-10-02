@@ -16,7 +16,7 @@ import { join, relative, resolve, sep } from 'node:path';
  * 왜 소스 스캔인가: "목록이 한 곳에만 있다"는 런타임 동작이 아니라 코드 배치의 성질이다 —
  * 렌더 테스트로는 표현할 수 없고 소스 층에서만 잡힌다.
  *
- * 왜 **설정 표면 스코프**(features/settings·pages/settings·app/settings)인가, whole-repo 가 아니라:
+ * 왜 **설정 표면 스코프**(features/settings·pages/settings·app/settings·pages/my-page·pages/my-stays·pages/settings-personalization)인가, whole-repo 가 아니라:
  * `회고`·`요약` 같은 삭제 대상 어휘는 `features/reflection` 등에 **정당하게** 등장한다 —
  * 전 리포 스캔은 그걸 위반으로 오탐한다. AC-13 의 실제 표적은 "삭제 고지 목록이 다이얼로그에
  * 인라인 중복되는 것"이고, 그 중복이 생길 곳은 설정 표면뿐이다.
@@ -40,6 +40,9 @@ const SCAN_ROOTS = [
   join(SRC_ROOT, 'features', 'settings'),
   join(SRC_ROOT, 'pages', 'settings'),
   join(SRC_ROOT, 'app', 'settings'),
+  join(SRC_ROOT, 'pages', 'my-page'),
+  join(SRC_ROOT, 'pages', 'my-stays'),
+  join(SRC_ROOT, 'pages', 'settings-personalization'),
 ];
 const SOURCE_EXTENSIONS = ['.ts', '.tsx'];
 
@@ -121,6 +124,8 @@ describe('AC-13 · deletionScope 단일 소유 가드', () => {
     expect(existsSync(DELETION_SCOPE_FILE)).toBe(true);
     const items = quotedStringsOf(readFileSync(DELETION_SCOPE_FILE, 'utf8'));
 
+    // 사정거리 앵커 — 스캔 루트가 전부 실재한다(오타·이동으로 빈 목록이 되면 red).
+    expect(SCAN_ROOTS.filter((root) => !existsSync(root))).toEqual([]);
     const files = SCAN_ROOTS.flatMap((root) => collectSources(root));
     // 긍정 짝 — 스캔 집합이 비어 있지 않다(공집합이면 "위반 0"이 공허하다).
     expect(files.length).toBeGreaterThan(0);
