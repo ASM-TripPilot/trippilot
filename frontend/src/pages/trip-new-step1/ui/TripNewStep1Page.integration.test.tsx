@@ -225,10 +225,14 @@ describe('제출·예외 배선 (I-1~I-7)', () => {
 
   /** 프리필이 예산 요약 행(80만원)까지 흘러온 것을 기다린다 — budgetTotal·스냅숏이 실린 요청을 보려면 필요. */
   async function waitForPrefill(): Promise<void> {
-    await waitFor(() =>
-      expect(
-        screen.getByTestId('trip-wizard-summary-budget')
-      ).toHaveTextContent(/80만원/)
+    // I-1 이 합친 파일의 첫 테스트라 냉시작(모듈 첫 로드)을 흡수한다 — CI 에서 기본 1000ms 를 넘겨
+    // I-1 만 red(PR #857 CI 2회). TRIP-1144 `SavedPlacesPage` 첫 목록 대기와 같은 5000ms.
+    await waitFor(
+      () =>
+        expect(
+          screen.getByTestId('trip-wizard-summary-budget')
+        ).toHaveTextContent(/80만원/),
+      { timeout: 5000 }
     );
   }
 
