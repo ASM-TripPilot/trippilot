@@ -2,15 +2,16 @@ import { router } from 'expo-router';
 import { Pressable, Share, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { usePlaceDetail } from '@/features/execution/model/usePlaceDetail';
+import { BackArrowGlyph } from '@/features/execution/ui/ExecutionGlyphs';
+import { isNotFound } from '@/shared/api/isNotFound';
+import { StateNotice } from '@/shared/ui/StateNotice';
+
 import {
   buildPlaceDetailView,
   buildPlaceShareMessage,
-} from '@/features/execution/model/placeDetailView';
-import { usePlaceDetail } from '@/features/execution/model/usePlaceDetail';
-import { BackArrowGlyph } from '@/features/execution/ui/ExecutionGlyphs';
-import { PlaceDetailScreen } from '@/features/execution/ui/PlaceDetailScreen';
-import { isNotFound } from '@/shared/api/isNotFound';
-import { StateNotice } from '@/shared/ui/StateNotice';
+} from '../model/placeDetailView';
+import { PlaceDetailScreen } from './PlaceDetailScreen';
 
 /**
  * TRIP-398 · live-place 페이지(i05) — 조회·조립·렌더 배선의 단일 출처. `LiveItineraryPage` 선례.

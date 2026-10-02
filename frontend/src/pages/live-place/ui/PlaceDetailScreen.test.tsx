@@ -5,10 +5,13 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import type { PlaceDetailView } from '@/features/execution/model/placeDetailView';
+import {
+  BackArrowGlyph,
+  ShareGlyph,
+} from '@/features/execution/ui/ExecutionGlyphs';
 import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
 
-import { BackArrowGlyph, ShareGlyph } from './ExecutionGlyphs';
+import type { PlaceDetailView } from '../model/placeDetailView';
 import { PlaceDetailScreen } from './PlaceDetailScreen';
 
 /**
