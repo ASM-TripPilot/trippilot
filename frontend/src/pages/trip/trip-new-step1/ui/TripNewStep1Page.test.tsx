@@ -6,7 +6,7 @@ import {
   act,
 } from '@testing-library/react-native';
 
-import type { TripWizardStep1ScreenProps } from '@/pages/trip-new-step1/ui/TripWizardStep1Screen';
+import type { TripWizardStep1ScreenProps } from '@/pages/trip/trip-new-step1/ui/TripWizardStep1Screen';
 import type {
   SavedPlace,
   PreferenceView,
@@ -94,9 +94,9 @@ jest.mock('@/features/save-place/model/savedPlaces', () => ({
 let mockStubScreen = false;
 const mockScreenProps: { props?: { isLoading?: boolean } } = {};
 
-jest.mock('@/pages/trip-new-step1/ui/TripWizardStep1Screen', () => {
+jest.mock('@/pages/trip/trip-new-step1/ui/TripWizardStep1Screen', () => {
   const actual = jest.requireActual(
-    '@/pages/trip-new-step1/ui/TripWizardStep1Screen'
+    '@/pages/trip/trip-new-step1/ui/TripWizardStep1Screen'
   );
   return {
     ...actual,

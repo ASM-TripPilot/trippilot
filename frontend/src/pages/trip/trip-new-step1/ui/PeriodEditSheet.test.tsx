@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import type { TripDateRange } from '@/pages/trip-new-step1/model/tripDatePicker';
+import type { TripDateRange } from '@/pages/trip/trip-new-step1/model/tripDatePicker';
 
 import { PeriodEditSheet } from './PeriodEditSheet';
 

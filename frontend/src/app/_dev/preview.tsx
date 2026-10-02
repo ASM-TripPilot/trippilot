@@ -165,14 +165,14 @@ import { StayFilterSheet } from '@/pages/stay-search/ui/StayFilterSheet';
 import {
   TripWizardStep1Screen,
   type TripWizardStep1ScreenProps,
-} from '@/pages/trip-new-step1/ui/TripWizardStep1Screen';
-import { CompanionEditSheet } from '@/pages/trip-new-step1/ui/CompanionEditSheet';
-import { DestinationEditSheet } from '@/pages/trip-new-step1/ui/DestinationEditSheet';
-import { PeriodEditSheet } from '@/pages/trip-new-step1/ui/PeriodEditSheet';
+} from '@/pages/trip/trip-new-step1/ui/TripWizardStep1Screen';
+import { CompanionEditSheet } from '@/pages/trip/trip-new-step1/ui/CompanionEditSheet';
+import { DestinationEditSheet } from '@/pages/trip/trip-new-step1/ui/DestinationEditSheet';
+import { PeriodEditSheet } from '@/pages/trip/trip-new-step1/ui/PeriodEditSheet';
 import {
   StaySelectSheet,
   type StaySelectCandidate,
-} from '@/pages/trip-new-step2/ui/StaySelectSheet';
+} from '@/pages/trip/trip-new-step2/ui/StaySelectSheet';
 import { LiveLocationView } from '@/pages/live-location/ui/LiveLocationView';
 import { NoBaseNoticeCard } from '@/pages/itinerary-plan/ui/NoBaseNoticeCard';
 import { DraftFallbackBanner } from '@/pages/itinerary-draft/ui/DraftFallbackBanner';
@@ -182,14 +182,14 @@ import {
   type LiveHubSlot,
   type LiveHubViewProps,
 } from '@/pages/live-itinerary/ui/LiveHubView';
-import { BudgetEditSheet } from '@/pages/trip-new-step1/ui/BudgetEditSheet';
-import { PrefOverrideSheet } from '@/pages/trip-new-step1/ui/PrefOverrideSheet';
+import { BudgetEditSheet } from '@/pages/trip/trip-new-step1/ui/BudgetEditSheet';
+import { PrefOverrideSheet } from '@/pages/trip/trip-new-step1/ui/PrefOverrideSheet';
 import {
   TripWizardStep2Screen,
   type TripWizardStep2ScreenProps,
-} from '@/pages/trip-new-step2/ui/TripWizardStep2Screen';
-import { BaseRegenerateDialog } from '@/pages/trip-new-step2/ui/BaseRegenerateDialog';
-import { TripWizardLeaveDialog } from '@/pages/trip-new-step1/ui/TripWizardLeaveDialog';
+} from '@/pages/trip/trip-new-step2/ui/TripWizardStep2Screen';
+import { BaseRegenerateDialog } from '@/pages/trip/trip-new-step2/ui/BaseRegenerateDialog';
+import { TripWizardLeaveDialog } from '@/pages/trip/trip-new-step1/ui/TripWizardLeaveDialog';
 import { PrefStep1Screen } from '@/pages/onboarding-pref1/ui/PrefStep1Screen';
 import { PrefStep2Screen } from '@/pages/onboarding-pref2/ui/PrefStep2Screen';
 import { TermsScreen } from '@/pages/onboarding-terms/ui/TermsScreen';

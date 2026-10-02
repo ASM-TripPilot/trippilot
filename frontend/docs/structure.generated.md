@@ -1028,43 +1028,6 @@
 - `src/pages/travel-style/ui/TravelStylePage.tsx`  →  TravelStylePage
 - `src/pages/travel-style/ui/TravelStyleScreen.tsx`  →  TravelStyleScreenProps · TravelStyleScreen
 
-## src/pages/trip-new-step1/
-- `src/pages/trip-new-step1/index.ts`  →  TripNewStep1Page
-
-## src/pages/trip-new-step1/model/
-- `src/pages/trip-new-step1/model/budgetAmount.ts`  →  BudgetAmount · parseBudgetAmount · formatBudgetAmount · BudgetTier · budgetForTier · isBudgetTier · tierForAmount
-- `src/pages/trip-new-step1/model/createTripRequest.ts`  →  CreateTripInput · buildCreateTripRequest
-- `src/pages/trip-new-step1/model/mustVisitSync.ts`  →  MustVisitSyncPlan · planMustVisitSync
-- `src/pages/trip-new-step1/model/tripDatePicker.ts`  →  dateCell · TripDateRange
-- `src/pages/trip-new-step1/model/useCreateTrip.ts`  →  useCreateTrip
-- `src/pages/trip-new-step1/model/usePreferencePrefill.ts`  →  usePreferencePrefill
-
-## src/pages/trip-new-step1/ui/
-- `src/pages/trip-new-step1/ui/BudgetEditSheet.tsx`  →  BudgetEditSheetProps · BudgetEditSheet
-- `src/pages/trip-new-step1/ui/CompanionEditSheet.tsx`  →  CompanionEditSheetProps · CompanionEditSheet
-- `src/pages/trip-new-step1/ui/DestinationEditSheet.tsx`  →  DestinationEditSheetProps · DestinationEditSheet
-- `src/pages/trip-new-step1/ui/PeriodEditSheet.tsx`  →  PeriodEditSheetProps · PeriodEditSheet
-- `src/pages/trip-new-step1/ui/PrefOverrideSheet.tsx`  →  PrefOverrideSheetProps · PrefOverrideSheet
-- `src/pages/trip-new-step1/ui/TripNewStep1Page.tsx`  →  TripNewStep1PageProps · TripNewStep1Page
-- `src/pages/trip-new-step1/ui/TripWizardLeaveDialog.tsx`  →  TripWizardLeaveDialog
-- `src/pages/trip-new-step1/ui/TripWizardStep1Screen.tsx`  →  TripWizardStep1ScreenProps · TripWizardStep1Screen
-
-## src/pages/trip-new-step2/
-- `src/pages/trip-new-step2/index.ts`  →  TripNewStep2Page · TripBasesPage
-
-## src/pages/trip-new-step2/model/
-- `src/pages/trip-new-step2/model/baseSections.ts`  →  BaseSection · toBaseSections · NightlyBaseCard · nightlyBaseCards
-- `src/pages/trip-new-step2/model/basesChanged.ts`  →  basesChanged
-- `src/pages/trip-new-step2/model/staySheetSections.ts`  →  StayAddressState · StaySheetSection · staySheetSections
-- `src/pages/trip-new-step2/model/useStayAddresses.ts`  →  useStayAddresses
-
-## src/pages/trip-new-step2/ui/
-- `src/pages/trip-new-step2/ui/BaseRegenerateDialog.tsx`  →  BaseRegenerateDialog
-- `src/pages/trip-new-step2/ui/StaySelectSheet.tsx`  →  StaySelectCandidate · StaySelectSection · StaySelectSheetProps · StaySelectSheet
-- `src/pages/trip-new-step2/ui/TripBasesPage.tsx`  →  TripBasesPage
-- `src/pages/trip-new-step2/ui/TripNewStep2Page.tsx`  →  TripNewStep2Page · BaseNightsFlowProps · BaseNightsFlow
-- `src/pages/trip-new-step2/ui/TripWizardStep2Screen.tsx`  →  NightlyBaseCardVM · Step2Variant · TripWizardStep2ScreenProps · TripWizardStep2Screen
-
 ## src/pages/trip-records/
 - `src/pages/trip-records/index.ts`  →  TripRecordsPage
 
@@ -1094,6 +1057,43 @@
 - `src/pages/trip-summary/ui/DayHighlightCard.tsx`  →  DayHighlightCardProps · DayHighlightCard
 - `src/pages/trip-summary/ui/TripSummaryPage.tsx`  →  TripSummaryPageProps · TripSummaryPage
 - `src/pages/trip-summary/ui/TripSummaryScreen.tsx`  →  SummaryViewMode · DayReflectionVM · DayCardVM · TripSummaryScreenProps · TripSummaryScreen
+
+## src/pages/trip/trip-new-step1/
+- `src/pages/trip/trip-new-step1/index.ts`  →  TripNewStep1Page
+
+## src/pages/trip/trip-new-step1/model/
+- `src/pages/trip/trip-new-step1/model/budgetAmount.ts`  →  BudgetAmount · parseBudgetAmount · formatBudgetAmount · BudgetTier · budgetForTier · isBudgetTier · tierForAmount
+- `src/pages/trip/trip-new-step1/model/createTripRequest.ts`  →  CreateTripInput · buildCreateTripRequest
+- `src/pages/trip/trip-new-step1/model/mustVisitSync.ts`  →  MustVisitSyncPlan · planMustVisitSync
+- `src/pages/trip/trip-new-step1/model/tripDatePicker.ts`  →  dateCell · TripDateRange
+- `src/pages/trip/trip-new-step1/model/useCreateTrip.ts`  →  useCreateTrip
+- `src/pages/trip/trip-new-step1/model/usePreferencePrefill.ts`  →  usePreferencePrefill
+
+## src/pages/trip/trip-new-step1/ui/
+- `src/pages/trip/trip-new-step1/ui/BudgetEditSheet.tsx`  →  BudgetEditSheetProps · BudgetEditSheet
+- `src/pages/trip/trip-new-step1/ui/CompanionEditSheet.tsx`  →  CompanionEditSheetProps · CompanionEditSheet
+- `src/pages/trip/trip-new-step1/ui/DestinationEditSheet.tsx`  →  DestinationEditSheetProps · DestinationEditSheet
+- `src/pages/trip/trip-new-step1/ui/PeriodEditSheet.tsx`  →  PeriodEditSheetProps · PeriodEditSheet
+- `src/pages/trip/trip-new-step1/ui/PrefOverrideSheet.tsx`  →  PrefOverrideSheetProps · PrefOverrideSheet
+- `src/pages/trip/trip-new-step1/ui/TripNewStep1Page.tsx`  →  TripNewStep1PageProps · TripNewStep1Page
+- `src/pages/trip/trip-new-step1/ui/TripWizardLeaveDialog.tsx`  →  TripWizardLeaveDialog
+- `src/pages/trip/trip-new-step1/ui/TripWizardStep1Screen.tsx`  →  TripWizardStep1ScreenProps · TripWizardStep1Screen
+
+## src/pages/trip/trip-new-step2/
+- `src/pages/trip/trip-new-step2/index.ts`  →  TripNewStep2Page · TripBasesPage
+
+## src/pages/trip/trip-new-step2/model/
+- `src/pages/trip/trip-new-step2/model/baseSections.ts`  →  BaseSection · toBaseSections · NightlyBaseCard · nightlyBaseCards
+- `src/pages/trip/trip-new-step2/model/basesChanged.ts`  →  basesChanged
+- `src/pages/trip/trip-new-step2/model/staySheetSections.ts`  →  StayAddressState · StaySheetSection · staySheetSections
+- `src/pages/trip/trip-new-step2/model/useStayAddresses.ts`  →  useStayAddresses
+
+## src/pages/trip/trip-new-step2/ui/
+- `src/pages/trip/trip-new-step2/ui/BaseRegenerateDialog.tsx`  →  BaseRegenerateDialog
+- `src/pages/trip/trip-new-step2/ui/StaySelectSheet.tsx`  →  StaySelectCandidate · StaySelectSection · StaySelectSheetProps · StaySelectSheet
+- `src/pages/trip/trip-new-step2/ui/TripBasesPage.tsx`  →  TripBasesPage
+- `src/pages/trip/trip-new-step2/ui/TripNewStep2Page.tsx`  →  TripNewStep2Page · BaseNightsFlowProps · BaseNightsFlow
+- `src/pages/trip/trip-new-step2/ui/TripWizardStep2Screen.tsx`  →  NightlyBaseCardVM · Step2Variant · TripWizardStep2ScreenProps · TripWizardStep2Screen
 
 ## src/shared/api/generated/account/
 - `src/shared/api/generated/account/account.ts`  →  getMe · getGetMeQueryKey · getGetMeQueryOptions · GetMeQueryResult · GetMeQueryError · useGetMe · postMeDeletion · getPostMeDeletionMutationOptions · PostMeDeletionMutationResult · PostMeDeletionMutationError · usePostMeDeletion · deleteMeDeletion · getDeleteMeDeletionMutationOptions · DeleteMeDeletionMutationResult · DeleteMeDeletionMutationError · useDeleteMeDeletion · getMeExport · getGetMeExportQueryKey · getGetMeExportQueryOptions · GetMeExportQueryResult · GetMeExportQueryError · useGetMeExport

@@ -18,7 +18,7 @@ const FEATURES_DIR = path.resolve('src/features');
 // 아니라 모듈 해석 실패(no-unresolved)로 잡혀 심판이 조용히 무의미해진다.
 const REAL_FEATURE_HOME = '@/features/home/ui/HomeGlyphs';
 const REAL_FEATURE_ONB = '@/features/edit-preferences/model/preferenceStore';
-const REAL_PAGE = '@/pages/place-explore/ui/PlaceExplorePage';
+const REAL_PAGE = '@/pages/trip/trip-new-step1/ui/TripNewStep1Page';
 const REAL_SHARED = '@/shared/ui/BottomTabBar';
 const REAL_APP_SHELL = '@/app-shell';
 
@@ -248,10 +248,12 @@ const REAL_ENTITY_STAY = '@/entities/stay/ui/StaySearchCard';
 
 describe('AC-P0-3 · 같은 층 형제 슬라이스는 서로 import 하지 못한다', () => {
   // 🔴 pages 슬라이스 간 직접 import → 경계 위반(실파일이라 no-unresolved 아님).
-  it('pages/stay-search → 형제 pages/place-explore import 는 경계 위반', async () => {
+  // 같은 그룹 형제를 고른다 — 그룹은 탐색용 폴더일 뿐 격리는 그대로다. 다른 그룹 쌍은 readSlices 가 그룹을
+  // 슬라이스로 잘못 봐도 error 라 그 회귀를 못 잡는다(TRIP-1156).
+  it('pages/trip/trip-new-step2 → 같은 그룹 형제 pages/trip/trip-new-step1 import 는 경계 위반', async () => {
     const ruleIds = await lint(
       `import '${REAL_PAGE}';\n`,
-      'src/pages/stay-search/__slice_probe__.ts'
+      'src/pages/trip/trip-new-step2/__slice_probe__.ts'
     );
 
     expect(ruleIds).toContain(BOUNDARY_RULE);

@@ -41,8 +41,8 @@ paths:
 | `src/app/explore/places/[poiId].tsx` | d06 **explore** 장소 상세 — poiId만 읽어 `PlaceDetailPage`에 위임(`canGoBack` 폴백은 페이지 소관). 여행 중 장소 상세(`live/place/[poiId]`)와 다른 슬라이스 |
 | `src/app/explore/saved-places.tsx` | d02 담은 장소 — `@/pages/saved-places` 얇은 래퍼 |
 | `src/app/trips/new/_layout.tsx` | 여행 생성 위저드 셸 — 네이티브 헤더만 끄고, **마운트 시에만** 시드 초기화(`resetMustVisits` 등). step1↔step2 왕복은 재마운트가 아니라 편집이 살고, `push('/trips/new/step1')` 재진입은 초기화된다. 마운트마다 `createdTripId`를 지우되 `preserveCreatedTripIdOnce`가 켜져 있으면 id를 남기고 표식만 끈다(꼭 갈 곳 고르기 완료 복귀용, TRIP-1113) — 딥링크 등 census 밖 진입이 켜진 표식과 겹치면 옛 id를 PATCH할 수 있다(6-b 몫) — 실제 재마운트 여부는 jest가 못 본다(expo-router 통째 목). |
-| `src/app/trips/new/step1.tsx` | g01 위저드 1/2 — `@/pages/trip-new-step1` 얇은 래퍼 |
-| `src/app/trips/new/step2.tsx` | g02 위저드 2/2 거점 숙소 — `@/pages/trip-new-step2` 얇은 래퍼 |
+| `src/app/trips/new/step1.tsx` | g01 위저드 1/2 — `@/pages/trip/trip-new-step1` 얇은 래퍼 |
+| `src/app/trips/new/step2.tsx` | g02 위저드 2/2 거점 숙소 — `@/pages/trip/trip-new-step2` 얇은 래퍼 |
 | `src/app/trips/[tripId]/bases.tsx` | 거점 화면 라우트 — h04(mode 없음)·l04(`mode=edit`) 두 입구 공유. `mode === 'edit'`인 **정확 일치만** `'edit'`로 넘기고 그 밖은 `undefined`(다른 값이 새면 h04가 생성 CTA를 잃는다) |
 | `src/app/trips/[tripId]/itinerary/must-visits/index.tsx` | 필수 방문지 목록 — `@/pages/itinerary-mustvisit` 얇은 래퍼 |
 | `src/app/trips/[tripId]/itinerary/must-visits/[poiId].tsx` | 필수 방문지 시각 지정 — 같은 배럴. `poiId`는 그 방문지의 `sourcePoiId` |
