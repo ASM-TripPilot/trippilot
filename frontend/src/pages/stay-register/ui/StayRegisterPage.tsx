@@ -34,7 +34,7 @@ import {
   canSubmitStayRegister,
   type StayRegisterFlow,
   type StayRegisterTab,
-} from '@/features/stay/model/stayRegisterForm';
+} from '../model/stayRegisterForm';
 import { StayRegisterScreen } from './StayRegisterScreen';
 import { showToast } from '@/shared/ui/Toast';
 

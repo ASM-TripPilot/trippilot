@@ -486,22 +486,13 @@
 
 ## src/features/stay/model/
 - `src/features/stay/model/buildSaveStayRequest.ts`  →  buildSaveStayRequest
-- `src/features/stay/model/priceRangeFilter.ts`  →  PriceBucketId · PRICE_BUCKETS · filterByPriceRange
-- `src/features/stay/model/relaxCulpritFilter.ts`  →  relaxCulpritFilter
 - `src/features/stay/model/savedStayIndex.ts`  →  findSavedStayId · optimisticSavedStayId
 - `src/features/stay/model/savedStays.ts`  →  SavedStaysFailureReason · SavedStaysOutcome · useSavedStays
-- `src/features/stay/model/stayFilterOptions.ts`  →  StayFilterOption · StayFilterOptions · buildStayFilterOptions · toggleFilterValue · countActiveFilters
 - `src/features/stay/model/stayKey.ts`  →  stayKey
-- `src/features/stay/model/stayOutbound.ts`  →  StayOutboundMode · stayOutboundMode · buildStaySearchUrl · openStayOutbound
-- `src/features/stay/model/stayRegisterForm.ts`  →  StayRegisterTab · StayRegisterFlow · resolveName · canSubmitStayRegister · buildStayRegisterRequest
-- `src/features/stay/model/staySearchState.ts`  →  StaySearchState · resolveStaySearchState
 - `src/features/stay/model/useStaySearch.ts`  →  useStaySearch
 
 ## src/features/stay/ui/
-- `src/features/stay/ui/OtaChoiceSheet.tsx`  →  OtaChoiceSheetProps · OtaChoiceSheet
-- `src/features/stay/ui/StayFilterSheet.tsx`  →  StayFilterSheetProps · StayFilterSheet
 - `src/features/stay/ui/StayGlyphs.tsx`  →  BackChevronGlyph · ChevronDownGlyph · FilterSlidersGlyph · WarningTriangleGlyph · MapPinGlyph · SearchGlyph · PlusGlyph · ChevronRightGlyph · HeartOutlineGlyph · ShareGlyph · InfoGlyph · BedGlyph · CheckGlyph · RefreshGlyph · ExternalLinkGlyph · AmenityGlyph · ParkingGlyph · BreakfastGlyph · WifiGlyph · OceanViewGlyph · HeartFilledGlyph
-- `src/features/stay/ui/StayPriceSheet.tsx`  →  StayPriceSheetProps · StayPriceSheet
 
 ## src/features/trip/lib/
 - `src/features/trip/lib/sheetHandle.ts`  →  SHEET_HANDLE_INDICATOR_STYLE
@@ -948,12 +939,19 @@
 ## src/pages/stay-detail/
 - `src/pages/stay-detail/index.ts`  →  StayDetailPage
 
+## src/pages/stay-detail/model/
+- `src/pages/stay-detail/model/stayOutbound.ts`  →  StayOutboundMode · stayOutboundMode · buildStaySearchUrl · openStayOutbound
+
 ## src/pages/stay-detail/ui/
+- `src/pages/stay-detail/ui/OtaChoiceSheet.tsx`  →  OtaChoiceSheetProps · OtaChoiceSheet
 - `src/pages/stay-detail/ui/StayDetailPage.tsx`  →  StayDetailPage
 - `src/pages/stay-detail/ui/StayDetailScreen.tsx`  →  StayDetailState · StayDetailScreenProps · StayDetailScreen
 
 ## src/pages/stay-register/
 - `src/pages/stay-register/index.ts`  →  StayRegisterPage
+
+## src/pages/stay-register/model/
+- `src/pages/stay-register/model/stayRegisterForm.ts`  →  StayRegisterTab · StayRegisterFlow · resolveName · canSubmitStayRegister · buildStayRegisterRequest
 
 ## src/pages/stay-register/ui/
 - `src/pages/stay-register/ui/StayRegisterPage.tsx`  →  StayRegisterPage
@@ -971,10 +969,16 @@
 
 ## src/pages/stay-search/model/
 - `src/pages/stay-search/model/filterReasonLabel.ts`  →  filterReasonLabel
+- `src/pages/stay-search/model/priceRangeFilter.ts`  →  PriceBucketId · PRICE_BUCKETS · filterByPriceRange
+- `src/pages/stay-search/model/relaxCulpritFilter.ts`  →  relaxCulpritFilter
+- `src/pages/stay-search/model/stayFilterOptions.ts`  →  StayFilterOption · StayFilterOptions · buildStayFilterOptions · toggleFilterValue · countActiveFilters
+- `src/pages/stay-search/model/staySearchState.ts`  →  StaySearchState · resolveStaySearchState
 
 ## src/pages/stay-search/ui/
 - `src/pages/stay-search/ui/PartialFailureBanner.tsx`  →  PartialFailureBanner
 - `src/pages/stay-search/ui/SkeletonList.tsx`  →  SkeletonList
+- `src/pages/stay-search/ui/StayFilterSheet.tsx`  →  StayFilterSheetProps · StayFilterSheet
+- `src/pages/stay-search/ui/StayPriceSheet.tsx`  →  StayPriceSheetProps · StayPriceSheet
 - `src/pages/stay-search/ui/StaySearchPage.tsx`  →  StaySearchPage
 - `src/pages/stay-search/ui/StaySearchScreen.tsx`  →  StaySearchScreenProps · StaySearchScreen
 

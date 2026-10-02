@@ -87,10 +87,10 @@ jest.mock('expo-linking', () => ({
 // 인자 없음은 02a 계약이다 — 이름을 바꾸면 이 목이 안 물려 affiliate 심판이 red 가 된다.
 let mockOutboundMode: 'affiliate' | 'webSearch' | undefined;
 
-jest.mock('@/features/stay/model/stayOutbound', () => {
-  const actual = jest.requireActual<
-    typeof import('@/features/stay/model/stayOutbound')
-  >('@/features/stay/model/stayOutbound');
+jest.mock('../model/stayOutbound', () => {
+  const actual = jest.requireActual<typeof import('../model/stayOutbound')>(
+    '../model/stayOutbound'
+  );
   return {
     ...actual,
     stayOutboundMode: () => mockOutboundMode ?? actual.stayOutboundMode(),

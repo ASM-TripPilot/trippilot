@@ -18,10 +18,7 @@ import {
   setAccessToken,
   getAccessToken,
 } from '@/shared/api/tokenManager';
-import {
-  PRICE_BUCKETS,
-  type PriceBucketId,
-} from '@/features/stay/model/priceRangeFilter';
+import { PRICE_BUCKETS, type PriceBucketId } from '../model/priceRangeFilter';
 
 /**
  * e02 숙소 검색 — StaySearchPage 배선 통합 테스트(msw 로 실제 나간 요청을 본다).

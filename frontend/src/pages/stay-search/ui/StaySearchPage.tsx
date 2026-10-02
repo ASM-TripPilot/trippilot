@@ -18,19 +18,19 @@ import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 import {
   filterByPriceRange,
   type PriceBucketId,
-} from '@/features/stay/model/priceRangeFilter';
-import { relaxCulpritFilter } from '@/features/stay/model/relaxCulpritFilter';
+} from '../model/priceRangeFilter';
+import { relaxCulpritFilter } from '../model/relaxCulpritFilter';
 import { useSavedStays } from '@/features/stay/model/savedStays';
 import {
   buildStayFilterOptions,
   countActiveFilters,
   toggleFilterValue,
-} from '@/features/stay/model/stayFilterOptions';
+} from '../model/stayFilterOptions';
 import { stayKey } from '@/features/stay/model/stayKey';
-import { resolveStaySearchState } from '@/features/stay/model/staySearchState';
+import { resolveStaySearchState } from '../model/staySearchState';
 import { useStaySearch } from '@/features/stay/model/useStaySearch';
-import { StayFilterSheet } from '@/features/stay/ui/StayFilterSheet';
-import { StayPriceSheet } from '@/features/stay/ui/StayPriceSheet';
+import { StayFilterSheet } from './StayFilterSheet';
+import { StayPriceSheet } from './StayPriceSheet';
 import { StaySearchScreen } from './StaySearchScreen';
 
 /** URL은 신뢰 경계 — 같은 쿼리 키가 중복되면 배열로 온다. 계약(`GetStaysSearchParams`)은

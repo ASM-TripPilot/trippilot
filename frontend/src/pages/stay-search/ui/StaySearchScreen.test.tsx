@@ -7,11 +7,8 @@ import {
 import type { StayItem } from '@/shared/api/generated/schemas';
 import { stayKey } from '@/features/stay/model/stayKey';
 import { StaySearchScreen } from './StaySearchScreen';
-import type { StaySearchState } from '@/features/stay/model/staySearchState';
-import {
-  PRICE_BUCKETS,
-  type PriceBucketId,
-} from '@/features/stay/model/priceRangeFilter';
+import type { StaySearchState } from '../model/staySearchState';
+import { PRICE_BUCKETS, type PriceBucketId } from '../model/priceRangeFilter';
 
 /**
  * e02 숙소 검색 — StaySearchScreen(props 만 받는 뷰) 단위 테스트.

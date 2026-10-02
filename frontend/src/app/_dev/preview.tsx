@@ -159,9 +159,9 @@ import {
   SavedStayListScreen,
   type SavedStayCardVM,
 } from '@/pages/stay-saved/ui/SavedStayListScreen';
-import { OtaChoiceSheet } from '@/features/stay/ui/OtaChoiceSheet';
-import { StayPriceSheet } from '@/features/stay/ui/StayPriceSheet';
-import { StayFilterSheet } from '@/features/stay/ui/StayFilterSheet';
+import { OtaChoiceSheet } from '@/pages/stay-detail/ui/OtaChoiceSheet';
+import { StayPriceSheet } from '@/pages/stay-search/ui/StayPriceSheet';
+import { StayFilterSheet } from '@/pages/stay-search/ui/StayFilterSheet';
 import {
   TripWizardStep1Screen,
   type TripWizardStep1ScreenProps,
