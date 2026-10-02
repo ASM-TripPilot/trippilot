@@ -165,7 +165,7 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `realAuthorize` | `pages/auth/login/lib/realAuthorize` | expo-auth-session PKCE authorize. **`makeAuthorize`가 동적 import로만 부름** |
 | `kakaoAuthorize` · `naverAuthorize` | `pages/auth/login/lib/{kakaoAuthorize,naverAuthorize}` | **신규(TRIP-210)** — 카카오·네이버 네이티브 SDK authorize. `realAuthorize`와 동형으로 **`makeAuthorize`가 동적 import로만 부름**(SDK가 정적 그래프에 안 실림, AC-11) |
 | `resolveBootstrapDestination` | `features/auth/model` | 부트스트랩 상태 → 목적지(순수) |
-| `resolveOnboardingStep` · `validateNicknameFormat` | `features/onboarding/model`(`resolveOnboardingStep`) · `pages/onboarding-nickname/model`(`validateNicknameFormat`) | 잔여 온보딩 단계 · 닉네임 길이 검증(순수) |
+| `resolveOnboardingStep` · `validateNicknameFormat` | `features/onboarding/model`(`resolveOnboardingStep`) · `pages/onboarding/onboarding-nickname/model`(`validateNicknameFormat`) | 잔여 온보딩 단계 · 닉네임 길이 검증(순수) |
 | `toggleMulti` · `toggleSingle` | `features/edit-preferences/model/preferenceSelection` | 취향 축 토글 순수 규칙(복수/단일 공용). `null`=미설정, 빈 배열로 안 떨어짐(US-ONB-14) |
 | `usePreferenceStore` | `features/edit-preferences/model/preferenceStore` | 취향 6축 세션 메모리 Zustand 스토어(persist 없음). **TRIP-173에서 `store/`→`model/` 합류** |
 | `BottomTabBar` · `ShellTabKey` · `BottomTabBarProps` | `shared/ui` | 순수 뷰 탭바(TRIP-170) — `activeKey`·`onPressTab` 두 prop만, 네비게이션 모름 |
@@ -175,12 +175,12 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `HomeScreenProps` · `HomeSections` · `HomeCollectionCard` · `HomeSpotCard` · `HomeItineraryCard` · `HomeMagazineHero` | `pages/home/model/homeTypes` | 홈 화면 prop 계약(**TRIP-316 재작성** — 구 `trip`·`nextPlan`·`resume`·`taste` 계약 전부 폐기). `HomeScreenProps{hero; sections}` — `hero`는 상태 무관 고정 블록, `sections`는 판별 유니온 `HomeSections`(`ready`/`empty`/`loading`, 3섹션 한 덩어리로 동시 전환). **TRIP-317 추가**: `HomeScreenProps.phase?: HomePhase`(옵셔널 additive, 316 무회귀) — `HomePhase`는 `discovery`·`collecting`·`planning`·`upcoming`·`postTrip` 5종 판별 유니온(화면은 `phase.kind`로 스위치만, TRIP-206 S-6). 페이로드 타입 `TripHeroData`·`HomeStatTile`·`NextStop`·`NearbyCard`·`RecapCard`·`PastTrip`·`HomeSoftNote` 7종 신규(전부 컴파일용, home 내부 소비만 — 재사용 대상 아님) |
 | `useBootstrapGate` · `useSocialLogin` | `features/auth/model`(`useBootstrapGate`) · `pages/auth/login/model`(`useSocialLogin`) | 부트스트랩 · 소셜 로그인 훅. **TRIP-173에서 `hooks/`→`model/` 개명** |
 | `useOnboardingProgress` | `features/onboarding/model` | 진행 상태 훅. **TRIP-173에서 `hooks/`→`model/` 개명** |
-| `useTermsConsent` · `useNickname` | `pages/onboarding-terms/model` · `pages/onboarding-nickname/model` | 약관 · 닉네임 훅. TRIP-173에서 `hooks/`→`model/` 개명, **TRIP-1146으로 각 page 슬라이스로 이사**(소비처가 그 page 하나뿐 — 재사용 공개 API가 아니다) |
+| `useTermsConsent` · `useNickname` | `pages/onboarding/onboarding-terms/model` · `pages/onboarding/onboarding-nickname/model` | 약관 · 닉네임 훅. TRIP-173에서 `hooks/`→`model/` 개명, **TRIP-1146으로 각 page 슬라이스로 이사**(소비처가 그 page 하나뿐 — 재사용 공개 API가 아니다) |
 | `SPLASH_BACKGROUND_COLORS` · `SPLASH_BACKGROUND_LOCATIONS` · `APP_ICON_COLORS` · `AUTH_ICON_COLORS` | `features/auth/config/gradients` | 그라디언트 상수. **TRIP-173에서 `lib/`→`config/` 개명**, `AUTH_ICON_COLORS`(경고 글리프 색)는 **FSD 완결 4/4 신설**(code-critic 03b 참고-1: 이 행 갱신 누락이 "이름 다른 재구현" 경로를 여는 사례로 실측됨 — 다음에 경고 아이콘 색이 또 필요하면 여기부터 본다) |
 | `BOOTSTRAP_TIMEOUT_MS` | `features/auth/model` | 부트스트랩 타임아웃 |
 | `LoginPage` | `pages/auth/login` | 로그인 훅↔화면 배선(구 `features/auth/containers/SocialLoginContainer`, TRIP-173 신설) |
 | `TermsPage` · `NicknamePage` · `PrefStep1Page` · `PrefStep2Page` | `pages/onboarding-{terms,nickname,pref1,pref2}` | 온보딩 각 단계 배선(구 `features/onboarding/containers/*Container`, TRIP-173 신설) |
-| `LocationPage` | `pages/onboarding-location` | **신규(TRIP-459)** — c08 위치 권한 프리프롬프트 배선. 동결 `shared/location/LocationPreprompt`(TRIP-162)의 콜백에 `expo-location` 실호출(리포 최초)을 건다. nickname→location→pref1 체인 삽입(D7 반전) |
+| `LocationPage` | `pages/onboarding/onboarding-location` | **신규(TRIP-459)** — c08 위치 권한 프리프롬프트 배선. 동결 `shared/location/LocationPreprompt`(TRIP-162)의 콜백에 `expo-location` 실호출(리포 최초)을 건다. nickname→location→pref1 체인 삽입(D7 반전) |
 | `SplashGate` | `app-shell` | 부트스트랩 결과 라우팅(구 `features/auth/containers/SplashGate`, TRIP-173 신설 — `src/app` 밖) |
 | `SPLASH_MIN_VISIBLE_MS` | `app-shell/ui/SplashGate` | **신규(TRIP-579)** — 스플래시 최소 노출 하한(900ms, 발명값). resolved여도 마운트 후 이 값이 지나기 전엔 라우팅하지 않는다. 선례 `BOOTSTRAP_TIMEOUT_MS`(위 행)와 동형(export된 발명값 상수) |
 | `dwellMinutes` | `features/execution/model/dwellMinutes` | **신규(TRIP-396)** — `completedAt − arrivedAt` 분 산출 순수 함수(한쪽 null→null, 역전→`Math.max(0,·)`). BR-U4-34에 따라 `split(':')`로 산출(Date API 미사용). **소비처 0** — 서버가 dwell을 스스로 도출해 클라→서버 dwell 필드가 계약에 없다(데드코드, 상세는 `.claude/rules/repo-traps.md` "여행 중 실행" 절) |

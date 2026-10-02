@@ -148,7 +148,7 @@ import { TripRecordsView } from '@/pages/trip-records/ui/TripRecordsView';
 import { ReplanSolvingView } from '@/pages/planb-draft/ui/ReplanSolvingView';
 import { SlotCandidateSheet } from '@/features/planb/ui/SlotCandidateSheet';
 import { RiskDetailSheet } from '@/pages/live-itinerary/ui/RiskDetailSheet';
-import { NicknameScreen } from '@/pages/onboarding-nickname/ui/NicknameScreen';
+import { NicknameScreen } from '@/pages/onboarding/onboarding-nickname/ui/NicknameScreen';
 import {
   StayRegisterScreen,
   type StayRegisterScreenProps,
@@ -190,9 +190,9 @@ import {
 } from '@/pages/trip/trip-new-step2/ui/TripWizardStep2Screen';
 import { BaseRegenerateDialog } from '@/pages/trip/trip-new-step2/ui/BaseRegenerateDialog';
 import { TripWizardLeaveDialog } from '@/pages/trip/trip-new-step1/ui/TripWizardLeaveDialog';
-import { PrefStep1Screen } from '@/pages/onboarding-pref1/ui/PrefStep1Screen';
-import { PrefStep2Screen } from '@/pages/onboarding-pref2/ui/PrefStep2Screen';
-import { TermsScreen } from '@/pages/onboarding-terms/ui/TermsScreen';
+import { PrefStep1Screen } from '@/pages/onboarding/onboarding-pref1/ui/PrefStep1Screen';
+import { PrefStep2Screen } from '@/pages/onboarding/onboarding-pref2/ui/PrefStep2Screen';
+import { TermsScreen } from '@/pages/onboarding/onboarding-terms/ui/TermsScreen';
 import type { PreferenceSelection } from '@/features/edit-preferences/model/preferenceDraft';
 import { PreferencesEditView } from '@/pages/settings-preferences/ui/PreferencesEditView';
 import type {

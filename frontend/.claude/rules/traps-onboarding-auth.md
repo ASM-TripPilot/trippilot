@@ -2,7 +2,7 @@
 paths:
   - "src/features/auth/**"
   - "src/features/onboarding/**"
-  - "src/pages/onboarding-*/**"
+  - "src/pages/onboarding/onboarding-*/**"
   - "src/app/(onboarding)/**"
   - "src/pages/auth/login/**"
   - "src/features/edit-preferences/**"
@@ -15,7 +15,7 @@ paths:
 - **세션 만료·로그아웃 UX** → 토큰 clear가 게이트 목적지를 LOGIN으로 바꾸면 `app-shell/model/useAccountBoundaryReset.ts`가 `dismissAll`→`replace('/login')`→캐시·취향 비우기를 한다(TRIP-1077, 옛 "즉시 리다이렉트 없음(FW2)"은 폐기). 단 세션 만료 실기는 재현 수단이 없어 jest 체인으로만 확인됐고(6-b 미검증), 같은 계정의 HOME→FORCE_UPDATE/RECONSENT 전이는 정리 대상이 아니다.
 - **apple 소셜 로그인** → `oauthConfig.ts`의 apple 슬롯은 여전히 빈 값이지만 이제 **안 쓰인다** — `makeAuthorize.ts`(TRIP-932, 2026-09-28 TRIP-1035로 재확인)가 apple을 브라우저 OAuth가 아니라 **네이티브 SDK 어댑터(`appleAuthorize`)로 항상** 라우팅해 `oauthConfig`를 거치지 않는다(env 게이트 없음). "범위 밖" 서술은 낡았다 — 옛 코드 주석·`oauthConfig.ts` 파일 주석에는 아직 남아 있다. kakao·naver는 채워졌고, naver는 `usePKCE:false`+`state` 필수인 비표준 갈래라 다시 만질 땐 `realAuthorize.ts` 조건부 분기부터 본다.
 - **약관 라벨(`TERMS_LABELS`)은 신규 타입에 자동 대응 안 한다** → `useTermsConsent.ts`의 `ONBOARDING_TERMS_TYPES`(순회 대상)와 `TERMS_LABELS`(라벨 맵)는 **두 상수를 손으로 맞추는 관례일 뿐 구조적 강제가 아니다**(옛 커밋 메시지의 "구조적 불가"는 부정확). 폴백 `TERMS_LABELS[type] ?? term.termsType`이 있어 라벨을 안 채우면 원시 코드가 그대로 화면에 노출된다.
-- **c08 위치 화면의 마운트 시 기존 denied 감지 전이는 무심판이다** → `pages/onboarding-location/ui/LocationPage.tsx`의 `useEffect`(`getForegroundPermissionsAsync` 조회)를 통째로 지우거나 조건을 뒤집어도 `LocationPage.integration.test.tsx`가 green이다. 조건은 `status==='denied' && !canAskAgain`이다 — 안드로이드 `canAskAgain=true`(재요청 가능)를 설정-강제 화면으로 보내면 오분류다. 이 파일을 다시 만질 때 회귀가 소리 없이 날 수 있다.
+- **c08 위치 화면의 마운트 시 기존 denied 감지 전이는 무심판이다** → `pages/onboarding/onboarding-location/ui/LocationPage.tsx`의 `useEffect`(`getForegroundPermissionsAsync` 조회)를 통째로 지우거나 조건을 뒤집어도 `LocationPage.integration.test.tsx`가 green이다. 조건은 `status==='denied' && !canAskAgain`이다 — 안드로이드 `canAskAgain=true`(재요청 가능)를 설정-강제 화면으로 보내면 오분류다. 이 파일을 다시 만질 때 회귀가 소리 없이 날 수 있다.
 - **`SocialLoginScreen.tsx`의 앱아이콘 `LinearGradient`는 반경을 `className`이 아니라 `style borderRadius`로 준다** → `rounded-*` 같은 NativeWind 반경 토큰은 그라디언트를 실제로 클립하지 않아 값이 있어도 각져 보인다. 대조군은 `SplashScreen.tsx`(style borderRadius로 라운드 정상). 이 클립 여부·확대 후 픽셀 크기는 jest 무심판 — `_dev/preview` 로그인 실기 육안이 유일한 그물(지도 `viewOnly`·바텀시트 딤과 동형 층 한계). 반경 재조정 시 반경/박스(0.223)·글리프/박스(0.6) 두 비율을 함께 옮긴다.
 - **온보딩 카드끼리 하단 버튼이 같은 자리라, 앞 카드의 이동 경로 하나라도 가드 창을 못 열면 연타의 두 번째 탭이 다음 카드 버튼을 대신 누른다** → 위치→푸시 사이에서 실제로 재현됐다(TRIP-1108 5-b): 위치 권한이 **이미 허용된** 기기(같은 기기 두 번째 계정)는 OS 창 없이 곧장 granted가 돌아와, `계속` 연타가 푸시 카드 `계속`을 눌러 카드를 못 본 채 OS 알림 창이 뜬다. `LocationPage.tsx` granted 분기의 `openPressGuardWindow()`가 막고, `pressGuardOnboardingPush.test.tsx` X1(나중에→나중에)·X2(거부 계속→계속)·X3(granted 계속→계속) **세 쌍만** 잰다. 온보딩 카드를 하나 더 잇거나 이동 분기를 추가하면 그 쌍은 무심판이다 — `guardPress`가 감싼 버튼을 눌러야만 창이 열리므로, 응답이 빠른 비동기 분기는 감싸거나 창을 직접 열어야 한다. X3은 시계를 멈추고 첫 탭 뒤 `resetPressGuard()`를 부르지 않는다(넣으면 사고가 사라져 red가 안 난다).
 - **푸시 카드 `계속` 뒤 OS 알림 창은 취향 1/2 화면 위에 뜬다** → `void promptAndRegisterPush()`를 기다리지 않고 `replace`하기 때문이다(권한 결과·토큰 등록 실패는 이 화면이 모른다, 실패는 `register.ts`가 삼키고 재등록은 다음 콜드 스타트 `SplashGate` HOME 진입뿐). 창이 실제로 취향 화면 위에 어색하지 않게 뜨는지·`(onboarding)/push` 실제 진입·동심원 링 픽셀(위치 카드 추정값)은 jest 사각이고 6-b 미검증이다. 카드 문구는 Figma 채택본 c08-push(`4774:2960`)이고 위치 카드 주 버튼 `위치 사용 허용`(Figma) vs `계속`(코드) 드리프트는 미결이다.

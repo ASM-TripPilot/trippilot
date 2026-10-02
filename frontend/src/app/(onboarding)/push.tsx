@@ -1,4 +1,4 @@
-import { PushPage } from '@/pages/onboarding-push';
+import { PushPage } from '@/pages/onboarding/onboarding-push';
 
 export default function PushRoute() {
   return <PushPage />;

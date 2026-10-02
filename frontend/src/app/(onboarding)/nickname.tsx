@@ -1,4 +1,4 @@
-import { NicknamePage } from '@/pages/onboarding-nickname';
+import { NicknamePage } from '@/pages/onboarding/onboarding-nickname';
 
 export default function NicknameRoute() {
   return <NicknamePage />;

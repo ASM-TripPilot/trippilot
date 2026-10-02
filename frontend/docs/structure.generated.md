@@ -751,52 +751,52 @@
 - `src/pages/notification-inbox/ui/NotificationInboxScreen.tsx`  →  NotificationRowVM · NotificationSection · NotificationInboxScreenProps · NotificationInboxScreen
 - `src/pages/notification-inbox/ui/NotificationRow.tsx`  →  NotificationRowProps · NotificationRow
 
-## src/pages/onboarding-location/
-- `src/pages/onboarding-location/index.ts`  →  LocationPage
+## src/pages/onboarding/onboarding-location/
+- `src/pages/onboarding/onboarding-location/index.ts`  →  LocationPage
 
-## src/pages/onboarding-location/ui/
-- `src/pages/onboarding-location/ui/LocationPage.tsx`  →  LocationPage
+## src/pages/onboarding/onboarding-location/ui/
+- `src/pages/onboarding/onboarding-location/ui/LocationPage.tsx`  →  LocationPage
 
-## src/pages/onboarding-nickname/
-- `src/pages/onboarding-nickname/index.ts`  →  NicknamePage
+## src/pages/onboarding/onboarding-nickname/
+- `src/pages/onboarding/onboarding-nickname/index.ts`  →  NicknamePage
 
-## src/pages/onboarding-nickname/model/
-- `src/pages/onboarding-nickname/model/useNickname.ts`  →  UseNickname · useNickname
-- `src/pages/onboarding-nickname/model/validateNicknameFormat.ts`  →  validateNicknameFormat · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH · type NicknameFormatReason · type NicknameFormatResult
+## src/pages/onboarding/onboarding-nickname/model/
+- `src/pages/onboarding/onboarding-nickname/model/useNickname.ts`  →  UseNickname · useNickname
+- `src/pages/onboarding/onboarding-nickname/model/validateNicknameFormat.ts`  →  validateNicknameFormat · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH · type NicknameFormatReason · type NicknameFormatResult
 
-## src/pages/onboarding-nickname/ui/
-- `src/pages/onboarding-nickname/ui/NicknamePage.tsx`  →  NicknamePage
-- `src/pages/onboarding-nickname/ui/NicknameScreen.tsx`  →  NicknameErrorReason · NicknameScreenProps · NicknameScreen
+## src/pages/onboarding/onboarding-nickname/ui/
+- `src/pages/onboarding/onboarding-nickname/ui/NicknamePage.tsx`  →  NicknamePage
+- `src/pages/onboarding/onboarding-nickname/ui/NicknameScreen.tsx`  →  NicknameErrorReason · NicknameScreenProps · NicknameScreen
 
-## src/pages/onboarding-pref1/
-- `src/pages/onboarding-pref1/index.ts`  →  PrefStep1Page
+## src/pages/onboarding/onboarding-pref1/
+- `src/pages/onboarding/onboarding-pref1/index.ts`  →  PrefStep1Page
 
-## src/pages/onboarding-pref1/ui/
-- `src/pages/onboarding-pref1/ui/PrefStep1Page.tsx`  →  PrefStep1Page
-- `src/pages/onboarding-pref1/ui/PrefStep1Screen.tsx`  →  PrefStep1ScreenProps · PrefStep1Screen
+## src/pages/onboarding/onboarding-pref1/ui/
+- `src/pages/onboarding/onboarding-pref1/ui/PrefStep1Page.tsx`  →  PrefStep1Page
+- `src/pages/onboarding/onboarding-pref1/ui/PrefStep1Screen.tsx`  →  PrefStep1ScreenProps · PrefStep1Screen
 
-## src/pages/onboarding-pref2/
-- `src/pages/onboarding-pref2/index.ts`  →  PrefStep2Page
+## src/pages/onboarding/onboarding-pref2/
+- `src/pages/onboarding/onboarding-pref2/index.ts`  →  PrefStep2Page
 
-## src/pages/onboarding-pref2/ui/
-- `src/pages/onboarding-pref2/ui/PrefStep2Page.tsx`  →  PrefStep2Page
-- `src/pages/onboarding-pref2/ui/PrefStep2Screen.tsx`  →  PrefStep2ScreenProps · PrefStep2Screen
+## src/pages/onboarding/onboarding-pref2/ui/
+- `src/pages/onboarding/onboarding-pref2/ui/PrefStep2Page.tsx`  →  PrefStep2Page
+- `src/pages/onboarding/onboarding-pref2/ui/PrefStep2Screen.tsx`  →  PrefStep2ScreenProps · PrefStep2Screen
 
-## src/pages/onboarding-push/
-- `src/pages/onboarding-push/index.ts`  →  PushPage
+## src/pages/onboarding/onboarding-push/
+- `src/pages/onboarding/onboarding-push/index.ts`  →  PushPage
 
-## src/pages/onboarding-push/ui/
-- `src/pages/onboarding-push/ui/PushPage.tsx`  →  PushPage
+## src/pages/onboarding/onboarding-push/ui/
+- `src/pages/onboarding/onboarding-push/ui/PushPage.tsx`  →  PushPage
 
-## src/pages/onboarding-terms/
-- `src/pages/onboarding-terms/index.ts`  →  TermsPage
+## src/pages/onboarding/onboarding-terms/
+- `src/pages/onboarding/onboarding-terms/index.ts`  →  TermsPage
 
-## src/pages/onboarding-terms/model/
-- `src/pages/onboarding-terms/model/useTermsConsent.ts`  →  UseTermsConsent · useTermsConsent
+## src/pages/onboarding/onboarding-terms/model/
+- `src/pages/onboarding/onboarding-terms/model/useTermsConsent.ts`  →  UseTermsConsent · useTermsConsent
 
-## src/pages/onboarding-terms/ui/
-- `src/pages/onboarding-terms/ui/TermsPage.tsx`  →  TermsPage
-- `src/pages/onboarding-terms/ui/TermsScreen.tsx`  →  TermsItemView · TermsScreenProps · TermsScreen
+## src/pages/onboarding/onboarding-terms/ui/
+- `src/pages/onboarding/onboarding-terms/ui/TermsPage.tsx`  →  TermsPage
+- `src/pages/onboarding/onboarding-terms/ui/TermsScreen.tsx`  →  TermsItemView · TermsScreenProps · TermsScreen
 
 ## src/pages/place-detail/
 - `src/pages/place-detail/index.ts`  →  PlaceDetailPage

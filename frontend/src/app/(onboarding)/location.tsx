@@ -1,4 +1,4 @@
-import { LocationPage } from '@/pages/onboarding-location';
+import { LocationPage } from '@/pages/onboarding/onboarding-location';
 
 export default function LocationRoute() {
   return <LocationPage />;
