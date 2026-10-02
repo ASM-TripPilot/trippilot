@@ -1,5 +1,5 @@
 import type { ItineraryStatus, Trip } from '@/shared/api/generated/schemas';
-import { buildMonthGrid, isDateInRange } from '@/shared/date/monthGrid';
+import { buildMonthGrid, isDateInRange } from '@/shared/date';
 import { formatDayLabel } from '@/entities/trip';
 import { formatLegendDateRange, formatTripDateRange } from '@/entities/trip';
 import { nightsLabel } from '@/entities/trip';

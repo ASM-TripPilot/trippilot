@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { usePreferenceStore } from '@/features/edit-preferences';
-import { notifyBootstrapReeval } from '@/shared/bootstrap/bootstrapReeval';
+import { notifyBootstrapReeval } from '@/shared/bootstrap';
 import { resetPressGuard } from '@/shared/press/pressGuard';
 import { PrefStep1Page } from '@/pages/onboarding/onboarding-pref1';
 import { PrefStep2Page } from '@/pages/onboarding/onboarding-pref2';

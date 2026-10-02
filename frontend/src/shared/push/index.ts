@@ -9,3 +9,5 @@ export {
   registerPushIfGranted,
   unregisterStoredPushToken,
 } from './register';
+
+export { PushPreprompt } from './PushPreprompt';

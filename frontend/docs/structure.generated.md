@@ -1452,10 +1452,12 @@
 
 ## src/shared/bootstrap/
 - `src/shared/bootstrap/bootstrapReeval.ts`  →  subscribeBootstrapReeval · notifyBootstrapReeval
+- `src/shared/bootstrap/index.ts`  →  notifyBootstrapReeval · subscribeBootstrapReeval
 
 ## src/shared/date/
 - `src/shared/date/formatKoreanDate.ts`  →  formatKoreanDate
 - `src/shared/date/formatRelativeTime.ts`  →  formatRelativeTime
+- `src/shared/date/index.ts`  →  formatRelativeTime · buildMonthGrid · daysInMonth · firstWeekdayOfMonth · isDateInRange · shiftMonth · seoulDate · seoulInstant · seoulTime
 - `src/shared/date/monthGrid.ts`  →  MonthCell · daysInMonth · firstWeekdayOfMonth · shiftMonth · isDateInRange · buildMonthGrid
 - `src/shared/date/seoulDate.ts`  →  seoulDate · seoulTime · seoulInstant
 
@@ -1464,6 +1466,8 @@
 - `src/shared/location/LocationPreprompt.tsx`  →  LocationPrepromptState · LocationPrepromptProps · LocationPreprompt
 - `src/shared/location/consentPutBody.ts`  →  consentPutBody
 - `src/shared/location/geofence.ts`  →  GeofenceRegion · buildGeofenceRegions · geofenceArriveRequest · registerGeofences · clearGeofences
+- `src/shared/location/index.ts`  →  LocationBackChevronGlyph · LocationClockGlyph · LocationInfoGlyph · LocationPinGlyph · LocationSwapGlyph · LocationWarningGlyph · LocationPreprompt · LOCATION_ICON_COLORS · readDevicePosition · revokeImpact · useLocationConsent
+- `src/shared/location/index.view.ts`  →  LocationBackChevronGlyph · LocationClockGlyph · LocationInfoGlyph · LocationPinGlyph · LocationSwapGlyph · LocationWarningGlyph · LocationPreprompt · LOCATION_ICON_COLORS · readDevicePosition · revokeImpact
 
 ## src/shared/location/lib/
 - `src/shared/location/lib/locationColors.ts`  →  LOCATION_ICON_COLORS
@@ -1480,21 +1484,25 @@
 - `src/shared/map/index.ts`  →  MapView · CenterPinPicker
 
 ## src/shared/motion/
+- `src/shared/motion/index.ts`  →  startUnlessReduceMotion
 - `src/shared/motion/reduceMotion.ts`  →  startUnlessReduceMotion
 
 ## src/shared/photo/
 - `src/shared/photo/index.ts`  →  PhotoAssetMeta · PhotoPickResult · pickPhotoAsset · resolvePhotoUri
 
 ## src/shared/pref/
+- `src/shared/pref/index.ts`  →  toggleMulti · toggleSingle
 - `src/shared/pref/preferenceSelection.ts`  →  toggleMulti · toggleSingle
 
 ## src/shared/press/
+- `src/shared/press/index.ts`  →  guardPress · openPressGuardWindow
 - `src/shared/press/pressGuard.ts`  →  guardPress · openPressGuardWindow · resetPressGuard
 
 ## src/shared/push/
 - `src/shared/push/PushGlyphs.tsx`  →  PushBellHero
 - `src/shared/push/PushPreprompt.tsx`  →  PushPrepromptProps · PushPreprompt
-- `src/shared/push/index.ts`  →  getPushPermission · type PushPermissionStatus · requestPushPermission · registerPushToken · unregisterDeviceToken · toServerOsPermission · isDeviceNotRegistered · promptAndRegisterPush · registerPushIfGranted · unregisterStoredPushToken
+- `src/shared/push/index.ts`  →  getPushPermission · type PushPermissionStatus · requestPushPermission · registerPushToken · unregisterDeviceToken · toServerOsPermission · isDeviceNotRegistered · promptAndRegisterPush · registerPushIfGranted · unregisterStoredPushToken · PushPreprompt
+- `src/shared/push/index.view.ts`  →  PushPreprompt
 
 ## src/shared/push/lib/
 - `src/shared/push/lib/pushColors.ts`  →  PUSH_ICON_COLORS
@@ -1506,11 +1514,12 @@
 
 ## src/shared/storage/
 - `src/shared/storage/idSet.ts`  →  readIdSet · writeIdSet
-- `src/shared/storage/index.ts`  →  TokenBundle · saveTokens · getTokens · clearTokens · hasStoredToken
+- `src/shared/storage/index.ts`  →  TokenBundle · saveTokens · getTokens · clearTokens · hasStoredToken · readIdSet · writeIdSet · getInstallId · readStringValue · writeStringValue
 - `src/shared/storage/installId.ts`  →  getInstallId
 - `src/shared/storage/stringValue.ts`  →  readStringValue · writeStringValue
 
 ## src/shared/time/
+- `src/shared/time/index.ts`  →  useElapsedFlag
 - `src/shared/time/useElapsedFlag.ts`  →  useElapsedFlag
 
 ## src/shared/ui/
@@ -1529,12 +1538,15 @@
 ## src/shared/ui/pref/
 - `src/shared/ui/pref/PrefChip.tsx`  →  PrefChipProps · PrefChip
 - `src/shared/ui/pref/PrefTile.tsx`  →  PrefTileIcon · PrefTileProps · PrefTile
+- `src/shared/ui/pref/index.ts`  →  PrefChip · PrefTile
 
 ## src/shared/validation/
+- `src/shared/validation/index.ts`  →  NICKNAME_MAX_LENGTH · NICKNAME_MIN_LENGTH · validateNicknameFormat
 - `src/shared/validation/nicknameFormat.ts`  →  NicknameFormatReason · NicknameFormatResult · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH · validateNicknameFormat
 
 ## src/shared/version/
 - `src/shared/version/compareVersion.ts`  →  compareVersion
+- `src/shared/version/index.ts`  →  compareVersion
 
 ## src/test-support/
 - `src/test-support/editDragList.ts`  →  EDIT_LIST · editListData · moveItem · fireEditDragEnd · fireEditDropOnZone · fireEditDragBegin
@@ -1578,4 +1590,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 952개 파일
+합계 964개 파일

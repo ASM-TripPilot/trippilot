@@ -8,7 +8,7 @@ import {
   hydrate,
   subscribeAccessToken,
 } from '@/shared/api/tokenManager';
-import { subscribeBootstrapReeval } from '@/shared/bootstrap/bootstrapReeval';
+import { subscribeBootstrapReeval } from '@/shared/bootstrap';
 import { publishGateDestination } from './gateDestination';
 import {
   resolveBootstrapDestination,

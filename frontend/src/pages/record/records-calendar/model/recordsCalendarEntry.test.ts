@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 
 import type { Trip } from '@/shared/api/generated/schemas';
-import { isDateInRange } from '@/shared/date/monthGrid';
+import { isDateInRange } from '@/shared/date';
 
 import { canOpenTripRecords, recordsTripIdForDate } from './recordsCalendar';
 

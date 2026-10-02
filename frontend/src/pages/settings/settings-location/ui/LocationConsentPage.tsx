@@ -3,8 +3,8 @@ import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 
 import { LocationConsentScreen } from './LocationConsentScreen';
-import { revokeImpact } from '@/shared/location/revokeImpact';
-import { useLocationConsent } from '@/shared/location/useLocationConsent';
+import { revokeImpact } from '@/shared/location';
+import { useLocationConsent } from '@/shared/location';
 
 /**
  * l06 위치 동의 배선(pages 층) — `useLocationConsent`(조회·마운트 미러 보고·PUT 을 consentPutBody 로

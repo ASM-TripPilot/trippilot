@@ -19,7 +19,7 @@ import { isEstimatedOrigin } from '@/features/request-replan/index.view';
 import {
   LocationBackChevronGlyph,
   LocationInfoGlyph,
-} from '@/shared/location/LocationGlyphs';
+} from '@/shared/location/index.view';
 import { CenterPinPicker, type MapCenter } from '@/shared/map';
 
 export type LiveLocationState = 'manual' | 'permission-denied';

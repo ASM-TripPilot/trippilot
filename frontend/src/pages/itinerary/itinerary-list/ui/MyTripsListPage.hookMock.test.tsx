@@ -15,7 +15,7 @@ import {
   useGetTrips,
   useGetTripsTripIdItinerary,
 } from '@/shared/api/generated/trips/trips';
-import { readIdSet, writeIdSet } from '@/shared/storage/idSet';
+import { readIdSet, writeIdSet } from '@/shared/storage';
 import { MyTripsListPage } from '@/pages/itinerary/itinerary-list';
 
 /**

@@ -199,11 +199,11 @@ import type {
   TriggerKind,
 } from '@/shared/api/generated/schemas';
 import { PersonalizationInfoReason } from '@/shared/api/generated/schemas';
-import { buildMonthGrid } from '@/shared/date/monthGrid';
-import { LocationPreprompt } from '@/shared/location/LocationPreprompt';
+import { buildMonthGrid } from '@/shared/date';
+import { LocationPreprompt } from '@/shared/location/index.view';
 // 딥 경로 — 배럴(`@/shared/push`)로 끌면 권한 루틴(expo-notifications)까지 실린다(TRIP-1108 R10).
-import { PushPreprompt } from '@/shared/push/PushPreprompt';
-import { revokeImpact } from '@/shared/location/revokeImpact';
+import { PushPreprompt } from '@/shared/push/index.view';
+import { revokeImpact } from '@/shared/location/index.view';
 import { MapView, type MapPin } from '@/shared/map';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 

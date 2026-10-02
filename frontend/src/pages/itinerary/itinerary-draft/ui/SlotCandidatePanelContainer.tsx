@@ -9,7 +9,7 @@ import { parseSlotKey } from '@/entities/itinerary-slot';
 import { resolveSlotSwapError } from '@/features/edit-itinerary';
 import { swapSlotPoi } from '@/features/edit-itinerary';
 import { SlotCandidateSheet } from './SlotCandidateSheet';
-import { useElapsedFlag } from '@/shared/time/useElapsedFlag';
+import { useElapsedFlag } from '@/shared/time';
 import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripIdItinerary,

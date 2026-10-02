@@ -17,7 +17,7 @@ import { type ReactElement, type ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { PrefChip } from '@/shared/ui/pref/PrefChip';
+import { PrefChip } from '@/shared/ui/pref';
 import {
   PreferenceInputActivitiesItem,
   PreferenceInputBudgetTier,

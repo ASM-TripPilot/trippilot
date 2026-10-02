@@ -11,7 +11,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 
 import type { StayItem } from '@/shared/api/generated/schemas';
 import { getAccessToken } from '@/shared/api/tokenManager';
-import { guardPress } from '@/shared/press/pressGuard';
+import { guardPress } from '@/shared/press';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
 
 import { regionPickerHref } from '@/features/explore';

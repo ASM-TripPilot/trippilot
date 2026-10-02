@@ -43,7 +43,9 @@ import { TripRecordsPage } from './TripRecordsPage';
  */
 
 // 스토리지·라우터는 페이지 마운트가 건드리므로 목킹(visitCheck 통합 선례). push 는 [방문 추가] 이동 관측용.
+// TRIP-1157: 배럴이 idSet·stringValue·installId 도 재수출한다 — 통째로 갈아끼우면 그 함수들이 지워지므로 실물을 펼친 뒤 토큰 함수만 덮는다.
 jest.mock('@/shared/storage', () => ({
+  ...jest.requireActual('@/shared/storage'),
   saveTokens: jest.fn().mockResolvedValue(undefined),
   getTokens: jest
     .fn()

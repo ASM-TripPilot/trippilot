@@ -6,7 +6,7 @@ import type {
   PersonalizationInfoReason,
   PersonalizationItem,
 } from '@/shared/api/generated/schemas';
-import { LocationBackChevronGlyph } from '@/shared/location/LocationGlyphs';
+import { LocationBackChevronGlyph } from '@/shared/location/index.view';
 import { Toggle } from '@/shared/ui/Toggle';
 
 import { personalizationCopy } from '../model/personalizationCopy';

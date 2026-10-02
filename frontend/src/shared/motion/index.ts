@@ -1,0 +1,1 @@
+export { startUnlessReduceMotion } from './reduceMotion';

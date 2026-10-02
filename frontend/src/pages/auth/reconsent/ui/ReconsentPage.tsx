@@ -5,7 +5,7 @@ import { type ReactElement, useRef, useState } from 'react';
 import { termsDocumentTitle } from '@/features/onboarding';
 import { ReconsentScreen } from './ReconsentScreen';
 import { fetchBootstrap, fetchTerms, patchConsent } from '@/shared/api';
-import { notifyBootstrapReeval } from '@/shared/bootstrap/bootstrapReeval';
+import { notifyBootstrapReeval } from '@/shared/bootstrap';
 
 interface ReconsentTarget {
   termsType: string;

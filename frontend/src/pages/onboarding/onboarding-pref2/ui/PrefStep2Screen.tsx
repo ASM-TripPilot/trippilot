@@ -10,8 +10,8 @@ import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { PrefChip } from '@/shared/ui/pref/PrefChip';
-import { PrefTile } from '@/shared/ui/pref/PrefTile';
+import { PrefChip } from '@/shared/ui/pref';
+import { PrefTile } from '@/shared/ui/pref';
 
 import {
   BikeGlyph,

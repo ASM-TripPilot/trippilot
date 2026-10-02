@@ -15,7 +15,7 @@ import type {
   OngoingTripCardVM,
   PastTripCardVM,
 } from '../model/recordsCalendar';
-import type { MonthCell } from '@/shared/date/monthGrid';
+import type { MonthCell } from '@/shared/date';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
 /**

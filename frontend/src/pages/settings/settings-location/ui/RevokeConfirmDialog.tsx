@@ -1,7 +1,7 @@
 import { type ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 
-import type { RevokeImpact } from '@/shared/location/revokeImpact';
+import type { RevokeImpact } from '@/shared/location/index.view';
 
 /** 카드 그림자(Figma drop 0,8,14 · 20%) — 그림자는 className 으로 못 준다. */
 const DIALOG_SHADOW = {

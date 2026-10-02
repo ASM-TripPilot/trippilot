@@ -8,7 +8,7 @@ import { deriveReplanMapAnchor } from '@/features/request-replan';
 import { buildManualOrigin } from '@/features/request-replan';
 import { buildStartReplanRequest } from '@/features/request-replan';
 import { useStartReplan } from '@/features/request-replan';
-import { seoulDate } from '@/shared/date/seoulDate';
+import { seoulDate } from '@/shared/date';
 import type { MapCenter } from '@/shared/map';
 
 import { LiveLocationView } from './LiveLocationView';

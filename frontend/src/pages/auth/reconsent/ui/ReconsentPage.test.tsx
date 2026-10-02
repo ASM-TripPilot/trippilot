@@ -37,7 +37,7 @@ import {
 
 import { fetchBootstrap, fetchTerms, patchConsent } from '@/shared/api';
 import type { BootstrapResponse, TermsVersion } from '@/shared/api';
-import { notifyBootstrapReeval } from '@/shared/bootstrap/bootstrapReeval';
+import { notifyBootstrapReeval } from '@/shared/bootstrap';
 
 import { ReconsentPage } from '..';
 

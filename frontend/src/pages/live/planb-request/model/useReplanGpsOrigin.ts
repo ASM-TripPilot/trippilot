@@ -1,5 +1,5 @@
 import { useGetMeLocationConsent } from '@/shared/api/generated/location/location';
-import { readDevicePosition } from '@/shared/location/readDevicePosition';
+import { readDevicePosition } from '@/shared/location';
 
 import { buildGpsOrigin, type ReplanOrigin } from '@/features/request-replan';
 

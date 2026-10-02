@@ -12,4 +12,4 @@ export {
   NICKNAME_MAX_LENGTH,
   type NicknameFormatReason,
   type NicknameFormatResult,
-} from '@/shared/validation/nicknameFormat';
+} from '@/shared/validation';

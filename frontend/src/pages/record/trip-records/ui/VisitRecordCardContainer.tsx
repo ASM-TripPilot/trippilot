@@ -3,7 +3,7 @@ import { Text } from 'react-native';
 import { useQueries } from '@tanstack/react-query';
 
 import { resolvePhotoUri } from '@/shared/photo';
-import { getInstallId } from '@/shared/storage/installId';
+import { getInstallId } from '@/shared/storage';
 
 import { photoAvailability } from '../model/photoAvailability';
 import { pickPhotoForVisit } from '@/features/attach-visit-media';

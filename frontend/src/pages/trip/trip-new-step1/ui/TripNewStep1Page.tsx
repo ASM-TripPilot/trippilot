@@ -23,9 +23,9 @@ import type {
 import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
 import { isNotFound } from '@/shared/api/isNotFound';
 import { getAccessToken } from '@/shared/api/tokenManager';
-import { seoulDate } from '@/shared/date/seoulDate';
-import { shiftMonth } from '@/shared/date/monthGrid';
-import { toggleMulti } from '@/shared/pref/preferenceSelection';
+import { seoulDate } from '@/shared/date';
+import { shiftMonth } from '@/shared/date';
+import { toggleMulti } from '@/shared/pref';
 import { showToast } from '@/shared/ui/Toast';
 
 import {

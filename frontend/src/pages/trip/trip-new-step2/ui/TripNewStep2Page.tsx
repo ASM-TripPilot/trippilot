@@ -11,7 +11,7 @@ import { useStayAddresses } from '../model/useStayAddresses';
 import { useAssignBase, useTripBases } from '@/features/assign-trip-base';
 import { StaySelectSheet, type StaySelectCandidate } from './StaySelectSheet';
 import type { TripDestination } from '@/shared/api/generated/schemas';
-import { guardPress, openPressGuardWindow } from '@/shared/press/pressGuard';
+import { guardPress, openPressGuardWindow } from '@/shared/press';
 import {
   TripWizardStep2Screen,
   type Step2Variant,

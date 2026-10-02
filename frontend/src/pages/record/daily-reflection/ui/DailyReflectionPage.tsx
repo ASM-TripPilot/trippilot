@@ -16,7 +16,7 @@ import {
   type ReflectionFace,
 } from './DailyReflectionScreen';
 import { useGetTripsTripId } from '@/shared/api/generated/trips/trips';
-import { seoulDate } from '@/shared/date/seoulDate';
+import { seoulDate } from '@/shared/date';
 import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
 

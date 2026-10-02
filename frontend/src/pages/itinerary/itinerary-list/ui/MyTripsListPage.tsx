@@ -11,12 +11,9 @@ import {
   useGetTrips,
 } from '@/shared/api/generated/trips/trips';
 import { isNotFound } from '@/shared/api/isNotFound';
-import { seoulDate } from '@/shared/date/seoulDate';
-import { readIdSet, writeIdSet } from '@/shared/storage/idSet';
-import {
-  readStringValue,
-  writeStringValue,
-} from '@/shared/storage/stringValue';
+import { seoulDate } from '@/shared/date';
+import { readIdSet, writeIdSet } from '@/shared/storage';
+import { readStringValue, writeStringValue } from '@/shared/storage';
 import { pickDoneBar, type DoneBarEntry } from '../model/doneBar';
 import {
   byLatest,

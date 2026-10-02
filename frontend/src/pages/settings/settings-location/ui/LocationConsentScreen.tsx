@@ -9,9 +9,9 @@ import {
   LocationPinGlyph,
   LocationSwapGlyph,
   LocationWarningGlyph,
-} from '@/shared/location/LocationGlyphs';
-import { LOCATION_ICON_COLORS } from '@/shared/location/lib/locationColors';
-import type { RevokeImpact } from '@/shared/location/revokeImpact';
+} from '@/shared/location/index.view';
+import { LOCATION_ICON_COLORS } from '@/shared/location/index.view';
+import type { RevokeImpact } from '@/shared/location/index.view';
 import { Toggle } from '@/shared/ui/Toggle';
 
 import { RevokeConfirmDialog } from './RevokeConfirmDialog';

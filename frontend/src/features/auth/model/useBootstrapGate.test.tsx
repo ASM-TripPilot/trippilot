@@ -12,7 +12,7 @@ import {
 } from '@/shared/api/tokenManager';
 // 실물 로드(딥 경로) — @/shared/api 목과 다른 모듈 specifier 라 목킹되지 않는다(케이스 3~8 이
 // tokenManager 실물 위에 선 것과 같은 사실). 신호를 실제로 발화해 훅의 구독을 관통 검증한다.
-import { notifyBootstrapReeval } from '@/shared/bootstrap/bootstrapReeval';
+import { notifyBootstrapReeval } from '@/shared/bootstrap';
 import {
   getGateDestination,
   resetGateDestination,

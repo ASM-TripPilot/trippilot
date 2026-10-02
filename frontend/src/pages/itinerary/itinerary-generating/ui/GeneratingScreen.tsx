@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MapView, type MapCenter, type MapPin } from '@/shared/map';
-import { startUnlessReduceMotion } from '@/shared/motion/reduceMotion';
+import { startUnlessReduceMotion } from '@/shared/motion';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
 import {
