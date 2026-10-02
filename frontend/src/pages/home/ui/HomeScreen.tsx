@@ -37,7 +37,7 @@ import {
   SearchGlyph,
   SparkleGlyph,
   SuitcaseGlyph,
-} from './HomeGlyphs';
+} from '@/features/home/ui/HomeGlyphs';
 import { formatCountBadge } from '../lib/formatCountBadge';
 import { HeartButton } from '@/shared/ui/HeartButton';
 import { Skeleton } from '@/shared/ui/Skeleton';

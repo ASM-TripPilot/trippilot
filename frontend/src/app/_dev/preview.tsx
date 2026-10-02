@@ -22,8 +22,8 @@ import {
   HOME_PLANNING_PROPS,
   HOME_POST_TRIP_PROPS,
   HOME_TRAVELING_PROPS,
-} from '@/features/home/model/homeFixtures';
-import type { HomeSpotsLane } from '@/features/home/model/homeTypes';
+} from '@/pages/home/model/homeFixtures';
+import type { HomeSpotsLane } from '@/pages/home/model/homeTypes';
 import {
   PREVIEW_PLACES,
   PREVIEW_REGIONS,
@@ -55,7 +55,7 @@ import {
   ExploreLandingScreen,
   type StayCardVM,
 } from '@/features/explore/ui/ExploreLandingScreen';
-import { HomeScreen } from '@/features/home/ui/HomeScreen';
+import { HomeScreen } from '@/pages/home/ui/HomeScreen';
 import { MAGAZINE_DEFAULT_PROPS } from '@/pages/magazine/model/magazineFixtures';
 import { MagazineScreen } from '@/pages/magazine/ui/MagazineScreen';
 import {

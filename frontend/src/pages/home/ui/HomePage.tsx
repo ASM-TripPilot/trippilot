@@ -20,13 +20,10 @@ import {
   itineraryDestinationHref,
   resolveItineraryDestination,
 } from '@/features/itinerary/model/planState';
-import { HOME_DEFAULT_PROPS } from '@/features/home/model/homeFixtures';
-import {
-  applyItineraryTarget,
-  resolveHomePhase,
-} from '@/features/home/model/homePhase';
-import type { HomePhase, HomeSpotsLane } from '@/features/home/model/homeTypes';
-import { HomeScreen } from '@/features/home/ui/HomeScreen';
+import { HOME_DEFAULT_PROPS } from '../model/homeFixtures';
+import { applyItineraryTarget, resolveHomePhase } from '../model/homePhase';
+import type { HomePhase, HomeSpotsLane } from '../model/homeTypes';
+import { HomeScreen } from './HomeScreen';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 
 interface HomeNav {

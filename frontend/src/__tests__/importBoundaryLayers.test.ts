@@ -16,7 +16,7 @@ const FEATURES_DIR = path.resolve('src/features');
 
 // import **대상**은 해석돼야(실파일이어야) 한다 — 아니면 위반이 경계(no-restricted-paths)가
 // 아니라 모듈 해석 실패(no-unresolved)로 잡혀 심판이 조용히 무의미해진다.
-const REAL_FEATURE_HOME = '@/features/home/model/homeFixtures';
+const REAL_FEATURE_HOME = '@/features/home/ui/HomeGlyphs';
 const REAL_FEATURE_ONB = '@/features/onboarding/model/preferenceStore';
 const REAL_PAGE = '@/pages/place-explore/ui/PlaceExplorePage';
 const REAL_SHARED = '@/shared/ui/BottomTabBar';
