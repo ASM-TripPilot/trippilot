@@ -193,6 +193,49 @@ def test_one_call_per_forecast_and_zero_for_empty_days() -> None:
     assert len(http.calls) == 1  # 빈 요청은 호출 없음
 
 
+def test_daily_and_hourly_together_stay_one_call() -> None:
+    """`WeatherProvider.fetch` 가 부르는 방식 그대로 — 둘을 합쳐도 HTTP 1건이다.
+
+    종전에는 2건이었다. 각 메서드가 `_fetch_body` 를 따로 불렀고, 테스트는
+    `daily_forecast` 단독만 세서 어긋남이 안 보였다. 그 사이 docstring 두 곳은
+    "호출 1건 = 응답 1건 … 시간 단위 도입에 추가 API 비용이 없다"고 적어 두고
+    있었다 — 공공데이터포털 일일 한도를 문서값의 2배로 쓰는 상태였다.
+    """
+    http = _FakeHttp(_body({"item": []}))
+    adapter = _adapter(http)
+    adapter.daily_forecast(_COORD, (_D1, _D2))
+    adapter.hourly_forecast(_COORD, (_D1, _D2))
+    assert len(http.calls) == 1
+
+
+def test_a_new_publication_slot_refetches() -> None:
+    """기억은 발표분까지 키다 — 경계를 넘으면 다시 부른다.
+
+    두 호출이 발표시각 경계(02/05/08/11/14/17/20/23시 +10분)를 걸칠 때 낡은 응답을
+    돌려주면 daily 와 hourly 가 서로 다른 발표분에서 나온 줄도 모른다. 호출 수를
+    아끼려고 값을 틀리게 하지 않는다.
+    """
+    http = _FakeHttp(_body({"item": []}))
+    now = _NOW
+    adapter = KmaWeatherAdapter(http, "test-key", now_fn=lambda: now)
+    adapter.daily_forecast(_COORD, (_D1,))
+    assert len(http.calls) == 1
+    now = _NOW.replace(hour=8, minute=15)  # 0800 발표분이 열렸다
+    assert base_datetime_for(now) != base_datetime_for(_NOW)
+    adapter.daily_forecast(_COORD, (_D1,))
+    assert len(http.calls) == 2
+
+
+def test_a_failed_call_is_not_remembered() -> None:
+    """실패를 굳히면 프로세스를 재시작해야 풀린다 — 다음 호출은 다시 나간다."""
+    http = _FakeHttp(error=urllib.error.URLError("boom"))
+    adapter = _adapter(http)
+    for _ in range(2):
+        with pytest.raises(WeatherError):
+            adapter.daily_forecast(_COORD, (_D1,))
+    assert len(http.calls) == 2
+
+
 # ── ⑥ 키·권한 오류(401/403)는 프로세스당 1회 WARN — 운영에서 보이게 ────────
 
 

@@ -60,8 +60,11 @@ class WeatherProvider:
         )
         # 시간별은 **선택 능력** — 포트가 가지면 같이 싣는다(`HourlyWeatherPort`,
         # `fetch_typed` 와 같은 hasattr 방식). 같은 응답을 다르게 접는 것이라
-        # 추가 HTTP 호출이 없다. 실패해도 일 단위는 이미 얻었으므로 조용히 생략
-        # 하지 않고 없는 대로 간다 — 소비측이 키 부재로 일 단위 폴백을 안다.
+        # 추가 HTTP 호출이 없다 — 여기서 메서드를 **두 번 부르지만**, 어댑터가 같은
+        # (좌표, 발표분)이면 마지막 응답을 돌려주므로 포털 호출은 1건이다
+        # (`kma_weather._fetch_body`). 그 기억이 없던 동안 요청당 2건이 나갔다.
+        # 실패해도 일 단위는 이미 얻었으므로 조용히 생략하지 않고 없는 대로 간다 —
+        # 소비측이 키 부재로 일 단위 폴백을 안다.
         hourly: dict[str, int] = {}
         if hasattr(self._port, "hourly_forecast"):
             try:
