@@ -111,28 +111,28 @@ import { TripDeleteDialog } from '@/pages/itinerary/itinerary-list/ui/TripDelete
 import {
   NotificationInboxScreen,
   type NotificationSection,
-} from '@/pages/notification-inbox/ui/NotificationInboxScreen';
+} from '@/pages/settings/notification-inbox/ui/NotificationInboxScreen';
 import {
   NotificationSettingsScreen,
   type ToggleValueMap,
-} from '@/pages/settings-notifications/ui/NotificationSettingsScreen';
+} from '@/pages/settings/settings-notifications/ui/NotificationSettingsScreen';
 import {
   buildSettingsSections,
   filterReadySettingsSections,
-} from '@/pages/settings/model/settingsSections';
+} from '@/pages/settings/settings/model/settingsSections';
 import { BaseToggleDialog } from '@/features/settings/ui/BaseToggleDialog';
-import { DeleteAccountDialog } from '@/pages/settings/ui/DeleteAccountDialog';
-import { LocationConsentScreen } from '@/pages/settings-location/ui/LocationConsentScreen';
-import type { StyleCardVM } from '@/pages/my-page/model/styleCardModel';
-import { MyPageScreen } from '@/pages/my-page/ui/MyPageScreen';
-import { PersonalizationScreen } from '@/pages/settings-personalization/ui/PersonalizationScreen';
+import { DeleteAccountDialog } from '@/pages/settings/settings/ui/DeleteAccountDialog';
+import { LocationConsentScreen } from '@/pages/settings/settings-location/ui/LocationConsentScreen';
+import type { StyleCardVM } from '@/pages/settings/my-page/model/styleCardModel';
+import { MyPageScreen } from '@/pages/settings/my-page/ui/MyPageScreen';
+import { PersonalizationScreen } from '@/pages/settings/settings-personalization/ui/PersonalizationScreen';
 import {
   MyStaysScreen,
   type MyStayRowVM,
 } from '@/pages/stay/my-stays/ui/MyStaysScreen';
-import { StyleSummaryCard } from '@/pages/my-page/ui/StyleSummaryCard';
-import { RevokeConfirmDialog } from '@/pages/settings-location/ui/RevokeConfirmDialog';
-import { SettingsScreen } from '@/pages/settings/ui/SettingsScreen';
+import { StyleSummaryCard } from '@/pages/settings/my-page/ui/StyleSummaryCard';
+import { RevokeConfirmDialog } from '@/pages/settings/settings-location/ui/RevokeConfirmDialog';
+import { SettingsScreen } from '@/pages/settings/settings/ui/SettingsScreen';
 import { triggerLabel } from '@/features/planb/model/triggerLabel';
 import { triggerPillCopy } from '@/features/planb/model/triggerPillCopy';
 import { riskAffectedRow } from '@/pages/live/live-itinerary/model/riskAffectedRow';
@@ -194,7 +194,7 @@ import { PrefStep1Screen } from '@/pages/onboarding/onboarding-pref1/ui/PrefStep
 import { PrefStep2Screen } from '@/pages/onboarding/onboarding-pref2/ui/PrefStep2Screen';
 import { TermsScreen } from '@/pages/onboarding/onboarding-terms/ui/TermsScreen';
 import type { PreferenceSelection } from '@/features/edit-preferences/model/preferenceDraft';
-import { PreferencesEditView } from '@/pages/settings-preferences/ui/PreferencesEditView';
+import { PreferencesEditView } from '@/pages/settings/settings-preferences/ui/PreferencesEditView';
 import type {
   ItineraryDaysItemSlotsItem,
   ReflectionStats,

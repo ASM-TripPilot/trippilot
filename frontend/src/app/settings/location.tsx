@@ -1,4 +1,4 @@
-import { LocationConsentPage } from '@/pages/settings-location';
+import { LocationConsentPage } from '@/pages/settings/settings-location';
 
 export default function LocationConsentRoute() {
   return <LocationConsentPage />;

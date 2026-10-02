@@ -6,7 +6,7 @@ paths:
 
 화면 뷰 6개(마이·설정·위치 동의·개인화·취향 수정)와 그 전용 부품·model(`deletionScope`·`personalizationCopy`·`usePreferences`)은 **TRIP-1154로 `pages/{my-page,settings,settings-location,settings-personalization,settings-preferences}` 이사** — 행은 `layer-pages.md`. 여기엔 page가 함께 쓰는 model·공용 부품(`InfoChip`·`cardShadow`·`SettingsGlyphs`)·`StyleSummaryCard`·l04 몫만 남았다. TRIP-1155로 그중 model·`InfoChip`·`StyleSummaryCard`·l04 몫은 `pages/{my-page,my-stays,settings,settings-personalization}`·`features/edit-preferences`로 이사해 `BaseToggleDialog`·`cardShadow`·`SettingsGlyphs`만 남았다.
 
-**경계(G-U5-14)**: 다른 `features/*`를 import할 수 없다 — eslint 층 zone이 막는다. 조합·조회·포맷은 `pages/my-page`·`pages/stay/my-stays`·`pages/settings` 같은 페이지 층이 진다. 다른 feature에 동명 글리프가 있어도 복제한다.
+**경계(G-U5-14)**: 다른 `features/*`를 import할 수 없다 — eslint 층 zone이 막는다. 조합·조회·포맷은 `pages/settings/my-page`·`pages/stay/my-stays`·`pages/settings/settings` 같은 페이지 층이 진다. 다른 feature에 동명 글리프가 있어도 복제한다.
 
 **다이얼로그 패턴**: 리포에 Modal 선례가 없다 — 확인/삭제류는 로컬 `useState`로 열고 조건부 `absolute inset-0` 오버레이로 그린다. 비즈니스 콜백은 다이얼로그 확정에서만 부른다. 딤·중앙정렬·터치 차단은 jest 원리적 사각(`repo-traps.md` 바텀시트·오버레이 절) — 자동 심판은 testID 트리 존재 + 확정 전 콜백 0회까지.
 

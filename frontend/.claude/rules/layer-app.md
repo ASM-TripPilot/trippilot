@@ -28,10 +28,10 @@ paths:
 | `src/app/(tabs)/explore.tsx` | 탐색 탭 — `<ExploreLandingPage/>`만 렌더하는 11줄 얇은 래퍼(TRIP-1142). `region` 주소 파라미터는 래퍼가 아니라 page가 `useLocalSearchParams`로 직접 읽는다. 조회·조립·항법은 `pages/explore/explore-landing` 소관. 래퍼 연결은 `tabsShell` 탐색 래퍼 it가 심판 |
 | `src/app/(tabs)/itinerary.tsx` | 일정 탭 — `<MyTripsListPage/>`만 렌더(리다이렉트 없음). 조회·정렬·카드별 목적지 판정은 `pages/itinerary/itinerary-list` 소관. |
 | `src/app/(tabs)/records.tsx` | 기록 탭 — `<RecordsCalendarPage/>`만 렌더. 조회·조립·항법은 `pages/record/records-calendar` 소관 |
-| `src/app/(tabs)/my.tsx` | 마이 탭 — `<MyPage/>`만 렌더. 조회·분류·조합은 `pages/my-page` 소관 |
+| `src/app/(tabs)/my.tsx` | 마이 탭 — `<MyPage/>`만 렌더. 조회·분류·조합은 `pages/settings/my-page` 소관 |
 | `src/app/my/stays.tsx` | `/my/stays` — `@/pages/stay/my-stays` 얇은 래퍼. 마이 페이지에서 진입 |
-| `src/app/settings/notifications.tsx` | `/settings/notifications` — `@/pages/settings-notifications` 얇은 래퍼. 설정 화면에서 진입 |
-| `src/app/notifications.tsx` | `/notifications` 알림함 — `@/pages/notification-inbox` 얇은 래퍼. 홈에서 진입 |
+| `src/app/settings/notifications.tsx` | `/settings/notifications` — `@/pages/settings/settings-notifications` 얇은 래퍼. 설정 화면에서 진입 |
+| `src/app/notifications.tsx` | `/notifications` 알림함 — `@/pages/settings/notification-inbox` 얇은 래퍼. 홈에서 진입 |
 | `src/app/stays/index.tsx` | `/stays` 숙소 검색 — `@/pages/stay/stay-search` 얇은 래퍼 |
 | `src/app/stays/register.tsx` | `/stays/register` — `@/pages/stay/stay-register` 얇은 래퍼. 구조 가드가 `useState`·`useGetStaysGeocode`·`FlatList` 0건을 잠근다 |
 | `src/app/stays/saved.tsx` | `/stays/saved` e04 저장한 숙소 — `@/pages/stay/stay-saved` 얇은 래퍼 |
@@ -66,6 +66,6 @@ paths:
 | `src/app/records/style.tsx` | j05 여행 스타일 — **계정 단위**라 `[tripId]` 밖(INV-U5-08). params 없이 `@/pages/record/travel-style` 위임. `app/records/index.tsx`는 두지 않는다 — `(tabs)/records.tsx`의 `/records`와 충돌 |
 | `src/app/trips/[tripId]/planb/draft.tsx` | 재계획 초안 — `tripId`·`sessionId`만 읽어 `@/pages/live/planb-draft` 얇은 래퍼 |
 | `src/app/trips/[tripId]/live/location.tsx` | 위치 폴백(수동 입력·권한 거부) — `tripId`·`state`를 `LiveLocationPage`에 위임(`?state=`로 얼굴 선택) |
-| `src/app/settings/preferences.tsx` | l05 취향 전체 수정 — `@/pages/settings-preferences` 얇은 래퍼. 설정 화면에서 진입 |
-| `src/app/settings/personalization.tsx` | l05 개인화 동의 — `@/pages/settings-personalization` 얇은 래퍼. 설정 화면에서 진입 |
+| `src/app/settings/preferences.tsx` | l05 취향 전체 수정 — `@/pages/settings/settings-preferences` 얇은 래퍼. 설정 화면에서 진입 |
+| `src/app/settings/personalization.tsx` | l05 개인화 동의 — `@/pages/settings/settings-personalization` 얇은 래퍼. 설정 화면에서 진입 |
 | `src/app/magazine.tsx` | a02 매거진 목록 — `@/pages/magazine/ui/MagazinePage` **딥 경로** 직참조(무배럴 페이지). 홈 매거진 히어로에서 push, 실앱은 탭바 미렌더(프리뷰만 `withShellTabBar`) |

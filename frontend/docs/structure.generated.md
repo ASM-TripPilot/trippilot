@@ -770,35 +770,6 @@
 - `src/pages/magazine/ui/MagazinePage.tsx`  →  MagazinePage
 - `src/pages/magazine/ui/MagazineScreen.tsx`  →  MagazineScreen
 
-## src/pages/my-page/
-- `src/pages/my-page/index.ts`  →  MyPage
-
-## src/pages/my-page/model/
-- `src/pages/my-page/model/styleCardModel.ts`  →  StyleGauge · StyleCardVM · buildStyleCardModel
-- `src/pages/my-page/model/tripBuckets.ts`  →  TripBucket · phaseBucket · bucketTrips
-
-## src/pages/my-page/ui/
-- `src/pages/my-page/ui/InfoChip.tsx`  →  InfoChip
-- `src/pages/my-page/ui/MyPage.tsx`  →  MyPage
-- `src/pages/my-page/ui/MyPageScreen.tsx`  →  MyPageScreenProps · MyPageScreen
-- `src/pages/my-page/ui/ProfileCard.tsx`  →  ProfileCardCounts · ProfileCardProps · ProfileCard
-- `src/pages/my-page/ui/StyleSummaryCard.tsx`  →  StyleSummaryCardProps · StyleSummaryCard
-
-## src/pages/notification-inbox/
-- `src/pages/notification-inbox/index.ts`  →  NotificationInboxPage
-
-## src/pages/notification-inbox/model/
-- `src/pages/notification-inbox/model/groupByDay.ts`  →  NotificationGroups · groupByDay
-- `src/pages/notification-inbox/model/notificationAction.ts`  →  notificationAction
-- `src/pages/notification-inbox/model/notificationKind.ts`  →  NotificationIconKind · NotificationKindMeta · notificationKind
-- `src/pages/notification-inbox/model/useNotificationInbox.ts`  →  UseNotificationInboxResult · useNotificationInbox
-
-## src/pages/notification-inbox/ui/
-- `src/pages/notification-inbox/ui/NotificationInboxGlyphs.tsx`  →  NotificationKindIcon · NotifBellGlyph
-- `src/pages/notification-inbox/ui/NotificationInboxPage.tsx`  →  NotificationInboxPage
-- `src/pages/notification-inbox/ui/NotificationInboxScreen.tsx`  →  NotificationRowVM · NotificationSection · NotificationInboxScreenProps · NotificationInboxScreen
-- `src/pages/notification-inbox/ui/NotificationRow.tsx`  →  NotificationRowProps · NotificationRow
-
 ## src/pages/onboarding/onboarding-location/
 - `src/pages/onboarding/onboarding-location/index.ts`  →  LocationPage
 
@@ -936,68 +907,97 @@
 - `src/pages/record/trip-summary/ui/TripSummaryPage.tsx`  →  TripSummaryPageProps · TripSummaryPage
 - `src/pages/record/trip-summary/ui/TripSummaryScreen.tsx`  →  SummaryViewMode · DayReflectionVM · DayCardVM · TripSummaryScreenProps · TripSummaryScreen
 
-## src/pages/settings-location/
-- `src/pages/settings-location/index.ts`  →  LocationConsentPage
+## src/pages/settings/my-page/
+- `src/pages/settings/my-page/index.ts`  →  MyPage
 
-## src/pages/settings-location/ui/
-- `src/pages/settings-location/ui/LocationConsentPage.tsx`  →  LocationConsentPage
-- `src/pages/settings-location/ui/LocationConsentScreen.tsx`  →  LocationConsentScreenProps · LocationConsentScreen
-- `src/pages/settings-location/ui/RevokeConfirmDialog.tsx`  →  RevokeConfirmDialog
+## src/pages/settings/my-page/model/
+- `src/pages/settings/my-page/model/styleCardModel.ts`  →  StyleGauge · StyleCardVM · buildStyleCardModel
+- `src/pages/settings/my-page/model/tripBuckets.ts`  →  TripBucket · phaseBucket · bucketTrips
 
-## src/pages/settings-notifications/
-- `src/pages/settings-notifications/index.ts`  →  NotificationSettingsPage
+## src/pages/settings/my-page/ui/
+- `src/pages/settings/my-page/ui/InfoChip.tsx`  →  InfoChip
+- `src/pages/settings/my-page/ui/MyPage.tsx`  →  MyPage
+- `src/pages/settings/my-page/ui/MyPageScreen.tsx`  →  MyPageScreenProps · MyPageScreen
+- `src/pages/settings/my-page/ui/ProfileCard.tsx`  →  ProfileCardCounts · ProfileCardProps · ProfileCard
+- `src/pages/settings/my-page/ui/StyleSummaryCard.tsx`  →  StyleSummaryCardProps · StyleSummaryCard
 
-## src/pages/settings-notifications/model/
-- `src/pages/settings-notifications/model/channelAvailability.ts`  →  PushPermission · PushColumnState · resolvePushColumn
-- `src/pages/settings-notifications/model/useToggles.ts`  →  ToggleChannel · ToggleOutcome · UseTogglesResult · useToggles
+## src/pages/settings/notification-inbox/
+- `src/pages/settings/notification-inbox/index.ts`  →  NotificationInboxPage
 
-## src/pages/settings-notifications/ui/
-- `src/pages/settings-notifications/ui/NotificationSettingsPage.tsx`  →  NotificationSettingsPage
-- `src/pages/settings-notifications/ui/NotificationSettingsScreen.tsx`  →  ToggleValueMap · NotificationSettingsScreenProps · NotificationSettingsScreen
-- `src/pages/settings-notifications/ui/PermissionBanner.tsx`  →  PermissionBanner
-- `src/pages/settings-notifications/ui/ToggleRow.tsx`  →  ToggleRowProps · ToggleRow
+## src/pages/settings/notification-inbox/model/
+- `src/pages/settings/notification-inbox/model/groupByDay.ts`  →  NotificationGroups · groupByDay
+- `src/pages/settings/notification-inbox/model/notificationAction.ts`  →  notificationAction
+- `src/pages/settings/notification-inbox/model/notificationKind.ts`  →  NotificationIconKind · NotificationKindMeta · notificationKind
+- `src/pages/settings/notification-inbox/model/useNotificationInbox.ts`  →  UseNotificationInboxResult · useNotificationInbox
 
-## src/pages/settings-personalization/
-- `src/pages/settings-personalization/index.ts`  →  PersonalizationPage
+## src/pages/settings/notification-inbox/ui/
+- `src/pages/settings/notification-inbox/ui/NotificationInboxGlyphs.tsx`  →  NotificationKindIcon · NotifBellGlyph
+- `src/pages/settings/notification-inbox/ui/NotificationInboxPage.tsx`  →  NotificationInboxPage
+- `src/pages/settings/notification-inbox/ui/NotificationInboxScreen.tsx`  →  NotificationRowVM · NotificationSection · NotificationInboxScreenProps · NotificationInboxScreen
+- `src/pages/settings/notification-inbox/ui/NotificationRow.tsx`  →  NotificationRowProps · NotificationRow
 
-## src/pages/settings-personalization/model/
-- `src/pages/settings-personalization/model/personalizationCopy.ts`  →  personalizationCopy
-- `src/pages/settings-personalization/model/usePersonalization.ts`  →  UsePersonalizationResult · usePersonalization
+## src/pages/settings/settings-location/
+- `src/pages/settings/settings-location/index.ts`  →  LocationConsentPage
 
-## src/pages/settings-personalization/ui/
-- `src/pages/settings-personalization/ui/PersonalizationPage.tsx`  →  PersonalizationPage
-- `src/pages/settings-personalization/ui/PersonalizationScreen.tsx`  →  PersonalizationScreenProps · PersonalizationScreen
+## src/pages/settings/settings-location/ui/
+- `src/pages/settings/settings-location/ui/LocationConsentPage.tsx`  →  LocationConsentPage
+- `src/pages/settings/settings-location/ui/LocationConsentScreen.tsx`  →  LocationConsentScreenProps · LocationConsentScreen
+- `src/pages/settings/settings-location/ui/RevokeConfirmDialog.tsx`  →  RevokeConfirmDialog
 
-## src/pages/settings-preferences/
-- `src/pages/settings-preferences/index.ts`  →  SettingsPreferencesPage
+## src/pages/settings/settings-notifications/
+- `src/pages/settings/settings-notifications/index.ts`  →  NotificationSettingsPage
 
-## src/pages/settings-preferences/model/
-- `src/pages/settings-preferences/model/usePreferences.ts`  →  UsePreferencesResult · usePreferences
+## src/pages/settings/settings-notifications/model/
+- `src/pages/settings/settings-notifications/model/channelAvailability.ts`  →  PushPermission · PushColumnState · resolvePushColumn
+- `src/pages/settings/settings-notifications/model/useToggles.ts`  →  ToggleChannel · ToggleOutcome · UseTogglesResult · useToggles
 
-## src/pages/settings-preferences/ui/
-- `src/pages/settings-preferences/ui/PreferencesEditScreen.tsx`  →  PreferencesEditScreen
-- `src/pages/settings-preferences/ui/PreferencesEditView.tsx`  →  EditableAxis · isMultiAxis · PreferencesEditViewProps · PreferencesEditView
-- `src/pages/settings-preferences/ui/SettingsPreferencesPage.tsx`  →  SettingsPreferencesPage
+## src/pages/settings/settings-notifications/ui/
+- `src/pages/settings/settings-notifications/ui/NotificationSettingsPage.tsx`  →  NotificationSettingsPage
+- `src/pages/settings/settings-notifications/ui/NotificationSettingsScreen.tsx`  →  ToggleValueMap · NotificationSettingsScreenProps · NotificationSettingsScreen
+- `src/pages/settings/settings-notifications/ui/PermissionBanner.tsx`  →  PermissionBanner
+- `src/pages/settings/settings-notifications/ui/ToggleRow.tsx`  →  ToggleRowProps · ToggleRow
 
-## src/pages/settings/
-- `src/pages/settings/index.ts`  →  SettingsPage
+## src/pages/settings/settings-personalization/
+- `src/pages/settings/settings-personalization/index.ts`  →  PersonalizationPage
 
-## src/pages/settings/model/
-- `src/pages/settings/model/dataAttribution.ts`  →  OSM_COPYRIGHT_URL
-- `src/pages/settings/model/deletionScope.ts`  →  DELETION_SCOPE
-- `src/pages/settings/model/exportSummary.ts`  →  ExportSummary · resolveExportSummary
-- `src/pages/settings/model/preferenceSummary.ts`  →  PreferenceRowKey · PreferenceSummary · summarizePreferences
-- `src/pages/settings/model/settingsSections.ts`  →  SettingsInput · SettingsRowChip · SettingsRowVM · SettingsGroupVM · buildSettingsSections · filterReadySettingsSections
+## src/pages/settings/settings-personalization/model/
+- `src/pages/settings/settings-personalization/model/personalizationCopy.ts`  →  personalizationCopy
+- `src/pages/settings/settings-personalization/model/usePersonalization.ts`  →  UsePersonalizationResult · usePersonalization
 
-## src/pages/settings/ui/
-- `src/pages/settings/ui/DeleteAccountDialog.tsx`  →  DeleteAccountDialog
-- `src/pages/settings/ui/ExportRow.tsx`  →  ExportRow
-- `src/pages/settings/ui/LogoutConfirmDialog.tsx`  →  LogoutConfirmDialog
-- `src/pages/settings/ui/NicknameEditRow.tsx`  →  NicknameEditRow
-- `src/pages/settings/ui/SettingsGroup.tsx`  →  SettingsGroup
-- `src/pages/settings/ui/SettingsPage.tsx`  →  SettingsPage
-- `src/pages/settings/ui/SettingsRow.tsx`  →  RowBody · PreparingRow · NavRow
-- `src/pages/settings/ui/SettingsScreen.tsx`  →  SettingsScreenProps · SettingsScreen
+## src/pages/settings/settings-personalization/ui/
+- `src/pages/settings/settings-personalization/ui/PersonalizationPage.tsx`  →  PersonalizationPage
+- `src/pages/settings/settings-personalization/ui/PersonalizationScreen.tsx`  →  PersonalizationScreenProps · PersonalizationScreen
+
+## src/pages/settings/settings-preferences/
+- `src/pages/settings/settings-preferences/index.ts`  →  SettingsPreferencesPage
+
+## src/pages/settings/settings-preferences/model/
+- `src/pages/settings/settings-preferences/model/usePreferences.ts`  →  UsePreferencesResult · usePreferences
+
+## src/pages/settings/settings-preferences/ui/
+- `src/pages/settings/settings-preferences/ui/PreferencesEditScreen.tsx`  →  PreferencesEditScreen
+- `src/pages/settings/settings-preferences/ui/PreferencesEditView.tsx`  →  EditableAxis · isMultiAxis · PreferencesEditViewProps · PreferencesEditView
+- `src/pages/settings/settings-preferences/ui/SettingsPreferencesPage.tsx`  →  SettingsPreferencesPage
+
+## src/pages/settings/settings/
+- `src/pages/settings/settings/index.ts`  →  SettingsPage
+
+## src/pages/settings/settings/model/
+- `src/pages/settings/settings/model/dataAttribution.ts`  →  OSM_COPYRIGHT_URL
+- `src/pages/settings/settings/model/deletionScope.ts`  →  DELETION_SCOPE
+- `src/pages/settings/settings/model/exportSummary.ts`  →  ExportSummary · resolveExportSummary
+- `src/pages/settings/settings/model/preferenceSummary.ts`  →  PreferenceRowKey · PreferenceSummary · summarizePreferences
+- `src/pages/settings/settings/model/settingsSections.ts`  →  SettingsInput · SettingsRowChip · SettingsRowVM · SettingsGroupVM · buildSettingsSections · filterReadySettingsSections
+
+## src/pages/settings/settings/ui/
+- `src/pages/settings/settings/ui/DeleteAccountDialog.tsx`  →  DeleteAccountDialog
+- `src/pages/settings/settings/ui/ExportRow.tsx`  →  ExportRow
+- `src/pages/settings/settings/ui/LogoutConfirmDialog.tsx`  →  LogoutConfirmDialog
+- `src/pages/settings/settings/ui/NicknameEditRow.tsx`  →  NicknameEditRow
+- `src/pages/settings/settings/ui/SettingsGroup.tsx`  →  SettingsGroup
+- `src/pages/settings/settings/ui/SettingsPage.tsx`  →  SettingsPage
+- `src/pages/settings/settings/ui/SettingsRow.tsx`  →  RowBody · PreparingRow · NavRow
+- `src/pages/settings/settings/ui/SettingsScreen.tsx`  →  SettingsScreenProps · SettingsScreen
 
 ## src/pages/stay/my-stays/
 - `src/pages/stay/my-stays/index.ts`  →  MyStaysPage

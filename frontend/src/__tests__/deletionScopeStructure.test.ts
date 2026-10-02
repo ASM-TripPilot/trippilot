@@ -8,7 +8,7 @@ import { join, relative, resolve, sep } from 'node:path';
  * TRIP-608 AC-13 · BR-U6-25(DEC-U6-6) — 삭제 고지 목록은 `deletionScope.ts` 가 **단일 소유**한다.
  *
  * 무엇을 보장하나: 계정 삭제 시 함께 삭제되는 것들의 목록(법적 사전 고지)이 오직
- * `pages/settings/model/deletionScope.ts` 의 `DELETION_SCOPE` 상수에만 리터럴로 산다.
+ * `pages/settings/settings/model/deletionScope.ts` 의 `DELETION_SCOPE` 상수에만 리터럴로 산다.
  * 다이얼로그는 이 상수를 import·map 해 그리므로(Q1 확정 — Figma 3항목 축약 산문 미채용, 전체 목록
  * 렌더), 설정 표면의 다른 소스 파일에는 이 문자열들이 **인라인으로 중복되지 않아야** 한다. 목록이
  * 두 군데로 갈리면 한쪽만 고쳐 법적 고지가 실제 삭제 범위와 어긋난다.
@@ -16,7 +16,7 @@ import { join, relative, resolve, sep } from 'node:path';
  * 왜 소스 스캔인가: "목록이 한 곳에만 있다"는 런타임 동작이 아니라 코드 배치의 성질이다 —
  * 렌더 테스트로는 표현할 수 없고 소스 층에서만 잡힌다.
  *
- * 왜 **설정 표면 스코프**(features/settings·pages/settings·app/settings·pages/my-page·pages/my-stays·pages/settings-personalization·features/edit-preferences)인가, whole-repo 가 아니라:
+ * 왜 **설정 표면 스코프**(features/settings·pages/settings/settings·app/settings·pages/settings/my-page·pages/stay/my-stays·pages/settings/settings-personalization·features/edit-preferences)인가, whole-repo 가 아니라:
  * `회고`·`요약` 같은 삭제 대상 어휘는 `features/reflection` 등에 **정당하게** 등장한다 —
  * 전 리포 스캔은 그걸 위반으로 오탐한다. AC-13 의 실제 표적은 "삭제 고지 목록이 다이얼로그에
  * 인라인 중복되는 것"이고, 그 중복이 생길 곳은 설정 표면뿐이다.
@@ -33,16 +33,17 @@ const DELETION_SCOPE_FILE = join(
   SRC_ROOT,
   'pages',
   'settings',
+  'settings',
   'model',
   'deletionScope.ts'
 );
 const SCAN_ROOTS = [
   join(SRC_ROOT, 'features', 'settings'),
-  join(SRC_ROOT, 'pages', 'settings'),
+  join(SRC_ROOT, 'pages', 'settings', 'settings'),
   join(SRC_ROOT, 'app', 'settings'),
-  join(SRC_ROOT, 'pages', 'my-page'),
+  join(SRC_ROOT, 'pages', 'settings', 'my-page'),
   join(SRC_ROOT, 'pages', 'stay', 'my-stays'),
-  join(SRC_ROOT, 'pages', 'settings-personalization'),
+  join(SRC_ROOT, 'pages', 'settings', 'settings-personalization'),
   join(SRC_ROOT, 'features', 'edit-preferences'),
 ];
 const SOURCE_EXTENSIONS = ['.ts', '.tsx'];

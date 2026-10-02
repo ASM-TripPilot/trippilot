@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 
-import { NotificationInboxPage } from '@/pages/notification-inbox';
+import { NotificationInboxPage } from '@/pages/settings/notification-inbox';
 
 /**
  * TRIP-576 · l01 알림함 라우트 `/notifications` — d02 얇은 위임(→ NotificationInboxPage).

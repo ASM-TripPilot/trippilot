@@ -86,15 +86,15 @@ paths:
 | `src/pages/stay/my-stays/model/stayTripLink.test.ts` | `buildStayTripLink` — 연결/미연결/혼합/first-wins/유령 base 배제/빈 입력 |
 | `src/pages/stay/my-stays/ui/MyStaysScreen.test.tsx` | l04 뷰 — 행 표시·「출발점 변경」 press 1회(등록 행만, 미등록 행은 버튼 없음 — TRIP-1076)·좌표 미확정 disabled·empty + Figma l04 정합(옛 `.l04parity`, TRIP-1148 합본). 출발점 다이얼로그·chevron 색은 소스 옆 `features/settings/ui/{BaseToggleDialog,SettingsGlyphs}.test.tsx`로 갈라졌다 |
 | `src/pages/stay/my-stays/ui/MyStaysPage.integration.test.tsx` | l04 페이지 배선 — 두 관점을 팩토리 안 스위치 `mockRealWiring` 하나로 가른다(TRIP-1148 합본): 화면 캡처 스텁(null 반환 props-캡처 목 + 조회 훅 `jest.fn`) / 실 화면 + msw(옛 `.release`). 실 화면 위임은 JSX 없이 `createElement`(NativeWind babel 함정 회피). 스텁 관점은 쓰기 훅을 보지 않고, 거점 쓰기 0회는 실 화면 관점이 msw 요청 로그(`writes`가 빈 배열)로 단언한다 — TRIP-1076 이후 이 페이지는 거점을 쓰지 않는다 |
-| `src/pages/my-page/model/styleCardModel.test.ts` | `buildStyleCardModel` — official 매핑·insufficient는 preview 미유출·게이지 전수 |
-| `src/pages/my-page/ui/StyleSummaryCard.test.tsx` | 스타일 카드 — 채움/빈 점을 서로 다른 testID로 세어 SVG fill 함정 차단 · 상세 진입 disabled degrade(INV-4) |
-| `src/pages/my-page/ui/MyPage.test.tsx` | 마이 페이지 배선+배치(`layer-pages.md` `my-page` 행) — 옛 `.counts`·`.l03empty`·`.l03parity`·`.integration`·`.styleDetail.integration`을 describe 5개로 합침(TRIP-1154, MSW 0이라 node 버킷) |
-| `src/pages/settings-notifications/ui/NotificationSettingsScreen.test.tsx` | 알림 설정 화면 — 행·토글·Figma 정합 + 계약 밖 kind(COMMUNITY·SYSTEM)를 주입받아도 렌더하지 않는지(`VISIBLE_ROWS` 자체 소유, 옛 `__tests__/notificationKindGuard` 흡수 — TRIP-1154) |
+| `src/pages/settings/my-page/model/styleCardModel.test.ts` | `buildStyleCardModel` — official 매핑·insufficient는 preview 미유출·게이지 전수 |
+| `src/pages/settings/my-page/ui/StyleSummaryCard.test.tsx` | 스타일 카드 — 채움/빈 점을 서로 다른 testID로 세어 SVG fill 함정 차단 · 상세 진입 disabled degrade(INV-4) |
+| `src/pages/settings/my-page/ui/MyPage.test.tsx` | 마이 페이지 배선+배치(`layer-pages.md` `my-page` 행) — 옛 `.counts`·`.l03empty`·`.l03parity`·`.integration`·`.styleDetail.integration`을 describe 5개로 합침(TRIP-1154, MSW 0이라 node 버킷) |
+| `src/pages/settings/settings-notifications/ui/NotificationSettingsScreen.test.tsx` | 알림 설정 화면 — 행·토글·Figma 정합 + 계약 밖 kind(COMMUNITY·SYSTEM)를 주입받아도 렌더하지 않는지(`VISIBLE_ROWS` 자체 소유, 옛 `__tests__/notificationKindGuard` 흡수 — TRIP-1154) |
 | `src/features/edit-preferences/model/preferenceDraft.test.ts` | 취향 역변환 — 안 만진 축은 omit(`toStrictEqual`로 여분 `undefined` 키까지) |
-| `src/pages/settings-preferences/ui/PreferencesEditScreen.integration.test.tsx` | 취향 편집 MSW 통합 — 시드·한 축 PUT 바디·400 인라인(INV-4) + 저장 diff 기준선이 시드 시점으로 얼어 있는지(lost update 방지, 옛 `.baseline` 흡수 — 스위치 `mockFakePreferences`로 그 describe만 가짜 훅) |
-| `src/pages/settings-personalization/model/personalizationCopy.test.ts` | 개인화 문구표 전수 + `NOT_ENOUGH_RECORDS`에 동의 유도 문구 없음(BR-U5-44) |
-| `src/pages/settings-personalization/ui/PersonalizationScreen.test.tsx` | reason 3얼굴·목록 개수·토글 배선 — `NOT_ENOUGH_RECORDS`는 토글 ON 유지+동의 문구 부재 |
-| `src/pages/settings-personalization/ui/PersonalizationPage.test.tsx` | 토글 → GRANT/REVOKE — `reason`이 아니라 `applied`로 판정하는 뮤턴트를 잡는 `NOT_ENOUGH_RECORDS` 케이스 포함 · termsVersion 필터 · `invalidateQueries` spy |
+| `src/pages/settings/settings-preferences/ui/PreferencesEditScreen.integration.test.tsx` | 취향 편집 MSW 통합 — 시드·한 축 PUT 바디·400 인라인(INV-4) + 저장 diff 기준선이 시드 시점으로 얼어 있는지(lost update 방지, 옛 `.baseline` 흡수 — 스위치 `mockFakePreferences`로 그 describe만 가짜 훅) |
+| `src/pages/settings/settings-personalization/model/personalizationCopy.test.ts` | 개인화 문구표 전수 + `NOT_ENOUGH_RECORDS`에 동의 유도 문구 없음(BR-U5-44) |
+| `src/pages/settings/settings-personalization/ui/PersonalizationScreen.test.tsx` | reason 3얼굴·목록 개수·토글 배선 — `NOT_ENOUGH_RECORDS`는 토글 ON 유지+동의 문구 부재 |
+| `src/pages/settings/settings-personalization/ui/PersonalizationPage.test.tsx` | 토글 → GRANT/REVOKE — `reason`이 아니라 `applied`로 판정하는 뮤턴트를 잡는 `NOT_ENOUGH_RECORDS` 케이스 포함 · termsVersion 필터 · `invalidateQueries` spy |
 | `src/shared/api/patchConsent.test.ts` | `patchConsent` 와이어 계약 — URL에 termsType, body는 `{action, termsVersion}` 두 필드만 |
 | `src/features/create-trip/model/tripWizardStore.periodFromNights.test.ts` | 시작·박수 재계산 예시 + fast-check 액션열 PBT(**매 단계 뒤** 끝−시작=Σnights, 오라클은 구현과 다른 계산 경로). `reset()`은 파일 최상위 `beforeEach`+`afterEach` 둘 다 |
 | `src/pages/record/trip-records/model/stayAttribution.test.ts` | (TRIP-1155로 features/record에서 이사) 행동 테스트 + PBT(`baseStay`가 항상 그 날짜를 덮는 base의 함수) + dateTo 경계값 3종 |
@@ -111,5 +111,5 @@ paths:
 | `src/pages/record/daily-reflection/model/reflectionFallback.test.ts` | (TRIP-1155로 features/reflection에서 이사) PBT-U5-F1(CI 차단): 임의 `Reflection \| undefined`에도 표시본 `trim().length>0` + 폴백 순서 예제 |
 | `src/pages/record/daily-reflection/model/statsCard.test.ts` | (TRIP-1155로 features/reflection에서 이사) undefined/null→0s · 완전 입력 통과 · 숫자 타입 |
 | `src/pages/record/daily-reflection/model/missingParts.test.ts` | (TRIP-1155로 features/reflection에서 이사) 각 플래그 on/off 짝 |
-| `src/pages/settings-notifications/model/channelAvailability.test.ts` | (TRIP-1155로 features/notification에서 이사) PBT-U6-F2 전용(node 버킷). `permissionArb`는 선언만 되고 미사용 |
-| `src/pages/settings-notifications/model/useToggles.integration.test.tsx` | (TRIP-1155로 features/notification에서 이사) msw 통합 버킷. hitCount needle은 `GET ` 메서드 접두까지 포함해야 한다(복사 원본 대비 누락 시 어떤 구현으로도 통과 불가) |
+| `src/pages/settings/settings-notifications/model/channelAvailability.test.ts` | (TRIP-1155로 features/notification에서 이사) PBT-U6-F2 전용(node 버킷). `permissionArb`는 선언만 되고 미사용 |
+| `src/pages/settings/settings-notifications/model/useToggles.integration.test.tsx` | (TRIP-1155로 features/notification에서 이사) msw 통합 버킷. hitCount needle은 `GET ` 메서드 접두까지 포함해야 한다(복사 원본 대비 누락 시 어떤 구현으로도 통과 불가) |

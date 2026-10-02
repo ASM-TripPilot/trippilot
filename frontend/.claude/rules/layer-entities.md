@@ -93,4 +93,4 @@ paths:
 | `lib/styleProgress.ts` | `resolveStyleProgress(envelope)` — `progress`를 **필드 단위**로 폴백(`current ?? 0`, `required ?? 10`). 객체 단위 폴백(`progress ?? {…}`)은 `progress: {}`를 그대로 통과시켜 "현재 undefined곳"을 낸다 — 쓰지 않는다. 소비처가 progress를 직접 읽지 않게 하는 것이 목적. |
 | `lib/styleProgress.test.ts` | 값 표(it.each) + property("숫자면 그 값, 아니면 기본값"을 `typeof`로 따로 적어 구현식 복붙 방지). |
 
-`pages/my-page/model/styleCardModel.ts`의 `\|\| analysis == null`은 판정과 별개인 TS 타입 좁히기용 중복이다(동치 property `styleCardModel.face.test.ts`가 잠금).
+`pages/settings/my-page/model/styleCardModel.ts`의 `\|\| analysis == null`은 판정과 별개인 TS 타입 좁히기용 중복이다(동치 property `styleCardModel.face.test.ts`가 잠금).

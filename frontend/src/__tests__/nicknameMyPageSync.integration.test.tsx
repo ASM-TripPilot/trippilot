@@ -10,8 +10,8 @@ import {
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
-import { MyPage } from '@/pages/my-page';
-import { SettingsPage } from '@/pages/settings';
+import { MyPage } from '@/pages/settings/my-page';
+import { SettingsPage } from '@/pages/settings/settings';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { WithToastHost, resetToast } from '@/test-support/toastHarness';
 

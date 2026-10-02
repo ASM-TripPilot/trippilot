@@ -23,7 +23,7 @@ import path from 'path';
  *   탐지기가 그 살아남은 것에 오검출/미검출을 안 내는지 **실제 문자열로 1회 태운다**(G0, 문제로그
  *   [[stripComments 가 URL 슬래시 오인]] 계열). 바이너리 스캔 범위는 features/record+shared/photo+
  *   pages/live/live-itinerary 로 한정 — generated/trips/trips.ts 주석에 storage_key 가 실재하나 그 밖이라
- *   사정거리 밖(src 전체로 넓히면 거짓 red). TRIP-1155로 첨부·방문 파일이 pages/trip-records·pages/records-calendar·
+ *   사정거리 밖(src 전체로 넓히면 거짓 red). TRIP-1155로 첨부·방문 파일이 pages/record/trip-records·pages/record/records-calendar·
  *   features/check-visit·features/attach-visit-media로 흩어져 SCAN_DIRS에 더했다.
  */
 

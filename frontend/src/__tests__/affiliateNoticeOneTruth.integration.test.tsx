@@ -11,7 +11,7 @@ import {
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
-import { SettingsPage } from '@/pages/settings';
+import { SettingsPage } from '@/pages/settings/settings';
 import { StayDetailPage } from '@/pages/stay/stay-detail';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { StayDetail } from '@/shared/api/generated/schemas';
