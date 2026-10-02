@@ -1,7 +1,7 @@
 ---
 paths:
   - "src/features/stay/**"
-  - "src/pages/stay-*/**"
+  - "src/pages/stay/stay-*/**"
   - "src/app/stays/**"
   - "src/features/save-stay/**"
   - "src/entities/stay/**"
@@ -22,11 +22,11 @@ paths:
 
 ## stay 담기 (coordConfirmed)
 
-- **`buildSaveStayRequest`의 출력값을 잠그는 심판이 단위·통합 두 층에 나뉘어 있고, 서로를 갱신시키는 기계가 없다** → `buildSaveStayRequest.test.ts`(단위, 함수 반환값)와 `src/pages/stay-search/ui/StaySearchPage.integration.test.tsx` 「저장 하트」 describe(배선층, `EXPECTED_POST_A` 리터럴)가 같은 `coordConfirmed` 값을 각자 리터럴로 굳힌다. 단위 테스트만 갱신하고 통합 테스트를 빠뜨려도 lint·tsc·`pnpm test:node`는 green이다 — `pnpm test:integration`(또는 `pnpm test` 전체)을 돌려야만 드러난다(실측 2건). 이 함수의 반환 필드를 바꿀 때는 두 파일을 함께 grep한다.
+- **`buildSaveStayRequest`의 출력값을 잠그는 심판이 단위·통합 두 층에 나뉘어 있고, 서로를 갱신시키는 기계가 없다** → `buildSaveStayRequest.test.ts`(단위, 함수 반환값)와 `src/pages/stay/stay-search/ui/StaySearchPage.integration.test.tsx` 「저장 하트」 describe(배선층, `EXPECTED_POST_A` 리터럴)가 같은 `coordConfirmed` 값을 각자 리터럴로 굳힌다. 단위 테스트만 갱신하고 통합 테스트를 빠뜨려도 lint·tsc·`pnpm test:node`는 green이다 — `pnpm test:integration`(또는 `pnpm test` 전체)을 돌려야만 드러난다(실측 2건). 이 함수의 반환 필드를 바꿀 때는 두 파일을 함께 grep한다.
 
 ## e03 숙소 상세 GET
 
-- **`GET /stays/{stayId}`는 인증 필요인데 401을 별도로 안 가르고 통합 테스트 목 서버는 무조건 200이다** → `pages/stay-detail/ui/StayDetailPage.tsx`의 `resolveDetailState`는 404(notFound)·400(invalid)만 가르고 401은 나머지(`error`, 재시도 버튼)로 접힌다. 401은 다시 물어도 안 풀리므로 세션 만료 사용자는 재시도를 눌러도 같은 얼굴이 반복된다. `StayDetailPage.integration.test.tsx`의 `beforeEach` 기본 핸들러가 Authorization 헤더를 안 보고 200을 주기 때문에, 게스트 동선 케이스(I7·I8·G1·G2·`affiliateNoticeOneTruth`)가 green이어도 **실서버의 게스트/세션만료 경로는 보장되지 않는다**(정책 미결: 공개 API로 열지 FE가 401 얼굴을 만들지).
+- **`GET /stays/{stayId}`는 인증 필요인데 401을 별도로 안 가르고 통합 테스트 목 서버는 무조건 200이다** → `pages/stay/stay-detail/ui/StayDetailPage.tsx`의 `resolveDetailState`는 404(notFound)·400(invalid)만 가르고 401은 나머지(`error`, 재시도 버튼)로 접힌다. 401은 다시 물어도 안 풀리므로 세션 만료 사용자는 재시도를 눌러도 같은 얼굴이 반복된다. `StayDetailPage.integration.test.tsx`의 `beforeEach` 기본 핸들러가 Authorization 헤더를 안 보고 200을 주기 때문에, 게스트 동선 케이스(I7·I8·G1·G2·`affiliateNoticeOneTruth`)가 green이어도 **실서버의 게스트/세션만료 경로는 보장되지 않는다**(정책 미결: 공개 API로 열지 FE가 401 얼굴을 만들지).
 
 ## 하트 글리프 사본 분기 (6-b 시각 전용)
 

@@ -41,7 +41,7 @@ const SCAN_ROOTS = [
   join(SRC_ROOT, 'pages', 'settings'),
   join(SRC_ROOT, 'app', 'settings'),
   join(SRC_ROOT, 'pages', 'my-page'),
-  join(SRC_ROOT, 'pages', 'my-stays'),
+  join(SRC_ROOT, 'pages', 'stay', 'my-stays'),
   join(SRC_ROOT, 'pages', 'settings-personalization'),
   join(SRC_ROOT, 'features', 'edit-preferences'),
 ];

@@ -3,7 +3,7 @@
  * TRIP-940 · US-STAY-*).
  *
  * `state`(조회 결과 판별 유니온) + 상태 플래그·콜백만 받는다 — 네트워크·라우팅·저장 판정을 전혀
- * 모른다(FSD 경계, 조회·배선은 `pages/stay-detail/ui/StayDetailPage.tsx`가 진다. 구조 가드가
+ * 모른다(FSD 경계, 조회·배선은 `pages/stay/stay-detail/ui/StayDetailPage.tsx`가 진다. 구조 가드가
  * useState·라우터·query·타 feature import 0을 잠근다). ready 가 아닌 네 얼굴(로딩·404·400·네트워크)은
  * testID 로 갈리고 모두 뒤로 버튼을 갖는다. 재시도는 네트워크 오류에만 있다(INV-4, TRIP-940 Q2).
  * ready 얼굴: 사진 URL 필드가 없어 회색 자리(INV-1)·최저가(`formatPrice` 재사용, "· 1박" 없음 Q6)·

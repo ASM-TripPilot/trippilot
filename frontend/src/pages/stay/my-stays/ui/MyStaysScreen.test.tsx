@@ -10,7 +10,7 @@ import {
   type MyStaysScreenProps,
 } from './MyStaysScreen';
 import type { ReactTestInstance } from 'react-test-renderer';
-import tailwindConfig from '../../../../tailwind.config.js';
+import tailwindConfig from '../../../../../tailwind.config.js';
 import { MUTED_SOFT } from '@/features/settings/ui/SettingsGlyphs';
 
 /**

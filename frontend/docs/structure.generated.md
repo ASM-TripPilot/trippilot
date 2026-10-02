@@ -764,16 +764,6 @@
 - `src/pages/my-page/ui/ProfileCard.tsx`  →  ProfileCardCounts · ProfileCardProps · ProfileCard
 - `src/pages/my-page/ui/StyleSummaryCard.tsx`  →  StyleSummaryCardProps · StyleSummaryCard
 
-## src/pages/my-stays/
-- `src/pages/my-stays/index.ts`  →  MyStaysPage
-
-## src/pages/my-stays/model/
-- `src/pages/my-stays/model/stayTripLink.ts`  →  StayTripLink · buildStayTripLink
-
-## src/pages/my-stays/ui/
-- `src/pages/my-stays/ui/MyStaysPage.tsx`  →  MyStaysPage
-- `src/pages/my-stays/ui/MyStaysScreen.tsx`  →  MyStayBaseState · MyStayRowVM · MyStaysScreenProps · MyStaysScreen
-
 ## src/pages/notification-inbox/
 - `src/pages/notification-inbox/index.ts`  →  NotificationInboxPage
 
@@ -966,54 +956,64 @@
 - `src/pages/share-card/ui/ShareCardPreview.tsx`  →  ShareCardPreviewProps · ShareCardPreview
 - `src/pages/share-card/ui/ShareCardScreen.tsx`  →  ShareCardScreenProps · ShareCardScreen
 
-## src/pages/stay-detail/config/
-- `src/pages/stay-detail/config/amenityIcons.ts`  →  resolveAmenityIcon
+## src/pages/stay/my-stays/
+- `src/pages/stay/my-stays/index.ts`  →  MyStaysPage
 
-## src/pages/stay-detail/
-- `src/pages/stay-detail/index.ts`  →  StayDetailPage
+## src/pages/stay/my-stays/model/
+- `src/pages/stay/my-stays/model/stayTripLink.ts`  →  StayTripLink · buildStayTripLink
 
-## src/pages/stay-detail/model/
-- `src/pages/stay-detail/model/stayOutbound.ts`  →  StayOutboundMode · stayOutboundMode · buildStaySearchUrl · openStayOutbound
+## src/pages/stay/my-stays/ui/
+- `src/pages/stay/my-stays/ui/MyStaysPage.tsx`  →  MyStaysPage
+- `src/pages/stay/my-stays/ui/MyStaysScreen.tsx`  →  MyStayBaseState · MyStayRowVM · MyStaysScreenProps · MyStaysScreen
 
-## src/pages/stay-detail/ui/
-- `src/pages/stay-detail/ui/OtaChoiceSheet.tsx`  →  OtaChoiceSheetProps · OtaChoiceSheet
-- `src/pages/stay-detail/ui/StayDetailPage.tsx`  →  StayDetailPage
-- `src/pages/stay-detail/ui/StayDetailScreen.tsx`  →  StayDetailState · StayDetailScreenProps · StayDetailScreen
+## src/pages/stay/stay-detail/config/
+- `src/pages/stay/stay-detail/config/amenityIcons.ts`  →  resolveAmenityIcon
 
-## src/pages/stay-register/
-- `src/pages/stay-register/index.ts`  →  StayRegisterPage
+## src/pages/stay/stay-detail/
+- `src/pages/stay/stay-detail/index.ts`  →  StayDetailPage
 
-## src/pages/stay-register/model/
-- `src/pages/stay-register/model/stayRegisterForm.ts`  →  StayRegisterTab · StayRegisterFlow · resolveName · canSubmitStayRegister · buildStayRegisterRequest
+## src/pages/stay/stay-detail/model/
+- `src/pages/stay/stay-detail/model/stayOutbound.ts`  →  StayOutboundMode · stayOutboundMode · buildStaySearchUrl · openStayOutbound
 
-## src/pages/stay-register/ui/
-- `src/pages/stay-register/ui/StayRegisterPage.tsx`  →  StayRegisterPage
-- `src/pages/stay-register/ui/StayRegisterScreen.tsx`  →  StayRegisterScreenProps · StayRegisterScreen
+## src/pages/stay/stay-detail/ui/
+- `src/pages/stay/stay-detail/ui/OtaChoiceSheet.tsx`  →  OtaChoiceSheetProps · OtaChoiceSheet
+- `src/pages/stay/stay-detail/ui/StayDetailPage.tsx`  →  StayDetailPage
+- `src/pages/stay/stay-detail/ui/StayDetailScreen.tsx`  →  StayDetailState · StayDetailScreenProps · StayDetailScreen
 
-## src/pages/stay-saved/
-- `src/pages/stay-saved/index.ts`  →  SavedStayPage
+## src/pages/stay/stay-register/
+- `src/pages/stay/stay-register/index.ts`  →  StayRegisterPage
 
-## src/pages/stay-saved/ui/
-- `src/pages/stay-saved/ui/SavedStayListScreen.tsx`  →  SavedStayFace · SavedStayListScreenProps · SavedStayListScreen
-- `src/pages/stay-saved/ui/SavedStayPage.tsx`  →  SavedStayPage
+## src/pages/stay/stay-register/model/
+- `src/pages/stay/stay-register/model/stayRegisterForm.ts`  →  StayRegisterTab · StayRegisterFlow · resolveName · canSubmitStayRegister · buildStayRegisterRequest
 
-## src/pages/stay-search/
-- `src/pages/stay-search/index.ts`  →  StaySearchPage
+## src/pages/stay/stay-register/ui/
+- `src/pages/stay/stay-register/ui/StayRegisterPage.tsx`  →  StayRegisterPage
+- `src/pages/stay/stay-register/ui/StayRegisterScreen.tsx`  →  StayRegisterScreenProps · StayRegisterScreen
 
-## src/pages/stay-search/model/
-- `src/pages/stay-search/model/filterReasonLabel.ts`  →  filterReasonLabel
-- `src/pages/stay-search/model/priceRangeFilter.ts`  →  PriceBucketId · PRICE_BUCKETS · filterByPriceRange
-- `src/pages/stay-search/model/relaxCulpritFilter.ts`  →  relaxCulpritFilter
-- `src/pages/stay-search/model/stayFilterOptions.ts`  →  StayFilterOption · StayFilterOptions · buildStayFilterOptions · toggleFilterValue · countActiveFilters
-- `src/pages/stay-search/model/staySearchState.ts`  →  StaySearchState · resolveStaySearchState
+## src/pages/stay/stay-saved/
+- `src/pages/stay/stay-saved/index.ts`  →  SavedStayPage
 
-## src/pages/stay-search/ui/
-- `src/pages/stay-search/ui/PartialFailureBanner.tsx`  →  PartialFailureBanner
-- `src/pages/stay-search/ui/SkeletonList.tsx`  →  SkeletonList
-- `src/pages/stay-search/ui/StayFilterSheet.tsx`  →  StayFilterSheetProps · StayFilterSheet
-- `src/pages/stay-search/ui/StayPriceSheet.tsx`  →  StayPriceSheetProps · StayPriceSheet
-- `src/pages/stay-search/ui/StaySearchPage.tsx`  →  StaySearchPage
-- `src/pages/stay-search/ui/StaySearchScreen.tsx`  →  StaySearchScreenProps · StaySearchScreen
+## src/pages/stay/stay-saved/ui/
+- `src/pages/stay/stay-saved/ui/SavedStayListScreen.tsx`  →  SavedStayFace · SavedStayListScreenProps · SavedStayListScreen
+- `src/pages/stay/stay-saved/ui/SavedStayPage.tsx`  →  SavedStayPage
+
+## src/pages/stay/stay-search/
+- `src/pages/stay/stay-search/index.ts`  →  StaySearchPage
+
+## src/pages/stay/stay-search/model/
+- `src/pages/stay/stay-search/model/filterReasonLabel.ts`  →  filterReasonLabel
+- `src/pages/stay/stay-search/model/priceRangeFilter.ts`  →  PriceBucketId · PRICE_BUCKETS · filterByPriceRange
+- `src/pages/stay/stay-search/model/relaxCulpritFilter.ts`  →  relaxCulpritFilter
+- `src/pages/stay/stay-search/model/stayFilterOptions.ts`  →  StayFilterOption · StayFilterOptions · buildStayFilterOptions · toggleFilterValue · countActiveFilters
+- `src/pages/stay/stay-search/model/staySearchState.ts`  →  StaySearchState · resolveStaySearchState
+
+## src/pages/stay/stay-search/ui/
+- `src/pages/stay/stay-search/ui/PartialFailureBanner.tsx`  →  PartialFailureBanner
+- `src/pages/stay/stay-search/ui/SkeletonList.tsx`  →  SkeletonList
+- `src/pages/stay/stay-search/ui/StayFilterSheet.tsx`  →  StayFilterSheetProps · StayFilterSheet
+- `src/pages/stay/stay-search/ui/StayPriceSheet.tsx`  →  StayPriceSheetProps · StayPriceSheet
+- `src/pages/stay/stay-search/ui/StaySearchPage.tsx`  →  StaySearchPage
+- `src/pages/stay/stay-search/ui/StaySearchScreen.tsx`  →  StaySearchScreenProps · StaySearchScreen
 
 ## src/pages/travel-style/
 - `src/pages/travel-style/index.ts`  →  TravelStylePage

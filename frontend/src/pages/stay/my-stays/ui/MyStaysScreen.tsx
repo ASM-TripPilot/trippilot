@@ -12,7 +12,7 @@ import {
 
 /**
  * TRIP-605 · l04 등록 숙소·예약 기록 화면 — 순수 프레젠테이션(VM 주입). 조회·조합·N+1·포맷은
- * 페이지(`pages/my-stays`)가 진다(MyPageScreen↔TripCardContainer 분리 규율, features/settings 경계).
+ * 페이지(`pages/stay/my-stays`)가 진다(MyPageScreen↔TripCardContainer 분리 규율, features/settings 경계).
  *
  * 「출발점 변경」(TRIP-1076 결정 2(A)): 등록 행의 링크 press = `onPressChangeBase(row)` 1회 — 이 화면은
  * 거점을 바꾸지도, 확인 다이얼로그를 띄우지도 않는다. 바꾸기는 페이지가 여는 그 여행의 거점 화면이 한다.

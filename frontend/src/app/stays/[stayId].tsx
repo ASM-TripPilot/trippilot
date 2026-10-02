@@ -1,4 +1,4 @@
-import { StayDetailPage } from '@/pages/stay-detail';
+import { StayDetailPage } from '@/pages/stay/stay-detail';
 
 export default function StayDetailRoute() {
   return <StayDetailPage />;

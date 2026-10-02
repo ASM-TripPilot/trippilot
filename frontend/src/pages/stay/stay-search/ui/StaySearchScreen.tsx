@@ -1,7 +1,7 @@
 /**
  * e02 숙소 검색 결과 · 프레젠테이션 화면(Figma 1837:2283 default · 1340:1312~1344:1416
  * 상태 5종 · US-STAY-01·10·11). `region`·`items`·`state`·`onRetry` 4개 prop만 받는다 —
- * 네트워크·라우팅을 전혀 모른다(FSD 경계, 배선·상태 판정은 `pages/stay-search/ui/
+ * 네트워크·라우팅을 전혀 모른다(FSD 경계, 배선·상태 판정은 `pages/stay/stay-search/ui/
  * StaySearchPage.tsx`가 진다). `state`는 옵셔널이고 기본값이 TRIP-181 default 얼굴이라
  * 기존 2-prop 호출은 한 글자도 바뀌지 않는다. 서버가 준 `items` 순서를 그대로 그리고
  * (BR-U1-15), 소요 시간은 어디에도 없다(INV-3 · BR-U1-54). 세 필터 칩은 화면 층에선 모두

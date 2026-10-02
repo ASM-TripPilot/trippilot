@@ -1,7 +1,7 @@
 /**
  * e05 숙소 직접 등록 · 무상태 프레젠테이션 화면(Figma default 1703:1183 골격 + 3탭 셸 절충안,
  * 01b Seed §1~§3-6). `flow` prop과 콜백만 받는다 — 상태·네트워크·라우팅을
- * 전혀 모른다(FSD 경계, `pages/stay-register/ui/StayRegisterPage.tsx`가 진다). 지도는
+ * 전혀 모른다(FSD 경계, `pages/stay/stay-register/ui/StayRegisterPage.tsx`가 진다). 지도는
  * `@/shared/map`(검색·시트는 `MapView`, 핀 지정은 `CenterPinPicker`=중앙 고정 핀, TRIP-866)을 쓴다.
  *
  * 지도 검색 탭의 인라인 미리보기는 세그먼트 아래 항상 뜬다(TRIP-730 — 후보 선택 전에도).

@@ -1065,7 +1065,7 @@ describe('저장 하트 렌더 계약 (옛 .save)', () => {
    * 하나만 맞고 하나만 틀린 구현(selected=false인데 찬 하트)도 잡으려 둘 다 건다(d02 T-15 동형).
    *
    * 왜 화면 단위인가: "props를 받았을 때 무엇을 그리는가"를 잰다. 실제로 나간 요청·저장/해제 판정·
-   * 라우팅은 `pages/stay-search/ui/StaySearchPage.save.integration.test.tsx` 몫이다.
+   * 라우팅은 `pages/stay/stay-search/ui/StaySearchPage.save.integration.test.tsx` 몫이다.
    */
 
   const ITEMS: StayItem[] = [

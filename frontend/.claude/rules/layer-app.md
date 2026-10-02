@@ -29,12 +29,12 @@ paths:
 | `src/app/(tabs)/itinerary.tsx` | 일정 탭 — `<MyTripsListPage/>`만 렌더(리다이렉트 없음). 조회·정렬·카드별 목적지 판정은 `pages/itinerary-list` 소관. |
 | `src/app/(tabs)/records.tsx` | 기록 탭 — `<RecordsCalendarPage/>`만 렌더. 조회·조립·항법은 `pages/records-calendar` 소관 |
 | `src/app/(tabs)/my.tsx` | 마이 탭 — `<MyPage/>`만 렌더. 조회·분류·조합은 `pages/my-page` 소관 |
-| `src/app/my/stays.tsx` | `/my/stays` — `@/pages/my-stays` 얇은 래퍼. 마이 페이지에서 진입 |
+| `src/app/my/stays.tsx` | `/my/stays` — `@/pages/stay/my-stays` 얇은 래퍼. 마이 페이지에서 진입 |
 | `src/app/settings/notifications.tsx` | `/settings/notifications` — `@/pages/settings-notifications` 얇은 래퍼. 설정 화면에서 진입 |
 | `src/app/notifications.tsx` | `/notifications` 알림함 — `@/pages/notification-inbox` 얇은 래퍼. 홈에서 진입 |
-| `src/app/stays/index.tsx` | `/stays` 숙소 검색 — `@/pages/stay-search` 얇은 래퍼 |
-| `src/app/stays/register.tsx` | `/stays/register` — `@/pages/stay-register` 얇은 래퍼. 구조 가드가 `useState`·`useGetStaysGeocode`·`FlatList` 0건을 잠근다 |
-| `src/app/stays/saved.tsx` | `/stays/saved` e04 저장한 숙소 — `@/pages/stay-saved` 얇은 래퍼 |
+| `src/app/stays/index.tsx` | `/stays` 숙소 검색 — `@/pages/stay/stay-search` 얇은 래퍼 |
+| `src/app/stays/register.tsx` | `/stays/register` — `@/pages/stay/stay-register` 얇은 래퍼. 구조 가드가 `useState`·`useGetStaysGeocode`·`FlatList` 0건을 잠근다 |
+| `src/app/stays/saved.tsx` | `/stays/saved` e04 저장한 숙소 — `@/pages/stay/stay-saved` 얇은 래퍼 |
 | `src/app/explore/region.tsx` | d1b·e00 지역 선택 — `@/pages/explore/region-picker` 얇은 래퍼. 목적은 쿼리 `?purpose=trip`(기본 `stay`) |
 | `src/app/explore/destination/[region].tsx` | 옛 목적지 상세 딥링크 리다이렉트 — `<Redirect>`로 `/explore?region={code}`(탐색 탭 d01 지역 필터)에 넘긴다(TRIP-1105) |
 | `src/app/explore/places.tsx` | d04 장소 탐색 — `@/pages/explore/place-explore` 얇은 래퍼 |
