@@ -6,7 +6,7 @@ import { startUnlessReduceMotion } from '@/shared/motion/reduceMotion';
 import {
   deriveVisitStatus,
   isOptimisticVisit,
-} from '@/features/record/model/visitStatus';
+} from '@/features/check-visit/model/visitStatus';
 import {
   RetryGlyph,
   VisitCheckActiveGlyph,

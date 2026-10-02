@@ -14,10 +14,10 @@ import {
   useTripRecords,
 } from '../model/useTripRecords';
 import { useAdjustVisitTimes } from '../model/useAdjustVisitTimes';
-import { useSpontaneousNames } from '@/features/record/model/spontaneousNames';
-import { useVisitCheck } from '@/features/record/model/useVisitCheck';
+import { useSpontaneousNames } from '@/features/check-visit/model/spontaneousNames';
+import { useVisitCheck } from '@/features/check-visit/model/useVisitCheck';
 import { orderByArrival } from '../model/visitOrder';
-import { isOptimisticVisit } from '@/features/record/model/visitStatus';
+import { isOptimisticVisit } from '@/features/check-visit/model/visitStatus';
 import { SkipVisitDialog } from './SkipVisitDialog';
 import type { VisitRecordCardVM } from './VisitRecordCard';
 import { VisitRecordCardContainer } from './VisitRecordCardContainer';
