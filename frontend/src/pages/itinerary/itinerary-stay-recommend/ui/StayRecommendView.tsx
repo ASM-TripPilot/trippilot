@@ -8,7 +8,7 @@ import { withObjectParticle } from '../lib/objectParticle';
 import { LinkChevronGlyph } from '@/features/itinerary/ui/ItineraryGlyphs';
 import type { StayRecommendView as StayRecommendViewModel } from '../model/stayRecommend';
 import type { MapPin } from '@/shared/map';
-import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
+import { MapSheetShell } from '@/widgets/map-sheet-shell';
 
 /**
  * TRIP-800 · h15 동선 기준 숙소 추천 pages 순수 뷰(presentation-only, Figma `4385:1623`). 지도+시트 셸 위에 헤더 ·

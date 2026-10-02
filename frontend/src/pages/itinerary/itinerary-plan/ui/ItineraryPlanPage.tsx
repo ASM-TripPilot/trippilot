@@ -41,9 +41,9 @@ import { getAccessToken } from '@/shared/api/tokenManager';
 import { guardPress, openPressGuardWindow } from '@/shared/press/pressGuard';
 import { StateNotice, type StateNoticeAction } from '@/shared/ui/StateNotice';
 import { showToast } from '@/shared/ui/Toast';
-import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
-import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
-import { SheetHeader } from '@/widgets/map-sheet-shell/ui/SheetHeader';
+import { DistanceConnector } from '@/widgets/map-sheet-shell';
+import { MapSheetShell } from '@/widgets/map-sheet-shell';
+import { SheetHeader } from '@/widgets/map-sheet-shell';
 
 import { NoBaseNoticeCard } from './NoBaseNoticeCard';
 

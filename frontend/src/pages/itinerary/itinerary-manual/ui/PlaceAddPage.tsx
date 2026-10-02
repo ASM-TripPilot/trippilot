@@ -16,8 +16,8 @@ import {
   PlaceAddHeader,
   PlaceAddRow,
 } from '@/features/itinerary/ui/PlaceAddScreen';
-import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
-import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
+import { MapSheetShell } from '@/widgets/map-sheet-shell';
+import { TimeSheet } from '@/widgets/time-sheet';
 import { suggestNextSlotTime } from '@/entities/itinerary-slot';
 import {
   getGetTripsTripIdItineraryQueryKey,

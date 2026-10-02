@@ -36,11 +36,11 @@ import {
 import { isNotFound } from '@/shared/api/isNotFound';
 import { getAccessToken } from '@/shared/api/tokenManager';
 import { StateNotice } from '@/shared/ui/StateNotice';
-import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
-import { GenerationProgressCard } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
-import type { GenerationProgressCell } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
-import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
-import { SheetHeader } from '@/widgets/map-sheet-shell/ui/SheetHeader';
+import { DistanceConnector } from '@/widgets/map-sheet-shell';
+import { GenerationProgressCard } from '@/widgets/map-sheet-shell';
+import type { GenerationProgressCell } from '@/widgets/map-sheet-shell';
+import { MapSheetShell } from '@/widgets/map-sheet-shell';
+import { SheetHeader } from '@/widgets/map-sheet-shell';
 
 import { DraftFallbackBanner } from './DraftFallbackBanner';
 import { SlotCandidatePanelContainer } from './SlotCandidatePanelContainer';

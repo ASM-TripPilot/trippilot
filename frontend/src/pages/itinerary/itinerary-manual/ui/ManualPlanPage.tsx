@@ -31,8 +31,8 @@ import {
 import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
 import { isNotFound } from '@/shared/api/isNotFound';
 import { showToast } from '@/shared/ui/Toast';
-import { EditorView } from '@/widgets/map-sheet-shell/ui/EditorView';
-import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
+import { EditorView } from '@/widgets/map-sheet-shell';
+import { TimeSheet } from '@/widgets/time-sheet';
 
 /**
  * h19 배선(TRIP-338) → TRIP-921 로 **h12 편집(`ItineraryEditPage`)과 같은 위젯 편집 뷰**

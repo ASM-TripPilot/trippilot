@@ -20,11 +20,8 @@ import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
 import type { MapCenter } from '@/shared/map';
-import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
-import {
-  BackChevronGlyph,
-  FullAiGlyph,
-} from '@/widgets/map-sheet-shell/ui/MapSheetGlyphs';
+import { MapSheetShell } from '@/widgets/map-sheet-shell';
+import { BackChevronGlyph, FullAiGlyph } from '@/widgets/map-sheet-shell';
 import { formatCoPickDayHeader } from '@/features/itinerary/model/draftView';
 import { PencilGlyph } from '@/features/itinerary/ui/ItineraryGlyphs';
 import { CloseGlyph } from '@/features/home/ui/HomeGlyphs';

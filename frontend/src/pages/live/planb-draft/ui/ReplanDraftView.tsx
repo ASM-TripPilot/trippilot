@@ -4,11 +4,11 @@ import { Text, View } from 'react-native';
 import type { ReplanSlotVM } from '@/entities/itinerary-slot';
 import { ReplanSlotRow } from '@/entities/itinerary-slot';
 import type { MapCenter, MapPin } from '@/shared/map';
-import type { CtaButton } from '@/widgets/map-sheet-shell/ui/CtaBar';
-import type { DayChip } from '@/widgets/map-sheet-shell/ui/DayChipOverlay';
-import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
-import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
-import { SheetHeader } from '@/widgets/map-sheet-shell/ui/SheetHeader';
+import type { CtaButton } from '@/widgets/map-sheet-shell';
+import type { DayChip } from '@/widgets/map-sheet-shell';
+import { DistanceConnector } from '@/widgets/map-sheet-shell';
+import { MapSheetShell } from '@/widgets/map-sheet-shell';
+import { SheetHeader } from '@/widgets/map-sheet-shell';
 
 /**
  * TRIP-751 · i06 재계획안 **순수 뷰**(pages · api import 0 — preview 가 파일 경로로 직접 import, TRIP-610).

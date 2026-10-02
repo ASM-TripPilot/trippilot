@@ -29,7 +29,7 @@ import {
   InfoCircleGlyph,
 } from '@/features/itinerary/ui/ItineraryGlyphs';
 import { SaveConflictDialog } from '@/features/edit-itinerary/ui/SaveConflictDialog';
-import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
+import { TimeSheet } from '@/widgets/time-sheet';
 import {
   getGetTripsTripIdItineraryQueryKey,
   getGetTripsTripIdItineraryQueryOptions,
@@ -41,7 +41,7 @@ import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
 import { isNotFound } from '@/shared/api/isNotFound';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { showToast } from '@/shared/ui/Toast';
-import { EditorView } from '@/widgets/map-sheet-shell/ui/EditorView';
+import { EditorView } from '@/widgets/map-sheet-shell';
 
 /**
  * h24 일정 편집 배선(TRIP-302 슬라이스1~3) — **TRIP-797 묶음 C 로 소비 화면을 옛

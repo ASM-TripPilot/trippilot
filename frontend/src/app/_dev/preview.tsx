@@ -86,12 +86,12 @@ import type { UnplacedMustVisitRow } from '@/features/itinerary/model/unplacedMu
 import type { StayRecommendView as StayRecommendViewModel } from '@/pages/itinerary/itinerary-stay-recommend/model/stayRecommend';
 import { CoPickStepper } from '@/pages/itinerary/itinerary-copick/ui/CoPickStepper';
 import { GenerationDoneBar } from '@/pages/itinerary/itinerary-list/ui/GenerationDoneBar';
-import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
-import { GenerationProgressCard } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
-import type { GenerationProgressCell } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
+import { DistanceConnector } from '@/widgets/map-sheet-shell';
+import { GenerationProgressCard } from '@/widgets/map-sheet-shell';
+import type { GenerationProgressCell } from '@/widgets/map-sheet-shell';
 import { MapFallbackBar } from '@/widgets/map-sheet-shell/ui/MapFallbackBar';
-import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
-import { SheetHeader } from '@/widgets/map-sheet-shell/ui/SheetHeader';
+import { MapSheetShell } from '@/widgets/map-sheet-shell';
+import { SheetHeader } from '@/widgets/map-sheet-shell';
 import { SlotStopCard } from '@/entities/itinerary-slot';
 import { PastTripRow } from '@/entities/trip';
 import { ChevronRightGlyph as TripChevronRightGlyph } from '@/entities/trip';
@@ -99,7 +99,7 @@ import type { PastTripCardVM } from '@/entities/trip';
 import type { MonthLegends } from '@/pages/record/records-calendar/model/recordsCalendar';
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import { buildStatePins } from '@/entities/itinerary-slot';
-import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
+import { TimeSheet } from '@/widgets/time-sheet';
 import { MethodPickerScreen } from '@/pages/itinerary/itinerary-method/ui/MethodPickerScreen';
 import {
   MyTripCard,
@@ -176,7 +176,7 @@ import {
 import { LiveLocationView } from '@/pages/live/live-location/ui/LiveLocationView';
 import { NoBaseNoticeCard } from '@/pages/itinerary/itinerary-plan/ui/NoBaseNoticeCard';
 import { DraftFallbackBanner } from '@/pages/itinerary/itinerary-draft/ui/DraftFallbackBanner';
-import { EditorView } from '@/widgets/map-sheet-shell/ui/EditorView';
+import { EditorView } from '@/widgets/map-sheet-shell';
 import {
   LiveHubView,
   type LiveHubSlot,

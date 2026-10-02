@@ -11,7 +11,7 @@ import { usePlacesInfinite } from '@/features/explore/model/usePlacesInfinite';
 import { PlaceAddHeader } from '@/features/itinerary/ui/PlaceAddScreen';
 import { rememberSpontaneousName } from '@/features/check-visit/model/spontaneousNames';
 import { useVisitCheck } from '@/features/check-visit/model/useVisitCheck';
-import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
+import { MapSheetShell } from '@/widgets/map-sheet-shell';
 import { useGetTripsTripId } from '@/shared/api/generated/trips/trips';
 import { ArriveRequestSource } from '@/shared/api/generated/schemas';
 import type { Place, PoiCategory } from '@/shared/api/generated/schemas';
