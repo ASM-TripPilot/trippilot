@@ -2,7 +2,7 @@
  * 계정 삭제 시 **함께 삭제되는 것**의 목록 — 법적 사전 고지(BR-U6-25 · DEC-U6-6 · LEGAL-01).
  *
  * ⚠️ 이 문자열들은 **오직 이 파일에만** 산다. 삭제 다이얼로그는 이 상수를 import·map 해 그리고,
- * 설정 표면(features/settings·pages/settings·app/settings)의 다른 소스에는 이 문자열이 인라인으로
+ * 설정 표면(features/settings·pages/settings/settings·app/settings)의 다른 소스에는 이 문자열이 인라인으로
  * 중복되지 않는다(`deletionScopeStructure.test.ts` 가 강제). 목록이 두 군데로 갈리면 한쪽만 고쳐
  * 법적 고지가 실제 삭제 범위와 어긋난다 — 되돌릴 수 없는 삭제라 그 어긋남이 곧 사고다.
  *

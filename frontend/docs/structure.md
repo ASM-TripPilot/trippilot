@@ -41,6 +41,7 @@ frontend/
 │   ├── app/          Expo Router 라우트 (파일 = 화면)
 │   ├── app-shell/    src/app **밖**의 루트 셸 조립 (TRIP-173 신설 — SplashGate)
 │   ├── pages/        FSD pages 층 — 화면별 배선 (TRIP-173 신설, 구 `features/*/containers` 5개가 이주)
+│   │                 슬라이스는 여정 단계 그룹 폴더 아래 `pages/<그룹>/<slice>` (TRIP-1156 — home·magazine은 그룹 없음)
 │   ├── widgets/      FSD widgets 층 — 여러 화면이 쓰는 화면 조각 (TRIP-804 규칙 신설, 빈 층 — 첫 입주 TRIP-805)
 │   ├── features/     도메인 기능 (auth·onboarding 실구현, 나머지 9개 빈 스텁)
 │   ├── entities/     FSD entities 층 — 여러 feature가 쓰는 도메인 단위 (TRIP-804 규칙 신설, 빈 층 — 첫 입주 TRIP-806~809)
@@ -58,7 +59,7 @@ frontend/
 
 TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개를 `git rm`으로 전부 삭제했다. 그중 8개(`archive`·`execution`·`itinerary`·`notification`·`planb`·`settings`·`stay`·`trip`)는 그 배럴이 디렉토리 안의 유일한 파일이라 **디렉토리째 사라졌다** — `stay`는 위 절대로 TRIP-179로 재등장(데이터 계층만), `itinerary`는 위 절대로 TRIP-295로 재등장(순수 함수만). 지금 `src/features/`에는 `auth`·`home`·`onboarding`·`stay`·`explore`·`trip`·`itinerary` 7개다.
 
-새 코드는 **pages first**다 — 먼저 그 코드를 쓰는 `pages/<slice>`에 두고, 추출 규칙 세 조건(지금 여러 곳이 쓴다 · 독립 변경 이유 · 좁은 책임)을 모두 만족할 때만 features·entities로 뺀다(정본: `frontend/README.md` §층 규칙). 빈 배럴 선점(`export {};`만 있는 `index.ts`)은 여전히 금지다(기계 강제 없음 — TRIP-1145에서 스캔 삭제). 공개 API(`index.ts`)는 TRIP-1157에서 일괄 정비한다 — 그 전까지 딥 임포트는 과도기 허용이다.
+새 코드는 **pages first**다 — 먼저 그 코드를 쓰는 `pages/<slice>`(그룹이 있으면 `pages/<그룹>/<slice>`)에 두고, 추출 규칙 세 조건(지금 여러 곳이 쓴다 · 독립 변경 이유 · 좁은 책임)을 모두 만족할 때만 features·entities로 뺀다(정본: `frontend/README.md` §층 규칙). 빈 배럴 선점(`export {};`만 있는 `index.ts`)은 여전히 금지다(기계 강제 없음 — TRIP-1145에서 스캔 삭제). 공개 API(`index.ts`)는 TRIP-1157에서 일괄 정비한다 — 그 전까지 딥 임포트는 과도기 허용이다.
 ## 재사용 공개 API
 
 **새 함수를 만들기 전에 여기부터 본다.** 있으면 다시 만들지 말고 가져다 쓴다.

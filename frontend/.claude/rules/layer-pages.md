@@ -2,7 +2,7 @@
 paths:
   - "src/pages/**"
 ---
-# `src/pages/` — FSD pages 층 (슬라이스 목록의 정본은 `src/pages` 디렉토리·`docs/structure.generated.md`)
+# `src/pages/` — FSD pages 층 (슬라이스 목록의 정본은 그룹 폴더 아래까지 포함한 `src/pages` 디렉토리·`docs/structure.generated.md`)
 
 조회·판정·라우팅을 화면(순수 뷰)에 잇는 배선판 층. 층 방향(`app → pages → widgets → features → entities → shared`)은 `eslint.config.js` 층 zone이 강제한다(`docs/structure.md` "FSD 층 방향 규칙") — pages는 app·app-shell과 **형제 pages 슬라이스**를 import할 수 없다. features는 widgets를 못 물으므로 `MapSheetShell` 등 위젯 조립은 pages가 맡고, 두 feature(execution·planb 등)를 함께 부르는 조합도 pages만 할 수 있다. 프리뷰가 네트워크 계층을 전이 로드하지 않도록 셸을 조립하는 순수 뷰는 컨테이너와 다른 파일(`*View.tsx`)에 둔다.
 
