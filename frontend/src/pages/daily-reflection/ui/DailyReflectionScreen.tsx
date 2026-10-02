@@ -9,7 +9,7 @@ import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import type { ReflectionStats } from '@/shared/api/generated/schemas';
 
-import type { MapNotice } from '../model/missingParts';
+import type { MapNotice } from '@/features/reflection/model/missingParts';
 import { ChangeSummaryRow } from './ChangeSummaryRow';
 import { NarrativeBlock } from './NarrativeBlock';
 import {
@@ -18,7 +18,7 @@ import {
   LocationOffGlyph,
   PhotoOffGlyph,
   RetryGlyph,
-} from './ReflectionGlyphs';
+} from '@/features/reflection/ui/ReflectionGlyphs';
 import { ReflectionPhotoGrid } from './ReflectionPhotoGrid';
 import { ReflectionStatsRow } from './ReflectionStatsRow';
 

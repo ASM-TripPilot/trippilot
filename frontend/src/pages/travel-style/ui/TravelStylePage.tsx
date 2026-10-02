@@ -6,7 +6,7 @@ import { router } from 'expo-router';
 import { resolveStyleFace } from '@/entities/style-analysis/lib/styleFace';
 import { resolveStyleProgress } from '@/entities/style-analysis/lib/styleProgress';
 import { useStyleAnalysis } from '@/features/reflection/model/useStyleAnalysis';
-import { TravelStyleScreen } from '@/features/reflection/ui/TravelStyleScreen';
+import { TravelStyleScreen } from './TravelStyleScreen';
 import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
 

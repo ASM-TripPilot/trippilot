@@ -53,7 +53,7 @@ jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 // TRIP-1071 — [공유] 진입은 네이티브 캡처 모듈 3종이 이 빌드에 있을 때만(`isShareCaptureArmed`). jest-expo 는
 // 세 모듈을 "있는 척"해서 실 판정이면 늘 true 가 된다 → 이 파일(B-6 "공유 진입이 되살아나지 않는다")은
-// **재빌드 전 빌드**를 뜻하도록 false 로 고정한다. 개통 짝은 TripSummaryPage.share.test 가 진다.
+// **재빌드 전 빌드**를 뜻하도록 false 로 고정한다. 개통 짝은 TripSummaryPage.hookMock.test 가 진다.
 jest.mock('@/features/reflection/model/shareCapture', () => ({
   ...jest.requireActual('@/features/reflection/model/shareCapture'),
   isShareCaptureArmed: () => false,

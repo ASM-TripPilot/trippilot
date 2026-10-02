@@ -83,7 +83,7 @@ paths:
 
 | 파일 | 용도·함정 |
 |---|---|
-| `lib/styleFace.ts` | "정식 분석인가 임시 미리보기인가" 판정의 단일 소유처. `resolveStyleFace(envelope)` — `official===true && analysis!=null`만 official(BR-U5-40, PBT-U5-F4). `progress.current`는 읽지 않아 자체 승격을 구조적으로 차단한다. 중첩 결측에도 크래시 0·항상 insufficient(개념 [[반쪽 방어 (half-applied guard)]]). 표시 라벨(`categoryLabel`)은 j05 전용이라 `features/reflection/model/styleThreshold.ts`에 남는다. |
+| `lib/styleFace.ts` | "정식 분석인가 임시 미리보기인가" 판정의 단일 소유처. `resolveStyleFace(envelope)` — `official===true && analysis!=null`만 official(BR-U5-40, PBT-U5-F4). `progress.current`는 읽지 않아 자체 승격을 구조적으로 차단한다. 중첩 결측에도 크래시 0·항상 insufficient(개념 [[반쪽 방어 (half-applied guard)]]). 표시 라벨(`categoryLabel`)은 j05 전용이라 `pages/travel-style/model/styleThreshold.ts`에 있다(TRIP-1153 이사). |
 | `lib/styleFace.test.ts` | PBT-U5-F4 property + 9↔10 경계 예제 + 반쪽 방어 형태. |
 | `lib/styleProgress.ts` | `resolveStyleProgress(envelope)` — `progress`를 **필드 단위**로 폴백(`current ?? 0`, `required ?? 10`). 객체 단위 폴백(`progress ?? {…}`)은 `progress: {}`를 그대로 통과시켜 "현재 undefined곳"을 낸다 — 쓰지 않는다. 소비처가 progress를 직접 읽지 않게 하는 것이 목적. |
 | `lib/styleProgress.test.ts` | 값 표(it.each) + property("숫자면 그 값, 아니면 기본값"을 `typeof`로 따로 적어 구현식 복붙 방지). |

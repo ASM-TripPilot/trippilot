@@ -7,14 +7,14 @@ import {
   CalendarGlyph,
   ChevronDownGlyph,
   LegendChevronGlyph,
-} from './RecordGlyphs';
+} from '@/features/record/ui/RecordGlyphs';
 import { TripCalendarMonth } from './TripCalendarMonth';
 import type {
   LegendRow,
   MonthLegends,
   OngoingTripCardVM,
   PastTripCardVM,
-} from '../model/recordsCalendar';
+} from '@/features/record/model/recordsCalendar';
 import type { MonthCell } from '@/shared/date/monthGrid';
 import { StateNotice } from '@/shared/ui/StateNotice';
 

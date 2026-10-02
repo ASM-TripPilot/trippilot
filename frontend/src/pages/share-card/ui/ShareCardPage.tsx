@@ -8,7 +8,7 @@ import {
 } from '@/features/reflection/model/shareCard';
 import { shareEnabled } from '@/features/reflection/model/summaryView';
 import { useTripSummary } from '@/features/reflection/model/useTripSummary';
-import { ShareCardScreen } from '@/features/reflection/ui/ShareCardScreen';
+import { ShareCardScreen } from './ShareCardScreen';
 import { useGetTripsTripId } from '@/shared/api/generated/trips/trips';
 import { StateNotice } from '@/shared/ui/StateNotice';
 

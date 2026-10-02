@@ -5,10 +5,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MapView, type MapCenter, type MapPin } from '@/shared/map';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 
-import { BackArrowGlyph, LocationOffGlyph } from './ReflectionGlyphs';
+import {
+  BackArrowGlyph,
+  LocationOffGlyph,
+} from '@/features/reflection/ui/ReflectionGlyphs';
 import { DayHighlightCard } from './DayHighlightCard';
-import type { SummaryStatCells } from '../model/summaryStats';
-import type { OrderedVisit } from '../model/summaryView';
+import type { SummaryStatCells } from '@/features/reflection/model/summaryStats';
+import type { OrderedVisit } from '@/features/reflection/model/summaryView';
 
 /**
  * TRIP-572 · j04 여행 요약 화면(순수 프레젠테이션 — VM·콜백 주입, 조회/조립 0).

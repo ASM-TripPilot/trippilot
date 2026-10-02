@@ -26,9 +26,9 @@ const ROOT = path.resolve('src');
 const SHARE_SCAN_FILES = [
   'features/reflection/model/shareCard.ts',
   'features/reflection/model/shareCapture.ts',
-  'features/reflection/ui/ShareCardScreen.tsx',
-  'features/reflection/ui/ShareCardPreview.tsx',
-  'features/reflection/ui/FormatSegment.tsx',
+  'pages/share-card/ui/ShareCardScreen.tsx',
+  'pages/share-card/ui/ShareCardPreview.tsx',
+  'pages/share-card/ui/FormatSegment.tsx',
   'pages/share-card/ui/ShareCardPage.tsx',
 ];
 

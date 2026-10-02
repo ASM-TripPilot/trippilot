@@ -2,8 +2,8 @@ import type { ReactElement } from 'react';
 import { View } from 'react-native';
 
 import { PastTripRow } from '@/entities/trip/ui/PastTripRow';
-import { ChevronRightGlyph } from './RecordGlyphs';
-import type { PastTripCardVM } from '../model/recordsCalendar';
+import { ChevronRightGlyph } from '@/features/record/ui/RecordGlyphs';
+import type { PastTripCardVM } from '@/features/record/model/recordsCalendar';
 
 /**
  * TRIP-575 · j07 지난 여행 카드 목록. (TRIP-808: 행 자체는 `entities/trip/ui/PastTripRow` 로 이관 —

@@ -25,7 +25,7 @@ import { MyPage } from './MyPage';
  *  - **backward-compat**: prop 미주입이던 기존 `StyleSummaryCard.test.tsx` AC-S6(`toBeDisabled()`)·
  *    기존 `MyPage.integration.test.tsx`(배선·배치)는 무회귀여야 한다(implementer 는 prop-gated 로 활성화).
  *
- * (별 파일 신설 — 기존 `MyPage.integration.test.tsx` 는 수정하지 않는다. `DailyReflectionScreen.share.test.tsx`
+ * (별 파일 신설 — 기존 `MyPage.integration.test.tsx` 는 수정하지 않는다. `DailyReflectionScreen.test.tsx` 공유 묶음
  *  선례 동형: 동결 테스트를 안 건드리고 새 배선만 별 파일에 잠근다.)
  */
 

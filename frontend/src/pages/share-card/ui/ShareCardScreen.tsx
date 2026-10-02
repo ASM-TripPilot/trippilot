@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Linking from 'expo-linking';
 
 import { FormatSegment } from './FormatSegment';
-import { BackArrowGlyph } from './ReflectionGlyphs';
+import { BackArrowGlyph } from '@/features/reflection/ui/ReflectionGlyphs';
 import { DownloadGlyph, ShareGlyph } from './ShareCardGlyphs';
 import { ShareCardPreview } from './ShareCardPreview';
 import {
@@ -15,13 +15,13 @@ import {
   validateHashtags,
   type ShareCardVM,
   type ShareFormat,
-} from '../model/shareCard';
+} from '@/features/reflection/model/shareCard';
 import {
   isShareCaptureArmed,
   saveShareCardImage,
   shareShareCardImage,
   type SaveShareCardResult,
-} from '../model/shareCapture';
+} from '@/features/reflection/model/shareCapture';
 
 /**
  * TRIP-574 · j06 공유 카드 화면(VM·formats 주입, 포맷·해시태그 편집·결과 안내는 로컬 상태).
