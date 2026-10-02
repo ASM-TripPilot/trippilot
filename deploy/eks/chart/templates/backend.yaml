@@ -31,6 +31,10 @@ spec:
           securityContext:
             {{- include "trippilot.containerSecurity" . | nindent 12 }}
           env:
+            # Default JRE heap is 25% of the container limit (512Mi of 2Gi) — too small under load
+            # while the other 1.5Gi sits unused. 75% leaves ~512Mi for metaspace/threads/agent.
+            - name: JAVA_TOOL_OPTIONS
+              value: -XX:MaxRAMPercentage=75.0
             - name: DEPLOY_ENV
               value: {{ .Values.environment | quote }}
             - name: DB_URL
