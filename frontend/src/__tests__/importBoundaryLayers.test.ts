@@ -55,6 +55,7 @@ beforeAll(() => {
 
 // filePath 위치에서 code 를 린트하고, severity=error 인 메시지의 룰 ID 배열만 뽑는다.
 // 개수가 아니라 "어느 룰이 잡았는가"를 본다 — 개수만 세면 다른 룰이 대신 잡아도 통과한다.
+// 딥 zone(TRIP-1157)은 층 zone 과 룰 ID 가 같아 별도 이름표로 가른다 — 안 가르면 층 zone 이 사라져도 딥 zone 이 대신 울려 층 탐침이 green 이다.
 async function lint(
   code: string,
   filePath: string
@@ -62,7 +63,13 @@ async function lint(
   const [result] = await eslint.lintText(code, {
     filePath: path.resolve(filePath),
   });
-  return result.messages.filter((m) => m.severity === 2).map((m) => m.ruleId);
+  return result.messages
+    .filter((m) => m.severity === 2)
+    .map((m) =>
+      m.ruleId === BOUNDARY_RULE && m.message.includes('TRIP-1157')
+        ? `${BOUNDARY_RULE}#TRIP-1157`
+        : m.ruleId
+    );
 }
 
 // home 이면 onboarding 을, 그 외에는 home 을 형제 대상으로 — 같은 feature import(정당)로

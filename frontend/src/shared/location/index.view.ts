@@ -12,6 +12,5 @@ export {
 export { LocationPreprompt } from './LocationPreprompt';
 export type { LocationPrepromptState } from './LocationPreprompt';
 export { LOCATION_ICON_COLORS } from './lib/locationColors';
-export { readDevicePosition } from './readDevicePosition';
 export { revokeImpact } from './revokeImpact';
 export type { RevokeImpact } from './revokeImpact';

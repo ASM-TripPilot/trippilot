@@ -19,8 +19,10 @@ const PAGE = path.resolve(
   'src/pages/itinerary/itinerary-edit/ui/ItineraryEditPage.tsx'
 );
 // TRIP-1157: 헬퍼는 슬라이스 공개 API(index)로만 들어온다 — 딥 경로 끝맺음이 아니라 index 지정자 완전 일치 + 바인딩 이름.
+// 이름은 **그 index import 문의 중괄호 안**에 있어야 한다 — 파일 어딘가의 글자 출현이면 같은 이름 지역 재구현이 통과한다.
 const HELPER_SPEC = '@/entities/itinerary-slot';
-const HELPER_NAME = /\bderiveEndsNextDay\b/;
+const HELPER_NAME =
+  /\bimport\s*\{[^}]*\bderiveEndsNextDay\b[^}]*\}\s*from\s*['"]@\/entities\/itinerary-slot['"]/;
 
 /**
  * 스캔 전처리 — 주석을 걷는다. 블록 주석을 먼저(순서 바꾸면 한 줄 안 코드 소실). 줄 주석은 바로 앞
