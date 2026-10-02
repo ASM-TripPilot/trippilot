@@ -16,7 +16,7 @@ import {
   buildPreferenceInput,
   initialSelection,
   type PreferenceSelection,
-} from '@/features/settings/model/preferenceDraft';
+} from '@/features/edit-preferences/model/preferenceDraft';
 import { usePreferences } from '../model/usePreferences';
 import {
   type EditableAxis,

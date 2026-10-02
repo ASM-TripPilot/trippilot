@@ -315,6 +315,12 @@
 ## src/features/edit-itinerary/ui/
 - `src/features/edit-itinerary/ui/SaveConflictDialog.tsx`  →  SaveConflictDialog
 
+## src/features/edit-preferences/model/
+- `src/features/edit-preferences/model/preferenceDraft.ts`  →  PreferenceSelection · initialSelection · buildPreferenceInput
+- `src/features/edit-preferences/model/preferenceInput.ts`  →  PreferenceDraftValues · STYLE · ACTIVITY · toPreferenceInput
+- `src/features/edit-preferences/model/preferenceSelection.ts`  →  toggleMulti · toggleSingle
+- `src/features/edit-preferences/model/preferenceStore.ts`  →  PreferenceDraft · usePreferenceStore
+
 ## src/features/execution/model/
 - `src/features/execution/model/dwellMinutes.ts`  →  dwellMinutes
 - `src/features/execution/model/nextNav.ts`  →  NavDest · buildAppNavUrl · buildWebNavUrl · resolveNextDest · openNextNav
@@ -358,9 +364,6 @@
 - `src/features/notification/ui/NotificationGlyphs.tsx`  →  NotifBackChevronGlyph · NotifInfoGlyph · NotifWarningGlyph
 
 ## src/features/onboarding/model/
-- `src/features/onboarding/model/preferenceInput.ts`  →  PreferenceDraftValues · STYLE · ACTIVITY · toPreferenceInput
-- `src/features/onboarding/model/preferenceSelection.ts`  →  toggleMulti · toggleSingle
-- `src/features/onboarding/model/preferenceStore.ts`  →  PreferenceDraft · usePreferenceStore
 - `src/features/onboarding/model/resolveOnboardingStep.ts`  →  OnboardingStep · OnboardingProgress · resolveOnboardingStep
 - `src/features/onboarding/model/termsDocumentTitle.ts`  →  termsDocumentTitle
 - `src/features/onboarding/model/useOnboardingProgress.ts`  →  useOnboardingProgress
@@ -426,9 +429,6 @@
 - `src/features/save-stay/model/savedStayIndex.ts`  →  findSavedStayId · optimisticSavedStayId
 - `src/features/save-stay/model/savedStays.ts`  →  SavedStaysFailureReason · SavedStaysOutcome · useSavedStays
 - `src/features/save-stay/model/stayKey.ts`  →  stayKey
-
-## src/features/settings/model/
-- `src/features/settings/model/preferenceDraft.ts`  →  PreferenceSelection · initialSelection · buildPreferenceInput
 
 ## src/features/settings/ui/
 - `src/features/settings/ui/BaseToggleDialog.tsx`  →  BaseToggleDialog

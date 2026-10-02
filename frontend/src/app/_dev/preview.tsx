@@ -193,7 +193,7 @@ import { TripWizardLeaveDialog } from '@/pages/trip-new-step1/ui/TripWizardLeave
 import { PrefStep1Screen } from '@/pages/onboarding-pref1/ui/PrefStep1Screen';
 import { PrefStep2Screen } from '@/pages/onboarding-pref2/ui/PrefStep2Screen';
 import { TermsScreen } from '@/pages/onboarding-terms/ui/TermsScreen';
-import type { PreferenceSelection } from '@/features/settings/model/preferenceDraft';
+import type { PreferenceSelection } from '@/features/edit-preferences/model/preferenceDraft';
 import { PreferencesEditView } from '@/pages/settings-preferences/ui/PreferencesEditView';
 import type {
   ItineraryDaysItemSlotsItem,

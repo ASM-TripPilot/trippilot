@@ -90,7 +90,7 @@ paths:
 | `src/pages/my-page/ui/StyleSummaryCard.test.tsx` | 스타일 카드 — 채움/빈 점을 서로 다른 testID로 세어 SVG fill 함정 차단 · 상세 진입 disabled degrade(INV-4) |
 | `src/pages/my-page/ui/MyPage.test.tsx` | 마이 페이지 배선+배치(`layer-pages.md` `my-page` 행) — 옛 `.counts`·`.l03empty`·`.l03parity`·`.integration`·`.styleDetail.integration`을 describe 5개로 합침(TRIP-1154, MSW 0이라 node 버킷) |
 | `src/pages/settings-notifications/ui/NotificationSettingsScreen.test.tsx` | 알림 설정 화면 — 행·토글·Figma 정합 + 계약 밖 kind(COMMUNITY·SYSTEM)를 주입받아도 렌더하지 않는지(`VISIBLE_ROWS` 자체 소유, 옛 `__tests__/notificationKindGuard` 흡수 — TRIP-1154) |
-| `src/features/settings/model/preferenceDraft.test.ts` | 취향 역변환 — 안 만진 축은 omit(`toStrictEqual`로 여분 `undefined` 키까지) |
+| `src/features/edit-preferences/model/preferenceDraft.test.ts` | 취향 역변환 — 안 만진 축은 omit(`toStrictEqual`로 여분 `undefined` 키까지) |
 | `src/pages/settings-preferences/ui/PreferencesEditScreen.integration.test.tsx` | 취향 편집 MSW 통합 — 시드·한 축 PUT 바디·400 인라인(INV-4) + 저장 diff 기준선이 시드 시점으로 얼어 있는지(lost update 방지, 옛 `.baseline` 흡수 — 스위치 `mockFakePreferences`로 그 describe만 가짜 훅) |
 | `src/pages/settings-personalization/model/personalizationCopy.test.ts` | 개인화 문구표 전수 + `NOT_ENOUGH_RECORDS`에 동의 유도 문구 없음(BR-U5-44) |
 | `src/pages/settings-personalization/ui/PersonalizationScreen.test.tsx` | reason 3얼굴·목록 개수·토글 배선 — `NOT_ENOUGH_RECORDS`는 토글 ON 유지+동의 문구 부재 |

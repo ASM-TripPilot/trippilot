@@ -28,7 +28,7 @@ import {
   PreferenceInputTransportModesItem,
 } from '@/shared/api/generated/schemas';
 
-import { type PreferenceSelection } from '@/features/settings/model/preferenceDraft';
+import { type PreferenceSelection } from '@/features/edit-preferences/model/preferenceDraft';
 import { ChevronLeftGlyph } from '@/features/settings/ui/SettingsGlyphs';
 
 type MultiAxisKey =

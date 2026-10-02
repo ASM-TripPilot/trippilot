@@ -7,7 +7,7 @@
 import type { ReactElement } from 'react';
 import { useRouter } from 'expo-router';
 
-import { usePreferenceStore } from '@/features/onboarding/model/preferenceStore';
+import { usePreferenceStore } from '@/features/edit-preferences/model/preferenceStore';
 import { notifyBootstrapReeval } from '@/shared/bootstrap/bootstrapReeval';
 import { guardPress } from '@/shared/press/pressGuard';
 import { PrefStep1Screen } from './PrefStep1Screen';

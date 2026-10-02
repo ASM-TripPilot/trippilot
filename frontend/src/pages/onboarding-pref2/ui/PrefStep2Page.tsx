@@ -7,8 +7,8 @@
 import type { ReactElement } from 'react';
 import { useRouter } from 'expo-router';
 
-import { usePreferenceStore } from '@/features/onboarding/model/preferenceStore';
-import { toPreferenceInput } from '@/features/onboarding/model/preferenceInput';
+import { usePreferenceStore } from '@/features/edit-preferences/model/preferenceStore';
+import { toPreferenceInput } from '@/features/edit-preferences/model/preferenceInput';
 import { notifyBootstrapReeval } from '@/shared/bootstrap/bootstrapReeval';
 import { guardPress } from '@/shared/press/pressGuard';
 import { usePutMePreferences } from '@/shared/api/generated/preferences/preferences';
