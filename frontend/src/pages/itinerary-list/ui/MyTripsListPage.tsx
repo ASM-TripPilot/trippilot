@@ -17,10 +17,7 @@ import {
   readStringValue,
   writeStringValue,
 } from '@/shared/storage/stringValue';
-import {
-  pickDoneBar,
-  type DoneBarEntry,
-} from '@/features/itinerary/model/doneBar';
+import { pickDoneBar, type DoneBarEntry } from '../model/doneBar';
 import {
   byLatest,
   byStart,
@@ -28,14 +25,14 @@ import {
   orderMyTrips,
   parseMyTripsSortKey,
   type MyTripsSortKey,
-} from '@/features/itinerary/model/myTripsOrder';
+} from '../model/myTripsOrder';
 import {
   itineraryDestinationHref,
   resolveItineraryDestination,
 } from '@/features/itinerary/model/planState';
 import { MyTripsListScreen } from './MyTripsListScreen';
-import { MyTripsSortSheet } from '@/features/itinerary/ui/MyTripsSortSheet';
-import { TripDeleteDialog } from '@/features/itinerary/ui/TripDeleteDialog';
+import { MyTripsSortSheet } from './MyTripsSortSheet';
+import { TripDeleteDialog } from './TripDeleteDialog';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import { GenerationDoneBar } from './GenerationDoneBar';
 

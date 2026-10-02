@@ -12,7 +12,7 @@ import {
 import type {
   StayRecommendCandidate,
   StayRecommendView,
-} from '@/features/itinerary/model/stayRecommend';
+} from '../model/stayRecommend';
 import { server } from '@/mocks/server';
 import type {
   AssignBaseRequest,

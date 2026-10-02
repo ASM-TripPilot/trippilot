@@ -4,9 +4,9 @@ import { Pressable, Text, View } from 'react-native';
 import { formatDistance } from '@/entities/place/lib/formatDistance';
 import { formatPrice } from '@/entities/stay/lib/formatPrice';
 import { StayRecommendCard } from '@/entities/stay/ui/StayRecommendCard';
-import { withObjectParticle } from '@/features/itinerary/lib/objectParticle';
+import { withObjectParticle } from '../lib/objectParticle';
 import { LinkChevronGlyph } from '@/features/itinerary/ui/ItineraryGlyphs';
-import type { StayRecommendView as StayRecommendViewModel } from '@/features/itinerary/model/stayRecommend';
+import type { StayRecommendView as StayRecommendViewModel } from '../model/stayRecommend';
 import type { MapPin } from '@/shared/map';
 import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
 

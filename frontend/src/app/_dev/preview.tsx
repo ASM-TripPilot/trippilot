@@ -79,11 +79,11 @@ import {
   PlaceAddHeader,
   PlaceAddRow,
 } from '@/features/itinerary/ui/PlaceAddScreen';
-import { SlotCandidateSheet as ItinerarySlotCandidateSheet } from '@/features/itinerary/ui/SlotCandidateSheet';
+import { SlotCandidateSheet as ItinerarySlotCandidateSheet } from '@/pages/itinerary-draft/ui/SlotCandidateSheet';
 import { SlotFillScreen } from '@/pages/itinerary-copick/ui/SlotFillScreen';
 import { UnplacedMustVisitNotice } from '@/features/itinerary/ui/UnplacedMustVisitNotice';
 import type { UnplacedMustVisitRow } from '@/features/itinerary/model/unplacedMustVisits';
-import type { StayRecommendView as StayRecommendViewModel } from '@/features/itinerary/model/stayRecommend';
+import type { StayRecommendView as StayRecommendViewModel } from '@/pages/itinerary-stay-recommend/model/stayRecommend';
 import { CoPickStepper } from '@/pages/itinerary-copick/ui/CoPickStepper';
 import { GenerationDoneBar } from '@/pages/itinerary-list/ui/GenerationDoneBar';
 import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
@@ -104,10 +104,10 @@ import { MethodPickerScreen } from '@/pages/itinerary-method/ui/MethodPickerScre
 import {
   MyTripCard,
   type MyTripCardVM,
-} from '@/features/itinerary/ui/MyTripCard';
+} from '@/pages/itinerary-list/ui/MyTripCard';
 import { MyTripsListScreen } from '@/pages/itinerary-list/ui/MyTripsListScreen';
-import { MyTripsSortSheet } from '@/features/itinerary/ui/MyTripsSortSheet';
-import { TripDeleteDialog } from '@/features/itinerary/ui/TripDeleteDialog';
+import { MyTripsSortSheet } from '@/pages/itinerary-list/ui/MyTripsSortSheet';
+import { TripDeleteDialog } from '@/pages/itinerary-list/ui/TripDeleteDialog';
 import {
   NotificationInboxScreen,
   type NotificationSection,

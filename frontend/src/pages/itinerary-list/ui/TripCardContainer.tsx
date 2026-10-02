@@ -11,13 +11,9 @@ import {
   itineraryDestinationHref,
   resolveItineraryDestination,
 } from '@/features/itinerary/model/planState';
-import { deriveTripCardFace } from '@/features/itinerary/model/tripCardFace';
+import { deriveTripCardFace } from '../model/tripCardFace';
 import { isGenerationRunning } from '@/features/itinerary/model/useGenerationBusy';
-import {
-  MyTripCard,
-  type MyTripBadge,
-  type MyTripCardVM,
-} from '@/features/itinerary/ui/MyTripCard';
+import { MyTripCard, type MyTripBadge, type MyTripCardVM } from './MyTripCard';
 
 /**
  * TRIP-468 · 여행 1건 담당 컨테이너 — 그 여행의 `useGetTripsTripIdItinerary` 를 물어

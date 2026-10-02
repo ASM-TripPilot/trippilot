@@ -326,39 +326,23 @@
 ## src/features/itinerary/config/
 - `src/features/itinerary/config/placeCategoryChips.ts`  →  PlaceCategoryChip · PLACE_CATEGORY_CHIPS
 
-## src/features/itinerary/lib/
-- `src/features/itinerary/lib/objectParticle.ts`  →  withObjectParticle
-
 ## src/features/itinerary/model/
 - `src/features/itinerary/model/buildEditItineraryRequest.ts`  →  buildEditItineraryRequest
-- `src/features/itinerary/model/candidateSelection.ts`  →  resolveCandidateSelection
 - `src/features/itinerary/model/coPickSlots.ts`  →  firstCoPickSlotKey · nextCoPickSlotKey · countPickedCoPickSlots
-- `src/features/itinerary/model/dayRegion.ts`  →  regionForDay
-- `src/features/itinerary/model/doneBar.ts`  →  DoneBarEntry · DoneBarPick · pickDoneBar
 - `src/features/itinerary/model/draftView.ts`  →  DRAFT_POLL_INTERVAL_MS · DRAFT_POLL_MAX_COUNT · DraftDayTab · buildDraftDayTabs · GenerationDayState · GenerationGaugeCell · buildGenerationGauge · GenerationGaugeFold · FoldedGenerationGaugeCell · foldGenerationGauge · formatDraftDayHeader · formatCoPickDayHeader · DraftPin · buildDraftPins · shouldKeepPollingDraft · DraftView · isCandidatesDemoted · FallbackNotice · resolveFallbackNotice · resolveDraftView
-- `src/features/itinerary/model/editorMapCenter.ts`  →  resolveEditorMapCenter
 - `src/features/itinerary/model/itineraryEditStore.ts`  →  EditorSlot · EditorDaysItem · removeSlot · addSlot · insertSlotAt · reorderKeepingFixed · ItineraryEditState · useItineraryEditStore
 - `src/features/itinerary/model/mustVisitList.ts`  →  MUST_VISIT_NAME_PLACEHOLDER · MustVisitListItem · MustVisitListView · joinMustVisits · fixedTimeLabel · buildMustVisitPins · resolveMustVisitListView
 - `src/features/itinerary/model/mustVisitTimeForm.ts`  →  DwellKey · MustVisitTimeForm · DWELL_OPTIONS · DEFAULT_DWELL_KEY · tripDayChips · startTimeOptions · startTimeLabel · mustVisitTimeBlockReason · canSubmitMustVisitTime · buildFixedMustVisitRequest · buildAnytimeMustVisitRequest
-- `src/features/itinerary/model/myTripsOrder.ts`  →  MyTripsSortKey · byLatest · byStart · byTitle · parseMyTripsSortKey · orderMyTrips
 - `src/features/itinerary/model/planState.ts`  →  PlanState · PlanDayTab · resolvePlanState · isConfirmLocked · ItineraryDestination · resolveItineraryDestination · ItineraryDestinationHref · itineraryDestinationHref · buildPlanDayTabs
-- `src/features/itinerary/model/radiusUsedLabel.ts`  →  formatRadiusUsed
 - `src/features/itinerary/model/slotSwapError.ts`  →  SLOT_SWAP_CONFLICT_CODES · SlotSwapErrorKind · SlotSwapError · resolveSlotSwapError
-- `src/features/itinerary/model/stayRecommend.ts`  →  StayRecommendCandidate · StayRecommendView
 - `src/features/itinerary/model/swapSlotPoi.ts`  →  swapSlotPoi
-- `src/features/itinerary/model/tripCardFace.ts`  →  TripCardFace · deriveTripCardFace
 - `src/features/itinerary/model/unplacedMustVisits.ts`  →  UnplacedMustVisitRow · resolveUnplacedNames
 - `src/features/itinerary/model/useGenerationBusy.ts`  →  isGenerationRunning · GenerationBusy · useGenerationBusy
 
 ## src/features/itinerary/ui/
-- `src/features/itinerary/ui/CoPickLeaveDialog.tsx`  →  CoPickLeaveDialog
 - `src/features/itinerary/ui/ItineraryGlyphs.tsx`  →  BackChevronGlyph · LockGlyph · DragHandleGlyph · PlusGlyph · CheckGlyph · SortCheckGlyph · DashGlyph · DiamondGlyph · CheckCircleGlyph · PencilGlyph · SearchGlyph · CloseGlyph · ClockGlyph · CalendarGlyph · ChevronDownGlyph · ChevronRightGlyph · LinkChevronGlyph · LocationOffGlyph · CircleGlyphTone · InfoCircleGlyph · AlertCircleGlyph · WarningTriangleGlyph · ShareGlyph · WalkGlyph · CarGlyph · ExpandGlyph · RefreshGlyph · FullAiGlyph · CoPickGlyph · ManualGlyph
-- `src/features/itinerary/ui/MyTripCard.tsx`  →  MyTripCardProps · MyTripCard
-- `src/features/itinerary/ui/MyTripsSortSheet.tsx`  →  MyTripsSortSheetProps · MyTripsSortSheet
 - `src/features/itinerary/ui/PlaceAddScreen.tsx`  →  PlaceAddHeaderProps · PlaceAddHeader · PlaceAddRowProps · PlaceAddRow
 - `src/features/itinerary/ui/SaveConflictDialog.tsx`  →  SaveConflictDialog
-- `src/features/itinerary/ui/SlotCandidateSheet.tsx`  →  SlotCandidateSheetRow · SlotCandidateSheetProps · SlotCandidateSheet
-- `src/features/itinerary/ui/TripDeleteDialog.tsx`  →  TripDeleteDialog
 - `src/features/itinerary/ui/UnplacedMustVisitNotice.tsx`  →  UnplacedMustVisitNotice
 
 ## src/features/notification/model/
@@ -390,7 +374,6 @@
 ## src/features/planb/model/
 - `src/features/planb/model/appliedSummary.ts`  →  AppliedSummaryInput · appliedSummaryBadges
 - `src/features/planb/model/foldScope.ts`  →  foldScope
-- `src/features/planb/model/reorderKeepingLocked.ts`  →  reorderKeepingLocked
 - `src/features/planb/model/replanFormStore.ts`  →  ReplanFormState · useReplanFormStore
 - `src/features/planb/model/replanFromInstant.ts`  →  readFromInstant
 - `src/features/planb/model/replanMapCenter.ts`  →  REPLAN_MAP_FALLBACK_CENTER · deriveReplanMapAnchor
@@ -559,8 +542,14 @@
 ## src/pages/itinerary-copick/
 - `src/pages/itinerary-copick/index.ts`  →  SlotFillPage · CoPickCompletePage
 
+## src/pages/itinerary-copick/model/
+- `src/pages/itinerary-copick/model/candidateSelection.ts`  →  resolveCandidateSelection
+- `src/pages/itinerary-copick/model/dayRegion.ts`  →  regionForDay
+- `src/pages/itinerary-copick/model/radiusUsedLabel.ts`  →  formatRadiusUsed
+
 ## src/pages/itinerary-copick/ui/
 - `src/pages/itinerary-copick/ui/CoPickCompletePage.tsx`  →  CoPickCompletePageProps · CoPickCompletePage
+- `src/pages/itinerary-copick/ui/CoPickLeaveDialog.tsx`  →  CoPickLeaveDialog
 - `src/pages/itinerary-copick/ui/CoPickStepper.tsx`  →  CoPickStep · CoPickStepperProps · CoPickStepper
 - `src/pages/itinerary-copick/ui/CoPickStepperGlyphs.tsx`  →  StepperSunGlyph · StepperCheckBadge
 - `src/pages/itinerary-copick/ui/ConceptPickerScreen.tsx`  →  ConceptProgress · ConceptPickerScreenProps · ConceptPickerScreen
@@ -580,9 +569,13 @@
 - `src/pages/itinerary-draft/ui/DraftScreen.tsx`  →  DraftScreenProps · DraftScreen
 - `src/pages/itinerary-draft/ui/GenerationFallbackScreen.tsx`  →  GenerationFallbackScreenProps · GenerationFallbackScreen
 - `src/pages/itinerary-draft/ui/SlotCandidatePanelContainer.tsx`  →  SlotCandidatePanelContainerProps · SlotCandidatePanelContainer
+- `src/pages/itinerary-draft/ui/SlotCandidateSheet.tsx`  →  SlotCandidateSheetRow · SlotCandidateSheetProps · SlotCandidateSheet
 
 ## src/pages/itinerary-edit/
 - `src/pages/itinerary-edit/index.ts`  →  ItineraryEditPage
+
+## src/pages/itinerary-edit/model/
+- `src/pages/itinerary-edit/model/reorderKeepingLocked.ts`  →  reorderKeepingLocked
 
 ## src/pages/itinerary-edit/ui/
 - `src/pages/itinerary-edit/ui/ItineraryEditPage.tsx`  →  ItineraryEditPage
@@ -597,15 +590,26 @@
 ## src/pages/itinerary-list/
 - `src/pages/itinerary-list/index.ts`  →  MyTripsListPage
 
+## src/pages/itinerary-list/model/
+- `src/pages/itinerary-list/model/doneBar.ts`  →  DoneBarEntry · DoneBarPick · pickDoneBar
+- `src/pages/itinerary-list/model/myTripsOrder.ts`  →  MyTripsSortKey · byLatest · byStart · byTitle · parseMyTripsSortKey · orderMyTrips
+- `src/pages/itinerary-list/model/tripCardFace.ts`  →  TripCardFace · deriveTripCardFace
+
 ## src/pages/itinerary-list/ui/
 - `src/pages/itinerary-list/ui/GenerationDoneBar.tsx`  →  GenerationDoneBarProps · GenerationDoneBar
 - `src/pages/itinerary-list/ui/GenerationDoneBarGlyphs.tsx`  →  DoneCheckGlyph
+- `src/pages/itinerary-list/ui/MyTripCard.tsx`  →  MyTripCardProps · MyTripCard
 - `src/pages/itinerary-list/ui/MyTripsListPage.tsx`  →  MyTripsListPage
 - `src/pages/itinerary-list/ui/MyTripsListScreen.tsx`  →  MyTripsListMode · MyTripsListScreenProps · MyTripsListScreen
+- `src/pages/itinerary-list/ui/MyTripsSortSheet.tsx`  →  MyTripsSortSheetProps · MyTripsSortSheet
 - `src/pages/itinerary-list/ui/TripCardContainer.tsx`  →  TripCardContainerProps · TripCardContainer
+- `src/pages/itinerary-list/ui/TripDeleteDialog.tsx`  →  TripDeleteDialog
 
 ## src/pages/itinerary-manual/
 - `src/pages/itinerary-manual/index.ts`  →  ManualPlanPage · PlaceAddPage
+
+## src/pages/itinerary-manual/model/
+- `src/pages/itinerary-manual/model/editorMapCenter.ts`  →  resolveEditorMapCenter
 
 ## src/pages/itinerary-manual/ui/
 - `src/pages/itinerary-manual/ui/ManualPlanPage.tsx`  →  ManualPlanPage
@@ -639,6 +643,12 @@
 
 ## src/pages/itinerary-stay-recommend/
 - `src/pages/itinerary-stay-recommend/index.ts`  →  StayRecommendPage
+
+## src/pages/itinerary-stay-recommend/lib/
+- `src/pages/itinerary-stay-recommend/lib/objectParticle.ts`  →  withObjectParticle
+
+## src/pages/itinerary-stay-recommend/model/
+- `src/pages/itinerary-stay-recommend/model/stayRecommend.ts`  →  StayRecommendCandidate · StayRecommendView
 
 ## src/pages/itinerary-stay-recommend/ui/
 - `src/pages/itinerary-stay-recommend/ui/StayRecommendPage.tsx`  →  StayRecommendPageProps · StayRecommendPage

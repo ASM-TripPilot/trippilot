@@ -20,7 +20,7 @@ import {
   resolvePlanState,
 } from '@/features/itinerary/model/planState';
 import { deriveVisitProgress } from '@/entities/itinerary-slot/lib/visitProgress';
-import { reorderKeepingLocked } from '@/features/planb/model/reorderKeepingLocked';
+import { reorderKeepingLocked } from '../model/reorderKeepingLocked';
 import { deriveEndsNextDay } from '@/entities/itinerary-slot/lib/endsNextDay';
 import {
   buildSlotKey,

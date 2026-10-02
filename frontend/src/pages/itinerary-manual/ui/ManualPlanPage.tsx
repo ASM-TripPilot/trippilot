@@ -5,7 +5,7 @@ import { Text, View } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { buildEditItineraryRequest } from '@/features/itinerary/model/buildEditItineraryRequest';
-import { resolveEditorMapCenter } from '@/features/itinerary/model/editorMapCenter';
+import { resolveEditorMapCenter } from '../model/editorMapCenter';
 import {
   buildDraftPins,
   formatCoPickDayHeader,

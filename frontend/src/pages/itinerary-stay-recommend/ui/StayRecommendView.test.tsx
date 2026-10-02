@@ -9,7 +9,7 @@ import {
 import type {
   StayRecommendCandidate,
   StayRecommendView as StayRecommendViewModel,
-} from '@/features/itinerary/model/stayRecommend';
+} from '../model/stayRecommend';
 import type { MapPin } from '@/shared/map';
 
 import { StayRecommendView } from './StayRecommendView';

@@ -195,7 +195,7 @@ function stripComments(source: string): string {
 describe('🔴 T7 · 시트 파일에 raw hex 0 — 색은 토큰으로, hex 는 *Glyphs.tsx 에만 (AC-6)', () => {
   it('주석을 걷은 MyTripsSortSheet.tsx 에 #RGB·#RRGGBB 가 없다', () => {
     const source = readFileSync(
-      resolve('src/features/itinerary/ui/MyTripsSortSheet.tsx'),
+      resolve('src/pages/itinerary-list/ui/MyTripsSortSheet.tsx'),
       'utf8'
     );
 

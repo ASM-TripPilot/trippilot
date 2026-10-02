@@ -78,9 +78,9 @@ paths:
 | `src/pages/itinerary-manual/ui/ManualPlanPage.hookMock.test.tsx` | h19 배선 — 마운트 POST 1회·여분 키 0. 폴백 배너 부재 단언은 이 표면에 폴백 경로가 없어 지금은 공허 통과(미래 회귀 트립와이어) |
 | `src/pages/itinerary-manual/ui/PlaceAddPage.integration.test.tsx` | h20 배선 — 검색·클라 필터·카테고리 재조회. **add→PUT 전체 플로우는 범위 밖**(캐시 무효화 회귀 심판 없음) |
 | `src/entities/itinerary-slot/lib/categoryPlaceholder.test.ts` | `resolveCategoryPlaceholder` 매핑 — 7종 `tintClass` 완전일치·폴백·iconKey distinct. 프로토타입 키 입력은 다루지 않는다 |
-| `src/features/itinerary/ui/MyTripCard.test.tsx` | h37 카드 렌더 — 제목·메타·부가정보 완전일치 + 배지/resume 유무 짝. `metaLine` 조립 로직은 컨테이너 소관이라 여기서 안 돈다 |
+| `src/pages/itinerary-list/ui/MyTripCard.test.tsx` | h37 카드 렌더 — 제목·메타·부가정보 완전일치 + 배지/resume 유무 짝. `metaLine` 조립 로직은 컨테이너 소관이라 여기서 안 돈다 |
 | `src/__tests__/planbManualRoute.test.tsx` | i07 라우트가 `ItineraryEditPage`를 `tripId`+`inTrip=true`로 부르고 `variant`가 새지 않는지 |
-| `src/features/planb/model/reorderKeepingLocked.test.ts` | 잠긴 칸 고정 재정렬 예시 + fast-check PBT(고정 index 불변·순열·상대 순서 보존). 이 규칙을 부르는 프로덕션 드래그 표면은 아직 없다 |
+| `src/pages/itinerary-edit/model/reorderKeepingLocked.test.ts` | 잠긴 칸 고정 재정렬 예시 + fast-check PBT(고정 index 불변·순열·상대 순서 보존). 이 규칙을 부르는 프로덕션 드래그 표면은 아직 없다 |
 | `src/pages/itinerary-edit/ui/ItineraryEditPage.integration.test.tsx` | 「여행 중 직접 수정(i07)」 describe: h12·i07 페이지 계약 — 완료 알약 press는 시트 안 엶 · 드래그가 `reorderKeepingLocked` 경유 · CONFIRMED 409는 정직 안내(라우터 4메서드 0회) |
 | `src/pages/itinerary-edit/ui/ItineraryEditPage.integration.test.tsx` | 「저장 성공 뒤 토스트·복귀」 describe: 저장 성공 뒤 복귀 계약 — 위반 없음→back/replace 폴백 · 위반(h12·i07·다른 날만)→머묾+배지 · 연타 PUT 1회 · 토스트 완전일치. 편집 통합 파일의 expo-router 목은 `canGoBack`이 있어야 한다(없으면 onSuccess TypeError가 삼켜짐) |
 | `src/features/settings/model/stayTripLink.test.ts` | `buildStayTripLink` — 연결/미연결/혼합/first-wins/유령 base 배제/빈 입력 |

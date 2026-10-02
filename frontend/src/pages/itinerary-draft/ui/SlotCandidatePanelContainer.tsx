@@ -8,7 +8,7 @@ import { isConfirmLocked } from '@/features/itinerary/model/planState';
 import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { resolveSlotSwapError } from '@/features/itinerary/model/slotSwapError';
 import { swapSlotPoi } from '@/features/itinerary/model/swapSlotPoi';
-import { SlotCandidateSheet } from '@/features/itinerary/ui/SlotCandidateSheet';
+import { SlotCandidateSheet } from './SlotCandidateSheet';
 import { useElapsedFlag } from '@/shared/time/useElapsedFlag';
 import {
   getGetTripsTripIdItineraryQueryKey,

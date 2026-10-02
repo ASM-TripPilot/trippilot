@@ -4,7 +4,7 @@ import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 
 import type { MyTripsSortKey } from '../model/myTripsOrder';
 
-import { SortCheckGlyph } from './ItineraryGlyphs';
+import { SortCheckGlyph } from '@/features/itinerary/ui/ItineraryGlyphs';
 
 /**
  * TRIP-1122 · h06 정렬 시트(Figma 4750:2946) — 완전 제어(선택·열림은 페이지가 쥔다, StayPriceSheet 선례).

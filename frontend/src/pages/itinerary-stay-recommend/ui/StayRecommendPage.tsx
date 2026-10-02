@@ -3,7 +3,7 @@ import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
-import type { StayRecommendView as StayRecommendViewModel } from '@/features/itinerary/model/stayRecommend';
+import type { StayRecommendView as StayRecommendViewModel } from '../model/stayRecommend';
 import { LocationOffGlyph } from '@/features/itinerary/ui/ItineraryGlyphs';
 import { useAssignBase } from '@/features/trip/model/useTripBases';
 import { useGetTripsTripId } from '@/shared/api/generated/trips/trips';

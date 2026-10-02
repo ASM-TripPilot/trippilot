@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { View } from 'react-native';
 
 import { buildEditItineraryRequest } from '@/features/itinerary/model/buildEditItineraryRequest';
-import { resolveCandidateSelection } from '@/features/itinerary/model/candidateSelection';
+import { resolveCandidateSelection } from '../model/candidateSelection';
 import {
   countPickedCoPickSlots,
   nextCoPickSlotKey,
@@ -14,10 +14,10 @@ import {
   DRAFT_POLL_INTERVAL_MS,
   formatCoPickDayHeader,
 } from '@/features/itinerary/model/draftView';
-import { regionForDay } from '@/features/itinerary/model/dayRegion';
+import { regionForDay } from '../model/dayRegion';
 import { tripDayChips } from '@/features/itinerary/model/mustVisitTimeForm';
 import { isConfirmLocked } from '@/features/itinerary/model/planState';
-import { formatRadiusUsed } from '@/features/itinerary/model/radiusUsedLabel';
+import { formatRadiusUsed } from '../model/radiusUsedLabel';
 import { formatDistance } from '@/entities/place/lib/formatDistance';
 import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { resolveSlotSwapError } from '@/features/itinerary/model/slotSwapError';
@@ -27,7 +27,7 @@ import {
   ConceptPickerScreen,
   type ConceptProgress,
 } from './ConceptPickerScreen';
-import { CoPickLeaveDialog } from '@/features/itinerary/ui/CoPickLeaveDialog';
+import { CoPickLeaveDialog } from './CoPickLeaveDialog';
 import { SlotFillScreen } from './SlotFillScreen';
 import type {
   ItineraryDaysItemSlotsItem,

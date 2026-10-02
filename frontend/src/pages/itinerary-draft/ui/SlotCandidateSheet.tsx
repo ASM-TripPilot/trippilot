@@ -10,7 +10,7 @@ import {
   CheckGlyph,
   ChevronRightGlyph,
   DiamondGlyph,
-} from './ItineraryGlyphs';
+} from '@/features/itinerary/ui/ItineraryGlyphs';
 
 /**
  * TRIP-793 · h08 "다른 후보 시트" — 순수 바텀시트(props + 콜백만, `@gorhom/bottom-sheet` + scrim).
