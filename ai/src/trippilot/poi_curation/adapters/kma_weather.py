@@ -136,6 +136,8 @@ class KmaWeatherAdapter:
         self._http = http
         self._key = service_key
         self._now = now_fn if now_fn is not None else lambda: datetime.now(_KST)
+        # 같은 (좌표, 발표분) 응답을 기억한다 — 아래 `_fetch_body` 참고.
+        self._last: tuple[tuple[float, float, str, str], object] | None = None
 
     def daily_forecast(
         self, coord: GeoPoint, days: Sequence[date]
@@ -157,11 +159,25 @@ class KmaWeatherAdapter:
 
         **호출 1건 = 응답 1건**이다. 시간별을 따로 부르는 것이 아니라 같은 응답을
         다르게 접을 뿐이라, 시간 단위 도입에 추가 API 비용이 없다.
+
+        그 약속을 **마지막 응답 1건 기억**으로 지킨다. `WeatherProvider.fetch` 는
+        `daily_forecast` 와 `hourly_forecast` 를 따로 부르므로, 기억이 없으면 요청당
+        호출이 2건 나가 공공데이터포털 일일 한도를 문서값의 2배로 쓴다. 더 나쁜 쪽은
+        값이다 — 두 호출이 발표시각 경계(02/05/08/11/14/17/20/23시 +10분)를 걸치면
+        daily 와 hourly 가 **서로 다른 발표분**에서 나와, 같은 응답을 접은 것이라는
+        전제가 깨진다. 그래서 키에 발표분을 넣는다(경계를 넘으면 다시 부른다).
+
+        한 칸만 둔다. 한 요청이 한 좌표를 쓰고 어댑터 수명이 프로세스 수명이라
+        LRU 가 필요한 자리가 아니고, 칸을 늘리면 오래된 발표분이 남는 쪽이 위험하다.
+        실패는 기억하지 않는다 — 일시 장애를 굳히면 프로세스를 재시작해야 풀린다.
         """
         nx, ny = latlon_to_grid(coord.lat, coord.lng)
         base_date, base_time = base_datetime_for(self._now())
+        key = (coord.lat, coord.lng, base_date, base_time)
+        if self._last is not None and self._last[0] == key:
+            return self._last[1]
         try:
-            return self._http.get_json(
+            body = self._http.get_json(
                 f"{_BASE}/getVilageFcst",
                 {
                     "serviceKey": self._key,
@@ -179,6 +195,8 @@ class KmaWeatherAdapter:
             if code in _AUTH_CODES:
                 _warn_auth_once(code)
             raise WeatherError(f"단기예보 호출 실패: {e}") from e
+        self._last = (key, body)
+        return body
 
     def hourly_forecast(
         self, coord: GeoPoint, days: Sequence[date]
