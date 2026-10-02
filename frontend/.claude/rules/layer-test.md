@@ -73,16 +73,16 @@ paths:
 | `src/__tests__/tabsItineraryRoute.test.tsx` | 일정 탭 "내 여행" 목록 — 카드 렌더·무리다이렉트(`Redirect` 목의 마커 부재가 트립와이어)·빈 상태·스켈레톤·최신순·**눌린 카드의** 목적지·카드별 itinerary GET 파생. 줄바꿈 부제는 `.props.children` 직단언(`toHaveTextContent`는 `\n`을 정규화) |
 | `src/features/itinerary/model/itineraryDestination.test.ts` | `resolveItineraryDestination` 표 전수 `it.each`(404→method … CONFIRMED→live), 입력 타입은 함수 시그니처에 고정 |
 | `src/pages/itinerary-method/ui/MethodPickerScreen.test.tsx` | h04 방식 선택 — 차단 사유(BR-U3-01)·안내 액션·뒤로 무회귀 |
-| `src/pages/itinerary-plan/ui/ItineraryPlanPage.escape.integration.test.tsx` | h25 4얼굴 탈출구 — msw로 얼굴 강제(훅 목 금지) + `useRouter` 4메서드 목. 딥링크(`canGoBack()===false`)는 `replace('/(tabs)')` 완전일치(`/(tabs)/itinerary`는 리다이렉트 함정) |
+| `src/pages/itinerary-plan/ui/ItineraryPlanPage.integration.test.tsx` | 「탈출구 — 뒤로·일정 만들기」 describe: h25 4얼굴 탈출구 — msw로 얼굴 강제(훅 목 금지) + `useRouter` 4메서드 목. 딥링크(`canGoBack()===false`)는 `replace('/(tabs)')` 완전일치(`/(tabs)/itinerary`는 리다이렉트 함정) |
 | `src/features/itinerary/model/itineraryEditStore.addSlot.test.ts` | `addSlot` 순수함수 — 비파괴 append + 읽기전용 5필드 키 완전일치(여분 키 누출 차단) |
-| `src/pages/itinerary-manual/ui/ManualPlanPage.integration.test.tsx` | h19 배선 — 마운트 POST 1회·여분 키 0. 폴백 배너 부재 단언은 이 표면에 폴백 경로가 없어 지금은 공허 통과(미래 회귀 트립와이어) |
+| `src/pages/itinerary-manual/ui/ManualPlanPage.hookMock.test.tsx` | h19 배선 — 마운트 POST 1회·여분 키 0. 폴백 배너 부재 단언은 이 표면에 폴백 경로가 없어 지금은 공허 통과(미래 회귀 트립와이어) |
 | `src/pages/itinerary-manual/ui/PlaceAddPage.integration.test.tsx` | h20 배선 — 검색·클라 필터·카테고리 재조회. **add→PUT 전체 플로우는 범위 밖**(캐시 무효화 회귀 심판 없음) |
 | `src/entities/itinerary-slot/lib/categoryPlaceholder.test.ts` | `resolveCategoryPlaceholder` 매핑 — 7종 `tintClass` 완전일치·폴백·iconKey distinct. 프로토타입 키 입력은 다루지 않는다 |
 | `src/features/itinerary/ui/MyTripCard.test.tsx` | h37 카드 렌더 — 제목·메타·부가정보 완전일치 + 배지/resume 유무 짝. `metaLine` 조립 로직은 컨테이너 소관이라 여기서 안 돈다 |
 | `src/__tests__/planbManualRoute.test.tsx` | i07 라우트가 `ItineraryEditPage`를 `tripId`+`inTrip=true`로 부르고 `variant`가 새지 않는지 |
 | `src/features/planb/model/reorderKeepingLocked.test.ts` | 잠긴 칸 고정 재정렬 예시 + fast-check PBT(고정 index 불변·순열·상대 순서 보존). 이 규칙을 부르는 프로덕션 드래그 표면은 아직 없다 |
-| `src/pages/itinerary-edit/ui/ItineraryEditPage.inTrip.integration.test.tsx` | h12·i07 페이지 계약 — 완료 알약 press는 시트 안 엶 · 드래그가 `reorderKeepingLocked` 경유 · CONFIRMED 409는 정직 안내(라우터 4메서드 0회) |
-| `src/pages/itinerary-edit/ui/ItineraryEditPage.save-exit.integration.test.tsx` | 저장 성공 뒤 복귀 계약 — 위반 없음→back/replace 폴백 · 위반(h12·i07·다른 날만)→머묾+배지 · 연타 PUT 1회 · 토스트 완전일치. 편집 스위트 6파일의 expo-router 목은 `canGoBack`이 있어야 한다(없으면 onSuccess TypeError가 삼켜짐) |
+| `src/pages/itinerary-edit/ui/ItineraryEditPage.integration.test.tsx` | 「여행 중 직접 수정(i07)」 describe: h12·i07 페이지 계약 — 완료 알약 press는 시트 안 엶 · 드래그가 `reorderKeepingLocked` 경유 · CONFIRMED 409는 정직 안내(라우터 4메서드 0회) |
+| `src/pages/itinerary-edit/ui/ItineraryEditPage.integration.test.tsx` | 「저장 성공 뒤 토스트·복귀」 describe: 저장 성공 뒤 복귀 계약 — 위반 없음→back/replace 폴백 · 위반(h12·i07·다른 날만)→머묾+배지 · 연타 PUT 1회 · 토스트 완전일치. 편집 통합 파일의 expo-router 목은 `canGoBack`이 있어야 한다(없으면 onSuccess TypeError가 삼켜짐) |
 | `src/features/settings/model/stayTripLink.test.ts` | `buildStayTripLink` — 연결/미연결/혼합/first-wins/유령 base 배제/빈 입력 |
 | `src/pages/my-stays/ui/MyStaysScreen.test.tsx` | l04 뷰 — 행 표시·「출발점 변경」 press 1회(등록 행만, 미등록 행은 버튼 없음 — TRIP-1076)·좌표 미확정 disabled·empty + Figma l04 정합(옛 `.l04parity`, TRIP-1148 합본). 출발점 다이얼로그·chevron 색은 소스 옆 `features/settings/ui/{BaseToggleDialog,SettingsGlyphs}.test.tsx`로 갈라졌다 |
 | `src/pages/my-stays/ui/MyStaysPage.integration.test.tsx` | l04 페이지 배선 — 두 관점을 팩토리 안 스위치 `mockRealWiring` 하나로 가른다(TRIP-1148 합본): 화면 캡처 스텁(null 반환 props-캡처 목 + 조회 훅 `jest.fn`) / 실 화면 + msw(옛 `.release`). 실 화면 위임은 JSX 없이 `createElement`(NativeWind babel 함정 회피). 스텁 관점은 쓰기 훅을 보지 않고, 거점 쓰기 0회는 실 화면 관점이 msw 요청 로그(`writes`가 빈 배열)로 단언한다 — TRIP-1076 이후 이 페이지는 거점을 쓰지 않는다 |

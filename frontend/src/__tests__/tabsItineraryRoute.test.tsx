@@ -66,7 +66,7 @@ jest.mock('expo-router', () => ({
 // TRIP-928 준비부 확장(단언 무변경) — 페이지가 완료 배너 판정을 위해 여행별 일정을 `useQueries` +
 // 옵션 함수로 함께 구독하고, 본 여행 id 를 SecureStore 에서 읽는다. 이 파일은 카드 계약 전용이라
 // 두 비동기를 영영 안 끝나게 막아 배너 판정을 늘 "보류"로 둔다(배너 동작은
-// `pages/itinerary-list/ui/MyTripsListPage.doneBar.test.tsx` 소관). 팩토리는 바깥 변수를 안 쓴다(호이스팅).
+// `pages/itinerary-list/ui/MyTripsListPage.hookMock.test.tsx` 소관). 팩토리는 바깥 변수를 안 쓴다(호이스팅).
 jest.mock('@/shared/api/generated/trips/trips', () => ({
   useGetTrips: jest.fn(),
   useGetTripsTripIdItinerary: jest.fn(),

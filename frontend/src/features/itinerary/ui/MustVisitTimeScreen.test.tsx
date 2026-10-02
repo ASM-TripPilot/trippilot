@@ -4,7 +4,7 @@ import type { ReactTestInstance } from 'react-test-renderer';
 
 import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
 
-import type { MustVisitTimeForm } from '../model/mustVisitTimeForm';
+import type { MustVisitTimeForm } from '@/features/itinerary/model/mustVisitTimeForm';
 import { MustVisitTimeScreen } from './MustVisitTimeScreen';
 
 /**

@@ -15,7 +15,7 @@ import {
   MUST_VISIT_NAME_PLACEHOLDER,
   type MustVisitListItem,
   type MustVisitListView,
-} from '../model/mustVisitList';
+} from '@/features/itinerary/model/mustVisitList';
 import { MustVisitPickerScreen } from './MustVisitPickerScreen';
 
 /**

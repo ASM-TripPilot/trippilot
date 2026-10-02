@@ -445,7 +445,7 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
    * (01b D1). 곁줄 배너·zero 화면·zero 분기는 사라진다.
    *
    * 왜 통합 버킷인가: solveMode·isFallback·candidatesSummary 세 신호가 배선을 타고 **인터스티셜로
-   * 이어지는지**는 model 도 screen 도 못 본다. 규칙(F-1~F-7)은 `draftView.fallback.test.ts` 가,
+   * 이어지는지**는 model 도 screen 도 못 본다. 규칙(F-1~F-7)은 `draftView.test.ts` 「폴백·강등 배너 판정」 가,
    * 화면(카피·체크리스트·CTA)은 `GenerationFallbackScreen.test.tsx` 가 따로 잰다 — 여기는 응답 한 벌이
    * 실제로 인터스티셜/기존 얼굴로 갈렸는지다. (하드실패 라우팅은 이 사이클 DraftPage 무심판 — 02a §3.)
    */
