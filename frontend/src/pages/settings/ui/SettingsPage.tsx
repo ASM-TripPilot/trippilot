@@ -13,7 +13,7 @@ import {
   buildSettingsSections,
   filterReadySettingsSections,
 } from '@/features/settings/model/settingsSections';
-import { SettingsScreen } from '@/features/settings/ui/SettingsScreen';
+import { SettingsScreen } from './SettingsScreen';
 import { logout } from '@/shared/api';
 import {
   useDeleteMeDeletion,
@@ -46,15 +46,11 @@ import { validateNicknameFormat } from '@/shared/validation/nicknameFormat';
 const NICKNAME_SAVED_TOAST = '닉네임을 바꿨어요';
 
 /**
- * 라우팅 — `expo-router` 를 **정적 import 하지 않는다.** 정적 import 면 이 파일의 node-버킷 테스트
- * (`SettingsPage.test.tsx`, expo-router 미목)가 `@react-navigation` ESM 로드로 깨진다. require 를
- * **호출 시점까지** 늦춘다(모듈 로드가 아니라) — 목/실물이 없으면(미목 테스트) throw → catch → no-op.
- *
- * ⚠️ 호출 시점 require 인 이유(모듈 로드가 아니라): `SettingsPage.nav.test.tsx` 의 목
- * `jest.mock('expo-router', () => ({ router: { push: mockPush, ... } }))` 팩토리는 **첫 require 때**
- * 평가된다. 모듈 로드에서 당기면 그 첫 require 가 `const mockPush = jest.fn()` 배정 전에 돌아
- * `router.push` 가 undefined 로 굳는다(press 때 "not a function"). require 를 press 시점으로 늦추면
- * mockPush 배정 뒤 팩토리가 돌아 싱글턴 `router.push` 가 mockPush 를 받는다.
+ * 라우팅 — `expo-router` 를 **정적 import 하지 않고** 누르는 순간 require 한다(없으면 throw → catch →
+ * no-op). 처음 근거였던 두 테스트(expo-router 미목 node 테스트 · 팩토리가 `mockPush` 를 직접 무는
+ * nav 테스트)는 TRIP-1154 합치기로 사라졌다. 지금 이 page 를 그리는 테스트는 모두 `router` 를
+ * 화살표 래퍼로 목하고, `SettingsPage.hookMock.test.tsx` 의 목엔 `useRouter` 가 없다 — `useRouter()`
+ * 로 바꾸면 그 파일이 깨진다. 정적 import 로 되돌려도 되는지는 재측정 전이다.
  */
 function loadRouter(): typeof import('expo-router').router | null {
   try {

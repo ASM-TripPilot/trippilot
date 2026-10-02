@@ -28,8 +28,8 @@ import {
   PreferenceInputTransportModesItem,
 } from '@/shared/api/generated/schemas';
 
-import { type PreferenceSelection } from '../model/preferenceDraft';
-import { ChevronLeftGlyph } from './SettingsGlyphs';
+import { type PreferenceSelection } from '@/features/settings/model/preferenceDraft';
+import { ChevronLeftGlyph } from '@/features/settings/ui/SettingsGlyphs';
 
 type MultiAxisKey =
   'styles' | 'activities' | 'transportModes' | 'foodTastes' | 'companionTypes';

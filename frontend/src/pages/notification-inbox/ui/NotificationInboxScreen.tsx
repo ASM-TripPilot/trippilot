@@ -2,8 +2,8 @@ import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import type { NotificationIconKind } from '../model/notificationKind';
-import { NotifBackChevronGlyph } from './NotificationGlyphs';
+import type { NotificationIconKind } from '@/features/notification/model/notificationKind';
+import { NotifBackChevronGlyph } from '@/features/notification/ui/NotificationGlyphs';
 import { NotifBellGlyph } from './NotificationInboxGlyphs';
 import { NotificationRow } from './NotificationRow';
 

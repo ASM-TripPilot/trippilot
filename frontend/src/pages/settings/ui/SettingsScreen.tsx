@@ -4,12 +4,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Toggle } from '@/shared/ui/Toggle';
 
-import type { SettingsGroupVM, SettingsRowVM } from '../model/settingsSections';
+import type {
+  SettingsGroupVM,
+  SettingsRowVM,
+} from '@/features/settings/model/settingsSections';
 import { DeleteAccountDialog } from './DeleteAccountDialog';
 import { ExportRow } from './ExportRow';
 import { LogoutConfirmDialog } from './LogoutConfirmDialog';
 import { NicknameEditRow } from './NicknameEditRow';
-import { ChevronLeftGlyph, TrashGlyph } from './SettingsGlyphs';
+import {
+  ChevronLeftGlyph,
+  TrashGlyph,
+} from '@/features/settings/ui/SettingsGlyphs';
 import { SettingsGroup } from './SettingsGroup';
 import { NavRow, PreparingRow, RowBody } from './SettingsRow';
 

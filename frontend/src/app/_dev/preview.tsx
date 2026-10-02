@@ -111,28 +111,28 @@ import { TripDeleteDialog } from '@/features/itinerary/ui/TripDeleteDialog';
 import {
   NotificationInboxScreen,
   type NotificationSection,
-} from '@/features/notification/ui/NotificationInboxScreen';
+} from '@/pages/notification-inbox/ui/NotificationInboxScreen';
 import {
   NotificationSettingsScreen,
   type ToggleValueMap,
-} from '@/features/notification/ui/NotificationSettingsScreen';
+} from '@/pages/settings-notifications/ui/NotificationSettingsScreen';
 import {
   buildSettingsSections,
   filterReadySettingsSections,
 } from '@/features/settings/model/settingsSections';
 import { BaseToggleDialog } from '@/features/settings/ui/BaseToggleDialog';
-import { DeleteAccountDialog } from '@/features/settings/ui/DeleteAccountDialog';
-import { LocationConsentScreen } from '@/features/settings/ui/LocationConsentScreen';
+import { DeleteAccountDialog } from '@/pages/settings/ui/DeleteAccountDialog';
+import { LocationConsentScreen } from '@/pages/settings-location/ui/LocationConsentScreen';
 import type { StyleCardVM } from '@/features/settings/model/styleCardModel';
-import { MyPageScreen } from '@/features/settings/ui/MyPageScreen';
-import { PersonalizationScreen } from '@/features/settings/ui/PersonalizationScreen';
+import { MyPageScreen } from '@/pages/my-page/ui/MyPageScreen';
+import { PersonalizationScreen } from '@/pages/settings-personalization/ui/PersonalizationScreen';
 import {
   MyStaysScreen,
   type MyStayRowVM,
 } from '@/pages/my-stays/ui/MyStaysScreen';
 import { StyleSummaryCard } from '@/features/settings/ui/StyleSummaryCard';
-import { RevokeConfirmDialog } from '@/features/settings/ui/RevokeConfirmDialog';
-import { SettingsScreen } from '@/features/settings/ui/SettingsScreen';
+import { RevokeConfirmDialog } from '@/pages/settings-location/ui/RevokeConfirmDialog';
+import { SettingsScreen } from '@/pages/settings/ui/SettingsScreen';
 import { triggerLabel } from '@/features/planb/model/triggerLabel';
 import { triggerPillCopy } from '@/features/planb/model/triggerPillCopy';
 import { riskAffectedRow } from '@/features/planb/model/riskAffectedRow';
@@ -194,7 +194,7 @@ import { PrefStep1Screen } from '@/pages/onboarding-pref1/ui/PrefStep1Screen';
 import { PrefStep2Screen } from '@/pages/onboarding-pref2/ui/PrefStep2Screen';
 import { TermsScreen } from '@/pages/onboarding-terms/ui/TermsScreen';
 import type { PreferenceSelection } from '@/features/settings/model/preferenceDraft';
-import { PreferencesEditView } from '@/features/settings/ui/PreferencesEditView';
+import { PreferencesEditView } from '@/pages/settings-preferences/ui/PreferencesEditView';
 import type {
   ItineraryDaysItemSlotsItem,
   ReflectionStats,
@@ -5269,7 +5269,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   },
   // l03 마이페이지 empty(TRIP-776·1123) — Figma 4755:3123 과 같은 데이터: 카운트 0/0/3(칸마다 ›) · 프로필 태그(스타일 카드
   // 없음 — Figma 내부 모순 그대로) · 지난 여행 썸네일 카드 3장 + "캘린더 ›" ·
-  // 메뉴 3행 · 탭바(마이). 종료 0건 엣지("아직 종료된 여행이 없습니다")는 jest(MyPageScreen.l03empty)가 잰다.
+  // 메뉴 3행 · 탭바(마이). 종료 0건 엣지("아직 종료된 여행이 없습니다")는 jest(`MyPageScreen.test.tsx`)가 잰다.
   {
     key: 'my-page-empty',
     band: 'l',

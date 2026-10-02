@@ -88,13 +88,12 @@ paths:
 | `src/pages/my-stays/ui/MyStaysPage.integration.test.tsx` | l04 페이지 배선 — 두 관점을 팩토리 안 스위치 `mockRealWiring` 하나로 가른다(TRIP-1148 합본): 화면 캡처 스텁(null 반환 props-캡처 목 + 조회 훅 `jest.fn`) / 실 화면 + msw(옛 `.release`). 실 화면 위임은 JSX 없이 `createElement`(NativeWind babel 함정 회피). 스텁 관점은 쓰기 훅을 보지 않고, 거점 쓰기 0회는 실 화면 관점이 msw 요청 로그(`writes`가 빈 배열)로 단언한다 — TRIP-1076 이후 이 페이지는 거점을 쓰지 않는다 |
 | `src/features/settings/model/styleCardModel.test.ts` | `buildStyleCardModel` — official 매핑·insufficient는 preview 미유출·게이지 전수 |
 | `src/features/settings/ui/StyleSummaryCard.test.tsx` | 스타일 카드 — 채움/빈 점을 서로 다른 testID로 세어 SVG fill 함정 차단 · 상세 진입 disabled degrade(INV-4) |
-| `src/pages/my-page/ui/MyPage.integration.test.tsx` | 마이 페이지 배선+배치(`layer-pages.md` `my-page` 행) |
-| `src/__tests__/notificationKindGuard.test.tsx` | 알림 설정 화면이 계약 밖 kind(COMMUNITY·SYSTEM)를 주입받아도 렌더하지 않는지(`VISIBLE_ROWS` 자체 소유) |
+| `src/pages/my-page/ui/MyPage.test.tsx` | 마이 페이지 배선+배치(`layer-pages.md` `my-page` 행) — 옛 `.counts`·`.l03empty`·`.l03parity`·`.integration`·`.styleDetail.integration`을 describe 5개로 합침(TRIP-1154, MSW 0이라 node 버킷) |
+| `src/pages/settings-notifications/ui/NotificationSettingsScreen.test.tsx` | 알림 설정 화면 — 행·토글·Figma 정합 + 계약 밖 kind(COMMUNITY·SYSTEM)를 주입받아도 렌더하지 않는지(`VISIBLE_ROWS` 자체 소유, 옛 `__tests__/notificationKindGuard` 흡수 — TRIP-1154) |
 | `src/features/settings/model/preferenceDraft.test.ts` | 취향 역변환 — 안 만진 축은 omit(`toStrictEqual`로 여분 `undefined` 키까지) |
-| `src/features/settings/ui/PreferencesEditScreen.integration.test.tsx` | 취향 편집 MSW 통합 — 시드·한 축 PUT 바디·400 인라인(INV-4) |
-| `src/features/settings/ui/PreferencesEditScreen.baseline.test.tsx` | 저장 diff 기준선이 시드 시점으로 얼어 있는지(lost update 방지) |
-| `src/features/settings/model/personalizationCopy.test.ts` | 개인화 문구표 전수 + `NOT_ENOUGH_RECORDS`에 동의 유도 문구 없음(BR-U5-44) |
-| `src/features/settings/ui/PersonalizationScreen.test.tsx` | reason 3얼굴·목록 개수·토글 배선 — `NOT_ENOUGH_RECORDS`는 토글 ON 유지+동의 문구 부재 |
-| `src/pages/settings-personalization/ui/PersonalizationPage.integration.test.tsx` | 토글 → GRANT/REVOKE — `reason`이 아니라 `applied`로 판정하는 뮤턴트를 잡는 `NOT_ENOUGH_RECORDS` 케이스 포함 · termsVersion 필터 · `invalidateQueries` spy |
+| `src/pages/settings-preferences/ui/PreferencesEditScreen.integration.test.tsx` | 취향 편집 MSW 통합 — 시드·한 축 PUT 바디·400 인라인(INV-4) + 저장 diff 기준선이 시드 시점으로 얼어 있는지(lost update 방지, 옛 `.baseline` 흡수 — 스위치 `mockFakePreferences`로 그 describe만 가짜 훅) |
+| `src/pages/settings-personalization/model/personalizationCopy.test.ts` | 개인화 문구표 전수 + `NOT_ENOUGH_RECORDS`에 동의 유도 문구 없음(BR-U5-44) |
+| `src/pages/settings-personalization/ui/PersonalizationScreen.test.tsx` | reason 3얼굴·목록 개수·토글 배선 — `NOT_ENOUGH_RECORDS`는 토글 ON 유지+동의 문구 부재 |
+| `src/pages/settings-personalization/ui/PersonalizationPage.test.tsx` | 토글 → GRANT/REVOKE — `reason`이 아니라 `applied`로 판정하는 뮤턴트를 잡는 `NOT_ENOUGH_RECORDS` 케이스 포함 · termsVersion 필터 · `invalidateQueries` spy |
 | `src/shared/api/patchConsent.test.ts` | `patchConsent` 와이어 계약 — URL에 termsType, body는 `{action, termsVersion}` 두 필드만 |
 | `src/features/trip/model/tripWizardStore.periodFromNights.test.ts` | 시작·박수 재계산 예시 + fast-check 액션열 PBT(**매 단계 뒤** 끝−시작=Σnights, 오라클은 구현과 다른 계산 경로). `reset()`은 파일 최상위 `beforeEach`+`afterEach` 둘 다 |

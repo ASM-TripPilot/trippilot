@@ -1,7 +1,7 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import type { SettingsRowChip } from '../model/settingsSections';
+import type { SettingsRowChip } from '@/features/settings/model/settingsSections';
 
 import {
   BellGlyph,
@@ -16,7 +16,7 @@ import {
   PinGlyph,
   SparkleGlyph,
   TrashGlyph,
-} from './SettingsGlyphs';
+} from '@/features/settings/ui/SettingsGlyphs';
 
 /** 행 key → 리딩 아이콘. Figma `1607:2440` 아이콘 배치. */
 const LEADING_GLYPHS: Record<

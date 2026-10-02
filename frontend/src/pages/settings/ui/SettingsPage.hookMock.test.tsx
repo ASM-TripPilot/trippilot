@@ -10,7 +10,7 @@ import {
 } from '@testing-library/react-native';
 import { AxiosError } from 'axios';
 import { Keyboard, Share } from 'react-native';
-import { DELETION_SCOPE } from '@/features/settings/model/deletionScope';
+import { DELETION_SCOPE } from '../model/deletionScope';
 import {
   useDeleteMeDeletion,
   useGetMe,

@@ -6,8 +6,8 @@ import {
 } from '@testing-library/react-native';
 import { ProfileCard } from './ProfileCard';
 import type { ReactTestInstance } from 'react-test-renderer';
-import type { TripBucket } from '../model/tripBuckets';
-import { PencilGlyph } from './SettingsGlyphs';
+import type { TripBucket } from '@/features/settings/model/tripBuckets';
+import { PencilGlyph } from '@/features/settings/ui/SettingsGlyphs';
 
 /**
  * l03 프로필 카드 단위 테스트.

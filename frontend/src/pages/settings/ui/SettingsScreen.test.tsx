@@ -9,9 +9,9 @@ import type { ReactTestInstance } from 'react-test-renderer';
 import {
   buildSettingsSections,
   type SettingsInput,
-} from '../model/settingsSections';
+} from '@/features/settings/model/settingsSections';
 import { SettingsScreen } from './SettingsScreen';
-import { ContrastGlyph } from './SettingsGlyphs';
+import { ContrastGlyph } from '@/features/settings/ui/SettingsGlyphs';
 
 /**
  * l05 설정 화면(프레젠테이션) 단위 테스트.

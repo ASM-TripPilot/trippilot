@@ -1,7 +1,10 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { ChevronRightGlyph, MUTED_SOFT } from './SettingsGlyphs';
+import {
+  ChevronRightGlyph,
+  MUTED_SOFT,
+} from '@/features/settings/ui/SettingsGlyphs';
 import { RowBody } from './SettingsRow';
 
 /**

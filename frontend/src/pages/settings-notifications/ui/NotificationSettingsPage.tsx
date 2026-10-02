@@ -10,7 +10,7 @@ import { useToggles } from '@/features/notification/model/useToggles';
 import {
   NotificationSettingsScreen,
   type ToggleValueMap,
-} from '@/features/notification/ui/NotificationSettingsScreen';
+} from './NotificationSettingsScreen';
 import { getPushPermission } from '@/shared/push';
 
 /**
