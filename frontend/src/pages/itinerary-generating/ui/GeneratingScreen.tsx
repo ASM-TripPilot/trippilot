@@ -1,0 +1,315 @@
+import type { ReactElement } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import {
+  AccessibilityInfo,
+  Animated,
+  Easing,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { MapView, type MapCenter, type MapPin } from '@/shared/map';
+import { startUnlessReduceMotion } from '@/shared/motion/reduceMotion';
+import { StateNotice } from '@/shared/ui/StateNotice';
+
+import {
+  AlertCircleGlyph,
+  BackChevronGlyph,
+  FullAiGlyph,
+} from '@/features/itinerary/ui/ItineraryGlyphs';
+
+/**
+ * h07 [완전AI] "AI가 일정 짜는 중" 화면 — Figma `4294:8516`. 프레젠테이션(props만, 재판정 금지).
+ *
+ * 이 화면은 언제나 "생성 중"이다 — 진행 여부를 스스로 판정하지 않고(`generating` prop 없음) 진행
+ * 표면을 상시 그린다. `failed` 일 때만 실패 표면으로 갈아 낀다(배선의 `isError`).
+ *
+ * **지어낸 진척을 그리지 않는다(⚑C)**: in-flight 엔 세션 데이터가 없어 단계 완료를 알 수 없다.
+ * Figma 의 "완료 체크 / 반채움 / 대기" 고정 표기 대신 3단계를 **균일 진행 중**으로만 그리고,
+ * 진행 바도 채움률(48%) 대신 **비결정형**(좌우로 미끄러지는 세그먼트)으로 "도는 중"만 표현한다.
+ * 그래서 화면에 퍼센트·`N초`·소요시간(`N분`/`N시간`) 문자열이 하나도 없다(AC-1·AC-2 · INV-3).
+ *
+ * **지도 카드(TRIP-789)**: 꼭 갈 곳 핀만 그리고 연결선은 안 그린다(`connectPins={false}`, INV-2 —
+ * 생성 중엔 검증된 동선이 없어 실선을 그리면 거짓말이 된다). 좌표(`pins`+`center`)가 있을 때만
+ * 렌더하고, 없으면 지도 자체를 정직하게 생략한다(프로덕션은 생성 중 좌표가 없어 미렌더, 프리뷰만
+ * 픽스처 주입 — 실 좌표 배관은 후속 티켓).
+ * **하단 제거(TRIP-789)**: Figma 프레임에 없는 footer 안내·[생성 취소]·[백그라운드로 전환] 2버튼을
+ * 뺐다. 뒤로가기 = 백그라운드(앱바 뒤로 셰브론 = `onBackground`). [취소]=CANCELED 경로(BR-U3-05)가
+ * UI에서 사라지는 것은 [기록]에서 canon 드리프트로 보고한다(팀 확정 2026-09-11).
+ */
+
+const SCREEN_TITLE = 'AI 일정 생성';
+const PROGRESS_HEADING = 'AI가 일정을 짜고 있어요';
+/** Figma 부제에서 숫자·시간 어휘(`· 보통 10초쯤 걸려요`)를 뗀 것 — `초` 는 렌더 심판이 잠근다. */
+const PROGRESS_NOTE = '취향·거리·동선까지 맞추는 중';
+/** 3단계 라벨은 Figma 정본(정확 문자열). 완료 여부는 표시하지 않는다(⚑C). */
+const STEPS = ['장소 수집', '동선 계산', '시간 배치'] as const;
+const FAILED_TITLE = '일정을 만들지 못했어요';
+const FAILED_NOTE = '네트워크를 확인하고 다시 시도해 주세요';
+const RETRY_LABEL = '다시 시도';
+// TRIP-1032 — 다른 여행 생성 중(409) 안내. Figma 프레임 없음(01b Q7 채택 문구 — 발명, 사용자 확인 대기).
+const BUSY_TITLE = '다른 여행의 일정을 만들고 있어요';
+const BUSY_NOTE =
+  '한 번에 하나만 만들 수 있어요. 기존 생성을 멈추고 이 여행을 만들까요?';
+const BUSY_UNCANCELABLE_NOTE =
+  '지금은 첫날을 만드는 중이라 취소할 수 없어요. 조금 뒤에 다시 시도해 주세요.';
+const BUSY_CANCEL_RETRY_LABEL = '취소하고 새로 만들기';
+const BUSY_WAIT_LABEL = '기다리기';
+
+// 카드 그림자(Figma `0px 2px 10px rgba(0,0,0,0.06)`). RN 은 box-shadow 가 없어 스타일
+// 프로퍼티로 옮긴다. `#000000` 은 raw-hex 가드의 브랜드 팔레트에 없어 그림자 색으로 정당하다
+// (`MethodPickerScreen.tsx` 선례).
+const cardShadow = {
+  shadowColor: '#000000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.06,
+  shadowRadius: 10,
+  elevation: 2,
+} as const;
+
+/**
+ * 비결정형 진행 바 — 완료율을 모르므로 채움률 대신 좌우로 미끄러지는 세그먼트로 "도는 중"만
+ * 표현한다. RN `Animated`(네이티브 드라이버) 라 **자체 타이머가 없다** — `setInterval`/`setTimeout`
+ * 은 features/pages 타이머 금지 심판에 걸린다. 트랙 폭은 `onLayout` 으로 재 세그먼트 이동 범위를
+ * 픽셀로 잡는다(레이아웃 전엔 폭 0 이라 정지, 첫 레이아웃 후 흐른다).
+ */
+function IndeterminateBar(): ReactElement {
+  const progress = useRef(new Animated.Value(0)).current;
+  const [trackWidth, setTrackWidth] = useState(0);
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: 1200,
+        easing: Easing.inOut(Easing.ease),
+        useNativeDriver: true,
+      })
+    );
+    // 동작 줄이기면 돌지 않고 세그먼트가 트랙 안에 완전히 보이는 자리(0.5)에 선다(01b Q2=(b), 위치 발명값).
+    return startUnlessReduceMotion(loop, () => progress.setValue(0.5));
+  }, [progress]);
+
+  const segmentWidth = trackWidth * 0.4;
+  const translateX = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-segmentWidth, trackWidth],
+  });
+
+  return (
+    <View
+      testID="itinerary-generating-progress"
+      onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
+      className="h-[8px] w-full overflow-hidden rounded-pill bg-surface-strong"
+    >
+      <Animated.View
+        style={{ width: segmentWidth, transform: [{ translateX }] }}
+        className="h-full rounded-pill bg-primary"
+      />
+    </View>
+  );
+}
+
+/**
+ * 3단계 원의 순차 펄스(TRIP-1046 · QA #025) — 세 원이 같은 박자로 옅어졌다 돌아오되 시작만 300ms씩
+ * 어긋난다(stagger). 어느 단계가 끝났다고 주장하지 않으므로 세 원의 얼굴은 같다(⚑C). 박자·진폭은
+ * Figma 모션 정의가 없어 발명값(6-b 육안 조정). 기기 "동작 줄이기"면 시작하지 않아 정지 원으로 남는다.
+ */
+function useStepPulse(count: number): Animated.Value[] {
+  const [values] = useState(() =>
+    Array.from({ length: count }, () => new Animated.Value(1))
+  );
+
+  useEffect(() => {
+    let active = true;
+    const pulse = Animated.stagger(
+      300,
+      values.map((value) =>
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(value, {
+              toValue: 0.3,
+              duration: 600,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+            Animated.timing(value, {
+              toValue: 1,
+              duration: 600,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+          ])
+        )
+      )
+    );
+    void AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
+      if (active && !reduce) pulse.start();
+    });
+    return () => {
+      active = false;
+      pulse.stop();
+    };
+  }, [values]);
+
+  return values;
+}
+
+export interface GeneratingScreenProps {
+  /** 앱바 뒤로 셰브론 press — 배선이 앞으로 이탈(여행/홈), 뮤테이션은 살아 있음(뒤로가기=백그라운드). */
+  onBackground: () => void;
+  /** 실패 표면의 [다시 시도] press — 배선이 POST 를 재발화. */
+  onRetry: () => void;
+  /** POST 오류(배선의 isError) — 참이면 인라인 실패 표면 노출(INV-4, 침묵 금지). */
+  failed?: boolean;
+  /** 꼭 갈 곳 핀 — `center`와 함께 있을 때만 지도 카드를 렌더(정직 폴백, INV-2 연결선 없음). */
+  pins?: MapPin[];
+  /** 지도 중심 — MapView 필수 prop. `pins`와 동반(둘 다 없으면 지도 생략). */
+  center?: MapCenter;
+  /** TRIP-1032 — 다른 여행이 생성 중(409)이면 실패 표면 대신 안내. `cancelable=false` 면 [기다리기]만. */
+  busy?: {
+    cancelable: boolean;
+    onCancelAndRetry: () => void;
+    onWait: () => void;
+  } | null;
+}
+
+export function GeneratingScreen({
+  onBackground,
+  onRetry,
+  failed = false,
+  pins,
+  center,
+  busy,
+}: GeneratingScreenProps): ReactElement {
+  const pulse = useStepPulse(STEPS.length);
+  return (
+    <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+      <View className="flex-1 bg-canvas">
+        <View
+          testID="itinerary-generating-appbar"
+          className="w-full flex-row items-center gap-[6px] bg-canvas py-[14px] pl-md pr-lg"
+        >
+          {/* 앱바 뒤로가기 = 백그라운드 이탈(생성은 살아 있음) — 뒤로가면 h05가 상태를 표시한다. */}
+          <Pressable
+            testID="itinerary-generating-back"
+            accessibilityRole="button"
+            accessibilityLabel="뒤로"
+            onPress={onBackground}
+            hitSlop={8}
+          >
+            <BackChevronGlyph />
+          </Pressable>
+          <Text className="font-noto-bold text-[18px] font-bold text-ink">
+            {SCREEN_TITLE}
+          </Text>
+        </View>
+
+        <ScrollView contentContainerClassName="gap-lg px-lg pb-2xl pt-sm">
+          {busy ? (
+            <StateNotice
+              testID="itinerary-generation-busy"
+              icon={<AlertCircleGlyph />}
+              title={BUSY_TITLE}
+              description={busy.cancelable ? BUSY_NOTE : BUSY_UNCANCELABLE_NOTE}
+              actions={[
+                ...(busy.cancelable
+                  ? [
+                      {
+                        testID: 'itinerary-generation-busy-cancel-retry',
+                        label: BUSY_CANCEL_RETRY_LABEL,
+                        variant: 'filled' as const,
+                        onPress: busy.onCancelAndRetry,
+                      },
+                    ]
+                  : []),
+                {
+                  testID: 'itinerary-generation-busy-wait',
+                  label: BUSY_WAIT_LABEL,
+                  variant: busy.cancelable ? 'outline' : 'filled',
+                  onPress: busy.onWait,
+                },
+              ]}
+            />
+          ) : failed ? (
+            <StateNotice
+              testID="itinerary-generating-failed"
+              icon={<AlertCircleGlyph />}
+              title={FAILED_TITLE}
+              description={FAILED_NOTE}
+              actions={[
+                {
+                  testID: 'itinerary-generating-retry',
+                  label: RETRY_LABEL,
+                  variant: 'filled',
+                  onPress: onRetry,
+                },
+              ]}
+            />
+          ) : (
+            <>
+              <View
+                style={cardShadow}
+                className="w-full gap-md rounded-card border border-hairline bg-canvas p-lg"
+              >
+                <View className="w-full flex-row items-center gap-sm">
+                  <FullAiGlyph size={22} tone="primary" />
+                  <Text className="flex-1 font-noto-bold text-[16px] font-bold text-ink">
+                    {PROGRESS_HEADING}
+                  </Text>
+                </View>
+                <IndeterminateBar />
+                <Text className="w-full font-noto text-label text-muted">
+                  {PROGRESS_NOTE}
+                </Text>
+              </View>
+
+              {pins && center ? (
+                <View
+                  testID="itinerary-generating-map"
+                  style={cardShadow}
+                  className="h-[230px] w-full overflow-hidden rounded-card border border-hairline"
+                >
+                  <MapView
+                    center={center}
+                    pins={pins}
+                    viewOnly
+                    connectPins={false}
+                  />
+                </View>
+              ) : null}
+
+              <View
+                style={cardShadow}
+                className="w-full gap-[15px] rounded-card border border-hairline bg-canvas p-lg"
+              >
+                {STEPS.map((label, index) => (
+                  <View
+                    key={label}
+                    testID={`itinerary-generating-step-${index + 1}`}
+                    className="flex-row items-center gap-md"
+                  >
+                    {/* 균일한 진행 중 표식 — 단계별 완료/대기 차등을 두지 않는다(⚑C). */}
+                    <View className="h-5 w-5 items-center justify-center">
+                      <Animated.View
+                        testID={`itinerary-generating-pulse-${index + 1}`}
+                        style={{ opacity: pulse[index] }}
+                        className="h-[13px] w-[13px] rounded-pill border-[1.5px] border-muted-soft"
+                      />
+                    </View>
+                    <Text className="font-noto-bold text-[14.5px] font-bold text-ink">
+                      {label}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </>
+          )}
+        </ScrollView>
+      </View>
+    </SafeAreaView>
+  );
+}

@@ -14,7 +14,7 @@ import {
   tripDayChips,
   type MustVisitTimeForm,
 } from '@/features/itinerary/model/mustVisitTimeForm';
-import { MustVisitTimeScreen } from '@/features/itinerary/ui/MustVisitTimeScreen';
+import { MustVisitTimeScreen } from './MustVisitTimeScreen';
 import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
 import type { AddMustVisitRequest } from '@/shared/api/generated/schemas';
 import {

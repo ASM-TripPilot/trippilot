@@ -6,7 +6,7 @@ import type { Itinerary, Trip } from '@/shared/api/generated/schemas';
 
 /**
  * TRIP-1123 · l03 마이페이지 테스트 공용 — 페이지가 여행마다 부르는 일정 조회(`useQueries` +
- * `getGetTripsTripIdItineraryQueryOptions`)를 대본으로 돌린다. h06 `MyTripsListPage.ongoing.test` 장치를 옮겼다.
+ * `getGetTripsTripIdItineraryQueryOptions`)를 대본으로 돌린다. h06 `MyTripsListPage.hookMock.test` 「여행 중 여행 맨 위 고정」(옛 `.ongoing.test`) 장치를 옮겼다.
  *
  * 쓰는 법: 테스트 파일의 trips 목 팩토리에 `getGetTripsTripIdItineraryQueryOptions: jest.fn()` 을 두고,
  * 그 목을 `scriptItineraryOptions` 에 넘긴다. 목 옵션 함수의 `queryFn` 이 진짜로 돈다 — 실 `QueryClient` 필요.

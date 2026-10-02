@@ -8,7 +8,7 @@ import {
   joinMustVisits,
   resolveMustVisitListView,
 } from '@/features/itinerary/model/mustVisitList';
-import { MustVisitPickerScreen } from '@/features/itinerary/ui/MustVisitPickerScreen';
+import { MustVisitPickerScreen } from './MustVisitPickerScreen';
 import type { GenerateItineraryRequestGenerationMode } from '@/shared/api/generated/schemas';
 import {
   getGetTripsTripIdMustVisitsQueryKey,

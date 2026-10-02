@@ -13,7 +13,7 @@
 
 ## 글리프 · 심판 사정거리
 
-- **raw hex 소스 스캔은 없다**(TRIP-1145에서 지움). `*Glyphs.tsx`의 SVG `stroke`/`fill` raw hex는 className을 못 받는 리포 전체 관례다. AC-7 스텁 잠금의 `cardFingerprint`는 testID·className·텍스트만 굳히고 **`fill` 변화는 안 본다** — 저장 하트를 `StayGlyphs.tsx`로 옮겨 `useState` 토글을 걸면 5개 심판이 전부 green인 채로 "저장됐다는 거짓말"이 통과한다.
+- **raw hex 소스 스캔은 하나만 남았다**(나머지는 TRIP-1145에서 지움 — 남은 것: `src/features/itinerary/ui/MyTripsSortSheet.test.tsx` T7, 시트 파일 hex 0 단언). `*Glyphs.tsx`의 SVG `stroke`/`fill` raw hex는 className을 못 받는 리포 전체 관례다. AC-7 스텁 잠금의 `cardFingerprint`는 testID·className·텍스트만 굳히고 **`fill` 변화는 안 본다** — 저장 하트를 `StayGlyphs.tsx`로 옮겨 `useState` 토글을 걸면 5개 심판이 전부 green인 채로 "저장됐다는 거짓말"이 통과한다.
 
 ## 지도 (`shared/map`)
 

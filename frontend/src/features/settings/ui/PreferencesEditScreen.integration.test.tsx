@@ -62,7 +62,7 @@ beforeEach(() => {
   mockBack.mockClear();
   mockPush.mockClear();
   // 인메모리 토큰 홀더 — mutator 인증 계층이 Authorization 을 붙이게 한다
-  // (ItineraryEditPage.slot-time.integration 선례).
+  // (ItineraryEditPage.integration 「시각 조정 시트」 선례).
   setAccessToken('valid-access');
 });
 
