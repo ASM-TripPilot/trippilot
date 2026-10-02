@@ -10,7 +10,7 @@ import type { ReactTestInstance } from 'react-test-renderer';
 
 import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
 
-import { optimisticSavedPlaceId } from '@/features/explore/model/savedPlaceIndex';
+import { optimisticSavedPlaceId } from '@/features/save-place/model/savedPlaceIndex';
 import {
   SavedPlaceListScreen,
   type SavedPlaceListScreenProps,

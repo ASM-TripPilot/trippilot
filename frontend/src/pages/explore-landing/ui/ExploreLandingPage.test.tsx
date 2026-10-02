@@ -70,7 +70,7 @@ jest.mock('@/shared/api/generated/places/places', () => ({
 }));
 
 const mockUseSavedPlaces = jest.fn();
-jest.mock('@/features/explore/model/savedPlaces', () => ({
+jest.mock('@/features/save-place/model/savedPlaces', () => ({
   useSavedPlaces: (...args: unknown[]) => mockUseSavedPlaces(...args),
 }));
 

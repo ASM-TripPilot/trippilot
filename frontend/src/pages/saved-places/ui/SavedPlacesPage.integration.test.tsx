@@ -22,7 +22,7 @@ import type {
 } from '@/shared/api/generated/schemas';
 import { RegionLevel } from '@/shared/api/generated/schemas';
 import { useGetTripsTripIdMustVisits } from '@/shared/api/generated/trips/trips';
-import { optimisticSavedPlaceId } from '@/features/explore/model/savedPlaceIndex';
+import { optimisticSavedPlaceId } from '@/features/save-place/model/savedPlaceIndex';
 import { wizardOriginParams } from '@/features/explore/model/wizardOrigin';
 import type { MustVisitSeedItem } from '@/features/trip/model/mustVisitSeed';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';

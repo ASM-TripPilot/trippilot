@@ -85,7 +85,7 @@ jest.mock('@/pages/trip-new-step1/model/useCreateTrip', () => ({
   }),
 }));
 
-jest.mock('@/features/explore/model/savedPlaces', () => ({
+jest.mock('@/features/save-place/model/savedPlaces', () => ({
   useSavedPlaces: () => ({
     savedPlaces: [],
     isPending: false,

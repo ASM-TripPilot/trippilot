@@ -45,7 +45,7 @@ jest.mock('@/shared/api/generated/trips/trips', () => ({
     queryFn: () => new Promise(() => {}),
   }),
 }));
-jest.mock('@/features/explore/model/savedPlaces', () => ({
+jest.mock('@/features/save-place/model/savedPlaces', () => ({
   useSavedPlaces: () => ({ savedPoiIds: [] }),
 }));
 // TRIP-1049 — 홈 라우트가 '지금 뜨는 장소' 실데이터로 `useGetPlaces` 를 문다. 빈 목록 무해 스텁

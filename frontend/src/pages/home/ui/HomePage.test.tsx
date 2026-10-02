@@ -12,7 +12,7 @@ import {
   ItineraryStatus,
 } from '@/shared/api/generated/schemas';
 import { seoulDate } from '@/shared/date/seoulDate';
-import { SAVE_FAILURE_NOTICE } from '@/features/explore/model/placeSaveGuard';
+import { SAVE_FAILURE_NOTICE } from '@/features/save-place/model/placeSaveGuard';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import {
@@ -62,7 +62,7 @@ jest.mock('@/shared/api/generated/places/places', () => ({
 const mockUseSavedPlaces = jest.fn();
 const mockSave = jest.fn();
 const mockRemove = jest.fn();
-jest.mock('@/features/explore/model/savedPlaces', () => ({
+jest.mock('@/features/save-place/model/savedPlaces', () => ({
   useSavedPlaces: (...args: unknown[]) => mockUseSavedPlaces(...args),
 }));
 

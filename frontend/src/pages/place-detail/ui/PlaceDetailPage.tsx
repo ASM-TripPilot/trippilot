@@ -34,8 +34,8 @@ import { StateNotice } from '@/shared/ui/StateNotice';
 import {
   SAVE_FAILURE_NOTICE,
   type PlaceSaveNotice,
-} from '@/features/explore/model/placeSaveGuard';
-import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+} from '@/features/save-place/model/placeSaveGuard';
+import { useSavedPlaces } from '@/features/save-place/model/savedPlaces';
 import { BackChevronGlyph } from '@/features/explore/ui/ExploreGlyphs';
 import { PlaceDetailScreen } from './PlaceDetailScreen';
 

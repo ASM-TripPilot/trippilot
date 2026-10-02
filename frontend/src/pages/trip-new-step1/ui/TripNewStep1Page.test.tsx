@@ -86,7 +86,7 @@ let mockSavedPlaces: {
   remove: jest.Mock;
 };
 
-jest.mock('@/features/explore/model/savedPlaces', () => ({
+jest.mock('@/features/save-place/model/savedPlaces', () => ({
   useSavedPlaces: () => mockSavedPlaces,
 }));
 

@@ -12,8 +12,8 @@ import { seoulDate } from '@/shared/date/seoulDate';
 import { formatNightsLabel } from '@/entities/trip/lib/formatNights';
 import { formatTripRange } from '@/entities/trip/lib/formatTripPeriod';
 import { pickTrendingPlaces } from '@/entities/place/lib/trendingPlaces';
-import { usePlaceSaveToggle } from '@/features/explore/model/placeSaveToggle';
-import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { usePlaceSaveToggle } from '@/features/save-place/model/placeSaveToggle';
+import { useSavedPlaces } from '@/features/save-place/model/savedPlaces';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 import { useSavedStays } from '@/features/stay/model/savedStays';
 import {

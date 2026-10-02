@@ -91,7 +91,7 @@ jest.mock('@/shared/api/generated/places/places', () => ({
   }),
 }));
 
-jest.mock('@/features/explore/model/savedPlaces', () => ({
+jest.mock('@/features/save-place/model/savedPlaces', () => ({
   useSavedPlaces: () => ({ savedPoiIds: [] }),
 }));
 

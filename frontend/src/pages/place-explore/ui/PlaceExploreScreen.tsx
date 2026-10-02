@@ -18,7 +18,7 @@ import { StateNotice } from '@/shared/ui/StateNotice';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
 import type { PlaceListState } from '@/features/explore/model/placeListState';
-import type { PlaceSaveNotice } from '@/features/explore/model/placeSaveGuard';
+import type { PlaceSaveNotice } from '@/features/save-place/model/placeSaveGuard';
 import { formatRegionChipLabel } from '../model/regionChipLabel';
 import {
   BackChevronGlyph,

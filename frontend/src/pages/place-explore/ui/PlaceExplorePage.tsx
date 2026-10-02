@@ -39,10 +39,10 @@ import {
   hasUsableCoords,
   SAVE_FAILURE_NOTICE,
   type PlaceSaveNotice,
-} from '@/features/explore/model/placeSaveGuard';
+} from '@/features/save-place/model/placeSaveGuard';
 import { usePlacesInfinite } from '@/features/explore/model/usePlacesInfinite';
 import { useMultiRegionPlaces } from '@/features/explore/model/useMultiRegionPlaces';
-import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { useSavedPlaces } from '@/features/save-place/model/savedPlaces';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 import { isWizardOrigin } from '@/features/explore/model/wizardOrigin';
 import { PlaceExploreScreen } from './PlaceExploreScreen';

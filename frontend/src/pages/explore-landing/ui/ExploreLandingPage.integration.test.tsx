@@ -20,7 +20,7 @@ import type {
 } from '@/shared/api/generated/schemas';
 import { stayKey } from '@/features/stay/model/stayKey';
 import { useStaySearch } from '@/features/stay/model/useStaySearch';
-import { SAVE_FAILURE_NOTICE } from '@/features/explore/model/placeSaveGuard';
+import { SAVE_FAILURE_NOTICE } from '@/features/save-place/model/placeSaveGuard';
 import { ExploreLandingPage } from '@/pages/explore-landing';
 
 /**

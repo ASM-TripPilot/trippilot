@@ -48,9 +48,9 @@ import {
   REMOVE_FAILURE_NOTICE,
   SAVE_FAILURE_NOTICE,
   type PlaceSaveNotice,
-} from '@/features/explore/model/placeSaveGuard';
+} from '@/features/save-place/model/placeSaveGuard';
 import { orderSavedPlaces } from '../model/savedPlaceList';
-import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { useSavedPlaces } from '@/features/save-place/model/savedPlaces';
 import { wizardOriginParams } from '@/features/explore/model/wizardOrigin';
 import { MustVisitOutsideConfirmDialog } from './MustVisitOutsideConfirmDialog';
 import { MustVisitPickScreen } from './MustVisitPickScreen';
