@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 
-import { resolveStyleFace } from '@/entities/style-analysis/lib/styleFace';
+import { resolveStyleFace } from '@/entities/style-analysis';
 import type {
   StyleAnalysisBody,
   StyleAnalysisEnvelope,

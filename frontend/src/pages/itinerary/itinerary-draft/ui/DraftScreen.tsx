@@ -11,10 +11,10 @@ import type {
   DraftPin,
   DraftView,
 } from '@/features/itinerary/model/draftView';
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
-import { VIOLATION_NOTICE } from '@/entities/itinerary-slot/lib/violationLabel';
+import { buildSlotKey } from '@/entities/itinerary-slot';
+import { VIOLATION_NOTICE } from '@/entities/itinerary-slot';
 import { Skeleton } from '@/shared/ui/Skeleton';
-import { timeBandLabel } from '@/entities/itinerary-slot/lib/timeBandLabel';
+import { timeBandLabel } from '@/entities/itinerary-slot';
 import {
   AlertCircleGlyph,
   BackChevronGlyph,

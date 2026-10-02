@@ -11,7 +11,7 @@ import {
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+import { buildSlotKey } from '@/entities/itinerary-slot';
 import type {
   EditItineraryRequest,
   Itinerary,

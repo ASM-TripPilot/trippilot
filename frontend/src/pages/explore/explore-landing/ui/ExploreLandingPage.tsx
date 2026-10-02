@@ -5,7 +5,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { Place, StayItem } from '@/shared/api/generated/schemas';
 import { getAccessToken } from '@/shared/api/tokenManager';
 import { guardPress } from '@/shared/press/pressGuard';
-import { formatPrice } from '@/entities/stay/lib/formatPrice';
+import { formatPrice } from '@/entities/stay';
 import { stayKey } from '@/features/save-stay/model/stayKey';
 import { useSavedStays } from '@/features/save-stay/model/savedStays';
 import { useStaySearch } from '@/features/stay/model/useStaySearch';

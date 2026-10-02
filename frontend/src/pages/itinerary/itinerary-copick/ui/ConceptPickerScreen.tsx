@@ -9,7 +9,7 @@ import {
   CategoryImageGlyph,
   CategoryShoppingBagGlyph,
   CategoryTreeGlyph,
-} from '@/entities/itinerary-slot/ui/SlotGlyphs';
+} from '@/entities/itinerary-slot';
 import { CONCEPT_DESCRIPTIONS } from '../config/conceptCards';
 import {
   BackChevronGlyph,

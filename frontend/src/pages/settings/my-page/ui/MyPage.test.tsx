@@ -37,7 +37,7 @@ import {
   type ItinScript,
 } from '@/test-support/myPageItineraries';
 import { MyPage } from './MyPage';
-import { ChevronRightGlyph as TripChevronGlyph } from '@/entities/trip/ui/TripGlyphs';
+import { ChevronRightGlyph as TripChevronGlyph } from '@/entities/trip';
 import {
   ChevronRightGlyph as SettingsChevronGlyph,
   BookmarkGlyph,

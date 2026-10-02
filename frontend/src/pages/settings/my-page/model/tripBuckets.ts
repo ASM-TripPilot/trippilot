@@ -1,4 +1,4 @@
-import type { TripPhase } from '@/entities/trip/lib/tripPhase';
+import type { TripPhase } from '@/entities/trip';
 import type { Trip } from '@/shared/api/generated/schemas';
 
 /**

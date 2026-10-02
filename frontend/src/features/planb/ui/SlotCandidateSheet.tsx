@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { Text, View } from 'react-native';
 
-import { SlotCandidateCard } from '@/entities/place/ui/SlotCandidateCard';
+import { SlotCandidateCard } from '@/entities/place';
 import type { SlotCandidatesCandidatesItem } from '@/shared/api/generated/schemas';
 
 /**

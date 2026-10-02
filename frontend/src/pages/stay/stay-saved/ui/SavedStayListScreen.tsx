@@ -2,8 +2,8 @@ import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import type { SavedStayCardVM } from '@/entities/stay/model';
-import { SavedStayCard } from '@/entities/stay/ui/SavedStayCard';
+import type { SavedStayCardVM } from '@/entities/stay';
+import { SavedStayCard } from '@/entities/stay';
 import { CollageEmptyState } from '@/shared/ui/CollageEmptyState';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { Skeleton } from '@/shared/ui/Skeleton';

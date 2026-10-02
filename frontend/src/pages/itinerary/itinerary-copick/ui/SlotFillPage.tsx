@@ -18,11 +18,11 @@ import { regionForDay } from '../model/dayRegion';
 import { tripDayChips } from '@/features/add-must-visit/model/mustVisitTimeForm';
 import { isConfirmLocked } from '@/features/itinerary/model/planState';
 import { formatRadiusUsed } from '../model/radiusUsedLabel';
-import { formatDistance } from '@/entities/place/lib/formatDistance';
-import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+import { formatDistance } from '@/entities/place';
+import { parseSlotKey } from '@/entities/itinerary-slot';
 import { resolveSlotSwapError } from '@/features/edit-itinerary/model/slotSwapError';
 import { swapSlotPoi } from '@/features/edit-itinerary/model/swapSlotPoi';
-import { timeBandLabel } from '@/entities/itinerary-slot/lib/timeBandLabel';
+import { timeBandLabel } from '@/entities/itinerary-slot';
 import {
   ConceptPickerScreen,
   type ConceptProgress,

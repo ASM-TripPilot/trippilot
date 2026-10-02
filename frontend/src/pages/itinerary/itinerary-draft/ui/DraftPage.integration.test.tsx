@@ -32,7 +32,7 @@ import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripIdItinerary,
 } from '@/shared/api/generated/trips/trips';
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+import { buildSlotKey } from '@/entities/itinerary-slot';
 import {
   AlertCircleGlyph,
   CheckCircleGlyph,

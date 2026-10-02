@@ -31,7 +31,7 @@ import {
   getGetTripsTripIdQueryKey,
 } from '@/shared/api/generated/trips/trips';
 import { flushNotifications } from '@/test-support/flushNotifications';
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+import { buildSlotKey } from '@/entities/itinerary-slot';
 
 import { ItineraryPlanPage } from './ItineraryPlanPage';
 

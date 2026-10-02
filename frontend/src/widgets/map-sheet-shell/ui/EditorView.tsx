@@ -11,9 +11,9 @@ import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
 import type { MapCenter, MapPin } from '@/shared/map';
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
-import { violationLabel } from '@/entities/itinerary-slot/lib/violationLabel';
-import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
+import { buildSlotKey } from '@/entities/itinerary-slot';
+import { violationLabel } from '@/entities/itinerary-slot';
+import { SlotStopCard } from '@/entities/itinerary-slot';
 
 import type { CtaButton } from './CtaBar';
 import { InfoCircleGlyph, PlusGlyph } from './EditorGlyphs';

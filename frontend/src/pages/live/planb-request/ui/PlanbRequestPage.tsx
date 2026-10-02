@@ -2,7 +2,7 @@ import { useRouter } from 'expo-router';
 import { isAxiosError } from 'axios';
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 
-import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+import { parseSlotKey } from '@/entities/itinerary-slot';
 import { useLiveItinerary } from '@/features/execution/model/useLiveItinerary';
 import { TRIGGER_REASON_KEY } from '../config/replanChoices';
 import { buildStartReplanRequest } from '@/features/request-replan/model/replanRequest';

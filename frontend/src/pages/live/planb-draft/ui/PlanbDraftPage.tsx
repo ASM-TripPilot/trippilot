@@ -1,9 +1,9 @@
 import { useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
 
-import type { ReplanSlotVM } from '@/entities/itinerary-slot/model';
-import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
-import { formatDistance } from '@/entities/place/lib/formatDistance';
+import type { ReplanSlotVM } from '@/entities/itinerary-slot';
+import { parseSlotKey } from '@/entities/itinerary-slot';
+import { formatDistance } from '@/entities/place';
 import { useLiveItinerary } from '@/features/execution/model/useLiveItinerary';
 import { formatCoPickDayHeader } from '@/features/itinerary/model/draftView';
 import { readFromInstant } from '../model/replanFromInstant';

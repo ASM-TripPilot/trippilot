@@ -1,8 +1,8 @@
 import { Fragment, type ReactElement } from 'react';
 import { Text, View } from 'react-native';
 
-import type { ReplanSlotVM } from '@/entities/itinerary-slot/model';
-import { ReplanSlotRow } from '@/entities/itinerary-slot/ui/ReplanSlotRow';
+import type { ReplanSlotVM } from '@/entities/itinerary-slot';
+import { ReplanSlotRow } from '@/entities/itinerary-slot';
 import type { MapCenter, MapPin } from '@/shared/map';
 import type { CtaButton } from '@/widgets/map-sheet-shell/ui/CtaBar';
 import type { DayChip } from '@/widgets/map-sheet-shell/ui/DayChipOverlay';

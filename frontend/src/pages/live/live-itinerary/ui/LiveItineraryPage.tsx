@@ -5,15 +5,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { resolveLiveState } from '../model/liveState';
 import { useLiveItinerary } from '@/features/execution/model/useLiveItinerary';
-import { projectSlotProgress } from '@/entities/itinerary-slot/lib/slotProgress';
+import { projectSlotProgress } from '@/entities/itinerary-slot';
 import { useVisitCheck } from '../model/useVisitCheck';
 import { photoAttach } from '@/features/attach-visit-media/model/photoAttach';
 import { pickPhotoForVisit } from '@/features/attach-visit-media/model/pickPhotoForVisit';
 import { useVisitMemo } from '@/features/attach-visit-media/model/useVisitMemo';
 import { MemoSheet } from './MemoSheet';
-import { deriveVisitProgress } from '@/entities/itinerary-slot/lib/visitProgress';
+import { deriveVisitProgress } from '@/entities/itinerary-slot';
 import { TriggerChip } from './TriggerChip';
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+import { buildSlotKey } from '@/entities/itinerary-slot';
 import { foldScope } from '../model/foldScope';
 import { riskAffectedRow } from '../model/riskAffectedRow';
 import { triggerLabel } from '@/features/planb/model/triggerLabel';

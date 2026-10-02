@@ -1,4 +1,4 @@
-import { normalizeOpeningHours } from '@/entities/itinerary-slot/lib/normalizeOpeningHours';
+import { normalizeOpeningHours } from '@/entities/itinerary-slot';
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
 
 /**

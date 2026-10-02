@@ -4,8 +4,8 @@ import type { ReactElement } from 'react';
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
-import { PlaceRowCard } from '@/entities/place/ui/PlaceRowCard';
-import { PlaceSubtitle } from '@/entities/place/ui/PlaceSubtitle';
+import { PlaceRowCard } from '@/entities/place';
+import { PlaceSubtitle } from '@/entities/place';
 import { useMultiRegionPlaces } from '@/features/explore/model/useMultiRegionPlaces';
 import { usePlacesInfinite } from '@/features/explore/model/usePlacesInfinite';
 import { PlaceAddHeader } from '@/features/itinerary/ui/PlaceAddScreen';

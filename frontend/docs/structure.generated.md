@@ -205,6 +205,9 @@
 ## src/entities/itinerary-slot/config/
 - `src/entities/itinerary-slot/config/altLabel.ts`  →  ALT_LABEL
 
+## src/entities/itinerary-slot/
+- `src/entities/itinerary-slot/index.ts`  →  deriveEndsNextDay · normalizeOpeningHours · formatOpeningHoursLabel · buildSlotKey · parseSlotKey · buildStatePins · projectSlotProgress · suggestNextSlotTime · timeBandLabel · VIOLATION_NOTICE · violationLabel · deriveVisitProgress · ReplanSlotRow · CategoryBuildingGlyph · CategoryCupGlyph · CategoryForkKnifeGlyph · CategoryImageGlyph · CategoryShoppingBagGlyph · CategoryTreeGlyph · SlotProgressCard · SlotStopCard
+
 ## src/entities/itinerary-slot/lib/
 - `src/entities/itinerary-slot/lib/categoryPlaceholder.ts`  →  CategoryPlaceholder · resolveCategoryPlaceholder
 - `src/entities/itinerary-slot/lib/endsNextDay.ts`  →  deriveEndsNextDay
@@ -229,6 +232,9 @@
 - `src/entities/itinerary-slot/ui/SlotProgressCard.tsx`  →  SlotProgressCardProps · SlotProgressCard
 - `src/entities/itinerary-slot/ui/SlotStopCard.tsx`  →  UNSPECIFIED_CHIP_LABEL · SlotStopCardProps · SlotStopCard
 
+## src/entities/place/
+- `src/entities/place/index.ts`  →  formatDistance · legDistance · pickTrendingPlaces · PlaceGridCard · PlaceRailCard · PlaceRowCard · PlaceSubtitle · SlotCandidateCard
+
 ## src/entities/place/lib/
 - `src/entities/place/lib/formatDistance.ts`  →  formatDistance
 - `src/entities/place/lib/legDistance.ts`  →  legDistance
@@ -247,6 +253,9 @@
 ## src/entities/stay/config/
 - `src/entities/stay/config/affiliateNotice.ts`  →  isOtaSource · otaDisplayName · otaConfirmLabel
 
+## src/entities/stay/
+- `src/entities/stay/index.ts`  →  isOtaSource · otaConfirmLabel · otaDisplayName · formatPrice · SavedStayCard · StayRecommendCard · StaySearchCard
+
 ## src/entities/stay/lib/
 - `src/entities/stay/lib/formatPrice.ts`  →  formatPrice
 
@@ -258,9 +267,15 @@
 - `src/entities/stay/ui/StayRecommendCard.tsx`  →  StayRecommendCardProps · StayRecommendCard
 - `src/entities/stay/ui/StaySearchCard.tsx`  →  StaySearchCardSave · StaySearchCardProps · StaySearchCard
 
+## src/entities/style-analysis/
+- `src/entities/style-analysis/index.ts`  →  resolveStyleFace · resolveStyleProgress
+
 ## src/entities/style-analysis/lib/
 - `src/entities/style-analysis/lib/styleFace.ts`  →  StyleFace · resolveStyleFace
 - `src/entities/style-analysis/lib/styleProgress.ts`  →  resolveStyleProgress
+
+## src/entities/trip/
+- `src/entities/trip/index.ts`  →  formatDayLabel · formatNightsLabel · nightsCountLabel · nightsLabel · formatShareCardPeriod · dayOfWeek · formatBaseNightRange · formatConfirmedDateRange · formatDateRangeWithDow · formatLegendDateRange · formatTripDateRange · formatTripRange · tripDayNumber · classifyTripPhase · isTripOngoing · PastTripRow · TripCard · ChevronRightGlyph
 
 ## src/entities/trip/lib/
 - `src/entities/trip/lib/formatDayLabel.ts`  →  formatDayLabel
@@ -1469,4 +1484,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 907개 파일
+합계 912개 파일

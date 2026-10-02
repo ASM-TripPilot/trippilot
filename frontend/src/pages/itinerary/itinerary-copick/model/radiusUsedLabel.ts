@@ -14,7 +14,7 @@
  *
  * 반올림·형식은 `entities/place/lib` 의 공용 `formatDistance` 를 재사용한다(legDistance 와 같은 코어).
  */
-import { formatDistance } from '@/entities/place/lib/formatDistance';
+import { formatDistance } from '@/entities/place';
 
 export function formatRadiusUsed(radiusMUsed: number): string {
   return `약 ${formatDistance(radiusMUsed)}`;

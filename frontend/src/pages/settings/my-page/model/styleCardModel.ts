@@ -1,5 +1,5 @@
-import { resolveStyleFace } from '@/entities/style-analysis/lib/styleFace';
-import { resolveStyleProgress } from '@/entities/style-analysis/lib/styleProgress';
+import { resolveStyleFace } from '@/entities/style-analysis';
+import { resolveStyleProgress } from '@/entities/style-analysis';
 import type { StyleAnalysisEnvelope } from '@/shared/api/generated/schemas';
 
 /**

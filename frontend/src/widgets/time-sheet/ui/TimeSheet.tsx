@@ -8,7 +8,7 @@ import BottomSheet, {
 } from '@gorhom/bottom-sheet';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { deriveEndsNextDay } from '@/entities/itinerary-slot/lib/endsNextDay';
+import { deriveEndsNextDay } from '@/entities/itinerary-slot';
 import { SegmentedControl } from '@/shared/ui/SegmentedControl';
 import { WheelPicker } from '@/shared/ui/WheelPicker';
 

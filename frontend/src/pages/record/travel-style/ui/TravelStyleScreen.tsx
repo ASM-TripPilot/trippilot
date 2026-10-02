@@ -7,7 +7,7 @@ import type {
   StylePreview,
   StyleProgress,
 } from '@/shared/api/generated/schemas';
-import type { StyleFace } from '@/entities/style-analysis/lib/styleFace';
+import type { StyleFace } from '@/entities/style-analysis';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 
 import { BackArrowGlyph } from '@/features/reflection/ui/ReflectionGlyphs';

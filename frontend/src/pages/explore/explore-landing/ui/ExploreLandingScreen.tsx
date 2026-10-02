@@ -25,13 +25,10 @@ import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import type { PlaceCardVM } from '@/entities/place/model';
-import {
-  PlaceRailCard,
-  type PlaceRailCardSave,
-} from '@/entities/place/ui/PlaceRailCard';
-import type { StayCardVM } from '@/entities/stay/model';
-import { StaySearchCard } from '@/entities/stay/ui/StaySearchCard';
+import type { PlaceCardVM } from '@/entities/place';
+import { PlaceRailCard, type PlaceRailCardSave } from '@/entities/place';
+import type { StayCardVM } from '@/entities/stay';
+import { StaySearchCard } from '@/entities/stay';
 import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
 
 import {

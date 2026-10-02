@@ -2,10 +2,7 @@ import { Text } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { renderRouter, screen } from 'expo-router/testing-library';
 
-import {
-  buildSlotKey,
-  parseSlotKey,
-} from '@/entities/itinerary-slot/lib/slotKey';
+import { buildSlotKey, parseSlotKey } from '@/entities/itinerary-slot';
 import { itineraryDestinationHref } from '@/features/itinerary/model/planState';
 import type { ItineraryDaysItem } from '@/shared/api/generated/schemas';
 

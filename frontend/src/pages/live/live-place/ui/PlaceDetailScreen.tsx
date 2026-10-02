@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { PlaceSubtitle } from '@/entities/place/ui/PlaceSubtitle';
+import { PlaceSubtitle } from '@/entities/place';
 import {
   BackArrowGlyph,
   HeroPhotoGlyph,

@@ -18,16 +18,16 @@ import {
   shouldKeepPollingDraft,
 } from '@/features/itinerary/model/draftView';
 import type { GenerationDayState } from '@/features/itinerary/model/draftView';
-import { legDistance } from '@/entities/place/lib/legDistance';
+import { legDistance } from '@/entities/place';
 import { resolveUnplacedNames } from '@/features/itinerary/model/unplacedMustVisits';
 import { isGenerationRunning } from '@/features/itinerary/model/useGenerationBusy';
 import { DraftScreen } from './DraftScreen';
 import { GenerationFallbackScreen } from './GenerationFallbackScreen';
 import { AlertCircleGlyph } from '@/features/itinerary/ui/ItineraryGlyphs';
 import { UnplacedMustVisitNotice } from '@/features/itinerary/ui/UnplacedMustVisitNotice';
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
-import { VIOLATION_NOTICE } from '@/entities/itinerary-slot/lib/violationLabel';
-import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
+import { buildSlotKey } from '@/entities/itinerary-slot';
+import { VIOLATION_NOTICE } from '@/entities/itinerary-slot';
+import { SlotStopCard } from '@/entities/itinerary-slot';
 import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripId,

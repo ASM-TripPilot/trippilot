@@ -3,12 +3,12 @@ import type { ReactElement } from 'react';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
-import type { ReplanSlotVM } from '@/entities/itinerary-slot/model';
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
-import { buildStatePins } from '@/entities/itinerary-slot/lib/slotMapPin';
-import { projectSlotProgress } from '@/entities/itinerary-slot/lib/slotProgress';
+import type { ReplanSlotVM } from '@/entities/itinerary-slot';
+import { buildSlotKey } from '@/entities/itinerary-slot';
+import { buildStatePins } from '@/entities/itinerary-slot';
+import { projectSlotProgress } from '@/entities/itinerary-slot';
 import { useLiveItinerary } from '@/features/execution/model/useLiveItinerary';
-import { deriveVisitProgress } from '@/entities/itinerary-slot/lib/visitProgress';
+import { deriveVisitProgress } from '@/entities/itinerary-slot';
 import { formatCoPickDayHeader } from '@/features/itinerary/model/draftView';
 import { readFromInstant } from '../model/replanFromInstant';
 import { deriveReplanMapAnchor } from '@/features/request-replan/model/replanMapCenter';

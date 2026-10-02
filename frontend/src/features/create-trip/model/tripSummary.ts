@@ -2,8 +2,8 @@ import type {
   CompanionType,
   TripDestination,
 } from '@/shared/api/generated/schemas';
-import { formatDateRangeWithDow } from '@/entities/trip/lib/formatTripPeriod';
-import { nightsCountLabel } from '@/entities/trip/lib/formatNights';
+import { formatDateRangeWithDow } from '@/entities/trip';
+import { nightsCountLabel } from '@/entities/trip';
 
 /**
  * g01 요약 카드 · 위저드 진행 모델의 순수 셀렉터 (TRIP-664 · US-TRIP-01 · US-TRIP-07).

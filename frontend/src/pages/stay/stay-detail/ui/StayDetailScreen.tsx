@@ -25,7 +25,7 @@ import {
 
 import type { StayDetail } from '@/shared/api/generated/schemas';
 
-import { formatPrice } from '@/entities/stay/lib/formatPrice';
+import { formatPrice } from '@/entities/stay';
 import { MapView } from '@/shared/map';
 import { resolveAmenityIcon } from '../config/amenityIcons';
 import {

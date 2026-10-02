@@ -92,13 +92,13 @@ import type { GenerationProgressCell } from '@/widgets/map-sheet-shell/ui/Genera
 import { MapFallbackBar } from '@/widgets/map-sheet-shell/ui/MapFallbackBar';
 import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
 import { SheetHeader } from '@/widgets/map-sheet-shell/ui/SheetHeader';
-import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
-import { PastTripRow } from '@/entities/trip/ui/PastTripRow';
-import { ChevronRightGlyph as TripChevronRightGlyph } from '@/entities/trip/ui/TripGlyphs';
-import type { PastTripCardVM } from '@/entities/trip/model';
+import { SlotStopCard } from '@/entities/itinerary-slot';
+import { PastTripRow } from '@/entities/trip';
+import { ChevronRightGlyph as TripChevronRightGlyph } from '@/entities/trip';
+import type { PastTripCardVM } from '@/entities/trip';
 import type { MonthLegends } from '@/pages/record/records-calendar/model/recordsCalendar';
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
-import { buildStatePins } from '@/entities/itinerary-slot/lib/slotMapPin';
+import { buildSlotKey } from '@/entities/itinerary-slot';
+import { buildStatePins } from '@/entities/itinerary-slot';
 import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
 import { MethodPickerScreen } from '@/pages/itinerary/itinerary-method/ui/MethodPickerScreen';
 import {
@@ -140,7 +140,7 @@ import { triggerWatchlist } from '@/pages/live/live-itinerary/model/triggerWatch
 import { ReplanRequestSheet } from '@/pages/live/planb-request/ui/ReplanRequestSheet';
 import { appliedSummaryBadges } from '@/features/planb/model/appliedSummary';
 import { ReplanAppliedSheet } from '@/pages/live/live-itinerary/ui/ReplanAppliedSheet';
-import type { ReplanSlotVM } from '@/entities/itinerary-slot/model';
+import type { ReplanSlotVM } from '@/entities/itinerary-slot';
 import { ReplanDraftView } from '@/pages/live/planb-draft/ui/ReplanDraftView';
 // 뷰 파일 경로로 직접 — 페이지 배럴은 useAssignBase(요청 모듈)를 끌어와 프리뷰 네트워크 지뢰가 터진다.
 import { StayRecommendView } from '@/pages/itinerary/itinerary-stay-recommend/ui/StayRecommendView';

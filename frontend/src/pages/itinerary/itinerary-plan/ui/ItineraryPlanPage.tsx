@@ -5,21 +5,21 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter, type Href } from 'expo-router';
 
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
-import { VIOLATION_NOTICE } from '@/entities/itinerary-slot/lib/violationLabel';
-import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
+import { buildSlotKey } from '@/entities/itinerary-slot';
+import { VIOLATION_NOTICE } from '@/entities/itinerary-slot';
+import { SlotStopCard } from '@/entities/itinerary-slot';
 import { useSavedPlaces } from '@/features/save-place/model/savedPlaces';
 import {
   buildDraftDayTabs,
   buildDraftPins,
   formatDraftDayHeader,
 } from '@/features/itinerary/model/draftView';
-import { legDistance } from '@/entities/place/lib/legDistance';
+import { legDistance } from '@/entities/place';
 import {
   isConfirmLocked,
   resolvePlanState,
 } from '@/features/itinerary/model/planState';
-import { timeBandLabel } from '@/entities/itinerary-slot/lib/timeBandLabel';
+import { timeBandLabel } from '@/entities/itinerary-slot';
 import { resolveUnplacedNames } from '@/features/itinerary/model/unplacedMustVisits';
 import {
   AlertCircleGlyph,

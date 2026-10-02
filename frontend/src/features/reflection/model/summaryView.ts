@@ -1,4 +1,4 @@
-import { formatDayLabel } from '@/entities/trip/lib/formatDayLabel';
+import { formatDayLabel } from '@/entities/trip';
 import type {
   DayHighlight,
   TripSummaryEnvelope,

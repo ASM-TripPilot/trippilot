@@ -14,7 +14,7 @@ import {
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import type { ReactTestInstance } from 'react-test-renderer';
 
-import type { ItineraryDaysItemSlotsItem } from '@/entities/itinerary-slot/model';
+import type { ItineraryDaysItemSlotsItem } from '@/entities/itinerary-slot';
 import {
   RailActiveGlyph,
   RailDoneGlyph,

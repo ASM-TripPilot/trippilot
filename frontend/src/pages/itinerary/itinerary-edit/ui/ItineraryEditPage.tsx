@@ -19,13 +19,10 @@ import {
   buildPlanDayTabs,
   resolvePlanState,
 } from '@/features/itinerary/model/planState';
-import { deriveVisitProgress } from '@/entities/itinerary-slot/lib/visitProgress';
+import { deriveVisitProgress } from '@/entities/itinerary-slot';
 import { reorderKeepingLocked } from '../model/reorderKeepingLocked';
-import { deriveEndsNextDay } from '@/entities/itinerary-slot/lib/endsNextDay';
-import {
-  buildSlotKey,
-  parseSlotKey,
-} from '@/entities/itinerary-slot/lib/slotKey';
+import { deriveEndsNextDay } from '@/entities/itinerary-slot';
+import { buildSlotKey, parseSlotKey } from '@/entities/itinerary-slot';
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
 import {
   AlertCircleGlyph,

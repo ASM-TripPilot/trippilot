@@ -18,7 +18,9 @@ const SHEET = path.resolve('src/widgets/time-sheet/ui/TimeSheet.tsx');
 const PAGE = path.resolve(
   'src/pages/itinerary/itinerary-edit/ui/ItineraryEditPage.tsx'
 );
-const HELPER_SPEC = 'entities/itinerary-slot/lib/endsNextDay';
+// TRIP-1157: 헬퍼는 슬라이스 공개 API(index)로만 들어온다 — 딥 경로 끝맺음이 아니라 index 지정자 완전 일치 + 바인딩 이름.
+const HELPER_SPEC = '@/entities/itinerary-slot';
+const HELPER_NAME = /\bderiveEndsNextDay\b/;
 
 /**
  * 스캔 전처리 — 주석을 걷는다. 블록 주석을 먼저(순서 바꾸면 한 줄 안 코드 소실). 줄 주석은 바로 앞
@@ -40,7 +42,10 @@ function fromSpecifiers(source: string): string[] {
 }
 
 function importsHelper(source: string): boolean {
-  return fromSpecifiers(source).some((spec) => spec.endsWith(HELPER_SPEC));
+  return (
+    fromSpecifiers(source).some((spec) => spec === HELPER_SPEC) &&
+    HELPER_NAME.test(source)
+  );
 }
 
 function scan(file: string): string {
@@ -51,11 +56,11 @@ describe('G0 · 탐지기 자가검사 — 이게 통과해야 아래 스캔이 
   it('주석 속 `<=`·import 는 걷히고, 코드의 `<=`·URL·여러 줄 import 의 from 절은 살아남는다', () => {
     const sample = [
       '/** endsNextDay 는 end <= start 유도다. raw <= 주석. */',
-      "// import { deriveEndsNextDay } from '@/entities/itinerary-slot/lib/endsNextDay';",
+      "// import { deriveEndsNextDay } from '@/entities/itinerary-slot';",
       '// const dead = a <= b;',
       'import {',
       '  deriveEndsNextDay,',
-      "} from '@/entities/itinerary-slot/lib/endsNextDay';",
+      "} from '@/entities/itinerary-slot';",
       "import { View } from 'react-native';",
       'const live = endAt <= startAt;',
       "const url = 'https://x/y';",
@@ -74,7 +79,7 @@ describe('G0 · 탐지기 자가검사 — 이게 통과해야 아래 스캔이 
 
     // ③ from 절 추출 — 여러 줄 import 1건 + 한 줄 import 1건, 주석 처리된 import 는 빠진다.
     expect(fromSpecifiers(stripped)).toEqual([
-      '@/entities/itinerary-slot/lib/endsNextDay',
+      '@/entities/itinerary-slot',
       'react-native',
     ]);
     expect(importsHelper(stripped)).toBe(true);

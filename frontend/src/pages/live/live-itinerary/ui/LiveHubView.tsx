@@ -33,12 +33,12 @@ import {
   RailDoneGlyph,
   RailUpcomingGlyph,
 } from '@/features/execution/ui/ExecutionGlyphs';
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+import { buildSlotKey } from '@/entities/itinerary-slot';
 import {
   buildStatePins,
   type SlotProgressState,
-} from '@/entities/itinerary-slot/lib/slotMapPin';
-import { SlotProgressCard } from '@/entities/itinerary-slot/ui/SlotProgressCard';
+} from '@/entities/itinerary-slot';
+import { SlotProgressCard } from '@/entities/itinerary-slot';
 
 /**
  * TRIP-746 · i01 여행중 허브 **순수 뷰**(pages · api import 0 — preview 가 직접 import, TRIP-610).

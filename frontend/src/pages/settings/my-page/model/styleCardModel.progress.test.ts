@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 
-import { resolveStyleFace } from '@/entities/style-analysis/lib/styleFace';
-import { resolveStyleProgress } from '@/entities/style-analysis/lib/styleProgress';
+import { resolveStyleFace } from '@/entities/style-analysis';
+import { resolveStyleProgress } from '@/entities/style-analysis';
 import type {
   StyleAnalysisBody,
   StyleAnalysisEnvelope,

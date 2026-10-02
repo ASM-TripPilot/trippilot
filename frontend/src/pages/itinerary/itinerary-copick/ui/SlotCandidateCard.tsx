@@ -1,6 +1,6 @@
 import type { ReactElement, ReactNode } from 'react';
 
-import { SlotCandidateCard as PlaceSlotCandidateCard } from '@/entities/place/ui/SlotCandidateCard';
+import { SlotCandidateCard as PlaceSlotCandidateCard } from '@/entities/place';
 import type { SlotCandidatesCandidatesItem } from '@/shared/api/generated/schemas';
 
 /**

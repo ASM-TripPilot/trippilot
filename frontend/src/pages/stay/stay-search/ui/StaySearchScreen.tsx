@@ -16,8 +16,8 @@ import type { ReactElement } from 'react';
 import { FlatList, Pressable, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { formatPrice } from '@/entities/stay/lib/formatPrice';
-import { StaySearchCard } from '@/entities/stay/ui/StaySearchCard';
+import { formatPrice } from '@/entities/stay';
+import { StaySearchCard } from '@/entities/stay';
 import type { StayItem } from '@/shared/api/generated/schemas';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';

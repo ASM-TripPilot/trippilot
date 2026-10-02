@@ -1,14 +1,11 @@
 import type { ItineraryStatus, Trip } from '@/shared/api/generated/schemas';
 import { buildMonthGrid, isDateInRange } from '@/shared/date/monthGrid';
-import { formatDayLabel } from '@/entities/trip/lib/formatDayLabel';
-import {
-  formatLegendDateRange,
-  formatTripDateRange,
-} from '@/entities/trip/lib/formatTripPeriod';
-import { nightsLabel } from '@/entities/trip/lib/formatNights';
-import { tripDayNumber } from '@/entities/trip/lib/tripDayNumber';
-import { isTripOngoing } from '@/entities/trip/lib/tripPhase';
-import type { PastTripCardVM } from '@/entities/trip/model';
+import { formatDayLabel } from '@/entities/trip';
+import { formatLegendDateRange, formatTripDateRange } from '@/entities/trip';
+import { nightsLabel } from '@/entities/trip';
+import { tripDayNumber } from '@/entities/trip';
+import { isTripOngoing } from '@/entities/trip';
+import type { PastTripCardVM } from '@/entities/trip';
 
 /**
  * TRIP-575 · j07 여행 캘린더 도메인 순수 함수. `useGetTrips()`가 준 `Trip[]`을 화면 재료로 접는다:

@@ -18,7 +18,7 @@ import {
 } from '@/features/itinerary/ui/PlaceAddScreen';
 import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
 import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
-import { suggestNextSlotTime } from '@/entities/itinerary-slot/lib/suggestNextSlotTime';
+import { suggestNextSlotTime } from '@/entities/itinerary-slot';
 import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripId,

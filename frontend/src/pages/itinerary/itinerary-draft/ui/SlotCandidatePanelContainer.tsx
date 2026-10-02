@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 
 import { buildEditItineraryRequest } from '@/features/edit-itinerary/model/buildEditItineraryRequest';
 import { isConfirmLocked } from '@/features/itinerary/model/planState';
-import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+import { parseSlotKey } from '@/entities/itinerary-slot';
 import { resolveSlotSwapError } from '@/features/edit-itinerary/model/slotSwapError';
 import { swapSlotPoi } from '@/features/edit-itinerary/model/swapSlotPoi';
 import { SlotCandidateSheet } from './SlotCandidateSheet';

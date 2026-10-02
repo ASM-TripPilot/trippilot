@@ -14,13 +14,10 @@ import {
 import { isNotFound } from '@/shared/api/isNotFound';
 import { seoulDate } from '@/shared/date/seoulDate';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
-import { formatTripDateRange } from '@/entities/trip/lib/formatTripPeriod';
-import {
-  classifyTripPhase,
-  type TripPhase,
-} from '@/entities/trip/lib/tripPhase';
-import { ChevronRightGlyph } from '@/entities/trip/ui/TripGlyphs';
-import { PastTripRow } from '@/entities/trip/ui/PastTripRow';
+import { formatTripDateRange } from '@/entities/trip';
+import { classifyTripPhase, type TripPhase } from '@/entities/trip';
+import { ChevronRightGlyph } from '@/entities/trip';
+import { PastTripRow } from '@/entities/trip';
 import { buildStyleCardModel } from '../model/styleCardModel';
 import { bucketTrips, type TripBucket } from '../model/tripBuckets';
 import { MyPageScreen } from './MyPageScreen';

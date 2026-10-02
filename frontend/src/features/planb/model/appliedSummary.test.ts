@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 
-import { formatDistance } from '@/entities/place/lib/formatDistance';
+import { formatDistance } from '@/entities/place';
 
 import { appliedSummaryBadges } from './appliedSummary';
 

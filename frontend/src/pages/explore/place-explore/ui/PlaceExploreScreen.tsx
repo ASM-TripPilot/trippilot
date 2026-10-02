@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { PlaceGridCard } from '@/entities/place/ui/PlaceGridCard';
+import { PlaceGridCard } from '@/entities/place';
 import type { Place } from '@/shared/api/generated/schemas';
 import { PoiCategory } from '@/shared/api/generated/schemas';
 import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';

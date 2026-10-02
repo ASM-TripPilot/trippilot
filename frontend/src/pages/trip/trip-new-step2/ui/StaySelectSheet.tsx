@@ -35,8 +35,8 @@ import BottomSheet, {
 
 import { SHEET_HANDLE_INDICATOR_STYLE } from '@/features/trip/lib/sheetHandle';
 
-import { SavedStayCard } from '@/entities/stay/ui/SavedStayCard';
-import { formatBaseNightRange } from '@/entities/trip/lib/formatTripPeriod';
+import { SavedStayCard } from '@/entities/stay';
+import { formatBaseNightRange } from '@/entities/trip';
 import type { SavedStay } from '@/shared/api/generated/schemas';
 
 import { CheckGlyph, SearchGlyph } from '@/features/trip/ui/TripGlyphs';

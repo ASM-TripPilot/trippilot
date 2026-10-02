@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 
-import { SlotCandidateCard } from '@/entities/place/ui/SlotCandidateCard';
+import { SlotCandidateCard } from '@/entities/place';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
 import {

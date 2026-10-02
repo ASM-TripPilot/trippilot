@@ -4,9 +4,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { router } from 'expo-router';
 
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
-import { buildStatePins } from '@/entities/itinerary-slot/lib/slotMapPin';
-import { formatDayLabel } from '@/entities/trip/lib/formatDayLabel';
+import { buildSlotKey } from '@/entities/itinerary-slot';
+import { buildStatePins } from '@/entities/itinerary-slot';
+import { formatDayLabel } from '@/entities/trip';
 import { deriveStayAttribution } from '../model/stayAttribution';
 import {
   useRecordBases,

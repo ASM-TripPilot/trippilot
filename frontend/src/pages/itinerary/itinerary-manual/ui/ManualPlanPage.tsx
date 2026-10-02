@@ -19,7 +19,7 @@ import { SaveConflictDialog } from '@/features/edit-itinerary/ui/SaveConflictDia
 import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
 import { useSavedStays } from '@/features/trip/model/useSavedStays';
 import { useTripBases } from '@/features/assign-trip-base/model/useTripBases';
-import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+import { parseSlotKey } from '@/entities/itinerary-slot';
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
 import {
   getGetTripsTripIdItineraryQueryKey,

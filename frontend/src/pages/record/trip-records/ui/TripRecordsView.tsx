@@ -5,7 +5,7 @@ import Animated, {
   useSharedValue,
 } from 'react-native-reanimated';
 
-import { formatDayLabel } from '@/entities/trip/lib/formatDayLabel';
+import { formatDayLabel } from '@/entities/trip';
 import { formatCoPickDayHeader } from '@/features/itinerary/model/draftView';
 import {
   GpsOffGlyph,

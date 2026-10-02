@@ -1,4 +1,4 @@
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+import { buildSlotKey } from '@/entities/itinerary-slot';
 import { firstCoPickSlotKey, nextCoPickSlotKey } from './coPickSlots';
 import type { ItineraryDaysItem } from '@/shared/api/generated/schemas';
 

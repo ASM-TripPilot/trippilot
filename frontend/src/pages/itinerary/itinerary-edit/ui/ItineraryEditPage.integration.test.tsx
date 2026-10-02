@@ -13,7 +13,7 @@ import {
 import { server } from '@/mocks/server';
 import { resetToast, WithToastHost } from '@/test-support/toastHarness';
 import { useItineraryEditStore } from '@/features/edit-itinerary/model/itineraryEditStore';
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+import { buildSlotKey } from '@/entities/itinerary-slot';
 import type {
   EditItineraryRequest,
   Itinerary,
