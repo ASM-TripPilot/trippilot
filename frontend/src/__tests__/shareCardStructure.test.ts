@@ -25,14 +25,14 @@ const ROOT = path.resolve('src');
 /** AC-5 서버 이미지 생성 0 스캔 그래프(온디바이스 조립·캡처). 캡처 어댑터는 G2 가 성질로 더한다. */
 const SHARE_SCAN_FILES = [
   'features/reflection/model/shareCard.ts',
-  'features/reflection/model/shareCapture.ts',
+  'features/share-trip-card/model/shareCapture.ts',
   'pages/share-card/ui/ShareCardScreen.tsx',
   'pages/share-card/ui/ShareCardPreview.tsx',
   'pages/share-card/ui/FormatSegment.tsx',
   'pages/share-card/ui/ShareCardPage.tsx',
 ];
 
-const CAPTURE_REL = 'features/reflection/model/shareCapture.ts';
+const CAPTURE_REL = 'features/share-trip-card/model/shareCapture.ts';
 
 /**
  * 서버 이미지 생성·서버 저장 금칙어. 라벨은 실패 메시지에 뜬다.

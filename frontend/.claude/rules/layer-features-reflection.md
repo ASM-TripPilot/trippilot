@@ -38,9 +38,6 @@ paths:
 |---|---|
 | `model/shareCard.ts` | `SHARE_FORMATS`(story·square·feed) · `buildShareCard({summary,trip,format})` 카드 VM(j04 모델 재사용, `totalPhotos===0`→`'no-photo'`, duration 필드 0) · `validateCaption`/`validateHashtags`(온디바이스만, 해시태그 인라인 편집이 재사용) · `periodText`는 시작·종료 **둘 다** 있을 때만 조합([[반쪽 방어 (half-applied guard)]]). 옛 `captureShareImage()` degrade 스텁은 제거됨(→ `model/shareCapture.ts`) |
 | `model/shareCard.test.ts` | 조립·mode·aspect·폼검증·INV-3(`JSON.stringify` 소요시간 0)·INV-4·null 방어 |
-| `model/shareCapture.ts` | (신규) `isShareCaptureArmed()`(모듈 3종 존재 판정, 없으면 null 조회 — 패키지 정적 import 없음) · `saveShareCardImage(ref)`/`shareShareCardImage(ref)`(캡처→저장/공유, 실패는 전부 `{status:'failed'}` 반환, throw 없음) — `shareCaptureNative.ts`를 `await import`로만 부른다 |
-| `model/shareCapture.test.ts` | (신규) armed 판정 3종 개별 부재·저장/공유 성공·권한거부·각 단계 reject |
-| `model/shareCaptureNative.ts` | (신규) 캡처 3종 패키지를 **정적 import**하는 유일한 파일(re-export). 옮기면 `eslint.config.js`의 캡처 어댑터 예외(이 파일 경로 하나만 캡처 3종 정적 import 허용)에서 빠져 lint error가 난다(`traps-reflection.md`) |
 
 ## j05 여행 스타일 분석
 

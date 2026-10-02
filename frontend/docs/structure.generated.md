@@ -410,8 +410,6 @@
 
 ## src/features/reflection/model/
 - `src/features/reflection/model/formatKm.ts`  →  formatKm
-- `src/features/reflection/model/shareCapture.ts`  →  SaveShareCardResult · ShareShareCardResult · isShareCaptureArmed · saveShareCardImage · shareShareCardImage
-- `src/features/reflection/model/shareCaptureNative.ts`  →  captureRef · requestPermissionsAsync · saveToLibraryAsync · shareAsync
 - `src/features/reflection/model/shareCard.ts`  →  ShareFormat · SHARE_FORMATS · ShareCardMode · ShareCardVM · BuildShareCardInput · buildShareCard · formatShareCardStats · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · validateCaption · validateHashtags
 - `src/features/reflection/model/summaryStats.ts`  →  SummaryStatCells · summaryStats
 - `src/features/reflection/model/summaryView.ts`  →  OrderedVisit · shareEnabled · resolveSummaryView · toOrderedVisitList · distanceSourceLabel · daySubtitle
@@ -444,6 +442,10 @@
 - `src/features/settings/ui/BaseToggleDialog.tsx`  →  BaseToggleDialog
 - `src/features/settings/ui/SettingsGlyphs.tsx`  →  MUTED · MUTED_SOFT · ChevronRightGlyph · BookmarkGlyph · BarChartGlyph · ShareNodesGlyph · ListGlyph · EyeOffGlyph · GearGlyph · PencilGlyph · HeartGlyph · ChevronLeftGlyph · PersonGlyph · DownloadGlyph · ContrastGlyph · PinGlyph · BellGlyph · SparkleGlyph · ExternalLinkGlyph · BedGlyph · MenuBedGlyph · TrashGlyph · DocumentGlyph · LogoutGlyph
 - `src/features/settings/ui/cardShadow.ts`  →  CARD_SHADOW
+
+## src/features/share-trip-card/model/
+- `src/features/share-trip-card/model/shareCapture.ts`  →  SaveShareCardResult · ShareShareCardResult · isShareCaptureArmed · saveShareCardImage · shareShareCardImage
+- `src/features/share-trip-card/model/shareCaptureNative.ts`  →  captureRef · requestPermissionsAsync · saveToLibraryAsync · shareAsync
 
 ## src/features/stay/model/
 - `src/features/stay/model/useStaySearch.ts`  →  useStaySearch

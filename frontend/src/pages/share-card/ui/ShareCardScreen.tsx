@@ -21,7 +21,7 @@ import {
   saveShareCardImage,
   shareShareCardImage,
   type SaveShareCardResult,
-} from '@/features/reflection/model/shareCapture';
+} from '@/features/share-trip-card/model/shareCapture';
 
 /**
  * TRIP-574 · j06 공유 카드 화면(VM·formats 주입, 포맷·해시태그 편집·결과 안내는 로컬 상태).

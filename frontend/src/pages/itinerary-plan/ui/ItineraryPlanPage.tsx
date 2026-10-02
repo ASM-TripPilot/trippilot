@@ -27,7 +27,7 @@ import {
   InfoCircleGlyph,
 } from '@/features/itinerary/ui/ItineraryGlyphs';
 import { UnplacedMustVisitNotice } from '@/features/itinerary/ui/UnplacedMustVisitNotice';
-import { isShareCaptureArmed } from '@/features/reflection/model/shareCapture';
+import { isShareCaptureArmed } from '@/features/share-trip-card/model/shareCapture';
 import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
 import {
   getGetTripsTripIdItineraryQueryKey,

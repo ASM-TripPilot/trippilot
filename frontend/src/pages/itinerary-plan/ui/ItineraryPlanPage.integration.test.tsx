@@ -10,7 +10,7 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import type * as ShareCaptureModule from '@/features/reflection/model/shareCapture';
+import type * as ShareCaptureModule from '@/features/share-trip-card/model/shareCapture';
 import { server } from '@/mocks/server';
 import { resetPressGuard } from '@/shared/press/pressGuard';
 import { resetToast, WithToastHost } from '@/test-support/toastHarness';
@@ -87,9 +87,9 @@ jest.mock('expo-router', () => ({
 
 // [공유하기] 게이트 스위치 — null 이면 실물 판정(jest-expo 는 캡처 모듈 3종을 "있는 척"한다), boolean 이면 그 값.
 const mockShareArmed: { value: boolean | null } = { value: null };
-jest.mock('@/features/reflection/model/shareCapture', () => {
+jest.mock('@/features/share-trip-card/model/shareCapture', () => {
   const actual = jest.requireActual<typeof ShareCaptureModule>(
-    '@/features/reflection/model/shareCapture'
+    '@/features/share-trip-card/model/shareCapture'
   );
   return {
     ...actual,

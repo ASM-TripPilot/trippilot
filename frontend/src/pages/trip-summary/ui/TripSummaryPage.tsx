@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
 
-import { isShareCaptureArmed } from '@/features/reflection/model/shareCapture';
+import { isShareCaptureArmed } from '@/features/share-trip-card/model/shareCapture';
 import { summaryStats } from '@/features/reflection/model/summaryStats';
 import {
   daySubtitle,

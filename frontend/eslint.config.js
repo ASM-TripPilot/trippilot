@@ -263,7 +263,7 @@ module.exports = defineConfig([
   },
   {
     // 캡처 어댑터만 캡처 3종을 정적으로 문다(사진 피커·공통 금지는 그대로).
-    files: ['src/features/reflection/model/shareCaptureNative.ts'],
+    files: ['src/features/share-trip-card/model/shareCaptureNative.ts'],
     rules: {
       // 루트·하위 경로 모두 사진 피커만 다시 건다 — 캡처 3종의 하위 경로 패턴이 여기 실려 오면 안 된다.
       'no-restricted-imports': restrictedImports(
