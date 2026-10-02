@@ -39,13 +39,15 @@ from trippilot.assembly_engine.travel import TravelEstimator
 from trippilot.domain.common import BudgetLevel, GeoPoint, PoiId, ScheduleId, TransportMode
 from trippilot.domain.itinerary import ItineraryProblem, SolveMode, TimeWindow
 from trippilot.domain.llm import ScoredPoi
-from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
+from trippilot.domain.poi import counts_as_food, DataQuality, OpenHour, Poi, PoiCategory, PoiSource
 
 _KST = timezone(timedelta(hours=9))
 _DAY = date(2026, 8, 5)                 # 수요일 (weekday 2)
 _CLOSED = (OpenHour(day_of_week=0, open_min=600, close_min=1200),)   # 월요일만 — _DAY 휴무
 _CFG = AssemblyConfig()
-_CFG_OFF = AssemblyConfig(meal_bonus=0.0, meal_penalty=0.0)
+# 보정 off 격리 — FOOD 하루 상한도 끈다(food_daily_max 크게). 상한이 켜지면 프리필터 FOOD 몫
+# (#859 후속)이 '순수 점수 상위 60' 을 바꾸는데, 이 config 가 시험하는 성질은 예약석 0 뿐이다.
+_CFG_OFF = AssemblyConfig(meal_bonus=0.0, meal_penalty=0.0, food_daily_max=10_000)
 _SEATS = 2                              # 식사창 수 (점심·저녁)
 _STAY = stay_for(PoiCategory.FOOD, None)
 _FULL_DAY = (0, 24 * 60)
@@ -109,12 +111,26 @@ def test_prefilter_food_seat_properties(pool) -> None:
     open_food = [c for c in cands if c.poi_id not in fixed and _open_food(index, c)]
     kept_food = [c for c in kept if c.poi_id not in fixed and _open_food(index, c)]
     assert len(kept_food) >= min(_SEATS, len(open_food), _PREFILTER_TOP_K - n_fixed)
-    # 예약석 말고는 점수 서열 그대로 — 밀려난 후보보다 서열이 낮은 비고정·비예약석이 남지 않는다
+    # 예약석 말고는 **같은 부류(FOOD류 / 비FOOD) 안에서** 점수 서열 그대로. FOOD류는 몫
+    # (max(예약석, food_daily_max×4))까지만 — 몫이 찼을 때만 서열보다 먼저 밀려난다(#859 후속:
+    # 미식 취향에서 상위 60 이 전부 FOOD 라 비FOOD 노드 0 이던 것). 비FOOD 가 모자라면 넘친
+    # FOOD 로 60 을 채운다(위 `len == 60`).
+    food_quota = max(_SEATS, _CFG.food_daily_max * 4)
+    is_food = lambda c: counts_as_food(index[c.poi_id])  # noqa: E731
+    kept_free_food = [c for c in kept if c.poi_id not in fixed and is_food(c)]
+    kept_free_non = [c for c in kept if c.poi_id not in fixed and not is_food(c)]
     dropped = [c for c in cands if c.poi_id not in set(ids)]
+    if any(not is_food(d) for d in dropped):
+        assert len(kept_free_food) <= food_quota          # 비FOOD 를 밀어낸 FOOD 는 몫 안에서만
     seat_ids = {c.poi_id for c in sorted(open_food, key=_key)[:_SEATS]}
-    others = [c for c in kept if c.poi_id not in fixed and c.poi_id not in seat_ids]
+    free_kept = [x for x in kept_free_food + kept_free_non if x.poi_id not in seat_ids]
     for d in dropped:
-        assert all(_key(x) < _key(d) for x in others)
+        same = kept_free_food if is_food(d) else kept_free_non
+        assert all(_key(x) < _key(d) for x in same if x.poi_id not in seat_ids)  # 부류 안 서열
+        # 밀려난 이유는 둘 중 하나 — 상위 60 절단(남은 비고정·비예약석이 전부 서열 위) 또는
+        # (FOOD류만) 몫이 참.
+        cut_by_top_k = all(_key(x) < _key(d) for x in free_kept)
+        assert cut_by_top_k or (is_food(d) and len(kept_free_food) >= food_quota)
 
 
 @settings(max_examples=50, deadline=None)

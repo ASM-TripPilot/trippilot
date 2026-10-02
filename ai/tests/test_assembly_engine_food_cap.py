@@ -213,3 +213,32 @@ def test_pbt_food_never_exceeds_cap_while_nonfood_remains(setup) -> None:
 def test_config_rejects_negative_food_cap(field) -> None:
     with pytest.raises(ValueError, match=field):
         AssemblyConfig(**{field: -1})
+
+
+# ── 프리필터 FOOD 몫 (후보 > 60) ─────────────────────────────────────────
+# 실측(2026-10-02, #859 직후 부산 미식): 후보 375 → 프리필터 상위 60 이 전부 FOOD(+음식 골목)라
+# 비FOOD 노드가 0 — 상한이 넘친 FOOD 를 빼도 채울 관광지가 없어 하루 6곳 → 3곳으로 줄었다.
+
+
+def _big_pool(n_food: int, n_sight: int):
+    specs = ([(f"f{i:02d}", _F, 0.9, None) for i in range(n_food)]
+             + [(f"s{i:02d}", _S, 0.2, None) for i in range(n_sight)])
+    return _setup(specs, same_coord=True)
+
+
+def test_prefilter_keeps_non_food_nodes_when_food_dominates_scores() -> None:
+    problem, index = _big_pool(70, 10)
+    sol = OrToolsAssembler(index, _EST, _CFG).solve(problem, 3000)
+    assert sol is not None
+    placed = [s for d in sol.days for s in d.slots]
+    assert _food_count(sol, index) <= _CFG.food_daily_max
+    assert any(index[s.poi_id].category is _S for s in placed), "관광지가 노드에 없으면 하루가 비어 간다"
+    assert len(placed) > _CFG.food_daily_max
+
+
+def test_prefilter_still_fills_sixty_when_non_food_is_scarce() -> None:
+    problem, index = _big_pool(70, 2)
+    asm = OrToolsAssembler(index, _EST, _CFG)
+    kept = asm._prefilter(list(problem.candidates), set(), _DAY, [], 60)
+    assert len(kept) == 60  # 비FOOD 가 모자라면 FOOD 로 다시 채운다 — 풀 손실 없음
+    assert sum(1 for c in kept if index[c.poi_id].category is _S) == 2

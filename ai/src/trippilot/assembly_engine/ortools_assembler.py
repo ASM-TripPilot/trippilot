@@ -745,7 +745,25 @@ class OrToolsAssembler:
         seats = {c.poi_id for c in list(filter(seat_ok, ranked))[:len(meal_slots)]}
         # 안정 정렬 — 고정 먼저, 다음 예약석, 그 안에서는 점수순
         head = sorted(ranked, key=lambda c: (c.poi_id not in fixed_ids, c.poi_id not in seats))
-        return sorted(head[:_PREFILTER_TOP_K], key=rank)
+        # FOOD 몫 상한 — 하루 상한(food_daily_max)을 넘는 FOOD 는 목적함수가 어차피 버리므로
+        # 노드를 그 이상 채우면 비FOOD 자리만 뺏는다. 미식 취향에서 상위 60 이 전부 FOOD 라
+        # 관광지 노드 0 → 상한 뒤 하루 3곳만 남던 것(2026-10-02 부산 미식 실측). 4배는 영업창·
+        # 동선 선택 여지. 비FOOD 가 모자라면 넘친 FOOD 로 다시 채워 60 을 유지한다(풀 손실 없음).
+        food_quota = max(len(seats), self._cfg.food_daily_max * 4)
+        kept: list[ScoredPoi] = []
+        spill: list[ScoredPoi] = []
+        food_taken = 0
+        for c in head:
+            if len(kept) >= _PREFILTER_TOP_K:
+                break
+            food_like = c.poi_id not in fixed_ids and counts_as_food(self._pois[c.poi_id])
+            if food_like and food_taken >= food_quota:
+                spill.append(c)
+                continue
+            food_taken += food_like
+            kept.append(c)
+        kept += spill[:_PREFILTER_TOP_K - len(kept)]
+        return sorted(kept, key=rank)
 
     def _day_open_window(self, poi: Poi, day) -> tuple[int, int] | None:
         """해당 요일 영업창 (없음=종일, 요일 미포함=휴무). 다중 창은 최장 창 채택
