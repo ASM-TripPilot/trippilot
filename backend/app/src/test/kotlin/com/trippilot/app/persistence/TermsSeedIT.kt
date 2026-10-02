@@ -39,5 +39,43 @@ class TermsSeedIT : AbstractPostgresIntegrationTest() {
         }
     }
 
+    /**
+     * md 정본 ↔ 시드 발효본 동기 게이트. 길이·플레이스홀더 검사는 **둘이 갈라지는 것**을 못 잡는다 —
+     * 실화가 있다: #776 이 시드를 실은 다음 날 #767 이 md 에만 클릭 기록 행을 추가해, 발효본이
+     * 클릭 수집을 고지하지 않는 채로 사흘 갔다(2026-10-02 발견). 수집 항목처럼 표로 적히는 내용이
+     * 가장 잘 갈라지므로, **md 본문(검토용 절 이전)의 표 행 전부가 시드 본문에 그대로 있어야 한다.**
+     */
+    @Test
+    fun `시드 발효본은 md 정본의 표 행을 전부 담는다 - 한쪽만 고치면 깨진다`() {
+        val legalDir = java.nio.file.Paths.get("..", "docs", "legal")
+        val files = mapOf(
+            "privacy-policy.md" to "PRIVACY_POLICY",
+            "location-terms.md" to "LOCATION_TERMS",
+            "terms-of-service.md" to "TERMS_OF_SERVICE",
+            "gps-recording-consent.md" to "GPS_RECORDING",
+            "marketing-consent.md" to "MARKETING",
+            "personalization-consent.md" to "PERSONALIZATION",
+        )
+        val seeded = jdbc.queryForList(
+            "SELECT terms_type, body FROM terms_version WHERE version = '1.0'",
+        ).associate { it["terms_type"] as String to it["body"] as String }
+
+        files.forEach { (file, type) ->
+            val md = java.nio.file.Files.readString(legalDir.resolve(file))
+                .substringBefore("[초안 검토용") // 대조표 절은 시드에 싣지 않는 것이 변환 규칙이다
+            val tableRows = md.lines()
+                .map(String::trim)
+                .filter { it.startsWith("|") }
+                // 구분선(|---|)과 머리행 장식은 내용이 아니다
+                .filterNot { row -> row.all { it == '|' || it == '-' || it == ':' || it.isWhitespace() } }
+            val body = seeded.getValue(type)
+            tableRows.forEach { row ->
+                withClue("$file 의 표 행이 시드($type)에 없다 — md 를 고쳤으면 시드도 고쳐라: $row") {
+                    body.contains(row) shouldBe true
+                }
+            }
+        }
+    }
+
     private fun withClue(clue: String, block: () -> Unit) = io.kotest.assertions.withClue(clue, block)
 }
