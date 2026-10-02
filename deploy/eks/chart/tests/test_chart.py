@@ -185,6 +185,25 @@ class ChartTests(unittest.TestCase):
             # fail-open 금지: 토큰이 없으면 조용히 열리는 대신 기동이 실패한다.
             self.assertEqual(env["SERVICE_AUTH_REQUIRE_TOKEN"]["value"], "true")
 
+    def test_backend_receives_affiliate_switch_from_secret(self):
+        """제휴 스위치 4종은 backend Secret 에서 와야 한다 — 배선이 빠지면 조용히 폴백이다.
+
+        시크릿에 AFFILIATE_MODE=tripcom + TRIPCOM 3종을 넣어도 차트가 env 로 안 실어 주면
+        validate_groups 는 통과하고 파드도 뜨는데, yml 기본 fallback 으로 돌아 수수료만
+        조용히 샌다(TRIP-850 에서 실측한 구멍). optional 이라 값이 없어도 기동은 안 막는다.
+        """
+        for environment in ("dev", "prd"):
+            documents = render(environment)
+            backend = next(item for item in documents
+                           if item["kind"] == "Deployment" and item["metadata"]["name"] == "backend")
+            env = {item["name"]: item
+                   for item in backend["spec"]["template"]["spec"]["containers"][0]["env"]}
+            for name in ("AFFILIATE_MODE", "TRIPCOM_ALLIANCE_ID", "TRIPCOM_SID", "TRIPCOM_AD_ID"):
+                ref = env[name]["valueFrom"]["secretKeyRef"]
+                self.assertEqual(ref["name"], "trippilot-backend")
+                self.assertEqual(ref["key"], name)
+                self.assertTrue(ref["optional"])
+
 
 if __name__ == "__main__":
     unittest.main()
