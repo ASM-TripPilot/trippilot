@@ -45,7 +45,7 @@ const FAB_SHADOW = {
 /**
  * d04 장소 탐색 default(Figma `1692:1183`) — **프레젠테이션 화면**. props 8개(TRIP-221 확정)
  * + 옵셔널 9개(TRIP-222 7개 + TRIP-708 `onPressSavedPlaces`·`onPressFilter`)만 받는다.
- * 조회·라우팅·로컬 상태는 `pages/place-explore/ui/
+ * 조회·라우팅·로컬 상태는 `pages/explore/place-explore/ui/
  * PlaceExplorePage.tsx` 몫이고, 상태 판정(`resolvePlaceListState`)도 페이지가 끝내 `state`
  * 하나로 내려준다 — 이 화면은 그 판별 유니온을 보고 그리기만 한다(판정의 단일 출처).
  * 새 prop은 전부 옵셔널이고 `state` 기본값이 `results`라 TRIP-221 동결 렌더(prop 8개)가

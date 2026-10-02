@@ -35,7 +35,7 @@ import {
  *  - **CS-14 (TRIP-1042 AC-9)** 행 위치는 페이지가 준 표기(`부산 사하구`)를 쓰고, 없으면 `place.region`.
  *
  * 왜 화면 단위인가: 재는 것은 "props 를 받았을 때 무엇을 그리는가"다. 실제 나간 시드·라우팅은
- * `pages/saved-places/ui/SavedPlacesPage.integration.test.tsx` `select ›` 관점 몫이다. 이 화면은 훅 0(props-only)
+ * `pages/explore/saved-places/ui/SavedPlacesPage.integration.test.tsx` `select ›` 관점 몫이다. 이 화면은 훅 0(props-only)
  * 이라 QueryClient·SafeAreaProvider 래퍼가 필요 없다(02a §4-5 확인).
  *
  * ★ 매처 근거(02a §5): `toBeSelected`/`toBeDisabled`=accessibilityState 읽음(RN Pressable 이 disabled

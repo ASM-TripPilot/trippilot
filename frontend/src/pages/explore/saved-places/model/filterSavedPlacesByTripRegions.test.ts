@@ -145,14 +145,14 @@ describe('filterSavedPlacesByTripRegions · AC-2 지역 필터(양방향 접두�
  * 참조하는지를 소스로 확인한다. 행동 증명(페이지가 실제로 필터함)은 통합 테스트가 별도로 잠근다.
  */
 describe('구조 앵커 · 순수함수는 정본 경로에 있고 페이지가 그것을 참조한다', () => {
-  const ROOT = path.resolve(__dirname, '../../../..'); // → frontend/
+  const ROOT = path.resolve(__dirname, '../../../../..'); // → frontend/
   const FN_PATH = path.join(
     ROOT,
-    'src/pages/saved-places/model/filterSavedPlacesByTripRegions.ts'
+    'src/pages/explore/saved-places/model/filterSavedPlacesByTripRegions.ts'
   );
   const PAGE_PATH = path.join(
     ROOT,
-    'src/pages/saved-places/ui/SavedPlacesPage.tsx'
+    'src/pages/explore/saved-places/ui/SavedPlacesPage.tsx'
   );
 
   it('순수함수 파일이 정본 경로에 존재한다', () => {

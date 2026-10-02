@@ -21,7 +21,7 @@ import type {
 import { stayKey } from '@/features/save-stay/model/stayKey';
 import { useStaySearch } from '@/features/stay/model/useStaySearch';
 import { SAVE_FAILURE_NOTICE } from '@/features/save-place/model/placeSaveGuard';
-import { ExploreLandingPage } from '@/pages/explore-landing';
+import { ExploreLandingPage } from '@/pages/explore/explore-landing';
 
 /**
  * 탐색 d01 page 의 담기 하트 — 실제 담기 훅 + msw 로 나간 요청을 센다.

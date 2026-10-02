@@ -1,4 +1,4 @@
-import { PlaceExplorePage } from '@/pages/place-explore';
+import { PlaceExplorePage } from '@/pages/explore/place-explore';
 
 /**
  * d04 장소 탐색 default — 정본 `frontend-components.md` §1의 `explore/places.tsx` 자리.

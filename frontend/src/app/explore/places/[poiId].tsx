@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 
-import { PlaceDetailPage } from '@/pages/place-detail';
+import { PlaceDetailPage } from '@/pages/explore/place-detail';
 
 /**
  * 장소(POI) 상세 라우트 `explore/places/[poiId]` — d06 실화면 위임(TRIP-456).

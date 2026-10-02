@@ -61,7 +61,7 @@ paths:
 | `src/pages/trip/trip-new-step1/model/budgetAmount.tier.test.ts` | `budgetForTier(tier)` 1인자(TRIP-1067) — 고정 맵(저가30만·중간100만·고급200만·럭셔리400만, 온보딩 범위 가운데값)×예제 4 + 무작위 500회(박수·인원 인자를 넘겨도 안 바뀜, `Function.length`로 박수 인자 부재 확인 — 기본값 인자는 `length`에 안 잡혀 `@ts-expect-error`로 이중 판정). 구 TRIP-1045 단가×박수 PBT는 폐기 |
 | `src/pages/trip/trip-new-step1/model/budgetAmount.isBudgetTier.test.ts` | `isBudgetTier`(TRIP-1107) U1~U6 — 칩 4값 참·`undefined`·4값 밖(`'LOW'`)·상속 키(`'toString'`) 거짓. 뮤테이션 실측: `in` 교체는 red 7, 4값 배열 사본 `.includes` 교체는 green(동작이 같아 원리적으로 못 잡음 — 소스 리뷰 몫) |
 | `src/pages/trip/trip-new-step1/ui/TripNewStep1Page.integration.test.tsx` | 「예산 시트 등급 프리필」 describe — g01 예산 시트 첫 열림 등급 프리필(TRIP-1107) AC-1~8 — 온보딩 금액·적용 금액이 등급 대표 금액을 이김, 열기만으로는 스토어 커밋 0. ⚠️ AC-2의 "같은 칩을 눌러도 값이 같다" 단언은 판별력이 없다(이미 채워진 칸에서 같은 칩 재누름은 값이 안 바뀜) — "칩 경로와 같은 출처"를 실제로 지키는 건 같은 파일 「예산 편집 시트」 describe D5 |
-| `src/__tests__/placeDetailStubRoute.test.tsx` | `explore/places/[poiId].tsx` 라우트가 `@/pages/place-detail`에 위임하는지(페이지 목으로 QueryClient 없이 렌더) |
+| `src/__tests__/placeDetailStubRoute.test.tsx` | `explore/places/[poiId].tsx` 라우트가 `@/pages/explore/place-detail`에 위임하는지(페이지 목으로 QueryClient 없이 렌더) |
 | `src/__tests__/socialSdkSecrets.test.ts` | 소셜 SDK 키·시크릿 소스 스캔 — `.env` 미추적 · git 추적 전 파일에 `VAR=<값>` 대입 0(공백 클래스는 `[^\S\n]` — `\s`는 개행을 건너 다음 줄을 값으로 오판) · `app.config.ts` env 참조 |
 | `src/__tests__/socialSdkConfigPlugin.test.ts` | `app.config.ts` kakao·naver config plugin 등록 — 옵션 키 허용목록·값 출처·**provider 간 값 교차 없음**(`[string, any]`라 tsc가 못 잡는 자리) |
 | `src/pages/trip/trip-new-step2/ui/StaySelectSheet.test.tsx` | g02 숙소 선택 시트 props-only 렌더 — 단일 선택·지정 disabled(`toBeDisabled`+press+핸들러 0회)·실패 인라인·가격/사진 미렌더 |

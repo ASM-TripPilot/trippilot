@@ -29,7 +29,7 @@ import {
   PREVIEW_REGIONS,
   PREVIEW_SAVED_PLACES,
   PREVIEW_SAVED_POI_IDS,
-} from '@/pages/explore-landing/model/exploreFixtures';
+} from '@/pages/explore/explore-landing/model/exploreFixtures';
 import { TriggerChip } from '@/pages/live-itinerary/ui/TriggerChip';
 import { MemoInline } from '@/features/attach-visit-media/ui/MemoInline';
 import { MemoSheet } from '@/pages/live-itinerary/ui/MemoSheet';
@@ -43,18 +43,18 @@ import { DailyReflectionScreen } from '@/pages/daily-reflection/ui/DailyReflecti
 import { ShareCardScreen } from '@/pages/share-card/ui/ShareCardScreen';
 import { TravelStyleScreen } from '@/pages/travel-style/ui/TravelStyleScreen';
 import { TripSummaryScreen } from '@/pages/trip-summary/ui/TripSummaryScreen';
-import { MustVisitOutsideConfirmDialog } from '@/pages/saved-places/ui/MustVisitOutsideConfirmDialog';
-import { MustVisitPickScreen } from '@/pages/saved-places/ui/MustVisitPickScreen';
-import { PlaceDetailScreen as ExplorePlaceDetailScreen } from '@/pages/place-detail/ui/PlaceDetailScreen';
+import { MustVisitOutsideConfirmDialog } from '@/pages/explore/saved-places/ui/MustVisitOutsideConfirmDialog';
+import { MustVisitPickScreen } from '@/pages/explore/saved-places/ui/MustVisitPickScreen';
+import { PlaceDetailScreen as ExplorePlaceDetailScreen } from '@/pages/explore/place-detail/ui/PlaceDetailScreen';
 import type { PlaceDetailView } from '@/pages/live-place/model/placeDetailView';
 import { PlaceDetailScreen } from '@/pages/live-place/ui/PlaceDetailScreen';
-import { PlaceExploreScreen } from '@/pages/place-explore/ui/PlaceExploreScreen';
-import { RegionPickerScreen } from '@/pages/region-picker/ui/RegionPickerScreen';
-import { SavedPlaceListScreen } from '@/pages/saved-places/ui/SavedPlaceListScreen';
+import { PlaceExploreScreen } from '@/pages/explore/place-explore/ui/PlaceExploreScreen';
+import { RegionPickerScreen } from '@/pages/explore/region-picker/ui/RegionPickerScreen';
+import { SavedPlaceListScreen } from '@/pages/explore/saved-places/ui/SavedPlaceListScreen';
 import {
   ExploreLandingScreen,
   type StayCardVM,
-} from '@/pages/explore-landing/ui/ExploreLandingScreen';
+} from '@/pages/explore/explore-landing/ui/ExploreLandingScreen';
 import { HomeScreen } from '@/pages/home/ui/HomeScreen';
 import { MAGAZINE_DEFAULT_PROPS } from '@/pages/magazine/model/magazineFixtures';
 import { MagazineScreen } from '@/pages/magazine/ui/MagazineScreen';

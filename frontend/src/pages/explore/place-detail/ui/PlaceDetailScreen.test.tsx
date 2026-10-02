@@ -14,7 +14,7 @@ import { PlaceDetailScreen } from './PlaceDetailScreen';
  *    viewOnly 有, center/pins = place.lat/lng 단일 핀, "지도 준비 중" 문구 소멸.
  *
  * 왜 화면 단위인가: 재는 것은 "props 를 받아 무엇을 그리는가"다. 실제 조회·라우팅·저장 토글은
- * `pages/place-detail/ui/PlaceDetailPage.integration.test.tsx`(동결) 몫이다. 이 화면은 훅 0
+ * `pages/explore/place-detail/ui/PlaceDetailPage.integration.test.tsx`(동결) 몫이다. 이 화면은 훅 0
  * (props-only)이라 QueryClient·SafeAreaProvider 래퍼가 필요 없다(02a §5-A 실측).
  *
  * ★ MapView 관측(02a §5-C): `@mj-studio/react-native-naver-map` 수동 목이 prop-기록형이라

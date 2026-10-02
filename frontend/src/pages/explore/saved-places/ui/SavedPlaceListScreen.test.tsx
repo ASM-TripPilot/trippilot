@@ -33,7 +33,7 @@ import {
  * TRIP-1144 로 옛 `.appBar`(TRIP-1086)·`.rowtap`(TRIP-456) 두 파일을 맨 아래 `앱바`·`행 탭` describe 로 합쳤다.
  *
  * 왜 화면 단위인가: 여기서 재는 것은 "props 를 받았을 때 무엇을 그리는가"다. 실제로 나간
- * 요청·라우팅은 `pages/saved-places/ui/SavedPlacesPage.integration.test.tsx` 몫이다.
+ * 요청·라우팅은 `pages/explore/saved-places/ui/SavedPlacesPage.integration.test.tsx` 몫이다.
  *
  * ── 졸업 조건 (frontend/CLAUDE.md "장치 판정 규칙") ──────────────────────
  * **A. 영구 규칙 — 유지한다.** 순번·행 구성·다섯 얼굴·부정 짝은 이 화면이 사는 한 유효하다.

@@ -522,15 +522,53 @@
 - `src/pages/daily-reflection/ui/ReflectionPhotoGrid.tsx`  →  ReflectionPhotoGridProps · ReflectionPhotoGrid
 - `src/pages/daily-reflection/ui/ReflectionStatsRow.tsx`  →  ReflectionStatsRowProps · ReflectionStatsRow
 
-## src/pages/explore-landing/
-- `src/pages/explore-landing/index.ts`  →  ExploreLandingPage
+## src/pages/explore/explore-landing/
+- `src/pages/explore/explore-landing/index.ts`  →  ExploreLandingPage
 
-## src/pages/explore-landing/model/
-- `src/pages/explore-landing/model/exploreFixtures.ts`  →  PREVIEW_PLACES · PREVIEW_SAVED_POI_IDS · PREVIEW_SAVED_PLACES · PREVIEW_REGIONS
+## src/pages/explore/explore-landing/model/
+- `src/pages/explore/explore-landing/model/exploreFixtures.ts`  →  PREVIEW_PLACES · PREVIEW_SAVED_POI_IDS · PREVIEW_SAVED_PLACES · PREVIEW_REGIONS
 
-## src/pages/explore-landing/ui/
-- `src/pages/explore-landing/ui/ExploreLandingPage.tsx`  →  ExploreLandingPage
-- `src/pages/explore-landing/ui/ExploreLandingScreen.tsx`  →  ExploreLandingScreenProps · ExploreLandingScreen
+## src/pages/explore/explore-landing/ui/
+- `src/pages/explore/explore-landing/ui/ExploreLandingPage.tsx`  →  ExploreLandingPage
+- `src/pages/explore/explore-landing/ui/ExploreLandingScreen.tsx`  →  ExploreLandingScreenProps · ExploreLandingScreen
+
+## src/pages/explore/place-detail/
+- `src/pages/explore/place-detail/index.ts`  →  PlaceDetailPage
+
+## src/pages/explore/place-detail/ui/
+- `src/pages/explore/place-detail/ui/PlaceDetailPage.tsx`  →  PlaceDetailPage
+- `src/pages/explore/place-detail/ui/PlaceDetailScreen.tsx`  →  PlaceDetailScreenProps · PlaceDetailScreen
+
+## src/pages/explore/place-explore/
+- `src/pages/explore/place-explore/index.ts`  →  PlaceExplorePage
+
+## src/pages/explore/place-explore/model/
+- `src/pages/explore/place-explore/model/regionChipLabel.ts`  →  formatRegionChipLabel
+
+## src/pages/explore/place-explore/ui/
+- `src/pages/explore/place-explore/ui/PartialFailureBanner.tsx`  →  PartialFailureBanner
+- `src/pages/explore/place-explore/ui/PlaceExplorePage.tsx`  →  PlaceExplorePage
+- `src/pages/explore/place-explore/ui/PlaceExploreScreen.tsx`  →  PlaceExploreScreenProps · PlaceExploreScreen
+
+## src/pages/explore/region-picker/
+- `src/pages/explore/region-picker/index.ts`  →  RegionPickerPage
+
+## src/pages/explore/region-picker/ui/
+- `src/pages/explore/region-picker/ui/RegionPickerPage.tsx`  →  RegionPickerPage
+- `src/pages/explore/region-picker/ui/RegionPickerScreen.tsx`  →  RegionPurpose · RegionPickerScreenProps · RegionPickerScreen
+
+## src/pages/explore/saved-places/
+- `src/pages/explore/saved-places/index.ts`  →  SavedPlacesPage
+
+## src/pages/explore/saved-places/model/
+- `src/pages/explore/saved-places/model/filterSavedPlacesByTripRegions.ts`  →  filterSavedPlacesByTripRegions
+- `src/pages/explore/saved-places/model/savedPlaceList.ts`  →  orderSavedPlaces · SAVED_PLACE_BADGE
+
+## src/pages/explore/saved-places/ui/
+- `src/pages/explore/saved-places/ui/MustVisitOutsideConfirmDialog.tsx`  →  MustVisitOutsideConfirmDialog
+- `src/pages/explore/saved-places/ui/MustVisitPickScreen.tsx`  →  MustVisitPickScreenProps · MustVisitPickScreen
+- `src/pages/explore/saved-places/ui/SavedPlaceListScreen.tsx`  →  SavedPlaceListScreenProps · SavedPlaceListScreen
+- `src/pages/explore/saved-places/ui/SavedPlacesPage.tsx`  →  SavedPlacesPage
 
 ## src/pages/home/
 - `src/pages/home/index.ts`  →  HomePage
@@ -798,24 +836,6 @@
 - `src/pages/onboarding/onboarding-terms/ui/TermsPage.tsx`  →  TermsPage
 - `src/pages/onboarding/onboarding-terms/ui/TermsScreen.tsx`  →  TermsItemView · TermsScreenProps · TermsScreen
 
-## src/pages/place-detail/
-- `src/pages/place-detail/index.ts`  →  PlaceDetailPage
-
-## src/pages/place-detail/ui/
-- `src/pages/place-detail/ui/PlaceDetailPage.tsx`  →  PlaceDetailPage
-- `src/pages/place-detail/ui/PlaceDetailScreen.tsx`  →  PlaceDetailScreenProps · PlaceDetailScreen
-
-## src/pages/place-explore/
-- `src/pages/place-explore/index.ts`  →  PlaceExplorePage
-
-## src/pages/place-explore/model/
-- `src/pages/place-explore/model/regionChipLabel.ts`  →  formatRegionChipLabel
-
-## src/pages/place-explore/ui/
-- `src/pages/place-explore/ui/PartialFailureBanner.tsx`  →  PartialFailureBanner
-- `src/pages/place-explore/ui/PlaceExplorePage.tsx`  →  PlaceExplorePage
-- `src/pages/place-explore/ui/PlaceExploreScreen.tsx`  →  PlaceExploreScreenProps · PlaceExploreScreen
-
 ## src/pages/planb-diff/
 - `src/pages/planb-diff/index.ts`  →  PlanbDiffPage
 
@@ -872,26 +892,6 @@
 - `src/pages/records-calendar/ui/RecordsCalendarPage.tsx`  →  RecordsCalendarPage
 - `src/pages/records-calendar/ui/RecordsCalendarScreen.tsx`  →  RecordsCalendarScreenProps · RecordsCalendarScreen
 - `src/pages/records-calendar/ui/TripCalendarMonth.tsx`  →  TripCalendarMonthProps · TripCalendarMonth
-
-## src/pages/region-picker/
-- `src/pages/region-picker/index.ts`  →  RegionPickerPage
-
-## src/pages/region-picker/ui/
-- `src/pages/region-picker/ui/RegionPickerPage.tsx`  →  RegionPickerPage
-- `src/pages/region-picker/ui/RegionPickerScreen.tsx`  →  RegionPurpose · RegionPickerScreenProps · RegionPickerScreen
-
-## src/pages/saved-places/
-- `src/pages/saved-places/index.ts`  →  SavedPlacesPage
-
-## src/pages/saved-places/model/
-- `src/pages/saved-places/model/filterSavedPlacesByTripRegions.ts`  →  filterSavedPlacesByTripRegions
-- `src/pages/saved-places/model/savedPlaceList.ts`  →  orderSavedPlaces · SAVED_PLACE_BADGE
-
-## src/pages/saved-places/ui/
-- `src/pages/saved-places/ui/MustVisitOutsideConfirmDialog.tsx`  →  MustVisitOutsideConfirmDialog
-- `src/pages/saved-places/ui/MustVisitPickScreen.tsx`  →  MustVisitPickScreenProps · MustVisitPickScreen
-- `src/pages/saved-places/ui/SavedPlaceListScreen.tsx`  →  SavedPlaceListScreenProps · SavedPlaceListScreen
-- `src/pages/saved-places/ui/SavedPlacesPage.tsx`  →  SavedPlacesPage
 
 ## src/pages/settings-location/
 - `src/pages/settings-location/index.ts`  →  LocationConsentPage

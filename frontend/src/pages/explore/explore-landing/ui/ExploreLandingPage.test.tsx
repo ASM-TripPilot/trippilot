@@ -26,7 +26,7 @@ import {
   resetWizardDraft,
   wizardDraftData,
 } from '@/test-support/wizardDraftFixture';
-import { ExploreLandingPage } from '@/pages/explore-landing';
+import { ExploreLandingPage } from '@/pages/explore/explore-landing';
 
 /**
  * 탐색 d01 랜딩 page — 숙소·장소 조회를 물어 카드 VM 을 조립하고 항법 콜백을 순수 화면

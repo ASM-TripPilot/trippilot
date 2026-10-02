@@ -25,7 +25,7 @@ paths:
 | `src/app/(onboarding)/pref2.tsx` | 취향 2/2 라우트(c09b) — `PrefStep2Page` 얇은 래퍼 |
 | `src/app/(tabs)/_layout.tsx` | 탭 네비게이터 — `tabBar` 렌더프롭 + `BottomTabBar` 어댑터(`routeNameToTabKey` index→home · `handlePressTab` home→index). `screenOptions.tabBarStyle`의 `position:'absolute'` 등은 **커스텀 `tabBar` 렌더프롭엔 무효**(react-navigation이 적용 안 함)인 죽은 문자열 — 실제 오버레이는 `shared/ui/BottomTabBar.tsx` 루트의 `absolute bottom-0`이 진다. |
 | `src/app/(tabs)/index.tsx` | 홈 탭 — `<HomePage/>`만 렌더하는 10줄 얇은 래퍼(TRIP-1142). 조회·판정·항법은 `pages/home` 소관(`layer-pages.md`). 래퍼 연결은 `tabsShell` 홈 래퍼 it가 심판 |
-| `src/app/(tabs)/explore.tsx` | 탐색 탭 — `<ExploreLandingPage/>`만 렌더하는 11줄 얇은 래퍼(TRIP-1142). `region` 주소 파라미터는 래퍼가 아니라 page가 `useLocalSearchParams`로 직접 읽는다. 조회·조립·항법은 `pages/explore-landing` 소관. 래퍼 연결은 `tabsShell` 탐색 래퍼 it가 심판 |
+| `src/app/(tabs)/explore.tsx` | 탐색 탭 — `<ExploreLandingPage/>`만 렌더하는 11줄 얇은 래퍼(TRIP-1142). `region` 주소 파라미터는 래퍼가 아니라 page가 `useLocalSearchParams`로 직접 읽는다. 조회·조립·항법은 `pages/explore/explore-landing` 소관. 래퍼 연결은 `tabsShell` 탐색 래퍼 it가 심판 |
 | `src/app/(tabs)/itinerary.tsx` | 일정 탭 — `<MyTripsListPage/>`만 렌더(리다이렉트 없음). 조회·정렬·카드별 목적지 판정은 `pages/itinerary-list` 소관. |
 | `src/app/(tabs)/records.tsx` | 기록 탭 — `<RecordsCalendarPage/>`만 렌더. 조회·조립·항법은 `pages/records-calendar` 소관 |
 | `src/app/(tabs)/my.tsx` | 마이 탭 — `<MyPage/>`만 렌더. 조회·분류·조합은 `pages/my-page` 소관 |
@@ -35,11 +35,11 @@ paths:
 | `src/app/stays/index.tsx` | `/stays` 숙소 검색 — `@/pages/stay-search` 얇은 래퍼 |
 | `src/app/stays/register.tsx` | `/stays/register` — `@/pages/stay-register` 얇은 래퍼. 구조 가드가 `useState`·`useGetStaysGeocode`·`FlatList` 0건을 잠근다 |
 | `src/app/stays/saved.tsx` | `/stays/saved` e04 저장한 숙소 — `@/pages/stay-saved` 얇은 래퍼 |
-| `src/app/explore/region.tsx` | d1b·e00 지역 선택 — `@/pages/region-picker` 얇은 래퍼. 목적은 쿼리 `?purpose=trip`(기본 `stay`) |
+| `src/app/explore/region.tsx` | d1b·e00 지역 선택 — `@/pages/explore/region-picker` 얇은 래퍼. 목적은 쿼리 `?purpose=trip`(기본 `stay`) |
 | `src/app/explore/destination/[region].tsx` | 옛 목적지 상세 딥링크 리다이렉트 — `<Redirect>`로 `/explore?region={code}`(탐색 탭 d01 지역 필터)에 넘긴다(TRIP-1105) |
-| `src/app/explore/places.tsx` | d04 장소 탐색 — `@/pages/place-explore` 얇은 래퍼 |
+| `src/app/explore/places.tsx` | d04 장소 탐색 — `@/pages/explore/place-explore` 얇은 래퍼 |
 | `src/app/explore/places/[poiId].tsx` | d06 **explore** 장소 상세 — poiId만 읽어 `PlaceDetailPage`에 위임(`canGoBack` 폴백은 페이지 소관). 여행 중 장소 상세(`live/place/[poiId]`)와 다른 슬라이스 |
-| `src/app/explore/saved-places.tsx` | d02 담은 장소 — `@/pages/saved-places` 얇은 래퍼 |
+| `src/app/explore/saved-places.tsx` | d02 담은 장소 — `@/pages/explore/saved-places` 얇은 래퍼 |
 | `src/app/trips/new/_layout.tsx` | 여행 생성 위저드 셸 — 네이티브 헤더만 끄고, **마운트 시에만** 시드 초기화(`resetMustVisits` 등). step1↔step2 왕복은 재마운트가 아니라 편집이 살고, `push('/trips/new/step1')` 재진입은 초기화된다. 마운트마다 `createdTripId`를 지우되 `preserveCreatedTripIdOnce`가 켜져 있으면 id를 남기고 표식만 끈다(꼭 갈 곳 고르기 완료 복귀용, TRIP-1113) — 딥링크 등 census 밖 진입이 켜진 표식과 겹치면 옛 id를 PATCH할 수 있다(6-b 몫) — 실제 재마운트 여부는 jest가 못 본다(expo-router 통째 목). |
 | `src/app/trips/new/step1.tsx` | g01 위저드 1/2 — `@/pages/trip/trip-new-step1` 얇은 래퍼 |
 | `src/app/trips/new/step2.tsx` | g02 위저드 2/2 거점 숙소 — `@/pages/trip/trip-new-step2` 얇은 래퍼 |
