@@ -4,9 +4,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Skeleton } from '@/shared/ui/Skeleton';
 
-import type { MustVisitSeedItem } from '../model/mustVisitSeed';
-import { formatWizardStep } from '../model/tripSummary';
-import type { PreferenceSummary, SummaryLine } from '../model/tripSummary';
+import type { MustVisitSeedItem } from '@/features/trip/model/mustVisitSeed';
+import { formatWizardStep } from '@/features/trip/model/tripSummary';
+import type {
+  PreferenceSummary,
+  SummaryLine,
+} from '@/features/trip/model/tripSummary';
 import {
   AlertCircleGlyph,
   BackChevronGlyph,
@@ -14,7 +17,7 @@ import {
   GlobeGlyph,
   PlusGlyph,
   SparkleGlyph,
-} from './TripGlyphs';
+} from '@/features/trip/ui/TripGlyphs';
 
 /**
  * TRIP-665 g01 '여행 만들기' default 재작성 — **props만 받는 프레젠테이션 화면**(Figma `3742:2068`).

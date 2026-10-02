@@ -71,7 +71,7 @@ jest.mock('@/features/trip/model/useSavedStays', () => ({
   }),
 }));
 
-/** 담은 목록 조회를 손으로 갈아 끼우는 창구(동결 `…mustVisit.test.tsx` 와 같은 형태). */
+/** 담은 목록 조회를 손으로 갈아 끼우는 창구(`TripNewStep1Page.test.tsx` 「담은목록 게이트」 describe 와 같은 형태). */
 const mockRefetch = jest.fn();
 const mockRemove = jest.fn();
 let mockSavedPlaces: {

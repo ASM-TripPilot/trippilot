@@ -12,7 +12,7 @@ import { BaseRegenerateDialog } from './BaseRegenerateDialog';
  *  - 레이아웃 토큰은 형제 `BaseToggleDialog`(딤 55%·카드 330/20·제목 19 Bold·버튼 44)와 같다.
  *
  * 커버하지 않는 것: 딤이 실제로 화면을 덮는지·중앙 정렬·터치 차단(조건부 렌더 오버레이의 jest 사각 — 6-b).
- * 언제 열리는지·누른 뒤 어디로 가는지는 페이지 통합 테스트(`TripBasesPage.editMode.integration`) 몫.
+ * 언제 열리는지·누른 뒤 어디로 가는지는 페이지 통합 테스트(`TripBasesPage.integration` 「편집 모드」) 몫.
  *
  * ⚠️ `toHaveTextContent(문자열)`·`getByText(문자열)`은 완전 일치다(RNTL 13.3.3 `build/matches.js`).
  *

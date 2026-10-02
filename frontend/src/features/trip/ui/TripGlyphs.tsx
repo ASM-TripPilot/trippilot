@@ -18,7 +18,7 @@ const PRIMARY = '#FF385C';
 const PRIMARY_TEXT = '#C13515';
 const ON_PRIMARY = '#FFFFFF';
 /** 등록 숙소 행의 비활성 색(Figma `2226:2027`) — 토큰 컬렉션에 없는 푸른 회색이다.
- * 같은 값이 `features/trip/ui/TripWizardStep1Screen.tsx`의 제목 임의값 클래스에도 있다 —
+ * 같은 값이 `pages/trip-new-step1/ui/TripWizardStep1Screen.tsx`의 제목 임의값 클래스에도 있다 —
  * 색을 바꿀 땐 두 자리를 함께 고친다(색은 어떤 테스트도 단언하지 않는다). */
 const DISABLED = '#C2CCD6';
 

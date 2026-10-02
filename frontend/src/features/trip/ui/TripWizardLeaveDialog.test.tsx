@@ -23,7 +23,7 @@ import { TripWizardLeaveDialog } from './TripWizardLeaveDialog';
  *    계층을 끌고 오지 않게).
  *
  * 커버하지 않는 것: 딤이 실제로 화면을 덮는지·중앙 정렬·터치 차단(조건부 렌더 오버레이의 jest 사각 — 6-b).
- * 언제 열리고 누른 뒤 무엇이 나가는지는 `TripNewStep1Page.leave.integration` 몫.
+ * 언제 열리고 누른 뒤 무엇이 나가는지는 `TripNewStep1Page.integration` 「‹ 나가기 확인」 몫.
  *
  * ⚠️ `toHaveTextContent(문자열)`·`getByText(문자열)`은 완전 일치다(RNTL 13.3.3 `build/matches.js` —
  *    공백은 접어서 비교).

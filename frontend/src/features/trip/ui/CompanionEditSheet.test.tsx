@@ -23,7 +23,7 @@ import { CompanionEditSheet } from './CompanionEditSheet';
  * children 무조건 렌더) 실제 개폐·딤 전면 커버·터치 차단은 jest 원리적 사각이다(AC-5).
  *
  * 왜 store 실반영을 여기서 안 잠그나: 시트는 props-only 라 store 를 모른다. "적용→setParty·selectCompanion
- * 각 1회"의 실반영은 배선 통합 테스트(`TripNewStep1Page.companion.integration`)가 store 상태로 증명한다 —
+ * 각 1회"의 실반영은 배선 통합 테스트(`TripNewStep1Page.integration` 「동행 편집 시트」)가 store 상태로 증명한다 —
  * 여기선 "적용 press → onApply 1회"(배선 신호)까지만 잠근다.
  */
 

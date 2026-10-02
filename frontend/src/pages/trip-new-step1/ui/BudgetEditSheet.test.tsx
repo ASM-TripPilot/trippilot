@@ -19,7 +19,7 @@ import { BudgetEditSheet } from './BudgetEditSheet';
  *
  * TRIP-1045(QA #020): 칩을 누르면 대표 금액(단가 × 박수)이 금액 칸에 채워진다. 그 **계산은 배선 몫**이다
  * — 시트는 박수를 모르고, 칩 press 는 여전히 `onSelectTier` 만 부른다(AC-2c). 채워지는 동작 자체는
- * `TripNewStep1Page.budgetSheet.integration.test.tsx` 의 D 블록이 잠근다. 안내 노트·range 문자열은 없어졌고
+ * `TripNewStep1Page.integration.test.tsx` 「예산 편집 시트」 describe 의 D 블록이 잠근다. 안내 노트·range 문자열은 없어졌고
  * (AC-D7), 금액 칸은 Figma `3647:2068` 대로 `₩` 접두 없이 `text-section`(17) 글자다.
  *
  * 무엇을 **못** 보나(6-b 실기 전용): `__mocks__/@gorhom/bottom-sheet.tsx`가 통과형 목이라(마운트하면
