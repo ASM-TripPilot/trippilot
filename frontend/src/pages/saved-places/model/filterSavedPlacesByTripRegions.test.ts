@@ -148,7 +148,7 @@ describe('구조 앵커 · 순수함수는 정본 경로에 있고 페이지가 
   const ROOT = path.resolve(__dirname, '../../../..'); // → frontend/
   const FN_PATH = path.join(
     ROOT,
-    'src/features/explore/model/filterSavedPlacesByTripRegions.ts'
+    'src/pages/saved-places/model/filterSavedPlacesByTripRegions.ts'
   );
   const PAGE_PATH = path.join(
     ROOT,

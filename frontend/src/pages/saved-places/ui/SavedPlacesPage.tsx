@@ -38,7 +38,7 @@ import {
 import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
 import { getAccessToken } from '@/shared/api/tokenManager';
 
-import { filterSavedPlacesByTripRegions } from '@/features/explore/model/filterSavedPlacesByTripRegions';
+import { filterSavedPlacesByTripRegions } from '../model/filterSavedPlacesByTripRegions';
 import {
   resolvePlaceListState,
   type PlaceListState,
@@ -49,7 +49,7 @@ import {
   SAVE_FAILURE_NOTICE,
   type PlaceSaveNotice,
 } from '@/features/explore/model/placeSaveGuard';
-import { orderSavedPlaces } from '@/features/explore/model/savedPlaceList';
+import { orderSavedPlaces } from '../model/savedPlaceList';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import { wizardOriginParams } from '@/features/explore/model/wizardOrigin';
 import { MustVisitOutsideConfirmDialog } from './MustVisitOutsideConfirmDialog';

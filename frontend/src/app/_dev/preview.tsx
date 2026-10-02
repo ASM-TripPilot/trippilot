@@ -29,7 +29,7 @@ import {
   PREVIEW_REGIONS,
   PREVIEW_SAVED_PLACES,
   PREVIEW_SAVED_POI_IDS,
-} from '@/features/explore/model/exploreFixtures';
+} from '@/pages/explore-landing/model/exploreFixtures';
 import { TriggerChip } from '@/features/execution/ui/TriggerChip';
 import { MemoInline } from '@/features/record/ui/MemoInline';
 import { MemoSheet } from '@/features/record/ui/MemoSheet';
@@ -54,7 +54,7 @@ import { SavedPlaceListScreen } from '@/pages/saved-places/ui/SavedPlaceListScre
 import {
   ExploreLandingScreen,
   type StayCardVM,
-} from '@/features/explore/ui/ExploreLandingScreen';
+} from '@/pages/explore-landing/ui/ExploreLandingScreen';
 import { HomeScreen } from '@/pages/home/ui/HomeScreen';
 import { MAGAZINE_DEFAULT_PROPS } from '@/pages/magazine/model/magazineFixtures';
 import { MagazineScreen } from '@/pages/magazine/ui/MagazineScreen';

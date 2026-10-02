@@ -3,8 +3,8 @@ import fc from 'fast-check';
 import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
 import { PlaceDataStatus } from '@/shared/api/generated/schemas';
 
-import { REMOVE_FAILURE_NOTICE } from './placeSaveGuard';
-import { optimisticSavedPlaceId } from './savedPlaceIndex';
+import { REMOVE_FAILURE_NOTICE } from '@/features/explore/model/placeSaveGuard';
+import { optimisticSavedPlaceId } from '@/features/explore/model/savedPlaceIndex';
 import { orderSavedPlaces, SAVED_PLACE_BADGE } from './savedPlaceList';
 
 /**

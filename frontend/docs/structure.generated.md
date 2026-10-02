@@ -304,8 +304,6 @@
 - `src/features/execution/ui/TriggerChip.tsx`  →  TriggerChipProps · TriggerChip
 
 ## src/features/explore/model/
-- `src/features/explore/model/exploreFixtures.ts`  →  PREVIEW_PLACES · PREVIEW_SAVED_POI_IDS · PREVIEW_SAVED_PLACES · PREVIEW_REGIONS
-- `src/features/explore/model/filterSavedPlacesByTripRegions.ts`  →  filterSavedPlacesByTripRegions
 - `src/features/explore/model/mergePlaces.ts`  →  mergePlacesByPoiId
 - `src/features/explore/model/placeListState.ts`  →  PlaceListState · resolvePlaceListState
 - `src/features/explore/model/placeListView.ts`  →  visiblePlaces
@@ -314,7 +312,6 @@
 - `src/features/explore/model/regionPickerPurpose.ts`  →  RegionPickerPurpose · regionPickerHref
 - `src/features/explore/model/regions.ts`  →  useRegions · filterRegions · limitRegionsWhenEmpty · RegionGroup · groupRegionsBySido · regionTint
 - `src/features/explore/model/savedPlaceIndex.ts`  →  findSavedPlaceId · optimisticSavedPlaceId
-- `src/features/explore/model/savedPlaceList.ts`  →  orderSavedPlaces · SAVED_PLACE_BADGE
 - `src/features/explore/model/savedPlaces.ts`  →  SavedPlacesFailureReason · SavedPlacesOutcome · useSavedPlaces
 - `src/features/explore/model/useMultiRegionPlaces.ts`  →  useMultiRegionPlaces
 - `src/features/explore/model/usePlacesInfinite.ts`  →  usePlacesInfinite
@@ -322,7 +319,6 @@
 
 ## src/features/explore/ui/
 - `src/features/explore/ui/ExploreGlyphs.tsx`  →  SuitcaseGlyph · CloseGlyph · PlusGlyph · BackChevronGlyph · ShareGlyph · SearchGlyph · MapPinGlyph · FilterSlidersGlyph · WarningTriangleGlyph · CheckCircleFilledGlyph · CheckCircleOutlineGlyph · CircleExclaimGlyph · InfoGlyph
-- `src/features/explore/ui/ExploreLandingScreen.tsx`  →  ExploreLandingScreenProps · ExploreLandingScreen
 
 ## src/features/home/ui/
 - `src/features/home/ui/HomeGlyphs.tsx`  →  BellGlyph · SearchGlyph · BackChevronGlyph · SparkleGlyph · LocationPinGlyph · HeartOutlineGlyph · HeartFilledGlyph · PlusGlyph · MapPinGlyph · SuitcaseGlyph · CloseGlyph
@@ -560,8 +556,12 @@
 ## src/pages/explore-landing/
 - `src/pages/explore-landing/index.ts`  →  ExploreLandingPage
 
+## src/pages/explore-landing/model/
+- `src/pages/explore-landing/model/exploreFixtures.ts`  →  PREVIEW_PLACES · PREVIEW_SAVED_POI_IDS · PREVIEW_SAVED_PLACES · PREVIEW_REGIONS
+
 ## src/pages/explore-landing/ui/
 - `src/pages/explore-landing/ui/ExploreLandingPage.tsx`  →  ExploreLandingPage
+- `src/pages/explore-landing/ui/ExploreLandingScreen.tsx`  →  ExploreLandingScreenProps · ExploreLandingScreen
 
 ## src/pages/home/
 - `src/pages/home/index.ts`  →  HomePage
@@ -867,6 +867,10 @@
 
 ## src/pages/saved-places/
 - `src/pages/saved-places/index.ts`  →  SavedPlacesPage
+
+## src/pages/saved-places/model/
+- `src/pages/saved-places/model/filterSavedPlacesByTripRegions.ts`  →  filterSavedPlacesByTripRegions
+- `src/pages/saved-places/model/savedPlaceList.ts`  →  orderSavedPlaces · SAVED_PLACE_BADGE
 
 ## src/pages/saved-places/ui/
 - `src/pages/saved-places/ui/MustVisitOutsideConfirmDialog.tsx`  →  MustVisitOutsideConfirmDialog

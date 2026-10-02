@@ -20,7 +20,7 @@ import {
   type ExploreLandingScreenProps,
   type PlaceCardVM,
   type StayCardVM,
-} from '@/features/explore/ui/ExploreLandingScreen';
+} from './ExploreLandingScreen';
 
 /**
  * 탐색 page — 죽은 껍데기가 아니라 d01 탐색 랜딩(US-EXPL-01)을 배선한다. 라우트 `(tabs)/explore.tsx`
