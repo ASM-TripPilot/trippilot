@@ -170,6 +170,18 @@ class AssemblyConfig:
     # 항만 끄고 폴백의 쿼터 재정렬은 남는다(폴백엔 페널티 개념이 없어 게이트 불가).
     category_free_count: int = 2        # 하루 같은 카테고리 이만큼까지는 무페널티
     category_excess_penalty: float = 0.3  # 초과 1개당 감점 (점수 축 [0,1])
+    # ── FOOD 하루 상한 (위 결정3 의 "맛집 투어 유지"를 하루 3곳까지로 좁히는 개정).
+    # 실측(2026-10-02, 로컬 full 스택 POI 18,605건, 부산 미식 4판): 하루 4~7곳 전부 FOOD·
+    # 관광지 0(한 판 2일차 맛집 7연속). 중립·액티비티 취향은 하루 1~2곳으로 정상. 원인 두 겹:
+    # 백엔드가 일자별 days=1 로 불러 위 공정 몫 허용치가 후보 전량이 되고(항이 꺼짐), 0.3 은
+    # 미식 점수 간격(~0.6)보다 작다(식사 보정 0.3·0.2 도 같은 이유로 진다). 점수 단계는 두고
+    # 하루 구성은 조립이 책임진다 — 위 체감 항·공정 몫 바닥은 그대로(다일 캐스케이드 방지).
+    # 세는 것: FOOD + 이름이 음식 골목인 POI(`domain.poi.counts_as_food`), 그날 고정 블록 포함.
+    # 하드 제약 아님: OR 은 초과 1곳당 감점(목적함수만), 폴백은 초과분 FOOD 를 후순위(배제
+    # 아님 — FOOD 만 남으면 배치). 끄려면 food_daily_max 를 크게 — penalty=0 은 OR 항만 끈다.
+    food_daily_max: int = 3             # 점심·저녁 + 1(간식·야식 한 곳)
+    # 점수 축 [0,1] 전체 — 어떤 취향 갭으로도 초과 FOOD 가 이득이 되지 않는다.
+    food_excess_penalty: float = 1.0
 
     def __post_init__(self) -> None:
         for name in ("or_tools_limit_ms", "or_tools_reorder_ms", "or_tools_min_ms",
@@ -189,7 +201,8 @@ class AssemblyConfig:
         for name in ("meal_bonus", "meal_penalty",
                      "rain_outdoor_penalty", "rain_indoor_bonus",
                      "event_bonus_scale",
-                     "category_free_count", "category_excess_penalty"):
+                     "category_free_count", "category_excess_penalty",
+                     "food_daily_max", "food_excess_penalty"):
             if getattr(self, name) < 0:
                 raise ValueError(f"{name} 음수 불가")
         if not 0 <= self.rain_threshold_pct <= 100:

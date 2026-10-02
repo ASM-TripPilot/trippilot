@@ -6,6 +6,7 @@ CachePort에 저장되는 직렬화 경로에서 구조적으로 차단.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import Enum
 
@@ -36,6 +37,20 @@ class PoiCategory(Enum):
     # 내부 전용(숙소 앵커·체류시간 계산). 경계 카테고리 8종에 포함되지 않으며
     # `/internal/pois` 응답에 등장하지 않는다 (PR #104 회신).
     STAY = "STAY"
+
+
+# 먹자골목·음식 골목은 TourAPI 가 액티비티로 주지만 실질은 식당 밀집이다 — 계열 판정
+# (agents/schedule/family.py)과 조립의 FOOD 하루 상한이 같이 쓴다('자갈치 양곱창 골목'이
+# '자갈치 크루즈'를 눌렀다). '해물탕거리' 같은 '…거리' 음식 거리는 아직 잡지 않는다(일반
+# '거리'와 이름으로 못 가른다). 괄호 접미·공백을 뗀 이름에 건다.
+EATERY_NAME = re.compile(r"골목$|먹자|먹거리|카페거리")
+_NAME_NOISE = re.compile(r"\([^)]*\)|\[[^\]]*\]|\s+")
+
+
+def counts_as_food(poi: Poi) -> bool:
+    """FOOD 이거나 이름이 음식 골목인 POI — 조립의 FOOD 하루 상한이 세는 기준."""
+    return (poi.category is PoiCategory.FOOD
+            or EATERY_NAME.search(_NAME_NOISE.sub("", poi.name)) is not None)
 
 
 class DataQuality(Enum):
