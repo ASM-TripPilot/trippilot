@@ -5,13 +5,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { resolveLiveState } from '@/features/execution/model/liveState';
 import { useLiveItinerary } from '@/features/execution/model/useLiveItinerary';
-import { projectSlotProgress } from '@/features/execution/model/slotProgress';
+import { projectSlotProgress } from '@/entities/itinerary-slot/lib/slotProgress';
 import { useVisitCheck } from '@/features/execution/model/useVisitCheck';
 import { photoAttach } from '@/features/record/model/photoAttach';
 import { pickPhotoForVisit } from '@/features/record/model/pickPhotoForVisit';
 import { useVisitMemo } from '@/features/record/model/useVisitMemo';
 import { MemoSheet } from '@/features/record/ui/MemoSheet';
-import { deriveVisitProgress } from '@/features/execution/model/visitProgress';
+import { deriveVisitProgress } from '@/entities/itinerary-slot/lib/visitProgress';
 import { TriggerChip } from '@/features/execution/ui/TriggerChip';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { foldScope } from '@/features/planb/model/foldScope';

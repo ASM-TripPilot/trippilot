@@ -12,7 +12,7 @@ import {
   type StayTripLink,
 } from '@/features/settings/model/stayTripLink';
 import { MyStaysScreen, type MyStayRowVM } from './MyStaysScreen';
-import { isOtaSource } from '@/features/stay/config/affiliateNotice';
+import { isOtaSource } from '@/entities/stay/config/affiliateNotice';
 
 /**
  * TRIP-605 · l04 페이지 배선 — 조회(`useGetSavedStays`·`useGetTrips`·N+1 bases)·역참조 조립

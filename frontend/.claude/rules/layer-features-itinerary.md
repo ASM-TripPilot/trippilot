@@ -8,8 +8,6 @@ paths:
 
 | 파일 | 역할 |
 |---|---|
-| `src/features/itinerary/model/timeBandLabel.ts` | `timeBandLabel(startAt)` — `HH:mm:ss` → `'오전'\|'점심'\|'오후'\|'저녁'`(BR-U3-07·PBT-U3-2). 경계 `05:00`·`11:00`·`14:00`·`17:00`은 정본 부재로 사용자가 동결한 값, 문자열 사전순 비교(0채움 전제). 저녁은 자정을 넘어 두 조각. **입력 형식을 검증하지 않는다** — `'9:00:00'`은 조용히 `'저녁'`. |
-| `src/features/itinerary/model/legDistance.ts` | `legDistance(distanceRanges)` — 서버 `distanceRange` 문자열에서 숫자+단위를 뽑아(`km`을 `m`보다 먼저) 미터 합산 → `"820m"`/`"3.2km"`. 깨진 값·빈 값(`null`/`undefined`/`''`)이 하나라도 섞이면 그날 줄 전체를 `null`로 접는다(부분합=실제보다 적은 틀린 숫자 금지, TRIP-1110 — 옛 "빈 값 스킵" 폐기). `0m`는 값이다(`!meters` 금지). 호출자는 첫 슬롯을 뺀다(구간 모집단) — 함수는 이를 강제하지 못하고 페이지 테스트가 지킨다. INV-3. |
 | `src/features/itinerary/model/mustVisitList.ts` | `joinMustVisits`(`sourcePoiId` 조인) · `resolveMustVisitListView`(items를 loading·failed보다 먼저 본다 — `staleFailed`로 잔존 목록과 실패를 한 값에 싣는다) · `MUST_VISIT_NAME_PLACEHOLDER` · `buildMustVisitPins`(좌표 없는 항목은 건너뛰되 뒤 번호를 당기지 않는다, `MapPin`은 타입 전용 import). |
 | `src/features/itinerary/model/mustVisitTimeForm.ts` | h03 폼 — `tripDayChips`·`startTimeOptions`(30분 간격 48개)·`DWELL_OPTIONS`(30·60·120분, 발명값)·`canSubmitMustVisitTime`(OFF는 값 무관 `true`, BR-U1-48 기본 ANYTIME) · `buildFixedMustVisitRequest`(검증 실패 시 `null` — 되돌릴 수 없는 DELETE를 검증 전에 못 내보낸다) · `buildAnytimeMustVisitRequest`(`{poiId, type:'ANYTIME'}` 최소본, 여분 키가 솔버 힌트가 되지 않게). |
 | `src/features/itinerary/config/placeCategoryChips.ts` | `PLACE_CATEGORY_CHIPS` `{testId,label,category}`. **전시 칩만 `label='전시'`·`category='문화'`** — `PoiCategory` enum에 '전시'가 없다. testID·라벨·전송값 3-way 분리가 이 파일의 존재 이유(라벨이 서버 파라미터로 새면 400/빈 목록). |

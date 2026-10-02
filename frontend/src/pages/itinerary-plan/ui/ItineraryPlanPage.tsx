@@ -14,12 +14,12 @@ import {
   buildDraftPins,
   formatDraftDayHeader,
 } from '@/features/itinerary/model/draftView';
-import { legDistance } from '@/features/itinerary/model/legDistance';
+import { legDistance } from '@/entities/place/lib/legDistance';
 import {
   isConfirmLocked,
   resolvePlanState,
 } from '@/features/itinerary/model/planState';
-import { timeBandLabel } from '@/features/itinerary/model/timeBandLabel';
+import { timeBandLabel } from '@/entities/itinerary-slot/lib/timeBandLabel';
 import { resolveUnplacedNames } from '@/features/itinerary/model/unplacedMustVisits';
 import {
   AlertCircleGlyph,

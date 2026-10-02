@@ -25,7 +25,10 @@ import BottomSheet, {
 import type { StayItem } from '@/shared/api/generated/schemas';
 
 import { formatPrice } from '@/entities/stay/lib/formatPrice';
-import { otaConfirmLabel, otaDisplayName } from '../config/affiliateNotice';
+import {
+  otaConfirmLabel,
+  otaDisplayName,
+} from '@/entities/stay/config/affiliateNotice';
 import type { StayOutboundMode } from '../model/stayOutbound';
 import {
   CheckGlyph,

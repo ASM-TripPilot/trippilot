@@ -18,7 +18,7 @@ import {
   shouldKeepPollingDraft,
 } from '@/features/itinerary/model/draftView';
 import type { GenerationDayState } from '@/features/itinerary/model/draftView';
-import { legDistance } from '@/features/itinerary/model/legDistance';
+import { legDistance } from '@/entities/place/lib/legDistance';
 import { resolveUnplacedNames } from '@/features/itinerary/model/unplacedMustVisits';
 import { isGenerationRunning } from '@/features/itinerary/model/useGenerationBusy';
 import { DraftScreen } from './DraftScreen';

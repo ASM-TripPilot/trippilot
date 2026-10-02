@@ -29,6 +29,7 @@ paths:
 | `ui/PlaceRowCard.tsx` | 범용 행 카드(save?/trailing?/subtitle 옵셔널 슬롯). |
 | `ui/SlotCandidateCard.tsx` | itinerary(h08·h10)·planb(i14) 후보 시트 공용, `testIDPrefix`로 소비처 구조 차이를 흡수. `tags?`·`nameKo?`·`showRationale?`·`distanceLabel?`·`distanceTone?`·`dimmed?`는 전부 기본값이 기존 렌더 불변. candidates 응답에 이름·사진·태그·"반경 밖" 필드가 없어 이 값들은 픽스처로만 채워진다(프로덕션 톤다운 0). planb 루트 정규식이 `image-`·`name-`를 감산하지 않으니 테스트에서 `queryByTestId`로 null을 확인한다. |
 | `ui/PlaceSubtitle.tsx` | 부제 조각(`parts.join(' · ')`만). 기존 부제 공식들을 통일하지 않고 조각만 인자화했다. |
+| `lib/legDistance.ts` | (TRIP-1155로 features/itinerary에서 이사) `legDistance(distanceRanges)` — 서버 `distanceRange` 문자열에서 숫자+단위를 뽑아(`km`을 `m`보다 먼저) 미터 합산 → `"820m"`/`"3.2km"`. 깨진 값·빈 값(`null`/`undefined`/`''`)이 하나라도 섞이면 그날 줄 전체를 `null`로 접는다(부분합=실제보다 적은 틀린 숫자 금지, TRIP-1110 — 옛 "빈 값 스킵" 폐기). `0m`는 값이다(`!meters` 금지). 호출자는 첫 슬롯을 뺀다(구간 모집단) — 함수는 이를 강제하지 못하고 페이지 테스트가 지킨다. INV-3. |
 
 ## `src/entities/stay/`
 
@@ -39,6 +40,7 @@ paths:
 | `ui/StaySearchCard.tsx` | 검색 풀/레인 카드(e02·d01·d05, `variant: 'full'\|'rail'`). **testID는 완성 문자열 prop**(root/photo/save/filled/outline) — 소비처마다 save/글리프 testID 스킴이 달라 단일 prefix로 못 접는다. 하트는 `@/shared/ui/HeartGlyphs`에서만. 이미지 필드가 없어 사진 자리는 항상 회색(INV-1). |
 | `ui/SavedStayCard.tsx` | degrade 카드(e04·g02 시트, `layout: 'vertical'\|'row'`). 계약에 사진·지역·거리·가격이 없어 이름+`subtitle`만. 하트/체크는 소비처가 `trailing` 슬롯으로 주입(카드는 하트 불가지, `save` prop 없음). |
 | `ui/StayRecommendCard.tsx` | h15 동선 기준 추천 카드(props-only). 거리만(INV-3), 문자열은 소비처가 서식해 넘긴다. 선택은 `accessibilityState.selected`와 테두리를 **같은 루트**에 건다. `SavedStayCard`의 layout으로 얹지 않는다 — degrade 카드 계약(배지·거리 줄·선택 테두리 없음)이 흐려진다. |
+| `config/affiliateNotice.ts` | (TRIP-1155로 features/stay에서 이사) `otaConfirmLabel(externalSource)`(`Map` 사전 — 프로토타입 키 오염 회피, 모르면 "외부 사이트로 이동", INV-1)·`isOtaSource`(사전 포함 여부 판정 창구 — `otaConfirmLabel`은 폴백 때문에 판정에 못 쓴다). "다시 보지 않기"는 서버 `/me/settings.affiliateNoticeDismissed`에 저장 |
 
 ## `src/entities/trip/`
 
@@ -76,6 +78,9 @@ paths:
 | `ui/SlotPhotoPlaceholder.tsx` | `resolveCategoryPlaceholder` 소비 → 72×72(카드 사진 자리와 같음, TRIP-1116) 틴트+아이콘. 텍스트 0(INV-3). |
 | `ui/PoiSlotCard.tsx` | peek/list 겸용 POI 카드. |
 | `ui/ReplanSlotRow.tsx` | 재계획 초안 행. 번호 원 톤(`tone==='visited'`→`bg-success`)·사진/플레이스홀더·시간 알약·흐림(`opacity-45`, 카드 루트에만)·"다른 후보"(예정 행만). |
+| `lib/slotProgress.ts` | (TRIP-1155로 features/execution에서 이사) `projectSlotProgress(slots, {completedPoiIds?, activePoiId?}) → ProjectedSlot[]` — 슬롯에 `done`\|`active`\|`upcoming`을 붙이는 순수 사영. **`startAt`/`endAt`을 읽지도 연산하지도 않고 통과**시킨다(PBT-U4-F1 — 시계로 도착 시각을 재추정하지 않는다, BR-U4-34). 완료가 진행 중보다 우선, 빈 progress는 전부 `upcoming` |
+| `lib/visitProgress.ts` | (TRIP-1155로 features/execution에서 이사) `deriveVisitProgress(list, date, planOrder) → {completedPoiIds, activePoiId, visitCheckIdByPoiId}` — 그날 slotKey를 가진 계획 레코드만 센다(즉석·다른 날·깨진 키는 완료로도 active로도 안 셈, poi는 slotKey 파싱값). 완료(`completedAt≠null && skippedAt==null`)가 진행 중을 이기고, active 후보가 여럿이면 `planOrder` 앞 1곳(도착 시각 비교는 BR-U4-34로 금지·문자열 비교는 소수초/Z 없는 낙관 레코드에서 뒤집힘). 입력 순서 불변, planOrder 밖 후보는 active 불가. `projectSlotProgress`에 주입되는 것이 유일한 소비 경로 |
+| `lib/timeBandLabel.ts` | (TRIP-1155로 features/itinerary에서 이사) `timeBandLabel(startAt)` — `HH:mm:ss` → `'오전'\|'점심'\|'오후'\|'저녁'`(BR-U3-07·PBT-U3-2). 경계 `05:00`·`11:00`·`14:00`·`17:00`은 정본 부재로 사용자가 동결한 값, 문자열 사전순 비교(0채움 전제). 저녁은 자정을 넘어 두 조각. **입력 형식을 검증하지 않는다** — `'9:00:00'`은 조용히 `'저녁'`. |
 
 화면 고유 슬롯(`DraftScreen`·`ManualPlanScreen`·`ItineraryEditScreen`·widgets `ManualEditShell`)은 계약이 달라 이 슬라이스로 접지 않는다. execution의 `SlotState`는 서버 enum이 아니라 방문기록 파생 사영이라 이관하지 않는다.
 

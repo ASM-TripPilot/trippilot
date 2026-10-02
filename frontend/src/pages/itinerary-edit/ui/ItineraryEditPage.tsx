@@ -19,7 +19,7 @@ import {
   buildPlanDayTabs,
   resolvePlanState,
 } from '@/features/itinerary/model/planState';
-import { deriveVisitProgress } from '@/features/execution/model/visitProgress';
+import { deriveVisitProgress } from '@/entities/itinerary-slot/lib/visitProgress';
 import { reorderKeepingLocked } from '@/features/planb/model/reorderKeepingLocked';
 import { deriveEndsNextDay } from '@/entities/itinerary-slot/lib/endsNextDay';
 import {
