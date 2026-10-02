@@ -158,7 +158,11 @@ describe('GET 초기값 → 타일 → PUT 저장·400 (옛 .integration)', () =
 
       // 실행 — 렌더 후 GET 이 해소돼 타일이 시드되길 기다린다.
       renderScreen();
-      await screen.findByTestId('settings-pref-style-휴양');
+      // 합친 뒤 이 테스트가 파일 첫 테스트라 냉시작(모듈 첫 로드)을 흡수한다 — CI 에서 기본 1000ms 를
+      // 넘겨 첫 테스트만 red 가 나는 일이 합친 통합 파일마다 반복됐다(TRIP-1144 SavedPlacesPage 선례).
+      await screen.findByTestId('settings-pref-style-휴양', undefined, {
+        timeout: 5000,
+      });
 
       // 단언 — 설정된 값은 selected, 아닌 값은 not selected.
       expect(screen.getByTestId('settings-pref-style-휴양')).toBeSelected();

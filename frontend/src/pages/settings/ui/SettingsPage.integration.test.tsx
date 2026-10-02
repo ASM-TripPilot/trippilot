@@ -310,12 +310,16 @@ describe('실 훅 · 서버 값 ↔ 행·토글 (옛 .l05parity)', () => {
 
       // 단언 — 값 도착 뒤의 행 표면(완전일치 · 행 안). 첫 렌더엔 취향이 아직 없어 값이 비어 있으므로
       // 도착할 때까지 기다린다(02a ★13).
-      await waitFor(() =>
-        expect(
-          within(screen.getByTestId('settings-nav-preferences')).getByText(
-            '6/7 설정됨'
-          )
-        ).toBeOnTheScreen()
+      // 합친 뒤 이 테스트가 파일 첫 테스트라 냉시작(모듈 첫 로드)을 흡수한다 — CI 에서 기본 1000ms 를
+      // 넘겨 첫 테스트만 red 가 나는 일이 합친 통합 파일마다 반복됐다(TRIP-1144 SavedPlacesPage 선례).
+      await waitFor(
+        () =>
+          expect(
+            within(screen.getByTestId('settings-nav-preferences')).getByText(
+              '6/7 설정됨'
+            )
+          ).toBeOnTheScreen(),
+        { timeout: 5000 }
       );
       // 옛 예산 칩은 없다(TRIP-1051 AC-5).
       expect(screen.queryByTestId('settings-chip-budget')).toBeNull();
