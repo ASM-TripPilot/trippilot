@@ -80,10 +80,13 @@ frontend/
 - **같은 층 형제 슬라이스는 서로 모른다(엄격)**: 형제 직접 import는 lint error다. 공유가 필요하면 순서대로 푼다 — ① 늘 같이 바뀌면 두 슬라이스를 합친다 ② 공유 도메인 책임은 entity로 내린다 ③ 위 층(pages·app)이 두 슬라이스를 받아 조립한다(props·slot) ④ 그래도 불가피하면 상대 슬라이스의 **공개 API(`index.ts`)로만** 받고, 왜 ①~③이 안 되는지 코드 주석으로 남긴다.
 - **entities 교차는 `@x`로만**: 도메인끼리 꼭 참조해야 하면 제공자가 소비자에게만 내주는 `entities/<제공자>/@x/<소비자>/**` 창구를 쓴다(형식 예: `entities/place/@x/itinerary-slot/` — 지금 리포에 `@x` 폴더는 0개, entity 간 import도 0건). 먼저 두 entity를 합칠 수 없는지부터 본다 — `@x`는 마지막 수단이고 features·widgets에는 쓰지 않는다.
 - **공개 API(`index.ts`)**: 슬라이스 밖에서는 그 슬라이스의 `index.ts`로만 import한다. `shared`는 슬라이스가 없으므로 세그먼트(또는 컴포넌트 폴더)마다 `index.ts`를 둔다.
-  - **과도기(TRIP-1157까지)**: 이주 중에는 딥 임포트(`@/features/home/ui/HomeGlyphs`)를 허용한다 — 옮기는 동안 `index.ts`를 두 번 고치지 않기 위해서다. TRIP-1157에서 `index.ts`를 일괄 정비하고 딥 임포트 금지 lint를 켠다. 그 뒤 딥 임포트는 위반이다.
-  - 현재: pages 53개 전부가 `index.ts`를 가진다(마지막 `magazine`은 TRIP-1147로 추가). entities는 `model/index.ts`(place·stay·trip·itinerary-slot)로 도메인 타입을 내준다.
+  - **딥 임포트 금지(TRIP-1157)**: 슬라이스 밖에서 `@/features/home/ui/HomeGlyphs`처럼 내부 파일을 직접 물면 lint error다. 진입점은 슬라이스(또는 shared 세그먼트) 루트의 `index.ts`와 `index.<이름>.ts`(`index.view`·`index.schemas`·`index.hooks`)뿐이다. shared/ui·shared/lib 루트 직속 파일은 세그먼트 index 없이 직접 import한다.
+  - **두 번째 진입점 `index.view.ts`**: 네트워크·컨테이너를 싣는 슬라이스는 순수 뷰·글리프·config·순수 model만 모은 `index.view.ts`를 따로 둔다. 개발 프리뷰처럼 네트워크 없이 그려야 하는 소비자는 이것을 문다 — `index.ts`를 물면 슬라이스 전체가 평가돼 프리뷰 지뢰(`devPreviewReleaseGate`)가 터진다. 새 공개 심볼을 view에도 넣을지는 "그 정의 모듈이 네트워크·컨테이너에 닿는가"로만 정한다. 타입은 `export type { … }`으로 낸다 — `export { T } from`은 타입이어도 런타임 `require`로 남는다.
+  - **shared/api는 세 진입점**: 본체 `@/shared/api`(클라이언트·토큰·에러 헬퍼) · `@/shared/api/index.schemas`(생성 타입) · `@/shared/api/index.hooks`(생성 react-query 훅 — 물면 네트워크 계층이 실린다). 본체 index로 되돌아오는 헬퍼는 순환을 피해 hooks 진입점으로 낸다.
+  - **테스트**: `jest.mock`·`jest.requireActual` 등 jest 계열 지정자, 목 타이핑(`typeof import`)·`spyOn` 대상 네임스페이스, 공개 API에 없는 테스트 전용 심볼은 정의 모듈(딥 경로)을 겨눈다 — 테스트 때문에 index를 넓히지 않는다. 배럴을 통째로 목으로 바꾸는 테스트는 팩토리 맨 앞에서 `jest.requireActual`로 실물을 펼친 뒤 덮는다(재수출이 늘 때 형제 export가 `undefined`가 되지 않게).
+  - 현재: pages 53 · features 25 · widgets 2 · entities 5 슬라이스 전부가 루트 `index.ts`를 가진다. shared는 세그먼트(또는 `ui/pref` 같은 컴포넌트 폴더)마다 `index.ts`를 두고, `index.view.ts`는 15개(features 13 · `shared/location` · `shared/push`)다.
 - **이주 방식**: 화면 묶음 단위로 옮긴다(TRIP-1138 · 서브 1146~1154) — 테스트 정상화를 먼저 하고 그 화면의 이동을 뒤 커밋으로.
-- **린터**: 이주가 끝나면 공식 FSD 린터 Steiger(`insignificant-slice` · `excessive-slicing`)를 CI 게이트로 붙인다(TRIP-1157·1158). 그 전까지는 ESLint zone(층 방향·형제 격리)만 경계를 지킨다 — 구조 소스 스캔은 TRIP-1145에서 지웠다.
+- **린터**: 이주가 끝나면 공식 FSD 린터 Steiger(`insignificant-slice` · `excessive-slicing`)를 CI 게이트로 붙인다(TRIP-1157·1158). 그 전까지는 ESLint zone(층 방향·형제 격리·딥 임포트 금지)만 경계를 지킨다 — 구조 소스 스캔은 TRIP-1145에서 지웠다. 딥 임포트 금지 zone(TRIP-1157)은 프로덕션 파일에만 걸고 테스트·`src/app/_dev/**`는 면제한다. 같은 룰 ID라 층 zone과 한 블록에 함께 펼친다(flat config는 같은 규칙을 거는 뒤 블록이 앞을 덮어쓴다). `import/no-cycle`은 상시 lint에 없다 — 자기 슬라이스 index를 물어 순환을 만들어도 `pnpm lint`는 침묵한다.
 - **`app → features` 제한은 두지 않는다** — 공식 FSD는 app 층이 아래 층 전부를 import하는 것을 허용한다. 라우트 파일은 page를 꽂는 얇은 래퍼로 두는 것을 권장한다(lint 강제 없음, TRIP-1142).
 - 절대 경로 별칭 `@/` = `src/` (tsconfig paths — `@/features/...`, `@/shared/...`).
 

@@ -57,13 +57,14 @@ frontend/
 **FSD 층 방향 규칙 — 도입됨(TRIP-804).** `app → pages → widgets → features → entities → shared` 6층 방향을 `eslint.config.js`의 `import/no-restricted-paths` 층 zone이 강제한다 — 역방향(하위→상위), features 간 직접 import, 하위 층의 상위 층 참조 상한을 잡는다. `src/__tests__/importBoundaryLayers.test.ts`가 13개 feature 전부에서 형제 feature·역방향 import가 경계 룰로 잡히는지 뮤테이션으로 실측한다(src 직계·세그먼트 허용목록 검사는 Steiger, TRIP-1158). **전방 `app → features` 제한은 아직 미도입** — app이 features를 직접 import하는 곳이 많아(라우트·프리뷰) 소급 이동 없이 못 켜므로 pages 이주 후 별도 티켓에서 켠다(app·app-shell은 이번 zone에서 target 아님).
 ## `src/features/` — 아직 시작 안 한 도메인
 
-TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개를 `git rm`으로 전부 삭제했다. 그중 8개(`archive`·`execution`·`itinerary`·`notification`·`planb`·`settings`·`stay`·`trip`)는 그 배럴이 디렉토리 안의 유일한 파일이라 **디렉토리째 사라졌다** — `stay`는 위 절대로 TRIP-179로 재등장(데이터 계층만), `itinerary`는 위 절대로 TRIP-295로 재등장(순수 함수만). 지금 `src/features/`에는 `auth`·`home`·`onboarding`·`stay`·`explore`·`trip`·`itinerary` 7개다.
+TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개를 `git rm`으로 전부 삭제했다. 그중 8개(`archive`·`execution`·`itinerary`·`notification`·`planb`·`settings`·`stay`·`trip`)는 그 배럴이 디렉토리 안의 유일한 파일이라 **디렉토리째 사라졌다** — `stay`는 위 절대로 TRIP-179로 재등장(데이터 계층만), `itinerary`는 위 절대로 TRIP-295로 재등장(순수 함수만). 지금 `src/features/`에는 25개 슬라이스가 있다(목록의 정본은 디렉토리 — 손 카운트는 드리프트한다).
 
-새 코드는 **pages first**다 — 먼저 그 코드를 쓰는 `pages/<slice>`(그룹이 있으면 `pages/<그룹>/<slice>`)에 두고, 추출 규칙 세 조건(지금 여러 곳이 쓴다 · 독립 변경 이유 · 좁은 책임)을 모두 만족할 때만 features·entities로 뺀다(정본: `frontend/README.md` §층 규칙). 빈 배럴 선점(`export {};`만 있는 `index.ts`)은 여전히 금지다(기계 강제 없음 — TRIP-1145에서 스캔 삭제). 공개 API(`index.ts`)는 TRIP-1157에서 일괄 정비한다 — 그 전까지 딥 임포트는 과도기 허용이다.
+새 코드는 **pages first**다 — 먼저 그 코드를 쓰는 `pages/<slice>`(그룹이 있으면 `pages/<그룹>/<slice>`)에 두고, 추출 규칙 세 조건(지금 여러 곳이 쓴다 · 독립 변경 이유 · 좁은 책임)을 모두 만족할 때만 features·entities로 뺀다(정본: `frontend/README.md` §층 규칙). 빈 배럴 선점(`export {};`만 있는 `index.ts`)은 여전히 금지다(기계 강제 없음 — TRIP-1145에서 스캔 삭제). 슬라이스 밖에서는 공개 API(`index.ts`·`index.<이름>.ts`)로만 import한다 — 딥 임포트는 lint error다(TRIP-1157, 정본 README §import 경계 규칙).
 ## 재사용 공개 API
 
 **새 함수를 만들기 전에 여기부터 본다.** 있으면 다시 만들지 말고 가져다 쓴다.
 (대상: `shared/*` + `features/*/lib`·`model`·`hooks`. 화면·컨테이너는 재사용 대상이 아니라 제외.)
+**위치 열은 정의 파일 자리다** — 슬라이스 밖에서 가져올 때는 그 슬라이스(또는 shared 세그먼트)의 공개 API `index.ts`로 import한다(TRIP-1157 — 딥 경로는 lint error). index에 없는 심볼이면 index에 재수출을 더한다.
 
 | 심볼 | 위치 | 무엇 |
 |---|---|---|
@@ -75,7 +76,7 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `StaySearchCard` | `entities/stay/ui`(TRIP-807) | 검색 풀/레인 카드(e02·d01). d01 rail 폭 160(TRIP-1105 — 옛 목적지 상세 격자 소멸). 명시적 testID 계약(root/photo/save/filled/outline 완성 문자열 prop) — `testIDPrefix` 단일 접두 방식이 아니다(소비처마다 스킴이 갈림) |
 | `SavedStayCard` | `entities/stay/ui`(TRIP-807) | 저장 degrade 카드(e04·g02 시트). `SavedStay` 계약 공백(사진·지역·거리·가격 없음)을 정직하게 비우고 이름+`subtitle`만 그린다. 하트/체크는 `trailing` 슬롯으로 소비처가 주입 |
 | `MapView` | `shared/map` | 공급자 중립 지도(네이버 네이티브, TRIP-861). props `center`·`pins?`·`viewOnly?`·`connectPins?`·`onPinTap?`·`onLoadFailed?`·`onCameraIdle?`·`maxLevel?`·**`fitPins?: boolean`(TRIP-1022)** — 켜고 핀 2개 이상이면 `camera` 대신 `buildFitRegion` 결과(`region`)를 넘겨 전체 핀이 담기게 카메라를 맞춘다(핀 1개면 무시, 기존 `center`+줌14). `camera`와 `region`은 SDK가 한쪽만 받으므로 스프레드로 택일. 새 지도가 필요하면 이걸 쓴다 — SDK를 직접 import 하지 마라(`mapBridgeStructure` A-4가 shared/map 밖 SDK import 0을 강제) |
-| `buildFitRegion` | `shared/map/fitRegion`(TRIP-1022) | 순수 함수. 핀 좌표 배열 → 전부를 담는 네이버 `Region`(남서 모서리+폭) 산출, 여백 1.4배·최소 폭 0.01°. 점 2개 미만이면 `null`(MapView가 `camera`로 폴백). `MapView`의 `fitPins` 소비 전용 — 배럴로 재수출 안 함 |
+| `buildFitRegion` | `shared/map/fitRegion`(TRIP-1022) | 순수 함수. 핀 좌표 배열 → 전부를 담는 네이버 `Region`(남서 모서리+폭) 산출, 여백 1.4배·최소 폭 0.01°. 점 2개 미만이면 `null`(MapView가 `camera`로 폴백). `MapView`의 `fitPins` 소비 전용 — 외부 소비처가 없어 `shared/map` 공개 API에 없다 |
 | `CenterPinPicker` | `shared/map` | 중앙 고정 핀 좌표 선택기(TRIP-866) — 지도를 움직여 화면 중앙 핀으로 좌표 확정(`onPick({lat,lng})`). 롱프레스 대체 |
 | `resolveEditorMapCenter` | `pages/itinerary/itinerary-manual/model/editorMapCenter`(TRIP-1022) | 순수 함수. 빈 일정 편집기 지도 중심 사다리 — ① 그날 핀 ② 그날을 덮는 거점(`base_assignment`) 숙소 좌표 ③ 좌표 온전한 거점 중 `dateFrom` 최이른 것 ④ 서울시청 폴백. 좌표 온전 = `lat`·`lng` 둘 다 `Number.isFinite`. `Q2` 후속(`PlaceAddPage`·`ItineraryEditPage`·`TripRecordsPage` 서울 폴백)이 그대로 재사용 가능한 일반형 입력(`pins/date/bases/stays`) |
 | `formatRegionChipLabel` | `pages/explore/place-explore/model/regionChipLabel`(TRIP-1023 칸 B · TRIP-1147로 features/explore에서 이사) | 순수 함수. `readonly string[]` → 칩 라벨(`[]`→"전국"·한 곳→이름·여러 곳→"{첫 지역} 외 N곳"). d04 지역 칩의 라벨 규칙 단일 출처 — page 슬라이스 안이라 `place-explore` 밖에서는 못 import(다른 소비처가 생기면 `shared` 승격 검토) |
@@ -203,7 +204,7 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `recordsTripIdForDate` | `pages/record/records-calendar/model/recordsCalendar`(TRIP-1015 신규) | 캘린더 날짜 → 그 날을 덮고 `canOpenTripRecords`인 여행 중 시작일이 가장 늦은 것의 id(없으면 `null`). `markedDaysOfMonth`(정방향: 여행→날짜)의 역방향 짝 — 역조회 함수가 이전엔 없었다 |
 | `seoulTime` · `seoulInstant` | `shared/date/seoulDate`(TRIP-1069 신규, 기존 `seoulDate`·`KST_OFFSET_MS` 옆) | 순간↔서울(KST, 서머타임 없음) 벽시계 상호 변환 — `seoulTime(at)`은 UTC+9h 뒤 UTC 게터(`toISOString`)로 읽어 `HH:mm`(기기 시간대 무관, `getHours()` 미사용), `seoulInstant(day, 'HH:mm')`은 역방향(−9h) + 항상 `Z`로 끝남. **주의(03b 대조)**: `pages/live/planb-draft/model/replanFromInstant.ts`에 같은 `KST_OFFSET_MS` 상수가 별도로 있다(순간→KST `{date,hour}`, `features`라 `shared`가 재사용 불가) — 통합은 planb 테스트 경계 때문에 별도 사이클 후보(문제로그 참고) |
 | `orderByArrival` | `pages/record/trip-records/model/visitOrder`(TRIP-1069 신규) | 방문 목록을 도착 에포크(`Date.parse`) 오름차순 정렬(사본 반환, 도착 없으면 `Infinity`로 끝) — 사전식 문자열 비교가 아니라 숫자 비교라 `.500Z` vs `Z` 포맷 혼재에도 안 뒤집힌다 |
-| `readStringValue` · `writeStringValue` | `shared/storage/stringValue`(TRIP-1122 신규, **딥 경로 import** — 배럴 재수출 없음) | 단일 문자열 값의 기기 저장(SecureStore, JSON 없이 그대로). 읽기 실패·저장 실패는 throw하므로 호출부가 삼킬지 정한다. 다른 화면의 "기기가 기억할 한 줄"(정렬·필터 기본값 등)에 재사용 — 새 저장 모듈을 또 만들지 말 것 |
+| `readStringValue` · `writeStringValue` | `shared/storage/stringValue`(TRIP-1122 신규, 공개 API `@/shared/storage`로 import — TRIP-1157) | 단일 문자열 값의 기기 저장(SecureStore, JSON 없이 그대로). 읽기 실패·저장 실패는 throw하므로 호출부가 삼킬지 정한다. 다른 화면의 "기기가 기억할 한 줄"(정렬·필터 기본값 등)에 재사용 — 새 저장 모듈을 또 만들지 말 것 |
 | `getInstallId` | `shared/storage/installId`(TRIP-1070 신규) | 기기 설치 식별자 — SecureStore에 있으면 그 값, 없으면 `randomUUID()`로 만들어 저장. 동시 최초 호출에도 id 하나만 만들도록 진행 중 Promise를 메모이즈 |
 | `pickPhotoAsset` · `resolvePhotoUri` | `shared/photo`(TRIP-1070 실장) | 두 네이티브 모듈(`expo-image-picker`·`expo-media-library`)의 유일한 입구(정적 import 금지는 ESLint `no-restricted-imports`, TRIP-1145 — 입구 자신도 호출 시점 `require`로만 연다). `pickPhotoAsset`은 판별 유니온 `PhotoPickResult`(picked·canceled·denied·no-asset-id·failed)로 접는다. `resolvePhotoUri`는 권한 재요청 없이 로컬 uri만 |
 | `pickPhotoForVisit` | `features/attach-visit-media/model/pickPhotoForVisit`(TRIP-1070 신규) | `pickPhotoAsset()`을 부르고 picked가 아니면 문구표로 `{notice}`, picked면 그때 위치 동의(`gpsRecordingOptIn`)를 1회 조회해 좌표 포함 여부를 정함. 사진 고르기 흐름을 다시 만들기 전에 이걸 먼저 본다 |
