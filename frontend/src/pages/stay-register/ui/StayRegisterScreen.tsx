@@ -51,7 +51,7 @@ import {
   resolveName,
   type StayRegisterFlow,
   type StayRegisterTab,
-} from '../model/stayRegisterForm';
+} from '@/features/stay/model/stayRegisterForm';
 import {
   BackChevronGlyph,
   BedGlyph,
@@ -60,7 +60,7 @@ import {
   RefreshGlyph,
   SearchGlyph,
   WarningTriangleGlyph,
-} from './StayGlyphs';
+} from '@/features/stay/ui/StayGlyphs';
 
 export interface StayRegisterScreenProps {
   flow: StayRegisterFlow;

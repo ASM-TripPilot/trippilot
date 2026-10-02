@@ -24,9 +24,12 @@ import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
 import { StateNotice, type StateNoticeAction } from '@/shared/ui/StateNotice';
 
 import { filterReasonLabel } from '../model/filterReasonLabel';
-import { PRICE_BUCKETS, type PriceBucketId } from '../model/priceRangeFilter';
-import type { StaySearchState } from '../model/staySearchState';
-import { stayKey } from '../model/stayKey';
+import {
+  PRICE_BUCKETS,
+  type PriceBucketId,
+} from '@/features/stay/model/priceRangeFilter';
+import type { StaySearchState } from '@/features/stay/model/staySearchState';
+import { stayKey } from '@/features/stay/model/stayKey';
 import { PartialFailureBanner } from './PartialFailureBanner';
 import { SkeletonList } from './SkeletonList';
 import {
@@ -38,7 +41,7 @@ import {
   PlusGlyph,
   SearchGlyph,
   WarningTriangleGlyph,
-} from './StayGlyphs';
+} from '@/features/stay/ui/StayGlyphs';
 
 export interface StaySearchScreenProps {
   region: string;

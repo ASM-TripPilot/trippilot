@@ -11,10 +11,7 @@ import {
   buildStayTripLink,
   type StayTripLink,
 } from '@/features/settings/model/stayTripLink';
-import {
-  MyStaysScreen,
-  type MyStayRowVM,
-} from '@/features/settings/ui/MyStaysScreen';
+import { MyStaysScreen, type MyStayRowVM } from './MyStaysScreen';
 import { isOtaSource } from '@/features/stay/config/affiliateNotice';
 
 /**

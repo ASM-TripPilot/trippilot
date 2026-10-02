@@ -84,8 +84,8 @@ paths:
 | `src/pages/itinerary-edit/ui/ItineraryEditPage.inTrip.integration.test.tsx` | h12·i07 페이지 계약 — 완료 알약 press는 시트 안 엶 · 드래그가 `reorderKeepingLocked` 경유 · CONFIRMED 409는 정직 안내(라우터 4메서드 0회) |
 | `src/pages/itinerary-edit/ui/ItineraryEditPage.save-exit.integration.test.tsx` | 저장 성공 뒤 복귀 계약 — 위반 없음→back/replace 폴백 · 위반(h12·i07·다른 날만)→머묾+배지 · 연타 PUT 1회 · 토스트 완전일치. 편집 스위트 6파일의 expo-router 목은 `canGoBack`이 있어야 한다(없으면 onSuccess TypeError가 삼켜짐) |
 | `src/features/settings/model/stayTripLink.test.ts` | `buildStayTripLink` — 연결/미연결/혼합/first-wins/유령 base 배제/빈 입력 |
-| `src/features/settings/ui/MyStaysScreen.test.tsx` | l04 화면 — 행 표시·토글→다이얼로그 게이트(확정에서만 콜백)·disabled·empty·INV-3 |
-| `src/pages/my-stays/ui/MyStaysPage.integration.test.tsx` | l04 페이지 배선 — 화면은 null 반환 props-캡처 목(NativeWind 함정 회피) · DELETE 인자·무효화(`invalidateQueries` spy) |
+| `src/pages/my-stays/ui/MyStaysScreen.test.tsx` | l04 뷰 — 행 표시·「출발점 변경」 press 1회(등록 행만, 미등록 행은 버튼 없음 — TRIP-1076)·좌표 미확정 disabled·empty + Figma l04 정합(옛 `.l04parity`, TRIP-1148 합본). 출발점 다이얼로그·chevron 색은 소스 옆 `features/settings/ui/{BaseToggleDialog,SettingsGlyphs}.test.tsx`로 갈라졌다 |
+| `src/pages/my-stays/ui/MyStaysPage.integration.test.tsx` | l04 페이지 배선 — 두 관점을 팩토리 안 스위치 `mockRealWiring` 하나로 가른다(TRIP-1148 합본): 화면 캡처 스텁(null 반환 props-캡처 목 + 조회 훅 `jest.fn`) / 실 화면 + msw(옛 `.release`). 실 화면 위임은 JSX 없이 `createElement`(NativeWind babel 함정 회피). 스텁 관점은 쓰기 훅을 보지 않고, 거점 쓰기 0회는 실 화면 관점이 msw 요청 로그(`writes`가 빈 배열)로 단언한다 — TRIP-1076 이후 이 페이지는 거점을 쓰지 않는다 |
 | `src/features/settings/model/styleCardModel.test.ts` | `buildStyleCardModel` — official 매핑·insufficient는 preview 미유출·게이지 전수 |
 | `src/features/settings/ui/StyleSummaryCard.test.tsx` | 스타일 카드 — 채움/빈 점을 서로 다른 testID로 세어 SVG fill 함정 차단 · 상세 진입 disabled degrade(INV-4) |
 | `src/pages/my-page/ui/MyPage.integration.test.tsx` | 마이 페이지 배선+배치(`layer-pages.md` `my-page` 행) |

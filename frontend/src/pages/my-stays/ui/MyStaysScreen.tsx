@@ -2,13 +2,13 @@ import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { CARD_SHADOW } from './cardShadow';
+import { CARD_SHADOW } from '@/features/settings/ui/cardShadow';
 import {
   BedGlyph,
   ChevronLeftGlyph,
   ChevronRightGlyph,
   MUTED,
-} from './SettingsGlyphs';
+} from '@/features/settings/ui/SettingsGlyphs';
 
 /**
  * TRIP-605 · l04 등록 숙소·예약 기록 화면 — 순수 프레젠테이션(VM 주입). 조회·조합·N+1·포맷은

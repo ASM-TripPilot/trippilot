@@ -23,7 +23,7 @@ import {
   SavedStayListScreen,
   type SavedStayCardVM,
   type SavedStayFace,
-} from '@/features/stay/ui/SavedStayListScreen';
+} from './SavedStayListScreen';
 import { useSavedStays } from '@/features/trip/model/useSavedStays';
 
 export function SavedStayPage(): ReactElement {

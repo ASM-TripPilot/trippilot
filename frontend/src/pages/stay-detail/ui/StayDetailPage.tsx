@@ -45,10 +45,7 @@ import {
 } from '@/features/stay/model/stayOutbound';
 import { stayKey } from '@/features/stay/model/stayKey';
 import { OtaChoiceSheet } from '@/features/stay/ui/OtaChoiceSheet';
-import {
-  StayDetailScreen,
-  type StayDetailState,
-} from '@/features/stay/ui/StayDetailScreen';
+import { StayDetailScreen, type StayDetailState } from './StayDetailScreen';
 
 /** 조회 결과 → 화면 얼굴. 404 만 notFound, 400 은 invalid, 응답 없음(네트워크)·5xx 는 error(INV-4). */
 function resolveDetailState(

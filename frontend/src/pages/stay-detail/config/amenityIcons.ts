@@ -6,7 +6,7 @@ import {
   OceanViewGlyph,
   ParkingGlyph,
   WifiGlyph,
-} from '../ui/StayGlyphs';
+} from '@/features/stay/ui/StayGlyphs';
 
 /**
  * 편의시설 코드 → 아이콘 매핑(TRIP-727 · AC-2). 서버가 보내는 실제 문자열은 canon(한글 enum)과

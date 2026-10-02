@@ -7,7 +7,7 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { WarningTriangleGlyph } from './StayGlyphs';
+import { WarningTriangleGlyph } from '@/features/stay/ui/StayGlyphs';
 
 export function PartialFailureBanner({
   onRetry,
