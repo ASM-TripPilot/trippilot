@@ -1,6 +1,6 @@
 import { type ReactElement } from 'react';
 
-import { PreferencesEditScreen } from '@/features/settings/ui/PreferencesEditScreen';
+import { PreferencesEditScreen } from './PreferencesEditScreen';
 
 /**
  * l05 취향 전체 수정 배선(pages 층, TRIP-610). 화면이 자족 컨테이너(스스로 GET/PUT)라 이 페이지는

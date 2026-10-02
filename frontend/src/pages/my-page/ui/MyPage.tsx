@@ -26,7 +26,7 @@ import {
   bucketTrips,
   type TripBucket,
 } from '@/features/settings/model/tripBuckets';
-import { MyPageScreen } from '@/features/settings/ui/MyPageScreen';
+import { MyPageScreen } from './MyPageScreen';
 import { StyleSummaryCard } from '@/features/settings/ui/StyleSummaryCard';
 
 /**

@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 
-import { LocationConsentScreen } from '@/features/settings/ui/LocationConsentScreen';
+import { LocationConsentScreen } from './LocationConsentScreen';
 import { revokeImpact } from '@/shared/location/revokeImpact';
 import { useLocationConsent } from '@/shared/location/useLocationConsent';
 

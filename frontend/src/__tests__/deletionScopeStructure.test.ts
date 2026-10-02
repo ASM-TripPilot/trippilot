@@ -8,7 +8,7 @@ import { join, relative, resolve, sep } from 'node:path';
  * TRIP-608 AC-13 · BR-U6-25(DEC-U6-6) — 삭제 고지 목록은 `deletionScope.ts` 가 **단일 소유**한다.
  *
  * 무엇을 보장하나: 계정 삭제 시 함께 삭제되는 것들의 목록(법적 사전 고지)이 오직
- * `features/settings/model/deletionScope.ts` 의 `DELETION_SCOPE` 상수에만 리터럴로 산다.
+ * `pages/settings/model/deletionScope.ts` 의 `DELETION_SCOPE` 상수에만 리터럴로 산다.
  * 다이얼로그는 이 상수를 import·map 해 그리므로(Q1 확정 — Figma 3항목 축약 산문 미채용, 전체 목록
  * 렌더), 설정 표면의 다른 소스 파일에는 이 문자열들이 **인라인으로 중복되지 않아야** 한다. 목록이
  * 두 군데로 갈리면 한쪽만 고쳐 법적 고지가 실제 삭제 범위와 어긋난다.
@@ -31,7 +31,7 @@ import { join, relative, resolve, sep } from 'node:path';
 const SRC_ROOT = resolve(__dirname, '..');
 const DELETION_SCOPE_FILE = join(
   SRC_ROOT,
-  'features',
+  'pages',
   'settings',
   'model',
   'deletionScope.ts'

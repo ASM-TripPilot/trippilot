@@ -10,7 +10,7 @@ import {
   NotificationInboxScreen,
   type NotificationRowVM,
   type NotificationSection,
-} from '@/features/notification/ui/NotificationInboxScreen';
+} from './NotificationInboxScreen';
 import { formatRelativeTime } from '@/shared/date/formatRelativeTime';
 import type { Notification } from '@/shared/api/generated/schemas';
 

@@ -30,8 +30,6 @@
 - `src/__tests__/mapBridgeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/nicknameMyPageSync.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/notFoundRoute.test.tsx`  →  (export 없음)
-- `src/__tests__/notificationKindGuard.test.tsx`  →  (export 없음)
-- `src/__tests__/notificationSettingsParityStructure.test.ts`  →  (export 없음)
 - `src/__tests__/onboardingEntryGuard.test.tsx`  →  (export 없음)
 - `src/__tests__/onboardingPrefRoutes.test.tsx`  →  (export 없음)
 - `src/__tests__/openapiContract.test.ts`  →  (export 없음)
@@ -392,12 +390,6 @@
 
 ## src/features/notification/ui/
 - `src/features/notification/ui/NotificationGlyphs.tsx`  →  NotifBackChevronGlyph · NotifInfoGlyph · NotifWarningGlyph
-- `src/features/notification/ui/NotificationInboxGlyphs.tsx`  →  NotificationKindIcon · NotifBellGlyph
-- `src/features/notification/ui/NotificationInboxScreen.tsx`  →  NotificationRowVM · NotificationSection · NotificationInboxScreenProps · NotificationInboxScreen
-- `src/features/notification/ui/NotificationRow.tsx`  →  NotificationRowProps · NotificationRow
-- `src/features/notification/ui/NotificationSettingsScreen.tsx`  →  ToggleValueMap · NotificationSettingsScreenProps · NotificationSettingsScreen
-- `src/features/notification/ui/PermissionBanner.tsx`  →  PermissionBanner
-- `src/features/notification/ui/ToggleRow.tsx`  →  ToggleRowProps · ToggleRow
 
 ## src/features/onboarding/model/
 - `src/features/onboarding/model/preferenceInput.ts`  →  PreferenceDraftValues · STYLE · ACTIVITY · toPreferenceInput
@@ -496,9 +488,7 @@
 
 ## src/features/settings/model/
 - `src/features/settings/model/dataAttribution.ts`  →  OSM_COPYRIGHT_URL
-- `src/features/settings/model/deletionScope.ts`  →  DELETION_SCOPE
 - `src/features/settings/model/exportSummary.ts`  →  ExportSummary · resolveExportSummary
-- `src/features/settings/model/personalizationCopy.ts`  →  personalizationCopy
 - `src/features/settings/model/preferenceDraft.ts`  →  PreferenceSelection · initialSelection · buildPreferenceInput
 - `src/features/settings/model/preferenceSummary.ts`  →  PreferenceRowKey · PreferenceSummary · summarizePreferences
 - `src/features/settings/model/settingsSections.ts`  →  SettingsInput · SettingsRowChip · SettingsRowVM · SettingsGroupVM · buildSettingsSections · filterReadySettingsSections
@@ -506,26 +496,11 @@
 - `src/features/settings/model/styleCardModel.ts`  →  StyleGauge · StyleCardVM · buildStyleCardModel
 - `src/features/settings/model/tripBuckets.ts`  →  TripBucket · phaseBucket · bucketTrips
 - `src/features/settings/model/usePersonalization.ts`  →  UsePersonalizationResult · usePersonalization
-- `src/features/settings/model/usePreferences.ts`  →  UsePreferencesResult · usePreferences
 
 ## src/features/settings/ui/
 - `src/features/settings/ui/BaseToggleDialog.tsx`  →  BaseToggleDialog
-- `src/features/settings/ui/DeleteAccountDialog.tsx`  →  DeleteAccountDialog
-- `src/features/settings/ui/ExportRow.tsx`  →  ExportRow
 - `src/features/settings/ui/InfoChip.tsx`  →  InfoChip
-- `src/features/settings/ui/LocationConsentScreen.tsx`  →  LocationConsentScreenProps · LocationConsentScreen
-- `src/features/settings/ui/LogoutConfirmDialog.tsx`  →  LogoutConfirmDialog
-- `src/features/settings/ui/MyPageScreen.tsx`  →  MyPageScreenProps · MyPageScreen
-- `src/features/settings/ui/NicknameEditRow.tsx`  →  NicknameEditRow
-- `src/features/settings/ui/PersonalizationScreen.tsx`  →  PersonalizationScreenProps · PersonalizationScreen
-- `src/features/settings/ui/PreferencesEditScreen.tsx`  →  PreferencesEditScreen
-- `src/features/settings/ui/PreferencesEditView.tsx`  →  EditableAxis · isMultiAxis · PreferencesEditViewProps · PreferencesEditView
-- `src/features/settings/ui/ProfileCard.tsx`  →  ProfileCardCounts · ProfileCardProps · ProfileCard
-- `src/features/settings/ui/RevokeConfirmDialog.tsx`  →  RevokeConfirmDialog
 - `src/features/settings/ui/SettingsGlyphs.tsx`  →  MUTED · MUTED_SOFT · ChevronRightGlyph · BookmarkGlyph · BarChartGlyph · ShareNodesGlyph · ListGlyph · EyeOffGlyph · GearGlyph · PencilGlyph · HeartGlyph · ChevronLeftGlyph · PersonGlyph · DownloadGlyph · ContrastGlyph · PinGlyph · BellGlyph · SparkleGlyph · ExternalLinkGlyph · BedGlyph · MenuBedGlyph · TrashGlyph · DocumentGlyph · LogoutGlyph
-- `src/features/settings/ui/SettingsGroup.tsx`  →  SettingsGroup
-- `src/features/settings/ui/SettingsRow.tsx`  →  RowBody · PreparingRow · NavRow
-- `src/features/settings/ui/SettingsScreen.tsx`  →  SettingsScreenProps · SettingsScreen
 - `src/features/settings/ui/StyleSummaryCard.tsx`  →  StyleSummaryCardProps · StyleSummaryCard
 - `src/features/settings/ui/cardShadow.ts`  →  CARD_SHADOW
 
@@ -754,6 +729,8 @@
 
 ## src/pages/my-page/ui/
 - `src/pages/my-page/ui/MyPage.tsx`  →  MyPage
+- `src/pages/my-page/ui/MyPageScreen.tsx`  →  MyPageScreenProps · MyPageScreen
+- `src/pages/my-page/ui/ProfileCard.tsx`  →  ProfileCardCounts · ProfileCardProps · ProfileCard
 
 ## src/pages/my-stays/
 - `src/pages/my-stays/index.ts`  →  MyStaysPage
@@ -766,7 +743,10 @@
 - `src/pages/notification-inbox/index.ts`  →  NotificationInboxPage
 
 ## src/pages/notification-inbox/ui/
+- `src/pages/notification-inbox/ui/NotificationInboxGlyphs.tsx`  →  NotificationKindIcon · NotifBellGlyph
 - `src/pages/notification-inbox/ui/NotificationInboxPage.tsx`  →  NotificationInboxPage
+- `src/pages/notification-inbox/ui/NotificationInboxScreen.tsx`  →  NotificationRowVM · NotificationSection · NotificationInboxScreenProps · NotificationInboxScreen
+- `src/pages/notification-inbox/ui/NotificationRow.tsx`  →  NotificationRowProps · NotificationRow
 
 ## src/pages/onboarding-location/
 - `src/pages/onboarding-location/index.ts`  →  LocationPage
@@ -897,30 +877,54 @@
 
 ## src/pages/settings-location/ui/
 - `src/pages/settings-location/ui/LocationConsentPage.tsx`  →  LocationConsentPage
+- `src/pages/settings-location/ui/LocationConsentScreen.tsx`  →  LocationConsentScreenProps · LocationConsentScreen
+- `src/pages/settings-location/ui/RevokeConfirmDialog.tsx`  →  RevokeConfirmDialog
 
 ## src/pages/settings-notifications/
 - `src/pages/settings-notifications/index.ts`  →  NotificationSettingsPage
 
 ## src/pages/settings-notifications/ui/
 - `src/pages/settings-notifications/ui/NotificationSettingsPage.tsx`  →  NotificationSettingsPage
+- `src/pages/settings-notifications/ui/NotificationSettingsScreen.tsx`  →  ToggleValueMap · NotificationSettingsScreenProps · NotificationSettingsScreen
+- `src/pages/settings-notifications/ui/PermissionBanner.tsx`  →  PermissionBanner
+- `src/pages/settings-notifications/ui/ToggleRow.tsx`  →  ToggleRowProps · ToggleRow
 
 ## src/pages/settings-personalization/
 - `src/pages/settings-personalization/index.ts`  →  PersonalizationPage
 
+## src/pages/settings-personalization/model/
+- `src/pages/settings-personalization/model/personalizationCopy.ts`  →  personalizationCopy
+
 ## src/pages/settings-personalization/ui/
 - `src/pages/settings-personalization/ui/PersonalizationPage.tsx`  →  PersonalizationPage
+- `src/pages/settings-personalization/ui/PersonalizationScreen.tsx`  →  PersonalizationScreenProps · PersonalizationScreen
 
 ## src/pages/settings-preferences/
 - `src/pages/settings-preferences/index.ts`  →  SettingsPreferencesPage
 
+## src/pages/settings-preferences/model/
+- `src/pages/settings-preferences/model/usePreferences.ts`  →  UsePreferencesResult · usePreferences
+
 ## src/pages/settings-preferences/ui/
+- `src/pages/settings-preferences/ui/PreferencesEditScreen.tsx`  →  PreferencesEditScreen
+- `src/pages/settings-preferences/ui/PreferencesEditView.tsx`  →  EditableAxis · isMultiAxis · PreferencesEditViewProps · PreferencesEditView
 - `src/pages/settings-preferences/ui/SettingsPreferencesPage.tsx`  →  SettingsPreferencesPage
 
 ## src/pages/settings/
 - `src/pages/settings/index.ts`  →  SettingsPage
 
+## src/pages/settings/model/
+- `src/pages/settings/model/deletionScope.ts`  →  DELETION_SCOPE
+
 ## src/pages/settings/ui/
+- `src/pages/settings/ui/DeleteAccountDialog.tsx`  →  DeleteAccountDialog
+- `src/pages/settings/ui/ExportRow.tsx`  →  ExportRow
+- `src/pages/settings/ui/LogoutConfirmDialog.tsx`  →  LogoutConfirmDialog
+- `src/pages/settings/ui/NicknameEditRow.tsx`  →  NicknameEditRow
+- `src/pages/settings/ui/SettingsGroup.tsx`  →  SettingsGroup
 - `src/pages/settings/ui/SettingsPage.tsx`  →  SettingsPage
+- `src/pages/settings/ui/SettingsRow.tsx`  →  RowBody · PreparingRow · NavRow
+- `src/pages/settings/ui/SettingsScreen.tsx`  →  SettingsScreenProps · SettingsScreen
 
 ## src/pages/share-card/
 - `src/pages/share-card/index.ts`  →  ShareCardPage
@@ -1393,4 +1397,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 909개 파일
+합계 907개 파일

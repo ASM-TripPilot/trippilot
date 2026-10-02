@@ -343,7 +343,7 @@ const CAPTURE_ADAPTER = 'src/features/reflection/model/shareCaptureNative.ts';
 const STATE_NOTICE = 'src/shared/ui/StateNotice.tsx';
 const ROUTE_PROBE = 'src/app/trips/__release_probe__.tsx';
 const PAGE_PROBE = 'src/pages/__release_probe__/x.tsx';
-const SETTINGS_UI_PROBE = 'src/features/settings/ui/__release_probe__.tsx';
+const SETTINGS_UI_PROBE = 'src/pages/settings/ui/__release_probe__.tsx';
 const DEV_PREVIEW_PROBE = 'src/app/_dev/__release_probe__.tsx';
 
 describe('msw·목은 앱 코드에 들어오지 않는다 (noMswInStaticGraph 이관)', () => {
@@ -601,7 +601,7 @@ describe('계정 삭제 다이얼로그는 1단계부터만 열린다 (deleteAcc
     const ruleIds = await lint(
       dialogTag(
         'initialStep="final" onCancel={noop} onConfirmDeletion={noop}',
-        '@/features/settings/ui/DeleteAccountDialog'
+        '@/pages/settings/ui/DeleteAccountDialog'
       ),
       PAGE_PROBE
     );
@@ -643,7 +643,7 @@ describe('계정 삭제 다이얼로그는 1단계부터만 열린다 (deleteAcc
     const ruleIds = await lint(
       dialogTag(
         'initialStep="final" onCancel={noop} onConfirmDeletion={noop}',
-        '@/features/settings/ui/DeleteAccountDialog'
+        '@/pages/settings/ui/DeleteAccountDialog'
       ),
       DEV_PREVIEW_PROBE
     );
