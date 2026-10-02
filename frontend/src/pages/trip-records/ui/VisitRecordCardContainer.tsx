@@ -6,9 +6,9 @@ import { resolvePhotoUri } from '@/shared/photo';
 import { getInstallId } from '@/shared/storage/installId';
 
 import { photoAvailability } from '../model/photoAvailability';
-import { pickPhotoForVisit } from '../model/pickPhotoForVisit';
+import { pickPhotoForVisit } from '@/features/record/model/pickPhotoForVisit';
 import { useVisitAttachments } from '../model/useVisitAttachments';
-import { MemoInline } from './MemoInline';
+import { MemoInline } from '@/features/record/ui/MemoInline';
 import { PhotoThumbStrip, type PhotoThumbVM } from './PhotoThumbStrip';
 import { VisitRecordCard, type VisitRecordCardVM } from './VisitRecordCard';
 

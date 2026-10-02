@@ -16,8 +16,8 @@ import {
   openableTripIds,
   pickOngoingTrip,
   recordsTripIdForDate,
-} from '@/features/record/model/recordsCalendar';
-import { useRecordsCalendar } from '@/features/record/model/useRecordsCalendar';
+} from '../model/recordsCalendar';
+import { useRecordsCalendar } from '../model/useRecordsCalendar';
 import { RecordsCalendarScreen } from './RecordsCalendarScreen';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import { buildMonthGrid, shiftMonth } from '@/shared/date/monthGrid';

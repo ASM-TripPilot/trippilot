@@ -7,21 +7,21 @@ import { router } from 'expo-router';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { buildStatePins } from '@/entities/itinerary-slot/lib/slotMapPin';
 import { formatDayLabel } from '@/entities/trip/lib/formatDayLabel';
-import { deriveStayAttribution } from '@/features/record/model/stayAttribution';
+import { deriveStayAttribution } from '../model/stayAttribution';
 import {
   useRecordBases,
   useRecordSavedStays,
   useTripRecords,
-} from '@/features/record/model/useTripRecords';
-import { useAdjustVisitTimes } from '@/features/record/model/useAdjustVisitTimes';
+} from '../model/useTripRecords';
+import { useAdjustVisitTimes } from '../model/useAdjustVisitTimes';
 import { useSpontaneousNames } from '@/features/record/model/spontaneousNames';
 import { useVisitCheck } from '@/features/record/model/useVisitCheck';
-import { orderByArrival } from '@/features/record/model/visitOrder';
+import { orderByArrival } from '../model/visitOrder';
 import { isOptimisticVisit } from '@/features/record/model/visitStatus';
-import { SkipVisitDialog } from '@/features/record/ui/SkipVisitDialog';
-import type { VisitRecordCardVM } from '@/features/record/ui/VisitRecordCard';
-import { VisitRecordCardContainer } from '@/features/record/ui/VisitRecordCardContainer';
-import { VisitTimeSheet } from '@/features/record/ui/VisitTimeSheet';
+import { SkipVisitDialog } from './SkipVisitDialog';
+import type { VisitRecordCardVM } from './VisitRecordCard';
+import { VisitRecordCardContainer } from './VisitRecordCardContainer';
+import { VisitTimeSheet } from './VisitTimeSheet';
 import {
   useGetTripsTripId,
   useGetTripsTripIdItinerary,

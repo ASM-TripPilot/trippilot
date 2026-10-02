@@ -12,7 +12,7 @@ import type {
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { flushNotifications } from '@/test-support/flushNotifications';
 
-import type { PhotoAssetMeta } from './photoAttach';
+import type { PhotoAssetMeta } from '@/features/record/model/photoAttach';
 import { useVisitAttachments } from './useVisitAttachments';
 
 /**

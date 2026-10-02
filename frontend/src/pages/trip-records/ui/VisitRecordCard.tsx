@@ -3,14 +3,17 @@ import { Animated, Pressable, Text, View } from 'react-native';
 
 import { startUnlessReduceMotion } from '@/shared/motion/reduceMotion';
 
-import { deriveVisitStatus, isOptimisticVisit } from '../model/visitStatus';
+import {
+  deriveVisitStatus,
+  isOptimisticVisit,
+} from '@/features/record/model/visitStatus';
 import {
   RetryGlyph,
   VisitCheckActiveGlyph,
   VisitCheckDoneGlyph,
   VisitCheckSkippedGlyph,
   VisitCheckUpcomingGlyph,
-} from './RecordGlyphs';
+} from '@/features/record/ui/RecordGlyphs';
 
 /**
  * TRIP-565 · j01 방문 기록 카드(순수 프레젠테이션 — VM 주입, 재판정 없음).

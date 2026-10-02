@@ -6,10 +6,10 @@ import { router } from 'expo-router';
 import {
   missingParts,
   type LocationPermissionState,
-} from '@/features/reflection/model/missingParts';
-import { resolveDisplayNarrative } from '@/features/reflection/model/reflectionFallback';
-import { statsCard } from '@/features/reflection/model/statsCard';
-import { useDailyReflection } from '@/features/reflection/model/useDailyReflection';
+} from '../model/missingParts';
+import { resolveDisplayNarrative } from '../model/reflectionFallback';
+import { statsCard } from '../model/statsCard';
+import { useDailyReflection } from '../model/useDailyReflection';
 import {
   DailyReflectionScreen,
   type ReflectionDayTab,

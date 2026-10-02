@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text } from 'react-native';
 
-import { PlusGlyph } from './RecordGlyphs';
+import { PlusGlyph } from '@/features/record/ui/RecordGlyphs';
 
 /**
  * TRIP-565 · j01 즉석 방문 추가 버튼(순수 프레젠테이션). 점선 테두리 + ＋ 아이콘 + 라벨.

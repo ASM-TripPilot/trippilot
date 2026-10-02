@@ -23,19 +23,25 @@ import path from 'path';
  *   탐지기가 그 살아남은 것에 오검출/미검출을 안 내는지 **실제 문자열로 1회 태운다**(G0, 문제로그
  *   [[stripComments 가 URL 슬래시 오인]] 계열). 바이너리 스캔 범위는 features/record+shared/photo+
  *   pages/live-itinerary 로 한정 — generated/trips/trips.ts 주석에 storage_key 가 실재하나 그 밖이라
- *   사정거리 밖(src 전체로 넓히면 거짓 red). pages/trip-records 는 첨부 경로를 모른다(j01 배선은
- *   features/record 컨테이너).
+ *   사정거리 밖(src 전체로 넓히면 거짓 red). TRIP-1155로 첨부·방문 파일이 pages/trip-records·pages/records-calendar·
+ *   features/check-visit·features/attach-visit-media로 흩어져 SCAN_DIRS에 더했다.
  */
 
 const ROOT = path.resolve('src');
 
 /** 바이너리 스캔 대상 — 사진 첨부 경로가 사는 곳만(shared 전체 아님, generated 주석 오탐 회피). */
-const SCAN_DIRS = ['features/record', 'shared/photo', 'pages/live-itinerary'];
+const SCAN_DIRS = [
+  'features/record',
+  'shared/photo',
+  'pages/live-itinerary',
+  'pages/trip-records',
+  'pages/records-calendar',
+];
 
 /** 사진이 기기를 떠나는 경로의 핵심 파일 — 폴더 밖으로 옮겨지면 스캔이 조용히 줄어든다(편입 앵커). */
 const UPLOAD_PATH_FILES = [
   'features/record/model/photoAttach.ts',
-  'features/record/model/useVisitAttachments.ts',
+  'pages/trip-records/model/useVisitAttachments.ts',
   'shared/photo/index.ts',
   'pages/live-itinerary/ui/LiveItineraryPage.tsx',
 ];
@@ -114,6 +120,10 @@ describe('G0 · 탐지기 자가검사 — stripComments × 금칙어 탐지 조
 describe('🔴 G2 · 바이너리 업로드 심볼 0 + 메타 실참조', () => {
   it('features/record+shared/photo+pages/live-itinerary 에 바이너리 금칙 6종 0건 + AddPhotoRequest 실참조', () => {
     const sources = scanGraph();
+    // 사정거리 앵커 — 스캔 폴더가 전부 실재한다(오타·이동으로 빈 목록이 되면 red).
+    expect(
+      SCAN_DIRS.filter((dir) => !fs.existsSync(path.join(ROOT, dir)))
+    ).toEqual([]);
 
     // 긍정 앵커 — 모집단이 비어있지 않다(구현 후 shared/photo 편입).
     expect(sources.length).toBeGreaterThan(0);

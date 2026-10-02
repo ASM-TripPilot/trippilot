@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react-native';
 import { View } from 'react-native';
 
-import { PlusGlyph } from './RecordGlyphs';
+import { PlusGlyph } from '@/features/record/ui/RecordGlyphs';
 import { VisitRecordCard } from './VisitRecordCard';
 
 /**

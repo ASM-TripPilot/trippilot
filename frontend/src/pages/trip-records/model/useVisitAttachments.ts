@@ -8,8 +8,11 @@ import {
 } from '@/shared/api/generated/trips/trips';
 import type { VisitPhoto } from '@/shared/api/generated/schemas';
 
-import { photoAttach, type PhotoAssetMeta } from './photoAttach';
-import { useVisitMemo } from './useVisitMemo';
+import {
+  photoAttach,
+  type PhotoAssetMeta,
+} from '@/features/record/model/photoAttach';
+import { useVisitMemo } from '@/features/record/model/useVisitMemo';
 
 /**
  * TRIP-566 · AC-5 · BR-U5-13 — 방문 첨부 배선 훅(사진 GET/POST · 메모 PUT upsert).

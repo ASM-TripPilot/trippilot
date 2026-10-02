@@ -97,3 +97,17 @@ paths:
 | `src/pages/settings-personalization/ui/PersonalizationPage.test.tsx` | 토글 → GRANT/REVOKE — `reason`이 아니라 `applied`로 판정하는 뮤턴트를 잡는 `NOT_ENOUGH_RECORDS` 케이스 포함 · termsVersion 필터 · `invalidateQueries` spy |
 | `src/shared/api/patchConsent.test.ts` | `patchConsent` 와이어 계약 — URL에 termsType, body는 `{action, termsVersion}` 두 필드만 |
 | `src/features/trip/model/tripWizardStore.periodFromNights.test.ts` | 시작·박수 재계산 예시 + fast-check 액션열 PBT(**매 단계 뒤** 끝−시작=Σnights, 오라클은 구현과 다른 계산 경로). `reset()`은 파일 최상위 `beforeEach`+`afterEach` 둘 다 |
+| `src/pages/trip-records/model/stayAttribution.test.ts` | (TRIP-1155로 features/record에서 이사) 행동 테스트 + PBT(`baseStay`가 항상 그 날짜를 덮는 base의 함수) + dateTo 경계값 3종 |
+| `src/pages/trip-records/model/photoAvailability.test.ts` | (TRIP-1155로 features/record에서 이사) 진리표 4행(deviceId×assetOk) |
+| `src/pages/trip-records/model/useVisitAttachments.integration.test.tsx` | (TRIP-1155로 features/record에서 이사) msw — addPhoto→GET 재조회 · saveMemo 공백 무시 · savedMemo 시드·같은 값 PUT 0·실패 시 savedMemo 유지 |
+| `src/pages/records-calendar/model/recordsCalendar.test.ts` | (TRIP-1155로 features/record에서 이사) 마킹·월 경계·겹침 유일·null 방어·필터/정렬·라벨 표 |
+| `src/pages/trip-records/ui/VisitRecordCard.checkPop.test.tsx` | (TRIP-1155로 features/record에서 이사) 체크 튐 심판 — 전이 감지(`prevStatus`)·답 전 언마운트(C-4)·튐 도중 되돌림 `setValue(1)`(C-5). `Animated.timing`/`spring`을 스파이해 설정은 기록하고 실행은 JS로 돈다(`Animated.loop`은 판정 함수가 아니라 설정의 `useNativeDriver`를 본다) |
+| `src/pages/trip-records/ui/VisitRecordCard.nameFit.test.tsx` | (TRIP-1155로 features/record에서 이사) 긴 이름 말줄임(TRIP-1086) — 머리 행 세 겹(바깥 `gap-sm`·왼쪽 묶음 `min-w-0 flex-1`·이름 Text `numberOfLines={1}`+`shrink`). RN은 `flexShrink` 기본 0이라 Text 자체에 `shrink`가 있어야 줄어든다. **jest는 토큰·prop까지만** — 실제 `…`·간격 픽셀은 6-b 육안 |
+| `src/pages/trip-records/ui/VisitRecordCard.test.tsx` | (TRIP-1155로 features/record에서 이사) 4상태 present/absent 짝·upcoming 완료 불가·skip·시각 수정 버튼 유무. 슬롯 테스트는 `.wiring.test.tsx`로 격리(새 import가 이 파일을 오염시키지 않게) |
+| `src/pages/trip-records/ui/VisitRecordCard.wiring.test.tsx` | (TRIP-1155로 features/record에서 이사) 슬롯 계약 testID 마커로 잠금 |
+| `src/pages/trip-records/ui/VisitTimeSheet.test.tsx` | (TRIP-1155로 features/record에서 이사) 셀 선택·diff 저장·휠 초기 위치·정지 확정·완료 휠 disabled 배선(W6, 선택 집합 마스크 84셀 앵커)·onClose/key(W4·W5·P1~P4)·인라인 오류·INV-3 렌더 스캔(동적 `${m}분`까지) |
+| `src/pages/trip-records/ui/SpontaneousVisitButton.test.tsx` | (TRIP-1155로 features/record에서 이사) 즉석 추가 UI |
+| `src/pages/trip-records/ui/PhotoThumbStrip.test.tsx` | (TRIP-1155로 features/record에서 이사) 상태 present/absent 짝 + add + 다건 |
+| `src/pages/daily-reflection/model/reflectionFallback.test.ts` | (TRIP-1155로 features/reflection에서 이사) PBT-U5-F1(CI 차단): 임의 `Reflection \| undefined`에도 표시본 `trim().length>0` + 폴백 순서 예제 |
+| `src/pages/daily-reflection/model/statsCard.test.ts` | (TRIP-1155로 features/reflection에서 이사) undefined/null→0s · 완전 입력 통과 · 숫자 타입 |
+| `src/pages/daily-reflection/model/missingParts.test.ts` | (TRIP-1155로 features/reflection에서 이사) 각 플래그 on/off 짝 |

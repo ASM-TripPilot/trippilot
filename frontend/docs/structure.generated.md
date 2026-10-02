@@ -386,46 +386,25 @@
 - `src/features/planb/ui/SlotCandidateSheet.tsx`  →  SlotCandidateSheetProps · SlotCandidateSheet
 
 ## src/features/record/model/
-- `src/features/record/model/adjustTimesDraft.ts`  →  AdjustTimesViolation · AdjustTimesDraftResult · adjustTimesDraft
 - `src/features/record/model/conflict.ts`  →  ConflictChoice · ConflictSelection · ConflictRow · ConflictVisitVM · isVisitConflict
 - `src/features/record/model/photoAttach.ts`  →  photoAttach
-- `src/features/record/model/photoAvailability.ts`  →  PhotoAvailability · photoAvailability
 - `src/features/record/model/pickPhotoForVisit.ts`  →  PhotoPickOutcome · pickPhotoForVisit
-- `src/features/record/model/recordsCalendar.ts`  →  markedDaysOfMonth · buildPastTripCards · LegendRow · MonthLegends · buildMonthLegends · canOpenTripRecords · recordsTripIdForDate · openableTripIds · OngoingTripEntry · OngoingTripCardVM · pickOngoingTrip · formatTripDateRange · nightsLabel
 - `src/features/record/model/spontaneousNames.ts`  →  rememberSpontaneousName · useSpontaneousNames
-- `src/features/record/model/stayAttribution.ts`  →  AttributedStay · DayAttribution · deriveStayAttribution
-- `src/features/record/model/useAdjustVisitTimes.ts`  →  VISIT_CONFLICT_NOTICE · AdjustVisitTimesOutcome · useAdjustVisitTimes
-- `src/features/record/model/useRecordsCalendar.ts`  →  useRecordsCalendar
-- `src/features/record/model/useTripRecords.ts`  →  useTripRecords · useRecordBases · useRecordSavedStays
-- `src/features/record/model/useVisitAttachments.ts`  →  useVisitAttachments
 - `src/features/record/model/useVisitCheck.ts`  →  VisitCheckOutcome · useVisitCheck
 - `src/features/record/model/useVisitMemo.ts`  →  useVisitMemo
-- `src/features/record/model/visitOrder.ts`  →  orderByArrival
 - `src/features/record/model/visitStatus.ts`  →  OPTIMISTIC_VISIT_ID_PREFIX · isOptimisticVisit · VisitStatus · deriveVisitStatus
 
 ## src/features/record/ui/
 - `src/features/record/ui/MemoInline.tsx`  →  MemoInlineProps · MemoInline
-- `src/features/record/ui/PhotoThumbStrip.tsx`  →  PhotoThumbVM · PhotoThumbStripProps · PhotoThumbStrip
 - `src/features/record/ui/RecordGlyphs.tsx`  →  VisitCheckDoneGlyph · VisitCheckActiveGlyph · VisitCheckUpcomingGlyph · VisitCheckSkippedGlyph · PlusGlyph · NoteGlyph · WarningTriangleGlyph · RetryGlyph · BackArrowGlyph · ChevronRightGlyph · LegendChevronGlyph · ChevronDownGlyph · InfoCircleGlyph · GpsOffGlyph · CalendarGlyph · CloseGlyph
-- `src/features/record/ui/SkipVisitDialog.tsx`  →  SkipVisitDialog
-- `src/features/record/ui/SpontaneousVisitButton.tsx`  →  SpontaneousVisitButtonProps · SpontaneousVisitButton
-- `src/features/record/ui/VisitRecordCard.tsx`  →  VisitRecordCardVM · VisitRecordCardProps · VisitRecordCard
-- `src/features/record/ui/VisitRecordCardContainer.tsx`  →  VisitRecordCardContainerProps · VisitRecordCardContainer
-- `src/features/record/ui/VisitTimeSheet.tsx`  →  VisitTimeSheetProps · VisitTimeSheet
 
 ## src/features/reflection/model/
-- `src/features/reflection/model/editCard.ts`  →  buildEditCard
 - `src/features/reflection/model/formatKm.ts`  →  formatKm
-- `src/features/reflection/model/missingParts.ts`  →  LocationPermissionState · MapNoticeReason · MapNotice · MissingParts · missingParts
-- `src/features/reflection/model/reflectionFallback.ts`  →  resolveDisplayNarrative
 - `src/features/reflection/model/shareCapture.ts`  →  SaveShareCardResult · ShareShareCardResult · isShareCaptureArmed · saveShareCardImage · shareShareCardImage
 - `src/features/reflection/model/shareCaptureNative.ts`  →  captureRef · requestPermissionsAsync · saveToLibraryAsync · shareAsync
 - `src/features/reflection/model/shareCard.ts`  →  ShareFormat · SHARE_FORMATS · ShareCardMode · ShareCardVM · BuildShareCardInput · buildShareCard · formatShareCardStats · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · validateCaption · validateHashtags
-- `src/features/reflection/model/statsCard.ts`  →  statsCard
 - `src/features/reflection/model/summaryStats.ts`  →  SummaryStatCells · summaryStats
 - `src/features/reflection/model/summaryView.ts`  →  OrderedVisit · shareEnabled · resolveSummaryView · toOrderedVisitList · distanceSourceLabel · daySubtitle
-- `src/features/reflection/model/useDailyReflection.ts`  →  UseDailyReflectionResult · useDailyReflection
-- `src/features/reflection/model/useStyleAnalysis.ts`  →  useStyleAnalysis
 - `src/features/reflection/model/useTripSummary.ts`  →  UseTripSummaryResult · useTripSummary
 
 ## src/features/reflection/ui/
@@ -484,6 +463,13 @@
 
 ## src/pages/daily-reflection/
 - `src/pages/daily-reflection/index.ts`  →  DailyReflectionPage
+
+## src/pages/daily-reflection/model/
+- `src/pages/daily-reflection/model/editCard.ts`  →  buildEditCard
+- `src/pages/daily-reflection/model/missingParts.ts`  →  LocationPermissionState · MapNoticeReason · MapNotice · MissingParts · missingParts
+- `src/pages/daily-reflection/model/reflectionFallback.ts`  →  resolveDisplayNarrative
+- `src/pages/daily-reflection/model/statsCard.ts`  →  statsCard
+- `src/pages/daily-reflection/model/useDailyReflection.ts`  →  UseDailyReflectionResult · useDailyReflection
 
 ## src/pages/daily-reflection/ui/
 - `src/pages/daily-reflection/ui/ChangeSummaryRow.tsx`  →  ChangeSummaryRowProps · ChangeSummaryRow
@@ -847,6 +833,10 @@
 ## src/pages/records-calendar/
 - `src/pages/records-calendar/index.ts`  →  RecordsCalendarPage
 
+## src/pages/records-calendar/model/
+- `src/pages/records-calendar/model/recordsCalendar.ts`  →  markedDaysOfMonth · buildPastTripCards · LegendRow · MonthLegends · buildMonthLegends · canOpenTripRecords · recordsTripIdForDate · openableTripIds · OngoingTripEntry · OngoingTripCardVM · pickOngoingTrip · formatTripDateRange · nightsLabel
+- `src/pages/records-calendar/model/useRecordsCalendar.ts`  →  useRecordsCalendar
+
 ## src/pages/records-calendar/ui/
 - `src/pages/records-calendar/ui/PastTripList.tsx`  →  PastTripListProps · PastTripList
 - `src/pages/records-calendar/ui/RecordsCalendarPage.tsx`  →  RecordsCalendarPage
@@ -998,6 +988,7 @@
 
 ## src/pages/travel-style/model/
 - `src/pages/travel-style/model/styleThreshold.ts`  →  categoryLabel
+- `src/pages/travel-style/model/useStyleAnalysis.ts`  →  useStyleAnalysis
 
 ## src/pages/travel-style/ui/
 - `src/pages/travel-style/ui/CategoryBarList.tsx`  →  CategoryBarListProps · CategoryBarList
@@ -1045,9 +1036,24 @@
 ## src/pages/trip-records/
 - `src/pages/trip-records/index.ts`  →  TripRecordsPage
 
+## src/pages/trip-records/model/
+- `src/pages/trip-records/model/adjustTimesDraft.ts`  →  AdjustTimesViolation · AdjustTimesDraftResult · adjustTimesDraft
+- `src/pages/trip-records/model/photoAvailability.ts`  →  PhotoAvailability · photoAvailability
+- `src/pages/trip-records/model/stayAttribution.ts`  →  AttributedStay · DayAttribution · deriveStayAttribution
+- `src/pages/trip-records/model/useAdjustVisitTimes.ts`  →  VISIT_CONFLICT_NOTICE · AdjustVisitTimesOutcome · useAdjustVisitTimes
+- `src/pages/trip-records/model/useTripRecords.ts`  →  useTripRecords · useRecordBases · useRecordSavedStays
+- `src/pages/trip-records/model/useVisitAttachments.ts`  →  useVisitAttachments
+- `src/pages/trip-records/model/visitOrder.ts`  →  orderByArrival
+
 ## src/pages/trip-records/ui/
+- `src/pages/trip-records/ui/PhotoThumbStrip.tsx`  →  PhotoThumbVM · PhotoThumbStripProps · PhotoThumbStrip
+- `src/pages/trip-records/ui/SkipVisitDialog.tsx`  →  SkipVisitDialog
+- `src/pages/trip-records/ui/SpontaneousVisitButton.tsx`  →  SpontaneousVisitButtonProps · SpontaneousVisitButton
 - `src/pages/trip-records/ui/TripRecordsPage.tsx`  →  TripRecordsPageProps · TripRecordsPage
 - `src/pages/trip-records/ui/TripRecordsView.tsx`  →  TripRecordsDayTab · DayAttributionHeader · RecordPlanRowVM · TripRecordsViewProps · TripRecordsView
+- `src/pages/trip-records/ui/VisitRecordCard.tsx`  →  VisitRecordCardVM · VisitRecordCardProps · VisitRecordCard
+- `src/pages/trip-records/ui/VisitRecordCardContainer.tsx`  →  VisitRecordCardContainerProps · VisitRecordCardContainer
+- `src/pages/trip-records/ui/VisitTimeSheet.tsx`  →  VisitTimeSheetProps · VisitTimeSheet
 
 ## src/pages/trip-summary/
 - `src/pages/trip-summary/index.ts`  →  TripSummaryPage
