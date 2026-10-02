@@ -4,7 +4,7 @@ import { readDevicePosition } from '@/shared/location/readDevicePosition';
 import {
   buildGpsOrigin,
   type ReplanOrigin,
-} from '@/features/planb/model/replanOrigin';
+} from '@/features/request-replan/model/replanOrigin';
 
 /**
  * TRIP-979 · 재계획 요청 직전 GPS origin 을 1회 읽는 seam(동의 GET + 단말 권한 + 측위).

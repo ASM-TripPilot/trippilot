@@ -11,7 +11,7 @@ import { useLiveItinerary } from '@/features/execution/model/useLiveItinerary';
 import { deriveVisitProgress } from '@/entities/itinerary-slot/lib/visitProgress';
 import { formatCoPickDayHeader } from '@/features/itinerary/model/draftView';
 import { readFromInstant } from '../model/replanFromInstant';
-import { deriveReplanMapAnchor } from '@/features/planb/model/replanMapCenter';
+import { deriveReplanMapAnchor } from '@/features/request-replan/model/replanMapCenter';
 import { resolveReplanState } from '../model/replanState';
 import { useReplanSession } from '../model/useReplanSession';
 import {

@@ -7,7 +7,7 @@ import { formatDistance } from '@/entities/place/lib/formatDistance';
 import { useLiveItinerary } from '@/features/execution/model/useLiveItinerary';
 import { formatCoPickDayHeader } from '@/features/itinerary/model/draftView';
 import { readFromInstant } from '../model/replanFromInstant';
-import { deriveReplanMapAnchor } from '@/features/planb/model/replanMapCenter';
+import { deriveReplanMapAnchor } from '@/features/request-replan/model/replanMapCenter';
 import { resolveReplanState } from '../model/replanState';
 import { useApplyReplan } from '@/features/planb/model/useApplyReplan';
 import { useReplanDiff } from '../model/useReplanDiff';

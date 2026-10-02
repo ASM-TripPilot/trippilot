@@ -8,12 +8,6 @@ paths:
 
 | 파일 | 역할 |
 |---|---|
-| `src/features/planb/model/replanScope.ts` | 범위 카탈로그 — `REPLAN_SCOPES`(`PARTIAL_SLOTS`·`FULL_DAY`)·`DEFAULT_REPLAN_SCOPE`. 와이어값은 ASCII key, 한글은 라벨. |
-| `src/features/planb/model/replanMapCenter.ts` | `deriveReplanMapAnchor({sessionOrigin?, days?, preferredDate?})` — 사다리 `세션 origin(lat·lng 둘 다) ?? 기준 날짜 첫 좌표 슬롯 ?? 일정 첫 좌표 슬롯 ?? REPLAN_MAP_FALLBACK_CENTER`. 슬롯에서 골랐으면 `placeName`도 돌려준다("{장소} 인근(추정)" 라벨 재료). `PlanbSolvingPage`·`PlanbDraftPage`·`LiveLocationPage` 공용(G3 소스 가드가 호출을 강제) |
-| `src/features/planb/model/replanRequest.ts` | `buildStartReplanRequest(values, origin?)` — 폼 값을 `StartReplanRequest` 7키로. 위치 미입력이어도 **`originKind: null`을 반드시 명시**(codegen required·nullable). `origin`이 없으면 `originLat/originLng` **키 자체가 없다**(값 null과 다름), 있으면 9키([[후방호환 옵셔널 파라미터 (additive prop)]]) |
-| `src/features/planb/model/replanOrigin.ts` | `buildManualOrigin`·`buildGpsOrigin`(`{originKind, originLat, originLng}` 정확히 3키)·`isEstimatedOrigin(originKind)`(`!== 'GPS'` — GPS만 실측, 나머지는 전부 "추정"). 파일 헤더의 "test-designer 스텁 — red 유도용" 주석은 낡았다 |
-| `src/features/planb/model/replanFormStore.ts` | Zustand 폼 스토어 `useReplanFormStore` — `scope`·`reasons`(Set)·`directives`(Set)·`freeText`·`sheetOpen`. 시트↔페이지 상태 공유 때문에 페이지 로컬 `useState`가 아니다 |
-| `src/features/planb/model/useStartReplan.ts` | codegen 세션 생성 훅의 얇은 래퍼 — 통합 테스트가 이 심볼을 목 seam으로 잠그므로 페이지가 codegen 훅을 직접 부르지 않는다 |
 | `src/features/planb/model/slackTime.ts` | `slackTime` — 두 확정 시각(`HH:mm[:ss]`)의 차를 `여유 N시간 M분`/`여유 없음`으로(wall-clock 미사용, `split(':')`). **프로덕션 소비처 0**(`SlotCandidateSheet`는 주석뿐, 문자열은 props로 받음 — 프리뷰 픽스처만 산출 형태를 흉내) — PBT-U4-F2(되파싱 오라클)가 유일 심판(INV-3 소스 스캔은 TRIP-1145에서 삭제). [[두 확정 시각의 차 — 여유(slack) 계산]] |
 | `src/features/planb/model/useSlotCandidates.ts` | codegen 슬롯 후보 POST passthrough. ⚠️ 프로덕션 소비처 0 |
 | `src/features/planb/ui/PlanbGlyphs.tsx` | 로컬 복제 글리프(`AppliedAlertGlyph`·`RiskWarningGlyph`·`ChevronRightGlyph`·`LockGlyph`) — 다른 feature 동명 글리프는 import 금지라 복제한다 |

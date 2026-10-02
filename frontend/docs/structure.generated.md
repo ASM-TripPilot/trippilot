@@ -376,18 +376,12 @@
 
 ## src/features/planb/model/
 - `src/features/planb/model/appliedSummary.ts`  →  AppliedSummaryInput · appliedSummaryBadges
-- `src/features/planb/model/replanFormStore.ts`  →  ReplanFormState · useReplanFormStore
-- `src/features/planb/model/replanMapCenter.ts`  →  REPLAN_MAP_FALLBACK_CENTER · deriveReplanMapAnchor
-- `src/features/planb/model/replanOrigin.ts`  →  ReplanOrigin · buildManualOrigin · buildGpsOrigin · isEstimatedOrigin
-- `src/features/planb/model/replanRequest.ts`  →  ReplanFormValues · buildStartReplanRequest
-- `src/features/planb/model/replanScope.ts`  →  ReplanScopeOption · REPLAN_SCOPES · DEFAULT_REPLAN_SCOPE
 - `src/features/planb/model/slackTime.ts`  →  slackTime
 - `src/features/planb/model/triggerLabel.ts`  →  TriggerLabel · TRIGGER_LABELS · triggerLabel
 - `src/features/planb/model/triggerPillCopy.ts`  →  TriggerPillSlot · triggerPillCopy
 - `src/features/planb/model/useActiveTriggers.ts`  →  useActiveTriggers
 - `src/features/planb/model/useApplyReplan.ts`  →  useApplyReplan
 - `src/features/planb/model/useSlotCandidates.ts`  →  useSlotCandidates
-- `src/features/planb/model/useStartReplan.ts`  →  useStartReplan
 
 ## src/features/planb/ui/
 - `src/features/planb/ui/PlanbGlyphs.tsx`  →  AppliedAlertGlyph · RiskWarningGlyph · ChevronRightGlyph · LockGlyph
@@ -417,6 +411,14 @@
 
 ## src/features/reflection/ui/
 - `src/features/reflection/ui/ReflectionGlyphs.tsx`  →  BackArrowGlyph · LocationOffGlyph · PhotoOffGlyph · EmptyCircleGlyph · RetryGlyph · MoodSadGlyph · MoodSosoGlyph · MoodGoodGlyph
+
+## src/features/request-replan/model/
+- `src/features/request-replan/model/replanFormStore.ts`  →  ReplanFormState · useReplanFormStore
+- `src/features/request-replan/model/replanMapCenter.ts`  →  REPLAN_MAP_FALLBACK_CENTER · deriveReplanMapAnchor
+- `src/features/request-replan/model/replanOrigin.ts`  →  ReplanOrigin · buildManualOrigin · buildGpsOrigin · isEstimatedOrigin
+- `src/features/request-replan/model/replanRequest.ts`  →  ReplanFormValues · buildStartReplanRequest
+- `src/features/request-replan/model/replanScope.ts`  →  ReplanScopeOption · REPLAN_SCOPES · DEFAULT_REPLAN_SCOPE
+- `src/features/request-replan/model/useStartReplan.ts`  →  useStartReplan
 
 ## src/features/save-place/model/
 - `src/features/save-place/model/placeSaveGuard.ts`  →  PlaceSaveNotice · hasUsableCoords · SAVE_FAILURE_NOTICE · COORD_BLOCKED_NOTICE · REMOVE_FAILURE_NOTICE

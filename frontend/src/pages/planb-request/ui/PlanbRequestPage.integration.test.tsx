@@ -6,8 +6,8 @@ import {
   waitFor,
 } from '@testing-library/react-native';
 
-import { useReplanFormStore } from '@/features/planb/model/replanFormStore';
-import type { ReplanOrigin } from '@/features/planb/model/replanOrigin';
+import { useReplanFormStore } from '@/features/request-replan/model/replanFormStore';
+import type { ReplanOrigin } from '@/features/request-replan/model/replanOrigin';
 import type {
   Itinerary,
   Trigger,
@@ -68,7 +68,7 @@ const mockReplace = jest.fn();
 const mockNavigate = jest.fn();
 const mockBack = jest.fn();
 
-jest.mock('@/features/planb/model/useStartReplan', () => ({
+jest.mock('@/features/request-replan/model/useStartReplan', () => ({
   useStartReplan: () => ({
     mutate: mockMutate,
     isPending: false,
