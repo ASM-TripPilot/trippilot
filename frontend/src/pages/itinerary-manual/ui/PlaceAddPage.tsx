@@ -7,8 +7,8 @@ import { ActivityIndicator, Keyboard, Text, View } from 'react-native';
 import {
   addSlot,
   insertSlotAt,
-} from '@/features/itinerary/model/itineraryEditStore';
-import { buildEditItineraryRequest } from '@/features/itinerary/model/buildEditItineraryRequest';
+} from '@/features/edit-itinerary/model/itineraryEditStore';
+import { buildEditItineraryRequest } from '@/features/edit-itinerary/model/buildEditItineraryRequest';
 import { buildDraftPins } from '@/features/itinerary/model/draftView';
 import { useMultiRegionPlaces } from '@/features/explore/model/useMultiRegionPlaces';
 import { usePlacesInfinite } from '@/features/explore/model/usePlacesInfinite';

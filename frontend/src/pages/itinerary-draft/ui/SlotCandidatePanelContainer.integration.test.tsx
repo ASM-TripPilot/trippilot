@@ -12,7 +12,7 @@ import {
 
 import { server } from '@/mocks/server';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
-import { SLOT_SWAP_CONFLICT_CODES } from '@/features/itinerary/model/slotSwapError';
+import { SLOT_SWAP_CONFLICT_CODES } from '@/features/edit-itinerary/model/slotSwapError';
 import type {
   EditItineraryRequest,
   Itinerary,

@@ -74,7 +74,7 @@ paths:
 | `src/features/itinerary/model/itineraryDestination.test.ts` | `resolveItineraryDestination` 표 전수 `it.each`(404→method … CONFIRMED→live), 입력 타입은 함수 시그니처에 고정 |
 | `src/pages/itinerary-method/ui/MethodPickerScreen.test.tsx` | h04 방식 선택 — 차단 사유(BR-U3-01)·안내 액션·뒤로 무회귀 |
 | `src/pages/itinerary-plan/ui/ItineraryPlanPage.integration.test.tsx` | 「탈출구 — 뒤로·일정 만들기」 describe: h25 4얼굴 탈출구 — msw로 얼굴 강제(훅 목 금지) + `useRouter` 4메서드 목. 딥링크(`canGoBack()===false`)는 `replace('/(tabs)')` 완전일치(`/(tabs)/itinerary`는 리다이렉트 함정) |
-| `src/features/itinerary/model/itineraryEditStore.addSlot.test.ts` | `addSlot` 순수함수 — 비파괴 append + 읽기전용 5필드 키 완전일치(여분 키 누출 차단) |
+| `src/features/edit-itinerary/model/itineraryEditStore.addSlot.test.ts` | `addSlot` 순수함수 — 비파괴 append + 읽기전용 5필드 키 완전일치(여분 키 누출 차단) |
 | `src/pages/itinerary-manual/ui/ManualPlanPage.hookMock.test.tsx` | h19 배선 — 마운트 POST 1회·여분 키 0. 폴백 배너 부재 단언은 이 표면에 폴백 경로가 없어 지금은 공허 통과(미래 회귀 트립와이어) |
 | `src/pages/itinerary-manual/ui/PlaceAddPage.integration.test.tsx` | h20 배선 — 검색·클라 필터·카테고리 재조회. **add→PUT 전체 플로우는 범위 밖**(캐시 무효화 회귀 심판 없음) |
 | `src/entities/itinerary-slot/lib/categoryPlaceholder.test.ts` | `resolveCategoryPlaceholder` 매핑 — 7종 `tintClass` 완전일치·폴백·iconKey distinct. 프로토타입 키 입력은 다루지 않는다 |

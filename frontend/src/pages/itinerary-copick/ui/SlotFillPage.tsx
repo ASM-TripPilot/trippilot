@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { View } from 'react-native';
 
-import { buildEditItineraryRequest } from '@/features/itinerary/model/buildEditItineraryRequest';
+import { buildEditItineraryRequest } from '@/features/edit-itinerary/model/buildEditItineraryRequest';
 import { resolveCandidateSelection } from '../model/candidateSelection';
 import {
   countPickedCoPickSlots,
@@ -20,8 +20,8 @@ import { isConfirmLocked } from '@/features/itinerary/model/planState';
 import { formatRadiusUsed } from '../model/radiusUsedLabel';
 import { formatDistance } from '@/entities/place/lib/formatDistance';
 import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
-import { resolveSlotSwapError } from '@/features/itinerary/model/slotSwapError';
-import { swapSlotPoi } from '@/features/itinerary/model/swapSlotPoi';
+import { resolveSlotSwapError } from '@/features/edit-itinerary/model/slotSwapError';
+import { swapSlotPoi } from '@/features/edit-itinerary/model/swapSlotPoi';
 import { timeBandLabel } from '@/entities/itinerary-slot/lib/timeBandLabel';
 import {
   ConceptPickerScreen,
