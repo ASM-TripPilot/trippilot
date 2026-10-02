@@ -18,7 +18,7 @@ import { buildPlanDayTabs } from '@/features/itinerary/model/planState';
 import { SaveConflictDialog } from '@/features/itinerary/ui/SaveConflictDialog';
 import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
 import { useSavedStays } from '@/features/trip/model/useSavedStays';
-import { useTripBases } from '@/features/trip/model/useTripBases';
+import { useTripBases } from '@/features/assign-trip-base/model/useTripBases';
 import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
 import {

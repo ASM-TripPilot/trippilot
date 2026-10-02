@@ -7,8 +7,11 @@ import { server } from '@/mocks/server';
 import { setAccessToken, clearAccessToken } from '@/shared/api/tokenManager';
 import type { BaseAssignment, SavedStay } from '@/shared/api/generated/schemas';
 
-import { useSavedStays } from './useSavedStays';
-import { useAssignBase, useTripBases } from './useTripBases';
+import { useSavedStays } from '@/features/trip/model/useSavedStays';
+import {
+  useAssignBase,
+  useTripBases,
+} from '@/features/assign-trip-base/model/useTripBases';
 
 /**
  * TRIP-225 g02 — 거점 조회·배정 훅이 **실제로 나간 요청**으로 계약을 지킨다.

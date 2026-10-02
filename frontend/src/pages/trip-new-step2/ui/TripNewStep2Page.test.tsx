@@ -97,7 +97,7 @@ jest.mock('../model/useStayAddresses', () => ({
     ),
 }));
 
-jest.mock('@/features/trip/model/useTripBases', () => {
+jest.mock('@/features/assign-trip-base/model/useTripBases', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const React = require('react');
   return {

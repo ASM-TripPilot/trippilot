@@ -78,7 +78,7 @@ jest.mock('@/features/trip/model/useSavedStays', () => ({
   useSavedStays: () => mockSavedStaysResult,
 }));
 
-jest.mock('@/features/trip/model/useTripBases', () => ({
+jest.mock('@/features/assign-trip-base/model/useTripBases', () => ({
   useTripBases: () => ({
     data: [] as BaseAssignment[],
     isPending: false,

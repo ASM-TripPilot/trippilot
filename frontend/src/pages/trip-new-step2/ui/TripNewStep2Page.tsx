@@ -11,7 +11,7 @@ import { useStayAddresses } from '../model/useStayAddresses';
 import {
   useAssignBase,
   useTripBases,
-} from '@/features/trip/model/useTripBases';
+} from '@/features/assign-trip-base/model/useTripBases';
 import { StaySelectSheet, type StaySelectCandidate } from './StaySelectSheet';
 import type { TripDestination } from '@/shared/api/generated/schemas';
 import { guardPress, openPressGuardWindow } from '@/shared/press/pressGuard';
