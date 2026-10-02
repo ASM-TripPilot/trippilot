@@ -45,7 +45,7 @@ const mockReplace = jest.fn();
 const mockNavigate = jest.fn();
 const mockBack = jest.fn();
 
-jest.mock('@/features/planb/model/useApplyReplan', () => ({
+jest.mock('@/features/apply-replan/model/useApplyReplan', () => ({
   useApplyReplan: () => ({
     mutate: mockApplyMutate,
     isPending: mockApplyPhase === 'pending',

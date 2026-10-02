@@ -3,7 +3,7 @@ import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { useApplyReplan } from '@/features/planb/model/useApplyReplan';
+import { useApplyReplan } from '@/features/apply-replan/model/useApplyReplan';
 import { useCancelReplan } from '../model/useCancelReplan';
 import { AppliedAlertGlyph } from '@/features/planb/ui/PlanbGlyphs';
 import { StateNotice } from '@/shared/ui/StateNotice';

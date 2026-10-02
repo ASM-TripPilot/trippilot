@@ -45,7 +45,7 @@ jest.mock('../model/useReplanSession', () => ({
 
 const mockMutate = jest.fn();
 const mockApply = { isPending: false, isError: false };
-jest.mock('@/features/planb/model/useApplyReplan', () => ({
+jest.mock('@/features/apply-replan/model/useApplyReplan', () => ({
   useApplyReplan: () => ({
     mutate: mockMutate,
     isPending: mockApply.isPending,

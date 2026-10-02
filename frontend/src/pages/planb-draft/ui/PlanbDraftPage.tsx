@@ -9,7 +9,7 @@ import { formatCoPickDayHeader } from '@/features/itinerary/model/draftView';
 import { readFromInstant } from '../model/replanFromInstant';
 import { deriveReplanMapAnchor } from '@/features/request-replan/model/replanMapCenter';
 import { resolveReplanState } from '../model/replanState';
-import { useApplyReplan } from '@/features/planb/model/useApplyReplan';
+import { useApplyReplan } from '@/features/apply-replan/model/useApplyReplan';
 import { useReplanDiff } from '../model/useReplanDiff';
 import { useReplanSession } from '../model/useReplanSession';
 import type {

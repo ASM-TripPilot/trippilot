@@ -281,6 +281,9 @@
 ## src/features/add-must-visit/model/
 - `src/features/add-must-visit/model/mustVisitTimeForm.ts`  →  DwellKey · MustVisitTimeForm · DWELL_OPTIONS · DEFAULT_DWELL_KEY · tripDayChips · startTimeOptions · startTimeLabel · mustVisitTimeBlockReason · canSubmitMustVisitTime · buildFixedMustVisitRequest · buildAnytimeMustVisitRequest
 
+## src/features/apply-replan/model/
+- `src/features/apply-replan/model/useApplyReplan.ts`  →  useApplyReplan
+
 ## src/features/assign-trip-base/model/
 - `src/features/assign-trip-base/model/baseAssignPlan.ts`  →  BaseAssignPlan · planBaseAssign
 - `src/features/assign-trip-base/model/useTripBases.ts`  →  useTripBases · useAssignBase
@@ -380,7 +383,6 @@
 - `src/features/planb/model/triggerLabel.ts`  →  TriggerLabel · TRIGGER_LABELS · triggerLabel
 - `src/features/planb/model/triggerPillCopy.ts`  →  TriggerPillSlot · triggerPillCopy
 - `src/features/planb/model/useActiveTriggers.ts`  →  useActiveTriggers
-- `src/features/planb/model/useApplyReplan.ts`  →  useApplyReplan
 - `src/features/planb/model/useSlotCandidates.ts`  →  useSlotCandidates
 
 ## src/features/planb/ui/
