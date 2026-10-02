@@ -138,6 +138,63 @@ const layerZones = [
   },
 ];
 
+// ── 공개 API 강제(TRIP-1157) ───────────────────────────────────────────────────────────
+// 슬라이스 밖에서는 그 슬라이스의 공개 API(index*.ts)로만 import 한다 — 딥 경로 금지. shared 는 세그먼트
+// index*(shared/ui·lib 는 루트 직속 파일 + 하위 폴더 index*). 진입점은 index.ts 와 `index.<이름>.ts`(예:
+// 네트워크 없는 `index.view.ts`, shared/api 의 `index.schemas.ts`·`index.hooks.ts`)를 함께 허용한다.
+// 대상(target)은 각 슬라이스와 app·app-shell 이다. 자기 슬라이스 안은 except 로 허용, entities 는 @x 창구도 허용.
+// 테스트·목·`_dev` 는 이 zone 밖이다(jest.mock 은 정의 모듈을 겨눠야 index 소비처까지 가로챈다).
+// import·export-from·import()·함수 안 require() 를 모두 잡는다(eslint-plugin-import 2.32.0 실측).
+const PUBLIC_API = [
+  ...[
+    ['pages', PAGES],
+    ['widgets', WIDGETS],
+    ['features', FEATURES],
+    ['entities', ENTITIES],
+  ].flatMap(([layer, slices]) =>
+    slices.map((slice) => path.join(SRC, layer, slice, 'index*.{ts,tsx}'))
+  ),
+  path.join(SRC, 'shared', '*', 'index*.{ts,tsx}'),
+  path.join(SRC, 'shared', '{ui,lib}', '*.{ts,tsx}'),
+  path.join(SRC, 'shared', '{ui,lib}', '*', 'index*.{ts,tsx}'),
+];
+const BELOW_APP = [
+  layerGlob('pages'),
+  layerGlob('widgets'),
+  layerGlob('features'),
+  layerGlob('entities'),
+  layerGlob('shared'),
+];
+const DEEP_MESSAGE =
+  '슬라이스 밖에서는 공개 API(index.ts·index.<이름>.ts)로만 import 한다 — 딥 경로 금지(TRIP-1157).';
+const deepZones = [
+  ...[
+    ['pages', PAGES],
+    ['widgets', WIDGETS],
+    ['features', FEATURES],
+    ['entities', ENTITIES],
+  ].flatMap(([layer, slices]) =>
+    slices.map((slice) => ({
+      target: layerGlob(layer, slice),
+      from: BELOW_APP,
+      except: [
+        ...PUBLIC_API,
+        layerGlob(layer, slice),
+        ...(layer === 'entities'
+          ? [layerGlob('entities', '*', '@x', slice)]
+          : []),
+      ],
+      message: DEEP_MESSAGE,
+    }))
+  ),
+  ...['app', 'app-shell'].map((layer) => ({
+    target: layerGlob(layer),
+    from: BELOW_APP,
+    except: PUBLIC_API,
+    message: DEEP_MESSAGE,
+  })),
+];
+
 // ── 출시·보안 금지(TRIP-1145 — 소스 스캔에서 옮겨 왔다) ────────────────────────────────
 // ⚠️ flat config 는 같은 규칙을 거는 블록이 여럿이면 뒤 블록 옵션이 앞 블록을 **통째로 덮는다**(합쳐지지
 //    않는다). 그래서 예외 파일(StateNotice·캡처 어댑터) 블록은 아래 공통 목록을 펼쳐 다시 선언한다.
@@ -259,6 +316,18 @@ module.exports = defineConfig([
       'import/no-restricted-paths': ['error', { zones: layerZones }],
       // NativeWind 전역 스타일은 side-effect import 이며 확장자 resolver 대상이 아니다.
       'import/no-unresolved': ['error', { ignore: ['\\.css$'] }],
+    },
+  },
+  {
+    // 공개 API 강제(TRIP-1157) — 프로덕션 파일만. 같은 규칙이라 층 zone 을 펼쳐 함께 선언한다(위 ⚠️ 덮어쓰기).
+    // 테스트·목·_dev 는 앞 블록(층 zone 만)이 그대로 남는다.
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: [...TEST_IGNORES, 'src/app/_dev/**'],
+    rules: {
+      'import/no-restricted-paths': [
+        'error',
+        { zones: [...layerZones, ...deepZones] },
+      ],
     },
   },
   {

@@ -239,12 +239,16 @@ describe('AC-3 · 허용 방향은 경계 룰이 침묵한다', () => {
 //    zone 자체가 정확함은 implementer 가 임시 stub(`entities/stay/model/x.ts`)으로 뮤테이션(zone 제거 →
 //    red · `@x` except 제거 → red)을 green→red 실측해 확인 후 stub 을 지웠다(2026-09-13, 03 0단계 절).
 
-// 본 단계 실파일(입주 후) — features → entities 하향 허용 프로브 대상.
-const REAL_ENTITY_PLACE = '@/entities/place/ui/PlaceRailCard';
+// 본 단계 실파일(입주 후) — features → entities 하향 허용 프로브 대상. TRIP-1157 부터 슬라이스 밖 하향은 공개 API(index)로만
+// 허용되므로 딥 실파일이 아니라 index 를 겨눈다(딥이면 딥 zone 위반).
+const REAL_ENTITY_PLACE = '@/entities/place';
 
 // TRIP-807 입주 실파일 — 806 이 it.todo 로 보류한 entities 형제 차단·하향 프로브를 이 실파일로 활성화한다.
 // stay 슬라이스가 생기면 eslint 층 zone(readSlices('entities'))이 자동 편입해 place→stay 가 경계 위반이 된다.
 const REAL_ENTITY_STAY = '@/entities/stay/ui/StaySearchCard';
+
+// TRIP-1157 공개 API — 하향 허용 프로브는 index 를 겨눈다(딥 실파일은 딥 zone 위반). 형제 차단 프로브는 위 딥 실파일 그대로.
+const ENTITY_STAY_API = '@/entities/stay';
 
 describe('AC-P0-3 · 같은 층 형제 슬라이스는 서로 import 하지 못한다', () => {
   // 🔴 pages 슬라이스 간 직접 import → 경계 위반(실파일이라 no-unresolved 아님).
@@ -298,7 +302,8 @@ describe('AC-M8 · [본 단계] entities 입주 후 하향 허용 방향은 erro
   // 🔴 features/** → @/entities/place/ui/* 는 실파일 딥 경로라 이제 error 0 을 단언한다
   //    (구 EMPTY_ENTITIES "경계 미발화"보다 강함, widgets D9 승격 선례). place 파일 생성 전엔
   //    no-unresolved 로 red → 생성 후 green.
-  it('features/** → @/entities/place/ui 실파일은 위반 0', async () => {
+  // TRIP-1157: 슬라이스 밖 하향 import 는 공개 API(index)로만 — 딥 실파일 대상은 이제 딥 zone 위반이라 index 로 겨눈다.
+  it('features/** → @/entities/place 공개 API 는 위반 0', async () => {
     const ruleIds = await lint(
       `import '${REAL_ENTITY_PLACE}';\n`,
       'src/features/home/__layer_probe__.ts'
@@ -309,9 +314,9 @@ describe('AC-M8 · [본 단계] entities 입주 후 하향 허용 방향은 erro
 
   // 🔴 TRIP-807 — features → @/entities/stay/ui 하향(허용 방향)도 실파일 생성 후 error 0.
   //    생성 전엔 no-unresolved 로 red → 생성 후 green(place 프로브 동형).
-  it('features/** → @/entities/stay/ui 실파일은 위반 0', async () => {
+  it('features/** → @/entities/stay 공개 API 는 위반 0', async () => {
     const ruleIds = await lint(
-      `import '${REAL_ENTITY_STAY}';\n`,
+      `import '${ENTITY_STAY_API}';\n`,
       'src/features/home/__layer_probe__.ts'
     );
 
@@ -695,6 +700,146 @@ describe('pages·app 은 아무것도 안 하는 핸들러를 넘기지 않는�
     ],
   ])('%s 는 error 0', async (_label, attr) => {
     const ruleIds = await lint(pressable(attr), PAGE_PROBE);
+
+    expect(ruleIds).toEqual([]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRIP-1157 · 공개 API 강제 — 슬라이스(·shared 세그먼트) 밖에서는 index*(공개 API)로만 import 한다.
+//
+// 딥 zone 은 층 zone 과 같은 규칙(import/no-restricted-paths)이라 룰 ID 로는 못 가른다 → 메시지의
+// TRIP-1157 표식으로 센다. 대상은 전부 실파일(해석돼야 경계 규칙이 뜬다 — 미해석이면 no-unresolved 로 샌다).
+// 프로브 위치(filePath)도 실슬라이스여야 한다 — zone target 은 readSlices 가 읽은 슬라이스뿐이라
+// `src/pages/__probe__` 같은 가짜 폴더에서는 딥 zone 이 원리적으로 안 뜬다.
+// 테스트·_dev 는 zone 밖이다(jest.mock 은 정의 모듈을 겨눠야 index 소비처까지 가로챈다 — 01 §5 실측 A·C).
+
+const DEEP_TAG = 'TRIP-1157';
+async function deepHits(code: string, filePath: string): Promise<number> {
+  const [result] = await eslint.lintText(code, {
+    filePath: path.resolve(filePath),
+  });
+  return result.messages.filter(
+    (m) =>
+      m.severity === 2 &&
+      m.ruleId === BOUNDARY_RULE &&
+      m.message.includes(DEEP_TAG)
+  ).length;
+}
+
+const HOME_PAGE_PROBE = 'src/pages/home/ui/__deep_probe__.tsx';
+
+describe('TRIP-1157 · 슬라이스 밖 딥 import 는 공개 API 위반이다', () => {
+  it.each([
+    [
+      'pages → features 내부(import)',
+      HOME_PAGE_PROBE,
+      `import '@/features/home/ui/HomeGlyphs';\n`,
+    ],
+    [
+      'pages → features 내부(export-from)',
+      HOME_PAGE_PROBE,
+      `export { HomeGlyph } from '@/features/home/ui/HomeGlyphs';\n`,
+    ],
+    [
+      'pages → features 내부(import())',
+      HOME_PAGE_PROBE,
+      `export const load = () => import('@/features/home/ui/HomeGlyphs');\n`,
+    ],
+    [
+      'pages → features 내부(함수 안 require)',
+      HOME_PAGE_PROBE,
+      `export const load = () => require('@/features/home/ui/HomeGlyphs');\n`,
+    ],
+    [
+      'widgets → entities 내부',
+      'src/widgets/time-sheet/ui/__deep_probe__.tsx',
+      `import '@/entities/itinerary-slot/lib/endsNextDay';\n`,
+    ],
+    [
+      'features → entities 내부',
+      'src/features/home/ui/__deep_probe__.tsx',
+      `import '@/entities/place/ui/PlaceRailCard';\n`,
+    ],
+    [
+      'features → entities 의 model 폴더 index(슬라이스 루트 아님)',
+      'src/features/home/ui/__deep_probe__.tsx',
+      `import '@/entities/place/model';\n`,
+    ],
+    [
+      'entities → shared 세그먼트 내부',
+      'src/entities/place/ui/__deep_probe__.tsx',
+      `import '@/shared/date/seoulDate';\n`,
+    ],
+    [
+      'pages → shared/ui 하위 폴더 내부',
+      HOME_PAGE_PROBE,
+      `import '@/shared/ui/pref/PrefChip';\n`,
+    ],
+    [
+      'features → 생성 스키마 내부(진입점은 index.schemas)',
+      'src/features/home/ui/__deep_probe__.tsx',
+      `import '@/shared/api/generated/schemas';\n`,
+    ],
+    [
+      '라우트(app) → features 내부',
+      'src/app/(tabs)/__deep_probe__.tsx',
+      `import '@/features/home/ui/HomeGlyphs';\n`,
+    ],
+    [
+      'app-shell → shared 세그먼트 내부',
+      'src/app-shell/ui/__deep_probe__.tsx',
+      `import '@/shared/date/seoulDate';\n`,
+    ],
+  ])('%s 는 딥 zone(TRIP-1157) error', async (_label, filePath, code) => {
+    const ruleIds = await lint(code, filePath);
+
+    expect(await deepHits(code, filePath)).toBeGreaterThan(0);
+    expect(ruleIds).not.toContain(UNRESOLVED_RULE);
+  });
+});
+
+describe('TRIP-1157 · 공개 API·자기 슬라이스·테스트·_dev 는 딥 zone 이 침묵한다', () => {
+  it.each([
+    ['슬라이스 index', HOME_PAGE_PROBE, `import '@/features/home';\n`],
+    [
+      'index.<이름> 진입점(index.view)',
+      HOME_PAGE_PROBE,
+      `import '@/features/explore/index.view';\n`,
+    ],
+    ['shared 세그먼트 index', HOME_PAGE_PROBE, `import '@/shared/date';\n`],
+    [
+      'shared/ui 루트 직속 파일(steiger 면제)',
+      HOME_PAGE_PROBE,
+      `import '@/shared/ui/BottomTabBar';\n`,
+    ],
+    [
+      'shared/ui 하위 폴더 index',
+      HOME_PAGE_PROBE,
+      `import '@/shared/ui/pref';\n`,
+    ],
+    [
+      'shared/api 진입점(index.schemas)',
+      HOME_PAGE_PROBE,
+      `import '@/shared/api/index.schemas';\n`,
+    ],
+    [
+      '자기 슬라이스 내부',
+      'src/features/home/model/__deep_probe__.ts',
+      `import '@/features/home/ui/HomeGlyphs';\n`,
+    ],
+    [
+      '테스트 파일의 딥 import',
+      'src/pages/home/ui/__deep_probe__.test.tsx',
+      `import '@/features/home/ui/HomeGlyphs';\n`,
+    ],
+    [
+      '개발 프리뷰(_dev)의 딥 import',
+      'src/app/_dev/__deep_probe__.tsx',
+      `import '@/features/home/ui/HomeGlyphs';\n`,
+    ],
+  ])('%s 는 error 0', async (_label, filePath, code) => {
+    const ruleIds = await lint(code, filePath);
 
     expect(ruleIds).toEqual([]);
   });
