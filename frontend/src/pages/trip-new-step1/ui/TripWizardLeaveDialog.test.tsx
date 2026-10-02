@@ -217,6 +217,7 @@ describe('🔴 AC-11(Q4 모양) · 뷰는 props 만 받는다', () => {
     'axios',
     '@/shared/api',
     '@/features/trip/model',
+    '@/features/create-trip/model',
     '@/pages',
     '@/app',
   ];
@@ -231,13 +232,13 @@ describe('🔴 AC-11(Q4 모양) · 뷰는 props 만 받는다', () => {
   it('탐지기 자가검사 — 금칙 import 는 잡고 react-native 는 통과시킨다', () => {
     const sample = [
       "import { useQueryClient } from '@tanstack/react-query';",
-      "import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';",
+      "import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';",
       "import { Pressable, Text, View } from 'react-native';",
     ].join('\n');
 
     expect(specifiersOf(sample).filter(isForbidden)).toEqual([
       '@tanstack/react-query',
-      '@/features/trip/model/tripWizardStore',
+      '@/features/create-trip/model/tripWizardStore',
     ]);
   });
 

@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 
-import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
 
 /**
  * 여행 생성 위저드 셸(BR-U1-33) — `(tabs)` 밖 몰입 화면이라 탭바가 구조적으로 안 붙는다.

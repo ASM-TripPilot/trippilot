@@ -14,7 +14,7 @@ import {
 import { seoulDate } from '@/shared/date/seoulDate';
 import { SAVE_FAILURE_NOTICE } from '@/features/save-place/model/placeSaveGuard';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
-import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
 import {
   captureDraftAtNextCall,
   freshWizardDraft,

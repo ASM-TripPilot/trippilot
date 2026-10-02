@@ -24,7 +24,7 @@ import { HOME_DEFAULT_PROPS } from '../model/homeFixtures';
 import { applyItineraryTarget, resolveHomePhase } from '../model/homePhase';
 import type { HomePhase, HomeSpotsLane } from '../model/homeTypes';
 import { HomeScreen } from './HomeScreen';
-import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
 
 interface HomeNav {
   onPressCreateTrip: () => void;

@@ -4,8 +4,8 @@ import { useRouter } from 'expo-router';
 import { nightlyBaseCards, toBaseSections } from '../model/baseSections';
 import { sigunguLabel } from '@/features/trip/model/regionMatch';
 import { staySheetSections } from '../model/staySheetSections';
-import { deriveEndDate } from '@/features/trip/model/tripWizardStep1';
-import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { deriveEndDate } from '@/features/create-trip/model/tripWizardStep1';
+import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
 import { useSavedStays } from '@/features/trip/model/useSavedStays';
 import { useStayAddresses } from '../model/useStayAddresses';
 import {

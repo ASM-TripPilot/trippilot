@@ -17,9 +17,9 @@ import {
   getAccessToken,
   setAccessToken,
 } from '@/shared/api/tokenManager';
-import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
-import { seedMustVisits } from '@/features/trip/model/mustVisitSeed';
-import { wizardOriginParams } from '@/features/explore/model/wizardOrigin';
+import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
+import { seedMustVisits } from '@/features/create-trip/model/mustVisitSeed';
+import { wizardOriginParams } from '@/features/create-trip/model/wizardOrigin';
 
 import { TripNewStep1Page } from './TripNewStep1Page';
 

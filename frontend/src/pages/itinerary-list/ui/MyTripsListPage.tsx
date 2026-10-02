@@ -33,7 +33,7 @@ import {
 import { MyTripsListScreen } from './MyTripsListScreen';
 import { MyTripsSortSheet } from './MyTripsSortSheet';
 import { TripDeleteDialog } from './TripDeleteDialog';
-import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
 import { GenerationDoneBar } from './GenerationDoneBar';
 
 import { TripCardContainer } from './TripCardContainer';

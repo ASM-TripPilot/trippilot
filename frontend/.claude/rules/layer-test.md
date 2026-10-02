@@ -96,7 +96,7 @@ paths:
 | `src/pages/settings-personalization/ui/PersonalizationScreen.test.tsx` | reason 3얼굴·목록 개수·토글 배선 — `NOT_ENOUGH_RECORDS`는 토글 ON 유지+동의 문구 부재 |
 | `src/pages/settings-personalization/ui/PersonalizationPage.test.tsx` | 토글 → GRANT/REVOKE — `reason`이 아니라 `applied`로 판정하는 뮤턴트를 잡는 `NOT_ENOUGH_RECORDS` 케이스 포함 · termsVersion 필터 · `invalidateQueries` spy |
 | `src/shared/api/patchConsent.test.ts` | `patchConsent` 와이어 계약 — URL에 termsType, body는 `{action, termsVersion}` 두 필드만 |
-| `src/features/trip/model/tripWizardStore.periodFromNights.test.ts` | 시작·박수 재계산 예시 + fast-check 액션열 PBT(**매 단계 뒤** 끝−시작=Σnights, 오라클은 구현과 다른 계산 경로). `reset()`은 파일 최상위 `beforeEach`+`afterEach` 둘 다 |
+| `src/features/create-trip/model/tripWizardStore.periodFromNights.test.ts` | 시작·박수 재계산 예시 + fast-check 액션열 PBT(**매 단계 뒤** 끝−시작=Σnights, 오라클은 구현과 다른 계산 경로). `reset()`은 파일 최상위 `beforeEach`+`afterEach` 둘 다 |
 | `src/pages/trip-records/model/stayAttribution.test.ts` | (TRIP-1155로 features/record에서 이사) 행동 테스트 + PBT(`baseStay`가 항상 그 날짜를 덮는 base의 함수) + dateTo 경계값 3종 |
 | `src/pages/trip-records/model/photoAvailability.test.ts` | (TRIP-1155로 features/record에서 이사) 진리표 4행(deviceId×assetOk) |
 | `src/pages/trip-records/model/useVisitAttachments.integration.test.tsx` | (TRIP-1155로 features/record에서 이사) msw — addPhoto→GET 재조회 · saveMemo 공백 무시 · savedMemo 시드·같은 값 PUT 0·실패 시 savedMemo 유지 |

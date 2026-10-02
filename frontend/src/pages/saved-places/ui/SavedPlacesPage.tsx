@@ -51,7 +51,7 @@ import {
 } from '@/features/save-place/model/placeSaveGuard';
 import { orderSavedPlaces } from '../model/savedPlaceList';
 import { useSavedPlaces } from '@/features/save-place/model/savedPlaces';
-import { wizardOriginParams } from '@/features/explore/model/wizardOrigin';
+import { wizardOriginParams } from '@/features/create-trip/model/wizardOrigin';
 import { MustVisitOutsideConfirmDialog } from './MustVisitOutsideConfirmDialog';
 import { MustVisitPickScreen } from './MustVisitPickScreen';
 import { SavedPlaceListScreen } from './SavedPlaceListScreen';
@@ -59,13 +59,13 @@ import { buildAnytimeMustVisitRequest } from '@/features/itinerary/model/mustVis
 import {
   mustVisitFailureNotice,
   seedMustVisits,
-} from '@/features/trip/model/mustVisitSeed';
+} from '@/features/create-trip/model/mustVisitSeed';
 import {
   placeLocationLabel,
   regionCodeInTrip,
   sidoKey,
 } from '@/features/trip/model/regionMatch';
-import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
 
 /** 실패 시 재시도가 다시 밟아야 할 마지막 조작 — 해제냐 되돌리기냐를 함께 기억한다. */
 type LastAttempt = { saved: SavedPlace; mode: 'release' | 'restore' };

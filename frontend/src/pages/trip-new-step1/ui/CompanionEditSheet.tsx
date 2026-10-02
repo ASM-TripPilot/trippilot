@@ -41,7 +41,7 @@ import type { CompanionType } from '@/shared/api/generated/schemas';
 import {
   COMPANION_OPTIONS,
   type CompanionCode,
-} from '@/features/trip/model/tripWizardStep1';
+} from '@/features/create-trip/model/tripWizardStep1';
 
 import {
   FamilyGlyph,

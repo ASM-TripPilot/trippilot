@@ -14,7 +14,7 @@ import { useRegions } from '@/features/explore/model/regions';
 import { useSavedPlaces } from '@/features/save-place/model/savedPlaces';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 import { useGetPlaces } from '@/shared/api/generated/places/places';
-import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
 import {
   ExploreLandingScreen,
   type ExploreLandingScreenProps,

@@ -18,7 +18,7 @@ import { resetPressGuard } from '@/shared/press/pressGuard';
 import { formatPrice } from '@/entities/stay/lib/formatPrice';
 import { stayKey } from '@/features/save-stay/model/stayKey';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
-import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
 import {
   captureDraftAtNextCall,
   freshWizardDraft,

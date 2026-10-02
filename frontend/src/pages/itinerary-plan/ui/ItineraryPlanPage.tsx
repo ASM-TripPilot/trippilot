@@ -28,7 +28,7 @@ import {
 } from '@/features/itinerary/ui/ItineraryGlyphs';
 import { UnplacedMustVisitNotice } from '@/features/itinerary/ui/UnplacedMustVisitNotice';
 import { isShareCaptureArmed } from '@/features/reflection/model/shareCapture';
-import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
 import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripId,

@@ -41,7 +41,7 @@ import {
 import { SHEET_HANDLE_INDICATOR_STYLE } from '@/features/trip/lib/sheetHandle';
 
 import { dateCell, type TripDateRange } from '../model/tripDatePicker';
-import { summaryPeriod } from '@/features/trip/model/tripSummary';
+import { summaryPeriod } from '@/features/create-trip/model/tripSummary';
 
 import {
   BackChevronGlyph,

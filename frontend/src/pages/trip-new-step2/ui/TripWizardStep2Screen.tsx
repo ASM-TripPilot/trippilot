@@ -9,7 +9,7 @@ import {
   ChevronRightGlyph,
   WarningTriangleGlyph,
 } from '@/features/trip/ui/TripGlyphs';
-import { formatWizardStep } from '@/features/trip/model/tripSummary';
+import { formatWizardStep } from '@/features/create-trip/model/tripSummary';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
 /**
