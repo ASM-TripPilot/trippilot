@@ -40,6 +40,7 @@ class SecretTests(unittest.TestCase):
         self.assertEqual(seeded["backend"]["JWT_SIGNING_KEY"], "rsa")
         self.assertEqual(seeded["shared"]["SERVICE_AUTH_TOKEN"], "secret")
         self.assertEqual(seeded["backend"]["PLACE_GEOCODE_MODE"], "stub")
+        self.assertEqual(seeded["backend"]["AFFILIATE_MODE"], "fallback")
 
     def test_provider_credentials_fail_before_deployment(self):
         cases = [
@@ -50,10 +51,15 @@ class SecretTests(unittest.TestCase):
             {"ai": {"TRIPPILOT_LLM_PROVIDER": "mixed", "OPENAI_API_KEY": "key"}},
             {"ai": {"TRIPPILOT_LLM_PROVIDER": "typo"}},
             {"backend": {"PLACE_GEOCODE_MODE": "typo"}},
+            {"backend": {"AFFILIATE_MODE": "tripcom"}},
+            {"backend": {"AFFILIATE_MODE": "tripcom", "TRIPCOM_ALLIANCE_ID": "a", "TRIPCOM_SID": "s"}},
+            {"backend": {"AFFILIATE_MODE": "typo"}},
         ]
         for changed in cases:
             with self.subTest(changed=changed), self.assertRaises(ValueError):
                 runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, **changed})
+        runtime_secrets.validate_groups({**{name: {} for name in runtime_secrets.GROUP_KEYS}, "backend": {
+            "AFFILIATE_MODE": "tripcom", "TRIPCOM_ALLIANCE_ID": "a", "TRIPCOM_SID": "s", "TRIPCOM_AD_ID": "D1"}})
 
     def test_google_client_secret_must_stay_empty(self):
         """공개(iOS) 클라이언트에 시크릿을 보내면 Google 이 invalid_client 로 거절한다(2026-09-23 실측).

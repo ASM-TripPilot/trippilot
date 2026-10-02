@@ -2097,11 +2097,13 @@ AI 쪽은 키 표기만 고치면 켜지지만, 백엔드 Plan-B 는 그것과 �
 id = "TRIP-850"
 ticket = "TRIP-850"
 title = "실사용 모드 전환 — 스위치 8종이 전부 가짜/꺼짐 기본값, 환경별 값이 아무 데도 없다"
-status = "todo"
+status = "done"
 migration = false
 touches = [
   "backend/app/src/main/resources/application.yml",
   "docker-compose.yml",
+  "backend/docs/design/실사용-모드-스위치.md",
+  "deploy/eks/runtime_secrets.py",
 ]
 note = """
 환경별 값 표 + 키 발급 상태 목록 + 기동 차단 조합 문서화. 숙소 stub→db 전환은 전제가 없어
@@ -2125,6 +2127,13 @@ TRIP-360 이후 차단이 아니라 안내 문구 문제). 켜기 자체의 전�
 즉 남은 것은 "스위치를 켜는 일"이 아니라 **시크릿에 값을 넣는 일**(AWS 콘솔)이다.
 `application.yml` 기본값은 **일부러 스텁으로 둔다** — 그건 배포 서술이 아니라 아무 설정도 없을 때의
 안전값이고, CI 의 외부호출 0 정책과 시드 없는 환경의 근거다.
+
+**닫힘(2026-10-03).** 완료 기준 3개 소진: 환경별 값 표·키 발급 상태·차단 조합을
+`backend/docs/design/실사용-모드-스위치.md` 로 모았다(코드가 정본, 문서는 소비 뷰).
+숙소 db 는 이미 compose 기본+차트 고정으로 돼 있었다. 덤으로 잡은 구멍 하나 —
+**9번째 스위치 `AFFILIATE_MODE`(#826)가 EKS allowlist·차트에 배선이 없어 켜는 결정이 나면
+EKS 에서 못 켜는 상태**였다. runtime_secrets allowlist·시드 기본 fallback·tripcom 3종
+배포 전 검증 + 차트 env 를 추가했다(변이 역검증 완료). 남은 것은 사람 몫 — 시크릿 실값 투입(문서 §4).
 
 숙소 쪽 드리프트는 2026-09-22 에 메웠다 — 로컬 k8s ConfigMap 과 compose 기본값이 EKS 와 갈려
 있었다. 이제 `StayContentModeParityTest` 가 세 배포 서술의 일치를 못 박는다.
