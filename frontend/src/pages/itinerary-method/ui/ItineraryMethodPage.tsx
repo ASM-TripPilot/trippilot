@@ -3,7 +3,7 @@ import type { ReactElement } from 'react';
 import { useState } from 'react';
 
 import { isGenerationRunning } from '@/features/itinerary/model/useGenerationBusy';
-import { MethodPickerScreen } from '@/features/itinerary/ui/MethodPickerScreen';
+import { MethodPickerScreen } from './MethodPickerScreen';
 import { useGetTripsTripIdItinerary } from '@/shared/api/generated/trips/trips';
 import { retryUnlessNotFound } from '@/shared/api/isNotFound';
 

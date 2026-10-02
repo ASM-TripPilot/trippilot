@@ -26,9 +26,9 @@ import { timeBandLabel } from '@/features/itinerary/model/timeBandLabel';
 import {
   ConceptPickerScreen,
   type ConceptProgress,
-} from '@/features/itinerary/ui/ConceptPickerScreen';
+} from './ConceptPickerScreen';
 import { CoPickLeaveDialog } from '@/features/itinerary/ui/CoPickLeaveDialog';
-import { SlotFillScreen } from '@/features/itinerary/ui/SlotFillScreen';
+import { SlotFillScreen } from './SlotFillScreen';
 import type {
   ItineraryDaysItemSlotsItem,
   SlotCandidatesRequest,

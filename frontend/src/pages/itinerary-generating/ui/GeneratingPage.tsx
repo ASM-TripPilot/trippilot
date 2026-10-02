@@ -6,7 +6,7 @@ import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import { firstCoPickSlotKey } from '@/features/itinerary/model/coPickSlots';
 import { buildMustVisitPins } from '@/features/itinerary/model/mustVisitList';
 import { useGenerationBusy } from '@/features/itinerary/model/useGenerationBusy';
-import { GeneratingScreen } from '@/features/itinerary/ui/GeneratingScreen';
+import { GeneratingScreen } from './GeneratingScreen';
 import type {
   GenerateItineraryRequestGenerationMode,
   Itinerary,

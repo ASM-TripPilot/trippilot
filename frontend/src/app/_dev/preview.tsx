@@ -70,9 +70,9 @@ import {
   startTimeOptions,
   tripDayChips,
 } from '@/features/itinerary/model/mustVisitTimeForm';
-import { ConceptPickerScreen } from '@/features/itinerary/ui/ConceptPickerScreen';
-import { GenerationFallbackScreen } from '@/features/itinerary/ui/GenerationFallbackScreen';
-import { GeneratingScreen } from '@/features/itinerary/ui/GeneratingScreen';
+import { ConceptPickerScreen } from '@/pages/itinerary-copick/ui/ConceptPickerScreen';
+import { GenerationFallbackScreen } from '@/pages/itinerary-draft/ui/GenerationFallbackScreen';
+import { GeneratingScreen } from '@/pages/itinerary-generating/ui/GeneratingScreen';
 import { MustVisitPickerScreen } from '@/features/itinerary/ui/MustVisitPickerScreen';
 import { MustVisitTimeScreen } from '@/features/itinerary/ui/MustVisitTimeScreen';
 import {
@@ -80,7 +80,7 @@ import {
   PlaceAddRow,
 } from '@/features/itinerary/ui/PlaceAddScreen';
 import { SlotCandidateSheet as ItinerarySlotCandidateSheet } from '@/features/itinerary/ui/SlotCandidateSheet';
-import { SlotFillScreen } from '@/features/itinerary/ui/SlotFillScreen';
+import { SlotFillScreen } from '@/pages/itinerary-copick/ui/SlotFillScreen';
 import { UnplacedMustVisitNotice } from '@/features/itinerary/ui/UnplacedMustVisitNotice';
 import type { UnplacedMustVisitRow } from '@/features/itinerary/model/unplacedMustVisits';
 import type { StayRecommendView as StayRecommendViewModel } from '@/features/itinerary/model/stayRecommend';
@@ -100,7 +100,7 @@ import type { MonthLegends } from '@/features/record/model/recordsCalendar';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { buildStatePins } from '@/entities/itinerary-slot/lib/slotMapPin';
 import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
-import { MethodPickerScreen } from '@/features/itinerary/ui/MethodPickerScreen';
+import { MethodPickerScreen } from '@/pages/itinerary-method/ui/MethodPickerScreen';
 import {
   MyTripCard,
   type MyTripCardVM,

@@ -345,9 +345,6 @@
 - `src/features/home/ui/HomeScreen.tsx`  →  HomeScreen
 
 ## src/features/itinerary/config/
-- `src/features/itinerary/config/conceptCards.ts`  →  CONCEPT_DESCRIPTIONS
-- `src/features/itinerary/config/generationFallback.ts`  →  GENERATION_FALLBACK_PROGRESS · GENERATION_FALLBACK_TITLE · GENERATION_FALLBACK_MAP_PILL · GENERATION_FALLBACK_MESSAGE_TITLE · GENERATION_FALLBACK_MESSAGE_BODY · GENERATION_FALLBACK_CHECK_ROUTE · GENERATION_FALLBACK_CHECK_SKIPPED · GENERATION_FALLBACK_CHECK_DONE · GENERATION_FALLBACK_VIEW_PLAN · GENERATION_FALLBACK_MANUAL · GENERATION_FALLBACK_FAILED_TITLE · GENERATION_FALLBACK_FAILED_NOTE · GENERATION_FALLBACK_RETRY
-- `src/features/itinerary/config/methodPicker.ts`  →  METHOD_PROGRESS · METHOD_SUBTITLE · METHOD_SWITCH_NOTE
 - `src/features/itinerary/config/placeCategoryChips.ts`  →  PlaceCategoryChip · PLACE_CATEGORY_CHIPS
 
 ## src/features/itinerary/lib/
@@ -378,12 +375,7 @@
 
 ## src/features/itinerary/ui/
 - `src/features/itinerary/ui/CoPickLeaveDialog.tsx`  →  CoPickLeaveDialog
-- `src/features/itinerary/ui/ConceptPickerScreen.tsx`  →  ConceptProgress · ConceptPickerScreenProps · ConceptPickerScreen
-- `src/features/itinerary/ui/DraftScreen.tsx`  →  DraftScreenProps · DraftScreen
-- `src/features/itinerary/ui/GeneratingScreen.tsx`  →  GeneratingScreenProps · GeneratingScreen
-- `src/features/itinerary/ui/GenerationFallbackScreen.tsx`  →  GenerationFallbackScreenProps · GenerationFallbackScreen
 - `src/features/itinerary/ui/ItineraryGlyphs.tsx`  →  BackChevronGlyph · LockGlyph · DragHandleGlyph · PlusGlyph · CheckGlyph · SortCheckGlyph · DashGlyph · DiamondGlyph · CheckCircleGlyph · PencilGlyph · SearchGlyph · CloseGlyph · ClockGlyph · CalendarGlyph · ChevronDownGlyph · ChevronRightGlyph · LinkChevronGlyph · LocationOffGlyph · CircleGlyphTone · InfoCircleGlyph · AlertCircleGlyph · WarningTriangleGlyph · ShareGlyph · WalkGlyph · CarGlyph · ExpandGlyph · RefreshGlyph · FullAiGlyph · CoPickGlyph · ManualGlyph
-- `src/features/itinerary/ui/MethodPickerScreen.tsx`  →  ActiveGeneration · MethodPickerScreenProps · MethodPickerScreen
 - `src/features/itinerary/ui/MustVisitPickerScreen.tsx`  →  MustVisitPickerScreenProps · MustVisitPickerScreen
 - `src/features/itinerary/ui/MustVisitTimeScreen.tsx`  →  MustVisitTimeScreenProps · MustVisitTimeScreen
 - `src/features/itinerary/ui/MyTripCard.tsx`  →  MyTripCardProps · MyTripCard
@@ -391,9 +383,7 @@
 - `src/features/itinerary/ui/MyTripsSortSheet.tsx`  →  MyTripsSortSheetProps · MyTripsSortSheet
 - `src/features/itinerary/ui/PlaceAddScreen.tsx`  →  PlaceAddHeaderProps · PlaceAddHeader · PlaceAddRowProps · PlaceAddRow
 - `src/features/itinerary/ui/SaveConflictDialog.tsx`  →  SaveConflictDialog
-- `src/features/itinerary/ui/SlotCandidateCard.tsx`  →  SlotCandidateCardProps · SlotCandidateCard
 - `src/features/itinerary/ui/SlotCandidateSheet.tsx`  →  SlotCandidateSheetRow · SlotCandidateSheetProps · SlotCandidateSheet
-- `src/features/itinerary/ui/SlotFillScreen.tsx`  →  SlotFillScreenProps · SlotFillScreen
 - `src/features/itinerary/ui/TripDeleteDialog.tsx`  →  TripDeleteDialog
 - `src/features/itinerary/ui/UnplacedMustVisitNotice.tsx`  →  UnplacedMustVisitNotice
 
@@ -641,6 +631,9 @@
 ## src/pages/home/ui/
 - `src/pages/home/ui/HomePage.tsx`  →  HomePage
 
+## src/pages/itinerary-copick/config/
+- `src/pages/itinerary-copick/config/conceptCards.ts`  →  CONCEPT_DESCRIPTIONS
+
 ## src/pages/itinerary-copick/
 - `src/pages/itinerary-copick/index.ts`  →  SlotFillPage · CoPickCompletePage
 
@@ -648,7 +641,13 @@
 - `src/pages/itinerary-copick/ui/CoPickCompletePage.tsx`  →  CoPickCompletePageProps · CoPickCompletePage
 - `src/pages/itinerary-copick/ui/CoPickStepper.tsx`  →  CoPickStep · CoPickStepperProps · CoPickStepper
 - `src/pages/itinerary-copick/ui/CoPickStepperGlyphs.tsx`  →  StepperSunGlyph · StepperCheckBadge
+- `src/pages/itinerary-copick/ui/ConceptPickerScreen.tsx`  →  ConceptProgress · ConceptPickerScreenProps · ConceptPickerScreen
+- `src/pages/itinerary-copick/ui/SlotCandidateCard.tsx`  →  SlotCandidateCardProps · SlotCandidateCard
 - `src/pages/itinerary-copick/ui/SlotFillPage.tsx`  →  SlotFillPageProps · SlotFillPage
+- `src/pages/itinerary-copick/ui/SlotFillScreen.tsx`  →  SlotFillScreenProps · SlotFillScreen
+
+## src/pages/itinerary-draft/config/
+- `src/pages/itinerary-draft/config/generationFallback.ts`  →  GENERATION_FALLBACK_PROGRESS · GENERATION_FALLBACK_TITLE · GENERATION_FALLBACK_MAP_PILL · GENERATION_FALLBACK_MESSAGE_TITLE · GENERATION_FALLBACK_MESSAGE_BODY · GENERATION_FALLBACK_CHECK_ROUTE · GENERATION_FALLBACK_CHECK_SKIPPED · GENERATION_FALLBACK_CHECK_DONE · GENERATION_FALLBACK_VIEW_PLAN · GENERATION_FALLBACK_MANUAL · GENERATION_FALLBACK_FAILED_TITLE · GENERATION_FALLBACK_FAILED_NOTE · GENERATION_FALLBACK_RETRY
 
 ## src/pages/itinerary-draft/
 - `src/pages/itinerary-draft/index.ts`  →  DraftPage
@@ -656,6 +655,8 @@
 ## src/pages/itinerary-draft/ui/
 - `src/pages/itinerary-draft/ui/DraftFallbackBanner.tsx`  →  DraftFallbackBanner
 - `src/pages/itinerary-draft/ui/DraftPage.tsx`  →  DraftPage
+- `src/pages/itinerary-draft/ui/DraftScreen.tsx`  →  DraftScreenProps · DraftScreen
+- `src/pages/itinerary-draft/ui/GenerationFallbackScreen.tsx`  →  GenerationFallbackScreenProps · GenerationFallbackScreen
 - `src/pages/itinerary-draft/ui/SlotCandidatePanelContainer.tsx`  →  SlotCandidatePanelContainerProps · SlotCandidatePanelContainer
 
 ## src/pages/itinerary-edit/
@@ -669,6 +670,7 @@
 
 ## src/pages/itinerary-generating/ui/
 - `src/pages/itinerary-generating/ui/GeneratingPage.tsx`  →  GeneratingPage
+- `src/pages/itinerary-generating/ui/GeneratingScreen.tsx`  →  GeneratingScreenProps · GeneratingScreen
 
 ## src/pages/itinerary-list/
 - `src/pages/itinerary-list/index.ts`  →  MyTripsListPage
@@ -686,11 +688,15 @@
 - `src/pages/itinerary-manual/ui/ManualPlanPage.tsx`  →  ManualPlanPage
 - `src/pages/itinerary-manual/ui/PlaceAddPage.tsx`  →  PlaceAddPage
 
+## src/pages/itinerary-method/config/
+- `src/pages/itinerary-method/config/methodPicker.ts`  →  METHOD_PROGRESS · METHOD_SUBTITLE · METHOD_SWITCH_NOTE
+
 ## src/pages/itinerary-method/
 - `src/pages/itinerary-method/index.ts`  →  ItineraryMethodPage
 
 ## src/pages/itinerary-method/ui/
 - `src/pages/itinerary-method/ui/ItineraryMethodPage.tsx`  →  ItineraryMethodPage
+- `src/pages/itinerary-method/ui/MethodPickerScreen.tsx`  →  ActiveGeneration · MethodPickerScreenProps · MethodPickerScreen
 
 ## src/pages/itinerary-mustvisit/
 - `src/pages/itinerary-mustvisit/index.ts`  →  MustVisitListPage · MustVisitTimePage

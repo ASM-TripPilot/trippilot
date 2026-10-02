@@ -11,7 +11,10 @@ import {
   CategoryTreeGlyph,
 } from '@/entities/itinerary-slot/ui/SlotGlyphs';
 import { CONCEPT_DESCRIPTIONS } from '../config/conceptCards';
-import { BackChevronGlyph, ChevronRightGlyph } from './ItineraryGlyphs';
+import {
+  BackChevronGlyph,
+  ChevronRightGlyph,
+} from '@/features/itinerary/ui/ItineraryGlyphs';
 
 /**
  * TRIP-335 슬라이스2 → TRIP-794 h09 Figma 정합(3845:2227) · "같이 고르기(co-pick)" 컨셉 고르기 화면(순수).

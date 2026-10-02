@@ -7,7 +7,10 @@ import type { MapCenter, MapPin } from '@/shared/map';
 import type { SlotCandidatesCandidatesItem } from '@/shared/api/generated/schemas';
 
 import type { ConceptProgress } from './ConceptPickerScreen';
-import { AlertCircleGlyph, BackChevronGlyph } from './ItineraryGlyphs';
+import {
+  AlertCircleGlyph,
+  BackChevronGlyph,
+} from '@/features/itinerary/ui/ItineraryGlyphs';
 import { SlotCandidateCard } from './SlotCandidateCard';
 
 /**

@@ -6,18 +6,22 @@ import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas'
 import { MapView } from '@/shared/map';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
-import type { DraftDayTab, DraftPin, DraftView } from '../model/draftView';
+import type {
+  DraftDayTab,
+  DraftPin,
+  DraftView,
+} from '@/features/itinerary/model/draftView';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { VIOLATION_NOTICE } from '@/entities/itinerary-slot/lib/violationLabel';
 import { Skeleton } from '@/shared/ui/Skeleton';
-import { timeBandLabel } from '../model/timeBandLabel';
+import { timeBandLabel } from '@/features/itinerary/model/timeBandLabel';
 import {
   AlertCircleGlyph,
   BackChevronGlyph,
   CheckCircleGlyph,
   InfoCircleGlyph,
   LockGlyph,
-} from './ItineraryGlyphs';
+} from '@/features/itinerary/ui/ItineraryGlyphs';
 
 /**
  * h11 [완전AI] AI 추천안 초안 — Figma `1870:1083`.

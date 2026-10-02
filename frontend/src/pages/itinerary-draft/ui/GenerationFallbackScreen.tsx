@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MapView } from '@/shared/map';
 
-import type { DraftPin } from '../model/draftView';
+import type { DraftPin } from '@/features/itinerary/model/draftView';
 import {
   GENERATION_FALLBACK_CHECK_DONE,
   GENERATION_FALLBACK_CHECK_ROUTE,
@@ -25,7 +25,7 @@ import {
   BackChevronGlyph,
   CheckGlyph,
   DashGlyph,
-} from './ItineraryGlyphs';
+} from '@/features/itinerary/ui/ItineraryGlyphs';
 
 /**
  * h07 [완전AI] 일정 생성 · fallback — Figma `3831:2177`.
