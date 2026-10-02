@@ -75,7 +75,7 @@ frontend/
 
 ### import 경계 규칙 (ESLint로 강제)
 
-- **층 방향**: `app → pages → widgets → features → entities → shared`. 각 층은 자기보다 **아래 층만** import한다. `eslint.config.js`의 `import/no-restricted-paths` 층 zone이 강제하고, 슬라이스별 zone은 `src/<층>` 디렉토리를 읽어 생성한다(새 슬라이스 자동 편입).
+- **층 방향**: `app → pages → widgets → features → entities → shared`. 각 층은 자기보다 **아래 층만** import한다. `eslint.config.js`의 `import/no-restricted-paths` 층 zone이 강제하고, 슬라이스별 zone은 `src/<층>` 디렉토리를 읽어 생성한다(새 슬라이스 자동 편입). 세그먼트 폴더나 `index.ts`가 없는 폴더는 슬라이스 그룹으로 보고 그 아래 슬라이스를 읽는다 — 같은 그룹 형제끼리도 격리된다.
 - **같은 층 형제 슬라이스는 서로 모른다(엄격)**: 형제 직접 import는 lint error다. 공유가 필요하면 순서대로 푼다 — ① 늘 같이 바뀌면 두 슬라이스를 합친다 ② 공유 도메인 책임은 entity로 내린다 ③ 위 층(pages·app)이 두 슬라이스를 받아 조립한다(props·slot) ④ 그래도 불가피하면 상대 슬라이스의 **공개 API(`index.ts`)로만** 받고, 왜 ①~③이 안 되는지 코드 주석으로 남긴다.
 - **entities 교차는 `@x`로만**: 도메인끼리 꼭 참조해야 하면 제공자가 소비자에게만 내주는 `entities/<제공자>/@x/<소비자>/**` 창구를 쓴다(형식 예: `entities/place/@x/itinerary-slot/` — 지금 리포에 `@x` 폴더는 0개, entity 간 import도 0건). 먼저 두 entity를 합칠 수 없는지부터 본다 — `@x`는 마지막 수단이고 features·widgets에는 쓰지 않는다.
 - **공개 API(`index.ts`)**: 슬라이스 밖에서는 그 슬라이스의 `index.ts`로만 import한다. `shared`는 슬라이스가 없으므로 세그먼트(또는 컴포넌트 폴더)마다 `index.ts`를 둔다.
