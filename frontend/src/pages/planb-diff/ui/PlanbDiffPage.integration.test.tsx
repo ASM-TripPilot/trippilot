@@ -54,7 +54,7 @@ jest.mock('@/features/planb/model/useApplyReplan', () => ({
   }),
 }));
 
-jest.mock('@/features/planb/model/useCancelReplan', () => ({
+jest.mock('../model/useCancelReplan', () => ({
   useCancelReplan: () => ({
     mutate: mockCancelMutate,
     isPending: mockCancelPhase === 'pending',

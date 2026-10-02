@@ -1,6 +1,6 @@
 import { Pressable, Text, View } from 'react-native';
 
-import { WarningFilledGlyph } from './ExecutionGlyphs';
+import { WarningFilledGlyph } from '@/features/execution/ui/ExecutionGlyphs';
 
 /**
  * TRIP-561 → TRIP-748 · TriggerChip(i02) — 지도 위 일자 칩 아래에 뜨는 흰 트리거 알약 한 줄

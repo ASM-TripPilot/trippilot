@@ -9,11 +9,7 @@ paths:
 | 파일 | 역할 |
 |---|---|
 | `src/features/execution/model/dwellMinutes.ts` | `dwellMinutes(arrivedAt, completedAt): number\|null` — 체류 분(한쪽 null→null, 역전→0). BR-U4-37·INV-U4-03(화면 비표시, 트리거 입력 전용). `new Date` 없이 `"HH:mm:ss".split(':')`로 쪼갠 지역 변수로만 연산한다. ⚠️ 프로덕션 소비처 0 — 서버가 dwell을 스스로 도출하고 클라→서버 dwell 필드가 없다 |
-| `src/features/execution/model/useVisitCheck.ts` | `useVisitCheck({tripId, day})` — 도착(`POST /visits`)·완료 imperative 낙관 갱신(promise 반환 계약이 필요해 raw 함수 호출). **롤백이 슬롯키(레코드) 단위**라 동시 두 카드 조작이 서로의 롤백을 지우지 않는다(통짜 스냅숏 롤백의 결함을 고친 형태). 도착 낙관 리터럴의 `updatedAt`(BR-U5-22)은 `new Date` 없이 자리표시자로 채운다(BR-U4-34). 개념: [[react-query tracked-props — 관찰자가 읽은 속성만 재렌더된다]] · [[낙관적 락 기준버전 (updatedAt)]] |
-| `src/features/execution/model/liveState.ts` | `resolveLiveState(input) → LiveState`(`loading`\|`notFound`\|`error`\|`active`, 이 순서로 우선) — 오늘이 일정 밖이어도 막지 않는다. `isNotFound`는 page가 `isNotFound(query.error)`로 계산해 주입(404를 5xx·네트워크와 분리). `active.todayIndex`는 오늘이 `days`에 있으면 그 인덱스, 여행 전이면 0, 여행 후면 마지막(`'YYYY-MM-DD'` 사전순=시간순). 이 분기의 심판은 **3일 이상 일정의 가운데 날**이어야 판정력이 있다(2일 일정은 폴백과 `findIndex`가 항상 같은 답) |
 | `src/features/execution/model/useLiveItinerary.ts` | `useGetTripsTripIdItinerary` 얇은 래퍼(로직 0) — 판정은 `liveState.ts`, 조립은 `pages/live-itinerary` |
-| `src/features/execution/model/usePlaceDetail.ts` | `useGetTripsTripIdItinerary` 얇은 래퍼(로직 0) — 매칭·조립은 page(`live-place`)와 `pages/live-place/model/placeDetailView.ts` |
-| `src/features/execution/ui/TriggerChip.tsx` | i02 지도 위 트리거 알약(`label`·`onPressAlternative`) — 흰 알약 + `WarningFilledGlyph` + 라벨(`numberOfLines=1`) + `›`. 그림자는 `BACK_SHADOW`와 같은 값의 로컬 상수(pages 상수는 층 방향상 import 불가). testID `execution-live-trigger-chip`·`-alternative` |
 | `src/features/execution/ui/ExecutionGlyphs.tsx` | 레일 3종·뒤로·공유·날씨·경고·히어로 핀/사진 글리프. 히어로 글리프는 벡터·선 두께가 달라 `shared`/`entities` 판을 쓰지 않고 복제했다. ⚠️ `WeatherCloudGlyph`는 프로덕션 소비처 0 — 통합 테스트가 "0개 그려짐"을 단언하려고 import하므로 지우면 그 심판이 깨진다. 흰 글리프 색은 SVG fill이라 jest 사각(6-b 실기 전용) |
 | `src/features/execution/model/nextNav.ts` | 다음 예정지 딥링크 폴백 사다리 — `buildAppNavUrl`(`kakaomap://`)·`buildWebNavUrl`·`resolveNextDest`·`openNextNav`(앱→웹→`fallback`). `expo-router` import 0(라우터 미개입을 구조로 보장). ⚠️ 프로덕션 호출자 0 |
 

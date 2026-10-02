@@ -3,8 +3,8 @@ import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 
-import { MemoInline } from './MemoInline';
-import { CloseGlyph } from './RecordGlyphs';
+import { MemoInline } from '@/features/record/ui/MemoInline';
+import { CloseGlyph } from '@/features/record/ui/RecordGlyphs';
 
 /**
  * TRIP-1117 · i01 허브 메모 시트(Figma 4741:2833 · 시트 4741:2984) — 순수 바텀시트(props + 콜백만).

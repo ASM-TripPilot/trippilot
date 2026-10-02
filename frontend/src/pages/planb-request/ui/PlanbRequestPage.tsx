@@ -4,14 +4,14 @@ import { useEffect, useRef, useState, type ReactElement } from 'react';
 
 import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { useLiveItinerary } from '@/features/execution/model/useLiveItinerary';
-import { TRIGGER_REASON_KEY } from '@/features/planb/config/replanChoices';
+import { TRIGGER_REASON_KEY } from '../config/replanChoices';
 import { buildStartReplanRequest } from '@/features/planb/model/replanRequest';
 import { useReplanFormStore } from '@/features/planb/model/replanFormStore';
 import { triggerPillCopy } from '@/features/planb/model/triggerPillCopy';
 import { useActiveTriggers } from '@/features/planb/model/useActiveTriggers';
-import { useReplanGpsOrigin } from '@/features/planb/model/useReplanGpsOrigin';
+import { useReplanGpsOrigin } from '../model/useReplanGpsOrigin';
 import { useStartReplan } from '@/features/planb/model/useStartReplan';
-import { ReplanRequestSheet } from '@/features/planb/ui/ReplanRequestSheet';
+import { ReplanRequestSheet } from './ReplanRequestSheet';
 import type { ItineraryDaysItem } from '@/shared/api/generated/schemas';
 
 /**

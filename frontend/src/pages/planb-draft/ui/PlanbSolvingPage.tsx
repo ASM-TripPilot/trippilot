@@ -10,10 +10,10 @@ import { projectSlotProgress } from '@/entities/itinerary-slot/lib/slotProgress'
 import { useLiveItinerary } from '@/features/execution/model/useLiveItinerary';
 import { deriveVisitProgress } from '@/entities/itinerary-slot/lib/visitProgress';
 import { formatCoPickDayHeader } from '@/features/itinerary/model/draftView';
-import { readFromInstant } from '@/features/planb/model/replanFromInstant';
+import { readFromInstant } from '../model/replanFromInstant';
 import { deriveReplanMapAnchor } from '@/features/planb/model/replanMapCenter';
-import { resolveReplanState } from '@/features/planb/model/replanState';
-import { useReplanSession } from '@/features/planb/model/useReplanSession';
+import { resolveReplanState } from '../model/replanState';
+import { useReplanSession } from '../model/useReplanSession';
 import {
   useGetTripsTripIdVisitsDaysDay,
   usePostTripsTripIdReplanSessionsSessionIdCancel,

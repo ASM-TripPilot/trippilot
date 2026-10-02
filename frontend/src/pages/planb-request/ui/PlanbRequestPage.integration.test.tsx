@@ -81,7 +81,7 @@ jest.mock('@/features/planb/model/useStartReplan', () => ({
 const mockReadOrigin = jest.fn((): Promise<ReplanOrigin | undefined> =>
   Promise.resolve(undefined)
 );
-jest.mock('@/features/planb/model/useReplanGpsOrigin', () => ({
+jest.mock('../model/useReplanGpsOrigin', () => ({
   useReplanGpsOrigin: () => () => mockReadOrigin(),
 }));
 

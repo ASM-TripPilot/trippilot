@@ -1,4 +1,4 @@
-import type { WatchKind } from './watchLabels';
+import type { WatchKind } from '@/features/planb/config/watchLabels';
 
 /**
  * TRIP-750 · i04 재계획 요청 시트의 **사유·방향 칩 카탈로그**(Figma 4067:2427).

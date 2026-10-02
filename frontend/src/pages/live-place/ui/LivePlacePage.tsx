@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { Pressable, Share, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { usePlaceDetail } from '@/features/execution/model/usePlaceDetail';
+import { usePlaceDetail } from '../model/usePlaceDetail';
 import { BackArrowGlyph } from '@/features/execution/ui/ExecutionGlyphs';
 import { isNotFound } from '@/shared/api/isNotFound';
 import { StateNotice } from '@/shared/ui/StateNotice';

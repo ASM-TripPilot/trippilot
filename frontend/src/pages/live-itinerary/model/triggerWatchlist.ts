@@ -1,6 +1,6 @@
 import type { Trigger } from '@/shared/api/generated/schemas';
 
-import { WATCH_CATEGORY_LABEL } from '../config/watchLabels';
+import { WATCH_CATEGORY_LABEL } from '@/features/planb/config/watchLabels';
 
 /**
  * TRIP-562 · triggerWatchlist — 발화 트리거 목록 → 감시 3항목 사영(projection).

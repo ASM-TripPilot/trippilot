@@ -6,10 +6,10 @@ import {
   WATCH_CATEGORY_LABEL,
   WATCH_STATUS_LABEL,
   type WatchKind,
-} from '../config/watchLabels';
+} from '@/features/planb/config/watchLabels';
 import type { RiskAffectedRow } from '../model/riskAffectedRow';
 import type { TriggerWatchlistRow } from '../model/triggerWatchlist';
-import { RiskWarningGlyph } from './PlanbGlyphs';
+import { RiskWarningGlyph } from '@/features/planb/ui/PlanbGlyphs';
 
 /**
  * TRIP-749 · i03 위험 상세 시트(Figma 4052:2427) — 순수 바텀시트(props + 콜백만).

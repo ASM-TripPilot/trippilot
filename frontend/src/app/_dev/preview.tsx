@@ -30,9 +30,9 @@ import {
   PREVIEW_SAVED_PLACES,
   PREVIEW_SAVED_POI_IDS,
 } from '@/pages/explore-landing/model/exploreFixtures';
-import { TriggerChip } from '@/features/execution/ui/TriggerChip';
+import { TriggerChip } from '@/pages/live-itinerary/ui/TriggerChip';
 import { MemoInline } from '@/features/record/ui/MemoInline';
-import { MemoSheet } from '@/features/record/ui/MemoSheet';
+import { MemoSheet } from '@/pages/live-itinerary/ui/MemoSheet';
 import { PhotoThumbStrip } from '@/features/record/ui/PhotoThumbStrip';
 import { RecordsCalendarScreen } from '@/pages/records-calendar/ui/RecordsCalendarScreen';
 import { VisitRecordCard } from '@/features/record/ui/VisitRecordCard';
@@ -135,11 +135,11 @@ import { RevokeConfirmDialog } from '@/pages/settings-location/ui/RevokeConfirmD
 import { SettingsScreen } from '@/pages/settings/ui/SettingsScreen';
 import { triggerLabel } from '@/features/planb/model/triggerLabel';
 import { triggerPillCopy } from '@/features/planb/model/triggerPillCopy';
-import { riskAffectedRow } from '@/features/planb/model/riskAffectedRow';
-import { triggerWatchlist } from '@/features/planb/model/triggerWatchlist';
-import { ReplanRequestSheet } from '@/features/planb/ui/ReplanRequestSheet';
+import { riskAffectedRow } from '@/pages/live-itinerary/model/riskAffectedRow';
+import { triggerWatchlist } from '@/pages/live-itinerary/model/triggerWatchlist';
+import { ReplanRequestSheet } from '@/pages/planb-request/ui/ReplanRequestSheet';
 import { appliedSummaryBadges } from '@/features/planb/model/appliedSummary';
-import { ReplanAppliedSheet } from '@/features/planb/ui/ReplanAppliedSheet';
+import { ReplanAppliedSheet } from '@/pages/live-itinerary/ui/ReplanAppliedSheet';
 import type { ReplanSlotVM } from '@/entities/itinerary-slot/model';
 import { ReplanDraftView } from '@/pages/planb-draft/ui/ReplanDraftView';
 // 뷰 파일 경로로 직접 — 페이지 배럴은 useAssignBase(요청 모듈)를 끌어와 프리뷰 네트워크 지뢰가 터진다.
@@ -147,7 +147,7 @@ import { StayRecommendView } from '@/pages/itinerary-stay-recommend/ui/StayRecom
 import { TripRecordsView } from '@/pages/trip-records/ui/TripRecordsView';
 import { ReplanSolvingView } from '@/pages/planb-draft/ui/ReplanSolvingView';
 import { SlotCandidateSheet } from '@/features/planb/ui/SlotCandidateSheet';
-import { RiskDetailSheet } from '@/features/planb/ui/RiskDetailSheet';
+import { RiskDetailSheet } from '@/pages/live-itinerary/ui/RiskDetailSheet';
 import { NicknameScreen } from '@/pages/onboarding-nickname/ui/NicknameScreen';
 import {
   StayRegisterScreen,
