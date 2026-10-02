@@ -37,11 +37,12 @@ const SCAN_DIRS = [
   'pages/trip-records',
   'pages/records-calendar',
   'features/check-visit',
+  'features/attach-visit-media',
 ];
 
 /** 사진이 기기를 떠나는 경로의 핵심 파일 — 폴더 밖으로 옮겨지면 스캔이 조용히 줄어든다(편입 앵커). */
 const UPLOAD_PATH_FILES = [
-  'features/record/model/photoAttach.ts',
+  'features/attach-visit-media/model/photoAttach.ts',
   'pages/trip-records/model/useVisitAttachments.ts',
   'shared/photo/index.ts',
   'pages/live-itinerary/ui/LiveItineraryPage.tsx',

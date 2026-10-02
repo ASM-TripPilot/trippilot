@@ -31,7 +31,7 @@ import {
   PREVIEW_SAVED_POI_IDS,
 } from '@/pages/explore-landing/model/exploreFixtures';
 import { TriggerChip } from '@/pages/live-itinerary/ui/TriggerChip';
-import { MemoInline } from '@/features/record/ui/MemoInline';
+import { MemoInline } from '@/features/attach-visit-media/ui/MemoInline';
 import { MemoSheet } from '@/pages/live-itinerary/ui/MemoSheet';
 import { PhotoThumbStrip } from '@/pages/trip-records/ui/PhotoThumbStrip';
 import { RecordsCalendarScreen } from '@/pages/records-calendar/ui/RecordsCalendarScreen';

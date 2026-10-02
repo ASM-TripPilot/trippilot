@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 
-import { MemoInline } from '@/features/record/ui/MemoInline';
+import { MemoInline } from '@/features/attach-visit-media/ui/MemoInline';
 import { CloseGlyph } from '@/features/record/ui/RecordGlyphs';
 
 /**

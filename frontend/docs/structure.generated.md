@@ -288,6 +288,14 @@
 - `src/features/assign-trip-base/model/baseAssignPlan.ts`  →  BaseAssignPlan · planBaseAssign
 - `src/features/assign-trip-base/model/useTripBases.ts`  →  useTripBases · useAssignBase
 
+## src/features/attach-visit-media/model/
+- `src/features/attach-visit-media/model/photoAttach.ts`  →  photoAttach
+- `src/features/attach-visit-media/model/pickPhotoForVisit.ts`  →  PhotoPickOutcome · pickPhotoForVisit
+- `src/features/attach-visit-media/model/useVisitMemo.ts`  →  useVisitMemo
+
+## src/features/attach-visit-media/ui/
+- `src/features/attach-visit-media/ui/MemoInline.tsx`  →  MemoInlineProps · MemoInline
+
 ## src/features/auth/config/
 - `src/features/auth/config/gradients.ts`  →  SPLASH_BACKGROUND_COLORS · SPLASH_BACKGROUND_LOCATIONS · APP_ICON_COLORS · AUTH_ICON_COLORS
 
@@ -396,12 +404,8 @@
 
 ## src/features/record/model/
 - `src/features/record/model/conflict.ts`  →  ConflictChoice · ConflictSelection · ConflictRow · ConflictVisitVM · isVisitConflict
-- `src/features/record/model/photoAttach.ts`  →  photoAttach
-- `src/features/record/model/pickPhotoForVisit.ts`  →  PhotoPickOutcome · pickPhotoForVisit
-- `src/features/record/model/useVisitMemo.ts`  →  useVisitMemo
 
 ## src/features/record/ui/
-- `src/features/record/ui/MemoInline.tsx`  →  MemoInlineProps · MemoInline
 - `src/features/record/ui/RecordGlyphs.tsx`  →  VisitCheckDoneGlyph · VisitCheckActiveGlyph · VisitCheckUpcomingGlyph · VisitCheckSkippedGlyph · PlusGlyph · NoteGlyph · WarningTriangleGlyph · RetryGlyph · BackArrowGlyph · ChevronRightGlyph · LegendChevronGlyph · ChevronDownGlyph · InfoCircleGlyph · GpsOffGlyph · CalendarGlyph · CloseGlyph
 
 ## src/features/reflection/model/
