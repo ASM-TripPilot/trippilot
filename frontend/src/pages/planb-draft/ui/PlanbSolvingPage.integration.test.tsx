@@ -17,8 +17,10 @@ import { PlanbSolvingPage } from './PlanbSolvingPage';
  *    back 만(세션은 살린다, cancel 0), [계속 기다리기]면 아무 데도 안 간다.
  *  - 범위가 FULL_DAY 면 캡션이 `{H}시 이후` 가 아니라 오늘 전체 문구다(TRIP-1007).
  *  - DRAFT·NO_SOLUTION·FAILED 면 `planb/draft` 로 replace 정확히 1회(push 아님 — 뒤로가기 무한 루프 방지).
- *  - itinerary 쓰기 훅은 0(INV-U4-05) — 아래 trips 목 팩토리가 cancel·visits 두 훅만 내주므로 페이지가 PUT 훅을
- *    부르면 전 케이스가 TypeError 로 red 다(TRIP-1152 에서 소스 스캔 P8 을 지운 뒤 남는 그물).
+ *  - itinerary 쓰기 훅은 0(INV-U4-05) — 아래 trips 목 팩토리가 cancel·visits 두 훅만 내주므로 페이지가 렌더 중
+ *    PUT 훅(`usePutTripsTripIdItinerary`)을 부르면 전 케이스가 TypeError 로 red 다(TRIP-1152 에서 소스 스캔 P8 을
+ *    지운 뒤 남는 그물). ⚠ 그물은 그것뿐이다 — raw 함수 `putTripsTripIdItinerary` 를 테스트가 안 타는 분기
+ *    (예: cancel `onError`)에서 부르면 green 이다(옛 P8 은 잡던 자리, 5-b 경고-1 실측).
  *
  *  - (5-b 후속) 취소 요청 중엔 [취소]가 잠긴다 · 원 일정에서 이웃하지 않는 두 완료 행 사이엔 커넥터가 없다 ·
  *    방문 기록을 모르면(로딩·실패) 곳 수를 비운다 · 지도 핀은 그날 슬롯 전부를 진행 상태별로 넘긴다.
