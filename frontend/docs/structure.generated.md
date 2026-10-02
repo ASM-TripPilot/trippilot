@@ -469,6 +469,41 @@
 - `src/mocks/scenarios.ts`  →  AuthOutcome · SocialServerBehavior · BootstrapBehavior · MockScenario · SCENARIOS · ScenarioKey · setScenario · getScenario · resetScenario
 - `src/mocks/server.ts`  →  server
 
+## src/pages/auth/login/config/
+- `src/pages/auth/login/config/oauthConfig.ts`  →  OAuthDiscovery · OAuthProviderConfig · getOAuthConfig
+
+## src/pages/auth/login/
+- `src/pages/auth/login/index.ts`  →  LoginPage
+
+## src/pages/auth/login/lib/
+- `src/pages/auth/login/lib/appleAuthorize.tsx`  →  appleAuthorize · isAppleSignInAvailable · AppleSignInButton
+- `src/pages/auth/login/lib/kakaoAuthorize.ts`  →  kakaoAuthorize
+- `src/pages/auth/login/lib/makeAuthorize.ts`  →  makeAuthorize
+- `src/pages/auth/login/lib/naverAuthorize.ts`  →  naverAuthorize
+- `src/pages/auth/login/lib/realAuthorize.ts`  →  realAuthorize
+
+## src/pages/auth/login/model/
+- `src/pages/auth/login/model/useAppleButton.ts`  →  useAppleButton
+- `src/pages/auth/login/model/useSocialLogin.ts`  →  SocialLoginPhase · AuthorizeResult · Authorize · useSocialLogin
+
+## src/pages/auth/login/ui/
+- `src/pages/auth/login/ui/LoginPage.tsx`  →  LoginPage
+- `src/pages/auth/login/ui/SocialLoginScreen.tsx`  →  SocialLoginScreenProps · SocialLoginScreen
+
+## src/pages/auth/reconsent/
+- `src/pages/auth/reconsent/index.ts`  →  ReconsentPage
+
+## src/pages/auth/reconsent/ui/
+- `src/pages/auth/reconsent/ui/ReconsentPage.tsx`  →  ReconsentPage
+- `src/pages/auth/reconsent/ui/ReconsentScreen.tsx`  →  ReconsentItemView · ReconsentScreenProps · ReconsentScreen
+
+## src/pages/auth/terms-viewer/
+- `src/pages/auth/terms-viewer/index.ts`  →  TermsViewerPage
+
+## src/pages/auth/terms-viewer/ui/
+- `src/pages/auth/terms-viewer/ui/TermsViewerPage.tsx`  →  TermsViewerPage
+- `src/pages/auth/terms-viewer/ui/TermsViewerScreen.tsx`  →  TermsViewerScreenProps · TermsViewerScreen
+
 ## src/pages/daily-reflection/
 - `src/pages/daily-reflection/index.ts`  →  DailyReflectionPage
 
@@ -666,27 +701,6 @@
 - `src/pages/live-place/ui/LivePlacePage.tsx`  →  LivePlacePageProps · LivePlacePage
 - `src/pages/live-place/ui/PlaceDetailScreen.tsx`  →  PlaceDetailScreenProps · PlaceDetailScreen
 
-## src/pages/login/config/
-- `src/pages/login/config/oauthConfig.ts`  →  OAuthDiscovery · OAuthProviderConfig · getOAuthConfig
-
-## src/pages/login/
-- `src/pages/login/index.ts`  →  LoginPage
-
-## src/pages/login/lib/
-- `src/pages/login/lib/appleAuthorize.tsx`  →  appleAuthorize · isAppleSignInAvailable · AppleSignInButton
-- `src/pages/login/lib/kakaoAuthorize.ts`  →  kakaoAuthorize
-- `src/pages/login/lib/makeAuthorize.ts`  →  makeAuthorize
-- `src/pages/login/lib/naverAuthorize.ts`  →  naverAuthorize
-- `src/pages/login/lib/realAuthorize.ts`  →  realAuthorize
-
-## src/pages/login/model/
-- `src/pages/login/model/useAppleButton.ts`  →  useAppleButton
-- `src/pages/login/model/useSocialLogin.ts`  →  SocialLoginPhase · AuthorizeResult · Authorize · useSocialLogin
-
-## src/pages/login/ui/
-- `src/pages/login/ui/LoginPage.tsx`  →  LoginPage
-- `src/pages/login/ui/SocialLoginScreen.tsx`  →  SocialLoginScreenProps · SocialLoginScreen
-
 ## src/pages/magazine/
 - `src/pages/magazine/index.ts`  →  MagazinePage
 
@@ -839,13 +853,6 @@
 ## src/pages/planb-request/ui/
 - `src/pages/planb-request/ui/PlanbRequestPage.tsx`  →  PlanbRequestPageProps · PlanbRequestPage
 - `src/pages/planb-request/ui/ReplanRequestSheet.tsx`  →  ReplanDetectedChip · ReplanRequestSheetProps · ReplanRequestSheet
-
-## src/pages/reconsent/
-- `src/pages/reconsent/index.ts`  →  ReconsentPage
-
-## src/pages/reconsent/ui/
-- `src/pages/reconsent/ui/ReconsentPage.tsx`  →  ReconsentPage
-- `src/pages/reconsent/ui/ReconsentScreen.tsx`  →  ReconsentItemView · ReconsentScreenProps · ReconsentScreen
 
 ## src/pages/record-add-visit/
 - `src/pages/record-add-visit/index.ts`  →  RecordAddVisitPage
@@ -1007,13 +1014,6 @@
 - `src/pages/stay-search/ui/StayPriceSheet.tsx`  →  StayPriceSheetProps · StayPriceSheet
 - `src/pages/stay-search/ui/StaySearchPage.tsx`  →  StaySearchPage
 - `src/pages/stay-search/ui/StaySearchScreen.tsx`  →  StaySearchScreenProps · StaySearchScreen
-
-## src/pages/terms-viewer/
-- `src/pages/terms-viewer/index.ts`  →  TermsViewerPage
-
-## src/pages/terms-viewer/ui/
-- `src/pages/terms-viewer/ui/TermsViewerPage.tsx`  →  TermsViewerPage
-- `src/pages/terms-viewer/ui/TermsViewerScreen.tsx`  →  TermsViewerScreenProps · TermsViewerScreen
 
 ## src/pages/travel-style/
 - `src/pages/travel-style/index.ts`  →  TravelStylePage

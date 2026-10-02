@@ -62,10 +62,10 @@ jest.mock('@/shared/api/generated/trips/trips', () => {
     '프리뷰가 trips 생성 클라이언트(네트워크)를 런타임에 로드했다'
   );
 });
-jest.mock('@/pages/login/ui/LoginPage', () => {
+jest.mock('@/pages/auth/login/ui/LoginPage', () => {
   throw new Error('프리뷰가 LoginPage(페이지)를 런타임에 로드했다');
 });
-jest.mock('@/pages/login/model/useSocialLogin', () => {
+jest.mock('@/pages/auth/login/model/useSocialLogin', () => {
   throw new Error('프리뷰가 useSocialLogin(훅)을 런타임에 로드했다');
 });
 jest.mock('@/app-shell/ui/SplashGate', () => {

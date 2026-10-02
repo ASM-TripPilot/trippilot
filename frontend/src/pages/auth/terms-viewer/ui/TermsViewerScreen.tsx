@@ -1,7 +1,7 @@
 /**
  * 약관 열람 프레젠테이션(TRIP-937 · 가이드라인 5.1.1(i) · LEGAL-01 · INV-4).
  * Figma 프레임이 없어 l06 하위 화면 헤더 + 본문 스크롤로 구성했다(Figma 역반영 후속).
- * props 만 받고 네트워크를 모른다 — 조회·재시도 배선은 `pages/terms-viewer` 몫이다.
+ * props 만 받고 네트워크를 모른다 — 조회·재시도 배선은 `pages/auth/terms-viewer` 몫이다.
  */
 import type { ReactElement } from 'react';
 import {

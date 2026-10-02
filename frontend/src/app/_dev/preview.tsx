@@ -10,11 +10,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { useAppleButton } from '@/pages/login/model/useAppleButton';
+import { useAppleButton } from '@/pages/auth/login/model/useAppleButton';
 import {
   SocialLoginScreen,
   type SocialLoginScreenProps,
-} from '@/pages/login/ui/SocialLoginScreen';
+} from '@/pages/auth/login/ui/SocialLoginScreen';
 import { SplashScreen } from '@/features/auth/ui/SplashScreen';
 import {
   HOME_DEFAULT_PROPS,

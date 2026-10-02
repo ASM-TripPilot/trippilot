@@ -27,7 +27,7 @@ const mockViewer: { termsType?: string; rendered: boolean } = {
 };
 const mockReconsent = { rendered: false };
 
-jest.mock('@/pages/terms-viewer', () => ({
+jest.mock('@/pages/auth/terms-viewer', () => ({
   TermsViewerPage: (props: { termsType?: string }) => {
     mockViewer.termsType = props.termsType;
     mockViewer.rendered = true;
@@ -35,7 +35,7 @@ jest.mock('@/pages/terms-viewer', () => ({
   },
 }));
 
-jest.mock('@/pages/reconsent', () => ({
+jest.mock('@/pages/auth/reconsent', () => ({
   ReconsentPage: () => {
     mockReconsent.rendered = true;
     return null;

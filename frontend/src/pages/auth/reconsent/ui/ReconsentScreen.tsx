@@ -1,7 +1,7 @@
 /**
  * 약관 재동의 프레젠테이션(TRIP-937 · BR-U0-14 · BR-U0-10 · INV-4).
  * Figma 프레임이 없어 c06 `TermsScreen` 의 체크 행·"보기"·하단 고정 CTA 관례로 구성했다(Figma 역반영 후속).
- * props 만 받고 네트워크를 모른다 — 대상 조회·저장·탈출 배선은 `pages/reconsent` 몫이다.
+ * props 만 받고 네트워크를 모른다 — 대상 조회·저장·탈출 배선은 `pages/auth/reconsent` 몫이다.
  * 뒤로가기는 없다 — 재동의 전에는 나갈 곳이 없는 게이트 화면이다(거부 경로는 TRIP-938).
  */
 import type { ReactElement } from 'react';

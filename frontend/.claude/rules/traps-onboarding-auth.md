@@ -4,7 +4,7 @@ paths:
   - "src/features/onboarding/**"
   - "src/pages/onboarding-*/**"
   - "src/app/(onboarding)/**"
-  - "src/pages/login/**"
+  - "src/pages/auth/login/**"
   - "src/features/edit-preferences/**"
 ---
 이 파일은 repo-traps.md에서 경로별로 쪼갠 함정이다 — 해당 경로 만질 때만 로드된다.

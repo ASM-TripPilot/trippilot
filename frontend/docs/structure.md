@@ -15,7 +15,7 @@
 
 > **`docs/structure.generated.md`는 기계 담당 절반이다** — `--write`가 전 소스의 파일 목록·export를 뽑아 덮어쓴다. 손으로 고치지 마라(다음 `--write`가 덮는다). `--check`는 이 파일 + `layer-*.md` + structure.md 를 합쳐 실제 파일과 대조하므로, 새 파일은 `--write` 한 번으로 '누락'이 사라진다. 사람이 쓰는 것은 **왜 있나(용도·함정·재사용 근거)**뿐 — 기계가 주는 **무엇이 있나**를 손으로 옮겨 적지 마라.
 
-- **경로는 리포 상대 전체 경로를 백틱으로 적는다** (`src/pages/login/lib/makeAuthorize.ts`). 대조 검사가 이 형태만 인식한다.
+- **경로는 리포 상대 전체 경로를 백틱으로 적는다** (`src/pages/auth/login/lib/makeAuthorize.ts`). 대조 검사가 이 형태만 인식한다.
 - 갱신은 **이번 사이클이 만진 행만**(해당 층 규칙 파일에서). 전면 재작성 금지.
 - 대조: `node .claude/skills/trippilot-dev-cycle/scripts/structure-index.cjs --check` — DOC + `.claude/rules/layer-*.md`를 함께 읽어 실제 파일과 대조한다.
   - *파일은 있는데 행이 없다* → 새 파일 누락(해당 층 규칙에 추가) · *행은 있는데 파일이 없다* → 삭제·이동 미반영
@@ -160,10 +160,10 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `setAccessToken` · `getAccessToken` · `clearAccessToken` · `hydrate` · `subscribeAccessToken` | `shared/api/tokenManager` | 동기 in-memory 토큰 홀더. `getAccessToken`은 **동기** 반환(인터셉터용). `subscribeAccessToken(listener)`은 토큰이 실제로 바뀔 때만 통지하고 구독 해제 함수를 반환한다(TRIP-172 신규 — 로그인 성공 후 부트스트랩 재조회의 유일한 신호) |
 | `saveTokens` · `getTokens` · `clearTokens` · `hasStoredToken` | `shared/storage` | 토큰 저장소 CRUD. **로그인 여부 판정도 `hasStoredToken`**(accessToken 단독 판정 — 위 파일별 역할 표 참고, 심판 0이라 조용히 재발할 수 있다) |
 | `compareVersion` | `shared/version` | 버전 문자열 비교(`-1\|0\|1`) |
-| `makeAuthorize` | `pages/login/lib` | provider별 authorize 팩토리(DI 주입점) |
-| `getOAuthConfig` | `pages/login/config/oauthConfig` | provider별 OAuth config(env). 네이티브 의존 0 |
-| `realAuthorize` | `pages/login/lib/realAuthorize` | expo-auth-session PKCE authorize. **`makeAuthorize`가 동적 import로만 부름** |
-| `kakaoAuthorize` · `naverAuthorize` | `pages/login/lib/{kakaoAuthorize,naverAuthorize}` | **신규(TRIP-210)** — 카카오·네이버 네이티브 SDK authorize. `realAuthorize`와 동형으로 **`makeAuthorize`가 동적 import로만 부름**(SDK가 정적 그래프에 안 실림, AC-11) |
+| `makeAuthorize` | `pages/auth/login/lib` | provider별 authorize 팩토리(DI 주입점) |
+| `getOAuthConfig` | `pages/auth/login/config/oauthConfig` | provider별 OAuth config(env). 네이티브 의존 0 |
+| `realAuthorize` | `pages/auth/login/lib/realAuthorize` | expo-auth-session PKCE authorize. **`makeAuthorize`가 동적 import로만 부름** |
+| `kakaoAuthorize` · `naverAuthorize` | `pages/auth/login/lib/{kakaoAuthorize,naverAuthorize}` | **신규(TRIP-210)** — 카카오·네이버 네이티브 SDK authorize. `realAuthorize`와 동형으로 **`makeAuthorize`가 동적 import로만 부름**(SDK가 정적 그래프에 안 실림, AC-11) |
 | `resolveBootstrapDestination` | `features/auth/model` | 부트스트랩 상태 → 목적지(순수) |
 | `resolveOnboardingStep` · `validateNicknameFormat` | `features/onboarding/model`(`resolveOnboardingStep`) · `pages/onboarding-nickname/model`(`validateNicknameFormat`) | 잔여 온보딩 단계 · 닉네임 길이 검증(순수) |
 | `toggleMulti` · `toggleSingle` | `features/edit-preferences/model/preferenceSelection` | 취향 축 토글 순수 규칙(복수/단일 공용). `null`=미설정, 빈 배열로 안 떨어짐(US-ONB-14) |
@@ -173,12 +173,12 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `showToast` · `hideToast` · `ToastHost` · `TOAST_VISIBLE_MS` | `shared/ui/Toast` | **신규(TRIP-990)** — 성공 피드백 공용 토스트. 화면은 성공 지점에서 `showToast({message,testID})`만 부르고, 앱 맨 바깥(`app/_layout.tsx`)에 한 번 둔 `ToastHost`가 그린다(화면이 back으로 사라져도 알림은 남는다). 모듈 싱글턴(`useSyncExternalStore`) — **소비 테스트는 파일 최상위 `afterEach(resetToast)`(`test-support/toastHarness`) 필수**, describe 안에만 걸면 앞 테스트의 토스트가 새 나간다(03b 차단-1). 소비처 4곳(직접 짜기 저장·취향 저장·닉네임·숙소 등록). 상세는 `.claude/rules/layer-shared.md` |
 | `HOME_DEFAULT_PROPS` · `HOME_NO_TRIP_PROPS` · `HOME_EMPTY_PROPS` · `HOME_LOADING_PROPS` | `pages/home/model/homeFixtures` | 홈 4상수 Figma 고정 목업(Q2 — 서버 없어 유일한 데이터 소스). **TRIP-316 재작성**: 신 세대 "발견·영감 피드" 실측값으로 전면 교체, `HOME_NO_TRIP_PROPS`는 `HOME_DEFAULT_PROPS`와 바이트 동일(신 프레임에 no-trip 픽셀 정본 없음, 가정 B). **TRIP-317 추가**: `HOME_COLLECTING_PROPS`·`HOME_PLANNING_PROPS`·`HOME_UPCOMING_PROPS`·`HOME_POST_TRIP_PROPS` — discovery 기저 위에 `phase`만 주입한 프리뷰 전용 상수(실착지 `(tabs)/index.tsx`는 무변경, discovery 유지) |
 | `HomeScreenProps` · `HomeSections` · `HomeCollectionCard` · `HomeSpotCard` · `HomeItineraryCard` · `HomeMagazineHero` | `pages/home/model/homeTypes` | 홈 화면 prop 계약(**TRIP-316 재작성** — 구 `trip`·`nextPlan`·`resume`·`taste` 계약 전부 폐기). `HomeScreenProps{hero; sections}` — `hero`는 상태 무관 고정 블록, `sections`는 판별 유니온 `HomeSections`(`ready`/`empty`/`loading`, 3섹션 한 덩어리로 동시 전환). **TRIP-317 추가**: `HomeScreenProps.phase?: HomePhase`(옵셔널 additive, 316 무회귀) — `HomePhase`는 `discovery`·`collecting`·`planning`·`upcoming`·`postTrip` 5종 판별 유니온(화면은 `phase.kind`로 스위치만, TRIP-206 S-6). 페이로드 타입 `TripHeroData`·`HomeStatTile`·`NextStop`·`NearbyCard`·`RecapCard`·`PastTrip`·`HomeSoftNote` 7종 신규(전부 컴파일용, home 내부 소비만 — 재사용 대상 아님) |
-| `useBootstrapGate` · `useSocialLogin` | `features/auth/model`(`useBootstrapGate`) · `pages/login/model`(`useSocialLogin`) | 부트스트랩 · 소셜 로그인 훅. **TRIP-173에서 `hooks/`→`model/` 개명** |
+| `useBootstrapGate` · `useSocialLogin` | `features/auth/model`(`useBootstrapGate`) · `pages/auth/login/model`(`useSocialLogin`) | 부트스트랩 · 소셜 로그인 훅. **TRIP-173에서 `hooks/`→`model/` 개명** |
 | `useOnboardingProgress` | `features/onboarding/model` | 진행 상태 훅. **TRIP-173에서 `hooks/`→`model/` 개명** |
 | `useTermsConsent` · `useNickname` | `pages/onboarding-terms/model` · `pages/onboarding-nickname/model` | 약관 · 닉네임 훅. TRIP-173에서 `hooks/`→`model/` 개명, **TRIP-1146으로 각 page 슬라이스로 이사**(소비처가 그 page 하나뿐 — 재사용 공개 API가 아니다) |
 | `SPLASH_BACKGROUND_COLORS` · `SPLASH_BACKGROUND_LOCATIONS` · `APP_ICON_COLORS` · `AUTH_ICON_COLORS` | `features/auth/config/gradients` | 그라디언트 상수. **TRIP-173에서 `lib/`→`config/` 개명**, `AUTH_ICON_COLORS`(경고 글리프 색)는 **FSD 완결 4/4 신설**(code-critic 03b 참고-1: 이 행 갱신 누락이 "이름 다른 재구현" 경로를 여는 사례로 실측됨 — 다음에 경고 아이콘 색이 또 필요하면 여기부터 본다) |
 | `BOOTSTRAP_TIMEOUT_MS` | `features/auth/model` | 부트스트랩 타임아웃 |
-| `LoginPage` | `pages/login` | 로그인 훅↔화면 배선(구 `features/auth/containers/SocialLoginContainer`, TRIP-173 신설) |
+| `LoginPage` | `pages/auth/login` | 로그인 훅↔화면 배선(구 `features/auth/containers/SocialLoginContainer`, TRIP-173 신설) |
 | `TermsPage` · `NicknamePage` · `PrefStep1Page` · `PrefStep2Page` | `pages/onboarding-{terms,nickname,pref1,pref2}` | 온보딩 각 단계 배선(구 `features/onboarding/containers/*Container`, TRIP-173 신설) |
 | `LocationPage` | `pages/onboarding-location` | **신규(TRIP-459)** — c08 위치 권한 프리프롬프트 배선. 동결 `shared/location/LocationPreprompt`(TRIP-162)의 콜백에 `expo-location` 실호출(리포 최초)을 건다. nickname→location→pref1 체인 삽입(D7 반전) |
 | `SplashGate` | `app-shell` | 부트스트랩 결과 라우팅(구 `features/auth/containers/SplashGate`, TRIP-173 신설 — `src/app` 밖) |

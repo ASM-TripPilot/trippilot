@@ -20,7 +20,7 @@ import { join } from 'node:path';
  */
 
 const LIB_DIR = __dirname;
-const SRC_DIR = join(LIB_DIR, '..', '..', '..');
+const SRC_DIR = join(LIB_DIR, '..', '..', '..', '..');
 const MAKE_AUTHORIZE = join(LIB_DIR, 'makeAuthorize.ts');
 const OAUTH_CONFIG = join(LIB_DIR, '..', 'config', 'oauthConfig.ts');
 const TEST_ONLY_DIRS = ['__tests__', '__mocks__', 'test-support', 'mocks'];
@@ -208,7 +208,7 @@ describe('AC-11 · 네이티브 SDK lazy 경계 (소스 스캔)', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('애플 SDK 를 정적 import 하는 프로덕션 파일은 전부 pages/login/lib/ 안에 있다 (TRIP-932 · 화면·페이지 직접 import 차단)', () => {
+  it('애플 SDK 를 정적 import 하는 프로덕션 파일은 전부 pages/auth/login/lib/ 안에 있다 (TRIP-932 · 화면·페이지 직접 import 차단)', () => {
     const sources = productionSources();
 
     const appleImporters = sources
@@ -221,7 +221,7 @@ describe('AC-11 · 네이티브 SDK lazy 경계 (소스 스캔)', () => {
     // 본체 — lib 밖(예: ui/SocialLoginScreen.tsx 가 공식 버튼을 직접 import, pages/LoginPage 가
     // isAvailableAsync 를 직접 import)에서 정적으로 끌어오는 파일이 하나도 없다.
     expect(
-      appleImporters.filter((file) => !file.startsWith('pages/login/lib/'))
+      appleImporters.filter((file) => !file.startsWith('pages/auth/login/lib/'))
     ).toEqual([]);
   });
 });
