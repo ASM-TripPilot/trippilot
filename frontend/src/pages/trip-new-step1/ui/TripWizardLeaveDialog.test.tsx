@@ -227,7 +227,9 @@ describe('🔴 AC-11(Q4 모양) · 뷰는 props 만 받는다', () => {
   const isForbidden = (spec: string): boolean =>
     FORBIDDEN.some(
       (prefix) => spec === prefix || spec.startsWith(`${prefix}/`)
-    ) || spec.startsWith('../model');
+    ) ||
+    spec.startsWith('../model') ||
+    /^(\.\.\/)+features\//.test(spec); // 상대경로로 슬라이스 밖 features 를 뚫는 것도 금칙
 
   it('탐지기 자가검사 — 금칙 import 는 잡고 react-native 는 통과시킨다', () => {
     const sample = [
