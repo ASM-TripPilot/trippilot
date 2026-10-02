@@ -5,9 +5,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
-import type { MyTripsSortKey } from '../model/myTripsOrder';
+import type { MyTripsSortKey } from '@/features/itinerary/model/myTripsOrder';
 
-import { CalendarGlyph, ChevronDownGlyph } from './ItineraryGlyphs';
+import {
+  CalendarGlyph,
+  ChevronDownGlyph,
+} from '@/features/itinerary/ui/ItineraryGlyphs';
 
 /**
  * TRIP-468 · h37 "내 여행" 목록 화면 — 순수 프레젠테이션(3얼굴: list·empty·loading).

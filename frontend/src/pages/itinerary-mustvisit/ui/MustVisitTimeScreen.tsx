@@ -10,21 +10,21 @@ import BottomSheet, {
 
 import { WheelPicker } from '@/shared/ui/WheelPicker';
 
-import { MUST_VISIT_NAME_PLACEHOLDER } from '../model/mustVisitList';
+import { MUST_VISIT_NAME_PLACEHOLDER } from '@/features/itinerary/model/mustVisitList';
 import {
   DWELL_OPTIONS,
   startTimeLabel,
   canSubmitMustVisitTime,
   type DwellKey,
   type MustVisitTimeForm,
-} from '../model/mustVisitTimeForm';
+} from '@/features/itinerary/model/mustVisitTimeForm';
 import {
   AlertCircleGlyph,
   BackChevronGlyph,
   ChevronDownGlyph,
   ClockGlyph,
   InfoCircleGlyph,
-} from './ItineraryGlyphs';
+} from '@/features/itinerary/ui/ItineraryGlyphs';
 
 /**
  * h07 방문 시각 지정 — Figma `1904:1083`.

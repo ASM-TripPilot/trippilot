@@ -73,8 +73,8 @@ import {
 import { ConceptPickerScreen } from '@/pages/itinerary-copick/ui/ConceptPickerScreen';
 import { GenerationFallbackScreen } from '@/pages/itinerary-draft/ui/GenerationFallbackScreen';
 import { GeneratingScreen } from '@/pages/itinerary-generating/ui/GeneratingScreen';
-import { MustVisitPickerScreen } from '@/features/itinerary/ui/MustVisitPickerScreen';
-import { MustVisitTimeScreen } from '@/features/itinerary/ui/MustVisitTimeScreen';
+import { MustVisitPickerScreen } from '@/pages/itinerary-mustvisit/ui/MustVisitPickerScreen';
+import { MustVisitTimeScreen } from '@/pages/itinerary-mustvisit/ui/MustVisitTimeScreen';
 import {
   PlaceAddHeader,
   PlaceAddRow,
@@ -105,7 +105,7 @@ import {
   MyTripCard,
   type MyTripCardVM,
 } from '@/features/itinerary/ui/MyTripCard';
-import { MyTripsListScreen } from '@/features/itinerary/ui/MyTripsListScreen';
+import { MyTripsListScreen } from '@/pages/itinerary-list/ui/MyTripsListScreen';
 import { MyTripsSortSheet } from '@/features/itinerary/ui/MyTripsSortSheet';
 import { TripDeleteDialog } from '@/features/itinerary/ui/TripDeleteDialog';
 import {
