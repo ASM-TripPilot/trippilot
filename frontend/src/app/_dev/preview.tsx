@@ -30,8 +30,6 @@ import {
   PREVIEW_SAVED_PLACES,
   PREVIEW_SAVED_POI_IDS,
 } from '@/features/explore/model/exploreFixtures';
-import type { PlaceDetailView } from '@/features/execution/model/placeDetailView';
-import { PlaceDetailScreen } from '@/features/execution/ui/PlaceDetailScreen';
 import { TriggerChip } from '@/features/execution/ui/TriggerChip';
 import { MemoInline } from '@/features/record/ui/MemoInline';
 import { MemoSheet } from '@/features/record/ui/MemoSheet';
@@ -48,6 +46,8 @@ import { TripSummaryScreen } from '@/features/reflection/ui/TripSummaryScreen';
 import { MustVisitOutsideConfirmDialog } from '@/pages/saved-places/ui/MustVisitOutsideConfirmDialog';
 import { MustVisitPickScreen } from '@/pages/saved-places/ui/MustVisitPickScreen';
 import { PlaceDetailScreen as ExplorePlaceDetailScreen } from '@/pages/place-detail/ui/PlaceDetailScreen';
+import type { PlaceDetailView } from '@/pages/live-place/model/placeDetailView';
+import { PlaceDetailScreen } from '@/pages/live-place/ui/PlaceDetailScreen';
 import { PlaceExploreScreen } from '@/pages/place-explore/ui/PlaceExploreScreen';
 import { RegionPickerScreen } from '@/pages/region-picker/ui/RegionPickerScreen';
 import { SavedPlaceListScreen } from '@/pages/saved-places/ui/SavedPlaceListScreen';

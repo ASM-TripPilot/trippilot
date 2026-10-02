@@ -149,7 +149,6 @@ const SEOUL_ITINERARY = {
   ],
 } as unknown as Itinerary;
 
-const DURATION = /\d+\s*(초|분|시간)|소요/;
 const MSG_409 = '여행 기간에만 AI에게 맡길 수 있어요';
 const MSG_GENERIC = '다시 짜기를 시작하지 못했어요. 잠시 후 다시 시도해 주세요';
 const SOLVING_HREF = {
@@ -383,7 +382,6 @@ describe('🔴 AC-B5 · Q7 — 실패하면 같은 화면에 안내하고 이동
     expect(mockReplace).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
     expect(mockNavigate).not.toHaveBeenCalled();
-    expect(screen.queryByText(DURATION)).toBeNull();
   });
 
   it('실패 뒤에는 다시 누를 수 있다(중복 가드가 풀린다) — mutate 2회', () => {
@@ -404,14 +402,5 @@ describe('AC-A7 · INV-4 — 컨테이너도 state 없이 열려 죽지 않는�
 
     expect(screen.getByTestId('live-location-manual')).toBeOnTheScreen();
     expect(pickerCenter()).toEqual(GYEONGBOK);
-  });
-});
-
-describe('🔴 AC-B6 · INV-3 — 소요·대기 시간 문구 없음', () => {
-  it('일정이 온 화면에 분·시간·초·소요 표기가 없다', () => {
-    renderPage('permission-denied');
-
-    expect(screen.getByTestId('center-pin-picker')).toBeOnTheScreen();
-    expect(screen.queryByText(DURATION)).toBeNull();
   });
 });

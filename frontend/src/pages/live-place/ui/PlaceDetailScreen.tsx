@@ -12,15 +12,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { PlaceSubtitle } from '@/entities/place/ui/PlaceSubtitle';
-import { MapView } from '@/shared/map';
-
-import type { PlaceDetailView } from '../model/placeDetailView';
 import {
   BackArrowGlyph,
   HeroPhotoGlyph,
   HeroPinGlyph,
   ShareGlyph,
-} from './ExecutionGlyphs';
+} from '@/features/execution/ui/ExecutionGlyphs';
+import { MapView } from '@/shared/map';
+
+import type { PlaceDetailView } from '../model/placeDetailView';
 
 /**
  * TRIP-755 · PlaceDetailScreen(i10, Figma 4159:2673) — 여행 중 현재 장소 상세, 무상태 화면.

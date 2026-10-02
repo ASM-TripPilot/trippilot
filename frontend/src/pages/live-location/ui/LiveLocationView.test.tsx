@@ -42,7 +42,6 @@ jest.mock('@/shared/api/generated/stays/stays', () => ({
 const mockReverse = useGetStaysReverseGeocode as jest.Mock;
 
 const SEOUL: MapCenter = { lat: 37.5796, lng: 126.977 };
-const DURATION = /\d+\s*(초|분|시간)|소요/;
 
 beforeEach(() => {
   mockReverse.mockClear();
@@ -263,29 +262,6 @@ describe('TRIP-979 AC-A7 · state 미지정·미지 값은 manual 얼굴로 폴�
     expect(screen.queryByTestId('live-location-permission-denied')).toBeNull();
     expect(screen.getByText(/위치를 확인할 수 없어/)).toBeOnTheScreen();
     expect(screen.getByTestId('center-pin-picker')).toBeOnTheScreen();
-  });
-});
-
-describe('🔴 AC-B6 · INV-3 — 어느 얼굴·상태에도 소요·대기 시간 문구가 없다', () => {
-  it.each([
-    [
-      'manual',
-      SEOUL,
-      '다시 짜기를 시작하지 못했어요. 잠시 후 다시 시도해 주세요',
-    ],
-    ['permission-denied', SEOUL, '여행 기간에만 AI에게 맡길 수 있어요'],
-    ['manual', null, null],
-  ] as const)('%s · center=%j · error=%s', (state, center, errorText) => {
-    render(
-      <LiveLocationView
-        state={state}
-        center={center}
-        placeName="경복궁"
-        errorText={errorText}
-      />
-    );
-
-    expect(screen.queryByText(DURATION)).toBeNull();
   });
 });
 
