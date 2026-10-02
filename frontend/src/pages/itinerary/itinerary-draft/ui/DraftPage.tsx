@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 
-import { useSavedPlaces } from '@/features/save-place/model/savedPlaces';
+import { useSavedPlaces } from '@/features/save-place';
 import {
   buildDraftDayTabs,
   buildDraftPins,
@@ -16,15 +16,15 @@ import {
   resolveDraftView,
   resolveFallbackNotice,
   shouldKeepPollingDraft,
-} from '@/features/itinerary/model/draftView';
-import type { GenerationDayState } from '@/features/itinerary/model/draftView';
+} from '@/features/itinerary';
+import type { GenerationDayState } from '@/features/itinerary';
 import { legDistance } from '@/entities/place';
-import { resolveUnplacedNames } from '@/features/itinerary/model/unplacedMustVisits';
-import { isGenerationRunning } from '@/features/itinerary/model/useGenerationBusy';
+import { resolveUnplacedNames } from '@/features/itinerary';
+import { isGenerationRunning } from '@/features/itinerary';
 import { DraftScreen } from './DraftScreen';
 import { GenerationFallbackScreen } from './GenerationFallbackScreen';
-import { AlertCircleGlyph } from '@/features/itinerary/ui/ItineraryGlyphs';
-import { UnplacedMustVisitNotice } from '@/features/itinerary/ui/UnplacedMustVisitNotice';
+import { AlertCircleGlyph } from '@/features/itinerary';
+import { UnplacedMustVisitNotice } from '@/features/itinerary';
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import { VIOLATION_NOTICE } from '@/entities/itinerary-slot';
 import { SlotStopCard } from '@/entities/itinerary-slot';

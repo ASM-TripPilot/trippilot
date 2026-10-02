@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import type { Region } from '@/shared/api/generated/schemas';
 import { RegionLevel } from '@/shared/api/generated/schemas';
-import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
+import { regionPickerHref } from '@/features/explore/index.view';
 import type * as TripWizardStoreModule from '@/features/create-trip/model/tripWizardStore';
 
 import { RegionPickerPage } from './RegionPickerPage';

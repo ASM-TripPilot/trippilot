@@ -10,9 +10,9 @@ import { isTripOngoing } from '@/entities/trip';
 import {
   itineraryDestinationHref,
   resolveItineraryDestination,
-} from '@/features/itinerary/model/planState';
+} from '@/features/itinerary';
 import { deriveTripCardFace } from '../model/tripCardFace';
-import { isGenerationRunning } from '@/features/itinerary/model/useGenerationBusy';
+import { isGenerationRunning } from '@/features/itinerary';
 import { MyTripCard, type MyTripBadge, type MyTripCardVM } from './MyTripCard';
 
 /**

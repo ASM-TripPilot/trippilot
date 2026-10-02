@@ -18,7 +18,7 @@ import {
   LocationOffGlyph,
   PhotoOffGlyph,
   RetryGlyph,
-} from '@/features/reflection/ui/ReflectionGlyphs';
+} from '@/features/reflection/index.view';
 import { ReflectionPhotoGrid } from './ReflectionPhotoGrid';
 import { ReflectionStatsRow } from './ReflectionStatsRow';
 

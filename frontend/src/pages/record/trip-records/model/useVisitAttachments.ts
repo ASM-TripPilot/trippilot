@@ -11,8 +11,8 @@ import type { VisitPhoto } from '@/shared/api/generated/schemas';
 import {
   photoAttach,
   type PhotoAssetMeta,
-} from '@/features/attach-visit-media/model/photoAttach';
-import { useVisitMemo } from '@/features/attach-visit-media/model/useVisitMemo';
+} from '@/features/attach-visit-media';
+import { useVisitMemo } from '@/features/attach-visit-media';
 
 /**
  * TRIP-566 · AC-5 · BR-U5-13 — 방문 첨부 배선 훅(사진 GET/POST · 메모 PUT upsert).

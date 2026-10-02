@@ -2,18 +2,18 @@ import type { ReactElement } from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
 
-import { isShareCaptureArmed } from '@/features/share-trip-card/model/shareCapture';
-import { summaryStats } from '@/features/reflection/model/summaryStats';
+import { isShareCaptureArmed } from '@/features/share-trip-card';
+import { summaryStats } from '@/features/reflection';
 import {
   daySubtitle,
   distanceSourceLabel,
   resolveSummaryView,
   shareEnabled,
   toOrderedVisitList,
-} from '@/features/reflection/model/summaryView';
-import { useTripSummary } from '@/features/reflection/model/useTripSummary';
+} from '@/features/reflection';
+import { useTripSummary } from '@/features/reflection';
 import { TripSummaryScreen, type DayCardVM } from './TripSummaryScreen';
-import { tripDayChips } from '@/features/add-must-visit/model/mustVisitTimeForm';
+import { tripDayChips } from '@/features/add-must-visit';
 import { formatDayLabel } from '@/entities/trip';
 import { useGetTripsTripId } from '@/shared/api/generated/trips/trips';
 import { StateNotice } from '@/shared/ui/StateNotice';

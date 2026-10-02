@@ -293,15 +293,28 @@
 - `src/entities/trip/ui/TripCard.tsx`  →  TripCardProps · TripCard
 - `src/entities/trip/ui/TripGlyphs.tsx`  →  ChevronRightGlyph · MoreDotsGlyph · TrashGlyph
 
+## src/features/add-must-visit/
+- `src/features/add-must-visit/index.ts`  →  DEFAULT_DWELL_KEY · DWELL_OPTIONS · buildAnytimeMustVisitRequest · buildFixedMustVisitRequest · canSubmitMustVisitTime · mustVisitTimeBlockReason · startTimeLabel · startTimeOptions · tripDayChips
+
 ## src/features/add-must-visit/model/
 - `src/features/add-must-visit/model/mustVisitTimeForm.ts`  →  DwellKey · MustVisitTimeForm · DWELL_OPTIONS · DEFAULT_DWELL_KEY · tripDayChips · startTimeOptions · startTimeLabel · mustVisitTimeBlockReason · canSubmitMustVisitTime · buildFixedMustVisitRequest · buildAnytimeMustVisitRequest
+
+## src/features/apply-replan/
+- `src/features/apply-replan/index.ts`  →  useApplyReplan
 
 ## src/features/apply-replan/model/
 - `src/features/apply-replan/model/useApplyReplan.ts`  →  useApplyReplan
 
+## src/features/assign-trip-base/
+- `src/features/assign-trip-base/index.ts`  →  useAssignBase · useTripBases
+
 ## src/features/assign-trip-base/model/
 - `src/features/assign-trip-base/model/baseAssignPlan.ts`  →  BaseAssignPlan · planBaseAssign
 - `src/features/assign-trip-base/model/useTripBases.ts`  →  useTripBases · useAssignBase
+
+## src/features/attach-visit-media/
+- `src/features/attach-visit-media/index.ts`  →  photoAttach · pickPhotoForVisit · useVisitMemo · MemoInline
+- `src/features/attach-visit-media/index.view.ts`  →  photoAttach · MemoInline
 
 ## src/features/attach-visit-media/model/
 - `src/features/attach-visit-media/model/photoAttach.ts`  →  photoAttach
@@ -314,6 +327,10 @@
 ## src/features/auth/config/
 - `src/features/auth/config/gradients.ts`  →  SPLASH_BACKGROUND_COLORS · SPLASH_BACKGROUND_LOCATIONS · APP_ICON_COLORS · AUTH_ICON_COLORS
 
+## src/features/auth/
+- `src/features/auth/index.ts`  →  APP_ICON_COLORS · waitForGateDestination · useBootstrapGate · AppIconGlyph · AppleLogoGlyph · GoogleIcon · KakaoIcon · NaverIcon · SplashScreen
+- `src/features/auth/index.view.ts`  →  APP_ICON_COLORS · waitForGateDestination · AppIconGlyph · AppleLogoGlyph · GoogleIcon · KakaoIcon · NaverIcon · SplashScreen
+
 ## src/features/auth/model/
 - `src/features/auth/model/gateDestination.ts`  →  publishGateDestination · getGateDestination · waitForGateDestination · resetGateDestination
 - `src/features/auth/model/resolveBootstrapDestination.ts`  →  BootstrapDestination · resolveBootstrapDestination
@@ -324,10 +341,17 @@
 - `src/features/auth/ui/SplashIllustration.tsx`  →  SplashIllustration
 - `src/features/auth/ui/SplashScreen.tsx`  →  SplashScreen
 
+## src/features/check-visit/
+- `src/features/check-visit/index.ts`  →  rememberSpontaneousName · useSpontaneousNames · useVisitCheck · deriveVisitStatus · isOptimisticVisit
+- `src/features/check-visit/index.view.ts`  →  rememberSpontaneousName · useSpontaneousNames · deriveVisitStatus · isOptimisticVisit
+
 ## src/features/check-visit/model/
 - `src/features/check-visit/model/spontaneousNames.ts`  →  rememberSpontaneousName · useSpontaneousNames
 - `src/features/check-visit/model/useVisitCheck.ts`  →  VisitCheckOutcome · useVisitCheck
 - `src/features/check-visit/model/visitStatus.ts`  →  OPTIMISTIC_VISIT_ID_PREFIX · isOptimisticVisit · VisitStatus · deriveVisitStatus
+
+## src/features/create-trip/
+- `src/features/create-trip/index.ts`  →  mustVisitFailureNotice · seedMustVisits · nightsSum · validateTripDraft · formatWizardStep · summaryBudget · summaryCompanion · summaryDestinations · summaryPeriod · summaryPreferences · COMPANION_OPTIONS · deriveEndDate · fromEpochDay · useTripWizardStore · isWizardOrigin · wizardOriginParams
 
 ## src/features/create-trip/model/
 - `src/features/create-trip/model/mustVisitSeed.ts`  →  MustVisitSeedItem · MUST_VISIT_THUMBNAIL_LIMIT · seedMustVisits · mergeMustVisitSeeds · MustVisitSectionView · resolveMustVisitSection · mustVisitFailureNotice
@@ -336,6 +360,9 @@
 - `src/features/create-trip/model/tripWizardStep1.ts`  →  PeriodPresetCode · CompanionCode · PERIOD_PRESETS · COMPANION_OPTIONS · fromEpochDay · presetRange · deriveEndDate
 - `src/features/create-trip/model/tripWizardStore.ts`  →  TripWizardField · TripWizardDraft · useTripWizardStore
 - `src/features/create-trip/model/wizardOrigin.ts`  →  WizardOriginParams · wizardOriginParams · isWizardOrigin
+
+## src/features/edit-itinerary/
+- `src/features/edit-itinerary/index.ts`  →  buildEditItineraryRequest · addSlot · insertSlotAt · useItineraryEditStore · resolveSlotSwapError · swapSlotPoi · SaveConflictDialog
 
 ## src/features/edit-itinerary/model/
 - `src/features/edit-itinerary/model/buildEditItineraryRequest.ts`  →  buildEditItineraryRequest
@@ -346,11 +373,18 @@
 ## src/features/edit-itinerary/ui/
 - `src/features/edit-itinerary/ui/SaveConflictDialog.tsx`  →  SaveConflictDialog
 
+## src/features/edit-preferences/
+- `src/features/edit-preferences/index.ts`  →  buildPreferenceInput · initialSelection · ACTIVITY · STYLE · toPreferenceInput · usePreferenceStore
+
 ## src/features/edit-preferences/model/
 - `src/features/edit-preferences/model/preferenceDraft.ts`  →  PreferenceSelection · initialSelection · buildPreferenceInput
 - `src/features/edit-preferences/model/preferenceInput.ts`  →  PreferenceDraftValues · STYLE · ACTIVITY · toPreferenceInput
 - `src/features/edit-preferences/model/preferenceSelection.ts`  →  toggleMulti · toggleSingle
 - `src/features/edit-preferences/model/preferenceStore.ts`  →  PreferenceDraft · usePreferenceStore
+
+## src/features/execution/
+- `src/features/execution/index.ts`  →  useLiveItinerary · BackArrowGlyph · HeroPhotoGlyph · HeroPinGlyph · RailActiveGlyph · RailDoneGlyph · RailUpcomingGlyph · ShareGlyph · WarningFilledGlyph
+- `src/features/execution/index.view.ts`  →  BackArrowGlyph · HeroPhotoGlyph · HeroPinGlyph · RailActiveGlyph · RailDoneGlyph · RailUpcomingGlyph · ShareGlyph · WarningFilledGlyph
 
 ## src/features/execution/model/
 - `src/features/execution/model/dwellMinutes.ts`  →  dwellMinutes
@@ -359,6 +393,10 @@
 
 ## src/features/execution/ui/
 - `src/features/execution/ui/ExecutionGlyphs.tsx`  →  RailDoneGlyph · RailActiveGlyph · RailUpcomingGlyph · BackArrowGlyph · ShareGlyph · WarningFilledGlyph · WeatherCloudGlyph · HeroPinGlyph · HeroPhotoGlyph
+
+## src/features/explore/
+- `src/features/explore/index.ts`  →  resolvePlaceListState · regionPickerHref · filterRegions · groupRegionsBySido · regionTint · useRegions · useMultiRegionPlaces · usePlacesInfinite · BackChevronGlyph · CheckCircleFilledGlyph · CheckCircleOutlineGlyph · CircleExclaimGlyph · CloseGlyph · FilterSlidersGlyph · InfoGlyph · MapPinGlyph · PlusGlyph · SearchGlyph · ShareGlyph · SuitcaseGlyph · WarningTriangleGlyph
+- `src/features/explore/index.view.ts`  →  resolvePlaceListState · regionPickerHref · filterRegions · groupRegionsBySido · regionTint · useRegions · BackChevronGlyph · CheckCircleFilledGlyph · CheckCircleOutlineGlyph · CircleExclaimGlyph · CloseGlyph · FilterSlidersGlyph · InfoGlyph · MapPinGlyph · PlusGlyph · SearchGlyph · ShareGlyph · SuitcaseGlyph · WarningTriangleGlyph
 
 ## src/features/explore/model/
 - `src/features/explore/model/mergePlaces.ts`  →  mergePlacesByPoiId
@@ -372,11 +410,18 @@
 ## src/features/explore/ui/
 - `src/features/explore/ui/ExploreGlyphs.tsx`  →  SuitcaseGlyph · CloseGlyph · PlusGlyph · BackChevronGlyph · ShareGlyph · SearchGlyph · MapPinGlyph · FilterSlidersGlyph · WarningTriangleGlyph · CheckCircleFilledGlyph · CheckCircleOutlineGlyph · CircleExclaimGlyph · InfoGlyph
 
+## src/features/home/
+- `src/features/home/index.ts`  →  BackChevronGlyph · BellGlyph · CloseGlyph · HeartFilledGlyph · HeartOutlineGlyph · LocationPinGlyph · MapPinGlyph · PlusGlyph · SearchGlyph · SparkleGlyph · SuitcaseGlyph
+
 ## src/features/home/ui/
 - `src/features/home/ui/HomeGlyphs.tsx`  →  BellGlyph · SearchGlyph · BackChevronGlyph · SparkleGlyph · LocationPinGlyph · HeartOutlineGlyph · HeartFilledGlyph · PlusGlyph · MapPinGlyph · SuitcaseGlyph · CloseGlyph
 
 ## src/features/itinerary/config/
 - `src/features/itinerary/config/placeCategoryChips.ts`  →  PlaceCategoryChip · PLACE_CATEGORY_CHIPS
+
+## src/features/itinerary/
+- `src/features/itinerary/index.ts`  →  countPickedCoPickSlots · firstCoPickSlotKey · nextCoPickSlotKey · DRAFT_POLL_INTERVAL_MS · buildDraftDayTabs · buildDraftPins · buildGenerationGauge · foldGenerationGauge · formatCoPickDayHeader · formatDraftDayHeader · resolveDraftView · resolveFallbackNotice · shouldKeepPollingDraft · MUST_VISIT_NAME_PLACEHOLDER · buildMustVisitPins · fixedTimeLabel · joinMustVisits · resolveMustVisitListView · buildPlanDayTabs · isConfirmLocked · itineraryDestinationHref · resolveItineraryDestination · resolvePlanState · resolveUnplacedNames · isGenerationRunning · useGenerationBusy · AlertCircleGlyph · BackChevronGlyph · CalendarGlyph · CheckCircleGlyph · CheckGlyph · ChevronDownGlyph · ChevronRightGlyph · ClockGlyph · CloseGlyph · CoPickGlyph · DashGlyph · DiamondGlyph · FullAiGlyph · InfoCircleGlyph · LinkChevronGlyph · LocationOffGlyph · LockGlyph · ManualGlyph · PencilGlyph · PlusGlyph · SortCheckGlyph · WarningTriangleGlyph · PlaceAddHeader · PlaceAddRow · UnplacedMustVisitNotice
+- `src/features/itinerary/index.view.ts`  →  countPickedCoPickSlots · firstCoPickSlotKey · nextCoPickSlotKey · DRAFT_POLL_INTERVAL_MS · buildDraftDayTabs · buildDraftPins · buildGenerationGauge · foldGenerationGauge · formatCoPickDayHeader · formatDraftDayHeader · resolveDraftView · resolveFallbackNotice · shouldKeepPollingDraft · MUST_VISIT_NAME_PLACEHOLDER · buildMustVisitPins · fixedTimeLabel · joinMustVisits · resolveMustVisitListView · buildPlanDayTabs · isConfirmLocked · itineraryDestinationHref · resolveItineraryDestination · resolvePlanState · resolveUnplacedNames · AlertCircleGlyph · BackChevronGlyph · CalendarGlyph · CheckCircleGlyph · CheckGlyph · ChevronDownGlyph · ChevronRightGlyph · ClockGlyph · CloseGlyph · CoPickGlyph · DashGlyph · DiamondGlyph · FullAiGlyph · InfoCircleGlyph · LinkChevronGlyph · LocationOffGlyph · LockGlyph · ManualGlyph · PencilGlyph · PlusGlyph · SortCheckGlyph · WarningTriangleGlyph · PlaceAddHeader · PlaceAddRow · UnplacedMustVisitNotice
 
 ## src/features/itinerary/model/
 - `src/features/itinerary/model/coPickSlots.ts`  →  firstCoPickSlotKey · nextCoPickSlotKey · countPickedCoPickSlots
@@ -391,8 +436,14 @@
 - `src/features/itinerary/ui/PlaceAddScreen.tsx`  →  PlaceAddHeaderProps · PlaceAddHeader · PlaceAddRowProps · PlaceAddRow
 - `src/features/itinerary/ui/UnplacedMustVisitNotice.tsx`  →  UnplacedMustVisitNotice
 
+## src/features/notification/
+- `src/features/notification/index.ts`  →  NotifBackChevronGlyph · NotifInfoGlyph · NotifWarningGlyph
+
 ## src/features/notification/ui/
 - `src/features/notification/ui/NotificationGlyphs.tsx`  →  NotifBackChevronGlyph · NotifInfoGlyph · NotifWarningGlyph
+
+## src/features/onboarding/
+- `src/features/onboarding/index.ts`  →  resolveOnboardingStep · termsDocumentTitle · useOnboardingProgress · ActivityGlyph · ArtGlyph · BackChevronGlyph · BalanceGlyph · BikeGlyph · CameraGlyph · CarGlyph · CheckGlyph · FamilyGlyph · ForkKnifeGlyph · FriendsGlyph · HeartGlyph · InfoCircleGlyph · LightningGlyph · MoonGlyph · MountainGlyph · ParentsGlyph · PetGlyph · PositiveCheckGlyph · RegenerateGlyph · ShoppingBagGlyph · SkipChevronGlyph · SoloPersonGlyph · SunGlyph · TaxiGlyph · TransitGlyph · ViewChevronGlyph · WalkGlyph
 
 ## src/features/onboarding/model/
 - `src/features/onboarding/model/resolveOnboardingStep.ts`  →  OnboardingStep · OnboardingProgress · resolveOnboardingStep
@@ -404,6 +455,10 @@
 
 ## src/features/planb/config/
 - `src/features/planb/config/watchLabels.ts`  →  WatchKind · WATCH_CATEGORY_LABEL · WATCH_STATUS_LABEL
+
+## src/features/planb/
+- `src/features/planb/index.ts`  →  WATCH_CATEGORY_LABEL · WATCH_STATUS_LABEL · triggerLabel · triggerPillCopy · useActiveTriggers · AppliedAlertGlyph · RiskWarningGlyph
+- `src/features/planb/index.view.ts`  →  WATCH_CATEGORY_LABEL · WATCH_STATUS_LABEL · triggerLabel · triggerPillCopy · AppliedAlertGlyph · RiskWarningGlyph
 
 ## src/features/planb/model/
 - `src/features/planb/model/appliedSummary.ts`  →  AppliedSummaryInput · appliedSummaryBadges
@@ -417,11 +472,18 @@
 - `src/features/planb/ui/PlanbGlyphs.tsx`  →  AppliedAlertGlyph · RiskWarningGlyph · ChevronRightGlyph · LockGlyph
 - `src/features/planb/ui/SlotCandidateSheet.tsx`  →  SlotCandidateSheetProps · SlotCandidateSheet
 
+## src/features/record/
+- `src/features/record/index.ts`  →  BackArrowGlyph · CalendarGlyph · ChevronDownGlyph · ChevronRightGlyph · CloseGlyph · GpsOffGlyph · InfoCircleGlyph · LegendChevronGlyph · NoteGlyph · PlusGlyph · RetryGlyph · VisitCheckActiveGlyph · VisitCheckDoneGlyph · VisitCheckSkippedGlyph · VisitCheckUpcomingGlyph · WarningTriangleGlyph
+
 ## src/features/record/model/
 - `src/features/record/model/conflict.ts`  →  ConflictChoice · ConflictSelection · ConflictRow · ConflictVisitVM · isVisitConflict
 
 ## src/features/record/ui/
 - `src/features/record/ui/RecordGlyphs.tsx`  →  VisitCheckDoneGlyph · VisitCheckActiveGlyph · VisitCheckUpcomingGlyph · VisitCheckSkippedGlyph · PlusGlyph · NoteGlyph · WarningTriangleGlyph · RetryGlyph · BackArrowGlyph · ChevronRightGlyph · LegendChevronGlyph · ChevronDownGlyph · InfoCircleGlyph · GpsOffGlyph · CalendarGlyph · CloseGlyph
+
+## src/features/reflection/
+- `src/features/reflection/index.ts`  →  formatKm · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · SHARE_FORMATS · buildShareCard · formatShareCardStats · validateCaption · validateHashtags · summaryStats · daySubtitle · distanceSourceLabel · resolveSummaryView · shareEnabled · toOrderedVisitList · useTripSummary · BackArrowGlyph · EmptyCircleGlyph · LocationOffGlyph · PhotoOffGlyph · RetryGlyph
+- `src/features/reflection/index.view.ts`  →  formatKm · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · SHARE_FORMATS · buildShareCard · formatShareCardStats · validateCaption · validateHashtags · summaryStats · daySubtitle · distanceSourceLabel · resolveSummaryView · shareEnabled · toOrderedVisitList · BackArrowGlyph · EmptyCircleGlyph · LocationOffGlyph · PhotoOffGlyph · RetryGlyph
 
 ## src/features/reflection/model/
 - `src/features/reflection/model/formatKm.ts`  →  formatKm
@@ -433,6 +495,10 @@
 ## src/features/reflection/ui/
 - `src/features/reflection/ui/ReflectionGlyphs.tsx`  →  BackArrowGlyph · LocationOffGlyph · PhotoOffGlyph · EmptyCircleGlyph · RetryGlyph · MoodSadGlyph · MoodSosoGlyph · MoodGoodGlyph
 
+## src/features/request-replan/
+- `src/features/request-replan/index.ts`  →  useReplanFormStore · deriveReplanMapAnchor · buildGpsOrigin · buildManualOrigin · isEstimatedOrigin · buildStartReplanRequest · REPLAN_SCOPES · useStartReplan
+- `src/features/request-replan/index.view.ts`  →  useReplanFormStore · deriveReplanMapAnchor · buildGpsOrigin · buildManualOrigin · isEstimatedOrigin · buildStartReplanRequest · REPLAN_SCOPES
+
 ## src/features/request-replan/model/
 - `src/features/request-replan/model/replanFormStore.ts`  →  ReplanFormState · useReplanFormStore
 - `src/features/request-replan/model/replanMapCenter.ts`  →  REPLAN_MAP_FALLBACK_CENTER · deriveReplanMapAnchor
@@ -441,11 +507,19 @@
 - `src/features/request-replan/model/replanScope.ts`  →  ReplanScopeOption · REPLAN_SCOPES · DEFAULT_REPLAN_SCOPE
 - `src/features/request-replan/model/useStartReplan.ts`  →  useStartReplan
 
+## src/features/save-place/
+- `src/features/save-place/index.ts`  →  COORD_BLOCKED_NOTICE · REMOVE_FAILURE_NOTICE · SAVE_FAILURE_NOTICE · hasUsableCoords · usePlaceSaveToggle · optimisticSavedPlaceId · useSavedPlaces
+- `src/features/save-place/index.view.ts`  →  COORD_BLOCKED_NOTICE · REMOVE_FAILURE_NOTICE · SAVE_FAILURE_NOTICE · hasUsableCoords · usePlaceSaveToggle · optimisticSavedPlaceId
+
 ## src/features/save-place/model/
 - `src/features/save-place/model/placeSaveGuard.ts`  →  PlaceSaveNotice · hasUsableCoords · SAVE_FAILURE_NOTICE · COORD_BLOCKED_NOTICE · REMOVE_FAILURE_NOTICE
 - `src/features/save-place/model/placeSaveToggle.ts`  →  usePlaceSaveToggle
 - `src/features/save-place/model/savedPlaceIndex.ts`  →  findSavedPlaceId · optimisticSavedPlaceId
 - `src/features/save-place/model/savedPlaces.ts`  →  SavedPlacesFailureReason · SavedPlacesOutcome · useSavedPlaces
+
+## src/features/save-stay/
+- `src/features/save-stay/index.ts`  →  useSavedStays · stayKey
+- `src/features/save-stay/index.view.ts`  →  stayKey
 
 ## src/features/save-stay/model/
 - `src/features/save-stay/model/buildSaveStayRequest.ts`  →  buildSaveStayRequest
@@ -453,20 +527,34 @@
 - `src/features/save-stay/model/savedStays.ts`  →  SavedStaysFailureReason · SavedStaysOutcome · useSavedStays
 - `src/features/save-stay/model/stayKey.ts`  →  stayKey
 
+## src/features/settings/
+- `src/features/settings/index.ts`  →  BarChartGlyph · BedGlyph · BellGlyph · ChevronLeftGlyph · ChevronRightGlyph · ContrastGlyph · DocumentGlyph · DownloadGlyph · ExternalLinkGlyph · EyeOffGlyph · GearGlyph · ListGlyph · LogoutGlyph · MUTED · MUTED_SOFT · MenuBedGlyph · PersonGlyph · PinGlyph · ShareNodesGlyph · SparkleGlyph · TrashGlyph · CARD_SHADOW
+
 ## src/features/settings/ui/
 - `src/features/settings/ui/BaseToggleDialog.tsx`  →  BaseToggleDialog
 - `src/features/settings/ui/SettingsGlyphs.tsx`  →  MUTED · MUTED_SOFT · ChevronRightGlyph · BookmarkGlyph · BarChartGlyph · ShareNodesGlyph · ListGlyph · EyeOffGlyph · GearGlyph · PencilGlyph · HeartGlyph · ChevronLeftGlyph · PersonGlyph · DownloadGlyph · ContrastGlyph · PinGlyph · BellGlyph · SparkleGlyph · ExternalLinkGlyph · BedGlyph · MenuBedGlyph · TrashGlyph · DocumentGlyph · LogoutGlyph
 - `src/features/settings/ui/cardShadow.ts`  →  CARD_SHADOW
 
+## src/features/share-trip-card/
+- `src/features/share-trip-card/index.ts`  →  isShareCaptureArmed · saveShareCardImage · shareShareCardImage
+
 ## src/features/share-trip-card/model/
 - `src/features/share-trip-card/model/shareCapture.ts`  →  SaveShareCardResult · ShareShareCardResult · isShareCaptureArmed · saveShareCardImage · shareShareCardImage
 - `src/features/share-trip-card/model/shareCaptureNative.ts`  →  captureRef · requestPermissionsAsync · saveToLibraryAsync · shareAsync
+
+## src/features/stay/
+- `src/features/stay/index.ts`  →  useStaySearch · AmenityGlyph · BackChevronGlyph · BedGlyph · BreakfastGlyph · CheckGlyph · ChevronDownGlyph · ChevronRightGlyph · ExternalLinkGlyph · FilterSlidersGlyph · HeartFilledGlyph · HeartOutlineGlyph · InfoGlyph · MapPinGlyph · OceanViewGlyph · ParkingGlyph · PlusGlyph · RefreshGlyph · SearchGlyph · ShareGlyph · WarningTriangleGlyph · WifiGlyph
+- `src/features/stay/index.view.ts`  →  AmenityGlyph · BackChevronGlyph · BedGlyph · BreakfastGlyph · CheckGlyph · ChevronDownGlyph · ChevronRightGlyph · ExternalLinkGlyph · FilterSlidersGlyph · HeartFilledGlyph · HeartOutlineGlyph · InfoGlyph · MapPinGlyph · OceanViewGlyph · ParkingGlyph · PlusGlyph · RefreshGlyph · SearchGlyph · ShareGlyph · WarningTriangleGlyph · WifiGlyph
 
 ## src/features/stay/model/
 - `src/features/stay/model/useStaySearch.ts`  →  useStaySearch
 
 ## src/features/stay/ui/
 - `src/features/stay/ui/StayGlyphs.tsx`  →  BackChevronGlyph · ChevronDownGlyph · FilterSlidersGlyph · WarningTriangleGlyph · MapPinGlyph · SearchGlyph · PlusGlyph · ChevronRightGlyph · HeartOutlineGlyph · ShareGlyph · InfoGlyph · BedGlyph · CheckGlyph · RefreshGlyph · ExternalLinkGlyph · AmenityGlyph · ParkingGlyph · BreakfastGlyph · WifiGlyph · OceanViewGlyph · HeartFilledGlyph
+
+## src/features/trip/
+- `src/features/trip/index.ts`  →  SHEET_HANDLE_INDICATOR_STYLE · addressInRegion · placeLocationLabel · regionCodeInTrip · sidoKey · sigunguLabel · useSavedStays · AlertCircleGlyph · BackChevronGlyph · BedGlyph · CheckGlyph · ChevronRightGlyph · FamilyGlyph · FriendsGlyph · GlobeGlyph · HeartGlyph · PlusGlyph · RemoveGlyph · SearchGlyph · SoloGlyph · SparkleGlyph · StepperMinusGlyph · StepperPlusGlyph · WarningTriangleGlyph
+- `src/features/trip/index.view.ts`  →  SHEET_HANDLE_INDICATOR_STYLE · addressInRegion · placeLocationLabel · regionCodeInTrip · sidoKey · sigunguLabel · AlertCircleGlyph · BackChevronGlyph · BedGlyph · CheckGlyph · ChevronRightGlyph · FamilyGlyph · FriendsGlyph · GlobeGlyph · HeartGlyph · PlusGlyph · RemoveGlyph · SearchGlyph · SoloGlyph · SparkleGlyph · StepperMinusGlyph · StepperPlusGlyph · WarningTriangleGlyph
 
 ## src/features/trip/lib/
 - `src/features/trip/lib/sheetHandle.ts`  →  SHEET_HANDLE_INDICATOR_STYLE
@@ -1490,4 +1578,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 914개 파일
+합계 952개 파일

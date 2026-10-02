@@ -1,6 +1,6 @@
 import type { BaseAssignment } from '@/shared/api/generated/schemas';
 
-import { deriveEndDate } from '@/features/create-trip/model/tripWizardStep1';
+import { deriveEndDate } from '@/features/create-trip';
 
 /** 배정 목록을 "밤 ISO → savedStayId" 지도로 편다(`[dateFrom, dateTo)`, 체크아웃 배타). 다음 밤은
  * 달력 계산(`deriveEndDate`)으로 구한다 — 문자열에 일만 더하면 월 경계에서 끝나지 않는다. */

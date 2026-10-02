@@ -14,10 +14,10 @@ import type {
   DraftDayTab,
   DraftPin,
   DraftView,
-} from '@/features/itinerary/model/draftView';
+} from '@/features/itinerary/index.view';
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import { timeBandLabel } from '@/entities/itinerary-slot';
-import { CheckCircleGlyph } from '@/features/itinerary/ui/ItineraryGlyphs';
+import { CheckCircleGlyph } from '@/features/itinerary/index.view';
 
 import { DraftScreen } from './DraftScreen';
 

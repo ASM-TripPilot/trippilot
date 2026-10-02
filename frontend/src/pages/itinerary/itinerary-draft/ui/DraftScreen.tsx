@@ -10,7 +10,7 @@ import type {
   DraftDayTab,
   DraftPin,
   DraftView,
-} from '@/features/itinerary/model/draftView';
+} from '@/features/itinerary/index.view';
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import { VIOLATION_NOTICE } from '@/entities/itinerary-slot';
 import { Skeleton } from '@/shared/ui/Skeleton';
@@ -21,7 +21,7 @@ import {
   CheckCircleGlyph,
   InfoCircleGlyph,
   LockGlyph,
-} from '@/features/itinerary/ui/ItineraryGlyphs';
+} from '@/features/itinerary/index.view';
 
 /**
  * h11 [완전AI] AI 추천안 초안 — Figma `1870:1083`.

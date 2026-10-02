@@ -1,4 +1,4 @@
-import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
+import { useTripWizardStore } from '@/features/create-trip';
 
 /**
  * 위저드 드래프트(모듈 싱글턴) 테스트 헬퍼 — TRIP-1012 "새 진입점은 이동 직전 드래프트를 비운다".

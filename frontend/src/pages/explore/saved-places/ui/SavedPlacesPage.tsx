@@ -39,33 +39,23 @@ import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
 import { getAccessToken } from '@/shared/api/tokenManager';
 
 import { filterSavedPlacesByTripRegions } from '../model/filterSavedPlacesByTripRegions';
-import {
-  resolvePlaceListState,
-  type PlaceListState,
-} from '@/features/explore/model/placeListState';
-import { useRegions } from '@/features/explore/model/regions';
+import { resolvePlaceListState, type PlaceListState } from '@/features/explore';
+import { useRegions } from '@/features/explore';
 import {
   REMOVE_FAILURE_NOTICE,
   SAVE_FAILURE_NOTICE,
   type PlaceSaveNotice,
-} from '@/features/save-place/model/placeSaveGuard';
+} from '@/features/save-place';
 import { orderSavedPlaces } from '../model/savedPlaceList';
-import { useSavedPlaces } from '@/features/save-place/model/savedPlaces';
-import { wizardOriginParams } from '@/features/create-trip/model/wizardOrigin';
+import { useSavedPlaces } from '@/features/save-place';
+import { wizardOriginParams } from '@/features/create-trip';
 import { MustVisitOutsideConfirmDialog } from './MustVisitOutsideConfirmDialog';
 import { MustVisitPickScreen } from './MustVisitPickScreen';
 import { SavedPlaceListScreen } from './SavedPlaceListScreen';
-import { buildAnytimeMustVisitRequest } from '@/features/add-must-visit/model/mustVisitTimeForm';
-import {
-  mustVisitFailureNotice,
-  seedMustVisits,
-} from '@/features/create-trip/model/mustVisitSeed';
-import {
-  placeLocationLabel,
-  regionCodeInTrip,
-  sidoKey,
-} from '@/features/trip/model/regionMatch';
-import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
+import { buildAnytimeMustVisitRequest } from '@/features/add-must-visit';
+import { mustVisitFailureNotice, seedMustVisits } from '@/features/create-trip';
+import { placeLocationLabel, regionCodeInTrip, sidoKey } from '@/features/trip';
+import { useTripWizardStore } from '@/features/create-trip';
 
 /** 실패 시 재시도가 다시 밟아야 할 마지막 조작 — 해제냐 되돌리기냐를 함께 기억한다. */
 type LastAttempt = { saved: SavedPlace; mode: 'release' | 'restore' };

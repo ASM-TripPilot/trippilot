@@ -5,7 +5,7 @@ import {
   formatShareCardStats,
   SHARE_FORMATS,
   type ShareCardVM,
-} from '@/features/reflection/model/shareCard';
+} from '@/features/reflection/index.view';
 import { WatermarkLogoGlyph } from './ShareCardGlyphs';
 
 /**

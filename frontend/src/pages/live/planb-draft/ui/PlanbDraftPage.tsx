@@ -4,12 +4,12 @@ import type { ReactElement } from 'react';
 import type { ReplanSlotVM } from '@/entities/itinerary-slot';
 import { parseSlotKey } from '@/entities/itinerary-slot';
 import { formatDistance } from '@/entities/place';
-import { useLiveItinerary } from '@/features/execution/model/useLiveItinerary';
-import { formatCoPickDayHeader } from '@/features/itinerary/model/draftView';
+import { useLiveItinerary } from '@/features/execution';
+import { formatCoPickDayHeader } from '@/features/itinerary';
 import { readFromInstant } from '../model/replanFromInstant';
-import { deriveReplanMapAnchor } from '@/features/request-replan/model/replanMapCenter';
+import { deriveReplanMapAnchor } from '@/features/request-replan';
 import { resolveReplanState } from '../model/replanState';
-import { useApplyReplan } from '@/features/apply-replan/model/useApplyReplan';
+import { useApplyReplan } from '@/features/apply-replan';
 import { useReplanDiff } from '../model/useReplanDiff';
 import { useReplanSession } from '../model/useReplanSession';
 import type {

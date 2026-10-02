@@ -10,7 +10,7 @@ import type { MyTripsSortKey } from '../model/myTripsOrder';
 import {
   CalendarGlyph,
   ChevronDownGlyph,
-} from '@/features/itinerary/ui/ItineraryGlyphs';
+} from '@/features/itinerary/index.view';
 
 /**
  * TRIP-468 · h37 "내 여행" 목록 화면 — 순수 프레젠테이션(3얼굴: list·empty·loading).

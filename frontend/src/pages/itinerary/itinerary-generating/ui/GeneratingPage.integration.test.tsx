@@ -23,7 +23,7 @@ import type {
   ItineraryGenerationState,
 } from '@/shared/api/generated/schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
-import { resolveItineraryDestination } from '@/features/itinerary/model/planState';
+import { resolveItineraryDestination } from '@/features/itinerary';
 import { isNotFound } from '@/shared/api/isNotFound';
 
 import { GeneratingPage } from './GeneratingPage';

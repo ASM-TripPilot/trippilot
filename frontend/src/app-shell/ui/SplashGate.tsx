@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 
 import { useAccountBoundaryReset } from '@/app-shell/model/useAccountBoundaryReset';
-import { useBootstrapGate } from '@/features/auth/model/useBootstrapGate';
-import { SplashScreen } from '@/features/auth/ui/SplashScreen';
+import { useBootstrapGate } from '@/features/auth';
+import { SplashScreen } from '@/features/auth';
 import { registerPushIfGranted } from '@/shared/push';
 
 /** 스플래시 최소 노출 하한(ms). 정본 근거 없는 발명값 — 머지 후 실기 체감으로 조정. */

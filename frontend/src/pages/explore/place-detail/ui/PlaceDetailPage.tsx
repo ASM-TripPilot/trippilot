@@ -34,9 +34,9 @@ import { StateNotice } from '@/shared/ui/StateNotice';
 import {
   SAVE_FAILURE_NOTICE,
   type PlaceSaveNotice,
-} from '@/features/save-place/model/placeSaveGuard';
-import { useSavedPlaces } from '@/features/save-place/model/savedPlaces';
-import { BackChevronGlyph } from '@/features/explore/ui/ExploreGlyphs';
+} from '@/features/save-place';
+import { useSavedPlaces } from '@/features/save-place';
+import { BackChevronGlyph } from '@/features/explore';
 import { PlaceDetailScreen } from './PlaceDetailScreen';
 
 // 딥링크로 이 화면에 직접 떨어지면(explore/** 는 (tabs) 밖) 뒤로 갈 히스토리가 없다 — 홈으로

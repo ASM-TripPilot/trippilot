@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import type { ShareFormat } from '@/features/reflection/model/shareCard';
+import type { ShareFormat } from '@/features/reflection/index.view';
 
 /**
  * TRIP-574 · j06 포맷 세그먼트(3셀) — 활성 셀은 흰 배경+ink Bold, 비활성은 muted Regular.

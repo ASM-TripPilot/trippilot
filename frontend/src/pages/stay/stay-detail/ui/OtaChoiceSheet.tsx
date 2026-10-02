@@ -32,7 +32,7 @@ import {
   ChevronRightGlyph,
   InfoGlyph,
   WarningTriangleGlyph,
-} from '@/features/stay/ui/StayGlyphs';
+} from '@/features/stay/index.view';
 
 // 법정성 문구(BR-U1-30 → l07 두 문장). 각 문장을 한 Text 노드로 렌더해 오탈자가 완전일치 red 가 되게 한다.
 // 가운뎃점은 Figma 원문 그대로 U+00B7.

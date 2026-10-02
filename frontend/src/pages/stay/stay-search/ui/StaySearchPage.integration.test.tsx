@@ -12,7 +12,7 @@ import { server } from '@/mocks/server';
 import { StaySearchPage } from './StaySearchPage';
 import type { StayItem, SavedStay } from '@/shared/api/generated/schemas';
 import { resetPressGuard } from '@/shared/press/pressGuard';
-import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
+import { regionPickerHref } from '@/features/explore';
 import {
   clearAccessToken,
   setAccessToken,

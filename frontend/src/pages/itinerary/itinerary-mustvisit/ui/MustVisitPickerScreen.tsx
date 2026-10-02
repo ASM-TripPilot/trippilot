@@ -11,7 +11,7 @@ import {
   fixedTimeLabel,
   type MustVisitListItem,
   type MustVisitListView,
-} from '@/features/itinerary/model/mustVisitList';
+} from '@/features/itinerary/index.view';
 import {
   BackChevronGlyph,
   CloseGlyph,
@@ -19,7 +19,7 @@ import {
   LockGlyph,
   PencilGlyph,
   PlusGlyph,
-} from '@/features/itinerary/ui/ItineraryGlyphs';
+} from '@/features/itinerary/index.view';
 
 /**
  * h02 필수 방문지 — Figma `3824:2173`(default) · `4294:8292`(error).

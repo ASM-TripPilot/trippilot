@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { BackArrowGlyph } from '@/features/record/ui/RecordGlyphs';
+import { BackArrowGlyph } from '@/features/record';
 import type { MonthCell } from '@/shared/date/monthGrid';
 
 /**

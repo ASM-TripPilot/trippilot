@@ -14,7 +14,7 @@ import {
 } from '@testing-library/react-native';
 import { router } from 'expo-router';
 
-import { PlusGlyph } from '@/features/record/ui/RecordGlyphs';
+import { PlusGlyph } from '@/features/record';
 import { server } from '@/mocks/server';
 import type { VisitPhoto } from '@/shared/api/generated/schemas';
 import { getGetTripsTripIdVisitsVisitCheckIdPhotosQueryKey } from '@/shared/api/generated/trips/trips';

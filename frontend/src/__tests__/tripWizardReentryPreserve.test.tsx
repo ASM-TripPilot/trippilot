@@ -1,8 +1,8 @@
 import { render, screen } from '@testing-library/react-native';
 
 import TripWizardLayout from '@/app/trips/new/_layout';
-import type { MustVisitSeedItem } from '@/features/create-trip/model/mustVisitSeed';
-import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
+import type { MustVisitSeedItem } from '@/features/create-trip';
+import { useTripWizardStore } from '@/features/create-trip';
 
 /**
  * TRIP-1113 결정 2 — 위저드 **안** 재진입(꼭 갈 곳 고르기 완료)은 이미 만든 여행 id 를 지키고,

@@ -2,12 +2,12 @@ import type { ReactElement } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 
-import { useSavedPlaces } from '@/features/save-place/model/savedPlaces';
+import { useSavedPlaces } from '@/features/save-place';
 import {
   buildMustVisitPins,
   joinMustVisits,
   resolveMustVisitListView,
-} from '@/features/itinerary/model/mustVisitList';
+} from '@/features/itinerary';
 import { MustVisitPickerScreen } from './MustVisitPickerScreen';
 import type { GenerateItineraryRequestGenerationMode } from '@/shared/api/generated/schemas';
 import {

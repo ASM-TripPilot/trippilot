@@ -5,7 +5,7 @@ import { formatDistance } from '@/entities/place';
 import { formatPrice } from '@/entities/stay';
 import { StayRecommendCard } from '@/entities/stay';
 import { withObjectParticle } from '../lib/objectParticle';
-import { LinkChevronGlyph } from '@/features/itinerary/ui/ItineraryGlyphs';
+import { LinkChevronGlyph } from '@/features/itinerary/index.view';
 import type { StayRecommendView as StayRecommendViewModel } from '../model/stayRecommend';
 import type { MapPin } from '@/shared/map';
 import { MapSheetShell } from '@/widgets/map-sheet-shell';

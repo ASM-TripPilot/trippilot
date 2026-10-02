@@ -8,7 +8,7 @@
  */
 import type { PreferenceView } from '@/shared/api/generated/schemas';
 
-import { initialSelection } from '@/features/edit-preferences/model/preferenceDraft';
+import { initialSelection } from '@/features/edit-preferences';
 
 export type PreferenceRowKey =
   | 'style'

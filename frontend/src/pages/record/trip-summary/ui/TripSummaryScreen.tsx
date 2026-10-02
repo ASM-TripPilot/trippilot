@@ -8,10 +8,10 @@ import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 import {
   BackArrowGlyph,
   LocationOffGlyph,
-} from '@/features/reflection/ui/ReflectionGlyphs';
+} from '@/features/reflection/index.view';
 import { DayHighlightCard } from './DayHighlightCard';
-import type { SummaryStatCells } from '@/features/reflection/model/summaryStats';
-import type { OrderedVisit } from '@/features/reflection/model/summaryView';
+import type { SummaryStatCells } from '@/features/reflection/index.view';
+import type { OrderedVisit } from '@/features/reflection/index.view';
 
 /**
  * TRIP-572 · j04 여행 요약 화면(순수 프레젠테이션 — VM·콜백 주입, 조회/조립 0).

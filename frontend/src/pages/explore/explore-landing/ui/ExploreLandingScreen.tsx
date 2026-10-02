@@ -39,7 +39,7 @@ import {
   SearchGlyph,
   SuitcaseGlyph,
   WarningTriangleGlyph,
-} from '@/features/explore/ui/ExploreGlyphs';
+} from '@/features/explore/index.view';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
 // 카드 뷰모델은 entities 로 이관됐다(StayCardVM=807 · PlaceCardVM=806) — 여기서 재수출해 기존

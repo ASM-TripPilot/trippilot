@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { View } from 'react-native';
 
 import { PastTripRow } from '@/entities/trip';
-import { ChevronRightGlyph } from '@/features/record/ui/RecordGlyphs';
+import { ChevronRightGlyph } from '@/features/record';
 import type { PastTripCardVM } from '../model/recordsCalendar';
 
 /**

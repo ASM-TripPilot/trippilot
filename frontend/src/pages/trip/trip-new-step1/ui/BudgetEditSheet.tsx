@@ -32,7 +32,7 @@ import BottomSheet, {
 } from '@gorhom/bottom-sheet';
 
 import type { BudgetTier } from '../model/budgetAmount';
-import { SHEET_HANDLE_INDICATOR_STYLE } from '@/features/trip/lib/sheetHandle';
+import { SHEET_HANDLE_INDICATOR_STYLE } from '@/features/trip/index.view';
 
 export interface BudgetEditSheetProps {
   /** 드래프트 금액 원문(배선 소유) — TextInput 표시값(formatBudgetAmount 로 포맷된 콤마 문자열). */

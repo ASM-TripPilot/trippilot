@@ -1,4 +1,4 @@
-import { addressInRegion } from '@/features/trip/model/regionMatch';
+import { addressInRegion } from '@/features/trip/index.view';
 
 /**
  * TRIP-1011 — g02 숙소 선택 시트의 섹션 분리(그 밤 지역 / 다른 지역).

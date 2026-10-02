@@ -5,30 +5,21 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 
-import { buildEditItineraryRequest } from '@/features/edit-itinerary/model/buildEditItineraryRequest';
-import {
-  buildDraftPins,
-  formatCoPickDayHeader,
-} from '@/features/itinerary/model/draftView';
+import { buildEditItineraryRequest } from '@/features/edit-itinerary';
+import { buildDraftPins, formatCoPickDayHeader } from '@/features/itinerary';
 import {
   useItineraryEditStore,
   type EditorDaysItem,
   type EditorSlot,
-} from '@/features/edit-itinerary/model/itineraryEditStore';
-import {
-  buildPlanDayTabs,
-  resolvePlanState,
-} from '@/features/itinerary/model/planState';
+} from '@/features/edit-itinerary';
+import { buildPlanDayTabs, resolvePlanState } from '@/features/itinerary';
 import { deriveVisitProgress } from '@/entities/itinerary-slot';
 import { reorderKeepingLocked } from '../model/reorderKeepingLocked';
 import { deriveEndsNextDay } from '@/entities/itinerary-slot';
 import { buildSlotKey, parseSlotKey } from '@/entities/itinerary-slot';
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
-import {
-  AlertCircleGlyph,
-  InfoCircleGlyph,
-} from '@/features/itinerary/ui/ItineraryGlyphs';
-import { SaveConflictDialog } from '@/features/edit-itinerary/ui/SaveConflictDialog';
+import { AlertCircleGlyph, InfoCircleGlyph } from '@/features/itinerary';
+import { SaveConflictDialog } from '@/features/edit-itinerary';
 import { TimeSheet } from '@/widgets/time-sheet';
 import {
   getGetTripsTripIdItineraryQueryKey,

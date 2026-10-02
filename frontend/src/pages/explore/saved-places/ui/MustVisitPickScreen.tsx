@@ -2,7 +2,7 @@ import { Fragment, type ReactElement } from 'react';
 import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import type { PlaceListState } from '@/features/explore/model/placeListState';
+import type { PlaceListState } from '@/features/explore/index.view';
 import type { SavedPlace } from '@/shared/api/generated/schemas';
 import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
 import { Skeleton } from '@/shared/ui/Skeleton';
@@ -14,7 +14,7 @@ import {
   CircleExclaimGlyph,
   MapPinGlyph,
   SearchGlyph,
-} from '@/features/explore/ui/ExploreGlyphs';
+} from '@/features/explore/index.view';
 
 /**
  * d02 select 모드 화면 — 담은 곳 중 '꼭 갈 곳'을 고른다(TRIP-706 D1·D2, props-only 순수 뷰).

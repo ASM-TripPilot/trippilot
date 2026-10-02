@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react-native';
 
 import type { OnboardingProgress } from '@/features/onboarding/model/resolveOnboardingStep';
-import { useOnboardingProgress } from '@/features/onboarding/model/useOnboardingProgress';
+import { useOnboardingProgress } from '@/features/onboarding';
 import OnboardingLayout from '@/app/(onboarding)/_layout';
 import OnboardingIndex from '@/app/(onboarding)/index';
 

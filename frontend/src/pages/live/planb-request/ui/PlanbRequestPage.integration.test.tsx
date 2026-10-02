@@ -6,8 +6,8 @@ import {
   waitFor,
 } from '@testing-library/react-native';
 
-import { useReplanFormStore } from '@/features/request-replan/model/replanFormStore';
-import type { ReplanOrigin } from '@/features/request-replan/model/replanOrigin';
+import { useReplanFormStore } from '@/features/request-replan';
+import type { ReplanOrigin } from '@/features/request-replan';
 import type {
   Itinerary,
   Trigger,

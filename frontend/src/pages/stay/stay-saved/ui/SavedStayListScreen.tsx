@@ -14,7 +14,7 @@ import {
   MapPinGlyph,
   SearchGlyph,
   WarningTriangleGlyph,
-} from '@/features/stay/ui/StayGlyphs';
+} from '@/features/stay/index.view';
 
 /**
  * e04 저장한 숙소(Figma default `1701:1183` · empty `1702:1183`) — **무상태 프레젠테이션 화면**.

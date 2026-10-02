@@ -2,16 +2,13 @@ import { type ReactElement, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 
 import { nightlyBaseCards, toBaseSections } from '../model/baseSections';
-import { sigunguLabel } from '@/features/trip/model/regionMatch';
+import { sigunguLabel } from '@/features/trip';
 import { staySheetSections } from '../model/staySheetSections';
-import { deriveEndDate } from '@/features/create-trip/model/tripWizardStep1';
-import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
-import { useSavedStays } from '@/features/trip/model/useSavedStays';
+import { deriveEndDate } from '@/features/create-trip';
+import { useTripWizardStore } from '@/features/create-trip';
+import { useSavedStays } from '@/features/trip';
 import { useStayAddresses } from '../model/useStayAddresses';
-import {
-  useAssignBase,
-  useTripBases,
-} from '@/features/assign-trip-base/model/useTripBases';
+import { useAssignBase, useTripBases } from '@/features/assign-trip-base';
 import { StaySelectSheet, type StaySelectCandidate } from './StaySelectSheet';
 import type { TripDestination } from '@/shared/api/generated/schemas';
 import { guardPress, openPressGuardWindow } from '@/shared/press/pressGuard';

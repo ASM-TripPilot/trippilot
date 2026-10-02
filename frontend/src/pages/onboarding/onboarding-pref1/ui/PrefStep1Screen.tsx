@@ -23,7 +23,7 @@ import {
   SkipChevronGlyph,
   SunGlyph,
   type GlyphComponent,
-} from '@/features/onboarding/ui/OnboardingGlyphs';
+} from '@/features/onboarding';
 
 export interface PrefStep1ScreenProps {
   selectedStyles: readonly string[] | null;

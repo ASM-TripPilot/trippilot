@@ -12,7 +12,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react-native';
-import { useSavedStays } from '@/features/trip/model/useSavedStays';
+import { useSavedStays } from '@/features/trip';
 import { server } from '@/mocks/server';
 import { WithToastHost, resetToast } from '@/test-support/toastHarness';
 import { StayRegisterPage } from './StayRegisterPage';

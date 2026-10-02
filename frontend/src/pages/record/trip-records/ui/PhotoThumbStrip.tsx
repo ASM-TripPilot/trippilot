@@ -2,10 +2,7 @@ import type { ReactElement } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 
 import type { PhotoAvailability } from '../model/photoAvailability';
-import {
-  PlusGlyph,
-  WarningTriangleGlyph,
-} from '@/features/record/ui/RecordGlyphs';
+import { PlusGlyph, WarningTriangleGlyph } from '@/features/record';
 
 /**
  * TRIP-566 · AC-3·AC-4·AC-5(다건 UI) — 방문 사진 썸네일 스트립(순수 프레젠테이션, VM 주입).

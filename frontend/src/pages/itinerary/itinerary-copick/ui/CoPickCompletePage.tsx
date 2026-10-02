@@ -8,9 +8,9 @@ import {
   buildDraftDayTabs,
   buildDraftPins,
   formatDraftDayHeader,
-} from '@/features/itinerary/model/draftView';
+} from '@/features/itinerary';
 import { timeBandLabel } from '@/entities/itinerary-slot';
-import { WarningTriangleGlyph } from '@/features/itinerary/ui/ItineraryGlyphs';
+import { WarningTriangleGlyph } from '@/features/itinerary';
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import { SlotStopCard } from '@/entities/itinerary-slot';
 import {

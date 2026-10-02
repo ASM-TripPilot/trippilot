@@ -19,7 +19,7 @@ import {
   RailActiveGlyph,
   RailDoneGlyph,
   RailUpcomingGlyph,
-} from '@/features/execution/ui/ExecutionGlyphs';
+} from '@/features/execution/index.view';
 
 import { LiveHubView, type LiveHubSlot } from './LiveHubView';
 

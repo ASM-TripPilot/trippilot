@@ -10,7 +10,7 @@ import type { ConceptProgress } from './ConceptPickerScreen';
 import {
   AlertCircleGlyph,
   BackChevronGlyph,
-} from '@/features/itinerary/ui/ItineraryGlyphs';
+} from '@/features/itinerary/index.view';
 import { SlotCandidateCard } from './SlotCandidateCard';
 
 /**

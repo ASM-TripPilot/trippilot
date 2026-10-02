@@ -4,21 +4,18 @@ import { useEffect, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 
-import { buildEditItineraryRequest } from '@/features/edit-itinerary/model/buildEditItineraryRequest';
+import { buildEditItineraryRequest } from '@/features/edit-itinerary';
 import { resolveEditorMapCenter } from '../model/editorMapCenter';
-import {
-  buildDraftPins,
-  formatCoPickDayHeader,
-} from '@/features/itinerary/model/draftView';
+import { buildDraftPins, formatCoPickDayHeader } from '@/features/itinerary';
 import {
   useItineraryEditStore,
   type EditorDaysItem,
-} from '@/features/edit-itinerary/model/itineraryEditStore';
-import { buildPlanDayTabs } from '@/features/itinerary/model/planState';
-import { SaveConflictDialog } from '@/features/edit-itinerary/ui/SaveConflictDialog';
-import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
-import { useSavedStays } from '@/features/trip/model/useSavedStays';
-import { useTripBases } from '@/features/assign-trip-base/model/useTripBases';
+} from '@/features/edit-itinerary';
+import { buildPlanDayTabs } from '@/features/itinerary';
+import { SaveConflictDialog } from '@/features/edit-itinerary';
+import { useTripWizardStore } from '@/features/create-trip';
+import { useSavedStays } from '@/features/trip';
+import { useTripBases } from '@/features/assign-trip-base';
 import { parseSlotKey } from '@/entities/itinerary-slot';
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
 import {

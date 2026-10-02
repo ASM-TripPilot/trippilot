@@ -12,19 +12,19 @@ import { seoulDate } from '@/shared/date/seoulDate';
 import { formatNightsLabel } from '@/entities/trip';
 import { formatTripRange } from '@/entities/trip';
 import { pickTrendingPlaces } from '@/entities/place';
-import { usePlaceSaveToggle } from '@/features/save-place/model/placeSaveToggle';
-import { useSavedPlaces } from '@/features/save-place/model/savedPlaces';
-import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
-import { useSavedStays } from '@/features/save-stay/model/savedStays';
+import { usePlaceSaveToggle } from '@/features/save-place';
+import { useSavedPlaces } from '@/features/save-place';
+import { regionPickerHref } from '@/features/explore';
+import { useSavedStays } from '@/features/save-stay';
 import {
   itineraryDestinationHref,
   resolveItineraryDestination,
-} from '@/features/itinerary/model/planState';
+} from '@/features/itinerary';
 import { HOME_DEFAULT_PROPS } from '../model/homeFixtures';
 import { applyItineraryTarget, resolveHomePhase } from '../model/homePhase';
 import type { HomePhase, HomeSpotsLane } from '../model/homeTypes';
 import { HomeScreen } from './HomeScreen';
-import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
+import { useTripWizardStore } from '@/features/create-trip';
 
 interface HomeNav {
   onPressCreateTrip: () => void;

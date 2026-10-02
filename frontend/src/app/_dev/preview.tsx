@@ -15,7 +15,7 @@ import {
   SocialLoginScreen,
   type SocialLoginScreenProps,
 } from '@/pages/auth/login/ui/SocialLoginScreen';
-import { SplashScreen } from '@/features/auth/ui/SplashScreen';
+import { SplashScreen } from '@/features/auth/index.view';
 import {
   HOME_DEFAULT_PROPS,
   HOME_LOADING_PROPS,
@@ -31,14 +31,14 @@ import {
   PREVIEW_SAVED_POI_IDS,
 } from '@/pages/explore/explore-landing/model/exploreFixtures';
 import { TriggerChip } from '@/pages/live/live-itinerary/ui/TriggerChip';
-import { MemoInline } from '@/features/attach-visit-media/ui/MemoInline';
+import { MemoInline } from '@/features/attach-visit-media/index.view';
 import { MemoSheet } from '@/pages/live/live-itinerary/ui/MemoSheet';
 import { PhotoThumbStrip } from '@/pages/record/trip-records/ui/PhotoThumbStrip';
 import { RecordsCalendarScreen } from '@/pages/record/records-calendar/ui/RecordsCalendarScreen';
 import { VisitRecordCard } from '@/pages/record/trip-records/ui/VisitRecordCard';
 import { VisitTimeSheet } from '@/pages/record/trip-records/ui/VisitTimeSheet';
 import { missingParts } from '@/pages/record/daily-reflection/model/missingParts';
-import { SHARE_FORMATS } from '@/features/reflection/model/shareCard';
+import { SHARE_FORMATS } from '@/features/reflection/index.view';
 import { DailyReflectionScreen } from '@/pages/record/daily-reflection/ui/DailyReflectionScreen';
 import { ShareCardScreen } from '@/pages/record/share-card/ui/ShareCardScreen';
 import { TravelStyleScreen } from '@/pages/record/travel-style/ui/TravelStyleScreen';
@@ -63,25 +63,19 @@ import {
   buildGenerationGauge,
   foldGenerationGauge,
   formatCoPickDayHeader,
-} from '@/features/itinerary/model/draftView';
+} from '@/features/itinerary/index.view';
 import { type PlanDayTab } from '@/features/itinerary/model/planState';
-import type { MustVisitListItem } from '@/features/itinerary/model/mustVisitList';
-import {
-  startTimeOptions,
-  tripDayChips,
-} from '@/features/add-must-visit/model/mustVisitTimeForm';
+import type { MustVisitListItem } from '@/features/itinerary/index.view';
+import { startTimeOptions, tripDayChips } from '@/features/add-must-visit';
 import { ConceptPickerScreen } from '@/pages/itinerary/itinerary-copick/ui/ConceptPickerScreen';
 import { GenerationFallbackScreen } from '@/pages/itinerary/itinerary-draft/ui/GenerationFallbackScreen';
 import { GeneratingScreen } from '@/pages/itinerary/itinerary-generating/ui/GeneratingScreen';
 import { MustVisitPickerScreen } from '@/pages/itinerary/itinerary-mustvisit/ui/MustVisitPickerScreen';
 import { MustVisitTimeScreen } from '@/pages/itinerary/itinerary-mustvisit/ui/MustVisitTimeScreen';
-import {
-  PlaceAddHeader,
-  PlaceAddRow,
-} from '@/features/itinerary/ui/PlaceAddScreen';
+import { PlaceAddHeader, PlaceAddRow } from '@/features/itinerary/index.view';
 import { SlotCandidateSheet as ItinerarySlotCandidateSheet } from '@/pages/itinerary/itinerary-draft/ui/SlotCandidateSheet';
 import { SlotFillScreen } from '@/pages/itinerary/itinerary-copick/ui/SlotFillScreen';
-import { UnplacedMustVisitNotice } from '@/features/itinerary/ui/UnplacedMustVisitNotice';
+import { UnplacedMustVisitNotice } from '@/features/itinerary/index.view';
 import type { UnplacedMustVisitRow } from '@/features/itinerary/model/unplacedMustVisits';
 import type { StayRecommendView as StayRecommendViewModel } from '@/pages/itinerary/itinerary-stay-recommend/model/stayRecommend';
 import { CoPickStepper } from '@/pages/itinerary/itinerary-copick/ui/CoPickStepper';
@@ -133,8 +127,8 @@ import {
 import { StyleSummaryCard } from '@/pages/settings/my-page/ui/StyleSummaryCard';
 import { RevokeConfirmDialog } from '@/pages/settings/settings-location/ui/RevokeConfirmDialog';
 import { SettingsScreen } from '@/pages/settings/settings/ui/SettingsScreen';
-import { triggerLabel } from '@/features/planb/model/triggerLabel';
-import { triggerPillCopy } from '@/features/planb/model/triggerPillCopy';
+import { triggerLabel } from '@/features/planb/index.view';
+import { triggerPillCopy } from '@/features/planb/index.view';
 import { riskAffectedRow } from '@/pages/live/live-itinerary/model/riskAffectedRow';
 import { triggerWatchlist } from '@/pages/live/live-itinerary/model/triggerWatchlist';
 import { ReplanRequestSheet } from '@/pages/live/planb-request/ui/ReplanRequestSheet';
@@ -193,7 +187,7 @@ import { TripWizardLeaveDialog } from '@/pages/trip/trip-new-step1/ui/TripWizard
 import { PrefStep1Screen } from '@/pages/onboarding/onboarding-pref1/ui/PrefStep1Screen';
 import { PrefStep2Screen } from '@/pages/onboarding/onboarding-pref2/ui/PrefStep2Screen';
 import { TermsScreen } from '@/pages/onboarding/onboarding-terms/ui/TermsScreen';
-import type { PreferenceSelection } from '@/features/edit-preferences/model/preferenceDraft';
+import type { PreferenceSelection } from '@/features/edit-preferences';
 import { PreferencesEditView } from '@/pages/settings/settings-preferences/ui/PreferencesEditView';
 import type {
   ItineraryDaysItemSlotsItem,

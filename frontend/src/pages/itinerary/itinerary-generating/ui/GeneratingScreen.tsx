@@ -19,7 +19,7 @@ import {
   AlertCircleGlyph,
   BackChevronGlyph,
   FullAiGlyph,
-} from '@/features/itinerary/ui/ItineraryGlyphs';
+} from '@/features/itinerary/index.view';
 
 /**
  * h07 [완전AI] "AI가 일정 짜는 중" 화면 — Figma `4294:8516`. 프레젠테이션(props만, 재판정 금지).

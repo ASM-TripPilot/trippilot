@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
 
-import { termsDocumentTitle } from '@/features/onboarding/model/termsDocumentTitle';
+import { termsDocumentTitle } from '@/features/onboarding';
 import { TermsViewerScreen } from './TermsViewerScreen';
 import { fetchTermsByType } from '@/shared/api';
 

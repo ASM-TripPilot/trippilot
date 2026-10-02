@@ -1,7 +1,7 @@
 import { Redirect } from 'expo-router';
 
-import { useOnboardingProgress } from '@/features/onboarding/model/useOnboardingProgress';
-import { resolveOnboardingStep } from '@/features/onboarding/model/resolveOnboardingStep';
+import { useOnboardingProgress } from '@/features/onboarding';
+import { resolveOnboardingStep } from '@/features/onboarding';
 
 /**
  * 온보딩 그룹 진입 라우트 — 죽은 화면이 아니라 진행 단계로 리다이렉트한다. 완료면 홈('/', 루트

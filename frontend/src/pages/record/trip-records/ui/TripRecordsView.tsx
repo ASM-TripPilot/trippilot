@@ -6,13 +6,13 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { formatDayLabel } from '@/entities/trip';
-import { formatCoPickDayHeader } from '@/features/itinerary/model/draftView';
+import { formatCoPickDayHeader } from '@/features/itinerary/index.view';
 import {
   GpsOffGlyph,
   InfoCircleGlyph,
   NoteGlyph,
   VisitCheckUpcomingGlyph,
-} from '@/features/record/ui/RecordGlyphs';
+} from '@/features/record';
 import { SpontaneousVisitButton } from './SpontaneousVisitButton';
 import { VisitRecordCard, type VisitRecordCardVM } from './VisitRecordCard';
 import type { MapCenter, MapPin } from '@/shared/map';

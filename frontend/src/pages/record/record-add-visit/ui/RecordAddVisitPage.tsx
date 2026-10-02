@@ -6,11 +6,11 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
 import { PlaceRowCard } from '@/entities/place';
 import { PlaceSubtitle } from '@/entities/place';
-import { useMultiRegionPlaces } from '@/features/explore/model/useMultiRegionPlaces';
-import { usePlacesInfinite } from '@/features/explore/model/usePlacesInfinite';
-import { PlaceAddHeader } from '@/features/itinerary/ui/PlaceAddScreen';
-import { rememberSpontaneousName } from '@/features/check-visit/model/spontaneousNames';
-import { useVisitCheck } from '@/features/check-visit/model/useVisitCheck';
+import { useMultiRegionPlaces } from '@/features/explore';
+import { usePlacesInfinite } from '@/features/explore';
+import { PlaceAddHeader } from '@/features/itinerary';
+import { rememberSpontaneousName } from '@/features/check-visit';
+import { useVisitCheck } from '@/features/check-visit';
 import { MapSheetShell } from '@/widgets/map-sheet-shell';
 import { useGetTripsTripId } from '@/shared/api/generated/trips/trips';
 import { ArriveRequestSource } from '@/shared/api/generated/schemas';

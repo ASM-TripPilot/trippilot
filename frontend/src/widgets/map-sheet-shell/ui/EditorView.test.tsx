@@ -15,7 +15,7 @@ import type {
   ItineraryDaysItem,
   ItineraryDaysItemSlotsItem,
 } from '@/shared/api/generated/schemas';
-import { buildPlanDayTabs } from '@/features/itinerary/model/planState';
+import { buildPlanDayTabs } from '@/features/itinerary/index.view';
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import {
   EDIT_LIST,

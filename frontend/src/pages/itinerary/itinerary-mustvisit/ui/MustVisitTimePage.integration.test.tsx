@@ -18,7 +18,7 @@ import type {
 } from '@/shared/api/generated/schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
-import { startTimeOptions } from '@/features/add-must-visit/model/mustVisitTimeForm';
+import { startTimeOptions } from '@/features/add-must-visit';
 import { resetPressGuard } from '@/shared/press/pressGuard';
 
 import { MustVisitTimePage } from './MustVisitTimePage';

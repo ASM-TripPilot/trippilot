@@ -8,8 +8,8 @@ import {
   BedGlyph,
   ChevronRightGlyph,
   WarningTriangleGlyph,
-} from '@/features/trip/ui/TripGlyphs';
-import { formatWizardStep } from '@/features/create-trip/model/tripSummary';
+} from '@/features/trip/index.view';
+import { formatWizardStep } from '@/features/create-trip';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
 /**

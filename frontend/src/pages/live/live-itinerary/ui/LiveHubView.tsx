@@ -22,14 +22,14 @@ import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas'
 import type { MapCenter } from '@/shared/map';
 import { MapSheetShell } from '@/widgets/map-sheet-shell';
 import { BackChevronGlyph, FullAiGlyph } from '@/widgets/map-sheet-shell';
-import { formatCoPickDayHeader } from '@/features/itinerary/model/draftView';
-import { PencilGlyph } from '@/features/itinerary/ui/ItineraryGlyphs';
-import { CloseGlyph } from '@/features/home/ui/HomeGlyphs';
+import { formatCoPickDayHeader } from '@/features/itinerary/index.view';
+import { PencilGlyph } from '@/features/itinerary/index.view';
+import { CloseGlyph } from '@/features/home';
 import {
   RailActiveGlyph,
   RailDoneGlyph,
   RailUpcomingGlyph,
-} from '@/features/execution/ui/ExecutionGlyphs';
+} from '@/features/execution/index.view';
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import {
   buildStatePins,

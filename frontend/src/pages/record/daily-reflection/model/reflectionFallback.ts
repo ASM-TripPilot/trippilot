@@ -3,7 +3,7 @@ import type {
   ReflectionStats,
 } from '@/shared/api/generated/schemas';
 
-import { formatKm } from '@/features/reflection/model/formatKm';
+import { formatKm } from '@/features/reflection/index.view';
 import { statsCard } from './statsCard';
 
 /**

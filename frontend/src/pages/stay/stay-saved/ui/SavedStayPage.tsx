@@ -17,14 +17,14 @@ import { router } from 'expo-router';
 
 import { getAccessToken } from '@/shared/api/tokenManager';
 
-import { resolvePlaceListState } from '@/features/explore/model/placeListState';
-import { stayKey } from '@/features/save-stay/model/stayKey';
+import { resolvePlaceListState } from '@/features/explore';
+import { stayKey } from '@/features/save-stay';
 import {
   SavedStayListScreen,
   type SavedStayCardVM,
   type SavedStayFace,
 } from './SavedStayListScreen';
-import { useSavedStays } from '@/features/trip/model/useSavedStays';
+import { useSavedStays } from '@/features/trip';
 
 export function SavedStayPage(): ReactElement {
   // isAuthed 는 렌더 시점 1회 동기 판정(d02·StayDetailPage 선례 — "판정 대기" 제3 상태가 안 생긴다).

@@ -16,9 +16,9 @@ import type {
 import { RegionLevel } from '@/shared/api/generated/schemas';
 import { resetPressGuard } from '@/shared/press/pressGuard';
 import { formatPrice } from '@/entities/stay';
-import { stayKey } from '@/features/save-stay/model/stayKey';
-import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
-import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
+import { stayKey } from '@/features/save-stay';
+import { regionPickerHref } from '@/features/explore';
+import { useTripWizardStore } from '@/features/create-trip';
 import {
   captureDraftAtNextCall,
   freshWizardDraft,

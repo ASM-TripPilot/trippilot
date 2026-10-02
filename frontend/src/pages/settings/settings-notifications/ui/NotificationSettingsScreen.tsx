@@ -4,10 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { NotificationToggleKind } from '@/shared/api/generated/schemas';
 
-import {
-  NotifBackChevronGlyph,
-  NotifInfoGlyph,
-} from '@/features/notification/ui/NotificationGlyphs';
+import { NotifBackChevronGlyph, NotifInfoGlyph } from '@/features/notification';
 import { PermissionBanner } from './PermissionBanner';
 import { ToggleRow } from './ToggleRow';
 

@@ -3,7 +3,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { renderRouter, screen } from 'expo-router/testing-library';
 
 import { buildSlotKey, parseSlotKey } from '@/entities/itinerary-slot';
-import { itineraryDestinationHref } from '@/features/itinerary/model/planState';
+import { itineraryDestinationHref } from '@/features/itinerary/index.view';
 import type { ItineraryDaysItem } from '@/shared/api/generated/schemas';
 
 /**

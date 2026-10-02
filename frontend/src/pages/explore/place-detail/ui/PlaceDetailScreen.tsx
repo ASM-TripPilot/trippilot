@@ -15,13 +15,13 @@ import { PlaceSubtitle } from '@/entities/place';
 import { normalizeOpeningHours } from '@/entities/itinerary-slot';
 import type { Place } from '@/shared/api/generated/schemas';
 
-import type { PlaceSaveNotice } from '@/features/save-place/model/placeSaveGuard';
+import type { PlaceSaveNotice } from '@/features/save-place/index.view';
 import {
   BackChevronGlyph,
   InfoGlyph,
   MapPinGlyph,
   ShareGlyph,
-} from '@/features/explore/ui/ExploreGlyphs';
+} from '@/features/explore/index.view';
 
 /**
  * d06 장소 상세(Figma `1907:1083`) — **무상태 프레젠테이션 화면**. props만 받는다. 조회·라우팅·

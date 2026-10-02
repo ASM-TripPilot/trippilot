@@ -14,10 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import {
-  CheckGlyph,
-  ViewChevronGlyph,
-} from '@/features/onboarding/ui/OnboardingGlyphs';
+import { CheckGlyph, ViewChevronGlyph } from '@/features/onboarding';
 
 export interface ReconsentItemView {
   termsType: string;

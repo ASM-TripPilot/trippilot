@@ -14,21 +14,21 @@ import { getAccessToken } from '@/shared/api/tokenManager';
 import { guardPress } from '@/shared/press/pressGuard';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
 
-import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
+import { regionPickerHref } from '@/features/explore';
 import {
   filterByPriceRange,
   type PriceBucketId,
 } from '../model/priceRangeFilter';
 import { relaxCulpritFilter } from '../model/relaxCulpritFilter';
-import { useSavedStays } from '@/features/save-stay/model/savedStays';
+import { useSavedStays } from '@/features/save-stay';
 import {
   buildStayFilterOptions,
   countActiveFilters,
   toggleFilterValue,
 } from '../model/stayFilterOptions';
-import { stayKey } from '@/features/save-stay/model/stayKey';
+import { stayKey } from '@/features/save-stay';
 import { resolveStaySearchState } from '../model/staySearchState';
-import { useStaySearch } from '@/features/stay/model/useStaySearch';
+import { useStaySearch } from '@/features/stay';
 import { StayFilterSheet } from './StayFilterSheet';
 import { StayPriceSheet } from './StayPriceSheet';
 import { StaySearchScreen } from './StaySearchScreen';

@@ -3,7 +3,7 @@ import type {
   SavedPlace,
 } from '@/shared/api/generated/schemas';
 
-import { optimisticSavedPlaceId } from '@/features/save-place/model/savedPlaceIndex';
+import { optimisticSavedPlaceId } from '@/features/save-place/index.view';
 
 /**
  * d02 담은 장소의 순수 판정 2종(01b Seed Q2·Q3·Q8) — 정렬과 dataStatus 배지 매핑.

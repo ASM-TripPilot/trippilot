@@ -38,9 +38,9 @@ import type {
   StayDetail,
 } from '@/shared/api/generated/schemas';
 
-import { useSavedStays } from '@/features/save-stay/model/savedStays';
+import { useSavedStays } from '@/features/save-stay';
 import { openStayOutbound, stayOutboundMode } from '../model/stayOutbound';
-import { stayKey } from '@/features/save-stay/model/stayKey';
+import { stayKey } from '@/features/save-stay';
 import { OtaChoiceSheet } from './OtaChoiceSheet';
 import { StayDetailScreen, type StayDetailState } from './StayDetailScreen';
 

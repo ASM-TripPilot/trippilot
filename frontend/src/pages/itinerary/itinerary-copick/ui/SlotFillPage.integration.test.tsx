@@ -29,7 +29,7 @@ import {
   getGetTripsTripIdQueryKey,
 } from '@/shared/api/generated/trips/trips';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
-import { DRAFT_POLL_INTERVAL_MS } from '@/features/itinerary/model/draftView';
+import { DRAFT_POLL_INTERVAL_MS } from '@/features/itinerary';
 
 import { SlotFillPage } from './SlotFillPage';
 

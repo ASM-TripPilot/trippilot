@@ -16,7 +16,7 @@ import {
   PinGlyph,
   SparkleGlyph,
   TrashGlyph,
-} from '@/features/settings/ui/SettingsGlyphs';
+} from '@/features/settings';
 
 /** 행 key → 리딩 아이콘. Figma `1607:2440` 아이콘 배치. */
 const LEADING_GLYPHS: Record<

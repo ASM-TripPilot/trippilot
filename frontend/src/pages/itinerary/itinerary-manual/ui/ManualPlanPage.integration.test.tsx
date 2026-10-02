@@ -12,8 +12,8 @@ import type { ReactNode } from 'react';
 
 import { server } from '@/mocks/server';
 import { resetToast, WithToastHost } from '@/test-support/toastHarness';
-import { useItineraryEditStore } from '@/features/edit-itinerary/model/itineraryEditStore';
-import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
+import { useItineraryEditStore } from '@/features/edit-itinerary';
+import { useTripWizardStore } from '@/features/create-trip';
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import { getGetTripsTripIdItineraryQueryKey } from '@/shared/api/generated/trips/trips';
 import type {

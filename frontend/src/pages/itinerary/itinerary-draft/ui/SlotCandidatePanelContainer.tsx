@@ -3,11 +3,11 @@ import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 
-import { buildEditItineraryRequest } from '@/features/edit-itinerary/model/buildEditItineraryRequest';
-import { isConfirmLocked } from '@/features/itinerary/model/planState';
+import { buildEditItineraryRequest } from '@/features/edit-itinerary';
+import { isConfirmLocked } from '@/features/itinerary';
 import { parseSlotKey } from '@/entities/itinerary-slot';
-import { resolveSlotSwapError } from '@/features/edit-itinerary/model/slotSwapError';
-import { swapSlotPoi } from '@/features/edit-itinerary/model/swapSlotPoi';
+import { resolveSlotSwapError } from '@/features/edit-itinerary';
+import { swapSlotPoi } from '@/features/edit-itinerary';
 import { SlotCandidateSheet } from './SlotCandidateSheet';
 import { useElapsedFlag } from '@/shared/time/useElapsedFlag';
 import {

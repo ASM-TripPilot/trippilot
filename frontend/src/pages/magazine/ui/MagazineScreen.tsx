@@ -29,7 +29,7 @@ import {
   BackChevronGlyph,
   HeartOutlineGlyph,
   SearchGlyph,
-} from '@/features/home/ui/HomeGlyphs';
+} from '@/features/home';
 import type { MagazineCard, MagazineScreenProps } from '../model/magazineTypes';
 
 const ABSOLUTE_FILL = StyleSheet.absoluteFillObject;

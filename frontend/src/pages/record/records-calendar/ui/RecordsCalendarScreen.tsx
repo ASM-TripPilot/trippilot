@@ -7,7 +7,7 @@ import {
   CalendarGlyph,
   ChevronDownGlyph,
   LegendChevronGlyph,
-} from '@/features/record/ui/RecordGlyphs';
+} from '@/features/record';
 import { TripCalendarMonth } from './TripCalendarMonth';
 import type {
   LegendRow,

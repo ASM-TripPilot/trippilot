@@ -17,7 +17,7 @@ import {
   HeroPhotoGlyph,
   HeroPinGlyph,
   ShareGlyph,
-} from '@/features/execution/ui/ExecutionGlyphs';
+} from '@/features/execution/index.view';
 import { MapView } from '@/shared/map';
 
 import type { PlaceDetailView } from '../model/placeDetailView';

@@ -8,7 +8,7 @@ import { isNotFound } from '@/shared/api/isNotFound';
 import {
   itineraryDestinationHref,
   resolveItineraryDestination,
-} from '@/features/itinerary/model/planState';
+} from '@/features/itinerary';
 import {
   buildMonthLegends,
   buildPastTripCards,
@@ -19,7 +19,7 @@ import {
 } from '../model/recordsCalendar';
 import { useRecordsCalendar } from '../model/useRecordsCalendar';
 import { RecordsCalendarScreen } from './RecordsCalendarScreen';
-import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
+import { useTripWizardStore } from '@/features/create-trip';
 import { buildMonthGrid, shiftMonth } from '@/shared/date/monthGrid';
 import { seoulDate } from '@/shared/date/seoulDate';
 import { StateNotice } from '@/shared/ui/StateNotice';

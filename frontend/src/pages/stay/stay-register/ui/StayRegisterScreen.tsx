@@ -60,7 +60,7 @@ import {
   RefreshGlyph,
   SearchGlyph,
   WarningTriangleGlyph,
-} from '@/features/stay/ui/StayGlyphs';
+} from '@/features/stay/index.view';
 
 export interface StayRegisterScreenProps {
   flow: StayRegisterFlow;

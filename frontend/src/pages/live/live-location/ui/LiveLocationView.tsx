@@ -15,7 +15,7 @@ import { useState, type ReactElement } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { isEstimatedOrigin } from '@/features/request-replan/model/replanOrigin';
+import { isEstimatedOrigin } from '@/features/request-replan/index.view';
 import {
   LocationBackChevronGlyph,
   LocationInfoGlyph,

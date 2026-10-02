@@ -10,10 +10,10 @@ import {
   REPLAN_REASONS,
   type ReplanChoice,
 } from '@/pages/live/planb-request/config/replanChoices';
-import { REPLAN_SCOPES } from '@/features/request-replan/model/replanScope';
+import { REPLAN_SCOPES } from '@/features/request-replan/index.view';
 import type { StartReplanRequestScope } from '@/shared/api/generated/schemas/startReplanRequestScope';
 
-import { RiskWarningGlyph } from '@/features/planb/ui/PlanbGlyphs';
+import { RiskWarningGlyph } from '@/features/planb/index.view';
 
 /**
  * TRIP-750 · i04 재계획 요청 시트("AI에게 맡길게요", Figma 4067:2427). 순수 시트 — props+콜백만 받고

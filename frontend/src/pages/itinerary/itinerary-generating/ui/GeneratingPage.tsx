@@ -2,10 +2,10 @@ import { useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
 import { useCallback, useEffect, useRef } from 'react';
 
-import { useSavedPlaces } from '@/features/save-place/model/savedPlaces';
-import { firstCoPickSlotKey } from '@/features/itinerary/model/coPickSlots';
-import { buildMustVisitPins } from '@/features/itinerary/model/mustVisitList';
-import { useGenerationBusy } from '@/features/itinerary/model/useGenerationBusy';
+import { useSavedPlaces } from '@/features/save-place';
+import { firstCoPickSlotKey } from '@/features/itinerary';
+import { buildMustVisitPins } from '@/features/itinerary';
+import { useGenerationBusy } from '@/features/itinerary';
 import { GeneratingScreen } from './GeneratingScreen';
 import type {
   GenerateItineraryRequestGenerationMode,

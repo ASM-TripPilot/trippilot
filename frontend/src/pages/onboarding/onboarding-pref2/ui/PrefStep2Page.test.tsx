@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import { usePreferenceStore } from '@/features/edit-preferences/model/preferenceStore';
+import { usePreferenceStore } from '@/features/edit-preferences';
 import { notifyBootstrapReeval } from '@/shared/bootstrap/bootstrapReeval';
 import { resetPressGuard } from '@/shared/press/pressGuard';
 import { PrefStep2Page } from './PrefStep2Page';

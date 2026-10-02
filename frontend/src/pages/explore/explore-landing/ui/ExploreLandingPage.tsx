@@ -6,15 +6,15 @@ import type { Place, StayItem } from '@/shared/api/generated/schemas';
 import { getAccessToken } from '@/shared/api/tokenManager';
 import { guardPress } from '@/shared/press/pressGuard';
 import { formatPrice } from '@/entities/stay';
-import { stayKey } from '@/features/save-stay/model/stayKey';
-import { useSavedStays } from '@/features/save-stay/model/savedStays';
-import { useStaySearch } from '@/features/stay/model/useStaySearch';
-import { usePlaceSaveToggle } from '@/features/save-place/model/placeSaveToggle';
-import { useRegions } from '@/features/explore/model/regions';
-import { useSavedPlaces } from '@/features/save-place/model/savedPlaces';
-import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
+import { stayKey } from '@/features/save-stay';
+import { useSavedStays } from '@/features/save-stay';
+import { useStaySearch } from '@/features/stay';
+import { usePlaceSaveToggle } from '@/features/save-place';
+import { useRegions } from '@/features/explore';
+import { useSavedPlaces } from '@/features/save-place';
+import { regionPickerHref } from '@/features/explore';
 import { useGetPlaces } from '@/shared/api/generated/places/places';
-import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
+import { useTripWizardStore } from '@/features/create-trip';
 import {
   ExploreLandingScreen,
   type ExploreLandingScreenProps,

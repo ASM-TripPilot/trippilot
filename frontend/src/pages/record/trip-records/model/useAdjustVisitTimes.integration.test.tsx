@@ -17,7 +17,7 @@ import type {
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { flushNotifications } from '@/test-support/flushNotifications';
 
-import { deriveVisitStatus } from '@/features/check-visit/model/visitStatus';
+import { deriveVisitStatus } from '@/features/check-visit';
 import {
   useAdjustVisitTimes,
   VISIT_CONFLICT_NOTICE,

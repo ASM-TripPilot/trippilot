@@ -216,8 +216,9 @@ describe('🔴 AC-11(Q4 모양) · 뷰는 props 만 받는다', () => {
     'expo-router',
     'axios',
     '@/shared/api',
-    '@/features/trip/model',
-    '@/features/create-trip/model',
+    // TRIP-1157: 스토어는 슬라이스 공개 API(index·index.view)로도 들어온다 — model 딥 접두가 아니라 슬라이스 접두로 막는다.
+    '@/features/trip',
+    '@/features/create-trip',
     '@/pages',
     '@/app',
   ];
@@ -235,12 +236,14 @@ describe('🔴 AC-11(Q4 모양) · 뷰는 props 만 받는다', () => {
     const sample = [
       "import { useQueryClient } from '@tanstack/react-query';",
       "import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';",
+      "import { useTripWizardStore as viaIndex } from '@/features/create-trip';",
       "import { Pressable, Text, View } from 'react-native';",
     ].join('\n');
 
     expect(specifiersOf(sample).filter(isForbidden)).toEqual([
       '@tanstack/react-query',
       '@/features/create-trip/model/tripWizardStore',
+      '@/features/create-trip',
     ]);
   });
 

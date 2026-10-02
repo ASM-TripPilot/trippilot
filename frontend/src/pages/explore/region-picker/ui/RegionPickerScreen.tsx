@@ -9,16 +9,13 @@ import { RegionLevel } from '@/shared/api/generated/schemas';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
-import {
-  groupRegionsBySido,
-  regionTint,
-} from '@/features/explore/model/regions';
-import type { RegionGroup } from '@/features/explore/model/regions';
+import { groupRegionsBySido, regionTint } from '@/features/explore/index.view';
+import type { RegionGroup } from '@/features/explore/index.view';
 import {
   BackChevronGlyph,
   SearchGlyph,
   WarningTriangleGlyph,
-} from '@/features/explore/ui/ExploreGlyphs';
+} from '@/features/explore/index.view';
 
 /**
  * e00(숙소 지역 선택) · d1b(여행지 선택) 화면 — **props만 받는 프레젠테이션** (TRIP-445).

@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import type { StyleCardVM, StyleGauge } from '../model/styleCardModel';
-import { CARD_SHADOW } from '@/features/settings/ui/cardShadow';
+import { CARD_SHADOW } from '@/features/settings';
 import { InfoChip } from './InfoChip';
 
 /**

@@ -4,9 +4,9 @@ import { isAxiosError } from 'axios';
 import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 
-import { useSavedPlaces } from '@/features/save-place/model/savedPlaces';
-import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
-import { wizardOriginParams } from '@/features/create-trip/model/wizardOrigin';
+import { useSavedPlaces } from '@/features/save-place';
+import { regionPickerHref } from '@/features/explore';
+import { wizardOriginParams } from '@/features/create-trip';
 import {
   deleteTripsTripId,
   deleteTripsTripIdMustVisitsMustVisitId,
@@ -44,9 +44,9 @@ import {
   nightsSum,
   validateTripDraft,
   type TripDraft,
-} from '@/features/create-trip/model/tripDraft';
-import { deriveEndDate } from '@/features/create-trip/model/tripWizardStep1';
-import { mustVisitFailureNotice } from '@/features/create-trip/model/mustVisitSeed';
+} from '@/features/create-trip';
+import { deriveEndDate } from '@/features/create-trip';
+import { mustVisitFailureNotice } from '@/features/create-trip';
 import { planMustVisitSync } from '../model/mustVisitSync';
 import {
   summaryBudget,
@@ -54,8 +54,8 @@ import {
   summaryDestinations,
   summaryPeriod,
   summaryPreferences,
-} from '@/features/create-trip/model/tripSummary';
-import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
+} from '@/features/create-trip';
+import { useTripWizardStore } from '@/features/create-trip';
 import { useCreateTrip } from '../model/useCreateTrip';
 import { usePreferencePrefill } from '../model/usePreferencePrefill';
 import { CompanionEditSheet } from './CompanionEditSheet';

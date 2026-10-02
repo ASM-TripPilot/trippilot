@@ -29,11 +29,11 @@ import {
 import {
   itineraryDestinationHref,
   resolveItineraryDestination,
-} from '@/features/itinerary/model/planState';
+} from '@/features/itinerary';
 import { MyTripsListScreen } from './MyTripsListScreen';
 import { MyTripsSortSheet } from './MyTripsSortSheet';
 import { TripDeleteDialog } from './TripDeleteDialog';
-import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
+import { useTripWizardStore } from '@/features/create-trip';
 import { GenerationDoneBar } from './GenerationDoneBar';
 
 import { TripCardContainer } from './TripCardContainer';

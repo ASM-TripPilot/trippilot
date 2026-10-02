@@ -8,7 +8,7 @@ import { router } from 'expo-router';
 
 import type { Trip, TripSummary } from '@/shared/api/generated/schemas';
 
-import { useTripSummary } from '@/features/reflection/model/useTripSummary';
+import { useTripSummary } from '@/features/reflection';
 import { ShareCardScreen } from './ShareCardScreen';
 import { useGetTripsTripId } from '@/shared/api/generated/trips/trips';
 import { ShareCardPage } from './ShareCardPage';

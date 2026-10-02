@@ -5,8 +5,8 @@ import * as Linking from 'expo-linking';
 import { type ReactElement, useState } from 'react';
 import { Keyboard, Share } from 'react-native';
 
-import { waitForGateDestination } from '@/features/auth/model/gateDestination';
-import { usePreferenceStore } from '@/features/edit-preferences/model/preferenceStore';
+import { waitForGateDestination } from '@/features/auth';
+import { usePreferenceStore } from '@/features/edit-preferences';
 import { OSM_COPYRIGHT_URL } from '../model/dataAttribution';
 import { resolveExportSummary } from '../model/exportSummary';
 import {

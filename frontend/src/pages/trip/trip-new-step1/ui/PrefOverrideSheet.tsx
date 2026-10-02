@@ -37,12 +37,9 @@ import BottomSheet, {
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 
-import { SHEET_HANDLE_INDICATOR_STYLE } from '@/features/trip/lib/sheetHandle';
+import { SHEET_HANDLE_INDICATOR_STYLE } from '@/features/trip/index.view';
 
-import {
-  ACTIVITY,
-  STYLE,
-} from '@/features/edit-preferences/model/preferenceInput';
+import { ACTIVITY, STYLE } from '@/features/edit-preferences';
 import {
   ActivityGlyph,
   ArtGlyph,
@@ -52,7 +49,7 @@ import {
   MountainGlyph,
   ShoppingBagGlyph,
   SunGlyph,
-} from '@/features/onboarding/ui/OnboardingGlyphs';
+} from '@/features/onboarding';
 
 export interface PrefOverrideSheetProps {
   /** 배선이 소유한 드래프트(한국어 STYLE 라벨 배열, 빈 `[]` 포함) — 선택 표식의 단일 출처. */

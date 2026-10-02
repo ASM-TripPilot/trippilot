@@ -11,7 +11,7 @@ import {
   type SettingsInput,
 } from '../model/settingsSections';
 import { SettingsScreen } from './SettingsScreen';
-import { ContrastGlyph } from '@/features/settings/ui/SettingsGlyphs';
+import { ContrastGlyph } from '@/features/settings';
 
 /**
  * l05 설정 화면(프레젠테이션) 단위 테스트.

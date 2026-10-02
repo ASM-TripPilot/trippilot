@@ -4,18 +4,12 @@ import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { ActivityIndicator, Keyboard, Text, View } from 'react-native';
 
-import {
-  addSlot,
-  insertSlotAt,
-} from '@/features/edit-itinerary/model/itineraryEditStore';
-import { buildEditItineraryRequest } from '@/features/edit-itinerary/model/buildEditItineraryRequest';
-import { buildDraftPins } from '@/features/itinerary/model/draftView';
-import { useMultiRegionPlaces } from '@/features/explore/model/useMultiRegionPlaces';
-import { usePlacesInfinite } from '@/features/explore/model/usePlacesInfinite';
-import {
-  PlaceAddHeader,
-  PlaceAddRow,
-} from '@/features/itinerary/ui/PlaceAddScreen';
+import { addSlot, insertSlotAt } from '@/features/edit-itinerary';
+import { buildEditItineraryRequest } from '@/features/edit-itinerary';
+import { buildDraftPins } from '@/features/itinerary';
+import { useMultiRegionPlaces } from '@/features/explore';
+import { usePlacesInfinite } from '@/features/explore';
+import { PlaceAddHeader, PlaceAddRow } from '@/features/itinerary';
 import { MapSheetShell } from '@/widgets/map-sheet-shell';
 import { TimeSheet } from '@/widgets/time-sheet';
 import { suggestNextSlotTime } from '@/entities/itinerary-slot';

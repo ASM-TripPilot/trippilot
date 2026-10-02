@@ -7,11 +7,11 @@ import type { ReplanSlotVM } from '@/entities/itinerary-slot';
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import { buildStatePins } from '@/entities/itinerary-slot';
 import { projectSlotProgress } from '@/entities/itinerary-slot';
-import { useLiveItinerary } from '@/features/execution/model/useLiveItinerary';
+import { useLiveItinerary } from '@/features/execution';
 import { deriveVisitProgress } from '@/entities/itinerary-slot';
-import { formatCoPickDayHeader } from '@/features/itinerary/model/draftView';
+import { formatCoPickDayHeader } from '@/features/itinerary';
 import { readFromInstant } from '../model/replanFromInstant';
-import { deriveReplanMapAnchor } from '@/features/request-replan/model/replanMapCenter';
+import { deriveReplanMapAnchor } from '@/features/request-replan';
 import { resolveReplanState } from '../model/replanState';
 import { useReplanSession } from '../model/useReplanSession';
 import {

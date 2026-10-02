@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react-native';
 
-import { usePreferenceStore } from '@/features/edit-preferences/model/preferenceStore';
+import { usePreferenceStore } from '@/features/edit-preferences';
 import OnboardingLayout from '@/app/(onboarding)/_layout';
 import Pref1Route from '@/app/(onboarding)/pref1';
 import Pref2Route from '@/app/(onboarding)/pref2';
