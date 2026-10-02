@@ -38,12 +38,15 @@ import {
   isDateInRange,
 } from '@/shared/date/monthGrid';
 
-import { SHEET_HANDLE_INDICATOR_STYLE } from '../lib/sheetHandle';
+import { SHEET_HANDLE_INDICATOR_STYLE } from '@/features/trip/lib/sheetHandle';
 
 import { dateCell, type TripDateRange } from '../model/tripDatePicker';
-import { summaryPeriod } from '../model/tripSummary';
+import { summaryPeriod } from '@/features/trip/model/tripSummary';
 
-import { BackChevronGlyph, ChevronRightGlyph } from './TripGlyphs';
+import {
+  BackChevronGlyph,
+  ChevronRightGlyph,
+} from '@/features/trip/ui/TripGlyphs';
 
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
 

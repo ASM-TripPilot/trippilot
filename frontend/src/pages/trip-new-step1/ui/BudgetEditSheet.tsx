@@ -31,7 +31,7 @@ import BottomSheet, {
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 
-import type { BudgetTier } from '@/features/trip/model/budgetAmount';
+import type { BudgetTier } from '../model/budgetAmount';
 import { SHEET_HANDLE_INDICATOR_STYLE } from '@/features/trip/lib/sheetHandle';
 
 export interface BudgetEditSheetProps {

@@ -58,7 +58,7 @@ const routerMock = require('expo-router').router as {
 let mockPreference: PreferenceView | undefined;
 let mockPrefillPending = false;
 
-jest.mock('@/features/trip/model/usePreferencePrefill', () => ({
+jest.mock('../model/usePreferencePrefill', () => ({
   usePreferencePrefill: () => ({
     data: mockPreference,
     isPending: mockPrefillPending,
@@ -67,7 +67,7 @@ jest.mock('@/features/trip/model/usePreferencePrefill', () => ({
 
 const mockMutateAsync = jest.fn();
 
-jest.mock('@/features/trip/model/useCreateTrip', () => ({
+jest.mock('../model/useCreateTrip', () => ({
   useCreateTrip: () => ({
     mutateAsync: mockMutateAsync,
     isPending: false,

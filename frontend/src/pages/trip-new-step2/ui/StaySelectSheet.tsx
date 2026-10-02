@@ -33,13 +33,13 @@ import BottomSheet, {
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 
-import { SHEET_HANDLE_INDICATOR_STYLE } from '../lib/sheetHandle';
+import { SHEET_HANDLE_INDICATOR_STYLE } from '@/features/trip/lib/sheetHandle';
 
 import { SavedStayCard } from '@/entities/stay/ui/SavedStayCard';
 import { formatBaseNightRange } from '@/entities/trip/lib/formatTripPeriod';
 import type { SavedStay } from '@/shared/api/generated/schemas';
 
-import { CheckGlyph, SearchGlyph } from './TripGlyphs';
+import { CheckGlyph, SearchGlyph } from '@/features/trip/ui/TripGlyphs';
 
 /** 후보 = 저장 숙소 + 표시용 rich 필드(사진·동네·가격). 동네는 배선이 주소 시군구 토큰으로 채운다
  *  (TRIP-1074, 주소 모름이면 undefined). 사진·가격은 SavedStay 계약에 없어(실측) 실데이터 경로는

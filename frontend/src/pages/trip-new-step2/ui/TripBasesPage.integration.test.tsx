@@ -62,7 +62,7 @@ jest.mock('expo-router', () => ({
   },
 }));
 
-jest.mock('@/features/trip/model/useStayAddresses', () => ({
+jest.mock('../model/useStayAddresses', () => ({
   useStayAddresses: () => ({}),
 }));
 

@@ -35,11 +35,11 @@ import {
   parseBudgetAmount,
   tierForAmount,
   type BudgetTier,
-} from '@/features/trip/model/budgetAmount';
+} from '../model/budgetAmount';
 import {
   buildCreateTripRequest,
   type CreateTripInput,
-} from '@/features/trip/model/createTripRequest';
+} from '../model/createTripRequest';
 import {
   nightsSum,
   validateTripDraft,
@@ -47,7 +47,7 @@ import {
 } from '@/features/trip/model/tripDraft';
 import { deriveEndDate } from '@/features/trip/model/tripWizardStep1';
 import { mustVisitFailureNotice } from '@/features/trip/model/mustVisitSeed';
-import { planMustVisitSync } from '@/features/trip/model/mustVisitSync';
+import { planMustVisitSync } from '../model/mustVisitSync';
 import {
   summaryBudget,
   summaryCompanion,
@@ -56,12 +56,12 @@ import {
   summaryPreferences,
 } from '@/features/trip/model/tripSummary';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
-import { useCreateTrip } from '@/features/trip/model/useCreateTrip';
-import { usePreferencePrefill } from '@/features/trip/model/usePreferencePrefill';
-import { CompanionEditSheet } from '@/features/trip/ui/CompanionEditSheet';
-import { DestinationEditSheet } from '@/features/trip/ui/DestinationEditSheet';
-import { PeriodEditSheet } from '@/features/trip/ui/PeriodEditSheet';
-import { TripWizardLeaveDialog } from '@/features/trip/ui/TripWizardLeaveDialog';
+import { useCreateTrip } from '../model/useCreateTrip';
+import { usePreferencePrefill } from '../model/usePreferencePrefill';
+import { CompanionEditSheet } from './CompanionEditSheet';
+import { DestinationEditSheet } from './DestinationEditSheet';
+import { PeriodEditSheet } from './PeriodEditSheet';
+import { TripWizardLeaveDialog } from './TripWizardLeaveDialog';
 import { TripWizardStep1Screen } from './TripWizardStep1Screen';
 
 import { BudgetEditSheet } from './BudgetEditSheet';

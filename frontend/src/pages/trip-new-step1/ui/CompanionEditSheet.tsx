@@ -34,14 +34,14 @@ import BottomSheet, {
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 
-import { SHEET_HANDLE_INDICATOR_STYLE } from '../lib/sheetHandle';
+import { SHEET_HANDLE_INDICATOR_STYLE } from '@/features/trip/lib/sheetHandle';
 
 import type { CompanionType } from '@/shared/api/generated/schemas';
 
 import {
   COMPANION_OPTIONS,
   type CompanionCode,
-} from '../model/tripWizardStep1';
+} from '@/features/trip/model/tripWizardStep1';
 
 import {
   FamilyGlyph,
@@ -51,7 +51,7 @@ import {
   SoloGlyph,
   StepperMinusGlyph,
   StepperPlusGlyph,
-} from './TripGlyphs';
+} from '@/features/trip/ui/TripGlyphs';
 
 export interface CompanionEditSheetProps {
   /** 드래프트 인원(배선 소유) — 표시·스테퍼 하한 판정용. */

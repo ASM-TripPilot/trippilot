@@ -6,7 +6,7 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import type { StayAddressState } from '@/features/trip/model/staySheetSections';
+import type { StayAddressState } from '../model/staySheetSections';
 import type { BaseAssignment, SavedStay } from '@/shared/api/generated/schemas';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import { resetPressGuard } from '@/shared/press/pressGuard';
@@ -88,7 +88,7 @@ jest.mock('@/features/trip/model/useSavedStays', () => ({
  * 기본값은 빈 표 = 전부 "모름".
  */
 let mockAddressById: Record<string, StayAddressState> = {};
-jest.mock('@/features/trip/model/useStayAddresses', () => ({
+jest.mock('../model/useStayAddresses', () => ({
   useStayAddresses: (stays: { savedStayId: string }[]) =>
     Object.fromEntries(
       stays

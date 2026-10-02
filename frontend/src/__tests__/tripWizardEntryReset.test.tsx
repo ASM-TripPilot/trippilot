@@ -50,11 +50,11 @@ jest.mock('expo-router', () => {
   };
 });
 
-jest.mock('@/features/trip/model/usePreferencePrefill', () => ({
+jest.mock('@/pages/trip-new-step1/model/usePreferencePrefill', () => ({
   usePreferencePrefill: () => ({ data: undefined }),
 }));
 
-jest.mock('@/features/trip/model/useCreateTrip', () => ({
+jest.mock('@/pages/trip-new-step1/model/useCreateTrip', () => ({
   useCreateTrip: () => ({
     mutateAsync: jest.fn(),
     isPending: false,

@@ -8,7 +8,7 @@ import type {
 // 에포크 일수 → 'YYYY-MM-DD' 역변환(`fromEpochDay`)은 같은 feature 의 순수 정수 산술(`new Date` 미사용,
 // civil_from_days)이라 재구현 대신 재사용한다. 요일(`dayOfWeek`)은 TRIP-808 로 entities/trip/lib 로 이관됐다.
 import { dayOfWeek } from '@/entities/trip/lib/formatTripPeriod';
-import { fromEpochDay } from './tripWizardStep1';
+import { fromEpochDay } from '@/features/trip/model/tripWizardStep1';
 
 /**
  * g02 거점 구간 행 — 배정·저장 숙소·여행을 화면이 그릴 행으로 합치는 순수 함수

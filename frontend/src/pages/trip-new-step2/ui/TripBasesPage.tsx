@@ -1,9 +1,9 @@
 import { type ReactElement, useState } from 'react';
 import { useRouter } from 'expo-router';
 
-import { basesChanged } from '@/features/trip/model/basesChanged';
+import { basesChanged } from '../model/basesChanged';
 import { useTripBases } from '@/features/trip/model/useTripBases';
-import { BaseRegenerateDialog } from '@/features/trip/ui/BaseRegenerateDialog';
+import { BaseRegenerateDialog } from './BaseRegenerateDialog';
 import type { BaseAssignment } from '@/shared/api/generated/schemas';
 import { useGetTripsTripId } from '@/shared/api/generated/trips/trips';
 

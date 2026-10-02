@@ -29,7 +29,7 @@ import BottomSheet, {
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 
-import { SHEET_HANDLE_INDICATOR_STYLE } from '../lib/sheetHandle';
+import { SHEET_HANDLE_INDICATOR_STYLE } from '@/features/trip/lib/sheetHandle';
 
 import type { TripDestination } from '@/shared/api/generated/schemas';
 
@@ -38,7 +38,7 @@ import {
   RemoveGlyph,
   StepperMinusGlyph,
   StepperPlusGlyph,
-} from './TripGlyphs';
+} from '@/features/trip/ui/TripGlyphs';
 
 export interface DestinationEditSheetProps {
   /** 각 행 렌더 소스(스토어 `destinations` 그대로). */

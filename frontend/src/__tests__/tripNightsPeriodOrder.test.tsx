@@ -73,11 +73,11 @@ jest.mock('@/features/explore/model/regions', () => ({
 
 let mockPreference: PreferenceView | undefined;
 
-jest.mock('@/features/trip/model/usePreferencePrefill', () => ({
+jest.mock('@/pages/trip-new-step1/model/usePreferencePrefill', () => ({
   usePreferencePrefill: () => ({ data: mockPreference }),
 }));
 
-jest.mock('@/features/trip/model/useCreateTrip', () => ({
+jest.mock('@/pages/trip-new-step1/model/useCreateTrip', () => ({
   useCreateTrip: () => ({
     mutateAsync: jest.fn().mockResolvedValue(undefined),
     isPending: false,
