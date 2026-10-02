@@ -70,22 +70,22 @@ import {
   startTimeOptions,
   tripDayChips,
 } from '@/features/add-must-visit/model/mustVisitTimeForm';
-import { ConceptPickerScreen } from '@/pages/itinerary-copick/ui/ConceptPickerScreen';
-import { GenerationFallbackScreen } from '@/pages/itinerary-draft/ui/GenerationFallbackScreen';
-import { GeneratingScreen } from '@/pages/itinerary-generating/ui/GeneratingScreen';
-import { MustVisitPickerScreen } from '@/pages/itinerary-mustvisit/ui/MustVisitPickerScreen';
-import { MustVisitTimeScreen } from '@/pages/itinerary-mustvisit/ui/MustVisitTimeScreen';
+import { ConceptPickerScreen } from '@/pages/itinerary/itinerary-copick/ui/ConceptPickerScreen';
+import { GenerationFallbackScreen } from '@/pages/itinerary/itinerary-draft/ui/GenerationFallbackScreen';
+import { GeneratingScreen } from '@/pages/itinerary/itinerary-generating/ui/GeneratingScreen';
+import { MustVisitPickerScreen } from '@/pages/itinerary/itinerary-mustvisit/ui/MustVisitPickerScreen';
+import { MustVisitTimeScreen } from '@/pages/itinerary/itinerary-mustvisit/ui/MustVisitTimeScreen';
 import {
   PlaceAddHeader,
   PlaceAddRow,
 } from '@/features/itinerary/ui/PlaceAddScreen';
-import { SlotCandidateSheet as ItinerarySlotCandidateSheet } from '@/pages/itinerary-draft/ui/SlotCandidateSheet';
-import { SlotFillScreen } from '@/pages/itinerary-copick/ui/SlotFillScreen';
+import { SlotCandidateSheet as ItinerarySlotCandidateSheet } from '@/pages/itinerary/itinerary-draft/ui/SlotCandidateSheet';
+import { SlotFillScreen } from '@/pages/itinerary/itinerary-copick/ui/SlotFillScreen';
 import { UnplacedMustVisitNotice } from '@/features/itinerary/ui/UnplacedMustVisitNotice';
 import type { UnplacedMustVisitRow } from '@/features/itinerary/model/unplacedMustVisits';
-import type { StayRecommendView as StayRecommendViewModel } from '@/pages/itinerary-stay-recommend/model/stayRecommend';
-import { CoPickStepper } from '@/pages/itinerary-copick/ui/CoPickStepper';
-import { GenerationDoneBar } from '@/pages/itinerary-list/ui/GenerationDoneBar';
+import type { StayRecommendView as StayRecommendViewModel } from '@/pages/itinerary/itinerary-stay-recommend/model/stayRecommend';
+import { CoPickStepper } from '@/pages/itinerary/itinerary-copick/ui/CoPickStepper';
+import { GenerationDoneBar } from '@/pages/itinerary/itinerary-list/ui/GenerationDoneBar';
 import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
 import { GenerationProgressCard } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
 import type { GenerationProgressCell } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
@@ -100,14 +100,14 @@ import type { MonthLegends } from '@/pages/records-calendar/model/recordsCalenda
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { buildStatePins } from '@/entities/itinerary-slot/lib/slotMapPin';
 import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
-import { MethodPickerScreen } from '@/pages/itinerary-method/ui/MethodPickerScreen';
+import { MethodPickerScreen } from '@/pages/itinerary/itinerary-method/ui/MethodPickerScreen';
 import {
   MyTripCard,
   type MyTripCardVM,
-} from '@/pages/itinerary-list/ui/MyTripCard';
-import { MyTripsListScreen } from '@/pages/itinerary-list/ui/MyTripsListScreen';
-import { MyTripsSortSheet } from '@/pages/itinerary-list/ui/MyTripsSortSheet';
-import { TripDeleteDialog } from '@/pages/itinerary-list/ui/TripDeleteDialog';
+} from '@/pages/itinerary/itinerary-list/ui/MyTripCard';
+import { MyTripsListScreen } from '@/pages/itinerary/itinerary-list/ui/MyTripsListScreen';
+import { MyTripsSortSheet } from '@/pages/itinerary/itinerary-list/ui/MyTripsSortSheet';
+import { TripDeleteDialog } from '@/pages/itinerary/itinerary-list/ui/TripDeleteDialog';
 import {
   NotificationInboxScreen,
   type NotificationSection,
@@ -143,7 +143,7 @@ import { ReplanAppliedSheet } from '@/pages/live-itinerary/ui/ReplanAppliedSheet
 import type { ReplanSlotVM } from '@/entities/itinerary-slot/model';
 import { ReplanDraftView } from '@/pages/planb-draft/ui/ReplanDraftView';
 // 뷰 파일 경로로 직접 — 페이지 배럴은 useAssignBase(요청 모듈)를 끌어와 프리뷰 네트워크 지뢰가 터진다.
-import { StayRecommendView } from '@/pages/itinerary-stay-recommend/ui/StayRecommendView';
+import { StayRecommendView } from '@/pages/itinerary/itinerary-stay-recommend/ui/StayRecommendView';
 import { TripRecordsView } from '@/pages/trip-records/ui/TripRecordsView';
 import { ReplanSolvingView } from '@/pages/planb-draft/ui/ReplanSolvingView';
 import { SlotCandidateSheet } from '@/features/planb/ui/SlotCandidateSheet';
@@ -174,8 +174,8 @@ import {
   type StaySelectCandidate,
 } from '@/pages/trip/trip-new-step2/ui/StaySelectSheet';
 import { LiveLocationView } from '@/pages/live-location/ui/LiveLocationView';
-import { NoBaseNoticeCard } from '@/pages/itinerary-plan/ui/NoBaseNoticeCard';
-import { DraftFallbackBanner } from '@/pages/itinerary-draft/ui/DraftFallbackBanner';
+import { NoBaseNoticeCard } from '@/pages/itinerary/itinerary-plan/ui/NoBaseNoticeCard';
+import { DraftFallbackBanner } from '@/pages/itinerary/itinerary-draft/ui/DraftFallbackBanner';
 import { EditorView } from '@/widgets/map-sheet-shell/ui/EditorView';
 import {
   LiveHubView,

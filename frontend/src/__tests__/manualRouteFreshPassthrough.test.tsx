@@ -14,7 +14,7 @@ const mockPageProps: Record<string, unknown>[] = [];
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
 }));
-jest.mock('@/pages/itinerary-manual', () => ({
+jest.mock('@/pages/itinerary/itinerary-manual', () => ({
   ManualPlanPage: (props: Record<string, unknown>) => {
     mockPageProps.push(props);
     return null;

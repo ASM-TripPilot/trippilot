@@ -10,7 +10,7 @@ import type { MapPin } from '@/shared/map';
 
 // 색 계열 목록을 손으로 적으면 늙는다 — 디자인 토큰 정본에서 파생한다(`design-tokens.test.ts`
 // 가 같은 방식으로 읽는 선례). 여기 새 `primary-*` 색이 생기면 아래 계열 판정이 자동으로 넓어진다.
-import tailwindConfig from '../../../../tailwind.config.js';
+import tailwindConfig from '../../../../../tailwind.config.js';
 import {
   MUST_VISIT_NAME_PLACEHOLDER,
   type MustVisitListItem,

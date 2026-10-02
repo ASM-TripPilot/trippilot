@@ -15,7 +15,7 @@ import {
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { Itinerary, Trip } from '@/shared/api/generated/schemas';
-import { MyTripsListPage } from '@/pages/itinerary-list';
+import { MyTripsListPage } from '@/pages/itinerary/itinerary-list';
 
 /**
  * TRIP-1055 · 작성중 여행 삭제 — ⋯ → '삭제' → 확인 다이얼로그 → `DELETE /trips/{tripId}` 흐름을 실제로

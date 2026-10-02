@@ -15,7 +15,9 @@ import path from 'path';
 
 const HELPER = path.resolve('src/entities/itinerary-slot/lib/endsNextDay.ts');
 const SHEET = path.resolve('src/widgets/time-sheet/ui/TimeSheet.tsx');
-const PAGE = path.resolve('src/pages/itinerary-edit/ui/ItineraryEditPage.tsx');
+const PAGE = path.resolve(
+  'src/pages/itinerary/itinerary-edit/ui/ItineraryEditPage.tsx'
+);
 const HELPER_SPEC = 'entities/itinerary-slot/lib/endsNextDay';
 
 /**

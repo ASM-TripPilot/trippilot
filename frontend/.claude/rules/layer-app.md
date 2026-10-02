@@ -26,7 +26,7 @@ paths:
 | `src/app/(tabs)/_layout.tsx` | 탭 네비게이터 — `tabBar` 렌더프롭 + `BottomTabBar` 어댑터(`routeNameToTabKey` index→home · `handlePressTab` home→index). `screenOptions.tabBarStyle`의 `position:'absolute'` 등은 **커스텀 `tabBar` 렌더프롭엔 무효**(react-navigation이 적용 안 함)인 죽은 문자열 — 실제 오버레이는 `shared/ui/BottomTabBar.tsx` 루트의 `absolute bottom-0`이 진다. |
 | `src/app/(tabs)/index.tsx` | 홈 탭 — `<HomePage/>`만 렌더하는 10줄 얇은 래퍼(TRIP-1142). 조회·판정·항법은 `pages/home` 소관(`layer-pages.md`). 래퍼 연결은 `tabsShell` 홈 래퍼 it가 심판 |
 | `src/app/(tabs)/explore.tsx` | 탐색 탭 — `<ExploreLandingPage/>`만 렌더하는 11줄 얇은 래퍼(TRIP-1142). `region` 주소 파라미터는 래퍼가 아니라 page가 `useLocalSearchParams`로 직접 읽는다. 조회·조립·항법은 `pages/explore/explore-landing` 소관. 래퍼 연결은 `tabsShell` 탐색 래퍼 it가 심판 |
-| `src/app/(tabs)/itinerary.tsx` | 일정 탭 — `<MyTripsListPage/>`만 렌더(리다이렉트 없음). 조회·정렬·카드별 목적지 판정은 `pages/itinerary-list` 소관. |
+| `src/app/(tabs)/itinerary.tsx` | 일정 탭 — `<MyTripsListPage/>`만 렌더(리다이렉트 없음). 조회·정렬·카드별 목적지 판정은 `pages/itinerary/itinerary-list` 소관. |
 | `src/app/(tabs)/records.tsx` | 기록 탭 — `<RecordsCalendarPage/>`만 렌더. 조회·조립·항법은 `pages/records-calendar` 소관 |
 | `src/app/(tabs)/my.tsx` | 마이 탭 — `<MyPage/>`만 렌더. 조회·분류·조합은 `pages/my-page` 소관 |
 | `src/app/my/stays.tsx` | `/my/stays` — `@/pages/stay/my-stays` 얇은 래퍼. 마이 페이지에서 진입 |
@@ -44,13 +44,13 @@ paths:
 | `src/app/trips/new/step1.tsx` | g01 위저드 1/2 — `@/pages/trip/trip-new-step1` 얇은 래퍼 |
 | `src/app/trips/new/step2.tsx` | g02 위저드 2/2 거점 숙소 — `@/pages/trip/trip-new-step2` 얇은 래퍼 |
 | `src/app/trips/[tripId]/bases.tsx` | 거점 화면 라우트 — h04(mode 없음)·l04(`mode=edit`) 두 입구 공유. `mode === 'edit'`인 **정확 일치만** `'edit'`로 넘기고 그 밖은 `undefined`(다른 값이 새면 h04가 생성 CTA를 잃는다) |
-| `src/app/trips/[tripId]/itinerary/must-visits/index.tsx` | 필수 방문지 목록 — `@/pages/itinerary-mustvisit` 얇은 래퍼 |
+| `src/app/trips/[tripId]/itinerary/must-visits/index.tsx` | 필수 방문지 목록 — `@/pages/itinerary/itinerary-mustvisit` 얇은 래퍼 |
 | `src/app/trips/[tripId]/itinerary/must-visits/[poiId].tsx` | 필수 방문지 시각 지정 — 같은 배럴. `poiId`는 그 방문지의 `sourcePoiId` |
 | `src/app/trips/[tripId]/itinerary/generating.tsx` | 생성 진행 — `tripId`·`mode`·`successRoute` params를 `GeneratingPage`에 forward(없으면 페이지 기본값 FULLY_AI/draft) |
-| `src/app/trips/[tripId]/itinerary/draft.tsx` | AI 추천안 초안 — `@/pages/itinerary-draft` 얇은 래퍼 |
-| `src/app/trips/[tripId]/itinerary/index.tsx` | 완성 일정 — `tripId`만 읽어 `@/pages/itinerary-plan` 얇은 래퍼 |
-| `src/app/trips/[tripId]/itinerary/edit.tsx` | 일정 편집 — `@/pages/itinerary-edit` 얇은 래퍼 |
-| `src/app/trips/[tripId]/itinerary/manual/index.tsx` | 직접 짜기 — `@/pages/itinerary-manual` 얇은 래퍼. **`fresh` 쿼리 파라미터를 읽어 `startFresh={fresh === '1'}`로 내린다**(TRIP-1038, 값은 항상 문자열). `fresh`는 URL에 남아 재마운트(딥링크·상태 복원) 시 다시 비운다 — `firedRef`는 마운트 단위라 막지 못한다 |
+| `src/app/trips/[tripId]/itinerary/draft.tsx` | AI 추천안 초안 — `@/pages/itinerary/itinerary-draft` 얇은 래퍼 |
+| `src/app/trips/[tripId]/itinerary/index.tsx` | 완성 일정 — `tripId`만 읽어 `@/pages/itinerary/itinerary-plan` 얇은 래퍼 |
+| `src/app/trips/[tripId]/itinerary/edit.tsx` | 일정 편집 — `@/pages/itinerary/itinerary-edit` 얇은 래퍼 |
+| `src/app/trips/[tripId]/itinerary/manual/index.tsx` | 직접 짜기 — `@/pages/itinerary/itinerary-manual` 얇은 래퍼. **`fresh` 쿼리 파라미터를 읽어 `startFresh={fresh === '1'}`로 내린다**(TRIP-1038, 값은 항상 문자열). `fresh`는 URL에 남아 재마운트(딥링크·상태 복원) 시 다시 비운다 — `firedRef`는 마운트 단위라 막지 못한다 |
 | `src/app/trips/[tripId]/itinerary/manual/add.tsx` | 장소 추가 — 같은 배럴 얇은 래퍼 |
 | `src/app/trips/[tripId]/live/index.tsx` | 여행 중 허브(i01) — `tripId`만 읽어 `@/pages/live-itinerary` 얇은 래퍼 |
 | `src/app/trips/[tripId]/live/place/[poiId].tsx` | 여행 중 장소 상세 — `tripId`·`poiId`만 읽어 `@/pages/live-place` 얇은 래퍼 |

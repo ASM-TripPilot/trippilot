@@ -585,123 +585,123 @@
 - `src/pages/home/ui/HomePage.tsx`  →  HomePage
 - `src/pages/home/ui/HomeScreen.tsx`  →  HomeScreen
 
-## src/pages/itinerary-copick/config/
-- `src/pages/itinerary-copick/config/conceptCards.ts`  →  CONCEPT_DESCRIPTIONS
+## src/pages/itinerary/itinerary-copick/config/
+- `src/pages/itinerary/itinerary-copick/config/conceptCards.ts`  →  CONCEPT_DESCRIPTIONS
 
-## src/pages/itinerary-copick/
-- `src/pages/itinerary-copick/index.ts`  →  SlotFillPage · CoPickCompletePage
+## src/pages/itinerary/itinerary-copick/
+- `src/pages/itinerary/itinerary-copick/index.ts`  →  SlotFillPage · CoPickCompletePage
 
-## src/pages/itinerary-copick/model/
-- `src/pages/itinerary-copick/model/candidateSelection.ts`  →  resolveCandidateSelection
-- `src/pages/itinerary-copick/model/dayRegion.ts`  →  regionForDay
-- `src/pages/itinerary-copick/model/radiusUsedLabel.ts`  →  formatRadiusUsed
+## src/pages/itinerary/itinerary-copick/model/
+- `src/pages/itinerary/itinerary-copick/model/candidateSelection.ts`  →  resolveCandidateSelection
+- `src/pages/itinerary/itinerary-copick/model/dayRegion.ts`  →  regionForDay
+- `src/pages/itinerary/itinerary-copick/model/radiusUsedLabel.ts`  →  formatRadiusUsed
 
-## src/pages/itinerary-copick/ui/
-- `src/pages/itinerary-copick/ui/CoPickCompletePage.tsx`  →  CoPickCompletePageProps · CoPickCompletePage
-- `src/pages/itinerary-copick/ui/CoPickLeaveDialog.tsx`  →  CoPickLeaveDialog
-- `src/pages/itinerary-copick/ui/CoPickStepper.tsx`  →  CoPickStep · CoPickStepperProps · CoPickStepper
-- `src/pages/itinerary-copick/ui/CoPickStepperGlyphs.tsx`  →  StepperSunGlyph · StepperCheckBadge
-- `src/pages/itinerary-copick/ui/ConceptPickerScreen.tsx`  →  ConceptProgress · ConceptPickerScreenProps · ConceptPickerScreen
-- `src/pages/itinerary-copick/ui/SlotCandidateCard.tsx`  →  SlotCandidateCardProps · SlotCandidateCard
-- `src/pages/itinerary-copick/ui/SlotFillPage.tsx`  →  SlotFillPageProps · SlotFillPage
-- `src/pages/itinerary-copick/ui/SlotFillScreen.tsx`  →  SlotFillScreenProps · SlotFillScreen
+## src/pages/itinerary/itinerary-copick/ui/
+- `src/pages/itinerary/itinerary-copick/ui/CoPickCompletePage.tsx`  →  CoPickCompletePageProps · CoPickCompletePage
+- `src/pages/itinerary/itinerary-copick/ui/CoPickLeaveDialog.tsx`  →  CoPickLeaveDialog
+- `src/pages/itinerary/itinerary-copick/ui/CoPickStepper.tsx`  →  CoPickStep · CoPickStepperProps · CoPickStepper
+- `src/pages/itinerary/itinerary-copick/ui/CoPickStepperGlyphs.tsx`  →  StepperSunGlyph · StepperCheckBadge
+- `src/pages/itinerary/itinerary-copick/ui/ConceptPickerScreen.tsx`  →  ConceptProgress · ConceptPickerScreenProps · ConceptPickerScreen
+- `src/pages/itinerary/itinerary-copick/ui/SlotCandidateCard.tsx`  →  SlotCandidateCardProps · SlotCandidateCard
+- `src/pages/itinerary/itinerary-copick/ui/SlotFillPage.tsx`  →  SlotFillPageProps · SlotFillPage
+- `src/pages/itinerary/itinerary-copick/ui/SlotFillScreen.tsx`  →  SlotFillScreenProps · SlotFillScreen
 
-## src/pages/itinerary-draft/config/
-- `src/pages/itinerary-draft/config/generationFallback.ts`  →  GENERATION_FALLBACK_PROGRESS · GENERATION_FALLBACK_TITLE · GENERATION_FALLBACK_MAP_PILL · GENERATION_FALLBACK_MESSAGE_TITLE · GENERATION_FALLBACK_MESSAGE_BODY · GENERATION_FALLBACK_CHECK_ROUTE · GENERATION_FALLBACK_CHECK_SKIPPED · GENERATION_FALLBACK_CHECK_DONE · GENERATION_FALLBACK_VIEW_PLAN · GENERATION_FALLBACK_MANUAL · GENERATION_FALLBACK_FAILED_TITLE · GENERATION_FALLBACK_FAILED_NOTE · GENERATION_FALLBACK_RETRY
+## src/pages/itinerary/itinerary-draft/config/
+- `src/pages/itinerary/itinerary-draft/config/generationFallback.ts`  →  GENERATION_FALLBACK_PROGRESS · GENERATION_FALLBACK_TITLE · GENERATION_FALLBACK_MAP_PILL · GENERATION_FALLBACK_MESSAGE_TITLE · GENERATION_FALLBACK_MESSAGE_BODY · GENERATION_FALLBACK_CHECK_ROUTE · GENERATION_FALLBACK_CHECK_SKIPPED · GENERATION_FALLBACK_CHECK_DONE · GENERATION_FALLBACK_VIEW_PLAN · GENERATION_FALLBACK_MANUAL · GENERATION_FALLBACK_FAILED_TITLE · GENERATION_FALLBACK_FAILED_NOTE · GENERATION_FALLBACK_RETRY
 
-## src/pages/itinerary-draft/
-- `src/pages/itinerary-draft/index.ts`  →  DraftPage
+## src/pages/itinerary/itinerary-draft/
+- `src/pages/itinerary/itinerary-draft/index.ts`  →  DraftPage
 
-## src/pages/itinerary-draft/ui/
-- `src/pages/itinerary-draft/ui/DraftFallbackBanner.tsx`  →  DraftFallbackBanner
-- `src/pages/itinerary-draft/ui/DraftPage.tsx`  →  DraftPage
-- `src/pages/itinerary-draft/ui/DraftScreen.tsx`  →  DraftScreenProps · DraftScreen
-- `src/pages/itinerary-draft/ui/GenerationFallbackScreen.tsx`  →  GenerationFallbackScreenProps · GenerationFallbackScreen
-- `src/pages/itinerary-draft/ui/SlotCandidatePanelContainer.tsx`  →  SlotCandidatePanelContainerProps · SlotCandidatePanelContainer
-- `src/pages/itinerary-draft/ui/SlotCandidateSheet.tsx`  →  SlotCandidateSheetRow · SlotCandidateSheetProps · SlotCandidateSheet
+## src/pages/itinerary/itinerary-draft/ui/
+- `src/pages/itinerary/itinerary-draft/ui/DraftFallbackBanner.tsx`  →  DraftFallbackBanner
+- `src/pages/itinerary/itinerary-draft/ui/DraftPage.tsx`  →  DraftPage
+- `src/pages/itinerary/itinerary-draft/ui/DraftScreen.tsx`  →  DraftScreenProps · DraftScreen
+- `src/pages/itinerary/itinerary-draft/ui/GenerationFallbackScreen.tsx`  →  GenerationFallbackScreenProps · GenerationFallbackScreen
+- `src/pages/itinerary/itinerary-draft/ui/SlotCandidatePanelContainer.tsx`  →  SlotCandidatePanelContainerProps · SlotCandidatePanelContainer
+- `src/pages/itinerary/itinerary-draft/ui/SlotCandidateSheet.tsx`  →  SlotCandidateSheetRow · SlotCandidateSheetProps · SlotCandidateSheet
 
-## src/pages/itinerary-edit/
-- `src/pages/itinerary-edit/index.ts`  →  ItineraryEditPage
+## src/pages/itinerary/itinerary-edit/
+- `src/pages/itinerary/itinerary-edit/index.ts`  →  ItineraryEditPage
 
-## src/pages/itinerary-edit/model/
-- `src/pages/itinerary-edit/model/reorderKeepingLocked.ts`  →  reorderKeepingLocked
+## src/pages/itinerary/itinerary-edit/model/
+- `src/pages/itinerary/itinerary-edit/model/reorderKeepingLocked.ts`  →  reorderKeepingLocked
 
-## src/pages/itinerary-edit/ui/
-- `src/pages/itinerary-edit/ui/ItineraryEditPage.tsx`  →  ItineraryEditPage
+## src/pages/itinerary/itinerary-edit/ui/
+- `src/pages/itinerary/itinerary-edit/ui/ItineraryEditPage.tsx`  →  ItineraryEditPage
 
-## src/pages/itinerary-generating/
-- `src/pages/itinerary-generating/index.ts`  →  GeneratingPage
+## src/pages/itinerary/itinerary-generating/
+- `src/pages/itinerary/itinerary-generating/index.ts`  →  GeneratingPage
 
-## src/pages/itinerary-generating/ui/
-- `src/pages/itinerary-generating/ui/GeneratingPage.tsx`  →  GeneratingPage
-- `src/pages/itinerary-generating/ui/GeneratingScreen.tsx`  →  GeneratingScreenProps · GeneratingScreen
+## src/pages/itinerary/itinerary-generating/ui/
+- `src/pages/itinerary/itinerary-generating/ui/GeneratingPage.tsx`  →  GeneratingPage
+- `src/pages/itinerary/itinerary-generating/ui/GeneratingScreen.tsx`  →  GeneratingScreenProps · GeneratingScreen
 
-## src/pages/itinerary-list/
-- `src/pages/itinerary-list/index.ts`  →  MyTripsListPage
+## src/pages/itinerary/itinerary-list/
+- `src/pages/itinerary/itinerary-list/index.ts`  →  MyTripsListPage
 
-## src/pages/itinerary-list/model/
-- `src/pages/itinerary-list/model/doneBar.ts`  →  DoneBarEntry · DoneBarPick · pickDoneBar
-- `src/pages/itinerary-list/model/myTripsOrder.ts`  →  MyTripsSortKey · byLatest · byStart · byTitle · parseMyTripsSortKey · orderMyTrips
-- `src/pages/itinerary-list/model/tripCardFace.ts`  →  TripCardFace · deriveTripCardFace
+## src/pages/itinerary/itinerary-list/model/
+- `src/pages/itinerary/itinerary-list/model/doneBar.ts`  →  DoneBarEntry · DoneBarPick · pickDoneBar
+- `src/pages/itinerary/itinerary-list/model/myTripsOrder.ts`  →  MyTripsSortKey · byLatest · byStart · byTitle · parseMyTripsSortKey · orderMyTrips
+- `src/pages/itinerary/itinerary-list/model/tripCardFace.ts`  →  TripCardFace · deriveTripCardFace
 
-## src/pages/itinerary-list/ui/
-- `src/pages/itinerary-list/ui/GenerationDoneBar.tsx`  →  GenerationDoneBarProps · GenerationDoneBar
-- `src/pages/itinerary-list/ui/GenerationDoneBarGlyphs.tsx`  →  DoneCheckGlyph
-- `src/pages/itinerary-list/ui/MyTripCard.tsx`  →  MyTripCardProps · MyTripCard
-- `src/pages/itinerary-list/ui/MyTripsListPage.tsx`  →  MyTripsListPage
-- `src/pages/itinerary-list/ui/MyTripsListScreen.tsx`  →  MyTripsListMode · MyTripsListScreenProps · MyTripsListScreen
-- `src/pages/itinerary-list/ui/MyTripsSortSheet.tsx`  →  MyTripsSortSheetProps · MyTripsSortSheet
-- `src/pages/itinerary-list/ui/TripCardContainer.tsx`  →  TripCardContainerProps · TripCardContainer
-- `src/pages/itinerary-list/ui/TripDeleteDialog.tsx`  →  TripDeleteDialog
+## src/pages/itinerary/itinerary-list/ui/
+- `src/pages/itinerary/itinerary-list/ui/GenerationDoneBar.tsx`  →  GenerationDoneBarProps · GenerationDoneBar
+- `src/pages/itinerary/itinerary-list/ui/GenerationDoneBarGlyphs.tsx`  →  DoneCheckGlyph
+- `src/pages/itinerary/itinerary-list/ui/MyTripCard.tsx`  →  MyTripCardProps · MyTripCard
+- `src/pages/itinerary/itinerary-list/ui/MyTripsListPage.tsx`  →  MyTripsListPage
+- `src/pages/itinerary/itinerary-list/ui/MyTripsListScreen.tsx`  →  MyTripsListMode · MyTripsListScreenProps · MyTripsListScreen
+- `src/pages/itinerary/itinerary-list/ui/MyTripsSortSheet.tsx`  →  MyTripsSortSheetProps · MyTripsSortSheet
+- `src/pages/itinerary/itinerary-list/ui/TripCardContainer.tsx`  →  TripCardContainerProps · TripCardContainer
+- `src/pages/itinerary/itinerary-list/ui/TripDeleteDialog.tsx`  →  TripDeleteDialog
 
-## src/pages/itinerary-manual/
-- `src/pages/itinerary-manual/index.ts`  →  ManualPlanPage · PlaceAddPage
+## src/pages/itinerary/itinerary-manual/
+- `src/pages/itinerary/itinerary-manual/index.ts`  →  ManualPlanPage · PlaceAddPage
 
-## src/pages/itinerary-manual/model/
-- `src/pages/itinerary-manual/model/editorMapCenter.ts`  →  resolveEditorMapCenter
+## src/pages/itinerary/itinerary-manual/model/
+- `src/pages/itinerary/itinerary-manual/model/editorMapCenter.ts`  →  resolveEditorMapCenter
 
-## src/pages/itinerary-manual/ui/
-- `src/pages/itinerary-manual/ui/ManualPlanPage.tsx`  →  ManualPlanPage
-- `src/pages/itinerary-manual/ui/PlaceAddPage.tsx`  →  PlaceAddPage
+## src/pages/itinerary/itinerary-manual/ui/
+- `src/pages/itinerary/itinerary-manual/ui/ManualPlanPage.tsx`  →  ManualPlanPage
+- `src/pages/itinerary/itinerary-manual/ui/PlaceAddPage.tsx`  →  PlaceAddPage
 
-## src/pages/itinerary-method/config/
-- `src/pages/itinerary-method/config/methodPicker.ts`  →  METHOD_PROGRESS · METHOD_SUBTITLE · METHOD_SWITCH_NOTE
+## src/pages/itinerary/itinerary-method/config/
+- `src/pages/itinerary/itinerary-method/config/methodPicker.ts`  →  METHOD_PROGRESS · METHOD_SUBTITLE · METHOD_SWITCH_NOTE
 
-## src/pages/itinerary-method/
-- `src/pages/itinerary-method/index.ts`  →  ItineraryMethodPage
+## src/pages/itinerary/itinerary-method/
+- `src/pages/itinerary/itinerary-method/index.ts`  →  ItineraryMethodPage
 
-## src/pages/itinerary-method/ui/
-- `src/pages/itinerary-method/ui/ItineraryMethodPage.tsx`  →  ItineraryMethodPage
-- `src/pages/itinerary-method/ui/MethodPickerScreen.tsx`  →  ActiveGeneration · MethodPickerScreenProps · MethodPickerScreen
+## src/pages/itinerary/itinerary-method/ui/
+- `src/pages/itinerary/itinerary-method/ui/ItineraryMethodPage.tsx`  →  ItineraryMethodPage
+- `src/pages/itinerary/itinerary-method/ui/MethodPickerScreen.tsx`  →  ActiveGeneration · MethodPickerScreenProps · MethodPickerScreen
 
-## src/pages/itinerary-mustvisit/
-- `src/pages/itinerary-mustvisit/index.ts`  →  MustVisitListPage · MustVisitTimePage
+## src/pages/itinerary/itinerary-mustvisit/
+- `src/pages/itinerary/itinerary-mustvisit/index.ts`  →  MustVisitListPage · MustVisitTimePage
 
-## src/pages/itinerary-mustvisit/ui/
-- `src/pages/itinerary-mustvisit/ui/MustVisitListPage.tsx`  →  MustVisitListPage
-- `src/pages/itinerary-mustvisit/ui/MustVisitPickerScreen.tsx`  →  MustVisitPickerScreenProps · MustVisitPickerScreen
-- `src/pages/itinerary-mustvisit/ui/MustVisitTimePage.tsx`  →  MustVisitTimePage
-- `src/pages/itinerary-mustvisit/ui/MustVisitTimeScreen.tsx`  →  MustVisitTimeScreenProps · MustVisitTimeScreen
+## src/pages/itinerary/itinerary-mustvisit/ui/
+- `src/pages/itinerary/itinerary-mustvisit/ui/MustVisitListPage.tsx`  →  MustVisitListPage
+- `src/pages/itinerary/itinerary-mustvisit/ui/MustVisitPickerScreen.tsx`  →  MustVisitPickerScreenProps · MustVisitPickerScreen
+- `src/pages/itinerary/itinerary-mustvisit/ui/MustVisitTimePage.tsx`  →  MustVisitTimePage
+- `src/pages/itinerary/itinerary-mustvisit/ui/MustVisitTimeScreen.tsx`  →  MustVisitTimeScreenProps · MustVisitTimeScreen
 
-## src/pages/itinerary-plan/
-- `src/pages/itinerary-plan/index.ts`  →  ItineraryPlanPage
+## src/pages/itinerary/itinerary-plan/
+- `src/pages/itinerary/itinerary-plan/index.ts`  →  ItineraryPlanPage
 
-## src/pages/itinerary-plan/ui/
-- `src/pages/itinerary-plan/ui/ItineraryPlanPage.tsx`  →  ItineraryPlanPage
-- `src/pages/itinerary-plan/ui/NoBaseNoticeCard.tsx`  →  NoBaseNoticeCard
+## src/pages/itinerary/itinerary-plan/ui/
+- `src/pages/itinerary/itinerary-plan/ui/ItineraryPlanPage.tsx`  →  ItineraryPlanPage
+- `src/pages/itinerary/itinerary-plan/ui/NoBaseNoticeCard.tsx`  →  NoBaseNoticeCard
 
-## src/pages/itinerary-stay-recommend/
-- `src/pages/itinerary-stay-recommend/index.ts`  →  StayRecommendPage
+## src/pages/itinerary/itinerary-stay-recommend/
+- `src/pages/itinerary/itinerary-stay-recommend/index.ts`  →  StayRecommendPage
 
-## src/pages/itinerary-stay-recommend/lib/
-- `src/pages/itinerary-stay-recommend/lib/objectParticle.ts`  →  withObjectParticle
+## src/pages/itinerary/itinerary-stay-recommend/lib/
+- `src/pages/itinerary/itinerary-stay-recommend/lib/objectParticle.ts`  →  withObjectParticle
 
-## src/pages/itinerary-stay-recommend/model/
-- `src/pages/itinerary-stay-recommend/model/stayRecommend.ts`  →  StayRecommendCandidate · StayRecommendView
+## src/pages/itinerary/itinerary-stay-recommend/model/
+- `src/pages/itinerary/itinerary-stay-recommend/model/stayRecommend.ts`  →  StayRecommendCandidate · StayRecommendView
 
-## src/pages/itinerary-stay-recommend/ui/
-- `src/pages/itinerary-stay-recommend/ui/StayRecommendPage.tsx`  →  StayRecommendPageProps · StayRecommendPage
-- `src/pages/itinerary-stay-recommend/ui/StayRecommendView.tsx`  →  StayRecommendViewProps · StayRecommendView
+## src/pages/itinerary/itinerary-stay-recommend/ui/
+- `src/pages/itinerary/itinerary-stay-recommend/ui/StayRecommendPage.tsx`  →  StayRecommendPageProps · StayRecommendPage
+- `src/pages/itinerary/itinerary-stay-recommend/ui/StayRecommendView.tsx`  →  StayRecommendViewProps · StayRecommendView
 
 ## src/pages/live-itinerary/
 - `src/pages/live-itinerary/index.ts`  →  LiveItineraryPage

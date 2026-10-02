@@ -319,7 +319,7 @@ describe('🔴 SlotCandidateSheet — scrim·바텀시트 복귀(AC-1·D3)', () 
 
     // 반전 앵커 — 이 시트는 바텀시트를 **다시** 문다(옛 인라인 패널의 "import 0" 단언을 뒤집는다).
     const source = fs.readFileSync(
-      resolve('src/pages/itinerary-draft/ui/SlotCandidateSheet.tsx'),
+      resolve('src/pages/itinerary/itinerary-draft/ui/SlotCandidateSheet.tsx'),
       'utf8'
     );
     expect(source).toContain('@gorhom/bottom-sheet');

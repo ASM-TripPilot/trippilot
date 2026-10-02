@@ -16,7 +16,7 @@ import {
   useGetTripsTripIdItinerary,
 } from '@/shared/api/generated/trips/trips';
 import { readIdSet, writeIdSet } from '@/shared/storage/idSet';
-import { MyTripsListPage } from '@/pages/itinerary-list';
+import { MyTripsListPage } from '@/pages/itinerary/itinerary-list';
 
 /**
  * TRIP-928 · h05 "내 여행" 목록의 완료 도킹 배너 표시 조건.

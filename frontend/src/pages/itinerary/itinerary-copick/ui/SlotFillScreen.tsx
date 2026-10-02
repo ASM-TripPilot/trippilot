@@ -15,7 +15,7 @@ import { SlotCandidateCard } from './SlotCandidateCard';
 
 /**
  * TRIP-335 슬라이스2 → TRIP-795 h10 후보 선택(Figma 3849:2227 default·3850:2227 반경 넓힘) — 순수
- * 화면(props + 콜백만). 상태는 `SlotFillPage`(pages/itinerary-copick)가 소유한다.
+ * 화면(props + 콜백만). 상태는 `SlotFillPage`(pages/itinerary/itinerary-copick)가 소유한다.
  *
  * 무엇을 보장하나:
  *  - AC-1: 앱바가 정적 `후보 고르기`가 아니라 `{concept} 후보 고르기`(concept 없으면 정적 폴백).
