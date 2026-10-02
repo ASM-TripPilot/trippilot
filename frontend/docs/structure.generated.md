@@ -278,6 +278,9 @@
 - `src/entities/trip/ui/TripCard.tsx`  →  TripCardProps · TripCard
 - `src/entities/trip/ui/TripGlyphs.tsx`  →  ChevronRightGlyph · MoreDotsGlyph · TrashGlyph
 
+## src/features/add-must-visit/model/
+- `src/features/add-must-visit/model/mustVisitTimeForm.ts`  →  DwellKey · MustVisitTimeForm · DWELL_OPTIONS · DEFAULT_DWELL_KEY · tripDayChips · startTimeOptions · startTimeLabel · mustVisitTimeBlockReason · canSubmitMustVisitTime · buildFixedMustVisitRequest · buildAnytimeMustVisitRequest
+
 ## src/features/assign-trip-base/model/
 - `src/features/assign-trip-base/model/baseAssignPlan.ts`  →  BaseAssignPlan · planBaseAssign
 - `src/features/assign-trip-base/model/useTripBases.ts`  →  useTripBases · useAssignBase
@@ -342,7 +345,6 @@
 - `src/features/itinerary/model/coPickSlots.ts`  →  firstCoPickSlotKey · nextCoPickSlotKey · countPickedCoPickSlots
 - `src/features/itinerary/model/draftView.ts`  →  DRAFT_POLL_INTERVAL_MS · DRAFT_POLL_MAX_COUNT · DraftDayTab · buildDraftDayTabs · GenerationDayState · GenerationGaugeCell · buildGenerationGauge · GenerationGaugeFold · FoldedGenerationGaugeCell · foldGenerationGauge · formatDraftDayHeader · formatCoPickDayHeader · DraftPin · buildDraftPins · shouldKeepPollingDraft · DraftView · isCandidatesDemoted · FallbackNotice · resolveFallbackNotice · resolveDraftView
 - `src/features/itinerary/model/mustVisitList.ts`  →  MUST_VISIT_NAME_PLACEHOLDER · MustVisitListItem · MustVisitListView · joinMustVisits · fixedTimeLabel · buildMustVisitPins · resolveMustVisitListView
-- `src/features/itinerary/model/mustVisitTimeForm.ts`  →  DwellKey · MustVisitTimeForm · DWELL_OPTIONS · DEFAULT_DWELL_KEY · tripDayChips · startTimeOptions · startTimeLabel · mustVisitTimeBlockReason · canSubmitMustVisitTime · buildFixedMustVisitRequest · buildAnytimeMustVisitRequest
 - `src/features/itinerary/model/planState.ts`  →  PlanState · PlanDayTab · resolvePlanState · isConfirmLocked · ItineraryDestination · resolveItineraryDestination · ItineraryDestinationHref · itineraryDestinationHref · buildPlanDayTabs
 - `src/features/itinerary/model/unplacedMustVisits.ts`  →  UnplacedMustVisitRow · resolveUnplacedNames
 - `src/features/itinerary/model/useGenerationBusy.ts`  →  isGenerationRunning · GenerationBusy · useGenerationBusy

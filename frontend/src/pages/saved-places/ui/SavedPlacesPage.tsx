@@ -55,7 +55,7 @@ import { wizardOriginParams } from '@/features/create-trip/model/wizardOrigin';
 import { MustVisitOutsideConfirmDialog } from './MustVisitOutsideConfirmDialog';
 import { MustVisitPickScreen } from './MustVisitPickScreen';
 import { SavedPlaceListScreen } from './SavedPlaceListScreen';
-import { buildAnytimeMustVisitRequest } from '@/features/itinerary/model/mustVisitTimeForm';
+import { buildAnytimeMustVisitRequest } from '@/features/add-must-visit/model/mustVisitTimeForm';
 import {
   mustVisitFailureNotice,
   seedMustVisits,

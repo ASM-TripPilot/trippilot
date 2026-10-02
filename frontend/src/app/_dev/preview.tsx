@@ -69,7 +69,7 @@ import type { MustVisitListItem } from '@/features/itinerary/model/mustVisitList
 import {
   startTimeOptions,
   tripDayChips,
-} from '@/features/itinerary/model/mustVisitTimeForm';
+} from '@/features/add-must-visit/model/mustVisitTimeForm';
 import { ConceptPickerScreen } from '@/pages/itinerary-copick/ui/ConceptPickerScreen';
 import { GenerationFallbackScreen } from '@/pages/itinerary-draft/ui/GenerationFallbackScreen';
 import { GeneratingScreen } from '@/pages/itinerary-generating/ui/GeneratingScreen';

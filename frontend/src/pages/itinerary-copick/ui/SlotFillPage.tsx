@@ -15,7 +15,7 @@ import {
   formatCoPickDayHeader,
 } from '@/features/itinerary/model/draftView';
 import { regionForDay } from '../model/dayRegion';
-import { tripDayChips } from '@/features/itinerary/model/mustVisitTimeForm';
+import { tripDayChips } from '@/features/add-must-visit/model/mustVisitTimeForm';
 import { isConfirmLocked } from '@/features/itinerary/model/planState';
 import { formatRadiusUsed } from '../model/radiusUsedLabel';
 import { formatDistance } from '@/entities/place/lib/formatDistance';

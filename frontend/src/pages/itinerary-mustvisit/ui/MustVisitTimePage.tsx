@@ -13,7 +13,7 @@ import {
   startTimeOptions,
   tripDayChips,
   type MustVisitTimeForm,
-} from '@/features/itinerary/model/mustVisitTimeForm';
+} from '@/features/add-must-visit/model/mustVisitTimeForm';
 import { MustVisitTimeScreen } from './MustVisitTimeScreen';
 import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
 import type { AddMustVisitRequest } from '@/shared/api/generated/schemas';
