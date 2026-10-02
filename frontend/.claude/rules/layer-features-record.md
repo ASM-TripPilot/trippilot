@@ -4,7 +4,7 @@ paths:
 ---
 # `src/features/record/` — j01 방문 기록 · j07 캘린더 model
 
-j07 화면 뷰(`RecordsCalendarScreen`·`TripCalendarMonth`·`PastTripList`)는 TRIP-1153으로 `pages/records-calendar/ui`로 이사했다(`layer-pages.md`). 여기 남은 j07 몫은 page와 화면이 함께 쓰는 `model/recordsCalendar`·page 전용 `model/useRecordsCalendar`·공용 `ui/RecordGlyphs`다. TRIP-1155로 j07 model 2개는 `pages/records-calendar/model/`로, j01 방문 기록 파일은 `pages/trip-records`·`features/check-visit`·`features/attach-visit-media`·`pages/live/live-itinerary`(`MemoSheet`)로 이사해 여기엔 `model/conflict`·`ui/RecordGlyphs`만 남았다.
+j07 화면 뷰(`RecordsCalendarScreen`·`TripCalendarMonth`·`PastTripList`)는 TRIP-1153으로 `pages/record/records-calendar/ui`로 이사했다(`layer-pages.md`). 여기 남은 j07 몫은 page와 화면이 함께 쓰는 `model/recordsCalendar`·page 전용 `model/useRecordsCalendar`·공용 `ui/RecordGlyphs`다. TRIP-1155로 j07 model 2개는 `pages/record/records-calendar/model/`로, j01 방문 기록 파일은 `pages/record/trip-records`·`features/check-visit`·`features/attach-visit-media`·`pages/live/live-itinerary`(`MemoSheet`)로 이사해 여기엔 `model/conflict`·`ui/RecordGlyphs`만 남았다.
 
 `features/execution`과 목적이 겹쳐 보이지만(둘 다 `visit_check` 실적) shape가 다르다 — execution의 `deriveVisitProgress`는 poi 단위 **집계**, 이쪽은 per-record 4상태다. 그래서 재사용하지 않는다.
 

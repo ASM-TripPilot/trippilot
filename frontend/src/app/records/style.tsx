@@ -1,7 +1,7 @@
-import { TravelStylePage } from '@/pages/travel-style';
+import { TravelStylePage } from '@/pages/record/travel-style';
 
 /**
- * j05 여행 스타일 분석 · 얇은 라우트 — 배선은 `pages/travel-style` 가 진다(`records/summary.tsx` 선례).
+ * j05 여행 스타일 분석 · 얇은 라우트 — 배선은 `pages/record/travel-style` 가 진다(`records/summary.tsx` 선례).
  * **계정 단위**(INV-U5-08)라 `tripId` 파라미터가 없다(`GET /me/style`) — `trips/[tripId]/records/*`
  * 와 달리 `app/records/` 아래에 산다. `app/records/index.tsx` 는 만들지 않는다(`(tabs)/records.tsx`
  * 가 이미 `/records` 를 소유 — 탭 충돌 회피). `(tabs)` 밖 파일시스템 라우트라 미인증 딥링크 노출

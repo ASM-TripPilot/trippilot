@@ -27,7 +27,7 @@ paths:
 | `src/app/(tabs)/index.tsx` | 홈 탭 — `<HomePage/>`만 렌더하는 10줄 얇은 래퍼(TRIP-1142). 조회·판정·항법은 `pages/home` 소관(`layer-pages.md`). 래퍼 연결은 `tabsShell` 홈 래퍼 it가 심판 |
 | `src/app/(tabs)/explore.tsx` | 탐색 탭 — `<ExploreLandingPage/>`만 렌더하는 11줄 얇은 래퍼(TRIP-1142). `region` 주소 파라미터는 래퍼가 아니라 page가 `useLocalSearchParams`로 직접 읽는다. 조회·조립·항법은 `pages/explore/explore-landing` 소관. 래퍼 연결은 `tabsShell` 탐색 래퍼 it가 심판 |
 | `src/app/(tabs)/itinerary.tsx` | 일정 탭 — `<MyTripsListPage/>`만 렌더(리다이렉트 없음). 조회·정렬·카드별 목적지 판정은 `pages/itinerary/itinerary-list` 소관. |
-| `src/app/(tabs)/records.tsx` | 기록 탭 — `<RecordsCalendarPage/>`만 렌더. 조회·조립·항법은 `pages/records-calendar` 소관 |
+| `src/app/(tabs)/records.tsx` | 기록 탭 — `<RecordsCalendarPage/>`만 렌더. 조회·조립·항법은 `pages/record/records-calendar` 소관 |
 | `src/app/(tabs)/my.tsx` | 마이 탭 — `<MyPage/>`만 렌더. 조회·분류·조합은 `pages/my-page` 소관 |
 | `src/app/my/stays.tsx` | `/my/stays` — `@/pages/stay/my-stays` 얇은 래퍼. 마이 페이지에서 진입 |
 | `src/app/settings/notifications.tsx` | `/settings/notifications` — `@/pages/settings-notifications` 얇은 래퍼. 설정 화면에서 진입 |
@@ -58,12 +58,12 @@ paths:
 | `src/app/trips/[tripId]/planb/solving.tsx` | 재계획 로딩 — `tripId`·`sessionId`만 읽어 `@/pages/live/planb-draft` 얇은 래퍼 |
 | `src/app/trips/[tripId]/planb/diff.tsx` | 재계획 확정/취소 — `tripId`·`sessionId`만 읽어 `@/pages/live/planb-diff` 얇은 래퍼 |
 | `src/app/trips/[tripId]/planb/manual.tsx` | 여행 중 일정 편집 — `tripId`만 꺼내 `ItineraryEditPage`에 리터럴 `inTrip={true}`로 위임(params를 통째로 펼치지 않는다 — `planbManualRoute.test.tsx` RT1) |
-| `src/app/trips/[tripId]/records/index.tsx` | j01 방문 기록 — `tripId`·`day`만 읽어 `@/pages/trip-records` 얇은 래퍼 |
-| `src/app/trips/[tripId]/records/add-visit.tsx` | j01 즉석 방문 장소 피커(TRIP-1072) — `tripId`·`day`만 읽어 `@/pages/record-add-visit` 얇은 래퍼(RT1) |
-| `src/app/trips/[tripId]/records/reflection/[date].tsx` | j03 오늘의 회고 — `tripId`·`date`만 읽어 `@/pages/daily-reflection` 얇은 래퍼(G3 스캔이 `@/features/reflection`·조회 훅 직접 import 0을 잠금) |
-| `src/app/trips/[tripId]/records/summary.tsx` | j04 여행 요약 — `tripId`만 읽어 `@/pages/trip-summary` 얇은 래퍼 |
-| `src/app/trips/[tripId]/records/share.tsx` | j06 공유 카드(전체화면, 탭바 없음) — `tripId`만 읽어 `@/pages/share-card` 얇은 래퍼. j04·j03에서 push |
-| `src/app/records/style.tsx` | j05 여행 스타일 — **계정 단위**라 `[tripId]` 밖(INV-U5-08). params 없이 `@/pages/travel-style` 위임. `app/records/index.tsx`는 두지 않는다 — `(tabs)/records.tsx`의 `/records`와 충돌 |
+| `src/app/trips/[tripId]/records/index.tsx` | j01 방문 기록 — `tripId`·`day`만 읽어 `@/pages/record/trip-records` 얇은 래퍼 |
+| `src/app/trips/[tripId]/records/add-visit.tsx` | j01 즉석 방문 장소 피커(TRIP-1072) — `tripId`·`day`만 읽어 `@/pages/record/record-add-visit` 얇은 래퍼(RT1) |
+| `src/app/trips/[tripId]/records/reflection/[date].tsx` | j03 오늘의 회고 — `tripId`·`date`만 읽어 `@/pages/record/daily-reflection` 얇은 래퍼(G3 스캔이 `@/features/reflection`·조회 훅 직접 import 0을 잠금) |
+| `src/app/trips/[tripId]/records/summary.tsx` | j04 여행 요약 — `tripId`만 읽어 `@/pages/record/trip-summary` 얇은 래퍼 |
+| `src/app/trips/[tripId]/records/share.tsx` | j06 공유 카드(전체화면, 탭바 없음) — `tripId`만 읽어 `@/pages/record/share-card` 얇은 래퍼. j04·j03에서 push |
+| `src/app/records/style.tsx` | j05 여행 스타일 — **계정 단위**라 `[tripId]` 밖(INV-U5-08). params 없이 `@/pages/record/travel-style` 위임. `app/records/index.tsx`는 두지 않는다 — `(tabs)/records.tsx`의 `/records`와 충돌 |
 | `src/app/trips/[tripId]/planb/draft.tsx` | 재계획 초안 — `tripId`·`sessionId`만 읽어 `@/pages/live/planb-draft` 얇은 래퍼 |
 | `src/app/trips/[tripId]/live/location.tsx` | 위치 폴백(수동 입력·권한 거부) — `tripId`·`state`를 `LiveLocationPage`에 위임(`?state=`로 얼굴 선택) |
 | `src/app/settings/preferences.tsx` | l05 취향 전체 수정 — `@/pages/settings-preferences` 얇은 래퍼. 설정 화면에서 진입 |

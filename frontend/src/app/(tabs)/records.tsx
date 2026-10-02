@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 
-import { RecordsCalendarPage } from '@/pages/records-calendar';
+import { RecordsCalendarPage } from '@/pages/record/records-calendar';
 
 /**
  * 기록 탭 — j07 여행 캘린더 허브(TRIP-575). "기록 준비 중" 자리표시자(TRIP-290)를 교체했다.

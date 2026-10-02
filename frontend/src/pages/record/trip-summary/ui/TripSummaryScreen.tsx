@@ -16,7 +16,7 @@ import type { OrderedVisit } from '@/features/reflection/model/summaryView';
 /**
  * TRIP-572 · j04 여행 요약 화면(순수 프레젠테이션 — VM·콜백 주입, 조회/조립 0).
  * 조회·조립(summaryStats·resolveSummaryView·toOrderedVisitList·shareEnabled·daySubtitle)은
- * `pages/trip-summary` 가 진다(이 파일은 `@/shared/*` 만 import — 프리뷰 격리 렌더 안전, FSD 경계).
+ * `pages/record/trip-summary` 가 진다(이 파일은 `@/shared/*` 만 import — 프리뷰 격리 렌더 안전, FSD 경계).
  * 화면은 완성된 셀·VM 을 받아 그릴 뿐 `ready`·`hasLocationData`·거리 대시를 자체 해석하지 않는다
  * (571 DailyReflectionScreen 동형 — 화면이 폴백을 발명하면 심판 사각이 생긴다는 571 교훈).
  *

@@ -20,7 +20,7 @@ import { StateNotice } from '@/shared/ui/StateNotice';
 
 /**
  * TRIP-575 · j07 여행 캘린더 허브(무상태 프레젠테이션 — 계산된 값·콜백만 받는다).
- * 판정·조회·라우팅을 모른다(목 없이 props 만 넣어 렌더 트리를 관찰). 조립·조회는 `pages/records-calendar`.
+ * 판정·조회·라우팅을 모른다(목 없이 props 만 넣어 렌더 트리를 관찰). 조립·조회는 `pages/record/records-calendar`.
  *
  * - AC-1: placeholder 가 아니라 캘린더 허브(record-calendar-month)를 그린다.
  * - AC-5: 저장 여행 0건이면 빈 캘린더 대신 안내 + '새 여행' 버튼(record-calendar-empty[-create]).

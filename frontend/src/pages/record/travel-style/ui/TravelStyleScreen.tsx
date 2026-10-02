@@ -16,7 +16,7 @@ import { StatTile } from './StatTile';
 
 /**
  * TRIP-573 · j05 여행 스타일 분석 화면(순수 프레젠테이션 — VM·콜백 주입, 조회/조립 0).
- * 조회·얼굴 판정(useStyleAnalysis·resolveStyleFace)은 `pages/travel-style` 가 진다(이 파일이 무는
+ * 조회·얼굴 판정(useStyleAnalysis·resolveStyleFace)은 `pages/record/travel-style` 가 진다(이 파일이 무는
  * `@/shared` 값은 프레젠테이션 `shared/ui/BottomTabBar` 뿐 — 네트워크 계층 import 0 이라 프리뷰
  * 격리 렌더 안전, FSD 경계). 화면은 완성된 `face` 로만 두 얼굴을
  * 가르고 재판정하지 않는다(571·572 동형 — 화면이 판정을 발명하면 심판 사각이 생긴다).

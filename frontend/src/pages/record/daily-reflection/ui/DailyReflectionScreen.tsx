@@ -24,7 +24,7 @@ import { ReflectionStatsRow } from './ReflectionStatsRow';
 
 /**
  * TRIP-571 · j03 오늘의 회고 화면(순수 프레젠테이션 — VM·콜백 주입, 조회/표시본 조립 0).
- * 조립·조회·표시본 결정은 `pages/daily-reflection` 이 진다(이 파일은 `@/shared/*`·`@/entities/*` 만
+ * 조립·조회·표시본 결정은 `pages/record/daily-reflection` 이 진다(이 파일은 `@/shared/*`·`@/entities/*` 만
  * import — 프리뷰 격리 렌더 안전, FSD 경계). 화면은 완성된 `narrative`·`editableText` 를 받고,
  * `draftNarrative`/`editedNarrative`/`resolveDisplayNarrative` 어느 것도 참조하지 않는다.
  *

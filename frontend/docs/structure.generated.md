@@ -504,24 +504,6 @@
 - `src/pages/auth/terms-viewer/ui/TermsViewerPage.tsx`  →  TermsViewerPage
 - `src/pages/auth/terms-viewer/ui/TermsViewerScreen.tsx`  →  TermsViewerScreenProps · TermsViewerScreen
 
-## src/pages/daily-reflection/
-- `src/pages/daily-reflection/index.ts`  →  DailyReflectionPage
-
-## src/pages/daily-reflection/model/
-- `src/pages/daily-reflection/model/editCard.ts`  →  buildEditCard
-- `src/pages/daily-reflection/model/missingParts.ts`  →  LocationPermissionState · MapNoticeReason · MapNotice · MissingParts · missingParts
-- `src/pages/daily-reflection/model/reflectionFallback.ts`  →  resolveDisplayNarrative
-- `src/pages/daily-reflection/model/statsCard.ts`  →  statsCard
-- `src/pages/daily-reflection/model/useDailyReflection.ts`  →  UseDailyReflectionResult · useDailyReflection
-
-## src/pages/daily-reflection/ui/
-- `src/pages/daily-reflection/ui/ChangeSummaryRow.tsx`  →  ChangeSummaryRowProps · ChangeSummaryRow
-- `src/pages/daily-reflection/ui/DailyReflectionPage.tsx`  →  DailyReflectionPageProps · DailyReflectionPage
-- `src/pages/daily-reflection/ui/DailyReflectionScreen.tsx`  →  ReflectionFace · ReflectionDayTab · DailyReflectionScreenProps · DailyReflectionScreen
-- `src/pages/daily-reflection/ui/NarrativeBlock.tsx`  →  NarrativeBlockProps · NarrativeBlock
-- `src/pages/daily-reflection/ui/ReflectionPhotoGrid.tsx`  →  ReflectionPhotoGridProps · ReflectionPhotoGrid
-- `src/pages/daily-reflection/ui/ReflectionStatsRow.tsx`  →  ReflectionStatsRowProps · ReflectionStatsRow
-
 ## src/pages/explore/explore-landing/
 - `src/pages/explore/explore-landing/index.ts`  →  ExploreLandingPage
 
@@ -864,24 +846,95 @@
 - `src/pages/onboarding/onboarding-terms/ui/TermsPage.tsx`  →  TermsPage
 - `src/pages/onboarding/onboarding-terms/ui/TermsScreen.tsx`  →  TermsItemView · TermsScreenProps · TermsScreen
 
-## src/pages/record-add-visit/
-- `src/pages/record-add-visit/index.ts`  →  RecordAddVisitPage
+## src/pages/record/daily-reflection/
+- `src/pages/record/daily-reflection/index.ts`  →  DailyReflectionPage
 
-## src/pages/record-add-visit/ui/
-- `src/pages/record-add-visit/ui/RecordAddVisitPage.tsx`  →  RecordAddVisitPage
+## src/pages/record/daily-reflection/model/
+- `src/pages/record/daily-reflection/model/editCard.ts`  →  buildEditCard
+- `src/pages/record/daily-reflection/model/missingParts.ts`  →  LocationPermissionState · MapNoticeReason · MapNotice · MissingParts · missingParts
+- `src/pages/record/daily-reflection/model/reflectionFallback.ts`  →  resolveDisplayNarrative
+- `src/pages/record/daily-reflection/model/statsCard.ts`  →  statsCard
+- `src/pages/record/daily-reflection/model/useDailyReflection.ts`  →  UseDailyReflectionResult · useDailyReflection
 
-## src/pages/records-calendar/
-- `src/pages/records-calendar/index.ts`  →  RecordsCalendarPage
+## src/pages/record/daily-reflection/ui/
+- `src/pages/record/daily-reflection/ui/ChangeSummaryRow.tsx`  →  ChangeSummaryRowProps · ChangeSummaryRow
+- `src/pages/record/daily-reflection/ui/DailyReflectionPage.tsx`  →  DailyReflectionPageProps · DailyReflectionPage
+- `src/pages/record/daily-reflection/ui/DailyReflectionScreen.tsx`  →  ReflectionFace · ReflectionDayTab · DailyReflectionScreenProps · DailyReflectionScreen
+- `src/pages/record/daily-reflection/ui/NarrativeBlock.tsx`  →  NarrativeBlockProps · NarrativeBlock
+- `src/pages/record/daily-reflection/ui/ReflectionPhotoGrid.tsx`  →  ReflectionPhotoGridProps · ReflectionPhotoGrid
+- `src/pages/record/daily-reflection/ui/ReflectionStatsRow.tsx`  →  ReflectionStatsRowProps · ReflectionStatsRow
 
-## src/pages/records-calendar/model/
-- `src/pages/records-calendar/model/recordsCalendar.ts`  →  markedDaysOfMonth · buildPastTripCards · LegendRow · MonthLegends · buildMonthLegends · canOpenTripRecords · recordsTripIdForDate · openableTripIds · OngoingTripEntry · OngoingTripCardVM · pickOngoingTrip · formatTripDateRange · nightsLabel
-- `src/pages/records-calendar/model/useRecordsCalendar.ts`  →  useRecordsCalendar
+## src/pages/record/record-add-visit/
+- `src/pages/record/record-add-visit/index.ts`  →  RecordAddVisitPage
 
-## src/pages/records-calendar/ui/
-- `src/pages/records-calendar/ui/PastTripList.tsx`  →  PastTripListProps · PastTripList
-- `src/pages/records-calendar/ui/RecordsCalendarPage.tsx`  →  RecordsCalendarPage
-- `src/pages/records-calendar/ui/RecordsCalendarScreen.tsx`  →  RecordsCalendarScreenProps · RecordsCalendarScreen
-- `src/pages/records-calendar/ui/TripCalendarMonth.tsx`  →  TripCalendarMonthProps · TripCalendarMonth
+## src/pages/record/record-add-visit/ui/
+- `src/pages/record/record-add-visit/ui/RecordAddVisitPage.tsx`  →  RecordAddVisitPage
+
+## src/pages/record/records-calendar/
+- `src/pages/record/records-calendar/index.ts`  →  RecordsCalendarPage
+
+## src/pages/record/records-calendar/model/
+- `src/pages/record/records-calendar/model/recordsCalendar.ts`  →  markedDaysOfMonth · buildPastTripCards · LegendRow · MonthLegends · buildMonthLegends · canOpenTripRecords · recordsTripIdForDate · openableTripIds · OngoingTripEntry · OngoingTripCardVM · pickOngoingTrip · formatTripDateRange · nightsLabel
+- `src/pages/record/records-calendar/model/useRecordsCalendar.ts`  →  useRecordsCalendar
+
+## src/pages/record/records-calendar/ui/
+- `src/pages/record/records-calendar/ui/PastTripList.tsx`  →  PastTripListProps · PastTripList
+- `src/pages/record/records-calendar/ui/RecordsCalendarPage.tsx`  →  RecordsCalendarPage
+- `src/pages/record/records-calendar/ui/RecordsCalendarScreen.tsx`  →  RecordsCalendarScreenProps · RecordsCalendarScreen
+- `src/pages/record/records-calendar/ui/TripCalendarMonth.tsx`  →  TripCalendarMonthProps · TripCalendarMonth
+
+## src/pages/record/share-card/
+- `src/pages/record/share-card/index.ts`  →  ShareCardPage
+
+## src/pages/record/share-card/ui/
+- `src/pages/record/share-card/ui/FormatSegment.tsx`  →  FormatSegmentProps · FormatSegment
+- `src/pages/record/share-card/ui/ShareCardGlyphs.tsx`  →  DownloadGlyph · ShareGlyph · WatermarkLogoGlyph
+- `src/pages/record/share-card/ui/ShareCardPage.tsx`  →  ShareCardPageProps · ShareCardPage
+- `src/pages/record/share-card/ui/ShareCardPreview.tsx`  →  ShareCardPreviewProps · ShareCardPreview
+- `src/pages/record/share-card/ui/ShareCardScreen.tsx`  →  ShareCardScreenProps · ShareCardScreen
+
+## src/pages/record/travel-style/
+- `src/pages/record/travel-style/index.ts`  →  TravelStylePage
+
+## src/pages/record/travel-style/model/
+- `src/pages/record/travel-style/model/styleThreshold.ts`  →  categoryLabel
+- `src/pages/record/travel-style/model/useStyleAnalysis.ts`  →  useStyleAnalysis
+
+## src/pages/record/travel-style/ui/
+- `src/pages/record/travel-style/ui/CategoryBarList.tsx`  →  CategoryBarListProps · CategoryBarList
+- `src/pages/record/travel-style/ui/StatTile.tsx`  →  StatTileProps · StatTile
+- `src/pages/record/travel-style/ui/TravelStylePage.tsx`  →  TravelStylePage
+- `src/pages/record/travel-style/ui/TravelStyleScreen.tsx`  →  TravelStyleScreenProps · TravelStyleScreen
+
+## src/pages/record/trip-records/
+- `src/pages/record/trip-records/index.ts`  →  TripRecordsPage
+
+## src/pages/record/trip-records/model/
+- `src/pages/record/trip-records/model/adjustTimesDraft.ts`  →  AdjustTimesViolation · AdjustTimesDraftResult · adjustTimesDraft
+- `src/pages/record/trip-records/model/photoAvailability.ts`  →  PhotoAvailability · photoAvailability
+- `src/pages/record/trip-records/model/stayAttribution.ts`  →  AttributedStay · DayAttribution · deriveStayAttribution
+- `src/pages/record/trip-records/model/useAdjustVisitTimes.ts`  →  VISIT_CONFLICT_NOTICE · AdjustVisitTimesOutcome · useAdjustVisitTimes
+- `src/pages/record/trip-records/model/useTripRecords.ts`  →  useTripRecords · useRecordBases · useRecordSavedStays
+- `src/pages/record/trip-records/model/useVisitAttachments.ts`  →  useVisitAttachments
+- `src/pages/record/trip-records/model/visitOrder.ts`  →  orderByArrival
+
+## src/pages/record/trip-records/ui/
+- `src/pages/record/trip-records/ui/PhotoThumbStrip.tsx`  →  PhotoThumbVM · PhotoThumbStripProps · PhotoThumbStrip
+- `src/pages/record/trip-records/ui/SkipVisitDialog.tsx`  →  SkipVisitDialog
+- `src/pages/record/trip-records/ui/SpontaneousVisitButton.tsx`  →  SpontaneousVisitButtonProps · SpontaneousVisitButton
+- `src/pages/record/trip-records/ui/TripRecordsPage.tsx`  →  TripRecordsPageProps · TripRecordsPage
+- `src/pages/record/trip-records/ui/TripRecordsView.tsx`  →  TripRecordsDayTab · DayAttributionHeader · RecordPlanRowVM · TripRecordsViewProps · TripRecordsView
+- `src/pages/record/trip-records/ui/VisitRecordCard.tsx`  →  VisitRecordCardVM · VisitRecordCardProps · VisitRecordCard
+- `src/pages/record/trip-records/ui/VisitRecordCardContainer.tsx`  →  VisitRecordCardContainerProps · VisitRecordCardContainer
+- `src/pages/record/trip-records/ui/VisitTimeSheet.tsx`  →  VisitTimeSheetProps · VisitTimeSheet
+
+## src/pages/record/trip-summary/
+- `src/pages/record/trip-summary/index.ts`  →  TripSummaryPage
+
+## src/pages/record/trip-summary/ui/
+- `src/pages/record/trip-summary/ui/DayHighlightCard.tsx`  →  DayHighlightCardProps · DayHighlightCard
+- `src/pages/record/trip-summary/ui/TripSummaryPage.tsx`  →  TripSummaryPageProps · TripSummaryPage
+- `src/pages/record/trip-summary/ui/TripSummaryScreen.tsx`  →  SummaryViewMode · DayReflectionVM · DayCardVM · TripSummaryScreenProps · TripSummaryScreen
 
 ## src/pages/settings-location/
 - `src/pages/settings-location/index.ts`  →  LocationConsentPage
@@ -946,16 +999,6 @@
 - `src/pages/settings/ui/SettingsRow.tsx`  →  RowBody · PreparingRow · NavRow
 - `src/pages/settings/ui/SettingsScreen.tsx`  →  SettingsScreenProps · SettingsScreen
 
-## src/pages/share-card/
-- `src/pages/share-card/index.ts`  →  ShareCardPage
-
-## src/pages/share-card/ui/
-- `src/pages/share-card/ui/FormatSegment.tsx`  →  FormatSegmentProps · FormatSegment
-- `src/pages/share-card/ui/ShareCardGlyphs.tsx`  →  DownloadGlyph · ShareGlyph · WatermarkLogoGlyph
-- `src/pages/share-card/ui/ShareCardPage.tsx`  →  ShareCardPageProps · ShareCardPage
-- `src/pages/share-card/ui/ShareCardPreview.tsx`  →  ShareCardPreviewProps · ShareCardPreview
-- `src/pages/share-card/ui/ShareCardScreen.tsx`  →  ShareCardScreenProps · ShareCardScreen
-
 ## src/pages/stay/my-stays/
 - `src/pages/stay/my-stays/index.ts`  →  MyStaysPage
 
@@ -1014,49 +1057,6 @@
 - `src/pages/stay/stay-search/ui/StayPriceSheet.tsx`  →  StayPriceSheetProps · StayPriceSheet
 - `src/pages/stay/stay-search/ui/StaySearchPage.tsx`  →  StaySearchPage
 - `src/pages/stay/stay-search/ui/StaySearchScreen.tsx`  →  StaySearchScreenProps · StaySearchScreen
-
-## src/pages/travel-style/
-- `src/pages/travel-style/index.ts`  →  TravelStylePage
-
-## src/pages/travel-style/model/
-- `src/pages/travel-style/model/styleThreshold.ts`  →  categoryLabel
-- `src/pages/travel-style/model/useStyleAnalysis.ts`  →  useStyleAnalysis
-
-## src/pages/travel-style/ui/
-- `src/pages/travel-style/ui/CategoryBarList.tsx`  →  CategoryBarListProps · CategoryBarList
-- `src/pages/travel-style/ui/StatTile.tsx`  →  StatTileProps · StatTile
-- `src/pages/travel-style/ui/TravelStylePage.tsx`  →  TravelStylePage
-- `src/pages/travel-style/ui/TravelStyleScreen.tsx`  →  TravelStyleScreenProps · TravelStyleScreen
-
-## src/pages/trip-records/
-- `src/pages/trip-records/index.ts`  →  TripRecordsPage
-
-## src/pages/trip-records/model/
-- `src/pages/trip-records/model/adjustTimesDraft.ts`  →  AdjustTimesViolation · AdjustTimesDraftResult · adjustTimesDraft
-- `src/pages/trip-records/model/photoAvailability.ts`  →  PhotoAvailability · photoAvailability
-- `src/pages/trip-records/model/stayAttribution.ts`  →  AttributedStay · DayAttribution · deriveStayAttribution
-- `src/pages/trip-records/model/useAdjustVisitTimes.ts`  →  VISIT_CONFLICT_NOTICE · AdjustVisitTimesOutcome · useAdjustVisitTimes
-- `src/pages/trip-records/model/useTripRecords.ts`  →  useTripRecords · useRecordBases · useRecordSavedStays
-- `src/pages/trip-records/model/useVisitAttachments.ts`  →  useVisitAttachments
-- `src/pages/trip-records/model/visitOrder.ts`  →  orderByArrival
-
-## src/pages/trip-records/ui/
-- `src/pages/trip-records/ui/PhotoThumbStrip.tsx`  →  PhotoThumbVM · PhotoThumbStripProps · PhotoThumbStrip
-- `src/pages/trip-records/ui/SkipVisitDialog.tsx`  →  SkipVisitDialog
-- `src/pages/trip-records/ui/SpontaneousVisitButton.tsx`  →  SpontaneousVisitButtonProps · SpontaneousVisitButton
-- `src/pages/trip-records/ui/TripRecordsPage.tsx`  →  TripRecordsPageProps · TripRecordsPage
-- `src/pages/trip-records/ui/TripRecordsView.tsx`  →  TripRecordsDayTab · DayAttributionHeader · RecordPlanRowVM · TripRecordsViewProps · TripRecordsView
-- `src/pages/trip-records/ui/VisitRecordCard.tsx`  →  VisitRecordCardVM · VisitRecordCardProps · VisitRecordCard
-- `src/pages/trip-records/ui/VisitRecordCardContainer.tsx`  →  VisitRecordCardContainerProps · VisitRecordCardContainer
-- `src/pages/trip-records/ui/VisitTimeSheet.tsx`  →  VisitTimeSheetProps · VisitTimeSheet
-
-## src/pages/trip-summary/
-- `src/pages/trip-summary/index.ts`  →  TripSummaryPage
-
-## src/pages/trip-summary/ui/
-- `src/pages/trip-summary/ui/DayHighlightCard.tsx`  →  DayHighlightCardProps · DayHighlightCard
-- `src/pages/trip-summary/ui/TripSummaryPage.tsx`  →  TripSummaryPageProps · TripSummaryPage
-- `src/pages/trip-summary/ui/TripSummaryScreen.tsx`  →  SummaryViewMode · DayReflectionVM · DayCardVM · TripSummaryScreenProps · TripSummaryScreen
 
 ## src/pages/trip/trip-new-step1/
 - `src/pages/trip/trip-new-step1/index.ts`  →  TripNewStep1Page
