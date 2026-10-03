@@ -452,6 +452,7 @@ function ListEmptyBlock({
   onPressChangeRegion,
   onRelaxFilters,
   onClearCulpritFilter,
+  onClearNameQuery,
 }: {
   state: StaySearchState;
   /** name 검색이 results 를 0건으로 좁혔을 때(TRIP-469) — 빈 body 대신 안내를 낸다. */
@@ -463,18 +464,38 @@ function ListEmptyBlock({
   onPressChangeRegion?: () => void;
   onRelaxFilters?: () => void;
   onClearCulpritFilter?: (reason: string) => void;
+  onClearNameQuery?: () => void;
 }): ReactElement | null {
   if (state.kind === 'loading') return <SkeletonList />;
   if (state.kind === 'results') {
     if (!nameNoMatch) return null;
+    // 이름검색은 클라에서 거르므로 서버 filter-zero 가 여기 올 수 없다 — 필터가 걸려 있으면
+    // 이 카드가 필터 탈출구도 낸다(TRIP-935). 미지정 개수는 "필터 없음"으로 본다(숨김).
+    const actions: StateNoticeAction[] = [
+      {
+        testID: 'stay-search-name-empty-clear',
+        label: '검색어 지우기',
+        variant: 'outline',
+        onPress: onClearNameQuery,
+      },
+    ];
+    if ((activeFilterCount ?? 0) > 0 || priceFiltered) {
+      actions.push({
+        testID: 'stay-search-name-empty-reset',
+        label: '필터 초기화',
+        variant: 'link',
+        onPress: onRelaxFilters,
+      });
+    }
     return (
       <View className="w-full flex-1 items-center justify-center">
-        <Text
+        <StateNotice
           testID="stay-search-name-empty"
-          className="py-2xl text-center font-noto text-body text-muted"
-        >
-          검색 결과가 없어요
-        </Text>
+          icon={<SearchGlyph size={32} tone="mutedSoft" />}
+          title="검색 결과가 없어요"
+          description="다른 이름이나 지역으로 찾아보세요"
+          actions={actions}
+        />
       </View>
     );
   }
@@ -545,6 +566,9 @@ export function StaySearchScreen({
         <FlatList<StayItem>
           testID="stay-search-list"
           className="flex-1"
+          // 이름 0건 카드는 검색어를 치는 도중(키보드가 떠 있을 때) 나타난다 — 기본값 never 면 첫 탭이
+          // 키보드 닫기에만 쓰여 [검색어 지우기]·[필터 초기화]가 안 눌린다(TRIP-935, RegionPicker 선례).
+          keyboardShouldPersistTaps="handled"
           contentContainerStyle={listContentStyle}
           data={visibleItems}
           keyExtractor={(item) => stayKey(item)}
@@ -593,6 +617,8 @@ export function StaySearchScreen({
               onPressChangeRegion={onPressChangeRegion}
               onRelaxFilters={onRelaxFilters}
               onClearCulpritFilter={onClearCulpritFilter}
+              // 화살표로 감싼다 — 직결하면 RN 이 눌림 이벤트를 검색어 자리로 흘린다(★3과 같은 함정).
+              onClearNameQuery={() => onChangeNameQuery?.('')}
             />
           }
           renderItem={({ item }) => {

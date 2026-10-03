@@ -2781,6 +2781,28 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   {
+    // 이름검색 0건 + 필터 1개(TRIP-935) — [검색어 지우기]·[필터 초기화] 두 버튼. Figma 정본 프레임 미확인.
+    key: 'stay-search-name-empty',
+    band: 'e',
+    label: 'e02 · 검색 결과 이름 0건',
+    login: null,
+    render: () => (
+      <StaySearchScreen
+        region="부산"
+        items={STAY_SEARCH_PREVIEW_ITEMS}
+        nameQuery="없는숙소"
+        onChangeNameQuery={noop}
+        activeFilterCount={1}
+        onRelaxFilters={noop}
+        onPressBack={noop}
+        onPressTab={noop}
+        onPressFilter={noop}
+        onPressSaved={noop}
+        onPressRegister={noop}
+      />
+    ),
+  },
+  {
     // 배너 + 카드(결측가 muted 1장 포함, s4 price:null) 재확인(E-2). savedKeys 로 1장 찬 하트.
     key: 'stay-search-partial-failure',
     band: 'e',
