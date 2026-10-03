@@ -4,6 +4,7 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 
 /**
@@ -20,7 +21,8 @@ class ReplanSessionTest : StringSpec({
     val gps = ReplanOrigin(OriginKind.GPS, 33.45, 126.56)
 
     fun collecting() = ReplanSession.start(
-        UUID.randomUUID(), UUID.randomUUID(), null, ReplanScope.PARTIAL_SLOTS, t0, gps,
+        UUID.randomUUID(), UUID.randomUUID(), null, ReplanScope.PARTIAL_SLOTS,
+        LocalDate.of(2026, 8, 11), t0, gps,
         listOf("비"), listOf("실내로"), null, emptyList(), t0,
     )
 

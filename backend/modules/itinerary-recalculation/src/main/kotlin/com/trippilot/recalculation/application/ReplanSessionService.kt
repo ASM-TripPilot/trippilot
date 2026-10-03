@@ -2,7 +2,9 @@ package com.trippilot.recalculation.application
 
 import com.trippilot.archive.api.ArchiveFacade
 import com.trippilot.core.error.ConflictDetected
+import com.trippilot.core.error.FieldError
 import com.trippilot.core.error.ResourceNotFound
+import com.trippilot.core.error.ValidationFailed
 import com.trippilot.itinerarygeneration.api.ItineraryFacade
 import com.trippilot.placedata.api.PoiSurfaceFacade
 import com.trippilot.recalculation.domain.ReplanOrigin
@@ -35,6 +37,8 @@ import java.util.UUID
 /** 재계획 진입 입력(`i10`). 어휘는 화면이 정하고 서버는 그대로 싣는다. */
 data class StartReplan(
     val scope: ReplanScope,
+    /** 다시 짤 일자(TRIP-1182). **null 이면 오늘** — 종전 동작이 기본값이다. */
+    val targetDate: LocalDate?,
     /** 클라이언트가 알려준 기준점. **null 이면 서버가 사다리로 정한다**(BR-U4-19). */
     val origin: ReplanOrigin?,
     val reasons: List<String>,
@@ -81,6 +85,7 @@ class ReplanSessionService(
         // 다시 짤 일정이 있어야 재계획이다. 없으면 그건 '생성'이지 재계획이 아니다.
         val itinerary = itineraries.findCurrent(accountId, tripId)
             ?: throw ResourceNotFound("생성된 일정이 없습니다.")
+        val targetDate = resolveTargetDate(request, today, period.endDate, itinerary.dates)
 
         // 마지막 완료 방문지 좌표(있으면). 정본에서 사라진 POI 면 null 이 되고 사다리가 다음 단으로 내려간다.
         val lastVisit = archive.findLastCompletedPoi(tripId)
@@ -107,13 +112,18 @@ class ReplanSessionService(
                 itineraryId = itinerary.itineraryId,
                 triggerId = request.triggerId,
                 scope = request.scope,
+                targetDate = targetDate,
                 fromInstant = now, // '지금 이후'가 기준 — 이미 지난 슬롯은 대상이 아니다
                 // 위치를 못 잡았어도 **막지 않는다** — 사다리를 내려가 가정을 밝힌다(BR-U4-19).
                 // 사다리 3단(마지막 완료 방문지)이 방문 실적 도착으로 실제로 채워진다(BR-U4-19).
                 // 좌표는 POI 정본에서 얻는다 — 실적은 poiId 만 들고 있다.
+                // 미래일을 다시 짤 때는 **지금 서 있는 좌표를 쓰지 않는다** — 그 날의 출발지는
+                // 그 날 거점이다. 오늘 좌표를 그대로 실으면 AI 가 모레 하루를 오늘 있던 동네에 매단다.
                 origin = origins.resolve(
-                    tripId, period.startDate, period.endDate, today, requestedOrigin,
-                    lastVisitLat = lastVisit?.lat, lastVisitLng = lastVisit?.lng,
+                    tripId, period.startDate, period.endDate, targetDate,
+                    requested = requestedOrigin?.takeIf { targetDate == today },
+                    lastVisitLat = lastVisit?.lat?.takeIf { targetDate == today },
+                    lastVisitLng = lastVisit?.lng?.takeIf { targetDate == today },
                 ),
                 reasons = request.reasons,
                 directives = request.directives,
@@ -136,6 +146,40 @@ class ReplanSessionService(
         // 조용히 아무것도 하지 않고, 세션은 SOLVING 에 영원히 멈춘다(실측: E2E 가 20초 폴링 끝에 잡았다).
         afterCommit { solver.solve(accountId, solving.sessionId) }
         return solving
+    }
+
+    /**
+     * 다시 짤 일자를 정한다(TRIP-1182). **생략하면 오늘** — 종전 동작이 기본값이다.
+     *
+     * 네 가지를 막는다. 막지 않으면 사용자에게 보이는 결과가 각각 다르다:
+     * - **지난 날** — 이미 다녀온 하루를 덮어쓴다. 실적(archive)과 계획이 어긋나고 되돌릴 근거가 없다
+     * - **기간 밖** — 거점·커버리지가 없는 날이라 AI 가 매달 곳이 없다(진입 가드와 같은 취지)
+     * - **일정에 없는 날** — 부분 생성(`PARTIAL`)은 1일차만 있다. 통과시키면 AI 25초를 태운 뒤
+     *   **확정에서야** "그 사이 일정이 바뀌었습니다"가 나온다(실제 원인과 다른 문구다)
+     * - **미래일 + `지금 이후`** — 그 날의 '지금'은 없다. 통과시키면 다른 날의 벽시계로 슬롯이 잠겨
+     *   하루 절반이 그대로 남는다([com.trippilot.itinerarygeneration.api.ReplanCommand] 의 잠금 판정)
+     *
+     * **생략 경로에도 같은 가드를 적용한다.** `?: return today` 로 빠져나가면 같은 의도가 필드 유무로
+     * 갈린다 — 1차 생성만 끝난(`PARTIAL`) 일정은 1일차만 있어 **오늘이 일정에 없을 수 있고**, 그때
+     * 생략 경로는 통과해 AI 25초를 태운 뒤 확정에서 "그 사이 일정이 바뀌었습니다"로 막힌다(막다른 길).
+     * 같은 상태에서 오늘을 **명시**하면 진입에서 즉시 409 였다. 지금은 둘 다 409 다.
+     */
+    private fun resolveTargetDate(
+        request: StartReplan,
+        today: LocalDate,
+        tripEnd: LocalDate,
+        itineraryDates: List<LocalDate>,
+    ): LocalDate {
+        val target = request.targetDate ?: today
+        if (target < today) throw ConflictDetected(message = "지난 날짜는 다시 짤 수 없습니다.")
+        if (target > tripEnd) throw ConflictDetected(message = "여행 기간 안의 날짜만 다시 짤 수 있습니다.")
+        if (target !in itineraryDates) throw ConflictDetected(message = "그 날짜의 일정이 아직 없습니다.")
+        if (target > today && request.scope != ReplanScope.FULL_DAY) {
+            throw ValidationFailed(
+                listOf(FieldError("scope", "오늘이 아닌 날짜는 하루 전체(FULL_DAY)로만 다시 짤 수 있습니다.")),
+            )
+        }
+        return target
     }
 
     /**

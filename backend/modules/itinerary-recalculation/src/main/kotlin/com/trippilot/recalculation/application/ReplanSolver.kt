@@ -13,8 +13,6 @@ import org.springframework.stereotype.Component
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Clock
-import java.time.LocalDate
-import java.time.ZoneId
 import java.util.UUID
 
 /**
@@ -42,13 +40,14 @@ class ReplanSolver(
     @Async
     fun solve(accountId: UUID, sessionId: UUID) {
         val session = sessions.findById(sessionId) ?: return
-        val today = LocalDate.ofInstant(session.fromInstant, TRAVEL_ZONE)
         try {
             val proposal = replans.propose(
                 ReplanCommand(
                     accountId = accountId,
                     tripId = session.tripId,
-                    targetDate = today,
+                    // 진입에서 정해진 일자다(TRIP-1182). 종전에는 여기서 `fromInstant` 로 '오늘'을
+                    // 다시 계산해 **오늘만** 다시 짤 수 있었다 — 미래일 재계획이 막혀 있던 지점이다.
+                    targetDate = session.targetDate,
                     fromInstant = session.fromInstant,
                     fullDay = session.scope == ReplanScope.FULL_DAY,
                     // 잠금(INV-U4-04)의 원천은 방문 실적이고, 실적은 archive 소유다(BR-U5-10).
@@ -103,8 +102,5 @@ class ReplanSolver(
 
     private companion object {
         private val log = LoggerFactory.getLogger(ReplanSolver::class.java)
-
-        /** 여행 "오늘"은 사용자가 있는 곳의 날짜지, 서버 UTC 날짜가 아니다. */
-        private val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
     }
 }

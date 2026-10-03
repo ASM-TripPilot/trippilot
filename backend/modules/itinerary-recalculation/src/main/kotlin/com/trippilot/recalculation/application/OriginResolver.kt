@@ -22,12 +22,15 @@ class OriginResolver(private val anchors: BaseAnchorFacade) {
     /**
      * @param requested 클라이언트가 알려준 기준점. GPS·수동 좌표가 있으면 그대로 쓴다.
      * @param lastVisitLat 마지막 완료 방문지 좌표. 방문 실적(`visit_check`)이 아직 없어 지금은 항상 null 이다.
+     * @param asOf 어느 날의 기준점인가 — 오늘을 다시 짜면 오늘, 미래일을 다시 짜면 그 날이다(TRIP-1182).
+     *   숙소 단이 이 날짜로 거점을 고른다. 미래일에는 호출 측이 [requested]·마지막 방문지를 비워 보낸다 —
+     *   지금 서 있는 좌표는 **그 날의** 출발지가 아니다.
      */
     fun resolve(
         tripId: UUID,
         tripStart: LocalDate,
         tripEnd: LocalDate,
-        today: LocalDate,
+        asOf: LocalDate,
         requested: ReplanOrigin?,
         lastVisitLat: Double? = null,
         lastVisitLng: Double? = null,
@@ -41,10 +44,10 @@ class OriginResolver(private val anchors: BaseAnchorFacade) {
             return ReplanOrigin(OriginKind.LAST_VISIT, lastVisitLat, lastVisitLng)
         }
 
-        // 4단: 등록 숙소 앵커. 오늘 밤 숙소가 없으면(체크아웃일) 전날 거점으로 파생한다 —
+        // 4단: 등록 숙소 앵커. 그 날 밤 숙소가 없으면(체크아웃일) 전날 거점으로 파생한다 —
         // 그 날 사용자는 아직 그 숙소 권역에 있다.
         val stay = anchors.findStayNightAnchors(tripId, tripStart, tripEnd)
-            .filter { it.date <= today }
+            .filter { it.date <= asOf }
             .maxByOrNull { it.date }
         if (stay != null) return ReplanOrigin(OriginKind.STAY_ANCHOR, stay.lat, stay.lng)
 
