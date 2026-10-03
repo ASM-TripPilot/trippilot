@@ -12,7 +12,7 @@ import {
   useGetTrips,
 } from '@/shared/api/index.hooks';
 import { isNotFound } from '@/shared/api';
-import { seoulDate } from '@/shared/date';
+import { seoulDate } from '@/shared/lib/seoulDate';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
 import { formatTripDateRange } from '@/entities/trip';
 import { classifyTripPhase, type TripPhase } from '@/entities/trip';

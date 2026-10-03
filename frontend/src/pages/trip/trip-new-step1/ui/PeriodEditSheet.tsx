@@ -32,7 +32,11 @@ import BottomSheet, {
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 
-import { daysInMonth, firstWeekdayOfMonth, isDateInRange } from '@/shared/date';
+import {
+  daysInMonth,
+  firstWeekdayOfMonth,
+  isDateInRange,
+} from '@/shared/lib/monthGrid';
 
 import { SHEET_HANDLE_INDICATOR_STYLE } from '@/features/trip/index.view';
 

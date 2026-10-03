@@ -1455,16 +1455,13 @@
 - `src/shared/api/tokenManager.ts`  →  getAccessToken · setAccessToken · clearAccessToken · hydrate · subscribeAccessToken
 - `src/shared/api/visitConflict.ts`  →  VISIT_CONFLICT_CODES · VisitConflictKind · resolveVisitConflict
 
-## src/shared/date/
-- `src/shared/date/formatKoreanDate.ts`  →  formatKoreanDate
-- `src/shared/date/formatRelativeTime.ts`  →  formatRelativeTime
-- `src/shared/date/index.ts`  →  formatRelativeTime · buildMonthGrid · daysInMonth · firstWeekdayOfMonth · isDateInRange · shiftMonth · seoulDate · seoulInstant · seoulTime
-- `src/shared/date/monthGrid.ts`  →  MonthCell · daysInMonth · firstWeekdayOfMonth · shiftMonth · isDateInRange · buildMonthGrid
-- `src/shared/date/seoulDate.ts`  →  seoulDate · seoulTime · seoulInstant
-
 ## src/shared/lib/
 - `src/shared/lib/bootstrapReeval.ts`  →  subscribeBootstrapReeval · notifyBootstrapReeval
+- `src/shared/lib/formatKoreanDate.ts`  →  formatKoreanDate
+- `src/shared/lib/formatRelativeTime.ts`  →  formatRelativeTime
+- `src/shared/lib/monthGrid.ts`  →  MonthCell · daysInMonth · firstWeekdayOfMonth · shiftMonth · isDateInRange · buildMonthGrid
 - `src/shared/lib/nicknameFormat.ts`  →  NicknameFormatReason · NicknameFormatResult · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH · validateNicknameFormat
+- `src/shared/lib/seoulDate.ts`  →  seoulDate · seoulTime · seoulInstant
 
 ## src/shared/location/
 - `src/shared/location/LocationGlyphs.tsx`  →  LocationBackChevronGlyph · LocationRadarHero · LocationOffGlyph · LocationInfoGlyph · LocationClockGlyph · LocationSwapGlyph · LocationPinGlyph · LocationWarningGlyph
@@ -1582,4 +1579,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 964개 파일
+합계 963개 파일

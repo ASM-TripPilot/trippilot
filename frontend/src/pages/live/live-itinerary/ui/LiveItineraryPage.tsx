@@ -29,7 +29,7 @@ import {
   useGetTripsTripIdVisitsDaysDay,
 } from '@/shared/api/index.hooks';
 import { isNotFound } from '@/shared/api';
-import { seoulDate } from '@/shared/date';
+import { seoulDate } from '@/shared/lib/seoulDate';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { ArriveRequestSource } from '@/shared/api/index.schemas';
 

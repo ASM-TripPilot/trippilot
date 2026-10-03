@@ -3,7 +3,7 @@ import {
   firstWeekdayOfMonth,
   isDateInRange,
   shiftMonth,
-} from '@/shared/date';
+} from '@/shared/lib/monthGrid';
 
 import { dateCell } from './tripDatePicker';
 

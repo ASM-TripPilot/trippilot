@@ -200,7 +200,7 @@ import type {
   TriggerKind,
 } from '@/shared/api/index.schemas';
 import { PersonalizationInfoReason } from '@/shared/api/index.schemas';
-import { buildMonthGrid } from '@/shared/date';
+import { buildMonthGrid } from '@/shared/lib/monthGrid';
 import { LocationPreprompt } from '@/shared/location/index.view';
 // 딥 경로 — 배럴(`@/shared/push`)로 끌면 권한 루틴(expo-notifications)까지 실린다(TRIP-1108 R10).
 import { PushPreprompt } from '@/shared/push/index.view';

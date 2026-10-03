@@ -5,7 +5,7 @@ import {
   firstWeekdayOfMonth,
   isDateInRange,
   shiftMonth,
-} from '@/shared/date/monthGrid';
+} from '@/shared/lib/monthGrid';
 
 /**
  * `shared/date/monthGrid` 성질 테스트(PBT) — TRIP-1052에서 이관.

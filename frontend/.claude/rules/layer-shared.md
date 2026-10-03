@@ -21,7 +21,7 @@ paths:
 | `src/shared/storage/idSet.ts` | 도메인 무관 문자열 id 집합 저장(`readIdSet`·`writeIdSet`, JSON 파싱 실패는 throw). 공개 API `@/shared/storage`로 import(TRIP-1157 — 옛 "배럴 재수출 금지·딥 경로 전용" 계약은 폐기). 배럴을 통째로 목으로 바꾸는 테스트는 팩토리 맨 앞에서 `jest.requireActual('@/shared/storage')`로 실물을 펼친 뒤 덮는다. 웹 폴백 없음 |
 | `src/shared/storage/stringValue.ts` | **(TRIP-1122 신규)** 키 하나에 문자열 하나(`readStringValue`→`string\|null`·`writeStringValue`) — JSON으로 감싸지 않고 그대로 저장하며 jest-expo 자동 목의 `undefined`도 `null`로 접는다. 실패(reject)는 호출부 몫(삼킬지 정한다). 공개 API `@/shared/storage`로 import(TRIP-1157 — 딥 경로 전용 계약 폐기, `stringValue.test`가 배럴 재수출을 참조 동일성으로 단언). 웹 폴백 없음. 첫 소비처 `MyTripsListPage`(키 `itinerary.myTrips.sort`). |
 | `src/shared/version/compareVersion.ts` | 버전 비교(강제 업데이트 판정) |
-| `src/shared/date/formatKoreanDate.ts` | `formatKoreanDate(isoDate): "M월 D일 요일"`. `features/execution/**`의 `new Date`류 금지(BR-U4-34)를 피해 날짜 파싱을 execution 밖에 둔 자리. 에포크 일수(UTC 정수) 산술만 써 TZ-safe. 외부 소비처 0이라 `shared/date/index.ts`에 아직 없다 — 슬라이스 밖에서 쓰려면 index에 재수출을 더한다(딥 import는 lint error, TRIP-1157) |
+| `src/shared/lib/formatKoreanDate.ts` | `formatKoreanDate(isoDate): "M월 D일 요일"`. `features/execution/**`의 `new Date`류 금지(BR-U4-34)를 피해 날짜 파싱을 execution 밖에 둔 자리. 에포크 일수(UTC 정수) 산술만 써 TZ-safe. 외부 소비처 0 — `shared/lib` 직속 파일이라 `@/shared/lib/formatKoreanDate`로 바로 import한다(바렐 없음, TRIP-1162) |
 | `src/shared/location/LocationPreprompt.tsx` | 위치 권한 프리프롬프트 — 전체화면(레이더 히어로) `default` / 카드형 `permission-denied` 2상태. `expo-location`을 import하지 않는다(구조적으로 OS 다이얼로그를 못 부름) |
 | `src/shared/location/LocationGlyphs.tsx` | 위치 화면 인라인 SVG 글리프. 색은 `locationColors.ts` 상수 경유(`shared/location/**`은 raw-hex 가드 대상) |
 | `src/shared/location/locationColors.ts` | 위치 글리프 색 상수(raw hex 분리) — 토큰 색과 **수동 동기화** 필요 |
@@ -34,9 +34,9 @@ paths:
 | `src/shared/push/PushPreprompt.tsx` | 온보딩 푸시 사전 안내 카드(TRIP-1108) — props는 `onProceed`·`onDefer` 둘뿐, 권한 루틴·`expo-notifications`를 import하지 않는다(구조적으로 OS 창을 못 부름). 버튼 라벨은 `계속`·`나중에 하기` — 렌더 텍스트에 "허용"을 쓰지 않는다(심사 문구 규칙). 머리 바·하단 바·버튼 className은 `LocationPreprompt` default와 글자까지 같다(두 화면이 연달아 나와 튀지 않게, 테스트가 `===` 비교) |
 | `src/shared/push/PushGlyphs.tsx` | `PushBellHero` — 위치 레이더와 같은 틀(동심원 3개)에 벨. 동심원 선 색·투명도는 위치 값을 그대로 쓴 **추정값**(Figma 에셋 404) |
 | `src/shared/push/pushColors.ts` | 푸시 글리프 색 상수(raw hex 분리) — 토큰 색과 **수동 동기화** 필요 |
-| `src/shared/date/formatRelativeTime.ts` | `formatRelativeTime(iso, now)` — 경과 시각("방금·N분 전·어제·N일 전"). INV-3 소요시간과 무관 |
-| `src/shared/date/monthGrid.ts` | 월 그리드 순수 산술(`daysInMonth`·`firstWeekdayOfMonth`·`shiftMonth`·`isDateInRange`·`buildMonthGrid` — 7의 배수, 4~6주 가변). stay·trip·record가 공유하는 유일한 정의(재구현 금지). 에포크 일수 산술로 TZ-safe, `firstWeekdayOfMonth`는 음수 나머지를 흡수한다 |
-| `src/shared/date/monthGrid.test.ts` | 윤년·연 경계·양끝 포함·월/일요일 시작 패딩 표 전수 |
+| `src/shared/lib/formatRelativeTime.ts` | `formatRelativeTime(iso, now)` — 경과 시각("방금·N분 전·어제·N일 전"). INV-3 소요시간과 무관 |
+| `src/shared/lib/monthGrid.ts` | 월 그리드 순수 산술(`daysInMonth`·`firstWeekdayOfMonth`·`shiftMonth`·`isDateInRange`·`buildMonthGrid` — 7의 배수, 4~6주 가변). stay·trip·record가 공유하는 유일한 정의(재구현 금지). 에포크 일수 산술로 TZ-safe, `firstWeekdayOfMonth`는 음수 나머지를 흡수한다 |
+| `src/shared/lib/monthGrid.test.ts` | 윤년·연 경계·양끝 포함·월/일요일 시작 패딩 표 전수 |
 | `src/shared/photo/index.ts` | `pickPhotoAsset()`·`resolvePhotoUri()` — TRIP-1070부터 실장(`expo-image-picker`/`expo-media-library` 두 네이티브 모듈의 **유일한 입구**, `recordPhotoBinaryGuard.test.ts`가 소스 스캔 census로 잠금 — 다른 파일이 이 모듈을 직접 import하면 red). `pickPhotoAsset`은 권한→앨범→`PhotoPickResult`(판별 유니온 `kind`: picked·canceled·denied·no-asset-id·failed, 전체 try/catch)까지 한 함수로 접는다. picked는 촬영시각 ISO 문자열 + 좌표는 있을 때만 키 생성 + `getInstallId()` 결과를 함께 담는다. `resolvePhotoUri`는 권한 재요청 없이 `getAssetInfoAsync` → `info?.localUri ?? null`로 접는다(jest-expo 자동 목이 미해결 호출에 `undefined`를 주는 형제 테스트 대비 방어) |
 | `src/shared/storage/installId.ts` | `getInstallId()` — SecureStore에 있으면 그 값, 없으면 `randomUUID()`로 만들어 같은 키에 저장. 동시 최초 호출에 id가 여러 개 생기지 않도록 **완성값이 아니라 진행 중 Promise 하나**를 메모이즈한다(`pending ??= (async () => …)()`), 실패하면 `pending = null`로 되돌려 다음 호출이 재시도하게 한다(단 이 재시도 자체를 심판하는 테스트는 없다 — 03b 참고-2). 공개 API `@/shared/storage`로 import(TRIP-1157 — 딥 경로 전용 계약 폐기) |
 | `src/shared/ui/HeartGlyphs.tsx` | 하트 채움/외곽 인라인 SVG — place 카드와 stay 검색 카드가 공유. `features/stay/ui/StayGlyphs.tsx`에 22-viewBox 하트 사본이 따로 남아 있다 |

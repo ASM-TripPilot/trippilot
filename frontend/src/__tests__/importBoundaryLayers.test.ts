@@ -777,7 +777,7 @@ describe('TRIP-1157 · 슬라이스 밖 딥 import 는 공개 API 위반이다',
     [
       'entities → shared 세그먼트 내부',
       'src/entities/place/ui/__deep_probe__.tsx',
-      `import '@/shared/date/seoulDate';\n`,
+      `import '@/shared/location/geofence';\n`,
     ],
     [
       'pages → shared/ui 하위 폴더 내부',
@@ -797,7 +797,7 @@ describe('TRIP-1157 · 슬라이스 밖 딥 import 는 공개 API 위반이다',
     [
       'app 층 → shared 세그먼트 내부',
       'src/app/routing/__deep_probe__.tsx',
-      `import '@/shared/date/seoulDate';\n`,
+      `import '@/shared/location/geofence';\n`,
     ],
   ])('%s 는 딥 zone(TRIP-1157) error', async (_label, filePath, code) => {
     const ruleIds = await lint(code, filePath);
@@ -815,7 +815,7 @@ describe('TRIP-1157 · 공개 API·자기 슬라이스·테스트·_dev 는 딥 
       HOME_PAGE_PROBE,
       `import '@/features/explore/index.view';\n`,
     ],
-    ['shared 세그먼트 index', HOME_PAGE_PROBE, `import '@/shared/date';\n`],
+    ['shared 세그먼트 index', HOME_PAGE_PROBE, `import '@/shared/location';\n`],
     [
       'shared/ui 루트 직속 파일(steiger 면제)',
       HOME_PAGE_PROBE,

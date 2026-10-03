@@ -1,4 +1,4 @@
-import { isDateInRange } from '@/shared/date';
+import { isDateInRange } from '@/shared/lib/monthGrid';
 
 import type { ItineraryStatus, Trip } from '../model';
 

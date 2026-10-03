@@ -7,7 +7,7 @@ import {
 } from '@/shared/api/index.hooks';
 import { useGetPlaces } from '@/shared/api/index.hooks';
 import { isNotFound } from '@/shared/api';
-import { seoulDate } from '@/shared/date';
+import { seoulDate } from '@/shared/lib/seoulDate';
 import { formatNightsLabel } from '@/entities/trip';
 import { formatTripRange } from '@/entities/trip';
 import { pickTrendingPlaces } from '@/entities/place';

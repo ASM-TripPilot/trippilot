@@ -20,8 +20,8 @@ import {
 import { useRecordsCalendar } from '../model/useRecordsCalendar';
 import { RecordsCalendarScreen } from './RecordsCalendarScreen';
 import { useTripWizardStore } from '@/features/create-trip';
-import { buildMonthGrid, shiftMonth } from '@/shared/date';
-import { seoulDate } from '@/shared/date';
+import { buildMonthGrid, shiftMonth } from '@/shared/lib/monthGrid';
+import { seoulDate } from '@/shared/lib/seoulDate';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
 /**
