@@ -1,10 +1,12 @@
-import type {
-  AxiosAdapter,
-  AxiosResponse,
-  InternalAxiosRequestConfig,
+import {
+  AxiosError,
+  type AxiosAdapter,
+  type AxiosResponse,
+  type InternalAxiosRequestConfig,
 } from 'axios';
 
-import { createAuthedApiClient } from '.';
+import { authedClient, createAuthedApiClient } from '.';
+import { customInstance } from './mutator';
 
 function readAuth(config: InternalAxiosRequestConfig): string | undefined {
   const headers = config.headers as unknown as {
@@ -202,5 +204,92 @@ describe('createAuthedApiClient — 리프레시 슬롯 해제 (A6 · BR-U0-07/0
     // onSessionExpired 는 요청 1개당 1회(순차 시나리오라 횟수 단언이 허용된다).
     expect(refreshTokens).toHaveBeenCalledTimes(2);
     expect(onSessionExpired).toHaveBeenCalledTimes(2);
+  });
+});
+
+/**
+ * TRIP-935 — 요청 timeout. 서버가 포트만 잡고 답을 안 주면 timeout 이 없을 때 요청이 끝나지 않아
+ * 화면이 스켈레톤에 갇혔다. 반대로 서버가 AI 를 동기로 부르는 요청을 같은 값으로 자르면 서버는 일을
+ * 끝냈는데 화면만 실패로 읽는다 — 그래서 "전역 상한 + AI 요청 예외" 두 쪽을 함께 잰다.
+ *
+ * *(개념)* timeout — 응답을 기다리는 최대 시간(ms). 넘으면 axios 가 `ECONNABORTED` 코드로 요청을
+ *   거부한다. 0 은 "상한 없음"이다. 실제 시계는 axios 의 기본 adapter 가 재므로, 여기서는 adapter 가
+ *   **받은 설정값**(`config.timeout`)을 본다.
+ */
+describe('createAuthedApiClient — timeout (TRIP-935)', () => {
+  it('요청마다 15초 상한을 싣고, 시간 초과(ECONNABORTED)는 리프레시를 타지 않고 그대로 거부된다', async () => {
+    // 준비 — 응답 대신 "시간 초과" 오류를 내는 adapter(응답이 없으니 401 이 아니다)
+    const seenTimeouts: (number | undefined)[] = [];
+    const adapter: AxiosAdapter = async (config) => {
+      seenTimeouts.push(config.timeout);
+      throw new AxiosError(
+        'timeout of 15000ms exceeded',
+        'ECONNABORTED',
+        config
+      );
+    };
+    const refreshTokens = jest.fn(async () => 'fresh');
+    const onSessionExpired = jest.fn();
+    const client = createAuthedApiClient({
+      baseURL: 'http://test',
+      adapter,
+      getAccessToken: () => 'token',
+      refreshTokens,
+      onSessionExpired,
+    });
+
+    // 실행 + 단언 — 네트워크 오류와 같은 길: 오류가 그대로 올라오고 세션은 건드리지 않는다
+    await expect(client.get('/trips')).rejects.toMatchObject({
+      code: 'ECONNABORTED',
+    });
+    expect(seenTimeouts).toEqual([15_000]);
+    expect(refreshTokens).not.toHaveBeenCalled();
+    expect(onSessionExpired).not.toHaveBeenCalled();
+  });
+});
+
+describe('customInstance — AI 를 동기로 부르는 요청만 상한을 풀어 준다 (TRIP-935)', () => {
+  // 실제 authedClient(생성 클라이언트가 타는 그 인스턴스)의 adapter 만 바꿔, 나가는 설정을 받아 적는다.
+  const originalAdapter = authedClient.defaults.adapter;
+  let seen: InternalAxiosRequestConfig[] = [];
+
+  beforeEach(() => {
+    seen = [];
+    authedClient.defaults.adapter = async (config) => {
+      seen.push(config);
+      return okResponse(config);
+    };
+  });
+  afterEach(() => {
+    authedClient.defaults.adapter = originalAdapter;
+  });
+
+  it('일반 조회·저장은 전역 15초 상한을 탄다(일정 폴링 GET 포함)', async () => {
+    await customInstance({ url: '/trips', method: 'GET' });
+    await customInstance({ url: '/trips/t1/itinerary', method: 'GET' });
+    await customInstance({ url: '/me/consents', method: 'POST' });
+
+    expect(seen.map((config) => config.timeout)).toEqual([
+      15_000, 15_000, 15_000,
+    ]);
+  });
+
+  it('일정 생성·편집 재검증·되돌리기·슬롯 후보·회고 생성은 상한 없음(0) — 서버의 AI 상한(최대 612초)이 끊는다', async () => {
+    await customInstance({ url: '/trips/t1/itinerary', method: 'POST' });
+    await customInstance({ url: '/trips/t1/itinerary', method: 'PUT' });
+    await customInstance({
+      url: '/trips/t1/itinerary/revisions/r1/restore',
+      method: 'POST',
+    });
+    await customInstance({
+      url: '/trips/t1/itinerary/slot-candidates',
+      method: 'POST',
+    });
+    await customInstance({
+      url: '/trips/t1/reflections/2026-10-01',
+      method: 'POST',
+    });
+
+    expect(seen.map((config) => config.timeout)).toEqual([0, 0, 0, 0, 0]);
   });
 });
