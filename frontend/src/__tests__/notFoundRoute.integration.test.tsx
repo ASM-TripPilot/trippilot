@@ -1,4 +1,4 @@
-import { Stack, Tabs } from 'expo-router';
+import { router, Stack, Tabs } from 'expo-router';
 import { Text } from 'react-native';
 import {
   act,
@@ -53,8 +53,9 @@ function stub(testID: string) {
   };
 }
 
-// 키 순서 = 앱 파일 순서(require.context, 사전순). 순서가 판정에 걸린다: 지금 화면과 그룹이 안 겹치면
-// '/' 처럼 여러 라우트에 똑같이 맞는 경로는 앞 키가 이긴다 — (tabs) 를 앞에 두면 옛 버그가 안 보인다.
+// 키 순서 = 앱 파일 순서(require.context, 사전순). 지금 화면과 그룹이 안 겹치면 '/' 처럼 여러 라우트에
+// 똑같이 맞는 경로는 앞 키가 이긴다 — (tabs) 를 앞에 두면 옛 버그의 HOME 증상은 숨지만 ONBOARDING 쪽이 대신
+// 막혀 스위트 전체로는 여전히 red 다. 고친 코드는 그룹을 명시해 동점이 없으므로 순서와 무관하다.
 const ROUTES = {
   _layout: SplashGate,
   '(auth)/_layout': () => <Stack />,
@@ -63,6 +64,7 @@ const ROUTES = {
   '(onboarding)/index': stub('onboarding-root'),
   '(tabs)/_layout': () => <Tabs />,
   '(tabs)/index': stub('home-root'),
+  '(tabs)/explore': stub('explore-root'),
   '+not-found': NotFoundRoute,
   'force-update': stub('force-update-root'),
   reconsent: stub('reconsent-root'),
@@ -106,5 +108,31 @@ describe('🔴 TRIP-935 M-08 · [홈으로]는 게이트가 연 화면에 닿는
     // 단언 — 목적지 화면이 보이고 없는 경로 화면은 사라졌다.
     expect(screen.getByTestId(landing)).toBeOnTheScreen();
     expect(screen.queryByTestId('not-found-home')).toBeNull();
+  });
+
+  it('앱 안(탐색 탭)에서 404 로 들어와도 [홈으로]는 기존 탭으로 돌아간다 — (tabs) 를 두 벌 쌓지 않는다', () => {
+    // 준비 — HOME 으로 탐색 탭에 있다가 없는 주소가 push 됐다(알림·공유 딥링크, 낡은 push 대상).
+    mockUseBootstrapGate.mockReturnValue({
+      phase: 'resolved',
+      destination: 'HOME',
+      isProvisional: false,
+    });
+    publishGateDestination('HOME');
+    renderRouter(ROUTES, { initialUrl: '/explore' });
+    act(() => {
+      jest.advanceTimersByTime(SPLASH_MIN_VISIBLE_MS);
+    });
+    act(() => {
+      router.push('/zz-none' as never);
+    });
+    expect(screen.getByTestId('not-found-home')).toBeOnTheScreen();
+
+    // 실행
+    fireEvent.press(screen.getByTestId('not-found-home'));
+
+    // 단언 — 홈이 보이고, 루트 스택에 되돌아갈 화면이 없다. replace 였다면 [옛 (tabs), 새 (tabs)] 라
+    // 뒤로가기가 옛 탭의 탐색 화면을 꺼냈다(canGoBack true). navigate·push 였다면 404 가 뒤에 남는다.
+    expect(screen.getByTestId('home-root')).toBeOnTheScreen();
+    expect(router.canGoBack()).toBe(false);
   });
 });

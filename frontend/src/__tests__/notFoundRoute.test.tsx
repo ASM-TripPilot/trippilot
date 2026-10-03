@@ -15,19 +15,21 @@ import NotFoundRoute from '@routes/+not-found';
  * TRIP-935 AC-2(R3) · 없는 경로 화면 `+not-found`.
  *
  * 무엇을 보장하나: expo-router 기본 화면(영문 "Unmatched Route" + `/_sitemap` 링크)을 대체해
- * 한국어 안내와 [홈으로]를 그리고, [홈으로]는 게이트가 연 그룹으로 replace 한다(뒤로가기로 이 화면에
- * 돌아오지 않게). 그 경로가 실제 라우터에서 화면에 닿는지는 `notFoundRoute.integration.test`,
- * `_sitemap` 차단은 재빌드 실기(6-b) 몫이다.
+ * 한국어 안내와 [홈으로]를 그리고, [홈으로]는 **누른 순간** 게이트가 연 그룹으로 dismissTo 한다(뒤로가기로
+ * 이 화면에 돌아오지 않고, 그 그룹을 두 벌 쌓지 않게). 그 경로가 실제 라우터에서 화면에 닿는지·스택이 한
+ * 벌인지는 `notFoundRoute.integration.test`, `_sitemap` 차단은 재빌드 실기(6-b) 몫이다.
  *
  * 목: `useRouter()` 반환값과 `router` 싱글턴을 같은 함수로 묶는다 — 어느 방식으로 구현해도
- * 목적지와 replace 여부만 잠근다(02a ★11).
+ * 목적지와 이동 방식만 잠근다(02a ★11).
  */
 
+const mockDismissTo = jest.fn();
 const mockReplace = jest.fn();
 const mockPush = jest.fn();
 const mockBack = jest.fn();
 jest.mock('expo-router', () => {
   const router = {
+    dismissTo: (...args: unknown[]) => mockDismissTo(...args),
     replace: (...args: unknown[]) => mockReplace(...args),
     push: (...args: unknown[]) => mockPush(...args),
     back: (...args: unknown[]) => mockBack(...args),
@@ -36,6 +38,7 @@ jest.mock('expo-router', () => {
 });
 
 beforeEach(() => {
+  mockDismissTo.mockClear();
   mockReplace.mockClear();
   mockPush.mockClear();
   mockBack.mockClear();
@@ -62,16 +65,29 @@ describe('🔴 TRIP-935 AC-2 · 없는 경로 화면은 한국어 안내 + [홈�
     ).toHaveLength(0);
   });
 
-  it('[홈으로] press(목적지 HOME) → router.replace("/(tabs)") 정확히 1회, push·back 은 0회', () => {
-    // '/' 가 아니다 — '/' 는 라우터가 닫힌 (onboarding) 으로 풀어 replace 가 버려졌다(M-08).
+  it('[홈으로] press(목적지 HOME) → router.dismissTo("/(tabs)") 정확히 1회, replace·push·back 은 0회', () => {
+    // '/' 가 아니다 — '/' 는 라우터가 닫힌 (onboarding) 으로 풀어 버려졌다(M-08).
+    // replace 가 아니다 — 앱 안에서 열린 404 면 (tabs) 를 한 벌 더 쌓는다(5-b 경고-1).
     publishGateDestination('HOME');
     render(<NotFoundRoute />);
 
     fireEvent.press(screen.getByTestId('not-found-home'));
 
-    expect(mockReplace).toHaveBeenCalledTimes(1);
-    expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+    expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)');
+    expect(mockReplace).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
     expect(mockBack).not.toHaveBeenCalled();
+  });
+
+  it('목적지는 그릴 때가 아니라 누를 때 읽는다 — 404 가 떠 있는 동안 HOME→LOGIN 이면 /login', () => {
+    // 준비 — HOME 으로 그린 뒤 세션이 만료돼 게이트가 LOGIN 을 열었다(화면은 다시 안 그려진다).
+    publishGateDestination('HOME');
+    render(<NotFoundRoute />);
+    publishGateDestination('LOGIN');
+
+    fireEvent.press(screen.getByTestId('not-found-home'));
+
+    expect(mockDismissTo).toHaveBeenCalledWith('/login');
   });
 });

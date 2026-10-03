@@ -15,7 +15,9 @@ const HOME_HREF: Record<BootstrapDestination, Href> = {
 
 /**
  * 없는 경로 화면(TRIP-935 R3) — expo-router 기본 영문 화면(Unmatched Route + Sitemap 링크)을
- * 대체한다. [홈으로]는 replace — 뒤로가기로 이 화면에 돌아오지 않게. 목적지는 게이트가 연 그룹이다.
+ * 대체한다. 목적지는 게이트가 연 그룹이다. [홈으로]는 dismissTo — 그 그룹이 이미 스택 아래에
+ * 있으면(앱 안에서 404 로 들어온 경우) 거기까지 걷어 내고 돌아가고, 없으면 replace 처럼 갈아 끼운다.
+ * replace 는 그룹을 한 벌 더 쌓고, navigate·push 는 404 를 뒤로가기 자리에 남긴다.
  */
 export default function NotFoundRoute() {
   return (
@@ -30,7 +32,7 @@ export default function NotFoundRoute() {
         testID="not-found-home"
         accessibilityRole="button"
         onPress={() =>
-          router.replace(HOME_HREF[getGateDestination() ?? 'HOME'])
+          router.dismissTo(HOME_HREF[getGateDestination() ?? 'HOME'])
         }
         className="h-[52px] w-full items-center justify-center rounded-button bg-primary"
       >
