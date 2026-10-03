@@ -86,7 +86,7 @@ frontend/
   - **테스트**: `jest.mock`·`jest.requireActual` 등 jest 계열 지정자, 목 타이핑(`typeof import`)·`spyOn` 대상 네임스페이스, 공개 API에 없는 테스트 전용 심볼은 정의 모듈(딥 경로)을 겨눈다 — 테스트 때문에 index를 넓히지 않는다. 배럴을 통째로 목으로 바꾸는 테스트는 팩토리 맨 앞에서 `jest.requireActual`로 실물을 펼친 뒤 덮는다(재수출이 늘 때 형제 export가 `undefined`가 되지 않게).
   - 현재: pages 53 · features 25 · widgets 2 · entities 5 슬라이스 전부가 루트 `index.ts`를 가진다. shared는 세그먼트(또는 `ui/pref` 같은 컴포넌트 폴더)마다 `index.ts`를 두고, `index.view.ts`는 15개(features 13 · `shared/location` · `shared/push`)다.
 - **이주 방식**: 화면 묶음 단위로 옮긴다(TRIP-1138 · 서브 1146~1154) — 테스트 정상화를 먼저 하고 그 화면의 이동을 뒤 커밋으로.
-- **린터**: 이주가 끝나면 공식 FSD 린터 Steiger(`insignificant-slice` · `excessive-slicing`)를 CI 게이트로 붙인다(TRIP-1157·1158). 그 전까지는 ESLint zone(층 방향·형제 격리·딥 임포트 금지)만 경계를 지킨다 — 구조 소스 스캔은 TRIP-1145에서 지웠다. 딥 임포트 금지 zone(TRIP-1157)은 프로덕션 파일에만 걸고 테스트·`src/app/_dev/**`는 면제한다. 같은 룰 ID라 층 zone과 한 블록에 함께 펼친다(flat config는 같은 규칙을 거는 뒤 블록이 앞을 덮어쓴다). `import/no-cycle`은 상시 lint에 없다 — 자기 슬라이스 index를 물어 순환을 만들어도 `pnpm lint`는 침묵한다.
+- **린터**: 경계는 두 도구가 나눠 지킨다 — ESLint zone은 import 줄(층 방향·형제 격리·딥 임포트 금지), 공식 FSD 린터 Steiger(`pnpm fsd`, `steiger.config.ts`)는 폴더·슬라이스 배치(권장 설정 `fsd.configs.recommended` 전 규칙)를 본다. 둘 다 CI 머지 게이트다(TRIP-1158) — 구조 소스 스캔은 TRIP-1145에서 지웠다. Steiger 예외는 셋뿐이고 설정 파일 주석과 같다: ① 테스트·`src/app/_dev/**`는 검사 대상에서 뺀다(아래 「테스트」대로 딥 경로가 설계, ESLint 면제 범위와 같음 — 다시 켤 조건 없음) ② `src/features`의 `excessive-slicing`을 끈다(25개 > 20, 다시 켤 조건 features ≤ 20 — TRIP-1159 껍데기 정리) ③ `pages/itinerary`·`pages/onboarding` 그룹의 `repetitive-naming`을 끈다(접두를 떼면 16개 개명 + shared 세그먼트와 이름 충돌 — 다시 켤 조건 두 그룹 접두 제거, 별 티켓). 딥 임포트 금지 zone(TRIP-1157)은 프로덕션 파일에만 걸고 테스트·`src/app/_dev/**`는 면제한다. 같은 룰 ID라 층 zone과 한 블록에 함께 펼친다(flat config는 같은 규칙을 거는 뒤 블록이 앞을 덮어쓴다). `import/no-cycle`은 상시 lint에 없다 — 자기 슬라이스 index를 물어 순환을 만들어도 `pnpm lint`는 침묵한다.
 - **`app → features` 제한은 두지 않는다** — 공식 FSD는 app 층이 아래 층 전부를 import하는 것을 허용한다. 라우트 파일은 page를 꽂는 얇은 래퍼로 두는 것을 권장한다(lint 강제 없음, TRIP-1142).
 - 절대 경로 별칭 `@/` = `src/` (tsconfig paths — `@/features/...`, `@/shared/...`).
 
@@ -188,7 +188,7 @@ python3 scripts/test-classify.py    # 테스트 파일 칸 분류(행동·소스
 - **ESLint** (`eslint.config.js`): `eslint-config-expo` 베이스 + import 경계 규칙(§import 경계) + NativeWind 클래스 정렬 플러그인
 - **Prettier** (`.prettierrc`): 포맷 전담
 - Biome 등 통합 도구 미채택 — Expo 공식 프리셋·NativeWind·경계 강제 플러그인이 전부 ESLint 생태계
-- 스크립트: `pnpm lint` / `pnpm format`
+- 스크립트: `pnpm lint` / `pnpm format` / `pnpm fsd`(Steiger 구조 린트 — `frontend/`에서 실행)
 
 ## 빌드·실행 (스캐폴드 후)
 
