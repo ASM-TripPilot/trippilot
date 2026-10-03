@@ -377,7 +377,7 @@
 - `src/features/edit-itinerary/ui/SaveConflictDialog.tsx`  →  SaveConflictDialog
 
 ## src/features/edit-preferences/
-- `src/features/edit-preferences/index.ts`  →  buildPreferenceInput · initialSelection · ACTIVITY · STYLE · toPreferenceInput · usePreferenceStore
+- `src/features/edit-preferences/index.ts`  →  buildPreferenceInput · initialSelection · ACTIVITY · STYLE · toPreferenceInput · usePreferenceStore · toggleMulti · toggleSingle
 
 ## src/features/edit-preferences/model/
 - `src/features/edit-preferences/model/preferenceDraft.ts`  →  PreferenceSelection · initialSelection · buildPreferenceInput
@@ -1494,10 +1494,6 @@
 ## src/shared/photo/
 - `src/shared/photo/index.ts`  →  PhotoAssetMeta · PhotoPickResult · pickPhotoAsset · resolvePhotoUri
 
-## src/shared/pref/
-- `src/shared/pref/index.ts`  →  toggleMulti · toggleSingle
-- `src/shared/pref/preferenceSelection.ts`  →  toggleMulti · toggleSingle
-
 ## src/shared/press/
 - `src/shared/press/index.ts`  →  guardPress · openPressGuardWindow
 - `src/shared/press/pressGuard.ts`  →  guardPress · openPressGuardWindow · resetPressGuard
@@ -1589,4 +1585,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 967개 파일
+합계 965개 파일

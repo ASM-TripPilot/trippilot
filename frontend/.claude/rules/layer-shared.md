@@ -80,7 +80,7 @@ paths:
 | `src/shared/api/generated/schemas/trip.ts` | `preferenceSnapshot`이 **응답에는 required** — 채우는 주인은 서버, 클라이언트는 요청에 싣지 않는다(`buildCreateTripRequest`가 걷어낸다) |
 | `src/shared/bootstrap/bootstrapReeval.ts` | 온보딩 완료 → 부트스트랩 재평가 pub/sub 신호(값 없는 순수 이벤트) |
 
-### `src/shared/ui/pref/`·`src/shared/pref/` — 취향 타일·선택 로직
+### `src/shared/ui/pref/` — 취향 타일
 
 온보딩과 설정(l05 편집)이 공유한다(features 간 직접 import 금지라 shared 승격).
 
@@ -88,7 +88,6 @@ paths:
 |---|---|
 | `src/shared/ui/pref/PrefTile.tsx` | id-agnostic 순수 타일 — `testID`·`selected`·`onPress`·`Icon`(슬롯) + 라벨 |
 | `src/shared/ui/pref/PrefChip.tsx` | 아이콘 없는 칩형 변형 |
-| `src/shared/pref/preferenceSelection.ts` | `toggleMulti`/`toggleSingle` — 전부 해제 시 `[]`가 아니라 `null` 복귀(US-ONB-14). `shared/ui`가 아니라 `shared/pref`인 이유: 순수 로직은 `shared/ui`(화면 부품)에 두지 않는다 |
 
 ### `src/shared/time/` — 시간 경과 플래그
 

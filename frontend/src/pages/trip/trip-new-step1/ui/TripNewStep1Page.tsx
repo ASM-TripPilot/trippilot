@@ -25,7 +25,7 @@ import { isNotFound } from '@/shared/api';
 import { getAccessToken } from '@/shared/api';
 import { seoulDate } from '@/shared/date';
 import { shiftMonth } from '@/shared/date';
-import { toggleMulti } from '@/shared/pref';
+import { toggleMulti } from '@/features/edit-preferences';
 import { showToast } from '@/shared/ui/Toast';
 
 import {

@@ -8,7 +8,6 @@
 import { type ReactElement, useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 
-import { toggleMulti, toggleSingle } from '@/shared/pref';
 import { showToast } from '@/shared/ui/Toast';
 import { type PreferenceView } from '@/shared/api/index.schemas';
 
@@ -16,6 +15,8 @@ import {
   buildPreferenceInput,
   initialSelection,
   type PreferenceSelection,
+  toggleMulti,
+  toggleSingle,
 } from '@/features/edit-preferences';
 import { usePreferences } from '../model/usePreferences';
 import {
