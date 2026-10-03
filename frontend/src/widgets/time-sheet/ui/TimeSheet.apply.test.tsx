@@ -6,11 +6,11 @@ import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
 import { TimeSheet } from './TimeSheet';
 
 /**
- * TRIP-927 · h04(시간대 조정) 변형의 **종료 선택 사항**·요약 행 생략·닫힘 배선.
+ * TRIP-927 · 편집기 형태(title+placeSummary) 시각 시트의 **종료 선택 사항**·요약 행 생략·닫힘 배선.
  *
  * 무엇을 보장하나:
- *  - 종료를 손대지 않고 적용하면 `{ startAt, endAt: null }` — `endsNextDay` 키 자체가 없다(AC-1, Q2).
- *    종료 탭을 여는 것만으로는 "설정"이 아니다 — 휠 값을 눌러야 설정된다(AC-2 경계).
+ *  - 종료를 손대지 않고 적용하면 종료는 현재 값(`endAt` prop) 유지 + `endsNextDay` 재유도 — null 은 안 나간다
+ *    (TRIP-1196 AC-1). 종료 탭을 여는 것만으로는 "설정"이 아니다 — 휠 값을 눌러야 설정된다.
  *  - 종료를 설정하고 적용하면 `{ startAt, endAt, endsNextDay }`, 유도는 `end <= start`(AC-2).
  *  - 설정 상태에서도 소요시간 표기 0건(AC-4, INV-3).
  *  - 배지·지역을 안 주면 요약 행은 썸네일+이름뿐(AC-6, Q1).
@@ -42,7 +42,7 @@ type Summary = {
 function renderH04(placeSummary?: Summary): void {
   render(
     <TimeSheet
-      mode="h04"
+      title="시간대 조정"
       testIDPrefix={PREFIX}
       labels={{ start: '시작', end: '종료' }}
       startAt="13:00:00"
@@ -91,35 +91,58 @@ beforeEach(() => {
   onCancel.mockClear();
 });
 
-describe('🔴 AC-1 · 종료를 손대지 않고 적용하면 endAt:null — endsNextDay 키 없음', () => {
-  it('H1a · 아무것도 안 건드리고 적용 → { startAt: 13:00:00, endAt: null }', () => {
+describe('🔴 AC-1 · 종료를 손대지 않고 적용하면 종료는 현재 값 유지 — endAt 은 문자열 (TRIP-1196)', () => {
+  it('H1a · 아무것도 안 건드리고 적용 → { 13:00:00, endAt: 14:30:00(현재 값), endsNextDay: false }', () => {
     renderH04();
 
     press('apply');
 
     const patch = appliedPatch();
-    expect(patch).toStrictEqual({ startAt: '13:00:00', endAt: null });
-    expect(patch).not.toHaveProperty('endsNextDay');
+    expect(patch).toStrictEqual({
+      startAt: '13:00:00',
+      endAt: '14:30:00',
+      endsNextDay: false,
+    });
     expect(onCancel).not.toHaveBeenCalled();
   });
 
-  it('H1b · 시작만 23시로 바꿔 적용 → { startAt: 23:00:00, endAt: null }', () => {
+  it('H1b · 시작만 23시로 바꿔 적용 → 종료는 14:30:00 유지, endsNextDay 만 새 시작 기준 true', () => {
     renderH04();
 
     // 시작 탭 활성 · 오후 1시에서 11 셀 → 오후 11시(23).
     press('wheel-h-11', 'apply');
 
-    expect(appliedPatch()).toStrictEqual({ startAt: '23:00:00', endAt: null });
+    expect(appliedPatch()).toStrictEqual({
+      startAt: '23:00:00',
+      endAt: '14:30:00',
+      endsNextDay: true,
+    });
   });
 
-  it('H1c · 종료 탭만 열어 보고 휠을 안 누르면 여전히 미설정이다', () => {
+  it('H1c · 종료 탭만 열어 보고 휠을 안 누르면 여전히 미설정이고 종료 값은 유지된다', () => {
     renderH04();
 
     press('seg-end');
     expect(screen.getByTestId(id('readout'))).toHaveTextContent(/설정 안 됨/);
     press('apply');
 
-    expect(appliedPatch()).toStrictEqual({ startAt: '13:00:00', endAt: null });
+    expect(appliedPatch()).toStrictEqual({
+      startAt: '13:00:00',
+      endAt: '14:30:00',
+      endsNextDay: false,
+    });
+  });
+
+  it('H1d · 종료를 안 건드린 채 시작을 14:30 이후로 옮기면 현재 종료 기준으로 endsNextDay 가 다시 유도된다', () => {
+    renderH04();
+
+    press('wheel-h-3', 'wheel-m-45', 'apply');
+
+    expect(appliedPatch()).toStrictEqual({
+      startAt: '15:45:00',
+      endAt: '14:30:00',
+      endsNextDay: true,
+    });
   });
 });
 
@@ -224,18 +247,22 @@ describe('🔴 W4 · h04 휠 스크롤 정지 = 셀 탭과 같은 결과 (D21)',
   }
 
   it.each([
-    ['h', 10, '23:00:00', '시 열 11(오후) → 23시'],
-    ['ap', 0, '01:00:00', '오전/오후 열 오전 → 1시'],
-    ['m', 15, '13:15:00', '분 열 15'],
+    ['h', 10, '23:00:00', true, '시 열 11(오후) → 23시'],
+    ['ap', 0, '01:00:00', false, '오전/오후 열 오전 → 1시'],
+    ['m', 15, '13:15:00', false, '분 열 15'],
   ] as const)(
-    '시작 탭에서 %s 열이 %i칸에 멈추면 startAt %s (%s)',
-    (column, cells, startAt, _label) => {
+    '시작 탭에서 %s 열이 %i칸에 멈추면 startAt %s · endsNextDay %s (%s)',
+    (column, cells, startAt, endsNextDay, _label) => {
       renderH04();
 
       settle(column, cells);
       press('apply');
 
-      expect(appliedPatch()).toStrictEqual({ startAt, endAt: null });
+      expect(appliedPatch()).toStrictEqual({
+        startAt,
+        endAt: '14:30:00',
+        endsNextDay,
+      });
     }
   );
 

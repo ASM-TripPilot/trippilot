@@ -5460,7 +5460,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => (
       <View className="flex-1">
         <TimeSheet
-          mode="h04"
+          title="시간대 조정"
           testIDPrefix="itinerary-edit-time"
           labels={{ start: '시작', end: '종료' }}
           startAt="13:00:00"

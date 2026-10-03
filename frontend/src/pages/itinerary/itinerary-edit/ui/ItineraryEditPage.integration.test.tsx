@@ -2236,7 +2236,7 @@ describe('시각 조정 시트', () => {
   /**
    * TRIP-797 · h12 편집기 통일(묶음 C 재조립) → TRIP-927 · 시트를 h04(시간대 조정) 변형으로 전환.
    * 편집 배선의 **시각조정 개폐·로컬성·저장 흐름**을 실 HTTP 로 태우는 심판. 시각칩은 `SlotStopCard` 의
-   * 누름 칩(`slot-stopcard-timechip-*`)이고 시트는 `TimeSheet mode="h04"`(접두 `itinerary-edit-time`) 다.
+   * 누름 칩(`slot-stopcard-timechip-*`)이고 시트는 `TimeSheet title="시간대 조정"`(접두 `itinerary-edit-time`) 다.
    *
    * 무엇을 보장하나(전부 페이지 층 배선):
    *  - 🔴 비고정 시각칩 → **시트 조건부 마운트**(등장, IT1), 고정은 **누름 칩 자체가 없다**(IT2 · INV-U3-03).

@@ -15,7 +15,6 @@ import {
 import { buildPlanDayTabs, resolvePlanState } from '@/features/itinerary';
 import { deriveVisitProgress } from '@/entities/itinerary-slot';
 import { reorderKeepingLocked } from '../model/reorderKeepingLocked';
-import { deriveEndsNextDay } from '@/entities/itinerary-slot';
 import { buildSlotKey, parseSlotKey } from '@/entities/itinerary-slot';
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 import { AlertCircleGlyph, InfoCircleGlyph } from '@/features/itinerary';
@@ -399,7 +398,7 @@ export function ItineraryEditPage({
       editing.kind === 'ok' &&
       editingSlot !== undefined ? (
         <TimeSheet
-          mode="h04"
+          title="시간대 조정"
           startAt={editingSlot.startAt}
           endAt={editingSlot.endAt}
           placeSummary={{
@@ -407,22 +406,7 @@ export function ItineraryEditPage({
             name: editingSlot.nameKo ?? '',
           }}
           onApply={(patch) => {
-            // 종료 미설정(null) = "종료는 그대로" — 드래프트의 현재 endAt 을 유지하고 자정 넘김만 새
-            // 시작 기준으로 다시 유도한다. 서버 계약(endAt 필수)은 그대로 string 으로 나간다.
-            adjustSlotTime(
-              editing.date,
-              editing.poiId,
-              patch.endAt === null
-                ? {
-                    startAt: patch.startAt,
-                    endAt: editingSlot.endAt,
-                    endsNextDay: deriveEndsNextDay(
-                      patch.startAt,
-                      editingSlot.endAt
-                    ),
-                  }
-                : patch
-            );
+            adjustSlotTime(editing.date, editing.poiId, patch);
             setEditingSlotKey(null);
           }}
           onCancel={() => setEditingSlotKey(null)}
