@@ -35,7 +35,9 @@ spec:
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           # Avoid uv's runtime cache/sync writes under a read-only filesystem.
           command: [/app/.venv/bin/uvicorn]
-          args: ["main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--timeout-graceful-shutdown", "630"]
+          # Two workers so one async process cannot pin more than a single core while the
+          # limit allows two; memory stays within requests (each worker loads the app once).
+          args: ["main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--timeout-graceful-shutdown", "630"]
           ports:
             - { name: http, containerPort: 8000 }
           securityContext:

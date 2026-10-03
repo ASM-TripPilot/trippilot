@@ -1,4 +1,8 @@
 environment: dev
+config:
+  # 로컬 compose 와 달리 배포 환경은 데드라인을 켠다 — LLM 이 늘어질 때 사용자가 무한 로딩 대신
+  # 부분 결과(day1)·폴백을 받는다. dev 에서 먼저 켜서 prd 와 같은 동작을 검증한다.
+  scheduleDeadlineEnforced: true
 backend:
   replicas: 1
 ai:
