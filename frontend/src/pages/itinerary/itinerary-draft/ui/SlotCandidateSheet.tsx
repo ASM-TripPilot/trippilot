@@ -6,6 +6,9 @@ import { SlotCandidateCard } from '@/entities/place';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
 import {
+  ALL_IN_ITINERARY_HINT,
+  ALL_IN_ITINERARY_TITLE,
+  resolveSlotEmptyFace,
   AlertCircleGlyph,
   CheckGlyph,
   ChevronRightGlyph,
@@ -94,6 +97,8 @@ export interface SlotCandidateSheetProps {
   fetchErrorMessage?: string | null;
   /** [다시 시도] press — slow·error 공통. */
   onRetryFetch?: () => void;
+  /** 0건일 때만 읽는다(TRIP-948). null·생략·미지 값은 기존 한 문구로 폴백. */
+  emptyReason?: string | null;
 }
 
 /** 시각·컨셉·안내를 한 줄 부제로 조립. 컨셉 부재 시 그 세그를 뺀다(정직 degrade · D5). */
@@ -132,10 +137,12 @@ export function SlotCandidateSheet({
   fetchState = 'ready',
   fetchErrorMessage,
   onRetryFetch,
+  emptyReason,
 }: SlotCandidateSheetProps): ReactElement {
   const isLoading = fetchState === 'loading' || fetchState === 'slow';
   const isFetchError = fetchState === 'error';
   const isEmpty = fetchState === 'ready' && candidates.length === 0;
+  const emptyFace = resolveSlotEmptyFace(emptyReason);
   const confirmDisabled = selectedPoiId === null || isPending || isLoading;
   const title = `${current.nameKo ?? TITLE_NAME_FALLBACK} 대신`;
   const subtitle = buildSubtitle(startAt, endAt, category);
@@ -213,12 +220,30 @@ export function SlotCandidateSheet({
               className={DASHED_CARD_CLASS}
             >
               <DiamondGlyph size={24} testID="itinerary-candidate-empty-icon" />
-              <Text className="text-center font-noto-bold text-card-title font-bold text-ink">
-                {EMPTY_TITLE}
-              </Text>
-              <Text className="text-center font-noto text-label text-muted">
-                {EMPTY_HINT}
-              </Text>
+              {/* 사유 접미 노드 — 알려진 사유에만 붙는다(폴백은 접미 없이 기존 문구). */}
+              <View
+                testID={
+                  emptyFace === 'FALLBACK'
+                    ? undefined
+                    : `itinerary-candidate-empty-${
+                        emptyFace === 'NO_NEARBY'
+                          ? 'no-nearby'
+                          : 'all-in-itinerary'
+                      }`
+                }
+                className="w-full items-center gap-sm"
+              >
+                <Text className="text-center font-noto-bold text-card-title font-bold text-ink">
+                  {emptyFace === 'ALL_IN_ITINERARY'
+                    ? ALL_IN_ITINERARY_TITLE
+                    : EMPTY_TITLE}
+                </Text>
+                <Text className="text-center font-noto text-label text-muted">
+                  {emptyFace === 'ALL_IN_ITINERARY'
+                    ? ALL_IN_ITINERARY_HINT
+                    : EMPTY_HINT}
+                </Text>
+              </View>
             </View>
 
             {/* 0건 CTA "장소 검색" — 교체하기 자리를 대체(h13). */}

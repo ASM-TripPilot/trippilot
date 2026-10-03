@@ -40,6 +40,12 @@ export {
   resolveItineraryDestination,
   resolvePlanState,
 } from './model/planState';
+export {
+  ALL_IN_ITINERARY_HINT,
+  ALL_IN_ITINERARY_TITLE,
+  resolveSlotEmptyFace,
+} from './model/slotEmptyFace';
+export type { SlotEmptyFace } from './model/slotEmptyFace';
 export { resolveUnplacedNames } from './model/unplacedMustVisits';
 export {
   isGenerationRunning,

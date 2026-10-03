@@ -560,3 +560,94 @@ describe('🔴 SlotCandidateSheet — 조회 상태 구조·INV-3·기본값(TRI
     }
   });
 });
+
+/**
+ * TRIP-948 — 0건 얼굴을 `emptyReason` 으로 가른다. 기존 testID(`-empty`)는 모든 0건 얼굴에 남고,
+ * 사유 접미(`-no-nearby`·`-all-in-itinerary`)는 알려진 사유에만 안쪽 노드로 붙는다(폴백엔 없다).
+ * 이 시트엔 원래 반경·컨셉 버튼이 없다(직접 검색 하나) — ALL_IN 도 같은 CTA 하나다.
+ * ★ 시트 실 열림·딤은 jest 사각(repo-traps 바텀시트) — 6-b 실기 몫.
+ */
+describe('🔴 SlotCandidateSheet — 0건 사유 얼굴(TRIP-948)', () => {
+  const ALL_IN_TITLE = '근처 후보가 이미 모두 일정에 있어요';
+  const ALL_IN_HINT =
+    '반경을 넓혀도 같아요. 다른 슬롯의 장소를 빼면 후보가 생겨요';
+
+  it('R1 · NO_NEARBY — 기존 문구·CTA 그대로 + 접미 노드', () => {
+    const onPressPlaceSearch = jest.fn();
+    renderSheet({
+      candidates: [],
+      emptyReason: 'NO_NEARBY',
+      onPressPlaceSearch,
+    });
+
+    expect(screen.getByTestId('itinerary-candidate-empty')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('itinerary-candidate-empty-no-nearby')
+    ).toBeOnTheScreen();
+    expect(
+      screen.queryByTestId('itinerary-candidate-empty-all-in-itinerary')
+    ).toBeNull();
+    expect(screen.getByText(EMPTY_TITLE)).toBeOnTheScreen();
+    expect(screen.queryByText(ALL_IN_TITLE)).toBeNull();
+    fireEvent.press(screen.getByTestId('itinerary-candidate-empty-search'));
+    expect(onPressPlaceSearch).toHaveBeenCalledTimes(1);
+  });
+
+  it('R2 · ALL_IN_ITINERARY — 새 문구(제목·보조), 기존 문구 없음, 검색 하나, 소요시간 없음', () => {
+    const onPressPlaceSearch = jest.fn();
+    renderSheet({
+      candidates: [],
+      emptyReason: 'ALL_IN_ITINERARY',
+      onPressPlaceSearch,
+    });
+
+    expect(screen.getByTestId('itinerary-candidate-empty')).toBeOnTheScreen();
+    const face = screen.getByTestId(
+      'itinerary-candidate-empty-all-in-itinerary'
+    );
+    expect(within(face).getByText(ALL_IN_TITLE)).toBeOnTheScreen();
+    expect(within(face).getByText(ALL_IN_HINT)).toBeOnTheScreen();
+    expect(
+      screen.queryByTestId('itinerary-candidate-empty-no-nearby')
+    ).toBeNull();
+    // NO_NEARBY 와 같은 문구면 위반.
+    expect(screen.queryByText(EMPTY_TITLE)).toBeNull();
+    expect(screen.queryByText(/반경 넓히기|컨셉 변경/)).toBeNull();
+    const sheet = within(screen.getByTestId('itinerary-candidate-sheet'));
+    expect(sheet.queryByText(/\d+\s*(분|시간)|소요/)).toBeNull();
+
+    const search = screen.getByTestId('itinerary-candidate-empty-search');
+    expect(search).toHaveTextContent('장소 검색');
+    fireEvent.press(search);
+    expect(onPressPlaceSearch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['null', null],
+    ['생략', undefined],
+    ['미지 값', 'SOMETHING_NEW'],
+  ])('R3 · 사유 %s + 0건 → 기존 한 문구로 폴백(빈 화면 아님)', (_n, reason) => {
+    renderSheet({ candidates: [], emptyReason: reason });
+
+    expect(screen.getByTestId('itinerary-candidate-empty')).toBeOnTheScreen();
+    expect(screen.getByText(EMPTY_TITLE)).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('itinerary-candidate-empty-search')
+    ).toBeOnTheScreen();
+    expect(
+      screen.queryByTestId('itinerary-candidate-empty-no-nearby')
+    ).toBeNull();
+    expect(
+      screen.queryByTestId('itinerary-candidate-empty-all-in-itinerary')
+    ).toBeNull();
+  });
+
+  it('R4 · 후보가 있으면 emptyReason 이 와도 0건 얼굴 없음(무회귀)', () => {
+    renderSheet({ emptyReason: 'ALL_IN_ITINERARY' });
+
+    expect(screen.queryByTestId('itinerary-candidate-empty')).toBeNull();
+    expect(
+      screen.getByTestId('itinerary-candidate-radio-p2')
+    ).toBeOnTheScreen();
+  });
+});

@@ -485,7 +485,15 @@ describe('조회 중·실패·지연', () => {
    * 대기 후 후보 2건, 숫자 = 그 상태코드, `network` = 연결 실패, `ok` = 후보 2건, `empty` = 0건.
    */
   type PostStep =
-    'hang' | 'gate' | 'ok' | 'empty' | 'network' | 500 | 404 | 409;
+    | 'hang'
+    | 'gate'
+    | 'ok'
+    | 'empty'
+    | 'emptyAllIn'
+    | 'network'
+    | 500
+    | 404
+    | 409;
 
   let postPlan: PostStep[] = [];
   let postBodies: unknown[] = [];
@@ -514,6 +522,13 @@ describe('조회 중·실패·지연', () => {
           radiusMUsed: 3000,
           degraded: false,
           emptyReason: 'NO_NEARBY',
+        });
+      case 'emptyAllIn':
+        return HttpResponse.json({
+          candidates: [],
+          radiusMUsed: 3000,
+          degraded: false,
+          emptyReason: 'ALL_IN_ITINERARY',
         });
       case 'network':
         return HttpResponse.error();
@@ -651,6 +666,22 @@ describe('조회 중·실패·지연', () => {
       expect(screen.getByTestId(ID.emptySearch)).toBeOnTheScreen();
       expect(screen.queryByTestId(ID.loading)).toBeNull();
       expect(screen.queryByTestId(ID.fetchError)).toBeNull();
+      // TRIP-948 — NO_NEARBY 는 기존 문구 + 접미 노드.
+      expect(
+        screen.getByTestId('itinerary-candidate-empty-no-nearby')
+      ).toBeOnTheScreen();
+    });
+
+    it('C3b · TRIP-948 — emptyReason=ALL_IN_ITINERARY 응답이면 새 문구(응답 → 컨테이너 → 시트 관통)', async () => {
+      postPlan = ['emptyAllIn'];
+      renderContainer();
+
+      await screen.findByTestId('itinerary-candidate-empty-all-in-itinerary');
+      expect(
+        screen.getByText('근처 후보가 이미 모두 일정에 있어요')
+      ).toBeOnTheScreen();
+      expect(screen.queryByText(EMPTY_TITLE)).toBeNull();
+      expect(screen.getByTestId(ID.emptySearch)).toBeOnTheScreen();
     });
   });
 

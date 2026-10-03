@@ -194,6 +194,7 @@ export function SlotCandidatePanelContainer({
         candidatesFailed ? resolveSlotSwapError(candidatesError).message : null
       }
       onRetryFetch={handleRetryFetch}
+      emptyReason={candidatesData?.emptyReason}
     />
   );
 }
