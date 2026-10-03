@@ -152,6 +152,15 @@ function place(
   };
 }
 
+/** 담긴 수가 겹치지 않는 n곳 — 인기순 = 입력 순서(실장소0 이 1위). 이름·지역은 부산 고정 픽스처와 겹치지 않는다. */
+function rankedPlaces(n: number): Place[] {
+  return Array.from({ length: n }, (_, i) => ({
+    ...place(`rk${i}`, `실장소${i}`, 100 - i),
+    category: i % 2 === 0 ? '카페' : '명소',
+    region: `서울 ${i}구`,
+  })) as Place[];
+}
+
 function placesOk(items: Place[]) {
   return {
     data: { items, nextCursor: null },
@@ -354,7 +363,7 @@ describe('얼굴 판정 — 여행 목록으로 discovery·planning·로딩을 �
     expect(screen.queryByTestId('home-trips-error')).toBeNull();
   });
 
-  // 컬렉션 카드는 부산 고정 픽스처라 여행 지역을 헤더에 끼우면 사실과 다른 표기가 된다(심사 2.3).
+  // 계획 중(여행 전)은 전국 조회라 카드가 그 지역 장소라는 보장이 없어 지역 헤더를 끼우지 않는다(TRIP-1209).
   it('계획 중 홈의 컬렉션 헤더는 기본 문구다 — "서울에서 담을 만한 곳"을 끼우지 않는다', () => {
     mockUseGetTrips.mockReturnValue(
       tripsOk([
@@ -366,6 +375,8 @@ describe('얼굴 판정 — 여행 목록으로 discovery·planning·로딩을 �
         }),
       ])
     );
+
+    mockUseGetPlaces.mockReturnValue(placesOk(rankedPlaces(7)));
 
     render(<HomePage />);
 
@@ -469,6 +480,142 @@ describe('진입점 — 누르면 어디로 가나', () => {
     fireEvent.press(screen.getByTestId('home-dashboard-bell'));
 
     expect(mockPush.mock.calls).toEqual([['/notifications']]);
+  });
+});
+
+// TRIP-1209 — 홈 컬렉션 레인은 부산 고정 샘플이 아니라 서버 장소 풀(useGetPlaces) 실데이터다.
+// '지금 뜨는 장소' 4장(담긴 수 상위)을 뺀 다음 3곳을 쓰고(겹침 0), 3곳을 못 채우면 레인을 숨긴다.
+describe('요즘 사람들이 담는 곳 — 실장소(TRIP-1209)', () => {
+  const BUSAN_FIXTURE_TITLES = ['감천문화마을', '해운대 해변', '해동용궁사'];
+  const seoulTravel = () =>
+    trip({
+      title: '서울 여행',
+      startDate: addDays(seoulDate(new Date()), -1),
+      endDate: addDays(seoulDate(new Date()), 1),
+      status: 'ACTIVE',
+      destinations: [{ seq: 1, region: '서울', nights: 2 }],
+    });
+
+  beforeEach(() => {
+    mockUseGetPlaces.mockReturnValue(placesOk(rankedPlaces(10)));
+  });
+
+  it('서울 여행 중에 부산 고정 카드가 없고, 서버 장소 3장이 담긴 수 순(상위 4곳 다음)으로 나온다', () => {
+    mockUseGetTrips.mockReturnValue(tripsOk([seoulTravel()]));
+
+    render(<HomePage />);
+
+    const cards = [0, 1, 2].map((i) =>
+      within(screen.getByTestId(`home-collection-card-${i}`))
+    );
+    expect(cards[0].getByText('실장소4')).toBeOnTheScreen();
+    expect(cards[1].getByText('실장소5')).toBeOnTheScreen();
+    expect(cards[2].getByText('실장소6')).toBeOnTheScreen();
+    expect(cards[0].getByText('서울 4구')).toBeOnTheScreen();
+    expect(screen.queryByTestId('home-collection-card-3')).toBeNull();
+    for (const title of BUSAN_FIXTURE_TITLES) {
+      expect(screen.queryByText(title)).toBeNull();
+    }
+  });
+
+  it('배지는 하드코딩 "당일치기"·"1박 2일"이 아니라 장소 카테고리다', () => {
+    render(<HomePage />);
+
+    const cards = [0, 1].map((i) =>
+      within(screen.getByTestId(`home-collection-card-${i}`))
+    );
+    expect(cards[0].getByText('카페')).toBeOnTheScreen(); // 실장소4(짝수)
+    expect(cards[1].getByText('명소')).toBeOnTheScreen(); // 실장소5
+    expect(screen.queryByText('당일치기')).toBeNull();
+    expect(screen.queryByText('1박 2일')).toBeNull();
+    expect(screen.queryByText('반나절')).toBeNull();
+  });
+
+  it('"지금 뜨는 장소" 4장과 겹치지 않는다', () => {
+    mockUseGetTrips.mockReturnValue(tripsOk([seoulTravel()]));
+
+    render(<HomePage />);
+
+    for (const name of ['실장소0', '실장소1', '실장소2', '실장소3']) {
+      // 뜨는 장소 카드에는 있고 컬렉션 카드에는 없다.
+      const inSpots = [0, 1, 2, 3].filter(
+        (i) =>
+          within(screen.getByTestId(`home-spot-card-${i}`)).queryByText(
+            name
+          ) !== null
+      );
+      expect(inSpots).toHaveLength(1);
+      for (const i of [0, 1, 2]) {
+        expect(
+          within(screen.getByTestId(`home-collection-card-${i}`)).queryByText(
+            name
+          )
+        ).toBeNull();
+      }
+    }
+  });
+
+  it('여행이 없는 발견 얼굴에서도 실장소 3장이다', () => {
+    render(<HomePage />);
+
+    expect(
+      within(screen.getByTestId('home-collection-card-0')).getByText('실장소4')
+    ).toBeOnTheScreen();
+    expect(screen.queryByText('감천문화마을')).toBeNull();
+  });
+
+  it('장소 조회 대기 중이면 컬렉션 스켈레톤이다(고정 카드를 대신 깔지 않는다)', () => {
+    mockUseGetPlaces.mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isError: false,
+      refetch: jest.fn(),
+    });
+
+    render(<HomePage />);
+
+    expect(screen.getByTestId('home-collections-skeleton')).toBeOnTheScreen();
+    expect(screen.queryByTestId('home-collection-card-0')).toBeNull();
+    expect(screen.queryByText('감천문화마을')).toBeNull();
+  });
+
+  it('장소 조회 실패면 한 줄 재시도이고, 누르면 그 조회를 다시 부른다(침묵 금지)', () => {
+    const refetch = jest.fn();
+    mockUseGetPlaces.mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isError: true,
+      refetch,
+    });
+
+    render(<HomePage />);
+    fireEvent.press(screen.getByTestId('home-collections-error'));
+
+    expect(refetch).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('home-collection-card-0')).toBeNull();
+    expect(screen.queryByText('감천문화마을')).toBeNull();
+  });
+
+  it('뜨는 장소 4곳을 빼고 3곳이 안 남으면(6곳) 컬렉션 레인을 통째로 숨긴다', () => {
+    mockUseGetPlaces.mockReturnValue(placesOk(rankedPlaces(6)));
+
+    render(<HomePage />);
+
+    expect(screen.queryByTestId('home-collection-card-0')).toBeNull();
+    expect(screen.queryByText('요즘 사람들이 담는 곳')).toBeNull();
+    expect(screen.queryByTestId('home-collections-skeleton')).toBeNull();
+    expect(screen.queryByTestId('home-collections-error')).toBeNull();
+    expect(screen.queryByText('감천문화마을')).toBeNull();
+    // 뜨는 장소 레인은 그대로다.
+    expect(screen.getByTestId('home-spot-card-3')).toBeOnTheScreen();
+  });
+
+  it('딱 7곳이면 3장이 찬다(경계)', () => {
+    mockUseGetPlaces.mockReturnValue(placesOk(rankedPlaces(7)));
+
+    render(<HomePage />);
+
+    expect(screen.getByTestId('home-collection-card-2')).toBeOnTheScreen();
   });
 });
 

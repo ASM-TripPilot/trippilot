@@ -13,6 +13,16 @@ export interface HomeCollectionCard {
   badge: string;
   /** 카드 배경 사진 URI(TRIP-694). `resolveAssetSource(...).uri`로 푼 문자열, jest·웹에선 null(사진 자리 토큰 tint). */
   imageUrl?: string | null;
+  /** 실데이터 장소 id(TRIP-1209) — 목록 key 로만 쓴다(픽스처엔 없다). */
+  poiId?: string;
+}
+
+/** "요즘 사람들이 담는 곳" 실데이터 레인(TRIP-1209) — 섹션 독립 상태. 있으면 sections.collections 대신 이것을 그린다. */
+export interface HomeCollectionsLane {
+  status: 'loading' | 'error' | 'ready';
+  /** ready 에서 0장이면 섹션 통째 숨김(정직한 빈 상태). */
+  cards: readonly HomeCollectionCard[];
+  onRetry: () => void;
 }
 
 /** 섹션2 "지금 뜨는 장소" 카드 1장 — 사진 위 타이틀·해시태그. */
@@ -191,6 +201,8 @@ export interface HomeScreenProps {
   sections: HomeSections;
   /** "지금 뜨는 장소" 실데이터(TRIP-1049, 옵셔널) — 있으면 sections.spots 대신 이것을 그린다. */
   spotsLane?: HomeSpotsLane;
+  /** "요즘 사람들이 담는 곳" 실데이터(TRIP-1209, 옵셔널) — 있으면 sections.collections 대신 이것을 그린다. */
+  collectionsLane?: HomeCollectionsLane;
   /**
    * 여행 조회 실패(TRIP-935, 옵셔널) — 있으면 discovery 얼굴 위에 오류 안내 + [다시 시도]를 띄운다.
    * 실패를 "여행 없음" 얼굴로 조용히 접지 않는다(INV-4). 대기·성공이면 page 가 넘기지 않는다.

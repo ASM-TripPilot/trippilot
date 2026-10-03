@@ -21,7 +21,11 @@ import {
 } from '@/features/itinerary';
 import { HOME_DEFAULT_PROPS } from '../model/homeFixtures';
 import { applyItineraryTarget, resolveHomePhase } from '../model/homePhase';
-import type { HomePhase, HomeSpotsLane } from '../model/homeTypes';
+import type {
+  HomeCollectionsLane,
+  HomePhase,
+  HomeSpotsLane,
+} from '../model/homeTypes';
 import { HomeScreen } from './HomeScreen';
 import { useTripWizardStore } from '@/features/create-trip';
 
@@ -37,7 +41,11 @@ interface HomeNav {
   savedMenuOpen: boolean;
   onToggleSavedMenu: () => void;
   spotsLane: HomeSpotsLane;
+  collectionsLane: HomeCollectionsLane;
 }
+
+/** 컬렉션 레인 장수 — 이만큼 못 채우면 레인을 숨긴다(TRIP-1209). */
+const COLLECTION_COUNT = 3;
 
 // 지배 planning 여행이 있을 때만 마운트되는 자식 — 여기서만 지배 여행의 itinerary GET 을 문다.
 // 지배 여행이 없는 렌더(discovery·빈 목록·로딩·오류)는 이 자식을 안 그려 훅이 아예 호출되지
@@ -139,7 +147,11 @@ export function HomePage() {
     { ...(spotsRegion ? { region: spotsRegion } : {}), limit: 200 },
     { query: { enabled: !trips.isPending } }
   );
-  const trending = pickTrendingPlaces(places.data?.items ?? [], 4);
+  // 같은 정렬로 7곳을 줄 세워 앞 4장은 '지금 뜨는 장소', 다음 3장은 컬렉션 레인 — 두 레인이 겹치지
+  // 않는다(TRIP-1209). 3곳을 못 채우면 컬렉션은 빈 배열 → 화면이 레인을 숨긴다.
+  const ranked = pickTrendingPlaces(places.data?.items ?? [], 7);
+  const trending = ranked.slice(0, 4);
+  const collectionPlaces = ranked.slice(4);
   const placeSave = usePlaceSaveToggle({
     isAuthed: true,
     savedPoiIds,
@@ -159,6 +171,21 @@ export function HomePage() {
     onRetry: () => void places.refetch(),
     savedPoiIds,
     ...placeSave,
+  };
+
+  const collectionsLane: HomeCollectionsLane = {
+    status: places.isPending ? 'loading' : places.isError ? 'error' : 'ready',
+    cards:
+      collectionPlaces.length === COLLECTION_COUNT
+        ? collectionPlaces.map((place) => ({
+            poiId: place.poiId,
+            title: place.nameKo,
+            region: place.region ?? '',
+            badge: place.category,
+            imageUrl: place.imageUrl,
+          }))
+        : [],
+    onRetry: () => void places.refetch(),
   };
 
   const nav: HomeNav = {
@@ -186,6 +213,7 @@ export function HomePage() {
     savedMenuOpen,
     onToggleSavedMenu: () => setSavedMenuOpen((v) => !v),
     spotsLane,
+    collectionsLane,
   };
 
   // 조회 진행 중 — 섹션만 로딩 스켈레톤, phase 미전달. no-trip(discovery)으로 확정하지 않는다(INV-4).
