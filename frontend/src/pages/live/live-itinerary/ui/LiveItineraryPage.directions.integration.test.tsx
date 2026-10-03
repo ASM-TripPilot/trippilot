@@ -172,18 +172,23 @@ describe('i01 허브 · 슬롯별 길찾기 (TRIP-1189)', () => {
     seed([slotOf('p1'), slotOf('p2'), slotOf('p3')], [doneVisit('p1')]);
     await renderHub();
 
-    // 방문 기록이 늦게 도착한다 — p1 이 done 이 될 때까지 기다린다.
-    expect(await screen.findByTestId(dirId('p2'))).toHaveTextContent('길찾기');
-    expect(screen.getByTestId(dirId('p3'))).toHaveTextContent('길찾기');
-    expect(screen.queryByTestId(dirId('p1'))).toBeNull();
+    // 방문 기록이 늦게 도착한다 — p1 이 done 이 될 때까지 기다린다. 찾은 노드가 그 사이 다시 그려져 사라질 수 있어
+    // (CI 에서 "unmounted component") 노드를 쥐지 않고 안정된 상태를 한 번에 단언한다.
+    await waitFor(() => {
+      expect(screen.getByTestId(dirId('p2'))).toHaveTextContent('길찾기');
+      expect(screen.getByTestId(dirId('p3'))).toHaveTextContent('길찾기');
+      expect(screen.queryByTestId(dirId('p1'))).toBeNull();
+    });
   });
 
   it('N1b 진행 중(active) 슬롯에도 [길찾기]가 있다', async () => {
     seed([slotOf('p1'), slotOf('p2')], [arrivedVisit('p1')]);
     await renderHub();
 
-    expect(await screen.findByTestId(dirId('p1'))).toHaveTextContent('길찾기');
-    expect(screen.getByTestId(dirId('p2'))).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByTestId(dirId('p1'))).toHaveTextContent('길찾기');
+      expect(screen.getByTestId(dirId('p2'))).toBeTruthy();
+    });
   });
 
   it('N2 첫 예정지 버튼은 출발지 없이(현재 위치) 그 장소 좌표의 네이버 앱 URL 로 openURL 한다 · 라우터는 안 건드린다', async () => {
