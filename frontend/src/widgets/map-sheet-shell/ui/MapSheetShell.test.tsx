@@ -6,7 +6,7 @@ import {
   screen,
   within,
 } from '@testing-library/react-native';
-import { Text } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
 import { MapSheetShell } from './MapSheetShell';
@@ -1025,5 +1025,64 @@ describe('🔴 MapSheetShell · SH17 — 셸 시트가 안전 영역 top 과 키
     expect(host.props.enableDynamicSizing).toBe(false);
     expect(host.props.snapPoints).toEqual([28, '45%', '88%']);
     expect(host.props.index).toBe(1);
+  });
+});
+
+/* ───────────────────────────────────────────────────────────────────────
+ * SH19 — 스크롤 끝 카드가 CTA 바 뒤에 숨지 않는다 (TRIP-935 · 결과 시트 마지막 카드 가림)
+ *
+ * CTA 바는 시트 위에 absolute 로 떠 있어, 본문 아래 여백이 모자라면 끝까지 스크롤해도 마지막 카드가 바 뒤에
+ * 반쯤 남는다(h08 1일차 8번째 카드 실측). 그래서 본문 스크롤 뷰의 아래 여백 ≥ CTA 바 81 + 하단 안전 영역이어야
+ * 한다(편집기 N5 와 같은 기준). 인셋 0·34·120 세 줄이 짝이라, 인셋을 빼먹은 고정값은 34·120 줄에서 걸린다.
+ * ⚠️ 원리적 사각: 실제로 카드가 바 위로 올라오는지는 gorhom 런타임 몫이라 6-b 실기.
+ *
+ * 3동작 뼈대: 준비=(하단 인셋을 넣어) CTA 있는 셸 렌더 → 실행=렌더 → 단언=본문 스크롤 뷰의 paddingBottom.
+ * ─────────────────────────────────────────────────────────────────────── */
+describe('🔴 MapSheetShell · SH19 — 본문 아래 여백 ≥ CTA 바 + 하단 안전 영역 (TRIP-935)', () => {
+  it.each<[string, number, number | null]>([
+    ['안전 영역 Provider 없음(인셋 0)', 81, null],
+    ['하단 인셋 34(홈 인디케이터 기기)', 115, 34],
+    ['하단 인셋 120(고정값으로는 못 맞추는 큰 값)', 201, 120],
+  ])('%s → 본문 스크롤 뷰 paddingBottom ≥ %i', (_label, min, bottom) => {
+    if (bottom === null) {
+      renderShell();
+    } else {
+      render(
+        <SafeAreaInsetsContext.Provider
+          value={{ top: 47, bottom, left: 0, right: 0 }}
+        >
+          <MapSheetShell
+            center={CENTER}
+            pins={PINS}
+            days={DAYS}
+            header={<Text testID="fake-header">헤더</Text>}
+            cta={[
+              { label: '확정하기', variant: 'primary', onPress: jest.fn() },
+            ]}
+          >
+            <Text testID="fake-body">본문</Text>
+          </MapSheetShell>
+        </SafeAreaInsetsContext.Provider>
+      );
+    }
+
+    // 본문 스크롤 뷰 = 본문을 품고 snapPoints 가 없는 host(시트 본체가 아닌 쪽 — 목에선 둘이 같은 통과형).
+    const body = screen.getByTestId('fake-body');
+    let scroll = body.parent;
+    while (
+      scroll &&
+      !(
+        typeof scroll.type === 'string' &&
+        'contentContainerStyle' in scroll.props
+      )
+    ) {
+      scroll = scroll.parent;
+    }
+    expect(scroll).not.toBeNull();
+    expect(Array.isArray(scroll?.props.snapPoints)).toBe(false);
+    const style = StyleSheet.flatten(scroll?.props.contentContainerStyle) as
+      { paddingBottom?: unknown } | undefined;
+    expect(typeof style?.paddingBottom).toBe('number');
+    expect(style?.paddingBottom as number).toBeGreaterThanOrEqual(min);
   });
 });
