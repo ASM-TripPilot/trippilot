@@ -3,6 +3,8 @@
 
 import { Image } from 'react-native';
 
+import { PLACEHOLDER_PHOTOS } from '@/shared/ui/placeholders';
+
 import type {
   HomeCollectionCard,
   HomeItineraryCard,
@@ -17,30 +19,30 @@ import type {
 // `require('...jpg')`가 번들 에셋 참조(숫자)라 `<Image source={{ uri }} />` 자리에 넣으려면
 // `resolveAssetSource(...).uri` 로 풀어야 한다. jest·웹에선 `.uri`가 undefined → `?? null`로
 // 계약(`imageUrl: string | null`)에 맞춘다(테스트는 사진 없는 카드, 실기에서만 썸네일).
-// 출처·라이선스: src/assets/home/CREDITS.md.
+// 출처·라이선스: src/shared/ui/placeholders/home/CREDITS.md.
 const toUri = (source: number): string | null =>
   Image.resolveAssetSource?.(source)?.uri ?? null;
 
 // 히어로 캐러셀 5페이지 사진(부산 야경·해안·카페·시장·전망 순). page0 은 신·구 공통 픽셀 정본.
 const HERO_IMAGES = [
-  require('@/assets/home/hero-night.jpg'),
-  require('@/assets/home/hero-coast.jpg'),
-  require('@/assets/home/hero-cafe.jpg'),
-  require('@/assets/home/hero-market.jpg'),
-  require('@/assets/home/hero-view.jpg'),
+  PLACEHOLDER_PHOTOS.heroNight,
+  PLACEHOLDER_PHOTOS.heroCoast,
+  PLACEHOLDER_PHOTOS.heroCafe,
+  PLACEHOLDER_PHOTOS.heroMarket,
+  PLACEHOLDER_PHOTOS.heroView,
 ].map(toUri);
 
 const COLLECTION_IMAGES = [
-  require('@/assets/home/collection-gamcheon.jpg'),
-  require('@/assets/home/collection-haeundae.jpg'),
-  require('@/assets/home/collection-yonggungsa.jpg'),
+  PLACEHOLDER_PHOTOS.collectionGamcheon,
+  PLACEHOLDER_PHOTOS.collectionHaeundae,
+  PLACEHOLDER_PHOTOS.collectionYonggungsa,
 ].map(toUri);
 
 const SPOT_IMAGES = [
-  require('@/assets/home/spot-jeonpo.jpg'),
-  require('@/assets/home/spot-jagalchi.jpg'),
-  require('@/assets/home/spot-sup.jpg'),
-  require('@/assets/home/spot-hwangnyeong.jpg'),
+  PLACEHOLDER_PHOTOS.spotJeonpo,
+  PLACEHOLDER_PHOTOS.spotJagalchi,
+  PLACEHOLDER_PHOTOS.spotSup,
+  PLACEHOLDER_PHOTOS.spotHwangnyeong,
 ].map(toUri);
 
 // 히어로 5장 페이징 캐러셀(TRIP-694). page0 은 TRIP-316 정본 그대로, page1~4 는 부산 테마

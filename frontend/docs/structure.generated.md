@@ -1535,6 +1535,9 @@
 - `src/shared/ui/Toggle.tsx`  →  ToggleProps · Toggle
 - `src/shared/ui/WheelPicker.tsx`  →  WHEEL_CELL_HEIGHT · WheelPickerProps · WheelPicker
 
+## src/shared/ui/placeholders/
+- `src/shared/ui/placeholders/index.ts`  →  PLACEHOLDER_PHOTOS
+
 ## src/shared/ui/pref/
 - `src/shared/ui/pref/PrefChip.tsx`  →  PrefChipProps · PrefChip
 - `src/shared/ui/pref/PrefTile.tsx`  →  PrefTileIcon · PrefTileProps · PrefTile
@@ -1586,4 +1589,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 966개 파일
+합계 967개 파일

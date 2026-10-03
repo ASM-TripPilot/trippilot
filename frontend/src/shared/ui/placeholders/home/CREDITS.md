@@ -1,4 +1,4 @@
-# 이미지 출처 (src/assets/home)
+# 이미지 출처 (src/shared/ui/placeholders/home)
 
 **개발/프리뷰 전용 생성 플레이스홀더다.** a01(홈) default 얼굴의 히어로 캐러셀·컬렉션 카드·
 스팟 그리드가 사진 자리를 채우는 데 쓴다 — Figma `2091:1357`과 육안 대조할 때 사진 칸이
@@ -23,4 +23,4 @@
 - `_dev/preview`는 릴리스 빌드에서도 딥링크로 열리고 `require`된 에셋은 번들에 실린다(h11
   `itinerary/CREDITS.md`와 같은 도달성). 다만 이 12장은 라이선스 무관이라 릴리스 차단 사유는
   아니다 — 실사진으로 바꿀 때 이 파일도 갱신할 것.
-- 재생성: `src/assets/home` 생성 스크립트는 TRIP-694 사이클 원장(`_workspace/20260917-trip694-home-default`)에 기록.
+- 재생성: 이 폴더(옛 `src/assets/home`, TRIP-1161 이동) 생성 스크립트는 TRIP-694 사이클 원장(`_workspace/20260917-trip694-home-default`)에 기록.

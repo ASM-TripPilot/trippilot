@@ -45,7 +45,7 @@ const CENTER: MapCenter = { lat: 35.1532, lng: 129.1187 };
 
 /** 프리뷰와 같은 로컬 번들 사진(number source). jest 에서는 `{ testUri }` 객체로 온다 — SVG <Image href>
  *  가 받는다(원격 URL 은 TRIP-634 밖). */
-const PHOTO = require('@/assets/itinerary/draft-preview-1.jpg');
+const PHOTO = require('@/shared/ui/placeholders/home/hero-view.jpg');
 
 const GESTURE_TOGGLES = [
   'isScrollGesturesEnabled',

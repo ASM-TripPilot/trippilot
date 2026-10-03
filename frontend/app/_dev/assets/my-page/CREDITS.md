@@ -1,6 +1,6 @@
-# 이미지 출처 (src/assets/my-page)
+# 이미지 출처 (app/_dev/assets/my-page)
 
-**개발 프리뷰 전용 의도다.** `src/app/_dev/preview.tsx` 의 l03 마이페이지 empty(`my-page-empty`) 픽스처가
+**개발 프리뷰 전용 의도다.** `app/_dev/preview.tsx` 의 l03 마이페이지 empty(`my-page-empty`) 픽스처가
 "지난 여행" 썸네일 카드 사진 칸을 채우는 데만 쓴다 — 실앱은 사진 원본이 기기 로컬에만 있어(INV-U5-03)
 회색 자리만 그린다(TRIP-776, 부모 G7).
 

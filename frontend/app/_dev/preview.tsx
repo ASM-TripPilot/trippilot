@@ -538,7 +538,7 @@ const MUST_VISIT_PREVIEW_PINS: MapPin[] = [
  */
 
 /**
- * 프리뷰 카드 썸네일 3장. 파일 출처·라이선스는 `src/assets/itinerary/CREDITS.md`.
+ * 프리뷰 카드 썸네일 3장. 파일 출처·라이선스는 `app/_dev/assets/itinerary/CREDITS.md`.
  *
  * > **개념 — `require` + `Image.resolveAssetSource`**: React Native 에서 로컬 이미지는 URL 이
  * > 아니라 `require('...jpg')` 로 번들에 싣는다. 그 결과는 번들러가 매긴 **에셋 참조**이지
@@ -550,16 +550,17 @@ const MUST_VISIT_PREVIEW_PINS: MapPin[] = [
  * 실기에서만 썸네일이 뜬다. 실제 사진이 뜨는지는 6-b 실기 확인 몫이다.
  */
 const DRAFT_PREVIEW_PHOTOS: (string | null)[] = [
-  require('@/assets/itinerary/draft-preview-1.jpg'),
-  require('@/assets/itinerary/draft-preview-2.jpg'),
-  require('@/assets/itinerary/draft-preview-3.jpg'),
+  require('./assets/itinerary/draft-preview-1.jpg'),
+  require('./assets/itinerary/draft-preview-2.jpg'),
+  require('./assets/itinerary/draft-preview-3.jpg'),
 ].map((source) => Image.resolveAssetSource?.(source)?.uri ?? null); // 웹에는 이 API 가 없다(네이티브 전용) — 옵셔널 호출로 웹은 null(사진 없는 카드)
 
 // TRIP-710 d06 프리뷰 히어로 — 로컬 라이선스 에셋 재사용(assets/home/hero-view.jpg, CREDITS.md 有).
 // DRAFT_PREVIEW_PHOTOS 와 같은 패턴: jest 는 .uri 가 undefined 라 회색 자리, 실기만 사진(INV-1 안전).
 const PLACE_DETAIL_PREVIEW_IMAGE: string | null =
-  Image.resolveAssetSource?.(require('@/assets/home/hero-view.jpg'))?.uri ??
-  null;
+  Image.resolveAssetSource?.(
+    require('@/shared/ui/placeholders/home/hero-view.jpg')
+  )?.uri ?? null;
 
 const DRAFT_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
   {
@@ -1074,7 +1075,7 @@ const H15_STAY_RECOMMEND_VIEW: StayRecommendViewModel = {
     {
       savedStayId: 'preview-h15-haeundae',
       name: '해운대 그랜드 호텔',
-      imageSource: require('@/assets/home/collection-haeundae.jpg'),
+      imageSource: require('@/shared/ui/placeholders/home/collection-haeundae.jpg'),
       avgDistanceM: 900,
       maxDistanceM: 1400,
       district: '해운대구',
@@ -1086,7 +1087,7 @@ const H15_STAY_RECOMMEND_VIEW: StayRecommendViewModel = {
     {
       savedStayId: 'preview-h15-seomyeon',
       name: '서면 시티 호텔',
-      imageSource: require('@/assets/home/hero-night.jpg'),
+      imageSource: require('@/shared/ui/placeholders/home/hero-night.jpg'),
       avgDistanceM: 1200,
       maxDistanceM: 2000,
       district: '부산진구',
@@ -1098,7 +1099,7 @@ const H15_STAY_RECOMMEND_VIEW: StayRecommendViewModel = {
     {
       savedStayId: 'preview-h15-gwangalli',
       name: '광안리 오션뷰',
-      imageSource: require('@/assets/execution/live-gwangalli-1.jpg'),
+      imageSource: require('./assets/execution/live-gwangalli-1.jpg'),
       avgDistanceM: 1300,
       maxDistanceM: 1800,
       district: '수영구',
@@ -1483,21 +1484,21 @@ const MY_PAGE_PAST_VMS: PastTripCardVM[] = [
     '제주 여행',
     '2026.5.1–5.3',
     '사진 24',
-    require('@/assets/my-page/past-jeju.jpg')
+    require('./assets/my-page/past-jeju.jpg')
   ),
   myPagePastVM(
     'e-gangneung',
     '강릉 여행',
     '2026.4.18–4.20',
     '사진 16',
-    require('@/assets/my-page/past-gangneung.jpg')
+    require('./assets/my-page/past-gangneung.jpg')
   ),
   myPagePastVM(
     'e-busan',
     '부산 여행',
     '2025.10.3–10.5',
     '사진 30',
-    require('@/assets/my-page/past-busan.jpg')
+    require('./assets/my-page/past-busan.jpg')
   ),
 ];
 
@@ -1728,7 +1729,7 @@ const REPLAN_DRAFT_PREVIEW_SLOTS: ReplanSlotVM[] = [
     slotKey: 'i06-1',
     placeName: '감천문화마을',
     tone: 'visited',
-    photo: require('@/assets/execution/live-gamcheon-1.jpg'),
+    photo: require('./assets/execution/live-gamcheon-1.jpg'),
     category: 'SIGHT',
     timeLabel: '09:30 방문',
     categoryLabel: '마을 · 벽화',
@@ -1739,7 +1740,7 @@ const REPLAN_DRAFT_PREVIEW_SLOTS: ReplanSlotVM[] = [
     slotKey: 'i06-2',
     placeName: '광안리 해변',
     tone: 'visited',
-    photo: require('@/assets/execution/live-gwangalli-1.jpg'),
+    photo: require('./assets/execution/live-gwangalli-1.jpg'),
     category: 'NATURE',
     timeLabel: '11:00 방문',
     categoryLabel: '바다 · 산책',
@@ -1750,7 +1751,7 @@ const REPLAN_DRAFT_PREVIEW_SLOTS: ReplanSlotVM[] = [
     slotKey: 'i06-3',
     placeName: '부산시립미술관',
     tone: 'visited',
-    photo: require('@/assets/execution/replan-night-1.jpg'),
+    photo: require('./assets/execution/replan-night-1.jpg'),
     category: 'CULTURE',
     timeLabel: '13:00 도착 · 관람 중',
     categoryLabel: '미술 · 실내',
@@ -1761,7 +1762,7 @@ const REPLAN_DRAFT_PREVIEW_SLOTS: ReplanSlotVM[] = [
     slotKey: 'i06-4',
     placeName: '전포 카페거리',
     tone: 'planned',
-    photo: require('@/assets/execution/live-gamcheon-2.jpg'),
+    photo: require('./assets/execution/live-gamcheon-2.jpg'),
     category: 'CAFE',
     timeLabel: '15:00–16:30',
     categoryLabel: '카페 · 실내',
@@ -1772,7 +1773,7 @@ const REPLAN_DRAFT_PREVIEW_SLOTS: ReplanSlotVM[] = [
     slotKey: 'i06-5',
     placeName: 'F1963 복합문화공간',
     tone: 'planned',
-    photo: require('@/assets/execution/replan-night-1.jpg'),
+    photo: require('./assets/execution/replan-night-1.jpg'),
     category: 'CULTURE',
     timeLabel: '17:00–18:30',
     categoryLabel: '전시 · 실내',
@@ -1911,8 +1912,8 @@ const LIVE_HUB_PREVIEW_SLOTS: LiveHubSlot[] = [
       129.0106
     ),
     photos: [
-      require('@/assets/execution/live-gamcheon-1.jpg'),
-      require('@/assets/execution/live-gamcheon-2.jpg'),
+      require('./assets/execution/live-gamcheon-1.jpg'),
+      require('./assets/execution/live-gamcheon-2.jpg'),
     ],
     memo: '골목마다 알록달록한 벽화. 전망대에서 인증샷 남겼다.',
   },
@@ -1927,8 +1928,8 @@ const LIVE_HUB_PREVIEW_SLOTS: LiveHubSlot[] = [
       129.1186
     ),
     photos: [
-      require('@/assets/execution/live-gwangalli-1.jpg'),
-      require('@/assets/execution/live-gwangalli-2.jpg'),
+      require('./assets/execution/live-gwangalli-1.jpg'),
+      require('./assets/execution/live-gwangalli-2.jpg'),
     ],
     memo: '바람이 좋았다. 백사장 산책하고 커피 한 잔 마셨다.',
   },
@@ -2225,7 +2226,7 @@ const I07_EDIT_SLOTS: ItineraryDaysItemSlotsItem[] = [
     '10:30:00',
     '감천문화마을',
     ['마을', '벽화'],
-    require('@/assets/execution/live-gamcheon-1.jpg')
+    require('./assets/execution/live-gamcheon-1.jpg')
   ),
   i07Slot(
     'i07-2',
@@ -2233,7 +2234,7 @@ const I07_EDIT_SLOTS: ItineraryDaysItemSlotsItem[] = [
     '12:00:00',
     '광안리 해변',
     ['바다', '산책'],
-    require('@/assets/execution/live-gwangalli-1.jpg')
+    require('./assets/execution/live-gwangalli-1.jpg')
   ),
   i07Slot(
     'i07-3',
@@ -2241,7 +2242,7 @@ const I07_EDIT_SLOTS: ItineraryDaysItemSlotsItem[] = [
     '14:30:00',
     '부산시립미술관',
     ['미술', '실내'],
-    require('@/assets/execution/replan-night-1.jpg'),
+    require('./assets/execution/replan-night-1.jpg'),
     '숙소 고정 충돌'
   ),
   i07Slot(
@@ -2250,7 +2251,7 @@ const I07_EDIT_SLOTS: ItineraryDaysItemSlotsItem[] = [
     '16:30:00',
     '전포 카페거리',
     ['카페', '실내'],
-    require('@/assets/execution/live-gamcheon-2.jpg')
+    require('./assets/execution/live-gamcheon-2.jpg')
   ),
   i07Slot(
     'i07-5',
@@ -2258,7 +2259,7 @@ const I07_EDIT_SLOTS: ItineraryDaysItemSlotsItem[] = [
     '18:30:00',
     '해운대 해변',
     ['바다', '해변'],
-    require('@/assets/execution/i07-haeundae-1.jpg')
+    require('./assets/execution/i07-haeundae-1.jpg')
   ),
 ];
 const I07_EDIT_COMPLETED = ['i07-1', 'i07-2'].map((poiId) =>

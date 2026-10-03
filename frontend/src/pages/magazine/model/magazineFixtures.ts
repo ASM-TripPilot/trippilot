@@ -8,6 +8,8 @@
 
 import { Image } from 'react-native';
 
+import { PLACEHOLDER_PHOTOS } from '@/shared/ui/placeholders';
+
 import type {
   MagazineCard,
   MagazineEditorial,
@@ -17,7 +19,7 @@ import type {
 // 번들 에셋(number 참조)을 `<Image source={{ uri }} />` 자리에 넣을 문자열 URI 로 푼다
 // (homeFixtures.toUri 와 동형 — 슬라이스 내부 헬퍼라 재적음). jest·웹에선 `.uri` 가 undefined
 // → `?? null` 로 계약(imageUrl: string | null)에 맞춘다(테스트는 사진 없는 카드, 실기만 썸네일).
-// 실사진 미소싱이라 홈 부산 톤 플레이스홀더를 재사용한다 — 출처·라이선스: src/assets/home/CREDITS.md.
+// 실사진 미소싱이라 홈 부산 톤 플레이스홀더를 재사용한다 — 출처·라이선스: src/shared/ui/placeholders/home/CREDITS.md.
 const toUri = (source: number): string | null =>
   Image.resolveAssetSource?.(source)?.uri ?? null;
 
@@ -37,7 +39,7 @@ const MAGAZINE_EDITORIAL: MagazineEditorial = {
   title: '골목마다 색이 다른 마을',
   subtitle: '감천문화마을에서 반나절, 사진만 담아도 하루가 채워져요',
   chips: ['당일치기', '포토 명소'],
-  imageUrl: toUri(require('@/assets/home/collection-gamcheon.jpg')),
+  imageUrl: toUri(PLACEHOLDER_PHOTOS.collectionGamcheon),
 };
 
 // 매서너리 6카드 — 좌열(200/250/180) 3장 → 우열(260/190/220) 3장 순(card-i = cards[i] 인덱스).
@@ -47,37 +49,37 @@ const MAGAZINE_CARDS: readonly MagazineCard[] = [
     title: '전포 카페 투어',
     tag: '#감성카페',
     height: 200,
-    imageUrl: toUri(require('@/assets/home/spot-jeonpo.jpg')),
+    imageUrl: toUri(PLACEHOLDER_PHOTOS.spotJeonpo),
   },
   {
     title: '해운대 오션뷰',
     tag: '#바다멍',
     height: 250,
-    imageUrl: toUri(require('@/assets/home/collection-haeundae.jpg')),
+    imageUrl: toUri(PLACEHOLDER_PHOTOS.collectionHaeundae),
   },
   {
     title: '자갈치 먹방',
     tag: '#로컬푸드',
     height: 180,
-    imageUrl: toUri(require('@/assets/home/spot-jagalchi.jpg')),
+    imageUrl: toUri(PLACEHOLDER_PHOTOS.spotJagalchi),
   },
   {
     title: '부산 야경 명소',
     tag: '#야경',
     height: 260,
-    imageUrl: toUri(require('@/assets/home/hero-night.jpg')),
+    imageUrl: toUri(PLACEHOLDER_PHOTOS.heroNight),
   },
   {
     title: '바다 위 사찰',
     tag: '#힐링',
     height: 190,
-    imageUrl: toUri(require('@/assets/home/collection-yonggungsa.jpg')),
+    imageUrl: toUri(PLACEHOLDER_PHOTOS.collectionYonggungsa),
   },
   {
     title: '광안리 산책',
     tag: '#노을',
     height: 220,
-    imageUrl: toUri(require('@/assets/home/hero-view.jpg')),
+    imageUrl: toUri(PLACEHOLDER_PHOTOS.heroView),
   },
 ];
 
