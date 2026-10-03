@@ -27,10 +27,18 @@ const expoConfig = require('eslint-config-expo/flat');
 //
 // app·app-shell 은 target 에 넣지 않는다 — 공식 FSD v2.1 은 app 층이 아래 층 전부(features 포함)를
 // import 하는 것을 허용한다(TRIP-1142 결정). 라우트는 page 를 꽂는 얇은 래퍼로 둔다(권장, lint 강제 없음).
+//
+// 라우트(TRIP-1161): Expo Router 라우트는 src 밖 루트 app/ 에 있다(ROUTES). app 층과 같은 자리 — 아래 층이 라우트를
+// import 하면 위반이고(from), 라우트 자신은 아래 층을 공개 API 로만 문다(deepZones). 아래 블록의 files 글롭도
+// src/** 만 보면 라우트가 통째로 빠지므로 ROUTE_FILES 를 함께 건다(빠지면 lint 가 green 인 채 보호 4종이 꺼진다).
 
 const SRC = path.join(__dirname, 'src');
 // `layerGlob('features','auth')` → `<abs>/src/features/auth/**` (해당 층·슬라이스 아래 전부).
 const layerGlob = (...segments) => path.join(SRC, ...segments, '**');
+// 라우트 폴더(루트 app/) — 절대 glob(위 계약 (2)와 같은 이유).
+const ROUTES = path.join(__dirname, 'app', '**');
+const ROUTE_FILES = 'app/**/*.{ts,tsx}';
+const ROUTE_DEV = 'app/_dev/**';
 
 // 층별 슬라이스 목록은 손으로 나열하지 않고 디렉토리에서 읽는다 — 새 슬라이스가 생기면 자동으로
 // 형제 격리 대상에 편입돼 하드코딩 드리프트를 막는다(구조 테스트도 같은 방식으로 목록을 읽는다).
@@ -67,14 +75,16 @@ const ABOVE_FEATURES = [
   layerGlob('pages'),
   layerGlob('app'),
   layerGlob('app-shell'),
+  ROUTES,
 ];
 const ABOVE_ENTITIES = [layerGlob('features'), ...ABOVE_FEATURES];
 const ABOVE_WIDGETS = [
   layerGlob('pages'),
   layerGlob('app'),
   layerGlob('app-shell'),
+  ROUTES,
 ];
-const ABOVE_PAGES = [layerGlob('app'), layerGlob('app-shell')];
+const ABOVE_PAGES = [layerGlob('app'), layerGlob('app-shell'), ROUTES];
 const ABOVE_SHARED = [layerGlob('entities'), ...ABOVE_ENTITIES];
 
 const layerZones = [
@@ -142,7 +152,7 @@ const layerZones = [
 // 슬라이스 밖에서는 그 슬라이스의 공개 API(index*.ts)로만 import 한다 — 딥 경로 금지. shared 는 세그먼트
 // index*(shared/ui·lib 는 루트 직속 파일 + 하위 폴더 index*). 진입점은 index.ts 와 `index.<이름>.ts`(예:
 // 네트워크 없는 `index.view.ts`, shared/api 의 `index.schemas.ts`·`index.hooks.ts`)를 함께 허용한다.
-// 대상(target)은 각 슬라이스와 app·app-shell 이다. 자기 슬라이스 안은 except 로 허용, entities 는 @x 창구도 허용.
+// 대상(target)은 각 슬라이스와 app·app-shell·라우트(ROUTES)다. 자기 슬라이스 안은 except 로 허용, entities 는 @x 창구도 허용.
 // 테스트·목·`_dev` 는 이 zone 밖이다(jest.mock 은 정의 모듈을 겨눠야 index 소비처까지 가로챈다).
 // import·export-from·import()·함수 안 require() 를 모두 잡는다(eslint-plugin-import 2.32.0 실측).
 const PUBLIC_API = [
@@ -193,6 +203,12 @@ const deepZones = [
     except: PUBLIC_API,
     message: DEEP_MESSAGE,
   })),
+  {
+    target: ROUTES,
+    from: BELOW_APP,
+    except: PUBLIC_API,
+    message: DEEP_MESSAGE,
+  },
 ];
 
 // ── 출시·보안 금지(TRIP-1145 — 소스 스캔에서 옮겨 왔다) ────────────────────────────────
@@ -311,7 +327,7 @@ module.exports = defineConfig([
     ignores: ['dist/*', '.expo/*', 'ios/*', 'android/*', 'web/*', '.claude/**'],
   },
   {
-    files: ['src/**/*.{ts,tsx}'],
+    files: ['src/**/*.{ts,tsx}', ROUTE_FILES],
     rules: {
       'import/no-restricted-paths': ['error', { zones: layerZones }],
       // NativeWind 전역 스타일은 side-effect import 이며 확장자 resolver 대상이 아니다.
@@ -321,8 +337,8 @@ module.exports = defineConfig([
   {
     // 공개 API 강제(TRIP-1157) — 프로덕션 파일만. 같은 규칙이라 층 zone 을 펼쳐 함께 선언한다(위 ⚠️ 덮어쓰기).
     // 테스트·목·_dev 는 앞 블록(층 zone 만)이 그대로 남는다.
-    files: ['src/**/*.{ts,tsx}'],
-    ignores: [...TEST_IGNORES, 'src/app/_dev/**'],
+    files: ['src/**/*.{ts,tsx}', ROUTE_FILES],
+    ignores: [...TEST_IGNORES, ROUTE_DEV],
     rules: {
       'import/no-restricted-paths': [
         'error',
@@ -332,7 +348,7 @@ module.exports = defineConfig([
   },
   {
     // 출시·보안 공통 금지 — 앱 프로덕션 파일 전부(테스트·목·test-support 제외).
-    files: ['src/**/*.{ts,tsx}'],
+    files: ['src/**/*.{ts,tsx}', ROUTE_FILES],
     ignores: TEST_IGNORES,
     rules: {
       'no-restricted-imports': restrictedImports(nativePaths(NATIVE_MODULES), [
@@ -367,14 +383,14 @@ module.exports = defineConfig([
     },
   },
   {
-    files: ['src/**/*.tsx'],
-    ignores: [...TEST_IGNORES, 'src/app/_dev/**'],
+    files: ['src/**/*.tsx', 'app/**/*.tsx'],
+    ignores: [...TEST_IGNORES, ROUTE_DEV],
     rules: { 'no-restricted-syntax': ['error', ...DELETE_DIALOG_GATE] },
   },
   {
-    // 빈 핸들러 금지는 pages·app 만(원 스캔 범위). 같은 규칙이라 삭제 게이트를 펼쳐 함께 선언한다(위 ⚠️).
-    files: ['src/pages/**/*.tsx', 'src/app/**/*.tsx'],
-    ignores: [...TEST_IGNORES, 'src/app/_dev/**'],
+    // 빈 핸들러 금지는 pages·라우트만(원 스캔 범위). 같은 규칙이라 삭제 게이트를 펼쳐 함께 선언한다(위 ⚠️).
+    files: ['src/pages/**/*.tsx', 'app/**/*.tsx'],
+    ignores: [...TEST_IGNORES, ROUTE_DEV],
     rules: {
       'no-restricted-syntax': ['error', ...DELETE_DIALOG_GATE, ...DEAD_HANDLER],
     },

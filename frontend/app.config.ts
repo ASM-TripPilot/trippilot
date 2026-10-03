@@ -65,7 +65,10 @@ const config: ExpoConfig = {
   },
   plugins: [
     // TRIP-935 R3 — 개발용 라우트 목록(/_sitemap)을 운영 빌드에서 끈다. 네이티브 설정이라 재빌드 필요.
-    ['expo-router', { sitemap: false }],
+    // TRIP-1161 — 라우트 루트를 루트 app/ 로 고정한다. Expo CLI 는 src/app 이 **있으면 무조건** 그것을 라우트 루트로
+    // 고른다(@expo/cli getRouterDirectory) — src/app 은 이제 FSD app 층이라 이 옵션이 없으면 그 층 파일(테스트 포함)이
+    // 화면으로 등록된다. 번들 시점(babel caller routerRoot)에만 쓰이는 값이라 네이티브 재빌드는 필요 없다.
+    ['expo-router', { sitemap: false, root: './app' }],
     // 옵션을 false(불리언)로 줘야 플러그인이 영문 기본 권한 문구를 Info.plist 에서 지운다 —
     // 문자열 'false'·생략은 문구가 남는다. Face ID·"항상 허용" 위치는 쓰지 않는다(TRIP-936).
     ['expo-secure-store', { faceIDPermission: false }],

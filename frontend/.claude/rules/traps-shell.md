@@ -1,6 +1,6 @@
 ---
 paths:
-  - "src/app/**"
+  - "app/**"
   - "src/shared/ui/**"
 ---
 이 파일은 repo-traps.md에서 경로별로 쪼갠 함정이다 — 해당 경로 만질 때만 로드된다.

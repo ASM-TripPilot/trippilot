@@ -1,9 +1,9 @@
 import { render, screen } from '@testing-library/react-native';
 
 import { usePreferenceStore } from '@/features/edit-preferences';
-import OnboardingLayout from '@/app/(onboarding)/_layout';
-import Pref1Route from '@/app/(onboarding)/pref1';
-import Pref2Route from '@/app/(onboarding)/pref2';
+import OnboardingLayout from '@routes/(onboarding)/_layout';
+import Pref1Route from '@routes/(onboarding)/pref1';
+import Pref2Route from '@routes/(onboarding)/pref2';
 
 /**
  * AC3 · FW1 — 취향 라우트가 (onboarding) 가드에 걷어차이지 않고, 라우트 래퍼가 실제

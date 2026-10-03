@@ -22,7 +22,7 @@ jest.mock('@/pages/itinerary/itinerary-manual', () => ({
 }));
 
 // eslint-disable-next-line import/first -- 목 뒤에 라우트를 불러야 목이 물린다.
-import ManualPlanRoute from '@/app/trips/[tripId]/itinerary/manual/index';
+import ManualPlanRoute from '@routes/trips/[tripId]/itinerary/manual/index';
 
 beforeEach(() => {
   mockPageProps.length = 0;

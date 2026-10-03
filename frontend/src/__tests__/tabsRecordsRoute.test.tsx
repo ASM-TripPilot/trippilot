@@ -53,7 +53,7 @@ jest.mock('@/shared/api/generated/trips/trips', () => ({
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const RecordsRoute = require('@/app/(tabs)/records').default;
+const RecordsRoute = require('@routes/(tabs)/records').default;
 
 /** 기본 대본 — 일정이 영영 안 온다(대기에 머물러 상태 갱신·act 경고가 없다). */
 function itineraryNeverArrives(): void {

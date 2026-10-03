@@ -39,7 +39,7 @@ jest.mock('@/app-shell/ui/SplashGate', () =>
 );
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const RootLayout = require('@/app/_layout').default as ComponentType;
+const RootLayout = require('@routes/_layout').default as ComponentType;
 type ToastModule = typeof import('@/shared/ui/Toast');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const Toast = require('@/shared/ui/Toast') as ToastModule;

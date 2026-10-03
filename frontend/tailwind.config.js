@@ -2,7 +2,8 @@
 // theme.extend 는 Figma TripPilot 변수 컬렉션(파일 1MTF3dtptIrbg8gld5IdO2)의 미러다.
 // Figma 변수를 바꾸면 여기와 src/__tests__/design-tokens.test.ts 를 함께 갱신한다.
 module.exports = {
-  content: ['./src/**/*.{js,jsx,ts,tsx}'],
+  // 라우트(루트 app/)도 넣는다 — 빠지면 라우트에서만 쓰는 클래스의 스타일이 조용히 안 생긴다(TRIP-1161 실측 11개).
+  content: ['./src/**/*.{js,jsx,ts,tsx}', './app/**/*.{js,jsx,ts,tsx}'],
   presets: [require('nativewind/preset')],
   theme: {
     extend: {

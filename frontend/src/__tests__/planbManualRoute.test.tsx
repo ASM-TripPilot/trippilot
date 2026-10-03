@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react-native';
 
-import PlanbManualRoute from '@/app/trips/[tripId]/planb/manual';
+import PlanbManualRoute from '@routes/trips/[tripId]/planb/manual';
 
 /**
  * TRIP-753 · AC-1 — i07 일정 편집 라우트 `trips/[tripId]/planb/manual` 은 h12 편집 페이지

@@ -5,7 +5,7 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import NotFoundRoute from '@/app/+not-found';
+import NotFoundRoute from '@routes/+not-found';
 
 /**
  * TRIP-935 AC-2(R3) · 없는 경로 화면 `+not-found`.

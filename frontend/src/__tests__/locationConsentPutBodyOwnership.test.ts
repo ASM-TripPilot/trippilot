@@ -125,9 +125,9 @@ describe('TRIP-609 · consentPutBody 단일 통로 + shared 배치 가드', () =
   });
 
   it('AC-5 배치 — 라우트·슬라이스 배럴·페이지가 관례대로 실재한다', () => {
-    expect(existsSync(join(SRC_ROOT, 'app', 'settings', 'location.tsx'))).toBe(
-      true
-    );
+    expect(
+      existsSync(join(SRC_ROOT, '..', 'app', 'settings', 'location.tsx'))
+    ).toBe(true);
     expect(
       existsSync(
         join(SRC_ROOT, 'pages', 'settings', 'settings-location', 'index.ts')

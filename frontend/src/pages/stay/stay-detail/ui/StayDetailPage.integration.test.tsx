@@ -454,7 +454,7 @@ describe('D8 · 비정상 얼굴의 뒤로 = router.back (TRIP-940 AC-9)', () =>
 });
 
 describe('D9 · 404·400 은 자동 재시도 없이 바로 (TRIP-940 AC-13 · 맹점 ①-b)', () => {
-  // 운영 QueryClient(`src/app/_layout.tsx`)는 기본 재시도 3회다. 테스트 공용 wrapper 는 retry:false 라
+  // 운영 QueryClient(`app/_layout.tsx`)는 기본 재시도 3회다. 테스트 공용 wrapper 는 retry:false 라
   // 이 차이를 못 본다 → 여기서만 **재시도가 켜진** 클라이언트로 돌린다(지연 0 — 켜져 있으면 즉시 4회).
   function retryingWrapper() {
     const client = new QueryClient({

@@ -52,7 +52,7 @@ const { GestureHandlerRootView } = require('react-native-gesture-handler');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { SafeAreaProvider } = require('react-native-safe-area-context');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const RootLayout = require('@/app/_layout').default as ComponentType;
+const RootLayout = require('@routes/_layout').default as ComponentType;
 
 describe('루트 레이아웃 — SafeAreaProvider 전역 도입 (AC E1)', () => {
   it('SafeAreaProvider 가 GestureHandlerRootView 안쪽에 존재한다 (D4)', () => {

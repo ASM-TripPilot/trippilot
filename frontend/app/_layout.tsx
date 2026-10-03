@@ -1,4 +1,4 @@
-import '../../global.css';
+import '../global.css';
 
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';

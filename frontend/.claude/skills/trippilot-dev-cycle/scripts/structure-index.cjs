@@ -35,7 +35,8 @@ const ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const DOC = path.join(ROOT, 'docs', 'structure.md');
 // 기계 담당 절반 — `--write`가 생성하는 인벤토리. 손으로 고치지 않는다(다음 --write가 덮는다).
 const GEN_DOC = path.join(ROOT, 'docs', 'structure.generated.md');
-const SCAN_DIRS = ['src', '__mocks__'];
+// app = Expo Router 라우트 폴더(루트, TRIP-1161). 빠지면 라우트가 지도에서 사라지고 --check 도 안 본다.
+const SCAN_DIRS = ['src', '__mocks__', 'app'];
 
 // 옵시디언 볼트 — 개념 노트의 `설명하는코드` 유령 검사용.
 // 없으면 그 검사만 건너뛴다(다른 기기·CI에서 실패시키지 않는다).
@@ -112,7 +113,7 @@ function documentedPaths() {
   for (const doc of sources)
     for (const m of doc.matchAll(/`([^`\n]+)`/g)) {
       const v = m[1].trim();
-      if (/^(src|__mocks__)\/[^\s]+\.(ts|tsx)$/.test(v)) set.add(v);
+      if (/^(src|__mocks__|app)\/[^\s]+\.(ts|tsx)$/.test(v)) set.add(v);
     }
   return set;
 }

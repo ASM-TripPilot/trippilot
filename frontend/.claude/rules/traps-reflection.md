@@ -4,7 +4,7 @@ paths:
   - "src/pages/record/share-card/**"
   - "src/pages/record/trip-summary/**"
   - "src/pages/record/daily-reflection/**"
-  - "src/app/trips/[tripId]/records/**"
+  - "app/trips/[tripId]/records/**"
   - "src/features/share-trip-card/**"
   - "src/pages/record/travel-style/**"
 ---

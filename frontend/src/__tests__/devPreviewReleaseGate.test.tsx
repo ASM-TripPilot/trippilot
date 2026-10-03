@@ -79,7 +79,7 @@ jest.mock('@/shared/push/request', () => {
 });
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const previewModule = require('@/app/_dev/preview') as {
+const previewModule = require('@routes/_dev/preview') as {
   default: ComponentType;
   PREVIEW_STATES: { key: string }[];
 };

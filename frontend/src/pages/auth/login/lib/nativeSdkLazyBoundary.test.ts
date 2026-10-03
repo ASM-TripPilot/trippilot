@@ -2,7 +2,7 @@
  * @jest-environment node
  */
 import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 
 /**
  * AC-11 (lazy 소스 스캔) — 네이티브 SDK(카카오·네이버, TRIP-932 에서 애플 추가)가 정적 import 그래프에 실리지 않게 강제.
@@ -21,6 +21,8 @@ import { join } from 'node:path';
 
 const LIB_DIR = __dirname;
 const SRC_DIR = join(LIB_DIR, '..', '..', '..', '..');
+// 라우트는 src 밖 루트 app/ 에 있다(TRIP-1161) — 프로덕션 모집단에 함께 넣는다(빠지면 라우트의 SDK 정적 import 가 사각).
+const ROUTES_DIR = join(SRC_DIR, '..', 'app');
 const MAKE_AUTHORIZE = join(LIB_DIR, 'makeAuthorize.ts');
 const OAUTH_CONFIG = join(LIB_DIR, '..', 'config', 'oauthConfig.ts');
 const TEST_ONLY_DIRS = ['__tests__', '__mocks__', 'test-support', 'mocks'];
@@ -75,15 +77,16 @@ function libSources(): { file: string; source: string }[] {
     }));
 }
 
-/** `src/**` 프로덕션 파일 전체 — 테스트 파일도, 테스트 전용 디렉토리도 아닌 것. */
+/** `src/**`·라우트(`app/**`) 프로덕션 파일 전체 — 테스트 파일도, 테스트 전용 디렉토리도 아닌 것. 경로는 src 기준(라우트는 `../app/…`). */
 function productionSources(): { file: string; source: string }[] {
-  return listSourceFiles(SRC_DIR)
+  return [SRC_DIR, ROUTES_DIR]
+    .flatMap(listSourceFiles)
     .filter((full) => {
-      const rel = full.slice(SRC_DIR.length + 1).split('/');
+      const rel = relative(SRC_DIR, full).split('/');
       return !rel.some((segment) => TEST_ONLY_DIRS.includes(segment));
     })
     .map((full) => ({
-      file: full.slice(SRC_DIR.length + 1),
+      file: relative(SRC_DIR, full),
       source: stripComments(readFileSync(full, 'utf8')),
     }));
 }

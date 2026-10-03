@@ -12,6 +12,137 @@
 - `__mocks__/expo-notifications.ts`  →  getPermissionsAsync · requestPermissionsAsync · getExpoPushTokenAsync · setNotificationChannelAsync · AndroidImportance
 - `__mocks__/react-native-draggable-flatlist.tsx`  →  __dragLog · ScaleDecorator · OpacityDecorator · ShadowDecorator · NestableDraggableFlatList · NestableScrollContainer
 
+## app/(auth)/
+- `app/(auth)/_layout.tsx`  →  (export 없음)
+- `app/(auth)/login.tsx`  →  (export 없음)
+
+## app/(onboarding)/
+- `app/(onboarding)/_layout.tsx`  →  (export 없음)
+- `app/(onboarding)/index.tsx`  →  (export 없음)
+- `app/(onboarding)/location.tsx`  →  (export 없음)
+- `app/(onboarding)/nickname.tsx`  →  (export 없음)
+- `app/(onboarding)/pref1.tsx`  →  (export 없음)
+- `app/(onboarding)/pref2.tsx`  →  (export 없음)
+- `app/(onboarding)/push.tsx`  →  (export 없음)
+- `app/(onboarding)/terms.tsx`  →  (export 없음)
+
+## app/(tabs)/
+- `app/(tabs)/_layout.tsx`  →  (export 없음)
+- `app/(tabs)/explore.tsx`  →  (export 없음)
+- `app/(tabs)/index.tsx`  →  (export 없음)
+- `app/(tabs)/itinerary.tsx`  →  (export 없음)
+- `app/(tabs)/my.tsx`  →  (export 없음)
+- `app/(tabs)/records.tsx`  →  (export 없음)
+
+## app/
+- `app/+not-found.tsx`  →  (export 없음)
+
+## app/_dev/
+- `app/_dev/preview.tsx`  →  MUST_VISIT_THUMBNAILS · PREVIEW_STATES
+
+## app/
+- `app/_layout.tsx`  →  (export 없음)
+
+## app/explore/destination/
+- `app/explore/destination/[region].tsx`  →  (export 없음)
+
+## app/explore/
+- `app/explore/places.tsx`  →  (export 없음)
+
+## app/explore/places/
+- `app/explore/places/[poiId].tsx`  →  (export 없음)
+
+## app/explore/
+- `app/explore/region.tsx`  →  (export 없음)
+- `app/explore/saved-places.tsx`  →  (export 없음)
+
+## app/
+- `app/force-update.tsx`  →  (export 없음)
+- `app/magazine.tsx`  →  (export 없음)
+
+## app/my/
+- `app/my/stays.tsx`  →  (export 없음)
+
+## app/
+- `app/notifications.tsx`  →  (export 없음)
+- `app/reconsent.tsx`  →  (export 없음)
+
+## app/records/
+- `app/records/style.tsx`  →  (export 없음)
+
+## app/settings/
+- `app/settings/index.tsx`  →  (export 없음)
+- `app/settings/location.tsx`  →  (export 없음)
+- `app/settings/notifications.tsx`  →  (export 없음)
+- `app/settings/personalization.tsx`  →  (export 없음)
+- `app/settings/preferences.tsx`  →  (export 없음)
+
+## app/stays/
+- `app/stays/[stayId].tsx`  →  (export 없음)
+- `app/stays/index.tsx`  →  (export 없음)
+- `app/stays/register.tsx`  →  (export 없음)
+- `app/stays/saved.tsx`  →  (export 없음)
+
+## app/terms/
+- `app/terms/[termsType].tsx`  →  (export 없음)
+
+## app/trips/[tripId]/
+- `app/trips/[tripId]/bases.tsx`  →  (export 없음)
+
+## app/trips/[tripId]/itinerary/copick/
+- `app/trips/[tripId]/itinerary/copick/[slotKey].tsx`  →  (export 없음)
+- `app/trips/[tripId]/itinerary/copick/complete.tsx`  →  (export 없음)
+
+## app/trips/[tripId]/itinerary/
+- `app/trips/[tripId]/itinerary/draft.tsx`  →  (export 없음)
+- `app/trips/[tripId]/itinerary/edit.tsx`  →  (export 없음)
+- `app/trips/[tripId]/itinerary/generating.tsx`  →  (export 없음)
+- `app/trips/[tripId]/itinerary/index.tsx`  →  (export 없음)
+
+## app/trips/[tripId]/itinerary/manual/
+- `app/trips/[tripId]/itinerary/manual/add.tsx`  →  (export 없음)
+- `app/trips/[tripId]/itinerary/manual/index.tsx`  →  (export 없음)
+
+## app/trips/[tripId]/itinerary/
+- `app/trips/[tripId]/itinerary/method.tsx`  →  (export 없음)
+
+## app/trips/[tripId]/itinerary/must-visits/
+- `app/trips/[tripId]/itinerary/must-visits/[poiId].tsx`  →  (export 없음)
+- `app/trips/[tripId]/itinerary/must-visits/index.tsx`  →  (export 없음)
+
+## app/trips/[tripId]/itinerary/
+- `app/trips/[tripId]/itinerary/stay-recommend.tsx`  →  (export 없음)
+
+## app/trips/[tripId]/live/
+- `app/trips/[tripId]/live/index.tsx`  →  (export 없음)
+- `app/trips/[tripId]/live/location.tsx`  →  (export 없음)
+
+## app/trips/[tripId]/live/place/
+- `app/trips/[tripId]/live/place/[poiId].tsx`  →  (export 없음)
+
+## app/trips/[tripId]/planb/
+- `app/trips/[tripId]/planb/diff.tsx`  →  (export 없음)
+- `app/trips/[tripId]/planb/draft.tsx`  →  (export 없음)
+- `app/trips/[tripId]/planb/index.tsx`  →  (export 없음)
+- `app/trips/[tripId]/planb/manual.tsx`  →  (export 없음)
+- `app/trips/[tripId]/planb/solving.tsx`  →  (export 없음)
+
+## app/trips/[tripId]/records/
+- `app/trips/[tripId]/records/add-visit.tsx`  →  (export 없음)
+- `app/trips/[tripId]/records/index.tsx`  →  (export 없음)
+
+## app/trips/[tripId]/records/reflection/
+- `app/trips/[tripId]/records/reflection/[date].tsx`  →  (export 없음)
+
+## app/trips/[tripId]/records/
+- `app/trips/[tripId]/records/share.tsx`  →  (export 없음)
+- `app/trips/[tripId]/records/summary.tsx`  →  (export 없음)
+
+## app/trips/new/
+- `app/trips/new/_layout.tsx`  →  (export 없음)
+- `app/trips/new/step1.tsx`  →  (export 없음)
+- `app/trips/new/step2.tsx`  →  (export 없음)
+
 ## src/__tests__/
 - `src/__tests__/affiliateNoticeOneTruth.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/copickHrefRoundTrip.integration.test.tsx`  →  (export 없음)
@@ -70,137 +201,6 @@
 
 ## src/app-shell/ui/
 - `src/app-shell/ui/SplashGate.tsx`  →  SPLASH_MIN_VISIBLE_MS · SplashGate
-
-## src/app/(auth)/
-- `src/app/(auth)/_layout.tsx`  →  (export 없음)
-- `src/app/(auth)/login.tsx`  →  (export 없음)
-
-## src/app/(onboarding)/
-- `src/app/(onboarding)/_layout.tsx`  →  (export 없음)
-- `src/app/(onboarding)/index.tsx`  →  (export 없음)
-- `src/app/(onboarding)/location.tsx`  →  (export 없음)
-- `src/app/(onboarding)/nickname.tsx`  →  (export 없음)
-- `src/app/(onboarding)/pref1.tsx`  →  (export 없음)
-- `src/app/(onboarding)/pref2.tsx`  →  (export 없음)
-- `src/app/(onboarding)/push.tsx`  →  (export 없음)
-- `src/app/(onboarding)/terms.tsx`  →  (export 없음)
-
-## src/app/(tabs)/
-- `src/app/(tabs)/_layout.tsx`  →  (export 없음)
-- `src/app/(tabs)/explore.tsx`  →  (export 없음)
-- `src/app/(tabs)/index.tsx`  →  (export 없음)
-- `src/app/(tabs)/itinerary.tsx`  →  (export 없음)
-- `src/app/(tabs)/my.tsx`  →  (export 없음)
-- `src/app/(tabs)/records.tsx`  →  (export 없음)
-
-## src/app/
-- `src/app/+not-found.tsx`  →  (export 없음)
-
-## src/app/_dev/
-- `src/app/_dev/preview.tsx`  →  MUST_VISIT_THUMBNAILS · PREVIEW_STATES
-
-## src/app/
-- `src/app/_layout.tsx`  →  (export 없음)
-
-## src/app/explore/destination/
-- `src/app/explore/destination/[region].tsx`  →  (export 없음)
-
-## src/app/explore/
-- `src/app/explore/places.tsx`  →  (export 없음)
-
-## src/app/explore/places/
-- `src/app/explore/places/[poiId].tsx`  →  (export 없음)
-
-## src/app/explore/
-- `src/app/explore/region.tsx`  →  (export 없음)
-- `src/app/explore/saved-places.tsx`  →  (export 없음)
-
-## src/app/
-- `src/app/force-update.tsx`  →  (export 없음)
-- `src/app/magazine.tsx`  →  (export 없음)
-
-## src/app/my/
-- `src/app/my/stays.tsx`  →  (export 없음)
-
-## src/app/
-- `src/app/notifications.tsx`  →  (export 없음)
-- `src/app/reconsent.tsx`  →  (export 없음)
-
-## src/app/records/
-- `src/app/records/style.tsx`  →  (export 없음)
-
-## src/app/settings/
-- `src/app/settings/index.tsx`  →  (export 없음)
-- `src/app/settings/location.tsx`  →  (export 없음)
-- `src/app/settings/notifications.tsx`  →  (export 없음)
-- `src/app/settings/personalization.tsx`  →  (export 없음)
-- `src/app/settings/preferences.tsx`  →  (export 없음)
-
-## src/app/stays/
-- `src/app/stays/[stayId].tsx`  →  (export 없음)
-- `src/app/stays/index.tsx`  →  (export 없음)
-- `src/app/stays/register.tsx`  →  (export 없음)
-- `src/app/stays/saved.tsx`  →  (export 없음)
-
-## src/app/terms/
-- `src/app/terms/[termsType].tsx`  →  (export 없음)
-
-## src/app/trips/[tripId]/
-- `src/app/trips/[tripId]/bases.tsx`  →  (export 없음)
-
-## src/app/trips/[tripId]/itinerary/copick/
-- `src/app/trips/[tripId]/itinerary/copick/[slotKey].tsx`  →  (export 없음)
-- `src/app/trips/[tripId]/itinerary/copick/complete.tsx`  →  (export 없음)
-
-## src/app/trips/[tripId]/itinerary/
-- `src/app/trips/[tripId]/itinerary/draft.tsx`  →  (export 없음)
-- `src/app/trips/[tripId]/itinerary/edit.tsx`  →  (export 없음)
-- `src/app/trips/[tripId]/itinerary/generating.tsx`  →  (export 없음)
-- `src/app/trips/[tripId]/itinerary/index.tsx`  →  (export 없음)
-
-## src/app/trips/[tripId]/itinerary/manual/
-- `src/app/trips/[tripId]/itinerary/manual/add.tsx`  →  (export 없음)
-- `src/app/trips/[tripId]/itinerary/manual/index.tsx`  →  (export 없음)
-
-## src/app/trips/[tripId]/itinerary/
-- `src/app/trips/[tripId]/itinerary/method.tsx`  →  (export 없음)
-
-## src/app/trips/[tripId]/itinerary/must-visits/
-- `src/app/trips/[tripId]/itinerary/must-visits/[poiId].tsx`  →  (export 없음)
-- `src/app/trips/[tripId]/itinerary/must-visits/index.tsx`  →  (export 없음)
-
-## src/app/trips/[tripId]/itinerary/
-- `src/app/trips/[tripId]/itinerary/stay-recommend.tsx`  →  (export 없음)
-
-## src/app/trips/[tripId]/live/
-- `src/app/trips/[tripId]/live/index.tsx`  →  (export 없음)
-- `src/app/trips/[tripId]/live/location.tsx`  →  (export 없음)
-
-## src/app/trips/[tripId]/live/place/
-- `src/app/trips/[tripId]/live/place/[poiId].tsx`  →  (export 없음)
-
-## src/app/trips/[tripId]/planb/
-- `src/app/trips/[tripId]/planb/diff.tsx`  →  (export 없음)
-- `src/app/trips/[tripId]/planb/draft.tsx`  →  (export 없음)
-- `src/app/trips/[tripId]/planb/index.tsx`  →  (export 없음)
-- `src/app/trips/[tripId]/planb/manual.tsx`  →  (export 없음)
-- `src/app/trips/[tripId]/planb/solving.tsx`  →  (export 없음)
-
-## src/app/trips/[tripId]/records/
-- `src/app/trips/[tripId]/records/add-visit.tsx`  →  (export 없음)
-- `src/app/trips/[tripId]/records/index.tsx`  →  (export 없음)
-
-## src/app/trips/[tripId]/records/reflection/
-- `src/app/trips/[tripId]/records/reflection/[date].tsx`  →  (export 없음)
-
-## src/app/trips/[tripId]/records/
-- `src/app/trips/[tripId]/records/share.tsx`  →  (export 없음)
-- `src/app/trips/[tripId]/records/summary.tsx`  →  (export 없음)
-
-## src/app/trips/new/
-- `src/app/trips/new/_layout.tsx`  →  (export 없음)
-- `src/app/trips/new/step1.tsx`  →  (export 없음)
-- `src/app/trips/new/step2.tsx`  →  (export 없음)
 
 ## src/entities/itinerary-slot/config/
 - `src/entities/itinerary-slot/config/altLabel.ts`  →  ALT_LABEL

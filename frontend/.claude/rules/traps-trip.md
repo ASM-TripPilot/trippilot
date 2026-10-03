@@ -2,7 +2,7 @@
 paths:
   - "src/features/trip/**"
   - "src/pages/trip/trip-new-*/**"
-  - "src/app/trips/**"
+  - "app/trips/**"
   - "src/features/create-trip/**"
   - "src/features/assign-trip-base/**"
 ---

@@ -13,7 +13,7 @@
 set -euo pipefail
 
 FE="$(cd "$(dirname "$0")/.." && pwd)"
-PREVIEW_SRC="$FE/src/app/_dev/preview.tsx"
+PREVIEW_SRC="$FE/app/_dev/preview.tsx"
 SCHEME="trippilot"
 PLATFORM="ios"
 

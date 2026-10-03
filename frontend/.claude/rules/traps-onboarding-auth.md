@@ -3,7 +3,7 @@ paths:
   - "src/features/auth/**"
   - "src/features/onboarding/**"
   - "src/pages/onboarding/onboarding-*/**"
-  - "src/app/(onboarding)/**"
+  - "app/(onboarding)/**"
   - "src/pages/auth/login/**"
   - "src/features/edit-preferences/**"
 ---

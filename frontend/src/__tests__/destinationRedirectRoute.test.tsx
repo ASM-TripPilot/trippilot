@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react-native';
 
-import DestinationRoute from '@/app/explore/destination/[region]';
+import DestinationRoute from '@routes/explore/destination/[region]';
 
 /**
  * TRIP-1105 AC-18 — 옛 목적지 상세 딥링크(`/explore/destination/{code}`)는 화면을 그리지 않고
@@ -12,7 +12,7 @@ import DestinationRoute from '@/app/explore/destination/[region]';
  *
  * 왜 이렇게 테스트하나: expo-router 의 `Redirect` 를 "받은 href 를 기록하고 아무것도 안 그리는" 목으로
  * 바꾼다. href 모양(문자열/객체)은 구현 몫이라 "경로 + 파라미터"로 펴서 본다(02a ★16).
- * 라우트 파일 테스트는 `src/app` 밖에 둔다(expo-router 가 `.test.tsx` 를 라우트로 등록한다).
+ * 라우트 파일 테스트는 라우트 폴더(`app/`) 밖에 둔다(expo-router 가 `.test.tsx` 를 라우트로 등록한다).
  */
 
 const mockRedirect = jest.fn();

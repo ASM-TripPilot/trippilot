@@ -357,11 +357,12 @@ const REFLECTION_MODEL_PROBE =
 const CAPTURE_ADAPTER =
   'src/features/share-trip-card/model/shareCaptureNative.ts';
 const STATE_NOTICE = 'src/shared/ui/StateNotice.tsx';
-const ROUTE_PROBE = 'src/app/trips/__release_probe__.tsx';
+// 라우트는 루트 app/ 에 있다(TRIP-1161) — src/app 은 FSD app 층이라 거기 탐침을 두면 라우트가 아니라 그 층을 본다(green 위장).
+const ROUTE_PROBE = 'app/trips/__release_probe__.tsx';
 const PAGE_PROBE = 'src/pages/__release_probe__/x.tsx';
 const SETTINGS_UI_PROBE =
   'src/pages/settings/settings/ui/__release_probe__.tsx';
-const DEV_PREVIEW_PROBE = 'src/app/_dev/__release_probe__.tsx';
+const DEV_PREVIEW_PROBE = 'app/_dev/__release_probe__.tsx';
 
 describe('msw·목은 앱 코드에 들어오지 않는다 (noMswInStaticGraph 이관)', () => {
   it.each([
@@ -401,7 +402,7 @@ describe('msw·목은 앱 코드에 들어오지 않는다 (noMswInStaticGraph �
   // 5-b B1 — 원 스캔은 별칭만이 아니라 상대경로 `../mocks/…` 도 잡았다(src/mocks/server → msw/node 부팅 크래시).
   it.each([
     ['두 칸 위', PROD_PROBE, '../../mocks/server'],
-    ['한 칸 위', 'src/app/__release_probe__.ts', '../mocks/handlers'],
+    ['라우트에서 src 로', 'app/__release_probe__.ts', '../src/mocks/handlers'],
   ])(
     '프로덕션 파일이 src/mocks 를 상대경로(%s)로 import 하면 error',
     async (_label, filePath, spec) => {
@@ -553,7 +554,7 @@ describe('★ 덮어쓰기 함정 — 예외 블록이 있는 파일에서도 �
 
 describe('개발 프리뷰의 가짜 데이터는 앱 코드가 끌지 않는다 (stayRecommendStructure 일부 이관)', () => {
   it.each([
-    ['@ 별칭', '@/app/_dev/preview'],
+    ['@ 별칭', '@routes/_dev/preview'],
     ['상대경로', '../_dev/preview'],
   ])('라우트 파일이 프리뷰를 %s 로 import 하면 error', async (_label, spec) => {
     const ruleIds = await lint(
@@ -790,7 +791,7 @@ describe('TRIP-1157 · 슬라이스 밖 딥 import 는 공개 API 위반이다',
     ],
     [
       '라우트(app) → features 내부',
-      'src/app/(tabs)/__deep_probe__.tsx',
+      'app/(tabs)/__deep_probe__.tsx',
       `import '@/features/home/ui/HomeGlyphs';\n`,
     ],
     [
@@ -842,7 +843,7 @@ describe('TRIP-1157 · 공개 API·자기 슬라이스·테스트·_dev 는 딥 
     ],
     [
       '개발 프리뷰(_dev)의 딥 import',
-      'src/app/_dev/__deep_probe__.tsx',
+      'app/_dev/__deep_probe__.tsx',
       `import '@/features/home/ui/HomeGlyphs';\n`,
     ],
   ])('%s 는 error 0', async (_label, filePath, code) => {

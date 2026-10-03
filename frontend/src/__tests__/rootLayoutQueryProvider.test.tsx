@@ -55,7 +55,7 @@ jest.mock('@/app-shell/ui/SplashGate', () =>
 
 // jestSetup 이 먼저 돌아야 하므로 import 문(호이스팅) 대신 require 로 순서를 고정한다.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const RootLayout = require('@/app/_layout').default as ComponentType;
+const RootLayout = require('@routes/_layout').default as ComponentType;
 
 describe('AC-3 · 루트 레이아웃 — QueryClientProvider 관찰 가능성 (C-1)', () => {
   beforeEach(() => {

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import MagazineRoute from '@/app/magazine';
+import MagazineRoute from '@routes/magazine';
 
 /**
  * TRIP-700 a02 매거진 목록 라우트 + 컨테이너 배선. ⚠️ 라우트(`app/magazine.tsx`)·페이지

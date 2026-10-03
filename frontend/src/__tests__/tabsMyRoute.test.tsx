@@ -11,7 +11,7 @@ import {
   useGetTripsTripIdBases,
   useGetTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
-import MyScreen from '@/app/(tabs)/my';
+import MyScreen from '@routes/(tabs)/my';
 import {
   CONFIRMED,
   DURING,

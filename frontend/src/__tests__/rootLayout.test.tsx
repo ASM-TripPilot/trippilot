@@ -15,8 +15,8 @@ import { render, screen } from '@testing-library/react-native';
  * 다시 null 로 돌아가 (2)(3)(4)가 함께 빨개진다. "파일이 없어졌는가"가 아니라
  * "제거 후에도 부팅이 되는가"를 묻는 형태라, 대상이 사라져도 공허하게 통과하지 않는다.
  *
- * 왜 src/app 이 아니라 src/__tests__ 인가: expo-router 의 require.context 정규식은
- * `.test.tsx` 를 제외하지 않는다 → src/app/ 아래에 테스트 파일을 두면 실제 라우트로 등록된다.
+ * 왜 라우트 폴더(app/)가 아니라 src/__tests__ 인가: expo-router 의 require.context 정규식은
+ * `.test.tsx` 를 제외하지 않는다 → app/ 아래에 테스트 파일을 두면 실제 라우트로 등록된다.
  */
 
 process.env.EXPO_PUBLIC_API_MOCK = '1';
@@ -50,7 +50,7 @@ jest.mock('@/app-shell/ui/SplashGate', () =>
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { GestureHandlerRootView } = require('react-native-gesture-handler');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const RootLayout = require('@/app/_layout').default as ComponentType;
+const RootLayout = require('@routes/_layout').default as ComponentType;
 
 beforeEach(() => {
   mockFontsLoaded = true;

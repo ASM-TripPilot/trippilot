@@ -40,7 +40,7 @@ const DELETION_SCOPE_FILE = join(
 const SCAN_ROOTS = [
   join(SRC_ROOT, 'features', 'settings'),
   join(SRC_ROOT, 'pages', 'settings', 'settings'),
-  join(SRC_ROOT, 'app', 'settings'),
+  join(SRC_ROOT, '..', 'app', 'settings'), // 라우트는 루트 app/ (TRIP-1161)
   join(SRC_ROOT, 'pages', 'settings', 'my-page'),
   join(SRC_ROOT, 'pages', 'stay', 'my-stays'),
   join(SRC_ROOT, 'pages', 'settings', 'settings-personalization'),

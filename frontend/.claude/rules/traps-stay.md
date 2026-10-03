@@ -2,7 +2,7 @@
 paths:
   - "src/features/stay/**"
   - "src/pages/stay/stay-*/**"
-  - "src/app/stays/**"
+  - "app/stays/**"
   - "src/features/save-stay/**"
   - "src/entities/stay/**"
 ---

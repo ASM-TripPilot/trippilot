@@ -19,7 +19,7 @@ import { renderWithQueryClient } from '@/test-support/myPageItineraries';
  *      `src/__tests__/tabsItineraryRoute.test.tsx`·`pages/explore/explore-landing/ui/ExploreLandingPage.test.tsx`가 잠근다),
  *      나머지 2탭(records·my)은 TRIP-290으로 "준비 중" 상태 안내로 승격(더는 껍데기 아님).
  *
- * 왜 `src/app/` 밖에 두는가: expo-router의 require.context가 `.test.tsx`를 라우트로
+ * 왜 라우트 폴더(`app/`) 밖에 두는가: expo-router의 require.context가 `.test.tsx`를 라우트로
  * 등록해 버리므로(`rootLayout.test` 관례) 라우트 파일 테스트는 항상 `src/__tests__/`에 둔다.
  *
  * expo-router는 파일 상단에서 반드시 목킹한다 — node 버킷은 `--experimental-vm-modules`로
@@ -75,13 +75,13 @@ jest.mock('@/features/stay/model/useStaySearch', () => ({
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const TabsLayout = require('@/app/(tabs)/_layout').default;
+const TabsLayout = require('@routes/(tabs)/_layout').default;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const IndexRoute = require('@/app/(tabs)/index').default;
+const IndexRoute = require('@routes/(tabs)/index').default;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const ExploreRoute = require('@/app/(tabs)/explore').default;
+const ExploreRoute = require('@routes/(tabs)/explore').default;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const RecordsRoute = require('@/app/(tabs)/records').default;
+const RecordsRoute = require('@routes/(tabs)/records').default;
 
 // 라우트 이름 5개 → 조작 네비 상태(state.routes)에 쓸 최소 형태.
 const ROUTE_NAMES = ['index', 'explore', 'itinerary', 'records', 'my'];
