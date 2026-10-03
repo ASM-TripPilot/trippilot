@@ -991,6 +991,23 @@ describe('이름·지역 검색 (옛 .nameSearch — 통합 심판 0, 단위 전
       expect(onRelax).toHaveBeenCalledTimes(1);
     });
 
+    it('목록은 키보드가 떠 있어도 첫 탭을 버튼에 준다(keyboardShouldPersistTaps="handled", TRIP-935)', () => {
+      // 준비: 이름 0건 카드 — 검색어를 치는 도중(키보드가 떠 있을 때) 뜨는 화면.
+      render(
+        <StaySearchScreen
+          region="부산"
+          items={ITEMS}
+          nameQuery="없는숙소"
+          onChangeNameQuery={() => {}}
+        />
+      );
+
+      // 단언: 실제 키보드 동작은 jest 사각이라 그 동작을 정하는 prop 값을 잠근다.
+      expect(
+        screen.getByTestId('stay-search-list').props.keyboardShouldPersistTaps
+      ).toBe('handled');
+    });
+
     it('빈 검색어는 전체를 그대로 둔다(no-match 아님)', () => {
       render(
         <StaySearchScreen

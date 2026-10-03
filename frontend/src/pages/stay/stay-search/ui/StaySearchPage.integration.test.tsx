@@ -1562,7 +1562,11 @@ describe('이름검색 0건 탈출구 (TRIP-935)', () => {
     ).toBeOnTheScreen();
 
     // 실행
-    fireEvent.press(screen.getByTestId('stay-search-name-empty-clear'));
+    // 실기 RN 은 onPress(눌림이벤트)로 부른다 — 이벤트를 넘겨야 "화살표 감싸기 해제 → 이벤트가 검색어로
+    // 흘러 query.trim 크래시" 회귀가 잡힌다(인자 없는 press 는 undefined → ?? '' 로 덮여 green).
+    fireEvent.press(screen.getByTestId('stay-search-name-empty-clear'), {
+      nativeEvent: {},
+    });
 
     // 단언: 검색창이 비고 리조트 카드가 돌아온다(필터는 그대로 — setParams 0회).
     expect(screen.getByTestId('stay-search-name-input')).toHaveDisplayValue('');
@@ -1583,7 +1587,9 @@ describe('이름검색 0건 탈출구 (TRIP-935)', () => {
     await typeHotelUntilNameEmpty();
 
     // 실행
-    fireEvent.press(screen.getByTestId('stay-search-name-empty-reset'));
+    fireEvent.press(screen.getByTestId('stay-search-name-empty-reset'), {
+      nativeEvent: {},
+    });
     rerender(<StaySearchPage />);
 
     // 단언: 필터 두 키를 비웠고, 재조회 결과에서 "호텔" 카드가 보인다(검색어는 남는다).

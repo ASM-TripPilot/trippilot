@@ -566,6 +566,9 @@ export function StaySearchScreen({
         <FlatList<StayItem>
           testID="stay-search-list"
           className="flex-1"
+          // 이름 0건 카드는 검색어를 치는 도중(키보드가 떠 있을 때) 나타난다 — 기본값 never 면 첫 탭이
+          // 키보드 닫기에만 쓰여 [검색어 지우기]·[필터 초기화]가 안 눌린다(TRIP-935, RegionPicker 선례).
+          keyboardShouldPersistTaps="handled"
           contentContainerStyle={listContentStyle}
           data={visibleItems}
           keyExtractor={(item) => stayKey(item)}

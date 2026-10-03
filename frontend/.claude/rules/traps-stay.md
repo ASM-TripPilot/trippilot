@@ -14,7 +14,7 @@ paths:
 
 - **`useStaySearch` 기본 파라미터·오류 정규화** → **없다**(D6 이연). params를 그대로 넘기기만 한다.
 - **숙소 목록 무한 스크롤** → `/stays/search`에 **페이지네이션 파라미터가 없다**. `onEndReached`류를 붙이면 같은 1페이지를 반복 요청하는 함정인데, 그 "없음"을 잠그는 단언이 **어느 심판에도 없다**.
-- **이름검색 0건 카드의 [검색어 지우기]가 눌림 이벤트를 검색어로 흘려도 jest는 못 잡는다** → 이름검색은 클라에서 거르므로 이름+필터 0건엔 서버 filter-zero가 안 오고 `stay-search-name-empty` 카드가 탈출구(검색어 지우기·필터 있을 때 필터 초기화)를 낸다(TRIP-935, 통합 심판은 `StaySearchPage.integration.test.tsx` 「이름검색 0건 탈출구」). 화면은 `onChangeNameQuery?.('')`를 화살표로 감싸 넘기는데, RNTL `fireEvent.press`는 인자 없이 부르므로 감싸기를 풀어 직결해도(`setNameQuery(event)`) 전부 green이다(뮤테이션 실측) — 실기에서만 드러난다.
+- **눌림 콜백 회귀는 인자 없는 `fireEvent.press(el)`로는 안 잡힌다 — 이벤트를 넘겨라** → 이름검색은 클라에서 거르므로 이름+필터 0건엔 서버 filter-zero가 안 오고 `stay-search-name-empty` 카드가 탈출구(검색어 지우기·필터 있을 때 필터 초기화)를 낸다(TRIP-935, 통합 심판은 `StaySearchPage.integration.test.tsx` 「이름검색 0건 탈출구」). 화면은 `onChangeNameQuery?.('')`를 화살표로 감싸 넘긴다 — 직결하면 실기 RN이 `onPress(눌림이벤트)`로 불러 `query.trim is not a function` 크래시다. RNTL `fireEvent.press(el)`는 인자 없이 불러 `?? ''`가 덮으므로 green이지만, `fireEvent.press(el, { nativeEvent: {} })`로 넘기면 red다(뮤테이션 실측) — 그 통합 케이스가 그렇게 누른다. 콜백이 받은 값을 단언하는 경우(filter-zero 원인 해제 ★3 — 원인 코드로 불렸는지 본다)는 인자 없이 눌러도 직결이 잡힌다; 빈 값으로 리셋하는 콜백만 이 함정에 걸린다. 이 목록은 `keyboardShouldPersistTaps="handled"`다(키보드가 떠 있을 때 뜨는 카드라서) — 실제 키보드 동작은 jest 사각이라 prop 값만 단언한다.
 
 ## stay 등록
 
