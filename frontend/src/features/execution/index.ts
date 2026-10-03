@@ -4,6 +4,7 @@ export {
   buildWebNavUrl,
   openNextNav,
   resolveNextDest,
+  resolveSlotDests,
   type NavDest,
 } from './model/nextNav';
 export {

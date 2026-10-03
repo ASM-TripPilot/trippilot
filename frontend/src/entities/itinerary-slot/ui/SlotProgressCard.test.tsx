@@ -851,17 +851,8 @@ describe('SlotProgressCard · upcoming 길찾기 (TRIP-1189)', () => {
     );
   });
 
-  it('D6 active·done 카드에는 길찾기가 없다', () => {
-    const { rerender } = render(
-      <SlotProgressCard
-        slot={mkSlot()}
-        date={DATE}
-        state="active"
-        onPressDirections={jest.fn()}
-      />
-    );
-    expect(screen.queryByTestId(dirId)).toBeNull();
-    rerender(
+  it('D6 done 카드에는 길찾기가 없다', () => {
+    render(
       <SlotProgressCard
         slot={mkSlot()}
         date={DATE}
@@ -870,5 +861,43 @@ describe('SlotProgressCard · upcoming 길찾기 (TRIP-1189)', () => {
       />
     );
     expect(screen.queryByTestId(dirId)).toBeNull();
+  });
+
+  it('D7 active(진행 중) 카드에도 길찾기가 있고 누르면 콜백 1번 · 방문 완료 버튼과 공존한다', () => {
+    const onPressDirections = jest.fn();
+    const onPressComplete = jest.fn();
+    render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="active"
+        onPressDirections={onPressDirections}
+        onPressComplete={onPressComplete}
+      />
+    );
+
+    expect(screen.getByTestId(dirId)).toHaveTextContent('길찾기');
+    fireEvent.press(screen.getByTestId(dirId));
+    expect(onPressDirections).toHaveBeenCalledTimes(1);
+    expect(onPressComplete).not.toHaveBeenCalled();
+  });
+
+  it('D8 active 카드도 콜백이 없으면 버튼이 없고, directionsNotice 가 있으면 안내를 그린다', () => {
+    const { rerender } = render(
+      <SlotProgressCard slot={mkSlot()} date={DATE} state="active" />
+    );
+    expect(screen.queryByTestId(dirId)).toBeNull();
+
+    rerender(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="active"
+        directionsNotice="지도를 열 수 없어요."
+      />
+    );
+    expect(screen.getByTestId(id('directions-notice'))).toHaveTextContent(
+      '지도를 열 수 없어요.'
+    );
   });
 });

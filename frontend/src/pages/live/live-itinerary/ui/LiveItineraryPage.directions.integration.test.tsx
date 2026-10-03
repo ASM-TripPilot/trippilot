@@ -162,18 +162,31 @@ const settle = () =>
     await new Promise((resolve) => setTimeout(resolve, 100));
   });
 
-describe('i01 허브 · 다음 예정지 길찾기 (TRIP-1189)', () => {
-  it('N1 첫 upcoming 카드에만 [길찾기]가 있다 (둘째 upcoming · done 에는 없다)', async () => {
+const arrivedVisit = (poiId: string): VisitCheck => ({
+  ...doneVisit(poiId),
+  completedAt: null,
+});
+
+describe('i01 허브 · 슬롯별 길찾기 (TRIP-1189)', () => {
+  it('N1 예정 슬롯마다 [길찾기]가 있다 · 방문 완료에는 없다', async () => {
     seed([slotOf('p1'), slotOf('p2'), slotOf('p3')], [doneVisit('p1')]);
     await renderHub();
 
-    // 방문 기록이 늦게 도착한다 — p1 이 done 이 돼 p2 가 첫 upcoming 이 될 때까지 기다린다.
+    // 방문 기록이 늦게 도착한다 — p1 이 done 이 될 때까지 기다린다.
     expect(await screen.findByTestId(dirId('p2'))).toHaveTextContent('길찾기');
-    expect(screen.queryByTestId(dirId('p3'))).toBeNull();
+    expect(screen.getByTestId(dirId('p3'))).toHaveTextContent('길찾기');
     expect(screen.queryByTestId(dirId('p1'))).toBeNull();
   });
 
-  it('N2 누르면 그 장소 좌표의 네이버 앱 URL 로 openURL 한다 · 라우터는 안 건드린다 (복귀 = 같은 허브)', async () => {
+  it('N1b 진행 중(active) 슬롯에도 [길찾기]가 있다', async () => {
+    seed([slotOf('p1'), slotOf('p2')], [arrivedVisit('p1')]);
+    await renderHub();
+
+    expect(await screen.findByTestId(dirId('p1'))).toHaveTextContent('길찾기');
+    expect(screen.getByTestId(dirId('p2'))).toBeTruthy();
+  });
+
+  it('N2 첫 예정지 버튼은 출발지 없이(현재 위치) 그 장소 좌표의 네이버 앱 URL 로 openURL 한다 · 라우터는 안 건드린다', async () => {
     seed([slotOf('p1', { lat: 35.2, lng: 129.2, nameKo: '광안리' })]);
     mockOpenURL.mockResolvedValue(true);
     await renderHub();
@@ -185,6 +198,7 @@ describe('i01 허브 · 다음 예정지 길찾기 (TRIP-1189)', () => {
     expect(mockOpenURL).toHaveBeenCalledWith(
       buildAppNavUrl({ lat: 35.2, lng: 129.2, nameKo: '광안리' })
     );
+    expect(mockOpenURL.mock.calls[0][0]).not.toContain('slat');
     [mockPush, mockReplace, mockNavigate, mockBack, mockSetParams].forEach(
       (fn) => expect(fn).not.toHaveBeenCalled()
     );
@@ -192,37 +206,88 @@ describe('i01 허브 · 다음 예정지 길찾기 (TRIP-1189)', () => {
     expect(screen.queryByTestId(noticeId('p1'))).toBeNull();
   });
 
-  it('N3 앱이 없어 reject 되면 웹 지도로 연다', async () => {
-    seed([slotOf('p1', { lat: 35.2, lng: 129.2, nameKo: '광안리' })]);
+  it('N2b 셋째 슬롯 버튼은 바로 앞(둘째) 슬롯 → 이 슬롯 URL 로 연다', async () => {
+    seed([
+      slotOf('p1', { lat: 35.0, lng: 129.0, nameKo: '첫째' }),
+      slotOf('p2', { lat: 35.1, lng: 129.1, nameKo: '둘째' }),
+      slotOf('p3', { lat: 35.2, lng: 129.2, nameKo: '셋째' }),
+    ]);
+    mockOpenURL.mockResolvedValue(true);
+    await renderHub();
+
+    fireEvent.press(screen.getByTestId(dirId('p3')));
+    await settle();
+
+    expect(mockOpenURL).toHaveBeenCalledTimes(1);
+    expect(mockOpenURL).toHaveBeenCalledWith(
+      buildAppNavUrl({
+        lat: 35.2,
+        lng: 129.2,
+        nameKo: '셋째',
+        origin: { lat: 35.1, lng: 129.1, nameKo: '둘째' },
+      })
+    );
+  });
+
+  it('N2c 앞 슬롯 좌표가 없으면 출발지를 생략하고 연다 (현재 위치 폴백)', async () => {
+    seed([
+      slotOf('p1'),
+      slotOf('p2', { lat: null, lng: null }),
+      slotOf('p3', { lat: 35.2, lng: 129.2, nameKo: '셋째' }),
+    ]);
+    mockOpenURL.mockResolvedValue(true);
+    await renderHub();
+
+    expect(screen.queryByTestId(dirId('p2'))).toBeNull();
+    fireEvent.press(screen.getByTestId(dirId('p3')));
+    await settle();
+
+    expect(mockOpenURL).toHaveBeenCalledWith(
+      buildAppNavUrl({ lat: 35.2, lng: 129.2, nameKo: '셋째' })
+    );
+    expect(mockOpenURL.mock.calls[0][0]).not.toContain('slat');
+  });
+
+  it('N3 앱이 없어 reject 되면 앞 슬롯 출발의 웹 지도로 연다', async () => {
+    seed([
+      slotOf('p1', { lat: 35.0, lng: 129.0, nameKo: '첫째' }),
+      slotOf('p2', { lat: 35.2, lng: 129.2, nameKo: '광안리' }),
+    ]);
     mockOpenURL
       .mockRejectedValueOnce(new Error('no app'))
       .mockResolvedValueOnce(true);
     await renderHub();
 
-    fireEvent.press(screen.getByTestId(dirId('p1')));
+    fireEvent.press(screen.getByTestId(dirId('p2')));
     await settle();
 
     expect(mockOpenURL).toHaveBeenCalledTimes(2);
     expect(mockOpenURL).toHaveBeenLastCalledWith(
-      buildWebNavUrl({ lat: 35.2, lng: 129.2, nameKo: '광안리' })
+      buildWebNavUrl({
+        lat: 35.2,
+        lng: 129.2,
+        nameKo: '광안리',
+        origin: { lat: 35.0, lng: 129.0, nameKo: '첫째' },
+      })
     );
-    expect(screen.queryByTestId(noticeId('p1'))).toBeNull();
+    expect(screen.queryByTestId(noticeId('p2'))).toBeNull();
   });
 
-  it('N4 둘 다 실패하면 거리 안내를 카드에 보인다 — 침묵하지 않는다 (INV-4) · 소요시간은 없다 (INV-3)', async () => {
-    seed([slotOf('p1')]);
+  it('N4 둘 다 실패하면 눌린 그 카드 아래에만 거리 안내를 보인다 — 침묵하지 않는다 (INV-4) · 소요시간은 없다 (INV-3)', async () => {
+    seed([slotOf('p1'), slotOf('p2')]);
     mockOpenURL.mockRejectedValue(new Error('none'));
     await renderHub();
 
-    fireEvent.press(screen.getByTestId(dirId('p1')));
+    fireEvent.press(screen.getByTestId(dirId('p2')));
     await waitFor(() =>
-      expect(screen.getByTestId(noticeId('p1'))).toBeTruthy()
+      expect(screen.getByTestId(noticeId('p2'))).toBeTruthy()
     );
 
+    expect(screen.queryByTestId(noticeId('p1'))).toBeNull();
     const text = String(
-      screen.getByTestId(noticeId('p1')).props.children ?? ''
+      screen.getByTestId(noticeId('p2')).props.children ?? ''
     );
-    expect(screen.getByTestId(noticeId('p1'))).toHaveTextContent(/1\.2km/);
+    expect(screen.getByTestId(noticeId('p2'))).toHaveTextContent(/1\.2km/);
     expect(text).not.toMatch(/\d\s*분|시간/);
   });
 
@@ -251,7 +316,33 @@ describe('i01 허브 · 다음 예정지 길찾기 (TRIP-1189)', () => {
     expect(mockOpenURL).toHaveBeenCalledTimes(2);
   });
 
-  it('N6 다음 예정지가 없으면(전부 완료) 버튼이 없다', async () => {
+  it('N5b 한 슬롯의 길찾기가 열리는 중이면 다른 슬롯 버튼도 막힌다 (잠금은 페이지 하나 공유)', async () => {
+    seed([slotOf('p1'), slotOf('p2'), slotOf('p3')]);
+    let resolveOpen: (v: boolean) => void = () => undefined;
+    mockOpenURL.mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveOpen = resolve;
+        })
+    );
+    await renderHub();
+
+    fireEvent.press(screen.getByTestId(dirId('p1')));
+    fireEvent.press(screen.getByTestId(dirId('p2')));
+    fireEvent.press(screen.getByTestId(dirId('p3')));
+    await settle();
+    expect(mockOpenURL).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveOpen(true);
+    });
+    mockOpenURL.mockResolvedValue(true);
+    fireEvent.press(screen.getByTestId(dirId('p3')));
+    await settle();
+    expect(mockOpenURL).toHaveBeenCalledTimes(2);
+  });
+
+  it('N6 전부 완료면 버튼이 없다', async () => {
     seed([slotOf('p1')], [doneVisit('p1')]);
     await renderHub();
 
@@ -264,7 +355,7 @@ describe('i01 허브 · 다음 예정지 길찾기 (TRIP-1189)', () => {
     expect(screen.queryByTestId(dirId('p1'))).toBeNull();
   });
 
-  it('N7 첫 upcoming 의 좌표가 없으면 버튼이 없다 (resolveNextDest 가 null)', async () => {
+  it('N7 자기 좌표가 없는 슬롯에는 버튼이 없다', async () => {
     seed([slotOf('p1', { lat: null, lng: null })]);
     await renderHub();
 

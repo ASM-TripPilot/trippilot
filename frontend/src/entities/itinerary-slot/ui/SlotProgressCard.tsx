@@ -169,6 +169,29 @@ export function SlotProgressCard({
     </View>
   );
 
+  // TRIP-1189 — [길찾기]는 예정·진행 중 카드가 같은 모양을 쓴다(방문 완료엔 안 그린다).
+  const directionsButton = onPressDirections ? (
+    <Pressable
+      testID={fieldId('directions')}
+      accessibilityRole="button"
+      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+      onPress={onPressDirections}
+      className="rounded-[10px] border border-hairline-strong bg-canvas px-md py-[8px]"
+    >
+      <Text className="font-noto-bold text-caption font-bold text-ink">
+        길찾기
+      </Text>
+    </Pressable>
+  ) : null;
+  const directionsNoticeLine = directionsNotice ? (
+    <Text
+      testID={fieldId('directions-notice')}
+      className="font-noto text-caption text-muted"
+    >
+      {directionsNotice}
+    </Text>
+  ) : null;
+
   // 메모 박스 — done 과 active(TRIP-1117 결정 2, Figma 4741:4804)가 같은 마크업·testID 계열을 쓴다.
   const memoBox = memo ? (
     <View className="rounded-[10px] bg-surface-soft p-[10px]">
@@ -218,7 +241,7 @@ export function SlotProgressCard({
         >
           {`${hhmm} 도착 · 지금 관람 중`}
         </Text>
-        <View className="flex-row items-center gap-sm">
+        <View className="flex-row flex-wrap items-center gap-sm">
           <Pressable
             testID="execution-arrive-complete"
             accessibilityRole="button"
@@ -255,7 +278,9 @@ export function SlotProgressCard({
               </Text>
             </Pressable>
           ) : null}
+          {directionsButton}
         </View>
+        {directionsNoticeLine}
         {photoNotice ? (
           <Text
             testID="execution-arrive-photo-notice"
@@ -317,19 +342,7 @@ export function SlotProgressCard({
         </View>
         {onPressArrive || onPressDirections ? (
           <View className="flex-row items-center gap-sm">
-            {onPressDirections ? (
-              <Pressable
-                testID={fieldId('directions')}
-                accessibilityRole="button"
-                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                onPress={onPressDirections}
-                className="rounded-[10px] border border-hairline-strong bg-canvas px-md py-[8px]"
-              >
-                <Text className="font-noto-bold text-caption font-bold text-ink">
-                  길찾기
-                </Text>
-              </Pressable>
-            ) : null}
+            {directionsButton}
             {onPressArrive ? (
               <Pressable
                 testID={fieldId('arrive')}
@@ -346,14 +359,7 @@ export function SlotProgressCard({
           </View>
         ) : null}
       </View>
-      {directionsNotice ? (
-        <Text
-          testID={fieldId('directions-notice')}
-          className="font-noto text-caption text-muted"
-        >
-          {directionsNotice}
-        </Text>
-      ) : null}
+      {directionsNoticeLine}
     </View>
   );
 }

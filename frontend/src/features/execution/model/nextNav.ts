@@ -13,46 +13,88 @@ import type { ProjectedSlot } from '@/entities/itinerary-slot';
  * 두므로 복귀가 저절로 성립한다. 소스 스캔이 이 라우터 미개입을 구조로 강제한다.
  */
 
+/** 출발지 — 없으면(생략) 네이버 지도 앱이 현재 위치를 쓴다. */
+export interface NavOrigin {
+  lat: number;
+  lng: number;
+  nameKo: string | null;
+}
+
 export interface NavDest {
   lat: number;
   lng: number;
   nameKo: string | null;
   distanceRange: string | null;
+  /** TRIP-1189 슬롯별 [길찾기] — 바로 앞 슬롯. 첫 예정지·앞 슬롯 좌표 결측이면 키 자체가 없다(현재 위치). */
+  origin?: NavOrigin | null;
 }
 
 const APP_NAME = 'com.trippilot.travel';
+
+type NavUrlInput = Pick<NavDest, 'lat' | 'lng' | 'nameKo' | 'origin'>;
 
 export function buildAppNavUrl({
   lat,
   lng,
   nameKo,
-}: Pick<NavDest, 'lat' | 'lng' | 'nameKo'>): string {
+  origin,
+}: NavUrlInput): string {
   const dname = encodeURIComponent(nameKo ?? '장소');
-  return `nmap://route/public?dlat=${lat}&dlng=${lng}&dname=${dname}&appname=${APP_NAME}`;
+  const from = origin
+    ? `slat=${origin.lat}&slng=${origin.lng}&sname=${encodeURIComponent(origin.nameKo ?? '장소')}&`
+    : '';
+  return `nmap://route/public?${from}dlat=${lat}&dlng=${lng}&dname=${dname}&appname=${APP_NAME}`;
 }
 
+// 출발 지정 시 웹 형식(/directions/{출발}/{도착}/-/transit)은 네이버 공식 문서에 없다 — 실기 미검증.
 export function buildWebNavUrl({
   lat,
   lng,
   nameKo,
-}: Pick<NavDest, 'lat' | 'lng' | 'nameKo'>): string {
+  origin,
+}: NavUrlInput): string {
   const name = encodeURIComponent(nameKo ?? '장소');
-  return `https://map.naver.com/p/directions/-/${lng},${lat},${name}/-/transit`;
+  const from = origin
+    ? `${origin.lng},${origin.lat},${encodeURIComponent(origin.nameKo ?? '장소')}`
+    : '-';
+  return `https://map.naver.com/p/directions/${from}/${lng},${lat},${name}/-/transit`;
+}
+
+const hasCoords = (slot: ProjectedSlot['slot']): boolean =>
+  Number.isFinite(slot.lat) && Number.isFinite(slot.lng);
+
+/**
+ * 슬롯마다의 [길찾기] 도착지(+직전 슬롯 출발지), poiId 키.
+ * 예정·진행 중 + 유한 좌표 슬롯만 담는다(방문 완료는 없음). 출발지는 바로 앞 슬롯 —
+ * 단 첫 예정지는 현재 위치(생략)이고, 앞 슬롯 좌표가 없어도 생략으로 폴백한다.
+ */
+export function resolveSlotDests(slots: ProjectedSlot[]): Map<string, NavDest> {
+  const firstUpcoming = slots.findIndex((p) => p.state === 'upcoming');
+  const dests = new Map<string, NavDest>();
+  slots.forEach(({ slot, state }, i) => {
+    if (state === 'done' || !hasCoords(slot)) return;
+    const dest: NavDest = {
+      lat: slot.lat as number,
+      lng: slot.lng as number,
+      nameKo: slot.nameKo ?? null,
+      distanceRange: slot.distanceRange ?? null,
+    };
+    const prev = i > 0 && i !== firstUpcoming ? slots[i - 1].slot : null;
+    if (prev && hasCoords(prev)) {
+      dest.origin = {
+        lat: prev.lat as number,
+        lng: prev.lng as number,
+        nameKo: prev.nameKo ?? null,
+      };
+    }
+    dests.set(slot.poiId, dest);
+  });
+  return dests;
 }
 
 export function resolveNextDest(slots: ProjectedSlot[]): NavDest | null {
   const next = slots.find((projected) => projected.state === 'upcoming');
-  if (!next) return null;
-
-  const { lat, lng, nameKo, distanceRange } = next.slot;
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-
-  return {
-    lat: lat as number,
-    lng: lng as number,
-    nameKo: nameKo ?? null,
-    distanceRange: distanceRange ?? null,
-  };
+  return next ? (resolveSlotDests(slots).get(next.slot.poiId) ?? null) : null;
 }
 
 export async function openNextNav(

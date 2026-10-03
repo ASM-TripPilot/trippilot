@@ -148,11 +148,11 @@ export interface LiveHubViewProps {
   onPressSlotName?: (poiId: string) => void;
   /** TRIP-1021 — 예정 카드 수동 [도착](arg = poiId). active 슬롯이 있으면 어느 카드에도 안 넘긴다. */
   onPressArrive?: (poiId: string) => void;
-  /** TRIP-1189 — 다음 예정지(첫 upcoming + 유한 좌표) 한 곳의 [길찾기]. 페이지가 resolveNextDest 로 고른 poiId — 없으면 어느 카드에도 안 그린다. */
-  directionsPoiId?: string | null;
-  onPressDirections?: () => void;
-  /** TRIP-1189 — 앱·웹 모두 실패했을 때 그 카드 아래 거리 안내(INV-4). */
-  directionsNotice?: string | null;
+  /** TRIP-1189 — [길찾기]를 그릴 슬롯의 poiId(예정·진행 중 + 유한 좌표 — 페이지가 resolveSlotDests 로 고른다). 방문 완료는 안 들어온다. */
+  directionsPoiIds?: ReadonlySet<string>;
+  onPressDirections?: (poiId: string) => void;
+  /** TRIP-1189 — 앱·웹 모두 실패했을 때 눌린 그 카드 아래 거리 안내(INV-4). */
+  directionsNotice?: { poiId: string; text: string } | null;
 }
 
 // 레일 점의 행 상단 여백 — 점 크기(18·16·12)가 달라 Figma 에서 상태마다 다르다(rail 인스턴스 y 실측).
@@ -218,7 +218,7 @@ export function LiveHubView({
   slotBadgeLabel,
   onPressSlotName,
   onPressArrive,
-  directionsPoiId,
+  directionsPoiIds,
   onPressDirections,
   directionsNotice,
 }: LiveHubViewProps): ReactElement {
@@ -405,13 +405,13 @@ export function LiveHubView({
                       arrive ? () => arrive(slot.poiId) : undefined
                     }
                     onPressDirections={
-                      state === 'upcoming' && slot.poiId === directionsPoiId
-                        ? onPressDirections
+                      state !== 'done' && directionsPoiIds?.has(slot.poiId)
+                        ? () => onPressDirections?.(slot.poiId)
                         : undefined
                     }
                     directionsNotice={
-                      slot.poiId === directionsPoiId
-                        ? directionsNotice
+                      directionsNotice?.poiId === slot.poiId
+                        ? directionsNotice.text
                         : undefined
                     }
                   />
