@@ -14,7 +14,7 @@ paths:
 
 - **`useStaySearch` 기본 파라미터·오류 정규화** → **없다**(D6 이연). params를 그대로 넘기기만 한다.
 - **숙소 목록 무한 스크롤** → `/stays/search`에 **페이지네이션 파라미터가 없다**. `onEndReached`류를 붙이면 같은 1페이지를 반복 요청하는 함정인데, 그 "없음"을 잠그는 단언이 **어느 심판에도 없다**.
-- **이름·지역 검색은 통합 회귀 심판이 0이다** → `StaySearchScreen.tsx`의 `nameQuery`/`onChangeNameQuery`(필터링)와 `StaySearchPage.tsx`의 `nameQuery` state(소유)를 잇는 흐름을 누르는 테스트가 `StaySearchPage.integration.test.tsx`에 없다(`StaySearchScreen.test.tsx`의 「이름·지역 검색」 describe는 화면 단위뿐). `filterByNameQuery`를 지우거나 페이지가 다른 prop 이름으로 넘겨도 통합 스위트 전부 green이다.
+- **이름검색 0건 카드의 [검색어 지우기]가 눌림 이벤트를 검색어로 흘려도 jest는 못 잡는다** → 이름검색은 클라에서 거르므로 이름+필터 0건엔 서버 filter-zero가 안 오고 `stay-search-name-empty` 카드가 탈출구(검색어 지우기·필터 있을 때 필터 초기화)를 낸다(TRIP-935, 통합 심판은 `StaySearchPage.integration.test.tsx` 「이름검색 0건 탈출구」). 화면은 `onChangeNameQuery?.('')`를 화살표로 감싸 넘기는데, RNTL `fireEvent.press`는 인자 없이 부르므로 감싸기를 풀어 직결해도(`setNameQuery(event)`) 전부 green이다(뮤테이션 실측) — 실기에서만 드러난다.
 
 ## stay 등록
 

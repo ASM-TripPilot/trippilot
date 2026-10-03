@@ -1478,3 +1478,142 @@ describe('상태별 재시도·딥링크 파라미터 (옛 .states)', () => {
     );
   });
 });
+
+describe('이름검색 0건 탈출구 (TRIP-935)', () => {
+  /**
+   * 이름검색은 클라에서 거르므로 "이름 + 유형 필터"로 0곳이 되면 서버 filter-zero 카드가 나올 수
+   * 없다(서버는 리조트를 돌려줬고, 화면이 "호텔"로 좁혀 0건). 그 막다른 길에 버튼을 둔다:
+   *  - [검색어 지우기] → 검색창이 비고 목록이 다시 보인다.
+   *  - [필터 초기화](필터가 걸렸을 때만) → 필터 두 키를 비워 재조회 → 이름에 맞는 숙소가 보인다.
+   * 서버 목은 stayType 쿼리가 있으면 리조트만, 없으면 호텔까지 돌려준다.
+   */
+
+  const BASE = 'http://localhost:8080/api/v1';
+
+  const RESORT: StayItem = {
+    externalSource: 'NAVER',
+    externalId: 'resort',
+    name: '기장 오션 리조트',
+    lat: 35.2,
+    lng: 129.2,
+    region: '부산',
+    amenities: [],
+    stayType: 'RESORT',
+    price: { amount: 180000, currency: 'KRW' },
+  };
+  const HOTEL: StayItem = {
+    externalSource: 'NAVER',
+    externalId: 'hotel',
+    name: '해운대 호텔',
+    lat: 35.1,
+    lng: 129.1,
+    region: '부산',
+    amenities: [],
+    stayType: 'HOTEL',
+    price: { amount: 120000, currency: 'KRW' },
+  };
+  const KEY_RESORT = `${RESORT.externalSource}:${RESORT.externalId}`;
+  const KEY_HOTEL = `${HOTEL.externalSource}:${HOTEL.externalId}`;
+
+  beforeEach(() => {
+    server.use(
+      http.get(`${BASE}/stays/search`, ({ request }) => {
+        const filtered =
+          new URL(request.url).searchParams.getAll('stayType').length > 0;
+        return HttpResponse.json({
+          items: filtered ? [RESORT] : [HOTEL, RESORT],
+          degraded: false,
+          filterZeroReasons: [],
+        });
+      }),
+      http.get(`${BASE}/saved-stays`, () => HttpResponse.json([]))
+    );
+  });
+  // 최상위 beforeEach 는 mockClear 라 구현을 안 지운다 — 아래 mockImplementation 이 다른 describe 로 새지 않게.
+  afterEach(() => mockSetParams.mockReset());
+
+  function createWrapper() {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    return function Wrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      );
+    };
+  }
+
+  /** "호텔"을 쳐서 이름 0건 카드가 뜨게 한다. */
+  async function typeHotelUntilNameEmpty(): Promise<void> {
+    await waitFor(() =>
+      expect(screen.getByTestId(`stay-card-${KEY_RESORT}`)).toBeOnTheScreen()
+    );
+    fireEvent.changeText(screen.getByTestId('stay-search-name-input'), '호텔');
+    expect(screen.getByTestId('stay-search-name-empty')).toBeOnTheScreen();
+  }
+
+  it('이름 + 유형 필터 0건 → 두 버튼이 보이고, 검색어 지우기는 목록을 되살린다', async () => {
+    // 준비: 리조트 필터가 걸린 채 "호텔" 검색.
+    mockSearchParams = { region: '부산', stayType: 'RESORT' };
+    render(<StaySearchPage />, { wrapper: createWrapper() });
+    await typeHotelUntilNameEmpty();
+    expect(
+      screen.getByTestId('stay-search-name-empty-reset')
+    ).toBeOnTheScreen();
+
+    // 실행
+    fireEvent.press(screen.getByTestId('stay-search-name-empty-clear'));
+
+    // 단언: 검색창이 비고 리조트 카드가 돌아온다(필터는 그대로 — setParams 0회).
+    expect(screen.getByTestId('stay-search-name-input')).toHaveDisplayValue('');
+    expect(screen.getByTestId(`stay-card-${KEY_RESORT}`)).toBeOnTheScreen();
+    expect(screen.queryByTestId('stay-search-name-empty')).toBeNull();
+    expect(mockSetParams).not.toHaveBeenCalled();
+  });
+
+  it('필터 초기화는 필터를 풀어 재조회하고, 이름에 맞는 숙소가 보인다', async () => {
+    // 준비: setParams 가 실제 라우터처럼 URL params 를 바꾸게 한다(rerender 로 반영).
+    mockSearchParams = { region: '부산', stayType: 'RESORT' };
+    mockSetParams.mockImplementation((next: Record<string, unknown>) => {
+      mockSearchParams = { ...mockSearchParams, ...next };
+    });
+    const { rerender } = render(<StaySearchPage />, {
+      wrapper: createWrapper(),
+    });
+    await typeHotelUntilNameEmpty();
+
+    // 실행
+    fireEvent.press(screen.getByTestId('stay-search-name-empty-reset'));
+    rerender(<StaySearchPage />);
+
+    // 단언: 필터 두 키를 비웠고, 재조회 결과에서 "호텔" 카드가 보인다(검색어는 남는다).
+    expect(mockSetParams).toHaveBeenCalledWith({ amenity: [], stayType: [] });
+    await waitFor(() =>
+      expect(screen.getByTestId(`stay-card-${KEY_HOTEL}`)).toBeOnTheScreen()
+    );
+    expect(screen.getByTestId('stay-search-name-input')).toHaveDisplayValue(
+      '호텔'
+    );
+  });
+
+  it('필터 없는 이름 0건 → 검색어 지우기만 보인다', async () => {
+    // 준비: 필터 없음. "없는숙소"로 0건.
+    mockSearchParams = { region: '부산' };
+    render(<StaySearchPage />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(screen.getByTestId(`stay-card-${KEY_HOTEL}`)).toBeOnTheScreen()
+    );
+
+    // 실행
+    fireEvent.changeText(
+      screen.getByTestId('stay-search-name-input'),
+      '없는숙소'
+    );
+
+    // 단언
+    expect(
+      screen.getByTestId('stay-search-name-empty-clear')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('stay-search-name-empty-reset')).toBeNull();
+  });
+});

@@ -969,6 +969,28 @@ describe('이름·지역 검색 (옛 .nameSearch — 통합 심판 0, 단위 전
       expect(screen.queryByTestId(`stay-card-${KEY_A}`)).toBeNull();
     });
 
+    it('가격대만 걸린 이름 0건에도 "필터 초기화"가 보이고 onRelaxFilters 를 부른다 (TRIP-935)', () => {
+      // 준비: 가격대는 "필터" 배지에 안 세므로(activeFilterCount 0) priceBucket 만으로 판정돼야 한다.
+      const onRelax = jest.fn();
+      render(
+        <StaySearchScreen
+          region="부산"
+          items={ITEMS}
+          nameQuery="없는숙소"
+          onChangeNameQuery={() => {}}
+          activeFilterCount={0}
+          priceBucket="over-200k"
+          onRelaxFilters={onRelax}
+        />
+      );
+
+      // 실행
+      fireEvent.press(screen.getByTestId('stay-search-name-empty-reset'));
+
+      // 단언
+      expect(onRelax).toHaveBeenCalledTimes(1);
+    });
+
     it('빈 검색어는 전체를 그대로 둔다(no-match 아님)', () => {
       render(
         <StaySearchScreen
