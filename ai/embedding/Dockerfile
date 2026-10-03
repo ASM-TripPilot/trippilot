@@ -84,6 +84,11 @@ ENV EMBEDDING_ONNX_DIR=/models/onnx
 
 COPY app.py ./
 
+# `/ready` 가 모델 상태를 실제로 가르는지 **빌드에서** 확인한다 — 차트의 startup·readiness
+# 가 이걸 보고, 틀리면 모델 없는 파드가 트래픽을 받는다(check_ready.py 의 docstring 에 경위).
+COPY check_ready.py ./
+RUN /app/.venv/bin/python check_ready.py
+
 EXPOSE 8100
 # 워커 1개 — 모델이 **프로세스마다 4.2 GiB** 를 잡는다(워밍 직후 4.29 · 배치 정점 4.37,
 # `ai/docs/임베딩-사이징-근거.md` §2). 위의 1.1GB 는 이미지에 저장된 fp16 가중치 크기이고
