@@ -75,7 +75,12 @@ class BootstrapSecurityTests(unittest.TestCase):
         self.assertTrue(all(action.split(":")[1].startswith(("Get", "List")) for action in reads["Action"]))
 
     def test_cluster_and_node_roles_have_fixed_aws_service_trust(self):
-        expected = {"ClusterRole": "eks.amazonaws.com", "NodeRole": "ec2.amazonaws.com", "AiPodRole": "pods.eks.amazonaws.com"}
+        expected = {
+            "ClusterRole": "eks.amazonaws.com",
+            "NodeRole": "ec2.amazonaws.com",
+            "AiPodRole": "pods.eks.amazonaws.com",
+            "CloudWatchPodRole": "pods.eks.amazonaws.com",
+        }
         for role, service in expected.items():
             trust = self.resources[role]["Properties"]["AssumeRolePolicyDocument"]["Statement"]
             self.assertEqual(len(trust), 1)
@@ -90,6 +95,26 @@ class BootstrapSecurityTests(unittest.TestCase):
         self.assertEqual(statements[0]["Action"], ["bedrock:InvokeModel"])
         self.assertTrue(statements[0]["Resource"]["Fn::Sub"].endswith(":imported-model/*"))
         self.assertNotIn("ManagedPolicyArns", self.resources["AiPodRole"]["Properties"])
+
+    def test_cloudwatch_pod_role_can_only_write_this_environment_container_logs(self):
+        """로그 수집기 역할이 로그 쓰기 말고 아무것도 못 하는지.
+
+        `cloudwatch:PutMetricData` 가 붙으면 수집기가 커스텀 지표를 만들 수 있고,
+        커스텀 지표는 개당 월정액으로 과금된다 — 로그 한 줄 보려고 켠 애드온이
+        조용히 지표 요금을 만드는 경로를 막는다. 로그 그룹도 해당 환경으로 묶는다.
+        """
+        properties = self.resources["CloudWatchPodRole"]["Properties"]
+        statements = [item for policy in properties["Policies"] for item in policy["PolicyDocument"]["Statement"]]
+        self.assertEqual(len(statements), 1)
+        self.assertTrue(all(action.startswith("logs:") for action in statements[0]["Action"]))
+        self.assertTrue(statements[0]["Resource"]["Fn::Sub"].endswith(
+            ":log-group:/aws/containerinsights/trippilot-${Environment}/*"))
+        self.assertNotIn("ManagedPolicyArns", properties)
+
+        attached = self.resources["DeploymentExtraPolicy"]["Properties"]["PolicyDocument"]["Statement"]
+        passes = next(item for item in attached if item["Sid"] == "PassCloudWatchPodRoleToPods")
+        self.assertTrue(passes["Resource"]["Fn::Sub"].endswith("-${Environment}-cloudwatch-pod"))
+        self.assertEqual(passes["Condition"]["StringEquals"]["iam:PassedToService"], "pods.eks.amazonaws.com")
 
     def test_new_security_group_rules_have_tag_authorization(self):
         create = self.statement("CreateTaggedSecurityRules")

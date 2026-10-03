@@ -113,7 +113,7 @@
       ]
     },
     {
-      "Sid": "ManageAiPodRole",
+      "Sid": "ManagePodIdentityRoles",
       "Effect": "Allow",
       "Action": [
         "iam:CreateRole",
@@ -131,7 +131,10 @@
         "iam:PutRolePolicy",
         "iam:DeleteRolePolicy"
       ],
-      "Resource": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/trippilot-<ENVIRONMENT>-ai-pod"
+      "Resource": [
+        "arn:aws:iam::<AWS_ACCOUNT_ID>:role/trippilot-<ENVIRONMENT>-ai-pod",
+        "arn:aws:iam::<AWS_ACCOUNT_ID>:role/trippilot-<ENVIRONMENT>-cloudwatch-pod"
+      ]
     },
     {
       "Sid": "AttachApprovedEksServicePolicies",

@@ -31,13 +31,15 @@ run "dev_is_private_and_cost_conscious" {
   }
 
   variables {
-    environment                = "dev"
-    availability_zone_count    = 2
-    single_nat_gateway         = true
-    vpc_cidr                   = "10.40.0.0/16"
-    database_instance_class    = "db.t4g.small"
-    database_allocated_storage = 20
-    redis_node_type            = "cache.t4g.micro"
+    environment                   = "dev"
+    availability_zone_count       = 2
+    single_nat_gateway            = true
+    vpc_cidr                      = "10.40.0.0/16"
+    container_logs_enabled        = true
+    container_logs_retention_days = 7
+    database_instance_class       = "db.t4g.small"
+    database_allocated_storage    = 20
+    redis_node_type               = "cache.t4g.micro"
   }
 
   assert {
@@ -84,6 +86,21 @@ run "dev_is_private_and_cost_conscious" {
     condition     = length(aws_secretsmanager_secret.app) == 4 && aws_db_parameter_group.postgres.parameter == toset([{ name = "rds.force_ssl", value = "1", apply_method = "pending-reboot" }])
     error_message = "Create four secret containers and require PostgreSQL TLS."
   }
+
+  assert {
+    condition     = length(aws_cloudwatch_log_group.container_insights) == 4 && alltrue([for group in aws_cloudwatch_log_group.container_insights : group.retention_in_days == 7 && startswith(group.name, "/aws/containerinsights/trippilot-dev/")])
+    error_message = "Container logs must land in this environment Container Insights groups and expire, never accumulate forever."
+  }
+
+  assert {
+    condition     = aws_eks_addon.cloudwatch_observability[0].addon_name == "amazon-cloudwatch-observability" && one(aws_eks_addon.cloudwatch_observability[0].pod_identity_association).role_arn == data.aws_iam_role.cloudwatch_pod[0].arn && one(aws_eks_addon.cloudwatch_observability[0].pod_identity_association).service_account == "cloudwatch-agent"
+    error_message = "The log collector must read its CloudWatch permissions from the bootstrap-owned Pod Identity role."
+  }
+
+  assert {
+    condition     = strcontains(aws_eks_addon.cloudwatch_observability[0].configuration_values, "\"monitorAllServices\":false") && strcontains(aws_eks_addon.cloudwatch_observability[0].configuration_values, "\"containerLogs\":{\"enabled\":true}")
+    error_message = "The add-on must ship container logs and must not auto-instrument workloads for Application Signals."
+  }
 }
 
 run "prd_has_high_availability_and_data_protection" {
@@ -100,14 +117,16 @@ run "prd_has_high_availability_and_data_protection" {
   }
 
   variables {
-    environment                = "prd"
-    deployment_role_arn        = "arn:aws:iam::123456789012:role/trippilot-github-prd"
-    availability_zone_count    = 3
-    single_nat_gateway         = false
-    vpc_cidr                   = "10.50.0.0/16"
-    database_instance_class    = "db.t4g.medium"
-    database_allocated_storage = 100
-    redis_node_type            = "cache.t4g.small"
+    environment                   = "prd"
+    deployment_role_arn           = "arn:aws:iam::123456789012:role/trippilot-github-prd"
+    availability_zone_count       = 3
+    single_nat_gateway            = false
+    vpc_cidr                      = "10.50.0.0/16"
+    container_logs_enabled        = true
+    container_logs_retention_days = 30
+    database_instance_class       = "db.t4g.medium"
+    database_allocated_storage    = 100
+    redis_node_type               = "cache.t4g.small"
   }
 
   assert {
@@ -128,6 +147,11 @@ run "prd_has_high_availability_and_data_protection" {
   assert {
     condition     = aws_eks_cluster.this.deletion_protection && aws_cloudwatch_log_group.eks.retention_in_days >= 30
     error_message = "PRD EKS requires deletion protection and retained audit logs."
+  }
+
+  assert {
+    condition     = alltrue([for group in aws_cloudwatch_log_group.container_insights : group.retention_in_days == 30 && startswith(group.name, "/aws/containerinsights/trippilot-prd/")])
+    error_message = "PRD container logs must be kept longer than DEV and stay in PRD log groups, while still expiring."
   }
 
   assert {
