@@ -46,9 +46,19 @@ ENV EMBEDDING_MODEL=${EMBEDDING_MODEL} \
 COPY bake_model.py ./
 # 굽고 나면 HF 캐시(fp32 원본 2.1GB)는 필요 없다 — 같은 레이어에서 지워야
 # 이미지에 안 남는다. 런타임은 /models/kure 의 fp16 사본만 읽는다.
+#
+# **구운 뒤 권한을 연다.** safetensors 직렬화가 가중치를 `0600 root` 로 쓴다(다른 산출물은
+# 0644 다). 로컬 compose 는 root 로 돌아 드러나지 않지만, 배포 차트는 비루트(uid 10001)라
+# 거기서만 터진다 — 그리고 터지는 모양이 **`FileNotFoundError: No such file or directory`** 다
+# (safetensors 의 `safe_open` 이 권한 거부를 그렇게 보고한다). 없는 파일을 찾게 만든다.
+# 아래 검사가 재발을 빌드에서 막는다 — 런타임에 드러나면 `/health` 가 200 이라 조용하다.
 RUN HF_HUB_OFFLINE=0 TRANSFORMERS_OFFLINE=0 \
     /app/.venv/bin/python bake_model.py "${EMBEDDING_MODEL}" "${EMBEDDING_REVISION}" /models/kure \
- && rm -rf /models/hf
+ && rm -rf /models/hf \
+ && chmod -R a+rX /models/kure \
+ && if find /models/kure ! -perm -o+r | grep -q .; then \
+      echo "비루트가 못 읽는 산출물이 남았다:" >&2; find /models/kure ! -perm -o+r >&2; exit 1; \
+    fi
 
 # ONNX 그래프를 굽는다 — `EMBEDDING_BACKEND=onnx` 가 프로세스 안에서 이걸 읽는다
 # (TRIP-965, amd64 실측 13~15% 단축). **기본 백엔드는 여전히 sentence-transformers** 라
@@ -64,7 +74,11 @@ COPY export_onnx.py ./
 RUN if [ "${EMBEDDING_BAKE_ONNX}" = "1" ]; then \
       uv pip install --no-cache "onnx>=1.17" "onnxruntime>=1.19" && \
       /app/.venv/bin/python export_onnx.py /models/onnx && \
-      uv pip uninstall onnx ; \
+      uv pip uninstall onnx && \
+      chmod -R a+rX /models/onnx && \
+      if find /models/onnx ! -perm -o+r | grep -q .; then \
+        echo "비루트가 못 읽는 ONNX 산출물이 남았다:" >&2; find /models/onnx ! -perm -o+r >&2; exit 1; \
+      fi ; \
     fi
 ENV EMBEDDING_ONNX_DIR=/models/onnx
 
