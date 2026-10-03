@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { resolveLiveState } from '../model/liveState';
 import {
   openNextNav,
-  resolveNextDest,
+  resolveSlotDests,
   useLiveItinerary,
 } from '@/features/execution';
 import { projectSlotProgress } from '@/entities/itinerary-slot';
@@ -122,7 +122,10 @@ export function LiveItineraryPage({
   // TRIP-1189 다음 예정지 [길찾기] — 외부 앱을 띄우는 동안 연타를 막는 잠금(ref: 같은 틱 두 번째 press 도 본다)과
   // 앱·웹 모두 실패했을 때의 거리 안내(INV-4).
   const directionsBusy = useRef(false);
-  const [directionsNotice, setDirectionsNotice] = useState<string | null>(null);
+  const [directionsNotice, setDirectionsNotice] = useState<{
+    poiId: string;
+    text: string;
+  } | null>(null);
 
   const state = resolveLiveState({
     isLoading: query.isPending,
@@ -246,24 +249,23 @@ export function LiveItineraryPage({
     entry.state === 'active' ? { ...entry, memo: visitMemo.savedMemo } : entry
   );
 
-  // TRIP-1189 — 다음 예정지(첫 upcoming + 유한 좌표)는 resolveNextDest 가 정한다. 외부 지도앱에 넘기고 우리 라우트는
-  // 건드리지 않으므로 복귀하면 같은 허브다(BR-U4-39).
-  const nextDest = resolveNextDest(projected);
-  const directionsPoiId = nextDest
-    ? (projected.find((entry) => entry.state === 'upcoming')?.slot.poiId ??
-      null)
-    : null;
-  const pressDirections = async () => {
-    if (!nextDest || directionsBusy.current) return;
+  // TRIP-1189 — 예정·진행 중 슬롯마다 [길찾기]. 도착지·출발지(바로 앞 슬롯, 첫 예정지는 현재 위치)는 resolveSlotDests 가
+  // 정한다. 외부 지도앱에 넘기고 우리 라우트는 건드리지 않으므로 복귀하면 같은 허브다(BR-U4-39).
+  const slotDests = resolveSlotDests(projected);
+  const directionsPoiIds = new Set(slotDests.keys());
+  const pressDirections = async (poiId: string) => {
+    const dest = slotDests.get(poiId);
+    if (!dest || directionsBusy.current) return;
     directionsBusy.current = true;
     setDirectionsNotice(null);
     try {
-      await openNextNav(nextDest, (distanceRange) =>
-        setDirectionsNotice(
-          distanceRange
+      await openNextNav(dest, (distanceRange) =>
+        setDirectionsNotice({
+          poiId,
+          text: distanceRange
             ? `지도를 열 수 없어요. ${distanceRange}`
-            : '지도를 열 수 없어요.'
-        )
+            : '지도를 열 수 없어요.',
+        })
       );
     } finally {
       directionsBusy.current = false;
@@ -452,8 +454,8 @@ export function LiveItineraryPage({
               }
             : undefined
         }
-        directionsPoiId={directionsPoiId}
-        onPressDirections={() => void pressDirections()}
+        directionsPoiIds={directionsPoiIds}
+        onPressDirections={(poiId) => void pressDirections(poiId)}
         directionsNotice={directionsNotice}
         initialSnapIndex={initialSnapIndex}
       />

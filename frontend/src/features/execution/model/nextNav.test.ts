@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
+import * as fc from 'fast-check';
 import * as Linking from 'expo-linking';
 
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
@@ -14,6 +15,7 @@ import {
   buildWebNavUrl,
   openNextNav,
   resolveNextDest,
+  resolveSlotDests,
   type NavDest,
 } from './nextNav';
 
@@ -170,6 +172,179 @@ describe('AC-6 · resolveNextDest 도출 (첫 upcoming + 유한 좌표)', () => 
       nameKo: '첫 예정',
       distanceRange: '약 1.2km · 도보 추정',
     });
+  });
+});
+
+describe('슬롯 단위 · 출발지(origin) 지정 URL (TRIP-1189)', () => {
+  const origin = { lat: 35.0, lng: 129.0, nameKo: '해운대' };
+  const to = { lat: 35.1, lng: 129.1, nameKo: '광안리' };
+
+  it('buildAppNavUrl 은 origin 이 있으면 slat·slng·sname 을 도착지 앞에 싣는다', () => {
+    expect(buildAppNavUrl({ ...to, origin })).toBe(
+      `nmap://route/public?slat=35&slng=129&sname=${encodeURIComponent('해운대')}&dlat=35.1&dlng=129.1&dname=${encodeURIComponent('광안리')}&appname=com.trippilot.travel`
+    );
+  });
+
+  it('buildAppNavUrl 은 origin 이 null·undefined 면 slat 계열이 없다 (현재 위치)', () => {
+    expect(buildAppNavUrl({ ...to, origin: null })).not.toContain('slat');
+    expect(buildAppNavUrl(to)).not.toContain('sname');
+  });
+
+  it('buildAppNavUrl 은 origin.nameKo 가 null 이면 sname 을 "장소"로 대체한다', () => {
+    expect(
+      buildAppNavUrl({ ...to, origin: { ...origin, nameKo: null } })
+    ).toContain(`sname=${encodeURIComponent('장소')}`);
+  });
+
+  it('buildWebNavUrl 은 origin 이 있으면 출발 자리에 lng,lat,이름을 싣는다', () => {
+    expect(buildWebNavUrl({ ...to, origin })).toBe(
+      `https://map.naver.com/p/directions/129,35,${encodeURIComponent('해운대')}/129.1,35.1,${encodeURIComponent('광안리')}/-/transit`
+    );
+  });
+
+  it('buildWebNavUrl 은 origin 이 없으면 출발이 "-" 다 (기존 형식)', () => {
+    expect(buildWebNavUrl({ ...to, origin: null })).toBe(
+      `https://map.naver.com/p/directions/-/129.1,35.1,${encodeURIComponent('광안리')}/-/transit`
+    );
+  });
+
+  it('INV-3 · URL 어디에도 duration·소요시간 파라미터가 없다', () => {
+    const urls = [
+      buildAppNavUrl({ ...to, origin }),
+      buildWebNavUrl({ ...to, origin }),
+    ];
+    urls.forEach((u) => expect(u).not.toMatch(/duration|time|분/i));
+  });
+});
+
+describe('resolveSlotDests · 슬롯마다 도착지 + 직전 슬롯 출발지 (TRIP-1189)', () => {
+  const at = (
+    state: SlotState,
+    poiId: string,
+    over: Partial<ItineraryDaysItemSlotsItem> = {}
+  ): ProjectedSlot =>
+    projected(state, { poiId, nameKo: `n-${poiId}`, ...over });
+
+  it('방문 완료 슬롯에는 도착지가 없다 · 예정·진행 중에는 있다', () => {
+    const dests = resolveSlotDests([
+      at('done', 'a'),
+      at('active', 'b'),
+      at('upcoming', 'c'),
+    ]);
+
+    expect(dests.has('a')).toBe(false);
+    expect(dests.has('b')).toBe(true);
+    expect(dests.has('c')).toBe(true);
+  });
+
+  it('첫 upcoming 은 출발지가 없다 (현재 위치) — 앞 슬롯 좌표가 있어도', () => {
+    const dests = resolveSlotDests([
+      at('done', 'a', { lat: 35.0, lng: 129.0 }),
+      at('upcoming', 'b'),
+    ]);
+
+    expect(dests.get('b')?.origin ?? null).toBeNull();
+  });
+
+  it('둘째 upcoming 부터는 바로 앞 슬롯이 출발지다', () => {
+    const dests = resolveSlotDests([
+      at('upcoming', 'a', { lat: 35.0, lng: 129.0, nameKo: '앞' }),
+      at('upcoming', 'b'),
+      at('upcoming', 'c', { lat: 36.0, lng: 128.0 }),
+    ]);
+
+    expect(dests.get('b')?.origin).toEqual({
+      lat: 35.0,
+      lng: 129.0,
+      nameKo: '앞',
+    });
+    expect(dests.get('c')?.origin).toEqual({
+      lat: 35.1,
+      lng: 129.1,
+      nameKo: 'n-b',
+    });
+  });
+
+  it('진행 중 슬롯의 출발지는 바로 앞(방문 완료) 슬롯이다', () => {
+    const dests = resolveSlotDests([
+      at('done', 'a', { lat: 35.0, lng: 129.0, nameKo: '앞' }),
+      at('active', 'b'),
+    ]);
+
+    expect(dests.get('b')?.origin?.nameKo).toBe('앞');
+  });
+
+  it('폴백 · 앞 슬롯 좌표가 없으면 출발지를 생략한다 (현재 위치)', () => {
+    const dests = resolveSlotDests([
+      at('upcoming', 'a'),
+      at('upcoming', 'b', { lat: 35.5, lng: 129.5 }),
+      at('upcoming', 'x', { lat: null, lng: null }),
+      at('upcoming', 'c'),
+    ]);
+
+    expect(dests.get('b')?.origin).toBeTruthy();
+    expect(dests.has('x')).toBe(false); // 자기 좌표가 없으면 도착지도 없다
+    expect(dests.get('c')).toBeTruthy();
+    expect(dests.get('c')?.origin ?? null).toBeNull();
+  });
+
+  it('맨 앞 진행 중 슬롯은 앞이 없어 출발지를 생략한다', () => {
+    expect(
+      resolveSlotDests([at('active', 'a')]).get('a')?.origin ?? null
+    ).toBeNull();
+  });
+
+  it('도착지는 자기 좌표·이름·거리다', () => {
+    const dests = resolveSlotDests([
+      at('upcoming', 'a', { lat: 35.2, lng: 129.2, nameKo: '광안리' }),
+    ]);
+
+    expect(dests.get('a')).toMatchObject({
+      lat: 35.2,
+      lng: 129.2,
+      nameKo: '광안리',
+      distanceRange: '약 1.2km · 도보 추정',
+    });
+  });
+
+  it('PBT · 어떤 배열에도 done 에는 도착지가 없고, origin 은 항상 바로 앞 슬롯의 좌표이며, 첫 upcoming 은 origin 이 없다', () => {
+    const slotArb = fc.record({
+      state: fc.constantFrom<SlotState>('done', 'active', 'upcoming'),
+      lat: fc.option(fc.double({ min: 33, max: 38, noNaN: true }), {
+        nil: null,
+      }),
+      lng: fc.option(fc.double({ min: 124, max: 130, noNaN: true }), {
+        nil: null,
+      }),
+    });
+    fc.assert(
+      fc.property(fc.array(slotArb, { maxLength: 12 }), (rows) => {
+        const list = rows.map((r, i) =>
+          at(r.state, `p${i}`, { lat: r.lat, lng: r.lng })
+        );
+        const dests = resolveSlotDests(list);
+        const firstUp = list.findIndex((p) => p.state === 'upcoming');
+        list.forEach((p, i) => {
+          const dest = dests.get(`p${i}`);
+          if (p.state === 'done') expect(dest).toBeUndefined();
+          if (!dest) return;
+          if (i === firstUp) expect(dest.origin ?? null).toBeNull();
+          if (dest.origin) {
+            const prev = list[i - 1];
+            expect(i).toBeGreaterThan(0);
+            expect(dest.origin.lat).toBe(prev.slot.lat);
+            expect(dest.origin.lng).toBe(prev.slot.lng);
+          }
+        });
+      })
+    );
+  });
+
+  it('resolveNextDest 의 의미(첫 upcoming)는 보존된다 — origin 없음', () => {
+    const list = [at('done', 'a'), at('upcoming', 'b'), at('upcoming', 'c')];
+    const next = resolveNextDest(list);
+
+    expect(next).toEqual(resolveSlotDests(list).get('b'));
   });
 });
 
