@@ -257,11 +257,11 @@ describe('🔴 TRIP-1085 AC-7 · 지도 로드 실패 (INV-4)', () => {
 });
 
 describe('🔴 TRIP-1085 결정 2(a)·3(c) · 지도 prop', () => {
-  it('V8 지도는 잠겨 있고(viewOnly) 핀 전부 맞추기(fitPins)가 켜져 있으며, 받은 핀을 그대로 넘긴다', () => {
+  it('V8 지도는 열려 있고(viewOnly=false · TRIP-1204 시트 열린 채 손가락 확대) 핀 전부 맞추기(fitPins)가 켜져 있으며, 받은 핀을 그대로 넘긴다', () => {
     renderView();
 
     const map = screen.getByTestId('map-root');
-    expect(map.props.viewOnly).toBe(true);
+    expect(map.props.viewOnly).toBe(false);
     expect(map.props.fitPins).toBe(true);
     expect(map.props.pins).toEqual(PINS);
   });

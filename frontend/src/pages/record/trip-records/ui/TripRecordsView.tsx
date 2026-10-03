@@ -194,6 +194,8 @@ export function TripRecordsView({
         center={mapCenter}
         pins={mapPins}
         fitPins
+        // TRIP-1204 — 시트가 열린 채로도 손가락 확대·이동(셸 기본은 열림=잠금). 6-b 실기 전용.
+        mapViewOnly={false}
         // TRIP-1088 — 셸 기본 칩 줄을 뷰가 직접 넘긴다: FAB 하한을 재려면 칩 줄에 onLayout 을 걸어야 하는데
         // 셸 기본 오버레이엔 그 자리가 없다. ⚠️ 셸 기본 오버레이 배선의 사본 — 셸이 기본을 바꾸면 j01 만 남는다.
         overlay={
