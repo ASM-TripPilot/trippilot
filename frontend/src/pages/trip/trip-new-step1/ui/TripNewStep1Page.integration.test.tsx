@@ -48,8 +48,9 @@ import { TripNewStep1Page } from './TripNewStep1Page';
  *  - 모듈 싱글턴(위저드 스토어·누름 가드·토스트)은 최상위 훅이 매 테스트 되돌린다.
  */
 
-// jest.mock 팩토리는 호이스트돼 바깥 변수를 못 본다 — `mock` 접두만 예외. `useRouter()` 와 `router` 가
-// 같은 객체라 구현이 어느 쪽을 써도 같은 jest.fn 에 기록된다(옛 `.leave` 목).
+// jest.mock 팩토리는 호이스트돼 바깥 변수를 못 본다 — `mock` 접두만 예외. 단 팩토리는 import 시점(아래
+// `const mockRouter` 초기화 전)에 평가되므로 `router` export 는 `undefined` 다(실측). `useRouter()` 는 호출
+// 시점에 `mockRouter` 를 읽어 살아 있으니, 구현은 `useRouter()` 만 써야 같은 jest.fn 에 기록된다(옛 `.leave` 목).
 const mockPush = jest.fn();
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
@@ -118,8 +119,8 @@ function expectNoExitWizard(): void {
  *
  * ⚠️ 게스트(토큰 없음)로 돈다 — 담은목록 조회가 `enabled:isAuthed` 라 안 나가고 `savedPlacesLoading`
  * (=isAuthed && isPending)이 false 라 게이트를 막지 않는다(01b 비회원 예외). 그래서 /saved-places 핸들러가
- * 필요 없다. `/regions`·`/saved-stays` 핸들러도 안 준다 — 신 페이지가 그 훅을 드롭했음을 강제한다(02a ★9,
- * 남기면 onUnhandledRequest:'error' 로 크래시해 red).
+ * 필요 없다. `/regions`·`/saved-stays` 핸들러도 따로 안 준다 — 다만 통합 버킷의 기본 핸들러(`mocks/handlers.ts`)가
+ * 응답하므로 이 생략은 신 페이지가 그 훅을 드롭했음을 강제하지 않는다(02a ★9 의 옛 전제는 낡았다).
  *
  * ⚠️ 매처 함정(02a §5-2): `toHaveTextContent('문자열')` 완전 일치, 부분은 정규식/`within(x).getByText`.
  */
@@ -461,7 +462,7 @@ describe('제출·예외 배선 (I-1~I-7)', () => {
  * 신 스트립은 `mustVisits`(스토어) 만 그리고 자동 시드 경로가 없어 항상 카드 0장이다 — 옛 empty 얼굴·캡션
  * 단언을 신 스트립(카드 0장)으로 교체한다.
  *
- * ⚠️ /regions·/saved-stays 핸들러는 안 준다 — 신 페이지가 그 훅을 드롭했음을 강제한다(02a ★9).
+ * ⚠️ /regions·/saved-stays 핸들러는 따로 안 준다 — 기본 핸들러(`mocks/handlers.ts`)가 응답하므로 이 생략은 그 훅의 드롭을 강제하지 않는다.
  *
  * 로그인 상태는 이 describe 의 beforeEach(setAccessToken)·afterEach(clearAccessToken)에만 있다.
  */
@@ -1282,8 +1283,8 @@ describe('동행 편집 시트 (C-1~C-5)', () => {
  *
  * ⚠️ 게스트(토큰 없음)로 돈다 — 담은목록 조회가 `enabled:isAuthed` 라 안 나가고 `savedPlacesLoading`
  * 이 false 라 게이트를 안 막는다(비회원 예외, 기존 integration 선례). 그래서 /saved-places 핸들러가
- * 필요 없다. `/regions`·`/saved-stays` 핸들러도 안 준다 — 신 배선이 그 훅을 드롭했음을 강제한다
- * (남기면 onUnhandledRequest:'error' 로 크래시 red).
+ * 필요 없다. `/regions`·`/saved-stays` 핸들러도 따로 안 준다 — 다만 통합 버킷의 기본 핸들러(`mocks/handlers.ts`)가
+ * 응답하므로 이 생략은 신 배선이 그 훅을 드롭했음을 강제하지 않는다.
  *
  * ⚠️ 매처 함정(02a §5-4·§5-5): preferenceSnapshot 배열은 `toEqual`(정확 배열), 요약 부분 텍스트는
  * 정규식(`toHaveTextContent('문자열')`은 완전 일치라 부분 매칭엔 정규식/`within`).
@@ -1490,6 +1491,31 @@ describe('취향 편집 시트 (PI·PA)', () => {
       await waitFor(() =>
         expect(screen.queryByTestId('trip-wizard-pref-sheet')).toBeNull()
       );
+    });
+  });
+
+  describe('PI-4b · 재오픈 — 고친 취향(styleOverride)부터 보인다', () => {
+    it('적용해 닫은 뒤 다시 열면 프리필이 아니라 오버라이드 칩이 selected 로 시작한다', async () => {
+      renderPage();
+      await waitForPrefill();
+      await openSheet();
+
+      // 프리필(미식·자연)에서 둘 다 끄고 휴양을 켜 → 적용 → 닫힘.
+      fireEvent.press(chip('gourmet'));
+      fireEvent.press(chip('nature'));
+      fireEvent.press(chip('rest'));
+      await waitFor(() => expect(chip('rest')).toBeSelected());
+      fireEvent.press(screen.getByTestId('trip-wizard-pref-sheet-apply'));
+      await waitFor(() =>
+        expect(screen.queryByTestId('trip-wizard-pref-sheet')).toBeNull()
+      );
+
+      await openSheet();
+
+      // `styleOverride ?? prefillStyles` 에서 오버라이드 우선이 빠지면 미식·자연이 다시 켜진다.
+      expect(chip('rest')).toBeSelected();
+      expect(chip('gourmet')).not.toBeSelected();
+      expect(chip('nature')).not.toBeSelected();
     });
   });
 
