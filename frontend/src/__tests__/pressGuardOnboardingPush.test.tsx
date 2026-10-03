@@ -8,7 +8,7 @@ import {
 
 import { LocationPage } from '@/pages/onboarding/onboarding-location';
 import { PushPage } from '@/pages/onboarding/onboarding-push';
-import { resetPressGuard } from '@/shared/press/pressGuard';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { promptAndRegisterPush } from '@/shared/push';
 
 /**

@@ -1,5 +1,5 @@
 import type { ItineraryStatus, Trip } from '@/shared/api/index.schemas';
-import { buildMonthGrid, isDateInRange } from '@/shared/date';
+import { buildMonthGrid, isDateInRange } from '@/shared/lib/monthGrid';
 import { formatDayLabel } from '@/entities/trip';
 import { formatLegendDateRange, formatTripDateRange } from '@/entities/trip';
 import { nightsLabel } from '@/entities/trip';
@@ -14,7 +14,7 @@ import type { PastTripCardVM } from '@/entities/trip';
  *  3) 카드 라벨(날짜범위 + 박수 — TRIP-808 로 entities/trip/lib 에 바이트 이관, 여기선 위임·재수출),
  *  4) 캘린더 아래 legend 줄(같은 기간 묶음 + 앞 3줄, TRIP-1084).
  * 시계·네트워크·화면을 모른다 — 오늘 날짜는 문자열로 주입받는다. 월 그리드 수학은 재구현하지 않고
- * `@/shared/date`(monthGrid)를 경유한다(맹점② — stay/trip 두 벌 직접 import 금지, 세 벌째 금지).
+ * `@/shared/lib/monthGrid`를 경유한다(맹점② — stay/trip 두 벌 직접 import 금지, 세 벌째 금지).
  *
  * ★[[반쪽 방어]](571~574·570 계보): trips=null·원소 null·startDate/endDate null·빈 배열에도 던지지
  * 않는다. 결측 dates 는 `isDateInRange`가 false 로 접어 마킹에서 배제되고, 라벨은 null 로 정직 degrade

@@ -9,7 +9,7 @@ import {
 import type { StayAddressState } from '../model/staySheetSections';
 import type { BaseAssignment, SavedStay } from '@/shared/api/index.schemas';
 import { useTripWizardStore } from '@/features/create-trip';
-import { resetPressGuard } from '@/shared/press/pressGuard';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 
 import { TripNewStep2Page } from './TripNewStep2Page';
 

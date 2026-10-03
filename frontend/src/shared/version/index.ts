@@ -1,1 +1,0 @@
-export { compareVersion } from './compareVersion';

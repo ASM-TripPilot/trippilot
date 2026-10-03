@@ -11,7 +11,7 @@ import {
   ItineraryGenerationState,
   ItineraryStatus,
 } from '@/shared/api/index.schemas';
-import { seoulDate } from '@/shared/date';
+import { seoulDate } from '@/shared/lib/seoulDate';
 import { SAVE_FAILURE_NOTICE } from '@/features/save-place';
 import { regionPickerHref } from '@/features/explore';
 import { useTripWizardStore } from '@/features/create-trip';

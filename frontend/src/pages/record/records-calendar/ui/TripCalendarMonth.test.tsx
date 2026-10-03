@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react-native';
 import Svg, { Path } from 'react-native-svg';
 
 import { TripCalendarMonth } from './TripCalendarMonth';
-import type { MonthCell } from '@/shared/date';
+import type { MonthCell } from '@/shared/lib/monthGrid';
 
 /**
  * TRIP-767 · AC-5 — j07 월 캘린더 chevron 크기·색 정합(Figma 1570:1998: 얇은 회색 ≈16, 현 22 ink).

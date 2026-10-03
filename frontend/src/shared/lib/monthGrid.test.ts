@@ -7,7 +7,7 @@ import {
 } from './monthGrid';
 
 /**
- * TRIP-575 · shared/date/monthGrid — 월 캘린더 순수 계산(★정비①).
+ * TRIP-575 · shared/lib/monthGrid — 월 캘린더 순수 계산(★정비①).
  *
  * *(개념)* j07 기록 캘린더가 커스텀 월 그리드를 그리는 데 필요한 수학이다. `features/stay`·
  * `features/trip`에 두 벌 있으나 `features/record`가 경계(recordsStructure G2)로 직접 import

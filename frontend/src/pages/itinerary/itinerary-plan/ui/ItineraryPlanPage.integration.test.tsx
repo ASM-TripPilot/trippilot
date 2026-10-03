@@ -12,7 +12,7 @@ import {
 
 import type * as ShareCaptureModule from '@/features/share-trip-card/model/shareCapture';
 import { server } from '@/mocks/server';
-import { resetPressGuard } from '@/shared/press/pressGuard';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { resetToast, WithToastHost } from '@/test-support/toastHarness';
 import type {
   Itinerary,

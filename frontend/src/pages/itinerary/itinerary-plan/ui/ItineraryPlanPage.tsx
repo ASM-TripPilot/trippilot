@@ -35,7 +35,7 @@ import {
 import { isAlreadyRegistered } from '@/shared/api';
 import { isNotFound } from '@/shared/api';
 import { getAccessToken } from '@/shared/api';
-import { guardPress, openPressGuardWindow } from '@/shared/press';
+import { guardPress, openPressGuardWindow } from '@/shared/lib/pressGuard';
 import { StateNotice, type StateNoticeAction } from '@/shared/ui/StateNotice';
 import { showToast } from '@/shared/ui/Toast';
 import { DistanceConnector } from '@/widgets/map-sheet-shell';

@@ -11,7 +11,7 @@ import {
   type NotificationRowVM,
   type NotificationSection,
 } from './NotificationInboxScreen';
-import { formatRelativeTime } from '@/shared/date';
+import { formatRelativeTime } from '@/shared/lib/formatRelativeTime';
 import type { Notification } from '@/shared/api/index.schemas';
 
 /**

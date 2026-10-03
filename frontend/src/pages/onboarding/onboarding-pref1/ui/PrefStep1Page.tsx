@@ -8,8 +8,8 @@ import type { ReactElement } from 'react';
 import { useRouter } from 'expo-router';
 
 import { usePreferenceStore } from '@/features/edit-preferences';
-import { notifyBootstrapReeval } from '@/shared/bootstrap';
-import { guardPress } from '@/shared/press';
+import { notifyBootstrapReeval } from '@/shared/lib/bootstrapReeval';
+import { guardPress } from '@/shared/lib/pressGuard';
 import { PrefStep1Screen } from './PrefStep1Screen';
 
 export function PrefStep1Page(): ReactElement {

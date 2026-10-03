@@ -28,8 +28,8 @@ import {
 } from '@/shared/api/index.hooks';
 import { ArriveRequestSource } from '@/shared/api/index.schemas';
 import type { MapCenter } from '@/shared/map';
-import { seoulDate, seoulTime } from '@/shared/date';
-import { guardPress } from '@/shared/press';
+import { seoulDate, seoulTime } from '@/shared/lib/seoulDate';
+import { guardPress } from '@/shared/lib/pressGuard';
 
 import { TripRecordsView, type RecordPlanRowVM } from './TripRecordsView';
 

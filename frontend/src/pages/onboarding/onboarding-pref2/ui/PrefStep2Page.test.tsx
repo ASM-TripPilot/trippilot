@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { usePreferenceStore } from '@/features/edit-preferences';
-import { notifyBootstrapReeval } from '@/shared/bootstrap';
-import { resetPressGuard } from '@/shared/press/pressGuard';
+import { notifyBootstrapReeval } from '@/shared/lib/bootstrapReeval';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { PrefStep2Page } from './PrefStep2Page';
 
 /**
@@ -35,7 +35,7 @@ const routerMock = require('expo-router').router as {
 
 // TRIP-353 — 온보딩 완료 재평가 신호를 목킹해, 완료·탈출이 신호를 발화하는지 spy 로 관찰한다.
 // 실물 몸통(pub/sub)은 bootstrapReeval.test.ts 가 따로 잠근다.
-jest.mock('@/shared/bootstrap/bootstrapReeval', () => ({
+jest.mock('@/shared/lib/bootstrapReeval', () => ({
   notifyBootstrapReeval: jest.fn(),
   subscribeBootstrapReeval: jest.fn(() => () => {}),
 }));

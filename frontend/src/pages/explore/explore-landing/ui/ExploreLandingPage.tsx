@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import type { Place, StayItem } from '@/shared/api/index.schemas';
-import { guardPress } from '@/shared/press';
+import { guardPress } from '@/shared/lib/pressGuard';
 import { formatPrice } from '@/entities/stay';
 import { stayKey } from '@/features/save-stay';
 import { useSavedStays } from '@/features/save-stay';

@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { usePreferenceStore } from '@/features/edit-preferences';
-import { notifyBootstrapReeval } from '@/shared/bootstrap';
-import { resetPressGuard } from '@/shared/press/pressGuard';
+import { notifyBootstrapReeval } from '@/shared/lib/bootstrapReeval';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { PrefStep1Page } from './PrefStep1Page';
 
 /**
@@ -39,7 +39,7 @@ const routerMock = require('expo-router').router as {
 
 // TRIP-353 — 온보딩 완료 재평가 신호를 목킹해, 일괄 탈출이 신호를 발화하는지 spy 로 관찰한다.
 // 취향 1/2 의 '나중에 설정하고 시작'도 완료 탈출구라 홈 진입해야 한다(ticket AC-A · US-ONB-11).
-jest.mock('@/shared/bootstrap/bootstrapReeval', () => ({
+jest.mock('@/shared/lib/bootstrapReeval', () => ({
   notifyBootstrapReeval: jest.fn(),
   subscribeBootstrapReeval: jest.fn(() => () => {}),
 }));

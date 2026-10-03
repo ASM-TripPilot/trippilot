@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { usePreferenceStore } from '@/features/edit-preferences';
-import { notifyBootstrapReeval } from '@/shared/bootstrap';
-import { resetPressGuard } from '@/shared/press/pressGuard';
+import { notifyBootstrapReeval } from '@/shared/lib/bootstrapReeval';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { PrefStep1Page } from '@/pages/onboarding/onboarding-pref1';
 import { PrefStep2Page } from '@/pages/onboarding/onboarding-pref2';
 
@@ -15,7 +15,7 @@ import { PrefStep2Page } from '@/pages/onboarding/onboarding-pref2';
  * 것은 모듈 하나에 든 400ms 창뿐이다.
  *
  * "창 밖"은 `resetPressGuard()`로 만든다(=400ms 이상 흐른 것과 같다 — 400ms 경계 자체는
- * `shared/press/pressGuard.test.ts` 가 가짜 타이머로 잠근다).
+ * `shared/lib/pressGuard.test.ts` 가 가짜 타이머로 잠근다).
  */
 
 jest.mock('expo-router', () => {
@@ -36,7 +36,7 @@ const routerMock = require('expo-router').router as {
   back: jest.Mock;
 };
 
-jest.mock('@/shared/bootstrap/bootstrapReeval', () => ({
+jest.mock('@/shared/lib/bootstrapReeval', () => ({
   notifyBootstrapReeval: jest.fn(),
   subscribeBootstrapReeval: jest.fn(() => () => {}),
 }));

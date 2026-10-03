@@ -9,8 +9,8 @@ import { useRouter } from 'expo-router';
 
 import { usePreferenceStore } from '@/features/edit-preferences';
 import { toPreferenceInput } from '@/features/edit-preferences';
-import { notifyBootstrapReeval } from '@/shared/bootstrap';
-import { guardPress } from '@/shared/press';
+import { notifyBootstrapReeval } from '@/shared/lib/bootstrapReeval';
+import { guardPress } from '@/shared/lib/pressGuard';
 import { usePutMePreferences } from '@/shared/api/index.hooks';
 import { PrefStep2Screen } from './PrefStep2Screen';
 

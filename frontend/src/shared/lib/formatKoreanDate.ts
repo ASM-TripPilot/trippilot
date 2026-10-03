@@ -6,7 +6,7 @@
  *  - 요일 = 일/월/화/수/목/금/토.
  *
  * TZ-safe: 로컬 타임존에 요일이 밀리지 않게 에포크 일수(UTC 정수)로만 계산한다
- * (`shared/date/monthGrid.ts` 관례). 이 파일은 execution 밖(shared)이라
+ * (`shared/lib/monthGrid.ts` 관례). 이 파일은 execution 밖(shared)이라
  * features/execution 밖(BR-U4-34 대상 아님) — 날짜 산술 자유.
  */
 

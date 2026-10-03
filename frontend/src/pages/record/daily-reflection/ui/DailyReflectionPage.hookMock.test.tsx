@@ -23,7 +23,7 @@ import type {
   ReflectionStats,
 } from '@/shared/api/index.schemas';
 import { useGetTripsTripId } from '@/shared/api/index.hooks';
-import { seoulDate } from '@/shared/date';
+import { seoulDate } from '@/shared/lib/seoulDate';
 
 import { DailyReflectionPage } from './DailyReflectionPage';
 

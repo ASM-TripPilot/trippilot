@@ -14,7 +14,7 @@ import type {
   StayPrice,
 } from '@/shared/api/index.schemas';
 import { RegionLevel } from '@/shared/api/index.schemas';
-import { resetPressGuard } from '@/shared/press/pressGuard';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { formatPrice } from '@/entities/stay';
 import { stayKey } from '@/features/save-stay';
 import { regionPickerHref } from '@/features/explore';

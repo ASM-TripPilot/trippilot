@@ -25,7 +25,7 @@ import {
   useGetTripsTripIdMustVisits,
 } from '@/shared/api/index.hooks';
 import { getAccessToken } from '@/shared/api';
-import { guardPress, openPressGuardWindow } from '@/shared/press';
+import { guardPress, openPressGuardWindow } from '@/shared/lib/pressGuard';
 
 /**
  * h07 배선(TRIP-296) — `ANYTIME` 항목을 시각 고정 블록으로 **승격**한다.

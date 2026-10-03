@@ -15,7 +15,7 @@ import type {
   Trip,
 } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
-import { resetPressGuard } from '@/shared/press/pressGuard';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import {
   MustVisitListPage,
   MustVisitTimePage,

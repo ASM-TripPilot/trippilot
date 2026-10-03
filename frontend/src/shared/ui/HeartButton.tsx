@@ -1,7 +1,7 @@
 import { useEffect, useRef, type ReactElement } from 'react';
 import { Animated, Pressable } from 'react-native';
 
-import { startUnlessReduceMotion } from '@/shared/motion/reduceMotion';
+import { startUnlessReduceMotion } from '@/shared/lib/reduceMotion';
 
 import { HeartFilledGlyph, HeartOutlineGlyph } from './HeartGlyphs';
 

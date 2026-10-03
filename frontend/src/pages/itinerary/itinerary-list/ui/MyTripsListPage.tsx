@@ -11,7 +11,7 @@ import {
   useGetTrips,
 } from '@/shared/api/index.hooks';
 import { isNotFound } from '@/shared/api';
-import { seoulDate } from '@/shared/date';
+import { seoulDate } from '@/shared/lib/seoulDate';
 import { readIdSet, writeIdSet } from '@/shared/storage';
 import { readStringValue, writeStringValue } from '@/shared/storage';
 import { pickDoneBar, type DoneBarEntry } from '../model/doneBar';

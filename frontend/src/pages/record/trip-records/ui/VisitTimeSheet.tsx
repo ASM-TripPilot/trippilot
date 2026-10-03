@@ -7,7 +7,7 @@ import BottomSheet, {
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 
-import { seoulDate, seoulInstant, seoulTime } from '@/shared/date';
+import { seoulDate, seoulInstant, seoulTime } from '@/shared/lib/seoulDate';
 import { WheelPicker } from '@/shared/ui/WheelPicker';
 
 import { adjustTimesDraft } from '../model/adjustTimesDraft';

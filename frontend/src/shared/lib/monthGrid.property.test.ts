@@ -5,10 +5,10 @@ import {
   firstWeekdayOfMonth,
   isDateInRange,
   shiftMonth,
-} from '@/shared/date/monthGrid';
+} from '@/shared/lib/monthGrid';
 
 /**
- * `shared/date/monthGrid` 성질 테스트(PBT) — TRIP-1052에서 이관.
+ * `shared/lib/monthGrid` 성질 테스트(PBT) — TRIP-1052에서 이관.
  *
  * 이 케이스들은 원래 `features/stay/model/stayDates.test.ts`(F-1 · F-2 · F-4 · ISO 순서)와
  * `features/stay/model/stayCalendarMonth.test.ts`(shiftMonth 전부)에 있었다. 파일 이름은 stay지만
