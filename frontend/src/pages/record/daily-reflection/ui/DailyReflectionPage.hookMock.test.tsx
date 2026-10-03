@@ -1077,6 +1077,21 @@ describe('"오늘" 칩·지난 날 문구 — KST 실제 오늘', () => {
       ).toHaveTextContent(BASIC_SUBTITLE);
     });
   });
+
+  describe('TRIP-1202 · 일차 탭은 스택을 쌓지 않는다(replace)', () => {
+    it('2일차 탭 → 그날 경로로 replace 1회, push 0회', () => {
+      arrange(undefined);
+      renderPage('2026-09-26');
+
+      fireEvent.press(tab(2));
+
+      expect(router.replace).toHaveBeenCalledTimes(1);
+      expect(router.replace).toHaveBeenCalledWith(
+        `/trips/${TRIP_ID}/records/reflection/2026-09-25`
+      );
+      expect(router.push).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe('‹ 와 「확인」 — 히스토리 없으면 기록 탭', () => {
