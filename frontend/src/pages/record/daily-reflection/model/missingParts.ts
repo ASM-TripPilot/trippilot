@@ -1,4 +1,4 @@
-import type { ReflectionStats } from '@/shared/api/generated/schemas';
+import type { ReflectionStats } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-571 · missingParts — 부분 데이터면 누락을 명시한다(BR-U5-34, 조용히 칸을 지우지 않는다).

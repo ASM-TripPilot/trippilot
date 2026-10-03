@@ -5,7 +5,7 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
+import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 
 import { buildSlotKey } from '../lib/slotKey';
 import { SlotStopCard } from './SlotStopCard';

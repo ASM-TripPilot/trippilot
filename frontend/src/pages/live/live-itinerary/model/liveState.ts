@@ -1,4 +1,4 @@
-import type { Itinerary } from '@/shared/api/generated/schemas';
+import type { Itinerary } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-395 · resolveLiveState — 여행 중 화면의 상태 판정 1회(frontend-components.md §3).

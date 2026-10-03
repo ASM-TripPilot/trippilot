@@ -3,19 +3,19 @@ import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 
-import { buildEditItineraryRequest } from '@/features/edit-itinerary/model/buildEditItineraryRequest';
-import { isConfirmLocked } from '@/features/itinerary/model/planState';
-import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
-import { resolveSlotSwapError } from '@/features/edit-itinerary/model/slotSwapError';
-import { swapSlotPoi } from '@/features/edit-itinerary/model/swapSlotPoi';
+import { buildEditItineraryRequest } from '@/features/edit-itinerary';
+import { isConfirmLocked } from '@/features/itinerary';
+import { parseSlotKey } from '@/entities/itinerary-slot';
+import { resolveSlotSwapError } from '@/features/edit-itinerary';
+import { swapSlotPoi } from '@/features/edit-itinerary';
 import { SlotCandidateSheet } from './SlotCandidateSheet';
-import { useElapsedFlag } from '@/shared/time/useElapsedFlag';
+import { useElapsedFlag } from '@/shared/time';
 import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripIdItinerary,
   usePostTripsTripIdItinerarySlotCandidates,
   usePutTripsTripIdItinerary,
-} from '@/shared/api/generated/trips/trips';
+} from '@/shared/api/index.hooks';
 
 /**
  * TRIP-793 · h08 슬롯 교체 배선(초안 아래·h08 셸 둘 다 마운트하는 컨테이너, 이름 유지). 세 조각을

@@ -8,7 +8,7 @@ import {
   type SocialProvider,
   type SocialTokenLoginBody,
 } from '@/shared/api';
-import { setAccessToken } from '@/shared/api/tokenManager';
+import { setAccessToken } from '@/shared/api';
 import { saveTokens } from '@/shared/storage';
 
 export type SocialLoginPhase =

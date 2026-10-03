@@ -1,4 +1,4 @@
-import type { Place } from '@/shared/api/generated/schemas';
+import type { Place } from '@/shared/api/index.schemas';
 
 import { mergePlacesByPoiId } from './mergePlaces';
 

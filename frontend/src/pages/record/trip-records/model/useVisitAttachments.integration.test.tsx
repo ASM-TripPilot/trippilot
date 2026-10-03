@@ -8,11 +8,11 @@ import type {
   AddPhotoRequest,
   PutMemoRequest,
   VisitPhoto,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { flushNotifications } from '@/test-support/flushNotifications';
 
-import type { PhotoAssetMeta } from '@/features/attach-visit-media/model/photoAttach';
+import type { PhotoAssetMeta } from '@/features/attach-visit-media';
 import { useVisitAttachments } from './useVisitAttachments';
 
 /**

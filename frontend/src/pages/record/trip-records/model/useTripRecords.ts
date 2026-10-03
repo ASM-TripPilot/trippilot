@@ -1,8 +1,8 @@
-import { useGetSavedStays } from '@/shared/api/generated/saved-stays/saved-stays';
+import { useGetSavedStays } from '@/shared/api/index.hooks';
 import {
   useGetTripsTripIdBases,
   useGetTripsTripIdVisitsDaysDay,
-} from '@/shared/api/generated/trips/trips';
+} from '@/shared/api/index.hooks';
 
 /**
  * TRIP-565 — 그 날의 방문 기록 조회 훅(얇은 래퍼, 로직 0줄 — 선례 `useLiveItinerary.ts`).

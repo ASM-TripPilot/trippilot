@@ -10,15 +10,15 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { PlaceGridCard } from '@/entities/place/ui/PlaceGridCard';
-import type { Place } from '@/shared/api/generated/schemas';
-import { PoiCategory } from '@/shared/api/generated/schemas';
+import { PlaceGridCard } from '@/entities/place';
+import type { Place } from '@/shared/api/index.schemas';
+import { PoiCategory } from '@/shared/api/index.schemas';
 import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
-import type { PlaceListState } from '@/features/explore/model/placeListState';
-import type { PlaceSaveNotice } from '@/features/save-place/model/placeSaveGuard';
+import type { PlaceListState } from '@/features/explore/index.view';
+import type { PlaceSaveNotice } from '@/features/save-place/index.view';
 import { formatRegionChipLabel } from '../model/regionChipLabel';
 import {
   BackChevronGlyph,
@@ -28,7 +28,7 @@ import {
   PlusGlyph,
   SearchGlyph,
   WarningTriangleGlyph,
-} from '@/features/explore/ui/ExploreGlyphs';
+} from '@/features/explore/index.view';
 import { PartialFailureBanner } from './PartialFailureBanner';
 
 // 우하단 FAB 그림자 — `ExploreLandingScreen`의 FAB_SHADOW와 동형

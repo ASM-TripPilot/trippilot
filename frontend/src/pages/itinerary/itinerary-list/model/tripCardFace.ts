@@ -2,7 +2,7 @@ import type {
   ItineraryGenerationMode,
   ItineraryGenerationState,
   ItineraryStatus,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 /**
  * TRIP-788 · h05/h06 "내 여행" 카드 얼굴 파생(순수). 정본 공백(u3 FD 에 상태→상태문 표 없음)이라

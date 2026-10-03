@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import type { CompanionType } from '@/shared/api/generated/schemas';
+import type { CompanionType } from '@/shared/api/index.schemas';
 
 import { CompanionEditSheet } from './CompanionEditSheet';
 

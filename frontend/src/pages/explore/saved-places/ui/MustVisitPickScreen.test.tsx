@@ -5,7 +5,7 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
+import type { Place, SavedPlace } from '@/shared/api/index.schemas';
 
 import {
   MustVisitPickScreen,

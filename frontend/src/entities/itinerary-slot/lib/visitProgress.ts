@@ -1,7 +1,4 @@
-import type {
-  VisitCheck,
-  VisitCheckList,
-} from '@/shared/api/generated/schemas';
+import type { VisitCheck, VisitCheckList } from '@/shared/api/index.schemas';
 import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 
 /**

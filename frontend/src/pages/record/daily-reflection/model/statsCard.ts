@@ -1,4 +1,4 @@
-import type { ReflectionStats } from '@/shared/api/generated/schemas';
+import type { ReflectionStats } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-571 · statsCard — 근거 수치를 0으로 채운 완전한 stats 를 낸다(INV-U5-07).

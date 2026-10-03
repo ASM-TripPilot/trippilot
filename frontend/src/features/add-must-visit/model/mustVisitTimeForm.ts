@@ -1,4 +1,4 @@
-import type { AddMustVisitRequest } from '@/shared/api/generated/schemas';
+import type { AddMustVisitRequest } from '@/shared/api/index.schemas';
 
 /**
  * h07 방문 시각 지정의 순수 판정 — 날짜 칩 · 시각 목록 · FIXED 폼 검증 · 요청 본문.

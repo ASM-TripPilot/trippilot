@@ -1,6 +1,6 @@
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+import { buildSlotKey } from '@/entities/itinerary-slot';
 import { firstCoPickSlotKey, nextCoPickSlotKey } from './coPickSlots';
-import type { ItineraryDaysItem } from '@/shared/api/generated/schemas';
+import type { ItineraryDaysItem } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-504 · copick 선형 순회의 슬롯 진행 판정(01b 순회 세부, AC-8).

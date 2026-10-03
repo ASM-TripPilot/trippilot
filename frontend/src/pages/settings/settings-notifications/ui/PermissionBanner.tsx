@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { NotifWarningGlyph } from '@/features/notification/ui/NotificationGlyphs';
+import { NotifWarningGlyph } from '@/features/notification';
 
 /**
  * l02 permission-denied 상단 대시 배너 — "기기 설정에서 알림 권한을 허용하세요" + [설정 이동] 버튼.

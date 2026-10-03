@@ -2,7 +2,7 @@ import type { ReactTestInstance } from 'react-test-renderer';
 import { act, render, screen } from '@testing-library/react-native';
 import { Stack } from 'expo-router';
 
-import { useBootstrapGate } from '@/features/auth/model/useBootstrapGate';
+import { useBootstrapGate } from '@/features/auth';
 import { SplashGate, SPLASH_MIN_VISIBLE_MS } from './SplashGate';
 
 /**

@@ -9,15 +9,15 @@ import {
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
-import { useGetTripsTripIdVisitsDaysDay } from '@/shared/api/generated/trips/trips';
+import { useGetTripsTripIdVisitsDaysDay } from '@/shared/api/index.hooks';
 import type {
   AdjustTimesRequest,
   VisitCheck,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { flushNotifications } from '@/test-support/flushNotifications';
 
-import { deriveVisitStatus } from '@/features/check-visit/model/visitStatus';
+import { deriveVisitStatus } from '@/features/check-visit';
 import {
   useAdjustVisitTimes,
   VISIT_CONFLICT_NOTICE,

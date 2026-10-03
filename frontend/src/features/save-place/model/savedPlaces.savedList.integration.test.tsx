@@ -5,7 +5,7 @@ import { renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
-import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
+import type { Place, SavedPlace } from '@/shared/api/index.schemas';
 
 import { useSavedPlaces } from './savedPlaces';
 

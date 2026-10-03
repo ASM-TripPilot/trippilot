@@ -1,7 +1,7 @@
 import { Redirect, Stack } from 'expo-router';
 
-import { useOnboardingProgress } from '@/features/onboarding/model/useOnboardingProgress';
-import { resolveOnboardingStep } from '@/features/onboarding/model/resolveOnboardingStep';
+import { useOnboardingProgress } from '@/features/onboarding';
+import { resolveOnboardingStep } from '@/features/onboarding';
 
 /**
  * 온보딩 그룹 레이아웃 — 완료자만 홈으로 되돌리고(온보딩에 갇히지 않게), 미완자는 되돌리지 않고

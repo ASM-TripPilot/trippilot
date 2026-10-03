@@ -3,7 +3,7 @@ import fc from 'fast-check';
 import {
   NotificationActionType,
   type Notification,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 import { notificationAction } from './notificationAction';
 

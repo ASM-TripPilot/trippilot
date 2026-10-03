@@ -1,16 +1,16 @@
 import { useQueryClient } from '@tanstack/react-query';
 
-import { isNotFound } from '@/shared/api/isNotFound';
-import { resolveVisitConflict } from '@/shared/api/visitConflict';
+import { isNotFound } from '@/shared/api';
+import { resolveVisitConflict } from '@/shared/api';
 import {
   getGetTripsTripIdVisitsDaysDayQueryKey,
   patchTripsTripIdVisitsVisitCheckId,
-} from '@/shared/api/generated/trips/trips';
+} from '@/shared/api/index.hooks';
 import type {
   AdjustTimesRequest,
   VisitCheck,
   VisitCheckList,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 /**
  * TRIP-613 · AC-1·AC-5·AC-6 · BR-U5-04·07·22 · INV-4 — 방문 시각 편집(`PATCH /visits/{id}`)의

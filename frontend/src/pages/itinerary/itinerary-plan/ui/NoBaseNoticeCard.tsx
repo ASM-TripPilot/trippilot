@@ -4,7 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 import {
   ChevronRightGlyph,
   InfoCircleGlyph,
-} from '@/features/itinerary/ui/ItineraryGlyphs';
+} from '@/features/itinerary/index.view';
 
 /**
  * TRIP-799 · h14 거점 없음 안내 카드(D4) — 선택일에 고정 숙소 슬롯이 없을 때 시트 children 말미에

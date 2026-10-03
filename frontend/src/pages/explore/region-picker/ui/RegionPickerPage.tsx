@@ -2,10 +2,10 @@ import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
-import type { Region } from '@/shared/api/generated/schemas';
-import { filterRegions, useRegions } from '@/features/explore/model/regions';
-import type { RegionPickerPurpose } from '@/features/explore/model/regionPickerPurpose';
-import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
+import type { Region } from '@/shared/api/index.schemas';
+import { filterRegions, useRegions } from '@/features/explore/index.view';
+import type { RegionPickerPurpose } from '@/features/explore/index.view';
+import { useTripWizardStore } from '@/features/create-trip';
 import { RegionPickerScreen } from './RegionPickerScreen';
 import type { RegionPurpose } from './RegionPickerScreen';
 

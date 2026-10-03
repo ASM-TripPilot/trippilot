@@ -1,4 +1,4 @@
-import { ReplanSessionStatus } from '@/shared/api/generated/schemas';
+import { ReplanSessionStatus } from '@/shared/api/index.schemas';
 
 import { resolveReplanState } from './replanState';
 

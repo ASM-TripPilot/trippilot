@@ -14,9 +14,9 @@ import {
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
-import type { StayDetail } from '@/shared/api/generated/schemas';
-import { getGetMeSettingsQueryKey } from '@/shared/api/generated/profile/profile';
-import { formatPrice } from '@/entities/stay/lib/formatPrice';
+import type { StayDetail } from '@/shared/api/index.schemas';
+import { getGetMeSettingsQueryKey } from '@/shared/api/index.hooks';
+import { formatPrice } from '@/entities/stay';
 import { StayDetailPage } from './StayDetailPage';
 
 /**

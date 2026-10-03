@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 
-import type { Itinerary } from '@/shared/api/generated/schemas';
+import type { Itinerary } from '@/shared/api/index.schemas';
 
 import { resolveLiveState } from './liveState';
 

@@ -7,10 +7,7 @@ import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import {
-  CheckGlyph,
-  ViewChevronGlyph,
-} from '@/features/onboarding/ui/OnboardingGlyphs';
+import { CheckGlyph, ViewChevronGlyph } from '@/features/onboarding';
 
 export interface TermsItemView {
   termsType: string;

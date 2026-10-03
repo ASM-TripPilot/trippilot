@@ -5,7 +5,7 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import type { MustVisitSeedItem } from '@/features/create-trip/model/mustVisitSeed';
+import type { MustVisitSeedItem } from '@/features/create-trip';
 import { TripWizardStep1Screen } from './TripWizardStep1Screen';
 import type { TripWizardStep1ScreenProps } from './TripWizardStep1Screen';
 

@@ -5,8 +5,8 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import type { Region } from '@/shared/api/generated/schemas';
-import { RegionLevel } from '@/shared/api/generated/schemas';
+import type { Region } from '@/shared/api/index.schemas';
+import { RegionLevel } from '@/shared/api/index.schemas';
 
 import { RegionPickerScreen } from './RegionPickerScreen';
 import type {

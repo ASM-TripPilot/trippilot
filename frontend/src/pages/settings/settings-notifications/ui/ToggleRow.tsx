@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { Text, View } from 'react-native';
 
-import type { NotificationToggleKind } from '@/shared/api/generated/schemas';
+import type { NotificationToggleKind } from '@/shared/api/index.schemas';
 import { Toggle } from '@/shared/ui/Toggle';
 
 /**

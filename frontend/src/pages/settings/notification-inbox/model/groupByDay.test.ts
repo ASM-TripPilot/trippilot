@@ -1,5 +1,5 @@
 import { groupByDay } from './groupByDay';
-import type { Notification } from '@/shared/api/generated/schemas';
+import type { Notification } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-576 · l01 · AC-1(2구간 분할) — `groupByDay(items, now) → { today, earlier }`.

@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 
-import type { Itinerary, ReplanDiff } from '@/shared/api/generated/schemas';
+import type { Itinerary, ReplanDiff } from '@/shared/api/index.schemas';
 
 import { PlanbDraftPage } from './PlanbDraftPage';
 

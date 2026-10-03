@@ -9,26 +9,26 @@ import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 
-import type { StayItem } from '@/shared/api/generated/schemas';
-import { getAccessToken } from '@/shared/api/tokenManager';
-import { guardPress } from '@/shared/press/pressGuard';
+import type { StayItem } from '@/shared/api/index.schemas';
+import { getAccessToken } from '@/shared/api';
+import { guardPress } from '@/shared/press';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
 
-import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
+import { regionPickerHref } from '@/features/explore';
 import {
   filterByPriceRange,
   type PriceBucketId,
 } from '../model/priceRangeFilter';
 import { relaxCulpritFilter } from '../model/relaxCulpritFilter';
-import { useSavedStays } from '@/features/save-stay/model/savedStays';
+import { useSavedStays } from '@/features/save-stay';
 import {
   buildStayFilterOptions,
   countActiveFilters,
   toggleFilterValue,
 } from '../model/stayFilterOptions';
-import { stayKey } from '@/features/save-stay/model/stayKey';
+import { stayKey } from '@/features/save-stay';
 import { resolveStaySearchState } from '../model/staySearchState';
-import { useStaySearch } from '@/features/stay/model/useStaySearch';
+import { useStaySearch } from '@/features/stay';
 import { StayFilterSheet } from './StayFilterSheet';
 import { StayPriceSheet } from './StayPriceSheet';
 import { StaySearchScreen } from './StaySearchScreen';

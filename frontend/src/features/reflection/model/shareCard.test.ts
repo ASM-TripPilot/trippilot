@@ -1,4 +1,4 @@
-import type { Trip, TripSummary } from '@/shared/api/generated/schemas';
+import type { Trip, TripSummary } from '@/shared/api/index.schemas';
 
 import {
   CAPTION_MAX_LENGTH,

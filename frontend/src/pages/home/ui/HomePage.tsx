@@ -4,27 +4,27 @@ import { useRouter } from 'expo-router';
 import {
   useGetTrips,
   useGetTripsTripIdItinerary,
-} from '@/shared/api/generated/trips/trips';
-import { useGetPlaces } from '@/shared/api/generated/places/places';
-import { getAccessToken } from '@/shared/api/tokenManager';
-import { isNotFound } from '@/shared/api/isNotFound';
-import { seoulDate } from '@/shared/date/seoulDate';
-import { formatNightsLabel } from '@/entities/trip/lib/formatNights';
-import { formatTripRange } from '@/entities/trip/lib/formatTripPeriod';
-import { pickTrendingPlaces } from '@/entities/place/lib/trendingPlaces';
-import { usePlaceSaveToggle } from '@/features/save-place/model/placeSaveToggle';
-import { useSavedPlaces } from '@/features/save-place/model/savedPlaces';
-import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
-import { useSavedStays } from '@/features/save-stay/model/savedStays';
+} from '@/shared/api/index.hooks';
+import { useGetPlaces } from '@/shared/api/index.hooks';
+import { getAccessToken } from '@/shared/api';
+import { isNotFound } from '@/shared/api';
+import { seoulDate } from '@/shared/date';
+import { formatNightsLabel } from '@/entities/trip';
+import { formatTripRange } from '@/entities/trip';
+import { pickTrendingPlaces } from '@/entities/place';
+import { usePlaceSaveToggle } from '@/features/save-place';
+import { useSavedPlaces } from '@/features/save-place';
+import { regionPickerHref } from '@/features/explore';
+import { useSavedStays } from '@/features/save-stay';
 import {
   itineraryDestinationHref,
   resolveItineraryDestination,
-} from '@/features/itinerary/model/planState';
+} from '@/features/itinerary';
 import { HOME_DEFAULT_PROPS } from '../model/homeFixtures';
 import { applyItineraryTarget, resolveHomePhase } from '../model/homePhase';
 import type { HomePhase, HomeSpotsLane } from '../model/homeTypes';
 import { HomeScreen } from './HomeScreen';
-import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
+import { useTripWizardStore } from '@/features/create-trip';
 
 interface HomeNav {
   onPressCreateTrip: () => void;

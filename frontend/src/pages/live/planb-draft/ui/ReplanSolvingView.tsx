@@ -1,13 +1,13 @@
 import { Fragment, type ReactElement } from 'react';
 import { View } from 'react-native';
 
-import type { ReplanSlotVM } from '@/entities/itinerary-slot/model';
-import { ReplanSlotRow } from '@/entities/itinerary-slot/ui/ReplanSlotRow';
+import type { ReplanSlotVM } from '@/entities/itinerary-slot';
+import { ReplanSlotRow } from '@/entities/itinerary-slot';
 import type { MapCenter, MapPin } from '@/shared/map';
-import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
-import { GenerationProgressCard } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
-import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
-import { SheetHeader } from '@/widgets/map-sheet-shell/ui/SheetHeader';
+import { DistanceConnector } from '@/widgets/map-sheet-shell';
+import { GenerationProgressCard } from '@/widgets/map-sheet-shell';
+import { MapSheetShell } from '@/widgets/map-sheet-shell';
+import { SheetHeader } from '@/widgets/map-sheet-shell';
 
 /**
  * TRIP-752 · i05 다시 짜는 중 **순수 뷰**(pages · api import 0 — preview 가 파일 경로로 직접 import).

@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
+import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 import { MapView } from '@/shared/map';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
@@ -10,18 +10,18 @@ import type {
   DraftDayTab,
   DraftPin,
   DraftView,
-} from '@/features/itinerary/model/draftView';
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
-import { VIOLATION_NOTICE } from '@/entities/itinerary-slot/lib/violationLabel';
+} from '@/features/itinerary/index.view';
+import { buildSlotKey } from '@/entities/itinerary-slot';
+import { VIOLATION_NOTICE } from '@/entities/itinerary-slot';
 import { Skeleton } from '@/shared/ui/Skeleton';
-import { timeBandLabel } from '@/entities/itinerary-slot/lib/timeBandLabel';
+import { timeBandLabel } from '@/entities/itinerary-slot';
 import {
   AlertCircleGlyph,
   BackChevronGlyph,
   CheckCircleGlyph,
   InfoCircleGlyph,
   LockGlyph,
-} from '@/features/itinerary/ui/ItineraryGlyphs';
+} from '@/features/itinerary/index.view';
 
 /**
  * h11 [완전AI] AI 추천안 초안 — Figma `1870:1083`.

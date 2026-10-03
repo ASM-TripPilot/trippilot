@@ -1,7 +1,7 @@
 import { fireEvent, screen, within } from '@testing-library/react-native';
 
-import type { Itinerary, Trip } from '@/shared/api/generated/schemas';
-import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
+import type { Itinerary, Trip } from '@/shared/api/index.schemas';
+import { useTripWizardStore } from '@/features/create-trip';
 import {
   CONFIRMED,
   PLANNED,

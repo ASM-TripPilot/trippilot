@@ -12,7 +12,7 @@ import {
 } from '@/shared/api/tokenManager';
 // 실물 로드(딥 경로) — @/shared/api 목과 다른 모듈 specifier 라 목킹되지 않는다(케이스 3~8 이
 // tokenManager 실물 위에 선 것과 같은 사실). 신호를 실제로 발화해 훅의 구독을 관통 검증한다.
-import { notifyBootstrapReeval } from '@/shared/bootstrap/bootstrapReeval';
+import { notifyBootstrapReeval } from '@/shared/bootstrap';
 import {
   getGateDestination,
   resetGateDestination,
@@ -20,10 +20,15 @@ import {
 } from './gateDestination';
 import { BOOTSTRAP_TIMEOUT_MS, useBootstrapGate } from './useBootstrapGate';
 
-jest.mock('@/shared/api', () => ({ fetchBootstrap: jest.fn() }));
+// TRIP-1157: 훅은 tokenManager 를 @/shared/api(배럴)로 문다 — 팩토리가 실물 tokenManager 를 펼쳐 넣어야 토큰 함수가
+// 살아 있다(빠뜨리면 getAccessToken is not a function). 펼친 것은 테스트가 딥으로 import 하는 그 모듈 인스턴스다.
+jest.mock('@/shared/api', () => ({
+  ...jest.requireActual('@/shared/api/tokenManager'),
+  fetchBootstrap: jest.fn(),
+}));
 // getTokens 추가 필수 — 빠뜨리면 훅이 getTokens is not a function 으로 죽는다(TypeError는
-// red 가 아니라 사고다). @/shared/api/tokenManager 는 다른 모듈 경로라 여기서 목킹하지 않아도
-// 실물이 그대로 로드된다 — 이 파일의 케이스 3~8 설계 전체가 그 사실 위에 서 있다.
+// red 가 아니라 사고다). tokenManager 는 위 팩토리가 실물을 그대로 펼친다 — 이 파일의 케이스 3~8 설계
+// 전체가 그 사실(실물 tokenManager 의 모듈 스코프 상태) 위에 서 있다.
 jest.mock('@/shared/storage', () => ({
   hasStoredToken: jest.fn(),
   getTokens: jest.fn(),

@@ -5,8 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type {
   PersonalizationInfoReason,
   PersonalizationItem,
-} from '@/shared/api/generated/schemas';
-import { LocationBackChevronGlyph } from '@/shared/location/LocationGlyphs';
+} from '@/shared/api/index.schemas';
+import { LocationBackChevronGlyph } from '@/shared/location/index.view';
 import { Toggle } from '@/shared/ui/Toggle';
 
 import { personalizationCopy } from '../model/personalizationCopy';

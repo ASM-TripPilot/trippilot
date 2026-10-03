@@ -12,13 +12,13 @@ import type {
   Region,
   StayItem,
   StayPrice,
-} from '@/shared/api/generated/schemas';
-import { RegionLevel } from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
+import { RegionLevel } from '@/shared/api/index.schemas';
 import { resetPressGuard } from '@/shared/press/pressGuard';
-import { formatPrice } from '@/entities/stay/lib/formatPrice';
-import { stayKey } from '@/features/save-stay/model/stayKey';
-import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
-import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
+import { formatPrice } from '@/entities/stay';
+import { stayKey } from '@/features/save-stay';
+import { regionPickerHref } from '@/features/explore';
+import { useTripWizardStore } from '@/features/create-trip';
 import {
   captureDraftAtNextCall,
   freshWizardDraft,

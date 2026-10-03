@@ -11,15 +11,15 @@ import type {
   SavedPlace,
   PreferenceView,
   Place,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import {
   clearAccessToken,
   getAccessToken,
   setAccessToken,
 } from '@/shared/api/tokenManager';
-import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
-import { seedMustVisits } from '@/features/create-trip/model/mustVisitSeed';
-import { wizardOriginParams } from '@/features/create-trip/model/wizardOrigin';
+import { useTripWizardStore } from '@/features/create-trip';
+import { seedMustVisits } from '@/features/create-trip';
+import { wizardOriginParams } from '@/features/create-trip';
 
 import { TripNewStep1Page } from './TripNewStep1Page';
 

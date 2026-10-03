@@ -8,7 +8,7 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { WarningTriangleGlyph } from '@/features/explore/ui/ExploreGlyphs';
+import { WarningTriangleGlyph } from '@/features/explore/index.view';
 
 export function PartialFailureBanner({
   onRetry,

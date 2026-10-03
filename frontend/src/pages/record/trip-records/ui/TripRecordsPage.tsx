@@ -4,9 +4,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { router } from 'expo-router';
 
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
-import { buildStatePins } from '@/entities/itinerary-slot/lib/slotMapPin';
-import { formatDayLabel } from '@/entities/trip/lib/formatDayLabel';
+import { buildSlotKey } from '@/entities/itinerary-slot';
+import { buildStatePins } from '@/entities/itinerary-slot';
+import { formatDayLabel } from '@/entities/trip';
 import { deriveStayAttribution } from '../model/stayAttribution';
 import {
   useRecordBases,
@@ -14,10 +14,10 @@ import {
   useTripRecords,
 } from '../model/useTripRecords';
 import { useAdjustVisitTimes } from '../model/useAdjustVisitTimes';
-import { useSpontaneousNames } from '@/features/check-visit/model/spontaneousNames';
-import { useVisitCheck } from '@/features/check-visit/model/useVisitCheck';
+import { useSpontaneousNames } from '@/features/check-visit';
+import { useVisitCheck } from '@/features/check-visit';
 import { orderByArrival } from '../model/visitOrder';
-import { isOptimisticVisit } from '@/features/check-visit/model/visitStatus';
+import { isOptimisticVisit } from '@/features/check-visit';
 import { SkipVisitDialog } from './SkipVisitDialog';
 import type { VisitRecordCardVM } from './VisitRecordCard';
 import { VisitRecordCardContainer } from './VisitRecordCardContainer';
@@ -25,11 +25,11 @@ import { VisitTimeSheet } from './VisitTimeSheet';
 import {
   useGetTripsTripId,
   useGetTripsTripIdItinerary,
-} from '@/shared/api/generated/trips/trips';
-import { ArriveRequestSource } from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.hooks';
+import { ArriveRequestSource } from '@/shared/api/index.schemas';
 import type { MapCenter } from '@/shared/map';
-import { seoulDate, seoulTime } from '@/shared/date/seoulDate';
-import { guardPress } from '@/shared/press/pressGuard';
+import { seoulDate, seoulTime } from '@/shared/date';
+import { guardPress } from '@/shared/press';
 
 import { TripRecordsView, type RecordPlanRowVM } from './TripRecordsView';
 

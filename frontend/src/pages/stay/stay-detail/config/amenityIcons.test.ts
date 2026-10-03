@@ -1,5 +1,5 @@
 import { resolveAmenityIcon } from './amenityIcons';
-import { AmenityGlyph } from '@/features/stay/ui/StayGlyphs';
+import { AmenityGlyph } from '@/features/stay/index.view';
 
 /**
  * TRIP-727 (부모 TRIP-723) — 편의시설 코드 → 아이콘 매핑(AC-2). 01b 자율판정:

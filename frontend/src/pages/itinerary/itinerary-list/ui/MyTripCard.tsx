@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 
-import { TripCard } from '@/entities/trip/ui/TripCard';
-import type { MyTripBadge, MyTripCardVM } from '@/entities/trip/model';
+import { TripCard } from '@/entities/trip';
+import type { MyTripBadge, MyTripCardVM } from '@/entities/trip';
 
 /**
  * TRIP-808 · h06 "내 여행" 카드 — entities/trip 로 이관됨. 이 파일은 얇은 위임 shim 이다:

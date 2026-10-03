@@ -17,7 +17,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { SplashGate } from '@/app-shell';
-import { retryUnlessNotFound } from '@/shared/api/isNotFound';
+import { retryUnlessNotFound } from '@/shared/api';
 import { ToastHost } from '@/shared/ui/Toast';
 
 // 서버 상태(TanStack Query)의 앱 전역 캐시 저장소 — 모듈 스코프에서 한 번만 만들어 리렌더마다

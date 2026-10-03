@@ -1,4 +1,4 @@
-import type { StyleAnalysisEnvelope } from '@/shared/api/generated/schemas';
+import type { StyleAnalysisEnvelope } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-637 · 스타일 분석 정식/임시 판정 — j05(reflection)와 l03 요약카드(settings)가 같이 쓰는 한 곳

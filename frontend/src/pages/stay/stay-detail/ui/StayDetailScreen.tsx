@@ -23,9 +23,9 @@ import {
   View,
 } from 'react-native';
 
-import type { StayDetail } from '@/shared/api/generated/schemas';
+import type { StayDetail } from '@/shared/api/index.schemas';
 
-import { formatPrice } from '@/entities/stay/lib/formatPrice';
+import { formatPrice } from '@/entities/stay';
 import { MapView } from '@/shared/map';
 import { resolveAmenityIcon } from '../config/amenityIcons';
 import {
@@ -36,7 +36,7 @@ import {
   InfoGlyph,
   MapPinGlyph,
   ShareGlyph,
-} from '@/features/stay/ui/StayGlyphs';
+} from '@/features/stay/index.view';
 
 /** 조회 결과 — `kind` 하나로 얼굴을 고른다. notFound=404 · invalid=400/stayId 없음 · error=5xx/네트워크. */
 export type StayDetailState =

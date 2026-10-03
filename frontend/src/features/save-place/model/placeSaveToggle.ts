@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import type { Place } from '@/shared/api/generated/schemas';
+import type { Place } from '@/shared/api/index.schemas';
 
 import {
   COORD_BLOCKED_NOTICE,

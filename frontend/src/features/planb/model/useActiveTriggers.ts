@@ -1,4 +1,4 @@
-import { useGetTripsTripIdTriggers } from '@/shared/api/generated/trips/trips';
+import { useGetTripsTripIdTriggers } from '@/shared/api/index.hooks';
 
 /**
  * TRIP-561 · useActiveTriggers — 발화 중 트리거 조회(GET /trips/{tripId}/triggers).

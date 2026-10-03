@@ -15,7 +15,7 @@ import { router } from 'expo-router';
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
-import type { Place } from '@/shared/api/generated/schemas';
+import type { Place } from '@/shared/api/index.schemas';
 import { RecordAddVisitPage } from '@/pages/record/record-add-visit';
 import { TripRecordsPage } from '@/pages/record/trip-records';
 
@@ -38,7 +38,9 @@ import { TripRecordsPage } from '@/pages/record/trip-records';
  *   밖에서 만들어야 rerender(피커 재마운트) 뒤에도 같은 캐시가 남는다.
  */
 
+// TRIP-1157: 배럴이 idSet·stringValue·installId 도 재수출한다 — 통째로 갈아끼우면 그 함수들이 지워지므로 실물을 펼친 뒤 토큰 함수만 덮는다.
 jest.mock('@/shared/storage', () => ({
+  ...jest.requireActual('@/shared/storage'),
   saveTokens: jest.fn().mockResolvedValue(undefined),
   getTokens: jest
     .fn()

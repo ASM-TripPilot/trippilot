@@ -4,7 +4,7 @@ import {
   CompanionType,
   PreferenceInputCompanionTypesItem,
   type TripDestination,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 import {
   nightsSum,

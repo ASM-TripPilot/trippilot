@@ -7,10 +7,10 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import type { Place } from '@/shared/api/generated/schemas';
+import type { Place } from '@/shared/api/index.schemas';
 
-import type { PlaceListState } from '@/features/explore/model/placeListState';
-import type { PlaceSaveNotice } from '@/features/save-place/model/placeSaveGuard';
+import type { PlaceListState } from '@/features/explore/index.view';
+import type { PlaceSaveNotice } from '@/features/save-place/index.view';
 import {
   PlaceExploreScreen,
   type PlaceExploreScreenProps,

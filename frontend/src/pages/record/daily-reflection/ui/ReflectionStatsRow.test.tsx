@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react-native';
 
-import type { ReflectionStats } from '@/shared/api/generated/schemas';
+import type { ReflectionStats } from '@/shared/api/index.schemas';
 
 import { ReflectionStatsRow } from './ReflectionStatsRow';
 

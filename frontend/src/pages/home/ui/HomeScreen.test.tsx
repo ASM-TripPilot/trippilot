@@ -8,10 +8,7 @@ import {
 
 import { HOME_DEFAULT_PROPS, HOME_LOADING_PROPS } from '../model/homeFixtures';
 import type { HomePhase } from '../model/homeTypes';
-import {
-  HeartFilledGlyph,
-  HeartOutlineGlyph,
-} from '@/features/home/ui/HomeGlyphs';
+import { HeartFilledGlyph, HeartOutlineGlyph } from '@/features/home';
 import { HomeScreen } from './HomeScreen';
 
 /**

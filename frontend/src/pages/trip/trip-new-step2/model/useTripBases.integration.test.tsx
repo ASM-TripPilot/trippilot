@@ -5,13 +5,10 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
 import { setAccessToken, clearAccessToken } from '@/shared/api/tokenManager';
-import type { BaseAssignment, SavedStay } from '@/shared/api/generated/schemas';
+import type { BaseAssignment, SavedStay } from '@/shared/api/index.schemas';
 
-import { useSavedStays } from '@/features/trip/model/useSavedStays';
-import {
-  useAssignBase,
-  useTripBases,
-} from '@/features/assign-trip-base/model/useTripBases';
+import { useSavedStays } from '@/features/trip';
+import { useAssignBase, useTripBases } from '@/features/assign-trip-base';
 
 /**
  * TRIP-225 g02 — 거점 조회·배정 훅이 **실제로 나간 요청**으로 계약을 지킨다.

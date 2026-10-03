@@ -1,10 +1,7 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 
-import {
-  getPlaces,
-  getGetPlacesQueryKey,
-} from '@/shared/api/generated/places/places';
-import type { GetPlacesParams, Place } from '@/shared/api/generated/schemas';
+import { getPlaces, getGetPlacesQueryKey } from '@/shared/api/index.hooks';
+import type { GetPlacesParams, Place } from '@/shared/api/index.schemas';
 
 /**
  * d04·수동추가 '모두 보기' 세로 목록의 커서 무한 스크롤(TRIP-502). 첫 장(서버 limit 분량)만 받고

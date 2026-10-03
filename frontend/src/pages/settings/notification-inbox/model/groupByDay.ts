@@ -1,4 +1,4 @@
-import type { Notification } from '@/shared/api/generated/schemas';
+import type { Notification } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-576 · l01 — NotificationList 를 "오늘/이전" 2구간으로 가르는 순수 함수(PBT-U6-F1).

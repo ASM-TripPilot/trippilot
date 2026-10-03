@@ -1,7 +1,7 @@
-import type { CompanionType } from '@/shared/api/generated/schemas';
+import type { CompanionType } from '@/shared/api/index.schemas';
 
 // dayOfWeek 는 아래 daysUntilSaturday(presetRange)가 쓴다 — 본체는 entities/trip/lib 로 이관됐다(TRIP-808).
-import { dayOfWeek } from '@/entities/trip/lib/formatTripPeriod';
+import { dayOfWeek } from '@/entities/trip';
 
 /**
  * 위저드 1/2 화면이 쓰는 순수 함수 — 기간 프리셋 → 날짜 범위 계산, 날짜 표시 포맷,

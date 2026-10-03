@@ -6,13 +6,13 @@ import {
   screen,
 } from '@testing-library/react-native';
 
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
-import { useItineraryEditStore } from '@/features/edit-itinerary/model/itineraryEditStore';
+import { buildSlotKey } from '@/entities/itinerary-slot';
+import { useItineraryEditStore } from '@/features/edit-itinerary';
 import type {
   BaseAssignment,
   Itinerary,
   SavedStay,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import { promptAndRegisterPush } from '@/shared/push';
 
 import { ManualPlanPage } from './ManualPlanPage';

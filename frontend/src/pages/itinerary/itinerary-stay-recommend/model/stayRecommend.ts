@@ -1,6 +1,6 @@
 import type { ImageSourcePropType } from 'react-native';
 
-import type { StayPrice } from '@/shared/api/generated/schemas';
+import type { StayPrice } from '@/shared/api/index.schemas';
 import type { MapCenter, MapPin } from '@/shared/map';
 
 /**

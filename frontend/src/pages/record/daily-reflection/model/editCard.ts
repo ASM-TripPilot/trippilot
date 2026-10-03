@@ -1,4 +1,4 @@
-import type { ReflectionCard } from '@/shared/api/generated/schemas';
+import type { ReflectionCard } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-945 · buildEditCard — 회고 수정 저장(PUT) 바디의 `card` 문자열 조립(결정 2 · BR-U5-36 · PBT-U5-F1).

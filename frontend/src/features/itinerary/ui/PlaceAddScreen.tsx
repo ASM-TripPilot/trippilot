@@ -2,9 +2,9 @@ import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 
-import { PlaceRowCard } from '@/entities/place/ui/PlaceRowCard';
-import { PlaceSubtitle } from '@/entities/place/ui/PlaceSubtitle';
-import type { Place, PoiCategory } from '@/shared/api/generated/schemas';
+import { PlaceRowCard } from '@/entities/place';
+import { PlaceSubtitle } from '@/entities/place';
+import type { Place, PoiCategory } from '@/shared/api/index.schemas';
 
 import { PlusGlyph, SearchGlyph } from './ItineraryGlyphs';
 import { PLACE_CATEGORY_CHIPS } from '../config/placeCategoryChips';

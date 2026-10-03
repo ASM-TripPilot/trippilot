@@ -1,4 +1,4 @@
-import type { StayItem } from '@/shared/api/generated/schemas';
+import type { StayItem } from '@/shared/api/index.schemas';
 
 /**
  * e02 가격대 칩 "복구"의 코어 순수 함수(TRIP-457 AC-12 · 01b Q4 (a)).

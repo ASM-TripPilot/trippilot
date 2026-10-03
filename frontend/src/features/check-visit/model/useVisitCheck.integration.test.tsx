@@ -9,8 +9,8 @@ import {
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
-import { useGetTripsTripIdVisitsDaysDay } from '@/shared/api/generated/trips/trips';
-import type { ArriveRequest, VisitCheck } from '@/shared/api/generated/schemas';
+import { useGetTripsTripIdVisitsDaysDay } from '@/shared/api/index.hooks';
+import type { ArriveRequest, VisitCheck } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { flushNotifications } from '@/test-support/flushNotifications';
 

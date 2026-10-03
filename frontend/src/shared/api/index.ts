@@ -386,3 +386,13 @@ export async function updateNickname(nickname: string): Promise<void> {
 export async function completeOnboarding(): Promise<void> {
   await authedClient.post('/onboarding/complete');
 }
+
+export { isAlreadyRegistered } from './isAlreadyRegistered';
+export { isNotFound, retryUnlessNotFound } from './isNotFound';
+export {
+  getAccessToken,
+  hydrate,
+  setAccessToken,
+  subscribeAccessToken,
+} from './tokenManager';
+export { resolveVisitConflict } from './visitConflict';

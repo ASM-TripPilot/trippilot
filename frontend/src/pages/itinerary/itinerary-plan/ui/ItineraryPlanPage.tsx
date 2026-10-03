@@ -5,45 +5,42 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter, type Href } from 'expo-router';
 
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
-import { VIOLATION_NOTICE } from '@/entities/itinerary-slot/lib/violationLabel';
-import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
-import { useSavedPlaces } from '@/features/save-place/model/savedPlaces';
+import { buildSlotKey } from '@/entities/itinerary-slot';
+import { VIOLATION_NOTICE } from '@/entities/itinerary-slot';
+import { SlotStopCard } from '@/entities/itinerary-slot';
+import { useSavedPlaces } from '@/features/save-place';
 import {
   buildDraftDayTabs,
   buildDraftPins,
   formatDraftDayHeader,
-} from '@/features/itinerary/model/draftView';
-import { legDistance } from '@/entities/place/lib/legDistance';
-import {
-  isConfirmLocked,
-  resolvePlanState,
-} from '@/features/itinerary/model/planState';
-import { timeBandLabel } from '@/entities/itinerary-slot/lib/timeBandLabel';
-import { resolveUnplacedNames } from '@/features/itinerary/model/unplacedMustVisits';
+} from '@/features/itinerary';
+import { legDistance } from '@/entities/place';
+import { isConfirmLocked, resolvePlanState } from '@/features/itinerary';
+import { timeBandLabel } from '@/entities/itinerary-slot';
+import { resolveUnplacedNames } from '@/features/itinerary';
 import {
   AlertCircleGlyph,
   BackChevronGlyph,
   InfoCircleGlyph,
-} from '@/features/itinerary/ui/ItineraryGlyphs';
-import { UnplacedMustVisitNotice } from '@/features/itinerary/ui/UnplacedMustVisitNotice';
-import { isShareCaptureArmed } from '@/features/share-trip-card/model/shareCapture';
-import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
+} from '@/features/itinerary';
+import { UnplacedMustVisitNotice } from '@/features/itinerary';
+import { isShareCaptureArmed } from '@/features/share-trip-card';
+import { useTripWizardStore } from '@/features/create-trip';
 import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripId,
   useGetTripsTripIdItinerary,
   usePostTripsTripIdItineraryConfirm,
-} from '@/shared/api/generated/trips/trips';
-import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
-import { isNotFound } from '@/shared/api/isNotFound';
-import { getAccessToken } from '@/shared/api/tokenManager';
-import { guardPress, openPressGuardWindow } from '@/shared/press/pressGuard';
+} from '@/shared/api/index.hooks';
+import { isAlreadyRegistered } from '@/shared/api';
+import { isNotFound } from '@/shared/api';
+import { getAccessToken } from '@/shared/api';
+import { guardPress, openPressGuardWindow } from '@/shared/press';
 import { StateNotice, type StateNoticeAction } from '@/shared/ui/StateNotice';
 import { showToast } from '@/shared/ui/Toast';
-import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
-import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
-import { SheetHeader } from '@/widgets/map-sheet-shell/ui/SheetHeader';
+import { DistanceConnector } from '@/widgets/map-sheet-shell';
+import { MapSheetShell } from '@/widgets/map-sheet-shell';
+import { SheetHeader } from '@/widgets/map-sheet-shell';
 
 import { NoBaseNoticeCard } from './NoBaseNoticeCard';
 

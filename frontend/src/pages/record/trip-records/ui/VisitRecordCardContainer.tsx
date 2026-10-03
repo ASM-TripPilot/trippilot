@@ -3,12 +3,12 @@ import { Text } from 'react-native';
 import { useQueries } from '@tanstack/react-query';
 
 import { resolvePhotoUri } from '@/shared/photo';
-import { getInstallId } from '@/shared/storage/installId';
+import { getInstallId } from '@/shared/storage';
 
 import { photoAvailability } from '../model/photoAvailability';
-import { pickPhotoForVisit } from '@/features/attach-visit-media/model/pickPhotoForVisit';
+import { pickPhotoForVisit } from '@/features/attach-visit-media';
 import { useVisitAttachments } from '../model/useVisitAttachments';
-import { MemoInline } from '@/features/attach-visit-media/ui/MemoInline';
+import { MemoInline } from '@/features/attach-visit-media';
 import { PhotoThumbStrip, type PhotoThumbVM } from './PhotoThumbStrip';
 import { VisitRecordCard, type VisitRecordCardVM } from './VisitRecordCard';
 

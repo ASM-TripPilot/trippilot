@@ -4,9 +4,9 @@ import { fetchTerms, patchConsent } from '@/shared/api';
 import {
   getGetMePersonalizationQueryKey,
   useGetMePersonalization,
-} from '@/shared/api/generated/reflection/reflection';
-import { PersonalizationInfoReason } from '@/shared/api/generated/schemas';
-import type { PersonalizationItem } from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.hooks';
+import { PersonalizationInfoReason } from '@/shared/api/index.schemas';
+import type { PersonalizationItem } from '@/shared/api/index.schemas';
 
 /**
  * l05 개인화 컨테이너 훅(TRIP-612) — GET 조회 + reason→토글 도출 + 토글 변경 배선.

@@ -4,7 +4,7 @@ import type {
   BaseAssignment,
   SavedStay,
   Trip,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 import { toBaseSections, type BaseSection } from './baseSections';
 

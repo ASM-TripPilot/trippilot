@@ -2,21 +2,21 @@ import type { ReactElement } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 
-import { useSavedPlaces } from '@/features/save-place/model/savedPlaces';
+import { useSavedPlaces } from '@/features/save-place';
 import {
   buildMustVisitPins,
   joinMustVisits,
   resolveMustVisitListView,
-} from '@/features/itinerary/model/mustVisitList';
+} from '@/features/itinerary';
 import { MustVisitPickerScreen } from './MustVisitPickerScreen';
-import type { GenerateItineraryRequestGenerationMode } from '@/shared/api/generated/schemas';
+import type { GenerateItineraryRequestGenerationMode } from '@/shared/api/index.schemas';
 import {
   getGetTripsTripIdMustVisitsQueryKey,
   useDeleteTripsTripIdMustVisitsMustVisitId,
   useGetTripsTripIdMustVisits,
-} from '@/shared/api/generated/trips/trips';
-import { getAccessToken } from '@/shared/api/tokenManager';
-import { guardPress } from '@/shared/press/pressGuard';
+} from '@/shared/api/index.hooks';
+import { getAccessToken } from '@/shared/api';
+import { guardPress } from '@/shared/press';
 
 /**
  * h05 배선 — 두 조회를 잇고, 좌표를 지도 핀으로 만들고, 해제를 보내고, h07·h09 로 보낸다.

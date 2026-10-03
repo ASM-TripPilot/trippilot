@@ -1,7 +1,7 @@
 import type { ReactElement, ReactNode } from 'react';
 
-import { SlotCandidateCard as PlaceSlotCandidateCard } from '@/entities/place/ui/SlotCandidateCard';
-import type { SlotCandidatesCandidatesItem } from '@/shared/api/generated/schemas';
+import { SlotCandidateCard as PlaceSlotCandidateCard } from '@/entities/place';
+import type { SlotCandidatesCandidatesItem } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-335 · 후보 카드(h12 시트·h18 화면 공용) → TRIP-806 으로 entities/place 카드에 위임.

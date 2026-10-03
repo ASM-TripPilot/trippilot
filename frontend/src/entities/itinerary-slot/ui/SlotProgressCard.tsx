@@ -7,7 +7,7 @@ import {
   type ImageSourcePropType,
 } from 'react-native';
 
-import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
+import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 
 import { formatOpeningHoursLabel } from '../lib/openingHoursLabel';
 import { buildSlotKey } from '../lib/slotKey';

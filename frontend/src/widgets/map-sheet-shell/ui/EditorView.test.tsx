@@ -14,9 +14,9 @@ import DraggableFlatList, * as DraggableModule from 'react-native-draggable-flat
 import type {
   ItineraryDaysItem,
   ItineraryDaysItemSlotsItem,
-} from '@/shared/api/generated/schemas';
-import { buildPlanDayTabs } from '@/features/itinerary/model/planState';
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+} from '@/shared/api/index.schemas';
+import { buildPlanDayTabs } from '@/features/itinerary/index.view';
+import { buildSlotKey } from '@/entities/itinerary-slot';
 import {
   EDIT_LIST,
   editListData,

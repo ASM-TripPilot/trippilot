@@ -7,11 +7,11 @@ import {
   getGetTripsTripIdCoverageQueryKey,
   postTripsTripIdBases,
   useGetTripsTripIdBases,
-} from '@/shared/api/generated/trips/trips';
+} from '@/shared/api/index.hooks';
 import type {
   AssignBaseRequest,
   BaseAssignment,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 import { planBaseAssign } from './baseAssignPlan';
 

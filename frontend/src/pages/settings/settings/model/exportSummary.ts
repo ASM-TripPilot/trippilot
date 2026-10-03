@@ -1,4 +1,4 @@
-import type { AccountExport } from '@/shared/api/generated/schemas';
+import type { AccountExport } from '@/shared/api/index.schemas';
 
 /**
  * 내보내기 잘림 고지 조립 (AC-5 · INV-4) — 순수 함수.

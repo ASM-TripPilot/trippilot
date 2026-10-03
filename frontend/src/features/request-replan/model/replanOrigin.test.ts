@@ -4,7 +4,7 @@
 import fs from 'fs';
 import path from 'path';
 
-import { StartReplanRequestOriginKind } from '@/shared/api/generated/schemas/startReplanRequestOriginKind';
+import { StartReplanRequestOriginKind } from '@/shared/api/index.schemas';
 import type { ReplanOrigin } from './replanOrigin';
 import {
   buildGpsOrigin,

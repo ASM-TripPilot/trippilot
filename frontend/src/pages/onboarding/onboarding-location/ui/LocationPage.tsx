@@ -14,8 +14,8 @@ import { useRouter } from 'expo-router';
 import {
   LocationPreprompt,
   type LocationPrepromptState,
-} from '@/shared/location/LocationPreprompt';
-import { guardPress, openPressGuardWindow } from '@/shared/press/pressGuard';
+} from '@/shared/location/index.view';
+import { guardPress, openPressGuardWindow } from '@/shared/press';
 
 /** c08 default 목적 문단에 주입하는 Figma 온보딩 문구(1296:1208). 사용자 가시 텍스트라
  * 자구가 곧 계약이다 — 바꾸려면 게이트① 논의 대상. */

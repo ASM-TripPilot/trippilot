@@ -5,11 +5,8 @@ import {
   useGetTripsTripIdReflections,
   usePostTripsTripIdReflectionsDayDate,
   usePutTripsTripIdReflectionsDayDate,
-} from '@/shared/api/generated/reflection/reflection';
-import type {
-  Reflection,
-  ReflectionList,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.hooks';
+import type { Reflection, ReflectionList } from '@/shared/api/index.schemas';
 
 import { buildEditCard } from './editCard';
 

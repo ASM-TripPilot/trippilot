@@ -1,4 +1,4 @@
-import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
+import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-395 · 슬롯 상태 사영 — 슬롯 목록에 "지금 어떤 단계인가"(완료·진행 중·예정) 라벨을 붙인다.

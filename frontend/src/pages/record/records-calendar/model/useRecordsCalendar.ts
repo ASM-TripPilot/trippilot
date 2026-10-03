@@ -1,5 +1,5 @@
-import type { Trip } from '@/shared/api/generated/schemas';
-import { useGetTrips } from '@/shared/api/generated/trips/trips';
+import type { Trip } from '@/shared/api/index.schemas';
+import { useGetTrips } from '@/shared/api/index.hooks';
 
 /**
  * TRIP-575 · j07 캘린더 조회 훅(얇은 래퍼, 조회 전용). `useGetTrips`(=`GET /trips`)를 도메인 이름으로

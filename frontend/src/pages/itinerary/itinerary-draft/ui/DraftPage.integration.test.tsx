@@ -12,7 +12,7 @@ import {
 import { Text } from 'react-native';
 
 import { server } from '@/mocks/server';
-import { DRAFT_POLL_INTERVAL_MS } from '@/features/itinerary/model/draftView';
+import { DRAFT_POLL_INTERVAL_MS } from '@/features/itinerary';
 import type {
   Itinerary,
   ItineraryCandidatesSummary,
@@ -26,17 +26,14 @@ import type {
   GenerationSession,
   ItineraryUnplacedMustVisitsItem,
   SavedPlace,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripIdItinerary,
-} from '@/shared/api/generated/trips/trips';
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
-import {
-  AlertCircleGlyph,
-  CheckCircleGlyph,
-} from '@/features/itinerary/ui/ItineraryGlyphs';
+} from '@/shared/api/index.hooks';
+import { buildSlotKey } from '@/entities/itinerary-slot';
+import { AlertCircleGlyph, CheckCircleGlyph } from '@/features/itinerary';
 
 import { DraftPage } from './DraftPage';
 

@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 
-import { SlotCandidateCard } from '@/entities/place/ui/SlotCandidateCard';
+import { SlotCandidateCard } from '@/entities/place';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
 import {
@@ -10,7 +10,7 @@ import {
   CheckGlyph,
   ChevronRightGlyph,
   DiamondGlyph,
-} from '@/features/itinerary/ui/ItineraryGlyphs';
+} from '@/features/itinerary/index.view';
 
 /**
  * TRIP-793 · h08 "다른 후보 시트" — 순수 바텀시트(props + 콜백만, `@gorhom/bottom-sheet` + scrim).

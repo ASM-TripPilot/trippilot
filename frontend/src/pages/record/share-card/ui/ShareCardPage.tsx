@@ -2,14 +2,11 @@ import type { ReactElement } from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
 
-import {
-  SHARE_FORMATS,
-  buildShareCard,
-} from '@/features/reflection/model/shareCard';
-import { shareEnabled } from '@/features/reflection/model/summaryView';
-import { useTripSummary } from '@/features/reflection/model/useTripSummary';
+import { SHARE_FORMATS, buildShareCard } from '@/features/reflection';
+import { shareEnabled } from '@/features/reflection';
+import { useTripSummary } from '@/features/reflection';
 import { ShareCardScreen } from './ShareCardScreen';
-import { useGetTripsTripId } from '@/shared/api/generated/trips/trips';
+import { useGetTripsTripId } from '@/shared/api/index.hooks';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
 /**

@@ -6,11 +6,11 @@
 // 재수출하고, 나머지 둘은 타입만 재수출한다(place/model 의 PoiCategory·Place 배치와 동형).
 import type { ImageSourcePropType } from 'react-native';
 
-export { PoiCategory } from '@/shared/api/generated/schemas';
+export { PoiCategory } from '@/shared/api/index.schemas';
 export type {
   ItineraryDaysItemSlotsItem,
   PlannedSlot,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 /**
  * i06 재계획안 행 번호 원의 톤(TRIP-751) — 방문·진행 중은 visited(초록), 예정은 planned(빨강).

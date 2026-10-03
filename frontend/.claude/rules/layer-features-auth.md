@@ -17,4 +17,4 @@ paths:
 | `src/features/auth/ui/AuthGlyphs.tsx` | 인라인 SVG — 앱아이콘·소셜 4종·경고 삼각형·`AppleLogoGlyph`(TRIP-1124 신설, Figma c02 벡터 보관본 `d` 그대로 — 공식 Apple Design Resources 파일이 아니다, 교체 여부 미결. `LoginPage.apple.test.tsx`의 `FIGMA_APPLE_LOGO_D` 상수가 바이트 대조로 잠근다) |
 | `src/features/auth/ui/SplashIllustration.tsx` | 인라인 SVG — 스플래시 일러스트 |
 
-> 구현 슬라이스는 배럴(`index.ts`) 없이 간다 — `src/features/auth/`에도 없다.
+> 공개 API는 `src/features/auth/index.ts`와 네트워크 없는 `index.view.ts` 두 진입점이다(TRIP-1157 — 슬라이스 밖 딥 임포트는 lint error).

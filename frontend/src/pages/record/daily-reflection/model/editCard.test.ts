@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 
-import type { ReflectionCard } from '@/shared/api/generated/schemas';
+import type { ReflectionCard } from '@/shared/api/index.schemas';
 
 import { buildEditCard } from './editCard';
 

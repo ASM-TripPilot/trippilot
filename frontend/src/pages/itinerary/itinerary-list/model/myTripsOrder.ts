@@ -1,5 +1,5 @@
-import type { Trip } from '@/shared/api/generated/schemas';
-import { isTripOngoing } from '@/entities/trip/lib/tripPhase';
+import type { Trip } from '@/shared/api/index.schemas';
+import { isTripOngoing } from '@/entities/trip';
 
 import type { DoneBarEntry } from './doneBar';
 

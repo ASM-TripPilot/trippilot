@@ -10,12 +10,9 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
-import { useGetTrips } from '@/shared/api/generated/trips/trips';
-import {
-  useGetPlaces,
-  useGetSavedPlaces,
-} from '@/shared/api/generated/places/places';
-import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
+import { useGetTrips } from '@/shared/api/index.hooks';
+import { useGetPlaces, useGetSavedPlaces } from '@/shared/api/index.hooks';
+import type { Place, SavedPlace } from '@/shared/api/index.schemas';
 import { flushNotifications } from '@/test-support/flushNotifications';
 
 import { optimisticSavedPlaceId } from './savedPlaceIndex';

@@ -17,7 +17,7 @@ import { type ReactElement, type ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { PrefChip } from '@/shared/ui/pref/PrefChip';
+import { PrefChip } from '@/shared/ui/pref';
 import {
   PreferenceInputActivitiesItem,
   PreferenceInputBudgetTier,
@@ -26,10 +26,10 @@ import {
   PreferenceInputPace,
   PreferenceInputStylesItem,
   PreferenceInputTransportModesItem,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
-import { type PreferenceSelection } from '@/features/edit-preferences/model/preferenceDraft';
-import { ChevronLeftGlyph } from '@/features/settings/ui/SettingsGlyphs';
+import { type PreferenceSelection } from '@/features/edit-preferences';
+import { ChevronLeftGlyph } from '@/features/settings';
 
 type MultiAxisKey =
   'styles' | 'activities' | 'transportModes' | 'foodTastes' | 'companionTypes';

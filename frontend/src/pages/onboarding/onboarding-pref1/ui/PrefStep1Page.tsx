@@ -7,9 +7,9 @@
 import type { ReactElement } from 'react';
 import { useRouter } from 'expo-router';
 
-import { usePreferenceStore } from '@/features/edit-preferences/model/preferenceStore';
-import { notifyBootstrapReeval } from '@/shared/bootstrap/bootstrapReeval';
-import { guardPress } from '@/shared/press/pressGuard';
+import { usePreferenceStore } from '@/features/edit-preferences';
+import { notifyBootstrapReeval } from '@/shared/bootstrap';
+import { guardPress } from '@/shared/press';
 import { PrefStep1Screen } from './PrefStep1Screen';
 
 export function PrefStep1Page(): ReactElement {

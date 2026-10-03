@@ -5,7 +5,7 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import type { StyleAnalysisEnvelope } from '@/shared/api/generated/schemas';
+import type { StyleAnalysisEnvelope } from '@/shared/api/index.schemas';
 
 import { buildStyleCardModel, type StyleCardVM } from '../model/styleCardModel';
 import { StyleSummaryCard } from './StyleSummaryCard';

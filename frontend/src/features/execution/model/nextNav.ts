@@ -1,6 +1,6 @@
 import * as Linking from 'expo-linking';
 
-import type { ProjectedSlot } from '@/entities/itinerary-slot/lib/slotProgress';
+import type { ProjectedSlot } from '@/entities/itinerary-slot';
 
 /**
  * TRIP-399 · nextNav — i01 "다음 예정지 길찾기" 순수 로직(딥링크 폴백 사다리).

@@ -38,7 +38,9 @@ jest.mock('expo-linking', () => ({
   openSettings: jest.fn(() => Promise.resolve()),
 }));
 
+// TRIP-1157: 배럴이 PushPreprompt 도 재수출한다 — 통째로 갈아끼우면 화면 컴포넌트가 지워지므로 실물을 펼친 뒤 권한 함수만 덮는다.
 jest.mock('@/shared/push', () => ({
+  ...jest.requireActual('@/shared/push'),
   promptAndRegisterPush: jest.fn(() => Promise.resolve()),
   requestPushPermission: jest.fn(() => Promise.resolve('UNDETERMINED')),
   getPushPermission: jest.fn(() => Promise.resolve('UNDETERMINED')),

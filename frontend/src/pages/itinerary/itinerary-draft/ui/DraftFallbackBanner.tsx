@@ -4,7 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 import {
   AlertCircleGlyph,
   ChevronRightGlyph,
-} from '@/features/itinerary/ui/ItineraryGlyphs';
+} from '@/features/itinerary/index.view';
 
 /**
  * TRIP-1039 · h08 셸 시트 맨 위에 얹는 폴백·일부 실패 안내(BR-U3-11 · INV-4). Figma 전용 프레임이 없어

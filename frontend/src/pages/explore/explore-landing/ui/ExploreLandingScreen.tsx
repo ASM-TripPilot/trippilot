@@ -25,13 +25,10 @@ import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import type { PlaceCardVM } from '@/entities/place/model';
-import {
-  PlaceRailCard,
-  type PlaceRailCardSave,
-} from '@/entities/place/ui/PlaceRailCard';
-import type { StayCardVM } from '@/entities/stay/model';
-import { StaySearchCard } from '@/entities/stay/ui/StaySearchCard';
+import type { PlaceCardVM } from '@/entities/place';
+import { PlaceRailCard, type PlaceRailCardSave } from '@/entities/place';
+import type { StayCardVM } from '@/entities/stay';
+import { StaySearchCard } from '@/entities/stay';
 import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
 
 import {
@@ -42,7 +39,7 @@ import {
   SearchGlyph,
   SuitcaseGlyph,
   WarningTriangleGlyph,
-} from '@/features/explore/ui/ExploreGlyphs';
+} from '@/features/explore/index.view';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
 // 카드 뷰모델은 entities 로 이관됐다(StayCardVM=807 · PlaceCardVM=806) — 여기서 재수출해 기존

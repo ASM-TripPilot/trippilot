@@ -4,9 +4,9 @@ import { isAxiosError } from 'axios';
 import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 
-import { useSavedPlaces } from '@/features/save-place/model/savedPlaces';
-import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
-import { wizardOriginParams } from '@/features/create-trip/model/wizardOrigin';
+import { useSavedPlaces } from '@/features/save-place';
+import { regionPickerHref } from '@/features/explore';
+import { wizardOriginParams } from '@/features/create-trip';
 import {
   deleteTripsTripId,
   deleteTripsTripIdMustVisitsMustVisitId,
@@ -14,18 +14,18 @@ import {
   getTripsTripIdMustVisits,
   patchTripsTripId,
   postTripsTripIdMustVisits,
-} from '@/shared/api/generated/trips/trips';
+} from '@/shared/api/index.hooks';
 import type {
   CompanionType,
   CreateTripRequest,
   MustVisit,
-} from '@/shared/api/generated/schemas';
-import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
-import { isNotFound } from '@/shared/api/isNotFound';
-import { getAccessToken } from '@/shared/api/tokenManager';
-import { seoulDate } from '@/shared/date/seoulDate';
-import { shiftMonth } from '@/shared/date/monthGrid';
-import { toggleMulti } from '@/shared/pref/preferenceSelection';
+} from '@/shared/api/index.schemas';
+import { isAlreadyRegistered } from '@/shared/api';
+import { isNotFound } from '@/shared/api';
+import { getAccessToken } from '@/shared/api';
+import { seoulDate } from '@/shared/date';
+import { shiftMonth } from '@/shared/date';
+import { toggleMulti } from '@/shared/pref';
 import { showToast } from '@/shared/ui/Toast';
 
 import {
@@ -44,9 +44,9 @@ import {
   nightsSum,
   validateTripDraft,
   type TripDraft,
-} from '@/features/create-trip/model/tripDraft';
-import { deriveEndDate } from '@/features/create-trip/model/tripWizardStep1';
-import { mustVisitFailureNotice } from '@/features/create-trip/model/mustVisitSeed';
+} from '@/features/create-trip';
+import { deriveEndDate } from '@/features/create-trip';
+import { mustVisitFailureNotice } from '@/features/create-trip';
 import { planMustVisitSync } from '../model/mustVisitSync';
 import {
   summaryBudget,
@@ -54,8 +54,8 @@ import {
   summaryDestinations,
   summaryPeriod,
   summaryPreferences,
-} from '@/features/create-trip/model/tripSummary';
-import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
+} from '@/features/create-trip';
+import { useTripWizardStore } from '@/features/create-trip';
 import { useCreateTrip } from '../model/useCreateTrip';
 import { usePreferencePrefill } from '../model/usePreferencePrefill';
 import { CompanionEditSheet } from './CompanionEditSheet';

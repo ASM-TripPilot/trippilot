@@ -2,7 +2,7 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import { Pressable, Text } from 'react-native';
 
 import type { AuthorizeResult } from '../model/useSocialLogin';
-import { AppleLogoGlyph } from '@/features/auth/ui/AuthGlyphs';
+import { AppleLogoGlyph } from '@/features/auth/index.view';
 
 /**
  * 애플 네이티브 로그인 어댑터(TRIP-932). 이 파일만 애플 SDK를 **정적** import한다 —

@@ -1,4 +1,4 @@
-import type { TripSummaryStats } from '@/shared/api/generated/schemas';
+import type { TripSummaryStats } from '@/shared/api/index.schemas';
 
 import { formatKm } from './formatKm';
 

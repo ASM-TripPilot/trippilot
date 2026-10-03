@@ -1,4 +1,4 @@
-import type { Place } from '@/shared/api/generated/schemas';
+import type { Place } from '@/shared/api/index.schemas';
 
 /**
  * 계약(`GET /places`)에 정렬·검색 파라미터가 없어, 화면에 그리기 전 클라 가공을 이 함수

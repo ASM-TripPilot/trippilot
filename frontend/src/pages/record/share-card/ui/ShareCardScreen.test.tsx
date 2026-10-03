@@ -12,7 +12,7 @@ import {
   HASHTAG_MAX_COUNT,
   SHARE_FORMATS,
   type ShareCardVM,
-} from '@/features/reflection/model/shareCard';
+} from '@/features/reflection/index.view';
 import { ShareCardScreen, type ShareCardScreenProps } from './ShareCardScreen';
 
 // TRIP-1071 — 저장·공유 버튼은 `isShareCaptureArmed()`(네이티브 캡처 모듈 3종 실재) 로 그릴지 정하고,

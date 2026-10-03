@@ -14,9 +14,9 @@ import type {
   SavedStay,
   BaseAssignment,
   Trip,
-} from '@/shared/api/generated/schemas';
-import { useGetSavedStays } from '@/shared/api/generated/saved-stays/saved-stays';
-import { useGetTrips } from '@/shared/api/generated/trips/trips';
+} from '@/shared/api/index.schemas';
+import { useGetSavedStays } from '@/shared/api/index.hooks';
+import { useGetTrips } from '@/shared/api/index.hooks';
 import type { MyStayRowVM, MyStaysScreen } from './MyStaysScreen';
 import { MyStaysPage } from './MyStaysPage';
 import { http, HttpResponse } from 'msw';

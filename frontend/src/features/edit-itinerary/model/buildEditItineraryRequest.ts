@@ -1,4 +1,4 @@
-import type { EditItineraryRequest } from '@/shared/api/generated/schemas';
+import type { EditItineraryRequest } from '@/shared/api/index.schemas';
 
 import type { EditorDaysItem, EditorSlot } from './itineraryEditStore';
 

@@ -4,34 +4,34 @@ import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { resolveLiveState } from '../model/liveState';
-import { useLiveItinerary } from '@/features/execution/model/useLiveItinerary';
-import { projectSlotProgress } from '@/entities/itinerary-slot/lib/slotProgress';
+import { useLiveItinerary } from '@/features/execution';
+import { projectSlotProgress } from '@/entities/itinerary-slot';
 import { useVisitCheck } from '../model/useVisitCheck';
-import { photoAttach } from '@/features/attach-visit-media/model/photoAttach';
-import { pickPhotoForVisit } from '@/features/attach-visit-media/model/pickPhotoForVisit';
-import { useVisitMemo } from '@/features/attach-visit-media/model/useVisitMemo';
+import { photoAttach } from '@/features/attach-visit-media';
+import { pickPhotoForVisit } from '@/features/attach-visit-media';
+import { useVisitMemo } from '@/features/attach-visit-media';
 import { MemoSheet } from './MemoSheet';
-import { deriveVisitProgress } from '@/entities/itinerary-slot/lib/visitProgress';
+import { deriveVisitProgress } from '@/entities/itinerary-slot';
 import { TriggerChip } from './TriggerChip';
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+import { buildSlotKey } from '@/entities/itinerary-slot';
 import { foldScope } from '../model/foldScope';
 import { riskAffectedRow } from '../model/riskAffectedRow';
-import { triggerLabel } from '@/features/planb/model/triggerLabel';
-import { triggerPillCopy } from '@/features/planb/model/triggerPillCopy';
+import { triggerLabel } from '@/features/planb';
+import { triggerPillCopy } from '@/features/planb';
 import { triggerWatchlist } from '../model/triggerWatchlist';
-import { useActiveTriggers } from '@/features/planb/model/useActiveTriggers';
+import { useActiveTriggers } from '@/features/planb';
 import { ReplanAppliedSheet } from './ReplanAppliedSheet';
 import { RiskDetailSheet } from './RiskDetailSheet';
-import type { Trigger } from '@/shared/api/generated/schemas';
+import type { Trigger } from '@/shared/api/index.schemas';
 import {
   postTripsTripIdVisitsVisitCheckIdPhotos,
   useGetTripsTripId,
   useGetTripsTripIdVisitsDaysDay,
-} from '@/shared/api/generated/trips/trips';
-import { isNotFound } from '@/shared/api/isNotFound';
-import { seoulDate } from '@/shared/date/seoulDate';
+} from '@/shared/api/index.hooks';
+import { isNotFound } from '@/shared/api';
+import { seoulDate } from '@/shared/date';
 import { StateNotice } from '@/shared/ui/StateNotice';
-import { ArriveRequestSource } from '@/shared/api/generated/schemas';
+import { ArriveRequestSource } from '@/shared/api/index.schemas';
 
 import { LiveHubView } from './LiveHubView';
 

@@ -3,7 +3,7 @@ import { buildEditItineraryRequest } from './buildEditItineraryRequest';
 import type {
   ItineraryDaysItem,
   ItineraryDaysItemSlotsItem,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 /**
  * TRIP-338 · AC-4 (INV-U3-02) — h20 장소 추가의 **판정/조립 층**.

@@ -1,4 +1,4 @@
-import type { StayItem } from '@/shared/api/generated/schemas';
+import type { StayItem } from '@/shared/api/index.schemas';
 
 /**
  * e02 필터 시트 옵션 도출(TRIP-415) — 순수 함수.

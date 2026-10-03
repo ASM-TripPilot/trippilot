@@ -5,46 +5,34 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 
-import { buildEditItineraryRequest } from '@/features/edit-itinerary/model/buildEditItineraryRequest';
-import {
-  buildDraftPins,
-  formatCoPickDayHeader,
-} from '@/features/itinerary/model/draftView';
+import { buildEditItineraryRequest } from '@/features/edit-itinerary';
+import { buildDraftPins, formatCoPickDayHeader } from '@/features/itinerary';
 import {
   useItineraryEditStore,
   type EditorDaysItem,
   type EditorSlot,
-} from '@/features/edit-itinerary/model/itineraryEditStore';
-import {
-  buildPlanDayTabs,
-  resolvePlanState,
-} from '@/features/itinerary/model/planState';
-import { deriveVisitProgress } from '@/entities/itinerary-slot/lib/visitProgress';
+} from '@/features/edit-itinerary';
+import { buildPlanDayTabs, resolvePlanState } from '@/features/itinerary';
+import { deriveVisitProgress } from '@/entities/itinerary-slot';
 import { reorderKeepingLocked } from '../model/reorderKeepingLocked';
-import { deriveEndsNextDay } from '@/entities/itinerary-slot/lib/endsNextDay';
-import {
-  buildSlotKey,
-  parseSlotKey,
-} from '@/entities/itinerary-slot/lib/slotKey';
-import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
-import {
-  AlertCircleGlyph,
-  InfoCircleGlyph,
-} from '@/features/itinerary/ui/ItineraryGlyphs';
-import { SaveConflictDialog } from '@/features/edit-itinerary/ui/SaveConflictDialog';
-import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
+import { deriveEndsNextDay } from '@/entities/itinerary-slot';
+import { buildSlotKey, parseSlotKey } from '@/entities/itinerary-slot';
+import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
+import { AlertCircleGlyph, InfoCircleGlyph } from '@/features/itinerary';
+import { SaveConflictDialog } from '@/features/edit-itinerary';
+import { TimeSheet } from '@/widgets/time-sheet';
 import {
   getGetTripsTripIdItineraryQueryKey,
   getGetTripsTripIdItineraryQueryOptions,
   useGetTripsTripIdItinerary,
   useGetTripsTripIdVisitsDaysDay,
   usePutTripsTripIdItinerary,
-} from '@/shared/api/generated/trips/trips';
-import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
-import { isNotFound } from '@/shared/api/isNotFound';
+} from '@/shared/api/index.hooks';
+import { isAlreadyRegistered } from '@/shared/api';
+import { isNotFound } from '@/shared/api';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { showToast } from '@/shared/ui/Toast';
-import { EditorView } from '@/widgets/map-sheet-shell/ui/EditorView';
+import { EditorView } from '@/widgets/map-sheet-shell';
 
 /**
  * h24 일정 편집 배선(TRIP-302 슬라이스1~3) — **TRIP-797 묶음 C 로 소비 화면을 옛

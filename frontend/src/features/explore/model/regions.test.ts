@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 
-import type { Region } from '@/shared/api/generated/schemas';
-import { RegionLevel } from '@/shared/api/generated/schemas';
+import type { Region } from '@/shared/api/index.schemas';
+import { RegionLevel } from '@/shared/api/index.schemas';
 
 import {
   filterRegions,

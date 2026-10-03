@@ -3,12 +3,12 @@ import { ActivityIndicator, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQueries } from '@tanstack/react-query';
 
-import { getGetTripsTripIdItineraryQueryOptions } from '@/shared/api/generated/trips/trips';
-import { isNotFound } from '@/shared/api/isNotFound';
+import { getGetTripsTripIdItineraryQueryOptions } from '@/shared/api/index.hooks';
+import { isNotFound } from '@/shared/api';
 import {
   itineraryDestinationHref,
   resolveItineraryDestination,
-} from '@/features/itinerary/model/planState';
+} from '@/features/itinerary';
 import {
   buildMonthLegends,
   buildPastTripCards,
@@ -19,9 +19,9 @@ import {
 } from '../model/recordsCalendar';
 import { useRecordsCalendar } from '../model/useRecordsCalendar';
 import { RecordsCalendarScreen } from './RecordsCalendarScreen';
-import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
-import { buildMonthGrid, shiftMonth } from '@/shared/date/monthGrid';
-import { seoulDate } from '@/shared/date/seoulDate';
+import { useTripWizardStore } from '@/features/create-trip';
+import { buildMonthGrid, shiftMonth } from '@/shared/date';
+import { seoulDate } from '@/shared/date';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
 /**

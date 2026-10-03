@@ -16,14 +16,14 @@ import {
   useGetTripsTripIdReflections,
   usePostTripsTripIdReflectionsDayDate,
   usePutTripsTripIdReflectionsDayDate,
-} from '@/shared/api/generated/reflection/reflection';
+} from '@/shared/api/index.hooks';
 import type {
   Reflection,
   ReflectionCard,
   ReflectionStats,
-} from '@/shared/api/generated/schemas';
-import { useGetTripsTripId } from '@/shared/api/generated/trips/trips';
-import { seoulDate } from '@/shared/date/seoulDate';
+} from '@/shared/api/index.schemas';
+import { useGetTripsTripId } from '@/shared/api/index.hooks';
+import { seoulDate } from '@/shared/date';
 
 import { DailyReflectionPage } from './DailyReflectionPage';
 

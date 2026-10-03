@@ -2,7 +2,7 @@ import type {
   CompanionType,
   CreateTripRequest,
   TripDestination,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 /**
  * 여행 생성 위저드 1/2단계 드래프트를 서버로 보내도 되는지 판정하는 순수 함수 3개

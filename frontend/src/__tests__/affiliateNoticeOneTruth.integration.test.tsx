@@ -14,7 +14,7 @@ import { server } from '@/mocks/server';
 import { SettingsPage } from '@/pages/settings/settings';
 import { StayDetailPage } from '@/pages/stay/stay-detail';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
-import type { StayDetail } from '@/shared/api/generated/schemas';
+import type { StayDetail } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-778 AC-11 — "제휴 안내 다시 보지 않기"의 진실은 하나다(서버 `/me/settings`).

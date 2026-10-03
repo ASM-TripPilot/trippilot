@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 
-import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
+import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 
 import { reorderKeepingLocked } from './reorderKeepingLocked';
 

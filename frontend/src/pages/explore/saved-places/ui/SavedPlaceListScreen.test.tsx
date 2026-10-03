@@ -8,9 +8,9 @@ import {
 import { processColor } from 'react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 
-import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
+import type { Place, SavedPlace } from '@/shared/api/index.schemas';
 
-import { optimisticSavedPlaceId } from '@/features/save-place/model/savedPlaceIndex';
+import { optimisticSavedPlaceId } from '@/features/save-place/index.view';
 import {
   SavedPlaceListScreen,
   type SavedPlaceListScreenProps,

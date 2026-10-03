@@ -6,12 +6,12 @@ import {
   getGetTripsTripIdVisitsDaysDayQueryKey,
   postTripsTripIdVisits,
   postTripsTripIdVisitsVisitCheckIdComplete,
-} from '@/shared/api/generated/trips/trips';
+} from '@/shared/api/index.hooks';
 import type {
   ArriveRequestSource,
   VisitCheck,
   VisitCheckList,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 /**
  * TRIP-396 · AC-3 · AC-4 — 방문 체크 훅(도착·완료)의 낙관적 갱신 + 슬롯키 단위 롤백.

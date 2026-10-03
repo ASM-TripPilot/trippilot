@@ -1,9 +1,6 @@
 import fc from 'fast-check';
 
-import type {
-  VisitCheck,
-  VisitCheckList,
-} from '@/shared/api/generated/schemas';
+import type { VisitCheck, VisitCheckList } from '@/shared/api/index.schemas';
 
 import { deriveVisitProgress } from './visitProgress';
 

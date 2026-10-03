@@ -1,8 +1,8 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { BackArrowGlyph } from '@/features/record/ui/RecordGlyphs';
-import type { MonthCell } from '@/shared/date/monthGrid';
+import { BackArrowGlyph } from '@/features/record';
+import type { MonthCell } from '@/shared/date';
 
 /**
  * TRIP-575 · j07 월 캘린더(무상태 프레젠테이션 — 계산된 그리드·마킹·콜백만 받는다).

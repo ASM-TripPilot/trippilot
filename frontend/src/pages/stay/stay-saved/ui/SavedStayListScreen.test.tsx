@@ -5,7 +5,7 @@ import {
   SavedStayListScreen,
   type SavedStayCardVM,
 } from './SavedStayListScreen';
-import { HeartFilledGlyph as StayHeartFilledGlyph } from '@/features/stay/ui/StayGlyphs';
+import { HeartFilledGlyph as StayHeartFilledGlyph } from '@/features/stay/index.view';
 import type { ReactTestInstance } from 'react-test-renderer';
 
 /**

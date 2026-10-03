@@ -8,8 +8,8 @@ import {
   getGetSavedPlacesQueryKey,
   postSavedPlaces,
   useGetSavedPlaces,
-} from '@/shared/api/generated/places/places';
-import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.hooks';
+import type { Place, SavedPlace } from '@/shared/api/index.schemas';
 
 import { findSavedPlaceId, optimisticSavedPlaceId } from './savedPlaceIndex';
 

@@ -3,7 +3,7 @@ import { useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 
-import { useSavedPlaces } from '@/features/save-place/model/savedPlaces';
+import { useSavedPlaces } from '@/features/save-place';
 import {
   DEFAULT_DWELL_KEY,
   DWELL_OPTIONS,
@@ -13,19 +13,19 @@ import {
   startTimeOptions,
   tripDayChips,
   type MustVisitTimeForm,
-} from '@/features/add-must-visit/model/mustVisitTimeForm';
+} from '@/features/add-must-visit';
 import { MustVisitTimeScreen } from './MustVisitTimeScreen';
-import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
-import type { AddMustVisitRequest } from '@/shared/api/generated/schemas';
+import { isAlreadyRegistered } from '@/shared/api';
+import type { AddMustVisitRequest } from '@/shared/api/index.schemas';
 import {
   deleteTripsTripIdMustVisitsMustVisitId,
   getGetTripsTripIdMustVisitsQueryKey,
   postTripsTripIdMustVisits,
   useGetTripsTripId,
   useGetTripsTripIdMustVisits,
-} from '@/shared/api/generated/trips/trips';
-import { getAccessToken } from '@/shared/api/tokenManager';
-import { guardPress, openPressGuardWindow } from '@/shared/press/pressGuard';
+} from '@/shared/api/index.hooks';
+import { getAccessToken } from '@/shared/api';
+import { guardPress, openPressGuardWindow } from '@/shared/press';
 
 /**
  * h07 배선(TRIP-296) — `ANYTIME` 항목을 시각 고정 블록으로 **승격**한다.

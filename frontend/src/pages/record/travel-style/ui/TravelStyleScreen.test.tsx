@@ -3,7 +3,7 @@ import { render, screen, within } from '@testing-library/react-native';
 import type {
   StyleAnalysisBody,
   StyleProgress,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 import { TravelStyleScreen } from './TravelStyleScreen';
 

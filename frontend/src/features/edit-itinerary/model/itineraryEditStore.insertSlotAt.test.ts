@@ -3,7 +3,7 @@ import { buildEditItineraryRequest } from './buildEditItineraryRequest';
 import type {
   ItineraryDaysItem,
   ItineraryDaysItemSlotsItem,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 /**
  * TRIP-797 · AC-7 (INV-U3-02) — h12 편집기 "카드 사이 +"의 **판정/조립 층**.

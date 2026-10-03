@@ -12,8 +12,8 @@ import {
 
 import { server } from '@/mocks/server';
 import { resetToast, WithToastHost } from '@/test-support/toastHarness';
-import { useItineraryEditStore } from '@/features/edit-itinerary/model/itineraryEditStore';
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+import { useItineraryEditStore } from '@/features/edit-itinerary';
+import { buildSlotKey } from '@/entities/itinerary-slot';
 import type {
   EditItineraryRequest,
   Itinerary,
@@ -22,7 +22,7 @@ import type {
   VisitCheckList,
   ItineraryDaysItemSlotsItem,
   ItineraryStatus,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import {
   fireEditDragEnd,

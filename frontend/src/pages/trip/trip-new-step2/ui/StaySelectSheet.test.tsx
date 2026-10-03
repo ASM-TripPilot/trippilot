@@ -5,10 +5,10 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import type { SavedStay } from '@/shared/api/generated/schemas';
+import type { SavedStay } from '@/shared/api/index.schemas';
 
 import { StaySelectSheet } from './StaySelectSheet';
-import { CheckGlyph } from '@/features/trip/ui/TripGlyphs';
+import { CheckGlyph } from '@/features/trip/index.view';
 
 /**
  * TRIP-673 g02 숙소 선택 시트(S9) → TRIP-741 후보 카드 Figma 정합.

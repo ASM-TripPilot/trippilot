@@ -1,4 +1,4 @@
-import type { StayPrice } from '@/shared/api/generated/schemas';
+import type { StayPrice } from '@/shared/api/index.schemas';
 
 /**
  * 최저가 스냅숏 → 카드 금액 문자열 (US-STAY-01 · BR-U1-12/14 · INV-3).

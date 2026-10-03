@@ -1,9 +1,9 @@
 import type { ReactElement } from 'react';
 import { Text, View } from 'react-native';
 
-import type { ReflectionStats } from '@/shared/api/generated/schemas';
+import type { ReflectionStats } from '@/shared/api/index.schemas';
 
-import { formatKm } from '@/features/reflection/model/formatKm';
+import { formatKm } from '@/features/reflection/index.view';
 
 /**
  * TRIP-571 · 통계 3열(방문 · 이동 · 사진). testID `reflection-daily-stats`.

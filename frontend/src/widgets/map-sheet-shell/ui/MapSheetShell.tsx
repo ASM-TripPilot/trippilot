@@ -25,7 +25,7 @@ import { MapFallbackBar } from './MapFallbackBar';
 
 // 위젯 킷 소비처가 시트 body(카드·커넥터)를 조립할 때 쓰는 서버 슬롯 타입을 킷 표면으로 재수출한다
 // (widgets → entities 하향 참조 허용, `entities/itinerary-slot/model` 이 shared/api 를 얇게 재수출).
-export type { ItineraryDaysItemSlotsItem } from '@/entities/itinerary-slot/model';
+export type { ItineraryDaysItemSlotsItem } from '@/entities/itinerary-slot';
 
 /**
  * TRIP-783 · h공통 지도+시트 셸(widgets) — h·i 밴드 지도 결과 화면들이 공유하는 골격. 전면 지도(`<MapView viewOnly>`, 시트 뒤 형제) + 좌상단 일차 칩 오버레이 +

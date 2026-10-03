@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import { PersonalizationInfoReason } from '@/shared/api/generated/schemas';
-import type { PersonalizationItem } from '@/shared/api/generated/schemas';
+import { PersonalizationInfoReason } from '@/shared/api/index.schemas';
+import type { PersonalizationItem } from '@/shared/api/index.schemas';
 
 import { PersonalizationScreen } from './PersonalizationScreen';
 

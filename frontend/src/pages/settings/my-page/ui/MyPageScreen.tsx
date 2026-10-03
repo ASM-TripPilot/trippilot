@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { TripBucket } from '../model/tripBuckets';
 import { ProfileCard, type ProfileCardCounts } from './ProfileCard';
-import { CARD_SHADOW } from '@/features/settings/ui/cardShadow';
+import { CARD_SHADOW } from '@/features/settings';
 import {
   BarChartGlyph,
   ChevronRightGlyph,
@@ -14,7 +14,7 @@ import {
   MenuBedGlyph,
   MUTED_SOFT,
   ShareNodesGlyph,
-} from '@/features/settings/ui/SettingsGlyphs';
+} from '@/features/settings';
 
 /**
  * TRIP-604 · l03 마이페이지 화면 — 순수 프레젠테이션(props + 콜백만). 셸 교체의 실화면.

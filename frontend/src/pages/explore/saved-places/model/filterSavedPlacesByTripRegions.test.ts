@@ -18,7 +18,7 @@
 import fs from 'fs';
 import path from 'path';
 
-import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
+import type { Place, SavedPlace } from '@/shared/api/index.schemas';
 
 import { filterSavedPlacesByTripRegions } from './filterSavedPlacesByTripRegions';
 

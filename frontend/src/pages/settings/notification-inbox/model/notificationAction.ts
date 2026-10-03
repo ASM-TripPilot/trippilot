@@ -1,4 +1,4 @@
-import type { Notification } from '@/shared/api/generated/schemas';
+import type { Notification } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-576 · l01 — 알림 1건을 딥링크 경로 문자열 또는 null(액션 없음)로 접는 순수 사영.

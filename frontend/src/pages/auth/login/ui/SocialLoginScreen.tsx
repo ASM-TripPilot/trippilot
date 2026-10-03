@@ -9,8 +9,8 @@ import {
   GoogleIcon,
   KakaoIcon,
   NaverIcon,
-} from '@/features/auth/ui/AuthGlyphs';
-import { APP_ICON_COLORS } from '@/features/auth/config/gradients';
+} from '@/features/auth/index.view';
+import { APP_ICON_COLORS } from '@/features/auth/index.view';
 import type { SocialLoginPhase } from '../model/useSocialLogin';
 
 export interface SocialLoginScreenProps {

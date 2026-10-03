@@ -23,15 +23,15 @@ import type {
   ItineraryGenerationState,
   ItineraryUnplacedMustVisitsItem,
   SavedPlace,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { showToast } from '@/shared/ui/Toast';
 import {
   getGetTripsTripIdItineraryQueryKey,
   getGetTripsTripIdQueryKey,
-} from '@/shared/api/generated/trips/trips';
+} from '@/shared/api/index.hooks';
 import { flushNotifications } from '@/test-support/flushNotifications';
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+import { buildSlotKey } from '@/entities/itinerary-slot';
 
 import { ItineraryPlanPage } from './ItineraryPlanPage';
 

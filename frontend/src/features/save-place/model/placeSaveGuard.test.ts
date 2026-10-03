@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 
-import type { Place } from '@/shared/api/generated/schemas';
+import type { Place } from '@/shared/api/index.schemas';
 
 import type { SavedPlacesFailureReason } from './savedPlaces';
 import {

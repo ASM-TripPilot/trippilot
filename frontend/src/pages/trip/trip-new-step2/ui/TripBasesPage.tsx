@@ -2,10 +2,10 @@ import { type ReactElement, useState } from 'react';
 import { useRouter } from 'expo-router';
 
 import { basesChanged } from '../model/basesChanged';
-import { useTripBases } from '@/features/assign-trip-base/model/useTripBases';
+import { useTripBases } from '@/features/assign-trip-base';
 import { BaseRegenerateDialog } from './BaseRegenerateDialog';
-import type { BaseAssignment } from '@/shared/api/generated/schemas';
-import { useGetTripsTripId } from '@/shared/api/generated/trips/trips';
+import type { BaseAssignment } from '@/shared/api/index.schemas';
+import { useGetTripsTripId } from '@/shared/api/index.hooks';
 
 import { BaseNightsFlow } from './TripNewStep2Page';
 

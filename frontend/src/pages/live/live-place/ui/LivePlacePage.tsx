@@ -3,8 +3,8 @@ import { Pressable, Share, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { usePlaceDetail } from '../model/usePlaceDetail';
-import { BackArrowGlyph } from '@/features/execution/ui/ExecutionGlyphs';
-import { isNotFound } from '@/shared/api/isNotFound';
+import { BackArrowGlyph } from '@/features/execution';
+import { isNotFound } from '@/shared/api';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
 import {

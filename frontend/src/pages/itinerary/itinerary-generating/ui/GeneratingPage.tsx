@@ -2,23 +2,23 @@ import { useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
 import { useCallback, useEffect, useRef } from 'react';
 
-import { useSavedPlaces } from '@/features/save-place/model/savedPlaces';
-import { firstCoPickSlotKey } from '@/features/itinerary/model/coPickSlots';
-import { buildMustVisitPins } from '@/features/itinerary/model/mustVisitList';
-import { useGenerationBusy } from '@/features/itinerary/model/useGenerationBusy';
+import { useSavedPlaces } from '@/features/save-place';
+import { firstCoPickSlotKey } from '@/features/itinerary';
+import { buildMustVisitPins } from '@/features/itinerary';
+import { useGenerationBusy } from '@/features/itinerary';
 import { GeneratingScreen } from './GeneratingScreen';
 import type {
   GenerateItineraryRequestGenerationMode,
   Itinerary,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripIdItinerary,
   useGetTripsTripIdMustVisits,
   usePostTripsTripIdItinerary,
-} from '@/shared/api/generated/trips/trips';
-import { isNotFound } from '@/shared/api/isNotFound';
-import { getAccessToken } from '@/shared/api/tokenManager';
+} from '@/shared/api/index.hooks';
+import { isNotFound } from '@/shared/api';
+import { getAccessToken } from '@/shared/api';
 import type { MapCenter, MapPin } from '@/shared/map';
 import { showToast } from '@/shared/ui/Toast';
 

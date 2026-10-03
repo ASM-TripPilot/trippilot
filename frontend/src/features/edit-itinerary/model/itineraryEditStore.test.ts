@@ -1,7 +1,7 @@
 import type {
   ItineraryDaysItem,
   ItineraryDaysItemSlotsItem,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 import {
   removeSlot,

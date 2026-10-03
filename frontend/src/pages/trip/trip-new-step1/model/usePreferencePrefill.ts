@@ -1,4 +1,4 @@
-import { useGetMePreferences } from '@/shared/api/generated/preferences/preferences';
+import { useGetMePreferences } from '@/shared/api/index.hooks';
 
 /**
  * 생성 훅(`useGetMePreferences`)을 도메인 이름으로 재수출한다(`useStaySearch` 선례, 몸통

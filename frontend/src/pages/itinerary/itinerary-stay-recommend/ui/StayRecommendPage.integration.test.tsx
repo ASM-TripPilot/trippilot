@@ -18,7 +18,7 @@ import type {
   AssignBaseRequest,
   BaseAssignment,
   Trip,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 
 import { StayRecommendPage } from './StayRecommendPage';

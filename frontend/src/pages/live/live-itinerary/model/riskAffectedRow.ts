@@ -1,6 +1,6 @@
-import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
-import { formatOpeningHoursLabel } from '@/entities/itinerary-slot/lib/openingHoursLabel';
-import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
+import { formatOpeningHoursLabel } from '@/entities/itinerary-slot';
+import { parseSlotKey } from '@/entities/itinerary-slot';
 
 /**
  * TRIP-749 · 트리거 slotKey → i03 위험 상세 시트 "영향 장소" 행.

@@ -1,6 +1,6 @@
-import { resolveStyleFace } from '@/entities/style-analysis/lib/styleFace';
-import { resolveStyleProgress } from '@/entities/style-analysis/lib/styleProgress';
-import type { StyleAnalysisEnvelope } from '@/shared/api/generated/schemas';
+import { resolveStyleFace } from '@/entities/style-analysis';
+import { resolveStyleProgress } from '@/entities/style-analysis';
+import type { StyleAnalysisEnvelope } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-606 · l03 스타일 요약 카드 뷰모델 — 서버 응답(Envelope)을 화면이 그대로 그릴 값 묶음으로

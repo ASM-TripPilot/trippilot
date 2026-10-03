@@ -4,7 +4,7 @@ paths:
 ---
 # `src/app/` — 라우트 (expo-router 파일시스템 라우트)
 
-- **라우트 파일은 얇은 래퍼다** — params만 읽어 `@/pages/<슬라이스>` 배럴(무배럴 페이지는 딥 경로)로 위임한다. 조회·조립·마크업은 페이지 소관. 이 forward 자체는 라우트를 렌더하는 테스트가 없으면 무심판이다.
+- **라우트 파일은 얇은 래퍼다** — params만 읽어 `@/pages/<슬라이스>` 공개 API(`index.ts`)로 위임한다(딥 경로는 lint error — TRIP-1157). 조회·조립·마크업은 페이지 소관. 이 forward 자체는 라우트를 렌더하는 테스트가 없으면 무심판이다.
 - **`(tabs)` 밖 라우트는 `SplashGate`의 어떤 `Stack.Protected` guard에도 안 걸린다** — expo-router가 파일시스템 라우트를 자동 등록하므로 미인증 딥링크로 열린다(`stays/*`·`trips/new/**` 실기 확인, 데이터 노출은 서버 401이 막음). 새 라우트를 `(tabs)` 밖에 두면 같은 구조를 공유한다.
 
 | 파일 | 역할 |
@@ -68,4 +68,4 @@ paths:
 | `src/app/trips/[tripId]/live/location.tsx` | 위치 폴백(수동 입력·권한 거부) — `tripId`·`state`를 `LiveLocationPage`에 위임(`?state=`로 얼굴 선택) |
 | `src/app/settings/preferences.tsx` | l05 취향 전체 수정 — `@/pages/settings/settings-preferences` 얇은 래퍼. 설정 화면에서 진입 |
 | `src/app/settings/personalization.tsx` | l05 개인화 동의 — `@/pages/settings/settings-personalization` 얇은 래퍼. 설정 화면에서 진입 |
-| `src/app/magazine.tsx` | a02 매거진 목록 — `@/pages/magazine/ui/MagazinePage` **딥 경로** 직참조(무배럴 페이지). 홈 매거진 히어로에서 push, 실앱은 탭바 미렌더(프리뷰만 `withShellTabBar`) |
+| `src/app/magazine.tsx` | a02 매거진 목록 — `@/pages/magazine` 공개 API로 참조. 홈 매거진 히어로에서 push, 실앱은 탭바 미렌더(프리뷰만 `withShellTabBar`) |

@@ -1,4 +1,4 @@
-import type { StayItem } from '@/shared/api/generated/schemas';
+import type { StayItem } from '@/shared/api/index.schemas';
 
 import { buildSaveStayRequest } from './buildSaveStayRequest';
 

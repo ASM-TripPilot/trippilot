@@ -9,10 +9,7 @@ import { DeleteAccountDialog } from './DeleteAccountDialog';
 import { ExportRow } from './ExportRow';
 import { LogoutConfirmDialog } from './LogoutConfirmDialog';
 import { NicknameEditRow } from './NicknameEditRow';
-import {
-  ChevronLeftGlyph,
-  TrashGlyph,
-} from '@/features/settings/ui/SettingsGlyphs';
+import { ChevronLeftGlyph, TrashGlyph } from '@/features/settings';
 import { SettingsGroup } from './SettingsGroup';
 import { NavRow, PreparingRow, RowBody } from './SettingsRow';
 

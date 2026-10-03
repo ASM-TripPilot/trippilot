@@ -1,8 +1,8 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 
-import { useReplanFormStore } from '@/features/request-replan/model/replanFormStore';
-import type { Itinerary } from '@/shared/api/generated/schemas';
-import { useGetStaysReverseGeocode } from '@/shared/api/generated/stays/stays';
+import { useReplanFormStore } from '@/features/request-replan';
+import type { Itinerary } from '@/shared/api/index.schemas';
+import { useGetStaysReverseGeocode } from '@/shared/api/index.hooks';
 import type { MapCenter } from '@/shared/map';
 
 import { LiveLocationPage } from './LiveLocationPage';

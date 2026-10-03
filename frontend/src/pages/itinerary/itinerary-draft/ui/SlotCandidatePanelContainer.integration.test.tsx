@@ -11,14 +11,14 @@ import {
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+import { buildSlotKey } from '@/entities/itinerary-slot';
 import { SLOT_SWAP_CONFLICT_CODES } from '@/features/edit-itinerary/model/slotSwapError';
 import type {
   EditItineraryRequest,
   Itinerary,
   ItineraryDaysItem,
   SlotCandidates,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 
 import { SlotCandidatePanelContainer } from './SlotCandidatePanelContainer';

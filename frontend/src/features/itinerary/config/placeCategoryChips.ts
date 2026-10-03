@@ -1,4 +1,4 @@
-import type { PoiCategory } from '@/shared/api/generated/schemas';
+import type { PoiCategory } from '@/shared/api/index.schemas';
 
 /**
  * h13 장소 추가 카테고리 칩의 정본(TRIP-798 · AC-2). 화면이 `Object.values(PoiCategory)` 로 즉석

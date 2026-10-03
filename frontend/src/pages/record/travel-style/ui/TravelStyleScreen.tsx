@@ -6,11 +6,11 @@ import type {
   StyleAnalysisBody,
   StylePreview,
   StyleProgress,
-} from '@/shared/api/generated/schemas';
-import type { StyleFace } from '@/entities/style-analysis/lib/styleFace';
+} from '@/shared/api/index.schemas';
+import type { StyleFace } from '@/entities/style-analysis';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 
-import { BackArrowGlyph } from '@/features/reflection/ui/ReflectionGlyphs';
+import { BackArrowGlyph } from '@/features/reflection/index.view';
 import { CategoryBarList } from './CategoryBarList';
 import { StatTile } from './StatTile';
 

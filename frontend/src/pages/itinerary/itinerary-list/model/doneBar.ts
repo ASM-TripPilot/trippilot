@@ -2,7 +2,7 @@ import type {
   ItineraryGenerationState,
   ItineraryStatus,
   Trip,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 import { deriveTripCardFace } from './tripCardFace';
 

@@ -11,7 +11,7 @@ import {
 } from '@testing-library/react-native';
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
-import type { PreferenceView } from '@/shared/api/generated/schemas';
+import type { PreferenceView } from '@/shared/api/index.schemas';
 import { WithToastHost, resetToast } from '@/test-support/toastHarness';
 import { PreferencesEditScreen } from './PreferencesEditScreen';
 

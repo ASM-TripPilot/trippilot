@@ -9,15 +9,15 @@ import {
 import type {
   ItineraryDaysItem,
   ItineraryDaysItemSlotsItem,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import type {
   DraftDayTab,
   DraftPin,
   DraftView,
-} from '@/features/itinerary/model/draftView';
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
-import { timeBandLabel } from '@/entities/itinerary-slot/lib/timeBandLabel';
-import { CheckCircleGlyph } from '@/features/itinerary/ui/ItineraryGlyphs';
+} from '@/features/itinerary/index.view';
+import { buildSlotKey } from '@/entities/itinerary-slot';
+import { timeBandLabel } from '@/entities/itinerary-slot';
+import { CheckCircleGlyph } from '@/features/itinerary/index.view';
 
 import { DraftScreen } from './DraftScreen';
 

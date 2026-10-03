@@ -29,8 +29,15 @@ async function lintAsHome(code: string): Promise<ESLint.LintResult> {
 
 // severity 2 = error. **개수가 아니라 "어느 규칙이 잡았는지"** 를 배열로 뽑는다 —
 // 개수만 세면 다른 규칙이 대신 잡아도 통과해버린다.
+// 딥 zone(TRIP-1157)은 같은 룰 ID 라 별도 이름표로 가른다 — 안 가르면 층 zone 이 사라져도 딥 zone 이 대신 울린다.
 function errorRuleIds(result: ESLint.LintResult): (string | null)[] {
-  return result.messages.filter((m) => m.severity === 2).map((m) => m.ruleId);
+  return result.messages
+    .filter((m) => m.severity === 2)
+    .map((m) =>
+      m.ruleId === BOUNDARY_RULE && m.message.includes('TRIP-1157')
+        ? `${BOUNDARY_RULE}#TRIP-1157`
+        : m.ruleId
+    );
 }
 
 describe('import boundary rule: features/* may not import another feature', () => {

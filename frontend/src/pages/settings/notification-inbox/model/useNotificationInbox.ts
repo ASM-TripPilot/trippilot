@@ -4,8 +4,8 @@ import {
   getGetMeNotificationsQueryKey,
   postMeNotificationsReadAll,
   useGetMeNotifications,
-} from '@/shared/api/generated/notification/notification';
-import type { Notification } from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.hooks';
+import type { Notification } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-576 · l01 — `useGetMeNotifications` 를 얇게 감싸는 도메인 훅(catch-up 뷰).

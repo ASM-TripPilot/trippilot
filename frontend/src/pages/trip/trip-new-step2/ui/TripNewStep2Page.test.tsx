@@ -7,8 +7,8 @@ import {
 } from '@testing-library/react-native';
 
 import type { StayAddressState } from '../model/staySheetSections';
-import type { BaseAssignment, SavedStay } from '@/shared/api/generated/schemas';
-import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
+import type { BaseAssignment, SavedStay } from '@/shared/api/index.schemas';
+import { useTripWizardStore } from '@/features/create-trip';
 import { resetPressGuard } from '@/shared/press/pressGuard';
 
 import { TripNewStep2Page } from './TripNewStep2Page';

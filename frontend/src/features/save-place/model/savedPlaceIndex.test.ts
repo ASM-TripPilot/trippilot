@@ -1,4 +1,4 @@
-import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
+import type { Place, SavedPlace } from '@/shared/api/index.schemas';
 
 import { findSavedPlaceId, optimisticSavedPlaceId } from './savedPlaceIndex';
 

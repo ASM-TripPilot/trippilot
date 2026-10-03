@@ -1,10 +1,10 @@
 import { render, screen } from '@testing-library/react-native';
 
 import TripWizardLayout from '@/app/trips/new/_layout';
-import type { MustVisitSeedItem } from '@/features/create-trip/model/mustVisitSeed';
-import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
+import type { MustVisitSeedItem } from '@/features/create-trip';
+import { useTripWizardStore } from '@/features/create-trip';
 import { TripNewStep1Page } from '@/pages/trip/trip-new-step1';
-import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
+import type { Place, SavedPlace } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 
 /**

@@ -18,7 +18,7 @@
  * 온보딩 예산 범위(~50만·50~150만·150~300만·300만+)의 가운데값 — 1인 여행 전체 금액이라
  * 박수·인원과 무관하다(TRIP-1045의 1박 단가 × 박수는 폐기).
  */
-import type { PreferenceInputBudgetTier } from '@/shared/api/generated/schemas';
+import type { PreferenceInputBudgetTier } from '@/shared/api/index.schemas';
 
 export type BudgetAmount =
   { kind: 'empty' } | { kind: 'amount'; amount: number } | { kind: 'invalid' };

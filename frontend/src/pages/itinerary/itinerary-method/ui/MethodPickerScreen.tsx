@@ -13,7 +13,7 @@ import {
   CoPickGlyph,
   FullAiGlyph,
   ManualGlyph,
-} from '@/features/itinerary/ui/ItineraryGlyphs';
+} from '@/features/itinerary/index.view';
 
 /**
  * h01 시작 방법 — Figma `3824:2128`. 세 방식(완전 AI · AI와 같이 · 직접) 중 하나를 고른다.

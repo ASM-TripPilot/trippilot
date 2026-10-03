@@ -4,25 +4,25 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { View } from 'react-native';
 
-import { buildEditItineraryRequest } from '@/features/edit-itinerary/model/buildEditItineraryRequest';
+import { buildEditItineraryRequest } from '@/features/edit-itinerary';
 import { resolveCandidateSelection } from '../model/candidateSelection';
 import {
   countPickedCoPickSlots,
   nextCoPickSlotKey,
-} from '@/features/itinerary/model/coPickSlots';
+} from '@/features/itinerary';
 import {
   DRAFT_POLL_INTERVAL_MS,
   formatCoPickDayHeader,
-} from '@/features/itinerary/model/draftView';
+} from '@/features/itinerary';
 import { regionForDay } from '../model/dayRegion';
-import { tripDayChips } from '@/features/add-must-visit/model/mustVisitTimeForm';
-import { isConfirmLocked } from '@/features/itinerary/model/planState';
+import { tripDayChips } from '@/features/add-must-visit';
+import { isConfirmLocked } from '@/features/itinerary';
 import { formatRadiusUsed } from '../model/radiusUsedLabel';
-import { formatDistance } from '@/entities/place/lib/formatDistance';
-import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
-import { resolveSlotSwapError } from '@/features/edit-itinerary/model/slotSwapError';
-import { swapSlotPoi } from '@/features/edit-itinerary/model/swapSlotPoi';
-import { timeBandLabel } from '@/entities/itinerary-slot/lib/timeBandLabel';
+import { formatDistance } from '@/entities/place';
+import { parseSlotKey } from '@/entities/itinerary-slot';
+import { resolveSlotSwapError } from '@/features/edit-itinerary';
+import { swapSlotPoi } from '@/features/edit-itinerary';
+import { timeBandLabel } from '@/entities/itinerary-slot';
 import {
   ConceptPickerScreen,
   type ConceptProgress,
@@ -32,14 +32,14 @@ import { SlotFillScreen } from './SlotFillScreen';
 import type {
   ItineraryDaysItemSlotsItem,
   SlotCandidatesRequest,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripId,
   useGetTripsTripIdItinerary,
   usePostTripsTripIdItinerarySlotCandidates,
   usePutTripsTripIdItinerary,
-} from '@/shared/api/generated/trips/trips';
+} from '@/shared/api/index.hooks';
 import { CoPickStepper, type CoPickStep } from './CoPickStepper';
 
 /**

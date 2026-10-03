@@ -1,4 +1,4 @@
-import type { StyleAnalysisEnvelope } from '@/shared/api/generated/schemas';
+import type { StyleAnalysisEnvelope } from '@/shared/api/index.schemas';
 
 import { buildStyleCardModel } from './styleCardModel';
 

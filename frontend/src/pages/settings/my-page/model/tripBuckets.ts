@@ -1,5 +1,5 @@
-import type { TripPhase } from '@/entities/trip/lib/tripPhase';
-import type { Trip } from '@/shared/api/generated/schemas';
+import type { TripPhase } from '@/entities/trip';
+import type { Trip } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-604 · US-NOTIF-07 · BR-U6-22 — 마이페이지 숫자 3칸(예정·진행 중·종료) 분류 순수 함수.

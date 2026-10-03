@@ -15,7 +15,7 @@ import {
   SocialLoginScreen,
   type SocialLoginScreenProps,
 } from '@/pages/auth/login/ui/SocialLoginScreen';
-import { SplashScreen } from '@/features/auth/ui/SplashScreen';
+import { SplashScreen } from '@/features/auth/index.view';
 import {
   HOME_DEFAULT_PROPS,
   HOME_LOADING_PROPS,
@@ -31,14 +31,14 @@ import {
   PREVIEW_SAVED_POI_IDS,
 } from '@/pages/explore/explore-landing/model/exploreFixtures';
 import { TriggerChip } from '@/pages/live/live-itinerary/ui/TriggerChip';
-import { MemoInline } from '@/features/attach-visit-media/ui/MemoInline';
+import { MemoInline } from '@/features/attach-visit-media/index.view';
 import { MemoSheet } from '@/pages/live/live-itinerary/ui/MemoSheet';
 import { PhotoThumbStrip } from '@/pages/record/trip-records/ui/PhotoThumbStrip';
 import { RecordsCalendarScreen } from '@/pages/record/records-calendar/ui/RecordsCalendarScreen';
 import { VisitRecordCard } from '@/pages/record/trip-records/ui/VisitRecordCard';
 import { VisitTimeSheet } from '@/pages/record/trip-records/ui/VisitTimeSheet';
 import { missingParts } from '@/pages/record/daily-reflection/model/missingParts';
-import { SHARE_FORMATS } from '@/features/reflection/model/shareCard';
+import { SHARE_FORMATS } from '@/features/reflection/index.view';
 import { DailyReflectionScreen } from '@/pages/record/daily-reflection/ui/DailyReflectionScreen';
 import { ShareCardScreen } from '@/pages/record/share-card/ui/ShareCardScreen';
 import { TravelStyleScreen } from '@/pages/record/travel-style/ui/TravelStyleScreen';
@@ -63,43 +63,37 @@ import {
   buildGenerationGauge,
   foldGenerationGauge,
   formatCoPickDayHeader,
-} from '@/features/itinerary/model/draftView';
+} from '@/features/itinerary/index.view';
 import { type PlanDayTab } from '@/features/itinerary/model/planState';
-import type { MustVisitListItem } from '@/features/itinerary/model/mustVisitList';
-import {
-  startTimeOptions,
-  tripDayChips,
-} from '@/features/add-must-visit/model/mustVisitTimeForm';
+import type { MustVisitListItem } from '@/features/itinerary/index.view';
+import { startTimeOptions, tripDayChips } from '@/features/add-must-visit';
 import { ConceptPickerScreen } from '@/pages/itinerary/itinerary-copick/ui/ConceptPickerScreen';
 import { GenerationFallbackScreen } from '@/pages/itinerary/itinerary-draft/ui/GenerationFallbackScreen';
 import { GeneratingScreen } from '@/pages/itinerary/itinerary-generating/ui/GeneratingScreen';
 import { MustVisitPickerScreen } from '@/pages/itinerary/itinerary-mustvisit/ui/MustVisitPickerScreen';
 import { MustVisitTimeScreen } from '@/pages/itinerary/itinerary-mustvisit/ui/MustVisitTimeScreen';
-import {
-  PlaceAddHeader,
-  PlaceAddRow,
-} from '@/features/itinerary/ui/PlaceAddScreen';
+import { PlaceAddHeader, PlaceAddRow } from '@/features/itinerary/index.view';
 import { SlotCandidateSheet as ItinerarySlotCandidateSheet } from '@/pages/itinerary/itinerary-draft/ui/SlotCandidateSheet';
 import { SlotFillScreen } from '@/pages/itinerary/itinerary-copick/ui/SlotFillScreen';
-import { UnplacedMustVisitNotice } from '@/features/itinerary/ui/UnplacedMustVisitNotice';
+import { UnplacedMustVisitNotice } from '@/features/itinerary/index.view';
 import type { UnplacedMustVisitRow } from '@/features/itinerary/model/unplacedMustVisits';
 import type { StayRecommendView as StayRecommendViewModel } from '@/pages/itinerary/itinerary-stay-recommend/model/stayRecommend';
 import { CoPickStepper } from '@/pages/itinerary/itinerary-copick/ui/CoPickStepper';
 import { GenerationDoneBar } from '@/pages/itinerary/itinerary-list/ui/GenerationDoneBar';
-import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
-import { GenerationProgressCard } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
-import type { GenerationProgressCell } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
+import { DistanceConnector } from '@/widgets/map-sheet-shell';
+import { GenerationProgressCard } from '@/widgets/map-sheet-shell';
+import type { GenerationProgressCell } from '@/widgets/map-sheet-shell';
 import { MapFallbackBar } from '@/widgets/map-sheet-shell/ui/MapFallbackBar';
-import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
-import { SheetHeader } from '@/widgets/map-sheet-shell/ui/SheetHeader';
-import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
-import { PastTripRow } from '@/entities/trip/ui/PastTripRow';
-import { ChevronRightGlyph as TripChevronRightGlyph } from '@/entities/trip/ui/TripGlyphs';
-import type { PastTripCardVM } from '@/entities/trip/model';
+import { MapSheetShell } from '@/widgets/map-sheet-shell';
+import { SheetHeader } from '@/widgets/map-sheet-shell';
+import { SlotStopCard } from '@/entities/itinerary-slot';
+import { PastTripRow } from '@/entities/trip';
+import { ChevronRightGlyph as TripChevronRightGlyph } from '@/entities/trip';
+import type { PastTripCardVM } from '@/entities/trip';
 import type { MonthLegends } from '@/pages/record/records-calendar/model/recordsCalendar';
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
-import { buildStatePins } from '@/entities/itinerary-slot/lib/slotMapPin';
-import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
+import { buildSlotKey } from '@/entities/itinerary-slot';
+import { buildStatePins } from '@/entities/itinerary-slot';
+import { TimeSheet } from '@/widgets/time-sheet';
 import { MethodPickerScreen } from '@/pages/itinerary/itinerary-method/ui/MethodPickerScreen';
 import {
   MyTripCard,
@@ -133,14 +127,14 @@ import {
 import { StyleSummaryCard } from '@/pages/settings/my-page/ui/StyleSummaryCard';
 import { RevokeConfirmDialog } from '@/pages/settings/settings-location/ui/RevokeConfirmDialog';
 import { SettingsScreen } from '@/pages/settings/settings/ui/SettingsScreen';
-import { triggerLabel } from '@/features/planb/model/triggerLabel';
-import { triggerPillCopy } from '@/features/planb/model/triggerPillCopy';
+import { triggerLabel } from '@/features/planb/index.view';
+import { triggerPillCopy } from '@/features/planb/index.view';
 import { riskAffectedRow } from '@/pages/live/live-itinerary/model/riskAffectedRow';
 import { triggerWatchlist } from '@/pages/live/live-itinerary/model/triggerWatchlist';
 import { ReplanRequestSheet } from '@/pages/live/planb-request/ui/ReplanRequestSheet';
 import { appliedSummaryBadges } from '@/features/planb/model/appliedSummary';
 import { ReplanAppliedSheet } from '@/pages/live/live-itinerary/ui/ReplanAppliedSheet';
-import type { ReplanSlotVM } from '@/entities/itinerary-slot/model';
+import type { ReplanSlotVM } from '@/entities/itinerary-slot';
 import { ReplanDraftView } from '@/pages/live/planb-draft/ui/ReplanDraftView';
 // 뷰 파일 경로로 직접 — 페이지 배럴은 useAssignBase(요청 모듈)를 끌어와 프리뷰 네트워크 지뢰가 터진다.
 import { StayRecommendView } from '@/pages/itinerary/itinerary-stay-recommend/ui/StayRecommendView';
@@ -176,7 +170,7 @@ import {
 import { LiveLocationView } from '@/pages/live/live-location/ui/LiveLocationView';
 import { NoBaseNoticeCard } from '@/pages/itinerary/itinerary-plan/ui/NoBaseNoticeCard';
 import { DraftFallbackBanner } from '@/pages/itinerary/itinerary-draft/ui/DraftFallbackBanner';
-import { EditorView } from '@/widgets/map-sheet-shell/ui/EditorView';
+import { EditorView } from '@/widgets/map-sheet-shell';
 import {
   LiveHubView,
   type LiveHubSlot,
@@ -193,7 +187,7 @@ import { TripWizardLeaveDialog } from '@/pages/trip/trip-new-step1/ui/TripWizard
 import { PrefStep1Screen } from '@/pages/onboarding/onboarding-pref1/ui/PrefStep1Screen';
 import { PrefStep2Screen } from '@/pages/onboarding/onboarding-pref2/ui/PrefStep2Screen';
 import { TermsScreen } from '@/pages/onboarding/onboarding-terms/ui/TermsScreen';
-import type { PreferenceSelection } from '@/features/edit-preferences/model/preferenceDraft';
+import type { PreferenceSelection } from '@/features/edit-preferences';
 import { PreferencesEditView } from '@/pages/settings/settings-preferences/ui/PreferencesEditView';
 import type {
   ItineraryDaysItemSlotsItem,
@@ -203,13 +197,13 @@ import type {
   StayItem,
   Trigger,
   TriggerKind,
-} from '@/shared/api/generated/schemas';
-import { PersonalizationInfoReason } from '@/shared/api/generated/schemas';
-import { buildMonthGrid } from '@/shared/date/monthGrid';
-import { LocationPreprompt } from '@/shared/location/LocationPreprompt';
+} from '@/shared/api/index.schemas';
+import { PersonalizationInfoReason } from '@/shared/api/index.schemas';
+import { buildMonthGrid } from '@/shared/date';
+import { LocationPreprompt } from '@/shared/location/index.view';
 // 딥 경로 — 배럴(`@/shared/push`)로 끌면 권한 루틴(expo-notifications)까지 실린다(TRIP-1108 R10).
-import { PushPreprompt } from '@/shared/push/PushPreprompt';
-import { revokeImpact } from '@/shared/location/revokeImpact';
+import { PushPreprompt } from '@/shared/push/index.view';
+import { revokeImpact } from '@/shared/location/index.view';
 import { MapView, type MapPin } from '@/shared/map';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 

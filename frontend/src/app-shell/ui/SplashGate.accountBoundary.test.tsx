@@ -3,8 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen } from '@testing-library/react-native';
 import { router } from 'expo-router';
 
-import { useBootstrapGate } from '@/features/auth/model/useBootstrapGate';
-import { usePreferenceStore } from '@/features/edit-preferences/model/preferenceStore';
+import { useBootstrapGate } from '@/features/auth';
+import { usePreferenceStore } from '@/features/edit-preferences';
 
 import { SplashGate, SPLASH_MIN_VISIBLE_MS } from './SplashGate';
 

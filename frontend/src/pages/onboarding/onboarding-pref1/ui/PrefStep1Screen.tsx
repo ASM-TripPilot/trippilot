@@ -6,7 +6,7 @@ import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { PrefTile } from '@/shared/ui/pref/PrefTile';
+import { PrefTile } from '@/shared/ui/pref';
 
 import {
   ActivityGlyph,
@@ -23,7 +23,7 @@ import {
   SkipChevronGlyph,
   SunGlyph,
   type GlyphComponent,
-} from '@/features/onboarding/ui/OnboardingGlyphs';
+} from '@/features/onboarding';
 
 export interface PrefStep1ScreenProps {
   selectedStyles: readonly string[] | null;

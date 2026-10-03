@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 
-import type { TripDestination } from '@/shared/api/generated/schemas';
+import type { TripDestination } from '@/shared/api/index.schemas';
 
 import {
   nightlyBaseCards,

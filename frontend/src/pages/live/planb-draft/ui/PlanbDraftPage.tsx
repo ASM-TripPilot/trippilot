@@ -1,22 +1,22 @@
 import { useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
 
-import type { ReplanSlotVM } from '@/entities/itinerary-slot/model';
-import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
-import { formatDistance } from '@/entities/place/lib/formatDistance';
-import { useLiveItinerary } from '@/features/execution/model/useLiveItinerary';
-import { formatCoPickDayHeader } from '@/features/itinerary/model/draftView';
+import type { ReplanSlotVM } from '@/entities/itinerary-slot';
+import { parseSlotKey } from '@/entities/itinerary-slot';
+import { formatDistance } from '@/entities/place';
+import { useLiveItinerary } from '@/features/execution';
+import { formatCoPickDayHeader } from '@/features/itinerary';
 import { readFromInstant } from '../model/replanFromInstant';
-import { deriveReplanMapAnchor } from '@/features/request-replan/model/replanMapCenter';
+import { deriveReplanMapAnchor } from '@/features/request-replan';
 import { resolveReplanState } from '../model/replanState';
-import { useApplyReplan } from '@/features/apply-replan/model/useApplyReplan';
+import { useApplyReplan } from '@/features/apply-replan';
 import { useReplanDiff } from '../model/useReplanDiff';
 import { useReplanSession } from '../model/useReplanSession';
 import type {
   ItineraryDaysItem,
   ItineraryDaysItemSlotsItem,
   ReplanDiff,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 import { ReplanDraftView, type ReplanRemovedVM } from './ReplanDraftView';
 

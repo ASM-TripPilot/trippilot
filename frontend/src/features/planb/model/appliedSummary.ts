@@ -1,4 +1,4 @@
-import { formatDistance } from '@/entities/place/lib/formatDistance';
+import { formatDistance } from '@/entities/place';
 
 /**
  * TRIP-754 · i08 반영 시트 요약 배지 문구 — `['바뀐 곳 N', '방문지 A→B', '이동 ±X']`.

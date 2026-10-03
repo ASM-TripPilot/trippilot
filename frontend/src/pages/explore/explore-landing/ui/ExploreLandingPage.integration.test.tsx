@@ -17,10 +17,10 @@ import type {
   SavedPlace,
   SavedStay,
   StayItem,
-} from '@/shared/api/generated/schemas';
-import { stayKey } from '@/features/save-stay/model/stayKey';
-import { useStaySearch } from '@/features/stay/model/useStaySearch';
-import { SAVE_FAILURE_NOTICE } from '@/features/save-place/model/placeSaveGuard';
+} from '@/shared/api/index.schemas';
+import { stayKey } from '@/features/save-stay';
+import { useStaySearch } from '@/features/stay';
+import { SAVE_FAILURE_NOTICE } from '@/features/save-place';
 import { ExploreLandingPage } from '@/pages/explore/explore-landing';
 
 /**

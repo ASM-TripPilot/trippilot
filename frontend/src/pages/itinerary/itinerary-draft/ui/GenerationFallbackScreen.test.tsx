@@ -6,7 +6,7 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import type { DraftPin } from '@/features/itinerary/model/draftView';
+import type { DraftPin } from '@/features/itinerary/index.view';
 
 import { GenerationFallbackScreen } from './GenerationFallbackScreen';
 

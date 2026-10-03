@@ -1,4 +1,4 @@
-import type { NotificationKind } from '@/shared/api/generated/schemas';
+import type { NotificationKind } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-576 · l01 알림함 — kind 8종을 5 아이콘군·한글 라벨로 접는 순수 매핑(DEC-U6-8).

@@ -1,4 +1,4 @@
-import type { SavedPlace } from '@/shared/api/generated/schemas';
+import type { SavedPlace } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-209 g01 '꼭 갈 곳' — 담은 장소를 시드로 옮기고, 섹션의 얼굴을 정하는 순수 판정 3종.

@@ -12,8 +12,8 @@
  * 서버 `Region` shape 은 `@/shared/api/generated/schemas` 가 정본이다 — 여기서 재선언하지 않는다.
  */
 
-import type { GetRegionsParams, Region } from '@/shared/api/generated/schemas';
-import { RegionLevel } from '@/shared/api/generated/schemas';
+import type { GetRegionsParams, Region } from '@/shared/api/index.schemas';
+import { RegionLevel } from '@/shared/api/index.schemas';
 
 /**
  * `GET /regions` 조회 훅. 생성 훅 `useGetRegions(params?)` 얇은 재수출이다.
@@ -28,9 +28,9 @@ import { RegionLevel } from '@/shared/api/generated/schemas';
  * 불리고 프리뷰는 화면만 그리므로, 로드를 호출 시점까지 미루면 그 전이 경로가 끊긴다.
  */
 export function useRegions(params?: GetRegionsParams) {
-  type Places = typeof import('@/shared/api/generated/places/places');
+  type Places = typeof import('@/shared/api/index.hooks');
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const places: Places = require('@/shared/api/generated/places/places');
+  const places: Places = require('@/shared/api/index.hooks');
   // 반환 타입은 `useStaySearch` 선례처럼 추론에 맡긴다 — 호출이 기본 제네릭 인자를 적용해
   // `data: Region[] | undefined`가 된다(`ReturnType<typeof …>`는 제약을 써 `{}`로 무너진다).
   return places.useGetRegions(params);

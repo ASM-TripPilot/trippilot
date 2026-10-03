@@ -4,35 +4,32 @@ import { useEffect, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 
-import { buildEditItineraryRequest } from '@/features/edit-itinerary/model/buildEditItineraryRequest';
+import { buildEditItineraryRequest } from '@/features/edit-itinerary';
 import { resolveEditorMapCenter } from '../model/editorMapCenter';
-import {
-  buildDraftPins,
-  formatCoPickDayHeader,
-} from '@/features/itinerary/model/draftView';
+import { buildDraftPins, formatCoPickDayHeader } from '@/features/itinerary';
 import {
   useItineraryEditStore,
   type EditorDaysItem,
-} from '@/features/edit-itinerary/model/itineraryEditStore';
-import { buildPlanDayTabs } from '@/features/itinerary/model/planState';
-import { SaveConflictDialog } from '@/features/edit-itinerary/ui/SaveConflictDialog';
-import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
-import { useSavedStays } from '@/features/trip/model/useSavedStays';
-import { useTripBases } from '@/features/assign-trip-base/model/useTripBases';
-import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
-import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
+} from '@/features/edit-itinerary';
+import { buildPlanDayTabs } from '@/features/itinerary';
+import { SaveConflictDialog } from '@/features/edit-itinerary';
+import { useTripWizardStore } from '@/features/create-trip';
+import { useSavedStays } from '@/features/trip';
+import { useTripBases } from '@/features/assign-trip-base';
+import { parseSlotKey } from '@/entities/itinerary-slot';
+import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripIdItinerary,
   usePostTripsTripIdItinerary,
   usePostTripsTripIdItineraryConfirm,
   usePutTripsTripIdItinerary,
-} from '@/shared/api/generated/trips/trips';
-import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
-import { isNotFound } from '@/shared/api/isNotFound';
+} from '@/shared/api/index.hooks';
+import { isAlreadyRegistered } from '@/shared/api';
+import { isNotFound } from '@/shared/api';
 import { showToast } from '@/shared/ui/Toast';
-import { EditorView } from '@/widgets/map-sheet-shell/ui/EditorView';
-import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
+import { EditorView } from '@/widgets/map-sheet-shell';
+import { TimeSheet } from '@/widgets/time-sheet';
 
 /**
  * h19 배선(TRIP-338) → TRIP-921 로 **h12 편집(`ItineraryEditPage`)과 같은 위젯 편집 뷰**

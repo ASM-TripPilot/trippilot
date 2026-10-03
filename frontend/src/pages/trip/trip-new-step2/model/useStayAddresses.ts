@@ -1,7 +1,7 @@
 import { useQueries } from '@tanstack/react-query';
 
-import { getGetStaysReverseGeocodeQueryOptions } from '@/shared/api/generated/stays/stays';
-import type { SavedStay } from '@/shared/api/generated/schemas';
+import { getGetStaysReverseGeocodeQueryOptions } from '@/shared/api/index.hooks';
+import type { SavedStay } from '@/shared/api/index.schemas';
 
 import type { StayAddressState } from './staySheetSections';
 

@@ -1,4 +1,4 @@
-import { usePostTripsTripIdReplanSessionsSessionIdCancel } from '@/shared/api/generated/trips/trips';
+import { usePostTripsTripIdReplanSessionsSessionIdCancel } from '@/shared/api/index.hooks';
 
 /**
  * TRIP-441 · AC-4 · INV-U4-05 — 재계획 **취소(cancel)** 배선의 얇은 래퍼.

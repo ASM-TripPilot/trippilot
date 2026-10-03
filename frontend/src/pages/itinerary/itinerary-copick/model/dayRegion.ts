@@ -1,4 +1,4 @@
-import type { TripDestination } from '@/shared/api/generated/schemas';
+import type { TripDestination } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-1043 · 같이 짜기 진행 줄 앞에 붙일 "그날 여행지"(N일차, 1부터).

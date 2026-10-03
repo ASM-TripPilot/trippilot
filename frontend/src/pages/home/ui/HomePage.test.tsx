@@ -6,15 +6,15 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import type { Place, Trip } from '@/shared/api/generated/schemas';
+import type { Place, Trip } from '@/shared/api/index.schemas';
 import {
   ItineraryGenerationState,
   ItineraryStatus,
-} from '@/shared/api/generated/schemas';
-import { seoulDate } from '@/shared/date/seoulDate';
-import { SAVE_FAILURE_NOTICE } from '@/features/save-place/model/placeSaveGuard';
-import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
-import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
+} from '@/shared/api/index.schemas';
+import { seoulDate } from '@/shared/date';
+import { SAVE_FAILURE_NOTICE } from '@/features/save-place';
+import { regionPickerHref } from '@/features/explore';
+import { useTripWizardStore } from '@/features/create-trip';
 import {
   captureDraftAtNextCall,
   freshWizardDraft,

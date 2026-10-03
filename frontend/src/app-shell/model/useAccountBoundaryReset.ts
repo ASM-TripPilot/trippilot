@@ -2,8 +2,8 @@ import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 
-import type { BootstrapDestination } from '@/features/auth/model/resolveBootstrapDestination';
-import { usePreferenceStore } from '@/features/edit-preferences/model/preferenceStore';
+import type { BootstrapDestination } from '@/features/auth/index.view';
+import { usePreferenceStore } from '@/features/edit-preferences';
 
 /**
  * 계정 경계 정리(TRIP-1077). 스택을 그린 뒤 게이트 목적지가 비LOGIN → LOGIN 으로 바뀌면(로그아웃·세션 만료)

@@ -1,4 +1,4 @@
-import type { SavedPlace } from '@/shared/api/generated/schemas';
+import type { SavedPlace } from '@/shared/api/index.schemas';
 
 /**
  * poiId → savedPlaceId 역인덱스(TRIP-220 AC-5② · 01b Seed Q2·Q6). 카드의 하트는 poiId로

@@ -18,15 +18,15 @@ import { useState } from 'react';
 import type { ReactElement } from 'react';
 import { useRouter } from 'expo-router';
 
-import type { GeocodeCandidate } from '@/shared/api/generated/schemas';
+import type { GeocodeCandidate } from '@/shared/api/index.schemas';
 import {
   getGetSavedStaysQueryKey,
   usePostSavedStays,
-} from '@/shared/api/generated/saved-stays/saved-stays';
+} from '@/shared/api/index.hooks';
 import {
   useGetStaysGeocode,
   useGetStaysReverseGeocode,
-} from '@/shared/api/generated/stays/stays';
+} from '@/shared/api/index.hooks';
 import type { MapCenter } from '@/shared/map';
 
 import {

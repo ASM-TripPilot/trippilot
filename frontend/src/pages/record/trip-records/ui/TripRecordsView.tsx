@@ -5,20 +5,20 @@ import Animated, {
   useSharedValue,
 } from 'react-native-reanimated';
 
-import { formatDayLabel } from '@/entities/trip/lib/formatDayLabel';
-import { formatCoPickDayHeader } from '@/features/itinerary/model/draftView';
+import { formatDayLabel } from '@/entities/trip';
+import { formatCoPickDayHeader } from '@/features/itinerary/index.view';
 import {
   GpsOffGlyph,
   InfoCircleGlyph,
   NoteGlyph,
   VisitCheckUpcomingGlyph,
-} from '@/features/record/ui/RecordGlyphs';
+} from '@/features/record';
 import { SpontaneousVisitButton } from './SpontaneousVisitButton';
 import { VisitRecordCard, type VisitRecordCardVM } from './VisitRecordCard';
 import type { MapCenter, MapPin } from '@/shared/map';
 import { StateNotice } from '@/shared/ui/StateNotice';
-import { DayChipOverlay } from '@/widgets/map-sheet-shell/ui/DayChipOverlay';
-import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
+import { DayChipOverlay } from '@/widgets/map-sheet-shell';
+import { MapSheetShell } from '@/widgets/map-sheet-shell';
 
 /**
  * TRIP-1085 · j01 방문 기록 **순수 뷰**(pages · 셸 조립) — 전면 지도 + 바텀시트(Figma 4716:2833 — 옛 4705:2756 은 TRIP-1088 교체로 삭제).

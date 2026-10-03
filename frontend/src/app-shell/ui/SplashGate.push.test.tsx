@@ -1,6 +1,6 @@
 import { act, render } from '@testing-library/react-native';
 
-import { useBootstrapGate } from '@/features/auth/model/useBootstrapGate';
+import { useBootstrapGate } from '@/features/auth';
 import {
   promptAndRegisterPush,
   registerPushIfGranted,

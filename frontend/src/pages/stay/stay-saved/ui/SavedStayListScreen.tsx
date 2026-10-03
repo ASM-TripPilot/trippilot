@@ -2,8 +2,8 @@ import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import type { SavedStayCardVM } from '@/entities/stay/model';
-import { SavedStayCard } from '@/entities/stay/ui/SavedStayCard';
+import type { SavedStayCardVM } from '@/entities/stay';
+import { SavedStayCard } from '@/entities/stay';
 import { CollageEmptyState } from '@/shared/ui/CollageEmptyState';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { Skeleton } from '@/shared/ui/Skeleton';
@@ -14,7 +14,7 @@ import {
   MapPinGlyph,
   SearchGlyph,
   WarningTriangleGlyph,
-} from '@/features/stay/ui/StayGlyphs';
+} from '@/features/stay/index.view';
 
 /**
  * e04 저장한 숙소(Figma default `1701:1183` · empty `1702:1183`) — **무상태 프레젠테이션 화면**.

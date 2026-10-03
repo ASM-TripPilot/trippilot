@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 
-import { useSavedPlaces } from '@/features/save-place/model/savedPlaces';
+import { useSavedPlaces } from '@/features/save-place';
 import {
   buildDraftDayTabs,
   buildDraftPins,
@@ -16,31 +16,31 @@ import {
   resolveDraftView,
   resolveFallbackNotice,
   shouldKeepPollingDraft,
-} from '@/features/itinerary/model/draftView';
-import type { GenerationDayState } from '@/features/itinerary/model/draftView';
-import { legDistance } from '@/entities/place/lib/legDistance';
-import { resolveUnplacedNames } from '@/features/itinerary/model/unplacedMustVisits';
-import { isGenerationRunning } from '@/features/itinerary/model/useGenerationBusy';
+} from '@/features/itinerary';
+import type { GenerationDayState } from '@/features/itinerary';
+import { legDistance } from '@/entities/place';
+import { resolveUnplacedNames } from '@/features/itinerary';
+import { isGenerationRunning } from '@/features/itinerary';
 import { DraftScreen } from './DraftScreen';
 import { GenerationFallbackScreen } from './GenerationFallbackScreen';
-import { AlertCircleGlyph } from '@/features/itinerary/ui/ItineraryGlyphs';
-import { UnplacedMustVisitNotice } from '@/features/itinerary/ui/UnplacedMustVisitNotice';
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
-import { VIOLATION_NOTICE } from '@/entities/itinerary-slot/lib/violationLabel';
-import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
+import { AlertCircleGlyph } from '@/features/itinerary';
+import { UnplacedMustVisitNotice } from '@/features/itinerary';
+import { buildSlotKey } from '@/entities/itinerary-slot';
+import { VIOLATION_NOTICE } from '@/entities/itinerary-slot';
+import { SlotStopCard } from '@/entities/itinerary-slot';
 import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripId,
   useGetTripsTripIdItinerary,
-} from '@/shared/api/generated/trips/trips';
-import { isNotFound } from '@/shared/api/isNotFound';
-import { getAccessToken } from '@/shared/api/tokenManager';
+} from '@/shared/api/index.hooks';
+import { isNotFound } from '@/shared/api';
+import { getAccessToken } from '@/shared/api';
 import { StateNotice } from '@/shared/ui/StateNotice';
-import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
-import { GenerationProgressCard } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
-import type { GenerationProgressCell } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
-import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
-import { SheetHeader } from '@/widgets/map-sheet-shell/ui/SheetHeader';
+import { DistanceConnector } from '@/widgets/map-sheet-shell';
+import { GenerationProgressCard } from '@/widgets/map-sheet-shell';
+import type { GenerationProgressCell } from '@/widgets/map-sheet-shell';
+import { MapSheetShell } from '@/widgets/map-sheet-shell';
+import { SheetHeader } from '@/widgets/map-sheet-shell';
 
 import { DraftFallbackBanner } from './DraftFallbackBanner';
 import { SlotCandidatePanelContainer } from './SlotCandidatePanelContainer';

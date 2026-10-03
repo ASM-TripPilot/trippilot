@@ -4,17 +4,17 @@ import type { ReactElement } from 'react';
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
-import { PlaceRowCard } from '@/entities/place/ui/PlaceRowCard';
-import { PlaceSubtitle } from '@/entities/place/ui/PlaceSubtitle';
-import { useMultiRegionPlaces } from '@/features/explore/model/useMultiRegionPlaces';
-import { usePlacesInfinite } from '@/features/explore/model/usePlacesInfinite';
-import { PlaceAddHeader } from '@/features/itinerary/ui/PlaceAddScreen';
-import { rememberSpontaneousName } from '@/features/check-visit/model/spontaneousNames';
-import { useVisitCheck } from '@/features/check-visit/model/useVisitCheck';
-import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
-import { useGetTripsTripId } from '@/shared/api/generated/trips/trips';
-import { ArriveRequestSource } from '@/shared/api/generated/schemas';
-import type { Place, PoiCategory } from '@/shared/api/generated/schemas';
+import { PlaceRowCard } from '@/entities/place';
+import { PlaceSubtitle } from '@/entities/place';
+import { useMultiRegionPlaces } from '@/features/explore';
+import { usePlacesInfinite } from '@/features/explore';
+import { PlaceAddHeader } from '@/features/itinerary';
+import { rememberSpontaneousName } from '@/features/check-visit';
+import { useVisitCheck } from '@/features/check-visit';
+import { MapSheetShell } from '@/widgets/map-sheet-shell';
+import { useGetTripsTripId } from '@/shared/api/index.hooks';
+import { ArriveRequestSource } from '@/shared/api/index.schemas';
+import type { Place, PoiCategory } from '@/shared/api/index.schemas';
 
 // 후보가 없을 때 지도 중심 — 서울 시청(PlaceAddPage 선례).
 const FALLBACK_CENTER = { lat: 37.5665, lng: 126.978 };

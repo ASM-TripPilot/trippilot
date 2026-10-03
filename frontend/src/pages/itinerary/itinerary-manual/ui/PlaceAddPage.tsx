@@ -4,28 +4,22 @@ import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { ActivityIndicator, Keyboard, Text, View } from 'react-native';
 
-import {
-  addSlot,
-  insertSlotAt,
-} from '@/features/edit-itinerary/model/itineraryEditStore';
-import { buildEditItineraryRequest } from '@/features/edit-itinerary/model/buildEditItineraryRequest';
-import { buildDraftPins } from '@/features/itinerary/model/draftView';
-import { useMultiRegionPlaces } from '@/features/explore/model/useMultiRegionPlaces';
-import { usePlacesInfinite } from '@/features/explore/model/usePlacesInfinite';
-import {
-  PlaceAddHeader,
-  PlaceAddRow,
-} from '@/features/itinerary/ui/PlaceAddScreen';
-import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
-import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
-import { suggestNextSlotTime } from '@/entities/itinerary-slot/lib/suggestNextSlotTime';
+import { addSlot, insertSlotAt } from '@/features/edit-itinerary';
+import { buildEditItineraryRequest } from '@/features/edit-itinerary';
+import { buildDraftPins } from '@/features/itinerary';
+import { useMultiRegionPlaces } from '@/features/explore';
+import { usePlacesInfinite } from '@/features/explore';
+import { PlaceAddHeader, PlaceAddRow } from '@/features/itinerary';
+import { MapSheetShell } from '@/widgets/map-sheet-shell';
+import { TimeSheet } from '@/widgets/time-sheet';
+import { suggestNextSlotTime } from '@/entities/itinerary-slot';
 import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripId,
   useGetTripsTripIdItinerary,
   usePutTripsTripIdItinerary,
-} from '@/shared/api/generated/trips/trips';
-import type { Place, PoiCategory } from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.hooks';
+import type { Place, PoiCategory } from '@/shared/api/index.schemas';
 
 // 핀이 없을 때 지도 중심 — 서울 시청(LiveHubView 선례). {0,0} 은 기니만 바다(null-island)라 무의미하다.
 const FALLBACK_CENTER = { lat: 37.5665, lng: 126.978 };

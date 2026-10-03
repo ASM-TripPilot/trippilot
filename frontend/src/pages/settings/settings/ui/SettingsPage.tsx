@@ -5,8 +5,8 @@ import * as Linking from 'expo-linking';
 import { type ReactElement, useState } from 'react';
 import { Keyboard, Share } from 'react-native';
 
-import { waitForGateDestination } from '@/features/auth/model/gateDestination';
-import { usePreferenceStore } from '@/features/edit-preferences/model/preferenceStore';
+import { waitForGateDestination } from '@/features/auth';
+import { usePreferenceStore } from '@/features/edit-preferences';
 import { OSM_COPYRIGHT_URL } from '../model/dataAttribution';
 import { resolveExportSummary } from '../model/exportSummary';
 import {
@@ -20,9 +20,9 @@ import {
   useGetMe,
   useGetMeExport,
   usePostMeDeletion,
-} from '@/shared/api/generated/account/account';
-import { useGetMeLocationConsent } from '@/shared/api/generated/location/location';
-import { useGetMePreferences } from '@/shared/api/generated/preferences/preferences';
+} from '@/shared/api/index.hooks';
+import { useGetMeLocationConsent } from '@/shared/api/index.hooks';
+import { useGetMePreferences } from '@/shared/api/index.hooks';
 import {
   getGetMeProfileQueryKey,
   getGetMeSettingsQueryKey,
@@ -30,18 +30,18 @@ import {
   useGetMeSettings,
   usePatchMeProfileNickname,
   usePatchMeSettings,
-} from '@/shared/api/generated/profile/profile';
-import { useGetMePersonalization } from '@/shared/api/generated/reflection/reflection';
+} from '@/shared/api/index.hooks';
+import { useGetMePersonalization } from '@/shared/api/index.hooks';
 import {
   type AccountSettings,
   PersonalizationInfoReason,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import {
   registerPushIfGranted,
   unregisterStoredPushToken,
 } from '@/shared/push';
 import { showToast } from '@/shared/ui/Toast';
-import { validateNicknameFormat } from '@/shared/validation/nicknameFormat';
+import { validateNicknameFormat } from '@/shared/validation';
 
 const NICKNAME_SAVED_TOAST = '닉네임을 바꿨어요';
 

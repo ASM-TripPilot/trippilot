@@ -2,7 +2,7 @@ import type {
   BaseAssignment,
   SavedStay,
   Trip,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 import { buildStayTripLink } from './stayTripLink';
 

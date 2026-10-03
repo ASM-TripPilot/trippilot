@@ -8,9 +8,9 @@
 import type { ReactElement } from 'react';
 import { useRouter } from 'expo-router';
 
-import { guardPress } from '@/shared/press/pressGuard';
+import { guardPress } from '@/shared/press';
 import { promptAndRegisterPush } from '@/shared/push';
-import { PushPreprompt } from '@/shared/push/PushPreprompt';
+import { PushPreprompt } from '@/shared/push';
 
 export function PushPage(): ReactElement {
   const router = useRouter();

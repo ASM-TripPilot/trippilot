@@ -1,4 +1,4 @@
-import { useGetTripsTripIdItinerary } from '@/shared/api/generated/trips/trips';
+import { useGetTripsTripIdItinerary } from '@/shared/api/index.hooks';
 
 /**
  * TRIP-398 · usePlaceDetail — i05 현재 장소 상세의 조회. `useLiveItinerary.ts` 선례 복제.

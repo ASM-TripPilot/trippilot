@@ -12,12 +12,12 @@ import {
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
-import { getGetPlacesQueryKey } from '@/shared/api/generated/places/places';
+import { getGetPlacesQueryKey } from '@/shared/api/index.hooks';
 import type {
   GetPlacesParams,
   Place,
   SavedPlace,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 
 import { PlaceDetailPage } from './PlaceDetailPage';
 

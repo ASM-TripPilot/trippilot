@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 
-import type { ItineraryStatus, Trip } from '@/shared/api/generated/schemas';
+import type { ItineraryStatus, Trip } from '@/shared/api/index.schemas';
 
 import type { DoneBarEntry } from './doneBar';
 import {

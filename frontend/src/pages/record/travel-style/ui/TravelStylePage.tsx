@@ -3,8 +3,8 @@ import { Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 
-import { resolveStyleFace } from '@/entities/style-analysis/lib/styleFace';
-import { resolveStyleProgress } from '@/entities/style-analysis/lib/styleProgress';
+import { resolveStyleFace } from '@/entities/style-analysis';
+import { resolveStyleProgress } from '@/entities/style-analysis';
 import { useStyleAnalysis } from '../model/useStyleAnalysis';
 import { TravelStyleScreen } from './TravelStyleScreen';
 import type { ShellTabKey } from '@/shared/ui/BottomTabBar';

@@ -9,4 +9,4 @@
  * 위치 근거: `docs/structure.md`의 "재사용 공개 API" 표에 이 경로로 등재된 기존 계약.
  */
 
-export { toggleMulti, toggleSingle } from '@/shared/pref/preferenceSelection';
+export { toggleMulti, toggleSingle } from '@/shared/pref';

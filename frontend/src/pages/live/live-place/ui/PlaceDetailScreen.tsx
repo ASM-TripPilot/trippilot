@@ -11,13 +11,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { PlaceSubtitle } from '@/entities/place/ui/PlaceSubtitle';
+import { PlaceSubtitle } from '@/entities/place';
 import {
   BackArrowGlyph,
   HeroPhotoGlyph,
   HeroPinGlyph,
   ShareGlyph,
-} from '@/features/execution/ui/ExecutionGlyphs';
+} from '@/features/execution/index.view';
 import { MapView } from '@/shared/map';
 
 import type { PlaceDetailView } from '../model/placeDetailView';

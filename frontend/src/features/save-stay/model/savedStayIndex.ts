@@ -1,4 +1,4 @@
-import type { SavedStay, StayItem } from '@/shared/api/generated/schemas';
+import type { SavedStay, StayItem } from '@/shared/api/index.schemas';
 
 /**
  * (externalSource, externalId) → savedStayId 역인덱스(TRIP-417 AC-2·AC-3 · Q6). 카드의 하트는

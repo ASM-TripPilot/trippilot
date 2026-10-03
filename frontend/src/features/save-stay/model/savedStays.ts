@@ -7,8 +7,8 @@ import {
   getGetSavedStaysQueryKey,
   postSavedStays,
   useGetSavedStays,
-} from '@/shared/api/generated/saved-stays/saved-stays';
-import type { SavedStay, StayItem } from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.hooks';
+import type { SavedStay, StayItem } from '@/shared/api/index.schemas';
 
 import { buildSaveStayRequest } from './buildSaveStayRequest';
 import { findSavedStayId, optimisticSavedStayId } from './savedStayIndex';

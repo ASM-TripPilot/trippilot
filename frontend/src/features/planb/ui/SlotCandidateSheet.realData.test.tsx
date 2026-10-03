@@ -1,7 +1,7 @@
 import { Image } from 'react-native';
 import { render, screen } from '@testing-library/react-native';
 
-import type { SlotCandidatesCandidatesItem } from '@/shared/api/generated/schemas';
+import type { SlotCandidatesCandidatesItem } from '@/shared/api/index.schemas';
 
 import { SlotCandidateSheet } from './SlotCandidateSheet';
 

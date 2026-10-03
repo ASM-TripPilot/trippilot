@@ -1,4 +1,4 @@
-import { usePostTripsTripIdItinerarySlotCandidates } from '@/shared/api/generated/trips/trips';
+import { usePostTripsTripIdItinerarySlotCandidates } from '@/shared/api/index.hooks';
 
 /**
  * TRIP-440 · i14 슬롯 후보 조회 POST — `usePostTripsTripIdItinerarySlotCandidates` 얇은 passthrough.

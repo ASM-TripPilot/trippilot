@@ -13,7 +13,7 @@ paths:
 
 ## 세그먼트
 - `ui` / `model` / `lib` / `config` 넷만(옛 칸 `screens·containers·hooks·store` 부활 금지). `api` 세그먼트는 두지 않는다 — 서버 통신은 `shared/api` 단일 계층.
-- 배럴 없음 — 소비처가 deep import한다.
+- 공개 API는 슬라이스 루트 `index.ts`다 — 소비처는 그것으로만 import한다(딥 경로는 lint error, TRIP-1157).
 
 ## `src/widgets/map-sheet-shell/` — 지도+3스냅 시트 셸
 

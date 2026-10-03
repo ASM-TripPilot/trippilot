@@ -1,18 +1,18 @@
 import { useState, type ReactElement } from 'react';
 import { useRouter } from 'expo-router';
 
-import type { Trip } from '@/shared/api/generated/schemas';
-import { useGetTripsTripIdItinerary } from '@/shared/api/generated/trips/trips';
-import { isNotFound } from '@/shared/api/isNotFound';
-import { formatNightsLabel } from '@/entities/trip/lib/formatNights';
-import { formatConfirmedDateRange } from '@/entities/trip/lib/formatTripPeriod';
-import { isTripOngoing } from '@/entities/trip/lib/tripPhase';
+import type { Trip } from '@/shared/api/index.schemas';
+import { useGetTripsTripIdItinerary } from '@/shared/api/index.hooks';
+import { isNotFound } from '@/shared/api';
+import { formatNightsLabel } from '@/entities/trip';
+import { formatConfirmedDateRange } from '@/entities/trip';
+import { isTripOngoing } from '@/entities/trip';
 import {
   itineraryDestinationHref,
   resolveItineraryDestination,
-} from '@/features/itinerary/model/planState';
+} from '@/features/itinerary';
 import { deriveTripCardFace } from '../model/tripCardFace';
-import { isGenerationRunning } from '@/features/itinerary/model/useGenerationBusy';
+import { isGenerationRunning } from '@/features/itinerary';
 import { MyTripCard, type MyTripBadge, type MyTripCardVM } from './MyTripCard';
 
 /**

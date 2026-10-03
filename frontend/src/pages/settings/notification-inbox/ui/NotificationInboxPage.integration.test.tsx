@@ -10,7 +10,7 @@ import {
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
-import type { Notification } from '@/shared/api/generated/schemas';
+import type { Notification } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 
 import { NotificationInboxPage } from './NotificationInboxPage';

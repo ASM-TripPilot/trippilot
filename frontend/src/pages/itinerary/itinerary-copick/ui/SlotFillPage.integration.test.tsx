@@ -11,7 +11,7 @@ import {
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
-import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
+import { buildSlotKey } from '@/entities/itinerary-slot';
 import type {
   EditItineraryRequest,
   Itinerary,
@@ -23,13 +23,13 @@ import type {
   SlotCandidatesCandidatesItem,
   TripDestination,
   ItineraryGenerationState,
-} from '@/shared/api/generated/schemas';
+} from '@/shared/api/index.schemas';
 import {
   getGetTripsTripIdItineraryQueryKey,
   getGetTripsTripIdQueryKey,
-} from '@/shared/api/generated/trips/trips';
+} from '@/shared/api/index.hooks';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
-import { DRAFT_POLL_INTERVAL_MS } from '@/features/itinerary/model/draftView';
+import { DRAFT_POLL_INTERVAL_MS } from '@/features/itinerary';
 
 import { SlotFillPage } from './SlotFillPage';
 

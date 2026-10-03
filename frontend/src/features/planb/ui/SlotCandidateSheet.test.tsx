@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { render, screen, within } from '@testing-library/react-native';
 
-import type { SlotCandidatesCandidatesItem } from '@/shared/api/generated/schemas';
+import type { SlotCandidatesCandidatesItem } from '@/shared/api/index.schemas';
 
 import { SlotCandidateSheet } from './SlotCandidateSheet';
 

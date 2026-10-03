@@ -3,20 +3,17 @@ import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 
-import type { Trip } from '@/shared/api/generated/schemas';
+import type { Trip } from '@/shared/api/index.schemas';
 import {
   getGetTripsQueryKey,
   getGetTripsTripIdItineraryQueryOptions,
   useDeleteTripsTripId,
   useGetTrips,
-} from '@/shared/api/generated/trips/trips';
-import { isNotFound } from '@/shared/api/isNotFound';
-import { seoulDate } from '@/shared/date/seoulDate';
-import { readIdSet, writeIdSet } from '@/shared/storage/idSet';
-import {
-  readStringValue,
-  writeStringValue,
-} from '@/shared/storage/stringValue';
+} from '@/shared/api/index.hooks';
+import { isNotFound } from '@/shared/api';
+import { seoulDate } from '@/shared/date';
+import { readIdSet, writeIdSet } from '@/shared/storage';
+import { readStringValue, writeStringValue } from '@/shared/storage';
 import { pickDoneBar, type DoneBarEntry } from '../model/doneBar';
 import {
   byLatest,
@@ -29,11 +26,11 @@ import {
 import {
   itineraryDestinationHref,
   resolveItineraryDestination,
-} from '@/features/itinerary/model/planState';
+} from '@/features/itinerary';
 import { MyTripsListScreen } from './MyTripsListScreen';
 import { MyTripsSortSheet } from './MyTripsSortSheet';
 import { TripDeleteDialog } from './TripDeleteDialog';
-import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
+import { useTripWizardStore } from '@/features/create-trip';
 import { GenerationDoneBar } from './GenerationDoneBar';
 
 import { TripCardContainer } from './TripCardContainer';

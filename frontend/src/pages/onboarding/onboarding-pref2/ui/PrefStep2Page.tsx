@@ -7,11 +7,11 @@
 import type { ReactElement } from 'react';
 import { useRouter } from 'expo-router';
 
-import { usePreferenceStore } from '@/features/edit-preferences/model/preferenceStore';
-import { toPreferenceInput } from '@/features/edit-preferences/model/preferenceInput';
-import { notifyBootstrapReeval } from '@/shared/bootstrap/bootstrapReeval';
-import { guardPress } from '@/shared/press/pressGuard';
-import { usePutMePreferences } from '@/shared/api/generated/preferences/preferences';
+import { usePreferenceStore } from '@/features/edit-preferences';
+import { toPreferenceInput } from '@/features/edit-preferences';
+import { notifyBootstrapReeval } from '@/shared/bootstrap';
+import { guardPress } from '@/shared/press';
+import { usePutMePreferences } from '@/shared/api/index.hooks';
 import { PrefStep2Screen } from './PrefStep2Screen';
 
 export function PrefStep2Page(): ReactElement {

@@ -9,12 +9,12 @@
  */
 import { useQueryClient } from '@tanstack/react-query';
 
-import type { PreferenceInput } from '@/shared/api/generated/schemas';
+import type { PreferenceInput } from '@/shared/api/index.schemas';
 import {
   getGetMePreferencesQueryKey,
   useGetMePreferences,
   usePutMePreferences,
-} from '@/shared/api/generated/preferences/preferences';
+} from '@/shared/api/index.hooks';
 
 export interface UsePreferencesResult {
   view: ReturnType<typeof useGetMePreferences>['data'];

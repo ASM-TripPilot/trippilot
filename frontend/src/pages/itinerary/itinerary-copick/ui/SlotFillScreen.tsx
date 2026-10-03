@@ -4,13 +4,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MapView } from '@/shared/map';
 import type { MapCenter, MapPin } from '@/shared/map';
-import type { SlotCandidatesCandidatesItem } from '@/shared/api/generated/schemas';
+import type { SlotCandidatesCandidatesItem } from '@/shared/api/index.schemas';
 
 import type { ConceptProgress } from './ConceptPickerScreen';
 import {
   AlertCircleGlyph,
   BackChevronGlyph,
-} from '@/features/itinerary/ui/ItineraryGlyphs';
+} from '@/features/itinerary/index.view';
 import { SlotCandidateCard } from './SlotCandidateCard';
 
 /**

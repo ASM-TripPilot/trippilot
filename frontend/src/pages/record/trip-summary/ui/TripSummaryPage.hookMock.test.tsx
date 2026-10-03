@@ -1,9 +1,9 @@
 import { render, screen } from '@testing-library/react-native';
 import { router } from 'expo-router';
 
-import type { TripSummary } from '@/shared/api/generated/schemas';
+import type { TripSummary } from '@/shared/api/index.schemas';
 
-import { useTripSummary } from '@/features/reflection/model/useTripSummary';
+import { useTripSummary } from '@/features/reflection';
 import { TripSummaryScreen } from './TripSummaryScreen';
 import { TripSummaryPage } from './TripSummaryPage';
 

@@ -2,17 +2,17 @@ import { useRouter } from 'expo-router';
 import { isAxiosError } from 'axios';
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 
-import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
-import { useLiveItinerary } from '@/features/execution/model/useLiveItinerary';
+import { parseSlotKey } from '@/entities/itinerary-slot';
+import { useLiveItinerary } from '@/features/execution';
 import { TRIGGER_REASON_KEY } from '../config/replanChoices';
-import { buildStartReplanRequest } from '@/features/request-replan/model/replanRequest';
-import { useReplanFormStore } from '@/features/request-replan/model/replanFormStore';
-import { triggerPillCopy } from '@/features/planb/model/triggerPillCopy';
-import { useActiveTriggers } from '@/features/planb/model/useActiveTriggers';
+import { buildStartReplanRequest } from '@/features/request-replan';
+import { useReplanFormStore } from '@/features/request-replan';
+import { triggerPillCopy } from '@/features/planb';
+import { useActiveTriggers } from '@/features/planb';
 import { useReplanGpsOrigin } from '../model/useReplanGpsOrigin';
-import { useStartReplan } from '@/features/request-replan/model/useStartReplan';
+import { useStartReplan } from '@/features/request-replan';
 import { ReplanRequestSheet } from './ReplanRequestSheet';
-import type { ItineraryDaysItem } from '@/shared/api/generated/schemas';
+import type { ItineraryDaysItem } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-750 · i04 배선판. 진입 초기화 → 감지 트리거 시드 → 폼 스토어 ↔ 시트 → 빌더 → POST → 라우터.

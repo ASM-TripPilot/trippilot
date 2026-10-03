@@ -1,4 +1,4 @@
-import { useGetTripsTripIdItinerary } from '@/shared/api/generated/trips/trips';
+import { useGetTripsTripIdItinerary } from '@/shared/api/index.hooks';
 
 /**
  * TRIP-395 · useLiveItinerary — 여행 중 화면의 활성 일정 조회(frontend-components.md §3).
