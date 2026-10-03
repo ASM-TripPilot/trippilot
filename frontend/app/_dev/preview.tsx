@@ -115,7 +115,6 @@ import {
   buildSettingsSections,
   filterReadySettingsSections,
 } from '@/pages/settings/settings/model/settingsSections';
-import { BaseToggleDialog } from '@/features/settings/ui/BaseToggleDialog';
 import { DeleteAccountDialog } from '@/pages/settings/settings/ui/DeleteAccountDialog';
 import { LocationConsentScreen } from '@/pages/settings/settings-location/ui/LocationConsentScreen';
 import type { StyleCardVM } from '@/pages/settings/my-page/model/styleCardModel';
@@ -141,7 +140,6 @@ import { ReplanDraftView } from '@/pages/live/planb-draft/ui/ReplanDraftView';
 import { StayRecommendView } from '@/pages/itinerary/itinerary-stay-recommend/ui/StayRecommendView';
 import { TripRecordsView } from '@/pages/record/trip-records/ui/TripRecordsView';
 import { ReplanSolvingView } from '@/pages/live/planb-draft/ui/ReplanSolvingView';
-import { SlotCandidateSheet } from '@/features/planb/ui/SlotCandidateSheet';
 import { RiskDetailSheet } from '@/pages/live/live-itinerary/ui/RiskDetailSheet';
 import { NicknameScreen } from '@/pages/onboarding/onboarding-nickname/ui/NicknameScreen';
 import {
@@ -1718,22 +1716,6 @@ const STAY_REGISTER_PIN_FLOW: StayRegisterScreenProps['flow'] = {
   coordSource: 'PIN',
   coordConfirmed: false,
 };
-
-// h12·h18 슬롯 교체 후보(TRIP-335) — 서버 응답 3필드만(poiId·distanceRange·rationale). 이름·사진은
-// 아직 안 실려(BE 후속) 카드가 플레이스홀더로 뜨는 미확보 표기를 눈으로 대조하는 자리다.
-const SLOT_CANDIDATES_PREVIEW: SlotCandidatesCandidatesItem[] = [
-  { poiId: 'poi-a', distanceRange: '560m', rationale: '취향에 가장 잘 맞아요' },
-  {
-    poiId: 'poi-b',
-    distanceRange: '1.1km',
-    rationale: '여유로운 페이스, 머무르기 좋아요',
-  },
-  {
-    poiId: 'poi-c',
-    distanceRange: '1.8km',
-    rationale: '자연과 예술, 조금 멀어요',
-  },
-];
 
 // i06 재계획안(TRIP-751) — Figma `4314:1923` 펼침 5곳. 사진은 Figma 목업 사진(`assets/execution/CREDITS.md`,
 // 행 3·5 야경은 같은 사진). 거리는 "이 슬롯까지 오는 거리"라 행 1 은 null(커넥터는 다음 행 값을 그린다).
@@ -5402,7 +5384,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   },
   // l04 등록 숙소·예약 기록(TRIP-605·777) — 등록됨(채움 배지 + "출발점 변경" chevron)·미등록 두 행을
   // Figma l04 default(1604:2440)와 대조한다. 미등록 행의 점선 "출발점 지정"은 TRIP-989(D13)로 숨겨
-  // Figma 와 다르다. "출발점 변경" 을 누르면 BaseToggleDialog(딤+중앙 카드)가 뜨는 것도 여기서 조작해 본다.
+  // Figma 와 다르다.
   {
     key: 'my-stays-default',
     band: 'l',
@@ -5432,27 +5414,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         onPressExplore={noop}
         onPressBack={noop}
       />
-    ),
-  },
-  // l04 출발점 다이얼로그(1606:2440, TRIP-777) — default 화면 위에 BaseToggleDialog 를 형제로 겹친다
-  // (화면은 열림을 로컬 state 로 쥐어 prop 으로 못 연다 — settings-delete-dialog 와 같은 합성).
-  // 딤 전면 커버·중앙 정렬은 jest 원리적 사각이라 이 키가 육안 대조 자리다.
-  {
-    key: 'my-stays-dialog',
-    band: 'l',
-    label: 'l04 · 등록 숙소·예약 기록 dialog',
-    login: null,
-    render: () => (
-      <View style={StyleSheet.absoluteFill}>
-        <MyStaysScreen
-          rows={MY_STAYS_PREVIEW_ROWS}
-          isEmpty={false}
-          onConfirmBaseToggle={noop}
-          onPressExplore={noop}
-          onPressBack={noop}
-        />
-        <BaseToggleDialog onCancel={noop} onConfirm={noop} />
-      </View>
     ),
   },
   // l02 알림 설정 default(1600:2388) — 6행×인앱 1열(COMMUNITY 숨김, 푸시 열은 TRIP-939 개통 전 숨김)·
@@ -6197,54 +6158,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         onBack={noop}
         onCancel={noop}
       />
-    ),
-  },
-  // ── i14 슬롯 후보 시트(TRIP-440) — 순수 인라인 패널 3얼굴(후보·강등 고지·빈 목록). slackLabel
-  //    은 slackTime.ts(model) 산출 형태를 그대로 주입한다(ui 소스엔 숫자 리터럴 0) ──
-  {
-    key: 'planb-candidates',
-    band: 'i',
-    label: 'i14 · 슬롯 후보 3장',
-    login: null,
-    render: () => (
-      <SafeAreaView edges={['top']} style={{ flex: 1 }}>
-        <ScrollView contentContainerClassName="gap-md p-lg">
-          <SlotCandidateSheet
-            candidates={SLOT_CANDIDATES_PREVIEW}
-            slackLabel="여유 1시간 20분"
-          />
-        </ScrollView>
-      </SafeAreaView>
-    ),
-  },
-  {
-    key: 'planb-candidates-degraded',
-    band: 'i',
-    label: 'i14 · 슬롯 후보 강등',
-    login: null,
-    render: () => (
-      <SafeAreaView edges={['top']} style={{ flex: 1 }}>
-        <ScrollView contentContainerClassName="gap-md p-lg">
-          <SlotCandidateSheet
-            candidates={SLOT_CANDIDATES_PREVIEW}
-            slackLabel="여유 40분"
-            degraded
-          />
-        </ScrollView>
-      </SafeAreaView>
-    ),
-  },
-  {
-    key: 'planb-candidates-empty',
-    band: 'i',
-    label: 'i14 · 슬롯 후보 0건',
-    login: null,
-    render: () => (
-      <SafeAreaView edges={['top']} style={{ flex: 1 }}>
-        <ScrollView contentContainerClassName="gap-md p-lg">
-          <SlotCandidateSheet candidates={[]} slackLabel="여유 1시간 20분" />
-        </ScrollView>
-      </SafeAreaView>
     ),
   },
   // ── i06 재계획안(TRIP-751) — 한 뷰의 두 얼굴(펼침 · 대안 없음), 시트는 펼침(index 2). 같은 5곳

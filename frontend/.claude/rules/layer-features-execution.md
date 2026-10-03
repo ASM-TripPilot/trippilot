@@ -8,7 +8,6 @@ paths:
 
 | 파일 | 역할 |
 |---|---|
-| `src/features/execution/model/dwellMinutes.ts` | `dwellMinutes(arrivedAt, completedAt): number\|null` — 체류 분(한쪽 null→null, 역전→0). BR-U4-37·INV-U4-03(화면 비표시, 트리거 입력 전용). `new Date` 없이 `"HH:mm:ss".split(':')`로 쪼갠 지역 변수로만 연산한다. ⚠️ 프로덕션 소비처 0 — 서버가 dwell을 스스로 도출하고 클라→서버 dwell 필드가 없다 |
 | `src/features/execution/model/useLiveItinerary.ts` | `useGetTripsTripIdItinerary` 얇은 래퍼(로직 0) — 판정은 `pages/live/live-itinerary/model/liveState.ts`, 조립은 `pages/live/live-itinerary` |
 | `src/features/execution/ui/ExecutionGlyphs.tsx` | 레일 3종·뒤로·공유·날씨·경고·히어로 핀/사진 글리프. 히어로 글리프는 벡터·선 두께가 달라 `shared`/`entities` 판을 쓰지 않고 복제했다. ⚠️ `WeatherCloudGlyph`는 프로덕션 소비처 0 — 통합 테스트가 "0개 그려짐"을 단언하려고 import하므로 지우면 그 심판이 깨진다. 흰 글리프 색은 SVG fill이라 jest 사각(6-b 실기 전용) |
 | `src/features/execution/model/nextNav.ts` | 다음 예정지 딥링크 폴백 사다리 — `buildAppNavUrl`(`kakaomap://`)·`buildWebNavUrl`·`resolveNextDest`·`openNextNav`(앱→웹→`fallback`). `expo-router` import 0(라우터 미개입을 구조로 보장). ⚠️ 프로덕션 호출자 0 |

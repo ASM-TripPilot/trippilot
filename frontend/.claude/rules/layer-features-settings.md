@@ -4,7 +4,7 @@ paths:
 ---
 # `src/features/settings/` — 마이(l03)·등록 숙소(l04)·설정(l05)·위치/개인화 동의 표면
 
-화면 뷰 6개(마이·설정·위치 동의·개인화·취향 수정)와 그 전용 부품·model(`deletionScope`·`personalizationCopy`·`usePreferences`)은 **TRIP-1154로 `pages/{my-page,settings,settings-location,settings-personalization,settings-preferences}` 이사** — 행은 `layer-pages.md`. 여기엔 page가 함께 쓰는 model·공용 부품(`InfoChip`·`cardShadow`·`SettingsGlyphs`)·`StyleSummaryCard`·l04 몫만 남았다. TRIP-1155로 그중 model·`InfoChip`·`StyleSummaryCard`·l04 몫은 `pages/{my-page,my-stays,settings,settings-personalization}`·`features/edit-preferences`로 이사해 `BaseToggleDialog`·`cardShadow`·`SettingsGlyphs`만 남았다.
+화면 뷰 6개(마이·설정·위치 동의·개인화·취향 수정)와 그 전용 부품·model(`deletionScope`·`personalizationCopy`·`usePreferences`)은 **TRIP-1154로 `pages/{my-page,settings,settings-location,settings-personalization,settings-preferences}` 이사** — 행은 `layer-pages.md`. 여기엔 page가 함께 쓰는 model·공용 부품(`InfoChip`·`cardShadow`·`SettingsGlyphs`)·`StyleSummaryCard`·l04 몫만 남았다. TRIP-1155로 그중 model·`InfoChip`·`StyleSummaryCard`·l04 몫은 `pages/{my-page,my-stays,settings,settings-personalization}`·`features/edit-preferences`로 이사해 `cardShadow`·`SettingsGlyphs`만 남았다(`BaseToggleDialog` 는 소비처 0 으로 TRIP-1191 에서 삭제).
 
 **경계(G-U5-14)**: 다른 `features/*`를 import할 수 없다 — eslint 층 zone이 막는다. 조합·조회·포맷은 `pages/settings/my-page`·`pages/stay/my-stays`·`pages/settings/settings` 같은 페이지 층이 진다. 다른 feature에 동명 글리프가 있어도 복제한다.
 
@@ -12,7 +12,6 @@ paths:
 
 | 파일 | 역할 |
 |---|---|
-| `ui/BaseToggleDialog.tsx` | 출발점 해제 확인 다이얼로그 — "출발점을 해제할까요? / 일정은 그대로예요." + "해제". **제품 소비처 0**(TRIP-1076으로 l04가 다이얼로그 없이 거점 화면 push로 바뀜 — 프리뷰 `my-stays-dialog` 키만 문다, 고아). l04 뷰 `MyStaysScreen`은 TRIP-1148로 `pages/stay/my-stays/ui`로 이사. `DIALOG_SHADOW`는 `RevokeConfirmDialog`와 값이 다르다 — 다이얼로그 틀을 `shared/ui`로 승격할 때 먼저 맞출 것 |
 | `ui/SettingsGlyphs.tsx` | 설정·마이 글리프 + `MUTED`·`MUTED_SOFT` hex export(비-글리프 파일이 raw hex 없이 색을 넘기기 위함 — 기계 강제 없음, raw hex 소스 스캔은 TRIP-1145·1154에서 삭제). `BookmarkGlyph`·`PencilGlyph`는 프로덕션 소비처 0이지만 parity 테스트의 부재 단언이 import하므로 남긴다. **TRIP-1051**: 옛 취향 7행 아이콘 6개(`WonGlyph`·`PeopleGlyph`·`StarGlyph`·`ArrowsSwapGlyph`·`ForkKnifeGlyph`·`GaugeGlyph`) 삭제 — 취향 행이 하나로 합쳐지며 고아가 됐다. 취향 행 아이콘은 기존 `ContrastGlyph`(반원) 재사용, 새 글리프 추가 없음 |
 | `ui/cardShadow.ts` | `CARD_SHADOW`(카드 껍데기 공용). `LocationConsentScreen`에 같은 값의 지역 상수가 있다 |
 

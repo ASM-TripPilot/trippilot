@@ -17,8 +17,8 @@ import {
  * 「출발점 변경」(TRIP-1076 결정 2(A)): 등록 행의 링크 press = `onPressChangeBase(row)` 1회 — 이 화면은
  * 거점을 바꾸지도, 확인 다이얼로그를 띄우지도 않는다. 바꾸기는 페이지가 여는 그 여행의 거점 화면이 한다.
  * Figma 확인 다이얼로그(1606 「일정 다시 생성」)를 안 띄우는 이유: 거점 화면은 일정을 재생성하지 않아 그
- * 문구가 거짓 안내가 된다(INV-4). 옛 해제 다이얼로그(`BaseToggleDialog`)·`onConfirmBaseToggle` 은 프리뷰
- * 키(`my-stays-dialog`)가 물고 있어 남겨 둔 고아다 — 이 화면은 쓰지 않는다.
+ * 문구가 거짓 안내가 된다(INV-4). 옛 해제 다이얼로그(`BaseToggleDialog`)는 TRIP-1191 로 삭제됐고
+ * `onConfirmBaseToggle` 은 타입만 남은 고아다 — 이 화면은 쓰지 않는다.
  *
  * 좌표 미확정(INV-U1-08, `canAssignBase=false`)이면 토글이 real `disabled` 라 콜백이 나가지 않는다.
  */
@@ -43,7 +43,7 @@ export interface MyStaysScreenProps {
   rows: MyStayRowVM[];
   isEmpty: boolean;
   onPressChangeBase?: (row: MyStayRowVM) => void;
-  /** 고아(TRIP-1076) — 화면이 쓰지 않는다. 프리뷰 키 `my-stays-dialog` 가 넘겨서 타입만 남긴다. */
+  /** 고아(TRIP-1076) — 화면이 쓰지 않는다. 프리뷰·테스트 호출부가 넘겨서 타입만 남긴다. */
   onConfirmBaseToggle?: (row: MyStayRowVM) => void;
   onPressExplore: () => void;
   onPressBack?: () => void;

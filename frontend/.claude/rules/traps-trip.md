@@ -10,7 +10,7 @@ paths:
 
 ## 여행 만들기 위저드 (g01)
 
-- **기간 포맷터 6벌의 정본은 `entities/trip/lib/formatTripPeriod.ts`다(`baseScreen.ts`·`tripSummary.ts`·`tripWizardStep1.ts`는 내부 사용 `import`만 남았다)** → 6벌(`formatDateRange`·`formatSectionRange`·`formatTripRange`·`formatConfirmedDateRange`·`formatTripDateRange`·`formatDateRangeWithDow`)은 en dash(U+2013)·미들닷(U+00B7)·공백 유무가 서로 달라 하나로 통합하면 회귀한다.
+- **기간 포맷터 6벌의 정본은 `entities/trip/lib/formatTripPeriod.ts`다(`tripSummary.ts`·`tripWizardStep1.ts`는 내부 사용 `import`만 남았다)** → 6벌(`formatDateRange`·`formatSectionRange`·`formatTripRange`·`formatConfirmedDateRange`·`formatTripDateRange`·`formatDateRangeWithDow`)은 en dash(U+2013)·미들닷(U+00B7)·공백 유무가 서로 달라 하나로 통합하면 회귀한다.
 
 ## 거점 숙소 단일 카드 (g02)
 
