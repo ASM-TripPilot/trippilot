@@ -1,8 +1,8 @@
-environment                    = "dev"
-cluster_version                = "1.35"
-vpc_cidr                       = "10.40.0.0/16"
-availability_zone_count        = 2
-single_nat_gateway             = true
+environment             = "dev"
+cluster_version         = "1.35"
+vpc_cidr                = "10.40.0.0/16"
+availability_zone_count = 2
+single_nat_gateway      = true
 # 켜기 전에 **반드시 bootstrap 을 먼저 돌린다** — stack 이 trippilot-<env>-cloudwatch-pod 역할을
 # data 로 읽기만 해서, 역할이 없으면 plan 이 깨진다(2026-10-03 실측: 그 역할은 아직 없다).
 # 순서: bootstrap 정책 재등록 → AWS bootstrap 실행 → 여기를 true 로 → deploy.
