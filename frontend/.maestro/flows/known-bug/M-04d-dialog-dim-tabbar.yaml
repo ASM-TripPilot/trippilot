@@ -1,0 +1,36 @@
+# ⚠️ 기존 버그(스택 이전부터, develop f9458992 에서도 실패, TRIP-1168 베이스라인 비교) — 고치면 flows/ 로 올릴 것.
+#    실패 지점: 마지막 assertVisible(my-trip-delete-dialog-card) — 탭바 탭이 먹혀 다이얼로그가 사라진다.
+#    원인(코드 읽기): 다이얼로그 딤은 자기 화면(씬) 안만 덮고, 탭바는 (tabs)/_layout 의 tabBar 로 씬 바깥 층에 그려진다.
+# M-04d 다이얼로그 딤이 하단 탭바까지 막는가 — M-04 에서 떼어 낸 (d). (a)·(c) 는 flows/M-04 에 남아 기본 실행에서 돈다.
+# 준비: 일정 탭의 기존 여행 카드(TRIP_ID). 실행: ⋯ → 삭제 → 다이얼로그가 뜬 채로 탭바(홈) 자리를 좌표로 누른다.
+# 단언: 딤이 전면(0,0~화면 끝)을 덮으므로 다이얼로그가 그대로 있다 → 취소 → 사라짐. 확정 버튼은 누르지 않는다.
+appId: com.trippilot.travel
+name: M-04d 다이얼로그 딤이 탭바를 막음 (known-bug)
+env:
+  TRIP_ID: 36bc6101-08b4-4360-9a4b-c98ed5f3d3ea
+---
+- runFlow: ../_common/launch.yaml
+- tapOn:
+    id: 'shell-tabbar-tab-itinerary'
+- extendedWaitUntil:
+    visible:
+      id: 'my-trip-menu-${TRIP_ID}'
+    timeout: 10000
+- tapOn:
+    id: 'my-trip-menu-${TRIP_ID}'
+- tapOn:
+    id: 'my-trip-menu-delete-${TRIP_ID}'
+- extendedWaitUntil:
+    visible:
+      id: 'my-trip-delete-dialog-card'
+    timeout: 5000
+- tapOn:
+    point: '18%,96%'
+- waitForAnimationToEnd:
+    timeout: 3000
+- assertVisible:
+    id: 'my-trip-delete-dialog-card'
+- tapOn:
+    id: 'my-trip-delete-cancel'
+- assertNotVisible:
+    id: 'my-trip-delete-dialog'

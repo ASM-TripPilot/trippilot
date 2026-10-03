@@ -1,0 +1,56 @@
+# M-07 예산 금액 서식(Hermes) — 앱 런타임(Hermes)에서 금액 서식이 실제로 찍히는지.
+# jest 는 node 에서 돌아 Hermes 의 문자열 동작 차이를 못 본다(budgetAmount.ts 주석).
+# 현행 계약(소스 확인): 금액 칸의 천 단위 콤마는 등급 칩을 누를 때 formatBudgetAmount 가 채운다
+# (직접 입력 중·blur 때는 서식을 안 붙인다). 요약 행은 만원 단위("12만원", tripSummary.formatManwon)다.
+# 브리프의 "120,000원" 표기는 지금 화면 어디에도 없다(02a 드리프트 기록).
+# 준비: g01(여행 만들기 1단계). 실행: 예산 행 → 등급 칩 "중간" → 금액 지우고 120000 입력(ASCII) → 적용.
+# 단언: 칩 뒤 금액 칸 "1,000,000", 적용 뒤 요약 행 "12만원".
+# 데이터: 없음 — 예산은 위저드 메모리 스토어에만 남고([다음] 전이라 POST 0) 앱 재기동으로 사라진다.
+appId: com.trippilot.travel
+name: M-07 예산 서식
+---
+- runFlow: _common/launch.yaml
+- openLink: 'trippilot:///trips/new/step1'
+- extendedWaitUntil:
+    visible:
+      id: 'trip-wizard-summary-budget'
+    timeout: 10000
+# 요약 행은 접근성 요소 하나로 뭉쳐 "예산, 12만원, 1인 총액 · 저가" 처럼 읽힌다(완전 일치라 .* 로 감싼다).
+- assertNotVisible:
+    id: 'trip-wizard-summary-budget'
+    text: '.*12만원.*'
+- tapOn:
+    id: 'trip-wizard-summary-budget'
+- extendedWaitUntil:
+    visible:
+      id: 'trip-wizard-budget-input'
+    timeout: 5000
+
+# 등급 칩 → 대표 금액이 콤마 서식으로 채워진다
+- tapOn:
+    id: 'trip-wizard-budget-tier-mid'
+- extendedWaitUntil:
+    visible:
+      id: 'trip-wizard-budget-input'
+      text: '1,000,000'
+    timeout: 5000
+- takeScreenshot: M-07-budget-tier-format
+
+# 직접 입력 → 적용 → 요약 행 만원 단위
+- tapOn:
+    id: 'trip-wizard-budget-edit'
+- eraseText: 12
+- inputText: '120000'
+- tapOn: '1인 총액 기준이에요'
+- tapOn:
+    id: 'trip-wizard-budget-apply'
+- extendedWaitUntil:
+    notVisible:
+      id: 'trip-wizard-budget-apply'
+    timeout: 5000
+- assertVisible:
+    id: 'trip-wizard-summary-budget'
+    text: '.*12만원.*'
+- takeScreenshot: M-07-budget-summary
+- tapOn:
+    id: 'trip-wizard-step1-back'

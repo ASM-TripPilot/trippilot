@@ -1,0 +1,12 @@
+# 보호 라우트(Stack.Protected) 1개: 로그인된(HOME) 상태에선 딥링크로 열려도 그 화면이 뜨면 안 된다.
+# 준비: 직전 화면이 저장한 숙소(saved-stay-root)여야 한다. env: ROUTE, PROTECTED_ID
+appId: com.trippilot.travel
+---
+- openLink: 'trippilot://${ROUTE}'
+- waitForAnimationToEnd:
+    timeout: 4000
+- assertNotVisible:
+    id: '${PROTECTED_ID}'
+- assertVisible:
+    id: 'saved-stay-root'
+- runFlow: no-crash.yaml

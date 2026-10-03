@@ -1,0 +1,46 @@
+# M-10 떠 있는 탭바가 목록 끝을 가리지 않음 — 탭 화면을 끝까지 내렸을 때 마지막 요소가 보이고,
+# 탭바 바로 위 마지막 행을 눌러도 탭바가 아니라 그 행이 눌리는지(1161 AppProviders·SafeArea 이사).
+# 준비: 로그인된 앱. 실행: (a) 마이 탭 맨 아래 행(설정)을 누른다 (b) 홈을 끝까지 내린다.
+# 단언: (a) 설정 화면이 열린다 (b) 마지막 컬렉션 카드가 보인다 + 스크린샷(탭바와 카드 사이 여백은 픽셀 판정).
+# 한계: 이 계정 데이터에선 두 화면 모두 내용이 탭바 높이까지 닿지 않아(마이 마지막 행 하단 y≈665,
+# 홈 카드 하단 y≈726 < 탭바 상단 y≈778) 하단 여백을 지워도 탭이 탭바로 새지 않을 수 있다 — 감도 약함(02a).
+appId: com.trippilot.travel
+name: M-10 탭바가 목록 끝을 가리지 않음
+---
+- runFlow: _common/launch.yaml
+
+# (a) 마이 탭 마지막 행
+- tapOn:
+    id: 'shell-tabbar-tab-my'
+- scrollUntilVisible:
+    element:
+      id: 'my-settings-row'
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: 'my-settings-row'
+- extendedWaitUntil:
+    visible:
+      id: 'settings-back'
+    timeout: 10000
+- tapOn:
+    id: 'settings-back'
+- extendedWaitUntil:
+    visible:
+      id: 'my-page-root'
+    timeout: 10000
+
+# (b) 홈 끝까지
+- tapOn:
+    id: 'shell-tabbar-tab-home'
+- repeat:
+    times: 6
+    commands:
+      - swipe:
+          start: '50%,70%'
+          end: '50%,20%'
+          duration: 300
+- waitForAnimationToEnd
+- assertVisible:
+    id: 'home-collection-card-0'
+- takeScreenshot: M-10-home-end

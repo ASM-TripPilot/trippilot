@@ -1,0 +1,33 @@
+# M-11 (opt-in, 데이터 생성) 완전 AI 초안 카드 + INV-3 — 기존 여행에 실 AI 로 일정을 만들고, 초안 카드가
+# 그려지며 소요시간 글자("N분"·"N시간"·"소요")가 없는지(INV-3: 거리만, 시간 비표시).
+# ⚠️ 이 여행에 일정 1개를 남긴다(되돌리는 API 없음). 실 LLM 이라 1~5분, 폴백 초안이어도 카드가 그려지면 통과.
+# ⚠️ 실행 뒤에는 M-01 의 "일정 없음" 기대값(itinerary-*-notfound 등)이 깨진다 — 기본 실행(run-each.sh 의
+#    flows/M-*.yaml)에서 빠지도록 opt-in/ 아래에 둔다. 명시해서 한 번만 돌린다.
+# 준비: 일정 없는 기존 여행(TRIP_ID). 실행: 일정 방식 → 완전 AI → 꼭 갈 곳 건너뛰기 → 생성 대기.
+# 단언: 초안 화면의 슬롯 카드(slot-stopcard-*)가 보이고 소요시간 글자가 없다.
+appId: com.trippilot.travel
+name: M-11 완전 AI 초안 카드 + INV-3 (opt-in)
+env:
+  TRIP_ID: 36bc6101-08b4-4360-9a4b-c98ed5f3d3ea
+---
+- runFlow: ../_common/launch.yaml
+- openLink: 'trippilot:///trips/${TRIP_ID}/itinerary/method'
+- extendedWaitUntil:
+    visible:
+      id: 'itinerary-method-fullai'
+    timeout: 15000
+- tapOn:
+    id: 'itinerary-method-fullai'
+- extendedWaitUntil:
+    visible:
+      id: 'itinerary-mustvisit-screen-skip'
+    timeout: 15000
+- tapOn:
+    id: 'itinerary-mustvisit-screen-skip'
+- extendedWaitUntil:
+    visible:
+      id: 'slot-stopcard-.+'
+    timeout: 300000
+- runFlow: ../_common/no-crash.yaml
+- assertNotVisible: '.*([0-9]+ ?(분|시간)|소요).*'
+- takeScreenshot: M-11-draft

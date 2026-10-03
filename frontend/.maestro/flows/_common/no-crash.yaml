@@ -1,0 +1,5 @@
+# 레드박스(렌더 오류)·not-found 화면이 아닌지 확인한다.
+appId: com.trippilot.travel
+---
+- assertNotVisible: '.*(Render Error|Uncaught Error|Component Exception|Syntax Error).*'
+- assertNotVisible: '페이지를 찾을 수 없어요'

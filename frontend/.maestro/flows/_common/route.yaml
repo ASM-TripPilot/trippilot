@@ -1,0 +1,10 @@
+# 라우트 1개 진입: 딥링크로 열고 → 대표 testID 가 보이고 → 레드박스·not-found 가 아님을 확인한다.
+# env: ROUTE(앞 슬래시 포함 경로), EXPECT_ID(그 라우트의 page 가 그리는 대표 testID)
+appId: com.trippilot.travel
+---
+- openLink: 'trippilot://${ROUTE}'
+- extendedWaitUntil:
+    visible:
+      id: '${EXPECT_ID}'
+    timeout: 15000
+- runFlow: no-crash.yaml

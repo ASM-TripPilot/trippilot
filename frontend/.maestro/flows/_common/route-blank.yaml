@@ -1,0 +1,8 @@
+# 대표 testID 가 없는 라우트 1개(가짜 세션 id 로는 page 가 null 을 그린다): 레드박스·not-found 만 본다.
+# env: ROUTE
+appId: com.trippilot.travel
+---
+- openLink: 'trippilot://${ROUTE}'
+- waitForAnimationToEnd:
+    timeout: 5000
+- runFlow: no-crash.yaml
