@@ -3,6 +3,8 @@
 appId: com.trippilot.travel
 ---
 - launchApp:
+    permissions:
+      all: deny
     stopApp: true
 - extendedWaitUntil:
     visible:

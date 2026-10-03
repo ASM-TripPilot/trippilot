@@ -37,6 +37,11 @@ export interface LocationConsentScreenProps {
   onRevokeConfirmed: () => void;
   onOpenSettings: () => void;
   onPressBack?: () => void;
+  /** 동의 조회 상태 — 생략이면 'ready'. 로딩·실패는 토글 대신 별도 얼굴(TRIP-1194, "동의 안 함"으로 접지 않음). */
+  loadState?: 'loading' | 'error' | 'ready';
+  onRetry?: () => void;
+  /** 마지막 저장 실패 — 토글 카드 아래 안내(INV-4). */
+  saveFailed?: boolean;
 }
 
 /** 용도 3항목(US-NOTIF-11 정상) — 화면 고정 문안. */
@@ -78,6 +83,9 @@ export function LocationConsentScreen({
   onRevokeConfirmed,
   onOpenSettings,
   onPressBack,
+  loadState = 'ready',
+  onRetry,
+  saveFailed = false,
 }: LocationConsentScreenProps): ReactElement {
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -158,27 +166,68 @@ export function LocationConsentScreen({
           </View>
         ) : null}
 
-        {/* 토글 카드 */}
-        <View
-          style={CARD_SHADOW}
-          className="flex-row items-center gap-md rounded-[12px] border border-hairline bg-canvas p-lg"
-        >
-          <View className="flex-1">
-            <Text className="font-noto-bold text-card-title text-ink">
-              {TOGGLE_TITLE}
-            </Text>
-            <Text className="mt-[3px] text-[12.5px] font-noto text-muted">
-              {subtitle}
+        {/* 토글 카드 — 조회 로딩·실패는 "동의 안 함"으로 접지 않고 별도 얼굴(TRIP-1194) */}
+        {loadState === 'loading' ? (
+          <View
+            testID="settings-location-consent-loading"
+            style={CARD_SHADOW}
+            className="rounded-[12px] border border-hairline bg-canvas p-lg"
+          >
+            <Text className="font-noto text-label text-muted">
+              동의 상태를 불러오는 중이에요
             </Text>
           </View>
-          <Toggle
-            testID="settings-location-toggle"
-            accessibilityLabel={TOGGLE_TITLE}
-            checked={consentOn}
-            disabled={disabled}
-            onPress={handleTogglePress}
-          />
-        </View>
+        ) : loadState === 'error' ? (
+          <View
+            testID="settings-location-consent-error"
+            style={CARD_SHADOW}
+            className="gap-md rounded-[12px] border border-hairline bg-canvas p-lg"
+          >
+            <Text className="font-noto text-label text-body">
+              동의 상태를 불러오지 못했어요
+            </Text>
+            <Pressable
+              testID="settings-location-consent-retry"
+              accessibilityRole="button"
+              onPress={onRetry}
+              className="self-start rounded-[8px] border border-hairline-strong bg-canvas px-[13px] py-[7px]"
+            >
+              <Text className="text-[12.5px] font-noto-bold text-ink">
+                다시 시도
+              </Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View
+            style={CARD_SHADOW}
+            className="flex-row items-center gap-md rounded-[12px] border border-hairline bg-canvas p-lg"
+          >
+            <View className="flex-1">
+              <Text className="font-noto-bold text-card-title text-ink">
+                {TOGGLE_TITLE}
+              </Text>
+              <Text className="mt-[3px] text-[12.5px] font-noto text-muted">
+                {subtitle}
+              </Text>
+            </View>
+            <Toggle
+              testID="settings-location-toggle"
+              accessibilityLabel={TOGGLE_TITLE}
+              checked={consentOn}
+              disabled={disabled}
+              onPress={handleTogglePress}
+            />
+          </View>
+        )}
+        {saveFailed ? (
+          <Text
+            testID="settings-location-save-error"
+            accessibilityRole="alert"
+            className="font-noto text-caption text-primary-text"
+          >
+            저장하지 못했어요. 잠시 후 다시 시도해 주세요.
+          </Text>
+        ) : null}
 
         {/* 이렇게 사용해요 — 카드 한 장 안에 3행, 행 사이에만 구분선 */}
         <View testID="settings-location-usage-section" className="gap-[10px]">

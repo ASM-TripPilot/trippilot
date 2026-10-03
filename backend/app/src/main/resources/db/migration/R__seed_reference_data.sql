@@ -75,18 +75,7 @@ INSERT INTO terms_version (terms_type, version, body, effective_at, reconsent_re
 
 ## 제10조 (준거법 및 관할)
 
-본 약관은 대한민국 법률에 따르며, 분쟁은 민사소송법상 관할법원에 제기합니다.
-
----
-
-### [초안 검토용 — 시드 반영 시 삭제] 코드 대조표
-
-| 약관의 주장 | 코드 근거 |
-|---|---|
-| 소셜 3사·14세 게이트(제4조) | auth 모듈 · TRIP-249(연령 403/422) · Apple 은 개통 시(TRIP-858) 조항 갱신 |
-| 탈퇴 30일 철회(제4조) | `AccountDeletionService`(TRIP-158) |
-| 외부 예약 링크·고지(제5조) | affiliate 제휴 고지 + '다시 보지 않기'(TRIP-614/619) |
-| AI 참고용 성격(제5조) | INV-3(소요시간 미표시)·INV-4(폴백) — 일정은 제안이며 확정은 사용자 |$body$, TIMESTAMPTZ '2026-01-01 00:00:00+00', false),
+본 약관은 대한민국 법률에 따르며, 분쟁은 민사소송법상 관할법원에 제기합니다.$body$, TIMESTAMPTZ '2026-01-01 00:00:00+00', false),
   ('PRIVACY_POLICY', '1.0', $body$# TripPilot 개인정보 처리방침 (초안 v0.1)
 
 > terms_type: `PRIVACY_POLICY` · 개인정보 보호법 제30조 + 위치정보법상 개인위치정보 처리방침(위치 절 통합).
@@ -175,23 +164,7 @@ TripPilot(이하 "서비스")을 운영하는 트립파일럿(대표: 송승윤,
 
 ## 8. 고지 의무
 
-본 방침이 변경되는 경우 시행 7일 전(이용자에게 불리한 변경은 30일 전) 서비스 내 공지합니다.
-
----
-
-### [초안 검토용 — 시드 반영 시 삭제] 코드 대조표
-
-| 방침의 주장 | 코드 근거 |
-|---|---|
-| 30일 유예·세션 즉시 폐기 | `AccountDeletionService`·`AccountController`(TRIP-158) |
-| 파기 목록 자동 검증 | `DeletionCascadeNoticeIT`(BR-U6-25, FK 스캔) |
-| EXIF 철회 시 즉시 파기 | TRIP-846(PR #527) — **머지 전까지 이 문장 출하 금지** |
-| 확인자료 원시 좌표 미포함 | `location_legal_log.detail` 규약(V1.3) |
-| 확인자료 6개월 보존(6항 2호) | 법정 기준(제16조②). 코드 정합 완료 — `purge_expired_location_legal_log()`(V2.49) + `LocationLegalLogRetentionSweeper` 가 하루 1회 만료분을 지운다(TRIP-881, PR #649) |
-| 데이터 내보내기 | `/me/export`(TRIP-551) |
-| 개인화 동의 게이팅 | TRIP-556 — 동의 없으면 과거 기록을 읽지도 않음 |
-| 국외이전 벤더 = OpenAI·Anthropic(3항) | `ai/llm_gateway/config.py` — GPT·Claude 혼용(TRIP-513 기능별 오버라이드). **운영 벤더 배정이 바뀌면 이 표를 같이 고친다** |
-| 14세 미만 가입 불가 | 연령 게이트(TRIP-249 — 연령 403/422) |$body$, TIMESTAMPTZ '2026-01-01 00:00:00+00', false),
+본 방침이 변경되는 경우 시행 7일 전(이용자에게 불리한 변경은 30일 전) 서비스 내 공지합니다.$body$, TIMESTAMPTZ '2026-01-01 00:00:00+00', false),
   ('LOCATION_TERMS', '1.0', $body$# TripPilot 위치기반서비스 이용약관 (초안 v0.1)
 
 > terms_type: `LOCATION_TERMS` · 위치정보법상 위치기반서비스 이용약관.
@@ -275,22 +248,7 @@ TripPilot(이하 "서비스")을 운영하는 트립파일럿(대표: 송승윤,
 ## 제11조 (분쟁 조정)
 
 위치정보와 관련한 분쟁은 방송미디어통신위원회에 재정을 신청하거나 개인정보분쟁조정위원회에
-조정을 신청할 수 있습니다.
-
----
-
-### [초안 검토용 — 시드 반영 시 삭제] 코드 대조표
-
-| 약관의 주장 | 코드 근거 |
-|---|---|
-| 수동 입력 대체(제3조 3호) | i20·i21 위치 수동 입력 폴백(TRIP-442) — 위치 없이도 서비스 성립 |
-| 철회 시 EXIF 즉시 파기(제4조) | TRIP-846(PR #527) — **머지 전 출하 금지** |
-| 이동 경로 문구 제거(제4조, 2026-09-16) | `actual_route_point` 미구현 — 안 모으는 것을 약관에 쓰지 않는다. 기능 도입 시 약관 개정 + 재동의 |
-| 확인자료 자동 기록(제5조) | `location_legal_log`(V1.3) + TRIP-857(#526, 머지됨) |
-| 확인자료 6개월 보존(제5조) | 법정 기준(제16조②). 코드 정합 완료 — `purge_expired_location_legal_log()`(V2.49) + `LocationLegalLogRetentionSweeper` 가 하루 1회 만료분을 지운다(TRIP-881, PR #649) |
-| 원시 좌표 미포함(제5조) | V1.3 `detail` 규약 |
-| 동의 3층·철회(제7조) | `location_consent_state` L1/L2/L3 · `LocationConsentController` |
-| 14세 미만 미가입(제8조) | 연령 게이트(TRIP-249) |$body$, TIMESTAMPTZ '2026-01-01 00:00:00+00', false),
+조정을 신청할 수 있습니다.$body$, TIMESTAMPTZ '2026-01-01 00:00:00+00', false),
   ('MARKETING', '1.0', $body$# 광고성 정보 수신 동의 (초안 v0.1)
 
 > terms_type: `MARKETING` · **선택 동의**.
@@ -307,18 +265,7 @@ TripPilot이 이벤트·혜택 등 **광고성 정보**를 앱 푸시 알림으�
 
 ## 보유 기간
 
-동의 상태는 회원 탈퇴 + 30일 유예 후 파기되며, 동의·철회 이력은 법정 증적으로 보존됩니다.
-
----
-
-### [초안 검토용 — 시드 반영 시 삭제] 코드 대조표
-
-| 동의문의 주장 | 코드 근거 |
-|---|---|
-| 서비스 알림과 분리 | `NotificationKind` — 현재 8종 전부 정보성, SYSTEM 은 토글 불가(INV-U6-03) |
-| 광고성 0건 | LEGAL-U6-02 — 광고성은 이 경로로 나가지 않음. 도입 시 재평가 트리거 |
-| 야간 미발송 정책(2026-09-16 확정) | 별도 동의 표면을 만들지 않는 쪽으로 문구 확정 — **야간 광고 발송을 도입하려면 이 동의문 개정 + 별도 동의 표면 신설이 선행**(LEGAL-U6-03·QUIET-HOURS 연동) |
-| 동의·철회 증적 | `consent_record`(append-only, V1.2) · `marketing_consent`(V1.2) |$body$, TIMESTAMPTZ '2026-01-01 00:00:00+00', false),
+동의 상태는 회원 탈퇴 + 30일 유예 후 파기되며, 동의·철회 이력은 법정 증적으로 보존됩니다.$body$, TIMESTAMPTZ '2026-01-01 00:00:00+00', false),
   ('GPS_RECORDING', '1.0', $body$# 위치정보 기록 동의 (초안 v0.1)
 
 > terms_type: `GPS_RECORDING` · **선택 동의** (동의하지 않아도 서비스 이용 가능).
@@ -340,19 +287,7 @@ TripPilot이 여행 기록을 위해 다음 위치정보를 **수집·저장**�
 ## 보유 기간
 
 회원 탈퇴 + 30일 유예 후 파기(철회 시 위와 같이 즉시 파기). 상세는 개인정보 처리방침
-6항(위치정보의 처리)을 따릅니다.
-
----
-
-### [초안 검토용 — 시드 반영 시 삭제] 코드 대조표
-
-| 동의문의 주장 | 코드 근거 |
-|---|---|
-| 동의 없으면 좌표 미저장 | `VisitPhotoMeta.attach` — `exifLat.takeIf { gpsRecordingOptIn }`(INV-U5-04) |
-| 요청 시점 동의 재확인 | `VisitRecordService.addPhoto` — 저장 시점에 동의 상태 재조회 |
-| 철회 시 즉시 파기 | EXIF: TRIP-846(#527, 머지됨) |
-| 선택 동의(기능은 계속) | 사진·메모는 좌표 없이 동작(INV-U5-05) |
-| 이동 경로 항목 **없음**(2026-09-16 결정) | `actual_route_point` 미구현 — 안 모으는 것을 동의받지 않는다. **기능 도입 시 이 동의문 개정 + `reconsent_required=true` 재동의가 필수다**(범위 확대라 소급 불가) |$body$, TIMESTAMPTZ '2026-01-01 00:00:00+00', false),
+6항(위치정보의 처리)을 따릅니다.$body$, TIMESTAMPTZ '2026-01-01 00:00:00+00', false),
   ('PERSONALIZATION', '1.0', $body$# 기록 기반 개인화 동의 (초안 v0.1)
 
 > terms_type: `PERSONALIZATION` · **선택 동의**.
@@ -375,17 +310,7 @@ TripPilot이 나의 **과거 여행 기록**(방문 기록·회고·여행 스�
 
 동의 상태는 회원 탈퇴 + 30일 유예 후 파기되며, 동의·철회 이력은 법정 증적으로 보존됩니다.
 (과거 기록 자체의 보유는 이 동의와 무관하게 개인정보 처리방침 1항을 따릅니다 — 이 동의는
-"기록의 개인화 활용" 여부만 정합니다.)
-
----
-
-### [초안 검토용 — 시드 반영 시 삭제] 코드 대조표
-
-| 동의문의 주장 | 코드 근거 |
-|---|---|
-| 동의 없으면 읽지도 않음 | TRIP-556 — 개인화 동의 게이팅(조회 자체를 차단) |
-| 활용 내역 공시 | `/me/personalization`(BR-U5-45) — 무엇을 넘겼는지 공시 표면 |
-| 스타일 분석 | `StyleAnalysis`(TRIP-555) — 근거 부족 시 단정하지 않음 |$body$, TIMESTAMPTZ '2026-01-01 00:00:00+00', false)
+"기록의 개인화 활용" 여부만 정합니다.)$body$, TIMESTAMPTZ '2026-01-01 00:00:00+00', false)
 ON CONFLICT (terms_type, version) DO UPDATE
   SET body = EXCLUDED.body, effective_at = EXCLUDED.effective_at;
 

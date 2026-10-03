@@ -196,6 +196,7 @@
 
 ## src/app/entrypoint/
 - `src/app/entrypoint/AppProviders.tsx`  →  AppProviders
+- `src/app/entrypoint/initSentry.ts`  →  initSentry
 
 ## src/app/
 - `src/app/index.ts`  →  AppProviders · SplashGate
@@ -597,6 +598,9 @@
 
 ## src/pages/auth/terms-viewer/
 - `src/pages/auth/terms-viewer/index.ts`  →  TermsViewerPage
+
+## src/pages/auth/terms-viewer/model/
+- `src/pages/auth/terms-viewer/model/parseTermsMarkdown.ts`  →  Span · Block · parseTermsMarkdown
 
 ## src/pages/auth/terms-viewer/ui/
 - `src/pages/auth/terms-viewer/ui/TermsViewerPage.tsx`  →  TermsViewerPage
@@ -1559,4 +1563,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 953개 파일
+합계 955개 파일

@@ -6277,7 +6277,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         onPressDeleteAccount={noop}
         onPressCancelDeletion={noop}
         onPressOsmCopyright={noop}
-        appVersion="0.1.0"
+        appVersion="1.0.0"
       />
     ),
   },
@@ -6362,7 +6362,7 @@ export const PREVIEW_STATES: PreviewState[] = [
           onPressDeleteAccount={noop}
           onPressCancelDeletion={noop}
           onPressOsmCopyright={noop}
-          appVersion="0.1.0"
+          appVersion="1.0.0"
         />
         <DeleteAccountDialog onCancel={noop} onConfirmDeletion={noop} />
       </View>
@@ -6387,7 +6387,7 @@ export const PREVIEW_STATES: PreviewState[] = [
           onPressDeleteAccount={noop}
           onPressCancelDeletion={noop}
           onPressOsmCopyright={noop}
-          appVersion="0.1.0"
+          appVersion="1.0.0"
         />
         <DeleteAccountDialog
           onCancel={noop}
