@@ -191,6 +191,12 @@ export interface HomeScreenProps {
   sections: HomeSections;
   /** "지금 뜨는 장소" 실데이터(TRIP-1049, 옵셔널) — 있으면 sections.spots 대신 이것을 그린다. */
   spotsLane?: HomeSpotsLane;
+  /**
+   * 여행 조회 실패(TRIP-935, 옵셔널) — 있으면 discovery 얼굴 위에 오류 안내 + [다시 시도]를 띄운다.
+   * 실패를 "여행 없음" 얼굴로 조용히 접지 않는다(INV-4). 대기·성공이면 page 가 넘기지 않는다.
+   * `retrying` 이면 재조회 중이라 [다시 시도]를 비활성으로 흐리게 그린다(눌러도 무반응처럼 보이지 않게).
+   */
+  tripsError?: { onRetry: () => void; retrying?: boolean };
   /** 여행 단계 판별값(TRIP-317) — 미전달/discovery면 316 얼굴, 그 외 kind면 단계 얼굴 */
   phase?: HomePhase;
   /**

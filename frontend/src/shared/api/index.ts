@@ -115,6 +115,16 @@ export interface NicknameCheckResult {
   reason: NicknameCheckReason;
 }
 
+/**
+ * 요청 하나를 기다리는 상한(ms) — 넘으면 axios 가 `ECONNABORTED` 로 끊고, 응답 없는 실패라 네트워크 오류와
+ * 같은 길(401 리프레시 미개입 → 화면 isError)을 탄다. 서버가 포트만 잡고 답을 안 주면 이 값이 없을 때
+ * 스켈레톤이 끝나지 않았다(TRIP-935). 15초 = 서버의 비-AI 외부 호출 1회 상한(카카오·소셜·기상 연결 3s+읽기 5s)
+ * 위로 여유. 예외: 소셜 code 로그인은 서버가 토큰 교환·프로필 조회를 연달아 불러 최악 16초라 넘길 수 있다
+ * (두 호출이 각각 7.5초 넘게 걸리는 극단 — 잘리면 일회용 code 라 로그인을 처음부터 다시 한다).
+ * AI 를 동기로 부르는 요청은 이 값으로 자르면 안 된다 — 예외는 `mutator.ts`.
+ */
+const API_TIMEOUT_MS = 15_000;
+
 /** 재시도 여부를 요청 자체에 표시하는 내부 마커 — 요청당 정확히 1회만 리프레시를 태운다(A4). */
 interface RetriableRequestConfig extends InternalAxiosRequestConfig {
   _retry?: boolean;
@@ -136,6 +146,7 @@ export function createAuthedApiClient(
   const client = createAxiosInstance({
     baseURL: options.baseURL,
     adapter: options.adapter,
+    timeout: API_TIMEOUT_MS,
   });
 
   let refreshPromise: Promise<string> | null = null;
@@ -189,7 +200,10 @@ if (!__DEV__ && !envApiBaseUrl) {
 const API_BASE_URL = `${envApiBaseUrl ?? 'http://localhost:8080'}/api/v1`;
 
 /** 무인증 클라이언트 — SEC-04 화이트리스트(소셜 로그인·토큰 갱신·약관 조회)가 여기로 나간다. */
-const baseClient = createAxiosInstance({ baseURL: API_BASE_URL });
+const baseClient = createAxiosInstance({
+  baseURL: API_BASE_URL,
+  timeout: API_TIMEOUT_MS,
+});
 
 /** 서버 실코드 → 프론트 계약 코드 번역표. TRIP-172 — AGE_REQUIREMENT_NOT_MET 1건, 테스트 없이 이관. */
 const SERVER_ERROR_CODE_TRANSLATIONS: Record<string, string> = {

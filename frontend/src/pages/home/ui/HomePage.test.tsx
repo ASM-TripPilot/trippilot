@@ -260,6 +260,8 @@ describe('얼굴 판정 — 여행 목록으로 discovery·planning·로딩을 �
 
     expect(screen.getByTestId('home-magazine-hero')).toBeOnTheScreen();
     expect(screen.queryByTestId('home-trip-hero')).toBeNull();
+    // 진짜 "여행 없음"엔 오류 안내가 없다 — 아래 실패 케이스와 짝(안내를 늘 띄우면 둘이 구별 안 된다).
+    expect(screen.queryByTestId('home-trips-error')).toBeNull();
   });
 
   it('종료 여행만 있으면 discovery 로 폴백한다(종료 여행을 얼굴로 올리지 않는다)', () => {
@@ -301,14 +303,55 @@ describe('얼굴 판정 — 여행 목록으로 discovery·planning·로딩을 �
     expect(screen.queryByTestId('home-saved-menu-toggle')).toBeNull();
   });
 
-  it('조회 실패면 discovery 로 폴백하고 로딩·여행 얼굴로 새지 않는다(INV-4)', () => {
-    mockUseGetTrips.mockReturnValue(TRIPS_ERROR);
+  // TRIP-935 — 실패를 안내 없는 discovery 로 접으면 "여행 없음"과 구별되지 않는다(조용한 실패, INV-4).
+  it('조회 실패면 오류 안내 + [다시 시도]를 띄우고, 누르면 여행 목록을 다시 묻는다', () => {
+    const refetch = jest.fn();
+    mockUseGetTrips.mockReturnValue({ ...TRIPS_ERROR, refetch });
 
     render(<HomePage />);
 
+    expect(screen.getByTestId('home-trips-error')).toHaveTextContent(
+      /여행 정보를 불러오지 못했어요/
+    );
+    // discovery 는 서버와 무관한 고정 콘텐츠라 그대로 둔다 — 로딩·여행 얼굴로는 새지 않는다.
     expect(screen.getByTestId('home-magazine-hero')).toBeOnTheScreen();
     expect(screen.queryByTestId('home-collections-skeleton')).toBeNull();
     expect(screen.queryByTestId('home-trip-hero')).toBeNull();
+    expect(refetch).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('home-trips-retry'));
+
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('다시 묻는 중이면 [다시 시도]가 비활성이다 — 눌러도 반응 없는 버튼처럼 보이지 않게', () => {
+    const refetch = jest.fn();
+    mockUseGetTrips.mockReturnValue({
+      ...TRIPS_ERROR,
+      isFetching: true,
+      refetch,
+    });
+
+    render(<HomePage />);
+
+    expect(screen.getByTestId('home-trips-retry')).toBeDisabled();
+    fireEvent.press(screen.getByTestId('home-trips-retry'));
+    expect(refetch).not.toHaveBeenCalled();
+  });
+
+  // react-query v5 는 이미 받은 데이터가 있는 쿼리의 재조회가 실패하면 data 를 남긴 채 isError 가 된다.
+  it('여행을 이미 받아 둔 뒤 재조회만 실패하면 여행 카드를 유지하고 오류 안내는 없다', () => {
+    mockUseGetTrips.mockReturnValue({
+      data: [beforeTrip()],
+      isPending: false,
+      isError: true,
+      refetch: jest.fn(),
+    });
+
+    render(<HomePage />);
+
+    expect(screen.getByTestId('home-trip-hero')).toBeOnTheScreen();
+    expect(screen.queryByTestId('home-trips-error')).toBeNull();
   });
 
   // 컬렉션 카드는 부산 고정 픽스처라 여행 지역을 헤더에 끼우면 사실과 다른 표기가 된다(심사 2.3).
