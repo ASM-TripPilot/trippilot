@@ -92,3 +92,49 @@ resource "aws_eks_pod_identity_association" "ai" {
   service_account = "ai"
   role_arn        = data.aws_iam_role.ai_pod.arn
 }
+
+# Container stdout is otherwise reachable only through kubectl. The add-on's
+# Fluent Bit tails the node log files, so the application needs no change and
+# keeps OTEL_SDK_DISABLED=true - this stack provisions no OTLP collector.
+#
+# Cost: CloudWatch Logs charges for ingested volume (around USD 0.5-0.8 per GB)
+# plus storage over the retention window below, and the add-on's agent publishes
+# Container Insights observations (around USD 0.21 per million). Application
+# Signals auto-monitoring is turned off in the add-on config: it would inject
+# instrumentation into every workload and bill per request.
+data "aws_iam_role" "cloudwatch_pod" {
+  count = var.container_logs_enabled ? 1 : 0
+
+  name = "${local.name}-cloudwatch-pod"
+}
+
+# The collectors create these groups themselves, without any expiry. Creating
+# them here first is what keeps retention - and the storage bill - bounded.
+resource "aws_cloudwatch_log_group" "container_insights" {
+  for_each = var.container_logs_enabled ? toset(["application", "dataplane", "host", "performance"]) : toset([])
+
+  name              = "/aws/containerinsights/${local.name}/${each.value}"
+  retention_in_days = var.container_logs_retention_days
+}
+
+resource "aws_eks_addon" "cloudwatch_observability" {
+  count = var.container_logs_enabled ? 1 : 0
+
+  cluster_name = aws_eks_cluster.this.name
+  addon_name   = "amazon-cloudwatch-observability"
+
+  configuration_values = jsonencode({
+    containerLogs = { enabled = true }
+    manager       = { applicationSignals = { autoMonitor = { monitorAllServices = false } } }
+  })
+
+  # Auto Mode pins the IMDS hop limit to 1, so the collector pods take their
+  # CloudWatch permissions from Pod Identity, like the AI pods above. The
+  # add-on binds the association to its own amazon-cloudwatch namespace.
+  pod_identity_association {
+    role_arn        = data.aws_iam_role.cloudwatch_pod[0].arn
+    service_account = "cloudwatch-agent"
+  }
+
+  depends_on = [aws_cloudwatch_log_group.container_insights]
+}

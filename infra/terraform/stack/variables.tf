@@ -61,6 +61,23 @@ variable "eks_public_access_cidrs" {
   }
 }
 
+variable "container_logs_enabled" {
+  description = "Install the amazon-cloudwatch-observability add-on so pod stdout is readable without cluster access. Off by default: it bills per ingested GB and per Container Insights observation."
+  type        = bool
+  default     = false
+}
+
+variable "container_logs_retention_days" {
+  description = "Expiry for the Container Insights log groups. CloudWatch keeps log data forever unless a retention is set, so this is always set explicitly."
+  type        = number
+  default     = 7
+
+  validation {
+    condition     = contains([1, 3, 5, 7, 14, 30, 60, 90], var.container_logs_retention_days)
+    error_message = "container_logs_retention_days must be one of the CloudWatch values 1, 3, 5, 7, 14, 30, 60 or 90; longer storage is a cost decision, not a default."
+  }
+}
+
 variable "vpc_cidr" {
   description = "Environment-specific IPv4 /16; public, private compute and isolated data subnets are derived from this range."
   type        = string
