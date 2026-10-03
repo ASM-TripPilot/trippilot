@@ -74,6 +74,10 @@ export interface SlotProgressCardProps {
   onPressName?: () => void;
   /** TRIP-1021 — upcoming 수동 [도착]. 미주입이면 그리지 않는다. */
   onPressArrive?: () => void;
+  /** TRIP-1189 — upcoming 다음 예정지 [길찾기](외부 지도앱 위임). 미주입이면 그리지 않는다. 누가 첫 upcoming 인지는 부모가 정한다. */
+  onPressDirections?: () => void;
+  /** TRIP-1189 — 길찾기가 앱·웹 모두 실패했을 때 거리 안내 한 줄(INV-4). 상태는 부모가 가진다. 비면 안 그린다. */
+  directionsNotice?: string | null;
 }
 
 export function SlotProgressCard({
@@ -90,6 +94,8 @@ export function SlotProgressCard({
   badgeLabel,
   onPressName,
   onPressArrive,
+  onPressDirections,
+  directionsNotice,
 }: SlotProgressCardProps): ReactElement {
   const slotKey = buildSlotKey(date, slot.poiId);
   const fieldId = (role: string): string =>
@@ -309,20 +315,45 @@ export function SlotProgressCard({
             </Pressable>
           ))}
         </View>
-        {onPressArrive ? (
-          <Pressable
-            testID={fieldId('arrive')}
-            accessibilityRole="button"
-            onPress={onPressArrive}
-            className="flex-row items-center gap-[4px] rounded-button bg-primary px-md py-[6px]"
-          >
-            <CheckGlyph size={15} tone="onPrimary" />
-            <Text className="font-noto-bold text-label font-bold text-on-primary">
-              도착
-            </Text>
-          </Pressable>
+        {onPressArrive || onPressDirections ? (
+          <View className="flex-row items-center gap-sm">
+            {onPressDirections ? (
+              <Pressable
+                testID={fieldId('directions')}
+                accessibilityRole="button"
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                onPress={onPressDirections}
+                className="rounded-[10px] border border-hairline-strong bg-canvas px-md py-[8px]"
+              >
+                <Text className="font-noto-bold text-caption font-bold text-ink">
+                  길찾기
+                </Text>
+              </Pressable>
+            ) : null}
+            {onPressArrive ? (
+              <Pressable
+                testID={fieldId('arrive')}
+                accessibilityRole="button"
+                onPress={onPressArrive}
+                className="flex-row items-center gap-[4px] rounded-button bg-primary px-md py-[6px]"
+              >
+                <CheckGlyph size={15} tone="onPrimary" />
+                <Text className="font-noto-bold text-label font-bold text-on-primary">
+                  도착
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
         ) : null}
       </View>
+      {directionsNotice ? (
+        <Text
+          testID={fieldId('directions-notice')}
+          className="font-noto text-caption text-muted"
+        >
+          {directionsNotice}
+        </Text>
+      ) : null}
     </View>
   );
 }

@@ -42,6 +42,8 @@ jest.mock('expo-linking', () => ({
   openURL: jest.fn(),
 }));
 
+// TRIP-1189 — canOpenURL 은 iOS 에서 LSApplicationQueriesSchemes(네이티브·재빌드)가 필요해 쓰지 않는다.
+// 앱 → 웹 → 거리 안내 사다리는 openURL 의 reject 만으로 만든다.
 const mockCanOpenURL = Linking.canOpenURL as jest.Mock;
 const mockOpenURL = Linking.openURL as jest.Mock;
 
@@ -74,23 +76,39 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
-describe('AC-5 · URL 빌더 (순수 함수)', () => {
-  it('buildAppNavUrl 은 kakaomap route 딥링크에 목적지 좌표만 싣는다 (출발지 생략)', () => {
-    expect(buildAppNavUrl({ lat: 35.1, lng: 129.1 })).toBe(
-      'kakaomap://route?ep=35.1,129.1'
+describe('AC-5 · URL 빌더 (순수 함수, 네이버 지도)', () => {
+  it('buildAppNavUrl 은 nmap 대중교통 길찾기에 도착지만 싣는다 (출발지 생략=현재 위치, appname 필수)', () => {
+    const url = buildAppNavUrl({ lat: 35.1, lng: 129.1, nameKo: '광안리' });
+
+    expect(url).toBe(
+      `nmap://route/public?dlat=35.1&dlng=129.1&dname=${encodeURIComponent('광안리')}&appname=com.trippilot.travel`
+    );
+    expect(url).not.toContain('slat');
+    expect(url).not.toContain('slng');
+  });
+
+  it('buildAppNavUrl 은 nameKo 가 null 이면 dname 을 "장소"로 대체한다', () => {
+    expect(buildAppNavUrl({ lat: 35.1, lng: 129.1, nameKo: null })).toContain(
+      `dname=${encodeURIComponent('장소')}`
     );
   });
 
-  it('buildWebNavUrl 은 카카오맵 웹 link/to URL 에 이름·좌표를 raw(무인코딩)로 싣는다', () => {
+  it('buildWebNavUrl 은 네이버 지도 웹 길찾기(도착지 lng,lat,이름 · 대중교통)를 인코딩해 싣는다', () => {
     expect(buildWebNavUrl({ lat: 35.1, lng: 129.1, nameKo: '광안리' })).toBe(
-      'https://map.kakao.com/link/to/광안리,35.1,129.1'
+      `https://map.naver.com/p/directions/-/129.1,35.1,${encodeURIComponent('광안리')}/-/transit`
     );
   });
 
   it('buildWebNavUrl 은 nameKo 가 null 이면 "장소"로 대체한다', () => {
-    expect(buildWebNavUrl({ lat: 35.1, lng: 129.1, nameKo: null })).toBe(
-      'https://map.kakao.com/link/to/장소,35.1,129.1'
+    expect(buildWebNavUrl({ lat: 35.1, lng: 129.1, nameKo: null })).toContain(
+      `129.1,35.1,${encodeURIComponent('장소')}/`
     );
+  });
+
+  it('두 URL 어디에도 카카오 흔적이 없다', () => {
+    const d = { lat: 35.1, lng: 129.1, nameKo: '광안리' };
+    expect(buildAppNavUrl(d)).not.toMatch(/kakao/);
+    expect(buildWebNavUrl(d)).not.toMatch(/kakao/);
   });
 });
 
@@ -155,18 +173,17 @@ describe('AC-6 · resolveNextDest 도출 (첫 upcoming + 유한 좌표)', () => 
   });
 });
 
-describe('AC-4 · openNextNav 폴백 사다리 3단', () => {
+describe('AC-4 · openNextNav 폴백 사다리 3단 (openURL reject 기반)', () => {
   const dest: NavDest = {
     lat: 35.1,
     lng: 129.1,
     nameKo: '광안리',
     distanceRange: '약 1.2km · 도보 추정',
   };
-  const appUrl = 'kakaomap://route?ep=35.1,129.1';
-  const webUrl = 'https://map.kakao.com/link/to/광안리,35.1,129.1';
+  const appUrl = buildAppNavUrl(dest);
+  const webUrl = buildWebNavUrl(dest);
 
-  it('① 외부앱 열림 → 앱 딥링크로 openURL, "app" 반환, fallback 미호출', async () => {
-    mockCanOpenURL.mockResolvedValue(true);
+  it('① 앱 openURL 성공 → "app", openURL 1회, fallback 미호출, canOpenURL 은 부르지 않는다', async () => {
     mockOpenURL.mockResolvedValue(true);
     const fallback = jest.fn();
 
@@ -175,24 +192,11 @@ describe('AC-4 · openNextNav 폴백 사다리 3단', () => {
     expect(result).toBe('app');
     expect(mockOpenURL).toHaveBeenCalledTimes(1);
     expect(mockOpenURL).toHaveBeenCalledWith(appUrl);
+    expect(mockCanOpenURL).not.toHaveBeenCalled();
     expect(fallback).not.toHaveBeenCalled();
   });
 
-  it('② 외부앱 없음(canOpenURL false) → 웹 지도로 openURL, "web" 반환, fallback 미호출', async () => {
-    mockCanOpenURL.mockResolvedValue(false);
-    mockOpenURL.mockResolvedValue(true);
-    const fallback = jest.fn();
-
-    const result = await openNextNav(dest, fallback);
-
-    expect(result).toBe('web');
-    expect(mockOpenURL).toHaveBeenCalledTimes(1);
-    expect(mockOpenURL).toHaveBeenCalledWith(webUrl);
-    expect(fallback).not.toHaveBeenCalled();
-  });
-
-  it('③ 앱 열기 시도가 reject 되면 웹으로 강등한다 (openURL: 앱→웹 순서)', async () => {
-    mockCanOpenURL.mockResolvedValue(true);
+  it('② 앱 openURL 이 reject(미설치) → 웹 지도로 openURL, "web", fallback 미호출', async () => {
     mockOpenURL
       .mockRejectedValueOnce(new Error('no app'))
       .mockResolvedValueOnce(true);
@@ -206,16 +210,25 @@ describe('AC-4 · openNextNav 폴백 사다리 3단', () => {
     expect(fallback).not.toHaveBeenCalled();
   });
 
-  it('④ 웹 지도까지 reject 되면 거리 요약을 최종 안내로 내린다 (fallback(distanceRange), "distance")', async () => {
-    mockCanOpenURL.mockResolvedValue(false);
-    mockOpenURL.mockRejectedValue(new Error('no web'));
+  it('③ 웹까지 reject → 거리 요약을 최종 안내로 내린다 (fallback(distanceRange), "distance") — 삼키지 않는다', async () => {
+    mockOpenURL.mockRejectedValue(new Error('none'));
     const fallback = jest.fn();
 
     const result = await openNextNav(dest, fallback);
 
     expect(result).toBe('distance');
+    expect(mockOpenURL).toHaveBeenCalledTimes(2);
     expect(fallback).toHaveBeenCalledTimes(1);
     expect(fallback).toHaveBeenCalledWith('약 1.2km · 도보 추정');
+  });
+
+  it('④ distanceRange 가 null 이어도 fallback 은 호출된다 (null 전달)', async () => {
+    mockOpenURL.mockRejectedValue(new Error('none'));
+    const fallback = jest.fn();
+
+    await openNextNav({ ...dest, distanceRange: null }, fallback);
+
+    expect(fallback).toHaveBeenCalledWith(null);
   });
 });
 
@@ -223,7 +236,7 @@ describe('AC-7 · 매끄러운 복귀 = 유틸이 라우터를 모른다 (구조
   const NAV_CALL = /\brouter\.(push|replace|navigate|back)\b/;
   const ROUTER_IMPORT = /from ['"]expo-router['"]/;
 
-  // 블록 주석 → 줄 주석(콜론 예외). nextNav.ts 는 `kakaomap://`·`https://` URL 을 담으므로
+  // 블록 주석 → 줄 주석(콜론 예외). nextNav.ts 는 `nmap://`·`https://` URL 을 담으므로
   // 콜론 예외가 없으면 `://` 의 슬래시를 주석으로 오인해 URL 뒷부분(그리고 같은 줄 코드)을
   // 지운다 — 전처리×탐지기 상호소거 함정(리포 관례, [[stripComments가 URL 슬래시 오인]]).
   const stripComments = (src: string): string =>
@@ -237,8 +250,8 @@ describe('AC-7 · 매끄러운 복귀 = 유틸이 라우터를 모른다 (구조
   it('G · 자가검사 — 주석은 걷히고 URL(://)은 살아남고 실제 router 호출은 잡힌다', () => {
     const sample = [
       '// router.push 를 얹으면 복귀가 깨진다(금지).',
-      'const appUrl = `kakaomap://route?ep=${lat},${lng}`;',
-      'const webUrl = `https://map.kakao.com/link/to/${name}`;',
+      'const appUrl = `nmap://route/public?dlat=${lat}`;',
+      'const webUrl = `https://map.naver.com/p/directions/${name}`;',
       'export async function openNextNav() {}',
     ].join('\n');
     const stripped = stripComments(sample);
@@ -246,8 +259,8 @@ describe('AC-7 · 매끄러운 복귀 = 유틸이 라우터를 모른다 (구조
     // ① 주석 속 router.push 는 걷혀서 부정 단언을 거짓 red 로 만들지 않는다.
     expect(NAV_CALL.test(stripped)).toBe(false);
     // ② URL 의 // 는 주석이 아니다(콜론 예외) — 전처리가 URL 을 지우지 않는다.
-    expect(stripped).toContain('kakaomap://route?ep=');
-    expect(stripped).toContain('https://map.kakao.com/link/to/');
+    expect(stripped).toContain('nmap://route/public?');
+    expect(stripped).toContain('https://map.naver.com/p/directions/');
     // ③ 짝 — 실제 코드의 router.push 는 잡는다(우회 불가 증명).
     expect(NAV_CALL.test('router.push("/(tabs)")')).toBe(true);
   });

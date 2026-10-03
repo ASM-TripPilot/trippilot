@@ -761,3 +761,114 @@ describe('SlotProgressCard · active 메모 (TRIP-1117)', () => {
     }
   );
 });
+
+// TRIP-1189 · i01 다음 예정지 [길찾기] (Figma 4799:2653 btn·길찾기, US-ONTRIP-03 · BR-U4-39).
+// 카드는 순수 뷰 — 누가 첫 upcoming 인지·외부 앱 호출은 부모(페이지)가 정한다. 콜백이 없으면 버튼이 없다.
+describe('SlotProgressCard · upcoming 길찾기 (TRIP-1189)', () => {
+  const dirId = id('directions');
+
+  it('D1 onPressDirections 를 주면 "길찾기" 버튼이 있고 누르면 그 콜백이 1번 불린다', () => {
+    const onPressDirections = jest.fn();
+    render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="upcoming"
+        onPressDirections={onPressDirections}
+      />
+    );
+
+    expect(screen.getByTestId(dirId)).toHaveTextContent('길찾기');
+    fireEvent.press(screen.getByTestId(dirId));
+    expect(onPressDirections).toHaveBeenCalledTimes(1);
+  });
+
+  it('D2 콜백이 없으면 버튼이 없다 (다음 예정지가 아닌 카드 · 좌표 결측)', () => {
+    render(<SlotProgressCard slot={mkSlot()} date={DATE} state="upcoming" />);
+
+    expect(screen.queryByTestId(dirId)).toBeNull();
+  });
+
+  it('D3 터치 타깃은 hitSlop 으로 44pt 를 채운다 (버튼 높이 < 44)', () => {
+    render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="upcoming"
+        onPressDirections={jest.fn()}
+      />
+    );
+
+    const { hitSlop } = screen.getByTestId(dirId).props;
+    expect(hitSlop).toBeTruthy();
+    expect(
+      Object.values(hitSlop as Record<string, number>).every((n) => n >= 6)
+    ).toBe(true);
+  });
+
+  it('D4 [도착]과 공존한다 — 둘 다 자기 콜백만 부른다', () => {
+    const onPressDirections = jest.fn();
+    const onPressArrive = jest.fn();
+    render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="upcoming"
+        onPressDirections={onPressDirections}
+        onPressArrive={onPressArrive}
+      />
+    );
+
+    fireEvent.press(screen.getByTestId(dirId));
+    expect(onPressArrive).not.toHaveBeenCalled();
+    fireEvent.press(screen.getByTestId(id('arrive')));
+    expect(onPressDirections).toHaveBeenCalledTimes(1);
+    expect(onPressArrive).toHaveBeenCalledTimes(1);
+  });
+
+  it('D5 directionsNotice 를 주면 안내 한 줄을 그리고, 없으면 안 그린다 (INV-4)', () => {
+    const { rerender } = render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="upcoming"
+        onPressDirections={jest.fn()}
+      />
+    );
+    expect(screen.queryByTestId(id('directions-notice'))).toBeNull();
+
+    rerender(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="upcoming"
+        onPressDirections={jest.fn()}
+        directionsNotice="지도를 열 수 없어요. 약 1.2km"
+      />
+    );
+    expect(screen.getByTestId(id('directions-notice'))).toHaveTextContent(
+      '지도를 열 수 없어요. 약 1.2km'
+    );
+  });
+
+  it('D6 active·done 카드에는 길찾기가 없다', () => {
+    const { rerender } = render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="active"
+        onPressDirections={jest.fn()}
+      />
+    );
+    expect(screen.queryByTestId(dirId)).toBeNull();
+    rerender(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="done"
+        onPressDirections={jest.fn()}
+      />
+    );
+    expect(screen.queryByTestId(dirId)).toBeNull();
+  });
+});

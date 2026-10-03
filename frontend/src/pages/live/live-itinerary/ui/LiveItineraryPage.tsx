@@ -5,7 +5,11 @@ import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { resolveLiveState } from '../model/liveState';
-import { useLiveItinerary } from '@/features/execution';
+import {
+  openNextNav,
+  resolveNextDest,
+  useLiveItinerary,
+} from '@/features/execution';
 import { projectSlotProgress } from '@/entities/itinerary-slot';
 import { useVisitCheck } from '../model/useVisitCheck';
 import { photoAttach } from '@/features/attach-visit-media';
@@ -108,6 +112,10 @@ export function LiveItineraryPage({
   const [initialSnapIndex] = useState(appliedSessionId ? 2 : undefined);
   // 관람 중 카드 [사진] 안내 한 줄(TRIP-1070). 다음 [사진] 누름에 지운다.
   const [photoNotice, setPhotoNotice] = useState<string | null>(null);
+  // TRIP-1189 다음 예정지 [길찾기] — 외부 앱을 띄우는 동안 연타를 막는 잠금(ref: 같은 틱 두 번째 press 도 본다)과
+  // 앱·웹 모두 실패했을 때의 거리 안내(INV-4).
+  const directionsBusy = useRef(false);
+  const [directionsNotice, setDirectionsNotice] = useState<string | null>(null);
 
   const state = resolveLiveState({
     isLoading: query.isPending,
@@ -221,6 +229,30 @@ export function LiveItineraryPage({
   const hubSlots = projected.map((entry) =>
     entry.state === 'active' ? { ...entry, memo: visitMemo.savedMemo } : entry
   );
+
+  // TRIP-1189 — 다음 예정지(첫 upcoming + 유한 좌표)는 resolveNextDest 가 정한다. 외부 지도앱에 넘기고 우리 라우트는
+  // 건드리지 않으므로 복귀하면 같은 허브다(BR-U4-39).
+  const nextDest = resolveNextDest(projected);
+  const directionsPoiId = nextDest
+    ? (projected.find((entry) => entry.state === 'upcoming')?.slot.poiId ??
+      null)
+    : null;
+  const pressDirections = async () => {
+    if (!nextDest || directionsBusy.current) return;
+    directionsBusy.current = true;
+    setDirectionsNotice(null);
+    try {
+      await openNextNav(nextDest, (distanceRange) =>
+        setDirectionsNotice(
+          distanceRange
+            ? `지도를 열 수 없어요. ${distanceRange}`
+            : '지도를 열 수 없어요.'
+        )
+      );
+    } finally {
+      directionsBusy.current = false;
+    }
+  };
 
   // TRIP-1070 [사진] — 관람 중 방문에 메타만 POST 한다. 사진 목록은 조회하지 않는다(허브엔 사진 칸이
   // 없다 — useVisitAttachments 는 GET 을 무조건 쏘므로 부르지 않는다, F6).
@@ -392,6 +424,9 @@ export function LiveItineraryPage({
               }
             : undefined
         }
+        directionsPoiId={directionsPoiId}
+        onPressDirections={() => void pressDirections()}
+        directionsNotice={directionsNotice}
         initialSnapIndex={initialSnapIndex}
       />
       {riskSheet}
