@@ -199,9 +199,16 @@ export function HomePage() {
     );
   }
 
-  // 조회 실패 — phase 미전달로 discovery(상록 랜딩) 폴백. 오류를 로딩·여행 없음으로 뭉개지 않는다(INV-4).
+  // 조회 실패 — discovery(상록 랜딩)는 그대로 두되 그 위에 오류 안내 + [다시 시도]를 띄운다.
+  // 안내 없이 discovery 만 그리면 "여행 없음"과 구별되지 않는다(INV-4, TRIP-935).
   if (trips.isError) {
-    return <HomeScreen {...HOME_DEFAULT_PROPS} {...nav} />;
+    return (
+      <HomeScreen
+        {...HOME_DEFAULT_PROPS}
+        tripsError={{ onRetry: () => void trips.refetch() }}
+        {...nav}
+      />
+    );
   }
 
   // planning 이면 지배 여행 일정을 물어 카드 CTA 목적지를 정하는 자식으로 그린다(조건부-자식 —

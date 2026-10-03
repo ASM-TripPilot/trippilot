@@ -2932,6 +2932,21 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => withShellTabBar(<HomeScreen {...HOME_LOADING_PROPS} />),
   },
+  // TRIP-935 — 여행 조회 실패: discovery 위에 오류 안내 + [다시 시도](Figma 프레임 없음, 탐색 레인 오류 카드 모양).
+  {
+    key: 'home-trips-error',
+    band: 'a',
+    label: 'a01 · 여행 조회 실패',
+    login: null,
+    render: () =>
+      withShellTabBar(
+        <HomeScreen
+          {...HOME_DEFAULT_PROPS}
+          spotsLane={HOME_SPOTS_LANE}
+          tripsError={{ onRetry: noop }}
+        />
+      ),
+  },
   // ── 홈 여행 단계 얼굴 2종(TRIP-317; collecting·upcoming은 TRIP-701 제거) — 실기 판정 전용 진입점 ──
   {
     key: 'home-planning',

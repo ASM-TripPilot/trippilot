@@ -38,6 +38,7 @@ import {
   SparkleGlyph,
   SuitcaseGlyph,
 } from '@/features/home';
+import { WarningTriangleGlyph } from '@/features/explore/index.view';
 import { formatCountBadge } from '../lib/formatCountBadge';
 import { HeartButton } from '@/shared/ui/HeartButton';
 import { Skeleton } from '@/shared/ui/Skeleton';
@@ -163,6 +164,31 @@ function SearchBarBlock({ onPress }: { onPress?: () => void }): ReactElement {
         <SearchGlyph size={19} />
         <Text className="font-noto text-body text-muted-soft">
           가고 싶은 도시·장소를 검색해보세요
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+// ── 여행 조회 실패 안내(TRIP-935) — 탐색 랜딩 레인 오류 카드(StayLaneError)와 같은 모양 ──
+function TripsLoadError({ onRetry }: { onRetry: () => void }): ReactElement {
+  return (
+    <View
+      testID="home-trips-error"
+      className="mx-lg mb-[14px] items-center gap-sm rounded-card bg-surface-soft px-lg py-2xl"
+    >
+      <WarningTriangleGlyph size={28} tone="primary" />
+      <Text className="font-noto text-label text-muted">
+        여행 정보를 불러오지 못했어요
+      </Text>
+      <Pressable
+        testID="home-trips-retry"
+        accessibilityRole="button"
+        onPress={onRetry}
+        className="rounded-button border border-hairline-strong bg-canvas px-lg py-sm"
+      >
+        <Text className="font-noto-bold text-label font-bold text-ink">
+          다시 시도
         </Text>
       </Pressable>
     </View>
@@ -892,6 +918,7 @@ function DiscoveryBody({
   hero,
   sections,
   spotsLane,
+  tripsError,
   onPressSpotsMore,
   onPressSearch,
   onPressMagazine,
@@ -900,6 +927,7 @@ function DiscoveryBody({
   hero: readonly HomeMagazineHero[];
   sections: HomeSections;
   spotsLane?: HomeSpotsLane;
+  tripsError?: HomeScreenProps['tripsError'];
   onPressSpotsMore?: () => void;
   onPressSearch?: () => void;
   onPressMagazine?: () => void;
@@ -913,6 +941,7 @@ function DiscoveryBody({
         onPressBell={onPressBell}
       />
       <SearchBarBlock onPress={onPressSearch} />
+      {tripsError ? <TripsLoadError onRetry={tripsError.onRetry} /> : null}
       {/* TRIP-699 — 로딩이면 히어로는 캐러셀이 아니라 통짜 스켈레톤(390×470, Figma 2174:2307). */}
       {sections.kind === 'loading' ? (
         <Skeleton
@@ -1102,6 +1131,7 @@ function PhaseBody({
   hero,
   sections,
   spotsLane,
+  tripsError,
   phase,
   onPressSpotsMore,
   onPressTripHeroCta,
@@ -1115,6 +1145,7 @@ function PhaseBody({
         hero={hero}
         sections={sections}
         spotsLane={spotsLane}
+        tripsError={tripsError}
         onPressSpotsMore={onPressSpotsMore}
         onPressSearch={onPressSearch}
         onPressMagazine={onPressMagazine}
@@ -1153,6 +1184,7 @@ export function HomeScreen({
   hero,
   sections,
   spotsLane,
+  tripsError,
   phase,
   onPressCreateTrip,
   onPressSavedPlaces,
@@ -1180,6 +1212,7 @@ export function HomeScreen({
             hero={hero}
             sections={sections}
             spotsLane={spotsLane}
+            tripsError={tripsError}
             phase={phase}
             onPressSpotsMore={onPressSpotsMore}
             onPressTripHeroCta={onPressTripHeroCta}
