@@ -24,8 +24,10 @@ config:
   redisHost: ""
   redisPort: 6379
   scheduleDeadlineEnforced: false
-  scheduleDeadlineDay1Ms: 5000
-  scheduleDeadlineTotalMs: 20000
+  # 예산은 백엔드 코드 기본(ScheduleDeadlineProperties: 15s/60s)과 같게 둔다 — 종전 5s/20s 는
+  # 코드 기본과 어긋난 드리프트였고, 실측 생성(~15s)에서 day1 이 거의 매번 터질 값이었다.
+  scheduleDeadlineDay1Ms: 15000
+  scheduleDeadlineTotalMs: 60000
 backend:
   replicas: 1
   resources:
