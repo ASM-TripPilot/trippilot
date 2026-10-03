@@ -343,7 +343,19 @@ export function LiveItineraryPage({
           else router.replace(HOME_FALLBACK);
         }}
         // 수동 재계획 세션 진입(BR-U4-10) — 라우팅으로만(execution→planb 직접 import 없이).
-        onPressAiReplan={() => router.push(`/trips/${tripId}/planb`)}
+        // TRIP-1195 — 바라보는 날이 오늘이 아니면 그 날짜를 쿼리로 넘긴다(오늘이면 쿼리 없음 = 종전과 같은 경로).
+        // 이미 지난 날은 서버가 409 로 막는 막다른 길이라 진입 자체를 숨긴다(결정 3). 여행 구간 밖이라 보는 날이
+        // 없으면(activeDate '') 종전 그대로 — 서버가 기간 밖을 판정한다.
+        onPressAiReplan={
+          activeDate !== '' && activeDate < today
+            ? undefined
+            : () =>
+                router.push(
+                  activeDate !== '' && activeDate !== today
+                    ? `/trips/${tripId}/planb?targetDate=${activeDate}`
+                    : `/trips/${tripId}/planb`
+                )
+        }
         onPressManualEdit={() => router.push(`/trips/${tripId}/planb/manual`)}
         onPressComplete={
           activeVisitCheckId !== null

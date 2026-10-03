@@ -14,6 +14,7 @@ import { useReplanDiff } from '../model/useReplanDiff';
 import { useReplanSession } from '../model/useReplanSession';
 import type { ReplanDiff } from '@/shared/api/index.schemas';
 
+import { seoulDate } from '@/shared/lib/seoulDate';
 import type { MapCenter, MapPin } from '@/shared/map';
 
 import { ReplanDraftView, type ReplanRemovedVM } from './ReplanDraftView';
@@ -158,7 +159,8 @@ export function PlanbDraftPage({
         draftCenter(sheet?.pins) ??
         deriveReplanMapAnchor({
           days: itinerary.data?.days,
-          preferredDate: readFromInstant(data.fromInstant).date,
+          preferredDate:
+            data.targetDate ?? readFromInstant(data.fromInstant).date,
           origin: { lat: data.originLat, lng: data.originLng },
         }).center
       }
@@ -201,7 +203,14 @@ export function PlanbDraftPage({
           }
         )
       }
-      onReopenRequest={() => router.push(`/trips/${tripId}/planb`)}
+      // TRIP-1195 — 오늘이 아닌 날을 다시 짜던 세션이면 같은 날로 다시 연다(날짜를 빠뜨리면 오늘로 조용히 바뀐다, INV-4).
+      onReopenRequest={() =>
+        router.push(
+          data.targetDate && data.targetDate !== seoulDate(new Date())
+            ? `/trips/${tripId}/planb?targetDate=${data.targetDate}`
+            : `/trips/${tripId}/planb`
+        )
+      }
     />
   );
 }

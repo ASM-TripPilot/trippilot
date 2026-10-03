@@ -10,7 +10,10 @@ import {
   REPLAN_REASONS,
   type ReplanChoice,
 } from '@/pages/live/planb-request/config/replanChoices';
-import { REPLAN_SCOPES } from '@/features/request-replan/index.view';
+import {
+  REPLAN_SCOPES,
+  type ReplanScopeOption,
+} from '@/features/request-replan/index.view';
 import type { StartReplanRequestScope } from '@/shared/api/index.schemas';
 
 import { RiskWarningGlyph } from '@/features/planb/index.view';
@@ -53,6 +56,8 @@ export interface ReplanRequestSheetProps {
   selectedReasons: string[];
   selectedDirectives: string[];
   freeText: string;
+  /** 범위 칩 목록(TRIP-1195) — 없으면 종전 2칩. 오늘이 아닌 날은 "{N}일차 전체" 하나가 온다. */
+  scopeOptions?: ReplanScopeOption[];
   /** 트리거로 들어왔을 때만 — 사유 맨 앞 감지 칩. */
   detected?: ReplanDetectedChip | null;
   onSelectScope: (scope: StartReplanRequestScope) => void;
@@ -64,6 +69,8 @@ export interface ReplanRequestSheetProps {
   onClose: () => void;
   /** 재계획 시작 실패 안내(INV-4 — 조용한 실패 금지). 없으면 안 그린다. */
   errorText?: string | null;
+  /** 안내 아래 [닫기] — 다시 눌러 봐야 소용없는 실패(막다른 길)에만 준다(TRIP-1195). 없으면 버튼 없음. */
+  onCloseError?: () => void;
 }
 
 /**
@@ -160,6 +167,7 @@ export function ReplanRequestSheet({
   selectedReasons,
   selectedDirectives,
   freeText,
+  scopeOptions = REPLAN_SCOPES,
   detected,
   onSelectScope,
   onToggleReason,
@@ -168,6 +176,7 @@ export function ReplanRequestSheet({
   onSubmit,
   onClose,
   errorText,
+  onCloseError,
 }: ReplanRequestSheetProps): ReactElement {
   // 감지 칩이 있으면 그와 겹치는 정적 칩(날씨 · 감지 칩이 대신하는 사유)을 숨긴다(브리프 Q2).
   const staticReasons = detected
@@ -235,7 +244,7 @@ export function ReplanRequestSheet({
         <View className="gap-sm">
           <SectionLabel>{SCOPE_LABEL}</SectionLabel>
           <View className="flex-row gap-sm">
-            {REPLAN_SCOPES.map((option) => (
+            {scopeOptions.map((option) => (
               <Chip
                 key={option.scope}
                 testID={`planb-request-scope-${option.scope}`}
@@ -283,6 +292,18 @@ export function ReplanRequestSheet({
           >
             {errorText}
           </Text>
+        ) : null}
+        {errorText && onCloseError ? (
+          <Pressable
+            testID="planb-request-error-close"
+            accessibilityRole="button"
+            onPress={onCloseError}
+            className="items-center justify-center rounded-button bg-surface-strong py-[14px]"
+          >
+            <Text className="font-noto-bold text-label font-bold text-ink">
+              닫기
+            </Text>
+          </Pressable>
         ) : null}
 
         <Pressable

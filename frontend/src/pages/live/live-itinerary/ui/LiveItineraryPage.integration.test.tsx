@@ -398,6 +398,61 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       expect(mockPush).toHaveBeenCalledWith(`/trips/${TRIP_ID}/planb`);
     });
 
+    it('I7c 🔴 TRIP-1195 허브에서 오늘이 아닌 미래일(2일차)을 보는 중이면 [AI에게 맡기기]가 그 날짜를 targetDate 쿼리로 넘긴다', async () => {
+      server.use(twoDayItineraryOk(), tripHandler(), visitsHandler());
+
+      await renderActive();
+      fireEvent.press(screen.getByTestId('execution-live-daychip-1'));
+      fireEvent.press(screen.getByTestId('execution-live-replan-fab'));
+      fireEvent.press(screen.getByTestId('execution-live-edit-pill-ai'));
+
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(mockPush).toHaveBeenCalledWith(
+        `/trips/${TRIP_ID}/planb?targetDate=${DAY2}`
+      );
+    });
+
+    it('I7d 무회귀 — 2일짜리 일정이어도 오늘(1일차)을 보는 중이면 쿼리 없이 종전 경로다', async () => {
+      server.use(twoDayItineraryOk(), tripHandler(), visitsHandler());
+
+      await renderActive();
+      fireEvent.press(screen.getByTestId('execution-live-daychip-1'));
+      fireEvent.press(screen.getByTestId('execution-live-daychip-0'));
+      fireEvent.press(screen.getByTestId('execution-live-replan-fab'));
+      fireEvent.press(screen.getByTestId('execution-live-edit-pill-ai'));
+
+      expect(mockPush).toHaveBeenCalledWith(`/trips/${TRIP_ID}/planb`);
+    });
+
+    it('I7e 🔴 이미 지난 날(1일차, 오늘은 2일차)을 보는 중이면 [AI에게 맡기기]가 없고 [직접 수정]은 남는다 (결정 3 — 눌러서 409 받는 막다른 길을 만들지 않는다)', async () => {
+      server.use(twoDayItineraryOk(), tripHandler(), visitsHandler());
+
+      render(<LiveItineraryPage tripId={TRIP_ID} today={DAY2} />, { wrapper });
+      await waitFor(() =>
+        expect(screen.getByTestId('execution-live-screen')).toBeTruthy()
+      );
+      fireEvent.press(screen.getByTestId('execution-live-daychip-0'));
+      fireEvent.press(screen.getByTestId('execution-live-replan-fab'));
+
+      expect(screen.queryByTestId('execution-live-edit-pill-ai')).toBeNull();
+      expect(
+        screen.getByTestId('execution-live-edit-pill-manual')
+      ).toBeTruthy();
+    });
+
+    it('I7f 오늘이 2일차일 때 2일차(오늘)를 보면 종전 AI 알약·쿼리 없는 경로다', async () => {
+      server.use(twoDayItineraryOk(), tripHandler(), visitsHandler());
+
+      render(<LiveItineraryPage tripId={TRIP_ID} today={DAY2} />, { wrapper });
+      await waitFor(() =>
+        expect(screen.getByTestId('execution-live-screen')).toBeTruthy()
+      );
+      fireEvent.press(screen.getByTestId('execution-live-replan-fab'));
+      fireEvent.press(screen.getByTestId('execution-live-edit-pill-ai'));
+
+      expect(mockPush).toHaveBeenCalledWith(`/trips/${TRIP_ID}/planb`);
+    });
+
     it('I7b 열린 [직접 수정] 알약은 i07 편집(/trips/{id}/planb/manual)으로 간다 (US-PLANB-12 · TRIP-747)', async () => {
       server.use(itineraryOk(), tripHandler(), visitsHandler());
 

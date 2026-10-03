@@ -2,6 +2,8 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 
 import type { Itinerary, ReplanDiff } from '@/shared/api/index.schemas';
 
+import { seoulDate } from '@/shared/lib/seoulDate';
+
 import { PlanbDraftPage } from './PlanbDraftPage';
 
 /**
@@ -797,6 +799,30 @@ describe('🔴 P6 · AC-10 · Q4 — NO_SOLUTION 은 같은 뷰의 대안 없음
     expect(mockPush).toHaveBeenCalledTimes(2);
     expect(mockPush).toHaveBeenLastCalledWith(MANUAL_HREF);
     expect(mockMutate).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 TRIP-1195 · 다시 요청은 그 세션이 다시 짜던 날로 간다 (INV-4 — 오늘로 조용히 바뀌면 위반)', () => {
+  it('R1 오늘이 아닌 날 세션이 NO_SOLUTION 이면 [조건 바꿔 다시 짜기]가 같은 targetDate 를 싣는다', () => {
+    mockSession.data = session('NO_SOLUTION', { targetDate: '2999-01-02' });
+    renderPage();
+
+    fireEvent.press(screen.getByText('조건 바꿔 다시 짜기'));
+
+    expect(mockPush).toHaveBeenLastCalledWith(
+      `${REQUEST_HREF}?targetDate=2999-01-02`
+    );
+  });
+
+  it('R2 무회귀 — 오늘 세션이면 쿼리 없는 종전 경로다', () => {
+    mockSession.data = session('FAILED', {
+      targetDate: seoulDate(new Date()),
+    });
+    renderPage();
+
+    fireEvent.press(screen.getByText('다시 시도'));
+
+    expect(mockPush).toHaveBeenLastCalledWith(REQUEST_HREF);
   });
 });
 

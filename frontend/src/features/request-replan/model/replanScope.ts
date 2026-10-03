@@ -4,8 +4,10 @@ import type { StartReplanRequestScope } from '@/shared/api/index.schemas';
  * TRIP-439 · BR-U4-11 · DEC-U4-3 — i04 재계획 요청의 **범위 카탈로그**. 사유·방향 칩은 TRIP-750 으로
  * `config/replanChoices.ts` 에 옮겼다.
  *
- * 범위는 정확히 2종뿐이다(`PARTIAL_SLOTS`=지금 이후 · `FULL_DAY`=오늘 전체). '내일'·다일
- * 재계획은 계약상 존재하지 않는다.
+ * 범위는 2종이다(`PARTIAL_SLOTS`=지금 이후 · `FULL_DAY`=하루 전체). 한 세션은 하루만 바꾼다 — **다일**
+ * 재계획은 계약상 존재하지 않는다(DEC-U4-3). 그 하루는 오늘이 아니어도 된다(TRIP-1182 · openapi
+ * `StartReplanRequest.targetDate`): 오늘이 아닌 날은 '지금'이 없어 `FULL_DAY` 만 받는다(서버 400) —
+ * `replanScopeOptions` 가 그 날의 칩을 한 개로 줄인다.
  *
  * `import type` 로만 스키마를 끌어와(런타임 erase) 이 파일은 RN 을 안 물어 node 환경 구조가드가
  * 그대로 import 할 수 있다.
@@ -22,6 +24,26 @@ export const REPLAN_SCOPES: ReplanScopeOption[] = [
   { scope: 'PARTIAL_SLOTS', label: '지금 이후' },
   { scope: 'FULL_DAY', label: '오늘 전체' },
 ];
+
+/**
+ * TRIP-1195 · 결정 2 — 화면이 그릴 범위 칩. `otherDay` 가 없으면(오늘 · 알림·트리거 진입) 종전 2칩 그대로,
+ * 있으면(오늘이 아닌 날) `FULL_DAY` 한 칩 "{N}일차 전체"뿐이다. 일차를 모르면(일정 미도착·일정에 없는 날)
+ * "이 날 전체"로 쓴다 — 칩은 여전히 하나다.
+ */
+export function replanScopeOptions(otherDay?: {
+  dayNumber: number | null;
+}): ReplanScopeOption[] {
+  if (!otherDay) return REPLAN_SCOPES;
+  return [
+    {
+      scope: 'FULL_DAY',
+      label:
+        otherDay.dayNumber === null
+          ? '이 날 전체'
+          : `${otherDay.dayNumber}일차 전체`,
+    },
+  ];
+}
 
 /** 기본 범위 — 시트 진입 시 항상 값이 있다(BR-U4-11). */
 export const DEFAULT_REPLAN_SCOPE: StartReplanRequestScope = 'PARTIAL_SLOTS';

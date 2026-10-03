@@ -147,3 +147,40 @@ describe('M5·M6 · TRIP-750 — 새 카탈로그 key 통과 · 명시 null', ()
     expect(result.triggerId).toBeNull();
   });
 });
+
+describe('🔴 TRIP-1195 · targetDate — 바라보는 일차로 다시 짠다 (openapi StartReplanRequest.targetDate)', () => {
+  const form = {
+    scope: 'FULL_DAY' as const,
+    reasons: [],
+    directives: [],
+    freeText: '',
+  };
+
+  it('T1 targetDate 가 있으면 그 날짜를 YYYY-MM-DD 로 싣는다', () => {
+    const result = buildStartReplanRequest({
+      ...form,
+      targetDate: '2026-08-21',
+    });
+
+    expect(result.targetDate).toBe('2026-08-21');
+    expect(result.scope).toBe('FULL_DAY');
+  });
+
+  it('T2 무회귀 — targetDate 가 없으면 키 자체가 없다(생략 = 서버가 오늘, 종전 봉투와 키 집합 동일)', () => {
+    const result = buildStartReplanRequest(form);
+
+    expect('targetDate' in result).toBe(false);
+    expect(Object.keys(result).sort()).toEqual(EXPECTED_KEYS);
+  });
+
+  it('T3 targetDate 가 있으면 키 집합은 종전 7키 + targetDate 하나뿐이다(여분 키 0)', () => {
+    const result = buildStartReplanRequest({
+      ...form,
+      targetDate: '2026-08-21',
+    });
+
+    expect(Object.keys(result).sort()).toEqual(
+      [...EXPECTED_KEYS, 'targetDate'].sort()
+    );
+  });
+});

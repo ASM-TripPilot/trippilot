@@ -442,3 +442,60 @@ describe('🔴 S6 · 재계획 시트 키보드 처방 (#051 · D9 · Q10)', () 
     ).toBe('handled');
   });
 });
+
+describe('🔴 TRIP-1195 · 오늘이 아닌 날 — 범위 칩은 "{N}일차 전체" 하나 (결정 2)', () => {
+  const otherDay = [{ scope: 'FULL_DAY' as const, label: '2일차 전체' }];
+
+  it('X1 scopeOptions 를 주면 그 칩만 그린다 — 지금 이후(PARTIAL_SLOTS) 칩은 트리에 없다', () => {
+    render(
+      <ReplanRequestSheet
+        {...baseProps()}
+        scope="FULL_DAY"
+        scopeOptions={otherDay}
+      />
+    );
+
+    const chip = screen.getByTestId('planb-request-scope-FULL_DAY');
+    expect(chip).toHaveTextContent('2일차 전체');
+    expect(chip).toBeSelected();
+    expect(
+      screen.queryByTestId('planb-request-scope-PARTIAL_SLOTS')
+    ).toBeNull();
+  });
+
+  it('X2 무회귀 — scopeOptions 를 안 주면 종전 2칩(지금 이후 · 오늘 전체)이다', () => {
+    render(<ReplanRequestSheet {...baseProps()} />);
+
+    expect(
+      screen.getByTestId('planb-request-scope-PARTIAL_SLOTS')
+    ).toHaveTextContent('지금 이후');
+    expect(
+      screen.getByTestId('planb-request-scope-FULL_DAY')
+    ).toHaveTextContent('오늘 전체');
+  });
+
+  it('X3 onCloseError 가 있고 안내가 있으면 [닫기] 버튼이 안내 아래에 서고, 누르면 그 콜백이 불린다 (막다른 길 방지)', () => {
+    const onCloseError = jest.fn();
+    render(
+      <ReplanRequestSheet
+        {...baseProps()}
+        errorText="아직 일정이 없는 날이에요"
+        onCloseError={onCloseError}
+      />
+    );
+
+    expect(screen.getByTestId('planb-request-error')).toHaveTextContent(
+      '아직 일정이 없는 날이에요'
+    );
+    fireEvent.press(screen.getByTestId('planb-request-error-close'));
+    expect(onCloseError).toHaveBeenCalledTimes(1);
+  });
+
+  it('X4 onCloseError 가 없으면(종전 안내) 닫기 버튼은 없다', () => {
+    render(
+      <ReplanRequestSheet {...baseProps()} errorText="시작하지 못했어요" />
+    );
+
+    expect(screen.queryByTestId('planb-request-error-close')).toBeNull();
+  });
+});
