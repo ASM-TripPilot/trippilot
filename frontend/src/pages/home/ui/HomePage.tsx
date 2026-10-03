@@ -201,11 +201,15 @@ export function HomePage() {
 
   // 조회 실패 — discovery(상록 랜딩)는 그대로 두되 그 위에 오류 안내 + [다시 시도]를 띄운다.
   // 안내 없이 discovery 만 그리면 "여행 없음"과 구별되지 않는다(INV-4, TRIP-935).
-  if (trips.isError) {
+  // 캐시된 여행이 있으면(재조회만 실패 — v5 는 data 를 남긴 채 error) 그 여행으로 계속 그린다.
+  if (trips.isError && !trips.data) {
     return (
       <HomeScreen
         {...HOME_DEFAULT_PROPS}
-        tripsError={{ onRetry: () => void trips.refetch() }}
+        tripsError={{
+          onRetry: () => void trips.refetch(),
+          retrying: trips.isFetching,
+        }}
         {...nav}
       />
     );

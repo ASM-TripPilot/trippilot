@@ -324,6 +324,36 @@ describe('얼굴 판정 — 여행 목록으로 discovery·planning·로딩을 �
     expect(refetch).toHaveBeenCalledTimes(1);
   });
 
+  it('다시 묻는 중이면 [다시 시도]가 비활성이다 — 눌러도 반응 없는 버튼처럼 보이지 않게', () => {
+    const refetch = jest.fn();
+    mockUseGetTrips.mockReturnValue({
+      ...TRIPS_ERROR,
+      isFetching: true,
+      refetch,
+    });
+
+    render(<HomePage />);
+
+    expect(screen.getByTestId('home-trips-retry')).toBeDisabled();
+    fireEvent.press(screen.getByTestId('home-trips-retry'));
+    expect(refetch).not.toHaveBeenCalled();
+  });
+
+  // react-query v5 는 이미 받은 데이터가 있는 쿼리의 재조회가 실패하면 data 를 남긴 채 isError 가 된다.
+  it('여행을 이미 받아 둔 뒤 재조회만 실패하면 여행 카드를 유지하고 오류 안내는 없다', () => {
+    mockUseGetTrips.mockReturnValue({
+      data: [beforeTrip()],
+      isPending: false,
+      isError: true,
+      refetch: jest.fn(),
+    });
+
+    render(<HomePage />);
+
+    expect(screen.getByTestId('home-trip-hero')).toBeOnTheScreen();
+    expect(screen.queryByTestId('home-trips-error')).toBeNull();
+  });
+
   // 컬렉션 카드는 부산 고정 픽스처라 여행 지역을 헤더에 끼우면 사실과 다른 표기가 된다(심사 2.3).
   it('계획 중 홈의 컬렉션 헤더는 기본 문구다 — "서울에서 담을 만한 곳"을 끼우지 않는다', () => {
     mockUseGetTrips.mockReturnValue(

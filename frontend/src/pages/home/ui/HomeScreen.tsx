@@ -171,7 +171,13 @@ function SearchBarBlock({ onPress }: { onPress?: () => void }): ReactElement {
 }
 
 // ── 여행 조회 실패 안내(TRIP-935) — 탐색 랜딩 레인 오류 카드(StayLaneError)와 같은 모양 ──
-function TripsLoadError({ onRetry }: { onRetry: () => void }): ReactElement {
+function TripsLoadError({
+  onRetry,
+  retrying,
+}: {
+  onRetry: () => void;
+  retrying?: boolean;
+}): ReactElement {
   return (
     <View
       testID="home-trips-error"
@@ -185,7 +191,10 @@ function TripsLoadError({ onRetry }: { onRetry: () => void }): ReactElement {
         testID="home-trips-retry"
         accessibilityRole="button"
         onPress={onRetry}
-        className="rounded-button border border-hairline-strong bg-canvas px-lg py-sm"
+        disabled={retrying}
+        className={`rounded-button border border-hairline-strong bg-canvas px-lg py-sm${
+          retrying ? ' opacity-40' : ''
+        }`}
       >
         <Text className="font-noto-bold text-label font-bold text-ink">
           다시 시도
@@ -941,7 +950,12 @@ function DiscoveryBody({
         onPressBell={onPressBell}
       />
       <SearchBarBlock onPress={onPressSearch} />
-      {tripsError ? <TripsLoadError onRetry={tripsError.onRetry} /> : null}
+      {tripsError ? (
+        <TripsLoadError
+          onRetry={tripsError.onRetry}
+          retrying={tripsError.retrying}
+        />
+      ) : null}
       {/* TRIP-699 — 로딩이면 히어로는 캐러셀이 아니라 통짜 스켈레톤(390×470, Figma 2174:2307). */}
       {sections.kind === 'loading' ? (
         <Skeleton
