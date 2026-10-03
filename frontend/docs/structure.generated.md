@@ -388,7 +388,7 @@
 - `src/features/edit-preferences/model/preferenceStore.ts`  →  PreferenceDraft · usePreferenceStore
 
 ## src/features/execution/
-- `src/features/execution/index.ts`  →  useLiveItinerary · BackArrowGlyph · HeroPhotoGlyph · HeroPinGlyph · RailActiveGlyph · RailDoneGlyph · RailUpcomingGlyph · ShareGlyph · WarningFilledGlyph
+- `src/features/execution/index.ts`  →  useLiveItinerary · buildAppNavUrl · buildWebNavUrl · openNextNav · resolveNextDest · type NavDest · BackArrowGlyph · HeroPhotoGlyph · HeroPinGlyph · RailActiveGlyph · RailDoneGlyph · RailUpcomingGlyph · ShareGlyph · WarningFilledGlyph
 - `src/features/execution/index.view.ts`  →  BackArrowGlyph · HeroPhotoGlyph · HeroPinGlyph · RailActiveGlyph · RailDoneGlyph · RailUpcomingGlyph · ShareGlyph · WarningFilledGlyph
 
 ## src/features/execution/model/
