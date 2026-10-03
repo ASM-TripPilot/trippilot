@@ -2759,6 +2759,8 @@ note = """
   수동 승인 단계 없음). 멱등 기준은 `provenance.content_id`.
 - **장소 사진이 같이 들어온다** — TourAPI `firstimage` → `provenance.image_url` → `poi.image_url`.
   팀원이 보고한 "장소 사진 못 받아옴" 의 절반이 여기서 풀린다(숙소 사진은 원천이 없어 별개다).
+  **(2026-10-03 보강) 적재만으로는 안 풀렸다** — 들어온 URL 이 전부 평문 `http://` 라 iOS 가
+  조용히 막았다. 스킴 정규화가 함께 있어야 화면에 뜬다 → [[POI-IMAGE-HTTPS]].
 
 **artifact 한 장은 전국이 아니다.** 수집이 run 당 호출 예산(지역 공평 순회) 안에서 돌아서,
 전국 수준이 되려면 여러 run 의 artifact 를 순차 적재해야 한다. 런북이 이걸 명시하지 않으면
@@ -2945,7 +2947,10 @@ C8(`ReplanFacadeService`)은 `lockedSlots`·`currentSlots`·`groundingPoint`·`l
 `OriginResolver` 의 날짜 인자를 `today`→`asOf` 로 바꿨다.
 
 적대적 리뷰가 차단 3건을 냈고 **셋 다 테스트 공백**이었다(컨트롤러 매핑 미검증 · `asOf` 미검증 ·
-`?: return` 우회). 역검증 7건으로 각 가드가 자기 테스트만 깨는 것을 확인했다.
+`?: return` 우회). 가드를 하나씩 무력화해 **각각 자기 테스트만** 깨지는 것을 확인했다
+(가드 4종 · 미래일 좌표 차단 · 마지막 방문지 `takeIf` · 솔버 일자 · 컨트롤러 매핑).
+"기존 테스트 7건" 은 리뷰어 측정을 **직접 재현해 확인한 값**이다 — 픽스처 기본값을
+`listOf(tripStart)` 로 되돌리면 동의·파기 4건 + 기간/재진입/취소 3건이 깨진다.
 
 **선행 결정이 남았다 → [[REPLAN-TARGET-DATE-CANON]].** 서버만 아는 필드인 상태다.
 """
@@ -2955,7 +2960,6 @@ id = "REPLAN-TARGET-DATE-CANON"
 ticket = ""
 title = "DEC-U4-3 개정 + i10 날짜 입력 결정 — targetDate 를 쓰는 화면이 아직 없다"
 status = "todo"
-depends_on = ["REPLAN-TARGET-DATE"]
 migration = false
 touches = ["aidlc/aidlc-docs/construction/u4-in-trip-planb"]
 note = """
@@ -3027,8 +3031,10 @@ note = """
 "비가 와서 야외를 못 간다" → *지붕·실내 전망이 있는 문화·카페로 옮긴다*(0.6244).
 
 **비용**: 임베딩 파드가 2 CPU / 5Gi 를 요청해 기존 노드(c5a.large)에 안 들어가고 Karpenter 가
-`c5a.xlarge` 를 띄운다 — 시간당 약 $0.19(월 $135). 끄려면 `embedding_enabled=false` 로 한 번
-배포하면 노드도 회수된다. 롤아웃마다 maxSurge 로 큰 노드가 **일시적으로** 한 대 더 뜬다(몇 분).
+`c5a.xlarge` 를 띄운다 — 실측된 변화는 **노드 구성이 `c5a.large 1` → `c5a.xlarge 1 + c5a.large 1`**
+이라는 것까지다. **금액은 확인하지 못했다** — 이 계정에서 Pricing API 가 막혀 있다
+(`GetProducts` → `AccessDeniedException`). 온디맨드 단가는 Cost Explorer 나 콘솔로 확인할 것.
+끄려면 `embedding_enabled=false` 로 한 번 배포하면 노드도 회수된다. 롤아웃마다 maxSurge 로 큰 노드가 **일시적으로** 한 대 더 뜬다(몇 분).
 `maxSurge: 0` 으로 막을 수 있지만 그 대가가 배포마다 임베딩 1~2분 중단이라 **일부러 안 바꿨다** —
 배포가 노드 확보를 못 해 멈추기 시작하면 그때 바꾼다.
 
