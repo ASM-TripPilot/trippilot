@@ -264,6 +264,11 @@ describe('AC-6 Sentry 자동 업로드 끔', () => {
     expect(production.env?.SENTRY_DISABLE_AUTO_UPLOAD).toBe('true');
     expect(preview.env?.SENTRY_DISABLE_AUTO_UPLOAD).toBe('true');
     expect(production.autoIncrement).toBe(true);
+    // 운영 빌드는 API 주소 env 가 비면 부팅 중 throw 한다(shared/api, TRIP-936) — 빌드 프로파일이 https 주소를 박아 둬야 한다.
+    // (어느 환경 주소인지는 출시 결정 12 소관이라 값은 못 박지 않는다.)
+    expect(String(production.env?.EXPO_PUBLIC_API_BASE_URL)).toMatch(
+      /^https:\/\/[^/]+$/
+    );
     expect(optionsOf('@sentry/react-native/expo')).toEqual({
       organization: 'trippilot',
       project: 'trippilot-frontend',
