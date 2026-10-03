@@ -384,6 +384,10 @@ export function TripNewStep1Page({
   // 않게). 요청(등록·PATCH·동기화)이 날아가는 동안만 켜진다 — 성공 뒤에는 풀어 둬야 step2 에서
   // 돌아와 값을 바꾼 `[다음]`이 PATCH 로 나간다(TRIP-1113 AC-2b).
   const submitLockedRef = useRef(false);
+  // 서버에 **마지막으로 보낸** 박수 합(POST·PATCH 가 성공한 시점) — 0박이면 거점 단계를 건너뛰는 판정의 기준이다.
+  // 꼭 갈 곳 [다시 시도]는 여행을 PATCH 하지 않으므로, 그 사이 화면에서 박수를 바꿔도 서버 여행과 어긋나지 않게
+  // 스토어의 지금 값이 아니라 이 값을 본다(없으면 — 재마운트 직후 — 스토어 값으로 폴백).
+  const serverNightsRef = useRef<number | undefined>(undefined);
 
   // 이탈 확인(TRIP-1114) — 이 세션에서 이미 여행을 만들었을 때만 ‹ 가 다이얼로그를 연다.
   const [leaveOpen, setLeaveOpen] = useState(false);
@@ -472,6 +476,26 @@ export function TripNewStep1Page({
     // 성공 — 잠금을 푼다. 되돌아와 재탭해도 여행이 또 생기지 않는 것은 이제 `createdTripId`가
     // 막는다(아래 `submit` 이 PATCH 로 보낸다, TRIP-1113).
     submitLockedRef.current = false;
+    goAfterTripReady(tripId);
+  }
+
+  /**
+   * 여행이 서버에 있고 꼭 갈 곳까지 맞춰진 뒤의 다음 화면. **0박(당일치기)은 거점 숙소 단계(2/2)를 건너뛴다** —
+   * 묵는 밤이 없어 고를 숙소가 없으니 "숙소 없이"로 곧장 방식 선택(h04)으로 간다(0박 결정). 1박 이상은 그대로 2/2.
+   * 합은 **서버에 마지막으로 보낸 값**으로 본다(`serverNightsRef`) — 꼭 갈 곳 재시도는 PATCH 없이 등록만 다시
+   * 하므로 화면에서 고친 박수가 아니라 서버 여행의 박수로 가야 거점 단계가 어긋나지 않는다.
+   */
+  function goAfterTripReady(tripId: string): void {
+    const nights =
+      serverNightsRef.current ??
+      nightsSum(useTripWizardStore.getState().destinations);
+    if (nights === 0) {
+      router.push({
+        pathname: '/trips/[tripId]/itinerary/method',
+        params: { tripId },
+      });
+      return;
+    }
     router.push('/trips/new/step2');
   }
 
@@ -533,7 +557,7 @@ export function TripNewStep1Page({
       return;
     }
     setMustVisitError(undefined);
-    router.push('/trips/new/step2');
+    goAfterTripReady(tripId);
   }
 
   /** 이미 만든 여행을 화면 값으로 고친다(TRIP-1113 AC-1·2). PATCH 가 실패하면 사유와 무관하게 제출
@@ -541,13 +565,15 @@ export function TripNewStep1Page({
    * PATCH 가 성공한 **뒤에만** 한다. */
   async function editTrip(tripId: string): Promise<void> {
     setSubmitError(undefined);
+    const fields = tripFields();
     try {
       // 생성과 같은 규칙으로 조립한다 — 입력에 취향 스냅숏이 없으니 결과에도 없다.
-      await patchTripsTripId(tripId, buildCreateTripRequest(tripFields()));
+      await patchTripsTripId(tripId, buildCreateTripRequest(fields));
     } catch {
       setSubmitError(SUBMIT_ERROR_MESSAGE);
       return;
     }
+    serverNightsRef.current = nightsSum(fields.destinations);
     await syncMustVisits(tripId);
   }
 
@@ -635,6 +661,7 @@ export function TripNewStep1Page({
 
     // g02(TRIP-84·TRIP-193)가 읽는 소비자 — 라우트가 id 를 안 나른다.
     setCreatedTripId(trip.tripId);
+    serverNightsRef.current = nightsSum(input.destinations);
 
     // ↓ 여기서부터는 위 `try` 바깥이다. 여행은 이미 만들어졌으므로 아래 실패는 등록 실패다.
     // ⚠️ 시드를 여기서 **다시 읽는다** — `await` 동안 담은 목록이 도착해 늘어도 `[다음]`을 누른

@@ -31,6 +31,8 @@ import BottomSheet, {
 
 import { SHEET_HANDLE_INDICATOR_STYLE } from '@/features/trip/index.view';
 
+import { nightsOnlyLabel } from '@/entities/trip';
+import { minNightsFor } from '@/features/create-trip';
 import type { TripDestination } from '@/shared/api/index.schemas';
 
 import {
@@ -94,10 +96,13 @@ function StepperButton({
 
 function DestinationRow({
   destination,
+  minNights,
   onChangeNights,
   onRemove,
 }: {
   destination: TripDestination;
+  /** 박수 하한 — 도시 하나면 0(당일치기), 여럿이면 1. */
+  minNights: number;
   onChangeNights: (seq: number, nights: number) => void;
   onRemove: (seq: number) => void;
 }): ReactElement {
@@ -114,13 +119,13 @@ function DestinationRow({
         <View className="flex-row items-center gap-[10px]">
           <StepperButton
             testID={`trip-wizard-destination-nights-dec-${seq}`}
-            disabled={nights === 1}
+            disabled={nights <= minNights}
             onPress={() => onChangeNights(seq, nights - 1)}
           >
             <StepperMinusGlyph size={20} />
           </StepperButton>
           <Text className="font-noto-bold text-card-title font-bold text-ink">
-            {`${nights}박`}
+            {nightsOnlyLabel(nights)}
           </Text>
           <StepperButton
             testID={`trip-wizard-destination-nights-inc-${seq}`}
@@ -182,6 +187,7 @@ export function DestinationEditSheet({
                 {index > 0 ? <View className="h-[1px] bg-hairline" /> : null}
                 <DestinationRow
                   destination={destination}
+                  minNights={minNightsFor(destinations.length)}
                   onChangeNights={onChangeNights}
                   onRemove={onRemove}
                 />

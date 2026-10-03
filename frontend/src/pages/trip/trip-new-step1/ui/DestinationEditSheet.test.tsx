@@ -99,11 +99,14 @@ describe('AC-2 · 스테퍼 증감 → onChangeNights(seq, nights±1)', () => {
   });
 });
 
-describe('AC-2 · − 는 nights===1 이면 진짜 disabled (01b D1)', () => {
+describe('AC-2 · 다도시에서 − 는 nights===1 이면 진짜 disabled (01b D1)', () => {
   it('disabled 매처 + press 무반응 + 콜백 0회 3단', () => {
-    const spies = renderSheet([{ seq: 1, region: '부산', nights: 1 }]);
+    const spies = renderSheet([
+      { seq: 1, region: '부산', nights: 2 },
+      { seq: 2, region: '경주', nights: 1 },
+    ]);
 
-    const dec = screen.getByTestId('trip-wizard-destination-nights-dec-1');
+    const dec = screen.getByTestId('trip-wizard-destination-nights-dec-2');
     expect(dec).toBeDisabled();
 
     // 진짜 disabled prop 이면 press 가 안 먹는다(accessibilityState 만 세운 가짜는 여기서 red).
@@ -111,8 +114,33 @@ describe('AC-2 · − 는 nights===1 이면 진짜 disabled (01b D1)', () => {
     expect(spies.onChangeNights).not.toHaveBeenCalled();
 
     // 짝(긍정) — + 는 여전히 활성이라 눌린다(1 → 2).
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-nights-inc-1'));
-    expect(spies.onChangeNights).toHaveBeenCalledWith(1, 2);
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-nights-inc-2'));
+    expect(spies.onChangeNights).toHaveBeenCalledWith(2, 2);
+  });
+});
+
+describe('0박 결정 · 도시가 하나면 − 가 0박(당일치기)까지 내려간다', () => {
+  it('1박에서 − 는 활성이고 눌리면 (seq, 0) 으로 콜백한다', () => {
+    const spies = renderSheet([{ seq: 1, region: '부산', nights: 1 }]);
+
+    const dec = screen.getByTestId('trip-wizard-destination-nights-dec-1');
+    expect(dec).not.toBeDisabled();
+
+    fireEvent.press(dec);
+    expect(spies.onChangeNights).toHaveBeenCalledWith(1, 0);
+  });
+
+  it('0박이면 라벨이 "당일치기"이고 − 는 진짜 disabled 다', () => {
+    const spies = renderSheet([{ seq: 1, region: '부산', nights: 0 }]);
+
+    const row = screen.getByTestId('trip-wizard-destination-row-1');
+    expect(within(row).getByText('당일치기')).toBeOnTheScreen();
+    expect(within(row).queryByText('0박')).toBeNull();
+
+    const dec = screen.getByTestId('trip-wizard-destination-nights-dec-1');
+    expect(dec).toBeDisabled();
+    fireEvent.press(dec);
+    expect(spies.onChangeNights).not.toHaveBeenCalled();
   });
 });
 

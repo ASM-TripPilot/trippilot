@@ -31,17 +31,19 @@ describe('🔴 B. 박수 라벨 — 핵심 문자열 같고 실패 처리 다르
     expect(formatNightsLabel('2026-06-13', '2026-06-10')).toBe('');
   });
 
-  it('nightsLabel — "2박 3일" / 같은날·역전·null 은 null', () => {
+  it('nightsLabel — "2박 3일" / 같은 날은 "당일치기" / 역전·null 은 null', () => {
     expect(nightsLabel('2026-05-01', '2026-05-03')).toBe('2박 3일');
-    // ★ 실패값 = null (formatNightsLabel 의 '' 과 다르다 — 가짜 "0박" 금지).
-    expect(nightsLabel('2026-05-01', '2026-05-01')).toBeNull();
+    // 0박(같은 날)은 합법인 당일치기다 — 가짜 "0박 1일"이 아니라 '당일치기'.
+    expect(nightsLabel('2026-05-01', '2026-05-01')).toBe('당일치기');
+    // ★ 실패값 = null (formatNightsLabel 의 '' 과 다르다).
+    expect(nightsLabel('2026-05-03', '2026-05-01')).toBeNull();
     expect(nightsLabel('2026-05-01', null)).toBeNull();
     expect(nightsLabel(null, '2026-05-03')).toBeNull();
   });
 
   it('두 함수의 실패값이 서로 다르다 — 빈 문자열 vs null(통일 금지 못박기)', () => {
     const badForward = formatNightsLabel('2026-06-13', '2026-06-10');
-    const badRecord = nightsLabel('2026-05-01', '2026-05-01');
+    const badRecord = nightsLabel('2026-05-03', '2026-05-01');
     expect(badForward).toBe('');
     expect(badRecord).toBeNull();
     // 둘이 같은 값이면(둘 다 '' 또는 둘 다 null) 실패 처리가 통일된 것 = 회귀.

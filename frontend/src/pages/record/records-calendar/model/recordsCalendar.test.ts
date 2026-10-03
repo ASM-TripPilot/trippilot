@@ -227,12 +227,12 @@ describe('formatTripDateRange — 카드 날짜범위 라벨', () => {
   });
 });
 
-describe('nightsLabel — 박수 라벨(가짜 0 금지)', () => {
-  it('양수 박수만 라벨을 만들고, 같은날·역전·null은 null이다', () => {
+describe('nightsLabel — 박수 라벨(0박은 당일치기, 역전은 null)', () => {
+  it('박수 라벨을 만들고, 같은 날은 당일치기, 역전·null은 null이다', () => {
     expect(nightsLabel('2026-05-01', '2026-05-03')).toBe('2박 3일');
     expect(nightsLabel('2026-05-01', '2026-05-02')).toBe('1박 2일');
-    // 같은날(0박)·역전은 가짜 "0박"을 만들지 않고 null.
-    expect(nightsLabel('2026-05-01', '2026-05-01')).toBeNull();
+    // 같은 날(0박)은 합법인 당일치기 — 가짜 "0박 1일"이 아니다. 역전은 null.
+    expect(nightsLabel('2026-05-01', '2026-05-01')).toBe('당일치기');
     expect(nightsLabel('2026-05-03', '2026-05-01')).toBeNull();
     expect(nightsLabel(null, '2026-05-03')).toBeNull();
   });
