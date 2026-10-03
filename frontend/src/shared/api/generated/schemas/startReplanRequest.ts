@@ -14,6 +14,8 @@ import type { StartReplanRequestScope } from './startReplanRequestScope';
 export interface StartReplanRequest {
   /** 재계획 범위(DEC-U4-3). ai ReplanScope 어휘를 그대로 쓴다 */
   scope: StartReplanRequestScope;
+  /** 다시 짤 일자(TRIP-1182). **생략하면 오늘** — 종전 클라이언트는 그대로 돈다. 오늘이 아닌 날은 scope=FULL_DAY 만 받는다(400) — '그 날의 지금'은 없다. 지난 날·여행 기간 밖·일정이 아직 없는 날(부분 생성)은 409. 한 세션은 여전히 **하루만** 바꾼다(DEC-U4-3 의 다일 금지 유지) */
+  targetDate?: string | null;
   /** 출발 기준점. **생략하면 서버가 사다리로 정한다**(BR-U4-19) — 실측 → 수동 핀 → 마지막 완료 방문지 → 등록 숙소 앵커. 위치를 못 잡았다고 재계획을 막지 않으며, 어떤 가정을 썼는지는 응답의 originKind·originEstimated 로 밝힌다 */
   originKind: StartReplanRequestOriginKind;
   /** GPS·MANUAL 이면 필수 */

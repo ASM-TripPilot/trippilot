@@ -1126,7 +1126,7 @@ paths:
         '201':
           description: SKIPPED 실적 생성 — 허브·기록은 skippedAt 로 건너뜀을 판정한다(상태는 timestamp 파생, INV-U5-01)
           content: { application/json: { schema: { $ref: '#/components/schemas/VisitCheck' } } }
-        '409': { description: 그 슬롯에 이미 실적이 있음 — 같은 건너뜀 재전송은 VISIT_ALREADY_RECORDED, 다른 기록은 VISIT_CONFLICT(도착분은 기존 skip 경로로) }
+        '409': { description: '그 슬롯에 이미 실적이 있음 — 같은 건너뜀 재전송은 VISIT_ALREADY_RECORDED, 다른 기록은 VISIT_CONFLICT(도착분은 기존 skip 경로로)' }
   /trips/{tripId}/visits/{visitCheckId}/skip:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1518,7 +1518,7 @@ paths:
       responses:
         '200': { description: 반영됨, content: { application/json: { schema: { $ref: '#/components/schemas/ReplanSession' } } } }
         '404': { description: 여행 없음/타 계정/세션 없음 }
-        '409': { description: 초안 없음(산출 중·대안 없음·이미 끝남) · 그 사이 일정이 교체됨 — 확정 일정은 막지 않는다(여행 중 반영 허용, TRIP-999) }
+        '409': { description: '초안 없음(산출 중·대안 없음·이미 끝남) · 그 사이 일정이 교체됨 — 확정 일정은 막지 않는다(여행 중 반영 허용, TRIP-999)' }
   /trips/{tripId}/replan-sessions/{sessionId}/diff:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }

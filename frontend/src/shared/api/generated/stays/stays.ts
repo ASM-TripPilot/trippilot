@@ -27,6 +27,7 @@ import type {
   GetStaysGeocodeParams,
   GetStaysReverseGeocodeParams,
   GetStaysSearchParams,
+  GetStaysStayIdOutboundParams,
   PlaceSearchUnavailableResponse,
   ReverseGeocodeResult,
   StayDetail,
@@ -324,6 +325,189 @@ export function useGetStaysStayId<
   queryKey: DataTag<QueryKey, TData, TError>;
 } {
   const queryOptions = getGetStaysStayIdQueryOptions(stayId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * 클릭을 기록하고 예약 목적지로 302 리다이렉트한다. 클라이언트가 OTA URL 을 직접 조립하지 않는다 — 목적지 교체(웹검색 폴백 → OTA 딥링크)가 앱 배포 없이 서버 변경만으로 된다.
+ *
+ * OTA 계약 전에는 웹검색 폴백(`"{숙소명} 예약"`, BR-U1-31 이 명시 허용하는 우회)으로 보낸다. 날짜·인원은 지금 목적지에 실리지 않지만 클릭에 남는다 — 계약 협상 근거 데이터다.
+ *
+ * 응답 본문은 없다. 클릭·전환 지표는 내부 전용이라 사용자 대면 응답에 싣지 않는다(BR-U1-32).
+ *
+ * Bearer 선택(bootstrap 선례) — 브라우저·커스텀탭이 열어 Authorization 을 실을 수 없다. 토큰이 오면 계정이 클릭에 남고, 없으면 익명 클릭이다.
+ * @summary 예약 아웃바운드 302(C5 칸 1 · BR-U1-29~32)
+ */
+export const getStaysStayIdOutbound = (
+  stayId: string,
+  params?: GetStaysStayIdOutboundParams,
+  signal?: AbortSignal
+) => {
+  return customInstance<unknown>({
+    url: `/stays/${stayId}/outbound`,
+    method: 'GET',
+    params,
+    signal,
+  });
+};
+
+export const getGetStaysStayIdOutboundQueryKey = (
+  stayId: string,
+  params?: GetStaysStayIdOutboundParams
+) => {
+  return [`/stays/${stayId}/outbound`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetStaysStayIdOutboundQueryOptions = <
+  TData = Awaited<ReturnType<typeof getStaysStayIdOutbound>>,
+  TError = void | ValidationErrorResponse | ErrorResponse,
+>(
+  stayId: string,
+  params?: GetStaysStayIdOutboundParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getStaysStayIdOutbound>>,
+        TError,
+        TData
+      >
+    >;
+  }
+) => {
+  const { query: queryOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetStaysStayIdOutboundQueryKey(stayId, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getStaysStayIdOutbound>>
+  > = ({ signal }) => getStaysStayIdOutbound(stayId, params, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: stayId !== null && stayId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getStaysStayIdOutbound>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetStaysStayIdOutboundQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getStaysStayIdOutbound>>
+>;
+export type GetStaysStayIdOutboundQueryError =
+  void | ValidationErrorResponse | ErrorResponse;
+
+export function useGetStaysStayIdOutbound<
+  TData = Awaited<ReturnType<typeof getStaysStayIdOutbound>>,
+  TError = void | ValidationErrorResponse | ErrorResponse,
+>(
+  stayId: string,
+  params: undefined | GetStaysStayIdOutboundParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getStaysStayIdOutbound>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getStaysStayIdOutbound>>,
+          TError,
+          Awaited<ReturnType<typeof getStaysStayIdOutbound>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetStaysStayIdOutbound<
+  TData = Awaited<ReturnType<typeof getStaysStayIdOutbound>>,
+  TError = void | ValidationErrorResponse | ErrorResponse,
+>(
+  stayId: string,
+  params?: GetStaysStayIdOutboundParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getStaysStayIdOutbound>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getStaysStayIdOutbound>>,
+          TError,
+          Awaited<ReturnType<typeof getStaysStayIdOutbound>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetStaysStayIdOutbound<
+  TData = Awaited<ReturnType<typeof getStaysStayIdOutbound>>,
+  TError = void | ValidationErrorResponse | ErrorResponse,
+>(
+  stayId: string,
+  params?: GetStaysStayIdOutboundParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getStaysStayIdOutbound>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary 예약 아웃바운드 302(C5 칸 1 · BR-U1-29~32)
+ */
+
+export function useGetStaysStayIdOutbound<
+  TData = Awaited<ReturnType<typeof getStaysStayIdOutbound>>,
+  TError = void | ValidationErrorResponse | ErrorResponse,
+>(
+  stayId: string,
+  params?: GetStaysStayIdOutboundParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getStaysStayIdOutbound>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getGetStaysStayIdOutboundQueryOptions(
+    stayId,
+    params,
+    options
+  );
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<
     TData,
