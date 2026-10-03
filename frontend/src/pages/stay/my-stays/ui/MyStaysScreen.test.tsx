@@ -18,7 +18,7 @@ import { MUTED_SOFT } from '@/features/settings';
  *
  * 한 파일로 합친 기록(TRIP-1148): 옛 `MyStaysScreen.test.tsx`·`.l04parity.test.tsx` 를 각자의 바깥 describe 로
  * 옮겼다. l04parity 안에 있던 남의 컴포넌트 테스트 둘은 소스 옆으로 떼었다(01b Q4) — 출발점 다이얼로그 →
- * `BaseToggleDialog.test.tsx`, `ChevronRightGlyph` 기본색 → `SettingsGlyphs.test.tsx`.
+ * `BaseToggleDialog.test.tsx`(TRIP-1191 로 컴포넌트째 삭제), `ChevronRightGlyph` 기본색 → `SettingsGlyphs.test.tsx`.
  * INV-3 "분·시간·소요 0건" 렌더 it 은 지웠다 — 숙소 계약(`SavedStay`)에 시간·거리 재료가 없다(README 판정 4 하위 규칙).
  */
 
@@ -40,7 +40,7 @@ describe('행·출발점 변경·empty (옛 본 파일)', () => {
    * 왜 이렇게 테스트하나(02a ★1·★2):
    *  - TRIP-1076: 옛 해제 다이얼로그 게이트(TRIP-605·1017)는 사라졌다. 확인 다이얼로그(Figma 1606 「일정 다시 생성」)를
    *    띄우지 않는 이유 — 거점 화면은 일정을 재생성하지 않아 그 문구가 거짓 안내가 된다(01b Q1, INV-4).
-   *    `BaseToggleDialog` 는 프리뷰 키(`my-stays-dialog`) 때문에 파일로만 남는다(고아, 02a §3).
+   *    `BaseToggleDialog` 는 TRIP-1191 로 삭제됐다(소비처 0).
    *  - push 목적지('/stays'·거점 화면)는 페이지 배선이라 화면은 콜백 호출까지만(`MyStaysPage.integration.test.tsx`가 잠금).
    *
    * (개념) `getByText('문자열')`=leaf 완전일치 · `getByText(/정규식/)`/`queryAllByText(/정규식/)`=부분포함
@@ -273,7 +273,7 @@ describe('Figma l04 정합 (옛 .l04parity)', () => {
    *    미등록 행의 "출발점 지정" 점선 배지는 TRIP-989(D13)로 사라졌다 — 없음을 잠근다.
    *  - AC-2: 칩 모서리 8·글자색(날짜 body / 출처·메모 muted), 카드 r12·카드 간 16, 주소 줄 유무, 구분선 막대.
    *  - AC-3: empty 는 제목 없이 96 회색 원 + Figma 침대 + 설명 14 + 내용 폭 CTA h44.
-   *  - AC-4(출발점 다이얼로그)·AC-7(`ChevronRightGlyph` 기본색)은 소스 옆 `BaseToggleDialog.test.tsx`·
+   *  - AC-4(출발점 다이얼로그)·AC-7(`ChevronRightGlyph` 기본색)은 소스 옆 `BaseToggleDialog.test.tsx`(TRIP-1191 로 삭제)·
    *    `SettingsGlyphs.test.tsx` 로 옮겼다(TRIP-1148 · 01b Q4).
    *
    * 게이트(확정 전 콜백 0회·행당 토글 1개·disabled)는 `MyStaysScreen.test.tsx`(무수정)가 잠근다.
