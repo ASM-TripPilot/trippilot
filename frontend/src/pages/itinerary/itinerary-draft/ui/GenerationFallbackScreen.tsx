@@ -31,8 +31,9 @@ import {
  * h07 [완전AI] 일정 생성 · fallback — Figma `3831:2177`.
  *
  * **폴백 인터스티셜**이다(01b ⑦). AI 가 취향을 못 넣고 기본 동선만 그렸다는 사실을 먼저 보여주고,
- * [기본 일정 보기]로 넘어가야 실제 초안을 본다 — 곁줄 배너(DraftScreen)를 대체해 세 폴백 신호
- * (deterministic·minimal·demoted)와 하드 실패(생성 자체 실패)를 한 얼굴에 흡수한다(INV-4).
+ * [기본 일정 보기]로 넘어가야 실제 초안을 본다 — 곁줄 배너(DraftScreen)를 대체해 두 폴백 신호
+ * (deterministic·minimal)와 하드 실패(생성 자체 실패)를 한 얼굴에 흡수한다(INV-4). 후보 부족(LOW)은
+ * AI 가 돈 결과라 여기로 오지 않는다(TRIP-1174 — 초안 시트 안 한 줄 안내).
  *
  * 화면은 **완성된 값만 받는다**(props-only) — `solveMode`·`isFallback`·`candidatesSummary`
  * 원천 신호도 그 어휘도 모른다(판정은 model 의 `resolveFallbackNotice`, 라우팅은 DraftPage).

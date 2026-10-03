@@ -63,6 +63,7 @@ import {
   buildGenerationGauge,
   foldGenerationGauge,
   formatCoPickDayHeader,
+  resolveShortfallNotice,
 } from '@/features/itinerary/index.view';
 import { type PlanDayTab } from '@/features/itinerary/model/planState';
 import type { MustVisitListItem } from '@/features/itinerary/index.view';
@@ -733,8 +734,9 @@ function renderH08DraftNoticeShell(options: {
   fallback: boolean;
   staleFailed: boolean;
   unplaced?: UnplacedMustVisitRow[];
+  shortfall?: string | null;
 }): ReactElement {
-  const { fallback, staleFailed, unplaced } = options;
+  const { fallback, staleFailed, unplaced, shortfall } = options;
   return (
     <MapSheetShell
       center={{ lat: 35.1532, lng: 129.1188 }}
@@ -764,6 +766,7 @@ function renderH08DraftNoticeShell(options: {
       <View className="gap-md px-lg pb-2xl pt-xs">
         <DraftFallbackBanner
           fallback={fallback}
+          shortfall={shortfall ?? null}
           staleFailed={staleFailed}
           onManualPlan={noop}
         />
@@ -4812,6 +4815,27 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () =>
       renderH08DraftNoticeShell({ fallback: true, staleFailed: false }),
+  },
+  {
+    // TRIP-1174 — 후보 LOW 인데 AI 는 정상(FULL_AI·isFallback=false). 제목은 그대로 「AI 추천안」, 시트 맨 위
+    // 정보 한 줄만. 문구는 model 판정을 그대로 태워 실화면과 같은 글자를 본다(Figma 프레임 없음 — 육안 대조용).
+    key: 'h08-draft-shortfall',
+    band: 'h',
+    label: 'h08 · 후보 부족(LOW)',
+    login: null,
+    render: () =>
+      renderH08DraftNoticeShell({
+        fallback: false,
+        staleFailed: false,
+        shortfall: resolveShortfallNotice({
+          solveMode: 'FULL_AI',
+          isFallback: false,
+          candidatesSummary: {
+            level: 'LOW',
+            shortfallCategories: ['SHOPPING', 'NIGHT_VIEW'],
+          },
+        }),
+      }),
   },
   {
     key: 'h08-draft-stale-failed',
