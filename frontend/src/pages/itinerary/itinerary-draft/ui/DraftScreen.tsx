@@ -12,7 +12,7 @@ import type {
   DraftView,
 } from '@/features/itinerary/index.view';
 import { buildSlotKey } from '@/entities/itinerary-slot';
-import { VIOLATION_NOTICE } from '@/entities/itinerary-slot';
+import { violationNotice } from '@/entities/itinerary-slot';
 import { Skeleton } from '@/shared/ui/Skeleton';
 import { timeBandLabel } from '@/entities/itinerary-slot';
 import {
@@ -172,7 +172,7 @@ function DraftSlotCard({
   fallback: boolean;
 }): ReactElement {
   const slotKey = buildSlotKey(date, slot.poiId);
-  const violation = slot.hasViolation ? VIOLATION_NOTICE : null;
+  const violation = violationNotice(slot);
   const tagText =
     slot.tags.length > 0 ? slot.tags.map((tag) => `#${tag}`).join(' · ') : null;
   const distance = slot.distanceRange ?? null;

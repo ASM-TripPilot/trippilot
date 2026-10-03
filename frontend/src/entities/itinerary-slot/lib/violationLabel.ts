@@ -11,7 +11,7 @@ const MINUTE_RANGE = /(\d+)~(\d+)/g;
 
 const VIOLATION_FALLBACK = '일정 충돌';
 
-/** 사유 원문에 소요시간(`이동 N분 필요`)이 섞여 오므로 새 표면은 원문을 아예 그리지 않는다(INV-3 · D5 파싱 금지). */
+/** 사유가 없거나 숫자가 섞인 옛 형식일 때의 고정 라벨(INV-3 · D5 파싱 금지). */
 export const VIOLATION_NOTICE = '일정 확인이 필요해요';
 
 function minuteOfDay(minutes: string): string {
@@ -35,4 +35,18 @@ export function violationLabel(slot: {
 }): string | null {
   if (!slot.hasViolation) return null;
   return formatViolationMinutes(slot.violationReason ?? VIOLATION_FALLBACK);
+}
+
+/**
+ * TRIP-1031 · 새 세 표면의 표식 문구. 서버(TRIP-1030 `ViolationText`)가 type 만 보고 내리는 정성 문구
+ * (숫자 없음)는 그대로 보이고, 비었거나 숫자가 하나라도 섞인 옛 형식(`이동 N분 필요`·`543~618`)은
+ * 고정 라벨로 막는다(INV-3 방어선). 편집기의 `violationLabel` 은 건드리지 않는다.
+ */
+export function violationNotice(slot: {
+  hasViolation: boolean;
+  violationReason?: string | null;
+}): string | null {
+  if (!slot.hasViolation) return null;
+  const reason = slot.violationReason?.trim();
+  return reason && !/\d/.test(reason) ? reason : VIOLATION_NOTICE;
 }

@@ -8,7 +8,11 @@ export { projectSlotProgress } from './lib/slotProgress';
 export type { ProjectedSlot } from './lib/slotProgress';
 export { suggestNextSlotTime } from './lib/suggestNextSlotTime';
 export { timeBandLabel } from './lib/timeBandLabel';
-export { VIOLATION_NOTICE, violationLabel } from './lib/violationLabel';
+export {
+  VIOLATION_NOTICE,
+  violationLabel,
+  violationNotice,
+} from './lib/violationLabel';
 export { deriveVisitProgress } from './lib/visitProgress';
 export type { ItineraryDaysItemSlotsItem, ReplanSlotVM } from './model';
 export { ReplanSlotRow } from './ui/ReplanSlotRow';

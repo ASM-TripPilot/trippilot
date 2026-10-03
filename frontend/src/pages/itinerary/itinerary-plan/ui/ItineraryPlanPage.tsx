@@ -6,7 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useRouter, type Href } from 'expo-router';
 
 import { buildSlotKey } from '@/entities/itinerary-slot';
-import { VIOLATION_NOTICE } from '@/entities/itinerary-slot';
+import { violationNotice } from '@/entities/itinerary-slot';
 import { SlotStopCard } from '@/entities/itinerary-slot';
 import { useSavedPlaces } from '@/features/save-place';
 import {
@@ -436,7 +436,7 @@ export function ItineraryPlanPage({
                   : undefined
               }
               // 위반은 휴관 경고와 달리 확정 여부로 가르지 않는다 — 데이터가 정한다(BR-U3-13 · TRIP-1008 Q3).
-              violation={slot.hasViolation ? VIOLATION_NOTICE : null}
+              violation={violationNotice(slot)}
             />,
           ];
           if (index < slots.length - 1) {
