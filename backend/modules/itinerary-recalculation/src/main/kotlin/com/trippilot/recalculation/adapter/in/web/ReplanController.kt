@@ -104,6 +104,11 @@ class ReplanController(
  */
 data class StartReplanRequest(
     @field:NotNull(message = "재계획 범위는 필수입니다.") val scope: ReplanScope?,
+    /**
+     * 다시 짤 일자(TRIP-1182). **생략하면 오늘** — 종전 클라이언트는 그대로 돈다.
+     * 오늘이 아닌 날은 `FULL_DAY` 만 받는다('그 날의 지금'은 없다). 지난 날·기간 밖·일정 없는 날은 409.
+     */
+    val targetDate: LocalDate? = null,
     /** 생략하면 서버가 사다리로 정한다(BR-U4-19) — 위치를 못 잡았다고 재계획을 막지 않는다. */
     val originKind: OriginKind? = null,
     val originLat: Double? = null,
@@ -124,6 +129,7 @@ data class StartReplanRequest(
         }
         return StartReplan(
             scope = scope!!,
+            targetDate = targetDate,
             origin = originKind?.let { ReplanOrigin(it, originLat, originLng) },
             reasons = reasons,
             directives = directives,
@@ -144,6 +150,8 @@ data class ReplanSessionResponse(
     val itineraryId: UUID,
     val triggerId: UUID?,
     val scope: ReplanScope,
+    /** 어느 날을 다시 짰는가 — 요청이 생략했으면 서버가 정한 '오늘'이 그대로 보인다(TRIP-1182). */
+    val targetDate: LocalDate,
     val fromInstant: Instant,
     val originKind: OriginKind,
     val originLat: Double?,
@@ -160,7 +168,7 @@ data class ReplanSessionResponse(
 ) {
     companion object {
         fun from(s: ReplanSession) = ReplanSessionResponse(
-            s.sessionId, s.tripId, s.itineraryId, s.triggerId, s.scope, s.fromInstant,
+            s.sessionId, s.tripId, s.itineraryId, s.triggerId, s.scope, s.targetDate, s.fromInstant,
             s.origin.kind, s.origin.lat, s.origin.lng, s.origin.isEstimated,
             s.reasons, s.directives, s.freeText, s.excludedPoiIds,
             s.status, s.createdAt, s.closedAt,

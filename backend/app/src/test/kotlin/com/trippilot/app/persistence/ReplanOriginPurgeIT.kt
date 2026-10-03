@@ -44,9 +44,11 @@ class ReplanOriginPurgeIT : AbstractPostgresIntegrationTest() {
         val id = UUID.randomUUID()
         jdbc.update(
             """
-            INSERT INTO replan_session (session_id, trip_id, itinerary_id, scope, from_instant, origin_kind, origin_lat, origin_lng,
+            INSERT INTO replan_session (session_id, trip_id, itinerary_id, scope, target_date, from_instant,
+                                        origin_kind, origin_lat, origin_lng,
                                         reasons, directives, excluded_poi_ids, status, created_at, closed_at)
-            VALUES (?, ?, ?, 'FULL_DAY', now(), ?, ?, ?, '{}', '{}', '{}', 'CANCELED', now(), now())
+            VALUES (?, ?, ?, 'FULL_DAY', (now() AT TIME ZONE 'Asia/Seoul')::date, now(),
+                    ?, ?, ?, '{}', '{}', '{}', 'CANCELED', now(), now())
             """.trimIndent(),
             id, trip, UUID.randomUUID(), kind, lat, lng,
         )

@@ -1,6 +1,7 @@
 package com.trippilot.recalculation.domain
 
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 
 /**
@@ -20,6 +21,15 @@ data class ReplanSession(
     /** 자동 진입이면 근거 트리거. 수동 진입이면 null. */
     val triggerId: UUID?,
     val scope: ReplanScope,
+    /**
+     * 다시 짤 일자(TRIP-1182). 종전에는 [fromInstant] 에서 파생한 '오늘'이 코드에 박혀 있었다 —
+     * 그래서 내일·모레를 다시 짜는 길이 없었다.
+     *
+     * **정본 이탈**: DEC-U4-3 은 범위를 `지금 이후`·`오늘 전체` 2종으로 적고 "다일 재계획 없음"이라 한다.
+     * 다일은 그대로 금지다(한 세션이 한 날짜만 바꾼다) — 바뀐 것은 그 하루가 **반드시 오늘이어야 하는가**뿐이다.
+     * 미래일에는 '지금 이후'가 뜻을 잃으므로 `FULL_DAY` 만 받는다(진입 검증).
+     */
+    val targetDate: LocalDate,
     /** '지금 이후'의 기준점 — 이 시각 이전 슬롯은 재계획 대상이 아니다. */
     val fromInstant: Instant,
     val origin: ReplanOrigin,
@@ -42,6 +52,7 @@ data class ReplanSession(
             itineraryId: UUID,
             triggerId: UUID?,
             scope: ReplanScope,
+            targetDate: LocalDate,
             fromInstant: Instant,
             origin: ReplanOrigin,
             reasons: List<String>,
@@ -50,7 +61,7 @@ data class ReplanSession(
             excludedPoiIds: List<UUID>,
             at: Instant,
         ) = ReplanSession(
-            UUID.randomUUID(), tripId, itineraryId, triggerId, scope, fromInstant, origin,
+            UUID.randomUUID(), tripId, itineraryId, triggerId, scope, targetDate, fromInstant, origin,
             reasons, directives, freeText, excludedPoiIds,
             ReplanStatus.COLLECTING, null, at, null,
         )

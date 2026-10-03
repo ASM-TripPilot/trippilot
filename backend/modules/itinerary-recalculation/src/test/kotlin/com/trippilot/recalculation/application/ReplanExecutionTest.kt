@@ -64,7 +64,7 @@ class ReplanExecutionTest : StringSpec({
     }
     val itineraries = object : ItineraryFacade {
         override fun findCurrent(accountId: UUID, tripId: UUID) =
-            ItineraryRef(FakeReplans.ITINERARY_ID, "PLANNED", "COMPLETE", listOf(today), emptyList())
+            ItineraryRef(FakeReplans.ITINERARY_ID, "PLANNED", "COMPLETE", listOf(today, today.plusDays(1)), emptyList())
     }
     // 기준점 사다리는 GPS 로 끝나 앵커까지 안 내려간다 — 빈 구현으로 충분하다.
     val noAnchors = object : BaseAnchorFacade {
@@ -89,13 +89,35 @@ class ReplanExecutionTest : StringSpec({
         )
     }
 
-    fun Fixture.start(scope: ReplanScope = ReplanScope.PARTIAL_SLOTS) = service.start(
+    fun Fixture.start(
+        scope: ReplanScope = ReplanScope.PARTIAL_SLOTS,
+        targetDate: LocalDate? = null,
+    ) = service.start(
         acc, trip,
         StartReplan(
-            triggerId = null, scope = scope, origin = ReplanOrigin(OriginKind.GPS, 33.45, 126.56),
+            triggerId = null, scope = scope, targetDate = targetDate, origin = ReplanOrigin(OriginKind.GPS, 33.45, 126.56),
             reasons = listOf("비가 와요"), directives = listOf("실내로"), freeText = null, excludedPoiIds = emptyList(),
         ),
     )
+
+    // 종전에는 솔버가 `fromInstant` 로 '오늘'을 다시 계산해 **오늘만** 다시 짤 수 있었다(TRIP-1182).
+    // 이 단언이 깨지면 사용자가 모레를 골라도 오늘 하루가 다시 짜인다.
+    "산출 요청은 세션의 대상 일자로 나간다" {
+        val f = fixture()
+        val tomorrow = today.plusDays(1)
+
+        f.start(scope = ReplanScope.FULL_DAY, targetDate = tomorrow)
+
+        f.replans.commands.single().targetDate shouldBe tomorrow
+    }
+
+    "대상 일자를 생략하면 산출도 오늘로 나간다 — 종전 동작이 기본값이다" {
+        val f = fixture()
+
+        f.start()
+
+        f.replans.commands.single().targetDate shouldBe today
+    }
 
     // 단위 테스트엔 Spring 프록시가 없어 @Async 가 안 걸린다 → 산출이 그 자리에서 끝난다(결정론).
     "해가 있으면 DRAFT 로 초안이 남는다 — 원 일정은 그대로다" {
@@ -153,7 +175,7 @@ class ReplanExecutionTest : StringSpec({
         val opened = f.service.start(
             acc, trip,
             StartReplan(
-                triggerId = UUID.randomUUID(), scope = ReplanScope.PARTIAL_SLOTS,
+                triggerId = UUID.randomUUID(), targetDate = null, scope = ReplanScope.PARTIAL_SLOTS,
                 origin = ReplanOrigin(OriginKind.GPS, 33.45, 126.56),
                 reasons = listOf("비가 와요"), directives = listOf("실내로"),
                 freeText = null, excludedPoiIds = emptyList(),
@@ -171,7 +193,7 @@ class ReplanExecutionTest : StringSpec({
         val opened = f.service.start(
             acc, trip,
             StartReplan(
-                triggerId = null, scope = ReplanScope.PARTIAL_SLOTS,
+                triggerId = null, targetDate = null, scope = ReplanScope.PARTIAL_SLOTS,
                 origin = ReplanOrigin(OriginKind.GPS, 33.45, 126.56),
                 reasons = emptyList(), directives = emptyList(), freeText = "   ", excludedPoiIds = emptyList(),
             ),
@@ -188,7 +210,7 @@ class ReplanExecutionTest : StringSpec({
         val opened = f.service.start(
             acc, trip,
             StartReplan(
-                triggerId = null, scope = ReplanScope.PARTIAL_SLOTS,
+                triggerId = null, targetDate = null, scope = ReplanScope.PARTIAL_SLOTS,
                 origin = ReplanOrigin(OriginKind.GPS, 33.45, 126.56),
                 reasons = emptyList(), directives = emptyList(),
                 freeText = "가".repeat(900), excludedPoiIds = emptyList(),

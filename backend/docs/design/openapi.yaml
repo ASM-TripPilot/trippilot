@@ -2432,6 +2432,15 @@ components:
           type: string
           enum: [PARTIAL_SLOTS, FULL_DAY]
           description: 재계획 범위(DEC-U4-3). ai ReplanScope 어휘를 그대로 쓴다
+        targetDate:
+          type: string
+          format: date
+          nullable: true
+          description: >
+            다시 짤 일자(TRIP-1182). **생략하면 오늘** — 종전 클라이언트는 그대로 돈다.
+            오늘이 아닌 날은 scope=FULL_DAY 만 받는다(400) — '그 날의 지금'은 없다.
+            지난 날·여행 기간 밖·일정이 아직 없는 날(부분 생성)은 409.
+            한 세션은 여전히 **하루만** 바꾼다(DEC-U4-3 의 다일 금지 유지)
         originKind:
           type: string
           nullable: true
@@ -2549,13 +2558,14 @@ components:
 
     ReplanSession:
       type: object
-      required: [sessionId, tripId, itineraryId, scope, fromInstant, originKind, originEstimated, status, createdAt]
+      required: [sessionId, tripId, itineraryId, scope, targetDate, fromInstant, originKind, originEstimated, status, createdAt]
       properties:
         sessionId: { type: string, format: uuid }
         tripId: { type: string, format: uuid }
         itineraryId: { type: string, format: uuid, description: 어느 일정을 다시 짜는가 }
         triggerId: { type: string, format: uuid, nullable: true }
         scope: { type: string, enum: [PARTIAL_SLOTS, FULL_DAY] }
+        targetDate: { type: string, format: date, description: 어느 날을 다시 짰는가 — 요청이 생략했으면 서버가 정한 '오늘'이다(TRIP-1182) }
         fromInstant: { type: string, format: date-time, description: "'지금 이후'의 기준점 — 이 시각 이전 슬롯은 대상이 아니다" }
         originKind: { type: string, enum: [GPS, MANUAL, LAST_VISIT, STAY_ANCHOR] }
         originLat: { type: number, nullable: true }
