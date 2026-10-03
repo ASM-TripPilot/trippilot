@@ -34,7 +34,33 @@ def test_fetch_page_parses_records_and_coords() -> None:
     assert r.lat == pytest.approx(33.4620)   # mapy = 위도
     assert r.lng == pytest.approx(126.9425)  # mapx = 경도
     assert r.category_codes == ("A01", "A0101", "A01010400")
-    assert r.image_url == "http://img/100.jpg"
+    assert r.image_url == "https://img/100.jpg"  # 평문 HTTP 는 iOS ATS 가 조용히 막는다 — 스킴을 올린다
+
+
+# ── 어댑터: 이미지 URL 스킴 ───────────────────────────────────
+def _image_url_of(firstimage: str) -> str | None:
+    http = FakeTourApiHttp(pages={("12", 1): envelope(
+        [list_item("100", "성산일출봉", mapx="126.9425", mapy="33.4620",
+                   firstimage=firstimage)], total_count=1)})
+    (r,) = _adapter(http).fetch_page("39", "12", 1, 100).records
+    return r.image_url
+
+
+def test_image_url_http_is_upgraded_to_https() -> None:
+    """TourAPI 는 이미지를 전 건 `http://` 로 준다. iOS ATS 가 에러 없이 차단해 회색 자리만 남으므로
+    스킴을 올린다 — 호스트·경로는 그대로다(같은 URL 이 https 로도 200).
+    """
+    assert _image_url_of("http://tong.visitkorea.or.kr/cms/resource/72/3477972_image2_1.jpg") == (
+        "https://tong.visitkorea.or.kr/cms/resource/72/3477972_image2_1.jpg"
+    )
+
+
+def test_image_url_https_is_left_alone() -> None:
+    assert _image_url_of("https://img/already.jpg") == "https://img/already.jpg"
+
+
+def test_image_url_missing_stays_none() -> None:
+    assert _image_url_of("") is None
 
 
 def test_fetch_page_empty_items_string_variant() -> None:
