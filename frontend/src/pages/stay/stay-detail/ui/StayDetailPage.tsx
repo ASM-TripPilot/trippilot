@@ -1,6 +1,6 @@
 /**
  * e03 숙소 상세 배선(TRIP-457 · US-STAY-*). 화면·시트는 라우터·훅·Linking 을 모르므로(FSD 경계),
- * 조회·저장 요청·웹검색 이동·전화 열기·로그인 유도는 이 배선 층에서만 일어난다.
+ * 조회·저장 요청·아웃바운드 이동·전화 열기·로그인 유도는 이 배선 층에서만 일어난다.
  *
  * 데이터는 `GET /stays/{stayId}` 하나에서 온다(TRIP-940 D0 — 진입부 목록 값을 placeholder 로도 쓰지
  * 않는다). 조회 결과를 화면의 `state` 로 번역한다: 응답 전=loading · 404=notFound · 400 또는 stayId
@@ -8,7 +8,7 @@
  * (운영 QueryClient 기본 3회 → 약 7초 로딩 방지, AC-13). 재시도는 error 얼굴의 버튼이 맡는다.
  * 저장 하트는 `useSavedStays`(TRIP-417 토글 훅) 하나가 소유하고, 미인증은 요청 없이
  * 로그인으로 보낸다(BR-U1-03·55, 죽은 버튼 회피). "외부에서 예약하기"는 제휴 시트(BR-U1-30) →
- * [이동] 웹검색 폴백(`openStayOutbound`, BR-U1-31).
+ * [이동] 서버 아웃바운드(`openStayOutbound`, TRIP-1167).
  *
  * TRIP-781(l07): 시트의 열림·error 얼굴·"다시 보지 않기" 체크는 전부 이 층이 쥔다(시트는 제어 컴포넌트).
  * 저장값이 켜져 있으면 시트 없이 바로 이동하고, 그 이동이 실패하면 error 얼굴 시트를 새로 연다(BR-U1-55).
@@ -133,13 +133,13 @@ export function StayDetailPage(): ReactElement {
     }
   }
 
-  // 웹검색 폴백으로 연다(01b Q2). 성공하면 시트를 닫고, 실패하면 시트를 error 얼굴로 연다 — 생략
+  // 서버 아웃바운드로 연다(TRIP-1167). 성공하면 시트를 닫고, 실패하면 시트를 error 얼굴로 연다 — 생략
   // 경로(시트가 닫혀 있던 때)도 같다. 침묵 금지(BR-U1-55).
   async function runOutbound(): Promise<void> {
     if (item === null) {
       return;
     }
-    const result = await openStayOutbound(item, () => {});
+    const result = await openStayOutbound(stayId, () => {});
     const failed = result === 'failed';
     setOutboundError(failed);
     setOtaOpen(failed);
@@ -203,7 +203,7 @@ export function StayDetailPage(): ReactElement {
           dontShowAgain={dontShowAgain}
           onToggleDontShowAgain={() => setDontShowAgain((on) => !on)}
           showDontShowAgain={isAuthed}
-          // 이동 방식이 시트 얼굴(수수료 고지 유무)을 정한다 — 지금은 늘 웹검색(TRIP-1019 #018).
+          // 이동 방식이 시트 얼굴(수수료 고지 유무)을 정한다 — 지금은 늘 제휴(TRIP-1167).
           outbound={stayOutboundMode()}
           onCancel={handleCancelOutbound}
           onConfirm={handleConfirmOutbound}

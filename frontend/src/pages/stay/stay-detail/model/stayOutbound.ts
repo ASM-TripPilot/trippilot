@@ -1,14 +1,17 @@
 import * as Linking from 'expo-linking';
 
-import type { StayItem } from '@/shared/api/index.schemas';
+import { API_BASE_URL } from '@/shared/api';
 
 /**
- * 제휴 시트 [이동] 딥링크 사다리(TRIP-457 AC-9 · 01b Q2 — nextNav.ts 패턴 미러).
+ * 제휴 시트 [이동](TRIP-1167 · BR-U1-29~32).
  *
- * 실 OTA 딥링크 계약(`/stays/{id}/outbound`)이 없고 `StayItem`엔 이동 URL이 없다. 그래서 이동은
- * **웹검색 폴백**(BR-U1-31 "장소 검색 우회"가 명시 허용)으로만 성립한다 — 실 OTA 앱 스킴 단계가
- * 아예 없어(nextNav의 app→web→distance 3단이 아니라) `openURL` 단일 사다리다(★F-5). 실패하면
- * 침묵하지 않고 fallback으로 정직히 알린다(BR-U1-55 · INV-4).
+ * 이동은 서버 아웃바운드 `GET /stays/{stayId}/outbound`(openapi — 302 · Location · 본문 없음)를 브라우저로
+ * 여는 것이다. 서버가 클릭을 기록하고(BR-U1-32) 제휴 딥링크로 302 하며, 브라우저가 그 리다이렉트를 따라간다
+ * — 목적지(OTA·검색) 결정은 서버 소유라 클라는 OTA URL을 조립하지 않는다. `openURL` 단일 사다리다.
+ *
+ * 실패 알림(BR-U1-55 · INV-4)의 사정거리: `openURL`은 **브라우저를 못 열 때만** 실패한다. 브라우저가 열린
+ * 뒤 서버가 404(없는 숙소)·503을 주면 그 일은 브라우저 안에서 벌어져 클라는 알 수 없다 — 그쪽은 서버 응답
+ * 화면이 담당한다.
  *
  * `expo-router`를 import하지 않는다(nextNav.ts AC-7 규율 계승) — 외부 웹만 열고 우리 라우트는
  * 그대로 두므로 복귀가 저절로 성립한다.
@@ -18,27 +21,20 @@ import type { StayItem } from '@/shared/api/index.schemas';
 export type StayOutboundMode = 'affiliate' | 'webSearch';
 
 /**
- * 지금 계약의 이동 방식(TRIP-1019 #018). 딥링크 계약이 없어 이동은 늘 `openStayOutbound`의 웹검색이므로
- * 항상 `'webSearch'`다. 제휴 시트가 이 값으로 얼굴(수수료 고지 유무)을 고른다 — 딥링크 계약이 생기면
- * 판정 입력을 인자로 받아 여기서 `'affiliate'`를 돌려준다.
+ * 지금 계약의 이동 방식. 이동은 늘 서버 아웃바운드(제휴 딥링크)이므로 항상 `'affiliate'`다(TRIP-1167) —
+ * 제휴 시트가 이 값으로 얼굴(수수료 고지 유무, BR-U1-30)을 고른다.
  */
 export function stayOutboundMode(): StayOutboundMode {
-  return 'webSearch';
-}
-
-export function buildStaySearchUrl(item: Pick<StayItem, 'name'>): string {
-  return (
-    'https://www.google.com/search?q=' + encodeURIComponent(`${item.name} 예약`)
-  );
+  return 'affiliate';
 }
 
 export async function openStayOutbound(
-  item: Pick<StayItem, 'name'>,
+  stayId: string,
   fallback: () => void
 ): Promise<'web' | 'failed'> {
-  const searchUrl = buildStaySearchUrl(item);
+  const outboundUrl = `${API_BASE_URL}/stays/${encodeURIComponent(stayId)}/outbound`;
   try {
-    await Linking.openURL(searchUrl);
+    await Linking.openURL(outboundUrl);
     return 'web';
   } catch {
     // 브라우저조차 못 열면 침묵하지 않고 위로 알린다(BR-U1-55) — 전용 실패 화면은 없어
