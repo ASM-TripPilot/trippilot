@@ -2522,8 +2522,8 @@ note = """
 [[nodes]]
 id = "EKS-DEV-LIVE"
 ticket = ""
-title = "DEV 실기동 — bootstrap → plan → apply → 시크릿 → 앱 배포 → 스모크"
-status = "todo"
+title = "DEV 실기동 — bootstrap → plan → apply → 앱 배포 → 스모크 (시크릿 충전은 쪼개 냄)"
+status = "done"
 migration = false
 touches = []
 note = """
@@ -2532,6 +2532,14 @@ note = """
 plan → apply+deploy_application=false → Secrets Manager 키 입력(backend=송 · ai=준하 TRIP-892)
 → apply+deploy_application=true(embedding_enabled=false 시작) → NLB DNS 를 CNAME 연결 →
 `LIVE_AI=1 LiveAiRoundTripIT` 를 DEV 주소로. 이후 KB 사이클(TRIP-893)은 준하.
+
+**[완료 2026-10-03] 실기동 확인 — 쪼개서 닫는다.** `https://api-dev.trippilot.co.kr/healthz` 200 ·
+`/api/integration` 이 `backend UP · ai UP` 을 돌려준다(실측). 즉 bootstrap~앱 배포~스모크는 섰다.
+
+**잔여는 [[DEV-SECRETS-FILL]] 이 잇는다.** 노드 제목이 적은 "시크릿" 칸이 비어 있다 — 팀원이
+실기 테스트에서 **구글·애플 로그인 실패**를 보고했고(2026-10-03), 차트가 소셜 키를 `optional` 로
+주입하기 때문에 **키가 없어도 배포는 성공하고 로그인만 죽는다**. 통째로 todo 로 두면 "배포가
+안 됐다"로 읽혀 거짓이므로, 선 쪽을 닫고 잔여를 새 노드로 뺀다.
 """
 
 [[edges]]
@@ -2657,4 +2665,145 @@ note = """
 FE 1055 가 이미 완료(DELETE /trips 호출) — 현행 서버 동작 실사가 1순위: 엔드포인트 유무·
 상태 제한·CASCADE 범위·예약 알림 정리. 정본(US 신설 초안) 동반.
 [완료 2026-09-29] #798 머지 — 코드 몫(TripDeleted→예약 비움, 거점 live-trip 판정+정리). 스토리 US-TRIP-10·결정1·PBT 는 승인 대기(초안 있음).
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DEV 실사용 트랙 (2026-10-03 신설 — 팀원 실기 테스트 보고에서 나온 것들)
+#
+# api-dev 가 섰고([[EKS-DEV-LIVE]] done), 그 위에서 처음으로 **사람이 써 본** 결과가 왔다.
+# 다섯 증상 중 인프라 몫 셋을 노드로 세운다. 나머지 둘은 여기 두지 않는다 —
+# 숙소 사진은 원천이 없고(숙소 트랙·계약 대기), FE 표면 넷은 팀원 소유다.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[nodes]]
+id = "DEV-SECRETS-FILL"
+ticket = ""
+title = "DEV Secrets Manager 충전 — 소셜·AI 키가 비어 로그인·일정생성이 죽는다"
+status = "external"
+owner = "사용자"
+migration = false
+touches = []
+note = """
+[[EKS-DEV-LIVE]] 에서 쪼개 낸 잔여. **사람·콘솔 몫이라 external 이다.**
+
+증상(2026-10-03 팀원 보고): api-dev 에서 **구글·애플 로그인 실패**. 서버는 살아 있다(healthz 200).
+
+원인 구조: 차트가 소셜 키를 `optional: true` 로 주입한다
+(`deploy/eks/chart/templates/backend.yaml` 의 `trippilot.secretEnv ... optional true` 목록).
+**비어도 배포는 성공하고 로그인만 죽는다** — 조용히 실패하는 자리다.
+
+채울 곳은 **두 그룹**이다(이름 주의 — 슬래시다):
+- `trippilot/dev/backend` — GOOGLE_CLIENT_ID · KAKAO_CLIENT_ID · NAVER_CLIENT_ID/SECRET ·
+  APPLE_CLIENT_ID(= 번들 `com.trippilot.travel`) · APPLE_TEAM_ID/KEY_ID/PRIVATE_KEY ·
+  SOCIAL_TOKEN_ENCRYPTION_KEY · WEATHER_API
+- `trippilot/dev/ai` — TRIPPILOT_LLM_PROVIDER + 해당 공급자 키(OPENAI_API_KEY 등).
+  **이쪽을 빠뜨리면 로그인은 고쳐져도 일정 생성이 계속 폴백이다** — 증상이 "AI 가 이상하다"로만 보인다.
+
+**가드 둘을 알고 넣어야 한다**(`deploy/eks/runtime_secrets.py:125~` `validate_groups`):
+1. `GOOGLE_CLIENT_SECRET` 은 **반드시 빈 값** — 현재 구글 클라이언트가 공개(iOS) 유형이라
+   값이 차 있으면 배포가 거부된다(2026-09-23 실측).
+2. **모드와 키는 같은 배포에서 짝이어야 한다** — `PLACE_GEOCODE_MODE=kakao` 면 `KAKAO_CLIENT_ID`,
+   `WEATHER_MODE=kma` 면 `WEATHER_API` 가 없으면 apply 가 죽는다. 모드만 먼저 켜지 말 것.
+   안전 순서: **1차 배포는 키만 채우고, 모드 전환은 2차 배포로** 나눈다.
+
+충전 뒤 `aws-deploy`(dev·apply) 1회 → sync-secrets 가 k8s 로 복사한다.
+검증은 사람 실기(소셜 로그인 4종) + 일정 생성 1회.
+"""
+
+[[nodes]]
+id = "POI-INGEST-RUNBOOK"
+ticket = ""
+title = "POI 수집분 적재 런북·스크립트 — 수집이 artifact 로만 남아 서버 DB 가 비어 있다"
+status = "todo"
+migration = false
+touches = ["docs/guides/", "backend/scripts/"]
+note = """
+증상(2026-10-03 팀원 보고): 로컬엔 장소가 전국적으로 많은데 **서버 DB 에는 거의 없다**.
+
+원인: `ai-poi-collect` 워크플로가 **DB 에 직접 쓰지 않는다** — 워크플로 주석이
+*"백엔드 수신 API 협의 전까지는 artifact(30일 보존)로만 남긴다"* 고 적고 있다. 로컬이 많았던 것은
+수집분을 수신 API 로 **로컬에만** 부어 봤기 때문이고, RDS 에는 Flyway `R__` 시드만 들어간다.
+
+**적재 경로는 이미 열려 있다**(2026-10-03 코드 실측 — 이게 이 노드가 작은 이유다):
+- 수집 artifact 포맷 == 백엔드 수신 DTO 계약이다. **변환이 필요 없다.**
+  생산 `ai/src/trippilot/poi_curation/sourcing/pipeline.py:355~` ↔ 소비
+  `backend/modules/place-data/.../PoiProposalDtos.kt` — `schema_version`·`source`·
+  `proposals[].{poi,tags,region,opening_hours_raw,provenance{content_id,image_url,address}}` 가 그대로 맞는다.
+- 수신은 `POST /internal/pois/proposals`, 인증 헤더는 `X-Service-Token`(`ServiceTokenAuth.kt:95`).
+- **게이트웨이가 `/internal` 을 404 로 막는다**(설계) — 외부 URL 로는 못 부른다. `kubectl port-forward` 경유다.
+- 들어가면 **즉시 등록**된다(`PoiProposalIngestService.ingest` 가 registered/updated 를 센다 —
+  수동 승인 단계 없음). 멱등 기준은 `provenance.content_id`.
+- **장소 사진이 같이 들어온다** — TourAPI `firstimage` → `provenance.image_url` → `poi.image_url`.
+  팀원이 보고한 "장소 사진 못 받아옴" 의 절반이 여기서 풀린다(숙소 사진은 원천이 없어 별개다).
+
+**artifact 한 장은 전국이 아니다.** 수집이 run 당 호출 예산(지역 공평 순회) 안에서 돌아서,
+전국 수준이 되려면 여러 run 의 artifact 를 순차 적재해야 한다. 런북이 이걸 명시하지 않으면
+"한 번 부었는데 왜 아직 적지" 가 반복된다.
+
+이 노드는 **런북과 스크립트까지**다. 실행은 [[POI-INGEST-RUN]] — 클러스터 자격이 필요해 쪼갰다.
+"""
+
+[[nodes]]
+id = "POI-INGEST-RUN"
+ticket = ""
+title = "POI 적재 1회 실행 — port-forward 로 수집분을 DEV DB 에 붓는다"
+status = "external"
+owner = "사용자"
+migration = false
+touches = []
+note = """
+[[POI-INGEST-RUNBOOK]] 의 실행분. **kubectl·AWS 자격이 필요해 external 이다** —
+`/internal` 이 게이트웨이에서 막혀 있어 `kubectl port-forward svc/backend` 경유가 정석이고,
+그 자격은 사람에게만 있다.
+
+코드와 실행을 한 노드에 섞으면 그 노드가 영원히 안 닫힌다(이 파일 머리말의 "쪼개서 닫는다" 와 같은 축).
+
+완료 판정: 적재 응답의 `registered+updated` 가 보낸 건수와 맞고, DEV DB 의 `poi` 수와
+`image_url` 채움률이 오른다.
+"""
+
+[[nodes]]
+id = "OBSERVABILITY-DEV"
+ticket = "TRIP-894"
+title = "배포 환경 로그 관측 — stdout 뿐이라 클러스터 밖에서는 아무것도 못 본다"
+status = "todo"
+migration = false
+touches = ["infra/terraform/stack/", "deploy/eks/chart/"]
+note = """
+증상(2026-10-03 팀원 보고): api-dev 를 테스트 중인데 **로그 확인이 안 된다**.
+
+구조상 맞는 상태다 — 차트가 `OTEL_SDK_DISABLED=true` 로 배포하고 수집기를 프로비전하지 않는다
+(`backend.yaml` 주석: *"The image embeds a Java agent. No collector is provisioned by this deployment."*).
+로그는 파드 stdout 에만 남아 `kubectl logs` 가 유일한 통로다.
+
+방향: EKS 애드온 `amazon-cloudwatch-observability`(Fluent Bit 가 stdout 수집) — **앱 변경 0** 이라
+`OTEL_SDK_DISABLED` 를 그대로 둘 수 있다. 앱 OTLP 를 켜는 안은 수집기까지 세워야 해 범위가 커진다.
+Pod Identity 선례가 이미 있다(`infra/terraform/stack/eks.tf:89` 의 AI↔Bedrock 연결).
+
+**비용이 드는 변경이다** — 수집량·보존기간에 과금된다. 보존을 명시(dev 짧게)하고,
+적용은 사용자 승인 뒤 `aws-deploy` 로 한다.
+
+이것이 열려야 [[AI-ITIN-QUALITY]] 의 degraded 원인(타임아웃 vs 다른 것)을 가를 수 있다.
+"""
+
+[[nodes]]
+id = "AI-ITIN-QUALITY"
+ticket = "TRIP-1160"
+title = "일정 생성 품질 4건 — 동선 지그재그·계열 중복·결정성·취향 비일관"
+status = "external"
+owner = "AI"
+migration = false
+touches = []
+note = """
+2026-09-30 시뮬레이터 자동 E2E 로 일정 생성을 실서버·실DB 로 4판 돌려 슬롯 단위로 채점한 결과다
+(TRIP-1160 에 전문). **구조 불변식은 무결** — 시간 겹침 0 · 같은 poi_id 중복 0 · 지역 이탈 0 ·
+필수방문지 `is_fixed=t` 배치 · 거점 인접 시작/마감 · INV-3 거리만 · 실패 시 정직 폴백.
+
+남은 것은 품질 4건이고 **AI 서비스 소관이라 external 이다**:
+동선 지그재그(부산 1일차 37.7km 왕복) · 같은 장소 계열 중복(황령산×2, 남산×3) ·
+재생성 결정성 과다(같은 조건이면 80% 동일) · 취향 반영 비일관(미식인데 서울 판은 식당 0).
+
+**degraded 1회**(서울 1차)의 원인은 로그가 필요하다 → [[OBSERVABILITY-DEV]] 선행.
+우리 몫으로 넘어올 가능성이 하나 있다 — 원인이 백엔드 데드라인 예산이면 그때 노드를 새로 세운다
+(예산은 2026-10-03 PR #866 에서 코드 기본과 정렬했다: day1 15s · total 60s).
 """
