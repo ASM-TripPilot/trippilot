@@ -1,6 +1,6 @@
 /**
  * TRIP-576 · l01 알림함 메타 — 과거 시각(occurredAt)을 "방금·N분 전·N시간 전·어제·N일 전"으로.
- * `shared/date/formatKoreanDate`(절대 `M월 D일 요일`)와 다른 기능 — 재사용 불가, 신규.
+ * `shared/lib/formatKoreanDate`(절대 `M월 D일 요일`)와 다른 기능 — 재사용 불가, 신규.
  * "N분 전"은 **경과 시각**(발생 이후)이라 INV-3 소요시간과 무관하다. */
 
 const MIN = 60_000;

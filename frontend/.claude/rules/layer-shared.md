@@ -5,7 +5,7 @@ paths:
 # `src/shared/` — 도메인을 모르는 공용 층
 
 - **shared는 features·도메인을 모른다** — 두 feature가 같은 것을 써야 하는데 features 간 import가 금지돼 있을 때(각 feature 구조 가드·린트) 유일한 공유 자리가 shared 승격이다. shared 직계에 도메인명 디렉토리를 두지 않는다(도메인 컴포넌트는 `widgets`로).
-- `shared/ui/**`는 `@/features`·zustand·URL·raw hex 0을 지킨다(층 방향만 ESLint zone이 강제, 나머지는 TRIP-1145에서 스캔 삭제). 순수 로직 파일은 형제 비-ui 폴더에 둔다. `*Glyphs.tsx`의 raw hex는 SVG stroke/fill이 className을 못 받는 리포 관례.
+- `shared/ui/**`는 `@/features`·zustand·URL·raw hex 0을 지킨다(층 방향만 ESLint zone이 강제, 나머지는 TRIP-1145에서 스캔 삭제). 순수 로직 파일은 `shared/lib` 직속 파일로 둔다(주제 이름 폴더를 새로 만들지 않는다, TRIP-1162). `*Glyphs.tsx`의 raw hex는 SVG stroke/fill이 className을 못 받는 리포 관례.
 
 | 파일 | 역할 |
 |---|---|
