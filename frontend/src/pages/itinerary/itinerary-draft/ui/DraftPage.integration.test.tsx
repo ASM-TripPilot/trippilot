@@ -455,7 +455,8 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
 
   const INTERSTITIAL = 'itinerary-fallback-root';
 
-  /** AC-10 — 폴백 신호 세 축이 오면 인터스티셜로 라우팅된다(deterministic·minimal·demoted). */
+  /** AC-10 — 폴백 신호(deterministic·minimal)가 오면 인터스티셜로 라우팅된다. TRIP-1174 — 후보 LOW 는 폴백이
+   *  아니라 인터스티셜로 안 가지만(「폴백 셸」 S10), 폴백과 **함께** 오면 폴백을 덮지 않는다(3번째 행). */
   const SIGNAL_ROWS: {
     name: string;
     solveMode: ItinerarySolveMode;
@@ -475,9 +476,9 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
       summary: undefined,
     },
     {
-      name: 'LOW 강등(FULL_AI·isFallback=false)도 인터스티셜',
-      solveMode: 'FULL_AI',
-      isFallback: false,
+      name: 'DETERMINISTIC + isFallback=true + LOW → 그래도 인터스티셜 (LOW 가 폴백을 덮지 않는다 · TRIP-1174)',
+      solveMode: 'DETERMINISTIC',
+      isFallback: true,
       summary: { level: 'LOW' },
     },
   ];
@@ -1826,7 +1827,7 @@ describe('폴백·위반 라벨', () => {
    * 무엇을 보장하나:
    *  - 🔴 폴백 인터스티셜을 "기본 일정 보기"로 넘긴 셸이 폴백임을 드러낸다 — 제목·안내 제목이 "기본 일정"
    *    결이고 "AI 추천"·"취향·거리로 채운" 은 0건이다(BR-U3-11 · D6 · TRIP-1039 AC-3). 셸 카드엔 배지가
-   *    아예 없어 "배지가 AI 추천이 아니다"는 텍스트 0건으로 잰다. 폴백 3종(minimal·deterministic·demoted) 모두 같다.
+   *    아예 없어 "배지가 AI 추천이 아니다"는 텍스트 0건으로 잰다. 폴백 2종(minimal·deterministic)과 폴백+LOW 모두 같다.
    *  - 폴백이 아닌 staleFailed 셸의 제목은 그대로 "AI 추천안" 이다(무회귀 짝 — 무조건 바꾼 구현을 죽인다).
    *  - 🔴 위반 슬롯에 표식이 h08 셸(깨끗한 COMPLETE)과 폴백 셸 **둘 다** 뜨고, 문구는 서버 사유와 무관한
    *    고정 라벨이다(02c) — 사유 원문에 소요시간("이동 54분 필요")이 섞여 와 그리면 INV-3 위반이라서다.
@@ -1974,7 +1975,7 @@ describe('폴백·위반 라벨', () => {
     await screen.findByTestId('map-sheet-shell-root', {}, WAIT);
   }
 
-  /** 폴백 3종 — 인터스티셜이 세 kind 모두에 "취향 반영 (건너뜀)" 이라 목록도 같이 말한다(Q2). */
+  /** 폴백 행 — 인터스티셜이 모든 kind 에 "취향 반영 (건너뜀)" 이라 목록도 같이 말한다(Q2). */
   const FALLBACK_ROWS: {
     kind: string;
     solveMode: ItinerarySolveMode;
@@ -1983,10 +1984,12 @@ describe('폴백·위반 라벨', () => {
   }[] = [
     { kind: 'minimal', solveMode: 'MINIMAL', isFallback: true },
     { kind: 'deterministic', solveMode: 'DETERMINISTIC', isFallback: true },
+    // TRIP-1174 — LOW 단독(AI 정상)은 더는 폴백이 아니다(「폴백 셸」 S10). 폴백과 겹친 LOW 가 폴백 얼굴을
+    // 그대로 두는지를 이 행이 잰다.
     {
-      kind: 'demoted',
-      solveMode: 'FULL_AI',
-      isFallback: false,
+      kind: 'deterministic+LOW',
+      solveMode: 'DETERMINISTIC',
+      isFallback: true,
       summary: { level: 'LOW' },
     },
   ];
@@ -2270,10 +2273,12 @@ describe('폴백 셸', () => {
   }[] = [
     { kind: 'minimal', solveMode: 'MINIMAL', isFallback: true },
     { kind: 'deterministic', solveMode: 'DETERMINISTIC', isFallback: true },
+    // TRIP-1174 — LOW 단독(AI 정상)은 더는 폴백이 아니다(「폴백 셸」 S10). 폴백과 겹친 LOW 가 폴백 얼굴을
+    // 그대로 두는지를 이 행이 잰다.
     {
-      kind: 'demoted',
-      solveMode: 'FULL_AI',
-      isFallback: false,
+      kind: 'deterministic+LOW',
+      solveMode: 'DETERMINISTIC',
+      isFallback: true,
       summary: { level: 'LOW' },
     },
   ];
@@ -2467,6 +2472,142 @@ describe('폴백 셸', () => {
         screen.getByTestId('itinerary-draft-manual-reset-confirm')
       ).toBeOnTheScreen();
       expect(mockPush).not.toHaveBeenCalled();
+    });
+  });
+
+  /* ───────────── TRIP-1174 · 후보 부족(LOW)은 "AI 가 쉬었다"가 아니다 ─────────────
+   * 후보 요약 `level` 이 조용한 값(OK·HIGH)이 아닌데 AI 는 정상으로 끝난(FULL_AI·isFallback=false) 응답.
+   * 옛 화면은 이걸 폴백과 같은 얼굴(인터스티셜 → 「기본 일정」 + 「취향 반영 없이 만든 기본 일정이에요」)로
+   * 그렸다 — AI 가 취향을 반영해 짰는데도 "반영 안 했다"고 말한 거짓 표기다.
+   *
+   * 왜 통합 버킷인가: 판정(`resolveFallbackNotice`·`resolveShortfallNotice`)은 `draftView.test.ts` 가
+   * 따로 재지만, 화면 세 곳(인터스티셜·제목·시트 안내)이 **어느 축을 보는지**는 배선이라 여기서만 보인다.
+   *
+   * 3동작 뼈대: 준비=LOW 응답 → 실행=렌더(누르지 않음 — 인터스티셜이 없어야 한다) → 단언=셸·제목·안내.
+   */
+  const SHORTFALL = 'itinerary-draft-shortfall';
+  const GENERIC_SHORTFALL = '근처에 추천할 후보가 적어요';
+  /** 폴백 얼굴의 세 문구 — 인터스티셜 제목·체크리스트 행·셸 안내 제목. 후보 부족 화면엔 하나도 없어야 한다. */
+  const FALLBACK_COPIES = [
+    'AI 추천은 잠시 쉬어요',
+    '취향 반영 (건너뜀)',
+    FALLBACK_REASON_TITLE,
+  ];
+
+  describe('🔴 S10 · TRIP-1174 AC-1·AC-2 — LOW(AI 정상)는 인터스티셜 없이 「AI 추천안」 셸 + 후보 부족 한 줄이다', () => {
+    it('인터스티셜·폴백 안내·"AI 가 쉬었다" 문구 0 · 제목 AI 추천안 · 후보 부족 안내 정확히 1개(헤더 뒤·첫 카드 앞)', async () => {
+      itineraryScript = () =>
+        itinerary({
+          solveMode: 'FULL_AI',
+          isFallback: false,
+          candidatesSummary: { level: 'LOW' },
+        });
+
+      renderPage();
+
+      // 긍정 앵커 — 「기본 일정 보기」를 누르지 않고도 셸 카드가 뜬다(= 인터스티셜이 가로막지 않았다).
+      expect(
+        await screen.findByTestId(cardId('poi-a'), {}, WAIT)
+      ).toBeOnTheScreen();
+      expect(screen.getByTestId(SHELL)).toBeOnTheScreen();
+      expect(screen.queryByTestId('itinerary-fallback-root')).toBeNull();
+
+      // AC-1 — 제목은 그대로, 폴백 안내·문구는 0건.
+      expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
+        'AI 추천안'
+      );
+      expect(screen.queryByTestId(BANNER)).toBeNull();
+      for (const copy of FALLBACK_COPIES) {
+        expect(screen.queryAllByText(copy)).toEqual([]);
+      }
+
+      // AC-2 — 조용해지지 않았다: 후보 부족 안내가 정확히 1개, 셸 안 헤더 뒤·첫 카드 앞.
+      expect(screen.queryAllByTestId(SHORTFALL)).toHaveLength(1);
+      expect(screen.getByTestId(SHORTFALL)).toHaveTextContent(
+        GENERIC_SHORTFALL
+      );
+      expect(
+        within(screen.getByTestId(SHELL)).getByTestId(SHORTFALL)
+      ).toBeOnTheScreen();
+      expect(
+        treeOrder(['sheet-header-root', SHORTFALL, cardId('poi-a')])
+      ).toEqual(['sheet-header-root', SHORTFALL, cardId('poi-a')]);
+    });
+
+    it('AC-5 — 카테고리는 한글 이름으로 나가고 영문 코드는 화면 어디에도 없다', async () => {
+      itineraryScript = () =>
+        itinerary({
+          candidatesSummary: {
+            level: 'LOW',
+            shortfallCategories: ['NIGHT_VIEW', 'SHOPPING'],
+          },
+        });
+
+      renderPage();
+
+      expect(await screen.findByTestId(SHORTFALL, {}, WAIT)).toHaveTextContent(
+        '근처에 야경·쇼핑 후보가 적어요'
+      );
+      expect(screen.queryAllByText(/NIGHT_VIEW|SHOPPING/)).toEqual([]);
+    });
+  });
+
+  describe('🔴 S11 · TRIP-1174 AC-4 — 모르는 level 도 조용해지지 않는다 (INV-4)', () => {
+    it.each(['MEDIUM', 'NO_CANDIDATES', ''])(
+      'level=%p → 인터스티셜 없이 셸 + 후보 부족 일반형 안내',
+      async (level) => {
+        itineraryScript = () => itinerary({ candidatesSummary: { level } });
+
+        renderPage();
+
+        expect(
+          await screen.findByTestId(SHORTFALL, {}, WAIT)
+        ).toHaveTextContent(GENERIC_SHORTFALL);
+        expect(screen.queryByTestId('itinerary-fallback-root')).toBeNull();
+        expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
+          'AI 추천안'
+        );
+      }
+    );
+  });
+
+  describe('S12 · TRIP-1174 AC-7 — OK 면 shortfallCategories 가 차 있어도 안내 0건이다', () => {
+    it('level=OK·카테고리 있음 → 셸 카드는 뜨고 후보 부족·폴백 안내 0', async () => {
+      itineraryScript = () =>
+        itinerary({
+          candidatesSummary: { level: 'OK', shortfallCategories: ['CAFE'] },
+        });
+
+      renderPage();
+
+      // 긍정 앵커 — 로딩 중 공허 통과 방지.
+      expect(
+        await screen.findByTestId(cardId('poi-a'), {}, WAIT)
+      ).toBeOnTheScreen();
+      expect(screen.queryByTestId(SHORTFALL)).toBeNull();
+      expect(screen.queryByTestId(BANNER)).toBeNull();
+    });
+  });
+
+  describe('🔴 S13 · TRIP-1174 AC-3 — 폴백과 LOW 가 겹치면 폴백 얼굴 그대로, 후보 부족 안내는 숨긴다 (01 Q2 기본값)', () => {
+    it('DETERMINISTIC·isFallback + LOW → 인터스티셜 → 셸 「기본 일정」 + 폴백 안내 1 · 후보 부족 0', async () => {
+      itineraryScript = () =>
+        itinerary({
+          solveMode: 'DETERMINISTIC',
+          isFallback: true,
+          candidatesSummary: {
+            level: 'LOW',
+            shortfallCategories: ['CAFE'],
+          },
+        });
+
+      await openFallbackShell();
+
+      expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
+        FALLBACK_TITLE
+      );
+      expect(screen.queryAllByTestId(BANNER)).toHaveLength(1);
+      expect(screen.queryByTestId(SHORTFALL)).toBeNull();
     });
   });
 

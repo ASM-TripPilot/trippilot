@@ -15,6 +15,7 @@ import {
   formatDraftDayHeader,
   resolveDraftView,
   resolveFallbackNotice,
+  resolveShortfallNotice,
   shouldKeepPollingDraft,
 } from '@/features/itinerary';
 import type { GenerationDayState } from '@/features/itinerary';
@@ -232,13 +233,17 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   });
   const unplacedRows = resolveUnplacedNames({ unplaced, savedPlaces });
 
-  // 폴백·강등 배너 신호를 한 번만 접는다 — h08 라우팅 조건(깨끗한 COMPLETE 판별)과 DraftScreen
+  // 안내 신호를 한 번만 접는다 — h08 라우팅 조건(깨끗한 COMPLETE 판별)과 DraftScreen
   // 프롭이 같은 값을 써야 갈라지지 않는다(같은 규칙이 두 층에서 다르게 진화하는 것 방지).
-  const fallbackNotice = resolveFallbackNotice({
+  // 두 축은 따로 접는다(TRIP-1174): 폴백 축(AI 가 쉬었다)만 인터스티셜·「기본 일정」을 정하고,
+  // 후보 축(LOW — AI 는 돌았고 후보가 모자랐다)은 시트 안 한 줄 안내만 띄운다.
+  const signals = {
     solveMode: itinerary.data?.solveMode,
     isFallback: itinerary.data?.isFallback,
     candidatesSummary: summary,
-  });
+  };
+  const fallbackNotice = resolveFallbackNotice(signals);
+  const shortfallNotice = resolveShortfallNotice(signals);
 
   /**
    * 재생성 — 생성 화면(POST 는 그 화면이 마운트 때 1회)으로 보낸다. **확정 일정은 어떤 경로로도 보내지 않는다.**
@@ -500,7 +505,7 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   }
 
   /**
-   * 폴백 인터스티셜(TRIP-791) — 생성이 끝났는데 취향 반영이 실패(폴백·강등)면, 초안 목록 앞을
+   * 폴백 인터스티셜(TRIP-791) — 생성이 끝났는데 취향 반영이 실패(폴백)면, 초안 목록 앞을
    * 가로막는 전용 화면을 그린다(01b D1·D2·⑦). 판정은 재발명하지 않고 `resolveFallbackNotice` 를
    * 그대로 재사용해 F-7(MANUAL 방어)까지 물려받는다 — MANUAL(MINIMAL·isFallback=false)은
    * fallbackNotice=null 이라 여기로 안 온다. "기본 일정 보기"는 로컬 dismiss(D3)라 route push 없이
@@ -539,7 +544,7 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
 
   /**
    * h08 초안 셸 — 2단계 생성이 끝난(!isPartial) 목록이면 **공용 지도+시트 셸**로 그린다(TRIP-792).
-   * TRIP-1039 부터 폴백·강등·staleFailed 목록도 여기로 온다 — 그 사실은 시트 맨 위
+   * TRIP-1039 부터 폴백·staleFailed 목록도 여기로 온다(후보 부족 LOW 도 — TRIP-1174) — 그 사실은 시트 맨 위
    * `DraftFallbackBanner` 가 계속 말한다(BR-U3-11 · INV-4). 폴백이면 제목이 「기본 일정」이고 안내 안에
    * 「처음부터 직접 짜기」 링크가 붙는다(D2). h07 셸과 달리 day-chip 오버레이(overlay 미전달=기본 렌더)와
    * 하단 CTA 두 갈래(다시 짜기·확정하기)를 얹는다.
@@ -626,6 +631,7 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
           <View className="gap-md px-lg pb-2xl pt-xs">
             <DraftFallbackBanner
               fallback={fallbackNotice !== null}
+              shortfall={shortfallNotice}
               staleFailed={view.staleFailed}
               // 확정 일정은 비우지 않는다(확정 해제 API 없음) — 확인 없이 현행 이동만.
               onManualPlan={

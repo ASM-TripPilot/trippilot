@@ -13,6 +13,7 @@ export {
   formatDraftDayHeader,
   resolveDraftView,
   resolveFallbackNotice,
+  resolveShortfallNotice,
   shouldKeepPollingDraft,
 } from './model/draftView';
 export type {

@@ -17,6 +17,7 @@ import {
   shouldKeepPollingDraft,
   type DraftDayTab,
   resolveFallbackNotice,
+  resolveShortfallNotice,
   foldGenerationGauge,
   type FoldedGenerationGaugeCell,
   type GenerationGaugeCell,
@@ -479,25 +480,31 @@ describe('M17 · AC-1 (TRIP-790) — 게이지는 다중일차에서도 tabs.has
   });
 });
 
+/** 화면(`DraftPage`)이 두 판정에 똑같이 넘기는 신호 묶음의 모양. */
+type Signals = Parameters<typeof resolveShortfallNotice>[0];
+
 // TRIP-304 · 옛 draftView.fallback.test.ts
-describe('폴백·강등 배너 판정(resolveFallbackNotice)', () => {
+describe('폴백 배너 판정(resolveFallbackNotice)', () => {
   /**
-   * TRIP-304 · 폴백·강등 배너의 **판정 규칙층**(model 순수 함수 `resolveFallbackNotice`).
+   * TRIP-304 · 폴백 배너의 **판정 규칙층**(model 순수 함수 `resolveFallbackNotice`).
    *
-   * 무엇을 보장하나 — 세 신호(`isFallback`·`solveMode`·298 `demoted`)가 하나의 배너로 접힐 때 어느
-   * 하나만 골라야 하고, 그 선택이 심각도 순위 **MINIMAL > LOW(demoted) > DETERMINISTIC** 를 따른다.
+   * 무엇을 보장하나 — "AI 가 쉬었다"(폴백 축) 신호 `isFallback`·`solveMode` 가 배너 하나로 접히고,
+   * 심각도 순위 **MINIMAL > DETERMINISTIC** 를 따른다.
    *
-   *  - 🔴 세 신호가 겹쳐도 배너는 하나 — 접기 순서 `minimal → demoted → deterministic`(01b 결정 2).
    *  - 🔴 **MANUAL 함정**: `solveMode=MINIMAL` 이라도 `isFallback=false` 면 폴백이 아니라 **선택**이다
    *    (openapi 원문). minimal 갈래는 `isFallback=true` 를 함께 봐야 한다 — 안 그러면 직접 만들기
    *    빈 일정에 "최소 일정 폴백" 오배너가 뜬다(맹점 후보 ①·INV-4).
-   *  - `demoted` 갈래는 298 `isCandidatesDemoted` 를 재사용한다(01b 결정 2) — 이 파일은 두 판정이
-   *    같은 답을 내는지(동작)만 잰다. "함수를 정말 재호출했나"라는 구현 세부는 심판하지 않는다.
+   *  - 🔴 **후보 요약(`level=LOW`)은 이 축을 켜지도 끄지도 않는다**(TRIP-1174). LOW 는 "AI 는 돌았고
+   *    후보가 모자랐다"는 다른 축이라, 여기 섞이면 정상 AI 결과를 "취향 반영 없이 만든 기본 일정"이라고
+   *    거짓말한다. 그 축은 아래 「후보 부족 안내 판정」 이 잰다.
+   *
+   * 화면은 두 함수에 **같은 신호 묶음**(`signals`)을 넘긴다(`DraftPage`) — 이 파일도 그 모양 그대로 넘겨
+   * "LOW 가 함께 와도 폴백 판정이 그대로"를 잰다.
    *
    * 3동작 뼈대: 준비=신호 조합을 만든다 → 실행=`resolveFallbackNotice(...)` → 단언=어느 배너/없음.
    *
-   * *(개념)* **판별 유니온** — `{ kind: 'minimal' | 'deterministic' | 'demoted' }` 처럼 "종류 꼬리표를
-   * 단 값". 화면이 `switch` 없이 꼬리표 하나로 그릴 배너를 고른다. 신호 없으면 `null`(배너 0건).
+   * *(개념)* **판별 유니온** — `{ kind: 'minimal' | 'deterministic' }` 처럼 "종류 꼬리표를 단 값".
+   * 신호 없으면 `null`(배너 0건).
    */
 
   describe('🔴 F-1 · AC-1 — DETERMINISTIC 폴백은 deterministic 배너다 (BR-U3-11)', () => {
@@ -516,18 +523,20 @@ describe('폴백·강등 배너 판정(resolveFallbackNotice)', () => {
     });
   });
 
-  describe('🔴 F-3 · AC-6 — LOW 강등 단독은 demoted 배너다 (298 isCandidatesDemoted 재사용)', () => {
-    it('candidatesSummary.level=LOW → { kind: "demoted" } 이고, 298 판정과 답이 같다', () => {
-      // solveMode 는 폴백이 아닌 정상값(FULL_AI, isFallback:false) — demoted 신호만 살아 있다.
-      expect(
-        resolveFallbackNotice({
-          solveMode: 'FULL_AI',
-          isFallback: false,
-          candidatesSummary: { level: 'LOW' },
-        })
-      ).toEqual({ kind: 'demoted' });
+  describe('🔴 F-3 · TRIP-1174 AC-1 — LOW 단독(AI 정상 성공)은 폴백 배너가 아니다', () => {
+    it('FULL_AI·isFallback=false·level=LOW → null 이고, 후보 축 판정은 여전히 LOW 를 안내 대상으로 본다', () => {
+      // 준비 — AI 가 LLM 점수까지 정상으로 끝냈고 후보만 모자란 응답.
+      const signals: Signals = {
+        solveMode: 'FULL_AI',
+        isFallback: false,
+        candidatesSummary: { level: 'LOW' },
+      };
 
-      // 짝 — 재사용하는 298 판정이 같은 입력에 true 다. demoted 갈래가 그 판정과 어긋나면 여기서 갈린다.
+      // 단언 — "AI 가 쉬었다" 배너 0건. 옛 구현({ kind:'demoted' })은 여기서 죽는다.
+      expect(resolveFallbackNotice(signals)).toBeNull();
+
+      // 짝 — LOW 신호 자체는 살아 있다(조용해진 게 아니라 다른 축으로 간 것). 항상 null 을
+      // 돌려주는 구현이 위 단언을 공짜로 통과하는 것은 F-1·F-2 가 막는다.
       expect(isCandidatesDemoted({ level: 'LOW' })).toBe(true);
     });
   });
@@ -539,63 +548,211 @@ describe('폴백·강등 배너 판정(resolveFallbackNotice)', () => {
         resolveFallbackNotice({ solveMode: 'FULL_AI', isFallback: false })
       ).toBeNull();
 
-      // (b) 요약은 왔지만 조용한 값(OK) — 298 화이트리스트가 안내를 안 켠다.
-      expect(
-        resolveFallbackNotice({
-          solveMode: 'FULL_AI',
-          isFallback: false,
-          candidatesSummary: { level: 'OK' },
-        })
-      ).toBeNull();
+      // (b) 요약은 왔지만 조용한 값(OK).
+      const quiet: Signals = {
+        solveMode: 'FULL_AI',
+        isFallback: false,
+        candidatesSummary: { level: 'OK' },
+      };
+      expect(resolveFallbackNotice(quiet)).toBeNull();
 
-      // (c) 데이터가 아직 안 온 첫 렌더 — 세 입력 전부 undefined.
+      // (c) 데이터가 아직 안 온 첫 렌더 — 입력 전부 undefined.
       expect(resolveFallbackNotice({})).toBeNull();
     });
   });
 
-  describe('🔴 F-5 · AC-3 — MINIMAL 이 LOW 를 이긴다 (심각도 최상위 하나만)', () => {
+  describe('🔴 F-5 · AC-3 — MINIMAL 과 LOW 가 겹치면 minimal 이다', () => {
     it('MINIMAL(＋isFallback) 과 LOW 가 동시에 와도 minimal 하나만 반환한다', () => {
-      expect(
-        resolveFallbackNotice({
-          solveMode: 'MINIMAL',
-          isFallback: true,
-          candidatesSummary: { level: 'LOW' },
-        })
-      ).toEqual({ kind: 'minimal' });
+      const signals: Signals = {
+        solveMode: 'MINIMAL',
+        isFallback: true,
+        candidatesSummary: { level: 'LOW' },
+      };
+      expect(resolveFallbackNotice(signals)).toEqual({ kind: 'minimal' });
     });
   });
 
-  describe('🔴 F-6 · AC-3 — LOW 가 DETERMINISTIC 을 이긴다 (접기 순서 잠금)', () => {
-    it('DETERMINISTIC(＋isFallback) 과 LOW 가 동시에 오면 demoted 를 반환한다', () => {
-      // 접기 순서는 minimal → **demoted → deterministic**. deterministic 을 먼저 보는 구현은
-      // 여기서 { kind:'deterministic' } 를 내며 죽는다. 실제 후보 누락(LOW)이 알고리즘 강등보다 심각하다.
-      expect(
-        resolveFallbackNotice({
-          solveMode: 'DETERMINISTIC',
-          isFallback: true,
-          candidatesSummary: { level: 'LOW' },
-        })
-      ).toEqual({ kind: 'demoted' });
+  describe('🔴 F-6 · TRIP-1174 AC-3 — LOW 가 DETERMINISTIC 폴백을 덮지 않는다 (옛 "LOW 가 이긴다" 뒤집음)', () => {
+    it('DETERMINISTIC(＋isFallback) 과 LOW 가 동시에 오면 deterministic 을 반환한다', () => {
+      // 옛 순서(minimal → demoted → deterministic)는 LOW 와 폴백이 **같은 문구**일 때만 무해했다.
+      // 이제 LOW 는 "AI 는 돌았다"는 가벼운 안내라, LOW 가 이기면 진짜 폴백이 "AI 가 쉬었다"를 잃는다.
+      const signals: Signals = {
+        solveMode: 'DETERMINISTIC',
+        isFallback: true,
+        candidatesSummary: { level: 'LOW' },
+      };
+      expect(resolveFallbackNotice(signals)).toEqual({ kind: 'deterministic' });
     });
   });
 
   describe('🔴 F-7 · AC-7 — MANUAL 방어: (MINIMAL, isFallback=false) 는 폴백이 아니다', () => {
-    it('MINIMAL 이라도 isFallback=false 면 minimal 을 안 켜고, 다른 신호가 있으면 그쪽만 켠다', () => {
+    it('MINIMAL 이라도 isFallback=false 면 LOW 가 함께 와도 폴백 배너 0건이다', () => {
       // (a) 순수 MANUAL — 빈 일정을 직접 만든 것이지 실패가 아니다. 배너 0건.
       //     minimal 갈래에서 `&& isFallback` 을 지운 구현은 여기서 { kind:'minimal' } 를 내며 죽는다.
       expect(
         resolveFallbackNotice({ solveMode: 'MINIMAL', isFallback: false })
       ).toBeNull();
 
-      // (b) 같은 (MINIMAL, false) 인데 LOW 요약이 함께 왔다 → demoted 는 여전히 발동해야 한다.
-      //     isFallback 게이트는 **minimal 갈래만** 막는다 — demoted 까지 삼키면 정당한 강등을 놓친다.
+      // (b) 같은 (MINIMAL, false) 인데 LOW 요약이 함께 왔다 → 폴백 축은 여전히 0건(LOW 는 후보 축 몫 —
+      //     후보 부족 안내로 뜨는지는 아래 「후보 부족 안내 판정」 SN-6 이 잰다).
+      const signals: Signals = {
+        solveMode: 'MINIMAL',
+        isFallback: false,
+        candidatesSummary: { level: 'LOW' },
+      };
+      expect(resolveFallbackNotice(signals)).toBeNull();
+    });
+  });
+});
+
+// TRIP-1174
+describe('후보 부족 안내 판정(resolveShortfallNotice)', () => {
+  /**
+   * TRIP-1174 · **후보 축** — 후보 요약이 "모자라다"일 때 시트 맨 위에 띄우는 가벼운 한 줄의 문구.
+   *
+   * 무엇을 보장하나:
+   *  - 🔴 켜는 조건은 "조용할 값(`OK`·`HIGH`)" 화이트리스트다 — `LOW` 뿐 아니라 **모르는 `level`
+   *    문자열**도 안내가 뜬다(INV-4: 서버가 어휘를 늘려도 화면이 조용해지지 않는다).
+   *  - 🔴 카테고리는 **한글 이름**으로만 나간다 — 영문 경계 코드(`NIGHT_VIEW` 등)가 문구에 새지 않는다.
+   *  - `OK` 인데 `shortfallCategories` 가 차 있는 응답(정상 생성의 흔한 모양)은 조용하다.
+   *  - 폴백 축이 켜져 있으면 숨긴다(심각도 최상위 하나 — 01 Q2 기본값).
+   *
+   * *(개념)* **`shortfallCategories`** — AI 가 "후보 풀에 0건인 카테고리"를 영문 코드 배열로 준다.
+   * 취향과 무관한 목록이라 LOW 의 *원인*을 말하지는 않지만, "그 카테고리 후보가 근처에 없다"는 사실이다.
+   *
+   * 3동작 뼈대: 준비=신호 묶음 → 실행=`resolveShortfallNotice(...)` → 단언=문구 완전 일치/`null`.
+   */
+
+  const ok: Signals = { solveMode: 'FULL_AI', isFallback: false };
+  const GENERIC = '근처에 추천할 후보가 적어요';
+
+  describe('🔴 SN-1 · AC-2 — LOW(AI 정상)면 일반형 안내가 정확히 뜬다', () => {
+    it('카테고리 정보가 없으면 "근처에 추천할 후보가 적어요"', () => {
       expect(
-        resolveFallbackNotice({
+        resolveShortfallNotice({ ...ok, candidatesSummary: { level: 'LOW' } })
+      ).toBe(GENERIC);
+      // 빈 배열도 같다.
+      expect(
+        resolveShortfallNotice({
+          ...ok,
+          candidatesSummary: { level: 'LOW', shortfallCategories: [] },
+        })
+      ).toBe(GENERIC);
+    });
+  });
+
+  describe('🔴 SN-2 · AC-5 — 아는 카테고리는 한글 이름으로, 모르는 코드는 버린다', () => {
+    it('두 개면 가운뎃점으로 잇고, 세 개 이상이면 앞 두 개 + "등"이다', () => {
+      const with_ = (codes: string[]) =>
+        resolveShortfallNotice({
+          ...ok,
+          candidatesSummary: { level: 'LOW', shortfallCategories: codes },
+        });
+
+      expect(with_(['SHOPPING', 'NIGHT_VIEW'])).toBe(
+        '근처에 쇼핑·야경 후보가 적어요'
+      );
+      expect(with_(['CAFE'])).toBe('근처에 카페 후보가 적어요');
+      expect(with_(['SIGHT', 'FOOD', 'ACTIVITY'])).toBe(
+        '근처에 명소·맛집 등 후보가 적어요'
+      );
+      // 모르는 코드는 버리고 아는 것만 — 원시 코드가 문구에 새지 않는다.
+      expect(with_(['UNKNOWN_X', 'NATURE'])).toBe('근처에 자연 후보가 적어요');
+      // 전부 모르면 일반형(빈 이름 "근처에  후보가" 금지).
+      expect(with_(['UNKNOWN_X', 'nope'])).toBe(GENERIC);
+      // 대소문자·공백은 같은 코드로 본다(level 판정과 같은 관대함).
+      expect(with_([' culture '])).toBe('근처에 문화 후보가 적어요');
+    });
+  });
+
+  describe('🔴 SN-3 · AC-4 — 모르는 level 도 안내가 뜬다 (INV-4)', () => {
+    it.each(['MEDIUM', 'NO_CANDIDATES', 'INSUFFICIENT', ''])(
+      'level=%p → 일반형 안내',
+      (level) => {
+        expect(
+          resolveShortfallNotice({ ...ok, candidatesSummary: { level } })
+        ).toBe(GENERIC);
+      }
+    );
+  });
+
+  describe('🔴 SN-4 · AC-7 — 조용한 값·요약 없음은 안내 0건이다', () => {
+    it('OK/HIGH(카테고리가 차 있어도)·undefined·null 은 null', () => {
+      expect(
+        resolveShortfallNotice({
+          ...ok,
+          candidatesSummary: { level: 'OK', shortfallCategories: ['CAFE'] },
+        })
+      ).toBeNull();
+      expect(
+        resolveShortfallNotice({
+          ...ok,
+          candidatesSummary: { level: ' high ', shortfallCategories: ['FOOD'] },
+        })
+      ).toBeNull();
+      expect(resolveShortfallNotice({ ...ok })).toBeNull();
+      expect(
+        resolveShortfallNotice({ ...ok, candidatesSummary: null })
+      ).toBeNull();
+    });
+  });
+
+  describe('SN-5 · 01 Q2 — 폴백 축이 켜지면 후보 부족 안내는 숨긴다', () => {
+    it('DETERMINISTIC·MINIMAL(＋isFallback) + LOW → null', () => {
+      for (const solveMode of ['DETERMINISTIC', 'MINIMAL'] as const) {
+        expect(
+          resolveShortfallNotice({
+            solveMode,
+            isFallback: true,
+            candidatesSummary: { level: 'LOW' },
+          })
+        ).toBeNull();
+      }
+    });
+  });
+
+  describe('SN-6 · AC-6 — MANUAL(MINIMAL·isFallback=false) + LOW 는 후보 안내만 뜬다', () => {
+    it('폴백이 아니므로 숨기지 않는다', () => {
+      expect(
+        resolveShortfallNotice({
           solveMode: 'MINIMAL',
           isFallback: false,
           candidatesSummary: { level: 'LOW' },
         })
-      ).toEqual({ kind: 'demoted' });
+      ).toBe(GENERIC);
+    });
+  });
+
+  describe('🔴 SN-7 · AC-4·AC-5 성질 — 어떤 level·카테고리 문자열이 와도', () => {
+    it('조용한 값이 아니면 반드시 문구가 있고, 문구에 영문 경계 코드가 새지 않는다', () => {
+      const CODES = [
+        'SIGHT',
+        'FOOD',
+        'CAFE',
+        'NIGHT_VIEW',
+        'NATURE',
+        'SHOPPING',
+        'CULTURE',
+        'ACTIVITY',
+      ];
+      fc.assert(
+        fc.property(
+          fc.string(),
+          fc.array(fc.oneof(fc.constantFrom(...CODES), fc.string())),
+          (level, codes) => {
+            const notice = resolveShortfallNotice({
+              ...ok,
+              candidatesSummary: { level, shortfallCategories: codes },
+            });
+            const quiet = ['OK', 'HIGH'].includes(level.trim().toUpperCase());
+            expect(notice === null).toBe(quiet);
+            if (notice !== null) {
+              expect(notice).toMatch(/^근처에 .+ 후보가 적어요$/);
+              expect(notice).not.toMatch(/[A-Z_]{3,}/);
+            }
+          }
+        )
+      );
     });
   });
 });

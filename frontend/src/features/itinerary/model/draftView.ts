@@ -230,38 +230,86 @@ export function isCandidatesDemoted(
 }
 
 /**
- * 폴백·강등 안내 한 줄의 종류. 셋 중 **하나만** 뜬다 — 신호가 겹쳐도 심각도 최상위 하나로 접는다.
+ * "AI 가 쉬었다" 안내의 종류. 둘 중 **하나만** 뜬다 — MINIMAL 이 DETERMINISTIC 보다 심각하다.
  */
-export type FallbackNotice =
-  { kind: 'minimal' } | { kind: 'deterministic' } | { kind: 'demoted' };
+export type FallbackNotice = { kind: 'minimal' } | { kind: 'deterministic' };
 
 /**
- * 세 신호(`solveMode`·`isFallback`·후보 요약)를 배너 하나로 접는다. 화면은 이 결과만 받고
- * 원천 신호도 그 어휘도 모른다(판정이 두 층에 흩어지면 같은 규칙이 서로 다르게 진화한다).
+ * **폴백 축** — 엔진이 AI 대신 규칙 기반 경로로 일정을 만들었나(`solveMode`·`isFallback`). 화면은 이
+ * 결과만 받고 원천 신호도 그 어휘도 모른다(판정이 두 층에 흩어지면 같은 규칙이 서로 다르게 진화한다).
+ * 아무 신호도 없으면 `null`(인터스티셜·「기본 일정」 제목·폴백 안내 0건)이다.
  *
- * 심각도 순위 **MINIMAL > LOW(demoted) > DETERMINISTIC** — 실제 후보 누락(LOW)이 알고리즘
- * 강등(DETERMINISTIC)보다 심각하다(01b). 그래서 `minimal → demoted → deterministic` 순으로
- * 검사해 첫 매치를 반환하고, 아무 신호도 없으면 `null`(배너 0건)이다.
+ * 후보 요약(`level=LOW`)은 여기서 보지 않는다(TRIP-1174) — LOW 는 "AI 는 돌았는데 후보가 모자랐다"는
+ * **다른 축**이라 "취향 반영 없이 만든 기본 일정"으로 말하면 거짓이 된다(BR-U2-07 독립 축).
+ * 그 축은 `resolveShortfallNotice` 가 진다.
  *
- * `minimal` 갈래만 `isFallback` 을 함께 본다 — MANUAL(직접 만들기)은 `solveMode=MINIMAL` 이지만
+ * `minimal` 갈래는 `isFallback` 을 함께 본다 — MANUAL(직접 만들기)은 `solveMode=MINIMAL` 이지만
  * 실패가 아니라 선택이라 `isFallback=false` 다. 이 게이트가 없으면 빈 일정에 오배너가 뜬다.
- * 그 게이트가 `demoted` 까지 삼키면 정당한 강등을 놓치므로, LOW 판정은 `isFallback` 과 무관하게 산다.
  */
 export function resolveFallbackNotice(input: {
   solveMode?: ItinerarySolveMode;
   isFallback?: boolean;
-  candidatesSummary?: ItineraryCandidatesSummary;
 }): FallbackNotice | null {
   if (input.solveMode === 'MINIMAL' && input.isFallback === true) {
     return { kind: 'minimal' };
-  }
-  if (isCandidatesDemoted(input.candidatesSummary)) {
-    return { kind: 'demoted' };
   }
   if (input.isFallback === true && input.solveMode === 'DETERMINISTIC') {
     return { kind: 'deterministic' };
   }
   return null;
+}
+
+/**
+ * 후보 부족 안내에 넣을 카테고리 이름. `shortfallCategories` 는 AI 경계 카테고리 **영문 코드**
+ * (`ai/src/trippilot/domain/poi.py` `PoiCategory`)로 오는데 화면용 한글 표가 정본에 없어, 그 docstring 의
+ * 한글 대응을 옮겼다. 표에 없는 코드는 버린다 — 원시 영문 코드를 화면에 내지 않는다.
+ */
+const SHORTFALL_CATEGORY_LABEL: Record<string, string> = {
+  SIGHT: '명소',
+  FOOD: '맛집',
+  CAFE: '카페',
+  NIGHT_VIEW: '야경',
+  NATURE: '자연',
+  SHOPPING: '쇼핑',
+  CULTURE: '문화',
+  ACTIVITY: '액티비티',
+};
+
+/** 카테고리 이름을 몇 개까지 늘어놓나 — 넘치면 앞 두 개 + "등"(한 줄 안내라 길게 늘이지 않는다). */
+const SHORTFALL_NAMED_MAX = 2;
+
+/**
+ * **후보 축** — 후보가 모자라다는 가벼운 안내 문구(TRIP-1174). 안내가 없으면 `null`.
+ *
+ * - 켜는 조건은 `isCandidatesDemoted` 그대로다 — "조용할 값(`OK`·`HIGH`)" 화이트리스트라 모르는
+ *   `level` 문자열도 안내 쪽에 떨어진다(INV-4). 요약이 없으면(`undefined`·`null`) 안 켠다.
+ * - 폴백 축이 켜져 있으면 이 안내는 숨긴다 — 그 화면은 이미 "AI 가 쉬었다"를 말하고, 안내는 심각도
+ *   최상위 하나만 보인다(01 Q2 기본값).
+ * - 아는 카테고리 코드가 있으면 이름을 넣고(`근처에 쇼핑·야경 후보가 적어요`), 없으면 일반형이다.
+ */
+export function resolveShortfallNotice(input: {
+  solveMode?: ItinerarySolveMode;
+  isFallback?: boolean;
+  candidatesSummary?: ItineraryCandidatesSummary;
+}): string | null {
+  if (resolveFallbackNotice(input) !== null) return null;
+  if (!isCandidatesDemoted(input.candidatesSummary)) return null;
+
+  const labels = [
+    ...new Set(
+      (input.candidatesSummary?.shortfallCategories ?? []).flatMap((code) => {
+        const label = SHORTFALL_CATEGORY_LABEL[code.trim().toUpperCase()];
+        return label === undefined ? [] : [label];
+      })
+    ),
+  ];
+  if (labels.length === 0) return '근처에 추천할 후보가 적어요';
+
+  const named =
+    labels.length > SHORTFALL_NAMED_MAX
+      ? `${labels.slice(0, SHORTFALL_NAMED_MAX).join('·')} 등`
+      : labels.join('·');
+  return `근처에 ${named} 후보가 적어요`;
 }
 
 /**
