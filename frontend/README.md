@@ -142,7 +142,7 @@ frontend/
 - 테스트 파일은 소스 옆에 둔다(`foo.ts` ↔ `foo.test.ts`). jest 설정이 둘이라(`jest.config.js` node · `jest.integration.config.js` MSW) 통합 테스트는 `.integration.test`로 파일이 갈린다. 둘 다 돌리려면 `pnpm test`(한쪽만 부르면 다른 쪽이 0건인 채 green으로 보인다).
 - **버킷 예외 — node 버킷이어야 하는 page 배선 테스트는 `XxxPage.test.tsx`**(TRIP-1146): `await import`로만 닿는 모듈(integration 버킷에선 그 자리에서 동기 throw)이나 생성 훅·스토어 목으로 page 배선을 보는 테스트는 integration 버킷으로 못 가므로 `.integration` 없이 둔다(예: `PrefStep1Page.test.tsx`·`ReconsentPage.test.tsx`). 같은 page에 통합 파일이 따로 있으면 버킷 사유를 접미사로 남긴다(`LoginPage.apple.test.tsx` — 애플 SDK lazy import).
 - testID 규약 `{feature}-{screen}-{role}`(예: `execution-hub-timeline`) — testID 부여는 스펙의 일부다.
-- CI(`.github/workflows/frontend-ci.yml`, 경로 필터 `frontend/**`): `tsc` · ESLint · Jest(두 버킷)+fast-check — 머지 게이트.
+- CI(`.github/workflows/frontend-ci.yml`, 경로 필터 `frontend/**`): ESLint · `tsc` · Steiger(`pnpm fsd`) · 구조 지도 드리프트(`structure-index.cjs --write`·`--check`) · Jest(두 버킷)+fast-check — 머지 게이트.
 
 ### 남김·합침·지움 판정
 

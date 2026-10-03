@@ -34,6 +34,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm tsc
+      # FSD 구조 게이트(TRIP-1158): 공식 린터 Steiger 가 폴더·슬라이스 배치를 본다. 설정(steiger.config.ts)은
+      # cwd 기준으로만 찾으므로 working-directory(frontend)에서 돈다. 진단 1건이라도 있으면 실패(--fail-on-warnings).
+      - run: pnpm fsd
       # 구조 인벤토리 게이트: --write 재생성 결과가 커밋본과 다르면(=파일 추가·삭제·export 변경 후
       # --write 미실행) 드리프트로 실패. --check 는 손-프로즈가 죽은 경로를 가리키는 '유령'을 잡는다.
       # (볼트가 없는 CI 에선 '개념 유령' 검사는 스크립트가 자동으로 건너뛴다.)
