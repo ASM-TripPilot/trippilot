@@ -556,7 +556,8 @@ describe('검색 후보로 등록 — 실물 훅 + msw (옛 본 파일)', () => 
 
     it('POST 201 이면 "숙소를 등록했어요" 토스트가 뜨고 뒤로 1회 간다', async () => {
       renderWithToast();
-      // "아직 없다" 앵커 — 앞 관점(핀 등록 성공)이 남긴 토스트가 새면 아래 단언이 누르기 전부터 참이 된다.
+      // "아직 없다" 앵커 — 토스트 스토어는 모듈 싱글턴이라 앞 테스트가 남기면 아래 단언이 누르기 전부터 참이 된다.
+      // 이 앞의 정상 등록 테스트들이 토스트를 남기고, 그것을 최상위 afterEach 의 resetToast() 가 비운다 — 그 줄을 지우면 기본 순서에서도 여기서 red 다(5-b 실측).
       expect(screen.queryByTestId('stay-register-saved')).toBeNull();
 
       searchFor('busan');
@@ -1008,6 +1009,12 @@ describe('뒤로가기 배선 (옛 .back)', () => {
     }
     return Wrapper;
   }
+
+  // 리셋 앵커(TRIP-1187) — 핀 describe 의 beforeEach 가 켠 `mockPinStubs` 는 최상위 afterEach 만 끈다.
+  // 그 줄이 빠지면 여기서 red 다(기본 순서에서도 — 핀 describe 가 이 describe 보다 앞이다).
+  it('핀 관점이 켠 훅 스텁 스위치가 이 관점으로 새지 않는다', () => {
+    expect(mockPinStubs).toBe(false);
+  });
 
   describe('SB-1 · 뒤로가기 버튼이 router.back()으로 배선된다 (AC-2)', () => {
     it('페이지를 열고 헤더 뒤로가기를 누르면 이전 화면으로 돌아간다', () => {
