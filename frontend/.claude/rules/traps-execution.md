@@ -5,6 +5,8 @@ paths:
   - "src/shared/location/**"
   - "src/features/planb/**"
   - "src/pages/planb-*/**"
+  - "src/features/request-replan/**"
+  - "src/features/apply-replan/**"
 ---
 이 파일은 repo-traps.md에서 경로별로 쪼갠 함정이다 — 해당 경로 만질 때만 로드된다.
 (전역 불변식 INV-3 "소요시간 비표시, 거리만"은 코어 `repo-traps.md`에 남아 무조건 로드된다.)

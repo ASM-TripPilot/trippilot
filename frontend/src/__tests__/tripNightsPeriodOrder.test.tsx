@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import type { PreferenceView, Region } from '@/shared/api/generated/schemas';
 import { RegionLevel } from '@/shared/api/generated/schemas';
-import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
 import { RegionPickerPage } from '@/pages/region-picker/ui/RegionPickerPage';
 import { TripNewStep1Page } from '@/pages/trip-new-step1/ui/TripNewStep1Page';
 
@@ -73,11 +73,11 @@ jest.mock('@/features/explore/model/regions', () => ({
 
 let mockPreference: PreferenceView | undefined;
 
-jest.mock('@/features/trip/model/usePreferencePrefill', () => ({
+jest.mock('@/pages/trip-new-step1/model/usePreferencePrefill', () => ({
   usePreferencePrefill: () => ({ data: mockPreference }),
 }));
 
-jest.mock('@/features/trip/model/useCreateTrip', () => ({
+jest.mock('@/pages/trip-new-step1/model/useCreateTrip', () => ({
   useCreateTrip: () => ({
     mutateAsync: jest.fn().mockResolvedValue(undefined),
     isPending: false,
@@ -85,7 +85,7 @@ jest.mock('@/features/trip/model/useCreateTrip', () => ({
   }),
 }));
 
-jest.mock('@/features/explore/model/savedPlaces', () => ({
+jest.mock('@/features/save-place/model/savedPlaces', () => ({
   useSavedPlaces: () => ({
     savedPlaces: [],
     isPending: false,

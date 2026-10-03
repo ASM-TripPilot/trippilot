@@ -4,9 +4,9 @@ import { isAxiosError } from 'axios';
 import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 
-import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { useSavedPlaces } from '@/features/save-place/model/savedPlaces';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
-import { wizardOriginParams } from '@/features/explore/model/wizardOrigin';
+import { wizardOriginParams } from '@/features/create-trip/model/wizardOrigin';
 import {
   deleteTripsTripId,
   deleteTripsTripIdMustVisitsMustVisitId,
@@ -35,33 +35,33 @@ import {
   parseBudgetAmount,
   tierForAmount,
   type BudgetTier,
-} from '@/features/trip/model/budgetAmount';
+} from '../model/budgetAmount';
 import {
   buildCreateTripRequest,
   type CreateTripInput,
-} from '@/features/trip/model/createTripRequest';
+} from '../model/createTripRequest';
 import {
   nightsSum,
   validateTripDraft,
   type TripDraft,
-} from '@/features/trip/model/tripDraft';
-import { deriveEndDate } from '@/features/trip/model/tripWizardStep1';
-import { mustVisitFailureNotice } from '@/features/trip/model/mustVisitSeed';
-import { planMustVisitSync } from '@/features/trip/model/mustVisitSync';
+} from '@/features/create-trip/model/tripDraft';
+import { deriveEndDate } from '@/features/create-trip/model/tripWizardStep1';
+import { mustVisitFailureNotice } from '@/features/create-trip/model/mustVisitSeed';
+import { planMustVisitSync } from '../model/mustVisitSync';
 import {
   summaryBudget,
   summaryCompanion,
   summaryDestinations,
   summaryPeriod,
   summaryPreferences,
-} from '@/features/trip/model/tripSummary';
-import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
-import { useCreateTrip } from '@/features/trip/model/useCreateTrip';
-import { usePreferencePrefill } from '@/features/trip/model/usePreferencePrefill';
-import { CompanionEditSheet } from '@/features/trip/ui/CompanionEditSheet';
-import { DestinationEditSheet } from '@/features/trip/ui/DestinationEditSheet';
-import { PeriodEditSheet } from '@/features/trip/ui/PeriodEditSheet';
-import { TripWizardLeaveDialog } from '@/features/trip/ui/TripWizardLeaveDialog';
+} from '@/features/create-trip/model/tripSummary';
+import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
+import { useCreateTrip } from '../model/useCreateTrip';
+import { usePreferencePrefill } from '../model/usePreferencePrefill';
+import { CompanionEditSheet } from './CompanionEditSheet';
+import { DestinationEditSheet } from './DestinationEditSheet';
+import { PeriodEditSheet } from './PeriodEditSheet';
+import { TripWizardLeaveDialog } from './TripWizardLeaveDialog';
 import { TripWizardStep1Screen } from './TripWizardStep1Screen';
 
 import { BudgetEditSheet } from './BudgetEditSheet';

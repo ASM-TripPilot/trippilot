@@ -16,9 +16,9 @@ import type {
 import { RegionLevel } from '@/shared/api/generated/schemas';
 import { resetPressGuard } from '@/shared/press/pressGuard';
 import { formatPrice } from '@/entities/stay/lib/formatPrice';
-import { stayKey } from '@/features/stay/model/stayKey';
+import { stayKey } from '@/features/save-stay/model/stayKey';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
-import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
 import {
   captureDraftAtNextCall,
   freshWizardDraft,
@@ -70,12 +70,12 @@ jest.mock('@/shared/api/generated/places/places', () => ({
 }));
 
 const mockUseSavedPlaces = jest.fn();
-jest.mock('@/features/explore/model/savedPlaces', () => ({
+jest.mock('@/features/save-place/model/savedPlaces', () => ({
   useSavedPlaces: (...args: unknown[]) => mockUseSavedPlaces(...args),
 }));
 
 const mockUseSavedStays = jest.fn();
-jest.mock('@/features/stay/model/savedStays', () => ({
+jest.mock('@/features/save-stay/model/savedStays', () => ({
   useSavedStays: (...args: unknown[]) => mockUseSavedStays(...args),
 }));
 

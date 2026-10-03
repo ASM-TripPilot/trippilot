@@ -7,7 +7,7 @@ import {
 } from '@testing-library/react-native';
 
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
-import { useItineraryEditStore } from '@/features/itinerary/model/itineraryEditStore';
+import { useItineraryEditStore } from '@/features/edit-itinerary/model/itineraryEditStore';
 import type {
   BaseAssignment,
   Itinerary,

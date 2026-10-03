@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { Region } from '@/shared/api/generated/schemas';
 import { RegionLevel } from '@/shared/api/generated/schemas';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
-import type * as TripWizardStoreModule from '@/features/trip/model/tripWizardStore';
+import type * as TripWizardStoreModule from '@/features/create-trip/model/tripWizardStore';
 
 import { RegionPickerPage } from './RegionPickerPage';
 
@@ -64,9 +64,9 @@ jest.mock('@/features/explore/model/regions', () => ({
 // 기간 없음"(= 1박으로 담는 옛 동작)으로 넓혀, 셀렉터로 읽든 `getState()` 로 읽든 크래시 없이 돈다.
 // 이 파일의 단언(`('…', 1)`)은 그 상태에서 그대로 유효하다. 담긴 결과(박수·끝 날짜·코드)는 아래
 // `실제 스토어에 담긴 결과` describe 가 스위치를 켜고 실물 스토어에서 읽는다.
-jest.mock('@/features/trip/model/tripWizardStore', () => {
+jest.mock('@/features/create-trip/model/tripWizardStore', () => {
   const actual = jest.requireActual<typeof TripWizardStoreModule>(
-    '@/features/trip/model/tripWizardStore'
+    '@/features/create-trip/model/tripWizardStore'
   );
   const mockWizardState = () => ({
     addDestination: mockAddDestination,
@@ -95,7 +95,7 @@ jest.mock('@/features/trip/model/tripWizardStore', () => {
 /** 실물 스토어 — 목을 거치지 않고 직접 읽고 리셋한다(목 팩토리의 requireActual 과 같은 인스턴스). */
 const { useTripWizardStore: realWizardStore } = jest.requireActual<
   typeof TripWizardStoreModule
->('@/features/trip/model/tripWizardStore');
+>('@/features/create-trip/model/tripWizardStore');
 
 /** 서버 `Region` 표본 도우미. */
 function region(

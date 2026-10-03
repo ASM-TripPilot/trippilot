@@ -16,7 +16,7 @@ import type {
   DraftView,
 } from '@/features/itinerary/model/draftView';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
-import { timeBandLabel } from '@/features/itinerary/model/timeBandLabel';
+import { timeBandLabel } from '@/entities/itinerary-slot/lib/timeBandLabel';
 import { CheckCircleGlyph } from '@/features/itinerary/ui/ItineraryGlyphs';
 
 import { DraftScreen } from './DraftScreen';

@@ -6,7 +6,7 @@ import {
 } from '@testing-library/react-native';
 import { ProfileCard } from './ProfileCard';
 import type { ReactTestInstance } from 'react-test-renderer';
-import type { TripBucket } from '@/features/settings/model/tripBuckets';
+import type { TripBucket } from '../model/tripBuckets';
 import { PencilGlyph } from '@/features/settings/ui/SettingsGlyphs';
 
 /**

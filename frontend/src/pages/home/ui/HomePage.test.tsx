@@ -12,9 +12,9 @@ import {
   ItineraryStatus,
 } from '@/shared/api/generated/schemas';
 import { seoulDate } from '@/shared/date/seoulDate';
-import { SAVE_FAILURE_NOTICE } from '@/features/explore/model/placeSaveGuard';
+import { SAVE_FAILURE_NOTICE } from '@/features/save-place/model/placeSaveGuard';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
-import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
 import {
   captureDraftAtNextCall,
   freshWizardDraft,
@@ -62,13 +62,13 @@ jest.mock('@/shared/api/generated/places/places', () => ({
 const mockUseSavedPlaces = jest.fn();
 const mockSave = jest.fn();
 const mockRemove = jest.fn();
-jest.mock('@/features/explore/model/savedPlaces', () => ({
+jest.mock('@/features/save-place/model/savedPlaces', () => ({
   useSavedPlaces: (...args: unknown[]) => mockUseSavedPlaces(...args),
 }));
 
 // 딥 경로로 목한다 — features/trip 의 동명 훅이 아니다(QueryClient 없이 실훅이 돌면 크래시).
 const mockUseSavedStays = jest.fn();
-jest.mock('@/features/stay/model/savedStays', () => ({
+jest.mock('@/features/save-stay/model/savedStays', () => ({
   useSavedStays: (...args: unknown[]) => mockUseSavedStays(...args),
 }));
 

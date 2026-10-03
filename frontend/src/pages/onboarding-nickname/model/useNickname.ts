@@ -8,7 +8,7 @@ import {
 } from '@/shared/api';
 
 import type { NicknameErrorReason } from '../ui/NicknameScreen';
-import { validateNicknameFormat } from '@/features/onboarding/model/validateNicknameFormat';
+import { validateNicknameFormat } from './validateNicknameFormat';
 
 /**
  * 닉네임 상태·서버 호출 (US-ONB-03 · AC B1·B2·B5~B9).

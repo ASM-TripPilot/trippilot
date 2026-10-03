@@ -51,7 +51,7 @@ import {
   resolveName,
   type StayRegisterFlow,
   type StayRegisterTab,
-} from '@/features/stay/model/stayRegisterForm';
+} from '../model/stayRegisterForm';
 import {
   BackChevronGlyph,
   BedGlyph,

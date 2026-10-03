@@ -3,6 +3,8 @@ paths:
   - "src/features/trip/**"
   - "src/pages/trip-new-*/**"
   - "src/app/trips/**"
+  - "src/features/create-trip/**"
+  - "src/features/assign-trip-base/**"
 ---
 이 파일은 repo-traps.md에서 경로별로 쪼갠 함정이다 — 해당 경로 만질 때만 로드된다.
 
@@ -20,4 +22,4 @@ paths:
 
 ## 예산 등급 (g01)
 
-- **`tierForAmount`의 경계(50만·150만·300만)는 온보딩 `PrefStep2Screen.BUDGET_OPTIONS` 라벨 문자열(`'50~150만원'` 등)의 손 복사본이라, 라벨을 고쳐도 이 숫자가 따라가지 않고 잡는 테스트도 없다** → 온보딩 구간을 바꾸는 작업은 `features/trip/model/budgetAmount.ts`의 세 숫자와 칩 대표 금액 맵(`BUDGET_TIER_AMOUNT`)을 함께 고쳐야 한다. 형제 feature import 금지라 공용화도 막혀 있다(공용 범위 표 후보, 미착수). 역산 등급은 화면 표시 전용 — 생성 결과는 계정 `budgetTier`로 정해져 바뀌지 않는다(BE/AI 짝 칸).
+- **`tierForAmount`의 경계(50만·150만·300만)는 온보딩 `PrefStep2Screen.BUDGET_OPTIONS` 라벨 문자열(`'50~150만원'` 등)의 손 복사본이라, 라벨을 고쳐도 이 숫자가 따라가지 않고 잡는 테스트도 없다** → 온보딩 구간을 바꾸는 작업은 `pages/trip-new-step1/model/budgetAmount.ts`의 세 숫자와 칩 대표 금액 맵(`BUDGET_TIER_AMOUNT`)을 함께 고쳐야 한다. 형제 feature import 금지라 공용화도 막혀 있다(공용 범위 표 후보, 미착수). 역산 등급은 화면 표시 전용 — 생성 결과는 계정 `budgetTier`로 정해져 바뀌지 않는다(BE/AI 짝 칸).

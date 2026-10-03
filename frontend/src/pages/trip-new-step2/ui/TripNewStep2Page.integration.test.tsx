@@ -12,7 +12,7 @@ import {
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { BaseAssignment, SavedStay } from '@/shared/api/generated/schemas';
-import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
 import { resetPressGuard } from '@/shared/press/pressGuard';
 
 import { TripNewStep2Page } from './TripNewStep2Page';
@@ -78,7 +78,7 @@ jest.mock('@/features/trip/model/useSavedStays', () => ({
   useSavedStays: () => mockSavedStaysResult,
 }));
 
-jest.mock('@/features/trip/model/useTripBases', () => ({
+jest.mock('@/features/assign-trip-base/model/useTripBases', () => ({
   useTripBases: () => ({
     data: [] as BaseAssignment[],
     isPending: false,

@@ -16,8 +16,8 @@ const FEATURES_DIR = path.resolve('src/features');
 
 // import **대상**은 해석돼야(실파일이어야) 한다 — 아니면 위반이 경계(no-restricted-paths)가
 // 아니라 모듈 해석 실패(no-unresolved)로 잡혀 심판이 조용히 무의미해진다.
-const REAL_FEATURE_HOME = '@/features/home/model/homeFixtures';
-const REAL_FEATURE_ONB = '@/features/onboarding/model/preferenceStore';
+const REAL_FEATURE_HOME = '@/features/home/ui/HomeGlyphs';
+const REAL_FEATURE_ONB = '@/features/edit-preferences/model/preferenceStore';
 const REAL_PAGE = '@/pages/place-explore/ui/PlaceExplorePage';
 const REAL_SHARED = '@/shared/ui/BottomTabBar';
 const REAL_APP_SHELL = '@/app-shell';
@@ -335,11 +335,13 @@ const NO_CONSOLE = 'no-console';
 
 const PROD_PROBE = 'src/features/home/__release_probe__.ts';
 const PHOTO_PROBE = 'src/shared/photo/__release_probe__.ts';
-const REFLECTION_UI_PROBE = 'src/features/reflection/ui/__release_probe__.ts';
+const REFLECTION_UI_PROBE =
+  'src/features/share-trip-card/ui/__release_probe__.ts';
 const REFLECTION_MODEL_PROBE =
-  'src/features/reflection/model/__release_probe__.ts';
+  'src/features/share-trip-card/model/__release_probe__.ts';
 // 캡처 어댑터 자신의 경로 — 예외 블록이 이 파일에만 걸린다.
-const CAPTURE_ADAPTER = 'src/features/reflection/model/shareCaptureNative.ts';
+const CAPTURE_ADAPTER =
+  'src/features/share-trip-card/model/shareCaptureNative.ts';
 const STATE_NOTICE = 'src/shared/ui/StateNotice.tsx';
 const ROUTE_PROBE = 'src/app/trips/__release_probe__.tsx';
 const PAGE_PROBE = 'src/pages/__release_probe__/x.tsx';
@@ -448,7 +450,7 @@ describe('네이티브 사진·캡처 모듈은 정적으로 끌지 않는다 (r
     [
       '@ 별칭',
       REFLECTION_UI_PROBE,
-      '@/features/reflection/model/shareCaptureNative',
+      '@/features/share-trip-card/model/shareCaptureNative',
     ],
   ])(
     '캡처 어댑터를 %s 로 정적 import 하면 error',

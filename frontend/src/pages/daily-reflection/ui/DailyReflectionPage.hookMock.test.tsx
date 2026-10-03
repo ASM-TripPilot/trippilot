@@ -10,7 +10,7 @@ import {
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { router } from 'expo-router';
 
-import { useDailyReflection } from '@/features/reflection/model/useDailyReflection';
+import { useDailyReflection } from '../model/useDailyReflection';
 import { DailyReflectionScreen } from './DailyReflectionScreen';
 import {
   useGetTripsTripIdReflections,
@@ -53,7 +53,7 @@ jest.mock('expo-router', () => ({
   },
 }));
 
-jest.mock('@/features/reflection/model/useDailyReflection', () => ({
+jest.mock('../model/useDailyReflection', () => ({
   useDailyReflection: jest.fn(),
 }));
 
@@ -370,9 +370,9 @@ describe('회고 카드 — 서버가 고른 card 를 그리고 { card } 로 저
    */
   beforeEach(() => {
     (useDailyReflection as jest.Mock).mockImplementation(
-      jest.requireActual<
-        typeof import('@/features/reflection/model/useDailyReflection')
-      >('@/features/reflection/model/useDailyReflection').useDailyReflection
+      jest.requireActual<typeof import('../model/useDailyReflection')>(
+        '../model/useDailyReflection'
+      ).useDailyReflection
     );
   });
   // 옛 파일의 trips 목 기본값 — 여행 조회가 "아직 없음"을 돌려준다(이 묶음은 trip 을 arrange 하지 않는다).

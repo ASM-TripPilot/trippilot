@@ -22,22 +22,22 @@ import {
   HOME_PLANNING_PROPS,
   HOME_POST_TRIP_PROPS,
   HOME_TRAVELING_PROPS,
-} from '@/features/home/model/homeFixtures';
-import type { HomeSpotsLane } from '@/features/home/model/homeTypes';
+} from '@/pages/home/model/homeFixtures';
+import type { HomeSpotsLane } from '@/pages/home/model/homeTypes';
 import {
   PREVIEW_PLACES,
   PREVIEW_REGIONS,
   PREVIEW_SAVED_PLACES,
   PREVIEW_SAVED_POI_IDS,
-} from '@/features/explore/model/exploreFixtures';
-import { TriggerChip } from '@/features/execution/ui/TriggerChip';
-import { MemoInline } from '@/features/record/ui/MemoInline';
-import { MemoSheet } from '@/features/record/ui/MemoSheet';
-import { PhotoThumbStrip } from '@/features/record/ui/PhotoThumbStrip';
+} from '@/pages/explore-landing/model/exploreFixtures';
+import { TriggerChip } from '@/pages/live-itinerary/ui/TriggerChip';
+import { MemoInline } from '@/features/attach-visit-media/ui/MemoInline';
+import { MemoSheet } from '@/pages/live-itinerary/ui/MemoSheet';
+import { PhotoThumbStrip } from '@/pages/trip-records/ui/PhotoThumbStrip';
 import { RecordsCalendarScreen } from '@/pages/records-calendar/ui/RecordsCalendarScreen';
-import { VisitRecordCard } from '@/features/record/ui/VisitRecordCard';
-import { VisitTimeSheet } from '@/features/record/ui/VisitTimeSheet';
-import { missingParts } from '@/features/reflection/model/missingParts';
+import { VisitRecordCard } from '@/pages/trip-records/ui/VisitRecordCard';
+import { VisitTimeSheet } from '@/pages/trip-records/ui/VisitTimeSheet';
+import { missingParts } from '@/pages/daily-reflection/model/missingParts';
 import { SHARE_FORMATS } from '@/features/reflection/model/shareCard';
 import { DailyReflectionScreen } from '@/pages/daily-reflection/ui/DailyReflectionScreen';
 import { ShareCardScreen } from '@/pages/share-card/ui/ShareCardScreen';
@@ -54,8 +54,8 @@ import { SavedPlaceListScreen } from '@/pages/saved-places/ui/SavedPlaceListScre
 import {
   ExploreLandingScreen,
   type StayCardVM,
-} from '@/features/explore/ui/ExploreLandingScreen';
-import { HomeScreen } from '@/features/home/ui/HomeScreen';
+} from '@/pages/explore-landing/ui/ExploreLandingScreen';
+import { HomeScreen } from '@/pages/home/ui/HomeScreen';
 import { MAGAZINE_DEFAULT_PROPS } from '@/pages/magazine/model/magazineFixtures';
 import { MagazineScreen } from '@/pages/magazine/ui/MagazineScreen';
 import {
@@ -69,7 +69,7 @@ import type { MustVisitListItem } from '@/features/itinerary/model/mustVisitList
 import {
   startTimeOptions,
   tripDayChips,
-} from '@/features/itinerary/model/mustVisitTimeForm';
+} from '@/features/add-must-visit/model/mustVisitTimeForm';
 import { ConceptPickerScreen } from '@/pages/itinerary-copick/ui/ConceptPickerScreen';
 import { GenerationFallbackScreen } from '@/pages/itinerary-draft/ui/GenerationFallbackScreen';
 import { GeneratingScreen } from '@/pages/itinerary-generating/ui/GeneratingScreen';
@@ -79,11 +79,11 @@ import {
   PlaceAddHeader,
   PlaceAddRow,
 } from '@/features/itinerary/ui/PlaceAddScreen';
-import { SlotCandidateSheet as ItinerarySlotCandidateSheet } from '@/features/itinerary/ui/SlotCandidateSheet';
+import { SlotCandidateSheet as ItinerarySlotCandidateSheet } from '@/pages/itinerary-draft/ui/SlotCandidateSheet';
 import { SlotFillScreen } from '@/pages/itinerary-copick/ui/SlotFillScreen';
 import { UnplacedMustVisitNotice } from '@/features/itinerary/ui/UnplacedMustVisitNotice';
 import type { UnplacedMustVisitRow } from '@/features/itinerary/model/unplacedMustVisits';
-import type { StayRecommendView as StayRecommendViewModel } from '@/features/itinerary/model/stayRecommend';
+import type { StayRecommendView as StayRecommendViewModel } from '@/pages/itinerary-stay-recommend/model/stayRecommend';
 import { CoPickStepper } from '@/pages/itinerary-copick/ui/CoPickStepper';
 import { GenerationDoneBar } from '@/pages/itinerary-list/ui/GenerationDoneBar';
 import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
@@ -96,7 +96,7 @@ import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
 import { PastTripRow } from '@/entities/trip/ui/PastTripRow';
 import { ChevronRightGlyph as TripChevronRightGlyph } from '@/entities/trip/ui/TripGlyphs';
 import type { PastTripCardVM } from '@/entities/trip/model';
-import type { MonthLegends } from '@/features/record/model/recordsCalendar';
+import type { MonthLegends } from '@/pages/records-calendar/model/recordsCalendar';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { buildStatePins } from '@/entities/itinerary-slot/lib/slotMapPin';
 import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
@@ -104,10 +104,10 @@ import { MethodPickerScreen } from '@/pages/itinerary-method/ui/MethodPickerScre
 import {
   MyTripCard,
   type MyTripCardVM,
-} from '@/features/itinerary/ui/MyTripCard';
+} from '@/pages/itinerary-list/ui/MyTripCard';
 import { MyTripsListScreen } from '@/pages/itinerary-list/ui/MyTripsListScreen';
-import { MyTripsSortSheet } from '@/features/itinerary/ui/MyTripsSortSheet';
-import { TripDeleteDialog } from '@/features/itinerary/ui/TripDeleteDialog';
+import { MyTripsSortSheet } from '@/pages/itinerary-list/ui/MyTripsSortSheet';
+import { TripDeleteDialog } from '@/pages/itinerary-list/ui/TripDeleteDialog';
 import {
   NotificationInboxScreen,
   type NotificationSection,
@@ -119,27 +119,27 @@ import {
 import {
   buildSettingsSections,
   filterReadySettingsSections,
-} from '@/features/settings/model/settingsSections';
+} from '@/pages/settings/model/settingsSections';
 import { BaseToggleDialog } from '@/features/settings/ui/BaseToggleDialog';
 import { DeleteAccountDialog } from '@/pages/settings/ui/DeleteAccountDialog';
 import { LocationConsentScreen } from '@/pages/settings-location/ui/LocationConsentScreen';
-import type { StyleCardVM } from '@/features/settings/model/styleCardModel';
+import type { StyleCardVM } from '@/pages/my-page/model/styleCardModel';
 import { MyPageScreen } from '@/pages/my-page/ui/MyPageScreen';
 import { PersonalizationScreen } from '@/pages/settings-personalization/ui/PersonalizationScreen';
 import {
   MyStaysScreen,
   type MyStayRowVM,
 } from '@/pages/my-stays/ui/MyStaysScreen';
-import { StyleSummaryCard } from '@/features/settings/ui/StyleSummaryCard';
+import { StyleSummaryCard } from '@/pages/my-page/ui/StyleSummaryCard';
 import { RevokeConfirmDialog } from '@/pages/settings-location/ui/RevokeConfirmDialog';
 import { SettingsScreen } from '@/pages/settings/ui/SettingsScreen';
 import { triggerLabel } from '@/features/planb/model/triggerLabel';
 import { triggerPillCopy } from '@/features/planb/model/triggerPillCopy';
-import { riskAffectedRow } from '@/features/planb/model/riskAffectedRow';
-import { triggerWatchlist } from '@/features/planb/model/triggerWatchlist';
-import { ReplanRequestSheet } from '@/features/planb/ui/ReplanRequestSheet';
+import { riskAffectedRow } from '@/pages/live-itinerary/model/riskAffectedRow';
+import { triggerWatchlist } from '@/pages/live-itinerary/model/triggerWatchlist';
+import { ReplanRequestSheet } from '@/pages/planb-request/ui/ReplanRequestSheet';
 import { appliedSummaryBadges } from '@/features/planb/model/appliedSummary';
-import { ReplanAppliedSheet } from '@/features/planb/ui/ReplanAppliedSheet';
+import { ReplanAppliedSheet } from '@/pages/live-itinerary/ui/ReplanAppliedSheet';
 import type { ReplanSlotVM } from '@/entities/itinerary-slot/model';
 import { ReplanDraftView } from '@/pages/planb-draft/ui/ReplanDraftView';
 // 뷰 파일 경로로 직접 — 페이지 배럴은 useAssignBase(요청 모듈)를 끌어와 프리뷰 네트워크 지뢰가 터진다.
@@ -147,7 +147,7 @@ import { StayRecommendView } from '@/pages/itinerary-stay-recommend/ui/StayRecom
 import { TripRecordsView } from '@/pages/trip-records/ui/TripRecordsView';
 import { ReplanSolvingView } from '@/pages/planb-draft/ui/ReplanSolvingView';
 import { SlotCandidateSheet } from '@/features/planb/ui/SlotCandidateSheet';
-import { RiskDetailSheet } from '@/features/planb/ui/RiskDetailSheet';
+import { RiskDetailSheet } from '@/pages/live-itinerary/ui/RiskDetailSheet';
 import { NicknameScreen } from '@/pages/onboarding-nickname/ui/NicknameScreen';
 import {
   StayRegisterScreen,
@@ -159,20 +159,20 @@ import {
   SavedStayListScreen,
   type SavedStayCardVM,
 } from '@/pages/stay-saved/ui/SavedStayListScreen';
-import { OtaChoiceSheet } from '@/features/stay/ui/OtaChoiceSheet';
-import { StayPriceSheet } from '@/features/stay/ui/StayPriceSheet';
-import { StayFilterSheet } from '@/features/stay/ui/StayFilterSheet';
+import { OtaChoiceSheet } from '@/pages/stay-detail/ui/OtaChoiceSheet';
+import { StayPriceSheet } from '@/pages/stay-search/ui/StayPriceSheet';
+import { StayFilterSheet } from '@/pages/stay-search/ui/StayFilterSheet';
 import {
   TripWizardStep1Screen,
   type TripWizardStep1ScreenProps,
 } from '@/pages/trip-new-step1/ui/TripWizardStep1Screen';
-import { CompanionEditSheet } from '@/features/trip/ui/CompanionEditSheet';
-import { DestinationEditSheet } from '@/features/trip/ui/DestinationEditSheet';
-import { PeriodEditSheet } from '@/features/trip/ui/PeriodEditSheet';
+import { CompanionEditSheet } from '@/pages/trip-new-step1/ui/CompanionEditSheet';
+import { DestinationEditSheet } from '@/pages/trip-new-step1/ui/DestinationEditSheet';
+import { PeriodEditSheet } from '@/pages/trip-new-step1/ui/PeriodEditSheet';
 import {
   StaySelectSheet,
   type StaySelectCandidate,
-} from '@/features/trip/ui/StaySelectSheet';
+} from '@/pages/trip-new-step2/ui/StaySelectSheet';
 import { LiveLocationView } from '@/pages/live-location/ui/LiveLocationView';
 import { NoBaseNoticeCard } from '@/pages/itinerary-plan/ui/NoBaseNoticeCard';
 import { DraftFallbackBanner } from '@/pages/itinerary-draft/ui/DraftFallbackBanner';
@@ -188,12 +188,12 @@ import {
   TripWizardStep2Screen,
   type TripWizardStep2ScreenProps,
 } from '@/pages/trip-new-step2/ui/TripWizardStep2Screen';
-import { BaseRegenerateDialog } from '@/features/trip/ui/BaseRegenerateDialog';
-import { TripWizardLeaveDialog } from '@/features/trip/ui/TripWizardLeaveDialog';
+import { BaseRegenerateDialog } from '@/pages/trip-new-step2/ui/BaseRegenerateDialog';
+import { TripWizardLeaveDialog } from '@/pages/trip-new-step1/ui/TripWizardLeaveDialog';
 import { PrefStep1Screen } from '@/pages/onboarding-pref1/ui/PrefStep1Screen';
 import { PrefStep2Screen } from '@/pages/onboarding-pref2/ui/PrefStep2Screen';
 import { TermsScreen } from '@/pages/onboarding-terms/ui/TermsScreen';
-import type { PreferenceSelection } from '@/features/settings/model/preferenceDraft';
+import type { PreferenceSelection } from '@/features/edit-preferences/model/preferenceDraft';
 import { PreferencesEditView } from '@/pages/settings-preferences/ui/PreferencesEditView';
 import type {
   ItineraryDaysItemSlotsItem,

@@ -13,11 +13,8 @@ import {
   NoteGlyph,
   VisitCheckUpcomingGlyph,
 } from '@/features/record/ui/RecordGlyphs';
-import { SpontaneousVisitButton } from '@/features/record/ui/SpontaneousVisitButton';
-import {
-  VisitRecordCard,
-  type VisitRecordCardVM,
-} from '@/features/record/ui/VisitRecordCard';
+import { SpontaneousVisitButton } from './SpontaneousVisitButton';
+import { VisitRecordCard, type VisitRecordCardVM } from './VisitRecordCard';
 import type { MapCenter, MapPin } from '@/shared/map';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { DayChipOverlay } from '@/widgets/map-sheet-shell/ui/DayChipOverlay';

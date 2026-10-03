@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
 
-import { isShareCaptureArmed } from '@/features/reflection/model/shareCapture';
+import { isShareCaptureArmed } from '@/features/share-trip-card/model/shareCapture';
 import { summaryStats } from '@/features/reflection/model/summaryStats';
 import {
   daySubtitle,
@@ -13,7 +13,7 @@ import {
 } from '@/features/reflection/model/summaryView';
 import { useTripSummary } from '@/features/reflection/model/useTripSummary';
 import { TripSummaryScreen, type DayCardVM } from './TripSummaryScreen';
-import { tripDayChips } from '@/features/itinerary/model/mustVisitTimeForm';
+import { tripDayChips } from '@/features/add-must-visit/model/mustVisitTimeForm';
 import { formatDayLabel } from '@/entities/trip/lib/formatDayLabel';
 import { useGetTripsTripId } from '@/shared/api/generated/trips/trips';
 import { StateNotice } from '@/shared/ui/StateNotice';

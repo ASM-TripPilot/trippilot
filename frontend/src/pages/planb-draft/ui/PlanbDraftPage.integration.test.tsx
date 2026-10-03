@@ -35,7 +35,7 @@ const SESSION_ID = 's9';
 const mockSession: { data: Record<string, unknown> | undefined } = {
   data: undefined,
 };
-jest.mock('@/features/planb/model/useReplanSession', () => ({
+jest.mock('../model/useReplanSession', () => ({
   useReplanSession: () => ({
     data: mockSession.data,
     isPending: mockSession.data === undefined,
@@ -45,7 +45,7 @@ jest.mock('@/features/planb/model/useReplanSession', () => ({
 
 const mockMutate = jest.fn();
 const mockApply = { isPending: false, isError: false };
-jest.mock('@/features/planb/model/useApplyReplan', () => ({
+jest.mock('@/features/apply-replan/model/useApplyReplan', () => ({
   useApplyReplan: () => ({
     mutate: mockMutate,
     isPending: mockApply.isPending,
@@ -74,7 +74,7 @@ const mockDiff: {
   data: ReplanDiff | undefined;
   calls: [string, string, { enabled?: boolean } | undefined][];
 } = { state: 'ok', data: undefined, calls: [] };
-jest.mock('@/features/planb/model/useReplanDiff', () => ({
+jest.mock('../model/useReplanDiff', () => ({
   useReplanDiff: (
     tripId: string,
     sessionId: string,

@@ -18,7 +18,7 @@ import type {
   Trip,
   TripStatus,
 } from '@/shared/api/generated/schemas';
-import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
 import { resetPressGuard } from '@/shared/press/pressGuard';
 import { getGetTripsTripIdBasesQueryKey } from '@/shared/api/generated/trips/trips';
 
@@ -62,7 +62,7 @@ jest.mock('expo-router', () => ({
   },
 }));
 
-jest.mock('@/features/trip/model/useStayAddresses', () => ({
+jest.mock('../model/useStayAddresses', () => ({
   useStayAddresses: () => ({}),
 }));
 

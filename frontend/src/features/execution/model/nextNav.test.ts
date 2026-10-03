@@ -5,7 +5,10 @@ import * as Linking from 'expo-linking';
 
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
 
-import type { ProjectedSlot, SlotState } from './slotProgress';
+import type {
+  ProjectedSlot,
+  SlotState,
+} from '@/entities/itinerary-slot/lib/slotProgress';
 import {
   buildAppNavUrl,
   buildWebNavUrl,

@@ -12,7 +12,8 @@ const HOME_FILE = path.resolve('src/features/home/__boundary_probe__.ts');
 // 프로브 경로는 배럴(index.ts)이 아니라 **실파일 깊은 경로**를 가리킨다.
 // 배럴은 지워질 수 있고, 지워지면 잡히는 것이 "경계 위반"에서 "모듈 해석 실패"로
 // 바뀌면서 테스트가 조용히 무의미해진다(실제로 그렇게 뚫렸다).
-const CROSS_FEATURE_IMPORT = '@/features/onboarding/model/preferenceStore';
+const CROSS_FEATURE_IMPORT =
+  '@/features/edit-preferences/model/preferenceStore';
 const SHARED_IMPORT = '@/shared/ui/BottomTabBar';
 // 일부러 존재하지 않는 경로 — 썩지 않는 하네스 생존 확인용이다.
 const UNRESOLVABLE_IMPORT = '@/features/__boundary_probe_missing__';

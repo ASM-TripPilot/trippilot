@@ -51,20 +51,20 @@ paths:
 | `src/__tests__/rootLayoutQueryProvider.test.tsx` | 앱 루트를 실제 렌더해 `SplashGate` 자리(`queryClientProbe` 목) 안쪽에서 진짜 `QueryClient`가 잡히는지 |
 | `src/__tests__/rootLayoutToastHost.test.tsx` | `<ToastHost/>`가 `SplashGate` **바깥**(형제)에 한 번만 배치됐는지 배선 가드 |
 | `src/shared/ui/Toast.test.tsx` | `showToast`/`hideToast` 가짜 타이머 테스트 — `TOAST_VISIBLE_MS` 뒤 사라짐 · hide가 타이머 정리 · 연속 show는 앞 타이머 취소. 페이드 애니메이션을 안 넣은 이유도 같다(타이머 카운트를 흐림) |
-| `src/__tests__/recordPhotoBinaryGuard.test.ts` | `features/record`+`shared/photo` 재귀 — 사진 바이너리·`storage_key` 금칙어 0 + `AddPhotoRequest` 실참조(INV-U5-03). 네이티브 사진 모듈 정적 import 금지는 ESLint로 옮겼다(TRIP-1145). 범위를 `shared` 전체로 넓히면 생성 코드 주석의 `storage_key`로 거짓 red |
+| `src/__tests__/recordPhotoBinaryGuard.test.ts` | `features/{record,check-visit,attach-visit-media}`+`shared/photo`+`pages/{live-itinerary,trip-records,records-calendar}` 재귀 — 사진 바이너리·`storage_key` 금칙어 0 + `AddPhotoRequest` 실참조(INV-U5-03). 네이티브 사진 모듈 정적 import 금지는 ESLint로 옮겼다(TRIP-1145). 범위를 `shared` 전체로 넓히면 생성 코드 주석의 `storage_key`로 거짓 red |
 | `src/__tests__/shareCardStructure.test.ts` | j06 공유 카드 — 서버 이미지 생성·저장·업로드 금칙 8종 0(BR-U5-46) + 온디바이스 앵커(`buildShareCard`·`isShareCaptureArmed`·`saveShareCardImage`). 스캔 대상에 캡처 어댑터를 "캡처 패키지를 정적 import 하는 파일"로 편입한다(그 탐지기 자가검사 G5a). 캡처 어댑터 정적 import 금지는 ESLint로 옮겼다(TRIP-1145) |
 | `src/__tests__/tabsRecordsRoute.test.tsx` | `(tabs)/records.tsx` 라우트 렌더 — 카드→기록 push · 빈 상태→새 여행 push · 월 이동 |
 | `src/__tests__/mapBridgeStructure.test.ts` | 지도 키 소스 스캔 — 키는 env 참조로만, git 추적 전수에 키 리터럴 0. **git 추적 전수는 `git ls-files`로 인덱스를 열거한다** — 테스트 파일을 `rm`만 하고 스테이지하지 않으면 없는 경로를 열어 ENOENT로 FAIL한다(`git rm`/`git add`로 스테이지) |
 | `src/__tests__/tripWizardEntryReset.test.tsx` | 위저드 레이아웃 마운트 시 시드 초기화·형제 화면 효과 순서·리렌더 보존. 실제 라우터가 레이아웃을 재마운트하는지는 jest 밖(6-b) |
-| `src/features/trip/model/budgetAmount.tierForAmount.test.ts` | `tierForAmount`(TRIP-1091) — 경계 6점(499,999/500,000/…/3,000,000)·0·1 예제 + PBT 4(범위 내·단조·칩 대표 금액 왕복·구간별). ⚠️ 생성기를 `oneof(0~5,000,000, 0~1e12)`로 섞는다 — 균등 0~1e12만 쓰면 세 경계가 있는 300만 아래를 거의 안 밟아 단조성이 공허하게 참 |
+| `src/pages/trip-new-step1/model/budgetAmount.tierForAmount.test.ts` | `tierForAmount`(TRIP-1091) — 경계 6점(499,999/500,000/…/3,000,000)·0·1 예제 + PBT 4(범위 내·단조·칩 대표 금액 왕복·구간별). ⚠️ 생성기를 `oneof(0~5,000,000, 0~1e12)`로 섞는다 — 균등 0~1e12만 쓰면 세 경계가 있는 300만 아래를 거의 안 밟아 단조성이 공허하게 참 |
 | `src/pages/trip-new-step1/ui/TripNewStep1Page.integration.test.tsx` | 「예산 행 역산 등급」 describe — g01 예산 행·시트 칩 등급 출처(TRIP-1091) R1~R10 — 프리필 등급을 기대 등급과 **다르게** 둔다(같으면 버그 코드도 통과). R5는 프리필 `고급+1,200,000`(역산하면 중간)으로 "프리필 금액은 역산하지 않는다"를 행·시트 양쪽에서 잠그고, R10은 `PUT/PATCH /me/preferences` 0회를 `GET` 관측 짝과 함께 단언 |
-| `src/features/trip/model/budgetAmount.tier.test.ts` | `budgetForTier(tier)` 1인자(TRIP-1067) — 고정 맵(저가30만·중간100만·고급200만·럭셔리400만, 온보딩 범위 가운데값)×예제 4 + 무작위 500회(박수·인원 인자를 넘겨도 안 바뀜, `Function.length`로 박수 인자 부재 확인 — 기본값 인자는 `length`에 안 잡혀 `@ts-expect-error`로 이중 판정). 구 TRIP-1045 단가×박수 PBT는 폐기 |
-| `src/features/trip/model/budgetAmount.isBudgetTier.test.ts` | `isBudgetTier`(TRIP-1107) U1~U6 — 칩 4값 참·`undefined`·4값 밖(`'LOW'`)·상속 키(`'toString'`) 거짓. 뮤테이션 실측: `in` 교체는 red 7, 4값 배열 사본 `.includes` 교체는 green(동작이 같아 원리적으로 못 잡음 — 소스 리뷰 몫) |
+| `src/pages/trip-new-step1/model/budgetAmount.tier.test.ts` | `budgetForTier(tier)` 1인자(TRIP-1067) — 고정 맵(저가30만·중간100만·고급200만·럭셔리400만, 온보딩 범위 가운데값)×예제 4 + 무작위 500회(박수·인원 인자를 넘겨도 안 바뀜, `Function.length`로 박수 인자 부재 확인 — 기본값 인자는 `length`에 안 잡혀 `@ts-expect-error`로 이중 판정). 구 TRIP-1045 단가×박수 PBT는 폐기 |
+| `src/pages/trip-new-step1/model/budgetAmount.isBudgetTier.test.ts` | `isBudgetTier`(TRIP-1107) U1~U6 — 칩 4값 참·`undefined`·4값 밖(`'LOW'`)·상속 키(`'toString'`) 거짓. 뮤테이션 실측: `in` 교체는 red 7, 4값 배열 사본 `.includes` 교체는 green(동작이 같아 원리적으로 못 잡음 — 소스 리뷰 몫) |
 | `src/pages/trip-new-step1/ui/TripNewStep1Page.integration.test.tsx` | 「예산 시트 등급 프리필」 describe — g01 예산 시트 첫 열림 등급 프리필(TRIP-1107) AC-1~8 — 온보딩 금액·적용 금액이 등급 대표 금액을 이김, 열기만으로는 스토어 커밋 0. ⚠️ AC-2의 "같은 칩을 눌러도 값이 같다" 단언은 판별력이 없다(이미 채워진 칸에서 같은 칩 재누름은 값이 안 바뀜) — "칩 경로와 같은 출처"를 실제로 지키는 건 같은 파일 「예산 편집 시트」 describe D5 |
 | `src/__tests__/placeDetailStubRoute.test.tsx` | `explore/places/[poiId].tsx` 라우트가 `@/pages/place-detail`에 위임하는지(페이지 목으로 QueryClient 없이 렌더) |
 | `src/__tests__/socialSdkSecrets.test.ts` | 소셜 SDK 키·시크릿 소스 스캔 — `.env` 미추적 · git 추적 전 파일에 `VAR=<값>` 대입 0(공백 클래스는 `[^\S\n]` — `\s`는 개행을 건너 다음 줄을 값으로 오판) · `app.config.ts` env 참조 |
 | `src/__tests__/socialSdkConfigPlugin.test.ts` | `app.config.ts` kakao·naver config plugin 등록 — 옵션 키 허용목록·값 출처·**provider 간 값 교차 없음**(`[string, any]`라 tsc가 못 잡는 자리) |
-| `src/features/trip/ui/StaySelectSheet.test.tsx` | g02 숙소 선택 시트 props-only 렌더 — 단일 선택·지정 disabled(`toBeDisabled`+press+핸들러 0회)·실패 인라인·가격/사진 미렌더 |
+| `src/pages/trip-new-step2/ui/StaySelectSheet.test.tsx` | g02 숙소 선택 시트 props-only 렌더 — 단일 선택·지정 disabled(`toBeDisabled`+press+핸들러 0회)·실패 인라인·가격/사진 미렌더 |
 | `src/pages/trip-new-step2/ui/TripNewStep2Page.test.tsx` | 「숙소 선택 시트 배선」 describe(옛 `.staysheet.integration`, node 버킷) — 카드 탭→시트→선택→지정 배선 — `useAssignBase` 인자 `{tripId,data:{savedStayId,dateFrom,dateTo}}` 완전일치 |
 | `src/__tests__/liveLocationRoute.test.tsx` | i20·i21 라우트 얇은 위임 — `useLocalSearchParams` 값이 페이지에 도달하는지(한 쌍만 확인이라 하드코딩도 통과) |
 | `src/pages/itinerary-draft/ui/GenerationFallbackScreen.test.tsx` | h07 폴백 인터스티셜 렌더 — 카피 완전일치·체크리스트·하드실패 변형(INV-3 렌더 스캔은 TRIP-1150 에서 지움 — 시간·거리 재료 없음). 지도는 `@/test-support/mapViewMock` |
@@ -74,26 +74,42 @@ paths:
 | `src/features/itinerary/model/itineraryDestination.test.ts` | `resolveItineraryDestination` 표 전수 `it.each`(404→method … CONFIRMED→live), 입력 타입은 함수 시그니처에 고정 |
 | `src/pages/itinerary-method/ui/MethodPickerScreen.test.tsx` | h04 방식 선택 — 차단 사유(BR-U3-01)·안내 액션·뒤로 무회귀 |
 | `src/pages/itinerary-plan/ui/ItineraryPlanPage.integration.test.tsx` | 「탈출구 — 뒤로·일정 만들기」 describe: h25 4얼굴 탈출구 — msw로 얼굴 강제(훅 목 금지) + `useRouter` 4메서드 목. 딥링크(`canGoBack()===false`)는 `replace('/(tabs)')` 완전일치(`/(tabs)/itinerary`는 리다이렉트 함정) |
-| `src/features/itinerary/model/itineraryEditStore.addSlot.test.ts` | `addSlot` 순수함수 — 비파괴 append + 읽기전용 5필드 키 완전일치(여분 키 누출 차단) |
+| `src/features/edit-itinerary/model/itineraryEditStore.addSlot.test.ts` | `addSlot` 순수함수 — 비파괴 append + 읽기전용 5필드 키 완전일치(여분 키 누출 차단) |
 | `src/pages/itinerary-manual/ui/ManualPlanPage.hookMock.test.tsx` | h19 배선 — 마운트 POST 1회·여분 키 0. 폴백 배너 부재 단언은 이 표면에 폴백 경로가 없어 지금은 공허 통과(미래 회귀 트립와이어) |
 | `src/pages/itinerary-manual/ui/PlaceAddPage.integration.test.tsx` | h20 배선 — 검색·클라 필터·카테고리 재조회. **add→PUT 전체 플로우는 범위 밖**(캐시 무효화 회귀 심판 없음) |
 | `src/entities/itinerary-slot/lib/categoryPlaceholder.test.ts` | `resolveCategoryPlaceholder` 매핑 — 7종 `tintClass` 완전일치·폴백·iconKey distinct. 프로토타입 키 입력은 다루지 않는다 |
-| `src/features/itinerary/ui/MyTripCard.test.tsx` | h37 카드 렌더 — 제목·메타·부가정보 완전일치 + 배지/resume 유무 짝. `metaLine` 조립 로직은 컨테이너 소관이라 여기서 안 돈다 |
+| `src/pages/itinerary-list/ui/MyTripCard.test.tsx` | h37 카드 렌더 — 제목·메타·부가정보 완전일치 + 배지/resume 유무 짝. `metaLine` 조립 로직은 컨테이너 소관이라 여기서 안 돈다 |
 | `src/__tests__/planbManualRoute.test.tsx` | i07 라우트가 `ItineraryEditPage`를 `tripId`+`inTrip=true`로 부르고 `variant`가 새지 않는지 |
-| `src/features/planb/model/reorderKeepingLocked.test.ts` | 잠긴 칸 고정 재정렬 예시 + fast-check PBT(고정 index 불변·순열·상대 순서 보존). 이 규칙을 부르는 프로덕션 드래그 표면은 아직 없다 |
+| `src/pages/itinerary-edit/model/reorderKeepingLocked.test.ts` | 잠긴 칸 고정 재정렬 예시 + fast-check PBT(고정 index 불변·순열·상대 순서 보존). 이 규칙을 부르는 프로덕션 드래그 표면은 아직 없다 |
 | `src/pages/itinerary-edit/ui/ItineraryEditPage.integration.test.tsx` | 「여행 중 직접 수정(i07)」 describe: h12·i07 페이지 계약 — 완료 알약 press는 시트 안 엶 · 드래그가 `reorderKeepingLocked` 경유 · CONFIRMED 409는 정직 안내(라우터 4메서드 0회) |
 | `src/pages/itinerary-edit/ui/ItineraryEditPage.integration.test.tsx` | 「저장 성공 뒤 토스트·복귀」 describe: 저장 성공 뒤 복귀 계약 — 위반 없음→back/replace 폴백 · 위반(h12·i07·다른 날만)→머묾+배지 · 연타 PUT 1회 · 토스트 완전일치. 편집 통합 파일의 expo-router 목은 `canGoBack`이 있어야 한다(없으면 onSuccess TypeError가 삼켜짐) |
-| `src/features/settings/model/stayTripLink.test.ts` | `buildStayTripLink` — 연결/미연결/혼합/first-wins/유령 base 배제/빈 입력 |
+| `src/pages/my-stays/model/stayTripLink.test.ts` | `buildStayTripLink` — 연결/미연결/혼합/first-wins/유령 base 배제/빈 입력 |
 | `src/pages/my-stays/ui/MyStaysScreen.test.tsx` | l04 뷰 — 행 표시·「출발점 변경」 press 1회(등록 행만, 미등록 행은 버튼 없음 — TRIP-1076)·좌표 미확정 disabled·empty + Figma l04 정합(옛 `.l04parity`, TRIP-1148 합본). 출발점 다이얼로그·chevron 색은 소스 옆 `features/settings/ui/{BaseToggleDialog,SettingsGlyphs}.test.tsx`로 갈라졌다 |
 | `src/pages/my-stays/ui/MyStaysPage.integration.test.tsx` | l04 페이지 배선 — 두 관점을 팩토리 안 스위치 `mockRealWiring` 하나로 가른다(TRIP-1148 합본): 화면 캡처 스텁(null 반환 props-캡처 목 + 조회 훅 `jest.fn`) / 실 화면 + msw(옛 `.release`). 실 화면 위임은 JSX 없이 `createElement`(NativeWind babel 함정 회피). 스텁 관점은 쓰기 훅을 보지 않고, 거점 쓰기 0회는 실 화면 관점이 msw 요청 로그(`writes`가 빈 배열)로 단언한다 — TRIP-1076 이후 이 페이지는 거점을 쓰지 않는다 |
-| `src/features/settings/model/styleCardModel.test.ts` | `buildStyleCardModel` — official 매핑·insufficient는 preview 미유출·게이지 전수 |
-| `src/features/settings/ui/StyleSummaryCard.test.tsx` | 스타일 카드 — 채움/빈 점을 서로 다른 testID로 세어 SVG fill 함정 차단 · 상세 진입 disabled degrade(INV-4) |
+| `src/pages/my-page/model/styleCardModel.test.ts` | `buildStyleCardModel` — official 매핑·insufficient는 preview 미유출·게이지 전수 |
+| `src/pages/my-page/ui/StyleSummaryCard.test.tsx` | 스타일 카드 — 채움/빈 점을 서로 다른 testID로 세어 SVG fill 함정 차단 · 상세 진입 disabled degrade(INV-4) |
 | `src/pages/my-page/ui/MyPage.test.tsx` | 마이 페이지 배선+배치(`layer-pages.md` `my-page` 행) — 옛 `.counts`·`.l03empty`·`.l03parity`·`.integration`·`.styleDetail.integration`을 describe 5개로 합침(TRIP-1154, MSW 0이라 node 버킷) |
 | `src/pages/settings-notifications/ui/NotificationSettingsScreen.test.tsx` | 알림 설정 화면 — 행·토글·Figma 정합 + 계약 밖 kind(COMMUNITY·SYSTEM)를 주입받아도 렌더하지 않는지(`VISIBLE_ROWS` 자체 소유, 옛 `__tests__/notificationKindGuard` 흡수 — TRIP-1154) |
-| `src/features/settings/model/preferenceDraft.test.ts` | 취향 역변환 — 안 만진 축은 omit(`toStrictEqual`로 여분 `undefined` 키까지) |
+| `src/features/edit-preferences/model/preferenceDraft.test.ts` | 취향 역변환 — 안 만진 축은 omit(`toStrictEqual`로 여분 `undefined` 키까지) |
 | `src/pages/settings-preferences/ui/PreferencesEditScreen.integration.test.tsx` | 취향 편집 MSW 통합 — 시드·한 축 PUT 바디·400 인라인(INV-4) + 저장 diff 기준선이 시드 시점으로 얼어 있는지(lost update 방지, 옛 `.baseline` 흡수 — 스위치 `mockFakePreferences`로 그 describe만 가짜 훅) |
 | `src/pages/settings-personalization/model/personalizationCopy.test.ts` | 개인화 문구표 전수 + `NOT_ENOUGH_RECORDS`에 동의 유도 문구 없음(BR-U5-44) |
 | `src/pages/settings-personalization/ui/PersonalizationScreen.test.tsx` | reason 3얼굴·목록 개수·토글 배선 — `NOT_ENOUGH_RECORDS`는 토글 ON 유지+동의 문구 부재 |
 | `src/pages/settings-personalization/ui/PersonalizationPage.test.tsx` | 토글 → GRANT/REVOKE — `reason`이 아니라 `applied`로 판정하는 뮤턴트를 잡는 `NOT_ENOUGH_RECORDS` 케이스 포함 · termsVersion 필터 · `invalidateQueries` spy |
 | `src/shared/api/patchConsent.test.ts` | `patchConsent` 와이어 계약 — URL에 termsType, body는 `{action, termsVersion}` 두 필드만 |
-| `src/features/trip/model/tripWizardStore.periodFromNights.test.ts` | 시작·박수 재계산 예시 + fast-check 액션열 PBT(**매 단계 뒤** 끝−시작=Σnights, 오라클은 구현과 다른 계산 경로). `reset()`은 파일 최상위 `beforeEach`+`afterEach` 둘 다 |
+| `src/features/create-trip/model/tripWizardStore.periodFromNights.test.ts` | 시작·박수 재계산 예시 + fast-check 액션열 PBT(**매 단계 뒤** 끝−시작=Σnights, 오라클은 구현과 다른 계산 경로). `reset()`은 파일 최상위 `beforeEach`+`afterEach` 둘 다 |
+| `src/pages/trip-records/model/stayAttribution.test.ts` | (TRIP-1155로 features/record에서 이사) 행동 테스트 + PBT(`baseStay`가 항상 그 날짜를 덮는 base의 함수) + dateTo 경계값 3종 |
+| `src/pages/trip-records/model/photoAvailability.test.ts` | (TRIP-1155로 features/record에서 이사) 진리표 4행(deviceId×assetOk) |
+| `src/pages/trip-records/model/useVisitAttachments.integration.test.tsx` | (TRIP-1155로 features/record에서 이사) msw — addPhoto→GET 재조회 · saveMemo 공백 무시 · savedMemo 시드·같은 값 PUT 0·실패 시 savedMemo 유지 |
+| `src/pages/records-calendar/model/recordsCalendar.test.ts` | (TRIP-1155로 features/record에서 이사) 마킹·월 경계·겹침 유일·null 방어·필터/정렬·라벨 표 |
+| `src/pages/trip-records/ui/VisitRecordCard.checkPop.test.tsx` | (TRIP-1155로 features/record에서 이사) 체크 튐 심판 — 전이 감지(`prevStatus`)·답 전 언마운트(C-4)·튐 도중 되돌림 `setValue(1)`(C-5). `Animated.timing`/`spring`을 스파이해 설정은 기록하고 실행은 JS로 돈다(`Animated.loop`은 판정 함수가 아니라 설정의 `useNativeDriver`를 본다) |
+| `src/pages/trip-records/ui/VisitRecordCard.nameFit.test.tsx` | (TRIP-1155로 features/record에서 이사) 긴 이름 말줄임(TRIP-1086) — 머리 행 세 겹(바깥 `gap-sm`·왼쪽 묶음 `min-w-0 flex-1`·이름 Text `numberOfLines={1}`+`shrink`). RN은 `flexShrink` 기본 0이라 Text 자체에 `shrink`가 있어야 줄어든다. **jest는 토큰·prop까지만** — 실제 `…`·간격 픽셀은 6-b 육안 |
+| `src/pages/trip-records/ui/VisitRecordCard.test.tsx` | (TRIP-1155로 features/record에서 이사) 4상태 present/absent 짝·upcoming 완료 불가·skip·시각 수정 버튼 유무. 슬롯 테스트는 `.wiring.test.tsx`로 격리(새 import가 이 파일을 오염시키지 않게) |
+| `src/pages/trip-records/ui/VisitRecordCard.wiring.test.tsx` | (TRIP-1155로 features/record에서 이사) 슬롯 계약 testID 마커로 잠금 |
+| `src/pages/trip-records/ui/VisitTimeSheet.test.tsx` | (TRIP-1155로 features/record에서 이사) 셀 선택·diff 저장·휠 초기 위치·정지 확정·완료 휠 disabled 배선(W6, 선택 집합 마스크 84셀 앵커)·onClose/key(W4·W5·P1~P4)·인라인 오류·INV-3 렌더 스캔(동적 `${m}분`까지) |
+| `src/pages/trip-records/ui/SpontaneousVisitButton.test.tsx` | (TRIP-1155로 features/record에서 이사) 즉석 추가 UI |
+| `src/pages/trip-records/ui/PhotoThumbStrip.test.tsx` | (TRIP-1155로 features/record에서 이사) 상태 present/absent 짝 + add + 다건 |
+| `src/pages/daily-reflection/model/reflectionFallback.test.ts` | (TRIP-1155로 features/reflection에서 이사) PBT-U5-F1(CI 차단): 임의 `Reflection \| undefined`에도 표시본 `trim().length>0` + 폴백 순서 예제 |
+| `src/pages/daily-reflection/model/statsCard.test.ts` | (TRIP-1155로 features/reflection에서 이사) undefined/null→0s · 완전 입력 통과 · 숫자 타입 |
+| `src/pages/daily-reflection/model/missingParts.test.ts` | (TRIP-1155로 features/reflection에서 이사) 각 플래그 on/off 짝 |
+| `src/pages/settings-notifications/model/channelAvailability.test.ts` | (TRIP-1155로 features/notification에서 이사) PBT-U6-F2 전용(node 버킷). `permissionArb`는 선언만 되고 미사용 |
+| `src/pages/settings-notifications/model/useToggles.integration.test.tsx` | (TRIP-1155로 features/notification에서 이사) msw 통합 버킷. hitCount needle은 `GET ` 메서드 접두까지 포함해야 한다(복사 원본 대비 누락 시 어떤 구현으로도 통과 불가) |

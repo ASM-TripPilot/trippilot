@@ -12,7 +12,7 @@ import {
   useGetTripsTripIdItinerary,
 } from '@/shared/api/generated/trips/trips';
 import ItineraryTab from '@/app/(tabs)/itinerary';
-import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
 import {
   captureDraftAtNextCall,
   freshWizardDraft,

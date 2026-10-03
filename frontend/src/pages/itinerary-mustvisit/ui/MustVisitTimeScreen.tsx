@@ -17,7 +17,7 @@ import {
   canSubmitMustVisitTime,
   type DwellKey,
   type MustVisitTimeForm,
-} from '@/features/itinerary/model/mustVisitTimeForm';
+} from '@/features/add-must-visit/model/mustVisitTimeForm';
 import {
   AlertCircleGlyph,
   BackChevronGlyph,

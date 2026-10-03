@@ -12,22 +12,19 @@ import { seoulDate } from '@/shared/date/seoulDate';
 import { formatNightsLabel } from '@/entities/trip/lib/formatNights';
 import { formatTripRange } from '@/entities/trip/lib/formatTripPeriod';
 import { pickTrendingPlaces } from '@/entities/place/lib/trendingPlaces';
-import { usePlaceSaveToggle } from '@/features/explore/model/placeSaveToggle';
-import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { usePlaceSaveToggle } from '@/features/save-place/model/placeSaveToggle';
+import { useSavedPlaces } from '@/features/save-place/model/savedPlaces';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
-import { useSavedStays } from '@/features/stay/model/savedStays';
+import { useSavedStays } from '@/features/save-stay/model/savedStays';
 import {
   itineraryDestinationHref,
   resolveItineraryDestination,
 } from '@/features/itinerary/model/planState';
-import { HOME_DEFAULT_PROPS } from '@/features/home/model/homeFixtures';
-import {
-  applyItineraryTarget,
-  resolveHomePhase,
-} from '@/features/home/model/homePhase';
-import type { HomePhase, HomeSpotsLane } from '@/features/home/model/homeTypes';
-import { HomeScreen } from '@/features/home/ui/HomeScreen';
-import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { HOME_DEFAULT_PROPS } from '../model/homeFixtures';
+import { applyItineraryTarget, resolveHomePhase } from '../model/homePhase';
+import type { HomePhase, HomeSpotsLane } from '../model/homeTypes';
+import { HomeScreen } from './HomeScreen';
+import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
 
 interface HomeNav {
   onPressCreateTrip: () => void;

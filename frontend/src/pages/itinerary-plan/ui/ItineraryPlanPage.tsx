@@ -8,18 +8,18 @@ import { useRouter, type Href } from 'expo-router';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { VIOLATION_NOTICE } from '@/entities/itinerary-slot/lib/violationLabel';
 import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
-import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { useSavedPlaces } from '@/features/save-place/model/savedPlaces';
 import {
   buildDraftDayTabs,
   buildDraftPins,
   formatDraftDayHeader,
 } from '@/features/itinerary/model/draftView';
-import { legDistance } from '@/features/itinerary/model/legDistance';
+import { legDistance } from '@/entities/place/lib/legDistance';
 import {
   isConfirmLocked,
   resolvePlanState,
 } from '@/features/itinerary/model/planState';
-import { timeBandLabel } from '@/features/itinerary/model/timeBandLabel';
+import { timeBandLabel } from '@/entities/itinerary-slot/lib/timeBandLabel';
 import { resolveUnplacedNames } from '@/features/itinerary/model/unplacedMustVisits';
 import {
   AlertCircleGlyph,
@@ -27,8 +27,8 @@ import {
   InfoCircleGlyph,
 } from '@/features/itinerary/ui/ItineraryGlyphs';
 import { UnplacedMustVisitNotice } from '@/features/itinerary/ui/UnplacedMustVisitNotice';
-import { isShareCaptureArmed } from '@/features/reflection/model/shareCapture';
-import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { isShareCaptureArmed } from '@/features/share-trip-card/model/shareCapture';
+import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
 import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripId,

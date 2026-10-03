@@ -17,9 +17,9 @@ import {
   getAccessToken,
   setAccessToken,
 } from '@/shared/api/tokenManager';
-import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
-import { seedMustVisits } from '@/features/trip/model/mustVisitSeed';
-import { wizardOriginParams } from '@/features/explore/model/wizardOrigin';
+import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
+import { seedMustVisits } from '@/features/create-trip/model/mustVisitSeed';
+import { wizardOriginParams } from '@/features/create-trip/model/wizardOrigin';
 
 import { TripNewStep1Page } from './TripNewStep1Page';
 
@@ -58,7 +58,7 @@ const routerMock = require('expo-router').router as {
 let mockPreference: PreferenceView | undefined;
 let mockPrefillPending = false;
 
-jest.mock('@/features/trip/model/usePreferencePrefill', () => ({
+jest.mock('../model/usePreferencePrefill', () => ({
   usePreferencePrefill: () => ({
     data: mockPreference,
     isPending: mockPrefillPending,
@@ -67,7 +67,7 @@ jest.mock('@/features/trip/model/usePreferencePrefill', () => ({
 
 const mockMutateAsync = jest.fn();
 
-jest.mock('@/features/trip/model/useCreateTrip', () => ({
+jest.mock('../model/useCreateTrip', () => ({
   useCreateTrip: () => ({
     mutateAsync: mockMutateAsync,
     isPending: false,
@@ -86,7 +86,7 @@ let mockSavedPlaces: {
   remove: jest.Mock;
 };
 
-jest.mock('@/features/explore/model/savedPlaces', () => ({
+jest.mock('@/features/save-place/model/savedPlaces', () => ({
   useSavedPlaces: () => mockSavedPlaces,
 }));
 

@@ -25,9 +25,9 @@ import type {
   SavedPlace,
   MustVisit,
 } from '@/shared/api/generated/schemas';
-import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
-import type { MustVisitSeedItem } from '@/features/trip/model/mustVisitSeed';
+import type { MustVisitSeedItem } from '@/features/create-trip/model/mustVisitSeed';
 import { useGetTrips } from '@/shared/api/generated/trips/trips';
 
 import { TripNewStep1Page } from './TripNewStep1Page';

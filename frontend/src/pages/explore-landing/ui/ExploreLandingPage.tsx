@@ -6,21 +6,21 @@ import type { Place, StayItem } from '@/shared/api/generated/schemas';
 import { getAccessToken } from '@/shared/api/tokenManager';
 import { guardPress } from '@/shared/press/pressGuard';
 import { formatPrice } from '@/entities/stay/lib/formatPrice';
-import { stayKey } from '@/features/stay/model/stayKey';
-import { useSavedStays } from '@/features/stay/model/savedStays';
+import { stayKey } from '@/features/save-stay/model/stayKey';
+import { useSavedStays } from '@/features/save-stay/model/savedStays';
 import { useStaySearch } from '@/features/stay/model/useStaySearch';
-import { usePlaceSaveToggle } from '@/features/explore/model/placeSaveToggle';
+import { usePlaceSaveToggle } from '@/features/save-place/model/placeSaveToggle';
 import { useRegions } from '@/features/explore/model/regions';
-import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { useSavedPlaces } from '@/features/save-place/model/savedPlaces';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
 import { useGetPlaces } from '@/shared/api/generated/places/places';
-import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
 import {
   ExploreLandingScreen,
   type ExploreLandingScreenProps,
   type PlaceCardVM,
   type StayCardVM,
-} from '@/features/explore/ui/ExploreLandingScreen';
+} from './ExploreLandingScreen';
 
 /**
  * 탐색 page — 죽은 껍데기가 아니라 d01 탐색 랜딩(US-EXPL-01)을 배선한다. 라우트 `(tabs)/explore.tsx`

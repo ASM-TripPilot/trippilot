@@ -30,8 +30,8 @@ import { TripSummaryPage } from './TripSummaryPage';
  */
 
 const mockShareArmed = { value: false };
-jest.mock('@/features/reflection/model/shareCapture', () => ({
-  ...jest.requireActual('@/features/reflection/model/shareCapture'),
+jest.mock('@/features/share-trip-card/model/shareCapture', () => ({
+  ...jest.requireActual('@/features/share-trip-card/model/shareCapture'),
   isShareCaptureArmed: () => mockShareArmed.value,
 }));
 

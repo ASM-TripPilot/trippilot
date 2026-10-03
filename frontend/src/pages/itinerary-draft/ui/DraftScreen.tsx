@@ -14,7 +14,7 @@ import type {
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { VIOLATION_NOTICE } from '@/entities/itinerary-slot/lib/violationLabel';
 import { Skeleton } from '@/shared/ui/Skeleton';
-import { timeBandLabel } from '@/features/itinerary/model/timeBandLabel';
+import { timeBandLabel } from '@/entities/itinerary-slot/lib/timeBandLabel';
 import {
   AlertCircleGlyph,
   BackChevronGlyph,

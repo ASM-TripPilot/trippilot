@@ -212,8 +212,11 @@
 - `src/entities/itinerary-slot/lib/openingHoursLabel.ts`  →  formatOpeningHoursLabel
 - `src/entities/itinerary-slot/lib/slotKey.ts`  →  buildSlotKey · ParsedSlotKey · parseSlotKey · SlotKeySet · buildSlotKeys
 - `src/entities/itinerary-slot/lib/slotMapPin.ts`  →  SlotProgressState · StatePinInput · toMapPinState · buildStatePins
+- `src/entities/itinerary-slot/lib/slotProgress.ts`  →  SlotState · ProjectedSlot · SlotProgressInput · projectSlotProgress
 - `src/entities/itinerary-slot/lib/suggestNextSlotTime.ts`  →  suggestNextSlotTime
+- `src/entities/itinerary-slot/lib/timeBandLabel.ts`  →  TimeBandLabel · timeBandLabel
 - `src/entities/itinerary-slot/lib/violationLabel.ts`  →  VIOLATION_NOTICE · formatViolationMinutes · violationLabel
+- `src/entities/itinerary-slot/lib/visitProgress.ts`  →  VisitProgress · deriveVisitProgress
 
 ## src/entities/itinerary-slot/model/
 - `src/entities/itinerary-slot/model/index.ts`  →  ReplanSlotTone · ReplanSlotVM · PoiCategory
@@ -228,6 +231,7 @@
 
 ## src/entities/place/lib/
 - `src/entities/place/lib/formatDistance.ts`  →  formatDistance
+- `src/entities/place/lib/legDistance.ts`  →  legDistance
 - `src/entities/place/lib/trendingPlaces.ts`  →  pickTrendingPlaces
 
 ## src/entities/place/model/
@@ -239,6 +243,9 @@
 - `src/entities/place/ui/PlaceRowCard.tsx`  →  PlaceRowCardProps · PlaceRowCard
 - `src/entities/place/ui/PlaceSubtitle.tsx`  →  PlaceSubtitleProps · PlaceSubtitle
 - `src/entities/place/ui/SlotCandidateCard.tsx`  →  SlotCandidateCardProps · SlotCandidateCard
+
+## src/entities/stay/config/
+- `src/entities/stay/config/affiliateNotice.ts`  →  isOtaSource · otaDisplayName · otaConfirmLabel
 
 ## src/entities/stay/lib/
 - `src/entities/stay/lib/formatPrice.ts`  →  formatPrice
@@ -271,294 +278,191 @@
 - `src/entities/trip/ui/TripCard.tsx`  →  TripCardProps · TripCard
 - `src/entities/trip/ui/TripGlyphs.tsx`  →  ChevronRightGlyph · MoreDotsGlyph · TrashGlyph
 
+## src/features/add-must-visit/model/
+- `src/features/add-must-visit/model/mustVisitTimeForm.ts`  →  DwellKey · MustVisitTimeForm · DWELL_OPTIONS · DEFAULT_DWELL_KEY · tripDayChips · startTimeOptions · startTimeLabel · mustVisitTimeBlockReason · canSubmitMustVisitTime · buildFixedMustVisitRequest · buildAnytimeMustVisitRequest
+
+## src/features/apply-replan/model/
+- `src/features/apply-replan/model/useApplyReplan.ts`  →  useApplyReplan
+
+## src/features/assign-trip-base/model/
+- `src/features/assign-trip-base/model/baseAssignPlan.ts`  →  BaseAssignPlan · planBaseAssign
+- `src/features/assign-trip-base/model/useTripBases.ts`  →  useTripBases · useAssignBase
+
+## src/features/attach-visit-media/model/
+- `src/features/attach-visit-media/model/photoAttach.ts`  →  photoAttach
+- `src/features/attach-visit-media/model/pickPhotoForVisit.ts`  →  PhotoPickOutcome · pickPhotoForVisit
+- `src/features/attach-visit-media/model/useVisitMemo.ts`  →  useVisitMemo
+
+## src/features/attach-visit-media/ui/
+- `src/features/attach-visit-media/ui/MemoInline.tsx`  →  MemoInlineProps · MemoInline
+
 ## src/features/auth/config/
 - `src/features/auth/config/gradients.ts`  →  SPLASH_BACKGROUND_COLORS · SPLASH_BACKGROUND_LOCATIONS · APP_ICON_COLORS · AUTH_ICON_COLORS
-- `src/features/auth/config/oauthConfig.ts`  →  OAuthDiscovery · OAuthProviderConfig · getOAuthConfig
-
-## src/features/auth/lib/
-- `src/features/auth/lib/appleAuthorize.tsx`  →  appleAuthorize · isAppleSignInAvailable · AppleSignInButton
-- `src/features/auth/lib/kakaoAuthorize.ts`  →  kakaoAuthorize
-- `src/features/auth/lib/makeAuthorize.ts`  →  makeAuthorize
-- `src/features/auth/lib/naverAuthorize.ts`  →  naverAuthorize
-- `src/features/auth/lib/realAuthorize.ts`  →  realAuthorize
 
 ## src/features/auth/model/
 - `src/features/auth/model/gateDestination.ts`  →  publishGateDestination · getGateDestination · waitForGateDestination · resetGateDestination
 - `src/features/auth/model/resolveBootstrapDestination.ts`  →  BootstrapDestination · resolveBootstrapDestination
 - `src/features/auth/model/useBootstrapGate.ts`  →  BOOTSTRAP_TIMEOUT_MS · useBootstrapGate
-- `src/features/auth/model/useSocialLogin.ts`  →  SocialLoginPhase · AuthorizeResult · Authorize · useSocialLogin
 
 ## src/features/auth/ui/
 - `src/features/auth/ui/AuthGlyphs.tsx`  →  AppIconGlyph · GoogleIcon · AppleLogoGlyph · KakaoIcon · NaverIcon · WarningTriangleGlyph
 - `src/features/auth/ui/SplashIllustration.tsx`  →  SplashIllustration
 - `src/features/auth/ui/SplashScreen.tsx`  →  SplashScreen
 
+## src/features/check-visit/model/
+- `src/features/check-visit/model/spontaneousNames.ts`  →  rememberSpontaneousName · useSpontaneousNames
+- `src/features/check-visit/model/useVisitCheck.ts`  →  VisitCheckOutcome · useVisitCheck
+- `src/features/check-visit/model/visitStatus.ts`  →  OPTIMISTIC_VISIT_ID_PREFIX · isOptimisticVisit · VisitStatus · deriveVisitStatus
+
+## src/features/create-trip/model/
+- `src/features/create-trip/model/mustVisitSeed.ts`  →  MustVisitSeedItem · MUST_VISIT_THUMBNAIL_LIMIT · seedMustVisits · mergeMustVisitSeeds · MustVisitSectionView · resolveMustVisitSection · mustVisitFailureNotice
+- `src/features/create-trip/model/tripDraft.ts`  →  TripViolationCode · TripDraft · tripLength · nightsSum · validateTripDraft · toCompanionType
+- `src/features/create-trip/model/tripSummary.ts`  →  wizardProgress · formatWizardStep · SummaryLine · PreferenceSummary · summaryDestinations · summaryPeriod · summaryCompanion · summaryPreferences · summaryBudget
+- `src/features/create-trip/model/tripWizardStep1.ts`  →  PeriodPresetCode · CompanionCode · PERIOD_PRESETS · COMPANION_OPTIONS · fromEpochDay · presetRange · deriveEndDate
+- `src/features/create-trip/model/tripWizardStore.ts`  →  TripWizardField · TripWizardDraft · useTripWizardStore
+- `src/features/create-trip/model/wizardOrigin.ts`  →  WizardOriginParams · wizardOriginParams · isWizardOrigin
+
+## src/features/edit-itinerary/model/
+- `src/features/edit-itinerary/model/buildEditItineraryRequest.ts`  →  buildEditItineraryRequest
+- `src/features/edit-itinerary/model/itineraryEditStore.ts`  →  EditorSlot · EditorDaysItem · removeSlot · addSlot · insertSlotAt · reorderKeepingFixed · ItineraryEditState · useItineraryEditStore
+- `src/features/edit-itinerary/model/slotSwapError.ts`  →  SLOT_SWAP_CONFLICT_CODES · SlotSwapErrorKind · SlotSwapError · resolveSlotSwapError
+- `src/features/edit-itinerary/model/swapSlotPoi.ts`  →  swapSlotPoi
+
+## src/features/edit-itinerary/ui/
+- `src/features/edit-itinerary/ui/SaveConflictDialog.tsx`  →  SaveConflictDialog
+
+## src/features/edit-preferences/model/
+- `src/features/edit-preferences/model/preferenceDraft.ts`  →  PreferenceSelection · initialSelection · buildPreferenceInput
+- `src/features/edit-preferences/model/preferenceInput.ts`  →  PreferenceDraftValues · STYLE · ACTIVITY · toPreferenceInput
+- `src/features/edit-preferences/model/preferenceSelection.ts`  →  toggleMulti · toggleSingle
+- `src/features/edit-preferences/model/preferenceStore.ts`  →  PreferenceDraft · usePreferenceStore
+
 ## src/features/execution/model/
 - `src/features/execution/model/dwellMinutes.ts`  →  dwellMinutes
-- `src/features/execution/model/liveState.ts`  →  LiveState · ResolveLiveStateInput · resolveLiveState
 - `src/features/execution/model/nextNav.ts`  →  NavDest · buildAppNavUrl · buildWebNavUrl · resolveNextDest · openNextNav
-- `src/features/execution/model/slotProgress.ts`  →  SlotState · ProjectedSlot · SlotProgressInput · projectSlotProgress
 - `src/features/execution/model/useLiveItinerary.ts`  →  useLiveItinerary
-- `src/features/execution/model/usePlaceDetail.ts`  →  usePlaceDetail
-- `src/features/execution/model/useVisitCheck.ts`  →  VisitCheckOutcome · useVisitCheck
-- `src/features/execution/model/visitProgress.ts`  →  VisitProgress · deriveVisitProgress
 
 ## src/features/execution/ui/
 - `src/features/execution/ui/ExecutionGlyphs.tsx`  →  RailDoneGlyph · RailActiveGlyph · RailUpcomingGlyph · BackArrowGlyph · ShareGlyph · WarningFilledGlyph · WeatherCloudGlyph · HeroPinGlyph · HeroPhotoGlyph
-- `src/features/execution/ui/TriggerChip.tsx`  →  TriggerChipProps · TriggerChip
 
 ## src/features/explore/model/
-- `src/features/explore/model/exploreFixtures.ts`  →  PREVIEW_PLACES · PREVIEW_SAVED_POI_IDS · PREVIEW_SAVED_PLACES · PREVIEW_REGIONS
-- `src/features/explore/model/filterSavedPlacesByTripRegions.ts`  →  filterSavedPlacesByTripRegions
 - `src/features/explore/model/mergePlaces.ts`  →  mergePlacesByPoiId
 - `src/features/explore/model/placeListState.ts`  →  PlaceListState · resolvePlaceListState
 - `src/features/explore/model/placeListView.ts`  →  visiblePlaces
-- `src/features/explore/model/placeSaveGuard.ts`  →  PlaceSaveNotice · hasUsableCoords · SAVE_FAILURE_NOTICE · COORD_BLOCKED_NOTICE · REMOVE_FAILURE_NOTICE
-- `src/features/explore/model/placeSaveToggle.ts`  →  usePlaceSaveToggle
 - `src/features/explore/model/regionPickerPurpose.ts`  →  RegionPickerPurpose · regionPickerHref
 - `src/features/explore/model/regions.ts`  →  useRegions · filterRegions · limitRegionsWhenEmpty · RegionGroup · groupRegionsBySido · regionTint
-- `src/features/explore/model/savedPlaceIndex.ts`  →  findSavedPlaceId · optimisticSavedPlaceId
-- `src/features/explore/model/savedPlaceList.ts`  →  orderSavedPlaces · SAVED_PLACE_BADGE
-- `src/features/explore/model/savedPlaces.ts`  →  SavedPlacesFailureReason · SavedPlacesOutcome · useSavedPlaces
 - `src/features/explore/model/useMultiRegionPlaces.ts`  →  useMultiRegionPlaces
 - `src/features/explore/model/usePlacesInfinite.ts`  →  usePlacesInfinite
-- `src/features/explore/model/wizardOrigin.ts`  →  WizardOriginParams · wizardOriginParams · isWizardOrigin
 
 ## src/features/explore/ui/
 - `src/features/explore/ui/ExploreGlyphs.tsx`  →  SuitcaseGlyph · CloseGlyph · PlusGlyph · BackChevronGlyph · ShareGlyph · SearchGlyph · MapPinGlyph · FilterSlidersGlyph · WarningTriangleGlyph · CheckCircleFilledGlyph · CheckCircleOutlineGlyph · CircleExclaimGlyph · InfoGlyph
-- `src/features/explore/ui/ExploreLandingScreen.tsx`  →  ExploreLandingScreenProps · ExploreLandingScreen
-
-## src/features/home/lib/
-- `src/features/home/lib/formatCountBadge.ts`  →  formatCountBadge
-
-## src/features/home/model/
-- `src/features/home/model/homeFixtures.ts`  →  HOME_DEFAULT_PROPS · HOME_LOADING_PROPS · HOME_PLANNING_PROPS · HOME_TRAVELING_PROPS · HOME_POST_TRIP_PROPS
-- `src/features/home/model/homePhase.ts`  →  HomeTripInput · ResolveHomePhaseInput · formatDday · resolveHomePhase · HomeItineraryTarget · applyItineraryTarget
-- `src/features/home/model/homeTypes.ts`  →  HomeCollectionCard · HomeSpotCard · HomeSpotsLane · HomeItineraryCard · HomeMagazineHero · HomeSections · TripHeroData · PastTrip · HomeSoftNote · HomePhase · HomeScreenProps
 
 ## src/features/home/ui/
 - `src/features/home/ui/HomeGlyphs.tsx`  →  BellGlyph · SearchGlyph · BackChevronGlyph · SparkleGlyph · LocationPinGlyph · HeartOutlineGlyph · HeartFilledGlyph · PlusGlyph · MapPinGlyph · SuitcaseGlyph · CloseGlyph
-- `src/features/home/ui/HomeScreen.tsx`  →  HomeScreen
 
 ## src/features/itinerary/config/
 - `src/features/itinerary/config/placeCategoryChips.ts`  →  PlaceCategoryChip · PLACE_CATEGORY_CHIPS
 
-## src/features/itinerary/lib/
-- `src/features/itinerary/lib/objectParticle.ts`  →  withObjectParticle
-
 ## src/features/itinerary/model/
-- `src/features/itinerary/model/buildEditItineraryRequest.ts`  →  buildEditItineraryRequest
-- `src/features/itinerary/model/candidateSelection.ts`  →  resolveCandidateSelection
 - `src/features/itinerary/model/coPickSlots.ts`  →  firstCoPickSlotKey · nextCoPickSlotKey · countPickedCoPickSlots
-- `src/features/itinerary/model/dayRegion.ts`  →  regionForDay
-- `src/features/itinerary/model/doneBar.ts`  →  DoneBarEntry · DoneBarPick · pickDoneBar
 - `src/features/itinerary/model/draftView.ts`  →  DRAFT_POLL_INTERVAL_MS · DRAFT_POLL_MAX_COUNT · DraftDayTab · buildDraftDayTabs · GenerationDayState · GenerationGaugeCell · buildGenerationGauge · GenerationGaugeFold · FoldedGenerationGaugeCell · foldGenerationGauge · formatDraftDayHeader · formatCoPickDayHeader · DraftPin · buildDraftPins · shouldKeepPollingDraft · DraftView · isCandidatesDemoted · FallbackNotice · resolveFallbackNotice · resolveDraftView
-- `src/features/itinerary/model/editorMapCenter.ts`  →  resolveEditorMapCenter
-- `src/features/itinerary/model/itineraryEditStore.ts`  →  EditorSlot · EditorDaysItem · removeSlot · addSlot · insertSlotAt · reorderKeepingFixed · ItineraryEditState · useItineraryEditStore
-- `src/features/itinerary/model/legDistance.ts`  →  legDistance
 - `src/features/itinerary/model/mustVisitList.ts`  →  MUST_VISIT_NAME_PLACEHOLDER · MustVisitListItem · MustVisitListView · joinMustVisits · fixedTimeLabel · buildMustVisitPins · resolveMustVisitListView
-- `src/features/itinerary/model/mustVisitTimeForm.ts`  →  DwellKey · MustVisitTimeForm · DWELL_OPTIONS · DEFAULT_DWELL_KEY · tripDayChips · startTimeOptions · startTimeLabel · mustVisitTimeBlockReason · canSubmitMustVisitTime · buildFixedMustVisitRequest · buildAnytimeMustVisitRequest
-- `src/features/itinerary/model/myTripsOrder.ts`  →  MyTripsSortKey · byLatest · byStart · byTitle · parseMyTripsSortKey · orderMyTrips
 - `src/features/itinerary/model/planState.ts`  →  PlanState · PlanDayTab · resolvePlanState · isConfirmLocked · ItineraryDestination · resolveItineraryDestination · ItineraryDestinationHref · itineraryDestinationHref · buildPlanDayTabs
-- `src/features/itinerary/model/radiusUsedLabel.ts`  →  formatRadiusUsed
-- `src/features/itinerary/model/slotSwapError.ts`  →  SLOT_SWAP_CONFLICT_CODES · SlotSwapErrorKind · SlotSwapError · resolveSlotSwapError
-- `src/features/itinerary/model/stayRecommend.ts`  →  StayRecommendCandidate · StayRecommendView
-- `src/features/itinerary/model/swapSlotPoi.ts`  →  swapSlotPoi
-- `src/features/itinerary/model/timeBandLabel.ts`  →  TimeBandLabel · timeBandLabel
-- `src/features/itinerary/model/tripCardFace.ts`  →  TripCardFace · deriveTripCardFace
 - `src/features/itinerary/model/unplacedMustVisits.ts`  →  UnplacedMustVisitRow · resolveUnplacedNames
 - `src/features/itinerary/model/useGenerationBusy.ts`  →  isGenerationRunning · GenerationBusy · useGenerationBusy
 
 ## src/features/itinerary/ui/
-- `src/features/itinerary/ui/CoPickLeaveDialog.tsx`  →  CoPickLeaveDialog
 - `src/features/itinerary/ui/ItineraryGlyphs.tsx`  →  BackChevronGlyph · LockGlyph · DragHandleGlyph · PlusGlyph · CheckGlyph · SortCheckGlyph · DashGlyph · DiamondGlyph · CheckCircleGlyph · PencilGlyph · SearchGlyph · CloseGlyph · ClockGlyph · CalendarGlyph · ChevronDownGlyph · ChevronRightGlyph · LinkChevronGlyph · LocationOffGlyph · CircleGlyphTone · InfoCircleGlyph · AlertCircleGlyph · WarningTriangleGlyph · ShareGlyph · WalkGlyph · CarGlyph · ExpandGlyph · RefreshGlyph · FullAiGlyph · CoPickGlyph · ManualGlyph
-- `src/features/itinerary/ui/MyTripCard.tsx`  →  MyTripCardProps · MyTripCard
-- `src/features/itinerary/ui/MyTripsSortSheet.tsx`  →  MyTripsSortSheetProps · MyTripsSortSheet
 - `src/features/itinerary/ui/PlaceAddScreen.tsx`  →  PlaceAddHeaderProps · PlaceAddHeader · PlaceAddRowProps · PlaceAddRow
-- `src/features/itinerary/ui/SaveConflictDialog.tsx`  →  SaveConflictDialog
-- `src/features/itinerary/ui/SlotCandidateSheet.tsx`  →  SlotCandidateSheetRow · SlotCandidateSheetProps · SlotCandidateSheet
-- `src/features/itinerary/ui/TripDeleteDialog.tsx`  →  TripDeleteDialog
 - `src/features/itinerary/ui/UnplacedMustVisitNotice.tsx`  →  UnplacedMustVisitNotice
-
-## src/features/notification/model/
-- `src/features/notification/model/channelAvailability.ts`  →  PushPermission · PushColumnState · resolvePushColumn
-- `src/features/notification/model/groupByDay.ts`  →  NotificationGroups · groupByDay
-- `src/features/notification/model/notificationAction.ts`  →  notificationAction
-- `src/features/notification/model/notificationKind.ts`  →  NotificationIconKind · NotificationKindMeta · notificationKind
-- `src/features/notification/model/useNotificationInbox.ts`  →  UseNotificationInboxResult · useNotificationInbox
-- `src/features/notification/model/useToggles.ts`  →  ToggleChannel · ToggleOutcome · UseTogglesResult · useToggles
 
 ## src/features/notification/ui/
 - `src/features/notification/ui/NotificationGlyphs.tsx`  →  NotifBackChevronGlyph · NotifInfoGlyph · NotifWarningGlyph
 
 ## src/features/onboarding/model/
-- `src/features/onboarding/model/preferenceInput.ts`  →  PreferenceDraftValues · STYLE · ACTIVITY · toPreferenceInput
-- `src/features/onboarding/model/preferenceSelection.ts`  →  toggleMulti · toggleSingle
-- `src/features/onboarding/model/preferenceStore.ts`  →  PreferenceDraft · usePreferenceStore
 - `src/features/onboarding/model/resolveOnboardingStep.ts`  →  OnboardingStep · OnboardingProgress · resolveOnboardingStep
 - `src/features/onboarding/model/termsDocumentTitle.ts`  →  termsDocumentTitle
 - `src/features/onboarding/model/useOnboardingProgress.ts`  →  useOnboardingProgress
-- `src/features/onboarding/model/validateNicknameFormat.ts`  →  validateNicknameFormat · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH · type NicknameFormatReason · type NicknameFormatResult
 
 ## src/features/onboarding/ui/
 - `src/features/onboarding/ui/OnboardingGlyphs.tsx`  →  BackChevronGlyph · CheckGlyph · ViewChevronGlyph · RegenerateGlyph · PositiveCheckGlyph · GlyphComponent · SunGlyph · ForkKnifeGlyph · MountainGlyph · ArtGlyph · ActivityGlyph · CameraGlyph · ShoppingBagGlyph · MoonGlyph · BalanceGlyph · LightningGlyph · SoloPersonGlyph · FriendsGlyph · HeartGlyph · FamilyGlyph · ParentsGlyph · PetGlyph · WalkGlyph · TransitGlyph · CarGlyph · TaxiGlyph · BikeGlyph · SkipChevronGlyph · InfoCircleGlyph
 
 ## src/features/planb/config/
-- `src/features/planb/config/replanChoices.ts`  →  ReplanChoice · REPLAN_REASONS · REPLAN_DIRECTIVES · TRIGGER_REASON_KEY
 - `src/features/planb/config/watchLabels.ts`  →  WatchKind · WATCH_CATEGORY_LABEL · WATCH_STATUS_LABEL
 
 ## src/features/planb/model/
 - `src/features/planb/model/appliedSummary.ts`  →  AppliedSummaryInput · appliedSummaryBadges
-- `src/features/planb/model/foldScope.ts`  →  foldScope
-- `src/features/planb/model/reorderKeepingLocked.ts`  →  reorderKeepingLocked
-- `src/features/planb/model/replanFormStore.ts`  →  ReplanFormState · useReplanFormStore
-- `src/features/planb/model/replanFromInstant.ts`  →  readFromInstant
-- `src/features/planb/model/replanMapCenter.ts`  →  REPLAN_MAP_FALLBACK_CENTER · deriveReplanMapAnchor
-- `src/features/planb/model/replanOrigin.ts`  →  ReplanOrigin · buildManualOrigin · buildGpsOrigin · isEstimatedOrigin
-- `src/features/planb/model/replanRequest.ts`  →  ReplanFormValues · buildStartReplanRequest
-- `src/features/planb/model/replanScope.ts`  →  ReplanScopeOption · REPLAN_SCOPES · DEFAULT_REPLAN_SCOPE
-- `src/features/planb/model/replanState.ts`  →  ReplanState · resolveReplanState
-- `src/features/planb/model/riskAffectedRow.ts`  →  RiskAffectedRow · riskAffectedRow
 - `src/features/planb/model/slackTime.ts`  →  slackTime
 - `src/features/planb/model/triggerLabel.ts`  →  TriggerLabel · TRIGGER_LABELS · triggerLabel
 - `src/features/planb/model/triggerPillCopy.ts`  →  TriggerPillSlot · triggerPillCopy
-- `src/features/planb/model/triggerWatchlist.ts`  →  TriggerWatchlistRow · triggerWatchlist
 - `src/features/planb/model/useActiveTriggers.ts`  →  useActiveTriggers
-- `src/features/planb/model/useApplyReplan.ts`  →  useApplyReplan
-- `src/features/planb/model/useCancelReplan.ts`  →  useCancelReplan
-- `src/features/planb/model/useReplanDiff.ts`  →  useReplanDiff
-- `src/features/planb/model/useReplanGpsOrigin.ts`  →  ReadReplanGpsOrigin · useReplanGpsOrigin
-- `src/features/planb/model/useReplanSession.ts`  →  useReplanSession
 - `src/features/planb/model/useSlotCandidates.ts`  →  useSlotCandidates
-- `src/features/planb/model/useStartReplan.ts`  →  useStartReplan
 
 ## src/features/planb/ui/
 - `src/features/planb/ui/PlanbGlyphs.tsx`  →  AppliedAlertGlyph · RiskWarningGlyph · ChevronRightGlyph · LockGlyph
-- `src/features/planb/ui/ReplanAppliedSheet.tsx`  →  AppliedDiffKind · AppliedDiffRow · ReplanAppliedSheetProps · ReplanAppliedSheet
-- `src/features/planb/ui/ReplanRequestSheet.tsx`  →  ReplanDetectedChip · ReplanRequestSheetProps · ReplanRequestSheet
-- `src/features/planb/ui/RiskDetailSheet.tsx`  →  RiskDetailSheetProps · RiskDetailSheet
 - `src/features/planb/ui/SlotCandidateSheet.tsx`  →  SlotCandidateSheetProps · SlotCandidateSheet
 
 ## src/features/record/model/
-- `src/features/record/model/adjustTimesDraft.ts`  →  AdjustTimesViolation · AdjustTimesDraftResult · adjustTimesDraft
 - `src/features/record/model/conflict.ts`  →  ConflictChoice · ConflictSelection · ConflictRow · ConflictVisitVM · isVisitConflict
-- `src/features/record/model/photoAttach.ts`  →  photoAttach
-- `src/features/record/model/photoAvailability.ts`  →  PhotoAvailability · photoAvailability
-- `src/features/record/model/pickPhotoForVisit.ts`  →  PhotoPickOutcome · pickPhotoForVisit
-- `src/features/record/model/recordsCalendar.ts`  →  markedDaysOfMonth · buildPastTripCards · LegendRow · MonthLegends · buildMonthLegends · canOpenTripRecords · recordsTripIdForDate · openableTripIds · OngoingTripEntry · OngoingTripCardVM · pickOngoingTrip · formatTripDateRange · nightsLabel
-- `src/features/record/model/spontaneousNames.ts`  →  rememberSpontaneousName · useSpontaneousNames
-- `src/features/record/model/stayAttribution.ts`  →  AttributedStay · DayAttribution · deriveStayAttribution
-- `src/features/record/model/useAdjustVisitTimes.ts`  →  VISIT_CONFLICT_NOTICE · AdjustVisitTimesOutcome · useAdjustVisitTimes
-- `src/features/record/model/useRecordsCalendar.ts`  →  useRecordsCalendar
-- `src/features/record/model/useTripRecords.ts`  →  useTripRecords · useRecordBases · useRecordSavedStays
-- `src/features/record/model/useVisitAttachments.ts`  →  useVisitAttachments
-- `src/features/record/model/useVisitCheck.ts`  →  VisitCheckOutcome · useVisitCheck
-- `src/features/record/model/useVisitMemo.ts`  →  useVisitMemo
-- `src/features/record/model/visitOrder.ts`  →  orderByArrival
-- `src/features/record/model/visitStatus.ts`  →  OPTIMISTIC_VISIT_ID_PREFIX · isOptimisticVisit · VisitStatus · deriveVisitStatus
 
 ## src/features/record/ui/
-- `src/features/record/ui/MemoInline.tsx`  →  MemoInlineProps · MemoInline
-- `src/features/record/ui/MemoSheet.tsx`  →  MemoSheetProps · MemoSheet
-- `src/features/record/ui/PhotoThumbStrip.tsx`  →  PhotoThumbVM · PhotoThumbStripProps · PhotoThumbStrip
 - `src/features/record/ui/RecordGlyphs.tsx`  →  VisitCheckDoneGlyph · VisitCheckActiveGlyph · VisitCheckUpcomingGlyph · VisitCheckSkippedGlyph · PlusGlyph · NoteGlyph · WarningTriangleGlyph · RetryGlyph · BackArrowGlyph · ChevronRightGlyph · LegendChevronGlyph · ChevronDownGlyph · InfoCircleGlyph · GpsOffGlyph · CalendarGlyph · CloseGlyph
-- `src/features/record/ui/SkipVisitDialog.tsx`  →  SkipVisitDialog
-- `src/features/record/ui/SpontaneousVisitButton.tsx`  →  SpontaneousVisitButtonProps · SpontaneousVisitButton
-- `src/features/record/ui/VisitRecordCard.tsx`  →  VisitRecordCardVM · VisitRecordCardProps · VisitRecordCard
-- `src/features/record/ui/VisitRecordCardContainer.tsx`  →  VisitRecordCardContainerProps · VisitRecordCardContainer
-- `src/features/record/ui/VisitTimeSheet.tsx`  →  VisitTimeSheetProps · VisitTimeSheet
 
 ## src/features/reflection/model/
-- `src/features/reflection/model/editCard.ts`  →  buildEditCard
 - `src/features/reflection/model/formatKm.ts`  →  formatKm
-- `src/features/reflection/model/missingParts.ts`  →  LocationPermissionState · MapNoticeReason · MapNotice · MissingParts · missingParts
-- `src/features/reflection/model/reflectionFallback.ts`  →  resolveDisplayNarrative
-- `src/features/reflection/model/shareCapture.ts`  →  SaveShareCardResult · ShareShareCardResult · isShareCaptureArmed · saveShareCardImage · shareShareCardImage
-- `src/features/reflection/model/shareCaptureNative.ts`  →  captureRef · requestPermissionsAsync · saveToLibraryAsync · shareAsync
 - `src/features/reflection/model/shareCard.ts`  →  ShareFormat · SHARE_FORMATS · ShareCardMode · ShareCardVM · BuildShareCardInput · buildShareCard · formatShareCardStats · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · validateCaption · validateHashtags
-- `src/features/reflection/model/statsCard.ts`  →  statsCard
 - `src/features/reflection/model/summaryStats.ts`  →  SummaryStatCells · summaryStats
 - `src/features/reflection/model/summaryView.ts`  →  OrderedVisit · shareEnabled · resolveSummaryView · toOrderedVisitList · distanceSourceLabel · daySubtitle
-- `src/features/reflection/model/useDailyReflection.ts`  →  UseDailyReflectionResult · useDailyReflection
-- `src/features/reflection/model/useStyleAnalysis.ts`  →  useStyleAnalysis
 - `src/features/reflection/model/useTripSummary.ts`  →  UseTripSummaryResult · useTripSummary
 
 ## src/features/reflection/ui/
 - `src/features/reflection/ui/ReflectionGlyphs.tsx`  →  BackArrowGlyph · LocationOffGlyph · PhotoOffGlyph · EmptyCircleGlyph · RetryGlyph · MoodSadGlyph · MoodSosoGlyph · MoodGoodGlyph
 
-## src/features/settings/model/
-- `src/features/settings/model/dataAttribution.ts`  →  OSM_COPYRIGHT_URL
-- `src/features/settings/model/exportSummary.ts`  →  ExportSummary · resolveExportSummary
-- `src/features/settings/model/preferenceDraft.ts`  →  PreferenceSelection · initialSelection · buildPreferenceInput
-- `src/features/settings/model/preferenceSummary.ts`  →  PreferenceRowKey · PreferenceSummary · summarizePreferences
-- `src/features/settings/model/settingsSections.ts`  →  SettingsInput · SettingsRowChip · SettingsRowVM · SettingsGroupVM · buildSettingsSections · filterReadySettingsSections
-- `src/features/settings/model/stayTripLink.ts`  →  StayTripLink · buildStayTripLink
-- `src/features/settings/model/styleCardModel.ts`  →  StyleGauge · StyleCardVM · buildStyleCardModel
-- `src/features/settings/model/tripBuckets.ts`  →  TripBucket · phaseBucket · bucketTrips
-- `src/features/settings/model/usePersonalization.ts`  →  UsePersonalizationResult · usePersonalization
+## src/features/request-replan/model/
+- `src/features/request-replan/model/replanFormStore.ts`  →  ReplanFormState · useReplanFormStore
+- `src/features/request-replan/model/replanMapCenter.ts`  →  REPLAN_MAP_FALLBACK_CENTER · deriveReplanMapAnchor
+- `src/features/request-replan/model/replanOrigin.ts`  →  ReplanOrigin · buildManualOrigin · buildGpsOrigin · isEstimatedOrigin
+- `src/features/request-replan/model/replanRequest.ts`  →  ReplanFormValues · buildStartReplanRequest
+- `src/features/request-replan/model/replanScope.ts`  →  ReplanScopeOption · REPLAN_SCOPES · DEFAULT_REPLAN_SCOPE
+- `src/features/request-replan/model/useStartReplan.ts`  →  useStartReplan
+
+## src/features/save-place/model/
+- `src/features/save-place/model/placeSaveGuard.ts`  →  PlaceSaveNotice · hasUsableCoords · SAVE_FAILURE_NOTICE · COORD_BLOCKED_NOTICE · REMOVE_FAILURE_NOTICE
+- `src/features/save-place/model/placeSaveToggle.ts`  →  usePlaceSaveToggle
+- `src/features/save-place/model/savedPlaceIndex.ts`  →  findSavedPlaceId · optimisticSavedPlaceId
+- `src/features/save-place/model/savedPlaces.ts`  →  SavedPlacesFailureReason · SavedPlacesOutcome · useSavedPlaces
+
+## src/features/save-stay/model/
+- `src/features/save-stay/model/buildSaveStayRequest.ts`  →  buildSaveStayRequest
+- `src/features/save-stay/model/savedStayIndex.ts`  →  findSavedStayId · optimisticSavedStayId
+- `src/features/save-stay/model/savedStays.ts`  →  SavedStaysFailureReason · SavedStaysOutcome · useSavedStays
+- `src/features/save-stay/model/stayKey.ts`  →  stayKey
 
 ## src/features/settings/ui/
 - `src/features/settings/ui/BaseToggleDialog.tsx`  →  BaseToggleDialog
-- `src/features/settings/ui/InfoChip.tsx`  →  InfoChip
 - `src/features/settings/ui/SettingsGlyphs.tsx`  →  MUTED · MUTED_SOFT · ChevronRightGlyph · BookmarkGlyph · BarChartGlyph · ShareNodesGlyph · ListGlyph · EyeOffGlyph · GearGlyph · PencilGlyph · HeartGlyph · ChevronLeftGlyph · PersonGlyph · DownloadGlyph · ContrastGlyph · PinGlyph · BellGlyph · SparkleGlyph · ExternalLinkGlyph · BedGlyph · MenuBedGlyph · TrashGlyph · DocumentGlyph · LogoutGlyph
-- `src/features/settings/ui/StyleSummaryCard.tsx`  →  StyleSummaryCardProps · StyleSummaryCard
 - `src/features/settings/ui/cardShadow.ts`  →  CARD_SHADOW
 
-## src/features/stay/config/
-- `src/features/stay/config/affiliateNotice.ts`  →  isOtaSource · otaDisplayName · otaConfirmLabel
+## src/features/share-trip-card/model/
+- `src/features/share-trip-card/model/shareCapture.ts`  →  SaveShareCardResult · ShareShareCardResult · isShareCaptureArmed · saveShareCardImage · shareShareCardImage
+- `src/features/share-trip-card/model/shareCaptureNative.ts`  →  captureRef · requestPermissionsAsync · saveToLibraryAsync · shareAsync
 
 ## src/features/stay/model/
-- `src/features/stay/model/buildSaveStayRequest.ts`  →  buildSaveStayRequest
-- `src/features/stay/model/priceRangeFilter.ts`  →  PriceBucketId · PRICE_BUCKETS · filterByPriceRange
-- `src/features/stay/model/relaxCulpritFilter.ts`  →  relaxCulpritFilter
-- `src/features/stay/model/savedStayIndex.ts`  →  findSavedStayId · optimisticSavedStayId
-- `src/features/stay/model/savedStays.ts`  →  SavedStaysFailureReason · SavedStaysOutcome · useSavedStays
-- `src/features/stay/model/stayFilterOptions.ts`  →  StayFilterOption · StayFilterOptions · buildStayFilterOptions · toggleFilterValue · countActiveFilters
-- `src/features/stay/model/stayKey.ts`  →  stayKey
-- `src/features/stay/model/stayOutbound.ts`  →  StayOutboundMode · stayOutboundMode · buildStaySearchUrl · openStayOutbound
-- `src/features/stay/model/stayRegisterForm.ts`  →  StayRegisterTab · StayRegisterFlow · resolveName · canSubmitStayRegister · buildStayRegisterRequest
-- `src/features/stay/model/staySearchState.ts`  →  StaySearchState · resolveStaySearchState
 - `src/features/stay/model/useStaySearch.ts`  →  useStaySearch
 
 ## src/features/stay/ui/
-- `src/features/stay/ui/OtaChoiceSheet.tsx`  →  OtaChoiceSheetProps · OtaChoiceSheet
-- `src/features/stay/ui/StayFilterSheet.tsx`  →  StayFilterSheetProps · StayFilterSheet
 - `src/features/stay/ui/StayGlyphs.tsx`  →  BackChevronGlyph · ChevronDownGlyph · FilterSlidersGlyph · WarningTriangleGlyph · MapPinGlyph · SearchGlyph · PlusGlyph · ChevronRightGlyph · HeartOutlineGlyph · ShareGlyph · InfoGlyph · BedGlyph · CheckGlyph · RefreshGlyph · ExternalLinkGlyph · AmenityGlyph · ParkingGlyph · BreakfastGlyph · WifiGlyph · OceanViewGlyph · HeartFilledGlyph
-- `src/features/stay/ui/StayPriceSheet.tsx`  →  StayPriceSheetProps · StayPriceSheet
 
 ## src/features/trip/lib/
 - `src/features/trip/lib/sheetHandle.ts`  →  SHEET_HANDLE_INDICATOR_STYLE
 
 ## src/features/trip/model/
-- `src/features/trip/model/baseAssignPlan.ts`  →  BaseAssignPlan · planBaseAssign
 - `src/features/trip/model/baseScreen.ts`  →  UnresolvedDaysView · unresolvedDaysView
-- `src/features/trip/model/baseSections.ts`  →  BaseSection · toBaseSections · NightlyBaseCard · nightlyBaseCards
-- `src/features/trip/model/basesChanged.ts`  →  basesChanged
-- `src/features/trip/model/budgetAmount.ts`  →  BudgetAmount · parseBudgetAmount · formatBudgetAmount · BudgetTier · budgetForTier · isBudgetTier · tierForAmount
-- `src/features/trip/model/createTripRequest.ts`  →  CreateTripInput · buildCreateTripRequest
-- `src/features/trip/model/mustVisitSeed.ts`  →  MustVisitSeedItem · MUST_VISIT_THUMBNAIL_LIMIT · seedMustVisits · mergeMustVisitSeeds · MustVisitSectionView · resolveMustVisitSection · mustVisitFailureNotice
-- `src/features/trip/model/mustVisitSync.ts`  →  MustVisitSyncPlan · planMustVisitSync
 - `src/features/trip/model/regionMatch.ts`  →  sidoKey · addressInRegion · regionCodeInTrip · placeLocationLabel · sigunguLabel
-- `src/features/trip/model/staySheetSections.ts`  →  StayAddressState · StaySheetSection · staySheetSections
-- `src/features/trip/model/tripDatePicker.ts`  →  dateCell · TripDateRange
-- `src/features/trip/model/tripDraft.ts`  →  TripViolationCode · TripDraft · tripLength · nightsSum · validateTripDraft · toCompanionType
-- `src/features/trip/model/tripSummary.ts`  →  wizardProgress · formatWizardStep · SummaryLine · PreferenceSummary · summaryDestinations · summaryPeriod · summaryCompanion · summaryPreferences · summaryBudget
-- `src/features/trip/model/tripWizardStep1.ts`  →  PeriodPresetCode · CompanionCode · PERIOD_PRESETS · COMPANION_OPTIONS · fromEpochDay · presetRange · deriveEndDate
-- `src/features/trip/model/tripWizardStore.ts`  →  TripWizardField · TripWizardDraft · useTripWizardStore
-- `src/features/trip/model/useCreateTrip.ts`  →  useCreateTrip
-- `src/features/trip/model/usePreferencePrefill.ts`  →  usePreferencePrefill
 - `src/features/trip/model/useSavedStays.ts`  →  useSavedStays
-- `src/features/trip/model/useStayAddresses.ts`  →  useStayAddresses
-- `src/features/trip/model/useTripBases.ts`  →  useTripBases · useAssignBase
 
 ## src/features/trip/ui/
-- `src/features/trip/ui/BaseRegenerateDialog.tsx`  →  BaseRegenerateDialog
-- `src/features/trip/ui/CompanionEditSheet.tsx`  →  CompanionEditSheetProps · CompanionEditSheet
-- `src/features/trip/ui/DestinationEditSheet.tsx`  →  DestinationEditSheetProps · DestinationEditSheet
-- `src/features/trip/ui/PeriodEditSheet.tsx`  →  PeriodEditSheetProps · PeriodEditSheet
-- `src/features/trip/ui/StaySelectSheet.tsx`  →  StaySelectCandidate · StaySelectSection · StaySelectSheetProps · StaySelectSheet
 - `src/features/trip/ui/TripGlyphs.tsx`  →  GlyphComponent · BackChevronGlyph · PinGlyph · RemoveGlyph · ThumbRemoveGlyph · PlusGlyph · CalendarGlyph · ChevronDownGlyph · StepperMinusGlyph · StepperPlusGlyph · SoloGlyph · FriendsGlyph · HeartGlyph · FamilyGlyph · SparkleGlyph · AlertCircleGlyph · GlobeGlyph · BedTone · BedGlyph · ChevronRightGlyph · BaseBadgePinGlyph · HeartFilledGlyph · CheckGlyph · SearchGlyph · WarningTriangleGlyph
-- `src/features/trip/ui/TripWizardLeaveDialog.tsx`  →  TripWizardLeaveDialog
 
 ## src/mocks/
 - `src/mocks/handlers.ts`  →  handlers
@@ -567,6 +471,13 @@
 
 ## src/pages/daily-reflection/
 - `src/pages/daily-reflection/index.ts`  →  DailyReflectionPage
+
+## src/pages/daily-reflection/model/
+- `src/pages/daily-reflection/model/editCard.ts`  →  buildEditCard
+- `src/pages/daily-reflection/model/missingParts.ts`  →  LocationPermissionState · MapNoticeReason · MapNotice · MissingParts · missingParts
+- `src/pages/daily-reflection/model/reflectionFallback.ts`  →  resolveDisplayNarrative
+- `src/pages/daily-reflection/model/statsCard.ts`  →  statsCard
+- `src/pages/daily-reflection/model/useDailyReflection.ts`  →  UseDailyReflectionResult · useDailyReflection
 
 ## src/pages/daily-reflection/ui/
 - `src/pages/daily-reflection/ui/ChangeSummaryRow.tsx`  →  ChangeSummaryRowProps · ChangeSummaryRow
@@ -579,14 +490,27 @@
 ## src/pages/explore-landing/
 - `src/pages/explore-landing/index.ts`  →  ExploreLandingPage
 
+## src/pages/explore-landing/model/
+- `src/pages/explore-landing/model/exploreFixtures.ts`  →  PREVIEW_PLACES · PREVIEW_SAVED_POI_IDS · PREVIEW_SAVED_PLACES · PREVIEW_REGIONS
+
 ## src/pages/explore-landing/ui/
 - `src/pages/explore-landing/ui/ExploreLandingPage.tsx`  →  ExploreLandingPage
+- `src/pages/explore-landing/ui/ExploreLandingScreen.tsx`  →  ExploreLandingScreenProps · ExploreLandingScreen
 
 ## src/pages/home/
 - `src/pages/home/index.ts`  →  HomePage
 
+## src/pages/home/lib/
+- `src/pages/home/lib/formatCountBadge.ts`  →  formatCountBadge
+
+## src/pages/home/model/
+- `src/pages/home/model/homeFixtures.ts`  →  HOME_DEFAULT_PROPS · HOME_LOADING_PROPS · HOME_PLANNING_PROPS · HOME_TRAVELING_PROPS · HOME_POST_TRIP_PROPS
+- `src/pages/home/model/homePhase.ts`  →  HomeTripInput · ResolveHomePhaseInput · formatDday · resolveHomePhase · HomeItineraryTarget · applyItineraryTarget
+- `src/pages/home/model/homeTypes.ts`  →  HomeCollectionCard · HomeSpotCard · HomeSpotsLane · HomeItineraryCard · HomeMagazineHero · HomeSections · TripHeroData · PastTrip · HomeSoftNote · HomePhase · HomeScreenProps
+
 ## src/pages/home/ui/
 - `src/pages/home/ui/HomePage.tsx`  →  HomePage
+- `src/pages/home/ui/HomeScreen.tsx`  →  HomeScreen
 
 ## src/pages/itinerary-copick/config/
 - `src/pages/itinerary-copick/config/conceptCards.ts`  →  CONCEPT_DESCRIPTIONS
@@ -594,8 +518,14 @@
 ## src/pages/itinerary-copick/
 - `src/pages/itinerary-copick/index.ts`  →  SlotFillPage · CoPickCompletePage
 
+## src/pages/itinerary-copick/model/
+- `src/pages/itinerary-copick/model/candidateSelection.ts`  →  resolveCandidateSelection
+- `src/pages/itinerary-copick/model/dayRegion.ts`  →  regionForDay
+- `src/pages/itinerary-copick/model/radiusUsedLabel.ts`  →  formatRadiusUsed
+
 ## src/pages/itinerary-copick/ui/
 - `src/pages/itinerary-copick/ui/CoPickCompletePage.tsx`  →  CoPickCompletePageProps · CoPickCompletePage
+- `src/pages/itinerary-copick/ui/CoPickLeaveDialog.tsx`  →  CoPickLeaveDialog
 - `src/pages/itinerary-copick/ui/CoPickStepper.tsx`  →  CoPickStep · CoPickStepperProps · CoPickStepper
 - `src/pages/itinerary-copick/ui/CoPickStepperGlyphs.tsx`  →  StepperSunGlyph · StepperCheckBadge
 - `src/pages/itinerary-copick/ui/ConceptPickerScreen.tsx`  →  ConceptProgress · ConceptPickerScreenProps · ConceptPickerScreen
@@ -615,9 +545,13 @@
 - `src/pages/itinerary-draft/ui/DraftScreen.tsx`  →  DraftScreenProps · DraftScreen
 - `src/pages/itinerary-draft/ui/GenerationFallbackScreen.tsx`  →  GenerationFallbackScreenProps · GenerationFallbackScreen
 - `src/pages/itinerary-draft/ui/SlotCandidatePanelContainer.tsx`  →  SlotCandidatePanelContainerProps · SlotCandidatePanelContainer
+- `src/pages/itinerary-draft/ui/SlotCandidateSheet.tsx`  →  SlotCandidateSheetRow · SlotCandidateSheetProps · SlotCandidateSheet
 
 ## src/pages/itinerary-edit/
 - `src/pages/itinerary-edit/index.ts`  →  ItineraryEditPage
+
+## src/pages/itinerary-edit/model/
+- `src/pages/itinerary-edit/model/reorderKeepingLocked.ts`  →  reorderKeepingLocked
 
 ## src/pages/itinerary-edit/ui/
 - `src/pages/itinerary-edit/ui/ItineraryEditPage.tsx`  →  ItineraryEditPage
@@ -632,15 +566,26 @@
 ## src/pages/itinerary-list/
 - `src/pages/itinerary-list/index.ts`  →  MyTripsListPage
 
+## src/pages/itinerary-list/model/
+- `src/pages/itinerary-list/model/doneBar.ts`  →  DoneBarEntry · DoneBarPick · pickDoneBar
+- `src/pages/itinerary-list/model/myTripsOrder.ts`  →  MyTripsSortKey · byLatest · byStart · byTitle · parseMyTripsSortKey · orderMyTrips
+- `src/pages/itinerary-list/model/tripCardFace.ts`  →  TripCardFace · deriveTripCardFace
+
 ## src/pages/itinerary-list/ui/
 - `src/pages/itinerary-list/ui/GenerationDoneBar.tsx`  →  GenerationDoneBarProps · GenerationDoneBar
 - `src/pages/itinerary-list/ui/GenerationDoneBarGlyphs.tsx`  →  DoneCheckGlyph
+- `src/pages/itinerary-list/ui/MyTripCard.tsx`  →  MyTripCardProps · MyTripCard
 - `src/pages/itinerary-list/ui/MyTripsListPage.tsx`  →  MyTripsListPage
 - `src/pages/itinerary-list/ui/MyTripsListScreen.tsx`  →  MyTripsListMode · MyTripsListScreenProps · MyTripsListScreen
+- `src/pages/itinerary-list/ui/MyTripsSortSheet.tsx`  →  MyTripsSortSheetProps · MyTripsSortSheet
 - `src/pages/itinerary-list/ui/TripCardContainer.tsx`  →  TripCardContainerProps · TripCardContainer
+- `src/pages/itinerary-list/ui/TripDeleteDialog.tsx`  →  TripDeleteDialog
 
 ## src/pages/itinerary-manual/
 - `src/pages/itinerary-manual/index.ts`  →  ManualPlanPage · PlaceAddPage
+
+## src/pages/itinerary-manual/model/
+- `src/pages/itinerary-manual/model/editorMapCenter.ts`  →  resolveEditorMapCenter
 
 ## src/pages/itinerary-manual/ui/
 - `src/pages/itinerary-manual/ui/ManualPlanPage.tsx`  →  ManualPlanPage
@@ -675,6 +620,12 @@
 ## src/pages/itinerary-stay-recommend/
 - `src/pages/itinerary-stay-recommend/index.ts`  →  StayRecommendPage
 
+## src/pages/itinerary-stay-recommend/lib/
+- `src/pages/itinerary-stay-recommend/lib/objectParticle.ts`  →  withObjectParticle
+
+## src/pages/itinerary-stay-recommend/model/
+- `src/pages/itinerary-stay-recommend/model/stayRecommend.ts`  →  StayRecommendCandidate · StayRecommendView
+
 ## src/pages/itinerary-stay-recommend/ui/
 - `src/pages/itinerary-stay-recommend/ui/StayRecommendPage.tsx`  →  StayRecommendPageProps · StayRecommendPage
 - `src/pages/itinerary-stay-recommend/ui/StayRecommendView.tsx`  →  StayRecommendViewProps · StayRecommendView
@@ -682,9 +633,20 @@
 ## src/pages/live-itinerary/
 - `src/pages/live-itinerary/index.ts`  →  LiveItineraryPage
 
+## src/pages/live-itinerary/model/
+- `src/pages/live-itinerary/model/foldScope.ts`  →  foldScope
+- `src/pages/live-itinerary/model/liveState.ts`  →  LiveState · ResolveLiveStateInput · resolveLiveState
+- `src/pages/live-itinerary/model/riskAffectedRow.ts`  →  RiskAffectedRow · riskAffectedRow
+- `src/pages/live-itinerary/model/triggerWatchlist.ts`  →  TriggerWatchlistRow · triggerWatchlist
+- `src/pages/live-itinerary/model/useVisitCheck.ts`  →  VisitCheckOutcome · useVisitCheck
+
 ## src/pages/live-itinerary/ui/
 - `src/pages/live-itinerary/ui/LiveHubView.tsx`  →  LiveHubSlot · LiveHubViewProps · LiveHubView
 - `src/pages/live-itinerary/ui/LiveItineraryPage.tsx`  →  LiveItineraryPageProps · LiveItineraryPage
+- `src/pages/live-itinerary/ui/MemoSheet.tsx`  →  MemoSheetProps · MemoSheet
+- `src/pages/live-itinerary/ui/ReplanAppliedSheet.tsx`  →  AppliedDiffKind · AppliedDiffRow · ReplanAppliedSheetProps · ReplanAppliedSheet
+- `src/pages/live-itinerary/ui/RiskDetailSheet.tsx`  →  RiskDetailSheetProps · RiskDetailSheet
+- `src/pages/live-itinerary/ui/TriggerChip.tsx`  →  TriggerChipProps · TriggerChip
 
 ## src/pages/live-location/
 - `src/pages/live-location/index.ts`  →  LiveLocationPage
@@ -698,16 +660,28 @@
 
 ## src/pages/live-place/model/
 - `src/pages/live-place/model/placeDetailView.ts`  →  PlaceDetailView · buildPlaceDetailView · buildPlaceShareMessage
+- `src/pages/live-place/model/usePlaceDetail.ts`  →  usePlaceDetail
 
 ## src/pages/live-place/ui/
 - `src/pages/live-place/ui/LivePlacePage.tsx`  →  LivePlacePageProps · LivePlacePage
 - `src/pages/live-place/ui/PlaceDetailScreen.tsx`  →  PlaceDetailScreenProps · PlaceDetailScreen
 
+## src/pages/login/config/
+- `src/pages/login/config/oauthConfig.ts`  →  OAuthDiscovery · OAuthProviderConfig · getOAuthConfig
+
 ## src/pages/login/
 - `src/pages/login/index.ts`  →  LoginPage
 
+## src/pages/login/lib/
+- `src/pages/login/lib/appleAuthorize.tsx`  →  appleAuthorize · isAppleSignInAvailable · AppleSignInButton
+- `src/pages/login/lib/kakaoAuthorize.ts`  →  kakaoAuthorize
+- `src/pages/login/lib/makeAuthorize.ts`  →  makeAuthorize
+- `src/pages/login/lib/naverAuthorize.ts`  →  naverAuthorize
+- `src/pages/login/lib/realAuthorize.ts`  →  realAuthorize
+
 ## src/pages/login/model/
 - `src/pages/login/model/useAppleButton.ts`  →  useAppleButton
+- `src/pages/login/model/useSocialLogin.ts`  →  SocialLoginPhase · AuthorizeResult · Authorize · useSocialLogin
 
 ## src/pages/login/ui/
 - `src/pages/login/ui/LoginPage.tsx`  →  LoginPage
@@ -727,13 +701,22 @@
 ## src/pages/my-page/
 - `src/pages/my-page/index.ts`  →  MyPage
 
+## src/pages/my-page/model/
+- `src/pages/my-page/model/styleCardModel.ts`  →  StyleGauge · StyleCardVM · buildStyleCardModel
+- `src/pages/my-page/model/tripBuckets.ts`  →  TripBucket · phaseBucket · bucketTrips
+
 ## src/pages/my-page/ui/
+- `src/pages/my-page/ui/InfoChip.tsx`  →  InfoChip
 - `src/pages/my-page/ui/MyPage.tsx`  →  MyPage
 - `src/pages/my-page/ui/MyPageScreen.tsx`  →  MyPageScreenProps · MyPageScreen
 - `src/pages/my-page/ui/ProfileCard.tsx`  →  ProfileCardCounts · ProfileCardProps · ProfileCard
+- `src/pages/my-page/ui/StyleSummaryCard.tsx`  →  StyleSummaryCardProps · StyleSummaryCard
 
 ## src/pages/my-stays/
 - `src/pages/my-stays/index.ts`  →  MyStaysPage
+
+## src/pages/my-stays/model/
+- `src/pages/my-stays/model/stayTripLink.ts`  →  StayTripLink · buildStayTripLink
 
 ## src/pages/my-stays/ui/
 - `src/pages/my-stays/ui/MyStaysPage.tsx`  →  MyStaysPage
@@ -741,6 +724,12 @@
 
 ## src/pages/notification-inbox/
 - `src/pages/notification-inbox/index.ts`  →  NotificationInboxPage
+
+## src/pages/notification-inbox/model/
+- `src/pages/notification-inbox/model/groupByDay.ts`  →  NotificationGroups · groupByDay
+- `src/pages/notification-inbox/model/notificationAction.ts`  →  notificationAction
+- `src/pages/notification-inbox/model/notificationKind.ts`  →  NotificationIconKind · NotificationKindMeta · notificationKind
+- `src/pages/notification-inbox/model/useNotificationInbox.ts`  →  UseNotificationInboxResult · useNotificationInbox
 
 ## src/pages/notification-inbox/ui/
 - `src/pages/notification-inbox/ui/NotificationInboxGlyphs.tsx`  →  NotificationKindIcon · NotifBellGlyph
@@ -759,6 +748,7 @@
 
 ## src/pages/onboarding-nickname/model/
 - `src/pages/onboarding-nickname/model/useNickname.ts`  →  UseNickname · useNickname
+- `src/pages/onboarding-nickname/model/validateNicknameFormat.ts`  →  validateNicknameFormat · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH · type NicknameFormatReason · type NicknameFormatResult
 
 ## src/pages/onboarding-nickname/ui/
 - `src/pages/onboarding-nickname/ui/NicknamePage.tsx`  →  NicknamePage
@@ -815,11 +805,20 @@
 ## src/pages/planb-diff/
 - `src/pages/planb-diff/index.ts`  →  PlanbDiffPage
 
+## src/pages/planb-diff/model/
+- `src/pages/planb-diff/model/useCancelReplan.ts`  →  useCancelReplan
+
 ## src/pages/planb-diff/ui/
 - `src/pages/planb-diff/ui/PlanbDiffPage.tsx`  →  PlanbDiffPageProps · PlanbDiffPage
 
 ## src/pages/planb-draft/
 - `src/pages/planb-draft/index.ts`  →  PlanbSolvingPage · PlanbDraftPage
+
+## src/pages/planb-draft/model/
+- `src/pages/planb-draft/model/replanFromInstant.ts`  →  readFromInstant
+- `src/pages/planb-draft/model/replanState.ts`  →  ReplanState · resolveReplanState
+- `src/pages/planb-draft/model/useReplanDiff.ts`  →  useReplanDiff
+- `src/pages/planb-draft/model/useReplanSession.ts`  →  useReplanSession
 
 ## src/pages/planb-draft/ui/
 - `src/pages/planb-draft/ui/PlanbDraftPage.tsx`  →  PlanbDraftPageProps · PlanbDraftPage
@@ -828,11 +827,18 @@
 - `src/pages/planb-draft/ui/ReplanLeaveDialog.tsx`  →  ReplanLeaveDialog
 - `src/pages/planb-draft/ui/ReplanSolvingView.tsx`  →  ReplanSolvingViewProps · ReplanSolvingView
 
+## src/pages/planb-request/config/
+- `src/pages/planb-request/config/replanChoices.ts`  →  ReplanChoice · REPLAN_REASONS · REPLAN_DIRECTIVES · TRIGGER_REASON_KEY
+
 ## src/pages/planb-request/
 - `src/pages/planb-request/index.ts`  →  PlanbRequestPage
 
+## src/pages/planb-request/model/
+- `src/pages/planb-request/model/useReplanGpsOrigin.ts`  →  ReadReplanGpsOrigin · useReplanGpsOrigin
+
 ## src/pages/planb-request/ui/
 - `src/pages/planb-request/ui/PlanbRequestPage.tsx`  →  PlanbRequestPageProps · PlanbRequestPage
+- `src/pages/planb-request/ui/ReplanRequestSheet.tsx`  →  ReplanDetectedChip · ReplanRequestSheetProps · ReplanRequestSheet
 
 ## src/pages/reconsent/
 - `src/pages/reconsent/index.ts`  →  ReconsentPage
@@ -850,6 +856,10 @@
 ## src/pages/records-calendar/
 - `src/pages/records-calendar/index.ts`  →  RecordsCalendarPage
 
+## src/pages/records-calendar/model/
+- `src/pages/records-calendar/model/recordsCalendar.ts`  →  markedDaysOfMonth · buildPastTripCards · LegendRow · MonthLegends · buildMonthLegends · canOpenTripRecords · recordsTripIdForDate · openableTripIds · OngoingTripEntry · OngoingTripCardVM · pickOngoingTrip · formatTripDateRange · nightsLabel
+- `src/pages/records-calendar/model/useRecordsCalendar.ts`  →  useRecordsCalendar
+
 ## src/pages/records-calendar/ui/
 - `src/pages/records-calendar/ui/PastTripList.tsx`  →  PastTripListProps · PastTripList
 - `src/pages/records-calendar/ui/RecordsCalendarPage.tsx`  →  RecordsCalendarPage
@@ -865,6 +875,10 @@
 
 ## src/pages/saved-places/
 - `src/pages/saved-places/index.ts`  →  SavedPlacesPage
+
+## src/pages/saved-places/model/
+- `src/pages/saved-places/model/filterSavedPlacesByTripRegions.ts`  →  filterSavedPlacesByTripRegions
+- `src/pages/saved-places/model/savedPlaceList.ts`  →  orderSavedPlaces · SAVED_PLACE_BADGE
 
 ## src/pages/saved-places/ui/
 - `src/pages/saved-places/ui/MustVisitOutsideConfirmDialog.tsx`  →  MustVisitOutsideConfirmDialog
@@ -883,6 +897,10 @@
 ## src/pages/settings-notifications/
 - `src/pages/settings-notifications/index.ts`  →  NotificationSettingsPage
 
+## src/pages/settings-notifications/model/
+- `src/pages/settings-notifications/model/channelAvailability.ts`  →  PushPermission · PushColumnState · resolvePushColumn
+- `src/pages/settings-notifications/model/useToggles.ts`  →  ToggleChannel · ToggleOutcome · UseTogglesResult · useToggles
+
 ## src/pages/settings-notifications/ui/
 - `src/pages/settings-notifications/ui/NotificationSettingsPage.tsx`  →  NotificationSettingsPage
 - `src/pages/settings-notifications/ui/NotificationSettingsScreen.tsx`  →  ToggleValueMap · NotificationSettingsScreenProps · NotificationSettingsScreen
@@ -894,6 +912,7 @@
 
 ## src/pages/settings-personalization/model/
 - `src/pages/settings-personalization/model/personalizationCopy.ts`  →  personalizationCopy
+- `src/pages/settings-personalization/model/usePersonalization.ts`  →  UsePersonalizationResult · usePersonalization
 
 ## src/pages/settings-personalization/ui/
 - `src/pages/settings-personalization/ui/PersonalizationPage.tsx`  →  PersonalizationPage
@@ -914,7 +933,11 @@
 - `src/pages/settings/index.ts`  →  SettingsPage
 
 ## src/pages/settings/model/
+- `src/pages/settings/model/dataAttribution.ts`  →  OSM_COPYRIGHT_URL
 - `src/pages/settings/model/deletionScope.ts`  →  DELETION_SCOPE
+- `src/pages/settings/model/exportSummary.ts`  →  ExportSummary · resolveExportSummary
+- `src/pages/settings/model/preferenceSummary.ts`  →  PreferenceRowKey · PreferenceSummary · summarizePreferences
+- `src/pages/settings/model/settingsSections.ts`  →  SettingsInput · SettingsRowChip · SettingsRowVM · SettingsGroupVM · buildSettingsSections · filterReadySettingsSections
 
 ## src/pages/settings/ui/
 - `src/pages/settings/ui/DeleteAccountDialog.tsx`  →  DeleteAccountDialog
@@ -942,12 +965,19 @@
 ## src/pages/stay-detail/
 - `src/pages/stay-detail/index.ts`  →  StayDetailPage
 
+## src/pages/stay-detail/model/
+- `src/pages/stay-detail/model/stayOutbound.ts`  →  StayOutboundMode · stayOutboundMode · buildStaySearchUrl · openStayOutbound
+
 ## src/pages/stay-detail/ui/
+- `src/pages/stay-detail/ui/OtaChoiceSheet.tsx`  →  OtaChoiceSheetProps · OtaChoiceSheet
 - `src/pages/stay-detail/ui/StayDetailPage.tsx`  →  StayDetailPage
 - `src/pages/stay-detail/ui/StayDetailScreen.tsx`  →  StayDetailState · StayDetailScreenProps · StayDetailScreen
 
 ## src/pages/stay-register/
 - `src/pages/stay-register/index.ts`  →  StayRegisterPage
+
+## src/pages/stay-register/model/
+- `src/pages/stay-register/model/stayRegisterForm.ts`  →  StayRegisterTab · StayRegisterFlow · resolveName · canSubmitStayRegister · buildStayRegisterRequest
 
 ## src/pages/stay-register/ui/
 - `src/pages/stay-register/ui/StayRegisterPage.tsx`  →  StayRegisterPage
@@ -965,10 +995,16 @@
 
 ## src/pages/stay-search/model/
 - `src/pages/stay-search/model/filterReasonLabel.ts`  →  filterReasonLabel
+- `src/pages/stay-search/model/priceRangeFilter.ts`  →  PriceBucketId · PRICE_BUCKETS · filterByPriceRange
+- `src/pages/stay-search/model/relaxCulpritFilter.ts`  →  relaxCulpritFilter
+- `src/pages/stay-search/model/stayFilterOptions.ts`  →  StayFilterOption · StayFilterOptions · buildStayFilterOptions · toggleFilterValue · countActiveFilters
+- `src/pages/stay-search/model/staySearchState.ts`  →  StaySearchState · resolveStaySearchState
 
 ## src/pages/stay-search/ui/
 - `src/pages/stay-search/ui/PartialFailureBanner.tsx`  →  PartialFailureBanner
 - `src/pages/stay-search/ui/SkeletonList.tsx`  →  SkeletonList
+- `src/pages/stay-search/ui/StayFilterSheet.tsx`  →  StayFilterSheetProps · StayFilterSheet
+- `src/pages/stay-search/ui/StayPriceSheet.tsx`  →  StayPriceSheetProps · StayPriceSheet
 - `src/pages/stay-search/ui/StaySearchPage.tsx`  →  StaySearchPage
 - `src/pages/stay-search/ui/StaySearchScreen.tsx`  →  StaySearchScreenProps · StaySearchScreen
 
@@ -984,6 +1020,7 @@
 
 ## src/pages/travel-style/model/
 - `src/pages/travel-style/model/styleThreshold.ts`  →  categoryLabel
+- `src/pages/travel-style/model/useStyleAnalysis.ts`  →  useStyleAnalysis
 
 ## src/pages/travel-style/ui/
 - `src/pages/travel-style/ui/CategoryBarList.tsx`  →  CategoryBarListProps · CategoryBarList
@@ -994,16 +1031,36 @@
 ## src/pages/trip-new-step1/
 - `src/pages/trip-new-step1/index.ts`  →  TripNewStep1Page
 
+## src/pages/trip-new-step1/model/
+- `src/pages/trip-new-step1/model/budgetAmount.ts`  →  BudgetAmount · parseBudgetAmount · formatBudgetAmount · BudgetTier · budgetForTier · isBudgetTier · tierForAmount
+- `src/pages/trip-new-step1/model/createTripRequest.ts`  →  CreateTripInput · buildCreateTripRequest
+- `src/pages/trip-new-step1/model/mustVisitSync.ts`  →  MustVisitSyncPlan · planMustVisitSync
+- `src/pages/trip-new-step1/model/tripDatePicker.ts`  →  dateCell · TripDateRange
+- `src/pages/trip-new-step1/model/useCreateTrip.ts`  →  useCreateTrip
+- `src/pages/trip-new-step1/model/usePreferencePrefill.ts`  →  usePreferencePrefill
+
 ## src/pages/trip-new-step1/ui/
 - `src/pages/trip-new-step1/ui/BudgetEditSheet.tsx`  →  BudgetEditSheetProps · BudgetEditSheet
+- `src/pages/trip-new-step1/ui/CompanionEditSheet.tsx`  →  CompanionEditSheetProps · CompanionEditSheet
+- `src/pages/trip-new-step1/ui/DestinationEditSheet.tsx`  →  DestinationEditSheetProps · DestinationEditSheet
+- `src/pages/trip-new-step1/ui/PeriodEditSheet.tsx`  →  PeriodEditSheetProps · PeriodEditSheet
 - `src/pages/trip-new-step1/ui/PrefOverrideSheet.tsx`  →  PrefOverrideSheetProps · PrefOverrideSheet
 - `src/pages/trip-new-step1/ui/TripNewStep1Page.tsx`  →  TripNewStep1PageProps · TripNewStep1Page
+- `src/pages/trip-new-step1/ui/TripWizardLeaveDialog.tsx`  →  TripWizardLeaveDialog
 - `src/pages/trip-new-step1/ui/TripWizardStep1Screen.tsx`  →  TripWizardStep1ScreenProps · TripWizardStep1Screen
 
 ## src/pages/trip-new-step2/
 - `src/pages/trip-new-step2/index.ts`  →  TripNewStep2Page · TripBasesPage
 
+## src/pages/trip-new-step2/model/
+- `src/pages/trip-new-step2/model/baseSections.ts`  →  BaseSection · toBaseSections · NightlyBaseCard · nightlyBaseCards
+- `src/pages/trip-new-step2/model/basesChanged.ts`  →  basesChanged
+- `src/pages/trip-new-step2/model/staySheetSections.ts`  →  StayAddressState · StaySheetSection · staySheetSections
+- `src/pages/trip-new-step2/model/useStayAddresses.ts`  →  useStayAddresses
+
 ## src/pages/trip-new-step2/ui/
+- `src/pages/trip-new-step2/ui/BaseRegenerateDialog.tsx`  →  BaseRegenerateDialog
+- `src/pages/trip-new-step2/ui/StaySelectSheet.tsx`  →  StaySelectCandidate · StaySelectSection · StaySelectSheetProps · StaySelectSheet
 - `src/pages/trip-new-step2/ui/TripBasesPage.tsx`  →  TripBasesPage
 - `src/pages/trip-new-step2/ui/TripNewStep2Page.tsx`  →  TripNewStep2Page · BaseNightsFlowProps · BaseNightsFlow
 - `src/pages/trip-new-step2/ui/TripWizardStep2Screen.tsx`  →  NightlyBaseCardVM · Step2Variant · TripWizardStep2ScreenProps · TripWizardStep2Screen
@@ -1011,9 +1068,24 @@
 ## src/pages/trip-records/
 - `src/pages/trip-records/index.ts`  →  TripRecordsPage
 
+## src/pages/trip-records/model/
+- `src/pages/trip-records/model/adjustTimesDraft.ts`  →  AdjustTimesViolation · AdjustTimesDraftResult · adjustTimesDraft
+- `src/pages/trip-records/model/photoAvailability.ts`  →  PhotoAvailability · photoAvailability
+- `src/pages/trip-records/model/stayAttribution.ts`  →  AttributedStay · DayAttribution · deriveStayAttribution
+- `src/pages/trip-records/model/useAdjustVisitTimes.ts`  →  VISIT_CONFLICT_NOTICE · AdjustVisitTimesOutcome · useAdjustVisitTimes
+- `src/pages/trip-records/model/useTripRecords.ts`  →  useTripRecords · useRecordBases · useRecordSavedStays
+- `src/pages/trip-records/model/useVisitAttachments.ts`  →  useVisitAttachments
+- `src/pages/trip-records/model/visitOrder.ts`  →  orderByArrival
+
 ## src/pages/trip-records/ui/
+- `src/pages/trip-records/ui/PhotoThumbStrip.tsx`  →  PhotoThumbVM · PhotoThumbStripProps · PhotoThumbStrip
+- `src/pages/trip-records/ui/SkipVisitDialog.tsx`  →  SkipVisitDialog
+- `src/pages/trip-records/ui/SpontaneousVisitButton.tsx`  →  SpontaneousVisitButtonProps · SpontaneousVisitButton
 - `src/pages/trip-records/ui/TripRecordsPage.tsx`  →  TripRecordsPageProps · TripRecordsPage
 - `src/pages/trip-records/ui/TripRecordsView.tsx`  →  TripRecordsDayTab · DayAttributionHeader · RecordPlanRowVM · TripRecordsViewProps · TripRecordsView
+- `src/pages/trip-records/ui/VisitRecordCard.tsx`  →  VisitRecordCardVM · VisitRecordCardProps · VisitRecordCard
+- `src/pages/trip-records/ui/VisitRecordCardContainer.tsx`  →  VisitRecordCardContainerProps · VisitRecordCardContainer
+- `src/pages/trip-records/ui/VisitTimeSheet.tsx`  →  VisitTimeSheetProps · VisitTimeSheet
 
 ## src/pages/trip-summary/
 - `src/pages/trip-summary/index.ts`  →  TripSummaryPage

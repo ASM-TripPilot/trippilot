@@ -6,13 +6,13 @@ import { type ReactElement, useState } from 'react';
 import { Keyboard, Share } from 'react-native';
 
 import { waitForGateDestination } from '@/features/auth/model/gateDestination';
-import { usePreferenceStore } from '@/features/onboarding/model/preferenceStore';
-import { OSM_COPYRIGHT_URL } from '@/features/settings/model/dataAttribution';
-import { resolveExportSummary } from '@/features/settings/model/exportSummary';
+import { usePreferenceStore } from '@/features/edit-preferences/model/preferenceStore';
+import { OSM_COPYRIGHT_URL } from '../model/dataAttribution';
+import { resolveExportSummary } from '../model/exportSummary';
 import {
   buildSettingsSections,
   filterReadySettingsSections,
-} from '@/features/settings/model/settingsSections';
+} from '../model/settingsSections';
 import { SettingsScreen } from './SettingsScreen';
 import { logout } from '@/shared/api';
 import {

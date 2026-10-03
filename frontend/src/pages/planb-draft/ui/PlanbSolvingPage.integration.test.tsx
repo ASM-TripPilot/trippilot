@@ -46,7 +46,7 @@ let mockOrigin: { lat: number | null; lng: number | null } = {
 };
 const mockSessionCache = new Map<string, unknown>();
 
-jest.mock('@/features/planb/model/useReplanSession', () => ({
+jest.mock('../model/useReplanSession', () => ({
   useReplanSession: () => {
     if (mockStatus === null) {
       return { data: undefined, isPending: true, isError: false };

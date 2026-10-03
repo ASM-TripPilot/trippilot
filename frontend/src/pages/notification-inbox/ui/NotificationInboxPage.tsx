@@ -2,10 +2,10 @@ import { useState, type ReactElement } from 'react';
 import { router } from 'expo-router';
 import type { Href } from 'expo-router';
 
-import { groupByDay } from '@/features/notification/model/groupByDay';
-import { notificationAction } from '@/features/notification/model/notificationAction';
-import { notificationKind } from '@/features/notification/model/notificationKind';
-import { useNotificationInbox } from '@/features/notification/model/useNotificationInbox';
+import { groupByDay } from '../model/groupByDay';
+import { notificationAction } from '../model/notificationAction';
+import { notificationKind } from '../model/notificationKind';
+import { useNotificationInbox } from '../model/useNotificationInbox';
 import {
   NotificationInboxScreen,
   type NotificationRowVM,

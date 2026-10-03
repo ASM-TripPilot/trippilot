@@ -69,10 +69,10 @@ jest.mock('expo-router', () => {
  */
 const mockAuthorizeCalls: string[] = [];
 let mockForceTokenFlow = false;
-jest.mock('@/features/auth/lib/makeAuthorize', () => {
-  const actual = jest.requireActual<
-    typeof import('@/features/auth/lib/makeAuthorize')
-  >('@/features/auth/lib/makeAuthorize');
+jest.mock('../lib/makeAuthorize', () => {
+  const actual = jest.requireActual<typeof import('../lib/makeAuthorize')>(
+    '../lib/makeAuthorize'
+  );
   return {
     makeAuthorize: (provider: SocialProvider) => {
       if (mockForceTokenFlow) {

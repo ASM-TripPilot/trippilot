@@ -69,7 +69,7 @@ jest.mock('@/features/stay/model/useStaySearch', () => ({
   }),
 }));
 
-jest.mock('@/features/stay/model/savedStays', () => ({
+jest.mock('@/features/save-stay/model/savedStays', () => ({
   useSavedStays: () => ({
     isSaved: () => false,
     save: jest.fn(),
@@ -91,7 +91,7 @@ jest.mock('@/shared/api/generated/places/places', () => ({
   }),
 }));
 
-jest.mock('@/features/explore/model/savedPlaces', () => ({
+jest.mock('@/features/save-place/model/savedPlaces', () => ({
   useSavedPlaces: () => ({ savedPoiIds: [] }),
 }));
 

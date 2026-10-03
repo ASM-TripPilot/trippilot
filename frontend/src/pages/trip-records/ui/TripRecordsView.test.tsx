@@ -15,12 +15,9 @@ import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { Path } from 'react-native-svg';
 import type { ReactTestInstance } from 'react-test-renderer';
 
-import { MemoInline } from '@/features/record/ui/MemoInline';
+import { MemoInline } from '@/features/attach-visit-media/ui/MemoInline';
 import { NoteGlyph } from '@/features/record/ui/RecordGlyphs';
-import {
-  VisitRecordCard,
-  type VisitRecordCardVM,
-} from '@/features/record/ui/VisitRecordCard';
+import { VisitRecordCard, type VisitRecordCardVM } from './VisitRecordCard';
 import type { MapCenter, MapPin } from '@/shared/map';
 import {
   closestAncestor,

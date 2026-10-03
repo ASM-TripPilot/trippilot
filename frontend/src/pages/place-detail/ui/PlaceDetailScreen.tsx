@@ -15,7 +15,7 @@ import { PlaceSubtitle } from '@/entities/place/ui/PlaceSubtitle';
 import { normalizeOpeningHours } from '@/entities/itinerary-slot/lib/normalizeOpeningHours';
 import type { Place } from '@/shared/api/generated/schemas';
 
-import type { PlaceSaveNotice } from '@/features/explore/model/placeSaveGuard';
+import type { PlaceSaveNotice } from '@/features/save-place/model/placeSaveGuard';
 import {
   BackChevronGlyph,
   InfoGlyph,

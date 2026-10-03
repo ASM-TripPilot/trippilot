@@ -54,10 +54,10 @@ jest.mock('@/features/explore/model/regions', () => ({
   ...jest.requireActual('@/features/explore/model/regions'),
   useRegions: () => mockUseRegions(),
 }));
-jest.mock('@/features/explore/model/savedPlaces', () => ({
+jest.mock('@/features/save-place/model/savedPlaces', () => ({
   useSavedPlaces: () => ({ savedPoiIds: [] }),
 }));
-jest.mock('@/features/stay/model/savedStays', () => ({
+jest.mock('@/features/save-stay/model/savedStays', () => ({
   useSavedStays: () => ({
     isSaved: () => false,
     save: jest.fn(),

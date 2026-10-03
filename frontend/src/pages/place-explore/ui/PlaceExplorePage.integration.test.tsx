@@ -13,8 +13,8 @@ import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
-import { wizardOriginParams } from '@/features/explore/model/wizardOrigin';
-import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { wizardOriginParams } from '@/features/create-trip/model/wizardOrigin';
+import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
 import {
   captureDraftAtNextCall,
   freshWizardDraft,

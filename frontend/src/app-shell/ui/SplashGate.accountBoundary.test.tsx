@@ -4,7 +4,7 @@ import { act, render, screen } from '@testing-library/react-native';
 import { router } from 'expo-router';
 
 import { useBootstrapGate } from '@/features/auth/model/useBootstrapGate';
-import { usePreferenceStore } from '@/features/onboarding/model/preferenceStore';
+import { usePreferenceStore } from '@/features/edit-preferences/model/preferenceStore';
 
 import { SplashGate, SPLASH_MIN_VISIBLE_MS } from './SplashGate';
 

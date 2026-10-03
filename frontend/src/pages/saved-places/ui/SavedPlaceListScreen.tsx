@@ -9,8 +9,8 @@ import { StateNotice } from '@/shared/ui/StateNotice';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
 import type { PlaceListState } from '@/features/explore/model/placeListState';
-import type { PlaceSaveNotice } from '@/features/explore/model/placeSaveGuard';
-import { SAVED_PLACE_BADGE } from '@/features/explore/model/savedPlaceList';
+import type { PlaceSaveNotice } from '@/features/save-place/model/placeSaveGuard';
+import { SAVED_PLACE_BADGE } from '../model/savedPlaceList';
 import {
   BackChevronGlyph,
   MapPinGlyph,

@@ -39,14 +39,14 @@ import {
   hasUsableCoords,
   SAVE_FAILURE_NOTICE,
   type PlaceSaveNotice,
-} from '@/features/explore/model/placeSaveGuard';
+} from '@/features/save-place/model/placeSaveGuard';
 import { usePlacesInfinite } from '@/features/explore/model/usePlacesInfinite';
 import { useMultiRegionPlaces } from '@/features/explore/model/useMultiRegionPlaces';
-import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { useSavedPlaces } from '@/features/save-place/model/savedPlaces';
 import { regionPickerHref } from '@/features/explore/model/regionPickerPurpose';
-import { isWizardOrigin } from '@/features/explore/model/wizardOrigin';
+import { isWizardOrigin } from '@/features/create-trip/model/wizardOrigin';
 import { PlaceExploreScreen } from './PlaceExploreScreen';
-import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
 
 /** 카테고리 시트(TRIP-708 AC-6) — **페이지가 소유**한다(@gorhom/bottom-sheet). 열림 상태는
  * 페이지 `useState`이고, 닫히면 트리에서 통째로 사라진다(조건부 마운트) — gorhom 목이 통과형

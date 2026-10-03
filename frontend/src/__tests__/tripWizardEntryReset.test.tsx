@@ -1,8 +1,8 @@
 import { render, screen } from '@testing-library/react-native';
 
 import TripWizardLayout from '@/app/trips/new/_layout';
-import type { MustVisitSeedItem } from '@/features/trip/model/mustVisitSeed';
-import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import type { MustVisitSeedItem } from '@/features/create-trip/model/mustVisitSeed';
+import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
 import { TripNewStep1Page } from '@/pages/trip-new-step1';
 import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
@@ -50,11 +50,11 @@ jest.mock('expo-router', () => {
   };
 });
 
-jest.mock('@/features/trip/model/usePreferencePrefill', () => ({
+jest.mock('@/pages/trip-new-step1/model/usePreferencePrefill', () => ({
   usePreferencePrefill: () => ({ data: undefined }),
 }));
 
-jest.mock('@/features/trip/model/useCreateTrip', () => ({
+jest.mock('@/pages/trip-new-step1/model/useCreateTrip', () => ({
   useCreateTrip: () => ({
     mutateAsync: jest.fn(),
     isPending: false,
@@ -82,7 +82,7 @@ let mockSavedPlaces: {
   remove: jest.Mock;
 };
 
-jest.mock('@/features/explore/model/savedPlaces', () => ({
+jest.mock('@/features/save-place/model/savedPlaces', () => ({
   useSavedPlaces: () => mockSavedPlaces,
 }));
 

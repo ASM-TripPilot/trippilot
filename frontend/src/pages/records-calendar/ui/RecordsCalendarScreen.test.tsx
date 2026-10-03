@@ -10,7 +10,7 @@ import type {
   MonthLegends,
   OngoingTripCardVM,
   PastTripCardVM,
-} from '@/features/record/model/recordsCalendar';
+} from '../model/recordsCalendar';
 import type { MonthCell } from '@/shared/date/monthGrid';
 
 import {

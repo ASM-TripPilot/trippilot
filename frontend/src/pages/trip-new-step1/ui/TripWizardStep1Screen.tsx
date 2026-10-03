@@ -4,12 +4,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Skeleton } from '@/shared/ui/Skeleton';
 
-import type { MustVisitSeedItem } from '@/features/trip/model/mustVisitSeed';
-import { formatWizardStep } from '@/features/trip/model/tripSummary';
+import type { MustVisitSeedItem } from '@/features/create-trip/model/mustVisitSeed';
+import { formatWizardStep } from '@/features/create-trip/model/tripSummary';
 import type {
   PreferenceSummary,
   SummaryLine,
-} from '@/features/trip/model/tripSummary';
+} from '@/features/create-trip/model/tripSummary';
 import {
   AlertCircleGlyph,
   BackChevronGlyph,

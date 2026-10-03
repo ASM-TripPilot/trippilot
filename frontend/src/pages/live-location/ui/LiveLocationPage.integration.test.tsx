@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 
-import { useReplanFormStore } from '@/features/planb/model/replanFormStore';
+import { useReplanFormStore } from '@/features/request-replan/model/replanFormStore';
 import type { Itinerary } from '@/shared/api/generated/schemas';
 import { useGetStaysReverseGeocode } from '@/shared/api/generated/stays/stays';
 import type { MapCenter } from '@/shared/map';
@@ -71,7 +71,7 @@ const mockMutate = jest.fn(
     if (mockPhase !== 'idle') options?.onSettled?.();
   }
 );
-jest.mock('@/features/planb/model/useStartReplan', () => ({
+jest.mock('@/features/request-replan/model/useStartReplan', () => ({
   useStartReplan: () => ({
     mutate: mockMutate,
     isPending: false,

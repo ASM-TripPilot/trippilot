@@ -23,7 +23,7 @@ import { ShareCardScreen, type ShareCardScreenProps } from './ShareCardScreen';
 const mockShareArmed = { value: false };
 const mockSave = jest.fn();
 const mockShare = jest.fn();
-jest.mock('@/features/reflection/model/shareCapture', () => ({
+jest.mock('@/features/share-trip-card/model/shareCapture', () => ({
   isShareCaptureArmed: () => mockShareArmed.value,
   saveShareCardImage: (...args: unknown[]) => mockSave(...args),
   shareShareCardImage: (...args: unknown[]) => mockShare(...args),

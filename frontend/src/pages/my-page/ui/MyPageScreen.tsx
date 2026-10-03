@@ -2,7 +2,7 @@ import { Fragment, type ReactElement, type ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import type { TripBucket } from '@/features/settings/model/tripBuckets';
+import type { TripBucket } from '../model/tripBuckets';
 import { ProfileCard, type ProfileCardCounts } from './ProfileCard';
 import { CARD_SHADOW } from '@/features/settings/ui/cardShadow';
 import {

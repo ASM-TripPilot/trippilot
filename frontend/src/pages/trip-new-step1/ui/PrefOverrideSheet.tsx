@@ -39,7 +39,10 @@ import BottomSheet, {
 
 import { SHEET_HANDLE_INDICATOR_STYLE } from '@/features/trip/lib/sheetHandle';
 
-import { ACTIVITY, STYLE } from '@/features/onboarding/model/preferenceInput';
+import {
+  ACTIVITY,
+  STYLE,
+} from '@/features/edit-preferences/model/preferenceInput';
 import {
   ActivityGlyph,
   ArtGlyph,

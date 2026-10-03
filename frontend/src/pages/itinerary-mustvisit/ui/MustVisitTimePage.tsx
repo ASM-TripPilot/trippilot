@@ -3,7 +3,7 @@ import { useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 
-import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { useSavedPlaces } from '@/features/save-place/model/savedPlaces';
 import {
   DEFAULT_DWELL_KEY,
   DWELL_OPTIONS,
@@ -13,7 +13,7 @@ import {
   startTimeOptions,
   tripDayChips,
   type MustVisitTimeForm,
-} from '@/features/itinerary/model/mustVisitTimeForm';
+} from '@/features/add-must-visit/model/mustVisitTimeForm';
 import { MustVisitTimeScreen } from './MustVisitTimeScreen';
 import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
 import type { AddMustVisitRequest } from '@/shared/api/generated/schemas';

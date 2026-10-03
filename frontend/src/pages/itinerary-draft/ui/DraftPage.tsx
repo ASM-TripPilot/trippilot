@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 
-import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { useSavedPlaces } from '@/features/save-place/model/savedPlaces';
 import {
   buildDraftDayTabs,
   buildDraftPins,
@@ -18,7 +18,7 @@ import {
   shouldKeepPollingDraft,
 } from '@/features/itinerary/model/draftView';
 import type { GenerationDayState } from '@/features/itinerary/model/draftView';
-import { legDistance } from '@/features/itinerary/model/legDistance';
+import { legDistance } from '@/entities/place/lib/legDistance';
 import { resolveUnplacedNames } from '@/features/itinerary/model/unplacedMustVisits';
 import { isGenerationRunning } from '@/features/itinerary/model/useGenerationBusy';
 import { DraftScreen } from './DraftScreen';

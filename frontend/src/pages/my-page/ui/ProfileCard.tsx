@@ -1,9 +1,9 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import type { TripBucket } from '@/features/settings/model/tripBuckets';
+import type { TripBucket } from '../model/tripBuckets';
 import { CARD_SHADOW } from '@/features/settings/ui/cardShadow';
-import { InfoChip } from '@/features/settings/ui/InfoChip';
+import { InfoChip } from './InfoChip';
 
 /**
  * TRIP-604 · l03 프로필 카드 — 순수 프레젠테이션(props 만). 아바타(닉네임 이니셜)·닉네임·이메일·

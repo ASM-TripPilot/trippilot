@@ -235,7 +235,7 @@ jest.mock('@/shared/push', () => ({
 
 // TRIP-929: 좌표는 담은 장소에서 온다 — 빈 목록으로 둔다. 팩토리 목이라 실물(QueryClient 필요 ·
 // 생성 클라이언트·인증 계층)을 로드하지 않는다.
-jest.mock('@/features/explore/model/savedPlaces', () => ({
+jest.mock('@/features/save-place/model/savedPlaces', () => ({
   useSavedPlaces: () => ({
     savedPlaces: [],
     isPending: false,

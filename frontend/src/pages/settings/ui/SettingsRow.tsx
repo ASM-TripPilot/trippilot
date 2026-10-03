@@ -1,7 +1,7 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import type { SettingsRowChip } from '@/features/settings/model/settingsSections';
+import type { SettingsRowChip } from '../model/settingsSections';
 
 import {
   BellGlyph,

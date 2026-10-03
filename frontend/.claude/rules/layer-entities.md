@@ -29,6 +29,7 @@ paths:
 | `ui/PlaceRowCard.tsx` | 범용 행 카드(save?/trailing?/subtitle 옵셔널 슬롯). |
 | `ui/SlotCandidateCard.tsx` | itinerary(h08·h10)·planb(i14) 후보 시트 공용, `testIDPrefix`로 소비처 구조 차이를 흡수. `tags?`·`nameKo?`·`showRationale?`·`distanceLabel?`·`distanceTone?`·`dimmed?`는 전부 기본값이 기존 렌더 불변. candidates 응답에 이름·사진·태그·"반경 밖" 필드가 없어 이 값들은 픽스처로만 채워진다(프로덕션 톤다운 0). planb 루트 정규식이 `image-`·`name-`를 감산하지 않으니 테스트에서 `queryByTestId`로 null을 확인한다. |
 | `ui/PlaceSubtitle.tsx` | 부제 조각(`parts.join(' · ')`만). 기존 부제 공식들을 통일하지 않고 조각만 인자화했다. |
+| `lib/legDistance.ts` | (TRIP-1155로 features/itinerary에서 이사) `legDistance(distanceRanges)` — 서버 `distanceRange` 문자열에서 숫자+단위를 뽑아(`km`을 `m`보다 먼저) 미터 합산 → `"820m"`/`"3.2km"`. 깨진 값·빈 값(`null`/`undefined`/`''`)이 하나라도 섞이면 그날 줄 전체를 `null`로 접는다(부분합=실제보다 적은 틀린 숫자 금지, TRIP-1110 — 옛 "빈 값 스킵" 폐기). `0m`는 값이다(`!meters` 금지). 호출자는 첫 슬롯을 뺀다(구간 모집단) — 함수는 이를 강제하지 못하고 페이지 테스트가 지킨다. INV-3. |
 
 ## `src/entities/stay/`
 
@@ -39,6 +40,7 @@ paths:
 | `ui/StaySearchCard.tsx` | 검색 풀/레인 카드(e02·d01·d05, `variant: 'full'\|'rail'`). **testID는 완성 문자열 prop**(root/photo/save/filled/outline) — 소비처마다 save/글리프 testID 스킴이 달라 단일 prefix로 못 접는다. 하트는 `@/shared/ui/HeartGlyphs`에서만. 이미지 필드가 없어 사진 자리는 항상 회색(INV-1). |
 | `ui/SavedStayCard.tsx` | degrade 카드(e04·g02 시트, `layout: 'vertical'\|'row'`). 계약에 사진·지역·거리·가격이 없어 이름+`subtitle`만. 하트/체크는 소비처가 `trailing` 슬롯으로 주입(카드는 하트 불가지, `save` prop 없음). |
 | `ui/StayRecommendCard.tsx` | h15 동선 기준 추천 카드(props-only). 거리만(INV-3), 문자열은 소비처가 서식해 넘긴다. 선택은 `accessibilityState.selected`와 테두리를 **같은 루트**에 건다. `SavedStayCard`의 layout으로 얹지 않는다 — degrade 카드 계약(배지·거리 줄·선택 테두리 없음)이 흐려진다. |
+| `config/affiliateNotice.ts` | (TRIP-1155로 features/stay에서 이사) `otaConfirmLabel(externalSource)`(`Map` 사전 — 프로토타입 키 오염 회피, 모르면 "외부 사이트로 이동", INV-1)·`isOtaSource`(사전 포함 여부 판정 창구 — `otaConfirmLabel`은 폴백 때문에 판정에 못 쓴다). "다시 보지 않기"는 서버 `/me/settings.affiliateNoticeDismissed`에 저장 |
 
 ## `src/entities/trip/`
 
@@ -47,14 +49,14 @@ paths:
 | `model/index.ts` | `Trip`·`TripStatus`·`TripDestination` 재수출 + `MyTripCardVM`·`MyTripBadge`(`'done'|'draft'|'live'|null`, `'live'`=여행 중 TRIP-1121)·`PastTripCardVM`. `resume?`·`imageUrl?`·`photoLabel?`은 additive 옵셔널(미전달 소비처 무회귀, `imageUrl`은 픽스처 전용 — 프로덕션 null, INV-1). |
 | `lib/formatTripPeriod.ts` | 기간 포맷터 **6벌** + `dayOfWeek`·`WEEKDAY_LABELS`. en dash(U+2013)·미들닷(U+00B7)·공백·월 생략이 벌마다 달라 **병합·통일 금지**(합치면 회귀). 근거는 개념 [[바이트 지문과 심볼 보존의 자기모순]]. |
 | `lib/tripPhase.ts` | **(TRIP-1121 신규)** `classifyTripPhase(period, itineraryStatus, today)` → `'draft'\|'upcoming'\|'ongoing'\|'ended'` · `isTripOngoing`. 서버 `Trip.status`(날짜만 봄)가 아니라 **일정 CONFIRMED × 서울 오늘**로 가른다(CONFIRMED 아니면 날짜 안 보고 `'draft'`). 시계를 읽지 않는다 — `today`는 호출부가 `seoulDate(new Date())`로 넘긴다. ⚠️ **`undefined`는 「일정 없음(404)」만 뜻한다** — 미도착(pending)·404 아닌 조회 실패는 호출 전에 걸러라(안 걸러내면 「모름」이 `'draft'`로 접힌다, 03b 경고 2). 소비처: 1123(마이페이지 집계)·1120(기록 탭 `pickOngoingTrip` — 모름 거르기는 호출부·순수 함수 양쪽에 있고 세 페이지가 각자 접는다). |
-| `lib/tripDayNumber.ts` | **(TRIP-1120 신규)** `tripDayNumber(startDate, today)` — 'YYYY-MM-DD' 두 날짜로 며칠째인지(시작 당일 = 1). `Date.UTC` 자정 뺄셈이라 월말·윤년·해넘김을 넘는다(문자열 뺄셈 아님). 시계를 읽지 않고 오늘은 인자. 시작 전(음수·0)은 막지 않으니 호출부가 기간 안일 때만 부른다(`pickOngoingTrip`이 `isTripOngoing` 뒤에서만 부름). ⚠️ 같은 계산이 `features/home/model/homePhase.ts`(지역 `toEpochDay`)에도 비공개로 있다 — features 형제 import 금지라 못 가져와 별도로 두었다(통일은 후속 후보). 소비처: `features/record/model/recordsCalendar.ts` |
+| `lib/tripDayNumber.ts` | **(TRIP-1120 신규)** `tripDayNumber(startDate, today)` — 'YYYY-MM-DD' 두 날짜로 며칠째인지(시작 당일 = 1). `Date.UTC` 자정 뺄셈이라 월말·윤년·해넘김을 넘는다(문자열 뺄셈 아님). 시계를 읽지 않고 오늘은 인자. 시작 전(음수·0)은 막지 않으니 호출부가 기간 안일 때만 부른다(`pickOngoingTrip`이 `isTripOngoing` 뒤에서만 부름). ⚠️ 같은 계산이 `pages/home/model/homePhase.ts`(지역 `toEpochDay`)에도 비공개로 있다 — features 형제 import 금지라 못 가져와 별도로 두었다(통일은 후속 후보). 소비처: `pages/records-calendar/model/recordsCalendar.ts` |
 | `lib/formatNights.ts` | 박수 포맷터 **3벌**(`formatNightsLabel` 실패 `''`·`nightsLabel` 실패 `null`·`nightsCountLabel`). **실패값 통일 금지**(`''`≠`null`이 계약). |
 | `ui/TripCard.tsx` | h06 여행 카드. `testIDPrefix` 명시 prop(카드가 `'my-trip'`을 하드코딩하지 않는다). 배지 `'live'`(여행 중)는 작성중과 같은 primary 칩 분기를 타고 ⋯ 삭제 메뉴가 안 뜬다(`deletable`이 draft만 통과). resume 게이트는 `vm.resume ?? (badge==='draft')` — 생성중도 배지가 `'draft'`라 컨테이너가 `resume:false`를 실어 억제한다. 사진 testID는 `imageUrl`이 있을 때만 붙는다. `onPressDelete` 콜백이 있을 때만 배지 옆 ⋯가 뜬다(TRIP-1055, 삭제 가능 판정은 이 컴포넌트가 안 함) — 누르면 `menuOpen`(부모가 쥔 스위치, controlled prop)로 카드 내 팝오버 메뉴(휴지통+'삭제')를 연다. `menuOpen`·`onPressMenu`도 없으면 없는 것과 같다(`useState` 금지 — entities는 무상태). 팝오버는 중첩 `Pressable`(카드 누름 안쪽에 `hitSlop={4}`)이라 카드 이동을 안 일으킨다. |
 | `ui/PastTripRow.tsx` | j07 지난 여행 행. **완성 full `testID`** prop(sub-part가 하나라 prefix 대신). `compact?`(기본 `false`)가 참이면 l03 변형(64/r12), 아니면 j07 원형(72/r10·카드 r16)이 className 그대로 유지된다. |
 | `ui/PastTripRow.compact.test.tsx` | `compact` 변형 단위 테스트 — 공백 분할 className 배열로 두 변형을 가른다(부분 문자열 오탐 방지). |
 | `ui/TripGlyphs.tsx` | `ChevronRightGlyph` 로컬 복제. `MoreDotsGlyph`·`TrashGlyph`(TRIP-1055, 신규) — 모양이 같은 사본이 `features/settings/ui/SettingsGlyphs.tsx`·`widgets/map-sheet-shell/ui/EditorGlyphs.tsx`에 있으나 entities는 형제 feature·상위 층 어느 쪽도 import할 수 없어(층 경계) Figma path를 그대로 다시 그렸다(viewBox·색 각각 다름 — 병합 금지, `traps-glyphs.md`류 동명이심볼 주의). |
 
-`features/record/model/recordsCalendar.ts`는 아직 `formatTripDateRange`·`nightsLabel`을 로컬 재수출한다(유일하게 남은 shim).
+`pages/records-calendar/model/recordsCalendar.ts`는 아직 `formatTripDateRange`·`nightsLabel`을 로컬 재수출한다(유일하게 남은 shim).
 
 ## `src/entities/itinerary-slot/`
 
@@ -76,6 +78,9 @@ paths:
 | `ui/SlotPhotoPlaceholder.tsx` | `resolveCategoryPlaceholder` 소비 → 72×72(카드 사진 자리와 같음, TRIP-1116) 틴트+아이콘. 텍스트 0(INV-3). |
 | `ui/PoiSlotCard.tsx` | peek/list 겸용 POI 카드. |
 | `ui/ReplanSlotRow.tsx` | 재계획 초안 행. 번호 원 톤(`tone==='visited'`→`bg-success`)·사진/플레이스홀더·시간 알약·흐림(`opacity-45`, 카드 루트에만)·"다른 후보"(예정 행만). |
+| `lib/slotProgress.ts` | (TRIP-1155로 features/execution에서 이사) `projectSlotProgress(slots, {completedPoiIds?, activePoiId?}) → ProjectedSlot[]` — 슬롯에 `done`\|`active`\|`upcoming`을 붙이는 순수 사영. **`startAt`/`endAt`을 읽지도 연산하지도 않고 통과**시킨다(PBT-U4-F1 — 시계로 도착 시각을 재추정하지 않는다, BR-U4-34). 완료가 진행 중보다 우선, 빈 progress는 전부 `upcoming` |
+| `lib/visitProgress.ts` | (TRIP-1155로 features/execution에서 이사) `deriveVisitProgress(list, date, planOrder) → {completedPoiIds, activePoiId, visitCheckIdByPoiId}` — 그날 slotKey를 가진 계획 레코드만 센다(즉석·다른 날·깨진 키는 완료로도 active로도 안 셈, poi는 slotKey 파싱값). 완료(`completedAt≠null && skippedAt==null`)가 진행 중을 이기고, active 후보가 여럿이면 `planOrder` 앞 1곳(도착 시각 비교는 BR-U4-34로 금지·문자열 비교는 소수초/Z 없는 낙관 레코드에서 뒤집힘). 입력 순서 불변, planOrder 밖 후보는 active 불가. `projectSlotProgress`에 주입되는 것이 유일한 소비 경로 |
+| `lib/timeBandLabel.ts` | (TRIP-1155로 features/itinerary에서 이사) `timeBandLabel(startAt)` — `HH:mm:ss` → `'오전'\|'점심'\|'오후'\|'저녁'`(BR-U3-07·PBT-U3-2). 경계 `05:00`·`11:00`·`14:00`·`17:00`은 정본 부재로 사용자가 동결한 값, 문자열 사전순 비교(0채움 전제). 저녁은 자정을 넘어 두 조각. **입력 형식을 검증하지 않는다** — `'9:00:00'`은 조용히 `'저녁'`. |
 
 화면 고유 슬롯(`DraftScreen`·`ManualPlanScreen`·`ItineraryEditScreen`·widgets `ManualEditShell`)은 계약이 달라 이 슬라이스로 접지 않는다. execution의 `SlotState`는 서버 enum이 아니라 방문기록 파생 사영이라 이관하지 않는다.
 
@@ -88,4 +93,4 @@ paths:
 | `lib/styleProgress.ts` | `resolveStyleProgress(envelope)` — `progress`를 **필드 단위**로 폴백(`current ?? 0`, `required ?? 10`). 객체 단위 폴백(`progress ?? {…}`)은 `progress: {}`를 그대로 통과시켜 "현재 undefined곳"을 낸다 — 쓰지 않는다. 소비처가 progress를 직접 읽지 않게 하는 것이 목적. |
 | `lib/styleProgress.test.ts` | 값 표(it.each) + property("숫자면 그 값, 아니면 기본값"을 `typeof`로 따로 적어 구현식 복붙 방지). |
 
-`features/settings/model/styleCardModel.ts`의 `\|\| analysis == null`은 판정과 별개인 TS 타입 좁히기용 중복이다(동치 property `styleCardModel.face.test.ts`가 잠금).
+`pages/my-page/model/styleCardModel.ts`의 `\|\| analysis == null`은 판정과 별개인 TS 타입 좁히기용 중복이다(동치 property `styleCardModel.face.test.ts`가 잠금).

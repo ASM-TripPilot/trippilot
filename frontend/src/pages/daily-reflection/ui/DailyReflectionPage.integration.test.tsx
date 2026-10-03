@@ -11,7 +11,7 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import { useDailyReflection } from '@/features/reflection/model/useDailyReflection';
+import { useDailyReflection } from '../model/useDailyReflection';
 import { server } from '@/mocks/server';
 import { getGetTripsTripIdReflectionsQueryKey } from '@/shared/api/generated/reflection/reflection';
 import type {

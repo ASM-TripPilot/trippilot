@@ -5,7 +5,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { Region } from '@/shared/api/generated/schemas';
 import { filterRegions, useRegions } from '@/features/explore/model/regions';
 import type { RegionPickerPurpose } from '@/features/explore/model/regionPickerPurpose';
-import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
 import { RegionPickerScreen } from './RegionPickerScreen';
 import type { RegionPurpose } from './RegionPickerScreen';
 

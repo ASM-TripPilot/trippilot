@@ -9,7 +9,7 @@ import {
   buildDraftPins,
   formatDraftDayHeader,
 } from '@/features/itinerary/model/draftView';
-import { timeBandLabel } from '@/features/itinerary/model/timeBandLabel';
+import { timeBandLabel } from '@/entities/itinerary-slot/lib/timeBandLabel';
 import { WarningTriangleGlyph } from '@/features/itinerary/ui/ItineraryGlyphs';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';

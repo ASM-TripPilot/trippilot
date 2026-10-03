@@ -38,13 +38,10 @@ import type {
   StayDetail,
 } from '@/shared/api/generated/schemas';
 
-import { useSavedStays } from '@/features/stay/model/savedStays';
-import {
-  openStayOutbound,
-  stayOutboundMode,
-} from '@/features/stay/model/stayOutbound';
-import { stayKey } from '@/features/stay/model/stayKey';
-import { OtaChoiceSheet } from '@/features/stay/ui/OtaChoiceSheet';
+import { useSavedStays } from '@/features/save-stay/model/savedStays';
+import { openStayOutbound, stayOutboundMode } from '../model/stayOutbound';
+import { stayKey } from '@/features/save-stay/model/stayKey';
+import { OtaChoiceSheet } from './OtaChoiceSheet';
 import { StayDetailScreen, type StayDetailState } from './StayDetailScreen';
 
 /** 조회 결과 → 화면 얼굴. 404 만 notFound, 400 은 invalid, 응답 없음(네트워크)·5xx 는 error(INV-4). */
