@@ -2847,6 +2847,37 @@ note = """
 """
 
 [[nodes]]
+id = "DEV-REAL-MODES"
+ticket = ""
+title = "DEV 스위치 실모드 전환 — 지오코딩·날씨·제휴를 가짜에서 실물로"
+status = "done"
+migration = false
+touches = []
+note = """
+2026-10-03. [[DEV-SECRETS-FILL]] 로 키가 들어간 뒤, 꺼져 있던 스위치를 켠 기록이다.
+기동 로그 한 줄이 최종 증거다:
+`[모드] env=dev · geocode=kakao  stay=db  weather=kma  schedule=http  reflect=http
+ push=off  reminder=http  affiliate=tripcom · 서비스토큰=있음  JWT키=있음`
+
+| 스위치 | 전 → 후 | 켜기 전에 한 것 |
+|---|---|---|
+| `PLACE_GEOCODE_MODE` | stub → **kakao** | 카카오 로컬 API 실호출 **200** 확인 |
+| `WEATHER_MODE` | fake → **kma** | 공공데이터포털 단기예보 실호출 **200** 확인 |
+| `AFFILIATE_MODE` | fallback → **tripcom** | 어트리뷰션 판정 완료(사용자) · 302 Location 에 트래킹 4종 실측 |
+| `SOCIAL_TOKEN_ENCRYPTION_KEY` | 없음 → 생성 | 없으면 Apple revoke 토큰을 아예 보관 안 한다 |
+
+**켜기 전에 외부 API 를 직접 때려 본 것이 이 작업의 전부다.** 날씨 키는 처음 것이 86자였고
+세 종류 KMA API 전부 `SERVICE_KEY_IS_NOT_REGISTERED_ERROR` 를 돌려줬다 — 포털 신청 문제로
+보였지만 실제로는 **키 자체가 엉뚱한 값**이었고, 올바른 64자 키로 바꾸자 즉시 200 이었다.
+그대로 켰다면 Plan-B 우천 트리거가 **조용히 무발화**로 돌았을 것이다(가짜가 차라리 정직하다).
+
+**안 켠 것**: `PUSH_MODE`(Expo 액세스 토큰 없음) · Apple p8 3종(탈퇴 revoke 몫, 로그인은 가능).
+
+제휴는 백엔드만 준비됐다 — **FE 가 아직 `/stays/{id}/outbound` 를 안 부른다**(PR #875 미머지).
+그 PR 이 머지되는 순간부터 실제 클릭이 `trip_sub1`(clickId)·`trip_sub3`(AdID)로 추적된다.
+"""
+
+[[nodes]]
 id = "CLUSTER-ACCESS"
 ticket = ""
 title = "EKS 접근 주체에 사람이 없었다 — kubectl 이 아무에게도 안 열려 있었다"
