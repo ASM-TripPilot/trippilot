@@ -2082,6 +2082,41 @@ describe('폴백·위반 라벨', () => {
     });
   });
 
+  describe('🔴 TRIP-1031 · h08 셸·폴백 셸 — 서버 정성 문구(숫자 없음)는 그대로 보인다', () => {
+    const QUALITATIVE = '앞 장소에서 이동할 시간이 빠듯해요';
+    function withQualitative(
+      input: Parameters<typeof itinerary>[0]
+    ): Itinerary {
+      const it = itinerary(input);
+      it.days[0].slots[0].violationReason = QUALITATIVE;
+      return it;
+    }
+
+    it('h08 셸 — poi-a 카드 표식이 그 문구, 소요시간 0건', async () => {
+      itineraryScript = () =>
+        withQualitative({ solveMode: 'FULL_AI', isFallback: false });
+
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+
+      expect(
+        screen.getByTestId(`slot-stopcard-violation-${k('poi-a')}`)
+      ).toHaveTextContent(QUALITATIVE);
+      expect(screen.queryAllByText(DURATION_TEXT).length).toBe(0);
+    });
+
+    it('폴백 셸 — poi-a 카드 표식이 그 문구', async () => {
+      itineraryScript = () =>
+        withQualitative({ solveMode: 'MINIMAL', isFallback: true });
+
+      await openFallbackShell();
+
+      expect(
+        screen.getByTestId(`slot-stopcard-violation-${k('poi-a')}`)
+      ).toHaveTextContent(QUALITATIVE);
+    });
+  });
+
   describe('🔴 C1·C2 · 폴백 셸 — 위반 슬롯 카드에만 고정 라벨 표식, 사유 원문·소요시간 0건 (INV-3)', () => {
     it('인터스티셜을 넘긴 셸의 poi-a 카드 안에 표식, 전체 1개, 소요시간·사유 원문·원시 분 범위 0건', async () => {
       // 갈래: MINIMAL+isFallback=true → 인터스티셜 → "기본 일정 보기" → h08 셸(TRIP-1039).
