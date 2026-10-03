@@ -320,9 +320,16 @@ class TourApiAdapter:
                     cls._opt_str(item.get("cat3")),
                 ) if c
             ),
-            image_url=cls._opt_str(item.get("firstimage")),
+            image_url=cls._https(cls._opt_str(item.get("firstimage"))),
             modified_at=cls._opt_str(item.get("modifiedtime")),
         )
+
+    @staticmethod
+    def _https(url: str | None) -> str | None:
+        """TourAPI 이미지는 전 건이 `http://` 다. 평문 HTTP 이미지는 iOS App Transport Security 가
+        **에러 없이** 차단해 앱에 회색 자리만 남는다 — 스킴만 올린다(같은 URL 이 https 로도 200).
+        """
+        return "https://" + url[len("http://"):] if url and url.startswith("http://") else url
 
     @staticmethod
     def _opt_str(v: object) -> str | None:

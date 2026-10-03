@@ -269,7 +269,8 @@ def test_output_document_schema_roundtrip_and_backend_fields() -> None:
     assert p100["region"] == "제주시"                 # addr1에서 시·군·구 추출
     assert p100["opening_hours_raw"] == "07:00~20:00"  # 파싱본과 별개로 원문 병행
     assert p100["provenance"]["content_id"] == "100"
-    assert p100["provenance"]["image_url"] == "http://img/100.jpg"
+    # 스킴은 어댑터가 올려 둔다 — 평문 HTTP 이미지는 iOS ATS 가 조용히 차단한다
+    assert p100["provenance"]["image_url"] == "https://img/100.jpg"
     # poi 블록은 도메인 직렬화 왕복 스키마 그대로
     for p in restored["proposals"]:
         poi = Poi.from_dict(p["poi"])
