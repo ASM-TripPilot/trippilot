@@ -34,8 +34,10 @@ class TermsSeedIT : AbstractPostgresIntegrationTest() {
         rows.forEach { (type, body) ->
             // "[플레이스홀더]" 가 본문 어디에도 없어야 한다 — 접두가 아니라 전체를 훑는다(부분 방치 차단).
             body.contains("플레이스홀더") shouldBe false
-            // 실본문 하한 — 한 줄짜리 대체 문구로 게이트를 속이지 못하게. 가장 짧은 초안(개인화 동의)도 이보다 길다.
-            withClue(type) { body.length shouldBeGreaterThan 500 }
+            // 법무 검토용 "코드 대조표"(INV-3·TRIP-249 같은 개발 용어)가 이용자 화면에 실려 나간 적이 있다(QA 2026-10-03).
+            withClue(type) { body.contains("초안 검토용") shouldBe false }
+            // 실본문 하한 — 한 줄짜리 대체 문구로 게이트를 속이지 못하게. 가장 짧은 본문(광고성 수신 동의, 약 400자)도 이보다 길다 — 검토용 대조표를 뺀 뒤 500 에서 내렸다.
+            withClue(type) { body.length shouldBeGreaterThan 300 }
         }
     }
 
