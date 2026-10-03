@@ -15,6 +15,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackChevronGlyph } from '@/features/onboarding';
 
+import {
+  parseTermsMarkdown,
+  type Block,
+  type Span,
+} from '../model/parseTermsMarkdown';
+
 export interface TermsViewerScreenProps {
   /** 헤더 제목 = 문서 이름(예: '개인정보 처리방침'). */
   title: string;
@@ -50,7 +56,9 @@ export function TermsViewerScreen({
           testID="terms-viewer-body"
           contentContainerClassName="px-2xl py-xl"
         >
-          <Text className="font-noto text-body text-ink">{body}</Text>
+          {parseTermsMarkdown(body ?? '').map((block, i) => (
+            <BlockView key={i} block={block} />
+          ))}
         </ScrollView>
       ) : status === 'error' ? (
         <View className="flex-1 items-center justify-center gap-md px-2xl">
@@ -78,4 +86,86 @@ export function TermsViewerScreen({
       )}
     </SafeAreaView>
   );
+}
+
+function Spans({ spans }: { spans: Span[] }): ReactElement {
+  return (
+    <>
+      {spans.map((s, i) =>
+        s.bold ? (
+          <Text key={i} className="font-noto-bold">
+            {s.text}
+          </Text>
+        ) : (
+          s.text
+        )
+      )}
+    </>
+  );
+}
+
+/** 약관 본문 마크다운 한 블록 — 서버 시드가 쓰는 문법만 그린다(`parseTermsMarkdown`). */
+function BlockView({ block }: { block: Block }): ReactElement {
+  switch (block.kind) {
+    case 'heading':
+      return (
+        <Text
+          className={`font-noto-bold text-ink ${
+            block.level === 1
+              ? 'pb-md text-[20px]'
+              : block.level === 2
+                ? 'pb-sm pt-xl text-[16px]'
+                : 'pb-xs pt-lg text-body'
+          }`}
+        >
+          <Spans spans={block.spans} />
+        </Text>
+      );
+    case 'quote':
+      return (
+        <Text className="pb-md font-noto text-body text-muted">
+          <Spans spans={block.spans} />
+        </Text>
+      );
+    case 'item':
+      return (
+        <View className="flex-row gap-sm pb-xs pl-sm">
+          <Text className="font-noto text-body text-ink">{block.marker}</Text>
+          <Text className="flex-1 font-noto text-body text-ink">
+            <Spans spans={block.spans} />
+          </Text>
+        </View>
+      );
+    case 'rule':
+      return <View className="my-lg h-px bg-hairline" />;
+    case 'table':
+      // 폰 폭에서 4열 표는 못 읽는다 — 행마다 카드로 쌓고 첫 칸을 제목으로, 나머지는 '머리: 값'.
+      return (
+        <View className="gap-sm pb-md">
+          {block.rows.map((row, r) => (
+            <View
+              key={r}
+              className="gap-xs rounded-button border border-hairline px-md py-sm"
+            >
+              <Text className="font-noto-bold text-body text-ink">
+                <Spans spans={row[0] ?? []} />
+              </Text>
+              {row.slice(1).map((cell, c) => (
+                <Text key={c} className="font-noto text-body text-ink">
+                  {block.header[c + 1]}
+                  {': '}
+                  <Spans spans={cell} />
+                </Text>
+              ))}
+            </View>
+          ))}
+        </View>
+      );
+    default:
+      return (
+        <Text className="pb-md font-noto text-body text-ink">
+          <Spans spans={block.spans} />
+        </Text>
+      );
+  }
 }
