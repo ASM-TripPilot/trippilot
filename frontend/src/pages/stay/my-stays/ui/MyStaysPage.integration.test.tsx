@@ -36,7 +36,7 @@ import { WithToastHost, resetToast } from '@/test-support/toastHarness';
  *  - 옛 스텁 관점의 라우터 목은 `push` 만 줬다(다른 메서드를 부르면 TypeError). 합친 목은 back·replace 도 주므로
  *    그 성질을 스텁 describe 의 `afterEach` 부재 단언으로 옮겼다.
  *  - 옛 스텁 관점의 거점 쓰기 훅 목(POST·DELETE)은 지웠다 — 페이지가 그 훅을 import 하지 않아 "0회" 단언이
- *    공회전이었다(TRIP-1076). 거점을 안 쓴다는 사실은 실 화면 관점 AC-6 이 msw 로 나간 쓰기 요청 0건으로 본다.
+ *    어떤 구현에도 통과했다(TRIP-1076). 거점을 안 쓴다는 사실은 실 화면 관점 AC-6 이 msw 로 나간 쓰기 요청 0건으로 본다.
  */
 
 const mockPush = jest.fn();
@@ -151,7 +151,7 @@ describe('화면 캡처 스텁 — 행 VM·콜백 배선 (옛 본 파일)', () =
    *  - 🔴 AC-4(US-NOTIF-06) empty 의 탐색 콜백이 `router.push('/stays')` 로 배선된다.
    *  - 🔴 AC-6(TRIP-1076 결정 2(A) · 반전) 「출발점 변경」 콜백에 등록 행이 오면 그 여행의 거점 화면
    *    (`/trips/[tripId]/bases`)으로 push 1회. 거점을 쓰지 않는다는 사실은 아래 실 화면 관점이 msw 로 본다
-   *    (TRIP-1148 — 이 관점의 쓰기 훅 목은 페이지가 import 하지 않아 공회전이라 지웠다).
+   *    (TRIP-1148 — 이 관점의 쓰기 훅 목은 페이지가 import 하지 않아 단언이 실패할 수 없어 지웠다).
    *  - 🔴 AC-1(BR-U6-20) 여행 0건이면 저장 숙소가 미연결 → 행 VM 이 정확히 '연결된 여행 없음'·unassigned 로 조립된다.
    *
    * 왜 이렇게 테스트하나(02a ★3):

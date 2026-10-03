@@ -303,7 +303,8 @@ describe('카드 → 상세 push (옛 .cardNav)', () => {
 
   describe('N2 · 하트 press 는 상세 push 를 삼키지 않는다 (AC-7 배선)', () => {
     it('게스트 하트 press 는 상세 라우트 push 를 0건으로 둔다', async () => {
-      // "아직 없다" 앵커 — 게스트 전제. 앞 관점(저장 하트)이 켠 토큰이 새면 여기서 red 다.
+      // "아직 없다" 앵커 — 게스트 전제. 토큰은 모듈 싱글턴이라 앞 describe 가 켜 두면 새는데, 지금 이 앞에는 토큰을 켜는 관점이 없다
+      // (저장 하트는 파일 뒤쪽이다 — 그 리셋의 심판은 저장 하트 바로 뒤 「토큰 격리 앵커」). 순서가 바뀌어도 게스트 전제를 지킨다.
       expect(getAccessToken()).toBeNull();
       render(<StaySearchPage />, { wrapper: createWrapper() });
       await waitFor(() =>
@@ -1306,6 +1307,23 @@ describe('저장 하트 (옛 .save)', () => {
 });
 
 // 옛 StaySearchPage.states — AC-11·AC-12 (INV-4 재시도)
+// 토큰 격리 앵커(TRIP-1187) — 저장 하트 describe 가 켠 액세스 토큰은 최상위 훅이 비운다.
+// 최상위 beforeEach 도 같은 줄을 갖고 있어 "테스트 안"에서 읽으면 어느 한쪽만 있어도 참이 된다 —
+// 그래서 beforeAll 로 **앞 테스트의 afterEach 직후, 이 describe 의 beforeEach 직전**을 읽는다.
+// afterEach 의 clearAccessToken 을 지우면 저장 하트 P5 의 토큰이 남아 여기서 red 다(기본 순서에서도).
+// ⚠️ 반드시 저장 하트 describe **바로 뒤**여야 한다 — 사이에 다른 테스트가 끼면 그 테스트의 beforeEach 가 토큰을 먼저 비워 앵커가 눈이 먼다(실측).
+// 또 저장 하트 묶음의 **마지막 테스트가 토큰을 켠 채 끝나야** 한다(지금은 P5) — 그 자리에 게스트 테스트가 오면 리셋 줄을 지워도 이 앵커가 통과한다.
+describe('토큰 격리 앵커 (describe 사이 리셋)', () => {
+  let tokenAtEntry: string | null | undefined;
+  beforeAll(() => {
+    tokenAtEntry = getAccessToken();
+  });
+
+  it('앞 describe 가 켠 토큰이 남아 있지 않다', () => {
+    expect(tokenAtEntry).toBeNull();
+  });
+});
+
 describe('상태별 재시도·딥링크 파라미터 (옛 .states)', () => {
   afterEach(expectNoRouterCall);
 
