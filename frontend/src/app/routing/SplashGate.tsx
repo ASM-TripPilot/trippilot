@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 
-import { useAccountBoundaryReset } from '@/app-shell/model/useAccountBoundaryReset';
+import { useAccountBoundaryReset } from '@/app/model/useAccountBoundaryReset';
 import { useBootstrapGate } from '@/features/auth';
 import { SplashScreen } from '@/features/auth';
 import { registerPushIfGranted } from '@/shared/push';

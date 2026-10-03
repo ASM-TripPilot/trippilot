@@ -8,7 +8,7 @@ import { PlanbRequestPage } from '@/pages/live/planb-request';
  *
  * i03 [대안 보기]가 `?scope=…&triggerId=…` 를 실어 이 라우트를 연다. 폼 초기화·scope 반영·감지 트리거
  * 시드는 페이지가 한 흐름으로 한다(TRIP-750). 루트 Stack 이 이 라우트를 `transparentModal` 로
- * 선언해 허브 위에 겹쳐 띄운다(`app-shell/ui/SplashGate.tsx`).
+ * 선언해 허브 위에 겹쳐 띄운다(`src/app/routing/SplashGate.tsx`).
  */
 export default function PlanbRequestRoute() {
   const { tripId, scope, triggerId } = useLocalSearchParams<{

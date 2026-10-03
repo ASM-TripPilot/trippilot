@@ -193,14 +193,17 @@
 - `src/__tests__/tripWizardEntryReset.test.tsx`  →  (export 없음)
 - `src/__tests__/tripWizardReentryPreserve.test.tsx`  →  (export 없음)
 
-## src/app-shell/
-- `src/app-shell/index.ts`  →  SplashGate
+## src/app/entrypoint/
+- `src/app/entrypoint/AppProviders.tsx`  →  AppProviders
 
-## src/app-shell/model/
-- `src/app-shell/model/useAccountBoundaryReset.ts`  →  useAccountBoundaryReset
+## src/app/
+- `src/app/index.ts`  →  AppProviders · SplashGate
 
-## src/app-shell/ui/
-- `src/app-shell/ui/SplashGate.tsx`  →  SPLASH_MIN_VISIBLE_MS · SplashGate
+## src/app/model/
+- `src/app/model/useAccountBoundaryReset.ts`  →  useAccountBoundaryReset
+
+## src/app/routing/
+- `src/app/routing/SplashGate.tsx`  →  SPLASH_MIN_VISIBLE_MS · SplashGate
 
 ## src/entities/itinerary-slot/config/
 - `src/entities/itinerary-slot/config/altLabel.ts`  →  ALT_LABEL
@@ -1583,4 +1586,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 965개 파일
+합계 966개 파일

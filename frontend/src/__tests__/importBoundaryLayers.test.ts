@@ -20,7 +20,7 @@ const REAL_FEATURE_HOME = '@/features/home/ui/HomeGlyphs';
 const REAL_FEATURE_ONB = '@/features/edit-preferences/model/preferenceStore';
 const REAL_PAGE = '@/pages/trip/trip-new-step1/ui/TripNewStep1Page';
 const REAL_SHARED = '@/shared/ui/BottomTabBar';
-const REAL_APP_SHELL = '@/app-shell';
+const REAL_APP_LAYER = '@/app'; // FSD app 층(TRIP-1161 — 옛 app-shell)
 
 // entities 는 여전히 빈 층이라 실대상이 없다 — import 대상으로 쓰면 no-unresolved 가 뜬다(아래 허용 프로브).
 const EMPTY_ENTITIES = '@/entities/__probe__/model/x';
@@ -154,9 +154,9 @@ describe('AC-3 · 나머지 층 방향 탐침 — 상위 층 참조 금지', () 
     expect(ruleIds).not.toContain(UNRESOLVED_RULE);
   });
 
-  it('pages/** 가 app-shell 을 import 하면 경계 위반', async () => {
+  it('pages/** 가 FSD app 층(@/app)을 import 하면 경계 위반', async () => {
     const ruleIds = await lint(
-      `import '${REAL_APP_SHELL}';\n`,
+      `import '${REAL_APP_LAYER}';\n`,
       'src/pages/__probe__/x.ts'
     );
 
@@ -795,8 +795,8 @@ describe('TRIP-1157 · 슬라이스 밖 딥 import 는 공개 API 위반이다',
       `import '@/features/home/ui/HomeGlyphs';\n`,
     ],
     [
-      'app-shell → shared 세그먼트 내부',
-      'src/app-shell/ui/__deep_probe__.tsx',
+      'app 층 → shared 세그먼트 내부',
+      'src/app/routing/__deep_probe__.tsx',
       `import '@/shared/date/seoulDate';\n`,
     ],
   ])('%s 는 딥 zone(TRIP-1157) error', async (_label, filePath, code) => {

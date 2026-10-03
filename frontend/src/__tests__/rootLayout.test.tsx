@@ -26,7 +26,7 @@ process.env.EXPO_PUBLIC_API_MOCK = '1';
 require('react-native-gesture-handler/jestSetup');
 
 // global.css 는 jest 의 transform 대상이 아니라 그대로 require 하면 SyntaxError 가 난다.
-jest.mock('../../global.css', () => ({}));
+jest.mock('@/app/styles/global.css', () => ({}));
 
 const mockHideAsync = jest.fn();
 jest.mock('expo-splash-screen', () => ({
@@ -41,7 +41,7 @@ jest.mock('expo-font', () => ({ useFonts: () => [mockFontsLoaded, null] }));
 
 // 실물 SplashGate 는 렌더 즉시 부트스트랩 요청을 발사하므로,
 // "그려졌는가"만 testID 로 관찰하는 마커로 대체한다.
-jest.mock('@/app-shell/ui/SplashGate', () =>
+jest.mock('@/app/routing/SplashGate', () =>
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   require('@/test-support/splashGateMock')
 );

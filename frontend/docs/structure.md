@@ -26,7 +26,7 @@
 ## 한눈에
 
 - **스택**: Expo(development build + prebuild) · Expo Router · TypeScript strict · NativeWind · TanStack Query + Zustand · orval · Jest + fast-check
-- **경로 별칭**: `@/*` → `./src/*`
+- **경로 별칭**: `@/*` → `./src/*` · `@routes/*` → `./app/*`(라우트를 렌더하는 테스트 전용 — 앱 코드가 쓰면 eslint 층 zone error, TRIP-1161)
 - **구현 범위**: `auth`·`home`·`onboarding`·`stay`·`explore`·`trip`(TRIP-205부터 — 아래 참조) **여섯 feature가 화면째 실구현**(`explore`는 TRIP-183에서 e00 지역 선택+'내 주변'으로 신설 — 이번 사이클[TRIP-197]에서 문서 소급 반영, 실제 구현은 그 사이클 산출물. 아래 `src/features/explore/` 절). `stay`는 TRIP-179(데이터 계층)·TRIP-180(`formatPrice`)·TRIP-181(e02 default 1상태)에 이어 **TRIP-182로 나머지 5상태**(loading·empty·filter-zero·partial-failure·error) + SafeArea 이관까지 붙어 **e02가 완결**됐다 — 아래 `src/features/stay/` 절. `trip`은 TRIP-203·204가 `model/`만 채운 계약 계층이었다가 **TRIP-205로 `ui/`가 처음 생겨 g01 위저드 1/2 셸이 화면째 완성**됐다(배선 `pages/trip/trip-new-step1/`·라우트 `app/trips/new/`까지 셋이 한 사이클에 함께 신설) — 아래 `src/features/trip/` 절. 나머지 자리는 도메인 작업이 시작될 때 새로 만든다 — TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}`) 14개를 전부 삭제했고, 그중 8개(`archive`·`execution`·`itinerary`·`notification`·`planb`·`settings`·`stay`·`trip`)는 디렉토리째 사라졌다(`stay`는 TRIP-179로 재등장).
 - **화면이 아닌 공용 신설**: `shared/map/`이 TRIP-197로 처음 생겼다 — 원래 카카오 지도 JS SDK를 WebView에 얹는 브리지였으나 **TRIP-861로 네이버 네이티브 SDK(`@mj-studio/react-native-naver-map`)로 전환**(공급자 중립 `MapView`). 화면이 아니라 지도 렌더 표면만. 아래 `.claude/rules/layer-shared.md` `src/shared/map/` 절.
 - **서버 상태 계층 신설(TRIP-179)**: TanStack Query `QueryClientProvider`가 `app/_layout.tsx`에 배선됐다(모듈 스코프 단일 `QueryClient`, 기본 옵션 미조정). orval이 `backend/docs/design/openapi.yaml`의 `stays` 태그만 코드젠(`filters.tags`, 아래 경고 참조)해 `src/shared/api/generated/`에 8파일을 생성한다. 생성 코드는 전부 `src/shared/api/mutator.ts`(`customInstance`)를 거쳐 기존 `authedClient`(Bearer·401 single-flight 리프레시)를 탄다 — 새 인증 코드 0.
@@ -37,9 +37,9 @@
 
 ```
 frontend/
+├── app/              Expo Router 라우트 (파일 = 화면, 라우팅 전용 — TRIP-1161로 src/app 에서 이동. 안의 .ts/.tsx 는 전부 화면이 된다)
 ├── src/
-│   ├── app/          Expo Router 라우트 (파일 = 화면)
-│   ├── app-shell/    src/app **밖**의 루트 셸 조립 (TRIP-173 신설 — SplashGate)
+│   ├── app/          FSD app 층 — 전역 프로바이더·SplashGate·전역 스타일 (TRIP-1161, 옛 app-shell)
 │   ├── pages/        FSD pages 층 — 화면별 배선 (TRIP-173 신설, 구 `features/*/containers` 5개가 이주)
 │   │                 슬라이스는 여정 단계 그룹 폴더 아래 `pages/<그룹>/<slice>` (TRIP-1156 — home·magazine은 그룹 없음)
 │   ├── widgets/      FSD widgets 층 — 여러 화면이 쓰는 화면 조각 (TRIP-804 규칙 신설, 빈 층 — 첫 입주 TRIP-805)
@@ -183,8 +183,8 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `LoginPage` | `pages/auth/login` | 로그인 훅↔화면 배선(구 `features/auth/containers/SocialLoginContainer`, TRIP-173 신설) |
 | `TermsPage` · `NicknamePage` · `PrefStep1Page` · `PrefStep2Page` | `pages/onboarding-{terms,nickname,pref1,pref2}` | 온보딩 각 단계 배선(구 `features/onboarding/containers/*Container`, TRIP-173 신설) |
 | `LocationPage` | `pages/onboarding/onboarding-location` | **신규(TRIP-459)** — c08 위치 권한 프리프롬프트 배선. 동결 `shared/location/LocationPreprompt`(TRIP-162)의 콜백에 `expo-location` 실호출(리포 최초)을 건다. nickname→location→pref1 체인 삽입(D7 반전) |
-| `SplashGate` | `app-shell` | 부트스트랩 결과 라우팅(구 `features/auth/containers/SplashGate`, TRIP-173 신설 — `src/app` 밖) |
-| `SPLASH_MIN_VISIBLE_MS` | `app-shell/ui/SplashGate` | **신규(TRIP-579)** — 스플래시 최소 노출 하한(900ms, 발명값). resolved여도 마운트 후 이 값이 지나기 전엔 라우팅하지 않는다. 선례 `BOOTSTRAP_TIMEOUT_MS`(위 행)와 동형(export된 발명값 상수) |
+| `SplashGate` | `app` | 부트스트랩 결과 라우팅(구 `features/auth/containers/SplashGate`, TRIP-173 신설 — TRIP-1161로 `src/app-shell`→`src/app/routing`) |
+| `SPLASH_MIN_VISIBLE_MS` | `app/routing/SplashGate` | **신규(TRIP-579)** — 스플래시 최소 노출 하한(900ms, 발명값). resolved여도 마운트 후 이 값이 지나기 전엔 라우팅하지 않는다. 선례 `BOOTSTRAP_TIMEOUT_MS`(위 행)와 동형(export된 발명값 상수) |
 | `dwellMinutes` | `features/execution/model/dwellMinutes` | **신규(TRIP-396)** — `completedAt − arrivedAt` 분 산출 순수 함수(한쪽 null→null, 역전→`Math.max(0,·)`). BR-U4-34에 따라 `split(':')`로 산출(Date API 미사용). **소비처 0** — 서버가 dwell을 스스로 도출해 클라→서버 dwell 필드가 계약에 없다(데드코드, 상세는 `.claude/rules/repo-traps.md` "여행 중 실행" 절) |
 | `deriveVisitProgress` | `entities/itinerary-slot/lib/visitProgress` | **신규(TRIP-396)** — `(list, date, planOrder) → {completedPoiIds, activePoiId, visitCheckIdByPoiId}`. 그날 slotKey를 가진 계획 레코드만 센다(즉석·다른 날·깨진 키 제외 — TRIP-1079). 완료가 진행 중보다 우선, active 후보가 여럿이면 planOrder 앞 1곳. `projectSlotProgress`(slotProgress.ts)에 주입해 i01 active 카드를 처음 프로덕션에 띄운다 |
 | `useVisitCheck` | `pages/live/live-itinerary/model/useVisitCheck` | **신규(TRIP-396)** — 도착(`arrive`)·완료(`complete`) 낙관 갱신 훅(imperative, `savedPlaces.ts` 동형). **롤백이 슬롯키(레코드) 단위**(통짜 스냅숏 아님 — W-2 방어, savedStays/savedPlaces 선례의 개선판) |

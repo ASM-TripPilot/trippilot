@@ -23,7 +23,7 @@ import {
  *
  * ── 졸업 조건 (frontend/CLAUDE.md "장치 판정 규칙") ──────────────────────
  * **A. 영구 규칙 — 유지한다.** 잠그는 것은 "값의 위치"가 아니라 "관찰 가능성"(동작)이라,
- * Provider를 `app-shell/ui/AppProviders.tsx`로 추출하는 정당한 리팩토링에도 살아남는다.
+ * Provider를 `src/app/entrypoint/AppProviders.tsx`로 추출하는 정당한 리팩토링에도 살아남는다.
  */
 
 process.env.EXPO_PUBLIC_API_MOCK = '1';
@@ -34,7 +34,7 @@ process.env.EXPO_PUBLIC_API_MOCK = '1';
 require('react-native-gesture-handler/jestSetup');
 
 // global.css 는 jest 의 transform 대상이 아니라 그대로 require 하면 SyntaxError 가 난다.
-jest.mock('../../global.css', () => ({}));
+jest.mock('@/app/styles/global.css', () => ({}));
 
 jest.mock('expo-splash-screen', () => ({
   preventAutoHideAsync: jest.fn(),
@@ -46,9 +46,9 @@ jest.mock('expo-splash-screen', () => ({
 jest.mock('expo-font', () => ({ useFonts: () => [true, null] }));
 
 // 실물 SplashGate 는 렌더 즉시 부트스트랩 요청을 발사하므로, QueryClient 를 손에 쥐었는지만
-// 관찰하는 프로브로 대체한다. 배럴(@/app-shell)이 ./ui/SplashGate 를 재수출하므로 깊은
+// 관찰하는 프로브로 대체한다. 배럴(@/app)이 ./routing/SplashGate 를 재수출하므로 깊은
 // 경로를 목으로 갈면 배럴을 타고 내려온다(rootLayout.test.tsx 가 이미 그렇게 돈다).
-jest.mock('@/app-shell/ui/SplashGate', () =>
+jest.mock('@/app/routing/SplashGate', () =>
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   require('@/test-support/queryClientProbe')
 );
