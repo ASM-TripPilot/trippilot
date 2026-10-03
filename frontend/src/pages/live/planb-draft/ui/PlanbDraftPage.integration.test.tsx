@@ -163,12 +163,25 @@ const DRAFT_ITINERARY = {
   ],
 } as unknown as Itinerary;
 
-const diffSlot = (poiId: string, startAt: string, endAt: string) => ({
+/** 응답 슬롯 — TRIP-1060 이후 서버가 이름·사진·카테고리·좌표(표면)를 싣는다. 안 주면 null(서버가 못 채움). */
+const diffSlot = (
+  poiId: string,
+  startAt: string,
+  endAt: string,
+  surface: {
+    nameKo?: string | null;
+    lat?: number | null;
+    lng?: number | null;
+    imageUrl?: string | null;
+    category?: string | null;
+  } = {}
+) => ({
   slotKey: key(poiId),
   startAt,
   endAt,
   isFixed: false,
   endsNextDay: false,
+  ...surface,
 });
 
 /**
@@ -181,16 +194,17 @@ const READY_DIFF: ReplanDiff = {
   status: 'DRAFT',
   date: DAY,
   before: [
-    diffSlot('p1', '09:30:00', '10:30:00'),
-    diffSlot('p2', '11:00:00', '12:00:00'),
-    diffSlot('p3', '13:00:00', '14:30:00'),
-    diffSlot('p4', '15:00:00', '16:30:00'),
+    diffSlot('p1', '09:30:00', '10:30:00', { nameKo: '감천문화마을' }),
+    diffSlot('p2', '11:00:00', '12:00:00', { nameKo: '광안리 해변' }),
+    diffSlot('p3', '13:00:00', '14:30:00', { nameKo: '부산시립미술관' }),
+    diffSlot('p4', '15:00:00', '16:30:00', { nameKo: '디키디키' }),
   ],
   after: [
-    diffSlot('p1', '09:30:00', '10:30:00'),
-    diffSlot('p3', '11:00:00', '12:30:00'),
-    diffSlot('px', '13:10:00', '14:00:00'),
-    diffSlot('p2', '15:00:00', '16:00:00'),
+    diffSlot('p1', '09:30:00', '10:30:00', { nameKo: '감천문화마을' }),
+    diffSlot('p3', '11:00:00', '12:30:00', { nameKo: '부산시립미술관' }),
+    // px — 재계획이 새로 넣은 장소: 현재 일정(캐시)에 없지만 서버 초안은 이름을 싣는다(TRIP-1044).
+    diffSlot('px', '13:10:00', '14:00:00', { nameKo: '해운대 시장' }),
+    diffSlot('p2', '15:00:00', '16:00:00', { nameKo: '광안리 해변' }),
   ],
   entries: [
     {
@@ -301,14 +315,14 @@ function renderPage() {
 // 계약으로 굳혀 두었던 테스트라 D1~D5 로 교체했다. 버튼 두 개·렌더만으로 라우터·확정 0 은 D1 이 이어받는다.
 
 describe('🔴 D1 · TRIP-1007 AC-1·AC-4 · US-PLANB-08 · INV-2 — 초안 행은 after 순서, 시각은 서버 값을 잘라 쓴다', () => {
-  it('이름은 [감천문화마을, 부산시립미술관, 이름 준비 중, 광안리 해변], 시각은 HH:mm–HH:mm, 전부 예정 톤, 커넥터 없음', () => {
+  it('이름은 [감천문화마을, 부산시립미술관, 해운대 시장, 광안리 해변], 시각은 HH:mm–HH:mm, 전부 예정 톤, 커넥터 없음', () => {
     renderDraft();
 
-    // after 순서(entries 순서도, 원 일정 순서도 아니다). px 는 캐시에 없어 폴백 — poiId 를 이름으로 쓰지 않는다.
+    // after 순서(entries 순서도, 원 일정 순서도 아니다). px(새 장소)도 서버 응답의 이름으로 그려진다.
     expect(textsOf(/^planb-draft-slot-name-/)).toEqual([
       '감천문화마을',
       '부산시립미술관',
-      '이름 준비 중',
+      '해운대 시장',
       '광안리 해변',
     ]);
     // 초까지 온 서버 시각을 분까지만 잘라 쓴다 — 다시 계산하지 않는다(INV-2).
@@ -337,6 +351,212 @@ describe('🔴 D1 · TRIP-1007 AC-1·AC-4 · US-PLANB-08 · INV-2 — 초안 행
     expect(mockPush).not.toHaveBeenCalled();
     expect(mockReplace).not.toHaveBeenCalled();
     expect(mockMutate).not.toHaveBeenCalled();
+  });
+});
+
+const SLOT_NAMES = /^planb-draft-slot-name-/;
+
+describe('🔴 D1b · TRIP-1044 — 행의 이름·사진은 일정 캐시가 아니라 응답 슬롯에서 온다', () => {
+  it('일정 조회가 아직 비어 있어도(캐시 없음) 초안 행과 빠지는 곳 이름이 그려진다', () => {
+    // 준비 — renderDraft 는 일정을 채우므로 쓰지 않고, 일정 미도착으로 직접 세운다.
+    mockItinerary = undefined;
+    mockSession.data = session('DRAFT');
+    mockDiff.data = READY_DIFF;
+
+    // 실행
+    renderPage();
+
+    // 단언 — 초안 행 4개 + REMOVED 1개 모두 이름이 있다(캐시 의존이면 전부 "이름 준비 중").
+    expect(textsOf(SLOT_NAMES)).toEqual([
+      '감천문화마을',
+      '부산시립미술관',
+      '해운대 시장',
+      '광안리 해변',
+    ]);
+    expect(
+      screen.getByTestId(`planb-draft-removed-${key('p4')}`)
+    ).toHaveTextContent(/디키디키/);
+  });
+
+  it('응답 이름과 캐시 이름이 다르면 응답이 이긴다', () => {
+    // 준비 — 캐시에는 같은 poiId 가 전혀 다른 이름으로 들어 있다.
+    mockItinerary = {
+      ...DRAFT_ITINERARY,
+      days: DRAFT_ITINERARY.days.map((day) => ({
+        ...day,
+        slots: day.slots.map((slot) => ({
+          ...slot,
+          nameKo: `캐시-${slot.poiId}`,
+        })),
+      })),
+    } as unknown as Itinerary;
+    mockSession.data = session('DRAFT');
+    mockDiff.data = READY_DIFF;
+
+    renderPage();
+
+    expect(textsOf(SLOT_NAMES)).toEqual([
+      '감천문화마을',
+      '부산시립미술관',
+      '해운대 시장',
+      '광안리 해변',
+    ]);
+    expect(
+      screen.getByTestId(`planb-draft-removed-${key('p4')}`)
+    ).toHaveTextContent(/디키디키/);
+  });
+
+  it('서버가 이름을 못 채운 행(nameKo null)은, 캐시에 같은 장소가 있어도 "이름 준비 중"이다', () => {
+    // 준비 — p3 의 nameKo 만 null. 캐시에는 p3 가 '부산시립미술관' 으로 있다(캐시 폴백이면 이름이 나온다).
+    renderDraft({
+      ...READY_DIFF,
+      after: READY_DIFF.after.map((slot) =>
+        slot.slotKey === key('p3') ? { ...slot, nameKo: null } : slot
+      ),
+    });
+
+    expect(textsOf(SLOT_NAMES)).toEqual([
+      '감천문화마을',
+      '이름 준비 중',
+      '해운대 시장',
+      '광안리 해변',
+    ]);
+  });
+
+  it('imageUrl 이 온 행만 사진을 그리고 나머지는 자리표시를 그린다', () => {
+    renderDraft({
+      ...READY_DIFF,
+      after: READY_DIFF.after.map((slot) =>
+        slot.slotKey === key('p1')
+          ? { ...slot, imageUrl: 'https://example.test/a.jpg' }
+          : slot
+      ),
+    });
+
+    expect(screen.getAllByTestId(/^planb-draft-slot-photo-/)).toHaveLength(1);
+    expect(
+      screen.getAllByTestId(/^planb-draft-slot-photoplaceholder-/)
+    ).toHaveLength(3);
+  });
+
+  // 5-b 경고-1 — 값이 비었을 때 가는 길. 빠지는 곳 이름이 before 에도 없으면 장소 ID·캐시 이름이 아니라 폴백 문구.
+  it('빠지는 곳의 before 이름이 null 이면(캐시에 있어도) "이름 준비 중"이고 slotKey·캐시 이름을 쓰지 않는다', () => {
+    // 준비 — p4 의 before.nameKo 만 null. 캐시에는 p4 가 '디키디키' 로 있다.
+    renderDraft({
+      ...READY_DIFF,
+      before: READY_DIFF.before.map((slot) =>
+        slot.slotKey === key('p4') ? { ...slot, nameKo: null } : slot
+      ),
+    });
+
+    const removed = screen.getByTestId(`planb-draft-removed-${key('p4')}`);
+    expect(removed).toHaveTextContent(/이름 준비 중/);
+    expect(removed).not.toHaveTextContent(/디키디키/);
+    expect(removed).not.toHaveTextContent(/p4/);
+  });
+
+  // 5-b 참고-1 — 사진도 이름과 같은 규칙(응답에 없으면 캐시 사진으로 채우지 않는다).
+  it('응답에 imageUrl 이 없으면 캐시에 사진이 있어도 사진을 그리지 않는다', () => {
+    // 준비 — 캐시의 모든 슬롯에 사진이 있다. 응답(READY_DIFF)에는 imageUrl 이 하나도 없다.
+    mockItinerary = {
+      ...DRAFT_ITINERARY,
+      days: DRAFT_ITINERARY.days.map((day) => ({
+        ...day,
+        slots: day.slots.map((slot) => ({
+          ...slot,
+          imageUrl: 'https://example.test/cache.jpg',
+        })),
+      })),
+    } as unknown as Itinerary;
+    mockSession.data = session('DRAFT');
+    mockDiff.data = READY_DIFF;
+
+    renderPage();
+
+    expect(screen.queryAllByTestId(/^planb-draft-slot-photo-/)).toHaveLength(0);
+    expect(
+      screen.getAllByTestId(/^planb-draft-slot-photoplaceholder-/)
+    ).toHaveLength(4);
+  });
+
+  // 5-b 경고-2 — 카테고리는 사진 없는 행의 자리표시 타일 색(틴트)을 정한다. null 이면 회색 기본 타일.
+  it('사진 없는 행의 자리표시 타일 색은 응답의 category 가 정한다(맛집 → primary-pale, null → surface-soft)', () => {
+    renderDraft({
+      ...READY_DIFF,
+      after: READY_DIFF.after.map((slot) =>
+        slot.slotKey === key('p1') ? { ...slot, category: '맛집' } : slot
+      ),
+    });
+
+    const tile = (poiId: string) =>
+      String(
+        screen.getByTestId(`planb-draft-slot-photoplaceholder-${key(poiId)}`)
+          .props.className
+      );
+    expect(tile('p1')).toContain('bg-primary-pale');
+    expect(tile('p3')).toContain('bg-surface-soft');
+  });
+});
+
+// TRIP-1044 — 지도: 초안 슬롯 핀(전부 예정 톤) + 중심은 초안의 첫 좌표.
+const withCoords = (
+  pairs: Record<string, { lat: number; lng: number } | null>
+): ReplanDiff => ({
+  ...READY_DIFF,
+  after: READY_DIFF.after.map((slot) => {
+    const poiId = slot.slotKey.split('#')[1];
+    const c = pairs[poiId];
+    return c ? { ...slot, lat: c.lat, lng: c.lng } : slot;
+  }),
+});
+
+describe('🔴 M1 · TRIP-1044 — 초안 슬롯이 지도 핀이 된다', () => {
+  it('좌표가 있는 행만 핀이 되고, 좌표 없는 행이 있어도 번호는 행 자리를 지킨다(전부 예정 톤)', () => {
+    // after 순서: p1(1번) · p3(2번, 좌표 없음) · px(3번) · p2(4번)
+    renderDraft(
+      withCoords({
+        p1: { lat: 35.1, lng: 129.1 },
+        px: { lat: 35.2, lng: 129.2 },
+        p2: { lat: 35.3, lng: 129.3 },
+      })
+    );
+
+    expect(screen.getByTestId('map-root').props.pins).toEqual([
+      { number: 1, lat: 35.1, lng: 129.1, state: 'upcoming' },
+      { number: 3, lat: 35.2, lng: 129.2, state: 'upcoming' },
+      { number: 4, lat: 35.3, lng: 129.3, state: 'upcoming' },
+    ]);
+  });
+
+  it('초안이 아직 없으면(로딩) 핀을 넘기지 않는다', () => {
+    mockItinerary = DRAFT_ITINERARY;
+    mockSession.data = session('DRAFT');
+    mockDiff.state = 'pending';
+    renderPage();
+
+    expect(screen.getByTestId('map-root').props.pins).toBeUndefined();
+  });
+});
+
+describe('🔴 M2 · TRIP-1044 — 지도 중심은 초안의 첫 좌표가 먼저다', () => {
+  it('세션 출발 좌표가 있어도 초안의 첫 좌표(좌표 있는 첫 행)가 중심이다', () => {
+    // 세션 기본값은 originLat 35.1587 — 이것을 이겨야 한다.
+    renderDraft(
+      withCoords({
+        p3: { lat: 37.1, lng: 127.1 },
+        px: { lat: 37.2, lng: 127.2 },
+      })
+    );
+
+    expect(screen.getByTestId('map-root')).toHaveTextContent('37.1,127.1');
+  });
+
+  it('초안에 좌표가 하나도 없으면 기존 순서(세션 출발 좌표)로 내려간다', () => {
+    renderDraft();
+
+    expect(screen.getByTestId('map-root')).toHaveTextContent(
+      '35.1587,129.1604'
+    );
   });
 });
 
