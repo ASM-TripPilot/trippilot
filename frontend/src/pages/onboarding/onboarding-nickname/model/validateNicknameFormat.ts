@@ -1,5 +1,5 @@
 /**
- * 닉네임 형식 검증 — **얇은 재수출**. 구현 본문은 `shared/validation/nicknameFormat` 로 승격됐다
+ * 닉네임 형식 검증 — **얇은 재수출**. 구현 본문은 `shared/lib/nicknameFormat` 로 승격됐다
  * (TRIP-608, `features/settings` 와 공유하기 위해). 여기엔 코드포인트 계수 구현이 남아 있지 않다
  * (복제가 아니라 이동).
  *
@@ -12,4 +12,4 @@ export {
   NICKNAME_MAX_LENGTH,
   type NicknameFormatReason,
   type NicknameFormatResult,
-} from '@/shared/validation';
+} from '@/shared/lib/nicknameFormat';

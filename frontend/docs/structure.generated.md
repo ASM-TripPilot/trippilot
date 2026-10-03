@@ -1463,6 +1463,9 @@
 - `src/shared/date/monthGrid.ts`  →  MonthCell · daysInMonth · firstWeekdayOfMonth · shiftMonth · isDateInRange · buildMonthGrid
 - `src/shared/date/seoulDate.ts`  →  seoulDate · seoulTime · seoulInstant
 
+## src/shared/lib/
+- `src/shared/lib/nicknameFormat.ts`  →  NicknameFormatReason · NicknameFormatResult · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH · validateNicknameFormat
+
 ## src/shared/location/
 - `src/shared/location/LocationGlyphs.tsx`  →  LocationBackChevronGlyph · LocationRadarHero · LocationOffGlyph · LocationInfoGlyph · LocationClockGlyph · LocationSwapGlyph · LocationPinGlyph · LocationWarningGlyph
 - `src/shared/location/LocationPreprompt.tsx`  →  LocationPrepromptState · LocationPrepromptProps · LocationPreprompt
@@ -1470,11 +1473,7 @@
 - `src/shared/location/geofence.ts`  →  GeofenceRegion · buildGeofenceRegions · geofenceArriveRequest · registerGeofences · clearGeofences
 - `src/shared/location/index.ts`  →  LocationBackChevronGlyph · LocationClockGlyph · LocationInfoGlyph · LocationPinGlyph · LocationSwapGlyph · LocationWarningGlyph · LocationPreprompt · LOCATION_ICON_COLORS · readDevicePosition · revokeImpact · useLocationConsent
 - `src/shared/location/index.view.ts`  →  LocationBackChevronGlyph · LocationClockGlyph · LocationInfoGlyph · LocationPinGlyph · LocationSwapGlyph · LocationWarningGlyph · LocationPreprompt · LOCATION_ICON_COLORS · revokeImpact
-
-## src/shared/location/lib/
-- `src/shared/location/lib/locationColors.ts`  →  LOCATION_ICON_COLORS
-
-## src/shared/location/
+- `src/shared/location/locationColors.ts`  →  LOCATION_ICON_COLORS
 - `src/shared/location/readDevicePosition.ts`  →  readDevicePosition
 - `src/shared/location/revokeImpact.ts`  →  RevokeImpact · revokeImpact
 - `src/shared/location/useLocationConsent.ts`  →  LocationConsentModel · useLocationConsent
@@ -1505,12 +1504,8 @@
 - `src/shared/push/PushPreprompt.tsx`  →  PushPrepromptProps · PushPreprompt
 - `src/shared/push/index.ts`  →  getPushPermission · type PushPermissionStatus · requestPushPermission · registerPushToken · unregisterDeviceToken · toServerOsPermission · isDeviceNotRegistered · promptAndRegisterPush · registerPushIfGranted · unregisterStoredPushToken · PushPreprompt
 - `src/shared/push/index.view.ts`  →  PushPreprompt
-
-## src/shared/push/lib/
-- `src/shared/push/lib/pushColors.ts`  →  PUSH_ICON_COLORS
-
-## src/shared/push/
 - `src/shared/push/permissions.ts`  →  PushPermissionStatus · getPushPermission
+- `src/shared/push/pushColors.ts`  →  PUSH_ICON_COLORS
 - `src/shared/push/register.ts`  →  toServerOsPermission · isDeviceNotRegistered · unregisterDeviceToken · registerPushToken · promptAndRegisterPush · registerPushIfGranted · unregisterStoredPushToken
 - `src/shared/push/request.ts`  →  ensureAndroidChannels · requestPushPermission
 
@@ -1541,10 +1536,6 @@
 - `src/shared/ui/pref/PrefChip.tsx`  →  PrefChipProps · PrefChip
 - `src/shared/ui/pref/PrefTile.tsx`  →  PrefTileIcon · PrefTileProps · PrefTile
 - `src/shared/ui/pref/index.ts`  →  PrefChip · PrefTile
-
-## src/shared/validation/
-- `src/shared/validation/index.ts`  →  NICKNAME_MAX_LENGTH · NICKNAME_MIN_LENGTH · validateNicknameFormat
-- `src/shared/validation/nicknameFormat.ts`  →  NicknameFormatReason · NicknameFormatResult · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH · validateNicknameFormat
 
 ## src/shared/version/
 - `src/shared/version/compareVersion.ts`  →  compareVersion
@@ -1592,4 +1583,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 966개 파일
+합계 965개 파일

@@ -48,7 +48,7 @@ frontend/
       ui/         # 디자인 시스템·공용 탭바(5탭)·빈 상태/로딩/오류 표준 패턴·접근성 기준
       map/        # 네이버 지도 SDK(네이티브·config plugin)·지도 렌더·경로 레이어·외부 지도앱 연동
       location/   # 위치 권한·수집 단일 소유(동의 상태 관리·프리프롬프트·포그라운드 수집)
-      validation/ # 경량 제약 검증기 — 서버 발행 규칙 명세 소비, 위반은 경고 배지(차단 아님)
+      lib/        # 업무 규칙 없는 유틸 — 경량 제약 검증기(닉네임 형식)도 여기, 위반은 경고 배지(차단 아님)
       storage/    # 로컬 영속 단일 소유 — 오프라인 입력 큐·사진 업로드 대기 큐
   package.json / app.json / eas.json / tailwind.config.js / tsconfig.json
   Dockerfile / nginx.conf / web/   # 통합 테스트 스텁 (앱 코드 아님)
@@ -86,7 +86,7 @@ frontend/
   - **테스트**: `jest.mock`·`jest.requireActual` 등 jest 계열 지정자, 목 타이핑(`typeof import`)·`spyOn` 대상 네임스페이스, 공개 API에 없는 테스트 전용 심볼은 정의 모듈(딥 경로)을 겨눈다 — 테스트 때문에 index를 넓히지 않는다. 배럴을 통째로 목으로 바꾸는 테스트는 팩토리 맨 앞에서 `jest.requireActual`로 실물을 펼친 뒤 덮는다(재수출이 늘 때 형제 export가 `undefined`가 되지 않게).
   - 현재: pages 53 · features 25 · widgets 2 · entities 5 슬라이스 전부가 루트 `index.ts`를 가진다. shared는 세그먼트(또는 `ui/pref` 같은 컴포넌트 폴더)마다 `index.ts`를 두고, `index.view.ts`는 15개(features 13 · `shared/location` · `shared/push`)다.
 - **이주 방식**: 화면 묶음 단위로 옮긴다(TRIP-1138 · 서브 1146~1154) — 테스트 정상화를 먼저 하고 그 화면의 이동을 뒤 커밋으로.
-- **린터**: 이주가 끝나면 공식 FSD 린터 Steiger(`insignificant-slice` · `excessive-slicing`)를 CI 게이트로 붙인다(TRIP-1157·1158). 그 전까지는 ESLint zone(층 방향·형제 격리·딥 임포트 금지)만 경계를 지킨다 — 구조 소스 스캔은 TRIP-1145에서 지웠다. 딥 임포트 금지 zone(TRIP-1157)은 프로덕션 파일에만 걸고 테스트·`src/app/_dev/**`는 면제한다. 같은 룰 ID라 층 zone과 한 블록에 함께 펼친다(flat config는 같은 규칙을 거는 뒤 블록이 앞을 덮어쓴다). `import/no-cycle`은 상시 lint에 없다 — 자기 슬라이스 index를 물어 순환을 만들어도 `pnpm lint`는 침묵한다.
+- **린터**: 경계는 두 도구가 나눠 지킨다 — ESLint zone은 import 줄(층 방향·형제 격리·딥 임포트 금지), 공식 FSD 린터 Steiger(`pnpm fsd`, `steiger.config.ts`)는 폴더·슬라이스 배치(권장 설정 `fsd.configs.recommended` 전 규칙)를 본다. 둘 다 CI 머지 게이트다(TRIP-1158) — 구조 소스 스캔은 TRIP-1145에서 지웠다. Steiger 예외는 셋뿐이고 설정 파일 주석과 같다: ① 테스트·`src/app/_dev/**`는 검사 대상에서 뺀다(아래 「테스트」대로 딥 경로가 설계, ESLint 면제 범위와 같음 — 다시 켤 조건 없음) ② `src/features`의 `excessive-slicing`을 끈다(25개 > 20, 다시 켤 조건 features ≤ 20 — TRIP-1159 껍데기 정리) ③ `pages/itinerary`·`pages/onboarding` 그룹의 `repetitive-naming`을 끈다(접두를 떼면 16개 개명 + shared 세그먼트와 이름 충돌 — 다시 켤 조건 두 그룹 접두 제거, 별 티켓). 딥 임포트 금지 zone(TRIP-1157)은 프로덕션 파일에만 걸고 테스트·`src/app/_dev/**`는 면제한다. 같은 룰 ID라 층 zone과 한 블록에 함께 펼친다(flat config는 같은 규칙을 거는 뒤 블록이 앞을 덮어쓴다). `import/no-cycle`은 상시 lint에 없다 — 자기 슬라이스 index를 물어 순환을 만들어도 `pnpm lint`는 침묵한다.
 - **`app → features` 제한은 두지 않는다** — 공식 FSD는 app 층이 아래 층 전부를 import하는 것을 허용한다. 라우트 파일은 page를 꽂는 얇은 래퍼로 두는 것을 권장한다(lint 강제 없음, TRIP-1142).
 - 절대 경로 별칭 `@/` = `src/` (tsconfig paths — `@/features/...`, `@/shared/...`).
 
@@ -108,7 +108,7 @@ frontend/
 
 ## 아키텍처 규칙 (클라이언트 불변식)
 
-- **서버 권위**: 판정의 정본은 항상 서버. `shared/validation`의 경량 검증은 경고 배지이며 저장을 차단하지 않는다. 규칙 명세 버전이 서버와 불일치하면 로컬 검사는 보수적으로 비활성화.
+- **서버 권위**: 판정의 정본은 항상 서버. `shared/lib`의 경량 검증(닉네임 형식)은 경고 배지이며 저장을 차단하지 않는다. 규칙 명세 버전이 서버와 불일치하면 로컬 검사는 보수적으로 비활성화.
 - **AI 계층 계약** (`ai/README.md`): 이동 구간에 소요 시간(duration)을 표시하지 않는다 — 거리만. 사용자에게 보이는 시각·순서는 서버(솔버)가 검증한 값만 렌더링한다.
 - **토큰**: OS 보안 저장소에만 저장, 로그아웃·401 확정 시 즉시 삭제, 로그·크래시 리포트에 미포함(Sentry `beforeSend` 스크러빙으로 집행).
 - **스플래시 게이트**: 부트스트랩 1왕복 후 목적지 분기(강제 업데이트 → 세션 → 온보딩 잔여 → 홈)는 부수효과 없는 순수 함수로 구현(PBT 대상). 타임아웃 시 로컬 폴백 — 무한 스플래시 금지.
@@ -142,7 +142,7 @@ frontend/
 - 테스트 파일은 소스 옆에 둔다(`foo.ts` ↔ `foo.test.ts`). jest 설정이 둘이라(`jest.config.js` node · `jest.integration.config.js` MSW) 통합 테스트는 `.integration.test`로 파일이 갈린다. 둘 다 돌리려면 `pnpm test`(한쪽만 부르면 다른 쪽이 0건인 채 green으로 보인다).
 - **버킷 예외 — node 버킷이어야 하는 page 배선 테스트는 `XxxPage.test.tsx`**(TRIP-1146): `await import`로만 닿는 모듈(integration 버킷에선 그 자리에서 동기 throw)이나 생성 훅·스토어 목으로 page 배선을 보는 테스트는 integration 버킷으로 못 가므로 `.integration` 없이 둔다(예: `PrefStep1Page.test.tsx`·`ReconsentPage.test.tsx`). 같은 page에 통합 파일이 따로 있으면 버킷 사유를 접미사로 남긴다(`LoginPage.apple.test.tsx` — 애플 SDK lazy import).
 - testID 규약 `{feature}-{screen}-{role}`(예: `execution-hub-timeline`) — testID 부여는 스펙의 일부다.
-- CI(`.github/workflows/frontend-ci.yml`, 경로 필터 `frontend/**`): `tsc` · ESLint · Jest(두 버킷)+fast-check — 머지 게이트.
+- CI(`.github/workflows/frontend-ci.yml`, 경로 필터 `frontend/**`): ESLint · `tsc` · Steiger(`pnpm fsd`) · 구조 지도 드리프트(`structure-index.cjs --write`·`--check`) · Jest(두 버킷)+fast-check — 머지 게이트.
 
 ### 남김·합침·지움 판정
 
@@ -188,7 +188,7 @@ python3 scripts/test-classify.py    # 테스트 파일 칸 분류(행동·소스
 - **ESLint** (`eslint.config.js`): `eslint-config-expo` 베이스 + import 경계 규칙(§import 경계) + NativeWind 클래스 정렬 플러그인
 - **Prettier** (`.prettierrc`): 포맷 전담
 - Biome 등 통합 도구 미채택 — Expo 공식 프리셋·NativeWind·경계 강제 플러그인이 전부 ESLint 생태계
-- 스크립트: `pnpm lint` / `pnpm format`
+- 스크립트: `pnpm lint` / `pnpm format` / `pnpm fsd`(Steiger 구조 린트 — `frontend/`에서 실행)
 
 ## 빌드·실행 (스캐폴드 후)
 

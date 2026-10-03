@@ -41,7 +41,7 @@ import {
   unregisterStoredPushToken,
 } from '@/shared/push';
 import { showToast } from '@/shared/ui/Toast';
-import { validateNicknameFormat } from '@/shared/validation';
+import { validateNicknameFormat } from '@/shared/lib/nicknameFormat';
 
 const NICKNAME_SAVED_TOAST = '닉네임을 바꿨어요';
 
