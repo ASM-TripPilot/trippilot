@@ -372,6 +372,9 @@ describe('진입점 — 누르면 어디로 가나', () => {
     expect(screen.getByTestId('home-saved-places-badge')).toHaveTextContent(
       '2'
     );
+    // 홈은 로그인 뒤에만 열린다 — false 를 넘기면 실훅이 담은 목록 조회를 꺼 배지가 늘 0이 된다(TRIP-1164).
+    expect(mockUseSavedPlaces).toHaveBeenCalledWith({ isAuthed: true });
+    expect(mockUseSavedStays).toHaveBeenCalledWith({ isAuthed: true });
   });
 
   it('뜨는 장소 "더 보기"를 누르면 장소 탐색으로 간다', () => {
