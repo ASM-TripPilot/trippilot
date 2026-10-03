@@ -6,7 +6,6 @@ import {
   useGetTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
 import { useGetPlaces } from '@/shared/api/index.hooks';
-import { getAccessToken } from '@/shared/api';
 import { isNotFound } from '@/shared/api';
 import { seoulDate } from '@/shared/date';
 import { formatNightsLabel } from '@/entities/trip';
@@ -103,12 +102,12 @@ function PlanningHome({
 export function HomePage() {
   const router = useRouter();
   const trips = useGetTrips();
-  const isAuthed = getAccessToken() !== null;
-  const savedPlaces = useSavedPlaces({ isAuthed });
+  // 홈은 (tabs) 라 로그인 뒤에만 열린다(SplashGate HOME 가드) — 게스트 분기 없이 로그인으로 넘긴다(TRIP-1164).
+  const savedPlaces = useSavedPlaces({ isAuthed: true });
   const { savedPoiIds } = savedPlaces;
   // 담은 곳 미니 FAB 개수 배지(TRIP-695) — 담은 장소 수·전체 저장 숙소 수를 실데이터에서 뽑아
   // 화면에 주입한다. useSavedStays 는 features/stay 것(savedCount 노출) — features/trip 동명 훅 아님.
-  const { savedCount: savedStaysCount } = useSavedStays({ isAuthed });
+  const { savedCount: savedStaysCount } = useSavedStays({ isAuthed: true });
 
   // 담은 곳 saved-menu 열림 상태(TRIP-494) — 순수 화면이 useState 0건이라 page 가 소유한다
   // (탐색 랜딩 선례와 동형). 미니 FAB press 는 메뉴를 닫고 각각 d02/e04 로 이동한다.
@@ -142,12 +141,12 @@ export function HomePage() {
   );
   const trending = pickTrendingPlaces(places.data?.items ?? [], 4);
   const placeSave = usePlaceSaveToggle({
-    isAuthed,
+    isAuthed: true,
     savedPoiIds,
     save: savedPlaces.save,
     remove: savedPlaces.remove,
     places: trending,
-    onRequireLogin: () => router.push('/(auth)/login'),
+    onRequireLogin: () => {},
   });
   const spotsLane: HomeSpotsLane = {
     status: places.isPending ? 'loading' : places.isError ? 'error' : 'ready',

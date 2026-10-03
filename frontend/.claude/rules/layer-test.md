@@ -42,7 +42,7 @@ paths:
 | `src/__tests__/devPreviewReleaseGate.test.tsx` | 운영 빌드(`__DEV__=false`)에서 `_dev` 프리뷰가 홈으로 1회 리다이렉트되는 출시 계약 + 프리뷰 스모크(TRIP-1145 — 딥링크 조준 화면 렌더 · 키 장부 중복 0 · 없는 키/배열 값 splash 폴백). 지뢰 목 7개가 프리뷰 정적 그래프 전체의 네트워크·컨테이너 미로드를 함께 지킨다. 키별 렌더는 하지 않는다 |
 | `src/widgets/time-sheet/ui/TimeSheet.test.tsx` | 공용 시각 시트 렌더 — testID 트리·셀 선택·`endsNextDay` 시·분 두 축·분 셀 bare 숫자(INV-3) |
 | `src/__tests__/onboardingPrefRoutes.test.tsx` | 취향 1/2·2/2 라우트 존재·내비게이션 계약 가드 — push/replace/back 분기 |
-| `src/__tests__/tabsShell.test.tsx` | `(tabs)/_layout.tsx` 배선 가드 — 5탭 등록 순서·`tabBar` 렌더프롭·활성 매핑/press→navigate. 홈·탐색 **라우트 래퍼**를 렌더하므로 두 page가 무는 훅(`useGetTrips`·`useSavedPlaces`·`useSavedStays`·`useGetPlaces`)의 무해 스텁을 가진다. 홈 래퍼 it = `PlanningHome` 조건부 자식의 유일한 심판(trips 목에 일정 훅 없음), 탐색 래퍼 it = 전국·게스트 갈래에 `shell-tabbar-root` 부재 + `/regions` 미호출을 **우연히** 지킨다(places 목에 `useGetRegions` 없음 — 스텁을 더하면 조용히 풀림) |
+| `src/__tests__/tabsShell.test.tsx` | `(tabs)/_layout.tsx` 배선 가드 — 5탭 등록 순서·`tabBar` 렌더프롭·활성 매핑/press→navigate. 홈·탐색 **라우트 래퍼**를 렌더하므로 두 page가 무는 훅(`useGetTrips`·`useSavedPlaces`·`useSavedStays`·`useGetPlaces`)의 무해 스텁을 가진다. 홈 래퍼 it = `PlanningHome` 조건부 자식의 유일한 심판(trips 목에 일정 훅 없음), 탐색 래퍼 it = 전국 갈래에 `shell-tabbar-root` 부재 + `/regions` 미호출을 **우연히** 지킨다(places 목에 `useGetRegions` 없음 — 스텁을 더하면 조용히 풀림) |
 | `src/__tests__/onboardingEntryGuard.test.tsx` | 온보딩 진입 리다이렉트·완료자 방어 가드 |
 | `src/__tests__/rootLayout.test.tsx` | 루트 부팅 골격 |
 | `src/__tests__/rootLayoutSafeArea.test.tsx` | `SafeAreaProvider` 도입 후에도 자식이 렌더되는지 |

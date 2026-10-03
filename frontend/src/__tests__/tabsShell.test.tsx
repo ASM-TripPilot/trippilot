@@ -64,7 +64,7 @@ jest.mock('@/shared/api/generated/places/places', () => ({
 jest.mock('@/features/save-stay/model/savedStays', () => ({
   useSavedStays: () => ({ savedCount: 0 }),
 }));
-// TRIP-1142 — 탐색 라우트 래퍼도 렌더한다. 숙소 검색은 빈 목록 무해 스텁(게스트라 담기 훅은 안 돈다).
+// TRIP-1142 — 탐색 라우트 래퍼도 렌더한다. 숙소 검색은 빈 목록 무해 스텁(담기 훅은 위 저장 숙소 스텁).
 jest.mock('@/features/stay/model/useStaySearch', () => ({
   useStaySearch: () => ({
     data: { items: [], degraded: false, filterZeroReasons: [] },

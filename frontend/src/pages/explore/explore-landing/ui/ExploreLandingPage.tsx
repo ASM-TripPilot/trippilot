@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import type { Place, StayItem } from '@/shared/api/index.schemas';
-import { getAccessToken } from '@/shared/api';
 import { guardPress } from '@/shared/press';
 import { formatPrice } from '@/entities/stay';
 import { stayKey } from '@/features/save-stay';
@@ -44,11 +43,8 @@ import {
  * 실패·코드 없음은 로딩이 아니라 재시도(카탈로그 재조회)로 드러낸다(INV-4). `useRegions` 는 필터 자식
  * 에서만 부른다 — 필터 없는 d01 은 카탈로그 조회를 태우지 않는다. 칩 ✕ 는 `setParams` 로 region 을 비운다.
  *
- * 담기 하트(TRIP-447): `useSavedStays`(react-query)는 `QueryClientProvider` 아래서만 돈다.
- * 게스트는 훅을 아예 안 태우고 로그인 유도만 하고, 로그인 사용자만 조건부 자식
- * `SavableStayLane` 에서 훅을 돌린다 — `HomePage` 의 `PlanningHome` 선례(조건부 자식
- * 으로 훅 실행을 격리)와 동형. 이 격리가 없으면 프로바이더 없이 page 를 렌더하는 동결
- * 테스트(`ExploreLandingPage.test.tsx`)가 "No QueryClient" 로 깨진다.
+ * 담기 하트(TRIP-447): 탐색 탭은 (tabs) 라 로그인 뒤에만 열린다(SplashGate HOME 가드) — 게스트
+ * 분기(로그인 유도) 없이 담기 훅에 로그인 상태를 넘긴다(TRIP-1164). 숙소 담기는 `SavableStayLane` 이 진다.
  */
 
 type LandingBase = Pick<
@@ -180,18 +176,16 @@ function ExploreLanding({
   filter?: RegionFilter;
 }): ReactElement {
   const router = useRouter();
-  const isAuthed = getAccessToken() !== null;
-  const savedPlaces = useSavedPlaces({ isAuthed });
+  const savedPlaces = useSavedPlaces({ isAuthed: true });
   const { savedPoiIds } = savedPlaces;
-  // 장소 담기 하트(TRIP-1049) — useState 만 쓰는 훅이라 게스트/로그인 분기 위에서 한 번 부르고
-  // base.placeLane 으로 두 경로에 함께 내린다. 게스트 press → 로그인(숙소 하트와 동일).
+  // 장소 담기 하트(TRIP-1049) — base.placeLane 으로 내린다.
   const placeSave = usePlaceSaveToggle({
-    isAuthed,
+    isAuthed: true,
     savedPoiIds,
     save: savedPlaces.save,
     remove: savedPlaces.remove,
     places: places.items,
-    onRequireLogin: () => router.push('/(auth)/login'),
+    onRequireLogin: () => {},
   });
 
   // 담은 곳 saved-menu 열림 상태(TRIP-494) — 순수 화면이 useState 0건이라 page 가 소유해
@@ -227,8 +221,7 @@ function ExploreLanding({
       subtitle: '숙소·장소를 둘러보고 담아요',
     },
     onPressSearch: () => router.push(regionPickerHref('explore')),
-    // "가볼 곳" 진입점 → d04 장소 목록(TRIP-453 entry 2). guest·SavableStayLane 양쪽이
-    // base 를 spread 하므로 한 곳에 두면 두 경로 모두 배선된다.
+    // "가볼 곳" 진입점 → d04 장소 목록(TRIP-453 entry 2).
     // 필터 중이면 그 지역 이름을 싣는다(TRIP-1105 Q7) — 빈 레인 폴백도 같은 콜백이다.
     onPressPlaces: () =>
       router.push(
@@ -237,7 +230,7 @@ function ExploreLanding({
           : '/explore/places'
       ),
     // ＋ 여행 만들기 FAB → g01 위저드(TRIP-703). 화면은 순수 뷰라 라우터를 모르므로 목적지를
-    // 여기(page)가 잇는다. base 스프레드라 guest·SavableStayLane 두 경로 모두 배선된다.
+    // 여기(page)가 잇는다.
     // 새 여행 진입이라 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074).
     onPressCreateTrip: () => {
       useTripWizardStore.getState().reset();
@@ -304,31 +297,12 @@ function ExploreLanding({
     },
   };
 
-  // 로그인 사용자만 담기 훅을 태운다(조건부 자식). 게스트는 하트를 눌러도 요청 없이 로그인
-  // 유도만 한다(BR-U1-03 · AC-7 — 서버 미호출 + login push).
-  if (isAuthed) {
-    return <SavableStayLane base={base} items={items} />;
-  }
-
-  return (
-    <ExploreLandingScreen
-      {...base}
-      stayLane={{
-        ...base.stayLane,
-        savedKeys: [],
-        pendingKeys: [],
-        onToggleSave: () => router.push('/(auth)/login'),
-        saveError: false,
-      }}
-    />
-  );
+  return <SavableStayLane base={base} items={items} />;
 }
 
 /**
- * 로그인 사용자 전용 숙소 담기 배선(조건부 자식). `useSavedStays`(TRIP-417)를 물어 담김 집합·
- * 대기 집합·실패를 조립해 stayLane 에 얹는다 — `attemptToggle`·pendingKeys 형태는
- * `StaySearchPage`(TRIP-417) 선례를 그대로 계승한다. 게스트는 이 자식을 마운트하지 않으므로
- * 미인증 분기(로그인 유도)는 여기서 다시 다루지 않는다.
+ * 숙소 담기 배선. `useSavedStays`(TRIP-417)를 물어 담김 집합·대기 집합·실패를 조립해 stayLane 에
+ * 얹는다 — `attemptToggle`·pendingKeys 형태는 `StaySearchPage`(TRIP-417) 선례를 그대로 계승한다.
  */
 function SavableStayLane({
   base,

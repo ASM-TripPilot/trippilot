@@ -119,7 +119,7 @@ afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
 // TRIP-1049 — 로그인 하트는 응답 전에 칠해지고(낙관), 담은 곳 FAB 수도 같은 캐시라 함께 움직인다.
-describe('장소 하트 — 담기·해제·게스트', () => {
+describe('장소 하트 — 담기·해제', () => {
   function place(poiId: string, nameKo: string): Place {
     return {
       poiId,
@@ -324,24 +324,10 @@ describe('장소 하트 — 담기·해제·게스트', () => {
 
     await releaseAndSettle(gate);
   });
-
-  it('게스트가 하트를 누르면 로그인으로 가고, 담기 요청도 담은 목록 조회도 0건이다', async () => {
-    renderPage();
-    await waitFor(
-      () => expect(screen.getByTestId(heartA)).toBeOnTheScreen(),
-      WAIT
-    );
-
-    fireEvent.press(screen.getByTestId(heartA));
-
-    expect(mockPush).toHaveBeenCalledWith('/(auth)/login');
-    expect(hitCount('POST /api/v1/saved-places')).toBe(0);
-    expect(hitCount('GET /api/v1/saved-places')).toBe(0);
-  });
 });
 
-// TRIP-447 AC-4~8 — 숙소 카드 하트. 담기 훅(`useSavedStays`)은 로그인 조건부 자식에서만 돈다.
-describe('숙소 하트 — 담기·롤백·게스트·연타', () => {
+// TRIP-447 AC-4~8 — 숙소 카드 하트.
+describe('숙소 하트 — 담기·롤백·연타', () => {
   function stayItem(
     externalId: string,
     region: string,
@@ -428,7 +414,6 @@ describe('숙소 하트 — 담기·롤백·게스트·연타', () => {
 
   beforeEach(() => {
     mockUseStaySearch.mockReturnValue(stayResults([ITEM_A, ITEM_B]));
-    // 담은 숙소 GET 은 항상 등록 — 게스트에서 잘못 나가면 throw 가 아니라 hitCount 로 잡히게.
     // 장소 레인·담은 장소는 이 describe 의 관심 밖이라 빈 응답만 준다.
     server.use(
       http.get(`${BASE}/saved-stays`, () => HttpResponse.json([])),
@@ -505,22 +490,6 @@ describe('숙소 하트 — 담기·롤백·게스트·연타', () => {
       screen.queryByTestId(`explore-stay-heart-filled-${KEY_A}`)
     ).toBeNull();
     expect(screen.getByTestId(`explore-stay-save-${KEY_A}`)).not.toBeSelected();
-  });
-
-  it('게스트가 하트를 누르면 담기 요청은 0건이고 로그인으로 1회 간다', async () => {
-    renderPage();
-    await waitOutlineA();
-    // 사전 단언 — 게스트에겐 담은 목록 조회가 아예 안 나간다.
-    expect(hitCount('GET /api/v1/saved-stays')).toBe(0);
-
-    fireEvent.press(screen.getByTestId(`explore-stay-save-${KEY_A}`));
-
-    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/(auth)/login'));
-    expect(mockPush).toHaveBeenCalledTimes(1);
-    expect(hitCount('POST /api/v1/saved-stays')).toBe(0);
-    expect(
-      screen.getByTestId(`explore-stay-heart-outline-${KEY_A}`)
-    ).toBeOnTheScreen();
   });
 
   it('응답 대기 중 하트를 다시 눌러도 POST 는 1건뿐이다', async () => {

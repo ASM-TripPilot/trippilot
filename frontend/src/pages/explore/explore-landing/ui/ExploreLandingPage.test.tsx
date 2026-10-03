@@ -35,9 +35,6 @@ import { ExploreLandingPage } from '@/pages/explore/explore-landing';
  * 왜 이렇게 테스트하나: 조회 훅을 목으로 갈아 끼우고 page 를 통째로 그려, 그려진 결과와 push 인자를
  * 본다. `formatPrice`·`stayKey` 는 순수 함수라 목하지 않고 실값으로 대조한다. `jest.mock` 은 파일
  * 단위라 목은 맨 위 한 벌이고 describe 마다 반환값만 바꾼다(팩토리가 읽는 변수는 `mock` 으로 시작).
- *
- * 게스트 렌더는 프로바이더 없이 돈다 — 숙소 담기 훅은 로그인 사용자의 조건부 자식에서만 불러야 한다.
- * 그래서 담기 훅 목의 기본값은 "불리면 throw"다(실훅이 QueryClient 없이 던지는 것과 같은 신호).
  */
 
 const mockPush = jest.fn();
@@ -77,11 +74,6 @@ jest.mock('@/features/save-place/model/savedPlaces', () => ({
 const mockUseSavedStays = jest.fn();
 jest.mock('@/features/save-stay/model/savedStays', () => ({
   useSavedStays: (...args: unknown[]) => mockUseSavedStays(...args),
-}));
-
-let mockToken: string | null = null;
-jest.mock('@/shared/api/tokenManager', () => ({
-  getAccessToken: () => mockToken,
 }));
 
 function stayItem(
@@ -151,16 +143,16 @@ beforeEach(() => {
   mockSetParams.mockImplementation((next: Record<string, unknown>) => {
     mockParams = { ...mockParams, ...next } as { region?: string };
   });
-  // 기본값 — 전국 d01 · 게스트 · 숙소 2곳(서울·제주) · 장소 0곳 · 담은 장소 1곳.
+  // 기본값 — 전국 d01 · 숙소 2곳(서울·제주) · 장소 0곳 · 담은 장소 1곳 · 담은 숙소 0곳.
   mockParams = {};
-  mockToken = null;
   mockUseStaySearch.mockReturnValue(stayOk([CARD_A, CARD_B]));
   mockUseGetPlaces.mockReturnValue(placesOk([]));
   mockUseSavedPlaces.mockReturnValue({ savedPoiIds: ['p1'] });
-  mockUseSavedStays.mockImplementation(() => {
-    throw new Error(
-      '게스트 렌더가 숙소 담기 훅을 불렀다 — 로그인 조건부 자식에서만 불러야 한다'
-    );
+  mockUseSavedStays.mockReturnValue({
+    isSaved: () => false,
+    save: jest.fn(),
+    remove: jest.fn(),
+    savedKeys: [],
   });
 });
 
@@ -405,19 +397,6 @@ describe('숙소 카드 press → 숙소 상세', () => {
       params: { stayId: KEY_A },
     });
   });
-
-  it('게스트가 하트를 눌러도 상세로 가지 않는다(하트가 카드 press 를 삼키지 않는다)', () => {
-    render(<ExploreLandingPage />);
-
-    fireEvent.press(screen.getByTestId(`explore-stay-save-${KEY_A}`));
-
-    const detailPushes = mockPush.mock.calls.filter(
-      ([arg]) =>
-        typeof arg === 'object' &&
-        (arg as { pathname?: string }).pathname === '/stays/[stayId]'
-    );
-    expect(detailPushes).toHaveLength(0);
-  });
 });
 
 // TRIP-1105 — 지역 선택(purpose=explore)이 region(지역 **코드**)을 싣고 이 탭으로 돌아온다. 두 조회는
@@ -482,7 +461,6 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
 
   beforeEach(() => {
     mockParams = { region: BUSAN.regionCode };
-    mockToken = 'tkn';
     regionsRefetch.mockReset();
     mockRegionsResult = {
       data: [BUSAN, MICHUHOL],

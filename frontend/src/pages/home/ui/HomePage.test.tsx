@@ -72,11 +72,6 @@ jest.mock('@/features/save-stay/model/savedStays', () => ({
   useSavedStays: (...args: unknown[]) => mockUseSavedStays(...args),
 }));
 
-let mockToken: string | null = null;
-jest.mock('@/shared/api/tokenManager', () => ({
-  getAccessToken: () => mockToken,
-}));
-
 const TRIP_ID = '33333333-3333-3333-3333-333333333333';
 
 function trip(overrides: Partial<Trip> = {}): Trip {
@@ -235,9 +230,8 @@ beforeEach(() => {
     mockSave,
     mockRemove,
   ].forEach((fn) => fn.mockReset());
-  // 기본값 — 게스트 · 여행 없음(discovery) · 담김 0 · 저장 숙소 0 · 뜨는 장소 1곳.
+  // 기본값 — 여행 없음(discovery) · 담김 0 · 저장 숙소 0 · 뜨는 장소 1곳.
   // 장소가 0곳이면 스팟 섹션이 숨어 "더 보기"를 못 찾는다.
-  mockToken = null;
   mockUseGetTrips.mockReturnValue(tripsOk([]));
   mockUseItinerary.mockReturnValue(
     itineraryOk(ItineraryGenerationState.COMPLETE, ItineraryStatus.PLANNED)
@@ -451,7 +445,6 @@ describe('지금 뜨는 장소', () => {
   }
 
   beforeEach(() => {
-    mockToken = 'tkn';
     mockUseGetPlaces.mockReturnValue(placesOk(SIX));
     mockSave.mockResolvedValue({ kind: 'saved' });
     mockRemove.mockResolvedValue({ kind: 'removed' });
@@ -556,17 +549,6 @@ describe('지금 뜨는 장소', () => {
       expect(mockRemove).toHaveBeenCalledTimes(1);
       expect(mockRemove).toHaveBeenCalledWith('p4');
       expect(mockSave).not.toHaveBeenCalled();
-    });
-
-    it('게스트 → 로그인으로 push 하고 담기·해제는 0건', () => {
-      mockToken = null;
-      render(<HomePage />);
-
-      fireEvent.press(screen.getByTestId('home-spot-save-p4'));
-
-      expect(mockPush).toHaveBeenCalledWith('/(auth)/login');
-      expect(mockSave).not.toHaveBeenCalled();
-      expect(mockRemove).not.toHaveBeenCalled();
     });
 
     it('담기 실패 → 담기 실패 문구 배너', async () => {
