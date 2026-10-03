@@ -101,6 +101,12 @@ function primeMutation(
       mutation?: {
         onSuccess?: (data: unknown, vars: unknown, ctx: unknown) => void;
         onError?: (error: unknown, vars: unknown, ctx: unknown) => void;
+        onSettled?: (
+          data: unknown,
+          error: unknown,
+          vars: unknown,
+          ctx: unknown
+        ) => void;
       };
     }) => ({
       isPending: false,
@@ -116,9 +122,21 @@ function primeMutation(
         if (opts.error) {
           options?.mutation?.onError?.(opts.error, vars, undefined);
           callOpts?.onError?.(opts.error, vars, undefined);
+          options?.mutation?.onSettled?.(
+            undefined,
+            opts.error,
+            vars,
+            undefined
+          );
         } else {
           options?.mutation?.onSuccess?.(opts.onSuccessData, vars, undefined);
           callOpts?.onSuccess?.(opts.onSuccessData, vars, undefined);
+          options?.mutation?.onSettled?.(
+            opts.onSuccessData,
+            null,
+            vars,
+            undefined
+          );
         }
       },
     })
@@ -337,5 +355,147 @@ describe('TRIP-778 · 저장 뒤 위치 동의 조회 무효화 (D11)', () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(locationInvalidations()).toBe(before);
+  });
+});
+
+/**
+ * TRIP-1194 — 조회 실패를 "동의 안 함"으로 접지 않고, PUT 실패를 드러내고, 연타를 잠근다.
+ * 위치 동의 이력은 append-only 법정 로그라 같은 PUT 2회는 중복 행이다(INV-4: 조용한 실패 금지).
+ */
+describe('TRIP-1194 · 조회 로딩·실패 얼굴', () => {
+  it('조회 로딩이면 "동의 안 함"이 아니라 로딩 얼굴이고 토글은 없다', async () => {
+    mockUseGetConsent.mockReturnValue({ data: undefined, isLoading: true });
+    renderPage();
+    await waitFor(() => expect(patchSpy).toHaveBeenCalledTimes(1));
+
+    expect(
+      screen.getByTestId('settings-location-consent-loading')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('settings-location-toggle')).toBeNull();
+    expect(screen.queryByText('동의 안 함 · 위치 미사용')).toBeNull();
+  });
+
+  it('조회 실패면 실패 얼굴 + [다시 시도] 가 refetch 를 부른다', async () => {
+    const refetch = jest.fn();
+    mockUseGetConsent.mockReturnValue({
+      data: undefined,
+      isError: true,
+      refetch,
+    });
+    renderPage();
+    await waitFor(() => expect(patchSpy).toHaveBeenCalledTimes(1));
+
+    expect(
+      screen.getByTestId('settings-location-consent-error')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('settings-location-toggle')).toBeNull();
+    expect(screen.queryByText('동의 안 함 · 위치 미사용')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('settings-location-consent-retry'));
+    expect(refetch).toHaveBeenCalledTimes(1);
+    expect(putSpy).not.toHaveBeenCalled();
+  });
+
+  it('짝: 조회 성공이면 로딩·실패 얼굴이 없고 토글이 있다', async () => {
+    renderPage();
+    await waitFor(() => expect(patchSpy).toHaveBeenCalledTimes(1));
+
+    expect(screen.getByTestId('settings-location-toggle')).toBeOnTheScreen();
+    expect(
+      screen.queryByTestId('settings-location-consent-loading')
+    ).toBeNull();
+    expect(screen.queryByTestId('settings-location-consent-error')).toBeNull();
+  });
+});
+
+describe('TRIP-1194 · PUT 실패 표면화', () => {
+  it('승낙 PUT 이 실패하면 실패 안내가 보이고 토글은 서버 값(OFF) 그대로다', async () => {
+    primeConsent({ osPermissionMirror: 'GRANTED', legalConsent: false });
+    primeMutation(mockUsePut, { spy: putSpy, error: new Error('500') });
+    renderPage();
+    await waitFor(() => expect(patchSpy).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId('settings-location-save-error')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('settings-location-toggle'));
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('settings-location-save-error')
+      ).toBeOnTheScreen()
+    );
+    expect(screen.getByText('동의 안 함 · 위치 미사용')).toBeOnTheScreen();
+  });
+
+  it('철회 PUT 이 실패해도 실패 안내가 보인다', async () => {
+    primeMutation(mockUsePut, { spy: putSpy, error: new Error('500') });
+    renderPage();
+    await waitFor(() => expect(patchSpy).toHaveBeenCalledTimes(1));
+
+    fireEvent.press(screen.getByTestId('settings-location-toggle'));
+    fireEvent.press(
+      screen.getByTestId('settings-location-revoke-confirm-button')
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('settings-location-save-error')
+      ).toBeOnTheScreen()
+    );
+  });
+
+  it('실패 뒤 다시 누르면 안내가 걷히고 PUT 이 다시 나간다(잠금이 풀려 있다)', async () => {
+    primeConsent({ osPermissionMirror: 'GRANTED', legalConsent: false });
+    primeMutation(mockUsePut, { spy: putSpy, error: new Error('500') });
+    renderPage();
+    await waitFor(() => expect(patchSpy).toHaveBeenCalledTimes(1));
+
+    fireEvent.press(screen.getByTestId('settings-location-toggle'));
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('settings-location-save-error')
+      ).toBeOnTheScreen()
+    );
+    fireEvent.press(screen.getByTestId('settings-location-toggle'));
+
+    expect(putSpy).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('TRIP-1194 · 연타 잠금', () => {
+  /** 진행 중(미정착) 뮤테이션 목 — mutate 가 정착하지 않아 같은 틱 연타를 재현한다. */
+  function primePendingPut() {
+    mockUsePut.mockImplementation(() => ({
+      isPending: false, // 일부러 false — ref 잠금이 isPending 갱신(리렌더) 전 틱을 막는지 본다.
+      mutate: (vars?: unknown) => {
+        putSpy(vars);
+      },
+    }));
+  }
+
+  it('승낙 토글을 같은 틱에 2회 누르면 PUT 은 1회', async () => {
+    primeConsent({ osPermissionMirror: 'GRANTED', legalConsent: false });
+    primePendingPut();
+    renderPage();
+    await waitFor(() => expect(patchSpy).toHaveBeenCalledTimes(1));
+
+    fireEvent.press(screen.getByTestId('settings-location-toggle'));
+    fireEvent.press(screen.getByTestId('settings-location-toggle'));
+
+    expect(putSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('철회 확정을 연타해도 PUT 은 1회', async () => {
+    primePendingPut();
+    renderPage();
+    await waitFor(() => expect(patchSpy).toHaveBeenCalledTimes(1));
+
+    fireEvent.press(screen.getByTestId('settings-location-toggle'));
+    const confirm = screen.getByTestId(
+      'settings-location-revoke-confirm-button'
+    );
+    fireEvent.press(confirm);
+    fireEvent.press(confirm);
+
+    expect(putSpy).toHaveBeenCalledTimes(1);
   });
 });
