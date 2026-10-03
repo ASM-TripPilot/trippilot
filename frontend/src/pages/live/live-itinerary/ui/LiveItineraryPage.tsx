@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useMemo, useRef, useState } from 'react';
 import { router } from 'expo-router';
 import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,11 +20,16 @@ import { riskAffectedRow } from '../model/riskAffectedRow';
 import { triggerLabel } from '@/features/planb';
 import { triggerPillCopy } from '@/features/planb';
 import { triggerWatchlist } from '../model/triggerWatchlist';
-import { useActiveTriggers } from '@/features/planb';
+import {
+  appliedSummaryBadges,
+  appliedSummaryInputFromDiff,
+  useActiveTriggers,
+} from '@/features/planb';
 import { ReplanAppliedSheet } from './ReplanAppliedSheet';
 import { RiskDetailSheet } from './RiskDetailSheet';
-import type { Trigger } from '@/shared/api/index.schemas';
+import type { ReplanDiff, Trigger } from '@/shared/api/index.schemas';
 import {
+  getGetTripsTripIdReplanSessionsSessionIdDiffQueryKey,
   postTripsTripIdVisitsVisitCheckIdPhotos,
   useGetTripsTripId,
   useGetTripsTripIdVisitsDaysDay,
@@ -75,6 +81,23 @@ export function LiveItineraryPage({
 }: LiveItineraryPageProps) {
   const query = useLiveItinerary(tripId);
   const trip = useGetTripsTripId(tripId);
+  const queryClient = useQueryClient();
+  // i08 배지 — 초안 화면(i06)이 확정 직전까지 들고 있던 diff 로 만든다. 확정(APPLIED) 뒤 서버는 diff 를 비우므로
+  // 다시 조회하지 않고 캐시만 읽는다. 캐시가 없거나 ready 가 아니면 배지 줄 없이 뜬다.
+  // useMemo 로 붙잡는 이유: getQueryData 는 구독이 아니라 읽기 한 번이다 — 시트가 뜬 채로 캐시가 정리(gc, 기본 5분)된 뒤
+  // 허브가 다시 그려지면(되돌리기 안내 등) 매 렌더 읽기는 undefined 를 얻어 배지가 사라진다.
+  const appliedBadges = useMemo(() => {
+    if (!appliedSessionId) return undefined;
+    const cachedDiff = queryClient.getQueryData<ReplanDiff>(
+      getGetTripsTripIdReplanSessionsSessionIdDiffQueryKey(
+        tripId,
+        appliedSessionId
+      )
+    );
+    return cachedDiff?.ready === true
+      ? appliedSummaryBadges(appliedSummaryInputFromDiff(cachedDiff))
+      : undefined;
+  }, [queryClient, tripId, appliedSessionId]);
   // 사용자가 고른 날(없으면 오늘). 훅 규칙상 조기 반환보다 위에서 무조건 선언한다.
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   // i03 위험 상세 시트 열림 = 그 트리거 id(TRIP-749). 재조회로 트리거가 사라지면 시트도 사라진다.
@@ -375,8 +398,10 @@ export function LiveItineraryPage({
       {memoSheet}
       {appliedSessionId ? (
         // i08 — 반영 직후 한 번 뜨는 알림. 닫기 = applied 쿼리 제거(값을 undefined 로 줘야 지워진다 —
-        // setParams 는 병합이라 `{}` 는 무동작). 부제·배지·내역은 데이터 계약이 없어 안 넘긴다(E4).
+        // setParams 는 병합이라 `{}` 는 무동작). 배지는 초안 화면이 남긴 diff 캐시에서 만든다(TRIP-1188 —
+        // 서버는 확정 뒤 diff 를 비운다). 캐시에 없으면(앱 재시작 등) 배지 줄만 숨긴다. 부제·내역은 계약이 없어 안 넘긴다.
         <ReplanAppliedSheet
+          summaryBadges={appliedBadges}
           showRevertNotice={revertNotice}
           onConfirm={() => router.setParams({ applied: undefined })}
           onRevert={() => setRevertNotice(true)}
