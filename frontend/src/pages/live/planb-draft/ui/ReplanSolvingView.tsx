@@ -9,12 +9,15 @@ import { GenerationProgressCard } from '@/widgets/map-sheet-shell';
 import { MapSheetShell } from '@/widgets/map-sheet-shell';
 import { SheetHeader } from '@/widgets/map-sheet-shell';
 
+import { ReplanSkeletonCards } from './ReplanSkeletonCards';
+
 /**
  * TRIP-752 · i05 다시 짜는 중 **순수 뷰**(pages · api import 0 — preview 가 파일 경로로 직접 import).
  * Figma `4341:1957`. 전면 지도 + 좌상단 진행 카드(셸 overlay 자리) + 40% peek 시트(헤더 · 방문 완료 행 ·
  * 거리 커넥터). CTA 바는 없다 — ‹ 가 "백그라운드로"를 대신한다. 조회·판정·라우팅은 `PlanbSolvingPage` 몫.
  *
- * 진행 막대는 정적이다(칸 1 완료 · 칸 2 진행 중) — 세션 계약에 진행률이 없다.
+ * 진행 막대는 진행률 없이 흐르기만 한다(칸 1 완료 · 칸 2 인디터미닛 — 세션 계약에 진행률이 없다).
+ * 시트 빈 곳엔 스켈레톤 슬롯 카드 2장이 펄스한다(TRIP-1205 · Figma `4817:2695`).
  */
 
 const CARD_TITLE = 'AI가 일정을 다시 짜고 있어요';
@@ -99,6 +102,7 @@ export function ReplanSolvingView({
             </Fragment>
           );
         })}
+        <ReplanSkeletonCards leadingConnector={slots.length > 0} />
       </View>
     </MapSheetShell>
   );
