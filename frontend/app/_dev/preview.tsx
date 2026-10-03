@@ -712,6 +712,13 @@ const H08_PREVIEW_CONNECTORS = ['차량 · 2.1km', '0.8km', '0.6km'];
 
 const H08_PREVIEW_DATE = '2026-06-10';
 
+// TRIP-935 육안용 8곳(보고 화면 h08 1일차 8곳과 같은 길이) — 4곳 픽스처는 펼침에서 시트를 겨우 채워 마지막
+// 카드 가림 여부를 못 가른다. 같은 4곳을 poiId 만 바꿔 한 번 더 잇는다(시각·커넥터 문구는 반복).
+const H08_PREVIEW_SLOTS_8: ItineraryDaysItemSlotsItem[] = [
+  ...H08_PREVIEW_SLOTS,
+  ...H08_PREVIEW_SLOTS.map((slot) => ({ ...slot, poiId: `${slot.poiId}-2` })),
+];
+
 // TRIP-1094 못 넣은 꼭 갈 곳 2건 — 문구는 서버 `UnplacedText.kt` 원문. 이름 있음·없음 두 얼굴을 한 키에서 본다.
 const PREVIEW_UNPLACED_ROWS: UnplacedMustVisitRow[] = [
   {
@@ -735,12 +742,16 @@ function renderH08DraftNoticeShell(options: {
   staleFailed: boolean;
   unplaced?: UnplacedMustVisitRow[];
   shortfall?: string | null;
+  slots?: ItineraryDaysItemSlotsItem[];
+  initialIndex?: number;
 }): ReactElement {
-  const { fallback, staleFailed, unplaced, shortfall } = options;
+  const { fallback, staleFailed, unplaced, shortfall, initialIndex } = options;
+  const slots = options.slots ?? H08_PREVIEW_SLOTS;
   return (
     <MapSheetShell
       center={{ lat: 35.1532, lng: 129.1188 }}
-      pins={buildDraftPins(H08_PREVIEW_SLOTS)}
+      pins={buildDraftPins(slots)}
+      initialIndex={initialIndex}
       days={[
         { label: '1일차' },
         { label: '2일차' },
@@ -755,7 +766,7 @@ function renderH08DraftNoticeShell(options: {
           title={fallback ? '기본 일정' : 'AI 추천안'}
           dayLabel="1일차"
           dateLabel="6월 10일(수)"
-          meta="4곳 · 3.5km"
+          meta={`${slots.length}곳 · 3.5km`}
         />
       }
       cta={[
@@ -771,23 +782,23 @@ function renderH08DraftNoticeShell(options: {
           onManualPlan={noop}
         />
         <UnplacedMustVisitNotice rows={unplaced ?? []} />
-        {H08_PREVIEW_SLOTS.flatMap((slot, index) => {
+        {slots.flatMap((slot, index) => {
           const items = [
             <SlotStopCard
               key={`card-${slot.poiId}`}
               slot={slot}
               date={H08_PREVIEW_DATE}
               index={index}
-              timeLabel={H08_PREVIEW_TIME_LABELS[index]}
+              timeLabel={H08_PREVIEW_TIME_LABELS[index % 4]}
               onPressAlt={noop}
             />,
           ];
-          if (index < H08_PREVIEW_CONNECTORS.length) {
+          if (index < slots.length - 1) {
             items.push(
               <DistanceConnector
                 key={`conn-${slot.poiId}`}
                 slotKey={buildSlotKey(H08_PREVIEW_DATE, slot.poiId)}
-                distanceRange={H08_PREVIEW_CONNECTORS[index]}
+                distanceRange={H08_PREVIEW_CONNECTORS[index % 3]}
               />
             );
           }
@@ -4807,6 +4818,20 @@ export const PREVIEW_STATES: PreviewState[] = [
         </View>
       </MapSheetShell>
     ),
+  },
+  // TRIP-935 — 카드 8곳 펼침. 끝까지 스크롤했을 때 8번째 카드가 하단 버튼 바 위로 다 올라오는지 보는 키.
+  {
+    key: 'h08-draft-expanded-8',
+    band: 'h',
+    label: 'h08 · 펼침 8곳(마지막 카드 가림 확인)',
+    login: null,
+    render: () =>
+      renderH08DraftNoticeShell({
+        fallback: false,
+        staleFailed: false,
+        slots: H08_PREVIEW_SLOTS_8,
+        initialIndex: 2,
+      }),
   },
   {
     key: 'h08-draft-fallback',
