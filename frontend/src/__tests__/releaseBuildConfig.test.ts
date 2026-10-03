@@ -278,6 +278,9 @@ describe('TRIP-935 AC-2 · expo-router 사이트맵 끔', () => {
     // 문자열 단독 등록이면 옵션이 없어 _sitemap 이 기본값(켜짐)으로 붙는다.
     expect(options).toBeDefined();
     expect(options?.sitemap).toBe(false);
+    // 라우트 폴더를 루트 app/ 으로 못 박는 옵션(TRIP-1161) — 빠지면 Expo 가 src/app(FSD app 층)을 라우트 루트로 골라
+    // 번들이 깨지거나 화면이 줄어드는데 tsc·lint·다른 jest 는 못 잡는다.
+    expect(options?.root).toBe('./app');
   });
 
   it('Expo 가 해석한 설정의 extra.router.sitemap 이 false 다(런타임이 읽는 값)', () => {

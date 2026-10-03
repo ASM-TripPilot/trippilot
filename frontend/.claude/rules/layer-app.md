@@ -8,7 +8,7 @@ paths:
 앱 전체에 한 번만 까는 것 — 전역 프로바이더·부팅 라우팅 게이트·전역 스타일. 슬라이스 없이 세그먼트(`entrypoint`·`routing`·`model`·`styles`)로만 나눈다. Expo Router 라우트 폴더는 루트 `app/`(별개, `layer-routes.md`)이다 — 이름이 같아도 다른 폴더다(TRIP-1161, 옛 `src/app-shell/`).
 
 - **`ui/`·`providers/` 세그먼트 이름은 `pnpm fsd`(Steiger)가 error로 막는다** — `fsd/no-ui-in-app`·`fsd/segments-by-purpose`(`providers`는 "무엇"이라 금지). 그래서 SplashGate는 `routing/`, 프로바이더는 `entrypoint/`에 있다.
-- **여기 파일은 라우트로 등록되지 않는다 — `app.config.ts`의 expo-router `root: './app'`이 있을 때만이다.** Expo CLI는 `src/app`이 있으면 무조건 그것을 라우트 루트로 고른다 — 옵션이 빠지면 이 층의 파일(테스트 포함)이 화면이 되고 번들이 깨진다(TRIP-1161 실측). jest·lint·tsc는 이걸 못 본다.
+- **여기 파일은 라우트로 등록되지 않는다 — `app.config.ts`의 expo-router `root: './app'`이 있을 때만이다.** Expo CLI는 `src/app`이 있으면 무조건 그것을 라우트 루트로 고른다 — 옵션이 빠지면 이 층의 파일(테스트 포함)이 화면이 되고 번들이 깨진다(TRIP-1161 실측). tsc·lint는 이걸 못 보고, `releaseBuildConfig.test.ts`가 `root` 값만 단언한다(번들 라우트 목록은 CI에 없다).
 
 | 파일 | 역할 |
 |---|---|
