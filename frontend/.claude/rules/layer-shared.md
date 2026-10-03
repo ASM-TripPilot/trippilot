@@ -24,7 +24,7 @@ paths:
 | `src/shared/date/formatKoreanDate.ts` | `formatKoreanDate(isoDate): "M월 D일 요일"`. `features/execution/**`의 `new Date`류 금지(BR-U4-34)를 피해 날짜 파싱을 execution 밖에 둔 자리. 에포크 일수(UTC 정수) 산술만 써 TZ-safe. 외부 소비처 0이라 `shared/date/index.ts`에 아직 없다 — 슬라이스 밖에서 쓰려면 index에 재수출을 더한다(딥 import는 lint error, TRIP-1157) |
 | `src/shared/location/LocationPreprompt.tsx` | 위치 권한 프리프롬프트 — 전체화면(레이더 히어로) `default` / 카드형 `permission-denied` 2상태. `expo-location`을 import하지 않는다(구조적으로 OS 다이얼로그를 못 부름) |
 | `src/shared/location/LocationGlyphs.tsx` | 위치 화면 인라인 SVG 글리프. 색은 `locationColors.ts` 상수 경유(`shared/location/**`은 raw-hex 가드 대상) |
-| `src/shared/location/lib/locationColors.ts` | 위치 글리프 색 상수(raw hex 분리) — 토큰 색과 **수동 동기화** 필요 |
+| `src/shared/location/locationColors.ts` | 위치 글리프 색 상수(raw hex 분리) — 토큰 색과 **수동 동기화** 필요 |
 | `src/shared/location/geofence.ts` | 지오펜스 리전 조립·진입→`ArriveRequest{source:AUTO_GEOFENCE}` 순수 매핑·등록/해제 계약. **실 네이티브 발화는 미배선** — `registerGeofences`가 `armed:false` 정직한 degrade 스텁을 반환(expo-task-manager·background 권한·네이티브 리빌드 선행) |
 | `src/shared/location/readDevicePosition.ts` | 실측 좌표 리더 — 권한 조회(request 아님) → `getLastKnownPositionAsync({maxAge:300_000})` → 없으면 `getCurrentPositionAsync({mayShowUserSettingsDialog:false})`, 전체 5초 `Promise.race`, 모든 실패는 `null`(reject 경로 없음). iOS는 대화상자 억제 옵션을 무시한다 |
 | `src/shared/push/permissions.ts` | `getPushPermission()` — 조회 전용. 로컬 `UNDETERMINED`는 서버 `osPermission`의 `NOT_DETERMINED`와 **어휘가 다르다** — 서버로 보낼 때는 반드시 `register.ts`의 `toServerOsPermission`을 거친다(TS는 `GRANTED`·`DENIED`가 우연히 겹치는 것을 못 잡는다) |
@@ -33,7 +33,7 @@ paths:
 | `src/shared/push/index.ts` | 푸시 배럴. **권한 루틴(`promptAndRegisterPush` 등)은 반드시 이 배럴로 import한다** — 페이지 테스트의 목이 배럴 경로에 걸려 있어 딥 import는 목을 우회한다. `PushPreprompt`도 배럴(그리고 네트워크 없는 `index.view.ts`)로 낸다(TRIP-1157 — 옛 딥 경로 전용 계약 폐기). 배럴을 통째로 목으로 바꾸는 테스트는 팩토리 맨 앞에서 `jest.requireActual('@/shared/push')`로 실물을 펼친 뒤 덮는다(안 그러면 카드가 `undefined`) |
 | `src/shared/push/PushPreprompt.tsx` | 온보딩 푸시 사전 안내 카드(TRIP-1108) — props는 `onProceed`·`onDefer` 둘뿐, 권한 루틴·`expo-notifications`를 import하지 않는다(구조적으로 OS 창을 못 부름). 버튼 라벨은 `계속`·`나중에 하기` — 렌더 텍스트에 "허용"을 쓰지 않는다(심사 문구 규칙). 머리 바·하단 바·버튼 className은 `LocationPreprompt` default와 글자까지 같다(두 화면이 연달아 나와 튀지 않게, 테스트가 `===` 비교) |
 | `src/shared/push/PushGlyphs.tsx` | `PushBellHero` — 위치 레이더와 같은 틀(동심원 3개)에 벨. 동심원 선 색·투명도는 위치 값을 그대로 쓴 **추정값**(Figma 에셋 404) |
-| `src/shared/push/lib/pushColors.ts` | 푸시 글리프 색 상수(raw hex 분리) — 토큰 색과 **수동 동기화** 필요 |
+| `src/shared/push/pushColors.ts` | 푸시 글리프 색 상수(raw hex 분리) — 토큰 색과 **수동 동기화** 필요 |
 | `src/shared/date/formatRelativeTime.ts` | `formatRelativeTime(iso, now)` — 경과 시각("방금·N분 전·어제·N일 전"). INV-3 소요시간과 무관 |
 | `src/shared/date/monthGrid.ts` | 월 그리드 순수 산술(`daysInMonth`·`firstWeekdayOfMonth`·`shiftMonth`·`isDateInRange`·`buildMonthGrid` — 7의 배수, 4~6주 가변). stay·trip·record가 공유하는 유일한 정의(재구현 금지). 에포크 일수 산술로 TZ-safe, `firstWeekdayOfMonth`는 음수 나머지를 흡수한다 |
 | `src/shared/date/monthGrid.test.ts` | 윤년·연 경계·양끝 포함·월/일요일 시작 패딩 표 전수 |

@@ -1,7 +1,7 @@
 import { View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 
-import { LOCATION_ICON_COLORS } from './lib/locationColors';
+import { LOCATION_ICON_COLORS } from './locationColors';
 
 // c08-location 전용 벡터 글리프(TRIP-162 전체화면 정합). Figma 좌표를 react-native-svg 로
 // 1:1 옮긴다(AuthGlyphs.tsx 와 같은 인라인 방식). onboarding 피처의 글리프(OnboardingGlyphs)와

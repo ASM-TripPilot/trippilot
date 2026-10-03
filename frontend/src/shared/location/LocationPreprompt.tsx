@@ -17,7 +17,7 @@ import {
   LocationOffGlyph,
   LocationRadarHero,
 } from './LocationGlyphs';
-import { LOCATION_ICON_COLORS } from './lib/locationColors';
+import { LOCATION_ICON_COLORS } from './locationColors';
 
 export type LocationPrepromptState = 'default' | 'permission-denied';
 
