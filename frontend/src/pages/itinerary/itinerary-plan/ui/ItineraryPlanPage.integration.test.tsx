@@ -3556,6 +3556,21 @@ describe('위반 슬롯 경고 표식', () => {
     );
   });
 
+  describe('🔴 TRIP-1031 · h14 — 서버 정성 문구(숫자 없음)는 그대로 보인다', () => {
+    it('violationReason="앞 장소에서 이동할 시간이 빠듯해요" → 카드 표식에 그 문구', async () => {
+      itineraryScript = () =>
+        itinerary('PLANNED', '앞 장소에서 이동할 시간이 빠듯해요');
+
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+
+      expect(
+        screen.getByTestId(`slot-stopcard-violation-${k('poi-a')}`)
+      ).toHaveTextContent('앞 장소에서 이동할 시간이 빠듯해요');
+      expect(screen.queryAllByText(DURATION_TEXT).length).toBe(0);
+    });
+  });
+
   describe('🔴 C3 · h14 — 사유가 없어도 같은 고정 라벨이다 (사유 유무로 문구가 갈리지 않는다 · 02c)', () => {
     it('hasViolation=true · violationReason=null → 표식 "일정 확인이 필요해요"', async () => {
       itineraryScript = () => itinerary('PLANNED', null);

@@ -1,6 +1,11 @@
 import fc from 'fast-check';
 
-import { formatViolationMinutes, violationLabel } from './violationLabel';
+import {
+  formatViolationMinutes,
+  VIOLATION_NOTICE,
+  violationLabel,
+  violationNotice,
+} from './violationLabel';
 
 /**
  * TRIP-1008 · 위반 사유 문구 — 서버 `violationReason` 의 자정 기준 분 정수 범위(`543~618`)만 `HH:mm`
@@ -221,5 +226,38 @@ describe('🔴 C3 · violationLabel — 표식 문구 조립 규칙 한 곳', ()
     expect(
       violationLabel({ hasViolation: true, violationReason: '숙소 고정 충돌' })
     ).toBe('숙소 고정 충돌');
+  });
+});
+
+describe('🔴 TRIP-1031 · violationNotice — 서버 정성 문구는 보이고, 숫자가 섞이면 고정 라벨', () => {
+  it('위반 없음이면 null', () => {
+    expect(
+      violationNotice({
+        hasViolation: false,
+        violationReason: '영업시간과 맞지 않아요',
+      })
+    ).toBeNull();
+  });
+
+  it('정성 문구(숫자 없음)는 그대로 보인다', () => {
+    expect(
+      violationNotice({
+        hasViolation: true,
+        violationReason:
+          '앞 장소에서 이동할 시간이 빠듯해요 · 영업시간과 맞지 않아요',
+      })
+    ).toBe('앞 장소에서 이동할 시간이 빠듯해요 · 영업시간과 맞지 않아요');
+  });
+
+  it.each([
+    ['null', null],
+    ['빈 문자열', ''],
+    ['공백', '   '],
+    ['옛 서버 소요시간', '이동 54분 필요, 간격 -60분'],
+    ['옛 서버 원시 분 범위', '영업시간 밖: 543~618'],
+  ])('%s → 고정 라벨 (INV-3 폴백)', (_n, reason) => {
+    expect(
+      violationNotice({ hasViolation: true, violationReason: reason })
+    ).toBe(VIOLATION_NOTICE);
   });
 });

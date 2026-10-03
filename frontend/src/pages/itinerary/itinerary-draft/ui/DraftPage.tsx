@@ -27,7 +27,7 @@ import { GenerationFallbackScreen } from './GenerationFallbackScreen';
 import { AlertCircleGlyph } from '@/features/itinerary';
 import { UnplacedMustVisitNotice } from '@/features/itinerary';
 import { buildSlotKey } from '@/entities/itinerary-slot';
-import { VIOLATION_NOTICE } from '@/entities/itinerary-slot';
+import { violationNotice } from '@/entities/itinerary-slot';
 import { SlotStopCard } from '@/entities/itinerary-slot';
 import {
   getGetTripsTripIdItineraryQueryKey,
@@ -664,7 +664,7 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
                             buildSlotKey(selectedDate, slot.poiId)
                           )
                   }
-                  violation={slot.hasViolation ? VIOLATION_NOTICE : null}
+                  violation={violationNotice(slot)}
                 />,
               ];
               if (index < listedSlots.length - 1) {
