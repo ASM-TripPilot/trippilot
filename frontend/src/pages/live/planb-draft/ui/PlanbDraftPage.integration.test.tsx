@@ -724,6 +724,35 @@ describe('🔴 P2·P3 · AC-9(b)(c) · E1·Q7 — [적용하기]는 바로 확�
   });
 });
 
+describe('🔴 TRIP-1195 결정 5 · 확정 뒤 허브는 확정한 날로 돌아간다', () => {
+  function applyAndSucceed(): void {
+    renderPage();
+    fireEvent.press(screen.getByText('적용하기'));
+    const options = mockMutate.mock.calls[0]?.[1] as { onSuccess: () => void };
+    act(() => options.onSuccess());
+  }
+
+  it('C1 오늘이 아닌 날 세션을 확정하면 허브 params 에 day=그 날짜가 실린다', () => {
+    mockSession.data = session('DRAFT', { targetDate: '2999-01-02' });
+    applyAndSucceed();
+
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/live',
+      params: { tripId: TRIP_ID, applied: SESSION_ID, day: '2999-01-02' },
+    });
+  });
+
+  it('C2 무회귀 — 오늘 세션을 확정하면 종전과 같은 params(day 없음)다', () => {
+    mockSession.data = session('DRAFT', { targetDate: seoulDate(new Date()) });
+    applyAndSucceed();
+
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/live',
+      params: { tripId: TRIP_ID, applied: SESSION_ID },
+    });
+  });
+});
+
 describe('🔴 P4 · AC-9(d) — 확정 요청 중에는 [적용하기]가 잠긴다', () => {
   it('seam isPending 이면 버튼이 disabled 이고 눌러도 mutate 가 안 불린다(이중 POST → 409 차단)', () => {
     mockSession.data = session('DRAFT');

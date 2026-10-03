@@ -198,7 +198,11 @@ export function PlanbDraftPage({
             onSuccess: () =>
               router.replace({
                 pathname: '/trips/[tripId]/live',
-                params: { tripId, applied: sessionId },
+                // TRIP-1195 — 오늘이 아닌 날을 확정했으면 허브가 그 일차로 열리게 날짜를 싣는다(오늘이면 종전과 같은 params).
+                params:
+                  data.targetDate && data.targetDate !== seoulDate(new Date())
+                    ? { tripId, applied: sessionId, day: data.targetDate }
+                    : { tripId, applied: sessionId },
               }),
           }
         )
