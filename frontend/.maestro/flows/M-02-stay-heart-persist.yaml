@@ -1,0 +1,58 @@
+# M-02 저장 하트 fill + 재기동 유지 — "저장됐다는 거짓말"(화면만 채워지고 서버엔 안 감)을 잡는다.
+# jest 는 하트 글리프의 fill 변화를 못 본다(repo-traps 글리프 절). 재기동 뒤에도 채워져 있어야
+# 서버 목록에서 다시 그려진 것이다.
+# 준비: 숙소 검색(/stays) 첫 화면의 아직 저장 안 된 카드(STAY_KEY).
+# 실행: 하트 탭 → 앱 재기동 → 같은 카드 확인 → 다시 탭해 원상 복구 → 재기동 확인.
+# 단언: 탭 전 outline → 탭 후 filled → 재기동 뒤 filled → 원복 후 outline → 재기동 뒤 outline.
+# 데이터: 저장 숙소 1건이 생겼다 지워진다(자기 정리). 중간 실패 시 저장 1건이 남을 수 있다.
+appId: com.trippilot.travel
+name: M-02 저장 하트 fill + 재기동 유지
+env:
+  STAY_KEY: 'LOCALDATA:3280000-214-2025-00002'
+---
+- runFlow: _common/launch.yaml
+- openLink: 'trippilot:///stays'
+- extendedWaitUntil:
+    visible:
+      id: 'stay-card-save-${STAY_KEY}'
+    timeout: 20000
+# 시작 상태 앵커: 아직 저장 안 됨
+- assertVisible:
+    id: 'stay-card-save-${STAY_KEY}-outline'
+- assertNotVisible:
+    id: 'stay-card-save-${STAY_KEY}-filled'
+
+- tapOn:
+    id: 'stay-card-save-${STAY_KEY}'
+- extendedWaitUntil:
+    visible:
+      id: 'stay-card-save-${STAY_KEY}-filled'
+    timeout: 10000
+- takeScreenshot: M-02-after-save
+
+# 재기동 — 화면 캐시가 아니라 서버 목록으로 다시 그려진 상태를 본다
+- runFlow: _common/launch.yaml
+- openLink: 'trippilot:///stays'
+- extendedWaitUntil:
+    visible:
+      id: 'stay-card-save-${STAY_KEY}'
+    timeout: 20000
+- assertVisible:
+    id: 'stay-card-save-${STAY_KEY}-filled'
+
+# 원상 복구
+- tapOn:
+    id: 'stay-card-save-${STAY_KEY}'
+- extendedWaitUntil:
+    visible:
+      id: 'stay-card-save-${STAY_KEY}-outline'
+    timeout: 10000
+
+- runFlow: _common/launch.yaml
+- openLink: 'trippilot:///stays'
+- extendedWaitUntil:
+    visible:
+      id: 'stay-card-save-${STAY_KEY}'
+    timeout: 20000
+- assertVisible:
+    id: 'stay-card-save-${STAY_KEY}-outline'

@@ -137,11 +137,12 @@ frontend/
 | 출시·보안 계약(ESLint로 표현 못 하는 것) | `src/__tests__` | 아래 판정 3의 남은 목록 | 소스 스캔 |
 | 출시·보안 금지(ESLint로 표현되는 것) | `eslint.config.js` | 규칙 발동 탐침은 `importBoundaryLayers.test.ts` | ESLint `lintText` |
 | 개발 도구(`_dev` 프리뷰) | `src/__tests__`(라우트 폴더 `app/` 안은 라우트로 등록돼 못 둔다) | 스모크 1파일 `devPreviewReleaseGate.test.tsx` | RNTL |
-| UI E2E | 핵심 해피패스 **1~2개만** | — | 미정(Maestro/Detox). 시나리오 검증 본체는 백엔드 API E2E |
+| UI E2E | 핵심 해피패스 **1~2개만** | `.maestro/flows/M-*.yaml` | Maestro(로컬 전용·CI 미편입, 아래 불릿). 시나리오 검증 본체는 백엔드 API E2E |
 
 - 테스트 파일은 소스 옆에 둔다(`foo.ts` ↔ `foo.test.ts`). jest 설정이 둘이라(`jest.config.js` node · `jest.integration.config.js` MSW) 통합 테스트는 `.integration.test`로 파일이 갈린다. 둘 다 돌리려면 `pnpm test`(한쪽만 부르면 다른 쪽이 0건인 채 green으로 보인다).
 - **버킷 예외 — node 버킷이어야 하는 page 배선 테스트는 `XxxPage.test.tsx`**(TRIP-1146): `await import`로만 닿는 모듈(integration 버킷에선 그 자리에서 동기 throw)이나 생성 훅·스토어 목으로 page 배선을 보는 테스트는 integration 버킷으로 못 가므로 `.integration` 없이 둔다(예: `PrefStep1Page.test.tsx`·`ReconsentPage.test.tsx`). 같은 page에 통합 파일이 따로 있으면 버킷 사유를 접미사로 남긴다(`LoginPage.apple.test.tsx` — 애플 SDK lazy import).
 - testID 규약 `{feature}-{screen}-{role}`(예: `execution-hub-timeline`) — testID 부여는 스펙의 일부다.
+- **UI E2E(Maestro, TRIP-1168)**: `frontend/.maestro/`, 실행은 `.maestro/run-each.sh [플로우 파일…]`로 **한 플로우씩**(폴더째 실행 금지 — iOS 드라이버가 두 번째 플로우부터 죽는다, Maestro #3318). 선택자는 `id:`(testID) 우선, `launchApp`에 `clearState` 금지(시뮬레이터 로그인 세션이 지워진다). 로그인 세션·실 백엔드가 필요해 **로컬 전용·CI 미편입**. 준비·`known-bug/`·`opt-in/` 은 `.maestro/README.md`.
 - CI(`.github/workflows/frontend-ci.yml`, 경로 필터 `frontend/**`): ESLint · `tsc` · Steiger(`pnpm fsd`) · 구조 지도 드리프트(`structure-index.cjs --write`·`--check`) · Jest(두 버킷)+fast-check — 머지 게이트.
 
 ### 남김·합침·지움 판정

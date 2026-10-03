@@ -1,0 +1,11 @@
+# 공통 준비: 앱을 다시 띄우고 홈 탭바가 보일 때까지 기다린다.
+# clearState·clearKeychain 금지 — 소셜 로그인 세션이 지워지면 사람이 다시 로그인해야 한다.
+appId: com.trippilot.travel
+---
+- launchApp:
+    stopApp: true
+- extendedWaitUntil:
+    visible:
+      id: 'shell-tabbar-root'
+    timeout: 30000
+- runFlow: dismiss-logbox.yaml

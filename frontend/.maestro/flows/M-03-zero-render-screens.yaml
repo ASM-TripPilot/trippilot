@@ -1,0 +1,99 @@
+# M-03 jest 0-렌더 화면 3개 + 홈 컬렉션·매거진 이미지 — 라우트 래퍼만 있고 렌더 테스트가 없는 화면을
+# 실제 버튼 경로로 들어가 본다(1155 흡수·1156 그룹 이동·1161 placeholders 사진 분리).
+# 준비: 로그인된 앱. 실행: 마이 → 스타일 분석(j05) / 설정 → 알림 설정 / 설정 → 여행 취향 / 홈 컬렉션 / 매거진.
+# 단언: 각 화면의 대표 testID 가 보인다. 이미지는 takeScreenshot 으로 남겨 baseline 과 픽셀 비교한다.
+# 데이터: 없음(토글·저장 버튼은 누르지 않는다).
+appId: com.trippilot.travel
+name: M-03 0-렌더 화면 3 + 홈/매거진 이미지
+---
+- runFlow: _common/launch.yaml
+
+# 마이 → 여행 스타일 분석(j05, /records/style)
+- tapOn:
+    id: 'shell-tabbar-tab-my'
+- extendedWaitUntil:
+    visible:
+      id: 'my-style-analysis-row'
+    timeout: 10000
+- tapOn:
+    id: 'my-style-analysis-row'
+- extendedWaitUntil:
+    visible:
+      id: 'reflection-style-progress'
+    timeout: 10000
+- runFlow: _common/no-crash.yaml
+- takeScreenshot: M-03-j05-style
+- tapOn:
+    id: 'reflection-style-back'
+- extendedWaitUntil:
+    visible:
+      id: 'my-page-root'
+    timeout: 10000
+
+# 마이 → 설정 → 알림 설정
+- tapOn:
+    id: 'my-header-settings'
+- extendedWaitUntil:
+    visible:
+      id: 'settings-nav-notifications'
+    timeout: 10000
+- tapOn:
+    id: 'settings-nav-notifications'
+- extendedWaitUntil:
+    visible:
+      id: 'notification-settings-toggle-inapp-STAY'
+    timeout: 10000
+- runFlow: _common/no-crash.yaml
+- takeScreenshot: M-03-settings-notifications
+- tapOn:
+    id: 'notification-settings-back'
+
+# 설정 → 여행 취향
+- extendedWaitUntil:
+    visible:
+      id: 'settings-nav-preferences'
+    timeout: 10000
+- tapOn:
+    id: 'settings-nav-preferences'
+- extendedWaitUntil:
+    visible:
+      id: 'settings-pref-root'
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: 'settings-pref-save'
+    direction: DOWN
+    timeout: 15000
+- runFlow: _common/no-crash.yaml
+- takeScreenshot: M-03-settings-preferences
+- tapOn:
+    id: 'settings-pref-back'
+- extendedWaitUntil:
+    visible:
+      id: 'settings-back'
+    timeout: 10000
+- tapOn:
+    id: 'settings-back'
+
+# 홈 컬렉션 카드(placeholders 사진)
+- tapOn:
+    id: 'shell-tabbar-tab-home'
+- extendedWaitUntil:
+    visible:
+      id: 'home-dashboard-root'
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: 'home-collection-card-0'
+    direction: DOWN
+    timeout: 15000
+- takeScreenshot: M-03-home-collection
+
+# 매거진
+- openLink: 'trippilot:///magazine'
+- extendedWaitUntil:
+    visible:
+      id: 'magazine-heart-0'
+    timeout: 10000
+- runFlow: _common/no-crash.yaml
+- takeScreenshot: M-03-magazine

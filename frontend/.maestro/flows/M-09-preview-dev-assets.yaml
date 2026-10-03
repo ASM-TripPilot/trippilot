@@ -1,0 +1,47 @@
+# M-09 프리뷰 라우트·dev 에셋 — 루트 app/_dev/preview 와 그 옆 app/_dev/assets 사진이 1161 이동 뒤에도
+# 번들되고 그려지는지. 프리뷰는 "앱을 끈 뒤 딥링크로 새로 띄울 때 1회만" 상태 키를 읽는다
+# (scripts/dev-preview-capture.sh 계약) — 그래서 키마다 stopApp → openLink 를 한다.
+# 준비: 앱 종료. 실행: 키 3개(로그인 기본·연령 시트·마이페이지 지난 여행 사진)를 차례로 연다.
+# 단언: 키마다 대표 testID 가 보인다. 사진이 실제로 그려졌는지는 스크린샷을 baseline 과 픽셀 비교한다.
+# 데이터: 없음(프리뷰는 픽스처만 그린다). 로그인 화면은 프리뷰 그림일 뿐 세션을 건드리지 않는다.
+appId: com.trippilot.travel
+name: M-09 프리뷰 라우트·dev 에셋
+---
+- stopApp
+- openLink: 'trippilot://_dev/preview?state=login-idle'
+- extendedWaitUntil:
+    visible:
+      id: 'auth-login-root'
+    timeout: 30000
+- assertVisible:
+    id: 'dev-preview-root'
+- assertVisible:
+    id: 'auth-login-logo-box'
+- runFlow: _common/no-crash.yaml
+- takeScreenshot: M-09-login-idle
+
+- stopApp
+- openLink: 'trippilot://_dev/preview?state=login-age-sheet'
+- extendedWaitUntil:
+    visible:
+      id: 'auth-age-sheet'
+    timeout: 30000
+- assertVisible:
+    id: 'auth-age-sheet-confirm'
+- runFlow: _common/no-crash.yaml
+- takeScreenshot: M-09-login-age-sheet
+
+# 지난 여행 썸네일 3장이 app/_dev/assets/my-page/*.jpg 를 쓴다
+- stopApp
+- openLink: 'trippilot://_dev/preview?state=my-page-empty'
+- extendedWaitUntil:
+    visible:
+      id: 'my-page-root'
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: 'my-trip-reflection-e-jeju'
+    direction: DOWN
+    timeout: 15000
+- runFlow: _common/no-crash.yaml
+- takeScreenshot: M-09-my-page-past-photos

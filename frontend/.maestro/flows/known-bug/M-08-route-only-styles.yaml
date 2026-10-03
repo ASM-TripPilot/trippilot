@@ -1,0 +1,27 @@
+# ⚠️ 기존 버그(스택 이전부터, develop f9458992 에서도 실패, TRIP-1168 베이스라인 비교) — 고치면 flows/ 로 올릴 것.
+#    실패 지점: 마지막 extendedWaitUntil(home-dashboard-root) — [홈으로](router.replace('/'))를 눌러도 홈이 안 뜬다.
+#    not-found 화면이 그려지는 것 자체는 M-01 대조군이 기본 실행에서 본다.
+# M-08 라우트 전용 스타일 — 루트 app/ 파일에만 쓰인 NativeWind 클래스가 번들에 실제로 들어갔는지
+# (1161 tailwind content 에 ./app/** 추가). not-found 는 화면이 라우트 파일(+not-found.tsx) 안에 있다.
+# 준비: 로그인된 앱. 실행: 없는 경로를 딥링크로 연다 → 스크린샷 → [홈으로].
+# 단언: not-found 글자·버튼이 보이고 [홈으로]가 홈으로 보낸다. 스타일 소실(배경·버튼 색)은 텍스트 단언으로
+# 못 잡는다 — 스크린샷(M-08-not-found)을 baseline 과 픽셀 비교하는 것이 판정이다.
+# 제외: /force-update 는 로그인(HOME) 상태에서 Stack.Protected 로 막혀 딥링크로 못 연다(M-01 이 그것을 단언).
+appId: com.trippilot.travel
+name: M-08 라우트 전용 스타일(not-found)
+---
+- runFlow: ../_common/launch.yaml
+- openLink: 'trippilot:///zz-none'
+- extendedWaitUntil:
+    visible:
+      id: 'not-found-home'
+    timeout: 10000
+- assertVisible: '페이지를 찾을 수 없어요'
+- assertVisible: '주소가 바뀌었거나 없는 화면이에요'
+- takeScreenshot: M-08-not-found
+- tapOn:
+    id: 'not-found-home'
+- extendedWaitUntil:
+    visible:
+      id: 'home-dashboard-root'
+    timeout: 10000

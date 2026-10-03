@@ -1,0 +1,70 @@
+# M-05 바텀시트 실제 열림·닫힘 — jest 는 @gorhom/bottom-sheet 를 children 을 무조건 그리는 목으로
+# 바꿔서 시트가 실제로 열리고 닫히는지 원리상 못 본다(repo-traps 바텀시트 절).
+# (a) 숙소 검색 → 필터 → 필터 시트(닫기·적용 버튼)가 보임 → 닫기 버튼 → 사라짐.
+# (b) 여행 만들기(g01) → 예산 행 → 예산 시트가 보임 → 아래로 쓸어내림 → 사라짐(enablePanDownToClose).
+# 데이터: 없음(적용·다음은 누르지 않는다. g01 은 [다음] 전이라 여행이 만들어지지 않는다).
+appId: com.trippilot.travel
+name: M-05 바텀시트 열림·닫힘
+---
+- runFlow: _common/launch.yaml
+
+# (a) 숙소 필터 시트
+- openLink: 'trippilot:///stays'
+- extendedWaitUntil:
+    visible:
+      id: 'stay-search-filter-more'
+    timeout: 20000
+- assertNotVisible:
+    id: 'stay-filter-sheet'
+- tapOn:
+    id: 'stay-search-filter-more'
+- extendedWaitUntil:
+    visible:
+      id: 'stay-filter-sheet'
+    timeout: 5000
+# 항목(stay-filter-<축>-<값>)은 검색 결과 데이터에 따라 0개일 수 있다(현재 부산 기본 결과는 0개 → 빈 문구).
+# 그래서 데이터와 무관한 시트 본문(닫기·적용 버튼)이 화면 안에 보이는 것으로 열림을 본다.
+- assertVisible:
+    id: 'stay-filter-close'
+- assertVisible:
+    id: 'stay-filter-apply'
+- takeScreenshot: M-05-stay-filter-open
+- tapOn:
+    id: 'stay-filter-close'
+- extendedWaitUntil:
+    notVisible:
+      id: 'stay-filter-sheet'
+    timeout: 5000
+- assertVisible:
+    id: 'stay-search-root'
+
+# (b) g01 예산 시트 — 쓸어내려 닫기
+- openLink: 'trippilot:///trips/new/step1'
+- extendedWaitUntil:
+    visible:
+      id: 'trip-wizard-summary-budget'
+    timeout: 10000
+- assertNotVisible:
+    id: 'trip-wizard-budget-sheet'
+- tapOn:
+    id: 'trip-wizard-summary-budget'
+- extendedWaitUntil:
+    visible:
+      id: 'trip-wizard-budget-apply'
+    timeout: 5000
+- takeScreenshot: M-05-budget-open
+# 손잡이(시트 윗변, 화면 높이 약 62%)에서 화면 아래 끝까지 천천히 끈다. 시트 본문 가운데에서 시작하면
+# 금액 입력칸 위라 팬 제스처가 시작되지 않는다(1차 실행 실측).
+- swipe:
+    start: '50%,63%'
+    end: '50%,98%'
+    duration: 600
+- extendedWaitUntil:
+    notVisible:
+      id: 'trip-wizard-budget-apply'
+    timeout: 5000
+- assertVisible:
+    id: 'trip-wizard-step1-root'
+# g01 을 떠난다 — 여행이 아직 안 만들어졌으므로 ‹ 는 확인 없이 뒤로 간다
+- tapOn:
+    id: 'trip-wizard-step1-back'

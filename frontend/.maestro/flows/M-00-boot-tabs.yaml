@@ -1,0 +1,50 @@
+# M-00 부팅·탭 5개 — 앱이 뜨고(스플래시 → 홈) 하단 탭 5개가 각자 제 화면을 그리는지.
+# 준비: 로그인된 앱을 다시 띄운다(_common/launch). 실행: 탭을 차례로 누른다.
+# 단언: 탭마다 그 화면의 루트 testID 가 보이고, 레드박스·not-found 가 아니다.
+appId: com.trippilot.travel
+name: M-00 부팅·탭 5개
+---
+- runFlow: _common/launch.yaml
+- assertVisible:
+    id: 'home-dashboard-root'
+- runFlow: _common/no-crash.yaml
+
+- tapOn:
+    id: 'shell-tabbar-tab-explore'
+- extendedWaitUntil:
+    visible:
+      id: 'explore-landing'
+    timeout: 10000
+- runFlow: _common/no-crash.yaml
+
+- tapOn:
+    id: 'shell-tabbar-tab-itinerary'
+- extendedWaitUntil:
+    visible:
+      id: 'itinerary-tab-root'
+    timeout: 10000
+- runFlow: _common/no-crash.yaml
+
+- tapOn:
+    id: 'shell-tabbar-tab-records'
+- extendedWaitUntil:
+    visible:
+      id: 'record-calendar-month'
+    timeout: 10000
+- runFlow: _common/no-crash.yaml
+
+- tapOn:
+    id: 'shell-tabbar-tab-my'
+- extendedWaitUntil:
+    visible:
+      id: 'my-page-root'
+    timeout: 10000
+- runFlow: _common/no-crash.yaml
+
+- tapOn:
+    id: 'shell-tabbar-tab-home'
+- extendedWaitUntil:
+    visible:
+      id: 'home-dashboard-root'
+    timeout: 10000
+- takeScreenshot: M-00-home

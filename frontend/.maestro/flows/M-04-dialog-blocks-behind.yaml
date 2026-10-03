@@ -1,0 +1,77 @@
+# M-04 다이얼로그 실제 열림·뒤 터치 차단 — 조건부 렌더 absolute 다이얼로그의 딤이 화면을 실제로 덮어
+# 뒤쪽 요소를 못 누르게 하는지. jest 는 원리상 못 본다(repo-traps 바텀시트·오버레이 다이얼로그 절).
+# 준비: 일정 탭의 기존 여행 카드(TRIP_ID). 실행: ⋯ → 삭제 → 다이얼로그가 뜬 채로 뒤쪽 여행 카드를 누른다.
+# 단언: 다이얼로그가 그대로 있고(뒤 카드 탭이 통과해 여행 화면으로 넘어가지 않음) → 취소 → 다이얼로그 사라짐.
+# 계정 삭제 다이얼로그도 같은 방식(1단만, 취소만). 확정 버튼은 절대 누르지 않는다.
+# 탭바까지 막는지((d))는 기존 버그로 실패해 known-bug/M-04d-dialog-dim-tabbar.yaml 로 뗐다(TRIP-1168).
+# 제외: g01 위저드 이탈 다이얼로그 — 여행이 이미 만들어진(createdTripId) 뒤에만 열려서 새 여행 생성이 필요하다.
+appId: com.trippilot.travel
+name: M-04 다이얼로그 뒤 터치 차단
+env:
+  TRIP_ID: 36bc6101-08b4-4360-9a4b-c98ed5f3d3ea
+---
+- runFlow: _common/launch.yaml
+
+# (a) 여행 삭제 다이얼로그
+- tapOn:
+    id: 'shell-tabbar-tab-itinerary'
+- extendedWaitUntil:
+    visible:
+      id: 'my-trip-menu-${TRIP_ID}'
+    timeout: 10000
+- tapOn:
+    id: 'my-trip-menu-${TRIP_ID}'
+- tapOn:
+    id: 'my-trip-menu-delete-${TRIP_ID}'
+- extendedWaitUntil:
+    visible:
+      id: 'my-trip-delete-dialog-card'
+    timeout: 5000
+# 뒤쪽 여행 카드(사진 자리, 다이얼로그 카드 바깥)를 좌표로 누른다. 다이얼로그가 떠 있으면 XCTest 가
+# 가려진 카드를 계층에서 빼므로 id 로는 못 누른다. 딤이 덮고 있으면 카드 탭(여행 화면 이동)이 안 먹어야 한다.
+- tapOn:
+    point: '15%,23%'
+- waitForAnimationToEnd:
+    timeout: 3000
+- assertVisible:
+    id: 'my-trip-delete-dialog-card'
+- takeScreenshot: M-04-trip-delete-dialog
+- tapOn:
+    id: 'my-trip-delete-cancel'
+- assertNotVisible:
+    id: 'my-trip-delete-dialog'
+- assertVisible:
+    id: 'itinerary-tab-root'
+- assertVisible:
+    id: 'my-trip-card-${TRIP_ID}'
+
+# (c) 계정 삭제 다이얼로그 — 1단 [취소]만
+- openLink: 'trippilot:///settings'
+- extendedWaitUntil:
+    visible:
+      id: 'settings-back'
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: 'settings-delete-account'
+    direction: DOWN
+    timeout: 15000
+- tapOn:
+    id: 'settings-delete-account'
+- extendedWaitUntil:
+    visible:
+      id: 'settings-delete-cancel'
+    timeout: 5000
+- assertVisible: '계정을 삭제할까요?'
+# 뒤쪽 설정 화면의 뒤로 버튼 자리(좌상단)를 좌표로 누른다 — 딤이 덮고 있으면 화면이 그대로여야 한다
+- tapOn:
+    point: '7%,10%'
+- waitForAnimationToEnd:
+    timeout: 3000
+- assertVisible: '계정을 삭제할까요?'
+- takeScreenshot: M-04-delete-account-dialog
+- tapOn:
+    id: 'settings-delete-cancel'
+- assertNotVisible: '계정을 삭제할까요?'
+- assertVisible:
+    id: 'settings-delete-account'

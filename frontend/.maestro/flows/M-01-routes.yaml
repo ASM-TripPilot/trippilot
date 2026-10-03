@@ -1,0 +1,420 @@
+# M-01 라우트 전수 진입 — 루트 app/ 의 라우트 래퍼가 올바른 page 를 꽂는지(1156 pages 그룹 이동·1161 루트 이동).
+# 준비: 로그인된 앱, 기존 여행(TRIP_ID)·담은 장소(POI_ID)·저장 숙소(SAVED_STAY_ID)의 실제 id.
+# 실행: 라우트마다 딥링크(openLink)로 연다. 단언: 그 page 의 대표 testID 가 보이고, 레드박스·not-found 가 아니다.
+# 빈/오류/일정 없음 상태 testID 도 "그 page 가 꽂혔다"의 증거로 인정한다(데이터 없는 계정이라서).
+# 제외: /trips/{id}/itinerary/manual — 진입만으로 MANUAL 일정을 POST 한다(데이터 생성). / — M-00 이 탭으로 덮는다.
+# 대조군: 없는 경로는 not-found 가 떠야 한다(단언 반전 확인). 보호 라우트는 로그인 상태에서 열리면 안 된다.
+appId: com.trippilot.travel
+name: M-01 라우트 전수 진입
+env:
+  TRIP_ID: 36bc6101-08b4-4360-9a4b-c98ed5f3d3ea
+  POI_ID: 3d80f917-1db9-47a8-ab30-df7168cbb95c
+  SAVED_STAY_ID: 8d7c5d78-6278-4210-957d-7c69f573fbf0
+---
+- runFlow: _common/launch.yaml
+
+# [region] 래퍼 → /explore?region 리다이렉트(explore-landing)
+- runFlow:
+    file: _common/route.yaml
+    label: '/explore/destination/seoul'
+    env:
+      ROUTE: '/explore/destination/seoul'
+      EXPECT_ID: 'explore-region-chip'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/explore/places'
+    env:
+      ROUTE: '/explore/places'
+      EXPECT_ID: 'explore-places-root'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/explore/places/${POI_ID}'
+    env:
+      ROUTE: '/explore/places/${POI_ID}'
+      EXPECT_ID: 'explore-place-detail'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/explore/region'
+    env:
+      ROUTE: '/explore/region'
+      EXPECT_ID: 'explore-region-search'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/explore/saved-places'
+    env:
+      ROUTE: '/explore/saved-places'
+      EXPECT_ID: 'explore-saved-root'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/magazine'
+    env:
+      ROUTE: '/magazine'
+      EXPECT_ID: 'magazine-root'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/my/stays'
+    env:
+      ROUTE: '/my/stays'
+      EXPECT_ID: 'my-stays-root'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/notifications'
+    env:
+      ROUTE: '/notifications'
+      EXPECT_ID: 'notification-inbox-header'
+
+# j05 travel-style
+- runFlow:
+    file: _common/route.yaml
+    label: '/records/style'
+    env:
+      ROUTE: '/records/style'
+      EXPECT_ID: 'reflection-style-progress'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/settings'
+    env:
+      ROUTE: '/settings'
+      EXPECT_ID: 'settings-nav-preferences'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/settings/location'
+    env:
+      ROUTE: '/settings/location'
+      EXPECT_ID: 'settings-location-toggle'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/settings/notifications'
+    env:
+      ROUTE: '/settings/notifications'
+      EXPECT_ID: 'notification-settings-toggle-inapp-STAY'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/settings/personalization'
+    env:
+      ROUTE: '/settings/personalization'
+      EXPECT_ID: 'settings-personalization-root'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/settings/preferences'
+    env:
+      ROUTE: '/settings/preferences'
+      EXPECT_ID: 'settings-pref-root'
+
+# 저장 숙소 id 로는 상세 조회 불가 화면(stay-detail 의 빈/오류 상태)
+- runFlow:
+    file: _common/route.yaml
+    label: '/stays/${SAVED_STAY_ID}'
+    env:
+      ROUTE: '/stays/${SAVED_STAY_ID}'
+      EXPECT_ID: 'stay-detail-invalid'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/stays'
+    env:
+      ROUTE: '/stays'
+      EXPECT_ID: 'stay-search-root'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/stays/register'
+    env:
+      ROUTE: '/stays/register'
+      EXPECT_ID: 'stay-register-root'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/terms/TERMS_OF_SERVICE'
+    env:
+      ROUTE: '/terms/TERMS_OF_SERVICE'
+      EXPECT_ID: 'terms-viewer-body'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/trips/${TRIP_ID}/bases'
+    env:
+      ROUTE: '/trips/${TRIP_ID}/bases'
+      EXPECT_ID: 'trip-base-step2-root'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/trips/${TRIP_ID}/itinerary/copick/1-1'
+    env:
+      ROUTE: '/trips/${TRIP_ID}/itinerary/copick/1-1'
+      EXPECT_ID: 'itinerary-copick-concept-root'
+
+# 일정 없음 → 오류 상태
+- runFlow:
+    file: _common/route.yaml
+    label: '/trips/${TRIP_ID}/itinerary/copick/complete'
+    env:
+      ROUTE: '/trips/${TRIP_ID}/itinerary/copick/complete'
+      EXPECT_ID: 'itinerary-copick-complete-error'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/trips/${TRIP_ID}/itinerary/draft'
+    env:
+      ROUTE: '/trips/${TRIP_ID}/itinerary/draft'
+      EXPECT_ID: 'itinerary-draft-title'
+
+# 일정 없음 상태
+- runFlow:
+    file: _common/route.yaml
+    label: '/trips/${TRIP_ID}/itinerary/edit'
+    env:
+      ROUTE: '/trips/${TRIP_ID}/itinerary/edit'
+      EXPECT_ID: 'itinerary-edit-notfound'
+
+# mode 없음 = 관찰 모드(POST 0) → 404 면 method 로 replace
+- runFlow:
+    file: _common/route.yaml
+    label: '/trips/${TRIP_ID}/itinerary/generating'
+    env:
+      ROUTE: '/trips/${TRIP_ID}/itinerary/generating'
+      EXPECT_ID: 'itinerary-method-fullai'
+
+# 일정 없음 상태
+- runFlow:
+    file: _common/route.yaml
+    label: '/trips/${TRIP_ID}/itinerary'
+    env:
+      ROUTE: '/trips/${TRIP_ID}/itinerary'
+      EXPECT_ID: 'itinerary-view-notfound'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/trips/${TRIP_ID}/itinerary/manual/add'
+    env:
+      ROUTE: '/trips/${TRIP_ID}/itinerary/manual/add'
+      EXPECT_ID: 'itinerary-place-search'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/trips/${TRIP_ID}/itinerary/method'
+    env:
+      ROUTE: '/trips/${TRIP_ID}/itinerary/method'
+      EXPECT_ID: 'itinerary-method-copick'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/trips/${TRIP_ID}/itinerary/must-visits/${POI_ID}'
+    env:
+      ROUTE: '/trips/${TRIP_ID}/itinerary/must-visits/${POI_ID}'
+      EXPECT_ID: 'itinerary-mustvisit-time-subtitle'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/trips/${TRIP_ID}/itinerary/must-visits'
+    env:
+      ROUTE: '/trips/${TRIP_ID}/itinerary/must-visits'
+      EXPECT_ID: 'itinerary-mustvisit-screen-empty'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/trips/${TRIP_ID}/itinerary/stay-recommend'
+    env:
+      ROUTE: '/trips/${TRIP_ID}/itinerary/stay-recommend'
+      EXPECT_ID: 'stay-recommend-empty'
+
+# 일정 없음 상태
+- runFlow:
+    file: _common/route.yaml
+    label: '/trips/${TRIP_ID}/live'
+    env:
+      ROUTE: '/trips/${TRIP_ID}/live'
+      EXPECT_ID: 'execution-live-notfound'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/trips/${TRIP_ID}/live/location'
+    env:
+      ROUTE: '/trips/${TRIP_ID}/live/location'
+      EXPECT_ID: 'live-location-confirm'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/trips/${TRIP_ID}/live/place/${POI_ID}'
+    env:
+      ROUTE: '/trips/${TRIP_ID}/live/place/${POI_ID}'
+      EXPECT_ID: 'execution-place-notfound'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/trips/${TRIP_ID}/planb/diff?sessionId=00000000-0000-0000-0000-000000000000'
+    env:
+      ROUTE: '/trips/${TRIP_ID}/planb/diff?sessionId=00000000-0000-0000-0000-000000000000'
+      EXPECT_ID: 'planb-diff-confirm'
+
+# transparentModal
+- runFlow:
+    file: _common/route.yaml
+    label: '/trips/${TRIP_ID}/planb'
+    env:
+      ROUTE: '/trips/${TRIP_ID}/planb'
+      EXPECT_ID: 'planb-request-sheet'
+
+# planb/manual 은 itinerary-edit page 재사용
+- runFlow:
+    file: _common/route.yaml
+    label: '/trips/${TRIP_ID}/planb/manual'
+    env:
+      ROUTE: '/trips/${TRIP_ID}/planb/manual'
+      EXPECT_ID: 'itinerary-edit-notfound'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/trips/${TRIP_ID}/records/add-visit'
+    env:
+      ROUTE: '/trips/${TRIP_ID}/records/add-visit'
+      EXPECT_ID: 'record-add-visit-screen'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/trips/${TRIP_ID}/records'
+    env:
+      ROUTE: '/trips/${TRIP_ID}/records'
+      EXPECT_ID: 'record-trip-view'
+
+# 미래 날짜 = 회고 생성 POST 안 함
+- runFlow:
+    file: _common/route.yaml
+    label: '/trips/${TRIP_ID}/records/reflection/2026-10-06'
+    env:
+      ROUTE: '/trips/${TRIP_ID}/records/reflection/2026-10-06'
+      EXPECT_ID: 'reflection-daily-compose'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/trips/${TRIP_ID}/records/share'
+    env:
+      ROUTE: '/trips/${TRIP_ID}/records/share'
+      EXPECT_ID: 'reflection-share-not-ready'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/trips/${TRIP_ID}/records/summary'
+    env:
+      ROUTE: '/trips/${TRIP_ID}/records/summary'
+      EXPECT_ID: 'reflection-summary-pending'
+
+# [다음] 안 누름 = POST 0
+- runFlow:
+    file: _common/route.yaml
+    label: '/trips/new/step1'
+    env:
+      ROUTE: '/trips/new/step1'
+      EXPECT_ID: 'trip-wizard-step1-root'
+
+- runFlow:
+    file: _common/route.yaml
+    label: '/trips/new/step2'
+    env:
+      ROUTE: '/trips/new/step2'
+      EXPECT_ID: 'trip-base-step2-root'
+
+# 대표 testID 없음: 가짜 세션 → PlanbDraftPage null
+- runFlow:
+    file: _common/route-blank.yaml
+    label: '/trips/${TRIP_ID}/planb/draft?sessionId=00000000-0000-0000-0000-000000000000'
+    env:
+      ROUTE: '/trips/${TRIP_ID}/planb/draft?sessionId=00000000-0000-0000-0000-000000000000'
+
+# 대표 testID 없음: 가짜 세션 → 빈 시트
+- runFlow:
+    file: _common/route-blank.yaml
+    label: '/trips/${TRIP_ID}/planb/solving?sessionId=00000000-0000-0000-0000-000000000000'
+    env:
+      ROUTE: '/trips/${TRIP_ID}/planb/solving?sessionId=00000000-0000-0000-0000-000000000000'
+
+# 보호 라우트 묶음 — 직전 화면을 저장한 숙소로 고정한 뒤, 열려도 화면이 바뀌지 않아야 한다.
+- runFlow:
+    file: _common/route.yaml
+    label: '/stays/saved'
+    env:
+      ROUTE: '/stays/saved'
+      EXPECT_ID: 'saved-stay-root'
+
+- runFlow:
+    file: _common/route-protected.yaml
+    label: '보호 /login'
+    env:
+      ROUTE: '/login'
+      PROTECTED_ID: 'auth-login-root'
+
+- runFlow:
+    file: _common/route-protected.yaml
+    label: '보호 /terms'
+    env:
+      ROUTE: '/terms'
+      PROTECTED_ID: 'onboarding-terms-root'
+
+- runFlow:
+    file: _common/route-protected.yaml
+    label: '보호 /nickname'
+    env:
+      ROUTE: '/nickname'
+      PROTECTED_ID: 'onboarding-nickname-root'
+
+- runFlow:
+    file: _common/route-protected.yaml
+    label: '보호 /pref1'
+    env:
+      ROUTE: '/pref1'
+      PROTECTED_ID: 'onboarding-pref1-root'
+
+- runFlow:
+    file: _common/route-protected.yaml
+    label: '보호 /pref2'
+    env:
+      ROUTE: '/pref2'
+      PROTECTED_ID: 'onboarding-pref2-root'
+
+- runFlow:
+    file: _common/route-protected.yaml
+    label: '보호 /location'
+    env:
+      ROUTE: '/location'
+      PROTECTED_ID: 'onboarding-location-root'
+
+- runFlow:
+    file: _common/route-protected.yaml
+    label: '보호 /push'
+    env:
+      ROUTE: '/push'
+      PROTECTED_ID: 'onboarding-push-root'
+
+- runFlow:
+    file: _common/route-protected.yaml
+    label: '보호 /reconsent'
+    env:
+      ROUTE: '/reconsent'
+      PROTECTED_ID: 'reconsent-agree'
+
+- openLink: 'trippilot:///force-update'
+- waitForAnimationToEnd:
+    timeout: 4000
+- assertNotVisible: '업데이트가 필요해요'
+- assertVisible:
+    id: 'saved-stay-root'
+
+# 대조군(단언 반전): 없는 경로는 not-found 화면이어야 한다.
+- openLink: 'trippilot:///zz-none'
+- extendedWaitUntil:
+    visible:
+      id: 'not-found-home'
+    timeout: 10000
+- assertVisible: '페이지를 찾을 수 없어요'

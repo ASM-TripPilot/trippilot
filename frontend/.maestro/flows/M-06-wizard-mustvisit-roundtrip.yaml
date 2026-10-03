@@ -1,0 +1,85 @@
+# M-06 위저드 → 꼭 갈 곳 고르기(d02) → 장소 탐색(d04) ♥ → d02 복귀 — 위저드에서 들어간 탐색이
+# 담기 뒤 위저드 흐름(d02)으로 돌아오고, 방금 담은 장소가 d02 목록에 실제로 나타나는지(1155 create-trip·
+# save-place 이사).
+# 준비: 홈 FAB → g01 → "더 담기" → d02. 시작 앵커: 테스트 장소(PLACE_ID)가 d02 에 아직 없다.
+# 실행: d02 "탐색에서 더 담기" → d04 첫 카드 ♥ → ‹ → d02. 정리: 다시 d04 로 가 ♥ 해제.
+# 단언: d02 에 PLACE_ID 행이 생긴다 → 정리 뒤 d04 카드에 "담음"이 없다.
+# 주의: d04 카드의 ♥ 버튼(explore-places-save-<id>)은 카드 접근성 요소 안에 묶여 XCTest 계층에 따로 안
+# 나온다 — 첫 카드의 ♥ 자리를 좌표(42%,36%)로 누르고, 담김 여부는 카드 라벨 끝의 "담음"으로 읽는다.
+# PLACE_ID 는 d04 기본 정렬(전체·전국)의 첫 카드다. 정렬이 바뀌면 이 id 를 고친다.
+# g01 의 [다음]·d02 의 [완료]는 누르지 않는다(여행 생성·꼭 갈 곳 확정 0).
+appId: com.trippilot.travel
+name: M-06 위저드 → d02 → d04 ♥ → d02
+env:
+  PLACE_ID: dbcb6dea-654d-44e6-b385-a23e2d45ca58
+---
+- runFlow: _common/launch.yaml
+- tapOn:
+    id: 'home-create-trip-fab'
+- extendedWaitUntil:
+    visible:
+      id: 'trip-wizard-mustvisit-more'
+    timeout: 10000
+- tapOn:
+    id: 'trip-wizard-mustvisit-more'
+- extendedWaitUntil:
+    visible:
+      id: 'mustvisit-pick-root'
+    timeout: 10000
+- assertNotVisible:
+    id: 'mustvisit-pick-row-${PLACE_ID}'
+
+# d02 → d04 → ♥
+- tapOn:
+    id: 'mustvisit-pick-addmore'
+- extendedWaitUntil:
+    visible:
+      id: 'explore-places-card-${PLACE_ID}'
+    timeout: 15000
+- assertNotVisible:
+    id: 'explore-places-card-${PLACE_ID}'
+    text: '.*담음'
+- tapOn:
+    point: '42%,36%'
+- extendedWaitUntil:
+    visible:
+      id: 'explore-places-card-${PLACE_ID}'
+      text: '.*담음'
+    timeout: 10000
+
+# ‹ → d02 로 돌아오고 방금 담은 장소가 목록에 있다
+- tapOn:
+    id: 'explore-places-back'
+- extendedWaitUntil:
+    visible:
+      id: 'mustvisit-pick-root'
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: 'mustvisit-pick-row-${PLACE_ID}'
+    timeout: 10000
+- takeScreenshot: M-06-d02-after-save
+
+# 정리 — d04 로 다시 가서 ♥ 해제
+- tapOn:
+    id: 'mustvisit-pick-addmore'
+- extendedWaitUntil:
+    visible:
+      id: 'explore-places-card-${PLACE_ID}'
+      text: '.*담음'
+    timeout: 15000
+- tapOn:
+    point: '42%,36%'
+- extendedWaitUntil:
+    notVisible:
+      id: 'explore-places-card-${PLACE_ID}'
+      text: '.*담음'
+    timeout: 10000
+- tapOn:
+    id: 'explore-places-back'
+- extendedWaitUntil:
+    visible:
+      id: 'mustvisit-pick-root'
+    timeout: 10000
+- assertNotVisible:
+    id: 'mustvisit-pick-row-${PLACE_ID}'
