@@ -187,7 +187,8 @@ export function DailyReflectionPage({
       isToday={date === today}
       onSelectDay={(day) => {
         if (!startDate) return;
-        router.push(
+        // TRIP-1202 · 같은 화면의 날짜만 바꾸므로 push 로 쌓으면 뒤로 가기가 역순으로 되돌아간다 — replace(j01 은 useState 라 안 쌓임)
+        router.replace(
           `/trips/${tripId}/records/reflection/${dateForDayNumber(startDate, day)}`
         );
       }}
