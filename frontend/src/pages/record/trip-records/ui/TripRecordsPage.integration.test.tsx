@@ -19,7 +19,7 @@ import { server } from '@/mocks/server';
 import type { VisitPhoto } from '@/shared/api/index.schemas';
 import { getGetTripsTripIdVisitsVisitCheckIdPhotosQueryKey } from '@/shared/api/index.hooks';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
-import { resetPressGuard } from '@/shared/press/pressGuard';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
 import { flushNotifications } from '@/test-support/flushNotifications';
 import { isInsideSheet, renderedText } from '@/test-support/sheetTree';

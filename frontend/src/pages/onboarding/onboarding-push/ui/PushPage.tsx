@@ -8,7 +8,7 @@
 import type { ReactElement } from 'react';
 import { useRouter } from 'expo-router';
 
-import { guardPress } from '@/shared/press';
+import { guardPress } from '@/shared/lib/pressGuard';
 import { promptAndRegisterPush } from '@/shared/push';
 import { PushPreprompt } from '@/shared/push';
 

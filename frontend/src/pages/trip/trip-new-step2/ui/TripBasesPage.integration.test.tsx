@@ -19,7 +19,7 @@ import type {
   TripStatus,
 } from '@/shared/api/index.schemas';
 import { useTripWizardStore } from '@/features/create-trip';
-import { resetPressGuard } from '@/shared/press/pressGuard';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { getGetTripsTripIdBasesQueryKey } from '@/shared/api/index.hooks';
 
 import { TripBasesPage } from './TripBasesPage';

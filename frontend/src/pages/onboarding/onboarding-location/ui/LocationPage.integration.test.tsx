@@ -6,7 +6,7 @@ import {
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
-import { resetPressGuard } from '@/shared/press/pressGuard';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { LocationPage } from './LocationPage';
 
 /**

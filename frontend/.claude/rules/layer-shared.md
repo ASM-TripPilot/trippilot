@@ -20,7 +20,7 @@ paths:
 | `src/shared/storage/index.ts` | expo-secure-store 토큰 저장소. `hasStoredToken`은 **accessToken 존재만** 판정한다(refreshToken만 없는 부분 저장도 true) — "두 토큰 다"로 좁히면 콜드스타트 폴백이 HOME→LOGIN으로 뒤집히는데, 이 함수를 실제로 도는 테스트가 없어 회귀해도 green이다. |
 | `src/shared/storage/idSet.ts` | 도메인 무관 문자열 id 집합 저장(`readIdSet`·`writeIdSet`, JSON 파싱 실패는 throw). 공개 API `@/shared/storage`로 import(TRIP-1157 — 옛 "배럴 재수출 금지·딥 경로 전용" 계약은 폐기). 배럴을 통째로 목으로 바꾸는 테스트는 팩토리 맨 앞에서 `jest.requireActual('@/shared/storage')`로 실물을 펼친 뒤 덮는다. 웹 폴백 없음 |
 | `src/shared/storage/stringValue.ts` | **(TRIP-1122 신규)** 키 하나에 문자열 하나(`readStringValue`→`string\|null`·`writeStringValue`) — JSON으로 감싸지 않고 그대로 저장하며 jest-expo 자동 목의 `undefined`도 `null`로 접는다. 실패(reject)는 호출부 몫(삼킬지 정한다). 공개 API `@/shared/storage`로 import(TRIP-1157 — 딥 경로 전용 계약 폐기, `stringValue.test`가 배럴 재수출을 참조 동일성으로 단언). 웹 폴백 없음. 첫 소비처 `MyTripsListPage`(키 `itinerary.myTrips.sort`). |
-| `src/shared/version/compareVersion.ts` | 버전 비교(강제 업데이트 판정) |
+| `src/shared/lib/compareVersion.ts` | 버전 비교(강제 업데이트 판정) |
 | `src/shared/lib/formatKoreanDate.ts` | `formatKoreanDate(isoDate): "M월 D일 요일"`. `features/execution/**`의 `new Date`류 금지(BR-U4-34)를 피해 날짜 파싱을 execution 밖에 둔 자리. 에포크 일수(UTC 정수) 산술만 써 TZ-safe. 외부 소비처 0 — `shared/lib` 직속 파일이라 `@/shared/lib/formatKoreanDate`로 바로 import한다(바렐 없음, TRIP-1162) |
 | `src/shared/location/LocationPreprompt.tsx` | 위치 권한 프리프롬프트 — 전체화면(레이더 히어로) `default` / 카드형 `permission-denied` 2상태. `expo-location`을 import하지 않는다(구조적으로 OS 다이얼로그를 못 부름) |
 | `src/shared/location/LocationGlyphs.tsx` | 위치 화면 인라인 SVG 글리프. 색은 `locationColors.ts` 상수 경유(`shared/location/**`은 raw-hex 가드 대상) |
@@ -42,7 +42,7 @@ paths:
 | `src/shared/ui/HeartGlyphs.tsx` | 하트 채움/외곽 인라인 SVG — place 카드와 stay 검색 카드가 공유. `features/stay/ui/StayGlyphs.tsx`에 22-viewBox 하트 사본이 따로 남아 있다 |
 | `src/shared/ui/HeartButton.tsx` | 32 흰 원 담기 버튼(신규, TRIP-1049) — `saved`·`pending`·**`onPress`**(옛 `onToggle` 표기는 낡았다)·testID 3종(root/filled/outline), `HeartGlyphs`를 감싼다. 위치(`absolute right-sm top-sm` 등)는 소비처 className, 버튼 자체는 32 원·18 하트·`disabled={pending}`·`accessibilityLabel="담기"`(담긴 상태에서도 "담기"로 읽힘, 03b 참고-2)만 고정. **`entities/stay/ui/StaySearchCard.tsx`의 로컬 `SaveButton`·`entities/place/ui/PlaceGridCard.tsx` 인라인 하트와 API가 완전히 같은 3번째 사본**이다 — `entities/place`가 `entities/stay`를 형제 import 못 해 여기 신설 외엔 길이 없었다(드라이브바이 금지로 기존 둘은 안 옮김, 새 티켓 후보). | **튐(TRIP-1125)**: 이 하트를 **누른 뒤** 안 담김→담김으로 바뀌는 순간만 글리프가 1회 튄다(누름 1회=튐 자격 1개, 첫 `saved` 변화가 소비). 저장 목록 늦은 도착·처음부터 담김·동작 줄이기는 안 튄다. 튐 크기·박자는 발명값(6-b). 게스트 누름→로그인→담아 둔 장소 도착 시 튈 수 있음은 실기 미확인(03b R3).
 | `src/shared/ui/Skeleton.tsx` | 로딩 자리 회색 상자(TRIP-1125) — 투명도 1↔0.45, 800ms `Animated.loop`. `testID`·`className`·`style`을 **한 노드**에 얹는다(자식 복제 금지 — 소비처 테스트가 testID 개수를 센다). 동작 줄이기면 불투명 정지. 로딩 자리 15파일 44곳이 쓴다 — **실패·빈 얼굴에는 얹지 않는다**(INV-4 — 기계 강제 없음). `ProfileCard` 이름 자리 막대는 일부러 안 바꿨다(null이 '없음'도 뜻해 영원한 '불러오는 중'이 될 수 있음). |
-| `src/shared/motion/reduceMotion.ts` | `startUnlessReduceMotion(animation, onReduce?)` — 기기 '동작 줄이기'를 **부를 때마다 새로 묻고**(캐시 없음) 켜졌으면 `onReduce`, 아니면 `animation.start()`. 반환 함수가 정리(`stop`). 답이 늦게 오는 사이 떠나면 시작 안 함(`active` 깃발). 설정을 켜고 끄는 순간의 실시간 반영은 범위 밖(마운트 때 1회 확인). 확인이 reject되면 아무것도 안 불린다 — 진행 바는 빈 트랙(03b R2, 실기 거의 불가). `GeneratingScreen.useStepPulse`는 아직 자체 확인 방식(두 벌). |
+| `src/shared/lib/reduceMotion.ts` | `startUnlessReduceMotion(animation, onReduce?)` — 기기 '동작 줄이기'를 **부를 때마다 새로 묻고**(캐시 없음) 켜졌으면 `onReduce`, 아니면 `animation.start()`. 반환 함수가 정리(`stop`). 답이 늦게 오는 사이 떠나면 시작 안 함(`active` 깃발). 설정을 켜고 끄는 순간의 실시간 반영은 범위 밖(마운트 때 1회 확인). 확인이 reject되면 아무것도 안 불린다 — 진행 바는 빈 트랙(03b R2, 실기 거의 불가). `GeneratingScreen.useStepPulse`는 아직 자체 확인 방식(두 벌). |
 | `src/shared/ui/StateNotice.tsx` | `empty`·`filter-zero`·`error` 공용 안내 블록(props로 완전 파라미터화). **이 파일 전용 ESLint `no-restricted-imports` 블록**(`eslint.config.js`)이 `useState`/`useReducer`·`expo-router`·`@tanstack/react-query`·`axios`를 막는다 — 로컬 상태는 호출부 몫 |
 | `src/shared/ui/CollageEmptyState.tsx` | 콜라주 빈 상태(신규, TRIP-1050) — 사진 3장 회색 자리 겹침 + 하트 원 + 제목·본문 + 아이콘 CTA. 틀(pt96·320×170·제목 20·본문 13/21·CTA 52 r12 pl22 pr24·그림자 3벌)은 고정, 문구·`ctaIcon`·testID·`onPressCta`는 props. 파생 testID `{testID}-art`·`-photo-0/1/2`·`-heart`. 소비처 d02 `SavedPlaceListScreen`·e04 `SavedStayListScreen`. **`StateNotice`(원형 배지 72·제목 16·가운데 정렬)와 다른 두 번째 빈 상태 부품** — 저장 목록 empty는 이쪽. d02 `RegionEmptyBlock`·`MustVisitPickScreen`에 옛 230·rotate 콜라주 사본이 남아 있다(TRIP-1042 범위). StateNotice 전용 순수성 린트가 안 걸린다 |
 | `src/shared/ui/WheelPicker.tsx` | 값-컬럼 휠 피커(`ScrollView`+`snapToInterval`). 라벨·testID는 소비처가 함수로 주입. **선택은 스크롤이 멈추면 확정**(`onMomentumScrollEnd` → `Math.round(y/WHEEL_CELL_HEIGHT)` clamp → `onSelect` 1회, 보이는 값=저장될 값). 중앙 정렬은 `contentOffset` prop에 의존하며 **prop이 바뀔 때마다 그 위치로 스크롤한다**. ⚠️ iOS에서 관성 없이 손을 떼면 `onMomentumScrollEnd`가 안 올 수 있고, 관성 중 탭 전환 시 늦은 정지 이벤트가 엉뚱한 탭에 확정될 수 있다. 스냅·관성은 jest 원리적 사각 — 실기만 그물 |
@@ -89,18 +89,18 @@ paths:
 | `src/shared/ui/pref/PrefTile.tsx` | id-agnostic 순수 타일 — `testID`·`selected`·`onPress`·`Icon`(슬롯) + 라벨 |
 | `src/shared/ui/pref/PrefChip.tsx` | 아이콘 없는 칩형 변형 |
 
-### `src/shared/time/` — 시간 경과 플래그
+### `src/shared/lib/useElapsedFlag.ts` — 시간 경과 플래그
 
 | 파일 | 역할 |
 |---|---|
-| `src/shared/time/useElapsedFlag.ts` | `useElapsedFlag(active, ms, restartKey?)` — `active`가 `ms` 동안 이어지면 true, 꺼지면 즉시 false(`active && elapsed`로 꺼진 그 렌더부터 보장), `restartKey`가 바뀌면 0부터 다시 잰다. 요청을 끊지 않는 "오래 걸린다" 플래그일 뿐. **타이머를 쓰는 shared 파일이다** — 지금 소비처는 `SlotCandidatePanelContainer` 1개 |
-| `src/shared/time/useElapsedFlag.test.ts` | 경계·꺼진 렌더 false·`restartKey` 리셋 |
+| `src/shared/lib/useElapsedFlag.ts` | `useElapsedFlag(active, ms, restartKey?)` — `active`가 `ms` 동안 이어지면 true, 꺼지면 즉시 false(`active && elapsed`로 꺼진 그 렌더부터 보장), `restartKey`가 바뀌면 0부터 다시 잰다. 요청을 끊지 않는 "오래 걸린다" 플래그일 뿐. **타이머를 쓰는 shared 파일이다** — 지금 소비처는 `SlotCandidatePanelContainer` 1개 |
+| `src/shared/lib/useElapsedFlag.test.ts` | 경계·꺼진 렌더 false·`restartKey` 리셋 |
 
-### `src/shared/press/` — 연타 관통 공용 가드
+### `src/shared/lib/pressGuard.ts` — 연타 관통 공용 가드
 
 | 파일 | 역할 |
 |---|---|
-| `src/shared/press/pressGuard.ts` | `guardPress(fn)`(모듈 전역 400ms 창이 열려 있으면 무시) · `openPressGuardWindow()`(서버 응답으로 표면이 바뀌는 순간 창만 연다) · `resetPressGuard()`(테스트 전용). 훅이 아니고 `setTimeout` 대신 `Date.now()` 비교(pages 층 타이머 금지 + 테스트가 `Date.now`를 멈춰 판정 고정). **음수 경과(시계 역행)는 창 밖**으로 처리 — 없으면 가드 걸린 버튼이 전부 먹통이 된다. 전역 창이라 스택 아래 화면의 재오픈이 앞 화면 버튼을 1회 먹일 수 있다 |
-| `src/shared/press/pressGuard.test.ts` | 경계 399/400ms·무시된 누름 비연장·인자 전달·리셋·시계 역행 |
+| `src/shared/lib/pressGuard.ts` | `guardPress(fn)`(모듈 전역 400ms 창이 열려 있으면 무시) · `openPressGuardWindow()`(서버 응답으로 표면이 바뀌는 순간 창만 연다) · `resetPressGuard()`(테스트 전용). 훅이 아니고 `setTimeout` 대신 `Date.now()` 비교(pages 층 타이머 금지 + 테스트가 `Date.now`를 멈춰 판정 고정). **음수 경과(시계 역행)는 창 밖**으로 처리 — 없으면 가드 걸린 버튼이 전부 먹통이 된다. 전역 창이라 스택 아래 화면의 재오픈이 앞 화면 버튼을 1회 먹일 수 있다 |
+| `src/shared/lib/pressGuard.test.ts` | 경계 399/400ms·무시된 누름 비연장·인자 전달·리셋·시계 역행 |
 
 **소비처** 명부 검사는 없다(TRIP-1145에서 스캔 삭제).

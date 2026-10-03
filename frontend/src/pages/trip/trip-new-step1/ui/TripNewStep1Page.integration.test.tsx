@@ -15,7 +15,7 @@ import {
   getAccessToken,
   setAccessToken,
 } from '@/shared/api/tokenManager';
-import { resetPressGuard } from '@/shared/press/pressGuard';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { resetToast, WithToastHost } from '@/test-support/toastHarness';
 import { server } from '@/mocks/server';
 import type {

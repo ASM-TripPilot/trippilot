@@ -1,7 +1,7 @@
 import { useEffect, useRef, type ReactElement } from 'react';
 import { Animated, type StyleProp, type ViewStyle } from 'react-native';
 
-import { startUnlessReduceMotion } from '@/shared/motion/reduceMotion';
+import { startUnlessReduceMotion } from '@/shared/lib/reduceMotion';
 
 /**
  * 로딩 자리 회색 상자(TRIP-1125) — 투명도가 오르내리는 펄스만 맡는다. 색·크기·반경은 소비처

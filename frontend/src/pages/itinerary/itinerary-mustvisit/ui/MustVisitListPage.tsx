@@ -16,7 +16,7 @@ import {
   useGetTripsTripIdMustVisits,
 } from '@/shared/api/index.hooks';
 import { getAccessToken } from '@/shared/api';
-import { guardPress } from '@/shared/press';
+import { guardPress } from '@/shared/lib/pressGuard';
 
 /**
  * h05 배선 — 두 조회를 잇고, 좌표를 지도 핀으로 만들고, 해제를 보내고, h07·h09 로 보낸다.

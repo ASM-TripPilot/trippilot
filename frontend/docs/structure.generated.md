@@ -1457,11 +1457,15 @@
 
 ## src/shared/lib/
 - `src/shared/lib/bootstrapReeval.ts`  →  subscribeBootstrapReeval · notifyBootstrapReeval
+- `src/shared/lib/compareVersion.ts`  →  compareVersion
 - `src/shared/lib/formatKoreanDate.ts`  →  formatKoreanDate
 - `src/shared/lib/formatRelativeTime.ts`  →  formatRelativeTime
 - `src/shared/lib/monthGrid.ts`  →  MonthCell · daysInMonth · firstWeekdayOfMonth · shiftMonth · isDateInRange · buildMonthGrid
 - `src/shared/lib/nicknameFormat.ts`  →  NicknameFormatReason · NicknameFormatResult · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH · validateNicknameFormat
+- `src/shared/lib/pressGuard.ts`  →  guardPress · openPressGuardWindow · resetPressGuard
+- `src/shared/lib/reduceMotion.ts`  →  startUnlessReduceMotion
 - `src/shared/lib/seoulDate.ts`  →  seoulDate · seoulTime · seoulInstant
+- `src/shared/lib/useElapsedFlag.ts`  →  useElapsedFlag
 
 ## src/shared/location/
 - `src/shared/location/LocationGlyphs.tsx`  →  LocationBackChevronGlyph · LocationRadarHero · LocationOffGlyph · LocationInfoGlyph · LocationClockGlyph · LocationSwapGlyph · LocationPinGlyph · LocationWarningGlyph
@@ -1481,16 +1485,8 @@
 - `src/shared/map/fitRegion.ts`  →  buildFitRegion · buildCircleRegion
 - `src/shared/map/index.ts`  →  MapView · CenterPinPicker
 
-## src/shared/motion/
-- `src/shared/motion/index.ts`  →  startUnlessReduceMotion
-- `src/shared/motion/reduceMotion.ts`  →  startUnlessReduceMotion
-
 ## src/shared/photo/
 - `src/shared/photo/index.ts`  →  PhotoAssetMeta · PhotoPickResult · pickPhotoAsset · resolvePhotoUri
-
-## src/shared/press/
-- `src/shared/press/index.ts`  →  guardPress · openPressGuardWindow
-- `src/shared/press/pressGuard.ts`  →  guardPress · openPressGuardWindow · resetPressGuard
 
 ## src/shared/push/
 - `src/shared/push/PushGlyphs.tsx`  →  PushBellHero
@@ -1507,10 +1503,6 @@
 - `src/shared/storage/index.ts`  →  TokenBundle · saveTokens · getTokens · clearTokens · hasStoredToken · readIdSet · writeIdSet · getInstallId · readStringValue · writeStringValue
 - `src/shared/storage/installId.ts`  →  getInstallId
 - `src/shared/storage/stringValue.ts`  →  readStringValue · writeStringValue
-
-## src/shared/time/
-- `src/shared/time/index.ts`  →  useElapsedFlag
-- `src/shared/time/useElapsedFlag.ts`  →  useElapsedFlag
 
 ## src/shared/ui/
 - `src/shared/ui/BottomTabBar.tsx`  →  ShellTabKey · shellTabHref · BottomTabBarProps · BottomTabBar
@@ -1532,10 +1524,6 @@
 - `src/shared/ui/pref/PrefChip.tsx`  →  PrefChipProps · PrefChip
 - `src/shared/ui/pref/PrefTile.tsx`  →  PrefTileIcon · PrefTileProps · PrefTile
 - `src/shared/ui/pref/index.ts`  →  PrefChip · PrefTile
-
-## src/shared/version/
-- `src/shared/version/compareVersion.ts`  →  compareVersion
-- `src/shared/version/index.ts`  →  compareVersion
 
 ## src/test-support/
 - `src/test-support/editDragList.ts`  →  EDIT_LIST · editListData · moveItem · fireEditDragEnd · fireEditDropOnZone · fireEditDragBegin
@@ -1579,4 +1567,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 963개 파일
+합계 959개 파일

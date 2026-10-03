@@ -29,7 +29,7 @@ import {
 import { ArriveRequestSource } from '@/shared/api/index.schemas';
 import type { MapCenter } from '@/shared/map';
 import { seoulDate, seoulTime } from '@/shared/lib/seoulDate';
-import { guardPress } from '@/shared/press';
+import { guardPress } from '@/shared/lib/pressGuard';
 
 import { TripRecordsView, type RecordPlanRowVM } from './TripRecordsView';
 

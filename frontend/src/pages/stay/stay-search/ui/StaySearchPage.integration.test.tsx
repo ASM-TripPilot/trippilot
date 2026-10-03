@@ -11,7 +11,7 @@ import {
 import { server } from '@/mocks/server';
 import { StaySearchPage } from './StaySearchPage';
 import type { StayItem, SavedStay } from '@/shared/api/index.schemas';
-import { resetPressGuard } from '@/shared/press/pressGuard';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { regionPickerHref } from '@/features/explore';
 import {
   clearAccessToken,

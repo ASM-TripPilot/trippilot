@@ -1,7 +1,7 @@
 import { useEffect, useRef, type ReactElement, type ReactNode } from 'react';
 import { Animated, Pressable, Text, View } from 'react-native';
 
-import { startUnlessReduceMotion } from '@/shared/motion';
+import { startUnlessReduceMotion } from '@/shared/lib/reduceMotion';
 
 import {
   deriveVisitStatus,
