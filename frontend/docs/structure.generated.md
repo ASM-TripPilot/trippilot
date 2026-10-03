@@ -1463,6 +1463,9 @@
 - `src/shared/date/monthGrid.ts`  →  MonthCell · daysInMonth · firstWeekdayOfMonth · shiftMonth · isDateInRange · buildMonthGrid
 - `src/shared/date/seoulDate.ts`  →  seoulDate · seoulTime · seoulInstant
 
+## src/shared/lib/
+- `src/shared/lib/nicknameFormat.ts`  →  NicknameFormatReason · NicknameFormatResult · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH · validateNicknameFormat
+
 ## src/shared/location/
 - `src/shared/location/LocationGlyphs.tsx`  →  LocationBackChevronGlyph · LocationRadarHero · LocationOffGlyph · LocationInfoGlyph · LocationClockGlyph · LocationSwapGlyph · LocationPinGlyph · LocationWarningGlyph
 - `src/shared/location/LocationPreprompt.tsx`  →  LocationPrepromptState · LocationPrepromptProps · LocationPreprompt
@@ -1534,10 +1537,6 @@
 - `src/shared/ui/pref/PrefTile.tsx`  →  PrefTileIcon · PrefTileProps · PrefTile
 - `src/shared/ui/pref/index.ts`  →  PrefChip · PrefTile
 
-## src/shared/validation/
-- `src/shared/validation/index.ts`  →  NICKNAME_MAX_LENGTH · NICKNAME_MIN_LENGTH · validateNicknameFormat
-- `src/shared/validation/nicknameFormat.ts`  →  NicknameFormatReason · NicknameFormatResult · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH · validateNicknameFormat
-
 ## src/shared/version/
 - `src/shared/version/compareVersion.ts`  →  compareVersion
 - `src/shared/version/index.ts`  →  compareVersion
@@ -1584,4 +1583,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 966개 파일
+합계 965개 파일

@@ -5,7 +5,7 @@
  * 이 함수는 길이만 본다 — 클라가 내용을 판정하면 서버와 규칙이 갈라진다.
  *
  * 승격 위치: 원래 `features/onboarding/model` 에 있었으나 `features/settings` 도 같은 규칙을
- * 써야 하는데 features 간 직접 import 가 막혀 있어(eslint 층 zone) `shared/validation`
+ * 써야 하는데 features 간 직접 import 가 막혀 있어(eslint 층 zone) `shared/lib`
  * 으로 옮겼다. onboarding 은 이제 이 파일을 **재수출**만 한다(이동이지 복제 아님). `StateNotice`·
  * `isNotFound` 승격과 같은 자리·같은 규칙.
  */
