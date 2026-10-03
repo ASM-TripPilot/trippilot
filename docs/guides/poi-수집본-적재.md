@@ -20,7 +20,7 @@
 
 | 필요한 것 | 확인 |
 |---|---|
-| AWS 자격 + EKS 접근 | `aws sts get-caller-identity` · `aws eks update-kubeconfig --name trippilot-dev-eks --region ap-northeast-2` |
+| AWS 자격 + EKS 접근 | `aws sts get-caller-identity` · `aws eks update-kubeconfig --name trippilot-dev --region ap-northeast-2` |
 | 네임스페이스 | `trippilot` (배포 도구 기본값 — `deploy/eks/runtime.py`) |
 | 서비스 토큰 | k8s secret `trippilot-shared` 의 `SERVICE_AUTH_TOKEN` |
 | 수집 산출 문서 | 아래 §무엇을 넣는가 |
@@ -70,12 +70,14 @@ gh run download <RUN_ID> -n collected-pois -D /tmp/poi/<RUN_ID>
 
 ```bash
 kubectl port-forward svc/backend 8080:8080 -n trippilot   # 별 터미널에서 띄워 둔다
-# 도달·인증 확인 — GET 이라 405 가 나오는 것이 정상(경로·토큰이 모두 맞다는 뜻)
-curl -s -o /dev/null -w '%{http_code}\n' -H "X-Service-Token: $SERVICE_AUTH_TOKEN" \
-  localhost:8080/internal/pois/proposals
+# 도달·인증 확인 — **빈 제안 문서**를 보낸다. 아무것도 바꾸지 않고 0 만 돌려주는 비파괴 호출이다.
+# (GET 으로 찔러 보지 마라 — 405 가 아니라 500 이 온다. 2026-10-03 실측)
+curl -s -X POST localhost:8080/internal/pois/proposals \
+  -H "X-Service-Token: $SERVICE_AUTH_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"source":"TOURAPI","proposals":[]}' -w ' [%{http_code}]\n'
 ```
 
-- `405` — 도달·인증 모두 정상. 적재로 넘어간다.
+- `{"received":0,...} [200]` — 도달·인증 모두 정상. 적재로 넘어간다.
 - `401`/`403` — 도달은 했고 토큰 문제다.
 - `404` — 터널이 아니라 게이트웨이로 가고 있다(외부 주소를 쓰고 있지 않은지 확인).
 
