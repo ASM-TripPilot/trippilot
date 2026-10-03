@@ -4,7 +4,7 @@ import type { Region, StayItem } from '@/shared/api/index.schemas';
 import { RegionLevel } from '@/shared/api/index.schemas';
 import { resetPressGuard } from '@/shared/press/pressGuard';
 import { StaySearchPage } from '@/pages/stay/stay-search';
-import ExploreRoute from '@/app/(tabs)/explore';
+import ExploreRoute from '@routes/(tabs)/explore';
 
 /**
  * TRIP-1013 #012 — 탐색 d01 숙소 '모두 보기' 연타의 두 번째 탭이 숙소 검색 첫 카드를

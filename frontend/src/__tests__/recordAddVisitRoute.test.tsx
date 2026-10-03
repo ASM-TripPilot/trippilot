@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react-native';
 
-import AddVisitRoute from '@/app/trips/[tripId]/records/add-visit';
+import AddVisitRoute from '@routes/trips/[tripId]/records/add-visit';
 
 /**
  * 🔴 TRIP-1072 · AC-3·AC-13 — 라우트 `trips/[tripId]/records/add-visit` → RecordAddVisitPage 위임.

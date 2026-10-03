@@ -68,7 +68,7 @@ jest.mock('@/pages/auth/login/ui/LoginPage', () => {
 jest.mock('@/pages/auth/login/model/useSocialLogin', () => {
   throw new Error('프리뷰가 useSocialLogin(훅)을 런타임에 로드했다');
 });
-jest.mock('@/app-shell/ui/SplashGate', () => {
+jest.mock('@/app/routing/SplashGate', () => {
   throw new Error('프리뷰가 SplashGate(컨테이너)를 런타임에 로드했다');
 });
 jest.mock('@/shared/push/register', () => {
@@ -79,7 +79,7 @@ jest.mock('@/shared/push/request', () => {
 });
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const previewModule = require('@/app/_dev/preview') as {
+const previewModule = require('@routes/_dev/preview') as {
   default: ComponentType;
   PREVIEW_STATES: { key: string }[];
 };

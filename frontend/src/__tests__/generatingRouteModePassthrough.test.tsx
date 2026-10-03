@@ -21,7 +21,7 @@ jest.mock('@/pages/itinerary/itinerary-generating', () => ({
 }));
 
 // eslint-disable-next-line import/first -- 목 뒤에 라우트를 불러야 목이 물린다.
-import ItineraryGeneratingRoute from '@/app/trips/[tripId]/itinerary/generating';
+import ItineraryGeneratingRoute from '@routes/trips/[tripId]/itinerary/generating';
 
 beforeEach(() => {
   mockPageProps.length = 0;

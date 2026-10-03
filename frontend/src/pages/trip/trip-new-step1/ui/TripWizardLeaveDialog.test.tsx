@@ -221,6 +221,7 @@ describe('🔴 AC-11(Q4 모양) · 뷰는 props 만 받는다', () => {
     '@/features/create-trip',
     '@/pages',
     '@/app',
+    '@routes',
   ];
   /** `from '…'` 절의 모듈 경로만 뽑는다(심볼명이 아니라 from 절 기준 — 동명 이심볼 오탐 방지). */
   const specifiersOf = (source: string): string[] =>

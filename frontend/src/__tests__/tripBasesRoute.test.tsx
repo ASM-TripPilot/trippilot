@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react-native';
 
-import TripBasesRoute from '@/app/trips/[tripId]/bases';
+import TripBasesRoute from '@routes/trips/[tripId]/bases';
 
 /**
  * TRIP-1011 C — 라우트 `trips/[tripId]/bases` → TripBasesPage 위임(5-b 경고-3, 오케 보강).

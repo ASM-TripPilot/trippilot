@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react-native';
 
-import PlanbDiffRoute from '@/app/trips/[tripId]/planb/diff';
+import PlanbDiffRoute from '@routes/trips/[tripId]/planb/diff';
 
 /**
  * TRIP-441 · AC-6 — 재계획 확정 라우트 `trips/[tripId]/planb/diff` — planb-diff 위임(얇은 라우트).
@@ -11,7 +11,7 @@ import PlanbDiffRoute from '@/app/trips/[tripId]/planb/diff';
  *
  * ★ `@/pages/live/planb-diff` 를 스파이 컴포넌트로 치환한다 — 실 페이지를 렌더하면 seam 훅이 얽혀
  *   위임 관찰이 흐려진다. 라우트가 실배선을 물지 않는다는 것(위임)이 이 목으로 증명된다.
- * ⚠️ 구현 전에는 `@/app/.../diff` · `@/pages/live/planb-diff` 모듈이 없어 jest.mock/ import 가 경로를
+ * ⚠️ 구현 전에는 `@routes/.../diff` · `@/pages/live/planb-diff` 모듈이 없어 jest.mock/ import 가 경로를
  *   해석하지 못해 이 suite 는 **모듈 미해석 red** 다(placeDetailStubRoute 와 같은 신규-모듈 red).
  */
 

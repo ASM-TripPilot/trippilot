@@ -11,7 +11,7 @@ import {
   useGetTrips,
   useGetTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
-import ItineraryTab from '@/app/(tabs)/itinerary';
+import ItineraryTab from '@routes/(tabs)/itinerary';
 import { useTripWizardStore } from '@/features/create-trip';
 import {
   captureDraftAtNextCall,

@@ -11,7 +11,7 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
  *
  * 동작: `useQueryClient()`를 부르고 받은 인스턴스를 모듈 스코프 홀더에 담은 뒤, "렌더에
  * 도달했다"는 마커로 `<View testID="query-client-probe" />`를 그린다. `SplashGate`라는
- * 이름으로 export하는 이유: `jest.mock('@/app-shell/ui/SplashGate', () => require(...))`가
+ * 이름으로 export하는 이유: `jest.mock('@/app/routing/SplashGate', () => require(...))`가
  * 심볼명으로 대체하므로 이름이 같아야 배선이 성립한다(`splashGateMock.tsx`가 같은 규약).
  *
  * `src/test-support/`는 eslint 출시·보안 금지 블록의 `TEST_IGNORES`에 들어 있다.

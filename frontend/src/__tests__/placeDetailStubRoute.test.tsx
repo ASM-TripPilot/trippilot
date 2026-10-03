@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react-native';
 
-import PlaceDetailRoute from '@/app/explore/places/[poiId]';
+import PlaceDetailRoute from '@routes/explore/places/[poiId]';
 
 /**
  * TRIP-456 · 장소 상세 라우트 `explore/places/[poiId]` — d06 위임(스텁 재작성).

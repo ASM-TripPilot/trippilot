@@ -4,7 +4,7 @@ paths:
   - "src/pages/explore/saved-places/**"
   - "src/pages/explore/place-*/**"
   - "src/pages/explore/region-picker/**"
-  - "src/app/(tabs)/explore.tsx"
+  - "app/(tabs)/explore.tsx"
   - "src/pages/explore/explore-landing/**"
   - "src/features/save-place/**"
   - "src/features/create-trip/model/wizardOrigin.ts"

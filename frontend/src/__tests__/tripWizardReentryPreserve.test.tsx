@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react-native';
 
-import TripWizardLayout from '@/app/trips/new/_layout';
+import TripWizardLayout from '@routes/trips/new/_layout';
 import type { MustVisitSeedItem } from '@/features/create-trip';
 import { useTripWizardStore } from '@/features/create-trip';
 

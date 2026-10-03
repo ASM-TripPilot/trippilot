@@ -1,6 +1,6 @@
-# 이미지 출처 (src/assets/itinerary)
+# 이미지 출처 (app/_dev/assets/itinerary)
 
-**개발 프리뷰 전용 의도다.** `src/app/_dev/preview.tsx` 의 h11(AI 추천안 초안) 픽스처가
+**개발 프리뷰 전용 의도다.** `app/_dev/preview.tsx` 의 h11(AI 추천안 초안) 픽스처가
 카드 썸네일 자리를 채우는 데만 쓴다 — 프로덕션 화면은 서버가 준 `imageUrl` 만 그린다.
 
 **다만 그 의도를 기계적으로 막는 것은 없다.** `_dev/preview` 는 expo-router 라우트이고

@@ -23,7 +23,7 @@ process.env.EXPO_PUBLIC_API_MOCK = '1';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 require('react-native-gesture-handler/jestSetup');
 
-jest.mock('../../global.css', () => ({}));
+jest.mock('@/app/styles/global.css', () => ({}));
 
 jest.mock('expo-splash-screen', () => ({
   preventAutoHideAsync: jest.fn(),
@@ -33,13 +33,13 @@ jest.mock('expo-splash-screen', () => ({
 let mockFontsLoaded = true;
 jest.mock('expo-font', () => ({ useFonts: () => [mockFontsLoaded, null] }));
 
-jest.mock('@/app-shell/ui/SplashGate', () =>
+jest.mock('@/app/routing/SplashGate', () =>
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   require('@/test-support/splashGateMock')
 );
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const RootLayout = require('@/app/_layout').default as ComponentType;
+const RootLayout = require('@routes/_layout').default as ComponentType;
 type ToastModule = typeof import('@/shared/ui/Toast');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const Toast = require('@/shared/ui/Toast') as ToastModule;

@@ -1,7 +1,7 @@
 ---
 paths:
   - "src/features/home/**"
-  - "src/app/(tabs)/index.tsx"
+  - "app/(tabs)/index.tsx"
   - "src/pages/home/**"
   - "src/pages/magazine/**"
 ---

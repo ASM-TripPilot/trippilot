@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react-native';
 
-import LiveLocationRoute from '@/app/trips/[tripId]/live/location';
+import LiveLocationRoute from '@routes/trips/[tripId]/live/location';
 
 /**
  * TRIP-442 · AC-5 — 라우트 `trips/[tripId]/live/location` → LiveLocationPage 위임.

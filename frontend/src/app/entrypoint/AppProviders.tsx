@@ -1,6 +1,4 @@
-import '../../global.css';
-
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import {
   initialWindowMetrics,
@@ -16,7 +14,6 @@ import {
 import * as SplashScreen from 'expo-splash-screen';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-import { SplashGate } from '@/app-shell';
 import { retryUnlessNotFound } from '@/shared/api';
 import { ToastHost } from '@/shared/ui/Toast';
 
@@ -32,9 +29,16 @@ const queryClient = new QueryClient({
 // 네이티브 스플래시(OS 부팅 화면)를 폰트 로드가 끝날 때까지 자동으로 숨기지 않게 붙잡는다.
 // 이것은 인앱 SplashScreen 컴포넌트(SplashGate 가 부트스트랩 중 그리는 화면)와는 별개 레이어 —
 // OS 가 앱 프로세스 시작 직후 그리는 최초 화면이다.
+// ⚠️ 모듈 최상위 호출을 유지한다 — 루트 레이아웃이 이 모듈을 import 하는 순간(번들 로드 시점) 돌아야
+// 네이티브 스플래시가 먼저 내려가지 않는다. 컴포넌트·지연 import 로 옮기면 jest 는 못 잡는다(TRIP-1161).
 SplashScreen.preventAutoHideAsync();
 
-export default function RootLayout() {
+/**
+ * 앱 전역 프로바이더(FSD app 층). 라우트 루트 레이아웃(`app/_layout.tsx`)이 `SplashGate` 를 감싸 조립한다.
+ * 배치 계약: 제스처 루트 > SafeArea > (QueryClient > children) + ToastHost — QueryClient 는 SplashGate 바깥,
+ * ToastHost 는 Stack(SplashGate) 바깥. 폰트 결판 전에는 아무것도 그리지 않는다(`rootLayout*` 테스트).
+ */
+export function AppProviders({ children }: { children: ReactNode }) {
   // tailwind.config 의 fontFamily 토큰(font-inter-bold·font-noto* → Inter_700Bold 등)이
   // 실제로 그려지도록 그 폰트명과 정확히 일치하는 파일을 로드한다. [loaded, error] 반환.
   const [loaded, error] = useFonts({
@@ -73,7 +77,7 @@ export default function RootLayout() {
             Provider가 자기보다 아래에 있게 되어 깨진다(rootLayoutQueryProvider.test.tsx가
             SplashGate를 목으로 갈아끼운 상태에서 이 배치를 간접적으로 강제한다). */}
         <QueryClientProvider client={queryClient}>
-          <SplashGate />
+          {children}
         </QueryClientProvider>
         {/* TRIP-990 — 토스트 호스트는 Stack(SplashGate) 바깥에 한 번. 화면이 back 으로 떠나도 남는다. */}
         <ToastHost />

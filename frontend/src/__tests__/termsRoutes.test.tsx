@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react-native';
 
-import TermsViewerRoute from '@/app/terms/[termsType]';
-import ReconsentRoute from '@/app/reconsent';
+import TermsViewerRoute from '@routes/terms/[termsType]';
+import ReconsentRoute from '@routes/reconsent';
 
 /**
  * TRIP-937 · 약관 열람 라우트 `terms/[termsType]` · 재동의 라우트 `reconsent` — 얇은 위임.

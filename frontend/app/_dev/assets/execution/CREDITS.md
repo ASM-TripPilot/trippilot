@@ -1,6 +1,6 @@
-# 이미지 출처 (src/assets/execution)
+# 이미지 출처 (app/_dev/assets/execution)
 
-**개발 프리뷰 전용 의도다.** `src/app/_dev/preview.tsx` 의 i01 여행중 허브(`live-hub-*`) 픽스처가
+**개발 프리뷰 전용 의도다.** `app/_dev/preview.tsx` 의 i01 여행중 허브(`live-hub-*`) 픽스처가
 done 카드 사진 칸과, i06 재계획안(`planb-replan-draft`·`planb-noalt`) 행 사진 칸, i07 일정 편집(`planb-manual-normal`) 카드 사진 칸을 채우는 데만 쓴다 — 실앱 허브는 사진 조회 계약이 없어 사진 칸을 그리지 않는다(G6).
 
 **다만 그 의도를 기계적으로 막는 것은 없다.** `_dev/preview` 는 expo-router 라우트이고

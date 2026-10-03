@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react-native';
 
-import PlanbRequestRoute from '@/app/trips/[tripId]/planb';
+import PlanbRequestRoute from '@routes/trips/[tripId]/planb';
 
 /**
  * TRIP-750 · AC-7 — 라우트 `trips/[tripId]/planb` → PlanbRequestPage 위임.

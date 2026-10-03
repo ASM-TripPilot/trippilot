@@ -21,6 +21,8 @@ import path from 'path';
  */
 
 const ROOT = path.resolve('src');
+// 라우트는 src 밖 루트 app/ 에 있다(TRIP-1161) — 캡처 어댑터 탐색 모집단에 함께 넣는다. 경로는 ROOT 기준(`../app/…`).
+const ROUTES = path.resolve('app');
 
 /** AC-5 서버 이미지 생성 0 스캔 그래프(온디바이스 조립·캡처). 캡처 어댑터는 G2 가 성질로 더한다. */
 const SHARE_SCAN_FILES = [
@@ -94,9 +96,10 @@ function listSourceFiles(dir: string): string[] {
   });
 }
 
-/** `src/**` 프로덕션 파일 전체(테스트·테스트 전용 디렉토리 제외), 주석 걷은 소스. */
+/** `src/**`·라우트(`app/**`) 프로덕션 파일 전체(테스트·테스트 전용 디렉토리 제외), 주석 걷은 소스. */
 function productionSources(): { file: string; source: string }[] {
-  return listSourceFiles(ROOT)
+  return [ROOT, ROUTES]
+    .flatMap(listSourceFiles)
     .map((full) => path.relative(ROOT, full))
     .filter(
       (rel) => !rel.split(path.sep).some((seg) => TEST_ONLY_DIRS.includes(seg))

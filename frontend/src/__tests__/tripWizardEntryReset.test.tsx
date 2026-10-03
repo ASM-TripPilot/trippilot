@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react-native';
 
-import TripWizardLayout from '@/app/trips/new/_layout';
+import TripWizardLayout from '@routes/trips/new/_layout';
 import type { MustVisitSeedItem } from '@/features/create-trip';
 import { useTripWizardStore } from '@/features/create-trip';
 import { TripNewStep1Page } from '@/pages/trip/trip-new-step1';
@@ -10,7 +10,7 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 /**
  * TRIP-288 AC-1 → 사용자 결정으로 재정의 — '꼭 갈 곳' 시드의 **수명이 어디서 시작하는가**.
  *
- * 무엇을 보장하나: 위저드 셸(`src/app/trips/new/_layout.tsx`)이 마운트되면 드래프트의 시드·채움
+ * 무엇을 보장하나: 위저드 셸(`app/trips/new/_layout.tsx`)이 마운트되면 드래프트의 시드·채움
  * 플래그·"뺀 곳" 기억이 **전부 초기값으로** 돌아간다. ⚠️ **담은 곳(하트) 자동 재시드는 폐지됐다**
  * (사용자 결정) — 예전엔 초기화 뒤 지금 담은 목록으로 다시 채워졌으나(TRIP-288), 이제는 채우는
  * 경로 자체가 없어(`TripNewStep1Page.tsx`의 마운트 효과 삭제) 새 진입마다 "꼭 갈 곳"은 항상
