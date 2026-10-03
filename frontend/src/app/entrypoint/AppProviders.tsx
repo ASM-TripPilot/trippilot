@@ -17,6 +17,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { retryUnlessNotFound } from '@/shared/api';
 import { ToastHost } from '@/shared/ui/Toast';
 
+import { initSentry } from './initSentry';
+
 // 서버 상태(TanStack Query)의 앱 전역 캐시 저장소 — 모듈 스코프에서 한 번만 만들어 리렌더마다
 // 다시 만들지 않는다. 기본 옵션은 retry 하나만 연다(TRIP-986 #063) — 404("없다")는 다시 물어도
 // 답이 같고, 같은 캐시 키의 관찰자들은 요청 하나를 공유해 그 요청을 시작한 관찰자의 retry 가
@@ -32,6 +34,9 @@ const queryClient = new QueryClient({
 // ⚠️ 모듈 최상위 호출을 유지한다 — 루트 레이아웃이 이 모듈을 import 하는 순간(번들 로드 시점) 돌아야
 // 네이티브 스플래시가 먼저 내려가지 않는다. 컴포넌트·지연 import 로 옮기면 jest 는 못 잡는다(TRIP-1161).
 SplashScreen.preventAutoHideAsync();
+
+// 크래시 수집은 번들 로드 시점에 한 번 켠다(DSN 없으면 no-op — initSentry 참고).
+initSentry();
 
 /**
  * 앱 전역 프로바이더(FSD app 층). 라우트 루트 레이아웃(`app/_layout.tsx`)이 `SplashGate` 를 감싸 조립한다.

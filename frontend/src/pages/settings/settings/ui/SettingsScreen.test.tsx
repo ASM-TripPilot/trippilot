@@ -403,10 +403,10 @@ describe('행·그룹·다이얼로그 (옛 .test)', () => {
    * `SettingsPage.version.test.tsx`.
    */
   describe('🔴 TRIP-935 AC-3 · 버전 줄은 appVersion 으로만 그린다', () => {
-    it('appVersion="0.1.0" 이면 "TripPilot v0.1.0" 한 줄을 그린다', () => {
-      renderScreen({ appVersion: '0.1.0' });
+    it('appVersion="1.0.0" 이면 "TripPilot v1.0.0" 한 줄을 그린다', () => {
+      renderScreen({ appVersion: '1.0.0' });
 
-      expect(screen.getByText('TripPilot v0.1.0')).toBeOnTheScreen();
+      expect(screen.getByText('TripPilot v1.0.0')).toBeOnTheScreen();
     });
 
     it.each([
@@ -852,7 +852,7 @@ describe('데이터 출처 고지 (옛 .attribution)', () => {
 
     it('AC-1(위치): 출처 블록은 버전 문구 바로 다음에 온다 — 사이에 다른 문구가 끼지 않는다', () => {
       // 준비: 링크 콜백 없이, 버전을 주고 그린다(TRIP-935 — 버전이 없으면 버전 줄 자체가 없다).
-      renderScreen({ appVersion: '0.1.0' });
+      renderScreen({ appVersion: '1.0.0' });
 
       // 실행: 화면 글자를 읽는 순서대로 잇는다.
       const text = readingText(screen.toJSON());
