@@ -808,3 +808,140 @@ describe('🔴 P-G · TRIP-979 제출 직전 GPS origin 을 읽어 싣는다 (AC
     }
   );
 });
+
+describe('🔴 TRIP-1195 · targetDate — 허브에서 바라보는 일차로 다시 짠다 (openapi StartReplanRequest.targetDate)', () => {
+  const ERROR = 'planb-request-error';
+  const CLOSE_ERROR = 'planb-request-error-close';
+
+  it('D1 정상 — targetDate=내일이면 body 에 그 날짜와 scope=FULL_DAY 가 실리고, 범위 칩은 "2일차 전체" 하나다', async () => {
+    mockPhase = 'success';
+    render(<PlanbRequestPage tripId={TRIP_ID} targetDate={TOMORROW} />);
+
+    const chip = screen.getByTestId('planb-request-scope-FULL_DAY');
+    expect(chip).toHaveTextContent('2일차 전체');
+    expect(chip).toBeSelected();
+    expect(
+      screen.queryByTestId('planb-request-scope-PARTIAL_SLOTS')
+    ).toBeNull();
+
+    await submit();
+
+    expect(postedBody()).toEqual(
+      body({ scope: 'FULL_DAY', targetDate: TOMORROW })
+    );
+    expect(mockReplace).toHaveBeenCalledWith(SOLVING_HREF);
+  });
+
+  it('D2 🔴 금지 — URL 이 scope=PARTIAL_SLOTS 를 같이 실어 와도(딥링크 조작) 오늘 아닌 날은 PARTIAL_SLOTS 가 나가지 않는다', async () => {
+    render(
+      <PlanbRequestPage
+        tripId={TRIP_ID}
+        scope="PARTIAL_SLOTS"
+        targetDate={TOMORROW}
+      />
+    );
+
+    expect(
+      screen.queryByTestId('planb-request-scope-PARTIAL_SLOTS')
+    ).toBeNull();
+    await submit();
+
+    expect(postedBody()).toEqual(
+      body({ scope: 'FULL_DAY', targetDate: TOMORROW })
+    );
+  });
+
+  it('D3 무회귀 — targetDate 가 없으면 body 에 targetDate 키가 없고 종전 2칩이다(오늘·알림·트리거 진입)', async () => {
+    render(<PlanbRequestPage tripId={TRIP_ID} />);
+
+    expect(
+      screen.getByTestId('planb-request-scope-PARTIAL_SLOTS')
+    ).toBeTruthy();
+    expect(
+      screen.getByTestId('planb-request-scope-FULL_DAY')
+    ).toHaveTextContent('오늘 전체');
+    await submit();
+
+    const posted = postedBody() as Record<string, unknown>;
+    expect('targetDate' in posted).toBe(false);
+    expect(posted).toEqual(body());
+  });
+
+  it('D4 일정에 없는 날짜면 칩 라벨은 "이 날 전체"(일차를 모름)지만 FULL_DAY 한 칩이고 날짜는 그대로 실린다', async () => {
+    render(<PlanbRequestPage tripId={TRIP_ID} targetDate="2026-08-25" />);
+
+    expect(
+      screen.getByTestId('planb-request-scope-FULL_DAY')
+    ).toHaveTextContent('이 날 전체');
+    await submit();
+
+    expect(postedBody()).toEqual(
+      body({ scope: 'FULL_DAY', targetDate: '2026-08-25' })
+    );
+  });
+
+  it('D5 미래일 재계획은 GPS 를 읽지 않는다 — 서버가 미래일의 현재 좌표를 버리므로 수집하지 않는다(최소 수집)', async () => {
+    render(<PlanbRequestPage tripId={TRIP_ID} targetDate={TOMORROW} />);
+
+    await submit();
+
+    expect(mockReadOrigin).not.toHaveBeenCalled();
+    expect((postedBody() as { originKind: unknown }).originKind).toBeNull();
+  });
+
+  it('D6 🔴 서버 판정 — 409 면 "아직 일정이 없는 날" 쉬운 안내 + [닫기] 를 띄우고 오늘로 바꿔 다시 보내지 않는다 (INV-4)', async () => {
+    mockPhase = 'conflict';
+    render(<PlanbRequestPage tripId={TRIP_ID} targetDate={TOMORROW} />);
+
+    await submit();
+
+    expect(mockMutate).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId(ERROR)).toHaveTextContent(/아직 일정이 없는 날/);
+    expect(screen.getByTestId(ERROR)).not.toHaveTextContent(/분|시간|소요/);
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+
+    // 막다른 길이 아니다 — [닫기] 가 시트를 닫는다(스크림·끌어 닫기와 같은 경로).
+    fireEvent.press(screen.getByTestId(CLOSE_ERROR));
+    expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('D7 🔴 서버 판정 — 400(오늘 아닌 날+PARTIAL_SLOTS)·5xx 는 일반 실패 안내로 내리고 날짜를 지우지 않는다', async () => {
+    mockPhase = 'serverError';
+    render(<PlanbRequestPage tripId={TRIP_ID} targetDate={TOMORROW} />);
+    await submit();
+
+    expect(screen.getByTestId(ERROR)).toHaveTextContent(
+      '다시 짜기를 시작하지 못했어요. 잠시 후 다시 시도해 주세요'
+    );
+    // 재시도도 같은 날짜로 간다.
+    mockPhase = 'idle';
+    await submit(2);
+    expect(
+      (mockMutate.mock.calls[1][0] as { data: { targetDate?: string } }).data
+        .targetDate
+    ).toBe(TOMORROW);
+  });
+
+  it('D8 무회귀 — targetDate 없는 409 는 종전 "여행 기간에만" 안내이고 [닫기] 는 없다', async () => {
+    mockPhase = 'conflict';
+    render(<PlanbRequestPage tripId={TRIP_ID} />);
+
+    await submit();
+
+    expect(screen.getByTestId(ERROR)).toHaveTextContent(
+      '여행 기간에만 AI에게 맡길 수 있어요'
+    );
+    expect(screen.queryByTestId(CLOSE_ERROR)).toBeNull();
+  });
+
+  it('D9 🔴 날짜 형식이 아닌 targetDate(깨진 딥링크)는 오늘로 조용히 바꿔 보내지 않는다 — POST 0 + 안내 (INV-4)', async () => {
+    render(<PlanbRequestPage tripId={TRIP_ID} targetDate="내일" />);
+
+    fireEvent.press(screen.getByTestId('planb-request-submit'));
+    await waitFor(() => expect(screen.getByTestId(ERROR)).toBeTruthy());
+
+    expect(mockMutate).not.toHaveBeenCalled();
+    expect(screen.getByTestId(ERROR)).toHaveTextContent(/날짜/);
+  });
+});

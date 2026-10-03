@@ -10,4 +10,5 @@ export {
 } from './model/replanOrigin';
 export type { ReplanOrigin } from './model/replanOrigin';
 export { buildStartReplanRequest } from './model/replanRequest';
-export { REPLAN_SCOPES } from './model/replanScope';
+export { REPLAN_SCOPES, replanScopeOptions } from './model/replanScope';
+export type { ReplanScopeOption } from './model/replanScope';

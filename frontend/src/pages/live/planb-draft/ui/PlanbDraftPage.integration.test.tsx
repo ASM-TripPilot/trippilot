@@ -2,6 +2,8 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 
 import type { Itinerary, ReplanDiff } from '@/shared/api/index.schemas';
 
+import { seoulDate } from '@/shared/lib/seoulDate';
+
 import { PlanbDraftPage } from './PlanbDraftPage';
 
 /**
@@ -722,6 +724,35 @@ describe('🔴 P2·P3 · AC-9(b)(c) · E1·Q7 — [적용하기]는 바로 확�
   });
 });
 
+describe('🔴 TRIP-1195 결정 5 · 확정 뒤 허브는 확정한 날로 돌아간다', () => {
+  function applyAndSucceed(): void {
+    renderPage();
+    fireEvent.press(screen.getByText('적용하기'));
+    const options = mockMutate.mock.calls[0]?.[1] as { onSuccess: () => void };
+    act(() => options.onSuccess());
+  }
+
+  it('C1 오늘이 아닌 날 세션을 확정하면 허브 params 에 day=그 날짜가 실린다', () => {
+    mockSession.data = session('DRAFT', { targetDate: '2999-01-02' });
+    applyAndSucceed();
+
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/live',
+      params: { tripId: TRIP_ID, applied: SESSION_ID, day: '2999-01-02' },
+    });
+  });
+
+  it('C2 무회귀 — 오늘 세션을 확정하면 종전과 같은 params(day 없음)다', () => {
+    mockSession.data = session('DRAFT', { targetDate: seoulDate(new Date()) });
+    applyAndSucceed();
+
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/live',
+      params: { tripId: TRIP_ID, applied: SESSION_ID },
+    });
+  });
+});
+
 describe('🔴 P4 · AC-9(d) — 확정 요청 중에는 [적용하기]가 잠긴다', () => {
   it('seam isPending 이면 버튼이 disabled 이고 눌러도 mutate 가 안 불린다(이중 POST → 409 차단)', () => {
     mockSession.data = session('DRAFT');
@@ -797,6 +828,30 @@ describe('🔴 P6 · AC-10 · Q4 — NO_SOLUTION 은 같은 뷰의 대안 없음
     expect(mockPush).toHaveBeenCalledTimes(2);
     expect(mockPush).toHaveBeenLastCalledWith(MANUAL_HREF);
     expect(mockMutate).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 TRIP-1195 · 다시 요청은 그 세션이 다시 짜던 날로 간다 (INV-4 — 오늘로 조용히 바뀌면 위반)', () => {
+  it('R1 오늘이 아닌 날 세션이 NO_SOLUTION 이면 [조건 바꿔 다시 짜기]가 같은 targetDate 를 싣는다', () => {
+    mockSession.data = session('NO_SOLUTION', { targetDate: '2999-01-02' });
+    renderPage();
+
+    fireEvent.press(screen.getByText('조건 바꿔 다시 짜기'));
+
+    expect(mockPush).toHaveBeenLastCalledWith(
+      `${REQUEST_HREF}?targetDate=2999-01-02`
+    );
+  });
+
+  it('R2 무회귀 — 오늘 세션이면 쿼리 없는 종전 경로다', () => {
+    mockSession.data = session('FAILED', {
+      targetDate: seoulDate(new Date()),
+    });
+    renderPage();
+
+    fireEvent.press(screen.getByText('다시 시도'));
+
+    expect(mockPush).toHaveBeenLastCalledWith(REQUEST_HREF);
   });
 });
 

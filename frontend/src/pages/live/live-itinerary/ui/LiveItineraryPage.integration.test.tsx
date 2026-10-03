@@ -398,6 +398,113 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       expect(mockPush).toHaveBeenCalledWith(`/trips/${TRIP_ID}/planb`);
     });
 
+    it('I7c 🔴 TRIP-1195 허브에서 오늘이 아닌 미래일(2일차)을 보는 중이면 [AI에게 맡기기]가 그 날짜를 targetDate 쿼리로 넘긴다', async () => {
+      server.use(twoDayItineraryOk(), tripHandler(), visitsHandler());
+
+      await renderActive();
+      fireEvent.press(screen.getByTestId('execution-live-daychip-1'));
+      fireEvent.press(screen.getByTestId('execution-live-replan-fab'));
+      fireEvent.press(screen.getByTestId('execution-live-edit-pill-ai'));
+
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(mockPush).toHaveBeenCalledWith(
+        `/trips/${TRIP_ID}/planb?targetDate=${DAY2}`
+      );
+    });
+
+    it('I7d 무회귀 — 2일짜리 일정이어도 오늘(1일차)을 보는 중이면 쿼리 없이 종전 경로다', async () => {
+      server.use(twoDayItineraryOk(), tripHandler(), visitsHandler());
+
+      await renderActive();
+      fireEvent.press(screen.getByTestId('execution-live-daychip-1'));
+      fireEvent.press(screen.getByTestId('execution-live-daychip-0'));
+      fireEvent.press(screen.getByTestId('execution-live-replan-fab'));
+      fireEvent.press(screen.getByTestId('execution-live-edit-pill-ai'));
+
+      expect(mockPush).toHaveBeenCalledWith(`/trips/${TRIP_ID}/planb`);
+    });
+
+    it('I7e 🔴 이미 지난 날(1일차, 오늘은 2일차)을 보는 중이면 [AI에게 맡기기]가 없고 [직접 수정]은 남는다 (결정 3 — 눌러서 409 받는 막다른 길을 만들지 않는다)', async () => {
+      server.use(twoDayItineraryOk(), tripHandler(), visitsHandler());
+
+      render(<LiveItineraryPage tripId={TRIP_ID} today={DAY2} />, { wrapper });
+      await waitFor(() =>
+        expect(screen.getByTestId('execution-live-screen')).toBeTruthy()
+      );
+      fireEvent.press(screen.getByTestId('execution-live-daychip-0'));
+      fireEvent.press(screen.getByTestId('execution-live-replan-fab'));
+
+      expect(screen.queryByTestId('execution-live-edit-pill-ai')).toBeNull();
+      expect(
+        screen.getByTestId('execution-live-edit-pill-manual')
+      ).toBeTruthy();
+    });
+
+    it('I7f 오늘이 2일차일 때 2일차(오늘)를 보면 종전 AI 알약·쿼리 없는 경로다', async () => {
+      server.use(twoDayItineraryOk(), tripHandler(), visitsHandler());
+
+      render(<LiveItineraryPage tripId={TRIP_ID} today={DAY2} />, { wrapper });
+      await waitFor(() =>
+        expect(screen.getByTestId('execution-live-screen')).toBeTruthy()
+      );
+      fireEvent.press(screen.getByTestId('execution-live-replan-fab'));
+      fireEvent.press(screen.getByTestId('execution-live-edit-pill-ai'));
+
+      expect(mockPush).toHaveBeenCalledWith(`/trips/${TRIP_ID}/planb`);
+    });
+
+    describe('🔴 TRIP-1195 결정 5 — 확정 뒤 허브는 확정한 날의 일차로 열린다', () => {
+      async function renderWithInitialDate(initialDate?: string) {
+        server.use(twoDayItineraryOk(), tripHandler(), visitsHandler());
+        render(
+          <LiveItineraryPage
+            tripId={TRIP_ID}
+            today={TODAY}
+            initialDate={initialDate}
+          />,
+          { wrapper }
+        );
+        await waitFor(() =>
+          expect(screen.getByTestId('execution-live-screen')).toBeTruthy()
+        );
+      }
+
+      it('H1 initialDate=2일차 날짜면 2일차 칩이 선택돼 열린다(오늘은 1일차)', async () => {
+        await renderWithInitialDate(DAY2);
+
+        expect(screen.getByTestId('execution-live-daychip-1')).toBeSelected();
+        expect(
+          screen.getByTestId('execution-live-daychip-0')
+        ).not.toBeSelected();
+        expect(
+          screen.getByTestId(`execution-live-slot-${DAY2}#p2`)
+        ).toBeTruthy();
+      });
+
+      it('H2 무회귀 — initialDate 가 없으면 종전처럼 오늘(1일차)로 열린다', async () => {
+        await renderWithInitialDate(undefined);
+
+        expect(screen.getByTestId('execution-live-daychip-0')).toBeSelected();
+      });
+
+      it.each([['2026-12-31'], ['내일'], ['']])(
+        'H3 일정에 없거나 형식이 틀린 initialDate(%j)는 무시하고 오늘로 연다 — 보는 위치일 뿐 쓰기가 없다',
+        async (bad) => {
+          await renderWithInitialDate(bad);
+
+          expect(screen.getByTestId('execution-live-daychip-0')).toBeSelected();
+        }
+      );
+
+      it('H4 사용자가 칩을 고르면 그 선택이 initialDate 를 이긴다', async () => {
+        await renderWithInitialDate(DAY2);
+
+        fireEvent.press(screen.getByTestId('execution-live-daychip-0'));
+
+        expect(screen.getByTestId('execution-live-daychip-0')).toBeSelected();
+      });
+    });
+
     it('I7b 열린 [직접 수정] 알약은 i07 편집(/trips/{id}/planb/manual)으로 간다 (US-PLANB-12 · TRIP-747)', async () => {
       server.use(itineraryOk(), tripHandler(), visitsHandler());
 
@@ -812,6 +919,64 @@ describe('i08 변경 반영 시트', () => {
 
       expect(screen.getByTestId(SHEET)).toBeTruthy();
       expect(screen.queryByTestId('planb-applied-summary')).toBeNull();
+    });
+  });
+
+  describe('🔴 TRIP-1195 결정 5 · 미래일 확정 — 반영 시트·배지는 그 날 diff 로, 허브는 그 일차로', () => {
+    const DAY2 = '2026-08-21';
+    const FUTURE_DIFF = {
+      ...SEEDED_DIFF,
+      date: DAY2,
+    } as unknown as ReplanDiff;
+
+    it('F1 확정한 날(2일차)로 열리고, 시트가 펼침으로 뜨며, 배지는 캐시된 그 날 diff 에서 만든다', async () => {
+      server.use(
+        http.get(`${BASE}/trips/:tripId/itinerary`, () => {
+          const base = itinerary();
+          const [day1] = base.days;
+          return HttpResponse.json({
+            ...base,
+            days: [day1, { date: DAY2, slots: day1.slots }],
+          });
+        }),
+        ...restHandlers()
+      );
+      const client = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false, gcTime: Infinity },
+          mutations: { gcTime: 0 },
+        },
+      });
+      client.setQueryData(
+        getGetTripsTripIdReplanSessionsSessionIdDiffQueryKey(
+          TRIP_ID,
+          SESSION_ID
+        ),
+        FUTURE_DIFF,
+        { updatedAt: Date.now() }
+      );
+      render(
+        <LiveItineraryPage
+          tripId={TRIP_ID}
+          today={TODAY}
+          appliedSessionId={SESSION_ID}
+          initialDate={DAY2}
+        />,
+        {
+          wrapper: ({ children }: { children: ReactNode }) => (
+            <QueryClientProvider client={client}>
+              {children}
+            </QueryClientProvider>
+          ),
+        }
+      );
+      await waitFor(() => expect(screen.getByTestId(HUB)).toBeTruthy());
+
+      expect(screen.getByTestId('execution-live-daychip-1')).toBeSelected();
+      expect(screen.getByTestId(SHEET)).toBeTruthy();
+      expect(hubSnapIndices().length).toBeGreaterThan(0);
+      expect(hubSnapIndices().every((index) => index === 2)).toBe(true);
+      expect(screen.getAllByTestId('planb-applied-badge')).toHaveLength(3);
     });
   });
 

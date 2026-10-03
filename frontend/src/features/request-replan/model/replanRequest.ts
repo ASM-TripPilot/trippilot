@@ -21,6 +21,12 @@ export interface ReplanFormValues {
   directives: string[];
   freeText: string;
   triggerId?: string | null;
+  /**
+   * TRIP-1195 — 다시 짤 날(`YYYY-MM-DD`). **오늘이 아닌 날에만** 호출부(허브)가 넘긴다 — 없으면 키 자체를
+   * 싣지 않는다(openapi: 생략하면 서버가 오늘로 처리, 종전 클라이언트와 바이트 동일). 오늘 아닌 날은 서버가
+   * `scope=FULL_DAY` 만 받는다(400) — 그 조합은 화면이 만들지 않는다(`replanScopeOptions`).
+   */
+  targetDate?: string;
 }
 
 export function buildStartReplanRequest(
@@ -44,6 +50,10 @@ export function buildStartReplanRequest(
   };
   // origin 미제공 = 기존 7키 그대로(좌표 키를 붙이지 않는다 — codegen originLat?/originLng? 는
   // "값 null"이 아니라 "키 부재"가 정본이라, 여기서 키를 안 만드는 것이 additive 불변이다).
-  if (!origin) return base;
-  return { ...base, originLat: origin.originLat, originLng: origin.originLng };
+  // targetDate 도 같은 규칙 — 없으면 키 부재(생략 = 오늘), 있으면 그 날짜 한 키만 덧붙인다.
+  const dated = form.targetDate
+    ? { ...base, targetDate: form.targetDate }
+    : base;
+  if (!origin) return dated;
+  return { ...dated, originLat: origin.originLat, originLng: origin.originLng };
 }

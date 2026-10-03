@@ -13,7 +13,12 @@ import PlanbRequestRoute from '@routes/trips/[tripId]/planb';
  */
 
 const mockCaptured: {
-  props?: { tripId?: string; scope?: string; triggerId?: string };
+  props?: {
+    tripId?: string;
+    scope?: string;
+    triggerId?: string;
+    targetDate?: string;
+  };
 } = {};
 let mockParams: Record<string, string | undefined> = {};
 
@@ -22,6 +27,7 @@ jest.mock('@/pages/live/planb-request', () => ({
     tripId?: string;
     scope?: string;
     triggerId?: string;
+    targetDate?: string;
   }) => {
     mockCaptured.props = props;
     return null;
@@ -59,5 +65,23 @@ describe('planb 요청 라우트 — PlanbRequestPage 위임', () => {
 
     expect(mockCaptured.props?.tripId).toBe('trip-1');
     expect(mockCaptured.props?.triggerId).toBeUndefined();
+  });
+});
+
+describe('TRIP-1195 · targetDate 위임', () => {
+  it('T3 허브가 싣은 targetDate 를 그대로 페이지에 넘긴다', () => {
+    mockParams = { tripId: 'trip-1', targetDate: '2026-08-21' };
+
+    render(<PlanbRequestRoute />);
+
+    expect(mockCaptured.props?.targetDate).toBe('2026-08-21');
+  });
+
+  it('T4 targetDate 없이 들어오면(알림·트리거·오늘) 비어 있다', () => {
+    mockParams = { tripId: 'trip-1', triggerId: 'trg-1' };
+
+    render(<PlanbRequestRoute />);
+
+    expect(mockCaptured.props?.targetDate).toBeUndefined();
   });
 });

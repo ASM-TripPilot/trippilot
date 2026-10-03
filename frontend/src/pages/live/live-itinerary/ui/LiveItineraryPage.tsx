@@ -59,6 +59,12 @@ export interface LiveItineraryPageProps {
   today?: string;
   /** TRIP-754 — i06 적용 성공 신호(`?applied=sessionId`). 있으면 i08 반영 시트를 허브 위에 띄운다. */
   appliedSessionId?: string;
+  /**
+   * TRIP-1195 — 처음 열 날짜 'YYYY-MM-DD'(`?day=`). 오늘이 아닌 날을 확정하고 돌아올 때만 온다 — 그 날 일차로 연다.
+   * 일정에 없는 값·형식이 틀린 값은 무시하고 종전 기본(오늘)로 연다(보는 위치일 뿐 쓰기·거짓 표기가 없어 INV-4 대상 아님).
+   * 사용자가 일차 칩을 고르면 그 선택이 이긴다.
+   */
+  initialDate?: string;
 }
 
 const NEUTRAL_BADGE = (
@@ -78,6 +84,7 @@ export function LiveItineraryPage({
   tripId,
   today = seoulDate(new Date()),
   appliedSessionId,
+  initialDate,
 }: LiveItineraryPageProps) {
   const query = useLiveItinerary(tripId);
   const trip = useGetTripsTripId(tripId);
@@ -127,8 +134,17 @@ export function LiveItineraryPage({
 
   // 방문 기록 조회·판정은 page 1회(FSD·구조가드). 훅 규칙상 조기 반환 위에서 무조건 선언한다 —
   // active 날짜(방문 기록 조회 키)를 미리 구하되, active 가 아니면 '' 로 두어 쿼리를 끈다.
+  const initialDayIndex =
+    state.kind === 'active' && initialDate
+      ? state.itinerary.days.findIndex((day) => day.date === initialDate)
+      : -1;
   const liveDayIndex =
-    selectedDay ?? (state.kind === 'active' ? state.todayIndex : 0);
+    selectedDay ??
+    (state.kind === 'active'
+      ? initialDayIndex >= 0
+        ? initialDayIndex
+        : state.todayIndex
+      : 0);
   const liveDate =
     state.kind === 'active'
       ? (state.itinerary.days[liveDayIndex]?.date ?? '')
@@ -343,7 +359,19 @@ export function LiveItineraryPage({
           else router.replace(HOME_FALLBACK);
         }}
         // 수동 재계획 세션 진입(BR-U4-10) — 라우팅으로만(execution→planb 직접 import 없이).
-        onPressAiReplan={() => router.push(`/trips/${tripId}/planb`)}
+        // TRIP-1195 — 바라보는 날이 오늘이 아니면 그 날짜를 쿼리로 넘긴다(오늘이면 쿼리 없음 = 종전과 같은 경로).
+        // 이미 지난 날은 서버가 409 로 막는 막다른 길이라 진입 자체를 숨긴다(결정 3). 여행 구간 밖이라 보는 날이
+        // 없으면(activeDate '') 종전 그대로 — 서버가 기간 밖을 판정한다.
+        onPressAiReplan={
+          activeDate !== '' && activeDate < today
+            ? undefined
+            : () =>
+                router.push(
+                  activeDate !== '' && activeDate !== today
+                    ? `/trips/${tripId}/planb?targetDate=${activeDate}`
+                    : `/trips/${tripId}/planb`
+                )
+        }
         onPressManualEdit={() => router.push(`/trips/${tripId}/planb/manual`)}
         onPressComplete={
           activeVisitCheckId !== null

@@ -121,7 +121,8 @@ export interface LiveHubViewProps {
   onBack: () => void;
   onSelectDay: (index: number) => void;
   /** [AI에게 맡기기] 알약 — 수동 재계획 진입(BR-U4-10). */
-  onPressAiReplan: () => void;
+  /** 없으면 [AI에게 맡기기] 알약을 안 그린다 — 이미 지난 날은 다시 짤 일이 없다(TRIP-1195 결정 3). */
+  onPressAiReplan?: () => void;
   /** [직접 수정] 알약 — 수동 편집 진입(US-PLANB-12). */
   onPressManualEdit: () => void;
   /** 수정 알약 메뉴 초기 열림(프리뷰 입구). 이후 열림은 뷰가 스스로 든다. */
@@ -420,12 +421,14 @@ export function LiveHubView({
           >
             {editMenuOpen ? (
               <>
-                <EditPill
-                  testID="execution-live-edit-pill-ai"
-                  icon={<FullAiGlyph />}
-                  label="AI에게 맡기기"
-                  onPress={pickEdit(onPressAiReplan)}
-                />
+                {onPressAiReplan ? (
+                  <EditPill
+                    testID="execution-live-edit-pill-ai"
+                    icon={<FullAiGlyph />}
+                    label="AI에게 맡기기"
+                    onPress={pickEdit(onPressAiReplan)}
+                  />
+                ) : null}
                 <EditPill
                   testID="execution-live-edit-pill-manual"
                   icon={<PencilGlyph size={18} tone="primary" />}

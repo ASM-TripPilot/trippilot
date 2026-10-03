@@ -44,6 +44,8 @@ let mockOrigin: { lat: number | null; lng: number | null } = {
   lat: 35.1667,
   lng: 129.137,
 };
+// TRIP-1195 — 세션이 다시 짜는 날(`ReplanSession.targetDate`). null 이면 종전처럼 fromInstant 의 KST 날짜(= 오늘 세션).
+let mockTargetDate: string | null = null;
 const mockSessionCache = new Map<string, unknown>();
 
 jest.mock('../model/useReplanSession', () => ({
@@ -51,7 +53,7 @@ jest.mock('../model/useReplanSession', () => ({
     if (mockStatus === null) {
       return { data: undefined, isPending: true, isError: false };
     }
-    const key = `${mockStatus}|${mockScope}|${mockFromInstant}|${mockOrigin.lat}|${mockOrigin.lng}`;
+    const key = `${mockStatus}|${mockScope}|${mockFromInstant}|${mockOrigin.lat}|${mockOrigin.lng}|${mockTargetDate}`;
     if (!mockSessionCache.has(key)) {
       mockSessionCache.set(key, {
         data: {
@@ -59,6 +61,11 @@ jest.mock('../model/useReplanSession', () => ({
           tripId: 't1',
           itineraryId: 'it1',
           scope: mockScope,
+          targetDate:
+            mockTargetDate ??
+            new Date(Date.parse(mockFromInstant) + 9 * 3600 * 1000)
+              .toISOString()
+              .slice(0, 10),
           fromInstant: mockFromInstant,
           originKind: mockOrigin.lat === null ? 'STAY_ANCHOR' : 'GPS',
           originLat: mockOrigin.lat,
@@ -250,6 +257,7 @@ beforeEach(() => {
   mockStatus = 'SOLVING';
   mockFromInstant = '2026-06-11T04:00:00Z';
   mockScope = 'PARTIAL_SLOTS';
+  mockTargetDate = null;
   mockOrigin = { lat: 35.1667, lng: 129.137 };
   mockSessionCache.clear();
   mockVisitsCache.clear();
@@ -485,6 +493,53 @@ describe('🔴 S4 · TRIP-1007 AC-7 · BR-U4-11 · DEC-U4-3 — FULL_DAY 캡션�
     expect(
       screen.getByTestId('generation-gauge-cell-2-active')
     ).toHaveTextContent('오늘 일정 다시 짜는 중');
+  });
+});
+
+describe('🔴 TRIP-1195 · 오늘이 아닌 날 세션 — 일차·날짜·캡션은 세션 targetDate 가 정한다', () => {
+  // 세션은 오늘(6/11 13시)에 시작했지만 다시 짜는 날은 3일차(6/12)다. fromInstant 의 날짜로 읽으면 2일차·6/11 이 그려진다.
+  function renderFutureSession() {
+    mockScope = 'FULL_DAY';
+    mockTargetDate = '2026-06-12';
+    return renderPage();
+  }
+
+  it('F1 헤더는 3일차·6월 12일이고, 오늘(6/11) 방문 완료 행·"방문한 N곳" 은 그리지 않는다', () => {
+    renderFutureSession();
+
+    expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('3일차');
+    expect(screen.getByTestId('sheet-header-date')).toHaveTextContent(
+      '6월 12일(금)'
+    );
+    expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent('');
+    expect(textsOf(/^planb-draft-slot-name-/)).toEqual([]);
+  });
+
+  it('F2 캡션은 "오늘" 이 아니라 "3일차 일정 다시 짜는 중"이다(거짓 문구 금지)', () => {
+    renderFutureSession();
+
+    expect(
+      screen.getByTestId('generation-gauge-cell-2-active')
+    ).toHaveTextContent('3일차 일정 다시 짜는 중');
+  });
+
+  it('F3 INV-3 — 어떤 라벨에도 소요시간 표현이 없다', () => {
+    renderFutureSession();
+
+    expect(
+      screen.getByTestId('generation-gauge-cell-2-active')
+    ).not.toHaveTextContent(/분|소요/);
+  });
+
+  it('F4 targetDate 가 일정에 없으면 일차·날짜는 비우되 캡션은 "일정 다시 짜는 중"으로 거짓 없이 그린다', () => {
+    mockScope = 'FULL_DAY';
+    mockTargetDate = '2026-06-30';
+    renderPage();
+
+    expect(screen.queryByTestId('sheet-header-day')).toBeNull();
+    expect(
+      screen.getByTestId('generation-gauge-cell-2-active')
+    ).toHaveTextContent('일정 다시 짜는 중');
   });
 });
 

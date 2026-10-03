@@ -53,3 +53,22 @@ describe('🔴 RT · live 라우트 — applied → appliedSessionId', () => {
     expect(mockCaptured.props?.appliedSessionId).toBeUndefined();
   });
 });
+
+describe('TRIP-1195 · day → initialDate', () => {
+  it('RT3 day 쿼리를 initialDate 로 넘긴다', () => {
+    mockParams.tripId = 'trip-1';
+    mockParams.day = '2026-08-21';
+
+    render(<LiveRoute />);
+
+    expect(mockCaptured.props?.initialDate).toBe('2026-08-21');
+  });
+
+  it('RT4 day 가 없으면 initialDate 도 없다', () => {
+    mockParams.tripId = 'trip-1';
+
+    render(<LiveRoute />);
+
+    expect(mockCaptured.props?.initialDate).toBeUndefined();
+  });
+});

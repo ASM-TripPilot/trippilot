@@ -25,7 +25,8 @@ import { ReplanSolvingView } from './ReplanSolvingView';
 /**
  * TRIP-752 · i05 다시 짜는 중 배선판. 세션 GET 폴링 → 판정 1회 → 짜는 중이면 `ReplanSolvingView`.
  *
- *  - 보여 줄 날 = `fromInstant` 의 **여행지(KST) 날짜**(서버의 "오늘"과 같다). 그날 일정 슬롯 중 방문
+ *  - 보여 줄 날 = 세션의 `targetDate`(TRIP-1195 — 오늘이 아닌 날을 다시 짤 수 있다. 오늘 세션이면 서버의 "오늘"과
+ *    같다). 그날 일정 슬롯 중 방문
  *    기록상 완료된 것만 일정 순서대로 행으로 그린다(BR-U4-34 — 진행 상태는 기록에서 온다, 시계 추정 없음).
  *    헤더 곳 수 = 완료 + 진행 중(둘 다 기준 시각 이전이라 그대로 둔다, BR-U4-17·18).
  *    그날을 모르면(일정 미도착·그날 없음) 제목만 남기고 화면은 그대로 그린다.
@@ -33,7 +34,8 @@ import { ReplanSolvingView } from './ReplanSolvingView';
  *  - ‹ → 이탈 확인부터(TRIP-1007 · QA #062 — 나간 뒤 다시 요청하면 새 POST 가 이 세션을 닫아 결과가
  *    버려진다, INV-U4-06). [나가기]면 `router.back()` — 세션을 살린 채 나간다(cancel 0). [계속 기다리기]는
  *    확인만 닫는다. 스와이프·Android 하드웨어 뒤로는 막지 않는다(범위 밖).
- *  - 캡션: PARTIAL_SLOTS 는 `{H}시 이후 다시 짜는 중`, FULL_DAY 는 오늘 전체라 시각 없이(BR-U4-11).
+ *  - 캡션: PARTIAL_SLOTS 는 `{H}시 이후 다시 짜는 중`, FULL_DAY 는 시각 없이 — 오늘이면 `오늘 일정`, 오늘이 아닌 날이면
+ *    `{N}일차 일정`(BR-U4-11). 오늘이 아닌 날엔 방문 기록이 없어 `방문한 N곳` 줄을 비운다.
  *  - DRAFT·NO_SOLUTION·FAILED → i06(`planb/draft`)으로 **replace** 1회. push 면 i06 에서 뒤로 갔을 때 이
  *    화면이 다시 떠 곧장 i06 로 되돌려 보내는 루프가 생긴다. 의존성을 kind 문자열로 둬 폴링 재렌더에
  *    다시 발화하지 않는다.
@@ -61,8 +63,14 @@ export function PlanbSolvingPage({
   const from =
     data === undefined ? undefined : readFromInstant(data.fromInstant);
   const days = itinerary.data?.days ?? [];
+  // 다시 짜는 날 = 세션 targetDate. fromInstant 의 날짜는 '지금'일 뿐 그 날이 아니다(미래일 세션에선 다르다).
+  const targetDate = data?.targetDate;
+  const otherDay =
+    from !== undefined && targetDate !== undefined && targetDate !== from.date;
   const dayIndex =
-    from === undefined ? -1 : days.findIndex((day) => day.date === from.date);
+    targetDate === undefined
+      ? -1
+      : days.findIndex((day) => day.date === targetDate);
   const day = dayIndex === -1 ? undefined : days[dayIndex];
 
   // 훅 규칙상 조기 반환 위에서 무조건 부른다 — 그날을 모르면 쿼리를 끈다.
@@ -106,7 +114,7 @@ export function PlanbSolvingPage({
     projected.filter((entry) => entry.state === 'active').length;
 
   const slotKeyAt = (index: number) =>
-    buildSlotKey(from.date, projected[index].slot.poiId);
+    buildSlotKey(day?.date ?? '', projected[index].slot.poiId);
   // 원 일정에서 바로 앞 슬롯이 완료 행이 아니면 그 앞 커넥터를 뺀다(거리는 바로 앞 슬롯 기준).
   const unlinkedSlotKeys = doneIndexes
     .filter((index, i) => i > 0 && doneIndexes[i - 1] !== index - 1)
@@ -136,7 +144,7 @@ export function PlanbSolvingPage({
         center={
           deriveReplanMapAnchor({
             days,
-            preferredDate: from.date,
+            preferredDate: targetDate,
             origin: { lat: data.originLat, lng: data.originLng },
           }).center
         }
@@ -149,12 +157,16 @@ export function PlanbSolvingPage({
         )}
         solvingLabel={
           data.scope === 'FULL_DAY'
-            ? '오늘 일정 다시 짜는 중'
+            ? !otherDay
+              ? '오늘 일정 다시 짜는 중'
+              : day
+                ? `${dayIndex + 1}일차 일정 다시 짜는 중`
+                : '일정 다시 짜는 중'
             : `${from.hour}시 이후 다시 짜는 중`
         }
         dayLabel={day ? `${dayIndex + 1}일차` : ''}
         dateLabel={day ? formatCoPickDayHeader(day.date) : ''}
-        meta={day && visitsKnown ? `방문한 ${kept}곳 그대로` : ''}
+        meta={day && visitsKnown && !otherDay ? `방문한 ${kept}곳 그대로` : ''}
         slots={slots}
         unlinkedSlotKeys={unlinkedSlotKeys}
         cancelPending={cancel.isPending}
