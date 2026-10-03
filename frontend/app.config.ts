@@ -22,7 +22,7 @@ const PHOTOS_PERMISSION =
 const config: ExpoConfig = {
   name: 'TripPilot',
   slug: 'trippilot',
-  version: '0.1.0',
+  version: '1.0.0',
   orientation: 'portrait',
   // TRIP-936 임시 아이콘(1024 불투명 RGB — App Store 는 알파 채널을 거부한다). 사람이 교체.
   icon: './assets/icon.png',
