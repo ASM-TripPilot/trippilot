@@ -15,12 +15,14 @@ import { WeatherCloudGlyph } from '@/features/execution/ui/ExecutionGlyphs';
 import { server } from '@/mocks/server';
 import type {
   Itinerary,
+  ReplanDiff,
   Trigger,
   TriggerList,
   VisitCheck,
   VisitCheckList,
 } from '@/shared/api/index.schemas';
 import {
+  getGetTripsTripIdReplanSessionsSessionIdDiffQueryKey,
   getGetTripsTripIdTriggersQueryKey,
   getGetTripsTripIdVisitsDaysDayQueryKey,
 } from '@/shared/api/index.hooks';
@@ -640,7 +642,7 @@ describe('i08 변경 반영 시트', () => {
   }
 
   describe('🔴 A1·A2 · AC-6 — applied 신호가 있으면 허브 밖 형제로 시트가 뜬다', () => {
-    it('A1 라벨·제목·두 버튼만 있고 부제·배지·내역은 없다 (E4)', async () => {
+    it('A1 라벨·제목·두 버튼만 있고, 캐시에 diff 가 없으면 부제·배지·내역은 없다 (E4)', async () => {
       await renderHub(SESSION_ID);
 
       const sheet = screen.getByTestId(SHEET);
@@ -669,6 +671,147 @@ describe('i08 변경 반영 시트', () => {
 
       expect(screen.getByTestId(HUB)).toBeTruthy();
       expect(screen.queryByTestId(SHEET)).toBeNull();
+    });
+  });
+
+  // TRIP-1188 — 배지는 초안 화면(i06)이 확정 직전까지 쿼리 캐시에 들고 있던 diff 에서 만든다.
+  // 서버는 확정(APPLIED) 뒤 diff 를 비우므로(`ready=false`) 다시 조회하지 않는다.
+  const slotOf = (poiId: string) => ({
+    slotKey: `${TODAY}#${poiId}`,
+    startAt: '10:00:00',
+    endAt: '11:00:00',
+    isFixed: false,
+    endsNextDay: false,
+  });
+  const entryOf = (poiId: string, change: string) => ({
+    slotKey: `${TODAY}#${poiId}`,
+    change,
+    beforeStart: null,
+    afterStart: null,
+  });
+  /**
+   * 바뀐 곳 3(추가·빠짐·이동) + 안 바뀐 곳(FIXED·UNCHANGED 는 세지 않는다). 곳 수 4→5, 총거리 −6.9km.
+   * ⚠️ 서버는 지금 `impact.totalDistanceDeltaM` 을 항상 null 로 준다(openapi·BE ReplanDiffService) — 그래서 실앱 배지는
+   * 거리 배지 없이 2개다. 이 픽스처의 −6.9km 는 서버가 델타를 내기 시작했을 때의 계약 모양을 잠근다(TRIP-1188 5-b 참고-1).
+   */
+  const SEEDED_DIFF = {
+    ready: true,
+    status: 'DRAFT',
+    date: TODAY,
+    before: ['a', 'b', 'c', 'd'].map(slotOf),
+    after: ['a', 'x', 'c', 'e', 'f'].map(slotOf),
+    entries: [
+      entryOf('x', 'ADDED'),
+      entryOf('b', 'REMOVED'),
+      entryOf('e', 'MOVED'),
+      entryOf('a', 'FIXED'),
+      entryOf('c', 'UNCHANGED'),
+    ],
+    impact: {
+      visitCountDelta: 1,
+      returnTimeDeltaMinutes: 0,
+      totalDistanceDeltaM: -6900,
+      totalDistanceKm: 12,
+    },
+  } as unknown as ReplanDiff;
+
+  /** diff 를 쿼리 캐시에 심은 채 허브를 띄운다 — 안정된 클라이언트(wrapper 는 렌더마다 새로 만든다). */
+  async function renderHubSeeded(
+    seeded: { sessionId: string; diff: ReplanDiff } | null
+  ): Promise<QueryClient> {
+    server.use(itineraryHandler(), ...restHandlers());
+    const client = new QueryClient({
+      // gcTime 을 끄지 않는다(Infinity) — 0 이면 관찰자 없는 심어 둔 diff 가 일정 로딩 중에 지워져,
+      // 시트가 뜨는 시점에는 캐시가 비어 있다. 실제 앱의 기본 gcTime 은 5분이라 이 가정이 맞다.
+      defaultOptions: {
+        queries: { retry: false, gcTime: Infinity },
+        mutations: { gcTime: 0 },
+      },
+    });
+    if (seeded) {
+      client.setQueryData(
+        getGetTripsTripIdReplanSessionsSessionIdDiffQueryKey(
+          TRIP_ID,
+          seeded.sessionId
+        ),
+        seeded.diff,
+        { updatedAt: Date.now() }
+      );
+    }
+    render(
+      <LiveItineraryPage
+        tripId={TRIP_ID}
+        today={TODAY}
+        appliedSessionId={SESSION_ID}
+      />,
+      {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        ),
+      }
+    );
+    await waitFor(() => expect(screen.getByTestId(HUB)).toBeTruthy());
+    return client;
+  }
+
+  describe('🔴 A5 · TRIP-1188 — 반영 시트 배지는 diff 캐시에서 온다', () => {
+    it('A5a 캐시에 ready diff 가 있으면 [바뀐 곳 3 · 방문지 4→5 · 이동 −6.9km] 가 뜬다', async () => {
+      await renderHubSeeded({ sessionId: SESSION_ID, diff: SEEDED_DIFF });
+
+      const badges = screen.getAllByTestId('planb-applied-badge');
+      // 배지 하나씩 완전 일치(문자열 toHaveTextContent 는 전체 일치다).
+      expect(badges).toHaveLength(3);
+      expect(badges[0]).toHaveTextContent('바뀐 곳 3');
+      expect(badges[1]).toHaveTextContent('방문지 4→5');
+      expect(badges[2]).toHaveTextContent('이동 −6.9km');
+    });
+
+    it('A5e 시트가 뜬 뒤 캐시가 정리돼도(gc) 허브가 다시 그려져도 배지가 남는다', async () => {
+      // 준비 — 배지가 뜬 상태에서
+      const client = await renderHubSeeded({
+        sessionId: SESSION_ID,
+        diff: SEEDED_DIFF,
+      });
+      expect(screen.getAllByTestId('planb-applied-badge')).toHaveLength(3);
+
+      // 실행 — 캐시를 비우고(5분 gc 와 같은 상태) 허브를 다시 그리게 한다([되돌리기] → 안내 상태 변경)
+      client.removeQueries({
+        queryKey: getGetTripsTripIdReplanSessionsSessionIdDiffQueryKey(
+          TRIP_ID,
+          SESSION_ID
+        ),
+      });
+      fireEvent.press(screen.getByTestId('planb-applied-revert'));
+
+      // 단언 — 리렌더가 실제로 일어났고(안내가 떴고) 배지는 그대로다
+      await waitFor(() => expect(screen.getByTestId(NOTICE)).toBeTruthy());
+      expect(screen.getAllByTestId('planb-applied-badge')).toHaveLength(3);
+    });
+
+    it('A5b 캐시에 diff 가 없으면 배지 줄이 없고, 배지를 만들려고 diff 를 다시 조회하지도 않는다', async () => {
+      await renderHubSeeded(null);
+
+      expect(screen.getByTestId(SHEET)).toBeTruthy();
+      expect(screen.queryByTestId('planb-applied-summary')).toBeNull();
+      // 확정 뒤 서버는 diff 를 비운다 — 재조회는 의미 없는 요청이다.
+      expect(observedHits.some((hit) => hit.includes('/diff'))).toBe(false);
+    });
+
+    it('A5c 캐시의 diff 가 ready=false 면 배지 줄이 없다', async () => {
+      await renderHubSeeded({
+        sessionId: SESSION_ID,
+        diff: { ...SEEDED_DIFF, ready: false },
+      });
+
+      expect(screen.getByTestId(SHEET)).toBeTruthy();
+      expect(screen.queryByTestId('planb-applied-summary')).toBeNull();
+    });
+
+    it('A5d 다른 세션의 diff 캐시는 쓰지 않는다', async () => {
+      await renderHubSeeded({ sessionId: 'other-session', diff: SEEDED_DIFF });
+
+      expect(screen.getByTestId(SHEET)).toBeTruthy();
+      expect(screen.queryByTestId('planb-applied-summary')).toBeNull();
     });
   });
 

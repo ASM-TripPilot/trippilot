@@ -461,11 +461,11 @@
 - `src/features/planb/config/watchLabels.ts`  →  WatchKind · WATCH_CATEGORY_LABEL · WATCH_STATUS_LABEL
 
 ## src/features/planb/
-- `src/features/planb/index.ts`  →  WATCH_CATEGORY_LABEL · WATCH_STATUS_LABEL · triggerLabel · triggerPillCopy · useActiveTriggers · AppliedAlertGlyph · RiskWarningGlyph
+- `src/features/planb/index.ts`  →  WATCH_CATEGORY_LABEL · WATCH_STATUS_LABEL · appliedSummaryBadges · appliedSummaryInputFromDiff · triggerLabel · triggerPillCopy · useActiveTriggers · AppliedAlertGlyph · RiskWarningGlyph
 - `src/features/planb/index.view.ts`  →  WATCH_CATEGORY_LABEL · WATCH_STATUS_LABEL · triggerLabel · triggerPillCopy · AppliedAlertGlyph · RiskWarningGlyph
 
 ## src/features/planb/model/
-- `src/features/planb/model/appliedSummary.ts`  →  AppliedSummaryInput · appliedSummaryBadges
+- `src/features/planb/model/appliedSummary.ts`  →  AppliedSummaryInput · appliedSummaryInputFromDiff · appliedSummaryBadges
 - `src/features/planb/model/slackTime.ts`  →  slackTime
 - `src/features/planb/model/triggerLabel.ts`  →  TriggerLabel · TRIGGER_LABELS · triggerLabel
 - `src/features/planb/model/triggerPillCopy.ts`  →  TriggerPillSlot · triggerPillCopy

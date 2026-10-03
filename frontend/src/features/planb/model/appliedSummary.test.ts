@@ -2,7 +2,12 @@ import fc from 'fast-check';
 
 import { formatDistance } from '@/entities/place';
 
-import { appliedSummaryBadges } from './appliedSummary';
+import type { ReplanDiff } from '@/shared/api/index.schemas';
+
+import {
+  appliedSummaryBadges,
+  appliedSummaryInputFromDiff,
+} from './appliedSummary';
 
 /**
  * TRIP-754 · AC-5 · INV-3 — i08 요약 배지 3종 문구(순수 함수).
@@ -126,5 +131,70 @@ describe('🔴 M4·M5 · PBT', () => {
         }
       )
     );
+  });
+});
+
+describe('🔴 M5 · TRIP-1188 — 재계획 비교 응답 → 배지 입력', () => {
+  const slot = (poiId: string) => ({
+    slotKey: `2026-08-20#${poiId}`,
+    startAt: '10:00:00',
+    endAt: '11:00:00',
+    isFixed: false,
+    endsNextDay: false,
+  });
+  const entry = (poiId: string, change: string) => ({
+    slotKey: `2026-08-20#${poiId}`,
+    change,
+    beforeStart: null,
+    afterStart: null,
+  });
+  const diff = (over: Partial<ReplanDiff> = {}): ReplanDiff =>
+    ({
+      ready: true,
+      status: 'DRAFT',
+      date: '2026-08-20',
+      before: ['a', 'b', 'c'].map(slot),
+      after: ['a', 'x'].map(slot),
+      entries: [
+        entry('x', 'ADDED'),
+        entry('b', 'REMOVED'),
+        entry('c', 'MOVED'),
+        entry('a', 'FIXED'),
+        entry('z', 'UNCHANGED'),
+      ],
+      impact: {
+        visitCountDelta: -1,
+        returnTimeDeltaMinutes: 0,
+        totalDistanceDeltaM: -300,
+        totalDistanceKm: 5,
+      },
+      ...over,
+    }) as ReplanDiff;
+
+  it('바뀐 곳은 추가·빠짐·이동만 세고(FIXED·UNCHANGED 제외), 방문지는 before→after 개수다', () => {
+    expect(appliedSummaryInputFromDiff(diff())).toEqual({
+      changedCount: 3,
+      visitsBefore: 3,
+      visitsAfter: 2,
+      distanceDeltaM: -300,
+    });
+  });
+
+  it('총거리 차이를 서버가 모르면(null·impact 없음) 거리 배지를 뺀다', () => {
+    expect(
+      appliedSummaryInputFromDiff(
+        diff({
+          impact: {
+            visitCountDelta: 0,
+            returnTimeDeltaMinutes: 0,
+            totalDistanceDeltaM: null,
+            totalDistanceKm: null,
+          },
+        })
+      ).distanceDeltaM
+    ).toBeNull();
+    expect(
+      appliedSummaryBadges(appliedSummaryInputFromDiff(diff({ impact: null })))
+    ).toEqual(['바뀐 곳 3', '방문지 3→2']);
   });
 });
