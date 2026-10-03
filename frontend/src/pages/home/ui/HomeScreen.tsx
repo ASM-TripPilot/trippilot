@@ -44,6 +44,7 @@ import { HeartButton } from '@/shared/ui/HeartButton';
 import { Skeleton } from '@/shared/ui/Skeleton';
 import type {
   HomeCollectionCard,
+  HomeCollectionsLane,
   HomeMagazineHero,
   HomePhase,
   HomeScreenProps,
@@ -494,26 +495,51 @@ function SpotCard({
 }
 
 // ── 섹션1: 요즘 사람들이 담는 곳(가로 스크롤 · 3상태) ───────────────────
+// TRIP-1209 — `lane`(실데이터)이 오면 섹션이 자기 상태를 따로 갖는다(SpotsSection 과 같은 패턴):
+// 대기=스켈레톤 · 실패=한 줄 재시도(INV-4) · 0장=섹션 통째 숨김. 없으면 `sections.collections`(픽스처).
+// `sections.kind==='loading'`(홈 전면 로딩)이면 lane 과 무관하게 스켈레톤이다.
 function CollectionsSection({
   sections,
   title = '요즘 사람들이 담는 곳',
+  lane,
 }: {
   sections: HomeSections;
   /** 컬렉션 헤더 카피. 미지정이면 기본 "요즘 사람들이 담는 곳"(discovery), planning 은 지역
    *  카피("부산에서 담을 만한 곳")를 주입(TRIP-696 파라미터화). */
   title?: string;
-}): ReactElement {
+  lane?: HomeCollectionsLane;
+}): ReactElement | null {
+  const status =
+    sections.kind === 'loading' ? 'loading' : (lane?.status ?? 'ready');
+  const cards =
+    sections.kind === 'loading' ? [] : (lane?.cards ?? sections.collections);
+  if (lane && status === 'ready' && cards.length === 0) return null;
   return (
     <View className="w-full gap-md">
       <SectionHeader title={title} moreTestID="home-collections-more" />
-      {sections.kind === 'ready' ? (
+      {status === 'error' ? (
+        <Pressable
+          testID="home-collections-error"
+          accessibilityRole="button"
+          onPress={lane?.onRetry}
+          className="mx-lg rounded-card bg-surface-soft px-lg py-2xl"
+        >
+          <Text className="font-noto text-label text-muted">
+            장소를 불러오지 못했어요 · 다시 시도
+          </Text>
+        </Pressable>
+      ) : status === 'ready' ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}
         >
-          {sections.collections.map((card, index) => (
-            <CollectionCard key={card.title} card={card} index={index} />
+          {cards.map((card, index) => (
+            <CollectionCard
+              key={card.poiId ?? card.title}
+              card={card}
+              index={index}
+            />
           ))}
         </ScrollView>
       ) : (
@@ -927,6 +953,7 @@ function DiscoveryBody({
   hero,
   sections,
   spotsLane,
+  collectionsLane,
   tripsError,
   onPressSpotsMore,
   onPressSearch,
@@ -936,6 +963,7 @@ function DiscoveryBody({
   hero: readonly HomeMagazineHero[];
   sections: HomeSections;
   spotsLane?: HomeSpotsLane;
+  collectionsLane?: HomeCollectionsLane;
   tripsError?: HomeScreenProps['tripsError'];
   onPressSpotsMore?: () => void;
   onPressSearch?: () => void;
@@ -969,7 +997,7 @@ function DiscoveryBody({
         />
       )}
       <View className="w-full gap-[24px] pb-sm pt-[22px]">
-        <CollectionsSection sections={sections} />
+        <CollectionsSection sections={sections} lane={collectionsLane} />
         <SpotsSection
           sections={sections}
           onMore={onPressSpotsMore}
@@ -1053,6 +1081,7 @@ function PlanningBody({
   hero,
   sections,
   spotsLane,
+  collectionsLane,
   onPressSpotsMore,
   onPressTripHeroCta,
   onPressSearch,
@@ -1062,6 +1091,7 @@ function PlanningBody({
   hero: readonly HomeMagazineHero[];
   sections: HomeSections;
   spotsLane?: HomeSpotsLane;
+  collectionsLane?: HomeCollectionsLane;
   onPressSpotsMore?: () => void;
   onPressTripHeroCta?: () => void;
   onPressSearch?: () => void;
@@ -1085,6 +1115,7 @@ function PlanningBody({
         <CollectionsSection
           sections={sections}
           title={phase.collectionsTitle}
+          lane={collectionsLane}
         />
         {phase.showSpots ? (
           <SpotsSection
@@ -1145,6 +1176,7 @@ function PhaseBody({
   hero,
   sections,
   spotsLane,
+  collectionsLane,
   tripsError,
   phase,
   onPressSpotsMore,
@@ -1159,6 +1191,7 @@ function PhaseBody({
         hero={hero}
         sections={sections}
         spotsLane={spotsLane}
+        collectionsLane={collectionsLane}
         tripsError={tripsError}
         onPressSpotsMore={onPressSpotsMore}
         onPressSearch={onPressSearch}
@@ -1175,6 +1208,7 @@ function PhaseBody({
           hero={hero}
           sections={sections}
           spotsLane={spotsLane}
+          collectionsLane={collectionsLane}
           onPressSpotsMore={onPressSpotsMore}
           onPressTripHeroCta={onPressTripHeroCta}
           onPressSearch={onPressSearch}
@@ -1198,6 +1232,7 @@ export function HomeScreen({
   hero,
   sections,
   spotsLane,
+  collectionsLane,
   tripsError,
   phase,
   onPressCreateTrip,
@@ -1226,6 +1261,7 @@ export function HomeScreen({
             hero={hero}
             sections={sections}
             spotsLane={spotsLane}
+            collectionsLane={collectionsLane}
             tripsError={tripsError}
             phase={phase}
             onPressSpotsMore={onPressSpotsMore}
