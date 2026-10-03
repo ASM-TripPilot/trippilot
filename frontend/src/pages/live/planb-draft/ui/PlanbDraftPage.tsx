@@ -2,7 +2,7 @@ import { useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
 
 import type { ReplanSlotVM } from '@/entities/itinerary-slot';
-import { parseSlotKey } from '@/entities/itinerary-slot';
+import { buildStatePins } from '@/entities/itinerary-slot';
 import { formatDistance } from '@/entities/place';
 import { useLiveItinerary } from '@/features/execution';
 import { formatCoPickDayHeader } from '@/features/itinerary';
@@ -12,11 +12,9 @@ import { resolveReplanState } from '../model/replanState';
 import { useApplyReplan } from '@/features/apply-replan';
 import { useReplanDiff } from '../model/useReplanDiff';
 import { useReplanSession } from '../model/useReplanSession';
-import type {
-  ItineraryDaysItem,
-  ItineraryDaysItemSlotsItem,
-  ReplanDiff,
-} from '@/shared/api/index.schemas';
+import type { ReplanDiff } from '@/shared/api/index.schemas';
+
+import type { MapCenter, MapPin } from '@/shared/map';
 
 import { ReplanDraftView, type ReplanRemovedVM } from './ReplanDraftView';
 
@@ -36,15 +34,18 @@ import { ReplanDraftView, type ReplanRemovedVM } from './ReplanDraftView';
  * TRIP-1007 — 초안 얼굴의 행은 서버 초안(`useReplanDiff` → `GET …/diff`)에서 온다. 세션 계약에 슬롯이
  * 없던 게 아니라 이 조회를 안 하고 있었다(QA #061 빈 시트). 조립 규칙:
  *  - 행 순서 = `after` 배열(entries 순서는 계약이 약속하지 않는다). 시각은 서버 값을 분까지 자르기만(INV-2).
- *  - 이름·사진·카테고리는 라이브 일정 캐시를 poiId 로 역조회, 없으면 "이름 준비 중"(지어내지 않는다).
- *    캐시의 `distanceRange` 는 옛 순서 기준 거리라 쓰지 않고, 행 사이 커넥터를 끈다(행 거리는 계약 밖).
- *  - `REMOVED` 는 초안 행과 섞지 않고 아래에 따로(BR-U4-25). 헤더 = `k일차 · M월 D일(요일)` + `N곳 · 총거리`.
+ *  - 이름·사진·카테고리·좌표는 응답 슬롯(`after`)의 필드를 그대로 읽는다(TRIP-1044 — 일정 캐시 역조회 폐기:
+ *    재계획이 새로 넣은 장소는 현재 일정에 없고, 일정 조회가 비어도 초안은 그려져야 한다). 서버가 이름을
+ *    못 채운 행(`nameKo` null)만 "이름 준비 중"(지어내지 않는다). 행 사이 커넥터는 끈다(행 거리는 계약 밖).
+ *  - `REMOVED` 는 초안 행과 섞지 않고 아래에 따로(BR-U4-25). 이름은 `before` 슬롯에서 slotKey 로 찾는다
+ *    (`entries` 에는 이름이 없다). 헤더 = `k일차 · M월 D일(요일)` + `N곳 · 총거리`.
+ *  - 지도 = 초안 슬롯 핀(전부 예정 톤)과 중심은 초안의 첫 좌표(없으면 기존 앵커: 세션 출발 → 그날 → 일정 전체).
  *  - 초안이 안 왔거나(로딩·ready=false) 조회가 실패하면 안내 + [적용하기] 잠금(INV-4 — 빈 초안 확정 차단).
  */
 
 // 라이브 대안 없음 부제 — Figma 앞 절("17시 이후 …")은 데이터별 사유라 서버가 주기 전엔 쓰지 않는다.
 const NO_SOLUTION_DESCRIPTION = '조건을 줄이거나 직접 고쳐 주세요';
-// 캐시에 없는 poiId — 서버 초안엔 이름이 없다(ReplanDiffSlot 계약). poiId 를 이름처럼 쓰지 않는다.
+// 서버가 이름을 못 채운 행(nameKo null) — poiId 를 이름처럼 쓰지 않는다.
 const NAME_PENDING = '이름 준비 중';
 const DIFF_LOADING_NOTICE = {
   title: '재계획안을 불러오는 중이에요',
@@ -56,50 +57,56 @@ const DIFF_FAILED_NOTICE = {
 };
 
 /** 서버 초안 → 행 VM(초안) · 빠지는 행 VM · 헤더 meta. 거리는 초안 총거리만(행 거리 없음, INV-3). */
-function buildDraftSheet(
-  diff: ReplanDiff,
-  days: ItineraryDaysItem[]
-): { slots: ReplanSlotVM[]; removed: ReplanRemovedVM[]; meta: string } {
-  const cached = new Map<string, ItineraryDaysItemSlotsItem>();
-  for (const day of days) {
-    for (const slot of day.slots) cached.set(slot.poiId, slot);
-  }
-  const lookup = (slotKey: string) => {
-    const parsed = parseSlotKey(slotKey);
-    return parsed.kind === 'ok' ? cached.get(parsed.poiId) : undefined;
-  };
-
-  const slots: ReplanSlotVM[] = diff.after.map((slot) => {
-    const hit = lookup(slot.slotKey);
-    return {
-      slotKey: slot.slotKey,
-      placeName: hit?.nameKo ?? NAME_PENDING,
-      // diff 엔 방문 여부가 없다 — 전 행 예정 톤(Seed Q6).
-      tone: 'planned',
-      photo: hit?.imageUrl ? { uri: hit.imageUrl } : null,
-      category: hit?.category ?? null,
-      timeLabel: `${slot.startAt.slice(0, 5)}–${slot.endAt.slice(0, 5)}`,
-      categoryLabel: null,
-      distanceRange: null,
-      isFixed: slot.isFixed,
-    };
-  });
+function buildDraftSheet(diff: ReplanDiff): {
+  slots: ReplanSlotVM[];
+  removed: ReplanRemovedVM[];
+  meta: string;
+  pins: MapPin[];
+} {
+  const slots: ReplanSlotVM[] = diff.after.map((slot) => ({
+    slotKey: slot.slotKey,
+    placeName: slot.nameKo ?? NAME_PENDING,
+    // diff 엔 방문 여부가 없다 — 전 행 예정 톤(Seed Q6).
+    tone: 'planned',
+    photo: slot.imageUrl ? { uri: slot.imageUrl } : null,
+    category: slot.category ?? null,
+    timeLabel: `${slot.startAt.slice(0, 5)}–${slot.endAt.slice(0, 5)}`,
+    categoryLabel: null,
+    distanceRange: null,
+    isFixed: slot.isFixed,
+  }));
+  // REMOVED 는 이번 초안에 없는 장소라 이름은 `before` 에서 찾는다(entries 에는 이름이 없다).
+  const before = new Map(diff.before.map((slot) => [slot.slotKey, slot]));
   const removed: ReplanRemovedVM[] = diff.entries
     .filter((entry) => entry.change === 'REMOVED')
     .map((entry) => ({
       slotKey: entry.slotKey,
-      placeName: lookup(entry.slotKey)?.nameKo ?? NAME_PENDING,
+      placeName: before.get(entry.slotKey)?.nameKo ?? NAME_PENDING,
       timeLabel: entry.beforeStart
         ? `원래 ${entry.beforeStart.slice(0, 5)}`
         : null,
     }));
+  // 좌표 없는 행은 핀을 건너뛰되 번호는 원래 자리를 지킨다(buildStatePins). 초안 행은 전부 예정 톤.
+  const pins = buildStatePins(
+    diff.after.map((slot) => ({
+      lat: slot.lat,
+      lng: slot.lng,
+      progress: 'upcoming' as const,
+    }))
+  );
   // 총거리를 모르면 곳 수만 — 0km 로 채우면 거짓 요약이다(openapi ReplanImpact).
   const km = diff.impact?.totalDistanceKm;
   const meta =
     km === null || km === undefined
       ? `${slots.length}곳`
       : `${slots.length}곳 · ${formatDistance(km * 1000)}`;
-  return { slots, removed, meta };
+  return { slots, removed, meta, pins };
+}
+
+/** 초안의 첫 좌표(핀 중 첫 것) — 번호·상태 같은 핀 필드를 지도 중심에 흘리지 않는다. */
+function draftCenter(pins: MapPin[] | undefined): MapCenter | undefined {
+  const first = pins?.[0];
+  return first ? { lat: first.lat, lng: first.lng } : undefined;
 }
 
 export interface PlanbDraftPageProps {
@@ -136,7 +143,7 @@ export function PlanbDraftPage({
 
   const days = itinerary.data?.days ?? [];
   const draft = diff.data?.ready === true ? diff.data : undefined;
-  const sheet = draft ? buildDraftSheet(draft, days) : undefined;
+  const sheet = draft ? buildDraftSheet(draft) : undefined;
   const draftDate = draft?.date ?? undefined;
   const dayIndex =
     draftDate === undefined
@@ -146,13 +153,16 @@ export function PlanbDraftPage({
   return (
     <ReplanDraftView
       variant={state.kind}
+      // 초안의 첫 좌표가 먼저다(초안이 이 화면의 주인공) — 좌표가 없으면 세션 출발 → 그날 → 일정 전체 → 서울시청.
       center={
+        draftCenter(sheet?.pins) ??
         deriveReplanMapAnchor({
           days: itinerary.data?.days,
           preferredDate: readFromInstant(data.fromInstant).date,
           origin: { lat: data.originLat, lng: data.originLng },
         }).center
       }
+      pins={sheet?.pins}
       days={[]}
       selectedDayIndex={0}
       dayLabel={dayIndex === -1 ? '' : `${dayIndex + 1}일차`}
