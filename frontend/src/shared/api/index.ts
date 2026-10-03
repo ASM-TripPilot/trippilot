@@ -186,7 +186,8 @@ if (!__DEV__ && !envApiBaseUrl) {
     'EXPO_PUBLIC_API_BASE_URL 이 비어 있습니다 — 운영 빌드는 API 주소 env 가 필요합니다.'
   );
 }
-const API_BASE_URL = `${envApiBaseUrl ?? 'http://localhost:8080'}/api/v1`;
+/** 서버 공개 API 기준 주소(`/api/v1` 포함). 외부 브라우저로 여는 서버 경로(숙소 아웃바운드)도 여기서 조립한다. */
+export const API_BASE_URL = `${envApiBaseUrl ?? 'http://localhost:8080'}/api/v1`;
 
 /** 무인증 클라이언트 — SEC-04 화이트리스트(소셜 로그인·토큰 갱신·약관 조회)가 여기로 나간다. */
 const baseClient = createAxiosInstance({ baseURL: API_BASE_URL });

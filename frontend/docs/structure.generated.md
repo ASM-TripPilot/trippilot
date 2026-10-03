@@ -1122,7 +1122,7 @@
 - `src/pages/stay/stay-detail/index.ts`  →  StayDetailPage
 
 ## src/pages/stay/stay-detail/model/
-- `src/pages/stay/stay-detail/model/stayOutbound.ts`  →  StayOutboundMode · stayOutboundMode · buildStaySearchUrl · openStayOutbound
+- `src/pages/stay/stay-detail/model/stayOutbound.ts`  →  StayOutboundMode · stayOutboundMode · openStayOutbound
 
 ## src/pages/stay/stay-detail/ui/
 - `src/pages/stay/stay-detail/ui/OtaChoiceSheet.tsx`  →  OtaChoiceSheetProps · OtaChoiceSheet
@@ -1448,7 +1448,7 @@
 - `src/shared/api/generationInProgress.ts`  →  resolveGenerationInProgress · cancelActiveGeneration
 - `src/shared/api/index.hooks.ts`  →  cancelActiveGeneration · resolveGenerationInProgress
 - `src/shared/api/index.schemas.ts`  →  (export 없음)
-- `src/shared/api/index.ts`  →  SocialProvider · BootstrapResponse · AgeConfirmation · SocialLoginBody · SocialTokenLoginBody · AccountSummary · TokenPair · NormalizedApiError · AuthedApiClientOptions · TermsVersion · ConsentAction · ConsentInput · NicknameCheckReason · NicknameCheckResult · createAuthedApiClient · fetchBootstrap · postSocialLogin · postSocialTokenLogin · refreshTokens · logout · fetchTerms · fetchTermsByType · authedClient · submitConsents · patchConsent · fetchNicknameSuggestions · checkNickname · updateNickname · completeOnboarding · isAlreadyRegistered · isNotFound · retryUnlessNotFound · getAccessToken · hydrate · setAccessToken · subscribeAccessToken · resolveVisitConflict
+- `src/shared/api/index.ts`  →  SocialProvider · BootstrapResponse · AgeConfirmation · SocialLoginBody · SocialTokenLoginBody · AccountSummary · TokenPair · NormalizedApiError · AuthedApiClientOptions · TermsVersion · ConsentAction · ConsentInput · NicknameCheckReason · NicknameCheckResult · createAuthedApiClient · API_BASE_URL · fetchBootstrap · postSocialLogin · postSocialTokenLogin · refreshTokens · logout · fetchTerms · fetchTermsByType · authedClient · submitConsents · patchConsent · fetchNicknameSuggestions · checkNickname · updateNickname · completeOnboarding · isAlreadyRegistered · isNotFound · retryUnlessNotFound · getAccessToken · hydrate · setAccessToken · subscribeAccessToken · resolveVisitConflict
 - `src/shared/api/isAlreadyRegistered.ts`  →  isAlreadyRegistered
 - `src/shared/api/isNotFound.ts`  →  isNotFound · retryUnlessNotFound
 - `src/shared/api/mutator.ts`  →  customInstance

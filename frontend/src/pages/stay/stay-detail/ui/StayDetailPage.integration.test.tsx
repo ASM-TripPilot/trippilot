@@ -22,7 +22,7 @@ import { StayDetailPage } from './StayDetailPage';
 /**
  * TRIP-457 AC-2·8·9·10·11 (배선) — e03 상세 페이지가 params 데이터·제휴 시트·이동·저장에
  * 실제로 이어진다는 증거. 화면·시트는 라우터·훅·Linking 을 모르므로(FSD 경계), params 파싱·
- * 저장 요청·웹검색 이동·로그인 유도는 이 배선 층에서만 확인된다.
+ * 저장 요청·아웃바운드 이동·로그인 유도는 이 배선 층에서만 확인된다.
  *
  * 무엇을 보장하나:
  *  - D1~D11 (TRIP-940) 데이터는 **서버 조회 `GET /stays/{stayId}` 하나**에서 온다(01b D0 — 구 I1~I3b 의
@@ -31,7 +31,7 @@ import { StayDetailPage } from './StayDetailPage';
  *    `item` param 이 와도 읽지 않는다. 전화 줄은 `tel:` 을 연다(AC-3).
  *  - 그 밖의 I·G·F 는 모두 **조회가 끝난 뒤**(`await ready()`) 누른다 — 로딩 얼굴엔 버튼이 없다(AC-4).
  *  - I4 (AC-8 · TRIP-781 AC-1) `stay-detail-book` → 제휴 고지 시트(l07 본문 정확 문구) 마운트.
- *  - I5 (AC-9) 시트 [이동] → 웹검색 URL 로 Linking.openURL(01b Q2 웹검색 폴백).
+ *  - I5 (AC-9 · TRIP-1167) 시트 [이동] → 서버 아웃바운드 `{BASE}/stays/{stayId}/outbound` 로 Linking.openURL.
  *  - R1 (TRIP-1041 AC-1) "일정에 추가" 버튼·담기 안내는 없다(QA #011 사용자 결정 — 구 I6·I7 폐기).
  *  - R2 (TRIP-1041 AC-4) 로그인 하트 담기 = POST 1회 + 찬 하트(무회귀).
  *  - R3 (TRIP-1041 AC-3 · 맹점 4) 같은 순간 두 번 누른 하트 = POST 1회, 첫 요청이 끝날 때까지 하트 잠김.
@@ -81,9 +81,9 @@ jest.mock('expo-linking', () => ({
 }));
 
 // TRIP-1019 #018 — 이동 방식 판정(`stayOutboundMode`)의 목 자리. 기본(undefined)은 **실제 함수**를 부른다 —
-// 지금 계약에선 이동이 항상 웹검색 폴백이라 시트가 폴백 얼굴이 된다(W1). "다시 보지 않기"·제휴 고지는
-// 제휴 딥링크 모드에서만 있는 경로라(BR-U1-30 · BR-U6-33), 그 경로를 지키는 기존 심판(G1·G2·F1·I13~I24)은
-// describe 마다 `inAffiliateMode()`로 이 값을 'affiliate' 로 바꿔 계속 돌린다(심판 소실 금지). 함수 이름·
+// TRIP-1167 부터 이동은 서버 아웃바운드(제휴)라 실제 함수도 'affiliate' 다(W1). "다시 보지 않기"·제휴 고지는
+// 제휴 모드에서만 있는 경로라(BR-U1-30 · BR-U6-33), 그 경로를 지키는 기존 심판(G1·G2·F1·I13~I24)은
+// describe 마다 `inAffiliateMode()`로 이 값을 'affiliate' 로 못박아 둔다(실제 함수가 바뀌어도 심판 유지). 함수 이름·
 // 인자 없음은 02a 계약이다 — 이름을 바꾸면 이 목이 안 물려 affiliate 심판이 red 가 된다.
 let mockOutboundMode: 'affiliate' | 'webSearch' | undefined;
 
@@ -107,6 +107,8 @@ function inAffiliateMode(): void {
 const mockOpenURL = Linking.openURL as jest.Mock;
 
 const BASE = 'http://localhost:8080/api/v1';
+// [이동]이 여는 서버 아웃바운드(TRIP-1167) — stayId `NAVER:s1` 의 `:` 는 `%3A` 로 인코딩된다.
+const OUTBOUND_URL = `${BASE}/stays/NAVER%3As1/outbound`;
 
 const OLD_BR_U1_30 =
   '예약 · 결제는 외부 OTA에서 진행되며, TripPilot은 제휴(어필리에이트) 수수료를 받을 수 있어요.';
@@ -552,18 +554,14 @@ describe('I4·I5 · 예약하기 → 제휴 시트 → 이동 (AC-8 · AC-9)', (
     expect(screen.queryByText(OLD_BR_U1_30)).toBeNull();
   });
 
-  it('I5 · 시트 [이동] → 웹검색 URL 로 openURL (01b Q2)', async () => {
+  it('I5 · 시트 [이동] → 서버 아웃바운드 URL 로 openURL (TRIP-1167)', async () => {
     render(<StayDetailPage />, { wrapper: createWrapper() });
     await ready();
 
     fireEvent.press(screen.getByTestId('stay-detail-book'));
     fireEvent.press(screen.getByTestId('stay-ota-confirm'));
 
-    await waitFor(() =>
-      expect(mockOpenURL).toHaveBeenCalledWith(
-        expect.stringContaining(encodeURIComponent(`${DETAIL.name} 예약`))
-      )
-    );
+    await waitFor(() => expect(mockOpenURL).toHaveBeenCalledWith(OUTBOUND_URL));
   });
 });
 
@@ -1040,7 +1038,7 @@ describe('I17~I21 · 서버 값이 켜져 있으면 시트 생략, 모르면 고
   // TRIP-1019 #018 — 체크박스·고지는 제휴 모드에만 있다(폴백 얼굴엔 없음, 01b Q3).
   inAffiliateMode();
 
-  it('I17 · 서버 값 true → [예약하기]가 시트 없이 바로 웹검색을 연다', async () => {
+  it('I17 · 서버 값 true → [예약하기]가 시트 없이 바로 서버 아웃바운드를 연다', async () => {
     signInWithDismissed(true);
     render(<StayDetailPage />, { wrapper: createWrapper() });
     await ready();
@@ -1048,11 +1046,7 @@ describe('I17~I21 · 서버 값이 켜져 있으면 시트 생략, 모르면 고
 
     fireEvent.press(screen.getByTestId('stay-detail-book'));
 
-    await waitFor(() =>
-      expect(mockOpenURL).toHaveBeenCalledWith(
-        expect.stringContaining(encodeURIComponent(`${DETAIL.name} 예약`))
-      )
-    );
+    await waitFor(() => expect(mockOpenURL).toHaveBeenCalledWith(OUTBOUND_URL));
     expect(mockOpenURL).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId('stay-ota-sheet')).toBeNull();
     // 앵커: 값은 서버에서 읽었다.
@@ -1248,14 +1242,12 @@ describe('A-2 · 공유 → Share.share(이름 + 있으면 주소) (TRIP-1019 #0
   });
 });
 
-// TRIP-1019 #018(결정 6) — 지금 [이동]은 늘 구글 웹검색이다(BR-U1-31 검색 우회, `stayOutbound.ts`). 제휴 딥링크
-// 이동이 아니니 BR-U1-30 의 "딥링크 이동 전 제휴 수수료 고지"가 성립하지 않는다 → 폴백 얼굴은 수수료 안내를
-// 숨기고 버튼을 "검색 결과로 이동"으로 바꾼다. "다시 보지 않기"도 숨긴다(01b Q3 — 계정 단위 제휴 고지 억제
-// 동의를 고지가 없는 시트에서 받지 않는다, BR-U6-33). 시트 본문·OTA 행은 이번엔 그대로다(01b Q4).
-// 이 describe 는 목을 안 바꾼다 = 실제 `stayOutboundMode` 가 판정한다. 제휴 얼굴이 살아 있는지는 시트 단위
-// 테스트(OtaChoiceSheet W 절)와 위 affiliate describe 들이 지킨다.
-describe('W1 · 웹검색 폴백 얼굴 — 수수료 고지 없음 · "검색 결과로 이동" (TRIP-1019 #018 · BR-U1-30 · BR-U1-31)', () => {
-  it('로그인 사용자가 [외부에서 예약하기]를 누르면 시트에 수수료 안내·체크박스가 없고 버튼이 "검색 결과로 이동"이다', async () => {
+// TRIP-1167 — [이동]이 서버 아웃바운드(제휴 딥링크)가 됐으니 시트는 제휴 얼굴이다: 수수료 고지(BR-U1-30)·
+// "다시 보지 않기"(로그인)·"{OTA명}로 이동". 이 describe 는 목을 안 바꾼다 = 실제 `stayOutboundMode` 가 판정한다
+// — 그 함수가 'webSearch' 로 되돌아가면 여기가 red 다(위 affiliate describe 들은 목으로 못박혀 있어 못 잡는다).
+// 웹검색 얼굴 자체는 시트 단위 테스트(OtaChoiceSheet W 절)가 계속 지킨다.
+describe('W1 · 기본 얼굴 = 제휴 — 수수료 고지 있음 · 서버 아웃바운드로 이동 (TRIP-1167 · BR-U1-30)', () => {
+  it('로그인 사용자가 [외부에서 예약하기]를 누르면 시트에 수수료 안내·체크박스가 있고 버튼이 "네이버로 이동"이다', async () => {
     signInWithDismissed(false);
     render(<StayDetailPage />, { wrapper: createWrapper() });
     await ready();
@@ -1263,32 +1255,29 @@ describe('W1 · 웹검색 폴백 얼굴 — 수수료 고지 없음 · "검색 �
 
     fireEvent.press(screen.getByTestId('stay-detail-book'));
 
-    // 앵커: 시트는 떴다(본문은 그대로 — 01b Q4).
+    // 앵커: 시트는 떴다.
     expect(screen.getByTestId('stay-ota-sheet')).toBeOnTheScreen();
     expect(screen.getByText(BODY)).toBeOnTheScreen();
-    // 금지: 수수료 고지 박스·문구가 없다.
-    expect(screen.queryByTestId('stay-ota-notice-box')).toBeNull();
-    expect(screen.queryByText(/제휴 수수료/)).toBeNull();
-    // 금지: 로그인 사용자여도 "다시 보지 않기"가 없다(01b Q3).
-    expect(screen.queryByTestId('stay-ota-dont-show')).toBeNull();
-    // 정상: 확인 버튼 이름이 가는 곳을 말한다.
+    // 정상: 수수료 고지 박스·문구가 있다(BR-U1-30).
+    expect(screen.getByTestId('stay-ota-notice-box')).toBeOnTheScreen();
+    expect(screen.getByText(/제휴 수수료/)).toBeOnTheScreen();
+    // 정상: 로그인 사용자는 "다시 보지 않기"가 있다.
+    expect(screen.getByTestId('stay-ota-dont-show')).toBeOnTheScreen();
+    // 정상: 확인 버튼은 제휴 라벨, 폴백 라벨이 아니다.
     expect(screen.getByTestId('stay-ota-confirm')).toHaveTextContent(
-      '검색 결과로 이동'
+      '네이버로 이동'
     );
+    expect(screen.queryByText('검색 결과로 이동')).toBeNull();
   });
 
-  it('"검색 결과로 이동"을 누르면 전처럼 웹검색 URL 을 연다', async () => {
+  it('[이동]을 누르면 서버 아웃바운드 URL 만 한 번 연다 — 구글 검색 URL 이 아니다', async () => {
     render(<StayDetailPage />, { wrapper: createWrapper() });
     await ready();
     fireEvent.press(screen.getByTestId('stay-detail-book'));
 
     fireEvent.press(screen.getByTestId('stay-ota-confirm'));
 
-    await waitFor(() =>
-      expect(mockOpenURL).toHaveBeenCalledWith(
-        expect.stringContaining(encodeURIComponent(`${DETAIL.name} 예약`))
-      )
-    );
+    await waitFor(() => expect(mockOpenURL).toHaveBeenCalledWith(OUTBOUND_URL));
     expect(mockOpenURL).toHaveBeenCalledTimes(1);
   });
 });

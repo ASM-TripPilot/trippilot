@@ -2843,8 +2843,8 @@ export const PREVIEW_STATES: PreviewState[] = [
   },
   // 제휴 고지 시트(BR-U1-30) — book press 시 뜨는 시트. 상세 화면(saved) 배경 위에 시트를 얹어
   // 실제 화면처럼 합성한다(딤은 gorhom BottomSheetBackdrop 이 진다 — 수동 스크림 래퍼 없음).
-  // gorhom 이라 실 슬라이드·딤 전면 커버는 실기 몫. 앱이 지금 실제로 띄우는 얼굴 = 웹검색 폴백
-  // (TRIP-1019 #018, 수수료 고지·"다시 보지 않기" 없음). 제휴 얼굴은 l07 키가 보여 준다.
+  // gorhom 이라 실 슬라이드·딤 전면 커버는 실기 몫. 이 키는 웹검색 폴백 얼굴(TRIP-1019 #018, 수수료 고지·
+  // "다시 보지 않기" 없음)이다. 앱이 지금 실제로 띄우는 얼굴은 제휴(TRIP-1167) — l07 키가 보여 준다.
   {
     key: 'stay-detail-affiliate-sheet',
     band: 'e',

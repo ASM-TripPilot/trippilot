@@ -33,7 +33,7 @@ import type { StayDetail } from '@/shared/api/index.schemas';
  *  층 린트가 막는다(테스트 파일도 적용). 이 폴더는 층 밖이다.
  *
  * 3동작 뼈대: 준비(두 페이지·서버 dismissed:false) → 실행(설정 토글 OFF → 숙소 [예약하기]) →
- *  단언(시트 없음 · 웹검색 이동 1회).
+ *  단언(시트 없음 · 서버 아웃바운드 이동 1회, TRIP-1167).
  *
  * ⚠️ jest 사각: 실제 화면 전환(설정→뒤로→숙소 상세)과 실서버 반영은 6-b 몫.
  *
@@ -223,10 +223,10 @@ describe('TRIP-778 AC-11 · 한 진실 — 설정과 숙소 상세가 같은 서
     await settleNetwork();
     fireEvent.press(screen.getByTestId('stay-detail-book'));
 
-    // 단언 — 시트 없이 웹검색으로 바로 이동했다.
+    // 단언 — 시트 없이 서버 아웃바운드로 바로 이동했다(stayId `NAVER:s1` 의 `:` = `%3A`).
     await waitFor(() =>
       expect(mockOpenURL).toHaveBeenCalledWith(
-        expect.stringContaining(encodeURIComponent(`${ITEM.name} 예약`))
+        `${BASE}/stays/NAVER%3As1/outbound`
       )
     );
     expect(mockOpenURL).toHaveBeenCalledTimes(1);
