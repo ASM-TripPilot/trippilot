@@ -447,8 +447,9 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
    * 하나로 합쳐졌다. DraftPage 는 `resolveFallbackNotice(...)` 가 non-null 이면 그 화면으로 라우팅한다
    * (01b D1). 곁줄 배너·zero 화면·zero 분기는 사라진다.
    *
-   * 왜 통합 버킷인가: solveMode·isFallback·candidatesSummary 세 신호가 배선을 타고 **인터스티셜로
-   * 이어지는지**는 model 도 screen 도 못 본다. 규칙(F-1~F-7)은 `draftView.test.ts` 「폴백·강등 배너 판정」 가,
+   * 왜 통합 버킷인가: solveMode·isFallback 두 신호가 배선을 타고 **인터스티셜로 이어지는지**는 model 도
+   * screen 도 못 본다(후보 요약 LOW 는 TRIP-1174 부터 인터스티셜로 안 간다 — 「폴백 셸」 S10~S14).
+   * 규칙(F-1~F-7)은 `draftView.test.ts` 「폴백 배너 판정」 가,
    * 화면(카피·체크리스트·CTA)은 `GenerationFallbackScreen.test.tsx` 가 따로 잰다 — 여기는 응답 한 벌이
    * 실제로 인터스티셜/기존 얼굴로 갈렸는지다. (하드실패 라우팅은 이 사이클 DraftPage 무심판 — 02a §3.)
    */
@@ -2110,7 +2111,7 @@ describe('폴백·위반 라벨', () => {
 // TRIP-1039 · 옛 DraftPage.fallbackShell.integration.test.tsx
 describe('폴백 셸', () => {
   /**
-   * TRIP-1039 · 폴백·강등·일부 실패 초안이 **지도+시트 셸**로 뜨고, 셸 안에서 그 사실을 계속 말하는지
+   * TRIP-1039 · 폴백·일부 실패 초안(TRIP-1174 부터 후보 부족 LOW 도)이 **지도+시트 셸**로 뜨고, 셸 안에서 그 사실을 계속 말하는지
    * 실 HTTP 로 태우는 심판(AC-1·2·4·5·6·7·10).
    *
    * 무엇을 보장하나:
@@ -2609,6 +2610,33 @@ describe('폴백 셸', () => {
       expect(screen.queryAllByTestId(BANNER)).toHaveLength(1);
       expect(screen.queryByTestId(SHORTFALL)).toBeNull();
     });
+  });
+
+  describe('🔴 S14 · TRIP-1174 5-b 경고-1 — 슬롯 0곳(빈 얼굴)이어도 후보 부족 안내를 잃지 않는다 (INV-4)', () => {
+    it.each(['NO_CANDIDATES', 'LOW'])(
+      'COMPLETE·FULL_AI·isFallback=false·슬롯 0곳·level=%p → 빈 얼굴 + 후보 부족 일반형 안내 1개 · 인터스티셜 0',
+      async (level) => {
+        // 준비 — 후보가 없어 하나도 못 놓은 일정. 이 줄이 없으면 빈 얼굴이 "다시 만들기"만 권해
+        // 다시 만들어도 같은 결과가 나오는 고리에 빠진다(원인이 조용해진다).
+        itineraryScript = () =>
+          itinerary({
+            candidatesSummary: { level },
+            days: [{ date: DAY1, slots: [] }],
+          });
+
+        renderPage();
+
+        // 긍정 앵커 — 빈 얼굴이 떴다(로딩 중 공허 통과 방지).
+        expect(
+          await screen.findByTestId('itinerary-draft-empty', {}, WAIT)
+        ).toBeOnTheScreen();
+        expect(screen.queryAllByTestId(SHORTFALL)).toHaveLength(1);
+        expect(screen.getByTestId(SHORTFALL)).toHaveTextContent(
+          GENERIC_SHORTFALL
+        );
+        expect(screen.queryByTestId('itinerary-fallback-root')).toBeNull();
+      }
+    );
   });
 
   describe('🔴 S9 · 경고-1 보강(02c) — 셸 일차 칩은 데이터가 도착한 날만 그린다 (눌러도 무반응인 칩 금지)', () => {

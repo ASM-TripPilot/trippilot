@@ -700,6 +700,7 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
         // 폴백 판정은 위에서 접은 값 그대로(재발명 금지 → F-7 승계). 인터스티셜을 넘긴 목록이 폴백임을
         // 제목·배지로 계속 말한다(BR-U3-11 · TRIP-1008).
         fallback={fallbackNotice !== null}
+        shortfall={shortfallNotice}
         onSelectDay={setPickedDate}
         onRetry={() => void handleRetry()}
         onBack={handleBack}

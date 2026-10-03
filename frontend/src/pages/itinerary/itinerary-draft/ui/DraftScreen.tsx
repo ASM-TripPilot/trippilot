@@ -23,6 +23,8 @@ import {
   LockGlyph,
 } from '@/features/itinerary/index.view';
 
+import { DraftFallbackBanner } from './DraftFallbackBanner';
+
 /**
  * h11 [완전AI] AI 추천안 초안 — Figma `1870:1083`.
  *
@@ -67,8 +69,9 @@ const FIXED_NOTE_SUFFIX = ' 도착 · 변경 불가';
  * 조회 실패 · 2차 생성 실패 · 재생성 실패 · 폴링 상한 도달). 한 원인을 문구에 박으면 나머지
  * 경우에 **틀린 이유**를 말하게 된다. */
 const STALE_FAILED_NOTE = '일부 정보를 불러오지 못했어요';
-// 폴백·강등 배너(deterministic·minimal·demoted)는 TRIP-791 로 전용 인터스티셜
-// (GenerationFallbackScreen)으로 승격돼 이 화면에서 소멸했다 — 이 화면은 이제 목록만 남는다.
+// 폴백 배너(deterministic·minimal)는 TRIP-791 로 전용 인터스티셜(GenerationFallbackScreen)로
+// 승격돼 이 화면에서 소멸했다 — 이 화면은 이제 목록만 남는다. 후보 부족(LOW)은 폴백이 아니라
+// 인터스티셜로 가지 않는다(TRIP-1174 — 빈 얼굴의 후보 부족 줄만 이 화면이 그린다).
 // 판정(resolveFallbackNotice)·라우팅은 DraftPage 가, 그림은 인터스티셜 화면이 진다(01b D1·D2).
 
 const EMPTY_TITLE = '아직 만들어진 추천안이 없어요';
@@ -111,6 +114,9 @@ export interface DraftScreenProps {
   onManualPlan?: () => void;
   /** 폴백 일정의 목록인가 — `DraftPage` 가 접은 판정 결과만 받는다(원천 신호 어휘는 모른다 · G6). */
   fallback?: boolean;
+  /** 후보 부족 안내 문구(TRIP-1174) — 빈 얼굴에서만 그린다. 슬롯이 0곳인 이유가 후보 부족일 수 있어
+   * 이 줄이 없으면 그 사실이 조용해진다(INV-4). 판정·문구는 `DraftPage` 가 넘긴다. */
+  shortfall?: string | null;
 }
 
 function DayTab({
@@ -324,6 +330,7 @@ export function DraftScreen({
   onPressSlot,
   onManualPlan,
   fallback = false,
+  shortfall = null,
 }: DraftScreenProps): ReactElement {
   // PARTIAL(2단계 생성 중) 얼굴은 이제 DraftPage 가 공용 지도+시트 셸로 그린다(TRIP-790 · D1) —
   // 이 화면은 view.generating 을 읽지 않고 listed 얼굴만 그린다(완성 CTA 는 그대로 · C16 무회귀).
@@ -462,6 +469,14 @@ export function DraftScreen({
               title={FAILED_TITLE}
               description={FAILED_NOTE}
               actions={[]}
+            />
+          ) : null}
+
+          {view.kind === 'empty' ? (
+            <DraftFallbackBanner
+              fallback={false}
+              shortfall={shortfall}
+              staleFailed={false}
             />
           ) : null}
 
