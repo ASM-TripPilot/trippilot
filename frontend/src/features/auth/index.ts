@@ -1,5 +1,8 @@
 export { APP_ICON_COLORS } from './config/gradients';
-export { waitForGateDestination } from './model/gateDestination';
+export {
+  getGateDestination,
+  waitForGateDestination,
+} from './model/gateDestination';
 export type { BootstrapDestination } from './model/resolveBootstrapDestination';
 export { useBootstrapGate } from './model/useBootstrapGate';
 export {
