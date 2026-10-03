@@ -7,12 +7,13 @@ import { defineConfig } from 'steiger';
 
 export default defineConfig([
   ...fsd.configs.recommended,
-  // 예외 1(전역 제외 — 규칙은 끄지 않고 검사 파일만 뺀다): 테스트·개발 프리뷰.
-  // 이유: 테스트는 jest.mock 이 정의 모듈을 겨눠야 해서 딥 경로가 설계다(README §import 경계 「테스트」),
-  //   프리뷰는 공개 API 밖 화면 상태를 펼친다. ESLint 딥 임포트 zone 의 면제 범위와 같다(TEST_IGNORES·_dev).
+  // 예외 1(전역 제외 — 규칙은 끄지 않고 검사 파일만 뺀다): 테스트.
+  // 이유: 테스트는 jest.mock 이 정의 모듈을 겨눠야 해서 딥 경로가 설계다(README §import 경계 「테스트」).
+  //   ESLint 딥 임포트 zone 의 면제 범위와 같다(TEST_IGNORES). 개발 프리뷰(app/_dev)는 라우트 폴더라
+  //   애초에 `steiger ./src` 밖이다(TRIP-1161 — 옛 `./src/app/_dev/**` 글롭은 죽어서 지웠다).
   //   전역 제외라 insignificant-slice 가 프로덕션 참조만 센다(1155 소비처 정의와 같다).
-  // 다시 켤 조건: 없음(정본 설계). `_dev` 글롭은 라우트가 src 밖으로 나가면 죽은 글롭이 되니 그때 지운다(TRIP-1161).
-  { ignores: ['./src/**/*.test.{ts,tsx}', './src/app/_dev/**'] },
+  // 다시 켤 조건: 없음(정본 설계).
+  { ignores: ['./src/**/*.test.{ts,tsx}'] },
   // 예외 2(범위 끄기): features 의 excessive-slicing(슬라이스 25개 > 기준 20, 기준은 바꿀 수 없다).
   // 이유: 공식이 features 그룹화를 "use with caution"이라 하고 자연스러운 묶음 기준이 없다. 옛 도메인 껍데기
   //   정리(TRIP-1159)가 슬라이스 수를 줄이는 정해진 경로다(1155 01d Q3). 끈 동안 features 슬라이스 수는 무감시다.
