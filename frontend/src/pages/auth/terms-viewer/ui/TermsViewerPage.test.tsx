@@ -205,3 +205,37 @@ describe('TRIP-937 AC-4 · 열람 실패 — 오류 + 재시도 (INV-4)', () => 
     expect(screen.queryByText(TERMS.PRIVACY_POLICY.body)).toBeNull();
   });
 });
+
+describe('TRIP-935 · 마크다운 원문이 기호째 보이지 않는다', () => {
+  const MD = [
+    '# 개인정보 처리방침',
+    '',
+    '## 제1조 (수집 항목)',
+    '',
+    '1. **14세 미만**은 가입할 수 없습니다.',
+    '',
+    '| 항목 | 보유기간 |',
+    '|---|---|',
+    '| 닉네임 | 탈퇴 + 30일 |',
+  ].join('\n');
+
+  it('제목·굵게·표의 기호(#, **, |, ---)는 글자로 남지 않고 내용만 보인다', async () => {
+    // 준비: 서버가 마크다운 본문을 준다.
+    mockFetch.mockResolvedValue({
+      termsType: 'PRIVACY_POLICY',
+      version: '1.0',
+      body: MD,
+    });
+
+    // 실행
+    renderViewer('PRIVACY_POLICY');
+
+    // 단언: 내용은 본문 영역 안에 보이고
+    const body = await screen.findByTestId('terms-viewer-body');
+    expect(within(body).getByText('제1조 (수집 항목)')).toBeOnTheScreen();
+    expect(within(body).getByText(/14세 미만/)).toBeOnTheScreen();
+    expect(within(body).getByText('보유기간: 탈퇴 + 30일')).toBeOnTheScreen();
+    // 단언(짝): 마크다운 기호는 어떤 글자에도 없다.
+    expect(within(body).queryByText(/##|\*\*|\|---|\| 항목/)).toBeNull();
+  });
+});

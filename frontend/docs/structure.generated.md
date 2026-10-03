@@ -608,6 +608,9 @@
 ## src/pages/auth/terms-viewer/
 - `src/pages/auth/terms-viewer/index.ts`  →  TermsViewerPage
 
+## src/pages/auth/terms-viewer/model/
+- `src/pages/auth/terms-viewer/model/parseTermsMarkdown.ts`  →  Span · Block · parseTermsMarkdown
+
 ## src/pages/auth/terms-viewer/ui/
 - `src/pages/auth/terms-viewer/ui/TermsViewerPage.tsx`  →  TermsViewerPage
 - `src/pages/auth/terms-viewer/ui/TermsViewerScreen.tsx`  →  TermsViewerScreenProps · TermsViewerScreen
