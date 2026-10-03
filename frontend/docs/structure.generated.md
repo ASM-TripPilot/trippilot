@@ -279,10 +279,14 @@
 - `src/entities/style-analysis/lib/styleFace.ts`  →  StyleFace · resolveStyleFace
 - `src/entities/style-analysis/lib/styleProgress.ts`  →  resolveStyleProgress
 
+## src/entities/trip/config/
+- `src/entities/trip/config/coverGradients.ts`  →  CoverTone · COVER_GRADIENTS · COVER_START · COVER_END
+
 ## src/entities/trip/
-- `src/entities/trip/index.ts`  →  formatDayLabel · formatNightsLabel · nightsCountLabel · nightsLabel · nightsOnlyLabel · formatShareCardPeriod · dayOfWeek · formatBaseNightRange · formatConfirmedDateRange · formatDateRangeWithDow · formatLegendDateRange · formatTripDateRange · formatTripRange · tripDayNumber · classifyTripPhase · isTripOngoing · PastTripRow · TripCard · ChevronRightGlyph
+- `src/entities/trip/index.ts`  →  formatDayLabel · formatNightsLabel · nightsCountLabel · nightsLabel · nightsOnlyLabel · formatShareCardPeriod · dayOfWeek · formatBaseNightRange · formatConfirmedDateRange · formatDateRangeWithDow · formatLegendDateRange · formatTripDateRange · formatTripRange · tripDayNumber · classifyTripPhase · isTripOngoing · COVER_GRADIENTS · pickCoverCity · PastTripRow · TripCard · ChevronRightGlyph
 
 ## src/entities/trip/lib/
+- `src/entities/trip/lib/coverCity.ts`  →  pickCoverCity
 - `src/entities/trip/lib/formatDayLabel.ts`  →  formatDayLabel
 - `src/entities/trip/lib/formatNights.ts`  →  formatNightsLabel · nightsLabel · nightsCountLabel · nightsOnlyLabel
 - `src/entities/trip/lib/formatShareCardPeriod.ts`  →  ShareCardPeriodOptions · formatShareCardPeriod
@@ -1565,4 +1569,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 957개 파일
+합계 959개 파일
