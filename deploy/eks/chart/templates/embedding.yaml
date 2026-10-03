@@ -46,13 +46,18 @@ spec:
               value: "2"
             - name: MKL_NUM_THREADS
               value: "2"
+          # 기동·준비는 `/ready`(모델이 실제로 올라왔는지), 생존은 `/health`(프로세스)다.
+          # 셋 다 `/health` 였을 때는 **모델 없는 파드가 정상으로 보였다** — `/health` 가
+          # 설계상 모델을 기다리지 않아 첫 프로브에서 바로 200 이고, 아래 180(15분) 여유도
+          # 사문이었다(2026-10-03 DEV 실측: `/embed` 전부 500 인데 배포는 success).
+          # 생존만 `/health` 로 남기는 이유: 모델을 못 읽는 이미지는 재시작해도 안 고쳐진다.
           startupProbe:
-            httpGet: { path: /health, port: http }
+            httpGet: { path: /ready, port: http }
             periodSeconds: 5
             timeoutSeconds: 5
             failureThreshold: 180
           readinessProbe:
-            httpGet: { path: /health, port: http }
+            httpGet: { path: /ready, port: http }
             periodSeconds: 10
             timeoutSeconds: 5
           livenessProbe:

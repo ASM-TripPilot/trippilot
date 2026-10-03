@@ -330,21 +330,43 @@ def health() -> dict:
     없이도 돌아야 하고(UnwiredEmbedding 계약), 여기에 결합을 걸면 임베딩 컨테이너의
     재시작 루프가 일정 생성·회고까지 기동 실패로 끌고 간다.
     """
-    # 백엔드마다 "다 읽었다"의 실체가 다르다. 엉뚱한 것을 보면 `loaded` 가 영원히
-    # false 로 남아 워밍 진행을 보는 유일한 창이 막힌다.
-    if BACKEND == "onnx":
-        loaded = _session is not None
-    elif BACKEND == "triton":
-        loaded = _tokenizer is not None
-    else:
-        loaded = _model is not None
     return {
         "status": "ok",
         "model": MODEL_NAME,
         "dim": EXPECTED_DIM,
-        "loaded": loaded,
+        "loaded": _loaded(),
         "backend": BACKEND,
     }
+
+
+def _loaded() -> bool:
+    """백엔드마다 "다 읽었다"의 실체가 다르다. 엉뚱한 것을 보면 영원히 false 로 남아
+    워밍 진행을 보는 유일한 창이 막힌다."""
+    if BACKEND == "onnx":
+        return _session is not None
+    if BACKEND == "triton":
+        return _tokenizer is not None
+    return _model is not None
+
+
+@app.get("/ready")
+def ready() -> dict:
+    """**모델이 실제로 올라왔을 때만 200.** [health] 와 가르는 이유가 있다.
+
+    `/health` 는 설계상 모델을 기다리지 않는다(위 docstring) — 운영자 관측용이다.
+    그런데 배포 차트가 그것을 readiness·startup 프로브로 쓰고 있었다. 관측용 신호를
+    트래픽 게이트로 승격시킨 셈이라, **영구히 못 뜨는 모델이 정상으로 보였다**:
+    가중치 권한 결함(TRIP-517 후속)으로 `/embed` 가 전부 500 인데 파드는 `1/1 Running`
+    이고 배포는 success 로 끝났다(2026-10-03 DEV 실측). `startupProbe` 의
+    `failureThreshold: 180`(15분)도 그래서 사문이었다 — 첫 프로브에서 바로 통과했다.
+
+    여기서 기동을 **죽이지는 않는다**(503 일 뿐이다). AI 는 임베딩 없이도 돌아야 하고
+    (UnwiredEmbedding 계약 · INV-4), 그 강등은 그대로다. 달라지는 것은 **아무도 모른 채
+    넘어가지 않는다**는 것뿐이다 — Service 가 엔드포인트에서 빼고 배포가 실패로 끝난다.
+    """
+    if not _loaded():
+        raise HTTPException(503, "모델 로드 전")
+    return {"ready": True, "model": MODEL_NAME, "dim": EXPECTED_DIM}
 
 
 @app.get("/model")
