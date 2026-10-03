@@ -324,6 +324,19 @@ describe('🔴 AC-2·3·5 · 속성 — 오라클과 같고, 순서를 섞어도
       outsideUnknownCard: 0,
     };
 
+    // 적중을 시드 운에 맡기지 않는다(README §테스트 전략) — examples 는 매 실행 맨 앞에 돈다.
+    // ① 기간 안 확정 2건 같은 기간(동점 → tripId) + 기간 밖 모름 → card·tieById·outsideUnknownCard
+    const tieWithOutsideUnknown = [
+      entry(trip('b', '2026-06-10', '2026-06-12'), 'CONFIRMED'),
+      entry(trip('a', '2026-06-10', '2026-06-12'), 'CONFIRMED'),
+      entry(trip('c', '2026-06-12', '2026-06-13'), 'unknown'),
+    ];
+    // ② 기간 안 확정 + 기간 안 모름 → blockedByUnknown
+    const blockedByInRangeUnknown = [
+      entry(trip('a', '2026-06-10', '2026-06-12'), 'CONFIRMED'),
+      entry(trip('b', '2026-06-11', '2026-06-11'), 'unknown'),
+    ];
+
     fc.assert(
       fc.property(listAndShuffle, ([list, shuffled]) => {
         const expected = oracle(list, TODAY);
@@ -358,7 +371,12 @@ describe('🔴 AC-2·3·5 · 속성 — 오라클과 같고, 순서를 섞어도
           if (outsideUnknown) hits.outsideUnknownCard += 1;
         }
       }),
-      { numRuns: 400 }
+      {
+        numRuns: 400,
+        examples: [tieWithOutsideUnknown, blockedByInRangeUnknown].map(
+          (list) => [[list, [...list].reverse()]]
+        ),
+      }
     );
 
     expect(hits.card).toBeGreaterThan(0);
