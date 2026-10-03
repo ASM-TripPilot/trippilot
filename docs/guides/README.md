@@ -9,3 +9,4 @@
 | [jira.md](jira.md) | 지라 이슈·Smart Commit·개발 패널·상태 흐름 | 지라 쓸 때 |
 | [slack.md](slack.md) | GitHub/Jira for Slack 슬래시 커맨드·알림·인라인 액션 | 슬랙 쓸 때 |
 | [aws-eks-deployment.md](aws-eks-deployment.md) | DEV/PRD Terraform·EKS 수동 배포 | AWS 배포·환경 준비 |
+| [poi-수집본-적재.md](poi-수집본-적재.md) | 수집한 POI(장소·사진)를 배포 환경 DB 에 넣는 절차 | 배포 환경에 장소가 비어 있을 때 |
