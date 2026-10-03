@@ -1,5 +1,12 @@
 import type { ReactElement } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+
+import {
+  COVER_END,
+  COVER_GRADIENTS,
+  COVER_START,
+} from '../config/coverGradients';
 
 import { ChevronRightGlyph, MoreDotsGlyph, TrashGlyph } from './TripGlyphs';
 import type { MyTripCardVM } from '../model';
@@ -15,7 +22,8 @@ import type { MyTripCardVM } from '../model';
  * 무엇을 보장하나:
  *  - 제목·메타줄·부가정보 leaf 는 값 하나만 담는다(toHaveTextContent 완전일치 계약).
  *  - 배지는 badge!==null 일 때만, resume CTA 는 badge==='draft' 일 때만 뜬다(파생 — 별도 VM 필드 없음).
- *  - 사진 자리는 중립 회색(`bg-surface-soft`) — `Trip` 계약에 사진 필드가 없다(INV-1).
+ *  - 사진 자리는 imageUrl(픽스처 전용)이 있으면 Image, 없으면 톤별 가로 그라데이션 + 도시 이름(TRIP-1208,
+ *    Figma 4828:2737) — `Trip` 계약에 사진 필드가 없어(INV-1) 실서비스는 항상 그라데이션이다.
  */
 
 /** resume CTA 미제공 시 onResume 대신 onPress 로 폴백(현 h06 동작 보존). */
@@ -65,7 +73,18 @@ export function TripCard({
   menuOpen = false,
   onPressMenu,
 }: TripCardProps): ReactElement {
-  const { tripId, title, metaLine, badge, extra, resume, imageUrl } = vm;
+  const {
+    tripId,
+    title,
+    metaLine,
+    badge,
+    extra,
+    resume,
+    imageUrl,
+    coverCity,
+    coverTone = 'upcoming',
+  } = vm;
+  const city = coverCity?.trim() ? coverCity.trim() : null;
   const showMore = onPressDelete !== undefined;
   const showMenu = showMore && menuOpen;
 
@@ -80,16 +99,40 @@ export function TripCard({
       onPress={onPress}
       className="w-full overflow-hidden rounded-card border border-hairline bg-canvas"
     >
-      {/* 사진 자리 — imageUrl(픽스처 전용, AC-6 G7) 있으면 Image, 없으면 중립 회색(Trip 에 사진 필드
-          없음, INV-1). 배지·resume 는 이 위에 얹는다. */}
-      <View className="h-[178px] w-full bg-surface-soft">
+      {/* 사진 자리 — imageUrl(픽스처 전용, AC-6 G7) 있으면 Image, 없으면 톤별 그라데이션 + 도시 이름
+          (Trip 에 사진 필드 없음, INV-1). 배지·resume 는 이 위에 얹는다. */}
+      <View className="h-[178px] w-full">
         {imageUrl ? (
           <Image
             testID={`${testIDPrefix}-photo-${tripId}`}
             source={{ uri: imageUrl }}
             className="h-[178px] w-full"
           />
-        ) : null}
+        ) : (
+          <>
+            <LinearGradient
+              colors={[...COVER_GRADIENTS[coverTone]]}
+              start={COVER_START}
+              end={COVER_END}
+              style={{
+                position: 'absolute',
+                top: 0,
+                right: 0,
+                bottom: 0,
+                left: 0,
+              }}
+            />
+            {city !== null ? (
+              <Text
+                testID={`${testIDPrefix}-city-${tripId}`}
+                numberOfLines={1}
+                className="absolute left-[16px] right-[120px] top-[16px] font-noto-bold text-[22px] font-bold leading-[29px] text-on-primary"
+              >
+                {city}
+              </Text>
+            ) : null}
+          </>
+        )}
         {/* 우상단 줄 — [배지][⋯](Figma topRight, gap 8). testID 없음(TC7 host testID 수 보호). */}
         <View className="absolute right-[14px] top-[14px] flex-row items-center gap-sm">
           {badge !== null ? (

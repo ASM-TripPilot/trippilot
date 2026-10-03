@@ -4,7 +4,12 @@ import { useRouter } from 'expo-router';
 import type { Trip } from '@/shared/api/index.schemas';
 import { useGetTripsTripIdItinerary } from '@/shared/api/index.hooks';
 import { isNotFound } from '@/shared/api';
-import { formatNightsLabel } from '@/entities/trip';
+import {
+  classifyTripPhase,
+  formatNightsLabel,
+  pickCoverCity,
+  type CoverTone,
+} from '@/entities/trip';
 import { formatConfirmedDateRange } from '@/entities/trip';
 import { isTripOngoing } from '@/entities/trip';
 import {
@@ -43,6 +48,20 @@ export interface TripCardContainerProps {
  * 구분자만 Figma h37 의 `~` 로 로컬 치환한다(01b Q5, h25 회귀 회피). */
 function formatCardDateRange(startDate: string, endDate: string): string {
   return formatConfirmedDateRange(startDate, endDate).replace(' – ', ' ~ ');
+}
+
+function coverTone(
+  trip: Trip,
+  status: Parameters<typeof classifyTripPhase>[1],
+  today: string | undefined
+): CoverTone {
+  if (today === undefined) return 'upcoming';
+  const phase = classifyTripPhase(trip, status, today);
+  return phase === 'ongoing'
+    ? 'live'
+    : phase === 'ended'
+      ? 'ended'
+      : 'upcoming';
 }
 
 export function TripCardContainer({
@@ -84,6 +103,9 @@ export function TripCardContainer({
     badge,
     extra,
     resume,
+    // TRIP-1208 · 커버 — 첫 목적지 도시 + 단계 톤(확정 × 오늘: 여행 중=live · 종료=ended · 그 외=upcoming).
+    coverCity: pickCoverCity(trip.destinations),
+    coverTone: coverTone(trip, itinerary.data?.status, today),
   };
 
   const onPress = (): void => {
