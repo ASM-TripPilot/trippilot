@@ -6,8 +6,9 @@ import {
   screen,
   within,
 } from '@testing-library/react-native';
-import { Text } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
+import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 
 import { MapSheetShell } from './MapSheetShell';
 
@@ -1025,5 +1026,89 @@ describe('🔴 MapSheetShell · SH17 — 셸 시트가 안전 영역 top 과 키
     expect(host.props.enableDynamicSizing).toBe(false);
     expect(host.props.snapPoints).toEqual([28, '45%', '88%']);
     expect(host.props.index).toBe(1);
+  });
+});
+
+/* ───────────────────────────────────────────────────────────────────────
+ * SH19 — 스크롤 끝 카드가 CTA 바 뒤에 숨지 않는다 (TRIP-935 · 결과 시트 마지막 카드 가림)
+ *
+ * CTA 바는 시트 위에 absolute 로 떠 있어, 본문 아래 여백이 모자라면 끝까지 스크롤해도 마지막 카드가 바 뒤에
+ * 반쯤 남는다(h08 1일차 8번째 카드 실측). 그래서 본문 스크롤 뷰의 아래 여백 ≥ CTA 바 81 + 하단 안전 영역이어야
+ * 한다(편집기 N5 와 같은 하한). 인셋 0·34·120 세 줄이 짝이라, 인셋을 빼먹은 고정값은 34·120 줄에서 걸린다.
+ * 상한은 하한 + 24(카드 한 칸 틈 pb-2xl) — 여백이 몇 배로 불어 바 위에 빈 칸이 생기는 회귀를 잡는다.
+ * 반대편(SH19b): CTA 가 없는 셸(h07 생성 중·i01 허브·Plan-B 재계산 중)은 덮을 바가 없으니 여백을 안 준다.
+ * ⚠️ 원리적 사각: 실제로 카드가 바 위로 올라오는지는 gorhom 런타임 몫이라 6-b 실기.
+ *
+ * 3동작 뼈대: 준비=(하단 인셋·CTA 유무를 정해) 셸 렌더 → 실행=렌더 → 단언=본문 스크롤 뷰의 paddingBottom.
+ * ─────────────────────────────────────────────────────────────────────── */
+function renderShellWithBottomInset(
+  bottom: number | null,
+  cta: Parameters<typeof MapSheetShell>[0]['cta']
+): void {
+  const shell = (
+    <MapSheetShell
+      center={CENTER}
+      pins={PINS}
+      days={DAYS}
+      header={<Text testID="fake-header">헤더</Text>}
+      cta={cta}
+    >
+      <Text testID="fake-body">본문</Text>
+    </MapSheetShell>
+  );
+  render(
+    bottom === null ? (
+      shell
+    ) : (
+      <SafeAreaInsetsContext.Provider
+        value={{ top: 47, bottom, left: 0, right: 0 }}
+      >
+        {shell}
+      </SafeAreaInsetsContext.Provider>
+    )
+  );
+}
+
+/** 본문 스크롤 뷰가 받은 paddingBottom. 목에선 시트 본체·스크롤 뷰가 같은 통과형이라 본문에서 가장 가까운
+ *  통과형 조상이 스크롤 뷰다(SH18c 와 같은 식) — snapPoints 가 없어야 시트 본체를 잘못 집지 않은 것이다. */
+function bodyPaddingBottom(): unknown {
+  let scroll = screen.getByTestId('fake-body').parent;
+  while (scroll && scroll.type !== (BottomSheetScrollView as unknown)) {
+    scroll = scroll.parent;
+  }
+  if (!scroll) throw new Error('본문 스크롤 뷰가 없다');
+  expect(Array.isArray(scroll.props.snapPoints)).toBe(false);
+  const style = StyleSheet.flatten(scroll.props.contentContainerStyle) as
+    { paddingBottom?: unknown } | undefined;
+  return style?.paddingBottom;
+}
+
+const ONE_CTA = [
+  { label: '확정하기', variant: 'primary' as const, onPress: jest.fn() },
+];
+
+describe('🔴 MapSheetShell · SH19 — 본문 아래 여백 = CTA 바 + 하단 안전 영역, CTA 없으면 0 (TRIP-935)', () => {
+  it.each<[string, number, number | null]>([
+    ['안전 영역 Provider 없음(인셋 0)', 81, null],
+    ['하단 인셋 34(홈 인디케이터 기기)', 115, 34],
+    ['하단 인셋 120(고정값으로는 못 맞추는 큰 값)', 201, 120],
+  ])(
+    '%s → 본문 스크롤 뷰 paddingBottom ≥ %i (상한 +24)',
+    (_label, min, bottom) => {
+      renderShellWithBottomInset(bottom, ONE_CTA);
+
+      const padding = bodyPaddingBottom();
+      expect(typeof padding).toBe('number');
+      expect(padding as number).toBeGreaterThanOrEqual(min);
+      expect(padding as number).toBeLessThanOrEqual(min + 24);
+    }
+  );
+
+  it('SH19b · CTA 미전달·빈 배열이면 인셋 34 여도 본문 아래 여백이 없다', () => {
+    for (const cta of [undefined, []]) {
+      renderShellWithBottomInset(34, cta);
+      expect(bodyPaddingBottom() ?? 0).toBe(0);
+      screen.unmount();
+    }
   });
 });

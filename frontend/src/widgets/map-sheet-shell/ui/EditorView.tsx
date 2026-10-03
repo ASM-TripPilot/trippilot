@@ -15,7 +15,7 @@ import { buildSlotKey } from '@/entities/itinerary-slot';
 import { violationLabel } from '@/entities/itinerary-slot';
 import { SlotStopCard } from '@/entities/itinerary-slot';
 
-import type { CtaButton } from './CtaBar';
+import { CTA_BAR_HEIGHT, type CtaButton } from './CtaBar';
 import { InfoCircleGlyph, PlusGlyph } from './EditorGlyphs';
 import { BackChevronGlyph } from './MapSheetGlyphs';
 import { MapSheetShell } from './MapSheetShell';
@@ -85,10 +85,6 @@ const GUIDE_IN_TRIP =
 // 리스트 끝 센티널(드롭존 칸). poiId 가 아니라 이 문자열이라 슬롯과 키가 겹치지 않는다.
 const DROP_SENTINEL = 'itinerary-edit-drop-sentinel';
 type ListItem = EditorViewSlot | typeof DROP_SENTINEL;
-
-// 셸 하단 CTA 바 높이 — CtaBar pt-md(12) + 버튼 52 + pb-lg(16) + 윗선 ≈ 81.3pt(TRIP-1112 실기 실측)를 올림.
-// 스크롤 끝의 「장소 추가」·안내줄이 CTA 바 뒤에 숨지 않게 본문 하단 여백으로 쓴다.
-const CTA_BAR_HEIGHT = 82;
 
 export function EditorView({
   center,

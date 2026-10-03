@@ -19,7 +19,7 @@ import {
   type MapViewProps,
 } from '@/shared/map';
 
-import { CtaBar, type CtaButton } from './CtaBar';
+import { CTA_BAR_HEIGHT, CtaBar, type CtaButton } from './CtaBar';
 import { DayChipOverlay, type DayChip } from './DayChipOverlay';
 import { MapFallbackBar } from './MapFallbackBar';
 
@@ -180,7 +180,12 @@ export function MapSheetShell<T = unknown>({
   const mapLocked = mapViewOnly ?? !sheetClosed;
   // 시트 윗변 한계 = 상태바·다이내믹 아일랜드 아래(TRIP-1014 #076). useSafeAreaInsets() 는 Provider 가
   // 없으면 throw 하므로(jest 전반) null 을 허용해 읽는다.
-  const topInset = useContext(SafeAreaInsetsContext)?.top ?? 0;
+  const insets = useContext(SafeAreaInsetsContext);
+  const topInset = insets?.top ?? 0;
+  // CTA 바는 시트 위에 떠 있어(아래 absolute) 스크롤 끝 카드를 덮는다 — 바 높이 + 하단 안전 영역만큼
+  // 본문 아래를 비워 마지막 카드까지 바 위로 올라오게 한다. 같은 이유로 Provider 없으면 0.
+  const hasCta = cta !== undefined && cta.length > 0;
+  const bottomInset = insets?.bottom ?? 0;
 
   return (
     <View testID="map-sheet-shell-root" className="flex-1 bg-canvas">
@@ -270,7 +275,14 @@ export function MapSheetShell<T = unknown>({
             {children}
           </View>
         ) : (
-          <BottomSheetScrollView onScrollBeginDrag={onSheetScrollBeginDrag}>
+          <BottomSheetScrollView
+            onScrollBeginDrag={onSheetScrollBeginDrag}
+            contentContainerStyle={
+              hasCta
+                ? { paddingBottom: CTA_BAR_HEIGHT + bottomInset }
+                : undefined
+            }
+          >
             {header}
             {children}
           </BottomSheetScrollView>
@@ -279,7 +291,7 @@ export function MapSheetShell<T = unknown>({
 
       {/* 하단 고정 CTA 바 — CTA 가 있을 때만(빈 배열/미전달이면 통째로 미렌더 · D9). 닫힘 칸에선 안 그린다 —
           28px 핸들을 CTA 바가 덮어 시트를 되올릴 손잡이가 사라진다(TRIP-920). */}
-      {!sheetClosed && cta !== undefined && cta.length > 0 ? (
+      {!sheetClosed && hasCta ? (
         <SafeAreaView
           edges={['bottom']}
           className="absolute bottom-0 left-0 right-0 bg-canvas"
