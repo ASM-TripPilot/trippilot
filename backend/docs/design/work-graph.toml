@@ -2678,8 +2678,8 @@ FE 1055 가 이미 완료(DELETE /trips 호출) — 현행 서버 동작 실사�
 [[nodes]]
 id = "DEV-SECRETS-FILL"
 ticket = ""
-title = "DEV Secrets Manager 충전 — 소셜·AI 키가 비어 로그인·일정생성이 죽는다"
-status = "external"
+title = "DEV Secrets Manager 충전 — 소셜·AI 키가 비어 로그인·일정생성이 죽었다"
+status = "done"
 owner = "사용자"
 migration = false
 touches = []
@@ -2707,14 +2707,28 @@ note = """
    안전 순서: **1차 배포는 키만 채우고, 모드 전환은 2차 배포로** 나눈다.
 
 충전 뒤 `aws-deploy`(dev·apply) 1회 → sync-secrets 가 k8s 로 복사한다.
-검증은 사람 실기(소셜 로그인 4종) + 일정 생성 1회.
+
+**[완료 2026-10-03] 충전·배포 완료.** 실측으로 두 가지가 확인됐다 —
+`trippilot/dev/backend` 는 **모드·JWT 5칸뿐**(소셜 키가 하나도 없었다), `trippilot/dev/ai` 는
+**값이 한 번도 안 들어간 그릇**(GetSecretValue 가 NotFound)이었다. 즉 AI 는 LLM 키 없이
+규칙 폴백으로만 돌고 있었고, 그 사실이 "AI 가 이상하다"로만 보였다.
+backend 5→12칸 · ai 0→13칸 머지 후 `aws-deploy`(dev·apply) 성공(run 37113637273),
+파드에 소셜 키 4종 주입 확인. 같은 배포에 PR #866(JVM 힙 75%·AI 워커 2·데드라인 on)도 탔다.
+
+**로컬 `.env` 이름이 시크릿 키 이름과 여럿 다르다** — `AI_LLM_PROVIDER`→`TRIPPILOT_LLM_PROVIDER`,
+`AI_LLM_FEATURE_MODELS`→`TRIPPILOT_LLM_FEATURE_MODELS`, 카카오 키는 AI 그룹에서 `KAKAO_REST_API_KEY`.
+손으로 옮기면 조용히 틀린다(배포 가이드도 *"Compose 별칭 AI_LLM_PROVIDER 는 지원하지 않는다"* 고 적는다).
+
+**남은 것**: 애플 p8 3종(`APPLE_TEAM_ID`·`APPLE_KEY_ID`·`APPLE_PRIVATE_KEY`)과
+`SOCIAL_TOKEN_ENCRYPTION_KEY` 는 로컬에도 없어 못 채웠다 — 로그인 자체는 `APPLE_CLIENT_ID` 로 되고,
+이 셋은 **탈퇴 시 토큰 revoke** 몫이다(TRIP-933).
 """
 
 [[nodes]]
 id = "POI-INGEST-RUNBOOK"
 ticket = ""
-title = "POI 수집분 적재 런북·스크립트 — 수집이 artifact 로만 남아 서버 DB 가 비어 있다"
-status = "todo"
+title = "POI 수집분 적재 런북·스크립트 — 수집이 artifact 로만 남아 서버 DB 가 비어 있었다"
+status = "done"
 migration = false
 touches = ["docs/guides/", "backend/scripts/"]
 note = """
@@ -2740,15 +2754,22 @@ note = """
 전국 수준이 되려면 여러 run 의 artifact 를 순차 적재해야 한다. 런북이 이걸 명시하지 않으면
 "한 번 부었는데 왜 아직 적지" 가 반복된다.
 
-이 노드는 **런북과 스크립트까지**다. 실행은 [[POI-INGEST-RUN]] — 클러스터 자격이 필요해 쪼갰다.
+이 노드는 **런북과 스크립트까지**다. 실행은 [[POI-INGEST-RUN]].
+
+**[완료 2026-10-03] PR #882 머지** — `docs/guides/poi-수집본-적재.md` + `backend/scripts/ingest_pois.py`.
+**적재 대상은 회차 artifact 가 아니라 팀 공유본(`ai/data/collected_pois.json`)이 1순위**였다 —
+수집 워크플로가 매일 `merge_pois_docs.py` 로 누적해 롤링 PR(`chore/poi-data-sync`)로 올린다.
+실측 18,605건(사진 보유 16,607). artifact 회차 적재는 그 PR 이 밀렸을 때의 우회로다.
+
+검수에서 결함 둘을 실 클러스터로 잡았다 — 클러스터 이름이 `trippilot-dev-eks`(실제 `trippilot-dev`),
+도달 확인을 "인증 GET 은 405"로 안내(실측 **500** — 비파괴 POST 로 교체).
 """
 
 [[nodes]]
 id = "POI-INGEST-RUN"
 ticket = ""
-title = "POI 적재 1회 실행 — port-forward 로 수집분을 DEV DB 에 붓는다"
-status = "external"
-owner = "사용자"
+title = "POI 적재 1회 실행 — port-forward 로 수집분을 DEV DB 에 부었다"
+status = "done"
 migration = false
 touches = []
 note = """
@@ -2760,6 +2781,15 @@ note = """
 
 완료 판정: 적재 응답의 `registered+updated` 가 보낸 건수와 맞고, DEV DB 의 `poi` 수와
 `image_url` 채움률이 오른다.
+
+**[완료 2026-10-03] 적재 성공.** 공유본 18,605건을 500건씩 38회 — **신규 18,605 · 탈락 0 ·
+지역코드미상 0**. DB 실측 `total=18646 with_image=16607 regions=212`.
+**external 이 아니게 된 이유**: EKS access entry 를 받아 세션이 직접 실행했다(아래 CLUSTER-ACCESS).
+
+**사진 경로가 끝까지 뚫려 있는 것도 확인했다** — `poi.image_url` → `PlaceResponse.imageUrl` →
+openapi `Place.imageUrl` → orval. 즉 "장소 사진이 안 보인다"는 계약 공백이 아니라 데이터 공백이었다.
+(주의: 내부 반경 DTO `PoiReadResponse` 에는 사진 칸이 **없다** — AI 후보 전달용이라 그렇고,
+그걸로 사진 유무를 판정하면 0 으로 오독한다.)
 """
 
 [[nodes]]
@@ -2784,6 +2814,14 @@ Pod Identity 선례가 이미 있다(`infra/terraform/stack/eks.tf:89` 의 AI↔
 적용은 사용자 승인 뒤 `aws-deploy` 로 한다.
 
 이것이 열려야 [[AI-ITIN-QUALITY]] 의 degraded 원인(타임아웃 vs 다른 것)을 가를 수 있다.
+
+**정정(2026-10-03) — "로그가 안 보인다"의 1차 원인은 수집기 부재가 아니었다.**
+클러스터 접근 주체에 **사람이 한 명도 없었다**([[CLUSTER-ACCESS]] 참조) — 수집기가 있든 없든
+`kubectl logs` 조차 못 쓰는 상태였다. access entry 를 열어 그 증상은 해소됐다.
+
+따라서 이 노드의 값어치는 **클러스터 접근이 없는 사람도 보게 하는 것**과 **보존·검색**으로 좁혀진다
+(지금은 파드가 죽으면 그 로그도 같이 사라진다). 우선순위는 내려가지만 사라지지는 않는다.
+PR #885 로 올라가 있고 **적용 전 bootstrap 정책 재등록이 선행**이다(IAM 에 logs:* 가 추가됐다).
 """
 
 [[nodes]]
@@ -2806,4 +2844,31 @@ note = """
 **degraded 1회**(서울 1차)의 원인은 로그가 필요하다 → [[OBSERVABILITY-DEV]] 선행.
 우리 몫으로 넘어올 가능성이 하나 있다 — 원인이 백엔드 데드라인 예산이면 그때 노드를 새로 세운다
 (예산은 2026-10-03 PR #866 에서 코드 기본과 정렬했다: day1 15s · total 60s).
+"""
+
+[[nodes]]
+id = "CLUSTER-ACCESS"
+ticket = ""
+title = "EKS 접근 주체에 사람이 없었다 — kubectl 이 아무에게도 안 열려 있었다"
+status = "done"
+migration = false
+touches = []
+note = """
+2026-10-03 발견. 팀원이 "로그 확인이 안 된다"고 했을 때 원인을 관측성 부재로 짚었는데, 실제로는
+**그보다 한 겹 앞**이었다 — `aws eks list-access-entries` 가 셋만 돌려줬다:
+배포 역할(`trippilot-dev-github-deploy`) · 노드 역할 · EKS 서비스 역할. **사람이 0명이다.**
+
+authenticationMode 는 `API` 라 aws-auth ConfigMap 이 아니라 access entry 가 유일한 통로인데,
+Terraform 이 사람 몫을 만들지 않는다(배포가 돌 만큼만 연다 — 최소권한으로는 옳은 설계다).
+그래서 AWS 콘솔 권한이 있어도 `kubectl` 은 "the server has asked for the client to provide
+credentials" 로 막힌다. **AWS 권한과 쿠버네티스 RBAC 은 별개**라는 것이 이 노드의 교훈이다.
+
+처치: SSO 역할(`AWSReservedSSO_myisb_IsbUsersPS_*`)에 access entry + `AmazonEKSClusterAdminPolicy`.
+같은 SSO 역할로 들어오는 **팀원 전원**이 함께 열린다. 되돌리기는 `delete-access-entry` 한 줄.
+
+이것이 열리자 같은 세션에서 [[POI-INGEST-RUN]] 이 바로 실행 가능해졌다(external → done).
+
+**Terraform 에 넣을지는 미결이다.** 지금은 수동 생성이라 클러스터를 다시 만들면 사라진다.
+`infra/terraform/stack/eks.tf` 에 `aws_eks_access_entry` 로 박아 두는 것이 재현 가능하지만,
+"어느 사람 역할을 코드에 적을 것인가"는 조직 정책 결정이라 여기서 단독으로 정하지 않는다.
 """
