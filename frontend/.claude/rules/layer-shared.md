@@ -78,7 +78,7 @@ paths:
 | `src/shared/api/generated/schemas/companionType.ts` | `'혼자'\|'친구'\|'연인'\|'가족'` — **`'커플'` 없음**(온보딩 축과 다른 목록, BR-U1-39) |
 | `src/shared/api/generated/schemas/poiCategory.ts` | 7종. Figma 칩·카드 라벨과 어긋나면 **enum이 정본** |
 | `src/shared/api/generated/schemas/trip.ts` | `preferenceSnapshot`이 **응답에는 required** — 채우는 주인은 서버, 클라이언트는 요청에 싣지 않는다(`buildCreateTripRequest`가 걷어낸다) |
-| `src/shared/bootstrap/bootstrapReeval.ts` | 온보딩 완료 → 부트스트랩 재평가 pub/sub 신호(값 없는 순수 이벤트) |
+| `src/shared/lib/bootstrapReeval.ts` | 온보딩 완료 → 부트스트랩 재평가 pub/sub 신호(값 없는 순수 이벤트) |
 
 ### `src/shared/ui/pref/` — 취향 타일
 

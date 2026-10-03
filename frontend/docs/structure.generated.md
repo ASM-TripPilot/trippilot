@@ -1455,10 +1455,6 @@
 - `src/shared/api/tokenManager.ts`  →  getAccessToken · setAccessToken · clearAccessToken · hydrate · subscribeAccessToken
 - `src/shared/api/visitConflict.ts`  →  VISIT_CONFLICT_CODES · VisitConflictKind · resolveVisitConflict
 
-## src/shared/bootstrap/
-- `src/shared/bootstrap/bootstrapReeval.ts`  →  subscribeBootstrapReeval · notifyBootstrapReeval
-- `src/shared/bootstrap/index.ts`  →  notifyBootstrapReeval · subscribeBootstrapReeval
-
 ## src/shared/date/
 - `src/shared/date/formatKoreanDate.ts`  →  formatKoreanDate
 - `src/shared/date/formatRelativeTime.ts`  →  formatRelativeTime
@@ -1467,6 +1463,7 @@
 - `src/shared/date/seoulDate.ts`  →  seoulDate · seoulTime · seoulInstant
 
 ## src/shared/lib/
+- `src/shared/lib/bootstrapReeval.ts`  →  subscribeBootstrapReeval · notifyBootstrapReeval
 - `src/shared/lib/nicknameFormat.ts`  →  NicknameFormatReason · NicknameFormatResult · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH · validateNicknameFormat
 
 ## src/shared/location/
@@ -1585,4 +1582,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 965개 파일
+합계 964개 파일

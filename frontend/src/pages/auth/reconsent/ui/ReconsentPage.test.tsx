@@ -9,7 +9,7 @@ jest.mock('@/shared/api', () => ({
 
 // 부트스트랩 재평가 신호(pub/sub)를 목으로 바꿔 발화 여부·순서를 관찰한다(PrefStep2Page 선례).
 // 실물 몸통은 bootstrapReeval.test.ts 가 따로 잠근다.
-jest.mock('@/shared/bootstrap/bootstrapReeval', () => ({
+jest.mock('@/shared/lib/bootstrapReeval', () => ({
   notifyBootstrapReeval: jest.fn(),
   subscribeBootstrapReeval: jest.fn(() => () => {}),
 }));
@@ -37,7 +37,7 @@ import {
 
 import { fetchBootstrap, fetchTerms, patchConsent } from '@/shared/api';
 import type { BootstrapResponse, TermsVersion } from '@/shared/api';
-import { notifyBootstrapReeval } from '@/shared/bootstrap';
+import { notifyBootstrapReeval } from '@/shared/lib/bootstrapReeval';
 
 import { ReconsentPage } from '..';
 

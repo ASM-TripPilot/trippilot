@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { usePreferenceStore } from '@/features/edit-preferences';
-import { notifyBootstrapReeval } from '@/shared/bootstrap';
+import { notifyBootstrapReeval } from '@/shared/lib/bootstrapReeval';
 import { resetPressGuard } from '@/shared/press/pressGuard';
 import { PrefStep1Page } from '@/pages/onboarding/onboarding-pref1';
 import { PrefStep2Page } from '@/pages/onboarding/onboarding-pref2';
@@ -36,7 +36,7 @@ const routerMock = require('expo-router').router as {
   back: jest.Mock;
 };
 
-jest.mock('@/shared/bootstrap/bootstrapReeval', () => ({
+jest.mock('@/shared/lib/bootstrapReeval', () => ({
   notifyBootstrapReeval: jest.fn(),
   subscribeBootstrapReeval: jest.fn(() => () => {}),
 }));
