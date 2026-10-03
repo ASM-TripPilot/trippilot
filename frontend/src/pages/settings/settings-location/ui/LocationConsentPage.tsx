@@ -12,12 +12,16 @@ import { useLocationConsent } from '@/shared/location';
  * "다이얼로그 없이 PUT 없음"이 구조로 지켜진다.
  */
 export function LocationConsentPage(): ReactElement {
-  const { consentOn, disabled, grant, revoke } = useLocationConsent();
+  const { consentOn, status, refetch, saveFailed, disabled, grant, revoke } =
+    useLocationConsent();
   const router = useRouter();
 
   return (
     <LocationConsentScreen
       consentOn={consentOn}
+      loadState={status}
+      onRetry={refetch}
+      saveFailed={saveFailed}
       disabled={disabled}
       impact={revokeImpact()}
       onGrant={grant}
