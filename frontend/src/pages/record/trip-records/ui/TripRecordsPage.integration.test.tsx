@@ -656,7 +656,7 @@ describe('셸 조립 — 전면 지도 + 바텀시트·핀·일차 칩·‹', ()
       );
       const map = screen.getByTestId('map-root');
       expect(map.props.fitPins).toBe(true);
-      expect(map.props.viewOnly).toBe(true);
+      expect(map.props.viewOnly).toBe(false);
     });
 
     it.each([

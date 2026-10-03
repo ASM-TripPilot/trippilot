@@ -5,6 +5,8 @@ import type { ReplanSlotVM } from '@/entities/itinerary-slot';
 
 import { ReplanDraftView } from './ReplanDraftView';
 
+jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
+
 /**
  * TRIP-751 · AC-1·2·4·5·6·7·13 · Seed Q3·Q6·Q8 — i06 재계획안 **순수 뷰**(pages · api import 0).
  * Figma `4314:1923`(펼침)·`4335:1923`(대안 없음).
@@ -408,5 +410,13 @@ describe('🔴 V10 · AC-13 — INV-3', () => {
     const tree = JSON.stringify(screen.toJSON());
     expect(tree).toContain('1.4km');
     expect(tree).not.toMatch(/\d+\s*분|\d+\s*시간|소요/);
+  });
+});
+
+describe('🔴 TRIP-1204 · 시트가 열린 채 손가락 확대 — 지도 잠금 해제', () => {
+  it('V11 · 재계획안 지도는 열려 있다(viewOnly=false)', () => {
+    renderView();
+
+    expect(screen.getByTestId('map-root').props.viewOnly).toBe(false);
   });
 });

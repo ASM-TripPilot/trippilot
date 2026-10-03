@@ -4,6 +4,8 @@ import type { ReplanSlotVM } from '@/entities/itinerary-slot';
 
 import { ReplanSolvingView } from './ReplanSolvingView';
 
+jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
+
 /**
  * TRIP-752 · AC-2·3·4·5·14 · Seed Q8 — i05 "다시 짜는 중" **순수 뷰**(pages · api import 0).
  * Figma `4341:1957`.
@@ -259,5 +261,13 @@ describe('🔴 VS8 · TRIP-1040 AC-9 — 칸 상한·접기가 들어와도 i05 
       expect(text.props.numberOfLines).toBe(1);
       expect(text.props.ellipsizeMode).toBe('tail');
     }
+  });
+});
+
+describe('TRIP-1204 · 재계획 진행 화면은 셸 기본 잠금을 유지한다', () => {
+  it('S-lock · 지도 viewOnly 는 true 다(손가락 확대는 결과 화면만)', () => {
+    renderView();
+
+    expect(screen.getByTestId('map-root').props.viewOnly).toBe(true);
   });
 });
