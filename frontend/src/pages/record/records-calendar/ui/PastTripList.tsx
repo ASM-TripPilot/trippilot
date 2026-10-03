@@ -1,8 +1,8 @@
 import type { ReactElement } from 'react';
-import { View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { PastTripRow } from '@/entities/trip';
-import { ChevronRightGlyph } from '@/features/record';
+import { BookmarkGlyph, ChevronRightGlyph } from '@/features/record';
 import type { PastTripCardVM } from '../model/recordsCalendar';
 
 /**
@@ -21,6 +21,22 @@ export function PastTripList({
   pastTrips,
   onSelectTrip,
 }: PastTripListProps): ReactElement {
+  // TRIP-1206 · 지난 여행 0개 — 점선 박스 한 줄(Figma 4821:2827). 설명·CTA 없음.
+  if (pastTrips.length === 0) {
+    return (
+      <View
+        testID="record-past-empty"
+        className="w-full flex-row items-center gap-[12px] rounded-[12px] border border-dashed border-hairline-strong px-[12px] py-[16px]"
+      >
+        <View className="h-[48px] w-[48px] items-center justify-center rounded-full bg-surface-soft">
+          <BookmarkGlyph size={24} />
+        </View>
+        <Text className="font-noto text-[14px] leading-[20px] text-muted">
+          여행이 끝나면 여기에 기록이 쌓여요
+        </Text>
+      </View>
+    );
+  }
   return (
     <View className="w-full gap-[12px]">
       {pastTrips.map((card) => (
