@@ -363,6 +363,8 @@ const PAGE_PROBE = 'src/pages/__release_probe__/x.tsx';
 const SETTINGS_UI_PROBE =
   'src/pages/settings/settings/ui/__release_probe__.tsx';
 const DEV_PREVIEW_PROBE = 'app/_dev/__release_probe__.tsx';
+const SETTINGS_UI_PROBE_TS =
+  'src/pages/settings/settings/ui/__release_probe__.ts';
 
 describe('msw·목은 앱 코드에 들어오지 않는다 (noMswInStaticGraph 이관)', () => {
   it.each([
@@ -550,6 +552,25 @@ describe('★ 덮어쓰기 함정 — 예외 블록이 있는 파일에서도 �
 
     expect(ruleIds).toContain(RESTRICTED_IMPORTS);
   });
+
+  // TRIP-1169 — 예외 블록이 공통 목록을 펼쳐 다시 선언하는 **하위 경로 패턴** 줄이 지워져도 위 테스트들은
+  // 전부 green 이었다. 루트 이름(paths)이 아니라 `<패키지>/*` 패턴(patterns)을 직접 문다.
+  it.each([
+    ['StateNotice.tsx', STATE_NOTICE, 'expo-sharing/build/Sharing'],
+    // 캡처 어댑터는 캡처 3종 루트를 허용하지만 사진 피커는 루트·하위 경로 모두 막는다.
+    [
+      '캡처 어댑터(사진 피커 하위 경로)',
+      CAPTURE_ADAPTER,
+      'expo-image-picker/build/ImagePicker',
+    ],
+  ])('%s 의 하위 경로 import 는 error', async (_label, filePath, spec) => {
+    const ruleIds = await lint(
+      `import * as Mod from '${spec}';\nexport const probe = Mod;\n`,
+      filePath
+    );
+
+    expect(ruleIds).toContain(RESTRICTED_IMPORTS);
+  });
 });
 
 describe('개발 프리뷰의 가짜 데이터는 앱 코드가 끌지 않는다 (stayRecommendStructure 일부 이관)', () => {
@@ -646,6 +667,39 @@ describe('계정 삭제 다이얼로그는 1단계부터만 열린다 (deleteAcc
     );
 
     expect(ruleIds).toContain(RESTRICTED_SYNTAX);
+  });
+
+  // TRIP-1169 — JSX 가 없는 .ts 에서도 별칭은 같은 우회다(태그 검사를 비켜 가는 통로).
+  it.each([
+    [
+      '.ts 의 별칭 import',
+      "import { DeleteAccountDialog as Dialog } from './DeleteAccountDialog';\nexport const probe = Dialog;\n",
+      SETTINGS_UI_PROBE_TS,
+    ],
+    [
+      '.ts 의 별칭 재수출',
+      "export { DeleteAccountDialog as SafeDialog } from './DeleteAccountDialog';\n",
+      SETTINGS_UI_PROBE_TS,
+    ],
+    [
+      '.tsx 의 별칭 재수출',
+      "export { DeleteAccountDialog as SafeDialog } from './DeleteAccountDialog';\n",
+      SETTINGS_UI_PROBE,
+    ],
+  ])('%s 는 error', async (_label, code, filePath) => {
+    const ruleIds = await lint(code, filePath);
+
+    expect(ruleIds).toContain(RESTRICTED_SYNTAX);
+  });
+
+  // 대조군 — 원래 이름의 재수출은 막지 않는다(별칭만 막는 규칙이 과하게 물지 않는지).
+  it('.ts 에서 원래 이름 그대로 재수출하면 error 0', async () => {
+    const ruleIds = await lint(
+      "export { DeleteAccountDialog } from './DeleteAccountDialog';\n",
+      SETTINGS_UI_PROBE_TS
+    );
+
+    expect(ruleIds).toEqual([]);
   });
 
   it('onCancel·onConfirmDeletion 두 prop 만 넘기면 error 0', async () => {

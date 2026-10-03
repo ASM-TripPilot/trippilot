@@ -270,6 +270,23 @@ const restrictedImports = (paths, patterns = []) => [
   },
 ];
 
+// 별칭은 태그 이름 검사를 통째로 비켜 가므로 JSX 가 없는 .ts 에도 건다 — import 별칭과 재수출 별칭.
+const DELETE_DIALOG_ALIAS_GATE = [
+  {
+    // 다른 이름으로 들여오면 태그 검사(`<DeleteAccountDialog`)를 통째로 비켜 간다.
+    selector:
+      "ImportSpecifier[imported.name='DeleteAccountDialog'][local.name!='DeleteAccountDialog']",
+    message:
+      '계정 삭제 다이얼로그는 원래 이름으로만 import 한다(별칭은 게이트 우회).',
+  },
+  {
+    // `export { DeleteAccountDialog as SafeDialog } from …` — 다른 파일이 별칭으로 되받아 쓰게 만든다.
+    selector:
+      "ExportSpecifier[local.name='DeleteAccountDialog'][exported.name!='DeleteAccountDialog']",
+    message:
+      '계정 삭제 다이얼로그는 원래 이름으로만 재수출한다(별칭은 게이트 우회).',
+  },
+];
 // 계정 삭제는 1단계 확인부터(BR-U6-25) — initialStep 등 다른 prop·펼치기로 건너뛰지 못하게.
 const DELETE_DIALOG_GATE = [
   {
@@ -283,13 +300,7 @@ const DELETE_DIALOG_GATE = [
       "JSXOpeningElement[name.name='DeleteAccountDialog'] > JSXSpreadAttribute",
     message: '계정 삭제 다이얼로그에 props 펼치기 금지(숨은 initialStep 통로).',
   },
-  {
-    // 다른 이름으로 들여오면 위 두 태그 검사를 통째로 비켜 간다.
-    selector:
-      "ImportSpecifier[imported.name='DeleteAccountDialog'][local.name!='DeleteAccountDialog']",
-    message:
-      '계정 삭제 다이얼로그는 원래 이름으로만 import 한다(별칭은 게이트 우회).',
-  },
+  ...DELETE_DIALOG_ALIAS_GATE,
 ];
 // 아무것도 안 하는 핸들러 금지(앱 심사 2.1). 주석은 AST 노드가 아니라 주석뿐인 본문도 빈 본문으로 잡힌다.
 // 정당한 빈 핸들러는 그 줄에 `// eslint-disable-next-line no-restricted-syntax -- <사유>` 로 연다.
@@ -369,6 +380,12 @@ module.exports = defineConfig([
         [...nativeSubpaths(NATIVE_MODULES), CAPTURE_ADAPTER_PATTERN]
       ),
     },
+  },
+  {
+    // JSX 가 없는 .ts 는 태그 검사가 필요 없고 별칭(import·재수출)만 막으면 된다.
+    files: ['src/**/*.ts', 'app/**/*.ts'],
+    ignores: [...TEST_IGNORES, ROUTE_DEV],
+    rules: { 'no-restricted-syntax': ['error', ...DELETE_DIALOG_ALIAS_GATE] },
   },
   {
     files: ['src/**/*.tsx', 'app/**/*.tsx'],
