@@ -956,6 +956,27 @@ describe('이름·지역 검색 (옛 .nameSearch — 통합 심판 0, 단위 전
       expect(screen.queryByTestId(`stay-card-${KEY_A}`)).toBeNull();
     });
 
+    it('이름에는 없고 지역에만 있는 검색어로도 그 지역 숙소만 남는다', () => {
+      // 이름에 "해운대"가 없는 숙소(region 만 해운대) — 이름 일치만으로는 못 찾는 사례.
+      const REGION_ONLY: StayItem = {
+        ...ITEMS[0],
+        externalId: 's3',
+        name: '바다 전망 스테이',
+      };
+      render(
+        <StaySearchScreen
+          region="부산"
+          items={[REGION_ONLY, ITEMS[1]]}
+          nameQuery="해운대"
+          onChangeNameQuery={() => {}}
+        />
+      );
+      expect(
+        screen.getByTestId(`stay-card-${stayKey(REGION_ONLY)}`)
+      ).toBeOnTheScreen();
+      expect(screen.queryByTestId(`stay-card-${KEY_B}`)).toBeNull();
+    });
+
     it('results 인데 검색어가 0건을 만들면 "검색 결과가 없어요"를 낸다', () => {
       render(
         <StaySearchScreen
