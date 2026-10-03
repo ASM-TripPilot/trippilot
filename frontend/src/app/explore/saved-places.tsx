@@ -1,4 +1,4 @@
-import { SavedPlacesPage } from '@/pages/saved-places';
+import { SavedPlacesPage } from '@/pages/explore/saved-places';
 
 /**
  * d02 담은 장소 — 정본 `frontend-components.md` §1의 `explore/saved-places.tsx` 자리.

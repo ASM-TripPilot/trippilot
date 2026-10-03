@@ -30,7 +30,7 @@ import {
  * TRIP-604 · (tabs)/my.tsx — TRIP-290 "마이 준비 중" StateNotice 셸을 l03 실화면으로 교체.
  *
  * 무엇을 보장하나(승인 계약):
- *  - 🔴 AC-8 라우트가 `@/pages/my-page` 슬라이스를 렌더한다 — `shell-tab-placeholder-my`(구 셸) 제거.
+ *  - 🔴 AC-8 라우트가 `@/pages/settings/my-page` 슬라이스를 렌더한다 — `shell-tab-placeholder-my`(구 셸) 제거.
  *  - 🔴 AC-7 testID 계약 `my-profile-card`·`my-profile-count-{upcoming|active|ended}` 존재.
  *    TRIP-1123 부터 세그(`my-trip-segment`)·여행 카드(`my-trip-card-{tripId}`)는 **없다**(일정 탭과 겹쳐 제거).
  *  - 🔴 AC-1 프로필 카드가 닉네임을 보이고 숫자 3칸을 그린다(초안은 세지 않는다 — 미래 초안 1건 → 예정 0).

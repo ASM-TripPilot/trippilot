@@ -3,8 +3,8 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { PreferenceView, Region } from '@/shared/api/generated/schemas';
 import { RegionLevel } from '@/shared/api/generated/schemas';
 import { useTripWizardStore } from '@/features/create-trip/model/tripWizardStore';
-import { RegionPickerPage } from '@/pages/region-picker/ui/RegionPickerPage';
-import { TripNewStep1Page } from '@/pages/trip-new-step1/ui/TripNewStep1Page';
+import { RegionPickerPage } from '@/pages/explore/region-picker/ui/RegionPickerPage';
+import { TripNewStep1Page } from '@/pages/trip/trip-new-step1/ui/TripNewStep1Page';
 
 /**
  * TRIP-1027 AC-6 — **어떤 입력 순서로도** 박수 합과 기간이 어긋나 '다음'이 막히지 않는다.
@@ -73,11 +73,11 @@ jest.mock('@/features/explore/model/regions', () => ({
 
 let mockPreference: PreferenceView | undefined;
 
-jest.mock('@/pages/trip-new-step1/model/usePreferencePrefill', () => ({
+jest.mock('@/pages/trip/trip-new-step1/model/usePreferencePrefill', () => ({
   usePreferencePrefill: () => ({ data: mockPreference }),
 }));
 
-jest.mock('@/pages/trip-new-step1/model/useCreateTrip', () => ({
+jest.mock('@/pages/trip/trip-new-step1/model/useCreateTrip', () => ({
   useCreateTrip: () => ({
     mutateAsync: jest.fn().mockResolvedValue(undefined),
     isPending: false,

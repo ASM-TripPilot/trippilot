@@ -26,10 +26,10 @@ const ROOT = path.resolve('src');
 const SHARE_SCAN_FILES = [
   'features/reflection/model/shareCard.ts',
   'features/share-trip-card/model/shareCapture.ts',
-  'pages/share-card/ui/ShareCardScreen.tsx',
-  'pages/share-card/ui/ShareCardPreview.tsx',
-  'pages/share-card/ui/FormatSegment.tsx',
-  'pages/share-card/ui/ShareCardPage.tsx',
+  'pages/record/share-card/ui/ShareCardScreen.tsx',
+  'pages/record/share-card/ui/ShareCardPreview.tsx',
+  'pages/record/share-card/ui/FormatSegment.tsx',
+  'pages/record/share-card/ui/ShareCardPage.tsx',
 ];
 
 const CAPTURE_REL = 'features/share-trip-card/model/shareCapture.ts';

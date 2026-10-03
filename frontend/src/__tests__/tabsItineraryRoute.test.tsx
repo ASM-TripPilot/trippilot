@@ -38,7 +38,7 @@ import {
  *    Seed D3 — 구 "오늘이 구간이면 무조건 live" 특례 제거).
  *  - 🔴 **AC-7** 최신순(updatedAt desc) 정렬 + "최신순" 라벨.
  *
- * 왜 이렇게 테스트하나: 라우트는 `pages/itinerary-list`(페이지→컨테이너→화면→카드)를 그리고
+ * 왜 이렇게 테스트하나: 라우트는 `pages/itinerary/itinerary-list`(페이지→컨테이너→화면→카드)를 그리고
  * 데이터는 두 훅 seam(`useGetTrips`·`useGetTripsTripIdItinerary`)으로 주입한다. **N+1 훅-per-카드**를
  * 훅 목으로 재현 — `useGetTripsTripIdItinerary` 를 tripId별 대본으로 갈아끼운다(react-query 미구동 →
  * QueryClientProvider 불필요, 02a ★5 — TRIP-928 로 페이지가 `useQueries`
@@ -66,7 +66,7 @@ jest.mock('expo-router', () => ({
 // TRIP-928 준비부 확장(단언 무변경) — 페이지가 완료 배너 판정을 위해 여행별 일정을 `useQueries` +
 // 옵션 함수로 함께 구독하고, 본 여행 id 를 SecureStore 에서 읽는다. 이 파일은 카드 계약 전용이라
 // 두 비동기를 영영 안 끝나게 막아 배너 판정을 늘 "보류"로 둔다(배너 동작은
-// `pages/itinerary-list/ui/MyTripsListPage.hookMock.test.tsx` 소관). 팩토리는 바깥 변수를 안 쓴다(호이스팅).
+// `pages/itinerary/itinerary-list/ui/MyTripsListPage.hookMock.test.tsx` 소관). 팩토리는 바깥 변수를 안 쓴다(호이스팅).
 jest.mock('@/shared/api/generated/trips/trips', () => ({
   useGetTrips: jest.fn(),
   useGetTripsTripIdItinerary: jest.fn(),

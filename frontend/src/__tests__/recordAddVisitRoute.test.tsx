@@ -12,7 +12,7 @@ import AddVisitRoute from '@/app/trips/[tripId]/records/add-visit';
 const mockParams: Record<string, string> = {};
 const mockCaptured: { props?: Record<string, unknown> } = {};
 
-jest.mock('@/pages/record-add-visit', () => ({
+jest.mock('@/pages/record/record-add-visit', () => ({
   RecordAddVisitPage: (props: Record<string, unknown>) => {
     mockCaptured.props = props;
     return null;

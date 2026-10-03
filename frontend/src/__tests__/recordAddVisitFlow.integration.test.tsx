@@ -16,8 +16,8 @@ import { router } from 'expo-router';
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { Place } from '@/shared/api/generated/schemas';
-import { RecordAddVisitPage } from '@/pages/record-add-visit';
-import { TripRecordsPage } from '@/pages/trip-records';
+import { RecordAddVisitPage } from '@/pages/record/record-add-visit';
+import { TripRecordsPage } from '@/pages/record/trip-records';
 
 /**
  * 🔴 TRIP-1072 · AC-5~12·AC-14 — j01 [방문 추가] 장소 피커(즉석 방문 = 계획에 없던 곳의 도착 기록).

@@ -36,13 +36,25 @@ const layerGlob = (...segments) => path.join(SRC, ...segments, '**');
 // 형제 격리 대상에 편입돼 하드코딩 드리프트를 막는다(구조 테스트도 같은 방식으로 목록을 읽는다).
 // entities 는 첫 입주 전이면 디렉토리가 아예 없을 수 있어(D2) existsSync 로 방어한다 — 없으면 빈 배열이라
 // zone 이 하나도 안 생기고, 있으면 그 슬라이스들이 형제 격리 대상이 된다.
-const readSlices = (layer) => {
-  const dir = path.join(SRC, layer);
+//
+// 슬라이스 그룹(TRIP-1156): 직계에 세그먼트 폴더(ui·model·api·lib·config)나 index.ts(x)가 있으면 슬라이스,
+// 없으면 그룹 폴더라 그 안으로 내려간다 — 반환값은 'itinerary/itinerary-draft' 같은 층 기준 상대경로다.
+// 그룹을 슬라이스로 잘못 보면 zone 의 except 가 그룹 전체(pages/<그룹>/**)가 돼 같은 그룹 형제 import 가
+// 조용히 허용된다(공식 FSD: 그룹 안에서도 슬라이스 격리는 그대로).
+const SLICE_MARKER = /^(ui|model|api|lib|config|index\.tsx?)$/;
+const readSlices = (layer, rel = '') => {
+  const dir = path.join(SRC, layer, rel);
   if (!fs.existsSync(dir)) return [];
   return fs
     .readdirSync(dir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name);
+    .flatMap((entry) => {
+      const sub = path.join(rel, entry.name);
+      const isSlice = fs
+        .readdirSync(path.join(dir, entry.name))
+        .some((name) => SLICE_MARKER.test(name));
+      return isSlice ? [sub] : readSlices(layer, sub);
+    });
 };
 const FEATURES = readSlices('features');
 const PAGES = readSlices('pages');

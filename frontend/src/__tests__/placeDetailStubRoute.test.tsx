@@ -14,7 +14,7 @@ import PlaceDetailRoute from '@/app/explore/places/[poiId]';
  *   잠근다. 여기서는 위임만 잰다 — 게이트① 프리즈 해시는 이 파일 변경을 잡으므로 의도적 교체임을
  *   명시한다.
  *
- * ★ `@/pages/place-detail` 을 스파이 컴포넌트로 치환한다 — 실 페이지를 렌더하면 react-query 훅이
+ * ★ `@/pages/explore/place-detail` 을 스파이 컴포넌트로 치환한다 — 실 페이지를 렌더하면 react-query 훅이
  *   `QueryClientProvider` 부재로 던진다. 라우트가 실훅을 물지 않는다는 것(위임)이 이 목으로
  *   증명된다(스텁의 "INV-1 무조회 프록시" 취지 계승).
  */
@@ -23,10 +23,10 @@ import PlaceDetailRoute from '@/app/explore/places/[poiId]';
 // poiId 를 이 캡처 객체에 담고, 컴포넌트는 null 을 그려 트리를 오염시키지 않는다.
 const mockCaptured: { poiId?: string; rendered: boolean } = { rendered: false };
 // 위임된 페이지를 스파이 컴포넌트로 치환 — 실 페이지가 부를 react-query 훅을 차단한다(위임만 관찰).
-// ⚠️ 구현 전에는 `@/pages/place-detail` 모듈이 없어 jest.mock 이 경로를 해석하지 못해 이 suite 는
+// ⚠️ 구현 전에는 `@/pages/explore/place-detail` 모듈이 없어 jest.mock 이 경로를 해석하지 못해 이 suite 는
 // **모듈 미해석 red** 다(PlaceDetailPage.integration 과 같은 신규-모듈 red). 구현이 배럴을 만들면
 // 이 목이 실모듈을 덮어 아래 단언이 살아난다.
-jest.mock('@/pages/place-detail', () => ({
+jest.mock('@/pages/explore/place-detail', () => ({
   PlaceDetailPage: (props: { poiId?: string }) => {
     mockCaptured.poiId = props.poiId;
     mockCaptured.rendered = true;

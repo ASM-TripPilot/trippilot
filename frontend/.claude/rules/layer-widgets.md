@@ -4,7 +4,7 @@ paths:
 ---
 # `src/widgets/` — FSD widgets 층
 
-여러 화면이 쓰는 **화면 조각**(지도+시트 셸 같은 조립 단위)을 두는 층. 담은 곳 FAB 스택(a01·d01·d03)은 소비처가 전부 features 층 화면이라 넣지 않았다 — features→widgets 상향 참조가 된다. **소비처가 한 page뿐인 부품은 위젯이 아니라 그 page 안에 둔다**(공식 FSD — TRIP-1143으로 `CoPickStepper`·`GenerationDoneBar`가 `pages/itinerary-copick`·`pages/itinerary-list`로 들어갔다). 지금 이 층은 `map-sheet-shell`·`time-sheet` 둘뿐이다.
+여러 화면이 쓰는 **화면 조각**(지도+시트 셸 같은 조립 단위)을 두는 층. 담은 곳 FAB 스택(a01·d01·d03)은 소비처가 전부 features 층 화면이라 넣지 않았다 — features→widgets 상향 참조가 된다. **소비처가 한 page뿐인 부품은 위젯이 아니라 그 page 안에 둔다**(공식 FSD — TRIP-1143으로 `CoPickStepper`·`GenerationDoneBar`가 `pages/itinerary/itinerary-copick`·`pages/itinerary/itinerary-list`로 들어갔다). 지금 이 층은 `map-sheet-shell`·`time-sheet` 둘뿐이다.
 
 ## import 방향
 - widgets → entities · shared 만 참조한다. 층 린트는 widgets→features를 막지 않는다(그것을 막던 소스 스캔은 TRIP-1145에서 지웠다 — 기계 강제 없음). 그래서 위젯은 features의 판단·글리프를 못 물고 로컬 복제하거나 소비처가 문자열로 넘긴다(`MapSheetGlyphs`·`EditorGlyphs`·`EditorView`의 `dateLabel`).

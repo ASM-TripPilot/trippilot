@@ -3,8 +3,8 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import { usePreferenceStore } from '@/features/edit-preferences/model/preferenceStore';
 import { notifyBootstrapReeval } from '@/shared/bootstrap/bootstrapReeval';
 import { resetPressGuard } from '@/shared/press/pressGuard';
-import { PrefStep1Page } from '@/pages/onboarding-pref1';
-import { PrefStep2Page } from '@/pages/onboarding-pref2';
+import { PrefStep1Page } from '@/pages/onboarding/onboarding-pref1';
+import { PrefStep2Page } from '@/pages/onboarding/onboarding-pref2';
 
 /**
  * TRIP-1013 #004 — 취향 1/2 '다음' 연타의 두 번째 탭이 2/2 '완료'를 누르지 않는다.

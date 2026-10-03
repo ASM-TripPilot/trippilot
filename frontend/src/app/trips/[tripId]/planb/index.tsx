@@ -1,9 +1,9 @@
 import { useLocalSearchParams } from 'expo-router';
 
-import { PlanbRequestPage } from '@/pages/planb-request';
+import { PlanbRequestPage } from '@/pages/live/planb-request';
 
 /**
- * i04 재계획 요청(AI에게 맡길게요) — 얇은 라우트. 배선은 `pages/planb-request`가 진다
+ * i04 재계획 요청(AI에게 맡길게요) — 얇은 라우트. 배선은 `pages/live/planb-request`가 진다
  * (`draft.tsx`·`manual/index.tsx` 선례). params 는 여기서만 읽어 prop 으로 그대로 내린다.
  *
  * i03 [대안 보기]가 `?scope=…&triggerId=…` 를 실어 이 라우트를 연다. 폼 초기화·scope 반영·감지 트리거

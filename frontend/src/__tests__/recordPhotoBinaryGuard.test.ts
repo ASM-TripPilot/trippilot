@@ -11,7 +11,7 @@ import path from 'path';
  *  - `features/record` + `shared/photo` 그래프 어디에도 사진 바이너리/스토리지 업로드 심볼이 없다
  *    (storage_key·storageKey·multipart·FormData·base64·uploadForCommunity 호출부) — 서버로 가는 것은
  *    로컬 자산ID·기기ID·촬영시각·EXIF(동의 시)·연결 방문 **메타만**(AddPhotoRequest 가 계약으로 봉쇄).
- *  - TRIP-1070 — 허브 [사진] 배선이 사는 `pages/live-itinerary` 도 같은 금칙어로 훑는다(사정거리 확장 —
+ *  - TRIP-1070 — 허브 [사진] 배선이 사는 `pages/live/live-itinerary` 도 같은 금칙어로 훑는다(사정거리 확장 —
  *    배선이 페이지에 생기면 features/record 스캔 밖이 된다).
  *  - 네이티브 사진 모듈 단일 입구(옛 G3)는 TRIP-1145 로 eslint `no-restricted-imports` 로 옮겼다.
  *  - 긍정 짝 — `AddPhotoRequest`(메타만) 실참조.
@@ -22,8 +22,8 @@ import path from 'path';
  * ★ 조합 실검증(전처리×탐지기, 강제) — stripComments 가 주석 속 금칙어는 걷되 URL(`://`)은 살려두고,
  *   탐지기가 그 살아남은 것에 오검출/미검출을 안 내는지 **실제 문자열로 1회 태운다**(G0, 문제로그
  *   [[stripComments 가 URL 슬래시 오인]] 계열). 바이너리 스캔 범위는 features/record+shared/photo+
- *   pages/live-itinerary 로 한정 — generated/trips/trips.ts 주석에 storage_key 가 실재하나 그 밖이라
- *   사정거리 밖(src 전체로 넓히면 거짓 red). TRIP-1155로 첨부·방문 파일이 pages/trip-records·pages/records-calendar·
+ *   pages/live/live-itinerary 로 한정 — generated/trips/trips.ts 주석에 storage_key 가 실재하나 그 밖이라
+ *   사정거리 밖(src 전체로 넓히면 거짓 red). TRIP-1155로 첨부·방문 파일이 pages/record/trip-records·pages/record/records-calendar·
  *   features/check-visit·features/attach-visit-media로 흩어져 SCAN_DIRS에 더했다.
  */
 
@@ -33,9 +33,9 @@ const ROOT = path.resolve('src');
 const SCAN_DIRS = [
   'features/record',
   'shared/photo',
-  'pages/live-itinerary',
-  'pages/trip-records',
-  'pages/records-calendar',
+  'pages/live/live-itinerary',
+  'pages/record/trip-records',
+  'pages/record/records-calendar',
   'features/check-visit',
   'features/attach-visit-media',
 ];
@@ -43,9 +43,9 @@ const SCAN_DIRS = [
 /** 사진이 기기를 떠나는 경로의 핵심 파일 — 폴더 밖으로 옮겨지면 스캔이 조용히 줄어든다(편입 앵커). */
 const UPLOAD_PATH_FILES = [
   'features/attach-visit-media/model/photoAttach.ts',
-  'pages/trip-records/model/useVisitAttachments.ts',
+  'pages/record/trip-records/model/useVisitAttachments.ts',
   'shared/photo/index.ts',
-  'pages/live-itinerary/ui/LiveItineraryPage.tsx',
+  'pages/live/live-itinerary/ui/LiveItineraryPage.tsx',
 ];
 
 /** 사진 바이너리 업로드 금칙어. 라벨은 실패 메시지에 뜬다. `base64: false` 같은 옵션도 적지 않는다(기본값). */
@@ -120,7 +120,7 @@ describe('G0 · 탐지기 자가검사 — stripComments × 금칙어 탐지 조
 });
 
 describe('🔴 G2 · 바이너리 업로드 심볼 0 + 메타 실참조', () => {
-  it('features/record+shared/photo+pages/live-itinerary 에 바이너리 금칙 6종 0건 + AddPhotoRequest 실참조', () => {
+  it('features/record+shared/photo+pages/live/live-itinerary 에 바이너리 금칙 6종 0건 + AddPhotoRequest 실참조', () => {
     const sources = scanGraph();
     // 사정거리 앵커 — 스캔 폴더가 전부 실재한다(오타·이동으로 빈 목록이 되면 red).
     expect(

@@ -129,13 +129,16 @@ describe('TRIP-609 · consentPutBody 단일 통로 + shared 배치 가드', () =
       true
     );
     expect(
-      existsSync(join(SRC_ROOT, 'pages', 'settings-location', 'index.ts'))
+      existsSync(
+        join(SRC_ROOT, 'pages', 'settings', 'settings-location', 'index.ts')
+      )
     ).toBe(true);
     expect(
       existsSync(
         join(
           SRC_ROOT,
           'pages',
+          'settings',
           'settings-location',
           'ui',
           'LocationConsentPage.tsx'

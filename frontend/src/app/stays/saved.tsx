@@ -1,4 +1,4 @@
-import { SavedStayPage } from '@/pages/stay-saved';
+import { SavedStayPage } from '@/pages/stay/stay-saved';
 
 export default function SavedStaysRoute() {
   return <SavedStayPage />;

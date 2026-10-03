@@ -1,4 +1,4 @@
-import { TermsPage } from '@/pages/onboarding-terms';
+import { TermsPage } from '@/pages/onboarding/onboarding-terms';
 
 export default function TermsRoute() {
   return <TermsPage />;

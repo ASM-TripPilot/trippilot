@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { Region, StayItem } from '@/shared/api/generated/schemas';
 import { RegionLevel } from '@/shared/api/generated/schemas';
 import { resetPressGuard } from '@/shared/press/pressGuard';
-import { StaySearchPage } from '@/pages/stay-search';
+import { StaySearchPage } from '@/pages/stay/stay-search';
 import ExploreRoute from '@/app/(tabs)/explore';
 
 /**

@@ -1,10 +1,10 @@
 ---
 paths:
   - "src/features/execution/**"
-  - "src/pages/live-*/**"
+  - "src/pages/live/live-*/**"
   - "src/shared/location/**"
   - "src/features/planb/**"
-  - "src/pages/planb-*/**"
+  - "src/pages/live/planb-*/**"
   - "src/features/request-replan/**"
   - "src/features/apply-replan/**"
 ---

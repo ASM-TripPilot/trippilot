@@ -7,7 +7,7 @@ import { isAlreadyRegistered } from './isAlreadyRegistered';
  * 목표 상태(그 장소가 필수 방문지에 있다)와 결과 상태가 같으므로 실패 건수로 세지 않는다.
  *
  * 왜 `shared/api` 인가(01b D9): 지금 이 판정이 리포에 **두 벌** 있다 —
- * `pages/trip-new-step1/ui/TripNewStep1Page.tsx` 의 비-export 지역 함수와
+ * `pages/trip/trip-new-step1/ui/TripNewStep1Page.tsx` 의 비-export 지역 함수와
  * `features/explore/model/savedPlaces.ts` 의 인라인. 이 칸이 세 번째 사용처가 되면서
  * README 승격 규칙("두 개 이상의 feature 가 쓰게 된 로직은 `shared/` 로 승격")이 충족됐다.
  * 승격의 값은 사용처 개수가 아니라 **판정이 한 군데에만 있다**는 것이다.

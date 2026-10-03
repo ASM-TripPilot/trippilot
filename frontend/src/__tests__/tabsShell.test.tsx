@@ -16,7 +16,7 @@ import { renderWithQueryClient } from '@/test-support/myPageItineraries';
  *      매핑하고, press 시 `navigation.navigate(라우트 이름)`을 호출한다,
  *  (4) `(tabs)/index.tsx`가 실물 `HomeScreen`을 그리고, `itinerary`는 TRIP-299로,
  *      `explore`는 TRIP-201로 실화면 승격(그 탭 동작은 각각
- *      `src/__tests__/tabsItineraryRoute.test.tsx`·`pages/explore-landing/ui/ExploreLandingPage.test.tsx`가 잠근다),
+ *      `src/__tests__/tabsItineraryRoute.test.tsx`·`pages/explore/explore-landing/ui/ExploreLandingPage.test.tsx`가 잠근다),
  *      나머지 2탭(records·my)은 TRIP-290으로 "준비 중" 상태 안내로 승격(더는 껍데기 아님).
  *
  * 왜 `src/app/` 밖에 두는가: expo-router의 require.context가 `.test.tsx`를 라우트로

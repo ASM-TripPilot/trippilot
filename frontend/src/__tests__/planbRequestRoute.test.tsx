@@ -9,7 +9,7 @@ import PlanbRequestRoute from '@/app/trips/[tripId]/planb';
  * 넘긴다. 749 [대안 보기]가 `?scope=…&triggerId=…` 로 push 하므로 여기서 끊기면 감지 칩이 영영 안 뜬다.
  * 폼 초기화·시드는 페이지가 한 흐름으로 한다(02a ★9).
  *
- * ★ `@/pages/planb-request` 를 스파이로 치환해 위임만 본다(planbManualRoute 선례).
+ * ★ `@/pages/live/planb-request` 를 스파이로 치환해 위임만 본다(planbManualRoute 선례).
  */
 
 const mockCaptured: {
@@ -17,7 +17,7 @@ const mockCaptured: {
 } = {};
 let mockParams: Record<string, string | undefined> = {};
 
-jest.mock('@/pages/planb-request', () => ({
+jest.mock('@/pages/live/planb-request', () => ({
   PlanbRequestPage: (props: {
     tripId?: string;
     scope?: string;

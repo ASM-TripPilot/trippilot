@@ -8,13 +8,13 @@ import TripBasesRoute from '@/app/trips/[tripId]/bases';
  * 무엇을 보장하나: 라우트는 `useLocalSearchParams` 의 `tripId` 를 그대로 페이지에 넘긴다. 3/4 '거점 숙소
  * 다시 고르기'가 `{ tripId }` 로 push 하므로, 다른 키를 읽으면 페이지가 여행을 못 찾아 3/4 로 되돌아간다.
  *
- * ★ `@/pages/trip-new-step2` 를 스파이로 치환해 위임만 본다(planbRequestRoute 선례).
+ * ★ `@/pages/trip/trip-new-step2` 를 스파이로 치환해 위임만 본다(planbRequestRoute 선례).
  */
 
 const mockCaptured: { props?: { tripId?: string; mode?: string } } = {};
 let mockParams: Record<string, string | undefined> = {};
 
-jest.mock('@/pages/trip-new-step2', () => ({
+jest.mock('@/pages/trip/trip-new-step2', () => ({
   TripBasesPage: (props: { tripId?: string; mode?: string }) => {
     mockCaptured.props = props;
     return null;

@@ -1,4 +1,4 @@
-import { NotificationSettingsPage } from '@/pages/settings-notifications';
+import { NotificationSettingsPage } from '@/pages/settings/settings-notifications';
 
 export default function NotificationSettingsRoute() {
   return <NotificationSettingsPage />;

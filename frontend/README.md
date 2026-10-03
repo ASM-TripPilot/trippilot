@@ -38,6 +38,7 @@ frontend/
   src/            # FSD 층만
     app/          # FSD app 층 — 전역 프로바이더·루트 셸(스플래시 게이트)·전역 폰트/스타일. 슬라이스 없이 세그먼트로만
     pages/        # 화면 — 라우트 하나가 꽂는 슬라이스. 그 화면만 쓰는 UI·상태·요청 조합을 전부 소유한다
+                  # 슬라이스는 여정 단계 그룹 폴더 아래 `pages/<그룹>/<slice>`(home·magazine은 그룹 없음, §층 규칙 「슬라이스 그룹」)
     widgets/      # 공식 비권장 — 새로 만드는 건 조건부(§층 규칙)
     features/     # 여러 화면이 공유하는 사용자 행동 (목록·수 정본: src/features 디렉토리 · docs/structure.generated.md)
     entities/     # 여러 화면이 공유하는 도메인 모델 (목록·수 정본: src/entities 디렉토리 · docs/structure.generated.md)
@@ -58,7 +59,7 @@ frontend/
 
 ### 층 규칙
 
-- **pages first**: 새 코드는 먼저 그 코드를 쓰는 `pages/<slice>`에 둔다. 페이지 사이의 중복은 그 자체로 추출 사유가 아니다. 아래 **세 조건을 모두** 만족할 때만 더 아래 층으로 뺀다.
+- **pages first**: 새 코드는 먼저 그 코드를 쓰는 `pages/<slice>`(그룹이 있으면 `pages/<그룹>/<slice>`)에 둔다. 페이지 사이의 중복은 그 자체로 추출 사유가 아니다. 아래 **세 조건을 모두** 만족할 때만 더 아래 층으로 뺀다.
   1. **지금** 여러 곳이 쓴다(가정이 아니라 실제로).
   2. 특정 소비처와 **독립된 변경 이유**가 있다.
   3. 경계의 책임이 **좁다**.
@@ -75,7 +76,7 @@ frontend/
 
 ### import 경계 규칙 (ESLint로 강제)
 
-- **층 방향**: `app → pages → widgets → features → entities → shared`. 각 층은 자기보다 **아래 층만** import한다. `eslint.config.js`의 `import/no-restricted-paths` 층 zone이 강제하고, 슬라이스별 zone은 `src/<층>` 디렉토리를 읽어 생성한다(새 슬라이스 자동 편입).
+- **층 방향**: `app → pages → widgets → features → entities → shared`. 각 층은 자기보다 **아래 층만** import한다. `eslint.config.js`의 `import/no-restricted-paths` 층 zone이 강제하고, 슬라이스별 zone은 `src/<층>` 디렉토리를 읽어 생성한다(새 슬라이스 자동 편입). 세그먼트 폴더나 `index.ts`가 없는 폴더는 슬라이스 그룹으로 보고 그 아래 슬라이스를 읽는다 — 같은 그룹 형제끼리도 격리된다.
 - **같은 층 형제 슬라이스는 서로 모른다(엄격)**: 형제 직접 import는 lint error다. 공유가 필요하면 순서대로 푼다 — ① 늘 같이 바뀌면 두 슬라이스를 합친다 ② 공유 도메인 책임은 entity로 내린다 ③ 위 층(pages·app)이 두 슬라이스를 받아 조립한다(props·slot) ④ 그래도 불가피하면 상대 슬라이스의 **공개 API(`index.ts`)로만** 받고, 왜 ①~③이 안 되는지 코드 주석으로 남긴다.
 - **entities 교차는 `@x`로만**: 도메인끼리 꼭 참조해야 하면 제공자가 소비자에게만 내주는 `entities/<제공자>/@x/<소비자>/**` 창구를 쓴다(형식 예: `entities/place/@x/itinerary-slot/` — 지금 리포에 `@x` 폴더는 0개, entity 간 import도 0건). 먼저 두 entity를 합칠 수 없는지부터 본다 — `@x`는 마지막 수단이고 features·widgets에는 쓰지 않는다.
 - **공개 API(`index.ts`)**: 슬라이스 밖에서는 그 슬라이스의 `index.ts`로만 import한다. `shared`는 슬라이스가 없으므로 세그먼트(또는 컴포넌트 폴더)마다 `index.ts`를 둔다.

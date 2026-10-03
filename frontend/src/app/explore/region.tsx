@@ -1,4 +1,4 @@
-import { RegionPickerPage } from '@/pages/region-picker';
+import { RegionPickerPage } from '@/pages/explore/region-picker';
 
 /**
  * d1b·e00 지역 선택 — 정본 `frontend-components.md` §1의 `explore/region.tsx` 자리.

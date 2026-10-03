@@ -1,8 +1,8 @@
 ---
 paths:
   - "src/features/record/**"
-  - "src/pages/trip-records/**"
-  - "src/pages/records-calendar/**"
+  - "src/pages/record/trip-records/**"
+  - "src/pages/record/records-calendar/**"
   - "src/features/check-visit/**"
   - "src/features/attach-visit-media/**"
 ---
