@@ -663,8 +663,10 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
       fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('c')}`));
       expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
 
-      fireEvent.press(screen.getByTestId('itinerary-manual-time-start-h-14'));
-      fireEvent.press(screen.getByTestId('itinerary-manual-time-end-h-15'));
+      // 원통 휠 — 시작 탭에서 오후 2시, 종료 탭에서 오후 3시(분 30 유지).
+      fireEvent.press(screen.getByTestId('itinerary-manual-time-wheel-h-2'));
+      fireEvent.press(screen.getByTestId('itinerary-manual-time-seg-end'));
+      fireEvent.press(screen.getByTestId('itinerary-manual-time-wheel-h-3'));
       fireEvent.press(screen.getByTestId('itinerary-manual-time-apply'));
       await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
 
@@ -674,6 +676,32 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
       expect(c?.startAt).toBe('14:00:00');
       expect(c?.endAt).toBe('15:30:00');
       expect(a?.startAt).toBe('09:00:00');
+    });
+  });
+
+  describe('🔴 M4b · TRIP-1196 — 종료를 안 건드리고 적용해도 PUT 의 endAt 은 현재 값 문자열이다', () => {
+    it('c 시작만 오후 3시로 바꿔 적용 → c endAt 은 원래 값(14:30:00) 그대로, endsNextDay 만 재유도되고 null 은 안 나간다', async () => {
+      renderPage();
+      await ready();
+
+      fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('c')}`));
+      expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
+      // 종료 탭을 열기만 한다(휠은 안 누른다) — 미설정 표기가 남는다.
+      fireEvent.press(screen.getByTestId('itinerary-manual-time-seg-end'));
+      expect(
+        screen.getByTestId('itinerary-manual-time-readout')
+      ).toHaveTextContent(/설정 안 됨/);
+      fireEvent.press(screen.getByTestId('itinerary-manual-time-seg-start'));
+      fireEvent.press(screen.getByTestId('itinerary-manual-time-wheel-h-3'));
+      fireEvent.press(screen.getByTestId('itinerary-manual-time-apply'));
+      await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
+
+      const body = await save();
+      const c = body.days[0].slots.find((s) => s.poiId === 'c');
+      expect(c?.startAt).toBe('15:00:00');
+      expect(c?.endAt).toBe('14:30:00');
+      expect(typeof c?.endAt).toBe('string');
+      expect(c?.endsNextDay).toBe(true);
     });
   });
 
@@ -995,8 +1023,8 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
       fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('c')}`));
       const sheet = await screen.findByTestId(SHEET);
       expect(
-        screen.getByTestId('itinerary-manual-time-start-h-13')
-      ).toBeSelected();
+        screen.getByTestId('itinerary-manual-time-readout')
+      ).toHaveTextContent(/오후 1:00/);
 
       // 딤 탭 닫힘 대리 — 시트의 onClose 를 부른다(없으면 조용히 아무 일도 안 일어난다).
       fireEvent(sheet, 'close');
@@ -1004,12 +1032,9 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
 
       fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('a')}`));
       expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
-      expect(
-        screen.getByTestId('itinerary-manual-time-start-h-09')
-      ).toBeSelected();
-      expect(
-        screen.getByTestId('itinerary-manual-time-start-h-13')
-      ).not.toBeSelected();
+      const readout = screen.getByTestId('itinerary-manual-time-readout');
+      expect(readout).toHaveTextContent(/오전 9:00/);
+      expect(readout).not.toHaveTextContent(/오후 1:00/);
     });
   });
 });

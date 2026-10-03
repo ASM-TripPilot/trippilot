@@ -3,16 +3,14 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import { TimeSheet, type TimeSheetPlaceSummary } from './TimeSheet';
 
 /**
- * TRIP-787 · 공용 시각 시트 `widgets/time-sheet`의 **h04(시간대 조정) opt-in 변형**.
+ * TRIP-787 · 공용 시각 시트 `widgets/time-sheet`를 **편집기(h04) 소비처 형태**(title='시간대 조정' + placeSummary)로 쓸 때의 계약.
+ * TRIP-1196 — 입력(휠·세그·readout·적용)은 모든 소비처가 공유한다. 공통 입력은 `TimeSheet.test.tsx` 가 두 접두로 잠근다.
  *
  * 무엇을 보장하나:
- *  - `mode='h04'`이면 헤더 '시간대 조정'+부제·장소 요약 행·시작/종료 2탭 세그·readout·3열 휠·
+ *  - title·placeSummary 를 주면 헤더 '시간대 조정'+부제·장소 요약 행·시작/종료 2탭 세그·readout·3열 휠·
  *    단일 '적용' CTA(취소 부재)를 낸다(AC-1~AC-6).
  *  - 종료는 **내부 optional 상태**로만 표현 — 미설정이면 readout '설정 안 됨'(seed Q1, onApply 계약 불변).
  *  - INV-3 — h04 분 열/readout 이 bare 숫자, 소요시간 표기 0건(AC-INV3).
- *
- * *(개념)* **opt-in `mode` = 한 컴포넌트 두 렌더 트리(리포 최초)** — 이 파일은 h04 분기만 잠근다.
- *   default(mode 미전달) 무회귀는 형제 `TimeSheet.test.tsx`(CS1~CS8 ×2접두, 무수정)가 진다(AC-R1).
  *
  * *(개념)* **통과형 목** — `@gorhom/bottom-sheet` 는 `__mocks__`가 children 을 무조건 렌더한다(node_modules
  *   수동 목 자동적용, frozen 파일이 `jest.mock` 0회로 green 인 실측). 직접 마운트하면 **항상 열린 상태**라
@@ -21,7 +19,7 @@ import { TimeSheet, type TimeSheetPlaceSummary } from './TimeSheet';
  * *(개념)* **휠 실회전·중앙강조·활성탭이 편집하는 필드**는 jest 원리적 사각(WheelPicker 주석 자인) —
  *   여기선 '3열이 트리에 존재·탭 selected 전환·readout 문자열'까지만(02a ★3). 아침 육안이 유일 그물.
  *
- * 3동작 뼈대: 준비=mode='h04'로 렌더 → 실행=탭/셀 press → 단언=텍스트·selected·testID 존재/부재.
+ * 3동작 뼈대: 준비=편집기 형태로 렌더 → 실행=탭/셀 press → 단언=텍스트·selected·testID 존재/부재.
  */
 
 // 소요시간 표기 탐지기 — HH:mm(1:00)은 콜론 뒤 숫자라 안 걸리고, bare 분 셀("00")도 안 걸린다(02a §5-B).
@@ -59,7 +57,7 @@ const onCancel = jest.fn();
 function renderH04(placeSummary: TimeSheetPlaceSummary = FIXTURE): void {
   render(
     <TimeSheet
-      mode="h04"
+      title="시간대 조정"
       testIDPrefix={PREFIX}
       labels={{ start: '시작', end: '종료' }}
       startAt="13:00:00"
@@ -76,7 +74,7 @@ beforeEach(() => {
   onCancel.mockClear();
 });
 
-describe('🔴 widgets/time-sheet · mode=h04 — 시간대 조정 변형', () => {
+describe('🔴 widgets/time-sheet · 편집기 형태(title+placeSummary) — 시간대 조정', () => {
   it('CH1 · 헤더 "시간대 조정" + 부제를 그린다 (AC-1)', () => {
     renderH04();
 
