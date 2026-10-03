@@ -579,3 +579,91 @@ describe('🔴 SlotFillScreen (h10) — 후보 행 전체가 라디오 (TRIP-102
     expect(rowB.props.accessibilityState?.selected).toBe(false);
   });
 });
+
+/**
+ * TRIP-948 — 0건 얼굴을 `emptyReason` 으로 가른다. 기존 testID(`-zero`·`-zero-radius`·`-zero-concept`)는
+ * 유지하고, 사유 접미(`-no-nearby`·`-all-in-itinerary`)는 알려진 사유에만 안쪽 노드로 붙는다.
+ * ALL_IN 은 반경 넓히기·컨셉 변경 없이 "장소 검색" 하나(`-zero-search`)만 둔다.
+ */
+describe('🔴 SlotFillScreen — 0건 사유 얼굴(TRIP-948)', () => {
+  const ALL_IN_TITLE = '근처 후보가 이미 모두 일정에 있어요';
+  const ALL_IN_HINT =
+    '반경을 넓혀도 같아요. 다른 슬롯의 장소를 빼면 후보가 생겨요';
+  const OLD_TITLE = '근처에서 조건에 맞는 곳을 못 찾았어요';
+
+  it('E1 · NO_NEARBY — 기존 문구·반경 넓히기·컨셉 변경 유지 + 접미 노드, 검색 버튼 없음', () => {
+    const { onExpandRadius, onChangeConcept } = renderScreen({
+      candidates: [],
+      emptyReason: 'NO_NEARBY',
+    });
+
+    expect(screen.getByTestId('itinerary-copick-zero')).toBeTruthy();
+    expect(screen.getByTestId('itinerary-copick-zero-no-nearby')).toBeTruthy();
+    expect(screen.getByText(OLD_TITLE)).toBeTruthy();
+    fireEvent.press(screen.getByTestId('itinerary-copick-zero-radius'));
+    fireEvent.press(screen.getByTestId('itinerary-copick-zero-concept'));
+    expect(onExpandRadius).toHaveBeenCalledTimes(1);
+    expect(onChangeConcept).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('itinerary-copick-zero-search')).toBeNull();
+  });
+
+  it('E2 · ALL_IN_ITINERARY — 새 문구, 반경·컨셉 버튼 없음, 장소 검색 하나, 소요시간 없음', () => {
+    const onPressPlaceSearch = jest.fn();
+    const { onExpandRadius, onChangeConcept } = renderScreen({
+      candidates: [],
+      emptyReason: 'ALL_IN_ITINERARY',
+      onPressPlaceSearch,
+    });
+
+    expect(screen.getByTestId('itinerary-copick-zero')).toBeTruthy();
+    const face = screen.getByTestId('itinerary-copick-zero-all-in-itinerary');
+    expect(within(face).getByText(ALL_IN_TITLE)).toBeTruthy();
+    expect(within(face).getByText(ALL_IN_HINT)).toBeTruthy();
+    expect(screen.queryByTestId('itinerary-copick-zero-no-nearby')).toBeNull();
+    expect(screen.queryByText(OLD_TITLE)).toBeNull();
+    expect(screen.queryByTestId('itinerary-copick-zero-radius')).toBeNull();
+    expect(screen.queryByTestId('itinerary-copick-zero-concept')).toBeNull();
+    expect(screen.queryByText(/반경 넓히기|컨셉 변경/)).toBeNull();
+    expect(screen.queryByText(/\d+\s*(분|시간)|소요/)).toBeNull();
+
+    const search = screen.getByTestId('itinerary-copick-zero-search');
+    expect(search).toHaveTextContent('장소 검색');
+    fireEvent.press(search);
+    expect(onPressPlaceSearch).toHaveBeenCalledTimes(1);
+    expect(onExpandRadius).toHaveBeenCalledTimes(0);
+    expect(onChangeConcept).toHaveBeenCalledTimes(0);
+  });
+
+  it.each([
+    ['null', null],
+    ['생략', undefined],
+    ['미지 값', 'SOMETHING_NEW'],
+  ])('E3 · 사유 %s + 0건 → 기존 얼굴로 폴백', (_n, reason) => {
+    renderScreen({ candidates: [], emptyReason: reason });
+
+    expect(screen.getByText(OLD_TITLE)).toBeTruthy();
+    expect(screen.getByTestId('itinerary-copick-zero-radius')).toBeTruthy();
+    expect(screen.getByTestId('itinerary-copick-zero-concept')).toBeTruthy();
+    expect(screen.queryByTestId('itinerary-copick-zero-no-nearby')).toBeNull();
+    expect(
+      screen.queryByTestId('itinerary-copick-zero-all-in-itinerary')
+    ).toBeNull();
+  });
+
+  it('E4 · 후보가 있으면 emptyReason 이 와도 0건 얼굴 없음(무회귀)', () => {
+    renderScreen({ emptyReason: 'ALL_IN_ITINERARY' });
+
+    expect(screen.queryByTestId('itinerary-copick-zero')).toBeNull();
+    expect(screen.getByTestId('itinerary-candidate-radio-A1')).toBeTruthy();
+  });
+
+  it('E5 · 조회 중이면 사유가 와도 0건 얼굴을 보류한다', () => {
+    renderScreen({
+      candidates: [],
+      emptyReason: 'ALL_IN_ITINERARY',
+      candidatesPending: true,
+    });
+
+    expect(screen.queryByTestId('itinerary-copick-zero')).toBeNull();
+  });
+});

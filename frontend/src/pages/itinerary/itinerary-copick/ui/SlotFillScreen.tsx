@@ -8,6 +8,9 @@ import type { SlotCandidatesCandidatesItem } from '@/shared/api/index.schemas';
 
 import type { ConceptProgress } from './ConceptPickerScreen';
 import {
+  ALL_IN_ITINERARY_HINT,
+  ALL_IN_ITINERARY_TITLE,
+  resolveSlotEmptyFace,
   AlertCircleGlyph,
   BackChevronGlyph,
 } from '@/features/itinerary/index.view';
@@ -44,6 +47,7 @@ const ZERO_TITLE = '근처에서 조건에 맞는 곳을 못 찾았어요';
 const ZERO_MAX_HINT = '이 지역엔 더 넓혀도 후보가 없어요';
 const ZERO_RADIUS_LABEL = '반경 넓히기';
 const ZERO_CONCEPT_LABEL = '컨셉 변경';
+const PLACE_SEARCH_LABEL = '장소 검색';
 const CONFIRM_LOCKED_TEXT = '나머지 일정을 만드는 중이에요';
 
 /**
@@ -109,6 +113,10 @@ export interface SlotFillScreenProps {
   onShrinkRadius: () => void;
   onChangeConcept: () => void;
   onBack: () => void;
+  /** 0건일 때만 읽는다(TRIP-948). null·생략·미지 값은 기존 반경·컨셉 얼굴로 폴백. */
+  emptyReason?: string | null;
+  /** 0건 `ALL_IN_ITINERARY` 얼굴의 유일한 CTA "장소 검색". */
+  onPressPlaceSearch?: () => void;
 }
 
 export function SlotFillScreen({
@@ -137,8 +145,11 @@ export function SlotFillScreen({
   onShrinkRadius,
   onChangeConcept,
   onBack,
+  emptyReason,
+  onPressPlaceSearch,
 }: SlotFillScreenProps): ReactElement {
   const isEmpty = candidates.length === 0;
+  const emptyFace = resolveSlotEmptyFace(emptyReason);
   const selectedIndex =
     selectedPoiId === null
       ? -1
@@ -324,44 +335,81 @@ export function SlotFillScreen({
               testID="itinerary-copick-zero"
               className="w-full items-center gap-md rounded-card border-[1.5px] border-dashed border-hairline-strong px-lg py-xl"
             >
-              <Text className="text-center font-noto-bold text-card-title font-bold text-ink">
-                {ZERO_TITLE}
-              </Text>
-              {canExpandRadius ? null : (
-                <Text className="text-center font-noto text-label text-muted">
-                  {ZERO_MAX_HINT}
-                </Text>
-              )}
-              <View className="w-full gap-sm">
-                <Pressable
-                  testID="itinerary-copick-zero-radius"
-                  accessibilityRole="button"
-                  disabled={!canExpandRadius}
-                  onPress={canExpandRadius ? onExpandRadius : undefined}
-                  className={`h-12 w-full items-center justify-center rounded-button border ${
-                    canExpandRadius
-                      ? 'border-primary'
-                      : 'border-hairline bg-surface-soft'
-                  }`}
-                >
-                  <Text
-                    className={`font-noto-bold text-label font-bold ${
-                      canExpandRadius ? 'text-primary-text' : 'text-muted'
-                    }`}
-                  >
-                    {ZERO_RADIUS_LABEL}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  testID="itinerary-copick-zero-concept"
-                  accessibilityRole="button"
-                  onPress={onChangeConcept}
-                  className="h-12 w-full items-center justify-center rounded-button bg-primary"
-                >
-                  <Text className="font-noto-bold text-label font-bold text-on-primary">
-                    {ZERO_CONCEPT_LABEL}
-                  </Text>
-                </Pressable>
+              {/* 사유 접미 노드 — 알려진 사유에만 붙는다(폴백은 접미 없이 기존 얼굴). */}
+              <View
+                testID={
+                  emptyFace === 'FALLBACK'
+                    ? undefined
+                    : `itinerary-copick-zero-${
+                        emptyFace === 'NO_NEARBY'
+                          ? 'no-nearby'
+                          : 'all-in-itinerary'
+                      }`
+                }
+                className="w-full items-center gap-md"
+              >
+                {emptyFace === 'ALL_IN_ITINERARY' ? (
+                  <>
+                    <Text className="text-center font-noto-bold text-card-title font-bold text-ink">
+                      {ALL_IN_ITINERARY_TITLE}
+                    </Text>
+                    <Text className="text-center font-noto text-label text-muted">
+                      {ALL_IN_ITINERARY_HINT}
+                    </Text>
+                    <Pressable
+                      testID="itinerary-copick-zero-search"
+                      accessibilityRole="button"
+                      onPress={onPressPlaceSearch}
+                      className="h-12 w-full items-center justify-center rounded-button bg-primary"
+                    >
+                      <Text className="font-noto-bold text-label font-bold text-on-primary">
+                        {PLACE_SEARCH_LABEL}
+                      </Text>
+                    </Pressable>
+                  </>
+                ) : (
+                  <>
+                    <Text className="text-center font-noto-bold text-card-title font-bold text-ink">
+                      {ZERO_TITLE}
+                    </Text>
+                    {canExpandRadius ? null : (
+                      <Text className="text-center font-noto text-label text-muted">
+                        {ZERO_MAX_HINT}
+                      </Text>
+                    )}
+                    <View className="w-full gap-sm">
+                      <Pressable
+                        testID="itinerary-copick-zero-radius"
+                        accessibilityRole="button"
+                        disabled={!canExpandRadius}
+                        onPress={canExpandRadius ? onExpandRadius : undefined}
+                        className={`h-12 w-full items-center justify-center rounded-button border ${
+                          canExpandRadius
+                            ? 'border-primary'
+                            : 'border-hairline bg-surface-soft'
+                        }`}
+                      >
+                        <Text
+                          className={`font-noto-bold text-label font-bold ${
+                            canExpandRadius ? 'text-primary-text' : 'text-muted'
+                          }`}
+                        >
+                          {ZERO_RADIUS_LABEL}
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        testID="itinerary-copick-zero-concept"
+                        accessibilityRole="button"
+                        onPress={onChangeConcept}
+                        className="h-12 w-full items-center justify-center rounded-button bg-primary"
+                      >
+                        <Text className="font-noto-bold text-label font-bold text-on-primary">
+                          {ZERO_CONCEPT_LABEL}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </>
+                )}
               </View>
             </View>
           ) : (

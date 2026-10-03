@@ -7,6 +7,12 @@ export {
   nextCoPickSlotKey,
 } from './model/coPickSlots';
 export {
+  ALL_IN_ITINERARY_HINT,
+  ALL_IN_ITINERARY_TITLE,
+  resolveSlotEmptyFace,
+} from './model/slotEmptyFace';
+export type { SlotEmptyFace } from './model/slotEmptyFace';
+export {
   DRAFT_POLL_INTERVAL_MS,
   buildDraftDayTabs,
   buildDraftPins,

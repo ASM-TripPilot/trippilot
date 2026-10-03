@@ -511,6 +511,13 @@ export function SlotFillPage({
       onShrinkRadius={handleShrinkRadius}
       onChangeConcept={handleChangeConcept}
       onBack={handleChangeConcept}
+      emptyReason={candidatesData?.emptyReason}
+      onPressPlaceSearch={() =>
+        router.push({
+          pathname: '/trips/[tripId]/itinerary/manual/add',
+          params: { tripId },
+        })
+      }
     />
   );
 }
