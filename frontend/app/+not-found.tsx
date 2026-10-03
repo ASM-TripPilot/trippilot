@@ -17,7 +17,7 @@ export default function NotFoundRoute() {
       <Pressable
         testID="not-found-home"
         accessibilityRole="button"
-        onPress={() => router.replace('/')}
+        onPress={() => router.replace('/(tabs)')}
         className="h-[52px] w-full items-center justify-center rounded-button bg-primary"
       >
         <Text className="font-noto-bold text-card-title font-bold text-on-primary">

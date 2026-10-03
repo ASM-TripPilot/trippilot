@@ -11,7 +11,7 @@ import NotFoundRoute from '@routes/+not-found';
  * TRIP-935 AC-2(R3) · 없는 경로 화면 `+not-found`.
  *
  * 무엇을 보장하나: expo-router 기본 화면(영문 "Unmatched Route" + `/_sitemap` 링크)을 대체해
- * 한국어 안내와 [홈으로]를 그리고, [홈으로]는 홈('/')으로 replace 한다(뒤로가기로 이 화면에
+ * 한국어 안내와 [홈으로]를 그리고, [홈으로]는 홈('/(tabs)')으로 replace 한다(뒤로가기로 이 화면에
  * 돌아오지 않게). 실제 라우트 매칭·`_sitemap` 차단은 재빌드 실기(6-b) 몫이다.
  *
  * 목: `useRouter()` 반환값과 `router` 싱글턴을 같은 함수로 묶는다 — 어느 방식으로 구현해도
@@ -56,13 +56,13 @@ describe('🔴 TRIP-935 AC-2 · 없는 경로 화면은 한국어 안내 + [홈�
     ).toHaveLength(0);
   });
 
-  it('[홈으로] press → router.replace("/") 정확히 1회, push·back 은 0회', () => {
+  it('[홈으로] press → router.replace("/(tabs)") 정확히 1회, push·back 은 0회', () => {
     render(<NotFoundRoute />);
 
     fireEvent.press(screen.getByTestId('not-found-home'));
 
     expect(mockReplace).toHaveBeenCalledTimes(1);
-    expect(mockReplace).toHaveBeenCalledWith('/');
+    expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
     expect(mockPush).not.toHaveBeenCalled();
     expect(mockBack).not.toHaveBeenCalled();
   });
