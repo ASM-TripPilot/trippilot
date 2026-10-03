@@ -3,6 +3,7 @@ export {
   formatNightsLabel,
   nightsCountLabel,
   nightsLabel,
+  nightsOnlyLabel,
 } from './lib/formatNights';
 export { formatShareCardPeriod } from './lib/formatShareCardPeriod';
 export {

@@ -67,6 +67,8 @@ export function formatDateRange(
   endDate?: string
 ): string | null {
   if (startDate === undefined || endDate === undefined) return null;
+  // 0박(같은 날)은 날짜 하나 — '6월 10일 – 6월 10일' 처럼 같은 날을 두 번 쓰지 않는다.
+  if (startDate === endDate) return formatMonthDay(startDate);
   return `${formatMonthDay(startDate)} – ${formatMonthDay(endDate)}`;
 }
 
@@ -79,6 +81,9 @@ export function formatSectionRange(dateFrom: string, dateTo: string): string {
 export function formatTripRange(startDate: string, endDate: string): string {
   const [, startMonth, startDay] = startDate.split('-');
   const [, endMonth, endDay] = endDate.split('-');
+  // 0박(같은 날)은 날짜 하나.
+  if (startDate === endDate)
+    return `${Number(startMonth)}월 ${Number(startDay)}일`;
   const tail =
     startMonth === endMonth
       ? `${Number(endDay)}일`
@@ -101,6 +106,7 @@ export function formatConfirmedDateRange(
   const startMonth = startAt.getUTCMonth() + 1;
   const endMonth = endAt.getUTCMonth() + 1;
   const head = `${startMonth}월 ${startAt.getUTCDate()}일`;
+  if (start === end) return head; // 0박(같은 날)은 날짜 하나
   const tail =
     startMonth === endMonth
       ? `${endAt.getUTCDate()}일`
@@ -118,6 +124,7 @@ export function formatTripDateRange(
   const [sy, sm, sd] = start.split('-').map(Number);
   const [ey, em, ed] = end.split('-').map(Number);
   const head = `${sy}.${sm}.${sd}`;
+  if (start === end) return head; // 0박(같은 날)은 날짜 하나
   if (sy !== ey) return `${head}${EN_DASH}${ey}.${em}.${ed}`;
   return `${head}${EN_DASH}${em}.${ed}`;
 }
@@ -133,6 +140,7 @@ export function formatLegendDateRange(
   if (start === null || end === null) return null;
   const [, sm, sd] = start.split('-').map(Number);
   const [, em, ed] = end.split('-').map(Number);
+  if (start === end) return `${sm}.${sd}`; // 0박(같은 날)은 날짜 하나
   return `${sm}.${sd}${EN_DASH}${em}.${ed}`;
 }
 
@@ -148,6 +156,7 @@ export function formatDateRangeWithDow(
   const endDow = WEEKDAY_LABELS[dayOfWeek(toEpochDay(endDate))];
 
   const head = `${startMonth}월 ${startDay}일(${startDow})`;
+  if (startDate === endDate) return head; // 0박(같은 날)은 날짜 하나
   const tail =
     startMonth === endMonth
       ? `${endDay}일(${endDow})`

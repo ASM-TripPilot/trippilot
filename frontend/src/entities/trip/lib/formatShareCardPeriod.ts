@@ -36,7 +36,8 @@ export function formatShareCardPeriod(
 
   const front = `${year}.${pad2(startMonth)}.${pad2(startDay)}`;
   const back = `${pad2(endMonth)}.${pad2(endDay)}`;
-  const range = `${front} ${separator} ${back}`;
+  // 0박(같은 날)은 날짜 하나 — '2026.06.10 – 06.10' 처럼 같은 날을 두 번 쓰지 않는다(다른 기간 포맷터와 같은 규칙).
+  const range = startDate === endDate ? front : `${front} ${separator} ${back}`;
 
   return opts.nights
     ? `${formatNightsLabel(startDate, endDate)} · ${range}`

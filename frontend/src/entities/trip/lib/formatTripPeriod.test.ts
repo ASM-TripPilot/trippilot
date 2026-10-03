@@ -107,6 +107,19 @@ describe('🔴 A. 여행 기간 범위 포맷터 6벌 — 출력이 서로 다�
     );
   });
 
+  it('같은 날(0박·당일치기)은 여섯 포맷터 중 여행 기간용은 날짜 하나만 낸다 — 같은 날을 두 번 쓰지 않는다', () => {
+    const day = '2026-06-10';
+    expect(formatDateRange(day, day)).toBe('6월 10일');
+    expect(formatTripRange(day, day)).toBe('6월 10일');
+    expect(formatConfirmedDateRange(day, day)).toBe('6월 10일');
+    expect(formatTripDateRange(day, day)).toBe('2026.6.10');
+    expect(formatLegendDateRange(day, day)).toBe('6.10');
+    expect(formatDateRangeWithDow(day, day)).toBe('6월 10일(수)');
+    // 짝 — 하루만 다르면 범위로 돌아온다(같은 날 분기가 과하게 넓지 않다).
+    expect(formatTripRange(day, '2026-06-11')).toContain('–');
+    expect(formatDateRangeWithDow(day, '2026-06-11')).toContain('–');
+  });
+
   it('PBT — 같은 달 정상 범위에서 formatConfirmedDateRange 는 항상 "N월 N일 – N일"(en dash) 꼴', () => {
     fc.assert(
       fc.property(
@@ -117,6 +130,8 @@ describe('🔴 A. 여행 기간 범위 포맷터 6벌 — 출력이 서로 다�
           const mm = String(month).padStart(2, '0');
           const sd = String(startDay).padStart(2, '0');
           const ed = String(Math.min(28, startDay + offset)).padStart(2, '0');
+          // 같은 날(0박)은 날짜 하나로 나온다 — 아래 별도 테스트. 이 속성은 두 날짜가 다른 범위만 본다.
+          fc.pre(ed !== sd);
           const out = formatConfirmedDateRange(
             `2026-${mm}-${sd}`,
             `2026-${mm}-${ed}`

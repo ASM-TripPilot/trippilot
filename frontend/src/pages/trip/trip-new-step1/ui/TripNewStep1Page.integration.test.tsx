@@ -270,6 +270,37 @@ describe('제출·예외 배선 (I-1~I-7)', () => {
     });
   });
 
+  describe('I-1d · 0박(당일치기)은 거점 숙소 단계를 건너뛰고 방식 선택으로 간다', () => {
+    it('도시 하나 0박 + 같은 날 기간 → POST 1회(nights 0·start==end) 뒤 방식 선택(h04)으로 가고 step2 는 안 간다', async () => {
+      // 준비 — 부산 0박, 기간 6/10~6/10(당일). 묵는 밤이 없어 거점 숙소를 고를 이유가 없다.
+      const store = useTripWizardStore.getState();
+      store.addDestination('부산', 0);
+      store.setPeriod(undefined, '2026-06-10', '2026-06-10');
+      renderPage();
+      await waitForPrefill();
+      expect(next()).toBeEnabled();
+
+      // 실행
+      fireEvent.press(next());
+
+      // 단언 — 서버엔 0박 그대로 나가고, 이동은 방식 선택 하나(step2 push 0건).
+      await waitFor(() => expect(createHits()).toBe(1));
+      expect(postedBodies[0]).toMatchObject({
+        startDate: '2026-06-10',
+        endDate: '2026-06-10',
+        destinations: [{ seq: 1, region: '부산', nights: 0 }],
+      });
+      await waitFor(() =>
+        expect(mockPush).toHaveBeenCalledWith({
+          pathname: '/trips/[tripId]/itinerary/method',
+          params: { tripId: '11111111-1111-1111-1111-111111111111' },
+        })
+      );
+      expect(mockPush).not.toHaveBeenCalledWith('/trips/new/step2');
+      expect(mockPush).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('I-1c · TRIP-1045 동행을 안 건드리고 제출해도 companionType 혼자가 실린다', () => {
     it('동행 시트를 한 번도 안 열고 [다음]을 누르면 바디에 companionType "혼자"·party 1 이 있다', async () => {
       // 준비 — 여행지·기간만 채운다(동행은 기본값 그대로).
@@ -3914,6 +3945,50 @@ describe('재진입 — 만든 여행 고치기 (AC-1~AC-11)', () => {
       ).toBeOnTheScreen();
       expect(screen.queryByTestId('trip-wizard-submit-banner')).toBeNull();
       expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it('R-0a 0박으로 되돌아와 [다음] → PATCH 한 번 뒤 방식 선택(h04)으로 가고 step2 는 안 간다', async () => {
+      // 준비 — 이미 만든 여행(재진입)인데 화면에서 0박(당일치기)으로 고쳤다. 도시 하나라 0박이 합법이다.
+      seedReentry();
+      useTripWizardStore.getState().setNights(1, 0);
+      renderPage();
+
+      // 실행
+      await pressNextAfterPrefill();
+
+      // 단언 — 서버엔 PATCH 1회(POST 아님), 이동은 방식 선택 하나(PATCH 경로의 분기를 지킨다).
+      await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/trips/[tripId]/itinerary/method',
+        params: { tripId: TRIP_ID },
+      });
+      expect(mockPush).not.toHaveBeenCalledWith('/trips/new/step2');
+      expect(hits(PATCH)).toBe(1);
+      expect(hits(CREATE)).toBe(0);
+    });
+
+    it('R-0b 꼭 갈 곳 [다시 시도]는 PATCH 없이 등록만 다시 하므로, 그 사이 박수를 0으로 내려도 서버가 아는 박수(3박) 기준으로 step2 로 간다', async () => {
+      // 준비 — 3박으로 PATCH 가 나갔고(서버 3박) 꼭 갈 곳 하나가 실패해 배너가 떴다.
+      registered = [mustVisit('poi-A')];
+      failAddFor = new Set(['poi-C']);
+      seedReentry();
+      useTripWizardStore.getState().initMustVisits([seedItem('poi-C')]);
+      renderPage();
+      await pressNextAfterPrefill();
+      const banner = await screen.findByTestId('trip-wizard-mustvisit-banner');
+      expect(hits(PATCH)).toBe(1);
+
+      // 실행 — 배너가 떠 있는 동안 화면에서 박수를 0으로 내리고(서버는 모름) 재시도한다.
+      act(() => useTripWizardStore.getState().setNights(1, 0));
+      failAddFor = new Set();
+      fireEvent.press(
+        within(banner).getByTestId('trip-wizard-mustvisit-banner-retry')
+      );
+
+      // 단언 — 재시도는 PATCH 를 또 보내지 않았고, 판정은 서버 여행(3박) 기준이라 거점 단계(step2)로 간다.
+      await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+      expect(mockPush).toHaveBeenCalledWith('/trips/new/step2');
+      expect(hits(PATCH)).toBe(1);
     });
 
     it('R-11 다시 시도는 여행을 만들지 않고 실패한 C 만 다시 추가한 뒤 step2 로 간다', async () => {

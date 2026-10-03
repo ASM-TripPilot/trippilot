@@ -77,7 +77,7 @@ export interface TripWizardDraft {
    * 가르고, 생성 요청에도 그대로 실린다. 안 주면 비어 있다(서버가 이름으로 찾는다). */
   addDestination(regionName: string, nights: number, regionCode?: string): void;
   removeDestination(seq: number): void;
-  /** 해당 seq destination 의 nights 를 교체(하한 1 클램프). seq 미일치면 no-op. add/remove 는
+  /** 해당 seq destination 의 nights 를 교체(하한 `minNightsFor` — 도시 하나면 0, 여럿이면 1). seq 미일치면 no-op. add/remove 는
    * 무변경 재사용(TRIP-666 여행지 편집 시트). */
   setNights(seq: number, nights: number): void;
   /** `presetCode`가 `undefined`면 "어떤 칩도 선택 안 됨" — 프리셋이 아닌 출처(등록 숙소
@@ -175,6 +175,12 @@ function endAfter(
     : state.endDate;
 }
 
+/** 도시당 박수 하한 — **도시가 하나일 때만 0박(당일치기)이 합법이다**. 여러 도시에서 한 도시만 0박이면
+ *  그 도시의 방문일이 없다는 뜻이라 의미가 모호하다(결정: 다도시는 도시당 최소 1박). */
+export function minNightsFor(destinationCount: number): number {
+  return destinationCount === 1 ? 0 : 1;
+}
+
 /** 목록 순서대로 1..N을 다시 매긴다 — 제거 뒤에도 `seq`에 구멍이 나면 서버가 방문 순서를
  * 읽을 수 없다. */
 function renumberSeq(destinations: TripDestination[]): TripDestination[] {
@@ -188,9 +194,23 @@ const createTripWizardDraft: StateCreator<TripWizardDraft> = (set) => ({
   ...INITIAL_DRAFT,
   addDestination: (regionName, nights, regionCode) =>
     set((state) => {
+      // 두 번째 도시를 담으면 하한이 1 로 올라간다 — 기존 도시가 0박이었다면 1박으로 올린다.
+      const raised =
+        state.destinations.length + 1 >= 2
+          ? state.destinations.map((one) =>
+              one.nights < 1 ? { ...one, nights: 1 } : one
+            )
+          : state.destinations;
+      // 새로 담는 도시도 같은 하한을 지난다 — 다도시가 되는 순간 0박 도시를 만들 수 없다.
+      const floor = minNightsFor(raised.length + 1);
       const destinations = renumberSeq([
-        ...state.destinations,
-        { seq: 0, region: regionName, nights, regionCode },
+        ...raised,
+        {
+          seq: 0,
+          region: regionName,
+          nights: Math.max(floor, nights),
+          regionCode,
+        },
       ]);
       return {
         destinations,
@@ -217,11 +237,12 @@ const createTripWizardDraft: StateCreator<TripWizardDraft> = (set) => ({
   setNights: (seq, nights) =>
     set((state) => {
       // 해당 seq의 nights만 갈아 끼운다 — `map`이 seq 미일치 항목은 원본 그대로 되돌려주므로
-      // 못 찾는 seq는 저절로 no-op이다(seq 재번호는 nights만 바뀌어 필요 없다). 하한 1은
-      // `Math.max(1, …)` 하나로 접는다 — 상한은 없다(도시=최소 1박, 01b D1). renumberSeq는
-      // 여기서 안 부른다: 목록 길이·순서가 그대로라 seq도 그대로다.
+      // 못 찾는 seq는 저절로 no-op이다(seq 재번호는 nights만 바뀌어 필요 없다). 하한은
+      // `minNightsFor` 하나로 접는다 — 도시 하나면 0박(당일치기), 여럿이면 최소 1박(01b D1 + 0박 결정).
+      // 상한은 없다. renumberSeq는 여기서 안 부른다: 목록 길이·순서가 그대로라 seq도 그대로다.
+      const floor = minNightsFor(state.destinations.length);
       const destinations = state.destinations.map((one) =>
-        one.seq === seq ? { ...one, nights: Math.max(1, nights) } : one
+        one.seq === seq ? { ...one, nights: Math.max(floor, nights) } : one
       );
       return { destinations, endDate: endAfter(state, destinations) };
     }),

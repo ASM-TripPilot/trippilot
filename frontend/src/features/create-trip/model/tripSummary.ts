@@ -3,7 +3,7 @@ import type {
   TripDestination,
 } from '@/shared/api/index.schemas';
 import { formatDateRangeWithDow } from '@/entities/trip';
-import { nightsCountLabel } from '@/entities/trip';
+import { nightsCountLabel, nightsOnlyLabel } from '@/entities/trip';
 
 /**
  * g01 요약 카드 · 위저드 진행 모델의 순수 셀렉터 (TRIP-664 · US-TRIP-01 · US-TRIP-07).
@@ -69,9 +69,10 @@ export function summaryDestinations(
   if (destinations.length === 0) return null;
   const [first, ...rest] = destinations;
   const subParts = [
-    `${first.nights}박`,
+    nightsOnlyLabel(first.nights),
     ...rest.map(
-      (destination) => `${destination.region} ${destination.nights}박`
+      (destination) =>
+        `${destination.region} ${nightsOnlyLabel(destination.nights)}`
     ),
   ];
   return { main: first.region, sub: subParts.join(DOT) };

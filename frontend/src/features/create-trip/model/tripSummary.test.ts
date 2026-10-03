@@ -105,6 +105,29 @@ describe('summaryDestinations — 여행지 요약 행 (AC-1·2, 2톤 분리)', 
   it('0개면 null이다 (객체가 아니라 null — 화면이 미선택 얼굴을 그린다, AC-2)', () => {
     expect(summaryDestinations([])).toBeNull();
   });
+
+  it('0박(도시 하나)이면 sub 가 "0박"이 아니라 "당일치기"다', () => {
+    expect(summaryDestinations([dest('부산', 0)])).toEqual({
+      main: '부산',
+      sub: '당일치기',
+    });
+  });
+});
+
+describe('summaryPeriod — 0박(같은 날)은 당일치기', () => {
+  it('같은 날이면 main 은 날짜 하나, sub 는 "당일치기"다', () => {
+    expect(summaryPeriod('2026-06-10', '2026-06-10')).toEqual({
+      main: '6월 10일(수)',
+      sub: '당일치기',
+    });
+  });
+
+  it('하루 이상이면 기존대로 범위와 "N박 M일"이다(분기가 과하게 넓지 않다)', () => {
+    expect(summaryPeriod('2026-06-10', '2026-06-11')).toEqual({
+      main: '6월 10일(수) – 11일(목)',
+      sub: '1박 2일',
+    });
+  });
 });
 
 // ── AC-2 기간 ──────────────────────────────────────────────────────────────────
