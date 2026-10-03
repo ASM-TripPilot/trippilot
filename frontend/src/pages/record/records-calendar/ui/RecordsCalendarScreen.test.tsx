@@ -789,3 +789,22 @@ describe('진행 중 여행 카드 + legend 줄 ›', () => {
     });
   });
 });
+
+describe('지난 여행 0개 빈 상태 박스 (TRIP-1206)', () => {
+  it('지난 여행이 0개면 안내 한 줄 박스를 보인다 (소요시간 문자열 없음)', () => {
+    render(<RecordsCalendarScreen {...baseProps({ pastTrips: [] })} />);
+
+    expect(screen.getByTestId('record-past-empty')).toBeOnTheScreen();
+    expect(
+      screen.getByText('여행이 끝나면 여기에 기록이 쌓여요')
+    ).toBeOnTheScreen();
+    expect(screen.queryByText(/소요|분 걸/)).toBeNull();
+  });
+
+  it('지난 여행이 1개 이상이면 박스가 없다 (무회귀)', () => {
+    render(<RecordsCalendarScreen {...baseProps()} />);
+
+    expect(screen.queryByTestId('record-past-empty')).toBeNull();
+    expect(screen.queryByText('여행이 끝나면 여기에 기록이 쌓여요')).toBeNull();
+  });
+});

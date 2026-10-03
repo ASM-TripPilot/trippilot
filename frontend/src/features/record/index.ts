@@ -1,5 +1,6 @@
 export {
   BackArrowGlyph,
+  BookmarkGlyph,
   CalendarGlyph,
   ChevronDownGlyph,
   ChevronRightGlyph,
