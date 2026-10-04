@@ -2,6 +2,7 @@ package com.trippilot.placedata.application
 
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ValidationFailed
+import com.trippilot.placedata.FakeRegionCatalog
 import com.trippilot.placedata.InMemoryPoiRepository
 import com.trippilot.placedata.domain.DataStatus
 import com.trippilot.placedata.domain.Poi
@@ -12,6 +13,10 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.property.Arb
+import io.kotest.property.arbitrary.int
+import io.kotest.property.arbitrary.set
+import io.kotest.property.checkAll
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -45,12 +50,24 @@ class PoiCloseMissingServiceTest : StringSpec({
 
     fun InMemoryPoiRepository.allActive() = stored.all { it.dataStatus == DataStatus.ACTIVE }
 
+    // 스크립트 순서를 재현할 때는 실제 수신 서비스로 붓는다 — 새 행이 어떤 상태로 생기는지까지 실물 규칙을 탄다.
+    fun InMemoryPoiRepository.ingest(refs: Collection<String>) = PoiProposalIngestService(this, FakeRegionCatalog, clock)
+        .ingest(
+            PoiSource.LOCALDATA,
+            refs.map {
+                PoiProposal(
+                    nameKo = "식당-$it", lat = 35.11, lng = 129.04, category = PoiCategory.맛집, region = "동구",
+                    openingHours = null, sourceRef = it, address = "부산광역시 동구 초량동 1",
+                )
+            },
+        )
+
     "문서에 없는 ACTIVE 행만 닫는다 — 삭제가 아니라 CLOSED 이고, 닫힌 시각이 남는다" {
         val repo = repoWith(poi("A"), poi("B"), poi("C"))
 
         val result = PoiCloseMissingService(repo, clock).closeMissing(PoiSource.LOCALDATA, listOf("A", "B"))
 
-        result shouldBe PoiCloseMissingResult(PoiSource.LOCALDATA, activeBefore = 3, present = 2, closed = 1)
+        result shouldBe PoiCloseMissingResult(PoiSource.LOCALDATA, activeBefore = 3, present = 2, closed = 1, closedSourceRefs = listOf("C"))
         repo.row("C").dataStatus shouldBe DataStatus.CLOSED
         repo.row("C").updatedAt shouldBe clock.instant()
         repo.row("A").dataStatus shouldBe DataStatus.ACTIVE
@@ -127,7 +144,7 @@ class PoiCloseMissingServiceTest : StringSpec({
         val result = PoiCloseMissingService(repo, clock)
             .closeMissing(PoiSource.LOCALDATA, listOf("A"), allowMassClose = true)
 
-        result shouldBe PoiCloseMissingResult(PoiSource.LOCALDATA, activeBefore = 4, present = 1, closed = 3)
+        result shouldBe PoiCloseMissingResult(PoiSource.LOCALDATA, activeBefore = 4, present = 1, closed = 3, closedSourceRefs = listOf("B", "C", "D"))
         repo.row("A").dataStatus shouldBe DataStatus.ACTIVE
     }
 
@@ -138,7 +155,7 @@ class PoiCloseMissingServiceTest : StringSpec({
 
         val second = PoiCloseMissingService(repo, later).closeMissing(PoiSource.LOCALDATA, listOf("A", "B"))
 
-        second shouldBe PoiCloseMissingResult(PoiSource.LOCALDATA, activeBefore = 2, present = 2, closed = 0)
+        second shouldBe PoiCloseMissingResult(PoiSource.LOCALDATA, activeBefore = 2, present = 2, closed = 0, closedSourceRefs = emptyList())
         repo.row("C").dataStatus shouldBe DataStatus.CLOSED
         repo.row("C").updatedAt shouldBe clock.instant()
     }
@@ -156,7 +173,7 @@ class PoiCloseMissingServiceTest : StringSpec({
 
         val result = PoiCloseMissingService(repo, clock).closeMissing(PoiSource.LOCALDATA, listOf("A", "B", "X"))
 
-        result shouldBe PoiCloseMissingResult(PoiSource.LOCALDATA, activeBefore = 2, present = 2, closed = 0)
+        result shouldBe PoiCloseMissingResult(PoiSource.LOCALDATA, activeBefore = 2, present = 2, closed = 0, closedSourceRefs = emptyList())
         repo.row("X").dataStatus shouldBe DataStatus.CLOSED
         repo.row("X").updatedAt shouldBe t0
         repo.row("U").dataStatus shouldBe DataStatus.UNVERIFIED
@@ -168,6 +185,66 @@ class PoiCloseMissingServiceTest : StringSpec({
         val repo = repoWith(poi("A", PoiSource.TOURAPI))
 
         PoiCloseMissingService(repo, clock).closeMissing(PoiSource.KAKAO_LOCAL, emptyList()) shouldBe
-            PoiCloseMissingResult(PoiSource.KAKAO_LOCAL, activeBefore = 0, present = 0, closed = 0)
+            PoiCloseMissingResult(PoiSource.KAKAO_LOCAL, activeBefore = 0, present = 0, closed = 0, closedSourceRefs = emptyList())
+    }
+
+    // 운영자가 첫 실행 전에 보는 숫자다 — 드라이런이 말한 만큼만 실제로 닫혀야 그 숫자를 믿고 돌릴 수 있다.
+    "드라이런은 아무것도 바꾸지 않고, 실제 실행과 같은 숫자와 식별자를 돌려준다" {
+        val repo = repoWith(poi("A"), poi("B"), poi("C"), poi("D"))
+        val svc = PoiCloseMissingService(repo, clock)
+
+        val dry = svc.closeMissing(PoiSource.LOCALDATA, listOf("A", "B", "C"), dryRun = true)
+
+        dry shouldBe PoiCloseMissingResult(PoiSource.LOCALDATA, activeBefore = 4, present = 3, closed = 1, closedSourceRefs = listOf("D"))
+        repo.allActive() shouldBe true
+        svc.closeMissing(PoiSource.LOCALDATA, listOf("A", "B", "C")) shouldBe dry
+        repo.row("D").dataStatus shouldBe DataStatus.CLOSED
+    }
+
+    "드라이런에도 비율 가드가 같다 — 실제로 거부될 호출은 드라이런도 409" {
+        val repo = repoWith(poi("A"), poi("B"), poi("C"), poi("D"))
+
+        shouldThrow<ConflictDetected> {
+            PoiCloseMissingService(repo, clock).closeMissing(PoiSource.LOCALDATA, listOf("A"), dryRun = true)
+        }
+        repo.allActive() shouldBe true
+    }
+
+    /**
+     * 적재 스크립트가 닫기를 **적재 전에** 부르는 근거(리뷰 실측 재현). 식별자 체계가 통째로 바뀐 문서(수집기 회귀)를
+     * 적재 전에 재면 기존 1,000건 중 0건이라 409 다. 적재 뒤에 재면 방금 만든 1,000행이 스스로를 "목록에 있음"으로 세어
+     * 2,000 중 1,000(정확히 50%)으로 가드를 넘고 기존 행이 전부 닫힌다. 서버는 호출 순서를 모르므로 순서는 호출자 몫이다.
+     */
+    "적재 뒤에 재면 방금 만든 행이 자기를 세어 가드를 넘는다 — 그래서 닫기는 적재 전에 부른다" {
+        val old = (1..1000).map { "OLD-$it" }
+        val rekeyed = (1..1000).map { "NEW-$it" }
+
+        val closeFirst = InMemoryPoiRepository().apply { ingest(old) }
+        shouldThrow<ConflictDetected> { PoiCloseMissingService(closeFirst, clock).closeMissing(PoiSource.LOCALDATA, rekeyed) }
+        closeFirst.allActive() shouldBe true
+
+        val ingestFirst = InMemoryPoiRepository().apply { ingest(old); ingest(rekeyed) }
+        val passed = PoiCloseMissingService(ingestFirst, clock).closeMissing(PoiSource.LOCALDATA, rekeyed)
+        passed.present shouldBe 1000
+        passed.closed shouldBe 1000
+    }
+
+    /**
+     * 닫기를 적재 앞으로 옮겨도 되는 근거 — 적재는 목록 안의 행만 만들고 상태를 덮지 않으므로, 닫히는 행은 어느 쪽에서
+     * 재든 "기존 ACTIVE 중 목록에 없는 것"이다. 목록은 문서 전체라 **적재가 중간에 끊겨도**(앞 일부만 들어가도) 같다.
+     */
+    "닫히는 집합은 적재 전후가 같다 — 닫은 뒤 적재가 중간에 끊겨도 같다" {
+        checkAll(Arb.set(Arb.int(0..30), 0..20), Arb.set(Arb.int(0..30), 0..20), Arb.int(0..20)) { existing, listed, cut ->
+            val doc = listed.map { "R$it" }
+
+            fun closedRefs(closeFirst: Boolean, ingested: List<String>): Set<String> {
+                val repo = InMemoryPoiRepository().apply { ingest(existing.map { "R$it" }) }
+                val close = { PoiCloseMissingService(repo, clock).closeMissing(PoiSource.LOCALDATA, doc, allowMassClose = true) }
+                if (closeFirst) { close(); repo.ingest(ingested) } else { repo.ingest(ingested); close() }
+                return repo.stored.filter { it.dataStatus == DataStatus.CLOSED }.mapNotNull { it.sourceRef }.toSet()
+            }
+
+            closedRefs(closeFirst = true, ingested = doc.take(cut)) shouldBe closedRefs(closeFirst = false, ingested = doc)
+        }
     }
 })

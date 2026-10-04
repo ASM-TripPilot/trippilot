@@ -89,17 +89,24 @@ data class CloseMissingRequest(
     val source: String? = null,
     @param:JsonProperty("present_source_refs") val presentSourceRefs: List<String>,
     @param:JsonProperty("allow_mass_close") val allowMassClose: Boolean = false,
+    /** 숫자만 계산하고 쓰지 않는다(적재 스크립트의 `--dry-run --close-missing`). 빠지면 false. */
+    @param:JsonProperty("dry_run") val dryRun: Boolean = false,
 )
 
-/** 미포함 정리 결과 — `present` 는 목록 크기가 아니라 "목록에 있어 ACTIVE 로 남은 수"다(`activeBefore = present + closed`). */
+/**
+ * 미포함 정리 결과 — `present` 는 목록 크기가 아니라 "목록에 있어 ACTIVE 로 남은 수"다(`activeBefore = present + closed`).
+ * `closedSourceRefs` 는 닫은(드라이런이면 닫을) 행의 식별자 — 되돌리기 열쇠다(닫힌 시각은 다음 적재가 덮는다).
+ */
 data class PoiCloseMissingResponse(
     val source: String,
     val activeBefore: Int,
     val present: Int,
     val closed: Int,
+    val closedSourceRefs: List<String>,
 ) {
     companion object {
-        fun from(r: PoiCloseMissingResult) = PoiCloseMissingResponse(r.source.name, r.activeBefore, r.present, r.closed)
+        fun from(r: PoiCloseMissingResult) =
+            PoiCloseMissingResponse(r.source.name, r.activeBefore, r.present, r.closed, r.closedSourceRefs)
     }
 }
 

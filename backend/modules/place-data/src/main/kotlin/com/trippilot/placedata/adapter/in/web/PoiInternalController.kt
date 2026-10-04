@@ -68,7 +68,9 @@ class PoiInternalController(
      * 미포함 정리(TRIP-1227) — 한 출처의 **완전한** 식별자 목록을 받아, 그 출처의 ACTIVE 중 목록에 없는 것을 CLOSED 로 내린다.
      *
      * `/proposals` 와 따로인 이유: 적재는 문서를 쪼개 보내므로 어느 수신 요청도 "이게 전부"라고 말하지 못한다.
-     * 전량 적재가 끝난 뒤 호출자가 전부를 한 번에 밝혀야 대조가 성립한다. 응답은 숫자 넷이다(INV-4).
+     * 호출자가 전부를 한 번에 밝혀야 대조가 성립하고, **그 문서를 적재하기 전에** 불러야 비율 가드가 맞는 분모를
+     * 본다(서비스 주석). `dry_run` 이면 숫자만 계산하고 쓰지 않는다 — 가드 판정(409)은 같다.
+     * 응답은 숫자 넷과 닫은 식별자(되돌리기 열쇠)다(INV-4).
      */
     @PostMapping("/close-missing")
     fun closeMissing(@RequestBody request: CloseMissingRequest): PoiCloseMissingResponse =
@@ -77,6 +79,7 @@ class PoiInternalController(
                 source = parseSource(request.source),
                 presentRefs = request.presentSourceRefs,
                 allowMassClose = request.allowMassClose,
+                dryRun = request.dryRun,
             ),
         )
 

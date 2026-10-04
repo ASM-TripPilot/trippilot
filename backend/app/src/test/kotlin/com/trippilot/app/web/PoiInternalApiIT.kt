@@ -262,8 +262,9 @@ class PoiInternalApiIT : AbstractPostgresIntegrationTest() {
         "SELECT data_status FROM poi WHERE source = ? AND source_ref = ?", String::class.java, source, ref,
     )!!
 
-    private fun closeBody(refs: Collection<String>, allowMassClose: Boolean = false) =
-        """{"source":"LOCALDATA","present_source_refs":[${refs.joinToString(",") { "\"$it\"" }}],"allow_mass_close":$allowMassClose}"""
+    private fun closeBody(refs: Collection<String>, allowMassClose: Boolean = false, dryRun: Boolean = false) =
+        """{"source":"LOCALDATA","present_source_refs":[${refs.joinToString(",") { "\"$it\"" }}],""" +
+            """"allow_mass_close":$allowMassClose,"dry_run":$dryRun}"""
 
     /** 가장 위험한 쓰기라 세 문을 다 확인한다 — 무인증·틀린 토큰·사용자 JWT. */
     @Test
@@ -282,8 +283,8 @@ class PoiInternalApiIT : AbstractPostgresIntegrationTest() {
     }
 
     /**
-     * 수신은 upsert 뿐이라 원본에서 빠진 수집분이 ACTIVE 로 남는다 — 적재 뒤 그 출처의 식별자 전부를 받아
-     * 목록에 없는 ACTIVE 만 닫는다. 응답 숫자만 믿지 않고 DB 상태와 읽기 경계(후보풀 쪽)까지 본다.
+     * 수신은 upsert 뿐이라 원본에서 빠진 수집분이 ACTIVE 로 남는다 — 그 출처의 식별자 전부를 받아(스크립트는
+     * 그 문서를 적재하기 전에 보낸다) 목록에 없는 ACTIVE 만 닫는다. 응답 숫자만 믿지 않고 DB 상태와 읽기 경계(후보풀 쪽)까지 본다.
      */
     @Test
     fun `미포함 정리 — 문서에 없는 수집분만 CLOSED 로 내리고 숫자로 알린다`() {
@@ -296,6 +297,13 @@ class PoiInternalApiIT : AbstractPostgresIntegrationTest() {
         )
         val before = activeLocaldataRefs()
 
+        // 드라이런(스크립트의 --dry-run --close-missing) — 같은 숫자를 돌려주되 아무것도 바꾸지 않는다.
+        val (drc, dry) = call(HttpMethod.POST, closeMissing, SERVICE_TOKEN, closeBody(before - "E2E-CM-3", dryRun = true))
+        drc shouldBe 200
+        dry["closed"].asInt() shouldBe 1
+        dry["closedSourceRefs"].map { it.asText() } shouldBe listOf("E2E-CM-3")
+        status("E2E-CM-3") shouldBe "ACTIVE"
+
         val (rc, res) = call(HttpMethod.POST, closeMissing, SERVICE_TOKEN, closeBody(before - "E2E-CM-3"))
 
         rc shouldBe 200
@@ -303,6 +311,8 @@ class PoiInternalApiIT : AbstractPostgresIntegrationTest() {
         res["activeBefore"].asInt() shouldBe before.size
         res["present"].asInt() shouldBe before.size - 1
         res["closed"].asInt() shouldBe 1
+        // 되돌리기 열쇠 — 닫힌 시각은 다음 적재가 덮으므로 식별자를 응답으로 돌려준다(스크립트가 되돌리기 SQL 로 남긴다).
+        res["closedSourceRefs"].map { it.asText() } shouldBe listOf("E2E-CM-3")
         status("E2E-CM-3") shouldBe "CLOSED"
         status("E2E-CM-1") shouldBe "ACTIVE"
         status("E2E-CM-T1", source = "TOURAPI") shouldBe "ACTIVE"
@@ -340,6 +350,7 @@ class PoiInternalApiIT : AbstractPostgresIntegrationTest() {
 
         rc shouldBe 409
         err["error"]["code"].asText() shouldBe "CONFLICT"
+        call(HttpMethod.POST, closeMissing, SERVICE_TOKEN, closeBody(listed, dryRun = true)).first shouldBe 409
         mine.forEach { status(it) shouldBe "ACTIVE" }
 
         val (ok, res) = call(HttpMethod.POST, closeMissing, SERVICE_TOKEN, closeBody(listed, allowMassClose = true))

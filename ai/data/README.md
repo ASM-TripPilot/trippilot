@@ -366,19 +366,22 @@ TourAPI 음식점은 전수 수집이 끝났는데도 숙소 12,936곳 중 **22.
 # 2) 생성 (약 30초) — pyproj 는 실행할 때만 붙인다(pyproject 의존성이 아니다)
 cd ai
 uv run --with pyproj python scripts/collect_localdata.py <받은 경로>/식품_일반음식점.csv
-# 3) 적재 + 빠진 행 닫기 — 백엔드 V2.61 이후만 받는다(이전 백엔드는 source 400). 드라이런 먼저
+# 3) 빠진 행 닫기 + 적재 — 백엔드 V2.61 이후만 받는다(이전 백엔드는 source 400). 드라이런 먼저:
+#    서버가 닫힐 수를 계산만 해서 돌려준다(토큰·터널 필요 — 런북 §port-forward)
 cd .. && python3 backend/scripts/ingest_pois.py --dry-run --close-missing ai/data/collected_localdata.json
 python3 backend/scripts/ingest_pois.py --close-missing ai/data/collected_localdata.json
 ```
 
 ⚠️ **플래그 없이 부으면 정본에서 행이 빠지지 않는다.** 수신은 관리번호 멱등 upsert 라, 다음 생성에서 빠진 식당
 (폐업·공백 해소)은 문서에서만 빠지고 정본에는 ACTIVE 로 남는다 — 공백 지역 일정이 아무 신호 없이 문 닫은 식당을
-끼니로 넣는다(원본 229만 행 중 162만 행이 폐업 이력일 만큼 식당은 자주 닫는다). `--close-missing` 은 적재가 전부
-성공한 뒤 **이 문서에 없는 LOCALDATA 행을 CLOSED 로** 내린다(삭제 아님 — 절차·숫자 읽는 법·되돌리기는
+끼니로 넣는다(원본 229만 행 중 162만 행이 폐업 이력일 만큼 식당은 자주 닫는다). `--close-missing` 은 **적재 전에 이
+문서에 없는 LOCALDATA 행을 CLOSED 로** 내리고 이어서 적재한다(삭제 아님 — 순서의 이유·숫자 읽는 법·되돌리기는
 `docs/guides/poi-수집본-적재.md` §원본에서 빠진 장소 닫기).
 
 - **닫힌 행은 다시 뽑혀도 되살아나지 않는다** — 수신은 상태를 덮지 않는다(`Poi.refreshed`). 폐업이 아니라 공백이
-  해소돼 빠졌던 식당이 다음 달 다시 뽑혀도 CLOSED 로 남는다. 되살리려면 런북의 되돌리기 SQL 이다.
+  해소돼 빠졌던 식당이 다음 달 다시 뽑혀도 CLOSED 로 남고, 담기 목록에는 '폐업' 배지로 보인다. 되살리려면 런북
+  §되돌리기 2번(그 문서의 식별자로 고른다 — LOCALDATA 전용)을 돌린다. 닫힌 시각으로 고르는 3번은 재적재가 시각을
+  덮어 듣지 않는다.
 - 서버는 목록에 있는 것이 LOCALDATA ACTIVE 의 **절반 미만이면 409** 로 거부한다. 선별 기준을 크게 바꿔 다시 만든
   경우처럼 정말 절반 넘게 빠질 때만 `--allow-mass-close` 를 붙인다.
 
