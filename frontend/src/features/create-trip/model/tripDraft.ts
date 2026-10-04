@@ -54,6 +54,13 @@ export function tripLength(draft: TripDraft): number {
 }
 
 /** 도시별 박수 합. */
+/**
+ * TRIP-1219 a · 한 여행의 박수 합 상한. 서버(`Trip.kt`)는 하한(0 이상)과 Σnights ≤ 기간만 검사하고 상한이
+ * 없다 — 정본 결정이 없어 클라가 UX 사본으로 30박을 둔다(42박 = 43일 기간이 잡히던 QA 실측). 서버가 상한을
+ * 정하면 이 값을 그 값으로 바꾼다.
+ */
+export const MAX_TRIP_NIGHTS = 30;
+
 export function nightsSum(destinations: TripDestination[]): number {
   return destinations.reduce((total, one) => total + one.nights, 0);
 }
