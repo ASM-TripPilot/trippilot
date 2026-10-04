@@ -605,7 +605,8 @@ class OrToolsAssembler:
 
         규칙(폴백 어셈블리와 동일 의미):
           ① 각 식사 창(점심·저녁)에 FOOD 슬롯이 1개 배치되면 창당 +meal_bonus
-          ② 창 밖 FOOD 배치는 건당 -meal_penalty
+          ② 창 밖 FOOD 배치는 건당 -meal_penalty (같은 창 두 번째 FOOD 도 창 밖 취급 —
+             상쇄는 창당 1곳)
           ③ FOOD→FOOD 연속 배치(인접 아크)는 건당 -meal_penalty
 
         스케일 근거: 점수 항이 int(score·1000)이고 score ∈ [0,1]이므로 보정도 같은
@@ -638,10 +639,14 @@ class OrToolsAssembler:
                 lits.append(b)
                 in_window[i].append(b)
             if lits:
+                # 상쇄 자격은 창당 1곳 — b 는 ① 보상의 근거이자 ② 상쇄의 자격이다. 걸지 않으면
+                # 같은 창 두 번째 FOOD 도 ② 를 상쇄받아 비용이 ③ 뿐이었다(QA 6회차 실측). b 만
+                # 묶으므로 방문(visit)은 그대로 자유 — HC1~4 해 집합 불변.
+                m.AddAtMostOne(lits)
                 r = m.NewBoolVar(f"meal_win{w_idx}")
                 m.AddBoolOr(lits).OnlyEnforceIf(r)  # r ⇒ 창에 FOOD ≥ 1
                 terms.append(bonus * r)             # ① 창당 1회 보상
-        # ② 창 밖 FOOD 억제: 방문 FOOD마다 -penalty, 창 안(b=1)이면 +penalty로 상쇄.
+        # ② 창 밖 FOOD 억제: 방문 FOOD마다 -penalty, 창 안(b=1, 창당 1곳)이면 +penalty로 상쇄.
         #    점심·저녁 창이 겹치지 않아 한 노드의 b는 최대 1개만 참 — 과잉 상쇄 없음.
         for i in food:
             terms.append(-penalty * visit[i])
