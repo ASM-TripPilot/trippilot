@@ -1,4 +1,6 @@
 import type { ReactElement } from 'react';
+import { KeyboardAvoidingView, ScrollView } from 'react-native';
+import type { ReactTestInstance } from 'react-test-renderer';
 import {
   fireEvent,
   render,
@@ -998,5 +1000,76 @@ describe('헤더 공유 아이콘 없음', () => {
       // 긍정 짝 — 헤더 편집 진입점(공유와 다름, AC-12)은 그대로 남는다.
       expect(screen.getByTestId('reflection-daily-edit')).toBeOnTheScreen();
     });
+  });
+});
+
+describe('TRIP-1211 · 긴 글 편집 — 키보드가 저장·취소를 가리지 않는다(구조 잠금)', () => {
+  function openEdit() {
+    const props = renderScreen({ face: 'default' });
+    fireEvent.press(screen.getByTestId('reflection-daily-edit'));
+    return props;
+  }
+
+  function hasAncestor(node: ReactTestInstance, type: unknown): boolean {
+    for (let p = node.parent; p; p = p.parent) if (p.type === type) return true;
+    return false;
+  }
+
+  it('편집 중엔 키보드 회피 컨테이너가 있고 본문 스크롤은 탭을 먹지 않는다', () => {
+    openEdit();
+
+    expect(screen.UNSAFE_getByType(KeyboardAvoidingView)).toBeTruthy();
+    const scroll = screen.UNSAFE_getByType(ScrollView);
+    expect(scroll.props.keyboardShouldPersistTaps).toBe('handled');
+    // 스크롤·바깥 드래그로 키보드를 내릴 수단(iOS interactive · Android on-drag).
+    expect(['interactive', 'on-drag']).toContain(
+      scroll.props.keyboardDismissMode
+    );
+  });
+
+  it('저장·취소 버튼은 스크롤 밖 고정 푸터에 있어 키보드 위에 항상 닿는다', () => {
+    openEdit();
+
+    const save = screen.getByTestId('reflection-daily-edit-save');
+    const cancel = screen.getByTestId('reflection-daily-edit-cancel');
+    expect(hasAncestor(save, ScrollView)).toBe(false);
+    expect(hasAncestor(cancel, ScrollView)).toBe(false);
+    expect(hasAncestor(save, KeyboardAvoidingView)).toBe(true);
+    expect(hasAncestor(cancel, KeyboardAvoidingView)).toBe(true);
+  });
+
+  it('입력칸은 스크롤 안에 남는다(긴 글은 본문이 스크롤)', () => {
+    openEdit();
+    expect(
+      hasAncestor(screen.getByTestId('reflection-daily-edit-input'), ScrollView)
+    ).toBe(true);
+  });
+});
+
+describe('TRIP-1212 · 입력칸에 안내문이 글자로 채워지지 않는다', () => {
+  const GUIDE =
+    '이 날은 기록된 방문이 없어요. 다녀온 곳을 남기면 회고가 채워져요.';
+
+  it('편집 시드가 서버 안내문이면 입력칸은 비어 있고 placeholder 만 보인다', () => {
+    renderScreen({ face: 'empty', editableText: GUIDE, narrative: GUIDE });
+    fireEvent.press(screen.getByTestId('reflection-daily-compose'));
+
+    const input = screen.getByTestId('reflection-daily-edit-input');
+    expect(input.props.value).toBe('');
+    expect(input.props.placeholder).toBeTruthy();
+    expect(screen.getByTestId('reflection-daily-edit-save')).toBeDisabled();
+  });
+
+  it('안내문 글자를 그대로 두고 저장 눌러도 저장 콜백 0회', () => {
+    const { onSaveEdit } = renderScreen({ face: 'empty' });
+    fireEvent.press(screen.getByTestId('reflection-daily-compose'));
+    fireEvent.changeText(
+      screen.getByTestId('reflection-daily-edit-input'),
+      GUIDE
+    );
+
+    expect(screen.getByTestId('reflection-daily-edit-save')).toBeDisabled();
+    fireEvent.press(screen.getByTestId('reflection-daily-edit-save'));
+    expect(onSaveEdit).not.toHaveBeenCalled();
   });
 });

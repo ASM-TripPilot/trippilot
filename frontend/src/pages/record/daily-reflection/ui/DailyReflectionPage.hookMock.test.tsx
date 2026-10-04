@@ -256,6 +256,59 @@ describe('얼굴 — 레코드 없음 ≠ 활동 없음, 생성 조건', () => {
     });
   });
 
+  describe('TRIP-1212 · 서버가 미치환 템플릿을 내려줘도 화면엔 중괄호가 없다', () => {
+    const TEMPLATE = '{region} · {start_date}~{end_date}';
+
+    it('본문·편집 시드 모두 여행의 지역·기간으로 치환된다', () => {
+      arrange({
+        reflection: record(
+          { visitCount: 2, photoCount: 1 },
+          { card: card(TEMPLATE) }
+        ),
+      });
+      (useGetTripsTripId as jest.Mock).mockReturnValue({
+        data: {
+          tripId: TRIP_ID,
+          startDate: '2026-09-24',
+          endDate: '2026-09-25',
+          destinations: [{ seq: 1, region: '부산', nights: 1 }],
+        },
+        isPending: false,
+        isError: false,
+      });
+
+      render(page(PAST_TODAY));
+
+      expect(
+        screen.getByTestId('reflection-daily-narrative')
+      ).toHaveTextContent('부산 · 2026-09-24~2026-09-25');
+      fireEvent.press(screen.getByTestId('reflection-daily-narrative-edit'));
+      expect(
+        screen.getByTestId('reflection-daily-edit-input').props.value
+      ).toBe('부산 · 2026-09-24~2026-09-25');
+    });
+
+    it('여행 정보가 없으면 중괄호를 지우고 stats 문장으로 폴백한다(빈 본문 아님)', () => {
+      arrange({
+        reflection: record(
+          { visitCount: 2, photoCount: 1 },
+          { card: card(TEMPLATE) }
+        ),
+      });
+      (useGetTripsTripId as jest.Mock).mockReturnValue({
+        data: undefined,
+        isPending: true,
+        isError: false,
+      });
+
+      render(page(PAST_TODAY));
+
+      const text = screen.getByTestId('reflection-daily-narrative');
+      expect(text).not.toHaveTextContent(/[{}]/);
+      expect(text).toHaveTextContent(/방문 2곳/);
+    });
+  });
+
   describe('AC-4 · 조회·생성 중에는 pending — empty 로 접지 않는다 (INV-4)', () => {
     it('① 목록을 아직 못 받았으면 pending 이고 empty 는 없으며, 레코드 유무를 모르니 만들지 않는다', () => {
       const create = arrange({ isPending: true });
