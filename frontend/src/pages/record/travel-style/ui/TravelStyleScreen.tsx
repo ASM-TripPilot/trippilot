@@ -104,11 +104,12 @@ export function TravelStyleScreen({
             <View className="flex-row gap-md">
               <StatTile
                 testID="reflection-style-stat-places"
-                value={analysis.avgPlacesPerDay}
+                value={Number(analysis.avgPlacesPerDay.toFixed(1))}
                 unit="곳"
                 label="하루 평균 방문"
               />
-              {analysis.avgDwellMinutes != null ? (
+              {analysis.avgDwellMinutes != null &&
+              analysis.avgDwellMinutes > 0 ? (
                 <StatTile
                   testID="reflection-style-stat-dwell"
                   value={analysis.avgDwellMinutes}
@@ -186,8 +187,8 @@ export function TravelStyleScreen({
         )}
       </ScrollView>
 
-      {/* 하단 탭바(기록 활성) — 두 얼굴 공통 오버레이(absolute bottom-0, j04 동형). */}
-      <BottomTabBar activeKey="records" onPressTab={onPressTab ?? (() => {})} />
+      {/* 하단 탭바(마이 활성, TRIP-1222) — 두 얼굴 공통 오버레이(absolute bottom-0, j04 동형). */}
+      <BottomTabBar activeKey="my" onPressTab={onPressTab ?? (() => {})} />
     </SafeAreaView>
   );
 }
