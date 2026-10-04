@@ -81,7 +81,7 @@ class RegionCenterIT : AbstractPostgresIntegrationTest() {
         )!! shouldBe 0
     }
 
-    /** 무게중심이 그 지역 안에 있어야 한다 — 서울 중심이 부산에 찍히면 앵커가 무의미하다. */
+    /** 대표 좌표가 그 지역 안에 있어야 한다 — 서울 중심이 부산에 찍히면 앵커가 무의미하다. */
     @Test
     fun `대표 좌표가 그 지역다운 위치에 있다`() {
         val seoul = regions.centerOf("서울특별시").shouldNotBeNull()
@@ -93,6 +93,50 @@ class RegionCenterIT : AbstractPostgresIntegrationTest() {
         val jeju = regions.centerOf("제주특별자치도").shouldNotBeNull()
         jeju.lat shouldBeLessThan 33.7
         jeju.lng shouldBeGreaterThan 126.1
+    }
+
+    /**
+     * **제주 시도 중심은 제주시 시가지에 있다 — 한라산 북사면이 아니다**(TRIP-1225).
+     *
+     * 별칭 `제주`·`제주도` 가 시도(50)로 이어져, 숙소 없이 제주를 고른 여행은 이 좌표가 앵커다.
+     * 점 평균은 남북 두 군집(제주시·서귀포) 사이 (33.389, 126.511) 산 위에 떨어졌고 2km 안에
+     * 숙소·장소가 한 건도 없었다. 상자는 제주시 시가지(구도심·신제주·공항 일대)를 넉넉히 감싼다.
+     */
+    @Test
+    fun `제주 시도 중심은 산 위가 아니라 제주시 시가지에 있다`() {
+        val jeju = regions.centerOfCode("50").shouldNotBeNull()
+        jeju.lat shouldBeGreaterThan 33.45
+        jeju.lat shouldBeLessThan 33.53
+        jeju.lng shouldBeGreaterThan 126.45
+        jeju.lng shouldBeLessThan 126.58
+
+        regions.centerOf("제주도") shouldBe jeju
+    }
+
+    /**
+     * **시도 중심 2km 안에는 숙소나 장소가 있다 — 사람 없는 곳에 떨어지지 않는다**(TRIP-1225).
+     *
+     * 군집이 여럿인 시도에서 점 평균은 군집 사이 빈 땅에 떨어진다 — 시드 기준 16개 시도 중 10곳이
+     * 평균 좌표 2km 안에 한 건도 없었다(제주 한라산·경북 내륙·강원 산간 …). 좌표값이 아니라 성질로
+     * 묻는다 — 시드가 바뀌어도 밀집지 둘레에는 점이 있다. 중심이 없는 시도도 위반으로 센다.
+     */
+    @Test
+    fun `시도 중심 2km 안에 숙소나 장소가 있다`() {
+        jdbc.queryForObject(
+            """
+            SELECT count(*) FROM region r
+             WHERE r.level = 'SIDO'
+               AND NOT EXISTS (
+                 SELECT 1
+                   FROM (SELECT lat, lng FROM stay
+                         UNION ALL
+                         SELECT lat, lng FROM poi WHERE data_status = 'ACTIVE') p
+                  WHERE sqrt(power((p.lat - r.lat) * 111.0, 2)
+                           + power((p.lng - r.lng) * 111.0 * cos(radians(r.lat)), 2)) <= 2.0
+               )
+            """.trimIndent(),
+            Int::class.java,
+        )!! shouldBe 0
     }
 
     /** 별칭으로도 찾혀야 한다 — 프론트는 `서울` 처럼 짧은 이름을 보낸다. */
