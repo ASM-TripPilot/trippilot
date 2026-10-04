@@ -322,13 +322,13 @@
 - `src/features/assign-trip-base/model/useTripBases.ts`  →  useTripBases · useAssignBase
 
 ## src/features/attach-visit-media/
-- `src/features/attach-visit-media/index.ts`  →  photoAttach · pickPhotoForVisit · useVisitMemo · MemoInline
+- `src/features/attach-visit-media/index.ts`  →  photoAttach · pickPhotoForVisit · useSavedVisitMemos · useVisitMemo · MemoInline
 - `src/features/attach-visit-media/index.view.ts`  →  photoAttach · MemoInline
 
 ## src/features/attach-visit-media/model/
 - `src/features/attach-visit-media/model/photoAttach.ts`  →  photoAttach
 - `src/features/attach-visit-media/model/pickPhotoForVisit.ts`  →  PhotoPickOutcome · pickPhotoForVisit
-- `src/features/attach-visit-media/model/useVisitMemo.ts`  →  useVisitMemo
+- `src/features/attach-visit-media/model/useVisitMemo.ts`  →  useVisitMemo · useSavedVisitMemos
 
 ## src/features/attach-visit-media/ui/
 - `src/features/attach-visit-media/ui/MemoInline.tsx`  →  MemoInlineProps · MemoInline
@@ -802,7 +802,7 @@
 - `src/pages/live/live-itinerary/model/riskAffectedRow.ts`  →  RiskAffectedRow · riskAffectedRow
 - `src/pages/live/live-itinerary/model/triggerWatchlist.ts`  →  TriggerWatchlistRow · triggerWatchlist
 - `src/pages/live/live-itinerary/model/useVisitCheck.ts`  →  VisitCheckOutcome · useVisitCheck
-- `src/pages/live/live-itinerary/model/visitedLabels.ts`  →  visitedLabelByPoiId
+- `src/pages/live/live-itinerary/model/visitedLabels.ts`  →  visitedLabelByPoiId · doneVisitCheckIdByPoiId
 
 ## src/pages/live/live-itinerary/ui/
 - `src/pages/live/live-itinerary/ui/LiveHubView.tsx`  →  LiveHubSlot · LiveHubViewProps · LiveHubView

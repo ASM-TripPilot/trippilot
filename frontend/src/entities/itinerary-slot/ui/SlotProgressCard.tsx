@@ -22,7 +22,8 @@ import {
 /**
  * TRIP-746 · i01 허브 시트의 슬롯 카드 3상태(entities · presentation-only, useState 0).
  *  - done     = 이름 › + 우측 실제 방문 시각 "09:30" + "방문"(TRIP-1220 — 실제 시각이 없으면 계획 시각 + "계획") / 사진 N장 / 후기. 사진·후기가 없으면 그 칸을
- *               통째로 안 그린다(G6 — 실앱은 조회 계약이 없어 늘 없다).
+ *               통째로 안 그린다(G6 — 실앱은 조회 계약이 없어 늘 없다). 사진·메모 콜백을 받으면 active 와 같은
+ *               [사진]·[메모]와 안내 줄(TRIP-1203 — testID 는 `execution-live-slot-done-*-{slotKey}`).
  *  - active   = 상태줄 "13:00 도착 · 지금 관람 중"(D4 고정) + [방문 완료]·[사진]·[메모] + (있으면) 메모 박스(TRIP-1117).
  *               [사진]은 `onPressPhoto`, [메모]는 `onPressMemo` 를 부른다(TRIP-1070). 받지 않은 버튼은
  *               그리지 않는다(TRIP-939 — 심사 2.1). 사진 안내 한 줄(`photoNotice`)의 상태는 부모가 쥔다.
@@ -62,15 +63,15 @@ export interface SlotProgressCardProps {
   memo?: string | null;
   /** active [방문 완료]. */
   onPressComplete?: () => void;
-  /** active [사진](TRIP-1070). 미주입이면 버튼을 그리지 않는다. */
+  /** active·done(TRIP-1203) [사진](TRIP-1070). 미주입이면 버튼을 그리지 않는다. */
   onPressPhoto?: () => void;
-  /** active [메모](TRIP-1070). 미주입이면 버튼을 그리지 않는다. */
+  /** active·done(TRIP-1203) [메모](TRIP-1070). 미주입이면 버튼을 그리지 않는다. */
   onPressMemo?: () => void;
-  /** active 사진 안내 한 줄(권한 거부·저장 실패 등) — 상태는 부모가 가진다. 비면 안 그린다. */
+  /** active·done 사진 안내 한 줄(권한 거부·저장 실패 등) — 상태는 부모가 가진다. 비면 안 그린다. */
   photoNotice?: string | null;
   /** TRIP-1216 — 사진 안내 옆 [설정 열기](권한 거부). 주면 안내가 있을 때만 그린다. 설정을 여는 일은 부모 몫. */
   onPressPhotoSettings?: () => void;
-  /** TRIP-1117 — active 메모 안내 한 줄(저장 실패, Q3). 상태는 부모가 가진다. 비면 안 그린다. */
+  /** TRIP-1117 — active·done 메모 안내 한 줄(저장 실패, Q3). 상태는 부모가 가진다. 비면 안 그린다. */
   memoNotice?: string | null;
   /** upcoming 전용(TRIP-748) — 주면 "예정" 대신 이 글자를 분홍 배지로(트리거 영향 카드). */
   badgeLabel?: string;
@@ -209,6 +210,70 @@ export function SlotProgressCard({
     </View>
   ) : null;
 
+  // [사진]·[메모] 버튼과 안내 줄 — active 와 done(TRIP-1203)이 같은 모양을 쓴다. testID 만 다르다:
+  // active 는 고정 id, done 은 카드가 여러 장이라 slotKey 를 붙인다.
+  const mediaButton = (
+    testID: string,
+    onPress: (() => void) | undefined,
+    glyph: ReactElement,
+    label: string
+  ): ReactElement | null =>
+    onPress ? (
+      <Pressable
+        testID={testID}
+        accessibilityRole="button"
+        onPress={onPress}
+        className="flex-row items-center gap-[5px] rounded-[10px] border border-hairline-strong bg-canvas py-[10px] pl-md pr-[13px]"
+      >
+        {glyph}
+        <Text className="font-noto-bold text-caption font-bold text-ink">
+          {label}
+        </Text>
+      </Pressable>
+    ) : null;
+  const photoButton = (testID: string) =>
+    mediaButton(testID, onPressPhoto, <PhotoGlyph size={16} />, '사진');
+  const memoButton = (testID: string) =>
+    mediaButton(testID, onPressMemo, <MemoGlyph size={16} />, '메모');
+  // 순서: 사진 안내 → [설정 열기] → 메모 안내(TRIP-1117 Q9 — 그 아래가 메모 박스).
+  const mediaNotices = (ids: {
+    photoNotice: string;
+    photoSettings: string;
+    memoNotice: string;
+  }): ReactElement => (
+    <>
+      {photoNotice ? (
+        <Text
+          testID={ids.photoNotice}
+          className="font-noto text-caption text-muted"
+        >
+          {photoNotice}
+        </Text>
+      ) : null}
+      {photoNotice && onPressPhotoSettings ? (
+        <Pressable
+          testID={ids.photoSettings}
+          accessibilityRole="button"
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          onPress={onPressPhotoSettings}
+          className="self-start"
+        >
+          <Text className="font-noto-bold text-caption font-bold text-primary">
+            설정 열기
+          </Text>
+        </Pressable>
+      ) : null}
+      {memoNotice ? (
+        <Text
+          testID={ids.memoNotice}
+          className="font-noto text-caption text-muted"
+        >
+          {memoNotice}
+        </Text>
+      ) : null}
+    </>
+  );
+
   if (state === 'done') {
     return (
       <View
@@ -230,6 +295,18 @@ export function SlotProgressCard({
             ))}
           </View>
         ) : null}
+        {/* TRIP-1203 — 완료 방문에도 [사진]·[메모](G-U4-7). [방문 완료]·[길찾기]는 없다. */}
+        {onPressPhoto || onPressMemo ? (
+          <View className="flex-row flex-wrap items-center gap-sm">
+            {photoButton(fieldId('done-photo'))}
+            {memoButton(fieldId('done-memo'))}
+          </View>
+        ) : null}
+        {mediaNotices({
+          photoNotice: fieldId('done-photo-notice'),
+          photoSettings: fieldId('done-photo-settings'),
+          memoNotice: fieldId('done-memo-notice'),
+        })}
         {memoBox}
       </View>
     );
@@ -260,65 +337,17 @@ export function SlotProgressCard({
               방문 완료
             </Text>
           </Pressable>
-          {onPressPhoto ? (
-            <Pressable
-              testID="execution-arrive-photo"
-              accessibilityRole="button"
-              onPress={onPressPhoto}
-              className="flex-row items-center gap-[5px] rounded-[10px] border border-hairline-strong bg-canvas py-[10px] pl-md pr-[13px]"
-            >
-              <PhotoGlyph size={16} />
-              <Text className="font-noto-bold text-caption font-bold text-ink">
-                사진
-              </Text>
-            </Pressable>
-          ) : null}
-          {onPressMemo ? (
-            <Pressable
-              testID="execution-arrive-memo"
-              accessibilityRole="button"
-              onPress={onPressMemo}
-              className="flex-row items-center gap-[5px] rounded-[10px] border border-hairline-strong bg-canvas py-[10px] pl-md pr-[13px]"
-            >
-              <MemoGlyph size={16} />
-              <Text className="font-noto-bold text-caption font-bold text-ink">
-                메모
-              </Text>
-            </Pressable>
-          ) : null}
+          {photoButton('execution-arrive-photo')}
+          {memoButton('execution-arrive-memo')}
           {directionsButton}
         </View>
         {directionsNoticeLine}
-        {photoNotice ? (
-          <Text
-            testID="execution-arrive-photo-notice"
-            className="font-noto text-caption text-muted"
-          >
-            {photoNotice}
-          </Text>
-        ) : null}
-        {photoNotice && onPressPhotoSettings ? (
-          <Pressable
-            testID="execution-arrive-photo-settings"
-            accessibilityRole="button"
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            onPress={onPressPhotoSettings}
-            className="self-start"
-          >
-            <Text className="font-noto-bold text-caption font-bold text-primary">
-              설정 열기
-            </Text>
-          </Pressable>
-        ) : null}
         {/* TRIP-1117 Q3 — 시트가 닫힌 뒤 도착한 메모 저장 실패(INV-4). 순서: 버튼 줄 → 안내 → 메모 박스(Q9). */}
-        {memoNotice ? (
-          <Text
-            testID="execution-arrive-memo-notice"
-            className="font-noto text-caption text-muted"
-          >
-            {memoNotice}
-          </Text>
-        ) : null}
+        {mediaNotices({
+          photoNotice: 'execution-arrive-photo-notice',
+          photoSettings: 'execution-arrive-photo-settings',
+          memoNotice: 'execution-arrive-memo-notice',
+        })}
         {memoBox}
       </View>
     );

@@ -8,7 +8,7 @@ import type { ReactTestInstance } from 'react-test-renderer';
 
 import type { ItineraryDaysItemSlotsItem } from '@/entities/itinerary-slot/model';
 
-import { ChevronRightGlyph } from './SlotGlyphs';
+import { ChevronRightGlyph, MemoGlyph, PhotoGlyph } from './SlotGlyphs';
 import { SlotProgressCard } from './SlotProgressCard';
 
 /**
@@ -800,25 +800,25 @@ describe('SlotProgressCard · active 메모 (TRIP-1117)', () => {
     );
   });
 
-  it.each(['done', 'upcoming'] as const)(
-    'C18 %s 카드는 memoNotice 를 받아도 안내 줄을 그리지 않는다',
-    (state) => {
-      render(
-        <SlotProgressCard
-          slot={activeSlot}
-          date={DATE}
-          state={state}
-          memoNotice={MEMO_NOTICE}
-        />
-      );
+  // TRIP-1203 — done 은 이제 안내를 그린다(아래 「done [사진]·[메모]」 C23). 여기는 upcoming 만 남는다.
+  it('C18 upcoming 카드는 memoNotice·photoNotice 를 받아도 안내 줄을 그리지 않는다', () => {
+    render(
+      <SlotProgressCard
+        slot={activeSlot}
+        date={DATE}
+        state="upcoming"
+        memoNotice={MEMO_NOTICE}
+        photoNotice="사진을 기록하지 못했어요. 다시 시도해 주세요"
+      />
+    );
 
-      // 짝 앵커 — 카드가 실제로 그려졌다.
-      expect(screen.getByTestId(id('name'))).toHaveTextContent(
-        '부산시립미술관'
-      );
-      expect(screen.queryByTestId('execution-arrive-memo-notice')).toBeNull();
-    }
-  );
+    // 짝 앵커 — 카드가 실제로 그려졌다.
+    expect(screen.getByTestId(id('name'))).toHaveTextContent('부산시립미술관');
+    expect(screen.queryByTestId('execution-arrive-memo-notice')).toBeNull();
+    expect(screen.queryByTestId('execution-arrive-photo-notice')).toBeNull();
+    expect(screen.queryByTestId(id('done-memo-notice'))).toBeNull();
+    expect(screen.queryByTestId(id('done-photo-notice'))).toBeNull();
+  });
 });
 
 // TRIP-1189 · i01 다음 예정지 [길찾기] (Figma 4799:2653 btn·길찾기, US-ONTRIP-03 · BR-U4-39).
@@ -958,5 +958,244 @@ describe('SlotProgressCard · upcoming 길찾기 (TRIP-1189)', () => {
     expect(screen.getByTestId(id('directions-notice'))).toHaveTextContent(
       '지도를 열 수 없어요.'
     );
+  });
+});
+
+// ── TRIP-1203 · 방문 완료(done) 카드의 [사진]·[메모] (US-REC-02 · G-U4-7) ─────────────────
+//
+// done 얼굴이 active 와 같은 prop(onPressPhoto·onPressMemo·photoNotice·onPressPhotoSettings·memoNotice)을
+// 읽는다 — 새 prop 은 없다. 카드가 여러 장이라 testID 에 slotKey 를 붙이고(`…-done-…-{slotKey}`), active 의
+// 고정 testID(`execution-arrive-*`)는 쓰지 않는다(02a ★1). 버튼 모양은 active 와 같은 className·글리프다.
+// 세로 순서: 머리줄 → 사진 행 → 버튼 줄 → 사진 안내 → [설정 열기] → 메모 안내 → 메모 박스.
+//
+// (개념) `findByType(컴포넌트)` = 그 노드 아래에서 해당 컴포넌트로 그려진 노드 하나를 찾는다(글리프 props 확인용).
+
+const DONE_IDS = [
+  'done-photo',
+  'done-memo',
+  'done-photo-notice',
+  'done-photo-settings',
+  'done-memo-notice',
+] as const;
+const DONE_ANY = /^execution-live-slot-done-/;
+const PHOTO_FAILED = '사진을 기록하지 못했어요. 다시 시도해 주세요';
+const PHOTO_DENIED = '사진 접근 권한이 없어 사진을 불러올 수 없어요';
+const DONE_MEMO_FAILED = '메모를 저장하지 못했어요. 다시 시도해 주세요.';
+
+describe('SlotProgressCard · done [사진]·[메모] (TRIP-1203)', () => {
+  it('C19 done 이 사진·메모 콜백을 받으면 [사진]·[메모]가 서고 각자 제 콜백만 1회 부른다 — [방문 완료]·[길찾기]·고정 testID 는 없다', () => {
+    // 준비 — 네 콜백을 모두 준다(done 이 앞의 둘만 그리는지 본다).
+    const onPressPhoto = jest.fn();
+    const onPressMemo = jest.fn();
+    const onPressComplete = jest.fn();
+    const onPressDirections = jest.fn();
+    render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="done"
+        visitedLabel="09:30"
+        onPressPhoto={onPressPhoto}
+        onPressMemo={onPressMemo}
+        onPressComplete={onPressComplete}
+        onPressDirections={onPressDirections}
+      />
+    );
+
+    // 단언 — 글자는 완전 일치(글리프는 텍스트를 내지 않는다, 02a §5).
+    expect(screen.getByTestId(id('done-photo'))).toHaveTextContent('사진');
+    expect(screen.getByTestId(id('done-memo'))).toHaveTextContent('메모');
+
+    // 실행·단언 — [사진]
+    fireEvent.press(screen.getByTestId(id('done-photo')));
+    expect(onPressPhoto).toHaveBeenCalledTimes(1);
+    expect(onPressMemo).not.toHaveBeenCalled();
+
+    // 실행·단언 — [메모]
+    fireEvent.press(screen.getByTestId(id('done-memo')));
+    expect(onPressMemo).toHaveBeenCalledTimes(1);
+    expect(onPressPhoto).toHaveBeenCalledTimes(1);
+
+    // 부재 — 완료 카드엔 [방문 완료]·[길찾기]가 없고, 관람 중 카드의 고정 testID 도 쓰지 않는다(02a ★1·★2).
+    expect(screen.queryByTestId('execution-arrive-complete')).toBeNull();
+    expect(screen.queryByTestId(id('directions'))).toBeNull();
+    expect(screen.queryByTestId('execution-arrive-photo')).toBeNull();
+    expect(screen.queryByTestId('execution-arrive-memo')).toBeNull();
+    expect(onPressComplete).not.toHaveBeenCalled();
+    expect(onPressDirections).not.toHaveBeenCalled();
+  });
+
+  it('C20 done [사진]·[메모]는 관람 중 카드의 버튼과 className 이 같고, 글리프는 PhotoGlyph·MemoGlyph 16 이다', () => {
+    // 준비 — 같은 슬롯을 관람 중으로 먼저 그려 그 버튼 className 을 읽는다(리터럴 복사 금지, 02a ★15).
+    const activeView = render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="active"
+        onPressPhoto={jest.fn()}
+        onPressMemo={jest.fn()}
+      />
+    );
+    const activePhotoClass = screen.getByTestId('execution-arrive-photo').props
+      .className as string;
+    const activeMemoClass = screen.getByTestId('execution-arrive-memo').props
+      .className as string;
+    activeView.unmount();
+    // 앵커 — 빈 문자열끼리 같아지는 공허 통과 차단.
+    expect(activePhotoClass).toContain('rounded-[10px]');
+
+    // 실행 — 같은 슬롯을 완료로 그린다.
+    render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="done"
+        onPressPhoto={jest.fn()}
+        onPressMemo={jest.fn()}
+      />
+    );
+
+    // 단언
+    const photo = screen.getByTestId(id('done-photo'));
+    const memo = screen.getByTestId(id('done-memo'));
+    expect(photo.props.className).toBe(activePhotoClass);
+    expect(memo.props.className).toBe(activeMemoClass);
+    expect(photo.findByType(PhotoGlyph).props.size).toBe(16);
+    expect(memo.findByType(MemoGlyph).props.size).toBe(16);
+  });
+
+  it('C21 done 이 사진·메모 콜백·안내를 안 받으면 done 버튼·안내가 하나도 없다 (TRIP-939 무회귀)', () => {
+    render(<SlotProgressCard slot={mkSlot()} date={DATE} state="done" />);
+
+    // 짝 앵커 — 카드는 그려졌다.
+    expect(screen.getByTestId(id('visit-time'))).toHaveTextContent('09:30');
+    for (const role of DONE_IDS) {
+      expect(screen.queryByTestId(id(role))).toBeNull();
+    }
+  });
+
+  it('C22 done 이 photoNotice 를 받으면 done 안내 한 줄이, onPressPhotoSettings 까지 받으면 [설정 열기]가 서고 누르면 1회 불린다', () => {
+    // 준비·실행
+    const onPressPhotoSettings = jest.fn();
+    const { rerender } = render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="done"
+        onPressPhoto={jest.fn()}
+        photoNotice={PHOTO_DENIED}
+        onPressPhotoSettings={onPressPhotoSettings}
+      />
+    );
+
+    // 단언 — 문구 완전 일치, 고정 testID 는 아니다.
+    expect(screen.getByTestId(id('done-photo-notice'))).toHaveTextContent(
+      PHOTO_DENIED
+    );
+    expect(screen.queryByTestId('execution-arrive-photo-notice')).toBeNull();
+    expect(screen.queryByTestId('execution-arrive-photo-settings')).toBeNull();
+    const settings = screen.getByTestId(id('done-photo-settings'));
+    expect(settings).toHaveTextContent('설정 열기');
+    fireEvent.press(settings);
+    expect(onPressPhotoSettings).toHaveBeenCalledTimes(1);
+
+    // 실행·단언 — 안내가 비면 [설정 열기]도 없다.
+    rerender(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="done"
+        onPressPhoto={jest.fn()}
+        photoNotice={null}
+        onPressPhotoSettings={onPressPhotoSettings}
+      />
+    );
+    expect(screen.getByTestId(id('done-photo'))).toBeOnTheScreen();
+    expect(screen.queryByTestId(id('done-photo-notice'))).toBeNull();
+    expect(screen.queryByTestId(id('done-photo-settings'))).toBeNull();
+  });
+
+  it('C23 done 메모 안내는 그 문구 그대로 한 줄이고, 순서는 사진 행 → 버튼 → 사진 안내 → [설정 열기] → 메모 안내 → 메모 박스다', () => {
+    render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="done"
+        photos={PHOTOS}
+        memo={MEMO}
+        onPressPhoto={jest.fn()}
+        onPressMemo={jest.fn()}
+        photoNotice={PHOTO_FAILED}
+        onPressPhotoSettings={jest.fn()}
+        memoNotice={DONE_MEMO_FAILED}
+      />
+    );
+
+    expect(screen.getByTestId(id('done-memo-notice'))).toHaveTextContent(
+      DONE_MEMO_FAILED
+    );
+    expect(screen.queryByTestId('execution-arrive-memo-notice')).toBeNull();
+
+    const order = testIdOrder();
+    const at = (testID: string) => order.indexOf(testID);
+    // 앵커 — 이미 있는 두 요소(사진 행 < 메모 박스)가 위→아래로 나온다(추출기 자가검사).
+    expect(at(id('photos'))).toBeGreaterThanOrEqual(0);
+    expect(at(id('memo'))).toBeGreaterThan(at(id('photos')));
+    expect(at(id('done-photo'))).toBeGreaterThan(at(id('photos')));
+    expect(at(id('done-memo'))).toBeGreaterThan(at(id('done-photo')));
+    expect(at(id('done-photo-notice'))).toBeGreaterThan(at(id('done-memo')));
+    expect(at(id('done-photo-settings'))).toBeGreaterThan(
+      at(id('done-photo-notice'))
+    );
+    expect(at(id('done-memo-notice'))).toBeGreaterThan(
+      at(id('done-photo-settings'))
+    );
+    expect(at(id('memo'))).toBeGreaterThan(at(id('done-memo-notice')));
+  });
+
+  it('C24 upcoming 은 사진·메모 콜백·안내를 받아도 done 버튼·안내도 고정 버튼도 그리지 않는다 (누설 앵커)', () => {
+    render(
+      <SlotProgressCard
+        slot={mkSlot({ startAt: '15:00:00' })}
+        date={DATE}
+        state="upcoming"
+        onPressPhoto={jest.fn()}
+        onPressMemo={jest.fn()}
+        photoNotice={PHOTO_FAILED}
+        onPressPhotoSettings={jest.fn()}
+        memoNotice={DONE_MEMO_FAILED}
+      />
+    );
+
+    // 짝 앵커 — 예정 얼굴이다.
+    expect(screen.getByTestId(id('time'))).toHaveTextContent('15:00 도착 예정');
+    expect(screen.queryAllByTestId(DONE_ANY)).toHaveLength(0);
+    expect(screen.queryByTestId('execution-arrive-photo')).toBeNull();
+    expect(screen.queryByTestId('execution-arrive-memo')).toBeNull();
+  });
+
+  it('C25 active 는 콜백·안내를 다 받아도 고정 testID 만 쓰고 done testID 는 하나도 그리지 않는다 (누설 앵커)', () => {
+    render(
+      <SlotProgressCard
+        slot={mkSlot({ startAt: '13:00:00' })}
+        date={DATE}
+        state="active"
+        onPressPhoto={jest.fn()}
+        onPressMemo={jest.fn()}
+        photoNotice={PHOTO_FAILED}
+        onPressPhotoSettings={jest.fn()}
+        memoNotice={DONE_MEMO_FAILED}
+      />
+    );
+
+    expect(screen.getByTestId('execution-arrive-photo')).toBeOnTheScreen();
+    expect(screen.getByTestId('execution-arrive-memo')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('execution-arrive-photo-notice')
+    ).toHaveTextContent(PHOTO_FAILED);
+    expect(
+      screen.getByTestId('execution-arrive-memo-notice')
+    ).toHaveTextContent(DONE_MEMO_FAILED);
+    expect(screen.queryAllByTestId(DONE_ANY)).toHaveLength(0);
   });
 });

@@ -32,8 +32,8 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { LiveItineraryPage } from './LiveItineraryPage';
 
 /**
- * i01 허브(LiveItineraryPage) 통합 테스트 — 실 페이지 + 실제 HTTP(MSW). 관점 7개를 바깥 describe 7개로 나눈다
- * (허브 · i08 반영 시트 · 메모 시트 · [사진]·[메모] · i03 위험 시트 · i02 트리거 · 방문 체크).
+ * i01 허브(LiveItineraryPage) 통합 테스트 — 실 페이지 + 실제 HTTP(MSW). 관점 8개를 바깥 describe 8개로 나눈다
+ * (허브 · i08 반영 시트 · 메모 시트 · [사진]·[메모] · 완료 카드 [사진]·[메모] · i03 위험 시트 · i02 트리거 · 방문 체크).
  *
  * 공용 장치(파일 맨 위 한 벌):
  *  - `jest.mock` 은 파일 전체에 걸린다 — 목은 하나만 두고 관점마다 다른 값은 가변 목(`mockCanGoBack` 등)으로 바꾼다.
@@ -1626,11 +1626,16 @@ describe('메모 시트', () => {
     });
   });
 
-  describe('🔴 AC-16 · 관람 중 방문이 바뀌면 시트가 사라진다', () => {
-    it('M18 시트가 열린 채 p1 완료·p2 도착으로 재조회되면 시트가 사라지고, 옛 방문에 저장하지 않는다', async () => {
+  // TRIP-1203 Q1 — 옛 AC-16("관람 중 방문이 바뀌면 시트가 사라지고 옛 방문에 저장하지 않는다")을 뒤집었다.
+  // 시트를 연 방문이 완료돼도 같은 방문이고 완료 방문 메모도 정당하다 → 시트는 남고 저장은 그 방문으로 간다.
+  // 시트가 빠지는 것은 그 방문이 그날 목록에서 사라졌을 때뿐이다(M18b — 옛 M18 의 남는 절반).
+  describe('🔴 AC-16 (TRIP-1203 Q1 개정) · 시트를 연 방문이 완료돼도 시트는 남고, 목록에서 사라지면 빠진다', () => {
+    it('M18 시트가 열린 채 p1 완료·p2 도착으로 재조회돼도 시트는 v1 에 남고, 저장은 v1 으로 가 완료 카드에 박스가 선다', async () => {
+      // 준비 — 관람 중 v1 으로 시트를 연다.
       await renderHub();
       await openSheet();
 
+      // 실행 — 재조회로 p1 완료·p2 관람 중.
       visitsResponse = () => [
         visit('v1', 'p1', '2026-08-20T14:00:00'),
         visit('v2', 'p2', null),
@@ -1639,15 +1644,48 @@ describe('메모 시트', () => {
         await client.invalidateQueries();
       });
 
-      // 앵커 — p2 가 관람 중 얼굴로 바뀌었다. time 노드는 예정 얼굴에도 있어 존재만으론
-      // 재조회 전에 통과한다 — 관람 중 얼굴의 문구(완전 일치)로 기다린다.
+      // 앵커 — p2 가 관람 중 얼굴로 바뀌었다(관람 중 문구 완전 일치로 기다린다).
       await waitFor(() =>
         expect(
           screen.getByTestId(`execution-live-slot-time-${TODAY}#p2`)
         ).toHaveTextContent('15:00 도착 · 지금 관람 중')
       );
+      // 단언 — 시트는 그 방문(감천문화마을)에 남는다.
+      expect(screen.getByTestId(SHEET)).toBeOnTheScreen();
+      expect(screen.getByTestId('live-memo-title')).toHaveTextContent(
+        '감천문화마을 · 메모'
+      );
+
+      // 실행 — 그대로 입력하고 blur.
+      typeAndBlur(screen.getByTestId(INPUT), '완료 뒤 메모');
+
+      // 단언 — PUT 은 v1 으로 정확히 1회, v2 로는 0회. 닫히고 (이제 완료인) p1 카드에 박스.
+      await waitFor(() => expect(hitCount(MEMO_PUT)).toBe(1));
+      await waitFor(() =>
+        expect(screen.queryByTestId(SHEET)).not.toBeOnTheScreen()
+      );
+      await settle();
+      expect(hitCount(MEMO_PUT)).toBe(1);
+      expect(hitCount(`PUT /api/v1/trips/${TRIP_ID}/visits/v2/memo`)).toBe(0);
+      expect(screen.getByTestId(CARD_MEMO)).toHaveTextContent('완료 뒤 메모');
+    });
+
+    it('M18b 시트가 열린 채 그 방문이 그날 목록에서 사라지면(빈 목록) 시트가 빠지고 저장하지 않는다', async () => {
+      await renderHub();
+      await openSheet();
+
+      visitsResponse = () => [];
+      await act(async () => {
+        await client.invalidateQueries();
+      });
+
+      // 앵커 — p1 이 예정 얼굴로 돌아갔다.
+      await waitFor(() =>
+        expect(
+          screen.getByTestId(`execution-live-slot-time-${TODAY}#p1`)
+        ).toHaveTextContent('13:00 도착 예정')
+      );
       expect(screen.queryByTestId(SHEET)).toBeNull();
-      expect(screen.getByTestId('execution-arrive-memo')).toBeOnTheScreen();
       await settle();
       expect(memoHits()).toEqual([]);
     });
@@ -2086,6 +2124,590 @@ describe('관람 중 카드 [사진]·[메모]', () => {
       // 단언 — 동의는 누른 뒤 1회, 사진 목록 조회는 처음부터 끝까지 0회.
       expect(hitCount(CONSENT_GET)).toBe(1);
       expect(hitCount(PHOTOS_GET)).toBe(0);
+    });
+  });
+});
+
+/**
+ * TRIP-1203 · i01 허브 **방문 완료 카드**의 [사진]·[메모] — 실 페이지 + 실제 HTTP(MSW).
+ *
+ * 무엇을 보장하나:
+ *  - AC-1  방문 id 를 아는 완료 카드(낙관 id 가 아닌 완료 계획 방문)에 [사진]·[메모]가 선다. [방문 완료]·[길찾기]는
+ *          없고, 관람 중 카드의 고정 한 쌍은 그대로 1쌍이다. 시각 표기(TRIP-1220)는 그대로다(AC-8).
+ *  - AC-2  완료 [사진] → `POST …/visits/{그 완료 방문 id}/photos` 1회(본문은 관람 중과 같은 메타), 사진 목록 GET 0(F6).
+ *  - AC-3  결과 안내는 누른 그 카드 아래 1줄 — 취소 무음, 권한 사유면 [설정 열기], 저장 실패 문구. 어느 카드든
+ *          다음 [사진]에 지워진다.
+ *  - AC-4  완료 [메모] → 이동 없이 허브 위 메모 시트(제목 `{그 장소} · 메모`, 시드 = 그 방문 저장본) → blur →
+ *          `PUT …/visits/{그 완료 방문 id}/memo` 1회 → 닫힘 → 그 완료 카드에 메모 박스.
+ *  - AC-5  저장 실패: 시트가 열려 있으면 시트 안, 닫힌 뒤 도착하면 그 완료 카드 아래.
+ *  - AC-6  완료 시트를 연 동안·저장 뒤에도 관람 중 카드 메모 박스는 관람 중 방문 값이고, 관람 중 [메모]는
+ *          관람 중 방문으로 PUT 한다(저장 대상 ≠ 표시 대상, 02a ★3).
+ *  - AC-7  j01 이 같은 세션에 저장한 완료 방문 메모가 허브 완료 카드에 보이고, 나중에 바뀌어도 따라온다(구독).
+ *
+ * 픽스처: 오늘 p1 감천문화마을 10:00(v1 완료) · p2 광안리 해변 13:00(v2 관람 중) · p3 전포 카페거리 15:00(예정).
+ * ⚠️ client 는 gcTime 0 — 렌더 전에 심는 세션 저장본은 `setQueryDefaults(['visit-memo'], { gcTime: Infinity })`
+ *   뒤에 넣는다(02a ★5). 실패 응답은 500 JSON 으로만 낸다(`HttpResponse.error()` 는 대기 헬퍼를 영원히 막는다, ★8).
+ * (개념) `within(카드)` = 그 카드 노드 안에서만 찾기 — "그 카드 아래에만"을 재는 자 ·
+ *   `invalidateQueries` 는 쓰지 않는다(재조회 사슬은 「메모 시트」 M18 이 본다).
+ * 3동작: 준비(일정·방문·앨범/서버 응답) → 실행(완료 카드 버튼) → 단언(요청 경로·횟수·카드 안 표시).
+ */
+// TRIP-1203
+describe('방문 완료 카드 [사진]·[메모]', () => {
+  const DONE_KEY = `${TODAY}#p1`;
+  const ACTIVE_KEY = `${TODAY}#p2`;
+  const UPCOMING_KEY = `${TODAY}#p3`;
+  const done = (role: string) => `execution-live-slot-done-${role}-${DONE_KEY}`;
+  const DONE_ANY = /^execution-live-slot-done-/;
+  const card = (key: string) =>
+    screen.getByTestId(`execution-live-slot-${key}`);
+
+  const PHOTOS_POST_V1 = `POST /api/v1/trips/${TRIP_ID}/visits/v1/photos`;
+  const PHOTOS_POST_V2 = `POST /api/v1/trips/${TRIP_ID}/visits/v2/photos`;
+  const PHOTOS_GET_V1 = `GET /api/v1/trips/${TRIP_ID}/visits/v1/photos`;
+  const MEMO_PUT_V1 = `PUT /api/v1/trips/${TRIP_ID}/visits/v1/memo`;
+  const MEMO_PUT_V2 = `PUT /api/v1/trips/${TRIP_ID}/visits/v2/memo`;
+
+  const COPY_DENIED = '사진 접근 권한이 없어 사진을 불러올 수 없어요';
+  const COPY_FAILED = '사진을 불러올 수 없어요';
+  const COPY_SAVE_FAILED = '사진을 기록하지 못했어요. 다시 시도해 주세요';
+  const COPY_MEMO_FAILED = '메모를 저장하지 못했어요. 다시 시도해 주세요.';
+
+  const SHEET = 'live-memo-sheet';
+  const INPUT = 'record-trip-memo-input';
+
+  const slot = (poiId: string, nameKo: string, startAt: string) => ({
+    poiId,
+    startAt,
+    endAt: startAt,
+    isFixed: false,
+    endsNextDay: false,
+    hasViolation: false,
+    nameKo,
+    distanceRange: null,
+    openingHours: null,
+    tags: [],
+  });
+
+  const itinerary = (): Itinerary =>
+    ({
+      itineraryId: 'it1',
+      tripId: TRIP_ID,
+      status: 'PLANNED',
+      solveMode: 'FULL',
+      generationMode: 'AI',
+      isFallback: false,
+      generationState: 'COMPLETE',
+      days: [
+        {
+          date: TODAY,
+          slots: [
+            slot('p1', '감천문화마을', '10:00:00'),
+            slot('p2', '광안리 해변', '13:00:00'),
+            slot('p3', '전포 카페거리', '15:00:00'),
+          ],
+        },
+      ],
+    }) as unknown as Itinerary;
+
+  const trip = () => ({
+    tripId: TRIP_ID,
+    title: '부산 여행',
+    startDate: TODAY,
+    endDate: '2026-08-22',
+    party: 2,
+    destinations: [{ seq: 1, region: '부산', nights: 2 }],
+    status: 'PLANNED',
+    createdAt: '2026-08-01T00:00:00Z',
+    updatedAt: '2026-08-01T00:00:00Z',
+  });
+
+  const visit = (
+    over: Partial<VisitCheck> & { poiId: string }
+  ): VisitCheck => ({
+    visitCheckId: `v-${over.poiId}`,
+    slotKey: `${TODAY}#${over.poiId}`,
+    arrivedAt: null,
+    completedAt: null,
+    skippedAt: null,
+    source: 'MANUAL',
+    spontaneous: false,
+    updatedAt: '2026-08-20T05:00:05Z',
+    ...over,
+  });
+  /** v1 = p1 완료(도착 01:02Z = KST 10:02), v2 = p2 도착·미완료(관람 중). */
+  const doneV1 = () =>
+    visit({
+      visitCheckId: 'v1',
+      poiId: 'p1',
+      arrivedAt: '2026-08-20T01:02:00Z',
+      completedAt: '2026-08-20T02:00:00Z',
+    });
+  const activeV2 = () =>
+    visit({
+      visitCheckId: 'v2',
+      poiId: 'p2',
+      arrivedAt: '2026-08-20T04:00:00Z',
+    });
+
+  const PICKED_ASSET = {
+    localAssetId: 'asset-9',
+    deviceId: 'dev-B',
+    takenAt: '2026-08-20T01:30:00.000Z',
+    exifLat: 35.0975,
+    exifLng: 129.0106,
+  };
+
+  let visitsResponse: () => VisitCheck[];
+  let photoBodies: Record<string, unknown>[] = [];
+  let photoStatus = 201;
+  let memoBodies: unknown[] = [];
+  let memoStatus = 200;
+  let memoGate: Promise<void> = Promise.resolve();
+  let releaseMemo: () => void = () => {};
+
+  /** 다음 PUT 응답을 releaseMemo() 전까지 붙잡는다 — 응답 상태는 풀 때의 memoStatus 로 정해진다. */
+  function holdMemo() {
+    memoGate = new Promise<void>((resolve) => {
+      releaseMemo = resolve;
+    });
+  }
+  async function release() {
+    await act(async () => {
+      releaseMemo();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+  }
+
+  let client: QueryClient;
+  function wrapper({ children }: { children: ReactNode }) {
+    return (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+  }
+
+  /** 렌더 전에 세션 저장본을 심는다 — j01·관람 중 시트가 PUT 성공 뒤 적는 자리(gcTime 0 이라 기본값부터 푼다). */
+  function seedMemo(visitCheckId: string, text: string) {
+    client.setQueryDefaults(['visit-memo'], { gcTime: Infinity });
+    client.setQueryData(['visit-memo', TRIP_ID, visitCheckId], text);
+  }
+
+  beforeEach(() => {
+    visitsResponse = () => [doneV1(), activeV2()];
+    photoBodies = [];
+    photoStatus = 201;
+    memoBodies = [];
+    memoStatus = 200;
+    memoGate = Promise.resolve();
+    releaseMemo = () => {};
+    client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    mockCanGoBack.mockReturnValue(false);
+    mockPick.mockReset().mockResolvedValue({
+      kind: 'picked',
+      asset: PICKED_ASSET,
+    });
+    mockResolveUri.mockReset().mockResolvedValue(null);
+    server.use(
+      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        HttpResponse.json(itinerary())
+      ),
+      http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
+        HttpResponse.json({ visits: visitsResponse() })
+      ),
+      http.get(`${BASE}/me/location-consent`, () =>
+        HttpResponse.json({
+          osPermissionMirror: 'GRANTED',
+          legalConsent: true,
+          gpsRecordingOptIn: false,
+          capabilities: {
+            localLocationUse: true,
+            serverLocationService: true,
+            gpsTrackRetention: false,
+          },
+        })
+      ),
+      http.get(`${BASE}/trips/:tripId/visits/:visitCheckId/photos`, () =>
+        HttpResponse.json({ items: [], count: 0 })
+      ),
+      http.post(
+        `${BASE}/trips/:tripId/visits/:visitCheckId/photos`,
+        async ({ request }) => {
+          const body = (await request.json()) as Record<string, unknown>;
+          photoBodies.push(body);
+          if (photoStatus !== 201) {
+            return HttpResponse.json(
+              { error: { code: 'INTERNAL', message: 'boom' } },
+              { status: photoStatus }
+            );
+          }
+          return HttpResponse.json(
+            {
+              visitPhotoMetaId: 'ph-new',
+              localAssetId: body.localAssetId,
+              deviceId: body.deviceId,
+              takenAt: body.takenAt ?? null,
+              exifLat: null,
+              exifLng: null,
+              sortOrder: 0,
+            },
+            { status: 201 }
+          );
+        }
+      ),
+      http.put(
+        `${BASE}/trips/:tripId/visits/:visitCheckId/memo`,
+        async ({ request }) => {
+          const body = (await request.json()) as { text: string };
+          memoBodies.push(body);
+          await memoGate;
+          if (memoStatus !== 200) {
+            return HttpResponse.json(
+              { error: { code: 'INTERNAL', message: 'boom' } },
+              { status: memoStatus }
+            );
+          }
+          return HttpResponse.json({
+            text: body.text,
+            updatedAt: '2026-08-20T05:10:00Z',
+          });
+        }
+      )
+    );
+  });
+  afterEach(() => {
+    client.clear();
+    expectNotCalled(mockNavigate);
+  });
+
+  /** 허브를 그리고 완료 카드 [사진]이 설 때까지 기다린다 — 그 버튼을 돌려준다. */
+  async function renderHub() {
+    render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
+    return screen.findByTestId(done('photo'));
+  }
+
+  /** 입력하고 포커스를 뺀다(= 키보드 "완료"). */
+  function typeAndBlur(input: ReactTestInstance, text: string) {
+    fireEvent.changeText(input, text);
+    fireEvent(input, 'blur');
+  }
+
+  describe('🔴 AC-1·AC-8 · 방문 id 를 아는 완료 카드에 [사진]·[메모]가 선다', () => {
+    it('D1 완료 카드 안에 [사진]·[메모]가 있고 [방문 완료]·[길찾기]는 없다 — 관람 중 고정 한 쌍은 1쌍, 예정 카드엔 없다, 시각은 10:02 방문', async () => {
+      await renderHub();
+
+      // 단언 — 완료(p1) 카드 안.
+      const doneCard = within(card(DONE_KEY));
+      expect(doneCard.getByTestId(done('photo'))).toHaveTextContent('사진');
+      expect(doneCard.getByTestId(done('memo'))).toHaveTextContent('메모');
+      expect(doneCard.queryByTestId('execution-arrive-complete')).toBeNull();
+      expect(
+        doneCard.queryByTestId(`execution-live-slot-directions-${DONE_KEY}`)
+      ).toBeNull();
+      // TRIP-1220 무변경 — 실제 도착 시각 + "방문".
+      expect(
+        screen.getByTestId(`execution-live-slot-visit-time-${DONE_KEY}`)
+      ).toHaveTextContent('10:02');
+      expect(
+        screen.getByTestId(`execution-live-slot-visit-label-${DONE_KEY}`)
+      ).toHaveTextContent('방문');
+
+      // 단언 — 관람 중(p2) 고정 한 쌍은 그대로 1쌍, 예정(p3) 카드엔 done 버튼 없음.
+      expect(screen.getAllByTestId('execution-arrive-photo')).toHaveLength(1);
+      expect(
+        within(card(ACTIVE_KEY)).getByTestId('execution-arrive-memo')
+      ).toBeOnTheScreen();
+      expect(
+        within(card(UPCOMING_KEY)).queryAllByTestId(DONE_ANY)
+      ).toHaveLength(0);
+    });
+
+    it('D2 낙관 id(optimistic:) 로 완료된 카드엔 버튼이 없고, 같은 화면의 서버 id 완료 카드엔 있다', async () => {
+      // 준비 — p1 완료 레코드는 아직 낙관 id(재조회 전 [방문 완료]와 같은 캐시 상태, 02a ★6), p2 는 서버 id 로 완료.
+      visitsResponse = () => [
+        visit({
+          visitCheckId: 'optimistic:p1',
+          poiId: 'p1',
+          arrivedAt: '2026-08-20T00:00:00',
+          completedAt: '2026-08-20T00:00:00',
+        }),
+        visit({
+          visitCheckId: 'v2',
+          poiId: 'p2',
+          arrivedAt: '2026-08-20T04:00:00Z',
+          completedAt: '2026-08-20T05:00:00Z',
+        }),
+      ];
+      render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, { wrapper });
+
+      // 단언 — 서버 id 완료 카드(p2)엔 한 쌍.
+      const p2 = await screen.findByTestId(
+        `execution-live-slot-done-photo-${ACTIVE_KEY}`
+      );
+      expect(within(card(ACTIVE_KEY)).getAllByTestId(DONE_ANY)).toHaveLength(2);
+      expect(p2).toBeOnTheScreen();
+      // 단언 — 낙관 완료 카드(p1)는 완료 얼굴(계획 시각 폴백)이지만 버튼이 없다.
+      expect(
+        screen.getByTestId(`execution-live-slot-visit-label-${DONE_KEY}`)
+      ).toHaveTextContent('계획');
+      expect(within(card(DONE_KEY)).queryAllByTestId(DONE_ANY)).toHaveLength(0);
+    });
+  });
+
+  describe('🔴 AC-2 · 완료 [사진] → 그 완료 방문에 메타만 POST', () => {
+    it('D3 POST …/visits/v1/photos 정확히 1회(v2 로는 0), 본문에 자산 번호·설치 식별자, 사진 목록 조회 0', async () => {
+      const photo = await renderHub();
+
+      fireEvent.press(photo);
+
+      await waitFor(() => expect(hitCount(PHOTOS_POST_V1)).toBe(1));
+      await settle();
+      expect(hitCount(PHOTOS_POST_V1)).toBe(1);
+      expect(hitCount(PHOTOS_POST_V2)).toBe(0);
+      expect(photoBodies[0]).toMatchObject({
+        localAssetId: 'asset-9',
+        deviceId: 'dev-B',
+      });
+      expect(hitCount(PHOTOS_GET_V1)).toBe(0);
+    });
+  });
+
+  describe('🔴 AC-3 · 안내는 누른 그 완료 카드 아래 한 줄 (INV-4)', () => {
+    it('D4 권한 거부 → 그 카드 안에 안내와 [설정 열기], 누르면 openSettings 1회 · 관람 중 고정 안내는 없고 POST 0', async () => {
+      const openSettings = jest
+        .spyOn(Linking, 'openSettings')
+        .mockResolvedValue(undefined);
+      mockPick.mockResolvedValueOnce({ kind: 'denied' });
+      const photo = await renderHub();
+
+      fireEvent.press(photo);
+
+      const doneCard = within(card(DONE_KEY));
+      expect(await screen.findByTestId(done('photo-notice'))).toHaveTextContent(
+        COPY_DENIED
+      );
+      expect(doneCard.getByTestId(done('photo-notice'))).toBeOnTheScreen();
+      expect(screen.queryByTestId('execution-arrive-photo-notice')).toBeNull();
+      fireEvent.press(doneCard.getByTestId(done('photo-settings')));
+      expect(openSettings).toHaveBeenCalledTimes(1);
+      await settle();
+      expect(hitCount(PHOTOS_POST_V1)).toBe(0);
+      openSettings.mockRestore();
+    });
+
+    it('D5 피커 실패 → 안내만 있고 [설정 열기]는 없다', async () => {
+      mockPick.mockResolvedValueOnce({ kind: 'failed' });
+      const photo = await renderHub();
+
+      fireEvent.press(photo);
+
+      expect(await screen.findByTestId(done('photo-notice'))).toHaveTextContent(
+        COPY_FAILED
+      );
+      expect(screen.queryByTestId(done('photo-settings'))).toBeNull();
+    });
+
+    it('D6 사진 기록 요청이 500 이면 그 카드 아래 저장 실패 안내가 뜬다', async () => {
+      photoStatus = 500;
+      const photo = await renderHub();
+
+      fireEvent.press(photo);
+
+      expect(
+        await within(card(DONE_KEY)).findByTestId(done('photo-notice'))
+      ).toHaveTextContent(COPY_SAVE_FAILED);
+      expect(hitCount(PHOTOS_POST_V1)).toBe(1);
+    });
+
+    it('D7 앨범에서 취소하면 요청도 안내도 없다', async () => {
+      mockPick.mockResolvedValueOnce({ kind: 'canceled' });
+      const photo = await renderHub();
+
+      fireEvent.press(photo);
+      await waitFor(() => expect(mockPick).toHaveBeenCalledTimes(1));
+      await settle();
+
+      expect(hitCount(PHOTOS_POST_V1)).toBe(0);
+      expect(screen.queryByTestId(done('photo-notice'))).toBeNull();
+      expect(screen.queryByTestId('execution-arrive-photo-notice')).toBeNull();
+    });
+
+    it('D8 안내는 마지막 한 줄 — 관람 중 [사진]을 누르면 완료 카드 안내가 지워지고, 다시 완료 [사진](취소)을 누르면 둘 다 없다', async () => {
+      // 1) 완료 카드 — 권한 거부 안내.
+      mockPick.mockResolvedValueOnce({ kind: 'denied' });
+      const photo = await renderHub();
+      fireEvent.press(photo);
+      expect(await screen.findByTestId(done('photo-notice'))).toHaveTextContent(
+        COPY_DENIED
+      );
+
+      // 2) 관람 중 카드 — 권한 거부 안내가 그 카드로 옮겨 간다.
+      mockPick.mockResolvedValueOnce({ kind: 'denied' });
+      fireEvent.press(screen.getByTestId('execution-arrive-photo'));
+      expect(
+        await within(card(ACTIVE_KEY)).findByTestId(
+          'execution-arrive-photo-notice'
+        )
+      ).toHaveTextContent(COPY_DENIED);
+      expect(screen.queryByTestId(done('photo-notice'))).toBeNull();
+
+      // 3) 완료 카드 — 이번엔 취소: 아무 안내도 없다.
+      mockPick.mockResolvedValueOnce({ kind: 'canceled' });
+      fireEvent.press(screen.getByTestId(done('photo')));
+      await waitFor(() => expect(mockPick).toHaveBeenCalledTimes(3));
+      await settle();
+      expect(screen.queryByTestId('execution-arrive-photo-notice')).toBeNull();
+      expect(screen.queryByTestId(done('photo-notice'))).toBeNull();
+    });
+  });
+
+  describe('🔴 AC-4 · 완료 [메모] → 허브 위 시트 → 그 완료 방문으로 PUT → 그 카드에 박스', () => {
+    it('D9 이동 없이 "감천문화마을 · 메모" 시트가 빈 입력으로 열리고, blur 하면 PUT …/v1/memo 정확히 1회 → 닫힘 → 완료 카드에 본문', async () => {
+      await renderHub();
+
+      fireEvent.press(screen.getByTestId(done('memo')));
+      const input = await screen.findByTestId(INPUT);
+
+      expect(mockPush).not.toHaveBeenCalled();
+      expect(screen.getByTestId('live-memo-title')).toHaveTextContent(
+        '감천문화마을 · 메모'
+      );
+      expect(input.props.value).toBe('');
+
+      typeAndBlur(input, '  벽화 골목 좋았다  ');
+
+      await waitFor(() => expect(hitCount(MEMO_PUT_V1)).toBe(1));
+      await waitFor(() =>
+        expect(screen.queryByTestId(SHEET)).not.toBeOnTheScreen()
+      );
+      await settle();
+      expect(hitCount(MEMO_PUT_V1)).toBe(1);
+      expect(hitCount(MEMO_PUT_V2)).toBe(0);
+      expect(memoBodies).toEqual([{ text: '벽화 골목 좋았다' }]);
+      expect(
+        within(card(DONE_KEY)).getByTestId(
+          `execution-live-slot-memo-${DONE_KEY}`
+        )
+      ).toHaveTextContent('벽화 골목 좋았다');
+      expect(
+        screen.queryByTestId(`execution-live-slot-memo-${ACTIVE_KEY}`)
+      ).toBeNull();
+    });
+  });
+
+  describe('🔴 AC-7 · j01 이 같은 세션에 저장한 완료 방문 메모가 보이고 따라온다 (키 한 벌·구독)', () => {
+    it('D10 렌더 전 저장본이 완료 카드 박스에 보이고, 렌더 뒤 바뀌면 다시 그려지며, 시트 입력칸도 새 값이다', async () => {
+      // 준비 — j01 이 v1 에 저장해 둔 값.
+      seedMemo('v1', 'j01에서 쓴 메모');
+      await renderHub();
+
+      const memoBox = `execution-live-slot-memo-${DONE_KEY}`;
+      expect(await screen.findByTestId(memoBox)).toHaveTextContent(
+        'j01에서 쓴 메모'
+      );
+
+      // 실행 — 허브가 떠 있는 동안 j01 쪽에서 값이 바뀐다(같은 키).
+      await act(async () => {
+        client.setQueryData(['visit-memo', TRIP_ID, 'v1'], 'j01에서 고친 메모');
+      });
+
+      // 단언 — 구독이라 다시 그려진다(렌더 중 한 번 읽기면 옛 값에 머문다, 02a ★4).
+      await waitFor(() =>
+        expect(screen.getByTestId(memoBox)).toHaveTextContent(
+          'j01에서 고친 메모'
+        )
+      );
+      fireEvent.press(screen.getByTestId(done('memo')));
+      expect((await screen.findByTestId(INPUT)).props.value).toBe(
+        'j01에서 고친 메모'
+      );
+    });
+  });
+
+  describe('🔴 AC-5 · 완료 메모 저장 실패 (INV-4)', () => {
+    it('D11 시트가 열린 채 500 → 시트 안에 안내, 카드 아래 안내(완료·관람 중)는 없다', async () => {
+      memoStatus = 500;
+      await renderHub();
+      fireEvent.press(screen.getByTestId(done('memo')));
+
+      typeAndBlur(await screen.findByTestId(INPUT), '실패할 메모');
+
+      expect(await screen.findByTestId('live-memo-notice')).toHaveTextContent(
+        COPY_MEMO_FAILED
+      );
+      expect(screen.getByTestId(SHEET)).toBeOnTheScreen();
+      expect(screen.queryByTestId(done('memo-notice'))).toBeNull();
+      expect(screen.queryByTestId('execution-arrive-memo-notice')).toBeNull();
+    });
+
+    it('D12 PUT 보류 중 ✕ 로 닫고 500 이 오면 그 완료 카드 아래에 안내 한 줄', async () => {
+      holdMemo();
+      await renderHub();
+      fireEvent.press(screen.getByTestId(done('memo')));
+      typeAndBlur(await screen.findByTestId(INPUT), '닫고 나서 실패');
+      await waitFor(() => expect(hitCount(MEMO_PUT_V1)).toBe(1));
+
+      fireEvent.press(screen.getByTestId('live-memo-close'));
+      expect(screen.queryByTestId(SHEET)).toBeNull();
+      memoStatus = 500;
+      await release();
+
+      expect(
+        await within(card(DONE_KEY)).findByTestId(done('memo-notice'))
+      ).toHaveTextContent(COPY_MEMO_FAILED);
+      expect(screen.queryByTestId('execution-arrive-memo-notice')).toBeNull();
+      expect(screen.queryByTestId('live-memo-notice')).toBeNull();
+    });
+  });
+
+  describe('🔴 AC-6 · 무회귀 — 관람 중 박스와 관람 중 PUT 대상은 그대로', () => {
+    it('D13 완료 시트를 연 동안에도 관람 중 박스는 관람 중 메모이고, 완료 저장은 v1 만 · 뒤이은 관람 중 저장은 v2 로 간다', async () => {
+      // 준비 — 관람 중 방문(v2)에 이미 저장본이 있다.
+      seedMemo('v2', '관람 중 메모');
+      await renderHub();
+      const activeBox = `execution-live-slot-memo-${ACTIVE_KEY}`;
+      const doneBox = `execution-live-slot-memo-${DONE_KEY}`;
+      expect(await screen.findByTestId(activeBox)).toHaveTextContent(
+        '관람 중 메모'
+      );
+
+      // 실행 — 완료 카드 [메모]로 시트를 연다.
+      fireEvent.press(screen.getByTestId(done('memo')));
+      const input = await screen.findByTestId(INPUT);
+
+      // 단언 — 열린 동안: 시드는 완료 방문 것(빈 값), 관람 중 박스는 그대로(02a ★3).
+      expect(input.props.value).toBe('');
+      expect(screen.getByTestId(activeBox)).toHaveTextContent('관람 중 메모');
+
+      // 실행 — 완료 메모 저장.
+      typeAndBlur(input, '완료 메모');
+      await waitFor(() =>
+        expect(screen.queryByTestId(SHEET)).not.toBeOnTheScreen()
+      );
+      await settle();
+
+      // 단언 — v1 만 1회, 두 박스가 각자 제 값.
+      expect(hitCount(MEMO_PUT_V1)).toBe(1);
+      expect(hitCount(MEMO_PUT_V2)).toBe(0);
+      expect(screen.getByTestId(doneBox)).toHaveTextContent('완료 메모');
+      expect(screen.getByTestId(activeBox)).toHaveTextContent('관람 중 메모');
+
+      // 실행 — 관람 중 [메모]: 시드는 관람 중 저장본, 저장은 v2.
+      fireEvent.press(screen.getByTestId('execution-arrive-memo'));
+      const activeInput = await screen.findByTestId(INPUT);
+      expect(activeInput.props.value).toBe('관람 중 메모');
+      typeAndBlur(activeInput, '관람 중 새 메모');
+      await waitFor(() => expect(hitCount(MEMO_PUT_V2)).toBe(1));
+      await settle();
+
+      // 단언
+      expect(hitCount(MEMO_PUT_V1)).toBe(1);
+      expect(hitCount(MEMO_PUT_V2)).toBe(1);
+      expect(screen.getByTestId(activeBox)).toHaveTextContent(
+        '관람 중 새 메모'
+      );
+      expect(screen.getByTestId(doneBox)).toHaveTextContent('완료 메모');
     });
   });
 });

@@ -43,8 +43,8 @@ import { SlotProgressCard } from '@/entities/itinerary-slot';
  * 카드 3상태), 시트 윗변 오른쪽을 따라가는 "일정 수정" 연필 FAB(TRIP-1083). 조회·판정·라우팅은
  * 페이지(LiveItineraryPage) 몫이고,
  * 이 뷰가 가진 상태는 수정 알약 메뉴 열림(TRIP-747 — FAB 는 제자리 토글, 이동은 알약이 한다),
- * 트리거 알약 로컬 숨김(TRIP-748 D3) 둘이다. [사진]·[메모]는 페이지가 콜백을 줄 때만 관람 중 카드에
- * 넘긴다(TRIP-1070 · 미주입이면 그리지 않는다 — TRIP-939).
+ * 트리거 알약 로컬 숨김(TRIP-748 D3) 둘이다. [사진]·[메모]는 페이지가 콜백을 줄 때만 관람 중 카드와
+ * `doneMediaPoiIds` 의 완료 카드(TRIP-1203)에 넘긴다(TRIP-1070 · 미주입이면 그리지 않는다 — TRIP-939).
  *
  * 트리거 알약 숨김은 **명시 열거 경로**로만 부른다 — 시트 본문 스크롤 시작 · 시트 스냅 이동(마운트
  * `-1→n` 제외) · 지도 탭 · 일자 칩/FAB/[방문 완료]. 루트 터치 캡처·투명 백드롭은 쓰지
@@ -131,15 +131,17 @@ export interface LiveHubViewProps {
   initialEditMenuOpen?: boolean;
   /** active 카드 [방문 완료]. */
   onPressComplete?: () => void;
-  /** active 카드 [사진]·[메모](TRIP-1070). 미주입이면 그 버튼이 없다. */
-  onPressPhoto?: () => void;
-  onPressMemo?: () => void;
-  /** active 카드 사진 안내 한 줄 — 상태는 페이지가 가진다. */
-  photoNotice?: string | null;
+  /** active 카드 [사진]·[메모](TRIP-1070, arg = 누른 카드 poiId). 미주입이면 그 버튼이 없다. */
+  onPressPhoto?: (poiId: string) => void;
+  onPressMemo?: (poiId: string) => void;
+  /** TRIP-1203 — [사진]·[메모]를 그릴 방문 완료 슬롯의 poiId(페이지가 방문 id 를 아는 것만 고른다). 없으면 완료 카드엔 버튼이 없다. */
+  doneMediaPoiIds?: ReadonlySet<string>;
+  /** 사진 안내 한 줄 — 그 poiId 카드(관람 중·완료)에만 선다. 상태는 페이지가 가진다. */
+  photoNotice?: { poiId: string; text: string } | null;
   /** TRIP-1216 — 사진 안내 옆 [설정 열기](권한 거부일 때만 페이지가 준다). */
   onPressPhotoSettings?: () => void;
-  /** TRIP-1117 — active 카드 메모 안내 한 줄(시트가 닫힌 뒤 도착한 저장 실패, Q3). 상태는 페이지가 가진다. */
-  memoNotice?: string | null;
+  /** TRIP-1117 — 메모 안내 한 줄(시트가 닫힌 뒤 도착한 저장 실패, Q3) — 그 poiId 카드에만. 상태는 페이지가 가진다. */
+  memoNotice?: { poiId: string; text: string } | null;
   /** TRIP-1117 — 메모 시트가 열린 동안 수정 FAB 를 숨긴다(Figma 4741:2833). 앵커 자리(HF8)는 그대로. */
   fabHidden?: boolean;
   /** 트리거 알약(TRIP-748) — 지도 위 일자 칩 아래(셸 `mapCard`)에 그린다. */
@@ -214,6 +216,7 @@ export function LiveHubView({
   onPressComplete,
   onPressPhoto,
   onPressMemo,
+  doneMediaPoiIds,
   photoNotice,
   onPressPhotoSettings,
   memoNotice,
@@ -376,6 +379,16 @@ export function LiveHubView({
           <View className="absolute bottom-0 left-[33px] top-[40px] w-[2px] bg-hairline-strong" />
           {slots.map(({ slot, state, photos, memo, visitedLabel }) => {
             const slotKey = buildSlotKey(activeDate, slot.poiId);
+            // [사진]·[메모]는 관람 중 카드와, 페이지가 고른 완료 카드(TRIP-1203)에만.
+            const media =
+              state === 'active' ||
+              (state === 'done' && doneMediaPoiIds?.has(slot.poiId) === true);
+            const noticeFor = (
+              notice: { poiId: string; text: string } | null | undefined
+            ) =>
+              state !== 'upcoming' && notice?.poiId === slot.poiId
+                ? notice.text
+                : undefined;
             return (
               <View key={slotKey} className="flex-row">
                 <View className={`w-[28px] items-center ${RAIL_TOP[state]}`}>
@@ -397,13 +410,21 @@ export function LiveHubView({
                           }
                         : undefined
                     }
-                    onPressPhoto={state === 'active' ? onPressPhoto : undefined}
-                    onPressMemo={state === 'active' ? onPressMemo : undefined}
-                    photoNotice={state === 'active' ? photoNotice : undefined}
-                    onPressPhotoSettings={
-                      state === 'active' ? onPressPhotoSettings : undefined
+                    onPressPhoto={
+                      media && onPressPhoto
+                        ? () => onPressPhoto(slot.poiId)
+                        : undefined
                     }
-                    memoNotice={state === 'active' ? memoNotice : undefined}
+                    onPressMemo={
+                      media && onPressMemo
+                        ? () => onPressMemo(slot.poiId)
+                        : undefined
+                    }
+                    photoNotice={noticeFor(photoNotice)}
+                    onPressPhotoSettings={
+                      state !== 'upcoming' ? onPressPhotoSettings : undefined
+                    }
+                    memoNotice={noticeFor(memoNotice)}
                     badgeLabel={slotBadgeLabel?.(slotKey) ?? undefined}
                     onPressName={
                       onPressSlotName
