@@ -1,5 +1,6 @@
-import type { ReactElement } from 'react';
+import { useContext, type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import BottomSheet, {
   BottomSheetScrollView,
   BottomSheetTextInput,
@@ -186,11 +187,17 @@ export function ReplanRequestSheet({
       )
     : REPLAN_REASONS;
 
+  // TRIP-1214 — 긴 글로 키보드가 시트를 밀어 올려도 윗변이 상태바·다이내믹 아일랜드 아래에서 멈추게 한다
+  // (MapSheetShell 선례). Provider 가 없으면(jest 전반) 0.
+  const topInset = useContext(SafeAreaInsetsContext)?.top ?? 0;
+
   return (
     <BottomSheet
       enablePanDownToClose
       onClose={onClose}
       keyboardBehavior="interactive"
+      keyboardBlurBehavior="restore"
+      topInset={topInset}
       backgroundStyle={SHEET_BACKGROUND}
       backdropComponent={() => (
         // 목/실라이브러리 모두 backdrop 에 prop 을 안 넘길 수 있어 onClose 를 클로저로 문다

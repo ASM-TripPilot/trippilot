@@ -1,4 +1,5 @@
 import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import type { ReactTestInstance } from 'react-test-renderer';
 import {
   act,
@@ -440,6 +441,33 @@ describe('🔴 S6 · 재계획 시트 키보드 처방 (#051 · D9 · Q10)', () 
     expect(
       screen.getByTestId('planb-request-sheet').props.keyboardShouldPersistTaps
     ).toBe('handled');
+  });
+});
+
+describe('🔴 TRIP-1214 d · 긴 글을 넣어도 시트가 상태바 아래에서 멈춘다', () => {
+  it('Y1 시트에 safe-area top 을 topInset 으로 넘기고, 키보드가 내려가면 이전 칸으로 돌아온다', () => {
+    render(
+      <SafeAreaInsetsContext.Provider
+        value={{ top: 47, bottom: 34, left: 0, right: 0 }}
+      >
+        <ReplanRequestSheet {...baseProps()} />
+      </SafeAreaInsetsContext.Provider>
+    );
+
+    const sheet = screen.UNSAFE_queryAllByProps({
+      keyboardBehavior: 'interactive',
+    })[0];
+    expect(sheet.props.topInset).toBe(47);
+    expect(sheet.props.keyboardBlurBehavior).toBe('restore');
+  });
+
+  it('Y2 Provider 가 없으면 topInset 0 (jest 전반 안전)', () => {
+    render(<ReplanRequestSheet {...baseProps()} />);
+
+    expect(
+      screen.UNSAFE_queryAllByProps({ keyboardBehavior: 'interactive' })[0]
+        .props.topInset
+    ).toBe(0);
   });
 });
 
