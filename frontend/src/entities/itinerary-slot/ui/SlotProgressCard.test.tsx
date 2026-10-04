@@ -65,6 +65,7 @@ describe('SlotProgressCard · done (AC-3)', () => {
         state="done"
         photos={PHOTOS}
         memo={MEMO}
+        visitedLabel="09:30"
         onPressName={jest.fn()}
       />
     );
@@ -72,7 +73,7 @@ describe('SlotProgressCard · done (AC-3)', () => {
     expect(screen.getByTestId(`execution-live-slot-${KEY}`)).toBeOnTheScreen();
     expect(screen.getByTestId(id('name'))).toHaveTextContent('감천문화마을');
     expect(screen.getByTestId(id('chevron'))).toBeOnTheScreen();
-    // 시각은 계획 startAt 을 자른 값(재추정 없음). "방문" 은 형제 leaf(중첩 금지, 02a ★4).
+    // 시각은 넘겨받은 실제 방문 시각(TRIP-1220). "방문" 은 형제 leaf(중첩 금지, 02a ★4).
     expect(screen.getByTestId(id('visit-time'))).toHaveTextContent('09:30');
     expect(screen.getByTestId(id('visit-label'))).toHaveTextContent('방문');
     // 사진은 준 만큼, 후기는 원문 그대로.
