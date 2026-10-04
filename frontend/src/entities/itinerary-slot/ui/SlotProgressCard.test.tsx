@@ -92,6 +92,25 @@ describe('SlotProgressCard · done (AC-3)', () => {
     expect(screen.queryByTestId(id('status'))).toBeNull();
   });
 
+  it('C1b TRIP-1220 실제 시각(visitedLabel)이 있으면 그 시각 + "방문", 없으면 계획 시각 + "계획"', () => {
+    const { rerender } = render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="done"
+        visitedLabel="07:04"
+      />
+    );
+
+    expect(screen.getByTestId(id('visit-time'))).toHaveTextContent('07:04');
+    expect(screen.getByTestId(id('visit-label'))).toHaveTextContent('방문');
+
+    rerender(<SlotProgressCard slot={mkSlot()} date={DATE} state="done" />);
+
+    expect(screen.getByTestId(id('visit-time'))).toHaveTextContent('09:30');
+    expect(screen.getByTestId(id('visit-label'))).toHaveTextContent('계획');
+  });
+
   it('C2 사진·후기가 둘 다 없으면 사진 행과 후기 박스를 통째로 안 그린다 (G6)', () => {
     render(<SlotProgressCard slot={mkSlot()} date={DATE} state="done" />);
 
