@@ -55,6 +55,18 @@ jest.mock('@/features/apply-replan/model/useApplyReplan', () => ({
   }),
 }));
 
+// 대안 없음 → [내일 일정 다시 짜기] — 세션 시작 seam(`useStartReplan`, 허브·i04 와 같은 래퍼).
+// 페이지가 `{ tripId, data }` + onSuccess 로 부른다. 기본은 대기·실패 없음.
+const mockStartMutate = jest.fn();
+const mockStart = { isPending: false, isError: false };
+jest.mock('@/features/request-replan/model/useStartReplan', () => ({
+  useStartReplan: () => ({
+    mutate: mockStartMutate,
+    isPending: mockStart.isPending,
+    isError: mockStart.isError,
+  }),
+}));
+
 // TRIP-979 B — 출발 좌표 없는 세션의 지도 중심을 일정에서 고르려고 페이지가 일정을 읽는다.
 // 기본은 미도착(undefined) — 기존 케이스는 세션 좌표가 있어 일정과 무관하다.
 let mockItinerary: Itinerary | undefined;
@@ -288,6 +300,9 @@ beforeEach(() => {
   mockMutate.mockClear();
   mockApply.isPending = false;
   mockApply.isError = false;
+  mockStartMutate.mockClear();
+  mockStart.isPending = false;
+  mockStart.isError = false;
   mockSession.data = undefined;
   mockItinerary = undefined;
   mockDiff.state = 'ok';
@@ -852,6 +867,197 @@ describe('🔴 TRIP-1195 · 다시 요청은 그 세션이 다시 짜던 날로 
     fireEvent.press(screen.getByText('다시 시도'));
 
     expect(mockPush).toHaveBeenLastCalledWith(REQUEST_HREF);
+  });
+});
+
+// ── 오늘 밤 대안 없음 → 내일 일정 다시 짜기 ─────────────────────────────────────────────────────────
+// 밤(KST 20:54)에 오늘을 다시 짜면 하루 창이 거의 안 남아 NO_SOLUTION 으로 끝난다. 그때 내일이 일정에
+// 있으면 같은 조건으로 내일 하루 전체를 다시 짜는 보조 버튼을 준다. "오늘·내일"은 KST 날짜다.
+// ★ 시계를 고정한다 — 실제 시계면 오늘·내일을 테스트도 같은 식으로 계산하게 돼 구현과 같이 틀린다.
+
+const NEXT_DAY_TESTID = 'planb-draft-next-day';
+// KST 2026-06-11 20:54 (UTC 11:54).
+const TONIGHT = new Date('2026-06-11T11:54:00Z');
+
+function itineraryOf(dates: string[]): Itinerary {
+  return {
+    ...DRAFT_ITINERARY,
+    days: dates.map((date) => ({ date, slots: [] })),
+  } as unknown as Itinerary;
+}
+
+/** 원 요청 값 — 내일 요청에 그대로 실려야 하는 것(사유·방향·자유 입력)과 실리면 안 되는 것(트리거·범위). */
+const TONIGHT_REQUEST = {
+  scope: 'PARTIAL_SLOTS',
+  targetDate: '2026-06-11',
+  reasons: ['WEATHER'],
+  directives: ['INDOOR'],
+  freeText: '비가 와요',
+  triggerId: 'trg-1',
+};
+
+describe('🔴 N · 오늘 대안 없음 → [내일 일정 다시 짜기] (targetDate=내일 · FULL_DAY)', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('N1 오늘 세션이 대안 없음이고 내일이 일정에 있으면 버튼이 보이고, 그리기만으로는 요청하지 않는다(기존 두 버튼·문구 유지)', () => {
+    jest.useFakeTimers({ now: TONIGHT });
+    mockItinerary = itineraryOf(['2026-06-11', '2026-06-12']);
+    mockSession.data = session('NO_SOLUTION', TONIGHT_REQUEST);
+    renderPage();
+
+    expect(screen.getByTestId(NEXT_DAY_TESTID)).toHaveTextContent(
+      '내일 일정 다시 짜기'
+    );
+    expect(
+      screen.getByTestId('planb-draft-notice-description')
+    ).toHaveTextContent('조건을 줄이거나 직접 고쳐 주세요');
+    expect(screen.getByText('조건 바꿔 다시 짜기')).toBeOnTheScreen();
+    expect(screen.getByText('직접 수정')).toBeOnTheScreen();
+    expect(mockStartMutate).not.toHaveBeenCalled();
+  });
+
+  it('N2 누르면 세션 시작 1회 — targetDate=내일·scope=FULL_DAY, 사유·방향·자유 입력은 원 요청 그대로, 트리거는 null', () => {
+    jest.useFakeTimers({ now: TONIGHT });
+    mockItinerary = itineraryOf(['2026-06-11', '2026-06-12']);
+    mockSession.data = session('NO_SOLUTION', TONIGHT_REQUEST);
+    renderPage();
+
+    fireEvent.press(screen.getByTestId(NEXT_DAY_TESTID));
+
+    expect(mockStartMutate).toHaveBeenCalledTimes(1);
+    const [vars] = mockStartMutate.mock.calls[0];
+    expect(vars).toEqual({
+      tripId: TRIP_ID,
+      data: {
+        scope: 'FULL_DAY',
+        targetDate: '2026-06-12',
+        originKind: null,
+        reasons: ['WEATHER'],
+        directives: ['INDOOR'],
+        freeText: '비가 와요',
+        excludedPoiIds: [],
+        triggerId: null,
+      },
+    });
+    // 성공 전에는 이동하지 않는다.
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('N3 시작에 성공하면 새 세션의 "다시 짜는 중"으로 replace 한다(i04 와 같은 착지)', () => {
+    jest.useFakeTimers({ now: TONIGHT });
+    mockItinerary = itineraryOf(['2026-06-11', '2026-06-12']);
+    mockSession.data = session('NO_SOLUTION', TONIGHT_REQUEST);
+    renderPage();
+
+    fireEvent.press(screen.getByTestId(NEXT_DAY_TESTID));
+    const [, callbacks] = mockStartMutate.mock.calls[0];
+    act(() => {
+      callbacks.onSuccess({ sessionId: 's10' });
+    });
+
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenLastCalledWith({
+      pathname: '/trips/[tripId]/planb/solving',
+      params: { tripId: TRIP_ID, sessionId: 's10' },
+    });
+  });
+
+  it('N4 "오늘·내일"은 기기 시간대가 아니라 KST 날짜다(UTC 6/11 15:30 = KST 6/12 00:30 → 내일은 6/13)', () => {
+    jest.useFakeTimers({ now: new Date('2026-06-11T15:30:00Z') });
+    mockItinerary = itineraryOf(['2026-06-11', '2026-06-12', '2026-06-13']);
+    mockSession.data = session('NO_SOLUTION', {
+      ...TONIGHT_REQUEST,
+      targetDate: '2026-06-12',
+    });
+    renderPage();
+
+    fireEvent.press(screen.getByTestId(NEXT_DAY_TESTID));
+
+    expect(mockStartMutate.mock.calls[0][0].data.targetDate).toBe('2026-06-13');
+  });
+
+  it.each([
+    [
+      '마지막 날(내일이 일정에 없다)',
+      'NO_SOLUTION',
+      TONIGHT_REQUEST.targetDate,
+      ['2026-06-10', '2026-06-11'],
+    ],
+    [
+      '오늘이 아닌 날을 다시 짜던 세션',
+      'NO_SOLUTION',
+      '2026-06-12',
+      ['2026-06-11', '2026-06-12', '2026-06-13'],
+    ],
+    [
+      '대안 없음이 아니라 실패(FAILED)',
+      'FAILED',
+      TONIGHT_REQUEST.targetDate,
+      ['2026-06-11', '2026-06-12'],
+    ],
+    ['일정이 아직 안 왔다', 'NO_SOLUTION', TONIGHT_REQUEST.targetDate, null],
+  ])(
+    'N5 %s 이면 버튼이 없다(안내는 그대로 뜬다)',
+    (_label, status, targetDate, dates) => {
+      jest.useFakeTimers({ now: TONIGHT });
+      mockItinerary = dates === null ? undefined : itineraryOf(dates);
+      mockSession.data = session(status, { ...TONIGHT_REQUEST, targetDate });
+      renderPage();
+
+      // 앵커 — 화면은 그려졌다(빈 렌더라서 버튼이 없는 게 아니다).
+      expect(screen.getByTestId('planb-draft-notice-title')).toBeOnTheScreen();
+      expect(screen.queryByTestId(NEXT_DAY_TESTID)).toBeNull();
+    }
+  );
+
+  it('N6 시작 요청 중에는 버튼이 잠겨 눌러도 다시 요청하지 않는다(이중 POST 차단)', () => {
+    jest.useFakeTimers({ now: TONIGHT });
+    mockStart.isPending = true;
+    mockItinerary = itineraryOf(['2026-06-11', '2026-06-12']);
+    mockSession.data = session('NO_SOLUTION', TONIGHT_REQUEST);
+    renderPage();
+
+    const button = screen.getByTestId(NEXT_DAY_TESTID);
+    expect(button).toBeDisabled();
+    fireEvent.press(button);
+    expect(mockStartMutate).not.toHaveBeenCalled();
+  });
+
+  it('N6b 시작 요청 중에는 [직접 수정]·[조건 바꿔 다시 짜기]도 잠긴다(교차 잠금 — 밑에 남은 이 화면의 onSuccess 가 새로 쌓인 화면을 solving 으로 갈아 끼우는 경로 차단, P4b 와 같은 이유)', () => {
+    jest.useFakeTimers({ now: TONIGHT });
+    mockStart.isPending = true;
+    mockItinerary = itineraryOf(['2026-06-11', '2026-06-12']);
+    mockSession.data = session('NO_SOLUTION', TONIGHT_REQUEST);
+    renderPage();
+
+    const manual = screen.getByTestId('sheet-cta-button-0');
+    const reopen = screen.getByTestId('sheet-cta-button-1');
+    expect(manual).toHaveTextContent('직접 수정');
+    expect(reopen).toHaveTextContent('조건 바꿔 다시 짜기');
+    expect(manual).toBeDisabled();
+    expect(reopen).toBeDisabled();
+    fireEvent.press(manual);
+    fireEvent.press(reopen);
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('N7 시작에 실패하면 같은 안내 자리에 실패 문구를 띄우고(INV-4), 버튼은 남아 재시도다', () => {
+    jest.useFakeTimers({ now: TONIGHT });
+    mockStart.isError = true;
+    mockItinerary = itineraryOf(['2026-06-11', '2026-06-12']);
+    mockSession.data = session('NO_SOLUTION', TONIGHT_REQUEST);
+    renderPage();
+
+    expect(
+      screen.getByTestId('planb-draft-notice-description')
+    ).toHaveTextContent(
+      '내일 일정을 다시 짜지 못했어요. 잠시 후 다시 시도해 주세요'
+    );
+    fireEvent.press(screen.getByTestId(NEXT_DAY_TESTID));
+    expect(mockStartMutate).toHaveBeenCalledTimes(1);
   });
 });
 
