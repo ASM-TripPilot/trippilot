@@ -20,7 +20,8 @@ TourAPI 는 산과 그 전망대, 관광특구와 그 안 해수욕장, 한 공�
 
 **묶음은 점수순 스타** (`family_followers`) — 대표마다 **직접** 맞는 것만 그 계열원이다.
 union-find 이행 폐포는 사슬로 번져('남산' 7곳·'강화' 5곳) 과강등했다: A~B, B~C 라고
-A 와 C 가 같은 단지인 것은 아니다.
+A 와 C 가 같은 단지인 것은 아니다. 예외는 ④ 쌍둥이 하나 — 식당 대표에 붙은 비식당 쌍둥이는
+같은 대표를 가리키는 별칭 대표로 남아 제 단지 이웃을 누른다(같은 장소라 사슬이 아니다).
 """
 
 from __future__ import annotations
@@ -141,16 +142,27 @@ def family_followers(
     `ranked` 는 호출측이 (점수↓, poi_id↑) 로 줄 세운 후보 — 앞에서부터 훑어 이미 정해진
     대표 중 하나와 **직접** 맞으면 첫 대표의 계열원, 아니면 새 대표다. 계열원끼리는 비교하지
     않는다(스타 — 사슬 금지).
+
+    예외 — 식당 대표에 ④ 로 붙은 **비식당 쌍둥이**는 그 대표를 가리키는 별칭 대표로도 남는다.
+    식당 대표는 동명만 누르니, 그러지 않으면 쌍둥이가 대표일 때 누르던 단지 이웃이 풀린다
+    (TRIP-1228 리뷰 실측 — 로컬 DB 식당–비식당 쌍둥이 9쌍 중 3쌍. '자갈치시장' 맛집 > '부산
+    자갈치시장' 쇼핑 순이면 '자갈치 크루즈'·'용두산 자갈치 관광특구'가 원래 점수로 남았다).
+    식당 쌍둥이는 별칭이 되지 않는다 — 동명만 맞으니 잃는 이웃이 없고, 별칭이면 동명 식당이
+    200m 씩 사슬로 이어진다.
     """
-    leaders = [_Sig.of(p) for p in anchors]
+    leaders = [(_Sig.of(p), p.poi_id) for p in anchors]
     out: dict[PoiId, PoiId] = {}
     for p in ranked:
         me = _Sig.of(p)
-        leader = next((ld for ld in leaders if _related(ld, me)), None)
-        if leader is None:
-            leaders.append(me)
-        elif p.poi_id != leader.poi.poi_id:
-            out[p.poi_id] = leader.poi.poi_id
+        hit = next(((ld, lid) for ld, lid in leaders if _related(ld, me)), None)
+        if hit is None:
+            leaders.append((me, p.poi_id))
+            continue
+        ld, lid = hit
+        if p.poi_id != lid:
+            out[p.poi_id] = lid
+            if ld.eatery and not me.eatery:
+                leaders.append((me, lid))  # 별칭 대표
     return out
 
 
