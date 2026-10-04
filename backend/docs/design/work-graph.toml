@@ -3111,7 +3111,7 @@ note = """
 **준비된 것** — 출시 빌드 설정이 테스트로 굳어 있다(`releaseBuildConfig.test.ts`: 아이콘 알파
 채널·스플래시·한국어 권한 문구·암호화 수출 면제·iPhone 전용·privacy manifest 4범주 ITMS-91053·
 Sentry 업로드 끔·사이트맵 끔). 번들 ID `com.trippilot.travel`, 애플 로그인 있음(타사 로그인이
-있으니 4.8 필수). 탈퇴 엔드포인트(`DELETE /api/v1/accounts/deletion`) + 2단 확인 다이얼로그.
+있으니 4.8 필수). 탈퇴 엔드포인트(`DELETE /api/v1/me/deletion`) + 2단 확인 다이얼로그.
 약관 6종 **실본문이 실제로 나간다**(DEV 실측: 1,550~2,879자, 플레이스홀더 없음 — TRIP-1004 #776).
 
 **prd 스택을 세우지 않기로 했다.** `prd.tfvars` 는 별 VPC(10.50/16) · 3 AZ ·
