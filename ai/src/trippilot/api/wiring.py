@@ -54,7 +54,7 @@ import pathlib
 import os
 import time
 import zlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, Mapping, Sequence
@@ -1020,6 +1020,45 @@ def _replan_not_before(request: schemas.ReplanRequest, tz: timezone) -> datetime
     return instant if instant.date() == request.target_date else None
 
 
+def _past_blocks(
+    blocks: tuple[FixedBlock, ...], not_before: datetime | None
+) -> tuple[FixedBlock, ...]:
+    """하한 전에 **끝난** 잠금 — 다녀온 하루의 이력이다. 솔버에 넣지 않는다.
+
+    이력을 제약으로 넣으면 지금 이동 추정으로 원 일정을 다시 검증하게 된다. 원 일정의
+    09:00-10:00 → 10:00-11:15 처럼 추정과 안 맞는 지난 잠금이 하나만 있어도 체인이 "고정
+    블록 모순"으로 남은 하루를 통째로 포기했다(2026-10-04 로컬 실측 — PARTIAL_SLOTS 표본
+    4건 중 1건). 진행 중인 잠금(하한을 걸친 것)은 남긴다 — 그 뒤로 새 방문이 와야 한다.
+    """
+    if not_before is None:
+        return ()
+    return tuple(b for b in blocks if b.window.end <= not_before)
+
+
+def _with_past_blocks(
+    solution: ItinerarySolution, past: tuple[FixedBlock, ...], day: date
+) -> ItinerarySolution:
+    """지난 잠금을 그 날 해에 **원 시각 그대로** 되싣는다 — BE 는 응답 하루로 원 일정 하루를
+    통째로 바꾸므로 빠뜨리면 다녀온 곳이 지워진다. 시각은 원 일정 값이지 지어낸 값이 아니고
+    (INV-2), `fixed_blocks` 에도 실어 `is_fixed` 로 사영된다.
+    """
+    if not past:
+        return solution
+    slots = tuple(
+        VisitSlot(poi_id=b.poi_id, start_at=b.window.start, end_at=b.window.end,
+                  stay_min=int((b.window.end - b.window.start).total_seconds() // 60),
+                  score=0.0, is_llm_score=False)
+        for b in past
+    )
+    days = tuple(
+        replace(d, slots=tuple(sorted(d.slots + slots, key=lambda s: s.start_at)),
+                fixed_blocks=d.fixed_blocks + past)
+        if d.date == day else d
+        for d in solution.days
+    )
+    return replace(solution, days=days)
+
+
 def _inline_persona(
     request: schemas.GenerateItineraryRequest | schemas.ReplanRequest,
 ) -> PersonaSummary | None:
@@ -1480,10 +1519,20 @@ class WiredItineraryOrchestrator:
         persona = _inline_persona(request) or self._persona_from(packets)
         daily_rain = self._rain_from(packets, dates, now)
 
+        not_before = _replan_not_before(request, self._tz)
+        blocks = _replan_fixed_blocks(request, self._tz)
+        past = _past_blocks(blocks, not_before)
+
         # ── PlanBAgent (RAG) — 상황 지식으로 순서를 낸다 ─────────────
-        planb = self._rag.run(_replan_rag_request(
-            request, pool, persona, daily_rain, trace_id, now,
-            notes=notes, deadline_ms=_deadline_budget(meta),
+        # 다녀온 곳(지난 잠금)은 PlanB 에도 제외다 — 기준점이 "마지막 완료 방문"이면 그 POI 가
+        # 거리 0 으로 규칙 1위가 되어 숏리스트·LLM 선택 한 자리를 헛되이 차지한다.
+        planb = self._rag.run(replace(
+            _replan_rag_request(
+                request, pool, persona, daily_rain, trace_id, now,
+                notes=notes, deadline_ms=_deadline_budget(meta),
+            ),
+            excluded_poi_ids=frozenset(PoiId(p) for p in request.excluded_poi_ids)
+            | {b.poi_id for b in past},
         ))
         notes += [f"planb: {n}" for n in planb.notes]
         # 랭킹은 **LLM 경로일 때만** 넘긴다 (독스트링 마지막 단락).
@@ -1510,13 +1559,16 @@ class WiredItineraryOrchestrator:
             # 시드가 달랐다(TRIP-1182). request_id 를 키로 두지 않는 것은 재시도·재현 때문이다
             # — 같은 입력이면 같은 해여야 덤프만으로 재현되고, 다양성은 거절 이력이 낸다.
             seed=_seed_from(request.trip_id),
-            fixed_blocks=_replan_fixed_blocks(request, self._tz),
-            excluded_poi_ids=frozenset(PoiId(p) for p in request.excluded_poi_ids),
+            # 지난 잠금은 솔버 밖이다(`_past_blocks`) — 사영에서 원 시각 그대로 되싣고,
+            # 다녀온 곳이 새 방문으로 다시 들어오지 않게 제외에 더한다.
+            fixed_blocks=tuple(b for b in blocks if b not in past),
+            excluded_poi_ids=frozenset(PoiId(p) for p in request.excluded_poi_ids)
+            | {b.poi_id for b in past},
             rejections=_domain_rejections(request.rejections),
             include_explanations=False,  # 재계획 화면(i06)은 설명을 안 쓴다
             prefer_categories=prefer,
             avoid_categories=avoid,
-            not_before=_replan_not_before(request, self._tz),
+            not_before=not_before,
         )
         outcome = self._schedule_agent.run(core.ScheduleTask(
             request=domain_request,
@@ -1537,7 +1589,7 @@ class WiredItineraryOrchestrator:
         ))
         return self._replan_projection(
             request, outcome, notes, resolved, unknown, retrieved=planb.retrieved,
-            planb_fallback=planb.is_fallback, started_ms=t0,
+            planb_fallback=planb.is_fallback, started_ms=t0, past=past,
         )
 
     def _replan_directives(
@@ -1656,6 +1708,7 @@ class WiredItineraryOrchestrator:
         retrieved: Mapping[str, int] | None = None,
         planb_fallback: bool = False,
         started_ms: int,
+        past: tuple[FixedBlock, ...] = (),
     ) -> schemas.ReplanResponse:
         """`GenerationOutcome` → `ReplanResponse`. **예외로 올리지 않는다** (IO-7).
 
@@ -1676,8 +1729,14 @@ class WiredItineraryOrchestrator:
                 "NO_FEASIBLE_SLOT", notes, resolved, unknown, retrieved, params)
         solution = outcome.solution
         if solution is None or not any(day.slots for day in solution.days):
+            if not_before is not None:  # 지난 잠금이 솔버 밖이라 빈 해로 온다 — 사유는 같다
+                notes.append(f"no_slot_after_from_instant: {not_before:%H:%M}")
             return self._replan_empty(
                 "NO_FEASIBLE_SLOT", notes, resolved, unknown, retrieved, params)
+        if past:
+            # 되실은 지난 잠금은 체인 검증 밖이다(원 시각 그대로) — 그 사실을 남긴다.
+            notes.append(f"past_locks_echoed: {len(past)}")
+        solution = _with_past_blocks(solution, past, request.target_date)
         # 잠금이 빠진 일정은 내지 않는다 (TRIP-1177). 에이전트는 좌표를 못 찾은 고정 블록을
         # 빼고 푼다 — generate 는 unplaced 로 보고하지만 재계획엔 그 칸이 없어, 내보내면
         # BE 가 잠금이 사라진 하루를 깨끗한 결과로 읽는다. 체인 HC3 가 나머지 블록을

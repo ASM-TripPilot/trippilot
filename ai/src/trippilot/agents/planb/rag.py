@@ -33,7 +33,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from types import MappingProxyType
 
@@ -64,6 +64,14 @@ _ALTERNATIVE_LABELS = ("A", "B", "C", "D", "E")
 # 프리필터가 상위 60을 보므로(`ortools_assembler._PREFILTER_TOP_K`) 20이면
 # 배치될 후보를 넉넉히 덮는다. 상한이 필요한 이유는 필드 주석에 있다.
 MAX_RANKED = 20
+
+# LLM 선택 프롬프트에 싣는 후보 수 — 규칙 랭킹 앞에서 자른다(+ KB-5 문서가 붙은 후보).
+# 풀 전원을 실으면 서울 10km(≈1,300곳)에서 입력이 6만 3천 토큰이었고 sol 이 5~7초 걸려
+# 1차(6.25s)·재시도(4.4s) 마감을 번갈아 넘겼다 — 재계획 표본 절반이 규칙 폴백이라 KB 를
+# 읽은 선택이 반영되지 않았다(2026-10-04 실측). LLM 이 내는 순서는 `MAX_RANKED` 까지만
+# 쓰이므로 그 세 배면 고를 폭이 충분하다. 규칙 랭킹이 우천 강등·저장 장소·거리를 이미
+# 본 순서라, 잘리는 쪽은 "그 셋 모두에서 뒤"인 후보다.
+LLM_SHORTLIST = 60
 
 # 규칙 폴백의 reason → 후순위 카테고리 (TRIP-532). 배정을 바꾸려면 여기만 고친다.
 # 분기 키는 TriggerKind 가 아니라 **reason** — MANUAL 트리거도 사유("비 와서")를 따라간다.
@@ -279,10 +287,12 @@ class RagContext:
     persona: tuple[KbHit, ...] = ()
     situation: tuple[KbHit, ...] = ()
     notes: tuple[str, ...] = ()
-    # KB-5 장소 지식 — {source_ref: 문서}. 앞 셋과 달리 **풀 전원**을 가져온다
+    # KB-5 장소 지식 — {source_ref: 문서}. 앞 셋과 달리 **숏리스트 전원**을 가져온다
     # (일부에게만 설명이 붙으면 임베딩 유사도가 랭커가 되어 규칙 랭킹을 덮는다 —
     #  `place_knowledge` 모듈 docstring).
     place_knowledge: Mapping[str, str] = field(default_factory=dict)
+    # LLM 에 보일 후보(`_shortlist`). None 이면 풀 전원 — 검색을 건너뛴 직접 조립용.
+    shortlist: CandidatePool | None = None
 
     def counts(self) -> dict:
         # SCHEDULE 키가 없다 — 검색하지 않으므로 0 을 싣는 것도 거짓이다(TRIP-972).
@@ -459,10 +469,15 @@ class PlanBAgent:
         )
         if note:
             notes.append(note)
-        # KB-5 — 앞 셋과 다르다: 상황에 맞는 몇 건이 아니라 **풀 전원의 문서**다.
+        # KB-5 — 앞 셋과 다르다: 상황에 맞는 몇 건이 아니라 **LLM 이 볼 후보 전원의 문서**다.
+        # 숏리스트를 먼저 정하고 그 후보 것만 가져온다 — 풀 전체에서 유사도로 문서를 고르면
+        # 문서가 후보 입장을 정하게 된다(규칙 랭킹 맨 뒤의 야외도 문서만 있으면 프롬프트에 든다).
         # 실패해도 예외를 안 올린다(문서 없이 도는 것이 정상 동작이지 실패가 아니다).
+        shortlist = _shortlist(request, persona)
+        if len(shortlist.pois) < len(request.pool.pois):
+            notes.append(f"llm_shortlist: {len(shortlist.pois)}/{len(request.pool.pois)}")
         knowledge, note = fetch_place_knowledge(
-            request.pool.pois, situ_q, self._embedding, self._store, vector=situ_v
+            shortlist.pois, situ_q, self._embedding, self._store, vector=situ_v
         )
         if note:
             notes.append(note)
@@ -471,6 +486,7 @@ class PlanBAgent:
             situation=situation,
             notes=tuple(notes),
             place_knowledge=knowledge,
+            shortlist=shortlist,
         )
 
     def _safe_retrieve(
@@ -537,7 +553,7 @@ class PlanBAgent:
             return rule_ranked, {}, False, _why("alternative_worker_absent"), rule_ranked
         try:
             result = self._worker.select(
-                request.pool,
+                context.shortlist if context.shortlist is not None else request.pool,
                 AlternativeSelectionInput(
                     trigger_kind=request.trigger.kind.value,
                     reason=request.reason,
@@ -786,6 +802,25 @@ def _rule_ranking(
     demoted_count = sum(1 for p in ranked if poi_by_id[p].category in demoted)
     note = f"rule_ranking: {reason} 신호로 야외 {demoted_count}건 후순위" if demoted_count else ""
     return tuple(str(p) for p in ranked), note
+
+
+def _shortlist(request: "PlanBRagRequest", persona_hits: Sequence[KbHit]) -> CandidatePool:
+    """LLM 에 보일 후보 — 규칙 랭킹 앞 `LLM_SHORTLIST` 곳 ∪ 원 일정 슬롯(제외분 빼고).
+
+    원 슬롯을 따로 넣는 이유: 재계획 풀의 기준점은 지금 위치라 몇 km 떨어진 오후 원 슬롯은
+    규칙 상위에 안 든다. 그런데 그 id 는 `[원래 추천 이유]` 줄로 프롬프트에 보이므로, 빼면
+    LLM 이 고른 원 슬롯이 게이트에서 드롭되고 "원래 자리보다 나은 것만 바꾼다"가 깨진다.
+    풀을 **좁히기만** 한다 — 게이트의 풀 교차가 이 숏리스트로 걸리므로 LLM 은 밖을 고를 수
+    없다(INV-1). 규칙 랭킹은 `_select` 와 같은 함수·같은 입력이라 순서가 같다.
+    """
+    pool, excluded = request.pool, request.excluded_poi_ids
+    available = tuple(p.poi_id for p in pool.pois if p.poi_id not in excluded)
+    ranked, _ = _rule_ranking(
+        _saved_refs(request.saved_places, persona_hits), pool, available, request.reason)
+    keep = set(ranked[:LLM_SHORTLIST]) | {
+        str(p) for p in request.current_slot_ids if p not in excluded}
+    pois = tuple(p for p in pool.pois if str(p.poi_id) in keep)
+    return replace(pool, poi_ids=frozenset(p.poi_id for p in pois), pois=pois)
 
 
 def _as_refs(value: object) -> tuple[tuple[str, ...], Mapping[str, str]] | None:

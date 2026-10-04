@@ -494,6 +494,7 @@ def test_남은_시간이_없으면_잠금만_남은_일정이_아니라_빈_결
     assert body["itinerary"] is None, body
     assert body["empty_reason"] == {"code": "NO_FEASIBLE_SLOT",
                                     "params": {"from": "20:50"}}
+    assert "no_slot_after_from_instant: 20:50" in body["notes"]
 
 
 def test_잠금이_창_앞쪽이어도_재계획이_실패하지_않는다() -> None:
@@ -509,6 +510,60 @@ def test_잠금이_창_앞쪽이어도_재계획이_실패하지_않는다() -> 
     body = response.json()
     assert body["empty_reason"] is None, body["notes"]
     assert all(s["start_at"] >= "14:10" for s in _new_slots(body))
+
+
+def test_지난_잠금끼리_이동이_안_맞아도_재계획은_된다() -> None:
+    """지난 잠금은 **이력**이지 검증할 제약이 아니다 (2026-10-04 로컬 실측).
+
+    PARTIAL_SLOTS 14:00 재계획 — BE 가 지난 슬롯을 전부 잠가 보낸다. 원 일정의
+    09:00-10:00 → 10:00-11:15 처럼 지금 추정으로는 이동이 안 맞는 지난 잠금이 하나라도
+    있으면 체인이 "고정 블록 모순"으로 하루를 통째로 포기했다(재계획 표본 4건 중 1건).
+    지난 잠금은 솔버 밖에서 그대로 되싣는다 — 시각은 원 일정 값 그대로라 지어낸 시각이
+    아니고(INV-2), BE 는 잠금 슬롯의 위반 표시를 원본에서 이어받는다(TRIP-839).
+    """
+    seed = demo_poi_seed()
+    a, b = str(seed[0].poi_id), str(seed[3].poi_id)  # 성산일출봉 ↔ 한라산 — 30km 넘게 떨어져 있다
+    response, spy = _spy_post(
+        scope="PARTIAL_SLOTS",
+        from_instant="2026-09-21T14:00:00+09:00",
+        locked_blocks=[
+            {"poi_id": a, "date": "2026-09-21", "start": "09:00", "dwell_min": 60},
+            {"poi_id": b, "date": "2026-09-21", "start": "10:00", "dwell_min": 75},
+        ],
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["empty_reason"] is None, body["notes"]
+    slots = [s for d in body["itinerary"]["days"] for s in d["slots"]]
+    pinned = {(s["poi_id"], s["start_at"][:5], s["end_at"][:5]) for s in slots if s["is_fixed"]}
+    assert pinned == {(a, "09:00", "10:00"), (b, "10:00", "11:15")}
+    assert all(s["start_at"] >= "14:00" for s in _new_slots(body))
+    # 솔버에는 지난 잠금이 안 간다 — 다시 검증할 대상이 아니다
+    assert spy.tasks[0].request.fixed_blocks == ()
+    # 다녀온 곳을 새 방문으로 다시 넣지 않는다
+    assert {a, b}.isdisjoint(s["poi_id"] for s in _new_slots(body))
+    assert "past_locks_echoed: 2" in body["notes"]  # 검증 밖 되싣기는 드러낸다
+
+
+def test_지난_잠금은_PlanB_에도_제외로_간다() -> None:
+    """기준점이 마지막 완료 방문이면 그 POI 가 거리 0 으로 규칙 1위다 — 제외 안 하면 숏리스트·
+    LLM 선택 한 자리를 다녀온 곳이 차지한다(ScheduleAgent 가 결국 버리므로 헛자리)."""
+    seed = demo_poi_seed()
+    a = str(seed[0].poi_id)
+    app = build_dev_app(directives=_DIRECTIVES)
+    seen = []
+    rag = app.state.orchestrator._rag
+    real = rag.run
+    rag.run = lambda req: seen.append(req) or real(req)
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.post("/ai/v1/planb/replan", json=_body(
+            scope="PARTIAL_SLOTS", from_instant="2026-09-21T14:00:00+09:00",
+            locked_blocks=[{"poi_id": a, "date": "2026-09-21", "start": "09:00",
+                            "dwell_min": 60}]))
+
+    assert response.status_code == 200, response.text
+    assert PoiId(a) in seen[0].excluded_poi_ids
 
 
 def test_에이전트가_하한을_어셈블리_문제로_넘긴다() -> None:

@@ -40,6 +40,7 @@ from trippilot.agents.planb.rag import (
     PlanBRagConfig,
     PlanBAgent,
     PlanBRagRequest,
+    LLM_SHORTLIST,
     PlanBRagResult,
     _DEMOTED_BY_REASON,
     _persona_query,
@@ -60,6 +61,7 @@ from trippilot.assembly_engine.config import RAIN_OUTDOOR
 from trippilot.assembly_engine.travel import haversine_km
 
 from tests.fakes.fake_embedding import FakeEmbedding
+from trippilot.poi_curation.place_docs import make_doc
 from tests.fakes.fake_llm import FailingLlm, FakeLlm
 from tests.fakes.in_memory_trace import InMemoryTrace
 from tests.fakes.in_memory_vector_store import InMemoryVectorStore
@@ -1211,3 +1213,74 @@ def test_배치가_터져도_KB_검색을_잃지_않는다() -> None:
     assert spy.embed_calls == 3
     assert any("embed_batch_degraded" in n for n in result.notes)
     assert [a.label for a in result.alternatives] == ["A", "B", "C"]  # 결과는 온전하다
+
+
+# ── LLM 에는 숏리스트만 (풀 전원 → 6만 토큰) ─────────────────────────────
+
+
+class _CapturingWorker:
+    """워커가 받은 풀만 적어 두고 폴백을 낸다 — 무엇이 프롬프트에 실렸나만 본다."""
+
+    def __init__(self) -> None:
+        self.pool: CandidatePool | None = None
+
+    def select(self, pool, inp, trace_id, now, **kw):
+        self.pool, self.knowledge = pool, inp.place_knowledge
+        return SimpleNamespace(is_fallback=True, error="stub", value=None)
+
+
+@given(st.integers(min_value=0, max_value=3 * LLM_SHORTLIST))
+@settings(max_examples=25, deadline=None)
+def test_LLM_에는_규칙_랭킹_상위만_실린다(n: int) -> None:
+    """서울 10km 풀(≈1,300곳)이 통째로 후보 줄이 돼 입력 6만 토큰 — sol 7초로 마감을
+    넘겨 KB 를 읽은 선택이 **한 번도** 반영되지 않았다(2026-10-04 실측). 숏리스트는
+    규칙 랭킹 앞 `LLM_SHORTLIST` 곳이고, 풀이 그보다 작으면 풀 전원이다.
+    """
+    pool = _pool(*[f"p{i:04d}" for i in range(n)])
+    worker = _CapturingWorker()
+
+    PlanBAgent(FakeEmbedding(dim=_SMALL), InMemoryVectorStore(),
+               alternative_worker=worker).run(_request(pool, reason="none"))
+
+    if n == 0:
+        return  # 후보 0 이면 워커까지 안 간다
+    rule, _ = _rule_ranking((), pool, tuple(p.poi_id for p in pool.pois), "none")
+    assert {str(p) for p in worker.pool.poi_ids} == set(rule[:LLM_SHORTLIST])
+    assert worker.pool.poi_ids <= pool.poi_ids  # 좁히기만 한다 (INV-1)
+
+
+def test_장소_지식은_숏리스트_후보_것만_가져온다() -> None:
+    """풀 전체에서 유사도로 문서를 고르면 문서가 후보 입장을 정한다 — 규칙 랭킹 맨 뒤의
+    후보도 문서만 있으면 프롬프트에 들었다(리뷰 지적, 정본 KB-5 절 "랭커가 규칙을 덮는다")."""
+    ids = [f"p{i:04d}" for i in range(LLM_SHORTLIST + 10)]
+    pool = _pool_with_refs(*ids)
+    inside, outside = ids[0], ids[-1]  # 규칙 랭킹(풀 순서) 맨 앞 · 맨 뒤
+    embedding, store = FakeEmbedding(dim=_SMALL), InMemoryVectorStore()
+    index_documents(
+        [make_doc("wiki", f"ref-{pid}", "실내 전시실이 여럿 있는 시립 박물관으로 비 오는 날 찾기 좋다.")
+         for pid in (inside, outside)],
+        embedding, store,
+    )
+    worker = _CapturingWorker()
+
+    result = PlanBAgent(embedding, store, alternative_worker=worker).run(
+        _request(pool, reason="none"))
+
+    assert set(worker.knowledge) == {f"ref-{inside}"}
+    assert PoiId(outside) not in worker.pool.poi_ids
+    assert f"llm_shortlist: {LLM_SHORTLIST}/{len(ids)}" in result.notes  # 축소는 보이게
+
+
+def test_원_일정_슬롯은_규칙_상위가_아니어도_숏리스트에_든다() -> None:
+    """원 슬롯 id 는 `[원래 추천 이유]` 줄로 프롬프트에 보인다 — 숏리스트에서 빠지면 LLM 이
+    고른 원 슬롯이 게이트에서 드롭되고, 원 자리가 근처 새 장소와 경쟁조차 못 한다."""
+    ids = [f"p{i:04d}" for i in range(LLM_SHORTLIST + 10)]
+    current, excluded = PoiId(ids[-1]), PoiId(ids[-2])
+    worker = _CapturingWorker()
+
+    PlanBAgent(FakeEmbedding(dim=_SMALL), InMemoryVectorStore(), alternative_worker=worker).run(
+        replace(_request(_pool(*ids), reason="none", excluded=frozenset({excluded})),
+                current_slot_ids=(current, excluded)))
+
+    assert current in worker.pool.poi_ids
+    assert excluded not in worker.pool.poi_ids  # 제외는 원 슬롯이어도 제외
