@@ -2,6 +2,7 @@ package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.itinerarygeneration.domain.PersonalizationHints
 import com.trippilot.itinerarygeneration.domain.PersonalizationPort
+import com.trippilot.itinerarygeneration.domain.DayAnchor
 import com.trippilot.itinerarygeneration.domain.DaySchedule
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.GenerationState
@@ -54,6 +55,7 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.property.Arb
 import io.kotest.property.arbitrary.int
+import io.kotest.property.arbitrary.list
 import io.kotest.property.checkAll
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ErrorCode
@@ -246,7 +248,7 @@ class GenerateItineraryServiceTest : StringSpec({
         sessionRepo: FakeGenerationSessions = FakeGenerationSessions(),
         end: LocalDate = defaultEnd,
         fixedVisits: List<FixedVisit> = listOf(FixedVisit(poi, start, LocalTime.parse("12:00"), 90)),
-        destinations: List<String> = listOf("제주"),
+        destinations: List<TripDestinationRef> = refs("제주"),
         clock: Clock = Clock.fixed(now, ZoneOffset.UTC),
         rejectionStore: RejectionStore = FakeRejectionStore(),
         // 기본값 인자는 **맨 뒤에** 둔다 — 중간에 끼우면 위치 인자로 부르는 호출이 조용히 어긋난다.
@@ -259,7 +261,7 @@ class GenerateItineraryServiceTest : StringSpec({
             override fun findGenerationContext(accountId: UUID, tripId: UUID) =
                 if (accountId == acc) {
                     TripGenerationContext(
-                        start, end, destinations.map { TripDestinationRef(it, null) }, "친구", 500_000, fixedVisits,
+                        start, end, destinations, "친구", 500_000, fixedVisits,
                     )
                 } else {
                     null
@@ -659,11 +661,78 @@ class GenerateItineraryServiceTest : StringSpec({
     "목적지 좌표가 없으면 앵커도 비운다" {
         val agent = CapturingAgent(now)
         val svc = service(agent, fullPrefs, anchors = emptyList(), fixedVisits = emptyList(),
-                          destinations = listOf("좌표없는곳"))
+                          destinations = refs("좌표없는곳"))
 
         svc.generate(acc, tripId, GenerationMode.FULLY_AI)
 
         agent.captured!!.anchors.isEmpty() shouldBe true
+    }
+
+    // ── 다목적지 날짜별 앵커 ────────────────────
+    /**
+     * **숙소 없는 날의 앵커는 그 날의 목적지 중심이다.** 박수가 실려 오지 않던 때는 모든 날이 첫
+     * 목적지로 접혀 "서울 1박 + 인천 1박"이 서울 2박처럼 나왔다. 날짜→목적지 규칙은 FE
+     * `dayRegion.ts` 와 같다 — seq 순서로 박수만큼, 넘치는 날(체크아웃일)은 마지막 목적지.
+     * 1차(day1)·2차(나머지)가 각자 자기 날짜의 앵커를 싣는지도 함께 본다.
+     */
+    "서울 1박 + 인천 1박, 숙소 미등록 — 1일차는 서울 중심, 2·3일차는 인천 중심" {
+        val agent = CapturingAgent(now)
+        service(
+            agent, fullPrefs, anchors = emptyList(), fixedVisits = emptyList(),
+            destinations = listOf(TripDestinationRef("서울", null, 1), TripDestinationRef("인천", null, 1)),
+        ).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        agent.captures[0].anchors shouldContainExactly listOf(DayAnchor(start, SEOUL.lat, SEOUL.lng))
+        agent.captures[1].anchors shouldContainExactly listOf(
+            DayAnchor(start.plusDays(1), INCHEON.lat, INCHEON.lng),
+            DayAnchor(end, INCHEON.lat, INCHEON.lng),
+        )
+    }
+
+    "숙소가 있는 날은 목적지 중심보다 숙소가 이긴다" {
+        val agent = CapturingAgent(now)
+        val stay = DayAnchorView(start.plusDays(1), 37.4400, 126.4500) // 인천 날(08-02)의 숙소
+        service(
+            agent, fullPrefs, anchors = listOf(stay), fixedVisits = emptyList(),
+            destinations = listOf(TripDestinationRef("서울", null, 1), TripDestinationRef("인천", null, 1)),
+        ).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        agent.captures[0].anchors shouldContainExactly listOf(DayAnchor(start, SEOUL.lat, SEOUL.lng))
+        agent.captures[1].anchors shouldContainExactly listOf(
+            DayAnchor(start.plusDays(1), stay.lat, stay.lng),
+            DayAnchor(end, stay.lat, stay.lng), // 체크아웃일 = 전날 거점(prev_stay)
+        )
+    }
+
+    /** 그 날 목적지의 좌표가 없으면 첫 목적지 중심으로 — 앵커를 잃지도, 지어내지도 않는다. */
+    "그 날 목적지 좌표가 없으면 첫 목적지 중심으로 떨어진다" {
+        val agent = CapturingAgent(now)
+        service(
+            agent, fullPrefs, anchors = emptyList(), fixedVisits = emptyList(),
+            destinations = listOf(TripDestinationRef("서울", null, 1), TripDestinationRef("좌표없는곳", null, 1)),
+        ).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        agent.captures[1].anchors shouldContainExactly listOf(
+            DayAnchor(start.plusDays(1), SEOUL.lat, SEOUL.lng),
+            DayAnchor(end, SEOUL.lat, SEOUL.lng),
+        )
+    }
+
+    /**
+     * 박수 합 == 일수-1(꽉 찬 여행)이면 날짜→목적지가 **seq 단조**이고, 목적지마다 자기 박수만큼의 날을
+     * 갖는다(마지막 목적지는 체크아웃일 하루를 더). 단조가 깨지면 일정이 도시를 오간다.
+     */
+    "속성: 날짜→목적지는 seq 단조이고 목적지마다 박수만큼의 날을 갖는다" {
+        checkAll(Arb.list(Arb.int(0..4), 1..5)) { nights ->
+            val refs = nights.mapIndexed { i, n -> TripDestinationRef("d$i", null, n) }
+            val days = generateSequence(start) { it.plusDays(1) }.take(nights.sum() + 1).toList()
+
+            val idx = days.map { refs.indexOf(RegionAnchors.destinationOn(refs, start, it)) }
+
+            idx shouldBe idx.sorted()
+            refs.indices.map { i -> idx.count { it == i } } shouldBe
+                nights.mapIndexed { i, n -> if (i == refs.lastIndex) n + 1 else n }
+        }
     }
 
 })
@@ -1476,12 +1545,19 @@ private object StubRegions : com.trippilot.placedata.api.RegionLookupFacade {
     override fun isSelectableCode(regionCode: String) = false
 
     override fun codesOf(regionName: String): List<String> = emptyList()
-    override fun centerOf(regionName: String) =
-        if (regionName == "좌표없는곳") null else com.trippilot.placedata.api.RegionCenter(33.4996, 126.5312)
+    override fun centerOf(regionName: String) = when (regionName) {
+        "좌표없는곳" -> null
+        "서울" -> SEOUL
+        "인천" -> INCHEON
+        else -> com.trippilot.placedata.api.RegionCenter(33.4996, 126.5312)
+    }
 
     /** 코드 중심 — 이 대역은 코드를 이름처럼 다룬다. 코드 우선 경로는 `RegionCodeAnchorTest` 가 본다. */
     override fun centerOfCode(regionCode: String) = centerOf(regionCode)
 }
 
+private val SEOUL = com.trippilot.placedata.api.RegionCenter(37.5665, 126.9780)
+private val INCHEON = com.trippilot.placedata.api.RegionCenter(37.4563, 126.7052)
+
 /** 코드 없는 목적지 — 기존 테스트는 전부 이름 경로다(코드 경로는 `RegionCodeAnchorTest`). */
-private fun refs(vararg names: String) = names.map { TripDestinationRef(it, null) }
+private fun refs(vararg names: String) = names.map { TripDestinationRef(it, null, 0) }

@@ -3,6 +3,8 @@ package com.trippilot.itinerarygeneration.application
 import com.trippilot.placedata.api.RegionCenter
 import com.trippilot.placedata.api.RegionLookupFacade
 import com.trippilot.trip.api.TripDestinationRef
+import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 
 /**
  * 목적지 하나에서 앵커 좌표를 고르는 규칙(TRIP-859 후속).
@@ -25,4 +27,18 @@ internal object RegionAnchors {
 
     fun centerOf(regions: RegionLookupFacade, ref: TripDestinationRef): RegionCenter? =
         ref.regionCode?.let { regions.centerOfCode(it) } ?: regions.centerOf(ref.name)
+
+    /**
+     * 계획일 [date] 가 어느 목적지의 날인가 — FE `dayRegion.ts`(같이 짜기 "그날 여행지")와 **같은 규칙**.
+     * [refs](seq 순)를 박수만큼 펼치고, 박수 합을 넘는 날(체크아웃일 포함)은 마지막 목적지다.
+     * 두 규칙이 갈리면 화면이 "인천"이라 적은 날에 서울 일정이 나온다. 목적지가 없으면 null.
+     */
+    fun destinationOn(refs: List<TripDestinationRef>, startDate: LocalDate, date: LocalDate): TripDestinationRef? {
+        var remaining = ChronoUnit.DAYS.between(startDate, date) + 1
+        for (ref in refs) {
+            if (remaining <= ref.nights) return ref
+            remaining -= ref.nights
+        }
+        return refs.lastOrNull()
+    }
 }

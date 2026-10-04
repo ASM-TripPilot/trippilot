@@ -566,7 +566,7 @@ class ReplanFacadeServiceTest : StringSpec({
 })
 
 /** 코드 없는 목적지 — 기존 테스트는 전부 이름 경로다(코드 경로는 `RegionCodeAnchorTest`). */
-private fun refs(vararg names: String) = names.map { TripDestinationRef(it, null) }
+private fun refs(vararg names: String) = names.map { TripDestinationRef(it, null, 0) }
 
 /**
  * 초안 맵을 **실제 JSON 을 거쳐** 되읽는다. Hibernate 가 `@JdbcTypeCode(SqlTypes.JSON)` 컬럼에
