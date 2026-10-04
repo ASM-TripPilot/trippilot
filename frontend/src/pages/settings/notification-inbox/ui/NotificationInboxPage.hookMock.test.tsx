@@ -139,7 +139,7 @@ describe('AC-10 · 나머지 4갈래 — 행 press 로 이동, 인라인 링크 
         actionType: 'TRIP_ITINERARY',
         actionPayload: { tripId: 't1' },
       }),
-      '/trips/t1/itinerary',
+      '/trips/t1/itinerary?from=notification',
     ],
     [
       'TRIP_SUMMARY → 여행 요약',
@@ -195,7 +195,9 @@ describe('Q2 · "대안 일정 보기" 는 kind 가 아니라 actionType 에 붙
     fireEvent.press(screen.getByTestId('notification-inbox-row'));
 
     expect(mockPush).toHaveBeenCalledTimes(1);
-    expect(mockPush).toHaveBeenCalledWith('/trips/t1/itinerary');
+    expect(mockPush).toHaveBeenCalledWith(
+      '/trips/t1/itinerary?from=notification'
+    );
   });
 });
 

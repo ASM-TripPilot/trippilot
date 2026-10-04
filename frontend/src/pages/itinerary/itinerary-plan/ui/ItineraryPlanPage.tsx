@@ -37,6 +37,7 @@ import { isNotFound } from '@/shared/api';
 import { getAccessToken } from '@/shared/api';
 import { guardPress, openPressGuardWindow } from '@/shared/lib/pressGuard';
 import { StateNotice, type StateNoticeAction } from '@/shared/ui/StateNotice';
+import { seoulDate } from '@/shared/lib/seoulDate';
 import { showToast } from '@/shared/ui/Toast';
 import { DistanceConnector } from '@/widgets/map-sheet-shell';
 import { MapSheetShell } from '@/widgets/map-sheet-shell';
@@ -134,12 +135,17 @@ function fixedSlotSubtitle(startAt: string): string {
 
 export function ItineraryPlanPage({
   tripId,
+  from,
 }: {
   tripId: string;
+  /** 진입 출처 표식(TRIP-1237 a) — 'notification' 이면 오늘 일차로 열고 뒤로가기는 알림함(이전 화면)이다. */
+  from?: string;
 }): ReactElement {
+  const fromNotification = from === 'notification';
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [activeDayIndex, setActiveDayIndex] = useState(0);
+  // null = 사용자가 아직 날짜를 안 골랐다 — 그동안은 알림 진입이면 오늘, 아니면 1일차(tabs 는 조회 뒤에야 생긴다).
+  const [activeDayIndex, setActiveDayIndex] = useState<number | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
 
   // 4얼굴 공통 뒤로가기. `router.canGoBack()` 은 expo-router 가 주는, 뒤로 갈 히스토리 유무를
@@ -149,7 +155,7 @@ export function ItineraryPlanPage({
     // 확정(CONFIRMED) 얼굴은 생성/확정 흐름 스택으로 되돌아가지 않고 내 여행 목록으로 간다
     // (TRIP-505 AC-1). `/(tabs)/itinerary` 는 `GeneratingPage.tsx` 가 이미 쓰는 typedRoutes 통과
     // 목적지다. 그 외 얼굴은 기존 딥링크 폴백(`canGoBack()?back():replace(HOME_FALLBACK)`) 그대로.
-    if (itinerary.data?.status === 'CONFIRMED') {
+    if (itinerary.data?.status === 'CONFIRMED' && !fromNotification) {
       router.replace('/(tabs)/itinerary');
       return;
     }
@@ -320,8 +326,12 @@ export function ItineraryPlanPage({
     endDate: trip.data?.endDate ?? '',
     days: state.days,
   });
+  const todayIndex = fromNotification
+    ? tabs.findIndex((tab) => tab.date === seoulDate(new Date()))
+    : -1;
+  const wantedDayIndex = activeDayIndex ?? Math.max(todayIndex, 0);
   const selectedDayIndex =
-    activeDayIndex >= 0 && activeDayIndex < tabs.length ? activeDayIndex : 0;
+    wantedDayIndex >= 0 && wantedDayIndex < tabs.length ? wantedDayIndex : 0;
   const selectedTab = tabs[selectedDayIndex];
   const selectedDate = selectedTab?.date ?? '';
   const selectedDayNumber = selectedTab?.dayNumber ?? 1;
@@ -371,6 +381,7 @@ export function ItineraryPlanPage({
           dayLabel={`${selectedDayNumber}일차`}
           dateLabel={formatDraftDayHeader(selectedDate)}
           meta={meta}
+          metaBelow={isConfirmed}
         />
       }
       // 확정(h16)은 읽기전용이라 [일정 수정](h12)·[공유하기](j06) 2버튼(둘 다 활성 · AC-2). 미확정(h14)은

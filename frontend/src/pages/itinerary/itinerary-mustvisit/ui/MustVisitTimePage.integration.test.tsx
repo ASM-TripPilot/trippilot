@@ -372,6 +372,58 @@ describe('I10 · AC-6 — 날짜 칩은 여행 기간에서만 나온다 (INV-U1
   });
 });
 
+describe('🔴 TRIP-1237 b — 당일치기(날짜 하루)는 날짜를 안 골라도 고정이 저장된다', () => {
+  it('시각만 고르고 저장하면 날짜 칩 하나가 fixedDate 로 나가고 "날짜를 골라 주세요" 오류가 없다', async () => {
+    // 준비 — 여행 기간이 하루(6.11)다.
+    server.use(
+      http.get(`${BASE}/trips/:tripId`, () =>
+        HttpResponse.json({
+          ...TRIP,
+          startDate: '2026-06-11',
+          endDate: '2026-06-11',
+        })
+      )
+    );
+    renderPage();
+    await ready();
+    ensureFixed(true);
+    // 실행 — 날짜 칩은 누르지 않고 시각만 고른다.
+    fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-start-field'));
+    fireEvent.press(
+      screen.getByTestId('itinerary-mustvisit-time-start-option-13:00')
+    );
+    expect(screen.queryByTestId('itinerary-mustvisit-time-error')).toBeNull();
+    submit();
+
+    // 단언 — 본문의 fixedDate 가 그 하루다.
+    await waitFor(() => expect(postBodies).toHaveLength(1));
+    expect(postBodies[0]).toMatchObject({
+      type: 'FIXED',
+      fixedDate: '2026-06-11',
+      fixedStart: '13:00',
+    });
+  });
+
+  it('여행이 3일이면 자동 선택은 없다(날짜 미선택이면 여전히 막힌다)', async () => {
+    renderPage();
+    await ready();
+    ensureFixed(true);
+    fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-start-field'));
+    fireEvent.press(
+      screen.getByTestId('itinerary-mustvisit-time-start-option-13:00')
+    );
+    submit();
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(postBodies).toEqual([]);
+    expect(
+      screen.getByTestId('itinerary-mustvisit-time-error')
+    ).not.toHaveTextContent('');
+  });
+});
+
 describe('I11 · AC-7 · D5(개정) · INV-U1-18 — 409 는 실패로 세지 않되 침묵하지도 않는다', () => {
   /**
    * **01b D5 개정(오케 판정 2026-08-08) — 409 안내 위치가 h05 → h07 로 옮겨졌다.**
