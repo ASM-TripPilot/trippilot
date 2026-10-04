@@ -123,20 +123,26 @@ describe('AC-3 · 회고 날짜 키는 dayDate — 옛 키 date 는 읽지 않�
   });
 });
 
-describe('AC-4 · STAY_DETAIL 은 액션 없음(결정2)', () => {
-  it('{savedStayId} → null', () => {
-    expect(
-      notificationAction('STAY_DETAIL', { savedStayId: TRIP_UUID })
-    ).toBeNull();
+describe('AC-4 · STAY_DETAIL → 등록 숙소 목록(TRIP-1222)', () => {
+  it('{savedStayId} → /my/stays (등록 숙소 상세가 없어 목록으로 보낸다)', () => {
+    expect(notificationAction('STAY_DETAIL', { savedStayId: TRIP_UUID })).toBe(
+      '/my/stays'
+    );
   });
 
-  it('여분 tripId 가 섞여 있어도 여행 경로로 새지 않는다 → null', () => {
+  it('savedStayId 가 없거나 비어 있으면 null(INV-4 — 반쪽 알림은 이동 없음)', () => {
+    expect(notificationAction('STAY_DETAIL', wire({}))).toBeNull();
+    expect(notificationAction('STAY_DETAIL', { savedStayId: '' })).toBeNull();
+    expect(notificationAction('STAY_DETAIL', null)).toBeNull();
+  });
+
+  it('여분 tripId 가 섞여 있어도 여행 경로로 새지 않는다 → /my/stays', () => {
     expect(
       notificationAction(
         'STAY_DETAIL',
         wire({ savedStayId: TRIP_UUID, tripId: 't1' })
       )
-    ).toBeNull();
+    ).toBe('/my/stays');
   });
 });
 
@@ -320,9 +326,10 @@ describe('AC-9 · PBT(CI 차단 게이트) — 임의 (actionType, payload)', ()
         );
 
         if (route === null) return;
-        expect(ROUTABLE.some((key) => FORMS[key].pattern.test(route))).toBe(
-          true
-        );
+        expect(
+          route === '/my/stays' ||
+            ROUTABLE.some((key) => FORMS[key].pattern.test(route))
+        ).toBe(true);
       }),
       { numRuns: 500 }
     );
@@ -336,6 +343,12 @@ describe('AC-9 · PBT(CI 차단 게이트) — 임의 (actionType, payload)', ()
           wire(payload)
         );
 
+        if (actionType === 'STAY_DETAIL') {
+          expect(route).toBe(
+            filled(field(payload, 'savedStayId')) ? '/my/stays' : null
+          );
+          return;
+        }
         const shouldRoute =
           isRoutable(actionType) &&
           FORMS[actionType].fields.every((key) => filled(field(payload, key)));

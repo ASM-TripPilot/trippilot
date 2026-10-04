@@ -130,7 +130,7 @@ describe('AC-10 · PLANB_REPLAN — 인라인 "대안 일정 보기" press 로 �
   });
 });
 
-describe('AC-10 · 나머지 3갈래 — 행 press 로 이동, 인라인 링크 없음', () => {
+describe('AC-10 · 나머지 4갈래 — 행 press 로 이동, 인라인 링크 없음', () => {
   it.each<[string, Notification, string]>([
     [
       'TRIP_ITINERARY(리마인드) → 일정 화면',
@@ -149,6 +149,15 @@ describe('AC-10 · 나머지 3갈래 — 행 press 로 이동, 인라인 링크 
         actionPayload: { tripId: 't1' },
       }),
       '/trips/t1/records/summary',
+    ],
+    [
+      'STAY_DETAIL(숙소 등록) → 등록 숙소 목록(TRIP-1222)',
+      notification({
+        kind: 'STAY',
+        actionType: 'STAY_DETAIL',
+        actionPayload: { savedStayId: '00000000-0000-4000-8000-0000000000bb' },
+      }),
+      '/my/stays',
     ],
     [
       'REFLECTION_DAILY → 그날 회고(dayDate)',
@@ -206,14 +215,6 @@ describe('AC-11 · 진입 표시 없음 — 인라인 링크 없음 · 버튼 �
         kind: 'PLAN_B',
         actionType: null,
         actionPayload: { tripId: 't1', triggerId: 'tr1' },
-      }),
-    ],
-    [
-      'STAY_DETAIL(결정2)',
-      notification({
-        kind: 'STAY',
-        actionType: 'STAY_DETAIL',
-        actionPayload: { savedStayId: '00000000-0000-4000-8000-0000000000bb' },
       }),
     ],
     [

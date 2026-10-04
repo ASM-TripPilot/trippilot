@@ -3,7 +3,7 @@ import type { Notification } from '@/shared/api/index.schemas';
 /**
  * TRIP-576 · l01 — 알림 1건을 딥링크 경로 문자열 또는 null(액션 없음)로 접는 순수 사영.
  * TRIP-946: 목적지는 서버가 말한 `actionType` 으로만 정한다(kind 폴백 폐지). STAY_DETAIL 은
- * 등록 숙소 상세 정의 전이라 액션 없음으로 접는다. 필수 필드가 없거나 빈 문자열이면 null(INV-4).
+ * 등록 숙소 상세가 없어 목록(`/my/stays`)으로 접는다(TRIP-1222). 필수 필드가 없거나 빈 문자열이면 null(INV-4).
  * 화면·행은 이 결과를 받기만 하고 재판정하지 않는다("조합·판정은 한 곳").
  */
 
@@ -23,6 +23,10 @@ export function notificationAction(
   actionType: Notification['actionType'],
   actionPayload: Notification['actionPayload']
 ): string | null {
+  // TRIP-1222: 등록 숙소 상세 화면이 없어 STAY_DETAIL 은 등록 숙소 목록으로 보낸다(savedStayId 필수).
+  if (actionType === 'STAY_DETAIL') {
+    return segment(actionPayload, 'savedStayId') == null ? null : '/my/stays';
+  }
   const tripId = segment(actionPayload, 'tripId');
   if (tripId == null) return null;
   switch (actionType) {
