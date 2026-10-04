@@ -84,6 +84,31 @@ class ChartTests(unittest.TestCase):
         self.assertIn("location / { return 404; }", config)
         self.assertIn("proxy_set_header X-Forwarded-Proto https;", config)
 
+    def assert_pdb_floors(self, documents, label=""):
+        """**PDB 가 있으면 그 컴포넌트의 복제본 바닥이 minAvailable+1 이상이어야 한다.**
+
+        `minAvailable: 1` 에 복제본이 1 이면 자발적 축출이 **영구히** 거부되어 노드
+        통합·교체가 멈춘다(EKS Auto 의 Karpenter 가 수시로 드레인한다). HPA 가 수를 쥔
+        컴포넌트는 Deployment 에 `replicas` 가 없으므로 바닥을 `minReplicas` 로 센다.
+
+        **헬퍼로 뺀 이유**: 오버라이드로 렌더하는 테스트(`--set ai.autoscaling.minReplicas=1`)가
+        이 불변식을 위반하는 매니페스트를 만들면서 검사하지 않았다. 렌더하는 모든 자리에서
+        같은 질문을 하게 만든다.
+        """
+        pdbs = [item for item in documents if item["kind"] == "PodDisruptionBudget"]
+        floors = {item["spec"]["scaleTargetRef"]["name"]: item["spec"]["minReplicas"]
+                  for item in documents if item["kind"] == "HorizontalPodAutoscaler"}
+        counts = {item["metadata"]["name"]: item["spec"].get("replicas")
+                  for item in documents if item["kind"] == "Deployment"}
+        for pdb in pdbs:
+            name = pdb["metadata"]["name"]
+            floor = floors.get(name, counts.get(name))
+            self.assertIsNotNone(floor, f"{label}/{name}: 복제본 바닥을 정하는 곳이 없다")
+            self.assertGreaterEqual(
+                floor, pdb["spec"]["minAvailable"] + 1,
+                f"{label}/{name}: PDB minAvailable={pdb['spec']['minAvailable']} 인데 "
+                f"복제본 바닥이 {floor} 다 — 드레인이 영구히 막힌다")
+
     def test_environment_replicas_secrets_and_pod_security(self):
         # dev 도 2 다(2026-10-04) — 스토어 출시를 dev 스택으로 받기로 해서 노드 드레인·
         # 장애를 견뎌야 한다. 롤아웃은 원래 무중단이었다(maxUnavailable 0 · maxSurge 1).
@@ -127,22 +152,7 @@ class ChartTests(unittest.TestCase):
             self.assertEqual(env["JWT_SIGNING_KEY"]["valueFrom"]["secretKeyRef"]["name"], "trippilot-backend")
             pdbs = [item for item in documents if item["kind"] == "PodDisruptionBudget"]
             self.assertEqual(len(pdbs), 3)
-            # **PDB 가 있으면 그 컴포넌트의 복제본은 2 이상이어야 한다.** `minAvailable: 1` 에
-            # 복제본이 1 이면 자발적 축출이 **영구히** 거부되어 노드 통합·교체가 멈춘다
-            # (EKS Auto 의 Karpenter 가 수시로 드레인한다). HPA 가 수를 쥔 컴포넌트는
-            # `replicas` 가 없으므로 그쪽 바닥은 minReplicas 로 센다.
-            floors = {item["spec"]["scaleTargetRef"]["name"]: item["spec"]["minReplicas"]
-                      for item in documents if item["kind"] == "HorizontalPodAutoscaler"}
-            counts = {item["metadata"]["name"]: item["spec"].get("replicas")
-                      for item in documents if item["kind"] == "Deployment"}
-            for pdb in pdbs:
-                name = pdb["metadata"]["name"]
-                floor = floors.get(name, counts.get(name))
-                self.assertIsNotNone(floor, f"{name} 의 복제본 바닥을 정하는 곳이 없다")
-                self.assertGreaterEqual(
-                    floor, pdb["spec"]["minAvailable"] + 1,
-                    f"{environment}/{name}: PDB minAvailable={pdb['spec']['minAvailable']} 인데 "
-                    f"복제본 바닥이 {floor} 다 — 드레인이 영구히 막힌다")
+            self.assert_pdb_floors(documents, environment)
 
     def test_embedding_and_vector_wiring_are_opt_in(self):
         for enabled in (False, True):
@@ -167,9 +177,13 @@ class ChartTests(unittest.TestCase):
                 self.assertEqual(sources[1]["podSelector"]["matchLabels"], {"app.kubernetes.io/name": "trippilot-kb-load"})
 
     def test_autoscaling_replaces_static_replicas_and_skips_embedding(self):
+        # `minReplicas` 는 2 를 쓴다 — 이 테스트가 보려는 것은 "HPA 가 정적 replicas 를
+        # 대체하는가"이고, 1 로 두면 PDB 가 켜진 dev 값 위에서 **드레인이 영구히 막히는
+        # 매니페스트**를 만들어 버린다(assert_pdb_floors 가 그것을 잡는다). 오버라이드가
+        # 먹는지는 maxReplicas=4 가 증명한다.
         documents = render(embedding=True, overrides=[
             "--set", "ai.autoscaling.enabled=true",
-            "--set", "ai.autoscaling.minReplicas=1",
+            "--set", "ai.autoscaling.minReplicas=2",
             "--set", "ai.autoscaling.maxReplicas=4",
         ])
         scalers = {item["metadata"]["name"]: item
@@ -184,6 +198,8 @@ class ChartTests(unittest.TestCase):
         # 다음 helm upgrade 가 HPA 가 정한 수를 되돌린다.
         self.assertNotIn("replicas", deployments["ai"]["spec"])
         self.assertEqual(deployments["embedding"]["spec"]["replicas"], 1)
+        # dev 값 위에 minReplicas=1 을 덮었다 — PDB 가 켜진 환경이므로 불변식이 걸린다.
+        self.assert_pdb_floors(documents, "autoscaling-override")
 
     def test_autoscaling_is_off_in_the_chart_default(self):
         """차트 기본값은 꺼짐이다 — 켜는 것은 **환경 파일의 선택**이어야 한다.

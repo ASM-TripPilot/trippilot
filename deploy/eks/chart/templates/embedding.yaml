@@ -11,7 +11,13 @@ spec:
   progressDeadlineSeconds: 1200
   strategy:
     type: RollingUpdate
-    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+    # **서지를 쓰지 않는다**(2026-10-05). `maxSurge: 1` 이면 5Gi 짜리 파드가 **둘** 떠야 하고,
+    # 그건 거의 항상 Karpenter 신규 노드를 롤아웃의 임계 경로에 넣는다 — 콜드 노드의 2GB 이미지
+    # 풀 + 모델 로드까지 합치면 helm `--timeout` 안에 못 끝날 수 있고, `--atomic` 이면 릴리스
+    # **전체가 롤백**된다(인증서 주석까지 되돌아간다).
+    # 공백을 받아들이는 근거: AI 는 임베딩 없이 규칙 랭킹으로 degraded 하는 계약이다(INV-4).
+    # 가용성보다 **배포가 끝나는 것**이 먼저다 — 안 끝나면 보호 설정도 같이 롤백된다.
+    rollingUpdate: { maxUnavailable: 1, maxSurge: 0 }
   selector:
     matchLabels:
       {{- include "trippilot.selector" (dict "root" . "component" "embedding") | nindent 6 }}
