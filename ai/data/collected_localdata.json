@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "source": "LOCALDATA",
-  "collected_at": "2026-10-04T09:19:55.033301+00:00",
+  "collected_at": "2026-10-04T12:23:19.532700+00:00",
   "stats": {
     "source_file": "식품_일반음식점.csv",
     "source_updated_max": "2026-09-07 22:47:52",
@@ -31,19 +31,19 @@
       "gap_region_centers": 61
     },
     "picked": 11389,
-    "gate_merged": 205,
+    "gate_merged": 220,
     "gate_drops": {
       "policy_non_travel:convenience_store": 3
     },
-    "passed": 11181,
+    "passed": 11166,
     "by_type": {
-      "한식": 7809,
-      "횟집": 841,
+      "한식": 7803,
+      "횟집": 840,
       "식육(숯불구이)": 599,
-      "경양식": 450,
+      "경양식": 444,
       "중국식": 440,
-      "분식": 376,
-      "일식": 167,
+      "분식": 375,
+      "일식": 166,
       "통닭(치킨)": 143,
       "탕류(보신용)": 114,
       "뷔페식": 81,
@@ -55,13 +55,13 @@
       "복어취급": 9
     },
     "by_sido": {
-      "강원특별자치도": 2028,
-      "경상북도": 1794,
-      "경상남도": 1493,
-      "충청남도": 1387,
-      "전남광주통합특별시": 1350,
+      "강원특별자치도": 2022,
+      "경상북도": 1792,
+      "경상남도": 1492,
+      "충청남도": 1385,
+      "전남광주통합특별시": 1349,
       "전북특별자치도": 881,
-      "경기도": 800,
+      "경기도": 797,
       "충청북도": 768,
       "제주특별자치도": 277,
       "인천광역시": 161,
@@ -70,7 +70,7 @@
       "세종특별자치시": 1
     },
     "region_check": {
-      "sigungu": 11180,
+      "sigungu": 11165,
       "sido_only": 1
     },
     "gap_anchors_without_pick_2km": 91,
@@ -2926,38 +2926,6 @@
       }
     },
     {
-      "provisional_id": "localdata-4181000-101-2020-00227",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4181000-101-2020-00227",
-        "name": "오월학교",
-        "category": "FOOD",
-        "coord": {
-          "lat": 37.971461619665405,
-          "lng": 127.6346450592351
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "일식"
-      ],
-      "region": "춘천시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4181000-101-2020-00227",
-        "address": "강원특별자치도 춘천시 서면 납실길 160, 1층",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-4181000-101-2020-00258",
       "source": "LOCALDATA",
       "poi": {
@@ -4906,38 +4874,6 @@
       "provenance": {
         "content_id": "4191000-101-2011-00343",
         "address": "강원특별자치도 원주시 지정면 구재로 16",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4191000-101-2011-00375",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4191000-101-2011-00375",
-        "name": "아뜰리에안",
-        "category": "FOOD",
-        "coord": {
-          "lat": 37.353571636644894,
-          "lng": 127.78563177510264
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "한식"
-      ],
-      "region": "원주시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4191000-101-2011-00375",
-        "address": "강원특별자치도 원주시 지정면 원양2로 135",
         "image_url": null
       }
     },
@@ -9930,38 +9866,6 @@
       "provenance": {
         "content_id": "4221000-101-2020-00005",
         "address": "강원특별자치도 태백시 태백산로 4760 (소도동)",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4221000-101-2020-00017",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4221000-101-2020-00017",
-        "name": "백번의봄",
-        "category": "FOOD",
-        "coord": {
-          "lat": 37.2004088446919,
-          "lng": 128.9604158085135
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "한식"
-      ],
-      "region": "태백시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4221000-101-2020-00017",
-        "address": "강원특별자치도 태백시 태백로 422 (화전동)",
         "image_url": null
       }
     },
@@ -28398,38 +28302,6 @@
       }
     },
     {
-      "provisional_id": "localdata-4271000-101-2014-00033",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4271000-101-2014-00033",
-        "name": "외룡송어회 캠핑장",
-        "category": "FOOD",
-        "coord": {
-          "lat": 37.11673084092918,
-          "lng": 128.64225117880457
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "횟집"
-      ],
-      "region": "영월군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4271000-101-2014-00033",
-        "address": "강원특별자치도 영월군 김삿갓면 직실길 7",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-4271000-101-2015-00007",
       "source": "LOCALDATA",
       "poi": {
@@ -41834,38 +41706,6 @@
       "provenance": {
         "content_id": "4301000-101-2020-00050",
         "address": "강원특별자치도 철원군 갈말읍 갈말로 369, 기와집",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4301000-101-2020-00051",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4301000-101-2020-00051",
-        "name": "카페 은하수",
-        "category": "FOOD",
-        "coord": {
-          "lat": 38.1997167356126,
-          "lng": 127.27747190818444
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "경양식"
-      ],
-      "region": "철원군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4301000-101-2020-00051",
-        "address": "강원특별자치도 철원군 동송읍 한탄강길 112, 1-2층",
         "image_url": null
       }
     },
@@ -62446,38 +62286,6 @@
       }
     },
     {
-      "provisional_id": "localdata-4351000-101-2019-00001",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4351000-101-2019-00001",
-        "name": "플리즈웨잇(Please wait)",
-        "category": "FOOD",
-        "coord": {
-          "lat": 37.96862531003278,
-          "lng": 128.76190951498387
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "경양식"
-      ],
-      "region": "양양군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4351000-101-2019-00001",
-        "address": "강원특별자치도 양양군 현남면 인구길 28-23",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-4351000-101-2019-00002",
       "source": "LOCALDATA",
       "poi": {
@@ -77710,38 +77518,6 @@
       }
     },
     {
-      "provisional_id": "localdata-4160000-101-2019-00064",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4160000-101-2019-00064",
-        "name": "어텐디드가든카페",
-        "category": "FOOD",
-        "coord": {
-          "lat": 37.8945112403516,
-          "lng": 127.55787188036945
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "한식"
-      ],
-      "region": "가평군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4160000-101-2019-00064",
-        "address": "경기도 가평군 북면 화악산로 131, 1층",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-4160000-101-2019-00113",
       "source": "LOCALDATA",
       "poi": {
@@ -79466,38 +79242,6 @@
       "provenance": {
         "content_id": "4170000-101-2016-00119",
         "address": "경기도 양평군 단월면 석산로 1151",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4170000-101-2016-00121",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4170000-101-2016-00121",
-        "name": "산음캠핑",
-        "category": "FOOD",
-        "coord": {
-          "lat": 37.59966267730518,
-          "lng": 127.59708917983033
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "한식"
-      ],
-      "region": "양평군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4170000-101-2016-00121",
-        "address": "경기도 양평군 단월면 고북길 76-23",
         "image_url": null
       }
     },
@@ -83146,38 +82890,6 @@
       "provenance": {
         "content_id": "5700000-101-2020-00080",
         "address": "경기도 여주시 산북면 광여로 1432-4",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-5700000-101-2023-00098",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5700000-101-2023-00098",
-        "name": "루덴시아",
-        "category": "FOOD",
-        "coord": {
-          "lat": 37.40206025113121,
-          "lng": 127.46108620250159
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "경양식"
-      ],
-      "region": "여주시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5700000-101-2023-00098",
-        "address": "경기도 여주시 산북면 금품1로 177, 26동",
         "image_url": null
       }
     },
@@ -94442,38 +94154,6 @@
       "provenance": {
         "content_id": "5340000-101-2018-00144",
         "address": "경상남도 사천시 곤명면 곤수로 32, 2층",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-5340000-101-2019-00002",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5340000-101-2019-00002",
-        "name": "비토애",
-        "category": "FOOD",
-        "coord": {
-          "lat": 34.983398410939124,
-          "lng": 127.96667505655883
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "분식"
-      ],
-      "region": "사천시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5340000-101-2019-00002",
-        "address": "경상남도 사천시 서포면 토끼로 234, 1층",
         "image_url": null
       }
     },
@@ -155918,38 +155598,6 @@
       }
     },
     {
-      "provisional_id": "localdata-5060000-101-2020-00031",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5060000-101-2020-00031",
-        "name": "양조장카페",
-        "category": "FOOD",
-        "coord": {
-          "lat": 36.10692804211114,
-          "lng": 128.18810891569717
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "경양식"
-      ],
-      "region": "김천시",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5060000-101-2020-00031",
-        "address": "경상북도 김천시 남면 옥산길 12",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-5060000-101-2020-00083",
       "source": "LOCALDATA",
       "poi": {
@@ -181322,38 +180970,6 @@
       "provenance": {
         "content_id": "5190000-101-2023-00001",
         "address": "경상북도 청도군 운문면 청려로 4730",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-5190000-101-2023-00006",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5190000-101-2023-00006",
-        "name": "엘파라이소365",
-        "category": "FOOD",
-        "coord": {
-          "lat": 35.66379732585089,
-          "lng": 128.7227945790614
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "경양식"
-      ],
-      "region": "청도군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5190000-101-2023-00006",
-        "address": "경상북도 청도군 화양읍 소라2길 36-13",
         "image_url": null
       }
     },
@@ -216298,38 +215914,6 @@
       "provenance": {
         "content_id": "5830000-101-2016-00041",
         "address": "전남광주통합특별시 담양군 용면 월계길 1",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-5830000-101-2018-00044",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-5830000-101-2018-00044",
-        "name": "까망감",
-        "category": "FOOD",
-        "coord": {
-          "lat": 35.395806017333136,
-          "lng": 127.00005504804098
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "한식"
-      ],
-      "region": "담양군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "5830000-101-2018-00044",
-        "address": "전남광주통합특별시 담양군 용면 추월산로 900-9",
         "image_url": null
       }
     },
@@ -313870,38 +313454,6 @@
       }
     },
     {
-      "provisional_id": "localdata-4590000-101-2006-00017",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4590000-101-2006-00017",
-        "name": "고목정",
-        "category": "FOOD",
-        "coord": {
-          "lat": 36.438140642180656,
-          "lng": 126.84546485448166
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "경양식"
-      ],
-      "region": "청양군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4590000-101-2006-00017",
-        "address": "충청남도 청양군 대치면 칠갑산로 668-19",
-        "image_url": null
-      }
-    },
-    {
       "provisional_id": "localdata-4590000-101-2006-00019",
       "source": "LOCALDATA",
       "poi": {
@@ -322730,38 +322282,6 @@
       "provenance": {
         "content_id": "4620000-101-2015-00054",
         "address": "충청남도 태안군 고남면 월고지길 8-56",
-        "image_url": null
-      }
-    },
-    {
-      "provisional_id": "localdata-4620000-101-2015-00074",
-      "source": "LOCALDATA",
-      "poi": {
-        "poi_id": "localdata-4620000-101-2015-00074",
-        "name": "청산수목원",
-        "category": "FOOD",
-        "coord": {
-          "lat": 36.68712488260391,
-          "lng": 126.2972069652301
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "saved_count": 0,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null,
-        "tags": [],
-        "source_ref": null
-      },
-      "tags": [
-        "한식"
-      ],
-      "region": "태안군",
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "4620000-101-2015-00074",
-        "address": "충청남도 태안군 남면 연꽃길 70",
         "image_url": null
       }
     },

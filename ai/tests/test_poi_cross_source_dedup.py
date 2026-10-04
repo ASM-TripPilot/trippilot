@@ -23,7 +23,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from hypothesis import given, settings
+from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
 from trippilot.domain.poi import OpenHour, PoiCategory
@@ -328,11 +328,13 @@ def test_pbt_주소키_병합은_FOOD_CAFE_에만_적용된다(
 ) -> None:
     """같은 입력을 **카테고리만 바꿔** 대조한다 — 같은 주소 + 포함관계 상호일 때
     FOOD·CAFE 는 병합, 그 밖(관광지·문화·자연·체험·쇼핑)은 2건으로 남는다.
+    (상호 **완전 일치**는 ㉢ 이 카테고리 무관하게 붙이므로 여기서는 뺀다 — 아래 5′ 절.)
 
     상호 부분일치는 식품업소에서만 검증된 규칙이다(폐업 대조 대상이 식품위생업소뿐).
     관광지에 그대로 쓰면 포함 관계인 **다른** POI 를 병합한다 — 공유본 18,607건에서
     전 카테고리 적용 시 57쌍 중 대부분이 오탐이었다.
     """
+    assume(normalize_business_name(names[0]) != normalize_business_name(names[1]))
     c0, c1 = coords
     pts = ((c0.lat, c0.lng), (c1.lat, c1.lng))
 
@@ -368,6 +370,65 @@ def test_같은_건물_같은_상호_식당은_병합된다() -> None:
     ])
     assert len(report.passed) == 1 and report.merged == 1
     assert str(report.passed[0].poi.poi_id) == "tourapi-1"
+
+
+# ── 5′. 주소 키 + 상호 완전 일치는 카테고리 무관 (TRIP-1231) ─────────
+@settings(max_examples=60, deadline=None)
+@given(
+    names=same_store_name_pairs(),
+    addresses=road_address_pairs(),
+    coords=coord_pairs_apart(max_km=10.0),
+    cats=st.tuples(st.sampled_from(PoiCategory), st.sampled_from(PoiCategory)),
+)
+def test_pbt_같은_주소_같은_상호는_분류가_달라도_한_건이다(
+    names, addresses, coords, cats
+) -> None:
+    """출처마다 분류가 갈린다 — TourAPI 카페 ⟷ LOCALDATA 일반음식점, 캠핑장·수목원 ⟷ 그 이름으로
+    인허가를 낸 식당. 같은 주소 + 같은 상호면 한 건이고, 남는 쪽은 먼저 온 레코드(분류 포함)다."""
+    assume(normalize_business_name(names[0]) == normalize_business_name(names[1]))
+    c0, c1 = coords
+    first, second = _two_sources(
+        names, addresses, ((c0.lat, c0.lng), (c1.lat, c1.lng)), cats[0])
+    report = CollectionGate().apply([first, replace(second, category=cats[1])])
+
+    assert len(report.passed) == 1 and report.merged == 1
+    assert _conserved(report, 2)
+    assert str(report.passed[0].poi.poi_id) == "tourapi-101"
+    assert report.passed[0].poi.category is cats[0]
+
+
+@settings(max_examples=60, deadline=None)
+@given(
+    names=same_store_name_pairs(),
+    addresses=road_address_pairs(),
+    coords=coord_pairs_apart(max_km=10.0),
+    cats=st.lists(st.sampled_from(PoiCategory), min_size=2, max_size=2, unique=True),
+)
+def test_pbt_분류가_다르면_포함관계_상호는_안_붙는다(
+    names, addresses, coords, cats
+) -> None:
+    """㉢ 은 완전 일치만 본다 — 포함 관계로 넓히면 '절 ⟷ 그 안 문화재' 류 오탐이 분류 사이로 번진다."""
+    assume(normalize_business_name(names[0]) != normalize_business_name(names[1]))
+    c0, c1 = coords
+    first, second = _two_sources(
+        names, addresses, ((c0.lat, c0.lng), (c1.lat, c1.lng)), cats[0])
+    report = CollectionGate().apply([first, replace(second, category=cats[1])])
+
+    assert len(report.passed) == 2 and report.merged == 0
+
+
+def test_수목원과_같은_이름_식당은_멀어도_병합된다() -> None:
+    """실측 회귀(TRIP-1231) — 공유본 NATURE '청산수목원' ⟷ LOCALDATA 일반음식점 '청산수목원',
+    173.5m. 50m(㉠) 밖이고 분류도 다르지만 주소 키 + 상호 완전 일치라 같은 곳이다."""
+    address = "충청남도 태안군 남면 연꽃길 70"
+    report = CollectionGate().apply([
+        _cand("1", name="청산수목원", address=address,
+              category=PoiCategory.NATURE, lat=36.6045, lng=126.2940),
+        _cand("2", name="청산수목원", address=address,
+              category=PoiCategory.FOOD, lat=36.6060, lng=126.2945, source="localdata"),
+    ])
+    assert len(report.passed) == 1 and report.merged == 1
+    assert report.passed[0].poi.category is PoiCategory.NATURE
 
 
 # ── 6. 배치 전체 — 중복 비율 0~100% 스윕 ───────────────────────────

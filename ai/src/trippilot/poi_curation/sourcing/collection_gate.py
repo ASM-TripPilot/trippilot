@@ -11,6 +11,7 @@ ai측 게이트 코드가 부재해(백엔드 C7 `PoiCollectionGate`만 실재) 
    `closed_refs` 주입 시). 설계의 Places API 교차확인은 교차 어댑터 부재로 이연
    (정형 공공데이터라 웹 추출 대비 위험 낮음).
 3. 중복 — source_ref 동일 또는 (동일 카테고리 + 정규화 이름 동일 + 50m 이내) 병합.
+   주소 키 + 상호 완전 일치는 카테고리가 달라도 병합한다(TRIP-1231).
    병합은 먼저 온 레코드를 지키되 결측 필드(영업시간)만 보충 — 조용한 덮어쓰기 금지.
 4. 신뢰 — 출처 태깅: 정형 API이므로 PoiSource.PLACES_API (WEB 아님 — confidence
    비필수). dataQuality는 백엔드 판정 기준과 동형(영업시간+대표사진 완비=FULL).
@@ -30,6 +31,7 @@ from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.poi_curation.sourcing.mapping import (
     addr_key,
     non_travel_reason,
+    normalize_business_name,
     same_business_name,
 )
 from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
@@ -208,7 +210,18 @@ class CollectionGate:
     ) -> int | None:
         name = _normalize_name(c.name)
         key = addr_key(c.address)
+        biz = normalize_business_name(c.name)
         for i, (k, k_coord) in enumerate(kept):
+            # ㉢ 같은 주소 + 같은 상호(완전 일치) — 카테고리가 달라도 같은 곳이다 (TRIP-1231).
+            #    출처마다 분류가 갈린다: TourAPI 가 카페로 둔 가게를 LOCALDATA 는 일반음식점으로,
+            #    캠핑장·수목원 안 식당은 그 시설 이름으로 인허가를 낸다. 공유본 × LOCALDATA 실측
+            #    15쌍(카페 9·체험 4·관광 1·자연 1)이 전부 이 모양이었다. **완전 일치만** 본다 —
+            #    포함 관계로 넓히면 ㉡ 주석의 57쌍 오탐(절 ⟷ 그 안 문화재)이 돌아온다.
+            #    분류는 먼저 온 쪽을 따른다(먼저 온 레코드 유지 — 3단 공통 규칙).
+            if (key is not None and biz
+                    and normalize_business_name(k.name) == biz
+                    and addr_key(k.address) == key):
+                return i
             if k.category is not c.category:
                 continue
             # ㉠ 같은 이름이 코앞에 — 한 출처 안의 중복, 그리고 교차 출처의 94.7%

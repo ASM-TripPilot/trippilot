@@ -219,22 +219,22 @@ def to_candidate(
     )
 
 
-def shared_food_candidates(doc: Mapping) -> list[SourcingCandidate]:
-    """공유본(`collected_pois.json`, TourAPI 등록 제안) → 게이트 비교 대상. FOOD 만.
+def shared_tourapi_candidates(doc: Mapping) -> list[SourcingCandidate]:
+    """공유본(`collected_pois.json`, TourAPI 등록 제안) → 게이트 비교 대상. **전 카테고리.**
 
-    게이트 3단은 같은 카테고리끼리만 병합하므로 LOCALDATA(FOOD)와 견줄 것은 FOOD 뿐이다.
+    게이트 3단 ㉢ 은 같은 주소 + 같은 상호면 카테고리가 달라도 병합한다(TRIP-1231) — TourAPI 가
+    카페·캠핑장·수목원으로 둔 곳을 LOCALDATA 가 일반음식점으로 다시 들고 오므로, FOOD 만 넘기면 그
+    쌍을 못 본다. 공백 판정(7km 안 식당 수)은 호출측이 FOOD 만 골라 센다.
     """
     out: list[SourcingCandidate] = []
     for item in doc.get("proposals", ()):
         poi = item["poi"]
-        if poi.get("category") != PoiCategory.FOOD.value:
-            continue
         prov = item.get("provenance") or {}
         out.append(SourcingCandidate(
             source_ref=str(prov.get("content_id") or poi["poi_id"]),
             kind=str(prov.get("content_type_id") or ""), name=poi["name"],
             address=prov.get("address"), lat=poi["coord"]["lat"], lng=poi["coord"]["lng"],
-            category=PoiCategory.FOOD, category_codes=(), open_hours=(), hours_raw=None,
+            category=PoiCategory(poi["category"]), category_codes=(), open_hours=(), hours_raw=None,
             image_url=prov.get("image_url"), modified_at=prov.get("modified_time"),
             source="tourapi",
         ))
@@ -337,14 +337,15 @@ def _sido(address: str | None) -> str:
 
 
 def gate_against_tourapi(
-    tour_food: Sequence[SourcingCandidate],
+    tour: Sequence[SourcingCandidate],
     picks: Sequence[SourcingCandidate],
     gate: CollectionGate | None = None,
 ) -> GateOutcome:
-    """기존 수집 게이트를 그대로 태운다 — TourAPI FOOD **뒤에** LOCALDATA 를 붙여서.
+    """기존 수집 게이트를 그대로 태운다 — TourAPI 공유본 **뒤에** LOCALDATA 를 붙여서.
 
-    게이트 3단은 먼저 온 것을 지키므로 같은 가게(같은 이름 50m 안 · 같은 주소 키 + 같은 상호)면
-    TourAPI 쪽이 남고(영업시간·사진이 있다) LOCALDATA 는 병합으로 빠진다. 산출은 LOCALDATA 만이고,
+    게이트 3단은 먼저 온 것을 지키므로 같은 가게(같은 이름 50m 안 · 같은 주소 키 + 같은 상호 ·
+    카테고리가 달라도 같은 주소 키 + 같은 상호 완전 일치)면 TourAPI 쪽이 남고(영업시간·사진이 있다)
+    LOCALDATA 는 병합으로 빠진다. 산출은 LOCALDATA 만이고,
     순서는 시도 이름 순 → 그 안에서 들어온 순(관리번호 순)이다.
 
     **시도 단위로 나눠 태운다.** 게이트 3단은 kept 전체를 선형 탐색해 한 지역 배치 규모에서만
@@ -359,7 +360,7 @@ def gate_against_tourapi(
     gate = gate or CollectionGate()
     batches: defaultdict[str, tuple[list[SourcingCandidate], list[SourcingCandidate]]] = (
         defaultdict(lambda: ([], [])))
-    for c in tour_food:
+    for c in tour:
         batches[_sido(c.address)][0].append(c)
     for c in picks:
         batches[_sido(c.address)][1].append(c)
