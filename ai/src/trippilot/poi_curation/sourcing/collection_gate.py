@@ -40,7 +40,7 @@ from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSou
 _KR_LAT = (32.5, 39.5)
 _KR_LNG = (124.0, 132.5)
 _DUP_RADIUS_M = 50.0
-# 주소 키 병합을 허용하는 카테고리 — 상호 부분일치가 검증된 범위
+# 상호 **부분일치**(㉡)를 허용하는 카테고리 — 검증된 범위. 완전 일치(㉢)는 카테고리 무관
 # (LOCALDATA 인허가가 식품위생업소라, 2출처가 실제로 겹치는 곳도 여기다)
 _ADDR_DEDUP_CATEGORIES = frozenset({PoiCategory.FOOD, PoiCategory.CAFE})
 
@@ -168,7 +168,9 @@ class CollectionGate:
                 base = replace(base, hours_raw=c.hours_raw, rest_raw=c.rest_raw)
             if not base.image_url and c.image_url:
                 base = replace(base, image_url=c.image_url)
-            if not base.detail_raw and c.detail_raw:
+            # 상세 원문은 벤더 필드명이 타입별이다 — 분류가 다른 병합(㉢)에서 옮기면 문화시설
+            # 레코드에 판매품목이 실린다(공유본 1쌍: 장생포고래박물관 문화 ⟷ 쇼핑).
+            if not base.detail_raw and c.detail_raw and base.category is c.category:
                 base = replace(base, detail_raw=c.detail_raw)
             kept[idx] = (base, base_coord)
 
@@ -217,7 +219,8 @@ class CollectionGate:
             #    캠핑장·수목원 안 식당은 그 시설 이름으로 인허가를 낸다. 공유본 × LOCALDATA 실측
             #    15쌍(카페 9·체험 4·관광 1·자연 1)이 전부 이 모양이었다. **완전 일치만** 본다 —
             #    포함 관계로 넓히면 ㉡ 주석의 57쌍 오탐(절 ⟷ 그 안 문화재)이 돌아온다.
-            #    분류는 먼저 온 쪽을 따른다(먼저 온 레코드 유지 — 3단 공통 규칙).
+            #    같은 분류에도 걸린다 — 괄호 주기·지점 꼬리표는 정규화로 떨어지므로 같은 건물의
+            #    'X(본관)'·'X(별관)' 도 한 건이다(공유본 0쌍). 분류는 먼저 온 쪽을 따른다.
             if (key is not None and biz
                     and normalize_business_name(k.name) == biz
                     and addr_key(k.address) == key):

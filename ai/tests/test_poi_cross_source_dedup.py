@@ -8,7 +8,8 @@
 여기서 증명하는 것은 네 방향이다.
 - **붙어야 할 것은 붙는다** — 표기·좌표·출처가 어떻게 흔들려도 한 건 (merged=1).
 - **붙으면 안 될 것은 안 붙는다** — 같은 건물의 다른 가게, 1자 상호, 그리고
-  주소 키가 유효한 FOOD·CAFE 밖의 카테고리(개심사 ⟷ 그 안의 문화재).
+  포함 관계 상호는 FOOD·CAFE 밖(개심사 ⟷ 그 안의 문화재)과 분류가 다른 쌍에서.
+- **분류가 달라도 같은 곳은 붙는다** — 주소 키 + 상호 완전 일치(TRIP-1231).
 - **모름은 근거가 아니다** — addr_key None 끼리는 주소로 판정하지 않는다.
 - **기존 동작 보존** — 출처 미지정이면 잠정 ID 는 여전히 `tourapi-` 다.
 
@@ -314,7 +315,7 @@ def test_같은_주소_1자_상호는_붙지_않는다() -> None:
     assert len(report.passed) == 2 and report.merged == 0
 
 
-# ── 5. 주소 키 분기의 적용 범위 (FOOD·CAFE 한정) ───────────────────
+# ── 5. 포함 관계 상호(㉡)의 적용 범위 (FOOD·CAFE 한정) ──────────────
 @settings(max_examples=60, deadline=None)
 @given(
     names=same_store_name_pairs(),
@@ -415,6 +416,55 @@ def test_pbt_분류가_다르면_포함관계_상호는_안_붙는다(
     report = CollectionGate().apply([first, replace(second, category=cats[1])])
 
     assert len(report.passed) == 2 and report.merged == 0
+
+
+@settings(max_examples=60, deadline=None)
+@given(
+    names=same_store_name_pairs(),
+    addr_a=road_address_pairs(bldg="101"),
+    addr_b=road_address_pairs(bldg="202"),
+    coords=coord_pairs_apart(min_km=0.2, max_km=10.0),
+    cats=st.lists(st.sampled_from(PoiCategory), min_size=2, max_size=2, unique=True),
+)
+def test_pbt_분류가_다르면_건물이_다른_같은_상호는_안_붙는다(
+    names, addr_a, addr_b, coords, cats
+) -> None:
+    """㉢ 의 근거는 주소 키다 — 상호만 같은 다른 건물(체인 지점·동명 관광지)은 두 건이다."""
+    assume(normalize_business_name(names[0]) == normalize_business_name(names[1]))
+    c0, c1 = coords
+    first, second = _two_sources(
+        names, (addr_a[0], addr_b[0]), ((c0.lat, c0.lng), (c1.lat, c1.lng)), cats[0])
+    report = CollectionGate().apply([first, replace(second, category=cats[1])])
+
+    assert len(report.passed) == 2 and report.merged == 0
+
+
+def test_정규화하면_빈_상호끼리는_분류가_다르면_안_붙는다() -> None:
+    """'본점'·'(1층)' 은 정규화하면 둘 다 빈 문자열이다 — 같다고 읽으면 한 건물의 이름 없는 레코드가 뭉친다."""
+    address = "제주특별자치도 제주시 월랑로 36"
+    report = CollectionGate().apply([
+        _cand("1", name="본점", address=address, category=PoiCategory.SIGHT),
+        _cand("2", name="(1층)", address=address, category=PoiCategory.FOOD,
+              lat=33.51, lng=126.52, source="localdata"),
+    ])
+    assert len(report.passed) == 2 and report.merged == 0
+
+
+def test_분류가_다른_병합은_상세_원문을_옮기지_않는다() -> None:
+    """상세 원문은 벤더 필드명이 타입별이다 — 쇼핑의 판매품목이 문화시설 레코드에 실리면 안 된다.
+    영업시간은 같은 곳의 시간이라 종전대로 비어 있을 때 보충한다."""
+    address = "울산광역시 남구 장생포고래로 244"
+    hours = (OpenHour(1, 570, 1080),)
+    museum = _cand("1", name="장생포고래박물관", address=address, category=PoiCategory.CULTURE)
+    shop = replace(
+        _cand("2", name="장생포고래박물관", address=address, category=PoiCategory.SHOPPING,
+              open_hours=hours, hours_raw="09:30~18:00"),
+        detail_raw={"saleitem": "고래 기념품"})
+    (kept,) = CollectionGate().apply([museum, shop]).passed
+
+    assert kept.poi.category is PoiCategory.CULTURE
+    assert kept.candidate.detail_raw == {}
+    assert kept.poi.open_hours == hours
 
 
 def test_수목원과_같은_이름_식당은_멀어도_병합된다() -> None:
