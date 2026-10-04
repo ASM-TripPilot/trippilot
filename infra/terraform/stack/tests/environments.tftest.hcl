@@ -77,6 +77,15 @@ run "dev_is_private_and_cost_conscious" {
     error_message = "EKS must use explicit IAM access entries and the private API endpoint."
   }
 
+  # 차트의 `ai.autoscaling.enabled` 가 이 애드온을 전제로 켜져 있다(values-dev.yaml).
+  # 애드온이 사라지면 HPA 목표치가 `<unknown>` 이 되고, Deployment 는 `replicas` 를
+  # 렌더하지 않으므로 **아무도 replica 수를 정하지 않는 상태**가 된다. 버전은 비워
+  # 둬야 한다 — EKS 가 클러스터 버전에 맞는 기본 호환 버전을 고른다.
+  assert {
+    condition     = aws_eks_addon.metrics_server.addon_name == "metrics-server" && aws_eks_addon.metrics_server.cluster_name == aws_eks_cluster.this.name
+    error_message = "HPA needs metrics-server on the cluster; Auto Mode does not provide it."
+  }
+
   assert {
     condition     = data.aws_iam_role.cluster.name == "trippilot-dev-cluster" && data.aws_iam_role.node.name == "trippilot-dev-node" && aws_eks_cluster.this.role_arn == data.aws_iam_role.cluster.arn && aws_eks_cluster.this.compute_config[0].node_role_arn == data.aws_iam_role.node.arn && aws_eks_pod_identity_association.ai.role_arn == data.aws_iam_role.ai_pod.arn && aws_eks_pod_identity_association.ai.service_account == "ai"
     error_message = "EKS must read the separate fixed bootstrap-owned DEV cluster/node roles."
