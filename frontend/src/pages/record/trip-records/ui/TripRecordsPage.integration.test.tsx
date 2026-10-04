@@ -3,6 +3,7 @@
  */
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
+import { Linking } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
@@ -2588,6 +2589,9 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
   const COPY_NO_ASSET_ID =
     '선택한 사진을 불러올 수 없어요. 사진 전체 접근을 허용해 주세요';
 
+  const COPY_LIMITED =
+    '사진 접근이 "선택한 사진만"으로 제한돼 있어요. 설정에서 모든 사진 접근을 허용해 주세요';
+
   const COPY_FAILED = '사진을 불러올 수 없어요';
 
   const asset = (localAssetId = 'asset-new') => ({
@@ -2867,6 +2871,7 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
     it.each([
       ['사진 권한 거부', 'denied', COPY_DENIED],
       ['자산 번호 없음(선택한 사진만 허용)', 'no-asset-id', COPY_NO_ASSET_ID],
+      ['제한 접근', 'limited', COPY_LIMITED],
       ['피커 실패(재빌드 전 앱)', 'failed', COPY_FAILED],
     ])(
       'R7 %s → 카드 안 안내가 뜨고 요청은 0회, 다음 `+` 에 안내가 지워진다',
@@ -2888,6 +2893,46 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
         await settle();
 
         expect(screen.queryByTestId(NOTICE)).toBeNull();
+      }
+    );
+
+    it('R7b 권한 거부 안내에는 [설정 열기] 가 있고 누르면 openSettings 1회 · 피커 실패 안내에는 없다 (TRIP-1216 d)', async () => {
+      const openSettings = jest
+        .spyOn(Linking, 'openSettings')
+        .mockResolvedValue(undefined);
+      mockPick.mockResolvedValueOnce({ kind: 'failed' });
+      const card = await renderCard();
+
+      fireEvent.press(await within(card).findByTestId('record-trip-photo-add'));
+      await within(card).findByTestId(NOTICE);
+      expect(
+        within(card).queryByTestId('record-trip-photo-settings')
+      ).toBeNull();
+
+      mockPick.mockResolvedValueOnce({ kind: 'denied' });
+      fireEvent.press(within(card).getByTestId('record-trip-photo-add'));
+      fireEvent.press(
+        await within(card).findByTestId('record-trip-photo-settings')
+      );
+
+      expect(openSettings).toHaveBeenCalledTimes(1);
+      openSettings.mockRestore();
+    });
+
+    it.each(['limited', 'no-asset-id'])(
+      'R7c %s 안내에도 [설정 열기] 가 있다 (TRIP-1216 a)',
+      async (kind) => {
+        mockPick.mockResolvedValueOnce({ kind });
+        const card = await renderCard();
+
+        fireEvent.press(
+          await within(card).findByTestId('record-trip-photo-add')
+        );
+
+        expect(
+          await within(card).findByTestId('record-trip-photo-settings')
+        ).toBeTruthy();
+        expect(hitCount(PHOTOS_POST)).toBe(0);
       }
     );
 
