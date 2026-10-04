@@ -153,6 +153,7 @@
 - `src/__tests__/generatingRouteModePassthrough.test.tsx`  →  (export 없음)
 - `src/__tests__/importBoundary.test.ts`  →  (export 없음)
 - `src/__tests__/importBoundaryLayers.test.ts`  →  (export 없음)
+- `src/__tests__/itineraryEditRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/liveHubRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/liveLocationRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/locationConsentPutBodyOwnership.test.ts`  →  (export 없음)
@@ -283,7 +284,7 @@
 - `src/entities/trip/config/coverGradients.ts`  →  CoverTone · COVER_GRADIENTS · COVER_START · COVER_END
 
 ## src/entities/trip/
-- `src/entities/trip/index.ts`  →  formatDayLabel · formatNightsLabel · nightsCountLabel · nightsLabel · nightsOnlyLabel · formatShareCardPeriod · dayOfWeek · formatBaseNightRange · formatConfirmedDateRange · formatDateRangeWithDow · formatLegendDateRange · formatTripDateRange · formatTripRange · tripDayNumber · classifyTripPhase · isTripOngoing · COVER_GRADIENTS · pickCoverCity · PastTripRow · TripCard · ChevronRightGlyph
+- `src/entities/trip/index.ts`  →  formatDayLabel · formatNightsLabel · nightsCountLabel · nightsLabel · nightsOnlyLabel · formatShareCardPeriod · dayOfWeek · formatBaseNightRange · formatConfirmedDateRange · formatDateRangeWithDow · formatLegendDateRange · formatTripDateRange · formatTripRange · regionForDay · tripDayNumber · classifyTripPhase · isTripOngoing · COVER_GRADIENTS · pickCoverCity · PastTripRow · TripCard · ChevronRightGlyph
 
 ## src/entities/trip/lib/
 - `src/entities/trip/lib/coverCity.ts`  →  pickCoverCity
@@ -291,6 +292,7 @@
 - `src/entities/trip/lib/formatNights.ts`  →  formatNightsLabel · nightsLabel · nightsCountLabel · nightsOnlyLabel
 - `src/entities/trip/lib/formatShareCardPeriod.ts`  →  ShareCardPeriodOptions · formatShareCardPeriod
 - `src/entities/trip/lib/formatTripPeriod.ts`  →  WEEKDAY_LABELS · dayOfWeek · formatDateRange · formatSectionRange · formatTripRange · formatConfirmedDateRange · formatTripDateRange · formatLegendDateRange · formatDateRangeWithDow · formatBaseNightRange
+- `src/entities/trip/lib/regionForDay.ts`  →  regionForDay
 - `src/entities/trip/lib/tripDayNumber.ts`  →  tripDayNumber
 - `src/entities/trip/lib/tripPhase.ts`  →  TripPhase · classifyTripPhase · isTripOngoing
 
@@ -683,7 +685,6 @@
 
 ## src/pages/itinerary/itinerary-copick/model/
 - `src/pages/itinerary/itinerary-copick/model/candidateSelection.ts`  →  resolveCandidateSelection
-- `src/pages/itinerary/itinerary-copick/model/dayRegion.ts`  →  regionForDay
 - `src/pages/itinerary/itinerary-copick/model/radiusUsedLabel.ts`  →  formatRadiusUsed
 
 ## src/pages/itinerary/itinerary-copick/ui/
@@ -1574,4 +1575,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
-합계 964개 파일
+합계 965개 파일

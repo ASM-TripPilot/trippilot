@@ -7,7 +7,10 @@ import { ItineraryEditPage } from '@/pages/itinerary/itinerary-edit';
  * 이 주소로 왔다는 사실(라우트가 곧 진입 신호)만 `inTrip` 으로 넘긴다.
  */
 export default function PlanbManualRoute() {
-  const { tripId } = useLocalSearchParams<{ tripId: string }>();
+  const { tripId, date } = useLocalSearchParams<{
+    tripId: string;
+    date?: string;
+  }>();
 
-  return <ItineraryEditPage tripId={tripId} inTrip />;
+  return <ItineraryEditPage tripId={tripId} inTrip initialDate={date} />;
 }

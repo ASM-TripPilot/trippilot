@@ -882,11 +882,31 @@ describe('확정 셸(h16) 얼굴', () => {
 
       fireEvent.press(edit);
       // 형태 완전일치(★2·D5) — 객체형 push(goEdit 관용구), pathname·params 정확히.
+      // TRIP-1233 AC-2a — 보고 있는 날(첫 화면은 1일차)의 날짜도 싣는다.
       expect(mockPush).toHaveBeenCalledWith({
         pathname: '/trips/[tripId]/itinerary/edit',
-        params: { tripId: TRIP_ID },
+        params: { tripId: TRIP_ID, date: DAY1 },
       });
       expect(mockPush).toHaveBeenCalledTimes(1);
+    });
+
+    // TRIP-1233 AC-2a — index 가 아니라 날짜를 싣는다(h16 칩은 여행 기간, 편집기 칩은 일정 days 라 칸이
+    // 어긋날 수 있다 — 01 맹점 ②). 2일차를 보고 있으면 2일차 날짜다.
+    it('C2d · 2일차 칩을 본 뒤 일정 수정 → push params.date 가 2일차 날짜다', async () => {
+      useItinerary(() => HttpResponse.json(confirmedDefault()));
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+
+      fireEvent.press(screen.getByTestId('sheet-daychip-1'));
+      // 앵커 — 칩 누름이 실제로 보고 있는 날을 바꿨다.
+      expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('2일차');
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/trips/[tripId]/itinerary/edit',
+        params: { tripId: TRIP_ID, date: '2026-06-11' },
+      });
     });
 
     it('C2b · TRIP-939: 캡처 미장전(armed:false)이면 [공유하기]가 없고 [일정 수정] 1버튼이다', async () => {
@@ -1491,9 +1511,10 @@ describe('일정 수정 진입', () => {
       expect(edit).toHaveTextContent('일정 수정');
 
       fireEvent.press(edit);
+      // TRIP-1233 AC-2a — 보고 있는 날(1일차) 날짜도 싣는다.
       expect(mockPush).toHaveBeenCalledWith({
         pathname: '/trips/[tripId]/itinerary/edit',
-        params: { tripId: TRIP_ID },
+        params: { tripId: TRIP_ID, date: DAY1 },
       });
       expect(mockPush).toHaveBeenCalledTimes(1);
     });
@@ -2176,9 +2197,10 @@ describe('연타 가드 — 저장 직후 일정 수정 관통 차단', () => {
   const TRIP_ID = '11111111-1111-1111-1111-111111111111';
   const DAY1 = '2026-06-10';
 
+  // TRIP-1233 AC-2a — 일정 수정은 보고 있는 날(첫 화면 = 1일차)의 날짜를 싣는다.
   const EDIT_ROUTE = {
     pathname: '/trips/[tripId]/itinerary/edit',
-    params: { tripId: TRIP_ID },
+    params: { tripId: TRIP_ID, date: DAY1 },
   };
 
   function trip(): Trip {

@@ -178,10 +178,12 @@ export function ItineraryPlanPage({
   // 완성/확정 일정 → h12 편집 진입(TRIP-482·801 AC-2). `goCreate` 의 동적 라우트 push 관용구(객체
   // 1인자)를 복제해 tripId 를 경로 파라미터에 싣는다. 셸은 라우팅을 모르므로 여기서 배선한다.
   // TRIP-1013 #057 수신 — '일정 저장하기'의 창 안이면 무시(두 CTA 갈래가 이 함수를 같이 쓴다).
-  const goEdit = guardPress((): void => {
+  // TRIP-1233 — 보고 있는 날(칸 번호가 아니라 날짜)을 싣는다. h16 칸은 여행 기간 기준이라 편집기 칸
+  // (일정 days 기준)과 어긋날 수 있어, 편집기가 자기 days 에서 이 날짜로 칸을 찾는다.
+  const goEdit = guardPress((date: string): void => {
     router.push({
       pathname: '/trips/[tripId]/itinerary/edit',
-      params: { tripId },
+      params: { tripId, date },
     });
   });
 
@@ -392,10 +394,20 @@ export function ItineraryPlanPage({
         isConfirmed
           ? isShareCaptureArmed()
             ? [
-                { label: '일정 수정', variant: 'outline', onPress: goEdit },
+                {
+                  label: '일정 수정',
+                  variant: 'outline',
+                  onPress: () => goEdit(selectedDate),
+                },
                 { label: '공유하기', variant: 'primary', onPress: goShare },
               ]
-            : [{ label: '일정 수정', variant: 'outline', onPress: goEdit }]
+            : [
+                {
+                  label: '일정 수정',
+                  variant: 'outline',
+                  onPress: () => goEdit(selectedDate),
+                },
+              ]
           : [
               {
                 label: '일정 저장하기',

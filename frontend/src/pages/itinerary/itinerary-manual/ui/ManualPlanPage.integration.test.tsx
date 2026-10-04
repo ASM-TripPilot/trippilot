@@ -468,6 +468,7 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
    *  - 🔴 M4 ⌄ → 시각 시트(`itinerary-manual-time-*`) → 적용값이 PUT 에 실린다.
    *  - 🔴 M5·M6 저장 실패·미지정 제외를 침묵하지 않는다(INV-4) — 페이지 소유 안내 testID 2종.
    *  - 🔴 M7 장소 추가·카드 사이 +·뒤로가 라우터로 이어진다(옛 `itinerary-manual-add-place` 대체).
+   *    TRIP-1233 부터 말미 장소 추가도 보고 있는 날(`date`)을 싣는다 — 안 실으면 h13 이 1일차에 담는다.
    *    뒤로(‹)는 TRIP-1009 부터 `router.back` 이 아니라 일정 탭 `replace` 다(옛 C1b 는 TRIP-1038 로 삭제 — S1 주석).
    *
    * MANUAL 생성 POST 가드(G-a1~a3·I2)는 `ManualPlanPage.hookMock.test.tsx` 가 계속 잠근다 — 여기선
@@ -829,12 +830,13 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
       await ready();
 
       fireEvent.press(screen.getByTestId('itinerary-edit-add-place'));
+      // TRIP-1233 AC-1a — 말미 「장소 추가」도 보고 있는 날(date)을 싣는다(옛 계약은 tripId 만이었다).
       expect(mockPush).toHaveBeenLastCalledWith({
         pathname: '/trips/[tripId]/itinerary/manual/add',
-        params: { tripId: TRIP_ID },
+        params: { tripId: TRIP_ID, date: DAY },
       });
 
-      // 카드 사이 + 는 보고 있는 날(date)도 싣는다(TRIP-1115 03b 차단-1). 말미 「장소 추가」는 위처럼 그대로.
+      // 카드 사이 + 는 보고 있는 날(date)도 싣는다(TRIP-1115 03b 차단-1).
       fireEvent.press(screen.getByTestId('itinerary-edit-insert-0'));
       expect(mockPush).toHaveBeenLastCalledWith({
         pathname: '/trips/[tripId]/itinerary/manual/add',
@@ -883,6 +885,35 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
       expect(mockPush).toHaveBeenCalledWith({
         pathname: '/trips/[tripId]/itinerary/manual/add',
         params: { tripId: TRIP_ID, insertAfter: '0', date: DAY2 },
+      });
+    });
+
+    // TRIP-1233 AC-1a — 2일짜리라야 "항상 첫 날 날짜"를 박는 구현과 갈린다(위 M7 첫 케이스는 1일짜리).
+    it('2일차 칩으로 옮긴 뒤 말미 장소 추가는 2일차 date 를 싣는다', async () => {
+      const DAY2 = '2026-06-11';
+      server.use(
+        http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+          HttpResponse.json({
+            ...manualDraft(PLAIN),
+            days: [
+              { date: DAY, slots: PLAIN },
+              { date: DAY2, slots: [slot('d', '09:00:00', '10:00:00')] },
+            ],
+          })
+        )
+      );
+      renderPage();
+      await ready();
+
+      fireEvent.press(screen.getByTestId('itinerary-edit-day-2'));
+      // 앵커 — 2일차 카드가 보인다(칩 누름이 실제로 날을 바꿨다).
+      await screen.findByTestId(`slot-stopcard-${buildSlotKey(DAY2, 'd')}`);
+      fireEvent.press(screen.getByTestId('itinerary-edit-add-place'));
+
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/trips/[tripId]/itinerary/manual/add',
+        params: { tripId: TRIP_ID, date: DAY2 },
       });
     });
   });

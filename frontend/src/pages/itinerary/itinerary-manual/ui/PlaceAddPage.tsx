@@ -7,12 +7,12 @@ import { ActivityIndicator, Keyboard, Text, View } from 'react-native';
 import { addSlot, insertSlotAt } from '@/features/edit-itinerary';
 import { buildEditItineraryRequest } from '@/features/edit-itinerary';
 import { buildDraftPins } from '@/features/itinerary';
-import { useMultiRegionPlaces } from '@/features/explore';
 import { usePlacesInfinite } from '@/features/explore';
 import { PlaceAddHeader, PlaceAddRow } from '@/features/itinerary';
 import { MapSheetShell } from '@/widgets/map-sheet-shell';
 import { TimeSheet } from '@/widgets/time-sheet';
 import { suggestNextSlotTime } from '@/entities/itinerary-slot';
+import { regionForDay } from '@/entities/trip';
 import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripId,
@@ -35,7 +35,7 @@ const FALLBACK_CENTER = { lat: 37.5665, lng: 126.978 };
  * 검색 규율(AC-5 · TRIP-502): 카테고리·검색어를 서버 파라미터로(`GET /places?category=&q=`) — 검색은
  * 서버가 하고 커서 무한 스크롤로 전량 수신을 없앤다. 후보는 여행 목적지(`GET /trips/{tripId}` 의
  * `destinations[].region`)로 좁힌다(TRIP-981 #041) — 여행 조회가 끝날 때까지 장소 조회를 미루고(전국
- * 목록 깜빡임 방지), 2곳 이상이면 지역별 병합(`useMultiRegionPlaces`), 실패·0곳이면 `region` 없이 연다.
+ * 목록 깜빡임 방지), 2곳 이상이면 담을 날의 지역 하나(`regionForDay`, TRIP-1233), 실패·0곳이면 `region` 없이 연다.
  *
  * 추가 저장(TRIP-338 무심판 해소 — AC-6 통합 심판이 이 플로우를 잠근다): "추가" → `TimeSheet` 로 시각
  * 자유입력 → **삽입 index 분기**(AC-7): 라우트 `insertAfter`(선행 슬롯 index)가 있으면
@@ -67,41 +67,15 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
   // 검색은 서버가 한다(q) + 커서 무한 스크롤(TRIP-502) — 클라 이름 필터·전량 수신을 없앤다.
   const trimmedQuery = searchText.trim();
   // 후보는 여행 목적지로 좁힌다(TRIP-981 #041). 여행 조회가 끝나기 전엔 장소 조회를 켜지 않는다 —
-  // 켜면 전국 목록이 먼저 떴다가 바뀐다. 실패·목적지 0곳이면 regions 가 비어 region 없이 연다(INV-4).
+  // 켜면 전국 목록이 먼저 떴다가 바뀐다. 실패·목적지 0곳이면 region 없이 연다(INV-4).
   // 재시도 없음 — 기본 3회(1+2+4초)를 다 기다리면 실패 시 목록이 ~7초 빈다.
   const trip = useGetTripsTripId(tripId, { query: { retry: false } });
-  const regions = (trip.data?.destinations ?? []).map((dest) => dest.region);
-  const isMultiRegion = regions.length >= 2;
-  // 두 훅 모두 호출하고 enabled 로 가른다(훅 규칙, PlaceExplorePage 선례). 다지역 훅은 스스로
-  // regions.length >= 2 일 때만 켜진다.
-  const infinite = usePlacesInfinite(
-    {
-      ...(regions.length === 1 ? { region: regions[0] } : {}),
-      ...(selectedCategory ? { category: selectedCategory } : {}),
-      ...(trimmedQuery ? { q: trimmedQuery } : {}),
-    },
-    { enabled: !trip.isPending && !isMultiRegion }
-  );
-  const multi = useMultiRegionPlaces(regions, {
-    category: selectedCategory,
-    q: trimmedQuery,
-  });
-  const { items, fetchNextPage, hasNextPage, isFetchingNextPage } =
-    isMultiRegion ? multi : infinite;
-  // 다지역 훅은 isSuccess 를 안 준다 — 도착했고 실패가 아니면 성공으로 본다.
-  const isSuccess = isMultiRegion
-    ? !multi.isPending && !multi.isError
-    : infinite.isSuccess;
   const itinerary = useGetTripsTripIdItinerary(tripId);
   const save = usePutTripsTripIdItinerary();
 
-  function handleEndReached(): void {
-    if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
-  }
-
-  // 담을 대상 일자 — 라우트 `date`(카드 사이 "+" 가 편집기의 활성 일자를 싣는다, TRIP-1115)가 일정에 있으면
-  // 그 날, 없거나 미전달(말미 「장소 추가」)이면 첫 날. insertAfter 는 그 날 기준 index 라 날이 어긋나면
-  // 다른 날의 완료 카드 앞에 끼어든다(INV-U3-03). 일정 GET 미도착·실패면 undefined.
+  // 담을 대상 일자 — 라우트 `date`(편집기의 활성 일자 — 카드 사이 "+" TRIP-1115·말미 「장소 추가」
+  // TRIP-1233)가 일정에 있으면 그 날, 없거나 미전달(같이 짜기·후보 시트의 장소 검색)이면 첫 날.
+  // insertAfter 는 그 날 기준 index 라 날이 어긋나면 다른 날의 완료 카드 앞에 끼어든다(INV-U3-03). 일정 GET 미도착·실패면 undefined.
   const days = itinerary.data?.days ?? [];
   const targetDay = days.find((day) => day.date === date) ?? days[0];
   const targetDate = targetDay?.date;
@@ -109,6 +83,27 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
   // 시트 헤더 "장소 추가 · N일차" — N = 담을 일자 index+1.
   const targetDayIndex = days.findIndex((day) => day.date === targetDate);
   const dayNumber = (targetDayIndex >= 0 ? targetDayIndex : 0) + 1;
+
+  // 후보 지역 = 담을 날(헤더 N일차)의 지역 하나(TRIP-1233 AC-3 — 옛 다지역 병합은 1일차 지역을 앞에
+  // 세워 2일차를 못 채웠다). 다지역이면 N 을 알려면 일정이 와야 하므로 그때까지 조회를 미룬다.
+  const destinations = trip.data?.destinations ?? [];
+  const region = regionForDay(destinations, dayNumber);
+  const { items, fetchNextPage, hasNextPage, isFetchingNextPage, isSuccess } =
+    usePlacesInfinite(
+      {
+        ...(region !== null ? { region } : {}),
+        ...(selectedCategory ? { category: selectedCategory } : {}),
+        ...(trimmedQuery ? { q: trimmedQuery } : {}),
+      },
+      {
+        enabled:
+          !trip.isPending && !(destinations.length >= 2 && itinerary.isPending),
+      }
+    );
+
+  function handleEndReached(): void {
+    if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+  }
 
   // 전면 지도 — 담을 일자 슬롯 좌표로 핀을 세운다(MapSheetShell 이 MapView 를 소유하므로
   // 지도 census 신규 등재 불필요). 좌표 없으면 서울 기본 중심(FALLBACK_CENTER).

@@ -66,6 +66,10 @@ import { PlaceAddPage } from './PlaceAddPage';
  *  - 🔴 **D1·D2** date 가 있으면 그 날 slots 에 splice·헤더 N일차·기본 시각 앞 장소도 그 날.
  *  - 🟢선제 **D3·D4** date 미전달·일정에 없는 날이면 첫 날(후방호환·폴백).
  *
+ * TRIP-1233 추가 — 말미 「장소 추가」도 date 를 싣는다(보내는 쪽은 편집기 두 페이지):
+ *  - 🟢선제 **D5** date 만 있고 insertAfter 가 없으면 그 날 말미에 붙는다.
+ *  - 🔴 **B2a·B2b·B2c·B4** 다지역 여행의 후보는 담을 날의 지역만 조회한다(옛 두 지역 병합을 뒤집음).
+ *
  * 왜 통합 버킷인가: 최종 직렬화된 URL·나간 PUT 바디·재요청 횟수·캐시 무효화는 msw/스파이만 본다.
  * 3동작 뼈대: 준비=핸들러/래퍼/params → 실행=렌더/입력/칩/add → 단언=나간 URL·PUT 바디·보이는 트리.
  */
@@ -555,6 +559,22 @@ describe('🔴 D · TRIP-1115 — 라우트 date 가 있으면 그 날에 끼워
     expect(await screen.findByText('장소 추가 · 2일차')).toBeOnTheScreen();
   });
 
+  // TRIP-1233 AC-1c — 말미 「장소 추가」도 이제 date 를 싣는다(insertAfter 없음). 받는 쪽은 이미 있었지만
+  // date 만 있고 insertAfter 가 없는 조합을 잠근 케이스가 없었다(D1 은 insertAfter 동반, A7b 는 첫 날만).
+  it('D5 · date=2일차·insertAfter 없음 → 2일차 말미 [tA, tB, tC, p1] · 1일차 불변 · p1 은 tC 종료(19:00)부터 1시간 · 헤더 2일차 (선제 green)', async () => {
+    mockParams = { tripId: 't1', date: DAY2 };
+
+    const { day1, day2, p1 } = await addP1AfterItinerary();
+
+    expect(day2).toEqual(['tA', 'tB', 'tC', 'p1']);
+    expect(day1).toEqual(['sA', 'sB']);
+    expect({ startAt: p1?.startAt, endAt: p1?.endAt }).toEqual({
+      startAt: '19:00:00',
+      endAt: '20:00:00',
+    });
+    expect(screen.getByText('장소 추가 · 2일차')).toBeOnTheScreen();
+  });
+
   it('D3 · date 미전달이면 첫 날에 넣는다 — 1일차 [sA, p1, sB] · 2일차 불변 (후방호환 · 선제 green)', async () => {
     mockParams = { tripId: 't1', insertAfter: '0' };
 
@@ -997,6 +1017,10 @@ describe('TRIP-981 · A — 장소 추가 시트의 "+ 추가" 무반응', () =>
  *
  * 칩·검색·무한 스크롤 무회귀(AC-B4)는 위 P1~P4·A2b·E1~E3 가 그대로 맡는다(기본 목적지 = 부산 1곳).
  *
+ * TRIP-1233 계약 변경(AC-3 · 01b 결정 2) — 목적지가 2곳 이상이면 지역을 합치지 않고 **담을 날의 지역만**
+ * 조회한다(`regionForDay`, seq 순서로 박수만큼). 담을 날은 헤더 "N일차"와 같은 날이다 — 라우트 `date`
+ * 가 일정에 있으면 그 날, 없거나 모르는 날이면 1일차(B2a·B2b·B2c 개정, B4 신설).
+ *
  * 3동작 뼈대: 준비=여행 응답(목적지)·장소 핸들러 → 실행=렌더·칩·검색 → 단언=나간 /places 의 region·화면 카드.
  */
 describe('TRIP-981 · B — 후보를 여행 목적지로 좁힌다 (region)', () => {
@@ -1067,6 +1091,25 @@ describe('TRIP-981 · B — 후보를 여행 목적지로 좁힌다 (region)', (
     return hitsOf('GET', '/api/v1/trips/t1');
   }
 
+  /** TRIP-1233 — 부산(1박)·경주(1박) 여행 + 6/10·6/11 이틀 일정 + 지역별 장소. 2일차 = 경주. */
+  function serveTwoDayTrip(): void {
+    server.use(
+      http.get(`${BASE}/trips/:tripId`, () =>
+        HttpResponse.json(tripJson(TWO_REGIONS))
+      ),
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        HttpResponse.json({
+          ...ITINERARY_ENVELOPE,
+          days: [
+            { date: '2026-06-10', slots: [] },
+            { date: '2026-06-11', slots: [] },
+          ],
+        })
+      )
+    );
+    serveRegionalPlaces();
+  }
+
   it('🔴 B1a · 여행 조회가 끝날 때까지 장소를 조회하지 않고, 첫 요청부터 region=부산 이 실린다', async () => {
     // 준비 — 여행 응답을 손으로 풀 때까지 붙잡는다(목적지 부산).
     let releaseTrip!: () => void;
@@ -1118,7 +1161,9 @@ describe('TRIP-981 · B — 후보를 여행 목적지로 좁힌다 (region)', (
     expect(regions).toEqual(regions.map(() => '부산'));
   });
 
-  it('🔴 B2a · 목적지가 부산·경주 2곳이면 지역마다 조회해 두 지역 장소를 함께 그린다', async () => {
+  // TRIP-1233 AC-3 — 다지역 여행의 후보는 **담을 날의 지역만**이다(01b 결정 2, `regionForDay`). 옛 B2a·B2b
+  // 는 "두 지역을 합쳐 그린다"를 잠갔는데, 그 병합이 2일차(경주)를 채울 때 1일차(부산) 후보를 앞에 세웠다.
+  it('🔴 B2a · 목적지가 부산(1박)·경주(1박)이고 date 가 없으면(1일차) 부산만 조회하고 경주 장소는 안 그린다', async () => {
     server.use(
       http.get(`${BASE}/trips/:tripId`, () =>
         HttpResponse.json(tripJson(TWO_REGIONS))
@@ -1128,23 +1173,36 @@ describe('TRIP-981 · B — 후보를 여행 목적지로 좁힌다 (region)', (
 
     render(<PlaceAddPage tripId="t1" />, { wrapper: createWrapper() });
     await waitFor(() =>
-      expect(screen.getByTestId('itinerary-place-card-g1')).toBeOnTheScreen()
+      expect(screen.getByTestId('itinerary-place-card-p1')).toBeOnTheScreen()
     );
 
     const regions = regionsOf(placeHits());
-    expect(regions).not.toContain(null);
-    expect(uniqueSorted(regions)).toEqual(['경주', '부산']);
-    expect(screen.getByTestId('itinerary-place-card-p1')).toBeOnTheScreen();
-    expect(screen.getByTestId('itinerary-place-card-g2')).toBeOnTheScreen();
+    expect(regions.length).toBeGreaterThanOrEqual(1);
+    expect(regions).toEqual(regions.map(() => '부산'));
+    expect(screen.queryByTestId('itinerary-place-card-g1')).toBeNull();
   });
 
-  it('🔴 B2b · 다지역에서도 칩(category)·검색어(q)가 두 지역 요청 모두에 실린다', async () => {
-    server.use(
-      http.get(`${BASE}/trips/:tripId`, () =>
-        HttpResponse.json(tripJson(TWO_REGIONS))
-      )
+  it('🔴 B4 · 목적지가 부산(1박)·경주(1박)이고 date=2일차면 경주만 조회하고 부산 장소는 안 그린다 (AC-3)', async () => {
+    serveTwoDayTrip();
+    mockParams = { tripId: 't1', date: '2026-06-11' };
+
+    render(<PlaceAddPage tripId="t1" />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(screen.getByTestId('itinerary-place-card-g1')).toBeOnTheScreen()
     );
-    serveRegionalPlaces();
+
+    // "만" — 첫 요청부터 경주다. 일정·날짜를 알기 전에 1일차(부산)나 지역 없이 먼저 부르면 여기서 red.
+    const regions = regionsOf(placeHits());
+    expect(regions.length).toBeGreaterThanOrEqual(1);
+    expect(regions).toEqual(regions.map(() => '경주'));
+    expect(screen.getByTestId('itinerary-place-card-g2')).toBeOnTheScreen();
+    expect(screen.queryByTestId('itinerary-place-card-p1')).toBeNull();
+    expect(screen.getByText('장소 추가 · 2일차')).toBeOnTheScreen();
+  });
+
+  it('🔴 B2b · 다지역에서도 칩(category)·검색어(q)가 그날 지역 요청에 실린다', async () => {
+    serveTwoDayTrip();
+    mockParams = { tripId: 't1', date: '2026-06-11' };
     render(<PlaceAddPage tripId="t1" />, { wrapper: createWrapper() });
     await waitFor(() =>
       expect(screen.getByTestId('itinerary-place-card-g1')).toBeOnTheScreen()
@@ -1154,26 +1212,33 @@ describe('TRIP-981 · B — 후보를 여행 목적지로 좁힌다 (region)', (
     const beforeChip = placeHits().length;
     fireEvent.press(screen.getByTestId('itinerary-place-category-카페'));
     await waitFor(() =>
-      expect(screen.queryByTestId('itinerary-place-card-p1')).toBeNull()
+      expect(screen.queryByTestId('itinerary-place-card-g1')).toBeNull()
     );
     const chipHits = placeHits()
       .slice(beforeChip)
       .filter(
         (hit) => new URL(hit.url).searchParams.get('category') === '카페'
       );
-    expect(uniqueSorted(regionsOf(chipHits))).toEqual(['경주', '부산']);
+    expect(chipHits.length).toBeGreaterThanOrEqual(1);
+    expect(uniqueSorted(regionsOf(chipHits))).toEqual(['경주']);
 
     // 실행 ② — 검색어 '황리'. 검색 뒤에 나간 요청만 본다.
     const beforeSearch = placeHits().length;
     fireEvent.changeText(screen.getByTestId('itinerary-place-search'), '황리');
     await waitFor(() =>
-      expect(screen.queryByTestId('itinerary-place-card-g1')).toBeNull()
+      expect(
+        placeHits()
+          .slice(beforeSearch)
+          .some((hit) => new URL(hit.url).searchParams.get('q') === '황리')
+      ).toBe(true)
     );
     const searchHits = placeHits()
       .slice(beforeSearch)
       .filter((hit) => new URL(hit.url).searchParams.get('q') === '황리');
-    expect(uniqueSorted(regionsOf(searchHits))).toEqual(['경주', '부산']);
-    expect(screen.getByTestId('itinerary-place-card-g2')).toBeOnTheScreen();
+    expect(uniqueSorted(regionsOf(searchHits))).toEqual(['경주']);
+    expect(
+      await screen.findByTestId('itinerary-place-card-g2')
+    ).toBeOnTheScreen();
   });
 
   it('🔴 B2c · 다지역 조회가 성공했는데 0건이면 "검색 결과가 없어요"가 뜬다 (INV-4)', async () => {
@@ -1191,8 +1256,8 @@ describe('TRIP-981 · B — 후보를 여행 목적지로 좁힌다 (region)', (
     expect(
       await screen.findByTestId('itinerary-place-empty')
     ).toHaveTextContent('검색 결과가 없어요');
-    // 앵커 — 지역별 조회가 실제로 나갔다(단일 경로의 0건 안내와 구분).
-    expect(uniqueSorted(regionsOf(placeHits()))).toEqual(['경주', '부산']);
+    // 앵커 — 그날(1일차) 지역으로 조회가 실제로 나갔다(TRIP-1233 — 옛 앵커는 두 지역 병합이었다).
+    expect(uniqueSorted(regionsOf(placeHits()))).toEqual(['부산']);
   });
 
   it('🔴 B3a · 여행 조회가 실패하면 region 없이 조회해 목록을 그린다 (폴백)', async () => {

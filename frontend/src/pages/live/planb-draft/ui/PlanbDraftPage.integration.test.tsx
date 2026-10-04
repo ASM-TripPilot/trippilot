@@ -287,9 +287,11 @@ function renderDraft(diff: ReplanDiff = READY_DIFF) {
   renderPage();
 }
 
+// TRIP-1233 — [직접 수정]은 세션이 다시 짜던 날(targetDate, 없으면 fromInstant 의 여행지 날짜)을 싣는다.
+// 기본 세션은 targetDate 가 없고 fromInstant 가 2026-06-11T06:00Z(=KST 15시, 6월 11일)라 DAY 다.
 const MANUAL_HREF = {
   pathname: '/trips/[tripId]/planb/manual',
-  params: { tripId: TRIP_ID },
+  params: { tripId: TRIP_ID, date: DAY },
 };
 const REQUEST_HREF = `/trips/${TRIP_ID}/planb`;
 
@@ -1058,6 +1060,29 @@ describe('🔴 N · 오늘 대안 없음 → [내일 일정 다시 짜기] (targ
     );
     fireEvent.press(screen.getByTestId(NEXT_DAY_TESTID));
     expect(mockStartMutate).toHaveBeenCalledTimes(1);
+// TRIP-1233 · i13 — 편집기는 날짜가 없으면 1일차로 연다. 오늘이 아닌 날을 다시 짜던 세션에서 [직접 수정]을
+// 누르면 그 날로 열려야 한다. 대안 없음·실패 얼굴엔 초안(diff)이 없으므로 초안 날짜가 아니라 세션에서 읽는다.
+describe('🔴 TRIP-1233 · [직접 수정]은 세션이 다시 짜던 날로 편집기를 연다', () => {
+  it('M1 대안 없음 세션의 targetDate 가 6/10 이면 [직접 수정] push params.date 가 6/10 이다', () => {
+    mockSession.data = session('NO_SOLUTION', { targetDate: '2026-06-10' });
+    renderPage();
+
+    fireEvent.press(screen.getByText('직접 수정'));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/planb/manual',
+      params: { tripId: TRIP_ID, date: '2026-06-10' },
+    });
+  });
+
+  it('M2 초안 얼굴에서도 [직접 수정]이 그 날 날짜를 싣는다', () => {
+    renderDraft();
+
+    fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith(MANUAL_HREF);
   });
 });
 

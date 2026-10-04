@@ -14,7 +14,7 @@ import {
   DRAFT_POLL_INTERVAL_MS,
   formatCoPickDayHeader,
 } from '@/features/itinerary';
-import { regionForDay } from '../model/dayRegion';
+import { regionForDay } from '@/entities/trip';
 import { tripDayChips } from '@/features/add-must-visit';
 import { isConfirmLocked } from '@/features/itinerary';
 import { formatRadiusUsed } from '../model/radiusUsedLabel';

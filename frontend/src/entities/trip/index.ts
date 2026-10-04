@@ -15,6 +15,7 @@ export {
   formatTripDateRange,
   formatTripRange,
 } from './lib/formatTripPeriod';
+export { regionForDay } from './lib/regionForDay';
 export { tripDayNumber } from './lib/tripDayNumber';
 export { classifyTripPhase, isTripOngoing } from './lib/tripPhase';
 export type { TripPhase } from './lib/tripPhase';

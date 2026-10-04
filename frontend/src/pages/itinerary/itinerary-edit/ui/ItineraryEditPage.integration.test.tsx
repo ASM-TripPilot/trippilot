@@ -466,6 +466,175 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
     });
   });
 
+  // TRIP-1233 · AC-1b·2b·2c — 진입 일차(initialDate)와 말미 장소 추가의 날짜
+  describe('🔴 진입 일차·장소 추가 날짜 (TRIP-1233)', () => {
+    /**
+     * 확정 일정(h16)·허브(i01)에서 N일차를 보다가 편집에 들어오면 편집기가 그 날로 열려야 하고, 말미
+     * [장소 추가]는 지금 보고 있는 날을 싣고 가야 한다(안 실으면 h13 이 1일차에 담는다).
+     *
+     * 무엇을 보장하나:
+     *  - 1b 말미 [장소 추가] push 에 활성 일자 `date` 가 실린다(1일차·칩으로 옮긴 2일차 둘 다).
+     *  - 2b `initialDate`=2일차면 일정이 도착한 뒤 2일차 칩이 선택되고, 헤더·카드가 2일차다. 날짜로 칸을
+     *    찾는다 — 일정에 빠진 날이 있어도 index 가 아니라 날짜가 기준이다(01 맹점 ②).
+     *  - 2c 모르는 날이면 1일차. 진입 일차는 초기값일 뿐 — 칩을 누르면 그 날로 바뀐다.
+     *  - 2b 스토어에 앞 여행 드래프트가 남아 있어도 진입 일차가 그 옛 날짜 순서로 굳지 않는다(01 맹점 ③).
+     *
+     * 3동작: 준비=가짜 서버(2일 일정)·진입 일차 → 실행=렌더(·칩·장소 추가) → 단언=선택 칩·헤더·카드·push.
+     */
+
+    function renderWith(initialDate?: string) {
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false, gcTime: 0 } },
+      });
+      function Wrapper({ children }: { children: ReactNode }) {
+        return (
+          <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        );
+      }
+      return render(
+        <ItineraryEditPage tripId={TRIP_ID} initialDate={initialDate} />,
+        { wrapper: Wrapper }
+      );
+    }
+
+    const ADD_PLACE = 'itinerary-edit-add-place';
+    const ADD_ROUTE = '/trips/[tripId]/itinerary/manual/add';
+
+    it('1b · 1일차에서 말미 장소 추가 → push params 에 1일차 date 가 실린다', async () => {
+      renderPage();
+      await screen.findByTestId(cardId('poi-a'));
+
+      fireEvent.press(screen.getByTestId(ADD_PLACE));
+
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: ADD_ROUTE,
+        params: { tripId: TRIP_ID, date: DAY1 },
+      });
+    });
+
+    it('1b · 2일차 칩으로 옮긴 뒤 말미 장소 추가 → push params 에 2일차 date 가 실린다', async () => {
+      renderPage();
+      await screen.findByTestId(cardId('poi-a'));
+
+      fireEvent.press(screen.getByTestId('itinerary-edit-day-2'));
+      // 앵커 — 칩 누름이 실제로 날을 바꿨다.
+      await screen.findByTestId(cardIdDay2('poi-c'));
+      fireEvent.press(screen.getByTestId(ADD_PLACE));
+
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: ADD_ROUTE,
+        params: { tripId: TRIP_ID, date: DAY2 },
+      });
+    });
+
+    it('2b · initialDate=2일차면 2일차 칩이 선택돼 열리고, 헤더·카드가 2일차이며 장소 추가도 2일차를 싣는다', async () => {
+      renderWith(DAY2);
+
+      // 일정이 도착해 2일차 카드가 뜰 때까지 기다린다(로딩 중엔 편집기가 없다).
+      await screen.findByTestId(cardIdDay2('poi-c'));
+      expect(screen.getByTestId('itinerary-edit-day-2')).toBeSelected();
+      expect(screen.getByTestId('itinerary-edit-day-1')).not.toBeSelected();
+      expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('2일차');
+      expect(screen.getByTestId('sheet-header-date')).toHaveTextContent(
+        '6월 11일(목)'
+      );
+      expect(screen.getByTestId(META)).toHaveTextContent('1곳');
+      expect(screen.queryByTestId(cardId('poi-a'))).toBeNull();
+
+      fireEvent.press(screen.getByTestId(ADD_PLACE));
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: ADD_ROUTE,
+        params: { tripId: TRIP_ID, date: DAY2 },
+      });
+    });
+
+    it('2b · 일정에 빠진 날이 있어도 날짜로 칸을 찾는다 — [6/10, 6/12] 에 initialDate=6/12 면 두 번째 칩이다', async () => {
+      const DAY3 = '2026-06-12';
+      const base = itinerary();
+      getHandler = () =>
+        HttpResponse.json({
+          ...base,
+          days: [base.days[0], { ...base.days[1], date: DAY3 }],
+        });
+
+      renderWith(DAY3);
+
+      await screen.findByTestId(`slot-stopcard-${buildSlotKey(DAY3, 'poi-c')}`);
+      expect(screen.getByTestId('itinerary-edit-day-2')).toBeSelected();
+      expect(screen.getByTestId('sheet-header-date')).toHaveTextContent(
+        '6월 12일(금)'
+      );
+    });
+
+    it('2b · 스토어에 앞 여행 드래프트(그 날이 0번 칸)가 남아 있어도 일정 도착 뒤 2일차로 열린다', async () => {
+      // 준비 — 편집 스토어는 모듈 싱글턴이고 프로덕션은 reset 하지 않는다. 옛 드래프트에선 2일차 날짜가
+      //   0번 칸이다 — 첫 렌더의 스토어로 index 를 한 번만 계산해 굳히면 0(1일차)으로 열린다.
+      useItineraryEditStore.getState().seed([
+        {
+          date: DAY2,
+          slots: [
+            {
+              poiId: 'poi-stale',
+              startAt: '10:00:00',
+              endAt: '11:00:00',
+              isFixed: false,
+              endsNextDay: false,
+              hasViolation: false,
+              alternatives: [],
+              tags: [],
+              nameKo: '옛 여행 장소',
+            },
+          ],
+        },
+      ]);
+
+      renderWith(DAY2);
+
+      await screen.findByTestId(cardIdDay2('poi-c'));
+      expect(screen.getByTestId('itinerary-edit-day-2')).toBeSelected();
+      expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('2일차');
+      expect(screen.queryByText('옛 여행 장소')).toBeNull();
+    });
+
+    it.each([['2026-07-01'], ['내일'], ['']])(
+      '2c · 일정에 없거나 형식이 틀린 initialDate(%j)면 1일차로 연다',
+      async (bad) => {
+        renderWith(bad);
+
+        await screen.findByTestId(cardId('poi-a'));
+        expect(screen.getByTestId('itinerary-edit-day-1')).toBeSelected();
+        expect(screen.getByTestId('sheet-header-day')).toHaveTextContent(
+          '1일차'
+        );
+      }
+    );
+
+    it('2c · initialDate 가 없으면 1일차로 연다 (무회귀)', async () => {
+      renderWith(undefined);
+
+      await screen.findByTestId(cardId('poi-a'));
+      expect(screen.getByTestId('itinerary-edit-day-1')).toBeSelected();
+    });
+
+    it('2c · initialDate=2일차로 열린 뒤 1일차 칩을 누르면 1일차로 바뀐다 (칩 선택이 진입 일차를 이긴다)', async () => {
+      renderWith(DAY2);
+      await screen.findByTestId(cardIdDay2('poi-c'));
+
+      fireEvent.press(screen.getByTestId('itinerary-edit-day-1'));
+
+      await screen.findByTestId(cardId('poi-a'));
+      expect(screen.getByTestId('itinerary-edit-day-1')).toBeSelected();
+      expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('1일차');
+      fireEvent.press(screen.getByTestId(ADD_PLACE));
+      expect(mockPush).toHaveBeenLastCalledWith({
+        pathname: ADD_ROUTE,
+        params: { tripId: TRIP_ID, date: DAY1 },
+      });
+    });
+  });
+
   describe('TRIP-926 · M — 지도 중심 (핀 0개면 서울 시청, 있으면 첫 핀)', () => {
     // mapViewMock 이 center 를 map-root 텍스트 "lat,lng" 로 노출한다(toHaveTextContent 는 완전 일치).
     const SEOUL_CITY_HALL = '37.5665,126.978';
@@ -1294,6 +1463,46 @@ describe('여행 중 직접 수정(i07)', () => {
       expect(mockPush).toHaveBeenCalledWith({
         pathname: '/trips/[tripId]/itinerary/manual/add',
         params: { tripId: TRIP_ID, insertAfter: '1', date: DAY2 },
+      });
+    });
+  });
+
+  // TRIP-1233 · AC-2d — 허브(i01)에서 2일차를 보다가 [직접 수정]으로 오면 i07 도 2일차로 열린다.
+  describe('🔴 i07 진입 일차 (TRIP-1233)', () => {
+    it('inTrip + initialDate=2일차 → 2일차 칩 선택 · 2일차 카드 · 말미 장소 추가가 2일차 date 를 싣는다', async () => {
+      const DAY2 = '2026-06-12';
+      getHandler = () =>
+        HttpResponse.json({
+          ...itinerary(),
+          days: [
+            { date: DAY, slots: SLOTS },
+            {
+              date: DAY2,
+              slots: [slot('q1', '09:00:00', '10:00:00', '태종대')],
+            },
+          ],
+        });
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false, gcTime: 0 } },
+      });
+      function Wrapper({ children }: { children: ReactNode }) {
+        return (
+          <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        );
+      }
+      render(<ItineraryEditPage tripId={TRIP_ID} inTrip initialDate={DAY2} />, {
+        wrapper: Wrapper,
+      });
+
+      await screen.findByTestId(`slot-stopcard-${buildSlotKey(DAY2, 'q1')}`);
+      expect(screen.getByTestId('itinerary-edit-day-2')).toBeSelected();
+      expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('2일차');
+
+      fireEvent.press(screen.getByTestId('itinerary-edit-add-place'));
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/trips/[tripId]/itinerary/manual/add',
+        params: { tripId: TRIP_ID, date: DAY2 },
       });
     });
   });

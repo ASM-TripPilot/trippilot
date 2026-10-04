@@ -322,7 +322,8 @@ export function ManualPlanPage({
           if (clearing) return;
           router.push({
             pathname: '/trips/[tripId]/itinerary/manual/add',
-            params: { tripId },
+            // 활성 일자 — 시트 제목·담을 날이 이 날이 된다(TRIP-1233).
+            params: { tripId, date: activeDate },
           });
         }}
         onPressAddBetween={(precedingIndex) => {

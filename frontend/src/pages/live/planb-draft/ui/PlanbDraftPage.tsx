@@ -160,6 +160,8 @@ export function PlanbDraftPage({
     state.kind === 'noSolution' &&
     data.targetDate === seoulDate(now) &&
     days.some((day) => day.date === tomorrow);
+  // 세션이 다시 짜던 날 — 대안 없음·실패 얼굴엔 초안(diff)이 없어 draftDate 대신 세션에서 읽는다.
+  const sessionDate = data.targetDate ?? readFromInstant(data.fromInstant).date;
   const draft = diff.data?.ready === true ? diff.data : undefined;
   const sheet = draft ? buildDraftSheet(draft) : undefined;
   const draftDate = draft?.date ?? undefined;
@@ -176,8 +178,7 @@ export function PlanbDraftPage({
         draftCenter(sheet?.pins) ??
         deriveReplanMapAnchor({
           days: itinerary.data?.days,
-          preferredDate:
-            data.targetDate ?? readFromInstant(data.fromInstant).date,
+          preferredDate: sessionDate,
           origin: { lat: data.originLat, lng: data.originLng },
         }).center
       }
@@ -238,7 +239,8 @@ export function PlanbDraftPage({
       onManualEdit={() =>
         router.push({
           pathname: '/trips/[tripId]/planb/manual',
-          params: { tripId },
+          // TRIP-1233 — 편집기가 이 날로 열린다(없으면 1일차).
+          params: { tripId, date: sessionDate },
         })
       }
       onApply={() =>
