@@ -38,6 +38,7 @@ import {
   SparkleGlyph,
   SuitcaseGlyph,
 } from '@/features/home';
+import { CategoryImageGlyph } from '@/entities/itinerary-slot';
 import { WarningTriangleGlyph } from '@/features/explore/index.view';
 import { formatCountBadge } from '../lib/formatCountBadge';
 import { HeartButton } from '@/shared/ui/HeartButton';
@@ -393,6 +394,20 @@ function SectionHeader({
   );
 }
 
+// 사진 없는 카드(서버 imageUrl 없음)의 대체 표시 — 일정 슬롯과 같은 이미지 글리프를 카드 가운데 위쪽에
+// 얹는다(새 자산 없음, TRIP-1221). 스크림·글씨 아래층이라 제목 가독성은 그대로.
+function PhotoPlaceholder({ testID }: { testID: string }): ReactElement {
+  return (
+    <View
+      testID={testID}
+      pointerEvents="none"
+      className="absolute inset-x-0 top-0 h-3/5 items-center justify-center"
+    >
+      <CategoryImageGlyph size={36} />
+    </View>
+  );
+}
+
 // ── 컬렉션 카드(요즘 사람들이 담는 곳 · 내가 담은 곳 · 추천) ─────────────
 // 하단 메타는 지역+핀으로 그린다(discovery·추천 공용).
 function CollectionCard({
@@ -414,6 +429,9 @@ function CollectionCard({
         resizeMode="cover"
         style={ABSOLUTE_FILL}
       />
+      {card.imageUrl ? null : (
+        <PhotoPlaceholder testID="home-collection-photo-placeholder" />
+      )}
       <LinearGradient
         colors={DEST_SCRIM_COLORS}
         locations={SCRIM_LOCATIONS}
@@ -466,6 +484,9 @@ function SpotCard({
         resizeMode="cover"
         style={ABSOLUTE_FILL}
       />
+      {card.imageUrl ? null : (
+        <PhotoPlaceholder testID="home-spot-photo-placeholder" />
+      )}
       <LinearGradient
         colors={SPOT_SCRIM_COLORS}
         locations={SCRIM_LOCATIONS}
