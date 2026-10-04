@@ -234,7 +234,7 @@ def test_multi_output_document_aggregates_with_per_area_breakdown() -> None:
 
 def test_multi_output_document_sums_raw_column_counters() -> None:
     """원문 칸 계수(TRIP-1226)도 지역 합산된다 — 잡 서머리는 합산 stats 만 찍는다."""
-    museum = "매주 월요일, 1월 1일, 설날 및 추석 당일"
+    museum = "동절기(12~2월) 휴관"   # 요일 없는 휴무 — 해석 불가
     http = FakeTourApiHttp(
         pages={
             ("1", "14", 1): envelope([list_item("700", "박물관", contenttypeid="14")], 1),

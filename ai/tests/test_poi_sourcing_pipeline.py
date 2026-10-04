@@ -311,7 +311,7 @@ def test_output_document_truncates_long_opening_hours_raw() -> None:
     assert hours.endswith("…") and rest == "연중무휴"
 
 
-_MUSEUM_REST = "매주 월요일, 1월 1일, 설날 및 추석 당일"   # 박물관 휴무의 전형 — 파서가 해석 못 한다
+_MUSEUM_REST = "동절기(12~2월) 휴관"   # 요일 없는 휴무 — 파서가 해석 못 한다
 
 
 def test_휴무를_해석_못_해_영업시간을_포기한_건을_센다() -> None:
@@ -351,7 +351,8 @@ def test_원문_칸_재파싱이_수집_판정과_다르면_센다() -> None:
     ① 200자 절단이 휴무의 요일 토큰을 잘라냈다(수집은 월요일 휴무, 칸은 해석 불가 → `()`)
     ② 중복 병합이 영업시간은 뒤 레코드에서, 원문은 앞 레코드에서 가져왔다
     """
-    long_rest = "매주 " + "※ 사정에 따라 변동될 수 있음 " * 6 + "월요일"
+    # 괄호 단서는 파서가 건너뛰고 끝의 요일을 읽는다 — 절단이 그 요일을 잘라낸다
+    long_rest = "매주 " + "(사정에 따라 변동될 수 있음) " * 6 + "월요일"
     http = FakeTourApiHttp(
         pages={("12", 1): envelope([
             list_item("800", "긴휴무관", mapx="126.60"),

@@ -6,7 +6,7 @@
 
 영업시간은 **파싱 가능한 것만** OpenHour로 만든다 — "정보 없음 ≠ 배제"
 원칙에 따라 파싱 불가는 open_hours=() 로 두고, 절대 지어내지 않는다
-(계절별·격주·명절 휴무 등 주간 스케줄로 표현 불가한 원문은 통째로 포기).
+(계절별 시간·요일 없는 휴무 안내 등 주간 스케줄로 못 읽는 원문은 통째로 포기).
 """
 
 from __future__ import annotations
@@ -207,9 +207,20 @@ _ALWAYS_OPEN_RE = re.compile(r"상시\s*개방|24\s*시간\s*개방|연중\s*개
 _ALL_DAY = (0, 24 * 60)
 _WEEKDAY_RE = re.compile(r"(월|화|수|목|금|토|일)요일")
 _WEEKDAY_INDEX = {"월": 0, "화": 1, "수": 2, "목": 3, "금": 4, "토": 5, "일": 6}
-# 주간 스케줄(OpenHour)로 표현할 수 없는 휴무 패턴 — 있으면 통째로 파싱 포기
-_UNREPRESENTABLE_REST = re.compile(r"첫째|둘째|셋째|넷째|다섯째|격주|짝수|홀수|공휴일|명절|설날|추석|법정")
-_NO_REST_TOKENS = frozenset({"연중무휴", "없음", "무휴", "연중 무휴"})
+# ── 휴무 원문 (TRIP-1230) — 규칙은 _parse_rest_days, 근거는 data/README 「휴무를 해석 못 하는 POI」
+_DAY_RANGE_RE = re.compile(r"(월|화|수|목|금|토|일)요일\s*[~\-–—]\s*(월|화|수|목|금|토|일)요일")
+_REST_PAREN = re.compile(r"[(（][^)）]*[)）]")
+_REST_REMARK = re.compile(r"※.*", re.S)
+_REST_BREAK = re.compile(r"<br\s*/?>", re.I)
+_REST_CLAUSE_SEP = re.compile(r"[/,\n]")
+_REST_PLACEHOLDER = re.compile(r"[-–—]+|없음|해당\s*없음")
+_NO_REST_RE = re.compile(r"무휴|휴무\s*일?\s*없음")
+# 주간 스케줄로 못 쓰는 비정기 휴일 — 연 단위(명절·공휴일·날짜·기념일·기관장 지정일)와
+# 요일 없는 월 단위("월 1회"). 실물 표본에 나온 표기만 넣었다(감으로 늘리지 말 것 — 영업 쪽
+# _NOT_OPEN_SEGMENT 의 교훈). '설' 단독은 넣지 않는다 — "시설별 상이" 가 휴일로 읽힌다.
+_IRREGULAR_REST = re.compile(
+    r"설날|추석|명절|공휴일|국경일|성탄|부처님|석가|연휴|당일|\d{1,2}\s*월\s*\d{1,2}\s*일|"
+    r"임시\s*휴|휴관일|지정|정하는|정한|기념일|월\s*\d\s*회")
 
 
 # 영업시간이 **아닌** 시각이 붙는 줄 — 빼고 읽지 않으면 휴게시간이 개점시간이 된다.
@@ -281,8 +292,8 @@ def parse_open_hours(hours_raw: str | None, rest_raw: str | None) -> tuple[OpenH
     - hours_raw에서 HH:MM이 **정확히 2회** 등장할 때만 개점~폐점으로 읽는다
       (계절별 시간 등 3회 이상은 어느 창이 맞는지 확정 불가 → 포기).
     - 폐점 ≤ 개점이면 자정 초과 영업으로 보고 +24h (OpenHour 계약).
-    - rest_raw는 "매주 X요일" 류만 해석 — 주차·명절 등 가변 휴무가 섞이면
-      해당 요일이 실제로 여는지 확정 불가 → 전체 포기.
+    - rest_raw 해석은 `_parse_rest_days` — 요일을 못 읽고 무휴·비정기 휴일도 아닌
+      글("점포별 상이"·"동절기 휴장")이면 어느 날 닫는지 모른다 → 전체 포기.
     """
     if not hours_raw:
         return ()
@@ -319,18 +330,44 @@ def parse_open_hours(hours_raw: str | None, rest_raw: str | None) -> tuple[OpenH
 
 
 def _parse_rest_days(rest_raw: str | None) -> frozenset[int] | None:
-    """휴무일 원문 → 휴무 요일 집합. 해석 불가면 None (호출측이 전체 포기)."""
+    """휴무일 원문 → 매주 쉬는 요일 집합. 해석 불가면 None (호출측이 전체 포기).
+
+    종전엔 명절·공휴일·"첫째 주"가 섞이면 통째로 포기했다 — 박물관 전형 `매주 월요일 / 1월 1일 /
+    설·추석 당일` 이 영업시간 창까지 잃었다(표본 584건 중 38.5% 포기). 지금 규칙(TRIP-1230):
+
+    - **요일이 나오면 매주 쉰다고 본다.** `매월 둘째·넷째 월요일` 같은 월 단위도 매주로 넓혀 읽는다 —
+      열린 월요일 몇 번을 놓치는 쪽이 닫힌 월요일에 보내는 쪽보다 낫다. 범위(`월요일~수요일`)는
+      사이 요일까지(종전엔 양끝만 읽었다), `주말` 은 토·일.
+    - **비정기 휴일은 무시한다** — 연 단위(설·추석·1월 1일·공휴일·지정일)와 요일 없는 월 단위.
+      주간 스케줄로 못 쓰고, 버리면 창까지 잃는다. `-` 같은 자리표시자는 휴무 없음.
+    - **괄호 단서와 ※ 비고는 읽지 않는다** — `(단, 월요일이 공휴일이면 다음 평일)`·`(토요일·일요일과
+      겹치면 휴관)` 의 요일이 휴무로 잡힌다. 구역 머리(`[경매] … [판매] …`)가 둘이면 포기.
+    - 요일도 무휴도 비정기 휴일도 아닌 글(`점포별 상이`·`동절기 휴장`·비고뿐)은 여전히 모른다.
+    """
     if rest_raw is None:
         return frozenset()
     text = rest_raw.strip()
-    if not text or text in _NO_REST_TOKENS:
+    if not text or _REST_PLACEHOLDER.fullmatch(text):
         return frozenset()
-    if _UNREPRESENTABLE_REST.search(text):
+    if len(_SECTION_HEAD.findall(text)) > 1:
         return None
-    days = {_WEEKDAY_INDEX[m] for m in _WEEKDAY_RE.findall(text)}
-    if not days:
-        return None  # 비어있지 않은데 요일도 못 읽음 — 확신 없음
-    return frozenset(days)
+    body = _REST_REMARK.sub("", _REST_PAREN.sub(" ", _REST_BREAK.sub("\n", text)))
+    days = {_WEEKDAY_INDEX[m] for m in _WEEKDAY_RE.findall(body)}
+    for a, b in _DAY_RANGE_RE.findall(body):
+        start, end = _WEEKDAY_INDEX[a], _WEEKDAY_INDEX[b]
+        days.update((start + k) % 7 for k in range((end - start) % 7 + 1))
+    if "주말" in body:
+        days.update((5, 6))
+    if days:
+        return frozenset(days)
+    clauses = [c for c in (c.strip(" -") for c in _REST_CLAUSE_SEP.split(body)) if c]
+    if not clauses:
+        return None  # 괄호·비고뿐 — 확신 없음
+    if any(_NO_REST_RE.search(c) for c in clauses):
+        return frozenset()
+    if all(_IRREGULAR_REST.search(c) for c in clauses):
+        return frozenset()  # 비정기 휴일뿐 — 매주 쉬는 요일은 없다
+    return None  # 요일도 무휴도 비정기 휴일도 아니다 — 확신 없음
 
 
 # ── 영업시간 원문 칸 (backend `poi.opening_hours varchar(200)`, TRIP-1226) ──────
@@ -357,7 +394,7 @@ def join_opening_hours_raw(
     없이 휴무만 싣지 않는 이유: 백엔드가 이 칸의 유무로 "영업시간 확인됨"을 판정한다
     (`SlotSurfaceAssembler.openingHoursKnown`).
 
-    파서가 해석 못 하는 휴무(`설날·추석`·`첫째 주`·`-` …)도 싣는다. 빼면 런타임이 7일
+    파서가 해석 못 하는 휴무(`점포별 상이`·`동절기 휴장` …)도 싣는다. 빼면 런타임이 7일
     영업으로 읽어 이 칸이 수집 파싱의 입력을 잃는 원래 결함이 되살아나고, 벤더 문구가
     남지 않아 파서를 고쳐도 다시 받아야 한다. 대가로 그런 POI 는 런타임에도 "정보 없음"
     (HC1 미적용)이다 — 건수는 수집 stats `rest_unparsed`, 결정·실측은 ai/data/README.md.
