@@ -677,6 +677,12 @@ describe('🔴 SC · TRIP-798 묶음 C — MapSheetShell peek 시트 조립 (시
     expect(screen.getByTestId('map-root')).toBeOnTheScreen();
   });
 
+  it('SC1b · TRIP-1204 · 지도는 시트가 열린 채로도 손가락으로 움직인다(viewOnly=false)', async () => {
+    await renderPage();
+
+    expect(screen.getByTestId('map-root').props.viewOnly).toBe(false);
+  });
+
   it('SC2 · 검색·칩·리스트·카드가 셸 안에 그대로 관측된다 (재조립 무회귀 그물)', async () => {
     await renderPage();
 

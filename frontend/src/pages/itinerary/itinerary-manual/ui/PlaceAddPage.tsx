@@ -180,6 +180,8 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
         center={center}
         pins={pins}
         onBack={() => router.back()}
+        // TRIP-1204 — 시트가 열린 채로도 손가락 확대·이동(셸 기본은 열림=잠금). 6-b 실기 전용.
+        mapViewOnly={false}
         header={
           <Text className="px-lg pb-xs pt-sm font-noto-bold text-[18px] font-bold text-ink">
             {`장소 추가 · ${dayNumber}일차`}

@@ -601,6 +601,15 @@ describe('확정 CTA·재조회 배선', () => {
     });
   });
 
+  describe('🔴 TRIP-1204 · h14·h16 일정 지도는 시트가 열린 채로도 손가락으로 움직인다', () => {
+    it('셸 지도가 viewOnly=false 로 열려 있다', async () => {
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+
+      expect(screen.getByTestId('map-root').props.viewOnly).toBe(false);
+    });
+  });
+
   describe('🔴 TRIP-1076 AC-3 · h16 확정 일정 지도는 핀 전부에 맞춰 연다', () => {
     it('셸 지도에 핀 2개 이상과 fitPins 가 함께 전달된다', async () => {
       // 준비 — 기본 픽스처는 좌표가 없어 핀이 0개다. day1 두 곳에 좌표를 실어 핀 2개를 만든다.

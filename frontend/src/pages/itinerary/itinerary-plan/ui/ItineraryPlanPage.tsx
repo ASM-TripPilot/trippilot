@@ -359,6 +359,8 @@ export function ItineraryPlanPage({
       center={center}
       pins={pins}
       fitPins
+      // TRIP-1204 — 시트가 열린 채로도 손가락 확대·이동(셸 기본은 열림=잠금). 6-b 실기 전용.
+      mapViewOnly={false}
       days={tabs.map((tab) => ({ label: `${tab.dayNumber}일차` }))}
       selectedDayIndex={selectedDayIndex}
       onSelectDay={setActiveDayIndex}
