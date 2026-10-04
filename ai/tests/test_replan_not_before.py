@@ -511,6 +511,39 @@ def test_잠금이_창_앞쪽이어도_재계획이_실패하지_않는다() -> 
     assert all(s["start_at"] >= "14:10" for s in _new_slots(body))
 
 
+def test_지난_잠금끼리_이동이_안_맞아도_재계획은_된다() -> None:
+    """지난 잠금은 **이력**이지 검증할 제약이 아니다 (2026-10-04 로컬 실측).
+
+    PARTIAL_SLOTS 14:00 재계획 — BE 가 지난 슬롯을 전부 잠가 보낸다. 원 일정의
+    09:00-10:00 → 10:00-11:15 처럼 지금 추정으로는 이동이 안 맞는 지난 잠금이 하나라도
+    있으면 체인이 "고정 블록 모순"으로 하루를 통째로 포기했다(재계획 표본 4건 중 1건).
+    지난 잠금은 솔버 밖에서 그대로 되싣는다 — 시각은 원 일정 값 그대로라 지어낸 시각이
+    아니고(INV-2), BE 는 잠금 슬롯의 위반 표시를 원본에서 이어받는다(TRIP-839).
+    """
+    seed = demo_poi_seed()
+    a, b = str(seed[0].poi_id), str(seed[3].poi_id)  # 성산일출봉 ↔ 한라산 — 30km 넘게 떨어져 있다
+    response, spy = _spy_post(
+        scope="PARTIAL_SLOTS",
+        from_instant="2026-09-21T14:00:00+09:00",
+        locked_blocks=[
+            {"poi_id": a, "date": "2026-09-21", "start": "09:00", "dwell_min": 60},
+            {"poi_id": b, "date": "2026-09-21", "start": "10:00", "dwell_min": 75},
+        ],
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["empty_reason"] is None, body["notes"]
+    slots = [s for d in body["itinerary"]["days"] for s in d["slots"]]
+    pinned = {(s["poi_id"], s["start_at"][:5], s["end_at"][:5]) for s in slots if s["is_fixed"]}
+    assert pinned == {(a, "09:00", "10:00"), (b, "10:00", "11:15")}
+    assert all(s["start_at"] >= "14:00" for s in _new_slots(body))
+    # 솔버에는 지난 잠금이 안 간다 — 다시 검증할 대상이 아니다
+    assert spy.tasks[0].request.fixed_blocks == ()
+    # 다녀온 곳을 새 방문으로 다시 넣지 않는다
+    assert {a, b}.isdisjoint(s["poi_id"] for s in _new_slots(body))
+
+
 def test_에이전트가_하한을_어셈블리_문제로_넘긴다() -> None:
     """요청에만 실리고 ItineraryProblem 으로 안 넘어가면 어셈블리는 하한을 모른다."""
     from tests.test_replan_via_planb import _agent, _case

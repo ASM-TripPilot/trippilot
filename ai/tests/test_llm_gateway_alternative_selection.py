@@ -36,7 +36,7 @@ from trippilot.domain.common import GeoPoint, PoiId, ScheduleId, TraceId
 from trippilot.domain.llm import AlternativePick, CandidatePool, LlmFeature, ModelTier
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.trigger import TriggerKind, TriggerParams
-from trippilot.domain.observability import FallbackEvent, LlmCallRecord
+from trippilot.domain.observability import FallbackEvent, GateDropEvent, LlmCallRecord
 
 from tests.fakes.fake_embedding import FakeEmbedding
 from tests.fakes.fake_llm import FailingLlm, FakeLlm, TimeoutForModelsLlm
@@ -426,14 +426,23 @@ def test_pipeline_gate_drops_ghost_before_closed_set_filter() -> None:
     assert result.dropped_out_of_pool == ()  # 게이트 층에서 이미 제거됨 (drop_event로 관측)
 
 
-def test_pipeline_drops_excluded_pick_via_second_gate() -> None:
-    """게이트는 풀 멤버십만 안다 — 제외 POI는 파이프라인 관문이 잡는다 (2겹 방어)."""
+def test_pipeline_drops_excluded_pick_at_the_gate() -> None:
+    """제외 POI 는 LLM 에 넘기는 숏리스트 풀에 없다 — 게이트 풀 교차가 1차로 잡고 드롭을
+    트레이스로 남긴다(조용히 사라지지 않는다). 종전에는 게이트가 전체 풀을 봐서 파이프라인
+    2차 관문(`closed_set_filter`)이 잡았고, 그 관문은 그대로 있다(숏리스트 도입 2026-10-04).
+    """
+    trace = InMemoryTrace()
     canned = _raw(("p1", "저장해둔 카페예요"), ("p2", "실내 전시예요"))
-    result = _pipeline(FakeLlm(canned=canned)).run(
-        _request(_pool(), excluded_poi_ids=frozenset({PoiId("p1")}))
-    )
+    gateway = GatewayFacade(
+        FakeLlm(canned=canned), PromptRegistry(_PROMPTS), AlternativeSelectionGate(), _CFG, trace)
+    result = PlanBAgent(
+        FakeEmbedding(dim=8), InMemoryVectorStore(),
+        alternative_worker=AlternativeSelectionWorker(gateway),
+    ).run(_request(_pool(), excluded_poi_ids=frozenset({PoiId("p1")})))
+
     assert [str(p) for a in result.alternatives for p in a.poi_ids] == ["p2"]
-    assert result.dropped_out_of_pool == ("p1",)
+    drops = trace.of_type(GateDropEvent)
+    assert [d.dropped_ids for d in drops] == [(PoiId("p1"),)]
 
 
 def test_pipeline_falls_back_to_rule_ranking_on_llm_failure() -> None:

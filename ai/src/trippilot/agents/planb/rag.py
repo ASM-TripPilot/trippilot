@@ -33,7 +33,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from types import MappingProxyType
 
@@ -64,6 +64,14 @@ _ALTERNATIVE_LABELS = ("A", "B", "C", "D", "E")
 # 프리필터가 상위 60을 보므로(`ortools_assembler._PREFILTER_TOP_K`) 20이면
 # 배치될 후보를 넉넉히 덮는다. 상한이 필요한 이유는 필드 주석에 있다.
 MAX_RANKED = 20
+
+# LLM 선택 프롬프트에 싣는 후보 수 — 규칙 랭킹 앞에서 자른다(+ KB-5 문서가 붙은 후보).
+# 풀 전원을 실으면 서울 10km(≈1,300곳)에서 입력이 6만 3천 토큰이었고 sol 이 5~7초 걸려
+# 1차(6.25s)·재시도(4.4s) 마감을 번갈아 넘겼다 — 재계획 표본 절반이 규칙 폴백이라 KB 를
+# 읽은 선택이 반영되지 않았다(2026-10-04 실측). LLM 이 내는 순서는 `MAX_RANKED` 까지만
+# 쓰이므로 그 세 배면 고를 폭이 충분하다. 규칙 랭킹이 우천 강등·저장 장소·거리를 이미
+# 본 순서라, 잘리는 쪽은 "그 셋 모두에서 뒤"인 후보다.
+LLM_SHORTLIST = 60
 
 # 규칙 폴백의 reason → 후순위 카테고리 (TRIP-532). 배정을 바꾸려면 여기만 고친다.
 # 분기 키는 TriggerKind 가 아니라 **reason** — MANUAL 트리거도 사유("비 와서")를 따라간다.
@@ -537,7 +545,7 @@ class PlanBAgent:
             return rule_ranked, {}, False, _why("alternative_worker_absent"), rule_ranked
         try:
             result = self._worker.select(
-                request.pool,
+                _shortlist(request.pool, rule_ranked, context.place_knowledge),
                 AlternativeSelectionInput(
                     trigger_kind=request.trigger.kind.value,
                     reason=request.reason,
@@ -786,6 +794,21 @@ def _rule_ranking(
     demoted_count = sum(1 for p in ranked if poi_by_id[p].category in demoted)
     note = f"rule_ranking: {reason} 신호로 야외 {demoted_count}건 후순위" if demoted_count else ""
     return tuple(str(p) for p in ranked), note
+
+
+def _shortlist(
+    pool: CandidatePool, rule_ranked: Sequence[str], knowledge: Mapping[str, str]
+) -> CandidatePool:
+    """LLM 에 보일 후보 — 규칙 랭킹 앞 `LLM_SHORTLIST` 곳 ∪ KB-5 문서가 붙은 곳.
+
+    문서 붙은 후보를 따로 넣는 이유: 상황 질의 유사도로 골라 온 문서인데 그 후보가
+    프롬프트에서 빠지면 검색이 헛일이 된다. 풀을 **좁히기만** 한다 — 게이트의 풀 교차가
+    이 숏리스트로 걸리므로 LLM 은 밖을 고를 수 없다(INV-1).
+    """
+    top = set(rule_ranked[:LLM_SHORTLIST])
+    pois = tuple(p for p in pool.pois
+                 if str(p.poi_id) in top or (p.source_ref or "") in knowledge)
+    return replace(pool, poi_ids=frozenset(p.poi_id for p in pois), pois=pois)
 
 
 def _as_refs(value: object) -> tuple[tuple[str, ...], Mapping[str, str]] | None:
