@@ -1,5 +1,6 @@
 import { type ReactElement, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
+import { isAxiosError } from 'axios';
 
 import { nightlyBaseCards, toBaseSections } from '../model/baseSections';
 import { sigunguLabel } from '@/features/trip';
@@ -7,9 +8,14 @@ import { staySheetSections } from '../model/staySheetSections';
 import { deriveEndDate } from '@/features/create-trip';
 import { useTripWizardStore } from '@/features/create-trip';
 import { useSavedStays } from '@/features/trip';
+import { isOptimisticSavedStayId } from '@/features/save-stay';
 import { useStayAddresses } from '../model/useStayAddresses';
 import { useAssignBase, useTripBases } from '@/features/assign-trip-base';
-import { StaySelectSheet, type StaySelectCandidate } from './StaySelectSheet';
+import {
+  StaySelectSheet,
+  type AssignFailure,
+  type StaySelectCandidate,
+} from './StaySelectSheet';
 import type { TripDestination } from '@/shared/api/index.schemas';
 import { guardPress, openPressGuardWindow } from '@/shared/lib/pressGuard';
 import {
@@ -132,7 +138,9 @@ export function BaseNightsFlow({
   const [selectedSavedStayId, setSelectedSavedStayId] = useState<string | null>(
     null
   );
-  const [assignFailed, setAssignFailed] = useState(false);
+  const [assignFailure, setAssignFailure] = useState<AssignFailure | null>(
+    null
+  );
   // in-flight 잠금(useRef — 상태와 달리 같은 틱에 즉시 읽힌다). 지정 요청이 날아가 응답을
   // 기다리는 동안 재탭이 잉여 POST 를 만들지 않게 한다. `isPending` 은 다음 렌더에야 반영돼
   // 같은 틱 이중탭을 못 막으므로, 그 창을 이 ref 가 닫는다(S8 재작성에서 드롭된 잠금 복원).
@@ -185,14 +193,14 @@ export function BaseNightsFlow({
     setSheetEverOpened(true);
     setOpenNight(nightNumber);
     setSelectedSavedStayId(null);
-    setAssignFailed(false);
+    setAssignFailure(null);
   }
 
   function closeSheet(): void {
     assignLockRef.current = false;
     setOpenNight(null);
     setSelectedSavedStayId(null);
-    setAssignFailed(false);
+    setAssignFailure(null);
   }
 
   /** 지정 커밋 — 밤 ISO를 파생(★1)해 POST 인자를 만든다. 밤 ISO는 `NightlyBaseCard`에 없어
@@ -209,6 +217,19 @@ export function BaseNightsFlow({
     // 이미 지정이 날아가는 중이면 즉시 되돌린다(같은 틱 이중탭 차단). 성공은 closeSheet 가
     // 잠금까지 푼다. 실패는 시트를 유지해야 해 여기서 직접 푼다 — 안 풀면 실패 후 영구 잠김.
     if (assignLockRef.current) return;
+    // TRIP-1235 AC-2 — 다시 누르는 순간 직전 실패를 걷는다. 끝나면 이 시도의 결과가 새로 뜬다.
+    setAssignFailure(null);
+    // AC-5 — 보내면 반드시 400 인 후보(서버가 모르는 낙관 id · 좌표 미확정 INV-U1-08)는 요청 없이 끝낸다.
+    const chosen = savedStayList.find(
+      (stay) => stay.savedStayId === selectedSavedStayId
+    );
+    if (
+      isOptimisticSavedStayId(selectedSavedStayId) ||
+      chosen?.coordConfirmed === false
+    ) {
+      setAssignFailure('permanent');
+      return;
+    }
     assignLockRef.current = true;
     const dateFrom = deriveEndDate(startDate, openNight - 1);
     const dateTo = deriveEndDate(startDate, openNight);
@@ -220,9 +241,9 @@ export function BaseNightsFlow({
           openPressGuardWindow();
           closeSheet();
         },
-        onError: () => {
+        onError: (error) => {
           assignLockRef.current = false;
-          setAssignFailed(true);
+          setAssignFailure(assignFailureOf(error));
         },
       }
     );
@@ -230,7 +251,12 @@ export function BaseNightsFlow({
 
   // 그 밤 카드가 있을 때만 시트를 마운트한다(`openNight`이 null이면 find가 undefined). 제목은
   // 카드 메타처럼 `{박수}박 · {지역}`, 날짜 라벨은 카드가 이미 요일을 붙여 낸 값을 그대로 쓴다.
-  const openCard = cards.find((card) => card.nightNumber === openNight);
+  const variant = resolveVariant();
+  // TRIP-1235 AC-4 — 얼굴이 error 면 시트를 그리지 않는다(실패 문구 시트가 error 얼굴을 덮지 않게).
+  const openCard =
+    variant === 'error'
+      ? undefined
+      : cards.find((card) => card.nightNumber === openNight);
   // TRIP-1074 — 섹션 판정용으로 이미 받은 주소에서 카드 동네 라벨(시군구)을 붙인다(새 요청 0). 평면
   // 목록(`candidates`)과 섹션(`section.candidates`)이 따로 그려지므로 둘 다 이 목록을 넘긴다.
   const candidates: StaySelectCandidate[] = savedStayList.map((stay) => {
@@ -252,7 +278,7 @@ export function BaseNightsFlow({
   return (
     <>
       <TripWizardStep2Screen
-        variant={resolveVariant()}
+        variant={variant}
         cards={cards}
         onPressCard={openSheet}
         onGenerate={onExit}
@@ -281,10 +307,17 @@ export function BaseNightsFlow({
           onBrowse={() => browseStays(openCard.region)}
           onAssign={guardPress(handleAssign)}
           assignPending={assignBase.isPending}
-          assignFailed={assignFailed}
+          assignFailure={assignFailure}
           onClose={closeSheet}
         />
       ) : null}
     </>
   );
+}
+
+/** TRIP-1235 — 지정 실패 갈래. 400 reason enum 이 계약에 없어 상태 코드로만 가른다(business-rules:124).
+ * 400·404 는 다시 보내도 같은 답, 그 밖(응답 없음·5xx·401 갱신 실패)은 다시 해 볼 만하다. */
+function assignFailureOf(error: unknown): AssignFailure {
+  const status = isAxiosError(error) ? error.response?.status : undefined;
+  return status === 400 || status === 404 ? 'permanent' : 'retryable';
 }

@@ -81,6 +81,34 @@ afterEach(() => {
 
 afterAll(() => server.close());
 
+// ── TRIP-1235 공용 — 지정 실패 갈래 문구와 서버 오류 응답 ─────────────────────────────
+// 두 describe(여행 단위·편집 모드)가 같은 배선(`BaseNightsFlow`)의 실패 표시를 잰다.
+
+/** 다시 해 볼 실패(응답 없음·5xx·401 갱신 실패) — 01b Q1. */
+const RETRYABLE_COPY = '연결이 불안정해요 · 잠시 후 다시 시도해 주세요';
+/** 다시 해도 같은 실패(400·404·보내기 전 확정 실패) — 01b Q1. */
+const PERMANENT_COPY =
+  '이 숙소는 지금 거점으로 지정할 수 없어요 · 다른 숙소를 골라 주세요';
+
+/** openapi `ErrorResponse` 모양 — code·message 필수, traceId·fields 는 선택(fields 는 VALIDATION_ERROR 만). */
+function errorJson(
+  status: number,
+  code: string,
+  fields?: { field: string; reason: string }[]
+): Response {
+  return HttpResponse.json(
+    {
+      error: {
+        code,
+        message: '요청을 처리하지 못했습니다',
+        traceId: 'trace-1235',
+        ...(fields ? { fields } : {}),
+      },
+    },
+    { status }
+  );
+}
+
 /**
  * TRIP-1011 C(#039) — 3/4 에서 "거점 숙소 다시 고르기"로 여는 **여행 단위 거점 화면**
  * (`/trips/[tripId]/bases`)과, 그 화면·위저드 2/4 가 함께 쓰는 **밤 교체**.
@@ -689,6 +717,302 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
       );
     });
   });
+
+  // ── TRIP-1235 지정 실패 처리 ──────────────────────────────────────────────────
+
+  /**
+   * TRIP-1235(QA R3-06) — [이 밤 거점으로 지정]이 실패했을 때 사용자가 할 일을 알 수 있게 한다.
+   *
+   * 무엇을 보장하나 — 실제 HTTP 응답(msw)과 보이는 얼굴로 잰다:
+   *  - AC-1 실패 문구가 두 갈래다. 응답 없음·5xx·401(갱신 실패)은 "잠시 후 다시 시도", 400·404 는 "다른 숙소를
+   *    골라" — 판정은 상태 코드로만 한다(400 reason enum 없음).
+   *  - AC-2 다시 누르면 그 순간 옛 문구가 걷히고, 끝나면 그 시도의 결과가 뜬다(같은 실패가 되풀이돼도 새 시도가
+   *    끝났음을 안다). 진행 중 화면은 두 번째 POST 를 문(gate)으로 붙잡아 본다.
+   *  - AC-3 일시 실패 뒤 서버가 살아나면 [지정] 한 번으로 바뀐다.
+   *  - AC-5 보내면 반드시 실패하는 후보(낙관 id·좌표 미확정)는 요청 없이 곧바로 "다른 숙소" 문구.
+   *  - AC-4 지정 실패 뒤 거점 재조회까지 실패하면 error 얼굴만 남는다 — 실패 문구가 남은 시트가 그 위에 없다.
+   *
+   * POST 응답은 케이스마다 `server.use` 로 덮는다(나중에 쓴 핸들러가 먼저 — 위 가짜 서버는 그대로 둔다).
+   * 덮은 핸들러는 `postBodies`·`handled` 를 안 채우므로 보낸 횟수는 요청 관찰자(`hits`)로 센다.
+   * ⚠️ 바텀시트는 통과형 목이라 "시트가 없다"는 트리에서 빠졌다는 뜻까지다 — 실제 덮임은 6-b.
+   */
+  describe('지정 실패 — 갈래 문구 · 재시도 · 막히지 않음', () => {
+    type Reply = () => Response | Promise<Response>;
+
+    /** POST /bases 의 n 번째 응답을 정한다. 목록이 끝나면 위 가짜 서버처럼 201 + 배정 추가. */
+    function replyPosts(replies: Reply[]): void {
+      let seq = 0;
+      server.use(
+        http.post(`${BASE}/trips/:tripId/bases`, async ({ request }) => {
+          const body = (await request.json()) as AssignBaseRequest;
+          const reply = replies[seq];
+          seq += 1;
+          if (reply) return reply();
+          postSeq += 1;
+          const created = { baseAssignmentId: `new-${postSeq}`, ...body };
+          serverBases = [...serverBases, created];
+          return HttpResponse.json(created, { status: 201 });
+        })
+      );
+    }
+
+    /** 열지 않은 문은 테스트가 끝날 때 연다 — 붙잡힌 요청이 다음 테스트로 매달리지 않게. */
+    const unopenedGates: (() => void)[] = [];
+    afterEach(() => {
+      unopenedGates.splice(0).forEach((open) => open());
+    });
+
+    /** 응답을 붙잡는 문 — 연 뒤에야 그 응답이 나간다. */
+    function gate(): { wait: Promise<void>; open: () => void } {
+      let open!: () => void;
+      const wait = new Promise<void>((resolve) => {
+        open = resolve;
+      });
+      unopenedGates.push(open);
+      return { wait, open };
+    }
+
+    function deleteHits(): string[] {
+      return hits.filter((hit) => hit.startsWith('DELETE'));
+    }
+
+    async function failureText(): Promise<
+      ReturnType<typeof screen.getByTestId>
+    > {
+      return screen.findByTestId('trip-base-staysheet-error', {}, NETWORK_WAIT);
+    }
+
+    /** 시트가 트리에서 빠지고, 잠시 뒤에도 다시 나타나지 않는다. */
+    async function sheetStaysGone(): Promise<void> {
+      await sheetClosed();
+      await settle();
+      expect(screen.queryByTestId('trip-base-staysheet')).toBeNull();
+    }
+
+    describe('AC-1 · 실패 문구가 다시 해 볼 실패와 다른 숙소를 골라야 하는 실패로 갈린다', () => {
+      it.each<[string, Reply, string]>([
+        ['500 서버 오류', () => errorJson(500, 'INTERNAL'), RETRYABLE_COPY],
+        [
+          '503 일시 중단',
+          () => new HttpResponse(null, { status: 503 }),
+          RETRYABLE_COPY,
+        ],
+        ['응답 없음(연결 끊김)', () => HttpResponse.error(), RETRYABLE_COPY],
+        [
+          '400 기간 위반(fields dateTo)',
+          () =>
+            errorJson(400, 'VALIDATION_ERROR', [
+              { field: 'dateTo', reason: '여행 종료일(2026-09-28) 이후' },
+            ]),
+          PERMANENT_COPY,
+        ],
+        [
+          '400 본문 해석 실패(fields 없음)',
+          () => errorJson(400, 'VALIDATION_ERROR'),
+          PERMANENT_COPY,
+        ],
+        [
+          '404 여행·숙소 없음',
+          () => errorJson(404, 'RESOURCE_NOT_FOUND'),
+          PERMANENT_COPY,
+        ],
+      ])(
+        '%s → 그 갈래 문구를 보이고 시트는 남는다',
+        async (_label, reply, copy) => {
+          replyPosts([reply]);
+          await renderTripBases();
+
+          assignNight(1, 'stay-b');
+
+          expect(await failureText()).toHaveTextContent(copy);
+          expect(screen.getByTestId('trip-base-staysheet')).toBeOnTheScreen();
+        }
+      );
+
+      it('401 이고 토큰 갱신도 실패하면 → 다시 해 볼 실패 문구', async () => {
+        replyPosts([() => new HttpResponse(null, { status: 401 })]);
+        server.use(
+          http.post(
+            `${BASE}/auth/token/refresh`,
+            () => new HttpResponse(null, { status: 401 })
+          )
+        );
+        await renderTripBases();
+
+        assignNight(1, 'stay-b');
+
+        expect(await failureText()).toHaveTextContent(RETRYABLE_COPY);
+      });
+    });
+
+    describe('AC-2 · 다시 누르면 옛 문구가 걷히고, 끝나면 그 시도의 결과가 뜬다', () => {
+      it.each<[string, Reply, string]>([
+        [
+          '같은 실패(500)가 되풀이돼도',
+          () => errorJson(500, 'INTERNAL'),
+          RETRYABLE_COPY,
+        ],
+        [
+          '두 번째가 400 이면 문구가 바뀐다',
+          () => errorJson(400, 'VALIDATION_ERROR'),
+          PERMANENT_COPY,
+        ],
+      ])(
+        '%s — 진행 중엔 문구가 없고, 끝나면 두 번째 결과 문구',
+        async (_label, secondReply, secondCopy) => {
+          const second = gate();
+          replyPosts([
+            () => errorJson(500, 'INTERNAL'),
+            async () => {
+              await second.wait;
+              return secondReply();
+            },
+          ]);
+          await renderTripBases();
+          assignNight(1, 'stay-b');
+          // 앵커 — 첫 실패 표시가 떠 있다(문구 갈래는 AC-1 이 잰다 — 여기선 "걷히나"만 본다).
+          expect(await failureText()).toBeOnTheScreen();
+
+          // 사람이 400ms 창 밖에서 다시 누른 것과 같게 연타 가드 창을 닫는다.
+          resetPressGuard();
+          fireEvent.press(screen.getByTestId('trip-base-staysheet-assign'));
+          // 두 번째 요청이 서버에 닿은 뒤에 본다 — 그 전의 "없다"는 아직 안 눌린 것과 구별되지 않는다.
+          await waitFor(() => expect(hitCount(POST_HIT)).toBe(2), NETWORK_WAIT);
+
+          expect(screen.queryByTestId('trip-base-staysheet-error')).toBeNull();
+
+          await act(async () => {
+            second.open();
+          });
+          expect(await failureText()).toHaveTextContent(secondCopy);
+        }
+      );
+    });
+
+    describe('AC-3 · 일시 실패 뒤 서버가 살아나면 [지정] 한 번으로 바뀐다', () => {
+      it('A 를 지운 뒤 붙이기가 500 → 다시 누르면 B 가 붙고 시트가 닫힌다 — 지운 배정을 또 지우지 않는다', async () => {
+        serverBases = [assignment('a1', 'stay-a', '2026-09-26', '2026-09-27')];
+        replyPosts([() => errorJson(500, 'INTERNAL')]);
+        await renderTripBases();
+
+        assignNight(1, 'stay-b');
+        await failureText();
+        // 첫 시도가 A 를 지운 것을 재조회가 보여 준다 — 재시도는 이 새 목록으로 계획한다.
+        await waitFor(
+          () =>
+            expect(
+              screen.getByTestId('trip-base-night-card-1')
+            ).toHaveTextContent(/숙소 미정/),
+          NETWORK_WAIT
+        );
+
+        resetPressGuard();
+        fireEvent.press(screen.getByTestId('trip-base-staysheet-assign'));
+
+        await sheetClosed();
+        await waitFor(
+          () =>
+            expect(
+              screen.getByTestId('trip-base-night-card-1')
+            ).toHaveTextContent(/메리어트 동대문/),
+          NETWORK_WAIT
+        );
+        expect(deleteHits()).toHaveLength(1);
+        expect(hitCount(POST_HIT)).toBe(2);
+      });
+    });
+
+    describe('AC-5 · 보내면 반드시 실패하는 후보는 요청 없이 곧바로 "다른 숙소를 골라" 문구', () => {
+      // 낙관 행은 좌표를 **확정**으로 둔다 — 실서비스의 낙관 행은 미확정이지만, 그러면 좌표 판정 하나만으로도
+      // 두 케이스가 다 통과해 "낙관 id 판정"을 잴 수 없다.
+      const OPTIMISTIC: SavedStay = stay(
+        'optimistic:NAVER:opt-1',
+        '1996 종로인'
+      );
+      const UNCONFIRMED: SavedStay = {
+        ...stay('stay-unconfirmed', '서울신라호텔'),
+        coordConfirmed: false,
+      };
+
+      it.each([
+        ['담기 응답 전 임시 행(낙관 id)', OPTIMISTIC],
+        ['좌표 미확정 숙소', UNCONFIRMED],
+      ] as const)(
+        '%s → 문구는 바로 뜨고 POST·DELETE 0건, 다른 숙소로 바꾸면 그대로 지정된다',
+        async (_label, candidate) => {
+          savedStays = [STAY_A, STAY_B, candidate];
+          await renderTripBases();
+
+          assignNight(1, candidate.savedStayId);
+
+          // 요청을 기다리지 않는다 — 누른 그 렌더에 이미 떠 있다.
+          expect(
+            screen.getByTestId('trip-base-staysheet-error')
+          ).toHaveTextContent(PERMANENT_COPY);
+          expect(screen.getByTestId('trip-base-staysheet')).toBeOnTheScreen();
+          // 요청이 나갈 틈을 준 뒤에 센다.
+          await settle();
+          expect(hitCount(POST_HIT)).toBe(0);
+          expect(deleteHits()).toEqual([]);
+
+          // 막다른 곳이 아니다 — 다른 숙소를 고르면 지정된다.
+          fireEvent.press(
+            screen.getByTestId('trip-base-staysheet-cand-stay-b')
+          );
+          resetPressGuard();
+          fireEvent.press(screen.getByTestId('trip-base-staysheet-assign'));
+          await sheetClosed();
+          expect(hitCount(POST_HIT)).toBe(1);
+        }
+      );
+    });
+
+    describe('AC-4 · 거점 재조회까지 실패하면 error 얼굴만 남고, 출구가 보인다', () => {
+      it('여행 단위 화면 — 실패 문구 시트가 error 얼굴 위에 남지 않고 [다시 시도]·[숙소 없이 시작하기]·‹ 가 있다', async () => {
+        replyPosts([() => errorJson(500, 'INTERNAL')]);
+        await renderTripBases();
+        // 첫 조회가 성공한 **뒤에** 켠다 — 먼저 켜면 "지정 실패 뒤"가 아니라 "처음부터 error"를 잰다.
+        failOnce.bases = true;
+        // 앵커 — 지정 전에는 error 얼굴이 아니다.
+        expect(screen.queryByTestId('trip-base-error')).toBeNull();
+
+        assignNight(1, 'stay-b');
+
+        await screen.findByTestId('trip-base-error', {}, NETWORK_WAIT);
+        await sheetStaysGone();
+        expect(screen.queryByTestId('trip-base-staysheet-error')).toBeNull();
+        expect(screen.getByTestId('trip-base-error-retry')).toBeOnTheScreen();
+        expect(screen.getByTestId('trip-base-error-nostay')).toBeOnTheScreen();
+        expect(screen.getByTestId('trip-base-back')).toBeOnTheScreen();
+      });
+
+      it('위저드 2/4 — error 얼굴의 [숙소 없이 시작하기]로 방식 선택(h04)에 간다', async () => {
+        const store = useTripWizardStore.getState();
+        store.reset();
+        store.setCreatedTripId(TRIP_T);
+        store.addDestination('서울특별시', 2);
+        store.setPeriod(undefined, '2026-09-26', '2026-09-28');
+        replyPosts([() => errorJson(500, 'INTERNAL')]);
+        render(
+          <QueryClientProvider client={client}>
+            <TripNewStep2Page />
+          </QueryClientProvider>
+        );
+        await screen.findByTestId('trip-base-night-card-1', {}, NETWORK_WAIT);
+        failOnce.bases = true;
+
+        assignNight(1, 'stay-b');
+
+        await screen.findByTestId('trip-base-error', {}, NETWORK_WAIT);
+        await sheetStaysGone();
+        // [숙소 없이 시작하기]는 위저드에서 연타 가드를 탄다 — 지정 탭이 연 창을 닫고 누른다.
+        resetPressGuard();
+        fireEvent.press(screen.getByTestId('trip-base-error-nostay'));
+        expect(mockReplace).toHaveBeenCalledTimes(1);
+        expect(mockReplace).toHaveBeenCalledWith(METHOD_ROUTE);
+      });
+    });
+  });
 });
 
 /**
@@ -1235,6 +1559,53 @@ describe('편집 모드 (TRIP-1082)', () => {
       expect(screen.getByTestId('trip-base-generate')).toBeOnTheScreen();
       expect(screen.getByTestId('trip-base-nostay-start')).toBeOnTheScreen();
       expect(screen.queryByTestId('trip-base-edit-done')).toBeNull();
+    });
+  });
+
+  // ── TRIP-1235 지정 실패 (공유 배선 — 편집 모드에서도 같다) ─────────────────────────
+
+  describe('AC-7 · 편집 모드도 같은 실패 표시를 탄다', () => {
+    it('400 이면 "다른 숙소를 골라" 문구', async () => {
+      server.use(
+        http.post(`${BASE}/trips/:tripId/bases`, () =>
+          errorJson(400, 'VALIDATION_ERROR', [
+            { field: 'dateTo', reason: '여행 종료일(2026-09-28) 이후' },
+          ])
+        )
+      );
+      await renderEdit();
+
+      assignNight(1, 'stay-b');
+
+      expect(
+        await screen.findByTestId('trip-base-staysheet-error', {}, NETWORK_WAIT)
+      ).toHaveTextContent(PERMANENT_COPY);
+    });
+
+    it('거점 재조회까지 실패하면 error 얼굴만 남는다 — [다시 시도]·‹ 가 있고 [숙소 없이 시작하기]는 없다', async () => {
+      failPostAt = 1;
+      await renderEdit();
+      // 첫 조회가 성공한 뒤에 다음 거점 조회 한 번만 실패시킨다(once).
+      server.use(
+        http.get(
+          `${BASE}/trips/:tripId/bases`,
+          () => new HttpResponse(null, { status: 500 }),
+          { once: true }
+        )
+      );
+
+      assignNight(1, 'stay-b');
+
+      await screen.findByTestId('trip-base-error', {}, NETWORK_WAIT);
+      await waitFor(
+        () => expect(screen.queryByTestId('trip-base-staysheet')).toBeNull(),
+        NETWORK_WAIT
+      );
+      await settle();
+      expect(screen.queryByTestId('trip-base-staysheet')).toBeNull();
+      expect(screen.getByTestId('trip-base-error-retry')).toBeOnTheScreen();
+      expect(screen.getByTestId('trip-base-back')).toBeOnTheScreen();
+      expect(screen.queryByTestId('trip-base-error-nostay')).toBeNull();
     });
   });
 });

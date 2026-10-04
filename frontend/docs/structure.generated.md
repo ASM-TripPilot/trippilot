@@ -523,12 +523,12 @@
 - `src/features/save-place/model/savedPlaces.ts`  →  SavedPlacesFailureReason · SavedPlacesOutcome · useSavedPlaces
 
 ## src/features/save-stay/
-- `src/features/save-stay/index.ts`  →  useSavedStays · stayKey
+- `src/features/save-stay/index.ts`  →  useSavedStays · stayKey · isOptimisticSavedStayId
 - `src/features/save-stay/index.view.ts`  →  stayKey
 
 ## src/features/save-stay/model/
 - `src/features/save-stay/model/buildSaveStayRequest.ts`  →  buildSaveStayRequest
-- `src/features/save-stay/model/savedStayIndex.ts`  →  findSavedStayId · optimisticSavedStayId
+- `src/features/save-stay/model/savedStayIndex.ts`  →  findSavedStayId · optimisticSavedStayId · isOptimisticSavedStayId
 - `src/features/save-stay/model/savedStays.ts`  →  SavedStaysFailureReason · SavedStaysOutcome · useSavedStays
 - `src/features/save-stay/model/stayKey.ts`  →  stayKey
 
@@ -1201,7 +1201,7 @@
 
 ## src/pages/trip/trip-new-step2/ui/
 - `src/pages/trip/trip-new-step2/ui/BaseRegenerateDialog.tsx`  →  BaseRegenerateDialog
-- `src/pages/trip/trip-new-step2/ui/StaySelectSheet.tsx`  →  StaySelectCandidate · StaySelectSection · StaySelectSheetProps · StaySelectSheet
+- `src/pages/trip/trip-new-step2/ui/StaySelectSheet.tsx`  →  StaySelectCandidate · StaySelectSection · AssignFailure · StaySelectSheetProps · StaySelectSheet
 - `src/pages/trip/trip-new-step2/ui/TripBasesPage.tsx`  →  TripBasesPage
 - `src/pages/trip/trip-new-step2/ui/TripNewStep2Page.tsx`  →  TripNewStep2Page · BaseNightsFlowProps · BaseNightsFlow
 - `src/pages/trip/trip-new-step2/ui/TripWizardStep2Screen.tsx`  →  NightlyBaseCardVM · Step2Variant · TripWizardStep2ScreenProps · TripWizardStep2Screen

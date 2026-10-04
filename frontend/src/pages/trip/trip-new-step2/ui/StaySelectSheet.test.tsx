@@ -25,7 +25,7 @@ import { CheckGlyph } from '@/features/trip/index.view';
  *  - **단일 선택**(★2·AC-3) 선택 표식은 색 fill 이 아니라 `accessibilityState={{selected}}`(=`toBeSelected()`).
  *  - **지정 disabled 3단**(★3·AC-7) 선택 없으면 진짜 disabled(press 해도 콜백 0), 선택 시 활성.
  *  - **후보 0건**(AC-5) empty + 둘러보기.
- *  - **실패 인라인**(★4·INV-4) assignFailed → 오류 present.
+ *  - **실패 인라인**(★4·INV-4) assignFailure 갈래별 문구 — 다시 해 볼 실패 / 다른 숙소를 골라야 하는 실패(TRIP-1235).
  *
  * ⚠️ 실개폐·딤·중앙정렬·터치차단·사진 실색·체크 분홍·테두리 분홍은 `@gorhom/bottom-sheet` 통과형 목/
  * react-native-svg 정수화라 jest 원리적 사각(★7) — 6-b 실기 전용(프리뷰 `trip-new-step2-staysheet`).
@@ -208,14 +208,44 @@ describe('S7 · 후보 0건 empty (AC-5)', () => {
 });
 
 describe('S8 · 실패 인라인 (INV-4)', () => {
-  it('assignFailed 면 인라인 오류를 그린다', () => {
-    renderSheet({ selectedSavedStayId: 'stay-gwangalli', assignFailed: true });
+  // TRIP-1235 — 옛 boolean `assignFailed`(모든 실패가 한 문구)를 갈래 prop 으로 바꿨다(계약 변경).
+  const RETRYABLE = '연결이 불안정해요 · 잠시 후 다시 시도해 주세요';
+  const PERMANENT =
+    '이 숙소는 지금 거점으로 지정할 수 없어요 · 다른 숙소를 골라 주세요';
 
-    expect(screen.getByTestId('trip-base-staysheet-error')).toBeOnTheScreen();
+  it('다시 해 볼 실패(retryable)면 "잠시 후 다시 시도" 문구를 그린다', () => {
+    renderSheet({
+      selectedSavedStayId: 'stay-gwangalli',
+      assignFailure: 'retryable',
+    });
+
+    expect(screen.getByTestId('trip-base-staysheet-error')).toHaveTextContent(
+      RETRYABLE
+    );
   });
 
-  it('짝 · assignFailed 가 아니면 오류를 안 그린다', () => {
-    renderSheet({ selectedSavedStayId: 'stay-gwangalli' });
+  it('다시 해도 같은 실패(permanent)면 다른 숙소를 고르라고 하고, 다시 시도를 권하지 않는다', () => {
+    renderSheet({
+      selectedSavedStayId: 'stay-gwangalli',
+      assignFailure: 'permanent',
+    });
+
+    expect(screen.getByTestId('trip-base-staysheet-error')).toHaveTextContent(
+      PERMANENT
+    );
+    expect(screen.getByTestId('trip-base-staysheet')).not.toHaveTextContent(
+      /다시 시도/
+    );
+  });
+
+  it.each([
+    ['생략', undefined],
+    ['null', null],
+  ] as const)('짝 · 실패가 없으면(%s) 오류를 안 그린다', (_label, failure) => {
+    renderSheet({
+      selectedSavedStayId: 'stay-gwangalli',
+      assignFailure: failure,
+    });
 
     expect(screen.queryByTestId('trip-base-staysheet-error')).toBeNull();
   });

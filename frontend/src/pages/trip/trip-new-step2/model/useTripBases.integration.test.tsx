@@ -306,3 +306,72 @@ describe('★10 · 01b D7 — tripId가 없으면 요청이 한 건도 안 나�
     expect(hitCount(BASES_HIT)).toBe(1);
   });
 });
+
+// TRIP-1235(01b 추가 · AC-3) — 직전 시도가 DELETE 는 해 놓고 POST 에서 실패했는데 캐시가 그걸 모르면(재조회 전·
+// 다른 화면이 채운 캐시), 재시도가 이미 지워진 배정을 또 지우려다 404 로 다시 실패했다. 404 는 "이미 없다"라
+// 목표 상태와 같으므로 접고 붙이기를 이어 간다. 접는 것은 **DELETE 의 404 하나뿐**이다 — 아래 두 짝이 과잉 접기를 잡는다.
+describe('AC-3 · 교체 중 지울 배정이 이미 없으면(DELETE 404) 붙이기를 이어 간다', () => {
+  /** 캐시의 ba-1(stay-a, 6/10–6/12)을 통째로 stay-b 로 — 계획은 DELETE ba-1 한 번 뒤 POST 한 번. */
+  const REPLACE_REQUEST = {
+    savedStayId: 'stay-b',
+    dateFrom: '2026-06-10',
+    dateTo: '2026-06-12',
+  };
+  const DELETE_HIT = `DELETE /api/v1/trips/${TRIP_ID}/bases/ba-1`;
+  const POST_HIT = `POST /api/v1/trips/${TRIP_ID}/bases`;
+
+  function deleteRespondsWith(status: number): void {
+    server.use(
+      http.delete(
+        `${BASE}/trips/${TRIP_ID}/bases/:baseAssignmentId`,
+        () => new HttpResponse(null, { status })
+      )
+    );
+  }
+
+  async function replaceAndReport(): Promise<{ rejected: boolean }> {
+    const { result } = await renderSettledProbe();
+    let rejected = false;
+    await act(async () => {
+      await result.current.assign
+        .mutateAsync({ tripId: TRIP_ID, data: REPLACE_REQUEST })
+        .catch(() => {
+          rejected = true;
+        });
+    });
+    return { rejected };
+  }
+
+  it('DELETE 가 404 여도 거부되지 않고, 새 배정 POST 가 그대로 나간다', async () => {
+    deleteRespondsWith(404);
+
+    const { rejected } = await replaceAndReport();
+
+    // 앵커 — 교체 경로를 실제로 탔다(지우기를 시도했다).
+    expect(hitCount(DELETE_HIT)).toBe(1);
+    expect(rejected).toBe(false);
+    expect(hitCount(POST_HIT)).toBe(1);
+    expect(capturedBody).toEqual(REPLACE_REQUEST);
+  });
+
+  it('짝 — DELETE 의 그 밖 실패(500)는 접지 않는다: 거부되고 POST 는 나가지 않는다', async () => {
+    deleteRespondsWith(500);
+
+    const { rejected } = await replaceAndReport();
+
+    expect(hitCount(DELETE_HIT)).toBe(1);
+    expect(rejected).toBe(true);
+    expect(hitCount(POST_HIT)).toBe(0);
+  });
+
+  it('짝 — POST 의 404(여행·숙소 없음)는 접지 않는다: 거부된다', async () => {
+    deleteRespondsWith(204);
+    postStatus = 404;
+
+    const { rejected } = await replaceAndReport();
+
+    // 앵커 — POST 까지 갔다(지우기에서 멈춘 거부가 아니다).
+    expect(hitCount(POST_HIT)).toBe(1);
+    expect(rejected).toBe(true);
+  });
+});

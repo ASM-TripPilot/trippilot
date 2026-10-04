@@ -4635,6 +4635,50 @@ export const PREVIEW_STATES: PreviewState[] = [
       );
     },
   },
+  // g02 지정 실패 두 갈래(TRIP-1235) — Figma 에 실패 프레임이 없어 코드가 만든 문구다. 두 줄 문구가
+  // 버튼 사이에서 넘치거나 튀지 않나를 6-b 가 보는 자리(문구 자체는 jest 가 잰다).
+  ...(['retryable', 'permanent'] as const).map((failure) => ({
+    key: `trip-new-step2-staysheet-fail-${failure}`,
+    band: 'g' as const,
+    label: `g02 · 숙소 선택 시트 지정 실패 ${failure}`,
+    login: null,
+    render: () => (
+      <StaySelectSheet
+        title="1박 · 서울특별시"
+        dateLabel="9/26(토)"
+        candidates={[
+          {
+            savedStayId: 'jw',
+            name: 'JW 메리어트 동대문',
+            coordConfirmed: true,
+            linkedTripIds: [],
+            checkIn: null,
+            checkOut: null,
+            registerRoute: 'MAP_SEARCH',
+            createdAt: '2026-08-01T00:00:00Z',
+            updatedAt: '2026-08-01T00:00:00Z',
+          },
+        ]}
+        selectedSavedStayId="jw"
+        assignFailure={failure}
+        onSelect={noop}
+        onBrowse={noop}
+        onAssign={noop}
+        onClose={noop}
+      />
+    ),
+  })),
+  // 지정 실패 뒤 거점 재조회까지 실패한 얼굴(TRIP-1235 AC-4, Figma `4506:2314`) — 이때 배선은 시트를 안
+  // 그리므로 얼굴만 남는다. 프리뷰는 props 만 받아 "시트 숨김" 판정 자체는 못 탄다(그건 jest C7·C8·E2).
+  {
+    key: 'trip-new-step2-assign-fail-error',
+    band: 'g',
+    label: 'g02 · 지정 실패 뒤 error 얼굴',
+    login: null,
+    render: () => (
+      <TripWizardStep2Screen {...TRIP_BASE_SCREEN} variant="error" />
+    ),
+  },
   // h02 꼭 갈 곳 (TRIP-785) — Figma 대조용 격리 렌더. default→loading→error 순으로 삽입해
   // (안정 정렬 = 배열 위치) h02 3키 순서를 맞춘다.
   {
