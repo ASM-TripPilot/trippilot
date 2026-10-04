@@ -3319,3 +3319,47 @@ note = """
 #956·#957 은 이 노드를 기다리지 않고 머지했다 — 대신 validate 잡의 **전 항목을 로컬에서
 명령 그대로** 돌려 통과를 확인했다(두 브랜치 각각). 그 증거는 각 PR 본문에 있다.
 """
+
+[[nodes]]
+id = "LEGAL-PAGES"
+ticket = ""
+title = "약관·처리방침 공개 URL — 심사 제출 필수 필드가 비어 있었다"
+status = "done"
+migration = false
+touches = [".github/workflows", "backend/scripts"]
+note = """
+2026-10-05, PR #963. App Store Connect 가 **공개 웹 URL 로 된 개인정보처리방침**을 제출
+필수로 받는데 우리 약관 6종은 앱 내 API(`GET /api/v1/terms`)로만 나가서 웹 주소가 없었다.
+그 칸이 비면 제출 버튼이 눌리지 않는다.
+
+**가동 주소**: `https://asm-trippilot.github.io/trippilot/privacy.html`
+(목록은 `/trippilot/`, 6종 전부 있다)
+
+**정본은 시드다.** `backend/docs/legal/*.md` 는 초안이고 **낡아 있다** — 초안은
+`시행일: [미확정: 공개 출시일]` 인데 시드(`R__seed_reference_data.sql`)는 `2026-09-28` 로
+해소돼 있다. 초안에서 뽑으면 공개 페이지가 앱 화면과 다른 말을 한다.
+(처음에 시드가 축약본이라고 봤다가 정정했다 — 글자수와 바이트를 비교한 오독이었다.)
+
+**한 번 복사해 올리지 않은 이유**: 본문 개정 때 페이지가 **조용히 갈라진다.** 사용자가 앱에서
+보는 본문과 공개 페이지가 다른 상태는 그 자체가 위험이고 증상이 없다. 시드 변경을 트리거로 묶었다.
+
+**색인은 막았다**(`noindex` + `robots.txt`). 생성물을 감사해 보니 공개되면 대표자명 7회·
+이메일 3회·사업자등록번호 3회·**개인 휴대폰 2회**가 검색에 수집된다. 법정 고지 항목이라 본문에서
+뺄 수 없고 앱에서도 보이는 값이지만, **ASC 는 열리는 URL 만 요구하고 색인을 요구하지 않는다.**
+접근은 그대로 공개다. 색인을 원하면 그 두 줄을 지우면 된다(판단은 사람 몫).
+
+## ⚠ 리포 **설정** 두 건 — 코드에 안 남는다
+
+머지만으로는 배포가 안 됐다. 둘 다 2026-10-05 에 API 로 풀었고, **클러스터를 다시 만들거나
+리포를 포크·이전하면 다시 막힌다.**
+
+1. **Pages 가 꺼져 있었다** — `deploy-pages` 가 `404 Not Found` + *"Ensure GitHub Pages has
+   been enabled"*. 처방: `gh api -X POST repos/<owner>/<repo>/pages -f build_type=workflow`.
+   (UI 로는 Settings → Pages → Source = **GitHub Actions**)
+2. **`github-pages` 환경이 `main` 만 허용했다** — Pages 를 켜면 GitHub 이 그 환경을 만들면서
+   배포 허용 브랜치를 **기본 브랜치로 제한**한다. 우리 트리거는 `develop` 이라 잡이
+   **스텝을 하나도 실행하지 않고** 죽었다. 진단 신호가 그것이다 — 실패 잡의 `steps` 가 **빈 배열**
+   이면 스텝 로그를 뒤질 것이 없고 **환경 정책**을 봐야 한다(로그에 이유가 안 남는다).
+   처방: `gh api -X POST repos/<o>/<r>/environments/github-pages/deployment-branch-policies
+   -f name=develop -f type=branch`.
+"""
