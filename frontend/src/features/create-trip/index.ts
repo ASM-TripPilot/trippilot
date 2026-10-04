@@ -1,6 +1,10 @@
 export { mustVisitFailureNotice, seedMustVisits } from './model/mustVisitSeed';
 export type { MustVisitSeedItem } from './model/mustVisitSeed';
-export { nightsSum, validateTripDraft } from './model/tripDraft';
+export {
+  MAX_TRIP_NIGHTS,
+  nightsSum,
+  validateTripDraft,
+} from './model/tripDraft';
 export type { TripDraft } from './model/tripDraft';
 export {
   formatWizardStep,
