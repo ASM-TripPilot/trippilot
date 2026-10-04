@@ -3,6 +3,7 @@ import json
 import re
 
 NAME = "trippilot-kb-load"
+DEADLINE_SEC = 3600
 
 # `scheme://user:pass@` 와 `KEY=value` 꼴의 비밀을 가린다(실패 출력용).
 _CREDENTIAL = re.compile(r"(://)[^\s/@]+@|((?:KEY|TOKEN|SECRET|PASSWORD)[A-Z_]*=)\S+", re.IGNORECASE)
@@ -43,7 +44,9 @@ def manifest(namespace, image):
         "apiVersion": "batch/v1", "kind": "Job",
         "metadata": {"name": NAME, "namespace": namespace},
         # 멱등(이미 들어간 문서는 건너뜀)이라 재시도가 이어받는다 — 임베딩 파드 일시 장애 대비.
-        "spec": {"backoffLimit": 2, "activeDeadlineSeconds": 1800, "ttlSecondsAfterFinished": 3600,
+        # 마감 60분: DEV 임베딩(CPU 2)은 건당 ≈1.5초라 KB-5 전량(1,470건)이 ≈37분이다 — 30분이던
+        # 첫 적재가 끊겼다(2026-10-04). 전량 재적재는 모델·데이터가 바뀔 때뿐이고 평소엔 건너뛴다.
+        "spec": {"backoffLimit": 2, "activeDeadlineSeconds": DEADLINE_SEC, "ttlSecondsAfterFinished": 3600,
                  "template": {"metadata": {"labels": {"app.kubernetes.io/name": NAME}},
                               "spec": {
                                   "restartPolicy": "Never", "automountServiceAccountToken": False,
@@ -67,7 +70,7 @@ def run(namespace, shell):
               json.dumps(manifest(namespace, image)))
         try:
             shell(["kubectl", "wait", "--namespace", namespace, "--for=condition=complete",
-                   f"job/{NAME}", "--timeout=1800s"])
+                   f"job/{NAME}", f"--timeout={DEADLINE_SEC}s"])
         except Exception:
             # 공용 헬퍼는 stderr 를 숨긴다. 적재 로그 마지막 줄들이 원인이라 자격만 가리고 보인다.
             logs = shell(["kubectl", "logs", "--namespace", namespace, f"job/{NAME}", "--tail=20"])
