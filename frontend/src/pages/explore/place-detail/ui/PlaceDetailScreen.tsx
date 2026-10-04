@@ -134,7 +134,7 @@ export function PlaceDetailScreen({
 
   return (
     <View testID="explore-place-detail" className="flex-1 bg-canvas">
-      <ScrollView className="flex-1" contentContainerClassName="pb-[22px]">
+      <ScrollView className="flex-1" contentContainerClassName="pb-[48px]">
         {/* 갤러리 hero(풀블리드) — imageUrl NULL 이면 기본 이미지를 지어내지 않고 회색 자리
             (BR-U1-06). 원형 버튼 3개는 안전영역 위로 띄운다(full-bleed 이미지 immersive). */}
         <View
@@ -273,15 +273,23 @@ export function PlaceDetailScreen({
           {/* 미니맵(Figma d06map 1907:1124) — 단일 핀 viewOnly 지도(place.lat/lng). connectPins
               미전달(핀 1개라 경로선 없음). 네이버 네이티브라 타일·제스처 잠금은 6-b 실기(코드만
               머지 시 재빌드 전 회색). env 키 부재 시 코어가 map-failure 로 접는다(INV-4). */}
+          {/* TRIP-1221(c) — 네이티브 지도는 조상의 둥근 클립을 아래 모서리에서 놓친 실측이 있어, 테두리 카드
+              (바깥)와 지도를 자르는 래퍼(안쪽 `overflow-hidden rounded-card`)를 나눠 지도 뷰 높이=카드 안쪽
+              높이로 맞춘다. 빈 아래쪽은 스크롤 끝 여백(pb)으로 둔다. */}
           <View
             testID="explore-place-map"
-            className="h-[150px] w-full overflow-hidden rounded-[14px] border border-hairline bg-surface-soft"
+            className="h-[220px] w-full overflow-hidden rounded-card border border-hairline bg-surface-soft"
           >
-            <MapView
-              center={{ lat: place.lat, lng: place.lng }}
-              pins={[{ number: 1, lat: place.lat, lng: place.lng }]}
-              viewOnly
-            />
+            <View
+              testID="explore-place-map-clip"
+              className="h-full w-full overflow-hidden rounded-card"
+            >
+              <MapView
+                center={{ lat: place.lat, lng: place.lng }}
+                pins={[{ number: 1, lat: place.lat, lng: place.lng }]}
+                viewOnly
+              />
+            </View>
           </View>
         </View>
       </ScrollView>
