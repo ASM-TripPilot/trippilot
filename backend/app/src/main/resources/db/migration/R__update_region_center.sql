@@ -14,7 +14,7 @@
 -- seed_region_catalog → seed_stay → seed_stub_pois → update_region_center 로 돈다.
 -- 파일명을 바꾸면 좌표가 빈 채로 계산된다 — 그 회귀를 IT 가 잡는다.
 
--- ① 무게중심 — 숙소·ACTIVE POI 좌표 평균. 시도 행도 여기서 채워지지만 곧바로 ② 가 덮어쓴다.
+-- ① 무게중심 — 숙소·ACTIVE POI 좌표 평균. 시도 행도 여기서 채워진다 — 아래 채움이 그 값을 쓰고, 맨 끝 ② 가 덮어쓴다.
 WITH pts AS (
   SELECT region_code, lat, lng FROM stay WHERE region_code IS NOT NULL
   UNION ALL
@@ -30,6 +30,15 @@ UPDATE region r
   ) c
  WHERE c.region_code = r.region_code;
 
+-- 데이터가 한 건도 없는 **목적지**는 시도 중심으로 채운다. 거친 값이지만 앵커가 아예 없는 것보다 낫다
+-- — 없으면 그 지역 여행이 빈 일정이 된다. 현재 과천시·의성군 2곳이 해당한다.
+-- 행정구(selectable=false)는 채우지 않는다 — 목적지로 고를 수 없어 앵커가 필요 없다.
+UPDATE region r
+   SET lat = s.lat, lng = s.lng, updated_at = now()
+  FROM region s
+ WHERE r.lat IS NULL AND r.selectable
+   AND s.region_code = r.sido_code AND s.lat IS NOT NULL;
+
 -- ② 시도는 밀도 정점으로 덮어쓴다(TRIP-1225). 시도에는 군집이 여럿이라 평균이 군집 사이 빈 땅에
 -- 떨어진다 — 제주는 북(제주시)·남(서귀포) 두 군집의 평균이 (33.389, 126.511) 한라산 북사면이었고
 -- 2km 안에 숙소·장소가 한 건도 없었다. 시드 기준(2026-10) 16개 시도 중 10곳이 그랬다.
@@ -42,15 +51,25 @@ UPDATE region r
 -- 시가지 하나를 갈라 더 작은 군집에 지는 것을 막으려는 것이고, 창 안 평균을 쓰는 것은 좌표가 칸
 -- 모서리가 아니라 점이 실제로 모인 곳에 떨어지게 하려는 것이다. 동률이면 남쪽·서쪽 칸 — 같은 데이터면
 -- 늘 같은 좌표다.
+--
+-- **채움 뒤에 둔다.** 채움은 위 ① 의 시도 평균을 그대로 받는다 — 앞에 두면 채움 입력이 정점으로 바뀌어
+-- 내륙 목적지가 해안 도시로 끌린다(시드 기준 의성군청에서 경북 평균 45.5km → 정점 경주 72.8km).
+--
+-- **시도 12(전남광주통합특별시)는 옛 광주 자치구 5곳 안에서만 찾는다.** 별칭 '광주'·'광주광역시'가 이
+-- 시도로 이어지는데(코드 없이 만든 '광주' 목적지도 이름 조회가 코드 순이라 12 를 먼저 집는다), 시도 전체의
+-- 정점은 여수라 광주 여행의 앵커·날씨 지점이 광주시청에서 94km 떨어진 다른 도시에 찍힌다. 별칭
+-- '전남'·'전라남도'도 같은 좌표(광주 도심)를 받는다 — 권역의 관문이라 감수한다.
 WITH pts AS (   -- ① 과 같은 점 집합
   SELECT region_code, lat, lng FROM stay WHERE region_code IS NOT NULL
   UNION ALL
   SELECT region_code, lat, lng FROM poi WHERE region_code IS NOT NULL AND data_status = 'ACTIVE'
 ),
-cell AS (       -- 시도 = 코드 앞 두 자리 — 그 안 시군구 점을 전부 포함한다
+cell AS (       -- 시도 = 코드 앞 두 자리 — 그 안 시군구 점을 전부 포함한다(시도 12 만 위 예외)
   SELECT left(region_code, 2) AS sido, lat, lng,
          floor(lat / 0.02)::int AS gy, floor(lng / 0.025)::int AS gx
     FROM pts
+   WHERE left(region_code, 2) <> '12'
+      OR region_code IN ('12210', '12240', '12270', '12300', '12330')   -- 옛 광주 동·서·남·북·광산구
 ),
 cnt AS (
   SELECT sido, gy, gx, count(*) AS n FROM cell GROUP BY sido, gy, gx
@@ -79,12 +98,3 @@ UPDATE region r
      GROUP BY k.sido
   ) c
  WHERE r.region_code = c.sido;
-
--- 데이터가 한 건도 없는 **목적지**는 시도 중심으로 채운다. 거친 값이지만 앵커가 아예 없는 것보다 낫다
--- — 없으면 그 지역 여행이 빈 일정이 된다. 현재 과천시·의성군 2곳이 해당한다.
--- 행정구(selectable=false)는 채우지 않는다 — 목적지로 고를 수 없어 앵커가 필요 없다.
-UPDATE region r
-   SET lat = s.lat, lng = s.lng, updated_at = now()
-  FROM region s
- WHERE r.lat IS NULL AND r.selectable
-   AND s.region_code = r.sido_code AND s.lat IS NOT NULL;

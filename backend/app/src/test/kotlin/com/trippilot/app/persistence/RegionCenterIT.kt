@@ -2,6 +2,7 @@ package com.trippilot.app.persistence
 
 import com.trippilot.placedata.api.RegionLookupFacade
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
+import io.kotest.assertions.withClue
 import io.kotest.matchers.doubles.shouldBeGreaterThan
 import io.kotest.matchers.ints.shouldBeGreaterThan as shouldBeGreaterThanInt
 import io.kotest.matchers.doubles.shouldBeLessThan
@@ -46,15 +47,24 @@ class RegionCenterIT : AbstractPostgresIntegrationTest() {
      * 목적지로 고를 수 없으니 앵커도 필요 없다 — 없는 것을 있다고 말하지 않는다.
      *
      * (데이터가 실제로 있는 행정구는 자기 무게중심을 가질 수 있다. 여기서 막는 것은 **시도 중심 대입**이다.)
+     *
+     * 시도 좌표와 같은지로 묻지 않는다 — 채움은 시도 평균을 받고 그 뒤 시도 행이 밀도 정점으로
+     * 덮어써지므로(TRIP-1225), 비교할 시도 좌표가 이미 바뀌어 있어 잘못된 대입을 못 본다.
+     * 그래서 "자기 데이터가 없는 행정구는 좌표도 없다"로 묻는다.
      */
     @Test
     fun `데이터 없는 행정구에 시도 중심을 대입하지 않는다`() {
         jdbc.queryForObject(
             """
-            SELECT count(*) FROM region r JOIN region s ON s.region_code = r.sido_code
-             WHERE NOT r.selectable AND r.lat IS NOT NULL
-               AND r.region_code <> r.sido_code   -- 시도 자기 자신과의 조인 제외
-               AND r.lat = s.lat AND r.lng = s.lng
+            SELECT count(*) FROM region r
+             WHERE NOT r.selectable AND r.level = 'SIGUNGU' AND r.lat IS NOT NULL
+               AND NOT EXISTS (
+                 SELECT 1
+                   FROM (SELECT region_code FROM stay
+                         UNION ALL
+                         SELECT region_code FROM poi WHERE data_status = 'ACTIVE') p
+                  WHERE p.region_code LIKE r.region_code || '%'
+               )
             """.trimIndent(),
             Int::class.java,
         )!! shouldBe 0
@@ -114,29 +124,54 @@ class RegionCenterIT : AbstractPostgresIntegrationTest() {
     }
 
     /**
-     * **시도 중심 2km 안에는 숙소나 장소가 있다 — 사람 없는 곳에 떨어지지 않는다**(TRIP-1225).
+     * **시도 중심 2km 안에는 숙소나 장소가 3건 이상 있다 — 사람 없는 곳에 떨어지지 않는다**(TRIP-1225).
      *
      * 군집이 여럿인 시도에서 점 평균은 군집 사이 빈 땅에 떨어진다 — 시드 기준 16개 시도 중 10곳이
      * 평균 좌표 2km 안에 한 건도 없었다(제주 한라산·경북 내륙·강원 산간 …). 좌표값이 아니라 성질로
      * 묻는다 — 시드가 바뀌어도 밀집지 둘레에는 점이 있다. 중심이 없는 시도도 위반으로 센다.
+     *
+     * 하한이 1건이 아니라 3건인 것은 **가장 성긴 창을 고르는 회귀**까지 잡으려는 것이다 — 점 하나짜리
+     * 창은 평균이 그 점 자체라 "1건 이상"을 통과한다. 시드 기준 최소는 세종 6건이다.
      */
     @Test
-    fun `시도 중심 2km 안에 숙소나 장소가 있다`() {
+    fun `시도 중심 2km 안에 숙소나 장소가 3건 이상 있다`() {
         jdbc.queryForObject(
             """
             SELECT count(*) FROM region r
              WHERE r.level = 'SIDO'
-               AND NOT EXISTS (
-                 SELECT 1
+               AND (
+                 SELECT count(*)
                    FROM (SELECT lat, lng FROM stay
                          UNION ALL
                          SELECT lat, lng FROM poi WHERE data_status = 'ACTIVE') p
                   WHERE sqrt(power((p.lat - r.lat) * 111.0, 2)
                            + power((p.lng - r.lng) * 111.0 * cos(radians(r.lat)), 2)) <= 2.0
-               )
+               ) < 3
             """.trimIndent(),
             Int::class.java,
         )!! shouldBe 0
+    }
+
+    /**
+     * **'광주'로 찾은 중심은 광주 시가지에 있다 — 여수가 아니다**(TRIP-1225).
+     *
+     * 별칭 `광주`·`광주광역시`(그리고 `전남`·`전라남도`)는 통합 시도 12 로 이어진다. `광주` 는
+     * 동명이지역이라 코드 없이 만든 목적지는 이름 조회가 코드 순으로 12 를 먼저 집는다. 시도 12 전체의
+     * 밀도 정점은 여수(광주시청에서 약 94km)라, 그대로 두면 숙소 없는 광주 여행의 앵커·날씨 지점이
+     * 그럴듯한 다른 도시에 찍힌다. 상자는 광주 시가지(상무지구·충장로·광주송정역 일대)를 감싸고
+     * 담양·화순·나주 읍내는 밖에 둔다.
+     */
+    @Test
+    fun `광주로 찾은 중심은 여수가 아니라 광주 시가지에 있다`() {
+        listOf("광주", "광주광역시").forEach { name ->
+            withClue(name) {
+                val c = regions.centerOf(name).shouldNotBeNull()
+                c.lat shouldBeGreaterThan 35.10
+                c.lat shouldBeLessThan 35.22
+                c.lng shouldBeGreaterThan 126.78
+                c.lng shouldBeLessThan 126.95
+            }
+        }
     }
 
     /** 별칭으로도 찾혀야 한다 — 프론트는 `서울` 처럼 짧은 이름을 보낸다. */
