@@ -598,7 +598,9 @@ describe('다섯 얼굴 · 실패 배너 · 대기 하트', () => {
         within(notice).getByText('‘해운대’ 때문에 0건이에요')
       ).toBeOnTheScreen();
       expect(
-        within(notice).getByText('조건을 해제하면 더 많은 장소를 볼 수 있어요')
+        within(notice).getByText(
+          '‘맛집’ 필터도 함께 걸려 있어요 · 조건을 해제하면 더 많은 장소를 볼 수 있어요'
+        )
       ).toBeOnTheScreen();
 
       const clear = screen.getByTestId('explore-places-filterzero-clear');
