@@ -232,6 +232,26 @@ def test_multi_output_document_aggregates_with_per_area_breakdown() -> None:
         == {"tourapi-100", "tourapi-101"}
 
 
+def test_multi_output_document_sums_raw_column_counters() -> None:
+    """원문 칸 계수(TRIP-1226)도 지역 합산된다 — 잡 서머리는 합산 stats 만 찍는다."""
+    museum = "매주 월요일, 1월 1일, 설날 및 추석 당일"
+    http = FakeTourApiHttp(
+        pages={
+            ("1", "14", 1): envelope([list_item("700", "박물관", contenttypeid="14")], 1),
+            ("39", "14", 1): envelope([list_item("701", "미술관", contenttypeid="14")], 1),
+        },
+        intros={cid: envelope([intro_item(cid, "14", "09:00~18:00", museum)], 1)
+                for cid in ("700", "701")},
+    )
+    result = collect_areas(_adapter(http), area_codes=["1", "39"],
+                           content_types=["14"], max_calls=10)
+    doc = to_multi_output_document(result, area_codes=["1", "39"],
+                                   content_types=["14"], collected_at=_NOW)
+    assert doc["stats"]["passed"] == 2
+    assert doc["stats"]["rest_unparsed"] == 2
+    assert doc["stats"]["raw_reparse_mismatch"] == 0
+
+
 def test_collect_areas_rejects_empty_inputs() -> None:
     http = FakeTourApiHttp()
     with pytest.raises(ValueError):

@@ -356,6 +356,11 @@ def join_opening_hours_raw(
     휴무 원문이 비었거나 영업 원문이 없으면 종전과 같다(영업 원문 절단만). 영업 원문
     없이 휴무만 싣지 않는 이유: 백엔드가 이 칸의 유무로 "영업시간 확인됨"을 판정한다
     (`SlotSurfaceAssembler.openingHoursKnown`).
+
+    파서가 해석 못 하는 휴무(`설날·추석`·`첫째 주`·`-` …)도 싣는다. 빼면 런타임이 7일
+    영업으로 읽어 이 칸이 수집 파싱의 입력을 잃는 원래 결함이 되살아나고, 벤더 문구가
+    남지 않아 파서를 고쳐도 다시 받아야 한다. 대가로 그런 POI 는 런타임에도 "정보 없음"
+    (HC1 미적용)이다 — 건수는 수집 stats `rest_unparsed`, 결정·실측은 ai/data/README.md.
     """
     if not hours_raw:
         return hours_raw

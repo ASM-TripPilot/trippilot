@@ -39,6 +39,7 @@ from trippilot.poi_curation.sourcing.mapping import (
     join_opening_hours_raw,
     map_category,
     parse_open_hours,
+    parse_opening_hours_raw,
 )
 from trippilot.poi_curation.sourcing.state import (
     CollectState,
@@ -98,6 +99,13 @@ class CollectStats:
     address_missing: int = 0
     resumed_from: dict[str, int] = field(default_factory=dict)  # kind → 재개 시작 pageNo (>1만)
     completed_kinds: tuple[str, ...] = ()         # 이번 실행 종료 시점 완주 상태인 kind
+    # ── 원문 칸이 런타임에 읽히는 모양 (TRIP-1226, 통과분 기준) ──
+    # 휴무를 해석 못 해 영업시간을 포기한 수 — 영업 원문만으로는 창이 읽힌다. 휴무 문구도
+    # 원문 칸에 실리므로 런타임도 "정보 없음"(HC1 미적용)이다. 결정·실측: ai/data/README.md
+    rest_unparsed: int = 0
+    # 원문 칸을 다시 파싱한 값 ≠ 수집 판정 — 200자 절단·중복 병합(영업시간과 원문의 출처가
+    # 갈림). 런타임은 원문 칸만 읽으므로 이 건들은 수집과 다른 영업시간으로 쓰인다
+    raw_reparse_mismatch: int = 0
 
     def to_dict(self) -> dict:
         return {
@@ -114,6 +122,8 @@ class CollectStats:
             "skipped_unchanged": self.skipped_unchanged,
             "resumed_from": dict(self.resumed_from),
             "completed_kinds": list(self.completed_kinds),
+            "rest_unparsed": self.rest_unparsed,
+            "raw_reparse_mismatch": self.raw_reparse_mismatch,
         }
 
 
@@ -309,6 +319,16 @@ def collect(
         if (c := cursors.get((area_code, kind))) is not None and c.completed
     )
 
+    # 원문 칸이 런타임에 어떻게 읽히는지 센다 (TRIP-1226 — 침묵 금지, CollectStats 주석)
+    rest_unparsed = raw_reparse_mismatch = 0
+    for p in report.passed:
+        cand = p.candidate
+        if not p.poi.open_hours and parse_open_hours(cand.hours_raw, None):
+            rest_unparsed += 1
+        raw = join_opening_hours_raw(cand.hours_raw, cand.rest_raw)
+        if parse_opening_hours_raw(raw) != p.poi.open_hours:
+            raw_reparse_mismatch += 1
+
     stats = CollectStats(
         http_calls=budget.used,
         listed=len(listed),
@@ -323,6 +343,8 @@ def collect(
         skipped_unchanged=skipped_unchanged,
         resumed_from=resumed_from,
         completed_kinds=completed_kinds,
+        rest_unparsed=rest_unparsed,
+        raw_reparse_mismatch=raw_reparse_mismatch,
     )
     logger.info("수집 완료: %s", stats.to_dict())
     return CollectResult(
@@ -504,6 +526,7 @@ def to_multi_output_document(
         "http_calls": 0, "listed": 0, "page_failures": 0, "detail_failures": 0,
         "category_unmapped": 0, "address_missing": 0,
         "merged": 0, "passed": 0, "skipped_unchanged": 0,
+        "rest_unparsed": 0, "raw_reparse_mismatch": 0,
     }
     gate_drops: dict[str, int] = {}
     budget_exhausted = False
@@ -523,6 +546,8 @@ def to_multi_output_document(
         totals["merged"] += s.merged
         totals["passed"] += s.passed
         totals["skipped_unchanged"] += s.skipped_unchanged
+        totals["rest_unparsed"] += s.rest_unparsed
+        totals["raw_reparse_mismatch"] += s.raw_reparse_mismatch
         for reason, count in s.gate_drops.items():
             gate_drops[reason] = gate_drops.get(reason, 0) + count
         budget_exhausted = budget_exhausted or s.budget_exhausted

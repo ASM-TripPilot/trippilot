@@ -193,9 +193,18 @@ def test_원문_칸의_휴무가_런타임에_반영된다() -> None:
     assert all((oh.open_min, oh.close_min) == (540, 1080) for oh in poi.open_hours)
 
 
-def test_해석할_수_없는_휴무면_수집_때처럼_포기한다() -> None:
-    """`첫째 주` 같은 휴무는 주간 스케줄로 못 쓴다 — 7일 영업으로 읽으면 닫힌 날에 일정이 들어간다."""
-    db, _ = _db([_row(opening_hours="09:00~18:00\n휴무: 매월 첫째 주 월요일")])
+@pytest.mark.parametrize("rest", [
+    "매월 첫째 주 월요일",
+    "매주 월요일, 1월 1일, 설날 및 추석 당일",   # 박물관 전형 — 주간 휴무가 있어도 명절이 섞이면 포기
+    "-",                                     # 요일 없는 문구도 해석 불가다
+])
+def test_해석할_수_없는_휴무면_수집_때처럼_포기한다(rest: str) -> None:
+    """`첫째 주` 같은 휴무는 주간 스케줄로 못 쓴다 — 7일 영업으로 읽으면 닫힌 날에 일정이 들어간다.
+
+    대가: 이 POI 는 "정보 없음"이라 HC1 이 안 걸린다(종전엔 휴무가 칸에 없어 7일 창이었다).
+    그래도 수집과 같게 읽는다 — 결정·실측은 data/README 「휴무를 해석 못 하는 POI」.
+    """
+    db, _ = _db([_row(opening_hours=f"09:00~18:00\n휴무: {rest}")])
     (poi,) = db.find_by_radius(GeoPoint(37.5, 127.0), 5.0)
     assert poi.open_hours == ()
 

@@ -60,6 +60,18 @@ def test_영업_원문이_없으면_휴무만_싣지_않는다() -> None:
     assert join_opening_hours_raw("", "매주 월요일") == ""
 
 
+def test_해석_못_하는_휴무도_싣는다() -> None:
+    """빼면 런타임이 7일 영업으로 읽는다 — 원문 칸이 수집 파싱의 입력 전부를 잃는 TRIP-1226 의 원인 그대로다.
+
+    실으면 런타임도 수집처럼 `()`(정보 없음)다. 파서가 이 문구를 읽게 되면 재수집 없이 소급된다
+    (결정·실측: data/README 「휴무를 해석 못 하는 POI」).
+    """
+    rest = "매주 월요일, 1월 1일, 설날 및 추석 당일"
+    joined = join_opening_hours_raw("09:00~18:00", rest)
+    assert joined == "09:00~18:00" + REST_SEP + rest
+    assert parse_opening_hours_raw(joined) == parse_open_hours("09:00~18:00", rest) == ()
+
+
 def test_영업_원문의_구분자는_무력화돼_휴무로_갈리지_않는다() -> None:
     """벤더가 usetime 에 `휴무:` 줄을 넣어 보내도 첫 구분자는 우리가 넣은 것이다."""
     hours = "11:00~21:00\n휴무: 매주 월요일"   # usetime 원문 — 이 줄은 파서가 휴무로 안 읽는다
