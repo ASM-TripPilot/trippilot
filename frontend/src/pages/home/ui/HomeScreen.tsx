@@ -38,6 +38,7 @@ import {
   SparkleGlyph,
   SuitcaseGlyph,
 } from '@/features/home';
+import { CategoryImageGlyph } from '@/entities/itinerary-slot';
 import { WarningTriangleGlyph } from '@/features/explore/index.view';
 import { formatCountBadge } from '../lib/formatCountBadge';
 import { HeartButton } from '@/shared/ui/HeartButton';
@@ -393,18 +394,38 @@ function SectionHeader({
   );
 }
 
+// 사진 없는 카드(서버 imageUrl 없음)의 대체 표시 — 일정 슬롯과 같은 이미지 글리프를 카드 가운데 위쪽에
+// 얹는다(새 자산 없음, TRIP-1221). 스크림·글씨 아래층이라 제목 가독성은 그대로.
+function PhotoPlaceholder({ testID }: { testID: string }): ReactElement {
+  return (
+    <View
+      testID={testID}
+      pointerEvents="none"
+      className="absolute inset-x-0 top-0 h-3/5 items-center justify-center"
+    >
+      <CategoryImageGlyph size={36} />
+    </View>
+  );
+}
+
 // ── 컬렉션 카드(요즘 사람들이 담는 곳 · 내가 담은 곳 · 추천) ─────────────
 // 하단 메타는 지역+핀으로 그린다(discovery·추천 공용).
 function CollectionCard({
   card,
   index,
+  onPressCard,
 }: {
   card: HomeCollectionCard;
   index: number;
+  onPressCard?: (poiId: string) => void;
 }): ReactElement {
+  const { poiId } = card;
+  const onPress = poiId && onPressCard ? () => onPressCard(poiId) : undefined;
   return (
-    <View
+    <Pressable
       testID={`home-collection-card-${index}`}
+      accessibilityRole={onPress ? 'button' : undefined}
+      onPress={onPress}
       style={softCardShadow}
       className="h-[300px] w-[230px] overflow-hidden rounded-[18px]"
     >
@@ -414,6 +435,9 @@ function CollectionCard({
         resizeMode="cover"
         style={ABSOLUTE_FILL}
       />
+      {card.imageUrl ? null : (
+        <PhotoPlaceholder testID="home-collection-photo-placeholder" />
+      )}
       <LinearGradient
         colors={DEST_SCRIM_COLORS}
         locations={SCRIM_LOCATIONS}
@@ -437,13 +461,13 @@ function CollectionCard({
           </Text>
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
 // ── 스팟 카드(지금 뜨는 장소, 2×2 그리드 셀) ────────────────────────────
 // 하트는 poiId(실데이터)와 save 배선이 둘 다 있을 때만 — 픽스처엔 담을 대상이 없다(AC-14).
-// 카드 자체는 버튼이 아니라(상세 이동 없음) disabled 하트 press 가 새어도 받을 곳이 없다.
+// 카드는 poiId + onPressCard 가 있을 때만 버튼(TRIP-1221 상세 이동) — 하트는 자기 Pressable 이 먼저 받는다.
 function SpotCard({
   card,
   index,
@@ -455,9 +479,12 @@ function SpotCard({
 }): ReactElement {
   const { poiId } = card;
   const onToggleSave = lane?.onToggleSave;
+  const onPressCard = lane?.onPressCard;
   return (
-    <View
+    <Pressable
       testID={`home-spot-card-${index}`}
+      accessibilityRole={poiId && onPressCard ? 'button' : undefined}
+      onPress={poiId && onPressCard ? () => onPressCard(poiId) : undefined}
       className="h-[166px] flex-1 overflow-hidden rounded-card"
     >
       <View className="absolute inset-0 bg-surface-strong" />
@@ -466,6 +493,9 @@ function SpotCard({
         resizeMode="cover"
         style={ABSOLUTE_FILL}
       />
+      {card.imageUrl ? null : (
+        <PhotoPlaceholder testID="home-spot-photo-placeholder" />
+      )}
       <LinearGradient
         colors={SPOT_SCRIM_COLORS}
         locations={SCRIM_LOCATIONS}
@@ -490,7 +520,7 @@ function SpotCard({
           className="absolute right-sm top-sm"
         />
       ) : null}
-    </View>
+    </Pressable>
   );
 }
 
@@ -539,6 +569,7 @@ function CollectionsSection({
               key={card.poiId ?? card.title}
               card={card}
               index={index}
+              onPressCard={lane?.onPressCard}
             />
           ))}
         </ScrollView>

@@ -13,7 +13,14 @@
  * `다시 시도`는 `onRetry`(=`refetch`)에 실배선된다(Q8).
  */
 import type { ReactElement } from 'react';
-import { FlatList, Pressable, Text, TextInput, View } from 'react-native';
+import {
+  FlatList,
+  Keyboard,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { formatPrice } from '@/entities/stay';
@@ -257,7 +264,11 @@ function ListHeader({
             label={axis === 'price' ? (priceLabel ?? label) : label}
             count={axis === 'more' ? activeFilterCount : undefined}
             selected={axis === 'price' && priceLabel !== undefined}
-            onPress={() => onPressFilter?.(axis)}
+            onPress={() => {
+              // TRIP-1217 · 이름 검색칸의 키보드가 열린 채 시트가 열리면 시트의 닫기·적용을 가린다 — 먼저 내린다.
+              Keyboard.dismiss();
+              onPressFilter?.(axis);
+            }}
           />
         ))}
       </View>

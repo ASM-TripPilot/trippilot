@@ -37,6 +37,12 @@ export function parseBudgetAmount(raw: string): BudgetAmount {
   return { kind: 'amount', amount: Number(digitsOnly) };
 }
 
+/**
+ * TRIP-1219 b · 1인 총액 상한 — 10억원. 서버(`budget_total bigint`)는 상한이 없고 정본에도 결정이 없어 UX 사본으로
+ * 둔다(14자리 99조원이 들어가던 QA 실측). 럭셔리 대표값(400만원)의 250배라 실제 여행 예산은 다 담는다.
+ */
+export const MAX_BUDGET_AMOUNT = 1_000_000_000;
+
 export function formatBudgetAmount(amount: number): string {
   return String(amount).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }

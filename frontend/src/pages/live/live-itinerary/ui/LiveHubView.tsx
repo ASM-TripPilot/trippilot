@@ -107,6 +107,8 @@ export interface LiveHubSlot {
   state: SlotProgressState;
   photos?: ImageSourcePropType[];
   memo?: string | null;
+  /** TRIP-1220 done 전용 — 실제 방문 시각 'HH:mm'. */
+  visitedLabel?: string | null;
 }
 
 export interface LiveHubViewProps {
@@ -134,6 +136,8 @@ export interface LiveHubViewProps {
   onPressMemo?: () => void;
   /** active 카드 사진 안내 한 줄 — 상태는 페이지가 가진다. */
   photoNotice?: string | null;
+  /** TRIP-1216 — 사진 안내 옆 [설정 열기](권한 거부일 때만 페이지가 준다). */
+  onPressPhotoSettings?: () => void;
   /** TRIP-1117 — active 카드 메모 안내 한 줄(시트가 닫힌 뒤 도착한 저장 실패, Q3). 상태는 페이지가 가진다. */
   memoNotice?: string | null;
   /** TRIP-1117 — 메모 시트가 열린 동안 수정 FAB 를 숨긴다(Figma 4741:2833). 앵커 자리(HF8)는 그대로. */
@@ -211,6 +215,7 @@ export function LiveHubView({
   onPressPhoto,
   onPressMemo,
   photoNotice,
+  onPressPhotoSettings,
   memoNotice,
   fabHidden = false,
   triggerChip,
@@ -369,7 +374,7 @@ export function LiveHubView({
         {/* 타임라인 — 레일 칸 28 + 카드. 세로선(2px)은 레일 칸 가운데, 첫 행 윗변 20px 아래부터 끝까지. */}
         <View className="gap-[22px] px-[20px] pb-[76px] pt-xl">
           <View className="absolute bottom-0 left-[33px] top-[40px] w-[2px] bg-hairline-strong" />
-          {slots.map(({ slot, state, photos, memo }) => {
+          {slots.map(({ slot, state, photos, memo, visitedLabel }) => {
             const slotKey = buildSlotKey(activeDate, slot.poiId);
             return (
               <View key={slotKey} className="flex-row">
@@ -383,6 +388,7 @@ export function LiveHubView({
                     state={state}
                     photos={photos}
                     memo={memo}
+                    visitedLabel={visitedLabel}
                     onPressComplete={
                       state === 'active'
                         ? () => {
@@ -394,6 +400,9 @@ export function LiveHubView({
                     onPressPhoto={state === 'active' ? onPressPhoto : undefined}
                     onPressMemo={state === 'active' ? onPressMemo : undefined}
                     photoNotice={state === 'active' ? photoNotice : undefined}
+                    onPressPhotoSettings={
+                      state === 'active' ? onPressPhotoSettings : undefined
+                    }
                     memoNotice={state === 'active' ? memoNotice : undefined}
                     badgeLabel={slotBadgeLabel?.(slotKey) ?? undefined}
                     onPressName={

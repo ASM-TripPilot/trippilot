@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
+import { Linking } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
@@ -217,8 +218,8 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
     visitCheckId: 'v1',
     poiId: 'p1',
     slotKey: `${TODAY}#p1`,
-    arrivedAt: '2026-08-20T10:02:00',
-    completedAt: '2026-08-20T10:55:00',
+    arrivedAt: '2026-08-20T01:02:00Z',
+    completedAt: '2026-08-20T01:55:00Z',
     skippedAt: null,
     source: 'MANUAL',
     spontaneous: false,
@@ -440,6 +441,23 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       ).toBeTruthy();
     });
 
+    it('I7g 🔴 TRIP-1214 시작 전 여행(오늘이 1일차 전)이면 [AI에게 맡기기]가 없고 [직접 수정]은 남는다', async () => {
+      server.use(twoDayItineraryOk(), tripHandler(), visitsHandler());
+
+      render(<LiveItineraryPage tripId={TRIP_ID} today="2026-08-10" />, {
+        wrapper,
+      });
+      await waitFor(() =>
+        expect(screen.getByTestId('execution-live-screen')).toBeTruthy()
+      );
+      fireEvent.press(screen.getByTestId('execution-live-replan-fab'));
+
+      expect(screen.queryByTestId('execution-live-edit-pill-ai')).toBeNull();
+      expect(
+        screen.getByTestId('execution-live-edit-pill-manual')
+      ).toBeTruthy();
+    });
+
     it('I7f 오늘이 2일차일 때 2일차(오늘)를 보면 종전 AI 알약·쿼리 없는 경로다', async () => {
       server.use(twoDayItineraryOk(), tripHandler(), visitsHandler());
 
@@ -516,7 +534,7 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       expect(mockPush).toHaveBeenCalledWith(`/trips/${TRIP_ID}/planb/manual`);
     });
 
-    it('I8 실앱 done 카드는 사진·후기 칸 없이 계획 시각 "10:00" + "방문" 만 그린다 (G6 · 맹점③)', async () => {
+    it('I8 실앱 done 카드는 사진·후기 칸 없이 실제 도착 시각 "10:02"(KST) + "방문" 만 그린다 (G6 · 맹점③ · TRIP-1220)', async () => {
       server.use(
         itineraryOk(),
         tripHandler(),
@@ -529,7 +547,7 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       await waitFor(() =>
         expect(
           screen.getByTestId(`execution-live-slot-visit-time-${key}`)
-        ).toHaveTextContent('10:00')
+        ).toHaveTextContent('10:02')
       );
       expect(
         screen.getByTestId(`execution-live-slot-visit-label-${key}`)
@@ -540,6 +558,26 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       expect(
         screen.queryByTestId(`execution-live-slot-memo-${key}`)
       ).toBeNull();
+    });
+
+    it('I8b TRIP-1220 도착 시각이 없는 완료 방문은 계획 시각 "10:00" + "계획" 으로 표시한다 — 계획 시각을 "방문"으로 말하지 않는다', async () => {
+      server.use(
+        itineraryOk(),
+        tripHandler(),
+        visitsHandler([{ ...completedVisit(), arrivedAt: null }])
+      );
+
+      await renderActive();
+
+      const key = `${TODAY}#p1`;
+      await waitFor(() => {
+        expect(
+          screen.getByTestId(`execution-live-slot-visit-time-${key}`)
+        ).toHaveTextContent('10:00');
+        expect(
+          screen.getByTestId(`execution-live-slot-visit-label-${key}`)
+        ).toHaveTextContent('계획');
+      });
     });
 
     it('I9 슬롯 이름을 누르면 /trips/{tripId}/live/place/{poiId} 로 간다 — done·active·upcoming 모두 (TRIP-987 A-3 · US-ONTRIP-02)', async () => {
@@ -588,7 +626,7 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       await waitFor(() =>
         expect(
           screen.getByTestId(`execution-live-slot-visit-time-${TODAY}#p1`)
-        ).toHaveTextContent('10:00')
+        ).toHaveTextContent('10:02')
       );
       expect(screen.getByTestId('execution-arrive-complete')).toBeOnTheScreen();
       expect(
@@ -712,7 +750,6 @@ describe('i08 변경 반영 시트', () => {
 
   const HUB = 'execution-live-screen';
   const SHEET = 'planb-applied-sheet';
-  const NOTICE = 'planb-applied-revert-notice';
 
   /** 준비 공통 — 성공 조회 핸들러로 페이지를 띄우고 허브가 뜰 때까지 기다린다. */
   async function renderHub(appliedSessionId?: string): Promise<void> {
@@ -761,13 +798,12 @@ describe('i08 변경 반영 시트', () => {
       expect(screen.getByTestId('planb-applied-title')).toHaveTextContent(
         '새 일정이 반영됐어요'
       );
-      expect(screen.getByTestId('planb-applied-revert')).toBeTruthy();
+      expect(screen.queryByTestId('planb-applied-revert')).toBeNull();
       expect(screen.getByTestId('planb-applied-confirm')).toBeTruthy();
 
       expect(screen.queryByTestId('planb-applied-subtitle')).toBeNull();
       expect(screen.queryByTestId('planb-applied-summary')).toBeNull();
       expect(screen.queryByTestId('planb-applied-diff')).toBeNull();
-      expect(screen.queryByTestId(NOTICE)).toBeNull();
       // 뜨는 것만으로 아무 데도 가지 않고 쿼리도 건드리지 않는다.
       expectNoNavigation();
       expect(mockSetParams).not.toHaveBeenCalled();
@@ -881,17 +917,17 @@ describe('i08 변경 반영 시트', () => {
       });
       expect(screen.getAllByTestId('planb-applied-badge')).toHaveLength(3);
 
-      // 실행 — 캐시를 비우고(5분 gc 와 같은 상태) 허브를 다시 그리게 한다([되돌리기] → 안내 상태 변경)
+      // 실행 — 캐시를 비우고(5분 gc 와 같은 상태) 허브를 다시 그리게 한다(일차 칩 누름 → 상태 변경)
       client.removeQueries({
         queryKey: getGetTripsTripIdReplanSessionsSessionIdDiffQueryKey(
           TRIP_ID,
           SESSION_ID
         ),
       });
-      fireEvent.press(screen.getByTestId('planb-applied-revert'));
+      fireEvent.press(screen.getByTestId('execution-live-daychip-0'));
+      await settle();
 
-      // 단언 — 리렌더가 실제로 일어났고(안내가 떴고) 배지는 그대로다
-      await waitFor(() => expect(screen.getByTestId(NOTICE)).toBeTruthy());
+      // 단언 — 리렌더 뒤에도 배지는 그대로다
       expect(screen.getAllByTestId('planb-applied-badge')).toHaveLength(3);
     });
 
@@ -1066,35 +1102,14 @@ describe('i08 변경 반영 시트', () => {
     });
   });
 
-  describe('🔴 A7 · AC-8 — [되돌리기]는 정직 안내만, 서버 쓰기 0 (E2 · Q3)', () => {
-    it('안내가 시트 안에 뜨고 시트는 그대로 · setParams 0 · 이동 0 · POST 0 · 다시 눌러도 같다', async () => {
+  describe('🔴 A7 · TRIP-1214 — 되돌리기 계약이 없어 버튼을 두지 않는다', () => {
+    it('시트에 [되돌리기]·안내 줄이 없고 [확인]만 남는다', async () => {
       await renderHub(SESSION_ID);
-      // 짝 앵커 — 요청 관측 배선이 살아 있다.
-      expect(
-        observedHits.filter(
-          (hit) => hit === `GET /api/v1/trips/${TRIP_ID}/itinerary`
-        ).length
-      ).toBeGreaterThanOrEqual(1);
 
-      fireEvent.press(screen.getByTestId('planb-applied-revert'));
-      await settle();
-
-      const sheet = screen.getByTestId(SHEET);
-      expect(within(sheet).getByTestId(NOTICE)).toHaveTextContent(
-        '이미 반영돼 되돌릴 수 없어요'
-      );
-      expect(mockSetParams).not.toHaveBeenCalled();
-      expectNoNavigation();
-      expect(postHits()).toEqual([]);
-
-      // Q3 멱등 — 다시 눌러도 안내 한 줄, 버튼 그대로.
-      fireEvent.press(screen.getByTestId('planb-applied-revert'));
-      await settle();
-
-      expect(screen.getAllByTestId(NOTICE)).toHaveLength(1);
-      expect(screen.getByTestId('planb-applied-revert')).toBeTruthy();
+      expect(screen.getByTestId(SHEET)).toBeTruthy();
+      expect(screen.queryByTestId('planb-applied-revert')).toBeNull();
+      expect(screen.queryByTestId('planb-applied-revert-notice')).toBeNull();
       expect(screen.getByTestId('planb-applied-confirm')).toBeTruthy();
-      expect(postHits()).toEqual([]);
     });
   });
 
@@ -1723,6 +1738,8 @@ describe('관람 중 카드 [사진]·[메모]', () => {
   const COPY_DENIED = '사진 접근 권한이 없어 사진을 불러올 수 없어요';
   const COPY_NO_ASSET_ID =
     '선택한 사진을 불러올 수 없어요. 사진 전체 접근을 허용해 주세요';
+  const COPY_LIMITED =
+    '사진 접근이 "선택한 사진만"으로 제한돼 있어요. 설정에서 모든 사진 접근을 허용해 주세요';
   const COPY_FAILED = '사진을 불러올 수 없어요';
   const COPY_SAVE_FAILED = '사진을 기록하지 못했어요. 다시 시도해 주세요';
 
@@ -1967,6 +1984,7 @@ describe('관람 중 카드 [사진]·[메모]', () => {
     it.each([
       ['사진 권한 거부', 'denied', COPY_DENIED],
       ['자산 번호 없음(선택한 사진만 허용)', 'no-asset-id', COPY_NO_ASSET_ID],
+      ['제한 접근', 'limited', COPY_LIMITED],
       ['피커 실패(재빌드 전 앱)', 'failed', COPY_FAILED],
     ])(
       'L6 %s → 카드 아래 안내가 뜨고 요청은 0회다',
@@ -1982,6 +2000,44 @@ describe('관람 중 카드 [사진]·[메모]', () => {
         await settle();
         expect(hitCount(PHOTOS_POST)).toBe(0);
         expect(hitCount(CONSENT_GET)).toBe(0);
+      }
+    );
+
+    it('L6b 권한 거부 안내에는 [설정 열기] 가 있고 누르면 openSettings 1회 · 피커 실패 안내에는 없다 (TRIP-1216 d)', async () => {
+      const openSettings = jest
+        .spyOn(Linking, 'openSettings')
+        .mockResolvedValue(undefined);
+      mockPick.mockResolvedValueOnce({ kind: 'failed' });
+      const photo = await renderHub();
+
+      fireEvent.press(photo);
+      await screen.findByTestId('execution-arrive-photo-notice');
+      expect(
+        screen.queryByTestId('execution-arrive-photo-settings')
+      ).toBeNull();
+
+      mockPick.mockResolvedValueOnce({ kind: 'denied' });
+      fireEvent.press(screen.getByTestId('execution-arrive-photo'));
+      fireEvent.press(
+        await screen.findByTestId('execution-arrive-photo-settings')
+      );
+
+      expect(openSettings).toHaveBeenCalledTimes(1);
+      openSettings.mockRestore();
+    });
+
+    it.each(['limited', 'no-asset-id'])(
+      'L6c %s 안내에도 [설정 열기] 가 있다 (TRIP-1216 a)',
+      async (kind) => {
+        mockPick.mockResolvedValueOnce({ kind });
+        const photo = await renderHub();
+
+        fireEvent.press(photo);
+
+        expect(
+          await screen.findByTestId('execution-arrive-photo-settings')
+        ).toBeTruthy();
+        expect(hitCount(PHOTOS_POST)).toBe(0);
       }
     );
 
@@ -2661,7 +2717,8 @@ describe('i02 트리거 표면', () => {
  */
 // TRIP-396 · TRIP-1021 · TRIP-1076 · TRIP-1079 (옛 LiveItineraryPage.visitCheck.integration.test.tsx)
 describe('방문 체크', () => {
-  const T = '2026-08-20T13:00:00';
+  // KST 13:00 — 시각 단언이 기기 시간대와 무관하도록 Z 로 못박는다(CI 는 UTC).
+  const T = '2026-08-20T04:00:00Z';
   const VISITS_PATH = `POST /api/v1/trips/${TRIP_ID}/visits`;
   const VISITS_GET_TODAY = `GET /api/v1/trips/${TRIP_ID}/visits/days/${TODAY}`;
   const arriveId = (date: string, poiId: string) =>

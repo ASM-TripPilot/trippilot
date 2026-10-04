@@ -1,5 +1,6 @@
-import { Fragment, type ReactElement } from 'react';
+import { Fragment, useContext, type ReactElement } from 'react';
 import { Text, View } from 'react-native';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
 import type { ReplanSlotVM } from '@/entities/itinerary-slot';
 import { ReplanSlotRow } from '@/entities/itinerary-slot';
@@ -7,7 +8,7 @@ import type { MapCenter, MapPin } from '@/shared/map';
 import type { CtaButton } from '@/widgets/map-sheet-shell';
 import type { DayChip } from '@/widgets/map-sheet-shell';
 import { DistanceConnector } from '@/widgets/map-sheet-shell';
-import { MapSheetShell } from '@/widgets/map-sheet-shell';
+import { CTA_BAR_HEIGHT, MapSheetShell } from '@/widgets/map-sheet-shell';
 import { SheetHeader } from '@/widgets/map-sheet-shell';
 
 /**
@@ -32,6 +33,10 @@ const FAILED_NOTICE = {
 };
 const NO_SOLUTION_TITLE = '대안을 찾지 못했어요';
 const TITLE = 'AI 재계획안';
+// TRIP-1214 — 셸 기본 배열의 닫힘 칸(28)은 CTA 바를 뺀다. 초안은 시트를 내리고 지도를 보다 바로 [적용하기]를
+// 눌러야 하므로, 가장 낮은 칸을 CTA 바 위(손잡이 28 + 바 높이 + 하단 안전 영역)로 직접 준다 — 직접 준 배열은
+// 닫힘 규칙이 안 걸려 버튼이 항상 남고, 손잡이는 바 위에 보인다. 셸 기본값은 안 건드린다(다른 소비처 영향).
+const HANDLE_HEIGHT = 28;
 
 type ReplanDraftVariant = 'draft' | 'noSolution' | 'failed';
 
@@ -103,6 +108,7 @@ export function ReplanDraftView({
   onPressCandidates,
 }: ReplanDraftViewProps): ReactElement {
   const isDraft = variant === 'draft';
+  const bottomInset = useContext(SafeAreaInsetsContext)?.bottom ?? 0;
   const notice: ReplanNotice | null =
     variant === 'noSolution'
       ? { title: NO_SOLUTION_TITLE, description: noSolutionDescription ?? '' }
@@ -142,6 +148,7 @@ export function ReplanDraftView({
       days={days}
       selectedDayIndex={selectedDayIndex}
       onBack={onBack}
+      snapPoints={[HANDLE_HEIGHT + CTA_BAR_HEIGHT + bottomInset, '45%', '88%']}
       initialIndex={2}
       header={
         <>

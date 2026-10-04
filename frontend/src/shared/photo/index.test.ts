@@ -193,6 +193,17 @@ describe('🔴 pickPhotoAsset · 실패 갈래 (AC-9 · AC-10 · INV-4)', () => 
     expect(result).toEqual({ kind: 'no-asset-id' });
   });
 
+  it('P8 사진 접근이 "선택한 사진만"(limited)이면 limited 이고 피커를 열지 않는다 (TRIP-1216 a)', async () => {
+    // 제한 접근에서 고른 자산 번호는 나중에(재시작 뒤) 앨범이 다시 못 찾을 수 있다 — 붙이기 전에 막는다.
+    grantAll({ ...GRANTED, accessPrivileges: 'limited' });
+
+    const result = await pickPhotoAsset();
+
+    expect(result).toEqual({ kind: 'limited' });
+    expect(mockLaunch).not.toHaveBeenCalled();
+    expect(mockAssetInfo).not.toHaveBeenCalled();
+  });
+
   it('P6 피커가 예외를 던져도(재빌드 전 앱) reject 하지 않고 failed 를 돌려준다', async () => {
     mockLaunch.mockRejectedValue(new Error('native module missing'));
 

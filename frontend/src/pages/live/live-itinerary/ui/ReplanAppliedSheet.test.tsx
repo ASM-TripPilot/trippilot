@@ -14,10 +14,10 @@ import type { AppliedDiffRow } from './ReplanAppliedSheet';
  *
  * 무엇을 보장하나:
  *  - 라벨 "변경 반영됨"(success 색) · 제목 · 부제 줄 · 요약 배지 · 변경 내역(추가/삭제 점 + 이름 + 메타) ·
- *    [되돌리기]/[확인]을 **받은 순서 그대로** 그린다.
+ *    [확인]을 **받은 순서 그대로** 그린다.
  *  - 데이터 prop 이 없거나 빈 배열이면 부제·배지 줄·내역 카드를 **컨테이너째** 안 그린다(E4 정직 축소).
- *  - [확인]·스크림·아래로 끌기 → onConfirm, [되돌리기] → onRevert. 서로 섞이지 않고, 본문을 눌러도 안 닫힌다.
- *  - showRevertNotice 가 켜지면 시트 안에 "이미 반영돼 되돌릴 수 없어요"(E2).
+ *  - [확인]·스크림·아래로 끌기 → onConfirm. 본문을 눌러도 안 닫힌다.
+ *  - TRIP-1214: [되돌리기] 버튼·안내 줄은 없다(서버에 되돌리기 계약이 없다).
  *
  * ★ 바텀시트 목 사각: 통과형 목이라 실제 딤 전면 커버·시트 높이·끌어 닫기 제스처는 jest 가 못 본다
  *   (repo-traps 바텀시트 항). 여기 심판은 testID·글자·클래스·콜백까지.
@@ -42,7 +42,6 @@ const REMOVED: AppliedDiffRow = {
   name: '해운대 해변',
   meta: '17:00–18:30 · 비 예보 · 17시 이후',
 };
-const NOTICE = '이미 반영돼 되돌릴 수 없어요';
 
 const SHEET = 'planb-applied-sheet';
 
@@ -52,7 +51,7 @@ function classTokens(node: ReactTestInstance): string[] {
 }
 
 function callbacks() {
-  return { onConfirm: jest.fn(), onRevert: jest.fn() };
+  return { onConfirm: jest.fn() };
 }
 
 function renderFull(cb = callbacks()) {
@@ -114,9 +113,8 @@ describe('🔴 S1·S2 · AC-1 — 픽스처 전부를 Figma 순서로 그린다'
     expectTexts('planb-applied-subtitle-line', SUBTITLE);
     expect(screen.getByTestId('planb-applied-summary')).toBeOnTheScreen();
     expectTexts('planb-applied-badge', BADGES);
-    expect(screen.getByTestId('planb-applied-revert')).toHaveTextContent(
-      '되돌리기'
-    );
+    // TRIP-1214 — 되돌리기 API 가 없어 버튼 자체를 두지 않는다.
+    expect(screen.queryByTestId('planb-applied-revert')).toBeNull();
     expect(screen.getByTestId('planb-applied-confirm')).toHaveTextContent(
       '확인'
     );
@@ -161,7 +159,7 @@ describe('🔴 S4·S5 · AC-3 — 데이터가 없으면 컨테이너째 없다 
     expect(screen.getByTestId('planb-applied-title')).toHaveTextContent(
       '새 일정이 반영됐어요'
     );
-    expect(screen.getByTestId('planb-applied-revert')).toBeOnTheScreen();
+    expect(screen.queryByTestId('planb-applied-revert')).toBeNull();
     expect(screen.getByTestId('planb-applied-confirm')).toBeOnTheScreen();
 
     expect(screen.queryByTestId('planb-applied-subtitle')).toBeNull();
@@ -192,23 +190,13 @@ describe('🔴 S4·S5 · AC-3 — 데이터가 없으면 컨테이너째 없다 
   });
 });
 
-describe('🔴 S6~S8 · AC-4 · Q1 — 닫기와 되돌리기는 섞이지 않는다', () => {
-  it('S6a [확인] → onConfirm 1회, onRevert 0회', () => {
+describe('🔴 S6~S8 · AC-4 · Q1 — 닫기 경로', () => {
+  it('S6a [확인] → onConfirm 1회', () => {
     const cb = renderFull();
 
     fireEvent.press(screen.getByTestId('planb-applied-confirm'));
 
     expect(cb.onConfirm).toHaveBeenCalledTimes(1);
-    expect(cb.onRevert).not.toHaveBeenCalled();
-  });
-
-  it('S6b [되돌리기] → onRevert 1회, onConfirm 0회', () => {
-    const cb = renderFull();
-
-    fireEvent.press(screen.getByTestId('planb-applied-revert'));
-
-    expect(cb.onRevert).toHaveBeenCalledTimes(1);
-    expect(cb.onConfirm).not.toHaveBeenCalled();
   });
 
   it('S7 스크림(시트 밖) → onConfirm 1회 (Q1 — 확인과 같은 닫기)', () => {
@@ -222,7 +210,6 @@ describe('🔴 S6~S8 · AC-4 · Q1 — 닫기와 되돌리기는 섞이지 않�
     fireEvent.press(scrim);
 
     expect(cb.onConfirm).toHaveBeenCalledTimes(1);
-    expect(cb.onRevert).not.toHaveBeenCalled();
   });
 
   it('S7b 아래로 끌어 닫기(gorhom onClose) → onConfirm 1회 (Q1)', () => {
@@ -235,7 +222,6 @@ describe('🔴 S6~S8 · AC-4 · Q1 — 닫기와 되돌리기는 섞이지 않�
     panClosable[0].props.onClose();
 
     expect(cb.onConfirm).toHaveBeenCalledTimes(1);
-    expect(cb.onRevert).not.toHaveBeenCalled();
   });
 
   it('S8 본문(제목)을 눌러도 닫히지 않는다 — 대조군 스크림은 닫는다', () => {
@@ -243,30 +229,9 @@ describe('🔴 S6~S8 · AC-4 · Q1 — 닫기와 되돌리기는 섞이지 않�
 
     fireEvent.press(screen.getByTestId('planb-applied-title'));
     expect(cb.onConfirm).not.toHaveBeenCalled();
-    expect(cb.onRevert).not.toHaveBeenCalled();
 
     // 대조군 — 같은 배선에서 스크림은 실제로 닫는다(0회 단언의 공허 통과 차단).
     fireEvent.press(screen.getByTestId('planb-applied-scrim'));
     expect(cb.onConfirm).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('🔴 S9 · AC-8 — 되돌리기 안내 줄 (E2)', () => {
-  it('showRevertNotice 면 시트 안에 정직 안내가 뜬다', () => {
-    render(<ReplanAppliedSheet showRevertNotice {...callbacks()} />);
-
-    const notice = within(screen.getByTestId(SHEET)).getByTestId(
-      'planb-applied-revert-notice'
-    );
-    expect(notice).toHaveTextContent(NOTICE);
-    // 안내가 떠도 버튼은 그대로다(Q3 — 숨기거나 잠그지 않는다).
-    expect(screen.getByTestId('planb-applied-revert')).toBeOnTheScreen();
-  });
-
-  it('주지 않으면 안내 줄이 없다', () => {
-    renderFull();
-
-    expect(screen.getByTestId(SHEET)).toBeOnTheScreen();
-    expect(screen.queryByTestId('planb-applied-revert-notice')).toBeNull();
   });
 });

@@ -10,9 +10,7 @@
 -- 본문 개정은 사용자 0명인 지금만 이렇게 한다 — 실사용자가 생기면 버전을 올리고
 -- reconsent_required 로 재동의를 받는다(consent_log FK 가 (type, version) 을 참조한다).
 INSERT INTO terms_version (terms_type, version, body, effective_at, reconsent_required) VALUES
-  ('TERMS_OF_SERVICE', '1.0', $body$# TripPilot 서비스 이용약관 (초안 v0.1)
-
-> terms_type: `TERMS_OF_SERVICE` · 필수 동의.
+  ('TERMS_OF_SERVICE', '1.0', $body$# TripPilot 서비스 이용약관
 
 ## 제1조 (목적)
 
@@ -76,9 +74,8 @@ INSERT INTO terms_version (terms_type, version, body, effective_at, reconsent_re
 ## 제10조 (준거법 및 관할)
 
 본 약관은 대한민국 법률에 따르며, 분쟁은 민사소송법상 관할법원에 제기합니다.$body$, TIMESTAMPTZ '2026-01-01 00:00:00+00', false),
-  ('PRIVACY_POLICY', '1.0', $body$# TripPilot 개인정보 처리방침 (초안 v0.1)
+  ('PRIVACY_POLICY', '1.0', $body$# TripPilot 개인정보 처리방침
 
-> terms_type: `PRIVACY_POLICY` · 개인정보 보호법 제30조 + 위치정보법상 개인위치정보 처리방침(위치 절 통합).
 > 시행일: 2026-09-28
 
 TripPilot(이하 "서비스")을 운영하는 트립파일럿(대표: 송승윤, 사업자등록번호 810-05-03734,
@@ -165,12 +162,7 @@ TripPilot(이하 "서비스")을 운영하는 트립파일럿(대표: 송승윤,
 ## 8. 고지 의무
 
 본 방침이 변경되는 경우 시행 7일 전(이용자에게 불리한 변경은 30일 전) 서비스 내 공지합니다.$body$, TIMESTAMPTZ '2026-01-01 00:00:00+00', false),
-  ('LOCATION_TERMS', '1.0', $body$# TripPilot 위치기반서비스 이용약관 (초안 v0.1)
-
-> terms_type: `LOCATION_TERMS` · 위치정보법상 위치기반서비스 이용약관.
-> lbsc.kr 표준양식(2022-04-29) 구조를 따름. 조항 대조 완료(2026-09-16) — 표준양식 준수
-> 통용본(카카오 위치기반서비스 이용약관)과 대조하여 약관 외 준칙·서비스 변경중지·법정대리인
-> 3개 조항을 보강했다.
+  ('LOCATION_TERMS', '1.0', $body$# TripPilot 위치기반서비스 이용약관
 
 ## 제1조 (목적)
 
@@ -249,9 +241,7 @@ TripPilot(이하 "서비스")을 운영하는 트립파일럿(대표: 송승윤,
 
 위치정보와 관련한 분쟁은 방송미디어통신위원회에 재정을 신청하거나 개인정보분쟁조정위원회에
 조정을 신청할 수 있습니다.$body$, TIMESTAMPTZ '2026-01-01 00:00:00+00', false),
-  ('MARKETING', '1.0', $body$# 광고성 정보 수신 동의 (초안 v0.1)
-
-> terms_type: `MARKETING` · **선택 동의**.
+  ('MARKETING', '1.0', $body$# 광고성 정보 수신 동의
 
 ## 동의 내용
 
@@ -266,10 +256,7 @@ TripPilot이 이벤트·혜택 등 **광고성 정보**를 앱 푸시 알림으�
 ## 보유 기간
 
 동의 상태는 회원 탈퇴 + 30일 유예 후 파기되며, 동의·철회 이력은 법정 증적으로 보존됩니다.$body$, TIMESTAMPTZ '2026-01-01 00:00:00+00', false),
-  ('GPS_RECORDING', '1.0', $body$# 위치정보 기록 동의 (초안 v0.1)
-
-> terms_type: `GPS_RECORDING` · **선택 동의** (동의하지 않아도 서비스 이용 가능).
-> 표시 제목 제안: "위치정보 기록 동의" — 코드 enum(`GPS_RECORDING`)은 유지, 표시명만 넓힘(이 티켓 본문 2항).
+  ('GPS_RECORDING', '1.0', $body$# 위치정보 기록 동의
 
 ## 동의 내용
 
@@ -288,9 +275,7 @@ TripPilot이 여행 기록을 위해 다음 위치정보를 **수집·저장**�
 
 회원 탈퇴 + 30일 유예 후 파기(철회 시 위와 같이 즉시 파기). 상세는 개인정보 처리방침
 6항(위치정보의 처리)을 따릅니다.$body$, TIMESTAMPTZ '2026-01-01 00:00:00+00', false),
-  ('PERSONALIZATION', '1.0', $body$# 기록 기반 개인화 동의 (초안 v0.1)
-
-> terms_type: `PERSONALIZATION` · **선택 동의**.
+  ('PERSONALIZATION', '1.0', $body$# 기록 기반 개인화 동의
 
 ## 동의 내용
 

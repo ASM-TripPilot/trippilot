@@ -79,7 +79,7 @@ class TripPeriodFacade(
             startDate = trip.startDate,
             endDate = trip.endDate,
             destinationRefs = trip.destinations.sortedBy { it.seq }
-                .map { TripDestinationRef(it.region, it.regionCode) },
+                .map { TripDestinationRef(it.region, it.regionCode, it.nights) },
             companionType = trip.companionType?.name,
             budgetTotal = trip.budgetTotal,
             fixedVisits = fixed,

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 
 import type { ReplanSlotVM } from '@/entities/itinerary-slot';
@@ -418,5 +418,28 @@ describe('🔴 TRIP-1204 · 시트가 열린 채 손가락 확대 — 지도 잠
     renderView();
 
     expect(screen.getByTestId('map-root').props.viewOnly).toBe(false);
+  });
+});
+
+describe('🔴 TRIP-1214 c · 시트를 맨 아래로 내려도 [직접 수정]·[적용하기]는 보인다', () => {
+  it('V12 · 가장 낮은 칸이 CTA 바 높이 + 손잡이만큼 위에 있고, 그 칸으로 내려도 두 버튼이 남는다', () => {
+    renderView();
+
+    const sheet = screen.root.findAll(
+      (node) =>
+        typeof node.props?.index === 'number' &&
+        Array.isArray(node.props?.snapPoints)
+    )[0];
+    const lowest = (sheet.props.snapPoints as unknown[])[0];
+    // 28(손잡이만) 이면 CTA 바(82)가 손잡이를 덮고, 닫힘 칸 규칙(셸 기본 배열)이 버튼을 뺀다.
+    expect(typeof lowest).toBe('number');
+    expect(lowest as number).toBeGreaterThanOrEqual(28 + 82);
+
+    act(() => {
+      sheet.props.onChange(0);
+    });
+
+    expect(screen.getByTestId('sheet-cta-button-0')).toBeTruthy();
+    expect(screen.getByTestId('sheet-cta-button-1')).toBeTruthy();
   });
 });

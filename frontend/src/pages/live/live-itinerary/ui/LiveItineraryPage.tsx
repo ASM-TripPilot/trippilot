@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useMemo, useRef, useState } from 'react';
 import { router } from 'expo-router';
-import { View } from 'react-native';
+import { Linking, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { resolveLiveState } from '../model/liveState';
@@ -24,6 +24,7 @@ import { riskAffectedRow } from '../model/riskAffectedRow';
 import { triggerLabel } from '@/features/planb';
 import { triggerPillCopy } from '@/features/planb';
 import { triggerWatchlist } from '../model/triggerWatchlist';
+import { visitedLabelByPoiId } from '../model/visitedLabels';
 import {
   appliedSummaryBadges,
   appliedSummaryInputFromDiff,
@@ -96,7 +97,7 @@ export function LiveItineraryPage({
   // i08 배지 — 초안 화면(i06)이 확정 직전까지 들고 있던 diff 로 만든다. 확정(APPLIED) 뒤 서버는 diff 를 비우므로
   // 다시 조회하지 않고 캐시만 읽는다. 캐시가 없거나 ready 가 아니면 배지 줄 없이 뜬다.
   // useMemo 로 붙잡는 이유: getQueryData 는 구독이 아니라 읽기 한 번이다 — 시트가 뜬 채로 캐시가 정리(gc, 기본 5분)된 뒤
-  // 허브가 다시 그려지면(되돌리기 안내 등) 매 렌더 읽기는 undefined 를 얻어 배지가 사라진다.
+  // 허브가 다시 그려지면 매 렌더 읽기는 undefined 를 얻어 배지가 사라진다.
   const appliedBadges = useMemo(() => {
     if (!appliedSessionId) return undefined;
     const cachedDiff = queryClient.getQueryData<ReplanDiff>(
@@ -113,12 +114,12 @@ export function LiveItineraryPage({
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   // i03 위험 상세 시트 열림 = 그 트리거 id(TRIP-749). 재조회로 트리거가 사라지면 시트도 사라진다.
   const [riskTriggerId, setRiskTriggerId] = useState<string | null>(null);
-  // i08 [되돌리기] 안내(E2 — 서버 호출 없이 안내만). 허브 초기 스냅은 마운트 때 한 번만 정한다 —
-  // 닫으며 applied 가 지워져도 펼친 허브를 도로 접지 않는다(Q5).
-  const [revertNotice, setRevertNotice] = useState(false);
+  // 허브 초기 스냅은 마운트 때 한 번만 정한다 — 닫으며 applied 가 지워져도 펼친 허브를 도로 접지 않는다(Q5).
   const [initialSnapIndex] = useState(appliedSessionId ? 2 : undefined);
   // 관람 중 카드 [사진] 안내 한 줄(TRIP-1070). 다음 [사진] 누름에 지운다.
   const [photoNotice, setPhotoNotice] = useState<string | null>(null);
+  // TRIP-1216 — 안내가 권한 거부라 설정에서만 풀릴 때 [설정 열기] 를 함께 그린다.
+  const [photoNeedsSettings, setPhotoNeedsSettings] = useState(false);
   // TRIP-1189 다음 예정지 [길찾기] — 외부 앱을 띄우는 동안 연타를 막는 잠금(ref: 같은 틱 두 번째 press 도 본다)과
   // 앱·웹 모두 실패했을 때의 거리 안내(INV-4).
   const directionsBusy = useRef(false);
@@ -245,8 +246,17 @@ export function LiveItineraryPage({
     activePoiId: progress.activePoiId,
   });
   // 결정 2 — 세션 저장본을 관람 중 카드의 메모 박스로 내린다(done 카드는 범위 밖, Q5).
+  // TRIP-1220 — 완료 카드 시각은 실제 도착 시각(기록 j01 과 같은 값). 없으면 카드가 계획 시각으로 표시한다.
+  const visitedLabels = visitedLabelByPoiId(
+    visits.data ?? { visits: [] },
+    activeDate
+  );
   const hubSlots = projected.map((entry) =>
-    entry.state === 'active' ? { ...entry, memo: visitMemo.savedMemo } : entry
+    entry.state === 'active'
+      ? { ...entry, memo: visitMemo.savedMemo }
+      : entry.state === 'done'
+        ? { ...entry, visitedLabel: visitedLabels[entry.slot.poiId] ?? null }
+        : entry
   );
 
   // TRIP-1189 — 예정·진행 중 슬롯마다 [길찾기]. 도착지·출발지(바로 앞 슬롯, 첫 예정지는 현재 위치)는 resolveSlotDests 가
@@ -276,9 +286,11 @@ export function LiveItineraryPage({
   // 없다 — useVisitAttachments 는 GET 을 무조건 쏘므로 부르지 않는다, F6).
   const attachActivePhoto = async (visitCheckId: string) => {
     setPhotoNotice(null);
+    setPhotoNeedsSettings(false);
     const picked = await pickPhotoForVisit();
     if ('notice' in picked) {
       setPhotoNotice(picked.notice);
+      setPhotoNeedsSettings(picked.settings === true);
       return;
     }
     try {
@@ -396,8 +408,10 @@ export function LiveItineraryPage({
         // TRIP-1195 — 바라보는 날이 오늘이 아니면 그 날짜를 쿼리로 넘긴다(오늘이면 쿼리 없음 = 종전과 같은 경로).
         // 이미 지난 날은 서버가 409 로 막는 막다른 길이라 진입 자체를 숨긴다(결정 3). 여행 구간 밖이라 보는 날이
         // 없으면(activeDate '') 종전 그대로 — 서버가 기간 밖을 판정한다.
+        // TRIP-1214 — 여행 시작 전(오늘이 첫날보다 앞)에도 서버가 "여행 기간이 아니다"로 막으므로 처음부터 숨긴다.
         onPressAiReplan={
-          activeDate !== '' && activeDate < today
+          (activeDate !== '' && activeDate < today) ||
+          today < (itinerary.days[0]?.date ?? '')
             ? undefined
             : () =>
                 router.push(
@@ -429,6 +443,9 @@ export function LiveItineraryPage({
             : undefined
         }
         photoNotice={photoNotice}
+        onPressPhotoSettings={
+          photoNeedsSettings ? () => void Linking.openSettings() : undefined
+        }
         memoNotice={!memoSheetOpen && memoFailed ? MEMO_SAVE_FAILED : null}
         fabHidden={memoSheetOpen}
         triggerChip={triggerChip}
@@ -467,9 +484,7 @@ export function LiveItineraryPage({
         // 서버는 확정 뒤 diff 를 비운다). 캐시에 없으면(앱 재시작 등) 배지 줄만 숨긴다. 부제·내역은 계약이 없어 안 넘긴다.
         <ReplanAppliedSheet
           summaryBadges={appliedBadges}
-          showRevertNotice={revertNotice}
           onConfirm={() => router.setParams({ applied: undefined })}
-          onRevert={() => setRevertNotice(true)}
         />
       ) : null}
     </>

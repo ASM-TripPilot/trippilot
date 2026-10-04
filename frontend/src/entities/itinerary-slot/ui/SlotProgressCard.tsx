@@ -21,7 +21,7 @@ import {
 
 /**
  * TRIP-746 · i01 허브 시트의 슬롯 카드 3상태(entities · presentation-only, useState 0).
- *  - done     = 이름 › + 우측 계획 시각 "09:30" + "방문" / 사진 N장 / 후기. 사진·후기가 없으면 그 칸을
+ *  - done     = 이름 › + 우측 실제 방문 시각 "09:30" + "방문"(TRIP-1220 — 실제 시각이 없으면 계획 시각 + "계획") / 사진 N장 / 후기. 사진·후기가 없으면 그 칸을
  *               통째로 안 그린다(G6 — 실앱은 조회 계약이 없어 늘 없다).
  *  - active   = 상태줄 "13:00 도착 · 지금 관람 중"(D4 고정) + [방문 완료]·[사진]·[메모] + (있으면) 메모 박스(TRIP-1117).
  *               [사진]은 `onPressPhoto`, [메모]는 `onPressMemo` 를 부른다(TRIP-1070). 받지 않은 버튼은
@@ -56,6 +56,8 @@ export interface SlotProgressCardProps {
   state: SlotProgressState;
   /** done 전용. 비었으면 사진 행을 통째로 안 그린다. */
   photos?: ImageSourcePropType[];
+  /** done 전용(TRIP-1220) — 실제 방문 시각 'HH:mm'(KST, 기록 j01 과 같은 값). 없으면 계획 시각 + "계획" 으로 표시한다. */
+  visitedLabel?: string | null;
   /** done·active(TRIP-1117). null/미전달이면 메모 박스를 안 그린다. */
   memo?: string | null;
   /** active [방문 완료]. */
@@ -66,6 +68,8 @@ export interface SlotProgressCardProps {
   onPressMemo?: () => void;
   /** active 사진 안내 한 줄(권한 거부·저장 실패 등) — 상태는 부모가 가진다. 비면 안 그린다. */
   photoNotice?: string | null;
+  /** TRIP-1216 — 사진 안내 옆 [설정 열기](권한 거부). 주면 안내가 있을 때만 그린다. 설정을 여는 일은 부모 몫. */
+  onPressPhotoSettings?: () => void;
   /** TRIP-1117 — active 메모 안내 한 줄(저장 실패, Q3). 상태는 부모가 가진다. 비면 안 그린다. */
   memoNotice?: string | null;
   /** upcoming 전용(TRIP-748) — 주면 "예정" 대신 이 글자를 분홍 배지로(트리거 영향 카드). */
@@ -86,10 +90,12 @@ export function SlotProgressCard({
   state,
   photos = [],
   memo,
+  visitedLabel,
   onPressComplete,
   onPressPhoto,
   onPressMemo,
   photoNotice,
+  onPressPhotoSettings,
   memoNotice,
   badgeLabel,
   onPressName,
@@ -140,13 +146,15 @@ export function SlotProgressCard({
             testID={fieldId('visit-time')}
             className="font-noto-bold text-label font-bold text-ink"
           >
-            {hhmm}
+            {visitedLabel ?? hhmm}
           </Text>
           <Text
             testID={fieldId('visit-label')}
-            className="ml-[3px] font-noto text-caption text-success"
+            className={`ml-[3px] font-noto text-caption ${
+              visitedLabel ? 'text-success' : 'text-muted'
+            }`}
           >
-            방문
+            {visitedLabel ? '방문' : '계획'}
           </Text>
         </View>
       ) : null}
@@ -288,6 +296,19 @@ export function SlotProgressCard({
           >
             {photoNotice}
           </Text>
+        ) : null}
+        {photoNotice && onPressPhotoSettings ? (
+          <Pressable
+            testID="execution-arrive-photo-settings"
+            accessibilityRole="button"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            onPress={onPressPhotoSettings}
+            className="self-start"
+          >
+            <Text className="font-noto-bold text-caption font-bold text-primary">
+              설정 열기
+            </Text>
+          </Pressable>
         ) : null}
         {/* TRIP-1117 Q3 — 시트가 닫힌 뒤 도착한 메모 저장 실패(INV-4). 순서: 버튼 줄 → 안내 → 메모 박스(Q9). */}
         {memoNotice ? (

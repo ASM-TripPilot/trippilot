@@ -6,7 +6,7 @@ import type {
 } from '@/shared/api/index.schemas';
 
 import { mergeMustVisitSeeds, type MustVisitSeedItem } from './mustVisitSeed';
-import { nightsSum } from './tripDraft';
+import { MAX_TRIP_NIGHTS, nightsSum } from './tripDraft';
 import { deriveEndDate, type PeriodPresetCode } from './tripWizardStep1';
 
 /**
@@ -239,10 +239,18 @@ const createTripWizardDraft: StateCreator<TripWizardDraft> = (set) => ({
       // 해당 seq의 nights만 갈아 끼운다 — `map`이 seq 미일치 항목은 원본 그대로 되돌려주므로
       // 못 찾는 seq는 저절로 no-op이다(seq 재번호는 nights만 바뀌어 필요 없다). 하한은
       // `minNightsFor` 하나로 접는다 — 도시 하나면 0박(당일치기), 여럿이면 최소 1박(01b D1 + 0박 결정).
-      // 상한은 없다. renumberSeq는 여기서 안 부른다: 목록 길이·순서가 그대로라 seq도 그대로다.
+      // 상한은 박수 **합** `MAX_TRIP_NIGHTS`(TRIP-1219 a) — 다른 도시 몫을 뺀 만큼까지만 오른다.
+      // renumberSeq는 여기서 안 부른다: 목록 길이·순서가 그대로라 seq도 그대로다.
       const floor = minNightsFor(state.destinations.length);
+      const othersSum = state.destinations.reduce(
+        (total, one) => (one.seq === seq ? total : total + one.nights),
+        0
+      );
+      const ceiling = Math.max(floor, MAX_TRIP_NIGHTS - othersSum);
       const destinations = state.destinations.map((one) =>
-        one.seq === seq ? { ...one, nights: Math.max(floor, nights) } : one
+        one.seq === seq
+          ? { ...one, nights: Math.min(ceiling, Math.max(floor, nights)) }
+          : one
       );
       return { destinations, endDate: endAfter(state, destinations) };
     }),

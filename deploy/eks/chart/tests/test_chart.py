@@ -25,6 +25,22 @@ def render(environment="dev", embedding=False, overrides=None):
     return [item for item in yaml.safe_load_all(result.stdout) if item]
 
 
+def render_default(overrides=None):
+    """환경 파일 **없이** 차트 기본값만 렌더한다 — `values.yaml` 의 성질을 보는 자리."""
+    result = subprocess.run(
+        [shutil.which("helm") or "helm", "template", "trippilot", str(CHART),
+         "--namespace", "trippilot-dev",
+         "--set", "images.backend.repository=example/backend,images.backend.tag=sha123",
+         "--set", "images.ai.repository=example/ai,images.ai.tag=sha123",
+         "--set", "images.embedding.repository=example/embedding,images.embedding.tag=sha123",
+         "--set", "config.databaseHost=database.example.internal,config.redisHost=redis.example.internal",
+         "--set", "gateway.certificateArn=arn:aws:acm:ap-northeast-2:123456789012:certificate/12345678-1234-1234-1234-123456789012",
+         "--set-string", "rolloutNonce=run-123"] + (overrides or []),
+        check=True, text=True, capture_output=True,
+    )
+    return [item for item in yaml.safe_load_all(result.stdout) if item]
+
+
 class ChartTests(unittest.TestCase):
     def test_rolling_deployments_allow_long_ai_requests_to_drain(self):
         documents = render("prd")
@@ -74,7 +90,15 @@ class ChartTests(unittest.TestCase):
             deployments = [item for item in documents if item["kind"] == "Deployment"]
             self.assertEqual(len(deployments), 3)
             for deployment in deployments:
-                self.assertEqual(deployment["spec"]["replicas"], expected)
+                # HPA 가 켜진 컴포넌트는 `replicas` 를 렌더하지 않는다(BR-MLO-15) —
+                # dev 의 ai 가 그렇다. 둘 다 실으면 helm upgrade 가 HPA 가 정한 수를
+                # 되돌리므로, 여기서 고정 수를 기대하면 안 되는 쪽이 맞다.
+                scaled = {item["spec"]["scaleTargetRef"]["name"] for item in documents
+                          if item["kind"] == "HorizontalPodAutoscaler"}
+                if deployment["metadata"]["name"] in scaled:
+                    self.assertNotIn("replicas", deployment["spec"])
+                else:
+                    self.assertEqual(deployment["spec"]["replicas"], expected)
                 pod = deployment["spec"]["template"]
                 self.assertEqual(pod["metadata"]["annotations"]["trippilot.io/rollout-nonce"], "run-123")
                 self.assertFalse(pod["spec"]["automountServiceAccountToken"])
@@ -141,13 +165,49 @@ class ChartTests(unittest.TestCase):
         self.assertNotIn("replicas", deployments["ai"]["spec"])
         self.assertEqual(deployments["embedding"]["spec"]["replicas"], 1)
 
-    def test_autoscaling_is_off_by_default(self):
-        documents = render()
+    def test_autoscaling_is_off_in_the_chart_default(self):
+        """차트 기본값은 꺼짐이다 — 켜는 것은 **환경 파일의 선택**이어야 한다.
+
+        `values.yaml` 만으로 렌더하면 HPA 가 하나도 없고 Deployment 가 수를 들고 있다.
+        metrics-server 가 없는 클러스터에 차트를 올려도 안전해야 하기 때문이다(목표치가
+        `<unknown>` 인 채 HPA 가 replica 소유권만 가져가는 상태를 기본값으로 둘 수 없다).
+        환경별로 켜진 것은 아래 `test_dev_enables_ai_autoscaling` 이 본다.
+        """
+        documents = render_default()
         self.assertEqual(
             [item for item in documents if item["kind"] == "HorizontalPodAutoscaler"], [])
         deployments = {item["metadata"]["name"]: item
                        for item in documents if item["kind"] == "Deployment"}
         self.assertEqual(deployments["ai"]["spec"]["replicas"], 1)
+
+    def test_dev_enables_ai_autoscaling(self):
+        """dev 는 ai HPA 를 켠다 — prd 보다 먼저 동작을 보는 자리다.
+
+        켤 수 있는 전제는 `infra/terraform/stack/eks.tf` 의 `aws_eks_addon.metrics_server`
+        다. 그 애드온 없이 이 값을 켜면 목표치가 `<unknown>` 이 되고, Deployment 가
+        `replicas` 를 렌더하지 않으므로 **아무도 수를 정하지 않는 상태**가 된다.
+        """
+        documents = render("dev")
+        scalers = {item["metadata"]["name"]: item for item in documents
+                   if item["kind"] == "HorizontalPodAutoscaler"}
+        self.assertEqual(set(scalers), {"ai"})
+        self.assertEqual(scalers["ai"]["spec"]["minReplicas"], 1)
+        self.assertEqual(scalers["ai"]["spec"]["maxReplicas"], 3)
+        target = scalers["ai"]["spec"]["scaleTargetRef"]
+        self.assertEqual((target["kind"], target["name"]), ("Deployment", "ai"))
+
+    def test_prd_keeps_fixed_replicas_until_a_human_turns_it_on(self):
+        """prd 는 아직 고정 2 다 — 켜는 것은 사람의 판단으로 남긴다.
+
+        prd 배포는 리뷰어 승인을 거치므로, 값만 미리 머지해 두면 다음 prd 배포가
+        조용히 동작을 바꾼다. dev 실측 뒤에 따로 켠다(TRIP-966).
+        """
+        documents = render("prd")
+        self.assertEqual(
+            [item for item in documents if item["kind"] == "HorizontalPodAutoscaler"], [])
+        deployments = {item["metadata"]["name"]: item
+                       for item in documents if item["kind"] == "Deployment"}
+        self.assertEqual(deployments["ai"]["spec"]["replicas"], 2)
 
     def test_in_cluster_reminder_serving_was_withdrawn(self):
         # GPU 파드로 리마인드 모델을 직접 서빙하는 구성은 접었다(2026-10-01) — 운영

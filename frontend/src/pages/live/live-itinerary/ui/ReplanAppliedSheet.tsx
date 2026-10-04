@@ -7,7 +7,7 @@ import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
  *
  * 재계획안을 반영하고 허브로 돌아오면(`?applied=`) 페이지가 허브의 형제로 **조건부 마운트**한다.
  * 부제·요약 배지·변경 내역은 데이터가 올 때만 그린다 — 없거나 빈 배열이면 컨테이너째 생략(E4).
- * [확인]·스크림 탭·아래로 끌기 → onConfirm(닫기), [되돌리기] → onRevert(E2 — 페이지가 안내만 켠다).
+ * [확인]·스크림 탭·아래로 끌기 → onConfirm(닫기). [되돌리기]는 없다 — 서버에 재계획 되돌리기 계약이 없다(TRIP-1214).
  *
  * ★ 바텀시트 목 통과형(repo-traps): 실제 딤 전면 커버·끌어 닫기는 jest 사각(6-b 실기).
  */
@@ -24,9 +24,7 @@ export interface ReplanAppliedSheetProps {
   subtitleLines?: readonly string[];
   summaryBadges?: readonly string[];
   diffRows?: readonly AppliedDiffRow[];
-  showRevertNotice?: boolean;
   onConfirm: () => void;
-  onRevert: () => void;
 }
 
 const DIFF_KIND: Record<AppliedDiffKind, { label: string; dot: string }> = {
@@ -51,9 +49,7 @@ export function ReplanAppliedSheet({
   subtitleLines = [],
   summaryBadges = [],
   diffRows = [],
-  showRevertNotice = false,
   onConfirm,
-  onRevert,
 }: ReplanAppliedSheetProps): ReactElement {
   return (
     <BottomSheet
@@ -168,26 +164,7 @@ export function ReplanAppliedSheet({
           </View>
         )}
 
-        {showRevertNotice ? (
-          <Text
-            testID="planb-applied-revert-notice"
-            className="font-noto text-caption text-body"
-          >
-            이미 반영돼 되돌릴 수 없어요
-          </Text>
-        ) : null}
-
         <View className="flex-row gap-sm">
-          <Pressable
-            testID="planb-applied-revert"
-            accessibilityRole="button"
-            onPress={onRevert}
-            className="h-[52px] w-[140px] items-center justify-center rounded-button border border-hairline-strong bg-canvas"
-          >
-            <Text className="font-noto-bold text-card-title font-bold text-ink">
-              되돌리기
-            </Text>
-          </Pressable>
           <Pressable
             testID="planb-applied-confirm"
             accessibilityRole="button"

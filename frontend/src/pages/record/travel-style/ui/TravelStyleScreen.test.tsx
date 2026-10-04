@@ -238,7 +238,7 @@ describe('Figma 정합 — 2톤 타일·헤딩 병합·남은 곳 계산·# 접�
    *  - 🔴 AC-6 값 인터폴레이션: 진행 바 아래 "{required-current}곳 더 필요" 가 리터럴이 아니라 계산값
    *    (두 픽스처 4곳/7곳 으로 잠근다).
    *  - 🔴 AC-7 `#`접두: 미리보기 칩을 컴포넌트가 `#${descriptor}` 로 그린다(§5 F 실측).
-   *  - 🔴 AC-8: 두 얼굴에 BottomTabBar(records 활성)를 얹는다.
+   *  - 🔴 AC-8: 두 얼굴에 BottomTabBar(my 활성 — TRIP-1222)를 얹는다.
    *
    * (개념) `within(node)` = 그 노드의 subtree(자기 포함)로 쿼리를 좁힌다. `getByText('분', {exact:true})`
    *   = 텍스트가 정확히 '분'인 노드만(부분포함은 정규식 `getByText(/분/)`). 중첩 Text 의 안쪽 Text 는
@@ -368,8 +368,8 @@ describe('Figma 정합 — 2톤 타일·헤딩 병합·남은 곳 계산·# 접�
     });
   });
 
-  describe('🔴 TRIP-765 · AC-8 BottomTabBar(records 활성) 두 얼굴', () => {
-    it('정식 얼굴에 기록 탭 활성 바텀탭바가 있다', () => {
+  describe('🔴 TRIP-765 · AC-8 BottomTabBar(my 활성 — TRIP-1222) 두 얼굴', () => {
+    it('정식 얼굴에 마이 탭 활성 바텀탭바가 있다', () => {
       // Arrange — 정식.
       render(
         <TravelStyleScreen
@@ -383,7 +383,7 @@ describe('Figma 정합 — 2톤 타일·헤딩 병합·남은 곳 계산·# 접�
       // Assert — 탭바 루트 + 기록 활성 아이콘(현재 미렌더 → red).
       expect(screen.getByTestId('shell-tabbar-root')).toBeOnTheScreen();
       expect(
-        screen.getByTestId('shell-tabbar-icon-records-active')
+        screen.getByTestId('shell-tabbar-icon-my-active')
       ).toBeOnTheScreen();
     });
 
@@ -401,8 +401,46 @@ describe('Figma 정합 — 2톤 타일·헤딩 병합·남은 곳 계산·# 접�
       // Assert — 두 얼굴 공통(현재 미렌더 → red).
       expect(screen.getByTestId('shell-tabbar-root')).toBeOnTheScreen();
       expect(
-        screen.getByTestId('shell-tabbar-icon-records-active')
+        screen.getByTestId('shell-tabbar-icon-my-active')
       ).toBeOnTheScreen();
     });
+  });
+});
+
+describe('🔴 TRIP-1222 · 통계 타일 표기', () => {
+  it('avgDwellMinutes=0(방문 시각 데이터 부족)이면 0분 타일을 그리지 않는다', () => {
+    render(
+      <TravelStyleScreen
+        face="official"
+        progress={{ current: 14, required: 10 }}
+        analysis={officialBody({ avgDwellMinutes: 0 })}
+        preview={null}
+      />
+    );
+    expect(screen.queryByTestId('reflection-style-stat-dwell')).toBeNull();
+    expect(
+      screen.getByTestId('reflection-style-stat-places')
+    ).toBeOnTheScreen();
+  });
+
+  it('하루 평균 방문 4.333…은 소수 1자리(4.3곳)로, 정수 4는 4곳 그대로', () => {
+    const { rerender } = render(
+      <TravelStyleScreen
+        face="official"
+        progress={{ current: 14, required: 10 }}
+        analysis={officialBody({ avgPlacesPerDay: 4.333333 })}
+        preview={null}
+      />
+    );
+    expect(screen.getByText(/^4\.3곳$/)).toBeOnTheScreen();
+    rerender(
+      <TravelStyleScreen
+        face="official"
+        progress={{ current: 14, required: 10 }}
+        analysis={officialBody({ avgPlacesPerDay: 4 })}
+        preview={null}
+      />
+    );
+    expect(screen.getByText(/^4곳$/)).toBeOnTheScreen();
   });
 });

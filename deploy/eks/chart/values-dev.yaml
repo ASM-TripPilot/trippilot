@@ -7,6 +7,15 @@ backend:
   replicas: 1
 ai:
   replicas: 1
+  # dev 에서 먼저 켠다 — prd 와 같은 이유다(위 scheduleDeadlineEnforced 와 같은 순서).
+  # **부하를 받으려는 것이 아니라 동작을 보려는 것이다.** dev 는 트래픽이 없어 HPA 는
+  # minReplicas 에 머물고, 확인하고 싶은 것은 "목표치를 읽는가"다 — metrics-server 가
+  # 없으면 `<unknown>` 이 되고 그 상태로 prd 에 켜면 replica 소유권만 가져간다.
+  # 애드온은 `infra/terraform/stack/eks.tf` 의 aws_eks_addon.metrics_server.
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 3
 gateway:
   replicas: 1
 embedding:

@@ -138,3 +138,23 @@ resource "aws_eks_addon" "cloudwatch_observability" {
 
   depends_on = [aws_cloudwatch_log_group.container_insights]
 }
+
+# HPA 가 CPU 목표를 읽을 수 있게 하는 유일한 조건. **Auto Mode 는 이걸 주지 않는다** —
+# 공식 시작 안내도 HPA 절에서 metrics-server 를 따로 배포하라고 적는다. 없으면 HPA 는
+# 목표치가 `<unknown>` 인 채 **replica 소유권만 가져간다**(차트가 HPA 를 켜면 Deployment
+# 에서 `replicas` 를 빼므로 아무도 수를 정하지 않는 상태가 된다). 그래서 차트의
+# `*.autoscaling.enabled` 는 이 애드온이 먼저 있어야 켜는 값이다.
+#
+# **`addon_version` 을 일부러 비운다** — 비우면 EKS 가 그 클러스터 버전에 맞는 기본
+# 호환 버전을 고른다. 리소스 메트릭 수집기는 우리 워크로드 계약에 걸리는 표면이 없어
+# 핀으로 얻는 것이 없고, 핀을 두면 클러스터 업그레이드마다 손이 간다.
+#
+# 배포 역할 권한은 이미 있다 — 부트스트랩 템플릿의 ManageEnvironmentEks 가
+# eks:CreateAddon 계열을 `addon/trippilot-${Environment}/*` 범위로 들고 있다.
+resource "aws_eks_addon" "metrics_server" {
+  cluster_name = aws_eks_cluster.this.name
+  addon_name   = "metrics-server"
+
+  # 애드온 파드가 노드를 필요로 하므로 클러스터 접근 구성이 끝난 뒤에 만든다.
+  depends_on = [aws_eks_access_policy_association.deployment]
+}

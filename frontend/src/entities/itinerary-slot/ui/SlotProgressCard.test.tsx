@@ -65,6 +65,7 @@ describe('SlotProgressCard · done (AC-3)', () => {
         state="done"
         photos={PHOTOS}
         memo={MEMO}
+        visitedLabel="09:30"
         onPressName={jest.fn()}
       />
     );
@@ -72,7 +73,7 @@ describe('SlotProgressCard · done (AC-3)', () => {
     expect(screen.getByTestId(`execution-live-slot-${KEY}`)).toBeOnTheScreen();
     expect(screen.getByTestId(id('name'))).toHaveTextContent('감천문화마을');
     expect(screen.getByTestId(id('chevron'))).toBeOnTheScreen();
-    // 시각은 계획 startAt 을 자른 값(재추정 없음). "방문" 은 형제 leaf(중첩 금지, 02a ★4).
+    // 시각은 넘겨받은 실제 방문 시각(TRIP-1220). "방문" 은 형제 leaf(중첩 금지, 02a ★4).
     expect(screen.getByTestId(id('visit-time'))).toHaveTextContent('09:30');
     expect(screen.getByTestId(id('visit-label'))).toHaveTextContent('방문');
     // 사진은 준 만큼, 후기는 원문 그대로.
@@ -90,6 +91,25 @@ describe('SlotProgressCard · done (AC-3)', () => {
     // done 엔 액션·상태 알약이 없다.
     expect(screen.queryByTestId('execution-arrive-complete')).toBeNull();
     expect(screen.queryByTestId(id('status'))).toBeNull();
+  });
+
+  it('C1b TRIP-1220 실제 시각(visitedLabel)이 있으면 그 시각 + "방문", 없으면 계획 시각 + "계획"', () => {
+    const { rerender } = render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="done"
+        visitedLabel="07:04"
+      />
+    );
+
+    expect(screen.getByTestId(id('visit-time'))).toHaveTextContent('07:04');
+    expect(screen.getByTestId(id('visit-label'))).toHaveTextContent('방문');
+
+    rerender(<SlotProgressCard slot={mkSlot()} date={DATE} state="done" />);
+
+    expect(screen.getByTestId(id('visit-time'))).toHaveTextContent('09:30');
+    expect(screen.getByTestId(id('visit-label'))).toHaveTextContent('계획');
   });
 
   it('C2 사진·후기가 둘 다 없으면 사진 행과 후기 박스를 통째로 안 그린다 (G6)', () => {
@@ -247,6 +267,45 @@ describe('SlotProgressCard · active (AC-4)', () => {
     expect(
       screen.getByTestId('execution-arrive-photo-notice')
     ).toHaveTextContent('사진을 기록하지 못했어요. 다시 시도해 주세요');
+  });
+});
+
+describe('SlotProgressCard · 사진 안내의 [설정 열기] (TRIP-1216 d)', () => {
+  const base = {
+    slot: mkSlot({
+      startAt: '13:00:00',
+      endAt: '14:30:00',
+      nameKo: '부산시립미술관',
+    }),
+    date: DATE,
+    state: 'active' as const,
+    onPressPhoto: jest.fn(),
+    photoNotice: '사진 접근 권한이 없어 사진을 불러올 수 없어요',
+  };
+
+  it('안내가 있고 onPressPhotoSettings 가 오면 [설정 열기] 가 보이고 누르면 1회 호출된다', () => {
+    const onSettings = jest.fn();
+    render(<SlotProgressCard {...base} onPressPhotoSettings={onSettings} />);
+
+    fireEvent.press(screen.getByTestId('execution-arrive-photo-settings'));
+
+    expect(onSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('onPressPhotoSettings 가 없으면 버튼이 없다', () => {
+    render(<SlotProgressCard {...base} />);
+    expect(screen.queryByTestId('execution-arrive-photo-settings')).toBeNull();
+  });
+
+  it('안내가 비면 onPressPhotoSettings 가 와도 버튼이 없다', () => {
+    render(
+      <SlotProgressCard
+        {...base}
+        photoNotice={null}
+        onPressPhotoSettings={jest.fn()}
+      />
+    );
+    expect(screen.queryByTestId('execution-arrive-photo-settings')).toBeNull();
   });
 });
 

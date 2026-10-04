@@ -32,6 +32,7 @@ import {
   budgetForTier,
   formatBudgetAmount,
   isBudgetTier,
+  MAX_BUDGET_AMOUNT,
   parseBudgetAmount,
   tierForAmount,
   type BudgetTier,
@@ -379,6 +380,10 @@ export function TripNewStep1Page({
   const [draftTier, setDraftTier] = useState<string>();
   const draftBudget = parseBudgetAmount(draftAmountText);
   const draftBudgetKind = draftBudget.kind;
+  // TRIP-1219 b — 빈 금액 오류는 사용자가 입력을 만진 뒤에만 보인다(열자마자 빨간 안내 금지).
+  const [draftBudgetTouched, setDraftBudgetTouched] = useState(false);
+  const draftBudgetOverCap =
+    draftBudget.kind === 'amount' && draftBudget.amount > MAX_BUDGET_AMOUNT;
 
   // 제출 경로 잠금(useRef — 상태와 달리 같은 틱에 즉시 읽힌다, 연타 두 번째가 옛 값을 읽지
   // 않게). 요청(등록·PATCH·동기화)이 날아가는 동안만 켜진다 — 성공 뒤에는 풀어 둬야 step2 에서
@@ -693,6 +698,7 @@ export function TripNewStep1Page({
           : tierAmountText
     );
     setDraftTier(appliedBudgetTier(currentBudgetText, tierLabel));
+    setDraftBudgetTouched(false);
     setBudgetSheetOpen(true);
   }
 
@@ -702,6 +708,7 @@ export function TripNewStep1Page({
    * 커밋된 금액을 지우거나 시트만 닫히는 침묵 실패 방지, 버튼도 비활성). */
   function applyBudget(): void {
     if (parseBudgetAmount(draftAmountText).kind !== 'amount') return;
+    if (draftBudgetOverCap) return;
     setBudgetText(draftAmountText);
     setBudgetSheetOpen(false);
   }
@@ -912,15 +919,20 @@ export function TripNewStep1Page({
             // amountText 로 스스로 오류를 도출하지 않는다). 카피는 오케 확정값.
             draftBudgetKind === 'invalid'
               ? '숫자만 입력해 주세요'
-              : draftBudgetKind === 'empty'
-                ? '금액을 입력해 주세요'
-                : undefined
+              : draftBudgetOverCap
+                ? '10억원 이하로 입력해 주세요'
+                : draftBudgetKind === 'empty' && draftBudgetTouched
+                  ? '금액을 입력해 주세요'
+                  : undefined
           }
-          onChangeAmount={setDraftAmountText}
+          onChangeAmount={(next) => {
+            setDraftBudgetTouched(true);
+            setDraftAmountText(next);
+          }}
           onSelectTier={selectBudgetTier}
           onApply={applyBudget}
           onClose={() => setBudgetSheetOpen(false)}
-          applyDisabled={draftBudgetKind === 'empty'}
+          applyDisabled={draftBudgetKind === 'empty' || draftBudgetOverCap}
         />
       ) : null}
       {/* 이탈 확인은 맨 위에 겹친다. 삭제가 성공해 id 가 비면 저절로 내려간다. */}

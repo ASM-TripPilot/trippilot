@@ -352,9 +352,10 @@ class GenerateItineraryService(
      *
      * 정본은 숙소 없는 생성을 허용한다(BR-U1-40 · BR-U1-47 · US-SCHED-11) — 계약이 그걸 막고 있었다.
      *
-     * **다목적지의 날짜별 배정은 하지 않는다.** 목적지에 박수(nights)가 실려 오지 않아 어느 날이
-     * 어느 도시인지 알 수 없다. 첫 목적지 중심을 쓴다 — 단일 목적지(대부분)는 정확하고,
-     * 다목적지는 거칠지만 앵커가 없는 것보다 낫다.
+     * **다목적지는 그 날의 목적지 중심을 쓴다**([RegionAnchors.destinationOn] — FE `dayRegion.ts` 와 같은
+     * 규칙). 예전엔 박수가 실려 오지 않아 모든 날이 첫 목적지로 접혔고, "서울 1박 + 인천 1박"이
+     * 서울 2박처럼 나왔다. 그 날 목적지의 좌표가 없으면 첫 목적지 중심으로 떨어진다(종전 동작).
+     * 우선순위: 숙소 좌표 → 그 날의 목적지 중심 → 첫 목적지 중심.
      *
      * **코드를 먼저 본다**(TRIP-859 후속). 이름으로 찾으면 동명이지역에서 첫 코드를 임의로 집어,
      * 부산 중구를 고른 사용자에게 **서울 중구 좌표**가 앵커로 박힐 수 있다. 증상은 "일정이 다른
@@ -368,14 +369,16 @@ class GenerateItineraryService(
         destinations: List<TripDestinationRef>,
     ): List<DayAnchor> {
         val byDate = stayAnchors.associateBy { it.date }
-        // 목적지 중심은 한 번만 조회한다 — 날짜마다 부르면 같은 값을 계획일 수만큼 다시 읽는다.
-        val fallback = destinations.firstNotNullOfOrNull { RegionAnchors.centerOf(regions, it) }
+        // 목적지 중심은 목적지마다 한 번만 조회한다 — 날짜마다 부르면 같은 값을 계획일 수만큼 다시 읽는다.
+        val centers = destinations.associateWith { RegionAnchors.centerOf(regions, it) }
+        val first = destinations.firstNotNullOfOrNull { centers[it] }
         return planDates(startDate, endDate).mapNotNull { d ->
             val stay = byDate[d] ?: if (d == endDate) byDate[d.minusDays(1)] else null // 체크아웃일만 전날 거점
+            val center = RegionAnchors.destinationOn(destinations, startDate, d)?.let { centers[it] } ?: first
             when {
                 stay != null -> DayAnchor(d, stay.lat, stay.lng)
                 // 목적지 좌표조차 없으면 그 날은 앵커 없이 둔다 — 지어낸 좌표를 보내지 않는다.
-                fallback != null -> DayAnchor(d, fallback.lat, fallback.lng)
+                center != null -> DayAnchor(d, center.lat, center.lng)
                 else -> null
             }
         }

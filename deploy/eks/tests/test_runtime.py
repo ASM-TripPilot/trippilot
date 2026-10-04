@@ -292,6 +292,33 @@ class RuntimeIntegrationTests(unittest.TestCase):
             runtime_smoke.run("trippilot", shell)
         self.assertIn("delete", shell.call_args.args[0])
 
+    def test_smoke_reports_autoscaler_targets_without_gating_the_deploy(self):
+        """HPA 현재값을 배포 로그에 남기되, 비어 있어도 배포를 깨지 않는다.
+
+        metrics-server 가 없으면 HPA 는 목표치가 `<unknown>` 인 채 replica 소유권만
+        가져간다 — 배포가 성공한 뒤에 조용히 시작되는 사고라 로그에 증거가 필요하다.
+        단언하지 않는 이유는 메트릭이 기동 수십 초 뒤에 채워져서, 단언하면 멀쩡한
+        배포가 타이밍으로 깨지기 때문이다.
+        """
+        import runtime_smoke
+        table = "NAME   TARGETS   CURRENT   MIN   MAX   REPLICAS\nai     70        <none>    1     3     1\n"
+        shell = Mock(side_effect=["", "", "", "", table])
+        with patch("builtins.print") as output:
+            runtime_smoke.run("trippilot", shell)
+        printed = " ".join(str(call.args[0]) for call in output.call_args_list)
+        self.assertIn("ai", printed)
+        self.assertIn("metrics-server", printed)  # 비어 있으면 어디를 볼지 알려준다
+        get = shell.call_args.args[0]
+        self.assertEqual(get[:3], ["kubectl", "get", "hpa"])
+        self.assertIn("--ignore-not-found", get)  # HPA 를 안 켠 환경에서 깨지지 않는다
+
+    def test_smoke_says_nothing_when_no_autoscaler_is_enabled(self):
+        import runtime_smoke
+        shell = Mock(side_effect=["", "", "", "", ""])
+        with patch("builtins.print") as output:
+            runtime_smoke.run("trippilot", shell)
+        output.assert_not_called()
+
     @patch("runtime.subprocess.run")
     def test_command_returns_success_without_echo(self, run):
         run.return_value = Mock(returncode=0, stdout="private", stderr="")
