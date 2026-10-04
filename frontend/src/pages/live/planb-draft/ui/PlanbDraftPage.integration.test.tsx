@@ -1060,6 +1060,9 @@ describe('🔴 N · 오늘 대안 없음 → [내일 일정 다시 짜기] (targ
     );
     fireEvent.press(screen.getByTestId(NEXT_DAY_TESTID));
     expect(mockStartMutate).toHaveBeenCalledTimes(1);
+  });
+});
+
 // TRIP-1233 · i13 — 편집기는 날짜가 없으면 1일차로 연다. 오늘이 아닌 날을 다시 짜던 세션에서 [직접 수정]을
 // 누르면 그 날로 열려야 한다. 대안 없음·실패 얼굴엔 초안(diff)이 없으므로 초안 날짜가 아니라 세션에서 읽는다.
 describe('🔴 TRIP-1233 · [직접 수정]은 세션이 다시 짜던 날로 편집기를 연다', () => {
