@@ -70,16 +70,9 @@ from sentence_transformers import SentenceTransformer  # noqa: E402
 
 MODEL = os.environ.get("TRIPPILOT_EMBEDDING_MODEL") or "nlpai-lab/KURE-v1"
 KB_PATH = Path(os.environ.get("KB_PATH") or "data/planb_situation_kb.yaml")
-QUERIES = (
-    "WEATHER 날씨 악화 상황",
-    "CLOSURE 휴무·폐점 상황",
-    "DELAY 지연 상황",
-    "MANUAL 예약 취소 상황",
-    "MANUAL 피로 상황",
-    "MANUAL 사용자 요청 교체 상황",
-)
-TOP_K = 4  # kb_retrieval.DEFAULT_TOP_K
-COSINE_FLOOR = 0.9999  # 채택 전제
+# 질의 묶음·순위 깊이·코사인 바닥은 **컨테이너 하네스와 같은 한 벌**이다
+# (`embedding_ab_gate`). 복사하면 한쪽만 느슨해진다 — BR-MLO-05.
+from embedding_ab_gate import COSINE_FLOOR, QUERIES, TOP_K  # noqa: E402
 
 # `ORT_DIRECT=1` 이면 Triton 서버 없이 onnxruntime 을 직접 부른다.
 #
