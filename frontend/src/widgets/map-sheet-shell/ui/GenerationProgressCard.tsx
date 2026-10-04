@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
+import { IndeterminateBar } from './IndeterminateBar';
 import { BackChevronGlyph, CheckGlyph, FullAiGlyph } from './MapSheetGlyphs';
 
 /**
@@ -17,7 +18,7 @@ import { BackChevronGlyph, CheckGlyph, FullAiGlyph } from './MapSheetGlyphs';
  *  - **퍼센트·캡션 없음**(계약). `generationState` 는 3값 열거뿐이라 진행 수치가 없다 — Figma 에
  *    67% 가 있어도 그리지 않는다(INV 류 · 티켓 확정).
  *
- * ⚠️ 원리적 사각(6-b 육안): ✦(FullAi)·✓(Check) 글리프 실렌더·active 트랙 안쪽 primary 부분채움·
+ * ⚠️ 원리적 사각(6-b 육안): ✦(FullAi)·✓(Check) 글리프 실렌더·active 트랙 안쪽 흐르는 막대(IndeterminateBar)·
  *   active 라벨 붉은색은 SVG stroke/fill·픽셀이라 jest 가 못 본다. 여기선 트랙 **배경 톤**·라벨
  *   **글자**·back 콜백까지만 잠긴다(02a §7).
  *
@@ -153,10 +154,8 @@ export function GenerationProgressCard({
                   testID={`generation-gauge-track-${cellNumber}`}
                   className={`h-[8px] w-full overflow-hidden rounded-pill ${trackTone}`}
                 >
-                  {/* active 트랙 안쪽 primary 부분채움(진행 중 표식, 픽셀이라 6-b 육안). */}
-                  {cell.status === 'active' ? (
-                    <View className="h-full w-1/3 rounded-pill bg-primary" />
-                  ) : null}
+                  {/* active 트랙 안쪽 흐르는 머리+꼬리(TRIP-1205 — 진행률 없이 "진행 중"만, 6-b 육안). */}
+                  {cell.status === 'active' ? <IndeterminateBar /> : null}
                 </View>
                 <View className="min-w-0 flex-row items-center gap-[3px]">
                   {cell.status === 'done' ? <CheckGlyph size={12} /> : null}

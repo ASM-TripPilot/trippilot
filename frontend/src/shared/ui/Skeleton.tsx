@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactElement } from 'react';
+import { useEffect, useRef, type ReactElement, type ReactNode } from 'react';
 import { Animated, type StyleProp, type ViewStyle } from 'react-native';
 
 import { startUnlessReduceMotion } from '@/shared/lib/reduceMotion';
@@ -13,12 +13,15 @@ export interface SkeletonProps {
   testID?: string;
   className?: string;
   style?: StyleProp<ViewStyle>;
+  /** 주면 상자 하나가 자식 묶음을 통째로 펄스시킨다(TRIP-1205 — 카드 여러 장을 루프 하나로). */
+  children?: ReactNode;
 }
 
 export function Skeleton({
   testID,
   className,
   style,
+  children,
 }: SkeletonProps): ReactElement {
   const progress = useRef(new Animated.Value(0)).current;
   const opacity = progress.interpolate({
@@ -46,6 +49,8 @@ export function Skeleton({
       testID={testID}
       className={className}
       style={[style, { opacity }]}
-    />
+    >
+      {children}
+    </Animated.View>
   );
 }
