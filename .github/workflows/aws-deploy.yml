@@ -234,7 +234,7 @@ jobs:
             -f "deploy/eks/chart/values-$DEPLOY_ENVIRONMENT.yaml" \
             -f "$RUNNER_TEMP/trippilot-values.json" \
             --set-string "rolloutNonce=$DEPLOY_RUN_ID" \
-            --atomic --wait --timeout 20m --history-max 10
+            --atomic --wait --timeout 30m --history-max 10
       - name: Verify in-cluster API and AI connectivity
         if: steps.config.outputs.deploy_application == 'true'
         run: python3 deploy/eks/runtime.py smoke --namespace trippilot
