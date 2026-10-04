@@ -15,7 +15,8 @@ export function visitedLabelByPoiId(
   for (const v of list.visits) {
     if (v.slotKey == null || v.completedAt == null || v.skippedAt != null)
       continue;
-    if (!v.arrivedAt) continue;
+    // 낙관 레코드(`optimistic:` id)의 시각은 자리표시자(날짜T00:00:00)라 실제 시각이 아니다 — 재조회로 서버 값이 올 때까지 계획 시각.
+    if (!v.arrivedAt || v.visitCheckId.startsWith('optimistic:')) continue;
     const parsed = parseSlotKey(v.slotKey);
     if (parsed.kind !== 'ok' || parsed.date !== date) continue;
     const at = new Date(v.arrivedAt);

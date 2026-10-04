@@ -2681,7 +2681,8 @@ describe('i02 트리거 표면', () => {
  */
 // TRIP-396 · TRIP-1021 · TRIP-1076 · TRIP-1079 (옛 LiveItineraryPage.visitCheck.integration.test.tsx)
 describe('방문 체크', () => {
-  const T = '2026-08-20T13:00:00';
+  // KST 13:00 — 시각 단언이 기기 시간대와 무관하도록 Z 로 못박는다(CI 는 UTC).
+  const T = '2026-08-20T04:00:00Z';
   const VISITS_PATH = `POST /api/v1/trips/${TRIP_ID}/visits`;
   const VISITS_GET_TODAY = `GET /api/v1/trips/${TRIP_ID}/visits/days/${TODAY}`;
   const arriveId = (date: string, poiId: string) =>

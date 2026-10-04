@@ -47,6 +47,22 @@ describe('visitedLabelByPoiId (TRIP-1220)', () => {
     expect(result).toEqual({});
   });
 
+  it('낙관 레코드(optimistic:)의 자리표시자 시각은 실제 시각이 아니라 담지 않는다', () => {
+    const result = visitedLabelByPoiId(
+      list(
+        vc({
+          poiId: 'p1',
+          visitCheckId: 'optimistic:p1',
+          arrivedAt: '2026-08-20T00:00:00',
+          completedAt: '2026-08-20T00:00:00',
+        })
+      ),
+      DAY
+    );
+
+    expect(result).toEqual({});
+  });
+
   it('완료 전(도착만)·건너뜀·즉석·다른 날 레코드는 담지 않는다', () => {
     const result = visitedLabelByPoiId(
       list(
