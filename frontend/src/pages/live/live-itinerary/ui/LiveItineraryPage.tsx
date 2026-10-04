@@ -14,7 +14,10 @@ import { projectSlotProgress } from '@/entities/itinerary-slot';
 import { useVisitCheck } from '../model/useVisitCheck';
 import { photoAttach } from '@/features/attach-visit-media';
 import { pickPhotoForVisit } from '@/features/attach-visit-media';
-import { useVisitMemo } from '@/features/attach-visit-media';
+import {
+  useSavedVisitMemos,
+  useVisitMemo,
+} from '@/features/attach-visit-media';
 import { MemoSheet } from './MemoSheet';
 import { deriveVisitProgress } from '@/entities/itinerary-slot';
 import { TriggerChip } from './TriggerChip';
@@ -24,7 +27,10 @@ import { riskAffectedRow } from '../model/riskAffectedRow';
 import { triggerLabel } from '@/features/planb';
 import { triggerPillCopy } from '@/features/planb';
 import { triggerWatchlist } from '../model/triggerWatchlist';
-import { visitedLabelByPoiId } from '../model/visitedLabels';
+import {
+  doneVisitCheckIdByPoiId,
+  visitedLabelByPoiId,
+} from '../model/visitedLabels';
 import {
   appliedSummaryBadges,
   appliedSummaryInputFromDiff,
@@ -116,10 +122,13 @@ export function LiveItineraryPage({
   const [riskTriggerId, setRiskTriggerId] = useState<string | null>(null);
   // 허브 초기 스냅은 마운트 때 한 번만 정한다 — 닫으며 applied 가 지워져도 펼친 허브를 도로 접지 않는다(Q5).
   const [initialSnapIndex] = useState(appliedSessionId ? 2 : undefined);
-  // 관람 중 카드 [사진] 안내 한 줄(TRIP-1070). 다음 [사진] 누름에 지운다.
-  const [photoNotice, setPhotoNotice] = useState<string | null>(null);
-  // TRIP-1216 — 안내가 권한 거부라 설정에서만 풀릴 때 [설정 열기] 를 함께 그린다.
-  const [photoNeedsSettings, setPhotoNeedsSettings] = useState(false);
+  // [사진] 안내 한 줄(TRIP-1070) — 누른 그 카드(poiId, TRIP-1203)에만. 어느 카드든 다음 [사진] 누름에 지운다.
+  // settings(TRIP-1216) = 안내가 권한 거부라 설정에서만 풀릴 때 [설정 열기] 를 함께 그린다.
+  const [photoNotice, setPhotoNotice] = useState<{
+    poiId: string;
+    text: string;
+    settings: boolean;
+  } | null>(null);
   // TRIP-1189 다음 예정지 [길찾기] — 외부 앱을 띄우는 동안 연타를 막는 잠금(ref: 같은 틱 두 번째 press 도 본다)과
   // 앱·웹 모두 실패했을 때의 거리 안내(INV-4).
   const directionsBusy = useRef(false);
@@ -182,15 +191,36 @@ export function LiveItineraryPage({
     progress.activePoiId !== null
       ? (progress.visitCheckIdByPoiId[progress.activePoiId] ?? null)
       : null;
-  // 메모 저장만 쓴다 — useVisitAttachments 는 사진 목록 GET 을 무조건 쏘므로 부르지 않는다(F6). 캐시 키는 j01 과 한 벌.
-  const visitMemo = useVisitMemo({
-    tripId,
-    visitCheckId: activeVisitCheckId ?? '',
-  });
-  // 메모 시트 열림 = "어느 방문으로 열었나"(AC-16) — 재조회로 관람 중 방문이 바뀌면 시트가 저절로 빠진다.
+  // TRIP-1203 — [사진]·[메모]가 쓸 방문 id 한 표(poi → 방문 id): 관람 중 방문 + 방문 id 를 아는 완료 방문(낙관 id 제외).
+  const doneVisitIds = doneVisitCheckIdByPoiId(
+    visits.data ?? { visits: [] },
+    liveDate
+  );
+  const mediaVisitIdByPoiId: Record<string, string> = {
+    ...doneVisitIds,
+    ...(progress.activePoiId !== null && activeVisitCheckId !== null
+      ? { [progress.activePoiId]: activeVisitCheckId }
+      : {}),
+  };
+  const poiOfVisit = (visitCheckId: string | null): string | undefined =>
+    visitCheckId === null
+      ? undefined
+      : Object.keys(mediaVisitIdByPoiId).find(
+          (poiId) => mediaVisitIdByPoiId[poiId] === visitCheckId
+        );
+  // 메모 시트 열림 = "어느 방문으로 열었나"(AC-16). TRIP-1203 Q1 — 그 방문이 이 날의 관람 중·완료 표에 있는 동안
+  // 열려 있다(관람 중이 완료로 바뀌어도 남고, 그날 목록에서 사라지면 저절로 빠진다).
   const [memoSheetFor, setMemoSheetFor] = useState<string | null>(null);
-  // 메모 저장 실패가 난 방문. 시트가 열려 있으면 시트 안, 닫혀 있으면 관람 중 카드 아래에 보인다(Q3).
+  // 메모 저장 실패가 난 방문. 시트가 열려 있으면 시트 안, 닫혀 있으면 그 카드 아래에 보인다(Q3).
   const [memoFailedFor, setMemoFailedFor] = useState<string | null>(null);
+  // 저장 대상 ≠ 표시 대상(TRIP-1203): 저장은 시트를 연 방문으로, 카드 메모 박스는 방문마다 구독해서 읽는다 —
+  // 한 훅이 둘 다 쥐면 완료 시트를 연 동안 관람 중 박스에 그 완료 방문의 저장본이 비친다. 캐시 키는 j01 과 한 벌.
+  // useVisitAttachments 는 사진 목록 GET 을 무조건 쏘므로 부르지 않는다(F6).
+  const visitMemo = useVisitMemo({ tripId, visitCheckId: memoSheetFor ?? '' });
+  const savedMemos = useSavedVisitMemos({
+    tripId,
+    visitCheckIds: Object.values(mediaVisitIdByPoiId),
+  });
   // 늦게 온 옛 실패가 최신 시도를 덮지 않게 시도 번호를 센다(j01 onSubmitMemo 선례).
   const memoAttempt = useRef(0);
 
@@ -245,17 +275,27 @@ export function LiveItineraryPage({
     completedPoiIds: progress.completedPoiIds,
     activePoiId: progress.activePoiId,
   });
-  // 결정 2 — 세션 저장본을 관람 중 카드의 메모 박스로 내린다(done 카드는 범위 밖, Q5).
+  // 결정 2 — 세션 저장본을 카드 메모 박스로 내린다(관람 중 + TRIP-1203 방문 id 를 아는 완료 카드).
   // TRIP-1220 — 완료 카드 시각은 실제 도착 시각(기록 j01 과 같은 값). 없으면 카드가 계획 시각으로 표시한다.
   const visitedLabels = visitedLabelByPoiId(
     visits.data ?? { visits: [] },
     activeDate
   );
+  const memoOf = (poiId: string): string | null => {
+    const visitCheckId = mediaVisitIdByPoiId[poiId];
+    return visitCheckId === undefined
+      ? null
+      : (savedMemos[visitCheckId] ?? null);
+  };
   const hubSlots = projected.map((entry) =>
     entry.state === 'active'
-      ? { ...entry, memo: visitMemo.savedMemo }
+      ? { ...entry, memo: memoOf(entry.slot.poiId) }
       : entry.state === 'done'
-        ? { ...entry, visitedLabel: visitedLabels[entry.slot.poiId] ?? null }
+        ? {
+            ...entry,
+            memo: memoOf(entry.slot.poiId),
+            visitedLabel: visitedLabels[entry.slot.poiId] ?? null,
+          }
         : entry
   );
 
@@ -282,15 +322,20 @@ export function LiveItineraryPage({
     }
   };
 
-  // TRIP-1070 [사진] — 관람 중 방문에 메타만 POST 한다. 사진 목록은 조회하지 않는다(허브엔 사진 칸이
-  // 없다 — useVisitAttachments 는 GET 을 무조건 쏘므로 부르지 않는다, F6).
-  const attachActivePhoto = async (visitCheckId: string) => {
+  // TRIP-1070 [사진] — 누른 카드의 방문(관람 중·TRIP-1203 완료)에 메타만 POST 한다. 사진 목록은 조회하지 않는다
+  // (허브엔 사진 칸이 없다 — useVisitAttachments 는 GET 을 무조건 쏘므로 부르지 않는다, F6).
+  const attachPhoto = async (poiId: string) => {
+    const visitCheckId = mediaVisitIdByPoiId[poiId];
+    if (visitCheckId === undefined) return;
     setPhotoNotice(null);
-    setPhotoNeedsSettings(false);
     const picked = await pickPhotoForVisit();
     if ('notice' in picked) {
-      setPhotoNotice(picked.notice);
-      setPhotoNeedsSettings(picked.settings === true);
+      // 취소는 notice null — 조용히 둔다.
+      setPhotoNotice(
+        picked.notice === null
+          ? null
+          : { poiId, text: picked.notice, settings: picked.settings === true }
+      );
       return;
     }
     try {
@@ -300,13 +345,13 @@ export function LiveItineraryPage({
         photoAttach(picked.asset, picked.gpsConsent)
       );
     } catch {
-      setPhotoNotice(PHOTO_SAVE_FAILED);
+      setPhotoNotice({ poiId, text: PHOTO_SAVE_FAILED, settings: false });
     }
   };
 
   // TRIP-1117 [메모] — 허브 위 메모 시트에서 저장한다(TRIP-1070 결정 1(c) 번복). 닫힘은 저장 성공 뒤(Q1).
-  const memoSheetOpen =
-    activeVisitCheckId !== null && memoSheetFor === activeVisitCheckId;
+  const memoSheetPoiId = poiOfVisit(memoSheetFor);
+  const memoSheetOpen = memoSheetPoiId !== undefined;
   const submitMemo = (visitCheckId: string, text: string) => {
     const attempt = ++memoAttempt.current;
     setMemoFailedFor(null);
@@ -320,18 +365,17 @@ export function LiveItineraryPage({
       }
     );
   };
-  const memoFailed =
-    activeVisitCheckId !== null && memoFailedFor === activeVisitCheckId;
+  const memoFailedPoiId = poiOfVisit(memoFailedFor);
   const memoSheet =
-    memoSheetOpen && activeVisitCheckId !== null ? (
+    memoSheetOpen && memoSheetFor !== null ? (
       <MemoSheet
         placeName={
-          activeSlots.find((slot) => slot.poiId === progress.activePoiId)
-            ?.nameKo ?? ''
+          activeSlots.find((slot) => slot.poiId === memoSheetPoiId)?.nameKo ??
+          ''
         }
         text={visitMemo.savedMemo}
-        notice={memoFailed ? MEMO_SAVE_FAILED : null}
-        onSubmit={(text) => submitMemo(activeVisitCheckId, text)}
+        notice={memoFailedFor === memoSheetFor ? MEMO_SAVE_FAILED : null}
+        onSubmit={(text) => submitMemo(memoSheetFor, text)}
         onClose={() => setMemoSheetFor(null)}
       />
     ) : null;
@@ -428,25 +472,25 @@ export function LiveItineraryPage({
               }
             : undefined
         }
-        onPressPhoto={
-          activeVisitCheckId !== null
-            ? () => void attachActivePhoto(activeVisitCheckId)
-            : undefined
-        }
+        // [사진]·[메모] — 관람 중 카드와, 방문 id 를 아는 완료 카드(doneMediaPoiIds, TRIP-1203)가 그 poiId 로 부른다.
+        onPressPhoto={(poiId) => void attachPhoto(poiId)}
         // [메모] — 허브 위 메모 시트를 연다(TRIP-1117). 카드 아래 실패 안내는 여기서 지운다.
-        onPressMemo={
-          activeVisitCheckId !== null
-            ? () => {
-                setMemoFailedFor(null);
-                setMemoSheetFor(activeVisitCheckId);
-              }
-            : undefined
-        }
+        onPressMemo={(poiId) => {
+          const visitCheckId = mediaVisitIdByPoiId[poiId];
+          if (visitCheckId === undefined) return;
+          setMemoFailedFor(null);
+          setMemoSheetFor(visitCheckId);
+        }}
+        doneMediaPoiIds={new Set(Object.keys(doneVisitIds))}
         photoNotice={photoNotice}
         onPressPhotoSettings={
-          photoNeedsSettings ? () => void Linking.openSettings() : undefined
+          photoNotice?.settings ? () => void Linking.openSettings() : undefined
         }
-        memoNotice={!memoSheetOpen && memoFailed ? MEMO_SAVE_FAILED : null}
+        memoNotice={
+          !memoSheetOpen && memoFailedPoiId !== undefined
+            ? { poiId: memoFailedPoiId, text: MEMO_SAVE_FAILED }
+            : null
+        }
         fabHidden={memoSheetOpen}
         triggerChip={triggerChip}
         triggerPillKey={chipTrigger?.triggerId}

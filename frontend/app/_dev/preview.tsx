@@ -6031,6 +6031,28 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () =>
       renderLiveHubPreview(2, { slots: LIVE_HUB_PREVIEW_SLOTS_NO_RECORDS }),
   },
+  // i01 완료 카드 [사진]·[메모](TRIP-1203, Figma 원본 없음 — 관람 중 버튼 재사용). 감천엔 권한 거부 안내 +
+  // [설정 열기], 광안리엔 세션 저장본 메모 박스.
+  {
+    key: 'live-hub-done-media',
+    band: 'i',
+    label: 'i01 · 여행중 허브 완료 카드 사진·메모',
+    login: null,
+    render: () =>
+      renderLiveHubPreview(2, {
+        slots: LIVE_HUB_PREVIEW_SLOTS_NO_RECORDS.map((entry) =>
+          entry.slot.poiId === 'gwangalli'
+            ? { ...entry, memo: '해 질 녘 산책. 다리 불빛이 예뻤다.' }
+            : entry
+        ),
+        doneMediaPoiIds: new Set(['gamcheon', 'gwangalli']),
+        photoNotice: {
+          poiId: 'gamcheon',
+          text: '사진 접근 권한이 없어 사진을 불러올 수 없어요',
+        },
+        onPressPhotoSettings: noop,
+      }),
+  },
   // i01 메모 시트(TRIP-1117, Figma 4741:2833) — 중간 허브 위에 페이지처럼 형제 시트를 얹고 FAB 를 숨긴다.
   // 저장본을 시드로 넣어 "작성 중" 모습을 낸다(입력칸은 첫 마운트에만 시드를 읽는다).
   {

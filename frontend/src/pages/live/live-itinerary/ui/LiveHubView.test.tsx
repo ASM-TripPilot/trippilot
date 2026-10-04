@@ -264,29 +264,35 @@ describe('LiveHubView · HV3 배선 (AC-1·AC-4 · Seed Q2)', () => {
     expect(screen.getByTestId('execution-arrive-complete')).toBeOnTheScreen();
   });
 
-  it('TRIP-1070 AC-1: 사진·메모 콜백과 안내 문구를 주면 관람 중 카드에만 한 쌍이 서고, 각 버튼이 제 콜백만 부른다', () => {
-    // 준비 — 사진·메모 콜백 + 안내 문구.
+  // TRIP-1203 — 콜백이 누른 카드의 poiId 를 받고 안내가 {poiId, text} 로 바뀌었다. 완료 카드 버튼은 아래 HD 절.
+  it('TRIP-1070 AC-1: 관람 중 카드의 [사진]·[메모]는 고정 testID 한 쌍이고, 누르면 그 poiId 로 제 콜백만 부른다', () => {
+    // 준비 — 사진·메모 콜백 + 관람 중 카드(museum)에 붙인 안내.
     const onPressPhoto = jest.fn();
     const onPressMemo = jest.fn();
     renderHub({
       onPressPhoto,
       onPressMemo,
-      photoNotice: '사진 접근 권한이 없어 사진을 불러올 수 없어요',
+      photoNotice: {
+        poiId: 'museum',
+        text: '사진 접근 권한이 없어 사진을 불러올 수 없어요',
+      },
     });
 
-    // 단언 — 5장 중 관람 중 카드 1장에만 선다.
+    // 단언 — 5장 중 관람 중 카드 1장에만 고정 한 쌍이 선다.
     expect(screen.getAllByTestId('execution-arrive-photo')).toHaveLength(1);
     expect(screen.getAllByTestId('execution-arrive-memo')).toHaveLength(1);
     expect(
       screen.getByTestId('execution-arrive-photo-notice')
     ).toHaveTextContent('사진 접근 권한이 없어 사진을 불러올 수 없어요');
 
-    // 실행·단언 — 각자 제 콜백만.
+    // 실행·단언 — 각자 제 콜백만, 인자는 그 카드의 poiId.
     fireEvent.press(screen.getByTestId('execution-arrive-photo'));
     expect(onPressPhoto).toHaveBeenCalledTimes(1);
+    expect(onPressPhoto).toHaveBeenLastCalledWith('museum');
     expect(onPressMemo).not.toHaveBeenCalled();
     fireEvent.press(screen.getByTestId('execution-arrive-memo'));
     expect(onPressMemo).toHaveBeenCalledTimes(1);
+    expect(onPressMemo).toHaveBeenLastCalledWith('museum');
     expect(onPressPhoto).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId('execution-arrive-soon-hint')).toBeNull();
   });
@@ -1300,8 +1306,12 @@ describe('LiveHubView · HM 메모 시트 배선 (TRIP-1117)', () => {
     expect(screen.getAllByTestId(/^execution-live-slot-memo-/)).toHaveLength(3);
   });
 
-  it('🔴 HM2 Q3: memoNotice 를 주면 안내 한 줄이 관람 중 카드에만 1개 선다', () => {
-    renderHub({ onPressMemo: jest.fn(), memoNotice: MEMO_NOTICE });
+  // TRIP-1203 — memoNotice 는 {poiId, text}: 그 poiId 카드에만 선다.
+  it('🔴 HM2 Q3: 관람 중 poiId 로 memoNotice 를 주면 안내 한 줄이 관람 중 카드에만 1개 선다', () => {
+    renderHub({
+      onPressMemo: jest.fn(),
+      memoNotice: { poiId: 'museum', text: MEMO_NOTICE },
+    });
 
     const notices = screen.getAllByTestId('execution-arrive-memo-notice');
     expect(notices).toHaveLength(1);
@@ -1311,6 +1321,9 @@ describe('LiveHubView · HM 메모 시트 배선 (TRIP-1117)', () => {
         screen.getByTestId(`execution-live-slot-${ACTIVE_KEY}`)
       ).getByTestId('execution-arrive-memo-notice')
     ).toBeOnTheScreen();
+    expect(
+      screen.queryAllByTestId(/^execution-live-slot-done-memo-notice-/)
+    ).toHaveLength(0);
   });
 
   it('🔴 HM3 AC-15: fabHidden 이면 수정 FAB 가 없고, 안 주면 FAB 가 있으며 앵커는 허브 루트 바로 아래다(HF8)', () => {
@@ -1327,5 +1340,120 @@ describe('LiveHubView · HM 메모 시트 배선 (TRIP-1117)', () => {
       screen.getByTestId('execution-live-fab-anchor')
     ).find((node) => typeof node.type === 'string');
     expect(hostParent?.props.testID).toBe('execution-live-screen');
+  });
+});
+
+// ── TRIP-1203 · 방문 완료 카드의 [사진]·[메모] (US-REC-02 · G-U4-7) ─────────────────────────
+//
+// 뷰는 방문 id 를 모른다 — 페이지가 "방문 id 를 아는 완료 슬롯"의 poiId 집합(`doneMediaPoiIds`)을 주면 그
+// 완료 카드에만 [사진]·[메모]를 내린다(선례: `directionsPoiIds`). 집합을 안 주면 완료 카드엔 버튼이 없다
+// (낙관 id 완료 카드는 페이지가 집합에서 뺀다, 02a §2-2). 콜백은 누른 카드의 poiId 를 받고, 안내는
+// `{ poiId, text }` 로 그 카드에만 선다(`directionsNotice` 선례). 관람 중 카드는 종전 그대로다.
+//
+// (개념) `new Set([...])` = 중복 없는 값 모음 — `has(x)` 로 들어 있는지 본다.
+// 3동작: 준비(콜백·집합·안내) → 실행(완료 카드 버튼 누르기) → 단언(카드 안 testID·콜백 인자).
+
+const GAMCHEON_KEY = `${DATE}#gamcheon`;
+const GWANGALLI_KEY = `${DATE}#gwangalli`;
+const doneId = (role: string, key: string) =>
+  `execution-live-slot-done-${role}-${key}`;
+const DONE_ANY = /^execution-live-slot-done-/;
+const cardOf = (key: string) =>
+  screen.getByTestId(`execution-live-slot-${key}`);
+
+describe('LiveHubView · HD 방문 완료 카드 [사진]·[메모] (TRIP-1203)', () => {
+  it('HD1 doneMediaPoiIds 에 든 완료 카드에만 [사진]·[메모]가 서고, 누르면 그 poiId 로 제 콜백을 부른다', () => {
+    // 준비 — 감천만 방문 id 를 안다고 친다.
+    const onPressPhoto = jest.fn();
+    const onPressMemo = jest.fn();
+    renderHub({
+      onPressPhoto,
+      onPressMemo,
+      doneMediaPoiIds: new Set(['gamcheon']),
+    });
+
+    // 단언 — 감천 카드 안에 한 쌍, 광안리(집합 밖)·예정 카드엔 없다. 관람 중 고정 한 쌍은 그대로 1개.
+    const gamcheon = within(cardOf(GAMCHEON_KEY));
+    expect(
+      gamcheon.getByTestId(doneId('photo', GAMCHEON_KEY))
+    ).toHaveTextContent('사진');
+    expect(
+      gamcheon.getByTestId(doneId('memo', GAMCHEON_KEY))
+    ).toHaveTextContent('메모');
+    expect(screen.getAllByTestId(DONE_ANY)).toHaveLength(2);
+    expect(
+      within(cardOf(GWANGALLI_KEY)).queryAllByTestId(DONE_ANY)
+    ).toHaveLength(0);
+    expect(screen.getAllByTestId('execution-arrive-photo')).toHaveLength(1);
+    expect(screen.getAllByTestId('execution-arrive-memo')).toHaveLength(1);
+
+    // 실행·단언 — [사진] → 'gamcheon', [메모] → 'gamcheon'.
+    fireEvent.press(screen.getByTestId(doneId('photo', GAMCHEON_KEY)));
+    expect(onPressPhoto).toHaveBeenCalledTimes(1);
+    expect(onPressPhoto).toHaveBeenLastCalledWith('gamcheon');
+    expect(onPressMemo).not.toHaveBeenCalled();
+    fireEvent.press(screen.getByTestId(doneId('memo', GAMCHEON_KEY)));
+    expect(onPressMemo).toHaveBeenCalledTimes(1);
+    expect(onPressMemo).toHaveBeenLastCalledWith('gamcheon');
+  });
+
+  it('HD2 doneMediaPoiIds 를 안 주면 완료 카드엔 버튼이 없고, 관람 중 고정 한 쌍만 있다', () => {
+    renderHub({ onPressPhoto: jest.fn(), onPressMemo: jest.fn() });
+
+    // 짝 앵커 — 카드 5장.
+    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(5);
+    expect(screen.queryAllByTestId(DONE_ANY)).toHaveLength(0);
+    expect(screen.getAllByTestId('execution-arrive-photo')).toHaveLength(1);
+  });
+
+  it('HD3 photoNotice 의 poiId 가 완료 카드면 그 카드 안에만 done 안내·[설정 열기]가 서고, 누르면 설정 콜백 1회', () => {
+    // 준비
+    const onPressPhotoSettings = jest.fn();
+    renderHub({
+      onPressPhoto: jest.fn(),
+      onPressMemo: jest.fn(),
+      doneMediaPoiIds: new Set(['gamcheon']),
+      photoNotice: {
+        poiId: 'gamcheon',
+        text: '사진 접근 권한이 없어 사진을 불러올 수 없어요',
+      },
+      onPressPhotoSettings,
+    });
+
+    // 단언 — 감천 카드 안에만, 관람 중 고정 안내는 없다.
+    const gamcheon = within(cardOf(GAMCHEON_KEY));
+    expect(
+      gamcheon.getByTestId(doneId('photo-notice', GAMCHEON_KEY))
+    ).toHaveTextContent('사진 접근 권한이 없어 사진을 불러올 수 없어요');
+    expect(
+      screen.getAllByTestId(/^execution-live-slot-done-photo-notice-/)
+    ).toHaveLength(1);
+    expect(screen.queryByTestId('execution-arrive-photo-notice')).toBeNull();
+    expect(screen.queryByTestId('execution-arrive-photo-settings')).toBeNull();
+
+    // 실행·단언
+    fireEvent.press(
+      gamcheon.getByTestId(doneId('photo-settings', GAMCHEON_KEY))
+    );
+    expect(onPressPhotoSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('HD4 memoNotice 의 poiId 가 완료 카드면 그 카드 안에만 done 메모 안내가 1개 선다', () => {
+    renderHub({
+      onPressMemo: jest.fn(),
+      doneMediaPoiIds: new Set(['gamcheon', 'gwangalli']),
+      memoNotice: { poiId: 'gwangalli', text: MEMO_NOTICE },
+    });
+
+    const notices = screen.getAllByTestId(
+      /^execution-live-slot-done-memo-notice-/
+    );
+    expect(notices).toHaveLength(1);
+    expect(
+      within(cardOf(GWANGALLI_KEY)).getByTestId(
+        doneId('memo-notice', GWANGALLI_KEY)
+      )
+    ).toHaveTextContent(MEMO_NOTICE);
+    expect(screen.queryByTestId('execution-arrive-memo-notice')).toBeNull();
   });
 });
