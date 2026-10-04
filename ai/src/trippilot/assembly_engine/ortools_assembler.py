@@ -607,7 +607,8 @@ class OrToolsAssembler:
           ① 각 식사 창(점심·저녁)에 FOOD 슬롯이 1개 배치되면 창당 +meal_bonus
           ② 창 밖 FOOD 배치는 건당 -meal_penalty (같은 창 두 번째 FOOD 도 창 밖 취급 —
              상쇄는 창당 1곳)
-          ③ FOOD→FOOD 연속 배치(인접 아크)는 건당 -meal_penalty
+          ③ FOOD→FOOD 연속 배치(인접 아크)는 건당 -food_adjacent_penalty (기본 1.0 — 점수 축
+             전체라 ①② 의 "한 단 미만" 원칙의 예외, config 주석)
 
         스케일 근거: 점수 항이 int(score·1000)이고 score ∈ [0,1]이므로 보정도 같은
         ×1000 축에 얹는다. 기본 보상 300·억제 200은 점수 한 단(0.2~0.3) 크기 —
@@ -617,9 +618,10 @@ class OrToolsAssembler:
         """
         bonus = int(self._cfg.meal_bonus * 1000)
         penalty = int(self._cfg.meal_penalty * 1000)
+        adjacent = int(self._cfg.food_adjacent_penalty * 1000)
         food = [i for i, n in enumerate(nodes)
                 if n["poi"].category is PoiCategory.FOOD]
-        if not food or (bonus == 0 and penalty == 0):
+        if not food or (bonus == 0 and penalty == 0 and adjacent == 0):
             return []
         terms: list = []
         in_window: dict[int, list] = {i: [] for i in food}
@@ -657,7 +659,7 @@ class OrToolsAssembler:
         for i, j, lit in arcs:
             if (i != j and i >= 1 and j >= 1
                     and i - 1 in food_set and j - 1 in food_set):
-                terms.append(-penalty * lit)
+                terms.append(-adjacent * lit)
         return terms
 
     def _rain_soft_terms(self, problem, day, nodes, visit) -> list:

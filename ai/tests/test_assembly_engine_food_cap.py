@@ -139,9 +139,13 @@ def test_food_only_pool_fallback_places_all_food() -> None:
 
 
 def test_food_only_pool_ortools_places_up_to_cap() -> None:
-    """OR 은 초과분이 점수 축 전체(1.0)만큼 깎여 이득이 없다 — 상한만큼만 담는다(비지는 않음)."""
+    """OR 은 초과분이 점수 축 전체(1.0)만큼 깎여 이득이 없다 — 상한만큼만 담는다(비지는 않음).
+
+    FOOD 인접 억제는 끈다 — 식당만 있는 풀에선 전부 인접이라 그 항이 상한보다 먼저 덜어낸다
+    (그 동작은 test_assembly_engine_food_adjacent). 여기서는 상한 항 단독을 본다."""
     problem, index = _setup(_FOOD_ONLY)
-    result = OrToolsAssembler(index, _EST, _CFG).solve(problem, 3000)
+    cfg = replace(_CFG, food_adjacent_penalty=0.0)
+    result = OrToolsAssembler(index, TravelEstimator(cfg), cfg).solve(problem, 3000)
     assert result is not None
     assert check_all(result, problem, index, _EST) == []
     assert _food_count(result, index) == _CFG.food_daily_max
