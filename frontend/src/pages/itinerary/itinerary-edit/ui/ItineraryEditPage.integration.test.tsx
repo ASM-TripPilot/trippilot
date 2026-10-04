@@ -1548,28 +1548,35 @@ describe('여행 중 직접 수정(i07)', () => {
       expect(p1?.startAt).toBe('09:30:00');
     });
 
-    it('P2b · 시작만 15:00 으로 바꿔 적용·저장하면 p3 endAt 은 원값 14:30:00 · endsNextDay true', async () => {
+    // TRIP-1215 계약 변경 — 옛 P2b 는 카드 '15:00–14:30' + PUT endsNextDay true(QA Q-29 증상 그대로)를 잠갔다.
+    // 이제 시트가 막는다. 시트는 onApply 안에서 동기로 닫히므로 [적용] 뒤 시트 잔존 = onApply 미호출(02a ★3).
+    it('P2b · 시작만 15:00 으로 옮기면(숨은 종료 14:30) 시트가 막고 카드·저장 PUT 의 p3 는 13:00–14:30 그대로다', async () => {
       renderPage();
       await waitForLocked();
 
       fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('p3')}`));
       await screen.findByTestId(SHEET);
       fireEvent.press(screen.getByTestId('itinerary-edit-time-wheel-h-3'));
-      fireEvent.press(screen.getByTestId('itinerary-edit-time-apply'));
-      await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
 
+      expect(screen.getByTestId('itinerary-edit-time-error')).toHaveTextContent(
+        '종료 시각은 시작보다 늦어야 해요'
+      );
+      fireEvent.press(screen.getByTestId('itinerary-edit-time-apply'));
+      expect(screen.getByTestId(SHEET)).toBeOnTheScreen();
       expect(
         screen.getByTestId(`slot-stopcard-time-${k('p3')}`)
-      ).toHaveTextContent('15:00–14:30');
+      ).toHaveTextContent('13:00–14:30');
 
+      fireEvent(screen.getByTestId(SHEET), 'close');
+      await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
       fireEvent.press(screen.getByTestId(SAVE));
       await waitFor(() => expect(putCalls).toBe(1));
 
       const body = putBody as EditItineraryRequest;
       const p3 = body.days[0].slots.find((s) => s.poiId === 'p3');
-      expect(p3?.startAt).toBe('15:00:00');
+      expect(p3?.startAt).toBe('13:00:00');
       expect(p3?.endAt).toBe('14:30:00');
-      expect(p3?.endsNextDay).toBe(true);
+      expect(p3?.endsNextDay).toBe(false);
     });
   });
 
@@ -2711,32 +2718,34 @@ describe('시각 조정 시트', () => {
   });
 
   describe('🔴 IT5 · AC-10 — 종료를 안 건드리면 기존 endAt 유지 + endsNextDay 재유도', () => {
-    it('IT5a · 시작만 23:15 로 적용하면 카드가 23:15–11:45 로 바뀌고 저장은 안 나간다(로컬)', async () => {
+    // TRIP-1215 계약 변경 — 옛 IT5a·IT5b 는 시작 23:15/숨은 종료 11:45:30 을 카드 '23:15–11:45'·PUT true 로 잠갔다.
+    // 그 조합은 이제 시트가 막는다(IT5a). 초 보존 의도는 허용 조합(IT5b), 익일 true 배선은 IT5d 가 잰다.
+    it('IT5a · 시작만 23:15 로 옮기면(숨은 종료 11:45:30) 시트가 막아 카드는 10:15 그대로고 저장도 안 나간다', async () => {
       renderPage();
       await openSheetFor('poi-a');
 
       press('wheel-ap-오후', 'wheel-h-11');
-      await applyAndWaitClosed();
-
-      expect(screen.getByTestId(timeChip('poi-a'))).toHaveTextContent(
-        /23:15–11:45/
+      expect(screen.getByTestId(t('error'))).toHaveTextContent(
+        '종료 시각은 시작보다 늦어야 해요'
       );
-      // 로컬 편집 — 시각조정만으로 서버를 안 건드린다(INV-2).
+      press('apply');
+
+      expect(screen.getByTestId(SHEET)).toBeOnTheScreen();
+      expect(screen.getByTestId(timeChip('poi-a'))).toHaveTextContent(/10:15/);
       expect(putCalls).toBe(0);
     });
 
-    it('IT5b · 저장 PUT 의 a 는 startAt 23:15:00 · endAt 원값 11:45:30(초 보존) · endsNextDay true', async () => {
+    it('IT5b · 시작만 오전 11:15 로 적용하면 저장 PUT 의 a 는 endAt 원값 11:45:30(초 보존) · endsNextDay false', async () => {
       renderPage();
       await openSheetFor('poi-a');
 
-      press('wheel-ap-오후', 'wheel-h-11');
+      press('wheel-h-11');
       await applyAndWaitClosed();
       const slotA = await saveAndGetSlot('poi-a');
 
-      expect(slotA?.startAt).toBe('23:15:00');
+      expect(slotA?.startAt).toBe('11:15:00');
       expect(slotA?.endAt).toBe('11:45:30');
-      // 원값은 false — 새 시작(23:15) 기준으로 다시 유도해야 true 다.
-      expect(slotA?.endsNextDay).toBe(true);
+      expect(slotA?.endsNextDay).toBe(false);
 
       // AC-13 — 서버 계약 endAt 은 항상 string(null 이 새지 않는다).
       const body = putBody as EditItineraryRequest;
@@ -2762,6 +2771,23 @@ describe('시각 조정 시트', () => {
       expect(slotA?.startAt).toBe('09:15:00');
       expect(slotA?.endAt).toBe('23:45:00');
       expect(slotA?.endsNextDay).toBe(false);
+    });
+  });
+
+  // TRIP-1215 — 시트가 허용한 정상 자정 넘김(밤 시작 + 새벽 종료)은 페이지를 지나 endsNextDay true 로 저장된다.
+  describe('🔴 IT5d · 정상 자정 넘김은 막히지 않고 endsNextDay true 로 저장된다', () => {
+    it('시작 오후 11:15 · 종료 오전 12:45 로 적용하면 저장 PUT 의 a 는 23:15:00–00:45:00 · endsNextDay true', async () => {
+      renderPage();
+      await openSheetFor('poi-a');
+
+      // 시작 10:15 → 오후 → 22:15 → 11 → 23:15. 종료 11:45 → 12(오전 12 = 00시) → 00:45.
+      press('wheel-ap-오후', 'wheel-h-11', 'seg-end', 'wheel-h-12');
+      await applyAndWaitClosed();
+      const slotA = await saveAndGetSlot('poi-a');
+
+      expect(slotA?.startAt).toBe('23:15:00');
+      expect(slotA?.endAt).toBe('00:45:00');
+      expect(slotA?.endsNextDay).toBe(true);
     });
   });
 

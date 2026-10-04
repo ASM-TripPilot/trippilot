@@ -1445,3 +1445,57 @@ describe('TRIP-1009 · B — 새 장소 기본 시각은 앞 장소가 끝나는
     });
   });
 });
+
+/**
+ * TRIP-1215 · QA Q-29 재현 지점 — 장소 추가 시트에서 시작 11:00 · 종료 08:00 을 넣으면 그대로 PUT 되던 것.
+ *
+ * 이 페이지는 onApply 를 받자마자 시트를 닫고(동기) 재판정 없이 바로 PUT 한다(02a ★3) — 시트가 유일한 문이다.
+ * 그래서 [적용] 뒤 시트가 남아 있고 PUT 이 0건이면 막힌 것이다. 고치면 같은 시트에서 바로 적용된다.
+ *
+ * 3동작 뼈대: 준비=빈 일자(기본 10:00–11:00) → 실행=p1 추가·휠·[적용] → 단언=문구·시트 잔존·PUT 바디.
+ */
+describe('장소 추가 시트 — 종료가 시작보다 이르면 막는다', () => {
+  const SHEET = 'itinerary-edit-time-sheet';
+  const t = (suffix: string): string => `itinerary-edit-time-${suffix}`;
+
+  it('🔴 QA1 · 11:00–08:00 은 [적용]해도 PUT 이 안 나가고, 종료를 오후 8:00 으로 고치면 그 값으로 담긴다', async () => {
+    const client = makeClient();
+    renderPageWith(client);
+    // 일정 도착 전 "+ 추가"는 조용히 무시된다(W-2) — 캐시 성공 + 한 틱 뒤에 누른다(1009 선례).
+    await waitFor(() =>
+      expect(
+        client.getQueryState(getGetTripsTripIdItineraryQueryKey('t1'))?.status
+      ).toBe('success')
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    fireEvent.press(await screen.findByTestId('itinerary-place-add-p1'));
+    await screen.findByTestId(SHEET);
+    // 기본 10:00–11:00 → 시작 오전 11 → 11:00 · 종료 오전 8 · 00분 → 08:00.
+    ['wheel-h-11', 'seg-end', 'wheel-h-8', 'wheel-m-00'].forEach((suffix) =>
+      fireEvent.press(screen.getByTestId(t(suffix)))
+    );
+
+    expect(screen.getByTestId(t('error'))).toHaveTextContent(
+      '종료 시각은 시작보다 늦어야 해요'
+    );
+    fireEvent.press(screen.getByTestId(t('apply')));
+    expect(screen.getByTestId(SHEET)).toBeOnTheScreen();
+    expect(putBodies).toHaveLength(0);
+
+    fireEvent.press(screen.getByTestId(t('wheel-ap-오후'))); // 08:00 → 20:00
+    expect(screen.queryByTestId(t('error'))).toBeNull();
+    fireEvent.press(screen.getByTestId(t('apply')));
+
+    await waitFor(() => expect(putBodies).toHaveLength(1));
+    const day = putBodies[0].days.find((d) => d.date === '2026-06-10');
+    const added = day?.slots.find((slot) => slot.poiId === 'p1');
+    expect({
+      startAt: added?.startAt,
+      endAt: added?.endAt,
+      endsNextDay: added?.endsNextDay,
+    }).toEqual({ startAt: '11:00:00', endAt: '20:00:00', endsNextDay: false });
+  });
+});

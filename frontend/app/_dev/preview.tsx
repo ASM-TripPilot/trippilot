@@ -5562,6 +5562,27 @@ export const PREVIEW_STATES: PreviewState[] = [
       </View>
     ),
   },
+  // h04 오류 상태(TRIP-1215) — QA Q-29 모양(11:00–08:00)을 그대로 심어 열자마자 문구·회색 [적용]이
+  // 보인다(종료 미설정 + 숨은 종료 오류 — readout "설정 안 됨"과 문구 동시 표시를 육안 대조). Figma 프레임 없음.
+  {
+    key: 'h04-time-adjust-sheet-error',
+    band: 'h',
+    label: 'h04 · 시각 조정 시트 · 오류',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <TimeSheet
+          title="시간대 조정"
+          testIDPrefix="itinerary-edit-time"
+          labels={{ start: '시작', end: '종료' }}
+          startAt="11:00:00"
+          endAt="08:00:00"
+          onApply={noop}
+          onCancel={noop}
+        />
+      </View>
+    ),
+  },
   // h16 확정 일정(TRIP-801) — CONFIRMED 지도+시트 셸(옛 h34 TimelineScreen 읽기전용을 대체). 페이지
   // (ItineraryPlanPage)는 react-query·라우터가 필요해 프리뷰에서 직접 못 쓰므로 셸 조립을 축소해
   // 그린다(h14 선례). 확정 얼굴의 요소(이름 옆 휴관 경고·[일정 수정]·[공유하기] 2버튼 — 성공 배너는

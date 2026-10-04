@@ -1,4 +1,4 @@
-export { deriveEndsNextDay } from './lib/endsNextDay';
+export { deriveEndsNextDay, isValidTimeRange } from './lib/endsNextDay';
 export { normalizeOpeningHours } from './lib/normalizeOpeningHours';
 export { formatOpeningHoursLabel } from './lib/openingHoursLabel';
 export { buildSlotKey, parseSlotKey } from './lib/slotKey';

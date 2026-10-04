@@ -78,6 +78,30 @@ function textsIn(node: ReactTestInstance): string[] {
   return out;
 }
 
+/** 오류 문구(01b Q5 확정) — 완전 일치로 잰다. */
+const RANGE_ERROR = '종료 시각은 시작보다 늦어야 해요';
+
+/**
+ * 막힌 상태 3종 — 문구가 보이고, [적용]이 disabled 이고, 눌러도 onApply 가 안 나간다.
+ * RNTL 은 disabled Pressable 을 누르지 않으므로 onApply 0회만으론 disabled 를 증명 못 한다(02a ★4).
+ */
+function expectBlocked(): void {
+  expect(screen.getByTestId(id('error'))).toHaveTextContent(RANGE_ERROR);
+  expect(screen.getByTestId(id('apply'))).toBeDisabled();
+  press('apply');
+  expect(onApply).not.toHaveBeenCalled();
+}
+
+function expectOpen(): void {
+  expect(screen.queryByTestId(id('error'))).toBeNull();
+  expect(screen.getByTestId(id('apply'))).not.toBeDisabled();
+}
+
+function classTokens(node: ReactTestInstance): string[] {
+  const className: unknown = node.props?.className;
+  return typeof className === 'string' ? className.trim().split(/\s+/) : [];
+}
+
 function pinkPills(node: ReactTestInstance): ReactTestInstance[] {
   return node.findAll(
     (n) =>
@@ -91,6 +115,7 @@ beforeEach(() => {
   onCancel.mockClear();
 });
 
+// TRIP-1215 계약 변경 — H1b·H1d 는 옛 "숨은 종료로 익일 적용"을 잠갔다. 이제 숨은 종료에도 같은 판정이 걸려 막힌다.
 describe('🔴 AC-1 · 종료를 손대지 않고 적용하면 종료는 현재 값 유지 — endAt 은 문자열 (TRIP-1196)', () => {
   it('H1a · 아무것도 안 건드리고 적용 → { 13:00:00, endAt: 14:30:00(현재 값), endsNextDay: false }', () => {
     renderH04();
@@ -106,17 +131,14 @@ describe('🔴 AC-1 · 종료를 손대지 않고 적용하면 종료는 현재 
     expect(onCancel).not.toHaveBeenCalled();
   });
 
-  it('H1b · 시작만 23시로 바꿔 적용 → 종료는 14:30:00 유지, endsNextDay 만 새 시작 기준 true', () => {
+  it('H1b · 시작만 23시로 바꾸면 숨은 종료 14:30 이 시작보다 일러 막힌다 — readout 은 여전히 "설정 안 됨"', () => {
     renderH04();
 
-    // 시작 탭 활성 · 오후 1시에서 11 셀 → 오후 11시(23).
-    press('wheel-h-11', 'apply');
+    // 시작 탭 활성 · 오후 1시에서 11 셀 → 오후 11시(23). 14:30 은 새벽(09:00 전)이 아니다.
+    press('wheel-h-11');
 
-    expect(appliedPatch()).toStrictEqual({
-      startAt: '23:00:00',
-      endAt: '14:30:00',
-      endsNextDay: true,
-    });
+    expect(screen.getByTestId(id('readout'))).toHaveTextContent(/설정 안 됨/);
+    expectBlocked();
   });
 
   it('H1c · 종료 탭만 열어 보고 휠을 안 누르면 여전히 미설정이고 종료 값은 유지된다', () => {
@@ -133,25 +155,20 @@ describe('🔴 AC-1 · 종료를 손대지 않고 적용하면 종료는 현재 
     });
   });
 
-  it('H1d · 종료를 안 건드린 채 시작을 14:30 이후로 옮기면 현재 종료 기준으로 endsNextDay 가 다시 유도된다', () => {
+  it('H1d · 종료를 안 건드린 채 시작을 14:30 이후(15:45)로 옮기면 숨은 종료 기준으로 막힌다', () => {
     renderH04();
 
-    press('wheel-h-3', 'wheel-m-45', 'apply');
+    press('wheel-h-3', 'wheel-m-45');
 
-    expect(appliedPatch()).toStrictEqual({
-      startAt: '15:45:00',
-      endAt: '14:30:00',
-      endsNextDay: true,
-    });
+    expectBlocked();
   });
 });
 
+// TRIP-1215 계약 변경 — 옛 '같은 시각이면 익일'(13:00=13:00)·'자정 넘김'(13:00→02:30) 행은 이제 막힌다(T3 로 옮김).
 describe('AC-2 · 종료를 설정하고 적용하면 endAt·endsNextDay(end <= start)를 싣는다', () => {
   it.each([
     [['wheel-h-3'], '15:30:00', false, '같은 날'],
-    [['wheel-h-1', 'wheel-m-00'], '13:00:00', true, '같은 시각이면 익일'],
     [['wheel-h-1'], '13:30:00', false, '같은 시·늦은 분'],
-    [['wheel-ap-오전'], '02:30:00', true, '자정 넘김'],
     [['wheel-m-45'], '14:45:00', false, '분만 바꿈'],
   ])(
     'H2 · 종료 탭 → %j → endAt %s · endsNextDay %s (%s)',
@@ -246,8 +263,9 @@ describe('🔴 W4 · h04 휠 스크롤 정지 = 셀 탭과 같은 결과 (D21)',
     });
   }
 
+  // TRIP-1215 계약 변경 — 옛 행 ['h', 10] 은 23:00 시작이 숨은 종료 14:30 보다 늦어 이제 막힌다.
   it.each([
-    ['h', 10, '23:00:00', true, '시 열 11(오후) → 23시'],
+    ['h', 1, '14:00:00', false, '시 열 2(오후) → 14시'],
     ['ap', 0, '01:00:00', false, '오전/오후 열 오전 → 1시'],
     ['m', 15, '13:15:00', false, '분 열 15'],
   ] as const)(
@@ -279,5 +297,144 @@ describe('🔴 W4 · h04 휠 스크롤 정지 = 셀 탭과 같은 결과 (D21)',
       endAt: '15:30:00',
       endsNextDay: false,
     });
+  });
+});
+
+/**
+ * TRIP-1215 · 시트가 "실수로 넣은" 종료<시작을 막는다 (QA Q-29: 11:00–08:00 이 그대로 들어가던 것).
+ *
+ * 허용 = 종료 > 시작(같은 날), 또는 시작 18:00 이상 + 종료 09:00 전(정상 자정 넘김 → endsNextDay true).
+ * 그 밖(같은 시각 포함)은 `-error` 문구 + [적용] disabled. 판정 대상 종료는 휠을 건드렸으면 휠 값,
+ * 아니면 숨은 `endAt` 이다. 휠을 굴릴 때마다 다시 판정한다 — 처음 그릴 때만 재면 T1·T2 가 red(02a ★1).
+ *
+ * jest 사각: 실제 회색·문구 위치·시트 높이는 6-b 실기(02a §8).
+ */
+describe('🔴 시트 안 종료<시작 막기 — 문구·disabled 가 휠을 따라간다', () => {
+  it('T1 · 허용으로 열려 종료를 오전 2:30 으로 굴리면 막히고, 다시 늦추면 풀려 그 값으로 적용된다', () => {
+    renderH04();
+    // 앵커 — 열렸을 땐(13:00–14:30) 문구가 없고 [적용]이 열려 있다.
+    expectOpen();
+
+    press('seg-end', 'wheel-ap-오전'); // 종료 14:30 → 02:30
+    expectBlocked();
+
+    press('wheel-ap-오후'); // 02:30 → 14:30
+    expectOpen();
+    press('wheel-h-3', 'apply'); // 15:30
+
+    expect(appliedPatch()).toStrictEqual({
+      startAt: '13:00:00',
+      endAt: '15:30:00',
+      endsNextDay: false,
+    });
+  });
+
+  it('T2 · 종료를 안 건드린 채 시작을 15:00 으로 옮기면 막히고, 14:00 으로 되돌리면 숨은 종료로 적용된다', () => {
+    renderH04();
+
+    press('wheel-h-3'); // 시작 15:00 · 숨은 종료 14:30
+    expectBlocked();
+
+    press('wheel-h-2'); // 시작 14:00
+    expectOpen();
+    press('apply');
+
+    expect(appliedPatch()).toStrictEqual({
+      startAt: '14:00:00',
+      endAt: '14:30:00',
+      endsNextDay: false,
+    });
+  });
+
+  // 12시간제 누름 순서(02a ★10): 시작 13:00 = 오후 1 · 종료 14:30 = 오후 2:30. 오전 12 → 00시.
+  it.each([
+    {
+      label: '18:00 시작 · 08:59 종료 → 자정 넘김 허용',
+      start: ['wheel-h-6'],
+      end: ['wheel-ap-오전', 'wheel-h-8', 'wheel-m-59'],
+      applied: { startAt: '18:00:00', endAt: '08:59:00', endsNextDay: true },
+    },
+    {
+      label: '17:59 시작 · 08:59 종료 → 막힘',
+      start: ['wheel-h-5', 'wheel-m-59'],
+      end: ['wheel-ap-오전', 'wheel-h-8', 'wheel-m-59'],
+      applied: null,
+    },
+    {
+      label: '18:00 시작 · 09:00 종료 → 막힘',
+      start: ['wheel-h-6'],
+      end: ['wheel-ap-오전', 'wheel-h-9', 'wheel-m-00'],
+      applied: null,
+    },
+    {
+      label: '23:30 시작 · 00:30 종료 → 자정 넘김 허용',
+      start: ['wheel-h-11', 'wheel-m-30'],
+      end: ['wheel-ap-오전', 'wheel-h-12'],
+      applied: { startAt: '23:30:00', endAt: '00:30:00', endsNextDay: true },
+    },
+    {
+      label: '11:00 시작 · 08:00 종료(Q-29) → 막힘',
+      start: ['wheel-ap-오전', 'wheel-h-11'],
+      end: ['wheel-ap-오전', 'wheel-h-8', 'wheel-m-00'],
+      applied: null,
+    },
+    {
+      label: '13:00 시작 · 13:00 종료(같은 시각) → 막힘',
+      start: [],
+      end: ['wheel-h-1', 'wheel-m-00'],
+      applied: null,
+    },
+    {
+      label: '13:00 시작 · 02:30 종료(시작이 밤이 아님) → 막힘',
+      start: [],
+      end: ['wheel-ap-오전'],
+      applied: null,
+    },
+  ])('T3 · 휠로 맞춘 경계 — $label', ({ start, end, applied }) => {
+    renderH04();
+
+    press(...start, 'seg-end', ...end);
+
+    if (applied === null) {
+      expectBlocked();
+      return;
+    }
+    expectOpen();
+    press('apply');
+    expect(appliedPatch()).toStrictEqual(applied);
+  });
+
+  it('T4 · 막히면 [적용] 채움이 회색 토큰으로 바뀌고, 문구는 오류 색 토큰 · raw hex 0 · 소요시간 표기 0', () => {
+    renderH04();
+    // 허용 상태 — [적용]은 primary 채움(className 은 Pressable 자신에 있다, 02a ★2).
+    expect(classTokens(screen.getByTestId(id('apply')))).toContain(
+      'bg-primary'
+    );
+    expect(classTokens(screen.getByTestId(id('apply')))).not.toContain(
+      'bg-hairline-strong'
+    );
+
+    press('seg-end', 'wheel-ap-오전');
+
+    const apply = screen.getByTestId(id('apply'));
+    expect(classTokens(apply)).toContain('bg-hairline-strong');
+    expect(classTokens(apply)).not.toContain('bg-primary');
+    expect(classTokens(screen.getByTestId(id('error')))).toContain(
+      'text-primary-text'
+    );
+
+    // raw hex — testID 몇 개가 아니라 시트 서브트리 전 노드(버튼 안쪽 Text 포함)의 className 을 본다.
+    const classNames = screen
+      .getByTestId(id('sheet'))
+      .findAll(() => true)
+      .map((node) => node.props?.className as unknown)
+      .filter((value): value is string => typeof value === 'string');
+    // 모집단 앵커 — 수집이 문구 Text 까지 닿았다.
+    expect(classNames.some((c) => c.includes('text-primary-text'))).toBe(true);
+    expect(classNames.filter((c) => c.includes('#'))).toEqual([]);
+
+    const texts = textsIn(screen.root);
+    expect(texts).toContain(RANGE_ERROR);
+    expect(texts.filter((t) => DURATION_TEXT.test(t))).toEqual([]);
   });
 });

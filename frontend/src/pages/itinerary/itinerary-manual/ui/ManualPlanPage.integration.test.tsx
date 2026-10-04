@@ -680,8 +680,10 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
     });
   });
 
+  // TRIP-1215 계약 변경 — 옛 M4b 는 시작 15:00/숨은 종료 14:30 을 익일(true)로 저장했다. 그 조합은 이제 시트가
+  // 막으므로(M4c), "종료 미설정 = 현재 값 문자열" 의도는 허용 조합(시작 14:00)으로 잰다.
   describe('🔴 M4b · TRIP-1196 — 종료를 안 건드리고 적용해도 PUT 의 endAt 은 현재 값 문자열이다', () => {
-    it('c 시작만 오후 3시로 바꿔 적용 → c endAt 은 원래 값(14:30:00) 그대로, endsNextDay 만 재유도되고 null 은 안 나간다', async () => {
+    it('c 시작만 오후 2시로 바꿔 적용 → c endAt 은 원래 값(14:30:00) 그대로, endsNextDay false 이고 null 은 안 나간다', async () => {
       renderPage();
       await ready();
 
@@ -693,16 +695,44 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
         screen.getByTestId('itinerary-manual-time-readout')
       ).toHaveTextContent(/설정 안 됨/);
       fireEvent.press(screen.getByTestId('itinerary-manual-time-seg-start'));
-      fireEvent.press(screen.getByTestId('itinerary-manual-time-wheel-h-3'));
+      fireEvent.press(screen.getByTestId('itinerary-manual-time-wheel-h-2'));
       fireEvent.press(screen.getByTestId('itinerary-manual-time-apply'));
       await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
 
       const body = await save();
       const c = body.days[0].slots.find((s) => s.poiId === 'c');
-      expect(c?.startAt).toBe('15:00:00');
+      expect(c?.startAt).toBe('14:00:00');
       expect(c?.endAt).toBe('14:30:00');
       expect(typeof c?.endAt).toBe('string');
-      expect(c?.endsNextDay).toBe(true);
+      expect(c?.endsNextDay).toBe(false);
+    });
+  });
+
+  // TRIP-1215 — 페이지는 onApply 를 재판정 없이 스토어에 덮어쓰고 그 안에서 시트를 동기로 닫는다.
+  // 그래서 [적용]을 누른 뒤에도 시트가 남아 있다 = onApply 가 안 나갔다(02a ★3).
+  describe('🔴 M4c · 종료보다 늦은 시작은 시트가 막고 드래프트는 그대로다', () => {
+    it('c 시작만 오후 3시(숨은 종료 14:30 뒤)로 옮기면 문구가 뜨고 [적용]해도 시트가 남으며, 닫고 저장하면 c 는 13:00–14:30 그대로다', async () => {
+      renderPage();
+      await ready();
+
+      fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('c')}`));
+      expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
+      fireEvent.press(screen.getByTestId('itinerary-manual-time-wheel-h-3'));
+
+      expect(
+        screen.getByTestId('itinerary-manual-time-error')
+      ).toHaveTextContent('종료 시각은 시작보다 늦어야 해요');
+      fireEvent.press(screen.getByTestId('itinerary-manual-time-apply'));
+      expect(screen.getByTestId(SHEET)).toBeOnTheScreen();
+
+      fireEvent(screen.getByTestId(SHEET), 'close');
+      await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
+
+      const body = await save();
+      const c = body.days[0].slots.find((s) => s.poiId === 'c');
+      expect(c?.startAt).toBe('13:00:00');
+      expect(c?.endAt).toBe('14:30:00');
+      expect(c?.endsNextDay).toBe(false);
     });
   });
 
